@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Design System Colors -->
+    <color name="bg_primary">#0c1222</color>
+    <color name="bg_secondary">#162032</color>
+    <color name="bg_tertiary">#1e2d42</color>
+    <color name="ink_primary">#e8edf5</color>
+    <color name="ink_secondary">#8899b0</color>
+    <color name="border">#2a3a52</color>
+    <color name="accent">#2dd4bf</color>
+    <color name="accent_secondary">#60a5fa</color>
+    <color name="accent_glow">#262dd4bf</color>
+    <color name="accent2_glow">#2660a5fa</color>
+    <color name="danger">#f87171</color>
+    <color name="warning">#fbbf24</color>
+    <color name="success">#34d399</color>
+    <!-- Launcher icon background -->
+    <color name="ic_launcher_background">#0C1222</color>
+</resources>

@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.NASMusicTV" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/bg_primary</item>
+        <item name="android:colorBackground">@color/bg_primary</item>
+        <item name="android:textColorPrimary">@color/ink_primary</item>
+        <item name="android:textColorSecondary">@color/ink_secondary</item>
+    </style>
+
+    <style name="Theme.NASMusicTV.NoActionBar" parent="Theme.NASMusicTV">
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:windowFullscreen">true</item>
+        <item name="android:windowContentOverlay">@null</item>
+    </style>
+</resources>

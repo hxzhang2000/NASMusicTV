@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">NAS Music TV</string>
+    <string name="app_description">开源的电视端 NAS 音乐播放器</string>
+
+    <!-- Navigation -->
+    <string name="nav_now_playing">正在播放</string>
+    <string name="nav_library">曲库</string>
+    <string name="nav_queue">播放队列</string>
+    <string name="nav_settings">设置</string>
+    <string name="nav_server">服务器</string>
+
+    <!-- Library -->
+    <string name="library_albums">专辑</string>
+    <string name="library_artists">歌手</string>
+    <string name="library_songs">歌曲</string>
+    <string name="library_folders">文件夹</string>
+    <string name="library_recently_added">最近添加</string>
+
+    <!-- Player -->
+    <string name="player_play">播放</string>
+    <string name="player_pause">暂停</string>
+    <string name="player_next">下一首</string>
+    <string name="player_previous">上一首</string>
+    <string name="player_shuffle">随机</string>
+    <string name="player_repeat">循环</string>
+    <string name="player_lyrics">歌词</string>
+    <string name="player_no_lyrics">暂无歌词</string>
+    <string name="player_lyrics_source_embedded">内嵌歌词</string>
+    <string name="player_lyrics_source_local">本地缓存</string>
+    <string name="player_lyrics_source_network">网络匹配</string>
+    <string name="player_lyrics_source_server">服务器</string>
+
+    <!-- Server Connection -->
+    <string name="server_connect_title">连接服务器</string>
+    <string name="server_connect_desc">选择您的 NAS 音乐后端类型</string>
+    <string name="server_address">服务器地址</string>
+    <string name="server_token">API Token</string>
+    <string name="server_username">用户名</string>
+    <string name="server_password">密码</string>
+    <string name="server_connect">连接</string>
+    <string name="server_type_jellyfin">Jellyfin</string>
+    <string name="server_type_navidrome">Navidrome</string>
+    <string name="server_connected">已连接</string>
+    <string name="server_connection_failed">连接失败</string>
+
+    <!-- Settings -->
+    <string name="settings_general">通用</string>
+    <string name="settings_audio">音频</string>
+    <string name="settings_lyrics">歌词</string>
+    <string name="settings_server">服务器</string>
+    <string name="settings_about">关于</string>
+    <string name="settings_dark_theme">暗色主题</string>
+    <string name="settings_dark_theme_desc">使用深色背景保护视力</string>
+    <string name="settings_animations">显示动画</string>
+    <string name="settings_animations_desc">界面切换时播放过渡动画</string>
+    <string name="settings_auto_play">自动播放下一首</string>
+    <string name="settings_auto_play_desc">歌曲结束后自动播放队列中的下一首</string>
+    <string name="settings_play_mode">默认播放模式</string>
+    <string name="settings_play_mode_desc">选择播放队列的默认循环方式</string>
+    <string name="settings_cache_lyrics">自动缓存歌词</string>
+    <string name="settings_cache_lyrics_desc">匹配到的歌词自动保存到本地</string>
+    <string name="settings_cache_cover">自动缓存封面</string>
+    <string name="settings_cache_cover_desc">专辑封面自动下载并缓存</string>
+    <string name="settings_lyrics_offset">歌词偏移</string>
+    <string name="settings_lyrics_offset_desc">调整歌词显示时间（毫秒）</string>
+
+    <!-- About -->
+    <string name="about_version">版本</string>
+    <string name="about_license">开源协议</string>
+    <string name="about_license_value">GPL v3</string>
+    <string name="about_github">GitHub</string>
+    <string name="about_credits">致谢</string>
+</resources>
