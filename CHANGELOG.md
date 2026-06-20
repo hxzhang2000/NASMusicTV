@@ -14,6 +14,8 @@
 - 版本控制系统：`NasMusicVersion` 统一管理版本号，设置页"关于"显示版本信息
 - 技术方案文档：`docs/features-plan.md` 记录未来功能规划
 - 技术架构文档：`docs/technical-overview.md` 记录当前完整的架构与实现细节
+- Git / GitHub 版本管理：`.gitignore`、`.gitattributes`、`.opencode/rules.md`
+- 文档记录：`docs/technical-overview.md` 第 8.5 节 Git 配置说明、第 10.2 节修改记录
 
 ### Fixed
 

@@ -1,6 +1,6 @@
 # NAS Music TV — 技术架构概述
 
-> 版本：v1.0.0 (STABLE)
+> 版本：v1.0.1 (STABLE)
 > 最后更新：2026-06-20
 > 本文档记录项目当前的完整技术架构，作为后续迭代的基准参考。
 
@@ -698,7 +698,48 @@ App 启动
 - 新增字段不影响旧数据读取（DataStore Preferences 自动处理缺失键）
 - 移除字段时需要递增 FILE_FORMAT_VERSION 并提供迁移逻辑
 
+### 8.5 Git / GitHub 配置
+
+#### 仓库信息
+
+| 项目 | 值 |
+|------|-----|
+| 远程仓库 | `https://github.com/hxzhang2000/NASMusicTV.git` |
+| 默认分支 | `main` |
+| Git 作者 | hxzhang2000 \<hxzhang2000@hotmail.com\> |
+| 代理 | `http://127.0.0.1:7890`（Clash for Windows） |
+
+#### 相关文件
+
+| 文件 | 用途 |
+|------|------|
+| `.gitignore` | 排除 Gradle 构建产物、IDE 配置、系统文件 |
+| `.gitattributes` | 统一 LF 行尾（`*.bat` 保留 CRLF） |
+| `.opencode/rules.md` | opencode 提交规范指令 |
+
+#### 提交流程
+
+```bash
+# 首次克隆
+git clone https://github.com/hxzhang2000/NASMusicTV.git
+
+# 日常提交流程（opencode 自动执行）
+git add <files>
+git commit -m "<type>: <description>"
+git push
+
+# 配置代理（Clash for Windows 环境）
+git config http.proxy http://127.0.0.1:7890
+git config https.proxy http://127.0.0.1:7890
+```
+
+#### 提交规范
+
+opencode 提交遵循 `.opencode/rules.md` 中定义的规范，前缀类型包括 `feat` / `fix` / `refactor` / `docs` / `chore`。
+
 ---
+
+
 
 ## 9. 文件索引
 
@@ -768,6 +809,7 @@ com.nasmusic.tv/
 | `docs/technical-overview.md` | 当前架构、修改记录与回归测试（本文档） |
 | `docs/features-plan.md` | 功能优化方案 |
 | `CHANGELOG.md` | 版本变更记录 |
+| `README.md` | 项目简介与功能特性 |
 
 ### 构建与配置
 
@@ -779,6 +821,9 @@ com.nasmusic.tv/
 | `gradle.properties` | Gradle 全局设置 |
 | `settings.gradle.kts` | 项目设置 |
 | `gradle/wrapper/gradle-wrapper.properties` | Gradle Wrapper |
+| `.gitignore` | Git 排除规则 |
+| `.gitattributes` | Git 行尾与属性配置 |
+| `.opencode/rules.md` | opencode Git 提交规范 |
 
 ---
 
@@ -900,3 +945,25 @@ if (albums.isNotEmpty())
 - 拼音首字母（"zjl"→"周杰伦"）
 
 **验证**：✅ 搜索过滤正确，tab 切换正常工作，清除恢复完整列表。
+
+---
+
+### 10.2 v1.0.1
+
+#### 10.2.1 Git / GitHub 版本管理初始化
+
+**功能描述**：为项目初始化 Git 仓库、配置 GitHub 远程仓库、添加 .gitignore / .gitattributes / opencode 提交规范。
+
+**新增文件**：
+- `.gitignore` — 排除 Gradle 构建产物、IDE 配置、系统文件
+- `.gitattributes` — 统一 LF 行尾（`*.bat` 保留 CRLF）
+- `.opencode/rules.md` — opencode Git 提交规范说明
+
+**配置项**：
+- Git 作者：hxzhang2000 \<hxzhang2000@hotmail.com\>
+- 远程仓库：`https://github.com/hxzhang2000/NASMusicTV.git`
+- 默认分支：`main`
+- Git 代理：`http://127.0.0.1:7890`（Clash for Windows）
+- 初始提交：75 个文件 / 10,757 行
+
+**验证结果**：✅ 已推送到 GitHub，`git log` 确认提交链完整。
