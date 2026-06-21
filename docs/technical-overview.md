@@ -1863,3 +1863,225 @@ SettingActionButton(
 ```
 
 **验证**：✅ 测试通过。设置 → 播放 → 均衡器 可正常打开均衡器页面。
+
+---
+
+#### 10.7.16 编码处理修复（繁体中文/多编码支持）
+
+**日期**：2026-06-21（同日补充）
+
+**问题**：部分歌曲信息显示为乱码，如 `ÎÒÊÇÕæµÄ°®Äã`（实际是 "我是真的爱你" 的 GB2312 编码被当作 Latin-1 解码）或末尾带 `�?`。
+
+**根因分析**：
+1. **GB2312/GBK 编码问题**：MP3 文件的 ID3 标签使用 GB2312/GBK 编码，但 Jellyfin 返回时被当作 Latin-1 解码，导致中文字符显示为乱码
+2. **末尾乱码**：部分歌曲标题末尾包含 `�?`（U+FFFD + 问号），是数据截断的标志
+
+**修改**：
+
+| 文件 | 改动 |
+|------|------|
+| `backend/impl/JellyfinAdapter.kt` | 新增 `fixEncoding()` 函数，处理两种乱码模式 |
+| `backend/impl/NavidromeAdapter.kt` | 新增 `fixEncoding()` 函数 |
+
+**编码修复逻辑**：
+```kotlin
+private fun fixEncoding(text: String?): String? {
+    if (text.isNullOrBlank()) return text
+    
+    // 第一步：移除末尾的乱码模式：�?（U+FFFD + ?）
+    var fixed: String = text
+    while (fixed.endsWith("?") || fixed.endsWith("\uFFFD?") || fixed.endsWith("\uFFFD")) {
+        if (fixed.endsWith("\uFFFD?")) {
+            fixed = fixed.dropLast(2)
+        } else {
+            fixed = fixed.dropLast(1)
+        }
+    }
+    
+    // 第二步：检测 GB2312/GBK 编码被当作 Latin-1 解码的情况
+    val latin1Count = fixed.count { it.code in 0x80..0xFF }
+    val totalCount = fixed.length
+    
+    // 如果超过 30% 的字符是 Latin-1 扩展字符，尝试从 Latin-1 转换到 GB2312
+    if (latin1Count > 0 && latin1Count.toFloat() / totalCount > 0.3f) {
+        try {
+            val bytes = fixed.toByteArray(Charsets.ISO_8859_1)
+            val decoded = String(bytes, charset("GB2312"))
+            if (decoded.any { it.code in 0x4E00..0x9FFF }) {
+                fixed = decoded
+            }
+        } catch (e: Exception) {
+            // GB2312 失败，尝试 GBK
+            try {
+                val bytes = fixed.toByteArray(Charsets.ISO_8859_1)
+                val decoded = String(bytes, charset("GBK"))
+                if (decoded.any { it.code in 0x4E00..0x9FFF }) {
+                    fixed = decoded
+                }
+            } catch (e2: Exception) {}
+        }
+    }
+    
+    return if (fixed.isBlank()) text else fixed
+}
+```
+
+**失败的修改方案（记录备忘，避免重复错误）**：
+
+| 方案 | 失败原因 |
+|------|----------|
+| 对所有字符串尝试 ISO-8859-1 → UTF-8 转换 | 破坏正常中文字符（如 `、` 被转为 `�?`） |
+| 检测 0x80-0xFF 范围字符就尝试转换 | 正常中文字符也在该范围内，导致误判 |
+| 多编码尝试 + 中文字符数量比较 | 对已经是 UTF-8 的字符串进行转换会破坏数据 |
+
+**关键教训**：
+- ✅ 先检测 Latin-1 扩展字符比例（>30%），再尝试 GB2312/GBK 转换
+- ✅ 只对明确的乱码模式（末尾 `�?`）进行移除
+- ✅ 转换后验证是否包含中文字符，避免误转换
+
+**验证**：✅ 测试通过。`ÎÒÊÇÕæµÄ°®Äã(live°æ)` 正确转换为 `我是真的爱你(live版)`。
+
+**服务器端修复方案（推荐）**：
+
+MP3 文件的 ID3 标签编码问题是根本原因。推荐使用以下工具批量修复：
+
+| 工具 | 平台 | 说明 |
+|------|------|------|
+| **MusicBrainz Picard** | 跨平台 | 自动匹配 MusicBrainz 数据库，修复元数据和编码。推荐首选 |
+| **EasyTAG** | Linux/Windows | 图形界面，支持批量编辑 ID3 标签编码 |
+| **id3-charset-converter** | Java (命令行) | 自动检测编码并转换为 UTF-8 |
+| **Mp3tag** | Windows | 功能强大的 ID3 标签编辑器 |
+
+**修复步骤（以 MusicBrainz Picard 为例）**：
+1. 下载安装 MusicBrainz Picard
+2. 导入音乐文件夹
+3. 选择文件 → 右键 → "Scan" 自动匹配
+4. 保存时选择 "ID3v2.3 + UTF-8" 编码
+5. 重新扫描 Jellyfin 音乐库
+
+**注意事项**：
+- 修复前建议备份原始文件
+- ID3v2.3 + UTF-8 是兼容性最好的组合
+- 修复后需要在 Jellyfin 中重新扫描音乐库
+
+---
+
+#### 10.7.17 歌曲时长获取修复
+
+**日期**：2026-06-21（同日补充）
+
+**问题**：播放歌曲时无法获取总时长，导致进度条不移动，无法 seek。
+
+**根因分析**：
+Jellyfin API 的 `fields` 参数未包含 `Album`、`AlbumArtist`、`Artists`、`IndexNumber`、`ParentIndexNumber`、`ProductionYear`、`Genres` 等字段，导致 API 返回的数据不完整。
+
+**修改**（`backend/impl/JellyfinAdapter.kt`）：
+扩展 `getSongs()` 方法的 `fields` 参数，包含所有必要字段：
+
+```kotlin
+// 改前
+val fields = "PrimaryImageAspectRatio,SortName,ParentId,RunTimeTicks"
+
+// 改后
+val fields = "PrimaryImageAspectRatio,SortName,ParentId,RunTimeTicks,Album,AlbumArtist,Artists,IndexNumber,ParentIndexNumber,ProductionYear,Genres"
+```
+
+**验证**：✅ 测试通过。播放歌曲时正确获取总时长，进度条正常移动，seek 功能正常工作。
+
+---
+
+#### 10.7.18 TV 桌面图标显示修复
+
+**日期**：2026-06-21（同日补充）
+
+**问题**：应用安装后在电视桌面和"我的应用"中找不到图标，只能在应用卸载列表中看到。
+
+**根因分析**：
+AndroidManifest.xml 中 MainActivity 的 intent-filter 只有 `LEANBACK_LAUNCHER` 类别，缺少 `LAUNCHER` 类别。部分电视系统需要两个类别同时存在才能在桌面显示应用图标。
+
+**修改**（`app/src/main/AndroidManifest.xml`）：
+在 MainActivity 的 intent-filter 中添加 `LAUNCHER` 类别：
+
+```xml
+<!-- 改前 -->
+<intent-filter>
+    <action android:name="android.intent.action.MAIN" />
+    <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
+</intent-filter>
+
+<!-- 改后 -->
+<intent-filter>
+    <action android:name="android.intent.action.MAIN" />
+    <category android:name="android.intent.category.LAUNCHER" />
+    <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
+</intent-filter>
+```
+
+**验证**：✅ 测试通过。应用图标正常显示在电视桌面和"我的应用"中。
+
+---
+
+#### 10.7.19 分批加载与进度显示
+
+**日期**：2026-06-21（同日补充）
+
+**问题**：
+1. 歌曲无数量限制，加载所有歌曲导致内存溢出和应用崩溃
+2. 加载过程中用户看不到进度
+
+**根因分析**：
+- 无数量限制时，应用尝试加载服务器上的所有歌曲（17,500+ 首）
+- 所有歌曲存储在内存中，导致频繁垃圾回收（GC）和内存不足
+- 最终导致应用崩溃
+
+**修改**：
+
+| 文件 | 改动 |
+|------|------|
+| `ui/viewmodel/MainViewModel.kt` | 添加 `maxSongs = 50000` 上限，限制最多加载 50,000 首歌曲 |
+| `ui/screens/LibraryScreen.kt` | 加载时显示 "已加载 X 首歌曲"，实时更新进度 |
+
+**加载逻辑**：
+```kotlin
+val maxSongs = 50000 // 最多加载 50000 首，避免内存问题
+val batchSize = 500
+
+while (hasMore && allSongs.size < maxSongs) {
+    val batch = adapter.getSongs(batchSize, currentOffset)
+    if (batch.isEmpty()) {
+        hasMore = false
+    } else {
+        // 计算还能添加多少首
+        val remaining = maxSongs - allSongs.size
+        val songsToAdd = if (batch.size > remaining) batch.take(remaining) else batch
+        
+        allSongs.addAll(songsToAdd)
+        _songs.value = allSongs.toList() // 更新 UI
+        buildArtistMaps(allSongs)
+        
+        if (batch.size < batchSize || allSongs.size >= maxSongs) {
+            hasMore = false
+        } else {
+            currentOffset += batchSize
+            delay(50) // 短暂延迟，让 UI 有时间响应
+        }
+    }
+}
+```
+
+**UI 显示**：
+```kotlin
+if (isLoading) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(text = "加载中...", color = NasMusicColors.TextSecondary, fontSize = 20.sp)
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(
+            text = "已加载 ${songs.size} 首歌曲",
+            color = NasMusicColors.TextSecondary,
+            fontSize = 16.sp
+        )
+    }
+}
+```
+
+**验证**：✅ 测试通过。歌曲正常加载，显示进度，不再崩溃。

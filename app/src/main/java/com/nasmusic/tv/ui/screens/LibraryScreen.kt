@@ -183,7 +183,15 @@ fun LibraryScreen(
             // 内容区域
             if (isLoading) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text(text = "加载中...", color = NasMusicColors.TextSecondary, fontSize = 20.sp)
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(text = "加载中...", color = NasMusicColors.TextSecondary, fontSize = 20.sp)
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = "已加载 ${songs.size} 首歌曲",
+                            color = NasMusicColors.TextSecondary,
+                            fontSize = 16.sp
+                        )
+                    }
                 }
             } else if (albums.isEmpty() && songs.isEmpty()) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {

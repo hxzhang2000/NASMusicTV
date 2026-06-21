@@ -63,10 +63,11 @@ interface BackendAdapter {
     suspend fun getArtistSongs(artistId: String): List<Song>
 
     /**
-     * 获取所有歌曲
-     * @param limit 返回的最大歌曲数量，默认 100000（加载全部）
+     * 获取歌曲（支持分页）
+     * @param limit 每批返回的最大歌曲数量
+     * @param offset 起始位置（用于分页）
      */
-    suspend fun getSongs(limit: Int = 100000): List<Song>
+    suspend fun getSongs(limit: Int = 500, offset: Int = 0): List<Song>
 
     /**
      * 搜索歌曲

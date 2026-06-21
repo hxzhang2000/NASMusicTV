@@ -95,6 +95,8 @@ class PlayerManager private constructor() {
             return
         }
 
+        android.util.Log.d("PlayerManager", "playSong: ${song.title}, currentPlaying=${p.isPlaying}")
+
         // Check if song is already in current queue — if so, seek to it (gapless path)
         val existingIndex = _queue.value.indexOf(song)
         if (existingIndex >= 0) {
@@ -151,15 +153,25 @@ class PlayerManager private constructor() {
             android.util.Log.e("PlayerManager", "playQueue failed", e)
         }
 
+        // 从歌曲数据初始化时长（player.duration 可能返回 C.TIME_UNSET）
+        val currentSong = songs.getOrNull(startIndex)
+        if (currentSong != null && currentSong.durationMs > 0) {
+            _duration.value = currentSong.durationMs
+        }
+        
         updateCurrentSongFromPlayer()
     }
 
     fun playPause() {
         player?.let {
-            if (it.isPlaying) {
+            val wasPlaying = it.isPlaying
+            android.util.Log.d("PlayerManager", "playPause: wasPlaying=$wasPlaying, state=${it.playbackState}")
+            if (wasPlaying) {
                 it.pause()
+                android.util.Log.d("PlayerManager", "playPause: paused")
             } else {
                 it.play()
+                android.util.Log.d("PlayerManager", "playPause: playing")
             }
         }
     }

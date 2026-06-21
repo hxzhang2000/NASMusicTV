@@ -115,8 +115,9 @@ fun ProgressSection(
                     if ((event.key == Key.DirectionLeft || event.key == Key.DirectionRight)
                         && event.type == KeyEventType.KeyDown && durationMs > 0) {
                         val delta = if (event.key == Key.DirectionLeft) -15000L else 15000L
-                        onSeek((progressMs + delta).coerceIn(0, durationMs))
-                        android.util.Log.d("NASMusic", "ProgressSection: seek by ${delta}ms, new=${progressMs + delta}, duration=$durationMs")
+                        val newPosition = (progressMs + delta).coerceIn(0, durationMs)
+                        android.util.Log.d("NASMusic", "ProgressSection: seek by ${delta}ms, current=$progressMs, new=$newPosition, duration=$durationMs")
+                        onSeek(newPosition)
                         true
                     } else false
                 }

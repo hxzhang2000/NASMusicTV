@@ -333,6 +333,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 _isLibraryLoading.value = false
                 return@launch
             }
+            
+            // 第一阶段：快速加载专辑和流派（不阻塞）
             try {
                 android.util.Log.d("NASMusic", "loadLibrary: loading albums...")
                 _albums.value = adapter.getAlbums()
@@ -341,20 +343,58 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 android.util.Log.e("NASMusic", "loadLibrary albums failed", e)
                 showError("加载专辑列表失败: ${e.message?.take(50)}")
             }
+            
+            loadGenres(adapter)
+            loadFavorites(adapter)
+            
+            // 第二阶段：分批加载歌曲（限制最大数量，避免内存溢出）
             try {
-                val songLimit = if (BuildConfig.DEBUG) 100 else 100000
-                android.util.Log.d("NASMusic", "loadLibrary: loading songs... (limit=$songLimit, debug=${BuildConfig.DEBUG})")
-                _songs.value = adapter.getSongs(songLimit)
-                android.util.Log.d("NASMusic", "loadLibrary: ${_songs.value.size} songs loaded")
-                // Build artist split maps from loaded songs
-                buildArtistMaps(_songs.value)
+                val maxSongs = 50000 // 最多加载 50000 首，避免内存问题
+                val batchSize = 500
+                android.util.Log.d("NASMusic", "loadLibrary: loading songs in batches... (maxSongs=$maxSongs, batchSize=$batchSize)")
+                
+                val allSongs = mutableListOf<Song>()
+                var currentOffset = 0
+                var hasMore = true
+                
+                while (hasMore && allSongs.size < maxSongs) {
+                    android.util.Log.d("NASMusic", "loadLibrary: fetching batch at offset=$currentOffset")
+                    
+                    val batch = adapter.getSongs(batchSize, currentOffset)
+                    android.util.Log.d("NASMusic", "loadLibrary: got ${batch.size} songs in this batch")
+                    
+                    if (batch.isEmpty()) {
+                        hasMore = false
+                    } else {
+                        // 计算还能添加多少首
+                        val remaining = maxSongs - allSongs.size
+                        val songsToAdd = if (batch.size > remaining) batch.take(remaining) else batch
+                        
+                        allSongs.addAll(songsToAdd)
+                        
+                        // 更新 UI（每批都更新，让用户看到进度）
+                        _songs.value = allSongs.toList()
+                        buildArtistMaps(allSongs)
+                        
+                        android.util.Log.d("NASMusic", "loadLibrary: total ${allSongs.size} songs loaded so far")
+                        
+                        // 如果这批少于 batchSize，说明已经是最后一批
+                        // 或者已经达到限制
+                        if (batch.size < batchSize || allSongs.size >= maxSongs) {
+                            hasMore = false
+                        } else {
+                            currentOffset += batchSize
+                            delay(50) // 短暂延迟，让 UI 有时间响应
+                        }
+                    }
+                }
+                
+                android.util.Log.d("NASMusic", "loadLibrary: finished loading ${allSongs.size} songs total")
             } catch (e: Exception) {
                 android.util.Log.e("NASMusic", "loadLibrary songs failed", e)
                 showError("加载歌曲列表失败: ${e.message?.take(50)}")
             }
-            // Load secondary data (continue on failure)
-            loadFavorites(adapter)
-            loadGenres(adapter)
+            
             _isLibraryLoading.value = false
         }
     }

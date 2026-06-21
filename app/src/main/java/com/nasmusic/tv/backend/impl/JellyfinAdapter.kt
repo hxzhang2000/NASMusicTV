@@ -197,21 +197,21 @@ class JellyfinAdapter : BackendAdapter {
         }
     }
 
-    override suspend fun getSongs(limit: Int): List<Song> = withContext(Dispatchers.IO) {
+    override suspend fun getSongs(limit: Int, offset: Int): List<Song> = withContext(Dispatchers.IO) {
         try {
-            val fields = "PrimaryImageAspectRatio,SortName,ParentId,RunTimeTicks"
+            val fields = "PrimaryImageAspectRatio,SortName,ParentId,RunTimeTicks,Album,AlbumArtist,Artists,IndexNumber,ParentIndexNumber,ProductionYear,Genres"
             val url = "$baseUrl/Items?" +
                     "IncludeItemTypes=Audio&" +
                     "Recursive=true&" +
                     "fields=$fields&" +
                     "UserId=$userId&" +
                     "SortBy=SortName&SortOrder=Ascending&" +
-                    "StartIndex=0&Limit=$limit"
+                    "StartIndex=$offset&Limit=$limit"
 
             val json = executeJsonRequest(url) ?: return@withContext emptyList<Song>()
             val items = json.getAsJsonArray("Items") ?: return@withContext emptyList<Song>()
             val songs = items.mapNotNull { jsonObjectToSong(it.asJsonObject, null) }
-            android.util.Log.d("JellyfinAdapter", "getSongs: ${songs.size} songs, hasCover=${songs.count { it.coverUrl != null }}/${songs.size}")
+            android.util.Log.d("JellyfinAdapter", "getSongs: ${songs.size} songs (offset=$offset, limit=$limit)")
             songs
         } catch (e: Exception) {
             android.util.Log.e("JellyfinAdapter", "getSongs failed", e)
@@ -619,21 +619,92 @@ class JellyfinAdapter : BackendAdapter {
         }
     }
 
+    /**
+     * 修复字符串编码问题
+     * 处理 Jellyfin 返回的乱码模式：
+     * 1. 末尾的 �?（U+FFFD + ?）
+     * 2. GB2312/GBK 字节被当作 Latin-1 解码（如 ÎÒÊÇÕæµÄ°®Äã）
+     */
+    private fun fixEncoding(text: String?): String? {
+        if (text.isNullOrBlank()) return text
+        
+        // 第一步：移除末尾的乱码模式：�?（U+FFFD + ?）或单独的 ?
+        var fixed: String = text
+        while (fixed.endsWith("?") || fixed.endsWith("\uFFFD?") || fixed.endsWith("\uFFFD")) {
+            if (fixed.endsWith("\uFFFD?")) {
+                fixed = fixed.dropLast(2) // 移除 U+FFFD 和 ?
+            } else {
+                fixed = fixed.dropLast(1)
+            }
+        }
+        
+        // 第二步：检测 GB2312/GBK 编码被当作 Latin-1 解码的情况
+        // 特征：字符串包含大量 Latin-1 扩展字符（0x80-0xFF 范围）
+        val latin1Count = fixed.count { it.code in 0x80..0xFF }
+        val totalCount = fixed.length
+        
+        // 如果超过 30% 的字符是 Latin-1 扩展字符，尝试从 Latin-1 转换到 GB2312
+        if (latin1Count > 0 && latin1Count.toFloat() / totalCount > 0.3f) {
+            try {
+                // 将字符串当作 Latin-1 编码的字节
+                val bytes = fixed.toByteArray(Charsets.ISO_8859_1)
+                // 尝试用 GB2312 解码
+                val decoded = String(bytes, charset("GB2312"))
+                // 如果解码后包含中文字符，使用这个结果
+                if (decoded.any { it.code in 0x4E00..0x9FFF }) {
+                    android.util.Log.d("JellyfinAdapter", "fixEncoding: converted Latin-1 to GB2312: '$fixed' -> '$decoded'")
+                    fixed = decoded
+                }
+            } catch (e: Exception) {
+                // GB2312 解码失败，尝试 GBK
+                try {
+                    val bytes = fixed.toByteArray(Charsets.ISO_8859_1)
+                    val decoded = String(bytes, charset("GBK"))
+                    if (decoded.any { it.code in 0x4E00..0x9FFF }) {
+                        android.util.Log.d("JellyfinAdapter", "fixEncoding: converted Latin-1 to GBK: '$fixed' -> '$decoded'")
+                        fixed = decoded
+                    }
+                } catch (e2: Exception) {
+                    // 都失败了，保持原样
+                }
+            }
+        }
+        
+        // 如果移除后变为空，返回原字符串
+        if (fixed.isBlank()) return text
+        
+        // 如果有变化，记录日志
+        if (fixed != text) {
+            android.util.Log.d("JellyfinAdapter", "fixEncoding: result: '${text.take(30)}' -> '${fixed.take(30)}'")
+        }
+        
+        return fixed
+    }
+
     private fun jsonObjectToSong(obj: JsonObject, albumIdOverride: String?): Song? {
         val id = obj.get("Id")?.asString ?: return null
-        val title = obj.get("Name")?.asString ?: "Unknown"
-        val artistArr = obj.getAsJsonArray("Artists")
-        val artist = artistArr?.firstOrNull()?.asString
-            ?: obj.get("AlbumArtist")?.asString ?: ""
-        val album = obj.get("Album")?.asString ?: ""
+        val rawTitle = obj.get("Name")?.asString
+        val rawAlbum = obj.get("Album")?.asString
+        val rawArtist = obj.getAsJsonArray("Artists")?.firstOrNull()?.asString
+        val title = fixEncoding(rawTitle) ?: "Unknown"
+        val artist = fixEncoding(rawArtist) ?: fixEncoding(obj.get("AlbumArtist")?.asString) ?: ""
+        val album = fixEncoding(rawAlbum) ?: ""
         val albumId = albumIdOverride ?: obj.get("AlbumId")?.asString ?: ""
         val trackNumber = obj.get("IndexNumber")?.asInt ?: 0
         val discNumber = obj.get("ParentIndexNumber")?.asInt ?: 1
         val year = obj.get("ProductionYear")?.asInt
         val runTimeTicks = obj.get("RunTimeTicks")?.asLong ?: 0L
+        val durationMs = runTimeTicks / 10000
         val imageTag = obj.get("ImageTags")?.asJsonObject?.get("Primary")?.asString
         val genreArr = obj.getAsJsonArray("Genres")
-        val genre = genreArr?.firstOrNull()?.asString
+        val genre = fixEncoding(genreArr?.firstOrNull()?.asString)
+
+        // 调试日志：检查原始数据和修复后的数据
+        android.util.Log.d("JellyfinAdapter", "jsonObjectToSong: id=$id")
+        android.util.Log.d("JellyfinAdapter", "  rawTitle='${rawTitle?.take(30)}' fixedTitle='${title.take(30)}'")
+        android.util.Log.d("JellyfinAdapter", "  rawAlbum='${rawAlbum?.take(30)}' fixedAlbum='${album.take(30)}'")
+        android.util.Log.d("JellyfinAdapter", "  rawArtist='${rawArtist?.take(30)}' fixedArtist='${artist.take(30)}'")
+        android.util.Log.d("JellyfinAdapter", "  runTimeTicks=$runTimeTicks durationMs=$durationMs")
 
         return Song(
             id = id,
@@ -644,7 +715,7 @@ class JellyfinAdapter : BackendAdapter {
             coverUrl = buildCoverUrl(albumId.ifBlank { id }, imageTag)
                 ?: getCoverUrl(albumId.ifBlank { id }),
             streamUrl = getStreamUrl(id),
-            durationMs = runTimeTicks / 10000,
+            durationMs = durationMs,
             trackNumber = trackNumber,
             discNumber = discNumber,
             year = year,
