@@ -50,6 +50,8 @@ object NasMusicColors {
     // glow / accent
     val AccentGlow = Color(0x262DD4BF)          // rgba(45, 212, 191, 0.15)
     val AccentGlowStrong = Color(0x4D2DD4BF)    // rgba(45, 212, 191, 0.30)
+    // Karaoke word highlight (B-3)
+    val TextBrightHighlight = Color(0xFF5EEAD4)  // brighter teal for active karaoke words
 }
 
 /**

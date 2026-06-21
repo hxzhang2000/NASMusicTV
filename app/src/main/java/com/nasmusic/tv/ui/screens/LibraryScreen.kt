@@ -44,6 +44,7 @@ import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 import coil.compose.AsyncImage
 import com.nasmusic.tv.data.model.Album
+import com.nasmusic.tv.data.model.Genre
 import com.nasmusic.tv.data.model.Song
 import com.nasmusic.tv.ui.theme.NasMusicColors
 import com.nasmusic.tv.util.PinyinUtils
@@ -53,7 +54,11 @@ import kotlinx.coroutines.launch
 private enum class LibraryTab(val displayName: String) {
     ALBUMS("专辑"),
     ARTISTS("歌唱家"),
-    SONGS("歌曲")
+    SONGS("歌曲"),
+    GENRES("风格"),
+    YEARS("年代"),
+    FAVORITES("收藏"),
+    RECENT("最近")
 }
 
 @Composable
@@ -61,10 +66,19 @@ fun LibraryScreen(
     albums: List<Album>,
     songs: List<Song>,
     isLoading: Boolean,
+    genres: List<Genre> = emptyList(),
+    favoriteIds: Set<String> = emptySet(),
+    recentSongIds: List<String> = emptyList(),
+    playCounts: Map<String, Int> = emptyMap(),
+    artistSongsMap: Map<String, List<Song>> = emptyMap(),
     onPlayAlbum: (Album) -> Unit,
     onPlaySong: (Song) -> Unit,
     onPlaySongs: (List<Song>) -> Unit,
     onPlayAllAlbums: () -> Unit,
+    onOpenAlbumDetail: ((Album) -> Unit)? = null,
+    onOpenArtistDetail: ((String) -> Unit)? = null,
+    onSongsByGenre: ((String, (List<Song>) -> Unit) -> Unit)? = null,
+    onSongsByYear: ((Int, Int, (List<Song>) -> Unit) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     var activeTab by remember { mutableStateOf(LibraryTab.ALBUMS) }
@@ -84,8 +98,8 @@ fun LibraryScreen(
             else songs.filter { PinyinUtils.matches(it.title, filterQuery) || PinyinUtils.matches(it.artist, filterQuery) }
         }
     }
-    val allArtists = remember(songs) {
-        songs.mapNotNull { it.artist.ifBlank { null } }.distinct().sorted()
+    val allArtists = remember(artistSongsMap) {
+        artistSongsMap.keys.sorted()
     }
     val filteredArtists by remember(filterQuery, allArtists) {
         derivedStateOf {
@@ -184,15 +198,39 @@ fun LibraryScreen(
                     LibraryTab.ALBUMS -> AlbumsTab(
                         albums = filteredAlbums,
                         songs = songs,
-                        onPlayAlbum = onPlayAlbum
+                        onPlayAlbum = onPlayAlbum,
+                        onOpenAlbumDetail = onOpenAlbumDetail
                     )
                     LibraryTab.ARTISTS -> ArtistsTab(
                         artists = filteredArtists,
-                        songs = songs,
-                        onPlaySongs = onPlaySongs
+                        artistSongsMap = artistSongsMap,
+                        onPlaySongs = onPlaySongs,
+                        onOpenArtistDetail = onOpenArtistDetail
                     )
                     LibraryTab.SONGS -> SongsTab(
                         songs = filteredSongs,
+                        favoriteIds = favoriteIds,
+                        onPlaySong = onPlaySong
+                    )
+                    LibraryTab.GENRES -> GenresTab(
+                        genres = genres,
+                        onSongsByGenre = onSongsByGenre,
+                        onPlaySongs = onPlaySongs
+                    )
+                    LibraryTab.YEARS -> YearsTab(
+                        songs = songs,
+                        onSongsByYear = onSongsByYear,
+                        onPlaySongs = onPlaySongs
+                    )
+                    LibraryTab.FAVORITES -> FavoritesTab(
+                        songs = songs,
+                        favoriteIds = favoriteIds,
+                        onPlaySong = onPlaySong
+                    )
+                    LibraryTab.RECENT -> RecentTab(
+                        songs = songs,
+                        recentSongIds = recentSongIds,
+                        playCounts = playCounts,
                         onPlaySong = onPlaySong
                     )
                 }
@@ -219,7 +257,8 @@ fun LibraryScreen(
 private fun AlbumsTab(
     albums: List<Album>,
     songs: List<Song>,
-    onPlayAlbum: (Album) -> Unit
+    onPlayAlbum: (Album) -> Unit,
+    onOpenAlbumDetail: ((Album) -> Unit)? = null
 ) {
     Column {
         Text(
@@ -235,7 +274,11 @@ private fun AlbumsTab(
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             items(albums) { album ->
-                AlbumCard(album = album, onClick = { onPlayAlbum(album) })
+                AlbumCard(
+                    album = album,
+                    onClick = { onOpenAlbumDetail?.invoke(album) ?: onPlayAlbum(album) },
+                    onPlay = { onPlayAlbum(album) }
+                )
             }
         }
     }
@@ -244,8 +287,9 @@ private fun AlbumsTab(
 @Composable
 private fun ArtistsTab(
     artists: List<String>,
-    songs: List<Song>,
-    onPlaySongs: (List<Song>) -> Unit
+    artistSongsMap: Map<String, List<Song>> = emptyMap(),
+    onPlaySongs: (List<Song>) -> Unit,
+    onOpenArtistDetail: ((String) -> Unit)? = null
 ) {
     Column {
         Text(
@@ -261,13 +305,21 @@ private fun ArtistsTab(
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             items(artists) { artist ->
+                val artistSongs = artistSongsMap[artist]
+                    ?: emptyList()
+                val songCount = artistSongs.size
                 ArtistCard(
                     artist = artist,
-                    songCount = songs.count { it.artist == artist },
+                    songCount = songCount,
                     onClick = {
-                        val artistSongs = songs.filter { it.artist == artist }
-                        if (artistSongs.isNotEmpty()) onPlaySongs(artistSongs)
-                    }
+                        // 点击打开详情页，如果没有详情回调则直接播放
+                        if (onOpenArtistDetail != null) {
+                            onOpenArtistDetail(artist)
+                        } else if (artistSongs.isNotEmpty()) {
+                            onPlaySongs(artistSongs)
+                        }
+                    },
+                    onPlay = if (artistSongs.isNotEmpty()) {{ onPlaySongs(artistSongs) }} else null
                 )
             }
         }
@@ -277,6 +329,7 @@ private fun ArtistsTab(
 @Composable
 private fun SongsTab(
     songs: List<Song>,
+    favoriteIds: Set<String> = emptySet(),
     onPlaySong: (Song) -> Unit
 ) {
     Column {
@@ -293,7 +346,275 @@ private fun SongsTab(
             verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             items(songs) { song ->
-                SongRow(song = song, onClick = { onPlaySong(song) })
+                SongRow(
+                    song = song,
+                    onClick = { onPlaySong(song) },
+                    isFavorite = song.id in favoriteIds
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun GenresTab(
+    genres: List<Genre>,
+    onSongsByGenre: ((String, (List<Song>) -> Unit) -> Unit)? = null,
+    onPlaySongs: (List<Song>) -> Unit
+) {
+    Column {
+        Text(
+            text = "风格 (${genres.size})",
+            color = NasMusicColors.TextPrimary,
+            fontSize = 18.sp,
+            modifier = Modifier.padding(bottom = 12.dp)
+        )
+        if (genres.isEmpty()) {
+            Text(
+                text = "暂无风格数据",
+                color = NasMusicColors.TextSecondary,
+                fontSize = 16.sp,
+                modifier = Modifier.padding(top = 24.dp)
+            )
+        } else {
+            LazyVerticalGrid(
+                columns = GridCells.Fixed(4),
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                items(genres) { genre ->
+                    var isFocused by remember { mutableStateOf(false) }
+                    val animScale = remember { Animatable(1f) }
+                    val scope = rememberCoroutineScope()
+                    Surface(
+                        onClick = {
+                            if (onSongsByGenre != null) {
+                                onSongsByGenre(genre.name) { songs ->
+                                    if (songs.isNotEmpty()) onPlaySongs(songs)
+                                }
+                            }
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .scale(animScale.value)
+                            .border(
+                                width = if (isFocused) 2.dp else 0.dp,
+                                color = if (isFocused) NasMusicColors.FocusRing else Color.Transparent,
+                                shape = RoundedCornerShape(10.dp)
+                            )
+                            .onFocusChanged {
+                                isFocused = it.isFocused
+                                scope.launch { animScale.animateTo(if (isFocused) 1.06f else 1f, tween(200)) }
+                            },
+                        shape = ClickableSurfaceDefaults.shape(
+                            shape = RoundedCornerShape(10.dp),
+                            focusedShape = RoundedCornerShape(10.dp)
+                        ),
+                        colors = ClickableSurfaceDefaults.colors(
+                            containerColor = NasMusicColors.Surface,
+                            contentColor = NasMusicColors.TextPrimary,
+                            focusedContainerColor = NasMusicColors.Primary.copy(alpha = 0.2f),
+                            focusedContentColor = NasMusicColors.Primary
+                        ),
+                        scale = ClickableSurfaceDefaults.scale(focusedScale = 1f, pressedScale = 0.96f)
+                    ) {
+                        Column(
+                            modifier = Modifier.fillMaxWidth().padding(16.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text(
+                                text = genre.name,
+                                color = NasMusicColors.TextPrimary,
+                                fontSize = 16.sp,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = "${genre.songCount} 首",
+                                color = NasMusicColors.TextSecondary,
+                                fontSize = 12.sp
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun YearsTab(
+    songs: List<Song>,
+    onSongsByYear: ((Int, Int, (List<Song>) -> Unit) -> Unit)? = null,
+    onPlaySongs: (List<Song>) -> Unit
+) {
+    val years = remember(songs) {
+        songs.mapNotNull { it.year }.distinct().sortedDescending()
+    }
+    Column {
+        Text(
+            text = "年代 (${years.size})",
+            color = NasMusicColors.TextPrimary,
+            fontSize = 18.sp,
+            modifier = Modifier.padding(bottom = 12.dp)
+        )
+        if (years.isEmpty()) {
+            Text(
+                text = "暂无年代数据",
+                color = NasMusicColors.TextSecondary,
+                fontSize = 16.sp,
+                modifier = Modifier.padding(top = 24.dp)
+            )
+        } else {
+            LazyVerticalGrid(
+                columns = GridCells.Fixed(5),
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                items(years) { year ->
+                    var isFocused by remember { mutableStateOf(false) }
+                    val animScale = remember { Animatable(1f) }
+                    val scope = rememberCoroutineScope()
+                    val yearSongs = songs.filter { it.year == year }
+                    Surface(
+                        onClick = {
+                            if (yearSongs.isNotEmpty()) onPlaySongs(yearSongs)
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .scale(animScale.value)
+                            .border(
+                                width = if (isFocused) 2.dp else 0.dp,
+                                color = if (isFocused) NasMusicColors.FocusRing else Color.Transparent,
+                                shape = RoundedCornerShape(10.dp)
+                            )
+                            .onFocusChanged {
+                                isFocused = it.isFocused
+                                scope.launch { animScale.animateTo(if (isFocused) 1.06f else 1f, tween(200)) }
+                            },
+                        shape = ClickableSurfaceDefaults.shape(
+                            shape = RoundedCornerShape(10.dp),
+                            focusedShape = RoundedCornerShape(10.dp)
+                        ),
+                        colors = ClickableSurfaceDefaults.colors(
+                            containerColor = NasMusicColors.Surface,
+                            contentColor = NasMusicColors.TextPrimary,
+                            focusedContainerColor = NasMusicColors.Primary.copy(alpha = 0.2f),
+                            focusedContentColor = NasMusicColors.Primary
+                        ),
+                        scale = ClickableSurfaceDefaults.scale(focusedScale = 1f, pressedScale = 0.96f)
+                    ) {
+                        Column(
+                            modifier = Modifier.fillMaxWidth().padding(16.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text(
+                                text = "$year",
+                                color = NasMusicColors.TextPrimary,
+                                fontSize = 22.sp
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = "${yearSongs.size} 首",
+                                color = NasMusicColors.TextSecondary,
+                                fontSize = 12.sp
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun FavoritesTab(
+    songs: List<Song>,
+    favoriteIds: Set<String>,
+    onPlaySong: (Song) -> Unit
+) {
+    val favoriteSongs = remember(songs, favoriteIds) {
+        songs.filter { it.id in favoriteIds }
+    }
+    Column {
+        Text(
+            text = "收藏 (${favoriteSongs.size})",
+            color = NasMusicColors.TextPrimary,
+            fontSize = 18.sp,
+            modifier = Modifier.padding(bottom = 12.dp)
+        )
+        if (favoriteSongs.isEmpty()) {
+            Box(
+                modifier = Modifier.fillMaxWidth().padding(top = 40.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = "暂无收藏歌曲\n在播放页面点击 ♡ 可收藏",
+                    color = NasMusicColors.TextSecondary,
+                    fontSize = 16.sp
+                )
+            }
+        } else {
+            LazyVerticalGrid(
+                columns = GridCells.Fixed(2),
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                items(favoriteSongs) { song ->
+                    SongRow(song = song, onClick = { onPlaySong(song) }, isFavorite = true)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun RecentTab(
+    songs: List<Song>,
+    recentSongIds: List<String>,
+    playCounts: Map<String, Int> = emptyMap(),
+    onPlaySong: (Song) -> Unit
+) {
+    val recentSongs = remember(songs, recentSongIds) {
+        val songMap = songs.associateBy { it.id }
+        recentSongIds.mapNotNull { songMap[it] }
+    }
+    Column {
+        Text(
+            text = "最近播放 (${recentSongs.size})",
+            color = NasMusicColors.TextPrimary,
+            fontSize = 18.sp,
+            modifier = Modifier.padding(bottom = 12.dp)
+        )
+        if (recentSongs.isEmpty()) {
+            Box(
+                modifier = Modifier.fillMaxWidth().padding(top = 40.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = "暂无播放记录",
+                    color = NasMusicColors.TextSecondary,
+                    fontSize = 16.sp
+                )
+            }
+        } else {
+            LazyVerticalGrid(
+                columns = GridCells.Fixed(2),
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                items(recentSongs) { song ->
+                    SongRow(
+                        song = song,
+                        onClick = { onPlaySong(song) },
+                        playCount = playCounts[song.id]
+                    )
+                }
             }
         }
     }
@@ -301,7 +622,7 @@ private fun SongsTab(
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
-fun AlbumCard(album: Album, onClick: () -> Unit) {
+fun AlbumCard(album: Album, onClick: () -> Unit, onPlay: (() -> Unit)? = null) {
     var isFocused by remember { mutableStateOf(false) }
     val animScale = remember { Animatable(1f) }
     val scope = rememberCoroutineScope()
@@ -356,14 +677,19 @@ fun AlbumCard(album: Album, onClick: () -> Unit) {
             }
             Spacer(modifier = Modifier.height(4.dp))
             Text(text = album.name, color = NasMusicColors.TextPrimary, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(text = album.artist.ifBlank { "—" }, color = NasMusicColors.TextSecondary, fontSize = 10.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(text = album.artist.ifBlank { "—" }, color = NasMusicColors.TextSecondary, fontSize = 10.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                if (onPlay != null) {
+                    Text(text = "▶播放", color = NasMusicColors.Primary, fontSize = 9.sp, modifier = Modifier.padding(start = 4.dp))
+                }
+            }
         }
     }
 }
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
-private fun ArtistCard(artist: String, songCount: Int, onClick: () -> Unit) {
+private fun ArtistCard(artist: String, songCount: Int, onClick: () -> Unit, onPlay: (() -> Unit)? = null) {
     var isFocused by remember { mutableStateOf(false) }
     val animScale = remember { Animatable(1f) }
     val scope = rememberCoroutineScope()
@@ -413,14 +739,19 @@ private fun ArtistCard(artist: String, songCount: Int, onClick: () -> Unit) {
             }
             Spacer(modifier = Modifier.height(6.dp))
             Text(text = artist, color = NasMusicColors.TextPrimary, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(text = "${songCount}首", color = NasMusicColors.TextSecondary, fontSize = 10.sp)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(text = "${songCount}首", color = NasMusicColors.TextSecondary, fontSize = 10.sp, modifier = Modifier.weight(1f))
+                if (onPlay != null) {
+                    Text(text = "▶", color = NasMusicColors.Primary, fontSize = 9.sp, modifier = Modifier.padding(start = 4.dp))
+                }
+            }
         }
     }
 }
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
-fun SongRow(song: Song, onClick: () -> Unit) {
+fun SongRow(song: Song, onClick: () -> Unit, isFavorite: Boolean = false, playCount: Int? = null) {
     var isFocused by remember { mutableStateOf(false) }
     val animScale = remember { Animatable(1f) }
     val scope = rememberCoroutineScope()
@@ -452,13 +783,20 @@ fun SongRow(song: Song, onClick: () -> Unit) {
         scale = ClickableSurfaceDefaults.scale(focusedScale = 1f, pressedScale = 0.98f)
     ) {
         Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text(text = String.format("%02d", song.trackNumber), color = NasMusicColors.TextSecondary, fontSize = 12.sp, modifier = Modifier.width(28.dp), textAlign = TextAlign.Center)
+            if (isFavorite) {
+                Text(text = "♥", color = NasMusicColors.Warning, fontSize = 10.sp, modifier = Modifier.width(16.dp))
+            } else {
+                Text(text = String.format("%02d", song.trackNumber), color = NasMusicColors.TextSecondary, fontSize = 12.sp, modifier = Modifier.width(28.dp), textAlign = TextAlign.Center)
+            }
             Spacer(modifier = Modifier.width(10.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(text = song.title, color = NasMusicColors.TextPrimary, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Text(text = song.artist.ifBlank { "—" }, color = NasMusicColors.TextSecondary, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
             Spacer(modifier = Modifier.width(10.dp))
+            if (playCount != null && playCount > 0) {
+                Text(text = "${playCount}次", color = NasMusicColors.Primary, fontSize = 10.sp, modifier = Modifier.padding(end = 8.dp))
+            }
             Text(text = TimeUtils.formatDuration(song.durationMs), color = NasMusicColors.TextSecondary, fontSize = 11.sp)
         }
     }

@@ -88,4 +88,28 @@ class CoverArtManager(private val context: Context) {
             imageLoader.execute(request)
         }
     }
+
+    /**
+     * 清除 Coil 图片加载器的内存和磁盘缓存 (E-4)
+     */
+    suspend fun clearCache() = withContext(Dispatchers.IO) {
+        try {
+            imageLoader.diskCache?.clear()
+            imageLoader.memoryCache?.clear()
+            android.util.Log.d("CoverArtManager", "clearCache: cache cleared")
+        } catch (e: Exception) {
+            android.util.Log.e("CoverArtManager", "clearCache failed", e)
+        }
+    }
+
+    /**
+     * 获取当前缓存大小估算值
+     */
+    fun getCacheSize(): Long {
+        return try {
+            imageLoader.diskCache?.size ?: 0L
+        } catch (e: Exception) {
+            0L
+        }
+    }
 }

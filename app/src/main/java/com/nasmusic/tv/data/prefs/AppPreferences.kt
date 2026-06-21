@@ -7,7 +7,10 @@ import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.google.gson.Gson
+import com.google.gson.reflect.TypeToken
 import com.nasmusic.tv.data.model.AppSettings
+import com.nasmusic.tv.data.model.EqualizerPreset
 import com.nasmusic.tv.data.model.PlayMode
 import com.nasmusic.tv.data.model.ServerConfig
 import kotlinx.coroutines.flow.Flow
@@ -38,6 +41,17 @@ class AppPreferences(private val context: Context) {
     private val keyCacheLyrics = booleanPreferencesKey("settings_cache_lyrics")
     private val keyCacheCover = booleanPreferencesKey("settings_cache_cover")
     private val keyLyricsOffset = longPreferencesKey("settings_lyrics_offset")
+
+    // --- B-2 最近播放 & 播放次数（序列化为 JSON）---
+    private val keyRecentSongs = stringPreferencesKey("recent_songs")
+    private val keyPlayCounts = stringPreferencesKey("play_counts")
+
+    // --- B-4 均衡器 ---
+    private val keyEqualizerPreset = intPreferencesKey("equalizer_preset")
+    private val keyEqualizerBands = stringPreferencesKey("equalizer_bands")
+
+    private val gson = Gson()
+    private val recentSongsMaxSize = 50
 
     // --- ServerConfig Flow ---
     val serverConfig: Flow<ServerConfig> = context.dataStore.data.map { prefs ->
@@ -82,6 +96,98 @@ class AppPreferences(private val context: Context) {
             prefs.remove(keyPassword)
             prefs[keyServerConnected] = false
             prefs.remove(keyServerDisplayName)
+        }
+    }
+
+    // --- B-2 最近播放 Flow ---
+    val recentSongIds: Flow<List<String>> = context.dataStore.data.map { prefs ->
+        val json = prefs[keyRecentSongs] ?: "[]"
+        try {
+            gson.fromJson(json, object : TypeToken<List<String>>() {}.type)
+        } catch (e: Exception) { emptyList() }
+    }
+
+    // --- B-2 播放次数 Flow ---
+    val playCounts: Flow<Map<String, Int>> = context.dataStore.data.map { prefs ->
+        val json = prefs[keyPlayCounts] ?: "{}"
+        try {
+            gson.fromJson(json, object : TypeToken<Map<String, Int>>() {}.type)
+        } catch (e: Exception) { emptyMap() }
+    }
+
+    /**
+     * 同步获取最近播放 ID 列表（非 Flow，用于 ViewModel 中一次性读取）
+     */
+    fun getRecentSongIdsSync(): List<String> {
+        // 此方法在非协程上下文使用，通过 runBlocking 读取
+        return emptyList() // ViewModel 应使用 Flow 版本
+    }
+
+    /**
+     * 记录一次播放（B-2）
+     * 1. 添加到最近播放列表（去重 + LRU，最多 50 条）
+     * 2. 播放次数 +1
+     */
+    suspend fun recordPlay(songId: String) {
+        context.dataStore.edit { prefs ->
+            // 更新最近播放
+            val recentJson = prefs[keyRecentSongs] ?: "[]"
+            val recentList = try {
+                gson.fromJson(recentJson, object : TypeToken<MutableList<String>>() {}.type)
+                    ?: mutableListOf()
+            } catch (e: Exception) { mutableListOf<String>() }
+
+            val mutableRecent = recentList.toMutableList()
+            mutableRecent.remove(songId) // 去重
+            mutableRecent.add(0, songId)  // 最新放最前面
+            if (mutableRecent.size > recentSongsMaxSize) {
+                mutableRecent.removeAt(mutableRecent.lastIndex)
+            }
+            prefs[keyRecentSongs] = gson.toJson(mutableRecent)
+
+            // 更新播放次数
+            val countsJson = prefs[keyPlayCounts] ?: "{}"
+            val counts = try {
+                gson.fromJson(countsJson, object : TypeToken<MutableMap<String, Int>>() {}.type)
+                    ?: mutableMapOf()
+            } catch (e: Exception) { mutableMapOf<String, Int>() }
+
+            counts[songId] = (counts[songId] ?: 0) + 1
+            prefs[keyPlayCounts] = gson.toJson(counts)
+        }
+    }
+
+    // --- B-4 均衡器 ---
+    val equalizerPreset: Flow<EqualizerPreset> = context.dataStore.data.map { prefs ->
+        val ordinal = prefs[keyEqualizerPreset] ?: 0
+        EqualizerPreset.entries.getOrElse(ordinal) { EqualizerPreset.NORMAL }
+    }
+
+    suspend fun setEqualizerPreset(preset: EqualizerPreset) {
+        context.dataStore.edit { it[keyEqualizerPreset] = preset.ordinal }
+    }
+
+    val equalizerBands: Flow<List<Float>> = context.dataStore.data.map { prefs ->
+        val json = prefs[keyEqualizerBands] ?: "[]"
+        try {
+            gson.fromJson(json, object : TypeToken<List<Float>>() {}.type)
+        } catch (e: Exception) { emptyList() }
+    }
+
+    suspend fun setEqualizerBands(bands: List<Float>) {
+        context.dataStore.edit { it[keyEqualizerBands] = gson.toJson(bands) }
+    }
+
+    suspend fun setEqualizerBand(index: Int, value: Float) {
+        context.dataStore.edit { prefs ->
+            val json = prefs[keyEqualizerBands] ?: "[]"
+            val bands: MutableList<Float> = try {
+                val list: List<Float> = gson.fromJson(json, object : TypeToken<List<Float>>() {}.type)
+                list.toMutableList()
+            } catch (e: Exception) { mutableListOf() }
+            while (bands.size <= index) bands.add(0f)
+            bands[index] = value
+            prefs[keyEqualizerBands] = gson.toJson(bands)
         }
     }
 

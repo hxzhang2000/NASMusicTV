@@ -2,6 +2,8 @@ package com.nasmusic.tv.backend
 
 import com.nasmusic.tv.data.model.Album
 import com.nasmusic.tv.data.model.Artist
+import com.nasmusic.tv.data.model.Genre
+import com.nasmusic.tv.data.model.Playlist
 import com.nasmusic.tv.data.model.Song
 
 /**
@@ -24,6 +26,21 @@ interface BackendAdapter {
      * 测试连接是否可用
      */
     suspend fun testConnection(): Boolean
+
+    /**
+     * 断开后端会话连接，释放服务端 session 资源。
+     * Jellyfin：POST /Sessions/Logout 使 token 失效。
+     * Navidrome：无状态认证，不需要显式登出。
+     * 默认空实现，子类按需覆盖。
+     */
+    suspend fun logout() {}
+
+    /**
+     * 释放底层网络资源（OkHttp 连接池）。
+     * logout() 负责使服务端 session 失效，
+     * close() 负责释放客户端连接，防止连接泄漏。
+     */
+    fun close() {}
 
     /**
      * 获取所有专辑
@@ -75,4 +92,31 @@ interface BackendAdapter {
      * 获取歌词（如果后端支持）
      */
     suspend fun getLyrics(songId: String): String?
+
+    // ========== F-1 扩展接口 ==========
+
+    // --- 播放列表 ---
+    suspend fun getPlaylists(): List<Playlist>
+    suspend fun createPlaylist(name: String): Playlist?
+    suspend fun deletePlaylist(playlistId: String): Boolean
+    suspend fun addToPlaylist(playlistId: String, songId: String): Boolean
+    suspend fun removeFromPlaylist(playlistId: String, songId: String): Boolean
+
+    // --- 收藏 ---
+    suspend fun toggleFavorite(songId: String): Boolean
+    suspend fun getFavorites(): List<Song>
+
+    // --- 评分 ---
+    suspend fun setRating(songId: String, rating: Int): Boolean
+
+    // --- 流派 ---
+    suspend fun getGenres(): List<Genre>
+    suspend fun getSongsByGenre(genre: String): List<Song>
+    suspend fun getSongsByYearRange(fromYear: Int, toYear: Int): List<Song>
+
+    // --- Scrobble ---
+    suspend fun scrobblePlay(songId: String, timestamp: Long): Boolean
+
+    // --- 随机歌曲 ---
+    suspend fun getRandomSongs(limit: Int = 20): List<Song>
 }

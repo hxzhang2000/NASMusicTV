@@ -1,5 +1,6 @@
 package com.nasmusic.tv.player
 
+import android.media.audiofx.Equalizer
 import android.os.Handler
 import android.os.Looper
 import androidx.media3.common.MediaItem
@@ -93,19 +94,37 @@ class PlayerManager private constructor() {
             android.util.Log.e("PlayerManager", "playSong: player is null!")
             return
         }
-        // Replace entire queue with this single song
-        _queue.value = listOf(song)
-        _currentIndex.value = 0
-        val mediaItem = MediaItem.fromUri(streamUrl)
-        try {
-            p.setMediaItem(mediaItem)
-            p.prepare()
-            p.play()
-            android.util.Log.d("PlayerManager", "playSong: playing ${song.title}")
-        } catch (e: Exception) {
-            android.util.Log.e("PlayerManager", "playSong failed", e)
+
+        // Check if song is already in current queue — if so, seek to it (gapless path)
+        val existingIndex = _queue.value.indexOf(song)
+        if (existingIndex >= 0) {
+            _currentIndex.value = existingIndex
+            try {
+                p.seekTo(existingIndex, 0)
+                p.play()
+                android.util.Log.d("PlayerManager", "playSong: seeking to existing queue item $existingIndex")
+            } catch (e: Exception) {
+                android.util.Log.e("PlayerManager", "playSong seek failed", e)
+            }
+        } else {
+            // New song — replace queue with single item and preload next if available
+            _queue.value = listOf(song)
+            _currentIndex.value = 0
+            val mediaItem = MediaItem.fromUri(streamUrl)
+            try {
+                p.setMediaItem(mediaItem)
+                // Preload next item if this song is in a known queue context
+                p.prepare()
+                p.play()
+                android.util.Log.d("PlayerManager", "playSong: playing ${song.title}")
+            } catch (e: Exception) {
+                android.util.Log.e("PlayerManager", "playSong failed", e)
+            }
         }
         _currentSong.value = song
+        // Initialize duration from API data; player.duration may return
+        // C.TIME_UNSET if the stream format lacks duration metadata.
+        if (song.durationMs > 0) _duration.value = song.durationMs
     }
 
     fun playQueue(songs: List<Song>, startIndex: Int = 0) {
@@ -221,6 +240,39 @@ class PlayerManager private constructor() {
         }
     }
 
+    /**
+     * 移动队列中的曲目位置
+     * @param fromIndex 当前索引
+     * @param toIndex 目标索引
+     * @return 移动是否成功
+     */
+    fun moveItem(fromIndex: Int, toIndex: Int): Boolean {
+        val currentQueue = _queue.value.toMutableList()
+        if (fromIndex !in currentQueue.indices || toIndex !in currentQueue.indices) return false
+        val item = currentQueue.removeAt(fromIndex)
+        currentQueue.add(toIndex, item)
+        _queue.value = currentQueue
+
+        // 同步更新 ExoPlayer 内部队列
+        try {
+            player?.moveMediaItem(fromIndex, toIndex)
+        } catch (e: Exception) {
+            android.util.Log.e("PlayerManager", "moveMediaItem failed", e)
+        }
+
+        // 调整 currentIndex 以跟随当前播放曲目
+        val ci = _currentIndex.value
+        _currentIndex.value = when {
+            fromIndex == ci -> toIndex
+            fromIndex < ci && toIndex >= ci -> ci - 1
+            fromIndex > ci && toIndex <= ci -> ci + 1
+            else -> ci
+        }
+
+        android.util.Log.d("PlayerManager", "moveItem: $fromIndex → $toIndex, currentIndex=${_currentIndex.value}")
+        return true
+    }
+
     fun clearQueue() {
         _queue.value = emptyList()
         player?.clearMediaItems()
@@ -263,6 +315,103 @@ class PlayerManager private constructor() {
         _currentIndex.value = currentIndex
         if (currentIndex in _queue.value.indices) {
             _currentSong.value = _queue.value[currentIndex]
+        }
+    }
+
+    // --- B-4 均衡器支持 ---
+    private var equalizer: Equalizer? = null
+    private var audioSessionId: Int = 0
+
+    /**
+     * 初始化均衡器（在 setPlayer 之后调用）
+     */
+    fun initEqualizer(): Boolean {
+        return try {
+            val p = player ?: return false
+            audioSessionId = p.audioSessionId
+            if (audioSessionId == 0) return false
+
+            // Release old equalizer if exists
+            equalizer?.release()
+            equalizer = Equalizer(0, audioSessionId)
+            equalizer?.enabled = true
+            android.util.Log.d("PlayerManager", "initEqualizer: initialised for session $audioSessionId")
+            true
+        } catch (e: Exception) {
+            android.util.Log.e("PlayerManager", "initEqualizer failed", e)
+            false
+        }
+    }
+
+    /**
+     * 设置指定频段的增益值
+     * @param bandIndex 频段索引 (0-based)
+     * @param gainDb 增益值 (dB, 通常 -15 到 +15)
+     */
+    fun setEqualizerBand(bandIndex: Int, gainDb: Float): Boolean {
+        return try {
+            val eq = equalizer
+            if (eq == null) {
+                if (!initEqualizer()) return false
+            }
+            val bands = equalizer?.numberOfBands ?: return false
+            if (bandIndex < 0 || bandIndex >= bands) return false
+            val gainMillibels = (gainDb * 100).toInt().toShort()
+            equalizer?.setBandLevel(bandIndex.toShort(), gainMillibels)
+            android.util.Log.d("PlayerManager", "setEqualizerBand: band=$bandIndex gain=${gainDb}dB")
+            true
+        } catch (e: Exception) {
+            android.util.Log.e("PlayerManager", "setEqualizerBand failed", e)
+            false
+        }
+    }
+
+    /**
+     * 获取当前频段增益值
+     */
+    fun getEqualizerBandLevel(bandIndex: Int): Float {
+        return try {
+            val eq = equalizer ?: return 0f
+            val level = eq.getBandLevel(bandIndex.toShort())
+            level / 100f
+        } catch (e: Exception) {
+            0f
+        }
+    }
+
+    /**
+     * 获取均衡器频段数量
+     */
+    fun getEqualizerBandCount(): Int {
+        return try {
+            equalizer?.numberOfBands?.toInt() ?: 0
+        } catch (e: Exception) {
+            0
+        }
+    }
+
+    /**
+     * 获取频段中心频率（Hz）
+     */
+    fun getEqualizerCenterFreq(bandIndex: Int): Int {
+        return try {
+            equalizer?.getCenterFreq(bandIndex.toShort())?.toInt() ?: 0
+        } catch (e: Exception) {
+            0
+        }
+    }
+
+    /**
+     * 禁用均衡器
+     */
+    fun disableEqualizer() {
+        try {
+            equalizer?.enabled = false
+            equalizer?.release()
+            equalizer = null
+            android.util.Log.d("PlayerManager", "disableEqualizer: disabled")
+        } catch (e: Exception) {
+            android.util.Log.e("PlayerManager", "disableEqualizer failed", e)
         }
     }
 

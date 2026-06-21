@@ -34,6 +34,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.tv.material3.ClickableSurfaceDefaults
@@ -55,6 +56,7 @@ private enum class SettingsSection(val displayName: String) {
     GENERAL("通用"),
     PLAYBACK("播放"),
     LYRICS("歌词"),
+    CACHE("缓存"),
     NETWORK("网络"),
     ABOUT("关于")
 }
@@ -70,6 +72,9 @@ fun SettingsScreen(
     onToggleCacheLyrics: (Boolean) -> Unit,
     onToggleCacheCover: (Boolean) -> Unit,
     onChangeLyricsOffset: (Long) -> Unit,
+    onClearLyricsCache: (() -> Unit)? = null,
+    onClearCoverCache: (() -> Unit)? = null,
+    onOpenEqualizer: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     var activeSection by remember { mutableStateOf(SettingsSection.GENERAL) }
@@ -149,6 +154,7 @@ fun SettingsScreen(
                             SettingsSection.GENERAL -> Icons.Default.Settings
                             SettingsSection.PLAYBACK -> Icons.Default.Audiotrack
                             SettingsSection.LYRICS -> Icons.AutoMirrored.Filled.QueueMusic
+                            SettingsSection.CACHE -> Icons.Default.Settings
                             SettingsSection.NETWORK -> Icons.Default.Settings
                             SettingsSection.ABOUT -> Icons.Default.Info
                         }
@@ -172,6 +178,12 @@ fun SettingsScreen(
                     SectionTitle("播放")
                     SettingSwitch(label = "自动播放下一首", description = "歌曲结束后自动播放队列中的下一首", checked = settings.autoPlayNext, onClick = { onToggleAutoPlayNext(!settings.autoPlayNext) })
                     PlayModeSelector(current = settings.defaultPlayMode, onSelect = { onChangePlayMode(it) })
+                    Spacer(modifier = Modifier.height(12.dp))
+                    SettingActionButton(
+                        label = "均衡器",
+                        description = "调节各频段增益",
+                        onClick = { onOpenEqualizer?.invoke() }
+                    )
                 }
                 SettingsSection.LYRICS -> {
                     SectionTitle("歌词")
@@ -185,6 +197,37 @@ fun SettingsScreen(
                     AboutRow(label = "构建类型", value = NasMusicVersion.BUILD_TYPE)
                     AboutRow(label = "开源协议", value = "GPL v3")
                     AboutRow(label = "支持后端", value = "Jellyfin / Navidrome")
+                }
+                SettingsSection.CACHE -> {
+                    SectionTitle("缓存管理")
+                    if (onClearLyricsCache != null) {
+                        SettingActionButton(
+                            label = "清除歌词缓存",
+                            description = "删除所有已缓存的歌词文件",
+                            onClick = onClearLyricsCache
+                        )
+                    }
+                    if (onClearCoverCache != null) {
+                        SettingActionButton(
+                            label = "清除封面缓存",
+                            description = "清理 Coil 图片加载器的磁盘缓存",
+                            onClick = onClearCoverCache
+                        )
+                    }
+                    val context = LocalContext.current
+                    val cacheDirSize = try {
+                        val cacheDir = context.cacheDir
+                        val sizeBytes = cacheDir?.walkTopDown()?.filter { it.isFile }?.sumOf { it.length() } ?: 0L
+                        if (sizeBytes > 1048576L) "${sizeBytes / 1048576} MB"
+                        else if (sizeBytes > 1024L) "${sizeBytes / 1024} KB"
+                        else "$sizeBytes B"
+                    } catch (_: Exception) { "—" }
+                    Text(
+                        text = "当前缓存目录大小: $cacheDirSize",
+                        color = NasMusicColors.TextSecondary,
+                        fontSize = 13.sp,
+                        modifier = Modifier.padding(start = 4.dp, top = 8.dp)
+                    )
                 }
                 SettingsSection.NETWORK -> {
                     SectionTitle("网络检测")
@@ -400,6 +443,63 @@ private fun PlayModeSelector(current: PlayMode, onSelect: (PlayMode) -> Unit) {
                     Text(text = mode.displayName, fontSize = 14.sp, modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp))
                 }
             }
+        }
+    }
+}
+
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+private fun SettingActionButton(
+    label: String,
+    description: String,
+    onClick: () -> Unit
+) {
+    var isFocused by remember { mutableStateOf(false) }
+    val animScale = remember { Animatable(1f) }
+    val scope = rememberCoroutineScope()
+    Surface(
+        onClick = onClick,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp)
+            .scale(animScale.value)
+            .border(
+                width = if (isFocused) 2.dp else 0.dp,
+                color = if (isFocused) NasMusicColors.FocusRing.copy(alpha = 0.6f) else Color.Transparent,
+                shape = RoundedCornerShape(12.dp)
+            )
+            .onFocusChanged {
+                    isFocused = it.isFocused
+                    scope.launch { animScale.animateTo(if (isFocused) 1.03f else 1f, tween(250)) }
+                },
+        shape = ClickableSurfaceDefaults.shape(
+            shape = RoundedCornerShape(12.dp),
+            focusedShape = RoundedCornerShape(12.dp)
+        ),
+        colors = ClickableSurfaceDefaults.colors(
+            containerColor = NasMusicColors.Surface,
+            contentColor = NasMusicColors.TextPrimary,
+            focusedContainerColor = NasMusicColors.Primary.copy(alpha = 0.15f),
+            focusedContentColor = NasMusicColors.TextPrimary
+        ),
+        scale = ClickableSurfaceDefaults.scale(
+            focusedScale = 1f,
+            pressedScale = 0.98f
+        )
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 18.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(text = label, color = NasMusicColors.TextPrimary, fontSize = 16.sp)
+                Text(text = description, color = NasMusicColors.TextSecondary, fontSize = 13.sp)
+            }
+            Text(
+                text = "执行",
+                color = NasMusicColors.Primary,
+                fontSize = 14.sp
+            )
         }
     }
 }

@@ -59,6 +59,7 @@ fun ServerConnectScreen(
     initialConfig: ServerConfig,
     isConnected: Boolean,
     serverDisplayName: String,
+    isConnecting: Boolean,
     onConnect: (ServerConfig) -> Unit,
     onDisconnect: () -> Unit,
     modifier: Modifier = Modifier
@@ -76,7 +77,12 @@ fun ServerConnectScreen(
             else TextFieldValue("hxzhang")
         )
     }
-    var password by remember { mutableStateOf(TextFieldValue("wfxzhx2000")) }
+    var password by remember {
+        mutableStateOf(
+            if (initialConfig.password.isNotBlank()) TextFieldValue(initialConfig.password)
+            else TextFieldValue("wfxzhx2000")
+        )
+    }
     var apiToken by remember {
         mutableStateOf(
             if (initialConfig.apiToken.isNotBlank()) TextFieldValue(initialConfig.apiToken)
@@ -84,7 +90,6 @@ fun ServerConnectScreen(
         )
     }
     var statusMessage by remember { mutableStateOf("") }
-    var isLoading by remember { mutableStateOf(false) }
     var activeInputField by remember { mutableStateOf<InputField?>(null) }
 
     // 连接测试状态
@@ -182,9 +187,7 @@ fun ServerConnectScreen(
                     val disconnectScope = rememberCoroutineScope()
                     Surface(
                         onClick = {
-                            isLoading = true
                             onDisconnect()
-                            isLoading = false
                             statusMessage = "已断开连接"
                         },
                         modifier = Modifier
@@ -345,7 +348,7 @@ fun ServerConnectScreen(
                     if (baseUrl.text.isBlank()) {
                         statusMessage = "请填写服务器地址"
                     } else {
-                        isLoading = true
+                        statusMessage = ""
                         val config = ServerConfig(
                             backendType = backendType,
                             baseUrl = baseUrl.text.trim().removeSuffix("/"),
@@ -354,7 +357,6 @@ fun ServerConnectScreen(
                             password = password.text.trim()
                         )
                         onConnect(config)
-                        isLoading = false
                     }
                 },
                 modifier = Modifier
@@ -389,7 +391,7 @@ fun ServerConnectScreen(
                 )
             ) {
                 Text(
-                    text = if (isLoading) "连接中..." else "连接服务器",
+                    text = if (isConnecting) "连接中..." else "连接服务器",
                     fontSize = 18.sp,
                     modifier = Modifier.padding(horizontal = 32.dp, vertical = 16.dp)
                 )

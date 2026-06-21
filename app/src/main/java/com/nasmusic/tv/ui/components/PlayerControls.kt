@@ -4,6 +4,7 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -25,6 +26,7 @@ import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material.icons.filled.Repeat
 import androidx.compose.material.icons.filled.RepeatOne
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -63,10 +65,190 @@ import com.nasmusic.tv.ui.theme.NasMusicColors
 import com.nasmusic.tv.util.TimeUtils
 import kotlinx.coroutines.launch
 
+// ─── Progress Section (standalone) ────────────────────────────────────────────
+
 /**
- * 播放控制栏
- * 包含进度条、上一首/播放/下一首、播放模式按钮
- * 对应 HTML 设计中的 `.player-controls` + `.np-progress`
+ * 独立进度条组件，包含进度轨道、滑块和时间标签。
+ * 用于 NowPlayingScreen 底部全宽显示，也可复用至其他页面。
+ */
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+fun ProgressSection(
+    progressMs: Long,
+    durationMs: Long,
+    onSeek: (Long) -> Unit,
+    onProgressFocusChanged: (Boolean) -> Unit = {},
+    modifier: Modifier = Modifier,
+    compact: Boolean = false,
+    currentSongId: String? = null
+) {
+    var progressBarSize by remember { mutableStateOf(IntSize.Zero) }
+    var isProgressFocused by remember { mutableStateOf(false) }
+    val progressSpacer = if (compact) 8.dp else 16.dp
+    val timeFont = if (compact) 12.sp else 14.sp
+    val timeFontFocused = if (compact) 15.sp else 18.sp
+    val progressFocusRequester = remember { FocusRequester() }
+
+    // 当播放新歌曲时请求焦点
+    LaunchedEffect(currentSongId) {
+        android.util.Log.d("NASMusic", "ProgressSection: requesting focus for song=$currentSongId")
+        progressFocusRequester.requestFocus()
+    }
+
+    Row(
+        modifier = modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = TimeUtils.formatDuration(progressMs),
+            color = if (isProgressFocused) NasMusicColors.TextPrimary else NasMusicColors.TextSecondary,
+            fontSize = if (isProgressFocused) timeFontFocused else timeFont
+        )
+        Spacer(modifier = Modifier.width(progressSpacer))
+        // 进度条（Box 组合布局）
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .height(36.dp)
+                .onPreviewKeyEvent { event ->
+                    // 在焦点导航之前拦截左右键进行 seek
+                    if ((event.key == Key.DirectionLeft || event.key == Key.DirectionRight)
+                        && event.type == KeyEventType.KeyDown && durationMs > 0) {
+                        val delta = if (event.key == Key.DirectionLeft) -15000L else 15000L
+                        onSeek((progressMs + delta).coerceIn(0, durationMs))
+                        android.util.Log.d("NASMusic", "ProgressSection: seek by ${delta}ms, new=${progressMs + delta}, duration=$durationMs")
+                        true
+                    } else false
+                }
+        ) {
+        Surface(
+            onClick = { if (durationMs > 0) onSeek(durationMs / 2) },
+            modifier = Modifier
+                .fillMaxSize()
+                .focusRequester(progressFocusRequester)
+                .onFocusChanged {
+                    isProgressFocused = it.isFocused
+                    onProgressFocusChanged(it.isFocused)
+                }
+                .onSizeChanged { progressBarSize = it },
+            colors = ClickableSurfaceDefaults.colors(
+                containerColor = NasMusicColors.Surface.copy(alpha = 0.15f),
+                focusedContainerColor = NasMusicColors.Surface.copy(alpha = 0.15f),
+                pressedContainerColor = NasMusicColors.Surface.copy(alpha = 0.15f)
+            ),
+            shape = ClickableSurfaceDefaults.shape(
+                shape = RoundedCornerShape(4.dp),
+                focusedShape = RoundedCornerShape(4.dp)
+            ),
+            scale = ClickableSurfaceDefaults.scale(focusedScale = 1f, pressedScale = 1f)
+        ) {
+            Box(modifier = Modifier.fillMaxSize()) {
+                val progress = if (durationMs > 0) progressMs.toFloat() / durationMs else 0f
+                val thumbDiameter = 16.dp
+
+                // 背景轨道
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(6.dp)
+                        .align(Alignment.CenterStart)
+                        .clip(RoundedCornerShape(3.dp))
+                        .background(NasMusicColors.SurfaceVariant)
+                )
+                // 进度填充
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth(progress.coerceIn(0f, 1f))
+                        .height(6.dp)
+                        .align(Alignment.CenterStart)
+                        .clip(RoundedCornerShape(3.dp))
+                        .background(NasMusicBrushes.progressBar)
+                )
+                // 滑块圆点
+                Box(
+                    modifier = Modifier
+                        .offset {
+                            val trackW = progressBarSize.width.toFloat()
+                            val thumbR = thumbDiameter.toPx() / 2f
+                            val pos = trackW * progress.coerceIn(0f, 1f)
+                            IntOffset(
+                                x = (pos - thumbR).roundToInt()
+                                    .coerceIn(0, (trackW - thumbDiameter.toPx()).toInt()),
+                                y = ((progressBarSize.height - thumbDiameter.toPx()) / 2f).roundToInt()
+                            )
+                        }
+                        .size(thumbDiameter)
+                        .clip(CircleShape)
+                        .background(if (isProgressFocused) Color.Yellow else NasMusicColors.Primary)
+                )
+            }
+        }
+        }
+        Spacer(modifier = Modifier.width(progressSpacer))
+        Text(
+            text = TimeUtils.formatDuration(durationMs),
+            color = if (isProgressFocused) NasMusicColors.TextPrimary else NasMusicColors.TextSecondary,
+            fontSize = if (isProgressFocused) timeFontFocused else timeFont
+        )
+    }
+}
+
+// ─── Control Buttons Row (standalone) ────────────────────────────────────────
+
+/**
+ * 独立播放控制按钮行：上一首、播放/暂停、下一首、播放模式。
+ * 供 NowPlayingScreen 在封面下方使用，也可在其他页面复用。
+ */
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+fun ControlButtonsRow(
+    isPlaying: Boolean,
+    playMode: PlayMode,
+    onPlayPause: () -> Unit,
+    onNext: () -> Unit,
+    onPrevious: () -> Unit,
+    onTogglePlayMode: () -> Unit,
+    modifier: Modifier = Modifier,
+    compact: Boolean = false
+) {
+    Row(
+        modifier = modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        IconButton(onClick = onPrevious, compact = compact, icon = {
+            Icon(imageVector = Icons.Filled.SkipPrevious, contentDescription = "Previous",
+                modifier = Modifier.size(if (compact) 22.dp else 32.dp))
+        })
+        Spacer(modifier = Modifier.width(if (compact) 12.dp else 20.dp))
+        IconButton(onClick = onPlayPause, primary = true, compact = compact, icon = {
+            Icon(imageVector = if (isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+                contentDescription = "Play/Pause",
+                modifier = Modifier.size(if (compact) 28.dp else 40.dp))
+        })
+        Spacer(modifier = Modifier.width(if (compact) 12.dp else 20.dp))
+        IconButton(onClick = onNext, compact = compact, icon = {
+            Icon(imageVector = Icons.Filled.SkipNext, contentDescription = "Next",
+                modifier = Modifier.size(if (compact) 22.dp else 32.dp))
+        })
+        Spacer(modifier = Modifier.width(if (compact) 12.dp else 20.dp))
+        IconButton(onClick = onTogglePlayMode, compact = compact, icon = {
+            val icon = when (playMode) {
+                PlayMode.SHUFFLE -> Icons.Filled.Shuffle
+                PlayMode.REPEAT_ONE -> Icons.Filled.RepeatOne
+                else -> Icons.Filled.Repeat
+            }
+            Icon(imageVector = icon, contentDescription = playMode.displayName,
+                modifier = Modifier.size(if (compact) 20.dp else 28.dp))
+        })
+    }
+}
+
+// ─── Combined PlayerControls (backward compatible) ───────────────────────────
+
+/**
+ * 播放控制栏（组合版）：进度条 + 控制按钮同一行。
+ * 保留兼容性，新页面推荐分别使用 [ProgressSection] 和 [ControlButtonsRow]。
  */
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
@@ -84,155 +266,30 @@ fun PlayerControls(
     modifier: Modifier = Modifier,
     compact: Boolean = false
 ) {
-    // 进度条 + 时间（两个模式共用）
-    var progressBarSize by remember { mutableStateOf(IntSize.Zero) }
-    var isProgressFocused by remember { mutableStateOf(false) }
-    val progressSpacer = if (compact) 8.dp else 16.dp
-    val timeFont = if (compact) 12.sp else 14.sp
-    val timeFontFocused = if (compact) 15.sp else 18.sp
-
-    @Composable
-    fun ProgressRow() {
-        val hasRequestedFocus = remember { mutableStateOf(false) }
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = TimeUtils.formatDuration(progressMs),
-                color = if (isProgressFocused) NasMusicColors.TextPrimary else NasMusicColors.TextSecondary,
-                fontSize = if (isProgressFocused) timeFontFocused else timeFont
-            )
-            Spacer(modifier = Modifier.width(progressSpacer))
-            // 进度条（Box 组合布局，取代 Canvas）
-            val progressFocusRequester = remember { FocusRequester() }
-            Surface(
-                onClick = { if (durationMs > 0) onSeek(durationMs / 2) },
-                modifier = Modifier
-                    .weight(1f)
-                    .height(36.dp)
-                    .focusRequester(progressFocusRequester)
-                    .onFocusChanged {
-                        isProgressFocused = it.isFocused
-                        onProgressFocusChanged(it.isFocused)
-                    }
-                    .onPreviewKeyEvent { event ->
-                        if (event.key == Key.DirectionLeft) {
-                            android.util.Log.d("NASMusic", "PlayerControls: DirectionLeft, type=${event.type}, progressMs=$progressMs, durationMs=$durationMs")
-                            if (event.type == KeyEventType.KeyUp && durationMs > 0) {
-                                onSeek((progressMs - 15000).coerceAtLeast(0))
-                            }
-                            true
-                        } else if (event.key == Key.DirectionRight) {
-                            android.util.Log.d("NASMusic", "PlayerControls: DirectionRight, type=${event.type}, progressMs=$progressMs, durationMs=$durationMs")
-                            if (event.type == KeyEventType.KeyUp && durationMs > 0) {
-                                onSeek((progressMs + 15000).coerceAtMost(durationMs))
-                            }
-                            true
-                        } else false
-                    }
-                    .onGloballyPositioned {
-                        if (!hasRequestedFocus.value) {
-                            hasRequestedFocus.value = true
-                            progressFocusRequester.requestFocus()
-                        }
-                    }
-                    .onSizeChanged { progressBarSize = it },
-                colors = ClickableSurfaceDefaults.colors(
-                    containerColor = NasMusicColors.Surface.copy(alpha = 0.15f),
-                    focusedContainerColor = NasMusicColors.Surface.copy(alpha = 0.15f),
-                    pressedContainerColor = NasMusicColors.Surface.copy(alpha = 0.15f)
-                ),
-                shape = ClickableSurfaceDefaults.shape(
-                    shape = RoundedCornerShape(4.dp),
-                    focusedShape = RoundedCornerShape(4.dp)
-                ),
-                scale = ClickableSurfaceDefaults.scale(focusedScale = 1f, pressedScale = 1f)
-            ) {
-                Box(modifier = Modifier.fillMaxSize()) {
-                    val progress = if (durationMs > 0) progressMs.toFloat() / durationMs else 0f
-                    val thumbDiameter = 16.dp
-
-                    // 背景轨道
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(6.dp)
-                            .align(Alignment.CenterStart)
-                            .clip(RoundedCornerShape(3.dp))
-                            .background(NasMusicColors.SurfaceVariant)
-                    )
-                    // 进度填充（按百分比宽度，与轨道同高以穿过滑块中心）
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth(progress.coerceIn(0f, 1f))
-                            .height(6.dp)
-                            .align(Alignment.CenterStart)
-                            .clip(RoundedCornerShape(3.dp))
-                            .background(NasMusicBrushes.progressBar)
-                    )
-                    // 滑块圆点（聚焦时变黄，不改变大小和位置）
-                    Box(
-                        modifier = Modifier
-                            .offset {
-                                val trackW = progressBarSize.width.toFloat()
-                                val thumbR = thumbDiameter.toPx() / 2f
-                                val pos = trackW * progress.coerceIn(0f, 1f)
-                                IntOffset(
-                                    x = (pos - thumbR).roundToInt()
-                                        .coerceIn(0, (trackW - thumbDiameter.toPx()).toInt()),
-                                    y = ((progressBarSize.height - thumbDiameter.toPx()) / 2f).roundToInt()
-                                )
-                            }
-                            .size(thumbDiameter)
-                            .clip(CircleShape)
-                            .background(if (isProgressFocused) Color.Yellow else NasMusicColors.Primary)
-                    )
-                }
-            }
-            Spacer(modifier = Modifier.width(progressSpacer))
-            Text(
-                text = TimeUtils.formatDuration(durationMs),
-                color = if (isProgressFocused) NasMusicColors.TextPrimary else NasMusicColors.TextSecondary,
-                fontSize = if (isProgressFocused) timeFontFocused else timeFont
-            )
-        }
-    }
-
-    // 所有模式：进度条 + 控制按钮同一行
-    // 紧凑模式用更紧凑的间距和小图标，非紧凑用更大的图标和间距
     val contentPadding = if (compact) 24.dp else 4.dp
     Row(
         modifier = modifier.fillMaxWidth().padding(horizontal = contentPadding),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // 左：进度条（含时间标签）
-        Box(modifier = Modifier.weight(if (compact) 0.66f else 0.6f)) { ProgressRow() }
+        Box(modifier = Modifier.weight(if (compact) 0.66f else 0.6f)) {
+            ProgressSection(
+                progressMs = progressMs,
+                durationMs = durationMs,
+                onSeek = onSeek,
+                onProgressFocusChanged = onProgressFocusChanged,
+                compact = compact
+            )
+        }
         Spacer(modifier = Modifier.width(if (compact) 8.dp else 16.dp))
-        // 右：控制按钮
-        IconButton(onClick = onPrevious, compact = compact, icon = {
-            Icon(imageVector = Icons.Filled.SkipPrevious, contentDescription = "Previous",
-                modifier = Modifier.size(if (compact) 22.dp else 32.dp))
-        })
-        IconButton(onClick = onPlayPause, primary = true, compact = compact, icon = {
-            Icon(imageVector = if (isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
-                contentDescription = "Play/Pause",
-                modifier = Modifier.size(if (compact) 28.dp else 40.dp))
-        })
-        IconButton(onClick = onNext, compact = compact, icon = {
-            Icon(imageVector = Icons.Filled.SkipNext, contentDescription = "Next",
-                modifier = Modifier.size(if (compact) 22.dp else 32.dp))
-        })
-        IconButton(onClick = onTogglePlayMode, compact = compact, icon = {
-            val icon = when (playMode) {
-                PlayMode.SHUFFLE -> Icons.Filled.Shuffle
-                PlayMode.REPEAT_ONE -> Icons.Filled.RepeatOne
-                else -> Icons.Filled.Repeat
-            }
-            Icon(imageVector = icon, contentDescription = playMode.displayName,
-                modifier = Modifier.size(if (compact) 20.dp else 28.dp))
-        })
+        ControlButtonsRow(
+            isPlaying = isPlaying,
+            playMode = playMode,
+            onPlayPause = onPlayPause,
+            onNext = onNext,
+            onPrevious = onPrevious,
+            onTogglePlayMode = onTogglePlayMode,
+            compact = compact
+        )
     }
 }
 

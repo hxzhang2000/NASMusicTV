@@ -3,6 +3,7 @@ package com.nasmusic.tv.lyrics
 import com.nasmusic.tv.data.model.Lyrics
 import com.nasmusic.tv.data.model.LyricsLine
 import com.nasmusic.tv.data.model.LyricsSource
+import com.nasmusic.tv.data.model.WordTimestamp
 
 /**
  * LRC 歌词解析器
@@ -28,11 +29,41 @@ object LrcParser {
         val lineRegex = Regex("(\\[\\d{1,2}:\\d{2}\\.\\d{2,3}\\])+(.+)")
         val timeRegex = Regex("\\[(\\d{1,2}):(\\d{2})\\.(\\d{2,3})\\]")
 
+        // Karaoke word-timestamp pattern: <mm:ss.ff>word
+        val wordTimestampRegex = Regex("<(\\d{1,2}):(\\d{2})\\.(\\d{2,3})>([^<]+)")
+
         cleanedText.lines().forEach { line ->
             val match = lineRegex.find(line)
             if (match != null) {
-                val text = match.groupValues[2].trim()
+                val rawText = match.groupValues[2].trim()
                 val timeMatches = timeRegex.findAll(line)
+
+                // Check if line contains embedded word timestamps (karaoke format)
+                val wordMatches = wordTimestampRegex.findAll(rawText).toList()
+                val wordTimestamps = if (wordMatches.isNotEmpty()) {
+                    android.util.Log.d("LrcParser", "Found ${wordMatches.size} word timestamps in line: ${rawText.take(50)}...")
+                    wordMatches.map { wm ->
+                        val wMinutes = wm.groupValues[1].toLong()
+                        val wSeconds = wm.groupValues[2].toLong()
+                        val wMillis = wm.groupValues[3].let {
+                            if (it.length == 2) it.toLong() * 10 else it.toLong()
+                        }
+                        val wTimeMs = wMinutes * 60 * 1000 + wSeconds * 1000 + wMillis + globalOffset
+                        WordTimestamp(
+                            word = wm.groupValues[4],
+                            startMs = wTimeMs
+                        )
+                    }
+                } else {
+                    emptyList()
+                }
+
+                // Compute display text: strip word timestamp markers for karaoke lines
+                val displayText = if (wordTimestamps.isNotEmpty()) {
+                    wordTimestamps.joinToString("") { it.word }
+                } else {
+                    rawText
+                }
 
                 timeMatches.forEach { timeMatch ->
                     val minutes = timeMatch.groupValues[1].toLong()
@@ -42,13 +73,19 @@ object LrcParser {
                     }
 
                     val timeMs = minutes * 60 * 1000 + seconds * 1000 + millis + globalOffset
-                    lines.add(LyricsLine(time = timeMs, text = text))
+                    lines.add(LyricsLine(
+                        time = timeMs,
+                        text = displayText,
+                        wordTimestamps = wordTimestamps
+                    ))
                 }
             }
         }
 
         // Sort by time
         lines.sortBy { it.time }
+        val lyricsWithWords = lines.count { it.wordTimestamps.isNotEmpty() }
+        android.util.Log.d("LrcParser", "Parsed ${lines.size} lines, $lyricsWithWords lines with word timestamps")
 
         return Lyrics(
             songId = songId,

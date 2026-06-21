@@ -17,8 +17,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -72,6 +73,7 @@ fun QueueScreen(
     onPlaySong: (Int) -> Unit,
     onRemoveSong: (Int) -> Unit,
     onClearQueue: () -> Unit,
+    onMoveItem: (Int, Int) -> Unit,
     onPlayPause: () -> Unit,
     onNext: () -> Unit,
     onPrevious: () -> Unit,
@@ -171,8 +173,7 @@ fun QueueScreen(
                 }
             } else {
                 LazyColumn(modifier = Modifier.fillMaxWidth().weight(1f)) {
-                    items(queue) { song ->
-                        val index = queue.indexOf(song)
+                    itemsIndexed(queue) { index, song ->
                         val isCurrent = index == currentIndex
                         var isFocused by remember { mutableStateOf(false) }
                         val animScale = remember { Animatable(1f) }
@@ -200,7 +201,7 @@ fun QueueScreen(
                                 containerColor = if (isCurrent) NasMusicColors.Primary.copy(alpha = 0.2f) else NasMusicColors.Surface,
                                 contentColor = if (isCurrent) NasMusicColors.Primary else NasMusicColors.TextPrimary,
                                 focusedContainerColor = if (isCurrent) NasMusicColors.Primary.copy(alpha = 0.3f) else NasMusicColors.Primary.copy(alpha = 0.2f),
-                                focusedContentColor = if (isCurrent) androidx.compose.ui.graphics.Color.Black else NasMusicColors.TextPrimary
+                                focusedContentColor = if (isCurrent) Color.Black else NasMusicColors.TextPrimary
                             ),
                             scale = ClickableSurfaceDefaults.scale(
                                 focusedScale = 1f,
@@ -229,13 +230,22 @@ fun QueueScreen(
                                     modifier = Modifier.width(40.dp),
                                     textAlign = TextAlign.Center
                                 )
-                                Spacer(modifier = Modifier.width(16.dp))
+                                Spacer(modifier = Modifier.width(12.dp))
                                 Column(modifier = Modifier.weight(1f)) {
                                     Text(text = song.title, color = if (isCurrent) NasMusicColors.Primary else NasMusicColors.TextPrimary, fontSize = 16.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                     Text(text = song.artist.ifBlank { "—" }, color = NasMusicColors.TextSecondary, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                 }
-                                Spacer(modifier = Modifier.width(16.dp))
+                                Spacer(modifier = Modifier.width(12.dp))
                                 Text(text = TimeUtils.formatDuration(song.durationMs), color = NasMusicColors.TextSecondary, fontSize = 14.sp)
+                                // 上下移动按钮
+                                if (index > 0) {
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    MoveButton(text = "↑", onClick = { onMoveItem(index, index - 1) })
+                                }
+                                if (index < queue.lastIndex) {
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    MoveButton(text = "↓", onClick = { onMoveItem(index, index + 1) })
+                                }
                             }
                         }
                     }
@@ -279,6 +289,45 @@ fun QueueActionButton(text: String, onClick: () -> Unit, icon: androidx.compose.
         )
     ) {
         Text(text = text, fontSize = 14.sp, modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp))
+    }
+}
+
+@Composable
+private fun MoveButton(text: String, onClick: () -> Unit) {
+    var isFocused by remember { mutableStateOf(false) }
+    val animScale = remember { Animatable(1f) }
+    val scope = rememberCoroutineScope()
+    Surface(
+        onClick = onClick,
+        modifier = Modifier
+            .widthIn(min = 36.dp)
+            .scale(animScale.value)
+            .border(
+                width = if (isFocused) 2.dp else 0.dp,
+                color = if (isFocused) NasMusicColors.FocusRing else Color.Transparent,
+                shape = RoundedCornerShape(6.dp)
+            )
+            .onFocusChanged {
+                isFocused = it.isFocused
+                scope.launch { animScale.animateTo(if (isFocused) 1.1f else 1f, tween(150)) }
+            },
+        shape = ClickableSurfaceDefaults.shape(
+            shape = RoundedCornerShape(6.dp),
+            focusedShape = RoundedCornerShape(6.dp)
+        ),
+        colors = ClickableSurfaceDefaults.colors(
+            containerColor = NasMusicColors.SurfaceVariant,
+            contentColor = NasMusicColors.TextSecondary,
+            focusedContainerColor = NasMusicColors.Primary.copy(alpha = 0.3f),
+            focusedContentColor = NasMusicColors.Primary
+        ),
+        scale = ClickableSurfaceDefaults.scale(focusedScale = 1f, pressedScale = 0.95f)
+    ) {
+        Text(
+            text = text,
+            fontSize = 16.sp,
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp)
+        )
     }
 }
 

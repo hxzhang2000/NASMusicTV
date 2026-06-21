@@ -34,12 +34,14 @@ object BackendRegistry {
             else -> return@withContext false
         }
 
+        android.util.Log.d("BackendRegistry", "initialize: type=${config.backendType}, baseUrl=${config.baseUrl}, username=${config.username}, hasPw=${config.password.isNotEmpty()}, hasToken=${config.apiToken.isNotEmpty()}")
         val success = adapter.initialize(
             baseUrl = config.baseUrl,
             apiToken = config.apiToken,
             username = config.username,
             password = config.password
         )
+        android.util.Log.d("BackendRegistry", "initialize: result=$success")
 
         if (success) {
             currentAdapter = adapter
@@ -75,9 +77,17 @@ object BackendRegistry {
     fun isConnected(): Boolean = currentAdapter != null
 
     /**
-     * 断开连接
+     * 断开连接并释放网络资源
      */
-    fun disconnect() {
+    suspend fun disconnect() {
+        currentAdapter?.let { adapter ->
+            try {
+                adapter.logout()
+            } catch (_: Exception) {}
+            try {
+                adapter.close()
+            } catch (_: Exception) {}
+        }
         currentAdapter = null
         currentConfig = null
         serverDisplayName = ""
@@ -107,8 +117,15 @@ object BackendRegistry {
                 is NavidromeAdapter -> adapter.getServerName()
                 else -> config.backendType.uppercase()
             }
+            // 登出释放临时 session 防止泄漏，结果不影响返回值
+            try { adapter.logout() } catch (_: Exception) {}
+            // 关闭连接池防止连接泄漏
+            try { adapter.close() } catch (_: Exception) {}
             Pair(true, serverName)
         } else {
+            // 即使失败也尝试 logout（部分 Jellyfin 可能已创建 session）
+            try { adapter.logout() } catch (_: Exception) {}
+            try { adapter.close() } catch (_: Exception) {}
             Pair(false, "连接失败，请检查地址和凭据")
         }
     }

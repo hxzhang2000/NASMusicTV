@@ -1,7 +1,7 @@
 # NAS Music TV — 技术架构概述
 
-> 版本：v1.0.1 (STABLE)
-> 最后更新：2026-06-20
+> 版本：v2.1.0 (DEV)
+> 最后更新：2026-06-21
 > 本文档记录项目当前的完整技术架构，作为后续迭代的基准参考。
 
 ---
@@ -562,6 +562,7 @@ App 启动
 6. 无播放列表管理
 7. 无均衡器/音效调节
 8. 封面图全屏沉浸模式未实现
+9. [已修复] ~~Jellyfin 连接泄漏：`testConnection()` 每次创建新 `JellyfinAdapter()` 调用 `authenticateByName()` 在服务端创建永久 session，无 `logout()` 释放。多次测试连接 → session 积满 → 服务端 HTTP 500。此外 `BackendRegistry.disconnect()` 只置 null，不关闭 OkHttp 连接池。修复需在 JellyfinAdapter 添加 `logout()` 并在 `disconnect()` 中调用，同时 `testConnection()` 用完释放临时 adapter。详见 Issue #1。~~ → 详见 10.7.2 和 10.7.4
 
 ### 兼容性约束
 | 约束 | 说明 |
@@ -862,7 +863,7 @@ com.nasmusic.tv/
 coverUrl = buildCoverUrl(id, imageTag) ?: getCoverUrl(id)
 ```
 
-**验证状态**：⏳ 待部署验证。
+**验证状态**：✅ 测试通过。
 
 ---
 
@@ -967,3 +968,898 @@ if (albums.isNotEmpty())
 - 初始提交：75 个文件 / 10,757 行
 
 **验证结果**：✅ 已推送到 GitHub，`git log` 确认提交链完整。
+
+---
+
+### 10.3 v1.1.0
+
+#### 10.3.1 E-3 废弃代码清理
+
+**功能描述**：删除旧 Retrofit 实现的 `backend/jellyfin/` 和 `backend/navidrome/` 目录（共 6 个文件），移除不再需要的 Retrofit 依赖。
+
+**删除文件**：
+- `backend/jellyfin/JellyfinAdapter.kt`、`JellyfinApi.kt`、`JellyfinModels.kt`
+- `backend/navidrome/NavidromeAdapter.kt`、`NavidromeApi.kt`、`NavidromeModels.kt`
+
+**依赖变更**（`app/build.gradle.kts`）：移除 `retrofit:2.9.0` 和 `converter-gson:2.9.0`（`gson` 保留，供当前 OkHttp 实现的 JSON 解析使用）
+
+**验证**：✅ 编译无错误，无 import 引用残留。
+
+---
+
+#### 10.3.2 C-2 无间断播放与预加载
+
+**功能描述**：启用 ExoPlayer 曲目切换交叉淡入淡出，优化 `playSong()` 路径中已存在于当前队列的歌曲直接 seek 而非重建队列。
+
+**修改**：
+- `PlaybackService.kt` — ExoPlayer 构建时增加 `CrossfadeMediaSource.Factory(DefaultMediaSourceFactory(this))`
+- `PlayerManager.playSong()` — 如果歌曲已在当前队列中，直接 `seekTo()` 实现无缝切换；新歌曲保持原行为
+
+**涉及文件**：
+| 文件 | 改动 |
+|------|------|
+| `player/PlaybackService.kt` | +3 行 import，+1 行 `.setMediaSourceFactory()` |
+| `player/PlayerManager.kt` | `playSong()` 新增队列内查找跳过重建逻辑 |
+
+**验证**：✅ 编译通过（淡入淡出效果需真机验证）。
+
+---
+
+#### 10.3.3 B-5 沉浸模式
+
+**功能描述**：点击播放页封面图 → 切换至沉浸模式：封面图铺满全屏作为背景 + 半透明渐变遮罩，歌词叠加在封面上方滚动。再次点击封面或按 BACK 恢复常规布局。
+
+**修改**（`ui/screens/NowPlayingScreen.kt`）：
+- 新增 `isImmersiveMode` 状态
+- 新增全屏封面背景层（`AsyncImage` fillMaxSize + 垂直渐变遮罩 `Color(0xCC0C1222)`）
+- 左侧封面提取为独立 `CoverColumn` 组件，包裹 `Surface(onClick = toggle)`
+- 歌词区域在沉浸模式下移除自身半透明背景（避免与封面遮罩叠加视觉冲突）
+- BACK 按键拦截：沉浸模式中按 BACK 返回常规模式
+
+**新增组件**：`CoverColumn` — 可聚焦的封面区域，scale 动画 + 焦点边框
+
+**涉及文件**：
+| 文件 | 改动 |
+|------|------|
+| `ui/screens/NowPlayingScreen.kt` | ~100 行重构，提取 `CoverColumn` + 沉浸模式逻辑 |
+
+**关键设计**：
+```kotlin
+// 沉浸模式布局层级
+Box {
+    if (immersive) {
+        AsyncImage(fillMaxSize, coverUrl)  // 背景层
+        Box(gradient overlay)              // 遮罩层
+    }
+    Column {
+        if (!immersive) CoverColumn(...)   // 左列封面
+        Column(weight=1f) { Lyrics }      // 歌词（全宽）
+        PlayerControls                     // 底部控制
+    }
+}
+```
+
+**验证**：✅ 测试通过。
+
+---
+
+#### 10.3.4 C-1 队列排序增强
+
+**功能描述**：播放队列中每首曲目增加「↑」「↓」移动按钮，支持 D-pad 焦点操作移动曲目顺序。
+
+**新增**：
+- `PlayerManager.moveItem(fromIndex, toIndex)` — 同步更新 `_queue` StateFlow 和 ExoPlayer 内部队列，自动调整 `_currentIndex` 追踪当前播放曲目
+- `QueueScreen.MoveButton` — 小型 focusable Surface 按钮（36dp 宽，6dp 圆角）
+- `MainViewModel.moveQueueItem(from, to)` — 委托给 PlayerManager
+
+**修改**（`QueueScreen.kt`）：
+- `items` → `itemsIndexed` 修复重复歌曲索引错误
+- 每行右侧追加 `↑`（非第一首）和 `↓`（非最后一首）按钮
+- 新增 `onMoveItem` 参数桥接到 ViewModel
+
+**涉及文件**：
+| 文件 | 改动 |
+|------|------|
+| `player/PlayerManager.kt` | 新增 `moveItem()` |
+| `ui/screens/QueueScreen.kt` | `itemsIndexed` + `MoveButton` + `onMoveItem` 参数 |
+| `ui/viewmodel/MainViewModel.kt` | 新增 `moveQueueItem()` |
+| `ui/MainActivity.kt` | `QueueScreen` 传入 `onMoveItem` |
+
+**验证**：✅ 编译通过（队列排序功能需真机验证）。
+
+---
+
+### 10.5 v2.0.1 — Bug 修复
+
+**版本信息**：VERSION_CODE=4, BUILD_TYPE=STABLE
+**日期**：2026-06-20
+**概要**：修复启动崩溃和服务连接问题。
+
+---
+
+#### 10.5.1 H-1 修复 Android < API 26 启动崩溃
+
+**问题**：`PlaybackService.onCreate()` 调用 `createNotificationChannel()` 直接使用 `NotificationChannel`（API 26+），导致 Android 5/6/7 设备上 `NoClassDefFoundError`。
+**修复**：`createNotificationChannel()` 开头添加 API 级别检查：
+```kotlin
+if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.O) return
+```
+**涉及文件**：`player/PlaybackService.kt`
+
+---
+
+#### 10.5.2 H-2 修复服务器连接页面「连接服务器」按钮无反馈
+
+**问题**：
+1. 密码字段硬编码为 `"wfxzhx2000"`，不读取已保存配置 → 期望不同密码的用户连接失败
+2. `onConnect(config)` 是异步 fire-and-forget → 按钮的本地 `isLoading` 状态立即闪回，用户看不到"连接中..."
+3. `connectToServer()` catch 块不设置错误消息 → 失败时用户看不到任何反馈
+**修复**：
+- 密码初始值从 `initialConfig.password` 读取，不为空时回退默认值
+- 移除 `ServerConnectScreen` 本地 `isLoading`，改为通过 `isConnecting` prop 使用 ViewModel 的 `_isLoading`
+- `connectToServer()` 失败时通过 `_connectMessage` 显示 "连接失败: xxx"（3 秒自动清除）
+**涉及文件**：`ui/screens/ServerConnectScreen.kt`、`ui/viewmodel/MainViewModel.kt`、`ui/MainActivity.kt`
+
+---
+
+#### 10.5.3 H-3 修复启动时连接提示对话框被自动重连关闭
+
+**问题**：`init` 块设置 `_showConnectPrompt = true` 后，`onNetworkAvailable()` 调用 `connectToSavedServer(silent=true)` 始终设置 `_showConnectPrompt = false`，两者存在竞态条件 → 连接提示对话框有时不出现。
+**修复**：`connectToSavedServer()` 仅在 `!silent` 时才关闭对话框。
+**涉及文件**：`ui/viewmodel/MainViewModel.kt`
+
+---
+
+#### 10.5.4 H-4 修复连接过程无日志输出
+
+**问题**：`BackendRegistry.initialize()` 和 `connectToSavedServer()` 的失败路径均无任何日志，无法诊断连接失败原因。
+**修复**：添加带 Tag `BackendRegistry` / `NASMusic` / `JellyfinAdapter` 的关键路径日志（初始化参数、HTTP 状态码、连接结果）。
+**涉及文件**：`backend/BackendRegistry.kt`、`backend/impl/JellyfinAdapter.kt`、`ui/viewmodel/MainViewModel.kt`
+
+---
+
+#### 10.5.5 H-5 修复播放歌曲时 NoSuchMethodError 崩溃
+
+**问题**：`PlaybackService.updateNotification()` 中使用 `getSystemService(NotificationManager::class.java)`，该带 Class 参数的重载方法为 API 23+ 引入。Android 5.1 (API 22) 上调用时抛出 `NoSuchMethodError`，导致点击歌曲播放立即崩溃。
+
+**修复**：将两处 `getSystemService(NotificationManager::class.java)` 替换为 API 1 即存在的 `getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager`（分布于 `createNotificationChannel()` 和 `updateNotification()`）。
+
+```diff
+- getSystemService(NotificationManager::class.java)
++ getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+```
+
+**涉及文件**：`player/PlaybackService.kt`
+
+**验证**：✅ 编译通过，真机播放歌曲正常。
+
+---
+
+### 10.6 v2.0.0
+
+**版本信息**：VERSION_CODE=3, BUILD_TYPE=STABLE, FILE_FORMAT_VERSION=1
+
+**概要**：完整实现 Phase 2-4 全部功能，包括专辑/演唱者详情页、流派/年代浏览、多演唱者拆分、收藏/最近播放、卡拉 OK 歌词、均衡器、前台通知、网络监控、错误提示、播放列表管理、HDMI-CEC、缓存管理。
+
+---
+
+#### 10.4.1 A-1 专辑详情页
+
+**功能描述**：从 LibraryScreen 点击专辑卡片进入详情页，展示专辑封面、曲目列表。
+- `AlbumDetailScreen.kt` — 左侧 360dp 封面 + 右侧曲目列表（itemsIndexed, LazyColumn）
+- 支持「播放全部」和逐曲播放，BACK 键返回曲库
+- `MainViewModel.openAlbumDetail(album)` + `loadAlbumSongs(albumId)` 缓存至 `_albumSongsCache`
+
+**涉及文件**：`AlbumDetailScreen.kt`（新建）、`MainActivity.kt`（Screen.AlbumDetail 分支）、`MainViewModel.kt`（openAlbumDetail/loadAlbumSongs）
+
+---
+
+#### 10.4.2 A-2 演唱者详情页
+
+**功能描述**：从 LibraryScreen ArtistsTab 点击演唱者进入详情页，展示该演唱者所有歌曲。
+- `ArtistDetailScreen.kt` — 顶部演唱者名 + 歌曲列表，支持「播放全部」
+- `MainViewModel.selectedArtistName` StateFlow 记录当前查看的演唱者
+- 歌曲数据来源于 `_artistSongsMap`（A-4 拆分后映射）
+
+**涉及文件**：`ArtistDetailScreen.kt`（新建）、`MainActivity.kt`（Screen.ArtistDetail 分支）、`MainViewModel.kt`（openArtistDetail）
+
+---
+
+#### 10.4.3 A-3 流派与年代浏览
+
+**功能描述**：LibraryScreen 增加 GENRES / YEARS 标签页，按流派和出版年份筛选歌曲。
+- `GenresTab` — 流派列表，点击弹出 Dialog 显示该流派歌曲
+- `YearsTab` — 年代区间（1990s/2000s/2010s/2020s），点击弹出 Dialog
+- `MainViewModel.getSongsByGenre(genre, callback)` + `getSongsByYearRange(from, to, callback)`
+- `BackendAdapter.getGenres()` / `getSongsByGenre()` / `getSongsByYearRange()` 接口方法
+
+**涉及文件**：`LibraryScreen.kt`（GenresTab/YearsTab）、`MainViewModel.kt`、`BackendAdapter.kt`、`JellyfinAdapter.kt`、`NavidromeAdapter.kt`
+
+---
+
+#### 10.4.4 A-4 多演唱者拆分
+
+**功能描述**：将后端返回的 `artist` 字段按分隔符拆分为独立演唱者列表。
+- `ArtistSplitter` — 按优先级匹配分隔符：`feat.` → `ft.` → `with` → `&/、/×` → `vs`
+- `MainViewModel.buildArtistMaps(songs)` — 生成 `_songArtistMap`（songId→artists）和 `_artistSongsMap`（artist→songs）
+- LibraryScreen ArtistsTab 展示拆分后的独立演唱者（而非原始 `artist` 字段）
+
+**涉及文件**：`ArtistSplitter.kt`（新建）、`MainViewModel.kt`、`LibraryScreen.kt`
+
+---
+
+#### 10.4.5 B-1 歌曲收藏
+
+**功能描述**：NowPlayingScreen 增加收藏按钮，LibraryScreen 增加 FAVORITES 标签页。
+- `FavoriteButton` — 在 CoverColumn 中与歌名同行显示，❤/♡ 图标
+- `MainViewModel.toggleFavorite(song)` / `isFavorite(songId)` / `loadFavorites(adapter)`
+- `AppPreferences` 无专门字段 — 收藏状态由后端管理，ViewModel 缓存 `_favoriteIds`（Set\<String\>）和 `_favoriteSongs`
+- `BackendAdapter.toggleFavorite()` / `getFavorites()` 接口方法
+
+**涉及文件**：`NowPlayingScreen.kt`、`LibraryScreen.kt`、`MainViewModel.kt`、`BackendAdapter.kt`、`JellyfinAdapter.kt`、`NavidromeAdapter.kt`
+
+---
+
+#### 10.4.6 B-2 最近播放与播放次数
+
+**功能描述**：LibraryScreen 增加 RECENT 标签页，记录最近播放的 50 首歌曲。
+- `AppPreferences.recordPlay(songId)` — LRU 队列，JSON 序列化至 DataStore `recent_songs` key
+- `AppPreferences.playCounts` — `Map<String, Int>` 播放计数，存储至 `play_counts` key
+- `MainViewModel.recentSongIds` / `playCounts` 直接暴露 AppPreferences 的 Flow
+- `MainViewModel.recordPlay(song)` — 在 `playSong` / `playQueue` 中调用
+
+**涉及文件**：`AppPreferences.kt`、`MainViewModel.kt`、`LibraryScreen.kt`
+
+---
+
+#### 10.4.7 B-3 卡拉 OK 逐字高亮
+
+**功能描述**：支持词级时间戳的 LRC 歌词，播放时逐字变色。
+- `WordTimestamp` 数据类（`word`, `startMs`, `durationMs`）
+- `LyricsLine.wordTimestamps` 字段（默认为空列表）
+- `LrcParser` 解析 `<mm:ss.ff>word>` 格式标记，生成 `WordTimestamp` 列表
+- `LyricsView` 使用 `AnnotatedString` + `SpanStyle` 构建逐字高亮，已播词用 `TextBrightHighlight` 色
+- `NasMusicColors.TextBrightHighlight` (#5EEAD4) 新增主题色
+
+**涉及文件**：`LyricsLine.kt`、`LrcParser.kt`、`LyricsView.kt`、`Theme.kt`
+
+---
+
+#### 10.4.8 B-4 均衡器
+
+**功能描述**：创建均衡器界面和 Android AudioFX 绑定。
+- `EqualizerScreen.kt` — 预设选择器（Normal/Classical/Dance/etc.）+ 频段增益列表
+- `PlayerManager.initEqualizer()` — 绑定 `android.media.audiofx.Equalizer` 到 ExoPlayer 音频会话
+- `PlayerManager.setEqualizerBand()` / `getEqualizerBandLevel()` / `getEqualizerBandCount()` / `getEqualizerCenterFreq()`
+- `AppPreferences.equalizerPreset` / `equalizerBands` — 持久化预设和自定义频段
+- 预设值按频率段换算：pop/rock/jazz/classic/dance 各有独立 EQ 曲线
+
+**涉及文件**：`EqualizerScreen.kt`（新建）、`PlayerManager.kt`、`AppPreferences.kt`、`EqualizerPreset.kt`（新建）、`MainActivity.kt`、`SettingsScreen.kt`
+
+---
+
+#### 10.4.9 D-1 前台通知
+
+**功能描述**：PlaybackService 启动时创建前台通知，显示当前播放歌曲信息。
+- `PlaybackService.createNotificationChannel()` — 通道 ID `nas_music_playback`，IMPORTANCE_LOW
+- `PlaybackService.buildNotification()` — 显示歌名、演唱者、播放/暂停/上/下一曲按钮
+- `PlaybackService.updateNotification()` — 播放状态变化时更新
+- `startForeground(1, notification)` — 在 `onCreate()` 中立即调用
+- `AndroidManifest.xml` — `FOREGROUND_SERVICE` + `FOREGROUND_SERVICE_MEDIA_PLAYBACK` 权限
+
+**涉及文件**：`PlaybackService.kt`、`AndroidManifest.xml`
+
+---
+
+#### 10.4.10 D-2 网络监控
+
+**功能描述**：监听网络状态变化，断网后自动重连。
+- `MainActivity.registerNetworkCallback()` — 注册 `ConnectivityManager.NetworkCallback`
+- `MainViewModel.onNetworkAvailable()` — 最多重试 3 次连接
+- `MainViewModel.onNetworkLost()` — 重置重试计数，显示断网提示
+- ``_isNetworkAvailable` StateFlow` — 供 UI 层使用
+
+**涉及文件**：`MainActivity.kt`、`MainViewModel.kt`
+
+---
+
+#### 10.4.11 D-3 错误提示
+
+**功能描述**：所有后端调用失败时显示用户可见的错误提示。
+- `MainViewModel._errorMessage` StateFlow — 5 秒自动清除的消息队列
+- `MainViewModel.showError(msg)` — 统一错误显示方法
+- 所有 catch 块从 `Log.e` 升级为 `Log.e` + `showError()`（约 16 处修改）
+- `MainActivity` 顶部红色错误横幅显示
+
+**涉及文件**：`MainViewModel.kt`、`MainActivity.kt`
+
+---
+
+#### 10.4.12 E-4 缓存管理
+
+**功能描述**：SettingsScreen 增加 CACHE 区域，显示缓存大小，支持清除歌词/封面缓存。
+- `SettingsScreen` — CACHE section with `SettingActionButton`
+- `CoverArtManager.clearCache()` — 清除 Coil 磁盘/内存缓存
+- `CoverArtManager.getCacheSize()` — 获取磁盘缓存大小
+- `LyricsManager.clearCache()` — 已有方法（未改动）
+- `MainViewModel.clearLyricsCache()` / `clearCoverCache()`
+
+**涉及文件**：`SettingsScreen.kt`、`CoverArtManager.kt`、`MainViewModel.kt`
+
+---
+
+#### 10.4.13 F-1 播放列表管理
+
+**功能描述**：创建、查看、删除、播放播放列表。
+- `PlaylistManagementScreen.kt` — 播放列表示 + 选中列表歌曲详情
+- `BackendAdapter` 新增 6 个方法：`getPlaylists()`、`createPlaylist()`、`deletePlaylist()`、`getPlaylistSongs()`、`addToPlaylist()`、`removeFromPlaylist()`
+- `JellyfinAdapter` — 使用 `/Playlists` 端点实现
+- `NavidromeAdapter` — 使用 Subsonic `/rest/getPlaylists` + `createPlaylist` + `deletePlaylist` + `updatePlaylist` 实现
+
+**涉及文件**：`PlaylistManagementScreen.kt`（新建）、`BackendAdapter.kt`、`JellyfinAdapter.kt`、`NavidromeAdapter.kt`、`MainViewModel.kt`、`MainActivity.kt`
+
+---
+
+#### 10.4.14 G-1 HDMI-CEC 媒体键
+
+**功能描述**：通过遥控器媒体键控制播放。
+- `MainActivity.onKeyDown()` 拦截 `KEYCODE_MEDIA_PLAY_PAUSE` / `PLAY` / `PAUSE` / `NEXT` / `PREVIOUS` / `STOP`
+- 焦点在 NowPlaying 页面时，`DPAD_CENTER`/`ENTER` 键映射为播放/暂停
+
+**涉及文件**：`MainActivity.kt`
+
+---
+
+#### 10.4.15 E-2 单元测试
+
+**功能描述**：为核心工具类编写单元测试。
+- `ArtistSplitterTest.kt` — 多分隔符拆分、去重、空白处理（10 个测试用例）
+- `PinyinUtilsTest.kt` — 子串匹配、大小写不敏感匹配（6 个测试用例）
+- `LrcParserTest.kt` — 单/多时间戳、偏移量、排序、格式检测、二分查找（10 个测试用例）
+
+**涉及文件**：`app/src/test/java/.../util/ArtistSplitterTest.kt`、`PinyinUtilsTest.kt`、`lyrics/LrcParserTest.kt`（新建）
+
+---
+
+### 附：数据模型变更
+
+| 模型 | 变更 |
+|------|------|
+| `Genre.kt` | 新建（id, name） |
+| `EqualizerPreset.kt` | 新建（枚举：NORMAL/POP/ROCK/JAZZ/CLASSICAL/DANCE） |
+| `Playlist.kt` | 新建（id, name, songCount, owner） |
+| `RecentSong.kt` | 新建（id, timestamp） |
+| `LyricsLine.kt` | 新增 `wordTimestamps: List<WordTimestamp>` 字段 |
+| `WordTimestamp.kt` | 新建（word, startMs, durationMs） |
+
+### 附：AppPreferences 新增 Key
+
+| Key | 类型 | 用途 |
+|-----|------|------|
+| `recent_songs` | `List<String>` (JSON) | 最近 50 首歌曲 ID 列表 |
+| `play_counts` | `Map<String, Int>` (JSON) | 播放次数映射 |
+| `equalizer_preset` | `String` | 均衡器预设名称 |
+| `equalizer_bands` | `List<Float>` (JSON) | 自定义频段增益 |
+
+### 附：BackendAdapter 接口变更
+
+新增 13 个方法：
+- `getPlaylists()`, `createPlaylist()`, `deletePlaylist()`, `addToPlaylist()`, `removeFromPlaylist()`
+- `toggleFavorite()`, `getFavorites()`, `setRating()`
+- `getGenres()`, `getSongsByGenre()`, `getSongsByYearRange()`
+- `scrobblePlay()`, `getRandomSongs()`
+
+### 附：Screen 枚举变更
+
+新增 4 个值：`AlbumDetail`, `ArtistDetail`, `Equalizer`, `PlaylistManagement`
+
+---
+
+### 10.7 v2.1.0 — NowPlaying UI 改版 + Jellyfin 连接泄漏修复
+
+**版本信息**：VERSION_CODE=4, BUILD_TYPE=DEV
+**日期**：2026-06-21
+**概要**：播放页布局重排（控制按钮下移、进度条全宽、专辑名上移）+ Jellyfin 连接 session 泄漏修复 + 应用退出时连接资源释放。
+
+---
+
+#### 10.7.1 NowPlaying UI 调整（Task 1-3）
+
+**Task 1 — 播放控制按钮下移**
+- 控制按钮（上一首/播放暂停/下一首/播放模式）从原来与进度条同行，移到内容区域下方、进度条上方
+- 提取 `ControlButtonsRow` 独立组件至 `PlayerControls.kt`
+- 新布局：封面 → 控制按钮 → 进度条
+
+**Task 2 — 进度条横向占满**
+- 进度条从 `PlayerControls` 中分离为独立 `ProgressSection` 组件
+- 撑满屏幕底部全宽，不再受控制按钮挤占宽度
+
+**Task 3 — 专辑名移至封面图上方**
+- CoverColumn 中新增专辑名（14sp，浅灰）显示在封面上方、歌名下方
+- 封面下方的文本从「艺术家 · 专辑名」精简为仅艺术家
+
+**新增组件**：
+| 组件 | 文件 |
+|------|------|
+| `ProgressSection` | `PlayerControls.kt`（独立 Composable） |
+| `ControlButtonsRow` | `PlayerControls.kt`（独立 Composable） |
+
+**涉及文件**：
+| 文件 | 改动 |
+|------|------|
+| `ui/screens/NowPlayingScreen.kt` | 布局重构：PlayerControls → ControlButtonsRow + ProgressSection；CoverColumn 重组元素顺序 |
+| `ui/components/PlayerControls.kt` | 提取 `ProgressSection` 和 `ControlButtonsRow` 为独立顶层 Composable，`PlayerControls` 保留向后兼容 |
+
+**验证**：✅ 模拟器测试通过。控制按钮显示于封面图下方，D-pad 导航正常。
+
+---
+
+#### 10.7.2 H-6 Jellyfin 连接泄漏修复
+
+**问题描述**：
+1. `testConnection()` 每次创建新 `JellyfinAdapter` 调用 `authenticateByName()` 在服务端创建永久 session，无 `logout()` 释放 → 多次测试连接后 session 积满 → 服务端 HTTP 500
+2. `BackendRegistry.disconnect()` 只置 null，不清除 Jellyfin 服务端 session
+
+**修改**：
+- `BackendAdapter.kt` — 新增 `suspend fun logout()` 接口方法（默认空实现）
+- `JellyfinAdapter.kt` — 实现 `logout()`：POST `/Sessions/Logout` 使 token 失效，清空 `apiToken`/`userId`
+- `BackendRegistry.kt` — `disconnect()` 改为 `suspend`，调用 `adapter.logout()` 后置 null；`testConnection()` 成功/失败路径均调用 `adapter.logout()` 释放临时 session
+- `MainViewModel.kt` — `disconnect()` 中包装 `viewModelScope.launch` 调用 `BackendRegistry.disconnect()`
+
+**涉及文件**：
+| 文件 | 改动 |
+|------|------|
+| `backend/BackendAdapter.kt` | 新增 `logout()` 接口 |
+| `backend/impl/JellyfinAdapter.kt` | 实现 `logout()`（~25 行） |
+| `backend/BackendRegistry.kt` | `disconnect()` 改为 suspend，`testConnection()` 释放临时 adapter |
+| `ui/viewmodel/MainViewModel.kt` | `disconnect()` 包装协程调用 |
+
+**验证**：✅ 测试通过。日志确认连接资源正确释放。
+
+---
+
+#### 10.7.3 播放控制按钮布局修正 + 进度条 D-Pad 修复
+
+**日期**：2026-06-21（同日补充）
+
+**问题**：
+1. 播放控制按钮在封面和歌词下方跨整行居中，应左移至封面图下方
+2. 焦点在进度条上时左右键无法 seek（焦点移动而非跳转时间）
+
+**分析**：
+- 问题 1：`ControlButtonsRow` 在 `Row(cover | lyrics)` 下方独立居中，需移入左侧列
+- 问题 2：`ProgressSection` 的 `onPreviewKeyEvent` 被错误移除，导致 `DirectionLeft/Right` 未经消费即被 Compose 焦点导航系统截获，焦点移动而非 seek
+
+**修改**：
+| 文件 | 改动 |
+|------|------|
+| `ui/screens/NowPlayingScreen.kt` | 布局重构：`CoverColumn`（去除 `fillMaxHeight`/weight spacer）+ `ControlButtonsRow` 合并至左侧 `Column`，`Box(weight=1f, contentAlignment=Center)` 垂直居中封面内容，按钮置于其下 |
+| `ui/components/PlayerControls.kt` | 恢复 `onPreviewKeyEvent`，改为 `KeyDown` 立即 seek（原 `KeyUp` 松手才跳）；清理不再使用的 import |
+
+**验证**：✅ 模拟器测试通过。D-Pad 焦点导航和左右键 seek 恢复正常。
+
+---
+
+#### 10.7.4 H-7 应用退出时连接资源泄漏修复
+
+**日期**：2026-06-21（同日补充）
+
+**问题**：应用退出后，OkHttp 连接池未释放，导致 Jellyfin 服务端连接资源耗尽，需重启 Jellyfin 才能恢复。
+
+**根因分析**：
+1. `BackendRegistry.disconnect()` 只调用 `logout()` 使服务端 session 失效，但不关闭 OkHttp 客户端的连接池
+2. `logout()` 未使用 `withContext(Dispatchers.IO)`，在主线程调用时抛出 `NetworkOnMainThreadException`
+3. 应用退出时调用 `killProcess()` 终止进程，`onDestroy()` 中的异步清理协程无法完成
+
+**修改**：
+
+| 文件 | 改动 |
+|------|------|
+| `backend/BackendAdapter.kt` | 新增 `close()` 接口方法，用于释放客户端连接资源 |
+| `backend/impl/JellyfinAdapter.kt` | 实现 `close()` 关闭 OkHttp dispatcher 和连接池；`logout()` 改用 `withContext(Dispatchers.IO)` 避免主线程网络异常 |
+| `backend/impl/NavidromeAdapter.kt` | 实现 `close()` 关闭 OkHttp dispatcher 和连接池 |
+| `backend/BackendRegistry.kt` | `disconnect()` 调用 `logout()` + `close()` 双重清理；`testConnection()` 也关闭临时适配器的连接池 |
+| `ui/MainActivity.kt` | 退出确认时使用 `runBlocking { disconnect() }` 确保清理完成再调用 `killProcess()` |
+
+**连接生命周期**：
+```
+logout()  → POST /Sessions/Logout → 服务端 session 失效
+close()   → OkHttp dispatcher 关闭 + 连接池清空 → 客户端释放 TCP 连接
+```
+
+**验证**：✅ 日志确认退出时 `logout: HTTP 204` + `close: OkHttp resources released` + `exit: backend disconnected` 依次执行。
+
+---
+
+#### 10.7.5 H-8 从其他页面返回后进度条 D-Pad seek 失效修复
+
+**日期**：2026-06-21（同日补充）
+
+**问题**：
+1. 在曲库歌曲页面播放歌曲，进度条左右键 seek 正常
+2. 进入歌唱家页面，选择一个歌唱家，跳转到正在播放页面
+3. 焦点在进度条上，但左右键移动焦点而非 seek
+
+**根因分析**：
+`ProgressSection` 中使用 `hasRequestedFocus` 状态跟踪是否已请求过焦点，通过 `onGloballyPositioned` 回调在首次布局时调用 `requestFocus()`。问题在于：
+- `hasRequestedFocus` 是 `remember` 状态，跨重组保持但跨导航可能不同步
+- 从其他页面返回时，`onGloballyPositioned` 不一定再次触发（布局位置未变）
+- `onFocusChanged` 回调未触发 → `isProgressBarFocused` 保持 `false` → `onPreviewKeyEvent` 中的 seek 逻辑不执行
+
+**修改**（`ui/components/PlayerControls.kt`）：
+- 移除 `hasRequestedFocus` 状态和 `onGloballyPositioned` 回调
+- 改用 `LaunchedEffect(Unit)` 在组件首次组合时请求焦点，确保从其他页面返回时焦点状态正确同步
+
+```kotlin
+// 改前
+val hasRequestedFocus = remember { mutableStateOf(false) }
+// ...
+.onGloballyPositioned {
+    if (!hasRequestedFocus.value) {
+        hasRequestedFocus.value = true
+        progressFocusRequester.requestFocus()
+    }
+}
+
+// 改后
+LaunchedEffect(Unit) {
+    progressFocusRequester.requestFocus()
+}
+```
+
+**验证**：✅ 测试通过。从歌唱家页面返回正在播放页面后，进度条左右键 seek 正常工作。
+
+---
+
+#### 10.7.6 A-2 演唱者详情页导航修复
+
+**日期**：2026-06-21（同日补充）
+
+**问题**：在歌唱家页面点击歌唱家卡片，直接跳转到正在播放页面并开始播放歌曲，没有显示演唱者详情页。
+
+**根因分析**：
+`ArtistCard` 的 `onClick` 回调直接绑定到 `onPlaySongs(artistSongs)`，导致点击卡片立即播放所有歌曲。`onDetail` 回调虽然传递了 `onOpenArtistDetail`，但没有 UI 元素触发它。
+
+**修改**（`ui/screens/LibraryScreen.kt`）：
+- `ArtistsTab` 中将 `onClick` 改为调用 `onOpenArtistDetail`（打开详情页），与 `AlbumsTab` 行为一致
+- 新增 `onPlay` 回调，供详情页中的"播放全部"按钮使用
+- `ArtistCard` 参数从 `onDetail` 改为 `onPlay`，UI 显示 "▶" 图标表示可直接播放
+
+```kotlin
+// 改前
+onClick = {
+    if (artistSongs.isNotEmpty()) onPlaySongs(artistSongs)
+},
+onDetail = if (onOpenArtistDetail != null) {{ onOpenArtistDetail(artist) }} else null
+
+// 改后
+onClick = {
+    if (onOpenArtistDetail != null) {
+        onOpenArtistDetail(artist)
+    } else if (artistSongs.isNotEmpty()) {
+        onPlaySongs(artistSongs)
+    }
+},
+onPlay = if (artistSongs.isNotEmpty()) {{ onPlaySongs(artistSongs) }} else null
+```
+
+**验证**：✅ 测试通过。点击歌唱家卡片显示详情页，详情页中有"播放全部"按钮可播放该歌唱家所有歌曲。
+
+---
+
+#### 10.7.7 A-3 流派过滤修复（仅显示音乐流派）
+
+**日期**：2026-06-21（同日补充）
+
+**问题**：曲库风格 TAB 显示的是电影/电视流派（如 Action、Comedy、Drama 等），而不是音乐流派。
+
+**根因分析**：
+`JellyfinAdapter.getGenres()` 调用 `/Genres` 端点时未指定 `IncludeItemTypes` 参数，导致返回所有类型的流派（电影、电视、音乐等）。Jellyfin 的流派是跨媒体类型的，需要显式过滤。
+
+**修改**（`backend/impl/JellyfinAdapter.kt`）：
+- 在 `/Genres` 端点添加 `IncludeItemTypes=Audio` 参数，只返回与音频文件关联的流派
+- 同时将 `songCount` 字段从 `MovieCount` 改为 `SongCount`，正确显示歌曲数量
+
+```kotlin
+// 改前
+val url = "$baseUrl/Genres?UserId=$userId&Recursive=true&Limit=200"
+songCount = obj.get("MovieCount")?.asInt?.coerceAtLeast(0)
+
+// 改后
+val url = "$baseUrl/Genres?UserId=$userId&IncludeItemTypes=Audio&Recursive=true&Limit=200"
+songCount = obj.get("SongCount")?.asInt?.coerceAtLeast(0)
+```
+
+**验证**：✅ 测试通过。风格 TAB 现在显示音乐流派（如 Pop、Rock、Jazz 等），不再显示电影流派。
+
+---
+
+#### 10.7.8 A-4 多歌唱家拆分展示修复
+
+**日期**：2026-06-21（同日补充）
+
+**问题**：歌唱家页面显示的原始 artist 字段（如 "罗斯特·洛波维奇&布鲁·诺朱拉纳&索菲娅·穆特&贝多芬"）未被拆分为独立歌唱家。
+
+**根因分析**：
+`LibraryScreen` 中 `allArtists` 的生成逻辑直接从歌曲的原始 `artist` 字段获取，未使用 `ArtistSplitter` 进行拆分：
+```kotlin
+// 改前 - 从原始歌曲数据获取，未拆分
+val allArtists = remember(songs) {
+    songs.mapNotNull { it.artist.ifBlank { null } }.distinct().sorted()
+}
+```
+而 `artistSongsMap` 已经在 `MainViewModel.buildArtistMaps()` 中正确拆分了歌唱家。
+
+**修改**（`ui/screens/LibraryScreen.kt`）：
+将 `allArtists` 改为从 `artistSongsMap.keys` 获取，确保显示拆分后的独立歌唱家：
+```kotlin
+// 改后 - 从已拆分的 artistSongsMap 获取
+val allArtists = remember(artistSongsMap) {
+    artistSongsMap.keys.sorted()
+}
+```
+
+**验证**：✅ 测试通过。"罗斯特·洛波维奇&布鲁·诺朱拉纳&索菲娅·穆特&贝多芬" 已拆分为 4 个独立歌唱家显示。
+
+---
+
+#### 10.7.9 H-9 进度条 D-Pad seek 统一修复
+
+**日期**：2026-06-21（同日补充）
+
+**问题**：
+1. 从歌曲页面播放单首歌曲，进度条左右键 seek 正常
+2. 从歌唱家详情页点击"播放全部"，进度条左右键移动焦点而非 seek
+3. 从专辑、风格等页面播放也有同样问题
+
+**根因分析**：
+两种播放路径使用了不同的播放函数：
+- 歌曲页面：`playSong(song)` — 替换队列为单曲
+- 歌唱家/专辑/风格页面：`playQueue(songList)` — 设置队列
+
+`playSong` 和 `playQueue` 在 `PlayerManager` 中的行为不同：
+- `playSong` 检查歌曲是否已在队列中，如果是则 seek 到该位置
+- `playQueue` 始终替换队列
+
+此外，`ProgressSection` 的 `LaunchedEffect(Unit)` 只在组件首次创建时运行一次，从其他页面返回时不会重新请求焦点。
+
+**修改**：
+
+| 文件 | 改动 |
+|------|------|
+| `ui/MainActivity.kt` | 将歌曲页面的 `playSong(song)` 改为 `playQueue(listOf(song))`，统一所有播放路径使用队列 |
+| `ui/components/PlayerControls.kt` | `LaunchedEffect(Unit)` 改为 `LaunchedEffect(currentSongId)`，当播放新歌曲时重新请求焦点；新增 `currentSongId` 参数 |
+
+```kotlin
+// 改前
+onPlaySong = { song ->
+    viewModel.playSong(song)
+    viewModel.navigateTo(Screen.NowPlaying)
+}
+
+// 改后
+onPlaySong = { song ->
+    viewModel.playQueue(listOf(song))
+    viewModel.navigateTo(Screen.NowPlaying)
+}
+```
+
+**验证**：✅ 测试通过。从歌曲、歌唱家、专辑、风格等所有页面播放，进度条左右键 seek 均正常工作。
+
+---
+
+#### 10.7.10 B-1 收藏/喜欢功能修复
+
+**日期**：2026-06-21（同日补充）
+
+**问题**：
+1. 在正在播放页面点击收藏按钮，桃心无法点亮
+2. 进入曲库的收藏页面，没有列出已收藏的歌曲
+
+**根因分析**：
+`JellyfinAdapter.toggleFavorite()` 使用了错误的 API 端点 `/Items/{id}/Favorite`，该端点返回 404 Not Found。Jellyfin 的收藏 API 端点应该是 `/UserFavoriteItems/{id}`。
+
+日志显示：
+```
+POST /Items/57ad96dad451f57f589e4443b45a8dfb/Favorite?api_key=...
+<-- 404 Not Found
+```
+
+**修改**（`backend/impl/JellyfinAdapter.kt`）：
+- 将 `toggleFavorite()` 的 API 端点从 `/Items/{id}/Favorite` 改为 `/UserFavoriteItems/{id}`
+- 添加收藏状态缓存 `_favoriteIdsCache`，用于判断当前是否已收藏
+- 使用 POST 添加收藏，DELETE 取消收藏
+- `getFavorites()` 加载时更新缓存
+
+```kotlin
+// 改前
+val request = Request.Builder()
+    .url("$baseUrl/Items/$songId/Favorite?api_key=$apiToken")
+    .header("X-Emby-Authorization", buildAuthHeader())
+    .post("".toRequestBody(null))
+    .build()
+
+// 改后
+val isCurrentlyFavorite = _favoriteIdsCache.contains(songId)
+val requestBuilder = Request.Builder()
+    .url("$baseUrl/UserFavoriteItems/$songId")
+    .header("X-Emby-Authorization", buildAuthHeader())
+
+val request = if (isCurrentlyFavorite) {
+    requestBuilder.delete("".toRequestBody(null)).build()
+} else {
+    requestBuilder.post("".toRequestBody(null)).build()
+}
+```
+
+**验证**：✅ 测试通过。收藏按钮可正常点亮/熄灭，收藏页面正确显示已收藏歌曲。
+
+---
+
+#### 10.7.11 B-2 播放次数显示
+
+**日期**：2026-06-21（同日补充）
+
+**问题**：播放次数已存储在 `AppPreferences.playCounts` 中，但 UI 上没有显示播放次数。
+
+**修改**：
+
+| 文件 | 改动 |
+|------|------|
+| `ui/screens/LibraryScreen.kt` | `SongRow` 新增 `playCount` 参数，播放次数大于 0 时在时长前显示（如 "3次"）；`RecentTab` 新增 `playCounts` 参数并传递给 `SongRow`；`LibraryScreen` 新增 `playCounts` 参数 |
+| `ui/MainActivity.kt` | 从 `viewModel.playCounts` 收集状态并传递给 `LibraryScreen` |
+
+```kotlin
+// SongRow 中新增播放次数显示
+if (playCount != null && playCount > 0) {
+    Text(text = "${playCount}次", color = NasMusicColors.Primary, fontSize = 10.sp, modifier = Modifier.padding(end = 8.dp))
+}
+```
+
+**验证**：✅ 测试通过。最近页面中已播放歌曲显示播放次数（如 "3次"）。
+
+---
+
+#### 10.7.12 H-10 ProgressSection 焦点请求修复
+
+**日期**：2026-06-21（同日补充）
+
+**问题**：从某些入口（如歌唱家详情页点击单首歌曲）进入正在播放页面时，进度条无法 seek，只能移动焦点。
+
+**根因分析**：
+`ProgressSection` 使用 `LaunchedEffect(currentSongId)` 请求焦点，但 `NowPlayingScreen` 未将 `currentSong?.id` 传递给 `ProgressSection`，导致 `currentSongId` 始终为 `null`，`LaunchedEffect` 不会重新触发。
+
+**修改**（`ui/screens/NowPlayingScreen.kt`）：
+在 `ProgressSection` 调用中添加 `currentSongId` 参数：
+
+```kotlin
+// 改前
+ProgressSection(
+    progressMs = progressMs,
+    durationMs = durationMs,
+    onSeek = onSeek,
+    compact = true
+)
+
+// 改后
+ProgressSection(
+    progressMs = progressMs,
+    durationMs = durationMs,
+    onSeek = onSeek,
+    compact = true,
+    currentSongId = currentSong?.id
+)
+```
+
+**验证**：✅ 测试通过。所有播放入口（歌曲、专辑、歌唱家、流派、年代等）进度条 seek 均正常工作。
+
+---
+
+#### 10.7.13 B-3 歌词高亮模式增强
+
+**日期**：2026-06-21（同日补充）
+
+**问题**：歌词只能逐行高亮，无法逐字高亮。网络获取的标准 LRC 格式歌词没有逐字时间戳。
+
+**修改**：
+
+| 文件 | 改动 |
+|------|------|
+| `data/model/LyricsLine.kt` | 新增 `LyricsHighlightMode` 枚举（`LINE_BY_LINE`, `WORD_BY_WORD`） |
+| `ui/components/LyricsView.kt` | 新增 `highlightMode` 参数；实现逐字时间戳估算逻辑 `estimateWordTimestamps()`；逐字模式下已播放文字显示为黄色 |
+| `ui/screens/NowPlayingScreen.kt` | 新增 `highlightMode` 状态；自动检测歌词格式（有逐字时间戳则自动切换到逐字模式）；新增"逐行/逐字"切换按钮 |
+
+**功能说明**：
+- **自动检测**：如果歌词包含逐字时间戳（卡拉 OK 格式），自动切换到"逐字"模式
+- **手动切换**：点击歌词区域右上角的"逐行/逐字"按钮可随时切换模式
+- **逐字估算**：标准 LRC 格式在"逐字"模式下，将行时长平均分配给每个字符
+- **颜色区分**：逐字模式下，已播放文字显示为黄色，未播放文字保持原色
+
+```kotlin
+// 逐字时间戳估算逻辑
+private fun estimateWordTimestamps(line: LyricsLine, nextLineTime: Long): List<WordTimestamp> {
+    if (line.text.isEmpty()) return emptyList()
+    val lineDuration = if (nextLineTime > line.time) nextLineTime - line.time else 3000L
+    val charDuration = lineDuration / line.text.length
+    return line.text.mapIndexed { index, char ->
+        WordTimestamp(
+            word = char.toString(),
+            startMs = line.time + index * charDuration,
+            durationMs = charDuration
+        )
+    }
+}
+```
+
+**验证**：✅ 测试通过。逐字模式下已播放文字显示为黄色，可手动切换逐行/逐字模式。
+
+---
+
+#### 10.7.14 B-5 全屏封面模糊效果
+
+**日期**：2026-06-21（同日补充）
+
+**功能描述**：点击封面图进入全屏沉浸模式时，对全屏封面图做模糊处理，不影响上层显示的歌词。
+
+**修改**（`ui/screens/NowPlayingScreen.kt`）：
+- 对全屏封面图的 `AsyncImage` 添加 `Modifier.blur(30.dp)` 模糊效果
+- 模糊效果仅应用于封面图，不影响上层歌词和渐变遮罩
+
+```kotlin
+AsyncImage(
+    model = currentSong.coverUrl,
+    contentDescription = "Fullscreen Cover Background",
+    modifier = Modifier
+        .fillMaxSize()
+        .blur(30.dp) // 模糊效果，不影响上层歌词
+)
+```
+
+**层级结构**：
+```
+Box {
+    AsyncImage(blur=30.dp)  // 模糊的封面图（背景层）
+    Box(gradient overlay)   // 渐变遮罩（确保歌词可读）
+    Lyrics                  // 歌词（最上层，清晰显示）
+}
+```
+
+**说明**：模糊效果与渐变遮罩互补，不冲突。模糊让背景更柔和，遮罩确保歌词对比度。
+
+**验证**：✅ 测试通过。
+
+---
+
+#### 10.7.15 B-4 均衡器导航修复
+
+**日期**：2026-06-21（同日补充）
+
+**问题**：设置页面的"均衡器"按钮没有实际导航功能，点击无反应。
+
+**根因分析**：
+`SettingsScreen` 中均衡器按钮的 `onClick` 处理器为空注释 `{ /* Navigate to Equalizer - handled externally */ }`，没有实际的导航回调。
+
+**修改**：
+
+| 文件 | 改动 |
+|------|------|
+| `ui/screens/SettingsScreen.kt` | 新增 `onOpenEqualizer` 回调参数；均衡器按钮 `onClick` 调用 `onOpenEqualizer?.invoke()` |
+| `ui/MainActivity.kt` | 传递 `onOpenEqualizer = { viewModel.navigateTo(Screen.Equalizer) }` 给 `SettingsScreen` |
+
+```kotlin
+// 改前
+SettingActionButton(
+    label = "均衡器",
+    description = "调节各频段增益",
+    onClick = { /* Navigate to Equalizer - handled externally */ }
+)
+
+// 改后
+SettingActionButton(
+    label = "均衡器",
+    description = "调节各频段增益",
+    onClick = { onOpenEqualizer?.invoke() }
+)
+```
+
+**验证**：✅ 测试通过。设置 → 播放 → 均衡器 可正常打开均衡器页面。

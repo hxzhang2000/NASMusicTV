@@ -5,6 +5,8 @@ import com.google.gson.JsonObject
 import com.nasmusic.tv.backend.BackendAdapter
 import com.nasmusic.tv.data.model.Album
 import com.nasmusic.tv.data.model.Artist
+import com.nasmusic.tv.data.model.Genre
+import com.nasmusic.tv.data.model.Playlist
 import com.nasmusic.tv.data.model.Song
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -52,7 +54,6 @@ class NavidromeAdapter : BackendAdapter {
         this@NavidromeAdapter.password = password
         this@NavidromeAdapter.apiToken = apiToken
 
-        // 验证连接
         testConnection()
     }
 
@@ -70,7 +71,10 @@ class NavidromeAdapter : BackendAdapter {
                 if (version.isNotBlank()) serverName = "Navidrome $version"
                 status == "ok"
             }
-        } catch (e: Exception) { false }
+        } catch (e: Exception) {
+            android.util.Log.w("NavidromeAdapter", "testConnection failed", e)
+            false
+        }
     }
 
     override suspend fun getAlbums(): List<Album> = withContext(Dispatchers.IO) {
@@ -103,7 +107,10 @@ class NavidromeAdapter : BackendAdapter {
                     durationMs = durationSec * 1000
                 )
             }
-        } catch (e: Exception) { emptyList() }
+        } catch (e: Exception) {
+            android.util.Log.e("NavidromeAdapter", "getAlbums failed", e)
+            emptyList()
+        }
     }
 
     override suspend fun getAlbumSongs(albumId: String): List<Song> = withContext(Dispatchers.IO) {
@@ -146,7 +153,10 @@ class NavidromeAdapter : BackendAdapter {
                     bitrate = bitrate
                 )
             }
-        } catch (e: Exception) { emptyList() }
+        } catch (e: Exception) {
+            android.util.Log.e("NavidromeAdapter", "getAlbumSongs failed", e)
+            emptyList()
+        }
     }
 
     override suspend fun getArtists(): List<Artist> = withContext(Dispatchers.IO) {
@@ -178,12 +188,14 @@ class NavidromeAdapter : BackendAdapter {
                 }
             }
             result
-        } catch (e: Exception) { emptyList() }
+        } catch (e: Exception) {
+            android.util.Log.e("NavidromeAdapter", "getArtists failed", e)
+            emptyList()
+        }
     }
 
     override suspend fun getArtistSongs(artistId: String): List<Song> = withContext(Dispatchers.IO) {
         try {
-            // Navidrome 先获取歌手专辑，再合并所有专辑歌曲
             val url = buildRestUrl("getArtist") + "&id=$artistId"
             val json = executeRequest(url) ?: return@withContext emptyList<Song>()
             val subsonic = json.getAsJsonObject("subsonic-response")
@@ -198,7 +210,10 @@ class NavidromeAdapter : BackendAdapter {
                 allSongs.addAll(songs)
             }
             allSongs
-        } catch (e: Exception) { emptyList() }
+        } catch (e: Exception) {
+            android.util.Log.e("NavidromeAdapter", "getArtistSongs failed", e)
+            emptyList()
+        }
     }
 
     override suspend fun getSongs(limit: Int): List<Song> = withContext(Dispatchers.IO) {
@@ -240,7 +255,10 @@ class NavidromeAdapter : BackendAdapter {
                     bitrate = bitrate
                 )
             }
-        } catch (e: Exception) { emptyList() }
+        } catch (e: Exception) {
+            android.util.Log.e("NavidromeAdapter", "getSongs failed", e)
+            emptyList()
+        }
     }
 
     override suspend fun searchSongs(query: String): List<Song> = withContext(Dispatchers.IO) {
@@ -278,13 +296,15 @@ class NavidromeAdapter : BackendAdapter {
                     trackNumber = track
                 )
             }
-        } catch (e: Exception) { emptyList() }
+        } catch (e: Exception) {
+            android.util.Log.e("NavidromeAdapter", "searchSongs failed", e)
+            emptyList()
+        }
     }
 
     override suspend fun getRecentSongs(): List<Song> = withContext(Dispatchers.IO) {
         try {
             val url = buildRestUrl("getAlbumList2") + "&type=newest&size=20"
-
             val json = executeRequest(url) ?: return@withContext emptyList<Song>()
             val subsonic = json.getAsJsonObject("subsonic-response")
             val albumList = subsonic?.getAsJsonObject("albumList2")
@@ -299,7 +319,10 @@ class NavidromeAdapter : BackendAdapter {
                 if (recentSongs.size >= 100) return@forEach
             }
             recentSongs
-        } catch (e: Exception) { emptyList() }
+        } catch (e: Exception) {
+            android.util.Log.e("NavidromeAdapter", "getRecentSongs failed", e)
+            emptyList()
+        }
     }
 
     override fun getStreamUrl(songId: String): String =
@@ -316,14 +339,281 @@ class NavidromeAdapter : BackendAdapter {
         return null
     }
 
+    // ========== F-1 扩展接口 ==========
+
+    // --- 播放列表 ---
+    override suspend fun getPlaylists(): List<Playlist> = withContext(Dispatchers.IO) {
+        try {
+            val url = buildRestUrl("getPlaylists")
+            val json = executeRequest(url) ?: return@withContext emptyList<Playlist>()
+            val subsonic = json.getAsJsonObject("subsonic-response")
+            val playlistsWrap = subsonic?.getAsJsonObject("playlists")
+            val playlists = playlistsWrap?.getAsJsonArray("playlist")
+                ?: return@withContext emptyList<Playlist>()
+            playlists.mapNotNull { item ->
+                val obj = item.asJsonObject
+                val id = obj.get("id")?.asString ?: return@mapNotNull null
+                Playlist(
+                    id = id,
+                    name = obj.get("name")?.asString ?: "Unknown",
+                    songCount = obj.get("songCount")?.asInt ?: 0,
+                    durationMs = (obj.get("duration")?.asLong ?: 0L) * 1000,
+                    owner = obj.get("owner")?.asString ?: ""
+                )
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("NavidromeAdapter", "getPlaylists failed", e)
+            emptyList()
+        }
+    }
+
+    override suspend fun createPlaylist(name: String): Playlist? = withContext(Dispatchers.IO) {
+        try {
+            val url = buildRestUrl("createPlaylist") + "&name=${java.net.URLEncoder.encode(name, "UTF-8")}"
+            val json = executeRequest(url) ?: return@withContext null
+            val subsonic = json.getAsJsonObject("subsonic-response")
+            val playlist = subsonic?.getAsJsonObject("playlist")
+            val id = playlist?.get("id")?.asString ?: return@withContext null
+            Playlist(id = id, name = name)
+        } catch (e: Exception) {
+            android.util.Log.e("NavidromeAdapter", "createPlaylist failed", e)
+            null
+        }
+    }
+
+    override suspend fun deletePlaylist(playlistId: String): Boolean = withContext(Dispatchers.IO) {
+        try {
+            val url = buildRestUrl("deletePlaylist") + "&id=$playlistId"
+            val json = executeRequest(url) ?: return@withContext false
+            val subsonic = json.getAsJsonObject("subsonic-response")
+            subsonic?.get("status")?.asString == "ok"
+        } catch (e: Exception) {
+            android.util.Log.e("NavidromeAdapter", "deletePlaylist failed", e)
+            false
+        }
+    }
+
+    override suspend fun addToPlaylist(playlistId: String, songId: String): Boolean = withContext(Dispatchers.IO) {
+        try {
+            val url = buildRestUrl("updatePlaylist") + "&playlistId=$playlistId&songIdToAdd=$songId"
+            val json = executeRequest(url) ?: return@withContext false
+            val subsonic = json.getAsJsonObject("subsonic-response")
+            subsonic?.get("status")?.asString == "ok"
+        } catch (e: Exception) {
+            android.util.Log.e("NavidromeAdapter", "addToPlaylist failed", e)
+            false
+        }
+    }
+
+    override suspend fun removeFromPlaylist(playlistId: String, songId: String): Boolean = withContext(Dispatchers.IO) {
+        try {
+            val url = buildRestUrl("updatePlaylist") + "&playlistId=$playlistId&songIdToRemove=$songId"
+            val json = executeRequest(url) ?: return@withContext false
+            val subsonic = json.getAsJsonObject("subsonic-response")
+            subsonic?.get("status")?.asString == "ok"
+        } catch (e: Exception) {
+            android.util.Log.e("NavidromeAdapter", "removeFromPlaylist failed", e)
+            false
+        }
+    }
+
+    // --- 收藏 ---
+    override suspend fun toggleFavorite(songId: String): Boolean = withContext(Dispatchers.IO) {
+        try {
+            // First check if already starred; Subsonic star/unstar toggles
+            val starredUrl = buildRestUrl("getStarred2")
+            val starredJson = executeRequest(starredUrl)
+            val subsonic = starredJson?.getAsJsonObject("subsonic-response")
+            val starredWrap = subsonic?.getAsJsonObject("starred2")
+            val starredSongs = starredWrap?.getAsJsonArray("song") ?: emptyList()
+            val isStarred = starredSongs.any {
+                it.asJsonObject.get("id")?.asString == songId
+            }
+
+            val method = if (isStarred) "unstar" else "star"
+            val url = buildRestUrl(method) + "&id=$songId"
+            val json = executeRequest(url)
+            val responseSubsonic = json?.getAsJsonObject("subsonic-response")
+            responseSubsonic?.get("status")?.asString == "ok"
+        } catch (e: Exception) {
+            android.util.Log.e("NavidromeAdapter", "toggleFavorite failed", e)
+            false
+        }
+    }
+
+    override suspend fun getFavorites(): List<Song> = withContext(Dispatchers.IO) {
+        try {
+            val url = buildRestUrl("getStarred2")
+            val json = executeRequest(url) ?: return@withContext emptyList<Song>()
+            val subsonic = json.getAsJsonObject("subsonic-response")
+            val starredWrap = subsonic?.getAsJsonObject("starred2")
+            val songs = starredWrap?.getAsJsonArray("song")
+                ?: return@withContext emptyList<Song>()
+            songs.mapNotNull { item ->
+                val obj = item.asJsonObject
+                val id = obj.get("id")?.asString ?: return@mapNotNull null
+                Song(
+                    id = id,
+                    title = obj.get("title")?.asString ?: "Unknown",
+                    artist = obj.get("artist")?.asString ?: "",
+                    album = obj.get("album")?.asString ?: "",
+                    albumId = obj.get("albumId")?.asString ?: "",
+                    coverUrl = buildCoverUrl(obj.get("coverArt")?.asString ?: id),
+                    streamUrl = getStreamUrl(id),
+                    durationMs = (obj.get("duration")?.asLong ?: 0L) * 1000,
+                    trackNumber = obj.get("track")?.asInt ?: 0
+                )
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("NavidromeAdapter", "getFavorites failed", e)
+            emptyList()
+        }
+    }
+
+    // --- 评分 ---
+    override suspend fun setRating(songId: String, rating: Int): Boolean = withContext(Dispatchers.IO) {
+        try {
+            val url = buildRestUrl("setRating") + "&id=$songId&rating=$rating"
+            val json = executeRequest(url) ?: return@withContext false
+            val subsonic = json.getAsJsonObject("subsonic-response")
+            subsonic?.get("status")?.asString == "ok"
+        } catch (e: Exception) {
+            android.util.Log.e("NavidromeAdapter", "setRating failed", e)
+            false
+        }
+    }
+
+    // --- 流派 ---
+    override suspend fun getGenres(): List<Genre> = withContext(Dispatchers.IO) {
+        try {
+            val url = buildRestUrl("getGenres")
+            val json = executeRequest(url) ?: return@withContext emptyList<Genre>()
+            val subsonic = json.getAsJsonObject("subsonic-response")
+            val genresWrap = subsonic?.getAsJsonObject("genres")
+            val genres = genresWrap?.getAsJsonArray("genre")
+                ?: return@withContext emptyList<Genre>()
+            genres.mapNotNull { item ->
+                val obj = item.asJsonObject
+                val name = obj.get("value")?.asString ?: return@mapNotNull null
+                Genre(
+                    id = name,
+                    name = name,
+                    songCount = obj.get("songCount")?.asInt ?: 0
+                )
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("NavidromeAdapter", "getGenres failed", e)
+            emptyList()
+        }
+    }
+
+    override suspend fun getSongsByGenre(genre: String): List<Song> = withContext(Dispatchers.IO) {
+        try {
+            val encodedGenre = java.net.URLEncoder.encode(genre, "UTF-8")
+            val url = buildRestUrl("getSongsByGenre") + "&genre=$encodedGenre&size=500"
+            val json = executeRequest(url) ?: return@withContext emptyList<Song>()
+            val subsonic = json.getAsJsonObject("subsonic-response")
+            val songsByGenre = subsonic?.getAsJsonObject("songsByGenre")
+            val songs = songsByGenre?.getAsJsonArray("song")
+                ?: return@withContext emptyList<Song>()
+            songs.mapNotNull { item ->
+                val obj = item.asJsonObject
+                val id = obj.get("id")?.asString ?: return@mapNotNull null
+                Song(
+                    id = id,
+                    title = obj.get("title")?.asString ?: "Unknown",
+                    artist = obj.get("artist")?.asString ?: "",
+                    album = obj.get("album")?.asString ?: "",
+                    albumId = obj.get("albumId")?.asString ?: "",
+                    coverUrl = buildCoverUrl(obj.get("coverArt")?.asString ?: id),
+                    streamUrl = getStreamUrl(id),
+                    durationMs = (obj.get("duration")?.asLong ?: 0L) * 1000,
+                    trackNumber = obj.get("track")?.asInt ?: 0,
+                    year = obj.get("year")?.asInt
+                )
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("NavidromeAdapter", "getSongsByGenre failed", e)
+            emptyList()
+        }
+    }
+
+    override suspend fun getSongsByYearRange(fromYear: Int, toYear: Int): List<Song> = withContext(Dispatchers.IO) {
+        try {
+            // Subsonic doesn't have a direct year-range endpoint; fallback to album-based
+            val allSongs = getSongs(10000)
+            allSongs.filter { song ->
+                song.year != null && song.year in fromYear..toYear
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("NavidromeAdapter", "getSongsByYearRange failed", e)
+            emptyList()
+        }
+    }
+
+    // --- Scrobble ---
+    override suspend fun scrobblePlay(songId: String, timestamp: Long): Boolean = withContext(Dispatchers.IO) {
+        try {
+            val url = buildRestUrl("scrobble") + "&id=$songId&time=$timestamp"
+            val json = executeRequest(url) ?: return@withContext false
+            val subsonic = json.getAsJsonObject("subsonic-response")
+            subsonic?.get("status")?.asString == "ok"
+        } catch (e: Exception) {
+            android.util.Log.e("NavidromeAdapter", "scrobblePlay failed", e)
+            false
+        }
+    }
+
+    // --- 随机歌曲 ---
+    override suspend fun getRandomSongs(limit: Int): List<Song> = withContext(Dispatchers.IO) {
+        try {
+            val url = buildRestUrl("getRandomSongs") + "&size=$limit"
+            val json = executeRequest(url) ?: return@withContext emptyList<Song>()
+            val subsonic = json.getAsJsonObject("subsonic-response")
+            val randomWrap = subsonic?.getAsJsonObject("randomSongs")
+            val songs = randomWrap?.getAsJsonArray("song")
+                ?: return@withContext emptyList<Song>()
+            songs.mapNotNull { item ->
+                val obj = item.asJsonObject
+                val id = obj.get("id")?.asString ?: return@mapNotNull null
+                Song(
+                    id = id,
+                    title = obj.get("title")?.asString ?: "Unknown",
+                    artist = obj.get("artist")?.asString ?: "",
+                    album = obj.get("album")?.asString ?: "",
+                    albumId = obj.get("albumId")?.asString ?: "",
+                    coverUrl = buildCoverUrl(obj.get("coverArt")?.asString ?: id),
+                    streamUrl = getStreamUrl(id),
+                    durationMs = (obj.get("duration")?.asLong ?: 0L) * 1000,
+                    trackNumber = obj.get("track")?.asInt ?: 0,
+                    year = obj.get("year")?.asInt
+                )
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("NavidromeAdapter", "getRandomSongs failed", e)
+            emptyList()
+        }
+    }
+
     fun getServerName(): String = serverName
+
+    /**
+     * 释放 OkHttp 连接资源。
+     * Navidrome 使用无状态认证，无服务端 session 需要清理。
+     * 此处关闭客户端连接池，防止连接泄漏。
+     */
+    override fun close() {
+        try {
+            client.dispatcher.executorService.shutdown()
+            client.connectionPool.evictAll()
+            android.util.Log.d("NavidromeAdapter", "close: OkHttp resources released")
+        } catch (e: Exception) {
+            android.util.Log.w("NavidromeAdapter", "close failed", e)
+        }
+    }
 
     // --- 内部辅助方法 ---
 
-    /**
-     * 构建 Subsonic API URL
-     * 使用 token + salt 认证方式
-     */
     private fun buildRestUrl(method: String): String {
         val salt = System.currentTimeMillis().toString()
         val token = md5(password + salt)
@@ -347,7 +637,10 @@ class NavidromeAdapter : BackendAdapter {
                 if (!response.isSuccessful) return null
                 gson.fromJson(body, JsonObject::class.java)
             }
-        } catch (e: Exception) { null }
+        } catch (e: Exception) {
+            android.util.Log.w("NavidromeAdapter", "executeRequest failed for $url", e)
+            null
+        }
     }
 
     private fun md5(input: String): String {
