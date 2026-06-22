@@ -47,7 +47,6 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.graphics.Color
 
-import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
@@ -62,6 +61,7 @@ import androidx.tv.material3.Text
 import com.nasmusic.tv.data.model.PlayMode
 import com.nasmusic.tv.ui.theme.NasMusicBrushes
 import com.nasmusic.tv.ui.theme.NasMusicColors
+import com.nasmusic.tv.util.AppLog
 import com.nasmusic.tv.util.TimeUtils
 import kotlinx.coroutines.launch
 
@@ -89,10 +89,13 @@ fun ProgressSection(
     val timeFontFocused = if (compact) 15.sp else 18.sp
     val progressFocusRequester = remember { FocusRequester() }
 
-    // 当播放新歌曲时请求焦点
-    LaunchedEffect(currentSongId) {
-        android.util.Log.d("NASMusic", "ProgressSection: requesting focus for song=$currentSongId")
-        progressFocusRequester.requestFocus()
+    // 仅在首次组合时请求一次焦点，避免歌曲切换时抢占焦点导致崩溃
+    LaunchedEffect(Unit) {
+        try {
+            progressFocusRequester.requestFocus()
+        } catch (_: Exception) {
+            // 焦点请求失败时忽略，不影响播放
+        }
     }
 
     Row(
@@ -116,7 +119,7 @@ fun ProgressSection(
                         && event.type == KeyEventType.KeyDown && durationMs > 0) {
                         val delta = if (event.key == Key.DirectionLeft) -15000L else 15000L
                         val newPosition = (progressMs + delta).coerceIn(0, durationMs)
-                        android.util.Log.d("NASMusic", "ProgressSection: seek by ${delta}ms, current=$progressMs, new=$newPosition, duration=$durationMs")
+                        AppLog.d("NASMusic", "ProgressSection: seek by ${delta}ms, current=$progressMs, new=$newPosition, duration=$durationMs")
                         onSeek(newPosition)
                         true
                     } else false
@@ -242,55 +245,6 @@ fun ControlButtonsRow(
             Icon(imageVector = icon, contentDescription = playMode.displayName,
                 modifier = Modifier.size(if (compact) 20.dp else 28.dp))
         })
-    }
-}
-
-// ─── Combined PlayerControls (backward compatible) ───────────────────────────
-
-/**
- * 播放控制栏（组合版）：进度条 + 控制按钮同一行。
- * 保留兼容性，新页面推荐分别使用 [ProgressSection] 和 [ControlButtonsRow]。
- */
-@OptIn(ExperimentalTvMaterial3Api::class)
-@Composable
-fun PlayerControls(
-    isPlaying: Boolean,
-    playMode: PlayMode,
-    progressMs: Long,
-    durationMs: Long,
-    onPlayPause: () -> Unit,
-    onNext: () -> Unit,
-    onPrevious: () -> Unit,
-    onTogglePlayMode: () -> Unit,
-    onSeek: (Long) -> Unit,
-    onProgressFocusChanged: (Boolean) -> Unit = {},
-    modifier: Modifier = Modifier,
-    compact: Boolean = false
-) {
-    val contentPadding = if (compact) 24.dp else 4.dp
-    Row(
-        modifier = modifier.fillMaxWidth().padding(horizontal = contentPadding),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Box(modifier = Modifier.weight(if (compact) 0.66f else 0.6f)) {
-            ProgressSection(
-                progressMs = progressMs,
-                durationMs = durationMs,
-                onSeek = onSeek,
-                onProgressFocusChanged = onProgressFocusChanged,
-                compact = compact
-            )
-        }
-        Spacer(modifier = Modifier.width(if (compact) 8.dp else 16.dp))
-        ControlButtonsRow(
-            isPlaying = isPlaying,
-            playMode = playMode,
-            onPlayPause = onPlayPause,
-            onNext = onNext,
-            onPrevious = onPrevious,
-            onTogglePlayMode = onTogglePlayMode,
-            compact = compact
-        )
     }
 }
 

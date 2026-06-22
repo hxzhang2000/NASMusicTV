@@ -3,17 +3,18 @@ package com.nasmusic.tv.backend
 import com.nasmusic.tv.backend.impl.JellyfinAdapter
 import com.nasmusic.tv.backend.impl.NavidromeAdapter
 import com.nasmusic.tv.data.model.ServerConfig
+import com.nasmusic.tv.util.AppLog
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 /**
  * 后端注册中心
- * 单例，管理并创建不同类型的后端适配器
+ * 管理并创建不同类型的后端适配器
  */
-object BackendRegistry {
+class BackendRegistry {
 
-    private const val TYPE_JELLYFIN = ServerConfig.TYPE_JELLYFIN
-    private const val TYPE_NAVIDROME = ServerConfig.TYPE_NAVIDROME
+    private val TYPE_JELLYFIN = ServerConfig.TYPE_JELLYFIN
+    private val TYPE_NAVIDROME = ServerConfig.TYPE_NAVIDROME
 
     private var currentAdapter: BackendAdapter? = null
     private var currentConfig: ServerConfig? = null
@@ -34,23 +35,19 @@ object BackendRegistry {
             else -> return@withContext false
         }
 
-        android.util.Log.d("BackendRegistry", "initialize: type=${config.backendType}, baseUrl=${config.baseUrl}, username=${config.username}, hasPw=${config.password.isNotEmpty()}, hasToken=${config.apiToken.isNotEmpty()}")
+        AppLog.d("BackendRegistry", "initialize: type=${config.backendType}, baseUrl=${config.baseUrl}, username=${config.username}, hasPw=${config.password.isNotEmpty()}, hasToken=${config.apiToken.isNotEmpty()}")
         val success = adapter.initialize(
             baseUrl = config.baseUrl,
             apiToken = config.apiToken,
             username = config.username,
             password = config.password
         )
-        android.util.Log.d("BackendRegistry", "initialize: result=$success")
+        AppLog.d("BackendRegistry", "initialize: result=$success")
 
         if (success) {
             currentAdapter = adapter
             currentConfig = config
-            serverDisplayName = when (adapter) {
-                is JellyfinAdapter -> adapter.getServerName()
-                is NavidromeAdapter -> adapter.getServerName()
-                else -> config.backendType.uppercase()
-            }
+            serverDisplayName = adapter.serverName
         }
 
         success
@@ -83,10 +80,14 @@ object BackendRegistry {
         currentAdapter?.let { adapter ->
             try {
                 adapter.logout()
-            } catch (_: Exception) {}
+            } catch (e: Exception) {
+                android.util.Log.w("BackendRegistry", "logout failed during disconnect", e)
+            }
             try {
                 adapter.close()
-            } catch (_: Exception) {}
+            } catch (e: Exception) {
+                android.util.Log.w("BackendRegistry", "close failed during disconnect", e)
+            }
         }
         currentAdapter = null
         currentConfig = null
@@ -112,20 +113,16 @@ object BackendRegistry {
         )
 
         if (success) {
-            val serverName = when (adapter) {
-                is JellyfinAdapter -> adapter.getServerName()
-                is NavidromeAdapter -> adapter.getServerName()
-                else -> config.backendType.uppercase()
-            }
+            val serverName = adapter.serverName
             // 登出释放临时 session 防止泄漏，结果不影响返回值
-            try { adapter.logout() } catch (_: Exception) {}
+            try { adapter.logout() } catch (e: Exception) { android.util.Log.w("BackendRegistry", "testConnection: logout failed", e) }
             // 关闭连接池防止连接泄漏
-            try { adapter.close() } catch (_: Exception) {}
+            try { adapter.close() } catch (e: Exception) { android.util.Log.w("BackendRegistry", "testConnection: close failed", e) }
             Pair(true, serverName)
         } else {
             // 即使失败也尝试 logout（部分 Jellyfin 可能已创建 session）
-            try { adapter.logout() } catch (_: Exception) {}
-            try { adapter.close() } catch (_: Exception) {}
+            try { adapter.logout() } catch (e: Exception) { android.util.Log.w("BackendRegistry", "testConnection failed: logout", e) }
+            try { adapter.close() } catch (e: Exception) { android.util.Log.w("BackendRegistry", "testConnection failed: close", e) }
             Pair(false, "连接失败，请检查地址和凭据")
         }
     }

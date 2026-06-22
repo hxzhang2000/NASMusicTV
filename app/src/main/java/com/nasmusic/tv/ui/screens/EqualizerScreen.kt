@@ -29,6 +29,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -36,9 +37,12 @@ import androidx.tv.material3.ClickableSurfaceDefaults
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
+import com.nasmusic.tv.R
 import com.nasmusic.tv.data.model.EqualizerPreset
 import com.nasmusic.tv.ui.theme.Accent
 import com.nasmusic.tv.ui.theme.NasMusicColors
+import com.nasmusic.tv.ui.components.BackButton
+import com.nasmusic.tv.ui.components.FocusableSurface
 import kotlinx.coroutines.launch
 
 /**
@@ -67,7 +71,7 @@ fun EqualizerScreen(
             BackButton(onClick = onBack)
             Spacer(modifier = Modifier.width(16.dp))
             Text(
-                text = "均衡器",
+                text = stringResource(R.string.equalizer_title),
                 color = NasMusicColors.TextPrimary,
                 fontSize = 24.sp
             )
@@ -82,13 +86,13 @@ fun EqualizerScreen(
             // 预设列表
             item {
                 Text(
-                    text = "预设",
+                    text = stringResource(R.string.equalizer_preset),
                     color = NasMusicColors.TextPrimary,
                     fontSize = 16.sp,
                     modifier = Modifier.padding(bottom = 8.dp)
                 )
             }
-            items(presets) { preset ->
+            items(presets, key = { it.name }) { preset ->
                 val isSelected = currentPreset?.name == preset.name
                 var isFocused by remember { mutableStateOf(false) }
                 val animScale = remember { Animatable(1f) }
@@ -149,7 +153,7 @@ fun EqualizerScreen(
                 item {
                     Spacer(modifier = Modifier.height(16.dp))
                     Text(
-                        text = "频段增益",
+                        text = stringResource(R.string.equalizer_bands),
                         color = NasMusicColors.TextPrimary,
                         fontSize = 16.sp,
                         modifier = Modifier.padding(bottom = 8.dp)
@@ -158,11 +162,8 @@ fun EqualizerScreen(
                 val bandLabels = listOf("31Hz", "63Hz", "125Hz", "250Hz", "500Hz", "1kHz", "2kHz", "4kHz", "8kHz", "16kHz")
                 items(bandLabels.size) { index ->
                     val band = currentBands.getOrElse(index) { 0f }
-                    var isFocused by remember { mutableStateOf(false) }
-                    val animScale = remember { Animatable(1f) }
-                    val scope = rememberCoroutineScope()
 
-                    Surface(
+                    FocusableSurface(
                         onClick = {
                             val newValue = when {
                                 band <= -10f -> 0f
@@ -171,30 +172,14 @@ fun EqualizerScreen(
                             }
                             onAdjustBand(index, newValue)
                         },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .scale(animScale.value)
-                            .border(
-                                width = if (isFocused) 2.dp else 0.dp,
-                                color = if (isFocused) NasMusicColors.FocusRing else Color.Transparent,
-                                shape = RoundedCornerShape(6.dp)
-                            )
-                            .onFocusChanged {
-                                isFocused = it.isFocused
-                                scope.launch {
-                                    animScale.animateTo(if (isFocused) 1.02f else 1f, tween(200))
-                                }
-                            },
-                        shape = ClickableSurfaceDefaults.shape(
-                            shape = RoundedCornerShape(6.dp),
-                            focusedShape = RoundedCornerShape(6.dp)
-                        ),
-                        colors = ClickableSurfaceDefaults.colors(
-                            containerColor = NasMusicColors.Surface.copy(alpha = 0.5f),
-                            contentColor = NasMusicColors.TextPrimary,
-                            focusedContainerColor = NasMusicColors.Primary.copy(alpha = 0.2f)
-                        ),
-                        scale = ClickableSurfaceDefaults.scale(focusedScale = 1f, pressedScale = 0.98f)
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(6.dp),
+                        focusedScale = 1.02f,
+                        animationDurationMs = 200,
+                        containerColor = NasMusicColors.Surface.copy(alpha = 0.5f),
+                        focusedContainerColor = NasMusicColors.Primary.copy(alpha = 0.2f),
+                        contentColor = NasMusicColors.TextPrimary,
+                        pressedScale = 0.98f
                     ) {
                         Row(
                             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
@@ -220,47 +205,6 @@ fun EqualizerScreen(
                     }
                 }
             }
-        }
-    }
-}
-
-@OptIn(ExperimentalTvMaterial3Api::class)
-@Composable
-private fun BackButton(onClick: () -> Unit) {
-    var isFocused by remember { mutableStateOf(false) }
-    val animScale = remember { Animatable(1f) }
-    val scope = rememberCoroutineScope()
-    Surface(
-        onClick = onClick,
-        modifier = Modifier
-            .scale(animScale.value)
-            .border(
-                width = if (isFocused) 2.dp else 0.dp,
-                color = if (isFocused) NasMusicColors.FocusRing else Color.Transparent,
-                shape = RoundedCornerShape(8.dp)
-            )
-            .onFocusChanged {
-                isFocused = it.isFocused
-                scope.launch { animScale.animateTo(if (isFocused) 1.08f else 1f, tween(200)) }
-            },
-        shape = ClickableSurfaceDefaults.shape(
-            shape = RoundedCornerShape(8.dp),
-            focusedShape = RoundedCornerShape(8.dp)
-        ),
-        colors = ClickableSurfaceDefaults.colors(
-            containerColor = NasMusicColors.Surface,
-            contentColor = NasMusicColors.TextPrimary,
-            focusedContainerColor = NasMusicColors.Primary.copy(alpha = 0.2f),
-            focusedContentColor = NasMusicColors.Primary
-        ),
-        scale = ClickableSurfaceDefaults.scale(focusedScale = 1f, pressedScale = 0.96f)
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(text = "←", fontSize = 14.sp, modifier = Modifier.padding(end = 6.dp))
-            Text(text = "返回", fontSize = 14.sp)
         }
     }
 }

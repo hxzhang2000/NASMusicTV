@@ -1,9 +1,6 @@
 package com.nasmusic.tv.ui.screens
 
-import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -33,26 +30,23 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.scale
-import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.tv.material3.ClickableSurfaceDefaults
+import com.nasmusic.tv.R
 import androidx.tv.material3.Icon
-import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 import coil.compose.AsyncImage
 import com.nasmusic.tv.data.model.PlayMode
 import com.nasmusic.tv.data.model.Song
+import com.nasmusic.tv.ui.components.FocusableSurface
 import com.nasmusic.tv.ui.theme.NasMusicBrushes
 import com.nasmusic.tv.ui.theme.NasMusicColors
 import com.nasmusic.tv.util.TimeUtils
@@ -113,7 +107,7 @@ fun QueueScreen(
             }
             Spacer(modifier = Modifier.height(18.dp))
             // 标题/作者
-            Text(text = currentSong?.title ?: "未选择歌曲",
+            Text(text = currentSong?.title ?: stringResource(R.string.player_no_song_selected),
                 color = NasMusicColors.Primary,
                 fontSize = 20.sp,
                 maxLines = 2,
@@ -152,12 +146,12 @@ fun QueueScreen(
         // --- 右侧：队列列表 ---
         Column(modifier = Modifier.fillMaxWidth().weight(1f).padding(start = 8.dp)) {
             Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Text(text = "播放队列", color = NasMusicColors.TextPrimary, fontSize = 36.sp)
+                Text(text = stringResource(R.string.queue_title), color = NasMusicColors.TextPrimary, fontSize = 36.sp)
                 Spacer(modifier = Modifier.weight(1f))
                 Text(text = "${queue.size} 首", color = NasMusicColors.TextSecondary, fontSize = 16.sp)
                 if (queue.isNotEmpty()) {
                     Spacer(modifier = Modifier.width(24.dp))
-                    QueueActionButton(text = "清空", onClick = onClearQueue, icon = null)
+                    QueueActionButton(text = stringResource(R.string.queue_clear), onClick = onClearQueue, icon = null)
                 }
             }
 
@@ -166,47 +160,31 @@ fun QueueScreen(
             if (queue.isEmpty()) {
                 Box(modifier = Modifier.fillMaxSize().weight(1f), contentAlignment = Alignment.Center) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text(text = "队列为空", color = NasMusicColors.TextSecondary, fontSize = 24.sp)
+                        Text(text = stringResource(R.string.queue_empty), color = NasMusicColors.TextSecondary, fontSize = 24.sp)
                         Spacer(modifier = Modifier.height(8.dp))
-                        Text(text = "前往曲库添加歌曲", color = NasMusicColors.TextSecondary, fontSize = 14.sp)
+                        Text(text = stringResource(R.string.queue_go_to_library), color = NasMusicColors.TextSecondary, fontSize = 14.sp)
                     }
                 }
             } else {
                 LazyColumn(modifier = Modifier.fillMaxWidth().weight(1f)) {
-                    itemsIndexed(queue) { index, song ->
+                    itemsIndexed(queue, key = { _, song -> song.id }) { index, song ->
                         val isCurrent = index == currentIndex
                         var isFocused by remember { mutableStateOf(false) }
-                        val animScale = remember { Animatable(1f) }
-                        val scope = rememberCoroutineScope()
-                        Surface(
+                        FocusableSurface(
                             onClick = { onPlaySong(index) },
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(vertical = 4.dp)
-                                .scale(animScale.value)
-                                .border(
-                                    width = if (isFocused) 2.dp else 0.dp,
-                                    color = if (isFocused) NasMusicColors.FocusRing.copy(alpha = 0.6f) else Color.Transparent,
-                                    shape = RoundedCornerShape(8.dp)
-                                )
-                                .onFocusChanged {
-                                    isFocused = it.isFocused
-                                    scope.launch { animScale.animateTo(if (isFocused) 1.03f else 1f, tween(250)) }
-                                },
-                            shape = ClickableSurfaceDefaults.shape(
-                                shape = RoundedCornerShape(8.dp),
-                                focusedShape = RoundedCornerShape(8.dp)
-                            ),
-                            colors = ClickableSurfaceDefaults.colors(
-                                containerColor = if (isCurrent) NasMusicColors.Primary.copy(alpha = 0.2f) else NasMusicColors.Surface,
-                                contentColor = if (isCurrent) NasMusicColors.Primary else NasMusicColors.TextPrimary,
-                                focusedContainerColor = if (isCurrent) NasMusicColors.Primary.copy(alpha = 0.3f) else NasMusicColors.Primary.copy(alpha = 0.2f),
-                                focusedContentColor = if (isCurrent) Color.Black else NasMusicColors.TextPrimary
-                            ),
-                            scale = ClickableSurfaceDefaults.scale(
-                                focusedScale = 1f,
-                                pressedScale = 0.97f
-                            )
+                                .padding(vertical = 4.dp),
+                            shape = RoundedCornerShape(8.dp),
+                            focusedScale = 1.03f,
+                            animationDurationMs = 250,
+                            containerColor = if (isCurrent) NasMusicColors.Primary.copy(alpha = 0.2f) else NasMusicColors.Surface,
+                            contentColor = if (isCurrent) NasMusicColors.Primary else NasMusicColors.TextPrimary,
+                            focusedContainerColor = if (isCurrent) NasMusicColors.Primary.copy(alpha = 0.3f) else NasMusicColors.Primary.copy(alpha = 0.2f),
+                            focusedContentColor = if (isCurrent) Color.Black else NasMusicColors.TextPrimary,
+                            pressedScale = 0.97f,
+                            focusBorderColor = NasMusicColors.FocusRing.copy(alpha = 0.6f),
+                            onFocusChanged = { isFocused = it }
                         ) {
                             Row(
                                 modifier = Modifier
@@ -257,36 +235,16 @@ fun QueueScreen(
 
 @Composable
 fun QueueActionButton(text: String, onClick: () -> Unit, icon: androidx.compose.ui.graphics.vector.ImageVector? = null) {
-    var isFocused by remember { mutableStateOf(false) }
-    val animScale = remember { Animatable(1f) }
-    val scope = rememberCoroutineScope()
-    Surface(
+    FocusableSurface(
         onClick = onClick,
-        modifier = Modifier
-            .scale(animScale.value)
-            .border(
-                width = if (isFocused) 2.dp else 0.dp,
-                color = if (isFocused) NasMusicColors.FocusRing else Color.Transparent,
-                shape = RoundedCornerShape(16.dp)
-            )
-            .onFocusChanged {
-                isFocused = it.isFocused
-                scope.launch { animScale.animateTo(if (isFocused) 1.08f else 1f, tween(250)) }
-            },
-        shape = ClickableSurfaceDefaults.shape(
-            shape = RoundedCornerShape(16.dp),
-            focusedShape = RoundedCornerShape(16.dp)
-        ),
-        colors = ClickableSurfaceDefaults.colors(
-            containerColor = NasMusicColors.Surface,
-            contentColor = NasMusicColors.TextPrimary,
-            focusedContainerColor = NasMusicColors.Danger.copy(alpha = 0.85f),
-            focusedContentColor = androidx.compose.ui.graphics.Color.White
-        ),
-        scale = ClickableSurfaceDefaults.scale(
-            focusedScale = 1f,
-            pressedScale = 0.95f
-        )
+        shape = RoundedCornerShape(16.dp),
+        focusedScale = 1.08f,
+        animationDurationMs = 250,
+        containerColor = NasMusicColors.Surface,
+        contentColor = NasMusicColors.TextPrimary,
+        focusedContainerColor = NasMusicColors.Danger.copy(alpha = 0.85f),
+        focusedContentColor = androidx.compose.ui.graphics.Color.White,
+        pressedScale = 0.95f
     ) {
         Text(text = text, fontSize = 14.sp, modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp))
     }
@@ -294,34 +252,17 @@ fun QueueActionButton(text: String, onClick: () -> Unit, icon: androidx.compose.
 
 @Composable
 private fun MoveButton(text: String, onClick: () -> Unit) {
-    var isFocused by remember { mutableStateOf(false) }
-    val animScale = remember { Animatable(1f) }
-    val scope = rememberCoroutineScope()
-    Surface(
+    FocusableSurface(
         onClick = onClick,
-        modifier = Modifier
-            .widthIn(min = 36.dp)
-            .scale(animScale.value)
-            .border(
-                width = if (isFocused) 2.dp else 0.dp,
-                color = if (isFocused) NasMusicColors.FocusRing else Color.Transparent,
-                shape = RoundedCornerShape(6.dp)
-            )
-            .onFocusChanged {
-                isFocused = it.isFocused
-                scope.launch { animScale.animateTo(if (isFocused) 1.1f else 1f, tween(150)) }
-            },
-        shape = ClickableSurfaceDefaults.shape(
-            shape = RoundedCornerShape(6.dp),
-            focusedShape = RoundedCornerShape(6.dp)
-        ),
-        colors = ClickableSurfaceDefaults.colors(
-            containerColor = NasMusicColors.SurfaceVariant,
-            contentColor = NasMusicColors.TextSecondary,
-            focusedContainerColor = NasMusicColors.Primary.copy(alpha = 0.3f),
-            focusedContentColor = NasMusicColors.Primary
-        ),
-        scale = ClickableSurfaceDefaults.scale(focusedScale = 1f, pressedScale = 0.95f)
+        modifier = Modifier.widthIn(min = 36.dp),
+        shape = RoundedCornerShape(6.dp),
+        focusedScale = 1.1f,
+        animationDurationMs = 150,
+        containerColor = NasMusicColors.SurfaceVariant,
+        contentColor = NasMusicColors.TextSecondary,
+        focusedContainerColor = NasMusicColors.Primary.copy(alpha = 0.3f),
+        focusedContentColor = NasMusicColors.Primary,
+        pressedScale = 0.95f
     ) {
         Text(
             text = text,
@@ -333,37 +274,17 @@ private fun MoveButton(text: String, onClick: () -> Unit) {
 
 @Composable
 fun MiniIconButton(onClick: () -> Unit, icon: androidx.compose.ui.graphics.vector.ImageVector, contentDescription: String? = null) {
-    var isFocused by remember { mutableStateOf(false) }
-    val animScale = remember { Animatable(1f) }
-    val scope = rememberCoroutineScope()
-    Surface(
+    FocusableSurface(
         onClick = onClick,
-        modifier = Modifier
-            .size(44.dp)
-            .scale(animScale.value)
-            .border(
-                width = if (isFocused) 2.dp else 0.dp,
-                color = if (isFocused) NasMusicColors.FocusRing else Color.Transparent,
-                shape = CircleShape
-            )
-            .onFocusChanged {
-                isFocused = it.isFocused
-                scope.launch { animScale.animateTo(if (isFocused) 1.15f else 1f, tween(250)) }
-            },
-        shape = ClickableSurfaceDefaults.shape(
-            shape = CircleShape,
-            focusedShape = CircleShape
-        ),
-        colors = ClickableSurfaceDefaults.colors(
-            containerColor = NasMusicColors.SurfaceVariant,
-            contentColor = NasMusicColors.TextPrimary,
-            focusedContainerColor = NasMusicColors.Primary.copy(alpha = 0.3f),
-            focusedContentColor = Color.Black
-        ),
-        scale = ClickableSurfaceDefaults.scale(
-            focusedScale = 1f,
-            pressedScale = 0.90f
-        )
+        modifier = Modifier.size(44.dp),
+        shape = CircleShape,
+        focusedScale = 1.15f,
+        animationDurationMs = 250,
+        containerColor = NasMusicColors.SurfaceVariant,
+        contentColor = NasMusicColors.TextPrimary,
+        focusedContainerColor = NasMusicColors.Primary.copy(alpha = 0.3f),
+        focusedContentColor = Color.Black,
+        pressedScale = 0.90f
     ) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Icon(imageVector = icon, contentDescription = null, modifier = Modifier.size(20.dp))

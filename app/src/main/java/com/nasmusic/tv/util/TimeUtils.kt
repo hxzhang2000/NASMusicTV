@@ -1,5 +1,7 @@
 package com.nasmusic.tv.util
 
+import java.util.Locale
+
 /**
  * 时间格式化工具
  */
@@ -13,7 +15,7 @@ object TimeUtils {
         val totalSeconds = ms / 1000
         val minutes = totalSeconds / 60
         val seconds = totalSeconds % 60
-        return String.format("%d:%02d", minutes, seconds)
+        return String.format(Locale.US, "%d:%02d", minutes, seconds)
     }
 
     /**
@@ -23,6 +25,6 @@ object TimeUtils {
         val minutes = ms / 60000
         val seconds = (ms % 60000) / 1000
         val millis = ms % 1000
-        return String.format("%d:%02d.%03d", minutes, seconds, millis)
+        return String.format(Locale.US, "%d:%02d.%03d", minutes, seconds, millis)
     }
 }

@@ -4,6 +4,21 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
 }
 
+fun readKeystoreProperty(name: String): String {
+    val f = rootProject.file("keystore.properties")
+    if (!f.exists()) return ""
+    return try {
+        val lines = f.readLines()
+        val prefix = "$name="
+        lines.firstOrNull { it.startsWith(prefix) }?.removePrefix(prefix) ?: ""
+    } catch (_: Exception) { "" }
+}
+
+val keystoreStoreFile = readKeystoreProperty("storeFile")
+val keystoreStorePassword = readKeystoreProperty("storePassword")
+val keystoreKeyAlias = readKeystoreProperty("keyAlias")
+val keystoreKeyPassword = readKeystoreProperty("keyPassword")
+
 android {
     namespace = "com.nasmusic.tv"
     compileSdk = 34
@@ -12,11 +27,20 @@ android {
         applicationId = "com.nasmusic.tv"
         minSdk = 22
         targetSdk = 34
-        versionCode = 4
-        versionName = "2.1.0"
+        versionCode = 5
+        versionName = "2.2.0"
 
         ndk {
             abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64")
+        }
+    }
+
+    signingConfigs {
+        create("release") {
+            storeFile = file(keystoreStoreFile)
+            storePassword = keystoreStorePassword
+            keyAlias = keystoreKeyAlias
+            keyPassword = keystoreKeyPassword
         }
     }
 
@@ -28,6 +52,7 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            signingConfig = signingConfigs.getByName("release")
         }
         debug {
             isDebuggable = true
@@ -75,9 +100,6 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.7.0")
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.7.0")
 
-    // Navigation
-    implementation("androidx.navigation:navigation-compose:2.7.7")
-
     // Media3 / ExoPlayer
     implementation("androidx.media3:media3-exoplayer:1.2.1")
     implementation("androidx.media3:media3-session:1.2.1")
@@ -104,6 +126,11 @@ dependencies {
 
     // Testing
     testImplementation("junit:junit:4.13.2")
+    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.7.3")
+    testImplementation("org.mockito:mockito-core:5.3.1")
+    testImplementation("org.mockito:mockito-inline:5.2.0")
+    testImplementation("androidx.test:core:1.5.0")
+    testImplementation("org.robolectric:robolectric:4.11.1")
     androidTestImplementation("androidx.test.ext:junit:1.1.5")
     androidTestImplementation("androidx.test.espresso:espresso-core:3.5.1")
 }

@@ -1,7 +1,5 @@
 package com.nasmusic.tv.ui.screens
 
-import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -18,8 +16,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.scale
-import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.automirrored.filled.QueueMusic
@@ -35,6 +31,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.tv.material3.ClickableSurfaceDefaults
@@ -43,8 +40,10 @@ import androidx.tv.material3.Icon
 import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 import com.nasmusic.tv.NasMusicVersion
+import com.nasmusic.tv.R
 import com.nasmusic.tv.data.model.AppSettings
 import com.nasmusic.tv.data.model.PlayMode
+import com.nasmusic.tv.ui.components.FocusableSurface
 import com.nasmusic.tv.ui.theme.NasMusicColors
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
@@ -52,13 +51,13 @@ import kotlinx.coroutines.Dispatchers
 /**
  * 设置屏幕 — 左侧为导航侧边栏（settings-sidebar），右侧为具体选项（settings-content）
  */
-private enum class SettingsSection(val displayName: String) {
-    GENERAL("通用"),
-    PLAYBACK("播放"),
-    LYRICS("歌词"),
-    CACHE("缓存"),
-    NETWORK("网络"),
-    ABOUT("关于")
+private enum class SettingsSection(val titleRes: Int) {
+    GENERAL(R.string.settings_general),
+    PLAYBACK(R.string.settings_playback),
+    LYRICS(R.string.settings_lyrics),
+    CACHE(R.string.settings_cache),
+    NETWORK(R.string.settings_network),
+    ABOUT(R.string.settings_about)
 }
 
 @OptIn(ExperimentalTvMaterial3Api::class)
@@ -106,45 +105,26 @@ fun SettingsScreen(
                     Icon(imageVector = Icons.Default.Settings, contentDescription = null, tint = Color.Black, modifier = Modifier.size(18.dp))
                 }
                 Spacer(modifier = Modifier.width(12.dp))
-                Text(text = "设置", color = NasMusicColors.TextPrimary, fontSize = 22.sp)
+                Text(text = stringResource(R.string.nav_settings), color = NasMusicColors.TextPrimary, fontSize = 22.sp)
             }
 
             Spacer(modifier = Modifier.height(12.dp))
 
             SettingsSection.values().forEach { section ->
                 val selected = section == activeSection
-                var isFocused by remember { mutableStateOf(false) }
-                val animScale = remember { Animatable(1f) }
-                val scope = rememberCoroutineScope()
-                Surface(
+                FocusableSurface(
                     onClick = { activeSection = section },
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(vertical = 4.dp)
-                        .scale(animScale.value)
-                        .border(
-                            width = if (isFocused) 2.dp else 0.dp,
-                            color = if (isFocused) NasMusicColors.FocusRing else Color.Transparent,
-                            shape = RoundedCornerShape(12.dp)
-                        )
-                        .onFocusChanged {
-                            isFocused = it.isFocused
-                            scope.launch { animScale.animateTo(if (isFocused) 1.08f else 1f, tween(250)) }
-                        },
-                    shape = ClickableSurfaceDefaults.shape(
-                        shape = RoundedCornerShape(12.dp),
-                        focusedShape = RoundedCornerShape(12.dp)
-                    ),
-                    colors = ClickableSurfaceDefaults.colors(
-                        containerColor = if (selected) NasMusicColors.Primary.copy(alpha = 0.18f) else Color.Transparent,
-                        contentColor = if (selected) NasMusicColors.Primary else NasMusicColors.TextPrimary,
-                        focusedContainerColor = if (selected) NasMusicColors.Primary.copy(alpha = 0.3f) else NasMusicColors.SurfaceVariant,
-                        focusedContentColor = if (selected) NasMusicColors.Primary else NasMusicColors.TextPrimary
-                    ),
-                    scale = ClickableSurfaceDefaults.scale(
-                        focusedScale = 1f,
-                        pressedScale = 0.97f
-                    )
+                        .padding(vertical = 4.dp),
+                    shape = RoundedCornerShape(12.dp),
+                    focusedScale = 1.08f,
+                    animationDurationMs = 250,
+                    containerColor = if (selected) NasMusicColors.Primary.copy(alpha = 0.18f) else Color.Transparent,
+                    contentColor = if (selected) NasMusicColors.Primary else NasMusicColors.TextPrimary,
+                    focusedContainerColor = if (selected) NasMusicColors.Primary.copy(alpha = 0.3f) else NasMusicColors.SurfaceVariant,
+                    focusedContentColor = if (selected) NasMusicColors.Primary else NasMusicColors.TextPrimary,
+                    pressedScale = 0.97f
                 ) {
                     Row(
                         modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 14.dp),
@@ -160,7 +140,7 @@ fun SettingsScreen(
                         }
                         Icon(imageVector = icon, contentDescription = null, tint = if (selected) NasMusicColors.Primary else NasMusicColors.TextSecondary, modifier = Modifier.size(18.dp))
                         Spacer(modifier = Modifier.width(12.dp))
-                        Text(text = section.displayName, color = if (selected) NasMusicColors.Primary else NasMusicColors.TextPrimary, fontSize = 16.sp)
+                        Text(text = stringResource(section.titleRes), color = if (selected) NasMusicColors.Primary else NasMusicColors.TextPrimary, fontSize = 16.sp)
                     }
                 }
             }
@@ -170,46 +150,46 @@ fun SettingsScreen(
         Column(modifier = Modifier.fillMaxWidth().weight(1f).padding(start = 24.dp)) {
             when (activeSection) {
                 SettingsSection.GENERAL -> {
-                    SectionTitle("通用")
-                    SettingSwitch(label = "暗色主题", description = "使用深色背景保护视力", checked = settings.darkTheme, onClick = { onToggleDarkTheme(!settings.darkTheme) })
-                    SettingSwitch(label = "界面动画", description = "页面切换和焦点动画", checked = settings.animationsEnabled, onClick = { onToggleAnimations(!settings.animationsEnabled) })
+                    SectionTitle(stringResource(R.string.settings_general))
+                    SettingSwitch(label = stringResource(R.string.settings_dark_theme), description = stringResource(R.string.settings_dark_theme_desc), checked = settings.darkTheme, onClick = { onToggleDarkTheme(!settings.darkTheme) })
+                    SettingSwitch(label = stringResource(R.string.settings_animations), description = stringResource(R.string.settings_animations_desc), checked = settings.animationsEnabled, onClick = { onToggleAnimations(!settings.animationsEnabled) })
                 }
                 SettingsSection.PLAYBACK -> {
-                    SectionTitle("播放")
-                    SettingSwitch(label = "自动播放下一首", description = "歌曲结束后自动播放队列中的下一首", checked = settings.autoPlayNext, onClick = { onToggleAutoPlayNext(!settings.autoPlayNext) })
+                    SectionTitle(stringResource(R.string.settings_playback))
+                    SettingSwitch(label = stringResource(R.string.settings_auto_play), description = stringResource(R.string.settings_auto_play_desc), checked = settings.autoPlayNext, onClick = { onToggleAutoPlayNext(!settings.autoPlayNext) })
                     PlayModeSelector(current = settings.defaultPlayMode, onSelect = { onChangePlayMode(it) })
                     Spacer(modifier = Modifier.height(12.dp))
                     SettingActionButton(
-                        label = "均衡器",
-                        description = "调节各频段增益",
+                        label = stringResource(R.string.settings_equalizer),
+                        description = stringResource(R.string.settings_equalizer_desc),
                         onClick = { onOpenEqualizer?.invoke() }
                     )
                 }
                 SettingsSection.LYRICS -> {
-                    SectionTitle("歌词")
-                    SettingSwitch(label = "自动缓存歌词", description = "匹配到的歌词自动保存到本地", checked = settings.cacheLyrics, onClick = { onToggleCacheLyrics(!settings.cacheLyrics) })
-                    SettingSwitch(label = "自动缓存封面", description = "专辑封面下载并缓存到本地", checked = settings.cacheCover, onClick = { onToggleCacheCover(!settings.cacheCover) })
+                    SectionTitle(stringResource(R.string.settings_lyrics))
+                    SettingSwitch(label = stringResource(R.string.settings_cache_lyrics), description = stringResource(R.string.settings_cache_lyrics_desc), checked = settings.cacheLyrics, onClick = { onToggleCacheLyrics(!settings.cacheLyrics) })
+                    SettingSwitch(label = stringResource(R.string.settings_cache_cover), description = stringResource(R.string.settings_cache_cover_desc), checked = settings.cacheCover, onClick = { onToggleCacheCover(!settings.cacheCover) })
                 }
                 SettingsSection.ABOUT -> {
-                    SectionTitle("关于")
-                    AboutRow(label = "应用名称", value = "NAS Music TV")
-                    AboutRow(label = "版本", value = NasMusicVersion.DISPLAY)
-                    AboutRow(label = "构建类型", value = NasMusicVersion.BUILD_TYPE)
-                    AboutRow(label = "开源协议", value = "GPL v3")
-                    AboutRow(label = "支持后端", value = "Jellyfin / Navidrome")
+                    SectionTitle(stringResource(R.string.settings_about))
+                    AboutRow(label = stringResource(R.string.settings_app_name), value = stringResource(R.string.app_name))
+                    AboutRow(label = stringResource(R.string.about_version), value = NasMusicVersion.DISPLAY)
+                    AboutRow(label = stringResource(R.string.settings_build_type), value = NasMusicVersion.BUILD_TYPE)
+                    AboutRow(label = stringResource(R.string.about_license), value = stringResource(R.string.about_license_value))
+                    AboutRow(label = stringResource(R.string.settings_supported_backends), value = "Jellyfin / Navidrome")
                 }
                 SettingsSection.CACHE -> {
-                    SectionTitle("缓存管理")
+                    SectionTitle(stringResource(R.string.settings_cache))
                     if (onClearLyricsCache != null) {
                         SettingActionButton(
-                            label = "清除歌词缓存",
-                            description = "删除所有已缓存的歌词文件",
+                            label = stringResource(R.string.settings_clear_lyrics_cache),
+                            description = stringResource(R.string.settings_clear_lyrics_cache_desc),
                             onClick = onClearLyricsCache
                         )
                     }
                     if (onClearCoverCache != null) {
                         SettingActionButton(
-                            label = "清除封面缓存",
+                            label = stringResource(R.string.settings_clear_cover_cache),
                             description = "清理 Coil 图片加载器的磁盘缓存",
                             onClick = onClearCoverCache
                         )
@@ -230,9 +210,9 @@ fun SettingsScreen(
                     )
                 }
                 SettingsSection.NETWORK -> {
-                    SectionTitle("网络检测")
+                    SectionTitle(stringResource(R.string.settings_network))
                     Text(
-                        text = "测试设备是否能访问互联网",
+                        text = stringResource(R.string.settings_network_test_desc),
                         color = NasMusicColors.TextSecondary,
                         fontSize = 14.sp,
                         modifier = Modifier.padding(bottom = 16.dp, start = 4.dp)
@@ -306,7 +286,7 @@ fun SettingsScreen(
                             )
                             Spacer(modifier = Modifier.width(12.dp))
                             Text(
-                                text = if (isNetworkTesting) "测试中..." else "测试网络",
+                                text = if (isNetworkTesting) stringResource(R.string.settings_network_testing) else stringResource(R.string.settings_network_test),
                                 fontSize = 16.sp
                             )
                             Spacer(modifier = Modifier.weight(1f))
@@ -345,38 +325,20 @@ private fun SettingSwitch(
     checked: Boolean,
     onClick: () -> Unit
 ) {
-    var isFocused by remember { mutableStateOf(false) }
-    val animScale = remember { Animatable(1f) }
-    val scope = rememberCoroutineScope()
-    Surface(
+    FocusableSurface(
         onClick = onClick,
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 4.dp)
-            .scale(animScale.value)
-            .border(
-                width = if (isFocused) 2.dp else 0.dp,
-                color = if (isFocused) NasMusicColors.FocusRing.copy(alpha = 0.6f) else Color.Transparent,
-                shape = RoundedCornerShape(12.dp)
-            )
-            .onFocusChanged {
-                    isFocused = it.isFocused
-                    scope.launch { animScale.animateTo(if (isFocused) 1.03f else 1f, tween(250)) }
-                },
-        shape = ClickableSurfaceDefaults.shape(
-            shape = RoundedCornerShape(12.dp),
-            focusedShape = RoundedCornerShape(12.dp)
-        ),
-        colors = ClickableSurfaceDefaults.colors(
-            containerColor = NasMusicColors.Surface,
-            contentColor = NasMusicColors.TextPrimary,
-            focusedContainerColor = NasMusicColors.Primary.copy(alpha = 0.15f),
-            focusedContentColor = NasMusicColors.TextPrimary
-        ),
-        scale = ClickableSurfaceDefaults.scale(
-            focusedScale = 1f,
-            pressedScale = 0.98f
-        )
+            .padding(vertical = 4.dp),
+        shape = RoundedCornerShape(12.dp),
+        focusedScale = 1.03f,
+        animationDurationMs = 250,
+        containerColor = NasMusicColors.Surface,
+        contentColor = NasMusicColors.TextPrimary,
+        focusedContainerColor = NasMusicColors.Primary.copy(alpha = 0.15f),
+        focusedContentColor = NasMusicColors.TextPrimary,
+        pressedScale = 0.98f,
+        focusBorderColor = NasMusicColors.FocusRing.copy(alpha = 0.6f)
     ) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 18.dp),
@@ -401,7 +363,7 @@ private fun SettingSwitch(
 private fun PlayModeSelector(current: PlayMode, onSelect: (PlayMode) -> Unit) {
     Column {
         Text(
-            text = "默认播放模式",
+            text = stringResource(R.string.settings_play_mode),
             color = NasMusicColors.TextPrimary,
             fontSize = 16.sp,
             modifier = Modifier.padding(vertical = 8.dp)
@@ -409,36 +371,16 @@ private fun PlayModeSelector(current: PlayMode, onSelect: (PlayMode) -> Unit) {
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             PlayMode.values().forEach { mode ->
                 val selected = current == mode
-                var isFocused by remember { mutableStateOf(false) }
-                val animScale = remember { Animatable(1f) }
-                val scope = rememberCoroutineScope()
-                Surface(
+                FocusableSurface(
                     onClick = { onSelect(mode) },
-                    modifier = Modifier
-                        .scale(animScale.value)
-                        .border(
-                            width = if (isFocused) 2.dp else 0.dp,
-                            color = if (isFocused) NasMusicColors.FocusRing else Color.Transparent,
-                            shape = RoundedCornerShape(12.dp)
-                        )
-                        .onFocusChanged {
-                            isFocused = it.isFocused
-                            scope.launch { animScale.animateTo(if (isFocused) 1.08f else 1f, tween(250)) }
-                        },
-                    shape = ClickableSurfaceDefaults.shape(
-                        shape = RoundedCornerShape(12.dp),
-                        focusedShape = RoundedCornerShape(12.dp)
-                    ),
-                    colors = ClickableSurfaceDefaults.colors(
-                        containerColor = if (selected) NasMusicColors.Primary else NasMusicColors.Surface,
-                        contentColor = if (selected) androidx.compose.ui.graphics.Color.Black else NasMusicColors.TextPrimary,
-                        focusedContainerColor = if (selected) NasMusicColors.Primary else NasMusicColors.Primary.copy(alpha = 0.2f),
-                        focusedContentColor = if (selected) androidx.compose.ui.graphics.Color.Black else NasMusicColors.TextPrimary
-                    ),
-                    scale = ClickableSurfaceDefaults.scale(
-                        focusedScale = 1f,
-                        pressedScale = 0.95f
-                    )
+                    shape = RoundedCornerShape(12.dp),
+                    focusedScale = 1.08f,
+                    animationDurationMs = 250,
+                    containerColor = if (selected) NasMusicColors.Primary else NasMusicColors.Surface,
+                    contentColor = if (selected) androidx.compose.ui.graphics.Color.Black else NasMusicColors.TextPrimary,
+                    focusedContainerColor = if (selected) NasMusicColors.Primary else NasMusicColors.Primary.copy(alpha = 0.2f),
+                    focusedContentColor = if (selected) androidx.compose.ui.graphics.Color.Black else NasMusicColors.TextPrimary,
+                    pressedScale = 0.95f
                 ) {
                     Text(text = mode.displayName, fontSize = 14.sp, modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp))
                 }
@@ -454,38 +396,20 @@ private fun SettingActionButton(
     description: String,
     onClick: () -> Unit
 ) {
-    var isFocused by remember { mutableStateOf(false) }
-    val animScale = remember { Animatable(1f) }
-    val scope = rememberCoroutineScope()
-    Surface(
+    FocusableSurface(
         onClick = onClick,
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 4.dp)
-            .scale(animScale.value)
-            .border(
-                width = if (isFocused) 2.dp else 0.dp,
-                color = if (isFocused) NasMusicColors.FocusRing.copy(alpha = 0.6f) else Color.Transparent,
-                shape = RoundedCornerShape(12.dp)
-            )
-            .onFocusChanged {
-                    isFocused = it.isFocused
-                    scope.launch { animScale.animateTo(if (isFocused) 1.03f else 1f, tween(250)) }
-                },
-        shape = ClickableSurfaceDefaults.shape(
-            shape = RoundedCornerShape(12.dp),
-            focusedShape = RoundedCornerShape(12.dp)
-        ),
-        colors = ClickableSurfaceDefaults.colors(
-            containerColor = NasMusicColors.Surface,
-            contentColor = NasMusicColors.TextPrimary,
-            focusedContainerColor = NasMusicColors.Primary.copy(alpha = 0.15f),
-            focusedContentColor = NasMusicColors.TextPrimary
-        ),
-        scale = ClickableSurfaceDefaults.scale(
-            focusedScale = 1f,
-            pressedScale = 0.98f
-        )
+            .padding(vertical = 4.dp),
+        shape = RoundedCornerShape(12.dp),
+        focusedScale = 1.03f,
+        animationDurationMs = 250,
+        containerColor = NasMusicColors.Surface,
+        contentColor = NasMusicColors.TextPrimary,
+        focusedContainerColor = NasMusicColors.Primary.copy(alpha = 0.15f),
+        focusedContentColor = NasMusicColors.TextPrimary,
+        pressedScale = 0.98f,
+        focusBorderColor = NasMusicColors.FocusRing.copy(alpha = 0.6f)
     ) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 18.dp),
@@ -496,7 +420,7 @@ private fun SettingActionButton(
                 Text(text = description, color = NasMusicColors.TextSecondary, fontSize = 13.sp)
             }
             Text(
-                text = "执行",
+                text = stringResource(R.string.common_confirm),
                 color = NasMusicColors.Primary,
                 fontSize = 14.sp
             )

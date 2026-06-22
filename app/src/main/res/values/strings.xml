@@ -3,6 +3,18 @@
     <string name="app_name">NAS Music TV</string>
     <string name="app_description">开源的电视端 NAS 音乐播放器</string>
 
+    <!-- Common -->
+    <string name="common_cancel">取消</string>
+    <string name="common_confirm">确定</string>
+    <string name="common_back">返回</string>
+    <string name="common_search">搜索</string>
+    <string name="common_clear">清除</string>
+    <string name="common_delete">删除</string>
+    <string name="common_play_all">播放全部</string>
+    <string name="common_loading">加载中...</string>
+    <string name="common_no_data">暂无数据</string>
+    <string name="common_not_connected">尚未连接到服务器</string>
+
     <!-- Navigation -->
     <string name="nav_now_playing">正在播放</string>
     <string name="nav_library">曲库</string>
@@ -13,9 +25,18 @@
     <!-- Library -->
     <string name="library_albums">专辑</string>
     <string name="library_artists">歌手</string>
+    <string name="library_artists_alt">歌唱家</string>
     <string name="library_songs">歌曲</string>
     <string name="library_folders">文件夹</string>
+    <string name="library_genres">风格</string>
+    <string name="library_years">年代</string>
+    <string name="library_favorites">收藏</string>
+    <string name="library_recent">最近播放</string>
     <string name="library_recently_added">最近添加</string>
+    <string name="library_search_hint">输入歌曲名、歌手或拼音首字母</string>
+    <string name="library_no_genres">暂无风格数据</string>
+    <string name="library_no_years">暂无年代数据</string>
+    <string name="library_no_recent">暂无播放记录</string>
 
     <!-- Player -->
     <string name="player_play">播放</string>
@@ -30,9 +51,15 @@
     <string name="player_lyrics_source_local">本地缓存</string>
     <string name="player_lyrics_source_network">网络匹配</string>
     <string name="player_lyrics_source_server">服务器</string>
+    <string name="player_no_song_selected">未选择歌曲</string>
+    <string name="player_highlight_word">逐字</string>
+    <string name="player_highlight_line">逐行</string>
+    <string name="player_highlight_backend">后端</string>
+    <string name="player_highlight_network">网络</string>
 
     <!-- Server Connection -->
     <string name="server_connect_title">连接服务器</string>
+    <string name="server_config_title">服务器配置</string>
     <string name="server_connect_desc">选择您的 NAS 音乐后端类型</string>
     <string name="server_address">服务器地址</string>
     <string name="server_token">API Token</string>
@@ -43,17 +70,42 @@
     <string name="server_type_navidrome">Navidrome</string>
     <string name="server_connected">已连接</string>
     <string name="server_connection_failed">连接失败</string>
+    <string name="server_reconnect_confirm">检测到已保存的服务器配置，是否连接？</string>
+    <string name="server_disconnected">已断开连接</string>
+    <string name="server_disconnect">断开</string>
+    <string name="server_type_label">服务器类型</string>
+    <string name="server_password_desc">密码（用于获取访问令牌）</string>
+    <string name="server_address_required">请填写服务器地址</string>
+    <string name="server_connecting">连接中...</string>
+    <string name="server_connect_action">连接服务器</string>
+    <string name="server_privacy_notice">提示：您的账号密码仅用于获取访问令牌，不会被上传到任何第三方。</string>
+    <string name="server_address_dialog_title">输入服务器地址</string>
+    <string name="server_username_dialog_title">输入用户名</string>
+    <string name="server_username_dialog_hint">请输入用户名</string>
+    <string name="server_password_dialog_title">输入密码</string>
+    <string name="server_password_dialog_hint">请输入密码</string>
+    <string name="server_token_dialog_title">输入访问令牌</string>
+    <string name="server_token_dialog_hint">请输入访问令牌</string>
+    <string name="server_press_ok_edit">按下确定键编辑</string>
+    <string name="server_testing">测试中...</string>
+    <string name="server_connection_test">连接测试</string>
+    <string name="server_username_hint">用户名</string>
+    <string name="server_password_hint">密码（用于获取访问令牌）</string>
+    <string name="server_navidrome_username_hint">Navidrome 用户名</string>
+    <string name="server_navidrome_password_hint">Navidrome 密码</string>
+    <string name="server_url_hint">https://jellyfin.example.com 或 http://192.168.1.100:8096</string>
 
     <!-- Settings -->
     <string name="settings_general">通用</string>
-    <string name="settings_audio">音频</string>
+    <string name="settings_playback">播放</string>
     <string name="settings_lyrics">歌词</string>
-    <string name="settings_server">服务器</string>
+    <string name="settings_cache">缓存管理</string>
+    <string name="settings_network">网络检测</string>
     <string name="settings_about">关于</string>
     <string name="settings_dark_theme">暗色主题</string>
     <string name="settings_dark_theme_desc">使用深色背景保护视力</string>
-    <string name="settings_animations">显示动画</string>
-    <string name="settings_animations_desc">界面切换时播放过渡动画</string>
+    <string name="settings_animations">界面动画</string>
+    <string name="settings_animations_desc">页面切换和焦点动画</string>
     <string name="settings_auto_play">自动播放下一首</string>
     <string name="settings_auto_play_desc">歌曲结束后自动播放队列中的下一首</string>
     <string name="settings_play_mode">默认播放模式</string>
@@ -61,9 +113,67 @@
     <string name="settings_cache_lyrics">自动缓存歌词</string>
     <string name="settings_cache_lyrics_desc">匹配到的歌词自动保存到本地</string>
     <string name="settings_cache_cover">自动缓存封面</string>
-    <string name="settings_cache_cover_desc">专辑封面自动下载并缓存</string>
+    <string name="settings_cache_cover_desc">专辑封面下载并缓存到本地</string>
     <string name="settings_lyrics_offset">歌词偏移</string>
     <string name="settings_lyrics_offset_desc">调整歌词显示时间（毫秒）</string>
+    <string name="settings_equalizer">均衡器</string>
+    <string name="settings_equalizer_desc">调节各频段增益</string>
+    <string name="settings_clear_lyrics_cache">清除歌词缓存</string>
+    <string name="settings_clear_lyrics_cache_desc">删除所有已缓存的歌词文件</string>
+    <string name="settings_clear_cover_cache">清除封面缓存</string>
+    <string name="settings_clear_cover_cache_desc">删除所有已缓存的封面图片</string>
+    <string name="settings_network_test">测试网络</string>
+    <string name="settings_network_testing">测试中...</string>
+    <string name="settings_network_test_desc">测试设备是否能访问互联网</string>
+    <string name="settings_app_name">应用名称</string>
+    <string name="settings_build_type">构建类型</string>
+    <string name="settings_supported_backends">支持后端</string>
+
+    <!-- Equalizer -->
+    <string name="equalizer_title">均衡器</string>
+    <string name="equalizer_preset">预设</string>
+    <string name="equalizer_bands">频段增益</string>
+
+    <!-- Playlist -->
+    <string name="playlist_title">播放列表管理</string>
+    <string name="playlist_empty">暂无播放列表</string>
+    <string name="playlist_create">创建播放列表</string>
+    <string name="playlist_create_hint">请输入播放列表名称</string>
+    <string name="playlist_select_hint">选择一个播放列表查看曲目</string>
+    <string name="playlist_song_count">%d 首曲目</string>
+    <string name="playlist_track_list">曲目 (%d)</string>
+
+    <!-- Queue -->
+    <string name="queue_title">播放队列</string>
+    <string name="queue_clear">清空</string>
+    <string name="queue_empty">队列为空</string>
+    <string name="queue_go_to_library">前往曲库添加歌曲</string>
+
+    <!-- Text Input -->
+    <string name="text_input_space">空格</string>
+
+    <!-- Exit Confirm -->
+    <string name="exit_title">退出应用</string>
+    <string name="exit_confirm_message">确定要退出 NAS Music 吗？</string>
+
+    <!-- Connect Prompt -->
+    <string name="connect_prompt_message">检测到已保存的服务器配置，是否连接？</string>
+    <string name="connect_prompt_message_with_name">检测到已保存的服务器配置（%s），是否连接？</string>
+
+    <!-- Playback / Notification -->
+    <string name="playback_channel_name">音乐播放</string>
+    <string name="playback_channel_desc">控制音乐播放和显示当前歌曲</string>
+    <string name="playback_playing">正在播放</string>
+    <string name="playback_paused">已暂停</string>
+    <string name="playback_previous">上一首</string>
+    <string name="playback_next">下一首</string>
+
+    <!-- Status Messages -->
+    <string name="status_no_saved_server">没有已保存的服务器配置</string>
+    <string name="status_network_restored">网络已恢复</string>
+    <string name="status_network_disconnected">网络已断开</string>
+    <string name="status_lyrics_cache_cleared">歌词缓存已清除</string>
+    <string name="status_cover_cache_cleared">封面缓存已清除</string>
 
     <!-- About -->
     <string name="about_version">版本</string>

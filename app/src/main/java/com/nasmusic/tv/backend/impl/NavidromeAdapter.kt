@@ -8,7 +8,13 @@ import com.nasmusic.tv.data.model.Artist
 import com.nasmusic.tv.data.model.Genre
 import com.nasmusic.tv.data.model.Playlist
 import com.nasmusic.tv.data.model.Song
+import com.nasmusic.tv.util.AppLog
+import com.nasmusic.tv.util.EncodingUtils
+import com.nasmusic.tv.util.RetryConfig
+import com.nasmusic.tv.util.withRetry
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -29,17 +35,23 @@ class NavidromeAdapter : BackendAdapter {
     private var username: String = ""
     private var password: String = ""
     private var apiToken: String = ""
-    private var serverName: String = "Navidrome"
+    override var serverName: String = "Navidrome"
+        private set
 
     private val gson = Gson()
     private val client: OkHttpClient by lazy {
         val logging = HttpLoggingInterceptor().apply {
             level = HttpLoggingInterceptor.Level.BASIC
         }
+        // 使用守护线程的 ExecutorService，防止 OkHttp 线程阻止进程退出
+        val daemonExecutor = java.util.concurrent.Executors.newCachedThreadPool { r ->
+            Thread(r, "Navidrome-OkHttp").apply { isDaemon = true }
+        }
         OkHttpClient.Builder()
             .addInterceptor(logging)
             .connectTimeout(15, TimeUnit.SECONDS)
             .readTimeout(30, TimeUnit.SECONDS)
+            .dispatcher(okhttp3.Dispatcher(daemonExecutor))
             .build()
     }
 
@@ -203,12 +215,14 @@ class NavidromeAdapter : BackendAdapter {
             val albums = artist?.getAsJsonArray("album")
                 ?: return@withContext emptyList<Song>()
 
-            val allSongs = mutableListOf<Song>()
-            albums.forEach { albumElem ->
-                val albumId = albumElem.asJsonObject.get("id")?.asString ?: return@forEach
-                val songs = getAlbumSongs(albumId)
-                allSongs.addAll(songs)
+            // 并发请求所有专辑的歌曲
+            val deferredSongs = albums.map { albumElem ->
+                async {
+                    val albumId = albumElem.asJsonObject.get("id")?.asString ?: return@async emptyList<Song>()
+                    getAlbumSongs(albumId)
+                }
             }
+            val allSongs = deferredSongs.awaitAll().flatten()
             allSongs
         } catch (e: Exception) {
             android.util.Log.e("NavidromeAdapter", "getArtistSongs failed", e)
@@ -229,9 +243,9 @@ class NavidromeAdapter : BackendAdapter {
             songs.mapNotNull { item ->
                 val obj = item.asJsonObject
                 val id = obj.get("id")?.asString ?: return@mapNotNull null
-                val title = fixEncoding(obj.get("title")?.asString) ?: "Unknown"
-                val artist = fixEncoding(obj.get("artist")?.asString) ?: ""
-                val album = fixEncoding(obj.get("album")?.asString) ?: ""
+                val title = EncodingUtils.fixEncoding(obj.get("title")?.asString) ?: "Unknown"
+                val artist = EncodingUtils.fixEncoding(obj.get("artist")?.asString) ?: ""
+                val album = EncodingUtils.fixEncoding(obj.get("album")?.asString) ?: ""
                 val albumId = obj.get("albumId")?.asString ?: ""
                 val track = obj.get("track")?.asInt ?: 0
                 val disc = obj.get("discNumber")?.asInt ?: 1
@@ -311,14 +325,15 @@ class NavidromeAdapter : BackendAdapter {
             val albums = albumList?.getAsJsonArray("album")
                 ?: return@withContext emptyList<Song>()
 
-            val recentSongs = mutableListOf<Song>()
-            albums.take(20).forEach { albumElem ->
-                val albumId = albumElem.asJsonObject.get("id")?.asString ?: return@forEach
-                val songs = getAlbumSongs(albumId)
-                recentSongs.addAll(songs.take(5))
-                if (recentSongs.size >= 100) return@forEach
+            // 并发请求所有专辑的歌曲，每个专辑最多取 5 首
+            val deferredSongs = albums.take(20).map { albumElem ->
+                async {
+                    val albumId = albumElem.asJsonObject.get("id")?.asString ?: return@async emptyList<Song>()
+                    getAlbumSongs(albumId).take(5)
+                }
             }
-            recentSongs
+            val recentSongs = deferredSongs.awaitAll().flatten()
+            recentSongs.take(100)
         } catch (e: Exception) {
             android.util.Log.e("NavidromeAdapter", "getRecentSongs failed", e)
             emptyList()
@@ -330,12 +345,12 @@ class NavidromeAdapter : BackendAdapter {
 
     override fun getCoverUrl(songId: String): String {
         val url = buildRestUrl("getCoverArt") + "&id=$songId&size=512"
-        android.util.Log.d("NavidromeAdapter", "getCoverUrl: $url")
+        AppLog.d("NavidromeAdapter", "getCoverUrl: $url")
         return url
     }
 
     override suspend fun getLyrics(songId: String): String? {
-        android.util.Log.d("NavidromeAdapter", "getLyrics: Navidrome does not support lyrics API, returning null")
+        AppLog.d("NavidromeAdapter", "getLyrics: Navidrome does not support lyrics API, returning null")
         return null
     }
 
@@ -595,8 +610,6 @@ class NavidromeAdapter : BackendAdapter {
         }
     }
 
-    fun getServerName(): String = serverName
-
     /**
      * 释放 OkHttp 连接资源。
      * Navidrome 使用无状态认证，无服务端 session 需要清理。
@@ -606,7 +619,7 @@ class NavidromeAdapter : BackendAdapter {
         try {
             client.dispatcher.executorService.shutdown()
             client.connectionPool.evictAll()
-            android.util.Log.d("NavidromeAdapter", "close: OkHttp resources released")
+            AppLog.d("NavidromeAdapter", "close: OkHttp resources released")
         } catch (e: Exception) {
             android.util.Log.w("NavidromeAdapter", "close failed", e)
         }
@@ -629,16 +642,26 @@ class NavidromeAdapter : BackendAdapter {
     private fun buildCoverUrl(coverArtId: String): String =
         buildRestUrl("getCoverArt") + "&id=$coverArtId&size=512"
 
-    private fun executeRequest(url: String): JsonObject? {
-        return try {
-            val request = Request.Builder().url(url).build()
-            client.newCall(request).execute().use { response ->
-                val body = response.body?.string() ?: return null
-                if (!response.isSuccessful) return null
-                gson.fromJson(body, JsonObject::class.java)
+    private suspend fun executeRequest(url: String): JsonObject? = withContext(Dispatchers.IO) {
+        try {
+            withRetry(
+                config = RetryConfig(maxAttempts = 3, baseDelayMs = 500L),
+                onError = { attempt, e ->
+                    android.util.Log.w("NavidromeAdapter", "executeRequest retry attempt=$attempt for $url", e)
+                }
+            ) {
+                val request = Request.Builder().url(url).build()
+                client.newCall(request).execute().use { response ->
+                    val body = response.body?.string()
+                    if (body != null && response.isSuccessful) {
+                        gson.fromJson(body, JsonObject::class.java)
+                    } else {
+                        null
+                    }
+                }
             }
         } catch (e: Exception) {
-            android.util.Log.w("NavidromeAdapter", "executeRequest failed for $url", e)
+            android.util.Log.e("NavidromeAdapter", "executeRequest failed for $url", e)
             null
         }
     }
@@ -647,67 +670,5 @@ class NavidromeAdapter : BackendAdapter {
         val md = MessageDigest.getInstance("MD5")
         return BigInteger(1, md.digest(input.toByteArray()))
             .toString(16).padStart(32, '0')
-    }
-
-    /**
-     * 修复字符串编码问题
-     * 处理 Jellyfin 返回的乱码模式：
-     * 1. 末尾的 �?（U+FFFD + ?）
-     * 2. GB2312/GBK 字节被当作 Latin-1 解码（如 ÎÒÊÇÕæµÄ°®Äã）
-     */
-    private fun fixEncoding(text: String?): String? {
-        if (text.isNullOrBlank()) return text
-        
-        // 第一步：移除末尾的乱码模式：�?（U+FFFD + ?）或单独的 ?
-        var fixed: String = text
-        while (fixed.endsWith("?") || fixed.endsWith("\uFFFD?") || fixed.endsWith("\uFFFD")) {
-            if (fixed.endsWith("\uFFFD?")) {
-                fixed = fixed.dropLast(2) // 移除 U+FFFD 和 ?
-            } else {
-                fixed = fixed.dropLast(1)
-            }
-        }
-        
-        // 第二步：检测 GB2312/GBK 编码被当作 Latin-1 解码的情况
-        // 特征：字符串包含大量 Latin-1 扩展字符（0x80-0xFF 范围）
-        val latin1Count = fixed.count { it.code in 0x80..0xFF }
-        val totalCount = fixed.length
-        
-        // 如果超过 30% 的字符是 Latin-1 扩展字符，尝试从 Latin-1 转换到 GB2312
-        if (latin1Count > 0 && latin1Count.toFloat() / totalCount > 0.3f) {
-            try {
-                // 将字符串当作 Latin-1 编码的字节
-                val bytes = fixed.toByteArray(Charsets.ISO_8859_1)
-                // 尝试用 GB2312 解码
-                val decoded = String(bytes, charset("GB2312"))
-                // 如果解码后包含中文字符，使用这个结果
-                if (decoded.any { it.code in 0x4E00..0x9FFF }) {
-                    android.util.Log.d("NavidromeAdapter", "fixEncoding: converted Latin-1 to GB2312: '$fixed' -> '$decoded'")
-                    fixed = decoded
-                }
-            } catch (e: Exception) {
-                // GB2312 解码失败，尝试 GBK
-                try {
-                    val bytes = fixed.toByteArray(Charsets.ISO_8859_1)
-                    val decoded = String(bytes, charset("GBK"))
-                    if (decoded.any { it.code in 0x4E00..0x9FFF }) {
-                        android.util.Log.d("NavidromeAdapter", "fixEncoding: converted Latin-1 to GBK: '$fixed' -> '$decoded'")
-                        fixed = decoded
-                    }
-                } catch (e2: Exception) {
-                    // 都失败了，保持原样
-                }
-            }
-        }
-        
-        // 如果移除后变为空，返回原字符串
-        if (fixed.isBlank()) return text
-        
-        // 如果有变化，记录日志
-        if (fixed != text) {
-            android.util.Log.d("NavidromeAdapter", "fixEncoding: result: '${text.take(30)}' -> '${fixed.take(30)}'")
-        }
-        
-        return fixed
     }
 }

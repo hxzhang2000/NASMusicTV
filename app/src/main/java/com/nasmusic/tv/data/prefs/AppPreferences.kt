@@ -13,8 +13,11 @@ import com.nasmusic.tv.data.model.AppSettings
 import com.nasmusic.tv.data.model.EqualizerPreset
 import com.nasmusic.tv.data.model.PlayMode
 import com.nasmusic.tv.data.model.ServerConfig
+import com.nasmusic.tv.util.CryptoUtils
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.runBlocking
 
 /**
  * 应用偏好存储
@@ -58,9 +61,9 @@ class AppPreferences(private val context: Context) {
         ServerConfig(
             backendType = prefs[keyBackendType] ?: ServerConfig.TYPE_JELLYFIN,
             baseUrl = prefs[keyBaseUrl] ?: "",
-            apiToken = prefs[keyApiToken] ?: "",
+            apiToken = CryptoUtils.decrypt(prefs[keyApiToken] ?: ""),
             username = prefs[keyUsername] ?: "",
-            password = prefs[keyPassword] ?: "",
+            password = CryptoUtils.decrypt(prefs[keyPassword] ?: ""),
             isConnected = prefs[keyServerConnected] ?: false,
             displayName = prefs[keyServerDisplayName] ?: ""
         )
@@ -70,9 +73,9 @@ class AppPreferences(private val context: Context) {
         context.dataStore.edit { prefs ->
             prefs[keyBackendType] = config.backendType
             prefs[keyBaseUrl] = config.baseUrl
-            prefs[keyApiToken] = config.apiToken
+            prefs[keyApiToken] = CryptoUtils.encrypt(config.apiToken)
             prefs[keyUsername] = config.username
-            prefs[keyPassword] = config.password
+            prefs[keyPassword] = CryptoUtils.encrypt(config.password)
             prefs[keyServerConnected] = config.isConnected
             prefs[keyServerDisplayName] = config.displayName
         }
@@ -119,8 +122,16 @@ class AppPreferences(private val context: Context) {
      * 同步获取最近播放 ID 列表（非 Flow，用于 ViewModel 中一次性读取）
      */
     fun getRecentSongIdsSync(): List<String> {
-        // 此方法在非协程上下文使用，通过 runBlocking 读取
-        return emptyList() // ViewModel 应使用 Flow 版本
+        return runBlocking {
+            try {
+                context.dataStore.data.first().let { prefs ->
+                    val recentJson = prefs[keyRecentSongs] ?: "[]"
+                    gson.fromJson(recentJson, object : TypeToken<List<String>>() {}.type) ?: emptyList()
+                }
+            } catch (e: Exception) {
+                emptyList()
+            }
+        }
     }
 
     /**
@@ -217,15 +228,4 @@ class AppPreferences(private val context: Context) {
     suspend fun setCacheCover(enabled: Boolean) = context.dataStore.edit { it[keyCacheCover] = enabled }
 
     suspend fun setLyricsOffset(offsetMs: Long) = context.dataStore.edit { it[keyLyricsOffset] = offsetMs }
-
-    companion object {
-        @Volatile
-        private var instance: AppPreferences? = null
-
-        fun getInstance(context: Context): AppPreferences {
-            return instance ?: synchronized(this) {
-                instance ?: AppPreferences(context.applicationContext).also { instance = it }
-            }
-        }
-    }
 }

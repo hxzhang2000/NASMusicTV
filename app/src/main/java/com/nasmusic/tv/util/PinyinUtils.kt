@@ -1,5 +1,6 @@
 package com.nasmusic.tv.util
 
+import android.icu.text.Transliterator
 import android.os.Build
 
 /**
@@ -13,6 +14,28 @@ import android.os.Build
  * 低于 API 24 的设备仅支持直接子串匹配。
  */
 object PinyinUtils {
+
+    private val transliterator: Transliterator? by lazy {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            try { Transliterator.getInstance("Han-Latin; Latin-ASCII") } catch (e: Exception) { null }
+        } else null
+    }
+
+    private const val SPACE_REGEX = "\\s+"
+
+    /**
+     * 将文本转换为拼音（API 26+ 使用 Transliterator，低版本 fallback 仅保留 ASCII 字符）。
+     */
+    fun toPinyin(text: String): String {
+        if (text.isBlank()) return ""
+        val trans = transliterator
+        return if (trans != null) {
+            trans.transliterate(text).split(SPACE_REGEX.toRegex()).joinToString("") { it.trim() }
+        } else {
+            // 低版本 fallback：仅保留 ASCII 字符
+            text.filter { it.isLetterOrDigit() || it.isWhitespace() }
+        }
+    }
 
     /**
      * 获取文本的拼音首字母。

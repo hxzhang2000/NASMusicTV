@@ -18,6 +18,11 @@ interface BackendAdapter {
     val backendType: String
 
     /**
+     * 服务端显示名称（登录后由后端返回的实际名称）
+     */
+    val serverName: String
+
+    /**
      * 初始化连接
      */
     suspend fun initialize(baseUrl: String, apiToken: String, username: String = "", password: String = ""): Boolean
@@ -70,6 +75,24 @@ interface BackendAdapter {
     suspend fun getSongs(limit: Int = 500, offset: Int = 0): List<Song>
 
     /**
+     * 获取歌曲总数（利用 Jellyfin 的 TotalRecordCount）
+     * 用于分页显示 "已加载 N / 共 M 首"
+     */
+    suspend fun getSongsTotalCount(): Int = 0
+
+    /**
+     * 按 ID 批量查询歌曲
+     * 用于最近播放、收藏等场景，避免依赖全量歌曲列表
+     * @param ids 歌曲 ID 列表
+     */
+    suspend fun getSongsByIds(ids: List<String>): List<Song> = emptyList()
+
+    /**
+     * 获取所有年份列表（从服务端提取，避免依赖全量歌曲）
+     */
+    suspend fun getYears(): List<Int> = emptyList()
+
+    /**
      * 搜索歌曲
      */
     suspend fun searchSongs(query: String): List<Song>
@@ -95,29 +118,33 @@ interface BackendAdapter {
     suspend fun getLyrics(songId: String): String?
 
     // ========== F-1 扩展接口 ==========
+    //
+    // 以下方法均带有 Kotlin 接口默认实现（返回空值），
+    // 新适配器可按需覆盖，不必强制实现全部接口。
+    // 已有覆盖的适配器不受影响（override 优先于默认值）。
 
     // --- 播放列表 ---
-    suspend fun getPlaylists(): List<Playlist>
-    suspend fun createPlaylist(name: String): Playlist?
-    suspend fun deletePlaylist(playlistId: String): Boolean
-    suspend fun addToPlaylist(playlistId: String, songId: String): Boolean
-    suspend fun removeFromPlaylist(playlistId: String, songId: String): Boolean
+    suspend fun getPlaylists(): List<Playlist> = emptyList()
+    suspend fun createPlaylist(name: String): Playlist? = null
+    suspend fun deletePlaylist(playlistId: String): Boolean = false
+    suspend fun addToPlaylist(playlistId: String, songId: String): Boolean = false
+    suspend fun removeFromPlaylist(playlistId: String, songId: String): Boolean = false
 
     // --- 收藏 ---
-    suspend fun toggleFavorite(songId: String): Boolean
-    suspend fun getFavorites(): List<Song>
+    suspend fun toggleFavorite(songId: String): Boolean = false
+    suspend fun getFavorites(): List<Song> = emptyList()
 
     // --- 评分 ---
-    suspend fun setRating(songId: String, rating: Int): Boolean
+    suspend fun setRating(songId: String, rating: Int): Boolean = false
 
     // --- 流派 ---
-    suspend fun getGenres(): List<Genre>
-    suspend fun getSongsByGenre(genre: String): List<Song>
-    suspend fun getSongsByYearRange(fromYear: Int, toYear: Int): List<Song>
+    suspend fun getGenres(): List<Genre> = emptyList()
+    suspend fun getSongsByGenre(genre: String): List<Song> = emptyList()
+    suspend fun getSongsByYearRange(fromYear: Int, toYear: Int): List<Song> = emptyList()
 
     // --- Scrobble ---
-    suspend fun scrobblePlay(songId: String, timestamp: Long): Boolean
+    suspend fun scrobblePlay(songId: String, timestamp: Long): Boolean = false
 
     // --- 随机歌曲 ---
-    suspend fun getRandomSongs(limit: Int = 20): List<Song>
+    suspend fun getRandomSongs(limit: Int = 20): List<Song> = emptyList()
 }

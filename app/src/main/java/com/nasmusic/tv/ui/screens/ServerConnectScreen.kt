@@ -35,6 +35,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -44,8 +46,11 @@ import androidx.tv.material3.Icon
 import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 import androidx.tv.material3.ExperimentalTvMaterial3Api
+import com.nasmusic.tv.NasMusicApp
+import com.nasmusic.tv.R
 import com.nasmusic.tv.backend.BackendRegistry
 import com.nasmusic.tv.data.model.ServerConfig
+import com.nasmusic.tv.ui.components.FocusableSurface
 import com.nasmusic.tv.ui.theme.NasMusicColors
 import kotlinx.coroutines.launch
 
@@ -68,19 +73,19 @@ fun ServerConnectScreen(
     var baseUrl by remember {
         mutableStateOf(
             if (initialConfig.baseUrl.isNotBlank()) TextFieldValue(initialConfig.baseUrl)
-            else TextFieldValue("http://192.168.0.190:8096")
+            else TextFieldValue("http://")
         )
     }
     var username by remember {
         mutableStateOf(
             if (initialConfig.username.isNotBlank()) TextFieldValue(initialConfig.username)
-            else TextFieldValue("hxzhang")
+            else TextFieldValue("")
         )
     }
     var password by remember {
         mutableStateOf(
             if (initialConfig.password.isNotBlank()) TextFieldValue(initialConfig.password)
-            else TextFieldValue("wfxzhx2000")
+            else TextFieldValue("")
         )
     }
     var apiToken by remember {
@@ -96,6 +101,9 @@ fun ServerConnectScreen(
     var isTesting by remember { mutableStateOf(false) }
     var testStatus by remember { mutableStateOf("") }  // "" | "success:xxx" | "error:xxx"
     val testScope = rememberCoroutineScope()
+    val appContext = LocalContext.current
+    val backendRegistry = remember { (appContext.applicationContext as NasMusicApp).backendRegistry }
+    val context = LocalContext.current
 
     Box(
         modifier = modifier.fillMaxSize(),
@@ -132,13 +140,13 @@ fun ServerConnectScreen(
             Spacer(modifier = Modifier.height(16.dp))
 
             Text(
-                text = "服务器配置",
+                text = stringResource(R.string.server_config_title),
                 color = NasMusicColors.TextPrimary,
                 fontSize = 36.sp
             )
             Spacer(modifier = Modifier.height(8.dp))
             Text(
-                text = "配置您的 Jellyfin 或 Navidrome 服务器",
+                text = stringResource(R.string.server_connect_desc),
                 color = NasMusicColors.TextSecondary,
                 fontSize = 16.sp,
                 textAlign = TextAlign.Center
@@ -169,7 +177,7 @@ fun ServerConnectScreen(
                     Spacer(modifier = Modifier.width(16.dp))
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = "已连接",
+                            text = stringResource(R.string.server_connected),
                             color = NasMusicColors.Primary,
                             fontSize = 18.sp
                         )
@@ -182,47 +190,22 @@ fun ServerConnectScreen(
                         }
                     }
                     // 断开按钮
-                    var disconnectFocused by remember { mutableStateOf(false) }
-                    val disconnectScale = remember { Animatable(1f) }
-                    val disconnectScope = rememberCoroutineScope()
-                    Surface(
+                    FocusableSurface(
                         onClick = {
                             onDisconnect()
-                            statusMessage = "已断开连接"
+                            statusMessage = context.getString(R.string.server_disconnected)
                         },
-                        modifier = Modifier
-                            .scale(disconnectScale.value)
-                            .border(
-                                width = if (disconnectFocused) 2.dp else 0.dp,
-                                color = if (disconnectFocused) NasMusicColors.FocusRing else Color.Transparent,
-                                shape = RoundedCornerShape(12.dp)
-                            )
-                            .onFocusChanged {
-                                disconnectFocused = it.isFocused
-                                disconnectScope.launch {
-                                    disconnectScale.animateTo(
-                                        if (disconnectFocused) 1.08f else 1f,
-                                        tween(150)
-                                    )
-                                }
-                            },
-                        shape = ClickableSurfaceDefaults.shape(
-                            shape = RoundedCornerShape(12.dp),
-                            focusedShape = RoundedCornerShape(12.dp)
-                        ),
-                        colors = ClickableSurfaceDefaults.colors(
-                            containerColor = NasMusicColors.Danger,
-                            contentColor = Color.White,
-                            focusedContainerColor = NasMusicColors.Danger.copy(alpha = 0.85f),
-                            focusedContentColor = Color.White
-                        ),
-                        scale = ClickableSurfaceDefaults.scale(
-                            focusedScale = 1f,
-                            pressedScale = 0.95f
-                        )
+                        shape = RoundedCornerShape(12.dp),
+                        focusedScale = 1.08f,
+                        animationDurationMs = 150,
+                        containerColor = NasMusicColors.Danger,
+                        contentColor = Color.White,
+                        focusedContainerColor = NasMusicColors.Danger.copy(alpha = 0.85f),
+                        focusedContentColor = Color.White,
+                        pressedScale = 0.95f
                     ) {
                         Text(
-                            text = "断开",
+                            text = stringResource(R.string.server_disconnect),
                             fontSize = 14.sp,
                             modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp)
                         )
@@ -234,7 +217,7 @@ fun ServerConnectScreen(
 
             // 服务器类型选择
             Text(
-                text = "服务器类型",
+                text = stringResource(R.string.server_type_label),
                 color = NasMusicColors.TextPrimary,
                 fontSize = 18.sp,
                 modifier = Modifier
@@ -282,7 +265,7 @@ fun ServerConnectScreen(
                                 username = username.text.trim(),
                                 password = password.text.trim()
                             )
-                            val (success, message) = BackendRegistry.testConnection(config)
+                            val (success, message) = backendRegistry.testConnection(config)
                             testStatus = if (success) "success:$message" else "error:$message"
                             isTesting = false
                         }
@@ -294,16 +277,16 @@ fun ServerConnectScreen(
 
             if (backendType == ServerConfig.TYPE_JELLYFIN) {
                 FormField(
-                    label = "用户名",
-                    hint = "用户名",
+                    label = stringResource(R.string.server_username),
+                    hint = stringResource(R.string.server_username_hint),
                     value = username,
                     onValueChange = { username = it },
                     onOpen = { activeInputField = InputField.USERNAME }
                 )
                 Spacer(modifier = Modifier.height(16.dp))
                 FormField(
-                    label = "密码",
-                    hint = "密码（用于获取访问令牌）",
+                    label = stringResource(R.string.server_password),
+                    hint = stringResource(R.string.server_password_hint),
                     value = password,
                     onValueChange = { password = it },
                     masked = true,
@@ -311,16 +294,16 @@ fun ServerConnectScreen(
                 )
             } else {
                 FormField(
-                    label = "用户名",
-                    hint = "Navidrome 用户名",
+                    label = stringResource(R.string.server_username),
+                    hint = stringResource(R.string.server_navidrome_username_hint),
                     value = username,
                     onValueChange = { username = it },
                     onOpen = { activeInputField = InputField.USERNAME }
                 )
                 Spacer(modifier = Modifier.height(16.dp))
                 FormField(
-                    label = "密码",
-                    hint = "Navidrome 密码",
+                    label = stringResource(R.string.server_password),
+                    hint = stringResource(R.string.server_navidrome_password_hint),
                     value = password,
                     onValueChange = { password = it },
                     masked = true,
@@ -340,13 +323,10 @@ fun ServerConnectScreen(
             }
 
             // 连接按钮
-            var connectFocused by remember { mutableStateOf(false) }
-            val connectScale = remember { Animatable(1f) }
-            val connectScope = rememberCoroutineScope()
-            Surface(
+            FocusableSurface(
                 onClick = {
                     if (baseUrl.text.isBlank()) {
-                        statusMessage = "请填写服务器地址"
+                        statusMessage = context.getString(R.string.server_address_required)
                     } else {
                         statusMessage = ""
                         val config = ServerConfig(
@@ -359,39 +339,17 @@ fun ServerConnectScreen(
                         onConnect(config)
                     }
                 },
-                modifier = Modifier
-                    .scale(connectScale.value)
-                    .border(
-                        width = if (connectFocused) 2.dp else 0.dp,
-                        color = if (connectFocused) NasMusicColors.FocusRing else Color.Transparent,
-                        shape = RoundedCornerShape(14.dp)
-                    )
-                    .onFocusChanged {
-                        connectFocused = it.isFocused
-                        connectScope.launch {
-                            connectScale.animateTo(
-                                if (connectFocused) 1.08f else 1f,
-                                tween(150)
-                            )
-                        }
-                    },
-                shape = ClickableSurfaceDefaults.shape(
-                    shape = RoundedCornerShape(14.dp),
-                    focusedShape = RoundedCornerShape(14.dp)
-                ),
-                colors = ClickableSurfaceDefaults.colors(
-                    containerColor = NasMusicColors.Primary,
-                    contentColor = Color.Black,
-                    focusedContainerColor = NasMusicColors.Primary.copy(alpha = 0.85f),
-                    focusedContentColor = Color.Black
-                ),
-                scale = ClickableSurfaceDefaults.scale(
-                    focusedScale = 1f,
-                    pressedScale = 0.95f
-                )
+                shape = RoundedCornerShape(14.dp),
+                focusedScale = 1.08f,
+                animationDurationMs = 150,
+                containerColor = NasMusicColors.Primary,
+                contentColor = Color.Black,
+                focusedContainerColor = NasMusicColors.Primary.copy(alpha = 0.85f),
+                focusedContentColor = Color.Black,
+                pressedScale = 0.95f
             ) {
                 Text(
-                    text = if (isConnecting) "连接中..." else "连接服务器",
+                    text = if (isConnecting) stringResource(R.string.server_connecting) else stringResource(R.string.server_connect_action),
                     fontSize = 18.sp,
                     modifier = Modifier.padding(horizontal = 32.dp, vertical = 16.dp)
                 )
@@ -400,7 +358,7 @@ fun ServerConnectScreen(
             Spacer(modifier = Modifier.height(24.dp))
 
             Text(
-                text = "提示：您的账号密码仅用于获取访问令牌，不会被上传到任何第三方。",
+                text = stringResource(R.string.server_privacy_notice),
                 color = NasMusicColors.TextSecondary,
                 fontSize = 13.sp
             )
@@ -414,26 +372,26 @@ fun ServerConnectScreen(
             val dialogMasked: Boolean
             when (activeInputField) {
                 InputField.BASE_URL -> {
-                    dialogTitle = "输入服务器地址"
+                    dialogTitle = stringResource(R.string.server_address_dialog_title)
                     dialogHint = "https://jellyfin.example.com 或 http://192.168.1.100:8096"
                     dialogValue = baseUrl.text
                     dialogMasked = false
                 }
                 InputField.USERNAME -> {
-                    dialogTitle = "输入用户名"
-                    dialogHint = "请输入用户名"
+                    dialogTitle = stringResource(R.string.server_username_dialog_title)
+                    dialogHint = stringResource(R.string.server_username_dialog_hint)
                     dialogValue = username.text
                     dialogMasked = false
                 }
                 InputField.PASSWORD -> {
-                    dialogTitle = "输入密码"
-                    dialogHint = "请输入密码"
+                    dialogTitle = stringResource(R.string.server_password_dialog_title)
+                    dialogHint = stringResource(R.string.server_password_dialog_hint)
                     dialogValue = password.text
                     dialogMasked = true
                 }
                 InputField.API_TOKEN -> {
-                    dialogTitle = "输入访问令牌"
-                    dialogHint = "请输入访问令牌"
+                    dialogTitle = stringResource(R.string.server_token_dialog_title)
+                    dialogHint = stringResource(R.string.server_token_dialog_hint)
                     dialogValue = apiToken.text
                     dialogMasked = true
                 }
@@ -529,10 +487,6 @@ private fun FormField(
     onOpen: () -> Unit = {},
     masked: Boolean = false
 ) {
-    var isFocused by remember { mutableStateOf(false) }
-    val animScale = remember { Animatable(1f) }
-    val scope = rememberCoroutineScope()
-
     Column(modifier = Modifier.fillMaxWidth()) {
         Text(
             text = label,
@@ -541,37 +495,19 @@ private fun FormField(
             modifier = Modifier.padding(bottom = 8.dp)
         )
 
-        Surface(
+        FocusableSurface(
             onClick = { onOpen() },
             modifier = Modifier
                 .fillMaxWidth()
-                .height(56.dp)
-                .scale(animScale.value)
-                .border(
-                    width = if (isFocused) 2.dp else 0.dp,
-                    color = if (isFocused) NasMusicColors.FocusRing else Color.Transparent,
-                    shape = RoundedCornerShape(12.dp)
-                )
-                .onFocusChanged {
-                    isFocused = it.isFocused
-                    scope.launch {
-                        animScale.animateTo(if (isFocused) 1.05f else 1f, tween(150))
-                    }
-                },
-            shape = ClickableSurfaceDefaults.shape(
-                shape = RoundedCornerShape(12.dp),
-                focusedShape = RoundedCornerShape(12.dp)
-            ),
-            colors = ClickableSurfaceDefaults.colors(
-                containerColor = NasMusicColors.SurfaceVariant,
-                contentColor = NasMusicColors.TextPrimary,
-                focusedContainerColor = NasMusicColors.Primary.copy(alpha = 0.2f),
-                focusedContentColor = NasMusicColors.TextPrimary
-            ),
-            scale = ClickableSurfaceDefaults.scale(
-                focusedScale = 1f,
-                pressedScale = 0.96f
-            )
+                .height(56.dp),
+            shape = RoundedCornerShape(12.dp),
+            focusedScale = 1.05f,
+            animationDurationMs = 150,
+            containerColor = NasMusicColors.SurfaceVariant,
+            contentColor = NasMusicColors.TextPrimary,
+            focusedContainerColor = NasMusicColors.Primary.copy(alpha = 0.2f),
+            focusedContentColor = NasMusicColors.TextPrimary,
+            pressedScale = 0.96f
         ) {
             Box(
                 modifier = Modifier.fillMaxSize(),
@@ -590,7 +526,7 @@ private fun FormField(
         }
 
         Text(
-            text = "按下确定键编辑",
+            text = stringResource(R.string.server_press_ok_edit),
             color = NasMusicColors.TextSecondary,
             fontSize = 12.sp,
             modifier = Modifier.padding(top = 6.dp, start = 4.dp)
@@ -646,7 +582,7 @@ private fun TestConnectionButton(
             contentAlignment = Alignment.Center
         ) {
             Text(
-                text = if (isTesting) "测试中..." else "连接测试",
+                text = if (isTesting) stringResource(R.string.server_testing) else stringResource(R.string.server_connection_test),
                 fontSize = 14.sp
             )
         }
@@ -663,14 +599,10 @@ private fun ServerAddressField(
     testStatus: String,
     onTestClick: () -> Unit
 ) {
-    var isFocused by remember { mutableStateOf(false) }
-    val animScale = remember { Animatable(1f) }
-    val scope = rememberCoroutineScope()
-
     Column(modifier = Modifier.fillMaxWidth()) {
-        Text(
-            text = "服务器地址",
-            color = NasMusicColors.TextPrimary,
+            Text(
+                text = stringResource(R.string.server_address),
+                color = NasMusicColors.TextPrimary,
             fontSize = 16.sp,
             modifier = Modifier.padding(bottom = 8.dp)
         )
@@ -681,38 +613,20 @@ private fun ServerAddressField(
             verticalAlignment = Alignment.CenterVertically
         ) {
             // 输入框
-            Surface(
+            FocusableSurface(
                 onClick = onOpenKeyboard,
                 modifier = Modifier
                     .weight(1f)
                     .widthIn(min = 0.dp)
-                    .height(56.dp)
-                    .scale(animScale.value)
-                    .border(
-                        width = if (isFocused) 2.dp else 0.dp,
-                        color = if (isFocused) NasMusicColors.FocusRing else Color.Transparent,
-                        shape = RoundedCornerShape(12.dp)
-                    )
-                    .onFocusChanged {
-                        isFocused = it.isFocused
-                        scope.launch {
-                            animScale.animateTo(if (isFocused) 1.02f else 1f, tween(150))
-                        }
-                    },
-                shape = ClickableSurfaceDefaults.shape(
-                    shape = RoundedCornerShape(12.dp),
-                    focusedShape = RoundedCornerShape(12.dp)
-                ),
-                colors = ClickableSurfaceDefaults.colors(
-                    containerColor = NasMusicColors.SurfaceVariant,
-                    contentColor = NasMusicColors.TextPrimary,
-                    focusedContainerColor = NasMusicColors.Primary.copy(alpha = 0.2f),
-                    focusedContentColor = NasMusicColors.TextPrimary
-                ),
-                scale = ClickableSurfaceDefaults.scale(
-                    focusedScale = 1f,
-                    pressedScale = 0.96f
-                )
+                    .height(56.dp),
+                shape = RoundedCornerShape(12.dp),
+                focusedScale = 1.02f,
+                animationDurationMs = 150,
+                containerColor = NasMusicColors.SurfaceVariant,
+                contentColor = NasMusicColors.TextPrimary,
+                focusedContainerColor = NasMusicColors.Primary.copy(alpha = 0.2f),
+                focusedContentColor = NasMusicColors.TextPrimary,
+                pressedScale = 0.96f
             ) {
                 Box(
                     modifier = Modifier.fillMaxSize(),
@@ -738,7 +652,7 @@ private fun ServerAddressField(
 
         // 提示文字
         Text(
-            text = "按下确定键编辑",
+            text = stringResource(R.string.server_press_ok_edit),
             color = NasMusicColors.TextSecondary,
             fontSize = 12.sp,
             modifier = Modifier.padding(top = 6.dp, start = 4.dp)

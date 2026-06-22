@@ -20,10 +20,10 @@ import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.outlined.MusicNote
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -33,6 +33,7 @@ import androidx.compose.ui.unit.sp
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Icon
 import androidx.tv.material3.Text
+import com.nasmusic.tv.R
 import com.nasmusic.tv.data.model.Lyrics
 import com.nasmusic.tv.data.model.LyricsHighlightMode
 import com.nasmusic.tv.data.model.WordTimestamp
@@ -86,7 +87,7 @@ fun LyricsView(
                     modifier = Modifier.size(64.dp).padding(bottom = 16.dp)
                 )
                 Text(
-                    text = "暂无歌词",
+                    text = stringResource(R.string.player_no_lyrics),
                     style = LyricsTheme.normalLine,
                     color = NasMusicColors.TextSecondary
                 )
@@ -96,7 +97,6 @@ fun LyricsView(
     }
 
     val listState = rememberLazyListState()
-    val coroutineScope = rememberCoroutineScope()
 
     // 找到当前歌词行索引
     val currentIndex = lyrics.lines
@@ -189,6 +189,13 @@ fun LyricsView(
                             for (word in wordTimestamps) {
                                 // Plain text before this word
                                 val wordStart = line.text.indexOf(word.word, lastEnd)
+                                if (wordStart < 0) {
+                                    // 未找到匹配词，追加剩余文本后退出，避免 IndexOutOfBoundsException
+                                    if (lastEnd < line.text.length) {
+                                        append(line.text.substring(lastEnd))
+                                    }
+                                    break
+                                }
                                 if (wordStart > lastEnd) {
                                     append(line.text.substring(lastEnd, wordStart))
                                 }

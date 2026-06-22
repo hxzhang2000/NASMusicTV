@@ -1,9 +1,6 @@
 package com.nasmusic.tv.ui.screens
 
-import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -19,28 +16,22 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.scale
 import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.tv.material3.ClickableSurfaceDefaults
-import androidx.tv.material3.ExperimentalTvMaterial3Api
-import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
+import com.nasmusic.tv.R
+import com.nasmusic.tv.ui.components.FocusableSurface
 import com.nasmusic.tv.ui.theme.NasMusicColors
-import kotlinx.coroutines.launch
 
 // 键盘行定义 —— 26个字母按ABC顺序排列，大小写通过Shift键切换
 // 小写：a-j, k-t, u-z + 符号
@@ -58,7 +49,6 @@ private val keyboardRowsUpper = listOf(
     listOf("U", "V", "W", "X", "Y", "Z", ".", "/", "-", ":"),
 )
 
-@OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 fun TextInputDialog(
     title: String,
@@ -83,13 +73,6 @@ fun TextInputDialog(
 
     // 焦点管理：弹窗打开时，焦点聚焦在"确认"按钮上
     val confirmFocusRequester = remember { FocusRequester() }
-    LaunchedEffect(Unit) {
-        try {
-            confirmFocusRequester.requestFocus()
-        } catch (_: Exception) {
-            // 忽略焦点请求异常
-        }
-    }
 
     Box(
         modifier = modifier
@@ -168,35 +151,36 @@ fun TextInputDialog(
                     )
                     ActionButton(label = "@", onClick = { text += "@" }, width = 40.dp)
                     ActionButton(
-                        label = "空格",
+                        label = stringResource(R.string.text_input_space),
                         onClick = { text += " " },
                         width = 130.dp
                     )
                     ActionButton(
-                        label = "删除",
+                        label = stringResource(R.string.common_delete),
                         onClick = { if (text.isNotEmpty()) text = text.dropLast(1) },
                         width = 80.dp,
                         color = NasMusicColors.Warning
                     )
                     ActionButton(
-                        label = "清除",
+                        label = stringResource(R.string.common_clear),
                         onClick = { text = "" },
                         width = 80.dp,
                         color = NasMusicColors.Warning
                     )
                     ActionButton(
-                        label = "取消",
+                        label = stringResource(R.string.common_cancel),
                         onClick = { onDismiss() },
                         width = 80.dp,
                         color = NasMusicColors.SurfaceVariant
                     )
                     ActionButton(
-                        label = "确认",
+                        label = stringResource(R.string.common_confirm),
                         onClick = { onConfirm(text) },
                         width = 100.dp,
                         color = NasMusicColors.Primary,
                         isPrimary = true,
-                        focusRequester = confirmFocusRequester
+                        focusRequester = confirmFocusRequester,
+                        requestFocusOnLaunch = true
                     )
                 }
             }
@@ -204,46 +188,22 @@ fun TextInputDialog(
     }
 }
 
-@OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 private fun KeyButton(
     label: String,
     onClick: () -> Unit
 ) {
-    var isFocused by remember { mutableStateOf(false) }
-    val animScale = remember { Animatable(1f) }
-    val scope = rememberCoroutineScope()
-
-    Surface(
+    FocusableSurface(
         onClick = onClick,
-        modifier = Modifier
-            .size(42.dp)
-            .scale(animScale.value)
-            .border(
-                width = if (isFocused) 2.dp else 0.dp,
-                color = if (isFocused) NasMusicColors.FocusRing else Color.Transparent,
-                shape = RoundedCornerShape(8.dp)
-            )
-            .onFocusChanged {
-                isFocused = it.isFocused
-                scope.launch {
-                    animScale.animateTo(if (isFocused) 1.12f else 1f, tween(120))
-                }
-            },
-        shape = ClickableSurfaceDefaults.shape(
-            shape = RoundedCornerShape(8.dp),
-            focusedShape = RoundedCornerShape(8.dp)
-        ),
-        colors = ClickableSurfaceDefaults.colors(
-            containerColor = NasMusicColors.SurfaceVariant,
-            contentColor = NasMusicColors.TextPrimary,
-            focusedContainerColor = NasMusicColors.Primary.copy(alpha = 0.25f),
-            focusedContentColor = NasMusicColors.TextPrimary
-        ),
-        scale = ClickableSurfaceDefaults.scale(
-            focusedScale = 1f,
-            pressedScale = 0.92f
-        )
+        modifier = Modifier.size(42.dp),
+        shape = RoundedCornerShape(8.dp),
+        focusedScale = 1.12f,
+        animationDurationMs = 120,
+        containerColor = NasMusicColors.SurfaceVariant,
+        focusedContainerColor = NasMusicColors.Primary.copy(alpha = 0.25f),
+        contentColor = NasMusicColors.TextPrimary,
+        focusedContentColor = NasMusicColors.TextPrimary,
+        pressedScale = 0.92f
     ) {
         Text(
             text = label,
@@ -254,7 +214,6 @@ private fun KeyButton(
     }
 }
 
-@OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 private fun ActionButton(
     label: String,
@@ -262,48 +221,25 @@ private fun ActionButton(
     width: Dp,
     color: Color = NasMusicColors.SurfaceVariant,
     isPrimary: Boolean = false,
-    focusRequester: FocusRequester? = null
+    focusRequester: FocusRequester? = null,
+    requestFocusOnLaunch: Boolean = false
 ) {
-    var isFocused by remember { mutableStateOf(false) }
-    val animScale = remember { Animatable(1f) }
-    val scope = rememberCoroutineScope()
-
-    Surface(
+    FocusableSurface(
         onClick = onClick,
         modifier = Modifier
             .width(width)
-            .height(44.dp)
-            .scale(animScale.value)
-            .then(
-                if (focusRequester != null) Modifier.focusRequester(focusRequester)
-                else Modifier
-            )
-            .border(
-                width = if (isFocused) 2.dp else 0.dp,
-                color = if (isFocused) NasMusicColors.FocusRing else Color.Transparent,
-                shape = RoundedCornerShape(8.dp)
-            )
-            .onFocusChanged {
-                isFocused = it.isFocused
-                scope.launch {
-                    animScale.animateTo(if (isFocused) 1.1f else 1f, tween(120))
-                }
-            },
-        shape = ClickableSurfaceDefaults.shape(
-            shape = RoundedCornerShape(8.dp),
-            focusedShape = RoundedCornerShape(8.dp)
-        ),
-        colors = ClickableSurfaceDefaults.colors(
-            containerColor = color,
-            contentColor = if (isPrimary) Color.Black else NasMusicColors.TextPrimary,
-            focusedContainerColor = if (isPrimary) NasMusicColors.Primary.copy(alpha = 0.85f)
-                                    else NasMusicColors.Primary.copy(alpha = 0.25f),
-            focusedContentColor = if (isPrimary) Color.Black else NasMusicColors.TextPrimary
-        ),
-        scale = ClickableSurfaceDefaults.scale(
-            focusedScale = 1f,
-            pressedScale = 0.92f
-        )
+            .height(44.dp),
+        shape = RoundedCornerShape(8.dp),
+        focusedScale = 1.1f,
+        animationDurationMs = 120,
+        containerColor = color,
+        focusedContainerColor = if (isPrimary) NasMusicColors.Primary.copy(alpha = 0.85f)
+                                else NasMusicColors.Primary.copy(alpha = 0.25f),
+        contentColor = if (isPrimary) Color.Black else NasMusicColors.TextPrimary,
+        focusedContentColor = if (isPrimary) Color.Black else NasMusicColors.TextPrimary,
+        pressedScale = 0.92f,
+        focusRequester = focusRequester,
+        requestFocusOnLaunch = requestFocusOnLaunch
     ) {
         Text(
             text = label,

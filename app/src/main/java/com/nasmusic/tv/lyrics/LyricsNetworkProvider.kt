@@ -1,6 +1,7 @@
 package com.nasmusic.tv.lyrics
 
 import android.util.Log
+import com.nasmusic.tv.util.AppLog
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
@@ -32,7 +33,7 @@ class LyricsNetworkProvider {
      * 支持多个歌词源，尝试多种关键词组合
      */
     suspend fun fetchLyrics(title: String, artist: String): String? = withContext(Dispatchers.IO) {
-        Log.d("LyricsNetwork", "fetchLyrics: title=$title, artist=$artist")
+        AppLog.d("LyricsNetwork", "fetchLyrics: title=$title, artist=$artist")
 
         // 尝试多种关键词组合
         val keywords = mutableListOf(title)
@@ -42,11 +43,11 @@ class LyricsNetworkProvider {
         }
 
         for (keyword in keywords) {
-            Log.d("LyricsNetwork", "fetchLyrics: trying keyword='$keyword'")
+            AppLog.d("LyricsNetwork", "fetchLyrics: trying keyword='$keyword'")
             val result = fetchFromKugou(keyword)
                 ?: fetchFromNetease(keyword)
             if (result != null) {
-                Log.d("LyricsNetwork", "fetchLyrics: success for keyword='$keyword', length=${result.length}")
+                AppLog.d("LyricsNetwork", "fetchLyrics: success for keyword='$keyword', length=${result.length}")
                 return@withContext result
             }
             Log.w("LyricsNetwork", "fetchLyrics: no result for keyword='$keyword'")
@@ -63,7 +64,7 @@ class LyricsNetworkProvider {
             val searchUrl = "https://mobilecdn.kugou.com/api/v3/search/song?keyword=" +
                     URLEncoder.encode(keyword, "UTF-8") +
                     "&page=1&pagesize=1&showtype=14"
-            Log.d("LyricsNetwork", "Kugou search: $searchUrl")
+            AppLog.d("LyricsNetwork", "Kugou search: $searchUrl")
 
             val searchRequest = Request.Builder()
                 .url(searchUrl)
@@ -73,14 +74,14 @@ class LyricsNetworkProvider {
             val searchResponse = client.newCall(searchRequest).execute()
             val searchBody = searchResponse.body?.string()
             if (searchBody == null) { Log.w("LyricsNetwork", "Kugou search: null body"); return null }
-            Log.d("LyricsNetwork", "Kugou search: status=${searchResponse.code}, body=${searchBody.take(200)}")
+            AppLog.d("LyricsNetwork", "Kugou search: status=${searchResponse.code}, body=${searchBody.take(200)}")
 
             val hash = parseKugouHash(searchBody)
             if (hash == null) { Log.w("LyricsNetwork", "Kugou search: no hash found"); return null }
-            Log.d("LyricsNetwork", "Kugou search: hash=$hash")
+            AppLog.d("LyricsNetwork", "Kugou search: hash=$hash")
 
             val lyricUrl = "https://krcs.kugou.com/search?ver=1&man=yes&client=mobi&keyword=&duration=&hash=$hash&album_audio_id="
-            Log.d("LyricsNetwork", "Kugou lyrics: $lyricUrl")
+            AppLog.d("LyricsNetwork", "Kugou lyrics: $lyricUrl")
 
             val lyricRequest = Request.Builder()
                 .url(lyricUrl)
@@ -90,10 +91,10 @@ class LyricsNetworkProvider {
             val lyricResponse = client.newCall(lyricRequest).execute()
             val lyricBody = lyricResponse.body?.string()
             if (lyricBody == null) { Log.w("LyricsNetwork", "Kugou lyrics: null body"); return null }
-            Log.d("LyricsNetwork", "Kugou lyrics: status=${lyricResponse.code}, body=${lyricBody.take(200)}")
+            AppLog.d("LyricsNetwork", "Kugou lyrics: status=${lyricResponse.code}, body=${lyricBody.take(200)}")
 
             val result = parseKugouLyrics(lyricBody)
-            if (result != null) Log.d("LyricsNetwork", "Kugou: success, length=${result.length}")
+            if (result != null) AppLog.d("LyricsNetwork", "Kugou: success, length=${result.length}")
             else Log.w("LyricsNetwork", "Kugou: parse returned null")
             result
         } catch (e: Exception) {
@@ -110,7 +111,7 @@ class LyricsNetworkProvider {
             val searchUrl = "https://music.163.com/api/search/get/web?csrf_token=" +
                     "&s=" + URLEncoder.encode(keyword, "UTF-8") +
                     "&type=1&offset=0&total=true&limit=1"
-            Log.d("LyricsNetwork", "Netease search: $searchUrl")
+            AppLog.d("LyricsNetwork", "Netease search: $searchUrl")
 
             val searchRequest = Request.Builder()
                 .url(searchUrl)
@@ -121,14 +122,14 @@ class LyricsNetworkProvider {
             val searchResponse = client.newCall(searchRequest).execute()
             val searchBody = searchResponse.body?.string()
             if (searchBody == null) { Log.w("LyricsNetwork", "Netease search: null body"); return null }
-            Log.d("LyricsNetwork", "Netease search: status=${searchResponse.code}, body=${searchBody.take(200)}")
+            AppLog.d("LyricsNetwork", "Netease search: status=${searchResponse.code}, body=${searchBody.take(200)}")
 
             val songId = parseNeteaseSongId(searchBody)
             if (songId == null) { Log.w("LyricsNetwork", "Netease search: no songId found"); return null }
-            Log.d("LyricsNetwork", "Netease search: songId=$songId")
+            AppLog.d("LyricsNetwork", "Netease search: songId=$songId")
 
             val lyricUrl = "https://music.163.com/api/song/lyric?os=pc&id=$songId&lv=-1&kv=-1&tv=-1"
-            Log.d("LyricsNetwork", "Netease lyrics: $lyricUrl")
+            AppLog.d("LyricsNetwork", "Netease lyrics: $lyricUrl")
 
             val lyricRequest = Request.Builder()
                 .url(lyricUrl)
@@ -139,10 +140,10 @@ class LyricsNetworkProvider {
             val lyricResponse = client.newCall(lyricRequest).execute()
             val lyricBody = lyricResponse.body?.string()
             if (lyricBody == null) { Log.w("LyricsNetwork", "Netease lyrics: null body"); return null }
-            Log.d("LyricsNetwork", "Netease lyrics: status=${lyricResponse.code}, body=${lyricBody.take(200)}")
+            AppLog.d("LyricsNetwork", "Netease lyrics: status=${lyricResponse.code}, body=${lyricBody.take(200)}")
 
             val result = parseNeteaseLyrics(lyricBody)
-            if (result != null) Log.d("LyricsNetwork", "Netease: success, length=${result.length}")
+            if (result != null) AppLog.d("LyricsNetwork", "Netease: success, length=${result.length}")
             else Log.w("LyricsNetwork", "Netease: parse returned null")
             result
         } catch (e: Exception) {

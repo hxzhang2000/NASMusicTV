@@ -8,6 +8,7 @@ import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
 import com.nasmusic.tv.data.model.PlayMode
 import com.nasmusic.tv.data.model.Song
+import com.nasmusic.tv.util.AppLog
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlin.random.Random
@@ -16,7 +17,7 @@ import kotlin.random.Random
  * 播放管理器
  * 单例模式，管理播放状态、队列和播放模式
  */
-class PlayerManager private constructor() {
+class PlayerManager() {
 
     private var player: ExoPlayer? = null
 
@@ -28,7 +29,7 @@ class PlayerManager private constructor() {
                 val dur = p.duration
                 if (dur > 0) _duration.value = dur
             }
-            progressHandler.postDelayed(this, 500)
+            progressHandler.postDelayed(this, 1000)
         }
     }
 
@@ -37,9 +38,6 @@ class PlayerManager private constructor() {
 
     private val _isPlaying = MutableStateFlow(false)
     val isPlaying: StateFlow<Boolean> = _isPlaying
-
-    private val _playMode = MutableStateFlow(PlayMode.SEQUENTIAL)
-    val playMode: StateFlow<PlayMode> = _playMode
 
     private val _progress = MutableStateFlow(0L)
     val progress: StateFlow<Long> = _progress
@@ -56,9 +54,22 @@ class PlayerManager private constructor() {
     private val _buffering = MutableStateFlow(false)
     val buffering: StateFlow<Boolean> = _buffering
 
+    private val _playerError = MutableStateFlow<String?>(null)
+    val playerError: StateFlow<String?> = _playerError
+
+    // 随机播放历史记录，避免连续重复
+    private val shuffleHistory = mutableListOf<Int>()
+
     private val playerListener = object : Player.Listener {
         override fun onIsPlayingChanged(isPlaying: Boolean) {
             _isPlaying.value = isPlaying
+            if (isPlaying) {
+                progressHandler.post(progressUpdateRunnable)
+            } else {
+                progressHandler.removeCallbacks(progressUpdateRunnable)
+                // 暂停时仍更新一次进度
+                player?.let { p -> _progress.value = p.currentPosition }
+            }
         }
 
         override fun onPlaybackStateChanged(playbackState: Int) {
@@ -78,13 +89,29 @@ class PlayerManager private constructor() {
         ) {
             _progress.value = newPosition.positionMs
         }
+
+        override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
+            android.util.Log.e("PlayerManager", "Player error: ${error.message}", error)
+            _playerError.value = error.message ?: "播放错误"
+            // 自动跳下一首
+            val p = player
+            val mode = if (p != null) derivePlayMode(p) else PlayMode.REPEAT_ALL
+            next(mode)
+        }
     }
 
     fun setPlayer(exoPlayer: ExoPlayer) {
+        // 清理旧 player
+        player?.removeListener(playerListener)
+        progressHandler.removeCallbacks(progressUpdateRunnable)
+
         player = exoPlayer
         exoPlayer.addListener(playerListener)
-        progressHandler.post(progressUpdateRunnable)
-        android.util.Log.d("PlayerManager", "setPlayer: player initialized")
+        // 仅在播放时启动进度更新
+        if (exoPlayer.isPlaying) {
+            progressHandler.post(progressUpdateRunnable)
+        }
+        AppLog.d("PlayerManager", "setPlayer: player initialized")
     }
 
     fun playSong(song: Song) {
@@ -95,7 +122,7 @@ class PlayerManager private constructor() {
             return
         }
 
-        android.util.Log.d("PlayerManager", "playSong: ${song.title}, currentPlaying=${p.isPlaying}")
+        AppLog.d("PlayerManager", "playSong: ${song.title}, currentPlaying=${p.isPlaying}")
 
         // Check if song is already in current queue — if so, seek to it (gapless path)
         val existingIndex = _queue.value.indexOf(song)
@@ -104,7 +131,7 @@ class PlayerManager private constructor() {
             try {
                 p.seekTo(existingIndex, 0)
                 p.play()
-                android.util.Log.d("PlayerManager", "playSong: seeking to existing queue item $existingIndex")
+                AppLog.d("PlayerManager", "playSong: seeking to existing queue item $existingIndex")
             } catch (e: Exception) {
                 android.util.Log.e("PlayerManager", "playSong seek failed", e)
             }
@@ -118,7 +145,7 @@ class PlayerManager private constructor() {
                 // Preload next item if this song is in a known queue context
                 p.prepare()
                 p.play()
-                android.util.Log.d("PlayerManager", "playSong: playing ${song.title}")
+                AppLog.d("PlayerManager", "playSong: playing ${song.title}")
             } catch (e: Exception) {
                 android.util.Log.e("PlayerManager", "playSong failed", e)
             }
@@ -148,7 +175,7 @@ class PlayerManager private constructor() {
             p.setMediaItems(mediaItems, startIndex, 0)
             p.prepare()
             p.play()
-            android.util.Log.d("PlayerManager", "playQueue: playing ${songs.size} songs, start=$startIndex")
+            AppLog.d("PlayerManager", "playQueue: playing ${songs.size} songs, start=$startIndex")
         } catch (e: Exception) {
             android.util.Log.e("PlayerManager", "playQueue failed", e)
         }
@@ -158,50 +185,61 @@ class PlayerManager private constructor() {
         if (currentSong != null && currentSong.durationMs > 0) {
             _duration.value = currentSong.durationMs
         }
-        
+
         updateCurrentSongFromPlayer()
     }
 
     fun playPause() {
         player?.let {
             val wasPlaying = it.isPlaying
-            android.util.Log.d("PlayerManager", "playPause: wasPlaying=$wasPlaying, state=${it.playbackState}")
+            AppLog.d("PlayerManager", "playPause: wasPlaying=$wasPlaying, state=${it.playbackState}")
             if (wasPlaying) {
                 it.pause()
-                android.util.Log.d("PlayerManager", "playPause: paused")
+                AppLog.d("PlayerManager", "playPause: paused")
             } else {
                 it.play()
-                android.util.Log.d("PlayerManager", "playPause: playing")
+                AppLog.d("PlayerManager", "playPause: playing")
             }
         }
     }
 
-    fun next() {
-        when (_playMode.value) {
+    fun next(playMode: PlayMode) {
+        val p = player ?: return
+        when (playMode) {
             PlayMode.SHUFFLE -> playRandom()
             PlayMode.REPEAT_ONE -> {
-                player?.seekTo(0)
-                player?.play()
+                // 用户主动按"下一首"时，跳到下一首（而非重播当前）
+                val nextIndex = _currentIndex.value + 1
+                if (nextIndex < _queue.value.size) {
+                    _currentIndex.value = nextIndex
+                    p.seekTo(nextIndex, 0)
+                    p.play()
+                } else {
+                    // 队列末尾，回到第一首
+                    _currentIndex.value = 0
+                    p.seekTo(0, 0)
+                    p.play()
+                }
             }
             else -> {
                 val nextIndex = _currentIndex.value + 1
                 if (nextIndex < _queue.value.size) {
-                    player?.seekToNextMediaItem()
-                } else if (_playMode.value == PlayMode.REPEAT_ALL) {
-                    player?.seekTo(0, 0)
+                    p.seekToNextMediaItem()
+                } else if (playMode == PlayMode.REPEAT_ALL) {
+                    p.seekTo(0, 0)
                 }
             }
         }
     }
 
-    fun previous() {
-        when (_playMode.value) {
+    fun previous(playMode: PlayMode) {
+        when (playMode) {
             PlayMode.SHUFFLE -> playRandom()
             else -> {
                 val prevIndex = _currentIndex.value - 1
                 if (prevIndex >= 0) {
                     player?.seekToPreviousMediaItem()
-                } else if (_playMode.value == PlayMode.REPEAT_ALL) {
+                } else if (playMode == PlayMode.REPEAT_ALL) {
                     player?.seekTo(_queue.value.size - 1, 0)
                 }
             }
@@ -209,26 +247,22 @@ class PlayerManager private constructor() {
     }
 
     fun seekTo(positionMs: Long) {
-        android.util.Log.d("NASMusic", "seekTo: position=$positionMs, player=${player != null}, state=${player?.playbackState}")
+        AppLog.d("NASMusic", "seekTo: position=$positionMs, player=${player != null}, state=${player?.playbackState}")
         player?.seekTo(positionMs)
         _progress.value = positionMs
     }
 
-    fun setPlayMode(mode: PlayMode) {
-        _playMode.value = mode
+    /**
+     * 设置 ExoPlayer 的播放模式（重复/随机）。
+     * @param mode 不存储状态，只应用 ExoPlayer 设置
+     */
+    fun applyPlayMode(mode: PlayMode) {
         player?.shuffleModeEnabled = (mode == PlayMode.SHUFFLE)
         player?.repeatMode = when (mode) {
             PlayMode.REPEAT_ONE -> Player.REPEAT_MODE_ONE
             PlayMode.REPEAT_ALL -> Player.REPEAT_MODE_ALL
             else -> Player.REPEAT_MODE_OFF
         }
-    }
-
-    fun togglePlayMode() {
-        val modes = PlayMode.values()
-        val currentIndex = modes.indexOf(_playMode.value)
-        val nextIndex = (currentIndex + 1) % modes.size
-        setPlayMode(modes[nextIndex])
     }
 
     fun addToQueue(song: Song) {
@@ -244,12 +278,32 @@ class PlayerManager private constructor() {
     }
 
     fun removeFromQueue(index: Int) {
+        val p = player ?: return
         val currentQueue = _queue.value.toMutableList()
-        if (index in currentQueue.indices) {
-            currentQueue.removeAt(index)
-            _queue.value = currentQueue
-            player?.removeMediaItem(index)
+        if (index < 0 || index >= currentQueue.size) return
+
+        currentQueue.removeAt(index)
+        _queue.value = currentQueue
+
+        // 调整 currentIndex
+        val currentIdx = _currentIndex.value
+        when {
+            index < currentIdx -> _currentIndex.value = currentIdx - 1
+            index == currentIdx -> {
+                // 移除的是当前播放的歌曲，跳到下一首（或停止）
+                if (currentQueue.isEmpty()) {
+                    _currentIndex.value = 0
+                    _currentSong.value = null
+                } else {
+                    val newIndex = index.coerceAtMost(currentQueue.size - 1)
+                    _currentIndex.value = newIndex
+                    // 播放新的当前歌曲
+                    p.removeMediaItem(index)
+                    return
+                }
+            }
         }
+        p.removeMediaItem(index)
     }
 
     /**
@@ -281,27 +335,32 @@ class PlayerManager private constructor() {
             else -> ci
         }
 
-        android.util.Log.d("PlayerManager", "moveItem: $fromIndex → $toIndex, currentIndex=${_currentIndex.value}")
+        AppLog.d("PlayerManager", "moveItem: $fromIndex → $toIndex, currentIndex=${_currentIndex.value}")
         return true
     }
 
     fun clearQueue() {
+        val p = player
         _queue.value = emptyList()
-        player?.clearMediaItems()
+        _currentIndex.value = 0
+        _currentSong.value = null
+        _progress.value = 0
+        _duration.value = 0
+        p?.clearMediaItems()
+        p?.stop()
     }
 
-    fun updateProgress() {
-        player?.let {
-            _progress.value = it.currentPosition
-            _duration.value = it.duration.coerceAtLeast(0)
-        }
-    }
-
+    /**
+     * 播放结束时根据当前 ExoPlayer 的重复/随机模式决定下一个操作。
+     * playMode 从 ExoPlayer 的 repeatMode + shuffleModeEnabled 推导。
+     */
     fun onPlaybackEnded() {
-        when (_playMode.value) {
+        val p = player ?: return
+        val playMode = derivePlayMode(p)
+        when (playMode) {
             PlayMode.REPEAT_ONE -> {
-                player?.seekTo(0)
-                player?.play()
+                p.seekTo(0)
+                p.play()
             }
             PlayMode.REPEAT_ALL -> {
                 if (_queue.value.isNotEmpty() && _currentIndex.value >= _queue.value.size - 1) {
@@ -313,13 +372,44 @@ class PlayerManager private constructor() {
         }
     }
 
+    /**
+     * 从 ExoPlayer 的当前状态推导 [PlayMode]。
+     * 不存储状态，只读取 ExoPlayer 当前值。
+     */
+    fun derivePlayMode(p: ExoPlayer): PlayMode = when {
+        p.shuffleModeEnabled -> PlayMode.SHUFFLE
+        p.repeatMode == Player.REPEAT_MODE_ONE -> PlayMode.REPEAT_ONE
+        p.repeatMode == Player.REPEAT_MODE_ALL -> PlayMode.REPEAT_ALL
+        else -> PlayMode.SEQUENTIAL
+    }
+
     private fun playRandom() {
-        val queue = _queue.value
-        if (queue.isNotEmpty()) {
-            val randomIndex = Random.nextInt(queue.size)
-            player?.seekTo(randomIndex, 0)
-            player?.play()
+        val p = player ?: return
+        val queueSize = _queue.value.size
+        if (queueSize == 0) return
+
+        // 如果所有歌曲都已播放过，清空历史
+        if (shuffleHistory.size >= queueSize) {
+            shuffleHistory.clear()
         }
+
+        // 排除已播放的
+        val available = (0 until queueSize).filter { it !in shuffleHistory }
+        if (available.isEmpty()) {
+            shuffleHistory.clear()
+            val available2 = (0 until queueSize).toList()
+            val randomIndex = available2.random()
+            shuffleHistory.add(randomIndex)
+            _currentIndex.value = randomIndex
+            p.seekTo(randomIndex, 0)
+            p.play()
+            return
+        }
+        val randomIndex = available.random()
+        shuffleHistory.add(randomIndex)
+        _currentIndex.value = randomIndex
+        p.seekTo(randomIndex, 0)
+        p.play()
     }
 
     private fun updateCurrentSongFromPlayer() {
@@ -328,6 +418,22 @@ class PlayerManager private constructor() {
         if (currentIndex in _queue.value.indices) {
             _currentSong.value = _queue.value[currentIndex]
         }
+    }
+
+    /**
+     * 清除播放错误状态
+     */
+    fun clearError() { _playerError.value = null }
+
+    /**
+     * 释放资源，清理 Handler 和 listener
+     */
+    fun release() {
+        progressHandler.removeCallbacks(progressUpdateRunnable)
+        player?.removeListener(playerListener)
+        player = null
+        equalizer?.release()
+        equalizer = null
     }
 
     // --- B-4 均衡器支持 ---
@@ -347,7 +453,7 @@ class PlayerManager private constructor() {
             equalizer?.release()
             equalizer = Equalizer(0, audioSessionId)
             equalizer?.enabled = true
-            android.util.Log.d("PlayerManager", "initEqualizer: initialised for session $audioSessionId")
+            AppLog.d("PlayerManager", "initEqualizer: initialised for session $audioSessionId")
             true
         } catch (e: Exception) {
             android.util.Log.e("PlayerManager", "initEqualizer failed", e)
@@ -370,10 +476,39 @@ class PlayerManager private constructor() {
             if (bandIndex < 0 || bandIndex >= bands) return false
             val gainMillibels = (gainDb * 100).toInt().toShort()
             equalizer?.setBandLevel(bandIndex.toShort(), gainMillibels)
-            android.util.Log.d("PlayerManager", "setEqualizerBand: band=$bandIndex gain=${gainDb}dB")
+            AppLog.d("PlayerManager", "setEqualizerBand: band=$bandIndex gain=${gainDb}dB")
             true
         } catch (e: Exception) {
             android.util.Log.e("PlayerManager", "setEqualizerBand failed", e)
+            false
+        }
+    }
+
+    /**
+     * 批量设置所有频段增益值（用于应用预设）
+     * @param gains 各频段增益值数组 (dB)，数组长度需与设备频段数匹配
+     */
+    fun setEqualizerBands(gains: FloatArray): Boolean {
+        return try {
+            val eq = equalizer
+            if (eq == null) {
+                if (!initEqualizer()) return false
+            }
+            val eqInstance = equalizer ?: return false
+            val bandCount = eqInstance.numberOfBands.toInt()
+            val range = eqInstance.bandLevelRange
+            val minLevel = range[0]
+            val maxLevel = range[1]
+
+            for (i in 0 until minOf(bandCount, gains.size)) {
+                val gainMb = (gains[i] * 100).toInt().toShort()
+                val clamped = gainMb.coerceIn(minLevel, maxLevel)
+                eqInstance.setBandLevel(i.toShort(), clamped)
+            }
+            AppLog.d("PlayerManager", "setEqualizerBands: applied ${minOf(bandCount, gains.size)} bands")
+            true
+        } catch (e: Exception) {
+            android.util.Log.e("PlayerManager", "setEqualizerBands failed", e)
             false
         }
     }
@@ -421,20 +556,9 @@ class PlayerManager private constructor() {
             equalizer?.enabled = false
             equalizer?.release()
             equalizer = null
-            android.util.Log.d("PlayerManager", "disableEqualizer: disabled")
+            AppLog.d("PlayerManager", "disableEqualizer: disabled")
         } catch (e: Exception) {
             android.util.Log.e("PlayerManager", "disableEqualizer failed", e)
-        }
-    }
-
-    companion object {
-        @Volatile
-        private var instance: PlayerManager? = null
-
-        fun getInstance(): PlayerManager {
-            return instance ?: synchronized(this) {
-                instance ?: PlayerManager().also { instance = it }
-            }
         }
     }
 }

@@ -1,9 +1,6 @@
 package com.nasmusic.tv.ui.screens
 
-import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -20,28 +17,30 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import com.nasmusic.tv.ui.LocalDialogBackHandler
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.scale
-import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.tv.material3.ClickableSurfaceDefaults
 import androidx.tv.material3.ExperimentalTvMaterial3Api
-import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
+import com.nasmusic.tv.R
 import com.nasmusic.tv.data.model.Playlist
 import com.nasmusic.tv.data.model.Song
 import com.nasmusic.tv.ui.theme.NasMusicColors
+import com.nasmusic.tv.ui.components.BackButton
+import com.nasmusic.tv.ui.components.FocusableSurface
 import com.nasmusic.tv.util.TimeUtils
 import kotlinx.coroutines.launch
 
@@ -57,95 +56,78 @@ fun PlaylistManagementScreen(
     selectedPlaylistSongs: List<Song>,
     isLoading: Boolean,
     onSelectPlaylist: (Playlist) -> Unit,
-    onCreatePlaylist: () -> Unit,
+    onCreatePlaylist: (String) -> Unit,
     onDeletePlaylist: (Playlist) -> Unit,
     onPlayPlaylist: (Playlist) -> Unit,
     onRemoveSong: (String) -> Unit, // songId
     onBack: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    Column(
-        modifier = modifier.fillMaxSize().padding(horizontal = 32.dp, vertical = 20.dp)
-    ) {
-        // 返回 + 标题
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
+    var showCreateDialog by remember { mutableStateOf(false) }
+
+    Box(modifier = modifier.fillMaxSize()) {
+        Column(
+            modifier = Modifier.fillMaxSize().padding(horizontal = 32.dp, vertical = 20.dp)
         ) {
-            BackButton(onClick = onBack)
-            Spacer(modifier = Modifier.width(16.dp))
-            Text(
-                text = "播放列表管理",
-                color = NasMusicColors.TextPrimary,
-                fontSize = 24.sp
-            )
-        }
-
-        Spacer(modifier = Modifier.height(20.dp))
-
-        Row(modifier = Modifier.fillMaxWidth().weight(1f)) {
-            // 左侧：播放列表示
-            Column(
-                modifier = Modifier.width(320.dp).fillMaxHeight()
+            // 返回 + 标题
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                BackButton(onClick = onBack)
+                Spacer(modifier = Modifier.width(16.dp))
+                Text(
+                    text = stringResource(R.string.playlist_title),
+                    color = NasMusicColors.TextPrimary,
+                    fontSize = 24.sp
+                )
+            }
+
+            Spacer(modifier = Modifier.height(20.dp))
+
+            Row(modifier = Modifier.fillMaxWidth().weight(1f)) {
+                // 左侧：播放列表示
+                Column(
+                    modifier = Modifier.width(320.dp).fillMaxHeight()
                 ) {
-                    Text(
-                        text = "我的播放列表 (${playlists.size})",
-                        color = NasMusicColors.TextPrimary,
-                        fontSize = 16.sp
-                    )
-                    ButtonChip(text = "+ 新建") { onCreatePlaylist() }
-                }
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = stringResource(R.string.library_favorites) + " (${playlists.size})",
+                            color = NasMusicColors.TextPrimary,
+                            fontSize = 16.sp
+                        )
+                        ButtonChip(text = "+ " + stringResource(R.string.playlist_create)) { showCreateDialog = true }
+                    }
 
                 Spacer(modifier = Modifier.height(12.dp))
 
                 if (isLoading) {
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Text(text = "加载中...", color = NasMusicColors.TextSecondary, fontSize = 16.sp)
+                        Text(text = stringResource(R.string.common_loading), color = NasMusicColors.TextSecondary, fontSize = 16.sp)
                     }
                 } else if (playlists.isEmpty()) {
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Text(text = "暂无播放列表", color = NasMusicColors.TextSecondary, fontSize = 16.sp)
+                        Text(text = stringResource(R.string.playlist_empty), color = NasMusicColors.TextSecondary, fontSize = 16.sp)
                     }
                 } else {
                     LazyColumn(
                         verticalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
-                        items(playlists) { playlist ->
-                            var isFocused by remember { mutableStateOf(false) }
-                            val animScale = remember { Animatable(1f) }
-                            val scope = rememberCoroutineScope()
-
-                            Surface(
+                        items(playlists, key = { it.id }) { playlist ->
+                            FocusableSurface(
                                 onClick = { onSelectPlaylist(playlist) },
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .scale(animScale.value)
-                                    .border(
-                                        width = if (isFocused) 2.dp else 0.dp,
-                                        color = if (isFocused) NasMusicColors.FocusRing else Color.Transparent,
-                                        shape = RoundedCornerShape(8.dp)
-                                    )
-                                    .onFocusChanged {
-                                        isFocused = it.isFocused
-                                        scope.launch {
-                                            animScale.animateTo(if (isFocused) 1.02f else 1f, tween(200))
-                                        }
-                                    },
-                                shape = ClickableSurfaceDefaults.shape(
-                                    shape = RoundedCornerShape(8.dp),
-                                    focusedShape = RoundedCornerShape(8.dp)
-                                ),
-                                colors = ClickableSurfaceDefaults.colors(
-                                    containerColor = NasMusicColors.Surface.copy(alpha = 0.5f),
-                                    contentColor = NasMusicColors.TextPrimary,
-                                    focusedContainerColor = NasMusicColors.Primary.copy(alpha = 0.2f)
-                                ),
-                                scale = ClickableSurfaceDefaults.scale(focusedScale = 1f, pressedScale = 0.98f)
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(8.dp),
+                                focusedScale = 1.02f,
+                                animationDurationMs = 200,
+                                containerColor = NasMusicColors.Surface.copy(alpha = 0.5f),
+                                contentColor = NasMusicColors.TextPrimary,
+                                focusedContainerColor = NasMusicColors.Primary.copy(alpha = 0.2f),
+                                pressedScale = 0.98f
                             ) {
                                 Row(
                                     modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 10.dp),
@@ -166,19 +148,19 @@ fun PlaylistManagementScreen(
                                             overflow = TextOverflow.Ellipsis
                                         )
                                         Text(
-                                            text = "${playlist.songCount} 首曲目",
+                                            text = stringResource(R.string.playlist_song_count, playlist.songCount),
                                             color = NasMusicColors.TextSecondary,
                                             fontSize = 11.sp
                                         )
                                     }
                                     Row {
                                         ButtonChipSmall(
-                                            text = "播放",
+                                            text = stringResource(R.string.player_play),
                                             onClick = { onPlayPlaylist(playlist) }
                                         )
                                         Spacer(modifier = Modifier.width(6.dp))
                                         ButtonChipSmall(
-                                            text = "删除",
+                                            text = stringResource(R.string.common_delete),
                                             onClick = { onDeletePlaylist(playlist) }
                                         )
                                     }
@@ -196,7 +178,7 @@ fun PlaylistManagementScreen(
                 modifier = Modifier.weight(1f).fillMaxHeight()
             ) {
                 Text(
-                    text = "曲目 (${selectedPlaylistSongs.size})",
+                    text = stringResource(R.string.playlist_track_list, selectedPlaylistSongs.size),
                     color = NasMusicColors.TextPrimary,
                     fontSize = 16.sp
                 )
@@ -206,7 +188,7 @@ fun PlaylistManagementScreen(
                 if (selectedPlaylistSongs.isEmpty()) {
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         Text(
-                            text = "选择一个播放列表查看曲目",
+                            text = stringResource(R.string.playlist_select_hint),
                             color = NasMusicColors.TextSecondary,
                             fontSize = 16.sp
                         )
@@ -215,39 +197,20 @@ fun PlaylistManagementScreen(
                     LazyColumn(
                         verticalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
-                        items(selectedPlaylistSongs) { song ->
-                            var isFocused by remember { mutableStateOf(false) }
-                            val animScale = remember { Animatable(1f) }
-                            val scope = rememberCoroutineScope()
-
-                            Surface(
+                        items(selectedPlaylistSongs, key = { it.id }) { song ->
+                            FocusableSurface(
                                 onClick = { onRemoveSong(song.id) },
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .scale(animScale.value)
-                                    .border(
-                                        width = if (isFocused) 2.dp else 0.dp,
-                                        color = if (isFocused) NasMusicColors.FocusRing.copy(alpha = 0.6f) else Color.Transparent,
-                                        shape = RoundedCornerShape(6.dp)
-                                    )
-                                    .onFocusChanged {
-                                        isFocused = it.isFocused
-                                        scope.launch {
-                                            animScale.animateTo(if (isFocused) 1.02f else 1f, tween(200))
-                                        }
-                                    },
-                                shape = ClickableSurfaceDefaults.shape(
-                                    shape = RoundedCornerShape(6.dp),
-                                    focusedShape = RoundedCornerShape(6.dp)
-                                ),
-                                colors = ClickableSurfaceDefaults.colors(
-                                    containerColor = NasMusicColors.Surface.copy(alpha = 0.5f),
-                                    contentColor = NasMusicColors.TextPrimary,
-                                    focusedContainerColor = NasMusicColors.Primary.copy(alpha = 0.2f),
-                                    focusedContentColor = Color.Black,
-                                    pressedContainerColor = NasMusicColors.SurfaceVariant
-                                ),
-                                scale = ClickableSurfaceDefaults.scale(focusedScale = 1f, pressedScale = 0.98f)
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(6.dp),
+                                focusedScale = 1.02f,
+                                animationDurationMs = 200,
+                                containerColor = NasMusicColors.Surface.copy(alpha = 0.5f),
+                                contentColor = NasMusicColors.TextPrimary,
+                                focusedContainerColor = NasMusicColors.Primary.copy(alpha = 0.2f),
+                                focusedContentColor = Color.Black,
+                                pressedContainerColor = NasMusicColors.SurfaceVariant,
+                                pressedScale = 0.98f,
+                                focusBorderColor = NasMusicColors.FocusRing.copy(alpha = 0.6f)
                             ) {
                                 Row(
                                     modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
@@ -280,82 +243,42 @@ fun PlaylistManagementScreen(
                         }
                     }
                 }
-            }
+            }   // right Column
+        }   // split Row
+    }   // outer Column
+
+    // 创建播放列表对话框
+        if (showCreateDialog) {
+            TextInputDialog(
+                title = stringResource(R.string.playlist_create),
+                hint = stringResource(R.string.playlist_create_hint),
+                initialValue = "",
+                onConfirm = { name ->
+                    if (name.isNotBlank()) {
+                        onCreatePlaylist(name)
+                    }
+                    showCreateDialog = false
+                },
+                onDismiss = { showCreateDialog = false }
+            )
         }
-    }
+    }   // Box
 }
 
-@OptIn(ExperimentalTvMaterial3Api::class)
-@Composable
-private fun BackButton(onClick: () -> Unit) {
-    var isFocused by remember { mutableStateOf(false) }
-    val animScale = remember { Animatable(1f) }
-    val scope = rememberCoroutineScope()
-    Surface(
-        onClick = onClick,
-        modifier = Modifier
-            .scale(animScale.value)
-            .border(
-                width = if (isFocused) 2.dp else 0.dp,
-                color = if (isFocused) NasMusicColors.FocusRing else Color.Transparent,
-                shape = RoundedCornerShape(8.dp)
-            )
-            .onFocusChanged {
-                isFocused = it.isFocused
-                scope.launch { animScale.animateTo(if (isFocused) 1.08f else 1f, tween(200)) }
-            },
-        shape = ClickableSurfaceDefaults.shape(
-            shape = RoundedCornerShape(8.dp),
-            focusedShape = RoundedCornerShape(8.dp)
-        ),
-        colors = ClickableSurfaceDefaults.colors(
-            containerColor = NasMusicColors.Surface,
-            contentColor = NasMusicColors.TextPrimary,
-            focusedContainerColor = NasMusicColors.Primary.copy(alpha = 0.2f),
-            focusedContentColor = NasMusicColors.Primary
-        ),
-        scale = ClickableSurfaceDefaults.scale(focusedScale = 1f, pressedScale = 0.96f)
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(text = "←", fontSize = 14.sp, modifier = Modifier.padding(end = 6.dp))
-            Text(text = "返回", fontSize = 14.sp)
-        }
-    }
-}
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 private fun ButtonChipSmall(text: String, onClick: () -> Unit) {
-    var isFocused by remember { mutableStateOf(false) }
-    val animScale = remember { Animatable(1f) }
-    val scope = rememberCoroutineScope()
-    Surface(
+    FocusableSurface(
         onClick = onClick,
-        modifier = Modifier
-            .scale(animScale.value)
-            .border(
-                width = if (isFocused) 2.dp else 0.dp,
-                color = if (isFocused) NasMusicColors.FocusRing else Color.Transparent,
-                shape = RoundedCornerShape(12.dp)
-            )
-            .onFocusChanged {
-                isFocused = it.isFocused
-                scope.launch { animScale.animateTo(if (isFocused) 1.08f else 1f, tween(200)) }
-            },
-        shape = ClickableSurfaceDefaults.shape(
-            shape = RoundedCornerShape(12.dp),
-            focusedShape = RoundedCornerShape(12.dp)
-        ),
-        colors = ClickableSurfaceDefaults.colors(
-            containerColor = NasMusicColors.Primary.copy(alpha = 0.8f),
-            contentColor = Color.Black,
-            focusedContainerColor = NasMusicColors.Primary,
-            focusedContentColor = Color.Black
-        ),
-        scale = ClickableSurfaceDefaults.scale(focusedScale = 1f, pressedScale = 0.95f)
+        shape = RoundedCornerShape(12.dp),
+        focusedScale = 1.08f,
+        animationDurationMs = 200,
+        containerColor = NasMusicColors.Primary.copy(alpha = 0.8f),
+        contentColor = Color.Black,
+        focusedContainerColor = NasMusicColors.Primary,
+        focusedContentColor = Color.Black,
+        pressedScale = 0.95f
     ) {
         Text(text = text, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp))
     }

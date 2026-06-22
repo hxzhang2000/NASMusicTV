@@ -32,3 +32,12 @@ Desktop.ini
 # ProGuard
 proguard/
 *.mapping
+
+# Signing
+keystore.properties
+
+# OpenCode internal state
+.omo/
+
+# App release builds
+app/release/

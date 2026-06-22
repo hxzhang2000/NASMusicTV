@@ -3,7 +3,7 @@ package com.nasmusic.tv.ui.viewmodel
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import com.nasmusic.tv.BuildConfig
+import com.nasmusic.tv.NasMusicApp
 import com.nasmusic.tv.backend.BackendRegistry
 import com.nasmusic.tv.backend.BackendAdapter
 import com.nasmusic.tv.data.model.Album
@@ -18,12 +18,14 @@ import com.nasmusic.tv.data.model.ServerConfig
 import com.nasmusic.tv.data.model.Genre
 import com.nasmusic.tv.data.model.Playlist
 import com.nasmusic.tv.data.model.EqualizerPreset
+import com.nasmusic.tv.data.model.UiState
 import com.nasmusic.tv.data.prefs.AppPreferences
-import com.nasmusic.tv.player.CoverArtManager
 import com.nasmusic.tv.lyrics.LyricsManager
 import com.nasmusic.tv.player.PlayerManager
+import com.nasmusic.tv.util.AppLog
 import com.nasmusic.tv.util.ArtistSplitter
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -34,25 +36,59 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 /**
+ * 歌曲分页加载状态
+ */
+data class SongsPagingState(
+    val songs: List<Song> = emptyList(),
+    val totalCount: Int = 0,
+    val isLoading: Boolean = false,
+    val hasMore: Boolean = true,
+    val currentPage: Int = 0
+)
+
+/**
  * 应用主 ViewModel
  * 管理播放器、歌曲队列、曲库数据、设置等
  */
 class MainViewModel(app: Application) : AndroidViewModel(app) {
 
-    private val playerManager = PlayerManager.getInstance()
-    private val lyricsManager = LyricsManager(app)
-    private val prefs = AppPreferences.getInstance(app)
+    private val nasMusicApp = app as NasMusicApp
+    private val playerManager = nasMusicApp.playerManager
+    private val prefs = nasMusicApp.appPreferences
+    private val backendRegistry = nasMusicApp.backendRegistry
+    private val lyricsManager = LyricsManager(app, backendRegistry)
 
     // --- 导航状态 ---
     private val _currentScreen = MutableStateFlow(Screen.NowPlaying)
     val currentScreen: StateFlow<Screen> = _currentScreen.asStateFlow()
 
-    // --- 曲库数据 ---
-    private val _albums = MutableStateFlow<List<Album>>(emptyList())
-    val albums: StateFlow<List<Album>> = _albums.asStateFlow()
+    // --- 曲库数据（B-12: UiState 统一异步状态）---
+    private val _albums = MutableStateFlow<UiState<List<Album>>>(UiState.Loading)
+    val albums: StateFlow<UiState<List<Album>>> = _albums.asStateFlow()
 
-    private val _songs = MutableStateFlow<List<Song>>(emptyList())
-    val songs: StateFlow<List<Song>> = _songs.asStateFlow()
+    private val _songs = MutableStateFlow<UiState<List<Song>>>(UiState.Loading)
+    val songs: StateFlow<UiState<List<Song>>> = _songs.asStateFlow()
+
+    // --- 按需加载：歌曲分页状态 ---
+    private val _songsPaging = MutableStateFlow(SongsPagingState())
+    val songsPaging: StateFlow<SongsPagingState> = _songsPaging.asStateFlow()
+    private val pageSize = 200
+
+    // --- 按需加载：艺术家列表（独立 API）---
+    private val _artists = MutableStateFlow<UiState<List<Artist>>>(UiState.Success(emptyList()))
+    val artists: StateFlow<UiState<List<Artist>>> = _artists.asStateFlow()
+
+    // --- 按需加载：年份列表（独立 API）---
+    private val _years = MutableStateFlow<UiState<List<Int>>>(UiState.Success(emptyList()))
+    val years: StateFlow<UiState<List<Int>>> = _years.asStateFlow()
+
+    // --- 按需加载：最近播放歌曲（按需批量查询）---
+    private val _recentSongs = MutableStateFlow<UiState<List<Song>>>(UiState.Success(emptyList()))
+    val recentSongs: StateFlow<UiState<List<Song>>> = _recentSongs.asStateFlow()
+
+    // --- 按需加载：搜索结果（服务端搜索）---
+    private val _searchResults = MutableStateFlow<UiState<List<Song>>>(UiState.Success(emptyList()))
+    val searchResults: StateFlow<UiState<List<Song>>> = _searchResults.asStateFlow()
 
     // --- 详情页状态 ---
     private val _selectedAlbum = MutableStateFlow<Album?>(null)
@@ -71,15 +107,15 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     private val _artistSongsMap = MutableStateFlow<Map<String, List<Song>>>(emptyMap())
     val artistSongsMap: StateFlow<Map<String, List<Song>>> = _artistSongsMap.asStateFlow()
 
-    // --- B-1 收藏 ---
+    // --- B-1 收藏（B-12: UiState）---
     private val _favoriteIds = MutableStateFlow<Set<String>>(emptySet())
     val favoriteIds: StateFlow<Set<String>> = _favoriteIds.asStateFlow()
-    private val _favoriteSongs = MutableStateFlow<List<Song>>(emptyList())
-    val favoriteSongs: StateFlow<List<Song>> = _favoriteSongs.asStateFlow()
+    private val _favoriteSongs = MutableStateFlow<UiState<List<Song>>>(UiState.Success(emptyList()))
+    val favoriteSongs: StateFlow<UiState<List<Song>>> = _favoriteSongs.asStateFlow()
 
-    // --- A-3 流派 ---
-    private val _genres = MutableStateFlow<List<Genre>>(emptyList())
-    val genres: StateFlow<List<Genre>> = _genres.asStateFlow()
+    // --- A-3 流派（B-12: UiState）---
+    private val _genres = MutableStateFlow<UiState<List<Genre>>>(UiState.Success(emptyList()))
+    val genres: StateFlow<UiState<List<Genre>>> = _genres.asStateFlow()
 
     // --- D-2 网络状态 ---
     private val _isNetworkAvailable = MutableStateFlow(true)
@@ -96,14 +132,17 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     private val _lyricsAvailability = MutableStateFlow(LyricsAvailability())
     val lyricsAvailability: StateFlow<LyricsAvailability> = _lyricsAvailability.asStateFlow()
 
-    // --- 播放器状态（镜像 PlayerManager 的 StateFlow）---
+    // --- B-13: 播放器状态（currentSong/isPlaying/progress/duration 由 PlayerManager 拥有）---
     val currentSong: StateFlow<Song?> = playerManager.currentSong
     val isPlaying: StateFlow<Boolean> = playerManager.isPlaying
-    val playMode: StateFlow<PlayMode> = playerManager.playMode
     val progress: StateFlow<Long> = playerManager.progress
     val duration: StateFlow<Long> = playerManager.duration
     val queue: StateFlow<List<Song>> = playerManager.queue
     val currentIndex: StateFlow<Int> = playerManager.currentIndex
+
+    // B-13: playMode 由 MainViewModel 拥有（UI/设置状态，不归 PlayerManager）
+    private val _playMode = MutableStateFlow(PlayMode.SEQUENTIAL)
+    val playMode: StateFlow<PlayMode> = _playMode.asStateFlow()
 
     // --- 连接状态 ---
     private val _isConnected = MutableStateFlow(false)
@@ -149,27 +188,19 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         initialValue = ServerConfig.Empty
     )
 
-    private var progressUpdateJob: Job? = null
     private var lyricsLoadJob: Job? = null
 
     init {
-        startProgressUpdate()
-
         viewModelScope.launch {
+            // 初始化播放模式（B-13: 从预设置恢复）
+            val settings = prefs.appSettings.first()
+            _playMode.value = settings.defaultPlayMode
+            playerManager.applyPlayMode(_playMode.value)
+
             // 等待配置加载完成后判断是否显示连接提示
             val config = prefs.serverConfig.first()
             if (config.baseUrl.isNotBlank()) {
                 _showConnectPrompt.value = true
-            }
-        }
-    }
-
-    private fun startProgressUpdate() {
-        if (progressUpdateJob?.isActive == true) return
-        progressUpdateJob = viewModelScope.launch {
-            while (true) {
-                delay(500)
-                playerManager.updateProgress()
             }
         }
     }
@@ -183,10 +214,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     suspend fun connectToServer(config: ServerConfig): Boolean {
         _isLoading.value = true
         return try {
-            val success = BackendRegistry.initialize(config)
+            val success = backendRegistry.initialize(config)
             if (success) {
                 _isConnected.value = true
-                _serverDisplayName.value = BackendRegistry.getServerDisplayName()
+                _serverDisplayName.value = backendRegistry.getServerDisplayName()
                 prefs.saveServerConfig(config.copy(isConnected = true))
                 // 连接成功后加载初始数据
                 loadLibrary()
@@ -206,15 +237,29 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     fun disconnect() {
         viewModelScope.launch {
-            BackendRegistry.disconnect()
-        }
-        _isConnected.value = false
-        _serverDisplayName.value = ""
-        _albums.value = emptyList()
-        _songs.value = emptyList()
-        viewModelScope.launch {
-            val current = serverConfig.value
-            prefs.saveServerConfig(current.copy(isConnected = false))
+            try {
+                backendRegistry.disconnect()
+            } catch (e: Exception) {
+                android.util.Log.e("MainViewModel", "disconnect failed", e)
+            }
+            _isConnected.value = false
+            _serverDisplayName.value = ""
+            _albums.value = UiState.Loading
+            _songs.value = UiState.Loading
+            _songsPaging.value = SongsPagingState()
+            _artists.value = UiState.Success(emptyList())
+            _years.value = UiState.Success(emptyList())
+            _recentSongs.value = UiState.Success(emptyList())
+            _searchResults.value = UiState.Success(emptyList())
+            _genres.value = UiState.Success(emptyList())
+            _favoriteSongs.value = UiState.Success(emptyList())
+            _playlists.value = UiState.Success(emptyList())
+            try {
+                val current = serverConfig.value
+                prefs.saveServerConfig(current.copy(isConnected = false))
+            } catch (e: Exception) {
+                android.util.Log.e("MainViewModel", "disconnect: save config failed", e)
+            }
         }
     }
 
@@ -239,14 +284,14 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             }
             _isLoading.value = true
             try {
-                val success = BackendRegistry.initialize(config)
+                val success = backendRegistry.initialize(config)
                 if (success) {
                     _isConnected.value = true
-                    _serverDisplayName.value = BackendRegistry.getServerDisplayName()
+                    _serverDisplayName.value = backendRegistry.getServerDisplayName()
                     prefs.saveServerConfig(config.copy(isConnected = true))
                     loadLibrary()
                     if (!silent) {
-                        _connectMessage.value = "已连接到 ${BackendRegistry.getServerDisplayName()}"
+                        _connectMessage.value = "已连接到 ${backendRegistry.getServerDisplayName()}"
                         delay(3000)
                         _connectMessage.value = null
                     }
@@ -279,12 +324,14 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /**
-     * 根据当前歌曲列表构建歌唱家拆分映射（A-4）
+     * 增量构建艺术家映射（避免每次分页都全量重建）
+     * @param newSongs 新增的歌曲列表
      */
-    private fun buildArtistMaps(songs: List<Song>) {
-        val songMap = mutableMapOf<String, List<String>>()
-        val artistMap = mutableMapOf<String, MutableList<Song>>()
-        for (song in songs) {
+    private fun buildArtistMapsIncremental(newSongs: List<Song>) {
+        val songMap = _songArtistMap.value.toMutableMap()
+        val artistMap = _artistSongsMap.value.mapValues { it.value.toMutableList() }.toMutableMap()
+
+        for (song in newSongs) {
             val artists = ArtistSplitter.split(song.artist)
             songMap[song.id] = artists
             for (name in artists) {
@@ -296,120 +343,256 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /**
-     * 加载收藏状态（B-1）
+     * 加载收藏状态（B-1, B-12: UiState）
      */
     private suspend fun loadFavorites(adapter: BackendAdapter) {
         try {
             val favorites = adapter.getFavorites()
-            _favoriteSongs.value = favorites
+            _favoriteSongs.value = UiState.Success(favorites)
             _favoriteIds.value = favorites.map { it.id }.toSet()
-            android.util.Log.d("NASMusic", "loadFavorites: ${favorites.size} favorites")
+            AppLog.d("NASMusic", "loadFavorites: ${favorites.size} favorites")
         } catch (e: Exception) {
             android.util.Log.e("NASMusic", "loadFavorites failed", e)
-            showError("加载收藏失败: ${e.message?.take(50)}")
+            _favoriteSongs.value = UiState.Error(
+                message = "加载收藏失败: ${e.message?.take(50)}"
+            )
         }
     }
 
     /**
-     * 加载流派列表（A-3）
+     * 加载流派列表（A-3, B-12: UiState）
      */
     private suspend fun loadGenres(adapter: BackendAdapter) {
         try {
-            if (adapter.javaClass.methods.any { it.name == "getGenres" }) {
-                _genres.value = adapter.getGenres()
-                android.util.Log.d("NASMusic", "loadGenres: ${_genres.value.size} genres")
-            }
+            _genres.value = UiState.Success(adapter.getGenres())
+            val data = _genres.value.dataOrNull()
+            AppLog.d("NASMusic", "loadGenres: ${data?.size} genres")
         } catch (e: Exception) {
             android.util.Log.e("NASMusic", "loadGenres failed", e)
-            showError("加载流派列表失败: ${e.message?.take(50)}")
+            _genres.value = UiState.Error(
+                message = "加载流派列表失败: ${e.message?.take(50)}"
+            )
         }
     }
 
-    // --- 曲库 ---
+    // --- 曲库（B-12: UiState）---
     private fun loadLibrary() {
         _isLibraryLoading.value = true
+        _albums.value = UiState.Loading
+        _songs.value = UiState.Loading
         viewModelScope.launch {
-            val adapter = BackendRegistry.getAdapter() ?: run {
+            val adapter = backendRegistry.getAdapter() ?: run {
                 _isLibraryLoading.value = false
+                _albums.value = UiState.Error("后端未连接")
+                _songs.value = UiState.Error("后端未连接")
                 return@launch
             }
-            
-            // 第一阶段：快速加载专辑和流派（不阻塞）
-            try {
-                android.util.Log.d("NASMusic", "loadLibrary: loading albums...")
-                _albums.value = adapter.getAlbums()
-                android.util.Log.d("NASMusic", "loadLibrary: ${_albums.value.size} albums loaded")
-            } catch (e: Exception) {
-                android.util.Log.e("NASMusic", "loadLibrary albums failed", e)
-                showError("加载专辑列表失败: ${e.message?.take(50)}")
-            }
-            
-            loadGenres(adapter)
-            loadFavorites(adapter)
-            
-            // 第二阶段：分批加载歌曲（限制最大数量，避免内存溢出）
-            try {
-                val maxSongs = 50000 // 最多加载 50000 首，避免内存问题
-                val batchSize = 500
-                android.util.Log.d("NASMusic", "loadLibrary: loading songs in batches... (maxSongs=$maxSongs, batchSize=$batchSize)")
-                
-                val allSongs = mutableListOf<Song>()
-                var currentOffset = 0
-                var hasMore = true
-                
-                while (hasMore && allSongs.size < maxSongs) {
-                    android.util.Log.d("NASMusic", "loadLibrary: fetching batch at offset=$currentOffset")
-                    
-                    val batch = adapter.getSongs(batchSize, currentOffset)
-                    android.util.Log.d("NASMusic", "loadLibrary: got ${batch.size} songs in this batch")
-                    
-                    if (batch.isEmpty()) {
-                        hasMore = false
-                    } else {
-                        // 计算还能添加多少首
-                        val remaining = maxSongs - allSongs.size
-                        val songsToAdd = if (batch.size > remaining) batch.take(remaining) else batch
-                        
-                        allSongs.addAll(songsToAdd)
-                        
-                        // 更新 UI（每批都更新，让用户看到进度）
-                        _songs.value = allSongs.toList()
-                        buildArtistMaps(allSongs)
-                        
-                        android.util.Log.d("NASMusic", "loadLibrary: total ${allSongs.size} songs loaded so far")
-                        
-                        // 如果这批少于 batchSize，说明已经是最后一批
-                        // 或者已经达到限制
-                        if (batch.size < batchSize || allSongs.size >= maxSongs) {
-                            hasMore = false
-                        } else {
-                            currentOffset += batchSize
-                            delay(50) // 短暂延迟，让 UI 有时间响应
-                        }
-                    }
+
+            // 并行加载专辑、流派、收藏（秒级响应）
+            val albumsDeferred = async {
+                try {
+                    AppLog.d("NASMusic", "loadLibrary: loading albums...")
+                    val loadedAlbums = adapter.getAlbums()
+                    _albums.value = UiState.Success(loadedAlbums)
+                    AppLog.d("NASMusic", "loadLibrary: ${loadedAlbums.size} albums loaded")
+                } catch (e: Exception) {
+                    android.util.Log.e("NASMusic", "loadLibrary albums failed", e)
+                    _albums.value = UiState.Error(
+                        message = "加载专辑列表失败: ${e.message?.take(50)}",
+                        retry = { loadLibrary() }
+                    )
                 }
-                
-                android.util.Log.d("NASMusic", "loadLibrary: finished loading ${allSongs.size} songs total")
-            } catch (e: Exception) {
-                android.util.Log.e("NASMusic", "loadLibrary songs failed", e)
-                showError("加载歌曲列表失败: ${e.message?.take(50)}")
             }
-            
+
+            val genresDeferred = async { loadGenres(adapter) }
+            val favoritesDeferred = async { loadFavorites(adapter) }
+
+            albumsDeferred.await()
+            genresDeferred.await()
+            favoritesDeferred.await()
+
+            // 不再全量加载歌曲，改为按需分页加载（SONGS Tab 激活时触发）
+            _songs.value = UiState.Success(emptyList())
+            _songsPaging.value = SongsPagingState()
+
             _isLibraryLoading.value = false
+            AppLog.d("NASMusic", "loadLibrary: initial data loaded (albums/genres/favorites)")
         }
+    }
+
+    /**
+     * SONGS Tab 首次激活时加载第一页
+     */
+    fun loadSongsFirstPage() {
+        if (_songsPaging.value.songs.isNotEmpty() || _songsPaging.value.isLoading) return
+        loadSongsNextPage()
+    }
+
+    /**
+     * 加载下一页歌曲（滚动到底部时触发）
+     */
+    fun loadSongsNextPage() {
+        val state = _songsPaging.value
+        if (state.isLoading || !state.hasMore) return
+        viewModelScope.launch {
+            val adapter = backendRegistry.getAdapter() ?: return@launch
+            _songsPaging.value = state.copy(isLoading = true)
+            try {
+                val offset = state.songs.size
+                val batch = adapter.getSongs(pageSize, offset)
+                val totalCount = if (state.totalCount == 0) adapter.getSongsTotalCount() else state.totalCount
+                val newState = SongsPagingState(
+                    songs = state.songs + batch,
+                    totalCount = totalCount,
+                    isLoading = false,
+                    hasMore = batch.size == pageSize,
+                    currentPage = state.currentPage + 1
+                )
+                _songsPaging.value = newState
+                // 同步更新 _songs（兼容现有 UI 依赖）
+                _songs.value = UiState.Success(newState.songs)
+                // 增量构建艺术家映射（仅处理新加载的批次，避免全量重建）
+                buildArtistMapsIncremental(batch)
+                AppLog.d("NASMusic", "loadSongsNextPage: loaded ${batch.size}, total ${newState.songs.size}/$totalCount")
+            } catch (e: Exception) {
+                android.util.Log.e("NASMusic", "loadSongsNextPage failed", e)
+                _songsPaging.value = state.copy(isLoading = false)
+                showError("加载歌曲失败: ${e.message?.take(50)}")
+            }
+        }
+    }
+
+    /**
+     * ARTISTS Tab 首次激活时加载艺术家列表（独立 API）
+     */
+    fun loadArtists() {
+        if (_artists.value is UiState.Success && (_artists.value as UiState.Success).data.isNotEmpty()) return
+        _artists.value = UiState.Loading
+        viewModelScope.launch {
+            val adapter = backendRegistry.getAdapter() ?: run {
+                _artists.value = UiState.Error("后端未连接")
+                return@launch
+            }
+            try {
+                val artistsList = adapter.getArtists()
+                _artists.value = UiState.Success(artistsList)
+                AppLog.d("NASMusic", "loadArtists: ${artistsList.size} artists loaded")
+            } catch (e: Exception) {
+                android.util.Log.e("NASMusic", "loadArtists failed", e)
+                _artists.value = UiState.Error(
+                    message = "加载艺术家失败: ${e.message?.take(50)}",
+                    retry = { loadArtists() }
+                )
+            }
+        }
+    }
+
+    /**
+     * YEARS Tab 首次激活时加载年份列表（独立 API）
+     */
+    fun loadYears() {
+        if (_years.value is UiState.Success && (_years.value as UiState.Success).data.isNotEmpty()) return
+        _years.value = UiState.Loading
+        viewModelScope.launch {
+            val adapter = backendRegistry.getAdapter() ?: run {
+                _years.value = UiState.Error("后端未连接")
+                return@launch
+            }
+            try {
+                val yearsList = adapter.getYears()
+                _years.value = UiState.Success(yearsList)
+                AppLog.d("NASMusic", "loadYears: ${yearsList.size} years loaded")
+            } catch (e: Exception) {
+                android.util.Log.e("NASMusic", "loadYears failed", e)
+                _years.value = UiState.Error(
+                    message = "加载年份失败: ${e.message?.take(50)}",
+                    retry = { loadYears() }
+                )
+            }
+        }
+    }
+
+    /**
+     * RECENT Tab 首次激活时按需批量查询最近播放歌曲
+     */
+    fun loadRecentSongs() {
+        if (_recentSongs.value is UiState.Success && (_recentSongs.value as UiState.Success).data.isNotEmpty()) return
+        _recentSongs.value = UiState.Loading
+        viewModelScope.launch {
+            val adapter = backendRegistry.getAdapter() ?: run {
+                _recentSongs.value = UiState.Error("后端未连接")
+                return@launch
+            }
+            try {
+                val recentIds = prefs.getRecentSongIdsSync().take(100)
+                if (recentIds.isEmpty()) {
+                    _recentSongs.value = UiState.Success(emptyList())
+                    return@launch
+                }
+                val songs = adapter.getSongsByIds(recentIds)
+                // 按最近播放顺序排序
+                val songMap = songs.associateBy { it.id }
+                val orderedSongs = recentIds.mapNotNull { songMap[it] }
+                _recentSongs.value = UiState.Success(orderedSongs)
+                AppLog.d("NASMusic", "loadRecentSongs: ${orderedSongs.size} recent songs loaded")
+            } catch (e: Exception) {
+                android.util.Log.e("NASMusic", "loadRecentSongs failed", e)
+                _recentSongs.value = UiState.Error(
+                    message = "加载最近播放失败: ${e.message?.take(50)}",
+                    retry = { loadRecentSongs() }
+                )
+            }
+        }
+    }
+
+    /**
+     * 服务端搜索歌曲（不依赖本地全量数据）
+     */
+    fun searchSongsOnServer(query: String) {
+        if (query.isBlank()) {
+            _searchResults.value = UiState.Success(emptyList())
+            return
+        }
+        _searchResults.value = UiState.Loading
+        viewModelScope.launch {
+            val adapter = backendRegistry.getAdapter() ?: run {
+                _searchResults.value = UiState.Error("后端未连接")
+                return@launch
+            }
+            try {
+                val results = adapter.searchSongs(query)
+                _searchResults.value = UiState.Success(results)
+                AppLog.d("NASMusic", "searchSongsOnServer: ${results.size} results for '$query'")
+            } catch (e: Exception) {
+                android.util.Log.e("NASMusic", "searchSongsOnServer failed", e)
+                _searchResults.value = UiState.Error(
+                    message = "搜索失败: ${e.message?.take(50)}"
+                )
+            }
+        }
+    }
+
+    /**
+     * 清除搜索结果
+     */
+    fun clearSearch() {
+        _searchResults.value = UiState.Success(emptyList())
     }
 
     fun refreshLibrary() {
-        viewModelScope.launch {
-            _isLoading.value = true
-            loadLibrary()
-            _isLoading.value = false
-        }
+        _albums.value = UiState.Loading
+        _songs.value = UiState.Loading
+        _songsPaging.value = SongsPagingState()
+        _artists.value = UiState.Success(emptyList())
+        _years.value = UiState.Success(emptyList())
+        _recentSongs.value = UiState.Success(emptyList())
+        _searchResults.value = UiState.Success(emptyList())
+        loadLibrary()
     }
 
     fun loadAlbumSongs(albumId: String) {
         viewModelScope.launch {
-            val adapter = BackendRegistry.getAdapter() ?: return@launch
+            val adapter = backendRegistry.getAdapter() ?: return@launch
             try {
                 val songs = adapter.getAlbumSongs(albumId)
                 val cache = _albumSongsCache.value.toMutableMap()
@@ -440,17 +623,19 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     // --- B-1 收藏控制 ---
     fun toggleFavorite(song: Song) {
         viewModelScope.launch {
-            val adapter = BackendRegistry.getAdapter() ?: return@launch
+            val adapter = backendRegistry.getAdapter() ?: return@launch
             try {
                 val success = adapter.toggleFavorite(song.id)
                 if (success) {
                     val newIds = _favoriteIds.value.toMutableSet()
                     if (song.id in newIds) {
                         newIds.remove(song.id)
-                        _favoriteSongs.value = _favoriteSongs.value.filter { it.id != song.id }
+                        val currentFavs = _favoriteSongs.value.dataOrNull() ?: emptyList()
+                        _favoriteSongs.value = UiState.Success(currentFavs.filter { it.id != song.id })
                     } else {
                         newIds.add(song.id)
-                        _favoriteSongs.value = _favoriteSongs.value + song
+                        val currentFavs = _favoriteSongs.value.dataOrNull() ?: emptyList()
+                        _favoriteSongs.value = UiState.Success(currentFavs + song)
                     }
                     _favoriteIds.value = newIds
                 }
@@ -473,16 +658,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     val recentSongIds = prefs.recentSongIds
     val playCounts = prefs.playCounts
 
-    fun getRecentSongs(): List<Song> {
-        val recentIds = prefs.getRecentSongIdsSync()
-        val songMap = _songs.value.associateBy { it.id }
-        return recentIds.mapNotNull { songMap[it] }
-    }
 
     // --- A-3 流派/年代歌曲加载 ---
     fun getSongsByGenre(genre: String, onResult: (List<Song>) -> Unit) {
         viewModelScope.launch {
-            val adapter = BackendRegistry.getAdapter() ?: return@launch
+            val adapter = backendRegistry.getAdapter() ?: return@launch
             try {
                 onResult(adapter.getSongsByGenre(genre))
             } catch (e: Exception) {
@@ -495,7 +675,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     fun getSongsByYearRange(fromYear: Int, toYear: Int, onResult: (List<Song>) -> Unit) {
         viewModelScope.launch {
-            val adapter = BackendRegistry.getAdapter() ?: return@launch
+            val adapter = backendRegistry.getAdapter() ?: return@launch
             try {
                 onResult(adapter.getSongsByYearRange(fromYear, toYear))
             } catch (e: Exception) {
@@ -520,7 +700,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         // 自动重连
         if (!_isConnected.value && reconnectAttempts < maxReconnectAttempts) {
             reconnectAttempts++
-            android.util.Log.d("NASMusic", "onNetworkAvailable: reconnecting (attempt $reconnectAttempts/$maxReconnectAttempts)")
+            AppLog.d("NASMusic", "onNetworkAvailable: reconnecting (attempt $reconnectAttempts/$maxReconnectAttempts)")
             connectToSavedServer(silent = true)
         }
     }
@@ -537,7 +717,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     // --- 播放控制 ---
     fun playSong(song: Song) {
-        android.util.Log.d("NASMusic", "playSong: ${song.title}, coverUrl=${song.coverUrl ?: "null"}")
+        AppLog.d("NASMusic", "playSong: ${song.title}, coverUrl=${song.coverUrl ?: "null"}")
         playerManager.playSong(song)
         loadLyricsForCurrentSong()
         recordPlay(song)
@@ -546,20 +726,29 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun playQueue(songs: List<Song>, startIndex: Int = 0) {
         if (songs.isEmpty()) return
         val firstSong = songs[startIndex.coerceIn(0, songs.lastIndex)]
-        android.util.Log.d("NASMusic", "playQueue: ${songs.size} songs, start=$startIndex, first=${firstSong.title}, coverUrl=${firstSong.coverUrl ?: "null"}")
+        AppLog.d("NASMusic", "playQueue: ${songs.size} songs, start=$startIndex, first=${firstSong.title}, coverUrl=${firstSong.coverUrl ?: "null"}")
         playerManager.playQueue(songs, startIndex)
         loadLyricsForCurrentSong()
         recordPlay(firstSong)
     }
 
     fun playPause() = playerManager.playPause()
-    fun next() = playerManager.next()
-    fun previous() = playerManager.previous()
+    fun next() = playerManager.next(_playMode.value)
+    fun previous() = playerManager.previous(_playMode.value)
     fun seekTo(positionMs: Long) = playerManager.seekTo(positionMs)
 
-    fun togglePlayMode() = playerManager.togglePlayMode()
+    fun togglePlayMode() {
+        val modes = PlayMode.values()
+        val nextIndex = (modes.indexOf(_playMode.value) + 1) % modes.size
+        val newMode = modes[nextIndex]
+        _playMode.value = newMode
+        playerManager.applyPlayMode(newMode)
+    }
 
-    fun setPlayMode(mode: PlayMode) = playerManager.setPlayMode(mode)
+    fun setPlayMode(mode: PlayMode) {
+        _playMode.value = mode
+        playerManager.applyPlayMode(mode)
+    }
 
     fun addSongToQueue(song: Song) = playerManager.addToQueue(song)
 
@@ -574,18 +763,18 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         _currentLyrics.value = null
         _lyricsAvailability.value = LyricsAvailability()
         val song = currentSong.value ?: return
-        android.util.Log.d("NASMusic", "loadLyrics: loading for ${song.title} by ${song.artist}")
+        AppLog.d("NASMusic", "loadLyrics: loading for ${song.title} by ${song.artist}")
         lyricsLoadJob = viewModelScope.launch {
             try {
                 // 先检查可用来源
                 val availability = lyricsManager.checkAvailability(song)
                 _lyricsAvailability.value = availability
-                android.util.Log.d("NASMusic", "loadLyrics: backend=${availability.hasBackend}, network=${availability.hasNetwork}")
+                AppLog.d("NASMusic", "loadLyrics: backend=${availability.hasBackend}, network=${availability.hasNetwork}")
 
                 // 自动选择第一个可用来源
                 val lyrics = availability.backend ?: availability.network
                 _currentLyrics.value = lyrics
-                android.util.Log.d("NASMusic", "loadLyrics: source=${lyrics?.source}, lines=${lyrics?.lines?.size}")
+                AppLog.d("NASMusic", "loadLyrics: source=${lyrics?.source}, lines=${lyrics?.lines?.size}")
             } catch (e: Exception) {
                 android.util.Log.e("NASMusic", "loadLyrics failed", e)
                 showError("加载歌词失败: ${e.message?.take(50)}")
@@ -598,12 +787,12 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
      */
     fun switchLyricsSource(source: LyricsSource) {
         val song = currentSong.value ?: return
-        android.util.Log.d("NASMusic", "switchLyricsSource: $source")
+        AppLog.d("NASMusic", "switchLyricsSource: $source")
         viewModelScope.launch {
             try {
                 val lyrics = lyricsManager.getLyricsFromSource(song, source)
                 _currentLyrics.value = lyrics
-                android.util.Log.d("NASMusic", "switchLyricsSource: source=${lyrics?.source}, lines=${lyrics?.lines?.size}")
+                AppLog.d("NASMusic", "switchLyricsSource: source=${lyrics?.source}, lines=${lyrics?.lines?.size}")
             } catch (e: Exception) {
                 android.util.Log.e("NASMusic", "switchLyricsSource failed", e)
                 showError("切换歌词来源失败: ${e.message?.take(50)}")
@@ -654,7 +843,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun clearCoverCache() {
         viewModelScope.launch {
             val context = getApplication<android.app.Application>()
-            CoverArtManager(context).clearCache()
+            // 直接使用 Coil 全局 ImageLoader 清除缓存，而非新建 CoverArtManager 实例
+            val imageLoader = coil.ImageLoader(context)
+            imageLoader.memoryCache?.clear()
+            imageLoader.diskCache?.clear()
+            AppLog.d("MainViewModel", "clearCoverCache: cache cleared")
             _connectMessage.value = "封面缓存已清除"
             delay(2000)
             _connectMessage.value = null
@@ -677,6 +870,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun setEqualizerPreset(preset: EqualizerPreset) {
         viewModelScope.launch {
             prefs.setEqualizerPreset(preset)
+            // 应用频段到 PlayerManager
+            playerManager.setEqualizerBands(preset.bandGains)
         }
     }
 
@@ -688,49 +883,60 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    // --- F-1 播放列表 ---
-    private val _playlists = MutableStateFlow<List<Playlist>>(emptyList())
-    val playlists: StateFlow<List<Playlist>> = _playlists.asStateFlow()
+    // --- F-1 播放列表（B-12: UiState）---
+    private val _playlists = MutableStateFlow<UiState<List<Playlist>>>(UiState.Success(emptyList()))
+    val playlists: StateFlow<UiState<List<Playlist>>> = _playlists.asStateFlow()
 
-    private val _selectedPlaylistSongs = MutableStateFlow<List<Song>>(emptyList())
-    val selectedPlaylistSongs: StateFlow<List<Song>> = _selectedPlaylistSongs.asStateFlow()
+    private val _selectedPlaylistSongs = MutableStateFlow<UiState<List<Song>>>(UiState.Success(emptyList()))
+    val selectedPlaylistSongs: StateFlow<UiState<List<Song>>> = _selectedPlaylistSongs.asStateFlow()
 
     fun loadPlaylists() {
+        _playlists.value = UiState.Loading
         viewModelScope.launch {
-            val adapter = BackendRegistry.getAdapter() ?: return@launch
+            val adapter = backendRegistry.getAdapter() ?: run {
+                _playlists.value = UiState.Error("后端未连接")
+                return@launch
+            }
             try {
-                _playlists.value = adapter.getPlaylists()
+                _playlists.value = UiState.Success(adapter.getPlaylists())
             } catch (e: Exception) {
                 android.util.Log.e("NASMusic", "loadPlaylists failed", e)
-                showError("加载播放列表失败: ${e.message?.take(50)}")
+                _playlists.value = UiState.Error(
+                    message = "加载播放列表失败: ${e.message?.take(50)}",
+                    retry = { loadPlaylists() }
+                )
             }
         }
     }
 
     fun selectPlaylist(playlist: Playlist) {
+        _selectedPlaylistSongs.value = UiState.Loading
         viewModelScope.launch {
-            val adapter = BackendRegistry.getAdapter() ?: return@launch
+            val adapter = backendRegistry.getAdapter() ?: run {
+                _selectedPlaylistSongs.value = UiState.Error("后端未连接")
+                return@launch
+            }
             try {
-                // Load playlist songs via getAlbumSongs (Subsonic) or equivalent
                 val songs = adapter.getAlbumSongs(playlist.id)
-                _selectedPlaylistSongs.value = songs
+                _selectedPlaylistSongs.value = UiState.Success(songs)
             } catch (e: Exception) {
                 android.util.Log.e("NASMusic", "selectPlaylist songs failed", e)
-                showError("加载播放列表歌曲失败: ${e.message?.take(50)}")
-                _selectedPlaylistSongs.value = emptyList()
+                _selectedPlaylistSongs.value = UiState.Error(
+                    message = "加载播放列表歌曲失败: ${e.message?.take(50)}",
+                    retry = { selectPlaylist(playlist) }
+                )
             }
         }
     }
 
-    fun showCreatePlaylistDialog() {
-        // Will be handled by the PlaylistManagementScreen with a TextInputDialog
+    fun createPlaylist(name: String) {
         viewModelScope.launch {
-            val adapter = BackendRegistry.getAdapter() ?: return@launch
+            val adapter = backendRegistry.getAdapter() ?: return@launch
             try {
-                val name = "New Playlist ${System.currentTimeMillis() % 10000}"
                 val result = adapter.createPlaylist(name)
                 if (result != null) {
-                    _playlists.value = _playlists.value + result
+                    val current = _playlists.value.dataOrNull() ?: emptyList()
+                    _playlists.value = UiState.Success(current + result)
                     _connectMessage.value = "播放列表已创建"
                 } else {
                     _connectMessage.value = "创建失败"
@@ -745,13 +951,15 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     fun deletePlaylist(playlist: Playlist) {
         viewModelScope.launch {
-            val adapter = BackendRegistry.getAdapter() ?: return@launch
+            val adapter = backendRegistry.getAdapter() ?: return@launch
             try {
                 val success = adapter.deletePlaylist(playlist.id)
                 if (success) {
-                    _playlists.value = _playlists.value.filter { it.id != playlist.id }
-                    if (_selectedPlaylistSongs.value.any { it.albumId == playlist.id }) {
-                        _selectedPlaylistSongs.value = emptyList()
+                    val current = _playlists.value.dataOrNull() ?: emptyList()
+                    _playlists.value = UiState.Success(current.filter { it.id != playlist.id })
+                    val selSongs = _selectedPlaylistSongs.value.dataOrNull()
+                    if (selSongs != null && selSongs.any { it.albumId == playlist.id }) {
+                        _selectedPlaylistSongs.value = UiState.Success(emptyList())
                     }
                     _connectMessage.value = "播放列表已删除"
                 } else {
@@ -767,7 +975,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     fun playPlaylist(playlist: Playlist) {
         viewModelScope.launch {
-            val adapter = BackendRegistry.getAdapter() ?: return@launch
+            val adapter = backendRegistry.getAdapter() ?: return@launch
             try {
                 val songs = adapter.getAlbumSongs(playlist.id)
                 if (songs.isNotEmpty()) {
@@ -783,13 +991,13 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     fun removeFromPlaylist(songId: String) {
         viewModelScope.launch {
-            val currentSongs = _selectedPlaylistSongs.value
+            val currentSongs = _selectedPlaylistSongs.value.dataOrNull() ?: return@launch
             val playlistId = currentSongs.firstOrNull { it.id == songId }?.albumId ?: return@launch
-            val adapter = BackendRegistry.getAdapter() ?: return@launch
+            val adapter = backendRegistry.getAdapter() ?: return@launch
             try {
                 val success = adapter.removeFromPlaylist(playlistId, songId)
                 if (success) {
-                    _selectedPlaylistSongs.value = currentSongs.filter { it.id != songId }
+                    _selectedPlaylistSongs.value = UiState.Success(currentSongs.filter { it.id != songId })
                 }
             } catch (e: Exception) {
                 android.util.Log.e("NASMusic", "removeFromPlaylist failed", e)

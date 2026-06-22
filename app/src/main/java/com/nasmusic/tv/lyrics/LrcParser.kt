@@ -4,6 +4,7 @@ import com.nasmusic.tv.data.model.Lyrics
 import com.nasmusic.tv.data.model.LyricsLine
 import com.nasmusic.tv.data.model.LyricsSource
 import com.nasmusic.tv.data.model.WordTimestamp
+import com.nasmusic.tv.util.AppLog
 
 /**
  * LRC 歌词解析器
@@ -41,7 +42,7 @@ object LrcParser {
                 // Check if line contains embedded word timestamps (karaoke format)
                 val wordMatches = wordTimestampRegex.findAll(rawText).toList()
                 val wordTimestamps = if (wordMatches.isNotEmpty()) {
-                    android.util.Log.d("LrcParser", "Found ${wordMatches.size} word timestamps in line: ${rawText.take(50)}...")
+                    AppLog.d("LrcParser", "Found ${wordMatches.size} word timestamps in line: ${rawText.take(50)}...")
                     wordMatches.map { wm ->
                         val wMinutes = wm.groupValues[1].toLong()
                         val wSeconds = wm.groupValues[2].toLong()
@@ -85,7 +86,7 @@ object LrcParser {
         // Sort by time
         lines.sortBy { it.time }
         val lyricsWithWords = lines.count { it.wordTimestamps.isNotEmpty() }
-        android.util.Log.d("LrcParser", "Parsed ${lines.size} lines, $lyricsWithWords lines with word timestamps")
+        AppLog.d("LrcParser", "Parsed ${lines.size} lines, $lyricsWithWords lines with word timestamps")
 
         return Lyrics(
             songId = songId,

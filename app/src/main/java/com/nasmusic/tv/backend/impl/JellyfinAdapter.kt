@@ -8,6 +8,10 @@ import com.nasmusic.tv.data.model.Artist
 import com.nasmusic.tv.data.model.Genre
 import com.nasmusic.tv.data.model.Playlist
 import com.nasmusic.tv.data.model.Song
+import com.nasmusic.tv.util.AppLog
+import com.nasmusic.tv.util.EncodingUtils
+import com.nasmusic.tv.util.RetryConfig
+import com.nasmusic.tv.util.withRetry
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
@@ -28,7 +32,8 @@ class JellyfinAdapter : BackendAdapter {
     private var baseUrl: String = ""
     private var apiToken: String = ""
     private var userId: String = ""
-    private var serverName: String = "Jellyfin"
+    override var serverName: String = "Jellyfin"
+        private set
 
     private val gson = Gson()
     private val jsonMediaType = "application/json; charset=utf-8".toMediaType()
@@ -37,10 +42,15 @@ class JellyfinAdapter : BackendAdapter {
         val logging = HttpLoggingInterceptor().apply {
             level = HttpLoggingInterceptor.Level.BASIC
         }
+        // 使用守护线程的 ExecutorService，防止 OkHttp 线程阻止进程退出
+        val daemonExecutor = java.util.concurrent.Executors.newCachedThreadPool { r ->
+            Thread(r, "Jellyfin-OkHttp").apply { isDaemon = true }
+        }
         OkHttpClient.Builder()
             .addInterceptor(logging)
             .connectTimeout(30, TimeUnit.SECONDS)
             .readTimeout(120, TimeUnit.SECONDS)
+            .dispatcher(okhttp3.Dispatcher(daemonExecutor))
             .build()
     }
 
@@ -146,7 +156,7 @@ class JellyfinAdapter : BackendAdapter {
             val json = executeJsonRequest(url) ?: return@withContext emptyList<Song>()
             val items = json.getAsJsonArray("Items") ?: return@withContext emptyList<Song>()
             val songs = items.mapNotNull { jsonObjectToSong(it.asJsonObject, albumId) }
-            android.util.Log.d("JellyfinAdapter", "getAlbumSongs: ${songs.size} songs, hasCover=${songs.count { it.coverUrl != null }}/${songs.size}")
+            AppLog.d("JellyfinAdapter", "getAlbumSongs: ${songs.size} songs, hasCover=${songs.count { it.coverUrl != null }}/${songs.size}")
             songs
         } catch (e: Exception) {
             android.util.Log.e("JellyfinAdapter", "getAlbumSongs failed", e)
@@ -211,10 +221,66 @@ class JellyfinAdapter : BackendAdapter {
             val json = executeJsonRequest(url) ?: return@withContext emptyList<Song>()
             val items = json.getAsJsonArray("Items") ?: return@withContext emptyList<Song>()
             val songs = items.mapNotNull { jsonObjectToSong(it.asJsonObject, null) }
-            android.util.Log.d("JellyfinAdapter", "getSongs: ${songs.size} songs (offset=$offset, limit=$limit)")
+            AppLog.d("JellyfinAdapter", "getSongs: ${songs.size} songs (offset=$offset, limit=$limit)")
             songs
         } catch (e: Exception) {
             android.util.Log.e("JellyfinAdapter", "getSongs failed", e)
+            emptyList()
+        }
+    }
+
+    override suspend fun getSongsTotalCount(): Int = withContext(Dispatchers.IO) {
+        try {
+            // 只请求 1 条获取 TotalRecordCount
+            val url = "$baseUrl/Items?" +
+                    "IncludeItemTypes=Audio&" +
+                    "Recursive=true&" +
+                    "UserId=$userId&" +
+                    "Limit=0"
+            val json = executeJsonRequest(url) ?: return@withContext 0
+            json.get("TotalRecordCount")?.asInt ?: 0
+        } catch (e: Exception) {
+            android.util.Log.e("JellyfinAdapter", "getSongsTotalCount failed", e)
+            0
+        }
+    }
+
+    override suspend fun getSongsByIds(ids: List<String>): List<Song> = withContext(Dispatchers.IO) {
+        if (ids.isEmpty()) return@withContext emptyList()
+        try {
+            // Jellyfin 支持 ?Ids=id1,id2,id3 批量查询
+            val fields = "PrimaryImageAspectRatio,SortName,ParentId,RunTimeTicks,Album,AlbumArtist,Artists,IndexNumber,ParentIndexNumber,ProductionYear,Genres"
+            val idsParam = ids.joinToString(",")
+            val url = "$baseUrl/Items?" +
+                    "IncludeItemTypes=Audio&" +
+                    "Recursive=true&" +
+                    "fields=$fields&" +
+                    "UserId=$userId&" +
+                    "Ids=$idsParam&" +
+                    "Limit=${ids.size}"
+            val json = executeJsonRequest(url) ?: return@withContext emptyList()
+            val items = json.getAsJsonArray("Items") ?: return@withContext emptyList()
+            items.mapNotNull { jsonObjectToSong(it.asJsonObject, null) }
+        } catch (e: Exception) {
+            android.util.Log.e("JellyfinAdapter", "getSongsByIds failed", e)
+            emptyList()
+        }
+    }
+
+    override suspend fun getYears(): List<Int> = withContext(Dispatchers.IO) {
+        try {
+            // 利用 Jellyfin 的 /Items/Filters 端点获取年份列表
+            val url = "$baseUrl/Items/Filters?UserId=$userId&IncludeItemTypes=Audio"
+            val json = executeJsonRequest(url) ?: return@withContext emptyList()
+            val yearsArray = json.getAsJsonArray("Years") ?: return@withContext emptyList()
+            val years = mutableListOf<Int>()
+            for (i in 0 until yearsArray.size()) {
+                val year = yearsArray[i].asInt
+                if (year > 0) years.add(year)
+            }
+            years.sortedDescending()
+        } catch (e: Exception) {
+            android.util.Log.e("JellyfinAdapter", "getYears failed", e)
             emptyList()
         }
     }
@@ -265,37 +331,87 @@ class JellyfinAdapter : BackendAdapter {
 
     override fun getCoverUrl(songId: String): String {
         val url = "$baseUrl/Items/$songId/Images/Primary?maxWidth=512&quality=90&api_key=$apiToken"
-        android.util.Log.d("JellyfinAdapter", "getCoverUrl: $url")
+        AppLog.d("JellyfinAdapter", "getCoverUrl: $url")
         return url
     }
 
     override suspend fun getLyrics(songId: String): String? = withContext(Dispatchers.IO) {
         try {
-            val url = "$baseUrl/Items/$songId/Lyrics?api_key=$apiToken"
-            android.util.Log.d("JellyfinAdapter", "getLyrics: requesting $url")
+            // Jellyfin 官方歌词端点：GET /Audio/{itemId}/Lyrics
+            // 响应为 LyricDto 结构：{ "Lyrics": [{ "Text": "...", "Start": ticks }], "Metadata": {...} }
+            val url = "$baseUrl/Audio/$songId/Lyrics"
+            AppLog.d("JellyfinAdapter", "getLyrics: requesting $url")
             val request = Request.Builder()
                 .url(url)
+                .header("X-Emby-Authorization", buildAuthHeader())
                 .get()
                 .build()
-            val response = client.newCall(request).execute()
-            android.util.Log.d("JellyfinAdapter", "getLyrics: status=${response.code} for song=$songId")
-            if (response.isSuccessful) {
-                val body = response.body?.string()
-                if (!body.isNullOrBlank()) {
-                    val json = gson.fromJson(body, JsonObject::class.java)
-                    val lyrics = json?.get("lyrics")?.asString
-                    android.util.Log.d("JellyfinAdapter", "getLyrics: lyrics found, length=${lyrics?.length ?: 0}")
-                    lyrics
+            client.newCall(request).execute().use { response ->
+                AppLog.d("JellyfinAdapter", "getLyrics: status=${response.code} for song=$songId")
+                if (response.isSuccessful) {
+                    val body = response.body?.string()
+                    if (!body.isNullOrBlank()) {
+                        // 将 Jellyfin LyricDto JSON 转换为 LRC 格式文本
+                        val lrcText = convertJellyfinLyricsToLrc(body)
+                        AppLog.d("JellyfinAdapter", "getLyrics: converted to LRC, length=${lrcText?.length ?: 0}")
+                        lrcText
+                    } else {
+                        android.util.Log.w("JellyfinAdapter", "getLyrics: body empty for $songId")
+                        null
+                    }
                 } else {
-                    android.util.Log.w("JellyfinAdapter", "getLyrics: body empty for $songId")
+                    android.util.Log.w("JellyfinAdapter", "getLyrics: not successful, code=${response.code}")
                     null
                 }
-            } else {
-                android.util.Log.w("JellyfinAdapter", "getLyrics: not successful, code=${response.code}")
-                null
             }
         } catch (e: Exception) {
             android.util.Log.e("JellyfinAdapter", "getLyrics failed for $songId", e)
+            null
+        }
+    }
+
+    /**
+     * 将 Jellyfin LyricDto JSON 转换为 LRC 格式文本
+     * Jellyfin 返回格式：{ "Lyrics": [{ "Text": "歌词", "Start": 10000000 }], "Metadata": {...} }
+     * Start 字段是 ticks（10000 ticks = 1 ms）
+     * 转换为 LRC 行：[mm:ss.xx]歌词
+     */
+    private fun convertJellyfinLyricsToLrc(jsonBody: String): String? {
+        return try {
+            val json = gson.fromJson(jsonBody, JsonObject::class.java) ?: return null
+            val lyricsArray = json.getAsJsonArray("Lyrics") ?: return null
+            if (lyricsArray.size() == 0) return null
+
+            val lrcBuilder = StringBuilder()
+
+            // 从 Metadata 提取信息，生成 LRC 头部
+            val metadata = json.getAsJsonObject("Metadata")
+            if (metadata != null) {
+                val artist = metadata.get("Artist")?.asString
+                val title = metadata.get("Title")?.asString
+                if (!artist.isNullOrBlank()) lrcBuilder.append("[ar:$artist]\n")
+                if (!title.isNullOrBlank()) lrcBuilder.append("[ti:$title]\n")
+            }
+
+            // 将每个 LyricLine 转换为 LRC 行
+            for (i in 0 until lyricsArray.size()) {
+                val lineObj = lyricsArray[i].asJsonObject
+                val text = lineObj.get("Text")?.asString ?: ""
+                val startTicks = lineObj.get("Start")?.asLong ?: 0L
+                // ticks 转 ms（10000 ticks = 1 ms）
+                val startMs = startTicks / 10000
+                // ms 转 [mm:ss.xx] 格式
+                val totalSeconds = startMs / 1000
+                val minutes = totalSeconds / 60
+                val seconds = totalSeconds % 60
+                val hundredths = (startMs % 1000) / 10
+                lrcBuilder.append("[%02d:%02d.%02d]%s\n".format(minutes, seconds, hundredths, text))
+            }
+
+            val result = lrcBuilder.toString()
+            if (result.isBlank()) null else result
+        } catch (e: Exception) {
+            android.util.Log.e("JellyfinAdapter", "convertJellyfinLyricsToLrc failed", e)
             null
         }
     }
@@ -305,7 +421,8 @@ class JellyfinAdapter : BackendAdapter {
     // --- 播放列表 ---
     override suspend fun getPlaylists(): List<Playlist> = withContext(Dispatchers.IO) {
         try {
-            val url = "$baseUrl/Items?IncludeItemTypes=Playlist&UserId=$userId&Recursive=true&StartIndex=0&Limit=200"
+            // Jellyfin API: GET /Playlists?userId=...
+            val url = "$baseUrl/Playlists?UserId=$userId"
             val json = executeJsonRequest(url) ?: return@withContext emptyList<Playlist>()
             val items = json.getAsJsonArray("Items") ?: return@withContext emptyList<Playlist>()
             items.mapNotNull { item ->
@@ -335,12 +452,13 @@ class JellyfinAdapter : BackendAdapter {
                 .header("X-Emby-Authorization", buildAuthHeader())
                 .post(body.toRequestBody(jsonMediaType))
                 .build()
-            val response = client.newCall(request).execute()
-            if (response.isSuccessful) {
-                val json = gson.fromJson(response.body?.string(), JsonObject::class.java)
-                val id = json?.get("Id")?.asString
-                if (id != null) Playlist(id = id, name = name) else null
-            } else null
+            client.newCall(request).execute().use { response ->
+                if (response.isSuccessful) {
+                    val json = gson.fromJson(response.body?.string(), JsonObject::class.java)
+                    val id = json?.get("Id")?.asString
+                    if (id != null) Playlist(id = id, name = name) else null
+                } else null
+            }
         } catch (e: Exception) {
             android.util.Log.e("JellyfinAdapter", "createPlaylist failed", e)
             null
@@ -380,8 +498,37 @@ class JellyfinAdapter : BackendAdapter {
 
     override suspend fun removeFromPlaylist(playlistId: String, songId: String): Boolean = withContext(Dispatchers.IO) {
         try {
+            // Jellyfin API: DELETE /Playlists/{playlistId}/Items?EntryIds={playlistItemId}
+            // EntryIds 需要的是播放列表条目 ID（PlaylistItemId），不是原始歌曲 ID
+            // 先查询播放列表条目，找到与 songId 匹配的 PlaylistItemId
+            val listUrl = "$baseUrl/Playlists/$playlistId/Items?UserId=$userId"
+            val listRequest = Request.Builder()
+                .url(listUrl)
+                .header("X-Emby-Authorization", buildAuthHeader())
+                .get()
+                .build()
+            val entryId = client.newCall(listRequest).execute().use { response ->
+                if (!response.isSuccessful) return@withContext false
+                val body = response.body?.string() ?: return@withContext false
+                val json = gson.fromJson(body, JsonObject::class.java)
+                val items = json?.getAsJsonArray("Items") ?: return@withContext false
+                var foundEntryId: String? = null
+                for (i in 0 until items.size()) {
+                    val item = items[i].asJsonObject
+                    val itemId = item.get("Id")?.asString
+                    val playlistItemId = item.get("PlaylistItemId")?.asString
+                    // 匹配歌曲 ID（Id 字段是原始歌曲 ID，PlaylistItemId 是播放列表条目 ID）
+                    if (itemId == songId) {
+                        foundEntryId = playlistItemId ?: itemId
+                        break
+                    }
+                }
+                foundEntryId
+            }
+
+            val effectiveEntryId = entryId ?: songId
             val request = Request.Builder()
-                .url("$baseUrl/Playlists/$playlistId/Items?EntryIds=$songId")
+                .url("$baseUrl/Playlists/$playlistId/Items?EntryIds=$effectiveEntryId")
                 .header("X-Emby-Authorization", buildAuthHeader())
                 .delete()
                 .build()
@@ -393,13 +540,18 @@ class JellyfinAdapter : BackendAdapter {
     }
 
     // --- 收藏 ---
+    // 缓存收藏 IDs，用于判断当前状态（线程安全）
+    private val _favoriteIdsCache = mutableSetOf<String>()
+    private val favoriteCacheLock = Any()
+
     override suspend fun toggleFavorite(songId: String): Boolean = withContext(Dispatchers.IO) {
         try {
-            // Jellyfin API: POST /UserFavoriteItems/{itemId} 添加收藏，DELETE /UserFavoriteItems/{itemId} 取消收藏
-            // 先检查是否已收藏
-            val isCurrentlyFavorite = _favoriteIdsCache.contains(songId)
+            // Jellyfin API: POST /Users/{userId}/FavoriteItems/{itemId} 添加收藏
+            //               DELETE /Users/{userId}/FavoriteItems/{itemId} 取消收藏
+            // 先查询当前收藏状态，避免依赖本地缓存（缓存可能未初始化）
+            val isCurrentlyFavorite = queryFavoriteStatus(songId)
             val requestBuilder = Request.Builder()
-                .url("$baseUrl/UserFavoriteItems/$songId")
+                .url("$baseUrl/Users/$userId/FavoriteItems/$songId")
                 .header("X-Emby-Authorization", buildAuthHeader())
 
             val request = if (isCurrentlyFavorite) {
@@ -409,8 +561,20 @@ class JellyfinAdapter : BackendAdapter {
             }
 
             client.newCall(request).execute().use { response ->
-                android.util.Log.d("JellyfinAdapter", "toggleFavorite: HTTP ${response.code} for $songId")
-                response.isSuccessful
+                AppLog.d("JellyfinAdapter", "toggleFavorite: HTTP ${response.code} for $songId")
+                if (response.isSuccessful) {
+                    // 操作成功后更新本地缓存
+                    synchronized(favoriteCacheLock) {
+                        if (isCurrentlyFavorite) {
+                            _favoriteIdsCache.remove(songId)
+                        } else {
+                            _favoriteIdsCache.add(songId)
+                        }
+                    }
+                    true
+                } else {
+                    false
+                }
             }
         } catch (e: Exception) {
             android.util.Log.e("JellyfinAdapter", "toggleFavorite failed", e)
@@ -418,8 +582,31 @@ class JellyfinAdapter : BackendAdapter {
         }
     }
 
-    // 缓存收藏 IDs，用于判断当前状态
-    private var _favoriteIdsCache: Set<String> = emptySet()
+    /**
+     * 查询歌曲当前的收藏状态
+     * Jellyfin API: GET /Users/{userId}/Items/{itemId} 返回 UserItemDataDto，
+     * 其中 UserData.IsFavorite 表示收藏状态
+     */
+    private fun queryFavoriteStatus(songId: String): Boolean {
+        return try {
+            val url = "$baseUrl/Users/$userId/Items/$songId"
+            val request = Request.Builder()
+                .url(url)
+                .header("X-Emby-Authorization", buildAuthHeader())
+                .get()
+                .build()
+            client.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) return false
+                val body = response.body?.string() ?: return false
+                val json = gson.fromJson(body, JsonObject::class.java) ?: return false
+                val userData = json.getAsJsonObject("UserData") ?: return false
+                userData.get("IsFavorite")?.asBoolean ?: false
+            }
+        } catch (e: Exception) {
+            android.util.Log.w("JellyfinAdapter", "queryFavoriteStatus failed for $songId", e)
+            false
+        }
+    }
 
     override suspend fun getFavorites(): List<Song> = withContext(Dispatchers.IO) {
         try {
@@ -429,9 +616,12 @@ class JellyfinAdapter : BackendAdapter {
             val json = executeJsonRequest(url) ?: return@withContext emptyList<Song>()
             val items = json.getAsJsonArray("Items") ?: return@withContext emptyList<Song>()
             val songs = items.mapNotNull { jsonObjectToSong(it.asJsonObject, null) }
-            // 更新缓存
-            _favoriteIdsCache = songs.map { it.id }.toSet()
-            android.util.Log.d("JellyfinAdapter", "getFavorites: ${songs.size} favorites")
+            // 更新缓存（线程安全）
+            synchronized(favoriteCacheLock) {
+                _favoriteIdsCache.clear()
+                _favoriteIdsCache.addAll(songs.map { it.id })
+            }
+            AppLog.d("JellyfinAdapter", "getFavorites: ${songs.size} favorites")
             songs
         } catch (e: Exception) {
             android.util.Log.e("JellyfinAdapter", "getFavorites failed", e)
@@ -442,11 +632,12 @@ class JellyfinAdapter : BackendAdapter {
     // --- 评分 ---
     override suspend fun setRating(songId: String, rating: Int): Boolean = withContext(Dispatchers.IO) {
         try {
+            // Jellyfin API: POST /Users/{userId}/Items/{itemId}/Rating?rating=...
             val body = JsonObject().apply {
                 addProperty("Rating", rating.coerceIn(1, 5))
             }.toString()
             val request = Request.Builder()
-                .url("$baseUrl/Items/$songId/Rating?api_key=$apiToken")
+                .url("$baseUrl/Users/$userId/Items/$songId/Rating?api_key=$apiToken")
                 .header("X-Emby-Authorization", buildAuthHeader())
                 .post(body.toRequestBody(jsonMediaType))
                 .build()
@@ -498,11 +689,10 @@ class JellyfinAdapter : BackendAdapter {
     override suspend fun getSongsByYearRange(fromYear: Int, toYear: Int): List<Song> = withContext(Dispatchers.IO) {
         try {
             val fields = "PrimaryImageAspectRatio,SortName,ParentId,RunTimeTicks"
-            // Jellyfin supports single year filter; for range we use Albums by year and collect songs
-            // Simplified: filter by first year in range
-            val year = fromYear
+            // Jellyfin Years 参数支持逗号分隔的多个年份
+            val years = (fromYear..toYear).joinToString(",")
             val url = "$baseUrl/Items?IncludeItemTypes=Audio&Recursive=true&" +
-                    "fields=$fields&UserId=$userId&Years=$year&Limit=1000"
+                    "fields=$fields&UserId=$userId&Years=$years&Limit=1000"
             val json = executeJsonRequest(url) ?: return@withContext emptyList<Song>()
             val items = json.getAsJsonArray("Items") ?: return@withContext emptyList<Song>()
             items.mapNotNull { jsonObjectToSong(it.asJsonObject, null) }
@@ -515,13 +705,14 @@ class JellyfinAdapter : BackendAdapter {
     // --- Scrobble ---
     override suspend fun scrobblePlay(songId: String, timestamp: Long): Boolean = withContext(Dispatchers.IO) {
         try {
+            // Jellyfin API: POST /Sessions/Playing 报告播放开始
             val body = JsonObject().apply {
                 addProperty("ItemId", songId)
                 addProperty("PositionTicks", timestamp * 10000)
                 addProperty("PlayMethod", "DirectPlay")
             }.toString()
             val request = Request.Builder()
-                .url("$baseUrl/Sessions/Playing?api_key=$apiToken")
+                .url("$baseUrl/Sessions/Playing")
                 .header("X-Emby-Authorization", buildAuthHeader())
                 .post(body.toRequestBody(jsonMediaType))
                 .build()
@@ -562,7 +753,7 @@ class JellyfinAdapter : BackendAdapter {
                 .post("".toRequestBody(null))
                 .build()
             client.newCall(request).execute().use { response ->
-                android.util.Log.d("JellyfinAdapter", "logout: HTTP ${response.code}")
+                AppLog.d("JellyfinAdapter", "logout: HTTP ${response.code}")
             }
         } catch (e: Exception) {
             android.util.Log.w("JellyfinAdapter", "logout failed", e)
@@ -581,13 +772,11 @@ class JellyfinAdapter : BackendAdapter {
         try {
             client.dispatcher.executorService.shutdown()
             client.connectionPool.evictAll()
-            android.util.Log.d("JellyfinAdapter", "close: OkHttp resources released")
+            AppLog.d("JellyfinAdapter", "close: OkHttp resources released")
         } catch (e: Exception) {
             android.util.Log.w("JellyfinAdapter", "close failed", e)
         }
     }
-
-    fun getServerName(): String = serverName
 
     // --- 内部辅助方法 ---
 
@@ -602,83 +791,35 @@ class JellyfinAdapter : BackendAdapter {
         return "$baseUrl/Items/$itemId/Images/Primary?tag=$imageTag&maxWidth=512&quality=90&api_key=$apiToken"
     }
 
-    private fun executeJsonRequest(url: String): JsonObject? {
-        return try {
-            val request = Request.Builder()
-                .url(url)
-                .header("X-Emby-Authorization", buildAuthHeader())
-                .build()
-            client.newCall(request).execute().use { response ->
-                val body = response.body?.string() ?: return null
-                if (!response.isSuccessful) return null
-                gson.fromJson(body, JsonObject::class.java)
+    private suspend fun executeJsonRequest(url: String): JsonObject? = withContext(Dispatchers.IO) {
+        try {
+            withRetry(
+                config = RetryConfig(maxAttempts = 3, baseDelayMs = 500L),
+                onError = { attempt, e ->
+                    android.util.Log.w("JellyfinAdapter", "executeJsonRequest retry attempt=$attempt for $url", e)
+                }
+            ) {
+                val request = Request.Builder()
+                    .url(url)
+                    .header("X-Emby-Authorization", buildAuthHeader())
+                    .get()
+                    .build()
+                client.newCall(request).execute().use { response ->
+                    if (response.isSuccessful) {
+                        val body = response.body?.string()
+                        if (!body.isNullOrBlank()) {
+                            gson.fromJson(body, JsonObject::class.java)
+                        } else null
+                    } else {
+                        android.util.Log.w("JellyfinAdapter", "executeJsonRequest: ${response.code} for $url")
+                        null
+                    }
+                }
             }
         } catch (e: Exception) {
-            android.util.Log.w("JellyfinAdapter", "executeJsonRequest failed for $url", e)
+            android.util.Log.e("JellyfinAdapter", "executeJsonRequest failed for $url", e)
             null
         }
-    }
-
-    /**
-     * 修复字符串编码问题
-     * 处理 Jellyfin 返回的乱码模式：
-     * 1. 末尾的 �?（U+FFFD + ?）
-     * 2. GB2312/GBK 字节被当作 Latin-1 解码（如 ÎÒÊÇÕæµÄ°®Äã）
-     */
-    private fun fixEncoding(text: String?): String? {
-        if (text.isNullOrBlank()) return text
-        
-        // 第一步：移除末尾的乱码模式：�?（U+FFFD + ?）或单独的 ?
-        var fixed: String = text
-        while (fixed.endsWith("?") || fixed.endsWith("\uFFFD?") || fixed.endsWith("\uFFFD")) {
-            if (fixed.endsWith("\uFFFD?")) {
-                fixed = fixed.dropLast(2) // 移除 U+FFFD 和 ?
-            } else {
-                fixed = fixed.dropLast(1)
-            }
-        }
-        
-        // 第二步：检测 GB2312/GBK 编码被当作 Latin-1 解码的情况
-        // 特征：字符串包含大量 Latin-1 扩展字符（0x80-0xFF 范围）
-        val latin1Count = fixed.count { it.code in 0x80..0xFF }
-        val totalCount = fixed.length
-        
-        // 如果超过 30% 的字符是 Latin-1 扩展字符，尝试从 Latin-1 转换到 GB2312
-        if (latin1Count > 0 && latin1Count.toFloat() / totalCount > 0.3f) {
-            try {
-                // 将字符串当作 Latin-1 编码的字节
-                val bytes = fixed.toByteArray(Charsets.ISO_8859_1)
-                // 尝试用 GB2312 解码
-                val decoded = String(bytes, charset("GB2312"))
-                // 如果解码后包含中文字符，使用这个结果
-                if (decoded.any { it.code in 0x4E00..0x9FFF }) {
-                    android.util.Log.d("JellyfinAdapter", "fixEncoding: converted Latin-1 to GB2312: '$fixed' -> '$decoded'")
-                    fixed = decoded
-                }
-            } catch (e: Exception) {
-                // GB2312 解码失败，尝试 GBK
-                try {
-                    val bytes = fixed.toByteArray(Charsets.ISO_8859_1)
-                    val decoded = String(bytes, charset("GBK"))
-                    if (decoded.any { it.code in 0x4E00..0x9FFF }) {
-                        android.util.Log.d("JellyfinAdapter", "fixEncoding: converted Latin-1 to GBK: '$fixed' -> '$decoded'")
-                        fixed = decoded
-                    }
-                } catch (e2: Exception) {
-                    // 都失败了，保持原样
-                }
-            }
-        }
-        
-        // 如果移除后变为空，返回原字符串
-        if (fixed.isBlank()) return text
-        
-        // 如果有变化，记录日志
-        if (fixed != text) {
-            android.util.Log.d("JellyfinAdapter", "fixEncoding: result: '${text.take(30)}' -> '${fixed.take(30)}'")
-        }
-        
-        return fixed
     }
 
     private fun jsonObjectToSong(obj: JsonObject, albumIdOverride: String?): Song? {
@@ -686,9 +827,9 @@ class JellyfinAdapter : BackendAdapter {
         val rawTitle = obj.get("Name")?.asString
         val rawAlbum = obj.get("Album")?.asString
         val rawArtist = obj.getAsJsonArray("Artists")?.firstOrNull()?.asString
-        val title = fixEncoding(rawTitle) ?: "Unknown"
-        val artist = fixEncoding(rawArtist) ?: fixEncoding(obj.get("AlbumArtist")?.asString) ?: ""
-        val album = fixEncoding(rawAlbum) ?: ""
+        val title = EncodingUtils.fixEncoding(rawTitle) ?: "Unknown"
+        val artist = EncodingUtils.fixEncoding(rawArtist) ?: EncodingUtils.fixEncoding(obj.get("AlbumArtist")?.asString) ?: ""
+        val album = EncodingUtils.fixEncoding(rawAlbum) ?: ""
         val albumId = albumIdOverride ?: obj.get("AlbumId")?.asString ?: ""
         val trackNumber = obj.get("IndexNumber")?.asInt ?: 0
         val discNumber = obj.get("ParentIndexNumber")?.asInt ?: 1
@@ -697,14 +838,24 @@ class JellyfinAdapter : BackendAdapter {
         val durationMs = runTimeTicks / 10000
         val imageTag = obj.get("ImageTags")?.asJsonObject?.get("Primary")?.asString
         val genreArr = obj.getAsJsonArray("Genres")
-        val genre = fixEncoding(genreArr?.firstOrNull()?.asString)
+        val genre = EncodingUtils.fixEncoding(genreArr?.firstOrNull()?.asString)
 
         // 调试日志：检查原始数据和修复后的数据
-        android.util.Log.d("JellyfinAdapter", "jsonObjectToSong: id=$id")
-        android.util.Log.d("JellyfinAdapter", "  rawTitle='${rawTitle?.take(30)}' fixedTitle='${title.take(30)}'")
-        android.util.Log.d("JellyfinAdapter", "  rawAlbum='${rawAlbum?.take(30)}' fixedAlbum='${album.take(30)}'")
-        android.util.Log.d("JellyfinAdapter", "  rawArtist='${rawArtist?.take(30)}' fixedArtist='${artist.take(30)}'")
-        android.util.Log.d("JellyfinAdapter", "  runTimeTicks=$runTimeTicks durationMs=$durationMs")
+        AppLog.d("JellyfinAdapter", "jsonObjectToSong: id=$id")
+        AppLog.d("JellyfinAdapter", "  rawTitle='${rawTitle?.take(30)}' fixedTitle='${title.take(30)}'")
+        AppLog.d("JellyfinAdapter", "  rawAlbum='${rawAlbum?.take(30)}' fixedAlbum='${album.take(30)}'")
+        AppLog.d("JellyfinAdapter", "  rawArtist='${rawArtist?.take(30)}' fixedArtist='${artist.take(30)}'")
+        AppLog.d("JellyfinAdapter", "  runTimeTicks=$runTimeTicks durationMs=$durationMs")
+
+        // 封面 URL 构造逻辑：
+        // - imageTag 来自歌曲自身的 ImageTags.Primary，必须用歌曲 id 构造 URL（tag 与 itemId 必须匹配）
+        // - 如果歌曲没有 Primary 图片 tag，回退到专辑 id 请求封面（专辑通常有封面）
+        // - 如果专辑 id 也为空，用歌曲 id 请求（Jellyfin 会返回 404 或默认图）
+        val coverUrl = if (imageTag != null) {
+            buildCoverUrl(id, imageTag)
+        } else {
+            getCoverUrl(albumId.ifBlank { id })
+        }
 
         return Song(
             id = id,
@@ -712,8 +863,7 @@ class JellyfinAdapter : BackendAdapter {
             artist = artist,
             album = album,
             albumId = albumId,
-            coverUrl = buildCoverUrl(albumId.ifBlank { id }, imageTag)
-                ?: getCoverUrl(albumId.ifBlank { id }),
+            coverUrl = coverUrl,
             streamUrl = getStreamUrl(id),
             durationMs = durationMs,
             trackNumber = trackNumber,

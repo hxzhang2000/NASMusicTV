@@ -6,7 +6,9 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.view.KeyEvent
 import androidx.core.app.NotificationCompat
+import androidx.core.app.ServiceCompat
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
@@ -15,8 +17,10 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.session.MediaLibraryService
 import androidx.media3.session.MediaSession
+import com.nasmusic.tv.NasMusicApp
 import com.nasmusic.tv.R
 import com.nasmusic.tv.ui.MainActivity
+import com.nasmusic.tv.util.AppLog
 
 /**
  * 后台播放服务
@@ -26,7 +30,7 @@ import com.nasmusic.tv.ui.MainActivity
 class PlaybackService : MediaLibraryService() {
 
     private var mediaLibrarySession: MediaLibrarySession? = null
-    private var lastNotificationSongTitle: String? = null
+    private var lastNotificationState: Pair<String?, Boolean>? = null
 
     private val playerListener = object : Player.Listener {
         override fun onIsPlayingChanged(isPlaying: Boolean) {
@@ -35,7 +39,7 @@ class PlaybackService : MediaLibraryService() {
 
         override fun onPlaybackStateChanged(playbackState: Int) {
             if (playbackState == Player.STATE_ENDED) {
-                PlayerManager.getInstance().onPlaybackEnded()
+                (application as NasMusicApp).playerManager.onPlaybackEnded()
             }
             updateNotification()
         }
@@ -47,7 +51,7 @@ class PlaybackService : MediaLibraryService() {
 
     override fun onCreate() {
         super.onCreate()
-        android.util.Log.d("PlaybackService", "onCreate: starting")
+        AppLog.d("PlaybackService", "onCreate: starting")
 
         // Create notification channel for Android 8+
         createNotificationChannel()
@@ -81,7 +85,7 @@ class PlaybackService : MediaLibraryService() {
             .build()
 
         // Store player reference in manager
-        PlayerManager.getInstance().setPlayer(player)
+        (application as NasMusicApp).playerManager.setPlayer(player)
 
         // Start as foreground service with initial notification
         startForeground(NOTIFICATION_ID, buildNotification(null, false))
@@ -92,29 +96,42 @@ class PlaybackService : MediaLibraryService() {
     }
 
     override fun onDestroy() {
+        AppLog.d("PlaybackService", "onDestroy: cleaning up")
+        // 释放 PlayerManager 资源（Handler、listener），防止内存泄漏
+        try {
+            (application as NasMusicApp).playerManager.release()
+        } catch (e: Exception) {
+            android.util.Log.w("PlaybackService", "PlayerManager.release failed", e)
+        }
+        // 释放 MediaSession 和 Player
         mediaLibrarySession?.run {
             player.release()
             release()
         }
         mediaLibrarySession = null
+        // 移除前台通知
+        try {
+            ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
+        } catch (e: Exception) {
+            android.util.Log.w("PlaybackService", "stopForeground failed", e)
+        }
         super.onDestroy()
     }
 
     override fun onTaskRemoved(rootIntent: Intent?) {
-        val player = mediaLibrarySession?.player
-        if (player == null || !player.playWhenReady || player.playbackState == Player.STATE_ENDED) {
-            stopSelf()
-        }
+        // 用户从最近任务列表移除应用时，停止播放和服务
+        AppLog.d("PlaybackService", "onTaskRemoved: stopping service")
+        stopSelf()
     }
 
     private fun createNotificationChannel() {
         if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.O) return
         val channel = NotificationChannel(
             CHANNEL_ID,
-            "音乐播放",
+            getString(R.string.playback_channel_name),
             NotificationManager.IMPORTANCE_LOW
         ).apply {
-            description = "控制音乐播放和显示当前歌曲"
+            description = getString(R.string.playback_channel_desc)
             setShowBadge(false)
         }
         val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
@@ -129,9 +146,10 @@ class PlaybackService : MediaLibraryService() {
             ?: "NAS Music TV"
         val isPlaying = player.isPlaying
 
-        // Avoid redundant updates
-        if (title == lastNotificationSongTitle) return
-        lastNotificationSongTitle = title
+        // 比较 (title, isPlaying) 元组，避免暂停/播放状态不刷新
+        val stateKey = title to isPlaying
+        if (stateKey == lastNotificationState) return
+        lastNotificationState = stateKey
 
         val notification = buildNotification(title, isPlaying)
         val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
@@ -147,16 +165,57 @@ class PlaybackService : MediaLibraryService() {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
 
+        // 媒体控制按钮（通过 ACTION_MEDIA_BUTTON + KeyEvent 转发给 MediaSession）
+        val playPauseKeyCode =
+            if (isPlaying) KeyEvent.KEYCODE_MEDIA_PAUSE else KeyEvent.KEYCODE_MEDIA_PLAY
+        val playPauseAction = NotificationCompat.Action.Builder(
+            if (isPlaying) android.R.drawable.ic_media_pause else android.R.drawable.ic_media_play,
+            if (isPlaying) getString(R.string.playback_paused) else getString(R.string.playback_playing),
+            buildMediaButtonPendingIntent(playPauseKeyCode)
+        ).build()
+
+        val prevAction = NotificationCompat.Action.Builder(
+            android.R.drawable.ic_media_previous,
+            getString(R.string.playback_previous),
+            buildMediaButtonPendingIntent(KeyEvent.KEYCODE_MEDIA_PREVIOUS)
+        ).build()
+
+        val nextAction = NotificationCompat.Action.Builder(
+            android.R.drawable.ic_media_next,
+            getString(R.string.playback_next),
+            buildMediaButtonPendingIntent(KeyEvent.KEYCODE_MEDIA_NEXT)
+        ).build()
+
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle(title ?: "NAS Music TV")
-            .setContentText(if (isPlaying) "正在播放" else "已暂停")
+            .setContentText(if (isPlaying) getString(R.string.playback_playing) else getString(R.string.playback_paused))
             .setSmallIcon(android.R.drawable.ic_media_play)
             .setContentIntent(pendingIntent)
+            .addAction(prevAction)
+            .addAction(playPauseAction)
+            .addAction(nextAction)
             .setOngoing(isPlaying)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setSilent(true)
             .build()
+    }
+
+    /**
+     * 构建媒体按钮 PendingIntent
+     * 通过 ACTION_MEDIA_BUTTON Intent + KeyEvent 转发控制指令到 MediaSession
+     * MediaLibraryService 会自动处理此 Intent 并调用对应的 Player 方法
+     */
+    private fun buildMediaButtonPendingIntent(keyCode: Int): PendingIntent {
+        val keyEvent = KeyEvent(KeyEvent.ACTION_DOWN, keyCode)
+        val intent = Intent(Intent.ACTION_MEDIA_BUTTON).apply {
+            setPackage(packageName)
+            putExtra(Intent.EXTRA_KEY_EVENT, keyEvent)
+        }
+        return PendingIntent.getBroadcast(
+            this, keyCode, intent,
+            PendingIntent.FLAG_IMMUTABLE
+        )
     }
 
     companion object {
