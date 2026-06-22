@@ -7,7 +7,7 @@
 >
 > 类型：`Added`（新增） | `Changed`（变更） | `Fixed`（修复） | `Removed`（移除）
 
-## [v2.2.0] - 2026-06-21
+## [v2.2.0] - 2026-06-22
 
 ### Added
 
@@ -15,6 +15,27 @@
 - 分批加载歌曲：每批 500 首，最多 50000 首，避免内存溢出
 - 加载进度显示：加载时显示 "已加载 X 首歌曲"，实时更新
 - TV 桌面图标显示修复：添加 `LAUNCHER` 类别，确保应用图标在桌面显示
+- 字符串资源化（B-3/B-8）：创建 `strings.xml`，替换 6+ 个屏幕中所有硬编码中文 UI 字符串
+- DI 容器（B-9）：`NasMusicApp` 作为控制反转容器，移除 `getInstance()` 静态方法
+- Activity + ViewModel 拆分（B-10）：MainActivity 从 678 行精简至 ~275 行，抽取 `AppRoot`/`NetworkMonitor`/`MediaKeyHandler`
+- 统一异步状态（B-12）：新增 `UiState<T>` 密封类（Loading/Success/Error）+ `RetryUtil` 指数退避重试
+- 播放模式迁移（B-13）：`_playMode` 从 PlayerManager 迁移到 MainViewModel，新增 `derivePlayMode()`
+- 单元测试补充（B-5）：UiStateTest、TimeUtilsTest、RetryUtilTest、MediaKeyHandlerTest、NetworkMonitorTest
+- CI 搭建（B-6）：GitHub Actions 工作流，push/PR 自动构建并上传 APK
+- 歌曲分页加载：`SongsPagingState` 每页 200 首，滚动到底部触发下一页，显示 "已加载 N / 共 M 首"
+- 按需加载 API：`getSongsTotalCount()` / `getSongsByIds()` / `getYears()` / `searchSongs()` 替代全量加载
+- 增量构建艺术家映射：`buildArtistMapsIncremental()` 仅处理新批次，避免全量重建
+- Navidrome 并发加载：专辑/演唱者/歌曲三个请求使用 `async + awaitAll` 并行执行
+- 密码加密存储（CryptoUtils）：基于 Android Keystore 的 AES-256-GCM 加密，保护 DataStore 中的 password 和 apiToken
+- 日志统一管理（AppLog）：Debug 构建输出 d/i/w 级别，Release 构建空操作，e 级别始终输出
+- 编码修复工具抽取（EncodingUtils）：从 Adapter 中抽取公共 `fixEncoding()` 逻辑
+- 公共可聚焦 Surface 组件（FocusableSurface）：统一封装焦点动画 + 边框 + FocusRequester，消除 30+ 处样板代码
+- 回归测试文档：`docs/regression-test.md`，19 章节 248 个测试项，覆盖单元/集成/UI/专项验证
+- `PlayerManager.release()`：释放 Handler、listener、Equalizer 资源
+- `PlayerManager.setEqualizerBands(gains)`：批量设置所有频段增益
+- `PlayerManager.moveItem(from, to)`：队列重排，同步 ExoPlayer 队列与 currentIndex
+- `PlayerManager.clearError()`：清除播放错误状态
+- `playerError` StateFlow：播放错误信息，用于 UI 错误展示与自动跳下一首
 
 ### Fixed
 
@@ -22,11 +43,24 @@
 - 进度条 D-Pad seek 修复：从歌唱家详情页等入口进入时，进度条 seek 正常工作
 - 编码修复逻辑优化：只对明确的乱码模式（末尾 `�?`）进行移除，避免破坏正常 UTF-8 字符串
 - 分批加载逻辑修复：正确限制歌曲数量，避免内存溢出和应用崩溃
+- PlaybackService Media3 1.2.1 API 不兼容修复：改用 `ACTION_MEDIA_BUTTON` + `KeyEvent` 方式构建 PendingIntent，替代不存在的 `MediaButtonReceiver.buildMediaButtonPendingIntent` 和 `Player.COMMAND_PLAY/PAUSE`
+- 进程退出残留修复：OkHttp Dispatcher 使用守护线程池（`isDaemon = true`）+ 退出时 `finishAffinity()` + `Process.killProcess()` 双保险，解决 Android Studio stop 按钮常亮问题
+- PlaybackService 退出清理增强：`onDestroy()` 新增 `PlayerManager.release()` + `ServiceCompat.stopForeground(STOP_FOREGROUND_REMOVE)`；`onTaskRemoved()` 简化为直接 `stopSelf()`
+- Jellyfin 歌词端点 404 修复：`/Items/{id}/Lyrics` 改为 `/Audio/{id}/Lyrics`
+- Jellyfin 收藏端点 404 修复：`/Items/{id}/Favorite` 改为 `/UserFavoriteItems/{id}`
+- Jellyfin 流派过滤修复：`/Genres` 端点添加 `IncludeItemTypes=Audio`，只返回音乐流派
+- Jellyfin 流派 songCount 字段修复：`MovieCount` 改为 `SongCount`
+- 全量加载歌曲导致内存溢出：改为分页加载（每页 200 首）
 
 ### Changed
 
 - 移除 Debug/Release 歌曲数量限制，统一使用分批加载（最多 50000 首）
 - 版本号升级至 v2.2.0，`versionCode` 递增至 5
+- 进度更新频率从 500ms 调整为 1000ms，减少 CPU 占用
+- PlayerManager 的 `next()` / `previous()` / `onPlaybackEnded()` 改为接收/推导 `playMode` 参数
+- `applyPlayMode()` 不再存储状态，只应用 ExoPlayer 设置
+- OkHttpClient 使用守护线程池，防止阻止进程退出（JellyfinAdapter 线程命名 `Jellyfin-OkHttp`，NavidromeAdapter 命名 `Navidrome-OkHttp`）
+- 退出确认流程：`playerManager.release()` → `stopService()` → `finishAffinity()` → `Process.killProcess()`
 
 ---
 

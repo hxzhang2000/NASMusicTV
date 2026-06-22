@@ -18,7 +18,9 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
+import okhttp3.Response
 import okhttp3.logging.HttpLoggingInterceptor
+import java.nio.charset.Charset
 import java.util.concurrent.TimeUnit
 
 /**
@@ -117,8 +119,8 @@ class JellyfinAdapter : BackendAdapter {
             items.mapNotNull { item ->
                 val obj = item.asJsonObject
                 val id = obj.get("Id")?.asString ?: return@mapNotNull null
-                val name = obj.get("Name")?.asString ?: "Unknown Album"
-                val artist = obj.get("AlbumArtist")?.asString ?: ""
+                val name = EncodingUtils.fixEncoding(obj.get("Name")?.asString) ?: "Unknown Album"
+                val artist = EncodingUtils.fixEncoding(obj.get("AlbumArtist")?.asString) ?: ""
                 val year = obj.get("ProductionYear")?.asInt
                 val childCount = obj.get("ChildCount")?.asInt ?: 0
                 val runTime = obj.get("RunTimeTicks")?.asLong ?: 0L
@@ -176,7 +178,10 @@ class JellyfinAdapter : BackendAdapter {
             items.mapNotNull { item ->
                 val obj = item.asJsonObject
                 val id = obj.get("Id")?.asString ?: return@mapNotNull null
-                val name = obj.get("Name")?.asString ?: "Unknown Artist"
+                val rawName = obj.get("Name")?.asString
+                val name = EncodingUtils.fixEncoding(rawName) ?: "Unknown Artist"
+                // 调试：确认 utf8Body 修复是否生效
+                android.util.Log.d("NASMusic", "getArtists: raw='${rawName?.take(30)}' fixed='${name.take(30)}'")
                 val imageTag = obj.get("ImageTags")?.asJsonObject?.get("Primary")?.asString
                 Artist(id = id, name = name, coverUrl = buildCoverUrl(id, imageTag) ?: getCoverUrl(id))
             }
@@ -349,7 +354,7 @@ class JellyfinAdapter : BackendAdapter {
             client.newCall(request).execute().use { response ->
                 AppLog.d("JellyfinAdapter", "getLyrics: status=${response.code} for song=$songId")
                 if (response.isSuccessful) {
-                    val body = response.body?.string()
+                    val body = response.utf8Body()
                     if (!body.isNullOrBlank()) {
                         // 将 Jellyfin LyricDto JSON 转换为 LRC 格式文本
                         val lrcText = convertJellyfinLyricsToLrc(body)
@@ -430,9 +435,9 @@ class JellyfinAdapter : BackendAdapter {
                 val id = obj.get("Id")?.asString ?: return@mapNotNull null
                 Playlist(
                     id = id,
-                    name = obj.get("Name")?.asString ?: "Unknown",
+                    name = EncodingUtils.fixEncoding(obj.get("Name")?.asString) ?: "Unknown",
                     songCount = obj.get("ChildCount")?.asInt ?: 0,
-                    owner = obj.get("AlbumArtist")?.asString ?: ""
+                    owner = EncodingUtils.fixEncoding(obj.get("AlbumArtist")?.asString) ?: ""
                 )
             }
         } catch (e: Exception) {
@@ -454,7 +459,7 @@ class JellyfinAdapter : BackendAdapter {
                 .build()
             client.newCall(request).execute().use { response ->
                 if (response.isSuccessful) {
-                    val json = gson.fromJson(response.body?.string(), JsonObject::class.java)
+                    val json = response.utf8Body()?.let { gson.fromJson(it, JsonObject::class.java) }
                     val id = json?.get("Id")?.asString
                     if (id != null) Playlist(id = id, name = name) else null
                 } else null
@@ -509,7 +514,7 @@ class JellyfinAdapter : BackendAdapter {
                 .build()
             val entryId = client.newCall(listRequest).execute().use { response ->
                 if (!response.isSuccessful) return@withContext false
-                val body = response.body?.string() ?: return@withContext false
+                val body = response.utf8Body() ?: return@withContext false
                 val json = gson.fromJson(body, JsonObject::class.java)
                 val items = json?.getAsJsonArray("Items") ?: return@withContext false
                 var foundEntryId: String? = null
@@ -597,7 +602,7 @@ class JellyfinAdapter : BackendAdapter {
                 .build()
             client.newCall(request).execute().use { response ->
                 if (!response.isSuccessful) return false
-                val body = response.body?.string() ?: return false
+                val body = response.utf8Body() ?: return false
                 val json = gson.fromJson(body, JsonObject::class.java) ?: return false
                 val userData = json.getAsJsonObject("UserData") ?: return false
                 userData.get("IsFavorite")?.asBoolean ?: false
@@ -660,7 +665,7 @@ class JellyfinAdapter : BackendAdapter {
                 val id = obj.get("Id")?.asString ?: return@mapNotNull null
                 Genre(
                     id = id,
-                    name = obj.get("Name")?.asString ?: "Unknown",
+                    name = EncodingUtils.fixEncoding(obj.get("Name")?.asString) ?: "Unknown",
                     songCount = obj.get("SongCount")?.asInt?.coerceAtLeast(0)
                         ?: obj.get("ChildCount")?.asInt ?: 0
                 )
@@ -791,6 +796,36 @@ class JellyfinAdapter : BackendAdapter {
         return "$baseUrl/Items/$itemId/Images/Primary?tag=$imageTag&maxWidth=512&quality=90&api_key=$apiToken"
     }
 
+    // 从原始字节检测编码并解码：优先 UTF-8，若出现 U+FFFD 或可疑字符则回退 GBK
+    private fun Response.utf8Body(): String? {
+        val rawBytes = body?.bytes() ?: return null
+        // 尝试 UTF-8 解码
+        val utf8 = try { String(rawBytes, Charsets.UTF_8) } catch (_: Exception) { return null }
+        // 检测 UTF-8 解码结果是否可信：
+        // 1. 如果有 U+FFFD 替换字符 → 无效 UTF-8，尝试 GBK
+        // 2. 如果有希腊字母(0x0370-0x03FF)或西里尔字母(0x0400-0x04FF)等 GBK→UTF-8 误解码的特征字符
+        //    且没有真正的中文字符(CJK统一表意文字) → 尝试 GBK
+        val hasReplacement = '\uFFFD' in utf8
+        val hasGreek = utf8.any { it.code in 0x0370..0x03FF } // 希腊字母
+        val hasCyrillic = utf8.any { it.code in 0x0400..0x04FF } // 西里尔字母
+        val hasChinese = utf8.any { it.code in 0x4E00..0x9FFF } // 中文字符
+        val hasHalfWidthKana = utf8.any { it.code in 0x00A0..0x00FF } // Latin-1 扩展
+
+        val needsGbkFallback = hasReplacement ||
+                ((hasGreek || hasCyrillic) && !hasChinese) ||
+                (hasHalfWidthKana && !hasChinese)
+
+        if (!needsGbkFallback) return utf8
+
+        // 尝试 GBK 解码
+        val gbk = try { String(rawBytes, Charset.forName("GBK")) } catch (_: Exception) { null }
+        if (gbk != null && (gbk.any { it.code in 0x4E00..0x9FFF } || '\uFFFD' !in gbk)) {
+            android.util.Log.d("NASMusic", "utf8Body: GBK fallback for '${utf8.take(30)}' -> '${gbk.take(30)}'")
+            return gbk
+        }
+        return utf8 // GBK 也失败，返回 UTF-8 结果
+    }
+
     private suspend fun executeJsonRequest(url: String): JsonObject? = withContext(Dispatchers.IO) {
         try {
             withRetry(
@@ -806,7 +841,7 @@ class JellyfinAdapter : BackendAdapter {
                     .build()
                 client.newCall(request).execute().use { response ->
                     if (response.isSuccessful) {
-                        val body = response.body?.string()
+                        val body = response.utf8Body()
                         if (!body.isNullOrBlank()) {
                             gson.fromJson(body, JsonObject::class.java)
                         } else null
@@ -887,7 +922,7 @@ class JellyfinAdapter : BackendAdapter {
                 .build()
 
             client.newCall(request).execute().use { response ->
-                val body = response.body?.string() ?: return@use null
+                val body = response.utf8Body() ?: return@use null
                 if (!response.isSuccessful) {
                     android.util.Log.w("JellyfinAdapter", "authenticateByName: HTTP ${response.code} for $baseUrl/Users/AuthenticateByName, body=${body.take(200)}")
                     return@use null
@@ -917,7 +952,7 @@ class JellyfinAdapter : BackendAdapter {
                 if (!response.isSuccessful) return@use null
                 val json = gson.fromJson(body, JsonObject::class.java)
                 val uid = json.get("Id")?.asString ?: return@use null
-                val name = json.get("Name")?.asString ?: "Jellyfin"
+                val name = EncodingUtils.fixEncoding(json.get("Name")?.asString) ?: "Jellyfin"
                 Pair(uid, name)
             }
         } catch (e: Exception) {

@@ -87,7 +87,12 @@ class PlayerManager() {
             newPosition: Player.PositionInfo,
             reason: Int
         ) {
-            _progress.value = newPosition.positionMs
+            // B-10 回归修复：只对用户主动 seek（reason=1）更新进度
+            // reason=2（SEEK_ADJUSTMENT）是 ExoPlayer 因流不支持 seek 而内部重置位置，
+            // 此时不应覆盖 _progress，让 Handler 的轮询自然更新即可
+            if (reason == Player.DISCONTINUITY_REASON_SEEK) {
+                _progress.value = newPosition.positionMs
+            }
         }
 
         override fun onPlayerError(error: androidx.media3.common.PlaybackException) {

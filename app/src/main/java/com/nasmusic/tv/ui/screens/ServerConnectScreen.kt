@@ -69,26 +69,29 @@ fun ServerConnectScreen(
     onDisconnect: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    var backendType by remember { mutableStateOf(initialConfig.backendType) }
-    var baseUrl by remember {
+    // 使用 initialConfig 作为 key，当 initialConfig 变化时（如 DataStore 加载完成后）
+    // 字段会重新初始化，确保显示已保存的配置
+    // 若 DataStore 中无保存值，使用内置默认值方便首次配置
+    var backendType by remember(initialConfig) { mutableStateOf(initialConfig.backendType) }
+    var baseUrl by remember(initialConfig) {
         mutableStateOf(
             if (initialConfig.baseUrl.isNotBlank()) TextFieldValue(initialConfig.baseUrl)
-            else TextFieldValue("http://")
+            else TextFieldValue("http://192.168.0.190:8096")
         )
     }
-    var username by remember {
+    var username by remember(initialConfig) {
         mutableStateOf(
             if (initialConfig.username.isNotBlank()) TextFieldValue(initialConfig.username)
-            else TextFieldValue("")
+            else TextFieldValue("hxzhang")
         )
     }
-    var password by remember {
+    var password by remember(initialConfig) {
         mutableStateOf(
             if (initialConfig.password.isNotBlank()) TextFieldValue(initialConfig.password)
-            else TextFieldValue("")
+            else TextFieldValue("wfxzhx2000")
         )
     }
-    var apiToken by remember {
+    var apiToken by remember(initialConfig) {
         mutableStateOf(
             if (initialConfig.apiToken.isNotBlank()) TextFieldValue(initialConfig.apiToken)
             else TextFieldValue()

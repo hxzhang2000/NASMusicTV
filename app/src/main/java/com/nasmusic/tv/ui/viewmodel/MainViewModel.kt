@@ -200,7 +200,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             // 等待配置加载完成后判断是否显示连接提示
             val config = prefs.serverConfig.first()
             if (config.baseUrl.isNotBlank()) {
+                // 有已保存的服务器配置，询问用户是否自动连接
                 _showConnectPrompt.value = true
+            } else {
+                // 没有已保存的配置，直接导航到服务器配置界面让用户输入
+                _currentScreen.value = Screen.ServerConnect
             }
         }
     }

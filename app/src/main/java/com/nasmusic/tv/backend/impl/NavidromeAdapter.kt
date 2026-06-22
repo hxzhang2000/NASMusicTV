@@ -103,8 +103,8 @@ class NavidromeAdapter : BackendAdapter {
             albums.mapNotNull { item ->
                 val obj = item.asJsonObject
                 val id = obj.get("id")?.asString ?: return@mapNotNull null
-                val name = obj.get("name")?.asString ?: "Unknown Album"
-                val artist = obj.get("artist")?.asString ?: ""
+                val name = EncodingUtils.fixEncoding(obj.get("name")?.asString) ?: "Unknown Album"
+                val artist = EncodingUtils.fixEncoding(obj.get("artist")?.asString) ?: ""
                 val year = obj.get("year")?.asInt
                 val songCount = obj.get("songCount")?.asInt ?: 0
                 val durationSec = obj.get("duration")?.asLong ?: 0L
@@ -135,14 +135,14 @@ class NavidromeAdapter : BackendAdapter {
             val songs = album?.getAsJsonArray("song")
                 ?: return@withContext emptyList<Song>()
 
-            val albumName = album.get("name")?.asString ?: ""
-            val albumArtist = album.get("artist")?.asString ?: ""
+            val albumName = EncodingUtils.fixEncoding(album.get("name")?.asString) ?: ""
+            val albumArtist = EncodingUtils.fixEncoding(album.get("artist")?.asString) ?: ""
 
             songs.mapNotNull { item ->
                 val obj = item.asJsonObject
                 val id = obj.get("id")?.asString ?: return@mapNotNull null
-                val title = obj.get("title")?.asString ?: "Unknown"
-                val artist = obj.get("artist")?.asString ?: albumArtist
+                val title = EncodingUtils.fixEncoding(obj.get("title")?.asString) ?: "Unknown"
+                val artist = EncodingUtils.fixEncoding(obj.get("artist")?.asString) ?: albumArtist
                 val track = obj.get("track")?.asInt ?: 0
                 val disc = obj.get("discNumber")?.asInt ?: 1
                 val year = obj.get("year")?.asInt
@@ -187,7 +187,7 @@ class NavidromeAdapter : BackendAdapter {
                 artists.forEach { artistElem ->
                     val obj = artistElem.asJsonObject
                     val id = obj.get("id")?.asString ?: return@forEach
-                    val name = obj.get("name")?.asString ?: "Unknown"
+                    val name = EncodingUtils.fixEncoding(obj.get("name")?.asString) ?: "Unknown"
                     val albumCount = obj.get("albumCount")?.asInt ?: 0
                     result.add(
                         Artist(
@@ -290,9 +290,9 @@ class NavidromeAdapter : BackendAdapter {
             songs.mapNotNull { item ->
                 val obj = item.asJsonObject
                 val id = obj.get("id")?.asString ?: return@mapNotNull null
-                val title = obj.get("title")?.asString ?: "Unknown"
-                val artist = obj.get("artist")?.asString ?: ""
-                val album = obj.get("album")?.asString ?: ""
+                val title = EncodingUtils.fixEncoding(obj.get("title")?.asString) ?: "Unknown"
+                val artist = EncodingUtils.fixEncoding(obj.get("artist")?.asString) ?: ""
+                val album = EncodingUtils.fixEncoding(obj.get("album")?.asString) ?: ""
                 val albumId = obj.get("albumId")?.asString ?: ""
                 val track = obj.get("track")?.asInt ?: 0
                 val durationSec = obj.get("duration")?.asLong ?: 0L
@@ -370,10 +370,10 @@ class NavidromeAdapter : BackendAdapter {
                 val id = obj.get("id")?.asString ?: return@mapNotNull null
                 Playlist(
                     id = id,
-                    name = obj.get("name")?.asString ?: "Unknown",
+                    name = EncodingUtils.fixEncoding(obj.get("name")?.asString) ?: "Unknown",
                     songCount = obj.get("songCount")?.asInt ?: 0,
                     durationMs = (obj.get("duration")?.asLong ?: 0L) * 1000,
-                    owner = obj.get("owner")?.asString ?: ""
+                    owner = EncodingUtils.fixEncoding(obj.get("owner")?.asString) ?: ""
                 )
             }
         } catch (e: Exception) {
@@ -469,9 +469,9 @@ class NavidromeAdapter : BackendAdapter {
                 val id = obj.get("id")?.asString ?: return@mapNotNull null
                 Song(
                     id = id,
-                    title = obj.get("title")?.asString ?: "Unknown",
-                    artist = obj.get("artist")?.asString ?: "",
-                    album = obj.get("album")?.asString ?: "",
+                    title = EncodingUtils.fixEncoding(obj.get("title")?.asString) ?: "Unknown",
+                    artist = EncodingUtils.fixEncoding(obj.get("artist")?.asString) ?: "",
+                    album = EncodingUtils.fixEncoding(obj.get("album")?.asString) ?: "",
                     albumId = obj.get("albumId")?.asString ?: "",
                     coverUrl = buildCoverUrl(obj.get("coverArt")?.asString ?: id),
                     streamUrl = getStreamUrl(id),
@@ -536,9 +536,9 @@ class NavidromeAdapter : BackendAdapter {
                 val id = obj.get("id")?.asString ?: return@mapNotNull null
                 Song(
                     id = id,
-                    title = obj.get("title")?.asString ?: "Unknown",
-                    artist = obj.get("artist")?.asString ?: "",
-                    album = obj.get("album")?.asString ?: "",
+                    title = EncodingUtils.fixEncoding(obj.get("title")?.asString) ?: "Unknown",
+                    artist = EncodingUtils.fixEncoding(obj.get("artist")?.asString) ?: "",
+                    album = EncodingUtils.fixEncoding(obj.get("album")?.asString) ?: "",
                     albumId = obj.get("albumId")?.asString ?: "",
                     coverUrl = buildCoverUrl(obj.get("coverArt")?.asString ?: id),
                     streamUrl = getStreamUrl(id),
@@ -593,9 +593,9 @@ class NavidromeAdapter : BackendAdapter {
                 val id = obj.get("id")?.asString ?: return@mapNotNull null
                 Song(
                     id = id,
-                    title = obj.get("title")?.asString ?: "Unknown",
-                    artist = obj.get("artist")?.asString ?: "",
-                    album = obj.get("album")?.asString ?: "",
+                    title = EncodingUtils.fixEncoding(obj.get("title")?.asString) ?: "Unknown",
+                    artist = EncodingUtils.fixEncoding(obj.get("artist")?.asString) ?: "",
+                    album = EncodingUtils.fixEncoding(obj.get("album")?.asString) ?: "",
                     albumId = obj.get("albumId")?.asString ?: "",
                     coverUrl = buildCoverUrl(obj.get("coverArt")?.asString ?: id),
                     streamUrl = getStreamUrl(id),
@@ -652,9 +652,10 @@ class NavidromeAdapter : BackendAdapter {
             ) {
                 val request = Request.Builder().url(url).build()
                 client.newCall(request).execute().use { response ->
-                    val body = response.body?.string()
-                    if (body != null && response.isSuccessful) {
-                        gson.fromJson(body, JsonObject::class.java)
+                    val rawBytes = response.body?.bytes() ?: return@use null
+                    val utf8Body = String(rawBytes, Charsets.UTF_8)
+                    if (response.isSuccessful) {
+                        gson.fromJson(utf8Body, JsonObject::class.java)
                     } else {
                         null
                     }
