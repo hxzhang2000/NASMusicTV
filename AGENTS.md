@@ -186,6 +186,26 @@ New entries go to `docs/technical-overview.md` (Section 10 — 修改记录), no
 
 **彻底解决**：需要在 Jellyfin 服务端重新扫描 MP3 文件的 ID3 标签，将编码改为 UTF-8（如用 MusicBrainz Picard）。
 
+## 拼音搜索在低版本设备上失效
+
+**问题**：Android TV（API 22，Android 5.1）上拼音搜索完全不起作用。
+
+**根因**：`PinyinUtils.getInitials()` 中有保护判断 `Build.VERSION.SDK_INT < 24`，API < 24 的设备直接返回空字符串，导致所有拼音首字母匹配失败。`toPinyin()` 也需要 API 26+（Android 8.0）的 `Transliterator` 支持。
+
+**影响**：曲库中搜索"ayq"找不到"安又琪"、"wf"找不到"王菲"等。
+
+**待修复**：需要为低版本设备提供不依赖 `android.icu.text.Transliterator` 的拼音方案（如硬编码映射表或第三方库）。
+
+## 播放页 vs 艺术家列表数据来源差异
+
+**现象**：播放页封面下方显示的艺术家名正确，但艺术家列表中同一艺术家显示为乱码。
+
+**根因**：Jellyfin 内部对同一个艺术家存了两份数据：
+- `getArtists()` API 返回的是 Jellyfin 数据库里艺术家实体的 `Name` 字段（从 ID3 标签的 `Artist` 字段读取并存储，WAV 文件的 GBK 编码标签导致乱码）
+- `getSongs()` API 返回的是歌曲的 `Artists` 数组（可能重新解析或使用不同编码）
+
+**结论**：这是 Jellyfin 服务端的已知问题（参见 GitHub issue #11411），客户端无法完全修复。
+
 ## Constraints
 
 - This is an Android TV app — no touch UI, D-Pad navigation only
