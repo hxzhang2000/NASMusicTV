@@ -3047,7 +3047,11 @@ if (!seekPending) {
 
 **依赖下载**：需配置代理（中国大陆网络通过 `127.0.0.1:7890`），或使用 Aliyun Maven 镜像。
 
-**验证**：✅ `assembleDebug` 编译通过，`Pinyin.toPinyin()` 调用正常。
+**验证**：✅ `assembleDebug` 编译通过，已在 Android TV（API 22）上测试验证：
+- 搜索 "ayq" → 匹配"安又琪"
+- 搜索 "wf" → 匹配"王菲"
+- 搜索 "zjl" → 匹配"周杰伦"
+- 兼容 API 22+，不依赖 `android.icu`
 
 ---
 
