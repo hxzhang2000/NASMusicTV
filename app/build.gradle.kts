@@ -121,6 +121,9 @@ dependencies {
     // JSON
     implementation("com.google.code.gson:gson:2.10.1")
 
+    // 拼音转换（兼容 API 22+，不依赖 ICU）
+    implementation("com.github.promeg:tinypinyin:2.0.3")
+
     // Leanback (TV support)
     implementation("androidx.leanback:leanback:1.0.0")
 

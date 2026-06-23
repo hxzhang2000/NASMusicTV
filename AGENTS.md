@@ -186,7 +186,7 @@ New entries go to `docs/technical-overview.md` (Section 10 — 修改记录), no
 
 **彻底解决**：需要在 Jellyfin 服务端重新扫描 MP3 文件的 ID3 标签，将编码改为 UTF-8（如用 MusicBrainz Picard）。
 
-## 拼音搜索在低版本设备上失效
+## 拼音搜索在低版本设备上失效（已修复）
 
 **问题**：Android TV（API 22，Android 5.1）上拼音搜索完全不起作用。
 
@@ -194,7 +194,20 @@ New entries go to `docs/technical-overview.md` (Section 10 — 修改记录), no
 
 **影响**：曲库中搜索"ayq"找不到"安又琪"、"wf"找不到"王菲"等。
 
-**待修复**：需要为低版本设备提供不依赖 `android.icu.text.Transliterator` 的拼音方案（如硬编码映射表或第三方库）。
+**修复**：重写 `PinyinUtils` 使用 `com.github.promeg:tinypinyin:2.0.3`（TinyPinyin），纯 Java 实现，不依赖 `android.icu`，兼容 API 22+。编译需配置代理（中国大陆网络需通过 `127.0.0.1:7890` 或 Aliyun Maven 镜像下载依赖）。
+
+**使用方式**：
+```kotlin
+// settings.gradle.kts - 添加阿里云 Maven 镜像和 JitPack
+maven { url = uri("https://maven.aliyun.com/repository/public") }
+maven { url = uri("https://jitpack.io") }
+
+// app/build.gradle.kts - 添加依赖
+implementation("com.github.promeg:tinypinyin:2.0.3")
+
+// PinyinUtils - 使用 API
+import com.github.promeg.pinyinhelper.Pinyin
+val py = Pinyin.toPinyin(c) // 返回拼音字符串，如 "zhong"
 
 ## 播放页 vs 艺术家列表数据来源差异
 

@@ -1,7 +1,6 @@
 package com.nasmusic.tv.util
 
-import android.icu.text.Transliterator
-import android.os.Build
+import com.github.promeg.pinyinhelper.Pinyin
 
 /**
  * 拼音首字母匹配工具
@@ -10,32 +9,9 @@ import android.os.Build
  * 1. 直接子串匹配（输入中文时使用）
  * 2. 拼音首字母匹配（输入拼音首字母时使用）
  *
- * 底层使用 android.icu.text.Transliterator（API 24+），
- * 低于 API 24 的设备仅支持直接子串匹配。
+ * 使用 TinyPinyin 库（不依赖 ICU），兼容 API 22+。
  */
 object PinyinUtils {
-
-    private val transliterator: Transliterator? by lazy {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            try { Transliterator.getInstance("Han-Latin; Latin-ASCII") } catch (e: Exception) { null }
-        } else null
-    }
-
-    private const val SPACE_REGEX = "\\s+"
-
-    /**
-     * 将文本转换为拼音（API 26+ 使用 Transliterator，低版本 fallback 仅保留 ASCII 字符）。
-     */
-    fun toPinyin(text: String): String {
-        if (text.isBlank()) return ""
-        val trans = transliterator
-        return if (trans != null) {
-            trans.transliterate(text).split(SPACE_REGEX.toRegex()).joinToString("") { it.trim() }
-        } else {
-            // 低版本 fallback：仅保留 ASCII 字符
-            text.filter { it.isLetterOrDigit() || it.isWhitespace() }
-        }
-    }
 
     /**
      * 获取文本的拼音首字母。
@@ -43,20 +19,20 @@ object PinyinUtils {
      * 英文字母和数字原样保留（小写）。
      */
     fun getInitials(text: String): String {
-        if (text.isBlank() || Build.VERSION.SDK_INT < 24) return ""
-        return try {
-            val pinyin = android.icu.text.Transliterator
-                .getInstance("Han-Latin/Names")
-                .transliterate(text)
-            if (pinyin.isBlank()) return ""
-            pinyin.trim().split("\\s+".toRegex()).joinToString("") { seg ->
-                seg.firstOrNull()?.let { firstChar ->
-                    val c = firstChar.lowercaseChar()
-                    if (c in 'a'..'z' || c in '0'..'9') c.toString() else ""
-                } ?: ""
+        if (text.isBlank()) return ""
+        return buildString {
+            for (c in text) {
+                if (c.code in 0x4E00..0x9FFF) {
+                    // CJK 统一表意文字：取拼音首字母
+                    val py = Pinyin.toPinyin(c)
+                    if (py.isNotEmpty()) {
+                        append(py.first().lowercaseChar())
+                    }
+                } else if (c.isLetterOrDigit()) {
+                    append(c.lowercaseChar())
+                }
+                // 其他字符（空格、标点等）跳过
             }
-        } catch (_: Exception) {
-            ""
         }
     }
 
@@ -76,9 +52,6 @@ object PinyinUtils {
 
         // 拼音首字母匹配
         val initials = getInitials(text)
-        val fullPinyin = toPinyin(text)
-        android.util.Log.d("NASMusic", "PinyinUtils.matches: text='$text', query='$q', initials='$initials', fullPinyin='$fullPinyin'")
-        return (initials.isNotEmpty() && initials.contains(q)) ||
-               (fullPinyin.isNotEmpty() && fullPinyin.lowercase().contains(q))
+        return initials.isNotEmpty() && initials.contains(q)
     }
 }

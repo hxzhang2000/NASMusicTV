@@ -3029,6 +3029,28 @@ if (!seekPending) {
 
 ---
 
+#### 10.10.22 拼音搜索兼容低版本设备（TinyPinyin）
+
+**日期**：2026-06-24
+
+**问题**：`PinyinUtils.getInitials()` 使用 `Build.VERSION.SDK_INT < 24` 保护判断，API 22 的电视上直接返回空字符串。`toPinyin()` 依赖 API 26+ 的 `android.icu.text.Transliterator`。
+
+**根因**：Android 5.1（API 22）没有 `android.icu` 库，且旧拼音实现使用了 `Transliterator` 进行拼音转换。
+
+**修改**：
+
+| 文件 | 改动 |
+|------|------|
+| `util/PinyinUtils.kt` | 重写为使用 `com.github.promeg.pinyinhelper.Pinyin`（TinyPinyin），纯 Java 实现，兼容 API 22+ |
+| `app/build.gradle.kts` | 添加依赖 `com.github.promeg:tinypinyin:2.0.3` |
+| `settings.gradle.kts` | 添加阿里云 Maven 镜像 + JitPack（已配置） |
+
+**依赖下载**：需配置代理（中国大陆网络通过 `127.0.0.1:7890`），或使用 Aliyun Maven 镜像。
+
+**验证**：✅ `assembleDebug` 编译通过，`Pinyin.toPinyin()` 调用正常。
+
+---
+
 ## 11. 回归测试文档
 
 > 完整的回归测试文档独立维护在 `docs/regression-test.md`，包含 19 章节 248 个测试项。
