@@ -27,6 +27,8 @@
 - 清空队列歌词未清除：`clearQueue()` 同时清除 `_currentLyrics`
 - 后端/网络歌词同时获取：`checkAvailability()` 不再跳过网络获取
 - 自动切歌歌词加载：`currentSong.collect` 统一触发歌词加载，移除重复调用
+- 艺术家分页加载：取消 1000 个艺术家限制，支持分页获取全部
+- 退出时 Jellyfin session 注销：`runBlocking` 确保 HTTP 请求完成后再杀进程
 
 ### Changed
 
