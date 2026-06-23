@@ -24,13 +24,14 @@ object EncodingUtils {
         var fixed: String = text
 
         // 第一步：检测并处理字符串中任意位置的 U+FFFD（替换字符）
-        // 这通常是 GBK 编码被当作 UTF-8 解码的结果
+        // 原因：GBK 字节被当作 UTF-8 解码时，部分无效序列变成 U+FFFD，
+        // 部分字节恰好形成合法 UTF-8（如 κ=U+03BA, л=U+043B）
+        // 正确做法：用 UTF-8 编码回字节，再用 GBK 解码
         if ('\uFFFD' in text) {
             try {
-                // 将字符串按 ISO-8859-1 编码回字节，再用 GBK 重新解码
-                val rawBytes = text.toByteArray(Charsets.ISO_8859_1)
+                val rawBytes = text.toByteArray(Charsets.UTF_8)
                 val gbkDecoded = String(rawBytes, Charset.forName("GBK"))
-                // 如果 GBK 解码后的结果包含中文字符（CJK 统一表意文字），
+                // 如果 GBK 解码后包含中文字符（CJK 统一表意文字），
                 // 且不再有 U+FFFD，说明 GBK 解码正确
                 if ('\uFFFD' !in gbkDecoded && gbkDecoded.any { it.code in 0x4E00..0x9FFF }) {
                     AppLog.d("EncodingUtils", "fixEncoding: U+FFFD GBK fallback: '${fixed.take(30)}' -> '${gbkDecoded.take(30)}'")

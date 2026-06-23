@@ -167,6 +167,25 @@ Implementation details and change records are maintained in `docs/technical-over
 **Rule**: Only record features/ fixes that have been tested and verified.
 New entries go to `docs/technical-overview.md` (Section 10 — 修改记录), not scattered files.
 
+## 歌唱家乱码问题
+
+**问题**：曲库中部分艺术家名字显示为乱码（如 `κ��(����)`、`³Â»ØÏÐ` 等）。
+
+**根因**：Jellyfin 服务端在读取 MP3 文件的 ID3 标签时，如果标签使用 GBK 编码，Jellyfin 会直接把原始字节当作 UTF-8 存储。当生成 JSON API 响应时：
+- **部分情况**：Jellyfin 将 GBK 字节编码为 Unicode 码点（如 `\u03BA` = `κ`），客户端收到的是合法 UTF-8 JSON，但内容已是乱码 → **客户端无法修复**
+- **另一部分情况**：Jellyfin 直接输出原始 GBK 字节，客户端收到乱码 UTF-8 → **`utf8Body()` 可以通过 GBK 回退修复**
+
+**当前客户端修复**：
+- `utf8Body()`：检测 U+FFFD / 希腊字母 / 西里尔字母时尝试 GBK 回退
+- `fixEncoding()`：检测 U+FFFD 时用 UTF-8 字节回退 GBK
+
+**服务端修复**：
+- 设置环境变量 `DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=0`（允许 .NET 使用系统全球化数据）
+- Windows：`[Environment]::SetEnvironmentVariable("DOTNET_SYSTEM_GLOBALIZATION_INVARIANT", "0", "User")`
+- 重启 Jellyfin 服务后重新扫描音乐库
+
+**彻底解决**：需要在 Jellyfin 服务端重新扫描 MP3 文件的 ID3 标签，将编码改为 UTF-8（如用 MusicBrainz Picard）。
+
 ## Constraints
 
 - This is an Android TV app — no touch UI, D-Pad navigation only

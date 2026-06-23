@@ -76,6 +76,9 @@ object PinyinUtils {
 
         // 拼音首字母匹配
         val initials = getInitials(text)
-        return initials.isNotEmpty() && initials.contains(q)
+        val fullPinyin = toPinyin(text)
+        android.util.Log.d("NASMusic", "PinyinUtils.matches: text='$text', query='$q', initials='$initials', fullPinyin='$fullPinyin'")
+        return (initials.isNotEmpty() && initials.contains(q)) ||
+               (fullPinyin.isNotEmpty() && fullPinyin.lowercase().contains(q))
     }
 }

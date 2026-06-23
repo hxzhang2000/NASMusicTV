@@ -189,6 +189,7 @@ class JellyfinAdapter : BackendAdapter {
                     val name = EncodingUtils.fixEncoding(rawName) ?: "Unknown Artist"
                     val imageTag = obj.get("ImageTags")?.asJsonObject?.get("Primary")?.asString
                     val coverUrl = buildCoverUrl(id, imageTag) ?: getCoverUrl(id)
+                    android.util.Log.d("NASMusic", "getArtists: raw='${rawName?.take(30)}' fixed='${name.take(30)}'")
                     allArtists.add(Artist(id = id, name = name, coverUrl = coverUrl))
                 }
 
@@ -816,28 +817,32 @@ class JellyfinAdapter : BackendAdapter {
         // 尝试 UTF-8 解码
         val utf8 = try { String(rawBytes, Charsets.UTF_8) } catch (_: Exception) { return null }
         // 检测 UTF-8 解码结果是否可信：
-        // 1. 如果有 U+FFFD 替换字符 → 无效 UTF-8，尝试 GBK
-        // 2. 如果有希腊字母(0x0370-0x03FF)或西里尔字母(0x0400-0x04FF)等 GBK→UTF-8 误解码的特征字符
-        //    且没有真正的中文字符(CJK统一表意文字) → 尝试 GBK
+        // - U+FFFD → 无效 UTF-8
+        // - 希腊/西里尔字母 → GBK→UTF-8 误解码的典型特征
         val hasReplacement = '\uFFFD' in utf8
-        val hasGreek = utf8.any { it.code in 0x0370..0x03FF } // 希腊字母
-        val hasCyrillic = utf8.any { it.code in 0x0400..0x04FF } // 西里尔字母
-        val hasChinese = utf8.any { it.code in 0x4E00..0x9FFF } // 中文字符
-        val hasHalfWidthKana = utf8.any { it.code in 0x00A0..0x00FF } // Latin-1 扩展
+        val hasGreek = utf8.any { it.code in 0x0370..0x03FF }
+        val hasCyrillic = utf8.any { it.code in 0x0400..0x04FF }
 
-        val needsGbkFallback = hasReplacement ||
-                ((hasGreek || hasCyrillic) && !hasChinese) ||
-                (hasHalfWidthKana && !hasChinese)
+        val needsGbkFallback = hasReplacement || hasGreek || hasCyrillic
 
-        if (!needsGbkFallback) return utf8
+        // 记录原始字节的前20个字节（用于调试编码问题）
+        val bytesHex = rawBytes.take(40).joinToString(" ") { "%02X".format(it) }
+        android.util.Log.d("NASMusic", "utf8Body: rawBytes[0..39]=${bytesHex}")
+        android.util.Log.d("NASMusic", "utf8Body: flags: replacement=$hasReplacement greek=$hasGreek cyrillic=$hasCyrillic → needsGbk=$needsGbkFallback")
 
-        // 尝试 GBK 解码
+        if (!needsGbkFallback) {
+            android.util.Log.d("NASMusic", "utf8Body: UTF-8 OK, first50='${utf8.take(50)}'")
+            return utf8
+        }
+
+        // 尝试 GBK 解码（Jellyfin 服务端 ID3 标签可能以 GBK 存储）
         val gbk = try { String(rawBytes, Charset.forName("GBK")) } catch (_: Exception) { null }
         if (gbk != null && (gbk.any { it.code in 0x4E00..0x9FFF } || '\uFFFD' !in gbk)) {
-            android.util.Log.d("NASMusic", "utf8Body: GBK fallback for '${utf8.take(30)}' -> '${gbk.take(30)}'")
+            android.util.Log.d("NASMusic", "utf8Body: GBK fallback: utf8='${utf8.take(20)}' → gbk='${gbk.take(20)}'")
             return gbk
         }
-        return utf8 // GBK 也失败，返回 UTF-8 结果
+        android.util.Log.d("NASMusic", "utf8Body: GBK fallback failed, keeping UTF-8")
+        return utf8
     }
 
     private suspend fun executeJsonRequest(url: String): JsonObject? = withContext(Dispatchers.IO) {
