@@ -58,59 +58,34 @@ class LyricsManager(
 
     /**
      * 检查歌词来源可用性
-     * 按顺序尝试后端 API → 网络匹配，获取到歌词后自动缓存。
+     * 同时尝试后端 API 和网络匹配，两个来源互不影响。
      */
     suspend fun checkAvailability(song: Song): LyricsAvailability = withContext(Dispatchers.IO) {
         AppLog.d("LyricsManager", "checkAvailability: song=${song.title}, artist=${song.artist}, id=${song.id}")
 
-        // 检查后端API是否有歌词，同时拿到解析后的结果
+        // 检查后端API是否有歌词
         val adapter = backendRegistry.getAdapter()
-        AppLog.d("LyricsManager", "checkAvailability: adapter=${adapter?.backendType ?: "null"}")
         val backendLyrics = if (adapter != null) {
             try {
                 val text = adapter.getLyrics(song.id)
-                AppLog.d("LyricsManager", "checkAvailability: backend response=${text?.take(100) ?: "null"}")
                 if (!text.isNullOrBlank() && LrcParser.isValidLrc(text)) {
-                    AppLog.d("LyricsManager", "checkAvailability: backend has valid lyrics")
                     cacheLyrics(song, text)
                     LrcParser.parse(text, song.id).copy(source = LyricsSource.EMBEDDED)
-                } else {
-                    Log.w("LyricsManager", "checkAvailability: backend returned invalid or empty: text=${text?.take(50) ?: "null"}, isValid=${text != null && LrcParser.isValidLrc(text)}")
-                    null
-                }
-            } catch (e: Exception) {
-                Log.e("LyricsManager", "checkAvailability: backend exception", e)
-                null
-            }
-        } else {
-            Log.w("LyricsManager", "checkAvailability: no adapter available")
-            null
-        }
+                } else null
+            } catch (_: Exception) { null }
+        } else null
 
-        // 后端没有歌词时才尝试网络
-        val network = if (backendLyrics == null) {
-            AppLog.d("LyricsManager", "checkAvailability: trying network provider")
-            try {
-                val text = networkProvider.fetchLyrics(song.title, song.artist)
-                if (text != null) {
-                    AppLog.d("LyricsManager", "checkAvailability: network has lyrics, length=${text.length}")
-                    cacheLyrics(song, text)
-                    LrcParser.parse(text, song.id).copy(source = LyricsSource.NETWORK)
-                } else {
-                    Log.w("LyricsManager", "checkAvailability: network returned null")
-                    null
-                }
-            } catch (e: Exception) {
-                Log.e("LyricsManager", "checkAvailability: network exception", e)
-                null
-            }
-        } else {
-            AppLog.d("LyricsManager", "checkAvailability: skip network - backend already has lyrics")
-            null
-        }
+        // 同时尝试网络歌词（不跳过）
+        val networkLyrics = try {
+            val text = networkProvider.fetchLyrics(song.title, song.artist)
+            if (text != null) {
+                cacheLyrics(song, text)
+                LrcParser.parse(text, song.id).copy(source = LyricsSource.NETWORK)
+            } else null
+        } catch (_: Exception) { null }
 
-        val result = LyricsAvailability(backend = backendLyrics, network = network)
-        AppLog.d("LyricsManager", "checkAvailability: result: backend=${result.hasBackend}, network=${result.hasNetwork}")
+        val result = LyricsAvailability(backend = backendLyrics, network = networkLyrics)
+        AppLog.d("LyricsManager", "checkAvailability: backend=${result.hasBackend}, network=${result.hasNetwork}")
         result
     }
 

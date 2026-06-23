@@ -98,6 +98,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     val selectedArtistName: StateFlow<String?> = _selectedArtistName.asStateFlow()
 
     private val _albumSongsCache = MutableStateFlow<Map<String, List<Song>>>(emptyMap())
+    val albumSongsCache: StateFlow<Map<String, List<Song>>> = _albumSongsCache.asStateFlow()
 
     // --- 歌唱家拆分映射 ---
     // songId → 拆分后的歌唱家列表（不含去重中间状态，直接展开后的结果）
@@ -621,7 +622,44 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     fun openArtistDetail(artistName: String) {
         _selectedArtistName.value = artistName
+        loadArtistSongs(artistName)
         _currentScreen.value = Screen.ArtistDetail
+    }
+
+    private val _artistDetailSongsCache = MutableStateFlow<Map<String, List<Song>>>(emptyMap())
+    val artistDetailSongsCache: StateFlow<Map<String, List<Song>>> = _artistDetailSongsCache.asStateFlow()
+
+    fun loadArtistSongs(artistName: String) {
+        // 先从 artistSongsMap 中获取已有的歌曲
+        val existingSongs = _artistSongsMap.value[artistName]
+        if (!existingSongs.isNullOrEmpty()) {
+            _artistDetailSongsCache.value = _artistDetailSongsCache.value.toMutableMap().apply {
+                put(artistName, existingSongs)
+            }
+            return
+        }
+        // 如果没有已有歌曲，从后端加载
+        viewModelScope.launch {
+            val adapter = backendRegistry.getAdapter() ?: return@launch
+            try {
+                // 先找到艺术家 ID
+                val artists = _artists.value.dataOrNull() ?: emptyList()
+                val artist = artists.find { it.name == artistName }
+                if (artist != null) {
+                    val songs = adapter.getArtistSongs(artist.id)
+                    _artistDetailSongsCache.value = _artistDetailSongsCache.value.toMutableMap().apply {
+                        put(artistName, songs)
+                    }
+                    // 同时更新 artistSongsMap
+                    _artistSongsMap.value = _artistSongsMap.value.toMutableMap().apply {
+                        put(artistName, songs)
+                    }
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("NASMusic", "loadArtistSongs failed", e)
+                showError("加载艺术家歌曲失败: ${e.message?.take(50)}")
+            }
+        }
     }
 
     // --- B-1 收藏控制 ---
@@ -760,7 +798,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     fun moveQueueItem(fromIndex: Int, toIndex: Int) = playerManager.moveItem(fromIndex, toIndex)
 
-    fun clearQueue() = playerManager.clearQueue()
+    fun clearQueue() {
+        playerManager.clearQueue()
+        _currentLyrics.value = null
+        _lyricsAvailability.value = LyricsAvailability()
+    }
 
     private fun loadLyricsForCurrentSong() {
         lyricsLoadJob?.cancel()

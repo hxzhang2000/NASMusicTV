@@ -28,6 +28,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Text
+import coil.compose.AsyncImage
 import com.nasmusic.tv.R
 import com.nasmusic.tv.data.model.Song
 import com.nasmusic.tv.ui.theme.NasMusicColors
@@ -43,6 +44,7 @@ import com.nasmusic.tv.util.TimeUtils
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 fun ArtistDetailScreen(
+    artist: com.nasmusic.tv.data.model.Artist? = null,
     artistName: String,
     songs: List<Song>,
     onPlaySong: (Song) -> Unit,
@@ -82,11 +84,19 @@ fun ArtistDetailScreen(
                     .background(NasMusicColors.Primary.copy(alpha = 0.2f)),
                 contentAlignment = Alignment.Center
             ) {
-                Text(
-                    text = artistName.firstOrNull()?.uppercase() ?: "?",
-                    color = NasMusicColors.Primary,
-                    fontSize = 72.sp
-                )
+                if (artist?.coverUrl != null) {
+                    AsyncImage(
+                        model = artist.coverUrl,
+                        contentDescription = artistName,
+                        modifier = Modifier.fillMaxSize().clip(CircleShape)
+                    )
+                } else {
+                    Text(
+                        text = artistName.firstOrNull()?.uppercase() ?: "?",
+                        color = NasMusicColors.Primary,
+                        fontSize = 72.sp
+                    )
+                }
             }
 
             Spacer(modifier = Modifier.width(24.dp))

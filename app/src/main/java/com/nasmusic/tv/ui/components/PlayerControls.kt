@@ -126,7 +126,7 @@ fun ProgressSection(
                 }
         ) {
         Surface(
-            onClick = { if (durationMs > 0) onSeek(durationMs / 2) },
+            onClick = { /* TV 遥控器：进度条不响应 OK 键，仅通过左右键 seek */ },
             modifier = Modifier
                 .fillMaxSize()
                 .focusRequester(progressFocusRequester)

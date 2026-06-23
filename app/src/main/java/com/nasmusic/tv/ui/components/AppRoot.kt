@@ -285,7 +285,8 @@ fun AppRoot(
                 }
                 Screen.AlbumDetail -> {
                     val selectedAlbum by viewModel.selectedAlbum.collectAsState(initial = null)
-                    val albumSongs = selectedAlbum?.let { viewModel.getAlbumSongsCache(it.id) } ?: emptyList()
+                    val albumSongsCache by viewModel.albumSongsCache.collectAsState(initial = emptyMap())
+                    val albumSongs = selectedAlbum?.let { albumSongsCache[it.id] } ?: emptyList()
                     if (selectedAlbum != null) {
                         AlbumDetailScreen(
                             album = selectedAlbum!!,
@@ -305,9 +306,15 @@ fun AppRoot(
                 }
                 Screen.ArtistDetail -> {
                     val selectedArtistName by viewModel.selectedArtistName.collectAsState(initial = null)
-                    val artistSongs = selectedArtistName?.let { viewModel.artistSongsMap.value[it] } ?: emptyList()
+                    val artistDetailSongsCache by viewModel.artistDetailSongsCache.collectAsState(initial = emptyMap())
+                    val artistSongs = selectedArtistName?.let { artistDetailSongsCache[it] } ?: emptyList()
+                    val artistsState by viewModel.artists.collectAsState(initial = UiState.Success(emptyList()))
+                    val selectedArtist = selectedArtistName?.let { name ->
+                        artistsState.dataOrNull()?.find { it.name == name }
+                    }
                     if (selectedArtistName != null) {
                         ArtistDetailScreen(
+                            artist = selectedArtist,
                             artistName = selectedArtistName!!,
                             songs = artistSongs,
                             onPlaySong = { song ->

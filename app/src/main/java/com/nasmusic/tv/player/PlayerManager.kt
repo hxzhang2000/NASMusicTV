@@ -25,7 +25,10 @@ class PlayerManager() {
     private val progressUpdateRunnable = object : Runnable {
         override fun run() {
             player?.let { p ->
-                _progress.value = p.currentPosition
+                // seek 期间不更新进度，防止 ExoPlayer 内部重置位置时覆盖 _progress
+                if (!seekPending) {
+                    _progress.value = p.currentPosition
+                }
                 val dur = p.duration
                 if (dur > 0) _duration.value = dur
             }
@@ -60,8 +63,17 @@ class PlayerManager() {
     // 随机播放历史记录，避免连续重复
     private val shuffleHistory = mutableListOf<Int>()
 
+    // seek 状态标志：seekTo 后置为 true，onPositionDiscontinuity(reason=SEEK) 后置为 false
+    // 用于防止 progressHandler 在 ExoPlayer 内部重置位置时覆盖 _progress
+    private var seekPending = false
+
     private val playerListener = object : Player.Listener {
         override fun onIsPlayingChanged(isPlaying: Boolean) {
+            // seek 期间忽略播放状态变化，防止播放按钮闪烁
+            if (seekPending) {
+                android.util.Log.d("NASMusic", "playerListener: onIsPlayingChanged=$isPlaying ignored (seekPending)")
+                return
+            }
             _isPlaying.value = isPlaying
             if (isPlaying) {
                 progressHandler.post(progressUpdateRunnable)
@@ -253,8 +265,15 @@ class PlayerManager() {
 
     fun seekTo(positionMs: Long) {
         AppLog.d("NASMusic", "seekTo: position=$positionMs, player=${player != null}, state=${player?.playbackState}")
+        seekPending = true
         player?.seekTo(positionMs)
         _progress.value = positionMs
+        android.util.Log.d("NASMusic", "seekTo: after seek, player.currentPosition=${player?.currentPosition}, seekPending=$seekPending")
+        // 2 秒后自动清除 seekPending，防止永久阻塞进度更新
+        progressHandler.postDelayed({
+            android.util.Log.d("NASMusic", "seekTo: timeout, seekPending=false, player.currentPosition=${player?.currentPosition}")
+            seekPending = false
+        }, 2000)
     }
 
     /**

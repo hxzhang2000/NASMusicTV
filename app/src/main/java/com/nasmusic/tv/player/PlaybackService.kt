@@ -61,8 +61,18 @@ class PlaybackService : MediaLibraryService() {
             .setUsage(C.USAGE_MEDIA)
             .build()
 
+        // 启用 MP3 seek 支持（解决 HTTP 流 seek 后重置到 0 的问题）
+        // FLAG_ENABLE_INDEX_SEEKING: 为 VBR MP3 建立时间-字节映射索引
+        // FLAG_ENABLE_CONSTANT_BITRATE_SEEKING: 假设 CBR MP3 可通过固定码率计算偏移
+        val extractorsFactory = androidx.media3.extractor.DefaultExtractorsFactory()
+            .setMp3ExtractorFlags(
+                androidx.media3.extractor.mp3.Mp3Extractor.FLAG_ENABLE_INDEX_SEEKING or
+                androidx.media3.extractor.mp3.Mp3Extractor.FLAG_ENABLE_CONSTANT_BITRATE_SEEKING
+            )
+        val mediaSourceFactory = androidx.media3.exoplayer.source.DefaultMediaSourceFactory(this, extractorsFactory)
+
         val player = ExoPlayer.Builder(this)
-            .setMediaSourceFactory(DefaultMediaSourceFactory(this))
+            .setMediaSourceFactory(mediaSourceFactory)
             .setAudioAttributes(audioAttributes, true)
             .setHandleAudioBecomingNoisy(true)
             .build()

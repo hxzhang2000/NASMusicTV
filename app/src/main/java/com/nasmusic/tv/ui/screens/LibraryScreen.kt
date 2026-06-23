@@ -145,8 +145,8 @@ fun LibraryScreen(
     // ARTISTS Tab：使用独立 API 加载的艺术家列表
     val filteredArtists by remember(filterQuery, artists) {
         derivedStateOf {
-            if (filterQuery.isBlank()) artists.map { it.name }
-            else artists.map { it.name }.filter { PinyinUtils.matches(it, filterQuery) }
+            if (filterQuery.isBlank()) artists
+            else artists.filter { PinyinUtils.matches(it.name, filterQuery) }
         }
     }
 
@@ -331,14 +331,14 @@ private fun AlbumsTab(
 
 @Composable
 private fun ArtistsTab(
-    artists: List<String>,
+    artists: List<Artist>,
     artistSongsMap: Map<String, List<Song>> = emptyMap(),
     onPlaySongs: (List<Song>) -> Unit,
     onOpenArtistDetail: ((String) -> Unit)? = null
 ) {
     Column {
         Text(
-            text = "歌唱家 (${artists.size})",
+            text = "艺术家 (${artists.size})",
             color = NasMusicColors.TextPrimary,
             fontSize = 18.sp,
             modifier = Modifier.padding(bottom = 12.dp)
@@ -349,17 +349,18 @@ private fun ArtistsTab(
             horizontalArrangement = Arrangement.spacedBy(10.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            items(artists, key = { it }) { artist ->
-                val artistSongs = artistSongsMap[artist]
+            items(artists, key = { it.id }) { artist ->
+                val artistSongs = artistSongsMap[artist.name]
                     ?: emptyList()
                 val songCount = artistSongs.size
                 ArtistCard(
-                    artist = artist,
+                    artist = artist.name,
+                    coverUrl = artist.coverUrl,
                     songCount = songCount,
                     onClick = {
                         // 点击打开详情页，如果没有详情回调则直接播放
                         if (onOpenArtistDetail != null) {
-                            onOpenArtistDetail(artist)
+                            onOpenArtistDetail(artist.name)
                         } else if (artistSongs.isNotEmpty()) {
                             onPlaySongs(artistSongs)
                         }
@@ -734,7 +735,7 @@ fun AlbumCard(album: Album, onClick: () -> Unit, onPlay: (() -> Unit)? = null) {
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
-private fun ArtistCard(artist: String, songCount: Int, onClick: () -> Unit, onPlay: (() -> Unit)? = null) {
+private fun ArtistCard(artist: String, coverUrl: String? = null, songCount: Int, onClick: () -> Unit, onPlay: (() -> Unit)? = null) {
     FocusableSurface(
         onClick = onClick,
         modifier = Modifier.fillMaxWidth(),
@@ -758,11 +759,19 @@ private fun ArtistCard(artist: String, songCount: Int, onClick: () -> Unit, onPl
                     .background(NasMusicColors.Primary.copy(alpha = 0.2f)),
                 contentAlignment = Alignment.Center
             ) {
-                Text(
-                    text = artist.firstOrNull()?.uppercase() ?: "?",
-                    color = NasMusicColors.Primary,
-                    fontSize = 20.sp
-                )
+                if (coverUrl != null) {
+                    AsyncImage(
+                        model = coverUrl,
+                        contentDescription = artist,
+                        modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(24.dp))
+                    )
+                } else {
+                    Text(
+                        text = artist.firstOrNull()?.uppercase() ?: "?",
+                        color = NasMusicColors.Primary,
+                        fontSize = 20.sp
+                    )
+                }
             }
             Spacer(modifier = Modifier.height(6.dp))
             Text(text = artist, color = NasMusicColors.TextPrimary, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)

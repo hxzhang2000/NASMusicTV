@@ -170,61 +170,62 @@ fun QueueScreen(
                     itemsIndexed(queue, key = { _, song -> song.id }) { index, song ->
                         val isCurrent = index == currentIndex
                         var isFocused by remember { mutableStateOf(false) }
-                        FocusableSurface(
-                            onClick = { onPlaySong(index) },
+                        // 整行容器：歌曲条目 + 操作按钮（按钮为 FocusableSurface 的兄弟级）
+                        Row(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(vertical = 4.dp),
-                            shape = RoundedCornerShape(8.dp),
-                            focusedScale = 1.03f,
-                            animationDurationMs = 250,
-                            containerColor = if (isCurrent) NasMusicColors.Primary.copy(alpha = 0.2f) else NasMusicColors.Surface,
-                            contentColor = if (isCurrent) NasMusicColors.Primary else NasMusicColors.TextPrimary,
-                            focusedContainerColor = if (isCurrent) NasMusicColors.Primary.copy(alpha = 0.3f) else NasMusicColors.Primary.copy(alpha = 0.2f),
-                            focusedContentColor = if (isCurrent) Color.Black else NasMusicColors.TextPrimary,
-                            pressedScale = 0.97f,
-                            focusBorderColor = NasMusicColors.FocusRing.copy(alpha = 0.6f),
-                            onFocusChanged = { isFocused = it }
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Row(
+                            // 歌曲条目（可聚焦，点击播放）
+                            FocusableSurface(
+                                onClick = { onPlaySong(index) },
                                 modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 20.dp, vertical = 14.dp)
-                                    .clip(RoundedCornerShape(8.dp))
-                                    .background(
-                                        when {
-                                            isFocused -> NasMusicColors.Primary.copy(alpha = 0.3f)
-                                            isCurrent -> NasMusicColors.Primary.copy(alpha = 0.15f)
-                                            else -> Color.Transparent
-                                        }
-                                    )
-                                    .padding(horizontal = 8.dp, vertical = 4.dp),
-                                verticalAlignment = Alignment.CenterVertically
+                                    .weight(1f),
+                                shape = RoundedCornerShape(8.dp),
+                                focusedScale = 1.03f,
+                                animationDurationMs = 250,
+                                containerColor = if (isCurrent) NasMusicColors.Primary.copy(alpha = 0.2f) else NasMusicColors.Surface,
+                                contentColor = if (isCurrent) NasMusicColors.Primary else NasMusicColors.TextPrimary,
+                                focusedContainerColor = if (isCurrent) NasMusicColors.Primary.copy(alpha = 0.3f) else NasMusicColors.Primary.copy(alpha = 0.2f),
+                                focusedContentColor = if (isCurrent) Color.Black else NasMusicColors.TextPrimary,
+                                pressedScale = 0.97f,
+                                focusBorderColor = NasMusicColors.FocusRing.copy(alpha = 0.6f),
+                                onFocusChanged = { isFocused = it }
                             ) {
-                                Text(
-                                    text = String.format("%02d", index + 1),
-                                    color = if (isCurrent) NasMusicColors.Primary else NasMusicColors.TextSecondary,
-                                    fontSize = 16.sp,
-                                    modifier = Modifier.width(40.dp),
-                                    textAlign = TextAlign.Center
-                                )
-                                Spacer(modifier = Modifier.width(12.dp))
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(text = song.title, color = if (isCurrent) NasMusicColors.Primary else NasMusicColors.TextPrimary, fontSize = 16.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                    Text(text = song.artist.ifBlank { "—" }, color = NasMusicColors.TextSecondary, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                }
-                                Spacer(modifier = Modifier.width(12.dp))
-                                Text(text = TimeUtils.formatDuration(song.durationMs), color = NasMusicColors.TextSecondary, fontSize = 14.sp)
-                                // 上下移动按钮
-                                if (index > 0) {
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    MoveButton(text = "↑", onClick = { onMoveItem(index, index - 1) })
-                                }
-                                if (index < queue.lastIndex) {
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    MoveButton(text = "↓", onClick = { onMoveItem(index, index + 1) })
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 20.dp, vertical = 14.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = String.format("%02d", index + 1),
+                                        color = if (isCurrent) NasMusicColors.Primary else NasMusicColors.TextSecondary,
+                                        fontSize = 16.sp,
+                                        modifier = Modifier.width(40.dp),
+                                        textAlign = TextAlign.Center
+                                    )
+                                    Spacer(modifier = Modifier.width(12.dp))
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(text = song.title, color = if (isCurrent) NasMusicColors.Primary else NasMusicColors.TextPrimary, fontSize = 16.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                        Text(text = song.artist.ifBlank { "—" }, color = NasMusicColors.TextSecondary, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                    }
+                                    Spacer(modifier = Modifier.width(12.dp))
+                                    Text(text = TimeUtils.formatDuration(song.durationMs), color = NasMusicColors.TextSecondary, fontSize = 14.sp)
                                 }
                             }
+                            // 操作按钮（兄弟级，可聚焦）
+                            if (index > 0) {
+                                Spacer(modifier = Modifier.width(4.dp))
+                                MoveButton(text = "↑", onClick = { onMoveItem(index, index - 1) })
+                            }
+                            if (index < queue.lastIndex) {
+                                Spacer(modifier = Modifier.width(4.dp))
+                                MoveButton(text = "↓", onClick = { onMoveItem(index, index + 1) })
+                            }
+                            Spacer(modifier = Modifier.width(4.dp))
+                            MoveButton(text = "✕", onClick = { onRemoveSong(index) })
                         }
                     }
                 }

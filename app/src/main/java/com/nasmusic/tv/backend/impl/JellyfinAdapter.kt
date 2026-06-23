@@ -171,6 +171,7 @@ class JellyfinAdapter : BackendAdapter {
             val url = "$baseUrl/Artists/AlbumArtists?" +
                     "UserId=$userId&" +
                     "SortBy=SortName&SortOrder=Ascending&" +
+                    "Fields=ImageTags&" +
                     "StartIndex=0&Limit=1000"
 
             val json = executeJsonRequest(url) ?: return@withContext emptyList<Artist>()
@@ -180,10 +181,11 @@ class JellyfinAdapter : BackendAdapter {
                 val id = obj.get("Id")?.asString ?: return@mapNotNull null
                 val rawName = obj.get("Name")?.asString
                 val name = EncodingUtils.fixEncoding(rawName) ?: "Unknown Artist"
-                // 调试：确认 utf8Body 修复是否生效
-                android.util.Log.d("NASMusic", "getArtists: raw='${rawName?.take(30)}' fixed='${name.take(30)}'")
                 val imageTag = obj.get("ImageTags")?.asJsonObject?.get("Primary")?.asString
-                Artist(id = id, name = name, coverUrl = buildCoverUrl(id, imageTag) ?: getCoverUrl(id))
+                val coverUrl = buildCoverUrl(id, imageTag) ?: getCoverUrl(id)
+                // 记录图片标签信息
+                android.util.Log.d("NASMusic", "getArtists: name='${name.take(20)}' imageTag=$imageTag coverUrl=${coverUrl?.take(80)}")
+                Artist(id = id, name = name, coverUrl = coverUrl)
             }
         } catch (e: Exception) {
             android.util.Log.e("JellyfinAdapter", "getArtists failed", e)

@@ -2825,6 +2825,160 @@ val totalCount = adapter.getSongsTotalCount()
 
 ---
 
+#### 10.10.12 MP3 流 Seek 修复
+
+**日期**：2026-06-22
+
+**问题**：进度条 seek 后，播放位置立即跳回 0。ExoPlayer 默认不支持 VBR MP3 流的 seek，导致 `player.seekTo()` 无效，音频从头重新播放。
+
+**根因**：Jellyfin 返回的 MP3 流不支持 HTTP Range 请求，ExoPlayer 将其视为不可 seek 的流。调用 `seekTo()` 后，ExoPlayer 内部触发 `onPositionDiscontinuity(reason=SEEK_ADJUSTMENT)` 重置位置到 0。
+
+**修改**：
+
+| 文件 | 改动 |
+|------|------|
+| `player/PlaybackService.kt` | 启用 `FLAG_ENABLE_INDEX_SEEKING` 和 `FLAG_ENABLE_CONSTANT_BITRATE_SEEKING`，让 ExoPlayer 为 MP3 建立时间-字节映射索引 |
+| `player/PlayerManager.kt` | 添加 `seekPending` 标志，seek 后 2 秒内阻止 Handler 覆盖进度；`onPositionDiscontinuity` 仅在 `reason=SEEK` 时更新进度 |
+
+**技术细节**：
+```kotlin
+// PlaybackService.kt - 启用 MP3 seek 支持
+val extractorsFactory = DefaultExtractorsFactory()
+    .setMp3ExtractorFlags(
+        Mp3Extractor.FLAG_ENABLE_INDEX_SEEKING or
+        Mp3Extractor.FLAG_ENABLE_CONSTANT_BITRATE_SEEKING
+    )
+val mediaSourceFactory = DefaultMediaSourceFactory(this, extractorsFactory)
+```
+
+```kotlin
+// PlayerManager.kt - seek 期间保护进度不被覆盖
+private var seekPending = false
+
+fun seekTo(positionMs: Long) {
+    seekPending = true
+    player?.seekTo(positionMs)
+    _progress.value = positionMs
+    progressHandler.postDelayed({ seekPending = false }, 2000)
+}
+
+// progressUpdateRunnable 中：
+if (!seekPending) {
+    _progress.value = p.currentPosition
+}
+```
+
+**验证**：✅ 模拟器测试通过，进度条 seek 后保持正确位置，不跳回 0。
+
+---
+
+#### 10.10.13 进度条 OK 键误触发 seek
+
+**日期**：2026-06-22
+
+**问题**：焦点在进度条上按 OK 键时，会跳转到歌曲中间位置（`durationMs / 2`），而不是触发播放/暂停。
+
+**根因**：`ProgressSection` 中 `Surface` 的 `onClick` 绑定了 `onSeek(durationMs / 2)`，在 TV 遥控器上按 OK 键会触发此 onClick。
+
+**修改**：
+
+| 文件 | 改动 |
+|------|------|
+| `ui/components/PlayerControls.kt` | 移除进度条 Surface 的 onClick 逻辑，改为不响应 OK 键 |
+
+**验证**：✅ 焦点在进度条上按 OK 键不再跳转，播放/暂停功能正常。
+
+---
+
+#### 10.10.14 艺术家详情页歌曲列表修复
+
+**日期**：2026-06-22
+
+**问题**：进入艺术家详情页后无法显示歌曲列表，因为 `artistSongsMap` 是从已加载歌曲增量构建的，只加载了部分歌曲。
+
+**根因**：`openArtistDetail()` 只设置艺术家名称并导航，没有触发歌曲加载。`artistSongsMap` 仅包含已分页加载的歌曲数据。
+
+**修改**：
+
+| 文件 | 改动 |
+|------|------|
+| `ui/viewmodel/MainViewModel.kt` | 新增 `loadArtistSongs()` 方法，按需从后端 API 加载艺术家歌曲；新增 `artistDetailSongsCache` StateFlow |
+| `ui/components/AppRoot.kt` | ArtistDetail 屏幕使用 `artistDetailSongsCache` 替代 `artistSongsMap` |
+
+**验证**：✅ 艺术家详情页正确显示所有歌曲，"播放全部"功能正常。
+
+---
+
+#### 10.10.15 艺术家封面图片显示
+
+**日期**：2026-06-22
+
+**问题**：艺术家列表和详情页不显示封面图片，只显示首字母占位符。
+
+**根因**：
+1. `getArtists()` API 请求缺少 `Fields=ImageTags` 参数，导致 Jellyfin 不返回图片标签
+2. `ArtistCard` 组件没有图片加载代码
+3. `ArtistDetailScreen` 没有接收 `Artist` 对象（只有名字字符串）
+
+**修改**：
+
+| 文件 | 改动 |
+|------|------|
+| `backend/impl/JellyfinAdapter.kt` | `getArtists()` 请求添加 `Fields=ImageTags` 参数 |
+| `ui/screens/LibraryScreen.kt` | `ArtistsTab` 改为接收 `List<Artist>`；`ArtistCard` 添加 `AsyncImage` 加载封面 |
+| `ui/screens/ArtistDetailScreen.kt` | 添加 `artist: Artist?` 参数，使用 `AsyncImage` 显示封面 |
+| `ui/components/AppRoot.kt` | 传递完整 `Artist` 对象到 ArtistDetailScreen |
+
+**验证**：✅ 艺术家列表和详情页均正确显示封面图片。
+
+---
+
+#### 10.10.16 播放按钮 seek 期间闪烁修复
+
+**日期**：2026-06-22
+
+**问题**：在进度条上按左右键 seek 时，播放/暂停按钮会短暂闪烁（状态切换）。
+
+**根因**：ExoPlayer 处理 seek 时会短暂触发 `onIsPlayingChanged(false)` 然后再触发 `onIsPlayingChanged(true)`，导致 `_isPlaying` 状态快速变化。
+
+**修改**：
+
+| 文件 | 改动 |
+|------|------|
+| `player/PlayerManager.kt` | `onIsPlayingChanged` 回调中检查 `seekPending` 标志，seek 期间忽略播放状态变化 |
+
+**验证**：✅ seek 期间播放按钮不再闪烁。
+
+---
+
+#### 10.10.17 编码修复增强（U+FFFD 检测）
+
+**日期**：2026-06-22
+
+**问题**：`EncodingUtils.fixEncoding()` 只处理末尾的 U+FFFD 和 Latin-1 范围字符，无法修复字符串中间出现的 U+FFFD（GBK 被当作 UTF-8 解码的情况）。
+
+**修改**：
+
+| 文件 | 改动 |
+|------|------|
+| `util/EncodingUtils.kt` | 新增第一步：检测字符串中任意位置的 U+FFFD，尝试将整个字符串按 ISO-8859-1 编码回字节，再用 GBK 重新解码 |
+
+**验证**：✅ 对 Latin-1 范围的乱码（如 `ÖìÕÜÇÙ`→`朱哲琴`）修复正确。Unicode 转义序列中的非 Latin-1 字符（如希腊/西里尔字母）无法修复，属 Jellyfin 服务端数据问题。
+
+---
+
+#### 10.10.18 UI 文本修正
+
+**日期**：2026-06-22
+
+**修改**：
+
+| 文件 | 改动 |
+|------|------|
+| `app/src/main/res/values/strings.xml` | `library_artists_alt` 从"歌唱家"改为"艺术家" |
+
+---
+
 ## 11. 回归测试文档
 
 > 完整的回归测试文档独立维护在 `docs/regression-test.md`，包含 19 章节 248 个测试项。
