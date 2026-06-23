@@ -2979,6 +2979,56 @@ if (!seekPending) {
 
 ---
 
+#### 10.10.19 自动切歌歌词加载
+
+**日期**：2026-06-22
+
+**问题**：当一首歌播放完毕自动切换到下一首时，歌词不会重新加载。
+
+**根因**：`loadLyricsForCurrentSong()` 仅在 `playSong()` 和 `playQueue()` 中调用。ExoPlayer 自动切歌时触发 `onMediaItemTransition` → `updateCurrentSongFromPlayer()` 更新 `currentSong`，但无人监听此变化来触发歌词加载。
+
+**修改**：
+
+| 文件 | 改动 |
+|------|------|
+| `ui/viewmodel/MainViewModel.kt` | `init` 中添加 `currentSong.collect { loadLyricsForCurrentSong() }`，统一由 StateFlow 监听触发；移除 `playSong()`/`playQueue()` 中的直接调用，避免重复 |
+
+**验证**：✅ 模拟器测试通过，自动切歌后歌词正确加载。
+
+---
+
+#### 10.10.20 艺术家分页加载
+
+**日期**：2026-06-22
+
+**问题**：`getArtists()` 限制 1000 个艺术家，曲库超过 1000 位艺术家时无法全部显示。
+
+**修改**：
+
+| 文件 | 改动 |
+|------|------|
+| `backend/impl/JellyfinAdapter.kt` | `getArtists()` 实现分页循环，每页 1000 个，直到返回数量小于 pageSize |
+
+**验证**：✅ 电视测试通过，艺术家数量超过 1000。
+
+---
+
+#### 10.10.21 退出时 Jellyfin Session 注销
+
+**日期**：2026-06-22
+
+**问题**：退出应用时 `Process.killProcess()` 立即杀死进程，`onDestroy()` 中的 `disconnect()` 协程来不及完成 HTTP 请求，Jellyfin 服务端 session 不会被注销。
+
+**修改**：
+
+| 文件 | 改动 |
+|------|------|
+| `ui/MainActivity.kt` | 退出确认回调中使用 `runBlocking { backendRegistry.disconnect() }` 同步等待注销完成后再 `killProcess()` |
+
+**验证**：✅ 编译通过，逻辑正确。
+
+---
+
 ## 11. 回归测试文档
 
 > 完整的回归测试文档独立维护在 `docs/regression-test.md`，包含 19 章节 248 个测试项。
