@@ -7,6 +7,34 @@
 >
 > 类型：`Added`（新增） | `Changed`（变更） | `Fixed`（修复） | `Removed`（移除）
 
+## [v2.3.0-dev] - 2026-06-22
+
+### Added
+
+- 回归测试执行：25 项通过 / 1 项缺陷 / 6 项跳过
+- 队列删除按钮：每首歌曲右侧添加 ✕ 按钮，焦点导航修复（按钮移至 FocusableSurface 外部）
+- 艺术家封面图片：`getArtists()` 添加 `Fields=ImageTags`，`ArtistCard`/`ArtistDetailScreen` 添加 `AsyncImage`
+- 歌词来源标签增强：后端/网络歌词同时获取，标签均亮起，点击切换来源
+
+### Fixed
+
+- MP3 流 seek 修复：启用 `FLAG_ENABLE_INDEX_SEEKING` + `FLAG_ENABLE_CONSTANT_BITRATE_SEEKING`，解决进度条跳回 0 的问题
+- seekPending 保护：seek 后 2 秒内阻止 progressHandler 覆盖进度
+- seek 期间播放按钮闪烁：`onIsPlayingChanged` 在 seekPending 期间跳过
+- 进度条 OK 键误触发：移除 Surface onClick，OK 键不再跳到歌曲中间
+- 专辑/艺术家详情页歌曲列表：响应式 StateFlow 按需加载
+- 编码修复增强：`EncodingUtils.fixEncoding()` 检测字符串中间的 U+FFFD，尝试 GBK 回退
+- 清空队列歌词未清除：`clearQueue()` 同时清除 `_currentLyrics`
+- 后端/网络歌词同时获取：`checkAvailability()` 不再跳过网络获取
+
+### Changed
+
+- "歌唱家"改名为"艺术家"（strings.xml + UI 标题）
+- 队列删除/移动按钮移至 `FocusableSurface` 外部（兄弟级），支持 D-Pad 焦点导航
+- `EncodingUtils.fixEncoding()` 新增 U+FFFD 检测逻辑，处理 GBK→UTF-8 误解码
+
+---
+
 ## [v2.2.0] - 2026-06-22
 
 ### Added
