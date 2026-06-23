@@ -95,16 +95,19 @@ class MainActivity : ComponentActivity() {
                                 onConfirm = {
                                     showExitConfirm.value = false
                                     val app = application as NasMusicApp
-                                    // 停止播放服务并释放播放器资源
+                                    // 释放播放器资源
                                     app.playerManager.release()
                                     stopService(Intent(this@MainActivity, PlaybackService::class.java))
-                                    // 结束所有 Activity
+                                    // 同步注销 Jellyfin session，确保 HTTP 请求完成后再杀进程
+                                    kotlinx.coroutines.runBlocking {
+                                        try {
+                                            app.backendRegistry.disconnect()
+                                            AppLog.d("MainActivity", "exit: backend disconnected")
+                                        } catch (e: Exception) {
+                                            android.util.Log.w("MainActivity", "exit: disconnect failed", e)
+                                        }
+                                    }
                                     finishAffinity()
-                                    // 强制终止进程
-                                    // OkHttp 默认使用非守护线程（isDaemon=false），
-                                    // 即使调用 shutdown() 也会阻止 JVM 退出，
-                                    // 导致 Android Studio stop 按钮一直亮。
-                                    // killProcess 确保所有线程立即终止。
                                     android.os.Process.killProcess(android.os.Process.myPid())
                                 },
                                 onDismiss = { showExitConfirm.value = false }

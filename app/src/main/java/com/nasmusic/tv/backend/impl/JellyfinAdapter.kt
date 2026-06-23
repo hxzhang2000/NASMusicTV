@@ -168,25 +168,37 @@ class JellyfinAdapter : BackendAdapter {
 
     override suspend fun getArtists(): List<Artist> = withContext(Dispatchers.IO) {
         try {
-            val url = "$baseUrl/Artists/AlbumArtists?" +
-                    "UserId=$userId&" +
-                    "SortBy=SortName&SortOrder=Ascending&" +
-                    "Fields=ImageTags&" +
-                    "StartIndex=0&Limit=1000"
+            val allArtists = mutableListOf<Artist>()
+            var startIndex = 0
+            val pageSize = 1000
 
-            val json = executeJsonRequest(url) ?: return@withContext emptyList<Artist>()
-            val items = json.getAsJsonArray("Items") ?: return@withContext emptyList<Artist>()
-            items.mapNotNull { item ->
-                val obj = item.asJsonObject
-                val id = obj.get("Id")?.asString ?: return@mapNotNull null
-                val rawName = obj.get("Name")?.asString
-                val name = EncodingUtils.fixEncoding(rawName) ?: "Unknown Artist"
-                val imageTag = obj.get("ImageTags")?.asJsonObject?.get("Primary")?.asString
-                val coverUrl = buildCoverUrl(id, imageTag) ?: getCoverUrl(id)
-                // 记录图片标签信息
-                android.util.Log.d("NASMusic", "getArtists: name='${name.take(20)}' imageTag=$imageTag coverUrl=${coverUrl?.take(80)}")
-                Artist(id = id, name = name, coverUrl = coverUrl)
+            while (true) {
+                val url = "$baseUrl/Artists/AlbumArtists?" +
+                        "UserId=$userId&" +
+                        "SortBy=SortName&SortOrder=Ascending&" +
+                        "Fields=ImageTags&" +
+                        "StartIndex=$startIndex&Limit=$pageSize"
+
+                val json = executeJsonRequest(url) ?: break
+                val items = json.getAsJsonArray("Items") ?: break
+
+                for (item in items) {
+                    val obj = item.asJsonObject
+                    val id = obj.get("Id")?.asString ?: continue
+                    val rawName = obj.get("Name")?.asString
+                    val name = EncodingUtils.fixEncoding(rawName) ?: "Unknown Artist"
+                    val imageTag = obj.get("ImageTags")?.asJsonObject?.get("Primary")?.asString
+                    val coverUrl = buildCoverUrl(id, imageTag) ?: getCoverUrl(id)
+                    allArtists.add(Artist(id = id, name = name, coverUrl = coverUrl))
+                }
+
+                // 如果返回数量小于 pageSize，说明已加载全部
+                if (items.size() < pageSize) break
+                startIndex += pageSize
             }
+
+            android.util.Log.d("NASMusic", "getArtists: total ${allArtists.size} artists loaded")
+            allArtists
         } catch (e: Exception) {
             android.util.Log.e("JellyfinAdapter", "getArtists failed", e)
             emptyList()
