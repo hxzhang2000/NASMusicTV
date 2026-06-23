@@ -26,6 +26,7 @@
 - 编码修复增强：`EncodingUtils.fixEncoding()` 检测字符串中间的 U+FFFD，尝试 GBK 回退
 - 清空队列歌词未清除：`clearQueue()` 同时清除 `_currentLyrics`
 - 后端/网络歌词同时获取：`checkAvailability()` 不再跳过网络获取
+- 自动切歌歌词加载：`currentSong.collect` 统一触发歌词加载，移除重复调用
 
 ### Changed
 

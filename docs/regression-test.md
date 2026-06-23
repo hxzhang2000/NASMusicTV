@@ -679,6 +679,7 @@ set JAVA_HOME=C:\Program Files\Android\Android Studio\jbr
 | RC-001 | ✅ Pass | |
 | RC-003 | ✅ Pass | |
 | ST-001 | ❌ Fail | 暗色主题开关无效 |
+| ST-003 | ✅ Pass | |
 | ST-004 | ✅ Pass | |
 | ST-009 | ⬜ Skipped | |
 | UI-001 | ✅ Pass | |

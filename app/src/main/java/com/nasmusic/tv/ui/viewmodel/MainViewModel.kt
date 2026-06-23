@@ -208,6 +208,15 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 _currentScreen.value = Screen.ServerConnect
             }
         }
+
+        // 监听 currentSong 变化，自动切歌时重新加载歌词
+        viewModelScope.launch {
+            currentSong.collect { song ->
+                if (song != null) {
+                    loadLyricsForCurrentSong()
+                }
+            }
+        }
     }
 
     // --- 导航 ---
@@ -761,7 +770,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun playSong(song: Song) {
         AppLog.d("NASMusic", "playSong: ${song.title}, coverUrl=${song.coverUrl ?: "null"}")
         playerManager.playSong(song)
-        loadLyricsForCurrentSong()
+        // 歌词由 currentSong.collect 统一触发，避免重复调用
         recordPlay(song)
     }
 
@@ -770,7 +779,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         val firstSong = songs[startIndex.coerceIn(0, songs.lastIndex)]
         AppLog.d("NASMusic", "playQueue: ${songs.size} songs, start=$startIndex, first=${firstSong.title}, coverUrl=${firstSong.coverUrl ?: "null"}")
         playerManager.playQueue(songs, startIndex)
-        loadLyricsForCurrentSong()
+        // 歌词由 currentSong.collect 统一触发，避免重复调用
         recordPlay(firstSong)
     }
 
