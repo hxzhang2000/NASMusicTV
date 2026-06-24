@@ -278,6 +278,26 @@ private fun CoverColumn(
             }
         }
 
+        // 网络歌曲来源标识
+        if (currentSong?.isNetworkSong == true) {
+            Spacer(modifier = Modifier.height(4.dp))
+            Box(
+                modifier = Modifier
+                    .background(
+                        NasMusicColors.Primary.copy(alpha = 0.2f),
+                        RoundedCornerShape(4.dp)
+                    )
+                    .padding(horizontal = 8.dp, vertical = 2.dp)
+            ) {
+                Text(
+                    text = "NET",
+                    color = NasMusicColors.Primary,
+                    fontSize = 10.sp,
+                    textAlign = TextAlign.Center
+                )
+            }
+        }
+
         // Task 3: 专辑名移至封面图上方
         if (!currentSong?.album.isNullOrBlank()) {
             Spacer(modifier = Modifier.height(6.dp))

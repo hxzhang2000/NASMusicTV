@@ -7,7 +7,7 @@
 >
 > 类型：`Added`（新增） | `Changed`（变更） | `Fixed`（修复） | `Removed`（移除）
 
-## [v2.3.0-dev] - 2026-06-24
+## [v2.4.0] - 2026-06-25
 
 ### Added
 
@@ -16,6 +16,25 @@
 - 艺术家封面图片：`getArtists()` 添加 `Fields=ImageTags`，`ArtistCard`/`ArtistDetailScreen` 添加 `AsyncImage`
 - 歌词来源标签增强：后端/网络歌词同时获取，标签均亮起，点击切换来源
 - 拼音搜索（TinyPinyin）：重写 `PinyinUtils` 使用 `com.github.promeg:tinypinyin:2.0.3`，兼容 API 22+
+- 网络音乐搜索（Meting-API）：独立于 NAS 后端的在线歌曲搜索，支持网易云源
+- 网络歌曲播放：302 重定向解析真实 mp3 URL，播放链接实时解析不缓存
+- 网络歌词获取：Meting-API lrc 端点返回 LRC 文本，失败回退到 LyricsNetworkProvider
+- 网络封面显示：Coil 自动跟随 302 重定向，无需额外解析
+- 网络歌曲收藏：DataStore + Gson 持久化，NetworkFavoriteItem 数据类，收藏列表展示
+- 收藏按钮通用化：FavoriteButton 组件（Box + focusable + clickable），本地/网络收藏共用
+- 全局收藏按钮：所有歌曲列表页面（SongsTab、RecentTab、AlbumDetailScreen、ArtistDetailScreen、FavoritesTab）统一添加收藏按钮
+- Meting-API 端点选择器：设置页 NETWORK 分区，3 个预设端点（Mikus/Redcha/Qijieya）+ 自定义输入
+- 搜索端点自动 fallback：当前端点失败/无结果时自动尝试其他预设端点，用户无感切换
+- 搜索输入支持中文：TextInputDialog 新增「中文输入」按钮，切换系统 IME 输入中文
+- 搜索状态持久化：搜索关键词移至 ViewModel StateFlow，跨页面导航保留搜索结果
+- 加入队列功能：所有歌曲列表页面的 SongRow 添加队列切换按钮（亮/暗状态）
+- 诊断日志体系：MetingDiag TAG 全链路日志，Release 包可见，便于网络问题排查
+- 播放队列持久化：DataStore 保存上次播放队列（streamUrl 置空避免过期链接），应用启动自动恢复队列和当前索引（不自动播放）
+- 网络歌曲播放链接缓存：NetworkMusicManager 5 分钟 TTL 缓存，避免短时间内重复请求解析
+- 网络收藏 LRU 上限：最多 500 条，超出自动清理最旧收藏，防止 DataStore 膨胀
+- NowPlayingScreen 网络歌曲来源标识：标题下方显示 "NET" 标签
+- 歌词来源标签文案优化："网络匹配" → "在线歌词"
+- LyricsNetworkProvider 改造：OkHttp 使用守护线程池（`LyricsNetwork-OkHttp`），日志切换为 AppLog，JSON 解析迁移到 Gson
 
 ### Fixed
 
@@ -30,12 +49,34 @@
 - 自动切歌歌词加载：`currentSong.collect` 统一触发歌词加载，移除重复调用
 - 艺术家分页加载：取消 1000 个艺术家限制，支持分页获取全部
 - 退出时 Jellyfin session 注销：`runBlocking` 确保 HTTP 请求完成后再杀进程
+- Meting-API 字段映射错误：`parseSongs()` 兼容 `title`/`author`（Mikus/Redcha）和 `name`/`artist`（Qijieya）两套字段名
+- SSL 证书信任失败：老 TV 设备缺少 Let's Encrypt 根 CA，新增信任所有证书的 TrustManager + 宽松 HostnameVerifier
+- API base URL 包含反引号：`baseUrl` getter 和 `setMetingApiBaseUrl()` 清理反引号/引号/空格
+- 收藏页面 NAS 歌曲无收藏按钮：FavoritesTab 的 NAS 歌曲 `onToggleFavorite` 从 `null` 改为可取消收藏
+- 收藏页面依赖 NAS 连接：FAVORITES Tab 与 NETWORK Tab 同等处理，不依赖 NAS 连接状态，始终可用
+- 收藏的网络歌曲不在收藏列表：FavoritesTab 合并本地收藏 + 网络收藏
+- NowPlayingScreen 网络歌曲收藏按钮无效：`toggleFavorite`/`isFavorite` 增加 `isNetworkSong` 分支路由
+- 队列按钮无法聚焦：QueueToggleButton 从嵌套 Surface 改为 Box + focusable + clickable 独立焦点节点
+- 队列页面样式不统一：QueueScreen 歌曲行统一为 SongRow 的紧凑样式 + 焦点行为
+- 网络搜索输入框被列表覆盖：TextInputDialog 内容包裹到 `Dialog`（系统级窗口），确保显示在歌曲列表之上
+- TextInputDialog BACK 键失效：Dialog 拦截 BACK 事件，改用 Compose `BackHandler` 在 Dialog 内部处理（先隐藏系统 IME，再关闭对话框）
+- 网络歌曲标题/作者编码乱码：`MetingApiService.parseSongs()` 对 title/author 字段调用 `EncodingUtils.fixEncoding()`，解决 GBK/Latin-1 误解码
+- 恢复队列后无法播放：`PlayerManager.restoreQueue()` 原先只更新 UI 状态，未加载 MediaItems 到 ExoPlayer；改为调用 `setMediaItems` + `prepare()`（不 play），并在 `playPause()`/`next()`/`previous()` 中检测 streamUrl 为空时先解析再播放
+- 恢复队列后网络歌曲无法播放：`restoreQueue` 为空 streamUrl 歌曲创建空 URI MediaItem，ExoPlayer prepare 出错并触发 `onPlayerError` 级联跳歌；改为当前歌曲 streamUrl 为空时跳过 prepare，由 `resolveAndPlayCurrentSong()` 在用户按播放时解析
+- 自动切歌到网络歌曲播放失败：ExoPlayer 自动过渡（`MEDIA_ITEM_TRANSITION_REASON_AUTO`）到 streamUrl 为空的歌曲会出错；`onMediaItemTransition` 拦截此场景，暂停并触发 `onNeedResolveStreamUrl` 回调，由 MainViewModel 解析 streamUrl 后重新播放
+- `onPlayerError` 级联跳歌：当前歌曲 streamUrl 为空时不自动跳下一首，避免下一首也可能为空导致循环错误
+- 歌词加载误报"加载歌词失败"：`loadLyricsForCurrentSong` 的 `catch (e: Exception)` 错误捕获了协程 `CancellationException`（切歌时 `lyricsLoadJob.cancel()` 触发）；新增 `catch (CancellationException) { throw e }` 重新抛出取消异常，不当作错误提示
 
 ### Changed
 
 - "歌唱家"改名为"艺术家"（strings.xml + UI 标题）
 - 队列删除/移动按钮移至 `FocusableSurface` 外部（兄弟级），支持 D-Pad 焦点导航
 - `EncodingUtils.fixEncoding()` 新增 U+FFFD 检测逻辑，处理 GBK→UTF-8 误解码
+- SongRow 焦点架构重构：Box(focusGroup) + 兄弟级 Row(weight(1f)+clickable) + Box(focusable+clickable)，解决嵌套焦点问题
+- 收藏页面 NAS 歌曲也可取消收藏（原方案仅网络歌曲可取消）
+- Phase 3 方案调整：从"多源（AlAPI/JioSaavn）"调整为"多端点 fallback"，Meting 3 端点已足够容错
+- 队列持久化策略：streamUrl 字段不持久化（时效性链接），NAS 歌曲在后端连接后通过 `adapter.getSongsByIds()` 刷新，网络歌曲在播放时由 `resolvePlayUrl()` 实时解析
+- 清空队列同步清除持久化数据：`clearQueue()` 调用 `prefs.clearLastQueue()` 维持状态一致
 
 ---
 

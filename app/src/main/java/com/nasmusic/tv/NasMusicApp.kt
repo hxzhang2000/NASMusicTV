@@ -2,6 +2,8 @@ package com.nasmusic.tv
 
 import android.app.Application
 import com.nasmusic.tv.backend.BackendRegistry
+import com.nasmusic.tv.backend.network.MetingApiService
+import com.nasmusic.tv.backend.network.NetworkMusicManager
 import com.nasmusic.tv.data.prefs.AppPreferences
 import com.nasmusic.tv.player.PlayerManager
 import kotlinx.coroutines.CoroutineScope
@@ -20,6 +22,8 @@ class NasMusicApp : Application() {
         private set
     lateinit var playerManager: PlayerManager
         private set
+    lateinit var networkMusicManager: NetworkMusicManager
+        private set
 
     /**
      * 应用级协程作用域，用于 onDestroy 等生命周期之后的异步操作
@@ -33,6 +37,16 @@ class NasMusicApp : Application() {
         appPreferences = AppPreferences(this)
         backendRegistry = BackendRegistry()
         playerManager = PlayerManager()
+        // 网络音乐管理器：注册所有网络源，默认源与 Meting 端点均由 AppSettings 动态提供
+        val services = mapOf(
+            "meting" to MetingApiService(
+                baseUrlProvider = { appPreferences.getMetingApiBaseUrlSync() }
+            )
+        )
+        networkMusicManager = NetworkMusicManager(
+            services = services,
+            defaultSourceProvider = { appPreferences.getDefaultNetworkSourceSync() }
+        )
     }
 
     companion object {

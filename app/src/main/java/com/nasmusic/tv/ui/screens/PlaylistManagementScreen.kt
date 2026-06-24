@@ -14,7 +14,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -22,11 +23,14 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import com.nasmusic.tv.ui.LocalDialogBackHandler
+import com.nasmusic.tv.ui.LocalListBackHandler
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
@@ -64,6 +68,44 @@ fun PlaylistManagementScreen(
     modifier: Modifier = Modifier
 ) {
     var showCreateDialog by remember { mutableStateOf(false) }
+
+    val playlistListState = rememberLazyListState()
+    val playlistFirstFocusRequester = remember { FocusRequester() }
+    val songsListState = rememberLazyListState()
+    val songsFirstFocusRequester = remember { FocusRequester() }
+    val scope = rememberCoroutineScope()
+    val listBackHandler = LocalListBackHandler.current
+
+    // Level 1.5: 任意列表已滚动时按 BACK 先回顶并聚焦第一个
+    DisposableEffect(Unit) {
+        val handler: () -> Boolean = {
+            val leftScrolled = !(playlistListState.firstVisibleItemIndex == 0 &&
+                    playlistListState.firstVisibleItemScrollOffset == 0)
+            val rightScrolled = !(songsListState.firstVisibleItemIndex == 0 &&
+                    songsListState.firstVisibleItemScrollOffset == 0)
+            if (leftScrolled || rightScrolled) {
+                scope.launch {
+                    if (leftScrolled) {
+                        playlistListState.scrollToItem(0)
+                    }
+                    if (rightScrolled) {
+                        songsListState.scrollToItem(0)
+                    }
+                    // 优先聚焦右侧歌曲列表，其次左侧播放列表
+                    if (rightScrolled) {
+                        runCatching { songsFirstFocusRequester.requestFocus() }
+                    } else {
+                        runCatching { playlistFirstFocusRequester.requestFocus() }
+                    }
+                }
+                true
+            } else {
+                false
+            }
+        }
+        listBackHandler.value = handler
+        onDispose { listBackHandler.value = null }
+    }
 
     Box(modifier = modifier.fillMaxSize()) {
         Column(
@@ -115,9 +157,10 @@ fun PlaylistManagementScreen(
                     }
                 } else {
                     LazyColumn(
+                        state = playlistListState,
                         verticalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
-                        items(playlists, key = { it.id }) { playlist ->
+                        itemsIndexed(playlists, key = { _, it -> it.id }) { index, playlist ->
                             FocusableSurface(
                                 onClick = { onSelectPlaylist(playlist) },
                                 modifier = Modifier.fillMaxWidth(),
@@ -127,7 +170,8 @@ fun PlaylistManagementScreen(
                                 containerColor = NasMusicColors.Surface.copy(alpha = 0.5f),
                                 contentColor = NasMusicColors.TextPrimary,
                                 focusedContainerColor = NasMusicColors.Primary.copy(alpha = 0.2f),
-                                pressedScale = 0.98f
+                                pressedScale = 0.98f,
+                                focusRequester = if (index == 0) playlistFirstFocusRequester else null
                             ) {
                                 Row(
                                     modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 10.dp),
@@ -195,9 +239,10 @@ fun PlaylistManagementScreen(
                     }
                 } else {
                     LazyColumn(
+                        state = songsListState,
                         verticalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
-                        items(selectedPlaylistSongs, key = { it.id }) { song ->
+                        itemsIndexed(selectedPlaylistSongs, key = { _, it -> it.id }) { index, song ->
                             FocusableSurface(
                                 onClick = { onRemoveSong(song.id) },
                                 modifier = Modifier.fillMaxWidth(),
@@ -210,7 +255,8 @@ fun PlaylistManagementScreen(
                                 focusedContentColor = Color.Black,
                                 pressedContainerColor = NasMusicColors.SurfaceVariant,
                                 pressedScale = 0.98f,
-                                focusBorderColor = NasMusicColors.FocusRing.copy(alpha = 0.6f)
+                                focusBorderColor = NasMusicColors.FocusRing.copy(alpha = 0.6f),
+                                focusRequester = if (index == 0) songsFirstFocusRequester else null
                             ) {
                                 Row(
                                     modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),

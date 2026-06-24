@@ -1,6 +1,12 @@
 package com.nasmusic.tv.ui.screens
 
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.focusGroup
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -17,6 +23,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -27,13 +34,19 @@ import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
@@ -46,6 +59,7 @@ import androidx.tv.material3.Text
 import coil.compose.AsyncImage
 import com.nasmusic.tv.data.model.PlayMode
 import com.nasmusic.tv.data.model.Song
+import com.nasmusic.tv.ui.LocalListBackHandler
 import com.nasmusic.tv.ui.components.FocusableSurface
 import com.nasmusic.tv.ui.theme.NasMusicBrushes
 import com.nasmusic.tv.ui.theme.NasMusicColors
@@ -73,6 +87,30 @@ fun QueueScreen(
     onPrevious: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val listState = rememberLazyListState()
+    val firstItemFocusRequester = remember { FocusRequester() }
+    val scope = rememberCoroutineScope()
+    val listBackHandler = LocalListBackHandler.current
+
+    // Level 1.5: 队列列表已滚动时按 BACK 先回顶并聚焦第一个
+    DisposableEffect(Unit) {
+        val handler: () -> Boolean = {
+            val atTop = listState.firstVisibleItemIndex == 0 &&
+                    listState.firstVisibleItemScrollOffset == 0
+            if (!atTop) {
+                scope.launch {
+                    listState.scrollToItem(0)
+                    runCatching { firstItemFocusRequester.requestFocus() }
+                }
+                true
+            } else {
+                false
+            }
+        }
+        listBackHandler.value = handler
+        onDispose { listBackHandler.value = null }
+    }
+
     Row(modifier = modifier.fillMaxSize().padding(32.dp)) {
         // --- 左侧：当前播放卡片（bg2 = 深紫）---
         Column(
@@ -166,66 +204,82 @@ fun QueueScreen(
                     }
                 }
             } else {
-                LazyColumn(modifier = Modifier.fillMaxWidth().weight(1f)) {
+                LazyColumn(
+                    state = listState,
+                    modifier = Modifier.fillMaxWidth().weight(1f)
+                ) {
                     itemsIndexed(queue, key = { _, song -> song.id }) { index, song ->
                         val isCurrent = index == currentIndex
-                        var isFocused by remember { mutableStateOf(false) }
-                        // 整行容器：歌曲条目 + 操作按钮（按钮为 FocusableSurface 的兄弟级）
-                        Row(
+                        // 与 SongRow 相同的实现方式：
+                        // 外层 Box(focusGroup) 承载背景/边框/缩放，onFocusChanged 用 hasFocus 追踪子树焦点
+                        // 内部 Row 用兄弟级排列：左侧歌曲内容(clickable) + 右侧操作按钮
+                        var isRowFocused by remember { mutableStateOf(false) }
+                        val animScale = remember { Animatable(1f) }
+                        val scope = rememberCoroutineScope()
+
+                        Box(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(vertical = 4.dp),
-                            verticalAlignment = Alignment.CenterVertically
+                                .focusGroup()
+                                .scale(animScale.value)
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(
+                                    color = if (isRowFocused || isCurrent) NasMusicColors.Primary.copy(alpha = 0.2f) else NasMusicColors.Surface.copy(alpha = 0.5f)
+                                )
+                                .border(
+                                    width = if (isRowFocused) 2.dp else 0.dp,
+                                    color = if (isRowFocused) NasMusicColors.FocusRing.copy(alpha = 0.6f) else Color.Transparent,
+                                    shape = RoundedCornerShape(6.dp)
+                                )
+                                .onFocusChanged { state ->
+                                    isRowFocused = state.hasFocus
+                                    scope.launch {
+                                        animScale.animateTo(
+                                            if (isRowFocused) 1.02f else 1f,
+                                            tween(200)
+                                        )
+                                    }
+                                }
                         ) {
-                            // 歌曲条目（可聚焦，点击播放）
-                            FocusableSurface(
-                                onClick = { onPlaySong(index) },
-                                modifier = Modifier
-                                    .weight(1f),
-                                shape = RoundedCornerShape(8.dp),
-                                focusedScale = 1.03f,
-                                animationDurationMs = 250,
-                                containerColor = if (isCurrent) NasMusicColors.Primary.copy(alpha = 0.2f) else NasMusicColors.Surface,
-                                contentColor = if (isCurrent) NasMusicColors.Primary else NasMusicColors.TextPrimary,
-                                focusedContainerColor = if (isCurrent) NasMusicColors.Primary.copy(alpha = 0.3f) else NasMusicColors.Primary.copy(alpha = 0.2f),
-                                focusedContentColor = if (isCurrent) Color.Black else NasMusicColors.TextPrimary,
-                                pressedScale = 0.97f,
-                                focusBorderColor = NasMusicColors.FocusRing.copy(alpha = 0.6f),
-                                onFocusChanged = { isFocused = it }
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
+                                // 左侧可聚焦+可点击区域（点击播放歌曲）
                                 Row(
                                     modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(horizontal = 20.dp, vertical = 14.dp),
+                                        .weight(1f)
+                                        .then(if (index == 0) Modifier.focusRequester(firstItemFocusRequester) else Modifier)
+                                        .clickable { onPlaySong(index) },
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     Text(
                                         text = String.format("%02d", index + 1),
                                         color = if (isCurrent) NasMusicColors.Primary else NasMusicColors.TextSecondary,
-                                        fontSize = 16.sp,
-                                        modifier = Modifier.width(40.dp),
+                                        fontSize = 12.sp,
+                                        modifier = Modifier.width(28.dp),
                                         textAlign = TextAlign.Center
                                     )
-                                    Spacer(modifier = Modifier.width(12.dp))
+                                    Spacer(modifier = Modifier.width(10.dp))
                                     Column(modifier = Modifier.weight(1f)) {
-                                        Text(text = song.title, color = if (isCurrent) NasMusicColors.Primary else NasMusicColors.TextPrimary, fontSize = 16.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                        Text(text = song.artist.ifBlank { "—" }, color = NasMusicColors.TextSecondary, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                        Text(text = song.title, color = if (isCurrent) NasMusicColors.Primary else NasMusicColors.TextPrimary, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                        Text(text = song.artist.ifBlank { "—" }, color = NasMusicColors.TextSecondary, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                     }
-                                    Spacer(modifier = Modifier.width(12.dp))
-                                    Text(text = TimeUtils.formatDuration(song.durationMs), color = NasMusicColors.TextSecondary, fontSize = 14.sp)
+                                    Spacer(modifier = Modifier.width(10.dp))
+                                    Text(text = TimeUtils.formatDuration(song.durationMs), color = NasMusicColors.TextSecondary, fontSize = 11.sp)
                                 }
-                            }
-                            // 操作按钮（兄弟级，可聚焦）
-                            if (index > 0) {
+                                // 右侧操作按钮（独立可聚焦）
+                                if (index > 0) {
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    MoveButton(text = "↑", onClick = { onMoveItem(index, index - 1) })
+                                }
+                                if (index < queue.lastIndex) {
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    MoveButton(text = "↓", onClick = { onMoveItem(index, index + 1) })
+                                }
                                 Spacer(modifier = Modifier.width(4.dp))
-                                MoveButton(text = "↑", onClick = { onMoveItem(index, index - 1) })
+                                MoveButton(text = "✕", onClick = { onRemoveSong(index) })
                             }
-                            if (index < queue.lastIndex) {
-                                Spacer(modifier = Modifier.width(4.dp))
-                                MoveButton(text = "↓", onClick = { onMoveItem(index, index + 1) })
-                            }
-                            Spacer(modifier = Modifier.width(4.dp))
-                            MoveButton(text = "✕", onClick = { onRemoveSong(index) })
                         }
                     }
                 }
@@ -253,22 +307,42 @@ fun QueueActionButton(text: String, onClick: () -> Unit, icon: androidx.compose.
 
 @Composable
 private fun MoveButton(text: String, onClick: () -> Unit) {
-    FocusableSurface(
-        onClick = onClick,
-        modifier = Modifier.widthIn(min = 36.dp),
-        shape = RoundedCornerShape(6.dp),
-        focusedScale = 1.1f,
-        animationDurationMs = 150,
-        containerColor = NasMusicColors.SurfaceVariant,
-        contentColor = NasMusicColors.TextSecondary,
-        focusedContainerColor = NasMusicColors.Primary.copy(alpha = 0.3f),
-        focusedContentColor = NasMusicColors.Primary,
-        pressedScale = 0.95f
+    // 使用 Box + focusable + clickable 替代 FocusableSurface，确保在 focusGroup 内可独立聚焦
+    var isFocused by remember { mutableStateOf(false) }
+    val animScale = remember { Animatable(1f) }
+    val scope = rememberCoroutineScope()
+
+    Box(
+        modifier = Modifier
+            .widthIn(min = 36.dp)
+            .scale(animScale.value)
+            .clip(RoundedCornerShape(6.dp))
+            .background(
+                color = if (isFocused) NasMusicColors.Primary.copy(alpha = 0.3f) else NasMusicColors.SurfaceVariant
+            )
+            .border(
+                width = if (isFocused) 2.dp else 0.dp,
+                color = if (isFocused) NasMusicColors.FocusRing else Color.Transparent,
+                shape = RoundedCornerShape(6.dp)
+            )
+            .onFocusChanged { state ->
+                isFocused = state.isFocused
+                scope.launch {
+                    animScale.animateTo(
+                        if (isFocused) 1.1f else 1f,
+                        tween(150)
+                    )
+                }
+            }
+            .focusable()
+            .clickable { onClick() }
+            .padding(horizontal = 8.dp, vertical = 6.dp),
+        contentAlignment = Alignment.Center
     ) {
         Text(
             text = text,
             fontSize = 16.sp,
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp)
+            color = if (isFocused) NasMusicColors.Primary else NasMusicColors.TextSecondary
         )
     }
 }

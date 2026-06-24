@@ -206,6 +206,52 @@
 - 线程命名 `Navidrome-OkHttp`，`isDaemon = true`
 - 防止 OkHttp 线程阻止进程退出
 
+#### 网络音乐层（v2.2.0 新增）
+
+> 独立于 NAS 后端，提供在线歌曲搜索、播放、歌词获取能力。与 `BackendAdapter` 体系并行，通过 `NetworkMusicManager` 统一路由。
+
+**架构**：
+
+```
+MainViewModel
+    └── NetworkMusicManager（多源路由）
+            ├── MetingApiService（默认源）
+            └── （可扩展其他源）
+```
+
+**NetworkMusicManager**（`backend/network/NetworkMusicManager.kt`）：
+- 多源路由层，管理多个 `NetworkMusicService` 实现
+- `search(keyword)` 采用 fallback 策略：默认源失败时依次尝试其他源
+- `resolvePlayUrl/resolveLyrics/resolveCoverUrl` 按 `song.networkSource` 精确路由，不 fallback
+- 默认源由 `defaultSourceProvider: () -> String` 动态提供（读取 AppSettings）
+- 手动 DI：在 `NasMusicApp.onCreate` 初始化
+
+**MetingApiService**（`backend/network/MetingApiService.kt`）：
+- 基于 [Meting-API](https://github.com/metowolf/Meting) 的网络音乐服务实现
+- 默认走网易云源（`server=netease`），支持搜索/播放/歌词/封面
+- 端点 URL 可配置（`baseUrlProvider: () -> String`），默认 `https://meting.mikus.ink/api`
+
+| 功能 | 端点格式 |
+|------|---------|
+| 搜索 | `{BASE}?server=netease&type=search&id={keyword}` |
+| 播放 URL | `{BASE}?server=netease&type=url&id={netId}`（302 重定向到真实 mp3） |
+| 歌词 | `{BASE}?server=netease&type=lrc&id={netId}`（返回 LRC 文本） |
+| 封面 | 搜索结果中的 `pic` 字段（302 重定向，Coil 自动跟随） |
+
+**响应字段映射**（关键）：
+- API 返回字段：`title` / `author` / `pic` / `url` / `lrc`
+- 无独立 `id` 字段，需从 `url` 字段的查询参数提取（`extractIdFromUrl()`）
+- 映射到 `Song` 模型：`id="ntwk_meting_{netId}"`、`isNetworkSong=true`、`networkSource="meting"`、`networkId={netId}`
+
+**SSL 兼容处理**（TV 盒子场景）：
+- 老版 Android 系统（API 22 等）缺少 Let's Encrypt 根证书，导致 `SSLHandshakeException`
+- OkHttpClient 配置信任所有证书的 `X509TrustManager` + 宽松 `HostnameVerifier`
+- Meting-API 为公开搜索服务，不涉及敏感数据，此妥协可接受
+
+**守护线程**：
+- OkHttp 客户端使用 `Executors.newCachedThreadPool` 自定义线程工厂
+- 线程命名 `Meting-OkHttp`，`isDaemon = true`
+
 #### 废弃代码
 
 **目录**：`backend/jellyfin/`、`backend/navidrome/`  
@@ -428,9 +474,9 @@ MP3 内嵌（MediaMetadataRetriever）
 | NowPlaying | `screens/NowPlayingScreen.kt` | 368 | 封面 + 歌词 + 播放控制 |
 | Library | `screens/LibraryScreen.kt` | 574 | 专辑/演唱者/歌曲 三 tab |
 | Queue | `screens/QueueScreen.kt` | 323 | 队列列表 + 迷你控制 |
-| Settings | `screens/SettingsScreen.kt` | 415 | 侧边栏导航：通用/播放/歌词/网络/关于 |
+| Settings | `screens/SettingsScreen.kt` | 457 | 侧边栏导航：通用/播放/歌词/缓存/网络/关于；网络页含 Meting-API 端点配置 |
 | ServerConnect | `screens/ServerConnectScreen.kt` | 757 | 服务器类型选择 + 表单 |
-| TextInputDialog | `screens/TextInputDialog.kt` | 315 | TV 虚拟键盘弹窗 |
+| TextInputDialog | `screens/TextInputDialog.kt` | 405 | TV 虚拟键盘弹窗 + 系统输入法切换（支持中文输入） |
 | ExitConfirmDialog | `screens/ExitConfirmDialog.kt` | 178 | 退出确认弹窗 |
 
 #### 组件列表
@@ -622,6 +668,37 @@ App 启动
 - [x] Jellyfin 无 tag fallback
 - [x] 封面图缓存
 
+### 网络音乐（v2.2.0 新增）
+- [x] 在线歌曲搜索（Meting-API，网易云源）
+- [x] 网络歌曲播放（302 重定向解析真实 mp3 URL）
+- [x] 网络歌词获取（LRC 文本）
+- [x] 网络封面显示（Coil 自动跟随 302）
+- [x] Meting-API 端点可配置（设置页可修改/恢复默认）
+- [x] SSL 兼容老版 Android（信任所有证书，解决 Let's Encrypt 根证书缺失）
+- [x] 搜索输入支持中文（虚拟键盘 + 系统输入法切换）
+- [x] 网络歌曲收藏（DataStore + Gson 持久化，收藏列表展示）
+- [x] 收藏按钮通用化（FavoriteButton 组件，本地/网络收藏共用）
+- [x] 全局收藏按钮（所有歌曲列表页面统一添加收藏按钮）
+- [x] 搜索端点自动 fallback（当前端点失败自动尝试其他预设端点，用户无感）
+- [x] 搜索状态持久化（关键词移至 ViewModel，跨页面导航保留）
+- [x] 加入队列功能（所有歌曲列表页面的 SongRow 添加队列切换按钮）
+- [x] 诊断日志体系（MetingDiag TAG，Release 包可见）
+- [x] 网络歌曲标题/作者编码修复（EncodingUtils.fixEncoding 处理 GBK/Latin-1 误解码）
+- [x] 网络歌曲播放链接缓存（5 分钟 TTL，避免短时间重复请求）
+- [x] 网络收藏 LRU 上限（500 条，超出自动清理最旧）
+- [x] NowPlayingScreen 网络歌曲来源标识（"NET" 标签）
+- [x] 歌词来源标签文案优化（"网络匹配" → "在线歌词"）
+- [x] LyricsNetworkProvider 守护线程改造（LyricsNetwork-OkHttp 线程池，不阻塞进程退出）
+
+### 播放队列持久化（v2.3.0 新增）
+- [x] 上次播放队列保存（DataStore + Gson，streamUrl 置空避免过期链接）
+- [x] 应用启动自动恢复队列和当前索引（不自动播放，防止意外声音）
+- [x] NAS 歌曲 streamUrl 后端连接后刷新（adapter.getSongsByIds）
+- [x] 网络歌曲 streamUrl 播放时实时解析（resolvePlayUrl）
+- [x] 恢复队列后首次播放 streamUrl 解析（playPause/next/previous 检测空 streamUrl）
+- [x] 自动切歌到网络歌曲 streamUrl 解析（onMediaItemTransition 拦截 + onNeedResolveStreamUrl 回调）
+- [x] 清空队列同步清除持久化数据
+
 ### 设置
 - [x] 暗色主题切换
 - [x] 界面动画开关
@@ -630,6 +707,7 @@ App 启动
 - [x] 歌词/封面缓存开关
 - [x] 歌词偏移调节
 - [x] 网络连通性测试
+- [x] Meting-API 端点配置（3 个预设端点选择 + 自定义输入，v2.2.0 新增）
 - [x] About 页面（版本信息）
 
 ### TV 适配
@@ -3052,6 +3130,657 @@ if (!seekPending) {
 - 搜索 "wf" → 匹配"王菲"
 - 搜索 "zjl" → 匹配"周杰伦"
 - 兼容 API 22+，不依赖 `android.icu`
+
+---
+
+### 10.11 v2.2.0 — 网络音乐功能（Meting-API）
+
+> 本节记录网络音乐搜索/播放/歌词功能的实现，以及测试中发现的搜索失败问题修复（字段映射错误、SSL 证书信任、中文输入）。
+
+#### 10.11.1 网络音乐基础架构搭建
+
+**日期**：2026-06-24
+
+**目标**：实现独立于 NAS 后端的在线音乐搜索与播放能力，支持在 TV 盒子上搜索网络歌曲。
+
+**架构设计**：
+
+```
+MainViewModel.searchNetworkSongs(keyword)
+    └── NetworkMusicManager.search(keyword)        // 多源路由 + fallback
+            └── MetingApiService.search(keyword)   // 默认源
+                    └── Meting-API（网易云）
+```
+
+**新增文件**：
+
+| 文件 | 职责 |
+|------|------|
+| `backend/network/NetworkMusicService.kt` | 网络音乐服务接口（search/resolvePlayUrl/resolveLyrics/resolveCoverUrl） |
+| `backend/network/NetworkMusicManager.kt` | 多源路由层，fallback 策略 |
+| `backend/network/MetingApiService.kt` | Meting-API 实现 |
+
+**修改文件**：
+
+| 文件 | 改动 |
+|------|------|
+| `NasMusicApp.kt` | 新增 `networkMusicManager` 单例，手动 DI 初始化 |
+| `data/model/Song.kt` | 新增 `isNetworkSong` / `networkSource` / `networkId` 字段 |
+| `data/model/AppSettings.kt` | 新增 `defaultNetworkSource` 字段 |
+| `data/prefs/AppPreferences.kt` | 新增 `keyDefaultNetworkSource`、`getDefaultNetworkSourceSync()` |
+| `ui/viewmodel/MainViewModel.kt` | 新增 `searchNetworkSongs()` / `networkSearchResults` StateFlow |
+| `ui/screens/SettingsScreen.kt` | 网络检测页新增网络搜索说明 |
+
+**验证**：✅ 编译通过，网络搜索 UI 流程可用。
+
+---
+
+#### 10.11.2 搜索输入支持中文（系统输入法切换）
+
+**日期**：2026-06-24
+
+**问题**：`TextInputDialog` 的自定义虚拟键盘只有英文字母/数字/符号，无法输入中文，导致网络搜索只能用拼音/英文。
+
+**方案**：混合输入模式 — 在现有自定义键盘上增加「中文输入」按钮，切换到系统 IME 输入中文，完成后可切回自定义键盘。
+
+**修改**：
+
+| 文件 | 改动 |
+|------|------|
+| `ui/screens/TextInputDialog.kt` | 完整重写（315→405 行）：新增 `hasAvailableIme()` 检测系统输入法、`showSystemIme` 状态切换、`BasicTextField` + `FocusRequester` + `keyboardController.show()` 触发系统 IME、「中文输入」/「返回键盘」按钮、BACK 键分层处理（IME 模式先隐藏 IME 再返回键盘） |
+| `res/values/strings.xml` | 新增 `text_input_chinese` / `text_input_back_keyboard` / `text_input_no_ime` |
+
+**关键实现**：
+```kotlin
+// 检测系统是否有可用的输入法
+private fun hasAvailableIme(context: Context): Boolean {
+    val imm = context.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
+    return imm.enabledInputMethodList.isNotEmpty()
+}
+
+// 触发系统 IME
+val keyboardController = LocalSoftwareKeyboardController.current
+val focusRequester = remember { FocusRequester() }
+BasicTextField(
+    value = text,
+    onValueChange = { text = it },
+    modifier = Modifier.focusRequester(focusRequester)
+)
+LaunchedEffect(showSystemIme) {
+    if (showSystemIme) {
+        focusRequester.requestFocus()
+        keyboardController?.show()
+    }
+}
+```
+
+**降级处理**：若系统未安装任何输入法，点击「中文输入」按钮显示提示「未检测到中文输入法，请先在系统设置中安装」。
+
+**验证**：✅ 中文输入正常，BACK 键分层处理正确。
+
+---
+
+#### 10.11.3 搜索失败修复 — Meting-API 字段映射错误
+
+**日期**：2026-06-24
+
+**问题**：中文输入修复后，搜索歌曲仍然返回空结果。
+
+**排查方法**：在 `MetingApiService` / `NetworkMusicManager` / `MainViewModel` 全链路添加诊断日志（TAG `MetingDiag`，直接用 `android.util.Log` 确保 Release 包可见），通过 `adb logcat -s MetingDiag` 抓取。
+
+**根因**：`parseSongs()` 使用的字段名与 API 实际返回完全不匹配：
+
+| 代码读取字段 | API 实际返回字段 |
+|------------|----------------|
+| `name` | `title` |
+| `artist` | `author` |
+| `id`（独立字段） | 无，需从 `url` 字段查询参数提取 |
+| `album` | 无 |
+
+导致所有 `mapNotNull` 返回 null → 搜索结果永远为空。
+
+**修改**（`backend/network/MetingApiService.kt`）：
+
+```kotlin
+// 修复前：字段名全部错误
+val title = item.get("name")?.asString ?: return@mapNotNull null
+val author = item.get("artist")?.asString.orEmpty()
+val netId = item.get("id")?.asString ?: return@mapNotNull null
+
+// 修复后：匹配 API 实际字段
+val title = item.get("title")?.asString ?: return@mapNotNull null
+val author = item.get("author")?.asString.orEmpty()
+val urlField = item.get("url")?.asString
+val netId = extractIdFromUrl(urlField) ?: return@mapNotNull null
+```
+
+**新增 `extractIdFromUrl()`**：从 Meting-API 端点 URL 的查询参数中提取 `id`。
+
+```kotlin
+private fun extractIdFromUrl(url: String?): String? {
+    // 输入示例：https://meting.mikus.ink/api?server=netease&type=url&id=2652820720
+    // 输出：2652820720
+    val uri = java.net.URI(url)
+    val query = uri.rawQuery ?: return null
+    query.split("&").forEach { param ->
+        val idx = param.indexOf("=")
+        if (idx > 0 && param.substring(0, idx) == "id") {
+            return param.substring(idx + 1)
+        }
+    }
+    return null  // URI 解析失败时有正则兜底
+}
+```
+
+**验证**：✅ 字段映射修复后，搜索能返回结果（但被 SSL 问题阻塞，见 10.11.4）。
+
+---
+
+#### 10.11.4 搜索失败修复 — SSL 证书信任失败
+
+**日期**：2026-06-24
+
+**问题**：字段映射修复后，搜索仍返回空，日志显示：
+
+```
+SSLHandshakeException: Trust anchor for certification path not found
+```
+
+**根因**：TV 盒子系统版本较老（API 22），缺少 `meting.mikus.ink` 所用 Let's Encrypt 证书的根 CA（`ISRG Root X1`），导致 SSL 握手失败。
+
+**修改**（`backend/network/MetingApiService.kt`）：
+
+新增信任所有证书的 `X509TrustManager` + 宽松 `HostnameVerifier`，通过 `applyTrustAllSsl()` 扩展函数应用到两个 OkHttpClient（`client` 和 `noRedirectClient`）：
+
+```kotlin
+private val trustAllManager: X509TrustManager = object : X509TrustManager {
+    override fun checkClientTrusted(chain: Array<out X509Certificate>?, authType: String?) {}
+    override fun checkServerTrusted(chain: Array<out X509Certificate>?, authType: String?) {}
+    override fun getAcceptedIssuers(): Array<X509Certificate> = arrayOf()
+}
+
+private val trustAllHostnameVerifier = HostnameVerifier { _, _ -> true }
+
+private fun OkHttpClient.Builder.applyTrustAllSsl(): OkHttpClient.Builder {
+    val sslContext = SSLContext.getInstance("TLS")
+    sslContext.init(null, arrayOf<TrustManager>(trustAllManager), java.security.SecureRandom())
+    this.sslSocketFactory(sslContext.socketFactory, trustAllManager)
+    this.hostnameVerifier(trustAllHostnameVerifier)
+    return this
+}
+```
+
+**安全考量**：Meting-API 为公开搜索服务，不涉及敏感数据传输，TV 盒子场景下此妥协可接受。NAS 后端连接（Jellyfin/Navidrome）仍使用系统默认证书校验，不受影响。
+
+**验证**：✅ 搜索「主角」成功返回结果。
+
+---
+
+#### 10.11.5 Meting-API 端点可配置
+
+**日期**：2026-06-24
+
+**需求**：公共服务端点可能不稳定或被墙，用户需能自建或替换为其他公共端点。
+
+**实现**：
+
+1. **MetingApiService 构造器改造**：从无参构造改为接受 `baseUrlProvider: () -> String`，每次请求动态读取端点，支持运行时切换。
+
+```kotlin
+class MetingApiService(
+    private val baseUrlProvider: () -> String
+) : NetworkMusicService {
+    private val baseUrl: String get() = baseUrlProvider().trim().trim('`', '\'', '"').trim().trimEnd('/')
+}
+```
+
+2. **AppSettings 扩展**：新增 `metingApiBaseUrl` 字段，默认 `https://meting.mikus.ink/api`。
+
+3. **AppPreferences 扩展**：新增 `keyMetingApiBaseUrl`、`setMetingApiBaseUrl()`、`getMetingApiBaseUrlSync()`，setter 中清理非法字符（反引号/引号）。
+
+4. **NasMusicApp 初始化**：传入 `baseUrlProvider = { appPreferences.getMetingApiBaseUrlSync() }`。
+
+5. **设置页 UI**（`SettingsScreen.kt` 网络检测页）：
+   - 显示当前端点 URL
+   - 「修改端点」按钮 → 弹出 `TextInputDialog` 编辑（支持中文输入法输入 URL）
+   - 「恢复默认」按钮（仅当端点与默认不同时显示）
+   - URL 校验：必须以 `http://` 或 `https://` 开头
+
+**修改文件**：
+
+| 文件 | 改动 |
+|------|------|
+| `backend/network/MetingApiService.kt` | 构造器接受 `baseUrlProvider`，新增 `DEFAULT_BASE_URL` 常量，`baseUrl` getter 清理非法字符 |
+| `data/model/AppSettings.kt` | 新增 `metingApiBaseUrl` 字段 |
+| `data/prefs/AppPreferences.kt` | 新增 `keyMetingApiBaseUrl`、Flow 映射、setter（含清理）、sync getter |
+| `NasMusicApp.kt` | 初始化时传入 `baseUrlProvider` |
+| `ui/viewmodel/MainViewModel.kt` | 新增 `updateMetingApiBaseUrl()` |
+| `ui/screens/SettingsScreen.kt` | 网络页新增端点配置 UI（显示/修改/恢复默认） |
+| `ui/components/AppRoot.kt` | 接入 `onChangeMetingApiBaseUrl` 回调 |
+| `res/values/strings.xml` | 新增 7 条字符串资源 |
+
+**验证**：✅ 设置页可修改端点，修改后立即生效（无需重启），恢复默认按钮正常。
+
+---
+
+#### 10.11.6 诊断日志体系（MetingDiag）
+
+**日期**：2026-06-24
+
+**背景**：网络搜索失败时，原有的 `AppLog.d/w` 在 Release 包中是空操作（仅 `BuildConfig.DEBUG` 时输出），导致用户测试时无法看到任何日志。
+
+**实现**：在 `MetingApiService` / `NetworkMusicManager` / `MainViewModel.searchNetworkSongs` 全链路添加诊断日志，统一 TAG `MetingDiag`，直接使用 `android.util.Log`（不依赖 `BuildConfig.DEBUG`），确保 Release 包也能看到。
+
+**日志覆盖节点**：
+
+| 节点 | 日志内容 |
+|------|---------|
+| MainViewModel 入口 | 搜索关键词 |
+| NetworkMusicManager | 默认源、有序服务列表、逐个尝试 |
+| MetingApiService.search | baseUrl、完整请求 URL、响应码、响应体长度、响应体前 800 字符预览 |
+| parseSongs | JSON 数组大小、首元素所有 key、每条的 title/author/pic/url、提取的 netId |
+| extractIdFromUrl | 输入 URL、rawQuery、提取结果 |
+| 异常 | 异常类型 + message + 堆栈 |
+
+**抓取方式**：
+```bash
+adb logcat -c                       # 清空旧日志
+adb logcat -s MetingDiag            # 只看 MetingDiag 标签
+```
+
+**价值**：本次 SSL 问题即通过日志中 `SSLHandshakeException` + `baseUrl` 值（带反引号）快速定位。日志保留在代码中，便于后续网络问题排查。
+
+---
+
+#### 10.11.7 网络歌曲收藏功能（Phase 2）
+
+**日期**：2026-06-24
+
+**目标**：实现网络歌曲的收藏/取消收藏，收藏列表展示，与本地收藏统一交互。
+
+**架构设计**：
+
+```
+用户点击收藏按钮
+    └── MainViewModel.toggleNetworkFavorite(song)
+            └── AppPreferences.toggleNetworkFavorite(NetworkFavoriteItem)
+                    └── DataStore JSON 序列化存储
+
+UI 收藏列表
+    └── MainViewModel.networkFavoriteSongs (StateFlow<List<Song>>)
+            └── _networkFavorites.map { NetworkFavoriteItem → Song }
+```
+
+**新增文件**：
+
+| 文件 | 职责 |
+|------|------|
+| `data/model/NetworkFavoriteItem.kt` | 网络收藏数据类（songId/title/artist/album/coverUrl/networkSource/networkId/addedAtMs） |
+
+**修改文件**：
+
+| 文件 | 改动 |
+|------|------|
+| `data/prefs/AppPreferences.kt` | 新增 `keyNetworkFavorites`、`networkFavorites` Flow、`getNetworkFavoritesSync()`、`toggleNetworkFavorite()` |
+| `ui/viewmodel/MainViewModel.kt` | 新增 `_networkFavorites`、`networkFavoriteSongs`、`networkFavoriteIds` StateFlow、`toggleNetworkFavorite()`、`isNetworkFavorite()`，init 块收集 `prefs.networkFavorites` |
+| `ui/screens/LibraryScreen.kt` | FavoritesTab 合并本地+网络收藏；NetworkTab 收藏列表展示；FavoriteButton 通用化 |
+| `ui/components/AppRoot.kt` | NowPlayingScreen 收藏按钮增加 `isNetworkSong` 分支路由 |
+
+**关键设计决策**：
+- **不存储 streamUrl**：播放链接有时效性，每次播放时重新解析
+- **NetworkFavoriteItem → Song 转换**：UI 层无需了解 NetworkFavoriteItem 类型，统一用 Song 模型
+- **FavoriteButton 通用化**：从 `NetworkFavoriteButton` 重命名为 `FavoriteButton`，本地/网络收藏共用同一组件
+
+**验证**：✅ 网络歌曲收藏/取消收藏正常，收藏列表正确显示，NowPlayingScreen 收藏按钮对网络歌曲生效。
+
+---
+
+#### 10.11.8 全局收藏按钮 + 收藏页面优化
+
+**日期**：2026-06-24
+
+**目标**：将收藏按钮扩展到所有歌曲列表页面，并修复收藏页面的若干问题。
+
+**修改文件**：
+
+| 文件 | 改动 |
+|------|------|
+| `ui/screens/LibraryScreen.kt` | SongRow 参数从 `isNetworkFavorite`/`onToggleNetworkFavorite` 重命名为通用的 `isFavorited`/`onToggleFavorite`；SongsTab、RecentTab、FavoritesTab 添加 `onToggleFavorite` 参数；LibraryScreen 函数签名新增 `onToggleFavorite` |
+| `ui/screens/AlbumDetailScreen.kt` | 函数签名新增 `favoriteIds`/`onToggleFavorite`；内联歌曲行添加 FavoriteButton |
+| `ui/screens/ArtistDetailScreen.kt` | 同上 |
+| `ui/components/AppRoot.kt` | LibraryScreen、AlbumDetailScreen、ArtistDetailScreen 调用传递 `favoriteIds`/`onToggleFavorite` |
+
+**修复的问题**：
+1. **收藏页面 NAS 歌曲无收藏按钮**：FavoritesTab 的 NAS 歌曲 `onToggleFavorite` 从 `null` 改为可取消收藏
+2. **收藏页面依赖 NAS 连接**：FAVORITES Tab 与 NETWORK Tab 同等处理，在 `isLoading`/`!isConnected` 判断之前渲染，始终可用
+3. **收藏的网络歌曲不在收藏列表**：FavoritesTab 合并 `favoriteSongs`（本地）+ `networkFavoriteSongs`（网络）
+
+**验证**：✅ 所有歌曲列表页面都有收藏按钮，收藏页面不依赖 NAS 连接，NAS 歌曲可取消收藏。
+
+---
+
+#### 10.11.9 搜索端点自动 fallback（Phase 3）
+
+**日期**：2026-06-24
+
+**目标**：实现搜索端点级别的自动容错，当前端点失败时自动尝试其他预设端点，用户无感切换。
+
+**方案调整说明**：原方案计划实现 AlApiService、JioSaavnService 作为多源容错。实际实施中，鉴于 Meting-API 已有 3 个可用预设端点（Mikus/Redcha/Qijieya），且 AlAPI/JioSaavn 国内访问不稳定，调整为**端点级自动 fallback**。该方案在 MetingApiService 内部实现，不影响 NetworkMusicManager 的多源路由架构。
+
+**修改文件**：
+
+| 文件 | 改动 |
+|------|------|
+| `backend/network/MetingApiService.kt` | `search()` 方法重构为端点 fallback 流程；新增 `buildEndpointFallbackOrder()` 构造端点优先级；新增 `searchWithEndpoint()` 单端点搜索 |
+
+**Fallback 逻辑**：
+
+```
+当前端点（用户选中）→ Mikus → Redcha → Qijieya（去重，跳过已尝试的）
+```
+
+```kotlin
+override suspend fun search(keyword: String): List<Song> = withContext(Dispatchers.IO) {
+    val endpoints = buildEndpointFallbackOrder(baseUrl)
+    for (endpoint in endpoints) {
+        val songs = searchWithEndpoint(keyword, endpoint)
+        if (songs.isNotEmpty()) return@withContext songs
+    }
+    emptyList()
+}
+```
+
+**关键设计**：
+- **当前端点优先**：尊重用户在设置页的选择，优先尝试
+- **去重处理**：`buildEndpointFallbackOrder()` 去除重复端点，避免重复请求
+- **自定义端点也支持 fallback**：用户自定义端点失败时，仍会 fallback 到预设端点
+- **无感切换**：搜索结果不记录实际使用的端点，`networkSource` 始终为 "meting"
+
+**验证**：✅ 当前端点失败时自动切换到其他端点，用户无感知。
+
+---
+
+#### 10.11.10 加入队列功能 + 焦点架构重构
+
+**日期**：2026-06-24
+
+**目标**：所有歌曲列表页面的 SongRow 添加队列切换按钮，并解决 Compose TV 嵌套焦点问题。
+
+**修改文件**：
+
+| 文件 | 改动 |
+|------|------|
+| `ui/screens/LibraryScreen.kt` | SongRow 添加 `isInQueue`/`onToggleQueue` 参数；QueueToggleButton 组件；SongRow 焦点架构重构为 Box(focusGroup) + 兄弟级 Row |
+| `ui/screens/AlbumDetailScreen.kt` | 内联歌曲行添加 QueueToggleButton |
+| `ui/screens/ArtistDetailScreen.kt` | 同上 |
+| `ui/screens/QueueScreen.kt` | 歌曲行统一为 SongRow 的紧凑样式 + 焦点行为 |
+| `ui/components/AppRoot.kt` | 所有屏幕调用传递 `queueSongIds`/`onToggleQueue` |
+
+**焦点架构重构**（解决嵌套 FocusableSurface 无法聚焦问题）：
+
+```
+Box(focusGroup)                          ← 外层容器，统一焦点组
+├── Row(weight(1f) + clickable)          ← 左侧内容（点击播放）
+│   ├── 封面
+│   └── 标题/艺术家
+└── Box(focusable + clickable)           ← 右侧按钮（独立焦点目标）
+    └── QueueToggleButton / FavoriteButton
+```
+
+- D-pad RIGHT 从左侧内容移到右侧按钮
+- D-pad LEFT 返回左侧内容
+- 背景/边框/缩放效果在外层 Box 上，通过 `state.hasFocus` 统一追踪
+
+**验证**：✅ 队列按钮可聚焦可点击，焦点导航正常，样式与 SongRow 一致。
+
+---
+
+### 10.12 v2.3.0 — Phase 4 优化 + 队列持久化 + 输入对话框修复
+
+#### 10.12.1 LyricsNetworkProvider 改造（守护线程 + AppLog + Gson）
+
+**日期**：2026-06-24
+
+**目标**：解决 LyricsNetworkProvider 的 OkHttp 线程阻塞进程退出、日志不统一、JSON 解析库混用问题。
+
+**修改文件**：`lyrics/LyricsNetworkProvider.kt`
+
+**改动**：
+- OkHttpClient dispatcher 使用 `Executors.newCachedThreadPool` 构造的守护线程池，线程命名 `LyricsNetwork-OkHttp`，`isDaemon = true` 防止阻塞进程退出
+- 所有 `android.util.Log.w/e` 替换为 `AppLog.w/e`，统一日志体系
+- JSON 解析从 `org.json.JSONObject` 迁移到 `Gson`/`JsonParser`，与项目其他网络服务保持一致
+
+**验证**：✅ 歌词网络请求不再阻塞进程退出，日志统一通过 AppLog 输出。
+
+---
+
+#### 10.12.2 网络歌曲编码修复
+
+**日期**：2026-06-24
+
+**目标**：网络歌曲标题/作者出现中文乱码（GBK 被当作 Latin-1 解码）。
+
+**修改文件**：`backend/network/MetingApiService.kt`
+
+**改动**：`parseSongs()` 方法对 title/author 字段调用 `EncodingUtils.fixEncoding()`，复用现有 NAS 歌曲的编码修复逻辑。
+
+**验证**：✅ 网络歌曲标题/作者正确显示中文。
+
+---
+
+#### 10.12.3 网络收藏 LRU 上限
+
+**日期**：2026-06-24
+
+**目标**：网络收藏无大小限制，DataStore 序列化的 JSON 会随收藏增多而膨胀。
+
+**修改文件**：`data/prefs/AppPreferences.kt`
+
+**改动**：
+- 新增 `networkFavoritesMaxSize = 500` 常量
+- `toggleNetworkFavorite()` 添加收藏时检查数量，超出上限从尾部移除最旧收藏
+- 实现 LRU（Least Recently Used）淘汰策略
+
+**验证**：✅ 收藏超过 500 条时自动清理最旧收藏。
+
+---
+
+#### 10.12.4 NowPlayingScreen 网络歌曲来源标识
+
+**日期**：2026-06-24
+
+**目标**：NowPlayingScreen 缺少网络歌曲来源标识，用户无法区分本地/网络歌曲。
+
+**修改文件**：`ui/screens/NowPlayingScreen.kt`、`data/model/LyricsSource.kt`
+
+**改动**：
+- NowPlayingScreen 标题下方添加 "NET" 标签，仅网络歌曲显示
+- `LyricsSource.NETWORK` 的显示文案从 "网络匹配" 改为 "在线歌词"，更准确
+
+**验证**：✅ 网络歌曲显示 "NET" 标签，歌词来源标签显示 "在线歌词"。
+
+---
+
+#### 10.12.5 网络歌曲播放链接缓存
+
+**日期**：2026-06-24
+
+**目标**：短时间内重复播放同一网络歌曲会重复请求 Meting-API 解析播放链接，浪费网络资源。
+
+**修改文件**：`backend/network/NetworkMusicManager.kt`
+
+**改动**：
+- 新增 `CachedPlayUrl` data class（url + timestamp）
+- 新增 `playUrlCache` 内存缓存 Map
+- `resolvePlayUrl()` 先检查缓存（5 分钟 TTL），命中则直接返回；未命中则请求 API 并写入缓存
+- 缓存 key 为 song.id，避免不同歌曲互相影响
+
+**验证**：✅ 5 分钟内重复播放同一歌曲不重复请求 API。
+
+---
+
+#### 10.12.6 播放队列持久化功能
+
+**日期**：2026-06-24
+
+**目标**：应用重启后丢失上次播放队列，用户体验不佳。
+
+**修改文件**：
+
+| 文件 | 改动 |
+|------|------|
+| `data/prefs/AppPreferences.kt` | 新增 `LastQueueData` data class、`saveLastQueue()`、`getLastQueueSync()`、`clearLastQueue()` |
+| `player/PlayerManager.kt` | 新增 `restoreQueue()` 方法，设置队列和索引但不播放 |
+| `ui/viewmodel/MainViewModel.kt` | init 块调用 `restoreLastQueue()`；`combine(queue, currentIndex)` 监听变化自动持久化；`connectToServer()` 后调用 `updateRestoredQueueStreamUrls()` 刷新 NAS 歌曲 streamUrl；`clearQueue()` 调用 `prefs.clearLastQueue()` |
+
+**持久化策略**：
+- 队列序列化为 JSON 存储到 DataStore
+- **streamUrl 字段置空**（时效性链接，不持久化）
+- NAS 歌曲 streamUrl 在后端连接后通过 `adapter.getSongsByIds()` 刷新
+- 网络歌曲 streamUrl 在播放时由 `resolvePlayUrl()` 实时解析
+
+**恢复流程**：
+```
+应用启动 → restoreLastQueue() → PlayerManager.restoreQueue()
+         → 设置 _queue/_currentIndex/_currentSong（不播放）
+         → 后端连接成功 → updateRestoredQueueStreamUrls() 刷新 NAS streamUrl
+         → 用户按播放 → playPause() 检测 streamUrl 为空 → resolveAndPlayCurrentSong()
+```
+
+**验证**：✅ 重启后队列和当前歌曲索引恢复，不自动播放。
+
+---
+
+#### 10.12.7 TextInputDialog 被列表覆盖修复
+
+**日期**：2026-06-24
+
+**目标**：网络搜索输入框有内容时，按确认无法弹出虚拟键盘，输入框被下方歌曲列表覆盖。
+
+**修改文件**：`ui/screens/TextInputDialog.kt`
+
+**改动**：
+- 将 TextInputDialog 内容包裹到 `Dialog` 组件
+- `DialogProperties(dismissOnBackPress=false, dismissOnClickOutside=false, usePlatformDefaultWidth=false)`
+- Dialog 创建系统级窗口，显示在所有内容之上，不被 LazyVerticalGrid 覆盖
+
+**验证**：✅ 输入框始终显示在最上层，虚拟键盘正常弹出。
+
+---
+
+#### 10.12.8 TextInputDialog BACK 键失效修复
+
+**日期**：2026-06-24
+
+**目标**：10.12.7 将 TextInputDialog 包裹到 Dialog 后，BACK 键无法关闭对话框（Dialog 拦截 BACK 事件，原 `LocalDialogBackHandler` 在外层 Activity 无法接收）。
+
+**修改文件**：`ui/screens/TextInputDialog.kt`
+
+**改动**：
+- 移除 `LocalDialogBackHandler` 和 `DisposableEffect`
+- 在 Dialog 内部使用 Compose 标准 `BackHandler` 处理 BACK 键
+- BACK 键行为：先隐藏系统 IME（如显示），再关闭对话框（自定义键盘模式）
+
+**验证**：✅ BACK 键正确关闭对话框，系统 IME 先隐藏再关闭。
+
+---
+
+#### 10.12.9 恢复队列后无法播放修复
+
+**日期**：2026-06-24
+
+**目标**：10.12.6 实现的队列持久化功能，重启后队列能记住但无法播放。
+
+**根因**：`PlayerManager.restoreQueue()` 只更新 UI 状态（`_queue`/`_currentIndex`/`_currentSong`），未加载 MediaItems 到 ExoPlayer，且恢复的歌曲 streamUrl 为空（持久化时置空）。
+
+**修改文件**：
+
+| 文件 | 改动 |
+|------|------|
+| `player/PlayerManager.kt` | `restoreQueue()` 增加 `setMediaItems` + `prepare()`（不 play），让 ExoPlayer 进入 ready 状态 |
+| `ui/viewmodel/MainViewModel.kt` | `playPause()` 检测 streamUrl 为空时调用 `resolveAndPlayCurrentSong()`；新增 `resolveAndPlayCurrentSong()` 解析网络/NAS streamUrl 后 `playQueue()`；`next()`/`previous()` 检测目标歌曲 streamUrl 为空时调用 `resolveAndPlayByIndex()` |
+
+**播放流程**：
+```
+用户按播放 → playPause() → song.streamUrl 为空？
+  ├─ 是 → resolveAndPlayCurrentSong()
+  │      ├─ 网络歌曲 → NetworkMusicManager.resolvePlayUrl()
+  │      └─ NAS 歌曲 → adapter.getSongsByIds()
+  │      → 更新队列 streamUrl → playerManager.playQueue()
+  └─ 否 → playerManager.playPause()
+```
+
+**验证**：✅ 恢复队列后按播放能正常播放。
+
+---
+
+#### 10.12.10 恢复队列后网络歌曲无法播放修复
+
+**日期**：2026-06-24
+
+**目标**：10.12.9 修复后，恢复队列中网络歌曲仍无法播放。
+
+**根因**：`restoreQueue` 为所有歌曲创建 `MediaItem.fromUri(song.streamUrl ?: "")`，网络歌曲 streamUrl 为空，创建空 URI MediaItem。ExoPlayer `prepare()` 尝试准备空 URI → 触发 `onPlayerError` → 自动跳下一首 → 下一首也可能为空 → **级联错误循环**，ExoPlayer 陷入错误状态。
+
+**修改文件**：`player/PlayerManager.kt`
+
+**改动**：
+1. `restoreQueue()`：仅当当前歌曲 streamUrl 不为空时才调用 `setMediaItems`/`prepare`；网络歌曲 streamUrl 为空时跳过 prepare，只设置 UI 状态
+2. `onPlayerError()`：当前歌曲 streamUrl 为空时不自动跳下一首，避免级联错误
+
+**验证**：✅ 恢复队列后网络歌曲不再触发级联错误，按播放可正常解析播放。
+
+---
+
+#### 10.12.11 自动切歌到网络歌曲播放失败修复
+
+**日期**：2026-06-24
+
+**目标**：10.12.10 修复后，第一首歌（有 streamUrl）播放完自动切到下一首网络歌曲（streamUrl 为空）时播放失败并停止。
+
+**根因**：ExoPlayer 自动过渡（`MEDIA_ITEM_TRANSITION_REASON_AUTO`）到 streamUrl 为空的歌曲时，尝试播放空 URI 出错。10.12.10 的修复只阻止了 `onPlayerError` 跳歌，但没有解决自动过渡时的 streamUrl 解析。
+
+**修改文件**：
+
+| 文件 | 改动 |
+|------|------|
+| `player/PlayerManager.kt` | 新增 `onNeedResolveStreamUrl` 回调属性；`onMediaItemTransition` 检测自动过渡到空 streamUrl 歌曲时，暂停并触发回调 |
+| `ui/viewmodel/MainViewModel.kt` | init 块设置 `playerManager.onNeedResolveStreamUrl` 回调，调用 `resolveAndPlayByIndex()` 解析 streamUrl 后重新播放 |
+
+**自动切歌流程**：
+```
+第一首播放完 → ExoPlayer 自动过渡到第二首（网络歌曲）
+            → onMediaItemTransition(reason=AUTO)
+            → 检测 streamUrl 为空 → player.pause()
+            → onNeedResolveStreamUrl 回调
+            → MainViewModel.resolveAndPlayByIndex()
+            → 解析 streamUrl → playerManager.playQueue() → 播放
+```
+
+**验证**：✅ 自动切歌到网络歌曲能正常解析播放。
+
+---
+
+#### 10.12.12 歌词加载误报"加载歌词失败"修复
+
+**日期**：2026-06-24
+
+**目标**：自动切歌到网络歌曲时，歌词已加载成功但仍提示"加载歌词失败"。
+
+**根因**：`loadLyricsForCurrentSong()` 使用 `lyricsLoadJob` 管理协程，切歌时调用 `lyricsLoadJob?.cancel()` 取消上一个加载任务。但 `catch (e: Exception)` 会捕获 `CancellationException`（协程取消机制），错误地显示"加载歌词失败"。
+
+**触发场景**（自动切歌到网络歌曲）：
+1. `currentSong` 第一次更新（streamUrl 为空）→ 启动 Job1 加载歌词
+2. `resolveAndPlayByIndex` 解析 streamUrl → `playQueue` → `currentSong` 第二次更新（新对象）
+3. `loadLyricsForCurrentSong` 再次被调用 → `lyricsLoadJob?.cancel()` 取消 Job1
+4. Job1 抛出 `CancellationException` → 被错误捕获 → 显示"加载歌词失败"
+5. Job2 成功加载歌词 → 歌词正常显示
+
+**修改文件**：`ui/viewmodel/MainViewModel.kt`
+
+**改动**：`loadLyricsForCurrentSong()` 的 catch 块前添加 `catch (e: kotlinx.coroutines.CancellationException) { throw e }`，将取消异常重新抛出，不当作错误处理。这是 Kotlin 协程的最佳实践。
+
+**验证**：✅ 切歌时不再误报"加载歌词失败"。
 
 ---
 

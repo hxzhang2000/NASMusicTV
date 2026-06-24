@@ -50,6 +50,8 @@ class MainActivity : ComponentActivity() {
     private val viewModel: MainViewModel by viewModels()
     // Level 1: 对话框 BACK 键回调 —— 当对话框（输入对话框、退出确认等）打开时设置
     private val dialogBackHandler: MutableState<(() -> Unit)?> = mutableStateOf(null)
+    // Level 1.5: 列表回到顶部回调 —— 列表已滚动时按 BACK 先回顶
+    private val listBackHandler: MutableState<(() -> Boolean)?> = mutableStateOf(null)
     // Level 2: 页面导航 BACK 键回调 —— 当不在 NowPlaying 页面时设置为导航函数
     private val navigateBackHandler: MutableState<(() -> Unit)?> = mutableStateOf(null)
     // Level 3: 退出确认对话框显示标志 —— 在 NowPlaying 页面时按下 BACK 设为 true
@@ -67,6 +69,7 @@ class MainActivity : ComponentActivity() {
                 // 暴露当前 Activity 给子组件，用于注册对话框的 BACK 键处理
                 CompositionLocalProvider(
                     LocalDialogBackHandler provides dialogBackHandler,
+                    LocalListBackHandler provides listBackHandler,
                     LocalNavigateBackHandler provides navigateBackHandler,
                     LocalShowExitConfirm provides showExitConfirm
                 ) {
@@ -173,9 +176,10 @@ class MainActivity : ComponentActivity() {
             }
         }
 
-        // 分层 BACK 键处理：Level 0 → Level 1 → Level 2 → Level 3
+        // 分层 BACK 键处理：Level 0 → Level 1 → Level 1.5 → Level 2 → Level 3
         // Level 0: 沉浸模式 → 退出全屏
         // Level 1: 关闭对话框（由 dialogBackHandler 控制）
+        // Level 1.5: 列表回到顶部（由 listBackHandler 控制，返回 true 表示已消费）
         // Level 2: 从其他页面导航回播放页（由 AppRoot 动态设置 navigateBackHandler）
         // Level 3: 在播放页显示退出确认（设置 showExitConfirm = true）
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
@@ -190,6 +194,12 @@ class MainActivity : ComponentActivity() {
                 val dialogHandler = dialogBackHandler.value
                 if (dialogHandler != null) {
                     dialogHandler()
+                    return
+                }
+
+                // Level 1.5: 列表已滚动 → 先滚动到顶部
+                val listHandler = listBackHandler.value
+                if (listHandler != null && listHandler()) {
                     return
                 }
 

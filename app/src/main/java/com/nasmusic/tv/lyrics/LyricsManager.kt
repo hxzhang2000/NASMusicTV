@@ -3,6 +3,7 @@ package com.nasmusic.tv.lyrics
 import android.content.Context
 import android.util.Log
 import com.nasmusic.tv.backend.BackendRegistry
+import com.nasmusic.tv.backend.network.NetworkMusicManager
 import com.nasmusic.tv.data.model.Lyrics
 import com.nasmusic.tv.data.model.LyricsAvailability
 import com.nasmusic.tv.data.model.LyricsSource
@@ -15,10 +16,16 @@ import java.io.File
 /**
  * 歌词管理器
  * 负责歌词的获取、缓存和匹配
+ *
+ * 来源优先级：
+ * 1. 本地缓存
+ * 2. 后端API（NAS 歌曲）/ NetworkMusicManager（网络歌曲）
+ * 3. 网络匹配（标题+艺术家模糊搜索）
  */
 class LyricsManager(
     private val context: Context,
-    private val backendRegistry: BackendRegistry
+    private val backendRegistry: BackendRegistry,
+    private val networkMusicManager: NetworkMusicManager? = null
 ) {
 
     private val cacheDir: File by lazy {
@@ -63,7 +70,34 @@ class LyricsManager(
     suspend fun checkAvailability(song: Song): LyricsAvailability = withContext(Dispatchers.IO) {
         AppLog.d("LyricsManager", "checkAvailability: song=${song.title}, artist=${song.artist}, id=${song.id}")
 
-        // 检查后端API是否有歌词
+        // 网络歌曲：通过 NetworkMusicManager 获取歌词，不走后端 API
+        if (song.isNetworkSong && networkMusicManager != null) {
+            val networkLyrics = try {
+                val text = networkMusicManager.resolveLyrics(song)
+                if (!text.isNullOrBlank() && LrcParser.isValidLrc(text)) {
+                    cacheLyrics(song, text)
+                    LrcParser.parse(text, song.id).copy(source = LyricsSource.EMBEDDED)
+                } else null
+            } catch (e: Exception) {
+                AppLog.w("LyricsManager", "network resolveLyrics failed: ${e.message}")
+                null
+            }
+            // 网络歌曲也尝试模糊匹配作为 fallback
+            val fuzzyLyrics = if (networkLyrics == null) {
+                try {
+                    val text = networkProvider.fetchLyrics(song.title, song.artist)
+                    if (text != null) {
+                        cacheLyrics(song, text)
+                        LrcParser.parse(text, song.id).copy(source = LyricsSource.NETWORK)
+                    } else null
+                } catch (_: Exception) { null }
+            } else null
+            val result = LyricsAvailability(backend = networkLyrics, network = fuzzyLyrics)
+            AppLog.d("LyricsManager", "checkAvailability(network song): backend=${result.hasBackend}, network=${result.hasNetwork}")
+            return@withContext result
+        }
+
+        // NAS 歌曲：检查后端API是否有歌词
         val adapter = backendRegistry.getAdapter()
         val backendLyrics = if (adapter != null) {
             try {

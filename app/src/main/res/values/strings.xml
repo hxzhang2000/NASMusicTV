@@ -37,6 +37,12 @@
     <string name="library_no_genres">暂无风格数据</string>
     <string name="library_no_years">暂无年代数据</string>
     <string name="library_no_recent">暂无播放记录</string>
+    <string name="library_network">网络搜索</string>
+    <string name="library_network_search_hint">输入歌曲名或歌手名搜索网络音乐</string>
+    <string name="library_network_empty">输入关键词开始搜索网络音乐</string>
+    <string name="library_network_no_results">未找到相关网络音乐</string>
+    <string name="library_network_favorites_title">我的收藏</string>
+    <string name="library_network_favorites_empty">搜索并收藏你喜欢的网络歌曲</string>
 
     <!-- Player -->
     <string name="player_play">播放</string>
@@ -125,6 +131,16 @@
     <string name="settings_network_test">测试网络</string>
     <string name="settings_network_testing">测试中...</string>
     <string name="settings_network_test_desc">测试设备是否能访问互联网</string>
+    <string name="settings_network_search">网络搜索</string>
+    <string name="settings_meting_api_url">Meting-API 端点</string>
+    <string name="settings_meting_api_url_desc">网络搜索所用 API 地址，可自建或替换为其他公共端点</string>
+    <string name="settings_meting_api_url_edit">修改端点</string>
+    <string name="settings_meting_api_url_reset">恢复默认</string>
+    <string name="settings_meting_api_url_hint">输入 Meting-API 端点 URL</string>
+    <string name="settings_meting_api_url_invalid">URL 格式不正确，请以 http:// 或 https:// 开头</string>
+    <string name="settings_meting_preset_endpoints">预设端点</string>
+    <string name="settings_meting_custom_endpoint">自定义端点</string>
+    <string name="settings_meting_custom_endpoint_desc">使用其他公共端点或自建端点</string>
     <string name="settings_app_name">应用名称</string>
     <string name="settings_build_type">构建类型</string>
     <string name="settings_supported_backends">支持后端</string>
@@ -151,6 +167,9 @@
 
     <!-- Text Input -->
     <string name="text_input_space">空格</string>
+    <string name="text_input_chinese">中文输入</string>
+    <string name="text_input_back_keyboard">返回键盘</string>
+    <string name="text_input_no_ime">未检测到中文输入法，请先在系统设置中安装</string>
 
     <!-- Exit Confirm -->
     <string name="exit_title">退出应用</string>

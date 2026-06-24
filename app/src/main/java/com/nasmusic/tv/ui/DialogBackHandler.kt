@@ -14,6 +14,14 @@ val LocalDialogBackHandler = staticCompositionLocalOf<MutableState<(() -> Unit)?
 }
 
 /**
+ * Level 1.5: 列表回到顶部回调 —— 当前列表已向下滚动时，按 BACK 先滚动到顶部。
+ * 返回 true 表示已消费（已滚动），false 表示已在顶部（让事件继续传递到 Level 2）。
+ */
+val LocalListBackHandler = staticCompositionLocalOf<MutableState<(() -> Boolean)?>> {
+    mutableStateOf(null)
+}
+
+/**
  * Level 2: 页面导航 BACK 键回调 —— 当不在 NowPlaying 页面时，设置为导航到 NowPlaying 的 lambda。
  * 由 AppRoot 根据当前屏幕状态动态设置；当在 NowPlaying 页面时设置为 null。
  */

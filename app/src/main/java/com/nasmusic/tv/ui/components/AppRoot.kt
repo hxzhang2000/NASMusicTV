@@ -154,7 +154,11 @@ fun AppRoot(
                         durationMs = duration,
                         lyrics = lyrics,
                         lyricsAvailability = lyricsAvailability,
-                        isFavorite = currentSong?.let { viewModel.isFavorite(it.id) } ?: false,
+                        // 网络歌曲用网络收藏判断，本地歌曲用本地收藏判断
+                        isFavorite = currentSong?.let { song ->
+                            if (song.isNetworkSong) viewModel.isNetworkFavorite(song.id)
+                            else viewModel.isFavorite(song.id)
+                        } ?: false,
                         isImmersiveMode = isImmersiveMode.value,
                         onToggleImmersive = { isImmersiveMode.value = !isImmersiveMode.value },
                         onPlayPause = { viewModel.playPause() },
@@ -163,7 +167,14 @@ fun AppRoot(
                         onTogglePlayMode = { viewModel.togglePlayMode() },
                         onSeek = { viewModel.seekTo(it) },
                         onSwitchLyricsSource = { viewModel.switchLyricsSource(it) },
-                        onToggleFavorite = if (currentSong != null) {{ viewModel.toggleFavorite(currentSong!!) }} else null
+                        // 网络歌曲调用 toggleNetworkFavorite，本地歌曲调用 toggleFavorite
+                        onToggleFavorite = if (currentSong != null) {
+                            {
+                                val song = currentSong!!
+                                if (song.isNetworkSong) viewModel.toggleNetworkFavorite(song)
+                                else viewModel.toggleFavorite(song)
+                            }
+                        } else null
                     )
                 }
                 Screen.Library -> {
@@ -176,6 +187,8 @@ fun AppRoot(
                     val yearsState by viewModel.years.collectAsState(initial = UiState.Success(emptyList()))
                     val songsPaging by viewModel.songsPaging.collectAsState(initial = com.nasmusic.tv.ui.viewmodel.SongsPagingState())
                     val searchResultsState by viewModel.searchResults.collectAsState(initial = UiState.Success(emptyList()))
+                    val networkSearchResultsState by viewModel.networkSearchResults.collectAsState(initial = UiState.Success(emptyList()))
+                    val networkSearchKeyword by viewModel.networkSearchKeyword.collectAsState(initial = "")
                     val albumList = albums.dataOrNull() ?: emptyList()
                     val songList = songs.dataOrNull() ?: emptyList()
                     val genreList = genres.dataOrNull() ?: emptyList()
@@ -211,7 +224,12 @@ fun AppRoot(
                             }
                         },
                         onPlaySong = { song ->
-                            viewModel.playQueue(listOf(song))
+                            // 网络歌曲需要先解析播放链接，本地歌曲直接播放
+                            if (song.isNetworkSong) {
+                                viewModel.playNetworkSong(song)
+                            } else {
+                                viewModel.playQueue(listOf(song))
+                            }
                             viewModel.navigateTo(Screen.NowPlaying)
                         },
                         onPlaySongs = { songListParam ->
@@ -224,6 +242,9 @@ fun AppRoot(
                                 viewModel.navigateTo(Screen.NowPlaying)
                             }
                         },
+                        queueSongIds = viewModel.queueSongIds.collectAsState(initial = emptySet()).value,
+                        onToggleQueue = { song -> viewModel.toggleQueueSong(song) },
+                        onToggleFavorite = { song -> viewModel.toggleFavorite(song) },
                         onOpenAlbumDetail = { album -> viewModel.openAlbumDetail(album) },
                         onOpenArtistDetail = { artist -> viewModel.openArtistDetail(artist) },
                         onSongsByGenre = { genre, callback -> viewModel.getSongsByGenre(genre, callback) },
@@ -234,7 +255,19 @@ fun AppRoot(
                         onLoadYears = { viewModel.loadYears() },
                         onLoadRecentSongs = { viewModel.loadRecentSongs() },
                         onSearch = { query -> viewModel.searchSongsOnServer(query) },
-                        onClearSearch = { viewModel.clearSearch() }
+                        onClearSearch = { viewModel.clearSearch() },
+                        networkSearchResults = networkSearchResultsState.dataOrNull() ?: emptyList(),
+                        isNetworkSearching = networkSearchResultsState is UiState.Loading,
+                        networkSearchKeyword = networkSearchKeyword,
+                        onSearchNetwork = { query -> viewModel.searchNetworkSongs(query) },
+                        onClearNetworkSearch = { viewModel.clearNetworkSearch() },
+                        onPlayNetworkSong = { song ->
+                            viewModel.playNetworkSong(song)
+                            viewModel.navigateTo(Screen.NowPlaying)
+                        },
+                        networkFavoriteSongs = viewModel.networkFavoriteSongs.collectAsState(initial = emptyList()).value,
+                        networkFavoriteIds = viewModel.networkFavoriteIds.collectAsState(initial = emptySet()).value,
+                        onToggleNetworkFavorite = { song -> viewModel.toggleNetworkFavorite(song) }
                     )
                 }
                 Screen.Queue -> {
@@ -280,13 +313,15 @@ fun AppRoot(
                         onChangeLyricsOffset = { viewModel.updateLyricsOffset(it) },
                         onClearLyricsCache = { viewModel.clearLyricsCache() },
                         onClearCoverCache = { viewModel.clearCoverCache() },
-                        onOpenEqualizer = { viewModel.navigateTo(Screen.Equalizer) }
+                        onOpenEqualizer = { viewModel.navigateTo(Screen.Equalizer) },
+                        onChangeMetingApiBaseUrl = { viewModel.updateMetingApiBaseUrl(it) }
                     )
                 }
                 Screen.AlbumDetail -> {
                     val selectedAlbum by viewModel.selectedAlbum.collectAsState(initial = null)
                     val albumSongsCache by viewModel.albumSongsCache.collectAsState(initial = emptyMap())
                     val albumSongs = selectedAlbum?.let { albumSongsCache[it.id] } ?: emptyList()
+                    val favoriteIds by viewModel.favoriteIds.collectAsState(initial = emptySet())
                     if (selectedAlbum != null) {
                         AlbumDetailScreen(
                             album = selectedAlbum!!,
@@ -300,7 +335,11 @@ fun AppRoot(
                                 viewModel.playQueue(songList)
                                 viewModel.navigateTo(Screen.NowPlaying)
                             },
-                            onBack = { viewModel.navigateTo(Screen.Library) }
+                            onBack = { viewModel.navigateTo(Screen.Library) },
+                            queueSongIds = viewModel.queueSongIds.collectAsState(initial = emptySet()).value,
+                            onToggleQueue = { song -> viewModel.toggleQueueSong(song) },
+                            favoriteIds = favoriteIds,
+                            onToggleFavorite = { song -> viewModel.toggleFavorite(song) }
                         )
                     }
                 }
@@ -312,6 +351,7 @@ fun AppRoot(
                     val selectedArtist = selectedArtistName?.let { name ->
                         artistsState.dataOrNull()?.find { it.name == name }
                     }
+                    val favoriteIds by viewModel.favoriteIds.collectAsState(initial = emptySet())
                     if (selectedArtistName != null) {
                         ArtistDetailScreen(
                             artist = selectedArtist,
@@ -325,7 +365,11 @@ fun AppRoot(
                                 viewModel.playQueue(songList)
                                 viewModel.navigateTo(Screen.NowPlaying)
                             },
-                            onBack = { viewModel.navigateTo(Screen.Library) }
+                            onBack = { viewModel.navigateTo(Screen.Library) },
+                            queueSongIds = viewModel.queueSongIds.collectAsState(initial = emptySet()).value,
+                            onToggleQueue = { song -> viewModel.toggleQueueSong(song) },
+                            favoriteIds = favoriteIds,
+                            onToggleFavorite = { song -> viewModel.toggleFavorite(song) }
                         )
                     }
                 }

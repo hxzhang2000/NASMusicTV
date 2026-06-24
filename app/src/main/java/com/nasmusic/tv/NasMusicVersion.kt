@@ -23,13 +23,13 @@ object NasMusicVersion {
     // =========================================================================
 
     /** 面向用户的版本名称 */
-    const val VERSION_NAME = "2.3.0"
+    const val VERSION_NAME = "2.4.0"
 
     /** Android versionCode（每次发布递增） */
-    const val VERSION_CODE = 6
+    const val VERSION_CODE = 7
 
     /** 构建阶段标识 */
-    const val BUILD_TYPE = "DEV"
+    const val BUILD_TYPE = "RELEASE"
 
     /** 文件格式版本（DataStore/缓存数据结构版本，向后不兼容时递增） */
     const val FILE_FORMAT_VERSION = 1

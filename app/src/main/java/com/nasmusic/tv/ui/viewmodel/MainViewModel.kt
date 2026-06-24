@@ -12,6 +12,7 @@ import com.nasmusic.tv.data.model.AppSettings
 import com.nasmusic.tv.data.model.Lyrics
 import com.nasmusic.tv.data.model.LyricsAvailability
 import com.nasmusic.tv.data.model.LyricsSource
+import com.nasmusic.tv.data.model.NetworkFavoriteItem
 import com.nasmusic.tv.data.model.PlayMode
 import com.nasmusic.tv.data.model.Song
 import com.nasmusic.tv.data.model.ServerConfig
@@ -31,7 +32,9 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -56,7 +59,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     private val playerManager = nasMusicApp.playerManager
     private val prefs = nasMusicApp.appPreferences
     private val backendRegistry = nasMusicApp.backendRegistry
-    private val lyricsManager = LyricsManager(app, backendRegistry)
+    private val lyricsManager = LyricsManager(app, backendRegistry, nasMusicApp.networkMusicManager)
 
     // --- 导航状态 ---
     private val _currentScreen = MutableStateFlow(Screen.NowPlaying)
@@ -89,6 +92,35 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     // --- 按需加载：搜索结果（服务端搜索）---
     private val _searchResults = MutableStateFlow<UiState<List<Song>>>(UiState.Success(emptyList()))
     val searchResults: StateFlow<UiState<List<Song>>> = _searchResults.asStateFlow()
+
+    // --- 网络音乐搜索结果（NetworkMusicManager 搜索）---
+    private val _networkSearchResults = MutableStateFlow<UiState<List<Song>>>(UiState.Success(emptyList()))
+    val networkSearchResults: StateFlow<UiState<List<Song>>> = _networkSearchResults.asStateFlow()
+    // 网络搜索关键词（跨页面导航时保留，避免回来后丢失搜索状态）
+    private val _networkSearchKeyword = MutableStateFlow("")
+    val networkSearchKeyword: StateFlow<String> = _networkSearchKeyword.asStateFlow()
+
+    // --- 网络歌曲收藏 ---
+    private val _networkFavorites = MutableStateFlow<List<NetworkFavoriteItem>>(emptyList())
+    // 供 UI 使用：转换为 Song 对象列表（设置 isNetworkSong 等标记字段）
+    val networkFavoriteSongs: StateFlow<List<Song>> = _networkFavorites.map { favorites ->
+        favorites.map { item ->
+            Song(
+                id = item.songId,
+                title = item.title,
+                artist = item.artist,
+                album = item.album,
+                coverUrl = item.coverUrl,
+                isNetworkSong = true,
+                networkSource = item.networkSource,
+                networkId = item.networkId
+            )
+        }
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+    // 网络收藏 ID 集合（用于快速判断是否已收藏）
+    val networkFavoriteIds: StateFlow<Set<String>> = _networkFavorites.map { favorites ->
+        favorites.map { it.songId }.toSet()
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, emptySet())
 
     // --- 详情页状态 ---
     private val _selectedAlbum = MutableStateFlow<Album?>(null)
@@ -217,11 +249,92 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 }
             }
         }
+
+        // 监听网络收藏变化（DataStore 持久化，响应式更新）
+        viewModelScope.launch {
+            prefs.networkFavorites.collect { favorites ->
+                _networkFavorites.value = favorites
+            }
+        }
+
+        // 恢复上次播放队列（仅恢复 UI 状态，不自动播放）
+        restoreLastQueue()
+
+        // 监听队列变化，自动持久化到 DataStore
+        viewModelScope.launch {
+            combine(queue, currentIndex) { songs, index ->
+                songs to index
+            }.collect { (songs, index) ->
+                if (songs.isNotEmpty()) {
+                    prefs.saveLastQueue(songs, index)
+                }
+            }
+        }
+
+        // ExoPlayer 自动过渡到 streamUrl 为空的歌曲时（如恢复队列中的网络歌曲），
+        // 解析 streamUrl 后重新播放
+        playerManager.onNeedResolveStreamUrl = { index ->
+            resolveAndPlayByIndex(index)
+        }
     }
 
     // --- 导航 ---
     fun navigateTo(screen: Screen) {
         _currentScreen.value = screen
+    }
+
+    /**
+     * 恢复上次播放队列（仅恢复 UI 状态，不自动播放）
+     *
+     * 从 DataStore 读取持久化的队列，调用 PlayerManager.restoreQueue() 设置队列和索引。
+     * NAS 歌曲的 streamUrl 暂时为空，等后端连接成功后由 updateRestoredQueueStreamUrls() 更新。
+     * 网络歌曲的 streamUrl 在播放时由 NetworkMusicManager.resolvePlayUrl() 解析。
+     */
+    private fun restoreLastQueue() {
+        val lastQueue = prefs.getLastQueueSync() ?: return
+        if (lastQueue.songs.isEmpty()) return
+        AppLog.d("NASMusic", "restoreLastQueue: ${lastQueue.songs.size} songs, index=${lastQueue.currentIndex}")
+        playerManager.restoreQueue(lastQueue.songs, lastQueue.currentIndex)
+    }
+
+    /**
+     * 后端连接成功后，更新恢复队列中 NAS 歌曲的 streamUrl
+     *
+     * 恢复的队列中 NAS 歌曲的 streamUrl 为空（持久化时置空），
+     * 需要通过 adapter.getSongsByIds() 重新获取有效的 streamUrl。
+     * 网络歌曲不需要更新，播放时由 resolvePlayUrl() 实时解析。
+     */
+    private fun updateRestoredQueueStreamUrls() {
+        val currentQueue = queue.value
+        if (currentQueue.isEmpty()) return
+        val adapter = backendRegistry.getAdapter() ?: return
+
+        // 筛选需要更新 streamUrl 的 NAS 歌曲
+        val nasSongIds = currentQueue.filter { !it.isNetworkSong }.map { it.id }
+        if (nasSongIds.isEmpty()) return
+
+        viewModelScope.launch {
+            try {
+                val updatedSongs = adapter.getSongsByIds(nasSongIds)
+                val songMap = updatedSongs.associateBy { it.id }
+                // 合并：NAS 歌曲用更新后的版本（含 streamUrl），网络歌曲保留原样
+                val mergedQueue = currentQueue.map { song ->
+                    if (!song.isNetworkSong) {
+                        songMap[song.id] ?: song
+                    } else {
+                        song
+                    }
+                }
+                // 只在队列未变化时更新（避免覆盖用户操作）
+                if (mergedQueue.size == queue.value.size) {
+                    val currentIndexValue = currentIndex.value
+                    playerManager.restoreQueue(mergedQueue, currentIndexValue)
+                    AppLog.d("NASMusic", "updateRestoredQueueStreamUrls: updated ${updatedSongs.size} NAS songs")
+                }
+            } catch (e: Exception) {
+                AppLog.w("NASMusic", "updateRestoredQueueStreamUrls failed: ${e.message}", e)
+            }
+        }
     }
 
     // --- 连接 ---
@@ -235,6 +348,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 prefs.saveServerConfig(config.copy(isConnected = true))
                 // 连接成功后加载初始数据
                 loadLibrary()
+                // 更新恢复队列中 NAS 歌曲的 streamUrl
+                updateRestoredQueueStreamUrls()
             }
             success
         } catch (e: Exception) {
@@ -593,6 +708,106 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         _searchResults.value = UiState.Success(emptyList())
     }
 
+    /**
+     * 搜索网络歌曲（通过 NetworkMusicManager，不依赖 NAS 连接）
+     *
+     * 策略：默认源优先，失败时 fallback 到其他源。
+     * 搜索结果为统一 Song 模型（isNetworkSong=true）。
+     */
+    fun searchNetworkSongs(keyword: String) {
+        android.util.Log.i("MetingDiag", "=== MainViewModel.searchNetworkSongs === keyword='$keyword'")
+        if (keyword.isBlank()) {
+            android.util.Log.i("MetingDiag", "searchNetworkSongs: keyword blank")
+            _networkSearchResults.value = UiState.Success(emptyList())
+            _networkSearchKeyword.value = ""
+            return
+        }
+        _networkSearchKeyword.value = keyword
+        _networkSearchResults.value = UiState.Loading
+        viewModelScope.launch {
+            try {
+                val results = nasMusicApp.networkMusicManager.search(keyword)
+                android.util.Log.i("MetingDiag", "searchNetworkSongs: got ${results.size} results for '$keyword'")
+                _networkSearchResults.value = UiState.Success(results)
+            } catch (e: Exception) {
+                android.util.Log.e("MetingDiag", "searchNetworkSongs failed: ${e.message}", e)
+                _networkSearchResults.value = UiState.Error(
+                    message = "网络搜索失败: ${e.message?.take(50)}"
+                )
+            }
+        }
+    }
+
+    /**
+     * 清除网络搜索结果
+     */
+    fun clearNetworkSearch() {
+        _networkSearchResults.value = UiState.Success(emptyList())
+        _networkSearchKeyword.value = ""
+    }
+
+    /**
+     * 播放网络歌曲
+     *
+     * 网络歌曲的 streamUrl 不持久化，播放前实时解析：
+     * 1. 通过 NetworkMusicManager.resolvePlayUrl() 获取直联 URL
+     * 2. 将解析后的 URL 填入 song.streamUrl
+     * 3. 交给 PlayerManager 播放
+     *
+     * 解析失败时显示错误提示。
+     */
+    fun playNetworkSong(song: Song) {
+        if (!song.isNetworkSong) {
+            // 非 network 歌曲，走普通播放流程
+            playSong(song)
+            return
+        }
+        viewModelScope.launch {
+            try {
+                val playUrl = nasMusicApp.networkMusicManager.resolvePlayUrl(song)
+                if (playUrl.isNullOrBlank()) {
+                    showError("无法解析播放链接，请稍后重试")
+                    return@launch
+                }
+                val playable = song.copy(streamUrl = playUrl)
+                AppLog.d("NASMusic", "playNetworkSong: ${song.title} → $playUrl")
+                playSong(playable)
+            } catch (e: Exception) {
+                AppLog.e("NASMusic", "playNetworkSong failed", e)
+                showError("播放失败: ${e.message?.take(50)}")
+            }
+        }
+    }
+
+    /**
+     * 切换网络歌曲收藏状态
+     *
+     * 仅对网络歌曲生效（isNetworkSong=true）。收藏信息持久化到 DataStore，
+     * 不存储 streamUrl（有时效性），播放时重新解析。
+     */
+    fun toggleNetworkFavorite(song: Song) {
+        if (!song.isNetworkSong) return
+        viewModelScope.launch {
+            val item = NetworkFavoriteItem(
+                songId = song.id,
+                title = song.title,
+                artist = song.artist,
+                album = song.album,
+                coverUrl = song.coverUrl,
+                networkSource = song.networkSource ?: return@launch,
+                networkId = song.networkId ?: return@launch
+            )
+            prefs.toggleNetworkFavorite(item)
+        }
+    }
+
+    /**
+     * 判断网络歌曲是否已收藏（同步，用于 UI 快速判断）
+     */
+    fun isNetworkFavorite(songId: String): Boolean {
+        return _networkFavorites.value.any { it.songId == songId }
+    }
+
     fun refreshLibrary() {
         _albums.value = UiState.Loading
         _songs.value = UiState.Loading
@@ -783,9 +998,122 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         recordPlay(firstSong)
     }
 
-    fun playPause() = playerManager.playPause()
-    fun next() = playerManager.next(_playMode.value)
-    fun previous() = playerManager.previous(_playMode.value)
+    fun playPause() {
+        val song = currentSong.value
+        // 恢复队列后，当前歌曲的 streamUrl 可能为空，需要先解析再播放
+        if (song != null && song.streamUrl.isNullOrBlank() && !isPlaying.value) {
+            resolveAndPlayCurrentSong(song)
+            return
+        }
+        playerManager.playPause()
+    }
+
+    /**
+     * 解析当前歌曲的播放链接并播放
+     *
+     * 用于恢复队列后首次播放：
+     * - 网络歌曲：通过 NetworkMusicManager.resolvePlayUrl() 解析
+     * - NAS 歌曲：通过 adapter.getSongsByIds() 获取 streamUrl
+     */
+    private fun resolveAndPlayCurrentSong(song: Song) {
+        viewModelScope.launch {
+            try {
+                val playUrl = if (song.isNetworkSong) {
+                    nasMusicApp.networkMusicManager.resolvePlayUrl(song)
+                } else {
+                    // NAS 歌曲：通过后端获取 streamUrl
+                    val adapter = backendRegistry.getAdapter()
+                    if (adapter != null) {
+                        val songs = adapter.getSongsByIds(listOf(song.id))
+                        songs.firstOrNull()?.streamUrl
+                    } else null
+                }
+
+                if (playUrl.isNullOrBlank()) {
+                    AppLog.w("NASMusic", "resolveAndPlayCurrentSong: failed to resolve streamUrl for ${song.title}")
+                    showError("无法解析播放链接，请稍后重试")
+                    return@launch
+                }
+
+                AppLog.d("NASMusic", "resolveAndPlayCurrentSong: resolved ${song.title} → $playUrl")
+                // 更新队列中当前歌曲的 streamUrl，然后播放
+                val currentQueue = queue.value
+                val currentIndexValue = currentIndex.value
+                val updatedQueue = currentQueue.mapIndexed { index, s ->
+                    if (index == currentIndexValue) s.copy(streamUrl = playUrl) else s
+                }
+                // 重新加载队列到 ExoPlayer 并播放
+                playerManager.playQueue(updatedQueue, currentIndexValue)
+            } catch (e: Exception) {
+                AppLog.e("NASMusic", "resolveAndPlayCurrentSong failed", e)
+                showError("播放失败: ${e.message?.take(50)}")
+            }
+        }
+    }
+    fun next() {
+        // 恢复队列后，下一首歌曲的 streamUrl 可能为空，需要先解析
+        val queueValue = queue.value
+        val nextIndex = currentIndex.value + 1
+        val targetIndex = if (nextIndex < queueValue.size) nextIndex else 0
+        val nextSong = queueValue.getOrNull(targetIndex)
+        if (nextSong != null && nextSong.streamUrl.isNullOrBlank()) {
+            // streamUrl 为空，先切换索引再解析播放
+            resolveAndPlayByIndex(targetIndex)
+            return
+        }
+        playerManager.next(_playMode.value)
+    }
+
+    fun previous() {
+        // 恢复队列后，上一首歌曲的 streamUrl 可能为空，需要先解析
+        val queueValue = queue.value
+        val prevIndex = currentIndex.value - 1
+        val targetIndex = if (prevIndex >= 0) prevIndex else queueValue.lastIndex
+        val prevSong = queueValue.getOrNull(targetIndex)
+        if (prevSong != null && prevSong.streamUrl.isNullOrBlank()) {
+            resolveAndPlayByIndex(targetIndex)
+            return
+        }
+        playerManager.previous(_playMode.value)
+    }
+
+    /**
+     * 解析指定索引处歌曲的播放链接并播放
+     *
+     * 用于恢复队列后切换歌曲（next/previous）时，目标歌曲 streamUrl 为空的情况。
+     */
+    private fun resolveAndPlayByIndex(targetIndex: Int) {
+        val queueValue = queue.value
+        val song = queueValue.getOrNull(targetIndex) ?: return
+        viewModelScope.launch {
+            try {
+                val playUrl = if (song.isNetworkSong) {
+                    nasMusicApp.networkMusicManager.resolvePlayUrl(song)
+                } else {
+                    val adapter = backendRegistry.getAdapter()
+                    if (adapter != null) {
+                        adapter.getSongsByIds(listOf(song.id)).firstOrNull()?.streamUrl
+                    } else null
+                }
+
+                if (playUrl.isNullOrBlank()) {
+                    AppLog.w("NASMusic", "resolveAndPlayByIndex: failed to resolve streamUrl for ${song.title}")
+                    showError("无法解析播放链接，请稍后重试")
+                    return@launch
+                }
+
+                AppLog.d("NASMusic", "resolveAndPlayByIndex: resolved ${song.title} → $playUrl")
+                // 更新队列中目标歌曲的 streamUrl，然后播放
+                val updatedQueue = queueValue.mapIndexed { index, s ->
+                    if (index == targetIndex) s.copy(streamUrl = playUrl) else s
+                }
+                playerManager.playQueue(updatedQueue, targetIndex)
+            } catch (e: Exception) {
+                AppLog.e("NASMusic", "resolveAndPlayByIndex failed", e)
+                showError("播放失败: ${e.message?.take(50)}")
+            }
+        }
+    }
     fun seekTo(positionMs: Long) = playerManager.seekTo(positionMs)
 
     fun togglePlayMode() {
@@ -805,12 +1133,35 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     fun removeFromQueue(index: Int) = playerManager.removeFromQueue(index)
 
+    /**
+     * 切换歌曲在队列中的状态：不在队列则加入，在队列则移除。
+     * 当前正在播放的歌曲不会被移除（避免误中断播放）。
+     */
+    fun toggleQueueSong(song: Song) {
+        val currentQueue = queue.value
+        val inQueue = currentQueue.any { it.id == song.id }
+        if (inQueue) {
+            playerManager.removeSongFromQueue(song)
+        } else {
+            playerManager.addToQueue(song)
+        }
+    }
+
+    /**
+     * 队列中所有歌曲 id 的集合（供 UI 快速判断某首歌是否在队列中）
+     */
+    val queueSongIds: StateFlow<Set<String>> = queue
+        .map { songs -> songs.map { it.id }.toSet() }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptySet())
+
     fun moveQueueItem(fromIndex: Int, toIndex: Int) = playerManager.moveItem(fromIndex, toIndex)
 
     fun clearQueue() {
         playerManager.clearQueue()
         _currentLyrics.value = null
         _lyricsAvailability.value = LyricsAvailability()
+        // 清除持久化的上次播放队列
+        viewModelScope.launch { prefs.clearLastQueue() }
     }
 
     private fun loadLyricsForCurrentSong() {
@@ -830,6 +1181,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 val lyrics = availability.backend ?: availability.network
                 _currentLyrics.value = lyrics
                 AppLog.d("NASMusic", "loadLyrics: source=${lyrics?.source}, lines=${lyrics?.lines?.size}")
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                // 协程被主动取消（如切歌时 lyricsLoadJob.cancel()），不是错误，不提示
+                throw e
             } catch (e: Exception) {
                 android.util.Log.e("NASMusic", "loadLyrics failed", e)
                 showError("加载歌词失败: ${e.message?.take(50)}")
@@ -883,6 +1237,19 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     fun updateLyricsOffset(offsetMs: Long) = viewModelScope.launch {
         prefs.setLyricsOffset(offsetMs)
+    }
+
+    /**
+     * 更新 Meting-API 端点 URL（网络搜索配置）
+     * 传入空串则恢复默认端点
+     */
+    fun updateMetingApiBaseUrl(url: String) = viewModelScope.launch {
+        val normalized = url.trim()
+        if (normalized.isEmpty()) {
+            prefs.setMetingApiBaseUrl(com.nasmusic.tv.backend.network.MetingApiService.DEFAULT_BASE_URL)
+        } else {
+            prefs.setMetingApiBaseUrl(normalized)
+        }
     }
 
     // --- E-4 缓存管理 ---

@@ -74,6 +74,7 @@ fun SettingsScreen(
     onClearLyricsCache: (() -> Unit)? = null,
     onClearCoverCache: (() -> Unit)? = null,
     onOpenEqualizer: (() -> Unit)? = null,
+    onChangeMetingApiBaseUrl: ((String) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     var activeSection by remember { mutableStateOf(SettingsSection.GENERAL) }
@@ -82,6 +83,15 @@ fun SettingsScreen(
     var isNetworkTesting by remember { mutableStateOf(false) }
     var networkTestStatus by remember { mutableStateOf("") }
     val networkTestScope = rememberCoroutineScope()
+
+    // Meting-API 端点编辑对话框状态
+    var showMetingUrlDialog by remember { mutableStateOf(false) }
+    var metingUrlError by remember { mutableStateOf<String?>(null) }
+
+    // 提前解析字符串资源，供非 Composable 回调使用
+    val metingUrlInvalidMsg = stringResource(R.string.settings_meting_api_url_invalid)
+    val metingUrlHint = stringResource(R.string.settings_meting_api_url_hint)
+    val metingUrlTitle = stringResource(R.string.settings_meting_api_url)
 
     Row(modifier = modifier.fillMaxSize().padding(32.dp)) {
         // --- 左侧：侧边导航栏（bg2 Surface 背景）---
@@ -301,9 +311,172 @@ fun SettingsScreen(
                             }
                         }
                     }
+
+                    // --- 网络搜索：Meting-API 端点配置 ---
+                    if (onChangeMetingApiBaseUrl != null) {
+                        Spacer(modifier = Modifier.height(24.dp))
+                        Text(
+                            text = stringResource(R.string.settings_network_search),
+                            color = NasMusicColors.Primary,
+                            fontSize = 18.sp,
+                            modifier = Modifier.padding(bottom = 8.dp, start = 4.dp)
+                        )
+                        Text(
+                            text = stringResource(R.string.settings_meting_api_url_desc),
+                            color = NasMusicColors.TextSecondary,
+                            fontSize = 13.sp,
+                            modifier = Modifier.padding(bottom = 8.dp, start = 4.dp)
+                        )
+
+                        // 预设端点单选列表
+                        Text(
+                            text = stringResource(R.string.settings_meting_preset_endpoints),
+                            color = NasMusicColors.TextPrimary,
+                            fontSize = 14.sp,
+                            modifier = Modifier.padding(start = 4.dp, top = 8.dp, bottom = 8.dp)
+                        )
+                        val currentNormalized = settings.metingApiBaseUrl.trim().trimEnd('/')
+                        com.nasmusic.tv.backend.network.MetingApiService.PRESET_ENDPOINTS.forEach { (name, url) ->
+                            val selected = currentNormalized == url.trimEnd('/')
+                            FocusableSurface(
+                                onClick = {
+                                    metingUrlError = null
+                                    onChangeMetingApiBaseUrl(url)
+                                },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 4.dp),
+                                shape = RoundedCornerShape(12.dp),
+                                focusedScale = 1.02f,
+                                animationDurationMs = 250,
+                                containerColor = if (selected) NasMusicColors.Primary.copy(alpha = 0.18f) else NasMusicColors.Surface,
+                                contentColor = NasMusicColors.TextPrimary,
+                                focusedContainerColor = if (selected) NasMusicColors.Primary.copy(alpha = 0.3f) else NasMusicColors.Primary.copy(alpha = 0.15f),
+                                focusedContentColor = NasMusicColors.TextPrimary,
+                                pressedScale = 0.98f,
+                                focusBorderColor = if (selected) NasMusicColors.Primary.copy(alpha = 0.5f) else NasMusicColors.FocusRing.copy(alpha = 0.6f)
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 24.dp, vertical = 14.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = name,
+                                            color = if (selected) NasMusicColors.Primary else NasMusicColors.TextPrimary,
+                                            fontSize = 15.sp
+                                        )
+                                        Text(
+                                            text = url,
+                                            color = NasMusicColors.TextSecondary,
+                                            fontSize = 12.sp,
+                                            modifier = Modifier.padding(top = 2.dp)
+                                        )
+                                    }
+                                    if (selected) {
+                                        Text(
+                                            text = "✓",
+                                            color = NasMusicColors.Primary,
+                                            fontSize = 16.sp
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        // 自定义端点选项
+                        val isPreset = com.nasmusic.tv.backend.network.MetingApiService.PRESET_ENDPOINTS
+                            .any { it.second.trimEnd('/') == currentNormalized }
+                        val customSelected = !isPreset
+                        FocusableSurface(
+                            onClick = {
+                                metingUrlError = null
+                                showMetingUrlDialog = true
+                            },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 4.dp),
+                            shape = RoundedCornerShape(12.dp),
+                            focusedScale = 1.02f,
+                            animationDurationMs = 250,
+                            containerColor = if (customSelected) NasMusicColors.Primary.copy(alpha = 0.18f) else NasMusicColors.Surface,
+                            contentColor = NasMusicColors.TextPrimary,
+                            focusedContainerColor = if (customSelected) NasMusicColors.Primary.copy(alpha = 0.3f) else NasMusicColors.Primary.copy(alpha = 0.15f),
+                            focusedContentColor = NasMusicColors.TextPrimary,
+                            pressedScale = 0.98f,
+                            focusBorderColor = if (customSelected) NasMusicColors.Primary.copy(alpha = 0.5f) else NasMusicColors.FocusRing.copy(alpha = 0.6f)
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 24.dp, vertical = 14.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = stringResource(R.string.settings_meting_custom_endpoint),
+                                        color = if (customSelected) NasMusicColors.Primary else NasMusicColors.TextPrimary,
+                                        fontSize = 15.sp
+                                    )
+                                    Text(
+                                        text = if (customSelected) settings.metingApiBaseUrl else stringResource(R.string.settings_meting_custom_endpoint_desc),
+                                        color = NasMusicColors.TextSecondary,
+                                        fontSize = 12.sp,
+                                        modifier = Modifier.padding(top = 2.dp)
+                                    )
+                                }
+                                Text(
+                                    text = stringResource(R.string.settings_meting_api_url_edit),
+                                    color = NasMusicColors.Primary,
+                                    fontSize = 14.sp
+                                )
+                            }
+                        }
+
+                        // 错误提示
+                        if (metingUrlError != null) {
+                            Text(
+                                text = metingUrlError!!,
+                                color = NasMusicColors.Warning,
+                                fontSize = 13.sp,
+                                modifier = Modifier.padding(top = 8.dp, start = 4.dp)
+                            )
+                        }
+                    }
                 }
             }
         }
+    }
+
+    // Meting-API 端点编辑对话框
+    if (showMetingUrlDialog) {
+        TextInputDialog(
+            title = metingUrlTitle,
+            hint = metingUrlHint,
+            initialValue = settings.metingApiBaseUrl,
+            onConfirm = { input ->
+                val trimmed = input.trim()
+                if (trimmed.isEmpty()) {
+                    metingUrlError = null
+                    onChangeMetingApiBaseUrl?.invoke(
+                        com.nasmusic.tv.backend.network.MetingApiService.DEFAULT_BASE_URL
+                    )
+                    showMetingUrlDialog = false
+                } else if (!trimmed.startsWith("http://") && !trimmed.startsWith("https://")) {
+                    metingUrlError = metingUrlInvalidMsg
+                } else {
+                    metingUrlError = null
+                    onChangeMetingApiBaseUrl?.invoke(trimmed)
+                    showMetingUrlDialog = false
+                }
+            },
+            onDismiss = {
+                showMetingUrlDialog = false
+                metingUrlError = null
+            }
+        )
     }
 }
 

@@ -21,6 +21,12 @@ class PlayerManager() {
 
     private var player: ExoPlayer? = null
 
+    /**
+     * 当 ExoPlayer 自动过渡到 streamUrl 为空的歌曲时触发（如恢复队列中的网络歌曲）。
+     * 外部（MainViewModel）应解析 streamUrl 后重新播放该索引的歌曲。
+     */
+    var onNeedResolveStreamUrl: ((index: Int) -> Unit)? = null
+
     private val progressHandler = Handler(Looper.getMainLooper())
     private val progressUpdateRunnable = object : Runnable {
         override fun run() {
@@ -92,6 +98,16 @@ class PlayerManager() {
 
         override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
             updateCurrentSongFromPlayer()
+            // 自动过渡（播放完一首）到 streamUrl 为空的歌曲时（如恢复队列中的网络歌曲），
+            // ExoPlayer 会因空 URI 出错。此时暂停并通知外部解析 streamUrl 后再播放。
+            if (reason == Player.MEDIA_ITEM_TRANSITION_REASON_AUTO) {
+                val currentSong = _queue.value.getOrNull(_currentIndex.value)
+                if (currentSong != null && currentSong.streamUrl.isNullOrBlank()) {
+                    AppLog.d("PlayerManager", "onMediaItemTransition: auto-transition to empty streamUrl, index=${_currentIndex.value}, resolving")
+                    player?.pause()
+                    onNeedResolveStreamUrl?.invoke(_currentIndex.value)
+                }
+            }
         }
 
         override fun onPositionDiscontinuity(
@@ -110,6 +126,14 @@ class PlayerManager() {
         override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
             android.util.Log.e("PlayerManager", "Player error: ${error.message}", error)
             _playerError.value = error.message ?: "播放错误"
+            // 当前歌曲 streamUrl 为空时（如恢复队列中的网络歌曲），不自动跳下一首，
+            // 避免级联错误（下一首也可能 streamUrl 为空）。
+            // 用户按播放时由 resolveAndPlayCurrentSong() 解析链接后正常播放。
+            val currentSong = _queue.value.getOrNull(_currentIndex.value)
+            if (currentSong != null && currentSong.streamUrl.isNullOrBlank()) {
+                AppLog.d("PlayerManager", "onPlayerError: skipped auto-next (current song streamUrl is empty)")
+                return
+            }
             // 自动跳下一首
             val p = player
             val mode = if (p != null) derivePlayMode(p) else PlayMode.REPEAT_ALL
@@ -331,6 +355,22 @@ class PlayerManager() {
     }
 
     /**
+     * 按 song.id 从队列中移除（用于歌曲列表页的「加入队列」按钮切换）
+     *
+     * 若队列中存在同 id 歌曲，移除第一个匹配项并返回 true；否则返回 false。
+     * 不移除当前正在播放的歌曲（避免误中断播放），若匹配的是当前歌曲则跳过并返回 false。
+     */
+    fun removeSongFromQueue(song: Song): Boolean {
+        val currentQueue = _queue.value.toMutableList()
+        val targetIndex = currentQueue.indexOfFirst { it.id == song.id }
+        if (targetIndex < 0) return false
+        // 不移除当前正在播放的歌曲
+        if (targetIndex == _currentIndex.value) return false
+        removeFromQueue(targetIndex)
+        return true
+    }
+
+    /**
      * 移动队列中的曲目位置
      * @param fromIndex 当前索引
      * @param toIndex 目标索引
@@ -372,6 +412,50 @@ class PlayerManager() {
         _duration.value = 0
         p?.clearMediaItems()
         p?.stop()
+    }
+
+    /**
+     * 恢复上次播放队列（恢复 UI 状态 + 加载到 ExoPlayer，但不自动播放）
+     *
+     * 应用启动时从持久化存储恢复队列：
+     * 1. 设置 _queue / _currentIndex / _currentSong（UI 状态）
+     * 2. 将 MediaItem 加载到 ExoPlayer 并 prepare（使 ExoPlayer 处于"已准备"状态）
+     * 3. 不调用 play（用户点击播放时才启动播放）
+     *
+     * - NAS 歌曲的 streamUrl 需要后端连接后由 MainViewModel 更新并重新 prepare
+     * - 网络歌曲的 streamUrl 在播放时由 NetworkMusicManager.resolvePlayUrl() 解析
+     * - streamUrl 为空的歌曲使用空 URI，ExoPlayer 会报错但不崩溃，更新后重新 prepare
+     *
+     * @param songs 队列歌曲列表
+     * @param currentIndex 当前播放索引
+     */
+    fun restoreQueue(songs: List<Song>, currentIndex: Int) {
+        if (songs.isEmpty()) return
+        val safeIndex = currentIndex.coerceIn(0, songs.lastIndex)
+        _queue.value = songs
+        _currentIndex.value = safeIndex
+        _currentSong.value = songs[safeIndex]
+
+        // 仅当当前歌曲有有效的 streamUrl 时，才加载 MediaItems 并 prepare
+        // 网络歌曲的 streamUrl 为空（持久化时置空），此时不应调用 prepare，
+        // 否则 ExoPlayer 会因空 URI 进入错误状态并触发 onPlayerError 级联跳歌。
+        // 网络歌曲的 streamUrl 在用户按播放时由 resolveAndPlayCurrentSong() 解析。
+        val currentSong = songs[safeIndex]
+        val p = player
+        if (p != null && !currentSong.streamUrl.isNullOrBlank()) {
+            val mediaItems = songs.map { song ->
+                MediaItem.fromUri(song.streamUrl ?: "")
+            }
+            try {
+                p.setMediaItems(mediaItems, safeIndex, 0)
+                p.prepare()
+                AppLog.d("PlayerManager", "restoreQueue: prepared ${songs.size} songs, start=$safeIndex (not playing)")
+            } catch (e: Exception) {
+                android.util.Log.e("PlayerManager", "restoreQueue: prepare failed", e)
+            }
+        } else {
+            AppLog.d("PlayerManager", "restoreQueue: skipped prepare (current song streamUrl is empty, index=$safeIndex)")
+        }
     }
 
     /**
