@@ -3945,6 +3945,39 @@ Box(focusGroup)                          ← 外层容器，统一焦点组
 
 ---
 
+### 10.14 v2.4.2 — Code Review 修复
+
+**日期**：2026-06-26
+
+**目标**：根据全项目代码审查文档（`docs/code-review-2026-06-26.md`），修复线程安全、DataStore 阻塞、Kotlin API 退化、Jellyfin 分页缺失等问题。用户决定不修改 #5 MainViewModel 上帝类（无 bug、重构风险高），#6/#4/#13 列为 low 优先级暂不修改。
+
+#### 10.14.1 修改清单
+
+按 review 编号：
+
+| # | 优先级 | 修改内容 | 修改文件 |
+|---|--------|----------|----------|
+| 3 | HIGH | `seekPending` 添加 `@Volatile`（主线程与 ExoPlayer 回调线程可见性） | `player/PlayerManager.kt` |
+| 8 | MEDIUM | `PlayMode.values()` → `PlayMode.entries`（Kotlin 1.9+ 推荐，避免每次创建新数组） | `ui/viewmodel/MainViewModel.kt` |
+| 2 | HIGH | `playUrlCache` 从 `mutableMapOf` 改为 `ConcurrentHashMap`（IO 线程并发读写） | `backend/network/NetworkMusicManager.kt` |
+| 1 | HIGH | `getRecentSongIdsSync`/`getNetworkFavoritesSync`/`getLastQueueSync` 3 处 `runBlocking` 改为 `suspend`；`restoreLastQueue()` 改为 suspend 并在 `viewModelScope.launch` 中调用；保留 `getDefaultNetworkSourceSync`/`getMetingApiBaseUrlSync`（被 lambda 同步调用无法改） | `data/prefs/AppPreferences.kt`、`ui/viewmodel/MainViewModel.kt` |
+| 10 | LOW | `AGENTS.md` 修正 `BackendRegistry` 描述（实际是普通类，非 `object` singleton） | `AGENTS.md` |
+| 7 | MEDIUM | `AGENTS.md` 进度轮询间隔从 500ms 修正为 1000ms（v2.2.0 已调整） | `AGENTS.md` |
+| 11 | MEDIUM | 全项目 11 个文件 166 处 `android.util.Log` 统一替换为 `AppLog`；仅保留 `AppLog.kt` 自身 4 处封装实现 | `backend/`、`player/`、`ui/`、`lyrics/`、`util/` 共 11 个文件 |
+| 12 | LOW | `Screen`/`SongsPagingState` 从 `MainViewModel.kt` 移到 `data/model/` 独立文件 | 新增 `data/model/Screen.kt`、`data/model/SongsPagingState.kt`；修改 `MainViewModel.kt` 及 4 个引用文件 |
+| 9 | MEDIUM | `getAlbums`/`getFavorites`/`getSongsByGenre`/`getSongsByYearRange` 4 处硬编码 `Limit=1000` 改为分页循环，参照 `getArtists` 模式 | `backend/impl/JellyfinAdapter.kt` |
+
+#### 10.14.2 未修改项
+
+- **#5 MainViewModel 上帝类**：用户决定不修改（无功能 bug、拆分风险高、违背避免过度工程原则）
+- **#6 LibraryScreen 拆分（60KB）**：low 优先级，纯重构无收益，暂不修改
+- **#4 OkHttpClient 共享单例**：low 优先级，4 处配置不同需统一基础+个性化，工作量大，暂不修改
+- **#13 EncodingUtils 30% 阈值**：low 优先级，建议引入 ICU4J 但当前无 bug，暂不修改
+
+**验证**：待编译验证。
+
+---
+
 ## 11. 回归测试文档
 
 > 完整的回归测试文档独立维护在 `docs/regression-test.md`，包含 19 章节 248 个测试项。

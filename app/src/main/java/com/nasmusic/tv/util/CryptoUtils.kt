@@ -3,6 +3,7 @@ package com.nasmusic.tv.util
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import android.util.Base64
+import com.nasmusic.tv.util.AppLog
 import java.security.KeyStore
 import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
@@ -50,7 +51,7 @@ object CryptoUtils {
             val combined = iv + encrypted
             Base64.encodeToString(combined, Base64.NO_WRAP)
         } catch (e: Exception) {
-            android.util.Log.e("CryptoUtils", "encrypt failed", e)
+            AppLog.e("CryptoUtils", "encrypt failed", e)
             plainText // 失败时返回明文（降级处理）
         }
     }
@@ -71,7 +72,7 @@ object CryptoUtils {
             cipher.init(Cipher.DECRYPT_MODE, getOrCreateKey(), spec)
             String(cipher.doFinal(encrypted), Charsets.UTF_8)
         } catch (e: Exception) {
-            android.util.Log.e("CryptoUtils", "decrypt failed", e)
+            AppLog.e("CryptoUtils", "decrypt failed", e)
             encryptedText // 失败时返回原值（可能是明文，兼容旧版本）
         }
     }

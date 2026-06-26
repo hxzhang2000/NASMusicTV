@@ -88,7 +88,7 @@ No lint checks configured. CI 只跑 assembleDebug，不跑测试。
 
 **Both impl adapters use raw OkHttp** (not Retrofit). The `backend/jellyfin/` and `backend/navidrome/` directories contain older Retrofit-based implementations that are **dead code** — unused by anything.
 
-`BackendRegistry` is a Kotlin `object` singleton that holds the active adapter. One connection at a time. `testConnection()` creates a throwaway adapter and does NOT change current state.
+`BackendRegistry` is a regular class instantiated in `NasMusicApp.onCreate()` (not a Kotlin `object` singleton) that holds the active adapter. One connection at a time. `testConnection()` creates a throwaway adapter and does NOT change current state.
 
 ### Playback Stack
 
@@ -130,8 +130,8 @@ All in `data/model/`: `Song`, `Album`, `Artist`, `Lyrics`, `LyricsLine`, `Lyrics
 - `android.software.leanback` required=true — app only runs on TV devices.
 - `ExperimentalTvMaterial3Api` is used throughout — TV Compose APIs are alpha.
 - `BackendRegistry` holds connection state in memory only. Reconnection on app restart reads from `AppPreferences` (DataStore).
-- No DI framework. `PlayerManager.getInstance()`, `BackendRegistry` (object), `AppPreferences.getInstance()` are singletons.
-- Progress is updated via 500ms polling loop in `MainViewModel`, not ExoPlayer callbacks.
+- No DI framework. `PlayerManager.getInstance()`, `BackendRegistry` (instantiated in `NasMusicApp`), `AppPreferences.getInstance()` are singletons.
+- Progress is updated via 1000ms polling loop in `PlayerManager` (v2.2.0 changed from 500ms to reduce CPU usage), not ExoPlayer callbacks.
 
 ## File Structure
 
@@ -142,7 +142,7 @@ app/src/main/java/com/nasmusic/tv/
 ├── DialogBackHandler.kt    # Dialog back button handling
 ├── backend/
 │   ├── BackendAdapter.kt    # Interface
-│   ├── BackendRegistry.kt   # Singleton registry
+│   ├── BackendRegistry.kt   # Registry (instantiated in NasMusicApp, not object singleton)
 │   ├── impl/                # JellyfinAdapter, NavidromeAdapter (raw OkHttp)
 │   ├── jellyfin/            # DEAD CODE — unused older Retrofit impl
 │   └── navidrome/           # DEAD CODE — unused older Retrofit impl

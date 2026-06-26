@@ -45,7 +45,7 @@ import com.nasmusic.tv.ui.screens.SettingsScreen
 import com.nasmusic.tv.ui.theme.NASMusicTVTheme
 import com.nasmusic.tv.ui.theme.NasMusicColors
 import com.nasmusic.tv.ui.viewmodel.MainViewModel
-import com.nasmusic.tv.ui.viewmodel.Screen
+import com.nasmusic.tv.data.model.Screen
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalTvMaterial3Api::class)
@@ -195,7 +195,7 @@ fun AppRoot(
                     val playCounts by viewModel.playCounts.collectAsState(initial = emptyMap())
                     val artistsState by viewModel.artists.collectAsState(initial = UiState.Success(emptyList()))
                     val yearsState by viewModel.years.collectAsState(initial = UiState.Success(emptyList()))
-                    val songsPaging by viewModel.songsPaging.collectAsState(initial = com.nasmusic.tv.ui.viewmodel.SongsPagingState())
+                    val songsPaging by viewModel.songsPaging.collectAsState(initial = com.nasmusic.tv.data.model.SongsPagingState())
                     val searchResultsState by viewModel.searchResults.collectAsState(initial = UiState.Success(emptyList()))
                     val networkSearchResultsState by viewModel.networkSearchResults.collectAsState(initial = UiState.Success(emptyList()))
                     val networkSearchKeyword by viewModel.networkSearchKeyword.collectAsState(initial = "")

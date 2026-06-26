@@ -71,13 +71,15 @@ class PlayerManager() {
 
     // seek 状态标志：seekTo 后置为 true，onPositionDiscontinuity(reason=SEEK) 后置为 false
     // 用于防止 progressHandler 在 ExoPlayer 内部重置位置时覆盖 _progress
+    // @Volatile：seekTo 在主线程，回调在 ExoPlayer 线程，需保证可见性
+    @Volatile
     private var seekPending = false
 
     private val playerListener = object : Player.Listener {
         override fun onIsPlayingChanged(isPlaying: Boolean) {
             // seek 期间忽略播放状态变化，防止播放按钮闪烁
             if (seekPending) {
-                android.util.Log.d("NASMusic", "playerListener: onIsPlayingChanged=$isPlaying ignored (seekPending)")
+                AppLog.d("NASMusic", "playerListener: onIsPlayingChanged=$isPlaying ignored (seekPending)")
                 return
             }
             _isPlaying.value = isPlaying
@@ -124,7 +126,7 @@ class PlayerManager() {
         }
 
         override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
-            android.util.Log.e("PlayerManager", "Player error: ${error.message}", error)
+            AppLog.e("PlayerManager", "Player error: ${error.message}", error)
             _playerError.value = error.message ?: "播放错误"
             // 当前歌曲 streamUrl 为空时（如恢复队列中的网络歌曲），不自动跳下一首，
             // 避免级联错误（下一首也可能 streamUrl 为空）。
@@ -159,7 +161,7 @@ class PlayerManager() {
         val streamUrl = song.streamUrl ?: return
         val p = player
         if (p == null) {
-            android.util.Log.e("PlayerManager", "playSong: player is null!")
+            AppLog.e("PlayerManager", "playSong: player is null!")
             return
         }
 
@@ -174,7 +176,7 @@ class PlayerManager() {
                 p.play()
                 AppLog.d("PlayerManager", "playSong: seeking to existing queue item $existingIndex")
             } catch (e: Exception) {
-                android.util.Log.e("PlayerManager", "playSong seek failed", e)
+                AppLog.e("PlayerManager", "playSong seek failed", e)
             }
         } else {
             // New song — replace queue with single item and preload next if available
@@ -188,7 +190,7 @@ class PlayerManager() {
                 p.play()
                 AppLog.d("PlayerManager", "playSong: playing ${song.title}")
             } catch (e: Exception) {
-                android.util.Log.e("PlayerManager", "playSong failed", e)
+                AppLog.e("PlayerManager", "playSong failed", e)
             }
         }
         _currentSong.value = song
@@ -201,7 +203,7 @@ class PlayerManager() {
         if (songs.isEmpty()) return
         val p = player
         if (p == null) {
-            android.util.Log.e("PlayerManager", "playQueue: player is null!")
+            AppLog.e("PlayerManager", "playQueue: player is null!")
             return
         }
 
@@ -218,7 +220,7 @@ class PlayerManager() {
             p.play()
             AppLog.d("PlayerManager", "playQueue: playing ${songs.size} songs, start=$startIndex")
         } catch (e: Exception) {
-            android.util.Log.e("PlayerManager", "playQueue failed", e)
+            AppLog.e("PlayerManager", "playQueue failed", e)
         }
 
         // 从歌曲数据初始化时长（player.duration 可能返回 C.TIME_UNSET）
@@ -292,10 +294,10 @@ class PlayerManager() {
         seekPending = true
         player?.seekTo(positionMs)
         _progress.value = positionMs
-        android.util.Log.d("NASMusic", "seekTo: after seek, player.currentPosition=${player?.currentPosition}, seekPending=$seekPending")
+        AppLog.d("NASMusic", "seekTo: after seek, player.currentPosition=${player?.currentPosition}, seekPending=$seekPending")
         // 2 秒后自动清除 seekPending，防止永久阻塞进度更新
         progressHandler.postDelayed({
-            android.util.Log.d("NASMusic", "seekTo: timeout, seekPending=false, player.currentPosition=${player?.currentPosition}")
+            AppLog.d("NASMusic", "seekTo: timeout, seekPending=false, player.currentPosition=${player?.currentPosition}")
             seekPending = false
         }, 2000)
     }
@@ -387,7 +389,7 @@ class PlayerManager() {
         try {
             player?.moveMediaItem(fromIndex, toIndex)
         } catch (e: Exception) {
-            android.util.Log.e("PlayerManager", "moveMediaItem failed", e)
+            AppLog.e("PlayerManager", "moveMediaItem failed", e)
         }
 
         // 调整 currentIndex 以跟随当前播放曲目
@@ -451,7 +453,7 @@ class PlayerManager() {
                 p.prepare()
                 AppLog.d("PlayerManager", "restoreQueue: prepared ${songs.size} songs, start=$safeIndex (not playing)")
             } catch (e: Exception) {
-                android.util.Log.e("PlayerManager", "restoreQueue: prepare failed", e)
+                AppLog.e("PlayerManager", "restoreQueue: prepare failed", e)
             }
         } else {
             AppLog.d("PlayerManager", "restoreQueue: skipped prepare (current song streamUrl is empty, index=$safeIndex)")
@@ -564,7 +566,7 @@ class PlayerManager() {
             AppLog.d("PlayerManager", "initEqualizer: initialised for session $audioSessionId")
             true
         } catch (e: Exception) {
-            android.util.Log.e("PlayerManager", "initEqualizer failed", e)
+            AppLog.e("PlayerManager", "initEqualizer failed", e)
             false
         }
     }
@@ -587,7 +589,7 @@ class PlayerManager() {
             AppLog.d("PlayerManager", "setEqualizerBand: band=$bandIndex gain=${gainDb}dB")
             true
         } catch (e: Exception) {
-            android.util.Log.e("PlayerManager", "setEqualizerBand failed", e)
+            AppLog.e("PlayerManager", "setEqualizerBand failed", e)
             false
         }
     }
@@ -616,7 +618,7 @@ class PlayerManager() {
             AppLog.d("PlayerManager", "setEqualizerBands: applied ${minOf(bandCount, gains.size)} bands")
             true
         } catch (e: Exception) {
-            android.util.Log.e("PlayerManager", "setEqualizerBands failed", e)
+            AppLog.e("PlayerManager", "setEqualizerBands failed", e)
             false
         }
     }
@@ -666,7 +668,7 @@ class PlayerManager() {
             equalizer = null
             AppLog.d("PlayerManager", "disableEqualizer: disabled")
         } catch (e: Exception) {
-            android.util.Log.e("PlayerManager", "disableEqualizer failed", e)
+            AppLog.e("PlayerManager", "disableEqualizer failed", e)
         }
     }
 }

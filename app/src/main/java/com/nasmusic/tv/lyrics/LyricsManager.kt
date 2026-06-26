@@ -1,7 +1,6 @@
 package com.nasmusic.tv.lyrics
 
 import android.content.Context
-import android.util.Log
 import com.nasmusic.tv.backend.BackendRegistry
 import com.nasmusic.tv.backend.network.NetworkMusicManager
 import com.nasmusic.tv.data.model.Lyrics
@@ -59,7 +58,7 @@ class LyricsManager(
             return@withContext lyrics
         }
 
-        Log.w("LyricsManager", "getLyrics: all sources returned null")
+        AppLog.w("LyricsManager", "getLyrics: all sources returned null")
         null
     }
 

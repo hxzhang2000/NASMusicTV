@@ -36,7 +36,7 @@ import com.nasmusic.tv.ui.screens.ExitConfirmDialog
 import com.nasmusic.tv.ui.theme.NASMusicTVTheme
 import com.nasmusic.tv.ui.theme.NasMusicColors
 import com.nasmusic.tv.ui.viewmodel.MainViewModel
-import com.nasmusic.tv.ui.viewmodel.Screen
+import com.nasmusic.tv.data.model.Screen
 import com.nasmusic.tv.util.AppLog
 import com.nasmusic.tv.util.MediaKeyHandler
 import com.nasmusic.tv.util.NetworkMonitor
@@ -107,7 +107,7 @@ class MainActivity : ComponentActivity() {
                                             app.backendRegistry.disconnect()
                                             AppLog.d("MainActivity", "exit: backend disconnected")
                                         } catch (e: Exception) {
-                                            android.util.Log.w("MainActivity", "exit: disconnect failed", e)
+                                            AppLog.w("MainActivity", "exit: disconnect failed", e)
                                         }
                                     }
                                     finishAffinity()
@@ -252,7 +252,7 @@ class MainActivity : ComponentActivity() {
                 app.backendRegistry.disconnect()
                 AppLog.d("MainActivity", "onDestroy: backend disconnected")
             } catch (e: Exception) {
-                android.util.Log.w("MainActivity", "onDestroy: disconnect failed", e)
+                AppLog.w("MainActivity", "onDestroy: disconnect failed", e)
             }
         }
     }

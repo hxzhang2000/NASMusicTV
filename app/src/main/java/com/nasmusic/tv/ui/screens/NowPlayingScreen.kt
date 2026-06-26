@@ -28,7 +28,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Text
-import android.util.Log
 import coil.compose.AsyncImage
 import com.nasmusic.tv.R
 import com.nasmusic.tv.data.model.Lyrics

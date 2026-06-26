@@ -81,12 +81,12 @@ class BackendRegistry {
             try {
                 adapter.logout()
             } catch (e: Exception) {
-                android.util.Log.w("BackendRegistry", "logout failed during disconnect", e)
+                AppLog.w("BackendRegistry", "logout failed during disconnect", e)
             }
             try {
                 adapter.close()
             } catch (e: Exception) {
-                android.util.Log.w("BackendRegistry", "close failed during disconnect", e)
+                AppLog.w("BackendRegistry", "close failed during disconnect", e)
             }
         }
         currentAdapter = null
@@ -115,14 +115,14 @@ class BackendRegistry {
         if (success) {
             val serverName = adapter.serverName
             // 登出释放临时 session 防止泄漏，结果不影响返回值
-            try { adapter.logout() } catch (e: Exception) { android.util.Log.w("BackendRegistry", "testConnection: logout failed", e) }
+            try { adapter.logout() } catch (e: Exception) { AppLog.w("BackendRegistry", "testConnection: logout failed", e) }
             // 关闭连接池防止连接泄漏
-            try { adapter.close() } catch (e: Exception) { android.util.Log.w("BackendRegistry", "testConnection: close failed", e) }
+            try { adapter.close() } catch (e: Exception) { AppLog.w("BackendRegistry", "testConnection: close failed", e) }
             Pair(true, serverName)
         } else {
             // 即使失败也尝试 logout（部分 Jellyfin 可能已创建 session）
-            try { adapter.logout() } catch (e: Exception) { android.util.Log.w("BackendRegistry", "testConnection failed: logout", e) }
-            try { adapter.close() } catch (e: Exception) { android.util.Log.w("BackendRegistry", "testConnection failed: close", e) }
+            try { adapter.logout() } catch (e: Exception) { AppLog.w("BackendRegistry", "testConnection failed: logout", e) }
+            try { adapter.close() } catch (e: Exception) { AppLog.w("BackendRegistry", "testConnection failed: close", e) }
             Pair(false, "连接失败，请检查地址和凭据")
         }
     }

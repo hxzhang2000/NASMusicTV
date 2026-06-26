@@ -100,7 +100,7 @@ class MetingApiService(
             this.sslSocketFactory(sslContext.socketFactory, trustAllManager)
             this.hostnameVerifier(trustAllHostnameVerifier)
         } catch (e: Exception) {
-            android.util.Log.e(DIAG, "applyTrustAllSsl failed: ${e.message}", e)
+            AppLog.e(DIAG, "applyTrustAllSsl failed: ${e.message}", e)
         }
         return this
     }
@@ -157,30 +157,30 @@ class MetingApiService(
      * - lrc → 实际就是歌词文本端点，由 resolveLyrics() 请求获取
      */
     override suspend fun search(keyword: String): List<Song> = withContext(Dispatchers.IO) {
-        android.util.Log.i(DIAG, "=== search start === keyword='$keyword'")
+        AppLog.i(DIAG, "=== search start === keyword='$keyword'")
         if (keyword.isBlank()) {
-            android.util.Log.i(DIAG, "search: keyword blank, return empty")
+            AppLog.i(DIAG, "search: keyword blank, return empty")
             return@withContext emptyList()
         }
 
         // 构造端点尝试顺序：当前选中的端点优先，然后是其他预设端点
         val currentBase = baseUrl
         val endpoints = buildEndpointFallbackOrder(currentBase)
-        android.util.Log.i(DIAG, "search: endpoint fallback order=${endpoints.map { it.take(40) }}")
+        AppLog.i(DIAG, "search: endpoint fallback order=${endpoints.map { it.take(40) }}")
 
         for ((index, endpoint) in endpoints.withIndex()) {
-            android.util.Log.i(DIAG, "search: trying endpoint[$index]='${endpoint.take(60)}'")
+            AppLog.i(DIAG, "search: trying endpoint[$index]='${endpoint.take(60)}'")
             val songs = searchWithEndpoint(keyword, endpoint)
             if (songs.isNotEmpty()) {
-                android.util.Log.i(DIAG, "search: endpoint[$index] returned ${songs.size} songs, success")
-                android.util.Log.i(DIAG, "=== search end ===")
+                AppLog.i(DIAG, "search: endpoint[$index] returned ${songs.size} songs, success")
+                AppLog.i(DIAG, "=== search end ===")
                 return@withContext songs
             }
-            android.util.Log.w(DIAG, "search: endpoint[$index] returned empty, trying next")
+            AppLog.w(DIAG, "search: endpoint[$index] returned empty, trying next")
         }
 
-        android.util.Log.w(DIAG, "search: all endpoints failed or empty")
-        android.util.Log.i(DIAG, "=== search end ===")
+        AppLog.w(DIAG, "search: all endpoints failed or empty")
+        AppLog.i(DIAG, "=== search end ===")
         emptyList()
     }
 
@@ -214,21 +214,21 @@ class MetingApiService(
     private fun searchWithEndpoint(keyword: String, endpoint: String): List<Song> {
         return try {
             val url = "$endpoint?server=$DEFAULT_SERVER&type=search&id=${URLEncoder.encode(keyword, "UTF-8")}"
-            android.util.Log.i(DIAG, "searchWithEndpoint: url='$url'")
+            AppLog.i(DIAG, "searchWithEndpoint: url='$url'")
             val request = Request.Builder()
                 .url(url)
                 .header("User-Agent", "Mozilla/5.0")
                 .build()
             val response = client.newCall(request).execute()
             val body = response.body?.string()
-            android.util.Log.i(DIAG, "searchWithEndpoint: response code=${response.code} bodyLen=${body?.length ?: 0}")
+            AppLog.i(DIAG, "searchWithEndpoint: response code=${response.code} bodyLen=${body?.length ?: 0}")
             if (!response.isSuccessful || body.isNullOrBlank()) {
-                android.util.Log.w(DIAG, "searchWithEndpoint: failed code=${response.code} bodyEmpty=${body.isNullOrBlank()}")
+                AppLog.w(DIAG, "searchWithEndpoint: failed code=${response.code} bodyEmpty=${body.isNullOrBlank()}")
                 return emptyList()
             }
             parseSongs(body)
         } catch (e: Exception) {
-            android.util.Log.w(DIAG, "searchWithEndpoint error: ${e.javaClass.simpleName}: ${e.message}")
+            AppLog.w(DIAG, "searchWithEndpoint error: ${e.javaClass.simpleName}: ${e.message}")
             emptyList()
         }
     }
@@ -308,17 +308,17 @@ class MetingApiService(
         return try {
             val type = object : TypeToken<List<JsonObject>>() {}.type
             val items: List<JsonObject> = gson.fromJson(body, type) ?: run {
-                android.util.Log.w(DIAG, "parseSongs: gson returned null, body is not a JSON array")
+                AppLog.w(DIAG, "parseSongs: gson returned null, body is not a JSON array")
                 return emptyList()
             }
-            android.util.Log.i(DIAG, "parseSongs: json array size=${items.size}")
+            AppLog.i(DIAG, "parseSongs: json array size=${items.size}")
             if (items.isEmpty()) {
-                android.util.Log.w(DIAG, "parseSongs: array empty")
+                AppLog.w(DIAG, "parseSongs: array empty")
                 return emptyList()
             }
             // 打印第一个元素的所有 key，便于核对字段名
             items.firstOrNull()?.keySet()?.let { keys ->
-                android.util.Log.i(DIAG, "parseSongs: first item keys=$keys")
+                AppLog.i(DIAG, "parseSongs: first item keys=$keys")
             }
             val result = items.mapIndexedNotNull { idx, item ->
                 try {
@@ -334,17 +334,17 @@ class MetingApiService(
                     // 编码修复：部分端点可能返回 GBK 被当作 Latin-1 解码的乱码
                     val fixedTitle = EncodingUtils.fixEncoding(title)
                     val fixedAuthor = EncodingUtils.fixEncoding(author)
-                    android.util.Log.i(DIAG, "parseSongs[$idx]: title=$fixedTitle author=$fixedAuthor pic=${pic?.take(60)} url=${urlField?.take(80)}")
+                    AppLog.i(DIAG, "parseSongs[$idx]: title=$fixedTitle author=$fixedAuthor pic=${pic?.take(60)} url=${urlField?.take(80)}")
                     if (fixedTitle == null) {
-                        android.util.Log.w(DIAG, "parseSongs[$idx]: title null, skip")
+                        AppLog.w(DIAG, "parseSongs[$idx]: title null, skip")
                         return@mapIndexedNotNull null
                     }
                     val netId = extractIdFromUrl(urlField)
                     if (netId == null) {
-                        android.util.Log.w(DIAG, "parseSongs[$idx]: extractIdFromUrl null for url=$urlField, skip")
+                        AppLog.w(DIAG, "parseSongs[$idx]: extractIdFromUrl null for url=$urlField, skip")
                         return@mapIndexedNotNull null
                     }
-                    android.util.Log.i(DIAG, "parseSongs[$idx]: extracted netId=$netId")
+                    AppLog.i(DIAG, "parseSongs[$idx]: extracted netId=$netId")
                     Song(
                         id = "ntwk_${sourceId}_$netId",
                         title = fixedTitle,
@@ -356,14 +356,14 @@ class MetingApiService(
                         networkId = netId
                     )
                 } catch (e: Exception) {
-                    android.util.Log.w(DIAG, "parseSongs[$idx] error: ${e.message}")
+                    AppLog.w(DIAG, "parseSongs[$idx] error: ${e.message}")
                     null
                 }
             }
-            android.util.Log.i(DIAG, "parseSongs: result size=${result.size}")
+            AppLog.i(DIAG, "parseSongs: result size=${result.size}")
             result
         } catch (e: Exception) {
-            android.util.Log.e(DIAG, "parseSongs error: ${e.javaClass.simpleName}: ${e.message}", e)
+            AppLog.e(DIAG, "parseSongs error: ${e.javaClass.simpleName}: ${e.message}", e)
             emptyList()
         }
     }
@@ -375,34 +375,34 @@ class MetingApiService(
      * 输出：2652820720
      */
     private fun extractIdFromUrl(url: String?): String? {
-        android.util.Log.i(DIAG, "extractIdFromUrl: input=$url")
+        AppLog.i(DIAG, "extractIdFromUrl: input=$url")
         if (url.isNullOrBlank()) {
-            android.util.Log.w(DIAG, "extractIdFromUrl: url null/blank")
+            AppLog.w(DIAG, "extractIdFromUrl: url null/blank")
             return null
         }
         return try {
             val uri = java.net.URI(url)
             val query = uri.rawQuery
-            android.util.Log.i(DIAG, "extractIdFromUrl: rawQuery=$query")
+            AppLog.i(DIAG, "extractIdFromUrl: rawQuery=$query")
             if (query == null) {
-                android.util.Log.w(DIAG, "extractIdFromUrl: rawQuery null")
+                AppLog.w(DIAG, "extractIdFromUrl: rawQuery null")
                 return null
             }
             query.split("&").forEach { param ->
                 val idx = param.indexOf("=")
                 if (idx > 0 && param.substring(0, idx) == "id") {
                     val id = param.substring(idx + 1)
-                    android.util.Log.i(DIAG, "extractIdFromUrl: found id=$id")
+                    AppLog.i(DIAG, "extractIdFromUrl: found id=$id")
                     return id
                 }
             }
-            android.util.Log.w(DIAG, "extractIdFromUrl: no id param found in query")
+            AppLog.w(DIAG, "extractIdFromUrl: no id param found in query")
             null
         } catch (e: Exception) {
-            android.util.Log.w(DIAG, "extractIdFromUrl: URI parse failed (${e.message}), try regex fallback")
+            AppLog.w(DIAG, "extractIdFromUrl: URI parse failed (${e.message}), try regex fallback")
             val regex = Regex("[?&]id=([^&]+)")
             val matched = regex.find(url)?.groupValues?.getOrNull(1)
-            android.util.Log.i(DIAG, "extractIdFromUrl: regex result=$matched")
+            AppLog.i(DIAG, "extractIdFromUrl: regex result=$matched")
             matched
         }
     }

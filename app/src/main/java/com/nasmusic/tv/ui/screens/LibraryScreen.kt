@@ -61,7 +61,7 @@ import com.nasmusic.tv.data.model.Song
 import com.nasmusic.tv.ui.LocalListBackHandler
 import com.nasmusic.tv.ui.components.FocusableSurface
 import com.nasmusic.tv.ui.theme.NasMusicColors
-import com.nasmusic.tv.ui.viewmodel.SongsPagingState
+import com.nasmusic.tv.data.model.SongsPagingState
 import com.nasmusic.tv.util.PinyinUtils
 import com.nasmusic.tv.util.TimeUtils
 import kotlinx.coroutines.launch

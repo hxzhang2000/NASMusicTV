@@ -84,7 +84,7 @@ class NavidromeAdapter : BackendAdapter {
                 status == "ok"
             }
         } catch (e: Exception) {
-            android.util.Log.w("NavidromeAdapter", "testConnection failed", e)
+            AppLog.w("NavidromeAdapter", "testConnection failed", e)
             false
         }
     }
@@ -120,7 +120,7 @@ class NavidromeAdapter : BackendAdapter {
                 )
             }
         } catch (e: Exception) {
-            android.util.Log.e("NavidromeAdapter", "getAlbums failed", e)
+            AppLog.e("NavidromeAdapter", "getAlbums failed", e)
             emptyList()
         }
     }
@@ -166,7 +166,7 @@ class NavidromeAdapter : BackendAdapter {
                 )
             }
         } catch (e: Exception) {
-            android.util.Log.e("NavidromeAdapter", "getAlbumSongs failed", e)
+            AppLog.e("NavidromeAdapter", "getAlbumSongs failed", e)
             emptyList()
         }
     }
@@ -201,7 +201,7 @@ class NavidromeAdapter : BackendAdapter {
             }
             result
         } catch (e: Exception) {
-            android.util.Log.e("NavidromeAdapter", "getArtists failed", e)
+            AppLog.e("NavidromeAdapter", "getArtists failed", e)
             emptyList()
         }
     }
@@ -225,7 +225,7 @@ class NavidromeAdapter : BackendAdapter {
             val allSongs = deferredSongs.awaitAll().flatten()
             allSongs
         } catch (e: Exception) {
-            android.util.Log.e("NavidromeAdapter", "getArtistSongs failed", e)
+            AppLog.e("NavidromeAdapter", "getArtistSongs failed", e)
             emptyList()
         }
     }
@@ -270,7 +270,7 @@ class NavidromeAdapter : BackendAdapter {
                 )
             }
         } catch (e: Exception) {
-            android.util.Log.e("NavidromeAdapter", "getSongs failed", e)
+            AppLog.e("NavidromeAdapter", "getSongs failed", e)
             emptyList()
         }
     }
@@ -311,7 +311,7 @@ class NavidromeAdapter : BackendAdapter {
                 )
             }
         } catch (e: Exception) {
-            android.util.Log.e("NavidromeAdapter", "searchSongs failed", e)
+            AppLog.e("NavidromeAdapter", "searchSongs failed", e)
             emptyList()
         }
     }
@@ -335,7 +335,7 @@ class NavidromeAdapter : BackendAdapter {
             val recentSongs = deferredSongs.awaitAll().flatten()
             recentSongs.take(100)
         } catch (e: Exception) {
-            android.util.Log.e("NavidromeAdapter", "getRecentSongs failed", e)
+            AppLog.e("NavidromeAdapter", "getRecentSongs failed", e)
             emptyList()
         }
     }
@@ -393,7 +393,7 @@ class NavidromeAdapter : BackendAdapter {
                 )
             }
         } catch (e: Exception) {
-            android.util.Log.e("NavidromeAdapter", "getPlaylists failed", e)
+            AppLog.e("NavidromeAdapter", "getPlaylists failed", e)
             emptyList()
         }
     }
@@ -407,7 +407,7 @@ class NavidromeAdapter : BackendAdapter {
             val id = playlist?.get("id")?.asString ?: return@withContext null
             Playlist(id = id, name = name)
         } catch (e: Exception) {
-            android.util.Log.e("NavidromeAdapter", "createPlaylist failed", e)
+            AppLog.e("NavidromeAdapter", "createPlaylist failed", e)
             null
         }
     }
@@ -419,7 +419,7 @@ class NavidromeAdapter : BackendAdapter {
             val subsonic = json.getAsJsonObject("subsonic-response")
             subsonic?.get("status")?.asString == "ok"
         } catch (e: Exception) {
-            android.util.Log.e("NavidromeAdapter", "deletePlaylist failed", e)
+            AppLog.e("NavidromeAdapter", "deletePlaylist failed", e)
             false
         }
     }
@@ -431,7 +431,7 @@ class NavidromeAdapter : BackendAdapter {
             val subsonic = json.getAsJsonObject("subsonic-response")
             subsonic?.get("status")?.asString == "ok"
         } catch (e: Exception) {
-            android.util.Log.e("NavidromeAdapter", "addToPlaylist failed", e)
+            AppLog.e("NavidromeAdapter", "addToPlaylist failed", e)
             false
         }
     }
@@ -443,7 +443,7 @@ class NavidromeAdapter : BackendAdapter {
             val subsonic = json.getAsJsonObject("subsonic-response")
             subsonic?.get("status")?.asString == "ok"
         } catch (e: Exception) {
-            android.util.Log.e("NavidromeAdapter", "removeFromPlaylist failed", e)
+            AppLog.e("NavidromeAdapter", "removeFromPlaylist failed", e)
             false
         }
     }
@@ -467,7 +467,7 @@ class NavidromeAdapter : BackendAdapter {
             val responseSubsonic = json?.getAsJsonObject("subsonic-response")
             responseSubsonic?.get("status")?.asString == "ok"
         } catch (e: Exception) {
-            android.util.Log.e("NavidromeAdapter", "toggleFavorite failed", e)
+            AppLog.e("NavidromeAdapter", "toggleFavorite failed", e)
             false
         }
     }
@@ -496,7 +496,7 @@ class NavidromeAdapter : BackendAdapter {
                 )
             }
         } catch (e: Exception) {
-            android.util.Log.e("NavidromeAdapter", "getFavorites failed", e)
+            AppLog.e("NavidromeAdapter", "getFavorites failed", e)
             emptyList()
         }
     }
@@ -509,7 +509,7 @@ class NavidromeAdapter : BackendAdapter {
             val subsonic = json.getAsJsonObject("subsonic-response")
             subsonic?.get("status")?.asString == "ok"
         } catch (e: Exception) {
-            android.util.Log.e("NavidromeAdapter", "setRating failed", e)
+            AppLog.e("NavidromeAdapter", "setRating failed", e)
             false
         }
     }
@@ -533,7 +533,7 @@ class NavidromeAdapter : BackendAdapter {
                 )
             }
         } catch (e: Exception) {
-            android.util.Log.e("NavidromeAdapter", "getGenres failed", e)
+            AppLog.e("NavidromeAdapter", "getGenres failed", e)
             emptyList()
         }
     }
@@ -564,7 +564,7 @@ class NavidromeAdapter : BackendAdapter {
                 )
             }
         } catch (e: Exception) {
-            android.util.Log.e("NavidromeAdapter", "getSongsByGenre failed", e)
+            AppLog.e("NavidromeAdapter", "getSongsByGenre failed", e)
             emptyList()
         }
     }
@@ -577,7 +577,7 @@ class NavidromeAdapter : BackendAdapter {
                 song.year != null && song.year in fromYear..toYear
             }
         } catch (e: Exception) {
-            android.util.Log.e("NavidromeAdapter", "getSongsByYearRange failed", e)
+            AppLog.e("NavidromeAdapter", "getSongsByYearRange failed", e)
             emptyList()
         }
     }
@@ -590,7 +590,7 @@ class NavidromeAdapter : BackendAdapter {
             val subsonic = json.getAsJsonObject("subsonic-response")
             subsonic?.get("status")?.asString == "ok"
         } catch (e: Exception) {
-            android.util.Log.e("NavidromeAdapter", "scrobblePlay failed", e)
+            AppLog.e("NavidromeAdapter", "scrobblePlay failed", e)
             false
         }
     }
@@ -621,7 +621,7 @@ class NavidromeAdapter : BackendAdapter {
                 )
             }
         } catch (e: Exception) {
-            android.util.Log.e("NavidromeAdapter", "getRandomSongs failed", e)
+            AppLog.e("NavidromeAdapter", "getRandomSongs failed", e)
             emptyList()
         }
     }
@@ -637,7 +637,7 @@ class NavidromeAdapter : BackendAdapter {
             client.connectionPool.evictAll()
             AppLog.d("NavidromeAdapter", "close: OkHttp resources released")
         } catch (e: Exception) {
-            android.util.Log.w("NavidromeAdapter", "close failed", e)
+            AppLog.w("NavidromeAdapter", "close failed", e)
         }
     }
 
@@ -663,7 +663,7 @@ class NavidromeAdapter : BackendAdapter {
             withRetry(
                 config = RetryConfig(maxAttempts = 3, baseDelayMs = 500L),
                 onError = { attempt, e ->
-                    android.util.Log.w("NavidromeAdapter", "executeRequest retry attempt=$attempt for $url", e)
+                    AppLog.w("NavidromeAdapter", "executeRequest retry attempt=$attempt for $url", e)
                 }
             ) {
                 val request = Request.Builder().url(url).build()
@@ -678,7 +678,7 @@ class NavidromeAdapter : BackendAdapter {
                 }
             }
         } catch (e: Exception) {
-            android.util.Log.e("NavidromeAdapter", "executeRequest failed for $url", e)
+            AppLog.e("NavidromeAdapter", "executeRequest failed for $url", e)
             null
         }
     }

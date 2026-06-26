@@ -4,6 +4,7 @@ import com.nasmusic.tv.data.model.Song
 import com.nasmusic.tv.util.AppLog
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import java.util.concurrent.ConcurrentHashMap
 
 /**
  * 网络音乐管理器
@@ -38,8 +39,8 @@ class NetworkMusicManager(
         val timestamp: Long
     )
 
-    /** 播放链接内存缓存：songId → CachedPlayUrl */
-    private val playUrlCache = mutableMapOf<String, CachedPlayUrl>()
+    /** 播放链接内存缓存：songId → CachedPlayUrl（线程安全，resolvePlayUrl 在 IO 线程并发访问） */
+    private val playUrlCache = ConcurrentHashMap<String, CachedPlayUrl>()
 
     /** 获取当前默认源 ID */
     val defaultSource: String
@@ -52,25 +53,25 @@ class NetworkMusicManager(
      * 任一源返回非空结果即返回，不再尝试后续源。
      */
     suspend fun search(keyword: String): List<Song> = withContext(Dispatchers.IO) {
-        android.util.Log.i("MetingDiag", "=== NetworkMusicManager.search === keyword='$keyword' defaultSource='${defaultSourceProvider()}'")
+        AppLog.i("MetingDiag", "=== NetworkMusicManager.search === keyword='$keyword' defaultSource='${defaultSourceProvider()}'")
         if (keyword.isBlank()) return@withContext emptyList()
 
         val ordered = orderedServices()
-        android.util.Log.i("MetingDiag", "search: orderedServices=${ordered.map { it.sourceId }}")
+        AppLog.i("MetingDiag", "search: orderedServices=${ordered.map { it.sourceId }}")
         for (svc in ordered) {
             try {
-                android.util.Log.i("MetingDiag", "search: trying source=${svc.sourceId}")
+                AppLog.i("MetingDiag", "search: trying source=${svc.sourceId}")
                 val results = svc.search(keyword)
                 if (results.isNotEmpty()) {
-                    android.util.Log.i("MetingDiag", "search '$keyword' hit source=${svc.sourceId} count=${results.size}")
+                    AppLog.i("MetingDiag", "search '$keyword' hit source=${svc.sourceId} count=${results.size}")
                     return@withContext results
                 }
-                android.util.Log.i("MetingDiag", "search '$keyword' empty on source=${svc.sourceId}, trying next")
+                AppLog.i("MetingDiag", "search '$keyword' empty on source=${svc.sourceId}, trying next")
             } catch (e: Exception) {
-                android.util.Log.e("MetingDiag", "search '$keyword' error on source=${svc.sourceId}: ${e.message}", e)
+                AppLog.e("MetingDiag", "search '$keyword' error on source=${svc.sourceId}: ${e.message}", e)
             }
         }
-        android.util.Log.w("MetingDiag", "search '$keyword' no results from any source")
+        AppLog.w("MetingDiag", "search '$keyword' no results from any source")
         emptyList()
     }
 

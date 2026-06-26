@@ -97,7 +97,7 @@ class JellyfinAdapter : BackendAdapter {
                 .build()
             client.newCall(request).execute().use { it.isSuccessful }
         } catch (e: Exception) {
-            android.util.Log.w("JellyfinAdapter", "testConnection failed", e)
+            AppLog.w("JellyfinAdapter", "testConnection failed", e)
             false
         }
     }
@@ -105,39 +105,54 @@ class JellyfinAdapter : BackendAdapter {
     override suspend fun getAlbums(): List<Album> = withContext(Dispatchers.IO) {
         try {
             val fields = "PrimaryImageAspectRatio,SortName,ParentId,ProductionYear,RunTimeTicks,ChildCount"
-            val url = "$baseUrl/Items?" +
-                    "Recursive=true&" +
-                    "IncludeItemTypes=MusicAlbum&" +
-                    "fields=$fields&" +
-                    "UserId=$userId&" +
-                    "SortBy=SortName&SortOrder=Ascending&" +
-                    "StartIndex=0&Limit=1000"
+            val allAlbums = mutableListOf<Album>()
+            var startIndex = 0
+            val pageSize = 1000
 
-            val json = executeJsonRequest(url) ?: return@withContext emptyList<Album>()
-            val items = json.getAsJsonArray("Items") ?: return@withContext emptyList<Album>()
+            while (true) {
+                val url = "$baseUrl/Items?" +
+                        "Recursive=true&" +
+                        "IncludeItemTypes=MusicAlbum&" +
+                        "fields=$fields&" +
+                        "UserId=$userId&" +
+                        "SortBy=SortName&SortOrder=Ascending&" +
+                        "StartIndex=$startIndex&Limit=$pageSize"
 
-            items.mapNotNull { item ->
-                val obj = item.asJsonObject
-                val id = obj.get("Id")?.asString ?: return@mapNotNull null
-                val name = EncodingUtils.fixEncoding(obj.get("Name")?.asString) ?: "Unknown Album"
-                val artist = EncodingUtils.fixEncoding(obj.get("AlbumArtist")?.asString) ?: ""
-                val year = obj.get("ProductionYear")?.asInt
-                val childCount = obj.get("ChildCount")?.asInt ?: 0
-                val runTime = obj.get("RunTimeTicks")?.asLong ?: 0L
-                val imageTag = obj.get("ImageTags")?.asJsonObject?.get("Primary")?.asString
+                val json = executeJsonRequest(url) ?: break
+                val items = json.getAsJsonArray("Items") ?: break
 
-                Album(
-                    id = id,
-                    name = name,
-                    artist = artist,
-                    coverUrl = buildCoverUrl(id, imageTag) ?: getCoverUrl(id),
-                    year = year,
-                    songCount = childCount,
-                    durationMs = runTime / 10000
-                )
+                for (item in items) {
+                    val obj = item.asJsonObject
+                    val id = obj.get("Id")?.asString ?: continue
+                    val name = EncodingUtils.fixEncoding(obj.get("Name")?.asString) ?: "Unknown Album"
+                    val artist = EncodingUtils.fixEncoding(obj.get("AlbumArtist")?.asString) ?: ""
+                    val year = obj.get("ProductionYear")?.asInt
+                    val childCount = obj.get("ChildCount")?.asInt ?: 0
+                    val runTime = obj.get("RunTimeTicks")?.asLong ?: 0L
+                    val imageTag = obj.get("ImageTags")?.asJsonObject?.get("Primary")?.asString
+
+                    allAlbums.add(
+                        Album(
+                            id = id,
+                            name = name,
+                            artist = artist,
+                            coverUrl = buildCoverUrl(id, imageTag) ?: getCoverUrl(id),
+                            year = year,
+                            songCount = childCount,
+                            durationMs = runTime / 10000
+                        )
+                    )
+                }
+
+                // 返回数量小于 pageSize 时已加载全部
+                if (items.size() < pageSize) break
+                startIndex += pageSize
             }
+
+            AppLog.d("JellyfinAdapter", "getAlbums: ${allAlbums.size} albums loaded")
+            allAlbums
         } catch (e: Exception) {
-            android.util.Log.e("JellyfinAdapter", "getAlbums failed", e)
+            AppLog.e("JellyfinAdapter", "getAlbums failed", e)
             emptyList()
         }
     }
@@ -161,7 +176,7 @@ class JellyfinAdapter : BackendAdapter {
             AppLog.d("JellyfinAdapter", "getAlbumSongs: ${songs.size} songs, hasCover=${songs.count { it.coverUrl != null }}/${songs.size}")
             songs
         } catch (e: Exception) {
-            android.util.Log.e("JellyfinAdapter", "getAlbumSongs failed", e)
+            AppLog.e("JellyfinAdapter", "getAlbumSongs failed", e)
             emptyList()
         }
     }
@@ -189,7 +204,7 @@ class JellyfinAdapter : BackendAdapter {
                     val name = EncodingUtils.fixEncoding(rawName) ?: "Unknown Artist"
                     val imageTag = obj.get("ImageTags")?.asJsonObject?.get("Primary")?.asString
                     val coverUrl = buildCoverUrl(id, imageTag) ?: getCoverUrl(id)
-                    android.util.Log.d("NASMusic", "getArtists: raw='${rawName?.take(30)}' fixed='${name.take(30)}'")
+                    AppLog.d("NASMusic", "getArtists: raw='${rawName?.take(30)}' fixed='${name.take(30)}'")
                     allArtists.add(Artist(id = id, name = name, coverUrl = coverUrl))
                 }
 
@@ -198,10 +213,10 @@ class JellyfinAdapter : BackendAdapter {
                 startIndex += pageSize
             }
 
-            android.util.Log.d("NASMusic", "getArtists: total ${allArtists.size} artists loaded")
+            AppLog.d("NASMusic", "getArtists: total ${allArtists.size} artists loaded")
             allArtists
         } catch (e: Exception) {
-            android.util.Log.e("JellyfinAdapter", "getArtists failed", e)
+            AppLog.e("JellyfinAdapter", "getArtists failed", e)
             emptyList()
         }
     }
@@ -222,7 +237,7 @@ class JellyfinAdapter : BackendAdapter {
             val items = json.getAsJsonArray("Items") ?: return@withContext emptyList<Song>()
             items.mapNotNull { jsonObjectToSong(it.asJsonObject, null) }
         } catch (e: Exception) {
-            android.util.Log.e("JellyfinAdapter", "getArtistSongs failed", e)
+            AppLog.e("JellyfinAdapter", "getArtistSongs failed", e)
             emptyList()
         }
     }
@@ -244,7 +259,7 @@ class JellyfinAdapter : BackendAdapter {
             AppLog.d("JellyfinAdapter", "getSongs: ${songs.size} songs (offset=$offset, limit=$limit)")
             songs
         } catch (e: Exception) {
-            android.util.Log.e("JellyfinAdapter", "getSongs failed", e)
+            AppLog.e("JellyfinAdapter", "getSongs failed", e)
             emptyList()
         }
     }
@@ -260,7 +275,7 @@ class JellyfinAdapter : BackendAdapter {
             val json = executeJsonRequest(url) ?: return@withContext 0
             json.get("TotalRecordCount")?.asInt ?: 0
         } catch (e: Exception) {
-            android.util.Log.e("JellyfinAdapter", "getSongsTotalCount failed", e)
+            AppLog.e("JellyfinAdapter", "getSongsTotalCount failed", e)
             0
         }
     }
@@ -282,7 +297,7 @@ class JellyfinAdapter : BackendAdapter {
             val items = json.getAsJsonArray("Items") ?: return@withContext emptyList()
             items.mapNotNull { jsonObjectToSong(it.asJsonObject, null) }
         } catch (e: Exception) {
-            android.util.Log.e("JellyfinAdapter", "getSongsByIds failed", e)
+            AppLog.e("JellyfinAdapter", "getSongsByIds failed", e)
             emptyList()
         }
     }
@@ -300,7 +315,7 @@ class JellyfinAdapter : BackendAdapter {
             }
             years.sortedDescending()
         } catch (e: Exception) {
-            android.util.Log.e("JellyfinAdapter", "getYears failed", e)
+            AppLog.e("JellyfinAdapter", "getYears failed", e)
             emptyList()
         }
     }
@@ -321,7 +336,7 @@ class JellyfinAdapter : BackendAdapter {
             val items = json.getAsJsonArray("Items") ?: return@withContext emptyList<Song>()
             items.mapNotNull { jsonObjectToSong(it.asJsonObject, null) }
         } catch (e: Exception) {
-            android.util.Log.e("JellyfinAdapter", "searchSongs failed", e)
+            AppLog.e("JellyfinAdapter", "searchSongs failed", e)
             emptyList()
         }
     }
@@ -341,7 +356,7 @@ class JellyfinAdapter : BackendAdapter {
             val items = json.getAsJsonArray("Items") ?: return@withContext emptyList<Song>()
             items.mapNotNull { jsonObjectToSong(it.asJsonObject, null) }
         } catch (e: Exception) {
-            android.util.Log.e("JellyfinAdapter", "getRecentSongs failed", e)
+            AppLog.e("JellyfinAdapter", "getRecentSongs failed", e)
             emptyList()
         }
     }
@@ -391,16 +406,16 @@ class JellyfinAdapter : BackendAdapter {
                         AppLog.d("JellyfinAdapter", "getLyrics: converted to LRC, length=${lrcText?.length ?: 0}")
                         lrcText
                     } else {
-                        android.util.Log.w("JellyfinAdapter", "getLyrics: body empty for $songId")
+                        AppLog.w("JellyfinAdapter", "getLyrics: body empty for $songId")
                         null
                     }
                 } else {
-                    android.util.Log.w("JellyfinAdapter", "getLyrics: not successful, code=${response.code}")
+                    AppLog.w("JellyfinAdapter", "getLyrics: not successful, code=${response.code}")
                     null
                 }
             }
         } catch (e: Exception) {
-            android.util.Log.e("JellyfinAdapter", "getLyrics failed for $songId", e)
+            AppLog.e("JellyfinAdapter", "getLyrics failed for $songId", e)
             null
         }
     }
@@ -446,7 +461,7 @@ class JellyfinAdapter : BackendAdapter {
             val result = lrcBuilder.toString()
             if (result.isBlank()) null else result
         } catch (e: Exception) {
-            android.util.Log.e("JellyfinAdapter", "convertJellyfinLyricsToLrc failed", e)
+            AppLog.e("JellyfinAdapter", "convertJellyfinLyricsToLrc failed", e)
             null
         }
     }
@@ -471,7 +486,7 @@ class JellyfinAdapter : BackendAdapter {
                 )
             }
         } catch (e: Exception) {
-            android.util.Log.e("JellyfinAdapter", "getPlaylists failed", e)
+            AppLog.e("JellyfinAdapter", "getPlaylists failed", e)
             emptyList()
         }
     }
@@ -495,7 +510,7 @@ class JellyfinAdapter : BackendAdapter {
                 } else null
             }
         } catch (e: Exception) {
-            android.util.Log.e("JellyfinAdapter", "createPlaylist failed", e)
+            AppLog.e("JellyfinAdapter", "createPlaylist failed", e)
             null
         }
     }
@@ -509,7 +524,7 @@ class JellyfinAdapter : BackendAdapter {
                 .build()
             client.newCall(request).execute().use { it.isSuccessful }
         } catch (e: Exception) {
-            android.util.Log.e("JellyfinAdapter", "deletePlaylist failed", e)
+            AppLog.e("JellyfinAdapter", "deletePlaylist failed", e)
             false
         }
     }
@@ -526,7 +541,7 @@ class JellyfinAdapter : BackendAdapter {
                 .build()
             client.newCall(request).execute().use { it.isSuccessful }
         } catch (e: Exception) {
-            android.util.Log.e("JellyfinAdapter", "addToPlaylist failed", e)
+            AppLog.e("JellyfinAdapter", "addToPlaylist failed", e)
             false
         }
     }
@@ -569,7 +584,7 @@ class JellyfinAdapter : BackendAdapter {
                 .build()
             client.newCall(request).execute().use { it.isSuccessful }
         } catch (e: Exception) {
-            android.util.Log.e("JellyfinAdapter", "removeFromPlaylist failed", e)
+            AppLog.e("JellyfinAdapter", "removeFromPlaylist failed", e)
             false
         }
     }
@@ -612,7 +627,7 @@ class JellyfinAdapter : BackendAdapter {
                 }
             }
         } catch (e: Exception) {
-            android.util.Log.e("JellyfinAdapter", "toggleFavorite failed", e)
+            AppLog.e("JellyfinAdapter", "toggleFavorite failed", e)
             false
         }
     }
@@ -638,7 +653,7 @@ class JellyfinAdapter : BackendAdapter {
                 userData.get("IsFavorite")?.asBoolean ?: false
             }
         } catch (e: Exception) {
-            android.util.Log.w("JellyfinAdapter", "queryFavoriteStatus failed for $songId", e)
+            AppLog.w("JellyfinAdapter", "queryFavoriteStatus failed for $songId", e)
             false
         }
     }
@@ -646,20 +661,32 @@ class JellyfinAdapter : BackendAdapter {
     override suspend fun getFavorites(): List<Song> = withContext(Dispatchers.IO) {
         try {
             val fields = "PrimaryImageAspectRatio,SortName,ParentId,RunTimeTicks"
-            val url = "$baseUrl/Items?Filters=IsFavorite&IncludeItemTypes=Audio&" +
-                    "Recursive=true&fields=$fields&UserId=$userId&Limit=1000"
-            val json = executeJsonRequest(url) ?: return@withContext emptyList<Song>()
-            val items = json.getAsJsonArray("Items") ?: return@withContext emptyList<Song>()
-            val songs = items.mapNotNull { jsonObjectToSong(it.asJsonObject, null) }
+            val allSongs = mutableListOf<Song>()
+            var startIndex = 0
+            val pageSize = 1000
+
+            while (true) {
+                val url = "$baseUrl/Items?Filters=IsFavorite&IncludeItemTypes=Audio&" +
+                        "Recursive=true&fields=$fields&UserId=$userId&" +
+                        "StartIndex=$startIndex&Limit=$pageSize"
+                val json = executeJsonRequest(url) ?: break
+                val items = json.getAsJsonArray("Items") ?: break
+                for (item in items) {
+                    jsonObjectToSong(item.asJsonObject, null)?.let { allSongs.add(it) }
+                }
+                if (items.size() < pageSize) break
+                startIndex += pageSize
+            }
+
             // 更新缓存（线程安全）
             synchronized(favoriteCacheLock) {
                 _favoriteIdsCache.clear()
-                _favoriteIdsCache.addAll(songs.map { it.id })
+                _favoriteIdsCache.addAll(allSongs.map { it.id })
             }
-            AppLog.d("JellyfinAdapter", "getFavorites: ${songs.size} favorites")
-            songs
+            AppLog.d("JellyfinAdapter", "getFavorites: ${allSongs.size} favorites")
+            allSongs
         } catch (e: Exception) {
-            android.util.Log.e("JellyfinAdapter", "getFavorites failed", e)
+            AppLog.e("JellyfinAdapter", "getFavorites failed", e)
             emptyList()
         }
     }
@@ -678,7 +705,7 @@ class JellyfinAdapter : BackendAdapter {
                 .build()
             client.newCall(request).execute().use { it.isSuccessful }
         } catch (e: Exception) {
-            android.util.Log.e("JellyfinAdapter", "setRating failed", e)
+            AppLog.e("JellyfinAdapter", "setRating failed", e)
             false
         }
     }
@@ -701,7 +728,7 @@ class JellyfinAdapter : BackendAdapter {
                 )
             }
         } catch (e: Exception) {
-            android.util.Log.e("JellyfinAdapter", "getGenres failed", e)
+            AppLog.e("JellyfinAdapter", "getGenres failed", e)
             emptyList()
         }
     }
@@ -710,13 +737,25 @@ class JellyfinAdapter : BackendAdapter {
         try {
             val fields = "PrimaryImageAspectRatio,SortName,ParentId,RunTimeTicks"
             val encodedGenre = java.net.URLEncoder.encode(genre, "UTF-8")
-            val url = "$baseUrl/Items?IncludeItemTypes=Audio&Recursive=true&" +
-                    "fields=$fields&UserId=$userId&Genres=$encodedGenre&Limit=1000"
-            val json = executeJsonRequest(url) ?: return@withContext emptyList<Song>()
-            val items = json.getAsJsonArray("Items") ?: return@withContext emptyList<Song>()
-            items.mapNotNull { jsonObjectToSong(it.asJsonObject, null) }
+            val allSongs = mutableListOf<Song>()
+            var startIndex = 0
+            val pageSize = 1000
+
+            while (true) {
+                val url = "$baseUrl/Items?IncludeItemTypes=Audio&Recursive=true&" +
+                        "fields=$fields&UserId=$userId&Genres=$encodedGenre&" +
+                        "StartIndex=$startIndex&Limit=$pageSize"
+                val json = executeJsonRequest(url) ?: break
+                val items = json.getAsJsonArray("Items") ?: break
+                for (item in items) {
+                    jsonObjectToSong(item.asJsonObject, null)?.let { allSongs.add(it) }
+                }
+                if (items.size() < pageSize) break
+                startIndex += pageSize
+            }
+            allSongs
         } catch (e: Exception) {
-            android.util.Log.e("JellyfinAdapter", "getSongsByGenre failed", e)
+            AppLog.e("JellyfinAdapter", "getSongsByGenre failed", e)
             emptyList()
         }
     }
@@ -726,13 +765,25 @@ class JellyfinAdapter : BackendAdapter {
             val fields = "PrimaryImageAspectRatio,SortName,ParentId,RunTimeTicks"
             // Jellyfin Years 参数支持逗号分隔的多个年份
             val years = (fromYear..toYear).joinToString(",")
-            val url = "$baseUrl/Items?IncludeItemTypes=Audio&Recursive=true&" +
-                    "fields=$fields&UserId=$userId&Years=$years&Limit=1000"
-            val json = executeJsonRequest(url) ?: return@withContext emptyList<Song>()
-            val items = json.getAsJsonArray("Items") ?: return@withContext emptyList<Song>()
-            items.mapNotNull { jsonObjectToSong(it.asJsonObject, null) }
+            val allSongs = mutableListOf<Song>()
+            var startIndex = 0
+            val pageSize = 1000
+
+            while (true) {
+                val url = "$baseUrl/Items?IncludeItemTypes=Audio&Recursive=true&" +
+                        "fields=$fields&UserId=$userId&Years=$years&" +
+                        "StartIndex=$startIndex&Limit=$pageSize"
+                val json = executeJsonRequest(url) ?: break
+                val items = json.getAsJsonArray("Items") ?: break
+                for (item in items) {
+                    jsonObjectToSong(item.asJsonObject, null)?.let { allSongs.add(it) }
+                }
+                if (items.size() < pageSize) break
+                startIndex += pageSize
+            }
+            allSongs
         } catch (e: Exception) {
-            android.util.Log.e("JellyfinAdapter", "getSongsByYearRange failed", e)
+            AppLog.e("JellyfinAdapter", "getSongsByYearRange failed", e)
             emptyList()
         }
     }
@@ -753,7 +804,7 @@ class JellyfinAdapter : BackendAdapter {
                 .build()
             client.newCall(request).execute().use { it.isSuccessful }
         } catch (e: Exception) {
-            android.util.Log.e("JellyfinAdapter", "scrobblePlay failed", e)
+            AppLog.e("JellyfinAdapter", "scrobblePlay failed", e)
             false
         }
     }
@@ -768,7 +819,7 @@ class JellyfinAdapter : BackendAdapter {
             val items = json.getAsJsonArray("Items") ?: return@withContext emptyList<Song>()
             items.mapNotNull { jsonObjectToSong(it.asJsonObject, null) }
         } catch (e: Exception) {
-            android.util.Log.e("JellyfinAdapter", "getRandomSongs failed", e)
+            AppLog.e("JellyfinAdapter", "getRandomSongs failed", e)
             emptyList()
         }
     }
@@ -791,7 +842,7 @@ class JellyfinAdapter : BackendAdapter {
                 AppLog.d("JellyfinAdapter", "logout: HTTP ${response.code}")
             }
         } catch (e: Exception) {
-            android.util.Log.w("JellyfinAdapter", "logout failed", e)
+            AppLog.w("JellyfinAdapter", "logout failed", e)
         } finally {
             // 清空凭据防止后续误用
             apiToken = ""
@@ -809,7 +860,7 @@ class JellyfinAdapter : BackendAdapter {
             client.connectionPool.evictAll()
             AppLog.d("JellyfinAdapter", "close: OkHttp resources released")
         } catch (e: Exception) {
-            android.util.Log.w("JellyfinAdapter", "close failed", e)
+            AppLog.w("JellyfinAdapter", "close failed", e)
         }
     }
 
@@ -842,21 +893,21 @@ class JellyfinAdapter : BackendAdapter {
 
         // 记录原始字节的前20个字节（用于调试编码问题）
         val bytesHex = rawBytes.take(40).joinToString(" ") { "%02X".format(it) }
-        android.util.Log.d("NASMusic", "utf8Body: rawBytes[0..39]=${bytesHex}")
-        android.util.Log.d("NASMusic", "utf8Body: flags: replacement=$hasReplacement greek=$hasGreek cyrillic=$hasCyrillic → needsGbk=$needsGbkFallback")
+        AppLog.d("NASMusic", "utf8Body: rawBytes[0..39]=${bytesHex}")
+        AppLog.d("NASMusic", "utf8Body: flags: replacement=$hasReplacement greek=$hasGreek cyrillic=$hasCyrillic → needsGbk=$needsGbkFallback")
 
         if (!needsGbkFallback) {
-            android.util.Log.d("NASMusic", "utf8Body: UTF-8 OK, first50='${utf8.take(50)}'")
+            AppLog.d("NASMusic", "utf8Body: UTF-8 OK, first50='${utf8.take(50)}'")
             return utf8
         }
 
         // 尝试 GBK 解码（Jellyfin 服务端 ID3 标签可能以 GBK 存储）
         val gbk = try { String(rawBytes, Charset.forName("GBK")) } catch (_: Exception) { null }
         if (gbk != null && (gbk.any { it.code in 0x4E00..0x9FFF } || '\uFFFD' !in gbk)) {
-            android.util.Log.d("NASMusic", "utf8Body: GBK fallback: utf8='${utf8.take(20)}' → gbk='${gbk.take(20)}'")
+            AppLog.d("NASMusic", "utf8Body: GBK fallback: utf8='${utf8.take(20)}' → gbk='${gbk.take(20)}'")
             return gbk
         }
-        android.util.Log.d("NASMusic", "utf8Body: GBK fallback failed, keeping UTF-8")
+        AppLog.d("NASMusic", "utf8Body: GBK fallback failed, keeping UTF-8")
         return utf8
     }
 
@@ -865,7 +916,7 @@ class JellyfinAdapter : BackendAdapter {
             withRetry(
                 config = RetryConfig(maxAttempts = 3, baseDelayMs = 500L),
                 onError = { attempt, e ->
-                    android.util.Log.w("JellyfinAdapter", "executeJsonRequest retry attempt=$attempt for $url", e)
+                    AppLog.w("JellyfinAdapter", "executeJsonRequest retry attempt=$attempt for $url", e)
                 }
             ) {
                 val request = Request.Builder()
@@ -880,13 +931,13 @@ class JellyfinAdapter : BackendAdapter {
                             gson.fromJson(body, JsonObject::class.java)
                         } else null
                     } else {
-                        android.util.Log.w("JellyfinAdapter", "executeJsonRequest: ${response.code} for $url")
+                        AppLog.w("JellyfinAdapter", "executeJsonRequest: ${response.code} for $url")
                         null
                     }
                 }
             }
         } catch (e: Exception) {
-            android.util.Log.e("JellyfinAdapter", "executeJsonRequest failed for $url", e)
+            AppLog.e("JellyfinAdapter", "executeJsonRequest failed for $url", e)
             null
         }
     }
@@ -962,7 +1013,7 @@ class JellyfinAdapter : BackendAdapter {
             client.newCall(request).execute().use { response ->
                 val body = response.utf8Body() ?: return@use null
                 if (!response.isSuccessful) {
-                    android.util.Log.w("JellyfinAdapter", "authenticateByName: HTTP ${response.code} for $baseUrl/Users/AuthenticateByName, body=${body.take(200)}")
+                    AppLog.w("JellyfinAdapter", "authenticateByName: HTTP ${response.code} for $baseUrl/Users/AuthenticateByName, body=${body.take(200)}")
                     return@use null
                 }
                 val json = gson.fromJson(body, JsonObject::class.java)
@@ -974,7 +1025,7 @@ class JellyfinAdapter : BackendAdapter {
                 Triple(accessToken, uid, sName)
             }
         } catch (e: Exception) {
-            android.util.Log.e("JellyfinAdapter", "authenticateByName failed", e)
+            AppLog.e("JellyfinAdapter", "authenticateByName failed", e)
             null
         }
     }
@@ -994,7 +1045,7 @@ class JellyfinAdapter : BackendAdapter {
                 Pair(uid, name)
             }
         } catch (e: Exception) {
-            android.util.Log.e("JellyfinAdapter", "fetchCurrentUserInfo failed", e)
+            AppLog.e("JellyfinAdapter", "fetchCurrentUserInfo failed", e)
             null
         }
     }

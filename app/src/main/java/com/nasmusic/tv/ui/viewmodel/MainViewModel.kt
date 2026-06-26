@@ -20,6 +20,8 @@ import com.nasmusic.tv.data.model.ServerConfig
 import com.nasmusic.tv.data.model.Genre
 import com.nasmusic.tv.data.model.Playlist
 import com.nasmusic.tv.data.model.EqualizerPreset
+import com.nasmusic.tv.data.model.Screen
+import com.nasmusic.tv.data.model.SongsPagingState
 import com.nasmusic.tv.data.model.UiState
 import com.nasmusic.tv.data.prefs.AppPreferences
 import com.nasmusic.tv.lyrics.LyricsManager
@@ -38,17 +40,6 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
-
-/**
- * 歌曲分页加载状态
- */
-data class SongsPagingState(
-    val songs: List<Song> = emptyList(),
-    val totalCount: Int = 0,
-    val isLoading: Boolean = false,
-    val hasMore: Boolean = true,
-    val currentPage: Int = 0
-)
 
 /**
  * 应用主 ViewModel
@@ -266,8 +257,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             }
         }
 
-        // 恢复上次播放队列（仅恢复 UI 状态，不自动播放）
-        restoreLastQueue()
+        // 恢复上次播放队列（仅恢复 UI 状态，不自动播放）— 协程异步读取 DataStore，避免阻塞主线程
+        viewModelScope.launch {
+            restoreLastQueue()
+        }
 
         // 监听队列变化，自动持久化到 DataStore
         viewModelScope.launch {
@@ -299,8 +292,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
      * NAS 歌曲的 streamUrl 暂时为空，等后端连接成功后由 updateRestoredQueueStreamUrls() 更新。
      * 网络歌曲的 streamUrl 在播放时由 NetworkMusicManager.resolvePlayUrl() 解析。
      */
-    private fun restoreLastQueue() {
-        val lastQueue = prefs.getLastQueueSync() ?: return
+    private suspend fun restoreLastQueue() {
+        val lastQueue = prefs.getLastQueue() ?: return
         if (lastQueue.songs.isEmpty()) return
         AppLog.d("NASMusic", "restoreLastQueue: ${lastQueue.songs.size} songs, index=${lastQueue.currentIndex}")
         playerManager.restoreQueue(lastQueue.songs, lastQueue.currentIndex)
@@ -378,7 +371,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             try {
                 backendRegistry.disconnect()
             } catch (e: Exception) {
-                android.util.Log.e("MainViewModel", "disconnect failed", e)
+                AppLog.e("MainViewModel", "disconnect failed", e)
             }
             _isConnected.value = false
             _serverDisplayName.value = ""
@@ -396,7 +389,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 val current = serverConfig.value
                 prefs.saveServerConfig(current.copy(isConnected = false))
             } catch (e: Exception) {
-                android.util.Log.e("MainViewModel", "disconnect: save config failed", e)
+                AppLog.e("MainViewModel", "disconnect: save config failed", e)
             }
         }
     }
@@ -434,7 +427,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                         _connectMessage.value = null
                     }
                 } else {
-                    android.util.Log.w("NASMusic", "connectToSavedServer: initialize returned false")
+                    AppLog.w("NASMusic", "connectToSavedServer: initialize returned false")
                     if (!silent) {
                         _connectMessage.value = "连接失败，请检查服务器设置"
                         delay(3000)
@@ -442,7 +435,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     }
                 }
             } catch (e: Exception) {
-                android.util.Log.e("NASMusic", "connectToSavedServer failed", e)
+                AppLog.e("NASMusic", "connectToSavedServer failed", e)
                 if (!silent) {
                     _connectMessage.value = "连接失败: ${e.message}"
                     delay(3000)
@@ -490,7 +483,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             _favoriteIds.value = favorites.map { it.id }.toSet()
             AppLog.d("NASMusic", "loadFavorites: ${favorites.size} favorites")
         } catch (e: Exception) {
-            android.util.Log.e("NASMusic", "loadFavorites failed", e)
+            AppLog.e("NASMusic", "loadFavorites failed", e)
             _favoriteSongs.value = UiState.Error(
                 message = "加载收藏失败: ${e.message?.take(50)}"
             )
@@ -506,7 +499,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             val data = _genres.value.dataOrNull()
             AppLog.d("NASMusic", "loadGenres: ${data?.size} genres")
         } catch (e: Exception) {
-            android.util.Log.e("NASMusic", "loadGenres failed", e)
+            AppLog.e("NASMusic", "loadGenres failed", e)
             _genres.value = UiState.Error(
                 message = "加载流派列表失败: ${e.message?.take(50)}"
             )
@@ -534,7 +527,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     _albums.value = UiState.Success(loadedAlbums)
                     AppLog.d("NASMusic", "loadLibrary: ${loadedAlbums.size} albums loaded")
                 } catch (e: Exception) {
-                    android.util.Log.e("NASMusic", "loadLibrary albums failed", e)
+                    AppLog.e("NASMusic", "loadLibrary albums failed", e)
                     _albums.value = UiState.Error(
                         message = "加载专辑列表失败: ${e.message?.take(50)}",
                         retry = { loadLibrary() }
@@ -593,7 +586,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 buildArtistMapsIncremental(batch)
                 AppLog.d("NASMusic", "loadSongsNextPage: loaded ${batch.size}, total ${newState.songs.size}/$totalCount")
             } catch (e: Exception) {
-                android.util.Log.e("NASMusic", "loadSongsNextPage failed", e)
+                AppLog.e("NASMusic", "loadSongsNextPage failed", e)
                 _songsPaging.value = state.copy(isLoading = false)
                 showError("加载歌曲失败: ${e.message?.take(50)}")
             }
@@ -616,7 +609,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 _artists.value = UiState.Success(artistsList)
                 AppLog.d("NASMusic", "loadArtists: ${artistsList.size} artists loaded")
             } catch (e: Exception) {
-                android.util.Log.e("NASMusic", "loadArtists failed", e)
+                AppLog.e("NASMusic", "loadArtists failed", e)
                 _artists.value = UiState.Error(
                     message = "加载艺术家失败: ${e.message?.take(50)}",
                     retry = { loadArtists() }
@@ -641,7 +634,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 _years.value = UiState.Success(yearsList)
                 AppLog.d("NASMusic", "loadYears: ${yearsList.size} years loaded")
             } catch (e: Exception) {
-                android.util.Log.e("NASMusic", "loadYears failed", e)
+                AppLog.e("NASMusic", "loadYears failed", e)
                 _years.value = UiState.Error(
                     message = "加载年份失败: ${e.message?.take(50)}",
                     retry = { loadYears() }
@@ -662,7 +655,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 return@launch
             }
             try {
-                val recentIds = prefs.getRecentSongIdsSync().take(100)
+                val recentIds = prefs.getRecentSongIds().take(100)
                 if (recentIds.isEmpty()) {
                     _recentSongs.value = UiState.Success(emptyList())
                     return@launch
@@ -674,7 +667,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 _recentSongs.value = UiState.Success(orderedSongs)
                 AppLog.d("NASMusic", "loadRecentSongs: ${orderedSongs.size} recent songs loaded")
             } catch (e: Exception) {
-                android.util.Log.e("NASMusic", "loadRecentSongs failed", e)
+                AppLog.e("NASMusic", "loadRecentSongs failed", e)
                 _recentSongs.value = UiState.Error(
                     message = "加载最近播放失败: ${e.message?.take(50)}",
                     retry = { loadRecentSongs() }
@@ -702,7 +695,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 _searchResults.value = UiState.Success(results)
                 AppLog.d("NASMusic", "searchSongsOnServer: ${results.size} results for '$query'")
             } catch (e: Exception) {
-                android.util.Log.e("NASMusic", "searchSongsOnServer failed", e)
+                AppLog.e("NASMusic", "searchSongsOnServer failed", e)
                 _searchResults.value = UiState.Error(
                     message = "搜索失败: ${e.message?.take(50)}"
                 )
@@ -724,9 +717,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
      * 搜索结果为统一 Song 模型（isNetworkSong=true）。
      */
     fun searchNetworkSongs(keyword: String) {
-        android.util.Log.i("MetingDiag", "=== MainViewModel.searchNetworkSongs === keyword='$keyword'")
+        AppLog.i("MetingDiag", "=== MainViewModel.searchNetworkSongs === keyword='$keyword'")
         if (keyword.isBlank()) {
-            android.util.Log.i("MetingDiag", "searchNetworkSongs: keyword blank")
+            AppLog.i("MetingDiag", "searchNetworkSongs: keyword blank")
             _networkSearchResults.value = UiState.Success(emptyList())
             _networkSearchKeyword.value = ""
             return
@@ -736,10 +729,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             try {
                 val results = nasMusicApp.networkMusicManager.search(keyword)
-                android.util.Log.i("MetingDiag", "searchNetworkSongs: got ${results.size} results for '$keyword'")
+                AppLog.i("MetingDiag", "searchNetworkSongs: got ${results.size} results for '$keyword'")
                 _networkSearchResults.value = UiState.Success(results)
             } catch (e: Exception) {
-                android.util.Log.e("MetingDiag", "searchNetworkSongs failed: ${e.message}", e)
+                AppLog.e("MetingDiag", "searchNetworkSongs failed: ${e.message}", e)
                 _networkSearchResults.value = UiState.Error(
                     message = "网络搜索失败: ${e.message?.take(50)}"
                 )
@@ -837,7 +830,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 cache[albumId] = songs
                 _albumSongsCache.value = cache
             } catch (e: Exception) {
-                android.util.Log.e("NASMusic", "loadAlbumSongs failed", e)
+                AppLog.e("NASMusic", "loadAlbumSongs failed", e)
                 showError("加载专辑歌曲失败: ${e.message?.take(50)}")
             }
         }
@@ -889,7 +882,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     }
                 }
             } catch (e: Exception) {
-                android.util.Log.e("NASMusic", "loadArtistSongs failed", e)
+                AppLog.e("NASMusic", "loadArtistSongs failed", e)
                 showError("加载艺术家歌曲失败: ${e.message?.take(50)}")
             }
         }
@@ -915,7 +908,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     _favoriteIds.value = newIds
                 }
             } catch (e: Exception) {
-                android.util.Log.e("NASMusic", "toggleFavorite failed", e)
+                AppLog.e("NASMusic", "toggleFavorite failed", e)
                 showError("切换收藏失败: ${e.message?.take(50)}")
             }
         }
@@ -941,7 +934,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             try {
                 onResult(adapter.getSongsByGenre(genre))
             } catch (e: Exception) {
-                android.util.Log.e("NASMusic", "getSongsByGenre failed", e)
+                AppLog.e("NASMusic", "getSongsByGenre failed", e)
                 showError("按流派加载歌曲失败: ${e.message?.take(50)}")
                 onResult(emptyList())
             }
@@ -954,7 +947,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             try {
                 onResult(adapter.getSongsByYearRange(fromYear, toYear))
             } catch (e: Exception) {
-                android.util.Log.e("NASMusic", "getSongsByYearRange failed", e)
+                AppLog.e("NASMusic", "getSongsByYearRange failed", e)
                 showError("按年代加载歌曲失败: ${e.message?.take(50)}")
                 onResult(emptyList())
             }
@@ -1126,7 +1119,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun seekTo(positionMs: Long) = playerManager.seekTo(positionMs)
 
     fun togglePlayMode() {
-        val modes = PlayMode.values()
+        val modes = PlayMode.entries
         val nextIndex = (modes.indexOf(_playMode.value) + 1) % modes.size
         val newMode = modes[nextIndex]
         _playMode.value = newMode
@@ -1198,7 +1191,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 // 协程被主动取消（如切歌时 lyricsLoadJob.cancel()），不是错误，不提示
                 throw e
             } catch (e: Exception) {
-                android.util.Log.e("NASMusic", "loadLyrics failed", e)
+                AppLog.e("NASMusic", "loadLyrics failed", e)
                 showError("加载歌词失败: ${e.message?.take(50)}")
             }
         }
@@ -1256,7 +1249,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     _networkCoverUrl.value = null
                 }
             } catch (e: Exception) {
-                android.util.Log.e("NASMusic", "switchLyricsSource failed", e)
+                AppLog.e("NASMusic", "switchLyricsSource failed", e)
                 showError("切换歌词来源失败: ${e.message?.take(50)}")
             }
         }
@@ -1375,7 +1368,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             try {
                 _playlists.value = UiState.Success(adapter.getPlaylists())
             } catch (e: Exception) {
-                android.util.Log.e("NASMusic", "loadPlaylists failed", e)
+                AppLog.e("NASMusic", "loadPlaylists failed", e)
                 _playlists.value = UiState.Error(
                     message = "加载播放列表失败: ${e.message?.take(50)}",
                     retry = { loadPlaylists() }
@@ -1395,7 +1388,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 val songs = adapter.getAlbumSongs(playlist.id)
                 _selectedPlaylistSongs.value = UiState.Success(songs)
             } catch (e: Exception) {
-                android.util.Log.e("NASMusic", "selectPlaylist songs failed", e)
+                AppLog.e("NASMusic", "selectPlaylist songs failed", e)
                 _selectedPlaylistSongs.value = UiState.Error(
                     message = "加载播放列表歌曲失败: ${e.message?.take(50)}",
                     retry = { selectPlaylist(playlist) }
@@ -1458,7 +1451,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     _currentScreen.value = Screen.NowPlaying
                 }
             } catch (e: Exception) {
-                android.util.Log.e("NASMusic", "playPlaylist failed", e)
+                AppLog.e("NASMusic", "playPlaylist failed", e)
                 showError("播放播放列表失败: ${e.message?.take(50)}")
             }
         }
@@ -1475,24 +1468,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     _selectedPlaylistSongs.value = UiState.Success(currentSongs.filter { it.id != songId })
                 }
             } catch (e: Exception) {
-                android.util.Log.e("NASMusic", "removeFromPlaylist failed", e)
+                AppLog.e("NASMusic", "removeFromPlaylist failed", e)
                 showError("从播放列表移除失败: ${e.message?.take(50)}")
             }
         }
     }
-}
-
-/**
- * 应用屏幕枚举
- */
-enum class Screen {
-    NowPlaying,
-    Library,
-    Queue,
-    Settings,
-    ServerConnect,
-    AlbumDetail,
-    ArtistDetail,
-    Equalizer,
-    PlaylistManagement
 }

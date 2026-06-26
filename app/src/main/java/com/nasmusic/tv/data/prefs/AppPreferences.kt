@@ -131,18 +131,16 @@ class AppPreferences(private val context: Context) {
     }
 
     /**
-     * 同步获取最近播放 ID 列表（非 Flow，用于 ViewModel 中一次性读取）
+     * 获取最近播放 ID 列表（一次性读取，调用方需在协程中）
      */
-    fun getRecentSongIdsSync(): List<String> {
-        return runBlocking {
-            try {
-                context.dataStore.data.first().let { prefs ->
-                    val recentJson = prefs[keyRecentSongs] ?: "[]"
-                    gson.fromJson(recentJson, object : TypeToken<List<String>>() {}.type) ?: emptyList()
-                }
-            } catch (e: Exception) {
-                emptyList()
+    suspend fun getRecentSongIds(): List<String> {
+        return try {
+            context.dataStore.data.first().let { prefs ->
+                val recentJson = prefs[keyRecentSongs] ?: "[]"
+                gson.fromJson(recentJson, object : TypeToken<List<String>>() {}.type) ?: emptyList()
             }
+        } catch (e: Exception) {
+            emptyList()
         }
     }
 
@@ -295,16 +293,14 @@ class AppPreferences(private val context: Context) {
     /**
      * 同步获取网络收藏列表（用于 isFavorite 判断，非 Flow）
      */
-    fun getNetworkFavoritesSync(): List<NetworkFavoriteItem> {
-        return runBlocking {
-            try {
-                context.dataStore.data.first().let { prefs ->
-                    val json = prefs[keyNetworkFavorites] ?: "[]"
-                    gson.fromJson(json, object : TypeToken<List<NetworkFavoriteItem>>() {}.type) ?: emptyList()
-                }
-            } catch (e: Exception) {
-                emptyList()
+    suspend fun getNetworkFavorites(): List<NetworkFavoriteItem> {
+        return try {
+            context.dataStore.data.first().let { prefs ->
+                val json = prefs[keyNetworkFavorites] ?: "[]"
+                gson.fromJson(json, object : TypeToken<List<NetworkFavoriteItem>>() {}.type) ?: emptyList()
             }
+        } catch (e: Exception) {
+            emptyList()
         }
     }
 
@@ -362,18 +358,16 @@ class AppPreferences(private val context: Context) {
     }
 
     /**
-     * 同步读取上次播放队列（用于应用启动时恢复）
+     * 读取上次播放队列（用于应用启动时恢复，调用方需在协程中）
      */
-    fun getLastQueueSync(): LastQueueData? {
-        return runBlocking {
-            try {
-                context.dataStore.data.first().let { prefs ->
-                    val json = prefs[keyLastQueue] ?: return@let null
-                    gson.fromJson(json, LastQueueData::class.java)
-                }
-            } catch (e: Exception) {
-                null
+    suspend fun getLastQueue(): LastQueueData? {
+        return try {
+            context.dataStore.data.first().let { prefs ->
+                val json = prefs[keyLastQueue] ?: return@let null
+                gson.fromJson(json, LastQueueData::class.java)
             }
+        } catch (e: Exception) {
+            null
         }
     }
 

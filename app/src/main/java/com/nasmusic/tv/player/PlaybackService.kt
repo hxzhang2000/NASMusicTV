@@ -111,7 +111,7 @@ class PlaybackService : MediaLibraryService() {
         try {
             (application as NasMusicApp).playerManager.release()
         } catch (e: Exception) {
-            android.util.Log.w("PlaybackService", "PlayerManager.release failed", e)
+            AppLog.w("PlaybackService", "PlayerManager.release failed", e)
         }
         // 释放 MediaSession 和 Player
         mediaLibrarySession?.run {
@@ -123,7 +123,7 @@ class PlaybackService : MediaLibraryService() {
         try {
             ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
         } catch (e: Exception) {
-            android.util.Log.w("PlaybackService", "stopForeground failed", e)
+            AppLog.w("PlaybackService", "stopForeground failed", e)
         }
         super.onDestroy()
     }

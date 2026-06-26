@@ -35,6 +35,24 @@
 
 ---
 
+## [v2.4.2] - 2026-06-26
+
+### Fixed
+
+- 线程安全：`PlayerManager.seekPending` 添加 `@Volatile`（seekTo 主线程与 ExoPlayer 回调线程可见性）
+- DataStore 阻塞主线程：`AppPreferences` 的 `getRecentSongIdsSync`/`getNetworkFavoritesSync`/`getLastQueueSync` 3 处 `runBlocking` 改为 `suspend`（调用方已在协程中），避免主线程 ANR；`restoreLastQueue()` 改为 suspend 并在 `viewModelScope.launch` 中调用；保留 `getDefaultNetworkSourceSync`/`getMetingApiBaseUrlSync`（被 lambda 同步调用无法改）
+- Jellyfin 分页缺失导致数据丢失：`getAlbums`/`getFavorites`/`getSongsByGenre`/`getSongsByYearRange` 4 处硬编码 `Limit=1000` 改为分页循环，参照 `getArtists` 模式，超过 1000 项时不再截断
+
+### Changed
+
+- 网络歌曲播放链接缓存线程安全：`NetworkMusicManager.playUrlCache` 从 `mutableMapOf` 改为 `ConcurrentHashMap`（IO 线程并发读写）
+- 日志统一：全项目 11 个文件 166 处 `android.util.Log` 调用统一替换为 `AppLog`（仅 Debug 构建输出，错误日志始终输出），仅保留 `AppLog.kt` 自身的 4 处封装实现
+- Kotlin 1.9+ API：`PlayMode.values()` 改为 `PlayMode.entries`（避免每次创建新数组）
+- 文件结构：`Screen`/`SongsPagingState` 从 `MainViewModel.kt` 移到 `data/model/` 独立文件，便于复用和维护
+- 文档对齐：`AGENTS.md` 修正 `BackendRegistry` 描述（实际是 `NasMusicApp` 实例化的普通类，非 `object` singleton）；进度轮询间隔从 500ms 修正为 1000ms（v2.2.0 已调整）
+
+---
+
 ## [v2.4.0] - 2026-06-25
 
 ### Added
