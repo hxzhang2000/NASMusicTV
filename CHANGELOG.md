@@ -7,6 +7,34 @@
 >
 > 类型：`Added`（新增） | `Changed`（变更） | `Fixed`（修复） | `Removed`（移除）
 
+## [v2.4.1] - 2026-06-26
+
+### Added
+
+- 逐字歌词高频刷新：LyricsView 内部独立高频时钟（50ms / 20fps），基于 1 秒进度锚点 + 流逝时间插值估算当前进度，逐字高亮平滑过渡；仅 `WORD_BY_WORD` 模式且播放时启动，进度条等其它 UI 仍用 1000ms 刷新
+- 封面多图轮播：新建 `CoverCarousel` 组件，多张封面时每 10 秒切换一张，仅播放时轮播，暂停定格；单张封面静态显示；当前 URL 加载失败自动 fallback 到候选列表下一项
+- 后端候选封面列表：`BackendAdapter` 新增 `getCoverUrlCandidates(song)` 接口，按优先级返回歌曲→专辑→艺术家封面 URL
+- Jellyfin 艺术家封面：`jsonObjectToSong` 解析 `ArtistItems.Id` 填充 `artistId`，请求 fields 添加 `ArtistItems`
+- 网络歌词联动网络封面：NAS 歌曲切换到"在线歌词"来源时，用标题+艺术家调 `searchCoverUrl()` 搜索网络封面，加入轮播候选列表；切回"内嵌"时清除网络封面
+- 统一封面候选入口：`MainViewModel.getCoverCandidates(song)` 统一组装候选列表（NAS 歌曲后端 3 类 + 网络封面；网络歌曲 1 张 pic）
+
+### Fixed
+
+- NowPlayingScreen 封面 fallback 重复 bug：原 attempt 1 和 2 都替换为 Backdrop，等于只有 2 级 fallback；统一替换为 `CoverCarousel` 候选列表方案
+- Navidrome 封面无 fallback：`coverArt` 为空时直接返回 null，无任何兜底；`getCoverUrlCandidates` 增加 albumId/artistId fallback
+- 网络歌曲 EMBEDDED 歌词路径错误：`LyricsManager.getLyricsFromSource()` 的 `EMBEDDED` 分支对网络歌曲走后端 `adapter.getLyrics()`（必然失败）；改为走 `NetworkMusicManager.resolveLyrics()`
+- 设置页左侧导航栏在模拟器上显示不全且无法用遥控器上下键滚动：原用普通 `Column`（不可滚动），6 个分区项超出屏幕高度被裁切；添加 `.verticalScroll(rememberScrollState())`，焦点移动时 Compose `BringIntoView` 自动把焦点项滚入可视区域
+- 关于页版本号显示滞后：`NasMusicVersion.kt` 硬编码 `VERSION_NAME`/`VERSION_CODE` 与 `build.gradle.kts` 的 `versionName`/`versionCode` 不一致（漏改）；改为从 `BuildConfig` 读取，`build.gradle.kts` 成为唯一来源
+- 切换页面后歌词高亮模式丢失：`NowPlayingScreen` 用 `remember`/`rememberSaveable` 保存 `highlightMode`，由于 AppRoot 用 `when (currentScreen)` 切换页面、离开的页面离开 composition，状态丢失，返回后重置为逐行；将 `lyricsHighlightMode` 提升到 `MainViewModel` StateFlow，跨页面切换保留用户选择，含逐字时间戳的歌词仍自动切到逐字模式
+
+### Changed
+
+- 封面加载策略：从 NowPlayingScreen 内联的 3 级 fallback（含重复 Backdrop）改为 `CoverCarousel` 组件统一管理候选列表 + 轮播 + fallback
+- 网络封面生命周期：网络封面只在"在线歌词"来源时存在，与歌词来源保持语义一致；`_networkCoverUrl` StateFlow 驱动候选列表自动刷新
+- 版本号唯一来源：`NasMusicVersion.VERSION_NAME`/`VERSION_CODE` 从 `const val` 改为 `val get() = BuildConfig.*`，发布前只需修改 `app/build.gradle.kts` 一处，代码侧自动同步
+
+---
+
 ## [v2.4.0] - 2026-06-25
 
 ### Added

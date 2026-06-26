@@ -20,6 +20,11 @@ import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.outlined.MusicNote
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -40,6 +45,7 @@ import com.nasmusic.tv.data.model.WordTimestamp
 import com.nasmusic.tv.ui.theme.LyricsTheme
 import com.nasmusic.tv.ui.theme.NasMusicBrushes
 import com.nasmusic.tv.ui.theme.NasMusicColors
+import kotlinx.coroutines.delay
 
 /**
  * 估算逐字时间戳（用于标准 LRC 格式）
@@ -72,7 +78,8 @@ fun LyricsView(
     lyrics: Lyrics?,
     currentTimeMs: Long,
     modifier: Modifier = Modifier,
-    highlightMode: LyricsHighlightMode = LyricsHighlightMode.LINE_BY_LINE
+    highlightMode: LyricsHighlightMode = LyricsHighlightMode.LINE_BY_LINE,
+    isPlaying: Boolean = true
 ) {
     if (lyrics == null || lyrics.isEmpty) {
         Box(
@@ -98,9 +105,40 @@ fun LyricsView(
 
     val listState = rememberLazyListState()
 
-    // 找到当前歌词行索引
+    // 逐字模式下使用本地高频时钟插值，平滑过渡（避免 1000ms progress 导致逐字跳动）
+    // 基于上次已知 currentTimeMs（1秒锚点）+ 实际流逝时间估算当前进度
+    var lyricTickMs by remember(lyrics) { mutableLongStateOf(currentTimeMs) }
+    LaunchedEffect(currentTimeMs, isPlaying, highlightMode, lyrics) {
+        if (highlightMode == LyricsHighlightMode.WORD_BY_WORD && isPlaying) {
+            // 记录锚点：当前已知 progress + 系统时间
+            var anchorProgress = currentTimeMs
+            var anchorSystemMs = System.currentTimeMillis()
+            lyricTickMs = anchorProgress
+            while (true) {
+                delay(50)  // 50ms 刷新（20fps）
+                val elapsed = System.currentTimeMillis() - anchorSystemMs
+                lyricTickMs = anchorProgress + elapsed
+                // currentTimeMs 更新时（每秒一次），重新校准锚点
+                if (currentTimeMs != anchorProgress) {
+                    anchorProgress = currentTimeMs
+                    anchorSystemMs = System.currentTimeMillis()
+                }
+            }
+        } else {
+            // 非逐字模式或暂停，直接使用 currentTimeMs
+            lyricTickMs = currentTimeMs
+        }
+    }
+
+    // 找到当前歌词行索引（逐字模式用高频时钟，逐行模式用原始 progress）
+    val effectiveTimeMs = if (highlightMode == LyricsHighlightMode.WORD_BY_WORD && isPlaying) {
+        lyricTickMs
+    } else {
+        currentTimeMs
+    }
+
     val currentIndex = lyrics.lines
-        .indexOfFirst { it.time > currentTimeMs }
+        .indexOfFirst { it.time > effectiveTimeMs }
         .let { if (it == -1) lyrics.lines.size - 1 else it - 1 }
         .coerceAtLeast(0)
 
@@ -182,7 +220,7 @@ fun LyricsView(
                         }
                         estimateWordTimestamps(line, nextLineTime)
                     }
-                    
+
                     if (wordTimestamps.isNotEmpty()) {
                         buildAnnotatedString {
                             var lastEnd = 0
@@ -200,7 +238,8 @@ fun LyricsView(
                                     append(line.text.substring(lastEnd, wordStart))
                                 }
                                 // Highlighted or dimmed word depending on playback progress
-                                val wordPlayed = word.startMs <= currentTimeMs
+                                // 逐字高亮使用高频插值时间，保证视觉流畅
+                                val wordPlayed = word.startMs <= effectiveTimeMs
                                 val style = if (wordPlayed) {
                                     SpanStyle(color = Color.Yellow)
                                 } else {

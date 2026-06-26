@@ -3784,6 +3784,167 @@ Box(focusGroup)                          ← 外层容器，统一焦点组
 
 ---
 
+### 10.13 v2.4.1 — 逐字歌词高频刷新 + 封面多图轮播 + 网络歌词联动封面
+
+#### 10.13.1 逐字歌词高频刷新
+
+**日期**：2026-06-26
+
+**目标**：逐字高亮（WORD_BY_WORD）模式下文字高亮切换有明显"跳动"感，不够流畅。
+
+**根因**：逐字高亮依赖 `currentTimeMs` 判断每个字符的播放状态，而 `currentTimeMs` 来自 `PlayerManager.progress`，该进度通过 `Handler.postDelayed` 每 1000ms 才更新一次。结果逐字高亮每秒最多刷新一次，一行 10 个字被"批量点亮"，视觉上跳跃式高亮。
+
+**修改文件**：
+
+| 文件 | 改动 |
+|------|------|
+| `ui/components/LyricsView.kt` | 新增 `isPlaying` 参数；内部独立高频时钟（50ms / 20fps），基于 1 秒进度锚点 + 流逝时间插值估算当前进度；仅 `WORD_BY_WORD` 模式且 `isPlaying` 时启动；逐字高亮使用 `effectiveTimeMs` 替代 `currentTimeMs` |
+| `ui/screens/NowPlayingScreen.kt` | 调用 LyricsView 时传入 `isPlaying` |
+
+**实现要点**：
+- 进度条等其它 UI 仍用 1000ms 的 `progress`，不受影响
+- 时钟基于上次 `currentTimeMs`（1 秒锚点）+ 实际流逝时间插值估算
+- `currentTimeMs` 更新时（每秒一次）重新校准锚点
+- 非逐字模式或暂停时直接使用 `currentTimeMs`
+
+**验证**：✅ 逐字高亮流畅无跳动。
+
+---
+
+#### 10.13.2 统一封面轮播框架
+
+**日期**：2026-06-26
+
+**目标**：封面图 fallback 不完整（Navidrome 无 fallback、Jellyfin 专辑 fallback 不带 tag、NowPlayingScreen 重复 Backdrop），且希望多种封面（歌曲/专辑/艺术家）都能取到时定时轮播展示。
+
+**方案**：后端提供"候选封面 URL 列表"（按优先级排序），UI 层用统一的 `CoverCarousel` 组件轮播展示。
+
+**轮播规则**：
+- 多张封面时每 10 秒切换一张
+- 仅播放时轮播，暂停时定格
+- 单张封面时静态显示
+- 当前 URL 加载失败自动 fallback 到候选列表下一项
+- 全部失败显示音符占位符
+
+**优先级**：歌曲封面 → 专辑封面 → 艺术家封面 → ♪ 占位符
+
+**修改文件**：
+
+| 文件 | 改动 |
+|------|------|
+| `backend/BackendAdapter.kt` | 新增 `getCoverUrlCandidates(song)` 接口方法，默认空实现 |
+| `backend/impl/JellyfinAdapter.kt` | `jsonObjectToSong` 解析 `ArtistItems.Id` 填充 `artistId`；请求 fields 添加 `ArtistItems`；实现 `getCoverUrlCandidates`（歌曲 coverUrl → 专辑 albumId → 艺术家 artistId） |
+| `backend/impl/NavidromeAdapter.kt` | 实现 `getCoverUrlCandidates`（coverUrl → albumId → artistId），修复原 coverArt 为空时无 fallback 的问题 |
+| `ui/components/CoverCarousel.kt` | **新建**组件。10 秒/张轮播，`LaunchedEffect(isPlaying, coverCandidates)` 控制启停，内层 `fallbackOffset` 处理 URL 加载失败，`PlaceholderCover` 显示音符图标 |
+| `ui/screens/NowPlayingScreen.kt` | 新增 `coverCandidates` 参数；`CoverColumn` 同步新增 `coverCandidates` + `isPlaying` 参数；替换原 3 级 fallback（含重复 Backdrop bug）为 `CoverCarousel` |
+| `ui/components/AppRoot.kt` | 订阅 `networkCoverUrl`；`remember(currentSong.id, networkCoverUrl)` 生成候选列表传给 NowPlayingScreen |
+
+**修复的 bug**：
+1. NowPlayingScreen attempt 1 和 2 都替换为 Backdrop（重复）
+2. Navidrome coverArt 为空时直接返回 null（无 fallback）
+3. Jellyfin `jsonObjectToSong` 未解析 `artistId`（字段缺失）
+
+**验证**：✅ NAS 歌曲多封面 10 秒轮播；单张封面静态显示；暂停定格；全失败显示占位符。
+
+---
+
+#### 10.13.3 网络歌词联动网络封面
+
+**日期**：2026-06-26
+
+**目标**：NAS 歌曲切换到"在线歌词"来源时，只切换歌词，封面图不联动。希望同时获取网络封面加入轮播候选列表。
+
+**方案**：`switchLyricsSource()` 切到 `NETWORK` 来源时，用标题+艺术家调 `searchCoverUrl()` 搜索网络封面，更新 `_networkCoverUrl` StateFlow；`getCoverCandidates()` 自动读取该状态组装候选列表；切回 `EMBEDDED` 时清除网络封面。
+
+**修改文件**：
+
+| 文件 | 改动 |
+|------|------|
+| `backend/network/MetingApiService.kt` | 新增 `searchCoverUrl(title, artist)`，复用 `search()` 取第一条结果的 `coverUrl` |
+| `backend/network/NetworkMusicManager.kt` | 暴露 `searchCoverUrl(title, artist)`，遍历 `orderedServices()` 调用 MetingApiService |
+| `ui/viewmodel/MainViewModel.kt` | 新增 `_networkCoverUrl` StateFlow；`getCoverCandidates(song)` 统一入口（NAS 歌曲：后端 3 类 + 网络封面；网络歌曲：1 张 pic）；`switchLyricsSource()` 增强——切到 NETWORK 且非网络歌曲时调 `searchCoverUrl`，切回 EMBEDDED 时清除 |
+
+**各场景轮播效果**：
+
+| 场景 | 候选封面数 | 轮播效果 |
+|------|-----------|---------|
+| NAS 歌曲，默认（后端歌词） | 1-3 张（后端） | 后端封面轮播 |
+| NAS 歌曲，切到在线歌词 | 2-4 张（后端+网络） | 后端+网络封面轮播 |
+| NAS 歌曲，切回内嵌歌词 | 1-3 张（后端，网络封面清除） | 后端封面轮播 |
+| 网络歌曲 | 1 张（pic） | 静态显示，不轮播 |
+
+**验证**：✅ NAS 歌曲切在线歌词后网络封面加入轮播；切回内嵌时网络封面移除；网络歌曲封面静态显示。
+
+---
+
+#### 10.13.4 网络歌曲 EMBEDDED 歌词路径修复
+
+**日期**：2026-06-26
+
+**目标**：网络歌曲切换歌词来源到"内嵌"时无法获取歌词。
+
+**根因**：`LyricsManager.getLyricsFromSource()` 的 `EMBEDDED` 分支对所有歌曲都走后端 `adapter.getLyrics(song.id)`，但网络歌曲不在后端，必然返回 null。
+
+**修改文件**：`lyrics/LyricsManager.kt`
+
+**改动**：`EMBEDDED` 分支增加 `song.isNetworkSong && networkMusicManager != null` 判断，网络歌曲走 `networkMusicManager.resolveLyrics(song)`，NAS 歌曲仍走后端 `adapter.getLyrics()`。
+
+**验证**：✅ 网络歌曲切换到"内嵌"歌词来源能正确获取歌词。
+
+---
+
+#### 10.13.5 设置页左侧导航栏滚动修复
+
+**日期**：2026-06-26
+
+**目标**：设置页左侧导航栏在模拟器上显示不全，且无法用遥控器上下键向下推进。
+
+**根因**：`SettingsScreen` 左侧栏使用普通 `Column`（不可滚动），6 个 `SettingsSection` 分区项加头部在 1080p 模拟器上超过可视高度，超出部分被裁切；`FocusableSurface` 焦点移动到不可见项时也没有滚动机制把它带入视图。
+
+**修改文件**：`ui/screens/SettingsScreen.kt`
+
+**改动**：左侧 `Column` 的 modifier 链上添加 `.verticalScroll(rememberScrollState())`。`Column` 自身可滚动后，当焦点移到当前不可见的 `FocusableSurface` 时，Compose 的 `BringIntoView` 机制会自动滚动该列把焦点项带入可视区域，遥控器上下键即可遍历全部 6 个分区。
+
+**验证**：✅ 模拟器上左侧栏所有 6 个设置分区均可见，遥控器上下键可逐个滚动聚焦。
+
+---
+
+#### 10.13.6 版本号唯一来源统一
+
+**日期**：2026-06-26
+
+**目标**：关于页显示的版本号滞后于 `build.gradle.kts` 中实际发布的版本（发布 2.4.1 时仍显示 2.4.0）。
+
+**根因**：版本号在两处独立硬编码——`app/build.gradle.kts` 的 `versionName`/`versionCode` 与 `NasMusicVersion.kt` 的 `VERSION_NAME`/`VERSION_CODE`。每次发版需要同步两处，容易漏改；关于页读取的是 `NasMusicVersion.DISPLAY`，所以显示旧版本。
+
+**修改文件**：`NasMusicVersion.kt`
+
+**改动**：`VERSION_NAME` / `VERSION_CODE` 从 `const val` 改为 `val get() = BuildConfig.VERSION_NAME` / `BuildConfig.VERSION_CODE`。AGP 已启用 `buildConfig = true`，`defaultConfig` 中的 `versionName`/`versionCode` 自动写入 `com.nasmusic.tv.BuildConfig`。`build.gradle.kts` 成为版本号的唯一来源，代码侧（包括 `DISPLAY`、`ABOUT_STRING` 等派生字符串）自动同步。文件头注释规则第 3 条更新为"修改 app/build.gradle.kts 的 versionName 与 versionCode（唯一来源）"。
+
+**验证**：✅ 关于页显示 `v2.4.1`，与 `build.gradle.kts` 一致；后续发版只改一处。
+
+---
+
+#### 10.13.7 歌词高亮模式状态提升
+
+**日期**：2026-06-26
+
+**目标**：在播放页切到逐字高亮 → 进设置页 → 返回播放页后，高亮模式丢失变回逐行。
+
+**根因**：`NowPlayingScreen` 用 `remember` 保存 `highlightMode`。`AppRoot` 用 `when (currentScreen)` 切换页面，离开的页面完全离开 composition，`remember` 状态被丢弃。返回时状态重置为默认 `LINE_BY_LINE`，而 `LaunchedEffect(lyrics)` 只在歌词含逐字时间戳时才自动切回 `WORD_BY_WORD`——标准 LRC 歌词（用户手动切到逐字）不会触发，所以变回逐行。尝试 `rememberSaveable` 同样无效：没有 NavHost back stack entry 托管 saveable state，离开 composition 时无处保存。
+
+**修改文件**：`ui/viewmodel/MainViewModel.kt`、`ui/screens/NowPlayingScreen.kt`、`ui/components/AppRoot.kt`、`data/model/LyricsLine.kt`
+
+**改动**：
+- `MainViewModel` 新增 `_lyricsHighlightMode` / `lyricsHighlightMode: StateFlow<LyricsHighlightMode>` 与 `setLyricsHighlightMode(mode)` 方法；`loadLyricsForCurrentSong` 加载歌词后，若歌词含逐字时间戳则自动切到 `WORD_BY_WORD`，否则保留用户上次选择（不强制重置）。
+- `NowPlayingScreen` 的 `highlightMode` 改为外部参数，新增 `onChangeHighlightMode` 回调，移除内部 `remember`/`rememberSaveable` 和 `LaunchedEffect`。
+- `AppRoot` 订阅 `viewModel.lyricsHighlightMode`，传给 `NowPlayingScreen`；切换按钮回调调 `viewModel.setLyricsHighlightMode(it)`。
+- `LyricsLine.kt` 的 `LyricsHighlightMode.Saver` 回退（状态提升后不再需要 `rememberSaveable`）。
+
+**验证**：✅ 播放页切逐字 → 进设置 → 返回仍为逐字；切歌时含逐字时间戳的歌词自动切到逐字模式，标准 LRC 歌词保留用户选择。
+
+---
+
 ## 11. 回归测试文档
 
 > 完整的回归测试文档独立维护在 `docs/regression-test.md`，包含 19 章节 248 个测试项。

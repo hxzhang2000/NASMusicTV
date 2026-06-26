@@ -15,12 +15,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
@@ -37,9 +32,11 @@ import android.util.Log
 import coil.compose.AsyncImage
 import com.nasmusic.tv.R
 import com.nasmusic.tv.data.model.Lyrics
+import com.nasmusic.tv.data.model.LyricsHighlightMode
 import com.nasmusic.tv.data.model.PlayMode
 import com.nasmusic.tv.data.model.Song
 import com.nasmusic.tv.ui.components.LyricsView
+import com.nasmusic.tv.ui.components.CoverCarousel
 import com.nasmusic.tv.ui.components.ControlButtonsRow
 import com.nasmusic.tv.ui.components.ProgressSection
 import com.nasmusic.tv.ui.components.FocusableSurface
@@ -63,6 +60,8 @@ fun NowPlayingScreen(
     durationMs: Long,
     lyrics: Lyrics?,
     lyricsAvailability: com.nasmusic.tv.data.model.LyricsAvailability,
+    coverCandidates: List<String> = emptyList(),
+    highlightMode: LyricsHighlightMode = LyricsHighlightMode.LINE_BY_LINE,
     isFavorite: Boolean = false,
     isImmersiveMode: Boolean = false,
     onToggleImmersive: () -> Unit = {},
@@ -72,19 +71,10 @@ fun NowPlayingScreen(
     onTogglePlayMode: () -> Unit,
     onSeek: (Long) -> Unit,
     onSwitchLyricsSource: (com.nasmusic.tv.data.model.LyricsSource) -> Unit,
+    onChangeHighlightMode: (LyricsHighlightMode) -> Unit = {},
     onToggleFavorite: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
-    // 歌词高亮模式状态
-    var highlightMode by remember { mutableStateOf(com.nasmusic.tv.data.model.LyricsHighlightMode.LINE_BY_LINE) }
-
-    // 自动检测歌词格式：如果有逐字时间戳，自动切换到逐字模式
-    LaunchedEffect(lyrics) {
-        if (lyrics != null && lyrics.lines.any { it.wordTimestamps.isNotEmpty() }) {
-            highlightMode = com.nasmusic.tv.data.model.LyricsHighlightMode.WORD_BY_WORD
-        }
-    }
-
     Box(
         modifier = modifier
             .fillMaxSize()
@@ -150,7 +140,9 @@ fun NowPlayingScreen(
                             currentSong = currentSong,
                             onToggleImmersive = onToggleImmersive,
                                 isFavorite = isFavorite,
-                                onToggleFavorite = onToggleFavorite
+                                onToggleFavorite = onToggleFavorite,
+                                coverCandidates = coverCandidates,
+                                isPlaying = isPlaying
                             )
                         }
 
@@ -193,15 +185,16 @@ fun NowPlayingScreen(
                         Spacer(modifier = Modifier.width(12.dp))
                         // 高亮模式切换按钮
                         SourceTag(
-                            label = if (highlightMode == com.nasmusic.tv.data.model.LyricsHighlightMode.WORD_BY_WORD) stringResource(R.string.player_highlight_word) else stringResource(R.string.player_highlight_line),
+                            label = if (highlightMode == LyricsHighlightMode.WORD_BY_WORD) stringResource(R.string.player_highlight_word) else stringResource(R.string.player_highlight_line),
                             available = true,
-                            selected = highlightMode == com.nasmusic.tv.data.model.LyricsHighlightMode.WORD_BY_WORD,
+                            selected = highlightMode == LyricsHighlightMode.WORD_BY_WORD,
                             onClick = {
-                                highlightMode = if (highlightMode == com.nasmusic.tv.data.model.LyricsHighlightMode.WORD_BY_WORD) {
-                                    com.nasmusic.tv.data.model.LyricsHighlightMode.LINE_BY_LINE
+                                val newMode = if (highlightMode == LyricsHighlightMode.WORD_BY_WORD) {
+                                    LyricsHighlightMode.LINE_BY_LINE
                                 } else {
-                                    com.nasmusic.tv.data.model.LyricsHighlightMode.WORD_BY_WORD
+                                    LyricsHighlightMode.WORD_BY_WORD
                                 }
+                                onChangeHighlightMode(newMode)
                             }
                         )
                     }
@@ -221,6 +214,7 @@ fun NowPlayingScreen(
                             lyrics = lyrics,
                             currentTimeMs = progressMs,
                             highlightMode = highlightMode,
+                            isPlaying = isPlaying,
                             modifier = Modifier
                                 .fillMaxSize()
                                 .padding(horizontal = 4.dp, vertical = 4.dp)
@@ -249,7 +243,9 @@ private fun CoverColumn(
     currentSong: Song?,
     onToggleImmersive: () -> Unit,
     isFavorite: Boolean = false,
-    onToggleFavorite: (() -> Unit)? = null
+    onToggleFavorite: (() -> Unit)? = null,
+    coverCandidates: List<String> = emptyList(),
+    isPlaying: Boolean = false
 ) {
     Column(
         modifier = Modifier.width(300.dp),
@@ -331,7 +327,7 @@ private fun CoverColumn(
                         .size(240.dp + 20.dp)
                         .background(NasMusicColors.AccentGlow, shape = RoundedCornerShape(50.dp))
                 )
-                // 实际封面
+                // 实际封面（使用 CoverCarousel 组件，支持多封面轮播）
                 Box(
                     modifier = Modifier
                         .size(240.dp)
@@ -339,42 +335,11 @@ private fun CoverColumn(
                         .background(NasMusicColors.Surface)
                 ) {
                     key(currentSong?.id) {
-                        var attemptCount by remember { mutableStateOf(0) }
-
-                        val effectiveUrl = when (attemptCount) {
-                            0 -> currentSong?.coverUrl
-                            1 -> currentSong?.coverUrl?.replace("/Images/Primary", "/Images/Backdrop")
-                            2 -> currentSong?.coverUrl?.replace("/Images/Primary", "/Images/Backdrop")
-                            else -> null
-                        }
-
-                        LaunchedEffect(attemptCount) {
-                            if (effectiveUrl != null) {
-                                AppLog.d("NASMusic", "Cover attempt ${attemptCount + 1}/3: ${effectiveUrl.take(80)}...")
-                            } else {
-                                Log.w("NASMusic", "Cover: ${if (attemptCount >= 3) "all attempts exhausted" else "no coverUrl"} for ${currentSong?.title}")
-                            }
-                        }
-
-                        if (effectiveUrl != null) {
-                            key(attemptCount) {
-                                AsyncImage(
-                                    model = effectiveUrl,
-                                    contentDescription = "Album Cover",
-                                    modifier = Modifier.fillMaxSize(),
-                                    onLoading = { AppLog.d("NASMusic", "Cover: loading...") },
-                                    onSuccess = { Log.i("NASMusic", "Cover: loaded from ${effectiveUrl.take(80)}...") },
-                                    onError = {
-                                        Log.e("NASMusic", "Cover attempt ${attemptCount + 1}/3 failed: ${it.result.throwable}")
-                                        attemptCount++
-                                    }
-                                )
-                            }
-                        } else {
-                            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                                Text(text = "♪", color = NasMusicColors.TextSecondary, fontSize = 120.sp)
-                            }
-                        }
+                        CoverCarousel(
+                            coverCandidates = coverCandidates,
+                            isPlaying = isPlaying,
+                            modifier = Modifier.fillMaxSize()
+                        )
                     }
                 }
             }

@@ -129,17 +129,26 @@ class LyricsManager(
     suspend fun getLyricsFromSource(song: Song, source: LyricsSource): Lyrics? = withContext(Dispatchers.IO) {
         when (source) {
             LyricsSource.EMBEDDED -> {
-                // 从后端API获取
-                val adapter = backendRegistry.getAdapter()
-                if (adapter != null) {
-                    try {
-                        val text = adapter.getLyrics(song.id)
-                        if (!text.isNullOrBlank() && LrcParser.isValidLrc(text)) {
-                            cacheLyrics(song, text)
-                            LrcParser.parse(text, song.id).copy(source = LyricsSource.EMBEDDED)
-                        } else null
-                    } catch (e: Exception) { null }
-                } else null
+                if (song.isNetworkSong && networkMusicManager != null) {
+                    // 网络歌曲的"内嵌"歌词走 NetworkMusicManager（实际为在线歌词接口）
+                    val text = networkMusicManager.resolveLyrics(song)
+                    if (!text.isNullOrBlank() && LrcParser.isValidLrc(text)) {
+                        cacheLyrics(song, text)
+                        LrcParser.parse(text, song.id).copy(source = LyricsSource.EMBEDDED)
+                    } else null
+                } else {
+                    // NAS 歌曲从后端API获取
+                    val adapter = backendRegistry.getAdapter()
+                    if (adapter != null) {
+                        try {
+                            val text = adapter.getLyrics(song.id)
+                            if (!text.isNullOrBlank() && LrcParser.isValidLrc(text)) {
+                                cacheLyrics(song, text)
+                                LrcParser.parse(text, song.id).copy(source = LyricsSource.EMBEDDED)
+                            } else null
+                        } catch (e: Exception) { null }
+                    } else null
+                }
             }
             LyricsSource.LOCAL_FILE -> getLocalLrcFile(song)
             LyricsSource.NETWORK -> {

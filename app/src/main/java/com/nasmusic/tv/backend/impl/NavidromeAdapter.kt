@@ -349,6 +349,22 @@ class NavidromeAdapter : BackendAdapter {
         return url
     }
 
+    override fun getCoverUrlCandidates(song: Song): List<String> {
+        val urls = mutableListOf<String>()
+        // 1. 歌曲/专辑封面（coverArt 字段已填充到 coverUrl）
+        song.coverUrl?.let { urls.add(it) }
+        // albumId 在 Subsonic 中也是合法的 coverArt id，作为 fallback
+        song.albumId?.takeIf { it.isNotBlank() }?.let {
+            val albumCoverUrl = buildCoverUrl(it)
+            if (albumCoverUrl !in urls) urls.add(albumCoverUrl)
+        }
+        // 2. 艺术家封面
+        song.artistId?.takeIf { it.isNotBlank() }?.let {
+            urls.add(buildCoverUrl(it))
+        }
+        return urls.distinct().filter { it.isNotBlank() }
+    }
+
     override suspend fun getLyrics(songId: String): String? {
         AppLog.d("NavidromeAdapter", "getLyrics: Navidrome does not support lyrics API, returning null")
         return null

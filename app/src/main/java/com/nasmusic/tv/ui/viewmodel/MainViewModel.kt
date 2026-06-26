@@ -11,6 +11,7 @@ import com.nasmusic.tv.data.model.Artist
 import com.nasmusic.tv.data.model.AppSettings
 import com.nasmusic.tv.data.model.Lyrics
 import com.nasmusic.tv.data.model.LyricsAvailability
+import com.nasmusic.tv.data.model.LyricsHighlightMode
 import com.nasmusic.tv.data.model.LyricsSource
 import com.nasmusic.tv.data.model.NetworkFavoriteItem
 import com.nasmusic.tv.data.model.PlayMode
@@ -164,6 +165,14 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     private val _lyricsAvailability = MutableStateFlow(LyricsAvailability())
     val lyricsAvailability: StateFlow<LyricsAvailability> = _lyricsAvailability.asStateFlow()
+
+    // 歌词高亮模式 — 提升到 ViewModel，跨页面切换保留用户选择
+    private val _lyricsHighlightMode = MutableStateFlow(LyricsHighlightMode.LINE_BY_LINE)
+    val lyricsHighlightMode: StateFlow<LyricsHighlightMode> = _lyricsHighlightMode.asStateFlow()
+
+    // --- 网络封面 URL（NAS 歌曲切到在线歌词时获取，参与封面轮播）---
+    private val _networkCoverUrl = MutableStateFlow<String?>(null)
+    val networkCoverUrl: StateFlow<String?> = _networkCoverUrl.asStateFlow()
 
     // --- B-13: 播放器状态（currentSong/isPlaying/progress/duration 由 PlayerManager 拥有）---
     val currentSong: StateFlow<Song?> = playerManager.currentSong
@@ -1180,6 +1189,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 // 自动选择第一个可用来源
                 val lyrics = availability.backend ?: availability.network
                 _currentLyrics.value = lyrics
+                // 自动检测歌词格式：含逐字时间戳时切到逐字高亮；否则保持用户上次选择（跨页面切换不丢失）
+                if (lyrics != null && lyrics.lines.any { it.wordTimestamps.isNotEmpty() }) {
+                    _lyricsHighlightMode.value = LyricsHighlightMode.WORD_BY_WORD
+                }
                 AppLog.d("NASMusic", "loadLyrics: source=${lyrics?.source}, lines=${lyrics?.lines?.size}")
             } catch (e: kotlinx.coroutines.CancellationException) {
                 // 协程被主动取消（如切歌时 lyricsLoadJob.cancel()），不是错误，不提示
@@ -1192,7 +1205,37 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /**
+     * 获取歌曲的候选封面 URL 列表（统一入口，不区分 NAS/网络歌曲）。
+     * NAS 歌曲：后端 3 类封面（歌曲/专辑/艺术家）+ 网络封面（切在线歌词时追加）
+     * 网络歌曲：1 张 pic 封面
+     */
+    fun getCoverCandidates(song: Song): List<String> {
+        val candidates = mutableListOf<String>()
+        if (song.isNetworkSong) {
+            // 网络歌曲：只有 1 张 pic 封面
+            song.coverUrl?.let { candidates.add(it) }
+        } else {
+            // NAS 歌曲：后端 3 类封面
+            val adapter = backendRegistry.getAdapter()
+            if (adapter != null) {
+                candidates.addAll(adapter.getCoverUrlCandidates(song))
+            }
+            // 如果有网络封面（切换网络歌词时获取），追加到列表
+            _networkCoverUrl.value?.let { candidates.add(it) }
+        }
+        return candidates.distinct().filter { it.isNotBlank() }
+    }
+
+    /**
+     * 设置歌词高亮模式（用户手动切换逐行/逐字时调用）
+     */
+    fun setLyricsHighlightMode(mode: LyricsHighlightMode) {
+        _lyricsHighlightMode.value = mode
+    }
+
+    /**
      * 切换歌词来源
+     * 切换到在线歌词时联动获取网络封面，切回内嵌时清除网络封面
      */
     fun switchLyricsSource(source: LyricsSource) {
         val song = currentSong.value ?: return
@@ -1202,6 +1245,16 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 val lyrics = lyricsManager.getLyricsFromSource(song, source)
                 _currentLyrics.value = lyrics
                 AppLog.d("NASMusic", "switchLyricsSource: source=${lyrics?.source}, lines=${lyrics?.lines?.size}")
+
+                // 联动网络封面：切换到在线歌词时获取，切回内嵌时清除
+                if (source == LyricsSource.NETWORK && lyrics != null && !song.isNetworkSong) {
+                    val networkCover = nasMusicApp.networkMusicManager.searchCoverUrl(song.title, song.artist)
+                    _networkCoverUrl.value = networkCover
+                    AppLog.d("NASMusic", "switchLyricsSource: 网络封面=${networkCover?.take(60)}")
+                } else {
+                    // 切回内嵌/本地文件来源，清除网络封面
+                    _networkCoverUrl.value = null
+                }
             } catch (e: Exception) {
                 android.util.Log.e("NASMusic", "switchLyricsSource failed", e)
                 showError("切换歌词来源失败: ${e.message?.take(50)}")

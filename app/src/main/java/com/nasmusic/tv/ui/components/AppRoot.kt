@@ -16,6 +16,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -62,6 +63,8 @@ fun AppRoot(
     val duration by viewModel.duration.collectAsState(initial = 0L)
     val lyrics by viewModel.currentLyrics.collectAsState(initial = null)
     val lyricsAvailability by viewModel.lyricsAvailability.collectAsState(initial = com.nasmusic.tv.data.model.LyricsAvailability())
+    val lyricsHighlightMode by viewModel.lyricsHighlightMode.collectAsState(initial = com.nasmusic.tv.data.model.LyricsHighlightMode.LINE_BY_LINE)
+    val networkCoverUrl by viewModel.networkCoverUrl.collectAsState(initial = null)
     val albums by viewModel.albums.collectAsState(initial = UiState.Loading as UiState<List<Album>>)
     val songs by viewModel.songs.collectAsState(initial = UiState.Loading as UiState<List<Song>>)
     val queue by viewModel.queue.collectAsState(initial = emptyList())
@@ -146,6 +149,10 @@ fun AppRoot(
         Box(modifier = Modifier.fillMaxWidth().weight(1f)) {
             when (currentScreen) {
                 Screen.NowPlaying -> {
+                    // 封面候选列表：依赖 currentSong 和 networkCoverUrl（切在线歌词时联动刷新）
+                    val coverCandidates = remember(currentSong?.id, networkCoverUrl) {
+                        currentSong?.let { viewModel.getCoverCandidates(it) } ?: emptyList()
+                    }
                     NowPlayingScreen(
                         currentSong = currentSong,
                         isPlaying = isPlaying,
@@ -154,6 +161,8 @@ fun AppRoot(
                         durationMs = duration,
                         lyrics = lyrics,
                         lyricsAvailability = lyricsAvailability,
+                        coverCandidates = coverCandidates,
+                        highlightMode = lyricsHighlightMode,
                         // 网络歌曲用网络收藏判断，本地歌曲用本地收藏判断
                         isFavorite = currentSong?.let { song ->
                             if (song.isNetworkSong) viewModel.isNetworkFavorite(song.id)
@@ -167,6 +176,7 @@ fun AppRoot(
                         onTogglePlayMode = { viewModel.togglePlayMode() },
                         onSeek = { viewModel.seekTo(it) },
                         onSwitchLyricsSource = { viewModel.switchLyricsSource(it) },
+                        onChangeHighlightMode = { viewModel.setLyricsHighlightMode(it) },
                         // 网络歌曲调用 toggleNetworkFavorite，本地歌曲调用 toggleFavorite
                         onToggleFavorite = if (currentSong != null) {
                             {

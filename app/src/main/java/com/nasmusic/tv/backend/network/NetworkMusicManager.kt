@@ -149,6 +149,25 @@ class NetworkMusicManager(
     }
 
     /**
+     * 按标题+艺术家搜索网络封面 URL。
+     * 用于 NAS 歌曲切换到"在线歌词"来源时，联动获取网络封面加入轮播候选列表。
+     * 仅 MetingApiService 实现该方法；返回 null 表示未找到。
+     */
+    suspend fun searchCoverUrl(title: String, artist: String): String? {
+        // 依次尝试各服务，第一个返回非 null 即采用
+        for (svc in orderedServices()) {
+            if (svc !is MetingApiService) continue
+            return try {
+                svc.searchCoverUrl(title, artist)
+            } catch (e: Exception) {
+                AppLog.w(TAG, "searchCoverUrl error: ${e.message}", e)
+                null
+            } ?: continue
+        }
+        return null
+    }
+
+    /**
      * 获取所有已注册源 ID（用于设置页面展示可选项）
      */
     fun availableSources(): List<String> = services.keys.toList()

@@ -113,6 +113,13 @@ interface BackendAdapter {
     fun getCoverUrl(songId: String): String
 
     /**
+     * 获取歌曲的候选封面 URL 列表，按优先级排序（歌曲→专辑→艺术家）。
+     * UI 层依次尝试/轮播，第一个加载成功的即为可用封面。
+     * 返回空列表表示无可用封面。
+     */
+    fun getCoverUrlCandidates(song: Song): List<String> = emptyList()
+
+    /**
      * 获取歌词（如果后端支持）
      */
     suspend fun getLyrics(songId: String): String?

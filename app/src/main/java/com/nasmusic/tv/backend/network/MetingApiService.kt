@@ -285,6 +285,16 @@ class MetingApiService(
     override suspend fun resolveCoverUrl(song: Song): String? = null
 
     /**
+     * 按标题+艺术家搜索第一首匹配歌曲的封面 URL。
+     * 用于 NAS 歌曲切换到网络歌词时，联动获取网络封面图加入轮播。
+     */
+    suspend fun searchCoverUrl(title: String, artist: String): String? {
+        val keyword = if (artist.isNotBlank()) "$title $artist" else title
+        val items = search(keyword)
+        return items.firstOrNull()?.coverUrl
+    }
+
+    /**
      * 解析 Meting-API 搜索响应
      *
      * 响应格式：JSON 数组，每个元素字段：

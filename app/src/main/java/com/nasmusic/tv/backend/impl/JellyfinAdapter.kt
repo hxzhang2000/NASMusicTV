@@ -229,7 +229,7 @@ class JellyfinAdapter : BackendAdapter {
 
     override suspend fun getSongs(limit: Int, offset: Int): List<Song> = withContext(Dispatchers.IO) {
         try {
-            val fields = "PrimaryImageAspectRatio,SortName,ParentId,RunTimeTicks,Album,AlbumArtist,Artists,IndexNumber,ParentIndexNumber,ProductionYear,Genres"
+            val fields = "PrimaryImageAspectRatio,SortName,ParentId,RunTimeTicks,Album,AlbumArtist,Artists,ArtistItems,IndexNumber,ParentIndexNumber,ProductionYear,Genres"
             val url = "$baseUrl/Items?" +
                     "IncludeItemTypes=Audio&" +
                     "Recursive=true&" +
@@ -269,7 +269,7 @@ class JellyfinAdapter : BackendAdapter {
         if (ids.isEmpty()) return@withContext emptyList()
         try {
             // Jellyfin 支持 ?Ids=id1,id2,id3 批量查询
-            val fields = "PrimaryImageAspectRatio,SortName,ParentId,RunTimeTicks,Album,AlbumArtist,Artists,IndexNumber,ParentIndexNumber,ProductionYear,Genres"
+            val fields = "PrimaryImageAspectRatio,SortName,ParentId,RunTimeTicks,Album,AlbumArtist,Artists,ArtistItems,IndexNumber,ParentIndexNumber,ProductionYear,Genres"
             val idsParam = ids.joinToString(",")
             val url = "$baseUrl/Items?" +
                     "IncludeItemTypes=Audio&" +
@@ -353,6 +353,21 @@ class JellyfinAdapter : BackendAdapter {
         val url = "$baseUrl/Items/$songId/Images/Primary?maxWidth=512&quality=90&api_key=$apiToken"
         AppLog.d("JellyfinAdapter", "getCoverUrl: $url")
         return url
+    }
+
+    override fun getCoverUrlCandidates(song: Song): List<String> {
+        val urls = mutableListOf<String>()
+        // 1. 歌曲封面（已含 tag 的精确 URL，或无 tag 的 Primary URL）
+        song.coverUrl?.let { urls.add(it) }
+        // 2. 专辑封面（不带 tag，Jellyfin 会返回该 item 的 Primary 图）
+        if (!song.albumId.isNullOrBlank()) {
+            urls.add("$baseUrl/Items/${song.albumId}/Images/Primary?maxWidth=512&quality=90&api_key=$apiToken")
+        }
+        // 3. 艺术家封面
+        if (!song.artistId.isNullOrBlank()) {
+            urls.add("$baseUrl/Items/${song.artistId}/Images/Primary?maxWidth=512&quality=90&api_key=$apiToken")
+        }
+        return urls.distinct().filter { it.isNotBlank() }
     }
 
     override suspend fun getLyrics(songId: String): String? = withContext(Dispatchers.IO) {
@@ -893,6 +908,9 @@ class JellyfinAdapter : BackendAdapter {
         val imageTag = obj.get("ImageTags")?.asJsonObject?.get("Primary")?.asString
         val genreArr = obj.getAsJsonArray("Genres")
         val genre = EncodingUtils.fixEncoding(genreArr?.firstOrNull()?.asString)
+        // 解析 artistId（从 ArtistItems 数组取第一个），用于封面候选列表
+        val artistItems = obj.getAsJsonArray("ArtistItems")
+        val artistId = artistItems?.firstOrNull()?.asJsonObject?.get("Id")?.asString
 
         // 调试日志：检查原始数据和修复后的数据
         AppLog.d("JellyfinAdapter", "jsonObjectToSong: id=$id")
@@ -915,6 +933,7 @@ class JellyfinAdapter : BackendAdapter {
             id = id,
             title = title,
             artist = artist,
+            artistId = artistId,
             album = album,
             albumId = albumId,
             coverUrl = coverUrl,

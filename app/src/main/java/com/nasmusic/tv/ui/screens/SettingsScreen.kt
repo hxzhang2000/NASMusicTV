@@ -14,7 +14,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.draw.clip
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Info
@@ -102,6 +104,7 @@ fun SettingsScreen(
                 .clip(RoundedCornerShape(20.dp))
                 .background(NasMusicColors.Surface)
                 .padding(20.dp)
+                .verticalScroll(rememberScrollState())
         ) {
             // 头部
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 16.dp)) {
