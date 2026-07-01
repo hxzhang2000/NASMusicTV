@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.itemsIndexed
@@ -31,6 +32,7 @@ import androidx.tv.material3.Text
 import com.nasmusic.tv.data.model.Song
 import com.nasmusic.tv.ui.LocalListBackHandler
 import com.nasmusic.tv.ui.components.BackButton
+import com.nasmusic.tv.ui.components.FocusableSurface
 import com.nasmusic.tv.ui.theme.NasMusicColors
 import kotlinx.coroutines.launch
 
@@ -45,6 +47,7 @@ fun NetworkPlaylistDetailScreen(
     playlistSongs: List<Song>,
     playlistTitle: String,
     onPlaySong: (Song) -> Unit = {},
+    onPlayAll: () -> Unit = {},
     queueSongIds: Set<String> = emptySet(),
     onToggleQueue: (Song) -> Unit = {},
     networkFavoriteIds: Set<String> = emptySet(),
@@ -57,7 +60,7 @@ fun NetworkPlaylistDetailScreen(
     val scope = rememberCoroutineScope()
     val listBackHandler = LocalListBackHandler.current
 
-    // Level 1.5: 列表已滚动时按 BACK 先回顶并聚焦第一个
+    // Level 1.5: 列表已滚动时按 BACK 先回顶并聚焦第一个；已在顶部时返回网络音乐页
     DisposableEffect(Unit) {
         val handler: () -> Boolean = {
             val atTop = listState.firstVisibleItemIndex == 0 &&
@@ -69,7 +72,8 @@ fun NetworkPlaylistDetailScreen(
                 }
                 true
             } else {
-                false
+                onBack()
+                true
             }
         }
         listBackHandler.value = handler
@@ -98,13 +102,37 @@ fun NetworkPlaylistDetailScreen(
 
         Spacer(modifier = Modifier.height(20.dp))
 
-        // 歌曲数量
-        Text(
-            text = "${playlistSongs.size} 首曲目",
-            color = NasMusicColors.TextSecondary,
-            fontSize = 14.sp,
-            modifier = Modifier.padding(bottom = 12.dp)
-        )
+        // 全部播放按钮 + 歌曲数量
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            if (playlistSongs.isNotEmpty()) {
+                FocusableSurface(
+                    onClick = onPlayAll,
+                    shape = RoundedCornerShape(8.dp),
+                    focusedScale = 1.08f,
+                    animationDurationMs = 150,
+                    containerColor = NasMusicColors.Primary.copy(alpha = 0.85f),
+                    focusedContainerColor = NasMusicColors.Primary,
+                    contentColor = androidx.compose.ui.graphics.Color.Black,
+                    focusedContentColor = androidx.compose.ui.graphics.Color.Black
+                ) {
+                    Text(
+                        text = "全部播放 ▶",
+                        fontSize = 14.sp,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                    )
+                }
+                Spacer(modifier = Modifier.width(16.dp))
+            }
+            Text(
+                text = "${playlistSongs.size} 首曲目",
+                color = NasMusicColors.TextSecondary,
+                fontSize = 14.sp
+            )
+        }
+        Spacer(modifier = Modifier.height(12.dp))
 
         if (playlistSongs.isEmpty()) {
             Box(

@@ -413,6 +413,7 @@ fun AppRoot(
                     val networkPlaylists by viewModel.networkPlaylists.collectAsState(initial = emptyList())
                     val playlistSongs by viewModel.playlistSongs.collectAsState(initial = emptyList())
                     val searchNetworkPlatform by viewModel.searchNetworkPlatform.collectAsState(initial = "netease")
+                    val queueSongIds by viewModel.queueSongIds.collectAsState(initial = emptySet())
                     val isNetworkSearching = networkSearchResultsState is UiState.Loading
                     NetworkScreen(
                         networkSearchResults = networkSearchResultsState.dataOrNull() ?: emptyList(),
@@ -423,6 +424,7 @@ fun AppRoot(
                         playlistSongs = playlistSongs,
                         searchNetworkPlatform = searchNetworkPlatform,
                         isNetworkSearching = isNetworkSearching,
+                        queueSongIds = queueSongIds,
                         onSearchNetwork = { query -> viewModel.searchNetworkSongs(query) },
                         onClearNetworkSearch = { viewModel.clearNetworkSearch() },
                         onPlayNetworkSong = { song ->
@@ -430,6 +432,11 @@ fun AppRoot(
                             viewModel.navigateTo(Screen.NowPlaying)
                         },
                         onToggleNetworkFavorite = { song -> viewModel.toggleNetworkFavorite(song) },
+                        onToggleQueue = { song -> viewModel.toggleQueueSong(song) },
+                        onPlayAllSongs = { songs ->
+                            viewModel.playQueue(songs, 0)
+                            viewModel.navigateTo(Screen.NowPlaying)
+                        },
                         onLoadPlaylistDetail = { (playlist, songs) -> viewModel.loadPlaylistDetail(playlist.id, playlist.name) },
                         onNavigateToPlaylistDetail = { viewModel.navigateTo(Screen.NetworkPlaylistDetail) },
                         onSearchNetworkPlatform = { platform ->
@@ -450,6 +457,10 @@ fun AppRoot(
                         playlistTitle = playlistTitle,
                         onPlaySong = { song ->
                             viewModel.playNetworkSong(song)
+                            viewModel.navigateTo(Screen.NowPlaying)
+                        },
+                        onPlayAll = {
+                            viewModel.playQueue(playlistSongs, 0)
                             viewModel.navigateTo(Screen.NowPlaying)
                         },
                         queueSongIds = queueSongIds,

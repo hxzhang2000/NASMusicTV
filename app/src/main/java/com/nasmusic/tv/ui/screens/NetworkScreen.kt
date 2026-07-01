@@ -77,10 +77,13 @@ fun NetworkScreen(
     playlistSongs: List<Song>,
     searchNetworkPlatform: String,
     isNetworkSearching: Boolean,
+    queueSongIds: Set<String> = emptySet(),
     onSearchNetwork: (String) -> Unit,
     onClearNetworkSearch: () -> Unit,
     onPlayNetworkSong: (Song) -> Unit,
     onToggleNetworkFavorite: (Song) -> Unit,
+    onToggleQueue: (Song) -> Unit = {},
+    onPlayAllSongs: (List<Song>) -> Unit = {},
     onLoadPlaylistDetail: (Pair<Playlist, List<Song>>) -> Unit,
     onNavigateToPlaylistDetail: () -> Unit,
     onSearchNetworkPlatform: (String) -> Unit,
@@ -112,18 +115,32 @@ fun NetworkScreen(
     }
 
     Column(modifier = modifier.fillMaxWidth()) {
-        // 搜索栏
+        // 标题
         Text(
             text = stringResource(R.string.nav_network),
             color = NasMusicColors.TextPrimary,
             fontSize = 18.sp,
             modifier = Modifier.padding(bottom = 12.dp)
         )
-        NetworkSearchBar(
-            query = networkSearchKeyword,
-            onOpenSearch = { showSearchDialog = true },
-            onClear = { onClearNetworkSearch() }
-        )
+        // 搜索栏 + 平台切换（同一行，平台切换右对齐）
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            NetworkSearchBar(
+                query = networkSearchKeyword,
+                onOpenSearch = { showSearchDialog = true },
+                onClear = { onClearNetworkSearch() }
+            )
+            Spacer(modifier = Modifier.weight(1f))
+            PlatformSwitchRow(
+                selectedPlatform = searchNetworkPlatform,
+                onSelectPlatform = { platform ->
+                    onSearchNetworkPlatform(platform)
+                },
+                focusRequester = firstItemFocusRequester
+            )
+        }
         Spacer(modifier = Modifier.height(12.dp))
 
         when {
@@ -177,17 +194,6 @@ fun NetworkScreen(
                     modifier = Modifier.fillMaxWidth(),
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
-                    // 平台切换行
-                    item(key = "platform_switch") {
-                        PlatformSwitchRow(
-                            selectedPlatform = searchNetworkPlatform,
-                            onSelectPlatform = { platform ->
-                                onSearchNetworkPlatform(platform)
-                            },
-                            focusRequester = firstItemFocusRequester
-                        )
-                    }
-
                     // 推荐歌单卡片行
                     item(key = "playlist_cards") {
                         Column {
@@ -214,53 +220,104 @@ fun NetworkScreen(
                         }
                     }
 
-                    // 热歌榜
+                    // 热歌榜 + 新歌榜并排显示
                     val hotPlaylist = networkPlaylists.find { it.first.id == "3778678" }
-                    if (hotPlaylist != null && hotPlaylist.second.isNotEmpty()) {
-                        item(key = "hot_songs_header") {
-                            Text(
-                                text = "热歌榜",
-                                color = NasMusicColors.TextPrimary,
-                                fontSize = 16.sp,
-                                modifier = Modifier.padding(top = 4.dp, bottom = 8.dp)
-                            )
-                        }
-                        itemsIndexed(
-                            hotPlaylist.second.take(50),
-                            key = { _, song -> "hot_${song.id}" }
-                        ) { index, song ->
-                            SongRow(
-                                song = song,
-                                onClick = { onPlayNetworkSong(song) },
-                                isInQueue = false,
-                                isFavorited = song.id in networkFavoriteIds,
-                                onToggleFavorite = { onToggleNetworkFavorite(song) }
-                            )
-                        }
-                    }
-
-                    // 新歌榜
                     val newPlaylist = networkPlaylists.find { it.first.id == "3779629" }
-                    if (newPlaylist != null && newPlaylist.second.isNotEmpty()) {
-                        item(key = "new_songs_header") {
-                            Text(
-                                text = "新歌榜",
-                                color = NasMusicColors.TextPrimary,
-                                fontSize = 16.sp,
-                                modifier = Modifier.padding(top = 12.dp, bottom = 8.dp)
-                            )
-                        }
-                        itemsIndexed(
-                            newPlaylist.second.take(50),
-                            key = { _, song -> "new_${song.id}" }
-                        ) { index, song ->
-                            SongRow(
-                                song = song,
-                                onClick = { onPlayNetworkSong(song) },
-                                isInQueue = false,
-                                isFavorited = song.id in networkFavoriteIds,
-                                onToggleFavorite = { onToggleNetworkFavorite(song) }
-                            )
+                    val hasCharts = (hotPlaylist != null && hotPlaylist.second.isNotEmpty()) ||
+                            (newPlaylist != null && newPlaylist.second.isNotEmpty())
+                    if (hasCharts) {
+                        item(key = "charts_row") {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(16.dp)
+                            ) {
+                                // 热歌榜
+                                if (hotPlaylist != null && hotPlaylist.second.isNotEmpty()) {
+                                    val hotSongs = hotPlaylist.second.take(15)
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Text(
+                                                text = "热歌榜",
+                                                color = NasMusicColors.TextPrimary,
+                                                fontSize = 16.sp,
+                                                modifier = Modifier.weight(1f)
+                                            )
+                                            FocusableSurface(
+                                                onClick = { onPlayAllSongs(hotSongs) },
+                                                shape = RoundedCornerShape(6.dp),
+                                                focusedScale = 1.08f,
+                                                animationDurationMs = 150,
+                                                containerColor = NasMusicColors.Primary.copy(alpha = 0.85f),
+                                                focusedContainerColor = NasMusicColors.Primary,
+                                                contentColor = Color.Black,
+                                                focusedContentColor = Color.Black
+                                            ) {
+                                                Text(
+                                                    text = "全部播放 ▶",
+                                                    fontSize = 12.sp,
+                                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                                                )
+                                            }
+                                        }
+                                        hotSongs.forEach { song ->
+                                            SongRow(
+                                                song = song,
+                                                onClick = { onPlayNetworkSong(song) },
+                                                isInQueue = song.id in queueSongIds,
+                                                onToggleQueue = { onToggleQueue(song) },
+                                                isFavorited = song.id in networkFavoriteIds,
+                                                onToggleFavorite = { onToggleNetworkFavorite(song) }
+                                            )
+                                        }
+                                    }
+                                }
+                                // 新歌榜
+                                if (newPlaylist != null && newPlaylist.second.isNotEmpty()) {
+                                    val newSongs = newPlaylist.second.take(15)
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Text(
+                                                text = "新歌榜",
+                                                color = NasMusicColors.TextPrimary,
+                                                fontSize = 16.sp,
+                                                modifier = Modifier.weight(1f)
+                                            )
+                                            FocusableSurface(
+                                                onClick = { onPlayAllSongs(newSongs) },
+                                                shape = RoundedCornerShape(6.dp),
+                                                focusedScale = 1.08f,
+                                                animationDurationMs = 150,
+                                                containerColor = NasMusicColors.Primary.copy(alpha = 0.85f),
+                                                focusedContainerColor = NasMusicColors.Primary,
+                                                contentColor = Color.Black,
+                                                focusedContentColor = Color.Black
+                                            ) {
+                                                Text(
+                                                    text = "全部播放 ▶",
+                                                    fontSize = 12.sp,
+                                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                                                )
+                                            }
+                                        }
+                                        newSongs.forEach { song ->
+                                            SongRow(
+                                                song = song,
+                                                onClick = { onPlayNetworkSong(song) },
+                                                isInQueue = song.id in queueSongIds,
+                                                onToggleQueue = { onToggleQueue(song) },
+                                                isFavorited = song.id in networkFavoriteIds,
+                                                onToggleFavorite = { onToggleNetworkFavorite(song) }
+                                            )
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
 
