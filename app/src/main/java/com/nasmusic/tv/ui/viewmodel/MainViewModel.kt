@@ -114,6 +114,19 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         favorites.map { it.songId }.toSet()
     }.stateIn(viewModelScope, SharingStarted.Eagerly, emptySet())
 
+    // --- 网络歌单（NetworkMusicManager 获取）---
+    private val _networkPlaylists = MutableStateFlow<List<Pair<Playlist, List<Song>>>>(emptyList())
+    val networkPlaylists: StateFlow<List<Pair<Playlist, List<Song>>>> = _networkPlaylists.asStateFlow()
+
+    private val _playlistSongs = MutableStateFlow<List<Song>>(emptyList())
+    val playlistSongs: StateFlow<List<Song>> = _playlistSongs.asStateFlow()
+
+    private val _selectedPlaylistTitle = MutableStateFlow("")
+    val selectedPlaylistTitle: StateFlow<String> = _selectedPlaylistTitle.asStateFlow()
+
+    private val _searchNetworkPlatform = MutableStateFlow("netease")
+    val searchNetworkPlatform: StateFlow<String> = _searchNetworkPlatform.asStateFlow()
+
     // --- 详情页状态 ---
     private val _selectedAlbum = MutableStateFlow<Album?>(null)
     val selectedAlbum: StateFlow<Album?> = _selectedAlbum.asStateFlow()
@@ -277,6 +290,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         // 解析 streamUrl 后重新播放
         playerManager.onNeedResolveStreamUrl = { index ->
             resolveAndPlayByIndex(index)
+        }
+
+        // 异步加载预配置的网络歌单
+        viewModelScope.launch {
+            loadNetworkPlaylists()
         }
     }
 
@@ -809,6 +827,77 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
      */
     fun isNetworkFavorite(songId: String): Boolean {
         return _networkFavorites.value.any { it.songId == songId }
+    }
+
+    /**
+     * 预配置的网络歌单列表（7 个网易云热门歌单）
+     */
+    private val preconfiguredPlaylists = listOf(
+        Triple("3778678", "热歌榜", "netease"),
+        Triple("3779629", "新歌榜", "netease"),
+        Triple("19723756", "飙升榜", "netease"),
+        Triple("3136952023", "华语流行", "netease"),
+        Triple("60198", "欧美流行", "netease"),
+        Triple("377165088", "抖音热门", "netease"),
+        Triple("2211745987", "经典老歌", "netease"),
+    )
+
+    /**
+     * 加载所有预配置的网络歌单
+     *
+     * 遍历 7 个预配置歌单 ID，通过 NetworkMusicManager 异步获取每首歌的歌曲列表，
+     * 与 Playlist 元数据配对后存入 _networkPlaylists。
+     * 获取失败的歌单（空结果）自动跳过。
+     */
+    fun loadNetworkPlaylists() {
+        viewModelScope.launch {
+            val results = mutableListOf<Pair<Playlist, List<Song>>>()
+            for ((id, name, _) in preconfiguredPlaylists) {
+                try {
+                    val songs = nasMusicApp.networkMusicManager.getPlaylist(id)
+                    if (songs.isEmpty()) {
+                        AppLog.d("NASMusic", "loadNetworkPlaylists: skip '$name' (empty)")
+                        continue
+                    }
+                    // coverUrls: 取前三首歌曲的封面
+                    val coverUrls = songs.take(3).mapNotNull { it.coverUrl }
+                    val playlist = Playlist(
+                        id = id,
+                        name = name,
+                        coverUrls = coverUrls,
+                        songCount = songs.size
+                    )
+                    results.add(playlist to songs)
+                    AppLog.d("NASMusic", "loadNetworkPlaylists: loaded '$name' (${songs.size} songs)")
+                } catch (e: Exception) {
+                    AppLog.w("NASMusic", "loadNetworkPlaylists: failed for '$name': ${e.message}", e)
+                    // 单歌单失败不阻断整体流程，跳过
+                }
+            }
+            _networkPlaylists.value = results
+            AppLog.d("NASMusic", "loadNetworkPlaylists: done, ${results.size}/${preconfiguredPlaylists.size} playlists loaded")
+        }
+    }
+
+    /**
+     * 加载指定网络歌单的歌曲详情
+     *
+     * @param playlistId 歌单 ID
+     * @param playlistTitle 歌单标题（用于 UI 标题显示）
+     */
+    fun loadPlaylistDetail(playlistId: String, playlistTitle: String) {
+        _selectedPlaylistTitle.value = playlistTitle
+        viewModelScope.launch {
+            try {
+                val songs = nasMusicApp.networkMusicManager.getPlaylist(playlistId)
+                _playlistSongs.value = songs
+                AppLog.d("NASMusic", "loadPlaylistDetail: '$playlistTitle' (${songs.size} songs)")
+            } catch (e: Exception) {
+                AppLog.e("NASMusic", "loadPlaylistDetail failed for '$playlistTitle': ${e.message}", e)
+                _playlistSongs.value = emptyList()
+                showError("加载歌单失败: ${e.message?.take(50)}")
+            }
+        }
     }
 
     fun refreshLibrary() {

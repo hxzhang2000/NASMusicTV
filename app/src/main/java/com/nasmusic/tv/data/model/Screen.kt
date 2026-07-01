@@ -12,5 +12,7 @@ enum class Screen {
     AlbumDetail,
     ArtistDetail,
     Equalizer,
-    PlaylistManagement
+    PlaylistManagement,
+    Network,
+    NetworkPlaylistDetail
 }

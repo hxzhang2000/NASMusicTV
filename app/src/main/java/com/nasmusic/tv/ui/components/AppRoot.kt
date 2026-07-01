@@ -37,6 +37,8 @@ import com.nasmusic.tv.ui.screens.AlbumDetailScreen
 import com.nasmusic.tv.ui.screens.ArtistDetailScreen
 import com.nasmusic.tv.ui.screens.EqualizerScreen
 import com.nasmusic.tv.ui.screens.LibraryScreen
+import com.nasmusic.tv.ui.screens.NetworkPlaylistDetailScreen
+import com.nasmusic.tv.ui.screens.NetworkScreen
 import com.nasmusic.tv.ui.screens.NowPlayingScreen
 import com.nasmusic.tv.ui.screens.PlaylistManagementScreen
 import com.nasmusic.tv.ui.screens.QueueScreen
@@ -131,6 +133,11 @@ fun AppRoot(
                     label = stringResource(R.string.nav_queue),
                     selected = currentScreen == Screen.Queue,
                     onClick = { viewModel.navigateTo(Screen.Queue) }
+                )
+                NavItem(
+                    label = "网络音乐",
+                    selected = currentScreen == Screen.Network,
+                    onClick = { viewModel.navigateTo(Screen.Network) }
                 )
                 NavItem(
                     label = stringResource(R.string.nav_server),
@@ -410,6 +417,53 @@ fun AppRoot(
                         },
                         onRemoveSong = { songId -> viewModel.removeFromPlaylist(songId) },
                         onBack = { viewModel.navigateTo(Screen.Library) }
+                    )
+                }
+                Screen.Network -> {
+                    val networkSearchResultsState by viewModel.networkSearchResults.collectAsState(initial = UiState.Success(emptyList()))
+                    val networkSearchKeyword by viewModel.networkSearchKeyword.collectAsState(initial = "")
+                    val networkFavoriteSongs by viewModel.networkFavoriteSongs.collectAsState(initial = emptyList())
+                    val networkFavoriteIds by viewModel.networkFavoriteIds.collectAsState(initial = emptySet())
+                    val networkPlaylists by viewModel.networkPlaylists.collectAsState(initial = emptyList())
+                    val playlistSongs by viewModel.playlistSongs.collectAsState(initial = emptyList())
+                    val isNetworkSearching = networkSearchResultsState is UiState.Loading
+                    NetworkScreen(
+                        networkSearchResults = networkSearchResultsState.dataOrNull() ?: emptyList(),
+                        networkSearchKeyword = networkSearchKeyword,
+                        networkFavoriteSongs = networkFavoriteSongs,
+                        networkFavoriteIds = networkFavoriteIds,
+                        networkPlaylists = networkPlaylists,
+                        playlistSongs = playlistSongs,
+                        isNetworkSearching = isNetworkSearching,
+                        onSearchNetwork = { query -> viewModel.searchNetworkSongs(query) },
+                        onClearNetworkSearch = { viewModel.clearNetworkSearch() },
+                        onPlayNetworkSong = { song ->
+                            viewModel.playNetworkSong(song)
+                            viewModel.navigateTo(Screen.NowPlaying)
+                        },
+                        onToggleNetworkFavorite = { song -> viewModel.toggleNetworkFavorite(song) },
+                        onLoadPlaylistDetail = { (playlist, songs) -> viewModel.loadPlaylistDetail(playlist.id, playlist.name) },
+                        onNavigateToPlaylistDetail = { viewModel.navigateTo(Screen.NetworkPlaylistDetail) },
+                        onSearchNetworkPlatform = { query -> viewModel.searchNetworkSongs(query) }
+                    )
+                }
+                Screen.NetworkPlaylistDetail -> {
+                    val playlistSongs by viewModel.playlistSongs.collectAsState(initial = emptyList())
+                    val playlistTitle by viewModel.selectedPlaylistTitle.collectAsState(initial = "")
+                    val networkFavoriteIds by viewModel.networkFavoriteIds.collectAsState(initial = emptySet())
+                    val queueSongIds by viewModel.queueSongIds.collectAsState(initial = emptySet())
+                    NetworkPlaylistDetailScreen(
+                        playlistSongs = playlistSongs,
+                        playlistTitle = playlistTitle,
+                        onPlaySong = { song ->
+                            viewModel.playNetworkSong(song)
+                            viewModel.navigateTo(Screen.NowPlaying)
+                        },
+                        queueSongIds = queueSongIds,
+                        onToggleQueue = { song -> viewModel.toggleQueueSong(song) },
+                        networkFavoriteIds = networkFavoriteIds,
+                        onToggleFavorite = { song -> viewModel.toggleNetworkFavorite(song) },
+                        onBack = { viewModel.navigateTo(Screen.Network) }
                     )
                 }
             }
