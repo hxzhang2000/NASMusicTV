@@ -859,11 +859,13 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun loadNetworkPlaylists() {
         viewModelScope.launch {
             val results = mutableListOf<Pair<Playlist, List<Song>>>()
+            var failCount = 0
             for ((id, name, _) in preconfiguredPlaylists) {
                 try {
                     val songs = nasMusicApp.networkMusicManager.getPlaylist(id)
                     if (songs.isEmpty()) {
                         AppLog.d("NASMusic", "loadNetworkPlaylists: skip '$name' (empty)")
+                        failCount++
                         continue
                     }
                     // coverUrls: 取前三首歌曲的封面
@@ -878,11 +880,15 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     AppLog.d("NASMusic", "loadNetworkPlaylists: loaded '$name' (${songs.size} songs)")
                 } catch (e: Exception) {
                     AppLog.w("NASMusic", "loadNetworkPlaylists: failed for '$name': ${e.message}", e)
-                    // 单歌单失败不阻断整体流程，跳过
+                    failCount++
                 }
             }
             _networkPlaylists.value = results
             AppLog.d("NASMusic", "loadNetworkPlaylists: done, ${results.size}/${preconfiguredPlaylists.size} playlists loaded")
+            // 所有歌单都加载失败时提示用户
+            if (results.isEmpty() && failCount == preconfiguredPlaylists.size) {
+                showError("网络音乐端点连接失败，请在设置中检查端点配置")
+            }
         }
     }
 
@@ -1109,6 +1115,12 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     } else {
                         song
                     }
+                }
+                // 检查第一首歌是否仍然无法解析
+                val resolvedFirst = resolved.getOrNull(startIndex)
+                if (resolvedFirst != null && resolvedFirst.isNetworkSong && resolvedFirst.streamUrl.isNullOrBlank()) {
+                    AppLog.w("NASMusic", "playQueue: all endpoints failed to resolve URL for ${resolvedFirst.title}")
+                    showError("无法解析播放链接，网络音乐端点连接失败")
                 }
                 playerManager.playQueue(resolved, startIndex)
                 recordPlay(firstSong)

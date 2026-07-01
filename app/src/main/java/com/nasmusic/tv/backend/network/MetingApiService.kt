@@ -124,7 +124,7 @@ class MetingApiService(
         private const val DIAG = "MetingDiag"
         private const val DEFAULT_SERVER = "netease"
         // 默认公共 Meting-API 端点
-        const val DEFAULT_BASE_URL = "https://meting.mikus.ink/api"
+        const val DEFAULT_BASE_URL = "https://meting.api.redcha.cn/api"
 
         /**
          * 预设公共 Meting-API 端点列表（供设置页选择）
@@ -236,28 +236,40 @@ class MetingApiService(
 
     /**
      * 解析播放链接
+     *
+     * 端点自动 fallback 策略：
+     * 1. 优先使用用户在设置中选中的端点（baseUrl）
+     * 2. 如果当前端点失败（异常或空结果），自动尝试其他预设端点
+     * 3. 任一端点返回非空播放 URL 即返回
+     *
      * Meting-API 返回 302 重定向，需要获取 Location header
      */
     override suspend fun resolvePlayUrl(song: Song): String? = withContext(Dispatchers.IO) {
         val netId = song.networkId ?: return@withContext song.streamUrl
-        try {
-            val url = "$baseUrl?server=$DEFAULT_SERVER&type=url&id=$netId"
-            val request = Request.Builder().url(url).build()
-            noRedirectClient.newCall(request).execute().use { response ->
-                val playUrl = when (response.code) {
-                    302 -> response.header("Location")
-                    200 -> response.body?.string()?.let { extractUrlFromJson(it) }
-                    else -> null
+        val endpoints = buildEndpointFallbackOrder(baseUrl)
+        for (endpoint in endpoints) {
+            try {
+                val url = "$endpoint?server=$DEFAULT_SERVER&type=url&id=$netId"
+                val request = Request.Builder().url(url).build()
+                var playUrl: String? = null
+                noRedirectClient.newCall(request).execute().use { response ->
+                    playUrl = when (response.code) {
+                        302 -> response.header("Location")
+                        200 -> response.body?.string()?.let { extractUrlFromJson(it) }
+                        else -> null
+                    }
                 }
-                if (playUrl.isNullOrBlank()) {
-                    AppLog.w(TAG, "resolvePlayUrl empty: code=${response.code} netId=$netId")
+                if (!playUrl.isNullOrBlank()) {
+                    AppLog.d(TAG, "resolvePlayUrl: resolved via '$endpoint' for netId=$netId")
+                    return@withContext playUrl
                 }
-                playUrl
+                AppLog.w(TAG, "resolvePlayUrl: empty from '$endpoint' for netId=$netId")
+            } catch (e: Exception) {
+                AppLog.w(TAG, "resolvePlayUrl: endpoint '$endpoint' failed: ${e.message}")
             }
-        } catch (e: Exception) {
-            AppLog.w(TAG, "resolvePlayUrl error: ${e.message}", e)
-            null
         }
+        AppLog.w(TAG, "resolvePlayUrl: all endpoints failed for netId=$netId")
+        null
     }
 
     /**
@@ -298,6 +310,11 @@ class MetingApiService(
     /**
      * 获取歌单中的所有歌曲。
      *
+     * 端点自动 fallback 策略：
+     * 1. 优先使用用户在设置中选中的端点（baseUrl）
+     * 2. 如果当前端点失败（异常或空结果），自动尝试其他预设端点
+     * 3. 任一端点返回非空歌曲列表即返回
+     *
      * Meting-API 的 type=playlist 端点直接返回歌曲 JSON 数组，
      * 格式与 type=search 完全一致，可直接复用 parseSongs() 解析。
      *
@@ -305,26 +322,34 @@ class MetingApiService(
      * @return 歌单中的歌曲列表；空列表表示无结果或获取失败
      */
     override suspend fun getPlaylist(playlistId: String): List<Song> = withContext(Dispatchers.IO) {
-        try {
-            val url = "$baseUrl?server=$DEFAULT_SERVER&type=playlist&id=$playlistId"
-            AppLog.i(DIAG, "getPlaylist: url='$url'")
-            val request = Request.Builder()
-                .url(url)
-                .header("User-Agent", "Mozilla/5.0")
-                .build()
-            client.newCall(request).execute().use { response ->
-                val body = response.body?.string()
-                AppLog.i(DIAG, "getPlaylist: code=${response.code} bodyLen=${body?.length ?: 0}")
-                if (!response.isSuccessful || body.isNullOrBlank()) {
-                    AppLog.w(DIAG, "getPlaylist: failed code=${response.code} bodyEmpty=${body.isNullOrBlank()}")
-                    return@use emptyList()
+        val endpoints = buildEndpointFallbackOrder(baseUrl)
+        for (endpoint in endpoints) {
+            try {
+                val url = "$endpoint?server=$DEFAULT_SERVER&type=playlist&id=$playlistId"
+                AppLog.i(DIAG, "getPlaylist: trying endpoint='$endpoint' url='$url'")
+                val request = Request.Builder()
+                    .url(url)
+                    .header("User-Agent", "Mozilla/5.0")
+                    .build()
+                var songs: List<Song>? = null
+                client.newCall(request).execute().use { response ->
+                    val body = response.body?.string()
+                    AppLog.i(DIAG, "getPlaylist: code=${response.code} bodyLen=${body?.length ?: 0}")
+                    if (response.isSuccessful && !body.isNullOrBlank()) {
+                        songs = parseSongs(body)
+                    }
                 }
-                parseSongs(body)
+                if (!songs.isNullOrEmpty()) {
+                    AppLog.i(DIAG, "getPlaylist: loaded ${songs.size} songs via '$endpoint'")
+                    return@withContext songs
+                }
+                AppLog.w(DIAG, "getPlaylist: empty from '$endpoint'")
+            } catch (e: Exception) {
+                AppLog.w(DIAG, "getPlaylist: endpoint '$endpoint' failed: ${e.javaClass.simpleName}: ${e.message}")
             }
-        } catch (e: Exception) {
-            AppLog.w(DIAG, "getPlaylist error: ${e.javaClass.simpleName}: ${e.message}")
-            emptyList()
         }
+        AppLog.w(DIAG, "getPlaylist: all endpoints failed for playlistId=$playlistId")
+        emptyList()
     }
 
     /**
