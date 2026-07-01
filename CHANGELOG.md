@@ -7,6 +7,32 @@
 >
 > 类型：`Added`（新增） | `Changed`（变更） | `Fixed`（修复） | `Removed`（移除）
 
+## [v2.5.0] - 2026-07-01
+
+### Added
+
+- 网络音乐顶级 Tab：新增独立「网络音乐」导航项，从曲库子 Tab 提升为顶级页面
+- 推荐歌单卡片行：横向滚动 LazyRow，7 个预置网易云歌单（热歌榜/新歌榜/飙升榜/华语流行/欧美流行/抖音热门/经典老歌）
+- 歌单封面轮播：取前 3 首歌封面 URL，CoverCarousel 自动循环（autoCycle 模式，不受播放状态影响）
+- 歌单详情页：点击推荐歌单卡片进入独立详情页（NetworkPlaylistDetailScreen），显示全部歌曲列表
+- 搜索平台切换：搜索框下方增加平台切换按钮（网易云 / QQ 音乐 / 酷狗），歌词来源标签样式
+- Playlist.kt 数据模型：新增网络歌单实体，支持多封面轮播列表
+- CoverCarousel.kt autoCycle 参数：解耦轮播节奏与播放状态
+
+### Changed
+
+- 版本号升级至 v2.5.0，versionCode 递增至 12
+- 网络音乐从 LibraryScreen 中移除，LibraryTab 从 8 个减少为 7 个
+- 搜索歌曲的 album 字段从硬编码空字符串改为解析 API 返回的专辑名
+- NetworkMusicService 接口新增 getPlaylist() 方法
+
+### Removed
+
+- LibraryScreen 中的 NetworkTab 组件及相关参数（170+ 行代码已迁移到 NetworkScreen）
+- strings.xml 中的 7 个 library_network* 字符串（替换为新的 network_* 字符串）
+
+---
+
 ## [v2.4.4] - 2026-07-01
 
 ### Fixed

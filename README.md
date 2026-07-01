@@ -86,6 +86,7 @@ adb -s 192.168.0.116:5555 install -r app/build/outputs/apk/debug/app-debug.apk
 
 ## 版本历史
 
+- **v2.5.0** — 网络音乐顶级 Tab（推荐歌单、歌单详情、搜索平台切换、独立导航入口）
 - **v2.4.4** — Code Review 修复（空安全、类型安全枚举、Compose 动画优化、代码清理）
 - **v2.4.3** — Code Review 修复（Response 泄漏、API 参数、线程安全、编码回退、播放列表端点）
 - **v2.4.2** — Code Review 修复（线程安全、DataStore 异步、日志统一、Jellyfin 分页）

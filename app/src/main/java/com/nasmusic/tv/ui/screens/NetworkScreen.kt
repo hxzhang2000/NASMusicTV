@@ -114,7 +114,7 @@ fun NetworkScreen(
     Column(modifier = modifier.fillMaxWidth()) {
         // 搜索栏
         Text(
-            text = stringResource(R.string.library_network),
+            text = stringResource(R.string.nav_network),
             color = NasMusicColors.TextPrimary,
             fontSize = 18.sp,
             modifier = Modifier.padding(bottom = 12.dp)
@@ -146,7 +146,7 @@ fun NetworkScreen(
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        text = stringResource(R.string.library_network_no_results),
+                        text = stringResource(R.string.network_no_results),
                         color = NasMusicColors.TextSecondary,
                         fontSize = 16.sp
                     )
@@ -268,7 +268,7 @@ fun NetworkScreen(
                     if (networkFavoriteSongs.isNotEmpty()) {
                         item(key = "favorites_header") {
                             Text(
-                                text = stringResource(R.string.library_network_favorites_title),
+                                text = stringResource(R.string.network_my_favorites),
                                 color = NasMusicColors.TextPrimary,
                                 fontSize = 16.sp,
                                 modifier = Modifier.padding(top = 12.dp, bottom = 8.dp)
@@ -300,8 +300,8 @@ fun NetworkScreen(
     // 搜索输入对话框
     if (showSearchDialog) {
         TextInputDialog(
-            title = stringResource(R.string.library_network),
-            hint = stringResource(R.string.library_network_search_hint),
+            title = stringResource(R.string.nav_network),
+            hint = stringResource(R.string.network_search_hint),
             initialValue = networkSearchKeyword,
             onConfirm = { input ->
                 onSearchNetwork(input)

@@ -48,6 +48,8 @@
     <string name="network_platform_netease">网易云</string>
     <string name="network_platform_qq">QQ音乐</string>
     <string name="network_platform_kugou">酷狗</string>
+    <string name="network_search_hint">输入歌曲名或歌手名搜索网络音乐</string>
+    <string name="network_no_results">未找到相关网络音乐</string>
 
     <!-- Player -->
     <string name="player_play">播放</string>
