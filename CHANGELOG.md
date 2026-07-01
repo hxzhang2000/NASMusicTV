@@ -14,6 +14,8 @@
 - **网络音乐端点 429 限流**：默认端点从 `meting.mikus.ink`（429 Too Many Requests）切换为 `meting.api.redcha.cn`；`getPlaylist()` 和 `resolvePlayUrl()` 增加多端点自动 fallback 机制，与 `search()` 保持一致
 - **全端点失败用户提示**：所有预置端点均连接失败时，界面显示红色提示「网络音乐端点连接失败，请在设置中检查端点配置」
 - **playQueue 网络歌曲播放修复**：播放网络歌曲前正确解析 `streamUrl`，不再卡在「播放中」状态
+- **ProGuard Gson 类型擦除导致 TV 启动崩溃**：`AppPreferences$LastQueueData.songs: List<Song>` 被 R8 剥离泛型签名，Gson 反序列化为 `LinkedTreeMap` 而非 `Song`；`proguard-rules.pro` 添加 `-keep class com.nasmusic.tv.data.prefs.**` 保留泛型信息
+- **restoreLastQueue 空安全**：`lastQueue.songs` 增加 `isNullOrEmpty()` 检查，防止残留损坏数据导致 NPE
 
 ### Added
 
