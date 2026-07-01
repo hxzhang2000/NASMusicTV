@@ -25,7 +25,8 @@ import kotlinx.coroutines.delay
  * 封面轮播组件
  *
  * - 多张封面时每 10 秒切换一张
- * - 仅播放时轮播，暂停时定格
+ * - 仅播放时轮播，暂停时定格（除非 autoCycle=true）
+ * - autoCycle=true 时无论播放状态都持续轮播
  * - 单张封面时静态显示
  * - 当前 URL 加载失败自动尝试候选列表下一项（内层 fallback）
  * - 全部失败时显示音符占位符
@@ -34,6 +35,7 @@ import kotlinx.coroutines.delay
 fun CoverCarousel(
     coverCandidates: List<String>,
     isPlaying: Boolean,
+    autoCycle: Boolean = false,
     modifier: Modifier = Modifier,
     onAllFailed: () -> Unit = {}
 ) {
@@ -66,9 +68,9 @@ fun CoverCarousel(
     var carouselIndex by remember(coverCandidates) { mutableIntStateOf(0) }
     var fallbackOffset by remember { mutableIntStateOf(0) }
 
-    // 仅播放时轮播
-    LaunchedEffect(isPlaying, coverCandidates) {
-        if (isPlaying) {
+    // 播放时轮播（autoCycle=true 时始终轮播）
+    LaunchedEffect(isPlaying, coverCandidates, autoCycle) {
+        if (isPlaying || autoCycle) {
             while (true) {
                 delay(10_000L)  // 10 秒/张
                 carouselIndex = (carouselIndex + 1) % coverCandidates.size

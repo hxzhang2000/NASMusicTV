@@ -68,4 +68,13 @@ interface NetworkMusicService {
      * @return 封面图片 URL；null 表示未找到
      */
     suspend fun searchCoverUrl(title: String, artist: String): String? = null
+
+    /**
+     * 获取歌单中的所有歌曲。
+     *
+     * @param playlistId 歌单 ID（平台特定，如网易云歌单 ID）
+     * @return 歌单中的歌曲列表。返回空列表表示无结果或获取失败。
+     * @throws Exception 网络或解析错误由上游统一处理
+     */
+    suspend fun getPlaylist(playlistId: String): List<Song>
 }

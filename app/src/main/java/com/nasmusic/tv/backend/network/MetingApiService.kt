@@ -296,11 +296,44 @@ class MetingApiService(
     }
 
     /**
+     * 获取歌单中的所有歌曲。
+     *
+     * Meting-API 的 type=playlist 端点直接返回歌曲 JSON 数组，
+     * 格式与 type=search 完全一致，可直接复用 parseSongs() 解析。
+     *
+     * @param playlistId 网易云歌单 ID
+     * @return 歌单中的歌曲列表；空列表表示无结果或获取失败
+     */
+    override suspend fun getPlaylist(playlistId: String): List<Song> = withContext(Dispatchers.IO) {
+        try {
+            val url = "$baseUrl?server=$DEFAULT_SERVER&type=playlist&id=$playlistId"
+            AppLog.i(DIAG, "getPlaylist: url='$url'")
+            val request = Request.Builder()
+                .url(url)
+                .header("User-Agent", "Mozilla/5.0")
+                .build()
+            client.newCall(request).execute().use { response ->
+                val body = response.body?.string()
+                AppLog.i(DIAG, "getPlaylist: code=${response.code} bodyLen=${body?.length ?: 0}")
+                if (!response.isSuccessful || body.isNullOrBlank()) {
+                    AppLog.w(DIAG, "getPlaylist: failed code=${response.code} bodyEmpty=${body.isNullOrBlank()}")
+                    return@use emptyList()
+                }
+                parseSongs(body)
+            }
+        } catch (e: Exception) {
+            AppLog.w(DIAG, "getPlaylist error: ${e.javaClass.simpleName}: ${e.message}")
+            emptyList()
+        }
+    }
+
+    /**
      * 解析 Meting-API 搜索响应
      *
      * 响应格式：JSON 数组，每个元素字段：
      * - title：歌曲名
      * - author：艺术家
+     * - album：专辑名
      * - pic：封面端点 URL
      * - url：播放端点 URL（含 id 参数，需提取）
      * - lrc：歌词端点 URL
@@ -332,10 +365,13 @@ class MetingApiService(
                         ?: item.get("artist")?.asString
                     val pic = item.get("pic")?.asString
                     val urlField = item.get("url")?.asString
+                    val albumField = item.get("album")?.asString
+                        ?: item.get("al")?.asString
                     // 编码修复：部分端点可能返回 GBK 被当作 Latin-1 解码的乱码
                     val fixedTitle = EncodingUtils.fixEncoding(title)
                     val fixedAuthor = EncodingUtils.fixEncoding(author)
-                    AppLog.i(DIAG, "parseSongs[$idx]: title=$fixedTitle author=$fixedAuthor pic=${pic?.take(60)} url=${urlField?.take(80)}")
+                    val fixedAlbum = EncodingUtils.fixEncoding(albumField)
+                    AppLog.i(DIAG, "parseSongs[$idx]: title=$fixedTitle author=$fixedAuthor album=$fixedAlbum pic=${pic?.take(60)} url=${urlField?.take(80)}")
                     if (fixedTitle == null) {
                         AppLog.w(DIAG, "parseSongs[$idx]: title null, skip")
                         return@mapIndexedNotNull null
@@ -350,7 +386,7 @@ class MetingApiService(
                         id = "ntwk_${sourceId}_$netId",
                         title = fixedTitle,
                         artist = fixedAuthor.orEmpty(),
-                        album = "",
+                        album = fixedAlbum.orEmpty(),
                         coverUrl = pic,
                         isNetworkSong = true,
                         networkSource = sourceId,

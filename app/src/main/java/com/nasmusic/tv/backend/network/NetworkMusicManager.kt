@@ -173,6 +173,24 @@ class NetworkMusicManager(
     }
 
     /**
+     * 获取播放列表歌曲列表。
+     *
+     * 按默���源路由，不 fallback — 播放列表 ID 是来源特定的（如网易云歌单）。
+     */
+    suspend fun getPlaylist(playlistId: String): List<Song> {
+        val svc = services[defaultSource] ?: run {
+            AppLog.w(TAG, "getPlaylist: no service for defaultSource=$defaultSource")
+            return emptyList()
+        }
+        return try {
+            svc.getPlaylist(playlistId)
+        } catch (e: Exception) {
+            AppLog.w(TAG, "getPlaylist error: ${e.message}", e)
+            emptyList()
+        }
+    }
+
+    /**
      * 获取所有已注册源 ID（用于设置页面展示可选项）
      */
     fun availableSources(): List<String> = services.keys.toList()
