@@ -1092,9 +1092,31 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         if (songs.isEmpty()) return
         val firstSong = songs[startIndex.coerceIn(0, songs.lastIndex)]
         AppLog.d("NASMusic", "playQueue: ${songs.size} songs, start=$startIndex, first=${firstSong.title}, coverUrl=${firstSong.coverUrl ?: "null"}")
-        playerManager.playQueue(songs, startIndex)
-        // 歌词由 currentSong.collect 统一触发，避免重复调用
-        recordPlay(firstSong)
+
+        // 网络歌曲的 streamUrl 需要异步解析，否则 ExoPlayer 收到空 URI 不会开始播放
+        val needsResolve = songs.any { it.isNetworkSong && it.streamUrl.isNullOrBlank() }
+        if (needsResolve) {
+            viewModelScope.launch {
+                val resolved = songs.map { song ->
+                    if (song.isNetworkSong && song.streamUrl.isNullOrBlank()) {
+                        try {
+                            val url = nasMusicApp.networkMusicManager.resolvePlayUrl(song)
+                            if (!url.isNullOrBlank()) song.copy(streamUrl = url) else song
+                        } catch (e: Exception) {
+                            AppLog.e("NASMusic", "playQueue: resolveUrl failed for ${song.title}", e)
+                            song
+                        }
+                    } else {
+                        song
+                    }
+                }
+                playerManager.playQueue(resolved, startIndex)
+                recordPlay(firstSong)
+            }
+        } else {
+            playerManager.playQueue(songs, startIndex)
+            recordPlay(firstSong)
+        }
     }
 
     fun playPause() {
