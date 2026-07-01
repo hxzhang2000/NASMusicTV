@@ -203,8 +203,6 @@ fun AppRoot(
                     val yearsState by viewModel.years.collectAsState(initial = UiState.Success(emptyList()))
                     val songsPaging by viewModel.songsPaging.collectAsState(initial = com.nasmusic.tv.data.model.SongsPagingState())
                     val searchResultsState by viewModel.searchResults.collectAsState(initial = UiState.Success(emptyList()))
-                    val networkSearchResultsState by viewModel.networkSearchResults.collectAsState(initial = UiState.Success(emptyList()))
-                    val networkSearchKeyword by viewModel.networkSearchKeyword.collectAsState(initial = "")
                     val albumList = albums.dataOrNull() ?: emptyList()
                     val songList = songs.dataOrNull() ?: emptyList()
                     val genreList = genres.dataOrNull() ?: emptyList()
@@ -272,18 +270,6 @@ fun AppRoot(
                         onLoadRecentSongs = { viewModel.loadRecentSongs() },
                         onSearch = { query -> viewModel.searchSongsOnServer(query) },
                         onClearSearch = { viewModel.clearSearch() },
-                        networkSearchResults = networkSearchResultsState.dataOrNull() ?: emptyList(),
-                        isNetworkSearching = networkSearchResultsState is UiState.Loading,
-                        networkSearchKeyword = networkSearchKeyword,
-                        onSearchNetwork = { query -> viewModel.searchNetworkSongs(query) },
-                        onClearNetworkSearch = { viewModel.clearNetworkSearch() },
-                        onPlayNetworkSong = { song ->
-                            viewModel.playNetworkSong(song)
-                            viewModel.navigateTo(Screen.NowPlaying)
-                        },
-                        networkFavoriteSongs = viewModel.networkFavoriteSongs.collectAsState(initial = emptyList()).value,
-                        networkFavoriteIds = viewModel.networkFavoriteIds.collectAsState(initial = emptySet()).value,
-                        onToggleNetworkFavorite = { song -> viewModel.toggleNetworkFavorite(song) }
                     )
                 }
                 Screen.Queue -> {

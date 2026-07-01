@@ -22,6 +22,7 @@
     <string name="nav_queue">播放队列</string>
     <string name="nav_settings">设置</string>
     <string name="nav_server">服务器</string>
+    <string name="nav_network">网络音乐</string>
 
     <!-- Library -->
     <string name="library_albums">专辑</string>
@@ -38,12 +39,15 @@
     <string name="library_no_genres">暂无风格数据</string>
     <string name="library_no_years">暂无年代数据</string>
     <string name="library_no_recent">暂无播放记录</string>
-    <string name="library_network">网络搜索</string>
-    <string name="library_network_search_hint">输入歌曲名或歌手名搜索网络音乐</string>
-    <string name="library_network_empty">输入关键词开始搜索网络音乐</string>
-    <string name="library_network_no_results">未找到相关网络音乐</string>
-    <string name="library_network_favorites_title">我的收藏</string>
-    <string name="library_network_favorites_empty">搜索并收藏你喜欢的网络歌曲</string>
+
+    <!-- Network Music -->
+    <string name="network_hot_songs">热歌榜</string>
+    <string name="network_new_songs">新歌榜</string>
+    <string name="network_my_favorites">我的收藏</string>
+    <string name="network_recommend_playlists">推荐歌单</string>
+    <string name="network_platform_netease">网易云</string>
+    <string name="network_platform_qq">QQ音乐</string>
+    <string name="network_platform_kugou">酷狗</string>
 
     <!-- Player -->
     <string name="player_play">播放</string>

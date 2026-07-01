@@ -73,8 +73,7 @@ private enum class LibraryTab(val titleRes: Int) {
     GENRES(R.string.library_genres),
     YEARS(R.string.library_years),
     FAVORITES(R.string.library_favorites),
-    RECENT(R.string.library_recent),
-    NETWORK(R.string.library_network)
+    RECENT(R.string.library_recent)
 }
 
 @Composable
@@ -115,16 +114,8 @@ fun LibraryScreen(
     onLoadRecentSongs: () -> Unit = {},
     onSearch: (String) -> Unit = {},
     onClearSearch: () -> Unit = {},
-    // 网络音乐搜索
-    networkSearchResults: List<Song> = emptyList(),
-    isNetworkSearching: Boolean = false,
-    networkSearchKeyword: String = "",
-    onSearchNetwork: (String) -> Unit = {},
-    onClearNetworkSearch: () -> Unit = {},
-    onPlayNetworkSong: (Song) -> Unit = {},
-    // 网络歌曲收藏
+    // 网络收藏（供 FavoritesTab 使用）
     networkFavoriteSongs: List<Song> = emptyList(),
-    networkFavoriteIds: Set<String> = emptySet(),
     onToggleNetworkFavorite: (Song) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
@@ -229,26 +220,9 @@ fun LibraryScreen(
             Spacer(modifier = Modifier.height(16.dp))
 
             // 内容区域
-            // NETWORK 和 FAVORITES Tab 不依赖 NAS 连接状态，始终可用
-            // （收藏数据存储在本地 DataStore，包括本地收藏和网络收藏）
-            if (activeTab == LibraryTab.NETWORK) {
-                // 网络 Tab：不依赖 NAS 连接状态，始终可用
-                NetworkTab(
-                    searchResults = networkSearchResults,
-                    isSearching = isNetworkSearching,
-                    keyword = networkSearchKeyword,
-                    onSearch = onSearchNetwork,
-                    onClearSearch = onClearNetworkSearch,
-                    onPlaySong = onPlayNetworkSong,
-                    queueSongIds = queueSongIds,
-                    onToggleQueue = onToggleQueue,
-                    favoriteSongs = networkFavoriteSongs,
-                    networkFavoriteIds = networkFavoriteIds,
-                    onToggleFavorite = onToggleNetworkFavorite
-                )
-            } else if (activeTab == LibraryTab.FAVORITES) {
-                // 收藏 Tab：不依赖 NAS 连接状态，始终可用
-                // （本地收藏和网络收藏都存储在 DataStore，无需 NAS 后端）
+            // FAVORITES Tab 不依赖 NAS 连接状态，始终可用
+            // （本地收藏和网络收藏都存储在 DataStore，无需 NAS 后端）
+            if (activeTab == LibraryTab.FAVORITES) {
                 FavoritesTab(
                     songs = favoriteSongs,
                     favoriteIds = favoriteIds,
@@ -335,7 +309,6 @@ fun LibraryScreen(
                         favoriteIds = favoriteIds,
                         onToggleFavorite = onToggleFavorite
                     )
-                    LibraryTab.NETWORK -> {} // 已在上方独立处理
                 }
             }
         }
@@ -960,178 +933,6 @@ private fun RecentTab(
     }
 }
 
-/**
- * 网络音乐搜索 Tab
- *
- * 独立于 NAS 连接状态，始终可用。
- * 用户输入关键词后通过 NetworkMusicManager 搜索，结果以 SongRow 展示。
- * 点击歌曲触发 onPlayNetworkSong，由 ViewModel 解析播放链接后播放。
- *
- * 包含 BACK 键回顶支持（Level 1.5）。
- */
-@Composable
-private fun NetworkTab(
-    searchResults: List<Song>,
-    isSearching: Boolean,
-    keyword: String,
-    onSearch: (String) -> Unit,
-    onClearSearch: () -> Unit,
-    onPlaySong: (Song) -> Unit,
-    queueSongIds: Set<String> = emptySet(),
-    onToggleQueue: (Song) -> Unit = {},
-    // 网络收藏
-    favoriteSongs: List<Song> = emptyList(),
-    networkFavoriteIds: Set<String> = emptySet(),
-    onToggleFavorite: (Song) -> Unit = {}
-) {
-    var showSearchDialog by remember { mutableStateOf(false) }
-    val listState = rememberLazyGridState()
-    val firstItemFocusRequester = remember { FocusRequester() }
-    val scope = rememberCoroutineScope()
-    val listBackHandler = LocalListBackHandler.current
-
-    // Level 1.5: 列表已滚动时按 BACK 先回顶并聚焦第一个
-    DisposableEffect(Unit) {
-        val handler: () -> Boolean = {
-            val atTop = listState.firstVisibleItemIndex == 0 &&
-                    listState.firstVisibleItemScrollOffset == 0
-            if (!atTop) {
-                scope.launch {
-                    listState.scrollToItem(0)
-                    runCatching { firstItemFocusRequester.requestFocus() }
-                }
-                true
-            } else {
-                false
-            }
-        }
-        listBackHandler.value = handler
-        onDispose { listBackHandler.value = null }
-    }
-
-    Column {
-        // 标题 + 搜索框
-        Text(
-            text = stringResource(R.string.library_network),
-            color = NasMusicColors.TextPrimary,
-            fontSize = 18.sp,
-            modifier = Modifier.padding(bottom = 12.dp)
-        )
-        SearchBar(
-            query = keyword,
-            onOpenSearch = { showSearchDialog = true },
-            onClear = { onClearSearch() }
-        )
-        Spacer(modifier = Modifier.height(12.dp))
-
-        when {
-            isSearching -> {
-                Box(
-                    modifier = Modifier.fillMaxWidth().padding(top = 40.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = "搜索中...",
-                        color = NasMusicColors.TextSecondary,
-                        fontSize = 16.sp
-                    )
-                }
-            }
-            keyword.isNotBlank() && searchResults.isEmpty() -> {
-                // 有关键词但无结果
-                Box(
-                    modifier = Modifier.fillMaxWidth().padding(top = 40.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = stringResource(R.string.library_network_no_results),
-                        color = NasMusicColors.TextSecondary,
-                        fontSize = 16.sp
-                    )
-                }
-            }
-            keyword.isNotBlank() -> {
-                // 搜索结果列表
-                LazyVerticalGrid(
-                    state = listState,
-                    columns = GridCells.Fixed(2),
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    itemsIndexed(searchResults, key = { _, it -> it.id }) { index, song ->
-                        SongRow(
-                            song = song,
-                            onClick = { onPlaySong(song) },
-                            isInQueue = song.id in queueSongIds,
-                            onToggleQueue = { onToggleQueue(song) },
-                            isFavorited = song.id in networkFavoriteIds,
-                            onToggleFavorite = { onToggleFavorite(song) },
-                            focusRequester = if (index == 0) firstItemFocusRequester else null
-                        )
-                    }
-                }
-            }
-            favoriteSongs.isEmpty() -> {
-                // 无关键词且无收藏：空状态
-                Box(
-                    modifier = Modifier.fillMaxWidth().padding(top = 40.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = stringResource(R.string.library_network_favorites_empty),
-                        color = NasMusicColors.TextSecondary,
-                        fontSize = 16.sp
-                    )
-                }
-            }
-            else -> {
-                // 无关键词但有收藏：显示收藏列表
-                Column {
-                    Text(
-                        text = stringResource(R.string.library_network_favorites_title),
-                        color = NasMusicColors.TextPrimary,
-                        fontSize = 16.sp,
-                        modifier = Modifier.padding(bottom = 8.dp)
-                    )
-                    LazyVerticalGrid(
-                        state = listState,
-                        columns = GridCells.Fixed(2),
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        itemsIndexed(favoriteSongs, key = { _, it -> it.id }) { index, song ->
-                            SongRow(
-                                song = song,
-                                onClick = { onPlaySong(song) },
-                                isInQueue = song.id in queueSongIds,
-                                onToggleQueue = { onToggleQueue(song) },
-                                isFavorited = true,  // 收藏列表中必然已收藏
-                                onToggleFavorite = { onToggleFavorite(song) },
-                                focusRequester = if (index == 0) firstItemFocusRequester else null
-                            )
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    // 搜索输入对话框
-    if (showSearchDialog) {
-        TextInputDialog(
-            title = stringResource(R.string.library_network),
-            hint = stringResource(R.string.library_network_search_hint),
-            initialValue = keyword,
-            onConfirm = { input ->
-                onSearch(input)
-                showSearchDialog = false
-            },
-            onDismiss = { showSearchDialog = false }
-        )
-    }
-}
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
