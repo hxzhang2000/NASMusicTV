@@ -75,6 +75,7 @@ fun NetworkScreen(
     networkFavoriteIds: Set<String>,
     networkPlaylists: List<Pair<Playlist, List<Song>>>,
     playlistSongs: List<Song>,
+    searchNetworkPlatform: String,
     isNetworkSearching: Boolean,
     onSearchNetwork: (String) -> Unit,
     onClearNetworkSearch: () -> Unit,
@@ -86,7 +87,6 @@ fun NetworkScreen(
     modifier: Modifier = Modifier
 ) {
     var showSearchDialog by remember { mutableStateOf(false) }
-    var selectedPlatform by remember { mutableStateOf("网易云") }
     val listState = rememberLazyListState()
     val firstItemFocusRequester = remember { FocusRequester() }
     val scope = rememberCoroutineScope()
@@ -180,13 +180,9 @@ fun NetworkScreen(
                     // 平台切换行
                     item(key = "platform_switch") {
                         PlatformSwitchRow(
-                            selectedPlatform = selectedPlatform,
+                            selectedPlatform = searchNetworkPlatform,
                             onSelectPlatform = { platform ->
-                                selectedPlatform = platform
-                                // 切换平台时如果有搜索关键词，重新搜索
-                                if (networkSearchKeyword.isNotBlank()) {
-                                    onSearchNetworkPlatform(networkSearchKeyword)
-                                }
+                                onSearchNetworkPlatform(platform)
                             },
                             focusRequester = firstItemFocusRequester
                         )
@@ -413,6 +409,7 @@ private fun NetworkSearchBar(
  *
  * 三个按钮：网易云 / QQ音乐 / 酷狗
  * 选中状态使用 Primary 色，未选中使用 TextSecondary。
+ * 内部维护标签与服务器值的映射：netease/qq/kugou
  */
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
@@ -421,16 +418,25 @@ private fun PlatformSwitchRow(
     onSelectPlatform: (String) -> Unit,
     focusRequester: FocusRequester? = null
 ) {
-    val platforms = listOf("网易云", "QQ音乐", "酷狗")
+    data class PlatformInfo(val server: String, val labelResId: Int)
+
+    val platforms = remember {
+        listOf(
+            PlatformInfo("netease", R.string.network_platform_netease),
+            PlatformInfo("qq", R.string.network_platform_qq),
+            PlatformInfo("kugou", R.string.network_platform_kugou)
+        )
+    }
 
     Row(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         platforms.forEachIndexed { index, platform ->
-            val isSelected = platform == selectedPlatform
+            val isSelected = platform.server == selectedPlatform
+            val label = stringResource(platform.labelResId)
             FocusableSurface(
-                onClick = { onSelectPlatform(platform) },
+                onClick = { onSelectPlatform(platform.server) },
                 modifier = if (index == 0 && focusRequester != null) {
                     Modifier.focusRequester(focusRequester)
                 } else {
@@ -442,13 +448,13 @@ private fun PlatformSwitchRow(
                 containerColor = if (isSelected) NasMusicColors.Primary
                                  else NasMusicColors.Surface.copy(alpha = 0.8f),
                 focusedContainerColor = if (isSelected) NasMusicColors.Primary
-                                        else NasMusicColors.Primary.copy(alpha = 0.3f),
+                                         else NasMusicColors.Primary.copy(alpha = 0.3f),
                 contentColor = if (isSelected) Color.Black
                                else NasMusicColors.TextSecondary,
                 focusedContentColor = if (isSelected) Color.Black else NasMusicColors.Primary
             ) {
                 Text(
-                    text = platform,
+                    text = label,
                     fontSize = 13.sp,
                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
                 )

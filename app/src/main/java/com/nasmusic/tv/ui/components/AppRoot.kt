@@ -412,6 +412,7 @@ fun AppRoot(
                     val networkFavoriteIds by viewModel.networkFavoriteIds.collectAsState(initial = emptySet())
                     val networkPlaylists by viewModel.networkPlaylists.collectAsState(initial = emptyList())
                     val playlistSongs by viewModel.playlistSongs.collectAsState(initial = emptyList())
+                    val searchNetworkPlatform by viewModel.searchNetworkPlatform.collectAsState(initial = "netease")
                     val isNetworkSearching = networkSearchResultsState is UiState.Loading
                     NetworkScreen(
                         networkSearchResults = networkSearchResultsState.dataOrNull() ?: emptyList(),
@@ -420,6 +421,7 @@ fun AppRoot(
                         networkFavoriteIds = networkFavoriteIds,
                         networkPlaylists = networkPlaylists,
                         playlistSongs = playlistSongs,
+                        searchNetworkPlatform = searchNetworkPlatform,
                         isNetworkSearching = isNetworkSearching,
                         onSearchNetwork = { query -> viewModel.searchNetworkSongs(query) },
                         onClearNetworkSearch = { viewModel.clearNetworkSearch() },
@@ -430,7 +432,12 @@ fun AppRoot(
                         onToggleNetworkFavorite = { song -> viewModel.toggleNetworkFavorite(song) },
                         onLoadPlaylistDetail = { (playlist, songs) -> viewModel.loadPlaylistDetail(playlist.id, playlist.name) },
                         onNavigateToPlaylistDetail = { viewModel.navigateTo(Screen.NetworkPlaylistDetail) },
-                        onSearchNetworkPlatform = { query -> viewModel.searchNetworkSongs(query) }
+                        onSearchNetworkPlatform = { platform ->
+                            viewModel.setSearchNetworkPlatform(platform)
+                            if (networkSearchKeyword.isNotBlank()) {
+                                viewModel.searchNetworkSongs(networkSearchKeyword)
+                            }
+                        }
                     )
                 }
                 Screen.NetworkPlaylistDetail -> {

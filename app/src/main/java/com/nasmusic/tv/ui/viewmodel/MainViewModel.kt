@@ -127,6 +127,13 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     private val _searchNetworkPlatform = MutableStateFlow("netease")
     val searchNetworkPlatform: StateFlow<String> = _searchNetworkPlatform.asStateFlow()
 
+    /**
+     * 设置网络搜索平台
+     */
+    fun setSearchNetworkPlatform(platform: String) {
+        _searchNetworkPlatform.value = platform
+    }
+
     // --- 详情页状态 ---
     private val _selectedAlbum = MutableStateFlow<Album?>(null)
     val selectedAlbum: StateFlow<Album?> = _selectedAlbum.asStateFlow()
