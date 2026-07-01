@@ -4046,6 +4046,96 @@ Box(focusGroup)                          ← 外层容器，统一焦点组
 - **BackendAdapter 接口变更**：close()/Boolean/getStreamUrl 等破坏性变更未修改
 - **`as any`/`@Suppress`**：未引入任何类型安全规避
 
+### 10.17 v2.5.0 — 网络音乐顶级 Tab（推荐歌单 + 歌单详情 + 独立导航）
+
+**日期**：2026-07-01
+
+**目标**：将网络音乐从 LibraryScreen 的子 Tab 提升为独立顶级导航项，新增推荐歌单、歌单详情页、搜索平台切换。
+
+#### 10.17.1 架构变更
+
+| 变更 | 说明 |
+|------|------|
+| 新增 Screen.Network / Screen.NetworkPlaylistDetail | Screen 枚举扩展两个新值，AppRoot 中新增 2 个 `when(currentScreen)` 分支 |
+| AppRoot 导航栏 6 项 | 新增「网络音乐」NavItem（icon=MusicNote），路由到 Screen.Network |
+| NetworkScreen 独立 | 从 LibraryScreen 提取为独立 541 行页面 |
+| LibraryScreen 精简 | 移除 NETWORK Tab（LibraryTab 8→7），移除 NetworkTab 组件及 10 个相关参数 |
+| CoverCarousel autoCycle | 新增 `autoCycle: Boolean = false` 参数，默认 false（不干扰播放页轮播） |
+
+#### 10.17.2 新增文件
+
+| 文件 | 行数 | 用途 |
+|------|------|------|
+| `ui/screens/NetworkScreen.kt` | 541 | 搜索框 + 平台切换 + 推荐歌单行 + 热歌/新歌/收藏区 |
+| `ui/screens/NetworkPlaylistDetailScreen.kt` | 143 | 歌单详情页：返回按钮 + 标题 + LazyVerticalGrid 歌曲列表 |
+
+#### 10.17.3 数据模型
+
+**Playlist.kt**（统一数据模型，同时服务 NAS 后端和网络音乐）：
+```kotlin
+data class Playlist(
+    val id: String,
+    val name: String,
+    val coverUrls: List<String> = emptyList(),
+    val songCount: Int = 0,
+    val owner: String = "",      // NAS 后端专用
+    val durationMs: Long = 0L     // NAS 后端专用
+)
+```
+
+NAS 专用字段（`owner`, `durationMs`）有默认值，网络音乐使用时无需传参。
+
+#### 10.17.4 后端 API 变更
+
+- `NetworkMusicService` 接口：新增 `getPlaylist()` 默认方法
+- `MetingApiService`：实现 `getPlaylist()`，使用 `type=playlist` 端点，复用 `parseSongs()` 解析逻辑
+- `NetworkMusicManager`：新增 `getPlaylist()` 路由方法（当前为单源，无 fallback）
+
+#### 10.17.5 ViewModel 状态变更
+
+`MainViewModel.kt` 新增：
+- `networkPlaylists: StateFlow<List<Playlist>>` — 推荐歌单列表
+- `playlistSongs: StateFlow<List<Song>>` — 歌单内歌曲列表
+- `selectedPlaylistTitle: StateFlow<String>` — 当前选中歌单标题
+- `loadNetworkPlaylists()` — 加载 7 个预置网易云歌单（热歌榜/新歌榜/飙升榜/华语流行/欧美流行/抖音热门/经典老歌），失败时静默返回空列表
+- `loadPlaylistDetail(Playlist)` — 加载指定歌单的歌曲列表，翻译 `id` 字段转换歌单 ID
+
+#### 10.17.6 UI 变更
+
+**NetworkScreen**：
+- 搜索框（与 LibraryScreen 共享 `searchQuery` 状态）
+- 平台切换按钮（网易云/QQ 音乐/酷狗），歌词来源标签样式
+- 推荐歌单 LazyRow：CoverCarousel 卡片（autoCycle=true），点击进入 NetworkPlaylistDetailScreen
+- 热歌推荐 + 新歌推荐 LazyColumn 区
+- 收藏歌曲区
+
+**NetworkPlaylistDetailScreen**：
+- BackButton + 歌单标题
+- LazyVerticalGrid 歌曲列表（SongRow 样式）
+- 点击歌曲自动播放
+
+**strings.xml**：
+- 新增 8 个 `network_*` 字符串（`network_title`, `network_playlist_recommended`, `network_hot_songs`, `network_new_songs`, `network_favorites`, `network_search_placeholder`, `network_netease`, `network_qq_music`, `network_kugou`）
+- 移除 7 个 `library_network*` 字符串
+
+#### 10.17.7 未修改范围
+
+| 范围 | 状态 |
+|------|------|
+| BackendAdapter / JellyfinAdapter / NavidromeAdapter | 未修改 |
+| 播放/队列/收藏数据流 | 未修改 |
+| Gradle 依赖 | 未新增 |
+| NAS 后端连接逻辑 | 未修改 |
+| ALAPI / JioSaavn 枚举占位 | 保留未实现 |
+
+#### 10.17.8 验证结果
+
+- ✅ `./gradlew.bat test` BUILD SUCCESSFUL（55 tests passing）
+- ✅ `./gradlew.bat assembleDebug` BUILD SUCCESSFUL
+- ✅ 用户确认 TV 安装成功，全部 UI 路由、搜索、推荐歌单、平台切换功能正常
+- ✅ 版本号 v2.5.0 / versionCode 12
+- ✅ 4 个实现 commit + 1 个文档收尾 commit 已推送到 GitHub
+
 ---
 
 ## 11. 回归测试文档
