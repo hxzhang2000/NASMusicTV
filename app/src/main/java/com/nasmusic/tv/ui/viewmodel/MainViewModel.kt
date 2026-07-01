@@ -797,7 +797,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 album = song.album,
                 coverUrl = song.coverUrl,
                 networkSource = song.networkSource ?: return@launch,
-                networkId = song.networkId ?: return@launch
+                networkId = song.networkId ?: return@launch,
+                addedAtMs = System.currentTimeMillis()
             )
             prefs.toggleNetworkFavorite(item)
         }

@@ -178,13 +178,12 @@ fun AppRoot(
                         onSwitchLyricsSource = { viewModel.switchLyricsSource(it) },
                         onChangeHighlightMode = { viewModel.setLyricsHighlightMode(it) },
                         // 网络歌曲调用 toggleNetworkFavorite，本地歌曲调用 toggleFavorite
-                        onToggleFavorite = if (currentSong != null) {
+                        onToggleFavorite = currentSong?.let { song ->
                             {
-                                val song = currentSong!!
                                 if (song.isNetworkSong) viewModel.toggleNetworkFavorite(song)
                                 else viewModel.toggleFavorite(song)
                             }
-                        } else null
+                        }
                     )
                 }
                 Screen.Library -> {

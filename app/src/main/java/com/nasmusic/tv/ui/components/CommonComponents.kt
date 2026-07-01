@@ -18,9 +18,13 @@ import com.nasmusic.tv.ui.theme.NasMusicColors
  * 带焦点动画的返回按钮，供各详情屏幕复用
  */
 @Composable
-fun BackButton(onClick: () -> Unit) {
+fun BackButton(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
     FocusableSurface(
         onClick = onClick,
+        modifier = modifier,
         shape = RoundedCornerShape(8.dp),
         focusedScale = 1.08f,
         animationDurationMs = 200,
@@ -33,7 +37,7 @@ fun BackButton(onClick: () -> Unit) {
             modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(text = "←", fontSize = 14.sp, modifier = Modifier.padding(end = 6.dp))
+            Text(text = stringResource(R.string.common_back_arrow), fontSize = 14.sp, modifier = Modifier.padding(end = 6.dp))
             Text(text = stringResource(R.string.common_back), fontSize = 14.sp)
         }
     }

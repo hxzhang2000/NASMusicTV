@@ -131,13 +131,13 @@ fun QueueScreen(
                     .clip(RoundedCornerShape(16.dp))
                     .background(NasMusicColors.SurfaceVariant)
             ) {
-                if (!currentSong?.coverUrl.isNullOrBlank()) {
+                currentSong?.coverUrl?.takeUnless { it.isBlank() }?.let { coverUrl ->
                     AsyncImage(
-                        model = currentSong!!.coverUrl,
+                        model = coverUrl,
                         contentDescription = "Album",
                         modifier = Modifier.fillMaxSize()
                     )
-                } else {
+                } ?: run {
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         Icon(imageVector = Icons.Default.MusicNote, contentDescription = null, tint = NasMusicColors.TextSecondary, modifier = Modifier.size(72.dp))
                     }

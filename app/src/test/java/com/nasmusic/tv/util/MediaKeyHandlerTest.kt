@@ -2,7 +2,7 @@ package com.nasmusic.tv.util
 
 import android.view.KeyEvent
 import com.nasmusic.tv.ui.viewmodel.MainViewModel
-import com.nasmusic.tv.ui.viewmodel.Screen
+import com.nasmusic.tv.data.model.Screen
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test

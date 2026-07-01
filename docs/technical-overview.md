@@ -1,7 +1,7 @@
 # NAS Music TV — 技术架构概述
 
-> 版本：v2.2.0 (DEV)
-> 最后更新：2026-06-22
+> 版本：v2.4.4
+> 最后更新：2026-07-01
 > 本文档记录项目当前的完整技术架构，作为后续迭代的基准参考。
 
 ---
@@ -3975,6 +3975,76 @@ Box(focusGroup)                          ← 外层容器，统一焦点组
 - **#13 EncodingUtils 30% 阈值**：low 优先级，建议引入 ICU4J 但当前无 bug，暂不修改
 
 **验证**：待编译验证。
+
+---
+
+### 10.15 v2.4.3 — Code Review 修复（第二轮）
+
+**日期**：2026-06-30
+
+**目标**：根据全项目代码审查文档（`docs/code-review-2026-06-30.md`），修复资源泄漏、API 参数错误、线程安全、编码回退过宽等问题。用户决定不修改安全与隐私类问题（Category 3）。
+
+#### 10.15.1 修改清单
+
+| 优先级 | 类别 | 修改内容 | 修改文件 |
+|--------|------|----------|----------|
+| P0 | 资源泄漏 | OkHttp Response 泄漏：MetingApiService 3 处（`searchWithEndpoint`/`resolvePlayUrl`/`resolveLyrics`）改为 `response.use {}` | `backend/network/MetingApiService.kt` |
+| P0 | 资源泄漏 | OkHttp Response 泄漏：LyricsNetworkProvider 5 处（Kugou 搜索/歌词、Netease 搜索/歌词、parseKugouLyrics）改为 `response.use {}` | `lyrics/LyricsNetworkProvider.kt` |
+| P0 | 资源泄漏 | BackendRegistry `initialize()` 异常时 adapter 未释放；重复初始化旧 adapter 未断开；添加 `releaseAdapter()` 和异常路径保护 | `backend/BackendRegistry.kt` |
+| P0 | 资源泄漏 | NasMusicApp `applicationScope` 未 cancel；移除废弃 `companion object { lateinit var instance }` | `NasMusicApp.kt` |
+| P0 | 资源泄漏 | LyricsNetworkProvider `daemonExecutor` 实例变量改为 `companion object` 静态变量 | `lyrics/LyricsNetworkProvider.kt` |
+| P0 | 正确性 Bug | Jellyfin `addToPlaylist` `Ids` 字段：`addProperty("Ids", string)` → `add("Ids", gson.toJsonTree(listOf(...)))` | `backend/impl/JellyfinAdapter.kt` |
+| P0 | 正确性 Bug | Jellyfin `setRating`：移除 request body，rating 改为 query param `?rating=N` | `backend/impl/JellyfinAdapter.kt` |
+| P0 | 正确性 Bug | Jellyfin `getPlaylists`：从 `/Playlists` 改为 `/Items?IncludeItemTypes=Playlist` | `backend/impl/JellyfinAdapter.kt` |
+| P0 | 正确性 Bug | PlaybackService `onDestroy` 释放顺序：`session.release()` 先于 `player.release()` | `player/PlaybackService.kt` |
+| P0 | 正确性 Bug | `utf8Body()` 移除希腊/西里尔 GBK 回退，仅 U+FFFD 触发回退 | `backend/impl/JellyfinAdapter.kt` |
+| P0 | 正确性 Bug | ArtistSplitter：`feat\.` → `feat\.?`；迭代拆分 `for(delim).flatMap{part.split(delim)}` | `util/ArtistSplitter.kt` |
+| P0 | 正确性 Bug | EqualizerScreen 波段循环：`band <= -10f -> 0f` 改为 `if (band >= 10f) -10f else band + 1f` | `ui/screens/EqualizerScreen.kt` |
+| P1 | 线程安全 | BackendRegistry 全部状态读写使用 `synchronized(lock)` | `backend/BackendRegistry.kt` |
+| P1 | 性能 | AppPreferences `runBlocking` → `runBlocking(Dispatchers.IO)` | `data/prefs/AppPreferences.kt` |
+
+#### 10.15.2 未修改项
+
+- **Category 3 安全与隐私**：用户决定不修改，共 16 项建议全部排除
+
+**验证**：见编译验证。
+
+---
+
+### 10.16 v2.4.4 — Code Review 修复（第三轮：代码质量与类型安全）
+
+**日期**：2026-07-01
+
+**目标**：根据全项目代码审查文档（`docs/code-review-2026-06-30.md`），完成 Groups A–L 的非安全类修复：空安全、类型安全枚举、Compose 动画优化、无用代码清理等。
+
+#### 10.16.1 修改清单
+
+| 优先级 | 类别 | 修改内容 | 修改文件 |
+|--------|------|----------|----------|
+| P0 | 死代码 | `LyricsSource.SERVER` 移除（v2.4.0 后未使用） | `data/model/LyricsSource.kt` |
+| P0 | 代码规范 | `Mp3MetadataExtractor` magic number 26 → 常量 `METADATA_KEY_LYRICS`；移除未使用 `context` 参数 | `util/Mp3MetadataExtractor.kt` |
+| P0 | 代码规范 | `RecentSong` 移除无用默认参数；新增 `createNew()` 工厂方法 | `data/model/RecentSong.kt` |
+| P0 | UI 可访问性 | `BackButton` 接受 `modifier: Modifier` 参数；硬编码 `"←"` → string 资源 | `ui/components/CommonComponents.kt` |
+| P0 | UI 性能 | `PlayerControls` shadow → border（TV 性能）；`LaunchedEffect(Unit)` → `LaunchedEffect(currentSongId)`；移除未使用参数 | `ui/components/PlayerControls.kt` |
+| P0 | 空安全 | 3 处 `currentSong!!` → `?.let{}` / `?: ""` | `ui/screens/AppRoot.kt`、`NowPlayingScreen.kt`、`QueueScreen.kt` |
+| P0 | 动画竞争 | `FocusableSurface` 移除 `scope.launch + delay`，改用声明式 `LaunchedEffect(isFocused)`；`catch (_: Exception)` → `catch (e: Exception)` 记录日志；移除重复缩放 | `ui/components/FocusableSurface.kt` |
+| P0 | 无限循环 | `CoverCarousel` 新增 `permanentlyFailed` 标志，防止 `onAllFailed()` 因 recomposition 循环触发 | `ui/components/CoverCarousel.kt` |
+| P0 | recomposition | `EqualizerScreen` bandLabels 提升为顶层 `val` 编译期常量 | `ui/screens/EqualizerScreen.kt` |
+| P1 | API 设计 | `NetworkMusicService.search()` 新增 `limit: Int = 0` 参数；接口方法完整 KDoc `@param`/`@return`/`@throws`；新增 `searchCoverUrl()` 默认方法 | `backend/network/NetworkMusicService.kt` |
+| P1 | 类型安全 | `NetworkSource` 枚举新增（METING/ALAPI/JIOSAAVN 带 `key`/`displayName`）；`AppSettings.defaultNetworkSource` 从 `String` 改为 `NetworkSource`；AppPreferences 新增 `fromKey()`/`fromName()` 转换器 + 类型 setter（向后兼容） | 新增 `data/model/NetworkSource.kt`；修改 `data/model/AppSettings.kt`、`data/prefs/AppPreferences.kt` |
+| P1 | 硬编码 | `NetworkMusicManager.searchCoverUrl` 移除 `if (svc !is MetingApiService) continue` 类型判断 | `backend/network/NetworkMusicManager.kt` |
+| P1 | 线程安全 | `SettingsScreen` IO 线程 `MutableState` 写入包裹 `withContext(Dispatchers.Main)` | `ui/screens/SettingsScreen.kt` |
+
+#### 10.16.2 已验证无需修改项
+
+- **EqualizerScreen 波段 -9~-1 不可达**：当前循环逻辑已正确处理所有 10 个波段值（code review #K 标记已关闭）
+- **ServerConnectScreen rememberCoroutineScope()**：Compose 运行时自动在 composition 离开时取消协程，无需显式 Job 跟踪
+
+#### 10.16.3 未修改项
+
+- **Security 相关**：未修改（与 v2.4.3 一致，用户决定不处理）
+- **BackendAdapter 接口变更**：close()/Boolean/getStreamUrl 等破坏性变更未修改
+- **`as any`/`@Suppress`**：未引入任何类型安全规避
 
 ---
 

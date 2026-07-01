@@ -297,7 +297,7 @@ private fun CoverColumn(
         if (!currentSong?.album.isNullOrBlank()) {
             Spacer(modifier = Modifier.height(6.dp))
             Text(
-                text = currentSong!!.album,
+                text = currentSong?.album ?: "",
                 color = NasMusicColors.TextSecondary.copy(alpha = 0.7f),
                 fontSize = 14.sp,
                 textAlign = TextAlign.Center,

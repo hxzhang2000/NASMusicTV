@@ -10,8 +10,7 @@ enum class PlayMode(val displayName: String) {
     SHUFFLE("随机播放");
 
     companion object {
-        fun fromOrdinal(ordinal: Int): PlayMode {
-            return values().getOrNull(ordinal) ?: SEQUENTIAL
-        }
+        @JvmStatic
+        fun fromOrdinal(ordinal: Int): PlayMode = values().getOrNull(ordinal) ?: SEQUENTIAL
     }
 }

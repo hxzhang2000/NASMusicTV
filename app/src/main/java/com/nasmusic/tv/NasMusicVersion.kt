@@ -31,8 +31,8 @@ object NasMusicVersion {
     /** Android versionCode（来自 BuildConfig，源：build.gradle.kts） */
     val VERSION_CODE: Int get() = BuildConfig.VERSION_CODE
 
-    /** 构建阶段标识 */
-    const val BUILD_TYPE = "RELEASE"
+    /** 构建阶段标识（来自 BuildConfig，动态反映实际构建变体） */
+    val BUILD_TYPE: String get() = BuildConfig.BUILD_TYPE
 
     /** 文件格式版本（DataStore/缓存数据结构版本，向后不兼容时递增） */
     const val FILE_FORMAT_VERSION = 1
@@ -63,9 +63,7 @@ object NasMusicVersion {
     /**
      * 检查给定的文件格式版本是否与当前版本兼容
      */
-    fun isFileFormatCompatible(version: Int): Boolean {
-        return version == FILE_FORMAT_VERSION
-    }
+    fun isFileFormatCompatible(version: Int): Boolean = version == FILE_FORMAT_VERSION
 
     /**
      * 获取版本标签（用于 git tag 和 CI）

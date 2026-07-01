@@ -1,6 +1,5 @@
 package com.nasmusic.tv.lyrics
 
-import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.media.MediaMetadataRetriever
@@ -14,7 +13,12 @@ import kotlinx.coroutines.withContext
  * MP3 元数据提取器
  * 从 MP3 文件中提取内嵌歌词、专辑封面等 ID3 标签信息
  */
-class Mp3MetadataExtractor(private val context: Context) {
+class Mp3MetadataExtractor {
+
+    companion object {
+        // METADATA_KEY_LYRICS (API 29+): Android doesn't expose this as a public constant
+        private const val METADATA_KEY_LYRICS = 26
+    }
 
     /**
      * 从网络流中提取内嵌歌词
@@ -29,7 +33,7 @@ class Mp3MetadataExtractor(private val context: Context) {
                 retriever.setDataSource(streamUrl, HashMap())
                 // METADATA_KEY_LYRICS is available in API 29+
                 val lyricsText = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                    retriever.extractMetadata(26) // METADATA_KEY_LYRICS = 26
+                    retriever.extractMetadata(METADATA_KEY_LYRICS)
                 } else {
                     null
                 }

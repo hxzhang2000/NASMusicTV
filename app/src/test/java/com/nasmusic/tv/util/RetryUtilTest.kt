@@ -2,10 +2,9 @@ package com.nasmusic.tv.util
 
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertTrue
 import org.junit.Assert.assertFalse
+import org.junit.Assert.fail
 import org.junit.Test
-import kotlin.test.assertFailsWith
 
 /**
  * B-12: RetryUtil 单元测试
@@ -35,28 +34,35 @@ class RetryUtilTest {
     @Test
     fun `withRetry exhausts all attempts and throws`() = runTest {
         var attempts = 0
-        val exception = assertFailsWith<RuntimeException> {
+        val exception = try {
             withRetry(
                 config = RetryConfig(maxAttempts = 3, baseDelayMs = 10L)
             ) {
                 attempts++
                 throw RuntimeException("always fail")
             }
+            fail("Expected RuntimeException")
+            null
+        } catch (e: RuntimeException) {
+            e
         }
-        assertEquals("always fail", exception.message)
+        assertEquals("always fail", exception?.message)
         assertEquals(3, attempts)
     }
 
     @Test
     fun `withRetry calls onError for each failure`() = runTest {
         val errors = mutableListOf<Int>()
-        assertFailsWith<RuntimeException> {
+        try {
             withRetry(
                 config = RetryConfig(maxAttempts = 3, baseDelayMs = 10L),
                 onError = { attempt, _ -> errors.add(attempt) }
             ) {
                 throw RuntimeException("fail")
             }
+            fail("Expected RuntimeException")
+        } catch (_: RuntimeException) {
+            // expected
         }
         assertEquals(listOf(1, 2, 3), errors)
     }
@@ -64,13 +70,16 @@ class RetryUtilTest {
     @Test
     fun `withRetry single attempt does not retry`() = runTest {
         var attempts = 0
-        assertFailsWith<RuntimeException> {
+        try {
             withRetry(
                 config = RetryConfig(maxAttempts = 1),
                 onError = { _, _ -> attempts++ }
             ) {
                 throw RuntimeException("fail")
             }
+            fail("Expected RuntimeException")
+        } catch (_: RuntimeException) {
+            // expected
         }
         // onError is still called once for the single attempt
         assertEquals(1, attempts)
@@ -88,13 +97,16 @@ class RetryUtilTest {
     @Test
     fun `withRetry custom config`() = runTest {
         var attempts = 0
-        assertFailsWith<RuntimeException> {
+        try {
             withRetry(
                 config = RetryConfig(maxAttempts = 5, baseDelayMs = 5L, maxDelayMs = 100L, factor = 1.5),
                 onError = { _, _ -> attempts++ }
             ) {
                 throw RuntimeException("fail")
             }
+            fail("Expected RuntimeException")
+        } catch (_: RuntimeException) {
+            // expected
         }
         assertEquals(5, attempts)
     }

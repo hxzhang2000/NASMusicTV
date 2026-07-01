@@ -53,7 +53,8 @@ class NetworkMusicManager(
      * 任一源返回非空结果即返回，不再尝试后续源。
      */
     suspend fun search(keyword: String): List<Song> = withContext(Dispatchers.IO) {
-        AppLog.i("MetingDiag", "=== NetworkMusicManager.search === keyword='$keyword' defaultSource='${defaultSourceProvider()}'")
+        val currentDefault = defaultSource
+        AppLog.i("MetingDiag", "=== NetworkMusicManager.search === keyword='$keyword' defaultSource='$currentDefault'")
         if (keyword.isBlank()) return@withContext emptyList()
 
         val ordered = orderedServices()
@@ -92,11 +93,14 @@ class NetworkMusicManager(
             return null
         }
 
-        // 检查缓存：未过期则直接返回
+        // 清理过期缓存条目
         val now = System.currentTimeMillis()
+        playUrlCache.entries.removeAll { (_, v) -> now - v.timestamp >= PLAY_URL_CACHE_TTL_MS }
+
+        // 检查缓存
         val cached = playUrlCache[song.id]
-        if (cached != null && now - cached.timestamp < PLAY_URL_CACHE_TTL_MS) {
-            AppLog.d(TAG, "resolvePlayUrl: cache hit for songId=${song.id}, age=${now - cached.timestamp}ms")
+        if (cached != null) {
+            AppLog.d(TAG, "resolvePlayUrl: cache hit for songId=${song.id}")
             return cached.url
         }
 
@@ -138,7 +142,7 @@ class NetworkMusicManager(
      * 若服务返回 null，调用方应使用 song.coverUrl。
      */
     suspend fun resolveCoverUrl(song: Song): String? {
-        if (!song.isNetworkSong) return song.coverUrl
+        if (!song.isNetworkSong) return null  // consistent with resolveLyrics; caller falls back to song.coverUrl
         val src = song.networkSource ?: return null
         val svc = services[src] ?: return null
         return try {
@@ -157,13 +161,13 @@ class NetworkMusicManager(
     suspend fun searchCoverUrl(title: String, artist: String): String? {
         // 依次尝试各服务，第一个返回非 null 即采用
         for (svc in orderedServices()) {
-            if (svc !is MetingApiService) continue
-            return try {
+            val url = try {
                 svc.searchCoverUrl(title, artist)
             } catch (e: Exception) {
                 AppLog.w(TAG, "searchCoverUrl error: ${e.message}", e)
                 null
-            } ?: continue
+            }
+            if (url != null) return url
         }
         return null
     }

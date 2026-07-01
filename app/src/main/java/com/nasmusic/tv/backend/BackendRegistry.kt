@@ -16,6 +16,7 @@ class BackendRegistry {
     private val TYPE_JELLYFIN = ServerConfig.TYPE_JELLYFIN
     private val TYPE_NAVIDROME = ServerConfig.TYPE_NAVIDROME
 
+    private val lock = Any()
     private var currentAdapter: BackendAdapter? = null
     private var currentConfig: ServerConfig? = null
     private var serverDisplayName: String = ""
@@ -36,18 +37,37 @@ class BackendRegistry {
         }
 
         AppLog.d("BackendRegistry", "initialize: type=${config.backendType}, baseUrl=${config.baseUrl}, username=${config.username}, hasPw=${config.password.isNotEmpty()}, hasToken=${config.apiToken.isNotEmpty()}")
-        val success = adapter.initialize(
-            baseUrl = config.baseUrl,
-            apiToken = config.apiToken,
-            username = config.username,
-            password = config.password
-        )
-        AppLog.d("BackendRegistry", "initialize: result=$success")
+
+        val success = try {
+            val ok = adapter.initialize(
+                baseUrl = config.baseUrl,
+                apiToken = config.apiToken,
+                username = config.username,
+                password = config.password
+            )
+            AppLog.d("BackendRegistry", "initialize: result=$ok")
+            ok
+        } catch (e: Exception) {
+            AppLog.e("BackendRegistry", "initialize: exception during adapter.initialize()", e)
+            try { adapter.close() } catch (_: Exception) {}
+            false
+        }
 
         if (success) {
-            currentAdapter = adapter
-            currentConfig = config
-            serverDisplayName = adapter.serverName
+            // 替换旧 adapter：先提取旧对象（锁内），再释放资源（锁外）
+            val oldAdapter = synchronized(lock) {
+                val old = currentAdapter
+                currentAdapter = adapter
+                currentConfig = config
+                serverDisplayName = adapter.serverName
+                old
+            }
+            if (oldAdapter != null) {
+                AppLog.d("BackendRegistry", "initialize: replacing existing adapter")
+                releaseAdapter(oldAdapter)
+            }
+        } else {
+            try { adapter.close() } catch (_: Exception) {}
         }
 
         success
@@ -56,42 +76,35 @@ class BackendRegistry {
     /**
      * 获取当前活动的后端适配器
      */
-    fun getAdapter(): BackendAdapter? = currentAdapter
+    fun getAdapter(): BackendAdapter? = synchronized(lock) { currentAdapter }
 
     /**
      * 获取当前配置
      */
-    fun getConfig(): ServerConfig? = currentConfig
+    fun getConfig(): ServerConfig? = synchronized(lock) { currentConfig }
 
     /**
      * 获取服务端显示名称
      */
-    fun getServerDisplayName(): String = serverDisplayName
+    fun getServerDisplayName(): String = synchronized(lock) { serverDisplayName }
 
     /**
      * 是否已连接
      */
-    fun isConnected(): Boolean = currentAdapter != null
+    fun isConnected(): Boolean = synchronized(lock) { currentAdapter != null }
 
     /**
      * 断开连接并释放网络资源
      */
     suspend fun disconnect() {
-        currentAdapter?.let { adapter ->
-            try {
-                adapter.logout()
-            } catch (e: Exception) {
-                AppLog.w("BackendRegistry", "logout failed during disconnect", e)
-            }
-            try {
-                adapter.close()
-            } catch (e: Exception) {
-                AppLog.w("BackendRegistry", "close failed during disconnect", e)
-            }
+        val adapter = synchronized(lock) {
+            val a = currentAdapter
+            currentAdapter = null
+            currentConfig = null
+            serverDisplayName = ""
+            a
         }
-        currentAdapter = null
-        currentConfig = null
-        serverDisplayName = ""
+        adapter?.let { releaseAdapter(it) }
     }
 
     /**
@@ -124,6 +137,22 @@ class BackendRegistry {
             try { adapter.logout() } catch (e: Exception) { AppLog.w("BackendRegistry", "testConnection failed: logout", e) }
             try { adapter.close() } catch (e: Exception) { AppLog.w("BackendRegistry", "testConnection failed: close", e) }
             Pair(false, "连接失败，请检查地址和凭据")
+        }
+    }
+
+    /**
+     * 释放适配器资源（logout + close），不操作锁状态
+     */
+    private fun releaseAdapter(adapter: BackendAdapter) {
+        try {
+            kotlinx.coroutines.runBlocking { adapter.logout() }
+        } catch (e: Exception) {
+            AppLog.w("BackendRegistry", "releaseAdapter: logout failed", e)
+        }
+        try {
+            adapter.close()
+        } catch (e: Exception) {
+            AppLog.w("BackendRegistry", "releaseAdapter: close failed", e)
         }
     }
 

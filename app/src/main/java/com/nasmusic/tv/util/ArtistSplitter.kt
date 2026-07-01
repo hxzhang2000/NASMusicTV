@@ -16,7 +16,7 @@ package com.nasmusic.tv.util
 object ArtistSplitter {
 
     private val delimiters = listOf(
-        Regex("\\s+feat\\.", RegexOption.IGNORE_CASE),
+        Regex("\\s+feat\\.?", RegexOption.IGNORE_CASE),
         Regex("\\s+ft\\.", RegexOption.IGNORE_CASE),
         Regex("\\s+with\\s+", RegexOption.IGNORE_CASE),
         Regex("\\s*[&/、×]\\s*"),
@@ -25,15 +25,19 @@ object ArtistSplitter {
 
     /**
      * 将原始 artist 字符串拆分为独立歌唱家列表。
+     * 迭代拆分：先用第一个分隔符拆分，再对每个部分用后续分隔符继续拆分。
      * 如果无法拆分，返回包含原始字符串的单元素列表。
      */
     fun split(artist: String): List<String> {
         if (artist.isBlank()) return emptyList()
+        var results = listOf(artist.trim())
         for (delim in delimiters) {
-            val parts = artist.split(delim).map { it.trim() }.filter { it.isNotBlank() }
-            if (parts.size > 1) return parts.distinct()
+            results = results.flatMap { part ->
+                val sub = part.split(delim).map { it.trim() }.filter { it.isNotBlank() }
+                if (sub.size > 1) sub else listOf(part)
+            }
         }
-        return listOf(artist.trim())
+        return results.distinct()
     }
 
     /**

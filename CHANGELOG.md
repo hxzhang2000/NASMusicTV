@@ -7,6 +7,56 @@
 >
 > 类型：`Added`（新增） | `Changed`（变更） | `Fixed`（修复） | `Removed`（移除）
 
+## [v2.4.4] - 2026-07-01
+
+### Fixed
+
+- LyricsSource.SERVER 死代码删除：该枚举值自 v2.4.0 后从未被使用
+- Mp3MetadataExtractor magic number 26 → 命名常量 `METADATA_KEY_LYRICS`；移除未使用的 `context` 参数及 import
+- RecentSong 数据类移除无用默认参数（id=0/playCount=0/playedAt=0L），新增 `createNew()` 工厂方法确保新记录有正确的默认值
+- CommonComponents.BackButton 接受 `modifier: Modifier` 参数，方便调用方自定义间距/位置；硬编码 `"←"` 改为 `stringResource(R.string.common_back_arrow)` 支持国际化
+- PlayerControls Compose 动画 `shadow()` → `border()`（避免 TV 端阴影性能开销）；`LaunchedEffect(Unit)` 改为 `LaunchedEffect(currentSongId)` 消除重启后焦点请求竞争；移除未使用的 `currentSongId` 参数
+- 空安全：移除 AppRoot、NowPlayingScreen、QueueScreen 中的 3 处 `currentSong!!` 强制解包，改用 `?.let{}` / `?: ""` / 安全分支
+- FocusableSurface 动画竞争：移除 `scope.launch` + `delay` 手动时间控制，改用声明式 `LaunchedEffect(isFocused)` 驱动焦点缩放的入场/出场动画；`catch (_: Exception)` → `catch (e: Exception) + AppLog.w()`；移除重复的缩放系数
+- CoverCarousel 永久失败标志：新增 `permanentlyFailed` 状态字段，避免 `onAllFailed()` 因 recomposition 循环触发；音频切换时重置 `fallbackOffset`
+- EqualizerScreen 每 recomposition 重新分配 bandLabels 问题：提升为顶层 `val` 编译期常量
+
+### Changed
+
+- `NetworkMusicService.search()` 新增 `limit: Int = 0` 参数（0 表示使用默认值）；接口方法添加完整 KDoc `@param`/`@return`/`@throws` 错误契约；新增 `searchCoverUrl()` 默认方法
+- `NetworkMusicManager.searchCoverUrl` 移除 `if (svc !is MetingApiService) continue` 硬编码类型判断，所有实现类均调用接口默认 `searchCoverUrl()`
+- `AppSettings.defaultNetworkSource` 类型从 `String` 改为 `NetworkSource` 枚举（METING / ALAPI / JIOSAAVN），编译期类型安全，消除运行时字符串拼写错误；AppPreferences 新增 `fromKey()` / `fromName()` 转换器 + `NetworkSource` 类型 setter，DataStore 仍存储 key 字符串向后兼容
+- EqualizerScreen 波段 -9~-1 不可达验证：当前循环逻辑已正确处理所有 10 个波段值，无需修改（code review 标记已关闭）
+- SettingsScreen 的 IO 线程 `MutableState` 写入包裹 `withContext(Dispatchers.Main)` 确保 Compose 状态更新发生在主线程
+- 版本号升级至 v2.4.4，`versionCode` 递增至 11
+
+---
+
+## [v2.4.3] - 2026-06-30
+
+### Fixed
+
+- OkHttp Response 泄漏：MetingApiService 3 处 `response.execute()` 未关闭（`searchWithEndpoint`/`resolvePlayUrl`/`resolveLyrics`），LyricsNetworkProvider 5 处 Response 未关闭（Kugou 搜索/歌词、Netease 搜索/歌词、parseKugouLyrics），全部改用 `response.use {}` 确保 Response 自动关闭
+- BackendRegistry adapter 泄漏：`initialize()` 异常时 adapter 未释放；重复初始化时旧 adapter 未断开连接；添加 `releaseAdapter()` 辅助方法确保异常路径和替换路径均正确释放
+- NasMusicApp `applicationScope` 泄漏：添加 `onTerminate()` 调用 `applicationScope.cancel()` 释放协程；移除废弃的 `companion object { lateinit var instance }`
+- LyricsNetworkProvider 线程池泄漏：`daemonExecutor` 从实例变量改为 `companion object` 静态变量，避免每个实例创建新线程池
+- JellyfinAdapter `addToPlaylist` API 参数错误：`Ids` 字段改为 JSON 数组 `gson.toJsonTree(listOf(...))`，修复原 `addProperty("Ids", string)` 导致 API 400 的问题
+- JellyfinAdapter `setRating` API 参数错误：rating 改为 query param `?rating=N`，移除无效的 request body
+- JellyfinAdapter `getPlaylists` API 路径错误：从 `/Playlists` 改为 `/Items?IncludeItemTypes=Playlist`（`/Playlists` 为创建端点，非查询端点）
+- JellyfinAdapter `utf8Body()` 回退过宽：移除希腊/西里尔字母触发 GBK 回退的逻辑，仅当出现 U+FFFD 时回退，避免破坏合法的希腊/西里尔音乐元数据
+- PlaybackService `onDestroy()` 释放顺序：交换 `session.release()` 与 `player.release()` 顺序，先释放 Session 再释放 Player，避免资源竞争
+- ArtistSplitter 正则匹配不完整：`feat\.` 改为 `feat\.?`，支持 "feat" 无句点变体；拆分逻辑改为迭代拆分（`for(delim).flatMap{part.split(delim)}`），支持多分隔符级联匹配
+- EqualizerScreen 波段 -9~-1 不可达：原循环逻辑 `band <= -10f -> 0f` 跳过负值区间，改为 `if (band >= 10f) -10f else band + 1f` 使所有波段值可循环递增
+- BackendRegistry 并发安全：`getAdapter()`/`getConfig()`/`getServerDisplayName()`/`isConnected()`/`disconnect()`/`initialize()` 全部使用 `synchronized(lock)` 保护状态读写
+- AppPreferences DataStore 阻塞主线程：`getDefaultNetworkSourceSync()`/`getMetingApiBaseUrlSync()` 的 `runBlocking` 改为 `runBlocking(Dispatchers.IO)`
+
+### Changed
+
+- 版本号升级至 v2.4.3，`versionCode` 递增至 10
+- 废弃的 `NasMusicApp.instance` 静态引用移除
+
+---
+
 ## [v2.4.1] - 2026-06-26
 
 ### Added

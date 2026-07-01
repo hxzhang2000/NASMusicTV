@@ -10,6 +10,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -36,9 +37,11 @@ fun CoverCarousel(
     modifier: Modifier = Modifier,
     onAllFailed: () -> Unit = {}
 ) {
+    var permanentlyFailed by remember { mutableStateOf(false) }
+
     if (coverCandidates.isEmpty()) {
         PlaceholderCover(modifier)
-        onAllFailed()
+        if (!permanentlyFailed) { permanentlyFailed = true; onAllFailed() }
         return
     }
     if (coverCandidates.size == 1) {
@@ -54,7 +57,7 @@ fun CoverCarousel(
             )
         } else {
             PlaceholderCover(modifier)
-            onAllFailed()
+            if (!permanentlyFailed) { permanentlyFailed = true; onAllFailed() }
         }
         return
     }
@@ -97,12 +100,12 @@ fun CoverCarousel(
                 )
             } else {
                 PlaceholderCover(modifier)
-                onAllFailed()
+                if (!permanentlyFailed) { permanentlyFailed = true; onAllFailed() }
             }
         }
     } else {
         PlaceholderCover(modifier)
-        onAllFailed()
+        if (!permanentlyFailed) { permanentlyFailed = true; onAllFailed() }
     }
 }
 

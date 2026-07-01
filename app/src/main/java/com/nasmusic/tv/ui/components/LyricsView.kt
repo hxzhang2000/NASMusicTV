@@ -60,8 +60,7 @@ private fun estimateWordTimestamps(line: com.nasmusic.tv.data.model.LyricsLine, 
     return line.text.mapIndexed { index, char ->
         WordTimestamp(
             word = char.toString(),
-            startMs = line.time + index * charDuration,
-            durationMs = charDuration
+            startMs = line.time + index * charDuration
         )
     }
 }

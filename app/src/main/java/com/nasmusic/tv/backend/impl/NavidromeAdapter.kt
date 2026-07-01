@@ -15,6 +15,7 @@ import com.nasmusic.tv.util.withRetry
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.supervisorScope
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -215,14 +216,15 @@ class NavidromeAdapter : BackendAdapter {
             val albums = artist?.getAsJsonArray("album")
                 ?: return@withContext emptyList<Song>()
 
-            // 并发请求所有专辑的歌曲
-            val deferredSongs = albums.map { albumElem ->
-                async {
-                    val albumId = albumElem.asJsonObject.get("id")?.asString ?: return@async emptyList<Song>()
-                    getAlbumSongs(albumId)
-                }
+            // 并发请求所有专辑的歌曲，supervisorScope 隔离单个请求失败
+            val allSongs = supervisorScope {
+                albums.map { albumElem ->
+                    async {
+                        val albumId = albumElem.asJsonObject.get("id")?.asString ?: return@async emptyList<Song>()
+                        getAlbumSongs(albumId)
+                    }
+                }.awaitAll().flatten()
             }
-            val allSongs = deferredSongs.awaitAll().flatten()
             allSongs
         } catch (e: Exception) {
             AppLog.e("NavidromeAdapter", "getArtistSongs failed", e)
@@ -343,11 +345,10 @@ class NavidromeAdapter : BackendAdapter {
     override fun getStreamUrl(songId: String): String =
         buildRestUrl("stream") + "&id=$songId"
 
-    override fun getCoverUrl(songId: String): String {
-        val url = buildRestUrl("getCoverArt") + "&id=$songId&size=512"
-        AppLog.d("NavidromeAdapter", "getCoverUrl: $url")
-        return url
-    }
+    override fun getCoverUrl(songId: String): String =
+        buildCoverUrl(songId).also {
+            AppLog.d("NavidromeAdapter", "getCoverUrl: id=$songId")
+        }
 
     override fun getCoverUrlCandidates(song: Song): List<String> {
         val urls = mutableListOf<String>()
@@ -449,27 +450,42 @@ class NavidromeAdapter : BackendAdapter {
     }
 
     // --- 收藏 ---
+    // 本地缓存收藏状态，避免每次 toggle 都拉取全量收藏列表
+    private val _favoriteIds = mutableSetOf<String>()
+    private var _favoritesLoaded = false
+
     override suspend fun toggleFavorite(songId: String): Boolean = withContext(Dispatchers.IO) {
         try {
-            // First check if already starred; Subsonic star/unstar toggles
-            val starredUrl = buildRestUrl("getStarred2")
-            val starredJson = executeRequest(starredUrl)
-            val subsonic = starredJson?.getAsJsonObject("subsonic-response")
-            val starredWrap = subsonic?.getAsJsonObject("starred2")
-            val starredSongs = starredWrap?.getAsJsonArray("song") ?: emptyList()
-            val isStarred = starredSongs.any {
-                it.asJsonObject.get("id")?.asString == songId
+            // 懒加载收藏列表
+            if (!_favoritesLoaded) {
+                loadFavorites()
             }
-
+            val isStarred = songId in _favoriteIds
             val method = if (isStarred) "unstar" else "star"
             val url = buildRestUrl(method) + "&id=$songId"
             val json = executeRequest(url)
             val responseSubsonic = json?.getAsJsonObject("subsonic-response")
-            responseSubsonic?.get("status")?.asString == "ok"
+            val ok = responseSubsonic?.get("status")?.asString == "ok"
+            if (ok) {
+                if (isStarred) _favoriteIds.remove(songId) else _favoriteIds.add(songId)
+            }
+            ok
         } catch (e: Exception) {
             AppLog.e("NavidromeAdapter", "toggleFavorite failed", e)
             false
         }
+    }
+
+    private suspend fun loadFavorites() {
+        val url = buildRestUrl("getStarred2")
+        val json = executeRequest(url) ?: return
+        val subsonic = json.getAsJsonObject("subsonic-response")
+        val starredWrap = subsonic?.getAsJsonObject("starred2")
+        val songs = starredWrap?.getAsJsonArray("song") ?: return
+        for (i in 0 until songs.size()) {
+            songs[i].asJsonObject.get("id")?.asString?.let { _favoriteIds.add(it) }
+        }
+        _favoritesLoaded = true
     }
 
     override suspend fun getFavorites(): List<Song> = withContext(Dispatchers.IO) {
@@ -571,11 +587,18 @@ class NavidromeAdapter : BackendAdapter {
 
     override suspend fun getSongsByYearRange(fromYear: Int, toYear: Int): List<Song> = withContext(Dispatchers.IO) {
         try {
-            // Subsonic doesn't have a direct year-range endpoint; fallback to album-based
-            val allSongs = getSongs(10000)
-            allSongs.filter { song ->
-                song.year != null && song.year in fromYear..toYear
+            // Subsonic doesn't have a direct year-range endpoint; paginate through songs
+            val pageSize = 500
+            val allSongs = mutableListOf<Song>()
+            var offset = 0
+            var maxPages = 200
+            while (maxPages-- > 0) {
+                val batch = getSongs(pageSize, offset)
+                if (batch.isEmpty()) break
+                allSongs.addAll(batch.filter { it.year != null && it.year in fromYear..toYear })
+                offset += pageSize
             }
+            allSongs
         } catch (e: Exception) {
             AppLog.e("NavidromeAdapter", "getSongsByYearRange failed", e)
             emptyList()

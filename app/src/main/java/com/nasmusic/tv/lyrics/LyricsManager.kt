@@ -9,6 +9,8 @@ import com.nasmusic.tv.data.model.LyricsSource
 import com.nasmusic.tv.data.model.Song
 import com.nasmusic.tv.util.AppLog
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.io.File
 
@@ -32,6 +34,7 @@ class LyricsManager(
     }
 
     private val networkProvider = LyricsNetworkProvider()
+    private val cacheMutex = Mutex()
 
     /**
      * 获取歌词 - 按优先级尝试多个来源
@@ -89,7 +92,10 @@ class LyricsManager(
                         cacheLyrics(song, text)
                         LrcParser.parse(text, song.id).copy(source = LyricsSource.NETWORK)
                     } else null
-                } catch (_: Exception) { null }
+                } catch (e: Exception) {
+                    AppLog.w("LyricsManager", "network fuzzy fetch failed: ${e.message}")
+                    null
+                }
             } else null
             val result = LyricsAvailability(backend = networkLyrics, network = fuzzyLyrics)
             AppLog.d("LyricsManager", "checkAvailability(network song): backend=${result.hasBackend}, network=${result.hasNetwork}")
@@ -105,17 +111,23 @@ class LyricsManager(
                     cacheLyrics(song, text)
                     LrcParser.parse(text, song.id).copy(source = LyricsSource.EMBEDDED)
                 } else null
-            } catch (_: Exception) { null }
-        } else null
+                } catch (e: Exception) {
+                    AppLog.w("LyricsManager", "backend getLyrics failed: ${e.message}")
+                    null
+                }
+            } else null
 
-        // 同时尝试网络歌词（不跳过）
+            // 同时尝试网络歌词（不跳过）
         val networkLyrics = try {
             val text = networkProvider.fetchLyrics(song.title, song.artist)
             if (text != null) {
                 cacheLyrics(song, text)
                 LrcParser.parse(text, song.id).copy(source = LyricsSource.NETWORK)
             } else null
-        } catch (_: Exception) { null }
+        } catch (e: Exception) {
+            AppLog.w("LyricsManager", "network fetch failed: ${e.message}")
+            null
+        }
 
         val result = LyricsAvailability(backend = backendLyrics, network = networkLyrics)
         AppLog.d("LyricsManager", "checkAvailability: backend=${result.hasBackend}, network=${result.hasNetwork}")
@@ -150,6 +162,7 @@ class LyricsManager(
                 }
             }
             LyricsSource.LOCAL_FILE -> getLocalLrcFile(song)
+            LyricsSource.LOCAL_CACHE -> getCachedLyrics(song)
             LyricsSource.NETWORK -> {
                 val text = networkProvider.fetchLyrics(song.title, song.artist)
                 if (text != null) {
@@ -165,27 +178,33 @@ class LyricsManager(
     /**
      * 从本地缓存获取歌词
      */
-    private fun getCachedLyrics(song: Song): Lyrics? {
-        val cacheFile = getCacheFile(song)
-        if (cacheFile.exists()) {
-            val text = cacheFile.readText()
-            if (LrcParser.isValidLrc(text)) {
-                return LrcParser.parse(text, song.id)
-                    .copy(source = LyricsSource.LOCAL_CACHE)
+    private suspend fun getCachedLyrics(song: Song): Lyrics? {
+        cacheMutex.withLock {
+            val cacheFile = getCacheFile(song)
+            if (cacheFile.exists()) {
+                val text = cacheFile.readText()
+                if (LrcParser.isValidLrc(text)) {
+                    return LrcParser.parse(text, song.id)
+                        .copy(source = LyricsSource.LOCAL_CACHE)
+                }
             }
+            return null
         }
-        return null
     }
 
     /**
      * 缓存歌词到本地
      */
-    fun cacheLyrics(song: Song, lrcText: String) {
-        try {
-            val cacheFile = getCacheFile(song)
-            cacheFile.writeText(lrcText)
-        } catch (e: Exception) {
-            e.printStackTrace()
+    suspend fun cacheLyrics(song: Song, lrcText: String) {
+        cacheMutex.withLock {
+            try {
+                val cacheFile = getCacheFile(song)
+                val tempFile = File(cacheDir, "${cacheFile.name}.tmp")
+                tempFile.writeText(lrcText)
+                tempFile.renameTo(cacheFile)
+            } catch (e: Exception) {
+                AppLog.w("LyricsManager", "cacheLyrics failed: ${e.message}")
+            }
         }
     }
 
@@ -201,8 +220,10 @@ class LyricsManager(
     /**
      * 清除所有缓存
      */
-    fun clearCache() {
-        cacheDir.listFiles()?.forEach { it.delete() }
+    suspend fun clearCache() {
+        cacheMutex.withLock {
+            cacheDir.listFiles()?.forEach { it.delete() }
+        }
     }
 
     /**

@@ -47,8 +47,9 @@ import com.nasmusic.tv.data.model.AppSettings
 import com.nasmusic.tv.data.model.PlayMode
 import com.nasmusic.tv.ui.components.FocusableSurface
 import com.nasmusic.tv.ui.theme.NasMusicColors
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * 设置屏幕 — 左侧为导航侧边栏（settings-sidebar），右侧为具体选项（settings-content）
@@ -235,29 +236,29 @@ fun SettingsScreen(
                             if (!isNetworkTesting) {
                                 isNetworkTesting = true
                                 networkTestStatus = ""
-                                networkTestScope.launch(Dispatchers.IO) {
-                                    try {
-                                        val url = java.net.URL("https://www.baidu.com")
-                                        val conn = url.openConnection() as java.net.HttpURLConnection
-                                        conn.connectTimeout = 5000
-                                        conn.readTimeout = 5000
-                                        conn.requestMethod = "HEAD"
-                                        val code = conn.responseCode
-                                        conn.disconnect()
-                                        networkTestStatus = if (code in 200..399) {
-                                            "success:网络连通 (HTTP $code)"
-                                        } else {
-                                            "error:HTTP 响应码 $code"
+                                networkTestScope.launch {
+                                    val result = withContext(Dispatchers.IO) {
+                                        try {
+                                            val url = java.net.URL("https://www.baidu.com")
+                                            val conn = url.openConnection() as java.net.HttpURLConnection
+                                            conn.connectTimeout = 5000
+                                            conn.readTimeout = 5000
+                                            conn.requestMethod = "HEAD"
+                                            val code = conn.responseCode
+                                            conn.disconnect()
+                                            if (code in 200..399) "success:网络连通 (HTTP $code)"
+                                            else "error:HTTP 响应码 $code"
+                                        } catch (e: java.net.SocketTimeoutException) {
+                                            "error:连接超时，无法访问外网"
+                                        } catch (e: java.net.UnknownHostException) {
+                                            "error:DNS 解析失败，无网络连接"
+                                        } catch (e: java.net.ConnectException) {
+                                            "error:连接被拒绝"
+                                        } catch (e: Exception) {
+                                            "error:网络异常: ${e.message ?: e.javaClass.simpleName}"
                                         }
-                                    } catch (e: java.net.SocketTimeoutException) {
-                                        networkTestStatus = "error:连接超时，无法访问外网"
-                                    } catch (e: java.net.UnknownHostException) {
-                                        networkTestStatus = "error:DNS 解析失败，无网络连接"
-                                    } catch (e: java.net.ConnectException) {
-                                        networkTestStatus = "error:连接被拒绝"
-                                    } catch (e: Exception) {
-                                        networkTestStatus = "error:网络异常: ${e.message ?: e.javaClass.simpleName}"
                                     }
+                                    networkTestStatus = result
                                     isNetworkTesting = false
                                 }
                             }

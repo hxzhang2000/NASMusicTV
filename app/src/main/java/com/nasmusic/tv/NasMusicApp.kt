@@ -9,6 +9,7 @@ import com.nasmusic.tv.player.PlayerManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 
 /**
  * Application 类 — 手动 DI 容器
@@ -33,7 +34,6 @@ class NasMusicApp : Application() {
 
     override fun onCreate() {
         super.onCreate()
-        instance = this
         appPreferences = AppPreferences(this)
         backendRegistry = BackendRegistry()
         playerManager = PlayerManager()
@@ -49,8 +49,8 @@ class NasMusicApp : Application() {
         )
     }
 
-    companion object {
-        lateinit var instance: NasMusicApp
-            private set
+    override fun onTerminate() {
+        super.onTerminate()
+        applicationScope.cancel()
     }
 }

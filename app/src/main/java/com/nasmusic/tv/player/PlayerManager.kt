@@ -598,7 +598,7 @@ class PlayerManager() {
      * 批量设置所有频段增益值（用于应用预设）
      * @param gains 各频段增益值数组 (dB)，数组长度需与设备频段数匹配
      */
-    fun setEqualizerBands(gains: FloatArray): Boolean {
+    fun setEqualizerBands(gains: List<Float>): Boolean {
         return try {
             val eq = equalizer
             if (eq == null) {

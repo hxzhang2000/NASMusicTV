@@ -89,8 +89,8 @@ fun ProgressSection(
     val timeFontFocused = if (compact) 15.sp else 18.sp
     val progressFocusRequester = remember { FocusRequester() }
 
-    // 仅在首次组合时请求一次焦点，避免歌曲切换时抢占焦点导致崩溃
-    LaunchedEffect(Unit) {
+    // 歌曲切换时重新请求焦点，确保进度条可聚焦
+    LaunchedEffect(currentSongId) {
         try {
             progressFocusRequester.requestFocus()
         } catch (_: Exception) {
@@ -267,16 +267,15 @@ private fun IconButton(
         else -> 48.dp
     }
     val glowElevation = if (compact) 6.dp else 12.dp
-    // 主按钮（播放/暂停）添加青色发光阴影效果，对应 HTML box-shadow: 0 4px 20px rgba(45,212,191,0.3)
+    // 主按钮（播放/暂停）添加青色发光边框效果（border 替代 shadow 以减少渲染开销）
     val glowModifier: Modifier = if (primary) {
         modifier
             .size(buttonSize)
             .scale(animScale.value)
-            .shadow(
-                elevation = glowElevation,
-                shape = CircleShape,
-                ambientColor = NasMusicColors.Primary,
-                spotColor = NasMusicColors.Primary
+            .border(
+                width = 1.5.dp,
+                color = NasMusicColors.Primary.copy(alpha = 0.4f),
+                shape = CircleShape
             )
     } else {
         modifier

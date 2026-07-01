@@ -108,8 +108,9 @@ class JellyfinAdapter : BackendAdapter {
             val allAlbums = mutableListOf<Album>()
             var startIndex = 0
             val pageSize = 1000
+            var maxPages = MAX_PAGES
 
-            while (true) {
+            while (maxPages-- > 0) {
                 val url = "$baseUrl/Items?" +
                         "Recursive=true&" +
                         "IncludeItemTypes=MusicAlbum&" +
@@ -186,8 +187,9 @@ class JellyfinAdapter : BackendAdapter {
             val allArtists = mutableListOf<Artist>()
             var startIndex = 0
             val pageSize = 1000
+            var maxPages = MAX_PAGES
 
-            while (true) {
+            while (maxPages-- > 0) {
                 val url = "$baseUrl/Artists/AlbumArtists?" +
                         "UserId=$userId&" +
                         "SortBy=SortName&SortOrder=Ascending&" +
@@ -366,7 +368,7 @@ class JellyfinAdapter : BackendAdapter {
 
     override fun getCoverUrl(songId: String): String {
         val url = "$baseUrl/Items/$songId/Images/Primary?maxWidth=512&quality=90&api_key=$apiToken"
-        AppLog.d("JellyfinAdapter", "getCoverUrl: $url")
+        AppLog.d("JellyfinAdapter", "getCoverUrl: item=$songId")
         return url
     }
 
@@ -471,8 +473,10 @@ class JellyfinAdapter : BackendAdapter {
     // --- 播放列表 ---
     override suspend fun getPlaylists(): List<Playlist> = withContext(Dispatchers.IO) {
         try {
-            // Jellyfin API: GET /Playlists?userId=...
-            val url = "$baseUrl/Playlists?UserId=$userId"
+            // Jellyfin API: GET /Items?IncludeItemTypes=Playlist 获取播放列表
+            val url = "$baseUrl/Items?IncludeItemTypes=Playlist&Recursive=true&" +
+                    "Fields=SortName&UserId=$userId&SortBy=SortName&SortOrder=Ascending&" +
+                    "StartIndex=0&Limit=200"
             val json = executeJsonRequest(url) ?: return@withContext emptyList<Playlist>()
             val items = json.getAsJsonArray("Items") ?: return@withContext emptyList<Playlist>()
             items.mapNotNull { item ->
@@ -532,7 +536,7 @@ class JellyfinAdapter : BackendAdapter {
     override suspend fun addToPlaylist(playlistId: String, songId: String): Boolean = withContext(Dispatchers.IO) {
         try {
             val body = JsonObject().apply {
-                addProperty("Ids", songId)
+                add("Ids", gson.toJsonTree(listOf(songId)))
             }.toString()
             val request = Request.Builder()
                 .url("$baseUrl/Playlists/$playlistId/Items")
@@ -590,15 +594,10 @@ class JellyfinAdapter : BackendAdapter {
     }
 
     // --- 收藏 ---
-    // 缓存收藏 IDs，用于判断当前状态（线程安全）
-    private val _favoriteIdsCache = mutableSetOf<String>()
-    private val favoriteCacheLock = Any()
-
     override suspend fun toggleFavorite(songId: String): Boolean = withContext(Dispatchers.IO) {
         try {
             // Jellyfin API: POST /Users/{userId}/FavoriteItems/{itemId} 添加收藏
             //               DELETE /Users/{userId}/FavoriteItems/{itemId} 取消收藏
-            // 先查询当前收藏状态，避免依赖本地缓存（缓存可能未初始化）
             val isCurrentlyFavorite = queryFavoriteStatus(songId)
             val requestBuilder = Request.Builder()
                 .url("$baseUrl/Users/$userId/FavoriteItems/$songId")
@@ -612,19 +611,7 @@ class JellyfinAdapter : BackendAdapter {
 
             client.newCall(request).execute().use { response ->
                 AppLog.d("JellyfinAdapter", "toggleFavorite: HTTP ${response.code} for $songId")
-                if (response.isSuccessful) {
-                    // 操作成功后更新本地缓存
-                    synchronized(favoriteCacheLock) {
-                        if (isCurrentlyFavorite) {
-                            _favoriteIdsCache.remove(songId)
-                        } else {
-                            _favoriteIdsCache.add(songId)
-                        }
-                    }
-                    true
-                } else {
-                    false
-                }
+                response.isSuccessful
             }
         } catch (e: Exception) {
             AppLog.e("JellyfinAdapter", "toggleFavorite failed", e)
@@ -664,8 +651,9 @@ class JellyfinAdapter : BackendAdapter {
             val allSongs = mutableListOf<Song>()
             var startIndex = 0
             val pageSize = 1000
+            var maxPages = MAX_PAGES
 
-            while (true) {
+            while (maxPages-- > 0) {
                 val url = "$baseUrl/Items?Filters=IsFavorite&IncludeItemTypes=Audio&" +
                         "Recursive=true&fields=$fields&UserId=$userId&" +
                         "StartIndex=$startIndex&Limit=$pageSize"
@@ -678,11 +666,6 @@ class JellyfinAdapter : BackendAdapter {
                 startIndex += pageSize
             }
 
-            // 更新缓存（线程安全）
-            synchronized(favoriteCacheLock) {
-                _favoriteIdsCache.clear()
-                _favoriteIdsCache.addAll(allSongs.map { it.id })
-            }
             AppLog.d("JellyfinAdapter", "getFavorites: ${allSongs.size} favorites")
             allSongs
         } catch (e: Exception) {
@@ -695,13 +678,11 @@ class JellyfinAdapter : BackendAdapter {
     override suspend fun setRating(songId: String, rating: Int): Boolean = withContext(Dispatchers.IO) {
         try {
             // Jellyfin API: POST /Users/{userId}/Items/{itemId}/Rating?rating=...
-            val body = JsonObject().apply {
-                addProperty("Rating", rating.coerceIn(1, 5))
-            }.toString()
+            // rating 在 query param 中传递，不需要 request body
             val request = Request.Builder()
-                .url("$baseUrl/Users/$userId/Items/$songId/Rating?api_key=$apiToken")
+                .url("$baseUrl/Users/$userId/Items/$songId/Rating?rating=${rating.coerceIn(1, 5)}")
                 .header("X-Emby-Authorization", buildAuthHeader())
-                .post(body.toRequestBody(jsonMediaType))
+                .post("".toRequestBody(null))
                 .build()
             client.newCall(request).execute().use { it.isSuccessful }
         } catch (e: Exception) {
@@ -740,8 +721,9 @@ class JellyfinAdapter : BackendAdapter {
             val allSongs = mutableListOf<Song>()
             var startIndex = 0
             val pageSize = 1000
+            var maxPages = MAX_PAGES
 
-            while (true) {
+            while (maxPages-- > 0) {
                 val url = "$baseUrl/Items?IncludeItemTypes=Audio&Recursive=true&" +
                         "fields=$fields&UserId=$userId&Genres=$encodedGenre&" +
                         "StartIndex=$startIndex&Limit=$pageSize"
@@ -768,8 +750,9 @@ class JellyfinAdapter : BackendAdapter {
             val allSongs = mutableListOf<Song>()
             var startIndex = 0
             val pageSize = 1000
+            var maxPages = MAX_PAGES
 
-            while (true) {
+            while (maxPages-- > 0) {
                 val url = "$baseUrl/Items?IncludeItemTypes=Audio&Recursive=true&" +
                         "fields=$fields&UserId=$userId&Years=$years&" +
                         "StartIndex=$startIndex&Limit=$pageSize"
@@ -877,33 +860,28 @@ class JellyfinAdapter : BackendAdapter {
         return "$baseUrl/Items/$itemId/Images/Primary?tag=$imageTag&maxWidth=512&quality=90&api_key=$apiToken"
     }
 
-    // 从原始字节检测编码并解码：优先 UTF-8，若出现 U+FFFD 或可疑字符则回退 GBK
+    // 从原始字节检测编码并解码：优先 UTF-8，仅当出现 U+FFFD 时回退 GBK
     private fun Response.utf8Body(): String? {
         val rawBytes = body?.bytes() ?: return null
         // 尝试 UTF-8 解码
         val utf8 = try { String(rawBytes, Charsets.UTF_8) } catch (_: Exception) { return null }
-        // 检测 UTF-8 解码结果是否可信：
-        // - U+FFFD → 无效 UTF-8
-        // - 希腊/西里尔字母 → GBK→UTF-8 误解码的典型特征
+        // 仅当出现 U+FFFD（无效 UTF-8 替换字符）时触发 GBK 回退
+        // 希腊/西里尔字母可能在音乐元数据中合法存在（希腊艺术家、俄罗斯乐队名），不应触发回退
         val hasReplacement = '\uFFFD' in utf8
-        val hasGreek = utf8.any { it.code in 0x0370..0x03FF }
-        val hasCyrillic = utf8.any { it.code in 0x0400..0x04FF }
-
-        val needsGbkFallback = hasReplacement || hasGreek || hasCyrillic
 
         // 记录原始字节的前20个字节（用于调试编码问题）
         val bytesHex = rawBytes.take(40).joinToString(" ") { "%02X".format(it) }
         AppLog.d("NASMusic", "utf8Body: rawBytes[0..39]=${bytesHex}")
-        AppLog.d("NASMusic", "utf8Body: flags: replacement=$hasReplacement greek=$hasGreek cyrillic=$hasCyrillic → needsGbk=$needsGbkFallback")
+        AppLog.d("NASMusic", "utf8Body: replacement=$hasReplacement")
 
-        if (!needsGbkFallback) {
+        if (!hasReplacement) {
             AppLog.d("NASMusic", "utf8Body: UTF-8 OK, first50='${utf8.take(50)}'")
             return utf8
         }
 
         // 尝试 GBK 解码（Jellyfin 服务端 ID3 标签可能以 GBK 存储）
         val gbk = try { String(rawBytes, Charset.forName("GBK")) } catch (_: Exception) { null }
-        if (gbk != null && (gbk.any { it.code in 0x4E00..0x9FFF } || '\uFFFD' !in gbk)) {
+        if (gbk != null && '\uFFFD' !in gbk) {
             AppLog.d("NASMusic", "utf8Body: GBK fallback: utf8='${utf8.take(20)}' → gbk='${gbk.take(20)}'")
             return gbk
         }
@@ -1037,7 +1015,7 @@ class JellyfinAdapter : BackendAdapter {
                 .header("X-Emby-Authorization", buildAuthHeader())
                 .build()
             client.newCall(request).execute().use { response ->
-                val body = response.body?.string() ?: return@use null
+                val body = response.utf8Body() ?: return@use null
                 if (!response.isSuccessful) return@use null
                 val json = gson.fromJson(body, JsonObject::class.java)
                 val uid = json.get("Id")?.asString ?: return@use null
@@ -1048,5 +1026,9 @@ class JellyfinAdapter : BackendAdapter {
             AppLog.e("JellyfinAdapter", "fetchCurrentUserInfo failed", e)
             null
         }
+    }
+
+    companion object {
+        private const val MAX_PAGES = 1000
     }
 }

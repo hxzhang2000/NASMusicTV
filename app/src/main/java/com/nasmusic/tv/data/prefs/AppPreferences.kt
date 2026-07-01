@@ -13,6 +13,7 @@ import com.nasmusic.tv.backend.network.MetingApiService
 import com.nasmusic.tv.data.model.AppSettings
 import com.nasmusic.tv.data.model.EqualizerPreset
 import com.nasmusic.tv.data.model.NetworkFavoriteItem
+import com.nasmusic.tv.data.model.NetworkSource
 import com.nasmusic.tv.data.model.PlayMode
 import com.nasmusic.tv.data.model.ServerConfig
 import com.nasmusic.tv.data.model.Song
@@ -20,6 +21,7 @@ import com.nasmusic.tv.util.CryptoUtils
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 
 /**
@@ -222,7 +224,7 @@ class AppPreferences(private val context: Context) {
             cacheLyrics = prefs[keyCacheLyrics] ?: true,
             cacheCover = prefs[keyCacheCover] ?: true,
             lyricsOffsetMs = prefs[keyLyricsOffset] ?: 0L,
-            defaultNetworkSource = prefs[keyDefaultNetworkSource] ?: "meting",
+            defaultNetworkSource = prefs[keyDefaultNetworkSource]?.let { NetworkSource.fromKey(it) ?: NetworkSource.fromName(it) } ?: NetworkSource.DEFAULT,
             metingApiBaseUrl = prefs[keyMetingApiBaseUrl] ?: MetingApiService.DEFAULT_BASE_URL
         )
     }
@@ -241,8 +243,8 @@ class AppPreferences(private val context: Context) {
 
     suspend fun setLyricsOffset(offsetMs: Long) = context.dataStore.edit { it[keyLyricsOffset] = offsetMs }
 
-    suspend fun setDefaultNetworkSource(source: String) =
-        context.dataStore.edit { it[keyDefaultNetworkSource] = source }
+    suspend fun setDefaultNetworkSource(source: NetworkSource) =
+        context.dataStore.edit { it[keyDefaultNetworkSource] = source.key }
 
     suspend fun setMetingApiBaseUrl(url: String) =
         context.dataStore.edit {
@@ -254,11 +256,12 @@ class AppPreferences(private val context: Context) {
      * 在 NetworkMusicManager.search() 调用时同步读取，避免协程上下文切换
      */
     fun getDefaultNetworkSourceSync(): String {
-        return runBlocking {
+        return runBlocking(Dispatchers.IO) {
             try {
-                context.dataStore.data.first()[keyDefaultNetworkSource] ?: "meting"
+                val stored = context.dataStore.data.first()[keyDefaultNetworkSource]
+                NetworkSource.fromKey(stored ?: "")?.key ?: stored ?: NetworkSource.DEFAULT.key
             } catch (e: Exception) {
-                "meting"
+                NetworkSource.DEFAULT.key
             }
         }
     }
@@ -268,7 +271,7 @@ class AppPreferences(private val context: Context) {
      * 在每次请求时同步读取，支持运行时切换端点
      */
     fun getMetingApiBaseUrlSync(): String {
-        return runBlocking {
+        return runBlocking(Dispatchers.IO) {
             try {
                 context.dataStore.data.first()[keyMetingApiBaseUrl]
                     ?: MetingApiService.DEFAULT_BASE_URL

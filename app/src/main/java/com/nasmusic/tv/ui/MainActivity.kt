@@ -21,7 +21,7 @@ import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.res.stringResource
+
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -127,7 +127,7 @@ class MainActivity : ComponentActivity() {
                         }
 
                         // D-3: 错误提示消息（数据加载/操作失败时显示，5秒后自动清除）
-                        if (errorMessage != null) {
+                        errorMessage?.let { msg ->
                             Box(
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -141,7 +141,7 @@ class MainActivity : ComponentActivity() {
                                 contentAlignment = Alignment.Center
                             ) {
                                 Text(
-                                    text = errorMessage!!,
+                                    text = msg,
                                     color = NasMusicColors.TextPrimary,
                                     fontSize = 16.sp,
                                     fontWeight = FontWeight.Medium
@@ -150,7 +150,7 @@ class MainActivity : ComponentActivity() {
                         }
 
                         // 连接结果提示消息（短时悬浮显示）
-                        if (connectMessage != null) {
+                        connectMessage?.let { msg ->
                             Box(
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -164,7 +164,7 @@ class MainActivity : ComponentActivity() {
                                 contentAlignment = Alignment.Center
                             ) {
                                 Text(
-                                    text = connectMessage!!,
+                                    text = msg,
                                     color = NasMusicColors.TextPrimary,
                                     fontSize = 16.sp,
                                     fontWeight = FontWeight.Medium

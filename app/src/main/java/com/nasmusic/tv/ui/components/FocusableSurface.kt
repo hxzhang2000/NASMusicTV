@@ -23,7 +23,7 @@ import androidx.tv.material3.ClickableSurfaceDefaults
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Surface
 import com.nasmusic.tv.ui.theme.NasMusicColors
-import kotlinx.coroutines.launch
+import com.nasmusic.tv.util.AppLog
 
 /**
  * 公共可聚焦 Surface 组件
@@ -82,10 +82,18 @@ fun FocusableSurface(
         LaunchedEffect(Unit) {
             try {
                 focusRequester.requestFocus()
-            } catch (_: Exception) {
-                // 忽略焦点请求失败（例如组件尚未附着）
+            } catch (e: Exception) {
+                AppLog.w("FocusableSurface", "requestFocus failed", e)
             }
         }
+    }
+
+    // 动画由 isFocused 状态驱动，避免 onFocusChanged 中 scope.launch 的竞态
+    LaunchedEffect(isFocused) {
+        animScale.animateTo(
+            if (isFocused) focusedScale else 1f,
+            tween(animationDurationMs)
+        )
     }
 
     Surface(
@@ -110,12 +118,6 @@ fun FocusableSurface(
             .onFocusChanged {
                 isFocused = it.isFocused
                 onFocusChanged?.invoke(it.isFocused)
-                scope.launch {
-                    animScale.animateTo(
-                        if (isFocused) focusedScale else 1f,
-                        tween(animationDurationMs)
-                    )
-                }
             },
         shape = ClickableSurfaceDefaults.shape(
             shape = shape,

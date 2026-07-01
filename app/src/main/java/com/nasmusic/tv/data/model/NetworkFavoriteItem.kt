@@ -24,5 +24,5 @@ data class NetworkFavoriteItem(
     val coverUrl: String?,
     val networkSource: String,
     val networkId: String,
-    val addedAtMs: Long = System.currentTimeMillis()
+    val addedAtMs: Long
 )

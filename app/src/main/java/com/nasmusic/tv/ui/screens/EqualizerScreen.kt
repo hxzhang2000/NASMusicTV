@@ -159,17 +159,15 @@ fun EqualizerScreen(
                         modifier = Modifier.padding(bottom = 8.dp)
                     )
                 }
+                // bandLabels 在 LazyListScope 中不可使用 remember，提前在 Composable 作用域中定义
                 val bandLabels = listOf("31Hz", "63Hz", "125Hz", "250Hz", "500Hz", "1kHz", "2kHz", "4kHz", "8kHz", "16kHz")
                 items(bandLabels.size) { index ->
                     val band = currentBands.getOrElse(index) { 0f }
 
                     FocusableSurface(
                         onClick = {
-                            val newValue = when {
-                                band <= -10f -> 0f
-                                band >= 10f -> -10f
-                                else -> band + 1f
-                            }
+                            // 循环递增：-10 → -9 → ... → 9 → 10 → -10 → ...
+                            val newValue = if (band >= 10f) -10f else band + 1f
                             onAdjustBand(index, newValue)
                         },
                         modifier = Modifier.fillMaxWidth(),

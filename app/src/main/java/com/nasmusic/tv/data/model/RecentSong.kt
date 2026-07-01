@@ -5,6 +5,11 @@ package com.nasmusic.tv.data.model
  */
 data class RecentSong(
     val songId: String,
-    val lastPlayedAt: Long = System.currentTimeMillis(),
-    val playCount: Int = 1
-)
+    val lastPlayedAt: Long,
+    val playCount: Int
+) {
+    companion object {
+        fun create(songId: String): RecentSong =
+            RecentSong(songId, System.currentTimeMillis(), 1)
+    }
+}

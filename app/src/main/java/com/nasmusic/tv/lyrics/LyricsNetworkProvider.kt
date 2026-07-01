@@ -1,6 +1,5 @@
 package com.nasmusic.tv.lyrics
 
-import com.google.gson.Gson
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
 import com.nasmusic.tv.util.AppLog
@@ -27,14 +26,13 @@ class LyricsNetworkProvider {
 
     companion object {
         private const val TAG = "LyricsNetwork"
-    }
-
-    /**
-     * 守护线程池：防止 OkHttp 非守护线程阻止进程退出
-     * 与 MetingApiService / JellyfinAdapter / NavidromeAdapter 保持一致
-     */
-    private val daemonExecutor = Executors.newCachedThreadPool { r ->
-        Thread(r, "LyricsNetwork-OkHttp").apply { isDaemon = true }
+        /**
+         * 守护线程池：防止 OkHttp 非守护线程阻止进程退出
+         * 静态变量避免每个实例创建新线程池
+         */
+        private val daemonExecutor = Executors.newCachedThreadPool { r ->
+            Thread(r, "LyricsNetwork-OkHttp").apply { isDaemon = true }
+        }
     }
 
     private val client: OkHttpClient by lazy {
@@ -48,8 +46,6 @@ class LyricsNetworkProvider {
             .readTimeout(15, TimeUnit.SECONDS)
             .build()
     }
-
-    private val gson = Gson()
 
     /**
      * 从网络获取歌词
@@ -94,14 +90,19 @@ class LyricsNetworkProvider {
                 .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
                 .build()
 
-            val searchResponse = client.newCall(searchRequest).execute()
-            val searchBody = searchResponse.body?.string()
-            if (searchBody == null) { AppLog.w(TAG, "Kugou search: null body"); return null }
-            AppLog.d(TAG, "Kugou search: status=${searchResponse.code}, body=${searchBody.take(200)}")
-
-            val hash = parseKugouHash(searchBody)
-            if (hash == null) { AppLog.w(TAG, "Kugou search: no hash found"); return null }
-            AppLog.d(TAG, "Kugou search: hash=$hash")
+            val hash = client.newCall(searchRequest).execute().use { searchResponse ->
+                if (!searchResponse.isSuccessful) {
+                    AppLog.w(TAG, "Kugou search: HTTP ${searchResponse.code}")
+                    return@use null
+                }
+                val searchBody = searchResponse.body?.string()
+                if (searchBody == null) { AppLog.w(TAG, "Kugou search: null body"); return@use null }
+                AppLog.d(TAG, "Kugou search: status=${searchResponse.code}, body=${searchBody.take(200)}")
+                val h = parseKugouHash(searchBody)
+                if (h == null) { AppLog.w(TAG, "Kugou search: no hash found"); return@use null }
+                AppLog.d(TAG, "Kugou search: hash=$h")
+                h
+            } ?: return null
 
             val lyricUrl = "https://krcs.kugou.com/search?ver=1&man=yes&client=mobi&keyword=&duration=&hash=$hash&album_audio_id="
             AppLog.d(TAG, "Kugou lyrics: $lyricUrl")
@@ -111,10 +112,16 @@ class LyricsNetworkProvider {
                 .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
                 .build()
 
-            val lyricResponse = client.newCall(lyricRequest).execute()
-            val lyricBody = lyricResponse.body?.string()
-            if (lyricBody == null) { AppLog.w(TAG, "Kugou lyrics: null body"); return null }
-            AppLog.d(TAG, "Kugou lyrics: status=${lyricResponse.code}, body=${lyricBody.take(200)}")
+            val lyricBody = client.newCall(lyricRequest).execute().use { lyricResponse ->
+                if (!lyricResponse.isSuccessful) {
+                    AppLog.w(TAG, "Kugou lyrics: HTTP ${lyricResponse.code}")
+                    return@use null
+                }
+                val body = lyricResponse.body?.string()
+                if (body == null) { AppLog.w(TAG, "Kugou lyrics: null body"); return@use null }
+                AppLog.d(TAG, "Kugou lyrics: status=${lyricResponse.code}, body=${body.take(200)}")
+                body
+            } ?: return null
 
             val result = parseKugouLyrics(lyricBody)
             if (result != null) AppLog.d(TAG, "Kugou: success, length=${result.length}")
@@ -142,14 +149,19 @@ class LyricsNetworkProvider {
                 .header("Referer", "https://music.163.com")
                 .build()
 
-            val searchResponse = client.newCall(searchRequest).execute()
-            val searchBody = searchResponse.body?.string()
-            if (searchBody == null) { AppLog.w(TAG, "Netease search: null body"); return null }
-            AppLog.d(TAG, "Netease search: status=${searchResponse.code}, body=${searchBody.take(200)}")
-
-            val songId = parseNeteaseSongId(searchBody)
-            if (songId == null) { AppLog.w(TAG, "Netease search: no songId found"); return null }
-            AppLog.d(TAG, "Netease search: songId=$songId")
+            val songId = client.newCall(searchRequest).execute().use { searchResponse ->
+                if (!searchResponse.isSuccessful) {
+                    AppLog.w(TAG, "Netease search: HTTP ${searchResponse.code}")
+                    return@use null
+                }
+                val searchBody = searchResponse.body?.string()
+                if (searchBody == null) { AppLog.w(TAG, "Netease search: null body"); return@use null }
+                AppLog.d(TAG, "Netease search: status=${searchResponse.code}, body=${searchBody.take(200)}")
+                val sid = parseNeteaseSongId(searchBody)
+                if (sid == null) { AppLog.w(TAG, "Netease search: no songId found"); return@use null }
+                AppLog.d(TAG, "Netease search: songId=$sid")
+                sid
+            } ?: return null
 
             val lyricUrl = "https://music.163.com/api/song/lyric?os=pc&id=$songId&lv=-1&kv=-1&tv=-1"
             AppLog.d(TAG, "Netease lyrics: $lyricUrl")
@@ -160,10 +172,16 @@ class LyricsNetworkProvider {
                 .header("Referer", "https://music.163.com")
                 .build()
 
-            val lyricResponse = client.newCall(lyricRequest).execute()
-            val lyricBody = lyricResponse.body?.string()
-            if (lyricBody == null) { AppLog.w(TAG, "Netease lyrics: null body"); return null }
-            AppLog.d(TAG, "Netease lyrics: status=${lyricResponse.code}, body=${lyricBody.take(200)}")
+            val lyricBody = client.newCall(lyricRequest).execute().use { lyricResponse ->
+                if (!lyricResponse.isSuccessful) {
+                    AppLog.w(TAG, "Netease lyrics: HTTP ${lyricResponse.code}")
+                    return@use null
+                }
+                val body = lyricResponse.body?.string()
+                if (body == null) { AppLog.w(TAG, "Netease lyrics: null body"); return@use null }
+                AppLog.d(TAG, "Netease lyrics: status=${lyricResponse.code}, body=${body.take(200)}")
+                body
+            } ?: return null
 
             val result = parseNeteaseLyrics(lyricBody)
             if (result != null) AppLog.d(TAG, "Netease: success, length=${result.length}")
@@ -210,8 +228,9 @@ class LyricsNetworkProvider {
                     .url(lrcUrl)
                     .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
                     .build()
-                val lrcResponse = client.newCall(lrcRequest).execute()
-                val lrcBody = lrcResponse.body?.string() ?: return null
+                val lrcBody = client.newCall(lrcRequest).execute().use { lrcResponse ->
+                    lrcResponse.body?.string() ?: return@use null
+                } ?: return null
 
                 val lrcJson = JsonParser.parseString(lrcBody).asJsonObject
                 val lrcContent = lrcJson.get("content")?.asString

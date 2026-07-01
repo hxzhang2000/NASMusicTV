@@ -86,6 +86,8 @@ adb -s 192.168.0.116:5555 install -r app/build/outputs/apk/debug/app-debug.apk
 
 ## 版本历史
 
+- **v2.4.4** — Code Review 修复（空安全、类型安全枚举、Compose 动画优化、代码清理）
+- **v2.4.3** — Code Review 修复（Response 泄漏、API 参数、线程安全、编码回退、播放列表端点）
 - **v2.4.2** — Code Review 修复（线程安全、DataStore 异步、日志统一、Jellyfin 分页）
 - **v2.4.1** — 逐字歌词高频刷新、封面多图轮播、网络歌词联动封面、版本号统一管理
 - **v2.4.0** — 网络音乐搜索功能（Meting-API 在线搜索、网络歌曲收藏、播放队列持久化）

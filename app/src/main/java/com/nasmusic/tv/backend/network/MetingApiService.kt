@@ -156,7 +156,7 @@ class MetingApiService(
      * - pic → Coil 自动处理 302，可以直接用端点 URL 作为 coverUrl
      * - lrc → 实际就是歌词文本端点，由 resolveLyrics() 请求获取
      */
-    override suspend fun search(keyword: String): List<Song> = withContext(Dispatchers.IO) {
+    override suspend fun search(keyword: String, limit: Int): List<Song> = withContext(Dispatchers.IO) {
         AppLog.i(DIAG, "=== search start === keyword='$keyword'")
         if (keyword.isBlank()) {
             AppLog.i(DIAG, "search: keyword blank, return empty")
@@ -219,14 +219,15 @@ class MetingApiService(
                 .url(url)
                 .header("User-Agent", "Mozilla/5.0")
                 .build()
-            val response = client.newCall(request).execute()
-            val body = response.body?.string()
-            AppLog.i(DIAG, "searchWithEndpoint: response code=${response.code} bodyLen=${body?.length ?: 0}")
-            if (!response.isSuccessful || body.isNullOrBlank()) {
-                AppLog.w(DIAG, "searchWithEndpoint: failed code=${response.code} bodyEmpty=${body.isNullOrBlank()}")
-                return emptyList()
+            client.newCall(request).execute().use { response ->
+                val body = response.body?.string()
+                AppLog.i(DIAG, "searchWithEndpoint: response code=${response.code} bodyLen=${body?.length ?: 0}")
+                if (!response.isSuccessful || body.isNullOrBlank()) {
+                    AppLog.w(DIAG, "searchWithEndpoint: failed code=${response.code} bodyEmpty=${body.isNullOrBlank()}")
+                    return@use emptyList()
+                }
+                parseSongs(body)
             }
-            parseSongs(body)
         } catch (e: Exception) {
             AppLog.w(DIAG, "searchWithEndpoint error: ${e.javaClass.simpleName}: ${e.message}")
             emptyList()
@@ -242,17 +243,17 @@ class MetingApiService(
         try {
             val url = "$baseUrl?server=$DEFAULT_SERVER&type=url&id=$netId"
             val request = Request.Builder().url(url).build()
-            val response = noRedirectClient.newCall(request).execute()
-            val playUrl = when (response.code) {
-                302 -> response.header("Location")
-                200 -> response.body?.string()?.let { extractUrlFromJson(it) }
-                else -> null
+            noRedirectClient.newCall(request).execute().use { response ->
+                val playUrl = when (response.code) {
+                    302 -> response.header("Location")
+                    200 -> response.body?.string()?.let { extractUrlFromJson(it) }
+                    else -> null
+                }
+                if (playUrl.isNullOrBlank()) {
+                    AppLog.w(TAG, "resolvePlayUrl empty: code=${response.code} netId=$netId")
+                }
+                playUrl
             }
-            response.close()
-            if (playUrl.isNullOrBlank()) {
-                AppLog.w(TAG, "resolvePlayUrl empty: code=${response.code} netId=$netId")
-            }
-            playUrl
         } catch (e: Exception) {
             AppLog.w(TAG, "resolvePlayUrl error: ${e.message}", e)
             null
@@ -268,10 +269,10 @@ class MetingApiService(
         try {
             val url = "$baseUrl?server=$DEFAULT_SERVER&type=lrc&id=$netId"
             val request = Request.Builder().url(url).build()
-            val response = client.newCall(request).execute()
-            val text = response.body?.string()
-            response.close()
-            if (text.isNullOrBlank()) null else text
+            client.newCall(request).execute().use { response ->
+                val text = response.body?.string()
+                if (text.isNullOrBlank()) null else text
+            }
         } catch (e: Exception) {
             AppLog.w(TAG, "resolveLyrics error: ${e.message}", e)
             null
@@ -288,7 +289,7 @@ class MetingApiService(
      * 按标题+艺术家搜索第一首匹配歌曲的封面 URL。
      * 用于 NAS 歌曲切换到网络歌词时，联动获取网络封面图加入轮播。
      */
-    suspend fun searchCoverUrl(title: String, artist: String): String? {
+    override suspend fun searchCoverUrl(title: String, artist: String): String? {
         val keyword = if (artist.isNotBlank()) "$title $artist" else title
         val items = search(keyword)
         return items.firstOrNull()?.coverUrl

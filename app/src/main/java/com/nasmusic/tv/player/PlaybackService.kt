@@ -113,10 +113,10 @@ class PlaybackService : MediaLibraryService() {
         } catch (e: Exception) {
             AppLog.w("PlaybackService", "PlayerManager.release failed", e)
         }
-        // 释放 MediaSession 和 Player
+        // 释放 MediaSession（先释放 Session 再释放 Player，防止发布后资源竞争）
         mediaLibrarySession?.run {
-            player.release()
             release()
+            player.release()
         }
         mediaLibrarySession = null
         // 移除前台通知

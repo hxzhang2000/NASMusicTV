@@ -13,8 +13,7 @@ enum class LyricsHighlightMode {
  */
 data class WordTimestamp(
     val word: String,
-    val startMs: Long,
-    val durationMs: Long = 0L
+    val startMs: Long
 )
 
 /**
