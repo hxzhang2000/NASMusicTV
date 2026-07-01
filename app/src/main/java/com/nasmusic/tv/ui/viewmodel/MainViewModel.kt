@@ -319,7 +319,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
      */
     private suspend fun restoreLastQueue() {
         val lastQueue = prefs.getLastQueue() ?: return
-        if (lastQueue.songs.isEmpty()) return
+        val songs = lastQueue.songs
+        if (songs.isNullOrEmpty()) return
         AppLog.d("NASMusic", "restoreLastQueue: ${lastQueue.songs.size} songs, index=${lastQueue.currentIndex}")
         playerManager.restoreQueue(lastQueue.songs, lastQueue.currentIndex)
     }

@@ -2,6 +2,7 @@
 
 # Keep data classes
 -keep class com.nasmusic.tv.data.model.** { *; }
+-keep class com.nasmusic.tv.data.prefs.** { *; }
 -keep class com.nasmusic.tv.backend.** { *; }
 
 # Gson
