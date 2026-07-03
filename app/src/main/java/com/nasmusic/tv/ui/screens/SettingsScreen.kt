@@ -86,6 +86,9 @@ fun SettingsScreen(
     onToggleCoverFilter: (Boolean) -> Unit = {},
     onChangeCoverBlurRadius: (Float) -> Unit = {},
     onChangeCoverDarkOverlay: (Float) -> Unit = {},
+    // 天气 API Key 设置
+    weatherApiKey: String = "",
+    onChangeWeatherApiKey: ((String) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     var activeSection by remember { mutableStateOf(SettingsSection.GENERAL) }
@@ -98,6 +101,9 @@ fun SettingsScreen(
     // Meting-API 端点编辑对话框状态
     var showMetingUrlDialog by remember { mutableStateOf(false) }
     var metingUrlError by remember { mutableStateOf<String?>(null) }
+
+    // 天气 API Key 编辑对话框状态
+    var showWeatherApiKeyDialog by remember { mutableStateOf(false) }
 
     // 提前解析字符串资源，供非 Composable 回调使用
     val metingUrlInvalidMsg = stringResource(R.string.settings_meting_api_url_invalid)
@@ -526,9 +532,79 @@ fun SettingsScreen(
                             )
                         }
                     }
+
+                    // --- 天气 API Key 配置 ---
+                    if (onChangeWeatherApiKey != null) {
+                        Spacer(modifier = Modifier.height(24.dp))
+                        Text(
+                            text = stringResource(R.string.settings_weather_api_key),
+                            color = NasMusicColors.Primary,
+                            fontSize = 18.sp,
+                            modifier = Modifier.padding(bottom = 8.dp, start = 4.dp)
+                        )
+                        Text(
+                            text = stringResource(R.string.settings_weather_api_key_desc),
+                            color = NasMusicColors.TextSecondary,
+                            fontSize = 13.sp,
+                            modifier = Modifier.padding(bottom = 8.dp, start = 4.dp)
+                        )
+                        FocusableSurface(
+                            onClick = { showWeatherApiKeyDialog = true },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 4.dp),
+                            shape = RoundedCornerShape(12.dp),
+                            focusedScale = 1.02f,
+                            animationDurationMs = 250,
+                            containerColor = NasMusicColors.Surface,
+                            contentColor = NasMusicColors.TextPrimary,
+                            focusedContainerColor = NasMusicColors.Primary.copy(alpha = 0.15f),
+                            focusedContentColor = NasMusicColors.TextPrimary,
+                            pressedScale = 0.98f,
+                            focusBorderColor = NasMusicColors.FocusRing.copy(alpha = 0.6f)
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 24.dp, vertical = 14.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = if (weatherApiKey.isNotBlank()) "···${weatherApiKey.takeLast(6)}"
+                                               else stringResource(R.string.common_not_set),
+                                        color = if (weatherApiKey.isNotBlank()) NasMusicColors.TextPrimary
+                                                else NasMusicColors.TextSecondary,
+                                        fontSize = 15.sp
+                                    )
+                                }
+                                Text(
+                                    text = stringResource(R.string.settings_meting_api_url_edit),
+                                    color = NasMusicColors.Primary,
+                                    fontSize = 14.sp
+                                )
+                            }
+                        }
+                    }
                 }
             }
         }
+    }
+
+    // 天气 API Key 编辑对话框
+    if (showWeatherApiKeyDialog && onChangeWeatherApiKey != null) {
+        TextInputDialog(
+            title = stringResource(R.string.settings_weather_api_key),
+            hint = stringResource(R.string.settings_weather_api_key_hint),
+            initialValue = weatherApiKey,
+            onConfirm = { input ->
+                onChangeWeatherApiKey(input.trim())
+                showWeatherApiKeyDialog = false
+            },
+            onDismiss = {
+                showWeatherApiKeyDialog = false
+            }
+        )
     }
 
     // Meting-API 端点编辑对话框

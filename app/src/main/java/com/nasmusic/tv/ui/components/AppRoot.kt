@@ -81,6 +81,8 @@ fun AppRoot(
     val coverFilterEnabled by viewModel.prefs.coverFilterEnabled.collectAsState(initial = false)
     val coverFilterBlurRadius by viewModel.prefs.coverFilterBlurRadius.collectAsState(initial = 8f)
     val coverFilterDarkOverlay by viewModel.prefs.coverFilterDarkOverlay.collectAsState(initial = 0.3f)
+    // 天气 API Key
+    val weatherApiKey by viewModel.prefs.weatherApiKey.collectAsState(initial = "")
     // Level 2: 根据当前屏幕和沉浸模式动态设置导航 BACK 键处理函数
     val navBackHandler = LocalNavigateBackHandler.current
     LaunchedEffect(currentScreen, isImmersiveMode.value) {
@@ -327,6 +329,8 @@ fun AppRoot(
                         onClearCoverCache = { viewModel.clearCoverCache() },
                         onOpenEqualizer = { viewModel.navigateTo(Screen.Equalizer) },
                         onChangeMetingApiBaseUrl = { viewModel.updateMetingApiBaseUrl(it) },
+                        weatherApiKey = weatherApiKey,
+                        onChangeWeatherApiKey = { viewModel.updateWeatherApiKey(it) },
                     // 封面滤镜设置
                     coverFilterEnabled = coverFilterEnabled,
                     coverFilterBlurRadius = coverFilterBlurRadius,

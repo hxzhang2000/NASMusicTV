@@ -1,6 +1,6 @@
 # NAS Music TV — 技术架构概述
 
-> 版本：v2.6.0
+> 版本：v2.6.1
 > 最后更新：2026-07-03
 > 本文档记录项目当前的完整技术架构，作为后续迭代的基准参考。
 
@@ -4298,6 +4298,81 @@ NAS 专用字段（`owner`, `durationMs`）有默认值，网络音乐使用时�
 | 文件 | 改动 |
 |------|------|
 | `ui/viewmodel/MainViewModel.kt` | playQueue() 新增 1 行 `playerManager.restoreQueue()` |
+
+#### 10.20.7 新增: 天气 API Key 配置 UI
+
+**背景**：
+v2.6.0 天气电台功能使用 Open-Meteo（无需 API Key）作为主要天气数据源。用户反馈在中国家庭网络下 Open-Meteo 被阻断，导致天气功能不可用。
+
+**修改**：
+- `backend/weather/WeatherApi.kt` — `fetchCurrentWeather()` 新增 `openWeatherMapApiKey: String` 参数。先尝试 Open-Meteo，失败或无数据时 fallback 到 OpenWeatherMap（需 API Key）。OpenWeatherMap 请求参数 `units=metric&lang=zh_cn`
+- `data/prefs/AppPreferences.kt` — 新增 `keyWeatherApiKey` (`stringPreferencesKey`)，公开 `weatherApiKey` Flow + `getWeatherApiKeySync()` + `setWeatherApiKey()`
+- `ui/viewmodel/MainViewModel.kt` — `fetchWeather()` 从 prefs 读取 API Key 并传入 `fetchCurrentWeather()`；新增 `updateWeatherApiKey()` wrapper 方法。错误提示改进：显示"请进入设置 → 网络 → 天气 API Key 配置"
+- `ui/screens/SettingsScreen.kt` — 网络设置区域新增"天气 API Key"配置项，显示遮掩后 6 位或"未设置"，点击弹出 TextInputDialog 输入 Key
+- `ui/components/AppRoot.kt` — 新增 `weatherApiKey` 状态收集，透传 `onChangeWeatherApiKey` 回调到 SettingsScreen
+- `app/src/main/res/values/strings.xml` — 新增 `common_not_set`、`settings_weather_api_key`、`settings_weather_api_key_desc`、`settings_weather_api_key_hint`
+
+**影响文件**：
+| 文件 | 改动 |
+|------|------|
+| `backend/weather/WeatherApi.kt` | fetchCurrentWeather() 新增参数 + fallback 逻辑 |
+| `data/prefs/AppPreferences.kt` | 新增 weatherApiKey 存取 |
+| `ui/viewmodel/MainViewModel.kt` | fetchWeather() 传参 + updateWeatherApiKey() + 错误提示 |
+| `ui/screens/SettingsScreen.kt` | 网络设置新增 API Key 配置项 + 编辑对话框 |
+| `ui/components/AppRoot.kt` | 状态收集 + 回调透传 |
+| `app/src/main/res/values/strings.xml` | 4 个新增字符串 |
+
+**验证结果**：
+- ✅ `./gradlew.bat assembleDebug` BUILD SUCCESSFUL
+- ⏳ 需用户配置 OpenWeatherMap API Key 后 TV 实测
+
+---
+
+### 10.21 v2.6.1 — 天气电台无后端修复 + OpenWeatherMap API Key 配置 UI
+
+**日期**：2026-07-03
+
+**目标**：修复天气电台在无 NAS 后端连接时不显示歌曲的问题；新增 OpenWeatherMap API Key 配置 UI 以解决国内网络 Open-Meteo 不可用的问题。
+
+#### 10.21.1 天气电台无后端连接时不显示歌曲
+
+**问题**：`fetchWeather()` 中 `weatherRadioManager` 仅在 `backendRegistry.getAdapter() != null` 时创建。纯网络音乐用户（无后端连接）的天气电台永远无歌曲，切换 mood 也无效。
+
+**修改**：
+- `WeatherRadioManager.kt` — `backendAdapter` 改为 `BackendAdapter?`（可空），`searchNasSongs()` 开头增加空判断：adapter 为 null 时直接返回空列表
+- `MainViewModel.kt` — `fetchWeather()` 去掉 `adapter != null` 条件，始终创建 `WeatherRadioManager`；`switchWeatherMood()` 增加延迟初始化 fallback
+
+**影响文件**：
+| 文件 | 改动 |
+|------|------|
+| `backend/weather/WeatherRadioManager.kt` | BackendAdapter 可空化 + searchNasSongs 空安全 |
+| `ui/viewmodel/MainViewModel.kt` | fetchWeather/switchWeatherMood 初始化逻辑放宽 |
+
+#### 10.21.2 OpenWeatherMap API Key 配置 UI
+
+**背景**：用户测试发现中国家庭网络下 Open-Meteo 被阻断，天气功能不可用。
+
+**修改**：
+- `WeatherApi.kt` — `fetchCurrentWeather()` 新增 `openWeatherMapApiKey` 参数，Open-Meteo 失败时 fallback 到 OpenWeatherMap
+- `AppPreferences.kt` — 新增 `weatherApiKey` string 偏好存取
+- `MainViewModel.kt` — `fetchWeather()` 读取 API Key 传入 WeatherApi；新增 `updateWeatherApiKey()`；错误提示引导到设置页
+- `SettingsScreen.kt` — 网络分区新增天气 API Key 配置项 + TextInputDialog
+- `AppRoot.kt` — 状态收集 + 回调透传
+- `strings.xml` — 新增 `common_not_set`、`settings_weather_api_key` 等 4 个字符串
+
+**影响文件**：
+| 文件 | 改动 |
+|------|------|
+| `backend/weather/WeatherApi.kt` | OpenWeatherMap fallback 逻辑 |
+| `data/prefs/AppPreferences.kt` | weatherApiKey 存取 |
+| `ui/viewmodel/MainViewModel.kt` | fetchWeather 传参 + updateWeatherApiKey + 错误提示 |
+| `ui/screens/SettingsScreen.kt` | API Key 配置项 + 编辑对话框 |
+| `ui/components/AppRoot.kt` | 状态收集 + 回调透传 |
+| `app/src/main/res/values/strings.xml` | 4 个新增字符串 |
+
+**验证结果**：
+- ✅ `./gradlew.bat assembleDebug` BUILD SUCCESSFUL
+- ⏳ 需用户安装 TV 实测（配置 OpenWeatherMap API Key + 切换心情）
 
 ---
 

@@ -67,6 +67,7 @@ class AppPreferences(private val context: Context) {
     private val keyWeatherEnabled = booleanPreferencesKey("weather_enabled")
     private val keyWeatherManualCity = stringPreferencesKey("weather_manual_city")
     private val keyWeatherAutoRefresh = booleanPreferencesKey("weather_auto_refresh")
+    private val keyWeatherApiKey = stringPreferencesKey("weather_openweathermap_api_key")
 
     // --- 封面滤镜设置（Phase 5） ---
     private val keyCoverFilterEnabled = booleanPreferencesKey("cover_filter_enabled")
@@ -329,6 +330,26 @@ class AppPreferences(private val context: Context) {
 
     suspend fun setWeatherAutoRefresh(enabled: Boolean) {
         context.dataStore.edit { it[keyWeatherAutoRefresh] = enabled }
+    }
+
+    /**
+     * OpenWeatherMap API Key
+     * 当 Open-Meteo 不可用时的备选天气数据源
+     */
+    val weatherApiKey: Flow<String> = context.dataStore.data.map { prefs ->
+        prefs[keyWeatherApiKey] ?: ""
+    }
+
+    fun getWeatherApiKeySync(): String {
+        return runBlocking(Dispatchers.IO) {
+            try {
+                context.dataStore.data.first()[keyWeatherApiKey] ?: ""
+            } catch (e: Exception) { "" }
+        }
+    }
+
+    suspend fun setWeatherApiKey(key: String) {
+        context.dataStore.edit { it[keyWeatherApiKey] = key.trim() }
     }
 
     // --- 封面滤镜设置 ---

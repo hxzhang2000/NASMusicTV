@@ -7,6 +7,20 @@
 >
 > 类型：`Added`（新增） | `Changed`（变更） | `Fixed`（修复） | `Removed`（移除）
 
+## [v2.6.1] - 2026-07-03
+
+### Fixed
+
+- **天气电台无后端连接时不显示歌曲**：`WeatherRadioManager` 构造函数中 `BackendAdapter` 改为可空类型。无 NAS 后端连接时（纯网络音乐使用场景），天气电台也能从网络端搜索匹配心情的歌曲并正确显示列表。`fetchWeather()` 和 `switchWeatherMood()` 不再因 adapter 为 null 跳过初始化。
+- **Open-Meteo 在国内网络被阻断时天气不可用**：`WeatherApi` 新增 OpenWeatherMap 作为 fallback 源。当 Open-Meteo 请求失败或无数据时自动切换到 OpenWeatherMap（需用户配置 API Key）。
+
+### Added
+
+- **OpenWeatherMap API Key 配置界面**：设置页 → 网络分区新增"天气 API Key"配置项，支持输入和修改 OpenWeatherMap API Key，输入后显示遮掩后 6 位。错误提示引导用户前往设置页配置。
+- **`common_not_set` 字符串资源**：统一"未设置"显示文案
+
+---
+
 ## [v2.6.0] - 2026-07-03
 
 ### Added

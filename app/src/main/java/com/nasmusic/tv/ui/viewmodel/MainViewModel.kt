@@ -227,12 +227,15 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             _weatherLoading.value = true
             _weatherError.value = null
             try {
-                val weather = weatherApi.fetchCurrentWeather()
+                val apiKey = nasMusicApp.appPreferences.getWeatherApiKeySync()
+                val weather = weatherApi.fetchCurrentWeather(
+                    openWeatherMapApiKey = apiKey.ifBlank { null }
+                )
                 if (weather != null) {
                     _weatherData.value = weather
                     // 延迟初始化 WeatherRadioManager（需要 BackendAdapter 和 NetworkMusicManager）
                     val adapter = backendRegistry.getAdapter()
-                    if (weatherRadioManager == null && adapter != null) {
+                    if (weatherRadioManager == null) {
                         weatherRadioManager = WeatherRadioManager(adapter, nasMusicApp.networkMusicManager)
                     }
                     weatherRadioManager?.let { mgr ->
@@ -241,7 +244,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                         _currentWeatherMood.value = queue.mood
                     }
                 } else {
-                    _weatherError.value = "无法获取天气信息"
+                    _weatherError.value = if (apiKey.isBlank()) {
+                        "无法获取天气信息，请在 设置→网络 中配置 OpenWeatherMap API Key"
+                    } else {
+                        "无法获取天气信息，请检查网络连接或 API Key 是否有效"
+                    }
                 }
             } catch (e: Exception) {
                 AppLog.e("MainViewModel", "fetchWeather failed", e)
@@ -261,10 +268,13 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             _weatherLoading.value = true
             try {
-                weatherRadioManager?.let { mgr ->
-                    val queue = mgr.buildRadioWithMood(mood, _weatherData.value)
-                    _weatherRadioQueue.value = queue
+                // 延迟初始化（可能在无后端连接时通过 fetchWeather() 创建）
+                val mgr = weatherRadioManager ?: run {
+                    val adapter = backendRegistry.getAdapter()
+                    WeatherRadioManager(adapter, nasMusicApp.networkMusicManager).also { weatherRadioManager = it }
                 }
+                val queue = mgr.buildRadioWithMood(mood, _weatherData.value)
+                _weatherRadioQueue.value = queue
             } catch (e: Exception) {
                 AppLog.e("MainViewModel", "switchWeatherMood failed", e)
                 _weatherError.value = "切换心情失败: ${e.message?.take(50)}"
@@ -1702,6 +1712,13 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         } else {
             prefs.setMetingApiBaseUrl(normalized)
         }
+    }
+
+    /**
+     * 更新 OpenWeatherMap API Key
+     */
+    fun updateWeatherApiKey(key: String) = viewModelScope.launch {
+        prefs.setWeatherApiKey(key.trim())
     }
 
     // --- E-4 缓存管理 ---

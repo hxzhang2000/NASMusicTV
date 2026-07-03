@@ -15,11 +15,13 @@ import java.util.concurrent.TimeUnit
 /**
  * 天气 API 封装
  *
- * 数据来源：
- * - Open-Meteo（免费公开天气 API，无需 API Key）
- * - ip-api.com（免费 IP 定位，无需 API Key）
+ * 数据来源（自动 fallback）：
+ * 1. Open-Meteo（免费公开天气 API，无需 API Key）
+ * 2. OpenWeatherMap（需 API Key，国内网络更稳定，免费注册：https://openweathermap.org/api）
+ * 3. ip-api.com（免费 IP 定位，无需 API Key）
  *
  * Open-Meteo API 文档：https://open-meteo.com/
+ * OpenWeatherMap 文档：https://openweathermap.org/current
  * ip-api.com 文档：https://ip-api.com/docs
  */
 class WeatherApi {
@@ -33,8 +35,10 @@ class WeatherApi {
 
     companion object {
         private const val TAG = "WeatherApi"
-        // Open-Meteo API 端点
+        // Open-Meteo API 端点（免费，无需 Key）
         private const val OPEN_METEO_BASE = "https://api.open-meteo.com/v1/forecast"
+        // OpenWeatherMap API 端点（需 API Key，作 Open-Meteo 不可用时的备选）
+        private const val OPEN_WEATHER_MAP_BASE = "https://api.openweathermap.org/data/2.5/weather"
         // IP 定位端点（免费版，不支持 HTTPS）
         private const val IP_API_BASE = "http://ip-api.com/json/"
     }
@@ -71,11 +75,17 @@ class WeatherApi {
     /**
      * 根据经纬度获取当前天气
      *
+     * 尝试顺序：
+     * 1. Open-Meteo（免费，无需 Key，国际网络环境可用）
+     * 2. OpenWeatherMap（需要 API key，提供者传参）
+     *
      * @param lat 纬度
      * @param lon 经度
+     * @param openWeatherMapApiKey 可选 OpenWeatherMap API Key
      */
-    suspend fun getWeather(lat: Double, lon: Double): WeatherData? = withContext(Dispatchers.IO) {
-        try {
+    suspend fun getWeather(lat: Double, lon: Double, openWeatherMapApiKey: String? = null): WeatherData? = withContext(Dispatchers.IO) {
+        // 1. 先试 Open-Meteo
+        val openMeteo = try {
             val url = buildString {
                 append("$OPEN_METEO_BASE?latitude=$lat&longitude=$lon")
                 append("&current=temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m,is_day")
@@ -88,7 +98,6 @@ class WeatherApi {
             val response = client.newCall(request).execute()
             val body = response.body?.string() ?: return@withContext null
             val json = gson.fromJson(body, JsonObject::class.java)
-
             val current = json.getAsJsonObject("current") ?: return@withContext null
 
             WeatherData(
@@ -100,24 +109,94 @@ class WeatherApi {
                 description = describeWeatherCode(current.get("weather_code")?.asInt ?: 0)
             )
         } catch (e: Exception) {
-            AppLog.e(TAG, "getWeather failed: ${e.message}", e)
+            AppLog.w(TAG, "Open-Meteo failed: ${e.message}")
+            null
+        }
+        if (openMeteo != null) return@withContext openMeteo
+
+        // 2. Open-Meteo 不可用，尝试 OpenWeatherMap（需要 API Key）
+        if (openWeatherMapApiKey.isNullOrBlank()) {
+            AppLog.w(TAG, "Open-Meteo failed and no OpenWeatherMap API key configured")
+            return@withContext null
+        }
+        return@withContext getWeatherOpenWeatherMap(lat, lon, openWeatherMapApiKey)
+    }
+
+    /**
+     * 通过 OpenWeatherMap API 获取天气
+     * 当 Open-Meteo 不可用时的备选方案
+     */
+    private suspend fun getWeatherOpenWeatherMap(lat: Double, lon: Double, apiKey: String): WeatherData? = withContext(Dispatchers.IO) {
+        try {
+            val url = "$OPEN_WEATHER_MAP_BASE?lat=$lat&lon=$lon&appid=$apiKey&units=metric&lang=zh_cn"
+            val request = Request.Builder()
+                .url(url)
+                .header("User-Agent", "NASMusicTV/2.6")
+                .build()
+            val response = client.newCall(request).execute()
+            val body = response.body?.string() ?: return@withContext null
+            val json = gson.fromJson(body, JsonObject::class.java)
+
+            // OpenWeatherMap 响应格式
+            val main = json.getAsJsonObject("main") ?: return@withContext null
+            val wind = json.getAsJsonObject("wind")
+            val weatherArr = json.getAsJsonArray("weather")
+            val weatherObj = weatherArr?.firstOrNull()?.asJsonObject
+            val sys = json.getAsJsonObject("sys")
+
+            WeatherData(
+                temperature = main.get("temp")?.asDouble ?: 0.0,
+                humidity = main.get("humidity")?.asDouble ?: 0.0,
+                windSpeed = wind?.get("speed")?.asDouble ?: 0.0,
+                weatherCode = mapOpenWeatherMapCode(weatherObj?.get("id")?.asInt ?: 0),
+                isDay = json.getAsJsonObject("sys")?.get("sunset")?.asLong?.let { sunsetMs ->
+                    val now = System.currentTimeMillis() / 1000
+                    now < sunsetMs
+                } ?: true,
+                description = weatherObj?.get("description")?.asString ?: "未知"
+            )
+        } catch (e: Exception) {
+            AppLog.e(TAG, "OpenWeatherMap failed: ${e.message}", e)
             null
         }
     }
 
     /**
+     * OpenWeatherMap weather condition code → WMO weather code 映射
+     * OpenWeatherMap codes: https://openweathermap.org/weather-conditions
+     */
+    private fun mapOpenWeatherMapCode(owmCode: Int): Int = when (owmCode) {
+        in 200..232 -> 95  // 雷暴
+        in 300..321 -> 50  // 毛毛雨
+        in 500..531 -> 60  // 雨
+        in 600..622 -> 70  // 雪
+        in 701..781 -> 20  // 雾/霾
+        800 -> 0           // 晴天
+        801 -> 1           // 少云
+        802 -> 2           // 多云
+        803, 804 -> 3      // 阴天
+        else -> 0
+    }
+
+    /**
      * 一键获取当前位置天气
      *
+     * 依次尝试：
+     * 1. ip-api.com IP 定位（失败则回退到北京）
+     * 2. Open-Meteo 获取天气（国际网络）
+     * 3. OpenWeatherMap 获取天气（需 API Key，国内网络备选）
+     *
      * @param manualCity 可选的手动城市名（JSON 写入 cityName，但坐标仍用经纬度）
+     * @param openWeatherMapApiKey 可选 OpenWeatherMap API Key，用于 Open-Meteo 不可用时的备选
      */
-    suspend fun fetchCurrentWeather(manualCity: String? = null): WeatherData? {
+    suspend fun fetchCurrentWeather(manualCity: String? = null, openWeatherMapApiKey: String? = null): WeatherData? {
         var location = getIpLocation()
         if (!location.success) {
             AppLog.w(TAG, "IP location failed, falling back to Beijing (39.9042, 116.4074)")
             location = IpLocation(city = "北京", lat = 39.9042, lon = 116.4074, success = true)
         }
 
-        val weather = getWeather(location.lat, location.lon) ?: return null
+        val weather = getWeather(location.lat, location.lon, openWeatherMapApiKey) ?: return null
         return weather.copy(
             cityName = manualCity ?: location.city
         )

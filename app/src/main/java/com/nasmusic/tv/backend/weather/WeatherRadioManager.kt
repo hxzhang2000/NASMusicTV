@@ -19,7 +19,8 @@ import kotlinx.coroutines.coroutineScope
  * 2. 网络歌曲（通过 NetworkMusicManager 搜索 mood 关键词）
  */
 class WeatherRadioManager(
-    private val backendAdapter: BackendAdapter,
+    /** NAS 后端适配器（可能为 null — 未连接时从网络端匹配歌曲） */
+    private val backendAdapter: BackendAdapter?,
     private val networkMusicManager: NetworkMusicManager
 ) {
     companion object {
@@ -146,8 +147,10 @@ class WeatherRadioManager(
      * TODO: 如果 BackendAdapter 未来支持 search() 方法，替换为正式搜索
      */
     private suspend fun searchNasSongs(queries: List<String>, maxCount: Int): List<Song> {
+        // 无后端连接时跳过 NAS 搜索
+        val adapter = backendAdapter ?: return emptyList()
         // 获取全部歌曲（带缓存）
-        val allSongs = backendAdapter.getSongs()?.toList() ?: return emptyList()
+        val allSongs = adapter.getSongs()?.toList() ?: return emptyList()
         if (allSongs.isEmpty()) return emptyList()
 
         val matched = mutableSetOf<Song>()
