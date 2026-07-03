@@ -66,6 +66,7 @@
     <string name="settings_weather_api_key">OpenWeatherMap API Key</string>
     <string name="settings_weather_api_key_desc">当 Open-Meteo 不可用时自动切换到此 API（免费注册：openweathermap.org）</string>
     <string name="settings_weather_api_key_hint">请输入 API Key（留空=关闭）</string>
+    <string name="settings_weather_api_key_edit">编辑</string>
     <string name="network_charts_coming_soon">榜单功能即将上线</string>
     <string name="network_charts_refresh">换一批</string>
     <string name="network_charts_count">共 %d 个榜单</string>

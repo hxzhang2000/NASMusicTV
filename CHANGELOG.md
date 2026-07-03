@@ -7,6 +7,19 @@
 >
 > 类型：`Added`（新增） | `Changed`（变更） | `Fixed`（修复） | `Removed`（移除）
 
+## [v2.6.2] - 2026-07-03
+
+### Fixed
+
+- **天气 API Key 编辑按钮文案错误**：SettingsScreen 中天气 API Key 编辑按钮从 `settings_meting_api_url_edit`（"修改端点"）改为新建的 `settings_weather_api_key_edit`（"编辑"），语义正确
+- **天气 API Key 输入未掩码**：TextInputDialog 添加 `masked = true`，输入时显示 `*` 遮掩，防止泄露 API Key
+- **`isDay` 白天检测逻辑错误**：仅检查 `now < sunset`，导致日出前（凌晨 3:00–6:00）被错误标记为白天。改为 `now in sunrise..sunset` 同时检查日出和日落时间
+- **`getWeatherOpenWeatherMap` 冗余 `withContext(Dispatchers.IO)`**：函数已被 `getWeather()` 的 `withContext(Dispatchers.IO)` 包裹，外层再次切换调度器无意义，已移除
+- **`getWeatherApiKeySync()` 空 catch 隐藏异常**：`catch { "" }` 改为 `catch { AppLog.w(TAG, "Failed to read weather API key", e); "" }`，异常可追溯
+- **OpenCodeReview 全量代码审查**：8 个文件通过 OpenCodeReview (OCR) 自动审查，修复 6 项逻辑错误、空异常捕获、冗余代码和安全隐患
+
+---
+
 ## [v2.6.1] - 2026-07-03
 
 ### Fixed

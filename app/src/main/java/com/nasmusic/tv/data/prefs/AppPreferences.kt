@@ -18,6 +18,7 @@ import com.nasmusic.tv.data.model.NetworkSource
 import com.nasmusic.tv.data.model.PlayMode
 import com.nasmusic.tv.data.model.ServerConfig
 import com.nasmusic.tv.data.model.Song
+import com.nasmusic.tv.util.AppLog
 import com.nasmusic.tv.util.CryptoUtils
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
@@ -344,7 +345,10 @@ class AppPreferences(private val context: Context) {
         return runBlocking(Dispatchers.IO) {
             try {
                 context.dataStore.data.first()[keyWeatherApiKey] ?: ""
-            } catch (e: Exception) { "" }
+            } catch (e: Exception) {
+                AppLog.w(TAG, "Failed to read weather API key", e)
+                ""
+            }
         }
     }
 

@@ -86,6 +86,7 @@ adb -s 192.168.0.116:5555 install -r app/build/outputs/apk/debug/app-debug.apk
 
 ## 版本历史
 
+- **v2.6.2** — 修复: 天气 API Key 编辑按钮文案错误（改为"编辑"）、API Key 输入掩码（masked=true）、isDay 白天检测逻辑（新增 sunrise 检查）、getWeatherOpenWeatherMap 冗余 withContext 移除、getWeatherApiKeySync 空 catch 改日志；OpenCodeReview 全量代码审查修复 6 项问题
 - **v2.6.1** — 修复: 天气电台无后端连接时不显示歌曲（`BackendAdapter` 可空化 + 纯网络搜索 fallback）；新增: OpenWeatherMap API Key 设置 UI + `common_not_set` 字符串
 - **v2.6.0** — 新增: 天气电台（OpenWeatherMap 天气获取 + 按心情匹配 NAS/网络歌曲）；改版: 榜单页双列卡片网格（封面轮播 + 换一批）；新增: 歌词字体缩放（0.7x-1.6x）；新增: 封面滤镜（高斯模糊 + 暗色遮罩）
 - **v2.5.1** — 修复: 网络音乐端点 429 限流（默认端点切换 Redcha + 多端点 fallback + 全失败用户提示）；新增: 歌单 Play All、队列开关、双列榜单、搜索/平台同行布局；修复: ProGuard 导致 TV 启动崩溃（Gson 类型擦除 + 空安全增强）

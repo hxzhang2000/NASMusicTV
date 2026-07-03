@@ -96,9 +96,9 @@ class WeatherApi {
                 .header("User-Agent", "NASMusicTV/2.6")
                 .build()
             val response = client.newCall(request).execute()
-            val body = response.body?.string() ?: return@withContext null
+            val body = response.body?.string() ?: return null
             val json = gson.fromJson(body, JsonObject::class.java)
-            val current = json.getAsJsonObject("current") ?: return@withContext null
+            val current = json.getAsJsonObject("current") ?: return null
 
             WeatherData(
                 temperature = current.get("temperature_2m")?.asDouble ?: 0.0,
@@ -117,16 +117,16 @@ class WeatherApi {
         // 2. Open-Meteo 不可用，尝试 OpenWeatherMap（需要 API Key）
         if (openWeatherMapApiKey.isNullOrBlank()) {
             AppLog.w(TAG, "Open-Meteo failed and no OpenWeatherMap API key configured")
-            return@withContext null
+            return null
         }
-        return@withContext getWeatherOpenWeatherMap(lat, lon, openWeatherMapApiKey)
+        return getWeatherOpenWeatherMap(lat, lon, openWeatherMapApiKey)
     }
 
     /**
      * 通过 OpenWeatherMap API 获取天气
      * 当 Open-Meteo 不可用时的备选方案
      */
-    private suspend fun getWeatherOpenWeatherMap(lat: Double, lon: Double, apiKey: String): WeatherData? = withContext(Dispatchers.IO) {
+    private suspend fun getWeatherOpenWeatherMap(lat: Double, lon: Double, apiKey: *** WeatherData? {
         try {
             val url = "$OPEN_WEATHER_MAP_BASE?lat=$lat&lon=$lon&appid=$apiKey&units=metric&lang=zh_cn"
             val request = Request.Builder()
@@ -134,25 +134,31 @@ class WeatherApi {
                 .header("User-Agent", "NASMusicTV/2.6")
                 .build()
             val response = client.newCall(request).execute()
-            val body = response.body?.string() ?: return@withContext null
+            val body = response.body?.string() ?: return null
             val json = gson.fromJson(body, JsonObject::class.java)
 
             // OpenWeatherMap 响应格式
-            val main = json.getAsJsonObject("main") ?: return@withContext null
+            val main = json.getAsJsonObject("main") ?: return null
             val wind = json.getAsJsonObject("wind")
             val weatherArr = json.getAsJsonArray("weather")
             val weatherObj = weatherArr?.firstOrNull()?.asJsonObject
             val sys = json.getAsJsonObject("sys")
+
+            val isDay = sys?.let {
+                val sunrise = it.get("sunrise")?.asLong
+                val sunset = it.get("sunset")?.asLong
+                if (sunrise != null && sunset != null) {
+                    val now = System.currentTimeMillis() / 1000
+                    now in sunrise..sunset
+                } else true
+            } ?: true
 
             WeatherData(
                 temperature = main.get("temp")?.asDouble ?: 0.0,
                 humidity = main.get("humidity")?.asDouble ?: 0.0,
                 windSpeed = wind?.get("speed")?.asDouble ?: 0.0,
                 weatherCode = mapOpenWeatherMapCode(weatherObj?.get("id")?.asInt ?: 0),
-                isDay = json.getAsJsonObject("sys")?.get("sunset")?.asLong?.let { sunsetMs ->
-                    val now = System.currentTimeMillis() / 1000
-                    now < sunsetMs
-                } ?: true,
+                isDay = isDay,
                 description = weatherObj?.get("description")?.asString ?: "未知"
             )
         } catch (e: Exception) {

@@ -579,7 +579,7 @@ fun SettingsScreen(
                                     )
                                 }
                                 Text(
-                                    text = stringResource(R.string.settings_meting_api_url_edit),
+                                    text = stringResource(R.string.settings_weather_api_key_edit),
                                     color = NasMusicColors.Primary,
                                     fontSize = 14.sp
                                 )
@@ -597,6 +597,7 @@ fun SettingsScreen(
             title = stringResource(R.string.settings_weather_api_key),
             hint = stringResource(R.string.settings_weather_api_key_hint),
             initialValue = weatherApiKey,
+            masked = true,
             onConfirm = { input ->
                 onChangeWeatherApiKey(input.trim())
                 showWeatherApiKeyDialog = false
