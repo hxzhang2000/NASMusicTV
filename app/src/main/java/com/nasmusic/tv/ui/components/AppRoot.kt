@@ -38,7 +38,7 @@ import com.nasmusic.tv.ui.screens.ArtistDetailScreen
 import com.nasmusic.tv.ui.screens.EqualizerScreen
 import com.nasmusic.tv.ui.screens.LibraryScreen
 import com.nasmusic.tv.ui.screens.NetworkPlaylistDetailScreen
-import com.nasmusic.tv.ui.screens.NetworkScreen
+import com.nasmusic.tv.ui.screens.network.NetworkMusicContainer
 import com.nasmusic.tv.ui.screens.NowPlayingScreen
 import com.nasmusic.tv.ui.screens.PlaylistManagementScreen
 import com.nasmusic.tv.ui.screens.QueueScreen
@@ -77,6 +77,10 @@ fun AppRoot(
     val serverDisplayName by viewModel.serverDisplayName.collectAsState(initial = "")
     val serverConfig by viewModel.serverConfig.collectAsState(initial = ServerConfig.Empty)
     val settings by viewModel.appSettings.collectAsState(initial = com.nasmusic.tv.data.model.AppSettings())
+    // 封面滤镜状态（跨屏幕共享，用于 NowPlaying + Settings）
+    val coverFilterEnabled by viewModel.prefs.coverFilterEnabled.collectAsState(initial = false)
+    val coverFilterBlurRadius by viewModel.prefs.coverFilterBlurRadius.collectAsState(initial = 8f)
+    val coverFilterDarkOverlay by viewModel.prefs.coverFilterDarkOverlay.collectAsState(initial = 0.3f)
     // Level 2: 根据当前屏幕和沉浸模式动态设置导航 BACK 键处理函数
     val navBackHandler = LocalNavigateBackHandler.current
     LaunchedEffect(currentScreen, isImmersiveMode.value) {
@@ -160,6 +164,7 @@ fun AppRoot(
                     val coverCandidates = remember(currentSong?.id, networkCoverUrl) {
                         currentSong?.let { viewModel.getCoverCandidates(it) } ?: emptyList()
                     }
+                    val lyricsFontScale by viewModel.prefs.lyricsFontScale.collectAsState(initial = 1.0f)
                     NowPlayingScreen(
                         currentSong = currentSong,
                         isPlaying = isPlaying,
@@ -170,6 +175,11 @@ fun AppRoot(
                         lyricsAvailability = lyricsAvailability,
                         coverCandidates = coverCandidates,
                         highlightMode = lyricsHighlightMode,
+                        lyricsFontScale = lyricsFontScale,
+                        onLyricsFontScaleChange = { viewModel.updateLyricsFontScale(it) },
+                        coverFilterEnabled = coverFilterEnabled,
+                        coverFilterBlurRadius = coverFilterBlurRadius,
+                        coverFilterDarkOverlay = coverFilterDarkOverlay,
                         // 网络歌曲用网络收藏判断，本地歌曲用本地收藏判断
                         isFavorite = currentSong?.let { song ->
                             if (song.isNetworkSong) viewModel.isNetworkFavorite(song.id)
@@ -316,7 +326,14 @@ fun AppRoot(
                         onClearLyricsCache = { viewModel.clearLyricsCache() },
                         onClearCoverCache = { viewModel.clearCoverCache() },
                         onOpenEqualizer = { viewModel.navigateTo(Screen.Equalizer) },
-                        onChangeMetingApiBaseUrl = { viewModel.updateMetingApiBaseUrl(it) }
+                        onChangeMetingApiBaseUrl = { viewModel.updateMetingApiBaseUrl(it) },
+                    // 封面滤镜设置
+                    coverFilterEnabled = coverFilterEnabled,
+                    coverFilterBlurRadius = coverFilterBlurRadius,
+                    coverFilterDarkOverlay = coverFilterDarkOverlay,
+                    onToggleCoverFilter = { viewModel.updateCoverFilterEnabled(it) },
+                    onChangeCoverBlurRadius = { viewModel.updateCoverFilterBlurRadius(it) },
+                    onChangeCoverDarkOverlay = { viewModel.updateCoverFilterDarkOverlay(it) }
                     )
                 }
                 Screen.AlbumDetail -> {
@@ -411,22 +428,34 @@ fun AppRoot(
                     val networkFavoriteSongs by viewModel.networkFavoriteSongs.collectAsState(initial = emptyList())
                     val networkFavoriteIds by viewModel.networkFavoriteIds.collectAsState(initial = emptySet())
                     val networkPlaylists by viewModel.networkPlaylists.collectAsState(initial = emptyList())
-                    val playlistSongs by viewModel.playlistSongs.collectAsState(initial = emptyList())
-                    val searchNetworkPlatform by viewModel.searchNetworkPlatform.collectAsState(initial = "netease")
                     val queueSongIds by viewModel.queueSongIds.collectAsState(initial = emptySet())
+                    val currentNetworkSubTab by viewModel.currentNetworkSubTab.collectAsState(initial = com.nasmusic.tv.data.model.NetworkSubTab.DISCOVER)
+                    val currentMusicSource by viewModel.currentMusicSource.collectAsState(initial = com.nasmusic.tv.data.model.MusicSource.NETEASE)
+                    val recentNetworkSongs by viewModel.recentNetworkSongs.collectAsState(initial = emptyList())
+                    val currentNetworkSong by viewModel.currentNetworkSong.collectAsState(initial = null)
                     val isNetworkSearching = networkSearchResultsState is UiState.Loading
-                    NetworkScreen(
-                        networkSearchResults = networkSearchResultsState.dataOrNull() ?: emptyList(),
-                        networkSearchKeyword = networkSearchKeyword,
+                    // 天气状态
+                    val weatherData by viewModel.weatherData.collectAsState(initial = null)
+                    val weatherRadioQueue by viewModel.weatherRadioQueue.collectAsState(initial = null)
+                    val currentWeatherMood by viewModel.currentWeatherMood.collectAsState(initial = com.nasmusic.tv.data.model.WeatherMood.SUNNY)
+                    val weatherLoading by viewModel.weatherLoading.collectAsState(initial = false)
+                    val weatherError by viewModel.weatherError.collectAsState(initial = null)
+                    NetworkMusicContainer(
+                        currentSubTab = currentNetworkSubTab,
+                        currentMusicSource = currentMusicSource,
+                        searchKeyword = networkSearchKeyword,
+                        searchResults = networkSearchResultsState.dataOrNull() ?: emptyList(),
+                        isSearching = isNetworkSearching,
+                        networkPlaylists = networkPlaylists,
                         networkFavoriteSongs = networkFavoriteSongs,
                         networkFavoriteIds = networkFavoriteIds,
-                        networkPlaylists = networkPlaylists,
-                        playlistSongs = playlistSongs,
-                        searchNetworkPlatform = searchNetworkPlatform,
-                        isNetworkSearching = isNetworkSearching,
                         queueSongIds = queueSongIds,
-                        onSearchNetwork = { query -> viewModel.searchNetworkSongs(query) },
-                        onClearNetworkSearch = { viewModel.clearNetworkSearch() },
+                        recentNetworkSongs = recentNetworkSongs,
+                        currentNetworkSong = currentNetworkSong,
+                        onSelectSubTab = { viewModel.selectNetworkSubTab(it) },
+                        onSelectMusicSource = { viewModel.selectMusicSource(it) },
+                        onSearch = { query -> viewModel.searchNetworkSongs(query) },
+                        onClearSearch = { viewModel.clearNetworkSearch() },
                         onPlayNetworkSong = { song ->
                             viewModel.playNetworkSong(song)
                             viewModel.navigateTo(Screen.NowPlaying)
@@ -439,10 +468,22 @@ fun AppRoot(
                         },
                         onLoadPlaylistDetail = { (playlist, songs) -> viewModel.loadPlaylistDetail(playlist.id, playlist.name) },
                         onNavigateToPlaylistDetail = { viewModel.navigateTo(Screen.NetworkPlaylistDetail) },
-                        onSearchNetworkPlatform = { platform ->
-                            viewModel.setSearchNetworkPlatform(platform)
-                            if (networkSearchKeyword.isNotBlank()) {
-                                viewModel.searchNetworkSongs(networkSearchKeyword)
+                        weatherData = weatherData,
+                        weatherRadioQueue = weatherRadioQueue,
+                        currentWeatherMood = currentWeatherMood,
+                        weatherLoading = weatherLoading,
+                        weatherError = weatherError,
+                        onSwitchWeatherMood = { mood -> viewModel.switchWeatherMood(mood) },
+                        onRefreshWeather = { viewModel.fetchWeather() },
+                        onPlayWeatherAll = { viewModel.playWeatherRadioAll() },
+                        onRefreshCharts = { viewModel.refreshCharts() },
+                        onNavigateToScreen = { action ->
+                            when (action) {
+                                "favorites" -> {
+                                    viewModel.selectNetworkSubTab(com.nasmusic.tv.data.model.NetworkSubTab.DISCOVER)
+                                }
+                                "queue" -> viewModel.navigateTo(Screen.Queue)
+                                "radio" -> viewModel.playPrivateRadio()
                             }
                         }
                     )

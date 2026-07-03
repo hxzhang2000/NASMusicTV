@@ -175,7 +175,7 @@ class NetworkMusicManager(
     /**
      * 获取播放列表歌曲列表。
      *
-     * 按默���源路由，不 fallback — 播放列表 ID 是来源特定的（如网易云歌单）。
+     * 按默认源路由，不 fallback — 播放列表 ID 是来源特定的（如网易云歌单）。
      */
     suspend fun getPlaylist(playlistId: String): List<Song> {
         val svc = services[defaultSource] ?: run {

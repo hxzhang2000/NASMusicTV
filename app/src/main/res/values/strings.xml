@@ -48,8 +48,29 @@
     <string name="network_platform_netease">网易云</string>
     <string name="network_platform_qq">QQ音乐</string>
     <string name="network_platform_kugou">酷狗</string>
+    <string name="network_platform_kuwo">酷我</string>
+    <string name="network_platform_migu">咪咕</string>
     <string name="network_search_hint">输入歌曲名或歌手名搜索网络音乐</string>
     <string name="network_no_results">未找到相关网络音乐</string>
+    <string name="network_tab_discover">发现</string>
+    <string name="network_tab_weather">天气</string>
+    <string name="network_tab_charts">榜单</string>
+    <string name="network_tab_search">搜索</string>
+    <string name="network_weather_coming_soon">天气电台功能即将上线</string>
+    <string name="network_weather_current">当前天气</string>
+    <string name="network_weather_refresh">刷新</string>
+    <string name="network_weather_switch_mood">切换心情</string>
+    <string name="network_weather_current_mood">当前心情</string>
+    <string name="network_weather_fetch_failed">无法获取天气信息</string>
+    <string name="network_charts_coming_soon">榜单功能即将上线</string>
+    <string name="network_charts_refresh">换一批</string>
+    <string name="network_charts_count">共 %d 个榜单</string>
+    <string name="network_discover_weather_entry">天气电台</string>
+    <string name="network_discover_weather_desc">根据当前天气匹配适合的音乐，听歌更有氛围</string>
+    <string name="network_discover_feature_playlist">推荐歌单</string>
+    <string name="network_discover_feature_favorites">我的收藏</string>
+    <string name="network_discover_feature_radio">私人电台</string>
+    <string name="network_discover_feature_queue">播放队列</string>
 
     <!-- Player -->
     <string name="player_play">播放</string>
@@ -151,6 +172,11 @@
     <string name="settings_app_name">应用名称</string>
     <string name="settings_build_type">构建类型</string>
     <string name="settings_supported_backends">支持后端</string>
+    <string name="settings_cover">封面</string>
+    <string name="settings_cover_filter">封面滤镜</string>
+    <string name="settings_cover_filter_desc">对当前播放封面应用模糊和暗色遮罩效果</string>
+    <string name="settings_cover_blur_radius">模糊强度: %dpx</string>
+    <string name="settings_cover_dark_overlay">暗色遮罩: %d%%</string>
 
     <!-- Equalizer -->
     <string name="equalizer_title">均衡器</string>

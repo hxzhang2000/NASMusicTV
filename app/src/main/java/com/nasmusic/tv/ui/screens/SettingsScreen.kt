@@ -60,6 +60,7 @@ private enum class SettingsSection(val titleRes: Int) {
     LYRICS(R.string.settings_lyrics),
     CACHE(R.string.settings_cache),
     NETWORK(R.string.settings_network),
+    COVER(R.string.settings_cover),
     ABOUT(R.string.settings_about)
 }
 
@@ -78,6 +79,13 @@ fun SettingsScreen(
     onClearCoverCache: (() -> Unit)? = null,
     onOpenEqualizer: (() -> Unit)? = null,
     onChangeMetingApiBaseUrl: ((String) -> Unit)? = null,
+    // 封面滤镜设置
+    coverFilterEnabled: Boolean = false,
+    coverFilterBlurRadius: Float = 8f,
+    coverFilterDarkOverlay: Float = 0.3f,
+    onToggleCoverFilter: (Boolean) -> Unit = {},
+    onChangeCoverBlurRadius: (Float) -> Unit = {},
+    onChangeCoverDarkOverlay: (Float) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     var activeSection by remember { mutableStateOf(SettingsSection.GENERAL) }
@@ -150,6 +158,7 @@ fun SettingsScreen(
                             SettingsSection.LYRICS -> Icons.AutoMirrored.Filled.QueueMusic
                             SettingsSection.CACHE -> Icons.Default.Settings
                             SettingsSection.NETWORK -> Icons.Default.Settings
+                            SettingsSection.COVER -> Icons.Default.Audiotrack
                             SettingsSection.ABOUT -> Icons.Default.Info
                         }
                         Icon(imageVector = icon, contentDescription = null, tint = if (selected) NasMusicColors.Primary else NasMusicColors.TextSecondary, modifier = Modifier.size(18.dp))
@@ -222,6 +231,74 @@ fun SettingsScreen(
                         fontSize = 13.sp,
                         modifier = Modifier.padding(start = 4.dp, top = 8.dp)
                     )
+                }
+                SettingsSection.COVER -> {
+                    SectionTitle(stringResource(R.string.settings_cover))
+                    SettingSwitch(
+                        label = stringResource(R.string.settings_cover_filter),
+                        description = stringResource(R.string.settings_cover_filter_desc),
+                        checked = coverFilterEnabled,
+                        onClick = { onToggleCoverFilter(!coverFilterEnabled) }
+                    )
+                    if (coverFilterEnabled) {
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Text(
+                            text = stringResource(R.string.settings_cover_blur_radius, coverFilterBlurRadius.toInt()),
+                            color = NasMusicColors.TextPrimary,
+                            fontSize = 16.sp,
+                            modifier = Modifier.padding(start = 4.dp)
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        // Blur radius buttons
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            AdjustButton("-", onClick = {
+                                val new = (coverFilterBlurRadius - 2f).coerceAtLeast(0f)
+                                onChangeCoverBlurRadius(new)
+                            })
+                            Text(
+                                text = "%.0fpx".format(coverFilterBlurRadius),
+                                color = NasMusicColors.Primary,
+                                fontSize = 22.sp,
+                                modifier = Modifier.width(64.dp).padding(horizontal = 8.dp)
+                            )
+                            AdjustButton("+", onClick = {
+                                val new = (coverFilterBlurRadius + 2f).coerceAtMost(40f)
+                                onChangeCoverBlurRadius(new)
+                            })
+                        }
+                        Spacer(modifier = Modifier.height(20.dp))
+                        Text(
+                            text = stringResource(R.string.settings_cover_dark_overlay, (coverFilterDarkOverlay * 100).toInt()),
+                            color = NasMusicColors.TextPrimary,
+                            fontSize = 16.sp,
+                            modifier = Modifier.padding(start = 4.dp)
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            AdjustButton("-", onClick = {
+                                val new = (coverFilterDarkOverlay - 0.1f).coerceAtLeast(0f)
+                                onChangeCoverDarkOverlay(new)
+                            })
+                            Text(
+                                text = "${(coverFilterDarkOverlay * 100).toInt()}%",
+                                color = NasMusicColors.Primary,
+                                fontSize = 22.sp,
+                                modifier = Modifier.width(64.dp).padding(horizontal = 8.dp)
+                            )
+                            AdjustButton("+", onClick = {
+                                val new = (coverFilterDarkOverlay + 0.1f).coerceAtMost(1f)
+                                onChangeCoverDarkOverlay(new)
+                            })
+                        }
+                    }
                 }
                 SettingsSection.NETWORK -> {
                     SectionTitle(stringResource(R.string.settings_network))
@@ -614,5 +691,27 @@ private fun AboutRow(label: String, value: String) {
         Text(text = label, color = NasMusicColors.TextSecondary, fontSize = 14.sp, modifier = Modifier.padding(end = 16.dp))
         Spacer(modifier = Modifier.weight(1f))
         Text(text = value, color = NasMusicColors.TextPrimary, fontSize = 14.sp)
+    }
+}
+
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+private fun AdjustButton(text: String, onClick: () -> Unit) {
+    FocusableSurface(
+        onClick = onClick,
+        modifier = Modifier.size(48.dp),
+        shape = RoundedCornerShape(12.dp),
+        focusedScale = 1.1f,
+        animationDurationMs = 200,
+        containerColor = NasMusicColors.Surface,
+        contentColor = NasMusicColors.TextPrimary,
+        focusedContainerColor = NasMusicColors.Primary.copy(alpha = 0.2f),
+        focusedContentColor = NasMusicColors.Primary,
+        pressedScale = 0.95f,
+        focusBorderColor = NasMusicColors.FocusRing.copy(alpha = 0.6f)
+    ) {
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Text(text = text, fontSize = 24.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
+        }
     }
 }

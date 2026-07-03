@@ -78,7 +78,8 @@ fun LyricsView(
     currentTimeMs: Long,
     modifier: Modifier = Modifier,
     highlightMode: LyricsHighlightMode = LyricsHighlightMode.LINE_BY_LINE,
-    isPlaying: Boolean = true
+    isPlaying: Boolean = true,
+    fontSizeMultiplier: Float = 1.0f
 ) {
     if (lyrics == null || lyrics.isEmpty) {
         Box(
@@ -200,9 +201,9 @@ fun LyricsView(
                     else -> NasMusicColors.TextSecondary
                 }
                 val fontSize = when {
-                    isCurrent -> 40.sp
-                    near -> 28.sp
-                    else -> 22.sp
+                    isCurrent -> 40.sp * fontSizeMultiplier
+                    near -> 28.sp * fontSizeMultiplier
+                    else -> 22.sp * fontSizeMultiplier
                 }
 
                 // B-3: Karaoke word-by-word highlighting for current line

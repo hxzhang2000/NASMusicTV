@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.datastore.preferences.core.doublePreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
@@ -61,6 +62,19 @@ class AppPreferences(private val context: Context) {
 
     // --- 上次播放队列（序列化为 JSON，streamUrl 置空不持久化）---
     private val keyLastQueue = stringPreferencesKey("last_queue")
+
+    // --- 天气电台设置 ---
+    private val keyWeatherEnabled = booleanPreferencesKey("weather_enabled")
+    private val keyWeatherManualCity = stringPreferencesKey("weather_manual_city")
+    private val keyWeatherAutoRefresh = booleanPreferencesKey("weather_auto_refresh")
+
+    // --- 封面滤镜设置（Phase 5） ---
+    private val keyCoverFilterEnabled = booleanPreferencesKey("cover_filter_enabled")
+    private val keyCoverFilterBlurRadius = doublePreferencesKey("cover_filter_blur_radius")
+    private val keyCoverFilterDarkOverlay = doublePreferencesKey("cover_filter_dark_overlay")
+
+    // --- 网络音乐平台来源 ---
+    private val keyMusicSource = stringPreferencesKey("music_source")
 
     // --- B-4 均衡器 ---
     private val keyEqualizerPreset = intPreferencesKey("equalizer_preset")
@@ -243,6 +257,17 @@ class AppPreferences(private val context: Context) {
 
     suspend fun setLyricsOffset(offsetMs: Long) = context.dataStore.edit { it[keyLyricsOffset] = offsetMs }
 
+    // --- 歌词显示设置 ---
+    private val keyLyricsFontScale = doublePreferencesKey("lyrics_font_scale")
+
+    val lyricsFontScale: Flow<Float> = context.dataStore.data.map { prefs ->
+        (prefs[keyLyricsFontScale] ?: 1.0).toFloat()
+    }
+
+    suspend fun setLyricsFontScale(scale: Float) {
+        context.dataStore.edit { it[keyLyricsFontScale] = scale.coerceIn(0.7f, 1.6f).toDouble() }
+    }
+
     suspend fun setDefaultNetworkSource(source: NetworkSource) =
         context.dataStore.edit { it[keyDefaultNetworkSource] = source.key }
 
@@ -250,6 +275,87 @@ class AppPreferences(private val context: Context) {
         context.dataStore.edit {
             it[keyMetingApiBaseUrl] = url.trim().trim('`', '\'', '"').trim()
         }
+
+    // --- 网络音乐平台来源 ---
+
+    /**
+     * 同步获取当前音乐平台来源（用于 MetingApiService 的 serverProvider）
+     * 在每次请求时同步读取，支持运行时切换平台
+     */
+    fun getMusicSourceSync(): String {
+        return runBlocking(Dispatchers.IO) {
+            try {
+                context.dataStore.data.first()[keyMusicSource] ?: com.nasmusic.tv.data.model.MusicSource.DEFAULT_API_KEY
+            } catch (e: Exception) {
+                com.nasmusic.tv.data.model.MusicSource.DEFAULT_API_KEY
+            }
+        }
+    }
+
+    suspend fun setMusicSource(sourceKey: String) {
+        context.dataStore.edit { it[keyMusicSource] = sourceKey }
+    }
+
+    // --- 天气电台设置 ---
+
+    /**
+     * 获取天气是否启用
+     */
+    val weatherEnabled: Flow<Boolean> = context.dataStore.data.map { prefs ->
+        prefs[keyWeatherEnabled] ?: true
+    }
+
+    suspend fun setWeatherEnabled(enabled: Boolean) {
+        context.dataStore.edit { it[keyWeatherEnabled] = enabled }
+    }
+
+    /**
+     * 获取手动设置的城市名（空串=自动定位）
+     */
+    val weatherManualCity: Flow<String> = context.dataStore.data.map { prefs ->
+        prefs[keyWeatherManualCity] ?: ""
+    }
+
+    suspend fun setWeatherManualCity(city: String) {
+        context.dataStore.edit { it[keyWeatherManualCity] = city }
+    }
+
+    /**
+     * 获取天气自动刷新开关
+     */
+    val weatherAutoRefresh: Flow<Boolean> = context.dataStore.data.map { prefs ->
+        prefs[keyWeatherAutoRefresh] ?: true
+    }
+
+    suspend fun setWeatherAutoRefresh(enabled: Boolean) {
+        context.dataStore.edit { it[keyWeatherAutoRefresh] = enabled }
+    }
+
+    // --- 封面滤镜设置 ---
+
+    val coverFilterEnabled: Flow<Boolean> = context.dataStore.data.map { prefs ->
+        prefs[keyCoverFilterEnabled] ?: false
+    }
+
+    suspend fun setCoverFilterEnabled(enabled: Boolean) {
+        context.dataStore.edit { it[keyCoverFilterEnabled] = enabled }
+    }
+
+    val coverFilterBlurRadius: Flow<Float> = context.dataStore.data.map { prefs ->
+        (prefs[keyCoverFilterBlurRadius] ?: 8.0).toFloat()
+    }
+
+    suspend fun setCoverFilterBlurRadius(radius: Float) {
+        context.dataStore.edit { it[keyCoverFilterBlurRadius] = radius.toDouble() }
+    }
+
+    val coverFilterDarkOverlay: Flow<Float> = context.dataStore.data.map { prefs ->
+        (prefs[keyCoverFilterDarkOverlay] ?: 0.3).toFloat()
+    }
+
+    suspend fun setCoverFilterDarkOverlay(overlay: Float) {
+        context.dataStore.edit { it[keyCoverFilterDarkOverlay] = overlay.toDouble() }
+    }
 
     /**
      * 同步获取当前默认网络源（用于 NetworkMusicManager 的 defaultSourceProvider）

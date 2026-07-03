@@ -7,6 +7,31 @@
 >
 > 类型：`Added`（新增） | `Changed`（变更） | `Fixed`（修复） | `Removed`（移除）
 
+## [v2.6.0] - 2026-07-03
+
+### Added
+
+- **天气电台 (Weather Radio)**：新增 OpenWeatherMap 天气获取（经纬度→城市→实时天气+5日预报），按天气心情 SUNNY/RAINY/SNOWY/WINDY/CLOUDY/NIGHT 自动匹配 NAS 曲库和网络歌曲，生成混排电台队列。新增 `WeatherApi.kt`/`WeatherRadioManager.kt`/`WeatherSubTab.kt` 及 `WeatherData`/`WeatherMood`/`WeatherRadioQueue` 数据模型。网络音乐 Tab 增加"天气"子 Tab 和发现页天气入口
+- **榜单改版**：从简单列表改为双列卡片网格（140dp×140dp），每张卡片显示封面轮播 + 榜单名称，新增"换一批"按钮随机刷新，预置歌单扩展至 20+ 个
+- **歌词字体缩放**：播放页歌词区域新增字号 +/- 按钮，范围 0.7x–1.6x，设置持久化
+- **封面滤镜设置**：设置页新增 COVER 分区，支持封面高斯模糊强度调节（0–25dp）和暗色遮罩透明度调节（0–100%），实时应用到播放页封面
+
+### Changed
+
+- `AppPreferences.kt`：`floatPreferencesKey` 改为 `doublePreferencesKey`（标准 DataStore 无 float key），涉及封面滤镜模糊/遮罩参数和 lyricsFontScale
+- 封面滤镜状态提升至 AppRoot 级别，跨 NowPlaying/Settings 页面共享
+
+### Fixed
+
+- `MainViewModel.prefs` 从 `private` 改为 `val` 公开访问，允许 AppRoot 直接读写偏好设置
+- `WeatherRadioManager.songId` → `song.id`（Song 数据类无 songId 字段）
+- `WeatherSubTab` 移除 `FocusableSurface` 不支持的 `enabled` 参数
+- `android.R.string.refresh` 改为直接硬编码"刷新"（TV SDK 无此资源）
+- `MainViewModel` 移除重复的 Screen/SongsPagingState import 和 TAG 引用
+- 版本号升级至 v2.6.0，`versionCode` 递增至 14
+
+---
+
 ## [v2.5.1] - 2026-07-01
 
 ### Fixed

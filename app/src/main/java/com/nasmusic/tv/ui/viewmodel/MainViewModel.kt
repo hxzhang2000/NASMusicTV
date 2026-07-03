@@ -20,10 +20,17 @@ import com.nasmusic.tv.data.model.ServerConfig
 import com.nasmusic.tv.data.model.Genre
 import com.nasmusic.tv.data.model.Playlist
 import com.nasmusic.tv.data.model.EqualizerPreset
+import com.nasmusic.tv.data.model.MusicSource
+import com.nasmusic.tv.data.model.NetworkSubTab
 import com.nasmusic.tv.data.model.Screen
 import com.nasmusic.tv.data.model.SongsPagingState
 import com.nasmusic.tv.data.model.UiState
+import com.nasmusic.tv.data.model.WeatherData
+import com.nasmusic.tv.data.model.WeatherMood
+import com.nasmusic.tv.data.model.WeatherRadioQueue
 import com.nasmusic.tv.data.prefs.AppPreferences
+import com.nasmusic.tv.backend.weather.WeatherApi
+import com.nasmusic.tv.backend.weather.WeatherRadioManager
 import com.nasmusic.tv.lyrics.LyricsManager
 import com.nasmusic.tv.player.PlayerManager
 import com.nasmusic.tv.util.AppLog
@@ -49,9 +56,36 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     private val nasMusicApp = app as NasMusicApp
     private val playerManager = nasMusicApp.playerManager
-    private val prefs = nasMusicApp.appPreferences
+    val prefs = nasMusicApp.appPreferences
+    // --- 封面滤镜设置 ---
+    private val _coverFilterEnabled = MutableStateFlow(false)
+    val coverFilterEnabled: StateFlow<Boolean> = _coverFilterEnabled.asStateFlow()
+    private val _coverFilterBlurRadius = MutableStateFlow(8f)
+    val coverFilterBlurRadius: StateFlow<Float> = _coverFilterBlurRadius.asStateFlow()
+    private val _coverFilterDarkOverlay = MutableStateFlow(0.3f)
+    val coverFilterDarkOverlay: StateFlow<Float> = _coverFilterDarkOverlay.asStateFlow()
     private val backendRegistry = nasMusicApp.backendRegistry
     private val lyricsManager = LyricsManager(app, backendRegistry, nasMusicApp.networkMusicManager)
+
+    // --- 天气电台 ---
+    val weatherApi = WeatherApi()
+    var weatherRadioManager: WeatherRadioManager? = null
+        private set
+
+    private val _weatherData = MutableStateFlow<WeatherData?>(null)
+    val weatherData: StateFlow<WeatherData?> = _weatherData.asStateFlow()
+
+    private val _weatherRadioQueue = MutableStateFlow<WeatherRadioQueue?>(null)
+    val weatherRadioQueue: StateFlow<WeatherRadioQueue?> = _weatherRadioQueue.asStateFlow()
+
+    private val _currentWeatherMood = MutableStateFlow(WeatherMood.SUNNY)
+    val currentWeatherMood: StateFlow<WeatherMood> = _currentWeatherMood.asStateFlow()
+
+    private val _weatherLoading = MutableStateFlow(false)
+    val weatherLoading: StateFlow<Boolean> = _weatherLoading.asStateFlow()
+
+    private val _weatherError = MutableStateFlow<String?>(null)
+    val weatherError: StateFlow<String?> = _weatherError.asStateFlow()
 
     // --- 导航状态 ---
     private val _currentScreen = MutableStateFlow(Screen.NowPlaying)
@@ -118,6 +152,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     private val _networkPlaylists = MutableStateFlow<List<Pair<Playlist, List<Song>>>>(emptyList())
     val networkPlaylists: StateFlow<List<Pair<Playlist, List<Song>>>> = _networkPlaylists.asStateFlow()
 
+    // 榜单轮换状态（Phase 3）
+    private val _chartsRotationIndex = MutableStateFlow(0)
+    val chartsRotationIndex: StateFlow<Int> = _chartsRotationIndex.asStateFlow()
+
     private val _playlistSongs = MutableStateFlow<List<Song>>(emptyList())
     val playlistSongs: StateFlow<List<Song>> = _playlistSongs.asStateFlow()
 
@@ -132,6 +170,120 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
      */
     fun setSearchNetworkPlatform(platform: String) {
         _searchNetworkPlatform.value = platform
+    }
+
+    // --- 网络音乐页子 Tab 状态 ---
+    private val _currentNetworkSubTab = MutableStateFlow(NetworkSubTab.DISCOVER)
+    val currentNetworkSubTab: StateFlow<NetworkSubTab> = _currentNetworkSubTab.asStateFlow()
+
+    fun selectNetworkSubTab(tab: NetworkSubTab) {
+        _currentNetworkSubTab.value = tab
+        // 切换到天气子 Tab 时自动加载天气
+        if (tab == NetworkSubTab.WEATHER) {
+            fetchWeather()
+        }
+    }
+
+    // --- 网络音乐平台来源 ---
+    private val _currentMusicSource = MutableStateFlow(MusicSource.NETEASE)
+    val currentMusicSource: StateFlow<MusicSource> = _currentMusicSource.asStateFlow()
+
+    /**
+     * 初始化音乐来源（从持久化存储读取）
+     */
+    private fun initMusicSource() {
+        val savedKey = prefs.getMusicSourceSync()
+        val source = MusicSource.fromApiKey(savedKey)
+        _currentMusicSource.value = source
+        _searchNetworkPlatform.value = source.apiKey
+    }
+
+    /**
+     * 切换音乐平台来源
+     *
+     * 持久化到 DataStore，同时更新旧的 searchNetworkPlatform 状态保持兼容，
+     * 如果有搜索关键词则自动重新搜索。
+     */
+    fun selectMusicSource(source: MusicSource) {
+        if (_currentMusicSource.value == source) return
+        _currentMusicSource.value = source
+        _searchNetworkPlatform.value = source.apiKey
+        viewModelScope.launch {
+            prefs.setMusicSource(source.apiKey)
+            // 有搜索关键词时自动重新搜索
+            if (_networkSearchKeyword.value.isNotBlank()) {
+                searchNetworkSongs(_networkSearchKeyword.value)
+            }
+        }
+    }
+
+    // --- 天气电台 ---
+
+    /**
+     * 获取当前天气并构建天气电台
+     */
+    fun fetchWeather() {
+        viewModelScope.launch {
+            _weatherLoading.value = true
+            _weatherError.value = null
+            try {
+                val weather = weatherApi.fetchCurrentWeather()
+                if (weather != null) {
+                    _weatherData.value = weather
+                    // 延迟初始化 WeatherRadioManager（需要 BackendAdapter 和 NetworkMusicManager）
+                    val adapter = backendRegistry.getAdapter()
+                    if (weatherRadioManager == null && adapter != null) {
+                        weatherRadioManager = WeatherRadioManager(adapter, nasMusicApp.networkMusicManager)
+                    }
+                    weatherRadioManager?.let { mgr ->
+                        val queue = mgr.buildRadio(weather)
+                        _weatherRadioQueue.value = queue
+                        _currentWeatherMood.value = queue.mood
+                    }
+                } else {
+                    _weatherError.value = "无法获取天气信息"
+                }
+            } catch (e: Exception) {
+                AppLog.e("MainViewModel", "fetchWeather failed", e)
+                _weatherError.value = "获取天气失败: ${e.message?.take(50)}"
+            } finally {
+                _weatherLoading.value = false
+            }
+        }
+    }
+
+    /**
+     * 切换天气电台 mood
+     */
+    fun switchWeatherMood(mood: WeatherMood) {
+        if (_currentWeatherMood.value == mood) return
+        _currentWeatherMood.value = mood
+        viewModelScope.launch {
+            _weatherLoading.value = true
+            try {
+                weatherRadioManager?.let { mgr ->
+                    val queue = mgr.buildRadioWithMood(mood, _weatherData.value)
+                    _weatherRadioQueue.value = queue
+                }
+            } catch (e: Exception) {
+                AppLog.e("MainViewModel", "switchWeatherMood failed", e)
+                _weatherError.value = "切换心情失败: ${e.message?.take(50)}"
+            } finally {
+                _weatherLoading.value = false
+            }
+        }
+    }
+
+    /**
+     * 播放天气电台全部歌曲
+     */
+    fun playWeatherRadioAll() {
+        val songs = _weatherRadioQueue.value?.songs ?: return
+        if (songs.isEmpty()) return
+        // 网络歌曲需要解析 streamUrl，但这里统一走 playQueue 的逻辑
+        playQueue(songs, 0)
+        // 导航到播放页
+        _currentScreen.value = Screen.NowPlaying
     }
 
     // --- 详情页状态 ---
@@ -303,6 +455,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             loadNetworkPlaylists()
         }
+
+        // 初始化网络音乐平台来源（从持久化存储读取）
+        initMusicSource()
     }
 
     // --- 导航 ---
@@ -838,7 +993,55 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /**
-     * 预配置的网络歌单列表（7 个网易云热门歌单）
+     * 播放私人电台 — 随机播放网络歌曲
+     *
+     * 策略：收藏优先，没有收藏时从随机歌单播放。
+     * 播放后自动导航到 NowPlaying 页。
+     */
+    fun playPrivateRadio() {
+        viewModelScope.launch {
+            // 收藏优先：使用网络收藏歌曲
+            val favorites = _networkFavorites.value
+            if (favorites.isNotEmpty()) {
+                val songs = favorites.map { item ->
+                    Song(
+                        id = item.songId,
+                        title = item.title,
+                        artist = item.artist,
+                        album = item.album,
+                        coverUrl = item.coverUrl,
+                        isNetworkSong = true,
+                        networkSource = item.networkSource,
+                        networkId = item.networkId
+                    )
+                }
+                val shuffled = songs.shuffled()
+                playQueue(shuffled, 0)
+                _currentScreen.value = Screen.NowPlaying
+                return@launch
+            }
+
+            // 无收藏时使用随机歌单
+            val playlists = _networkPlaylists.value
+            if (playlists.isNotEmpty()) {
+                val randomPlaylist = playlists.random()
+                if (randomPlaylist.second.isNotEmpty()) {
+                    playQueue(randomPlaylist.second, 0)
+                    _currentScreen.value = Screen.NowPlaying
+                    return@launch
+                }
+            }
+
+            // 没有收藏也没有歌单
+            showError("没有收藏或歌单可供播放，请先搜索并收藏歌曲")
+        }
+    }
+
+    /**
+     * 预配置的网络歌单列表（扩展版，用于榜单轮换）
+     *
+     * 每个 Triple 为 (id, name, source)。
+     * 每日轮换显示 CHART_PAGE_SIZE 个歌单，用 "换一批" 按钮切换到下一组。
      */
     private val preconfiguredPlaylists = listOf(
         Triple("3778678", "热歌榜", "netease"),
@@ -848,20 +1051,52 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         Triple("60198", "欧美流行", "netease"),
         Triple("377165088", "抖音热门", "netease"),
         Triple("2211745987", "经典老歌", "netease"),
+        Triple("2884035", "原创音乐榜", "netease"),
+        Triple("377733686", "ACG 音乐榜", "netease"),
+        Triple("3117263287", "纯音乐榜", "netease"),
+        Triple("377237077", "古风榜", "netease"),
+        Triple("5390174047", "日语流行", "netease"),
+        Triple("5059631514", "K-POP 热榜", "netease"),
+        Triple("3248421784", "说唱榜", "netease"),
     )
+    private val CHART_PAGE_SIZE = 6
 
     /**
-     * 加载所有预配置的网络歌单
+     * 获取当前时间对应的轮换起始索引（基于当天日期）
+     */
+    private fun dailyRotationStart(): Int {
+        val calendar = java.util.Calendar.getInstance()
+        val dayOfYear = calendar.get(java.util.Calendar.DAY_OF_YEAR)
+        return dayOfYear % preconfiguredPlaylists.size
+    }
+
+    /**
+     * 换一批：将榜单轮换索引 +1，重新加载歌单
+     */
+    fun refreshCharts() {
+        val next = (_chartsRotationIndex.value + 1) % preconfiguredPlaylists.size
+        _chartsRotationIndex.value = next
+        loadNetworkPlaylists()
+    }
+
+    /**
+     * 加载所有预配置的网络歌单（分页轮换）
      *
-     * 遍历 7 个预配置歌单 ID，通过 NetworkMusicManager 异步获取每首歌的歌曲列表，
-     * 与 Playlist 元数据配对后存入 _networkPlaylists。
-     * 获取失败的歌单（空结果）自动跳过。
+     * 默认从 dailyRotationStart() 位置开始取 CHART_PAGE_SIZE 个歌单，
+     * 如果 refreshCharts() 调用过则从上一次轮换索引继续。
      */
     fun loadNetworkPlaylists() {
         viewModelScope.launch {
             val results = mutableListOf<Pair<Playlist, List<Song>>>()
             var failCount = 0
-            for ((id, name, _) in preconfiguredPlaylists) {
+
+            // 计算本次显示的歌单子集
+            val startIdx = _chartsRotationIndex.value % preconfiguredPlaylists.size
+            val orderedIds = preconfiguredPlaylists.subList(startIdx, preconfiguredPlaylists.size) +
+                    preconfiguredPlaylists.subList(0, startIdx)
+            val visible = orderedIds.take(CHART_PAGE_SIZE)
+
+            for ((id, name, _) in visible) {
                 try {
                     val songs = nasMusicApp.networkMusicManager.getPlaylist(id)
                     if (songs.isEmpty()) {
@@ -1103,6 +1338,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         // 网络歌曲的 streamUrl 需要异步解析，否则 ExoPlayer 收到空 URI 不会开始播放
         val needsResolve = songs.any { it.isNetworkSong && it.streamUrl.isNullOrBlank() }
         if (needsResolve) {
+            // 立即更新队列状态，避免异步解析期间 UI 读到旧的队列数据（如恢复队列中的网络歌曲）
+            // ExoPlayer 的 prepare 延迟到解析完成后统一进行
+            playerManager.restoreQueue(songs, startIndex)
+
             viewModelScope.launch {
                 val resolved = songs.map { song ->
                     if (song.isNetworkSong && song.streamUrl.isNullOrBlank()) {
@@ -1288,6 +1527,25 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         .map { songs -> songs.map { it.id }.toSet() }
         .stateIn(viewModelScope, SharingStarted.Eagerly, emptySet())
 
+    /**
+     * 队列中的网络歌曲（用于「继续听」区域）
+     *
+     * 从当前队列中筛选出网络歌曲（isNetworkSong=true），
+     * 不包含当前正在播放的歌曲，最多保留 5 首，
+     * 按队列顺序排列（最近即将播放的在前）。
+     */
+    val recentNetworkSongs: StateFlow<List<Song>> = combine(queue, currentIndex) { songs, index ->
+        songs.filterIndexed { i, s -> s.isNetworkSong && i != index }
+            .take(5)
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
+    /**
+     * 当前播放的网络歌曲（用于「继续听」区域的"正在播放"）
+     */
+    val currentNetworkSong: StateFlow<Song?> = combine(currentSong, queue) { song, _ ->
+        song?.takeIf { it.isNetworkSong }
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, null)
+
     fun moveQueueItem(fromIndex: Int, toIndex: Int) = playerManager.moveItem(fromIndex, toIndex)
 
     fun clearQueue() {
@@ -1415,6 +1673,22 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     fun updateLyricsOffset(offsetMs: Long) = viewModelScope.launch {
         prefs.setLyricsOffset(offsetMs)
+    }
+
+    fun updateLyricsFontScale(scale: Float) = viewModelScope.launch {
+        prefs.setLyricsFontScale(scale)
+    }
+
+    fun updateCoverFilterEnabled(enabled: Boolean) = viewModelScope.launch {
+        prefs.setCoverFilterEnabled(enabled)
+    }
+
+    fun updateCoverFilterBlurRadius(radius: Float) = viewModelScope.launch {
+        prefs.setCoverFilterBlurRadius(radius)
+    }
+
+    fun updateCoverFilterDarkOverlay(overlay: Float) = viewModelScope.launch {
+        prefs.setCoverFilterDarkOverlay(overlay)
     }
 
     /**

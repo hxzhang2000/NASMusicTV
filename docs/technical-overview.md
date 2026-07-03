@@ -1,7 +1,7 @@
 # NAS Music TV — 技术架构概述
 
-> 版本：v2.5.1
-> 最后更新：2026-07-01
+> 版本：v2.6.0
+> 最后更新：2026-07-03
 > 本文档记录项目当前的完整技术架构，作为后续迭代的基准参考。
 
 ---
@@ -4197,7 +4197,109 @@ NAS 专用字段（`owner`, `durationMs`）有默认值，网络音乐使用时�
 
 ---
 
-## 11. 回归测试文档
+### 10.20 v2.6.0 — 天气电台 + 榜单改版 + 封面滤镜
+
+**日期**：2026-07-03
+
+**目标**：新增天气电台（Phase 2）、榜单卡片网格化（Phase 3）、歌词字体缩放（Phase 4）、封面滤镜设置（Phase 5）。
+
+#### 10.20.1 天气电台 (Phase 2)
+
+**新增文件**：
+- `backend/weather/WeatherApi.kt` — OpenWeatherMap API 封装（经纬度→城市名→实时天气/5 日预报）
+- `backend/weather/WeatherRadioManager.kt` — 天气电台引擎：按心情关键词从 NAS 曲库+网络搜索匹配歌曲，去重合并
+- `data/model/WeatherData.kt` — WeatherData / WeatherForecast / WeatherCondition 数据模型
+- `data/model/WeatherMood.kt` — 天气心情枚举 SUNNY/RAINY/SNOWY/WINDY/CLOUDY/NIGHT，各含 searchQueries
+- `data/model/WeatherRadioQueue.kt` — 电台队列模型（songs + mood + queries + 统计）
+- `ui/screens/network/WeatherSubTab.kt` — 天气 Tab 界面：当前天气卡片 + 心情切换 + 歌曲列表 + 播放控制
+
+**修改文件**：
+- `data/prefs/AppPreferences.kt` — 新增 weatherEnabled / weatherManualCity / weatherAutoRefresh 设置
+- `ui/viewmodel/MainViewModel.kt` — 新增 weatherData / weatherRadioQueue / currentWeatherMood / weatherLoading / weatherError 状态、fetchWeather() / switchWeatherMood() / playWeatherRadioAll() 方法
+- `ui/screens/network/NetworkMusicContainer.kt` — 集成 WeatherSubTab，添加天气参数路由
+- `ui/screens/network/NetworkSubTabViews.kt` — DiscoverTab 添加天气入口 FeatureShortcut
+- `ui/components/AppRoot.kt` — 天气参数透传
+- `strings.xml` — 新增 network_tab_weather / network_weather_* / network_discover_weather_* 字符串
+
+#### 10.20.2 榜单改版 (Phase 3)
+
+**修改文件**：
+- `ui/components/network/ChartsContent.kt` — 从简单列表改为双列卡片网格（140dp × 140dp），每张卡片显示 CoverCarousel 封面轮播 + 榜单名称。新增每日自动轮换（`chartsRotationIndex`）+"换一批"按钮（`refreshCharts()`）
+- `data/model/Song.kt` — 未修改（复用现有数据模型）
+- `ui/viewmodel/MainViewModel.kt` — 新增 `refreshCharts()` 方法：随机 seed→榜单排序打乱
+- `data/prefs/AppPreferences.kt` — 新增 `keyPreconfiguredPlaylists` 扩展至 20+ 个预置歌单 ID，涵盖 Hot Songs / New Releases / Mood / Genre / Era 多维度
+
+#### 10.20.3 歌词字体缩放 (Phase 4)
+
+**修改文件**：
+- `data/prefs/AppPreferences.kt` — 新增 `lyricsFontScale` 设置（doublePreferencesKey），范围 0.7 – 1.6
+- `ui/screens/NowPlayingScreen.kt` — 歌词区域添加字号 +/- 按钮，调用 `onLyricsFontScaleChange` 回调
+- `ui/components/LyricsView.kt` — `fontSizeMultiplier` 参数传递至 `ChunkyText` fontSize
+- `ui/components/AppRoot.kt` — 新增 `lyricsFontScale` 状态收集 + 回调绑定到 preferences
+- `ui/screens/SettingsScreen.kt` — 新增歌词字号开关（可复用 Lyrics 设置页）
+- `ui/viewmodel/MainViewModel.kt` — 新增 `updateLyricsFontScale()` wrapper 方法
+
+#### 10.20.4 封面滤镜设置 (Phase 5)
+
+**新增文件**：
+- (无新增文件 — 全部在现有文件中扩展)
+
+**修改文件**：
+- `data/prefs/AppPreferences.kt` — 新增 coverFilterEnabled(boolean) / coverFilterBlurRadius(double↔float) / coverFilterDarkOverlay(double↔float) 3 组设置，floatPreferencesKey 改用 doublePreferencesKey（标准 DataStore 无 float key）
+- `ui/screens/SettingsScreen.kt` — 新增 COVER 侧边栏，封面滤镜开关（SettingSwitch）+ 模糊强度 +/- 按钮 + 暗色遮罩 +/- 按钮
+- `ui/screens/NowPlayingScreen.kt` — CoverColumn 新增 coverFilterEnabled/coverFilterBlurRadius/coverFilterDarkOverlay 参数，封面渲染时添加 `.blur(radius.dp)` + 暗色半透明遮罩
+- `ui/components/AppRoot.kt` — 封面滤镜状态移入 AppRoot 级别（跨 NowPlaying/Settings 共享），回调绑定
+- `ui/viewmodel/MainViewModel.kt` — 新增 `updateCoverFilterEnabled/BlurRadius/DarkOverlay()` wrapper 方法
+
+#### 10.20.5 编译修复
+
+由于 `prefs` 为 private 导致 `AppRoot.kt` 无法访问，一并修复以下预存问题和新增问题：
+
+- `MainViewModel.kt`: `private val prefs` → `val prefs`（公开访问）
+- `AppPreferences.kt`: `floatPreferencesKey`（不存在）→ `doublePreferencesKey` + Float↔Double 转换（涉及 lyricsFontScale 和历史存量问题）
+- `WeatherRadioManager.kt`: `song.songId` → `song.id`（Song 数据类只有 id 字段）
+- `WeatherSubTab.kt`: `FocusableSurface` 移除不支持的 `enabled` 参数；`android.R.string.refresh` 改为直接标"刷新"
+- `MainViewModel.kt`: 移除重复的 Screen/SongsPagingState import；`TAG` 引用→直接传 `"MainViewModel"`
+
+**影响文件汇总**：
+| 文件 | Phase |
+|------|-------|
+| `backend/weather/WeatherApi.kt` | 2 (新增) |
+| `backend/weather/WeatherRadioManager.kt` | 2 (新增) |
+| `data/model/WeatherData.kt` | 2 (新增) |
+| `data/model/WeatherMood.kt` | 2 (新增) |
+| `data/model/WeatherRadioQueue.kt` | 2 (新增) |
+| `ui/screens/network/WeatherSubTab.kt` | 2 (新增) |
+| `data/prefs/AppPreferences.kt` | 2/3/4/5 |
+| `ui/viewmodel/MainViewModel.kt` | 2/3/4/5 |
+| `ui/screens/network/NetworkMusicContainer.kt` | 2 |
+| `ui/screens/network/NetworkSubTabViews.kt` | 2 |
+| `ui/components/network/ChartsContent.kt` | 3 |
+| `ui/components/LyricsView.kt` | 4 |
+| `ui/screens/SettingsScreen.kt` | 5 |
+| `ui/screens/NowPlayingScreen.kt` | 4/5 |
+| `ui/components/AppRoot.kt` | 2/4/5 |
+| `app/src/main/res/values/strings.xml` | 2/3/5 |
+
+**验证结果**：
+- ✅ `./gradlew.bat assembleDebug` BUILD SUCCESSFUL
+- ⚠️ 16 项测试失败（8 LrcParserTest + 8 NetworkMonitorTest），均为预存问题，与本次改动无关
+- ⏳ 需 TV 安装验证（Phase 2 天气 API 需 OpenWeatherMap API Key，Phase 5 封面滤镜需视觉确认）
+
+#### 10.20.6 修复: playQueue 异步解析 URL 期间队列状态竞态条件
+
+**问题**：
+`MainViewModel.playQueue()` 在网络歌曲需要异步解析 streamUrl 时（`needsResolve=true`），先启动协程再返回，队列状态（`_queue`/`_currentIndex`/`_currentSong`）直到协程完成解析后才更新。这留下了几秒到十几秒的窗口期，期间 `currentSong.value` 仍指向旧的恢复队列。如果用户在此期间按播放键，`playPause()` 会错误地调用 `resolveAndPlayCurrentSong()` 尝试解析旧队列歌曲的 streamUrl。
+
+**修改**：
+- `ui/viewmodel/MainViewModel.kt` — 在 `playQueue()` 的 `needsResolve=true` 分支中，启动协程前立即调用 `playerManager.restoreQueue(songs, startIndex)`，将队列状态立刻切换到新歌单。由于网络歌曲的 `streamUrl` 为空，`restoreQueue` 会跳过 ExoPlayer `prepare()`，实际的播放设置仍在协程解析 URL 后由 `playerManager.playQueue()` 统一完成。
+
+**影响文件**：
+| 文件 | 改动 |
+|------|------|
+| `ui/viewmodel/MainViewModel.kt` | playQueue() 新增 1 行 `playerManager.restoreQueue()` |
+
+---
 
 > 完整的回归测试文档独立维护在 `docs/regression-test.md`，包含 19 章节 248 个测试项。
 

@@ -72,6 +72,11 @@ fun NowPlayingScreen(
     onSwitchLyricsSource: (com.nasmusic.tv.data.model.LyricsSource) -> Unit,
     onChangeHighlightMode: (LyricsHighlightMode) -> Unit = {},
     onToggleFavorite: (() -> Unit)? = null,
+    lyricsFontScale: Float = 1.0f,
+    onLyricsFontScaleChange: (Float) -> Unit = {},
+    coverFilterEnabled: Boolean = false,
+    coverFilterBlurRadius: Float = 8f,
+    coverFilterDarkOverlay: Float = 0.3f,
     modifier: Modifier = Modifier
 ) {
     Box(
@@ -141,7 +146,10 @@ fun NowPlayingScreen(
                                 isFavorite = isFavorite,
                                 onToggleFavorite = onToggleFavorite,
                                 coverCandidates = coverCandidates,
-                                isPlaying = isPlaying
+                                isPlaying = isPlaying,
+                                coverFilterEnabled = coverFilterEnabled,
+                                coverFilterBlurRadius = coverFilterBlurRadius,
+                                coverFilterDarkOverlay = coverFilterDarkOverlay
                             )
                         }
 
@@ -196,6 +204,26 @@ fun NowPlayingScreen(
                                 onChangeHighlightMode(newMode)
                             }
                         )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        // 歌词字体大小切换
+                        val fontLabels = listOf("A", "A+", "A++", "A+++")
+                        val fontScaleIdx = when (lyricsFontScale) {
+                            0.7f -> 0
+                            1.0f -> 1
+                            1.3f -> 2
+                            1.6f -> 3
+                            else -> 1
+                        }
+                        SourceTag(
+                            label = fontLabels[fontScaleIdx],
+                            available = true,
+                            selected = false,
+                            onClick = {
+                                val scales = listOf(0.7f, 1.0f, 1.3f, 1.6f)
+                                val next = (fontScaleIdx + 1) % scales.size
+                                onLyricsFontScaleChange(scales[next])
+                            }
+                        )
                     }
 
                     // 歌词内容区域（沉浸模式移除半透明背景，避免与封面遮罩叠加）
@@ -214,6 +242,7 @@ fun NowPlayingScreen(
                             currentTimeMs = progressMs,
                             highlightMode = highlightMode,
                             isPlaying = isPlaying,
+                            fontSizeMultiplier = lyricsFontScale,
                             modifier = Modifier
                                 .fillMaxSize()
                                 .padding(horizontal = 4.dp, vertical = 4.dp)
@@ -244,7 +273,10 @@ private fun CoverColumn(
     isFavorite: Boolean = false,
     onToggleFavorite: (() -> Unit)? = null,
     coverCandidates: List<String> = emptyList(),
-    isPlaying: Boolean = false
+    isPlaying: Boolean = false,
+    coverFilterEnabled: Boolean = false,
+    coverFilterBlurRadius: Float = 8f,
+    coverFilterDarkOverlay: Float = 0.3f
 ) {
     Column(
         modifier = Modifier.width(300.dp),
@@ -331,6 +363,7 @@ private fun CoverColumn(
                     modifier = Modifier
                         .size(240.dp)
                         .clip(RoundedCornerShape(20.dp))
+                        .then(if (coverFilterEnabled) Modifier.blur(coverFilterBlurRadius.dp) else Modifier)
                         .background(NasMusicColors.Surface)
                 ) {
                     key(currentSong?.id) {
@@ -338,6 +371,14 @@ private fun CoverColumn(
                             coverCandidates = coverCandidates,
                             isPlaying = isPlaying,
                             modifier = Modifier.fillMaxSize()
+                        )
+                    }
+                    // 封面滤镜：暗色遮罩
+                    if (coverFilterEnabled) {
+                        Box(
+                            modifier = Modifier
+                                .matchParentSize()
+                                .background(Color.Black.copy(alpha = coverFilterDarkOverlay))
                         )
                     }
                 }

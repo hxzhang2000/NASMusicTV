@@ -40,7 +40,8 @@ class NasMusicApp : Application() {
         // 网络音乐管理器：注册所有网络源，默认源与 Meting 端点均由 AppSettings 动态提供
         val services = mapOf(
             "meting" to MetingApiService(
-                baseUrlProvider = { appPreferences.getMetingApiBaseUrlSync() }
+                baseUrlProvider = { appPreferences.getMetingApiBaseUrlSync() },
+                serverProvider = { appPreferences.getMusicSourceSync() }
             )
         )
         networkMusicManager = NetworkMusicManager(

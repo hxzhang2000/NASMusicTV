@@ -43,7 +43,12 @@ class MetingApiService(
      * Meting-API 基础端点，可在设置页面配置。
      * 默认使用公共服务 https://meting.mikus.ink/api
      */
-    private val baseUrlProvider: () -> String
+    private val baseUrlProvider: () -> String,
+    /**
+     * 运行时获取当前音乐平台来源（server 参数）。
+     * 默认返回 "netease"，由用户在网络音乐 Tab 中切换。
+     */
+    private val serverProvider: () -> String = { DEFAULT_SERVER }
 ) : NetworkMusicService {
 
     override val sourceId = "meting"
@@ -212,8 +217,9 @@ class MetingApiService(
      * 供 search() 在多端点 fallback 流程中调用。
      */
     private fun searchWithEndpoint(keyword: String, endpoint: String): List<Song> {
+        val server = serverProvider()
         return try {
-            val url = "$endpoint?server=$DEFAULT_SERVER&type=search&id=${URLEncoder.encode(keyword, "UTF-8")}"
+            val url = "$endpoint?server=$server&type=search&id=${URLEncoder.encode(keyword, "UTF-8")}"
             AppLog.i(DIAG, "searchWithEndpoint: url='$url'")
             val request = Request.Builder()
                 .url(url)
@@ -246,10 +252,11 @@ class MetingApiService(
      */
     override suspend fun resolvePlayUrl(song: Song): String? = withContext(Dispatchers.IO) {
         val netId = song.networkId ?: return@withContext song.streamUrl
+        val server = serverProvider()
         val endpoints = buildEndpointFallbackOrder(baseUrl)
         for (endpoint in endpoints) {
             try {
-                val url = "$endpoint?server=$DEFAULT_SERVER&type=url&id=$netId"
+                val url = "$endpoint?server=$server&type=url&id=$netId"
                 val request = Request.Builder().url(url).build()
                 var playUrl: String? = null
                 noRedirectClient.newCall(request).execute().use { response ->
@@ -278,8 +285,9 @@ class MetingApiService(
      */
     override suspend fun resolveLyrics(song: Song): String? = withContext(Dispatchers.IO) {
         val netId = song.networkId ?: return@withContext null
+        val server = serverProvider()
         try {
-            val url = "$baseUrl?server=$DEFAULT_SERVER&type=lrc&id=$netId"
+            val url = "$baseUrl?server=$server&type=lrc&id=$netId"
             val request = Request.Builder().url(url).build()
             client.newCall(request).execute().use { response ->
                 val text = response.body?.string()
@@ -322,10 +330,11 @@ class MetingApiService(
      * @return 歌单中的歌曲列表；空列表表示无结果或获取失败
      */
     override suspend fun getPlaylist(playlistId: String): List<Song> = withContext(Dispatchers.IO) {
+        val server = serverProvider()
         val endpoints = buildEndpointFallbackOrder(baseUrl)
         for (endpoint in endpoints) {
             try {
-                val url = "$endpoint?server=$DEFAULT_SERVER&type=playlist&id=$playlistId"
+                val url = "$endpoint?server=$server&type=playlist&id=$playlistId"
                 AppLog.i(DIAG, "getPlaylist: trying endpoint='$endpoint' url='$url'")
                 val request = Request.Builder()
                     .url(url)
