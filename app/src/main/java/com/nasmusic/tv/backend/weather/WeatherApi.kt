@@ -5,6 +5,7 @@ import com.google.gson.JsonObject
 import com.google.gson.reflect.TypeToken
 import com.nasmusic.tv.data.model.IpLocation
 import com.nasmusic.tv.data.model.WeatherData
+import com.nasmusic.tv.data.model.WeatherForecast
 import com.nasmusic.tv.util.AppLog
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -39,6 +40,7 @@ class WeatherApi {
         private const val OPEN_METEO_BASE = "https://api.open-meteo.com/v1/forecast"
         // OpenWeatherMap API 端点（需 API Key，作 Open-Meteo 不可用时的备选）
         private const val OPEN_WEATHER_MAP_BASE = "https://api.openweathermap.org/data/2.5/weather"
+        private const val OPEN_WEATHER_MAP_FORECAST_BASE = "https://api.openweathermap.org/data/2.5/forecast"
         // IP 定位端点（免费版，不支持 HTTPS）
         private const val IP_API_BASE = "http://ip-api.com/json/"
     }
@@ -88,7 +90,7 @@ class WeatherApi {
         val openMeteo = try {
             val url = buildString {
                 append("$OPEN_METEO_BASE?latitude=$lat&longitude=$lon")
-                append("&current=temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m,is_day")
+                append("&current=temperature_2m,relative_humidity_2m,apparent_temperature,weather_code,wind_speed_10m,is_day")
                 append("&timezone=auto")
             }
             val request = Request.Builder()
@@ -96,12 +98,13 @@ class WeatherApi {
                 .header("User-Agent", "NASMusicTV/2.6")
                 .build()
             val response = client.newCall(request).execute()
-            val body = response.body?.string() ?: return null
+            val body = response.body?.string() ?: return@withContext null
             val json = gson.fromJson(body, JsonObject::class.java)
-            val current = json.getAsJsonObject("current") ?: return null
+            val current = json.getAsJsonObject("current") ?: return@withContext null
 
             WeatherData(
                 temperature = current.get("temperature_2m")?.asDouble ?: 0.0,
+                feelsLike = current.get("apparent_temperature")?.asDouble,
                 humidity = current.get("relative_humidity_2m")?.asDouble ?: 0.0,
                 windSpeed = current.get("wind_speed_10m")?.asDouble ?: 0.0,
                 weatherCode = current.get("weather_code")?.asInt ?: 0,
@@ -117,17 +120,17 @@ class WeatherApi {
         // 2. Open-Meteo 不可用，尝试 OpenWeatherMap（需要 API Key）
         if (openWeatherMapApiKey.isNullOrBlank()) {
             AppLog.w(TAG, "Open-Meteo failed and no OpenWeatherMap API key configured")
-            return null
+            return@withContext null
         }
-        return getWeatherOpenWeatherMap(lat, lon, openWeatherMapApiKey)
+        return@withContext getWeatherOpenWeatherMap(lat, lon, openWeatherMapApiKey)
     }
 
     /**
      * 通过 OpenWeatherMap API 获取天气
      * 当 Open-Meteo 不可用时的备选方案
      */
-    private suspend fun getWeatherOpenWeatherMap(lat: Double, lon: Double, apiKey: *** WeatherData? {
-        try {
+    private suspend fun getWeatherOpenWeatherMap(lat: Double, lon: Double, apiKey: String): WeatherData? {
+        return try {
             val url = "$OPEN_WEATHER_MAP_BASE?lat=$lat&lon=$lon&appid=$apiKey&units=metric&lang=zh_cn"
             val request = Request.Builder()
                 .url(url)
@@ -136,8 +139,6 @@ class WeatherApi {
             val response = client.newCall(request).execute()
             val body = response.body?.string() ?: return null
             val json = gson.fromJson(body, JsonObject::class.java)
-
-            // OpenWeatherMap 响应格式
             val main = json.getAsJsonObject("main") ?: return null
             val wind = json.getAsJsonObject("wind")
             val weatherArr = json.getAsJsonArray("weather")
@@ -145,9 +146,9 @@ class WeatherApi {
             val sys = json.getAsJsonObject("sys")
 
             val isDay = sys?.let {
-                val sunrise = it.get("sunrise")?.asLong
-                val sunset = it.get("sunset")?.asLong
-                if (sunrise != null && sunset != null) {
+                val sunrise = it.get("sunrise")?.asLong ?: 0L
+                val sunset = it.get("sunset")?.asLong ?: 0L
+                if (sunrise > 0 && sunset > 0) {
                     val now = System.currentTimeMillis() / 1000
                     now in sunrise..sunset
                 } else true
@@ -155,6 +156,7 @@ class WeatherApi {
 
             WeatherData(
                 temperature = main.get("temp")?.asDouble ?: 0.0,
+                feelsLike = main.get("feels_like")?.asDouble,
                 humidity = main.get("humidity")?.asDouble ?: 0.0,
                 windSpeed = wind?.get("speed")?.asDouble ?: 0.0,
                 weatherCode = mapOpenWeatherMapCode(weatherObj?.get("id")?.asInt ?: 0),
@@ -164,6 +166,56 @@ class WeatherApi {
         } catch (e: Exception) {
             AppLog.e(TAG, "OpenWeatherMap failed: ${e.message}", e)
             null
+        }
+    }
+
+    /**
+     * 获取天气预报（未来 5 天）
+     *
+     * 需要 OpenWeatherMap API Key
+     */
+    suspend fun getForecast(lat: Double, lon: Double, apiKey: String): List<WeatherForecast> = withContext(Dispatchers.IO) {
+        try {
+            val url = "$OPEN_WEATHER_MAP_FORECAST_BASE?lat=$lat&lon=$lon&appid=$apiKey&units=metric&lang=zh_cn&cnt=5"
+            val request = Request.Builder()
+                .url(url)
+                .header("User-Agent", "NASMusicTV/2.6")
+                .build()
+            val response = client.newCall(request).execute()
+            val body = response.body?.string() ?: return@withContext emptyList()
+            val json = gson.fromJson(body, JsonObject::class.java)
+            val list = json.getAsJsonArray("list") ?: return@withContext emptyList()
+
+            val forecasts = mutableListOf<WeatherForecast>()
+            // 按天去重，每天取一条代表
+            val seenDates = mutableSetOf<String>()
+            for (i in 0 until list.size()) {
+                val item = list[i].asJsonObject
+                val dtTxt = item.get("dt_txt")?.asString ?: continue
+                val date = dtTxt.take(10) // "2024-01-15"
+                if (date in seenDates) continue
+                seenDates.add(date)
+
+                val main = item.getAsJsonObject("main")
+                val weatherArr = item.getAsJsonArray("weather")
+                val weatherObj = weatherArr?.firstOrNull()?.asJsonObject
+
+                forecasts.add(WeatherForecast(
+                    date = date,
+                    temperatureHigh = main?.get("temp_max")?.asDouble ?: 0.0,
+                    temperatureLow = main?.get("temp_min")?.asDouble ?: 0.0,
+                    humidity = main?.get("humidity")?.asDouble ?: 0.0,
+                    weatherCode = mapOpenWeatherMapCode(weatherObj?.get("id")?.asInt ?: 0),
+                    description = weatherObj?.get("description")?.asString ?: "未知",
+                    iconCode = weatherObj?.get("icon")?.asString ?: "01d"
+                ))
+
+                if (forecasts.size >= 5) break
+            }
+            forecasts
+        } catch (e: Exception) {
+            AppLog.e(TAG, "getForecast failed: ${e.message}", e)
+            emptyList()
         }
     }
 
@@ -186,14 +238,6 @@ class WeatherApi {
 
     /**
      * 一键获取当前位置天气
-     *
-     * 依次尝试：
-     * 1. ip-api.com IP 定位（失败则回退到北京）
-     * 2. Open-Meteo 获取天气（国际网络）
-     * 3. OpenWeatherMap 获取天气（需 API Key，国内网络备选）
-     *
-     * @param manualCity 可选的手动城市名（JSON 写入 cityName，但坐标仍用经纬度）
-     * @param openWeatherMapApiKey 可选 OpenWeatherMap API Key，用于 Open-Meteo 不可用时的备选
      */
     suspend fun fetchCurrentWeather(manualCity: String? = null, openWeatherMapApiKey: String? = null): WeatherData? {
         var location = getIpLocation()
@@ -206,6 +250,19 @@ class WeatherApi {
         return weather.copy(
             cityName = manualCity ?: location.city
         )
+    }
+
+    /**
+     * 获取当前位置的天气预报
+     */
+    suspend fun fetchForecast(openWeatherMapApiKey: String?): List<WeatherForecast> {
+        if (openWeatherMapApiKey.isNullOrBlank()) return emptyList()
+
+        var location = getIpLocation()
+        if (!location.success) {
+            location = IpLocation(city = "北京", lat = 39.9042, lon = 116.4074, success = true)
+        }
+        return getForecast(location.lat, location.lon, openWeatherMapApiKey)
     }
 
     /**

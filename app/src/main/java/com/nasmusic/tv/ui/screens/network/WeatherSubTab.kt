@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -73,12 +74,15 @@ fun WeatherSubTab(
     errorMessage: String? = null,
     networkFavoriteIds: Set<String> = emptySet(),
     queueSongIds: Set<String> = emptySet(),
+    forecast: List<com.nasmusic.tv.data.model.WeatherForecast> = emptyList(),
+    weatherIconCode: String? = null,
     onPlaySong: (Song) -> Unit = {},
     onPlayAll: (List<Song>) -> Unit = {},
     onSwitchMood: (WeatherMood) -> Unit = {},
     onRefresh: () -> Unit = {},
     onToggleFavorite: ((Song) -> Unit)? = null,
-    onToggleQueue: ((Song) -> Unit)? = null
+    onToggleQueue: ((Song) -> Unit)? = null,
+    onNavigateToNowPlaying: () -> Unit = {}
 ) {
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
@@ -110,8 +114,16 @@ fun WeatherSubTab(
                 weatherData = weatherData,
                 currentMood = currentMood,
                 isLoading = isLoading,
-                errorMessage = errorMessage
+                errorMessage = errorMessage,
+                iconCode = weatherIconCode
             )
+        }
+
+        // 2. 天气预报（仅当有预报数据时显示）
+        if (forecast.isNotEmpty()) {
+            item(key = "forecast") {
+                ForecastRow(forecast = forecast)
+            }
         }
 
         // 3. Mood 快捷切换行
@@ -133,8 +145,38 @@ fun WeatherSubTab(
             )
         }
 
-        // 5. 歌曲列表
+        // 4.5 天气匹配歌曲封面墙
         val songs = weatherRadioQueue?.songs ?: emptyList()
+        if (songs.isNotEmpty()) {
+            item(key = "cover_wall_header") {
+                Text(
+                    text = stringResource(R.string.stats_forecast) + " (" + stringResource(R.string.home_matching_covers) + ")",
+                    color = NasMusicColors.TextSecondary,
+                    fontSize = 12.sp,
+                    modifier = Modifier.padding(top = 4.dp, bottom = 6.dp)
+                )
+            }
+            item(key = "cover_wall") {
+                val displaySongs = songs.take(8)
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    // 每行 4 个
+                    displaySongs.chunked(4).forEach { rowSongs ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            rowSongs.forEach { song ->
+                                Box(modifier = Modifier.weight(1f)) {
+                                    WeatherCoverTile(song = song, onClick = { onPlaySong(song) })
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // 5. 歌曲列表
         if (songs.isNotEmpty()) {
             items(songs, key = { "wr_${it.id}" }) { song ->
                 SongRow(
@@ -178,7 +220,8 @@ private fun WeatherInfoCard(
     weatherData: WeatherData?,
     currentMood: WeatherMood,
     isLoading: Boolean,
-    errorMessage: String?
+    errorMessage: String?,
+    iconCode: String? = null
 ) {
     val bgColor = weatherData?.let { moodToColor(WeatherMood.fromWeather(it)) }
         ?: NasMusicColors.Surface.copy(alpha = 0.5f)
@@ -202,11 +245,20 @@ private fun WeatherInfoCard(
         Column {
             if (weatherData != null) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    // 天气图标
-                    Text(
-                        text = moodToEmoji(currentMood),
-                        fontSize = 48.sp
-                    )
+                    // 天气图标（emoji + OpenWeatherMap 图标）
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(
+                            text = moodToEmoji(currentMood),
+                            fontSize = 48.sp
+                        )
+                        if (iconCode != null) {
+                            Text(
+                                text = iconCode,
+                                color = NasMusicColors.TextSecondary,
+                                fontSize = 10.sp
+                            )
+                        }
+                    }
                     Spacer(modifier = Modifier.width(16.dp))
                     Column {
                         // 温度 + 城市
@@ -225,12 +277,15 @@ private fun WeatherInfoCard(
                             )
                         }
                         Spacer(modifier = Modifier.height(4.dp))
-                        // 天气描述 + 湿度/风速
+                        // 天气描述 + 湿度/风速 + 体感温度
                         Text(
                             text = buildString {
                                 append(weatherData.description)
                                 append(" · 湿度 ${weatherData.humidity.toInt()}%")
                                 append(" · ${weatherData.windSpeed.toInt()} km/h")
+                                weatherData.feelsLike?.let { feel ->
+                                    append(" · 体感 ${feel.toInt()}°C")
+                                }
                             },
                             fontSize = 12.sp,
                             color = NasMusicColors.TextSecondary
@@ -387,6 +442,90 @@ private fun ActionBar(
 }
 
 /**
+ * 天气预报行（水平滚动展示未来 3-5 天）
+ */
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+private fun ForecastRow(
+    forecast: List<com.nasmusic.tv.data.model.WeatherForecast>
+) {
+    Column {
+                Text(
+                    text = stringResource(R.string.stats_forecast),
+            color = NasMusicColors.TextSecondary,
+            fontSize = 12.sp,
+            modifier = Modifier.padding(bottom = 8.dp)
+        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            forecast.take(5).forEach { day ->
+                val mood = WeatherMood.fromWeather(com.nasmusic.tv.data.model.WeatherData(
+                    temperature = (day.temperatureHigh + day.temperatureLow) / 2,
+                    humidity = day.humidity,
+                    windSpeed = 0.0,
+                    weatherCode = day.weatherCode,
+                    isDay = true,
+                    description = day.description
+                ))
+                val bgColor = moodToColor(mood)
+
+                FocusableSurface(
+                    onClick = {},
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(10.dp),
+                    focusedScale = 1.06f,
+                    animationDurationMs = 150,
+                    containerColor = bgColor,
+                    focusedContainerColor = bgColor,
+                    contentColor = NasMusicColors.TextPrimary,
+                    focusedContentColor = NasMusicColors.TextPrimary
+                ) {
+                    Column(
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        // 日期（月/日）
+                        val dateParts = day.date.split("-")
+                        val displayDate = if (dateParts.size >= 3) {
+                            "${dateParts[1]}/${dateParts[2]}"
+                        } else day.date
+                        Text(
+                            text = displayDate,
+                            color = NasMusicColors.TextPrimary.copy(alpha = 0.7f),
+                            fontSize = 11.sp
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        // 天气 emoji
+                        Text(
+                            text = mood.icon,
+                            fontSize = 24.sp
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        // 温度
+                        Text(
+                            text = "${day.temperatureLow.toInt()}\u00B0/${day.temperatureHigh.toInt()}\u00B0",
+                            color = NasMusicColors.TextPrimary,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                        Spacer(modifier = Modifier.height(2.dp))
+                        // 简短描述
+                        Text(
+                            text = day.description.take(4),
+                            color = NasMusicColors.TextSecondary,
+                            fontSize = 10.sp,
+                            maxLines = 1
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
  * WeatherMood → 颜色映射
  */
 private fun moodToColor(mood: WeatherMood): Color = when (mood) {
@@ -397,6 +536,65 @@ private fun moodToColor(mood: WeatherMood): Color = when (mood) {
     WeatherMood.WINDY   -> Color(0x33A0B0B8)
     WeatherMood.THUNDER -> Color(0x33383050)
     WeatherMood.NIGHT   -> Color(0x33203040)
+}
+
+/**
+ * 天气匹配歌曲封面小方块
+ */
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+private fun WeatherCoverTile(
+    song: Song,
+    onClick: () -> Unit
+) {
+    FocusableSurface(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth().aspectRatio(1f),
+        shape = RoundedCornerShape(8.dp),
+        focusedScale = 1.06f,
+        animationDurationMs = 150,
+        containerColor = NasMusicColors.SurfaceVariant,
+        focusedContainerColor = NasMusicColors.Primary.copy(alpha = 0.2f),
+        contentColor = NasMusicColors.TextPrimary,
+        focusedContentColor = NasMusicColors.Primary
+    ) {
+        Box(modifier = Modifier.fillMaxSize().padding(2.dp)) {
+            if (!song.coverUrl.isNullOrBlank()) {
+                coil.compose.AsyncImage(
+                    model = song.coverUrl,
+                    contentDescription = song.title,
+                    modifier = Modifier.fillMaxSize()
+                )
+            } else {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Text(text = "\u266A", color = NasMusicColors.TextSecondary, fontSize = 18.sp)
+                }
+            }
+            // 底部半透明渐变 + 歌曲名
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .align(Alignment.BottomCenter)
+                    .background(
+                        androidx.compose.ui.graphics.Brush.verticalGradient(
+                            colors = listOf(
+                                Color.Transparent,
+                                Color.Black.copy(alpha = 0.7f)
+                            )
+                        )
+                    )
+                    .padding(4.dp)
+            ) {
+                Text(
+                    text = song.title,
+                    color = Color.White,
+                    fontSize = 10.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
+    }
 }
 
 /**

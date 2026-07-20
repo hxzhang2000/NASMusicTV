@@ -8,6 +8,7 @@ import com.nasmusic.tv.data.model.Artist
 import com.nasmusic.tv.data.model.Genre
 import com.nasmusic.tv.data.model.Playlist
 import com.nasmusic.tv.data.model.Song
+import com.nasmusic.tv.data.model.SongTechnicalInfo
 import com.nasmusic.tv.util.AppLog
 import com.nasmusic.tv.util.EncodingUtils
 import com.nasmusic.tv.util.RetryConfig
@@ -364,6 +365,36 @@ class NavidromeAdapter : BackendAdapter {
             urls.add(buildCoverUrl(it))
         }
         return urls.distinct().filter { it.isNotBlank() }
+    }
+
+    override suspend fun getSongTechnicalInfo(songId: String): SongTechnicalInfo? = withContext(Dispatchers.IO) {
+        try {
+            val url = buildRestUrl("getSong") + "&id=$songId"
+            val json = executeRequest(url) ?: return@withContext null
+            val subsonic = json.getAsJsonObject("subsonic-response") ?: return@withContext null
+            val songObj = subsonic.getAsJsonObject("song") ?: return@withContext null
+
+            val codec = songObj.get("contentType")?.asString?.substringAfter("/")?.uppercase()
+                ?: songObj.get("suffix")?.asString?.uppercase() ?: ""
+            val bitrate = songObj.get("bitRate")?.asInt ?: 0
+            val durationSec = songObj.get("duration")?.asLong ?: 0L
+            val size = songObj.get("size")?.asLong ?: 0L
+
+            // Subsonic API 不直接返回采样率和声道数，尝试从其他字段推断或留空
+            // Navidrome 支持通过 getSong 获取更完整的元数据
+            SongTechnicalInfo(
+                codec = codec,
+                bitrate = bitrate,
+                sampleRate = 0,
+                channels = 0,
+                fileSize = size,
+                durationMs = durationSec * 1000,
+                format = codec
+            )
+        } catch (e: Exception) {
+            AppLog.e("NavidromeAdapter", "getSongTechnicalInfo failed", e)
+            null
+        }
     }
 
     override suspend fun getLyrics(songId: String): String? {

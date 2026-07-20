@@ -15,9 +15,12 @@ import com.nasmusic.tv.data.model.LyricsHighlightMode
 import com.nasmusic.tv.data.model.LyricsSource
 import com.nasmusic.tv.data.model.NetworkFavoriteItem
 import com.nasmusic.tv.data.model.PlayMode
+import com.nasmusic.tv.data.model.PlayRecord
+import com.nasmusic.tv.data.model.PlayStatistics
 import com.nasmusic.tv.data.model.Song
 import com.nasmusic.tv.data.model.ServerConfig
 import com.nasmusic.tv.data.model.Genre
+import com.nasmusic.tv.data.model.HomeDashboardData
 import com.nasmusic.tv.data.model.Playlist
 import com.nasmusic.tv.data.model.EqualizerPreset
 import com.nasmusic.tv.data.model.MusicSource
@@ -26,6 +29,7 @@ import com.nasmusic.tv.data.model.Screen
 import com.nasmusic.tv.data.model.SongsPagingState
 import com.nasmusic.tv.data.model.UiState
 import com.nasmusic.tv.data.model.WeatherData
+import com.nasmusic.tv.data.model.WeatherForecast
 import com.nasmusic.tv.data.model.WeatherMood
 import com.nasmusic.tv.data.model.WeatherRadioQueue
 import com.nasmusic.tv.data.prefs.AppPreferences
@@ -87,9 +91,59 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     private val _weatherError = MutableStateFlow<String?>(null)
     val weatherError: StateFlow<String?> = _weatherError.asStateFlow()
 
+    private val _weatherForecast = MutableStateFlow<List<WeatherForecast>>(emptyList())
+    val weatherForecast: StateFlow<List<WeatherForecast>> = _weatherForecast.asStateFlow()
+
+    private val _weatherIconCode = MutableStateFlow<String?>(null)
+    val weatherIconCode: StateFlow<String?> = _weatherIconCode.asStateFlow()
+
     // --- 导航状态 ---
-    private val _currentScreen = MutableStateFlow(Screen.NowPlaying)
+    private val _currentScreen = MutableStateFlow(Screen.Home)
     val currentScreen: StateFlow<Screen> = _currentScreen.asStateFlow()
+
+    // --- 首页仪表盘数据 ---
+    private val _homeDashboardData = MutableStateFlow(HomeDashboardData())
+    val homeDashboardData: StateFlow<HomeDashboardData> = _homeDashboardData.asStateFlow()
+
+    /**
+     * 加载首页仪表盘数据
+     */
+    fun loadHomeDashboard() {
+        viewModelScope.launch {
+            val adapter = backendRegistry.getAdapter()
+            if (adapter == null) {
+                _homeDashboardData.value = HomeDashboardData()
+                return@launch
+            }
+            try {
+                val albums = _albums.value.dataOrNull() ?: emptyList()
+                val songs = _songs.value.dataOrNull() ?: emptyList()
+                val artists = _artists.value.dataOrNull() ?: emptyList()
+                val playlists = adapter.getPlaylists()
+
+                // 最新添加专辑（按年份降序排列）
+                val recentlyAdded = albums
+                    .filter { it.year != null }
+                    .sortedByDescending { it.year }
+                    .take(12)
+                    .ifEmpty { albums.take(12) }
+
+                // 收藏歌曲
+                val favoriteSongs = _favoriteSongs.value.dataOrNull() ?: emptyList()
+
+                _homeDashboardData.value = HomeDashboardData(
+                    totalAlbums = albums.size,
+                    totalSongs = songs.size,
+                    totalArtists = artists.size,
+                    totalPlaylists = playlists.size,
+                    recentlyAddedAlbums = recentlyAdded,
+                    favoriteSongs = favoriteSongs.take(20)
+                )
+            } catch (e: Exception) {
+                com.nasmusic.tv.util.AppLog.e("MainViewModel", "loadHomeDashboard failed", e)
+            }
+        }
+    }
 
     // --- 曲库数据（B-12: UiState 统一异步状态）---
     private val _albums = MutableStateFlow<UiState<List<Album>>>(UiState.Loading)
@@ -233,6 +287,15 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 )
                 if (weather != null) {
                     _weatherData.value = weather
+                    // 获取天气图标代码（从 OpenWeatherMap）
+                    _weatherIconCode.value = null // 由 Open-Meteo 数据时无图标
+
+                    // 获取天气预报（需要 API Key）
+                    if (apiKey.isNotBlank()) {
+                        val forecast = weatherApi.fetchForecast(apiKey.ifBlank { null })
+                        _weatherForecast.value = forecast
+                    }
+
                     // 延迟初始化 WeatherRadioManager（需要 BackendAdapter 和 NetworkMusicManager）
                     val adapter = backendRegistry.getAdapter()
                     if (weatherRadioManager == null) {
@@ -347,6 +410,125 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     private val _networkCoverUrl = MutableStateFlow<String?>(null)
     val networkCoverUrl: StateFlow<String?> = _networkCoverUrl.asStateFlow()
 
+    // --- 歌曲技术信息（编码格式、比特率等）---
+    private val _songTechnicalInfo = MutableStateFlow<com.nasmusic.tv.data.model.SongTechnicalInfo?>(null)
+    val songTechnicalInfo: StateFlow<com.nasmusic.tv.data.model.SongTechnicalInfo?> = _songTechnicalInfo.asStateFlow()
+
+    // --- 播放统计 ---
+    private val _playStatistics = MutableStateFlow(PlayStatistics())
+    val playStatistics: StateFlow<PlayStatistics> = _playStatistics.asStateFlow()
+
+    private val _playRecords = MutableStateFlow<List<PlayRecord>>(emptyList())
+    val playRecords: StateFlow<List<PlayRecord>> = _playRecords.asStateFlow()
+
+    /**
+     * 记录播放事件（歌曲切换或播放完成时调用）
+     */
+    fun recordPlayEvent(song: Song, durationPlayedMs: Long) {
+        if (durationPlayedMs < 5000) return // 少于 5 秒不计入
+        val record = PlayRecord(
+            songId = song.id,
+            title = song.title,
+            artist = song.artist,
+            album = song.album,
+            coverUrl = song.coverUrl,
+            timestamp = System.currentTimeMillis(),
+            durationPlayedMs = durationPlayedMs,
+            durationTotalMs = song.durationMs
+        )
+        viewModelScope.launch {
+            prefs.addPlayRecord(record)
+            // 更新内存中的记录列表
+            _playRecords.value = listOf(record) + _playRecords.value.take(499)
+            refreshPlayStatistics()
+        }
+    }
+
+    /**
+     * 刷新播放统计
+     */
+    fun refreshPlayStatistics() {
+        viewModelScope.launch {
+            val allRecords = _playRecords.value
+            if (allRecords.isEmpty()) {
+                _playStatistics.value = PlayStatistics()
+                return@launch
+            }
+
+            val totalPlayTimeMs = allRecords.sumOf { it.durationPlayedMs }
+            val uniqueSongs = allRecords.map { it.songId }.distinct().size
+
+            // Top 歌曲按播放次数排序
+            val songPlayCounts = allRecords.groupBy { it.songId }
+                .mapValues { (_, records) -> records.size }
+                .entries.sortedByDescending { it.value }.take(10)
+            val topSongs = songPlayCounts.mapNotNull { (songId, _) ->
+                allRecords.find { it.songId == songId }
+            }
+
+            // Top 歌手
+            val artistPlayCounts = allRecords.groupBy { it.artist }
+                .mapValues { (_, records) -> records.size }
+                .entries
+                .filter { it.key.isNotBlank() }
+                .sortedByDescending { it.value }
+                .take(10)
+                .map { it.key to it.value }
+
+            _playStatistics.value = PlayStatistics(
+                totalPlayCount = allRecords.size,
+                totalPlayTimeMs = totalPlayTimeMs,
+                uniqueSongsPlayed = uniqueSongs,
+                topSongs = topSongs,
+                topArtists = artistPlayCounts,
+                recentPlays = allRecords.take(50)
+            )
+        }
+    }
+
+    /**
+     * 加载播放记录（应用启动时调用）
+     */
+    private fun loadPlayRecords() {
+        viewModelScope.launch {
+            val records = prefs.getPlayRecords()
+            _playRecords.value = records
+            refreshPlayStatistics()
+        }
+    }
+
+    /**
+     * 清除播放记录
+     */
+    fun clearPlayRecords() {
+        viewModelScope.launch {
+            prefs.clearPlayRecords()
+            _playRecords.value = emptyList()
+            _playStatistics.value = PlayStatistics()
+        }
+    }
+
+    /**
+     * 异步获取当前歌曲的技术信息
+     */
+    fun loadSongTechnicalInfo() {
+        viewModelScope.launch {
+            val song = currentSong.value ?: return@launch
+            if (song.isNetworkSong) {
+                _songTechnicalInfo.value = null
+                return@launch
+            }
+            try {
+                val adapter = backendRegistry.getAdapter()
+                val info = adapter?.getSongTechnicalInfo(song.id)
+                _songTechnicalInfo.value = info
+            } catch (e: Exception) {
+                AppLog.e("MainViewModel", "loadSongTechnicalInfo failed", e)
+                _songTechnicalInfo.value = null
+            }
+        }
+    }
+
     // --- B-13: 播放器状态（currentSong/isPlaying/progress/duration 由 PlayerManager 拥有）---
     val currentSong: StateFlow<Song?> = playerManager.currentSong
     val isPlaying: StateFlow<Boolean> = playerManager.isPlaying
@@ -404,6 +586,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     )
 
     private var lyricsLoadJob: Job? = null
+    // 记录上一首歌的 ID，用于在切歌时统计播放记录
+    private var lastRecordedSongId: String? = null
+    private var lastRecordedSong: Song? = null
+    private var lastRecordedPositionMs: Long = 0L
 
     init {
         viewModelScope.launch {
@@ -423,12 +609,31 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             }
         }
 
-        // 监听 currentSong 变化，自动切歌时重新加载歌词
+        // 监听 currentSong 变化，自动切歌时重新加载歌词，并记录播放历史
         viewModelScope.launch {
             currentSong.collect { song ->
+                // 记录上一首歌的播放
+                val previousSong = lastRecordedSong
+                val previousPosition = lastRecordedPositionMs
+                if (previousSong != null && previousPosition > 5000L
+                    && previousSong.id != song?.id) {
+                    recordPlayEvent(previousSong, previousPosition)
+                }
+
                 if (song != null) {
                     loadLyricsForCurrentSong()
+                    // 记录当前歌的开始
+                    lastRecordedSong = song
+                    lastRecordedSongId = song.id
                 }
+            }
+        }
+
+        // 每 30 秒更新一次播放位置（用于切歌时记录精确的播放时长）
+        viewModelScope.launch {
+            while (true) {
+                delay(30000)
+                lastRecordedPositionMs = progress.value
             }
         }
 
@@ -468,6 +673,20 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
         // 初始化网络音乐平台来源（从持久化存储读取）
         initMusicSource()
+
+        // 当曲库数据加载完成时自动刷新首页仪表盘
+        viewModelScope.launch {
+            combine(_albums, _songs) { a, s ->
+                a.isSuccess && s.isSuccess
+            }.collect { loaded ->
+                if (loaded && _currentScreen.value == Screen.Home) {
+                    loadHomeDashboard()
+                }
+            }
+        }
+
+        // 加载播放记录
+        loadPlayRecords()
     }
 
     // --- 导航 ---
@@ -543,6 +762,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 loadLibrary()
                 // 更新恢复队列中 NAS 歌曲的 streamUrl
                 updateRestoredQueueStreamUrls()
+                // 导航到首页
+                _currentScreen.value = Screen.Home
+                loadHomeDashboard()
             }
             success
         } catch (e: Exception) {

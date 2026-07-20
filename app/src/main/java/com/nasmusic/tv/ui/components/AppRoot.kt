@@ -29,6 +29,7 @@ import androidx.tv.material3.Text
 import com.nasmusic.tv.R
 import com.nasmusic.tv.data.model.Album
 import com.nasmusic.tv.data.model.EqualizerPreset
+import com.nasmusic.tv.data.model.HomeDashboardData
 import com.nasmusic.tv.data.model.ServerConfig
 import com.nasmusic.tv.data.model.Song
 import com.nasmusic.tv.data.model.UiState
@@ -36,6 +37,7 @@ import com.nasmusic.tv.ui.LocalNavigateBackHandler
 import com.nasmusic.tv.ui.screens.AlbumDetailScreen
 import com.nasmusic.tv.ui.screens.ArtistDetailScreen
 import com.nasmusic.tv.ui.screens.EqualizerScreen
+import com.nasmusic.tv.ui.screens.HomeScreen
 import com.nasmusic.tv.ui.screens.LibraryScreen
 import com.nasmusic.tv.ui.screens.NetworkPlaylistDetailScreen
 import com.nasmusic.tv.ui.screens.network.NetworkMusicContainer
@@ -57,7 +59,7 @@ fun AppRoot(
     isImmersiveMode: androidx.compose.runtime.MutableState<Boolean>,
     onConnect: (ServerConfig) -> Unit
 ) {
-    val currentScreen by viewModel.currentScreen.collectAsState(initial = Screen.Library)
+    val currentScreen by viewModel.currentScreen.collectAsState(initial = Screen.Home)
     val currentSong by viewModel.currentSong.collectAsState(initial = null)
     val isPlaying by viewModel.isPlaying.collectAsState(initial = false)
     val playMode by viewModel.playMode.collectAsState(initial = com.nasmusic.tv.data.model.PlayMode.SEQUENTIAL)
@@ -88,8 +90,8 @@ fun AppRoot(
     LaunchedEffect(currentScreen, isImmersiveMode.value) {
         val handler: (() -> Unit)? = when {
             isImmersiveMode.value -> {{ isImmersiveMode.value = false }}
-            currentScreen != Screen.NowPlaying -> {{ viewModel.navigateTo(Screen.NowPlaying) }}
-            else -> null
+            currentScreen == Screen.Home || currentScreen == Screen.NowPlaying -> null
+            else -> {{ viewModel.navigateTo(Screen.Home) }}
         }
         navBackHandler.value = handler
     }
@@ -126,6 +128,11 @@ fun AppRoot(
                 Spacer(modifier = Modifier.weight(1f))
 
                 NavItem(
+                    label = stringResource(R.string.nav_home),
+                    selected = currentScreen == Screen.Home,
+                    onClick = { viewModel.navigateTo(Screen.Home) }
+                )
+                NavItem(
                     label = stringResource(R.string.nav_now_playing),
                     selected = currentScreen == Screen.NowPlaying,
                     onClick = { viewModel.navigateTo(Screen.NowPlaying) }
@@ -161,6 +168,49 @@ fun AppRoot(
         // 内容区域
         Box(modifier = Modifier.fillMaxWidth().weight(1f)) {
             when (currentScreen) {
+                Screen.Home -> {
+                    val homeDashboardData by viewModel.homeDashboardData.collectAsState(initial = HomeDashboardData())
+                    val weatherData by viewModel.weatherData.collectAsState(initial = null)
+                    val recentSongsState by viewModel.recentSongs.collectAsState(initial = UiState.Success(emptyList()))
+                    val recentSongsList = recentSongsState.dataOrNull() ?: emptyList()
+
+                    // 进入首页时刷新数据
+                    LaunchedEffect(Unit) {
+                        viewModel.loadHomeDashboard()
+                        viewModel.loadRecentSongs()
+                    }
+
+                    HomeScreen(
+                        isConnected = isConnected,
+                        isLibraryLoading = isLibraryLoading,
+                        serverDisplayName = serverDisplayName,
+                        dashboardData = homeDashboardData,
+                        weatherData = weatherData,
+                        recentSongs = recentSongsList,
+                        onPlaySong = { song ->
+                            if (song.isNetworkSong) viewModel.playNetworkSong(song)
+                            else viewModel.playQueue(listOf(song))
+                            viewModel.navigateTo(Screen.NowPlaying)
+                        },
+                        onPlayAlbum = { album ->
+                            val albumSongs = songs.dataOrNull()?.filter { it.albumId == album.id } ?: emptyList()
+                            if (albumSongs.isNotEmpty()) {
+                                viewModel.playQueue(albumSongs)
+                                viewModel.navigateTo(Screen.NowPlaying)
+                            }
+                        },
+                        onOpenAlbumDetail = { album -> viewModel.openAlbumDetail(album) },
+                        onNavigateToLibrary = { viewModel.navigateTo(Screen.Library) },
+                        onNavigateToNetwork = { viewModel.navigateTo(Screen.Network) },
+                        onNavigateToQueue = { viewModel.navigateTo(Screen.Queue) },
+                        onPlayAllRecent = {
+                            if (recentSongsList.isNotEmpty()) {
+                                viewModel.playQueue(recentSongsList)
+                                viewModel.navigateTo(Screen.NowPlaying)
+                            }
+                        }
+                    )
+                }
                 Screen.NowPlaying -> {
                     // 封面候选列表：依赖 currentSong 和 networkCoverUrl（切在线歌词时联动刷新）
                     val coverCandidates = remember(currentSong?.id, networkCoverUrl) {
@@ -202,7 +252,9 @@ fun AppRoot(
                                 if (song.isNetworkSong) viewModel.toggleNetworkFavorite(song)
                                 else viewModel.toggleFavorite(song)
                             }
-                        }
+                        },
+                        technicalInfo = viewModel.songTechnicalInfo.collectAsState(initial = null).value,
+                        onLoadTechnicalInfo = { viewModel.loadSongTechnicalInfo() }
                     )
                 }
                 Screen.Library -> {
@@ -282,6 +334,8 @@ fun AppRoot(
                         onLoadRecentSongs = { viewModel.loadRecentSongs() },
                         onSearch = { query -> viewModel.searchSongsOnServer(query) },
                         onClearSearch = { viewModel.clearSearch() },
+                        playStatistics = viewModel.playStatistics.collectAsState(initial = com.nasmusic.tv.data.model.PlayStatistics()).value,
+                        onClearPlayRecords = { viewModel.clearPlayRecords() }
                     )
                 }
                 Screen.Queue -> {
@@ -477,6 +531,8 @@ fun AppRoot(
                         currentWeatherMood = currentWeatherMood,
                         weatherLoading = weatherLoading,
                         weatherError = weatherError,
+                        weatherForecast = viewModel.weatherForecast.collectAsState(initial = emptyList()).value,
+                        weatherIconCode = viewModel.weatherIconCode.collectAsState(initial = null).value,
                         onSwitchWeatherMood = { mood -> viewModel.switchWeatherMood(mood) },
                         onRefreshWeather = { viewModel.fetchWeather() },
                         onPlayWeatherAll = { viewModel.playWeatherRadioAll() },

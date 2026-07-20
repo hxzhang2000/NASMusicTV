@@ -29,6 +29,7 @@ import com.nasmusic.tv.data.model.NetworkSubTab
 import com.nasmusic.tv.data.model.Playlist
 import com.nasmusic.tv.data.model.Song
 import com.nasmusic.tv.data.model.WeatherData
+import com.nasmusic.tv.data.model.WeatherForecast
 import com.nasmusic.tv.data.model.WeatherMood
 import com.nasmusic.tv.data.model.WeatherRadioQueue
 import com.nasmusic.tv.ui.LocalListBackHandler
@@ -85,6 +86,8 @@ fun NetworkMusicContainer(
     currentWeatherMood: WeatherMood = WeatherMood.SUNNY,
     weatherLoading: Boolean = false,
     weatherError: String? = null,
+    weatherForecast: List<WeatherForecast> = emptyList(),
+    weatherIconCode: String? = null,
     onSwitchWeatherMood: (WeatherMood) -> Unit = {},
     onRefreshWeather: () -> Unit = {},
     onPlayWeatherAll: (() -> Unit)? = null,
@@ -193,6 +196,8 @@ fun NetworkMusicContainer(
                         errorMessage = weatherError,
                         networkFavoriteIds = networkFavoriteIds,
                         queueSongIds = queueSongIds,
+                        forecast = weatherForecast,
+                        weatherIconCode = weatherIconCode,
                         onPlaySong = onPlayNetworkSong,
                         onPlayAll = { songs -> onPlayAllSongs(songs) },
                         onSwitchMood = onSwitchWeatherMood,

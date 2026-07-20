@@ -15,7 +15,11 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
@@ -37,8 +41,10 @@ import com.nasmusic.tv.data.model.Song
 import com.nasmusic.tv.ui.components.LyricsView
 import com.nasmusic.tv.ui.components.CoverCarousel
 import com.nasmusic.tv.ui.components.ControlButtonsRow
-import com.nasmusic.tv.ui.components.ProgressSection
 import com.nasmusic.tv.ui.components.FocusableSurface
+import com.nasmusic.tv.ui.components.ProgressSection
+import com.nasmusic.tv.ui.components.SongInfoPanel
+import com.nasmusic.tv.ui.components.VisualEqualizer
 import com.nasmusic.tv.ui.theme.NasMusicColors
 import com.nasmusic.tv.util.AppLog
 
@@ -77,8 +83,13 @@ fun NowPlayingScreen(
     coverFilterEnabled: Boolean = false,
     coverFilterBlurRadius: Float = 8f,
     coverFilterDarkOverlay: Float = 0.3f,
+    // 歌曲详情信息
+    technicalInfo: com.nasmusic.tv.data.model.SongTechnicalInfo? = null,
+    onLoadTechnicalInfo: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
+    var showInfoPanel by remember { mutableStateOf(false) }
+
     Box(
         modifier = modifier
             .fillMaxSize()
@@ -143,14 +154,18 @@ fun NowPlayingScreen(
                         CoverColumn(
                             currentSong = currentSong,
                             onToggleImmersive = onToggleImmersive,
-                                isFavorite = isFavorite,
-                                onToggleFavorite = onToggleFavorite,
-                                coverCandidates = coverCandidates,
-                                isPlaying = isPlaying,
-                                coverFilterEnabled = coverFilterEnabled,
-                                coverFilterBlurRadius = coverFilterBlurRadius,
-                                coverFilterDarkOverlay = coverFilterDarkOverlay
-                            )
+                            isFavorite = isFavorite,
+                            onToggleFavorite = onToggleFavorite,
+                            coverCandidates = coverCandidates,
+                            isPlaying = isPlaying,
+                            coverFilterEnabled = coverFilterEnabled,
+                            coverFilterBlurRadius = coverFilterBlurRadius,
+                            coverFilterDarkOverlay = coverFilterDarkOverlay,
+                            technicalInfo = technicalInfo,
+                            onLoadTechnicalInfo = onLoadTechnicalInfo,
+                            showInfoPanel = showInfoPanel,
+                            onToggleInfoPanel = { showInfoPanel = !showInfoPanel }
+                        )
                         }
 
                         Spacer(modifier = Modifier.height(8.dp))
@@ -251,7 +266,17 @@ fun NowPlayingScreen(
                 }
             }
 
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(4.dp))
+
+            // 可视化均衡器（仅在非沉浸模式 + 有歌曲时显示）
+            if (!isImmersiveMode && currentSong != null) {
+                VisualEqualizer(
+                    isPlaying = isPlaying,
+                    barCount = 32,
+                    modifier = Modifier.padding(horizontal = 4.dp)
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+            }
 
             // 进度条（全宽，底部对齐）— Task 2
             ProgressSection(
@@ -276,7 +301,11 @@ private fun CoverColumn(
     isPlaying: Boolean = false,
     coverFilterEnabled: Boolean = false,
     coverFilterBlurRadius: Float = 8f,
-    coverFilterDarkOverlay: Float = 0.3f
+    coverFilterDarkOverlay: Float = 0.3f,
+    technicalInfo: com.nasmusic.tv.data.model.SongTechnicalInfo? = null,
+    onLoadTechnicalInfo: () -> Unit = {},
+    showInfoPanel: Boolean = false,
+    onToggleInfoPanel: () -> Unit = {}
 ) {
     Column(
         modifier = Modifier.width(300.dp),
@@ -396,6 +425,43 @@ private fun CoverColumn(
             modifier = Modifier.fillMaxWidth()
         )
 
+        // 信息按钮
+        Spacer(modifier = Modifier.height(6.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.Center
+        ) {
+            FocusableSurface(
+                onClick = {
+                    if (!showInfoPanel) onLoadTechnicalInfo()
+                    onToggleInfoPanel()
+                },
+                shape = RoundedCornerShape(6.dp),
+                focusedScale = 1.08f,
+                animationDurationMs = 150,
+                containerColor = if (showInfoPanel) NasMusicColors.Primary.copy(alpha = 0.2f)
+                                 else NasMusicColors.Surface.copy(alpha = 0.3f),
+                focusedContainerColor = NasMusicColors.Primary.copy(alpha = 0.3f),
+                contentColor = if (showInfoPanel) NasMusicColors.Primary else NasMusicColors.TextSecondary,
+                focusedContentColor = NasMusicColors.Primary
+            ) {
+                Text(
+                    text = if (showInfoPanel) "信息 ▲" else "信息 ▼",
+                    fontSize = 11.sp,
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                )
+            }
+        }
+
+        // 信息面板（展开时显示）
+        if (showInfoPanel) {
+            Spacer(modifier = Modifier.height(8.dp))
+            SongInfoPanel(
+                song = currentSong,
+                technicalInfo = technicalInfo,
+                onDismiss = onToggleInfoPanel
+            )
+        }
     }
 }
 

@@ -43,6 +43,7 @@ import com.nasmusic.tv.ui.theme.Accent
 import com.nasmusic.tv.ui.theme.NasMusicColors
 import com.nasmusic.tv.ui.components.BackButton
 import com.nasmusic.tv.ui.components.FocusableSurface
+import com.nasmusic.tv.ui.components.VisualEqualizer
 import kotlinx.coroutines.launch
 
 /**
@@ -83,6 +84,27 @@ fun EqualizerScreen(
             modifier = Modifier.fillMaxSize(),
             verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
+            // 频谱可视化预览
+            item {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        text = stringResource(R.string.home_spectrum_preview),
+                        color = NasMusicColors.TextSecondary,
+                        fontSize = 12.sp,
+                        modifier = Modifier.padding(bottom = 6.dp)
+                    )
+                    VisualEqualizer(
+                        isPlaying = true,
+                        barCount = 24,
+                        modifier = Modifier.fillMaxWidth().height(64.dp)
+                    )
+                }
+                Spacer(modifier = Modifier.height(12.dp))
+            }
+
             // 预设列表
             item {
                 Text(

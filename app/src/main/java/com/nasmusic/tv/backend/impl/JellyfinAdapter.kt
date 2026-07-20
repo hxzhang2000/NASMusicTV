@@ -8,6 +8,7 @@ import com.nasmusic.tv.data.model.Artist
 import com.nasmusic.tv.data.model.Genre
 import com.nasmusic.tv.data.model.Playlist
 import com.nasmusic.tv.data.model.Song
+import com.nasmusic.tv.data.model.SongTechnicalInfo
 import com.nasmusic.tv.util.AppLog
 import com.nasmusic.tv.util.EncodingUtils
 import com.nasmusic.tv.util.RetryConfig
@@ -360,6 +361,46 @@ class JellyfinAdapter : BackendAdapter {
         } catch (e: Exception) {
             AppLog.e("JellyfinAdapter", "getRecentSongs failed", e)
             emptyList()
+        }
+    }
+
+    override suspend fun getSongTechnicalInfo(songId: String): SongTechnicalInfo? = withContext(Dispatchers.IO) {
+        try {
+            val url = "$baseUrl/Items/$songId?api_key=$apiToken"
+            val json = executeJsonRequest(url) ?: return@withContext null
+            val streams = json.getAsJsonArray("MediaStreams") ?: return@withContext null
+
+            // 查找第一个音频流
+            for (i in 0 until streams.size()) {
+                val stream = streams[i].asJsonObject
+                val type = stream.get("Type")?.asString ?: continue
+                if (type != "Audio") continue
+
+                val codec = stream.get("Codec")?.asString ?: ""
+                val bitrate = stream.get("BitRate")?.asInt ?: 0
+                val sampleRate = stream.get("SampleRate")?.asInt ?: 0
+                val channels = stream.get("Channels")?.asInt ?: 0
+
+                // 容器格式（从主对象获取）
+                val container = json.get("Container")?.asString ?: ""
+
+                val size = json.get("Size")?.asLong ?: 0L
+                val runTimeTicks = json.get("RunTimeTicks")?.asLong ?: 0L
+
+                return@withContext SongTechnicalInfo(
+                    codec = codec.uppercase(),
+                    bitrate = bitrate / 1000,
+                    sampleRate = sampleRate,
+                    channels = channels,
+                    fileSize = size,
+                    durationMs = runTimeTicks / 10000,
+                    format = container.uppercase()
+                )
+            }
+            return@withContext null
+        } catch (e: Exception) {
+            AppLog.e("JellyfinAdapter", "getSongTechnicalInfo failed", e)
+            null
         }
     }
 

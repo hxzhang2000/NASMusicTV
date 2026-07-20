@@ -5,6 +5,7 @@ import com.nasmusic.tv.data.model.Artist
 import com.nasmusic.tv.data.model.Genre
 import com.nasmusic.tv.data.model.Playlist
 import com.nasmusic.tv.data.model.Song
+import com.nasmusic.tv.data.model.SongTechnicalInfo
 
 /**
  * 后端适配器接口
@@ -154,4 +155,7 @@ interface BackendAdapter {
 
     // --- 随机歌曲 ---
     suspend fun getRandomSongs(limit: Int = 20): List<Song> = emptyList()
+
+    // --- 歌曲技术信息 ---
+    suspend fun getSongTechnicalInfo(songId: String): SongTechnicalInfo? = null
 }

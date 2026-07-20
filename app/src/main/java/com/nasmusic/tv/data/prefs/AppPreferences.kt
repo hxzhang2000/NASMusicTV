@@ -7,6 +7,7 @@ import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.doublePreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
+import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
@@ -31,6 +32,10 @@ import kotlinx.coroutines.runBlocking
  * 使用 DataStore 持久化服务器配置与通用设置
  */
 class AppPreferences(private val context: Context) {
+
+    companion object {
+        private const val TAG = "AppPreferences"
+    }
 
     private val Context.dataStore by preferencesDataStore(name = "nas_music_tv")
 
@@ -81,6 +86,9 @@ class AppPreferences(private val context: Context) {
     // --- B-4 均衡器 ---
     private val keyEqualizerPreset = intPreferencesKey("equalizer_preset")
     private val keyEqualizerBands = stringPreferencesKey("equalizer_bands")
+
+    // --- 播放统计 ---
+    private val keyPlayRecords = stringPreferencesKey("play_records")
 
     private val gson = Gson()
     private val recentSongsMaxSize = 50
@@ -511,6 +519,56 @@ class AppPreferences(private val context: Context) {
     suspend fun clearLastQueue() {
         context.dataStore.edit { prefs ->
             prefs.remove(keyLastQueue)
+        }
+    }
+
+    // ========== 播放统计 ==========
+
+    private data class PlayRecordsData(
+        val records: List<com.nasmusic.tv.data.model.PlayRecord> = emptyList()
+    )
+
+    /**
+     * 记录一次播放
+     */
+    suspend fun addPlayRecord(record: com.nasmusic.tv.data.model.PlayRecord) {
+        context.dataStore.edit { prefs ->
+            val json = prefs[keyPlayRecords] ?: "{\"records\":[]}"
+            val data = try {
+                gson.fromJson(json, PlayRecordsData::class.java)
+            } catch (e: Exception) {
+                PlayRecordsData()
+            }
+            // 最多保留 500 条记录
+            val updated = PlayRecordsData(
+                records = (listOf(record) + data.records).take(500)
+            )
+            prefs[keyPlayRecords] = gson.toJson(updated)
+        }
+    }
+
+    /**
+     * 获取所有播放记录
+     */
+    suspend fun getPlayRecords(): List<com.nasmusic.tv.data.model.PlayRecord> {
+        return try {
+            context.dataStore.data.first().let { prefs ->
+                val json = prefs[keyPlayRecords] ?: return emptyList()
+                val data = gson.fromJson(json, PlayRecordsData::class.java)
+                data.records
+            }
+        } catch (e: Exception) {
+            AppLog.w(TAG, "Failed to read play records", e)
+            emptyList()
+        }
+    }
+
+    /**
+     * 清除所有播放记录
+     */
+    suspend fun clearPlayRecords() {
+        context.dataStore.edit { prefs ->
+            prefs.remove(keyPlayRecords)
         }
     }
 }

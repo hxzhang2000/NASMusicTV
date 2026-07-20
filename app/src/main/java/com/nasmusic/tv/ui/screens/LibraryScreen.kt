@@ -44,6 +44,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -73,7 +74,8 @@ private enum class LibraryTab(val titleRes: Int) {
     GENRES(R.string.library_genres),
     YEARS(R.string.library_years),
     FAVORITES(R.string.library_favorites),
-    RECENT(R.string.library_recent)
+    RECENT(R.string.library_recent),
+    STATISTICS(com.nasmusic.tv.R.string.library_statistics)
 }
 
 @Composable
@@ -117,6 +119,9 @@ fun LibraryScreen(
     // 网络收藏（供 FavoritesTab 使用）
     networkFavoriteSongs: List<Song> = emptyList(),
     onToggleNetworkFavorite: (Song) -> Unit = {},
+    // 播放统计
+    playStatistics: com.nasmusic.tv.data.model.PlayStatistics = com.nasmusic.tv.data.model.PlayStatistics(),
+    onClearPlayRecords: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     var activeTab by remember { mutableStateOf(LibraryTab.ALBUMS) }
@@ -299,6 +304,10 @@ fun LibraryScreen(
                         onPlaySongs = onPlaySongs
                     )
                     LibraryTab.FAVORITES -> {} // 已在上方独立处理（不依赖 NAS 连接）
+                    LibraryTab.STATISTICS -> StatisticsTab(
+                        statistics = playStatistics,
+                        onClearRecords = onClearPlayRecords
+                    )
                     LibraryTab.RECENT -> RecentTab(
                         songs = recentSongs,
                         recentSongIds = recentSongIds,
@@ -851,6 +860,242 @@ private fun FavoritesTab(
             }
         }
     }
+}
+
+/**
+ * 播放统计 Tab
+ *
+ * 展示：总播放次数、总时长、Top 歌曲、Top 歌手。
+ */
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+private fun StatisticsTab(
+    statistics: com.nasmusic.tv.data.model.PlayStatistics,
+    onClearRecords: () -> Unit = {}
+) {
+    val listState = rememberLazyGridState()
+    val scope = rememberCoroutineScope()
+    val listBackHandler = LocalListBackHandler.current
+
+    DisposableEffect(Unit) {
+        val handler: () -> Boolean = {
+            val atTop = listState.firstVisibleItemIndex == 0 &&
+                    listState.firstVisibleItemScrollOffset == 0
+            if (!atTop) {
+                scope.launch { listState.scrollToItem(0) }
+                true
+            } else {
+                false
+            }
+        }
+        listBackHandler.value = handler
+        onDispose { listBackHandler.value = null }
+    }
+
+    Column {
+        Text(
+            text = stringResource(R.string.stats_title),
+            color = NasMusicColors.TextPrimary,
+            fontSize = 18.sp,
+            modifier = Modifier.padding(bottom = 12.dp)
+        )
+
+        if (statistics.totalPlayCount == 0) {
+            Box(
+                modifier = Modifier.fillMaxWidth().padding(top = 40.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                        text = stringResource(R.string.home_no_play_records),
+                    color = NasMusicColors.TextSecondary,
+                    fontSize = 16.sp
+                )
+            }
+        } else {
+            // 概览统计卡片行
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                        val totalMinutes = statistics.totalPlayTimeMs / 60000
+                        val hours = totalMinutes / 60
+                        val minutes = totalMinutes % 60
+                        Box(modifier = Modifier.weight(1f)) {
+                            StatCardSmall(
+                                label = stringResource(R.string.stats_total_plays),
+                                value = "${statistics.totalPlayCount}"
+                            )
+                        }
+                        Box(modifier = Modifier.weight(1f)) {
+                            StatCardSmall(
+                                label = stringResource(R.string.stats_total_time),
+                                value = "${hours}h${minutes}m"
+                            )
+                        }
+                        Box(modifier = Modifier.weight(1f)) {
+                            StatCardSmall(
+                                label = stringResource(R.string.stats_unique_songs),
+                                value = "${statistics.uniqueSongsPlayed}"
+                            )
+                        }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Top 歌曲
+            if (statistics.topSongs.isNotEmpty()) {
+                Text(
+                    text = stringResource(R.string.stats_top_songs),
+                    color = NasMusicColors.TextPrimary,
+                    fontSize = 16.sp,
+                    modifier = Modifier.padding(bottom = 8.dp)
+                )
+                statistics.topSongs.forEachIndexed { index, record ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 4.dp, horizontal = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "${index + 1}.",
+                            color = NasMusicColors.Primary,
+                            fontSize = 13.sp,
+                            modifier = Modifier.width(24.dp)
+                        )
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = record.title,
+                                color = NasMusicColors.TextPrimary,
+                                fontSize = 13.sp,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            Text(
+                                text = record.artist.ifBlank { "—" },
+                                color = NasMusicColors.TextSecondary,
+                                fontSize = 11.sp,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                        Text(
+                            text = formatDurationShort(record.durationPlayedMs),
+                            color = NasMusicColors.TextSecondary,
+                            fontSize = 11.sp
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Top 歌手
+            if (statistics.topArtists.isNotEmpty()) {
+                Text(
+                    text = stringResource(R.string.stats_top_artists),
+                    color = NasMusicColors.TextPrimary,
+                    fontSize = 16.sp,
+                    modifier = Modifier.padding(bottom = 8.dp)
+                )
+                statistics.topArtists.forEachIndexed { index, (artist, count) ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp, horizontal = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "${index + 1}.",
+                            color = NasMusicColors.Primary,
+                            fontSize = 13.sp,
+                            modifier = Modifier.width(24.dp)
+                        )
+                        Text(
+                            text = artist,
+                            color = NasMusicColors.TextPrimary,
+                            fontSize = 13.sp,
+                            modifier = Modifier.weight(1f),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Text(
+                            text = "${count}次",
+                            color = NasMusicColors.TextSecondary,
+                            fontSize = 12.sp
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // 清除记录按钮
+            FocusableSurface(
+                onClick = onClearRecords,
+                shape = RoundedCornerShape(8.dp),
+                focusedScale = 1.08f,
+                animationDurationMs = 150,
+                containerColor = NasMusicColors.Danger.copy(alpha = 0.15f),
+                focusedContainerColor = NasMusicColors.Danger.copy(alpha = 0.3f),
+                contentColor = NasMusicColors.Danger,
+                focusedContentColor = NasMusicColors.Danger
+            ) {
+                Text(
+                    text = stringResource(R.string.stats_clear_records),
+                    fontSize = 13.sp,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                )
+            }
+        }
+    }
+}
+
+/**
+ * 小统计卡片
+ */
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+private fun StatCardSmall(
+    label: String,
+    value: String
+) {
+    FocusableSurface(
+        onClick = {},
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(10.dp),
+        focusedScale = 1.04f,
+        animationDurationMs = 150,
+        containerColor = NasMusicColors.Surface.copy(alpha = 0.5f),
+        focusedContainerColor = NasMusicColors.Primary.copy(alpha = 0.15f),
+        contentColor = NasMusicColors.TextPrimary,
+        focusedContentColor = NasMusicColors.Primary
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(
+                text = value,
+                fontSize = 22.sp,
+                fontWeight = FontWeight.Bold,
+                color = NasMusicColors.Primary
+            )
+            Text(
+                text = label,
+                fontSize = 11.sp,
+                color = NasMusicColors.TextSecondary
+            )
+        }
+    }
+}
+
+/**
+ * 格式化时长为短格式 (如 3m 24s)
+ */
+private fun formatDurationShort(ms: Long): String {
+    val totalSec = ms / 1000
+    val min = totalSec / 60
+    val sec = totalSec % 60
+    return if (min > 0) "${min}m ${sec}s" else "${sec}s"
 }
 
 @Composable

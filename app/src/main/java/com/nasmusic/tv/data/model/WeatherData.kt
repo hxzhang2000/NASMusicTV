@@ -8,6 +8,7 @@ package com.nasmusic.tv.data.model
  */
 data class WeatherData(
     val temperature: Double,           // 当前温度（°C）
+    val feelsLike: Double? = null,     // 体感温度（°C）
     val humidity: Double,              // 相对湿度（%）
     val windSpeed: Double,             // 风速（km/h）
     val weatherCode: Int,              // WMO 天气代码（https://open-meteo.com/en/docs#weathervariables）

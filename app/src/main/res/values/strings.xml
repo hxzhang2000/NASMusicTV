@@ -24,6 +24,7 @@
     <string name="nav_settings">设置</string>
     <string name="nav_server">服务器</string>
     <string name="nav_network">网络音乐</string>
+    <string name="nav_home">首页</string>
 
     <!-- Library -->
     <string name="library_albums">专辑</string>
@@ -35,6 +36,27 @@
     <string name="library_years">年代</string>
     <string name="library_favorites">收藏</string>
     <string name="library_recent">最近播放</string>
+    <string name="library_statistics">统计</string>
+    <string name="home_ready">已就绪</string>
+    <string name="home_album_count">专辑</string>
+    <string name="home_song_count">歌曲</string>
+    <string name="home_artist_count">艺术家</string>
+    <string name="home_playlist_count">播放列表</string>
+    <string name="home_view_all">查看全部</string>
+    <string name="home_weather_radio">天气电台</string>
+    <string name="home_song_info">歌曲信息</string>
+    <string name="home_spectrum_preview">实时频谱预览</string>
+    <string name="home_no_play_records">暂无播放记录</string>
+    <string name="home_matching_covers">天气匹配封面</string>
+    <string name="stats_title">播放统计</string>
+    <string name="stats_total_plays">总播放次数</string>
+    <string name="stats_total_time">总播放时长</string>
+    <string name="stats_unique_songs">独立歌曲</string>
+    <string name="stats_top_songs">Top 10 歌曲</string>
+    <string name="stats_top_artists">Top 10 歌手</string>
+    <string name="stats_clear_records">清除所有播放记录</string>
+    <string name="stats_forecast">天气预报</string>
+
     <string name="library_recently_added">最近添加</string>
     <string name="library_search_hint">输入歌曲名、歌手或拼音首字母</string>
     <string name="library_no_genres">暂无风格数据</string>
