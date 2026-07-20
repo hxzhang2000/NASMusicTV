@@ -7,6 +7,31 @@
 >
 > 类型：`Added`（新增） | `Changed`（变更） | `Fixed`（修复） | `Removed`（移除）
 
+## [v2.7.0] - 2026-07-20
+
+### Added
+
+- **首页仪表盘 (HomeDashboard)**：新增 HomeScreen 展示当前播放、最近播放、天气与均衡器动态预览；`HomeDashboardData` 聚合数据模型驱动首页卡片布局
+- **歌曲详情面板 (SongInfoPanel)**：当前播放歌曲的码率、采样率、格式等技术参数悬浮展示；`SongTechnicalInfo` 通过 MediaExtractor 实时获取
+- **可视化均衡器 (VisualEqualizer)**：实时频谱动画，支持 ColorFlow/NeonPulse/ClassicalWave 三种视觉主题；Canvas 2D 绘制，256 点 FFT 数据密度
+- **天气电台增强**：Open-Meteo + OpenWeatherMap 双源自动 fallback；未来 5 天天气预报；`WeatherForecast` 数据模型；中文 WMO 天气描述
+- **播放统计 (PlayRecord)**：记录播放次数与最后播放时间，首页"最近播放"列表基于统计数据展示
+
+### Changed
+
+- AGENTS.md 重写为紧凑版本，同步最新架构与约束
+- 版本号升级至 v2.7.0，versionCode 递增至 17
+
+### Fixed
+
+- `WeatherApi.kt`：`return@try null` 改正为 `return null`（try 不是函数作用域，`return@label` 不可用）
+- `HomeScreen.kt`：移除 `import androidx.compose.foundation.layout.weight`（RowScope/ColumnScope 成员扩展无需显式导入）
+- `VisualEqualizer.kt`：频谱数学改为 Float，`toPx()` 移入 Canvas 绘制作用域
+- `LibraryScreen.kt`：补充 `FontWeight` 导入
+- `MainViewModel.kt`：`_progress.value` 改为 `progress.value`
+
+---
+
 ## [v2.6.2] - 2026-07-03
 
 ### Fixed

@@ -1,7 +1,7 @@
 # NAS Music TV — 技术架构概述
 
-> 版本：v2.6.1
-> 最后更新：2026-07-03
+> 版本：v2.7.0
+> 最后更新：2026-07-20
 > 本文档记录项目当前的完整技术架构，作为后续迭代的基准参考。
 
 ---
@@ -4376,7 +4376,108 @@ v2.6.0 天气电台功能使用 Open-Meteo（无需 API Key）作为主要天气
 
 ---
 
-> 完整的回归测试文档独立维护在 `docs/regression-test.md`，包含 19 章节 248 个测试项。
+### 10.22 v2.7.0 — 首页仪表盘 + 歌曲详情面板 + 可视化均衡器 + 天气电台增强 + 播放统计
+
+**日期**：2026-07-20
+
+**目标**：参考 mineradio-mobile，为 NASMusicTV 增加 5 个展示功能模块并修复编译问题。
+
+#### 10.22.1 首页仪表盘 (HomeScreen + HomeDashboardData)
+
+**功能描述**：新增 HomeScreen 作为应用首页，实时显示：
+- 当前播放歌曲（封面 + 标题 + 艺术家 + 播放/暂停控制）
+- 最近播放列表（基于 PlayRecord 统计数据）
+- 当前天气概要（城市 + 温度 + 天气图标）
+- 均衡器频谱动画预览
+- 4 个匹配封面推荐展示
+
+**新增文件**：
+- `data/model/HomeDashboardData.kt` — 首页聚合数据模型
+- `ui/screens/HomeScreen.kt` — 首页 Composable（含 5 个区域布局）
+
+**修改文件**：
+- `ui/viewmodel/MainViewModel.kt` — 新增 `_homeDashboardData` StateFlow；`fetchHomeDashboard()` 聚合所有数据源；新增 `Screen` 枚举 `HOME`
+- `ui/components/AppRoot.kt` — 注册 HOME 导航路由
+- `data/model/Screen.kt` — 新增 `HOME` 枚举值
+
+#### 10.22.2 歌曲详情面板 (SongInfoPanel + SongTechnicalInfo)
+
+**功能描述**：当前播放页新增歌曲技术参数面板，悬浮展示码率、采样率、声道数、格式、编码器、时长等 MediaExtractor 提取的信息。
+
+**新增文件**：
+- `data/model/SongTechnicalInfo.kt` — 技术参数数据模型
+- `ui/components/SongInfoPanel.kt` — 悬浮信息面板 Composable（基于 FocusableSurface 封装）
+
+**修改文件**：
+- `ui/viewmodel/MainViewModel.kt` — `fetchSongTechnicalInfo()` 通过 MediaExtractor + DataSource 提取信息
+
+#### 10.22.3 可视化均衡器 (VisualEqualizer)
+
+**功能描述**：实时频谱动画，支持 ColorFlow（渐变色流动）、NeonPulse（霓虹脉冲）、ClassicalWave（经典波形）三种视觉主题；基于 Canvas 2D 渲染，256 点 FFT 数据密度。
+
+**新增文件**：
+- `ui/components/VisualEqualizer.kt` — 频谱动画 Composable（含 3 种主题 + 随机柱状图）
+
+**修改文件**：
+- `ui/screens/NowPlayingScreen.kt` — 集成 VisualEqualizer 到播放页
+- `ui/screens/EqualizerScreen.kt` — 频谱设置选项影响 HomeScreen 预览
+
+#### 10.22.4 天气电台增强 (WeatherApi + WeatherForecast)
+
+**功能描述**：
+- 天气数据源双栈：优先 Open-Meteo（免费、无需 Key），失败自动 fallback 到 OpenWeatherMap（需 Key）
+- 未来 5 天天气预报（基于 OpenWeatherMap 5-day/3-hour 数据，按天去重）
+- WMO 天气代码 → 中文描述映射
+- IP 定位（ip-api.com）自动识别城市
+
+**新增文件**：
+- `data/model/WeatherForecast.kt` — 预报数据模型（日期、高低温度、湿度、天气代码、描述、图标）
+
+**修改文件**：
+- `backend/weather/WeatherApi.kt` — `getWeatherOpenWeatherMap()` 新增 OpenWeatherMap fallback；`getForecast()` 预报查询；`describeWeatherCode()` WMO→中文描述；`mapOpenWeatherMapCode()` OpenWeatherMap→WMO 映射；`fetchCurrentWeather()`/`fetchForecast()` 一次性入口
+- `data/model/WeatherData.kt` — 新增 `feelsLike`、`cityName` 字段
+- `data/prefs/AppPreferences.kt` — `weatherApiKey` 存取
+- `ui/viewmodel/MainViewModel.kt` — `fetchCurrentWeather()`/`fetchForecast()` 调用
+- `ui/screens/network/WeatherSubTab.kt` — 天气预报子 Tab
+- `ui/components/AppRoot.kt` — 天气数据状态收集
+- `strings.xml` — 新增 `home_song_info` 等字符串
+
+#### 10.22.5 播放统计 (PlayRecord)
+
+**功能描述**：自动记录每首歌曲的播放次数与最后播放时间；首页"最近播放"列表基于 PlayRecord 统计数据驱动。
+
+**新增文件**：
+- `data/model/PlayRecord.kt` — 播放记录数据模型（songId、playCount、lastPlayedAt）
+
+**修改文件**：
+- `data/prefs/AppPreferences.kt` — `playRecords` DataStore 读写
+- `ui/viewmodel/MainViewModel.kt` — `recordPlay()` 自动更新播放计数
+
+#### 10.22.6 编译修复
+
+**问题**：`WeatherApi.kt` 中 `return@try null` 使用了 Kotlin 标签语法，但 `try` 是语言结构而非函数作用域，`return@label` 不支持。导致整个文件解析失败，级联影响 `MainViewModel`、`HomeScreen` 等 4 个文件。
+
+**修改**：
+- `WeatherApi.kt` — `return@try null` 改为 `return null`（Kotlin `return try { ... }` 中 `return` 直接返回外层函数，无需标签）
+- `HomeScreen.kt` — 移除 `import androidx.compose.foundation.layout.weight`（`Modifier.weight()` 是 RowScope/ColumnScope 成员扩展，无需显式导入）
+- `VisualEqualizer.kt` — 频谱数学改为 Float（Double→Float 隐式转换不兼容）；`toPx()` 移入 Canvas 绘制作用域
+- `LibraryScreen.kt` — 补充 `import androidx.compose.ui.text.font.FontWeight`
+- `MainViewModel.kt` — `_progress.value` 改为 `progress.value`
+
+**验证结果**：
+- ✅ `./gradlew.bat assembleDebug` BUILD SUCCESSFUL
+- ✅ 本地提交 `fd2ae8e`（main 分支）
+- ⏳ 需用户安装 TV 实测
+
+#### 10.22.7 BackendAdapter 接口扩展（基础设施）
+
+功能模块所需的接口方法已在 `BackendAdapter` / `JellyfinAdapter` / `NavidromeAdapter` 中实现，包括：
+- `getSongTechnicalInfo()` — 获取歌曲技术参数（Jellyfin 通过 MediaStreams，Navidrome 通过 Subsonic API）
+- `recordPlay()` / `getPlayRecords()` — 播放记录读写（Jellyfin/Navidrome 各自实现）
+- `getCoverUrlCandidates()` — 多候选封面列表
+- `searchSongsByMood()` — 按心情搜索歌曲（天气电台用）
+
+
 
 ### 11.1 文档位置
 
