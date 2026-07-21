@@ -86,6 +86,8 @@ fun NowPlayingScreen(
     // 歌曲详情信息
     technicalInfo: com.nasmusic.tv.data.model.SongTechnicalInfo? = null,
     onLoadTechnicalInfo: () -> Unit = {},
+    /** 实时频谱柱状条数据（来自 Visualizer FFT），null = 随机回退 */
+    spectrumData: FloatArray? = null,
     modifier: Modifier = Modifier
 ) {
     var showInfoPanel by remember { mutableStateOf(false) }
@@ -102,7 +104,7 @@ fun NowPlayingScreen(
                 )
             )
     ) {
-        // --- 沉浸模式：全屏封面背景 ---
+        // --- 沉浸模式：全屏封面背景（应用封面滤镜设置）---
         if (isImmersiveMode && currentSong?.coverUrl != null) {
             Box(modifier = Modifier.fillMaxSize()) {
                 AsyncImage(
@@ -110,22 +112,36 @@ fun NowPlayingScreen(
                     contentDescription = "Fullscreen Cover Background",
                     modifier = Modifier
                         .fillMaxSize()
-                        .blur(30.dp) // 模糊效果，不影响上层歌词
-                )
-                // 半透明渐变遮罩确保歌词可读
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(
-                            Brush.verticalGradient(
-                                colors = listOf(
-                                    Color(0xCC0C1222),
-                                    Color(0x990C1222),
-                                    Color(0xCC0C1222)
-                                )
-                            )
+                        .then(
+                            if (coverFilterEnabled && coverFilterBlurRadius > 0f)
+                                Modifier.blur(coverFilterBlurRadius.dp)
+                            else
+                                Modifier.blur(30.dp) // 默认模糊，不影响上层歌词
                         )
                 )
+                // 封面滤镜：暗色遮罩（可配置透明度，确保歌词可读）
+                if (coverFilterEnabled) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(Color.Black.copy(alpha = coverFilterDarkOverlay))
+                    )
+                } else {
+                    // 默认半透明渐变遮罩
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(
+                                Brush.verticalGradient(
+                                    colors = listOf(
+                                        Color(0xCC0C1222),
+                                        Color(0x990C1222),
+                                        Color(0xCC0C1222)
+                                    )
+                                )
+                            )
+                    )
+                }
             }
         }
 
@@ -269,10 +285,13 @@ fun NowPlayingScreen(
             Spacer(modifier = Modifier.height(4.dp))
 
             // 可视化均衡器（仅在非沉浸模式 + 有歌曲时显示）
+            AppLog.d("NowPlayingScreen", "VisualEqualizer check: isImmersiveMode=$isImmersiveMode, isPlaying=$isPlaying, currentSong=${currentSong?.title}")
             if (!isImmersiveMode && currentSong != null) {
+                AppLog.d("NowPlayingScreen", "VisualEqualizer about to render")
                 VisualEqualizer(
                     isPlaying = isPlaying,
-                    barCount = 32,
+                    spectrumData = spectrumData,
+                    barCount = 96,
                     modifier = Modifier.padding(horizontal = 4.dp)
                 )
                 Spacer(modifier = Modifier.height(4.dp))
@@ -388,11 +407,11 @@ private fun CoverColumn(
                         .background(NasMusicColors.AccentGlow, shape = RoundedCornerShape(50.dp))
                 )
                 // 实际封面（使用 CoverCarousel 组件，支持多封面轮播）
+                // 注意：封面滤镜仅在全屏沉浸模式生效，不在普通播放界面应用
                 Box(
                     modifier = Modifier
                         .size(240.dp)
                         .clip(RoundedCornerShape(20.dp))
-                        .then(if (coverFilterEnabled) Modifier.blur(coverFilterBlurRadius.dp) else Modifier)
                         .background(NasMusicColors.Surface)
                 ) {
                     key(currentSong?.id) {
@@ -400,14 +419,6 @@ private fun CoverColumn(
                             coverCandidates = coverCandidates,
                             isPlaying = isPlaying,
                             modifier = Modifier.fillMaxSize()
-                        )
-                    }
-                    // 封面滤镜：暗色遮罩
-                    if (coverFilterEnabled) {
-                        Box(
-                            modifier = Modifier
-                                .matchParentSize()
-                                .background(Color.Black.copy(alpha = coverFilterDarkOverlay))
                         )
                     }
                 }

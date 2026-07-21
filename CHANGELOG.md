@@ -7,6 +7,47 @@
 >
 > 类型：`Added`（新增） | `Changed`（变更） | `Fixed`（修复） | `Removed`（移除）
 
+## [v2.8.0] - 2026-07-21
+
+### Added
+
+- **SpectrumAnalyzer (频谱分析器)**：全新 Android Visualizer FFT 引擎，代替旧版随机动画。
+  - 512 个 FFT 复数 → 幅值计算 → 自适应噪声基底（P-1）→ 分段密集感知映射（32柱）→ 战区增益（鼓点×2.2/人声×1.8/高频×0.3）
+  - 归一化锚定低频区（柱子5~19）峰值，`max(..., 0.01f)` 防除零保护
+  - 链式增强：`sqrt + pow(1.5)` 对比度压扩，小信号被压低、大信号保留
+  - 自适应 runningPeak 衰减（×0.94/帧 ≈ 3s 归零）
+- **VisualEqualizer 完整重写**：从 3 种静态视觉主题改为实时 FFT 频谱渲染。
+  - 频域三角平滑 [0.25, 0.5, 0.25] 消除柱间锯齿
+  - 动态噪声门限（低于帧均值 15% 置零）
+  - 每根柱子独立 Attack/Release 系数（鼓点区 0.96/0.12，人声区 0.80/0.20，边缘区 0.60/0.40）
+  - 帽子（峰值指示线）：金色横杠，柱子超过时瞬间跳顶，反之 ×0.993/帧缓慢下落
+  - 零间隙 Canvas 绘制 + 差异化柱宽（鼓点区 1.3× 加宽，高频区 0.7× 缩窄）+ 分区渐变色（翠绿→青→蓝→靛蓝）
+  - 帧率从 60fps 调整为 30fps，画面更沉稳
+- **PlayerManager 频谱联动**：
+  - 在 `setPlayer()`、`onPlaybackStateChanged(STATE_READY)`、`initEqualizer()` 三个时机自动初始化 SpectrumAnalyzer
+  - `audioSessionId` 延迟就绪时每秒重试，最多 5 次
+  - 释放时自动清理 Visualizer 资源
+
+### Changed
+
+- 数据层到 UI 层的完整频谱数据流：SpectrumAnalyzer (50ms) → StateFlow → VisualEqualizer (33ms 30fps) → Ω Canvas
+- 柱子布局从 96 柱对数映射改为 32 柱感知频率翘曲映射：鼓点区 15 根 / 人声区 8 根 / 高频区 4 根 / 极低频 5 根
+- `app/build.gradle.kts` versionCode 递增至 18，versionName 升级至 v2.8.0
+
+### Fixed
+
+- **静音/间隙底噪乱跳**（P-1 自适应静音门限）：RMS 自适应跟踪噪声基底，低于 `noiseFloor × 3` 时强制全灭并重置峰值
+- **歌曲未开始柱子狂跳**（绝对门限 + 归一化锚定）：帧最大值低于自适应门限直接返回空数组
+- **柱子初始化时不跳**：SpectrumAnalyzer 在 `STATE_READY` 时自动绑定音频会话，不再依赖进入均衡器界面
+- **Release 时间常数描述**：从 ≈150ms 修正为 ≈450ms，匹配数学计算 `ln(0.01)/ln(0.85) × 16ms`
+
+### Removed
+
+- VisualEqualizer 的 ColorFlow/NeonPulse/ClassicalWave 三种静态主题（改为实时 FFT 频谱渲染）
+- SpectumAnalyzer 旧版对数映射（`log10`）替换为分段密集映射
+
+---
+
 ## [v2.7.0] - 2026-07-20
 
 ### Added

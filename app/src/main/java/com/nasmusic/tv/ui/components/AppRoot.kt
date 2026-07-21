@@ -65,6 +65,7 @@ fun AppRoot(
     val playMode by viewModel.playMode.collectAsState(initial = com.nasmusic.tv.data.model.PlayMode.SEQUENTIAL)
     val progress by viewModel.progress.collectAsState(initial = 0L)
     val duration by viewModel.duration.collectAsState(initial = 0L)
+    val spectrumData by viewModel.spectrumData.collectAsState(initial = FloatArray(0))
     val lyrics by viewModel.currentLyrics.collectAsState(initial = null)
     val lyricsAvailability by viewModel.lyricsAvailability.collectAsState(initial = com.nasmusic.tv.data.model.LyricsAvailability())
     val lyricsHighlightMode by viewModel.lyricsHighlightMode.collectAsState(initial = com.nasmusic.tv.data.model.LyricsHighlightMode.LINE_BY_LINE)
@@ -166,11 +167,18 @@ fun AppRoot(
         }
 
         // 内容区域
+        // 封面候选列表（跨屏幕复用，确保首页和 NowPlaying 使用相同的封面解析逻辑）
+        val coverCandidates = remember(currentSong?.id, networkCoverUrl) {
+            currentSong?.let { viewModel.getCoverCandidates(it) } ?: emptyList()
+        }
+
         Box(modifier = Modifier.fillMaxWidth().weight(1f)) {
             when (currentScreen) {
                 Screen.Home -> {
                     val homeDashboardData by viewModel.homeDashboardData.collectAsState(initial = HomeDashboardData())
                     val weatherData by viewModel.weatherData.collectAsState(initial = null)
+                    val weatherLoading by viewModel.weatherLoading.collectAsState(initial = false)
+                    val weatherError by viewModel.weatherError.collectAsState(initial = null)
                     val recentSongsState by viewModel.recentSongs.collectAsState(initial = UiState.Success(emptyList()))
                     val recentSongsList = recentSongsState.dataOrNull() ?: emptyList()
 
@@ -178,6 +186,7 @@ fun AppRoot(
                     LaunchedEffect(Unit) {
                         viewModel.loadHomeDashboard()
                         viewModel.loadRecentSongs()
+                        viewModel.fetchWeather()
                     }
 
                     HomeScreen(
@@ -186,7 +195,11 @@ fun AppRoot(
                         serverDisplayName = serverDisplayName,
                         dashboardData = homeDashboardData,
                         weatherData = weatherData,
+                        weatherLoading = weatherLoading,
+                        weatherError = weatherError,
                         recentSongs = recentSongsList,
+                        currentSong = currentSong,
+                        coverCandidates = coverCandidates,
                         onPlaySong = { song ->
                             if (song.isNetworkSong) viewModel.playNetworkSong(song)
                             else viewModel.playQueue(listOf(song))
@@ -203,6 +216,7 @@ fun AppRoot(
                         onNavigateToLibrary = { viewModel.navigateTo(Screen.Library) },
                         onNavigateToNetwork = { viewModel.navigateTo(Screen.Network) },
                         onNavigateToQueue = { viewModel.navigateTo(Screen.Queue) },
+                        onNavigateToNowPlaying = { viewModel.navigateTo(Screen.NowPlaying) },
                         onPlayAllRecent = {
                             if (recentSongsList.isNotEmpty()) {
                                 viewModel.playQueue(recentSongsList)
@@ -212,10 +226,6 @@ fun AppRoot(
                     )
                 }
                 Screen.NowPlaying -> {
-                    // 封面候选列表：依赖 currentSong 和 networkCoverUrl（切在线歌词时联动刷新）
-                    val coverCandidates = remember(currentSong?.id, networkCoverUrl) {
-                        currentSong?.let { viewModel.getCoverCandidates(it) } ?: emptyList()
-                    }
                     val lyricsFontScale by viewModel.prefs.lyricsFontScale.collectAsState(initial = 1.0f)
                     NowPlayingScreen(
                         currentSong = currentSong,
@@ -254,7 +264,8 @@ fun AppRoot(
                             }
                         },
                         technicalInfo = viewModel.songTechnicalInfo.collectAsState(initial = null).value,
-                        onLoadTechnicalInfo = { viewModel.loadSongTechnicalInfo() }
+                        onLoadTechnicalInfo = { viewModel.loadSongTechnicalInfo() },
+                        spectrumData = spectrumData
                     )
                 }
                 Screen.Library -> {

@@ -1,100 +1,143 @@
 package com.nasmusic.tv.ui.components
 
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.tween
+import android.util.Log
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.drawscope.DrawScope
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.nasmusic.tv.ui.theme.NasMusicColors
-import kotlin.math.abs
-import kotlin.math.sin
 import kotlin.random.Random
 
 /**
  * 可视化均衡器柱状频谱图
  *
  * NowPlaying 页面底部的频谱动画组件。
- * 模拟频段能量，动态生成随机柱状条高度。
+ * 支持两种数据源：
+ * 1) 真实频谱：传入 [spectrumData] 来自 SpectrumAnalyzer（32 柱感知频率翘曲映射）
+ * 2) 模拟回退：当 [spectrumData] 为 null 时，使用随机生成（预览/测试场景）
  *
- * @param isPlaying 是否在播放（播放时动画活跃，暂停时衰减）
+ * 每根柱子使用独立的 Attack/Release 系数（帧率 33ms ≈ 30fps）：
+ *   [ 0-4] 极低频区    Attack=0.60 / Release=0.40（反应迟钝，快速归零）
+ *   [ 5-19] 鼓点核弹区  Attack=0.96 / Release=0.12（极快弹起，缓慢释放——冲击力+拖尾）
+ *   [20-27] 人声核心区  Attack=0.80 / Release=0.20（标准攻守）
+ *   [28-31] 超高频区    Attack=0.60 / Release=0.40（反应迟钝，快速归零——避免乱跳）
+ *
+ * 渲染参数：30fps
+ *
+ * @param isPlaying 是否在播放
+ * @param spectrumData 真实频谱数据（32 柱幅值，0~1），null 时使用随机模拟
  * @param barCount 柱状条数量
- * @param barWidth 每根柱子的宽度
- * @param barSpacing 柱子间距
  * @param maxBarHeight 最大柱子高度（百分比 of container height）
  * @param modifier Modifier
  */
 @Composable
 fun VisualEqualizer(
     isPlaying: Boolean,
+    spectrumData: FloatArray? = null,
     barCount: Int = 32,
-    barWidth: Dp = 4.dp,
-    barSpacing: Dp = 2.dp,
     maxBarHeight: Float = 0.85f,
     modifier: Modifier = Modifier
 ) {
-    // 存储每根柱子的当前高度（0..1）
+    val srcBarCount = spectrumData?.size ?: barCount
+    Log.d("VisualEqualizer", "Composed: isPlaying=$isPlaying, barCount=$barCount, " +
+            "realData=${spectrumData != null}, srcSize=${spectrumData?.size}")
+
     val barHeights = remember { Array(barCount) { 0f } }
-    // 目标高度（用于平滑过渡）
     val targetHeights = remember { Array(barCount) { 0f } }
-    // 每个柱子的相位偏移（龙卷风效果：不同柱子节奏不同）
-    val phases = remember {
-        Array(barCount) { Random.nextFloat() * kotlin.math.PI.toFloat() * 2f }
-    }
+    /** 帽子（峰值指示线）——金色横杠，记录每根柱子近期最高点，极其缓慢下落 */
+    val hatHeights = remember { Array(barCount) { 0f } }
+    // 用 tick 计数器强制 Canvas 重绘（barHeights 是普通数组，不会触发重组）
+    var tick by remember { mutableIntStateOf(0) }
+    // rememberUpdatedState 让 while(true) 循环总能读到最新的 spectrumData 值
+    val currentSpectrumData by rememberUpdatedState(spectrumData)
 
     // 动画更新：定时刷新柱子高度
     LaunchedEffect(isPlaying) {
         while (true) {
-            kotlinx.coroutines.delay(if (isPlaying) 80 else 200)
+            kotlinx.coroutines.delay(if (isPlaying) 33 else 400)
+            val data = currentSpectrumData
 
-            if (isPlaying) {
-                // 播放中：模拟频谱能量
-                // 低频（左侧）倾向于更高，高频（右侧）倾向于更低
+            if (isPlaying && data != null && data.isNotEmpty()) {
+                // 真实频谱数据：SpectrumAnalyzer 已输出 32 柱感知映射，
+                // 直接取值 + 频域平滑 + 动态门限
+                val rawTargets = FloatArray(barCount) { i ->
+                    if (i < data.size) data[i].coerceIn(0.02f, 1f) else 0.02f
+                }
+
+                // ① 频域三角平滑：3点汉宁窗 [0.25, 0.5, 0.25]，消除柱间犬牙交错
+                val smoothedTargets = applyFrequencySmoothing(rawTargets)
+
+                // ② 动态噪声门限：低于当前帧均值 15% 的柱子置零
+                val gatedTargets = applyNoiseGate(smoothedTargets)
+
+                for (i in 0 until barCount) {
+                    targetHeights[i] = gatedTargets[i]
+                }
+            } else if (isPlaying) {
+                // 随机回退（预览或 SpectrumAnalyzer 未就绪时）
                 for (i in 0 until barCount) {
                     val freqRatio = i.toFloat() / barCount
-                    // 低频能量更高（模拟真实频谱特征）
-                    val baseGain = 1.0f - freqRatio * 0.6f
-                    // 随机波动
-                    val phase = phases[i] + (System.nanoTime().toFloat() / 1e8f) * (0.5f + freqRatio * 2f)
-                    val randomFactor = abs(sin(phase))
-                    val energy = baseGain * randomFactor
-                    // 用噪声产生更多变化
-                    val noise = Random.nextFloat() * 0.2f
-                    targetHeights[i] = (energy + noise).coerceIn(0.05f, 1.0f)
+                    val baseGain = 1.0f - freqRatio * 0.7f
+                    val main = Random.nextFloat() * 0.6f
+                    val spike = if (Random.nextFloat() > 0.75f) Random.nextFloat() * 0.8f else 0f
+                    targetHeights[i] = (main + spike * baseGain).coerceIn(0.02f, 1.0f)
                 }
             } else {
-                // 暂停中：柱子逐渐衰减归零
+                // 暂停：柱子逐渐衰减归零
                 for (i in 0 until barCount) {
                     targetHeights[i] *= 0.85f
                     if (targetHeights[i] < 0.01f) targetHeights[i] = 0f
                 }
             }
 
-            // 平滑过渡：向目标靠近
+            // ③ 分区 Attack/Release 双系数滤波（帧率 33ms 优化值）
+            //
+            //   [ 0-4] 极低频:     迟钝      (0.60/0.40)
+            //   [ 5-19] 鼓点核弹区: 极快冲+慢放 (0.96/0.12)
+            //   [20-27] 人声核心区: 标准      (0.80/0.20)
+            //   [28-31] 超高频区:   迟钝      (0.60/0.40)
             for (i in 0 until barCount) {
-                barHeights[i] += (targetHeights[i] - barHeights[i]) * 0.3f
+                val diff = targetHeights[i] - barHeights[i]
+                val isRising = diff > 0
+                val (attack, release) = when (i) {
+                    in 5..19 -> 0.96f to 0.12f  // 鼓点区：极快攻击，极慢释放
+                    in 20..27 -> 0.80f to 0.20f // 人声区：标准
+                    else -> 0.60f to 0.40f      // 极低/超高频：迟钝
+                }
+                barHeights[i] += diff * (if (isRising) attack else release)
             }
+
+            // ④ 帽子（峰值指示线）更新
+            //    柱子高度超过帽子时，帽子瞬间跳到柱子顶部；
+            //    否则帽子缓慢下落（×0.993/帧，约 3.3 秒降到 50%）
+            for (i in 0 until barCount) {
+                if (barHeights[i] > hatHeights[i]) {
+                    hatHeights[i] = barHeights[i]
+                } else {
+                    hatHeights[i] *= 0.993f
+                    if (hatHeights[i] < 0.001f) hatHeights[i] = 0f
+                }
+            }
+            tick++
         }
     }
 
@@ -103,39 +146,91 @@ fun VisualEqualizer(
             .fillMaxWidth()
             .height(48.dp)
             .clip(RoundedCornerShape(6.dp))
-            .background(NasMusicColors.Surface.copy(alpha = 0.15f))
+            .background(NasMusicColors.SurfaceVariant.copy(alpha = 0.5f))
     ) {
+        Log.d("VisualEqualizer", "Box rendered, isPlaying=$isPlaying")
+        // 暂停时没有覆盖文字——柱子通过 decay 逻辑逐渐降到 0，
+        // 恢复播放后 SpectrumAnalyzer 的数据会重新使柱子跳动
         Canvas(modifier = Modifier.fillMaxWidth().height(48.dp)) {
-            val barWidthPx = barWidth.toPx()
-            val barSpacingPx = barSpacing.toPx()
-            val totalBarWidth = barWidthPx * barCount
-            val totalSpacing = barSpacingPx * (barCount - 1)
-            val startX = (size.width - totalBarWidth - totalSpacing) / 2f
-            val middleY = size.height / 2f
-            val usableHeight = size.height * maxBarHeight / 2f
+            // 读 tick 建立重组依赖，驱动 Canvas 重绘
+            if (tick >= 0) { /* no-op, just read tick */ }
+            val paddingPx = 8f
+            val usableWidth = size.width - paddingPx * 2
+            val startX = paddingPx
+            val bottomY = size.height - 2f
+            val usableHeight = size.height * maxBarHeight
 
+            // 根据分区调整每根柱子的宽度（低频更宽 → 视觉重量更大，高频更细 → 不抢镜）
+            // 总宽需保持 = usableWidth
+            val baseW = usableWidth / barCount
+            val barWidths = FloatArray(barCount) { i ->
+                when (i) {
+                    in 5..19 -> baseW * 1.3f  // 鼓点区：加宽 30%
+                    in 20..27 -> baseW * 1.0f // 人声区：标准
+                    else -> baseW * 0.7f      // 极低/超高频：缩窄 30%
+                }
+            }
+            // 归一化使总宽 = usableWidth
+            val totalRaw = barWidths.sum()
+            val scale = usableWidth / totalRaw
             for (i in 0 until barCount) {
-                val x = startX + i * (barWidthPx + barSpacingPx)
-                val height = barHeights[i].coerceIn(0.01f, 1f) * usableHeight
+                barWidths[i] *= scale
+            }
 
-                // 对称上下的柱子
-                if (height > 1f) {
-                    // 柱子颜色渐变：低频暖色 → 高频冷色
-                    val fraction = i.toFloat() / barCount
-                    val color = lerpColor(
-                        Color(0xFF2dd4bf), // 青色（低频）
-                        Color(0xFF60a5fa), // 蓝色（高频）
-                        fraction
-                    )
-                    val alpha = (0.4f + height / usableHeight * 0.6f).coerceIn(0.2f, 1f)
+            var currentX = startX
+            for (i in 0 until barCount) {
+                val barW = barWidths[i]
+                val hNorm = barHeights[i].coerceIn(0.01f, 1f)
+                val hPx = hNorm * usableHeight
+
+                if (hPx > 1f) {
+                    // 分区着色：低频暖色（青/绿），高频冷色（靛蓝/紫）
+                    val color = when (i) {
+                        in 5..19 -> lerpColor(
+                            Color(0xFF34d399),  // 翠绿
+                            Color(0xFF2dd4bf),  // 青
+                            i.toFloat() / barCount
+                        )
+                        in 20..27 -> lerpColor(
+                            Color(0xFF2dd4bf),  // 青
+                            Color(0xFF60a5fa),  // 蓝
+                            (i - 20) / 7f
+                        )
+                        else -> lerpColor(
+                            Color(0xFF60a5fa),  // 蓝
+                            Color(0xFF6366f1),  // 靛蓝
+                            i.toFloat() / barCount
+                        )
+                    }
+                    val alpha = (0.5f + hNorm * 0.5f).coerceIn(0.4f, 1f)
 
                     drawRoundRect(
                         color = color.copy(alpha = alpha),
-                        topLeft = Offset(x, middleY - height),
-                        size = Size(barWidthPx, height * 2f),
-                        cornerRadius = androidx.compose.ui.geometry.CornerRadius(barWidthPx / 2f)
+                        topLeft = Offset(currentX, bottomY - hPx),
+                        size = Size(barW + 1f, hPx),  // +1 消除亚像素缝隙
+                        cornerRadius = CornerRadius(barW / 4f, barW / 4f)
                     )
                 }
+                currentX += barW
+            }
+
+            // ⑤ 帽子（峰值指示线）绘制——金色横杠，比柱子稍宽，醒目突出
+            var hatX = startX
+            for (i in 0 until barCount) {
+                val hatH = hatHeights[i]
+                if (hatH > 0.01f) {
+                    val barW = barWidths[i]
+                    val hatY = bottomY - hatH * usableHeight
+                    val hatAlpha = (0.6f + hatH * 0.4f).coerceIn(0.4f, 1f)
+
+                    drawRoundRect(
+                        color = Color(0xFFFFD700).copy(alpha = hatAlpha),  // 金色
+                        topLeft = Offset(hatX - 3f, hatY - 2f),
+                        size = Size(barW + 7f, 4f),  // 比柱子宽 4px
+                        cornerRadius = CornerRadius(2f, 2f)
+                    )
+                }
+                hatX += barWidths[i]
             }
         }
     }
@@ -152,4 +247,38 @@ private fun lerpColor(from: Color, to: Color, fraction: Float): Color {
         blue = from.blue + (to.blue - from.blue) * f,
         alpha = 1f
     )
+}
+
+/**
+ * 频域三角平滑——3点汉宁窗 [0.25, 0.5, 0.25]
+ *
+ * 每一根柱子融合左右邻居的信息：
+ *   result[i] = left×0.25 + self×0.5 + right×0.25
+ *
+ * 孤立尖峰被拉低，只保留宏观频段起伏趋势，
+ * 消除柱间「犬牙交错」的视觉噪声。
+ */
+private fun applyFrequencySmoothing(data: FloatArray): FloatArray {
+    val size = data.size
+    if (size < 3) return data.copyOf()
+    val smoothed = FloatArray(size)
+    for (i in 0 until size) {
+        val left = if (i > 0) data[i - 1] else data[i]
+        val right = if (i < size - 1) data[i + 1] else data[i]
+        smoothed[i] = left * 0.25f + data[i] * 0.5f + right * 0.25f
+    }
+    return smoothed
+}
+
+/**
+ * 动态噪声门限——低于当前帧均值一定比例的直接置零
+ *
+ * threshold = avg × 0.15：低于均值 15% 视为底噪，清除「满屏微亮」
+ * 让画面背景纯净，只保留显著频段。
+ */
+private fun applyNoiseGate(data: FloatArray): FloatArray {
+    val sum = data.sum()
+    val avg = sum / data.size
+    val threshold = avg * 0.15f
+    return data.map { if (it < threshold) 0f else it }.toFloatArray()
 }

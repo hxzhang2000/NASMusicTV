@@ -24,7 +24,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -33,7 +33,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Text
+import androidx.compose.foundation.Image
 import coil.compose.AsyncImage
+import coil.compose.rememberAsyncImagePainter
 import com.nasmusic.tv.R
 import com.nasmusic.tv.data.model.Album
 import com.nasmusic.tv.data.model.HomeDashboardData
@@ -64,13 +66,18 @@ fun HomeScreen(
     serverDisplayName: String,
     dashboardData: HomeDashboardData,
     weatherData: WeatherData?,
+    weatherLoading: Boolean = false,
+    weatherError: String? = null,
     recentSongs: List<Song>,
+    currentSong: Song? = null,
+    coverCandidates: List<String> = emptyList(),
     onPlaySong: (Song) -> Unit,
     onPlayAlbum: (Album) -> Unit,
     onOpenAlbumDetail: (Album) -> Unit,
     onNavigateToLibrary: () -> Unit = {},
     onNavigateToNetwork: () -> Unit = {},
     onNavigateToQueue: () -> Unit = {},
+    onNavigateToNowPlaying: () -> Unit = {},
     onPlayAllRecent: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
@@ -110,6 +117,17 @@ fun HomeScreen(
                 dashboardData = dashboardData,
                 weatherData = weatherData
             )
+        }
+
+        // 1.5 当前播放卡片（有歌曲正在播放时显示）
+        if (currentSong != null) {
+            item(key = "now_playing") {
+                NowPlayingCard(
+                    song = currentSong,
+                    coverCandidates = coverCandidates,
+                    onClick = onNavigateToNowPlaying
+                )
+            }
         }
 
         // 2. 快捷操作按钮
@@ -185,11 +203,13 @@ fun HomeScreen(
             }
         }
 
-        // 6. 天气信息（仅当有数据时）
-        if (weatherData != null) {
-            item(key = "weather_card") {
-                HomeWeatherCard(weatherData = weatherData)
-            }
+        // 6. 天气信息（加载/错误/正常三种状态，与网络音乐页面统一）
+        item(key = "weather_card") {
+            HomeWeatherCard(
+                weatherData = weatherData,
+                isLoading = weatherLoading,
+                errorMessage = weatherError
+            )
         }
 
         // 底部间距
@@ -554,15 +574,102 @@ private fun HomeSongCard(
 }
 
 /**
- * 天气小卡片（首页嵌入）
+ * 当前播放小卡片（首页嵌入）
+ */
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+private fun NowPlayingCard(
+    song: Song,
+    coverCandidates: List<String> = emptyList(),
+    onClick: () -> Unit
+) {
+    // 优先使用 coverCandidates（含后端封面候选+回退），与原 coverUrl 兼容
+    val effectiveCoverUrl = coverCandidates.firstOrNull() ?: song.coverUrl
+
+    FocusableSurface(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(14.dp),
+        focusedScale = 1.02f,
+        animationDurationMs = 200,
+        containerColor = NasMusicColors.Primary.copy(alpha = 0.12f),
+        focusedContainerColor = NasMusicColors.Primary.copy(alpha = 0.25f),
+        contentColor = NasMusicColors.TextPrimary,
+        focusedContentColor = NasMusicColors.Primary
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // 封面缩略图
+            Box(
+                modifier = Modifier
+                    .size(48.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(NasMusicColors.SurfaceVariant),
+                contentAlignment = Alignment.Center
+            ) {
+                if (!effectiveCoverUrl.isNullOrBlank()) {
+                    Image(
+                        painter = rememberAsyncImagePainter(
+                            model = effectiveCoverUrl,
+                            contentScale = ContentScale.Crop
+                        ),
+                        contentDescription = song.title,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                } else {
+                    Text(text = "\u266A", color = NasMusicColors.TextSecondary, fontSize = 24.sp)
+                }
+            }
+            Spacer(modifier = Modifier.width(12.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = song.title,
+                    color = NasMusicColors.TextPrimary,
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                if (!song.artist.isNullOrBlank()) {
+                    Text(
+                        text = song.artist,
+                        color = NasMusicColors.TextSecondary,
+                        fontSize = 12.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                text = stringResource(R.string.nav_now_playing) + " \u25B6",
+                color = NasMusicColors.Primary,
+                fontSize = 12.sp
+            )
+        }
+    }
+}
+
+/**
+ * 天气小卡片（首页嵌入，与网络音乐页面 WeatherInfoCard 统一的状态处理）
  */
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 private fun HomeWeatherCard(
-    weatherData: WeatherData
+    weatherData: WeatherData?,
+    isLoading: Boolean = false,
+    errorMessage: String? = null
 ) {
-    val mood = WeatherMood.fromWeather(weatherData)
-    val bgColor = Color(0x332DD4BF)
+    val bgColor = if (weatherData != null) {
+        val mood = WeatherMood.fromWeather(weatherData)
+        Color(0x332DD4BF)
+    } else {
+        NasMusicColors.Surface.copy(alpha = 0.3f)
+    }
 
     FocusableSurface(
         onClick = {},
@@ -582,27 +689,48 @@ private fun HomeWeatherCard(
                 .padding(horizontal = 20.dp, vertical = 14.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(text = mood.icon, fontSize = 36.sp)
-            Spacer(modifier = Modifier.width(14.dp))
-            Column {
+            if (isLoading && weatherData == null) {
                 Text(
-                    text = "${weatherData.temperature.toInt()}\u00B0C",
-                    fontSize = 22.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = NasMusicColors.TextPrimary
+                    text = stringResource(R.string.common_loading),
+                    color = NasMusicColors.TextSecondary,
+                    fontSize = 14.sp
                 )
+            } else if (weatherData != null) {
+                val mood = WeatherMood.fromWeather(weatherData)
+                Text(text = mood.icon, fontSize = 36.sp)
+                Spacer(modifier = Modifier.width(14.dp))
+                Column {
+                    Text(
+                        text = "${weatherData.temperature.toInt()}\u00B0C",
+                        fontSize = 22.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = NasMusicColors.TextPrimary
+                    )
+                    Text(
+                        text = "${weatherData.cityName}  \u00B7  ${weatherData.description}",
+                        fontSize = 12.sp,
+                        color = NasMusicColors.TextSecondary
+                    )
+                }
+                Spacer(modifier = Modifier.weight(1f))
                 Text(
-                    text = "${weatherData.cityName}  \u00B7  ${weatherData.description}",
-                    fontSize = 12.sp,
-                    color = NasMusicColors.TextSecondary
+                    text = "\uD83C\uDFB2 " + stringResource(R.string.home_weather_radio),
+                    fontSize = 13.sp,
+                    color = NasMusicColors.Primary
+                )
+            } else if (errorMessage != null) {
+                Text(
+                    text = "⚠ $errorMessage",
+                    color = NasMusicColors.Warning,
+                    fontSize = 13.sp
+                )
+            } else {
+                Text(
+                    text = stringResource(R.string.common_loading),
+                    color = NasMusicColors.TextSecondary,
+                    fontSize = 14.sp
                 )
             }
-            Spacer(modifier = Modifier.weight(1f))
-            Text(
-                text = "\uD83C\uDFB2 " + stringResource(R.string.home_weather_radio),
-                fontSize = 13.sp,
-                color = NasMusicColors.Primary
-            )
         }
     }
 }

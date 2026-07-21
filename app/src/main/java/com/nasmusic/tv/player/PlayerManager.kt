@@ -96,6 +96,10 @@ class PlayerManager() {
             _buffering.value = playbackState == Player.STATE_BUFFERING
             val dur = player?.duration ?: 0
             if (dur > 0) _duration.value = dur
+            // 播放器就绪后尝试初始化频谱分析器
+            if (playbackState == Player.STATE_READY) {
+                initSpectrumAnalyzer()
+            }
         }
 
         override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
@@ -154,6 +158,8 @@ class PlayerManager() {
         if (exoPlayer.isPlaying) {
             progressHandler.post(progressUpdateRunnable)
         }
+        // 尝试初始化频谱分析器（如果音频会话已就绪）
+        initSpectrumAnalyzer()
         AppLog.d("PlayerManager", "setPlayer: player initialized")
     }
 
@@ -540,15 +546,22 @@ class PlayerManager() {
      */
     fun release() {
         progressHandler.removeCallbacks(progressUpdateRunnable)
+        // 停止频谱重试（将所有回调从消息队列中移除）
+        spectrumAnalyzerRetryCount = 5
         player?.removeListener(playerListener)
         player = null
         equalizer?.release()
         equalizer = null
+        spectrumAnalyzer.release()
     }
 
     // --- B-4 均衡器支持 ---
     private var equalizer: Equalizer? = null
     private var audioSessionId: Int = 0
+
+    // --- 频谱分析（真实 FFT 可视化） ---
+    private val spectrumAnalyzer = SpectrumAnalyzer()
+    val spectrumData: StateFlow<FloatArray> = spectrumAnalyzer.spectrumData
 
     /**
      * 初始化均衡器（在 setPlayer 之后调用）
@@ -564,10 +577,41 @@ class PlayerManager() {
             equalizer = Equalizer(0, audioSessionId)
             equalizer?.enabled = true
             AppLog.d("PlayerManager", "initEqualizer: initialised for session $audioSessionId")
+
+            // 初始化频谱分析器
+            initSpectrumAnalyzer()
             true
         } catch (e: Exception) {
             AppLog.e("PlayerManager", "initEqualizer failed", e)
             false
+        }
+    }
+
+    /**
+     * 初始化频谱分析器（使用当前音频会话 ID）
+     *
+     * 如果音频会话尚未就绪（audioSessionId == 0），
+     * 在后续 5 秒内每秒重试一次。
+     */
+    private var spectrumAnalyzerRetryCount = 0
+
+    private fun initSpectrumAnalyzer() {
+        val sessionId = player?.audioSessionId ?: 0
+        if (sessionId > 0) {
+            audioSessionId = sessionId
+            spectrumAnalyzerRetryCount = 0
+            AppLog.d("PlayerManager", "initSpectrumAnalyzer: attaching to session $sessionId")
+            spectrumAnalyzer.attach(sessionId)
+        } else if (spectrumAnalyzerRetryCount < 5) {
+            spectrumAnalyzerRetryCount++
+            AppLog.w("PlayerManager",
+                "initSpectrumAnalyzer: no valid audio session yet, " +
+                "retry ${spectrumAnalyzerRetryCount}/5 in 1s")
+            progressHandler.postDelayed({
+                initSpectrumAnalyzer()
+            }, 1000)
+        } else {
+            AppLog.w("PlayerManager", "initSpectrumAnalyzer: gave up after ${spectrumAnalyzerRetryCount} retries")
         }
     }
 

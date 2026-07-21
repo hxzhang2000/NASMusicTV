@@ -1,7 +1,7 @@
-# NAS Music TV — 技术架构概述
+﻿# NAS Music TV — 技术架构概述
 
-> 版本：v2.7.0
-> 最后更新：2026-07-20
+> 版本：v2.8.0
+> 最后更新：2026-07-21
 > 本文档记录项目当前的完整技术架构，作为后续迭代的基准参考。
 
 ---
@@ -4478,7 +4478,6 @@ v2.6.0 天气电台功能使用 Open-Meteo（无需 API Key）作为主要天气
 - `searchSongsByMood()` — 按心情搜索歌曲（天气电台用）
 
 
-
 ### 11.1 文档位置
 
 | 文件 | 用途 |
@@ -4511,3 +4510,29 @@ v2.6.0 天气电台功能使用 Open-Meteo（无需 API Key）作为主要天气
 - **修改或新增功能后**：执行相关章节的测试场景确保核心功能不受影响
 - **发布前完整回归**：按文档第 18 章"测试执行清单"逐项执行
 - **缺陷报告**：按文档第 19 章"缺陷报告模板"记录问题
+
+
+### 10.23 v2.8.0 — 频谱可视化引擎重写（感知频率翘曲 + 实时 FFT）
+
+**功能描述**：用 Android Visualizer 实时 FFT 引擎完全替换旧版随机频谱动画。从底层 FFT 捕获到 UI 渲染完整重写。
+
+#### 新增文件
+
+- `player/SpectrumAnalyzer.kt` — FFT 捕获 → 32 柱感知映射 → 自适应噪声基底 → 归一化链式增强
+
+#### 修改文件
+
+- `player/PlayerManager.kt` — SpectrumAnalyzer 生命周期管理（initSpectrumAnalyzer + 重试 + release）
+- `ui/components/VisualEqualizer.kt` — 完整重写：从 3 种静态主题改为实时 FFT 渲染
+- `ui/components/AppRoot.kt` — 集成 spectrumData 数据流
+- `ui/screens/NowPlayingScreen.kt` — spectrumData 参数传递
+- `ui/viewmodel/MainViewModel.kt` — val spectrumData 桥接
+- `data/model/EqualizerPreset.kt` — 小幅调整
+- `ui/screens/HomeScreen.kt` — 频谱相关修改
+- `AndroidManifest.xml` — 添加 RECORD_AUDIO 权限
+
+#### 验证结果
+
+- ✅ `./gradlew.bat assembleDebug` BUILD SUCCESSFUL
+- ⏳ 需用户安装 TV 实测
+

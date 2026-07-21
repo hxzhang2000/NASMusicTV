@@ -536,6 +536,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     val duration: StateFlow<Long> = playerManager.duration
     val queue: StateFlow<List<Song>> = playerManager.queue
     val currentIndex: StateFlow<Int> = playerManager.currentIndex
+    /** 实时频谱数据（96 柱幅值），来自 SpectrumAnalyzer / Visualizer FFT */
+    val spectrumData: StateFlow<FloatArray> = playerManager.spectrumData
 
     // B-13: playMode 由 MainViewModel 拥有（UI/设置状态，不归 PlayerManager）
     private val _playMode = MutableStateFlow(PlayMode.SEQUENTIAL)
@@ -625,6 +627,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     // 记录当前歌的开始
                     lastRecordedSong = song
                     lastRecordedSongId = song.id
+                    // 记录到最近播放列表（自动切歌时也需要更新）
+                    recordPlay(song)
                 }
             }
         }
@@ -1059,16 +1063,15 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     /**
      * RECENT Tab 首次激活时按需批量查询最近播放歌曲
      */
-    fun loadRecentSongs() {
-        if (_recentSongs.value is UiState.Success && (_recentSongs.value as UiState.Success).data.isNotEmpty()) return
-        _recentSongs.value = UiState.Loading
+    fun loadRecentSongs(showLoading: Boolean = true) {
+        if (showLoading) _recentSongs.value = UiState.Loading
         viewModelScope.launch {
             val adapter = backendRegistry.getAdapter() ?: run {
                 _recentSongs.value = UiState.Error("后端未连接")
                 return@launch
             }
             try {
-                val recentIds = prefs.getRecentSongIds().take(100)
+                val recentIds = prefs.getRecentSongIds().distinct().take(100)
                 if (recentIds.isEmpty()) {
                     _recentSongs.value = UiState.Success(emptyList())
                     return@launch
@@ -1491,6 +1494,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun recordPlay(song: Song) {
         viewModelScope.launch {
             prefs.recordPlay(song.id)
+            // 刷新最近播放列表，不显示 loading 以避免闪烁
+            loadRecentSongs(showLoading = false)
         }
     }
 
@@ -1983,6 +1988,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun setEqualizerPreset(preset: EqualizerPreset) {
         viewModelScope.launch {
             prefs.setEqualizerPreset(preset)
+            // 同时持久化频段数据到 DataStore，确保 UI 能正确显示 currentBands
+            prefs.setEqualizerBands(preset.bandGains)
             // 应用频段到 PlayerManager
             playerManager.setEqualizerBands(preset.bandGains)
         }
