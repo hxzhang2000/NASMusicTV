@@ -7,6 +7,21 @@
 >
 > 类型：`Added`（新增） | `Changed`（变更） | `Fixed`（修复） | `Removed`（移除）
 
+## [v2.9.0] - 2026-07-26
+
+### Added
+
+- **回到播放页自动聚焦播放/暂停**：进入 NowPlaying 页时自动将焦点置于播放/暂停按钮，电视遥控器可直接操作，不再需要额外导航
+- **曲库子Tab跨导航记忆**：专辑/艺术家/歌曲等子 Tab 切换页面后返回保留选中状态，由 ViewModel 驱动 `StateFlow`
+- **曲库播放全部按钮按 Tab 动态计算**：ALBUMS 搜索时"播放全部"只播搜索到的专辑内的歌曲；ARTISTS 按显示的艺术家聚合歌曲；各 Tab 均尊重当前搜索过滤
+
+### Fixed
+
+- **搜索后播放全部按钮消失**：ALBUMS/ARTISTS 搜索时因全量歌曲未加载导致 `playAllSongs` 为空，增加 `searchResults` 兜底，按钮正常显示
+- **Play/Pause 焦点被进度条抢占**：`ProgressSection` 的 `LaunchedEffect(currentSongId)` 在初始化时自动请求焦点覆盖了播放按钮，通过 `withFrameNanos` 延迟一帧后请求焦点解决
+
+---
+
 ## [v2.8.1] - 2026-07-26
 
 ### Fixed
