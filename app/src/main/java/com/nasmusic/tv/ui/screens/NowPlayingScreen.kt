@@ -17,6 +17,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -100,10 +101,11 @@ fun NowPlayingScreen(
     // 进入 NowPlaying 页面时自动聚焦播放/暂停按钮
     LaunchedEffect(Unit) {
         try {
-            playPauseFocusRequester.requestFocus()
-        } catch (_: Exception) {
-            // 焦点请求失败时忽略
-        }
+              withFrameNanos { }
+              playPauseFocusRequester.requestFocus()
+          } catch (_: Exception) {
+              // 焦点请求失败时忽略
+          }
     }
 
     Box(
