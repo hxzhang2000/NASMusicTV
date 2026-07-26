@@ -15,11 +15,13 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
@@ -93,6 +95,16 @@ fun NowPlayingScreen(
     modifier: Modifier = Modifier
 ) {
     var showInfoPanel by remember { mutableStateOf(false) }
+    val playPauseFocusRequester = remember { FocusRequester() }
+
+    // 进入 NowPlaying 页面时自动聚焦播放/暂停按钮
+    LaunchedEffect(Unit) {
+        try {
+            playPauseFocusRequester.requestFocus()
+        } catch (_: Exception) {
+            // 焦点请求失败时忽略
+        }
+    }
 
     Box(
         modifier = modifier
@@ -196,7 +208,8 @@ fun NowPlayingScreen(
                             onNext = onNext,
                             onPrevious = onPrevious,
                             onTogglePlayMode = onTogglePlayMode,
-                            compact = true
+                            compact = true,
+                            playPauseFocusRequester = playPauseFocusRequester
                         )
                     }
                 }

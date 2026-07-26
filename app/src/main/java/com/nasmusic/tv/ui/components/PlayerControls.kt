@@ -213,7 +213,8 @@ fun ControlButtonsRow(
     onPrevious: () -> Unit,
     onTogglePlayMode: () -> Unit,
     modifier: Modifier = Modifier,
-    compact: Boolean = false
+    compact: Boolean = false,
+    playPauseFocusRequester: FocusRequester? = null
 ) {
     Row(
         modifier = modifier.fillMaxWidth(),
@@ -225,7 +226,8 @@ fun ControlButtonsRow(
                 modifier = Modifier.size(if (compact) 22.dp else 32.dp))
         })
         Spacer(modifier = Modifier.width(if (compact) 12.dp else 20.dp))
-        IconButton(onClick = onPlayPause, primary = true, compact = compact, icon = {
+        IconButton(onClick = onPlayPause, primary = true, compact = compact,
+            focusRequester = playPauseFocusRequester, icon = {
             Icon(imageVector = if (isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
                 contentDescription = "Play/Pause",
                 modifier = Modifier.size(if (compact) 28.dp else 40.dp))
@@ -255,6 +257,7 @@ private fun IconButton(
     modifier: Modifier = Modifier,
     primary: Boolean = false,
     compact: Boolean = false,
+    focusRequester: FocusRequester? = null,
     icon: @Composable () -> Unit
 ) {
     var isFocused by remember { mutableStateOf(false) }
@@ -285,6 +288,7 @@ private fun IconButton(
     Surface(
         onClick = onClick,
         modifier = glowModifier
+            .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
             .border(
                 width = if (isFocused) 2.dp else 0.dp,
                 color = if (isFocused) NasMusicColors.FocusRing else Color.Transparent,
