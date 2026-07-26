@@ -328,9 +328,9 @@ fun AppRoot(
                             viewModel.playQueue(songListParam)
                             viewModel.navigateTo(Screen.NowPlaying)
                         },
-                        onPlayAllAlbums = {
-                            if (songList.isNotEmpty()) {
-                                viewModel.playQueue(songList)
+                        onPlayAllSongs = { songs ->
+                            if (songs.isNotEmpty()) {
+                                viewModel.playQueue(songs)
                                 viewModel.navigateTo(Screen.NowPlaying)
                             }
                         },

@@ -99,7 +99,7 @@ fun LibraryScreen(
     onPlayAlbum: (Album) -> Unit,
     onPlaySong: (Song) -> Unit,
     onPlaySongs: (List<Song>) -> Unit,
-    onPlayAllAlbums: () -> Unit,
+    onPlayAllSongs: (List<Song>) -> Unit,
     // 队列切换
     queueSongIds: Set<String> = emptySet(),
     onToggleQueue: (Song) -> Unit = {},
@@ -172,6 +172,35 @@ fun LibraryScreen(
         }
     }
 
+    // 播放全部按钮的歌曲列表：按当前 Tab + 搜索状态动态计算
+    val playAllSongs by remember(activeTab, filterQuery, songs, favoriteSongs, recentSongs, displaySongs, searchResults, filteredAlbums, filteredArtists, artistSongsMap) {
+        derivedStateOf {
+            when (activeTab) {
+                LibraryTab.ALBUMS -> {
+                    if (filterQuery.isNotBlank()) {
+                        val filteredAlbumIds = filteredAlbums.map { it.id }.toSet()
+                        val albumSongs = songs.filter { it.albumId in filteredAlbumIds }
+                        if (albumSongs.isNotEmpty()) albumSongs else searchResults
+                    } else {
+                        songs
+                    }
+                }
+                LibraryTab.ARTISTS -> {
+                    // 按当前显示的艺术家从 artistSongsMap 聚合歌曲
+                    val listed = filteredArtists.flatMap { artistSongsMap[it.name].orEmpty() }
+                    if (listed.isNotEmpty()) listed
+                    else if (searchResults.isNotEmpty()) searchResults
+                    else songs
+                }
+                LibraryTab.SONGS -> displaySongs
+                LibraryTab.FAVORITES -> favoriteSongs
+                LibraryTab.RECENT -> recentSongs
+                else -> songs  // GENRES, YEARS, STATISTICS
+            }
+        }
+    }
+    val showPlayAll = activeTab != LibraryTab.STATISTICS && playAllSongs.isNotEmpty()
+
     Box(modifier = modifier.fillMaxSize()) {
         Column(modifier = Modifier.fillMaxSize().padding(horizontal = 32.dp, vertical = 20.dp)) {
             // 顶部标题 + TAB + 播放全部
@@ -219,8 +248,8 @@ fun LibraryScreen(
 
                 Spacer(modifier = Modifier.width(12.dp))
 
-                if (albums.isNotEmpty()) {
-                    ButtonChip(text = stringResource(R.string.common_play_all)) { onPlayAllAlbums() }
+                if (showPlayAll) {
+                    ButtonChip(text = stringResource(R.string.common_play_all)) { onPlayAllSongs(playAllSongs) }
                 }
             }
 
