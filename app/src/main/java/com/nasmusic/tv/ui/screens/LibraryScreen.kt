@@ -67,7 +67,7 @@ import com.nasmusic.tv.util.PinyinUtils
 import com.nasmusic.tv.util.TimeUtils
 import kotlinx.coroutines.launch
 
-private enum class LibraryTab(val titleRes: Int) {
+enum class LibraryTab(val titleRes: Int) {
     ALBUMS(R.string.library_albums),
     ARTISTS(R.string.library_artists_alt),
     SONGS(R.string.library_songs),
@@ -122,9 +122,11 @@ fun LibraryScreen(
     // 播放统计
     playStatistics: com.nasmusic.tv.data.model.PlayStatistics = com.nasmusic.tv.data.model.PlayStatistics(),
     onClearPlayRecords: () -> Unit = {},
+    // 子 Tab 跨导航记忆（由 ViewModel 驱动）
+    activeTab: LibraryTab = LibraryTab.ALBUMS,
+    onTabSelected: (LibraryTab) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
-    var activeTab by remember { mutableStateOf(LibraryTab.ALBUMS) }
     var filterQuery by remember { mutableStateOf("") }
     var showSearchDialog by remember { mutableStateOf(false) }
 
@@ -188,7 +190,7 @@ fun LibraryScreen(
                 LibraryTab.values().forEach { tab ->
                     val selected = tab == activeTab
                     FocusableSurface(
-                        onClick = { activeTab = tab },
+                        onClick = { onTabSelected(tab) },
                         modifier = Modifier.padding(horizontal = 4.dp),
                         shape = RoundedCornerShape(8.dp),
                         focusedScale = 1.05f,

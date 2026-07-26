@@ -25,6 +25,7 @@ import com.nasmusic.tv.data.model.Playlist
 import com.nasmusic.tv.data.model.EqualizerPreset
 import com.nasmusic.tv.data.model.MusicSource
 import com.nasmusic.tv.data.model.NetworkSubTab
+import com.nasmusic.tv.ui.screens.LibraryTab
 import com.nasmusic.tv.data.model.Screen
 import com.nasmusic.tv.data.model.SongsPagingState
 import com.nasmusic.tv.data.model.UiState
@@ -224,6 +225,14 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
      */
     fun setSearchNetworkPlatform(platform: String) {
         _searchNetworkPlatform.value = platform
+    }
+
+    // --- 曲库页子 Tab 状态（跨导航记忆） ---
+    private val _libraryActiveTab = MutableStateFlow(LibraryTab.ALBUMS)
+    val libraryActiveTab: StateFlow<LibraryTab> = _libraryActiveTab.asStateFlow()
+
+    fun selectLibraryTab(tab: LibraryTab) {
+        _libraryActiveTab.value = tab
     }
 
     // --- 网络音乐页子 Tab 状态 ---

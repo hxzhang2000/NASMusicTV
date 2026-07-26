@@ -39,6 +39,7 @@ import com.nasmusic.tv.ui.screens.ArtistDetailScreen
 import com.nasmusic.tv.ui.screens.EqualizerScreen
 import com.nasmusic.tv.ui.screens.HomeScreen
 import com.nasmusic.tv.ui.screens.LibraryScreen
+import com.nasmusic.tv.ui.screens.LibraryTab
 import com.nasmusic.tv.ui.screens.NetworkPlaylistDetailScreen
 import com.nasmusic.tv.ui.screens.network.NetworkMusicContainer
 import com.nasmusic.tv.ui.screens.NowPlayingScreen
@@ -289,6 +290,7 @@ fun AppRoot(
                     val recentSongsList = recentSongsState.dataOrNull() ?: emptyList()
                     val searchResultsList = searchResultsState.dataOrNull() ?: emptyList()
                     val isSearching = searchResultsState is UiState.Loading
+                    val libraryActiveTab by viewModel.libraryActiveTab.collectAsState()
                     LibraryScreen(
                         albums = albumList,
                         songs = songList,
@@ -347,7 +349,9 @@ fun AppRoot(
                         onSearch = { query -> viewModel.searchSongsOnServer(query) },
                         onClearSearch = { viewModel.clearSearch() },
                         playStatistics = viewModel.playStatistics.collectAsState(initial = com.nasmusic.tv.data.model.PlayStatistics()).value,
-                        onClearPlayRecords = { viewModel.clearPlayRecords() }
+                        onClearPlayRecords = { viewModel.clearPlayRecords() },
+                        activeTab = libraryActiveTab,
+                        onTabSelected = { tab -> viewModel.selectLibraryTab(tab) }
                     )
                 }
                 Screen.Queue -> {
