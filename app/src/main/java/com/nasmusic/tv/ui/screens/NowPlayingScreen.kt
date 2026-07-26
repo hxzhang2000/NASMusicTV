@@ -88,6 +88,8 @@ fun NowPlayingScreen(
     onLoadTechnicalInfo: () -> Unit = {},
     /** 实时频谱柱状条数据（来自 Visualizer FFT），null = 随机回退 */
     spectrumData: FloatArray? = null,
+    /** 是否启用频谱显示 */
+    spectrumEnabled: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     var showInfoPanel by remember { mutableStateOf(false) }
@@ -284,9 +286,9 @@ fun NowPlayingScreen(
 
             Spacer(modifier = Modifier.height(4.dp))
 
-            // 可视化均衡器（仅在非沉浸模式 + 有歌曲时显示）
-            AppLog.d("NowPlayingScreen", "VisualEqualizer check: isImmersiveMode=$isImmersiveMode, isPlaying=$isPlaying, currentSong=${currentSong?.title}")
-            if (!isImmersiveMode && currentSong != null) {
+            // 可视化均衡器（仅在非沉浸模式 + 有歌曲 + 开启频谱显示时显示）
+            AppLog.d("NowPlayingScreen", "VisualEqualizer check: isImmersiveMode=$isImmersiveMode, isPlaying=$isPlaying, currentSong=${currentSong?.title}, spectrumEnabled=$spectrumEnabled")
+            if (!isImmersiveMode && currentSong != null && spectrumEnabled) {
                 AppLog.d("NowPlayingScreen", "VisualEqualizer about to render")
                 VisualEqualizer(
                     isPlaying = isPlaying,

@@ -1,7 +1,7 @@
 ﻿# NAS Music TV — 技术架构概述
 
-> 版本：v2.8.0
-> 最后更新：2026-07-21
+> 版本：v2.8.1
+> 最后更新：2026-07-26
 > 本文档记录项目当前的完整技术架构，作为后续迭代的基准参考。
 
 ---
@@ -4535,4 +4535,22 @@ v2.6.0 天气电台功能使用 Open-Meteo（无需 API Key）作为主要天气
 
 - ✅ `./gradlew.bat assembleDebug` BUILD SUCCESSFUL
 - ⏳ 需用户安装 TV 实测
+
+### 10.24 v2.8.1 — 合作歌曲艺术家拆分修复
+
+**功能描述**：修复中英文混排分隔符（全角逗号、全角 and 符、半角逗号）导致合作歌曲艺术家未正确拆分的问题；艺术家列表改为提前加载；拆分艺术家详情页歌曲加载修复。
+
+#### 修改文件
+
+- `util/ArtistSplitter.kt` — 分隔符正则追加 `，`（全角逗号）、`＆`（全角 and 符）、`,`（半角逗号）
+- `ui/viewmodel/MainViewModel.kt`：
+  - `loadArtists()` — 对原始艺术家列表使用 `flatMap + ArtistSplitter.split()` 拆分，`groupBy { name }` 合并去重
+  - `loadLibrary()` — `loadArtists()` 提前至专辑/流派/收藏并行加载阶段，不再依赖 ARTISTS Tab 触发
+  - `loadArtistSongs()` — 从合成 ID（`原ID|名称`）提取原始 ID，请求后端后按拆分艺术家名过滤匹配歌曲
+
+#### 验证结果
+
+- ✅ `./gradlew.bat assembleDebug` BUILD SUCCESSFUL（CI 已验证）
+- ✅ 合作歌曲正确拆分：`"窦唯 & 不一定"` → 窦唯、不一定；`"杨宗纬，宝石Gam"` → 杨宗纬、宝石Gam
+- ✅ 拆分后的艺术家详情页能正确显示其歌曲
 

@@ -80,6 +80,9 @@ class AppPreferences(private val context: Context) {
     private val keyCoverFilterBlurRadius = doublePreferencesKey("cover_filter_blur_radius")
     private val keyCoverFilterDarkOverlay = doublePreferencesKey("cover_filter_dark_overlay")
 
+    // --- 频谱显示设置 ---
+    private val keySpectrumEnabled = booleanPreferencesKey("settings_spectrum_enabled")
+
     // --- 网络音乐平台来源 ---
     private val keyMusicSource = stringPreferencesKey("music_source")
 
@@ -249,7 +252,8 @@ class AppPreferences(private val context: Context) {
             cacheCover = prefs[keyCacheCover] ?: true,
             lyricsOffsetMs = prefs[keyLyricsOffset] ?: 0L,
             defaultNetworkSource = prefs[keyDefaultNetworkSource]?.let { NetworkSource.fromKey(it) ?: NetworkSource.fromName(it) } ?: NetworkSource.DEFAULT,
-            metingApiBaseUrl = prefs[keyMetingApiBaseUrl] ?: MetingApiService.DEFAULT_BASE_URL
+            metingApiBaseUrl = prefs[keyMetingApiBaseUrl] ?: MetingApiService.DEFAULT_BASE_URL,
+            spectrumEnabled = prefs[keySpectrumEnabled] ?: false
         )
     }
 
@@ -388,6 +392,10 @@ class AppPreferences(private val context: Context) {
 
     suspend fun setCoverFilterDarkOverlay(overlay: Float) {
         context.dataStore.edit { it[keyCoverFilterDarkOverlay] = overlay.toDouble() }
+    }
+
+    suspend fun setSpectrumEnabled(enabled: Boolean) {
+        context.dataStore.edit { it[keySpectrumEnabled] = enabled }
     }
 
     /**

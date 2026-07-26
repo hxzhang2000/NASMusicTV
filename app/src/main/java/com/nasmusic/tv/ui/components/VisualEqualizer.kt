@@ -63,8 +63,6 @@ fun VisualEqualizer(
 
     val barHeights = remember { Array(barCount) { 0f } }
     val targetHeights = remember { Array(barCount) { 0f } }
-    /** 帽子（峰值指示线）——金色横杠，记录每根柱子近期最高点，极其缓慢下落 */
-    val hatHeights = remember { Array(barCount) { 0f } }
     // 用 tick 计数器强制 Canvas 重绘（barHeights 是普通数组，不会触发重组）
     var tick by remember { mutableIntStateOf(0) }
     // rememberUpdatedState 让 while(true) 循环总能读到最新的 spectrumData 值
@@ -126,17 +124,6 @@ fun VisualEqualizer(
                 barHeights[i] += diff * (if (isRising) attack else release)
             }
 
-            // ④ 帽子（峰值指示线）更新
-            //    柱子高度超过帽子时，帽子瞬间跳到柱子顶部；
-            //    否则帽子缓慢下落（×0.993/帧，约 3.3 秒降到 50%）
-            for (i in 0 until barCount) {
-                if (barHeights[i] > hatHeights[i]) {
-                    hatHeights[i] = barHeights[i]
-                } else {
-                    hatHeights[i] *= 0.993f
-                    if (hatHeights[i] < 0.001f) hatHeights[i] = 0f
-                }
-            }
             tick++
         }
     }
@@ -212,25 +199,6 @@ fun VisualEqualizer(
                     )
                 }
                 currentX += barW
-            }
-
-            // ⑤ 帽子（峰值指示线）绘制——金色横杠，比柱子稍宽，醒目突出
-            var hatX = startX
-            for (i in 0 until barCount) {
-                val hatH = hatHeights[i]
-                if (hatH > 0.01f) {
-                    val barW = barWidths[i]
-                    val hatY = bottomY - hatH * usableHeight
-                    val hatAlpha = (0.6f + hatH * 0.4f).coerceIn(0.4f, 1f)
-
-                    drawRoundRect(
-                        color = Color(0xFFFFD700).copy(alpha = hatAlpha),  // 金色
-                        topLeft = Offset(hatX - 3f, hatY - 2f),
-                        size = Size(barW + 7f, 4f),  // 比柱子宽 4px
-                        cornerRadius = CornerRadius(2f, 2f)
-                    )
-                }
-                hatX += barWidths[i]
             }
         }
     }

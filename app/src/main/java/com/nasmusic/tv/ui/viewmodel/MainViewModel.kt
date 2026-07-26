@@ -959,6 +959,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             genresDeferred.await()
             favoritesDeferred.await()
 
+            // 全量加载艺术家列表（数据量通常比专辑少，提前加载让 ARTISTS Tab 免等待）
+            loadArtists()
+
             // 不再全量加载歌曲，改为按需分页加载（SONGS Tab 激活时触发）
             _songs.value = UiState.Success(emptyList())
             _songsPaging.value = SongsPagingState()
@@ -1023,8 +1026,30 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             }
             try {
                 val artistsList = adapter.getArtists()
-                _artists.value = UiState.Success(artistsList)
-                AppLog.d("NASMusic", "loadArtists: ${artistsList.size} artists loaded")
+                // 对合作歌曲的艺术家名进行拆分（如 "AAA & BBB" → "AAA", "BBB"）
+                // 使每个参与者都独立出现在艺术家列表中
+                val splitArtists = artistsList.flatMap { artist ->
+                    val names = ArtistSplitter.split(artist.name)
+                    if (names.size > 1) {
+                        names.map { name ->
+                            artist.copy(
+                                id = "${artist.id}|$name",  // 唯一 ID，用于 Grid key
+                                name = name
+                            )
+                        }
+                    } else {
+                        listOf(artist)
+                    }
+                }
+                // 合并重复艺术家（同一名字可能来自独立条目和拆分条目）
+                val merged = splitArtists.groupBy { it.name }.map { (name, group) ->
+                    group.first().copy(
+                        songCount = group.maxOf { it.songCount },
+                        albumCount = group.sumOf { it.albumCount }
+                    )
+                }
+                _artists.value = UiState.Success(merged)
+                AppLog.d("NASMusic", "loadArtists: ${artistsList.size} raw → ${merged.size} after splitting")
             } catch (e: Exception) {
                 AppLog.e("NASMusic", "loadArtists failed", e)
                 _artists.value = UiState.Error(
@@ -1442,18 +1467,21 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             val adapter = backendRegistry.getAdapter() ?: return@launch
             try {
-                // 先找到艺术家 ID
+                // 先找到艺术家条目（拆分后的合成 ID 形如 "原ID|AAA"，需提取原始 ID）
                 val artists = _artists.value.dataOrNull() ?: emptyList()
                 val artist = artists.find { it.name == artistName }
                 if (artist != null) {
-                    val songs = adapter.getArtistSongs(artist.id)
+                    val originalId = artist.id.substringBefore("|", artist.id)
+                    val rawSongs = adapter.getArtistSongs(originalId)
+                    // 将返回的歌曲按 ArtistSplitter 拆分后，只取包含该艺术家的歌曲
+                    val matchingSongs = rawSongs.filter { song ->
+                        artistName in ArtistSplitter.split(song.artist)
+                    }
                     _artistDetailSongsCache.value = _artistDetailSongsCache.value.toMutableMap().apply {
-                        put(artistName, songs)
+                        put(artistName, matchingSongs)
                     }
-                    // 同时更新 artistSongsMap
-                    _artistSongsMap.value = _artistSongsMap.value.toMutableMap().apply {
-                        put(artistName, songs)
-                    }
+                    // 同时按拆分后的艺术家名更新 artistSongsMap 缓存
+                    buildArtistMapsIncremental(matchingSongs)
                 }
             } catch (e: Exception) {
                 AppLog.e("NASMusic", "loadArtistSongs failed", e)
@@ -1946,6 +1974,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
      */
     fun updateWeatherApiKey(key: String) = viewModelScope.launch {
         prefs.setWeatherApiKey(key.trim())
+    }
+
+    fun updateSpectrumEnabled(enabled: Boolean) = viewModelScope.launch {
+        prefs.setSpectrumEnabled(enabled)
     }
 
     // --- E-4 缓存管理 ---

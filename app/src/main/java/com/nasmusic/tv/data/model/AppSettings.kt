@@ -14,5 +14,7 @@ data class AppSettings(
     // 网络音乐默认源（NetworkSource 枚举，编译期类型安全）
     val defaultNetworkSource: NetworkSource = NetworkSource.DEFAULT,
     // Meting-API 端点 URL（由 AppPreferences.getMetingApiBaseUrlSync() 提供默认值）
-    val metingApiBaseUrl: String = ""
+    val metingApiBaseUrl: String = "",
+    // 频谱显示开关（默认关闭）
+    val spectrumEnabled: Boolean = false
 )

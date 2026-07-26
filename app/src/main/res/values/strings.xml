@@ -179,6 +179,8 @@
     <string name="settings_lyrics_offset_desc">调整歌词显示时间（毫秒）</string>
     <string name="settings_equalizer">均衡器</string>
     <string name="settings_equalizer_desc">调节各频段增益</string>
+    <string name="settings_spectrum">频谱显示</string>
+    <string name="settings_spectrum_desc">在播放页面显示实时频谱动画</string>
     <string name="settings_clear_lyrics_cache">清除歌词缓存</string>
     <string name="settings_clear_lyrics_cache_desc">删除所有已缓存的歌词文件</string>
     <string name="settings_clear_cover_cache">清除封面缓存</string>

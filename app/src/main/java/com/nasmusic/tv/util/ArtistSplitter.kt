@@ -10,7 +10,7 @@ package com.nasmusic.tv.util
  * 1. " feat. " — 常见合作标记（需前导空白）
  * 2. " ft. " — feat 的缩写
  * 3. " with " — 英文合作标记
- * 4. "&"、"、"、"/"、"×" — 中英文并列分隔符
+ * 4. "&"、"、"、"/"、"×"、"，"、"＆"、"," — 各式中英文并列分隔符
  * 5. " vs "、" vs. " — 对唱标记
  */
 object ArtistSplitter {
@@ -19,7 +19,7 @@ object ArtistSplitter {
         Regex("\\s+feat\\.?", RegexOption.IGNORE_CASE),
         Regex("\\s+ft\\.", RegexOption.IGNORE_CASE),
         Regex("\\s+with\\s+", RegexOption.IGNORE_CASE),
-        Regex("\\s*[&/、×]\\s*"),
+        Regex("\\s*[&/、×，＆,]\\s*"),
         Regex("\\s+vs\\.?\\s+", RegexOption.IGNORE_CASE),
     )
 

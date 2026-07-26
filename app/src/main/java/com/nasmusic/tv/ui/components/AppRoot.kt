@@ -265,7 +265,8 @@ fun AppRoot(
                         },
                         technicalInfo = viewModel.songTechnicalInfo.collectAsState(initial = null).value,
                         onLoadTechnicalInfo = { viewModel.loadSongTechnicalInfo() },
-                        spectrumData = spectrumData
+                        spectrumData = spectrumData,
+                        spectrumEnabled = settings.spectrumEnabled
                     )
                 }
                 Screen.Library -> {
@@ -396,6 +397,8 @@ fun AppRoot(
                         onChangeMetingApiBaseUrl = { viewModel.updateMetingApiBaseUrl(it) },
                         weatherApiKey = weatherApiKey,
                         onChangeWeatherApiKey = { viewModel.updateWeatherApiKey(it) },
+                        spectrumEnabled = settings.spectrumEnabled,
+                        onToggleSpectrum = { viewModel.updateSpectrumEnabled(it) },
                     // 封面滤镜设置
                     coverFilterEnabled = coverFilterEnabled,
                     coverFilterBlurRadius = coverFilterBlurRadius,

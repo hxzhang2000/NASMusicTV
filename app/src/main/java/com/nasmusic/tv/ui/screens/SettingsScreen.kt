@@ -89,6 +89,9 @@ fun SettingsScreen(
     // 天气 API Key 设置
     weatherApiKey: String = "",
     onChangeWeatherApiKey: ((String) -> Unit)? = null,
+    // 频谱显示设置
+    spectrumEnabled: Boolean = false,
+    onToggleSpectrum: (Boolean) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     var activeSection by remember { mutableStateOf(SettingsSection.GENERAL) }
@@ -186,6 +189,7 @@ fun SettingsScreen(
                 SettingsSection.PLAYBACK -> {
                     SectionTitle(stringResource(R.string.settings_playback))
                     SettingSwitch(label = stringResource(R.string.settings_auto_play), description = stringResource(R.string.settings_auto_play_desc), checked = settings.autoPlayNext, onClick = { onToggleAutoPlayNext(!settings.autoPlayNext) })
+                    SettingSwitch(label = stringResource(R.string.settings_spectrum), description = stringResource(R.string.settings_spectrum_desc), checked = spectrumEnabled, onClick = { onToggleSpectrum(!spectrumEnabled) })
                     PlayModeSelector(current = settings.defaultPlayMode, onSelect = { onChangePlayMode(it) })
                     Spacer(modifier = Modifier.height(12.dp))
                     SettingActionButton(
