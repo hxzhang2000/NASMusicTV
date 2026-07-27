@@ -3,6 +3,7 @@ name: Build
 on:
   push:
     branches: [ main, develop ]
+    tags: [ 'v*' ]
   pull_request:
     branches: [ main ]
 
@@ -41,3 +42,14 @@ jobs:
         with:
           name: app-debug
           path: app/build/outputs/apk/debug/
+
+      - name: Create Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          name: NASMusicTV ${{ github.ref_name }}
+          body_path: CHANGELOG.md
+          files: app/build/outputs/apk/debug/app-debug.apk
+          generate_release_notes: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
