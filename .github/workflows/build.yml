@@ -80,14 +80,15 @@ jobs:
         run: |
           TAG="${{ github.ref_name }}"
           APK="app/build/outputs/apk/release/app-release.apk"
+          # 删除已存在的 release（如果有），重新创建
           if gh release view "$TAG" --json tagName &>/dev/null; then
-            echo "Release $TAG already exists, updating..."
-            gh release edit "$TAG" --notes-file release_notes.md --title "NASMusicTV $TAG"
-            if [ -f "$APK" ]; then
-              gh release upload "$TAG" "$APK" --clobber
-            fi
-            gh release edit "$TAG" --latest
+            echo "Deleting existing release $TAG..."
+            gh release delete "$TAG" --yes
+          fi
+          echo "Creating release $TAG..."
+          ARGS=("--notes-file" "release_notes.md" "--title" "NASMusicTV $TAG")
+          if [ -f "$APK" ]; then
+            gh release create "$TAG" "${ARGS[@]}" "$APK"
           else
-            echo "Creating new release $TAG..."
-            gh release create "$TAG" --notes-file release_notes.md --title "NASMusicTV $TAG" $([ -f "$APK" ] && echo "$APK")
+            gh release create "$TAG" "${ARGS[@]}"
           fi
