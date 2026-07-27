@@ -21,9 +21,6 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v3
-
       - name: Set up Android SDK
         run: |
           yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses 2>&1 || true
@@ -37,18 +34,8 @@ jobs:
           echo "keyAlias=ci" >> keystore.properties
           echo "keyPassword=ci-pass" >> keystore.properties
 
-      - name: Cache Gradle packages
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.gradle/caches
-            ~/.gradle/wrapper
-          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
-          restore-keys: |
-            ${{ runner.os }}-gradle-
-
       - name: Build release APK
-        run: ./gradlew assembleRelease --no-daemon
+        run: ./gradlew assembleRelease --stacktrace
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
