@@ -237,11 +237,18 @@ class NavidromeAdapter : BackendAdapter {
         try {
             val url = buildRestUrl("getSongs") + "&type=alphabeticalByName&size=$limit&offset=$offset"
 
-            val json = executeRequest(url) ?: return@withContext emptyList<Song>()
-            val subsonic = json.getAsJsonObject("subsonic-response")
-            val songsWrap = subsonic?.getAsJsonObject("songs")
-            val songs = songsWrap?.getAsJsonArray("song")
-                ?: return@withContext emptyList<Song>()
+            val json = executeRequest(url) ?: return@withContext fallbackGetSongs(limit, offset)
+            val subsonic = json.getAsJsonObject("subsonic-response") ?: return@withContext fallbackGetSongs(limit, offset)
+
+            // 尝试标准格式: subsonic-response > songs > song[]
+            var songs = subsonic.getAsJsonObject("songs")?.getAsJsonArray("song")
+            // 尝试替代格式: subsonic-response > song[]（直接数组）
+            if (songs == null || songs.size() == 0) {
+                songs = subsonic.getAsJsonArray("song")
+            }
+            if (songs == null || songs.size() == 0) {
+                return@withContext fallbackGetSongs(limit, offset)
+            }
 
             songs.mapNotNull { item ->
                 val obj = item.asJsonObject
@@ -274,6 +281,37 @@ class NavidromeAdapter : BackendAdapter {
             }
         } catch (e: Exception) {
             AppLog.e("NavidromeAdapter", "getSongs failed", e)
+            fallbackGetSongs(limit, offset)
+        }
+    }
+
+    /**
+     * 当 getSongs 端点不可用或返回空时的兜底方案：
+     * 遍历所有专辑获取歌曲，再按分页裁剪。
+     */
+    private suspend fun fallbackGetSongs(limit: Int, offset: Int): List<Song> = withContext(Dispatchers.IO) {
+        try {
+            AppLog.w("NavidromeAdapter", "fallbackGetSongs: falling back to album iteration")
+            val albumUrl = buildRestUrl("getAlbumList2") + "&type=alphabeticalByName&size=5000&offset=0"
+            val json = executeRequest(albumUrl) ?: return@withContext emptyList<Song>()
+            val subsonic = json.getAsJsonObject("subsonic-response")
+            val albumList = subsonic?.getAsJsonObject("albumList2")?.getAsJsonArray("album")
+                ?: return@withContext emptyList<Song>()
+
+            val allSongs = supervisorScope {
+                albumList.map { albumElem ->
+                    async {
+                        val albumId = albumElem.asJsonObject.get("id")?.asString
+                            ?: return@async emptyList<Song>()
+                        getAlbumSongs(albumId)
+                    }
+                }.awaitAll().flatten()
+            }
+
+            // 按分页裁剪
+            allSongs.drop(offset).take(limit)
+        } catch (e: Exception) {
+            AppLog.e("NavidromeAdapter", "fallbackGetSongs failed", e)
             emptyList()
         }
     }
@@ -397,9 +435,29 @@ class NavidromeAdapter : BackendAdapter {
         }
     }
 
-    override suspend fun getLyrics(songId: String): String? {
-        AppLog.d("NavidromeAdapter", "getLyrics: Navidrome does not support lyrics API, returning null")
-        return null
+    override suspend fun getLyrics(songId: String): String? = withContext(Dispatchers.IO) {
+        try {
+            // 1. 通过 getSong 获取歌曲元数据（artist + title）
+            val songUrl = buildRestUrl("getSong") + "&id=$songId"
+            val songJson = executeRequest(songUrl) ?: return@withContext null
+            val subsonic = songJson.getAsJsonObject("subsonic-response")
+            val song = subsonic?.getAsJsonObject("song") ?: return@withContext null
+            val artist = song.get("artist")?.asString ?: return@withContext null
+            val title = song.get("title")?.asString ?: return@withContext null
+
+            // 2. 调用 Subsonic getLyrics 端点（按歌手+标题搜索）
+            val encodedArtist = java.net.URLEncoder.encode(artist, "UTF-8")
+            val encodedTitle = java.net.URLEncoder.encode(title, "UTF-8")
+            val lyricsUrl = buildRestUrl("getLyrics") + "&artist=$encodedArtist&title=$encodedTitle"
+            val lyricsJson = executeRequest(lyricsUrl) ?: return@withContext null
+            val lyricsSubsonic = lyricsJson.getAsJsonObject("subsonic-response")
+            val lyrics = lyricsSubsonic?.getAsJsonObject("lyrics")
+            val value = lyrics?.get("value")?.asString
+            if (value != null) EncodingUtils.fixEncoding(value) else null
+        } catch (e: Exception) {
+            AppLog.e("NavidromeAdapter", "getLyrics failed", e)
+            null
+        }
     }
 
     // ========== F-1 扩展接口 ==========

@@ -42,6 +42,7 @@ import com.nasmusic.tv.util.AppLog
 import com.nasmusic.tv.util.ArtistSplitter
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -157,6 +158,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     private val _songsPaging = MutableStateFlow(SongsPagingState())
     val songsPaging: StateFlow<SongsPagingState> = _songsPaging.asStateFlow()
     private val pageSize = 200
+
+    /**
+     * 后台全量加载是否正在进行中
+     */
+    private var _isBackgroundLoadingAll = false
 
     // --- 按需加载：艺术家列表（独立 API）---
     private val _artists = MutableStateFlow<UiState<List<Artist>>>(UiState.Success(emptyList()))
@@ -971,12 +977,12 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             // 全量加载艺术家列表（数据量通常比专辑少，提前加载让 ARTISTS Tab 免等待）
             loadArtists()
 
-            // 不再全量加载歌曲，改为按需分页加载（SONGS Tab 激活时触发）
-            _songs.value = UiState.Success(emptyList())
+            // 后台逐步加载全量歌曲：每加载一页立即显示，继续加载直到全部完成
             _songsPaging.value = SongsPagingState()
+            loadAllSongsBackground()
 
             _isLibraryLoading.value = false
-            AppLog.d("NASMusic", "loadLibrary: initial data loaded (albums/genres/favorites)")
+            AppLog.d("NASMusic", "loadLibrary: initial data loaded (albums/genres/favorites), starting background song loading")
         }
     }
 
@@ -993,7 +999,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
      */
     fun loadSongsNextPage() {
         val state = _songsPaging.value
-        if (state.isLoading || !state.hasMore) return
+        if (state.isLoading || !state.hasMore || _isBackgroundLoadingAll) return
         viewModelScope.launch {
             val adapter = backendRegistry.getAdapter() ?: return@launch
             _songsPaging.value = state.copy(isLoading = true)
@@ -1018,6 +1024,88 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 AppLog.e("NASMusic", "loadSongsNextPage failed", e)
                 _songsPaging.value = state.copy(isLoading = false)
                 showError("加载歌曲失败: ${e.message?.take(50)}")
+            }
+        }
+    }
+
+    /**
+     * 后台全量加载歌曲：分页加载，每页立即显示，继续加载直到全部完成。
+     * 与 loadSongsNextPage 共享 _songsPaging 状态，互斥运行。
+     */
+    private fun loadAllSongsBackground() {
+        if (_isBackgroundLoadingAll) return
+        _isBackgroundLoadingAll = true
+        viewModelScope.launch {
+            val adapter = backendRegistry.getAdapter() ?: run {
+                _isBackgroundLoadingAll = false
+                return@launch
+            }
+            try {
+                var offset = 0
+                while (true) {
+                    val batch = adapter.getSongs(pageSize, offset)
+                    if (batch.isEmpty()) break
+                    val current = _songsPaging.value
+                    val newState = SongsPagingState(
+                        songs = current.songs + batch,
+                        isLoading = false,
+                        hasMore = batch.size == pageSize,
+                        currentPage = current.currentPage + 1
+                    )
+                    _songsPaging.value = newState
+                    _songs.value = UiState.Success(newState.songs)
+                    buildArtistMapsIncremental(batch)
+                    offset += batch.size
+                    if (batch.size < pageSize) break
+                }
+                AppLog.d("NASMusic", "loadAllSongsBackground: done, ${_songsPaging.value.songs.size} songs")
+            } catch (e: Exception) {
+                AppLog.e("NASMusic", "loadAllSongsBackground failed", e)
+            } finally {
+                _isBackgroundLoadingAll = false
+            }
+        }
+    }
+
+    /**
+     * 独立从后端获取每个艺术家的歌曲，填充 artistSongsMap。
+     * 作为后台任务运行，不阻塞。
+     * 当歌曲 Tab 的后台全量加载已能覆盖时，此方法是冗余的，但确保
+     * 艺术家 Tab 在歌曲未加载时仍能显示歌曲数量。
+     */
+    private fun loadArtistSongsMap(adapter: BackendAdapter, artists: List<Artist>) {
+        viewModelScope.launch {
+            try {
+                val artistMap = mutableMapOf<String, MutableList<Song>>()
+                // 分批处理，每次最多 5 个并发请求避免压垮后端
+                artists.chunked(5).forEach { chunk ->
+                    val deferred = chunk.map { artist ->
+                        async {
+                            try {
+                                adapter.getArtistSongs(artist.id)
+                            } catch (e: Exception) {
+                                AppLog.w("NASMusic", "loadArtistSongsMap: skipped '${artist.name}': ${e.message?.take(50)}")
+                                emptyList<Song>()
+                            }
+                        }
+                    }
+                    val results = deferred.awaitAll()
+                    results.forEachIndexed { index, songs ->
+                        if (songs.isNotEmpty()) {
+                            artistMap.getOrPut(chunk[index].name) { mutableListOf() }.addAll(songs)
+                        }
+                    }
+                }
+                if (artistMap.isNotEmpty()) {
+                    val existing = _artistSongsMap.value.mapValues { it.value.toMutableList() }.toMutableMap()
+                    artistMap.forEach { (name, songs) ->
+                        existing.getOrPut(name) { mutableListOf() }.addAll(songs)
+                    }
+                    _artistSongsMap.value = existing
+                    AppLog.d("NASMusic", "loadArtistSongsMap: ${artistMap.size} artists, ${artistMap.values.sumOf { it.size }} songs")
+                }
+            } catch (e: Exception) {
+                AppLog.e("NASMusic", "loadArtistSongsMap failed", e)
             }
         }
     }
@@ -1059,6 +1147,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 }
                 _artists.value = UiState.Success(merged)
                 AppLog.d("NASMusic", "loadArtists: ${artistsList.size} raw → ${merged.size} after splitting")
+
+                // 独立从后端获取每个艺术家的歌曲，填充 artistSongsMap
+                // 这样即使歌曲 Tab 未加载，艺术家 Tab 也能显示歌曲数量
+                loadArtistSongsMap(adapter, merged)
             } catch (e: Exception) {
                 AppLog.e("NASMusic", "loadArtists failed", e)
                 _artists.value = UiState.Error(

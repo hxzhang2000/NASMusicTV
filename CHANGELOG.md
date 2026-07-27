@@ -7,6 +7,17 @@
 >
 > 类型：`Added`（新增） | `Changed`（变更） | `Fixed`（修复） | `Removed`（移除）
 
+## [v2.10.1] - 2026-07-27
+
+### Fixed
+
+- **Navidrome 歌曲 Tab 为空**：`getSongs()` 新增响应格式兜底（兼容 `subsonic-response > song[]` 直接数组格式），空时自动降级到专辑遍历 fallback，确保歌曲可获取
+- **Navidrome 内嵌歌词无法解析**：实现 Subsonic `getLyrics` 端点调用，通过 `getSong` 获取 artist+title 后搜索歌词，正确返回 ID3 USLT 帧内嵌歌词
+- **艺术家歌曲数量显示为 0**：新增 `loadArtistSongsMap()` 独立从后端获取每个艺术家的歌曲填充 `artistSongsMap`，不依赖歌曲 Tab 加载
+- **全部播放无反应**：`loadLibrary()` 启动 `loadAllSongsBackground()` 后台全量加载，分页渐进式拉取，每页加载后立即生效，播放全部按钮即刻可用
+
+---
+
 ## [v2.10.0] - 2026-07-27
 
 ### Added
