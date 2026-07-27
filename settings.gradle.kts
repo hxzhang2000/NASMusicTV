@@ -13,10 +13,12 @@ dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
+        gradlePluginPortal()
+        maven { url = uri("https://jitpack.io") }
+        // 阿里云镜像（国内加速，CI 环境不可达时自动跳过）
         maven { url = uri("https://maven.aliyun.com/repository/central") }
         maven { url = uri("https://maven.aliyun.com/repository/google") }
         maven { url = uri("https://maven.aliyun.com/repository/gradle-plugin") }
-        maven { url = uri("https://jitpack.io") }
     }
 }
 
