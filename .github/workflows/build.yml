@@ -49,9 +49,10 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/v')
         run: |
           TAG="${{ github.ref_name }}"
-          # 获取上一个 release 的版本号
-          PREV_TAG=$(gh release view --json tagName --jq '.tagName' 2>/dev/null || echo "")
+          # 获取上一个 release 的版本号（取倒数第二个）
+          PREV_TAG=$(gh release list --limit 2 --json tagName --jq '.[1].tagName' 2>/dev/null || echo "")
           if [ -n "$PREV_TAG" ] && [ "$PREV_TAG" != "$TAG" ]; then
+            echo "Previous release: $PREV_TAG, current: $TAG"
             # 从 CHANGELOG 开头提取到上一个版本之前
             awk -v prev="$PREV_TAG" '
               /^## \[/ { found=1 }
@@ -59,6 +60,7 @@ jobs:
               found { print }
             ' CHANGELOG.md > release_notes.md
           else
+            echo "No previous release found, extracting current version only"
             # 没有上一个 release，只提取当前版本
             awk -v tag="$TAG" '
               $0 ~ "^## \\[" tag "\\]" { found=1; next }
@@ -66,7 +68,7 @@ jobs:
               found { print }
             ' CHANGELOG.md > release_notes.md
           fi
-          echo "Release notes:"
+          echo "=== Release notes ==="
           cat release_notes.md
 
       - name: Create Release
