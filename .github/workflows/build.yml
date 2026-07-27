@@ -47,6 +47,8 @@ jobs:
 
       - name: Extract release notes from CHANGELOG
         if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           TAG="${{ github.ref_name }}"
           # 获取上一个 release 的版本号（取倒数第二个）
