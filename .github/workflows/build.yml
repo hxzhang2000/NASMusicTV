@@ -28,7 +28,7 @@ jobs:
 
       - name: Create keystore for CI
         run: |
-          keytool -genkey -v -keystore ci-keystore.jks -alias ci -keyalg RSA -keysize 2048 -validity 3650 -storepass ci-pass -keypass ci-pass -dname "CN=CI,OU=CI,O=CI,L=CI,S=CI,C=CI"
+          keytool -genkey -v -keystore app/ci-keystore.jks -alias ci -keyalg RSA -keysize 2048 -validity 3650 -storepass ci-pass -keypass ci-pass -dname "CN=CI,OU=CI,O=CI,L=CI,S=CI,C=CI"
           echo "storeFile=ci-keystore.jks" > keystore.properties
           echo "storePassword=ci-pass" >> keystore.properties
           echo "keyAlias=ci" >> keystore.properties
