@@ -101,7 +101,11 @@ adb -s 192.168.0.116:5555 install -r app/build/outputs/apk/debug/app-debug.apk
 
 ## 版本历史
 
-- **v2.7.0** — 新增: 首页仪表盘（当前播放/最近播放/天气/均衡器预览）、播放统计、歌曲详情面板（码率/采样率/格式）、可视化均衡器（3 种频谱主题）、天气电台双源 fallback + 5 日预报、中文 WMO 天气描述
+- **v2.10.0** — 新增: 曲库播放列表 Tab（专辑>艺术家>播放列表>歌曲排序）、`getPlaylistSongs()` 专用接口（修复复用 `getAlbumSongs` 的语义错误，Navidrome 端不再返回空）、Jellyfin 播放列表全量加载
+- **v2.9.0** — 新增: 回到播放页自动聚焦播放/暂停按钮、曲库子 Tab 跨导航记忆（ViewModel 驱动）、曲库播放全部按钮按 Tab 动态计算并绑定搜索结果
+- **v2.8.1** — 修复: 合作歌曲艺术家拆分不全（`ArtistSplitter` 追加全角逗号/and 符/半角逗号）、拆分后艺术家详情页歌曲为空
+- **v2.8.0** — 新增: 首页仪表盘（当前播放/最近播放/天气/均衡器预览）、播放统计、歌曲详情面板（码率/采样率/格式）、可视化均衡器（3 种频谱主题）、天气电台双源 fallback + 5 日预报、中文 WMO 天气描述
+- **v2.7.0** — 新增: 首页仪表盘、播放统计、歌曲详情面板、可视化均衡器、天气电台增强
 - **v2.6.2** — 修复: 天气 API Key 编辑按钮文案错误（改为"编辑"）、API Key 输入掩码（masked=true）、isDay 白天检测逻辑（新增 sunrise 检查）、getWeatherOpenWeatherMap 冗余 withContext 移除、getWeatherApiKeySync 空 catch 改日志；OpenCodeReview 全量代码审查修复 6 项问题
 - **v2.6.1** — 修复: 天气电台无后端连接时不显示歌曲（`BackendAdapter` 可空化 + 纯网络搜索 fallback）；新增: OpenWeatherMap API Key 设置 UI + `common_not_set` 字符串
 - **v2.6.0** — 新增: 天气电台（OpenWeatherMap 天气获取 + 按心情匹配 NAS/网络歌曲）；改版: 榜单页双列卡片网格（封面轮播 + 换一批）；新增: 歌词字体缩放（0.7x-1.6x）；新增: 封面滤镜（高斯模糊 + 暗色遮罩）
