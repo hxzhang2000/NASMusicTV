@@ -2078,7 +2078,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 return@launch
             }
             try {
-                val songs = adapter.getAlbumSongs(playlist.id)
+                val songs = adapter.getPlaylistSongs(playlist.id)
                 _selectedPlaylistSongs.value = UiState.Success(songs)
             } catch (e: Exception) {
                 AppLog.e("NASMusic", "selectPlaylist songs failed", e)
@@ -2138,7 +2138,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             val adapter = backendRegistry.getAdapter() ?: return@launch
             try {
-                val songs = adapter.getAlbumSongs(playlist.id)
+                val songs = adapter.getPlaylistSongs(playlist.id)
                 if (songs.isNotEmpty()) {
                     playQueue(songs)
                     _currentScreen.value = Screen.NowPlaying

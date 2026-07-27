@@ -514,10 +514,10 @@ class JellyfinAdapter : BackendAdapter {
     // --- 播放列表 ---
     override suspend fun getPlaylists(): List<Playlist> = withContext(Dispatchers.IO) {
         try {
-            // Jellyfin API: GET /Items?IncludeItemTypes=Playlist 获取播放列表
+            // Jellyfin API: GET /Items?IncludeItemTypes=Playlist 获取播放列表（全量）
             val url = "$baseUrl/Items?IncludeItemTypes=Playlist&Recursive=true&" +
                     "Fields=SortName&UserId=$userId&SortBy=SortName&SortOrder=Ascending&" +
-                    "StartIndex=0&Limit=200"
+                    "StartIndex=0&Limit=10000"
             val json = executeJsonRequest(url) ?: return@withContext emptyList<Playlist>()
             val items = json.getAsJsonArray("Items") ?: return@withContext emptyList<Playlist>()
             items.mapNotNull { item ->
@@ -532,6 +532,19 @@ class JellyfinAdapter : BackendAdapter {
             }
         } catch (e: Exception) {
             AppLog.e("JellyfinAdapter", "getPlaylists failed", e)
+            emptyList()
+        }
+    }
+
+    override suspend fun getPlaylistSongs(playlistId: String): List<Song> = withContext(Dispatchers.IO) {
+        try {
+            // Jellyfin API: GET /Playlists/{playlistId}/Items 获取播放列表中的歌曲
+            val url = "$baseUrl/Playlists/$playlistId/Items?UserId=$userId"
+            val json = executeJsonRequest(url) ?: return@withContext emptyList<Song>()
+            val items = json.getAsJsonArray("Items") ?: return@withContext emptyList<Song>()
+            items.mapNotNull { jsonObjectToSong(it.asJsonObject, playlistId) }
+        } catch (e: Exception) {
+            AppLog.e("JellyfinAdapter", "getPlaylistSongs failed", e)
             emptyList()
         }
     }

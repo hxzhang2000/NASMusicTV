@@ -7,6 +7,20 @@
 >
 > 类型：`Added`（新增） | `Changed`（变更） | `Fixed`（修复） | `Removed`（移除）
 
+## [v2.10.0] - 2026-07-27
+
+### Added
+
+- **曲库播放列表 Tab**：在专辑与歌曲之间新增"播放列表"Tab，左侧列列表（创建/删除/播放），右侧选中列表的歌曲明细（移除）
+- **`BackendAdapter.getPlaylistSongs()` 专用接口**：Jellyfin 使用 `GET /Playlists/{id}/Items`，Navidrome 使用 Subsonic `getPlaylist` 端点，替代之前复用 `getAlbumSongs()` 的语义错误
+
+### Fixed
+
+- **播放列表歌曲加载使用错误 API**：`selectPlaylist()` 和 `playPlaylist()` 从 `adapter.getAlbumSongs(playlist.id)` 改为 `adapter.getPlaylistSongs(playlist.id)`，Navidrome 端播放列表不再返回空结果
+- **Jellyfin 播放列表限制 200 个**：`getPlaylists()` 的 `Limit=200` 提升至 `Limit=10000`，全量加载
+
+---
+
 ## [v2.9.0] - 2026-07-26
 
 ### Added

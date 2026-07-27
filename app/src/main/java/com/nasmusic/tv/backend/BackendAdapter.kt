@@ -133,6 +133,7 @@ interface BackendAdapter {
 
     // --- 播放列表 ---
     suspend fun getPlaylists(): List<Playlist> = emptyList()
+    suspend fun getPlaylistSongs(playlistId: String): List<Song> = emptyList()
     suspend fun createPlaylist(name: String): Playlist? = null
     suspend fun deletePlaylist(playlistId: String): Boolean = false
     suspend fun addToPlaylist(playlistId: String, songId: String): Boolean = false

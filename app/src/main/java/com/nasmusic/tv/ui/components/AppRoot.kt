@@ -291,6 +291,11 @@ fun AppRoot(
                     val searchResultsList = searchResultsState.dataOrNull() ?: emptyList()
                     val isSearching = searchResultsState is UiState.Loading
                     val libraryActiveTab by viewModel.libraryActiveTab.collectAsState()
+                    val playlistsState by viewModel.playlists.collectAsState(initial = UiState.Success(emptyList()))
+                    val playlistsList = playlistsState.dataOrNull() ?: emptyList()
+                    val playlistSongsState by viewModel.selectedPlaylistSongs.collectAsState(initial = UiState.Success(emptyList()))
+                    val playlistSongsList = playlistSongsState.dataOrNull() ?: emptyList()
+                    val isPlaylistLoading = playlistsState is UiState.Loading || playlistSongsState is UiState.Loading
                     LibraryScreen(
                         albums = albumList,
                         songs = songList,
@@ -351,7 +356,17 @@ fun AppRoot(
                         playStatistics = viewModel.playStatistics.collectAsState(initial = com.nasmusic.tv.data.model.PlayStatistics()).value,
                         onClearPlayRecords = { viewModel.clearPlayRecords() },
                         activeTab = libraryActiveTab,
-                        onTabSelected = { tab -> viewModel.selectLibraryTab(tab) }
+                        onTabSelected = { tab -> viewModel.selectLibraryTab(tab) },
+                        // 播放列表
+                        playlists = playlistsList,
+                        playlistSongs = playlistSongsList,
+                        isPlaylistLoading = isPlaylistLoading,
+                        onSelectPlaylist = { playlist -> viewModel.selectPlaylist(playlist) },
+                        onCreatePlaylist = { name -> viewModel.createPlaylist(name) },
+                        onDeletePlaylist = { playlist -> viewModel.deletePlaylist(playlist) },
+                        onPlayPlaylist = { playlist -> viewModel.playPlaylist(playlist) },
+                        onRemoveFromPlaylist = { songId -> viewModel.removeFromPlaylist(songId) },
+                        onLoadPlaylists = { viewModel.loadPlaylists() }
                     )
                 }
                 Screen.Queue -> {

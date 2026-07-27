@@ -31,6 +31,7 @@
     <string name="library_artists">歌手</string>
     <string name="library_artists_alt">艺术家</string>
     <string name="library_songs">歌曲</string>
+    <string name="library_playlists">播放列表</string>
     <string name="library_folders">文件夹</string>
     <string name="library_genres">风格</string>
     <string name="library_years">年代</string>

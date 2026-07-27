@@ -430,6 +430,52 @@ class NavidromeAdapter : BackendAdapter {
         }
     }
 
+    override suspend fun getPlaylistSongs(playlistId: String): List<Song> = withContext(Dispatchers.IO) {
+        try {
+            val url = buildRestUrl("getPlaylist") + "&id=$playlistId"
+            val json = executeRequest(url) ?: return@withContext emptyList<Song>()
+            val subsonic = json.getAsJsonObject("subsonic-response")
+            val playlist = subsonic?.getAsJsonObject("playlist")
+                ?: return@withContext emptyList<Song>()
+            val entries = playlist.getAsJsonArray("entry")
+                ?: return@withContext emptyList<Song>()
+
+            val playlistName = EncodingUtils.fixEncoding(playlist.get("name")?.asString) ?: ""
+
+            entries.mapNotNull { item ->
+                val obj = item.asJsonObject
+                val id = obj.get("id")?.asString ?: return@mapNotNull null
+                val title = EncodingUtils.fixEncoding(obj.get("title")?.asString) ?: "Unknown"
+                val artist = EncodingUtils.fixEncoding(obj.get("artist")?.asString) ?: ""
+                val albumName = EncodingUtils.fixEncoding(obj.get("album")?.asString) ?: ""
+                val track = obj.get("track")?.asInt ?: 0
+                val disc = obj.get("discNumber")?.asInt ?: 1
+                val year = obj.get("year")?.asInt
+                val durationSec = obj.get("duration")?.asLong ?: 0L
+                val bitrate = obj.get("bitRate")?.asInt ?: 0
+                val coverId = obj.get("coverArt")?.asString ?: ""
+
+                Song(
+                    id = id,
+                    title = title,
+                    artist = artist,
+                    album = albumName,
+                    albumId = playlistId,
+                    coverUrl = if (coverId.isNotBlank()) buildCoverUrl(coverId) else null,
+                    streamUrl = getStreamUrl(id),
+                    durationMs = durationSec * 1000,
+                    trackNumber = track,
+                    discNumber = disc,
+                    year = year,
+                    bitrate = bitrate
+                )
+            }
+        } catch (e: Exception) {
+            AppLog.e("NavidromeAdapter", "getPlaylistSongs failed", e)
+            emptyList()
+        }
+    }
+
     override suspend fun createPlaylist(name: String): Playlist? = withContext(Dispatchers.IO) {
         try {
             val url = buildRestUrl("createPlaylist") + "&name=${java.net.URLEncoder.encode(name, "UTF-8")}"
