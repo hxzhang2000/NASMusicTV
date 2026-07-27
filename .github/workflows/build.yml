@@ -25,10 +25,17 @@ jobs:
         uses: gradle/actions/setup-gradle@v3
 
       - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
+        run: |
+          yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses 2>&1 || true
+          $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --install "platforms;android-34" "build-tools;34.0.0" 2>&1 || true
 
-      - name: Accept Android SDK licenses
-        run: yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses || true
+      - name: Create keystore for CI
+        run: |
+          keytool -genkey -v -keystore ci-keystore.jks -alias ci -keyalg RSA -keysize 2048 -validity 3650 -storepass ci-pass -keypass ci-pass -dname "CN=CI,OU=CI,O=CI,L=CI,S=CI,C=CI"
+          echo "storeFile=ci-keystore.jks" > keystore.properties
+          echo "storePassword=ci-pass" >> keystore.properties
+          echo "keyAlias=ci" >> keystore.properties
+          echo "keyPassword=ci-pass" >> keystore.properties
 
       - name: Cache Gradle packages
         uses: actions/cache@v4
@@ -40,14 +47,14 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-gradle-
 
-      - name: Build debug APK
-        run: ./gradlew assembleDebug --no-daemon
+      - name: Build release APK
+        run: ./gradlew assembleRelease --no-daemon
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: app-debug
-          path: app/build/outputs/apk/debug/
+          name: app-release
+          path: app/build/outputs/apk/release/
 
       - name: Create Release
         if: startsWith(github.ref, 'refs/tags/v')
@@ -55,7 +62,7 @@ jobs:
         with:
           name: NASMusicTV ${{ github.ref_name }}
           body_path: CHANGELOG.md
-          files: app/build/outputs/apk/debug/app-debug.apk
+          files: app/build/outputs/apk/release/app-release.apk
           generate_release_notes: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
