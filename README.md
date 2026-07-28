@@ -101,6 +101,10 @@ adb -s 192.168.0.116:5555 install -r app/build/outputs/apk/debug/app-debug.apk
 
 ## 版本历史
 
+- **v2.10.4** — 修复: 网络音乐榜单点击无反应、天气电台封面与列表分离、SongRow 增加封面缩略图
+- **v2.10.3** — 新增: 首页随心听（随机歌曲推荐+自动续播，NAS+网络混合）；修复: 网络歌曲歌词来源显示错误、天气电台无数据时仍加载歌曲、随心听消失
+- **v2.10.2** — 修复: 后台加载线程安全（AtomicBoolean）、Navidrome 歌词编码乱码、艺术家歌曲去重；Gradle wrapper 本地/CI 双路径
+- **v2.10.1** — 修复: Navidrome 歌曲 Tab 为空（getSongs 双格式兜底+专辑遍历 fallback）、内嵌歌词（Subsonic getLyrics 端点）、艺术家歌曲数量显示、全部播放无反应（后台渐进加载）
 - **v2.10.0** — 新增: 曲库播放列表 Tab（专辑>艺术家>播放列表>歌曲排序）、`getPlaylistSongs()` 专用接口（修复复用 `getAlbumSongs` 的语义错误，Navidrome 端不再返回空）、Jellyfin 播放列表全量加载
 - **v2.9.0** — 新增: 回到播放页自动聚焦播放/暂停按钮、曲库子 Tab 跨导航记忆（ViewModel 驱动）、曲库播放全部按钮按 Tab 动态计算并绑定搜索结果
 - **v2.8.1** — 修复: 合作歌曲艺术家拆分不全（`ArtistSplitter` 追加全角逗号/and 符/半角逗号）、拆分后艺术家详情页歌曲为空
