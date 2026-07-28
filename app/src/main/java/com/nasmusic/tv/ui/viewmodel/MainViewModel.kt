@@ -333,10 +333,14 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     } else {
                         "无法获取天气信息，请检查网络连接或 API Key 是否有效"
                     }
+                    // 即使天气获取失败，仍按默认心情（阳光）加载歌曲
+                    loadRadioForDefaultMood()
                 }
             } catch (e: Exception) {
                 AppLog.e("MainViewModel", "fetchWeather failed", e)
                 _weatherError.value = "获取天气失败: ${e.message?.take(50)}"
+                // 即使天气获取失败，仍按默认心情（阳光）加载歌曲
+                loadRadioForDefaultMood()
             } finally {
                 _weatherLoading.value = false
             }
@@ -879,8 +883,27 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     delay(3000)
                     _connectMessage.value = null
                 }
-            } finally {
-                _isLoading.value = false
+} finally {
+                _weatherLoading.value = false
+            }
+        }
+    }
+
+    /**
+     * 天气获取失败时，按默认心情（阳光）加载歌曲。
+     */
+    private fun loadRadioForDefaultMood() {
+        viewModelScope.launch {
+            try {
+                val mgr = weatherRadioManager ?: run {
+                    val adapter = backendRegistry.getAdapter()
+                    WeatherRadioManager(adapter, nasMusicApp.networkMusicManager).also { weatherRadioManager = it }
+                }
+                val queue = mgr.buildRadioWithMood(WeatherMood.SUNNY, null)
+                _weatherRadioQueue.value = queue
+                _currentWeatherMood.value = queue.mood
+            } catch (e: Exception) {
+                AppLog.e("MainViewModel", "loadRadioForDefaultMood failed", e)
             }
         }
     }
@@ -1084,35 +1107,39 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
      */
     private suspend fun loadRandomSongs(adapter: BackendAdapter?) {
         val allSongs = mutableListOf<Song>()
-        // 1. NAS 后端随机歌曲
+        // 1. NAS 后端随机歌曲（多拉一些确保够用）
         if (adapter != null) {
             try {
-                val nasSongs = adapter.getRandomSongs(20)
+                val nasSongs = adapter.getRandomSongs(50)
                 AppLog.d("NASMusic", "loadRandomSongs: got ${nasSongs.size} NAS songs")
                 allSongs.addAll(nasSongs)
             } catch (e: Exception) {
                 AppLog.e("NASMusic", "loadRandomSongs NAS failed", e)
             }
         }
-        // 2. 网络歌曲：从预设歌单随机抽取一个
-        try {
-            val randomPlaylist = preconfiguredPlaylists.random()
-            val networkSongs = nasMusicApp.networkMusicManager.getPlaylist(randomPlaylist.first)
-            if (networkSongs.isNotEmpty()) {
-                AppLog.d("NASMusic", "loadRandomSongs: got ${networkSongs.size} songs from '${randomPlaylist.second}'")
-                // 标记为网络歌曲
-                val tagged = networkSongs.map { it.copy(isNetworkSong = true, networkSource = "meting") }
-                allSongs.addAll(tagged)
+        // 2. 网络歌曲：从多个预设歌单随机抽取，凑够 20 首
+        val shuffledPlaylists = preconfiguredPlaylists.shuffled()
+        for ((playlistId, playlistName, _) in shuffledPlaylists) {
+            if (allSongs.size >= 20) break
+            try {
+                val networkSongs = nasMusicApp.networkMusicManager.getPlaylist(playlistId)
+                if (networkSongs.isNotEmpty()) {
+                    AppLog.d("NASMusic", "loadRandomSongs: got ${networkSongs.size} songs from '${playlistName}'")
+                    val tagged = networkSongs.map { it.copy(isNetworkSong = true, networkSource = "meting") }
+                    allSongs.addAll(tagged)
+                }
+            } catch (e: Exception) {
+                AppLog.e("NASMusic", "loadRandomSongs network failed for '$playlistName'", e)
             }
-        } catch (e: Exception) {
-            AppLog.e("NASMusic", "loadRandomSongs network failed", e)
         }
-        // 3. 打乱后取前 20 首
-        _randomSongs.value = if (allSongs.isNotEmpty()) {
-            allSongs.shuffled().take(20)
-        } else {
-            emptyList()
+        // 3. 打乱后取前 20 首。如果拉取失败则保留已有数据，不让区块消失
+        if (allSongs.isNotEmpty()) {
+            _randomSongs.value = allSongs.shuffled().take(20)
+        } else if (_randomSongs.value.isEmpty() && adapter != null) {
+            // 有后端但没拉到任何歌曲，可能是临时网络问题，下次刷新会重试
+            _randomSongs.value = emptyList()
         }
+        // 有后端但已有数据的不清空，保持区块可见
         AppLog.d("NASMusic", "loadRandomSongs: total ${_randomSongs.value.size} songs")
     }
 
