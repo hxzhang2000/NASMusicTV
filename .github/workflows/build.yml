@@ -58,8 +58,12 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           TAG="${{ github.ref_name }}"
-          # 获取上一个 release 的版本号（最新的已发布 release，当前 tag 尚未创建）
-          PREV_TAG=$(gh release list --limit 1 --json tagName --jq '.[0].tagName' 2>/dev/null || echo "")
+          # 获取上一个 release 的版本号
+          PREV_TAG=$(gh release list --limit 2 --json tagName --jq '.[0].tagName' 2>/dev/null || echo "")
+          # 如果最新 release 就是当前 tag，取倒数第二个
+          if [ "$PREV_TAG" = "$TAG" ]; then
+            PREV_TAG=$(gh release list --limit 2 --json tagName --jq '.[1].tagName' 2>/dev/null || echo "")
+          fi
           if [ -n "$PREV_TAG" ] && [ "$PREV_TAG" != "$TAG" ]; then
             echo "Previous release: $PREV_TAG, current: $TAG"
             # 从 CHANGELOG 开头提取到上一个版本之前
