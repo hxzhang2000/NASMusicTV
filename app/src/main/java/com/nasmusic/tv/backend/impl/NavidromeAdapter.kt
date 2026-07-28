@@ -292,11 +292,15 @@ class NavidromeAdapter : BackendAdapter {
     private suspend fun fallbackGetSongs(limit: Int, offset: Int): List<Song> = withContext(Dispatchers.IO) {
         try {
             AppLog.w("NavidromeAdapter", "fallbackGetSongs: falling back to album iteration")
+            // size=5000：覆盖绝大多数个人曲库规模，同时留在 Subsonic 服务端典型上限内
             val albumUrl = buildRestUrl("getAlbumList2") + "&type=alphabeticalByName&size=5000&offset=0"
             val json = executeRequest(albumUrl) ?: return@withContext emptyList<Song>()
             val subsonic = json.getAsJsonObject("subsonic-response")
             val albumList = subsonic?.getAsJsonObject("albumList2")?.getAsJsonArray("album")
                 ?: return@withContext emptyList<Song>()
+
+            val albumCount = albumList.size()
+            AppLog.w("NavidromeAdapter", "fallbackGetSongs: iterating $albumCount albums (may be slow for large libraries)")
 
             val allSongs = supervisorScope {
                 albumList.map { albumElem ->
@@ -442,8 +446,8 @@ class NavidromeAdapter : BackendAdapter {
             val songJson = executeRequest(songUrl) ?: return@withContext null
             val subsonic = songJson.getAsJsonObject("subsonic-response")
             val song = subsonic?.getAsJsonObject("song") ?: return@withContext null
-            val artist = song.get("artist")?.asString ?: return@withContext null
-            val title = song.get("title")?.asString ?: return@withContext null
+            val artist = EncodingUtils.fixEncoding(song.get("artist")?.asString) ?: return@withContext null
+            val title = EncodingUtils.fixEncoding(song.get("title")?.asString) ?: return@withContext null
 
             // 2. 调用 Subsonic getLyrics 端点（按歌手+标题搜索）
             val encodedArtist = java.net.URLEncoder.encode(artist, "UTF-8")

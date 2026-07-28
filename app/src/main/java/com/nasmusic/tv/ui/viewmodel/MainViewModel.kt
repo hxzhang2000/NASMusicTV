@@ -53,6 +53,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * 应用主 ViewModel
@@ -162,7 +163,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     /**
      * 后台全量加载是否正在进行中
      */
-    private var _isBackgroundLoadingAll = false
+    private val _isBackgroundLoadingAll = AtomicBoolean(false)
 
     // --- 按需加载：艺术家列表（独立 API）---
     private val _artists = MutableStateFlow<UiState<List<Artist>>>(UiState.Success(emptyList()))
@@ -999,7 +1000,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
      */
     fun loadSongsNextPage() {
         val state = _songsPaging.value
-        if (state.isLoading || !state.hasMore || _isBackgroundLoadingAll) return
+        if (state.isLoading || !state.hasMore || _isBackgroundLoadingAll.get()) return
         viewModelScope.launch {
             val adapter = backendRegistry.getAdapter() ?: return@launch
             _songsPaging.value = state.copy(isLoading = true)
@@ -1033,11 +1034,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
      * 与 loadSongsNextPage 共享 _songsPaging 状态，互斥运行。
      */
     private fun loadAllSongsBackground() {
-        if (_isBackgroundLoadingAll) return
-        _isBackgroundLoadingAll = true
+        if (!_isBackgroundLoadingAll.compareAndSet(false, true)) return
         viewModelScope.launch {
             val adapter = backendRegistry.getAdapter() ?: run {
-                _isBackgroundLoadingAll = false
+                _isBackgroundLoadingAll.set(false)
                 return@launch
             }
             try {
@@ -1062,7 +1062,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             } catch (e: Exception) {
                 AppLog.e("NASMusic", "loadAllSongsBackground failed", e)
             } finally {
-                _isBackgroundLoadingAll = false
+                _isBackgroundLoadingAll.set(false)
             }
         }
     }
@@ -1099,7 +1099,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 if (artistMap.isNotEmpty()) {
                     val existing = _artistSongsMap.value.mapValues { it.value.toMutableList() }.toMutableMap()
                     artistMap.forEach { (name, songs) ->
-                        existing.getOrPut(name) { mutableListOf() }.addAll(songs)
+                        val existingSongs = existing.getOrPut(name) { mutableListOf() }
+                        // 按 song.id 去重，避免与 buildArtistMapsIncremental 的结果重复
+                        val existingIds = existingSongs.map { it.id }.toSet()
+                        existingSongs.addAll(songs.filter { it.id !in existingIds })
                     }
                     _artistSongsMap.value = existing
                     AppLog.d("NASMusic", "loadArtistSongsMap: ${artistMap.size} artists, ${artistMap.values.sumOf { it.size }} songs")

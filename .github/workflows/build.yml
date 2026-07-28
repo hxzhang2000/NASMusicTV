@@ -17,6 +17,12 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # CI 环境没有本地 Gradle 文件，覆盖为网络 URL
+      - name: Use network Gradle distribution
+        run: |
+          sed -i 's|distributionUrl=.*|distributionUrl=https\\://services.gradle.org/distributions/gradle-9.5.0-bin.zip|' gradle/wrapper/gradle-wrapper.properties
+          cat gradle/wrapper/gradle-wrapper.properties
+
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
@@ -28,6 +34,7 @@ jobs:
           yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses 2>&1 || true
           $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --install "platforms;android-34" "build-tools;34.0.0" 2>&1 || true
 
+      # 签名密钥 - 生成临时 keystore 供 CI 签名（仅用于 CI 构建，非正式发布签名密钥）
       - name: Create keystore for CI
         run: |
           keytool -genkey -v -keystore app/ci-keystore.jks -alias ci -keyalg RSA -keysize 2048 -validity 3650 -storepass ci-pass -keypass ci-pass -dname "CN=CI,OU=CI,O=CI,L=CI,S=CI,C=CI"
