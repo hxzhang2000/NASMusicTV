@@ -97,7 +97,7 @@ class LyricsManager(
                     null
                 }
             } else null
-            val result = LyricsAvailability(backend = networkLyrics, network = fuzzyLyrics)
+            val result = LyricsAvailability(backend = null, network = networkLyrics ?: fuzzyLyrics)
             AppLog.d("LyricsManager", "checkAvailability(network song): backend=${result.hasBackend}, network=${result.hasNetwork}")
             return@withContext result
         }
