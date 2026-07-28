@@ -7,6 +7,21 @@
 >
 > 类型：`Added`（新增） | `Changed`（变更） | `Fixed`（修复） | `Removed`（移除）
 
+## [v2.10.2] - 2026-07-27
+
+### Fixed
+
+- **后台加载线程安全**：`_isBackgroundLoadingAll` 从普通 `var` 改为 `AtomicBoolean` + `compareAndSet` 原子操作，消除协程间竞态条件
+- **Navidrome 歌词编码乱码**：`getLyrics()` 中 artist/title 增加 `EncodingUtils.fixEncoding()` 处理，避免 GBK 编码导致歌词搜索失败
+- **艺术家歌曲去重**：`loadArtistSongsMap()` 合并到 `artistSongsMap` 时按 `song.id` 去重，避免与 `buildArtistMapsIncremental` 的歌曲重复
+
+### Changed
+
+- **fallbackGetSongs 增加日志**：降级时输出专辑数量，便于排查大曲库加载性能问题
+- **Gradle wrapper 本地/CI 双路径**：`gradle-wrapper.properties` 恢复本地文件 URL，CI 通过 `sed` 覆盖为网络 URL，本地开发和 CI 构建均正常工作
+
+---
+
 ## [v2.10.1] - 2026-07-27
 
 ### Fixed
