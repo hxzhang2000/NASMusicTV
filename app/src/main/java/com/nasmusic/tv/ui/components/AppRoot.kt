@@ -182,12 +182,14 @@ fun AppRoot(
                     val weatherError by viewModel.weatherError.collectAsState(initial = null)
                     val recentSongsState by viewModel.recentSongs.collectAsState(initial = UiState.Success(emptyList()))
                     val recentSongsList = recentSongsState.dataOrNull() ?: emptyList()
+                    val randomSongs by viewModel.randomSongs.collectAsState(initial = emptyList())
 
                     // 进入首页时刷新数据
                     LaunchedEffect(Unit) {
                         viewModel.loadHomeDashboard()
                         viewModel.loadRecentSongs()
                         viewModel.fetchWeather()
+                        viewModel.loadRandomSongs()
                     }
 
                     HomeScreen(
@@ -223,6 +225,10 @@ fun AppRoot(
                                 viewModel.playQueue(recentSongsList)
                                 viewModel.navigateTo(Screen.NowPlaying)
                             }
+                        },
+                        randomSongs = randomSongs,
+                        onPlayRandomSongs = { songs, index ->
+                            viewModel.playRandomSongs(songs, index)
                         }
                     )
                 }

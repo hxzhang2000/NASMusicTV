@@ -238,6 +238,23 @@ class PlayerManager() {
         updateCurrentSongFromPlayer()
     }
 
+    /**
+     * 追加歌曲到队列末尾（用于随心听自动续播）。
+     */
+    fun addToQueue(songs: List<Song>) {
+        if (songs.isEmpty()) return
+        val p = player ?: return
+        val currentQueue = _queue.value.toMutableList()
+        currentQueue.addAll(songs)
+        _queue.value = currentQueue
+        val mediaItems = songs.map { MediaItem.fromUri(it.streamUrl ?: "") }
+        try {
+            p.addMediaItems(mediaItems)
+        } catch (e: Exception) {
+            AppLog.e("PlayerManager", "addToQueue failed", e)
+        }
+    }
+
     fun playPause() {
         player?.let {
             val wasPlaying = it.isPlaying

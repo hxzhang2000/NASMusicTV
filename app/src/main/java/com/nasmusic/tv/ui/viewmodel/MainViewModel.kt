@@ -165,6 +165,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
      */
     private val _isBackgroundLoadingAll = AtomicBoolean(false)
 
+    // --- 随心听：随机歌曲 ---
+    private val _randomSongs = MutableStateFlow<List<Song>>(emptyList())
+    val randomSongs: StateFlow<List<Song>> = _randomSongs.asStateFlow()
+    private var shuffleRefillJob: kotlinx.coroutines.Job? = null
+
     // --- 按需加载：艺术家列表（独立 API）---
     private val _artists = MutableStateFlow<UiState<List<Artist>>>(UiState.Success(emptyList()))
     val artists: StateFlow<UiState<List<Artist>>> = _artists.asStateFlow()
@@ -982,6 +987,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             _songsPaging.value = SongsPagingState()
             loadAllSongsBackground()
 
+            // 加载随机歌曲（随心听）
+            loadRandomSongs(adapter)
+
             _isLibraryLoading.value = false
             AppLog.d("NASMusic", "loadLibrary: initial data loaded (albums/genres/favorites), starting background song loading")
         }
@@ -1063,6 +1071,91 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 AppLog.e("NASMusic", "loadAllSongsBackground failed", e)
             } finally {
                 _isBackgroundLoadingAll.set(false)
+            }
+        }
+    }
+
+    /**
+     * 加载随机歌曲（随心听）：混合 NAS 后端 + 网络歌曲，首页展示 20 首。
+     * - 已连 NAS：从后端拉取随机歌曲
+     * - 网络音乐可用：从预设歌单随机抽取
+     * - 两者混合，凑满 20 首
+     * - 都不可用时 _randomSongs 保持空，首页不显示区块
+     */
+    private suspend fun loadRandomSongs(adapter: BackendAdapter?) {
+        val allSongs = mutableListOf<Song>()
+        // 1. NAS 后端随机歌曲
+        if (adapter != null) {
+            try {
+                val nasSongs = adapter.getRandomSongs(20)
+                AppLog.d("NASMusic", "loadRandomSongs: got ${nasSongs.size} NAS songs")
+                allSongs.addAll(nasSongs)
+            } catch (e: Exception) {
+                AppLog.e("NASMusic", "loadRandomSongs NAS failed", e)
+            }
+        }
+        // 2. 网络歌曲：从预设歌单随机抽取一个
+        try {
+            val randomPlaylist = preconfiguredPlaylists.random()
+            val networkSongs = nasMusicApp.networkMusicManager.getPlaylist(randomPlaylist.first)
+            if (networkSongs.isNotEmpty()) {
+                AppLog.d("NASMusic", "loadRandomSongs: got ${networkSongs.size} songs from '${randomPlaylist.second}'")
+                // 标记为网络歌曲
+                val tagged = networkSongs.map { it.copy(isNetworkSong = true, networkSource = "meting") }
+                allSongs.addAll(tagged)
+            }
+        } catch (e: Exception) {
+            AppLog.e("NASMusic", "loadRandomSongs network failed", e)
+        }
+        // 3. 打乱后取前 20 首
+        _randomSongs.value = if (allSongs.isNotEmpty()) {
+            allSongs.shuffled().take(20)
+        } else {
+            emptyList()
+        }
+        AppLog.d("NASMusic", "loadRandomSongs: total ${_randomSongs.value.size} songs")
+    }
+
+    fun loadRandomSongs() {
+        viewModelScope.launch {
+            val adapter = backendRegistry.getAdapter()
+            loadRandomSongs(adapter)
+        }
+    }
+
+    /**
+     * 播放随机歌曲（随心听），启动自动续播。
+     */
+    fun playRandomSongs(songs: List<Song>, startIndex: Int) {
+        _isShufflePlaying = true
+        playQueue(songs, startIndex)
+        _currentScreen.value = Screen.NowPlaying
+        startShuffleRefill()
+    }
+
+    private var _isShufflePlaying = false
+
+    private fun startShuffleRefill() {
+        shuffleRefillJob?.cancel()
+        shuffleRefillJob = viewModelScope.launch {
+            while (_isShufflePlaying) {
+                val queue = playerManager.queue.value
+                val currentIdx = playerManager.currentIndex.value
+                val remaining = queue.size - currentIdx
+                if (remaining <= 5) {
+                    val adapter = backendRegistry.getAdapter() ?: break
+                    try {
+                        val newSongs = adapter.getRandomSongs(20)
+                        if (newSongs.isNotEmpty()) {
+                            playerManager.addToQueue(newSongs)
+                        }
+                    } catch (e: Exception) {
+                        AppLog.e("NASMusic", "shuffleRefill failed", e)
+                        delay(30000) // 失败后等 30 秒再试
+                        continue
+                    }
+                }
+                delay(5000)
             }
         }
     }
@@ -1700,6 +1793,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun playQueue(songs: List<Song>, startIndex: Int = 0) {
+        // 非随心听播放时停止自动续播
+        _isShufflePlaying = false
+        shuffleRefillJob?.cancel()
         if (songs.isEmpty()) return
         val firstSong = songs[startIndex.coerceIn(0, songs.lastIndex)]
         AppLog.d("NASMusic", "playQueue: ${songs.size} songs, start=$startIndex, first=${firstSong.title}, coverUrl=${firstSong.coverUrl ?: "null"}")

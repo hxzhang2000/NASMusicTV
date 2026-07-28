@@ -79,6 +79,8 @@ fun HomeScreen(
     onNavigateToQueue: () -> Unit = {},
     onNavigateToNowPlaying: () -> Unit = {},
     onPlayAllRecent: () -> Unit = {},
+    randomSongs: List<Song> = emptyList(),
+    onPlayRandomSongs: (List<Song>, Int) -> Unit = { _, _ -> },
     modifier: Modifier = Modifier
 ) {
     val listState = rememberLazyListState()
@@ -176,6 +178,26 @@ fun HomeScreen(
                         HomeSongCard(
                             song = song,
                             onClick = { onPlaySong(song) }
+                        )
+                    }
+                }
+            }
+        }
+
+        // 4.5 随心听（随机歌曲推荐）
+        if (randomSongs.isNotEmpty()) {
+            item(key = "shuffle_play_header") {
+                SectionHeader(
+                    title = stringResource(R.string.home_shuffle_play),
+                    count = randomSongs.size
+                )
+            }
+            item(key = "shuffle_play") {
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    items(randomSongs, key = { it.id }) { song ->
+                        HomeSongCard(
+                            song = song,
+                            onClick = { onPlayRandomSongs(randomSongs, randomSongs.indexOf(song)) }
                         )
                     }
                 }

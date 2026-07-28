@@ -49,6 +49,7 @@
     <string name="home_spectrum_preview">实时频谱预览</string>
     <string name="home_no_play_records">暂无播放记录</string>
     <string name="home_matching_covers">天气匹配封面</string>
+    <string name="home_shuffle_play">随心听</string>
     <string name="stats_title">播放统计</string>
     <string name="stats_total_plays">总播放次数</string>
     <string name="stats_total_time">总播放时长</string>
