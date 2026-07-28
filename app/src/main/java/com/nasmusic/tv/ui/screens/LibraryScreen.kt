@@ -1409,6 +1409,17 @@ fun SongRow(
                     .clickable { onClick() },
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                // 封面缩略图
+                if (song.coverUrl != null) {
+                    AsyncImage(
+                        model = song.coverUrl,
+                        contentDescription = null,
+                        modifier = Modifier
+                            .size(36.dp)
+                            .clip(RoundedCornerShape(4.dp))
+                            .padding(end = 8.dp)
+                    )
+                }
                 if (isFavorite) {
                     Text(text = "♥", color = NasMusicColors.Warning, fontSize = 10.sp, modifier = Modifier.width(16.dp))
                 } else {

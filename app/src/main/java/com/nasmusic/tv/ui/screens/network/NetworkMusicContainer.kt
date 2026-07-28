@@ -216,7 +216,10 @@ fun NetworkMusicContainer(
                         onToggleQueue = onToggleQueue,
                         onPlayAllSongs = onPlayAllSongs,
                         onRefreshCharts = onRefreshCharts,
-                        onNavigateToPlaylistDetail = { _ -> onNavigateToPlaylistDetail() }
+                        onNavigateToPlaylistDetail = { (playlist, songs) ->
+                            onLoadPlaylistDetail(playlist to songs)
+                            onNavigateToPlaylistDetail()
+                        }
                     )
                 }
                 NetworkSubTab.SEARCH -> {

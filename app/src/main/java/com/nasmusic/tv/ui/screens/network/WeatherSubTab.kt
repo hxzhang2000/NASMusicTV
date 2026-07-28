@@ -145,38 +145,8 @@ fun WeatherSubTab(
             )
         }
 
-        // 4.5 天气匹配歌曲封面墙
+        // 5. 歌曲列表（含封面，与列表合二为一）
         val songs = weatherRadioQueue?.songs ?: emptyList()
-        if (songs.isNotEmpty()) {
-            item(key = "cover_wall_header") {
-                Text(
-                    text = stringResource(R.string.stats_forecast) + " (" + stringResource(R.string.home_matching_covers) + ")",
-                    color = NasMusicColors.TextSecondary,
-                    fontSize = 12.sp,
-                    modifier = Modifier.padding(top = 4.dp, bottom = 6.dp)
-                )
-            }
-            item(key = "cover_wall") {
-                val displaySongs = songs.take(8)
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    // 每行 4 个
-                    displaySongs.chunked(4).forEach { rowSongs ->
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            rowSongs.forEach { song ->
-                                Box(modifier = Modifier.weight(1f)) {
-                                    WeatherCoverTile(song = song, onClick = { onPlaySong(song) })
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        // 5. 歌曲列表
         if (songs.isNotEmpty()) {
             items(songs, key = { "wr_${it.id}" }) { song ->
                 SongRow(
