@@ -78,7 +78,7 @@ class LyricsManager(
                 val text = networkMusicManager.resolveLyrics(song)
                 if (!text.isNullOrBlank() && LrcParser.isValidLrc(text)) {
                     cacheLyrics(song, text)
-                    LrcParser.parse(text, song.id).copy(source = LyricsSource.EMBEDDED)
+                    LrcParser.parse(text, song.id).copy(source = LyricsSource.NETWORK)
                 } else null
             } catch (e: Exception) {
                 AppLog.w("LyricsManager", "network resolveLyrics failed: ${e.message}")
@@ -141,11 +141,11 @@ class LyricsManager(
         when (source) {
             LyricsSource.EMBEDDED -> {
                 if (song.isNetworkSong && networkMusicManager != null) {
-                    // 网络歌曲的"内嵌"歌词走 NetworkMusicManager（实际为在线歌词接口）
+                    // 网络歌曲没有内嵌歌词，走 NetworkMusicManager 获取在线歌词
                     val text = networkMusicManager.resolveLyrics(song)
                     if (!text.isNullOrBlank() && LrcParser.isValidLrc(text)) {
                         cacheLyrics(song, text)
-                        LrcParser.parse(text, song.id).copy(source = LyricsSource.EMBEDDED)
+                        LrcParser.parse(text, song.id).copy(source = LyricsSource.NETWORK)
                     } else null
                 } else {
                     // NAS 歌曲从后端API获取
