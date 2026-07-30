@@ -32,6 +32,7 @@ import com.nasmusic.tv.data.model.EqualizerPreset
 import com.nasmusic.tv.data.model.HomeDashboardData
 import com.nasmusic.tv.data.model.ServerConfig
 import com.nasmusic.tv.data.model.Song
+import com.nasmusic.tv.data.model.VisualizerTheme
 import com.nasmusic.tv.data.model.UiState
 import com.nasmusic.tv.ui.LocalNavigateBackHandler
 import com.nasmusic.tv.ui.screens.AlbumDetailScreen
@@ -273,7 +274,8 @@ fun AppRoot(
                         technicalInfo = viewModel.songTechnicalInfo.collectAsState(initial = null).value,
                         onLoadTechnicalInfo = { viewModel.loadSongTechnicalInfo() },
                         spectrumData = spectrumData,
-                        spectrumEnabled = settings.spectrumEnabled
+                        spectrumEnabled = settings.spectrumEnabled,
+                        visualizerTheme = settings.visualizerTheme
                     )
                 }
                 Screen.Library -> {
@@ -425,6 +427,8 @@ fun AppRoot(
                         onChangeWeatherApiKey = { viewModel.updateWeatherApiKey(it) },
                         spectrumEnabled = settings.spectrumEnabled,
                         onToggleSpectrum = { viewModel.updateSpectrumEnabled(it) },
+                        visualizerTheme = settings.visualizerTheme,
+                        onChangeVisualizerTheme = { viewModel.updateVisualizerTheme(it) },
                     // 封面滤镜设置
                     coverFilterEnabled = coverFilterEnabled,
                     coverFilterBlurRadius = coverFilterBlurRadius,
@@ -499,7 +503,8 @@ fun AppRoot(
                         currentBands = equalizerBands,
                         onSelectPreset = { viewModel.setEqualizerPreset(it) },
                         onAdjustBand = { index, value -> viewModel.setEqualizerBand(index, value) },
-                        onBack = { viewModel.navigateTo(Screen.Settings) }
+                        onBack = { viewModel.navigateTo(Screen.Settings) },
+                        visualizerTheme = settings.visualizerTheme
                     )
                 }
                 Screen.PlaylistManagement -> {

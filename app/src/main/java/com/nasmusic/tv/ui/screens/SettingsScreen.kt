@@ -47,6 +47,7 @@ import com.nasmusic.tv.R
 import com.nasmusic.tv.data.model.AppSettings
 import com.nasmusic.tv.data.model.PlayMode
 import com.nasmusic.tv.ui.components.FocusableSurface
+import com.nasmusic.tv.data.model.VisualizerTheme
 import com.nasmusic.tv.ui.theme.NasMusicColors
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -93,6 +94,9 @@ fun SettingsScreen(
     // 频谱显示设置
     spectrumEnabled: Boolean = false,
     onToggleSpectrum: (Boolean) -> Unit = {},
+    // 可视化频谱主题
+    visualizerTheme: VisualizerTheme = VisualizerTheme.COLOR_FLOW,
+    onChangeVisualizerTheme: (VisualizerTheme) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     var activeSection by remember { mutableStateOf(SettingsSection.GENERAL) }
@@ -191,6 +195,9 @@ fun SettingsScreen(
                     item { SectionTitle(stringResource(R.string.settings_playback)) }
                     item { SettingSwitch(label = stringResource(R.string.settings_auto_play), description = stringResource(R.string.settings_auto_play_desc), checked = settings.autoPlayNext, onClick = { onToggleAutoPlayNext(!settings.autoPlayNext) }) }
                     item { SettingSwitch(label = stringResource(R.string.settings_spectrum), description = stringResource(R.string.settings_spectrum_desc), checked = spectrumEnabled, onClick = { onToggleSpectrum(!spectrumEnabled) }) }
+                    if (spectrumEnabled) {
+                        item { VisualizerThemeSelector(current = visualizerTheme, onSelect = { onChangeVisualizerTheme(it) }) }
+                    }
                     item { PlayModeSelector(current = settings.defaultPlayMode, onSelect = { onChangePlayMode(it) }) }
                     item { Spacer(modifier = Modifier.height(12.dp)) }
                     item {
@@ -758,6 +765,37 @@ private fun PlayModeSelector(current: PlayMode, onSelect: (PlayMode) -> Unit) {
                     pressedScale = 0.95f
                 ) {
                     Text(text = mode.displayName, fontSize = 14.sp, modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp))
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+private fun VisualizerThemeSelector(current: VisualizerTheme, onSelect: (VisualizerTheme) -> Unit) {
+    Column {
+        Text(
+            text = "频谱主题",
+            color = NasMusicColors.TextPrimary,
+            fontSize = 16.sp,
+            modifier = Modifier.padding(vertical = 8.dp)
+        )
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            VisualizerTheme.entries.forEach { theme ->
+                val selected = current == theme
+                FocusableSurface(
+                    onClick = { onSelect(theme) },
+                    shape = RoundedCornerShape(12.dp),
+                    focusedScale = 1.08f,
+                    animationDurationMs = 250,
+                    containerColor = if (selected) NasMusicColors.Primary else NasMusicColors.Surface,
+                    contentColor = if (selected) androidx.compose.ui.graphics.Color.Black else NasMusicColors.TextPrimary,
+                    focusedContainerColor = if (selected) NasMusicColors.Primary else NasMusicColors.Primary.copy(alpha = 0.2f),
+                    focusedContentColor = if (selected) androidx.compose.ui.graphics.Color.Black else NasMusicColors.TextPrimary,
+                    pressedScale = 0.95f
+                ) {
+                    Text(text = theme.displayName, fontSize = 14.sp, modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp))
                 }
             }
         }

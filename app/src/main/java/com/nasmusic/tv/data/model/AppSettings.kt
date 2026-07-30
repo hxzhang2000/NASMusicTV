@@ -16,5 +16,18 @@ data class AppSettings(
     // Meting-API 端点 URL（由 AppPreferences.getMetingApiBaseUrlSync() 提供默认值）
     val metingApiBaseUrl: String = "",
     // 频谱显示开关（默认关闭）
-    val spectrumEnabled: Boolean = false
+    val spectrumEnabled: Boolean = false,
+    // 可视化频谱主题
+    val visualizerTheme: VisualizerTheme = VisualizerTheme.COLOR_FLOW
 )
+
+enum class VisualizerTheme(val displayName: String) {
+    COLOR_FLOW("ColorFlow"),
+    NEON_PULSE("NeonPulse"),
+    CLASSICAL_WAVE("ClassicalWave");
+
+    companion object {
+        fun fromKey(key: String): VisualizerTheme? =
+            entries.find { it.name == key || it.displayName.equals(key, ignoreCase = true) }
+    }
+}

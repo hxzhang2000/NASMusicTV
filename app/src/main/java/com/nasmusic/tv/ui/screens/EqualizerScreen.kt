@@ -42,6 +42,7 @@ import com.nasmusic.tv.data.model.EqualizerPreset
 import com.nasmusic.tv.ui.theme.Accent
 import com.nasmusic.tv.ui.theme.NasMusicColors
 import com.nasmusic.tv.ui.components.BackButton
+import com.nasmusic.tv.data.model.VisualizerTheme
 import com.nasmusic.tv.ui.components.FocusableSurface
 import com.nasmusic.tv.ui.components.VisualEqualizer
 import kotlinx.coroutines.launch
@@ -59,6 +60,7 @@ fun EqualizerScreen(
     onSelectPreset: (EqualizerPreset) -> Unit,
     onAdjustBand: (Int, Float) -> Unit,
     onBack: () -> Unit,
+    visualizerTheme: VisualizerTheme = VisualizerTheme.COLOR_FLOW,
     modifier: Modifier = Modifier
 ) {
     Column(
@@ -98,6 +100,7 @@ fun EqualizerScreen(
                     )
                     VisualEqualizer(
                         isPlaying = true,
+                        theme = visualizerTheme,
                         barCount = 24,
                         modifier = Modifier.fillMaxWidth().height(64.dp)
                     )

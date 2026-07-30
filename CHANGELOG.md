@@ -7,6 +7,12 @@
 >
 > 类型：`Added`（新增） | `Changed`（变更） | `Fixed`（修复） | `Removed`（移除）
 
+## [v2.10.8] - 2026-07-30
+
+### Added
+- 频谱可视化主题：ColorFlow（渐变流光）、NeonPulse（霓虹脉冲）、ClassicalWave（古典波形）三种视觉主题
+- 设置页新增"频谱主题"选择器，主题选择持久化到 DataStore
+
 ## [v2.10.7] - 2026-07-30
 
 ### Fixed

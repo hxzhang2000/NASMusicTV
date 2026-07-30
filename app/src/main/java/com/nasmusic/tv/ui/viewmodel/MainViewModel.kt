@@ -2184,6 +2184,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         prefs.setSpectrumEnabled(enabled)
     }
 
+    fun updateVisualizerTheme(theme: com.nasmusic.tv.data.model.VisualizerTheme) = viewModelScope.launch {
+        prefs.setVisualizerTheme(theme)
+    }
+
     // --- E-4 缓存管理 ---
     fun clearLyricsCache() {
         viewModelScope.launch {

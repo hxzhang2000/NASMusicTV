@@ -43,6 +43,7 @@ import com.nasmusic.tv.data.model.Lyrics
 import com.nasmusic.tv.data.model.LyricsHighlightMode
 import com.nasmusic.tv.data.model.PlayMode
 import com.nasmusic.tv.data.model.Song
+import com.nasmusic.tv.data.model.VisualizerTheme
 import com.nasmusic.tv.ui.components.LyricsView
 import com.nasmusic.tv.ui.components.CoverCarousel
 import com.nasmusic.tv.ui.components.ControlButtonsRow
@@ -95,6 +96,8 @@ fun NowPlayingScreen(
     spectrumData: FloatArray? = null,
     /** 是否启用频谱显示 */
     spectrumEnabled: Boolean = false,
+    /** 可视化频谱主题 */
+    visualizerTheme: VisualizerTheme = VisualizerTheme.COLOR_FLOW,
     modifier: Modifier = Modifier
 ) {
     var showInfoPanel by remember { mutableStateOf(false) }
@@ -312,6 +315,7 @@ fun NowPlayingScreen(
                 VisualEqualizer(
                     isPlaying = isPlaying,
                     spectrumData = spectrumData,
+                    theme = visualizerTheme,
                     barCount = 96,
                     modifier = Modifier.padding(horizontal = 4.dp)
                 )

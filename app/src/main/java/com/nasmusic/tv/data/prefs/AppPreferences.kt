@@ -18,6 +18,7 @@ import com.nasmusic.tv.data.model.NetworkFavoriteItem
 import com.nasmusic.tv.data.model.NetworkSource
 import com.nasmusic.tv.data.model.PlayMode
 import com.nasmusic.tv.data.model.ServerConfig
+import com.nasmusic.tv.data.model.VisualizerTheme
 import com.nasmusic.tv.data.model.Song
 import com.nasmusic.tv.util.AppLog
 import com.nasmusic.tv.util.CryptoUtils
@@ -82,6 +83,7 @@ class AppPreferences(private val context: Context) {
 
     // --- 频谱显示设置 ---
     private val keySpectrumEnabled = booleanPreferencesKey("settings_spectrum_enabled")
+    private val keyVisualizerTheme = stringPreferencesKey("settings_visualizer_theme")
 
     // --- 网络音乐平台来源 ---
     private val keyMusicSource = stringPreferencesKey("music_source")
@@ -253,7 +255,8 @@ class AppPreferences(private val context: Context) {
             lyricsOffsetMs = prefs[keyLyricsOffset] ?: 0L,
             defaultNetworkSource = prefs[keyDefaultNetworkSource]?.let { NetworkSource.fromKey(it) ?: NetworkSource.fromName(it) } ?: NetworkSource.DEFAULT,
             metingApiBaseUrl = prefs[keyMetingApiBaseUrl] ?: MetingApiService.DEFAULT_BASE_URL,
-            spectrumEnabled = prefs[keySpectrumEnabled] ?: false
+            spectrumEnabled = prefs[keySpectrumEnabled] ?: false,
+            visualizerTheme = prefs[keyVisualizerTheme]?.let { VisualizerTheme.fromKey(it) } ?: VisualizerTheme.COLOR_FLOW
         )
     }
 
@@ -284,6 +287,9 @@ class AppPreferences(private val context: Context) {
 
     suspend fun setDefaultNetworkSource(source: NetworkSource) =
         context.dataStore.edit { it[keyDefaultNetworkSource] = source.key }
+
+    suspend fun setVisualizerTheme(theme: VisualizerTheme) =
+        context.dataStore.edit { it[keyVisualizerTheme] = theme.name }
 
     suspend fun setMetingApiBaseUrl(url: String) =
         context.dataStore.edit {
