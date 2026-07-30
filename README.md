@@ -99,35 +99,6 @@ export JAVA_HOME="C:\Program Files\Android\Android Studio\jbr"
 adb -s 192.168.0.116:5555 install -r app/build/outputs/apk/debug/app-debug.apk
 ```
 
-## 版本历史
-
-- **v2.10.7** — 修复: 沉浸模式封面背景不显示（GPU blur 兼容）、歌单信息面板不可滚动、QueueScreen 封面不显示、播放/暂停按钮无焦点；NowPlaying info 面板复用封面区域
-- **v2.10.6** — 修复: Jellyfin 艺术家详情页仅返回 1 首歌、`utf8Body()` 过量日志拖慢电视；Navidrome 合作歌曲支持
-- **v2.10.5** — 修复: 合作歌曲艺术家详情页仅显示 2 首歌、布局 Tab 过多挤压右侧按钮、ButtonChip 编译器歧义
-- **v2.10.4** — 修复: 网络音乐榜单点击无反应、天气电台封面与列表分离、SongRow 增加封面缩略图
-- **v2.10.3** — 新增: 首页随心听（随机歌曲推荐+自动续播，NAS+网络混合）；修复: 网络歌曲歌词来源显示错误、天气电台无数据时仍加载歌曲、随心听消失
-- **v2.10.2** — 修复: 后台加载线程安全（AtomicBoolean）、Navidrome 歌词编码乱码、艺术家歌曲去重；Gradle wrapper 本地/CI 双路径
-- **v2.10.1** — 修复: Navidrome 歌曲 Tab 为空（getSongs 双格式兜底+专辑遍历 fallback）、内嵌歌词（Subsonic getLyrics 端点）、艺术家歌曲数量显示、全部播放无反应（后台渐进加载）
-- **v2.10.0** — 新增: 曲库播放列表 Tab（专辑>艺术家>播放列表>歌曲排序）、`getPlaylistSongs()` 专用接口（修复复用 `getAlbumSongs` 的语义错误，Navidrome 端不再返回空）、Jellyfin 播放列表全量加载
-- **v2.9.0** — 新增: 回到播放页自动聚焦播放/暂停按钮、曲库子 Tab 跨导航记忆（ViewModel 驱动）、曲库播放全部按钮按 Tab 动态计算并绑定搜索结果
-- **v2.8.1** — 修复: 合作歌曲艺术家拆分不全（`ArtistSplitter` 追加全角逗号/and 符/半角逗号）、拆分后艺术家详情页歌曲为空
-- **v2.8.0** — 新增: 首页仪表盘（当前播放/最近播放/天气/均衡器预览）、播放统计、歌曲详情面板（码率/采样率/格式）、可视化均衡器（3 种频谱主题）、天气电台双源 fallback + 5 日预报、中文 WMO 天气描述
-- **v2.7.0** — 新增: 首页仪表盘、播放统计、歌曲详情面板、可视化均衡器、天气电台增强
-- **v2.6.2** — 修复: 天气 API Key 编辑按钮文案错误（改为"编辑"）、API Key 输入掩码（masked=true）、isDay 白天检测逻辑（新增 sunrise 检查）、getWeatherOpenWeatherMap 冗余 withContext 移除、getWeatherApiKeySync 空 catch 改日志；OpenCodeReview 全量代码审查修复 6 项问题
-- **v2.6.1** — 修复: 天气电台无后端连接时不显示歌曲（`BackendAdapter` 可空化 + 纯网络搜索 fallback）；新增: OpenWeatherMap API Key 设置 UI + `common_not_set` 字符串
-- **v2.6.0** — 新增: 天气电台（OpenWeatherMap 天气获取 + 按心情匹配 NAS/网络歌曲）；改版: 榜单页双列卡片网格（封面轮播 + 换一批）；新增: 歌词字体缩放（0.7x-1.6x）；新增: 封面滤镜（高斯模糊 + 暗色遮罩）
-- **v2.5.1** — 修复: 网络音乐端点 429 限流（默认端点切换 Redcha + 多端点 fallback + 全失败用户提示）；新增: 歌单 Play All、队列开关、双列榜单、搜索/平台同行布局；修复: ProGuard 导致 TV 启动崩溃（Gson 类型擦除 + 空安全增强）
-- **v2.5.0** — 网络音乐顶级 Tab（推荐歌单、歌单详情、搜索平台切换、独立导航入口）
-- **v2.4.4** — Code Review 修复（空安全、类型安全枚举、Compose 动画优化、代码清理）
-- **v2.4.3** — Code Review 修复（Response 泄漏、API 参数、线程安全、编码回退、播放列表端点）
-- **v2.4.2** — Code Review 修复（线程安全、DataStore 异步、日志统一、Jellyfin 分页）
-- **v2.4.1** — 逐字歌词高频刷新、封面多图轮播、网络歌词联动封面、版本号统一管理
-- **v2.4.0** — 网络音乐搜索功能（Meting-API 在线搜索、网络歌曲收藏、播放队列持久化）
-- **v2.3.0** — 拼音搜索、回归测试框架
-- **v2.2.0** — 编码修复、分批加载、DI 容器重构
-- **v2.1.0** — 播放页 UI 改版、连接泄漏修复
-- **v1.0.0** — 初始发布（Jellyfin / Navidrome 连接、ExoPlayer 播放、LRC 歌词）
-
 ## 开源协议
 
 GPL v3
