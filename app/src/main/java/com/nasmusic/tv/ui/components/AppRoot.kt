@@ -380,6 +380,7 @@ fun AppRoot(
                         queue = queue,
                         currentIndex = currentIndex,
                         currentSong = currentSong,
+                        coverCandidates = coverCandidates,
                         isPlaying = isPlaying,
                         playMode = playMode,
                         onPlaySong = { index ->

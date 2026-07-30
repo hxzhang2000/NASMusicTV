@@ -7,6 +7,20 @@
 >
 > 类型：`Added`（新增） | `Changed`（变更） | `Fixed`（修复） | `Removed`（移除）
 
+## [Unreleased]
+
+### Fixed
+
+- **沉浸模式封面背景不显示**：`Modifier.blur()` 在部分 TV GPU 驱动下导致整图渲染失败，改为 `rememberAsyncImagePainter` + `Image` 组合渲染，模糊仅在用户主动开启封面滤镜时应用
+- **歌单信息面板不可滚动**：`Column` 添加 `verticalScroll`，超出面板高度的信息项可遥控器滚动查看
+- **QueueScreen 封面不显示**：用 `CoverCarousel(coverCandidates)` 替代裸 `AsyncImage`，使用多候选封面轮播
+- **QueueScreen 播放/暂停按钮无焦点**：中间 PlayPause Box 缺少 `.focusable()` 和 `.clickable`，导致遥控器无法聚焦操作
+
+### Changed
+
+- **NowPlaying info 面板改为占用封面区域**：信息按钮触发后复用封面空间显示 SongInfoPanel，按钮文字同步切换"信息"/"封面"
+- **QueueScreen 控制按钮居中**：`Arrangement.spacedBy` 改为 `Arrangement.Center` + 显式 Spacer
+
 ## [v2.10.6] - 2026-07-30
 
 ### Fixed

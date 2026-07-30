@@ -36,6 +36,8 @@ import androidx.compose.ui.unit.sp
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Text
 import coil.compose.AsyncImage
+import coil.compose.rememberAsyncImagePainter
+import androidx.compose.foundation.Image
 import com.nasmusic.tv.R
 import com.nasmusic.tv.data.model.Lyrics
 import com.nasmusic.tv.data.model.LyricsHighlightMode
@@ -121,43 +123,45 @@ fun NowPlayingScreen(
             )
     ) {
         // --- 沉浸模式：全屏封面背景（应用封面滤镜设置）---
-        if (isImmersiveMode && currentSong?.coverUrl != null) {
-            Box(modifier = Modifier.fillMaxSize()) {
-                AsyncImage(
-                    model = currentSong.coverUrl,
-                    contentDescription = "Fullscreen Cover Background",
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .then(
-                            if (coverFilterEnabled && coverFilterBlurRadius > 0f)
-                                Modifier.blur(coverFilterBlurRadius.dp)
-                            else
-                                Modifier.blur(30.dp) // 默认模糊，不影响上层歌词
-                        )
-                )
-                // 封面滤镜：暗色遮罩（可配置透明度，确保歌词可读）
-                if (coverFilterEnabled) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .background(Color.Black.copy(alpha = coverFilterDarkOverlay))
+        if (isImmersiveMode) {
+            val bgUrl = coverCandidates.firstOrNull() ?: currentSong?.coverUrl
+            AppLog.d("NowPlayingScreen", "immersiveBg: bgUrl=$bgUrl, coverCandidates=$coverCandidates, coverUrl=${currentSong?.coverUrl}")
+            Box(modifier = Modifier.fillMaxSize().background(Color(0xFF1A1A2E))) {
+                if (bgUrl != null) {
+                    val painter = rememberAsyncImagePainter(
+                        model = bgUrl,
+                        onState = { state ->
+                            AppLog.d("NowPlayingScreen", "immersiveBg state: ${state.javaClass.simpleName} bgUrl=${bgUrl.take(60)}")
+                        }
                     )
-                } else {
-                    // 默认半透明渐变遮罩
-                    Box(
+                    Image(
+                        painter = painter,
+                        contentDescription = "Fullscreen Cover Background",
+                        contentScale = androidx.compose.ui.layout.ContentScale.Crop,
                         modifier = Modifier
                             .fillMaxSize()
-                            .background(
-                                Brush.verticalGradient(
-                                    colors = listOf(
-                                        Color(0xCC0C1222),
-                                        Color(0x990C1222),
-                                        Color(0xCC0C1222)
-                                    )
-                                )
+                            .then(
+                                if (coverFilterEnabled && coverFilterBlurRadius > 0f)
+                                    Modifier.blur(coverFilterBlurRadius.dp)
+                                else
+                                    Modifier
                             )
                     )
                 }
+                // 半透明渐变遮罩覆盖整个背景，确保歌词可读
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(
+                            Brush.verticalGradient(
+                                colors = listOf(
+                                    Color(0xCC0C1222),
+                                    Color(0x990C1222),
+                                    Color(0xCC0C1222)
+                                )
+                            )
+                        )
+                )
             }
         }
 
@@ -403,39 +407,49 @@ private fun CoverColumn(
 
         Spacer(modifier = Modifier.height(12.dp))
 
-        // 可聚焦的封面容器 — OK 键切换沉浸模式
-        FocusableSurface(
-            onClick = onToggleImmersive,
-            modifier = Modifier.size(240.dp + 40.dp),
-            shape = RoundedCornerShape(20.dp),
-            focusedScale = 1.05f,
-            animationDurationMs = 150,
-            containerColor = Color.Transparent,
-            focusedContainerColor = Color.Transparent,
-            contentColor = Color.Transparent,
-            pressedScale = 0.97f
-        ) {
-            Box(contentAlignment = Alignment.Center) {
-                // 发光光晕
-                Box(
-                    modifier = Modifier
-                        .size(240.dp + 20.dp)
-                        .background(NasMusicColors.AccentGlow, shape = RoundedCornerShape(50.dp))
-                )
-                // 实际封面（使用 CoverCarousel 组件，支持多封面轮播）
-                // 注意：封面滤镜仅在全屏沉浸模式生效，不在普通播放界面应用
-                Box(
-                    modifier = Modifier
-                        .size(240.dp)
-                        .clip(RoundedCornerShape(20.dp))
-                        .background(NasMusicColors.Surface)
-                ) {
-                    key(currentSong?.id) {
-                        CoverCarousel(
-                            coverCandidates = coverCandidates,
-                            isPlaying = isPlaying,
-                            modifier = Modifier.fillMaxSize()
-                        )
+        // 封面 / 信息面板切换（按下"信息"后占用封面空间显示歌曲详情）
+        if (showInfoPanel) {
+            SongInfoPanel(
+                song = currentSong,
+                technicalInfo = technicalInfo,
+                onDismiss = onToggleInfoPanel,
+                modifier = Modifier.fillMaxWidth()
+            )
+        } else {
+            // 可聚焦的封面容器 — OK 键切换沉浸模式
+            FocusableSurface(
+                onClick = onToggleImmersive,
+                modifier = Modifier.size(240.dp + 40.dp),
+                shape = RoundedCornerShape(20.dp),
+                focusedScale = 1.05f,
+                animationDurationMs = 150,
+                containerColor = Color.Transparent,
+                focusedContainerColor = Color.Transparent,
+                contentColor = Color.Transparent,
+                pressedScale = 0.97f
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    // 发光光晕
+                    Box(
+                        modifier = Modifier
+                            .size(240.dp + 20.dp)
+                            .background(NasMusicColors.AccentGlow, shape = RoundedCornerShape(50.dp))
+                    )
+                    // 实际封面（使用 CoverCarousel 组件，支持多封面轮播）
+                    // 注意：封面滤镜仅在全屏沉浸模式生效，不在普通播放界面应用
+                    Box(
+                        modifier = Modifier
+                            .size(240.dp)
+                            .clip(RoundedCornerShape(20.dp))
+                            .background(NasMusicColors.Surface)
+                    ) {
+                        key(currentSong?.id) {
+                            CoverCarousel(
+                                coverCandidates = coverCandidates,
+                                isPlaying = isPlaying,
+                                modifier = Modifier.fillMaxSize()
+                            )
+                        }
                     }
                 }
             }
@@ -452,7 +466,7 @@ private fun CoverColumn(
             modifier = Modifier.fillMaxWidth()
         )
 
-        // 信息按钮
+        // 信息按钮（封面/信息切换）
         Spacer(modifier = Modifier.height(6.dp))
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -473,21 +487,11 @@ private fun CoverColumn(
                 focusedContentColor = NasMusicColors.Primary
             ) {
                 Text(
-                    text = if (showInfoPanel) "信息 ▲" else "信息 ▼",
+                    text = if (showInfoPanel) "封面" else "信息",
                     fontSize = 11.sp,
                     modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
                 )
             }
-        }
-
-        // 信息面板（展开时显示）
-        if (showInfoPanel) {
-            Spacer(modifier = Modifier.height(8.dp))
-            SongInfoPanel(
-                song = currentSong,
-                technicalInfo = technicalInfo,
-                onDismiss = onToggleInfoPanel
-            )
         }
     }
 }

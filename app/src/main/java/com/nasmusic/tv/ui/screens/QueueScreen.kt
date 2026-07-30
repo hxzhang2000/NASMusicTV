@@ -27,12 +27,10 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
-import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
@@ -56,10 +54,10 @@ import androidx.compose.ui.unit.sp
 import com.nasmusic.tv.R
 import androidx.tv.material3.Icon
 import androidx.tv.material3.Text
-import coil.compose.AsyncImage
 import com.nasmusic.tv.data.model.PlayMode
 import com.nasmusic.tv.data.model.Song
 import com.nasmusic.tv.ui.LocalListBackHandler
+import com.nasmusic.tv.ui.components.CoverCarousel
 import com.nasmusic.tv.ui.components.FocusableSurface
 import com.nasmusic.tv.ui.theme.NasMusicBrushes
 import com.nasmusic.tv.ui.theme.NasMusicColors
@@ -76,6 +74,7 @@ fun QueueScreen(
     queue: List<Song>,
     currentIndex: Int,
     currentSong: Song?,
+    coverCandidates: List<String> = emptyList(),
     isPlaying: Boolean,
     playMode: PlayMode,
     onPlaySong: (Int) -> Unit,
@@ -123,7 +122,7 @@ fun QueueScreen(
                 .padding(24.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // 专辑封面
+            // 专辑封面（使用 CoverCarousel 支持多候选自动 fallback）
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -131,17 +130,11 @@ fun QueueScreen(
                     .clip(RoundedCornerShape(16.dp))
                     .background(NasMusicColors.SurfaceVariant)
             ) {
-                currentSong?.coverUrl?.takeUnless { it.isBlank() }?.let { coverUrl ->
-                    AsyncImage(
-                        model = coverUrl,
-                        contentDescription = "Album",
-                        modifier = Modifier.fillMaxSize()
-                    )
-                } ?: run {
-                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Icon(imageVector = Icons.Default.MusicNote, contentDescription = null, tint = NasMusicColors.TextSecondary, modifier = Modifier.size(72.dp))
-                    }
-                }
+                CoverCarousel(
+                    coverCandidates = coverCandidates,
+                    isPlaying = isPlaying,
+                    modifier = Modifier.fillMaxSize()
+                )
             }
             Spacer(modifier = Modifier.height(18.dp))
             // 标题/作者
@@ -160,21 +153,51 @@ fun QueueScreen(
                 overflow = TextOverflow.Ellipsis
             )
             Spacer(modifier = Modifier.height(24.dp))
-            // 迷你播放控制
+            // 迷你播放控制（整体居中）
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                horizontalArrangement = Arrangement.Center,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 MiniIconButton(onClick = onPrevious, icon = Icons.Filled.SkipPrevious, contentDescription = "Previous")
+                Spacer(modifier = Modifier.width(12.dp))
+                var isPlayPauseFocused by remember { mutableStateOf(false) }
+                val ppAnimScale = remember { Animatable(1f) }
                 Box(
                     modifier = Modifier
                         .size(56.dp)
-                        .background(NasMusicColors.Primary, shape = CircleShape),
+                        .scale(ppAnimScale.value)
+                        .clip(CircleShape)
+                        .background(
+                            if (isPlayPauseFocused) NasMusicColors.Primary.copy(alpha = 0.7f)
+                            else NasMusicColors.Primary,
+                            shape = CircleShape
+                        )
+                        .border(
+                            width = if (isPlayPauseFocused) 3.dp else 0.dp,
+                            color = if (isPlayPauseFocused) NasMusicColors.FocusRing else Color.Transparent,
+                            shape = CircleShape
+                        )
+                        .onFocusChanged { state ->
+                            isPlayPauseFocused = state.isFocused
+                            scope.launch {
+                                ppAnimScale.animateTo(
+                                    if (isPlayPauseFocused) 1.15f else 1f,
+                                    tween(200)
+                                )
+                            }
+                        }
+                        .focusable()
+                        .clickable { onPlayPause() },
                     contentAlignment = Alignment.Center
                 ) {
-                    Icon(imageVector = if (isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow, contentDescription = null, tint = Color.Black, modifier = Modifier.size(28.dp))
+                    Icon(imageVector = if (isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+                        contentDescription = if (isPlaying) "Pause" else "Play",
+                        tint = Color.Black,
+                        modifier = Modifier.size(28.dp)
+                    )
                 }
+                Spacer(modifier = Modifier.width(12.dp))
                 MiniIconButton(onClick = onNext, icon = Icons.Filled.SkipNext, contentDescription = "Next")
             }
             Spacer(modifier = Modifier.height(20.dp))
