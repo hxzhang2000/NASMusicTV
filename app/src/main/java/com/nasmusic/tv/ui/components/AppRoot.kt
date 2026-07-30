@@ -537,6 +537,10 @@ fun AppRoot(
                     val recentNetworkSongs by viewModel.recentNetworkSongs.collectAsState(initial = emptyList())
                     val currentNetworkSong by viewModel.currentNetworkSong.collectAsState(initial = null)
                     val isNetworkSearching = networkSearchResultsState is UiState.Loading
+                    // 浏览状态
+                    val browseSelections by viewModel.browseSelections.collectAsState(initial = emptyList())
+                    val browseResults by viewModel.browseResults.collectAsState(initial = UiState.Success(emptyList()))
+                    val isBrowseSearching by viewModel.isBrowseSearching.collectAsState(initial = false)
                     // 天气状态
                     val weatherData by viewModel.weatherData.collectAsState(initial = null)
                     val weatherRadioQueue by viewModel.weatherRadioQueue.collectAsState(initial = null)
@@ -581,6 +585,18 @@ fun AppRoot(
                         onSwitchWeatherMood = { mood -> viewModel.switchWeatherMood(mood) },
                         onRefreshWeather = { viewModel.fetchWeather() },
                         onPlayWeatherAll = { viewModel.playWeatherRadioAll() },
+                        // 浏览子 Tab
+                        browseSelections = browseSelections,
+                        browseResults = browseResults,
+                        isBrowseSearching = isBrowseSearching,
+                        onSelectBrowseOption = { dimIdx, optIdx ->
+                            viewModel.selectBrowseOption(dimIdx, optIdx)
+                        },
+                        onRefreshBrowse = { viewModel.refreshBrowseSongs() },
+                        onPlayAllBrowse = {
+                            viewModel.playAllBrowseSongs()
+                            viewModel.navigateTo(Screen.NowPlaying)
+                        },
                         onRefreshCharts = { viewModel.refreshCharts() },
                         onNavigateToScreen = { action ->
                             when (action) {

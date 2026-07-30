@@ -7,5 +7,6 @@ enum class NetworkSubTab(val displayNameResId: Int) {
     DISCOVER(com.nasmusic.tv.R.string.network_tab_discover),
     WEATHER(com.nasmusic.tv.R.string.network_tab_weather),
     CHARTS(com.nasmusic.tv.R.string.network_tab_charts),
-    SEARCH(com.nasmusic.tv.R.string.network_tab_search)
+    SEARCH(com.nasmusic.tv.R.string.network_tab_search),
+    BROWSE(com.nasmusic.tv.R.string.network_tab_browse)
 }

@@ -28,6 +28,7 @@ import com.nasmusic.tv.data.model.MusicSource
 import com.nasmusic.tv.data.model.NetworkSubTab
 import com.nasmusic.tv.data.model.Playlist
 import com.nasmusic.tv.data.model.Song
+import com.nasmusic.tv.data.model.UiState
 import com.nasmusic.tv.data.model.WeatherData
 import com.nasmusic.tv.data.model.WeatherForecast
 import com.nasmusic.tv.data.model.WeatherMood
@@ -92,6 +93,13 @@ fun NetworkMusicContainer(
     onRefreshWeather: () -> Unit = {},
     onPlayWeatherAll: (() -> Unit)? = null,
     // 导航
+    // 浏览子 Tab 参数
+    browseSelections: List<Int> = emptyList(),
+    browseResults: UiState<List<Song>> = UiState.Success(emptyList()),
+    isBrowseSearching: Boolean = false,
+    onSelectBrowseOption: (Int, Int) -> Unit = { _, _ -> },
+    onRefreshBrowse: () -> Unit = {},
+    onPlayAllBrowse: () -> Unit = {},
     onRefreshCharts: () -> Unit = {},
     onNavigateToScreen: (String) -> Unit = {},
     modifier: Modifier = Modifier
@@ -234,6 +242,21 @@ fun NetworkMusicContainer(
                         onPlaySong = { song ->
                             onPlayNetworkSong(song)
                         },
+                        onToggleFavorite = onToggleNetworkFavorite,
+                        onToggleQueue = onToggleQueue
+                    )
+                }
+                NetworkSubTab.BROWSE -> {
+                    BrowseSubTab(
+                        selections = browseSelections,
+                        browseResults = browseResults,
+                        isSearching = isBrowseSearching,
+                        networkFavoriteIds = networkFavoriteIds,
+                        queueSongIds = queueSongIds,
+                        onSelectOption = onSelectBrowseOption,
+                        onRefresh = onRefreshBrowse,
+                        onPlayAll = onPlayAllBrowse,
+                        onPlaySong = onPlayNetworkSong,
                         onToggleFavorite = onToggleNetworkFavorite,
                         onToggleQueue = onToggleQueue
                     )

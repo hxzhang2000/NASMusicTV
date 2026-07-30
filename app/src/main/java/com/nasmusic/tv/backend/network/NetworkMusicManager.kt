@@ -191,6 +191,21 @@ class NetworkMusicManager(
     }
 
     /**
+     * 通过组合关键词搜索（用于多维度浏览）。
+     *
+     * 将非空的多个关键词用空格拼接后调用 [search]。
+     * 若关键词列表为空，返回空列表。
+     */
+    suspend fun searchByKeywords(keywords: List<String>): List<Song> {
+        val query = keywords.filter { it.isNotBlank() }
+            .joinToString(separator = " ")
+            .trim()
+        if (query.isBlank()) return emptyList()
+        AppLog.i("MetingDiag", "searchByKeywords: combined='$query'")
+        return search(query)
+    }
+
+    /**
      * 获取所有已注册源 ID（用于设置页面展示可选项）
      */
     fun availableSources(): List<String> = services.keys.toList()

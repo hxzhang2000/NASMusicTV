@@ -81,6 +81,7 @@
     <string name="network_tab_weather">天气</string>
     <string name="network_tab_charts">榜单</string>
     <string name="network_tab_search">搜索</string>
+    <string name="network_tab_browse">浏览</string>
     <string name="network_weather_coming_soon">天气电台功能即将上线</string>
     <string name="network_weather_current">当前天气</string>
     <string name="network_weather_refresh">刷新</string>

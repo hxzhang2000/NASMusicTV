@@ -8,6 +8,7 @@ import com.nasmusic.tv.backend.BackendRegistry
 import com.nasmusic.tv.backend.BackendAdapter
 import com.nasmusic.tv.data.model.Album
 import com.nasmusic.tv.data.model.Artist
+import com.nasmusic.tv.data.model.BrowseDimension
 import com.nasmusic.tv.data.model.AppSettings
 import com.nasmusic.tv.data.model.Lyrics
 import com.nasmusic.tv.data.model.LyricsAvailability
@@ -1367,6 +1368,111 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun clearNetworkSearch() {
         _networkSearchResults.value = UiState.Success(emptyList())
         _networkSearchKeyword.value = ""
+    }
+
+    // --- 多维度浏览（语种/纯音乐/年代/情怀/风格） ---
+
+    /** 各维度当前选中的选项索引，默认全是 0（"所有"） */
+    private val _browseSelections = MutableStateFlow(
+        BrowseDimension.entries.map { 0 }
+    )
+    val browseSelections: StateFlow<List<Int>> = _browseSelections.asStateFlow()
+
+    /** 浏览搜索结果 */
+    private val _browseResults = MutableStateFlow<UiState<List<Song>>>(UiState.Success(emptyList()))
+    val browseResults: StateFlow<UiState<List<Song>>> = _browseResults.asStateFlow()
+
+    /** 当前是否正在搜索 */
+    private val _isBrowseSearching = MutableStateFlow(false)
+    val isBrowseSearching: StateFlow<Boolean> = _isBrowseSearching.asStateFlow()
+
+    /**
+     * 设置某个维度的选中选项并自动刷新。
+     * @param dimensionIndex BrowseDimension.entries 中的索引
+     * @param optionIndex 该维度 options 列表中的索引
+     */
+    fun selectBrowseOption(dimensionIndex: Int, optionIndex: Int) {
+        val current = _browseSelections.value.toMutableList()
+        if (dimensionIndex in current.indices) {
+            current[dimensionIndex] = optionIndex
+            _browseSelections.value = current
+        }
+        // 变更后自动刷新（如果有非 ALL 选项）
+        refreshBrowseSongs()
+    }
+
+    /**
+     * 刷新浏览结果：收集非"所有"选项的关键词，随机各取一个，组合搜索。
+     */
+    fun refreshBrowseSongs() {
+        val dimensions = BrowseDimension.entries
+        val selections = _browseSelections.value
+
+        // 收集非 ALL 选项的关键词
+        val keywordList = mutableListOf<String>()
+        for (i in dimensions.indices) {
+            val opt = dimensions[i].options.getOrNull(selections.getOrNull(i) ?: 0)
+                ?: continue
+            if (opt.label == "所有") continue
+            if (opt.keywords.isEmpty()) continue
+            // 从该选项的关键词列表中随机选一个
+            keywordList.add(opt.keywords.random())
+        }
+
+        if (keywordList.isEmpty()) {
+            _browseResults.value = UiState.Success(emptyList())
+            return
+        }
+
+        _isBrowseSearching.value = true
+        _browseResults.value = UiState.Loading
+
+        viewModelScope.launch {
+            try {
+                val results = nasMusicApp.networkMusicManager.searchByKeywords(keywordList)
+                _browseResults.value = UiState.Success(results)
+            } catch (e: Exception) {
+                AppLog.e("NASMusic", "refreshBrowseSongs failed: ${e.message}", e)
+                _browseResults.value = UiState.Error(
+                    message = "浏览搜索失败: ${e.message?.take(50)}"
+                )
+            } finally {
+                _isBrowseSearching.value = false
+            }
+        }
+    }
+
+    /**
+     * 播放全部浏览结果。
+     * 不触发导航，由调用方（AppRoot）处理 navigateTo(NowPlaying)。
+     */
+    fun playAllBrowseSongs() {
+        val results = _browseResults.value.dataOrNull() ?: return
+        if (results.isEmpty()) return
+        playNetworkBatch(results, 0)
+    }
+
+    /**
+     * 批量播放网络歌曲（解析 URL 后加入队列）。
+     */
+    private fun playNetworkBatch(songs: List<Song>, startIndex: Int) {
+        if (songs.isEmpty()) return
+        viewModelScope.launch {
+            val resolved = songs.map { song ->
+                if (song.streamUrl.isNullOrBlank()) {
+                    try {
+                        val url = nasMusicApp.networkMusicManager.resolvePlayUrl(song)
+                        if (!url.isNullOrBlank()) song.copy(streamUrl = url) else song
+                    } catch (e: Exception) {
+                        AppLog.e("NASMusic", "playNetworkBatch: resolve failed for ${song.title}", e)
+                        song
+                    }
+                } else {
+                    song
+                }
+            }
+            playQueue(resolved, startIndex)
+        }
     }
 
     /**
