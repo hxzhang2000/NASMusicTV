@@ -208,7 +208,7 @@ class NavidromeAdapter : BackendAdapter {
         }
     }
 
-    override suspend fun getArtistSongs(artistId: String): List<Song> = withContext(Dispatchers.IO) {
+    override suspend fun getArtistSongs(artistId: String, artistName: String?): List<Song> = withContext(Dispatchers.IO) {
         try {
             val url = buildRestUrl("getArtist") + "&id=$artistId"
             val json = executeRequest(url) ?: return@withContext emptyList<Song>()

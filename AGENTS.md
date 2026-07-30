@@ -15,7 +15,7 @@ Android TV music player (Kotlin + Jetpack Compose for TV) that connects to **Jel
 JDK comes from Android Studio's bundled JetBrains Runtime. Gradle wrapper points at a **local file URL** (`file:///C:/Users/hxzha/Downloads/gradle-9.5.0-bin.zip`) — intentional for offline builds; do not "fix" it to a network URL.
 
 ```powershell
-$env:JAVA_HOME = "C:\Program Files\Android\Studio\jbr"
+$env:JAVA_HOME = "C:\Program Files\Android\Android Studio\jbr"
 
 ./gradlew.bat assembleDebug      # debug APK
 ./gradlew.bat assembleRelease    # needs ./keystore.properties (gitignored)

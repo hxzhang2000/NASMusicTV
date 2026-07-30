@@ -65,8 +65,10 @@ interface BackendAdapter {
 
     /**
      * 获取歌手的歌曲
+     * @param artistId 艺术家 ID
+     * @param artistName 艺术家名称（可选，某些后端用于按名称查询避免 ArtistIds 不匹配）
      */
-    suspend fun getArtistSongs(artistId: String): List<Song>
+    suspend fun getArtistSongs(artistId: String, artistName: String? = null): List<Song>
 
     /**
      * 获取歌曲（支持分页）

@@ -26,7 +26,6 @@ import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material.icons.filled.Repeat
 import androidx.compose.material.icons.filled.RepeatOne
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -79,8 +78,7 @@ fun ProgressSection(
     onSeek: (Long) -> Unit,
     onProgressFocusChanged: (Boolean) -> Unit = {},
     modifier: Modifier = Modifier,
-    compact: Boolean = false,
-    currentSongId: String? = null
+    compact: Boolean = false
 ) {
     var progressBarSize by remember { mutableStateOf(IntSize.Zero) }
     var isProgressFocused by remember { mutableStateOf(false) }
@@ -88,15 +86,6 @@ fun ProgressSection(
     val timeFont = if (compact) 12.sp else 14.sp
     val timeFontFocused = if (compact) 15.sp else 18.sp
     val progressFocusRequester = remember { FocusRequester() }
-
-    // 歌曲切换时重新请求焦点，确保进度条可聚焦
-    LaunchedEffect(currentSongId) {
-        try {
-            progressFocusRequester.requestFocus()
-        } catch (_: Exception) {
-            // 焦点请求失败时忽略，不影响播放
-        }
-    }
 
     Row(
         modifier = modifier.fillMaxWidth(),

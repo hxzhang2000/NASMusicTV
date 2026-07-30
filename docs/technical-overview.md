@@ -4581,4 +4581,33 @@ v2.6.0 天气电台功能使用 Open-Meteo（无需 API Key）作为主要天气
 - ✅ 林子祥详情页从 2 首恢复至 39 首
 - ✅ 曲库页"搜索"/"播放全部"按钮不再被挤压
 
+### 10.26 v2.10.6 — Jellyfin 合作歌曲修复 + Navidrome 多 ID 联合查询 + 性能优化
+
+**功能描述**：
+1. Jellyfin `getArtistSongs()` 从 `ArtistIds`（按 ID）改为 `Artists`（按名称字符串），避免 Jellyfin 中 `AlbumArtist` ID 与 `ArtistItems` ID 不一致导致合作曲丢失
+2. Navidrome 新增多 ID 联合查询：保存原始艺术家列表，从拆分前的关系中找出所有相关原始条目，分别查询后合并去重
+3. 移除 `loadArtistSongsMap` 全量预加载（5000+ 艺术家 × 1000 批串行请求），改为歌曲 Tab `buildArtistMapsIncremental` 自动填充
+4. 移除 `utf8Body()` 中 5 条 `AppLog.d` 调试日志
+
+#### 修改文件
+
+- `app/build.gradle.kts` — versionCode 26→27, versionName "2.10.5"→"2.10.6"
+- `backend/BackendAdapter.kt` — `getArtistSongs()` 新增 `artistName: String? = null` 参数
+- `backend/impl/JellyfinAdapter.kt`：
+  - `getArtistSongs()` — 当 `artistName` 不为空时，用 `Artists=${URLEncoder.encode(artistName)}` 代替 `ArtistIds=$artistId`
+  - `utf8Body()` — 移除 5 条 `AppLog.d` 调试日志（hex 字节、U+FFFD 状态、前 50 字符、GBK 回退记录）
+- `backend/impl/NavidromeAdapter.kt` — `getArtistSongs()` 签名新增 `artistName: String?`
+- `ui/viewmodel/MainViewModel.kt`：
+  - 新增 `_rawArtistList` 保存原始艺术家列表（拆分前）
+  - `loadArtists()` — 保存 `_rawArtistList`，移除 `loadArtistSongsMap()` 调用
+  - `loadArtistSongs()` — 从原始列表查出所有匹配原始 ID，逐个查询后去重合并
+  - 移除 `loadArtistSongsMap()` 函数及其 `_artistSongsMapLoaded` 字段
+
+#### 验证结果
+
+- ✅ `./gradlew.bat assembleDebug` BUILD SUCCESSFUL
+- ✅ Jellyfin 宫崎骏详情页从 1 首恢复至正常数量
+- ✅ `loadArtistSongsMap` 不再执行，启动后无额外 5000+ API 请求
+
+
 

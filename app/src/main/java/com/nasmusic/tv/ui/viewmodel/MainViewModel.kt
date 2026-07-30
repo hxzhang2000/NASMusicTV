@@ -174,6 +174,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     private val _artists = MutableStateFlow<UiState<List<Artist>>>(UiState.Success(emptyList()))
     val artists: StateFlow<UiState<List<Artist>>> = _artists.asStateFlow()
 
+    // ArtistSplitter 拆分前的原始艺术家列表，用于 Navidrome 多 ID 查询合作歌曲
+    private var _rawArtistList: List<Artist> = emptyList()
+
     // --- 按需加载：年份列表（独立 API）---
     private val _years = MutableStateFlow<UiState<List<Int>>>(UiState.Success(emptyList()))
     val years: StateFlow<UiState<List<Int>>> = _years.asStateFlow()
@@ -1188,52 +1191,6 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /**
-     * 独立从后端获取每个艺术家的歌曲，填充 artistSongsMap。
-     * 作为后台任务运行，不阻塞。
-     * 当歌曲 Tab 的后台全量加载已能覆盖时，此方法是冗余的，但确保
-     * 艺术家 Tab 在歌曲未加载时仍能显示歌曲数量。
-     */
-    private fun loadArtistSongsMap(adapter: BackendAdapter, artists: List<Artist>) {
-        viewModelScope.launch {
-            try {
-                val artistMap = mutableMapOf<String, MutableList<Song>>()
-                // 分批处理，每次最多 5 个并发请求避免压垮后端
-                artists.chunked(5).forEach { chunk ->
-                    val deferred = chunk.map { artist ->
-                        async {
-                            try {
-                                adapter.getArtistSongs(artist.id)
-                            } catch (e: Exception) {
-                                AppLog.w("NASMusic", "loadArtistSongsMap: skipped '${artist.name}': ${e.message?.take(50)}")
-                                emptyList<Song>()
-                            }
-                        }
-                    }
-                    val results = deferred.awaitAll()
-                    results.forEachIndexed { index, songs ->
-                        if (songs.isNotEmpty()) {
-                            artistMap.getOrPut(chunk[index].name) { mutableListOf() }.addAll(songs)
-                        }
-                    }
-                }
-                if (artistMap.isNotEmpty()) {
-                    val existing = _artistSongsMap.value.mapValues { it.value.toMutableList() }.toMutableMap()
-                    artistMap.forEach { (name, songs) ->
-                        val existingSongs = existing.getOrPut(name) { mutableListOf() }
-                        // 按 song.id 去重，避免与 buildArtistMapsIncremental 的结果重复
-                        val existingIds = existingSongs.map { it.id }.toSet()
-                        existingSongs.addAll(songs.filter { it.id !in existingIds })
-                    }
-                    _artistSongsMap.value = existing
-                    AppLog.d("NASMusic", "loadArtistSongsMap: ${artistMap.size} artists, ${artistMap.values.sumOf { it.size }} songs")
-                }
-            } catch (e: Exception) {
-                AppLog.e("NASMusic", "loadArtistSongsMap failed", e)
-            }
-        }
-    }
-
-    /**
      * ARTISTS Tab 首次激活时加载艺术家列表（独立 API）
      */
     fun loadArtists() {
@@ -1246,6 +1203,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             }
             try {
                 val artistsList = adapter.getArtists()
+                // 保存原始艺术家列表（拆分前），用于 Navidrome 多 ID 联合查询合作歌曲
+                _rawArtistList = artistsList
                 // 对合作歌曲的艺术家名进行拆分（如 "AAA & BBB" → "AAA", "BBB"）
                 // 使每个参与者都独立出现在艺术家列表中
                 val splitArtists = artistsList.flatMap { artist ->
@@ -1270,10 +1229,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 }
                 _artists.value = UiState.Success(merged)
                 AppLog.d("NASMusic", "loadArtists: ${artistsList.size} raw → ${merged.size} after splitting")
-
-                // 独立从后端获取每个艺术家的歌曲，填充 artistSongsMap
-                // 这样即使歌曲 Tab 未加载，艺术家 Tab 也能显示歌曲数量
-                loadArtistSongsMap(adapter, merged)
+                // 艺术家歌曲数量由歌曲 Tab 的 buildArtistMapsIncremental 全量加载后自动填充
             } catch (e: Exception) {
                 AppLog.e("NASMusic", "loadArtists failed", e)
                 _artists.value = UiState.Error(
@@ -1689,27 +1645,45 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             val adapter = backendRegistry.getAdapter() ?: return@launch
             try {
-                // 先找到艺术家条目（拆分后的合成 ID 形如 "原ID|AAA"，需提取原始 ID）
-                val artists = _artists.value.dataOrNull() ?: emptyList()
-                val artist = artists.find { it.name == artistName }
-                if (artist != null) {
-                    val originalId = artist.id.substringBefore("|", artist.id)
-                    val rawSongs = adapter.getArtistSongs(originalId)
-                    AppLog.d("NASMusic", "loadArtistSongs('$artistName') originalId=$originalId rawSongs=${rawSongs.size}")
-                    rawSongs.take(3).forEach { s ->
-                        AppLog.d("NASMusic", "  song artist='${s.artist}' title='${s.title}' album='${s.album}'")
+                // 从原始艺术家列表中找出所有与目标歌手相关的条目
+                // 例如 "李宗盛" 可能匹配到独立条目 "李宗盛" 以及合作条目 "李宗盛 & 周华健"
+                val rawMatchingIds = _rawArtistList
+                    .filter { artistName in ArtistSplitter.split(it.name) }
+                    .map { it.id }
+                    .distinct()
+                    .ifEmpty {
+                        // fallback: 从拆分后的列表中提取原始 ID
+                        val artists = _artists.value.dataOrNull() ?: emptyList()
+                        val artist = artists.find { it.name == artistName }
+                        if (artist != null) listOf(artist.id.substringBefore("|", artist.id)) else emptyList()
                     }
-                    // 将返回的歌曲按 ArtistSplitter 拆分后，只取包含该艺术家的歌曲
-                    val matchingSongs = rawSongs.filter { song ->
-                        artistName in ArtistSplitter.split(song.artist)
+
+                AppLog.d("NASMusic", "loadArtistSongs('$artistName') rawMatchingIds=${rawMatchingIds.size}: $rawMatchingIds")
+
+                // 分别查询每个原始 ID 的歌曲后合并去重（解决 Navidrome 合作歌曲不完整的问题）
+                val allSongs = rawMatchingIds.flatMap { id ->
+                    try {
+                        adapter.getArtistSongs(id, artistName)
+                    } catch (e: Exception) {
+                        AppLog.w("NASMusic", "loadArtistSongs: ID=$id query failed: ${e.message?.take(50)}")
+                        emptyList()
                     }
-                    AppLog.d("NASMusic", "  matchingSongs=${matchingSongs.size} (raw=${rawSongs.size})")
-                    _artistDetailSongsCache.value = _artistDetailSongsCache.value.toMutableMap().apply {
-                        put(artistName, matchingSongs)
-                    }
-                    // 同时按拆分后的艺术家名更新 artistSongsMap 缓存
-                    buildArtistMapsIncremental(matchingSongs)
+                }.distinctBy { it.id }
+
+                AppLog.d("NASMusic", "loadArtistSongs('$artistName') allSongs=${allSongs.size} (from ${rawMatchingIds.size} IDs)")
+                allSongs.take(3).forEach { s ->
+                    AppLog.d("NASMusic", "  song artist='${s.artist}' title='${s.title}' album='${s.album}'")
                 }
+                // 将返回的歌曲按 ArtistSplitter 拆分后，只取包含该艺术家的歌曲
+                val matchingSongs = allSongs.filter { song ->
+                    artistName in ArtistSplitter.split(song.artist)
+                }
+                AppLog.d("NASMusic", "  matchingSongs=${matchingSongs.size} (raw=${allSongs.size})")
+                _artistDetailSongsCache.value = _artistDetailSongsCache.value.toMutableMap().apply {
+                    put(artistName, matchingSongs)
+                }
+                // 同时按拆分后的艺术家名更新 artistSongsMap 缓存
+                buildArtistMapsIncremental(matchingSongs)
             } catch (e: Exception) {
                 AppLog.e("NASMusic", "loadArtistSongs failed", e)
                 showError("加载艺术家歌曲失败: ${e.message?.take(50)}")

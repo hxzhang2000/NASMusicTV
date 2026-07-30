@@ -319,8 +319,7 @@ fun NowPlayingScreen(
                 progressMs = progressMs,
                 durationMs = durationMs,
                 onSeek = onSeek,
-                compact = true,
-                currentSongId = currentSong?.id
+                compact = true
             )
         }
     }

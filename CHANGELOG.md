@@ -7,6 +7,20 @@
 >
 > 类型：`Added`（新增） | `Changed`（变更） | `Fixed`（修复） | `Removed`（移除）
 
+## [v2.10.6] - 2026-07-30
+
+### Fixed
+
+- **Jellyfin 艺术家详情页仅返回 1 首歌**：`getArtistSongs()` 用 `ArtistIds` 查 ID 与 `AlbumArtist` ID 不一致，改为按名称查 `Artists`，合作/关联歌曲全部返回
+- **`utf8Body()` 过量日志拖慢电视**：每次 API 响应打 3 行 hex/状态日志，Android TV logd 开销累加显著，全部移除
+
+### Changed
+
+- **Navidrome 合作歌曲支持**：保留原始艺术家列表，艺术家详情页从所有相关原始 ID（含合作条目）联合查询后合并去重，Album Artist 级合作歌曲不再丢失
+- **移除 `loadArtistSongsMap` 预加载**：之前启动时对所有 5000+ 艺术家逐一查歌曲（1000 批串行请求跑数分钟），改为由歌曲 Tab 全量加载后自动填充数量
+
+---
+
 ## [v2.10.5] - 2026-07-30
 
 ### Fixed

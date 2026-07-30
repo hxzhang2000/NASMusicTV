@@ -224,22 +224,36 @@ class JellyfinAdapter : BackendAdapter {
         }
     }
 
-    override suspend fun getArtistSongs(artistId: String): List<Song> = withContext(Dispatchers.IO) {
+    override suspend fun getArtistSongs(artistId: String, artistName: String?): List<Song> = withContext(Dispatchers.IO) {
         try {
             val fields = "PrimaryImageAspectRatio,SortName,ParentId,RunTimeTicks"
-            val url = "$baseUrl/Items?" +
-                    "ArtistIds=$artistId&" +
-                    "IncludeItemTypes=Audio&" +
-                    "Recursive=true&" +
-                    "fields=$fields&" +
-                    "UserId=$userId&" +
-                    "SortBy=SortName&SortOrder=Ascending&" +
-                    "StartIndex=0&Limit=1000"
+            // 优先按名称查询（Artists 参数匹配 Artists 字符串数组，比 ArtistIds 更可靠）
+            // 当 ArtistIds 不匹配时（常见于 AlbumArtist 与 ArtistItems ID 不一致），按名称能正确返回
+            val url = if (artistName != null) {
+                "$baseUrl/Items?" +
+                        "Artists=${java.net.URLEncoder.encode(artistName, "UTF-8")}&" +
+                        "IncludeItemTypes=Audio&" +
+                        "Recursive=true&" +
+                        "fields=$fields&" +
+                        "UserId=$userId&" +
+                        "SortBy=SortName&SortOrder=Ascending&" +
+                        "StartIndex=0&Limit=1000"
+            } else {
+                "$baseUrl/Items?" +
+                        "ArtistIds=$artistId&" +
+                        "IncludeItemTypes=Audio&" +
+                        "Recursive=true&" +
+                        "fields=$fields&" +
+                        "UserId=$userId&" +
+                        "SortBy=SortName&SortOrder=Ascending&" +
+                        "StartIndex=0&Limit=1000"
+            }
 
             val json = executeJsonRequest(url) ?: return@withContext emptyList<Song>()
             val items = json.getAsJsonArray("Items") ?: return@withContext emptyList<Song>()
             val songs = items.mapNotNull { jsonObjectToSong(it.asJsonObject, null) }
-            AppLog.d("JellyfinAdapter", "getArtistSongs($artistId): items=${items.size()} songs=${songs.size}")
+            val label = if (artistName != null) "$artistId|$artistName" else artistId
+            AppLog.d("JellyfinAdapter", "getArtistSongs($label): items=${items.size()} songs=${songs.size}")
             songs.take(3).forEach { s ->
                 AppLog.d("JellyfinAdapter", "  -> artist='${s.artist}' title='${s.title}'")
             }
@@ -928,23 +942,15 @@ class JellyfinAdapter : BackendAdapter {
         // 希腊/西里尔字母可能在音乐元数据中合法存在（希腊艺术家、俄罗斯乐队名），不应触发回退
         val hasReplacement = '\uFFFD' in utf8
 
-        // 记录原始字节的前20个字节（用于调试编码问题）
-        val bytesHex = rawBytes.take(40).joinToString(" ") { "%02X".format(it) }
-        AppLog.d("NASMusic", "utf8Body: rawBytes[0..39]=${bytesHex}")
-        AppLog.d("NASMusic", "utf8Body: replacement=$hasReplacement")
-
         if (!hasReplacement) {
-            AppLog.d("NASMusic", "utf8Body: UTF-8 OK, first50='${utf8.take(50)}'")
             return utf8
         }
 
         // 尝试 GBK 解码（Jellyfin 服务端 ID3 标签可能以 GBK 存储）
         val gbk = try { String(rawBytes, Charset.forName("GBK")) } catch (_: Exception) { null }
         if (gbk != null && '\uFFFD' !in gbk) {
-            AppLog.d("NASMusic", "utf8Body: GBK fallback: utf8='${utf8.take(20)}' → gbk='${gbk.take(20)}'")
             return gbk
         }
-        AppLog.d("NASMusic", "utf8Body: GBK fallback failed, keeping UTF-8")
         return utf8
     }
 
