@@ -4554,3 +4554,31 @@ v2.6.0 天气电台功能使用 Open-Meteo（无需 API Key）作为主要天气
 - ✅ 合作歌曲正确拆分：`"窦唯 & 不一定"` → 窦唯、不一定；`"杨宗纬，宝石Gam"` → 杨宗纬、宝石Gam
 - ✅ 拆分后的艺术家详情页能正确显示其歌曲
 
+### 10.25 v2.10.5 — 合作曲详情页修复 & 布局挤压修复
+
+**功能描述**：修复 Jellyfin 适配器中 `jsonObjectToSong` 只取 `Artists[0]` 导致合作歌曲被丢弃的问题；修复曲库页 9 个 Tab 挤压右侧搜索/播放全部按钮的布局问题。
+
+#### 修改文件
+
+- `app/build.gradle.kts` — versionCode 25→26, versionName "2.10.4"→"2.10.5"
+- `backend/impl/JellyfinAdapter.kt`：
+  - `jsonObjectToSong()` — `Artists` 数组从 `firstOrNull()?.asString` 改为 `mapNotNull { it?.asString }?.joinToString(", ")`，拼接全部艺术家
+  - `getArtistSongs()` — 新增诊断日志（返回条数 + 前 3 首取样）
+- `ui/screens/LibraryScreen.kt`：
+  - Tab 外层 padding `4.dp`→`2.dp`，文字 padding `16.dp`→`10.dp` 省出 ~90dp
+  - 去掉 `Box(weight(1f))` 包装，改为 SearchBar 内部 Surface 带 `weight(1f)` 优先压缩
+  - ButtonChip 新增 `modifier` 参数，搜索按钮加 `widthIn(min=56.dp)` 保护
+- `ui/screens/AlbumDetailScreen.kt` — ButtonChip 调用改为显式命名参数
+- `ui/screens/ArtistDetailScreen.kt` — ButtonChip 调用改为显式命名参数
+- `ui/screens/PlaylistManagementScreen.kt` — ButtonChip 调用改为显式命名参数
+- `ui/viewmodel/MainViewModel.kt`：
+  - `loadArtistSongs()` — 进入详情页时清除当前歌手缓存，强制重新拉取
+  - 新增诊断日志
+
+#### 验证结果
+
+- ✅ `./gradlew.bat assembleDebug` BUILD SUCCESSFUL
+- ✅ 林子祥详情页从 2 首恢复至 39 首
+- ✅ 曲库页"搜索"/"播放全部"按钮不再被挤压
+
+

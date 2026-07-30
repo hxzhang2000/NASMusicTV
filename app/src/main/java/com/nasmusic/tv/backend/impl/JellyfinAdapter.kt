@@ -238,7 +238,12 @@ class JellyfinAdapter : BackendAdapter {
 
             val json = executeJsonRequest(url) ?: return@withContext emptyList<Song>()
             val items = json.getAsJsonArray("Items") ?: return@withContext emptyList<Song>()
-            items.mapNotNull { jsonObjectToSong(it.asJsonObject, null) }
+            val songs = items.mapNotNull { jsonObjectToSong(it.asJsonObject, null) }
+            AppLog.d("JellyfinAdapter", "getArtistSongs($artistId): items=${items.size()} songs=${songs.size}")
+            songs.take(3).forEach { s ->
+                AppLog.d("JellyfinAdapter", "  -> artist='${s.artist}' title='${s.title}'")
+            }
+            songs
         } catch (e: Exception) {
             AppLog.e("JellyfinAdapter", "getArtistSongs failed", e)
             emptyList()
@@ -978,7 +983,8 @@ class JellyfinAdapter : BackendAdapter {
         val id = obj.get("Id")?.asString ?: return null
         val rawTitle = obj.get("Name")?.asString
         val rawAlbum = obj.get("Album")?.asString
-        val rawArtist = obj.getAsJsonArray("Artists")?.firstOrNull()?.asString
+        val rawArtist = obj.getAsJsonArray("Artists")?.mapNotNull { it?.asString }?.joinToString(", ")
+                    ?.takeIf { it.isNotBlank() }
         val title = EncodingUtils.fixEncoding(rawTitle) ?: "Unknown"
         val artist = EncodingUtils.fixEncoding(rawArtist) ?: EncodingUtils.fixEncoding(obj.get("AlbumArtist")?.asString) ?: ""
         val album = EncodingUtils.fixEncoding(rawAlbum) ?: ""

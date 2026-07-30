@@ -172,9 +172,10 @@ fun AlbumDetailScreen(
                 Spacer(modifier = Modifier.height(12.dp))
 
                 // 播放全部按钮
-                ButtonChip(text = stringResource(R.string.common_play_all)) {
-                    if (songs.isNotEmpty()) onPlayAll(songs)
-                }
+                ButtonChip(
+                    text = stringResource(R.string.common_play_all),
+                    onClick = { if (songs.isNotEmpty()) onPlayAll(songs) }
+                )
 
                 Spacer(modifier = Modifier.height(16.dp))
 

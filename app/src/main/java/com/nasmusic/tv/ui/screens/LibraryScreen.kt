@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
@@ -237,7 +238,7 @@ fun LibraryScreen(
                     val selected = tab == activeTab
                     FocusableSurface(
                         onClick = { onTabSelected(tab) },
-                        modifier = Modifier.padding(horizontal = 4.dp),
+                        modifier = Modifier.padding(horizontal = 2.dp),
                         shape = RoundedCornerShape(8.dp),
                         focusedScale = 1.05f,
                         animationDurationMs = 200,
@@ -249,24 +250,34 @@ fun LibraryScreen(
                         Text(
                             text = stringResource(tab.titleRes),
                             fontSize = 14.sp,
-                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)
                         )
                     }
                 }
 
-                Spacer(modifier = Modifier.weight(1f))
+                // 搜索栏 + 播放全部（flex 约束区域，防止被 9 个 TAB 挤压）
+                Row(
+                    modifier = Modifier.weight(1f),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    SearchBar(
+                        query = filterQuery,
+                        onOpenSearch = { showSearchDialog = true },
+                        onClear = { filterQuery = "" },
+                        modifier = Modifier.weight(1f)
+                    )
 
-                // 搜索栏
-                SearchBar(
-                    query = filterQuery,
-                    onOpenSearch = { showSearchDialog = true },
-                    onClear = { filterQuery = "" }
-                )
+                    Spacer(modifier = Modifier.width(12.dp))
 
-                Spacer(modifier = Modifier.width(12.dp))
-
-                if (showPlayAll) {
-                    ButtonChip(text = stringResource(R.string.common_play_all)) { onPlayAllSongs(playAllSongs) }
+                    if (showPlayAll) {
+                        Box(modifier = Modifier.widthIn(min = 80.dp)) {
+                            ButtonChip(
+                                text = stringResource(R.string.common_play_all),
+                                onClick = { onPlayAllSongs(playAllSongs) }
+                            )
+                        }
+                    }
                 }
             }
 
@@ -1567,20 +1578,23 @@ fun FavoriteButton(
 private fun SearchBar(
     query: String,
     onOpenSearch: () -> Unit,
-    onClear: () -> Unit
+    onClear: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
     var isFocused by remember { mutableStateOf(false) }
     val animScale = remember { Animatable(1f) }
     val scope = rememberCoroutineScope()
 
     Row(
+        modifier = modifier,
         verticalAlignment = Alignment.CenterVertically
     ) {
         // 搜索输入框（点击弹出虚拟键盘）
         Surface(
             onClick = onOpenSearch,
             modifier = Modifier
-                .width(340.dp)
+                .weight(1f)
+                .widthIn(max = 340.dp)
                 .height(38.dp)
                 .scale(animScale.value)
                 .border(
@@ -1627,11 +1641,12 @@ private fun SearchBar(
 
         // 搜索按钮 / 清除按钮
         ButtonChip(
-                text = if (query.isNotEmpty()) stringResource(R.string.common_clear) else stringResource(R.string.common_search),
+            text = if (query.isNotEmpty()) stringResource(R.string.common_clear) else stringResource(R.string.common_search),
             onClick = {
                 if (query.isNotEmpty()) onClear()
                 else onOpenSearch()
-            }
+            },
+            modifier = Modifier.widthIn(min = 56.dp)
         )
     }
 }
@@ -1892,9 +1907,10 @@ private fun ButtonChipSmall(text: String, onClick: () -> Unit) {
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
-fun ButtonChip(text: String, onClick: () -> Unit) {
+fun ButtonChip(text: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
     FocusableSurface(
         onClick = onClick,
+        modifier = modifier,
         shape = RoundedCornerShape(16.dp),
         focusedScale = 1.08f,
         animationDurationMs = 200,

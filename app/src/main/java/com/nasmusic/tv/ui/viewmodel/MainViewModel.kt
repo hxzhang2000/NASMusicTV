@@ -884,7 +884,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     _connectMessage.value = null
                 }
 } finally {
-                _weatherLoading.value = false
+                _isLoading.value = false
             }
         }
     }
@@ -1679,15 +1679,13 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     val artistDetailSongsCache: StateFlow<Map<String, List<Song>>> = _artistDetailSongsCache.asStateFlow()
 
     fun loadArtistSongs(artistName: String) {
-        // 先从 artistSongsMap 中获取已有的歌曲
-        val existingSongs = _artistSongsMap.value[artistName]
-        if (!existingSongs.isNullOrEmpty()) {
-            _artistDetailSongsCache.value = _artistDetailSongsCache.value.toMutableMap().apply {
-                put(artistName, existingSongs)
-            }
-            return
-        }
-        // 如果没有已有歌曲，从后端加载
+        // 清掉当前歌手的缓存，确保用新格式重新拉取
+        val currentMap = _artistSongsMap.value.toMutableMap()
+        currentMap.remove(artistName)
+        _artistSongsMap.value = currentMap
+        _artistDetailSongsCache.value = _artistDetailSongsCache.value.toMutableMap().apply { remove(artistName) }
+
+        // 从后端加载
         viewModelScope.launch {
             val adapter = backendRegistry.getAdapter() ?: return@launch
             try {
@@ -1697,10 +1695,15 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 if (artist != null) {
                     val originalId = artist.id.substringBefore("|", artist.id)
                     val rawSongs = adapter.getArtistSongs(originalId)
+                    AppLog.d("NASMusic", "loadArtistSongs('$artistName') originalId=$originalId rawSongs=${rawSongs.size}")
+                    rawSongs.take(3).forEach { s ->
+                        AppLog.d("NASMusic", "  song artist='${s.artist}' title='${s.title}' album='${s.album}'")
+                    }
                     // 将返回的歌曲按 ArtistSplitter 拆分后，只取包含该艺术家的歌曲
                     val matchingSongs = rawSongs.filter { song ->
                         artistName in ArtistSplitter.split(song.artist)
                     }
+                    AppLog.d("NASMusic", "  matchingSongs=${matchingSongs.size} (raw=${rawSongs.size})")
                     _artistDetailSongsCache.value = _artistDetailSongsCache.value.toMutableMap().apply {
                         put(artistName, matchingSongs)
                     }

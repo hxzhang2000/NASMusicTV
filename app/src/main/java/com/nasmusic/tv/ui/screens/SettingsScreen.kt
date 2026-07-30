@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -179,299 +180,328 @@ fun SettingsScreen(
         }
 
         // --- 右侧：具体设置项 ---
-        Column(modifier = Modifier.fillMaxWidth().weight(1f).padding(start = 24.dp)) {
+        LazyColumn(modifier = Modifier.fillMaxWidth().weight(1f).padding(start = 24.dp)) {
             when (activeSection) {
                 SettingsSection.GENERAL -> {
-                    SectionTitle(stringResource(R.string.settings_general))
-                    SettingSwitch(label = stringResource(R.string.settings_dark_theme), description = stringResource(R.string.settings_dark_theme_desc), checked = settings.darkTheme, onClick = { onToggleDarkTheme(!settings.darkTheme) })
-                    SettingSwitch(label = stringResource(R.string.settings_animations), description = stringResource(R.string.settings_animations_desc), checked = settings.animationsEnabled, onClick = { onToggleAnimations(!settings.animationsEnabled) })
+                    item { SectionTitle(stringResource(R.string.settings_general)) }
+                    item { SettingSwitch(label = stringResource(R.string.settings_dark_theme), description = stringResource(R.string.settings_dark_theme_desc), checked = settings.darkTheme, onClick = { onToggleDarkTheme(!settings.darkTheme) }) }
+                    item { SettingSwitch(label = stringResource(R.string.settings_animations), description = stringResource(R.string.settings_animations_desc), checked = settings.animationsEnabled, onClick = { onToggleAnimations(!settings.animationsEnabled) }) }
                 }
                 SettingsSection.PLAYBACK -> {
-                    SectionTitle(stringResource(R.string.settings_playback))
-                    SettingSwitch(label = stringResource(R.string.settings_auto_play), description = stringResource(R.string.settings_auto_play_desc), checked = settings.autoPlayNext, onClick = { onToggleAutoPlayNext(!settings.autoPlayNext) })
-                    SettingSwitch(label = stringResource(R.string.settings_spectrum), description = stringResource(R.string.settings_spectrum_desc), checked = spectrumEnabled, onClick = { onToggleSpectrum(!spectrumEnabled) })
-                    PlayModeSelector(current = settings.defaultPlayMode, onSelect = { onChangePlayMode(it) })
-                    Spacer(modifier = Modifier.height(12.dp))
-                    SettingActionButton(
-                        label = stringResource(R.string.settings_equalizer),
-                        description = stringResource(R.string.settings_equalizer_desc),
-                        onClick = { onOpenEqualizer?.invoke() }
-                    )
+                    item { SectionTitle(stringResource(R.string.settings_playback)) }
+                    item { SettingSwitch(label = stringResource(R.string.settings_auto_play), description = stringResource(R.string.settings_auto_play_desc), checked = settings.autoPlayNext, onClick = { onToggleAutoPlayNext(!settings.autoPlayNext) }) }
+                    item { SettingSwitch(label = stringResource(R.string.settings_spectrum), description = stringResource(R.string.settings_spectrum_desc), checked = spectrumEnabled, onClick = { onToggleSpectrum(!spectrumEnabled) }) }
+                    item { PlayModeSelector(current = settings.defaultPlayMode, onSelect = { onChangePlayMode(it) }) }
+                    item { Spacer(modifier = Modifier.height(12.dp)) }
+                    item {
+                        SettingActionButton(
+                            label = stringResource(R.string.settings_equalizer),
+                            description = stringResource(R.string.settings_equalizer_desc),
+                            onClick = { onOpenEqualizer?.invoke() }
+                        )
+                    }
                 }
                 SettingsSection.LYRICS -> {
-                    SectionTitle(stringResource(R.string.settings_lyrics))
-                    SettingSwitch(label = stringResource(R.string.settings_cache_lyrics), description = stringResource(R.string.settings_cache_lyrics_desc), checked = settings.cacheLyrics, onClick = { onToggleCacheLyrics(!settings.cacheLyrics) })
-                    SettingSwitch(label = stringResource(R.string.settings_cache_cover), description = stringResource(R.string.settings_cache_cover_desc), checked = settings.cacheCover, onClick = { onToggleCacheCover(!settings.cacheCover) })
+                    item { SectionTitle(stringResource(R.string.settings_lyrics)) }
+                    item { SettingSwitch(label = stringResource(R.string.settings_cache_lyrics), description = stringResource(R.string.settings_cache_lyrics_desc), checked = settings.cacheLyrics, onClick = { onToggleCacheLyrics(!settings.cacheLyrics) }) }
+                    item { SettingSwitch(label = stringResource(R.string.settings_cache_cover), description = stringResource(R.string.settings_cache_cover_desc), checked = settings.cacheCover, onClick = { onToggleCacheCover(!settings.cacheCover) }) }
                 }
                 SettingsSection.ABOUT -> {
-                    SectionTitle(stringResource(R.string.settings_about))
-                    AboutRow(label = stringResource(R.string.settings_app_name), value = stringResource(R.string.app_name))
-                    AboutRow(label = stringResource(R.string.about_version), value = NasMusicVersion.DISPLAY)
-                    AboutRow(label = stringResource(R.string.settings_build_type), value = NasMusicVersion.BUILD_TYPE)
-                    AboutRow(label = stringResource(R.string.about_license), value = stringResource(R.string.about_license_value))
-                    AboutRow(label = stringResource(R.string.settings_supported_backends), value = "Jellyfin / Navidrome")
+                    item { SectionTitle(stringResource(R.string.settings_about)) }
+                    item { AboutRow(label = stringResource(R.string.settings_app_name), value = stringResource(R.string.app_name)) }
+                    item { AboutRow(label = stringResource(R.string.about_version), value = NasMusicVersion.DISPLAY) }
+                    item { AboutRow(label = stringResource(R.string.settings_build_type), value = NasMusicVersion.BUILD_TYPE) }
+                    item { AboutRow(label = stringResource(R.string.about_license), value = stringResource(R.string.about_license_value)) }
+                    item { AboutRow(label = stringResource(R.string.settings_supported_backends), value = "Jellyfin / Navidrome") }
                 }
                 SettingsSection.CACHE -> {
-                    SectionTitle(stringResource(R.string.settings_cache))
+                    item { SectionTitle(stringResource(R.string.settings_cache)) }
                     if (onClearLyricsCache != null) {
-                        SettingActionButton(
-                            label = stringResource(R.string.settings_clear_lyrics_cache),
-                            description = stringResource(R.string.settings_clear_lyrics_cache_desc),
-                            onClick = onClearLyricsCache
-                        )
+                        item {
+                            SettingActionButton(
+                                label = stringResource(R.string.settings_clear_lyrics_cache),
+                                description = stringResource(R.string.settings_clear_lyrics_cache_desc),
+                                onClick = onClearLyricsCache
+                            )
+                        }
                     }
                     if (onClearCoverCache != null) {
-                        SettingActionButton(
-                            label = stringResource(R.string.settings_clear_cover_cache),
-                            description = "清理 Coil 图片加载器的磁盘缓存",
-                            onClick = onClearCoverCache
+                        item {
+                            SettingActionButton(
+                                label = stringResource(R.string.settings_clear_cover_cache),
+                                description = "清理 Coil 图片加载器的磁盘缓存",
+                                onClick = onClearCoverCache
+                            )
+                        }
+                    }
+                    item {
+                        val context = LocalContext.current
+                        val cacheDirSize = try {
+                            val cacheDir = context.cacheDir
+                            val sizeBytes = cacheDir?.walkTopDown()?.filter { it.isFile }?.sumOf { it.length() } ?: 0L
+                            if (sizeBytes > 1048576L) "${sizeBytes / 1048576} MB"
+                            else if (sizeBytes > 1024L) "${sizeBytes / 1024} KB"
+                            else "$sizeBytes B"
+                        } catch (_: Exception) { "—" }
+                        Text(
+                            text = "当前缓存目录大小: $cacheDirSize",
+                            color = NasMusicColors.TextSecondary,
+                            fontSize = 13.sp,
+                            modifier = Modifier.padding(start = 4.dp, top = 8.dp)
                         )
                     }
-                    val context = LocalContext.current
-                    val cacheDirSize = try {
-                        val cacheDir = context.cacheDir
-                        val sizeBytes = cacheDir?.walkTopDown()?.filter { it.isFile }?.sumOf { it.length() } ?: 0L
-                        if (sizeBytes > 1048576L) "${sizeBytes / 1048576} MB"
-                        else if (sizeBytes > 1024L) "${sizeBytes / 1024} KB"
-                        else "$sizeBytes B"
-                    } catch (_: Exception) { "—" }
-                    Text(
-                        text = "当前缓存目录大小: $cacheDirSize",
-                        color = NasMusicColors.TextSecondary,
-                        fontSize = 13.sp,
-                        modifier = Modifier.padding(start = 4.dp, top = 8.dp)
-                    )
                 }
                 SettingsSection.COVER -> {
-                    SectionTitle(stringResource(R.string.settings_cover))
-                    SettingSwitch(
-                        label = stringResource(R.string.settings_cover_filter),
-                        description = stringResource(R.string.settings_cover_filter_desc),
-                        checked = coverFilterEnabled,
-                        onClick = { onToggleCoverFilter(!coverFilterEnabled) }
-                    )
+                    item { SectionTitle(stringResource(R.string.settings_cover)) }
+                    item {
+                        SettingSwitch(
+                            label = stringResource(R.string.settings_cover_filter),
+                            description = stringResource(R.string.settings_cover_filter_desc),
+                            checked = coverFilterEnabled,
+                            onClick = { onToggleCoverFilter(!coverFilterEnabled) }
+                        )
+                    }
                     if (coverFilterEnabled) {
-                        Spacer(modifier = Modifier.height(16.dp))
-                        Text(
-                            text = stringResource(R.string.settings_cover_blur_radius, coverFilterBlurRadius.toInt()),
-                            color = NasMusicColors.TextPrimary,
-                            fontSize = 16.sp,
-                            modifier = Modifier.padding(start = 4.dp)
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        // Blur radius buttons
-                        Row(
-                            modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
-                            horizontalArrangement = Arrangement.spacedBy(12.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            AdjustButton("-", onClick = {
-                                val new = (coverFilterBlurRadius - 2f).coerceAtLeast(0f)
-                                onChangeCoverBlurRadius(new)
-                            })
+                        item { Spacer(modifier = Modifier.height(16.dp)) }
+                        item {
                             Text(
-                                text = "%.0fpx".format(coverFilterBlurRadius),
-                                color = NasMusicColors.Primary,
-                                fontSize = 22.sp,
-                                modifier = Modifier.width(64.dp).padding(horizontal = 8.dp)
+                                text = stringResource(R.string.settings_cover_blur_radius, coverFilterBlurRadius.toInt()),
+                                color = NasMusicColors.TextPrimary,
+                                fontSize = 16.sp,
+                                modifier = Modifier.padding(start = 4.dp)
                             )
-                            AdjustButton("+", onClick = {
-                                val new = (coverFilterBlurRadius + 2f).coerceAtMost(40f)
-                                onChangeCoverBlurRadius(new)
-                            })
                         }
-                        Spacer(modifier = Modifier.height(20.dp))
-                        Text(
-                            text = stringResource(R.string.settings_cover_dark_overlay, (coverFilterDarkOverlay * 100).toInt()),
-                            color = NasMusicColors.TextPrimary,
-                            fontSize = 16.sp,
-                            modifier = Modifier.padding(start = 4.dp)
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Row(
-                            modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
-                            horizontalArrangement = Arrangement.spacedBy(12.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            AdjustButton("-", onClick = {
-                                val new = (coverFilterDarkOverlay - 0.1f).coerceAtLeast(0f)
-                                onChangeCoverDarkOverlay(new)
-                            })
+                        item { Spacer(modifier = Modifier.height(8.dp)) }
+                        item {
+                            // Blur radius buttons
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                AdjustButton("-", onClick = {
+                                    val new = (coverFilterBlurRadius - 2f).coerceAtLeast(0f)
+                                    onChangeCoverBlurRadius(new)
+                                })
+                                Text(
+                                    text = "%.0fpx".format(coverFilterBlurRadius),
+                                    color = NasMusicColors.Primary,
+                                    fontSize = 22.sp,
+                                    modifier = Modifier.width(64.dp).padding(horizontal = 8.dp)
+                                )
+                                AdjustButton("+", onClick = {
+                                    val new = (coverFilterBlurRadius + 2f).coerceAtMost(40f)
+                                    onChangeCoverBlurRadius(new)
+                                })
+                            }
+                        }
+                        item { Spacer(modifier = Modifier.height(20.dp)) }
+                        item {
                             Text(
-                                text = "${(coverFilterDarkOverlay * 100).toInt()}%",
-                                color = NasMusicColors.Primary,
-                                fontSize = 22.sp,
-                                modifier = Modifier.width(64.dp).padding(horizontal = 8.dp)
+                                text = stringResource(R.string.settings_cover_dark_overlay, (coverFilterDarkOverlay * 100).toInt()),
+                                color = NasMusicColors.TextPrimary,
+                                fontSize = 16.sp,
+                                modifier = Modifier.padding(start = 4.dp)
                             )
-                            AdjustButton("+", onClick = {
-                                val new = (coverFilterDarkOverlay + 0.1f).coerceAtMost(1f)
-                                onChangeCoverDarkOverlay(new)
-                            })
+                        }
+                        item { Spacer(modifier = Modifier.height(8.dp)) }
+                        item {
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                AdjustButton("-", onClick = {
+                                    val new = (coverFilterDarkOverlay - 0.1f).coerceAtLeast(0f)
+                                    onChangeCoverDarkOverlay(new)
+                                })
+                                Text(
+                                    text = "${(coverFilterDarkOverlay * 100).toInt()}%",
+                                    color = NasMusicColors.Primary,
+                                    fontSize = 22.sp,
+                                    modifier = Modifier.width(64.dp).padding(horizontal = 8.dp)
+                                )
+                                AdjustButton("+", onClick = {
+                                    val new = (coverFilterDarkOverlay + 0.1f).coerceAtMost(1f)
+                                    onChangeCoverDarkOverlay(new)
+                                })
+                            }
                         }
                     }
                 }
                 SettingsSection.NETWORK -> {
-                    SectionTitle(stringResource(R.string.settings_network))
-                    Text(
-                        text = stringResource(R.string.settings_network_test_desc),
-                        color = NasMusicColors.TextSecondary,
-                        fontSize = 14.sp,
-                        modifier = Modifier.padding(bottom = 16.dp, start = 4.dp)
-                    )
-                    Surface(
-                        onClick = {
-                            if (!isNetworkTesting) {
-                                isNetworkTesting = true
-                                networkTestStatus = ""
-                                networkTestScope.launch {
-                                    val result = withContext(Dispatchers.IO) {
-                                        try {
-                                            val url = java.net.URL("https://www.baidu.com")
-                                            val conn = url.openConnection() as java.net.HttpURLConnection
-                                            conn.connectTimeout = 5000
-                                            conn.readTimeout = 5000
-                                            conn.requestMethod = "HEAD"
-                                            val code = conn.responseCode
-                                            conn.disconnect()
-                                            if (code in 200..399) "success:网络连通 (HTTP $code)"
-                                            else "error:HTTP 响应码 $code"
-                                        } catch (e: java.net.SocketTimeoutException) {
-                                            "error:连接超时，无法访问外网"
-                                        } catch (e: java.net.UnknownHostException) {
-                                            "error:DNS 解析失败，无网络连接"
-                                        } catch (e: java.net.ConnectException) {
-                                            "error:连接被拒绝"
-                                        } catch (e: Exception) {
-                                            "error:网络异常: ${e.message ?: e.javaClass.simpleName}"
-                                        }
-                                    }
-                                    networkTestStatus = result
-                                    isNetworkTesting = false
-                                }
-                            }
-                        },
-                        enabled = !isNetworkTesting,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .border(
-                                width = 1.dp,
-                                color = NasMusicColors.Border,
-                                shape = RoundedCornerShape(12.dp)
-                            ),
-                        shape = ClickableSurfaceDefaults.shape(
-                            shape = RoundedCornerShape(12.dp),
-                            focusedShape = RoundedCornerShape(12.dp)
-                        ),
-                        colors = ClickableSurfaceDefaults.colors(
-                            containerColor = NasMusicColors.SurfaceVariant,
-                            contentColor = NasMusicColors.TextPrimary,
-                            focusedContainerColor = NasMusicColors.Primary.copy(alpha = 0.2f),
-                            focusedContentColor = NasMusicColors.TextPrimary
-                        ),
-                        scale = ClickableSurfaceDefaults.scale(
-                            focusedScale = 1f,
-                            pressedScale = 0.96f
+                    item { SectionTitle(stringResource(R.string.settings_network)) }
+                    item {
+                        Text(
+                            text = stringResource(R.string.settings_network_test_desc),
+                            color = NasMusicColors.TextSecondary,
+                            fontSize = 14.sp,
+                            modifier = Modifier.padding(bottom = 16.dp, start = 4.dp)
                         )
-                    ) {
-                        Row(
+                    }
+                    item {
+                        Surface(
+                            onClick = {
+                                if (!isNetworkTesting) {
+                                    isNetworkTesting = true
+                                    networkTestStatus = ""
+                                    networkTestScope.launch {
+                                        val result = withContext(Dispatchers.IO) {
+                                            try {
+                                                val url = java.net.URL("https://www.baidu.com")
+                                                val conn = url.openConnection() as java.net.HttpURLConnection
+                                                conn.connectTimeout = 5000
+                                                conn.readTimeout = 5000
+                                                conn.requestMethod = "HEAD"
+                                                val code = conn.responseCode
+                                                conn.disconnect()
+                                                if (code in 200..399) "success:网络连通 (HTTP $code)"
+                                                else "error:HTTP 响应码 $code"
+                                            } catch (e: java.net.SocketTimeoutException) {
+                                                "error:连接超时，无法访问外网"
+                                            } catch (e: java.net.UnknownHostException) {
+                                                "error:DNS 解析失败，无网络连接"
+                                            } catch (e: java.net.ConnectException) {
+                                                "error:连接被拒绝"
+                                            } catch (e: Exception) {
+                                                "error:网络异常: ${e.message ?: e.javaClass.simpleName}"
+                                            }
+                                        }
+                                        networkTestStatus = result
+                                        isNetworkTesting = false
+                                    }
+                                }
+                            },
+                            enabled = !isNetworkTesting,
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 20.dp, vertical = 16.dp),
-                            verticalAlignment = Alignment.CenterVertically
+                                .border(
+                                    width = 1.dp,
+                                    color = NasMusicColors.Border,
+                                    shape = RoundedCornerShape(12.dp)
+                                ),
+                            shape = ClickableSurfaceDefaults.shape(
+                                shape = RoundedCornerShape(12.dp),
+                                focusedShape = RoundedCornerShape(12.dp)
+                            ),
+                            colors = ClickableSurfaceDefaults.colors(
+                                containerColor = NasMusicColors.SurfaceVariant,
+                                contentColor = NasMusicColors.TextPrimary,
+                                focusedContainerColor = NasMusicColors.Primary.copy(alpha = 0.2f),
+                                focusedContentColor = NasMusicColors.TextPrimary
+                            ),
+                            scale = ClickableSurfaceDefaults.scale(
+                                focusedScale = 1f,
+                                pressedScale = 0.96f
+                            )
                         ) {
-                            Icon(
-                                imageVector = Icons.Default.Settings,
-                                contentDescription = null,
-                                tint = if (isNetworkTesting) NasMusicColors.TextSecondary else NasMusicColors.Primary,
-                                modifier = Modifier.size(20.dp)
-                            )
-                            Spacer(modifier = Modifier.width(12.dp))
-                            Text(
-                                text = if (isNetworkTesting) stringResource(R.string.settings_network_testing) else stringResource(R.string.settings_network_test),
-                                fontSize = 16.sp
-                            )
-                            Spacer(modifier = Modifier.weight(1f))
-                            if (networkTestStatus.isNotBlank()) {
-                                val isNetSuccess = networkTestStatus.startsWith("success:")
-                                val netMessage = if (isNetSuccess) networkTestStatus.removePrefix("success:") else networkTestStatus.removePrefix("error:")
-                                Text(
-                                    text = if (isNetSuccess) "✓ $netMessage" else "✗ $netMessage",
-                                    color = if (isNetSuccess) NasMusicColors.Primary else NasMusicColors.Warning,
-                                    fontSize = 13.sp
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 20.dp, vertical = 16.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Settings,
+                                    contentDescription = null,
+                                    tint = if (isNetworkTesting) NasMusicColors.TextSecondary else NasMusicColors.Primary,
+                                    modifier = Modifier.size(20.dp)
                                 )
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Text(
+                                    text = if (isNetworkTesting) stringResource(R.string.settings_network_testing) else stringResource(R.string.settings_network_test),
+                                    fontSize = 16.sp
+                                )
+                                Spacer(modifier = Modifier.weight(1f))
+                                if (networkTestStatus.isNotBlank()) {
+                                    val isNetSuccess = networkTestStatus.startsWith("success:")
+                                    val netMessage = if (isNetSuccess) networkTestStatus.removePrefix("success:") else networkTestStatus.removePrefix("error:")
+                                    Text(
+                                        text = if (isNetSuccess) "✓ $netMessage" else "✗ $netMessage",
+                                        color = if (isNetSuccess) NasMusicColors.Primary else NasMusicColors.Warning,
+                                        fontSize = 13.sp
+                                    )
+                                }
                             }
                         }
                     }
 
                     // --- 网络搜索：Meting-API 端点配置 ---
                     if (onChangeMetingApiBaseUrl != null) {
-                        Spacer(modifier = Modifier.height(24.dp))
-                        Text(
-                            text = stringResource(R.string.settings_network_search),
-                            color = NasMusicColors.Primary,
-                            fontSize = 18.sp,
-                            modifier = Modifier.padding(bottom = 8.dp, start = 4.dp)
-                        )
-                        Text(
-                            text = stringResource(R.string.settings_meting_api_url_desc),
-                            color = NasMusicColors.TextSecondary,
-                            fontSize = 13.sp,
-                            modifier = Modifier.padding(bottom = 8.dp, start = 4.dp)
-                        )
-
-                        // 预设端点单选列表
-                        Text(
-                            text = stringResource(R.string.settings_meting_preset_endpoints),
-                            color = NasMusicColors.TextPrimary,
-                            fontSize = 14.sp,
-                            modifier = Modifier.padding(start = 4.dp, top = 8.dp, bottom = 8.dp)
-                        )
+                        item { Spacer(modifier = Modifier.height(24.dp)) }
+                        item {
+                            Text(
+                                text = stringResource(R.string.settings_network_search),
+                                color = NasMusicColors.Primary,
+                                fontSize = 18.sp,
+                                modifier = Modifier.padding(bottom = 8.dp, start = 4.dp)
+                            )
+                        }
+                        item {
+                            Text(
+                                text = stringResource(R.string.settings_meting_api_url_desc),
+                                color = NasMusicColors.TextSecondary,
+                                fontSize = 13.sp,
+                                modifier = Modifier.padding(bottom = 8.dp, start = 4.dp)
+                            )
+                        }
+                        item {
+                            // 预设端点单选列表
+                            Text(
+                                text = stringResource(R.string.settings_meting_preset_endpoints),
+                                color = NasMusicColors.TextPrimary,
+                                fontSize = 14.sp,
+                                modifier = Modifier.padding(start = 4.dp, top = 8.dp, bottom = 8.dp)
+                            )
+                        }
                         val currentNormalized = settings.metingApiBaseUrl.trim().trimEnd('/')
                         com.nasmusic.tv.backend.network.MetingApiService.PRESET_ENDPOINTS.forEach { (name, url) ->
                             val selected = currentNormalized == url.trimEnd('/')
-                            FocusableSurface(
-                                onClick = {
-                                    metingUrlError = null
-                                    onChangeMetingApiBaseUrl(url)
-                                },
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(vertical = 4.dp),
-                                shape = RoundedCornerShape(12.dp),
-                                focusedScale = 1.02f,
-                                animationDurationMs = 250,
-                                containerColor = if (selected) NasMusicColors.Primary.copy(alpha = 0.18f) else NasMusicColors.Surface,
-                                contentColor = NasMusicColors.TextPrimary,
-                                focusedContainerColor = if (selected) NasMusicColors.Primary.copy(alpha = 0.3f) else NasMusicColors.Primary.copy(alpha = 0.15f),
-                                focusedContentColor = NasMusicColors.TextPrimary,
-                                pressedScale = 0.98f,
-                                focusBorderColor = if (selected) NasMusicColors.Primary.copy(alpha = 0.5f) else NasMusicColors.FocusRing.copy(alpha = 0.6f)
-                            ) {
-                                Row(
+                            item {
+                                FocusableSurface(
+                                    onClick = {
+                                        metingUrlError = null
+                                        onChangeMetingApiBaseUrl(url)
+                                    },
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .padding(horizontal = 24.dp, vertical = 14.dp),
-                                    verticalAlignment = Alignment.CenterVertically
+                                        .padding(vertical = 4.dp),
+                                    shape = RoundedCornerShape(12.dp),
+                                    focusedScale = 1.02f,
+                                    animationDurationMs = 250,
+                                    containerColor = if (selected) NasMusicColors.Primary.copy(alpha = 0.18f) else NasMusicColors.Surface,
+                                    contentColor = NasMusicColors.TextPrimary,
+                                    focusedContainerColor = if (selected) NasMusicColors.Primary.copy(alpha = 0.3f) else NasMusicColors.Primary.copy(alpha = 0.15f),
+                                    focusedContentColor = NasMusicColors.TextPrimary,
+                                    pressedScale = 0.98f,
+                                    focusBorderColor = if (selected) NasMusicColors.Primary.copy(alpha = 0.5f) else NasMusicColors.FocusRing.copy(alpha = 0.6f)
                                 ) {
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        Text(
-                                            text = name,
-                                            color = if (selected) NasMusicColors.Primary else NasMusicColors.TextPrimary,
-                                            fontSize = 15.sp
-                                        )
-                                        Text(
-                                            text = url,
-                                            color = NasMusicColors.TextSecondary,
-                                            fontSize = 12.sp,
-                                            modifier = Modifier.padding(top = 2.dp)
-                                        )
-                                    }
-                                    if (selected) {
-                                        Text(
-                                            text = "✓",
-                                            color = NasMusicColors.Primary,
-                                            fontSize = 16.sp
-                                        )
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 24.dp, vertical = 14.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(
+                                                text = name,
+                                                color = if (selected) NasMusicColors.Primary else NasMusicColors.TextPrimary,
+                                                fontSize = 15.sp
+                                            )
+                                            Text(
+                                                text = url,
+                                                color = NasMusicColors.TextSecondary,
+                                                fontSize = 12.sp,
+                                                modifier = Modifier.padding(top = 2.dp)
+                                            )
+                                        }
+                                        if (selected) {
+                                            Text(
+                                                text = "✓",
+                                                color = NasMusicColors.Primary,
+                                                fontSize = 16.sp
+                                            )
+                                        }
                                     }
                                 }
                             }
@@ -481,112 +511,122 @@ fun SettingsScreen(
                         val isPreset = com.nasmusic.tv.backend.network.MetingApiService.PRESET_ENDPOINTS
                             .any { it.second.trimEnd('/') == currentNormalized }
                         val customSelected = !isPreset
-                        FocusableSurface(
-                            onClick = {
-                                metingUrlError = null
-                                showMetingUrlDialog = true
-                            },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 4.dp),
-                            shape = RoundedCornerShape(12.dp),
-                            focusedScale = 1.02f,
-                            animationDurationMs = 250,
-                            containerColor = if (customSelected) NasMusicColors.Primary.copy(alpha = 0.18f) else NasMusicColors.Surface,
-                            contentColor = NasMusicColors.TextPrimary,
-                            focusedContainerColor = if (customSelected) NasMusicColors.Primary.copy(alpha = 0.3f) else NasMusicColors.Primary.copy(alpha = 0.15f),
-                            focusedContentColor = NasMusicColors.TextPrimary,
-                            pressedScale = 0.98f,
-                            focusBorderColor = if (customSelected) NasMusicColors.Primary.copy(alpha = 0.5f) else NasMusicColors.FocusRing.copy(alpha = 0.6f)
-                        ) {
-                            Row(
+                        item {
+                            FocusableSurface(
+                                onClick = {
+                                    metingUrlError = null
+                                    showMetingUrlDialog = true
+                                },
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(horizontal = 24.dp, vertical = 14.dp),
-                                verticalAlignment = Alignment.CenterVertically
+                                    .padding(vertical = 4.dp),
+                                shape = RoundedCornerShape(12.dp),
+                                focusedScale = 1.02f,
+                                animationDurationMs = 250,
+                                containerColor = if (customSelected) NasMusicColors.Primary.copy(alpha = 0.18f) else NasMusicColors.Surface,
+                                contentColor = NasMusicColors.TextPrimary,
+                                focusedContainerColor = if (customSelected) NasMusicColors.Primary.copy(alpha = 0.3f) else NasMusicColors.Primary.copy(alpha = 0.15f),
+                                focusedContentColor = NasMusicColors.TextPrimary,
+                                pressedScale = 0.98f,
+                                focusBorderColor = if (customSelected) NasMusicColors.Primary.copy(alpha = 0.5f) else NasMusicColors.FocusRing.copy(alpha = 0.6f)
                             ) {
-                                Column(modifier = Modifier.weight(1f)) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 24.dp, vertical = 14.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = stringResource(R.string.settings_meting_custom_endpoint),
+                                            color = if (customSelected) NasMusicColors.Primary else NasMusicColors.TextPrimary,
+                                            fontSize = 15.sp
+                                        )
+                                        Text(
+                                            text = if (customSelected) settings.metingApiBaseUrl else stringResource(R.string.settings_meting_custom_endpoint_desc),
+                                            color = NasMusicColors.TextSecondary,
+                                            fontSize = 12.sp,
+                                            modifier = Modifier.padding(top = 2.dp)
+                                        )
+                                    }
                                     Text(
-                                        text = stringResource(R.string.settings_meting_custom_endpoint),
-                                        color = if (customSelected) NasMusicColors.Primary else NasMusicColors.TextPrimary,
-                                        fontSize = 15.sp
-                                    )
-                                    Text(
-                                        text = if (customSelected) settings.metingApiBaseUrl else stringResource(R.string.settings_meting_custom_endpoint_desc),
-                                        color = NasMusicColors.TextSecondary,
-                                        fontSize = 12.sp,
-                                        modifier = Modifier.padding(top = 2.dp)
+                                        text = stringResource(R.string.settings_meting_api_url_edit),
+                                        color = NasMusicColors.Primary,
+                                        fontSize = 14.sp
                                     )
                                 }
-                                Text(
-                                    text = stringResource(R.string.settings_meting_api_url_edit),
-                                    color = NasMusicColors.Primary,
-                                    fontSize = 14.sp
-                                )
                             }
                         }
 
                         // 错误提示
                         if (metingUrlError != null) {
-                            Text(
-                                text = metingUrlError!!,
-                                color = NasMusicColors.Warning,
-                                fontSize = 13.sp,
-                                modifier = Modifier.padding(top = 8.dp, start = 4.dp)
-                            )
+                            item {
+                                Text(
+                                    text = metingUrlError!!,
+                                    color = NasMusicColors.Warning,
+                                    fontSize = 13.sp,
+                                    modifier = Modifier.padding(top = 8.dp, start = 4.dp)
+                                )
+                            }
                         }
                     }
 
                     // --- 天气 API Key 配置 ---
                     if (onChangeWeatherApiKey != null) {
-                        Spacer(modifier = Modifier.height(24.dp))
-                        Text(
-                            text = stringResource(R.string.settings_weather_api_key),
-                            color = NasMusicColors.Primary,
-                            fontSize = 18.sp,
-                            modifier = Modifier.padding(bottom = 8.dp, start = 4.dp)
-                        )
-                        Text(
-                            text = stringResource(R.string.settings_weather_api_key_desc),
-                            color = NasMusicColors.TextSecondary,
-                            fontSize = 13.sp,
-                            modifier = Modifier.padding(bottom = 8.dp, start = 4.dp)
-                        )
-                        FocusableSurface(
-                            onClick = { showWeatherApiKeyDialog = true },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 4.dp),
-                            shape = RoundedCornerShape(12.dp),
-                            focusedScale = 1.02f,
-                            animationDurationMs = 250,
-                            containerColor = NasMusicColors.Surface,
-                            contentColor = NasMusicColors.TextPrimary,
-                            focusedContainerColor = NasMusicColors.Primary.copy(alpha = 0.15f),
-                            focusedContentColor = NasMusicColors.TextPrimary,
-                            pressedScale = 0.98f,
-                            focusBorderColor = NasMusicColors.FocusRing.copy(alpha = 0.6f)
-                        ) {
-                            Row(
+                        item { Spacer(modifier = Modifier.height(24.dp)) }
+                        item {
+                            Text(
+                                text = stringResource(R.string.settings_weather_api_key),
+                                color = NasMusicColors.Primary,
+                                fontSize = 18.sp,
+                                modifier = Modifier.padding(bottom = 8.dp, start = 4.dp)
+                            )
+                        }
+                        item {
+                            Text(
+                                text = stringResource(R.string.settings_weather_api_key_desc),
+                                color = NasMusicColors.TextSecondary,
+                                fontSize = 13.sp,
+                                modifier = Modifier.padding(bottom = 8.dp, start = 4.dp)
+                            )
+                        }
+                        item {
+                            FocusableSurface(
+                                onClick = { showWeatherApiKeyDialog = true },
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(horizontal = 24.dp, vertical = 14.dp),
-                                verticalAlignment = Alignment.CenterVertically
+                                    .padding(vertical = 4.dp),
+                                shape = RoundedCornerShape(12.dp),
+                                focusedScale = 1.02f,
+                                animationDurationMs = 250,
+                                containerColor = NasMusicColors.Surface,
+                                contentColor = NasMusicColors.TextPrimary,
+                                focusedContainerColor = NasMusicColors.Primary.copy(alpha = 0.15f),
+                                focusedContentColor = NasMusicColors.TextPrimary,
+                                pressedScale = 0.98f,
+                                focusBorderColor = NasMusicColors.FocusRing.copy(alpha = 0.6f)
                             ) {
-                                Column(modifier = Modifier.weight(1f)) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 24.dp, vertical = 14.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = if (weatherApiKey.isNotBlank()) "···${weatherApiKey.takeLast(6)}"
+                                                   else stringResource(R.string.common_not_set),
+                                            color = if (weatherApiKey.isNotBlank()) NasMusicColors.TextPrimary
+                                                    else NasMusicColors.TextSecondary,
+                                            fontSize = 15.sp
+                                        )
+                                    }
                                     Text(
-                                        text = if (weatherApiKey.isNotBlank()) "···${weatherApiKey.takeLast(6)}"
-                                               else stringResource(R.string.common_not_set),
-                                        color = if (weatherApiKey.isNotBlank()) NasMusicColors.TextPrimary
-                                                else NasMusicColors.TextSecondary,
-                                        fontSize = 15.sp
+                                        text = stringResource(R.string.settings_weather_api_key_edit),
+                                        color = NasMusicColors.Primary,
+                                        fontSize = 14.sp
                                     )
                                 }
-                                Text(
-                                    text = stringResource(R.string.settings_weather_api_key_edit),
-                                    color = NasMusicColors.Primary,
-                                    fontSize = 14.sp
-                                )
                             }
                         }
                     }

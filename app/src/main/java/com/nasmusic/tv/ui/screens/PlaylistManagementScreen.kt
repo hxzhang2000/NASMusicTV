@@ -142,7 +142,10 @@ fun PlaylistManagementScreen(
                             color = NasMusicColors.TextPrimary,
                             fontSize = 16.sp
                         )
-                        ButtonChip(text = "+ " + stringResource(R.string.playlist_create)) { showCreateDialog = true }
+                        ButtonChip(
+                            text = "+ " + stringResource(R.string.playlist_create),
+                            onClick = { showCreateDialog = true }
+                        )
                     }
 
                 Spacer(modifier = Modifier.height(12.dp))
