@@ -101,6 +101,9 @@ adb -s 192.168.0.116:5555 install -r app/build/outputs/apk/debug/app-debug.apk
 
 ## 版本历史
 
+- **v2.10.7** — 修复: 沉浸模式封面背景不显示（GPU blur 兼容）、歌单信息面板不可滚动、QueueScreen 封面不显示、播放/暂停按钮无焦点；NowPlaying info 面板复用封面区域
+- **v2.10.6** — 修复: Jellyfin 艺术家详情页仅返回 1 首歌、`utf8Body()` 过量日志拖慢电视；Navidrome 合作歌曲支持
+- **v2.10.5** — 修复: 合作歌曲艺术家详情页仅显示 2 首歌、布局 Tab 过多挤压右侧按钮、ButtonChip 编译器歧义
 - **v2.10.4** — 修复: 网络音乐榜单点击无反应、天气电台封面与列表分离、SongRow 增加封面缩略图
 - **v2.10.3** — 新增: 首页随心听（随机歌曲推荐+自动续播，NAS+网络混合）；修复: 网络歌曲歌词来源显示错误、天气电台无数据时仍加载歌曲、随心听消失
 - **v2.10.2** — 修复: 后台加载线程安全（AtomicBoolean）、Navidrome 歌词编码乱码、艺术家歌曲去重；Gradle wrapper 本地/CI 双路径
