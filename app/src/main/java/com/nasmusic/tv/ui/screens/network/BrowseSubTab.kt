@@ -242,6 +242,7 @@ fun BrowseSubTab(
             gridItemsIndexed(results, key = { _, song -> song.id }) { index, song ->
                 SongRow(
                     song = song,
+                    index = index,
                     onClick = { onPlaySong(song) },
                     isFavorited = song.id in networkFavoriteIds,
                     onToggleFavorite = { onToggleFavorite(song) },

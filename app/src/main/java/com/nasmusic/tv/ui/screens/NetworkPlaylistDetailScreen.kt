@@ -156,6 +156,7 @@ fun NetworkPlaylistDetailScreen(
                 itemsIndexed(playlistSongs, key = { _, song -> song.id }) { index, song ->
                     SongRow(
                         song = song,
+                        index = index,
                         onClick = { onPlaySong(song) },
                         isFavorite = song.id in networkFavoriteIds,
                         isInQueue = song.id in queueSongIds,

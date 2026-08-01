@@ -179,6 +179,7 @@ fun NetworkScreen(
                     itemsIndexed(networkSearchResults, key = { _, it -> it.id }) { index, song ->
                         SongRow(
                             song = song,
+                            index = index,
                             onClick = { onPlayNetworkSong(song) },
                             isFavorited = song.id in networkFavoriteIds,
                             onToggleFavorite = { onToggleNetworkFavorite(song) },
@@ -262,9 +263,10 @@ fun NetworkScreen(
                                                 )
                                             }
                                         }
-                                        hotSongs.forEach { song ->
+                                        hotSongs.forEachIndexed { index, song ->
                                             SongRow(
                                                 song = song,
+                                                index = index,
                                                 onClick = { onPlayNetworkSong(song) },
                                                 isInQueue = song.id in queueSongIds,
                                                 onToggleQueue = { onToggleQueue(song) },
@@ -305,9 +307,10 @@ fun NetworkScreen(
                                                 )
                                             }
                                         }
-                                        newSongs.forEach { song ->
+                                        newSongs.forEachIndexed { index, song ->
                                             SongRow(
                                                 song = song,
+                                                index = index,
                                                 onClick = { onPlayNetworkSong(song) },
                                                 isInQueue = song.id in queueSongIds,
                                                 onToggleQueue = { onToggleQueue(song) },
@@ -337,6 +340,7 @@ fun NetworkScreen(
                         ) { index, song ->
                             SongRow(
                                 song = song,
+                                index = index,
                                 onClick = { onPlayNetworkSong(song) },
                                 isInQueue = false,
                                 isFavorited = true,

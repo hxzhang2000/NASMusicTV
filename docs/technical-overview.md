@@ -4723,5 +4723,25 @@ v2.6.0 天气电台功能使用 Open-Meteo（无需 API Key）作为主要天气
 - ✅ 全仓 grep `ChartsContent|ChartsCard|refreshCharts|NetworkSubTab.CHARTS|network_tab_charts|network_charts_` 零匹配
 - ⏳ 真机验证由用户执行（子 Tab 歌曲双列布局 + 榜单 Tab 消失）
 
+### 10.31 v2.11.0 — 歌曲列表序号修复（"00" → 列表序号）
+
+**功能描述**：
+- **问题**：`SongRow` 序号列显示 `String.format("%02d", song.trackNumber)`——`trackNumber` 是音频文件内嵌的轨道号元数据。网络歌曲（Meting-API）无此字段恒为 0，多数本地文件也未写入，导致曲库/网络/歌单详情/天气电台/搜索/浏览等页面序号全部显示 "00"
+- **修复**：`SongRow` 新增 `index: Int? = null` 参数。`index != null` 时显示列表序号 `index + 1`；`index == null`（仅发现页"正在播放"单曲场景）显示播放图标「▶」，不再显示无意义的 "00"
+- **决策**：按用户要求全部页面统一显示列表序号（专辑详情页本就显示 `index + 1`，不受影响）；不保留 `trackNumber` 语义，专辑内顺序无关紧要
+
+#### 修改文件
+
+- `ui/screens/LibraryScreen.kt`：`SongRow` 加 `index` 参数 + 序号显示逻辑；3 处调用（歌曲/收藏/最近播放）传 `index`
+- `ui/screens/NetworkScreen.kt`：4 处调用传 `index`；推荐歌单热门/新歌榜两处 `forEach` 改 `forEachIndexed`
+- `ui/screens/NetworkPlaylistDetailScreen.kt`、`ui/screens/network/BrowseSubTab.kt`、`ui/screens/network/SearchSubTab.kt`：各 1 处传 `index`
+- `ui/screens/network/WeatherSubTab.kt`：`items` 改 `itemsIndexed`（import 同步替换），传 `index`
+- `ui/screens/network/NetworkSubTabViews.kt`："继续听" `forEach` 改 `forEachIndexed` 传 `index`、收藏列表传 `index`；"正在播放"单曲不传（显示 ▶）
+
+#### 验证结果
+
+- ✅ `./gradlew.bat assembleDebug` BUILD SUCCESSFUL in 6s（36 tasks）
+- ⏳ 真机验证由用户执行（各列表序号 01/02/03… 递增；发现页"正在播放"显示 ▶）
+
 
 

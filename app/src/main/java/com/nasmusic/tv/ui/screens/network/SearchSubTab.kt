@@ -213,6 +213,7 @@ fun SearchSubTab(
                     itemsIndexed(searchResults, key = { _, song -> song.id }) { index, song ->
                         SongRow(
                             song = song,
+                            index = index,
                             onClick = { onPlaySong(song) },
                             isFavorited = song.id in favoriteIds,
                             onToggleFavorite = { onToggleFavorite(song) },

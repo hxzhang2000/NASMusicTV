@@ -17,7 +17,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
@@ -152,9 +152,10 @@ fun WeatherSubTab(
         // 5. 歌曲列表（含封面，与列表合二为一，两列展示）
         val songs = weatherRadioQueue?.songs ?: emptyList()
         if (songs.isNotEmpty()) {
-            items(songs, key = { "wr_${it.id}" }) { song ->
+            itemsIndexed(songs, key = { _, song -> "wr_${song.id}" }) { index, song ->
                 SongRow(
                     song = song,
+                    index = index,
                     onClick = { onPlaySong(song) },
                     isFavorited = song.id in networkFavoriteIds,
                     isInQueue = song.id in queueSongIds,

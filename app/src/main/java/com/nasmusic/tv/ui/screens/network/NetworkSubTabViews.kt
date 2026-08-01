@@ -176,10 +176,11 @@ fun DiscoverContent(
                         )
                     }
                 }
-                recentNetworkSongs.forEach { song ->
+                recentNetworkSongs.forEachIndexed { index, song ->
                     item(key = "continue_${song.id}") {
                         SongRow(
                             song = song,
+                            index = index,
                             onClick = { onPlayNetworkSong(song) },
                             isInQueue = song.id in queueSongIds,
                             onToggleQueue = { onToggleQueue(song) },
@@ -208,6 +209,7 @@ fun DiscoverContent(
             ) { index, song ->
                 SongRow(
                     song = song,
+                    index = index,
                     onClick = { onPlayNetworkSong(song) },
                     isInQueue = false,
                     isFavorited = true,

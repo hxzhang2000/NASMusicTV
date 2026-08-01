@@ -622,6 +622,7 @@ private fun SongsTab(
                 itemsIndexed(songs, key = { _, it -> it.id }) { index, song ->
                     SongRow(
                         song = song,
+                        index = index,
                         onClick = { onPlaySong(song) },
                         isFavorite = song.id in favoriteIds,
                         isInQueue = song.id in queueSongIds,
@@ -912,6 +913,7 @@ private fun FavoritesTab(
                 itemsIndexed(allSongs, key = { _, it -> it.id }) { index, song ->
                     SongRow(
                         song = song,
+                        index = index,
                         onClick = { onPlaySong(song) },
                         isFavorite = !song.isNetworkSong,  // 本地收藏显示 ♥ 标记
                         isInQueue = song.id in queueSongIds,
@@ -1232,6 +1234,7 @@ private fun RecentTab(
                 itemsIndexed(songs, key = { _, it -> it.id }) { index, song ->
                     SongRow(
                         song = song,
+                        index = index,
                         onClick = { onPlaySong(song) },
                         playCount = playCounts[song.id],
                         isFavorite = song.id in favoriteIds,
@@ -1368,6 +1371,8 @@ private fun ArtistCard(
 fun SongRow(
     song: Song,
     onClick: () -> Unit,
+    // 列表序号（从 0 开始，显示为 index+1）。null 时表示非列表场景（如"正在播放"单曲），显示播放图标
+    index: Int? = null,
     isFavorite: Boolean = false,
     playCount: Int? = null,
     isInQueue: Boolean = false,
@@ -1433,8 +1438,10 @@ fun SongRow(
                 }
                 if (isFavorite) {
                     Text(text = "♥", color = NasMusicColors.Warning, fontSize = 10.sp, modifier = Modifier.width(16.dp))
+                } else if (index != null) {
+                    Text(text = String.format("%02d", index + 1), color = NasMusicColors.TextSecondary, fontSize = 12.sp, modifier = Modifier.width(28.dp), textAlign = TextAlign.Center)
                 } else {
-                    Text(text = String.format("%02d", song.trackNumber), color = NasMusicColors.TextSecondary, fontSize = 12.sp, modifier = Modifier.width(28.dp), textAlign = TextAlign.Center)
+                    Text(text = "▶", color = NasMusicColors.Primary, fontSize = 11.sp, modifier = Modifier.width(28.dp), textAlign = TextAlign.Center)
                 }
                 Spacer(modifier = Modifier.width(10.dp))
                 Column(modifier = Modifier.weight(1f)) {
