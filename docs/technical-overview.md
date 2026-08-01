@@ -4609,5 +4609,31 @@ v2.6.0 天气电台功能使用 Open-Meteo（无需 API Key）作为主要天气
 - ✅ Jellyfin 宫崎骏详情页从 1 首恢复至正常数量
 - ✅ `loadArtistSongsMap` 不再执行，启动后无额外 5000+ API 请求
 
+### 10.27 v2.11.0 — 网络音乐搜索"全部播放" + 过期链接自动重试修复
+
+**功能描述**：
+1. 网络音乐搜索 Tab 新增"全部播放"操作栏：搜索结果按歌手+歌名去重（`distinctBy { artist to title }`）后批量加入播放队列，上限 30 首（`maxNetworkBatchPlayCount`），完成后自动跳转 NowPlaying
+2. 搜索结果列表改用统一 `SongRow` 组件，内嵌"加入队列"切换按钮（`isInQueue`/`onToggleQueue`），与歌单/收藏列表交互一致
+3. 修复网络歌曲播放约 5 首后无法继续的问题：入队时预解析的网易/CDN 直链有时效，URL 过期后 `onPlayerError` 仅因链接非空就直接 `next()` 级联跳歌。现改为：出错时若当前歌曲 URL 非空，先经 `onNeedResolveStreamUrl` → `resolveAndPlayByIndex` 重新解析一次再播放；`lastErrorRetryIndex` 守卫保证同一首歌只重试一次（重试自身触发的 `PLAYLIST_CHANGED` 过渡不会重置守卫），仍失败才自动跳下一首
+
+#### 修改文件
+
+- `app/build.gradle.kts` — versionCode 30→31, versionName "2.10.9"→"2.11.0"
+- `ui/viewmodel/MainViewModel.kt`：
+  - 新增 `playAllSearchResults()` — 去重 + 截断后 `playNetworkBatch(deduped, 0)`
+  - 新增 `private val maxNetworkBatchPlayCount = 30`
+- `ui/screens/network/SearchSubTab.kt` — 新增 `onPlayAll` 回调参数；结果列表顶部"全部播放"操作栏（FocusableSurface + 歌曲计数）；列表项改用 `SongRow`（`isInQueue`/`onToggleQueue`）
+- `ui/screens/network/NetworkMusicContainer.kt` — 新增 `onPlayAllSearch` 参数并透传给 `SearchSubTab`
+- `ui/components/AppRoot.kt` — `onPlayAllSearch = { viewModel.playAllSearchResults(); viewModel.navigateTo(Screen.NowPlaying) }`
+- `player/PlayerManager.kt`：
+  - 新增 `lastErrorRetryIndex` 出错重试守卫（@Volatile）
+  - `onMediaItemTransition` — 非 `PLAYLIST_CHANGED` 过渡时重置守卫
+  - `onPlayerError` — 当前歌曲 URL 非空时先重解析重试一次，同曲二次失败才 `next()`
+
+#### 验证结果
+
+- ✅ `./gradlew.bat assembleDebug` BUILD SUCCESSFUL（含全部 5 个修改文件）
+- ⏳ 真机播放验证由用户执行（连续播放超过 5 首验证不再断播）
+
 
 

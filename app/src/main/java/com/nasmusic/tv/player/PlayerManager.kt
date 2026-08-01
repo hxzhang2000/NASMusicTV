@@ -75,6 +75,13 @@ class PlayerManager() {
     @Volatile
     private var seekPending = false
 
+    /**
+     * 最近一次"播放出错后重新解析"的队列索引。
+     * 同一首歌只重新解析一次：若重解析后仍失败（如解析源不可用），则放弃该曲跳到下一首，防止死循环。
+     */
+    @Volatile
+    private var lastErrorRetryIndex = -1
+
     private val playerListener = object : Player.Listener {
         override fun onIsPlayingChanged(isPlaying: Boolean) {
             // seek 期间忽略播放状态变化，防止播放按钮闪烁
@@ -104,6 +111,10 @@ class PlayerManager() {
 
         override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
             updateCurrentSongFromPlayer()
+            // 除 playlist 变更（重新解析后 playQueue 重载队列）外，切到新歌曲后允许再次触发"出错重新解析"
+            if (reason != Player.MEDIA_ITEM_TRANSITION_REASON_PLAYLIST_CHANGED) {
+                lastErrorRetryIndex = -1
+            }
             // 自动过渡（播放完一首）到 streamUrl 为空的歌曲时（如恢复队列中的网络歌曲），
             // ExoPlayer 会因空 URI 出错。此时暂停并通知外部解析 streamUrl 后再播放。
             if (reason == Player.MEDIA_ITEM_TRANSITION_REASON_AUTO) {
@@ -138,6 +149,15 @@ class PlayerManager() {
             val currentSong = _queue.value.getOrNull(_currentIndex.value)
             if (currentSong != null && currentSong.streamUrl.isNullOrBlank()) {
                 AppLog.d("PlayerManager", "onPlayerError: skipped auto-next (current song streamUrl is empty)")
+                return
+            }
+            // 播放链接可能已过期（入队时预解析的直链有时效，网络歌曲尤甚，约 5 首后集中出现）。
+            // 出错时复用 onNeedResolveStreamUrl（→ ViewModel.resolveAndPlayByIndex）重新解析一次再播放；
+            // 同一首歌只重试一次，若重解析后仍失败则继续自动跳下一首，避免死循环。
+            if (currentSong != null && lastErrorRetryIndex != _currentIndex.value) {
+                AppLog.d("PlayerManager", "onPlayerError: streamUrl likely expired, re-resolving index=${_currentIndex.value}")
+                lastErrorRetryIndex = _currentIndex.value
+                onNeedResolveStreamUrl?.invoke(_currentIndex.value)
                 return
             }
             // 自动跳下一首

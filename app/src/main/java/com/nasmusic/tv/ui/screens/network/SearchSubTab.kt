@@ -30,6 +30,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -66,6 +67,7 @@ fun SearchSubTab(
     onPlaySong: (Song) -> Unit,
     onToggleFavorite: (Song) -> Unit,
     onToggleQueue: (Song) -> Unit = {},
+    onPlayAll: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     var showSearchDialog by remember { mutableStateOf(false) }
@@ -136,12 +138,46 @@ fun SearchSubTab(
                     modifier = Modifier.fillMaxWidth(),
                     verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
+                    // 操作栏：播放全部（去重后最多 30 首由 ViewModel 处理）
+                    if (searchResults.isNotEmpty()) {
+                        item(key = "search_action_bar") {
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(top = 4.dp, bottom = 2.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                FocusableSurface(
+                                    onClick = onPlayAll,
+                                    shape = RoundedCornerShape(8.dp),
+                                    focusedScale = 1.08f,
+                                    animationDurationMs = 150,
+                                    containerColor = NasMusicColors.Primary.copy(alpha = 0.85f),
+                                    focusedContainerColor = NasMusicColors.Primary,
+                                    contentColor = Color.Black,
+                                    focusedContentColor = Color.Black
+                                ) {
+                                    Text(
+                                        text = "全部播放 ▶",
+                                        fontSize = 14.sp,
+                                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                                    )
+                                }
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Text(
+                                    text = "${searchResults.size} 首",
+                                    color = NasMusicColors.TextSecondary,
+                                    fontSize = 13.sp
+                                )
+                            }
+                        }
+                    }
                     itemsIndexed(searchResults, key = { _, song -> song.id }) { index, song ->
                         SongRow(
                             song = song,
                             onClick = { onPlaySong(song) },
                             isFavorited = song.id in favoriteIds,
                             onToggleFavorite = { onToggleFavorite(song) },
+                            isInQueue = song.id in queueSongIds,
+                            onToggleQueue = { onToggleQueue(song) },
                             focusRequester = if (index == 0) firstItemFocusRequester else null
                         )
                     }

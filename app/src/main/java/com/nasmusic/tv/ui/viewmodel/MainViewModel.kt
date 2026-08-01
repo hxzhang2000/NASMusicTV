@@ -160,6 +160,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     private val _songsPaging = MutableStateFlow(SongsPagingState())
     val songsPaging: StateFlow<SongsPagingState> = _songsPaging.asStateFlow()
     private val pageSize = 200
+    /** 网络音乐"播放全部"单次加入队列的上限（去重后取前 N 首） */
+    private val maxNetworkBatchPlayCount = 30
 
     /**
      * 后台全量加载是否正在进行中
@@ -1450,6 +1452,22 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         val results = _browseResults.value.dataOrNull() ?: return
         if (results.isEmpty()) return
         playNetworkBatch(results, 0)
+    }
+
+    /**
+     * 播放全部搜索结果。
+     *
+     * 加入队列前按（歌手, 歌曲名）去重；去重后最多取 30 首，
+     * 不足 30 首时有多少加多少。不触发导航，由调用方（AppRoot）处理 navigateTo(NowPlaying)。
+     */
+    fun playAllSearchResults() {
+        val results = _networkSearchResults.value.dataOrNull() ?: return
+        if (results.isEmpty()) return
+        val deduped = results
+            .distinctBy { it.artist.trim() to it.title.trim() }
+            .take(maxNetworkBatchPlayCount)
+        if (deduped.isEmpty()) return
+        playNetworkBatch(deduped, 0)
     }
 
     /**

@@ -573,6 +573,10 @@ fun AppRoot(
                             viewModel.playQueue(songs, 0)
                             viewModel.navigateTo(Screen.NowPlaying)
                         },
+                        onPlayAllSearch = {
+                            viewModel.playAllSearchResults()
+                            viewModel.navigateTo(Screen.NowPlaying)
+                        },
                         onLoadPlaylistDetail = { (playlist, songs) -> viewModel.loadPlaylistDetail(playlist.id, playlist.name) },
                         onNavigateToPlaylistDetail = { viewModel.navigateTo(Screen.NetworkPlaylistDetail) },
                         weatherData = weatherData,
