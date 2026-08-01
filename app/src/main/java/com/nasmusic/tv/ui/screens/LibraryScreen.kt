@@ -13,7 +13,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -21,14 +20,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
-import androidx.compose.foundation.lazy.itemsIndexed as lazyColumnItemsIndexed
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -62,7 +58,6 @@ import com.nasmusic.tv.R
 import com.nasmusic.tv.data.model.Album
 import com.nasmusic.tv.data.model.Artist
 import com.nasmusic.tv.data.model.Genre
-import com.nasmusic.tv.data.model.Playlist
 import com.nasmusic.tv.data.model.Song
 import com.nasmusic.tv.ui.LocalListBackHandler
 import com.nasmusic.tv.ui.components.FocusableSurface
@@ -75,11 +70,9 @@ import kotlinx.coroutines.launch
 enum class LibraryTab(val titleRes: Int) {
     ALBUMS(R.string.library_albums),
     ARTISTS(R.string.library_artists_alt),
-    PLAYLISTS(R.string.library_playlists),
     SONGS(R.string.library_songs),
     GENRES(R.string.library_genres),
     YEARS(R.string.library_years),
-    FAVORITES(R.string.library_favorites),
     RECENT(R.string.library_recent),
     STATISTICS(com.nasmusic.tv.R.string.library_statistics)
 }
@@ -92,7 +85,6 @@ fun LibraryScreen(
     isConnected: Boolean = false,
     genres: List<Genre> = emptyList(),
     favoriteIds: Set<String> = emptySet(),
-    favoriteSongs: List<Song> = emptyList(),
     recentSongIds: List<String> = emptyList(),
     recentSongs: List<Song> = emptyList(),
     playCounts: Map<String, Int> = emptyMap(),
@@ -111,6 +103,8 @@ fun LibraryScreen(
     onToggleQueue: (Song) -> Unit = {},
     // 本地收藏切换（用于 SongsTab、RecentTab 等本地歌曲列表）
     onToggleFavorite: (Song) -> Unit = {},
+    // 加入歌单（弹出歌单选择弹窗）
+    onAddToPlaylist: (Song) -> Unit = {},
     onOpenAlbumDetail: ((Album) -> Unit)? = null,
     onOpenArtistDetail: ((String) -> Unit)? = null,
     onSongsByGenre: ((String, (List<Song>) -> Unit) -> Unit)? = null,
@@ -122,25 +116,12 @@ fun LibraryScreen(
     onLoadRecentSongs: () -> Unit = {},
     onSearch: (String) -> Unit = {},
     onClearSearch: () -> Unit = {},
-    // 网络收藏（供 FavoritesTab 使用）
-    networkFavoriteSongs: List<Song> = emptyList(),
-    onToggleNetworkFavorite: (Song) -> Unit = {},
     // 播放统计
     playStatistics: com.nasmusic.tv.data.model.PlayStatistics = com.nasmusic.tv.data.model.PlayStatistics(),
     onClearPlayRecords: () -> Unit = {},
     // 子 Tab 跨导航记忆（由 ViewModel 驱动）
     activeTab: LibraryTab = LibraryTab.ALBUMS,
     onTabSelected: (LibraryTab) -> Unit = {},
-    // 播放列表
-    playlists: List<Playlist> = emptyList(),
-    playlistSongs: List<Song> = emptyList(),
-    isPlaylistLoading: Boolean = false,
-    onSelectPlaylist: (Playlist) -> Unit = {},
-    onCreatePlaylist: (String) -> Unit = {},
-    onDeletePlaylist: (Playlist) -> Unit = {},
-    onPlayPlaylist: (Playlist) -> Unit = {},
-    onRemoveFromPlaylist: (String) -> Unit = {},
-    onLoadPlaylists: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     var filterQuery by remember { mutableStateOf("") }
@@ -153,7 +134,6 @@ fun LibraryScreen(
             LibraryTab.ARTISTS -> onLoadArtists()
             LibraryTab.YEARS -> onLoadYears()
             LibraryTab.RECENT -> onLoadRecentSongs()
-            LibraryTab.PLAYLISTS -> onLoadPlaylists()
             else -> {}
         }
     }
@@ -190,7 +170,7 @@ fun LibraryScreen(
     }
 
     // 播放全部按钮的歌曲列表：按当前 Tab + 搜索状态动态计算
-    val playAllSongs by remember(activeTab, filterQuery, songs, favoriteSongs, recentSongs, displaySongs, searchResults, filteredAlbums, filteredArtists, artistSongsMap) {
+    val playAllSongs by remember(activeTab, filterQuery, songs, recentSongs, displaySongs, searchResults, filteredAlbums, filteredArtists, artistSongsMap) {
         derivedStateOf {
             when (activeTab) {
                 LibraryTab.ALBUMS -> {
@@ -210,8 +190,6 @@ fun LibraryScreen(
                     else songs
                 }
                 LibraryTab.SONGS -> displaySongs
-                LibraryTab.PLAYLISTS -> emptyList()
-                LibraryTab.FAVORITES -> favoriteSongs
                 LibraryTab.RECENT -> recentSongs
                 else -> songs  // GENRES, YEARS, STATISTICS
             }
@@ -284,20 +262,7 @@ fun LibraryScreen(
             Spacer(modifier = Modifier.height(16.dp))
 
             // 内容区域
-            // FAVORITES Tab 不依赖 NAS 连接状态，始终可用
-            // （本地收藏和网络收藏都存储在 DataStore，无需 NAS 后端）
-            if (activeTab == LibraryTab.FAVORITES) {
-                FavoritesTab(
-                    songs = favoriteSongs,
-                    favoriteIds = favoriteIds,
-                    onPlaySong = onPlaySong,
-                    queueSongIds = queueSongIds,
-                    onToggleQueue = onToggleQueue,
-                    onToggleFavorite = onToggleFavorite,
-                    networkFavoriteSongs = networkFavoriteSongs,
-                    onToggleNetworkFavorite = onToggleNetworkFavorite
-                )
-            } else if (isLoading) {
+            if (isLoading) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text(text = "加载中...", color = NasMusicColors.TextSecondary, fontSize = 20.sp)
@@ -335,16 +300,6 @@ fun LibraryScreen(
                         onPlayAlbum = onPlayAlbum,
                         onOpenAlbumDetail = onOpenAlbumDetail
                     )
-                    LibraryTab.PLAYLISTS -> PlaylistsTab(
-                        playlists = playlists,
-                        playlistSongs = playlistSongs,
-                        isLoading = isPlaylistLoading,
-                        onSelectPlaylist = onSelectPlaylist,
-                        onCreatePlaylist = onCreatePlaylist,
-                        onDeletePlaylist = onDeletePlaylist,
-                        onPlayPlaylist = onPlayPlaylist,
-                        onRemoveFromPlaylist = onRemoveFromPlaylist
-                    )
                     LibraryTab.ARTISTS -> ArtistsTab(
                         artists = filteredArtists,
                         artistSongsMap = artistSongsMap,
@@ -360,7 +315,8 @@ fun LibraryScreen(
                         onPlaySong = onPlaySong,
                         queueSongIds = queueSongIds,
                         onToggleQueue = onToggleQueue,
-                        onToggleFavorite = onToggleFavorite
+                        onToggleFavorite = onToggleFavorite,
+                        onAddToPlaylist = onAddToPlaylist
                     )
                     LibraryTab.GENRES -> GenresTab(
                         genres = genres,
@@ -372,7 +328,6 @@ fun LibraryScreen(
                         onSongsByYear = onSongsByYear,
                         onPlaySongs = onPlaySongs
                     )
-                    LibraryTab.FAVORITES -> {} // 已在上方独立处理（不依赖 NAS 连接）
                     LibraryTab.STATISTICS -> StatisticsTab(
                         statistics = playStatistics,
                         onClearRecords = onClearPlayRecords
@@ -385,7 +340,8 @@ fun LibraryScreen(
                         queueSongIds = queueSongIds,
                         onToggleQueue = onToggleQueue,
                         favoriteIds = favoriteIds,
-                        onToggleFavorite = onToggleFavorite
+                        onToggleFavorite = onToggleFavorite,
+                        onAddToPlaylist = onAddToPlaylist
                     )
                 }
             }
@@ -543,7 +499,8 @@ private fun SongsTab(
     onPlaySong: (Song) -> Unit,
     queueSongIds: Set<String> = emptySet(),
     onToggleQueue: (Song) -> Unit = {},
-    onToggleFavorite: (Song) -> Unit = {}
+    onToggleFavorite: (Song) -> Unit = {},
+    onAddToPlaylist: (Song) -> Unit = {}
 ) {
     val listState = rememberLazyGridState()
     val firstItemFocusRequester = remember { FocusRequester() }
@@ -629,6 +586,7 @@ private fun SongsTab(
                         onToggleQueue = { onToggleQueue(song) },
                         isFavorited = song.id in favoriteIds,
                         onToggleFavorite = { onToggleFavorite(song) },
+                        onAddToPlaylist = { onAddToPlaylist(song) },
                         focusRequester = if (index == 0) firstItemFocusRequester else null
                     )
                 }
@@ -837,96 +795,6 @@ private fun YearsTab(
                             )
                         }
                     }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun FavoritesTab(
-    songs: List<Song>,
-    favoriteIds: Set<String>,
-    onPlaySong: (Song) -> Unit,
-    queueSongIds: Set<String> = emptySet(),
-    onToggleQueue: (Song) -> Unit = {},
-    // 本地收藏切换（用于取消 NAS 歌曲收藏）
-    onToggleFavorite: (Song) -> Unit = {},
-    // 网络收藏
-    networkFavoriteSongs: List<Song> = emptyList(),
-    onToggleNetworkFavorite: (Song) -> Unit = {}
-) {
-    val listState = rememberLazyGridState()
-    val firstItemFocusRequester = remember { FocusRequester() }
-    val scope = rememberCoroutineScope()
-    val listBackHandler = LocalListBackHandler.current
-
-    // Level 1.5: 列表已滚动时按 BACK 先回顶并聚焦第一个
-    DisposableEffect(Unit) {
-        val handler: () -> Boolean = {
-            val atTop = listState.firstVisibleItemIndex == 0 &&
-                    listState.firstVisibleItemScrollOffset == 0
-            if (!atTop) {
-                scope.launch {
-                    listState.scrollToItem(0)
-                    runCatching { firstItemFocusRequester.requestFocus() }
-                }
-                true
-            } else {
-                false
-            }
-        }
-        listBackHandler.value = handler
-        onDispose { listBackHandler.value = null }
-    }
-
-    // 合并本地收藏和网络收藏（本地在前，网络在后）
-    val allSongs = songs + networkFavoriteSongs
-    val totalCount = allSongs.size
-
-    Column {
-        Text(
-            text = "收藏 ($totalCount)",
-            color = NasMusicColors.TextPrimary,
-            fontSize = 18.sp,
-            modifier = Modifier.padding(bottom = 12.dp)
-        )
-        if (allSongs.isEmpty()) {
-            Box(
-                modifier = Modifier.fillMaxWidth().padding(top = 40.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = "暂无收藏歌曲\n在播放页面点击 ♡ 可收藏",
-                    color = NasMusicColors.TextSecondary,
-                    fontSize = 16.sp
-                )
-            }
-        } else {
-            LazyVerticalGrid(
-                state = listState,
-                columns = GridCells.Fixed(2),
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                itemsIndexed(allSongs, key = { _, it -> it.id }) { index, song ->
-                    SongRow(
-                        song = song,
-                        index = index,
-                        onClick = { onPlaySong(song) },
-                        isFavorite = !song.isNetworkSong,  // 本地收藏显示 ♥ 标记
-                        isInQueue = song.id in queueSongIds,
-                        onToggleQueue = { onToggleQueue(song) },
-                        // 收藏按钮（本地/网络都可取消收藏，收藏列表中必然已收藏）
-                        isFavorited = true,
-                        onToggleFavorite = if (song.isNetworkSong) {
-                            { onToggleNetworkFavorite(song) }
-                        } else {
-                            { onToggleFavorite(song) }
-                        },
-                        focusRequester = if (index == 0) firstItemFocusRequester else null
-                    )
                 }
             }
         }
@@ -1178,7 +1046,8 @@ private fun RecentTab(
     queueSongIds: Set<String> = emptySet(),
     onToggleQueue: (Song) -> Unit = {},
     favoriteIds: Set<String> = emptySet(),
-    onToggleFavorite: (Song) -> Unit = {}
+    onToggleFavorite: (Song) -> Unit = {},
+    onAddToPlaylist: (Song) -> Unit = {}
 ) {
     val listState = rememberLazyGridState()
     val firstItemFocusRequester = remember { FocusRequester() }
@@ -1242,6 +1111,7 @@ private fun RecentTab(
                         onToggleQueue = { onToggleQueue(song) },
                         isFavorited = song.id in favoriteIds,
                         onToggleFavorite = { onToggleFavorite(song) },
+                        onAddToPlaylist = { onAddToPlaylist(song) },
                         focusRequester = if (index == 0) firstItemFocusRequester else null
                     )
                 }
@@ -1380,6 +1250,8 @@ fun SongRow(
     // 收藏按钮（本地/网络通用，onToggleFavorite 不为 null 时显示）
     isFavorited: Boolean = false,
     onToggleFavorite: (() -> Unit)? = null,
+    // 加入歌单按钮（onAddToPlaylist 不为 null 时显示）
+    onAddToPlaylist: (() -> Unit)? = null,
     focusRequester: FocusRequester? = null
 ) {
     // 将行拆分为两个独立的可聚焦区域：左侧内容（播放）和右侧按钮。
@@ -1471,7 +1343,63 @@ fun SongRow(
                     onClick = onToggleQueue
                 )
             }
+            // 加入歌单按钮
+            if (onAddToPlaylist != null) {
+                Spacer(modifier = Modifier.width(8.dp))
+                AddToPlaylistButton(onClick = onAddToPlaylist)
+            }
         }
+    }
+}
+
+/**
+ * 加入歌单按钮
+ *
+ * 视觉：＋（歌单图标），聚焦时高亮 Primary 色，未聚焦时暗色 TextSecondary。
+ * 点击打开歌单选择弹窗。
+ *
+ * 焦点处理与 QueueToggleButton 一致：Box + focusable() + clickable()，
+ * 避免嵌套 Surface 导致的焦点问题。
+ */
+@Composable
+fun AddToPlaylistButton(
+    onClick: () -> Unit
+) {
+    var isFocused by remember { mutableStateOf(false) }
+    val animScale = remember { Animatable(1f) }
+    val scope = rememberCoroutineScope()
+
+    Box(
+        modifier = Modifier
+            .size(28.dp)
+            .scale(animScale.value)
+            .border(
+                width = if (isFocused) 2.dp else 0.dp,
+                color = if (isFocused) NasMusicColors.FocusRing else Color.Transparent,
+                shape = RoundedCornerShape(6.dp)
+            )
+            .background(
+                color = if (isFocused) NasMusicColors.Primary.copy(alpha = 0.2f) else Color.Transparent,
+                shape = RoundedCornerShape(6.dp)
+            )
+            .onFocusChanged {
+                isFocused = it.isFocused
+                scope.launch {
+                    animScale.animateTo(
+                        if (isFocused) 1.1f else 1f,
+                        tween(200)
+                    )
+                }
+            }
+            .focusable()
+            .clickable { onClick() },
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = "＋",
+            fontSize = 16.sp,
+            color = NasMusicColors.TextSecondary.copy(alpha = 0.5f)
+        )
     }
 }
 
@@ -1658,259 +1586,6 @@ private fun SearchBar(
     }
 }
 
-/**
- * 播放列表 Tab：左侧列列表 + 右侧歌曲明细
- */
-@OptIn(ExperimentalTvMaterial3Api::class)
-@Composable
-private fun PlaylistsTab(
-    playlists: List<Playlist>,
-    playlistSongs: List<Song>,
-    isLoading: Boolean,
-    onSelectPlaylist: (Playlist) -> Unit,
-    onCreatePlaylist: (String) -> Unit,
-    onDeletePlaylist: (Playlist) -> Unit,
-    onPlayPlaylist: (Playlist) -> Unit,
-    onRemoveFromPlaylist: (String) -> Unit
-) {
-    var showCreateDialog by remember { mutableStateOf(false) }
-
-    val playlistListState = rememberLazyListState()
-    val playlistFirstFocusRequester = remember { FocusRequester() }
-    val songsListState = rememberLazyListState()
-    val songsFirstFocusRequester = remember { FocusRequester() }
-    val scope = rememberCoroutineScope()
-    val listBackHandler = LocalListBackHandler.current
-
-    // Level 1.5: 任意列表已滚动时按 BACK 先回顶并聚焦第一个
-    DisposableEffect(Unit) {
-        val handler: () -> Boolean = {
-            val leftScrolled = !(playlistListState.firstVisibleItemIndex == 0 &&
-                    playlistListState.firstVisibleItemScrollOffset == 0)
-            val rightScrolled = !(songsListState.firstVisibleItemIndex == 0 &&
-                    songsListState.firstVisibleItemScrollOffset == 0)
-            if (leftScrolled || rightScrolled) {
-                scope.launch {
-                    if (leftScrolled) {
-                        playlistListState.scrollToItem(0)
-                    }
-                    if (rightScrolled) {
-                        songsListState.scrollToItem(0)
-                    }
-                    if (rightScrolled) {
-                        runCatching { songsFirstFocusRequester.requestFocus() }
-                    } else {
-                        runCatching { playlistFirstFocusRequester.requestFocus() }
-                    }
-                }
-                true
-            } else {
-                false
-            }
-        }
-        listBackHandler.value = handler
-        onDispose { listBackHandler.value = null }
-    }
-
-    Row(modifier = Modifier.fillMaxWidth().fillMaxHeight()) {
-        // 左侧：播放列表示
-        Column(
-            modifier = Modifier.width(320.dp).fillMaxHeight()
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = stringResource(R.string.library_favorites) + " (${playlists.size})",
-                    color = NasMusicColors.TextPrimary,
-                    fontSize = 16.sp
-                )
-                ButtonChipSmall(text = "+ " + stringResource(R.string.playlist_create)) { showCreateDialog = true }
-            }
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            if (isLoading) {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text(text = stringResource(R.string.common_loading), color = NasMusicColors.TextSecondary, fontSize = 16.sp)
-                }
-            } else if (playlists.isEmpty()) {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text(text = stringResource(R.string.playlist_empty), color = NasMusicColors.TextSecondary, fontSize = 16.sp)
-                }
-            } else {
-                LazyColumn(
-                    state = playlistListState,
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    lazyColumnItemsIndexed(playlists, key = { _, it -> it.id }) { index, playlist ->
-                        FocusableSurface(
-                            onClick = { onSelectPlaylist(playlist) },
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(8.dp),
-                            focusedScale = 1.02f,
-                            animationDurationMs = 200,
-                            containerColor = NasMusicColors.Surface.copy(alpha = 0.5f),
-                            contentColor = NasMusicColors.TextPrimary,
-                            focusedContainerColor = NasMusicColors.Primary.copy(alpha = 0.2f),
-                            pressedScale = 0.98f,
-                            focusRequester = if (index == 0) playlistFirstFocusRequester else null
-                        ) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 10.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(
-                                    text = "♪",
-                                    color = NasMusicColors.Primary,
-                                    fontSize = 18.sp,
-                                    modifier = Modifier.padding(end = 12.dp)
-                                )
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        text = playlist.name,
-                                        color = NasMusicColors.TextPrimary,
-                                        fontSize = 14.sp,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
-                                    Text(
-                                        text = stringResource(R.string.playlist_song_count, playlist.songCount),
-                                        color = NasMusicColors.TextSecondary,
-                                        fontSize = 11.sp
-                                    )
-                                }
-                                Row {
-                                    ButtonChipSmall(
-                                        text = stringResource(R.string.player_play),
-                                        onClick = { onPlayPlaylist(playlist) }
-                                    )
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    ButtonChipSmall(
-                                        text = stringResource(R.string.common_delete),
-                                        onClick = { onDeletePlaylist(playlist) }
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        Spacer(modifier = Modifier.width(24.dp))
-
-        // 右侧：选中播放列表的歌曲明细
-        Column(
-            modifier = Modifier.weight(1f).fillMaxHeight()
-        ) {
-            Text(
-                text = stringResource(R.string.playlist_track_list, playlistSongs.size),
-                color = NasMusicColors.TextPrimary,
-                fontSize = 16.sp
-            )
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            if (playlistSongs.isEmpty()) {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text(
-                        text = stringResource(R.string.playlist_select_hint),
-                        color = NasMusicColors.TextSecondary,
-                        fontSize = 16.sp
-                    )
-                }
-            } else {
-                LazyColumn(
-                    state = songsListState,
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    lazyColumnItemsIndexed(playlistSongs, key = { _, it -> it.id }) { index, song ->
-                        FocusableSurface(
-                            onClick = { onRemoveFromPlaylist(song.id) },
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(6.dp),
-                            focusedScale = 1.02f,
-                            animationDurationMs = 200,
-                            containerColor = NasMusicColors.Surface.copy(alpha = 0.5f),
-                            contentColor = NasMusicColors.TextPrimary,
-                            focusedContainerColor = NasMusicColors.Primary.copy(alpha = 0.2f),
-                            focusedContentColor = Color.Black,
-                            pressedContainerColor = NasMusicColors.SurfaceVariant,
-                            pressedScale = 0.98f,
-                            focusBorderColor = NasMusicColors.FocusRing.copy(alpha = 0.6f),
-                            focusRequester = if (index == 0) songsFirstFocusRequester else null
-                        ) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        text = song.title,
-                                        color = NasMusicColors.TextPrimary,
-                                        fontSize = 13.sp,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
-                                    Text(
-                                        text = song.artist.ifBlank { "—" },
-                                        color = NasMusicColors.TextSecondary,
-                                        fontSize = 11.sp,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
-                                }
-                                Spacer(modifier = Modifier.width(10.dp))
-                                Text(
-                                    text = TimeUtils.formatDuration(song.durationMs),
-                                    color = NasMusicColors.TextSecondary,
-                                    fontSize = 11.sp
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    // 创建播放列表对话框
-    if (showCreateDialog) {
-        TextInputDialog(
-            title = stringResource(R.string.playlist_create),
-            hint = stringResource(R.string.playlist_create_hint),
-            initialValue = "",
-            onConfirm = { name ->
-                if (name.isNotBlank()) {
-                    onCreatePlaylist(name)
-                }
-                showCreateDialog = false
-            },
-            onDismiss = { showCreateDialog = false }
-        )
-    }
-}
-
-@OptIn(ExperimentalTvMaterial3Api::class)
-@Composable
-private fun ButtonChipSmall(text: String, onClick: () -> Unit) {
-    FocusableSurface(
-        onClick = onClick,
-        shape = RoundedCornerShape(12.dp),
-        focusedScale = 1.08f,
-        animationDurationMs = 200,
-        containerColor = NasMusicColors.Primary.copy(alpha = 0.8f),
-        contentColor = Color.Black,
-        focusedContainerColor = NasMusicColors.Primary,
-        focusedContentColor = Color.Black,
-        pressedScale = 0.95f
-    ) {
-        Text(text = text, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp))
-    }
-}
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable

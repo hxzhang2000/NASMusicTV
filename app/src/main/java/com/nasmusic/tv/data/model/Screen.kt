@@ -7,6 +7,7 @@ enum class Screen {
     Home,
     NowPlaying,
     Library,
+    Mine,
     Queue,
     Settings,
     ServerConnect,

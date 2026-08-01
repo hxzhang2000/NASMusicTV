@@ -25,6 +25,7 @@
     <string name="nav_server">服务器</string>
     <string name="nav_network">网络音乐</string>
     <string name="nav_home">首页</string>
+    <string name="nav_mine">我的</string>
 
     <!-- Library -->
     <string name="library_albums">专辑</string>
@@ -205,6 +206,19 @@
     <string name="settings_cover_filter_desc">对当前播放封面应用模糊和暗色遮罩效果</string>
     <string name="settings_cover_blur_radius">模糊强度: %dpx</string>
     <string name="settings_cover_dark_overlay">暗色遮罩: %d%%</string>
+    <string name="settings_data">数据管理</string>
+    <string name="settings_data_desc">导出或恢复收藏、歌单、播放统计等数据</string>
+    <string name="settings_export_backup">导出备份</string>
+    <string name="settings_export_backup_desc">将收藏、歌单、播放统计等数据导出到本地文件</string>
+    <string name="settings_backup_list">备份文件</string>
+    <string name="settings_backup_empty">暂无备份文件</string>
+    <string name="settings_import_backup">恢复</string>
+    <string name="settings_import_backup_desc">从备份文件恢复数据</string>
+    <string name="settings_backup_exported">备份已导出</string>
+    <string name="settings_backup_imported">备份已恢复</string>
+    <string name="settings_delete_backup">删除</string>
+    <string name="settings_delete_backup_confirm_title">删除备份</string>
+    <string name="settings_delete_backup_confirm_message">确定删除备份文件「%1$s」吗？此操作不可恢复。</string>
 
     <!-- Equalizer -->
     <string name="equalizer_title">均衡器</string>
@@ -219,6 +233,25 @@
     <string name="playlist_select_hint">选择一个播放列表查看曲目</string>
     <string name="playlist_song_count">%d 首曲目</string>
     <string name="playlist_track_list">曲目 (%d)</string>
+
+    <!-- Mine -->
+    <string name="mine_favorites">收藏</string>
+    <string name="mine_playlists">本地歌单</string>
+    <string name="mine_favorites_empty">暂无收藏歌曲</string>
+    <string name="mine_playlists_empty">暂无本地歌单</string>
+    <string name="mine_create_playlist">新建歌单</string>
+    <string name="mine_rename_playlist">重命名</string>
+    <string name="mine_play_playlist">播放</string>
+    <string name="mine_remove_song">移除</string>
+    <string name="mine_song_count">%d 首</string>
+    <string name="mine_add_to_playlist">添加到歌单</string>
+    <string name="mine_pick_playlist_title">添加到歌单</string>
+    <string name="mine_pick_playlist_hint">请选择要加入的歌单</string>
+    <string name="mine_pick_playlist_empty">暂无歌单，请先新建</string>
+    <string name="mine_playlist_name_hint">请输入歌单名称</string>
+    <string name="mine_rename_playlist_title">重命名歌单</string>
+    <string name="mine_added_to_playlist">已添加到歌单</string>
+    <string name="mine_not_added_to_playlist">添加失败</string>
 
     <!-- Queue -->
     <string name="queue_title">播放队列</string>

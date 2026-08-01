@@ -14,6 +14,7 @@ import com.google.gson.reflect.TypeToken
 import com.nasmusic.tv.backend.network.MetingApiService
 import com.nasmusic.tv.data.model.AppSettings
 import com.nasmusic.tv.data.model.EqualizerPreset
+import com.nasmusic.tv.data.model.LocalPlaylist
 import com.nasmusic.tv.data.model.NetworkFavoriteItem
 import com.nasmusic.tv.data.model.NetworkSource
 import com.nasmusic.tv.data.model.PlayMode
@@ -66,6 +67,9 @@ class AppPreferences(private val context: Context) {
 
     // --- 网络歌曲收藏（序列化为 JSON）---
     private val keyNetworkFavorites = stringPreferencesKey("network_favorites")
+
+    // --- 本地歌单（序列化为 JSON，独立于 NAS 后端歌单）---
+    private val keyLocalPlaylists = stringPreferencesKey("local_playlists")
 
     // --- 上次播放队列（序列化为 JSON，streamUrl 置空不持久化）---
     private val keyLastQueue = stringPreferencesKey("last_queue")
@@ -488,6 +492,151 @@ class AppPreferences(private val context: Context) {
         }
     }
 
+    // --- 本地歌单（DataStore JSON，独立于 NAS 后端歌单）---
+
+    /**
+     * 本地歌单列表 Flow（响应式，歌单变化时自动更新）
+     */
+    val localPlaylists: Flow<List<LocalPlaylist>> = context.dataStore.data.map { prefs ->
+        val json = prefs[keyLocalPlaylists] ?: "[]"
+        try {
+            gson.fromJson(json, object : TypeToken<List<LocalPlaylist>>() {}.type)
+        } catch (e: Exception) { emptyList() }
+    }
+
+    /**
+     * 一次性读取本地歌单列表
+     */
+    suspend fun getLocalPlaylists(): List<LocalPlaylist> {
+        return try {
+            context.dataStore.data.first().let { prefs ->
+                val json = prefs[keyLocalPlaylists] ?: "[]"
+                gson.fromJson(json, object : TypeToken<List<LocalPlaylist>>() {}.type) ?: emptyList()
+            }
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+
+    /**
+     * 创建本地歌单（最新创建的放最前）
+     */
+    suspend fun createLocalPlaylist(name: String): LocalPlaylist {
+        val trimmed = name.trim()
+        require(trimmed.isNotEmpty()) { "Playlist name must not be empty" }
+        lateinit var created: LocalPlaylist
+        context.dataStore.edit { prefs ->
+            val json = prefs[keyLocalPlaylists] ?: "[]"
+            val list = try {
+                gson.fromJson(json, object : TypeToken<MutableList<LocalPlaylist>>() {}.type)
+                    ?: mutableListOf()
+            } catch (e: Exception) { mutableListOf<LocalPlaylist>() }
+
+            val playlist = LocalPlaylist(
+                id = java.util.UUID.randomUUID().toString(),
+                name = trimmed,
+                createdAt = System.currentTimeMillis()
+            )
+            val mutable = list.toMutableList()
+            mutable.add(0, playlist)
+            prefs[keyLocalPlaylists] = gson.toJson(mutable)
+            created = playlist
+        }
+        return created
+    }
+
+    /**
+     * 重命名本地歌单
+     */
+    suspend fun renameLocalPlaylist(id: String, newName: String) {
+        val trimmed = newName.trim()
+        if (trimmed.isEmpty()) return
+        context.dataStore.edit { prefs ->
+            val json = prefs[keyLocalPlaylists] ?: "[]"
+            val list = try {
+                gson.fromJson(json, object : TypeToken<MutableList<LocalPlaylist>>() {}.type)
+                    ?: mutableListOf()
+            } catch (e: Exception) { mutableListOf<LocalPlaylist>() }
+
+            val mutable = list.toMutableList()
+            val idx = mutable.indexOfFirst { it.id == id }
+            if (idx >= 0) {
+                mutable[idx] = mutable[idx].copy(name = trimmed)
+                prefs[keyLocalPlaylists] = gson.toJson(mutable)
+            }
+        }
+    }
+
+    /**
+     * 删除本地歌单
+     */
+    suspend fun deleteLocalPlaylist(id: String) {
+        context.dataStore.edit { prefs ->
+            val json = prefs[keyLocalPlaylists] ?: "[]"
+            val list = try {
+                gson.fromJson(json, object : TypeToken<MutableList<LocalPlaylist>>() {}.type)
+                    ?: mutableListOf()
+            } catch (e: Exception) { mutableListOf<LocalPlaylist>() }
+
+            val mutable = list.toMutableList()
+            if (mutable.removeAll { it.id == id }) {
+                prefs[keyLocalPlaylists] = gson.toJson(mutable)
+            }
+        }
+    }
+
+    /**
+     * 添加歌曲到本地歌单（按 song.id 去重，streamUrl 置空不持久化）
+     * @return true 添加成功；false 歌单不存在或歌曲已在歌单中
+     */
+    suspend fun addSongToPlaylist(playlistId: String, song: Song): Boolean {
+        var added = false
+        context.dataStore.edit { prefs ->
+            val json = prefs[keyLocalPlaylists] ?: "[]"
+            val list = try {
+                gson.fromJson(json, object : TypeToken<MutableList<LocalPlaylist>>() {}.type)
+                    ?: mutableListOf()
+            } catch (e: Exception) { mutableListOf<LocalPlaylist>() }
+
+            val mutable = list.toMutableList()
+            val idx = mutable.indexOfFirst { it.id == playlistId }
+            if (idx < 0) {
+                added = false
+            } else {
+                val current = mutable[idx]
+                if (current.songs.any { it.id == song.id }) {
+                    added = false
+                } else {
+                    mutable[idx] = current.copy(songs = current.songs + song.copy(streamUrl = null))
+                    prefs[keyLocalPlaylists] = gson.toJson(mutable)
+                    added = true
+                }
+            }
+        }
+        return added
+    }
+
+    /**
+     * 从本地歌单移除歌曲
+     */
+    suspend fun removeSongFromPlaylist(playlistId: String, songId: String) {
+        context.dataStore.edit { prefs ->
+            val json = prefs[keyLocalPlaylists] ?: "[]"
+            val list = try {
+                gson.fromJson(json, object : TypeToken<MutableList<LocalPlaylist>>() {}.type)
+                    ?: mutableListOf()
+            } catch (e: Exception) { mutableListOf<LocalPlaylist>() }
+
+            val mutable = list.toMutableList()
+            val idx = mutable.indexOfFirst { it.id == playlistId }
+            if (idx >= 0) {
+                val current = mutable[idx]
+                mutable[idx] = current.copy(songs = current.songs.filterNot { it.id == songId })
+                prefs[keyLocalPlaylists] = gson.toJson(mutable)
+            }
+        }
+    }
+
     // --- 上次播放队列持久化 ---
 
     /**
@@ -583,6 +732,95 @@ class AppPreferences(private val context: Context) {
     suspend fun clearPlayRecords() {
         context.dataStore.edit { prefs ->
             prefs.remove(keyPlayRecords)
+        }
+    }
+
+    // ========== 数据备份 ==========
+
+    /**
+     * 备份文件数据结构
+     *
+     * 注意：不包含敏感字段 —— 密码、API Token、天气 API Key 一律不导出。
+     * 恢复后服务器需重新输入密码连接（isConnected=false）。
+     */
+    data class BackupData(
+        val version: Int = 1,
+        val exportedAt: Long = System.currentTimeMillis(),
+        val serverConfig: ServerConfig? = null,
+        val appSettings: AppSettings? = null,
+        val networkFavorites: List<NetworkFavoriteItem> = emptyList(),
+        val localPlaylists: List<LocalPlaylist> = emptyList(),
+        val lastQueue: LastQueueData? = null,
+        val recentSongIds: List<String> = emptyList(),
+        val playCounts: Map<String, Int> = emptyMap(),
+        val playRecords: List<com.nasmusic.tv.data.model.PlayRecord> = emptyList(),
+        val equalizerPreset: EqualizerPreset? = null,
+        val equalizerBands: List<Float> = emptyList()
+    )
+
+    /**
+     * 导出备份数据（敏感字段已排除：密码、API Token、天气 API Key）
+     */
+    suspend fun exportBackupData(): BackupData {
+        val config = serverConfig.first()
+        return BackupData(
+            serverConfig = if (config.baseUrl.isNotBlank()) {
+                config.copy(apiToken = "", password = "", isConnected = false)
+            } else null,
+            appSettings = appSettings.first(),
+            networkFavorites = getNetworkFavorites(),
+            localPlaylists = getLocalPlaylists(),
+            lastQueue = getLastQueue(),
+            recentSongIds = getRecentSongIds(),
+            playCounts = playCounts.first(),
+            playRecords = getPlayRecords(),
+            equalizerPreset = equalizerPreset.first(),
+            equalizerBands = equalizerBands.first()
+        )
+    }
+
+    /**
+     * 导入备份数据并恢复至 DataStore
+     * 服务器密码/API Token 不在备份中，恢复后 isConnected=false，需重新输入密码连接
+     */
+    suspend fun importBackupData(data: BackupData) {
+        data.serverConfig?.let { config ->
+            saveServerConfig(
+                config.copy(apiToken = "", password = "", isConnected = false)
+            )
+        }
+        data.appSettings?.let { settings ->
+            context.dataStore.edit { prefs ->
+                prefs[keyDarkTheme] = settings.darkTheme
+                prefs[keyAnimations] = settings.animationsEnabled
+                prefs[keyAutoPlayNext] = settings.autoPlayNext
+                prefs[keyPlayMode] = settings.defaultPlayMode.ordinal
+                prefs[keyCacheLyrics] = settings.cacheLyrics
+                prefs[keyCacheCover] = settings.cacheCover
+                prefs[keyLyricsOffset] = settings.lyricsOffsetMs
+                prefs[keyDefaultNetworkSource] = settings.defaultNetworkSource.key
+                prefs[keyMetingApiBaseUrl] = settings.metingApiBaseUrl
+                prefs[keySpectrumEnabled] = settings.spectrumEnabled
+                prefs[keyVisualizerTheme] = settings.visualizerTheme.name
+            }
+        }
+        context.dataStore.edit { prefs ->
+            prefs[keyNetworkFavorites] = gson.toJson(data.networkFavorites)
+            prefs[keyLocalPlaylists] = gson.toJson(data.localPlaylists)
+            prefs[keyRecentSongs] = gson.toJson(data.recentSongIds)
+            prefs[keyPlayCounts] = gson.toJson(data.playCounts)
+            if (data.lastQueue != null) {
+                prefs[keyLastQueue] = gson.toJson(
+                    data.lastQueue.copy(songs = data.lastQueue.songs.map { it.copy(streamUrl = null) })
+                )
+            }
+            data.equalizerPreset?.let { prefs[keyEqualizerPreset] = it.ordinal }
+            if (data.equalizerBands.isNotEmpty()) {
+                prefs[keyEqualizerBands] = gson.toJson(data.equalizerBands)
+            }
+            if (data.playRecords.isNotEmpty()) {
+                prefs[keyPlayRecords] = gson.toJson(PlayRecordsData(data.playRecords))
+            }
         }
     }
 }

@@ -63,6 +63,7 @@ fun DiscoverContent(
     onPlayNetworkSong: (Song) -> Unit,
     onToggleNetworkFavorite: (Song) -> Unit,
     onToggleQueue: (Song) -> Unit,
+    onAddToPlaylist: (Song) -> Unit = {},
     onPlayAllSongs: (List<Song>) -> Unit,
     onLoadPlaylistDetail: (Pair<Playlist, List<Song>>) -> Unit,
     onNavigateToPlaylistDetail: () -> Unit,
@@ -160,7 +161,8 @@ fun DiscoverContent(
                         onClick = { onPlayNetworkSong(currentNetworkSong!!) },
                         isInQueue = false,
                         isFavorited = currentNetworkSong!!.id in networkFavoriteIds,
-                        onToggleFavorite = { onToggleNetworkFavorite(currentNetworkSong!!) }
+                        onToggleFavorite = { onToggleNetworkFavorite(currentNetworkSong!!) },
+                        onAddToPlaylist = { onAddToPlaylist(currentNetworkSong!!) }
                     )
                 }
             }
@@ -185,7 +187,8 @@ fun DiscoverContent(
                             isInQueue = song.id in queueSongIds,
                             onToggleQueue = { onToggleQueue(song) },
                             isFavorited = song.id in networkFavoriteIds,
-                            onToggleFavorite = { onToggleNetworkFavorite(song) }
+                            onToggleFavorite = { onToggleNetworkFavorite(song) },
+                            onAddToPlaylist = { onAddToPlaylist(song) }
                         )
                     }
                 }
@@ -213,7 +216,8 @@ fun DiscoverContent(
                     onClick = { onPlayNetworkSong(song) },
                     isInQueue = false,
                     isFavorited = true,
-                    onToggleFavorite = { onToggleNetworkFavorite(song) }
+                    onToggleFavorite = { onToggleNetworkFavorite(song) },
+                    onAddToPlaylist = { onAddToPlaylist(song) }
                 )
             }
         }

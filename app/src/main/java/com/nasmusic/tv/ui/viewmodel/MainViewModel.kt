@@ -1,8 +1,10 @@
 package com.nasmusic.tv.ui.viewmodel
 
 import android.app.Application
+import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.google.gson.Gson
 import com.nasmusic.tv.NasMusicApp
 import com.nasmusic.tv.backend.BackendRegistry
 import com.nasmusic.tv.backend.BackendAdapter
@@ -22,6 +24,7 @@ import com.nasmusic.tv.data.model.Song
 import com.nasmusic.tv.data.model.ServerConfig
 import com.nasmusic.tv.data.model.Genre
 import com.nasmusic.tv.data.model.HomeDashboardData
+import com.nasmusic.tv.data.model.LocalPlaylist
 import com.nasmusic.tv.data.model.Playlist
 import com.nasmusic.tv.data.model.EqualizerPreset
 import com.nasmusic.tv.data.model.MusicSource
@@ -41,6 +44,7 @@ import com.nasmusic.tv.lyrics.LyricsManager
 import com.nasmusic.tv.player.PlayerManager
 import com.nasmusic.tv.util.AppLog
 import com.nasmusic.tv.util.ArtistSplitter
+import com.nasmusic.tv.util.BackupFileUtils
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -248,6 +252,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     val networkFavoriteIds: StateFlow<Set<String>> = _networkFavorites.map { favorites ->
         favorites.map { it.songId }.toSet()
     }.stateIn(viewModelScope, SharingStarted.Eagerly, emptySet())
+
+    // --- 本地歌单（「我的」Tab，DataStore 持久化，可混合 NAS/网络歌曲）---
+    private val _localPlaylists = MutableStateFlow<List<LocalPlaylist>>(emptyList())
+    val localPlaylists: StateFlow<List<LocalPlaylist>> = _localPlaylists.asStateFlow()
 
     // --- 网络歌单（NetworkMusicManager 获取）---
     private val _networkPlaylists = MutableStateFlow<List<Pair<Playlist, List<Song>>>>(emptyList())
@@ -730,6 +738,13 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             prefs.networkFavorites.collect { favorites ->
                 _networkFavorites.value = favorites
+            }
+        }
+
+        // 监听本地歌单变化（DataStore 持久化，响应式更新）
+        viewModelScope.launch {
+            prefs.localPlaylists.collect { playlists ->
+                _localPlaylists.value = playlists
             }
         }
 
@@ -2033,6 +2048,180 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun isFavorite(songId: String): Boolean = songId in _favoriteIds.value
+
+    // --- 本地歌单操作（「我的」Tab，DataStore 持久化）---
+
+    /**
+     * 创建本地歌单（空名称忽略）
+     */
+    fun createLocalPlaylist(name: String) {
+        if (name.isBlank()) return
+        viewModelScope.launch {
+            try {
+                prefs.createLocalPlaylist(name)
+            } catch (e: Exception) {
+                AppLog.e("NASMusic", "createLocalPlaylist failed", e)
+                showError("创建歌单失败: ${e.message?.take(50)}")
+            }
+        }
+    }
+
+    /**
+     * 重命名本地歌单
+     */
+    fun renameLocalPlaylist(id: String, newName: String) {
+        if (newName.isBlank()) return
+        viewModelScope.launch {
+            try {
+                prefs.renameLocalPlaylist(id, newName)
+            } catch (e: Exception) {
+                AppLog.e("NASMusic", "renameLocalPlaylist failed", e)
+                showError("重命名歌单失败: ${e.message?.take(50)}")
+            }
+        }
+    }
+
+    /**
+     * 删除本地歌单
+     */
+    fun deleteLocalPlaylist(id: String) {
+        viewModelScope.launch {
+            try {
+                prefs.deleteLocalPlaylist(id)
+            } catch (e: Exception) {
+                AppLog.e("NASMusic", "deleteLocalPlaylist failed", e)
+                showError("删除歌单失败: ${e.message?.take(50)}")
+            }
+        }
+    }
+
+    /**
+     * 添加歌曲到本地歌单（已存在则提示）
+     */
+    fun addSongToPlaylist(playlistId: String, song: Song) {
+        viewModelScope.launch {
+            try {
+                val added = prefs.addSongToPlaylist(playlistId, song)
+                if (!added) {
+                    showError("歌曲已在歌单中")
+                }
+            } catch (e: Exception) {
+                AppLog.e("NASMusic", "addSongToPlaylist failed", e)
+                showError("添加到歌单失败: ${e.message?.take(50)}")
+            }
+        }
+    }
+
+    /**
+     * 从本地歌单移除歌曲
+     */
+    fun removeSongFromPlaylist(playlistId: String, songId: String) {
+        viewModelScope.launch {
+            try {
+                prefs.removeSongFromPlaylist(playlistId, songId)
+            } catch (e: Exception) {
+                AppLog.e("NASMusic", "removeSongFromPlaylist failed", e)
+                showError("从歌单移除失败: ${e.message?.take(50)}")
+            }
+        }
+    }
+
+    /**
+     * 播放整个本地歌单（含网络歌曲时自动解析 streamUrl）
+     */
+    fun playLocalPlaylist(playlist: LocalPlaylist) {
+        if (playlist.songs.isEmpty()) return
+        playQueue(playlist.songs, 0)
+        navigateTo(Screen.NowPlaying)
+    }
+
+    // --- 数据备份（设置页入口，含服务器地址但不含密码）---
+
+    /** 当前可用的备份文件列表（按修改时间倒序） */
+    private val _backupFiles = MutableStateFlow<List<BackupFileUtils.BackupFile>>(emptyList())
+    val backupFiles: StateFlow<List<BackupFileUtils.BackupFile>> = _backupFiles.asStateFlow()
+
+    /** 备份操作结果消息（导出成功/失败、导入成功/失败） */
+    private val _backupMessage = MutableStateFlow<String?>(null)
+    val backupMessage: StateFlow<String?> = _backupMessage.asStateFlow()
+
+    /** 刷新备份文件列表（进入设置页时调用） */
+    fun refreshBackupFiles() {
+        viewModelScope.launch {
+            _backupFiles.value = BackupFileUtils.listBackups(getApplication())
+        }
+    }
+
+    /** 导出完整备份到 Downloads/NASMusic/（含服务器地址，不含密码/Token） */
+    fun exportBackup() {
+        viewModelScope.launch {
+            try {
+                val data = prefs.exportBackupData()
+                val json = Gson().toJson(data)
+                val result = BackupFileUtils.export(getApplication(), json)
+                result.onSuccess { fileName ->
+                    _backupFiles.value = BackupFileUtils.listBackups(getApplication())
+                    _backupMessage.value = "备份成功：$fileName"
+                }.onFailure { e ->
+                    AppLog.e("NASMusic", "exportBackup failed", e)
+                    _backupMessage.value = "备份失败：${e.message?.take(60) ?: "未知错误"}"
+                }
+            } catch (e: Exception) {
+                AppLog.e("NASMusic", "exportBackup failed", e)
+                _backupMessage.value = "备份失败：${e.message?.take(60) ?: "未知错误"}"
+            }
+        }
+    }
+
+    /**
+     * 从指定备份文件恢复数据
+     * 恢复后服务器未连接（密码不备份），需重新连接
+     */
+    fun importBackup(uri: Uri) {
+        viewModelScope.launch {
+            try {
+                val json = BackupFileUtils.read(getApplication(), uri).getOrThrow()
+                val data = Gson().fromJson(json, AppPreferences.BackupData::class.java)
+                prefs.importBackupData(data)
+                // 刷新受备份影响的 UI 状态
+                refreshAfterImport()
+                _backupMessage.value = "恢复成功，请重新连接服务器"
+            } catch (e: Exception) {
+                AppLog.e("NASMusic", "importBackup failed", e)
+                _backupMessage.value = "恢复失败：${e.message?.take(60) ?: "未知错误"}"
+            }
+        }
+    }
+
+    /** 导入备份后刷新相关 StateFlow（收藏、歌单、队列、统计等由 prefs Flow 自动更新） */
+    private fun refreshAfterImport() {
+        // 服务器连接状态保持断开（密码不备份），其余由 collect 自动同步
+        _backupFiles.value = BackupFileUtils.listBackups(getApplication())
+    }
+
+    /** 删除指定备份文件 */
+    fun deleteBackup(uri: Uri) {
+        viewModelScope.launch {
+            try {
+                val result = BackupFileUtils.delete(getApplication(), uri)
+                _backupFiles.value = BackupFileUtils.listBackups(getApplication())
+                result.onSuccess {
+                    _backupMessage.value = "备份已删除"
+                }.onFailure { e ->
+                    AppLog.e("NASMusic", "deleteBackup failed", e)
+                    _backupMessage.value = "删除失败：${e.message?.take(60) ?: "未知错误"}"
+                }
+            } catch (e: Exception) {
+                AppLog.e("NASMusic", "deleteBackup failed", e)
+                _backupMessage.value = "删除失败：${e.message?.take(60) ?: "未知错误"}"
+            }
+        }
+    }
+
+    /** 消费备份结果消息（UI 显示后调用） */
+    fun consumeBackupMessage() {
+        _backupMessage.value = null
+    }
 
     // --- B-2 最近播放 & 播放次数 ---
     fun recordPlay(song: Song) {

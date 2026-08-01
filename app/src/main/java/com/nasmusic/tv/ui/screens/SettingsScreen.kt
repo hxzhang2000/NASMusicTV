@@ -1,5 +1,6 @@
 package com.nasmusic.tv.ui.screens
 
+import android.net.Uri
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -25,6 +26,7 @@ import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.material.icons.filled.Audiotrack
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -63,6 +65,7 @@ private enum class SettingsSection(val titleRes: Int) {
     CACHE(R.string.settings_cache),
     NETWORK(R.string.settings_network),
     COVER(R.string.settings_cover),
+    DATA(R.string.settings_data),
     ABOUT(R.string.settings_about)
 }
 
@@ -97,6 +100,14 @@ fun SettingsScreen(
     // 可视化频谱主题
     visualizerTheme: VisualizerTheme = VisualizerTheme.COLOR_FLOW,
     onChangeVisualizerTheme: (VisualizerTheme) -> Unit = {},
+    // 数据管理（备份/恢复）
+    backupFiles: List<com.nasmusic.tv.util.BackupFileUtils.BackupFile> = emptyList(),
+    backupMessage: String? = null,
+    onRefreshBackupFiles: (() -> Unit)? = null,
+    onExportBackup: (() -> Unit)? = null,
+    onImportBackup: ((Uri) -> Unit)? = null,
+    onDeleteBackup: ((Uri) -> Unit)? = null,
+    onConsumeBackupMessage: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     var activeSection by remember { mutableStateOf(SettingsSection.GENERAL) }
@@ -112,6 +123,24 @@ fun SettingsScreen(
 
     // 天气 API Key 编辑对话框状态
     var showWeatherApiKeyDialog by remember { mutableStateOf(false) }
+
+    // 待删除的备份文件（非空时显示确认弹窗）
+    var backupToDelete by remember {
+        mutableStateOf<com.nasmusic.tv.util.BackupFileUtils.BackupFile?>(null)
+    }
+
+    // 进入"数据管理"分区时刷新备份文件列表
+    LaunchedEffect(activeSection) {
+        if (activeSection == SettingsSection.DATA) onRefreshBackupFiles?.invoke()
+    }
+
+    // 备份操作结果消息显示后自动消费
+    LaunchedEffect(backupMessage) {
+        if (backupMessage != null) {
+            kotlinx.coroutines.delay(4000)
+            onConsumeBackupMessage?.invoke()
+        }
+    }
 
     // 提前解析字符串资源，供非 Composable 回调使用
     val metingUrlInvalidMsg = stringResource(R.string.settings_meting_api_url_invalid)
@@ -173,6 +202,7 @@ fun SettingsScreen(
                             SettingsSection.CACHE -> Icons.Default.Settings
                             SettingsSection.NETWORK -> Icons.Default.Settings
                             SettingsSection.COVER -> Icons.Default.Audiotrack
+                            SettingsSection.DATA -> Icons.Default.Info
                             SettingsSection.ABOUT -> Icons.Default.Info
                         }
                         Icon(imageVector = icon, contentDescription = null, tint = if (selected) NasMusicColors.Primary else NasMusicColors.TextSecondary, modifier = Modifier.size(18.dp))
@@ -638,6 +668,71 @@ fun SettingsScreen(
                         }
                     }
                 }
+                SettingsSection.DATA -> {
+                    item { SectionTitle(stringResource(R.string.settings_data)) }
+                    item {
+                        Text(
+                            text = stringResource(R.string.settings_data_desc),
+                            color = NasMusicColors.TextSecondary,
+                            fontSize = 14.sp,
+                            modifier = Modifier.padding(bottom = 16.dp, start = 4.dp)
+                        )
+                    }
+                    // 导出备份
+                    if (onExportBackup != null) {
+                        item {
+                            SettingActionButton(
+                                label = stringResource(R.string.settings_export_backup),
+                                description = stringResource(R.string.settings_export_backup_desc),
+                                onClick = { onExportBackup?.invoke() }
+                            )
+                        }
+                    }
+                    // 备份文件列表
+                    item { Spacer(modifier = Modifier.height(24.dp)) }
+                    item {
+                        Text(
+                            text = stringResource(R.string.settings_backup_list),
+                            color = NasMusicColors.Primary,
+                            fontSize = 18.sp,
+                            modifier = Modifier.padding(bottom = 8.dp, start = 4.dp)
+                        )
+                    }
+                    if (backupFiles.isEmpty()) {
+                        item {
+                            Text(
+                                text = stringResource(R.string.settings_backup_empty),
+                                color = NasMusicColors.TextSecondary,
+                                fontSize = 13.sp,
+                                modifier = Modifier.padding(start = 4.dp)
+                            )
+                        }
+                    } else {
+                        backupFiles.forEach { file ->
+                            item {
+                                BackupFileRow(
+                                    file = file,
+                                    onRestore = { onImportBackup?.invoke(file.uri) },
+                                    onDelete = { backupToDelete = file }
+                                )
+                            }
+                        }
+                    }
+                    // 从备份列表恢复（电视无系统文件选择器，恢复入口即上方备份文件列表）
+                    // 备份结果消息
+                    if (backupMessage != null) {
+                        item { Spacer(modifier = Modifier.height(16.dp)) }
+                        item {
+                            Text(
+                                text = backupMessage!!,
+                                color = if (backupMessage!!.startsWith("恢复") || backupMessage!!.startsWith("备份失败") || backupMessage!!.contains("失败"))
+                                    NasMusicColors.Warning else NasMusicColors.Primary,
+                                fontSize = 14.sp,
+                                modifier = Modifier.padding(start = 4.dp)
+                            )
+                        }
+                    }
+                }
             }
         }
     }
@@ -686,6 +781,87 @@ fun SettingsScreen(
                 metingUrlError = null
             }
         )
+    }
+
+    // 删除备份文件确认弹窗
+    backupToDelete?.let { file ->
+        androidx.compose.ui.window.Dialog(
+            onDismissRequest = { backupToDelete = null },
+            properties = androidx.compose.ui.window.DialogProperties(
+                dismissOnBackPress = false,
+                dismissOnClickOutside = false
+            )
+        ) {
+            androidx.activity.compose.BackHandler { backupToDelete = null }
+            Column(
+                modifier = Modifier
+                    .width(520.dp)
+                    .background(NasMusicColors.Surface, RoundedCornerShape(16.dp))
+                    .padding(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(
+                    text = stringResource(R.string.settings_delete_backup_confirm_title),
+                    color = NasMusicColors.Warning,
+                    fontSize = 18.sp
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                Text(
+                    text = stringResource(R.string.settings_delete_backup_confirm_message, file.displayName),
+                    color = NasMusicColors.TextPrimary,
+                    fontSize = 14.sp,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                )
+                Spacer(modifier = Modifier.height(20.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterHorizontally)
+                ) {
+                    FocusableSurface(
+                        onClick = { backupToDelete = null },
+                        modifier = Modifier.width(140.dp).height(44.dp),
+                        shape = RoundedCornerShape(10.dp),
+                        focusedScale = 1.08f,
+                        animationDurationMs = 150,
+                        containerColor = NasMusicColors.SurfaceVariant,
+                        contentColor = NasMusicColors.TextPrimary,
+                        focusedContainerColor = NasMusicColors.Primary.copy(alpha = 0.25f),
+                        focusedContentColor = NasMusicColors.TextPrimary
+                    ) {
+                        Text(
+                            text = stringResource(R.string.common_cancel),
+                            color = NasMusicColors.TextPrimary,
+                            fontSize = 14.sp,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                            modifier = Modifier.fillMaxSize().padding(vertical = 12.dp)
+                        )
+                    }
+                    FocusableSurface(
+                        onClick = {
+                            onDeleteBackup?.invoke(file.uri)
+                            backupToDelete = null
+                        },
+                        modifier = Modifier.width(140.dp).height(44.dp),
+                        shape = RoundedCornerShape(10.dp),
+                        focusedScale = 1.08f,
+                        animationDurationMs = 150,
+                        containerColor = NasMusicColors.Warning,
+                        contentColor = androidx.compose.ui.graphics.Color.Black,
+                        focusedContainerColor = NasMusicColors.Warning.copy(alpha = 0.85f),
+                        focusedContentColor = androidx.compose.ui.graphics.Color.Black,
+                        requestFocusOnLaunch = true
+                    ) {
+                        Text(
+                            text = stringResource(R.string.settings_delete_backup),
+                            color = androidx.compose.ui.graphics.Color.Black,
+                            fontSize = 14.sp,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                            modifier = Modifier.fillMaxSize().padding(vertical = 12.dp)
+                        )
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -837,6 +1013,87 @@ private fun SettingActionButton(
                 color = NasMusicColors.Primary,
                 fontSize = 14.sp
             )
+        }
+    }
+}
+
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+private fun BackupFileRow(
+    file: com.nasmusic.tv.util.BackupFileUtils.BackupFile,
+    onRestore: () -> Unit,
+    onDelete: (() -> Unit)? = null
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        FocusableSurface(
+            onClick = onRestore,
+            modifier = Modifier
+                .weight(1f)
+                .padding(end = 12.dp),
+            shape = RoundedCornerShape(12.dp),
+            focusedScale = 1.03f,
+            animationDurationMs = 250,
+            containerColor = NasMusicColors.Surface,
+            contentColor = NasMusicColors.TextPrimary,
+            focusedContainerColor = NasMusicColors.Primary.copy(alpha = 0.15f),
+            focusedContentColor = NasMusicColors.TextPrimary,
+            pressedScale = 0.98f,
+            focusBorderColor = NasMusicColors.FocusRing.copy(alpha = 0.6f)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 14.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Info,
+                    contentDescription = null,
+                    tint = NasMusicColors.Primary,
+                    modifier = Modifier.size(18.dp)
+                )
+                Spacer(modifier = Modifier.width(12.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(text = file.displayName, color = NasMusicColors.TextPrimary, fontSize = 15.sp)
+                    Text(
+                        text = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.getDefault())
+                            .format(java.util.Date(file.lastModified)),
+                        color = NasMusicColors.TextSecondary,
+                        fontSize = 12.sp
+                    )
+                }
+                Text(
+                    text = stringResource(R.string.settings_import_backup),
+                    color = NasMusicColors.Primary,
+                    fontSize = 13.sp
+                )
+            }
+        }
+        if (onDelete != null) {
+            FocusableSurface(
+                onClick = onDelete,
+                modifier = Modifier.size(64.dp),
+                shape = RoundedCornerShape(12.dp),
+                focusedScale = 1.06f,
+                animationDurationMs = 200,
+                containerColor = NasMusicColors.Surface,
+                contentColor = NasMusicColors.Warning,
+                focusedContainerColor = NasMusicColors.Warning.copy(alpha = 0.18f),
+                focusedContentColor = NasMusicColors.Warning,
+                pressedScale = 0.96f,
+                focusBorderColor = NasMusicColors.FocusRing.copy(alpha = 0.6f)
+            ) {
+                Text(
+                    text = stringResource(R.string.settings_delete_backup),
+                    color = NasMusicColors.Warning,
+                    fontSize = 13.sp,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                    modifier = Modifier.fillMaxSize().padding(vertical = 20.dp)
+                )
+            }
         }
     }
 }

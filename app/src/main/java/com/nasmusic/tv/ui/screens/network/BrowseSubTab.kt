@@ -72,6 +72,7 @@ fun BrowseSubTab(
     onPlaySong: (Song) -> Unit,
     onToggleFavorite: (Song) -> Unit,
     onToggleQueue: (Song) -> Unit,
+    onAddToPlaylist: (Song) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val listState = rememberLazyGridState()
@@ -248,6 +249,7 @@ fun BrowseSubTab(
                     onToggleFavorite = { onToggleFavorite(song) },
                     isInQueue = song.id in queueSongIds,
                     onToggleQueue = { onToggleQueue(song) },
+                    onAddToPlaylist = { onAddToPlaylist(song) },
                     focusRequester = if (index == 0) null else null // 第一个自动聚焦
                 )
             }

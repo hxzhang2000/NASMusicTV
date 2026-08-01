@@ -69,6 +69,7 @@ fun SearchSubTab(
     onPlaySong: (Song) -> Unit,
     onToggleFavorite: (Song) -> Unit,
     onToggleQueue: (Song) -> Unit = {},
+    onAddToPlaylist: (Song) -> Unit = {},
     onPlayAll: () -> Unit = {},
     onShuffleSearch: () -> Unit = {},
     onAddAllToQueue: () -> Unit = {},
@@ -219,6 +220,7 @@ fun SearchSubTab(
                             onToggleFavorite = { onToggleFavorite(song) },
                             isInQueue = song.id in queueSongIds,
                             onToggleQueue = { onToggleQueue(song) },
+                            onAddToPlaylist = { onAddToPlaylist(song) },
                             focusRequester = if (index == 0) firstItemFocusRequester else null
                         )
                     }

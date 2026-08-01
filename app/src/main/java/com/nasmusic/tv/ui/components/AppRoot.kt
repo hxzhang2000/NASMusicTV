@@ -16,7 +16,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -30,6 +32,7 @@ import com.nasmusic.tv.R
 import com.nasmusic.tv.data.model.Album
 import com.nasmusic.tv.data.model.EqualizerPreset
 import com.nasmusic.tv.data.model.HomeDashboardData
+import com.nasmusic.tv.data.model.LocalPlaylist
 import com.nasmusic.tv.data.model.ServerConfig
 import com.nasmusic.tv.data.model.Song
 import com.nasmusic.tv.data.model.VisualizerTheme
@@ -41,10 +44,12 @@ import com.nasmusic.tv.ui.screens.EqualizerScreen
 import com.nasmusic.tv.ui.screens.HomeScreen
 import com.nasmusic.tv.ui.screens.LibraryScreen
 import com.nasmusic.tv.ui.screens.LibraryTab
+import com.nasmusic.tv.ui.screens.MineScreen
 import com.nasmusic.tv.ui.screens.NetworkPlaylistDetailScreen
 import com.nasmusic.tv.ui.screens.network.NetworkMusicContainer
 import com.nasmusic.tv.ui.screens.NowPlayingScreen
 import com.nasmusic.tv.ui.screens.PlaylistManagementScreen
+import com.nasmusic.tv.ui.screens.PlaylistPickerDialog
 import com.nasmusic.tv.ui.screens.QueueScreen
 import com.nasmusic.tv.ui.screens.ServerConnectScreen
 import com.nasmusic.tv.ui.screens.SettingsScreen
@@ -144,6 +149,11 @@ fun AppRoot(
                     label = stringResource(R.string.nav_library),
                     selected = currentScreen == Screen.Library,
                     onClick = { viewModel.navigateTo(Screen.Library) }
+                )
+                NavItem(
+                    label = stringResource(R.string.nav_mine),
+                    selected = currentScreen == Screen.Mine,
+                    onClick = { viewModel.navigateTo(Screen.Mine) }
                 )
                 NavItem(
                     label = stringResource(R.string.nav_queue),
@@ -281,7 +291,6 @@ fun AppRoot(
                 Screen.Library -> {
                     val genres by viewModel.genres.collectAsState(initial = UiState.Success(emptyList()))
                     val favoriteIds by viewModel.favoriteIds.collectAsState(initial = emptySet())
-                    val favoriteSongsState by viewModel.favoriteSongs.collectAsState(initial = UiState.Success(emptyList()))
                     val recentSongIds = viewModel.recentSongIds.collectAsState(initial = emptyList())
                     val playCounts by viewModel.playCounts.collectAsState(initial = emptyMap())
                     val artistsState by viewModel.artists.collectAsState(initial = UiState.Success(emptyList()))
@@ -291,7 +300,6 @@ fun AppRoot(
                     val albumList = albums.dataOrNull() ?: emptyList()
                     val songList = songs.dataOrNull() ?: emptyList()
                     val genreList = genres.dataOrNull() ?: emptyList()
-                    val favoriteSongsList = favoriteSongsState.dataOrNull() ?: emptyList()
                     val artistsList = artistsState.dataOrNull() ?: emptyList()
                     val yearsList = yearsState.dataOrNull() ?: emptyList()
                     val recentSongsState by viewModel.recentSongs.collectAsState(initial = UiState.Success(emptyList()))
@@ -299,11 +307,8 @@ fun AppRoot(
                     val searchResultsList = searchResultsState.dataOrNull() ?: emptyList()
                     val isSearching = searchResultsState is UiState.Loading
                     val libraryActiveTab by viewModel.libraryActiveTab.collectAsState()
-                    val playlistsState by viewModel.playlists.collectAsState(initial = UiState.Success(emptyList()))
-                    val playlistsList = playlistsState.dataOrNull() ?: emptyList()
-                    val playlistSongsState by viewModel.selectedPlaylistSongs.collectAsState(initial = UiState.Success(emptyList()))
-                    val playlistSongsList = playlistSongsState.dataOrNull() ?: emptyList()
-                    val isPlaylistLoading = playlistsState is UiState.Loading || playlistSongsState is UiState.Loading
+                    val localPlaylists by viewModel.localPlaylists.collectAsState(initial = emptyList())
+                    var pickerSong by remember { mutableStateOf<Song?>(null) }
                     LibraryScreen(
                         albums = albumList,
                         songs = songList,
@@ -311,7 +316,6 @@ fun AppRoot(
                         isConnected = isConnected,
                         genres = genreList,
                         favoriteIds = favoriteIds,
-                        favoriteSongs = favoriteSongsList,
                         recentSongIds = recentSongIds.value,
                         recentSongs = recentSongsList,
                         playCounts = playCounts,
@@ -350,6 +354,7 @@ fun AppRoot(
                         queueSongIds = viewModel.queueSongIds.collectAsState(initial = emptySet()).value,
                         onToggleQueue = { song -> viewModel.toggleQueueSong(song) },
                         onToggleFavorite = { song -> viewModel.toggleFavorite(song) },
+                        onAddToPlaylist = { song -> pickerSong = song },
                         onOpenAlbumDetail = { album -> viewModel.openAlbumDetail(album) },
                         onOpenArtistDetail = { artist -> viewModel.openArtistDetail(artist) },
                         onSongsByGenre = { genre, callback -> viewModel.getSongsByGenre(genre, callback) },
@@ -364,17 +369,55 @@ fun AppRoot(
                         playStatistics = viewModel.playStatistics.collectAsState(initial = com.nasmusic.tv.data.model.PlayStatistics()).value,
                         onClearPlayRecords = { viewModel.clearPlayRecords() },
                         activeTab = libraryActiveTab,
-                        onTabSelected = { tab -> viewModel.selectLibraryTab(tab) },
-                        // 播放列表
-                        playlists = playlistsList,
-                        playlistSongs = playlistSongsList,
-                        isPlaylistLoading = isPlaylistLoading,
-                        onSelectPlaylist = { playlist -> viewModel.selectPlaylist(playlist) },
-                        onCreatePlaylist = { name -> viewModel.createPlaylist(name) },
-                        onDeletePlaylist = { playlist -> viewModel.deletePlaylist(playlist) },
-                        onPlayPlaylist = { playlist -> viewModel.playPlaylist(playlist) },
-                        onRemoveFromPlaylist = { songId -> viewModel.removeFromPlaylist(songId) },
-                        onLoadPlaylists = { viewModel.loadPlaylists() }
+                        onTabSelected = { tab -> viewModel.selectLibraryTab(tab) }
+                    )
+                    // 加入歌单选择弹窗
+                    pickerSong?.let { song ->
+                        PlaylistPickerDialog(
+                            playlists = localPlaylists,
+                            onPick = { playlist ->
+                                viewModel.addSongToPlaylist(playlist.id, song)
+                                pickerSong = null
+                            },
+                            onCreate = { name ->
+                                if (name.isNotBlank()) {
+                                    viewModel.createLocalPlaylist(name)
+                                }
+                            },
+                            onDismiss = { pickerSong = null }
+                        )
+                    }
+                }
+                Screen.Mine -> {
+                    val favoriteSongsState by viewModel.favoriteSongs.collectAsState(initial = UiState.Success(emptyList()))
+                    val networkFavoriteSongs by viewModel.networkFavoriteSongs.collectAsState(initial = emptyList())
+                    val localPlaylists by viewModel.localPlaylists.collectAsState(initial = emptyList())
+                    val queueSongIds by viewModel.queueSongIds.collectAsState(initial = emptySet())
+                    MineScreen(
+                        favoriteSongsState = favoriteSongsState,
+                        networkFavoriteSongs = networkFavoriteSongs,
+                        localPlaylists = localPlaylists,
+                        queueSongIds = queueSongIds,
+                        onPlaySong = { song ->
+                            // 网络歌曲先解析播放链接，本地歌曲直接播放
+                            if (song.isNetworkSong) {
+                                viewModel.playNetworkSong(song)
+                            } else {
+                                viewModel.playQueue(listOf(song))
+                            }
+                            viewModel.navigateTo(Screen.NowPlaying)
+                        },
+                        onToggleFavorite = { song ->
+                            if (song.isNetworkSong) viewModel.toggleNetworkFavorite(song)
+                            else viewModel.toggleFavorite(song)
+                        },
+                        onToggleQueue = { song -> viewModel.toggleQueueSong(song) },
+                        onCreatePlaylist = { name -> viewModel.createLocalPlaylist(name) },
+                        onRenamePlaylist = { id, newName -> viewModel.renameLocalPlaylist(id, newName) },
+                        onDeletePlaylist = { id -> viewModel.deleteLocalPlaylist(id) },
+                        onPlayPlaylist = { playlist -> viewModel.playLocalPlaylist(playlist) },
+                        onRemoveSongFromPlaylist = { playlistId, songId -> viewModel.removeSongFromPlaylist(playlistId, songId) },
+                        onAddSongToPlaylist = { playlistId, song -> viewModel.addSongToPlaylist(playlistId, song) }
                     )
                 }
                 Screen.Queue -> {
@@ -429,6 +472,14 @@ fun AppRoot(
                         onToggleSpectrum = { viewModel.updateSpectrumEnabled(it) },
                         visualizerTheme = settings.visualizerTheme,
                         onChangeVisualizerTheme = { viewModel.updateVisualizerTheme(it) },
+                        // 数据管理（备份/恢复）
+                        backupFiles = viewModel.backupFiles.collectAsState(initial = emptyList()).value,
+                        backupMessage = viewModel.backupMessage.collectAsState(initial = null).value,
+                        onRefreshBackupFiles = { viewModel.refreshBackupFiles() },
+                        onExportBackup = { viewModel.exportBackup() },
+                        onImportBackup = { uri -> viewModel.importBackup(uri) },
+                        onDeleteBackup = { uri -> viewModel.deleteBackup(uri) },
+                        onConsumeBackupMessage = { viewModel.consumeBackupMessage() },
                     // 封面滤镜设置
                     coverFilterEnabled = coverFilterEnabled,
                     coverFilterBlurRadius = coverFilterBlurRadius,
@@ -547,6 +598,8 @@ fun AppRoot(
                     val currentWeatherMood by viewModel.currentWeatherMood.collectAsState(initial = com.nasmusic.tv.data.model.WeatherMood.SUNNY)
                     val weatherLoading by viewModel.weatherLoading.collectAsState(initial = false)
                     val weatherError by viewModel.weatherError.collectAsState(initial = null)
+                    val localPlaylists by viewModel.localPlaylists.collectAsState(initial = emptyList())
+                    var pickerSong by remember { mutableStateOf<Song?>(null) }
                     NetworkMusicContainer(
                         currentSubTab = currentNetworkSubTab,
                         currentMusicSource = currentMusicSource,
@@ -569,6 +622,7 @@ fun AppRoot(
                         },
                         onToggleNetworkFavorite = { song -> viewModel.toggleNetworkFavorite(song) },
                         onToggleQueue = { song -> viewModel.toggleQueueSong(song) },
+                        onAddToPlaylist = { song -> pickerSong = song },
                         onPlayAllSongs = { songs ->
                             viewModel.playQueue(songs, 0)
                             viewModel.navigateTo(Screen.NowPlaying)
@@ -605,20 +659,36 @@ fun AppRoot(
                         },
                         onNavigateToScreen = { action ->
                             when (action) {
-                                "favorites" -> {
-                                    viewModel.selectNetworkSubTab(com.nasmusic.tv.data.model.NetworkSubTab.DISCOVER)
-                                }
+                                "favorites" -> viewModel.navigateTo(Screen.Mine)
                                 "queue" -> viewModel.navigateTo(Screen.Queue)
                                 "radio" -> viewModel.playPrivateRadio()
                             }
                         }
                     )
+                    // 加入歌单选择弹窗（网络歌曲）
+                    pickerSong?.let { song ->
+                        PlaylistPickerDialog(
+                            playlists = localPlaylists,
+                            onPick = { playlist ->
+                                viewModel.addSongToPlaylist(playlist.id, song)
+                                pickerSong = null
+                            },
+                            onCreate = { name ->
+                                if (name.isNotBlank()) {
+                                    viewModel.createLocalPlaylist(name)
+                                }
+                            },
+                            onDismiss = { pickerSong = null }
+                        )
+                    }
                 }
                 Screen.NetworkPlaylistDetail -> {
                     val playlistSongs by viewModel.playlistSongs.collectAsState(initial = emptyList())
                     val playlistTitle by viewModel.selectedPlaylistTitle.collectAsState(initial = "")
                     val networkFavoriteIds by viewModel.networkFavoriteIds.collectAsState(initial = emptySet())
                     val queueSongIds by viewModel.queueSongIds.collectAsState(initial = emptySet())
+                    val localPlaylists by viewModel.localPlaylists.collectAsState(initial = emptyList())
+                    var pickerSong by remember { mutableStateOf<Song?>(null) }
                     NetworkPlaylistDetailScreen(
                         playlistSongs = playlistSongs,
                         playlistTitle = playlistTitle,
@@ -634,8 +704,25 @@ fun AppRoot(
                         onToggleQueue = { song -> viewModel.toggleQueueSong(song) },
                         networkFavoriteIds = networkFavoriteIds,
                         onToggleFavorite = { song -> viewModel.toggleNetworkFavorite(song) },
+                        onAddToPlaylist = { song -> pickerSong = song },
                         onBack = { viewModel.navigateTo(Screen.Network) }
                     )
+                    // 加入歌单选择弹窗（网络歌单详情）
+                    pickerSong?.let { song ->
+                        PlaylistPickerDialog(
+                            playlists = localPlaylists,
+                            onPick = { playlist ->
+                                viewModel.addSongToPlaylist(playlist.id, song)
+                                pickerSong = null
+                            },
+                            onCreate = { name ->
+                                if (name.isNotBlank()) {
+                                    viewModel.createLocalPlaylist(name)
+                                }
+                            },
+                            onDismiss = { pickerSong = null }
+                        )
+                    }
                 }
             }
         }

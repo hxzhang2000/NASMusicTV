@@ -52,6 +52,7 @@ fun NetworkPlaylistDetailScreen(
     onToggleQueue: (Song) -> Unit = {},
     networkFavoriteIds: Set<String> = emptySet(),
     onToggleFavorite: (Song) -> Unit = {},
+    onAddToPlaylist: (Song) -> Unit = {},
     onBack: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -163,6 +164,7 @@ fun NetworkPlaylistDetailScreen(
                         onToggleQueue = { onToggleQueue(song) },
                         isFavorited = song.id in networkFavoriteIds,
                         onToggleFavorite = { onToggleFavorite(song) },
+                        onAddToPlaylist = { onAddToPlaylist(song) },
                         focusRequester = if (index == 0) firstItemFocusRequester else null
                     )
                 }

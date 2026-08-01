@@ -78,6 +78,7 @@ fun NetworkMusicContainer(
     onPlayNetworkSong: (Song) -> Unit,
     onToggleNetworkFavorite: (Song) -> Unit,
     onToggleQueue: (Song) -> Unit,
+    onAddToPlaylist: (Song) -> Unit = {},
     onPlayAllSongs: (List<Song>) -> Unit,
     onPlayAllSearch: () -> Unit = {},
     onShuffleSearch: () -> Unit = {},
@@ -191,6 +192,7 @@ fun NetworkMusicContainer(
                         onPlayNetworkSong = onPlayNetworkSong,
                         onToggleNetworkFavorite = onToggleNetworkFavorite,
                         onToggleQueue = onToggleQueue,
+                        onAddToPlaylist = onAddToPlaylist,
                         onPlayAllSongs = onPlayAllSongs,
                         onLoadPlaylistDetail = onLoadPlaylistDetail,
                         onNavigateToPlaylistDetail = onNavigateToPlaylistDetail,
@@ -213,7 +215,8 @@ fun NetworkMusicContainer(
                         onSwitchMood = onSwitchWeatherMood,
                         onRefresh = onRefreshWeather,
                         onToggleFavorite = onToggleNetworkFavorite,
-                        onToggleQueue = onToggleQueue
+                        onToggleQueue = onToggleQueue,
+                        onAddToPlaylist = onAddToPlaylist
                     )
                 }
                 NetworkSubTab.SEARCH -> {
@@ -230,6 +233,7 @@ fun NetworkMusicContainer(
                         },
                         onToggleFavorite = onToggleNetworkFavorite,
                         onToggleQueue = onToggleQueue,
+                        onAddToPlaylist = onAddToPlaylist,
                         onPlayAll = onPlayAllSearch,
                         onShuffleSearch = onShuffleSearch,
                         onAddAllToQueue = onAddAllToQueue
@@ -247,7 +251,8 @@ fun NetworkMusicContainer(
                         onPlayAll = onPlayAllBrowse,
                         onPlaySong = onPlayNetworkSong,
                         onToggleFavorite = onToggleNetworkFavorite,
-                        onToggleQueue = onToggleQueue
+                        onToggleQueue = onToggleQueue,
+                        onAddToPlaylist = onAddToPlaylist
                     )
                 }
             }

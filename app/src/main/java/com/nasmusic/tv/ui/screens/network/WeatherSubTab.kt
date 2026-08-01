@@ -84,6 +84,7 @@ fun WeatherSubTab(
     onRefresh: () -> Unit = {},
     onToggleFavorite: ((Song) -> Unit)? = null,
     onToggleQueue: ((Song) -> Unit)? = null,
+    onAddToPlaylist: (Song) -> Unit = {},
     onNavigateToNowPlaying: () -> Unit = {}
 ) {
     val listState = rememberLazyGridState()
@@ -160,7 +161,8 @@ fun WeatherSubTab(
                     isFavorited = song.id in networkFavoriteIds,
                     isInQueue = song.id in queueSongIds,
                     onToggleFavorite = onToggleFavorite?.let { { it(song) } },
-                    onToggleQueue = onToggleQueue?.let { { it(song) } }
+                    onToggleQueue = onToggleQueue?.let { { it(song) } },
+                    onAddToPlaylist = { onAddToPlaylist(song) }
                 )
             }
         } else if (!isLoading) {
