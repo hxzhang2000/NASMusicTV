@@ -253,7 +253,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     private val _networkPlaylists = MutableStateFlow<List<Pair<Playlist, List<Song>>>>(emptyList())
     val networkPlaylists: StateFlow<List<Pair<Playlist, List<Song>>>> = _networkPlaylists.asStateFlow()
 
-    // 榜单轮换状态（Phase 3）
+    // 网络歌单轮换索引（发现页推荐歌单数据来源）
     private val _chartsRotationIndex = MutableStateFlow(0)
     val chartsRotationIndex: StateFlow<Int> = _chartsRotationIndex.asStateFlow()
 
@@ -1836,28 +1836,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     private val CHART_PAGE_SIZE = 6
 
     /**
-     * 获取当前时间对应的轮换起始索引（基于当天日期）
-     */
-    private fun dailyRotationStart(): Int {
-        val calendar = java.util.Calendar.getInstance()
-        val dayOfYear = calendar.get(java.util.Calendar.DAY_OF_YEAR)
-        return dayOfYear % preconfiguredPlaylists.size
-    }
-
-    /**
-     * 换一批：将榜单轮换索引 +1，重新加载歌单
-     */
-    fun refreshCharts() {
-        val next = (_chartsRotationIndex.value + 1) % preconfiguredPlaylists.size
-        _chartsRotationIndex.value = next
-        loadNetworkPlaylists()
-    }
-
-    /**
      * 加载所有预配置的网络歌单（分页轮换）
      *
-     * 默认从 dailyRotationStart() 位置开始取 CHART_PAGE_SIZE 个歌单，
-     * 如果 refreshCharts() 调用过则从上一次轮换索引继续。
+     * 从 _chartsRotationIndex 位置开始取 CHART_PAGE_SIZE 个歌单。
      */
     fun loadNetworkPlaylists() {
         viewModelScope.launch {

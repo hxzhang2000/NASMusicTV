@@ -79,7 +79,6 @@
     <string name="network_no_results">未找到相关网络音乐</string>
     <string name="network_tab_discover">发现</string>
     <string name="network_tab_weather">天气</string>
-    <string name="network_tab_charts">榜单</string>
     <string name="network_tab_search">搜索</string>
     <string name="network_tab_browse">浏览</string>
     <string name="network_weather_coming_soon">天气电台功能即将上线</string>
@@ -92,9 +91,6 @@
     <string name="settings_weather_api_key_desc">当 Open-Meteo 不可用时自动切换到此 API（免费注册：openweathermap.org）</string>
     <string name="settings_weather_api_key_hint">请输入 API Key（留空=关闭）</string>
     <string name="settings_weather_api_key_edit">编辑</string>
-    <string name="network_charts_coming_soon">榜单功能即将上线</string>
-    <string name="network_charts_refresh">换一批</string>
-    <string name="network_charts_count">共 %d 个榜单</string>
     <string name="network_discover_weather_entry">天气电台</string>
     <string name="network_discover_weather_desc">根据当前天气匹配适合的音乐，听歌更有氛围</string>
     <string name="network_discover_feature_playlist">推荐歌单</string>

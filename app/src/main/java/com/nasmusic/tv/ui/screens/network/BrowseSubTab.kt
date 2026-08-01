@@ -14,10 +14,13 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.itemsIndexed as gridItemsIndexed
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -71,7 +74,7 @@ fun BrowseSubTab(
     onToggleQueue: (Song) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val listState = rememberLazyListState()
+    val listState = rememberLazyGridState()
     val firstItemFocusRequester = remember { FocusRequester() }
     val scope = rememberCoroutineScope()
     val listBackHandler = LocalListBackHandler.current
@@ -102,14 +105,16 @@ fun BrowseSubTab(
         opt != null && opt.label != "所有"
     }
 
-    LazyColumn(
+    LazyVerticalGrid(
+        columns = GridCells.Fixed(2),
         state = listState,
         modifier = modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         // 各维度筛选行
         dimensions.forEachIndexed { dimIdx, dimension ->
-            item(key = "dim_${dimension.name}") {
+            item(key = "dim_${dimension.name}", span = { GridItemSpan(2) }) {
                 DimensionRow(
                     dimension = dimension,
                     selectedIndex = selections.getOrNull(dimIdx) ?: 0,
@@ -122,7 +127,7 @@ fun BrowseSubTab(
         }
 
         // 操作栏：播放全部 + 换一批
-        item(key = "action_bar") {
+        item(key = "action_bar", span = { GridItemSpan(2) }) {
             Row(
                 modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
                 verticalAlignment = Alignment.CenterVertically
@@ -176,7 +181,7 @@ fun BrowseSubTab(
         }
 
         // 内容区域
-        item(key = "content") {
+        item(key = "content", span = { GridItemSpan(2) }) {
             when {
                 isSearching -> {
                     Box(
@@ -234,7 +239,7 @@ fun BrowseSubTab(
 
         // 歌曲列表
         if (results != null && results.isNotEmpty()) {
-            itemsIndexed(results, key = { _, song -> song.id }) { index, song ->
+            gridItemsIndexed(results, key = { _, song -> song.id }) { index, song ->
                 SongRow(
                     song = song,
                     onClick = { onPlaySong(song) },
@@ -248,7 +253,7 @@ fun BrowseSubTab(
         }
 
         // 底部间距
-        item(key = "bottom_spacer") {
+        item(key = "bottom_spacer", span = { GridItemSpan(2) }) {
             Spacer(modifier = Modifier.height(16.dp))
         }
     }

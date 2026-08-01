@@ -13,9 +13,11 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.itemsIndexed
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -73,7 +75,7 @@ fun SearchSubTab(
     modifier: Modifier = Modifier
 ) {
     var showSearchDialog by remember { mutableStateOf(false) }
-    val listState = rememberLazyListState()
+    val listState = rememberLazyGridState()
     val firstItemFocusRequester = remember { FocusRequester() }
     val scope = rememberCoroutineScope()
     val listBackHandler = LocalListBackHandler.current
@@ -135,14 +137,16 @@ fun SearchSubTab(
             }
             searchKeyword.isNotBlank() -> {
                 // 搜索结果
-                LazyColumn(
+                LazyVerticalGrid(
+                    columns = GridCells.Fixed(2),
                     state = listState,
                     modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     // 操作栏：播放全部 / 全部加入列表 / 换一批（去重由 ViewModel 处理）
                     if (searchResults.isNotEmpty()) {
-                        item(key = "search_action_bar") {
+                        item(key = "search_action_bar", span = { GridItemSpan(2) }) {
                             Row(
                                 modifier = Modifier.fillMaxWidth().padding(top = 4.dp, bottom = 2.dp),
                                 verticalAlignment = Alignment.CenterVertically

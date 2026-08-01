@@ -45,7 +45,7 @@ import kotlinx.coroutines.launch
  * 页面结构：
  * ┌──────────────────────────────────────────┐
  * │  网络音乐                                  │
- * │  [发现] [天气] [榜单] [搜索]    [来源选择器]  │
+ * │  [发现] [天气] [搜索]    [来源选择器]  │
  * ├──────────────────────────────────────────┤
  * │                                          │
  * │           子 Tab 内容区域                    │
@@ -103,7 +103,6 @@ fun NetworkMusicContainer(
     onSelectBrowseOption: (Int, Int) -> Unit = { _, _ -> },
     onRefreshBrowse: () -> Unit = {},
     onPlayAllBrowse: () -> Unit = {},
-    onRefreshCharts: () -> Unit = {},
     onNavigateToScreen: (String) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
@@ -215,22 +214,6 @@ fun NetworkMusicContainer(
                         onRefresh = onRefreshWeather,
                         onToggleFavorite = onToggleNetworkFavorite,
                         onToggleQueue = onToggleQueue
-                    )
-                }
-                NetworkSubTab.CHARTS -> {
-                    ChartsContent(
-                        networkPlaylists = networkPlaylists,
-                        networkFavoriteIds = networkFavoriteIds,
-                        queueSongIds = queueSongIds,
-                        onPlayNetworkSong = onPlayNetworkSong,
-                        onToggleNetworkFavorite = onToggleNetworkFavorite,
-                        onToggleQueue = onToggleQueue,
-                        onPlayAllSongs = onPlayAllSongs,
-                        onRefreshCharts = onRefreshCharts,
-                        onNavigateToPlaylistDetail = { (playlist, songs) ->
-                            onLoadPlaylistDetail(playlist to songs)
-                            onNavigateToPlaylistDetail()
-                        }
                     )
                 }
                 NetworkSubTab.SEARCH -> {

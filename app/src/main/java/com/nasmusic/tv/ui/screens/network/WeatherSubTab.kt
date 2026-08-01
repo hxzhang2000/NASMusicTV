@@ -14,9 +14,11 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -84,7 +86,7 @@ fun WeatherSubTab(
     onToggleQueue: ((Song) -> Unit)? = null,
     onNavigateToNowPlaying: () -> Unit = {}
 ) {
-    val listState = rememberLazyListState()
+    val listState = rememberLazyGridState()
     val scope = rememberCoroutineScope()
     val listBackHandler = LocalListBackHandler.current
 
@@ -103,13 +105,15 @@ fun WeatherSubTab(
         onDispose { listBackHandler.value = null }
     }
 
-    LazyColumn(
+    LazyVerticalGrid(
+        columns = GridCells.Fixed(2),
         state = listState,
         modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
         // 1. 天气信息展示区
-        item(key = "weather_info") {
+        item(key = "weather_info", span = { GridItemSpan(2) }) {
             WeatherInfoCard(
                 weatherData = weatherData,
                 currentMood = currentMood,
@@ -121,13 +125,13 @@ fun WeatherSubTab(
 
         // 2. 天气预报（仅当有预报数据时显示）
         if (forecast.isNotEmpty()) {
-            item(key = "forecast") {
+            item(key = "forecast", span = { GridItemSpan(2) }) {
                 ForecastRow(forecast = forecast)
             }
         }
 
         // 3. Mood 快捷切换行
-        item(key = "mood_switcher") {
+        item(key = "mood_switcher", span = { GridItemSpan(2) }) {
             MoodSwitcherRow(
                 moods = WeatherMood.quickSwitches(),
                 selectedMood = currentMood,
@@ -136,7 +140,7 @@ fun WeatherSubTab(
         }
 
         // 4. 操作栏：全部播放 + 刷新
-        item(key = "action_bar") {
+        item(key = "action_bar", span = { GridItemSpan(2) }) {
             ActionBar(
                 queue = weatherRadioQueue,
                 isLoading = isLoading,
@@ -145,7 +149,7 @@ fun WeatherSubTab(
             )
         }
 
-        // 5. 歌曲列表（含封面，与列表合二为一）
+        // 5. 歌曲列表（含封面，与列表合二为一，两列展示）
         val songs = weatherRadioQueue?.songs ?: emptyList()
         if (songs.isNotEmpty()) {
             items(songs, key = { "wr_${it.id}" }) { song ->
@@ -159,7 +163,7 @@ fun WeatherSubTab(
                 )
             }
         } else if (!isLoading) {
-            item(key = "empty_hint") {
+            item(key = "empty_hint", span = { GridItemSpan(2) }) {
                 Box(
                     modifier = Modifier.fillMaxWidth().padding(top = 32.dp),
                     contentAlignment = Alignment.Center
@@ -175,7 +179,7 @@ fun WeatherSubTab(
         }
 
         // 底部间距
-        item(key = "bottom_spacer") {
+        item(key = "bottom_spacer", span = { GridItemSpan(2) }) {
             Spacer(modifier = Modifier.height(16.dp))
         }
     }

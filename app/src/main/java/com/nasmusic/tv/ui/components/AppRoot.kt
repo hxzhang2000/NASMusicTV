@@ -603,7 +603,6 @@ fun AppRoot(
                             viewModel.playAllBrowseSongs()
                             viewModel.navigateTo(Screen.NowPlaying)
                         },
-                        onRefreshCharts = { viewModel.refreshCharts() },
                         onNavigateToScreen = { action ->
                             when (action) {
                                 "favorites" -> {

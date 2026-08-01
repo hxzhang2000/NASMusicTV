@@ -12,11 +12,13 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.itemsIndexed
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -66,7 +68,7 @@ fun DiscoverContent(
     onNavigateToPlaylistDetail: () -> Unit,
     onNavigateToScreen: (String) -> Unit = {}
 ) {
-    val listState = rememberLazyListState()
+    val listState = rememberLazyGridState()
     val scope = rememberCoroutineScope()
     val listBackHandler = LocalListBackHandler.current
 
@@ -85,14 +87,16 @@ fun DiscoverContent(
         onDispose { listBackHandler.value = null }
     }
 
-    LazyColumn(
+    LazyVerticalGrid(
+        columns = GridCells.Fixed(2),
         state = listState,
         modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalArrangement = Arrangement.spacedBy(20.dp)
     ) {
         // 1. 推荐歌单
         if (networkPlaylists.isNotEmpty()) {
-            item(key = "trending_header") {
+            item(key = "trending_header", span = { GridItemSpan(2) }) {
                 Text(
                     text = "推荐歌单",
                     color = NasMusicColors.TextPrimary,
@@ -100,7 +104,7 @@ fun DiscoverContent(
                     modifier = Modifier.padding(bottom = 4.dp)
                 )
             }
-            item(key = "playlist_cards") {
+            item(key = "playlist_cards", span = { GridItemSpan(2) }) {
                 LazyRow(
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
@@ -119,7 +123,7 @@ fun DiscoverContent(
         }
 
         // 3. 快捷功能入口
-        item(key = "feature_shortcuts") {
+        item(key = "feature_shortcuts", span = { GridItemSpan(2) }) {
             FeatureShortcuts(
                 favoriteCount = networkFavoriteSongs.size,
                 onNavigateToFavorites = { onNavigateToScreen("favorites") },
@@ -132,7 +136,7 @@ fun DiscoverContent(
         val hasCurrentSong = currentNetworkSong != null
         val hasRecentSongs = recentNetworkSongs.isNotEmpty()
         if (hasCurrentSong || hasRecentSongs) {
-            item(key = "continue_listening_header") {
+            item(key = "continue_listening_header", span = { GridItemSpan(2) }) {
                 Text(
                     text = "继续听",
                     color = NasMusicColors.TextPrimary,
@@ -142,7 +146,7 @@ fun DiscoverContent(
             }
             // 当前正在播放的网络歌曲
             if (hasCurrentSong) {
-                item(key = "now_playing_section") {
+                item(key = "now_playing_section", span = { GridItemSpan(2) }) {
                     Text(
                         text = "正在播放",
                         color = NasMusicColors.TextSecondary,
@@ -163,7 +167,7 @@ fun DiscoverContent(
             // 队列中的其它网络歌曲
             if (hasRecentSongs) {
                 if (hasCurrentSong) {
-                    item(key = "up_next_header") {
+                    item(key = "up_next_header", span = { GridItemSpan(2) }) {
                         Text(
                             text = "即将播放",
                             color = NasMusicColors.TextSecondary,
@@ -189,7 +193,7 @@ fun DiscoverContent(
 
         // 5. 我的收藏（最多显示最近 10 条）
         if (networkFavoriteSongs.isNotEmpty()) {
-            item(key = "favorites_header") {
+            item(key = "favorites_header", span = { GridItemSpan(2) }) {
                 Text(
                     text = stringResource(R.string.network_my_favorites),
                     color = NasMusicColors.TextPrimary,
@@ -213,7 +217,7 @@ fun DiscoverContent(
         }
 
         // 底部间距
-        item(key = "bottom_spacer") {
+        item(key = "bottom_spacer", span = { GridItemSpan(2) }) {
             Spacer(modifier = Modifier.height(16.dp))
         }
     }
@@ -330,204 +334,6 @@ fun WeatherPlaceholder() {
                 text = stringResource(R.string.network_weather_coming_soon),
                 color = NasMusicColors.TextSecondary,
                 fontSize = 16.sp
-            )
-        }
-    }
-}
-
-/**
- * 榜单子 Tab — 卡片网格 + 每日轮换 + 换一批
- *
- * 每天根据日期自动选择一组榜单展示，用户可按 "换一批" 切换到下一组。
- */
-@OptIn(ExperimentalTvMaterial3Api::class)
-@Composable
-fun ChartsContent(
-    networkPlaylists: List<Pair<Playlist, List<Song>>>,
-    networkFavoriteIds: Set<String>,
-    queueSongIds: Set<String>,
-    onPlayNetworkSong: (Song) -> Unit,
-    onToggleNetworkFavorite: (Song) -> Unit,
-    onToggleQueue: (Song) -> Unit,
-    onPlayAllSongs: (List<Song>) -> Unit,
-    onRefreshCharts: () -> Unit = {},
-    onNavigateToPlaylistDetail: ((Pair<Playlist, List<Song>>) -> Unit)? = null
-) {
-    val hasCharts = networkPlaylists.any { it.second.isNotEmpty() }
-
-    val listState = rememberLazyListState()
-    val scope = rememberCoroutineScope()
-    val listBackHandler = LocalListBackHandler.current
-
-    DisposableEffect(Unit) {
-        val handler: () -> Boolean = {
-            val atTop = listState.firstVisibleItemIndex == 0 &&
-                    listState.firstVisibleItemScrollOffset == 0
-            if (!atTop) {
-                scope.launch { listState.scrollToItem(0) }
-                true
-            } else {
-                false
-            }
-        }
-        listBackHandler.value = handler
-        onDispose { listBackHandler.value = null }
-    }
-
-    if (!hasCharts) {
-        Box(
-            modifier = Modifier.fillMaxWidth().padding(top = 60.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            Text(
-                text = stringResource(R.string.network_charts_coming_soon),
-                color = NasMusicColors.TextSecondary,
-                fontSize = 16.sp
-            )
-        }
-        return
-    }
-
-    val displayPlaylists = networkPlaylists
-        .filter { it.second.isNotEmpty() }
-
-    LazyColumn(
-        state = listState,
-        modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        // 标题行 + 换一批按钮
-        item(key = "charts_header") {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = stringResource(R.string.network_tab_charts),
-                    color = NasMusicColors.TextPrimary,
-                    fontSize = 16.sp,
-                    modifier = Modifier.weight(1f)
-                )
-                Text(
-                    text = stringResource(R.string.network_charts_count, displayPlaylists.size),
-                    color = NasMusicColors.TextSecondary,
-                    fontSize = 12.sp,
-                    modifier = Modifier.padding(end = 12.dp)
-                )
-                FocusableSurface(
-                    onClick = onRefreshCharts,
-                    shape = RoundedCornerShape(6.dp),
-                    focusedScale = 1.08f,
-                    animationDurationMs = 150,
-                    containerColor = NasMusicColors.Primary.copy(alpha = 0.85f),
-                    focusedContainerColor = NasMusicColors.Primary,
-                    contentColor = Color.Black,
-                    focusedContentColor = Color.Black
-                ) {
-                    Text(
-                        text = stringResource(R.string.network_charts_refresh),
-                        fontSize = 13.sp,
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
-                    )
-                }
-            }
-        }
-
-        // 卡片网格：每行 3 张卡片
-        displayPlaylists.chunked(3).forEachIndexed { rowIndex, row ->
-            item(key = "charts_row_$rowIndex") {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    row.forEach { (playlist, songs) ->
-                        ChartsCard(
-                            playlist = playlist,
-                            songs = songs,
-                            onClick = {
-                                onNavigateToPlaylistDetail?.invoke(playlist to songs)
-                            }
-                        )
-                    }
-                    // 补齐该行剩余空间
-                    repeat(3 - row.size) {
-                        Spacer(modifier = Modifier.weight(1f))
-                    }
-                }
-            }
-        }
-
-        // 底部间距
-        item(key = "bottom_spacer") {
-            Spacer(modifier = Modifier.height(16.dp))
-        }
-    }
-}
-
-/**
- * 榜单卡片 — 封面 + 名称 + 歌曲数
- */
-@OptIn(ExperimentalTvMaterial3Api::class)
-@Composable
-private fun ChartsCard(
-    playlist: Playlist,
-    songs: List<Song>,
-    onClick: () -> Unit
-) {
-    FocusableSurface(
-        onClick = onClick,
-        modifier = Modifier.width(200.dp),
-        shape = RoundedCornerShape(12.dp),
-        focusedScale = 1.06f,
-        animationDurationMs = 200,
-        containerColor = NasMusicColors.Surface,
-        focusedContainerColor = NasMusicColors.Primary.copy(alpha = 0.2f),
-        contentColor = NasMusicColors.TextPrimary,
-        focusedContentColor = NasMusicColors.Primary
-    ) {
-        Column(modifier = Modifier.fillMaxWidth()) {
-            // 封面区域（4:3 比例）
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .aspectRatio(4f / 3f)
-                    .clip(RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp))
-                    .background(NasMusicColors.SurfaceVariant)
-            ) {
-                CoverCarousel(
-                    coverCandidates = playlist.coverUrls,
-                    isPlaying = false,
-                    autoCycle = true,
-                    modifier = Modifier.fillMaxSize()
-                )
-                // 歌曲数标签
-                if (playlist.songCount > 0) {
-                    Box(
-                        modifier = Modifier
-                            .align(Alignment.BottomEnd)
-                            .padding(6.dp)
-                            .background(
-                                Color.Black.copy(alpha = 0.6f),
-                                shape = RoundedCornerShape(8.dp)
-                            )
-                            .padding(horizontal = 8.dp, vertical = 3.dp)
-                    ) {
-                        Text(
-                            text = "${playlist.songCount}首",
-                            color = Color.White,
-                            fontSize = 11.sp
-                        )
-                    }
-                }
-            }
-            // 名称
-            Text(
-                text = playlist.name,
-                color = NasMusicColors.TextPrimary,
-                fontSize = 14.sp,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp)
             )
         }
     }

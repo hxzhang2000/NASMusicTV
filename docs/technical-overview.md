@@ -4688,5 +4688,40 @@ v2.6.0 天气电台功能使用 Open-Meteo（无需 API Key）作为主要天气
 - ✅ `./gradlew.bat assembleDebug` BUILD SUCCESSFUL（36 tasks；唯一警告为既有 Coil `ExperimentalCoilApi` opt-in，与本次改动无关）
 - ⏳ 真机验证由用户执行（浏览换一批只出新歌 + 天气电台同 mood 反复换一批持续出新歌 + mood 切换后重置）
 
+### 10.30 v2.11.0 — 网络音乐子 Tab 歌曲列表双列化 + 移除榜单 Tab
+
+**功能描述**：
+1. **歌曲列表双列化**：网络音乐 4 个子 Tab 的全宽单列 `LazyColumn` 歌曲列表改为双列 `LazyVerticalGrid(GridCells.Fixed(2))`，充分利用 TV 大屏宽度（此前每行只显示一首歌）。涉及：
+   - **发现 Tab**（`DiscoverContent`）：继续听 + 我的收藏双列
+   - **天气电台**（`WeatherSubTab`）：歌曲列表双列
+   - **搜索**（`SearchSubTab`）：搜索结果双列
+   - **浏览**（`BrowseSubTab`）：筛选结果双列（维度筛选行保持单行 LazyRow）
+2. 跨列区块（标题、操作栏、歌单卡片 LazyRow、空态、底部间距）统一加 `span = { GridItemSpan(2) }`；列间距 `horizontalArrangement = spacedBy(8.dp)` 与曲库网格一致
+3. `rememberLazyListState` → `rememberLazyGridState`，back-to-top 回顶逻辑（`firstVisibleItemIndex`/`scrollToItem`）在 LazyGridState 上等价工作，无需改动
+4. **import 冲突处理**：`BrowseSubTab` 同文件同时使用 LazyRow（维度筛选）与 grid（结果列表），grid 版 `itemsIndexed` 以别名 `gridItemsIndexed` 引入，LazyRow 版保留原名
+
+**移除榜单 Tab**：
+- 榜单页（`ChartsContent`/`ChartsCard`）与发现页顶部"推荐歌单"数据源重合——两者都用 `loadNetworkPlaylists()` 加载同一批预配置网易云歌单（`preconfiguredPlaylists` + `_chartsRotationIndex` 轮换）。保留发现页入口，移除整个榜单 Tab
+- 删除：`NetworkSubTab.CHARTS` 枚举项、`NetworkMusicContainer` 的 CHARTS 分支与 `onRefreshCharts` 参数、`ChartsContent`/`ChartsCard` 约 200 行 UI、`AppRoot` 回调传递、`MainViewModel.refreshCharts()` 与从未被调用的 `dailyRotationStart()` 死代码、`strings.xml` 4 个 `network_charts_*`/`network_tab_charts` 字符串
+- 保留：`loadNetworkPlaylists()`/`_chartsRotationIndex`/`preconfiguredPlaylists`（发现页推荐歌单仍依赖）
+
+#### 修改文件
+
+- `ui/screens/network/NetworkSubTabViews.kt`：`DiscoverContent` 双列化；删除 `ChartsContent` + `ChartsCard`；清理孤儿 import（`LazyColumn`/`rememberLazyListState`）
+- `ui/screens/network/WeatherSubTab.kt`：列表改 `LazyVerticalGrid(Fixed(2))`，6 个跨列 item 加 span
+- `ui/screens/network/SearchSubTab.kt`：结果列表双列，操作栏 span(2)
+- `ui/screens/network/BrowseSubTab.kt`：结果双列 + `gridItemsIndexed` 别名 import
+- `ui/screens/network/NetworkMusicContainer.kt`：删除 CHARTS 分支、`onRefreshCharts` 参数、注释 `[榜单]`
+- `data/model/NetworkSubTab.kt`：删除 `CHARTS` 枚举项
+- `ui/components/AppRoot.kt`：删除 `onRefreshCharts` 回调传递
+- `ui/viewmodel/MainViewModel.kt`：删除 `refreshCharts()`、`dailyRotationStart()`；`loadNetworkPlaylists` 注释更新
+- `res/values/strings.xml`：删除 `network_tab_charts` / `network_charts_coming_soon` / `network_charts_refresh` / `network_charts_count`
+
+#### 验证结果
+
+- ✅ `./gradlew.bat assembleDebug` BUILD SUCCESSFUL（36 tasks；唯一警告为既有 Coil `ExperimentalCoilApi` opt-in，与本次改动无关）
+- ✅ 全仓 grep `ChartsContent|ChartsCard|refreshCharts|NetworkSubTab.CHARTS|network_tab_charts|network_charts_` 零匹配
+- ⏳ 真机验证由用户执行（子 Tab 歌曲双列布局 + 榜单 Tab 消失）
+
 
 
