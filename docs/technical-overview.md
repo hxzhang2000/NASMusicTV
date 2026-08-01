@@ -4743,5 +4743,53 @@ v2.6.0 天气电台功能使用 Open-Meteo（无需 API Key）作为主要天气
 - ✅ `./gradlew.bat assembleDebug` BUILD SUCCESSFUL in 6s（36 tasks）
 - ⏳ 真机验证由用户执行（各列表序号 01/02/03… 递增；发现页"正在播放"显示 ▶）
 
+### 10.32 v2.12.0 ｜「我的」页（收藏合并 + 本地歌单）与数据备份
+
+**背景**：收藏与播放列表此前分散在曲库页多个 Tab（FAVORITES / PLAYLISTS），且依赖 NAS 连接状态；播放列表仅支持 NAS 后端歌单，无法容纳网络歌曲。本次新增独立「我的」页统一管理用户数据，并在设置页提供数据备份/恢复。
+
+#### 主要变更
+
+1. **「我的」页（`ui/screens/MineScreen.kt` 新建）**
+   - 底部导航新增 `nav_mine` 入口（`Screen.Mine` 枚举 + `AppRoot` NavItem）
+   - 双栏布局：左栏收藏（`favoriteSongs` 本地 + `networkFavoriteSongs` 网络合并，`LinkedHashMap` 按 id 去重，本地优先），右栏本地歌单
+   - 收藏歌曲行：播放 / 取消收藏 / 加入队列 / 加入歌单（`isFavorited = true`，按 `isNetworkSong` 由外层路由取消收藏）
+2. **本地歌单（`data/model/LocalPlaylist.kt` 新建 + `AppPreferences` 扩展）**
+   - DataStore JSON 持久化（`keyLocalPlaylists`），响应式 `localPlaylists` Flow，`MainViewModel` collect 接线
+   - CRUD：`createLocalPlaylist` / `renameLocalPlaylist` / `deleteLocalPlaylist` / `addSongToPlaylist`（按 id 去重，`streamUrl` 置空持久化）/ `removeSongFromPlaylist`
+   - 播放：`playLocalPlaylist` 走 `playQueue(songs, 0)`，网络歌曲由既有解析链路处理
+3. **歌单选择弹窗（`ui/screens/PlaylistPickerDialog.kt` 新建）**
+   - `SongRow` 新增 `onAddToPlaylist` 参数与 `AddToPlaylistButton`（＋按钮），曲库 / 我的页 / 网络页通用
+   - 弹窗：歌单列表（`requestFocusOnLaunch` 首个聚焦）+ 新建歌单入口（内嵌 `TextInputDialog`）+ 取消；BACK 键两级关闭
+4. **数据备份 / 恢复（`ui/util/BackupFileUtils.kt` 新建 + `AppPreferences.BackupData`）**
+   - `BackupData`：version / exportedAt / serverConfig / appSettings / networkFavorites / localPlaylists / lastQueue / recentSongIds / playCounts / playRecords / equalizerPreset / equalizerBands
+   - **敏感字段排除**：`exportBackupData` 中 `apiToken`/`password` 置空、`isConnected=false`；天气 API Key 不在备份结构内
+   - 存储：API 29+ 走 `MediaStore.Downloads`（`Downloads/NASMusic/`，免权限）；API < 29 **主备份写应用内部存储 `filesDir/NASMusic/`**（`/data` 真闪存，断电不丢），另尽力写一份到公共 Downloads 目录供文件管理器访问——部分电视 ROM（如创维 Android 5.1.1）外部存储为 RAM-backed rootfs（非真实挂载点），断电即清空，故内部存储才是可靠主备份；`listBackups` 合并两处按文件名去重、按修改时间倒序，`delete` 按文件名同步删除两份副本
+   - 设置页新增 `SettingsSection.DATA`「数据管理」：导出按钮、备份文件列表（`BackupFileRow` 可点击恢复）、`OpenDocument` 选择器导入、结果消息 4s 自动消费
+   - `importBackupData` 恢复后服务器 `isConnected=false`，需重新输入密码连接
+5. **曲库页瘦身（`LibraryScreen.kt`）**
+   - 移除 `LibraryTab.FAVORITES` / `LibraryTab.PLAYLISTS` 及 `FavoritesTab` / `PlaylistsTab`（约 450 行）；相关参数（`favoriteSongs` / `networkFavoriteSongs` / `onToggleNetworkFavorite` / `playlists` / `playlistSongs` 等）与 `AppRoot` 回调同步删除
+   - `SongRow` 新增 `onAddToPlaylist` + `AddToPlaylistButton`
+6. **no-op 修复（`AppRoot.kt`）**：网络音乐页「收藏」动作此前 `selectNetworkSubTab(DISCOVER)` 无实际跳转，改为 `navigateTo(Screen.Mine)`
+
+#### 修改文件
+
+- `data/model/Screen.kt`：新增 `Mine` 枚举
+- `data/model/LocalPlaylist.kt`（新建）：本地歌单数据类
+- `data/prefs/AppPreferences.kt`：本地歌单 CRUD + `BackupData` 导出/导入
+- `ui/components/AppRoot.kt`：MINE 导航项 + `Screen.Mine` 分支接线 + 备份回调 + no-op 修复
+- `ui/screens/MineScreen.kt`（新建）：我的页双栏 UI
+- `ui/screens/PlaylistPickerDialog.kt`（新建）：歌单选择弹窗
+- `ui/screens/LibraryScreen.kt`：移除收藏/播放列表 Tab，`SongRow` 加加入歌单按钮
+- `ui/screens/SettingsScreen.kt`：新增「数据管理」分区
+- `ui/viewmodel/MainViewModel.kt`：本地歌单操作 + 备份方法 + collect 接线
+- `util/BackupFileUtils.kt`（新建）：备份文件读写
+- `res/values/strings.xml`：`nav_mine` + `mine_*` + `settings_data*` / `settings_backup*` / `settings_import_backup` 字符串
+
+#### 验证结果
+
+- ✅ `./gradlew.bat assembleDebug` BUILD SUCCESSFUL（36 tasks up-to-date）
+- ✅ 备份断电存活实测（v2.12.0 修复后）：创维电视导出备份 → 断电重启 → 备份仍在列表（内部存储 `filesDir/NASMusic/` 落于 `/data` 真闪存，断电不丢）；修复前公共 Downloads（RAM 盘）断电即清空
+- ⏳ 真机验证由用户执行（「我的」页收藏/歌单操作、备份导出后文件可访问、导入恢复后需重新连接服务器）
+
 
 
