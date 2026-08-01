@@ -4636,4 +4636,57 @@ v2.6.0 天气电台功能使用 Open-Meteo（无需 API Key）作为主要天气
 - ⏳ 真机播放验证由用户执行（连续播放超过 5 首验证不再断播）
 
 
+### 10.28 v2.11.0 — 网络音乐搜索"换一批" + "全部加入列表"（突破 30 首上限）
+
+**功能描述**：
+1. 网络音乐搜索 Tab 操作栏新增"换一批"：以原搜索词 + 未用过的变异后缀（`searchVariantSuffixes`，24 种：翻唱/Live/现场/伴奏/钢琴/吉他/Remix/串烧/经典/怀旧/演唱会/DJ版/纯音乐/古风/钢琴版/吉他版/慢速/混音/国语/粤语/英文/日文/韩文/原唱）拼接后重新搜索；后缀用尽自动重置从头再来。`networkSearchBaseKeyword` 记录基准词，`usedSearchVariants` 记录已用后缀，手动搜索或清除时重置
+2. **跨批次去重**（v2.11.0 增强）：`seenNetworkSearchKeys` 记录已展示过的歌曲（歌手, 歌名）集合。每次换一批只展示未出现过的新歌；在 `maxShuffleAttemptsPerClick`（6）个随机后缀中挑选新歌最多的批次展示，新歌达到 `minNewResultsForShuffle`（5）首即停止。已展示的新歌才记入集合（未展示的保留，后续批次仍可出现），保证每次点击都出新歌且不会空转
+3. 网络音乐搜索 Tab 操作栏新增"全部加入列表"：将当前搜索结果按歌手+歌名与播放队列实时去重（`playerManager.queue` 读取），去重后经 `playerManager.addToQueue()` 追加到队列末尾（不替换队列、不触发导航）；全部重复时提示"队列已包含全部搜索结果"，成功时 `_connectMessage` 显示"已加入 X 首到队列（跳过 Y 首重复）"
+4. 由于 Meting-API 协议不支持分页（端点固定返回 30 首/忽略 limit/offset），采用变异词方案突破单次搜索上限；与 Browse Tab 已有的"随机关键词 + 组合搜索"先例一致
+
+#### 修改文件
+
+- `ui/viewmodel/MainViewModel.kt`：
+  - 新增 `searchVariantSuffixes`（24 个变异后缀）
+  - 新增状态 `networkSearchBaseKeyword`、`usedSearchVariants`（用尽重置）、`seenNetworkSearchKeys`（跨批次去重）
+  - 新增 `shuffleNetworkSearch()` — 变异搜索 + 跨批次去重 + 多后缀挑选新歌最多批次
+  - 新增 `addAllSearchResultsToQueue()` — 与队列按（歌手, 歌名）去重后追加，带成功/全重复提示
+  - 新增 `private suspend fun searchNetworkSongsBlocking(keyword)` — 手动搜索与换一批共用搜索路径
+  - `searchNetworkSongs()` / `clearNetworkSearch()` — 重置基准词、已用后缀与已见歌曲集合
+- `ui/screens/network/SearchSubTab.kt` — 新增 `onShuffleSearch` / `onAddAllToQueue` 回调参数；操作栏新增"换一批 ↻"与"全部加入列表 +"两个可聚焦按钮
+- `ui/screens/network/NetworkMusicContainer.kt` — 新增参数并透传给 `SearchSubTab`
+- `ui/components/AppRoot.kt` — 接线 `onShuffleSearch = { viewModel.shuffleNetworkSearch() }`、`onAddAllToQueue = { viewModel.addAllSearchResultsToQueue() }`
+
+#### 验证结果
+
+- ✅ `./gradlew.bat assembleDebug` BUILD SUCCESSFUL（含全部 4 个修改文件，36 tasks up-to-date）
+- ⏳ 真机验证由用户执行（换一批轮换批次 + 追加去重 + 队列持续扩充）
+
+### 10.29 v2.11.0 — "换一批"跨批次去重逻辑统一到浏览与天气电台
+
+**功能描述**：
+1. 将 v2.11.0 搜索页的"换一批"跨批次去重逻辑抽为公共泛型函数 `pickBestFreshBatch<T>(seenKeys, maxAttempts, minNewResults, produce, songsOf)`：反复调用 `produce` 生成候选（最多 6 次），用 `songsOf` 取歌曲列表并过滤 `seenKeys` 中已展示过的歌曲，返回新歌最多的候选与新歌列表；新歌达 5 首即提前停止；全部候选无新歌（集合饱和）时清空 `seenKeys` 重新生成一批（从头再来），返回前仅把本次真正展示的新歌记入集合。调用方负责在"上下文变化"（新搜索词 / 新筛选 / 新 mood）时清空对应已见集合
+2. **多维度浏览**（`BrowseSubTab`）：新增 `browseSeenKeys` 跨批次去重集合。`refreshBrowseSongs()` 改为通过 `pickBestFreshBatch` 生成候选——每次候选重新随机抽取各非"所有"维度关键词组合（增加组合多样性），挑选新歌最多的批次展示。`selectBrowseOption()` 在筛选选项实际变化时清空 `browseSeenKeys`（新上下文从头开始）
+3. **天气电台**（`WeatherSubTab`）：新增 `weatherSeenKeys` 跨构建去重集合与私有 `buildWeatherRadioDeduped(mgr, mood, weather)` helper（内部走 `pickBestFreshBatch`，produce 为 `buildRadioWithMood`，返回 `chosen.copy(songs = shown)`）。`fetchWeather()`（成功与失败降级路径 `loadRadioForDefaultMood()`）、`switchWeatherMood()` 全部改走该 helper；mood 变化或天气重新获取时清空 `weatherSeenKeys`
+4. **WeatherRadioManager 引入随机化**：`searchNasSongs`（匹配结果 `shuffled()`）与 `searchNetworkSongs`（结果 `shuffled()`）在合并前打乱，使同一 mood / 天气下每次构建的电台基础集合不同——否则 `buildRadioWithMood` 结果确定性重复，`pickBestFreshBatch` 的去重必然饱和导致换一批无效
+5. 榜单 Tab（`NetworkSubTabViews`）维持既有歌单轮换语义（`dailyRotationStart` + 索引 +1），不接入该逻辑
+
+#### 修改文件
+
+- `ui/viewmodel/MainViewModel.kt`：
+  - 新增 `pickBestFreshBatch<T>()` 公共泛型函数（搜索 / 浏览 / 天气电台三处共用）
+  - 新增 `browseSeenKeys`、`weatherSeenKeys` 已见歌曲集合
+  - `shuffleNetworkSearch()` 重构为调用 `pickBestFreshBatch`（produce 返回 `keyword to results`，`songsOf` 取 `.second`；全部候选搜索失败时保留错误态）
+  - `selectBrowseOption()` — 筛选变化时清空 `browseSeenKeys`
+  - `refreshBrowseSongs()` — 改用 `pickBestFreshBatch`，每候选随机抽取维度关键词组合
+  - 新增 `buildWeatherRadioDeduped()` — 天气电台跨构建去重构建
+  - `fetchWeather()` / `switchWeatherMood()` / `loadRadioForDefaultMood()` — 改走去重构建，上下文变化时清空 `weatherSeenKeys`
+- `backend/weather/WeatherRadioManager.kt` — `searchNasSongs` / `searchNetworkSongs` 结果打乱（每次构建基础集合不同）
+
+#### 验证结果
+
+- ✅ `./gradlew.bat assembleDebug` BUILD SUCCESSFUL（36 tasks；唯一警告为既有 Coil `ExperimentalCoilApi` opt-in，与本次改动无关）
+- ⏳ 真机验证由用户执行（浏览换一批只出新歌 + 天气电台同 mood 反复换一批持续出新歌 + mood 切换后重置）
+
+
 

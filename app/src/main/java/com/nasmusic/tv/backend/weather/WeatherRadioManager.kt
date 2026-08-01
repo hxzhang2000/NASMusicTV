@@ -172,8 +172,9 @@ class WeatherRadioManager(
             matched.addAll(remaining)
         }
 
+        // 打乱匹配结果，让每次构建的电台基础集合不同（支持「换一批」跨构建去重）
         // 标记为 NAS 来源（id 增加 nas_ 前缀以区分网络搜索）
-        return matched.take(maxCount).map { it.copy(id = "nas_${it.id}") }
+        return matched.toList().shuffled().take(maxCount).map { it.copy(id = "nas_${it.id}") }
     }
 
     /**
@@ -192,6 +193,7 @@ class WeatherRadioManager(
                 AppLog.w(TAG, "Network search for '$query' failed: ${e.message}")
             }
         }
-        return results.take(maxCount).toList()
+        // 打乱结果，让每次构建的电台基础集合不同（支持「换一批」跨构建去重）
+        return results.shuffled().take(maxCount).toList()
     }
 }

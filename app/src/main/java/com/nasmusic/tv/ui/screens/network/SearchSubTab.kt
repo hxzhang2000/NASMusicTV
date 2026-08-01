@@ -68,6 +68,8 @@ fun SearchSubTab(
     onToggleFavorite: (Song) -> Unit,
     onToggleQueue: (Song) -> Unit = {},
     onPlayAll: () -> Unit = {},
+    onShuffleSearch: () -> Unit = {},
+    onAddAllToQueue: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     var showSearchDialog by remember { mutableStateOf(false) }
@@ -138,7 +140,7 @@ fun SearchSubTab(
                     modifier = Modifier.fillMaxWidth(),
                     verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    // 操作栏：播放全部（去重后最多 30 首由 ViewModel 处理）
+                    // 操作栏：播放全部 / 全部加入列表 / 换一批（去重由 ViewModel 处理）
                     if (searchResults.isNotEmpty()) {
                         item(key = "search_action_bar") {
                             Row(
@@ -157,6 +159,40 @@ fun SearchSubTab(
                                 ) {
                                     Text(
                                         text = "全部播放 ▶",
+                                        fontSize = 14.sp,
+                                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                                    )
+                                }
+                                Spacer(modifier = Modifier.width(12.dp))
+                                FocusableSurface(
+                                    onClick = onAddAllToQueue,
+                                    shape = RoundedCornerShape(8.dp),
+                                    focusedScale = 1.08f,
+                                    animationDurationMs = 150,
+                                    containerColor = NasMusicColors.SurfaceVariant.copy(alpha = 0.6f),
+                                    focusedContainerColor = NasMusicColors.Primary.copy(alpha = 0.3f),
+                                    contentColor = NasMusicColors.TextPrimary,
+                                    focusedContentColor = NasMusicColors.Primary
+                                ) {
+                                    Text(
+                                        text = "全部加入列表 +",
+                                        fontSize = 14.sp,
+                                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                                    )
+                                }
+                                Spacer(modifier = Modifier.width(12.dp))
+                                FocusableSurface(
+                                    onClick = onShuffleSearch,
+                                    shape = RoundedCornerShape(8.dp),
+                                    focusedScale = 1.08f,
+                                    animationDurationMs = 150,
+                                    containerColor = NasMusicColors.SurfaceVariant.copy(alpha = 0.6f),
+                                    focusedContainerColor = NasMusicColors.Primary.copy(alpha = 0.3f),
+                                    contentColor = NasMusicColors.TextPrimary,
+                                    focusedContentColor = NasMusicColors.Primary
+                                ) {
+                                    Text(
+                                        text = "换一批 ↻",
                                         fontSize = 14.sp,
                                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
                                     )

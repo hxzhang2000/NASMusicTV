@@ -80,6 +80,8 @@ fun NetworkMusicContainer(
     onToggleQueue: (Song) -> Unit,
     onPlayAllSongs: (List<Song>) -> Unit,
     onPlayAllSearch: () -> Unit = {},
+    onShuffleSearch: () -> Unit = {},
+    onAddAllToQueue: () -> Unit = {},
     onLoadPlaylistDetail: (Pair<Playlist, List<Song>>) -> Unit,
     onNavigateToPlaylistDetail: () -> Unit,
     // 天气子 Tab 参数
@@ -245,7 +247,9 @@ fun NetworkMusicContainer(
                         },
                         onToggleFavorite = onToggleNetworkFavorite,
                         onToggleQueue = onToggleQueue,
-                        onPlayAll = onPlayAllSearch
+                        onPlayAll = onPlayAllSearch,
+                        onShuffleSearch = onShuffleSearch,
+                        onAddAllToQueue = onAddAllToQueue
                     )
                 }
                 NetworkSubTab.BROWSE -> {

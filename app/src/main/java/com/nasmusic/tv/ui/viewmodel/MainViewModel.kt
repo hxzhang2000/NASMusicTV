@@ -199,6 +199,34 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     private val _networkSearchKeyword = MutableStateFlow("")
     val networkSearchKeyword: StateFlow<String> = _networkSearchKeyword.asStateFlow()
 
+    /** 搜索变异词后缀表：换一批时在原词后追加，用于突破单次搜索 30 首上限 */
+    private val searchVariantSuffixes = listOf(
+        "翻唱", "live", "现场", "伴奏", "钢琴", "吉他", "remix", "串烧",
+        "经典", "怀旧", "演唱会", "DJ版", "纯音乐", "古风", "钢琴版", "吉他版",
+        "慢速", "混音", "国语", "粤语", "英文", "日文", "韩文", "原唱"
+    )
+
+    /** 换一批时新歌数量达到该值才展示（否则继续尝试下一后缀） */
+    private val minNewResultsForShuffle = 5
+
+    /** 换一批单次点击最多尝试的后缀数量（避免搜索结果长期重复时空转） */
+    private val maxShuffleAttemptsPerClick = 6
+
+    /** 用户输入的原始搜索词（换一批的基准） */
+    private var networkSearchBaseKeyword = ""
+
+    /** 已用过的变异后缀（一轮内不重复，用尽后重置） */
+    private val usedSearchVariants = mutableSetOf<String>()
+
+    /** 换一批已展示过的歌曲（歌手, 歌名）集合：跨批次去重，保证每次换一批只出新歌 */
+    private val seenNetworkSearchKeys = mutableSetOf<Pair<String, String>>()
+
+    /** 浏览换一批已展示过的歌曲（歌手, 歌名）集合：跨批次去重，筛选条件变化时重置 */
+    private val browseSeenKeys = mutableSetOf<Pair<String, String>>()
+
+    /** 天气电台换一批已展示过的歌曲（歌手, 歌名）集合：跨构建去重，mood 变化时重置 */
+    private val weatherSeenKeys = mutableSetOf<Pair<String, String>>()
+
     // --- 网络歌曲收藏 ---
     private val _networkFavorites = MutableStateFlow<List<NetworkFavoriteItem>>(emptyList())
     // 供 UI 使用：转换为 Song 对象列表（设置 isNetworkSong 等标记字段）
@@ -329,7 +357,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                         weatherRadioManager = WeatherRadioManager(adapter, nasMusicApp.networkMusicManager)
                     }
                     weatherRadioManager?.let { mgr ->
-                        val queue = mgr.buildRadio(weather)
+                        // 天气变化 = 新上下文，重置电台已见集合（跨构建去重从头开始）
+                        weatherSeenKeys.clear()
+                        val queue = buildWeatherRadioDeduped(mgr, WeatherMood.fromWeather(weather), weather)
                         _weatherRadioQueue.value = queue
                         _currentWeatherMood.value = queue.mood
                     }
@@ -359,6 +389,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun switchWeatherMood(mood: WeatherMood) {
         if (_currentWeatherMood.value == mood) return
         _currentWeatherMood.value = mood
+        // mood 变化 = 新上下文，重置电台已见集合（跨构建去重从头开始）
+        weatherSeenKeys.clear()
         viewModelScope.launch {
             _weatherLoading.value = true
             try {
@@ -367,7 +399,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     val adapter = backendRegistry.getAdapter()
                     WeatherRadioManager(adapter, nasMusicApp.networkMusicManager).also { weatherRadioManager = it }
                 }
-                val queue = mgr.buildRadioWithMood(mood, _weatherData.value)
+                val queue = buildWeatherRadioDeduped(mgr, mood, _weatherData.value)
                 _weatherRadioQueue.value = queue
             } catch (e: Exception) {
                 AppLog.e("MainViewModel", "switchWeatherMood failed", e)
@@ -388,6 +420,28 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         playQueue(songs, 0)
         // 导航到播放页
         _currentScreen.value = Screen.NowPlaying
+    }
+
+    /**
+     * 构建天气电台并跨构建去重（「换一批」）。
+     *
+     * 与网络搜索 / 多维度浏览共用 [pickBestFreshBatch]：每次候选都重新构建一次电台
+     * （NAS 匹配与网络搜索结果已打乱，故每次基础集合不同），在多个候选中挑选
+     * 新歌最多的展示，保证同一 mood 下反复「换一批」只出新歌。
+     *
+     * mood 变化（新上下文）时调用方负责清空 [weatherSeenKeys]。
+     */
+    private suspend fun buildWeatherRadioDeduped(
+        mgr: WeatherRadioManager,
+        mood: WeatherMood,
+        weather: WeatherData?
+    ): WeatherRadioQueue {
+        val (chosen, shown) = pickBestFreshBatch(
+            seenKeys = weatherSeenKeys,
+            produce = { mgr.buildRadioWithMood(mood, weather) },
+            songsOf = { it.songs }
+        )
+        return chosen.copy(songs = shown)
     }
 
     // --- 详情页状态 ---
@@ -905,7 +959,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     val adapter = backendRegistry.getAdapter()
                     WeatherRadioManager(adapter, nasMusicApp.networkMusicManager).also { weatherRadioManager = it }
                 }
-                val queue = mgr.buildRadioWithMood(WeatherMood.SUNNY, null)
+                // 天气获取失败也走同一套跨构建去重：反复「换一批」仍只出新歌
+                val queue = buildWeatherRadioDeduped(mgr, WeatherMood.SUNNY, null)
                 _weatherRadioQueue.value = queue
                 _currentWeatherMood.value = queue.mood
             } catch (e: Exception) {
@@ -1346,20 +1401,124 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             AppLog.i("MetingDiag", "searchNetworkSongs: keyword blank")
             _networkSearchResults.value = UiState.Success(emptyList())
             _networkSearchKeyword.value = ""
+            networkSearchBaseKeyword = ""
+            usedSearchVariants.clear()
             return
         }
+        // 用户手动搜索：重置换一批状态（基准词 + 已用变异词 + 已见歌曲集合）
+        networkSearchBaseKeyword = keyword
+        usedSearchVariants.clear()
+        seenNetworkSearchKeys.clear()
+        doNetworkSearch(keyword)
+    }
+
+    /**
+     * 换一批：用原搜索词 + 变异后缀重新搜索，突破单次搜索 30 首上限。
+     * 跨批次去重：已展示过的歌曲会被过滤；在 [maxShuffleAttemptsPerClick] 个后缀
+     * 中挑选新歌最多的批次展示，保证每次点击都有新歌且不会空转。
+     */
+    fun shuffleNetworkSearch() {
+        val base = networkSearchBaseKeyword
+        if (base.isBlank()) return
+        viewModelScope.launch {
+            var failed = false
+            val (chosen, shown) = pickBestFreshBatch(
+                seenKeys = seenNetworkSearchKeys,
+                produce = {
+                    val available = searchVariantSuffixes.filterNot { it in usedSearchVariants }
+                    if (available.isEmpty()) usedSearchVariants.clear()
+                    val suffix = searchVariantSuffixes
+                        .filterNot { it in usedSearchVariants }
+                        .shuffled()
+                        .first()
+                    usedSearchVariants.add(suffix)
+                    val keyword = "$base $suffix"
+                    val results = searchNetworkSongsBlocking(keyword)
+                    if (results == null) failed = true
+                    keyword to (results ?: emptyList())
+                },
+                songsOf = { it.second }
+            )
+            // 全部候选都搜索失败时保留错误态（searchNetworkSongsBlocking 已设置）
+            if (failed && shown.isEmpty()) return@launch
+            _networkSearchKeyword.value = chosen.first
+            _networkSearchResults.value = UiState.Success(shown)
+        }
+    }
+
+    /**
+     * 统一的「换一批」核心逻辑（网络搜索 / 多维度浏览 / 天气电台共用）。
+     *
+     * 反复调用 [produce] 生成候选（最多 [maxShuffleAttemptsPerClick] 次），用 [songsOf]
+     * 取出其中的歌曲列表，过滤掉 [seenKeys] 中已展示过的歌曲，返回新歌最多的候选与
+     * 新歌列表；新歌数量达到 [minNewResultsForShuffle] 即提前停止。
+     *
+     * 若所有候选都没有新歌（已见集合饱和），清空 [seenKeys] 后重新生成一次候选并返回
+     * （从头再来，保证每次点击都有内容）。返回前把本次真正展示的新歌记入 [seenKeys]
+     * （未展示的候选歌曲保留，之后批次仍可出现）。
+     *
+     * 调用方负责在「上下文变化」（新搜索词 / 新筛选 / 新 mood）时清空对应的 [seenKeys]。
+     *
+     * @param seenKeys 该场景的跨批次已见歌曲集合
+     * @param produce 生成一个候选（如变异后缀搜索、随机关键词组合、重建天气电台）
+     * @param songsOf 从候选 T 中取出歌曲列表
+     * @return Pair(选中的候选 T, 本次展示的新歌列表)
+     */
+    private suspend fun <T> pickBestFreshBatch(
+        seenKeys: MutableSet<Pair<String, String>>,
+        maxAttempts: Int = maxShuffleAttemptsPerClick,
+        minNewResults: Int = minNewResultsForShuffle,
+        produce: suspend () -> T,
+        songsOf: (T) -> List<Song>
+    ): Pair<T, List<Song>> {
+        var best: T? = null
+        var bestFresh: List<Song> = emptyList()
+        var attempts = 0
+        while (attempts < maxAttempts) {
+            attempts++
+            val candidate = produce()
+            val fresh = songsOf(candidate).filterNot { (it.artist.trim() to it.title.trim()) in seenKeys }
+            if (fresh.size > bestFresh.size) {
+                best = candidate
+                bestFresh = fresh
+            }
+            if (fresh.size >= minNewResults) break
+        }
+        val chosen = best
+        val result = if (chosen == null || bestFresh.isEmpty()) {
+            // 所有候选都没有新歌：已见集合饱和，从头再来一批
+            seenKeys.clear()
+            val freshProduce = produce()
+            freshProduce to songsOf(freshProduce)
+        } else {
+            chosen to bestFresh
+        }
+        result.second.forEach { seenKeys.add(it.artist.trim() to it.title.trim()) }
+        return result
+    }
+
+    /** 实际执行网络搜索（换一批与手动搜索共用），失败返回 null 并设置错误态 */
+    private suspend fun searchNetworkSongsBlocking(keyword: String): List<Song>? {
         _networkSearchKeyword.value = keyword
         _networkSearchResults.value = UiState.Loading
+        return try {
+            nasMusicApp.networkMusicManager.search(keyword)
+        } catch (e: Exception) {
+            AppLog.e("MetingDiag", "doNetworkSearch failed: ${e.message}", e)
+            _networkSearchResults.value = UiState.Error(
+                message = "网络搜索失败: ${e.message?.take(50)}"
+            )
+            null
+        }
+    }
+
+    /** 实际执行网络搜索（换一批与手动搜索共用） */
+    private fun doNetworkSearch(keyword: String) {
         viewModelScope.launch {
-            try {
-                val results = nasMusicApp.networkMusicManager.search(keyword)
-                AppLog.i("MetingDiag", "searchNetworkSongs: got ${results.size} results for '$keyword'")
+            val results = searchNetworkSongsBlocking(keyword)
+            if (results != null) {
+                AppLog.i("MetingDiag", "doNetworkSearch: got ${results.size} results for '$keyword'")
                 _networkSearchResults.value = UiState.Success(results)
-            } catch (e: Exception) {
-                AppLog.e("MetingDiag", "searchNetworkSongs failed: ${e.message}", e)
-                _networkSearchResults.value = UiState.Error(
-                    message = "网络搜索失败: ${e.message?.take(50)}"
-                )
             }
         }
     }
@@ -1370,6 +1529,35 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun clearNetworkSearch() {
         _networkSearchResults.value = UiState.Success(emptyList())
         _networkSearchKeyword.value = ""
+        networkSearchBaseKeyword = ""
+        usedSearchVariants.clear()
+        seenNetworkSearchKeys.clear()
+    }
+
+    /**
+     * 全部加入列表：将当前搜索结果追加到播放队列末尾（不替换队列），
+     * 与队列已有歌曲按（歌手, 歌曲名）去重，保证队列中没有重复歌曲。
+     * 每次追加前实时读取队列，反复「换一批 → 全部加入列表」可持续扩充队列。
+     */
+    fun addAllSearchResultsToQueue() {
+        val results = _networkSearchResults.value.dataOrNull() ?: return
+        if (results.isEmpty()) return
+        val existingKeys = queue.value
+            .map { it.artist.trim() to it.title.trim() }
+            .toSet()
+        val toAdd = results
+            .distinctBy { it.artist.trim() to it.title.trim() }
+            .filterNot { (it.artist.trim() to it.title.trim()) in existingKeys }
+        if (toAdd.isEmpty()) {
+            showError("队列已包含全部搜索结果")
+            return
+        }
+        playerManager.addToQueue(toAdd)
+        _connectMessage.value = "已加入 ${toAdd.size} 首到队列（跳过 ${results.size - toAdd.size} 首重复）"
+        viewModelScope.launch {
+            delay(3000)
+            _connectMessage.value = null
+        }
     }
 
     // --- 多维度浏览（语种/纯音乐/年代/情怀/风格） ---
@@ -1396,6 +1584,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun selectBrowseOption(dimensionIndex: Int, optionIndex: Int) {
         val current = _browseSelections.value.toMutableList()
         if (dimensionIndex in current.indices) {
+            // 筛选条件变化 = 新上下文，重置浏览已见集合（跨批次去重从头开始）
+            if (current[dimensionIndex] != optionIndex) {
+                browseSeenKeys.clear()
+            }
             current[dimensionIndex] = optionIndex
             _browseSelections.value = current
         }
@@ -1405,6 +1597,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     /**
      * 刷新浏览结果：收集非"所有"选项的关键词，随机各取一个，组合搜索。
+     *
+     * 与网络搜索「换一批」共用同一套跨批次去重逻辑：在多个随机关键词组合中
+     * 挑选新歌最多的批次展示，保证每次「换一批」只出新歌。
      */
     fun refreshBrowseSongs() {
         val dimensions = BrowseDimension.entries
@@ -1431,8 +1626,23 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
         viewModelScope.launch {
             try {
-                val results = nasMusicApp.networkMusicManager.searchByKeywords(keywordList)
-                _browseResults.value = UiState.Success(results)
+                val (_, shown) = pickBestFreshBatch(
+                    seenKeys = browseSeenKeys,
+                    produce = {
+                        // 每次候选都重新随机取关键词，增加组合多样性
+                        val combo = mutableListOf<String>()
+                        for (i in dimensions.indices) {
+                            val opt = dimensions[i].options.getOrNull(selections.getOrNull(i) ?: 0)
+                                ?: continue
+                            if (opt.label == "所有") continue
+                            if (opt.keywords.isEmpty()) continue
+                            combo.add(opt.keywords.random())
+                        }
+                        nasMusicApp.networkMusicManager.searchByKeywords(combo)
+                    },
+                    songsOf = { it }
+                )
+                _browseResults.value = UiState.Success(shown)
             } catch (e: Exception) {
                 AppLog.e("NASMusic", "refreshBrowseSongs failed: ${e.message}", e)
                 _browseResults.value = UiState.Error(
