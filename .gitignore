@@ -45,3 +45,15 @@ release_notes.md
 
 # App release builds
 app/release/
+
+# Obsidian vault local config
+.obsidian/
+
+# CI / debug leftovers
+build_log.txt
+ci_logs.zip
+logs.zip
+jobs.json
+jobs3.json
+screen.png
+screenshot.png
