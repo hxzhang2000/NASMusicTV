@@ -2200,6 +2200,23 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /**
+     * 从 JSON 字符串恢复备份（用于扫码传输）
+     * @return true 恢复成功；false 失败
+     */
+    suspend fun restoreBackupFromJson(json: String): Boolean {
+        return try {
+            val data = Gson().fromJson(json, AppPreferences.BackupData::class.java)
+            prefs.importBackupData(data)
+            refreshAfterImport()
+            _backupMessage.value = "恢复成功，请重新连接服务器"
+            true
+        } catch (e: Exception) {
+            AppLog.e("NASMusic", "restoreBackupFromJson failed", e)
+            false
+        }
+    }
+
     /** 导入备份后刷新相关 StateFlow（收藏、歌单、队列、统计等由 prefs Flow 自动更新） */
     private fun refreshAfterImport() {
         // 服务器连接状态保持断开（密码不备份），其余由 collect 自动同步

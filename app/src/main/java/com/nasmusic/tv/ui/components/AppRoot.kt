@@ -54,6 +54,7 @@ import com.nasmusic.tv.ui.screens.PlaylistPickerDialog
 import com.nasmusic.tv.ui.screens.QueueScreen
 import com.nasmusic.tv.ui.screens.ServerConnectScreen
 import com.nasmusic.tv.ui.screens.SettingsScreen
+import com.nasmusic.tv.ui.screens.BackupTransferDialog
 import com.nasmusic.tv.ui.theme.NASMusicTVTheme
 import com.nasmusic.tv.ui.theme.NasMusicColors
 import com.nasmusic.tv.ui.viewmodel.MainViewModel
@@ -456,6 +457,7 @@ fun AppRoot(
                     )
                 }
                 Screen.Settings -> {
+                    var showBackupTransferDialog by remember { mutableStateOf(false) }
                     SettingsScreen(
                         settings = settings,
                         onToggleDarkTheme = { viewModel.updateDarkTheme(it) },
@@ -483,6 +485,7 @@ fun AppRoot(
                         onImportBackup = { uri -> viewModel.importBackup(uri) },
                         onDeleteBackup = { uri -> viewModel.deleteBackup(uri) },
                         onConsumeBackupMessage = { viewModel.consumeBackupMessage() },
+                        onScanTransferBackup = { showBackupTransferDialog = true },
                     // 封面滤镜设置
                     coverFilterEnabled = coverFilterEnabled,
                     coverFilterBlurRadius = coverFilterBlurRadius,
@@ -491,6 +494,14 @@ fun AppRoot(
                     onChangeCoverBlurRadius = { viewModel.updateCoverFilterBlurRadius(it) },
                     onChangeCoverDarkOverlay = { viewModel.updateCoverFilterDarkOverlay(it) }
                     )
+                    // 扫码传输备份弹窗
+                    if (showBackupTransferDialog) {
+                        BackupTransferDialog(
+                            onRestore = { json -> viewModel.restoreBackupFromJson(json) },
+                            onBackupChanged = { viewModel.refreshBackupFiles() },
+                            onDismiss = { showBackupTransferDialog = false }
+                        )
+                    }
                 }
                 Screen.AlbumDetail -> {
                     val selectedAlbum by viewModel.selectedAlbum.collectAsState(initial = null)

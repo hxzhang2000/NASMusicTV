@@ -4862,5 +4862,53 @@ v2.6.0 天气电台功能使用 Open-Meteo（无需 API Key）作为主要天气
 - 搜索历史全局共享（Library / Network 两个入口共用同一份），30 天 TTL + 200 条上限防存储爆炸
 
 
+### 10.34 v2.12.2 ｜扫码传输备份（手机下载/上传/恢复）
+
+**背景**：v2.12.0 的数据备份功能将备份存在 TV 本地（内部存储 `filesDir/NASMusic/`），卸载 app 即清空。本次复用 v2.12.1 的扫码输入架构（NanoHTTPD + ZXing + NetworkUtils），新增备份传输 server，手机扫码后浏览器管理备份：下载到手机 / 上传到 TV / 远程恢复。
+
+#### 主要变更
+
+1. **备份传输服务器（`net/BackupTransferServer.kt` 新建）**
+   - NanoHTTPD 端口 18081（与搜索输入 18080 独立，互不干扰）
+   - `GET /`：备份管理 HTML 页（深色主题，显示 TV 端备份列表 + 上传表单）
+   - `GET /api/list`：返回备份文件列表 JSON（文件名 + 时间，复用 `BackupFileUtils.listBackups`）
+   - `GET /api/download?name=xxx`：下载指定备份（`Content-Disposition: attachment` 触发浏览器下载，复用 `BackupFileUtils.read`）
+   - `POST /api/upload`：接收 raw JSON body，**直接从 `session.inputStream` 按 Content-Length 读取字节 + UTF-8 解码**（绕过 NanoHTTPD `parseBody` 的字符集/大小限制问题），调 `BackupFileUtils.export` 保存为新备份
+   - `POST /api/restore?name=xxx`：读取备份 + `runBlocking { onRestore(json) }` 调用恢复回调
+   - `onBackupChanged` 回调：上传/恢复成功后通知 ViewModel 刷新备份列表
+2. **备份传输弹窗（`ui/screens/BackupTransferDialog.kt` 新建）**
+   - `DisposableEffect` 管理 server 生命周期：打开时 start，关闭时 stop
+   - QR 码（`QrCodeGenerator` 生成 `http://<IP>:18081/`）+ 状态文字 + 关闭按钮
+   - `BackHandler` 处理返回键
+3. **设置页入口（`SettingsScreen.kt`）**
+   - DATA 分区新增 `onScanTransferBackup` 参数 + "扫码传输备份"按钮（导出按钮下方）
+4. **ViewModel 恢复方法（`MainViewModel.kt`）**
+   - `restoreBackupFromJson(json: String): Boolean`（suspend）：Gson 解析 JSON -> `prefs.importBackupData(data)` -> `refreshAfterImport()`，供 server 的 onRestore 回调调用
+5. **AppRoot 接线**
+   - `Screen.Settings` 分支加 `showBackupTransferDialog` 状态
+   - `BackupTransferDialog(onRestore = { viewModel.restoreBackupFromJson(it) }, onBackupChanged = { viewModel.refreshBackupFiles() }, onDismiss = ...)`
+
+#### 修改文件
+
+- `net/BackupTransferServer.kt`（新建）：NanoHTTPD server + HTML 页
+- `ui/screens/BackupTransferDialog.kt`（新建）：QR 弹窗
+- `ui/screens/SettingsScreen.kt`：+`onScanTransferBackup` 参数 + 按钮
+- `ui/components/AppRoot.kt`：+状态 + 弹窗渲染 + 接线
+- `ui/viewmodel/MainViewModel.kt`：+`restoreBackupFromJson` suspend 方法
+- `app/build.gradle.kts`：versionCode 34 / versionName 2.12.2
+
+#### 验证结果
+
+- ✅ `./gradlew.bat assembleDebug` + `assembleRelease` BUILD SUCCESSFUL
+- ✅ 真机实测：手机扫码打开备份管理页 -> 下载备份到手机成功 -> 上传备份到 TV 成功 -> TV 端列表自动刷新（`onBackupChanged` 回调触发 `refreshBackupFiles`） -> 手机端点"恢复"按钮远程恢复成功
+
+#### 注意事项
+
+- 上传用 raw body + 直接读 inputStream，不用 `parseBody`（NanoHTTPD `parseBody` 对 raw body 用 ISO-8859-1 读取导致中文乱码，且有潜在大小限制）
+- server 仅在弹窗打开时启动、关闭时停止，不常驻后台
+- 端口 18081 独立于搜索输入的 18080，两个功能可同时使用
+
+
+
 
 

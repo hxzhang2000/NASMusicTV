@@ -108,6 +108,7 @@ fun SettingsScreen(
     onImportBackup: ((Uri) -> Unit)? = null,
     onDeleteBackup: ((Uri) -> Unit)? = null,
     onConsumeBackupMessage: (() -> Unit)? = null,
+    onScanTransferBackup: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     var activeSection by remember { mutableStateOf(SettingsSection.GENERAL) }
@@ -685,6 +686,16 @@ fun SettingsScreen(
                                 label = stringResource(R.string.settings_export_backup),
                                 description = stringResource(R.string.settings_export_backup_desc),
                                 onClick = { onExportBackup?.invoke() }
+                            )
+                        }
+                    }
+                    // 扫码传输（手机下载/上传备份）
+                    if (onScanTransferBackup != null) {
+                        item {
+                            SettingActionButton(
+                                label = "扫码传输备份",
+                                description = "手机扫码管理备份：下载到手机 / 上传到电视 / 远程恢复",
+                                onClick = { onScanTransferBackup?.invoke() }
                             )
                         }
                     }
