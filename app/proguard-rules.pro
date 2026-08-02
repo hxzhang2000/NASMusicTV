@@ -14,6 +14,12 @@
 # ExoPlayer
 -keep class androidx.media3.** { *; }
 
+# ZXing (二维码生成)
+-keep class com.google.zxing.** { *; }
+
+# NanoHTTPD (本地 HTTP server，实际 Java 包为 fi.iki.elonen)
+-keep class fi.iki.elonen.** { *; }
+
 # Coroutines
 -keepnames class kotlinx.coroutines.internal.MainDispatcherFactory {}
 -keepnames class kotlinx.coroutines.CoroutineExceptionHandler {}

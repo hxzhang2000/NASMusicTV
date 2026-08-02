@@ -27,6 +27,7 @@ import com.nasmusic.tv.R
 import com.nasmusic.tv.data.model.MusicSource
 import com.nasmusic.tv.data.model.NetworkSubTab
 import com.nasmusic.tv.data.model.Playlist
+import com.nasmusic.tv.data.model.SearchHistoryItem
 import com.nasmusic.tv.data.model.Song
 import com.nasmusic.tv.data.model.UiState
 import com.nasmusic.tv.data.model.WeatherData
@@ -61,6 +62,7 @@ fun NetworkMusicContainer(
     searchKeyword: String,
     searchResults: List<Song>,
     isSearching: Boolean,
+    historyItems: List<SearchHistoryItem> = emptyList(),
     // 发现子 Tab 参数
     networkPlaylists: List<Pair<Playlist, List<Song>>>,
     networkFavoriteSongs: List<Song>,
@@ -226,6 +228,7 @@ fun NetworkMusicContainer(
                         isSearching = isSearching,
                         favoriteIds = networkFavoriteIds,
                         queueSongIds = queueSongIds,
+                        historyItems = historyItems,
                         onSearch = onSearch,
                         onClearSearch = onClearSearch,
                         onPlaySong = { song ->

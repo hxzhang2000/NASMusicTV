@@ -35,6 +35,7 @@ import com.nasmusic.tv.data.model.HomeDashboardData
 import com.nasmusic.tv.data.model.LocalPlaylist
 import com.nasmusic.tv.data.model.ServerConfig
 import com.nasmusic.tv.data.model.Song
+import com.nasmusic.tv.data.model.SearchHistoryItem
 import com.nasmusic.tv.data.model.VisualizerTheme
 import com.nasmusic.tv.data.model.UiState
 import com.nasmusic.tv.ui.LocalNavigateBackHandler
@@ -308,6 +309,7 @@ fun AppRoot(
                     val isSearching = searchResultsState is UiState.Loading
                     val libraryActiveTab by viewModel.libraryActiveTab.collectAsState()
                     val localPlaylists by viewModel.localPlaylists.collectAsState(initial = emptyList())
+                    val searchHistory by viewModel.searchHistory.collectAsState(initial = emptyList())
                     var pickerSong by remember { mutableStateOf<Song?>(null) }
                     LibraryScreen(
                         albums = albumList,
@@ -366,6 +368,7 @@ fun AppRoot(
                         onLoadRecentSongs = { viewModel.loadRecentSongs() },
                         onSearch = { query -> viewModel.searchSongsOnServer(query) },
                         onClearSearch = { viewModel.clearSearch() },
+                        historyItems = searchHistory,
                         playStatistics = viewModel.playStatistics.collectAsState(initial = com.nasmusic.tv.data.model.PlayStatistics()).value,
                         onClearPlayRecords = { viewModel.clearPlayRecords() },
                         activeTab = libraryActiveTab,
@@ -599,6 +602,7 @@ fun AppRoot(
                     val weatherLoading by viewModel.weatherLoading.collectAsState(initial = false)
                     val weatherError by viewModel.weatherError.collectAsState(initial = null)
                     val localPlaylists by viewModel.localPlaylists.collectAsState(initial = emptyList())
+                    val searchHistory by viewModel.searchHistory.collectAsState(initial = emptyList())
                     var pickerSong by remember { mutableStateOf<Song?>(null) }
                     NetworkMusicContainer(
                         currentSubTab = currentNetworkSubTab,
@@ -606,6 +610,7 @@ fun AppRoot(
                         searchKeyword = networkSearchKeyword,
                         searchResults = networkSearchResultsState.dataOrNull() ?: emptyList(),
                         isSearching = isNetworkSearching,
+                        historyItems = searchHistory,
                         networkPlaylists = networkPlaylists,
                         networkFavoriteSongs = networkFavoriteSongs,
                         networkFavoriteIds = networkFavoriteIds,

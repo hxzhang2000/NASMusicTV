@@ -6,10 +6,12 @@ import com.nasmusic.tv.backend.network.MetingApiService
 import com.nasmusic.tv.backend.network.NetworkMusicManager
 import com.nasmusic.tv.data.prefs.AppPreferences
 import com.nasmusic.tv.player.PlayerManager
+import com.nasmusic.tv.util.AppLog
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 
 /**
  * Application 类 — 手动 DI 容器
@@ -48,6 +50,14 @@ class NasMusicApp : Application() {
             services = services,
             defaultSourceProvider = { appPreferences.getDefaultNetworkSourceSync() }
         )
+        // 启动时清理超过 30 天的搜索历史
+        applicationScope.launch {
+            try {
+                appPreferences.purgeExpiredSearchHistory()
+            } catch (e: Exception) {
+                AppLog.w("NasMusicApp", "Failed to purge search history", e)
+            }
+        }
     }
 
     override fun onTerminate() {

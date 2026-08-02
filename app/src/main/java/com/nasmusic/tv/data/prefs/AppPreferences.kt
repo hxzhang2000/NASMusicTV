@@ -18,6 +18,7 @@ import com.nasmusic.tv.data.model.LocalPlaylist
 import com.nasmusic.tv.data.model.NetworkFavoriteItem
 import com.nasmusic.tv.data.model.NetworkSource
 import com.nasmusic.tv.data.model.PlayMode
+import com.nasmusic.tv.data.model.SearchHistoryItem
 import com.nasmusic.tv.data.model.ServerConfig
 import com.nasmusic.tv.data.model.VisualizerTheme
 import com.nasmusic.tv.data.model.Song
@@ -99,9 +100,14 @@ class AppPreferences(private val context: Context) {
     // --- 播放统计 ---
     private val keyPlayRecords = stringPreferencesKey("play_records")
 
+    // --- 搜索历史（序列化为 JSON，30 天 TTL + 上限 200 条）---
+    private val keySearchHistory = stringPreferencesKey("search_history")
+
     private val gson = Gson()
     private val recentSongsMaxSize = 50
     private val networkFavoritesMaxSize = 500
+    private val searchHistoryMaxSize = 200
+    private val searchHistoryTtlMs = 30L * 24 * 60 * 60 * 1000  // 30 天
 
     // --- ServerConfig Flow ---
     val serverConfig: Flow<ServerConfig> = context.dataStore.data.map { prefs ->
@@ -735,6 +741,102 @@ class AppPreferences(private val context: Context) {
         }
     }
 
+    // ========== 搜索历史 ==========
+
+    /**
+     * 搜索历史列表 Flow（响应式）
+     * 列表按 lastSearchedAt 降序（最新在前）
+     */
+    val searchHistory: Flow<List<SearchHistoryItem>> = context.dataStore.data.map { prefs ->
+        val json = prefs[keySearchHistory] ?: "[]"
+        try {
+            gson.fromJson(json, object : TypeToken<List<SearchHistoryItem>>() {}.type)
+        } catch (e: Exception) { emptyList() }
+    }
+
+    /**
+     * 一次性读取搜索历史
+     */
+    suspend fun getSearchHistory(): List<SearchHistoryItem> {
+        return try {
+            context.dataStore.data.first().let { prefs ->
+                val json = prefs[keySearchHistory] ?: "[]"
+                gson.fromJson(json, object : TypeToken<List<SearchHistoryItem>>() {}.type) ?: emptyList()
+            }
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+
+    /**
+     * 记录一次搜索
+     * 1. 同名 query 合并：count+1、lastSearchedAt 更新为当前时间、移到列表头部
+     * 2. 清理超过 30 天的条目
+     * 3. 超过 200 条上限时裁剪尾部
+     */
+    suspend fun recordSearch(query: String) {
+        val trimmed = query.trim()
+        if (trimmed.isEmpty()) return
+        val now = System.currentTimeMillis()
+        context.dataStore.edit { prefs ->
+            val json = prefs[keySearchHistory] ?: "[]"
+            val list = try {
+                gson.fromJson(json, object : TypeToken<MutableList<SearchHistoryItem>>() {}.type)
+                    ?: mutableListOf()
+            } catch (e: Exception) { mutableListOf<SearchHistoryItem>() }
+
+            val mutable = list.toMutableList()
+            // 合并同名条目
+            val existingIdx = mutable.indexOfFirst { it.query == trimmed }
+            if (existingIdx >= 0) {
+                val existing = mutable.removeAt(existingIdx)
+                mutable.add(0, existing.copy(lastSearchedAt = now, count = existing.count + 1))
+            } else {
+                mutable.add(0, SearchHistoryItem(query = trimmed, lastSearchedAt = now, count = 1))
+            }
+            // 30 天 TTL 清理
+            val cutoff = now - searchHistoryTtlMs
+            mutable.removeAll { it.lastSearchedAt < cutoff }
+            // 数量上限裁剪
+            if (mutable.size > searchHistoryMaxSize) {
+                mutable.subList(searchHistoryMaxSize, mutable.size).clear()
+            }
+            prefs[keySearchHistory] = gson.toJson(mutable)
+        }
+    }
+
+    /**
+     * 清理超过 30 天的搜索历史条目
+     * 在应用启动时调用一次
+     */
+    suspend fun purgeExpiredSearchHistory() {
+        val now = System.currentTimeMillis()
+        val cutoff = now - searchHistoryTtlMs
+        context.dataStore.edit { prefs ->
+            val json = prefs[keySearchHistory] ?: return@edit
+            val list = try {
+                gson.fromJson(json, object : TypeToken<MutableList<SearchHistoryItem>>() {}.type)
+                    ?: mutableListOf()
+            } catch (e: Exception) { mutableListOf<SearchHistoryItem>() }
+
+            val mutable = list.toMutableList()
+            val beforeSize = mutable.size
+            mutable.removeAll { it.lastSearchedAt < cutoff }
+            if (mutable.size != beforeSize) {
+                prefs[keySearchHistory] = gson.toJson(mutable)
+            }
+        }
+    }
+
+    /**
+     * 清除所有搜索历史
+     */
+    suspend fun clearSearchHistory() {
+        context.dataStore.edit { prefs ->
+            prefs.remove(keySearchHistory)
+        }
+    }
+
     // ========== 数据备份 ==========
 
     /**
@@ -754,6 +856,7 @@ class AppPreferences(private val context: Context) {
         val recentSongIds: List<String> = emptyList(),
         val playCounts: Map<String, Int> = emptyMap(),
         val playRecords: List<com.nasmusic.tv.data.model.PlayRecord> = emptyList(),
+        val searchHistory: List<SearchHistoryItem> = emptyList(),
         val equalizerPreset: EqualizerPreset? = null,
         val equalizerBands: List<Float> = emptyList()
     )
@@ -774,6 +877,7 @@ class AppPreferences(private val context: Context) {
             recentSongIds = getRecentSongIds(),
             playCounts = playCounts.first(),
             playRecords = getPlayRecords(),
+            searchHistory = getSearchHistory(),
             equalizerPreset = equalizerPreset.first(),
             equalizerBands = equalizerBands.first()
         )
@@ -820,6 +924,9 @@ class AppPreferences(private val context: Context) {
             }
             if (data.playRecords.isNotEmpty()) {
                 prefs[keyPlayRecords] = gson.toJson(PlayRecordsData(data.playRecords))
+            }
+            if (data.searchHistory.isNotEmpty()) {
+                prefs[keySearchHistory] = gson.toJson(data.searchHistory)
             }
         }
     }

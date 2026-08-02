@@ -42,6 +42,7 @@ import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 import com.nasmusic.tv.R
+import com.nasmusic.tv.data.model.SearchHistoryItem
 import com.nasmusic.tv.data.model.Song
 import com.nasmusic.tv.ui.LocalListBackHandler
 import com.nasmusic.tv.ui.components.FocusableSurface
@@ -64,6 +65,7 @@ fun SearchSubTab(
     isSearching: Boolean,
     favoriteIds: Set<String>,
     queueSongIds: Set<String> = emptySet(),
+    historyItems: List<SearchHistoryItem> = emptyList(),
     onSearch: (String) -> Unit,
     onClearSearch: () -> Unit,
     onPlaySong: (Song) -> Unit,
@@ -252,7 +254,14 @@ fun SearchSubTab(
                 onSearch(input)
                 showSearchDialog = false
             },
-            onDismiss = { showSearchDialog = false }
+            onDismiss = { showSearchDialog = false },
+            showQrCode = true,
+            showHistory = true,
+            historyItems = historyItems,
+            onHistorySelect = { query ->
+                onSearch(query)
+                showSearchDialog = false
+            }
         )
     }
 }

@@ -20,6 +20,7 @@ import com.nasmusic.tv.data.model.NetworkFavoriteItem
 import com.nasmusic.tv.data.model.PlayMode
 import com.nasmusic.tv.data.model.PlayRecord
 import com.nasmusic.tv.data.model.PlayStatistics
+import com.nasmusic.tv.data.model.SearchHistoryItem
 import com.nasmusic.tv.data.model.Song
 import com.nasmusic.tv.data.model.ServerConfig
 import com.nasmusic.tv.data.model.Genre
@@ -69,6 +70,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     private val nasMusicApp = app as NasMusicApp
     private val playerManager = nasMusicApp.playerManager
     val prefs = nasMusicApp.appPreferences
+    /** 搜索历史（最近输入 + 最多搜索） */
+    val searchHistory = prefs.searchHistory
     // --- 封面滤镜设置 ---
     private val _coverFilterEnabled = MutableStateFlow(false)
     val coverFilterEnabled: StateFlow<Boolean> = _coverFilterEnabled.asStateFlow()
@@ -1378,6 +1381,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             _searchResults.value = UiState.Success(emptyList())
             return
         }
+        // 记录搜索历史
+        viewModelScope.launch { prefs.recordSearch(query) }
         _searchResults.value = UiState.Loading
         viewModelScope.launch {
             val adapter = backendRegistry.getAdapter() ?: run {
@@ -1420,6 +1425,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             usedSearchVariants.clear()
             return
         }
+        // 记录搜索历史
+        viewModelScope.launch { prefs.recordSearch(keyword) }
         // 用户手动搜索：重置换一批状态（基准词 + 已用变异词 + 已见歌曲集合）
         networkSearchBaseKeyword = keyword
         usedSearchVariants.clear()

@@ -27,8 +27,8 @@ android {
         applicationId = "com.nasmusic.tv"
         minSdk = 22
         targetSdk = 34
-    versionCode = 32
-    versionName = "2.12.0"
+        versionCode = 33
+        versionName = "2.12.1"
 
         ndk {
             abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64")
@@ -120,6 +120,12 @@ dependencies {
 
     // JSON
     implementation("com.google.code.gson:gson:2.10.1")
+
+    // 二维码生成（手机扫码输入）
+    implementation("com.google.zxing:core:3.5.3")
+
+    // 本地 HTTP server（接收手机浏览器提交的文字）
+    implementation("org.nanohttpd:nanohttpd:2.3.1")
 
     // 拼音转换（兼容 API 22+，不依赖 ICU）
     implementation("com.github.promeg:tinypinyin:2.0.3")

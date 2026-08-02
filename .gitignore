@@ -25,6 +25,9 @@ Desktop.ini
 # Kotlin/Native
 *.klib
 
+# Kotlin daemon / compiler working directory
+.kotlin/
+
 # Environment
 .env
 .env.local

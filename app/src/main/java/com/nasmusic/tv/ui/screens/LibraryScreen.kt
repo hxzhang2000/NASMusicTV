@@ -58,6 +58,7 @@ import com.nasmusic.tv.R
 import com.nasmusic.tv.data.model.Album
 import com.nasmusic.tv.data.model.Artist
 import com.nasmusic.tv.data.model.Genre
+import com.nasmusic.tv.data.model.SearchHistoryItem
 import com.nasmusic.tv.data.model.Song
 import com.nasmusic.tv.ui.LocalListBackHandler
 import com.nasmusic.tv.ui.components.FocusableSurface
@@ -116,6 +117,7 @@ fun LibraryScreen(
     onLoadRecentSongs: () -> Unit = {},
     onSearch: (String) -> Unit = {},
     onClearSearch: () -> Unit = {},
+    historyItems: List<SearchHistoryItem> = emptyList(),
     // 播放统计
     playStatistics: com.nasmusic.tv.data.model.PlayStatistics = com.nasmusic.tv.data.model.PlayStatistics(),
     onClearPlayRecords: () -> Unit = {},
@@ -357,7 +359,14 @@ fun LibraryScreen(
                     filterQuery = query
                     showSearchDialog = false
                 },
-                onDismiss = { showSearchDialog = false }
+                onDismiss = { showSearchDialog = false },
+                showQrCode = true,
+                showHistory = true,
+                historyItems = historyItems,
+                onHistorySelect = { query ->
+                    filterQuery = query
+                    showSearchDialog = false
+                }
             )
         }
     }

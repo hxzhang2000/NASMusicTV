@@ -4792,4 +4792,75 @@ v2.6.0 天气电台功能使用 Open-Meteo（无需 API Key）作为主要天气
 - ⏳ 真机验证由用户执行（「我的」页收藏/歌单操作、备份导出后文件可访问、导入恢复后需重新连接服务器）
 
 
+### 10.33 v2.12.1 ｜搜索窗口二维码扫码输入 + 搜索历史建议
+
+**背景**：TV 遥控器输入中文体验差（自制键盘逐字母、系统 IME 需额外安装且 TV 遥控器操作不便）。本次在搜索输入窗口右侧新增二维码，手机扫码后浏览器打开输入页直接输入文字推送到 TV；同时在输入框下方显示历史搜索建议（最近 + 热门），减少重复输入。
+
+#### 主要变更
+
+1. **搜索历史存储（`data/model/SearchHistoryItem.kt` 新建 + `AppPreferences` 扩展）**
+   - `SearchHistoryItem(query, lastSearchedAt, count)` 放 `data.model`（ProGuard 已 keep）
+   - `AppPreferences` 新增 `keySearchHistory`（stringPreferencesKey，Gson JSON 序列化）、`searchHistoryMaxSize = 200`、`searchHistoryTtlMs = 30 天`
+   - `recordSearch(query)`：空串跳过；`edit {}` 内读 JSON -> 同名合并（`count+1`、`lastSearchedAt=now`、移到头部）或 `add(0, ...)` -> 删 >30 天条目 -> 超 200 条裁尾 -> 写回
+   - `purgeExpiredSearchHistory()`：启动时 `applicationScope.launch` 调一次，只做 TTL 清理
+   - `searchHistory` Flow + `getSearchHistory()` 一次性读取
+   - `BackupData` 新增 `searchHistory` 字段，`exportBackupData` / `importBackupData` 同步处理
+2. **本地输入服务器（`net/LocalInputServer.kt` 新建）**
+   - 包装 NanoHTTPD（`fi.iki.elonen.NanoHTTPD`，Maven group `org.nanohttpd` ≠ Java package），固定端口 18080
+   - `GET /` 返回移动端 HTML 页（深色主题、viewport 适配、输入框 + 发送按钮、回车提交、提交后显示"已发送"并清空可连续输入）
+   - `POST /submit`：`session.parseBody(files)` 取 `postData`（raw body）-> `onText` 回调 -> 返回 `{"ok":true}`
+   - `start(onText)` / `stop()`，回调在 NanoHTTPD 线程上调用
+3. **二维码生成（`util/QrCodeGenerator.kt` 新建）**
+   - ZXing `QRCodeWriter` 生成 Bitmap（ErrorCorrectionLevel.M、margin 1、UTF-8）
+   - `generateQrBitmap(content, size=512)` 返回 `Bitmap?`，失败返回 null
+4. **本地 IP 获取（`util/NetworkUtils.kt` 新建）**
+   - `NetworkInterface.getNetworkInterfaces()` 遍历，返回第一个非回环 IPv4 地址
+   - 不需要 ACCESS_WIFI_STATE 权限，兼容所有 API 级别
+5. **TextInputDialog UI 改造（`ui/screens/TextInputDialog.kt`）**
+   - 新增可选参数：`showQrCode` / `showHistory` / `historyItems` / `onHistorySelect`（默认不传则行为不变）
+   - `showQrCode=true` 时：`DisposableEffect` 启动 `LocalInputServer`，`NetworkUtils.getLocalIpAddress()` 拿 IP，`QrCodeGenerator` 生成 Bitmap（URL = `http://<IP>:18080/`）；`LaunchedEffect(qrText)` 收 server 推来的文字 -> 更新 `text` 状态（mutableStateOf 支持跨线程写入）；server 启动失败或无 IP 则隐藏 QR
+   - `showHistory=true` 时：输入框下方两行历史建议--「最近」按 `lastSearchedAt` 降序取 5、「热门」按 `count` 降序取 5（不去重，允许同一词同时出现在两行）；`FocusableSurface` 可 D-Pad 聚焦，OK 键 -> 填入 `text` + `onHistorySelect` 回调（调用方接到后执行搜索 + 关闭弹窗）
+   - 布局：外层 Column 宽度条件化（QR 显示时 940dp 否则 720dp），内嵌 Row 包左列（原有内容）+ 右列 QR 面板（180dp）
+6. **搜索记录钩子（`MainViewModel.kt`）**
+   - `searchSongsOnServer(query)`（Library 搜索）入口加 `viewModelScope.launch { prefs.recordSearch(query) }`（空串跳过）
+   - `searchNetworkSongs(keyword)`（Network 搜索）入口同样加
+   - `shuffleNetworkSearch()`（换一批自动变体）**不记录**--只记用户实际输入的关键词
+   - 暴露 `val searchHistory = prefs.searchHistory` 给 UI
+7. **UI 接线**
+   - `SearchSubTab.kt`：新增 `historyItems` 参数，`TextInputDialog` 传 `showQrCode=true` / `showHistory=true` / `historyItems` / `onHistorySelect = { onSearch(it); showSearchDialog = false }`
+   - `LibraryScreen.kt`：同上，`onHistorySelect` 设 `filterQuery = query` + 关弹窗（由 `LaunchedEffect(filterQuery)` 触发 `onSearch`）
+   - `NetworkMusicContainer.kt`：透传 `historyItems` 到 `SearchSubTab`
+   - `AppRoot.kt`：Library / Network 两个分支各 `collectAsState` 收 `viewModel.searchHistory`，传给 `LibraryScreen` / `NetworkMusicContainer`
+
+#### 修改文件
+
+- `data/model/SearchHistoryItem.kt`（新建）：搜索历史数据类
+- `data/prefs/AppPreferences.kt`：`keySearchHistory` + Flow + `recordSearch` + `purgeExpiredSearchHistory` + `BackupData` 集成
+- `NasMusicApp.kt`：onCreate 里 `applicationScope.launch { purgeExpiredSearchHistory() }`
+- `net/LocalInputServer.kt`（新建）：NanoHTTPD 包装 + HTML 页
+- `util/QrCodeGenerator.kt`（新建）：ZXing 二维码生成
+- `util/NetworkUtils.kt`（新建）：局域网 IP 获取
+- `ui/screens/TextInputDialog.kt`：QR 面板 + 历史建议 + 外部文字注入
+- `ui/screens/network/SearchSubTab.kt`：传 `historyItems` + QR/历史开关
+- `ui/screens/LibraryScreen.kt`：同上
+- `ui/screens/network/NetworkMusicContainer.kt`：透传 `historyItems`
+- `ui/components/AppRoot.kt`：收集 `searchHistory` Flow 传给两个搜索入口
+- `ui/viewmodel/MainViewModel.kt`：`recordSearch` 钩子 + 暴露 `searchHistory`
+- `app/build.gradle.kts`：+`zxing:core:3.5.3` +`nanohttpd:2.3.1`，versionCode 33 / versionName 2.13.0
+- `proguard-rules.pro`：keep `com.google.zxing.**` + `fi.iki.elonen.**`
+
+#### 验证结果
+
+- ✅ `./gradlew.bat assembleDebug` BUILD SUCCESSFUL
+- ✅ `./gradlew.bat assembleRelease` BUILD SUCCESSFUL（R8 minify + lintVital 通过）
+- ✅ 真机实测：搜索窗口右侧出 QR + 下方出历史建议；手机扫码浏览器打开 -> 输入文字 -> TV 输入框实时显示；搜索后历史记录；重开搜索历史显示「最近」+「热门」两行；D-Pad 选历史项填入 + 直接搜索；Library / Network 两个入口共享历史
+
+#### 注意事项
+
+- NanoHTTPD Maven group ID `org.nanohttpd` ≠ Java package `fi.iki.elonen`（原作者域名），import 需用 `fi.iki.elonen.NanoHTTPD`
+- HTTP server 仅在搜索弹窗打开时启动、关闭时停止，不常驻后台；端口 18080 固定，手机可保持页面打开连续输入
+- 搜索历史全局共享（Library / Network 两个入口共用同一份），30 天 TTL + 200 条上限防存储爆炸
+
+
+
 
