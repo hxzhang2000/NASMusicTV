@@ -55,7 +55,7 @@ import kotlinx.coroutines.launch
  * 搜索子 Tab
  *
  * 包含搜索栏输入触发 + 搜索结果列表。
- * 搜索输入使用 TextInputDialog（与现有 NetworkScreen 一致）。
+ * 搜索输入使用 TextInputDialog（开启二维码扫码 + 搜索历史）。
  */
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable

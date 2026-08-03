@@ -105,7 +105,7 @@ fun TextInputDialog(
     onConfirm: (String) -> Unit,
     onDismiss: () -> Unit,
     masked: Boolean = false,
-    showQrCode: Boolean = false,
+    showQrCode: Boolean = true,
     showHistory: Boolean = false,
     historyItems: List<SearchHistoryItem> = emptyList(),
     onHistorySelect: ((String) -> Unit)? = null,

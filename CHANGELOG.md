@@ -7,6 +7,20 @@
 >
 > 类型：`Added`（新增） | `Changed`（变更） | `Fixed`（修复） | `Removed`（移除）
 
+## [v2.12.4] - 2026-08-03
+
+### Added
+
+- **输入弹窗全面支持二维码扫码输入**：`TextInputDialog` 的 `showQrCode` 默认值改为 `true`，所有输入弹窗（服务器连接、天气 API Key、Meting 端点、歌单新建/重命名等）默认显示右侧二维码，手机扫码即可远程输入，与搜索窗口体验统一
+
+### Changed
+
+- **搜索历史范围收窄**：仅搜索类弹窗（曲库搜索 / 网络搜索）显示搜索历史，其余基本输入型弹窗不显示（`showHistory` 仍默认 `false`）
+
+### Removed
+
+- **旧网络音乐入口 `NetworkScreen`**：无任何调用者（已被 `NetworkMusicContainer` + `SearchSubTab` 取代），整个文件死代码移除；相关注释同步更新
+
 ## [v2.12.3] - 2026-08-03
 
 ### Fixed

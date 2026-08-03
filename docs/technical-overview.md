@@ -4956,6 +4956,37 @@ v2.6.0 天气电台功能使用 Open-Meteo（无需 API Key）作为主要天气
 - `restoreBackupFromJsonBlocking` 内部 `runBlocking` 在 NanoHTTPD 工作线程执行（非主线程），安全；桥接职责集中在 ViewModel，`BackupTransferServer` / `BackupTransferDialog` 不依赖协程库
 - 搜索历史记录时机变更：失败搜索不记录，空结果仍记录；用户行为不变，仅「热门」榜更准确
 
+### 10.36 v2.12.4 ｜输入弹窗二维码统一 + 移除旧网络音乐入口
+
+**背景**：统一搜索与输入体验——所有输入弹窗默认开启二维码扫码输入；删除已被 `NetworkMusicContainer` + `SearchSubTab` 取代、且全项目无调用者的旧 `NetworkScreen` 死代码；搜索历史仅保留在搜索类弹窗。
+
+#### 主要变更
+
+1. **`TextInputDialog` 默认开启二维码（`ui/screens/TextInputDialog.kt`）**
+   - `showQrCode: Boolean = false` -> `= true`，一处改动覆盖全部 9 个调用点（曲库搜索 / 网络搜索 / 服务器连接 / 天气 API Key / Meting 端点 / 歌单新建、重命名 / 创建歌单）
+   - `showHistory` 仍默认 `false`，仅搜索入口（`LibraryScreen` / `SearchSubTab`）显式开启搜索历史
+2. **移除旧网络音乐入口（删除 `ui/screens/NetworkScreen.kt`）**
+   - `AppRoot` 已改用 `NetworkMusicContainer`（内含 `SearchSubTab`），`NetworkScreen` 无任何调用者，属死代码，整文件删除（含其中不带二维码的旧搜索弹窗）
+   - `ui/screens/network/SearchSubTab.kt` 注释同步更新（不再引用"现有 NetworkScreen"）
+
+#### 修改文件
+
+- `ui/screens/TextInputDialog.kt`：`showQrCode` 默认值 `false` -> `true`
+- `ui/screens/NetworkScreen.kt`：整文件删除（死代码）
+- `ui/screens/network/SearchSubTab.kt`：文档注释更新
+- `docs/technical-overview.md`：新增 §10.36
+- `CHANGELOG.md`：新增 v2.12.4 条目
+- `app/build.gradle.kts`：versionCode 35->36, versionName 2.12.3->2.12.4
+
+#### 验证结果
+
+- ✅ `./gradlew.bat :app:compileDebugKotlin` BUILD SUCCESSFUL（删除 `NetworkScreen` 后无残留引用，全部 9 个调用点编译通过）
+- ⏳ 真机验证由用户执行（输入弹窗二维码显示、搜索历史仅搜索入口可见）
+
+#### 注意事项
+
+- 密码类输入（天气 API Key / 服务器密码等 `masked=true` 场景）现在也会显示二维码，按"全部默认开启"要求执行；如后续需要排除密码场景，可在调用点显式传 `showQrCode = false`
+
 
 
 
