@@ -4846,7 +4846,7 @@ v2.6.0 天气电台功能使用 Open-Meteo（无需 API Key）作为主要天气
 - `ui/screens/network/NetworkMusicContainer.kt`：透传 `historyItems`
 - `ui/components/AppRoot.kt`：收集 `searchHistory` Flow 传给两个搜索入口
 - `ui/viewmodel/MainViewModel.kt`：`recordSearch` 钩子 + 暴露 `searchHistory`
-- `app/build.gradle.kts`：+`zxing:core:3.5.3` +`nanohttpd:2.3.1`，versionCode 33 / versionName 2.13.0
+- `app/build.gradle.kts`：+`zxing:core:3.5.3` +`nanohttpd:2.3.1`，versionCode 33 / versionName 2.12.1
 - `proguard-rules.pro`：keep `com.google.zxing.**` + `fi.iki.elonen.**`
 
 #### 验证结果
@@ -4907,6 +4907,54 @@ v2.6.0 天气电台功能使用 Open-Meteo（无需 API Key）作为主要天气
 - 上传用 raw body + 直接读 inputStream，不用 `parseBody`（NanoHTTPD `parseBody` 对 raw body 用 ISO-8859-1 读取导致中文乱码，且有潜在大小限制）
 - server 仅在弹窗打开时启动、关闭时停止，不常驻后台
 - 端口 18081 独立于搜索输入的 18080，两个功能可同时使用
+
+
+### 10.35 v2.12.3 ｜代码审查修复（搜索历史时机 / runBlocking / 死代码）
+
+**背景**：v2.12.2 发版后对 `v2.12.0...HEAD` 做双轴审查（Standards + Spec），发现 5 处问题（0 硬性违规，5 条判断性建议/范围蔓延/实现有误）。本次集中修复。
+
+#### 主要变更
+
+1. **搜索历史记录时机（`ui/viewmodel/MainViewModel.kt`）**
+   - `searchSongsOnServer(query)`：`recordSearch` 从入口处移到 `try` 块内 `UiState.Success` 之后；失败（异常）或后端未连接时不记录，避免污染「热门」榜计数
+   - `searchNetworkSongs(keyword)`：移除入口处的 `recordSearch`；记录逻辑下沉到 `doNetworkSearch` 的成功路径（`results != null`）
+   - `shuffleNetworkSearch()`（换一批）走 `searchNetworkSongsBlocking`，不经过 `doNetworkSearch`，不受影响--只记用户实际输入的关键词
+   - 空结果仍记录（用户确实搜过）
+2. **`BackupTransferServer` runBlocking 修复（`net/BackupTransferServer.kt` + `ui/screens/BackupTransferDialog.kt` + `ui/viewmodel/MainViewModel.kt` + `ui/components/AppRoot.kt`）**
+   - `onRestore` 回调类型：`suspend (String) -> Boolean` -> `(String) -> Boolean`（非挂起）
+   - `BackupTransferServer.Impl.handleRestore`：`kotlinx.coroutines.runBlocking { onRestore.invoke(json) }` -> `onRestore.invoke(json)`，server 不再依赖协程库
+   - `MainViewModel` 新增 `restoreBackupFromJsonBlocking(json): Boolean`：`runBlocking { restoreBackupFromJson(json) }`，集中桥接职责（在 NanoHTTPD 工作线程上执行，非主线程，安全）
+   - `AppRoot` 接线：`onRestore = { json -> viewModel.restoreBackupFromJsonBlocking(json) }`
+3. **`TextInputDialog` 历史项「填入」死状态（`ui/screens/TextInputDialog.kt`）**
+   - `HistoryRow` 选中回调中的 `text = query` 在弹窗立即关闭后不可见，属死状态，移除
+   - `onHistorySelect` 由调用方（`LibraryScreen` / `SearchSubTab`）负责执行搜索 + 关闭弹窗
+   - 文档注释同步更新
+4. **`AppPreferences.clearSearchHistory()` 死代码移除（`data/prefs/AppPreferences.kt`）**
+   - 已定义但从未被任何 UI 调用，移除
+5. **`docs/technical-overview.md` §10.33 笔误修正**
+   - v2.12.1 修改文件列表中 `versionName 2.13.0` -> `2.12.1`（与标题版本一致）
+
+#### 修改文件
+
+- `ui/viewmodel/MainViewModel.kt`：`searchSongsOnServer` / `searchNetworkSongs` / `doNetworkSearch` 记录时机调整；新增 `restoreBackupFromJsonBlocking`
+- `net/BackupTransferServer.kt`：`onRestore` 改为非挂起，移除 `runBlocking`
+- `ui/screens/BackupTransferDialog.kt`：`onRestore` 改为非挂起
+- `ui/components/AppRoot.kt`：`onRestore` 改用 `restoreBackupFromJsonBlocking`
+- `ui/screens/TextInputDialog.kt`：移除 `HistoryRow` 回调中 `text = query` 死写入 + 注释更新
+- `data/prefs/AppPreferences.kt`：移除 `clearSearchHistory()`
+- `docs/technical-overview.md`：§10.33 笔误修正 + 新增 §10.35
+- `CHANGELOG.md`：新增 v2.12.3 条目
+- `app/build.gradle.kts`：versionCode 34->35, versionName 2.12.2->2.12.3
+
+#### 验证结果
+
+- ✅ `./gradlew.bat assembleDebug` BUILD SUCCESSFUL in 1m 9s（0 errors；1 pre-existing warning `MainViewModel.kt:2748` ExperimentalCoilApi opt-in，与本次修改无关）
+- ⏳ 真机验证由用户执行（搜索失败不再污染历史、扫码恢复仍正常、历史项选中仍能触发搜索）
+
+#### 注意事项
+
+- `restoreBackupFromJsonBlocking` 内部 `runBlocking` 在 NanoHTTPD 工作线程执行（非主线程），安全；桥接职责集中在 ViewModel，`BackupTransferServer` / `BackupTransferDialog` 不依赖协程库
+- 搜索历史记录时机变更：失败搜索不记录，空结果仍记录；用户行为不变，仅「热门」榜更准确
 
 
 

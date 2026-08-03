@@ -1381,8 +1381,6 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             _searchResults.value = UiState.Success(emptyList())
             return
         }
-        // 记录搜索历史
-        viewModelScope.launch { prefs.recordSearch(query) }
         _searchResults.value = UiState.Loading
         viewModelScope.launch {
             val adapter = backendRegistry.getAdapter() ?: run {
@@ -1392,6 +1390,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             try {
                 val results = adapter.searchSongs(query)
                 _searchResults.value = UiState.Success(results)
+                // 搜索成功后才记录历史（空结果也算成功，记录用户确实搜过的词；
+                // 失败/未连接不记录，避免污染热门榜）
+                prefs.recordSearch(query)
                 AppLog.d("NASMusic", "searchSongsOnServer: ${results.size} results for '$query'")
             } catch (e: Exception) {
                 AppLog.e("NASMusic", "searchSongsOnServer failed", e)
@@ -1425,9 +1426,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             usedSearchVariants.clear()
             return
         }
-        // 记录搜索历史
-        viewModelScope.launch { prefs.recordSearch(keyword) }
         // 用户手动搜索：重置换一批状态（基准词 + 已用变异词 + 已见歌曲集合）
+        // 搜索历史记录在 doNetworkSearch 成功路径里，失败不记录
         networkSearchBaseKeyword = keyword
         usedSearchVariants.clear()
         seenNetworkSearchKeys.clear()
@@ -1541,6 +1541,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             if (results != null) {
                 AppLog.i("MetingDiag", "doNetworkSearch: got ${results.size} results for '$keyword'")
                 _networkSearchResults.value = UiState.Success(results)
+                // 搜索成功后才记录历史（空结果也算成功；shuffleNetworkSearch 不走此路径，不会重复记录）
+                prefs.recordSearch(keyword)
             }
         }
     }
@@ -2216,6 +2218,17 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             false
         }
     }
+
+    /**
+     * 非挂起版本的 [restoreBackupFromJson]，供 BackupTransferServer 回调用。
+     *
+     * NanoHTTPD 的 `serve()` 是同步的，必须立即返回响应；此方法用 `runBlocking`
+     * 在 NanoHTTPD 工作线程上桥接 suspend 调用（非主线程，安全）。
+     * 桥接职责集中在 ViewModel，使 BackupTransferServer / BackupTransferDialog
+     * 不依赖协程库。
+     */
+    fun restoreBackupFromJsonBlocking(json: String): Boolean =
+        kotlinx.coroutines.runBlocking { restoreBackupFromJson(json) }
 
     /** 导入备份后刷新相关 StateFlow（收藏、歌单、队列、统计等由 prefs Flow 自动更新） */
     private fun refreshAfterImport() {

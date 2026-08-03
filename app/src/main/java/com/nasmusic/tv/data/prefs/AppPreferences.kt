@@ -828,15 +828,6 @@ class AppPreferences(private val context: Context) {
         }
     }
 
-    /**
-     * 清除所有搜索历史
-     */
-    suspend fun clearSearchHistory() {
-        context.dataStore.edit { prefs ->
-            prefs.remove(keySearchHistory)
-        }
-    }
-
     // ========== 数据备份 ==========
 
     /**

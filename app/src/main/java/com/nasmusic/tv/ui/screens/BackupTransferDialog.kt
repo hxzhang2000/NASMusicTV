@@ -45,12 +45,13 @@ import com.nasmusic.tv.util.QrCodeGenerator
  * 手机扫码后浏览器打开备份管理页面，可下载/上传/恢复备份。
  * 关闭弹窗时自动停止 server。
  *
- * @param onRestore 恢复备份的回调，传入备份 JSON 内容，返回是否成功
+ * @param onRestore 恢复备份的回调，传入备份 JSON 内容，返回是否成功。
+ *   非挂起类型：调用方负责同步桥接 suspend 逻辑（server 在 NanoHTTPD 工作线程上调用）
  * @param onDismiss 关闭弹窗
  */
 @Composable
 fun BackupTransferDialog(
-    onRestore: suspend (String) -> Boolean,
+    onRestore: (String) -> Boolean,
     onBackupChanged: () -> Unit = {},
     onDismiss: () -> Unit
 ) {

@@ -7,6 +7,22 @@
 >
 > 类型：`Added`（新增） | `Changed`（变更） | `Fixed`（修复） | `Removed`（移除）
 
+## [v2.12.3] - 2026-08-03
+
+### Fixed
+
+- **搜索历史记录时机**：此前曲库搜索（`searchSongsOnServer`）与网络音乐搜索（`searchNetworkSongs`）在入口处即记录关键词，失败搜索（后端未连接、网络错误）也会污染「热门」榜计数。改为仅在搜索成功返回后记录（空结果仍记录，反映用户实际搜过的词）；「换一批」（`shuffleNetworkSearch`）走独立路径不经过 `doNetworkSearch`，不受影响
+- **扫码传输备份 `runBlocking` 代码坏味道**：`BackupTransferServer` 的 `onRestore` 回调从 `suspend (String) -> Boolean` 改为非挂起 `(String) -> Boolean`，server 不再依赖协程库；`runBlocking` 桥接职责集中到 `MainViewModel.restoreBackupFromJsonBlocking`（在 NanoHTTPD 工作线程上执行，非主线程，安全）
+- **搜索历史「填入」死状态**：`TextInputDialog` 历史项选中回调中的 `text = query` 写入在弹窗立即关闭后不可见，属死状态；已移除，由调用方 `onHistorySelect` 直接执行搜索 + 关闭弹窗
+
+### Changed
+
+- **`docs/technical-overview.md` §10.33** 修正笔误：v2.12.1 修改文件列表中 `versionName 2.13.0` -> `2.12.1`（与标题版本一致）
+
+### Removed
+
+- **`AppPreferences.clearSearchHistory()`** 死代码：已定义但从未被任何 UI 调用，移除
+
 ## [v2.12.2] - 2026-08-02
 
 ### Added

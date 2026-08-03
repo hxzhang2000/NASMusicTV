@@ -22,11 +22,13 @@ import java.util.Locale
  * 生命周期：由 BackupTransferDialog 在打开时 [start]，关闭时 [stop]。
  *
  * @param context 用于访问 BackupFileUtils
- * @param onRestore 恢复备份的回调，传入备份 JSON 内容，返回是否成功
+ * @param onRestore 恢复备份的回调，传入备份 JSON 内容，返回是否成功。
+ *   非挂起类型：调用方负责在 NanoHTTPD 工作线程上同步桥接 suspend 逻辑
+ *   （server 不依赖协程库，桥接职责集中在 ViewModel）。
  */
 class BackupTransferServer(
     private val context: Context,
-    private val onRestore: suspend (String) -> Boolean,
+    private val onRestore: (String) -> Boolean,
     private val onBackupChanged: () -> Unit = {},
     private val port: Int = DEFAULT_PORT
 ) {
@@ -68,7 +70,7 @@ class BackupTransferServer(
 
     private class Impl(
         private val context: Context,
-        private val onRestore: suspend (String) -> Boolean,
+        private val onRestore: (String) -> Boolean,
         private val onBackupChanged: () -> Unit,
         port: Int
     ) : NanoHTTPD(port) {
@@ -199,8 +201,8 @@ class BackupTransferServer(
                     return jsonResponse(false, "读取失败: ${e.message}")
                 }
 
-                // 调用恢复回调（suspend -> 阻塞等待结果）
-                val ok = kotlinx.coroutines.runBlocking { onRestore.invoke(json) }
+                // 调用恢复回调（非挂起；调用方在工作线程上同步桥接 suspend 逻辑）
+                val ok = onRestore.invoke(json)
                 if (ok) {
                     jsonResponse(true, "恢复成功")
                 } else {

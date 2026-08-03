@@ -497,7 +497,7 @@ fun AppRoot(
                     // 扫码传输备份弹窗
                     if (showBackupTransferDialog) {
                         BackupTransferDialog(
-                            onRestore = { json -> viewModel.restoreBackupFromJson(json) },
+                            onRestore = { json -> viewModel.restoreBackupFromJsonBlocking(json) },
                             onBackupChanged = { viewModel.refreshBackupFiles() },
                             onDismiss = { showBackupTransferDialog = false }
                         )

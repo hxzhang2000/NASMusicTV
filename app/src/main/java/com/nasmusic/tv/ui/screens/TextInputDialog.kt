@@ -94,7 +94,8 @@ fun hasAvailableIme(context: Context): Boolean {
  * @param showQrCode 是否显示二维码扫码面板（仅搜索入口启用）
  * @param showHistory 是否显示搜索历史建议（仅搜索入口启用）
  * @param historyItems 搜索历史列表（按 lastSearchedAt 降序）
- * @param onHistorySelect 历史项被选中时的回调（填入文字 + 触发搜索）
+ * @param onHistorySelect 历史项被选中时的回调（触发搜索；调用方负责关闭弹窗。
+ *   选中后弹窗立即销毁，对话框内 `text` 状态不再可见，故不在此写入）
  */
 @Composable
 fun TextInputDialog(
@@ -304,13 +305,11 @@ fun TextInputDialog(
                             ) {
                                 if (recent.isNotEmpty()) {
                                     HistoryRow(label = "最近", items = recent) { query ->
-                                        text = query
                                         onHistorySelect?.invoke(query)
                                     }
                                 }
                                 if (top.isNotEmpty()) {
                                     HistoryRow(label = "热门", items = top) { query ->
-                                        text = query
                                         onHistorySelect?.invoke(query)
                                     }
                                 }
@@ -477,7 +476,8 @@ fun TextInputDialog(
 /**
  * 搜索历史行（最近 / 热门）
  *
- * 每行一个标签 + 最多 5 个可聚焦的历史项，D-Pad 选中后填入输入框并触发搜索。
+ * 每行一个标签 + 最多 5 个可聚焦的历史项，D-Pad 选中后触发 [onSelect] 回调
+ * （调用方负责执行搜索并关闭弹窗）。
  */
 @Composable
 private fun HistoryRow(
