@@ -52,6 +52,9 @@ app/release/
 # Obsidian vault local config
 .obsidian/
 
+# CodeGraph code intelligence index
+.codegraph/
+
 # CI / debug leftovers
 build_log.txt
 ci_logs.zip
