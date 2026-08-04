@@ -72,6 +72,7 @@ fun MineScreen(
     // 通用
     queueSongIds: Set<String>,
     onPlaySong: (Song) -> Unit,
+    onPlayAll: (List<Song>) -> Unit,
     onToggleFavorite: (Song) -> Unit,
     onToggleQueue: (Song) -> Unit,
     onCreatePlaylist: (String) -> Unit,
@@ -102,12 +103,24 @@ fun MineScreen(
     Row(modifier = Modifier.fillMaxSize().padding(32.dp)) {
         // ===== 左栏：收藏 =====
         Column(modifier = Modifier.weight(1f).fillMaxHeight()) {
-            Text(
-                text = stringResource(R.string.mine_favorites),
-                color = NasMusicColors.TextPrimary,
-                fontSize = 28.sp,
-                modifier = Modifier.padding(end = 24.dp)
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = stringResource(R.string.mine_favorites),
+                    color = NasMusicColors.TextPrimary,
+                    fontSize = 28.sp,
+                    modifier = Modifier.padding(end = 24.dp)
+                )
+                Spacer(modifier = Modifier.weight(1f))
+                if (mergedFavorites.isNotEmpty()) {
+                    ButtonChip(
+                        text = stringResource(R.string.common_play_all),
+                        onClick = { onPlayAll(mergedFavorites) }
+                    )
+                }
+            }
             Spacer(modifier = Modifier.height(16.dp))
             if (mergedFavorites.isEmpty()) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {

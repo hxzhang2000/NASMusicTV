@@ -411,6 +411,12 @@ fun AppRoot(
                             }
                             viewModel.navigateTo(Screen.NowPlaying)
                         },
+                        onPlayAll = { songs ->
+                            if (songs.isNotEmpty()) {
+                                viewModel.playQueue(songs)
+                                viewModel.navigateTo(Screen.NowPlaying)
+                            }
+                        },
                         onToggleFavorite = { song ->
                             if (song.isNetworkSong) viewModel.toggleNetworkFavorite(song)
                             else viewModel.toggleFavorite(song)

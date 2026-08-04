@@ -4987,6 +4987,35 @@ v2.6.0 天气电台功能使用 Open-Meteo（无需 API Key）作为主要天气
 
 - 密码类输入（天气 API Key / 服务器密码等 `masked=true` 场景）现在也会显示二维码，按"全部默认开启"要求执行；如后续需要排除密码场景，可在调用点显式传 `showQrCode = false`
 
+### 10.37 v2.12.5 — 「我的」收藏列表新增「播放全部」
+
+**概述**：在「我的」页面左栏收藏列表标题行新增「播放全部」按钮，一键播放全部收藏歌曲（NAS + 网络收藏合并，按 id 去重）。
+
+#### 主要变更
+
+1. **`ui/screens/MineScreen.kt`：左栏收藏标题行新增「播放全部」按钮**
+   - 收藏标题从纯 `Text` 改为 `Row`（标题 + 右侧按钮），仅 `mergedFavorites` 非空时显示 `ButtonChip`（复用 `common_play_all` 文案）
+   - 新增参数 `onPlayAll: (List<Song>) -> Unit`（与 `AlbumDetailScreen` / `ArtistDetailScreen` 的播放全部模式一致），点击时传入合并后的收藏歌曲列表
+2. **`ui/components/AppRoot.kt`：`MineScreen` 调用处接线 `onPlayAll`**
+   - `viewModel.playQueue(songs)` + `navigateTo(Screen.NowPlaying)`；`playQueue` 内部已处理网络歌曲 streamUrl 的异步解析，NAS + 网络收藏歌曲均能直接播放
+
+#### 修改文件
+
+- `ui/screens/MineScreen.kt`：新增 `onPlayAll` 参数 + 标题行「播放全部」按钮
+- `ui/components/AppRoot.kt`：`MineScreen` 调用处接线 `onPlayAll`
+- `app/build.gradle.kts`：versionCode 36->37, versionName 2.12.4->2.12.5
+- `CHANGELOG.md`：新增 v2.12.5 条目
+- `docs/technical-overview.md`：新增 §10.37
+
+#### 验证结果
+
+- ✅ `./gradlew.bat assembleDebug` BUILD SUCCESSFUL（产出 app-debug.apk，时间戳晚于改动文件）
+- ⏳ 真机验证由用户执行（收藏页「播放全部」按钮显示与播放行为）
+
+#### 注意事项
+
+- 按钮仅在有收藏歌曲时显示（空收藏列表不显示，避免无意义按钮）；播放顺序为合并列表顺序（本地收藏在前、网络收藏在后，同 id 仅保留本地版本）
+
 
 
 
