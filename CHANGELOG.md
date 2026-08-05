@@ -7,6 +7,13 @@
 >
 > 类型：`Added`（新增） | `Changed`（变更） | `Fixed`（修复） | `Removed`（移除）
 
+## [v2.12.6] - 2026-08-05
+
+### Added
+
+- **网络歌词候选切换**：再次按下"在线歌词"按钮时，会重新搜索酷狗/网易云并取下一个候选歌词，解决歌词匹配错误时无法换一个的问题。
+  涉及 `LyricsNetworkProvider`（`fetchFromKugou`/`fetchFromNetease` 返回多条候选）、`LyricsManager`（`getLyricsFromSource` 支持 `candidateIndex`）、`MainViewModel`（`switchLyricsSource` 递增索引）
+
 ## [v2.12.5] - 2026-08-04
 
 ### Added

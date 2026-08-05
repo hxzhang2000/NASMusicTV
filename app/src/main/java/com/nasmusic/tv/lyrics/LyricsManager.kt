@@ -136,8 +136,9 @@ class LyricsManager(
 
     /**
      * 从指定来源获取歌词
+     * @param candidateIndex 候选歌词索引（仅 NETWORK 来源有效），用于切换不同候选歌词
      */
-    suspend fun getLyricsFromSource(song: Song, source: LyricsSource): Lyrics? = withContext(Dispatchers.IO) {
+    suspend fun getLyricsFromSource(song: Song, source: LyricsSource, candidateIndex: Int = 0): Lyrics? = withContext(Dispatchers.IO) {
         when (source) {
             LyricsSource.EMBEDDED -> {
                 if (song.isNetworkSong && networkMusicManager != null) {
@@ -164,8 +165,11 @@ class LyricsManager(
             LyricsSource.LOCAL_FILE -> getLocalLrcFile(song)
             LyricsSource.LOCAL_CACHE -> getCachedLyrics(song)
             LyricsSource.NETWORK -> {
-                val text = networkProvider.fetchLyrics(song.title, song.artist)
-                if (text != null) {
+                val candidates = networkProvider.fetchLyricsCandidates(song.title, song.artist)
+                AppLog.d("LyricsManager", "getLyricsFromSource NETWORK: ${candidates.size} candidates, index=$candidateIndex")
+                val idx = candidateIndex.coerceIn(0, (candidates.size - 1).coerceAtLeast(0))
+                if (candidates.isNotEmpty() && idx < candidates.size) {
+                    val text = candidates[idx]
                     val lyrics = LrcParser.parse(text, song.id).copy(source = LyricsSource.NETWORK)
                     cacheLyrics(song, text)
                     lyrics

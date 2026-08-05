@@ -48,41 +48,73 @@ class LyricsNetworkProvider {
     }
 
     /**
-     * 从网络获取歌词
-     * 支持多个歌词源，尝试多种关键词组合
+     * 从网络获取歌词（单条，返回第一个匹配结果）
      */
     suspend fun fetchLyrics(title: String, artist: String): String? = withContext(Dispatchers.IO) {
         AppLog.d(TAG, "fetchLyrics: title=$title, artist=$artist")
+        val candidates = fetchLyricsCandidates(title, artist, maxResults = 1)
+        val result = candidates.firstOrNull()
+        if (result != null) {
+            AppLog.d(TAG, "fetchLyrics: success, length=${result.length}")
+        } else {
+            AppLog.w(TAG, "fetchLyrics: all keywords exhausted, returning null")
+        }
+        result
+    }
 
-        // 尝试多种关键词组合
+    /**
+     * 从网络获取歌词（多条候选）
+     * 遍历多种关键词组合、多个来源，收集去重后的候选歌词列表。
+     * 应用于：用户反复按下"在线歌词"按钮时切换不同候选。
+     */
+    suspend fun fetchLyricsCandidates(title: String, artist: String, maxResults: Int = 5): List<String> = withContext(Dispatchers.IO) {
+        AppLog.d(TAG, "fetchLyricsCandidates: title=$title, artist=$artist, maxResults=$maxResults")
+
         val keywords = mutableListOf(title)
         if (artist.isNotBlank()) {
             keywords.add("$title $artist")
             keywords.add("$artist $title")
         }
 
+        val seen = mutableSetOf<String>()
+        val results = mutableListOf<String>()
+
         for (keyword in keywords) {
-            AppLog.d(TAG, "fetchLyrics: trying keyword='$keyword'")
-            val result = fetchFromKugou(keyword)
-                ?: fetchFromNetease(keyword)
-            if (result != null) {
-                AppLog.d(TAG, "fetchLyrics: success for keyword='$keyword', length=${result.length}")
-                return@withContext result
+            if (results.size >= maxResults) break
+            AppLog.d(TAG, "fetchLyricsCandidates: trying keyword='$keyword'")
+
+            // 尝试酷狗
+            for (lyrics in fetchFromKugou(keyword, maxResults)) {
+                if (results.size >= maxResults) break
+                if (seen.add(lyrics)) {
+                    results.add(lyrics)
+                    AppLog.d(TAG, "fetchLyricsCandidates: Kugou candidate #${results.size}, len=${lyrics.length}")
+                }
             }
-            AppLog.w(TAG, "fetchLyrics: no result for keyword='$keyword'")
+
+            // 尝试网易云
+            for (lyrics in fetchFromNetease(keyword, maxResults)) {
+                if (results.size >= maxResults) break
+                if (seen.add(lyrics)) {
+                    results.add(lyrics)
+                    AppLog.d(TAG, "fetchLyricsCandidates: Netease candidate #${results.size}, len=${lyrics.length}")
+                }
+            }
         }
-        AppLog.w(TAG, "fetchLyrics: all keywords exhausted, returning null")
-        null
+
+        AppLog.d(TAG, "fetchLyricsCandidates: total=${results.size}")
+        results
     }
 
     /**
-     * 从酷狗音乐获取歌词
+     * 从酷狗音乐获取歌词（多条候选）
+     * @param maxResults 搜索时取前 N 个结果
      */
-    private suspend fun fetchFromKugou(keyword: String): String? {
+    private suspend fun fetchFromKugou(keyword: String, maxResults: Int = 1): List<String> {
         return try {
             val searchUrl = "https://mobilecdn.kugou.com/api/v3/search/song?keyword=" +
                     URLEncoder.encode(keyword, "UTF-8") +
-                    "&page=1&pagesize=1&showtype=14"
+                    "&page=1&pagesize=$maxResults&showtype=14"
             AppLog.d(TAG, "Kugou search: $searchUrl")
 
             val searchRequest = Request.Builder()
@@ -90,22 +122,47 @@ class LyricsNetworkProvider {
                 .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
                 .build()
 
-            val hash = client.newCall(searchRequest).execute().use { searchResponse ->
+            val searchBody = client.newCall(searchRequest).execute().use { searchResponse ->
                 if (!searchResponse.isSuccessful) {
                     AppLog.w(TAG, "Kugou search: HTTP ${searchResponse.code}")
                     return@use null
                 }
-                val searchBody = searchResponse.body?.string()
-                if (searchBody == null) { AppLog.w(TAG, "Kugou search: null body"); return@use null }
-                AppLog.d(TAG, "Kugou search: status=${searchResponse.code}, body=${searchBody.take(200)}")
-                val h = parseKugouHash(searchBody)
-                if (h == null) { AppLog.w(TAG, "Kugou search: no hash found"); return@use null }
-                AppLog.d(TAG, "Kugou search: hash=$h")
-                h
-            } ?: return null
+                val body = searchResponse.body?.string()
+                if (body == null) { AppLog.w(TAG, "Kugou search: null body"); return@use null }
+                AppLog.d(TAG, "Kugou search: status=${searchResponse.code}, body=${body.take(200)}")
+                body
+            } ?: return emptyList()
 
+            val hashes = parseKugouHashes(searchBody, maxResults)
+            if (hashes.isEmpty()) {
+                AppLog.w(TAG, "Kugou search: no hashes found")
+                return emptyList()
+            }
+            AppLog.d(TAG, "Kugou search: hashes=${hashes.joinToString()}")
+
+            val results = hashes.mapNotNull { hash ->
+                val lyrics = getLyricsByHash(hash)
+                if (lyrics != null) {
+                    AppLog.d(TAG, "Kugou: hash=$hash success, len=${lyrics.length}")
+                } else {
+                    AppLog.w(TAG, "Kugou: hash=$hash returned null")
+                }
+                lyrics
+            }
+            results
+        } catch (e: Exception) {
+            AppLog.e(TAG, "Kugou exception", e)
+            emptyList()
+        }
+    }
+
+    /**
+     * 根据酷狗 hash 获取歌词内容
+     */
+    private suspend fun getLyricsByHash(hash: String): String? {
+        return try {
             val lyricUrl = "https://krcs.kugou.com/search?ver=1&man=yes&client=mobi&keyword=&duration=&hash=$hash&album_audio_id="
-            AppLog.d(TAG, "Kugou lyrics: $lyricUrl")
+            AppLog.d(TAG, "Kugou lyrics by hash: $hash")
 
             val lyricRequest = Request.Builder()
                 .url(lyricUrl)
@@ -119,28 +176,25 @@ class LyricsNetworkProvider {
                 }
                 val body = lyricResponse.body?.string()
                 if (body == null) { AppLog.w(TAG, "Kugou lyrics: null body"); return@use null }
-                AppLog.d(TAG, "Kugou lyrics: status=${lyricResponse.code}, body=${body.take(200)}")
                 body
             } ?: return null
 
-            val result = parseKugouLyrics(lyricBody)
-            if (result != null) AppLog.d(TAG, "Kugou: success, length=${result.length}")
-            else AppLog.w(TAG, "Kugou: parse returned null")
-            result
+            parseKugouLyrics(lyricBody)
         } catch (e: Exception) {
-            AppLog.e(TAG, "Kugou exception", e)
+            AppLog.e(TAG, "Kugou getLyricsByHash exception", e)
             null
         }
     }
 
     /**
-     * 从网易云音乐获取歌词
+     * 从网易云音乐获取歌词（多条候选）
+     * @param maxResults 搜索时取前 N 个结果
      */
-    private suspend fun fetchFromNetease(keyword: String): String? {
+    private suspend fun fetchFromNetease(keyword: String, maxResults: Int = 1): List<String> {
         return try {
             val searchUrl = "https://music.163.com/api/search/get/web?csrf_token=" +
                     "&s=" + URLEncoder.encode(keyword, "UTF-8") +
-                    "&type=1&offset=0&total=true&limit=1"
+                    "&type=1&offset=0&total=true&limit=$maxResults"
             AppLog.d(TAG, "Netease search: $searchUrl")
 
             val searchRequest = Request.Builder()
@@ -149,22 +203,47 @@ class LyricsNetworkProvider {
                 .header("Referer", "https://music.163.com")
                 .build()
 
-            val songId = client.newCall(searchRequest).execute().use { searchResponse ->
+            val searchBody = client.newCall(searchRequest).execute().use { searchResponse ->
                 if (!searchResponse.isSuccessful) {
                     AppLog.w(TAG, "Netease search: HTTP ${searchResponse.code}")
                     return@use null
                 }
-                val searchBody = searchResponse.body?.string()
-                if (searchBody == null) { AppLog.w(TAG, "Netease search: null body"); return@use null }
-                AppLog.d(TAG, "Netease search: status=${searchResponse.code}, body=${searchBody.take(200)}")
-                val sid = parseNeteaseSongId(searchBody)
-                if (sid == null) { AppLog.w(TAG, "Netease search: no songId found"); return@use null }
-                AppLog.d(TAG, "Netease search: songId=$sid")
-                sid
-            } ?: return null
+                val body = searchResponse.body?.string()
+                if (body == null) { AppLog.w(TAG, "Netease search: null body"); return@use null }
+                AppLog.d(TAG, "Netease search: status=${searchResponse.code}, body=${body.take(200)}")
+                body
+            } ?: return emptyList()
 
+            val songIds = parseNeteaseSongIds(searchBody, maxResults)
+            if (songIds.isEmpty()) {
+                AppLog.w(TAG, "Netease search: no songIds found")
+                return emptyList()
+            }
+            AppLog.d(TAG, "Netease search: songIds=${songIds.joinToString()}")
+
+            val results = songIds.mapNotNull { songId ->
+                val lyrics = getLyricsBySongId(songId)
+                if (lyrics != null) {
+                    AppLog.d(TAG, "Netease: songId=$songId success, len=${lyrics.length}")
+                } else {
+                    AppLog.w(TAG, "Netease: songId=$songId returned null")
+                }
+                lyrics
+            }
+            results
+        } catch (e: Exception) {
+            AppLog.e(TAG, "Netease exception", e)
+            emptyList()
+        }
+    }
+
+    /**
+     * 根据网易云 songId 获取歌词内容
+     */
+    private suspend fun getLyricsBySongId(songId: String): String? {
+        return try {
             val lyricUrl = "https://music.163.com/api/song/lyric?os=pc&id=$songId&lv=-1&kv=-1&tv=-1"
-            AppLog.d(TAG, "Netease lyrics: $lyricUrl")
+            AppLog.d(TAG, "Netease lyrics by songId: $songId")
 
             val lyricRequest = Request.Builder()
                 .url(lyricUrl)
@@ -179,33 +258,28 @@ class LyricsNetworkProvider {
                 }
                 val body = lyricResponse.body?.string()
                 if (body == null) { AppLog.w(TAG, "Netease lyrics: null body"); return@use null }
-                AppLog.d(TAG, "Netease lyrics: status=${lyricResponse.code}, body=${body.take(200)}")
                 body
             } ?: return null
 
-            val result = parseNeteaseLyrics(lyricBody)
-            if (result != null) AppLog.d(TAG, "Netease: success, length=${result.length}")
-            else AppLog.w(TAG, "Netease: parse returned null")
-            result
+            parseNeteaseLyrics(lyricBody)
         } catch (e: Exception) {
-            AppLog.e(TAG, "Netease exception", e)
+            AppLog.e(TAG, "Netease getLyricsBySongId exception", e)
             null
         }
     }
 
     /**
-     * 解析酷狗搜索响应，提取歌曲 hash
+     * 解析酷狗搜索响应，提取前 N 个歌曲 hash
      * 使用 Gson 解析（与 MetingApiService 一致）
      */
-    private fun parseKugouHash(response: String): String? {
+    private fun parseKugouHashes(response: String, maxResults: Int): List<String> {
         return try {
             val json = JsonParser.parseString(response).asJsonObject
             val data = json.getAsJsonObject("data")
-            val info = data?.getAsJsonArray("info")
-            val first = info?.firstOrNull() as? JsonObject
-            first?.get("hash")?.asString
+            val info = data?.getAsJsonArray("info") ?: return emptyList()
+            info.take(maxResults).mapNotNull { (it as? JsonObject)?.get("hash")?.asString }
         } catch (e: Exception) {
-            null
+            emptyList()
         }
     }
 
@@ -254,18 +328,17 @@ class LyricsNetworkProvider {
     }
 
     /**
-     * 解析网易云搜索响应，提取歌曲 ID
+     * 解析网易云搜索响应，提取前 N 个歌曲 ID
      * 使用 Gson 解析（与 MetingApiService 一致）
      */
-    private fun parseNeteaseSongId(response: String): String? {
+    private fun parseNeteaseSongIds(response: String, maxResults: Int): List<String> {
         return try {
             val json = JsonParser.parseString(response).asJsonObject
             val result = json.getAsJsonObject("result")
-            val songs = result?.getAsJsonArray("songs")
-            val first = songs?.firstOrNull() as? JsonObject
-            first?.get("id")?.asString
+            val songs = result?.getAsJsonArray("songs") ?: return emptyList()
+            songs.take(maxResults).mapNotNull { (it as? JsonObject)?.get("id")?.asString }
         } catch (e: Exception) {
-            null
+            emptyList()
         }
     }
 

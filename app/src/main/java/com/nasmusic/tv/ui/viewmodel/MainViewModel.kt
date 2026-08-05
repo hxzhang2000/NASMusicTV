@@ -2626,16 +2626,37 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         _lyricsHighlightMode.value = mode
     }
 
+    // 网络歌词候选索引：再次按下"在线歌词"按钮时递增，切换不同候选
+    private var networkLyricsCandidateIndex = 0
+    private var networkLyricsSongId: String? = null
+
     /**
      * 切换歌词来源
      * 切换到在线歌词时联动获取网络封面，切回内嵌时清除网络封面
+     * 如果当前已显示网络歌词，再次按下"在线歌词"按钮 → 取下一个候选歌词
      */
     fun switchLyricsSource(source: LyricsSource) {
         val song = currentSong.value ?: return
-        AppLog.d("NASMusic", "switchLyricsSource: $source")
+        val currentSource = _currentLyrics.value?.source
+        AppLog.d("NASMusic", "switchLyricsSource: $source, currentSource=$currentSource")
+
+        // 切歌时重置候选索引
+        if (song.id != networkLyricsSongId) {
+            networkLyricsCandidateIndex = 0
+            networkLyricsSongId = song.id
+        }
+
+        // 已显示网络歌词 + 再次按下在线歌词按钮 → 尝试下一个候选
+        if (source == LyricsSource.NETWORK && currentSource == LyricsSource.NETWORK) {
+            networkLyricsCandidateIndex++
+            AppLog.d("NASMusic", "switchLyricsSource: increment candidateIndex to $networkLyricsCandidateIndex")
+        } else {
+            networkLyricsCandidateIndex = 0
+        }
+
         viewModelScope.launch {
             try {
-                val lyrics = lyricsManager.getLyricsFromSource(song, source)
+                val lyrics = lyricsManager.getLyricsFromSource(song, source, networkLyricsCandidateIndex)
                 _currentLyrics.value = lyrics
                 AppLog.d("NASMusic", "switchLyricsSource: source=${lyrics?.source}, lines=${lyrics?.lines?.size}")
 

@@ -5016,6 +5016,45 @@ v2.6.0 天气电台功能使用 Open-Meteo（无需 API Key）作为主要天气
 
 - 按钮仅在有收藏歌曲时显示（空收藏列表不显示，避免无意义按钮）；播放顺序为合并列表顺序（本地收藏在前、网络收藏在后，同 id 仅保留本地版本）
 
+### 10.38 v2.12.6 — 网络歌词候选切换
+
+**概述**：再次按下"在线歌词"按钮时，递增候选索引并重新搜索酷狗/网易云，取下一个不同的候选歌词，解决歌词匹配错误时无法换一个的问题。
+
+#### 主要变更
+
+1. **`lyrics/LyricsNetworkProvider.kt`：`fetchFromKugou`/`fetchFromNetease` 返回多条候选**
+   - 酷狗搜索 `pagesize=1`→`pagesize=maxResults`，解析多个 hash 逐一获取歌词
+   - 网易云搜索 `limit=1`→`limit=maxResults`，解析多个 songId 逐一获取歌词
+   - 新增 `fetchLyricsCandidates(title, artist, maxResults=5)` 遍历 3 种关键词组合、两个来源，去重后返回候选列表
+   - 新增 `getLyricsByHash`/`getLyricsBySongId` 辅助方法，提取单条歌词获取逻辑
+   - 原有 `fetchLyrics` 改为调用 `fetchLyricsCandidates(..., maxResults=1).firstOrNull()`，行为不变
+2. **`lyrics/LyricsManager.kt`：`getLyricsFromSource` 新增 `candidateIndex` 参数**
+   - `NETWORK` 分支走 `fetchLyricsCandidates` 按索引取候选，索引越界时 `coerceIn` 到最后一个有效值
+3. **`ui/viewmodel/MainViewModel.kt`：`switchLyricsSource` 追踪候选索引**
+   - 新增 `networkLyricsCandidateIndex` + `networkLyricsSongId` 字段
+   - 已显示网络歌词时再次按下"在线歌词"按钮 → 索引 +1 取下一个候选
+   - 切歌或切到其他来源 → 索引重置为 0
+
+#### 修改文件
+
+- `lyrics/LyricsNetworkProvider.kt`：`fetchFromKugou`/`fetchFromNetease` 改造为多结果返回，新增 `fetchLyricsCandidates` 等方法
+- `lyrics/LyricsManager.kt`：`getLyricsFromSource` 新增 `candidateIndex` 参数，`NETWORK` 分支走候选列表
+- `ui/viewmodel/MainViewModel.kt`：`switchLyricsSource` 追踪并递增候选索引
+- `app/build.gradle.kts`：versionCode 37->38, versionName 2.12.5->2.12.6
+- `CHANGELOG.md`：新增 v2.12.6 条目
+- `docs/technical-overview.md`：新增 §10.38
+
+#### 验证结果
+
+- ✅ `./gradlew.bat assembleDebug` BUILD SUCCESSFUL
+- ✅ `./gradlew.bat assembleRelease` BUILD SUCCESSFUL
+- ✅ 真机测试通过（重复按下"在线歌词"按钮切换不同候选歌词）
+
+#### 注意事项
+
+- 候选歌词数量取决于网络 API 搜索结果，如果只有 1 个候选，多次按下仍返回同一个（不会崩溃或空指针）
+- 候选索引基于当前歌曲 id 追踪，切歌后自动重置，不影响新歌的正常加载
+
 
 
 
