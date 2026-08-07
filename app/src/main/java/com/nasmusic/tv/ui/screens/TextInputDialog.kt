@@ -216,7 +216,7 @@ fun TextInputDialog(
                         Text(
                             text = title,
                             color = NasMusicColors.TextPrimary,
-                            fontSize = 18.sp
+                            fontSize = 23.sp
                         )
                         Spacer(modifier = Modifier.height(12.dp))
 
@@ -237,7 +237,7 @@ fun TextInputDialog(
                                     .padding(horizontal = 12.dp, vertical = 12.dp),
                                 textStyle = TextStyle(
                                     color = NasMusicColors.TextPrimary,
-                                    fontSize = 15.sp
+                                    fontSize = 20.sp
                                 ),
                                 cursorBrush = SolidColor(NasMusicColors.Primary),
                                 decorationBox = { innerTextField ->
@@ -249,7 +249,7 @@ fun TextInputDialog(
                                             Text(
                                                 text = hint,
                                                 color = NasMusicColors.TextSecondary,
-                                                fontSize = 15.sp
+                                                fontSize = 20.sp
                                             )
                                         }
                                         innerTextField()
@@ -274,7 +274,7 @@ fun TextInputDialog(
                                            else text,
                                     color = if (text.isEmpty()) NasMusicColors.TextSecondary
                                             else NasMusicColors.TextPrimary,
-                                    fontSize = 15.sp,
+                                    fontSize = 20.sp,
                                     modifier = Modifier.padding(horizontal = 12.dp)
                                 )
                             }
@@ -286,7 +286,7 @@ fun TextInputDialog(
                             Text(
                                 text = imeUnavailableMsg!!,
                                 color = NasMusicColors.Warning,
-                                fontSize = 12.sp
+                                fontSize = 17.sp
                             )
                         }
 
@@ -457,13 +457,13 @@ fun TextInputDialog(
                             Text(
                                 text = "扫码用手机输入",
                                 color = NasMusicColors.TextPrimary,
-                                fontSize = 13.sp
+                                fontSize = 18.sp
                             )
                             Spacer(modifier = Modifier.height(2.dp))
                             Text(
                                 text = "手机浏览器打开",
                                 color = NasMusicColors.TextSecondary,
-                                fontSize = 11.sp
+                                fontSize = 16.sp
                             )
                         }
                     }
@@ -492,7 +492,7 @@ private fun HistoryRow(
         Text(
             text = label,
             color = NasMusicColors.TextSecondary,
-            fontSize = 12.sp,
+            fontSize = 17.sp,
             modifier = Modifier.width(28.dp)
         )
         items.forEach { item ->
@@ -516,7 +516,7 @@ private fun HistoryRow(
                 ) {
                     Text(
                         text = item.query,
-                        fontSize = 12.sp,
+                        fontSize = 17.sp,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.padding(horizontal = 8.dp)
@@ -546,7 +546,7 @@ private fun KeyButton(
     ) {
         Text(
             text = label,
-            fontSize = 14.sp,
+            fontSize = 19.sp,
             textAlign = TextAlign.Center,
             modifier = Modifier.fillMaxSize().padding(vertical = 10.dp)
         )
@@ -582,7 +582,7 @@ private fun ActionButton(
     ) {
         Text(
             text = label,
-            fontSize = 13.sp,
+            fontSize = 18.sp,
             textAlign = TextAlign.Center,
             modifier = Modifier.fillMaxSize().padding(vertical = 12.dp)
         )

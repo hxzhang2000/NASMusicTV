@@ -107,7 +107,7 @@ fun BackupTransferDialog(
                 Text(
                     text = "扫码传输备份",
                     color = NasMusicColors.TextPrimary,
-                    fontSize = 18.sp
+                    fontSize = 23.sp
                 )
                 Spacer(modifier = Modifier.height(8.dp))
 
@@ -121,19 +121,19 @@ fun BackupTransferDialog(
                     Text(
                         text = "手机扫码打开备份管理页",
                         color = NasMusicColors.TextPrimary,
-                        fontSize = 14.sp
+                        fontSize = 19.sp
                     )
                     Text(
                         text = "可下载备份到手机 / 上传备份到电视 / 恢复备份",
                         color = NasMusicColors.TextSecondary,
-                        fontSize = 12.sp
+                        fontSize = 17.sp
                     )
                     Spacer(modifier = Modifier.height(6.dp))
                     serverUrl?.let { url ->
                         Text(
                             text = url,
                             color = NasMusicColors.TextSecondary,
-                            fontSize = 11.sp
+                            fontSize = 16.sp
                         )
                     }
                 } ?: run {
@@ -143,7 +143,7 @@ fun BackupTransferDialog(
                         text = status,
                         color = if (status.startsWith("等待")) NasMusicColors.Primary
                                else NasMusicColors.Warning,
-                        fontSize = 14.sp
+                        fontSize = 19.sp
                     )
                     Spacer(modifier = Modifier.height(40.dp))
                 }
@@ -175,7 +175,7 @@ fun BackupTransferDialog(
                         ) {
                             Text(
                                 text = "关闭",
-                                fontSize = 14.sp
+                                fontSize = 19.sp
                             )
                         }
                     }

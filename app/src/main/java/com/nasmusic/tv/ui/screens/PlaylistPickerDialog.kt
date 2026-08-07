@@ -98,13 +98,13 @@ fun PlaylistPickerDialog(
                 Text(
                     text = stringResource(R.string.mine_pick_playlist_title),
                     color = NasMusicColors.TextPrimary,
-                    fontSize = 18.sp
+                    fontSize = 23.sp
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
                     text = stringResource(R.string.mine_pick_playlist_hint),
                     color = NasMusicColors.TextSecondary,
-                    fontSize = 12.sp
+                    fontSize = 17.sp
                 )
 
                 Spacer(modifier = Modifier.height(16.dp))
@@ -118,7 +118,7 @@ fun PlaylistPickerDialog(
                         Text(
                             text = stringResource(R.string.mine_pick_playlist_empty),
                             color = NasMusicColors.TextSecondary,
-                            fontSize = 14.sp
+                            fontSize = 19.sp
                         )
                     }
                 } else {
@@ -148,21 +148,21 @@ fun PlaylistPickerDialog(
                                     Text(
                                         text = "♪",
                                         color = NasMusicColors.Primary,
-                                        fontSize = 16.sp,
+                                        fontSize = 21.sp,
                                         modifier = Modifier.padding(end = 12.dp)
                                     )
                                     Column(modifier = Modifier.weight(1f)) {
                                         Text(
                                             text = playlist.name,
                                             color = NasMusicColors.TextPrimary,
-                                            fontSize = 14.sp,
+                                            fontSize = 19.sp,
                                             maxLines = 1,
                                             overflow = TextOverflow.Ellipsis
                                         )
                                         Text(
                                             text = stringResource(R.string.mine_song_count, playlist.songs.size),
                                             color = NasMusicColors.TextSecondary,
-                                            fontSize = 11.sp
+                                            fontSize = 16.sp
                                         )
                                     }
                                 }
@@ -192,7 +192,7 @@ fun PlaylistPickerDialog(
                     ) {
                         Text(
                             text = "+ " + stringResource(R.string.mine_create_playlist),
-                            fontSize = 13.sp,
+                            fontSize = 18.sp,
                             modifier = Modifier.padding(horizontal = 18.dp, vertical = 9.dp)
                         )
                     }
@@ -209,7 +209,7 @@ fun PlaylistPickerDialog(
                     ) {
                         Text(
                             text = stringResource(R.string.common_cancel),
-                            fontSize = 13.sp,
+                            fontSize = 18.sp,
                             modifier = Modifier.padding(horizontal = 24.dp, vertical = 9.dp)
                         )
                     }
