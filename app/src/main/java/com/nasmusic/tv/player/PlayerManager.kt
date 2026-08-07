@@ -66,6 +66,24 @@ class PlayerManager() {
     private val _playerError = MutableStateFlow<String?>(null)
     val playerError: StateFlow<String?> = _playerError
 
+    // 人声消除处理器引用（由 PlaybackService 注入）
+    private var vocalRemovalProcessor: VocalRemovalProcessor? = null
+
+    /** 由 PlaybackService 注入处理器实例 */
+    fun setVocalRemovalProcessor(processor: VocalRemovalProcessor) {
+        vocalRemovalProcessor = processor
+    }
+
+    /** 开关人声消除（实时生效） */
+    fun setVocalRemovalEnabled(enabled: Boolean) {
+        vocalRemovalProcessor?.setEnabled(enabled)
+    }
+
+    /** 查询当前是否启用人声消除 */
+    fun isVocalRemovalEnabled(): Boolean {
+        return vocalRemovalProcessor?.isEnabled() ?: false
+    }
+
     // 随机播放历史记录，避免连续重复
     private val shuffleHistory = mutableListOf<Int>()
 

@@ -247,6 +247,7 @@ fun AppRoot(
                 }
                 Screen.NowPlaying -> {
                     val lyricsFontScale by viewModel.prefs.lyricsFontScale.collectAsState(initial = 1.0f)
+                    val vocalRemovalEnabled by viewModel.vocalRemovalEnabled.collectAsState()
                     NowPlayingScreen(
                         currentSong = currentSong,
                         isPlaying = isPlaying,
@@ -273,6 +274,9 @@ fun AppRoot(
                         onNext = { viewModel.next() },
                         onPrevious = { viewModel.previous() },
                         onTogglePlayMode = { viewModel.togglePlayMode() },
+                        // === KARAOKE 人声消除 ===
+                        vocalRemovalEnabled = vocalRemovalEnabled,
+                        onToggleVocalRemoval = { viewModel.toggleVocalRemoval() },
                         onSeek = { viewModel.seekTo(it) },
                         onSwitchLyricsSource = { viewModel.switchLyricsSource(it) },
                         onChangeHighlightMode = { viewModel.setLyricsHighlightMode(it) },

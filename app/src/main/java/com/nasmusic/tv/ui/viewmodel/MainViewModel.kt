@@ -2507,6 +2507,17 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         playerManager.applyPlayMode(newMode)
     }
 
+    // --- KARAOKE 伴奏模式（人声消除）---
+    private val _vocalRemovalEnabled = MutableStateFlow(false)
+    val vocalRemovalEnabled: StateFlow<Boolean> = _vocalRemovalEnabled.asStateFlow()
+
+    fun toggleVocalRemoval() {
+        val newValue = !_vocalRemovalEnabled.value
+        _vocalRemovalEnabled.value = newValue
+        playerManager.setVocalRemovalEnabled(newValue)
+        AppLog.d("NASMusic", "toggleVocalRemoval -> $newValue")
+    }
+
     fun setPlayMode(mode: PlayMode) {
         _playMode.value = mode
         playerManager.applyPlayMode(mode)

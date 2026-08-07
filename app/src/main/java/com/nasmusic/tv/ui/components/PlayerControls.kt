@@ -201,6 +201,8 @@ fun ControlButtonsRow(
     onNext: () -> Unit,
     onPrevious: () -> Unit,
     onTogglePlayMode: () -> Unit,
+    showVocalButton: Boolean = false,
+    onEnterKaraoke: () -> Unit = {},
     modifier: Modifier = Modifier,
     compact: Boolean = false,
     playPauseFocusRequester: FocusRequester? = null
@@ -236,6 +238,15 @@ fun ControlButtonsRow(
             Icon(imageVector = icon, contentDescription = playMode.displayName,
                 modifier = Modifier.size(if (compact) 20.dp else 28.dp))
         })
+        // K 歌入口按钮
+        if (showVocalButton) {
+            Spacer(modifier = Modifier.width(if (compact) 12.dp else 20.dp))
+            VocalToggleButton(
+                label = "K歌",
+                onClick = onEnterKaraoke,
+                compact = compact
+            )
+        }
     }
 }
 

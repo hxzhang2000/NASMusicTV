@@ -48,6 +48,7 @@ import com.nasmusic.tv.ui.components.LyricsView
 import com.nasmusic.tv.ui.components.CoverCarousel
 import com.nasmusic.tv.ui.components.ControlButtonsRow
 import com.nasmusic.tv.ui.components.FocusableSurface
+import com.nasmusic.tv.ui.components.KaraokePlaybackScreen
 import com.nasmusic.tv.ui.components.ProgressSection
 import com.nasmusic.tv.ui.components.SongInfoPanel
 import com.nasmusic.tv.ui.components.VisualEqualizer
@@ -98,10 +99,49 @@ fun NowPlayingScreen(
     spectrumEnabled: Boolean = false,
     /** 可视化频谱主题 */
     visualizerTheme: VisualizerTheme = VisualizerTheme.COLOR_FLOW,
+    // === KARAOKE 人声消除 ===
+    vocalRemovalEnabled: Boolean = false,
+    onToggleVocalRemoval: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     var showInfoPanel by remember { mutableStateOf(false) }
     val playPauseFocusRequester = remember { FocusRequester() }
+
+    // ── 是否显示全屏 KARAOKE 页面（与 vocalRemovalEnabled 音频开关分离）──
+    var showKaraoke by remember(currentSong) { mutableStateOf(false) }
+
+    fun enterKaraoke() {
+        showKaraoke = true
+        // 进入 K 歌页默认开启人声消除（伴唱）
+        if (!vocalRemovalEnabled) onToggleVocalRemoval()
+    }
+
+    fun exitKaraoke() {
+        showKaraoke = false
+        // 退出 K 歌页恢复原唱
+        if (vocalRemovalEnabled) onToggleVocalRemoval()
+    }
+
+    // ── 全屏 KARAOKE 页面 ──
+    if (showKaraoke) {
+        KaraokePlaybackScreen(
+            currentSong = currentSong,
+            isPlaying = isPlaying,
+            lyrics = lyrics,
+            coverCandidates = coverCandidates,
+            coverFilterEnabled = coverFilterEnabled,
+            coverFilterBlurRadius = coverFilterBlurRadius,
+            progressMs = progressMs,
+            vocalRemovalEnabled = vocalRemovalEnabled,
+            onToggleVocalRemoval = onToggleVocalRemoval,
+            onExitKaraoke = { exitKaraoke() },
+            onPlayPause = onPlayPause,
+            onNext = onNext,
+            onPrevious = onPrevious,
+            playPauseFocusRequester = playPauseFocusRequester
+        )
+        return
+    }
 
     // 进入 NowPlaying 页面时自动聚焦播放/暂停按钮
     LaunchedEffect(Unit) {
@@ -217,6 +257,8 @@ fun NowPlayingScreen(
                             onNext = onNext,
                             onPrevious = onPrevious,
                             onTogglePlayMode = onTogglePlayMode,
+                            showVocalButton = currentSong != null,
+                            onEnterKaraoke = { enterKaraoke() },
                             compact = true,
                             playPauseFocusRequester = playPauseFocusRequester
                         )

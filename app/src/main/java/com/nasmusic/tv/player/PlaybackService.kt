@@ -13,7 +13,10 @@ import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
+import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.audio.AudioSink
+import androidx.media3.exoplayer.audio.DefaultAudioSink
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.session.MediaLibraryService
 import androidx.media3.session.MediaSession
@@ -71,7 +74,25 @@ class PlaybackService : MediaLibraryService() {
             )
         val mediaSourceFactory = androidx.media3.exoplayer.source.DefaultMediaSourceFactory(this, extractorsFactory)
 
-        val player = ExoPlayer.Builder(this)
+        // 人声消除处理器（卡拉OK模式）
+        val vocalRemovalProcessor = VocalRemovalProcessor()
+
+        // 自定义 RenderersFactory，注入 VocalRemovalProcessor 到 AudioSink
+        val renderersFactory = object : DefaultRenderersFactory(this) {
+            override fun buildAudioSink(
+                context: android.content.Context,
+                enableFloatOutput: Boolean,
+                enableAudioTrackPlaybackParams: Boolean
+            ): AudioSink {
+                return DefaultAudioSink.Builder(context)
+                    .setAudioProcessors(arrayOf(vocalRemovalProcessor))
+                    .setEnableFloatOutput(enableFloatOutput)
+                    .setEnableAudioTrackPlaybackParams(enableAudioTrackPlaybackParams)
+                    .build()
+            }
+        }
+
+        val player = ExoPlayer.Builder(this, renderersFactory)
             .setMediaSourceFactory(mediaSourceFactory)
             .setAudioAttributes(audioAttributes, true)
             .setHandleAudioBecomingNoisy(true)
@@ -94,8 +115,9 @@ class PlaybackService : MediaLibraryService() {
             .setSessionActivity(pendingIntent)
             .build()
 
-        // Store player reference in manager
+        // Store player reference in manager + inject vocal removal processor
         (application as NasMusicApp).playerManager.setPlayer(player)
+        (application as NasMusicApp).playerManager.setVocalRemovalProcessor(vocalRemovalProcessor)
 
         // Start as foreground service with initial notification
         startForeground(NOTIFICATION_ID, buildNotification(null, false))
