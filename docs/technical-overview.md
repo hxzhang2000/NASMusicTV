@@ -5053,7 +5053,87 @@ v2.6.0 天气电台功能使用 Open-Meteo（无需 API Key）作为主要天气
 #### 注意事项
 
 - 候选歌词数量取决于网络 API 搜索结果，如果只有 1 个候选，多次按下仍返回同一个（不会崩溃或空指针）
-- 候选索引基于当前歌曲 id 追踪，切歌后自动重置，不影响新歌的正常加载
+### 10.39 v2.12.7 - 歌曲列表行高加大 & 文字放大
+
+**概述**：全应用所有歌曲列表项的行高增加一倍，文字字号同步加大，改善电视大屏远距离观看的可读性。
+
+#### 主要变更
+
+1. **`SongRow`（`ui/screens/LibraryScreen.kt`，共享组件）**：
+   - 行高从 ~52dp 增至 100dp（`height(100.dp)`）
+   - 封面缩略图 36dp -> 56dp，内边距加大
+   - 歌名 13sp -> 18sp，歌手 11sp -> 15sp
+   - 序号 12sp -> 16sp（宽 28dp -> 36dp），时长 11sp -> 15sp
+   - 收藏♥ 10sp -> 14sp，播放次数 10sp -> 13sp，▶ 11sp -> 15sp
+   - 影响：曲库歌曲列表、网络搜索结果、天气电台、继续听、收藏列表、网络歌单详情等 7+ 页面
+2. **`AlbumDetailScreen.kt` 内联行**：行高 80dp，歌名 18sp，歌手 15sp，序号 16sp，时长 15sp
+3. **`ArtistDetailScreen.kt` 内联行**：行高 80dp，歌名 18sp，专辑名 15sp，序号 16sp，时长 15sp
+4. **`QueueScreen.kt` 内联行**：行高 80dp，歌名 18sp，歌手 15sp，序号 16sp，时长 15sp
+5. **`PlaylistManagementScreen.kt` 行**：行高 80dp，歌名 18sp，歌手 15sp，时长 15sp
+6. **`PlaylistSongRow`（`MineScreen.kt` 歌单内歌曲行）**：行高 96dp，封面 32dp -> 52dp，歌名 18sp，歌手 15sp，时长 15sp
+
+#### 修改文件
+
+- `ui/screens/LibraryScreen.kt`：`SongRow` 组件行高/字号调整
+- `ui/screens/AlbumDetailScreen.kt`：内联歌曲行行高/字号调整
+- `ui/screens/ArtistDetailScreen.kt`：内联歌曲行行高/字号调整
+- `ui/screens/QueueScreen.kt`：内联歌曲行行高/字号调整
+- `ui/screens/PlaylistManagementScreen.kt`：歌曲行行高/字号调整
+- `ui/screens/MineScreen.kt`：`PlaylistSongRow` 行高/字号调整
+- `app/build.gradle.kts`：versionCode 38->39, versionName 2.12.6->2.12.7
+- `CHANGELOG.md`：新增 v2.12.7 条目
+- `docs/technical-overview.md`：新增 §10.39
+
+#### 验证结果
+
+- ✅ `./gradlew.bat assembleDebug` BUILD SUCCESSFUL
+
+#### 注意事项
+
+- 行高使用固定 `height()` 而非依赖内容自适应，确保有无封面时行高一致
+- 按钮区（收藏/队列/歌单）尺寸未调整，行高加大后按钮在行内占比变小但功能不受影响
+
+### 10.40 v2.12.8 - 全应用文字放大 + 按钮封面放大 + 歌单列表对齐
+
+**概述**：在 v2.12.7 基础上进一步放大全应用文字（固定 +5sp 而非倍数缩放）、操作按钮、封面缩略图，并将"我的"页面歌单列表项与歌曲行高度/字号对齐。
+
+#### 主要变更
+
+1. **全应用 fontSize 统一 +5sp**：用 PowerShell 脚本扫描 `ui/` 下所有 .kt 文件，将 348 处 `fontSize = N.sp` 值回退之前的 1.3 倍缩放后改为固定 +5sp。小字相对提升更大（9sp->14sp = +56%），大字不过度膨胀（36sp->41sp = +14%）。共修改 28 个文件
+2. **操作按钮放大**：
+   - `FavoriteButton` / `QueueToggleButton` / `AddToPlaylistButton`（LibraryScreen.kt）：`.size` 28dp->44dp
+   - `RemoveSongButton`（MineScreen.kt）：28dp->44dp
+   - `MoveButton`（QueueScreen.kt）：`widthIn` 36dp->48dp，内边距 8/6dp->12/8dp
+   - `FavoriteButton`（NowPlayingScreen.kt）：内边距 6dp->10dp
+3. **歌曲列表行高 & 封面再放大**：
+   - `SongRow`：行高 100dp->120dp，封面 72dp->92dp（行内仅留 2dp 边缘）
+   - `PlaylistSongRow`：行高 96dp->116dp，封面 68dp->88dp
+   - `AlbumDetailScreen` / `ArtistDetailScreen` / `QueueScreen` / `PlaylistManagementScreen` 内联行：行高 80dp->100dp
+4. **主导航 Tab 文字放大**：`NavItem`（AppRoot.kt）选中态 16sp->21sp，非选中 14sp->19sp。此前批量脚本因条件表达式 `fontSize = if (selected) ... else ...` 未匹配，手动修复
+5. **"我的"页面歌单列表项对齐**：`PlaylistCard`（MineScreen.kt）增加固定行高 100dp，歌单名 19sp->23sp（与歌名一致），歌曲数 16sp->20sp（与歌手一致），♪/▾ 图标 21sp->25sp + 宽度 28dp->36dp，`PlaylistActionButton` 文字 16sp->21sp + 内边距加大
+
+#### 修改文件
+
+- `ui/components/AppRoot.kt`：NavItem fontSize 修复
+- `ui/screens/LibraryScreen.kt`：SongRow 行高/封面 + 3 个按钮组件 size + 全文件 fontSize +5sp
+- `ui/screens/MineScreen.kt`：PlaylistSongRow 行高/封面 + PlaylistCard 对齐 + RemoveSongButton size + PlaylistActionButton + 全文件 fontSize +5sp
+- `ui/screens/AlbumDetailScreen.kt` / `ArtistDetailScreen.kt` / `QueueScreen.kt` / `PlaylistManagementScreen.kt`：行高 + fontSize +5sp
+- `ui/screens/NowPlayingScreen.kt`：FavoriteButton 内边距 + fontSize +5sp
+- 其余 22 个 UI 文件：fontSize +5sp
+- `app/build.gradle.kts`：versionCode 39->40, versionName 2.12.7->2.12.8
+- `CHANGELOG.md`：新增 v2.12.8 条目
+- `docs/technical-overview.md`：新增 §10.40
+
+#### 验证结果
+
+- ✅ `./gradlew.bat assembleRelease` BUILD SUCCESSFUL
+- ✅ 真机安装成功（192.168.0.116:5555）
+
+#### 注意事项
+
+- 固定 +5sp 而非倍数缩放：避免大字过大、小字变化不明显的 问题
+- `NavItem` 的条件 fontSize 被批量脚本遗漏，手动修复 -- 后续批量修改需检查 `fontSize = if (...)` 模式
+- 歌单列表项（PlaylistCard）现在与歌曲行高度/字号完全一致，视觉统一
 
 
 
