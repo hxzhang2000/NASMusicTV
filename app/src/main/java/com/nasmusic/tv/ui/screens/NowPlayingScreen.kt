@@ -364,7 +364,7 @@ private fun CoverColumn(
             Text(
                 text = currentSong?.title ?: stringResource(R.string.player_no_song_selected),
                 color = NasMusicColors.TextPrimary,
-                fontSize = 22.sp,
+                fontSize = 27.sp,
                 textAlign = TextAlign.Center,
                 modifier = Modifier.weight(1f)
             )
@@ -391,7 +391,7 @@ private fun CoverColumn(
                 Text(
                     text = "NET",
                     color = NasMusicColors.Primary,
-                    fontSize = 10.sp,
+                    fontSize = 15.sp,
                     textAlign = TextAlign.Center
                 )
             }
@@ -403,7 +403,7 @@ private fun CoverColumn(
             Text(
                 text = currentSong?.album ?: "",
                 color = NasMusicColors.TextSecondary.copy(alpha = 0.7f),
-                fontSize = 14.sp,
+                fontSize = 19.sp,
                 textAlign = TextAlign.Center,
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp)
             )
@@ -465,7 +465,7 @@ private fun CoverColumn(
         Text(
             text = currentSong?.artist?.takeIf { it.isNotBlank() } ?: "—",
             color = NasMusicColors.TextSecondary,
-            fontSize = 16.sp,
+            fontSize = 21.sp,
             textAlign = TextAlign.Center,
             modifier = Modifier.fillMaxWidth()
         )
@@ -492,7 +492,7 @@ private fun CoverColumn(
             ) {
                 Text(
                     text = if (showInfoPanel) "封面" else "信息",
-                    fontSize = 11.sp,
+                    fontSize = 16.sp,
                     modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
                 )
             }
@@ -521,8 +521,8 @@ private fun FavoriteButton(
     ) {
         Text(
             text = if (isFavorite) "♥" else "♡",
-            fontSize = 20.sp,
-            modifier = Modifier.padding(6.dp)
+            fontSize = 25.sp,
+            modifier = Modifier.padding(10.dp)
         )
     }
 }
@@ -555,7 +555,7 @@ private fun SourceTag(
     ) {
         Text(
             text = label,
-            fontSize = 11.sp,
+            fontSize = 16.sp,
             modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
         )
     }
