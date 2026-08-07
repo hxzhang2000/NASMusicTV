@@ -146,7 +146,7 @@ fun BrowseSubTab(
                     ) {
                         Text(
                             text = "全部播放 ▶",
-                            fontSize = 14.sp,
+                            fontSize = 19.sp,
                             modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
                         )
                     }
@@ -165,7 +165,7 @@ fun BrowseSubTab(
                     ) {
                         Text(
                             text = "换一批 ↻",
-                            fontSize = 14.sp,
+                            fontSize = 19.sp,
                             modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
                         )
                     }
@@ -175,7 +175,7 @@ fun BrowseSubTab(
                     Text(
                         text = "${results.size} 首",
                         color = NasMusicColors.TextSecondary,
-                        fontSize = 13.sp
+                        fontSize = 18.sp
                     )
                 }
             }
@@ -192,7 +192,7 @@ fun BrowseSubTab(
                         Text(
                             text = "搜索中...",
                             color = NasMusicColors.TextSecondary,
-                            fontSize = 15.sp
+                            fontSize = 20.sp
                         )
                     }
                 }
@@ -204,7 +204,7 @@ fun BrowseSubTab(
                         Text(
                             text = "请至少选择一个筛选条件",
                             color = NasMusicColors.TextSecondary,
-                            fontSize = 15.sp
+                            fontSize = 20.sp
                         )
                     }
                 }
@@ -216,7 +216,7 @@ fun BrowseSubTab(
                         Text(
                             text = "未找到相关歌曲，换一批试试",
                             color = NasMusicColors.TextSecondary,
-                            fontSize = 15.sp
+                            fontSize = 20.sp
                         )
                     }
                 }
@@ -231,7 +231,7 @@ fun BrowseSubTab(
                         Text(
                             text = "搜索失败，请重试",
                             color = NasMusicColors.Warning,
-                            fontSize = 15.sp
+                            fontSize = 20.sp
                         )
                     }
                 }
@@ -279,7 +279,7 @@ private fun DimensionRow(
         Text(
             text = dimension.displayName,
             color = NasMusicColors.TextSecondary,
-            fontSize = 13.sp,
+            fontSize = 18.sp,
             modifier = Modifier.padding(end = 10.dp)
         )
         LazyRow(
@@ -348,7 +348,7 @@ private fun ChipButton(
     ) {
         Text(
             text = label,
-            fontSize = 13.sp,
+            fontSize = 18.sp,
             modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp)
         )
     }

@@ -122,7 +122,7 @@ fun SearchSubTab(
                     Text(
                         text = "搜索中...",
                         color = NasMusicColors.TextSecondary,
-                        fontSize = 16.sp
+                        fontSize = 21.sp
                     )
                 }
             }
@@ -134,7 +134,7 @@ fun SearchSubTab(
                     Text(
                         text = stringResource(R.string.network_no_results),
                         color = NasMusicColors.TextSecondary,
-                        fontSize = 16.sp
+                        fontSize = 21.sp
                     )
                 }
             }
@@ -166,7 +166,7 @@ fun SearchSubTab(
                                 ) {
                                     Text(
                                         text = "全部播放 ▶",
-                                        fontSize = 14.sp,
+                                        fontSize = 19.sp,
                                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
                                     )
                                 }
@@ -183,7 +183,7 @@ fun SearchSubTab(
                                 ) {
                                     Text(
                                         text = "全部加入列表 +",
-                                        fontSize = 14.sp,
+                                        fontSize = 19.sp,
                                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
                                     )
                                 }
@@ -200,7 +200,7 @@ fun SearchSubTab(
                                 ) {
                                     Text(
                                         text = "换一批 ↻",
-                                        fontSize = 14.sp,
+                                        fontSize = 19.sp,
                                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
                                     )
                                 }
@@ -208,7 +208,7 @@ fun SearchSubTab(
                                 Text(
                                     text = "${searchResults.size} 首",
                                     color = NasMusicColors.TextSecondary,
-                                    fontSize = 13.sp
+                                    fontSize = 18.sp
                                 )
                             }
                         }
@@ -237,7 +237,7 @@ fun SearchSubTab(
                     Text(
                         text = "输入关键词搜索网络音乐",
                         color = NasMusicColors.TextSecondary,
-                        fontSize = 16.sp
+                        fontSize = 21.sp
                     )
                 }
             }
@@ -318,13 +318,13 @@ private fun SearchBar(
             ) {
                 Text(
                     text = "\uD83D\uDD0D",
-                    fontSize = 12.sp,
+                    fontSize = 17.sp,
                     modifier = Modifier.padding(end = 8.dp)
                 )
                 Text(
                     text = if (query.isEmpty()) "搜索歌曲、专辑、歌手..." else query,
                     color = if (query.isEmpty()) NasMusicColors.TextSecondary else NasMusicColors.TextPrimary,
-                    fontSize = 13.sp,
+                    fontSize = 18.sp,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -353,7 +353,7 @@ private fun SearchBar(
             ) {
                 Text(
                     text = if (query.isNotEmpty()) "清除" else "搜索",
-                    fontSize = 13.sp
+                    fontSize = 18.sp
                 )
             }
         }

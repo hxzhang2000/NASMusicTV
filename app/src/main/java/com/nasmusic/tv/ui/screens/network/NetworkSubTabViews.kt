@@ -101,7 +101,7 @@ fun DiscoverContent(
                 Text(
                     text = "推荐歌单",
                     color = NasMusicColors.TextPrimary,
-                    fontSize = 16.sp,
+                    fontSize = 21.sp,
                     modifier = Modifier.padding(bottom = 4.dp)
                 )
             }
@@ -141,7 +141,7 @@ fun DiscoverContent(
                 Text(
                     text = "继续听",
                     color = NasMusicColors.TextPrimary,
-                    fontSize = 16.sp,
+                    fontSize = 21.sp,
                     modifier = Modifier.padding(bottom = 8.dp)
                 )
             }
@@ -151,7 +151,7 @@ fun DiscoverContent(
                     Text(
                         text = "正在播放",
                         color = NasMusicColors.TextSecondary,
-                        fontSize = 12.sp,
+                        fontSize = 17.sp,
                         modifier = Modifier.padding(bottom = 4.dp)
                     )
                 }
@@ -173,7 +173,7 @@ fun DiscoverContent(
                         Text(
                             text = "即将播放",
                             color = NasMusicColors.TextSecondary,
-                            fontSize = 12.sp,
+                            fontSize = 17.sp,
                             modifier = Modifier.padding(top = 8.dp, bottom = 4.dp)
                         )
                     }
@@ -201,7 +201,7 @@ fun DiscoverContent(
                 Text(
                     text = stringResource(R.string.network_my_favorites),
                     color = NasMusicColors.TextPrimary,
-                    fontSize = 16.sp,
+                    fontSize = 21.sp,
                     modifier = Modifier.padding(top = 4.dp, bottom = 8.dp)
                 )
             }
@@ -245,7 +245,7 @@ private fun FeatureShortcuts(
         Text(
             text = "快捷功能",
             color = NasMusicColors.TextPrimary,
-            fontSize = 16.sp,
+            fontSize = 21.sp,
             modifier = Modifier.padding(bottom = 8.dp)
         )
         Row(
@@ -302,18 +302,18 @@ private fun FeatureCard(
             modifier = Modifier.fillMaxWidth().padding(16.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Text(text = icon, fontSize = 28.sp)
+            Text(text = icon, fontSize = 33.sp)
             Spacer(modifier = Modifier.height(8.dp))
             Text(
                 text = title,
-                fontSize = 14.sp,
+                fontSize = 19.sp,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
             Text(
                 text = subtitle,
                 color = NasMusicColors.TextSecondary,
-                fontSize = 11.sp,
+                fontSize = 16.sp,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
@@ -333,13 +333,13 @@ fun WeatherPlaceholder() {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Text(
                 text = "\u2601\uFE0F",
-                fontSize = 48.sp
+                fontSize = 53.sp
             )
             Spacer(modifier = Modifier.height(16.dp))
             Text(
                 text = stringResource(R.string.network_weather_coming_soon),
                 color = NasMusicColors.TextSecondary,
-                fontSize = 16.sp
+                fontSize = 21.sp
             )
         }
     }
@@ -396,7 +396,7 @@ private fun PlaylistCard(
                         Text(
                             text = "${playlist.songCount}首",
                             color = Color.Black,
-                            fontSize = 9.sp
+                            fontSize = 14.sp
                         )
                     }
                 }
@@ -405,14 +405,14 @@ private fun PlaylistCard(
             Text(
                 text = playlist.name,
                 color = NasMusicColors.TextPrimary,
-                fontSize = 12.sp,
+                fontSize = 17.sp,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
             Text(
                 text = "${playlist.songCount}首",
                 color = NasMusicColors.TextSecondary,
-                fontSize = 10.sp
+                fontSize = 15.sp
             )
         }
     }

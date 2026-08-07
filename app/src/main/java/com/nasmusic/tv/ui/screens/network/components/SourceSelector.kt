@@ -66,7 +66,7 @@ fun SourceSelector(
             ) {
                 Text(
                     text = label,
-                    fontSize = 13.sp,
+                    fontSize = 18.sp,
                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
                 )
             }

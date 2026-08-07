@@ -126,7 +126,7 @@ fun NetworkMusicContainer(
         Text(
             text = stringResource(R.string.nav_network),
             color = NasMusicColors.TextPrimary,
-            fontSize = 18.sp,
+            fontSize = 23.sp,
             modifier = Modifier.padding(bottom = 8.dp)
         )
 
@@ -160,7 +160,7 @@ fun NetworkMusicContainer(
                     ) {
                         Text(
                             text = stringResource(tab.displayNameResId),
-                            fontSize = 14.sp,
+                            fontSize = 19.sp,
                             modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
                         )
                     }

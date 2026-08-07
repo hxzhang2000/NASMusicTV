@@ -175,7 +175,7 @@ fun WeatherSubTab(
                         text = if (errorMessage != null) "⚠ $errorMessage"
                                else stringResource(R.string.common_loading),
                         color = NasMusicColors.TextSecondary,
-                        fontSize = 14.sp
+                        fontSize = 19.sp
                     )
                 }
             }
@@ -213,7 +213,7 @@ private fun WeatherInfoCard(
             Text(
                 text = stringResource(R.string.common_loading),
                 color = NasMusicColors.TextSecondary,
-                fontSize = 14.sp,
+                fontSize = 19.sp,
                 modifier = Modifier.align(Alignment.Center)
             )
             return
@@ -226,13 +226,13 @@ private fun WeatherInfoCard(
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text(
                             text = moodToEmoji(currentMood),
-                            fontSize = 48.sp
+                            fontSize = 53.sp
                         )
                         if (iconCode != null) {
                             Text(
                                 text = iconCode,
                                 color = NasMusicColors.TextSecondary,
-                                fontSize = 10.sp
+                                fontSize = 15.sp
                             )
                         }
                     }
@@ -242,14 +242,14 @@ private fun WeatherInfoCard(
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(
                                 text = "${weatherData.temperature.toInt()}°C",
-                                fontSize = 36.sp,
+                                fontSize = 41.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = NasMusicColors.TextPrimary
                             )
                             Spacer(modifier = Modifier.width(12.dp))
                             Text(
                                 text = weatherData.cityName,
-                                fontSize = 16.sp,
+                                fontSize = 21.sp,
                                 color = NasMusicColors.TextSecondary
                             )
                         }
@@ -264,7 +264,7 @@ private fun WeatherInfoCard(
                                     append(" · 体感 ${feel.toInt()}°C")
                                 }
                             },
-                            fontSize = 12.sp,
+                            fontSize = 17.sp,
                             color = NasMusicColors.TextSecondary
                         )
                     }
@@ -273,7 +273,7 @@ private fun WeatherInfoCard(
                 Text(
                     text = errorMessage,
                     color = NasMusicColors.Warning,
-                    fontSize = 13.sp
+                    fontSize = 18.sp
                 )
             }
 
@@ -283,13 +283,13 @@ private fun WeatherInfoCard(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     text = "当前心情:",
-                    fontSize = 12.sp,
+                    fontSize = 17.sp,
                     color = NasMusicColors.TextSecondary
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
                     text = "${currentMood.icon} ${currentMood.displayName}",
-                    fontSize = 14.sp,
+                    fontSize = 19.sp,
                     color = NasMusicColors.TextPrimary
                 )
             }
@@ -311,7 +311,7 @@ private fun MoodSwitcherRow(
         Text(
             text = "切换心情",
             color = NasMusicColors.TextSecondary,
-            fontSize = 12.sp,
+            fontSize = 17.sp,
             modifier = Modifier.padding(bottom = 6.dp)
         )
         Row(
@@ -337,7 +337,7 @@ private fun MoodSwitcherRow(
                 ) {
                     Text(
                         text = "${mood.icon} ${mood.displayName}",
-                        fontSize = 12.sp,
+                        fontSize = 17.sp,
                         modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
                     )
                 }
@@ -378,7 +378,7 @@ private fun ActionBar(
         ) {
             Text(
                 text = "▶ ${stringResource(R.string.common_play_all)}",
-                fontSize = 13.sp,
+                fontSize = 18.sp,
                 modifier = Modifier.padding(horizontal = 14.dp, vertical = 7.dp)
             )
         }
@@ -400,7 +400,7 @@ private fun ActionBar(
             Text(
                 text = if (isLoading) "..."
                        else "刷新",
-                fontSize = 13.sp,
+                fontSize = 18.sp,
                 modifier = Modifier.padding(horizontal = 14.dp, vertical = 7.dp)
             )
         }
@@ -412,7 +412,7 @@ private fun ActionBar(
             Text(
                 text = "共 ${songs.size} 首 · NAS ${queue?.nasCount ?: 0} · 网络 ${queue?.networkCount ?: 0}",
                 color = NasMusicColors.TextSecondary,
-                fontSize = 11.sp
+                fontSize = 16.sp
             )
         }
     }
@@ -430,7 +430,7 @@ private fun ForecastRow(
                 Text(
                     text = stringResource(R.string.stats_forecast),
             color = NasMusicColors.TextSecondary,
-            fontSize = 12.sp,
+            fontSize = 17.sp,
             modifier = Modifier.padding(bottom = 8.dp)
         )
         Row(
@@ -471,20 +471,20 @@ private fun ForecastRow(
                         Text(
                             text = displayDate,
                             color = NasMusicColors.TextPrimary.copy(alpha = 0.7f),
-                            fontSize = 11.sp
+                            fontSize = 16.sp
                         )
                         Spacer(modifier = Modifier.height(4.dp))
                         // 天气 emoji
                         Text(
                             text = mood.icon,
-                            fontSize = 24.sp
+                            fontSize = 29.sp
                         )
                         Spacer(modifier = Modifier.height(4.dp))
                         // 温度
                         Text(
                             text = "${day.temperatureLow.toInt()}\u00B0/${day.temperatureHigh.toInt()}\u00B0",
                             color = NasMusicColors.TextPrimary,
-                            fontSize = 12.sp,
+                            fontSize = 17.sp,
                             fontWeight = FontWeight.Medium
                         )
                         Spacer(modifier = Modifier.height(2.dp))
@@ -492,7 +492,7 @@ private fun ForecastRow(
                         Text(
                             text = day.description.take(4),
                             color = NasMusicColors.TextSecondary,
-                            fontSize = 10.sp,
+                            fontSize = 15.sp,
                             maxLines = 1
                         )
                     }
@@ -544,7 +544,7 @@ private fun WeatherCoverTile(
                 )
             } else {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text(text = "\u266A", color = NasMusicColors.TextSecondary, fontSize = 18.sp)
+                    Text(text = "\u266A", color = NasMusicColors.TextSecondary, fontSize = 23.sp)
                 }
             }
             // 底部半透明渐变 + 歌曲名
@@ -565,7 +565,7 @@ private fun WeatherCoverTile(
                 Text(
                     text = song.title,
                     color = Color.White,
-                    fontSize = 10.sp,
+                    fontSize = 15.sp,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
