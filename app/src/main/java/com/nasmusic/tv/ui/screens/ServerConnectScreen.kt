@@ -145,13 +145,13 @@ fun ServerConnectScreen(
             Text(
                 text = stringResource(R.string.server_config_title),
                 color = NasMusicColors.TextPrimary,
-                fontSize = 36.sp
+                fontSize = 41.sp
             )
             Spacer(modifier = Modifier.height(8.dp))
             Text(
                 text = stringResource(R.string.server_connect_desc),
                 color = NasMusicColors.TextSecondary,
-                fontSize = 16.sp,
+                fontSize = 21.sp,
                 textAlign = TextAlign.Center
             )
 
@@ -182,13 +182,13 @@ fun ServerConnectScreen(
                         Text(
                             text = stringResource(R.string.server_connected),
                             color = NasMusicColors.Primary,
-                            fontSize = 18.sp
+                            fontSize = 23.sp
                         )
                         if (serverDisplayName.isNotBlank()) {
                             Text(
                                 text = serverDisplayName,
                                 color = NasMusicColors.TextSecondary,
-                                fontSize = 14.sp
+                                fontSize = 19.sp
                             )
                         }
                     }
@@ -209,7 +209,7 @@ fun ServerConnectScreen(
                     ) {
                         Text(
                             text = stringResource(R.string.server_disconnect),
-                            fontSize = 14.sp,
+                            fontSize = 19.sp,
                             modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp)
                         )
                     }
@@ -222,7 +222,7 @@ fun ServerConnectScreen(
             Text(
                 text = stringResource(R.string.server_type_label),
                 color = NasMusicColors.TextPrimary,
-                fontSize = 18.sp,
+                fontSize = 23.sp,
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(bottom = 12.dp)
@@ -320,7 +320,7 @@ fun ServerConnectScreen(
                 Text(
                     text = statusMessage,
                     color = NasMusicColors.TextSecondary,
-                    fontSize = 14.sp,
+                    fontSize = 19.sp,
                     modifier = Modifier.padding(bottom = 12.dp)
                 )
             }
@@ -353,7 +353,7 @@ fun ServerConnectScreen(
             ) {
                 Text(
                     text = if (isConnecting) stringResource(R.string.server_connecting) else stringResource(R.string.server_connect_action),
-                    fontSize = 18.sp,
+                    fontSize = 23.sp,
                     modifier = Modifier.padding(horizontal = 32.dp, vertical = 16.dp)
                 )
             }
@@ -363,7 +363,7 @@ fun ServerConnectScreen(
             Text(
                 text = stringResource(R.string.server_privacy_notice),
                 color = NasMusicColors.TextSecondary,
-                fontSize = 13.sp
+                fontSize = 18.sp
             )
         }
 
@@ -471,7 +471,7 @@ private fun TypeCard(
     ) {
         Text(
             text = text,
-            fontSize = 18.sp,
+            fontSize = 23.sp,
             textAlign = TextAlign.Center,
             modifier = Modifier
                 .fillMaxWidth()
@@ -494,7 +494,7 @@ private fun FormField(
         Text(
             text = label,
             color = NasMusicColors.TextPrimary,
-            fontSize = 16.sp,
+            fontSize = 21.sp,
             modifier = Modifier.padding(bottom = 8.dp)
         )
 
@@ -522,7 +522,7 @@ private fun FormField(
                            else value.text,
                     color = if (value.text.isEmpty()) NasMusicColors.TextSecondary
                             else NasMusicColors.TextPrimary,
-                    fontSize = 16.sp,
+                    fontSize = 21.sp,
                     modifier = Modifier.padding(horizontal = 16.dp)
                 )
             }
@@ -531,7 +531,7 @@ private fun FormField(
         Text(
             text = stringResource(R.string.server_press_ok_edit),
             color = NasMusicColors.TextSecondary,
-            fontSize = 12.sp,
+            fontSize = 17.sp,
             modifier = Modifier.padding(top = 6.dp, start = 4.dp)
         )
     }
@@ -586,7 +586,7 @@ private fun TestConnectionButton(
         ) {
             Text(
                 text = if (isTesting) stringResource(R.string.server_testing) else stringResource(R.string.server_connection_test),
-                fontSize = 14.sp
+                fontSize = 19.sp
             )
         }
     }
@@ -606,7 +606,7 @@ private fun ServerAddressField(
             Text(
                 text = stringResource(R.string.server_address),
                 color = NasMusicColors.TextPrimary,
-            fontSize = 16.sp,
+            fontSize = 21.sp,
             modifier = Modifier.padding(bottom = 8.dp)
         )
 
@@ -640,7 +640,7 @@ private fun ServerAddressField(
                                else baseUrl.text,
                         color = if (baseUrl.text.isEmpty()) NasMusicColors.TextSecondary
                                 else NasMusicColors.TextPrimary,
-                        fontSize = 15.sp,
+                        fontSize = 20.sp,
                         modifier = Modifier.padding(horizontal = 16.dp)
                     )
                 }
@@ -657,7 +657,7 @@ private fun ServerAddressField(
         Text(
             text = stringResource(R.string.server_press_ok_edit),
             color = NasMusicColors.TextSecondary,
-            fontSize = 12.sp,
+            fontSize = 17.sp,
             modifier = Modifier.padding(top = 6.dp, start = 4.dp)
         )
 
@@ -669,7 +669,7 @@ private fun ServerAddressField(
             Text(
                 text = if (isSuccess) "✓ 连接成功：$message" else "✗ $message",
                 color = if (isSuccess) NasMusicColors.Primary else NasMusicColors.Warning,
-                fontSize = 13.sp
+                fontSize = 18.sp
             )
         }
     }

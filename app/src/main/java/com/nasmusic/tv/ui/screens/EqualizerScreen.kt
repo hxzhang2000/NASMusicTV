@@ -76,7 +76,7 @@ fun EqualizerScreen(
             Text(
                 text = stringResource(R.string.equalizer_title),
                 color = NasMusicColors.TextPrimary,
-                fontSize = 24.sp
+                fontSize = 29.sp
             )
         }
 
@@ -95,7 +95,7 @@ fun EqualizerScreen(
                     Text(
                         text = stringResource(R.string.home_spectrum_preview),
                         color = NasMusicColors.TextSecondary,
-                        fontSize = 12.sp,
+                        fontSize = 17.sp,
                         modifier = Modifier.padding(bottom = 6.dp)
                     )
                     VisualEqualizer(
@@ -113,7 +113,7 @@ fun EqualizerScreen(
                 Text(
                     text = stringResource(R.string.equalizer_preset),
                     color = NasMusicColors.TextPrimary,
-                    fontSize = 16.sp,
+                    fontSize = 21.sp,
                     modifier = Modifier.padding(bottom = 8.dp)
                 )
             }
@@ -160,11 +160,11 @@ fun EqualizerScreen(
                         Text(
                             text = if (isSelected) "✓  " else "   ",
                             color = NasMusicColors.Primary,
-                            fontSize = 14.sp
+                            fontSize = 19.sp
                         )
                         Text(
                             text = preset.displayName,
-                            fontSize = 14.sp,
+                            fontSize = 19.sp,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
@@ -180,7 +180,7 @@ fun EqualizerScreen(
                     Text(
                         text = stringResource(R.string.equalizer_bands),
                         color = NasMusicColors.TextPrimary,
-                        fontSize = 16.sp,
+                        fontSize = 21.sp,
                         modifier = Modifier.padding(bottom = 8.dp)
                     )
                 }
@@ -211,7 +211,7 @@ fun EqualizerScreen(
                             Text(
                                 text = bandLabels[index],
                                 color = NasMusicColors.TextPrimary,
-                                fontSize = 13.sp,
+                                fontSize = 18.sp,
                                 modifier = Modifier.width(60.dp)
                             )
                             Spacer(modifier = Modifier.weight(1f))
@@ -222,7 +222,7 @@ fun EqualizerScreen(
                                 color = if (band > 0) NasMusicColors.Primary
                                         else if (band < 0) Accent
                                         else NasMusicColors.TextSecondary,
-                                fontSize = 14.sp
+                                fontSize = 19.sp
                             )
                         }
                     }

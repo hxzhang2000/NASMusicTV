@@ -94,7 +94,7 @@ fun NetworkPlaylistDetailScreen(
             Text(
                 text = playlistTitle,
                 color = NasMusicColors.TextPrimary,
-                fontSize = 24.sp,
+                fontSize = 29.sp,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f)
@@ -121,7 +121,7 @@ fun NetworkPlaylistDetailScreen(
                 ) {
                     Text(
                         text = "全部播放 ▶",
-                        fontSize = 14.sp,
+                        fontSize = 19.sp,
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
                     )
                 }
@@ -130,7 +130,7 @@ fun NetworkPlaylistDetailScreen(
             Text(
                 text = "${playlistSongs.size} 首曲目",
                 color = NasMusicColors.TextSecondary,
-                fontSize = 14.sp
+                fontSize = 19.sp
             )
         }
         Spacer(modifier = Modifier.height(12.dp))
@@ -143,7 +143,7 @@ fun NetworkPlaylistDetailScreen(
                 Text(
                     text = "暂无歌曲",
                     color = NasMusicColors.TextSecondary,
-                    fontSize = 16.sp
+                    fontSize = 21.sp
                 )
             }
         } else {

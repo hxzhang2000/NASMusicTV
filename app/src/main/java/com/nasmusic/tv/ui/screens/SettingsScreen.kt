@@ -171,7 +171,7 @@ fun SettingsScreen(
                     Icon(imageVector = Icons.Default.Settings, contentDescription = null, tint = Color.Black, modifier = Modifier.size(18.dp))
                 }
                 Spacer(modifier = Modifier.width(12.dp))
-                Text(text = stringResource(R.string.nav_settings), color = NasMusicColors.TextPrimary, fontSize = 22.sp)
+                Text(text = stringResource(R.string.nav_settings), color = NasMusicColors.TextPrimary, fontSize = 27.sp)
             }
 
             Spacer(modifier = Modifier.height(12.dp))
@@ -208,7 +208,7 @@ fun SettingsScreen(
                         }
                         Icon(imageVector = icon, contentDescription = null, tint = if (selected) NasMusicColors.Primary else NasMusicColors.TextSecondary, modifier = Modifier.size(18.dp))
                         Spacer(modifier = Modifier.width(12.dp))
-                        Text(text = stringResource(section.titleRes), color = if (selected) NasMusicColors.Primary else NasMusicColors.TextPrimary, fontSize = 16.sp)
+                        Text(text = stringResource(section.titleRes), color = if (selected) NasMusicColors.Primary else NasMusicColors.TextPrimary, fontSize = 21.sp)
                     }
                 }
             }
@@ -284,7 +284,7 @@ fun SettingsScreen(
                         Text(
                             text = "当前缓存目录大小: $cacheDirSize",
                             color = NasMusicColors.TextSecondary,
-                            fontSize = 13.sp,
+                            fontSize = 18.sp,
                             modifier = Modifier.padding(start = 4.dp, top = 8.dp)
                         )
                     }
@@ -305,7 +305,7 @@ fun SettingsScreen(
                             Text(
                                 text = stringResource(R.string.settings_cover_blur_radius, coverFilterBlurRadius.toInt()),
                                 color = NasMusicColors.TextPrimary,
-                                fontSize = 16.sp,
+                                fontSize = 21.sp,
                                 modifier = Modifier.padding(start = 4.dp)
                             )
                         }
@@ -324,7 +324,7 @@ fun SettingsScreen(
                                 Text(
                                     text = "%.0fpx".format(coverFilterBlurRadius),
                                     color = NasMusicColors.Primary,
-                                    fontSize = 22.sp,
+                                    fontSize = 27.sp,
                                     modifier = Modifier.width(64.dp).padding(horizontal = 8.dp)
                                 )
                                 AdjustButton("+", onClick = {
@@ -338,7 +338,7 @@ fun SettingsScreen(
                             Text(
                                 text = stringResource(R.string.settings_cover_dark_overlay, (coverFilterDarkOverlay * 100).toInt()),
                                 color = NasMusicColors.TextPrimary,
-                                fontSize = 16.sp,
+                                fontSize = 21.sp,
                                 modifier = Modifier.padding(start = 4.dp)
                             )
                         }
@@ -356,7 +356,7 @@ fun SettingsScreen(
                                 Text(
                                     text = "${(coverFilterDarkOverlay * 100).toInt()}%",
                                     color = NasMusicColors.Primary,
-                                    fontSize = 22.sp,
+                                    fontSize = 27.sp,
                                     modifier = Modifier.width(64.dp).padding(horizontal = 8.dp)
                                 )
                                 AdjustButton("+", onClick = {
@@ -373,7 +373,7 @@ fun SettingsScreen(
                         Text(
                             text = stringResource(R.string.settings_network_test_desc),
                             color = NasMusicColors.TextSecondary,
-                            fontSize = 14.sp,
+                            fontSize = 19.sp,
                             modifier = Modifier.padding(bottom = 16.dp, start = 4.dp)
                         )
                     }
@@ -448,7 +448,7 @@ fun SettingsScreen(
                                 Spacer(modifier = Modifier.width(12.dp))
                                 Text(
                                     text = if (isNetworkTesting) stringResource(R.string.settings_network_testing) else stringResource(R.string.settings_network_test),
-                                    fontSize = 16.sp
+                                    fontSize = 21.sp
                                 )
                                 Spacer(modifier = Modifier.weight(1f))
                                 if (networkTestStatus.isNotBlank()) {
@@ -457,7 +457,7 @@ fun SettingsScreen(
                                     Text(
                                         text = if (isNetSuccess) "✓ $netMessage" else "✗ $netMessage",
                                         color = if (isNetSuccess) NasMusicColors.Primary else NasMusicColors.Warning,
-                                        fontSize = 13.sp
+                                        fontSize = 18.sp
                                     )
                                 }
                             }
@@ -471,7 +471,7 @@ fun SettingsScreen(
                             Text(
                                 text = stringResource(R.string.settings_network_search),
                                 color = NasMusicColors.Primary,
-                                fontSize = 18.sp,
+                                fontSize = 23.sp,
                                 modifier = Modifier.padding(bottom = 8.dp, start = 4.dp)
                             )
                         }
@@ -479,7 +479,7 @@ fun SettingsScreen(
                             Text(
                                 text = stringResource(R.string.settings_meting_api_url_desc),
                                 color = NasMusicColors.TextSecondary,
-                                fontSize = 13.sp,
+                                fontSize = 18.sp,
                                 modifier = Modifier.padding(bottom = 8.dp, start = 4.dp)
                             )
                         }
@@ -488,7 +488,7 @@ fun SettingsScreen(
                             Text(
                                 text = stringResource(R.string.settings_meting_preset_endpoints),
                                 color = NasMusicColors.TextPrimary,
-                                fontSize = 14.sp,
+                                fontSize = 19.sp,
                                 modifier = Modifier.padding(start = 4.dp, top = 8.dp, bottom = 8.dp)
                             )
                         }
@@ -524,12 +524,12 @@ fun SettingsScreen(
                                             Text(
                                                 text = name,
                                                 color = if (selected) NasMusicColors.Primary else NasMusicColors.TextPrimary,
-                                                fontSize = 15.sp
+                                                fontSize = 20.sp
                                             )
                                             Text(
                                                 text = url,
                                                 color = NasMusicColors.TextSecondary,
-                                                fontSize = 12.sp,
+                                                fontSize = 17.sp,
                                                 modifier = Modifier.padding(top = 2.dp)
                                             )
                                         }
@@ -537,7 +537,7 @@ fun SettingsScreen(
                                             Text(
                                                 text = "✓",
                                                 color = NasMusicColors.Primary,
-                                                fontSize = 16.sp
+                                                fontSize = 21.sp
                                             )
                                         }
                                     }
@@ -578,19 +578,19 @@ fun SettingsScreen(
                                         Text(
                                             text = stringResource(R.string.settings_meting_custom_endpoint),
                                             color = if (customSelected) NasMusicColors.Primary else NasMusicColors.TextPrimary,
-                                            fontSize = 15.sp
+                                            fontSize = 20.sp
                                         )
                                         Text(
                                             text = if (customSelected) settings.metingApiBaseUrl else stringResource(R.string.settings_meting_custom_endpoint_desc),
                                             color = NasMusicColors.TextSecondary,
-                                            fontSize = 12.sp,
+                                            fontSize = 17.sp,
                                             modifier = Modifier.padding(top = 2.dp)
                                         )
                                     }
                                     Text(
                                         text = stringResource(R.string.settings_meting_api_url_edit),
                                         color = NasMusicColors.Primary,
-                                        fontSize = 14.sp
+                                        fontSize = 19.sp
                                     )
                                 }
                             }
@@ -602,7 +602,7 @@ fun SettingsScreen(
                                 Text(
                                     text = metingUrlError!!,
                                     color = NasMusicColors.Warning,
-                                    fontSize = 13.sp,
+                                    fontSize = 18.sp,
                                     modifier = Modifier.padding(top = 8.dp, start = 4.dp)
                                 )
                             }
@@ -616,7 +616,7 @@ fun SettingsScreen(
                             Text(
                                 text = stringResource(R.string.settings_weather_api_key),
                                 color = NasMusicColors.Primary,
-                                fontSize = 18.sp,
+                                fontSize = 23.sp,
                                 modifier = Modifier.padding(bottom = 8.dp, start = 4.dp)
                             )
                         }
@@ -624,7 +624,7 @@ fun SettingsScreen(
                             Text(
                                 text = stringResource(R.string.settings_weather_api_key_desc),
                                 color = NasMusicColors.TextSecondary,
-                                fontSize = 13.sp,
+                                fontSize = 18.sp,
                                 modifier = Modifier.padding(bottom = 8.dp, start = 4.dp)
                             )
                         }
@@ -656,13 +656,13 @@ fun SettingsScreen(
                                                    else stringResource(R.string.common_not_set),
                                             color = if (weatherApiKey.isNotBlank()) NasMusicColors.TextPrimary
                                                     else NasMusicColors.TextSecondary,
-                                            fontSize = 15.sp
+                                            fontSize = 20.sp
                                         )
                                     }
                                     Text(
                                         text = stringResource(R.string.settings_weather_api_key_edit),
                                         color = NasMusicColors.Primary,
-                                        fontSize = 14.sp
+                                        fontSize = 19.sp
                                     )
                                 }
                             }
@@ -675,7 +675,7 @@ fun SettingsScreen(
                         Text(
                             text = stringResource(R.string.settings_data_desc),
                             color = NasMusicColors.TextSecondary,
-                            fontSize = 14.sp,
+                            fontSize = 19.sp,
                             modifier = Modifier.padding(bottom = 16.dp, start = 4.dp)
                         )
                     }
@@ -705,7 +705,7 @@ fun SettingsScreen(
                         Text(
                             text = stringResource(R.string.settings_backup_list),
                             color = NasMusicColors.Primary,
-                            fontSize = 18.sp,
+                            fontSize = 23.sp,
                             modifier = Modifier.padding(bottom = 8.dp, start = 4.dp)
                         )
                     }
@@ -714,7 +714,7 @@ fun SettingsScreen(
                             Text(
                                 text = stringResource(R.string.settings_backup_empty),
                                 color = NasMusicColors.TextSecondary,
-                                fontSize = 13.sp,
+                                fontSize = 18.sp,
                                 modifier = Modifier.padding(start = 4.dp)
                             )
                         }
@@ -738,7 +738,7 @@ fun SettingsScreen(
                                 text = backupMessage!!,
                                 color = if (backupMessage!!.startsWith("恢复") || backupMessage!!.startsWith("备份失败") || backupMessage!!.contains("失败"))
                                     NasMusicColors.Warning else NasMusicColors.Primary,
-                                fontSize = 14.sp,
+                                fontSize = 19.sp,
                                 modifier = Modifier.padding(start = 4.dp)
                             )
                         }
@@ -814,13 +814,13 @@ fun SettingsScreen(
                 Text(
                     text = stringResource(R.string.settings_delete_backup_confirm_title),
                     color = NasMusicColors.Warning,
-                    fontSize = 18.sp
+                    fontSize = 23.sp
                 )
                 Spacer(modifier = Modifier.height(12.dp))
                 Text(
                     text = stringResource(R.string.settings_delete_backup_confirm_message, file.displayName),
                     color = NasMusicColors.TextPrimary,
-                    fontSize = 14.sp,
+                    fontSize = 19.sp,
                     textAlign = androidx.compose.ui.text.style.TextAlign.Center
                 )
                 Spacer(modifier = Modifier.height(20.dp))
@@ -842,7 +842,7 @@ fun SettingsScreen(
                         Text(
                             text = stringResource(R.string.common_cancel),
                             color = NasMusicColors.TextPrimary,
-                            fontSize = 14.sp,
+                            fontSize = 19.sp,
                             textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                             modifier = Modifier.fillMaxSize().padding(vertical = 12.dp)
                         )
@@ -865,7 +865,7 @@ fun SettingsScreen(
                         Text(
                             text = stringResource(R.string.settings_delete_backup),
                             color = androidx.compose.ui.graphics.Color.Black,
-                            fontSize = 14.sp,
+                            fontSize = 19.sp,
                             textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                             modifier = Modifier.fillMaxSize().padding(vertical = 12.dp)
                         )
@@ -881,7 +881,7 @@ private fun SectionTitle(text: String) {
     Text(
         text = text,
         color = NasMusicColors.Primary,
-        fontSize = 18.sp,
+        fontSize = 23.sp,
         modifier = Modifier.padding(bottom = 12.dp, start = 4.dp)
     )
 }
@@ -914,14 +914,14 @@ private fun SettingSwitch(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column(modifier = Modifier.weight(1f)) {
-                Text(text = label, color = NasMusicColors.TextPrimary, fontSize = 16.sp)
-                Text(text = description, color = NasMusicColors.TextSecondary, fontSize = 13.sp)
+                Text(text = label, color = NasMusicColors.TextPrimary, fontSize = 21.sp)
+                Text(text = description, color = NasMusicColors.TextSecondary, fontSize = 18.sp)
             }
             // Switch indicator
             Text(
                 text = if (checked) "✓  开启" else "   关闭",
                 color = if (checked) NasMusicColors.Primary else NasMusicColors.TextSecondary,
-                fontSize = 14.sp
+                fontSize = 19.sp
             )
         }
     }
@@ -934,7 +934,7 @@ private fun PlayModeSelector(current: PlayMode, onSelect: (PlayMode) -> Unit) {
         Text(
             text = stringResource(R.string.settings_play_mode),
             color = NasMusicColors.TextPrimary,
-            fontSize = 16.sp,
+            fontSize = 21.sp,
             modifier = Modifier.padding(vertical = 8.dp)
         )
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -951,7 +951,7 @@ private fun PlayModeSelector(current: PlayMode, onSelect: (PlayMode) -> Unit) {
                     focusedContentColor = if (selected) androidx.compose.ui.graphics.Color.Black else NasMusicColors.TextPrimary,
                     pressedScale = 0.95f
                 ) {
-                    Text(text = mode.displayName, fontSize = 14.sp, modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp))
+                    Text(text = mode.displayName, fontSize = 19.sp, modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp))
                 }
             }
         }
@@ -965,7 +965,7 @@ private fun VisualizerThemeSelector(current: VisualizerTheme, onSelect: (Visuali
         Text(
             text = "频谱主题",
             color = NasMusicColors.TextPrimary,
-            fontSize = 16.sp,
+            fontSize = 21.sp,
             modifier = Modifier.padding(vertical = 8.dp)
         )
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -982,7 +982,7 @@ private fun VisualizerThemeSelector(current: VisualizerTheme, onSelect: (Visuali
                     focusedContentColor = if (selected) androidx.compose.ui.graphics.Color.Black else NasMusicColors.TextPrimary,
                     pressedScale = 0.95f
                 ) {
-                    Text(text = theme.displayName, fontSize = 14.sp, modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp))
+                    Text(text = theme.displayName, fontSize = 19.sp, modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp))
                 }
             }
         }
@@ -1016,13 +1016,13 @@ private fun SettingActionButton(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column(modifier = Modifier.weight(1f)) {
-                Text(text = label, color = NasMusicColors.TextPrimary, fontSize = 16.sp)
-                Text(text = description, color = NasMusicColors.TextSecondary, fontSize = 13.sp)
+                Text(text = label, color = NasMusicColors.TextPrimary, fontSize = 21.sp)
+                Text(text = description, color = NasMusicColors.TextSecondary, fontSize = 18.sp)
             }
             Text(
                 text = stringResource(R.string.common_confirm),
                 color = NasMusicColors.Primary,
-                fontSize = 14.sp
+                fontSize = 19.sp
             )
         }
     }
@@ -1068,18 +1068,18 @@ private fun BackupFileRow(
                 )
                 Spacer(modifier = Modifier.width(12.dp))
                 Column(modifier = Modifier.weight(1f)) {
-                    Text(text = file.displayName, color = NasMusicColors.TextPrimary, fontSize = 15.sp)
+                    Text(text = file.displayName, color = NasMusicColors.TextPrimary, fontSize = 20.sp)
                     Text(
                         text = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.getDefault())
                             .format(java.util.Date(file.lastModified)),
                         color = NasMusicColors.TextSecondary,
-                        fontSize = 12.sp
+                        fontSize = 17.sp
                     )
                 }
                 Text(
                     text = stringResource(R.string.settings_import_backup),
                     color = NasMusicColors.Primary,
-                    fontSize = 13.sp
+                    fontSize = 18.sp
                 )
             }
         }
@@ -1100,7 +1100,7 @@ private fun BackupFileRow(
                 Text(
                     text = stringResource(R.string.settings_delete_backup),
                     color = NasMusicColors.Warning,
-                    fontSize = 13.sp,
+                    fontSize = 18.sp,
                     textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                     modifier = Modifier.fillMaxSize().padding(vertical = 20.dp)
                 )
@@ -1115,9 +1115,9 @@ private fun AboutRow(label: String, value: String) {
         modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(text = label, color = NasMusicColors.TextSecondary, fontSize = 14.sp, modifier = Modifier.padding(end = 16.dp))
+        Text(text = label, color = NasMusicColors.TextSecondary, fontSize = 19.sp, modifier = Modifier.padding(end = 16.dp))
         Spacer(modifier = Modifier.weight(1f))
-        Text(text = value, color = NasMusicColors.TextPrimary, fontSize = 14.sp)
+        Text(text = value, color = NasMusicColors.TextPrimary, fontSize = 19.sp)
     }
 }
 
@@ -1138,7 +1138,7 @@ private fun AdjustButton(text: String, onClick: () -> Unit) {
         focusBorderColor = NasMusicColors.FocusRing.copy(alpha = 0.6f)
     ) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text(text = text, fontSize = 24.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
+            Text(text = text, fontSize = 29.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
         }
     }
 }
