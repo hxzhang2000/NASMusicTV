@@ -129,10 +129,10 @@ fun AppRoot(
                             ),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text(text = "\u266A", color = Color.Black, fontSize = 18.sp)
+                        Text(text = "\u266A", color = Color.Black, fontSize = 23.sp)
                     }
                     Spacer(modifier = Modifier.width(12.dp))
-                    Text(text = "NAS Music", color = NasMusicColors.TextPrimary, fontSize = 18.sp)
+                    Text(text = "NAS Music", color = NasMusicColors.TextPrimary, fontSize = 23.sp)
                 }
 
                 Spacer(modifier = Modifier.weight(1f))
@@ -780,7 +780,7 @@ private fun NavItem(
         ) {
             Text(
                 text = label,
-                fontSize = if (selected) 16.sp else 14.sp,
+                fontSize = if (selected) 21.sp else 19.sp,
                 fontWeight = FontWeight.Bold,
                 maxLines = 1
             )
