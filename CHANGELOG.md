@@ -7,6 +7,15 @@
 >
 > 类型：`Added`（新增） | `Changed`（变更） | `Fixed`（修复） | `Removed`（移除）
 
+## [v2.13.0] - 2026-08-08
+
+### Added
+
+- **人声消除（K 歌伴奏模式）**：基于 Mid-Side 编码 + 分频段处理（方案 B，实时 DSP），在播放页新增"伴奏"按钮，点击后实时消除人声并自动切换到全屏 K 歌页面（封面全屏 + 歌词逐字高亮 + 精简控制栏），"原唱"一键切回
+  - `VocalRemovalProcessor`（新增，AudioProcessor）：四阶 Linkwitz-Riley 滤波，Mid 低通 120Hz + 高通 6kHz 保留贝斯/镲片、消除居中 vocal 频段；Side 声道对 vocal 频段额外衰减 88%；补偿增益 1.6x
+  - `KaraokePlaybackScreen` / `KaraokeLyricsView` / `VocalToggleButton`（新增）：全屏伴奏播放页、固定 2 行逐字高亮歌词、红 色"伴奏/原唱"切换按钮
+  - `PlaybackService`（自定义 RenderersFactory 注入 AudioProcessor）、`PlayerManager`（开关方法）、`MainViewModel`（`vocalRemovalEnabled` 状态）、`NowPlayingScreen` / `PlayerControls` / `AppRoot`（条件渲染 + 入口按钮）
+
 ## [v2.12.8] - 2026-08-07
 
 ### Changed

@@ -5135,6 +5135,51 @@ v2.6.0 天气电台功能使用 Open-Meteo（无需 API Key）作为主要天气
 - `NavItem` 的条件 fontSize 被批量脚本遗漏，手动修复 -- 后续批量修改需检查 `fontSize = if (...)` 模式
 - 歌单列表项（PlaylistCard）现在与歌曲行高度/字号完全一致，视觉统一
 
+### 10.41 v2.13.0 - 人声消除 K 歌伴奏模式（实时 DSP）
+
+**概述**：实现方案 B（Mid-Side 编码 + 分频段处理）的实时人声消除，在播放页新增"伴奏"入口，点击后自动切换到全屏 K 歌页面（封面全屏 + 歌词逐字高亮 + 精简控制栏），"原唱"一键切回。方案 C（AI 预分离）保持为设计文档未实施。
+
+#### 主要变更
+
+1. **`VocalRemovalProcessor`（新增，AudioProcessor）**：核心 DSP，仅支持 16-bit PCM 立体声（其他格式自动 bypass）
+   - Mid-Side 编码：`Mid = (L+R)/2`，`Side = (L-R)/2`
+   - Mid 声道分频：低通 120Hz（保留贝斯/底鼓）+ 高通 6kHz（保留镲片），跳过 vocal 频段消除居中人声（男声基频 85~180Hz，故低通压至 120Hz）
+   - Side 声道同样分频，对 vocal 频段（120Hz~6kHz）额外衰减 88%（`SIDE_VOCAL_KEEP = 0.12f`），消除偏置/混响残留人声
+   - 补偿增益 `MAKEUP_GAIN = 1.6f` 抵消电平下降
+   - 滤波器：四阶 Linkwitz-Riley（两个二阶 biquad 级联，RBJ Cookbook 系数，-24dB/oct）
+2. **`PlaybackService`**：自定义 `RenderersFactory` 覆写 `buildAudioSink()`，通过 `DefaultAudioSink.Builder.setAudioProcessors()` 注入处理器
+3. **`PlayerManager`**：`setVocalRemovalProcessor()` 注入 + `setVocalRemovalEnabled()` / `isVocalRemovalEnabled()` 开关
+4. **`MainViewModel`**：暴露 `vocalRemovalEnabled: StateFlow<Boolean>` + `toggleVocalRemoval()`
+5. **`KaraokePlaybackScreen`（新增）**：全屏 K 歌布局，复用沉浸模式的全屏封面背景（`rememberAsyncImagePainter` + `ContentScale.Crop` + 三段渐变遮罩 0xCC/0x99/0xCC）
+6. **`KaraokeLyricsView`（新增）**：固定当前行（25sp 逐字高亮）+ 下一行预览（18sp 暗色），强制逐字模式
+7. **`VocalToggleButton`（新增）**：红色 accent `#FD3359` 圆角按钮，按状态切换"伴奏/原唱"文字
+8. **`NowPlayingScreen` / `PlayerControls` / `AppRoot`**：`vocalRemovalEnabled` 条件渲染切换两套布局（不新增 Screen 枚举），控制栏 `ControlButtonsRow` 新增伴奏入口按钮参数
+
+#### 修改文件
+
+- `player/VocalRemovalProcessor.kt`（新增，285 行）
+- `ui/components/KaraokePlaybackScreen.kt` / `KaraokeLyricsView.kt` / `VocalToggleButton.kt`（新增）
+- `player/PlaybackService.kt`：RenderersFactory 注入 AudioProcessor
+- `player/PlayerManager.kt`：处理器注入 + 开关方法
+- `ui/viewmodel/MainViewModel.kt`：vocalRemovalEnabled 状态
+- `ui/screens/NowPlayingScreen.kt` / `ui/components/PlayerControls.kt` / `ui/components/AppRoot.kt`：条件渲染 + 入口按钮
+- `app/build.gradle.kts`：versionCode 40->41, versionName 2.12.8->2.13.0
+- `CHANGELOG.md`：新增 v2.13.0 条目
+- `docs/vocal-removal-approach-b-dsp.md` / `vocal-removal-approach-c-ai.md`：方案设计文档（B 已实施，C 待评估）
+
+#### 验证结果
+
+- ✅ `./gradlew.bat assembleDebug` BUILD SUCCESSFUL
+- ✅ 真机安装成功（192.168.0.116:5555）
+
+#### 注意事项
+
+- 方案 B 与未来 K 歌方案的双音轨切换互斥：KARAOKE 模式（≥2 音轨）走硬件音轨切换，无需 DSP；当前阶段 playbackMode 恒为 MUSIC，按钮始终显示
+- 单声道文件自动 bypass（`configure` 返回 NOT_SET）
+- 消除效果依赖混音：人声居中、立体声宽度大的歌曲效果好；偏置人声/和声残留较多
+- 切歌时滤波器状态在 `flush()`/`setEnabled()` 中重置，无异常噪声
+- 方案 C（Spleeter AI 预分离）暂未实施，后续可在 UI 增加第三选项，无需改 B 的代码
+
 
 
 
