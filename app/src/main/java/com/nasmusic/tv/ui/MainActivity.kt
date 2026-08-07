@@ -143,7 +143,7 @@ class MainActivity : ComponentActivity() {
                                 Text(
                                     text = msg,
                                     color = NasMusicColors.TextPrimary,
-                                    fontSize = 16.sp,
+                                    fontSize = 21.sp,
                                     fontWeight = FontWeight.Medium
                                 )
                             }
@@ -166,7 +166,7 @@ class MainActivity : ComponentActivity() {
                                 Text(
                                     text = msg,
                                     color = NasMusicColors.TextPrimary,
-                                    fontSize = 16.sp,
+                                    fontSize = 21.sp,
                                     fontWeight = FontWeight.Medium
                                 )
                             }

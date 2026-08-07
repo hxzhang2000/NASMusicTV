@@ -112,44 +112,44 @@ private val LightColorScheme = lightColorScheme(
 
 private val AppTypography = Typography(
     displayLarge = TextStyle(
-        fontSize = 48.sp,
+        fontSize = 53.sp,
         fontWeight = FontWeight.Bold,
         letterSpacing = 0.sp
     ),
     displayMedium = TextStyle(
-        fontSize = 36.sp,
+        fontSize = 41.sp,
         fontWeight = FontWeight.Bold
     ),
     headlineLarge = TextStyle(
-        fontSize = 28.sp,
+        fontSize = 33.sp,
         fontWeight = FontWeight.SemiBold
     ),
     headlineMedium = TextStyle(
-        fontSize = 22.sp,
+        fontSize = 27.sp,
         fontWeight = FontWeight.SemiBold
     ),
     titleLarge = TextStyle(
-        fontSize = 20.sp,
+        fontSize = 25.sp,
         fontWeight = FontWeight.Medium
     ),
     titleMedium = TextStyle(
-        fontSize = 18.sp,
+        fontSize = 23.sp,
         fontWeight = FontWeight.Medium
     ),
     bodyLarge = TextStyle(
-        fontSize = 16.sp,
+        fontSize = 21.sp,
         fontWeight = FontWeight.Normal
     ),
     bodyMedium = TextStyle(
-        fontSize = 14.sp,
+        fontSize = 19.sp,
         fontWeight = FontWeight.Normal
     ),
     labelLarge = TextStyle(
-        fontSize = 14.sp,
+        fontSize = 19.sp,
         fontWeight = FontWeight.Medium
     ),
     labelMedium = TextStyle(
-        fontSize = 12.sp,
+        fontSize = 17.sp,
         fontWeight = FontWeight.Normal
     )
 )
@@ -181,17 +181,17 @@ fun NASMusicTVTheme(
  */
 object LyricsTheme {
     val currentLine = TextStyle(
-        fontSize = 36.sp,
+        fontSize = 41.sp,
         fontWeight = FontWeight.SemiBold,
         color = NasMusicColors.Primary
     )
     val normalLine = TextStyle(
-        fontSize = 28.sp,
+        fontSize = 33.sp,
         fontWeight = FontWeight.Normal,
         color = NasMusicColors.TextPrimary
     )
     val dimLine = TextStyle(
-        fontSize = 22.sp,
+        fontSize = 27.sp,
         fontWeight = FontWeight.Normal,
         color = NasMusicColors.TextSecondary
     )
