@@ -67,7 +67,7 @@ fun ConnectPromptDialog(
             Text(
                 text = stringResource(R.string.server_connect_title),
                 color = NasMusicColors.TextPrimary,
-                fontSize = 22.sp,
+                fontSize = 27.sp,
                 fontWeight = FontWeight.Bold
             )
             Spacer(modifier = Modifier.height(16.dp))
@@ -77,7 +77,7 @@ fun ConnectPromptDialog(
                 else
                     stringResource(R.string.connect_prompt_message),
                 color = NasMusicColors.TextSecondary,
-                fontSize = 16.sp
+                fontSize = 21.sp
             )
             Spacer(modifier = Modifier.height(28.dp))
 
@@ -133,7 +133,7 @@ private fun DialogButton(
         ) {
             Text(
                 text = label,
-                fontSize = 16.sp,
+                fontSize = 21.sp,
                 fontWeight = FontWeight.Bold
             )
         }

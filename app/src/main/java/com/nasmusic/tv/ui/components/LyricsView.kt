@@ -175,7 +175,7 @@ fun LyricsView(
                 Text(
                     text = lyrics.source.displayName,
                     color = NasMusicColors.TextSecondary,
-                    fontSize = 11.sp
+                    fontSize = 16.sp
                 )
             }
         }
