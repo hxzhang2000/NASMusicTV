@@ -110,7 +110,7 @@ fun MineScreen(
                 Text(
                     text = stringResource(R.string.mine_favorites),
                     color = NasMusicColors.TextPrimary,
-                    fontSize = 28.sp,
+                    fontSize = 33.sp,
                     modifier = Modifier.padding(end = 24.dp)
                 )
                 Spacer(modifier = Modifier.weight(1f))
@@ -127,7 +127,7 @@ fun MineScreen(
                     Text(
                         text = stringResource(R.string.mine_favorites_empty),
                         color = NasMusicColors.TextSecondary,
-                        fontSize = 16.sp
+                        fontSize = 21.sp
                     )
                 }
             } else {
@@ -161,7 +161,7 @@ fun MineScreen(
                 Text(
                     text = stringResource(R.string.mine_playlists),
                     color = NasMusicColors.TextPrimary,
-                    fontSize = 28.sp,
+                    fontSize = 33.sp,
                     modifier = Modifier.padding(end = 24.dp)
                 )
                 Spacer(modifier = Modifier.weight(1f))
@@ -178,7 +178,7 @@ fun MineScreen(
                 ) {
                     Text(
                         text = "+ " + stringResource(R.string.mine_create_playlist),
-                        fontSize = 14.sp,
+                        fontSize = 19.sp,
                         modifier = Modifier.padding(horizontal = 18.dp, vertical = 10.dp)
                     )
                 }
@@ -189,7 +189,7 @@ fun MineScreen(
                     Text(
                         text = stringResource(R.string.mine_playlists_empty),
                         color = NasMusicColors.TextSecondary,
-                        fontSize = 16.sp
+                        fontSize = 21.sp
                     )
                 }
             } else {
@@ -321,7 +321,7 @@ private fun PlaylistCard(
                 }
         ) {
             Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
+                modifier = Modifier.fillMaxWidth().height(100.dp).padding(horizontal = 16.dp, vertical = 12.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 // 左侧：点击展开/收起
@@ -334,39 +334,39 @@ private fun PlaylistCard(
                     Text(
                         text = if (expanded) "▾" else "♪",
                         color = NasMusicColors.Primary,
-                        fontSize = 16.sp,
-                        modifier = Modifier.width(28.dp)
+                        fontSize = 25.sp,
+                        modifier = Modifier.width(36.dp)
                     )
-                    Spacer(modifier = Modifier.width(6.dp))
+                    Spacer(modifier = Modifier.width(12.dp))
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
                             text = playlist.name,
                             color = NasMusicColors.TextPrimary,
-                            fontSize = 14.sp,
+                            fontSize = 23.sp,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
                         Text(
                             text = stringResource(R.string.mine_song_count, playlist.songs.size),
                             color = NasMusicColors.TextSecondary,
-                            fontSize = 11.sp
+                            fontSize = 20.sp
                         )
                     }
                 }
                 // 右侧操作按钮
-                Spacer(modifier = Modifier.width(8.dp))
+                Spacer(modifier = Modifier.width(10.dp))
                 PlaylistActionButton(
                     text = stringResource(R.string.mine_play_playlist),
                     color = NasMusicColors.Primary,
                     onClick = onPlay
                 )
-                Spacer(modifier = Modifier.width(8.dp))
+                Spacer(modifier = Modifier.width(10.dp))
                 PlaylistActionButton(
                     text = stringResource(R.string.mine_rename_playlist),
                     color = NasMusicColors.TextSecondary,
                     onClick = onRename
                 )
-                Spacer(modifier = Modifier.width(8.dp))
+                Spacer(modifier = Modifier.width(10.dp))
                 PlaylistActionButton(
                     text = stringResource(R.string.mine_remove_song),
                     color = NasMusicColors.Warning,
@@ -391,7 +391,7 @@ private fun PlaylistCard(
                         Text(
                             text = stringResource(R.string.mine_playlists_empty),
                             color = NasMusicColors.TextSecondary,
-                            fontSize = 13.sp
+                            fontSize = 18.sp
                         )
                     }
                 } else {
@@ -448,7 +448,7 @@ private fun PlaylistSongRow(
             }
     ) {
         Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+            modifier = Modifier.fillMaxWidth().height(116.dp).padding(horizontal = 16.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Row(
@@ -460,19 +460,19 @@ private fun PlaylistSongRow(
                         model = song.coverUrl,
                         contentDescription = null,
                         modifier = Modifier
-                            .size(32.dp)
+                            .size(88.dp)
                             .clip(RoundedCornerShape(4.dp))
-                            .padding(end = 8.dp)
+                            .padding(end = 14.dp)
                     )
                 }
-                Text(text = "▶", color = NasMusicColors.Primary, fontSize = 11.sp, modifier = Modifier.width(24.dp))
-                Spacer(modifier = Modifier.width(8.dp))
+                Text(text = "▶", color = NasMusicColors.Primary, fontSize = 20.sp, modifier = Modifier.width(32.dp))
+                Spacer(modifier = Modifier.width(12.dp))
                 Column(modifier = Modifier.weight(1f)) {
-                    Text(text = song.title, color = NasMusicColors.TextPrimary, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    Text(text = song.artist.ifBlank { "—" }, color = NasMusicColors.TextSecondary, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(text = song.title, color = NasMusicColors.TextPrimary, fontSize = 23.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(text = song.artist.ifBlank { "-" }, color = NasMusicColors.TextSecondary, fontSize = 20.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
-                Spacer(modifier = Modifier.width(10.dp))
-                Text(text = TimeUtils.formatDuration(song.durationMs), color = NasMusicColors.TextSecondary, fontSize = 11.sp)
+                Spacer(modifier = Modifier.width(12.dp))
+                Text(text = TimeUtils.formatDuration(song.durationMs), color = NasMusicColors.TextSecondary, fontSize = 20.sp)
             }
             Spacer(modifier = Modifier.width(8.dp))
             QueueToggleButton(isInQueue = isInQueue, onClick = onToggleQueue)
@@ -525,9 +525,9 @@ private fun PlaylistActionButton(
     ) {
         Text(
             text = text,
-            fontSize = 11.sp,
+            fontSize = 21.sp,
             color = if (isFocused) color else color.copy(alpha = 0.75f),
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)
         )
     }
 }
@@ -545,7 +545,7 @@ private fun RemoveSongButton(
 
     Box(
         modifier = Modifier
-            .size(28.dp)
+            .size(44.dp)
             .scale(animScale.value)
             .border(
                 width = if (isFocused) 2.dp else 0.dp,
@@ -571,7 +571,7 @@ private fun RemoveSongButton(
     ) {
         Text(
             text = "✕",
-            fontSize = 13.sp,
+            fontSize = 18.sp,
             color = if (isFocused) NasMusicColors.Warning else NasMusicColors.TextSecondary.copy(alpha = 0.5f)
         )
     }

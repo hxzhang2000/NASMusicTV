@@ -110,7 +110,7 @@ fun AlbumDetailScreen(
             Text(
                 text = album.name,
                 color = NasMusicColors.TextPrimary,
-                fontSize = 24.sp,
+                fontSize = 29.sp,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f)
@@ -139,7 +139,7 @@ fun AlbumDetailScreen(
                         modifier = Modifier.fillMaxSize(),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text(text = "♪", color = NasMusicColors.TextSecondary, fontSize = 64.sp)
+                        Text(text = "♪", color = NasMusicColors.TextSecondary, fontSize = 69.sp)
                     }
                 }
             }
@@ -152,7 +152,7 @@ fun AlbumDetailScreen(
                 Text(
                     text = album.artist.ifBlank { "—" },
                     color = NasMusicColors.TextSecondary,
-                    fontSize = 16.sp
+                    fontSize = 21.sp
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 Row {
@@ -160,13 +160,13 @@ fun AlbumDetailScreen(
                         Text(
                             text = "${album.year} · ",
                             color = NasMusicColors.TextSecondary,
-                            fontSize = 14.sp
+                            fontSize = 19.sp
                         )
                     }
                     Text(
                         text = "${album.songCount} 首曲目",
                         color = NasMusicColors.TextSecondary,
-                        fontSize = 14.sp
+                        fontSize = 19.sp
                     )
                 }
                 Spacer(modifier = Modifier.height(12.dp))
@@ -215,7 +215,7 @@ fun AlbumDetailScreen(
                                 }
                         ) {
                             Row(
-                                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+                                modifier = Modifier.fillMaxWidth().height(100.dp).padding(horizontal = 16.dp, vertical = 12.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 // 左侧可聚焦+可点击区域（点击播放歌曲）
@@ -229,32 +229,32 @@ fun AlbumDetailScreen(
                                     Text(
                                         text = "${index + 1}",
                                         color = NasMusicColors.TextSecondary,
-                                        fontSize = 12.sp,
-                                        modifier = Modifier.width(28.dp),
+                                        fontSize = 21.sp,
+                                        modifier = Modifier.width(36.dp),
                                         textAlign = TextAlign.Center
                                     )
-                                    Spacer(modifier = Modifier.width(10.dp))
+                                    Spacer(modifier = Modifier.width(12.dp))
                                     Column(modifier = Modifier.weight(1f)) {
                                         Text(
                                             text = song.title,
                                             color = NasMusicColors.TextPrimary,
-                                            fontSize = 13.sp,
+                                            fontSize = 23.sp,
                                             maxLines = 1,
                                             overflow = TextOverflow.Ellipsis
                                         )
                                         Text(
-                                            text = song.artist.ifBlank { "—" },
+                                            text = song.artist.ifBlank { "-" },
                                             color = NasMusicColors.TextSecondary,
-                                            fontSize = 11.sp,
+                                            fontSize = 20.sp,
                                             maxLines = 1,
                                             overflow = TextOverflow.Ellipsis
                                         )
                                     }
-                                    Spacer(modifier = Modifier.width(10.dp))
+                                    Spacer(modifier = Modifier.width(12.dp))
                                     Text(
                                         text = TimeUtils.formatDuration(song.durationMs),
                                         color = NasMusicColors.TextSecondary,
-                                        fontSize = 11.sp
+                                        fontSize = 20.sp
                                     )
                                 }
                                 Spacer(modifier = Modifier.width(8.dp))

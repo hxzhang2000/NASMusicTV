@@ -140,7 +140,7 @@ fun QueueScreen(
             // 标题/作者
             Text(text = currentSong?.title ?: stringResource(R.string.player_no_song_selected),
                 color = NasMusicColors.Primary,
-                fontSize = 20.sp,
+                fontSize = 25.sp,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
                 textAlign = TextAlign.Center)
@@ -148,7 +148,7 @@ fun QueueScreen(
             Text(
                 text = currentSong?.artist?.ifBlank { "—" } ?: "—",
                 color = NasMusicColors.TextSecondary,
-                fontSize = 14.sp,
+                fontSize = 19.sp,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
@@ -201,15 +201,15 @@ fun QueueScreen(
                 MiniIconButton(onClick = onNext, icon = Icons.Filled.SkipNext, contentDescription = "Next")
             }
             Spacer(modifier = Modifier.height(20.dp))
-            Text(text = playMode.displayName, color = NasMusicColors.TextSecondary, fontSize = 12.sp)
+            Text(text = playMode.displayName, color = NasMusicColors.TextSecondary, fontSize = 17.sp)
         }
 
         // --- 右侧：队列列表 ---
         Column(modifier = Modifier.fillMaxWidth().weight(1f).padding(start = 8.dp)) {
             Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Text(text = stringResource(R.string.queue_title), color = NasMusicColors.TextPrimary, fontSize = 36.sp)
+                Text(text = stringResource(R.string.queue_title), color = NasMusicColors.TextPrimary, fontSize = 41.sp)
                 Spacer(modifier = Modifier.weight(1f))
-                Text(text = "${queue.size} 首", color = NasMusicColors.TextSecondary, fontSize = 16.sp)
+                Text(text = "${queue.size} 首", color = NasMusicColors.TextSecondary, fontSize = 21.sp)
                 if (queue.isNotEmpty()) {
                     Spacer(modifier = Modifier.width(24.dp))
                     QueueActionButton(text = stringResource(R.string.queue_clear), onClick = onClearQueue, icon = null)
@@ -221,9 +221,9 @@ fun QueueScreen(
             if (queue.isEmpty()) {
                 Box(modifier = Modifier.fillMaxSize().weight(1f), contentAlignment = Alignment.Center) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text(text = stringResource(R.string.queue_empty), color = NasMusicColors.TextSecondary, fontSize = 24.sp)
+                        Text(text = stringResource(R.string.queue_empty), color = NasMusicColors.TextSecondary, fontSize = 29.sp)
                         Spacer(modifier = Modifier.height(8.dp))
-                        Text(text = stringResource(R.string.queue_go_to_library), color = NasMusicColors.TextSecondary, fontSize = 14.sp)
+                        Text(text = stringResource(R.string.queue_go_to_library), color = NasMusicColors.TextSecondary, fontSize = 19.sp)
                     }
                 }
             } else {
@@ -265,7 +265,7 @@ fun QueueScreen(
                                 }
                         ) {
                             Row(
-                                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+                                modifier = Modifier.fillMaxWidth().height(100.dp).padding(horizontal = 16.dp, vertical = 12.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 // 左侧可聚焦+可点击区域（点击播放歌曲）
@@ -279,17 +279,17 @@ fun QueueScreen(
                                     Text(
                                         text = String.format("%02d", index + 1),
                                         color = if (isCurrent) NasMusicColors.Primary else NasMusicColors.TextSecondary,
-                                        fontSize = 12.sp,
-                                        modifier = Modifier.width(28.dp),
+                                        fontSize = 21.sp,
+                                        modifier = Modifier.width(36.dp),
                                         textAlign = TextAlign.Center
                                     )
-                                    Spacer(modifier = Modifier.width(10.dp))
+                                    Spacer(modifier = Modifier.width(12.dp))
                                     Column(modifier = Modifier.weight(1f)) {
-                                        Text(text = song.title, color = if (isCurrent) NasMusicColors.Primary else NasMusicColors.TextPrimary, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                        Text(text = song.artist.ifBlank { "—" }, color = NasMusicColors.TextSecondary, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                        Text(text = song.title, color = if (isCurrent) NasMusicColors.Primary else NasMusicColors.TextPrimary, fontSize = 23.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                        Text(text = song.artist.ifBlank { "-" }, color = NasMusicColors.TextSecondary, fontSize = 20.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                     }
-                                    Spacer(modifier = Modifier.width(10.dp))
-                                    Text(text = TimeUtils.formatDuration(song.durationMs), color = NasMusicColors.TextSecondary, fontSize = 11.sp)
+                                    Spacer(modifier = Modifier.width(12.dp))
+                                    Text(text = TimeUtils.formatDuration(song.durationMs), color = NasMusicColors.TextSecondary, fontSize = 20.sp)
                                 }
                                 // 右侧操作按钮（独立可聚焦）
                                 if (index > 0) {
@@ -324,7 +324,7 @@ fun QueueActionButton(text: String, onClick: () -> Unit, icon: androidx.compose.
         focusedContentColor = androidx.compose.ui.graphics.Color.White,
         pressedScale = 0.95f
     ) {
-        Text(text = text, fontSize = 14.sp, modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp))
+        Text(text = text, fontSize = 19.sp, modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp))
     }
 }
 
@@ -337,7 +337,7 @@ private fun MoveButton(text: String, onClick: () -> Unit) {
 
     Box(
         modifier = Modifier
-            .widthIn(min = 36.dp)
+            .widthIn(min = 48.dp)
             .scale(animScale.value)
             .clip(RoundedCornerShape(6.dp))
             .background(
@@ -359,12 +359,12 @@ private fun MoveButton(text: String, onClick: () -> Unit) {
             }
             .focusable()
             .clickable { onClick() }
-            .padding(horizontal = 8.dp, vertical = 6.dp),
+            .padding(horizontal = 12.dp, vertical = 8.dp),
         contentAlignment = Alignment.Center
     ) {
         Text(
             text = text,
-            fontSize = 16.sp,
+            fontSize = 21.sp,
             color = if (isFocused) NasMusicColors.Primary else NasMusicColors.TextSecondary
         )
     }
