@@ -152,27 +152,29 @@ fun KaraokeLyricsView(
  * [lineStartMs] 到 [lineEndMs] 为该行的完整时长，[currentMs] 落在其中时
  * 返回线性比例；整行完成后返回 1f 保留黄色，行未开始时返回 0f（纯白预览）。
  */
-private fun lineProgress(lineStartMs: Long, lineEndMs: Long, currentMs: Long): Float {
+internal fun lineProgress(lineStartMs: Long, lineEndMs: Long, currentMs: Long): Float {
     if (lineEndMs <= lineStartMs) return 0f
     return ((currentMs - lineStartMs).toFloat() / (lineEndMs - lineStartMs).toFloat())
         .coerceIn(0f, 1f)
 }
 
 /**
- * 单行 KARAOKE 渲染：双层叠加实现平滑黄色进度
+ * 单行 KARAOKE 渲染：双层叠加实现平滑进度
  *
- * - 底层（白色）：整行歌词
- * - 顶层（黄色）：与底层完全相同的歌词，按 [progress]（0..1）从左到右裁剪揭示，
+ * - 底层（[baseColor]）：整行歌词
+ * - 顶层（[highlightColor]）：与底层完全相同的歌词，按 [progress]（0..1）从左到右裁剪揭示，
  *   进度边界落在字符中间时即实现"半个字被覆盖"，非逐字跳变
  *
  * 使用 TextLayoutResult 定位边界像素，文本左对齐/右对齐均正确。
  */
 @Composable
-private fun KaraokeLineText(
+internal fun KaraokeLineText(
     text: String,
     progress: Float,
     fontSize: TextUnit = 50.sp,
     textAlign: TextAlign = TextAlign.Start,
+    baseColor: Color = Color.White,
+    highlightColor: Color = Color.Yellow,
     modifier: Modifier = Modifier
 ) {
     var layout by remember(text) { mutableStateOf<TextLayoutResult?>(null) }
@@ -184,7 +186,7 @@ private fun KaraokeLineText(
             fontSize = fontSize,
             fontWeight = FontWeight.Bold,
             textAlign = textAlign,
-            color = Color.White,
+            color = baseColor,
             onTextLayout = { layout = it },
             modifier = Modifier.fillMaxWidth()
         )
@@ -197,7 +199,7 @@ private fun KaraokeLineText(
                 fontSize = fontSize,
                 fontWeight = FontWeight.Bold,
                 textAlign = textAlign,
-                color = Color.Yellow,
+                color = highlightColor,
                 modifier = Modifier
                     .fillMaxWidth()
                     .drawWithContent {

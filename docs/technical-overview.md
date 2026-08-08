@@ -5239,6 +5239,45 @@ v2.6.0 天气电台功能使用 Open-Meteo（无需 API Key）作为主要天气
 
 - 槽位奇偶绑定为全局约定：若未来改为三行/四行窗口需同步重写 `onTopIsCurrent` 归属规则
 
+### 10.44 v2.13.3 - 播放页/沉浸页逐字模式平滑化 + 卡拉OK组件复用
+
+**概述**：普通播放页与全屏沉浸页的逐字（WORD_BY_WORD）歌词此前仍按整字跳变高亮，与 v2.13.1 已平滑化的 K 歌模式不一致。本次复用 `KaraokeLineText` 双色渲染组件，让两处逐字歌词也按行内进度连续推进（边界可落在半个字上）。
+
+#### 主要变更
+
+1. **`KaraokeLyricsView.kt`（组件参数化）**
+   - `KaraokeLineText` 新增 `baseColor` / `highlightColor` 参数（默认白色底 / 黄色高亮），`baseTextStyle` 相应调整
+   - K 歌页调用保持不变（白 / 黄），供播放页复用同一声明式组件
+
+2. **`LyricsView.kt`（逐字模式改为平滑渲染）**
+   - WORD_BY_WORD 模式当前行改用 `KaraokeLineText` 渲染：白色底 + 黄色按 `lineProgress` 连续推进，不再按字跳变
+   - `estimateWordTimestamps` 及 `WordTimestamp` 相关逻辑移除，清理 `buildAnnotatedString` / `SpanStyle` 等未用导入
+
+3. **`ui/viewmodel/MainViewModel.kt`**
+   - `resolveAndPlayByIndex` 加固：补强索引边界与空集合防护
+
+#### 修改文件
+
+- `ui/components/KaraokeLyricsView.kt`：`KaraokeLineText` 参数化
+- `ui/components/LyricsView.kt`：逐字模式复用 `KaraokeLineText`，移除逐字时间戳估算
+- `ui/viewmodel/MainViewModel.kt`：`resolveAndPlayByIndex` 加固
+- `util/NetworkMonitor.kt`：新增可注入 `networkRequest` 参数（测试注入用，默认走原构建逻辑）
+- `test/.../lyrics/LrcParserTest.kt`：补挂 Robolectric Runner
+- `test/.../util/NetworkMonitorTest.kt`：注入 mock `NetworkRequest`、`@Config(sdk=[30])`、matcher 统一 `eq()`
+- `CHANGELOG.md`：v2.13.3 条目（Changed / Fixed）
+- `docs/technical-overview.md`：10.44 条目
+- `app/build.gradle.kts`：versionCode 44 / versionName "2.13.3"
+
+#### 验证结果
+
+- ✅ `./gradlew.bat compileDebugKotlin` 通过（12s，仅 1 条预存 Coil opt-in 警告）
+- ✅ 单元测试全量通过：`testDebugUnitTest` 84/84 绿（此前 16 条失败已修复——`LrcParserTest` 补 Robolectric Runner 解决 `android.util.Log not mocked`；`NetworkMonitor` 注入 `NetworkRequest` + `@Config(sdk=[30])` 规避 Robolectric 4.11.1 缺失的 `registerNetworkCallback`/`addCapability` shadow）
+
+#### 注意事项
+
+- 逐字平滑采用行内时间线性推进：LRC 各句节奏不均时，同一句内高亮推进速度恒定，跨句衔接精确
+- 普通播放页与 K 歌页共用一套渲染组件，后续歌词视觉调整只需改 `KaraokeLineText`
+
 
 
 

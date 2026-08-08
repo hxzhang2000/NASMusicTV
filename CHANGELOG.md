@@ -7,6 +7,18 @@
 >
 > 类型：`Added`（新增） | `Changed`（变更） | `Fixed`（修复） | `Removed`（移除）
 
+## [v2.13.3] - 2026-08-08
+
+### Changed
+
+- **播放页 / 全屏沉浸页逐字模式改为平滑进度**：普通播放页与全屏沉浸页的逐字（卡拉OK）歌词不再按字跳变，复用 `KaraokeLineText` 双色渲染（白色底 + 黄色按行内进度连续推进，边界可落在半个字上），与 K 歌页效果一致（`LyricsView`）
+- **`KaraokeLineText` 参数化**：新增 `baseColor` / `highlightColor` 参数，供 `KaraokeLyricsView`（默认白 / 黄）与普通播放页逐字模式复用同一声明式组件（`KaraokeLyricsView`）
+
+### Fixed
+
+- **`resolveAndPlayByIndex` 加固**：补强索引边界与空集合防护，避免逐字歌词连带异常（`MainViewModel`）
+- **修复 16 条单元测试失败**：`LrcParserTest` 补挂 Robolectric Runner（`android.util.Log` 不再抛 not mocked）；`NetworkMonitor` 支持注入 `NetworkRequest`、测试改用 `@Config(sdk=[30])` 规避 Robolectric 4.11.1 缺失的 `registerNetworkCallback` shadow（`NetworkMonitor` / 测试类）
+
 ## [v2.13.2] - 2026-08-08
 
 ### Changed

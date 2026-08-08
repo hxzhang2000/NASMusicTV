@@ -2461,27 +2461,39 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /**
-     * 解析指定索引处歌曲的播放链接并播放
+     * 解析单首歌曲的播放链接
      *
-     * 用于恢复队列后切换歌曲（next/previous）时，目标歌曲 streamUrl 为空的情况。
+     * - 网络歌曲：通过 NetworkMusicManager.resolvePlayUrl() 实时解析
+     * - NAS 歌曲：通过 adapter.getSongsByIds() 获取 streamUrl
      */
+    private suspend fun resolveStreamUrl(song: Song): String? {
+        return if (song.isNetworkSong) {
+            nasMusicApp.networkMusicManager.resolvePlayUrl(song)
+        } else {
+            val adapter = backendRegistry.getAdapter()
+            if (adapter != null) {
+                adapter.getSongsByIds(listOf(song.id)).firstOrNull()?.streamUrl
+            } else null
+        }
+    }
+
     private fun resolveAndPlayByIndex(targetIndex: Int) {
         val queueValue = queue.value
         val song = queueValue.getOrNull(targetIndex) ?: return
         viewModelScope.launch {
             try {
-                val playUrl = if (song.isNetworkSong) {
-                    nasMusicApp.networkMusicManager.resolvePlayUrl(song)
-                } else {
-                    val adapter = backendRegistry.getAdapter()
-                    if (adapter != null) {
-                        adapter.getSongsByIds(listOf(song.id)).firstOrNull()?.streamUrl
-                    } else null
-                }
-
+                var playUrl = resolveStreamUrl(song)
+                // 初次解析失败（网络瞬时抖动/端点超时）：延迟 1.5s 自动重试一次
                 if (playUrl.isNullOrBlank()) {
-                    AppLog.w("NASMusic", "resolveAndPlayByIndex: failed to resolve streamUrl for ${song.title}")
-                    showError("无法解析播放链接，请稍后重试")
+                    AppLog.w("NASMusic", "resolveAndPlayByIndex: initial resolve failed for ${song.title}, retrying in 1.5s")
+                    delay(1500)
+                    playUrl = resolveStreamUrl(song)
+                }
+                if (playUrl.isNullOrBlank()) {
+                    // 重试仍失败：不再静默卡在"已切歌未播放"状态，自动跳到下一首
+                    AppLog.w("NASMusic", "resolveAndPlayByIndex: failed after retry, skipping ${song.title}")
+                    showError("无法解析播放链接，自动跳过《${song.title}》")
+                    playerManager.next(_playMode.value)
                     return@launch
                 }
 

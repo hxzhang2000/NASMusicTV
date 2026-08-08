@@ -29,9 +29,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.AnnotatedString
-import androidx.compose.ui.text.SpanStyle
-import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -41,29 +38,10 @@ import androidx.tv.material3.Text
 import com.nasmusic.tv.R
 import com.nasmusic.tv.data.model.Lyrics
 import com.nasmusic.tv.data.model.LyricsHighlightMode
-import com.nasmusic.tv.data.model.WordTimestamp
 import com.nasmusic.tv.ui.theme.LyricsTheme
 import com.nasmusic.tv.ui.theme.NasMusicBrushes
 import com.nasmusic.tv.ui.theme.NasMusicColors
 import kotlinx.coroutines.delay
-
-/**
- * 估算逐字时间戳（用于标准 LRC 格式）
- * 将行时长平均分配给每个字符
- */
-private fun estimateWordTimestamps(line: com.nasmusic.tv.data.model.LyricsLine, nextLineTime: Long): List<WordTimestamp> {
-    if (line.text.isEmpty()) return emptyList()
-    
-    val lineDuration = if (nextLineTime > line.time) nextLineTime - line.time else 3000L // 默认3秒
-    val charDuration = lineDuration / line.text.length
-    
-    return line.text.mapIndexed { index, char ->
-        WordTimestamp(
-            word = char.toString(),
-            startMs = line.time + index * charDuration
-        )
-    }
-}
 
 /**
  * 歌词视图
@@ -206,74 +184,42 @@ fun LyricsView(
                     else -> 22.sp * fontSizeMultiplier
                 }
 
-                // B-3: Karaoke word-by-word highlighting for current line
-                val displayText: Any = if (isCurrent && highlightMode == LyricsHighlightMode.WORD_BY_WORD) {
-                    // 获取逐字时间戳：优先使用原始数据，否则估算
-                    val wordTimestamps = if (line.wordTimestamps.isNotEmpty()) {
-                        line.wordTimestamps
+                // 逐字模式：与 KARAOKE 页一致，使用平滑双层裁剪推进（半个字粒度），
+                // 而非逐字跳变。progress 由该行开始/结束时间按当前进度比例计算。
+                if (isCurrent && highlightMode == LyricsHighlightMode.WORD_BY_WORD) {
+                    val nextLineTime = if (index + 1 < lyrics.lines.size) {
+                        lyrics.lines[index + 1].time
                     } else {
-                        // 估算逐字时间戳
-                        val nextLineTime = if (index + 1 < lyrics.lines.size) {
-                            lyrics.lines[index + 1].time
-                        } else {
-                            line.time + 3000L // 默认3秒
-                        }
-                        estimateWordTimestamps(line, nextLineTime)
+                        line.time + 3000L // 默认3秒
                     }
-
-                    if (wordTimestamps.isNotEmpty()) {
-                        buildAnnotatedString {
-                            var lastEnd = 0
-                            for (word in wordTimestamps) {
-                                // Plain text before this word
-                                val wordStart = line.text.indexOf(word.word, lastEnd)
-                                if (wordStart < 0) {
-                                    // 未找到匹配词，追加剩余文本后退出，避免 IndexOutOfBoundsException
-                                    if (lastEnd < line.text.length) {
-                                        append(line.text.substring(lastEnd))
-                                    }
-                                    break
-                                }
-                                if (wordStart > lastEnd) {
-                                    append(line.text.substring(lastEnd, wordStart))
-                                }
-                                // Highlighted or dimmed word depending on playback progress
-                                // 逐字高亮使用高频插值时间，保证视觉流畅
-                                val wordPlayed = word.startMs <= effectiveTimeMs
-                                val style = if (wordPlayed) {
-                                    SpanStyle(color = Color.Yellow)
-                                } else {
-                                    SpanStyle(color = textColor)
-                                }
-                                pushStyle(style)
-                                append(word.word)
-                                pop()
-                                lastEnd = wordStart + word.word.length
-                            }
-                            // Remaining text after last word
-                            if (lastEnd < line.text.length) {
-                                append(line.text.substring(lastEnd))
-                            }
-                        }
-                    } else {
-                        line.text
-                    }
+                    val progress = lineProgress(line.time, nextLineTime, effectiveTimeMs)
+                    KaraokeLineText(
+                        text = line.text,
+                        progress = progress,
+                        fontSize = 40.sp * fontSizeMultiplier,
+                        textAlign = TextAlign.Center,
+                        baseColor = textColor,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(
+                                vertical = if (isCurrent) 22.dp else 14.dp,
+                                horizontal = 32.dp
+                            )
+                    )
                 } else {
-                    line.text
+                    Text(
+                        text = line.text,
+                        color = textColor,
+                        fontSize = fontSize,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(
+                                vertical = if (isCurrent) 22.dp else 14.dp,
+                                horizontal = 32.dp
+                            )
+                    )
                 }
-
-                Text(
-                    text = if (displayText is AnnotatedString) displayText else AnnotatedString(displayText as String),
-                    color = if (displayText !is AnnotatedString) textColor else androidx.compose.ui.graphics.Color.Unspecified,
-                    fontSize = fontSize,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(
-                            vertical = if (isCurrent) 22.dp else 14.dp,
-                            horizontal = 32.dp
-                        )
-                )
             }
             item {
                 Box(modifier = Modifier.fillMaxWidth().padding(vertical = 120.dp))

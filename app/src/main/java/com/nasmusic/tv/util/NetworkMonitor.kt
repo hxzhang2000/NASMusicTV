@@ -9,11 +9,17 @@ import android.net.NetworkRequest
 /**
  * 网络状态监听器
  * 封装 ConnectivityManager.NetworkCallback 的注册与注销
+ *
+ * @param networkRequest 可选的已构造 NetworkRequest（测试注入用）。
+ *   为 null 时内部用默认构建器（NET_CAPABILITY_INTERNET）构造。
+ *   Robolectric 对 NetworkRequest.Builder.addCapability 无 shadow 实现，
+ *   单元测试可通过此参数注入 mock 请求绕过框架桩方法。
  */
 class NetworkMonitor(
     private val context: Context,
     private val onNetworkAvailable: () -> Unit,
-    private val onNetworkLost: () -> Unit
+    private val onNetworkLost: () -> Unit,
+    private val networkRequest: NetworkRequest? = null
 ) {
 
     private var connectivityManager: ConnectivityManager? = null
@@ -51,7 +57,7 @@ class NetworkMonitor(
         }
         networkCallback = callback
 
-        val request = NetworkRequest.Builder()
+        val request = networkRequest ?: NetworkRequest.Builder()
             .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
             .build()
         cm.registerNetworkCallback(request, callback)
