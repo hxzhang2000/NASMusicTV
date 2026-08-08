@@ -5211,6 +5211,34 @@ v2.6.0 天气电台功能使用 Open-Meteo（无需 API Key）作为主要天气
 - 平滑进度按行时长线性推进，不再依赖逐字时间戳，进度与 LRC 行切换时机保持一致
 - 半字边界为像素级插值，中文全角/半角混排时边界像素与字符宽度一致
 
+### 10.43 v2.13.2 - K 歌歌词滚动窗口（逐行推进）
+
+**概述**：将 v2.13.1 的"两行一组整组替换"改为"滚动窗口逐行推进"：两行槽位固定不跳动，当前句播完进入下一句时，另一槽位内容替换为再下一句。用户实测通过后按 Patch 规则升版。
+
+#### 主要变更
+
+1. **`KaraokeLyricsView`（槽位选择逻辑重写）**
+   - 槽位绑定索引奇偶：`onTopIsCurrent = currentIndex % 2 == 0`，偶数索引句固定顶部、奇数索引句固定底部，另一槽位（`topLineIndex` / `bottomLineIndex`）取 `currentIndex + 1`
+   - 滚动替换：句1 播完切句2 时，顶部槽位内容由句1 换成句3（句2 本来就在底部原地变黄），不再整组跳动
+   - 进度规则：当前行按 `lineProgress` 黄色平滑推进，另一槽位白色预览（`progress = 0f`）
+   - `currentLineEndMs` 用 `currentIndex + 1` 行时间；末行无下一行时 +3000ms 兜底，`getOrNull` 处理槽位越界（末句奇/偶索引空槽位均安全）
+
+#### 修改文件
+
+- `ui/components/KaraokeLyricsView.kt`：滚动窗口槽位逻辑
+- `CHANGELOG.md`：v2.13.2 条目（Changed）
+- `app/build.gradle.kts`：versionCode 43 / versionName "2.13.2"
+
+#### 验证结果
+
+- ✅ `./gradlew.bat :app:compileDebugKotlin` 通过
+- ✅ `./gradlew.bat assembleRelease` BUILD SUCCESSFUL
+- ✅ 电视实测（192.168.0.116, 2.13.1）：句1→句2 顶行换句3、句2→句3 底行换句4、颜色正常，用户确认通过
+
+#### 注意事项
+
+- 槽位奇偶绑定为全局约定：若未来改为三行/四行窗口需同步重写 `onTopIsCurrent` 归属规则
+
 
 
 

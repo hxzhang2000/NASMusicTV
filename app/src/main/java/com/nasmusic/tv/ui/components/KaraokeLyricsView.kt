@@ -34,11 +34,12 @@ import kotlinx.coroutines.delay
  * KARAOKE 模式专用歌词视图
  *
  * 与普通 LyricsView 的区别：
- * - 不使用滚动列表，固定显示两行，两行一组整组替换
- * - 两行颜色完全一致：底色白色，播放进度以黄色平滑推进（非逐字跳变）
- * - 平滑进度按行时长比例连续移动，边界可落在半个字上
- * - 第一行播完后整行保留黄色，直接播放第二行；两行都播完后整组替换
- * - 两行同字号 50sp（两行同时显示）；第一行左对齐，第二行右对齐
+ * - 不使用滚动列表，固定显示两行：当前正在唱的行 + 下一行（滚动窗口逐行推进，不整组替换）
+ * - 槽位固定不跳动：偶数索引行始终显示在顶部，奇数索引行始终显示在底部。
+ *   下一句始终停留在另一个槽位作白色预览，轮到时原地变黄，无整行跳动
+ * - 当前行播放进度为黄色平滑推进（非逐字跳变），按行时长比例连续移动，
+ *   边界可落在半个字上
+ * - 两行同字号 50sp；顶部槽位右对齐，底部槽位右对齐
  *
  * @param lyrics 歌词对象
  * @param progressMs 当前播放进度（毫秒）
@@ -93,28 +94,32 @@ fun KaraokeLyricsView(
         .let { if (it == -1) lyrics.lines.size - 1 else it - 1 }
         .coerceAtLeast(0)
 
-    // 两行一组显示：pairStart 取偶数行下标，整组替换
-    val pairStart = currentIndex - (currentIndex % 2)
-    val firstLine = lyrics.lines.getOrNull(pairStart)
-    val secondLine = lyrics.lines.getOrNull(pairStart + 1)
-    // 第一行是否已播完（正在唱第二行）
-    val firstDone = currentIndex > pairStart
+    // 滚动窗口：偶数索引行固定在顶部、奇数索引行固定在底部，另一槽位显示下一行。
+    // 槽位不跳动：句2 开始播放时，顶部槽位内容换为句3（句2 已在底部），
+    // 句3 播放时底部槽位换为句4，逐行滚动。
+    val onTopIsCurrent = currentIndex % 2 == 0
+    val topLineIndex = if (onTopIsCurrent) currentIndex else currentIndex + 1
+    val bottomLineIndex = if (onTopIsCurrent) currentIndex + 1 else currentIndex
+    val topLine = lyrics.lines.getOrNull(topLineIndex)
+    val bottomLine = lyrics.lines.getOrNull(bottomLineIndex)
+    // 当前行结束时间 = 下一行开始时间；最后一行无下一行时按 +3000ms 估算
+    val currentLineEndMs = lyrics.lines.getOrNull(currentIndex + 1)?.time
+        ?: ((lyrics.lines[currentIndex].time) + 3000L)
 
     Column(
         modifier = modifier.fillMaxWidth().padding(horizontal = 72.dp),
         horizontalAlignment = Alignment.Start
     ) {
-        // 第一行：播放中 -> 黄色平滑推进；已播完 -> 整行黄色保留（不消失）
-        firstLine?.let { line ->
-            val firstLineEndMs = secondLine?.time ?: (line.time + 3000L)
-            val firstProgress = if (firstDone) {
-                1f
+        // 顶部槽位：偶数索引行 -> 黄色平滑推进；奇数索引行 -> 白色预览（下一句）
+        topLine?.let { line ->
+            val progress = if (onTopIsCurrent) {
+                lineProgress(line.time, currentLineEndMs, lyricTickMs)
             } else {
-                lineProgress(line.time, firstLineEndMs, lyricTickMs)
+                0f
             }
             KaraokeLineText(
                 text = line.text,
-                progress = firstProgress,
+                progress = progress,
                 fontSize = 50.sp,
                 textAlign = TextAlign.Start,
                 modifier = Modifier.fillMaxWidth()
@@ -123,18 +128,16 @@ fun KaraokeLyricsView(
 
         Spacer(Modifier.height(12.dp))
 
-        // 第二行：未开始 -> 白色预览（与第一行颜色一致）；播放中 -> 黄色平滑推进
-        secondLine?.let { line ->
-            val secondLineEndMs = lyrics.lines.getOrNull(pairStart + 2)?.time
-                ?: (line.time + 3000L)
-            val secondProgress = if (firstDone) {
-                lineProgress(line.time, secondLineEndMs, lyricTickMs)
+        // 底部槽位：奇数索引行 -> 黄色平滑推进；偶数索引行 -> 白色预览（下一句）
+        bottomLine?.let { line ->
+            val progress = if (!onTopIsCurrent) {
+                lineProgress(line.time, currentLineEndMs, lyricTickMs)
             } else {
                 0f
             }
             KaraokeLineText(
                 text = line.text,
-                progress = secondProgress,
+                progress = progress,
                 fontSize = 50.sp,
                 textAlign = TextAlign.End,
                 modifier = Modifier.fillMaxWidth()
