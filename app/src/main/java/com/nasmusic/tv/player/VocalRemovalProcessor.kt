@@ -14,12 +14,16 @@ import kotlin.math.sin
  *
  * 基于 Mid-Side 编码 + 分频段处理：
  * 1. 将立体声 L/R 转为 Mid = (L+R)/2, Side = (L-R)/2
- * 2. 对 Mid 信号分频：低通 120Hz（保留贝斯/底鼓）+ 高通 6kHz（保留镲片），跳过人声频段 —— 消除居中人声
- * 3. 对 Side 信号同样分频，将其 vocal 频段（120Hz~6kHz）额外衰减 88% —— 消除偏置/混响残留人声
- * 4. 重组：L_out = newMid + newSide, R_out = newMid - newSide，再乘补偿增益放大伴奏
+ * 2. 对 Mid 信号分频：低通 120Hz（保留贝斯/底鼓）+ 高通 8kHz（保留镲片/空气感），
+ *    提取 vocal 频段后**深度衰减（保留 15%）而非完全挖空** —— 消除居中，同时避免
+ *    与主旋律、吉他等居中乐器同频段的伴奏一起消失（Audacity 官方建议：伴奏变薄就降低处理强度）
+ * 3. 对 Side 信号同样分频，将其 vocal 频段保留 50%（仅轻度削减，保住立体声宽度/混响伴奏）
+ * 4. 重组：L_out = newMid + newSide, R_out = newMid - newSide，再乘 1.25x 补偿增益
  *
  * 说明：
- * - 男声基频约 85~180Hz，低通必须压到 ~120Hz 以下才能有效消除居中人声的基频分量。
+ * - 男声基频约 85~180Hz，低通必须压到 ~120Hz 以下才能有效消除人声的基频分量。
+ * - 人声主要能量集中在 200Hz~4kHz；高通压到 8kHz 以上即可同时保住镲片/空气感
+ *   （Audacity 官方建议 High Cut ≥ 8000Hz）。
  * - 所有滤波器均为四阶 Linkwitz-Riley（两个二阶 biquad 级联，-24dB/oct），
  *   过渡带比二阶陡一倍，人声频段边缘的残留更少，分频点相加平坦。
  *
@@ -31,13 +35,24 @@ class VocalRemovalProcessor : AudioProcessor {
         private const val TAG = "VocalRemoval"
         /** Mid 低通截止（保留底鼓/贝斯，消除男声基频 85~180Hz） */
         private const val LOW_PASS_FREQ = 120.0
-        /** Mid 高通截止（保留镲片，消除齿音 5~8kHz） */
-        private const val HIGH_PASS_FREQ = 6000.0
+        /** Mid 高通截止（保留镲片/空气感；Audacity 建议 ≥ 8000Hz） */
+        private const val HIGH_PASS_FREQ = 8000.0
         private const val FILTER_Q = 0.707
-        /** Side 声道 vocal 频段衰减系数（1.0 = 完全保留，0.0 = 完全消除） */
-        private const val SIDE_VOCAL_KEEP = 0.12f
-        /** 整体补偿增益：抵消人声消除后电平下降，等效放大伴奏（小心削波，1.5~1.7 较安全） */
-        private const val MAKEUP_GAIN = 1.6f
+        /**
+         * Mid 声道 vocal 频段保留系数：1.0 = 完全保留，0.0 = 完全消除。
+         *
+         * 取 0.15 意味着 vocal 频段深度衰减 85%（而非归零）——完全挖空会把与
+         * 人声同频段的居中乐器（主旋律/吉他等）一起抹掉，造成"人声没了音乐也没了"。
+         * 参考 Audacity Vocal Reduction 的 Strength 思路（伴奏变薄即降低强度）。
+         */
+        private const val MID_VOCAL_KEEP = 0.15f
+        /**
+         * Side 声道 vocal 频段保留系数：仅轻度削减（保留一半），保住立体声宽度伴奏。
+         * 网搜共识：Side = 立体声宽度，过度衰减会把左右铺开的乐器（吉他/和声/混响）一并削掉。
+         */
+        private const val SIDE_VOCAL_KEEP = 0.5f
+        /** 整体补偿增益：抵消衰减后电平下降，等效放大伴奏（1.0~1.3 较安全，避免削波） */
+        private const val MAKEUP_GAIN = 1.25f
         private val EMPTY_BUFFER: ByteBuffer =
             ByteBuffer.allocateDirect(0).order(ByteOrder.nativeOrder())
     }
@@ -136,11 +151,15 @@ class VocalRemovalProcessor : AudioProcessor {
             val side = (left - right) / 2
 
             val midF = mid.toFloat()
-            // 新 Mid = 只保留低频(贝斯) + 高频(镲片)，消除 vocal 频段的居中人声
-            val newMid = (lpM.process(midF) + hpM.process(midF)).toInt()
+            // 新 Mid = 低频段 + 高频段 + vocal 频段保留 15%
+            // （深度衰减而非归零，避免与主旋律/吉他同频段的居中乐器一起消失）
+            val midLow = lpM.process(midF)
+            val midHigh = hpM.process(midF)
+            val midVocal = midF - midLow - midHigh
+            val newMid = (midLow + midHigh + midVocal * MID_VOCAL_KEEP).toInt()
 
             val sideF = side.toFloat()
-            // 新 Side = 原始 Side 减去 vocal 频段残留（衰减 70%）
+            // 新 Side = 低频段 + 高频段 + vocal 频段保留 50%（轻度衰减，保住立体声宽度伴奏）
             val sideLow = lpS.process(sideF)
             val sideHigh = hpS.process(sideF)
             val sideVocal = sideF - sideLow - sideHigh
