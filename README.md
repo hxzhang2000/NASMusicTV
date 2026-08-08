@@ -2,6 +2,8 @@
 
 一款开源的 Android TV 端 NAS 音乐播放器，让电视上的歌词显示不再是奢望。
 
+[![Release](https://img.shields.io/github/v/release/hxzhang2000/NASMusicTV?color=blue&label=Release)](https://github.com/hxzhang2000/NASMusicTV/releases)
+
 ## 功能特性
 
 ### 首页仪表盘
@@ -17,6 +19,8 @@
 - **播放队列持久化**：重启应用自动恢复上次播放队列
 - **均衡器**：预设方案 + 频段增益调节
 - **可视化均衡器**：实时 FFT 频谱动画，支持 ColorFlow / NeonPulse / ClassicalWave 三种视觉主题
+- **人声消除（卡拉OK伴奏模式）**：实时 DSP 分离 Mid/Side 声道，切合人声频段深度衰减（保留 15%）而非完全挖空，Side 声道仅轻度削减（保留 50%）保住立体声宽度——K 歌时背景音乐完整不塌方（`VocalRemovalProcessor`）
+- **K 歌模式**：播放页点红色"K歌"按钮进入全屏沉浸 K 歌页，双行歌词窗口逐行滚动 + 逐字平滑变色推进，底部工具栏随时"原唱/伴奏"切换、退出返回播放页；歌词逐字模式与 K 歌页共用同一套双色渲染组件（`KaraokePlaybackScreen`）
 - **歌曲详情面板**：当前播放歌曲的码率、采样率、编码格式等技术参数悬浮展示
 
 ### 网络音乐
