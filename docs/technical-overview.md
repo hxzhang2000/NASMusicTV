@@ -5332,6 +5332,66 @@ v2.6.0 天气电台功能使用 Open-Meteo（无需 API Key）作为主要天气
 - ✅ 单测：`testDebugUnitTest` 全量绿（含新增 `KaraokePacingFractionTest`）
 - ✅ `assembleRelease` 出包，adb 推到电视（192.168.0.116:5555）安装成功
 
+### 10.47 v2.14.0 - 设置页新增 MTV 视频端点配置
+
+**功能描述**：
+
+1. **MTV 视频端点常量宿主**：新增 `backend/network/mv/BilibiliMvService.kt`（`object`），定义 `DEFAULT_BASE_URL = "https://api.bilibili.com"` 与 `PRESET_ENDPOINTS`（预设端点列表），作为后续 MTV 音乐视频搜索实现的端点常量宿主；同时为设置页端点选择提供数据源。
+2. **设置页「视频端点」配置**：网络搜索分区新增「视频端点」小节——预设端点单选（B站官方 API）+ 自定义端点输入（校验 `http://`/`https://` 前缀，空串恢复默认），选中端点高亮打 ✓；替换现有 Meting-API 端点配置的完整交互模式。
+
+**主要变更**：
+
+1. **`backend/network/mv/BilibiliMvService.kt`**（新增）：`DEFAULT_BASE_URL` + `PRESET_ENDPOINTS: List<Pair<String, String>>`
+2. **`data/model/AppSettings.kt`**：新增 `mvApiBaseUrl: String = ""`
+3. **`data/prefs/AppPreferences.kt`**：新增 `keyMvApiBaseUrl`、settings flow 映射（默认 `BilibiliMvService.DEFAULT_BASE_URL`）、`setMvApiBaseUrl(url)`（trim 反引号/引号/空白）、`getMvApiBaseUrlSync()`、备份恢复 `importBackupData` 同步字段
+4. **`ui/viewmodel/MainViewModel.kt`**：新增 `updateMvApiBaseUrl(url)`（空串归一为默认端点）
+5. **`ui/components/AppRoot.kt`**：`SettingsScreen` 调用传入 `mvApiBaseUrl = settings.mvApiBaseUrl` 与 `onChangeMvApiBaseUrl = { viewModel.updateMvApiBaseUrl(it) }`
+6. **`ui/screens/SettingsScreen.kt`**：新增参数 `mvApiBaseUrl`/`onChangeMvApiBaseUrl`、对话框状态 `showMvUrlDialog`/`mvUrlError`、视频端点小节（预设单选 + 自定义行 + `TextInputDialog` 校验）
+7. **`res/values/strings.xml`**：新增 `settings_mv_*` 系列字符串（`settings_mv_api_url`、`settings_mv_api_url_desc`、`settings_mv_api_url_edit`、`settings_mv_api_url_reset`、`settings_mv_api_url_hint`、`settings_mv_api_url_invalid`、`settings_mv_preset_endpoints`、`settings_mv_custom_endpoint`、`settings_mv_custom_endpoint_desc`）
+
+#### 验证结果
+
+- ✅ `./gradlew.bat :app:compileDebugKotlin` 通过（BUILD SUCCESSFUL）
+
+#### 注意事项
+
+- 本步仅完成 MTV 搜索端点**配置层**（`mv-karaoke-feature-proposal.md` 的前置步骤）；实际 MV 搜索/播放（`MvSearchService`、`MvSearchManager`、`MvPlaybackScreen`）不在本版本，方案文档仍为「待评审」状态
+
+---
+
+### 10.48 v2.15.0 - MTV 音乐视频搜索与全屏播放
+
+**功能描述**：
+
+1. **MTV 搜索层**：新增 `backend/network/mv/` 搜索栈——`MvSearchService` 接口（`searchMv(title, artist): MvSearchResult?` + `resolveMv(bvid): MvInfo?`）、`BilibiliMvService` 实现（复用 v2.14.0 的 `DEFAULT_BASE_URL` 与 `PRESET_ENDPOINTS` 常量宿主，搜索请求走 B 站官方 API）、`MvSearchManager` 多源管理器（默认 45 分钟 TTL 内存缓存、多源 fallback 首非空即停、空结果不缓存、单源异常不阻断后续源、播放失败可 `clearCache()` 强制重搜）。
+2. **MV 状态机接入播放页**：`MainViewModel` 新增 `MvAvailability`（Idle/Searching/Ready/NotFound）、`showMv` 状态与 `triggerMvSearch`/`enterMvMode`/`exitMvMode`（进 MV 模式前暂停主播放器，退出后恢复）；`PlayerControls` 新增 MTV 按钮（搜索结果非空高亮、NotFound 置暗），`NowPlayingScreen` 通过 `mvAvailable`/`onEnterMv`/`onExitMv` 透传。播放失败时 `onMvPlaybackError` 清缓存重搜一次（`mvRetryDone` 防死循环）；`AppRoot` 监听 `mvState` 变 NotFound 且 `showMv=true` 时自动 `exitMvMode()`，避免切歌到无 MV 的歌时卡在无导航栏的播放页。
+3. **MvPlaybackScreen 全屏视频页**：`ui/components/MvPlaybackScreen.kt`——AndroidView 内嵌 ExoPlayer `PlayerView` 播放大屏，视频层叠暗色渐变遮罩保证歌词可读，底部透明控制条（返回播放页 + 歌词开关 + 歌名/歌手），可选叠加 K 歌逐字歌词（`KaraokeLyricsView` 复用）；`AppRoot` 中 `showMv=true` 时隐藏顶部导航栏、BACK 键先退 MV 模式再退播放页、离开播放页自动 `exitMvMode()`。
+4. **单元测试**：`MvSearchManagerTest` 10 例覆盖缓存命中（不重复请求）、多源 fallback、单源异常不阻断、全源空结果返回 null、空结果不缓存、TTL=0 过期重搜、`clearCache()` 强制重搜、缓存 key 归一化（小写/trim/多歌手分隔符 `/ 、,，，&` 取首）、`buildCacheKey` 组合与不同歌曲隔离。`BilibiliMvServiceTest` 14 例覆盖 B 站搜索结果解析（bvid 选取/非 video 过滤/HTML 去标签/相似度阈值）与直链提取（durl/dash 回退/code 错误/空值跳过/非法 JSON），用本地 JSON fixture 不联网。
+
+**主要变更**：
+
+1. **`backend/network/mv/MvSearchService.kt`**（新增）：`MvSearchService` 接口
+2. **`backend/network/mv/MvSearchManager.kt`**（新增）：`ConcurrentHashMap` 缓存 + TTL 清理 + 多源 fallback；`buildCacheKey(title, artist)` 静态方法供单测
+3. **`backend/network/mv/BilibiliMvService.kt`**（扩充）：由常量宿主改为实现 `MvSearchService`，三步取流（搜索 bvid -> view 拿 cid -> playurl 拿直链），wbi/legacy 双路径回退 + 标题相似度排序；`parseCandidatesFromSearch`/`extractPlayUrl` 改 `internal` 供单测
+4. **`data/model/MvInfo.kt`**（新增）：`MvInfo(bvid, title, coverUrl, videoUrl, durationMs, fetchedAt)`——`data.model.**` 保持规则已覆盖
+5. **`data/model/Song.kt`**：无改动（`song.title`/`song.artist` 直接作为搜索关键词）
+6. **`ui/viewmodel/MainViewModel.kt`**：新增 `MvAvailability`/`showMv`/`mvState`、`triggerMvSearch`/`enterMvMode`/`exitMvMode`/`onMvPlaybackError`（+ `mvRetryDone` 防死循环）
+7. **`ui/screens/NowPlayingScreen.kt`**：`mtvAvailable`/`onEnterMv`/`onExitMv` 参数透传
+8. **`ui/components/PlayerControls.kt`**：新增 MTV 按钮（搜索结果高亮/置暗）（`VocalToggleButton` 复用 `compact`/`dimmed` 状态）
+9. **`ui/components/MvPlaybackScreen.kt`**（新增）：全屏视频页
+10. **`ui/components/AppRoot.kt`**：`showMv`/`mvState` 顶层收集、导航栏 `showMv` 隐藏、BACK 处理 `showMv -> exitMvMode()`、`MvPlaybackScreen` 渲染分支（含 `onPlaybackError` 接线）、NotFound 自动 `exitMvMode()` LaunchedEffect
+
+#### 验证结果
+
+- ✅ `./gradlew.bat :app:compileDebugKotlin` 通过（BUILD SUCCESSFUL）
+- ✅ `:app:testDebugUnitTest` 全量 113 例通过（MTV 相关 24 例：`MvSearchManagerTest` 11 例 + `BilibiliMvServiceTest` 13 例，Robolectric 4.11.1；AppLog 走 android.util.Log，纯 JVM 抛 "not mocked"，须 Robolectric 同 `LrcParserTest`）
+- ✅ `:app:assembleDebug` 通过（BUILD SUCCESSFUL）
+
+#### 注意事项
+
+- `PlayerView` 左上角 B 站水印/片头等实机表现以电视验收为准；MV 直链带 TTL，30–45 分钟内重进直接命缓存，超时自动重搜
+- 版本号由 v2.14.0 → v2.15.0（versionCode 47 → 48）
+
 
 
 

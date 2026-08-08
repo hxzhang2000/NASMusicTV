@@ -84,6 +84,9 @@ fun SettingsScreen(
     onClearCoverCache: (() -> Unit)? = null,
     onOpenEqualizer: (() -> Unit)? = null,
     onChangeMetingApiBaseUrl: ((String) -> Unit)? = null,
+    // MTV 视频搜索端点配置
+    mvApiBaseUrl: String = "",
+    onChangeMvApiBaseUrl: ((String) -> Unit)? = null,
     // 封面滤镜设置
     coverFilterEnabled: Boolean = false,
     coverFilterBlurRadius: Float = 8f,
@@ -122,6 +125,10 @@ fun SettingsScreen(
     var showMetingUrlDialog by remember { mutableStateOf(false) }
     var metingUrlError by remember { mutableStateOf<String?>(null) }
 
+    // MTV 视频端点编辑对话框状态
+    var showMvUrlDialog by remember { mutableStateOf(false) }
+    var mvUrlError by remember { mutableStateOf<String?>(null) }
+
     // 天气 API Key 编辑对话框状态
     var showWeatherApiKeyDialog by remember { mutableStateOf(false) }
 
@@ -147,6 +154,11 @@ fun SettingsScreen(
     val metingUrlInvalidMsg = stringResource(R.string.settings_meting_api_url_invalid)
     val metingUrlHint = stringResource(R.string.settings_meting_api_url_hint)
     val metingUrlTitle = stringResource(R.string.settings_meting_api_url)
+
+    // MTV 视频端点对话框字符串资源
+    val mvUrlInvalidMsg = stringResource(R.string.settings_mv_api_url_invalid)
+    val mvUrlHint = stringResource(R.string.settings_mv_api_url_hint)
+    val mvUrlTitle = stringResource(R.string.settings_mv_api_url)
 
     Row(modifier = modifier.fillMaxSize().padding(32.dp)) {
         // --- 左侧：侧边导航栏（bg2 Surface 背景）---
@@ -609,6 +621,150 @@ fun SettingsScreen(
                         }
                     }
 
+                    // --- 网络搜索：MTV 视频端点配置 ---
+                    if (onChangeMvApiBaseUrl != null) {
+                        item { Spacer(modifier = Modifier.height(24.dp)) }
+                        item {
+                            Text(
+                                text = stringResource(R.string.settings_mv_api_url),
+                                color = NasMusicColors.Primary,
+                                fontSize = 23.sp,
+                                modifier = Modifier.padding(bottom = 8.dp, start = 4.dp)
+                            )
+                        }
+                        item {
+                            Text(
+                                text = stringResource(R.string.settings_mv_api_url_desc),
+                                color = NasMusicColors.TextSecondary,
+                                fontSize = 18.sp,
+                                modifier = Modifier.padding(bottom = 8.dp, start = 4.dp)
+                            )
+                        }
+                        item {
+                            Text(
+                                text = stringResource(R.string.settings_mv_preset_endpoints),
+                                color = NasMusicColors.TextPrimary,
+                                fontSize = 19.sp,
+                                modifier = Modifier.padding(start = 4.dp, top = 8.dp, bottom = 8.dp)
+                            )
+                        }
+                        val mvCurrentNormalized = mvApiBaseUrl.trim().trimEnd('/')
+                        com.nasmusic.tv.backend.network.mv.BilibiliMvService.PRESET_ENDPOINTS.forEach { (name, url) ->
+                            val selected = mvCurrentNormalized == url.trimEnd('/')
+                            item {
+                                FocusableSurface(
+                                    onClick = {
+                                        mvUrlError = null
+                                        onChangeMvApiBaseUrl(url)
+                                    },
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 4.dp),
+                                    shape = RoundedCornerShape(12.dp),
+                                    focusedScale = 1.02f,
+                                    animationDurationMs = 250,
+                                    containerColor = if (selected) NasMusicColors.Primary.copy(alpha = 0.18f) else NasMusicColors.Surface,
+                                    contentColor = NasMusicColors.TextPrimary,
+                                    focusedContainerColor = if (selected) NasMusicColors.Primary.copy(alpha = 0.3f) else NasMusicColors.Primary.copy(alpha = 0.15f),
+                                    focusedContentColor = NasMusicColors.TextPrimary,
+                                    pressedScale = 0.98f,
+                                    focusBorderColor = if (selected) NasMusicColors.Primary.copy(alpha = 0.5f) else NasMusicColors.FocusRing.copy(alpha = 0.6f)
+                                ) {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 24.dp, vertical = 14.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(
+                                                text = name,
+                                                color = if (selected) NasMusicColors.Primary else NasMusicColors.TextPrimary,
+                                                fontSize = 20.sp
+                                            )
+                                            Text(
+                                                text = url,
+                                                color = NasMusicColors.TextSecondary,
+                                                fontSize = 17.sp,
+                                                modifier = Modifier.padding(top = 2.dp)
+                                            )
+                                        }
+                                        if (selected) {
+                                            Text(
+                                                text = "✓",
+                                                color = NasMusicColors.Primary,
+                                                fontSize = 21.sp
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        // 自定义端点选项
+                        val mvIsPreset = com.nasmusic.tv.backend.network.mv.BilibiliMvService.PRESET_ENDPOINTS
+                            .any { it.second.trimEnd('/') == mvCurrentNormalized }
+                        val mvCustomSelected = !mvIsPreset
+                        item {
+                            FocusableSurface(
+                                onClick = {
+                                    mvUrlError = null
+                                    showMvUrlDialog = true
+                                },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 4.dp),
+                                shape = RoundedCornerShape(12.dp),
+                                focusedScale = 1.02f,
+                                animationDurationMs = 250,
+                                containerColor = if (mvCustomSelected) NasMusicColors.Primary.copy(alpha = 0.18f) else NasMusicColors.Surface,
+                                contentColor = NasMusicColors.TextPrimary,
+                                focusedContainerColor = if (mvCustomSelected) NasMusicColors.Primary.copy(alpha = 0.3f) else NasMusicColors.Primary.copy(alpha = 0.15f),
+                                focusedContentColor = NasMusicColors.TextPrimary,
+                                pressedScale = 0.98f,
+                                focusBorderColor = if (mvCustomSelected) NasMusicColors.Primary.copy(alpha = 0.5f) else NasMusicColors.FocusRing.copy(alpha = 0.6f)
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 24.dp, vertical = 14.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = stringResource(R.string.settings_mv_custom_endpoint),
+                                            color = if (mvCustomSelected) NasMusicColors.Primary else NasMusicColors.TextPrimary,
+                                            fontSize = 20.sp
+                                        )
+                                        Text(
+                                            text = if (mvCustomSelected) mvApiBaseUrl else stringResource(R.string.settings_mv_custom_endpoint_desc),
+                                            color = NasMusicColors.TextSecondary,
+                                            fontSize = 17.sp,
+                                            modifier = Modifier.padding(top = 2.dp)
+                                        )
+                                    }
+                                    Text(
+                                        text = stringResource(R.string.settings_mv_api_url_edit),
+                                        color = NasMusicColors.Primary,
+                                        fontSize = 19.sp
+                                    )
+                                }
+                            }
+                        }
+
+                        // 错误提示
+                        if (mvUrlError != null) {
+                            item {
+                                Text(
+                                    text = mvUrlError!!,
+                                    color = NasMusicColors.Warning,
+                                    fontSize = 18.sp,
+                                    modifier = Modifier.padding(top = 8.dp, start = 4.dp)
+                                )
+                            }
+                        }
+                    }
+
                     // --- 天气 API Key 配置 ---
                     if (onChangeWeatherApiKey != null) {
                         item { Spacer(modifier = Modifier.height(24.dp)) }
@@ -790,6 +946,35 @@ fun SettingsScreen(
             onDismiss = {
                 showMetingUrlDialog = false
                 metingUrlError = null
+            }
+        )
+    }
+
+    // MTV 视频端点编辑对话框
+    if (showMvUrlDialog) {
+        TextInputDialog(
+            title = mvUrlTitle,
+            hint = mvUrlHint,
+            initialValue = mvApiBaseUrl,
+            onConfirm = { input ->
+                val trimmed = input.trim()
+                if (trimmed.isEmpty()) {
+                    mvUrlError = null
+                    onChangeMvApiBaseUrl?.invoke(
+                        com.nasmusic.tv.backend.network.mv.BilibiliMvService.DEFAULT_BASE_URL
+                    )
+                    showMvUrlDialog = false
+                } else if (!trimmed.startsWith("http://") && !trimmed.startsWith("https://")) {
+                    mvUrlError = mvUrlInvalidMsg
+                } else {
+                    mvUrlError = null
+                    onChangeMvApiBaseUrl?.invoke(trimmed)
+                    showMvUrlDialog = false
+                }
+            },
+            onDismiss = {
+                showMvUrlDialog = false
+                mvUrlError = null
             }
         )
     }

@@ -15,6 +15,8 @@ data class AppSettings(
     val defaultNetworkSource: NetworkSource = NetworkSource.DEFAULT,
     // Meting-API 端点 URL（由 AppPreferences.getMetingApiBaseUrlSync() 提供默认值）
     val metingApiBaseUrl: String = "",
+    // MTV 视频搜索端点 URL（由 AppPreferences.getMvApiBaseUrlSync() 提供默认值）
+    val mvApiBaseUrl: String = "",
     // 频谱显示开关（默认关闭）
     val spectrumEnabled: Boolean = false,
     // 可视化频谱主题

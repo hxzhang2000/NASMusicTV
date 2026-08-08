@@ -102,6 +102,9 @@ fun NowPlayingScreen(
     // === KARAOKE 人声消除 ===
     vocalRemovalEnabled: Boolean = false,
     onToggleVocalRemoval: () -> Unit = {},
+    // === MTV 音乐视频 ===
+    mvAvailable: Boolean = false,
+    onEnterMv: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     var showInfoPanel by remember { mutableStateOf(false) }
@@ -224,7 +227,7 @@ fun NowPlayingScreen(
                 // 左侧：封面 + 歌曲信息（沉浸模式隐藏）
                 if (!isImmersiveMode) {
                     Column(
-                        modifier = Modifier.width(300.dp).fillMaxHeight(),
+                        modifier = Modifier.width(380.dp).fillMaxHeight(),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         // 封面内容垂直居中
@@ -261,6 +264,9 @@ fun NowPlayingScreen(
                             onTogglePlayMode = onTogglePlayMode,
                             showVocalButton = currentSong != null,
                             onEnterKaraoke = { enterKaraoke() },
+                            showMvButton = true,
+                            mvAvailable = mvAvailable,
+                            onEnterMv = onEnterMv,
                             compact = true,
                             playPauseFocusRequester = playPauseFocusRequester
                         )

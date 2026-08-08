@@ -8,6 +8,7 @@ import com.google.gson.Gson
 import com.nasmusic.tv.NasMusicApp
 import com.nasmusic.tv.backend.BackendRegistry
 import com.nasmusic.tv.backend.BackendAdapter
+import com.nasmusic.tv.backend.network.mv.MvSearchManager
 import com.nasmusic.tv.data.model.Album
 import com.nasmusic.tv.data.model.Artist
 import com.nasmusic.tv.data.model.BrowseDimension
@@ -29,6 +30,9 @@ import com.nasmusic.tv.data.model.LocalPlaylist
 import com.nasmusic.tv.data.model.Playlist
 import com.nasmusic.tv.data.model.EqualizerPreset
 import com.nasmusic.tv.data.model.MusicSource
+import com.nasmusic.tv.data.model.MvInfo
+import com.nasmusic.tv.data.model.MvCandidate
+import com.nasmusic.tv.data.model.MvSearchResult
 import com.nasmusic.tv.data.model.NetworkSubTab
 import com.nasmusic.tv.ui.screens.LibraryTab
 import com.nasmusic.tv.data.model.Screen
@@ -62,6 +66,17 @@ import kotlinx.coroutines.launch
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
+ * MTV（音乐视频）可用状态。
+ * 切歌时自动搜索，UI 消费 [MainViewModel.mvState] 决定 MTV 按钮亮/暗。
+ */
+sealed interface MvAvailability {
+    object Idle : MvAvailability            // 无歌曲/不需要搜索
+    object Searching : MvAvailability
+    data class Ready(val mv: MvInfo, val alternatives: List<MvCandidate> = emptyList()) : MvAvailability
+    object NotFound : MvAvailability
+}
+
+/**
  * 应用主 ViewModel
  * 管理播放器、歌曲队列、曲库数据、设置等
  */
@@ -69,6 +84,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     private val nasMusicApp = app as NasMusicApp
     private val playerManager = nasMusicApp.playerManager
+    private val mvSearchManager = nasMusicApp.mvSearchManager
     val prefs = nasMusicApp.appPreferences
     /** 搜索历史（最近输入 + 最多搜索） */
     val searchHistory = prefs.searchHistory
@@ -720,11 +736,20 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
                 if (song != null) {
                     loadLyricsForCurrentSong()
+                    // MTV 连播静默推进索引时跳过搜索（预搜结果已直接设为 Ready）
+                    if (skipNextMvSearch) {
+                        skipNextMvSearch = false
+                    } else {
+                        triggerMvSearch(song)
+                    }
                     // 记录当前歌的开始
                     lastRecordedSong = song
                     lastRecordedSongId = song.id
                     // 记录到最近播放列表（自动切歌时也需要更新）
                     recordPlay(song)
+                } else {
+                    // 无当前歌曲（清空队列等）→ 重置 MV 状态
+                    _mvState.value = MvAvailability.Idle
                 }
             }
         }
@@ -2530,6 +2555,213 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         AppLog.d("NASMusic", "toggleVocalRemoval -> $newValue")
     }
 
+    // --- MTV 音乐视频 ---
+    private val _mvState = MutableStateFlow<MvAvailability>(MvAvailability.Idle)
+    val mvState: StateFlow<MvAvailability> = _mvState.asStateFlow()
+
+    /** MTV 页面显隐（进入 MTV 页面时为 true） */
+    private val _showMv = MutableStateFlow(false)
+    val showMv: StateFlow<Boolean> = _showMv.asStateFlow()
+
+    private var mvSearchJob: Job? = null
+
+    /** 当前歌曲的 MV 播放失败是否已重搜过一次（防止死循环；切歌时在 triggerMvSearch 内重置） */
+    private var mvRetryDone = false
+
+    /** 预搜的下一首 MV 结果（null = 未搜到或尚未完成预搜） */
+    private var pendingNextResult: MvSearchResult? = null
+
+    /** MTV 连播是否已静默推进队列索引（退出时据此决定 syncAndPlay 还是 resume） */
+    private var mvAdvanced = false
+
+    /** 静默推进索引时跳过 currentSong.collect 的 triggerMvSearch（避免覆盖预搜结果） */
+    private var skipNextMvSearch = false
+
+    /**
+     * 切歌/播放时自动搜索当前歌曲的 MV（MvSearchManager 内部有内存缓存，命中不重复请求）。
+     * 置 Searching → searchMvFor → Ready/NotFound；由 UI 按钮消费决定亮/暗。
+     */
+    fun triggerMvSearch(song: Song) {
+        mvRetryDone = false
+        pendingNextResult = null // 清除旧预搜
+        mvSearchJob?.cancel()
+        _mvState.value = MvAvailability.Searching
+        mvSearchJob = viewModelScope.launch {
+            val result = try {
+                mvSearchManager.searchMvFor(song)
+            } catch (e: Exception) {
+                AppLog.e("NASMusic", "triggerMvSearch failed", e)
+                null
+            }
+            _mvState.value = if (result != null) MvAvailability.Ready(result.mv, result.alternatives) else MvAvailability.NotFound
+            AppLog.d("NASMusic", "triggerMvSearch: ${song.title} -> ${if (result != null) "found ${result.mv.title} + ${result.alternatives.size} alts" else "not found"}")
+            // MTV 模式下预搜下一首
+            if (result != null && _showMv.value) preSearchNextMv()
+        }
+    }
+
+    /**
+     * 进入 MTV 页面：暂停主播放器 + 显示 MTV 页 + 预搜下一首 MV。
+     */
+    fun enterMvMode() {
+        val ready = _mvState.value as? MvAvailability.Ready ?: return
+        mvAdvanced = false
+        AppLog.d("NASMusic", "enterMvMode: ${ready.mv.title}")
+        playerManager.suppressPlayback = true // 封堵异步 URL 解析路径恢复播放
+        playerManager.pause()
+        _showMv.value = true
+        preSearchNextMv()
+    }
+
+    /**
+     * 退出 MTV 页面：隐藏 MTV 页 + 恢复主播放器。
+     * 若 MTV 连播已静默推进队列索引（mvAdvanced），用 syncAndPlayCurrent 同步到新歌；
+     * 否则 resume 从暂停位置续播。
+     */
+    fun exitMvMode() {
+        AppLog.d("NASMusic", "exitMvMode: mvAdvanced=$mvAdvanced")
+        _showMv.value = false
+        pendingNextResult = null
+        playerManager.suppressPlayback = false // 恢复播放前先解除限制
+        if (mvAdvanced) {
+            playerManager.syncAndPlayCurrent()
+        } else {
+            playerManager.resume()
+        }
+    }
+
+    /**
+     * MV 播放失败回调：清缓存 + 重搜一次（同一首歌只重搜一次防死循环）。
+     */
+    fun onMvPlaybackError() {
+        if (mvRetryDone) {
+            AppLog.d("NASMusic", "onMvPlaybackError: already retried, skip")
+            return
+        }
+        val song = currentSong.value ?: return
+        mvRetryDone = true
+        AppLog.d("NASMusic", "onMvPlaybackError: clearCache + re-search '${song.title}'")
+        mvSearchManager.clearCache()
+        triggerMvSearch(song)
+    }
+
+    /**
+     * MV 播放结束回调（连播模式）：
+     * - 有预搜结果 -> 静默推进队列索引 + 直接设 Ready（无缝切换，无 Searching 闪烁，无混音）
+     * - 无预搜结果 -> 静默推进 + 设 NotFound -> AppRoot 自动 exitMvMode -> syncAndPlayCurrent 播下一首
+     */
+    fun onMvPlaybackEnded() {
+        val pending = pendingNextResult
+        skipNextMvSearch = true // advanceIndexSilently 会更新 _currentSong，跳过 collect 的 triggerMvSearch
+        playerManager.advanceIndexSilently(_playMode.value)
+        mvAdvanced = true
+
+        if (pending != null) {
+            _mvState.value = MvAvailability.Ready(pending.mv, pending.alternatives)
+            pendingNextResult = null
+            AppLog.d("NASMusic", "onMvPlaybackEnded: seamless switch to '${pending.mv.title}'")
+            preSearchNextMv()
+        } else {
+            _mvState.value = MvAvailability.NotFound // 触发 AppRoot 自动 exitMvMode
+            AppLog.d("NASMusic", "onMvPlaybackEnded: no pre-searched MV, exiting to playback")
+        }
+    }
+
+    /**
+     * MTV 页面"上一首"按钮：回退队列索引 + 搜索前一首的 MV（无预搜，走 Searching）。
+     */
+    fun onMvPrevious() {
+        skipNextMvSearch = true
+        val prevSong = playerManager.advanceIndexBackward(_playMode.value)
+        if (prevSong == null) {
+            skipNextMvSearch = false
+            return
+        }
+        mvAdvanced = true
+        _mvState.value = MvAvailability.Searching
+        mvSearchJob?.cancel()
+        mvSearchJob = viewModelScope.launch {
+            val result = try {
+                mvSearchManager.searchMvFor(prevSong)
+            } catch (e: Exception) {
+                null
+            }
+            _mvState.value = if (result != null) MvAvailability.Ready(result.mv, result.alternatives) else MvAvailability.NotFound
+            AppLog.d("NASMusic", "onMvPrevious: '${prevSong.title}' -> ${if (result != null) "found" else "not found"}")
+            if (result != null) preSearchNextMv()
+        }
+    }
+
+    /**
+     * MTV 页面"下一首"按钮：有预搜则无缝切换，无则同步搜索。
+     */
+    fun onMvNext() {
+        val pending = pendingNextResult
+        if (pending != null) {
+            skipNextMvSearch = true
+            playerManager.advanceIndexSilently(_playMode.value)
+            mvAdvanced = true
+            _mvState.value = MvAvailability.Ready(pending.mv, pending.alternatives)
+            pendingNextResult = null
+            AppLog.d("NASMusic", "onMvNext: seamless switch to '${pending.mv.title}'")
+            preSearchNextMv()
+        } else {
+            skipNextMvSearch = true
+            val nextSong = playerManager.advanceIndexSilently(_playMode.value)
+            if (nextSong == null) { skipNextMvSearch = false; return }
+            mvAdvanced = true
+            _mvState.value = MvAvailability.Searching
+            mvSearchJob?.cancel()
+            mvSearchJob = viewModelScope.launch {
+                val result = try { mvSearchManager.searchMvFor(nextSong) } catch (e: Exception) { null }
+                _mvState.value = if (result != null) MvAvailability.Ready(result.mv, result.alternatives) else MvAvailability.NotFound
+                AppLog.d("NASMusic", "onMvNext: '${nextSong.title}' -> ${if (result != null) "found" else "not found"}")
+                if (result != null) preSearchNextMv()
+            }
+        }
+    }
+
+    /**
+     * 预搜下一首歌曲的 MV（后台协程，不阻塞 UI）。
+     * MTV 模式下当前 MV 搜到后调用，结果存入 [pendingNextResult] 供 onMvPlaybackEnded 无缝切换。
+     */
+    private fun preSearchNextMv() {
+        val nextSong = playerManager.peekNextSong(_playMode.value) ?: run {
+            pendingNextResult = null
+            return
+        }
+        viewModelScope.launch {
+            val result = try {
+                mvSearchManager.searchMvFor(nextSong)
+            } catch (e: Exception) {
+                AppLog.w("NASMusic", "preSearchNextMv failed: ${e.message}", e)
+                null
+            }
+            pendingNextResult = result
+            AppLog.d("NASMusic", "preSearchNextMv: '${nextSong.title}' -> ${if (result != null) "found ${result.mv.title}" else "not found"}")
+        }
+    }
+
+    /**
+     * 切换到候选列表中的另一个 MV（MTV 页面用户手动切换）。
+     * 按需解析 bvid 直链，旧 MV 变为候选。
+     */
+    fun switchMv(bvid: String) {
+        val ready = _mvState.value as? MvAvailability.Ready ?: return
+        if (ready.mv.bvid == bvid) return
+        viewModelScope.launch {
+            AppLog.d("NASMusic", "switchMv: resolving bvid=$bvid")
+            val newMv = mvSearchManager.resolveMv(bvid) ?: run {
+                AppLog.w("NASMusic", "switchMv: resolve failed for bvid=$bvid")
+                return@launch
+            }
+            val oldCandidate = MvCandidate(ready.mv.bvid, ready.mv.title, ready.mv.coverUrl)
+            val newAlternatives = ready.alternatives.filter { it.bvid != bvid } + oldCandidate
+            _mvState.value = MvAvailability.Ready(newMv, newAlternatives)
+            AppLog.d("NASMusic", "switchMv: switched to '${newMv.title}'")
+        }
+    }
+
     fun setPlayMode(mode: PlayMode) {
         _playMode.value = mode
         playerManager.applyPlayMode(mode)
@@ -2755,6 +2987,19 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             prefs.setMetingApiBaseUrl(com.nasmusic.tv.backend.network.MetingApiService.DEFAULT_BASE_URL)
         } else {
             prefs.setMetingApiBaseUrl(normalized)
+        }
+    }
+
+    /**
+     * 更新 MTV 视频搜索端点 URL（网络搜索配置）
+     * 传入空串则恢复默认端点
+     */
+    fun updateMvApiBaseUrl(url: String) = viewModelScope.launch {
+        val normalized = url.trim()
+        if (normalized.isEmpty()) {
+            prefs.setMvApiBaseUrl(com.nasmusic.tv.backend.network.mv.BilibiliMvService.DEFAULT_BASE_URL)
+        } else {
+            prefs.setMvApiBaseUrl(normalized)
         }
     }
 

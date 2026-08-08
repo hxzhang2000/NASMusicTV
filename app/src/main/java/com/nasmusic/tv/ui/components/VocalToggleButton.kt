@@ -15,6 +15,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
@@ -29,20 +30,21 @@ import com.nasmusic.tv.ui.theme.NasMusicColors
 import kotlinx.coroutines.launch
 
 /**
- * 原唱/伴奏/K歌 切换按钮（红色 accent）
+ * 原唱/伴奏/K歌/MTV/歌词 切换按钮
  *
- * 参考 maidong-ktv 设计：按钮底色始终为红色，不随状态变色，只切换文字。
+ * 配色与其他控制按钮一致（Surface 底色 + 聚焦时 Primary 高亮），不使用红色。
  *
- * @param label 按钮文字（入口按钮传 "K歌"，K 歌页内根据当前模式传 "原唱"/"伴唱"）
+ * @param label 按钮文字（入口按钮传 "K歌"/"MTV"/"歌词"，K 歌页内根据当前模式传 "原唱"/"伴唱"）
  * @param onClick 点击回调
- * @param compact 紧凑模式（NowPlayingScreen 控制栏用 true，KARAOKE 全屏页用 false）
+ * @param compact 紧凑模式（NowPlayingScreen 控制栏用 true，KARAOKE/MTV 全屏页用 false）
  */
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 fun VocalToggleButton(
     label: String,
     onClick: () -> Unit,
-    compact: Boolean = false
+    compact: Boolean = false,
+    dimmed: Boolean = false
 ) {
     var isFocused by remember { mutableStateOf(false) }
     val animScale = remember { Animatable(1f) }
@@ -54,6 +56,7 @@ fun VocalToggleButton(
         modifier = Modifier
             .size(buttonSize)
             .scale(animScale.value)
+            .alpha(if (dimmed) 0.35f else 1f)
             .border(
                 width = if (isFocused) 2.dp else 0.dp,
                 color = if (isFocused) NasMusicColors.FocusRing else Color.Transparent,
@@ -69,12 +72,12 @@ fun VocalToggleButton(
             pressedShape = RoundedCornerShape(8.dp)
         ),
         colors = ClickableSurfaceDefaults.colors(
-            containerColor = Color(0xFFFD3359),
-            contentColor = Color.White,
-            focusedContainerColor = Color(0xFFE8316F),
-            focusedContentColor = Color.White,
-            pressedContainerColor = Color(0xFFC42850),
-            pressedContentColor = Color.White
+            containerColor = NasMusicColors.Surface,
+            contentColor = NasMusicColors.TextPrimary,
+            focusedContainerColor = NasMusicColors.Primary.copy(alpha = 0.3f),
+            focusedContentColor = Color.Black,
+            pressedContainerColor = NasMusicColors.SurfaceVariant,
+            pressedContentColor = NasMusicColors.TextPrimary
         ),
         scale = ClickableSurfaceDefaults.scale(
             focusedScale = 1f,
@@ -88,8 +91,7 @@ fun VocalToggleButton(
             Text(
                 text = label,
                 fontSize = if (compact) 14.sp else 16.sp,
-                fontWeight = FontWeight.Bold,
-                color = Color.White
+                fontWeight = FontWeight.Bold
             )
         }
     }

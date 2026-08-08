@@ -203,6 +203,9 @@ fun ControlButtonsRow(
     onTogglePlayMode: () -> Unit,
     showVocalButton: Boolean = false,
     onEnterKaraoke: () -> Unit = {},
+    showMvButton: Boolean = false,
+    mvAvailable: Boolean = false,
+    onEnterMv: () -> Unit = {},
     modifier: Modifier = Modifier,
     compact: Boolean = false,
     playPauseFocusRequester: FocusRequester? = null
@@ -245,6 +248,16 @@ fun ControlButtonsRow(
                 label = "K歌",
                 onClick = onEnterKaraoke,
                 compact = compact
+            )
+        }
+        // MTV 入口按钮（有 MV 时可点击，无 MV 时半透明禁用）
+        if (showMvButton) {
+            Spacer(modifier = Modifier.width(if (compact) 12.dp else 20.dp))
+            VocalToggleButton(
+                label = "MTV",
+                onClick = { if (mvAvailable) onEnterMv() },
+                compact = compact,
+                dimmed = !mvAvailable
             )
         }
     }

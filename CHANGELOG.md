@@ -7,6 +7,34 @@
 >
 > 类型：`Added`（新增） | `Changed`（变更） | `Fixed`（修复） | `Removed`（移除）
 
+## [v2.15.0] - 2026-08-09
+
+### Added
+
+- **MTV 音乐视频搜索与播放**：播放页「K歌」按钮旁新增 MTV 按钮，切歌时后台自动搜索 B 站 MV（三步取流：搜索 bvid -> view 拿 cid -> playurl 拿直链，wbi/legacy 双路径回退 + 标题相似度排序），搜到则按钮亮起可点击进入全屏视频页（`MvPlaybackScreen`，独立 ExoPlayer + 暗色渐变遮罩 + 可开关 K 歌逐字歌词），未搜到则置暗不可点；进入时暂停主播放器、退出时恢复
+- **MTV 连播模式（预搜 + 无缝切换）**：当前 MV 播放时后台预搜下一首的 MV（`peekNextSong` + `preSearchNextMv`），MV 播完后用预搜结果直接设 `Ready`（`advanceIndexSilently` 静默推进队列索引，不触发 `Searching` 状态、不触碰 ExoPlayer），无闪烁无混音；预搜未就绪则同步搜索，搜不到自动退出回播放页
+- **MTV 页面上一首/下一首**：`MvPlaybackScreen` 底部控制条新增上一首（SkipPrevious）和下一首（SkipNext）按钮，`onMvPrevious` 回退队列索引 + 搜索 MV，`onMvNext` 有预搜则无缝切换、无则同步搜索
+- **多 MV 结果 + 切换**：搜索返回 `MvSearchResult`（最佳匹配 `MvInfo` + 候选列表 `List<MvCandidate>`），MTV 页面「切换」按钮按需 `resolveMv(bvid)` 懒加载直链切换不同视频，旧 MV 变为候选
+- **MTV 搜索单元测试**：`MvSearchManagerTest` 12 例覆盖缓存命中/多源 fallback/单源异常不阻断/空结果不缓存/TTL 过期重搜/`clearCache`/缓存 key 归一化/`resolveMv`；`BilibiliMvServiceTest` 13 例覆盖 B 站搜索结果解析（候选列表/非 video 过滤/HTML 去标签/相似度排序/封面 URL 补全）与直链提取（durl/dash 回退/code 错误/空值跳过/非法 JSON），用本地 JSON fixture 不联网（Robolectric）
+
+### Changed
+
+- **K歌/MTV/歌词按钮配色统一**：`VocalToggleButton` 从红色（`#FD3359`）改为与播放控制按钮一致的 Surface 底色 + 聚焦 Primary 高亮，Text 颜色继承 Surface contentColor（聚焦时自动变黑）
+- **MTV 按钮始终显示**：不再受 `currentSong != null` 条件控制，无 MV 时半透明（`dimmed`）不可点击；播放页左列宽度 300dp -> 380dp 容纳全部 6 个控制按钮
+
+### Fixed
+
+- **MTV 模式混音**：`pause()` 改为无条件执行（不再检查 `isPlaying`，避免 ExoPlayer BUFFERING 时 `isPlaying=false` 跳过暂停导致缓冲后自动恢复）；新增 `suppressPlayback` 标志封堵 `resume()`/`playQueue()`/`next()` 中的 `play()` 调用，防止异步 URL 解析路径在 MTV 模式下意外恢复主播放器
+- **退出 MTV 后队列错乱**：`syncAndPlayCurrent` 改用 `setMediaItems`（完整队列 + 起始索引）代替 `setMediaItem`（单曲），确保 ExoPlayer 内部 `currentMediaItemIndex` 与 `_currentIndex` 一致，`next()`/`previous()` 的 `seekToNextMediaItem`/`seekToPreviousMediaItem` 正常工作
+- **MV 播放失败**：直链过期播放失败时自动清缓存重搜一次（`onMvPlaybackError` + `mvRetryDone` 防死循环）
+- **切歌后卡在无导航栏播放页**：`AppRoot` 监听 `mvState` 变 `NotFound` 且 `showMv=true` 时自动 `exitMvMode()`
+
+## [v2.14.0] - 2026-08-08
+
+### Added
+
+- **设置页新增视频端点配置（MTV 音乐视频搜索端点）**：网络搜索分区新增「视频端点」小节，预设端点单选（B站官方 API `https://api.bilibili.com`）+ 自定义端点输入框（校验 `http://`/`https://` 前缀，空串恢复默认），选中端点打 ✓ 高亮；数据链路完整 —— `AppSettings.mvApiBaseUrl` → `AppPreferences`（`keyMvApiBaseUrl` + `setMvApiBaseUrl` + `getMvApiBaseUrlSync()` 同步读 + 备份恢复）→ `MainViewModel.updateMvApiBaseUrl()` → `SettingsScreen`；新文件 `backend/network/mv/BilibiliMvService.kt` 作为 MTV 搜索端点常量宿主（`DEFAULT_BASE_URL` / `PRESET_ENDPOINTS`），供后续 MTV 搜索实现复用
+
 ## [v2.13.5] - 2026-08-08
 
 ### Added

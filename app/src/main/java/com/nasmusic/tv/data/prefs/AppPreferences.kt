@@ -12,6 +12,7 @@ import androidx.datastore.preferences.preferencesDataStore
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import com.nasmusic.tv.backend.network.MetingApiService
+import com.nasmusic.tv.backend.network.mv.BilibiliMvService
 import com.nasmusic.tv.data.model.AppSettings
 import com.nasmusic.tv.data.model.EqualizerPreset
 import com.nasmusic.tv.data.model.LocalPlaylist
@@ -61,6 +62,7 @@ class AppPreferences(private val context: Context) {
     private val keyLyricsOffset = longPreferencesKey("settings_lyrics_offset")
     private val keyDefaultNetworkSource = stringPreferencesKey("settings_default_network_source")
     private val keyMetingApiBaseUrl = stringPreferencesKey("settings_meting_api_base_url")
+    private val keyMvApiBaseUrl = stringPreferencesKey("settings_mv_api_base_url")
 
     // --- B-2 最近播放 & 播放次数（序列化为 JSON）---
     private val keyRecentSongs = stringPreferencesKey("recent_songs")
@@ -265,6 +267,7 @@ class AppPreferences(private val context: Context) {
             lyricsOffsetMs = prefs[keyLyricsOffset] ?: 0L,
             defaultNetworkSource = prefs[keyDefaultNetworkSource]?.let { NetworkSource.fromKey(it) ?: NetworkSource.fromName(it) } ?: NetworkSource.DEFAULT,
             metingApiBaseUrl = prefs[keyMetingApiBaseUrl] ?: MetingApiService.DEFAULT_BASE_URL,
+            mvApiBaseUrl = prefs[keyMvApiBaseUrl] ?: BilibiliMvService.DEFAULT_BASE_URL,
             spectrumEnabled = prefs[keySpectrumEnabled] ?: false,
             visualizerTheme = prefs[keyVisualizerTheme]?.let { VisualizerTheme.fromKey(it) } ?: VisualizerTheme.COLOR_FLOW
         )
@@ -304,6 +307,11 @@ class AppPreferences(private val context: Context) {
     suspend fun setMetingApiBaseUrl(url: String) =
         context.dataStore.edit {
             it[keyMetingApiBaseUrl] = url.trim().trim('`', '\'', '"').trim()
+        }
+
+    suspend fun setMvApiBaseUrl(url: String) =
+        context.dataStore.edit {
+            it[keyMvApiBaseUrl] = url.trim().trim('`', '\'', '"').trim()
         }
 
     // --- 网络音乐平台来源 ---
@@ -440,6 +448,21 @@ class AppPreferences(private val context: Context) {
                     ?: MetingApiService.DEFAULT_BASE_URL
             } catch (e: Exception) {
                 MetingApiService.DEFAULT_BASE_URL
+            }
+        }
+    }
+
+    /**
+     * 同步获取 MTV 视频搜索端点 URL（用于 BilibiliMvService 的 baseUrlProvider）
+     * 在每次请求时同步读取，支持运行时切换端点
+     */
+    fun getMvApiBaseUrlSync(): String {
+        return runBlocking(Dispatchers.IO) {
+            try {
+                context.dataStore.data.first()[keyMvApiBaseUrl]
+                    ?: BilibiliMvService.DEFAULT_BASE_URL
+            } catch (e: Exception) {
+                BilibiliMvService.DEFAULT_BASE_URL
             }
         }
     }
@@ -895,6 +918,7 @@ class AppPreferences(private val context: Context) {
                 prefs[keyLyricsOffset] = settings.lyricsOffsetMs
                 prefs[keyDefaultNetworkSource] = settings.defaultNetworkSource.key
                 prefs[keyMetingApiBaseUrl] = settings.metingApiBaseUrl
+                prefs[keyMvApiBaseUrl] = settings.mvApiBaseUrl
                 prefs[keySpectrumEnabled] = settings.spectrumEnabled
                 prefs[keyVisualizerTheme] = settings.visualizerTheme.name
             }

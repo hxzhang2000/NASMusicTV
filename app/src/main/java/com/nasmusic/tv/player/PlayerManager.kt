@@ -27,6 +27,13 @@ class PlayerManager() {
      */
     var onNeedResolveStreamUrl: ((index: Int) -> Unit)? = null
 
+    /**
+     * MTV 模式下置 true：阻止 resume()/playQueue()/next() 中的 play() 调用，
+     * 防止异步 URL 解析路径在 MTV 模式下意外恢复主播放器（混音根因）。
+     * enterMvMode 置 true，exitMvMode 置 false。
+     */
+    var suppressPlayback = false
+
     private val progressHandler = Handler(Looper.getMainLooper())
     private val progressUpdateRunnable = object : Runnable {
         override fun run() {
@@ -261,7 +268,7 @@ class PlayerManager() {
         try {
             p.setMediaItems(mediaItems, startIndex, 0)
             p.prepare()
-            p.play()
+            if (!suppressPlayback) p.play()
             AppLog.d("PlayerManager", "playQueue: playing ${songs.size} songs, start=$startIndex")
         } catch (e: Exception) {
             AppLog.e("PlayerManager", "playQueue failed", e)
@@ -307,6 +314,141 @@ class PlayerManager() {
         }
     }
 
+    /** 暂停主播放器（无条件设 playWhenReady=false，避免 BUFFERING 时 isPlaying=false 跳过暂停） */
+    fun pause() {
+        player?.pause()
+        AppLog.d("PlayerManager", "pause: playWhenReady=${player?.playWhenReady}")
+    }
+
+    /** 恢复主播放器播放；MTV 模式下 suppressPlayback=true 时跳过（防混音） */
+    fun resume() {
+        if (suppressPlayback) {
+            AppLog.d("PlayerManager", "resume: suppressed")
+            return
+        }
+        player?.let {
+            if (!it.isPlaying && it.playbackState != Player.STATE_IDLE) {
+                it.play()
+                AppLog.d("PlayerManager", "resume: playing")
+            }
+        }
+    }
+
+    /**
+     * 预览下一首歌曲（不推进队列、不触碰 ExoPlayer）。
+     * 供 MTV 连播模式预搜下一首 MV 使用。
+     */
+    fun peekNextSong(playMode: PlayMode): Song? {
+        val queue = _queue.value
+        if (queue.isEmpty()) return null
+        val currentIdx = _currentIndex.value
+        return when (playMode) {
+            PlayMode.SHUFFLE -> {
+                if (queue.size == 1) null
+                else queue.filterIndexed { i, _ -> i != currentIdx }.random()
+            }
+            PlayMode.REPEAT_ONE -> {
+                val nextIdx = currentIdx + 1
+                if (nextIdx < queue.size) queue[nextIdx] else queue.getOrNull(0)
+            }
+            else -> {
+                val nextIdx = currentIdx + 1
+                when {
+                    nextIdx < queue.size -> queue[nextIdx]
+                    playMode == PlayMode.REPEAT_ALL -> queue.getOrNull(0)
+                    else -> null
+                }
+            }
+        }
+    }
+
+    /**
+     * 静默推进队列索引（更新 _currentIndex + _currentSong，不触碰 ExoPlayer、不触发播放）。
+     * 供 MTV 连播模式：MV 播完时推进歌曲索引，主播放器保持暂停，退出时 syncAndPlayCurrent 同步。
+     * @return 推进后的歌曲；null 表示队列末尾（SEQUENTIAL 模式）无法推进
+     */
+    fun advanceIndexSilently(playMode: PlayMode): Song? {
+        val queue = _queue.value
+        if (queue.isEmpty()) return null
+        val currentIdx = _currentIndex.value
+        val nextIdx = when (playMode) {
+            PlayMode.SHUFFLE -> {
+                if (queue.size == 1) return null
+                (0 until queue.size).filter { it != currentIdx }.random()
+            }
+            PlayMode.REPEAT_ONE -> {
+                val i = currentIdx + 1
+                if (i < queue.size) i else return null
+            }
+            else -> {
+                val i = currentIdx + 1
+                when {
+                    i < queue.size -> i
+                    playMode == PlayMode.REPEAT_ALL -> 0
+                    else -> return null
+                }
+            }
+        }
+        _currentIndex.value = nextIdx
+        val song = queue[nextIdx]
+        _currentSong.value = song
+        AppLog.d("PlayerManager", "advanceIndexSilently: $currentIdx -> $nextIdx '${song.title}'")
+        return song
+    }
+
+    /**
+     * 静默回退队列索引（MTV 页面"上一首"按钮用）。
+     * @return 回退后的歌曲；null 表示已在队列首位（非 REPEAT_ALL 模式）无法回退
+     */
+    fun advanceIndexBackward(playMode: PlayMode): Song? {
+        val queue = _queue.value
+        if (queue.isEmpty()) return null
+        val currentIdx = _currentIndex.value
+        val prevIdx = when {
+            currentIdx > 0 -> currentIdx - 1
+            playMode == PlayMode.REPEAT_ALL -> queue.size - 1
+            else -> return null
+        }
+        _currentIndex.value = prevIdx
+        val song = queue[prevIdx]
+        _currentSong.value = song
+        AppLog.d("PlayerManager", "advanceIndexBackward: $currentIdx -> $prevIdx '${song.title}'")
+        return song
+    }
+
+    /**
+     * 加载并播放当前索引处的歌曲（退出 MTV 模式时同步主播放器用）。
+     * 网络歌曲（streamUrl 为空）触发 onNeedResolveStreamUrl 由 ViewModel 异步解析。
+     */
+    fun syncAndPlayCurrent() {
+        val queue = _queue.value
+        val index = _currentIndex.value
+        val song = queue.getOrNull(index) ?: return
+        val p = player ?: return
+
+        _currentSong.value = song
+        if (song.durationMs > 0) _duration.value = song.durationMs
+
+        val streamUrl = song.streamUrl
+        if (streamUrl.isNullOrBlank()) {
+            AppLog.d("PlayerManager", "syncAndPlayCurrent: network song, trigger resolve for '${song.title}'")
+            onNeedResolveStreamUrl?.invoke(index)
+        } else {
+            try {
+                // 恢复完整队列并 seek 到当前索引（不能用 setMediaItem 替换为单曲，
+                // 否则 ExoPlayer currentMediaItemIndex=0，updateCurrentSongFromPlayer 会把 _currentIndex 覆盖回 0，
+                // 且 seekToNextMediaItem 无处可跳 -> 退出 MTV 后切歌乱套）
+                val mediaItems = queue.map { MediaItem.fromUri(it.streamUrl ?: "") }
+                p.setMediaItems(mediaItems, index, 0)
+                p.prepare()
+                if (!suppressPlayback) p.play()
+                AppLog.d("PlayerManager", "syncAndPlayCurrent: playing '${song.title}' at index=$index queueSize=${queue.size}")
+            } catch (e: Exception) {
+                AppLog.e("PlayerManager", "syncAndPlayCurrent failed", e)
+            }
+        }
+    }
+
     fun next(playMode: PlayMode) {
         val p = player ?: return
         when (playMode) {
@@ -317,12 +459,12 @@ class PlayerManager() {
                 if (nextIndex < _queue.value.size) {
                     _currentIndex.value = nextIndex
                     p.seekTo(nextIndex, 0)
-                    p.play()
+                    if (!suppressPlayback) p.play()
                 } else {
                     // 队列末尾，回到第一首
                     _currentIndex.value = 0
                     p.seekTo(0, 0)
-                    p.play()
+                    if (!suppressPlayback) p.play()
                 }
             }
             else -> {

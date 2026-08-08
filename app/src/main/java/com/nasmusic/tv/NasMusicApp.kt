@@ -4,6 +4,8 @@ import android.app.Application
 import com.nasmusic.tv.backend.BackendRegistry
 import com.nasmusic.tv.backend.network.MetingApiService
 import com.nasmusic.tv.backend.network.NetworkMusicManager
+import com.nasmusic.tv.backend.network.mv.BilibiliMvService
+import com.nasmusic.tv.backend.network.mv.MvSearchManager
 import com.nasmusic.tv.data.prefs.AppPreferences
 import com.nasmusic.tv.player.PlayerManager
 import com.nasmusic.tv.util.AppLog
@@ -27,6 +29,8 @@ class NasMusicApp : Application() {
         private set
     lateinit var networkMusicManager: NetworkMusicManager
         private set
+    lateinit var mvSearchManager: MvSearchManager
+        private set
 
     /**
      * 应用级协程作用域，用于 onDestroy 等生命周期之后的异步操作
@@ -49,6 +53,14 @@ class NasMusicApp : Application() {
         networkMusicManager = NetworkMusicManager(
             services = services,
             defaultSourceProvider = { appPreferences.getDefaultNetworkSourceSync() }
+        )
+        // MV（音乐视频）搜索管理器：v1 仅 Bilibili 官方 API，端点由设置页动态提供
+        mvSearchManager = MvSearchManager(
+            services = listOf(
+                BilibiliMvService(
+                    baseUrlProvider = { appPreferences.getMvApiBaseUrlSync() }
+                )
+            )
         )
         // 启动时清理超过 30 天的搜索历史
         applicationScope.launch {

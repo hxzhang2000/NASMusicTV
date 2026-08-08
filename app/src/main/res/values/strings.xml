@@ -198,6 +198,15 @@
     <string name="settings_meting_preset_endpoints">预设端点</string>
     <string name="settings_meting_custom_endpoint">自定义端点</string>
     <string name="settings_meting_custom_endpoint_desc">使用其他公共端点或自建端点</string>
+    <string name="settings_mv_api_url">视频端点</string>
+    <string name="settings_mv_api_url_desc">MTV 音乐视频搜索所用 API 地址，可自建代理或替换为其他端点</string>
+    <string name="settings_mv_api_url_edit">修改端点</string>
+    <string name="settings_mv_api_url_reset">恢复默认</string>
+    <string name="settings_mv_api_url_hint">输入视频搜索端点 URL</string>
+    <string name="settings_mv_api_url_invalid">URL 格式不正确，请以 http:// 或 https:// 开头</string>
+    <string name="settings_mv_preset_endpoints">预设端点</string>
+    <string name="settings_mv_custom_endpoint">自定义端点</string>
+    <string name="settings_mv_custom_endpoint_desc">使用自建代理或其他镜像端点</string>
     <string name="settings_app_name">应用名称</string>
     <string name="settings_build_type">构建类型</string>
     <string name="settings_supported_backends">支持后端</string>

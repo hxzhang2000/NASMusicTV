@@ -95,11 +95,28 @@ fun AppRoot(
     val coverFilterDarkOverlay by viewModel.prefs.coverFilterDarkOverlay.collectAsState(initial = 0.3f)
     // 天气 API Key
     val weatherApiKey by viewModel.prefs.weatherApiKey.collectAsState(initial = "")
+    // MTV 页面显隐（进入 MTV 全屏页时为 true）
+    val showMv by viewModel.showMv.collectAsState(initial = false)
+    // MTV 搜索状态（顶层收集，供 NotFound 自动退出保护与 NowPlaying 分支共用）
+    val mvState by viewModel.mvState.collectAsState()
+    // 安全兜底：离开 NowPlaying（如媒体键改变播放状态）时自动退出 MTV 全屏，避免主播放器一直暂停
+    LaunchedEffect(currentScreen, showMv) {
+        if (showMv && currentScreen != Screen.NowPlaying) {
+            viewModel.exitMvMode()
+        }
+    }
+    // 安全兜底：切歌后新歌无 MV（NotFound）时自动退出 MTV 全屏，避免卡在无导航栏的播放页
+    LaunchedEffect(mvState, showMv) {
+        if (showMv && mvState is com.nasmusic.tv.ui.viewmodel.MvAvailability.NotFound) {
+            viewModel.exitMvMode()
+        }
+    }
     // Level 2: 根据当前屏幕和沉浸模式动态设置导航 BACK 键处理函数
     val navBackHandler = LocalNavigateBackHandler.current
-    LaunchedEffect(currentScreen, isImmersiveMode.value) {
+    LaunchedEffect(currentScreen, isImmersiveMode.value, showMv) {
         val handler: (() -> Unit)? = when {
             isImmersiveMode.value -> {{ isImmersiveMode.value = false }}
+            showMv -> {{ viewModel.exitMvMode() }}
             currentScreen == Screen.Home || currentScreen == Screen.NowPlaying -> null
             else -> {{ viewModel.navigateTo(Screen.Home) }}
         }
@@ -107,8 +124,8 @@ fun AppRoot(
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
-        // 顶部导航栏（沉浸模式下隐藏）
-        if (!isImmersiveMode.value) {
+        // 顶部导航栏（沉浸模式 / MTV 全屏页时隐藏）
+        if (!isImmersiveMode.value && !showMv) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -248,51 +265,70 @@ fun AppRoot(
                 Screen.NowPlaying -> {
                     val lyricsFontScale by viewModel.prefs.lyricsFontScale.collectAsState(initial = 1.0f)
                     val vocalRemovalEnabled by viewModel.vocalRemovalEnabled.collectAsState()
-                    NowPlayingScreen(
-                        currentSong = currentSong,
-                        isPlaying = isPlaying,
-                        playMode = playMode,
-                        progressMs = progress,
-                        durationMs = duration,
-                        lyrics = lyrics,
-                        lyricsAvailability = lyricsAvailability,
-                        coverCandidates = coverCandidates,
-                        highlightMode = lyricsHighlightMode,
-                        lyricsFontScale = lyricsFontScale,
-                        onLyricsFontScaleChange = { viewModel.updateLyricsFontScale(it) },
-                        coverFilterEnabled = coverFilterEnabled,
-                        coverFilterBlurRadius = coverFilterBlurRadius,
-                        coverFilterDarkOverlay = coverFilterDarkOverlay,
-                        // 网络歌曲用网络收藏判断，本地歌曲用本地收藏判断
-                        isFavorite = currentSong?.let { song ->
-                            if (song.isNetworkSong) viewModel.isNetworkFavorite(song.id)
-                            else viewModel.isFavorite(song.id)
-                        } ?: false,
-                        isImmersiveMode = isImmersiveMode.value,
-                        onToggleImmersive = { isImmersiveMode.value = !isImmersiveMode.value },
-                        onPlayPause = { viewModel.playPause() },
-                        onNext = { viewModel.next() },
-                        onPrevious = { viewModel.previous() },
-                        onTogglePlayMode = { viewModel.togglePlayMode() },
-                        // === KARAOKE 人声消除 ===
-                        vocalRemovalEnabled = vocalRemovalEnabled,
-                        onToggleVocalRemoval = { viewModel.toggleVocalRemoval() },
-                        onSeek = { viewModel.seekTo(it) },
-                        onSwitchLyricsSource = { viewModel.switchLyricsSource(it) },
-                        onChangeHighlightMode = { viewModel.setLyricsHighlightMode(it) },
-                        // 网络歌曲调用 toggleNetworkFavorite，本地歌曲调用 toggleFavorite
-                        onToggleFavorite = currentSong?.let { song ->
-                            {
-                                if (song.isNetworkSong) viewModel.toggleNetworkFavorite(song)
-                                else viewModel.toggleFavorite(song)
-                            }
-                        },
-                        technicalInfo = viewModel.songTechnicalInfo.collectAsState(initial = null).value,
-                        onLoadTechnicalInfo = { viewModel.loadSongTechnicalInfo() },
-                        spectrumData = spectrumData,
-                        spectrumEnabled = settings.spectrumEnabled,
-                        visualizerTheme = settings.visualizerTheme
-                    )
+                    val mvReady = mvState as? com.nasmusic.tv.ui.viewmodel.MvAvailability.Ready
+                    if (showMv && mvReady != null) {
+                        // MTV 音乐视频全屏页（独立播放器，退出时 MainViewModel 恢复主播放器）
+                        MvPlaybackScreen(
+                            mv = mvReady.mv,
+                            lyrics = lyrics,
+                            alternatives = mvReady.alternatives,
+                            onExit = { viewModel.exitMvMode() },
+                            onPlaybackError = { viewModel.onMvPlaybackError() },
+                            onPlaybackEnded = { viewModel.onMvPlaybackEnded() },
+                            onSwitchMv = { viewModel.switchMv(it) },
+                            onPreviousMv = { viewModel.onMvPrevious() },
+                            onNextMv = { viewModel.onMvNext() }
+                        )
+                    } else {
+                        NowPlayingScreen(
+                            currentSong = currentSong,
+                            isPlaying = isPlaying,
+                            playMode = playMode,
+                            progressMs = progress,
+                            durationMs = duration,
+                            lyrics = lyrics,
+                            lyricsAvailability = lyricsAvailability,
+                            coverCandidates = coverCandidates,
+                            highlightMode = lyricsHighlightMode,
+                            lyricsFontScale = lyricsFontScale,
+                            onLyricsFontScaleChange = { viewModel.updateLyricsFontScale(it) },
+                            coverFilterEnabled = coverFilterEnabled,
+                            coverFilterBlurRadius = coverFilterBlurRadius,
+                            coverFilterDarkOverlay = coverFilterDarkOverlay,
+                            // 网络歌曲用网络收藏判断，本地歌曲用本地收藏判断
+                            isFavorite = currentSong?.let { song ->
+                                if (song.isNetworkSong) viewModel.isNetworkFavorite(song.id)
+                                else viewModel.isFavorite(song.id)
+                            } ?: false,
+                            isImmersiveMode = isImmersiveMode.value,
+                            onToggleImmersive = { isImmersiveMode.value = !isImmersiveMode.value },
+                            onPlayPause = { viewModel.playPause() },
+                            onNext = { viewModel.next() },
+                            onPrevious = { viewModel.previous() },
+                            onTogglePlayMode = { viewModel.togglePlayMode() },
+                            // === KARAOKE 人声消除 ===
+                            vocalRemovalEnabled = vocalRemovalEnabled,
+                            onToggleVocalRemoval = { viewModel.toggleVocalRemoval() },
+                            // === MTV 音乐视频 ===
+                            mvAvailable = mvState is com.nasmusic.tv.ui.viewmodel.MvAvailability.Ready,
+                            onEnterMv = { viewModel.enterMvMode() },
+                            onSeek = { viewModel.seekTo(it) },
+                            onSwitchLyricsSource = { viewModel.switchLyricsSource(it) },
+                            onChangeHighlightMode = { viewModel.setLyricsHighlightMode(it) },
+                            // 网络歌曲调用 toggleNetworkFavorite，本地歌曲调用 toggleFavorite
+                            onToggleFavorite = currentSong?.let { song ->
+                                {
+                                    if (song.isNetworkSong) viewModel.toggleNetworkFavorite(song)
+                                    else viewModel.toggleFavorite(song)
+                                }
+                            },
+                            technicalInfo = viewModel.songTechnicalInfo.collectAsState(initial = null).value,
+                            onLoadTechnicalInfo = { viewModel.loadSongTechnicalInfo() },
+                            spectrumData = spectrumData,
+                            spectrumEnabled = settings.spectrumEnabled,
+                            visualizerTheme = settings.visualizerTheme
+                        )
+                    }
                 }
                 Screen.Library -> {
                     val genres by viewModel.genres.collectAsState(initial = UiState.Success(emptyList()))
@@ -481,6 +517,8 @@ fun AppRoot(
                         onClearCoverCache = { viewModel.clearCoverCache() },
                         onOpenEqualizer = { viewModel.navigateTo(Screen.Equalizer) },
                         onChangeMetingApiBaseUrl = { viewModel.updateMetingApiBaseUrl(it) },
+                        mvApiBaseUrl = settings.mvApiBaseUrl,
+                        onChangeMvApiBaseUrl = { viewModel.updateMvApiBaseUrl(it) },
                         weatherApiKey = weatherApiKey,
                         onChangeWeatherApiKey = { viewModel.updateWeatherApiKey(it) },
                         spectrumEnabled = settings.spectrumEnabled,
