@@ -7,6 +7,12 @@
 >
 > 类型：`Added`（新增） | `Changed`（变更） | `Fixed`（修复） | `Removed`（移除）
 
+## [Unreleased] - 2026-08-08
+
+### Changed
+
+- **人声消除（方案 B）算法参数调整，修复"人声没了、音乐也没了"**：Mid vocal 频段由"完全挖空"改为"深度衰减保留 15%"——完全归零会把与人声同频段的居中乐器（主旋律/吉他等）一并抹掉，参考 Audacity 官方"伴奏变薄就降低 Strength"思路；Side vocal 频段保留系数 0.12→0.5（只轻度削减，保住立体声宽度/混响伴奏）；高通截止 6kHz→8kHz（保留镲片/空气感，Audacity 建议 High Cut ≥ 8000Hz）；补偿增益 1.6x→1.25x（衰减式处理后电平掉落小，避免削波与噪声放大）（`VocalRemovalProcessor`）
+
 ## [v2.13.3] - 2026-08-08
 
 ### Changed

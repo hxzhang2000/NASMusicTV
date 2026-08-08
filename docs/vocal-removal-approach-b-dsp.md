@@ -1,6 +1,6 @@
 # 方案 B：实时 DSP 人声消除（Mid-Side + 分频段处理）
 
-> 状态：设计文档，待评审  
+> 状态：已实施（v3.2 已按实测调优）  
 > 日期：2026-08-07  
 > 关联：方案 C（AI 预分离）见 `docs/vocal-removal-approach-c-ai.md`  
 > 关联：K 歌整体方案见 `docs/K歌开发方案.md`
@@ -12,6 +12,7 @@
 ### 1.1 处理流程
 
 ```
+```
 输入：立体声 PCM (L, R)
   │
   ├─ Mid-Side 编码
@@ -19,18 +20,20 @@
   │   Side = (L - R) / 2    ← 包含所有非居中内容（立体声宽度的伴奏）
   │
   ├─ 对 Mid 信号分频段处理
-  │   低通滤波（200Hz）-> lowMid    ← 保留贝斯、底鼓
-  │   高通滤波（5kHz） -> highMid   ← 保留镲片、空气感
-  │   ┌─────────────────────────────┐
-  │   │ 200Hz-5kHz 频段被跳过       │ ← 人声主要能量所在频段，被消除
-  │   └─────────────────────────────┘
-  │   newMid = lowMid + highMid
+  │   低通滤波（120Hz）-> lowMid     ← 保留贝斯、底鼓
+  │   高通滤波（8kHz） -> highMid    ← 保留镲片、空气感
+  │   midVocal = mid - lowMid - highMid   ← 人声主要能量所在频段（120Hz-8kHz）
+  │   newMid = (lowMid + highMid) + midVocal × 0.15   ← 深度衰减而非完全挖空
+  │
+  ├─ 对 Side 信号同样分频（轻度衰减，保住立体声宽度伴奏）
+  │   sideVocal = side - sideLow - sideHigh
+  │   newSide = (sideLow + sideHigh) + sideVocal × 0.5   ← 仅削减一半
   │
   ├─ 重组立体声
-  │   L_out = newMid + Side
-  │   R_out = newMid - Side
+  │   L_out = newMid + newSide
+  │   R_out = newMid - newSide
   │
-  └─ 输出：处理后的立体声 PCM (L_out, R_out)
+  └─ 输出：处理后的立体声 PCM (L_out, R_out)（再乘 1.25x 补偿增益）
 ```
 
 ### 1.2 为什么比简单 L-R 更好
@@ -40,7 +43,16 @@
 | 简单 L-R（`L-R` 输出单声道） | ✅ 干净 | ❌ 丢失 | ❌ 丢失 | ❌ 变单声道 |
 | Mid-Side 分频（本方案） | ⚠️ 大部分消除 | ✅ 保留 | ✅ 保留 | ✅ 保留 |
 
-简单 L-R 会把所有居中内容一起消除（贝斯、底鼓通常也在中央），导致伴奏变薄。本方案只消除人声频段（200Hz-5kHz）的居中内容，保留两端。
+简单 L-R 会把所有居中内容一起消除（贝斯、底鼓通常也在中央），导致伴奏变薄。本方案只深度衰减人声频段（120Hz-8kHz）的居中内容，保留两端。
+
+> **v3.2 调优记录（2026-08-08，实测驱动）**：初版实现把 Mid 人声频段完全挖空（-∞ 归零）、Side 频段额外衰减 88%，实测"人声没了、音乐也没了"。根因是**与主旋律、吉他同频段的居中乐器被一并抹除，且 Side（立体声宽度伴奏）被过度削减**。
+>
+> 依据网搜共识（Audacity 官方 Vocal Reduction & Isolation：伴奏变薄就降低处理强度；Adobe Audition Center Channel Extractor 默认 Amount 50%；多篇 Mid-Side vocal removal 技术文：只处理中心声道、别碰 Side）调整：
+>
+> - Mid vocal 频段从**归零**改为**深度衰减保留 15%**（`MID_VOCAL_KEEP = 0.15`）——既不残留人声，又保住同频段居中乐器的骨架
+> - Side vocal 频段从**衰减 88%**改为**保留 50%**（`SIDE_VOCAL_KEEP = 0.5`）——轻度削减混响残留人声，但保住立体声宽度伴奏主体
+> - 高通切点 6kHz → 8kHz：人声主能量在 200Hz~4kHz，8kHz 以上保留镲片/空气感（Audacity 官方建议 High Cut ≥ 8kHz）
+> - 补偿增益 1.6x → 1.25x：衰减式处理后电平掉落小，降低削波与残留噪声放大
 
 ## 2. 与 K 歌整体方案的关系
 
@@ -384,13 +396,23 @@ override fun queueInput(inputBuffer: ByteBuffer) {
         val mid = (left + right) / 2
         val side = (left - right) / 2
 
-        // 对 Mid 分频：低通 200Hz + 高通 5kHz，跳过人声频段
+        // 对 Mid 分频：低通 120Hz + 高通 8kHz，vocal 频段深度衰减（保留 15%）
         val midF = mid.toFloat()
-        val newMid = (lpFilter.process(midF) + hpFilter.process(midF)).toInt()
+        val midLow = lpFilter.process(midF)
+        val midHigh = hpFilter.process(midF)
+        val midVocal = midF - midLow - midHigh
+        val newMid = (midLow + midHigh + midVocal * 0.15f).toInt()
 
-        // 重组立体声
-        buffer.putShort(clamp(newMid + side))
-        buffer.putShort(clamp(newMid - side))
+        // 对 Side 分频：vocal 频段轻度衰减（保留 50%），保住立体声宽度伴奏
+        val sideF = side.toFloat()
+        val sideLow = lpSide.process(sideF)
+        val sideHigh = hpSide.process(sideF)
+        val sideVocal = sideF - sideLow - sideHigh
+        val newSide = (sideLow + sideHigh + sideVocal * 0.5f).toInt()
+
+        // 重组立体声（乘 1.25x 补偿增益）
+        buffer.putShort(clamp(newMid + newSide))
+        buffer.putShort(clamp(newMid - newSide))
     }
     buffer.flip()
     outputBuffer = buffer
@@ -400,8 +422,8 @@ override fun queueInput(inputBuffer: ByteBuffer) {
 **二阶 IIR 滤波器**（BiquadFilter 内部类）：
 
 使用 RBJ Audio EQ Cookbook 公式计算系数：
-- 低通：截止 200Hz, Q=0.707 (Butterworth)
-- 高通：截止 5000Hz, Q=0.707
+- 低通：截止 120Hz, Q=0.707 (Butterworth)
+- 高通：截止 8000Hz, Q=0.707
 
 Direct Form I 实现：
 ```
@@ -835,7 +857,7 @@ suspend fun setVocalRemovalEnabled(enabled: Boolean) {
 - **人声不在正中**（偏左/偏右混音）：消除不干净
 - **双轨人声/和声**：消除不完整
 - **单声道录音**：Side = 0，无效果（自动 bypass）
-- **人声频段与其他乐器重叠**：200Hz-5kHz 内的居中乐器也会被消除
+- **人声频段与其他乐器重叠**：120Hz-8kHz 内的居中乐器也会被大幅衰减（保留 15%，仅存骨架）
 
 ### 6.3 已知限制
 
@@ -901,8 +923,9 @@ suspend fun setVocalRemovalEnabled(enabled: Boolean) {
 
 ---
 
-*文档版本：3.1  
+*文档版本：3.3  
 *创建日期：2026-08-07  
+*更新日期：2026-08-08（v3.3：按实测调整 DSP 参数——Mid vocal 频段保留 15%、Side 保留 50%、高通 8kHz、补偿增益 1.25x，同步实现伪代码）  
 *更新日期：2026-08-07（v3.1：全屏封面背景改为复用沉浸模式逻辑）  
 *更新日期：2026-08-07（v3.0：独立全屏 KARAOKE 页面设计）  
 *更新日期：2026-08-07（v2.0：参考 K 歌开发方案完善 UI 设计）*

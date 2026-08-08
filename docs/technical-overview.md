@@ -5278,6 +5278,36 @@ v2.6.0 天气电台功能使用 Open-Meteo（无需 API Key）作为主要天气
 - 逐字平滑采用行内时间线性推进：LRC 各句节奏不均时，同一句内高亮推进速度恒定，跨句衔接精确
 - 普通播放页与 K 歌页共用一套渲染组件，后续歌词视觉调整只需改 `KaraokeLineText`
 
+### 10.45 v2.13.3 补丁 - 人声消除（方案 B）DSP 参数调整
+
+**概述**：实测人声消除"人声没了、音乐也没了"。根因是实现偏离了设计文档（`docs/vocal-removal-approach-b-dsp.md`）——代码把 `Side` 声道 vocal 频段也衰减 88%（文档设计 `L_out = newMid + Side`，Side 原样保留），Mid vocal 频段被完全挖空（-∞ 归零），切点更激进（120Hz/6kHz vs 文档 200Hz/5kHz），叠加 1.6x 补偿增益放大残余。
+
+按网搜共识（Audacity 官方 Vocal Reduction & Isolation / Adobe Audition Center Channel Extractor / 多篇 mid-side vocal removal 技术文）调整：
+
+| 参数 | 旧值 | 新值 | 依据 |
+|------|------|------|------|
+| `MID_VOCAL_KEEP`（新增） | 0（vocal 频段归零） | 0.15 | 深度衰减而非 -∞ 挖空，避免与吉他/主旋律等居中乐器同频段的伴奏一起消失（Audacity 官方：伴奏变薄就降低 Strength） |
+| `SIDE_VOCAL_KEEP` | 0.12（衰减 88%） | 0.5（轻度削减） | Side = 立体声宽度，过度衰减会削掉左右铺开的乐器/和声/混响（网搜共识：只处理中心声道，别碰 Side） |
+| `HIGH_PASS_FREQ` | 6000Hz | 8000Hz | 人声主能量 200Hz~4kHz，High Cut ≥ 8kHz 保住镲片/空气感（Audacity 官方建议） |
+| `MAKEUP_GAIN` | 1.6 | 1.25 | 衰减式处理后电平掉落小，降低削波与残留噪声放大 |
+
+#### 主要变更
+
+1. **`VocalRemovalProcessor.kt`**
+   - 新增 `MID_VOCAL_KEEP = 0.15f`：Mid vocal 频段提取后保留 15%，不再完全挖空
+   - `SIDE_VOCAL_KEEP` 0.12 → 0.5，`HIGH_PASS_FREQ` 6kHz → 8kHz，`MAKEUP_GAIN` 1.6 → 1.25
+   - 处理逻辑 `newMid = lowMid + highMid + midVocal * MID_VOCAL_KEEP`
+
+#### 验证结果
+
+- ✅ `./gradlew.bat compileReleaseKotlin` 通过
+- ✅ 单元测试全量通过：`testDebugUnitTest` 84/84 绿
+
+#### 注意事项
+
+- 该调整仍是"深度衰减"而非"分离"，人声残留与混响残留仍存在（方案 B 的天花板）；追求高质量伴奏需方案 C（AI 分离）
+- 后续若某曲吊仍弱，可继续下调 `MID_VOCAL_KEEP`（朝 0）或上调 `SIDE_VOCAL_KEEP`（朝 1）
+
 
 
 
