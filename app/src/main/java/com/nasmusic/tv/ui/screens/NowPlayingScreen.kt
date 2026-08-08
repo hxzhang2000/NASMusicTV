@@ -133,6 +133,7 @@ fun NowPlayingScreen(
             coverFilterEnabled = coverFilterEnabled,
             coverFilterBlurRadius = coverFilterBlurRadius,
             progressMs = progressMs,
+            durationMs = durationMs,
             vocalRemovalEnabled = vocalRemovalEnabled,
             onToggleVocalRemoval = onToggleVocalRemoval,
             onExitKaraoke = { exitKaraoke() },

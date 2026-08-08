@@ -7,11 +7,13 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -43,6 +45,7 @@ import androidx.tv.material3.Text
 import coil.compose.rememberAsyncImagePainter
 import com.nasmusic.tv.data.model.Lyrics
 import com.nasmusic.tv.data.model.Song
+import com.nasmusic.tv.ui.theme.NasMusicBrushes
 import com.nasmusic.tv.ui.theme.NasMusicColors
 
 /**
@@ -67,6 +70,8 @@ fun KaraokePlaybackScreen(
     coverFilterBlurRadius: Float = 8f,
     /** 当前播放进度（毫秒），驱动歌词定位 —— 必须与播放页传入的同一 progressMs 来源 */
     progressMs: Long,
+    /** 歌曲总时长（毫秒），用于底部细进度线 —— 与播放页传入的同一 durationMs 来源 */
+    durationMs: Long,
     vocalRemovalEnabled: Boolean,
     onToggleVocalRemoval: () -> Unit,
     onExitKaraoke: () -> Unit,
@@ -144,19 +149,51 @@ fun KaraokePlaybackScreen(
 
             Spacer(Modifier.weight(1f))
 
-            // 下部：歌词区域 —— 半透明黑色全宽框，上下保留空间
+            // 下部：歌词区域 —— 半透明黑色全宽框，上下保留空间；
+            // 框的下沿有一条细进度线（青色→蓝色渐变），颜色/渐变与播放页进度条一致，
+            // 但更细（2.dp）、无圆点滑块，仅作整曲进度指示，不参与焦点与 seek。
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .background(Color(0x66000000), RoundedCornerShape(12.dp))
-                    .padding(vertical = 36.dp)
             ) {
                 KaraokeLyricsView(
                     lyrics = lyrics,
                     progressMs = progressMs,
                     isPlaying = isPlaying,
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 36.dp)
                 )
+                // 进度细线：背景轨道 + 渐变填充，贴半透明框下沿（下沿上方留 8dp 间距）
+                val karaokeProgress = if (durationMs > 0L) {
+                    (progressMs.toFloat() / durationMs.toFloat()).coerceIn(0f, 1f)
+                } else {
+                    0f
+                }
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .fillMaxWidth()
+                        .padding(horizontal = 20.dp, vertical = 8.dp)
+                        .height(2.dp)
+                ) {
+                    // 轨道底色
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .clip(RoundedCornerShape(1.dp))
+                            .background(NasMusicColors.SurfaceVariant.copy(alpha = 0.6f))
+                    )
+                    // 渐变进度填充
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth(karaokeProgress)
+                            .fillMaxHeight()
+                            .clip(RoundedCornerShape(1.dp))
+                            .background(NasMusicBrushes.progressBar)
+                    )
+                }
             }
 
             Spacer(Modifier.height(48.dp))

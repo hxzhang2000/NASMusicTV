@@ -29,6 +29,7 @@ import androidx.tv.material3.Text
 import com.nasmusic.tv.data.model.Lyrics
 import com.nasmusic.tv.ui.theme.NasMusicColors
 import kotlinx.coroutines.delay
+import kotlin.math.pow
 
 /**
  * KARAOKE 模式专用歌词视图
@@ -147,6 +148,27 @@ fun KaraokeLyricsView(
 }
 
 /**
+ * 逐字高亮的"前快后慢"覆盖节奏
+ *
+ * 卡拉OK 逐字本质上每个字唱的时间并不均等——业界通常把行拆成独立字时长
+ * (ASS `\k` 逐字时间戳 / 逐字 LRC),且句尾常拖音。本项目 LRC 只有整行起止时间,
+ * 因此用一个平滑幂函数近似这种"每字时长不均"：`progress^0.6` 让行进到一半时
+ * 已覆盖约 66% 的字（前面唱得快），剩余 34% 的字用后半段时间慢慢唱完（后面慢、
+ * 句尾有拖音感）。这是一个内建常量曲线，不依赖每字时间戳，所有逐字渲染共用。
+ */
+private const val KARAOKE_PACING_EXPONENT = 0.6f
+
+/**
+ * 将行内进度（0..1）映射为逐字覆盖比例（0..1）。
+ * 指数 < 1 => 前快后慢：行内时间过半时覆盖比例已过半数。进度 0/1 边界保持严格 0/1。
+ */
+internal fun karaokePacingFraction(progress: Float): Float {
+    if (progress <= 0f) return 0f
+    if (progress >= 1f) return 1f
+    return progress.pow(KARAOKE_PACING_EXPONENT)
+}
+
+/**
  * 计算一行歌词的平滑播放进度（0f..1f）
  *
  * [lineStartMs] 到 [lineEndMs] 为该行的完整时长，[currentMs] 落在其中时
@@ -204,8 +226,9 @@ internal fun KaraokeLineText(
                     .fillMaxWidth()
                     .drawWithContent {
                         val contentScope = this
-                        // 已覆盖的字符数（含小数 -> 半个字）
-                        val coveredChars = progress * text.length
+                        // 已覆盖的字符数（含小数 -> 半个字）。
+                        // 逐字节奏前快后慢：同样行内进度下，句首字先亮、句尾字慢慢拖亮。
+                        val coveredChars = karaokePacingFraction(progress) * text.length
                         var remaining = coveredChars
 
                         // 逐可视行处理：先覆盖本行全部区域，再进入下一行
