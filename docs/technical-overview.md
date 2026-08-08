@@ -5181,6 +5181,37 @@ v2.6.0 天气电台功能使用 Open-Meteo（无需 API Key）作为主要天气
 - 方案 C（Spleeter AI 预分离）暂未实施，后续可在 UI 增加第三选项，无需改 B 的代码
 
 
+### 10.42 v2.13.1 - K 歌歌词渲染优化 + 自动切歌停留
+
+**概述**：对 v2.13.0 的 K 歌模式做三处体验修复：两行歌词颜色统一（白色底 + 黄色进度）、逐字高亮改为平滑进度（边界可落在半个字上）、自动切歌时停留在 K 歌页面而非跳回普通播放页。
+
+#### 主要变更
+
+1. **`KaraokeLyricsView`（渲染逻辑重写）**
+   - 颜色统一：第二行预览不再使用暗灰 `TextSecondary`，两行统一为白色底（未播放）+ 黄色（已播放进度）
+   - 平滑进度：移除逐字 `WordTimestamp` 高亮，改为双层渲染 —— 底层白色整行、顶层黄色按行时长比例裁剪揭示
+   - `KaraokeLineText`（新增私有组件）：`onTextLayout` 捕获 `TextLayoutResult`，`drawWithContent` + `clipRect` 按可视行（支持换行）裁剪；进度边界落在字符中间时用 `getHorizontalPosition` 双点插值，实现"半字覆盖"
+   - `lineProgress()`：按行起始时间计算线性进度 0..1；行未开始返回 0（白色预览），整行播完返回 1（整行保留黄色）
+2. **`NowPlayingScreen`**：`showKaraoke` 由 `remember(currentSong)` 改为 `remember`，切歌 / 自动下一首时停留在 K 歌页
+3. 清理 `buildKaraokeAnnotatedString` / `estimateWordTimestamps` 等不再使用的逐字逻辑
+
+#### 修改文件
+
+- `ui/components/KaraokeLyricsView.kt`：双层平滑进度渲染 + 两行颜色统一
+- `ui/screens/NowPlayingScreen.kt`：K 歌页状态 key 移除 currentSong 依赖
+- `CHANGELOG.md`：v2.13.1 条目内新增 Fixed 小节
+
+#### 验证结果
+
+- ✅ `./gradlew.bat :app:compileDebugKotlin` 通过
+- ✅ `./gradlew.bat assembleDebug` BUILD SUCCESSFUL
+
+#### 注意事项
+
+- 平滑进度按行时长线性推进，不再依赖逐字时间戳，进度与 LRC 行切换时机保持一致
+- 半字边界为像素级插值，中文全角/半角混排时边界像素与字符宽度一致
+
+
 
 
 

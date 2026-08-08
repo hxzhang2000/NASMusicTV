@@ -7,6 +7,14 @@
 >
 > 类型：`Added`（新增） | `Changed`（变更） | `Fixed`（修复） | `Removed`（移除）
 
+## [v2.13.1] - 2026-08-08
+
+### Fixed
+
+- **K 歌歌词两行颜色统一**：第二行预览不再使用暗灰（`TextSecondary`），两行统一白色底 + 黄色进度，视觉一致
+- **K 歌歌词逐字高亮改为平滑进度**：不再按字跳变，黄色进度按行时长比例连续推进，边界可落在半个字上（`TextLayoutResult` 像素级插值裁剪）
+- **K 歌模式自动切歌停留在 K 歌页**：移除 `showKaraoke` 对 `currentSong` 的 remember key 依赖，唱完自动下一首不再跳回普通播放页（`NowPlayingScreen`）
+
 ## [v2.13.0] - 2026-08-08
 
 ### Added

@@ -108,7 +108,8 @@ fun NowPlayingScreen(
     val playPauseFocusRequester = remember { FocusRequester() }
 
     // ── 是否显示全屏 KARAOKE 页面（与 vocalRemovalEnabled 音频开关分离）──
-    var showKaraoke by remember(currentSong) { mutableStateOf(false) }
+    // 不依赖 currentSong key：切歌（含自动下一首）时保持 K 歌页面，不跳回普通播放页
+    var showKaraoke by remember { mutableStateOf(false) }
 
     fun enterKaraoke() {
         showKaraoke = true
