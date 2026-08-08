@@ -7,7 +7,7 @@
 >
 > 类型：`Added`（新增） | `Changed`（变更） | `Fixed`（修复） | `Removed`（移除）
 
-## [Unreleased] - 2026-08-08
+## [v2.13.4] - 2026-08-08
 
 ### Changed
 
