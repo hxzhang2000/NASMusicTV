@@ -5308,6 +5308,30 @@ v2.6.0 天气电台功能使用 Open-Meteo（无需 API Key）作为主要天气
 - 该调整仍是"深度衰减"而非"分离"，人声残留与混响残留仍存在（方案 B 的天花板）；追求高质量伴奏需方案 C（AI 分离）
 - 后续若某曲吊仍弱，可继续下调 `MID_VOCAL_KEEP`（朝 0）或上调 `SIDE_VOCAL_KEEP`（朝 1）
 
+### 10.46 v2.13.5 - K 歌逐字"前快后慢"节奏 + 歌词框下沿整曲进度细线
+
+**功能描述**：
+
+1. **逐字高亮改"前快后慢"节奏**：卡拉OK 逐字本质每个字时长不均（ASS `\k` / 逐字 LRC 的业界做法），本项目 LRC 只有整行起止时间，故用内建幂曲线 `progress^0.6` 近似——行内时间过半时已覆盖约 2/3 的字（句首唱得快），剩余字数用后半段慢慢亮起（句尾拖音感）。不依赖每字时间戳，K 歌页与播放页逐字模式共用。
+2. **K 歌页整曲进度细线**：歌词半透明框下缘新增 2dp 青色→蓝色渐变进度线（复用 `NasMusicBrushes.progressBar`），由 `durationMs` 实时指示整曲进度，纯视觉、不参与焦点/seek。
+
+#### 主要变更
+
+1. **`KaraokeLyricsView.kt`**
+   - 新增 `KARAOKE_PACING_EXPONENT = 0.6f` 与 `internal fun karaokePacingFraction(progress): Float`（0/1 边界严格保持 0/1，内部 `progress^0.6`）
+   - `KaraokeLineText` 的 `coveredChars` 由 `progress * text.length` 改为 `karaokePacingFraction(progress) * text.length`
+2. **`KaraokePlaybackScreen.kt`**
+   - 新增 `durationMs: Long` 参数（歌曲总时长）
+   - 歌词框内进度细线：`Box` 内第二个子项默认 `TopStart` 对齐会被叠到框顶部 → 修正为 `.align(Alignment.BottomCenter)`，`padding(horizontal=20.dp, vertical=8.dp)` 使细线贴下沿上方 8dp、与歌词 36dp 底部 padding 不重叠
+3. **`NowPlayingScreen.kt`**：`KaraokePlaybackScreen(...)` 调用增加 `durationMs = durationMs` 实参
+4. **`KaraokePacingFractionTest.kt`**（新增测试）：0/1 边界、半程覆盖 > 0.5、90% 仍 < 1、单调不减
+
+#### 验证结果
+
+- ✅ `./gradlew.bat compileDebugKotlin` 通过
+- ✅ 单测：`testDebugUnitTest` 全量绿（含新增 `KaraokePacingFractionTest`）
+- ✅ `assembleRelease` 出包，adb 推到电视（192.168.0.116:5555）安装成功
+
 
 
 

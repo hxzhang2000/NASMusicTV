@@ -7,6 +7,21 @@
 >
 > 类型：`Added`（新增） | `Changed`（变更） | `Fixed`（修复） | `Removed`（移除）
 
+## [v2.13.5] - 2026-08-08
+
+### Added
+
+- **K 歌页整曲进度细线**：歌词半透明框下缘新增 2dp 青色→蓝色渐变进度线（复用 `NasMusicBrushes.progressBar`），由 `durationMs` 实时指示整曲进度；纯视觉指示、不参与焦点与 seek（`KaraokePlaybackScreen` 新增 `durationMs` 参数，`NowPlayingScreen` 传入）
+- **K 歌逐字节奏单元测试**：`KaraokePacingFractionTest` 5 例覆盖 0/1 边界、半程覆盖 > 0.5、90% 仍 < 1、全程单调不减（`app/src/test/.../ui/components/`）
+
+### Changed
+
+- **K 歌逐字高亮改为"前快后慢"覆盖节奏**：新增内建幂曲线 `progress^0.6`（`karaokePacingFraction`），模拟卡拉OK 每字实际耗时不均——行内时间过半时已覆盖约 2/3 的字（句首唱得快），剩余的字在后半段慢慢亮起（句尾拖音感）；不依赖每字时间戳，K 歌页与播放页逐字模式共用（`KaraokeLyricsView` / `KaraokeLineText`）
+
+### Fixed
+
+- **K 歌页进度细线初始位置错误**：细线 Box 作为歌词框父 Box 的第二子项，默认 `TopStart` 对齐被叠到歌词框顶部 → 加 `.align(Alignment.BottomCenter)` 贴到框下沿上方 8dp、与歌词底部 padding 不重叠（`KaraokePlaybackScreen`）
+
 ## [v2.13.4] - 2026-08-08
 
 ### Changed
