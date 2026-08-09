@@ -2330,11 +2330,15 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     private val maxReconnectAttempts = 3
 
     fun onNetworkAvailable() {
+        if (_isNetworkAvailable.value) return // 已是可用状态，跳过（防止 NetworkMonitor 重复回调）
         _isNetworkAvailable.value = true
-        _connectMessage.value = "网络已恢复"
-        viewModelScope.launch {
-            delay(2000)
-            _connectMessage.value = null
+        // MTV 模式下不弹提示（MV 视频流请求可能导致网络抖动，频繁弹"网络已恢复"打扰观看）
+        if (!_showMv.value) {
+            _connectMessage.value = "网络已恢复"
+            viewModelScope.launch {
+                delay(2000)
+                _connectMessage.value = null
+            }
         }
         // 自动重连
         if (!_isConnected.value && reconnectAttempts < maxReconnectAttempts) {
@@ -2347,10 +2351,12 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun onNetworkLost() {
         _isNetworkAvailable.value = false
         reconnectAttempts = 0
-        _connectMessage.value = "网络已断开"
-        viewModelScope.launch {
-            delay(5000)
-            _connectMessage.value = null
+        if (!_showMv.value) {
+            _connectMessage.value = "网络已断开"
+            viewModelScope.launch {
+                delay(5000)
+                _connectMessage.value = null
+            }
         }
     }
 
@@ -2766,6 +2772,27 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             val newAlternatives = ready.alternatives.filter { it.bvid != bvid } + oldCandidate
             _mvState.value = MvAvailability.Ready(newMv, newAlternatives)
             AppLog.d("NASMusic", "switchMv: switched to '${newMv.title}'")
+        }
+    }
+
+    /**
+     * MTV 页面"切换"按钮在无候选视频时触发：绕过缓存重新搜索 B站 API，看能否找到更多结果。
+     */
+    fun onResearchMv() {
+        val song = currentSong.value ?: return
+        AppLog.d("NASMusic", "onResearchMv: force refresh for '${song.title}'")
+        _mvState.value = MvAvailability.Searching
+        mvSearchJob?.cancel()
+        mvSearchJob = viewModelScope.launch {
+            val result = try {
+                mvSearchManager.searchMvFor(song, forceRefresh = true)
+            } catch (e: Exception) {
+                AppLog.e("NASMusic", "onResearchMv failed", e)
+                null
+            }
+            _mvState.value = if (result != null) MvAvailability.Ready(result.mv, result.alternatives) else MvAvailability.NotFound
+            AppLog.d("NASMusic", "onResearchMv: '${song.title}' -> ${if (result != null) "found ${result.mv.title} + ${result.alternatives.size} alts" else "not found"}")
+            if (result != null && _showMv.value) preSearchNextMv()
         }
     }
 

@@ -34,33 +34,35 @@ class MvSearchManager(
      *
      * @return 匹配到的 MV；null 表示未找到或全部源失败（UI 置暗）
      */
-    suspend fun searchMvFor(song: Song): MvSearchResult? {
+    suspend fun searchMvFor(song: Song, forceRefresh: Boolean = false): MvSearchResult? {
         val key = buildCacheKey(song.title, song.artist)
         // 清理过期条目
         val now = System.currentTimeMillis()
         cache.entries.removeAll { (_, v) -> now - v.timestamp >= cacheTtlMs }
 
-        // 1. 内存缓存命中（45min TTL，含直链）
-        cache[key]?.let {
-            AppLog.d(TAG, "searchMvFor: memory cache hit for '$key'")
-            return it.result
-        }
-
-        // 2. 持久缓存命中 -> 按 bvid 拿新鲜直链（省搜索请求）
-        persistentCache?.get(song.id)?.let { entry ->
-            AppLog.d(TAG, "searchMvFor: persistent cache hit, resolving bvid=${entry.bvid}")
-            val mv = resolveMv(entry.bvid)
-            if (mv != null) {
-                val result = MvSearchResult(mv, emptyList())
-                cache[key] = CachedResult(result, now)
-                return result
+        if (!forceRefresh) {
+            // 1. 内存缓存命中（45min TTL，含直链）
+            cache[key]?.let {
+                AppLog.d(TAG, "searchMvFor: memory cache hit for '$key'")
+                return it.result
             }
-            // resolveMv 失败（视频被删/风控）-> 删旧条目，继续走搜索
-            AppLog.w(TAG, "searchMvFor: persistent bvid=${entry.bvid} resolve failed, removing")
-            persistentCache.remove(song.id)
+
+            // 2. 持久缓存命中 -> 按 bvid 拿新鲜直链（省搜索请求）
+            persistentCache?.get(song.id)?.let { entry ->
+                AppLog.d(TAG, "searchMvFor: persistent cache hit, resolving bvid=${entry.bvid}")
+                val mv = resolveMv(entry.bvid)
+                if (mv != null) {
+                    val result = MvSearchResult(mv, emptyList())
+                    cache[key] = CachedResult(result, now)
+                    return result
+                }
+                // resolveMv 失败（视频被删/风控）-> 删旧条目，继续走搜索
+                AppLog.w(TAG, "searchMvFor: persistent bvid=${entry.bvid} resolve failed, removing")
+                persistentCache.remove(song.id)
+            }
         }
 
-        // 3. 搜索 API
+        // 3. 搜索 API（forceRefresh=true 时跳过缓存直接搜）
         return withContext(Dispatchers.IO) {
             for (svc in services) {
                 try {

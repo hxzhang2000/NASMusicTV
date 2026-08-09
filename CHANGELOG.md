@@ -12,6 +12,7 @@
 ### Added
 
 - **MV 持久缓存（跨会话复用）**：新增 `MvPersistentCache` 存 `songId -> bvid` 映射到 JSON 文件，只存 bvid（稳定不变）不存直链（小时级过期）；三层查询：内存缓存（45min TTL 含直链）-> 持久缓存（bvid 不过期，`resolveMv` 拿新鲜直链）-> B站 API 搜索；LRU 淘汰上限 500 条；MV 播完时 `markCompleted` 写入 `playCount++` + `lastPlayedAt`，用户切换后播完覆盖旧 bvid（追踪用户认可的版本）
+- **MTV「切换」按钮始终显示 + 强制重搜**：即使只搜到一个视频（无候选），「切换」按钮也常驻；无候选时点击触发 `onResearchMv`（`searchMvFor(forceRefresh=true)` 绕过内存+持久缓存直接打 B站 API 重新搜索），有候选时点击切换到下一个候选
 
 ### Changed
 
@@ -20,6 +21,7 @@
 ### Fixed
 
 - **MTV 连播几首后停在最后一帧**：`endedHandled`/`errorReported` 从 `remember` 改为 `remember(mv.videoUrl)`，无缝切歌时新 URL 触发标志重置，否则第一首 MV 设 `true` 后后续 `STATE_ENDED` 被忽略
+- **MTV 模式下网络抖动频繁弹提示**：`onNetworkAvailable` 加去重守卫（已可用时跳过）；MTV 模式（`showMv=true`）下抑制"网络已恢复/断开"弹窗，网络状态仍追踪、自动重连仍运行
 
 ## [v2.15.0] - 2026-08-09
 

@@ -86,6 +86,7 @@ fun MvPlaybackScreen(
     onSwitchMv: (bvid: String) -> Unit = {},
     onPreviousMv: () -> Unit = {},
     onNextMv: () -> Unit = {},
+    onResearchMv: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -302,13 +303,18 @@ fun MvPlaybackScreen(
                         label = "歌词",
                         onClick = { activateControls(); showMvLyrics = !showMvLyrics }
                     )
-                    if (alternatives.isNotEmpty()) {
-                        Spacer(Modifier.width(20.dp))
-                        VocalToggleButton(
-                            label = "切换",
-                            onClick = { activateControls(); alternatives.firstOrNull()?.let { onSwitchMv(it.bvid) } }
-                        )
-                    }
+                    Spacer(Modifier.width(20.dp))
+                    VocalToggleButton(
+                        label = "切换",
+                        onClick = {
+                            activateControls()
+                            if (alternatives.isNotEmpty()) {
+                                alternatives.firstOrNull()?.let { onSwitchMv(it.bvid) }
+                            } else {
+                                onResearchMv()
+                            }
+                        }
+                    )
                 }
             }
 

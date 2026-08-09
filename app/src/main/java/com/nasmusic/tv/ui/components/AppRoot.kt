@@ -277,7 +277,8 @@ fun AppRoot(
                             onPlaybackEnded = { viewModel.onMvPlaybackEnded() },
                             onSwitchMv = { viewModel.switchMv(it) },
                             onPreviousMv = { viewModel.onMvPrevious() },
-                            onNextMv = { viewModel.onMvNext() }
+                            onNextMv = { viewModel.onMvNext() },
+                            onResearchMv = { viewModel.onResearchMv() }
                         )
                     } else {
                         NowPlayingScreen(
