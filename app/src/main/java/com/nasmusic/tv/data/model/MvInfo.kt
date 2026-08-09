@@ -39,3 +39,20 @@ data class MvSearchResult(
     val mv: MvInfo,
     val alternatives: List<MvCandidate>
 )
+
+/**
+ * MV 持久缓存条目（跨会话复用 bvid，避免重复搜索）
+ *
+ * 只存 bvid（稳定不变）而非直链（小时级过期）。
+ * 播放时用 [MvSearchManager.resolveMv] 按 bvid 拿新鲜直链。
+ * [playCount] 和 [lastPlayedAt] 用于 LRU 淘汰 + 追踪用户偏好（播完的 MV 优先）。
+ */
+data class MvCacheEntry(
+    val songId: String,
+    val songTitle: String,
+    val songArtist: String,
+    val bvid: String,
+    val mvTitle: String,
+    val lastPlayedAt: Long = 0L,
+    val playCount: Int = 0
+)

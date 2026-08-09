@@ -5396,3 +5396,32 @@ v2.6.0 天气电台功能使用 Open-Meteo（无需 API Key）作为主要天气
 
 
 
+
+---
+
+### 10.49 v2.16.0 - MV 持久缓存 + 控制条虚化 + 连播修复
+
+**功能描述**：
+
+1. **MV 持久缓存**：新增 `MvPersistentCache`（`backend/network/mv/MvPersistentCache.kt`），存 `songId -> MvCacheEntry(bvid, mvTitle, playCount, lastPlayedAt)` 到 JSON 文件；只存 bvid（稳定）不存直链（过期）；三层查询：内存缓存（45min TTL）-> 持久缓存（`resolveMv(bvid)` 拿新鲜直链）-> B站 API；LRU 上限 500 条；`markCompleted` 在 MV 播完时写入（`playCount++`），用户切换后播完覆盖旧 bvid。
+2. **控制条自动虚化**：`MvPlaybackScreen` 新增 `controlsVisible` 状态 + `lastInteraction` 时间戳；5 秒无操作 -> 控制条 + 渐变遮罩 alpha 降至 0.15；任意按钮 `onClick` 或 D-pad 焦点变化 -> 完全显化（1.0）+ 重新计时。
+3. **连播卡住修复**：`endedHandled`/`errorReported` 从 `remember` 改为 `remember(mv.videoUrl)`，无缝切歌时新 URL 触发重置。
+
+**主要变更**：
+
+1. **`data/model/MvInfo.kt`**：新增 `MvCacheEntry` 数据类
+2. **`backend/network/mv/MvPersistentCache.kt`**（新增）：JSON 文件持久化 + LRU 淘汰
+3. **`backend/network/mv/MvSearchManager.kt`**：构造函数加 `persistentCache`；`searchMvFor` 加持久缓存查询/写入；新增 `markCompleted` 委托
+4. **`NasMusicApp.kt`**：构造 `MvPersistentCache(this)` 注入 `MvSearchManager`
+5. **`ui/viewmodel/MainViewModel.kt`**：`onMvPlaybackEnded` 播完时调 `markCompleted`
+6. **`ui/components/MvPlaybackScreen.kt`**：`endedHandled`/`errorReported` 绑定 `mv.videoUrl`；控制条 + 渐变遮罩 `alpha(controlsAlpha)` + `onFocusChanged` + `activateControls()`
+
+#### 验证结果
+
+- ✅ `:app:assembleRelease` 通过（BUILD SUCCESSFUL）
+- ✅ 实机验证：连续播放多首 MV 不再卡住；控制条 5 秒虚化/操作显化；退出重进同一首歌 MV 命持久缓存更快
+
+#### 注意事项
+
+- 持久缓存文件 `mv_cache.json` 在 app filesDir，卸载清除；bvid 不过期但视频可能被删/风控，`resolveMv` 失败时自动删旧条目重搜
+- 版本号由 v2.15.0 -> v2.16.0（versionCode 48 -> 49）

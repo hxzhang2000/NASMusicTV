@@ -35,6 +35,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -93,9 +95,21 @@ fun MvPlaybackScreen(
     var mvDurationMs by remember { mutableLongStateOf(0L) }
     var playbackError by remember { mutableStateOf(false) }
     // 防止 onPlaybackError 被同一播放器实例多次触发（ViewModel 侧也有一次/歌曲的兜底）
-    var errorReported by remember { mutableStateOf(false) }
-    // 防止 STATE_ENDED 多次触发 onPlaybackEnded（切歌重建播放器时自动重置）
-    var endedHandled by remember { mutableStateOf(false) }
+    // key 绑定 videoUrl：无缝切歌时新 URL -> 新 ExoPlayer -> 标志重置，否则 endedHandled 持续 true 会导致后续 MV 的 STATE_ENDED 被忽略
+    var errorReported by remember(mv.videoUrl) { mutableStateOf(false) }
+    // 防止 STATE_ENDED 多次触发 onPlaybackEnded（同上，切歌时需重置）
+    var endedHandled by remember(mv.videoUrl) { mutableStateOf(false) }
+
+    // ── 控制条自动虚化：5 秒无操作 -> 半透明（0.15），遥控器操作/焦点切换 -> 完全显化（1.0）──
+    var controlsVisible by remember { mutableStateOf(true) }
+    var lastInteraction by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    fun activateControls() { lastInteraction = System.currentTimeMillis() }
+    LaunchedEffect(lastInteraction) {
+        controlsVisible = true
+        delay(5000)
+        if (System.currentTimeMillis() - lastInteraction >= 5000) controlsVisible = false
+    }
+    val controlsAlpha = if (controlsVisible) 1f else 0.15f
 
     // ── 独立视频 ExoPlayer ──
     // key 绑定 videoUrl：切歌/换源时重建播放器（直链带时效，URL 变化即重建最稳妥）
@@ -185,10 +199,11 @@ fun MvPlaybackScreen(
             modifier = Modifier.fillMaxSize()
         )
 
-        // ── 暗色渐变遮罩：底部加深保证控制条/歌词可读 ──
+        // ── 暗色渐变遮罩：底部加深保证控制条/歌词可读（随控制条虚化）──
         Box(
             modifier = Modifier
                 .fillMaxSize()
+                .alpha(controlsAlpha)
                 .background(
                     Brush.verticalGradient(
                         colors = listOf(
@@ -236,12 +251,14 @@ fun MvPlaybackScreen(
             }
         }
 
-        // ── 底部内容：控制条 + 进度细线 ──
+        // ── 底部内容：控制条 + 进度细线（5 秒无操作虚化，焦点/操作时显化）──
         Column(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .fillMaxWidth()
                 .padding(start = 32.dp, end = 32.dp, bottom = 20.dp)
+                .onFocusChanged { if (it.hasFocus) activateControls() }
+                .alpha(controlsAlpha)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -250,7 +267,7 @@ fun MvPlaybackScreen(
             ) {
                 // 返回（退出 MTV 页 → MainViewModel 恢复主播放器）
                 MiniIconButton(
-                    onClick = onExit,
+                    onClick = { activateControls(); onExit() },
                     icon = Icons.AutoMirrored.Filled.ArrowBack,
                     contentDescription = "Back"
                 )
@@ -261,13 +278,14 @@ fun MvPlaybackScreen(
                     horizontalArrangement = Arrangement.Center
                 ) {
                     MiniIconButton(
-                        onClick = onPreviousMv,
+                        onClick = { activateControls(); onPreviousMv() },
                         icon = Icons.Filled.SkipPrevious,
                         contentDescription = "Previous"
                     )
                     Spacer(Modifier.width(20.dp))
                     MiniIconButton(
                         onClick = {
+                            activateControls()
                             if (exoPlayer.isPlaying) exoPlayer.pause() else exoPlayer.play()
                         },
                         icon = if (isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
@@ -275,20 +293,20 @@ fun MvPlaybackScreen(
                     )
                     Spacer(Modifier.width(20.dp))
                     MiniIconButton(
-                        onClick = onNextMv,
+                        onClick = { activateControls(); onNextMv() },
                         icon = Icons.Filled.SkipNext,
                         contentDescription = "Next"
                     )
                     Spacer(Modifier.width(20.dp))
                     VocalToggleButton(
                         label = "歌词",
-                        onClick = { showMvLyrics = !showMvLyrics }
+                        onClick = { activateControls(); showMvLyrics = !showMvLyrics }
                     )
                     if (alternatives.isNotEmpty()) {
                         Spacer(Modifier.width(20.dp))
                         VocalToggleButton(
                             label = "切换",
-                            onClick = { alternatives.firstOrNull()?.let { onSwitchMv(it.bvid) } }
+                            onClick = { activateControls(); alternatives.firstOrNull()?.let { onSwitchMv(it.bvid) } }
                         )
                     }
                 }

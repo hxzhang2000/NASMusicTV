@@ -2651,6 +2651,13 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
      * - 无预搜结果 -> 静默推进 + 设 NotFound -> AppRoot 自动 exitMvMode -> syncAndPlayCurrent 播下一首
      */
     fun onMvPlaybackEnded() {
+        // 标记当前 MV 播放完成（用户认可这个版本）-> 持久缓存 playCount++，下次优先用这个 bvid
+        val completedSong = currentSong.value
+        val completedMv = (_mvState.value as? MvAvailability.Ready)?.mv
+        if (completedSong != null && completedMv != null) {
+            mvSearchManager.markCompleted(completedSong.id, completedSong.title, completedSong.artist, completedMv.bvid, completedMv.title)
+        }
+
         val pending = pendingNextResult
         skipNextMvSearch = true // advanceIndexSilently 会更新 _currentSong，跳过 collect 的 triggerMvSearch
         playerManager.advanceIndexSilently(_playMode.value)

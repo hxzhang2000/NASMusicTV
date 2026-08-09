@@ -1,6 +1,7 @@
 package com.nasmusic.tv.backend.network.mv
 
 import com.nasmusic.tv.data.model.MvInfo
+import com.nasmusic.tv.data.model.MvCacheEntry
 import com.nasmusic.tv.data.model.MvSearchResult
 import com.nasmusic.tv.data.model.Song
 import com.nasmusic.tv.util.AppLog
@@ -20,7 +21,8 @@ import java.util.concurrent.ConcurrentHashMap
  */
 class MvSearchManager(
     private val services: List<MvSearchService>,
-    private val cacheTtlMs: Long = DEFAULT_CACHE_TTL_MS
+    private val cacheTtlMs: Long = DEFAULT_CACHE_TTL_MS,
+    private val persistentCache: MvPersistentCache? = null
 ) {
 
     private val cache = ConcurrentHashMap<String, CachedResult>()
@@ -38,12 +40,27 @@ class MvSearchManager(
         val now = System.currentTimeMillis()
         cache.entries.removeAll { (_, v) -> now - v.timestamp >= cacheTtlMs }
 
-        // 缓存命中
+        // 1. 内存缓存命中（45min TTL，含直链）
         cache[key]?.let {
-            AppLog.d(TAG, "searchMvFor: cache hit for '$key'")
+            AppLog.d(TAG, "searchMvFor: memory cache hit for '$key'")
             return it.result
         }
 
+        // 2. 持久缓存命中 -> 按 bvid 拿新鲜直链（省搜索请求）
+        persistentCache?.get(song.id)?.let { entry ->
+            AppLog.d(TAG, "searchMvFor: persistent cache hit, resolving bvid=${entry.bvid}")
+            val mv = resolveMv(entry.bvid)
+            if (mv != null) {
+                val result = MvSearchResult(mv, emptyList())
+                cache[key] = CachedResult(result, now)
+                return result
+            }
+            // resolveMv 失败（视频被删/风控）-> 删旧条目，继续走搜索
+            AppLog.w(TAG, "searchMvFor: persistent bvid=${entry.bvid} resolve failed, removing")
+            persistentCache.remove(song.id)
+        }
+
+        // 3. 搜索 API
         return withContext(Dispatchers.IO) {
             for (svc in services) {
                 try {
@@ -51,6 +68,12 @@ class MvSearchManager(
                     val result = svc.searchMv(song.title, song.artist)
                     if (result != null) {
                         cache[key] = CachedResult(result, now)
+                        // 存 bvid 到持久缓存（不存直链，直链会过期）
+                        persistentCache?.put(MvCacheEntry(
+                            songId = song.id, songTitle = song.title, songArtist = song.artist,
+                            bvid = result.mv.bvid, mvTitle = result.mv.title,
+                            lastPlayedAt = now, playCount = 0
+                        ))
                         AppLog.d(TAG, "searchMvFor: success for '$key' -> ${result.mv.title} + ${result.alternatives.size} alternatives")
                         return@withContext result
                     }
@@ -62,6 +85,14 @@ class MvSearchManager(
             AppLog.w(TAG, "searchMvFor: no MV found for '$key'")
             null
         }
+    }
+
+    /**
+     * 标记某首歌的 MV 播放完成（用户认可这个版本）。
+     * 持久缓存中 playCount++ + 更新 bvid/lastPlayedAt，下次播这首歌优先用这个 bvid。
+     */
+    fun markCompleted(songId: String, songTitle: String, songArtist: String, bvid: String, mvTitle: String) {
+        persistentCache?.markCompleted(songId, songTitle, songArtist, bvid, mvTitle)
     }
 
     /**

@@ -6,6 +6,7 @@ import com.nasmusic.tv.backend.network.MetingApiService
 import com.nasmusic.tv.backend.network.NetworkMusicManager
 import com.nasmusic.tv.backend.network.mv.BilibiliMvService
 import com.nasmusic.tv.backend.network.mv.MvSearchManager
+import com.nasmusic.tv.backend.network.mv.MvPersistentCache
 import com.nasmusic.tv.data.prefs.AppPreferences
 import com.nasmusic.tv.player.PlayerManager
 import com.nasmusic.tv.util.AppLog
@@ -60,7 +61,8 @@ class NasMusicApp : Application() {
                 BilibiliMvService(
                     baseUrlProvider = { appPreferences.getMvApiBaseUrlSync() }
                 )
-            )
+            ),
+            persistentCache = MvPersistentCache(this)
         )
         // 启动时清理超过 30 天的搜索历史
         applicationScope.launch {

@@ -7,6 +7,20 @@
 >
 > 类型：`Added`（新增） | `Changed`（变更） | `Fixed`（修复） | `Removed`（移除）
 
+## [v2.16.0] - 2026-08-09
+
+### Added
+
+- **MV 持久缓存（跨会话复用）**：新增 `MvPersistentCache` 存 `songId -> bvid` 映射到 JSON 文件，只存 bvid（稳定不变）不存直链（小时级过期）；三层查询：内存缓存（45min TTL 含直链）-> 持久缓存（bvid 不过期，`resolveMv` 拿新鲜直链）-> B站 API 搜索；LRU 淘汰上限 500 条；MV 播完时 `markCompleted` 写入 `playCount++` + `lastPlayedAt`，用户切换后播完覆盖旧 bvid（追踪用户认可的版本）
+
+### Changed
+
+- **MTV 控制条自动虚化**：5 秒无遥控器操作 -> 控制条 + 底部渐变遮罩虚化至 0.15 alpha（几乎透明不挡视频）；任意按钮点击或 D-pad 焦点切换 -> 完全显化并重新计时
+
+### Fixed
+
+- **MTV 连播几首后停在最后一帧**：`endedHandled`/`errorReported` 从 `remember` 改为 `remember(mv.videoUrl)`，无缝切歌时新 URL 触发标志重置，否则第一首 MV 设 `true` 后后续 `STATE_ENDED` 被忽略
+
 ## [v2.15.0] - 2026-08-09
 
 ### Added
