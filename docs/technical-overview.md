@@ -5425,3 +5425,31 @@ v2.6.0 天气电台功能使用 Open-Meteo（无需 API Key）作为主要天气
 
 - 持久缓存文件 `mv_cache.json` 在 app filesDir，卸载清除；bvid 不过期但视频可能被删/风控，`resolveMv` 失败时自动删旧条目重搜
 - 版本号由 v2.15.0 -> v2.16.0（versionCode 48 -> 49）
+
+### 10.50 v2.17.0 - 手机遥控 + 遥控服务器按需启动
+
+**功能描述**：
+
+1. **手机遥控（扫码控制）**：K歌/MTV 全屏页右上角显示二维码（含 token 的 URL），手机扫码打开遥控页——查看当前队列、播放/移动/添加歌曲、搜索 NAS 与网络音乐（`RemoteControlServer`，NanoHTTPD，端口 18082 + token 鉴权 + `Connection: close`；`/api/queue`、`/api/queue/play`、`/api/queue/move`、`/api/queue/add`、`/api/search`、`/api/status`）
+2. **遥控服务器按需启动**：移除 `MainViewModel.init` 中的常驻启动，改为 `ensureRemoteControlStarted()` 在进入 K歌（`onEnterKaraokeMode` 回调）或 MTV（`enterMvMode`）时按需启动，`onCleared` 统一停止——排查 TV WiFi/ADB 断连诱因时发现的最高嫌疑项（常驻端口 + 空闲线程）
+3. **轮询降频**：遥控页队列轮询 3s -> 5s，降低手机端连接频率与 TV 端 NanoHTTPD 线程创建/销毁压力
+
+**主要变更**：
+
+1. **`net/RemoteControlServer.kt`**（新增）：NanoHTTPD 服务器 + token 鉴权 + QR URL 生成 + 队列/搜索/播放 API
+2. **`net/RemoteControlHtml.kt`**（新增）：遥控页 HTML（内嵌），`setInterval(fetchQueue, 5000)` 轮询
+3. **`ui/viewmodel/MainViewModel.kt`**：移除 init 常驻启动；新增 `ensureRemoteControlStarted()`（幂等，URL 为空才启动）；`enterMvMode()` 调用；`onCleared()` 停止服务器
+4. **`ui/screens/NowPlayingScreen.kt`**：新增 `onEnterKaraokeMode` 回调参数，`enterKaraoke()` 时调用
+5. **`ui/components/AppRoot.kt`**：接线 `onEnterKaraokeMode = { viewModel.ensureRemoteControlStarted() }`
+6. **`player/PlayerManager.kt`**：新增 `playAt(index)` / `moveQueueItem(from, to)`（遥控队列操作）
+7. **`ui/components/KaraokePlaybackScreen.kt` / `MvPlaybackScreen.kt`**：右上角二维码显示（含 token URL），5 秒无操作自动隐藏
+
+#### 验证结果
+
+- ✅ `:app:compileDebugKotlin` BUILD SUCCESSFUL（exit 0）
+- ⏳ 实机验证待用户执行：扫码遥控、K歌/MTV 二维码显示、WiFi/ADB 稳定性对比
+
+#### 注意事项
+
+- 遥控服务器仅 K歌/MTV 模式需要；按需启动避免 App 常驻额外端口/线程，降低 TV 资源受限设备上的 WiFi/ADB 不稳定风险
+- 版本号由 v2.16.0 -> v2.17.0（versionCode 49 -> 50）

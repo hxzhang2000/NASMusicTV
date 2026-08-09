@@ -7,6 +7,17 @@
 >
 > 类型：`Added`（新增） | `Changed`（变更） | `Fixed`（修复） | `Removed`（移除）
 
+## [v2.17.0] - 2026-08-10
+
+### Added
+
+- **手机遥控（扫码控制）**：K歌/MTV 全屏页右上角显示二维码（`QrCodeGenerator` 生成，含 token 的 URL），手机扫码打开遥控页（`RemoteControlServer` NanoHTTPD 自建服务，端口 18082 + token 鉴权 + `Connection: close`），可查看当前队列、播放/移动/添加歌曲、搜索 NAS 与网络音乐（`/api/queue`、`/api/queue/play`、`/api/queue/move`、`/api/queue/add`、`/api/search`、`/api/status`；`PlayerManager.playAt` / `moveQueueItem`）；遥控页 HTML 内嵌于 `RemoteControlHtml`，队列每 5 秒轮询刷新
+
+### Changed
+
+- **遥控服务器按需启动**：`MainViewModel` 不再在 `init` 时启动遥控服务器（原常驻），改为 `ensureRemoteControlStarted()` 在进入 K歌（`onEnterKaraokeMode`）或 MTV（`enterMvMode`）模式时按需启动，`onCleared` 统一停止——降低 TV 资源受限设备上的常驻端口/线程开销（排查 TV WiFi/ADB 断连诱因时发现的最高嫌疑项）
+- **遥控页轮询间隔 3s → 5s**：降低手机端连接频率，减少 TV 端 NanoHTTPD 线程创建/销毁压力
+
 ## [v2.16.0] - 2026-08-09
 
 ### Added
