@@ -530,6 +530,42 @@ class PlayerManager() {
         }
     }
 
+    /** 跳转到队列指定索引并播放（手机遥控用） */
+    fun playAt(index: Int) {
+        val p = player ?: return
+        val queue = _queue.value
+        if (index !in queue.indices) return
+        _currentIndex.value = index
+        _currentSong.value = queue[index]
+        if (queue[index].durationMs > 0) _duration.value = queue[index].durationMs
+        try {
+            p.seekTo(index, 0)
+            p.play()
+            AppLog.d("PlayerManager", "playAt: $index '${queue[index].title}'")
+        } catch (e: Exception) {
+            AppLog.e("PlayerManager", "playAt failed", e)
+        }
+    }
+
+    /** 移动队列顺序（手机遥控用） */
+    fun moveQueueItem(from: Int, to: Int) {
+        val queue = _queue.value.toMutableList()
+        if (from !in queue.indices || to !in queue.indices || from == to) return
+        val item = queue.removeAt(from)
+        queue.add(to, item)
+        _queue.value = queue
+        val currentIdx = _currentIndex.value
+        _currentIndex.value = when {
+            from == currentIdx -> to
+            from < currentIdx && to >= currentIdx -> currentIdx - 1
+            from > currentIdx && to <= currentIdx -> currentIdx + 1
+            else -> currentIdx
+        }
+        try { player?.moveMediaItem(from, to) } catch (e: Exception) {
+            AppLog.e("PlayerManager", "moveQueueItem failed", e)
+        }
+    }
+
     fun removeFromQueue(index: Int) {
         val p = player ?: return
         val currentQueue = _queue.value.toMutableList()

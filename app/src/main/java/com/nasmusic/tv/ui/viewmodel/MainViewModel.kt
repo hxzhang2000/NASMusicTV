@@ -48,6 +48,14 @@ import com.nasmusic.tv.backend.weather.WeatherRadioManager
 import com.nasmusic.tv.lyrics.LyricsManager
 import com.nasmusic.tv.player.PlayerManager
 import com.nasmusic.tv.util.AppLog
+import com.nasmusic.tv.net.RemoteCallbacks
+import com.nasmusic.tv.net.RemoteControlServer
+import com.nasmusic.tv.net.RemoteSearchResult
+import android.os.Handler
+import android.os.Looper
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.Dispatchers
 import com.nasmusic.tv.util.ArtistSplitter
 import com.nasmusic.tv.util.BackupFileUtils
 import kotlinx.coroutines.Job
@@ -80,7 +88,7 @@ sealed interface MvAvailability {
  * 应用主 ViewModel
  * 管理播放器、歌曲队列、曲库数据、设置等
  */
-class MainViewModel(app: Application) : AndroidViewModel(app) {
+class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
 
     private val nasMusicApp = app as NasMusicApp
     private val playerManager = nasMusicApp.playerManager
@@ -97,6 +105,19 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     val coverFilterDarkOverlay: StateFlow<Float> = _coverFilterDarkOverlay.asStateFlow()
     private val backendRegistry = nasMusicApp.backendRegistry
     private val lyricsManager = LyricsManager(app, backendRegistry, nasMusicApp.networkMusicManager)
+
+    // --- 手机遥控服务器 ---
+    private val remoteControlServer = RemoteControlServer()
+    private val _remoteControlUrl = MutableStateFlow<String?>(null)
+    val remoteControlUrl: StateFlow<String?> = _remoteControlUrl.asStateFlow()
+    private val mainHandler = Handler(Looper.getMainLooper())
+
+    /** 按需启动遥控服务器（进入 K 歌/MTV 模式时调用，避免常驻浪费资源） */
+    fun ensureRemoteControlStarted() {
+        if (_remoteControlUrl.value == null) {
+            _remoteControlUrl.value = remoteControlServer.start(this)
+        }
+    }
 
     // --- 天气电台 ---
     val weatherApi = WeatherApi()
@@ -2631,7 +2652,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         val ready = _mvState.value as? MvAvailability.Ready ?: return
         mvAdvanced = false
         AppLog.d("NASMusic", "enterMvMode: ${ready.mv.title}")
-        playerManager.suppressPlayback = true // 封堵异步 URL 解析路径恢复播放
+        ensureRemoteControlStarted()
+        playerManager.suppressPlayback = true
         playerManager.pause()
         _showMv.value = true
         preSearchNextMv()
@@ -2861,6 +2883,43 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    // ---- RemoteCallbacks 实现（手机遥控服务器回调）----
+
+    override fun onCleared() {
+        remoteControlServer.stop()
+        super.onCleared()
+    }
+
+    override fun getQueue(): List<Song> = playerManager.queue.value
+    override fun getCurrentIndex(): Int = playerManager.currentIndex.value
+    override fun isPlaying(): Boolean = playerManager.isPlaying.value
+    override fun getProgressMs(): Long = playerManager.progress.value
+    override fun getDurationMs(): Long = playerManager.duration.value
+
+    override fun playAt(index: Int) {
+        mainHandler.post { playerManager.playAt(index) }
+    }
+
+    override fun moveQueueItem(from: Int, to: Int) {
+        mainHandler.post { playerManager.moveItem(from, to) }
+    }
+
+    override fun addToQueue(song: Song) {
+        mainHandler.post { playerManager.addToQueue(song) }
+    }
+
+    override suspend fun search(keyword: String): RemoteSearchResult = coroutineScope {
+        val nasDeferred = async(Dispatchers.IO) {
+            try { backendRegistry.getAdapter()?.searchSongs(keyword) ?: emptyList() }
+            catch (e: Exception) { AppLog.w("NASMusic", "remote search NAS failed: ${e.message}"); emptyList() }
+        }
+        val netDeferred = async(Dispatchers.IO) {
+            try { nasMusicApp.networkMusicManager.search(keyword) }
+            catch (e: Exception) { AppLog.w("NASMusic", "remote search network failed: ${e.message}"); emptyList() }
+        }
+        RemoteSearchResult(nasDeferred.await(), netDeferred.await())
+    }
+
     fun setPlayMode(mode: PlayMode) {
         _playMode.value = mode
         playerManager.applyPlayMode(mode)
@@ -2909,8 +2968,6 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     val currentNetworkSong: StateFlow<Song?> = combine(currentSong, queue) { song, _ ->
         song?.takeIf { it.isNetworkSong }
     }.stateIn(viewModelScope, SharingStarted.Eagerly, null)
-
-    fun moveQueueItem(fromIndex: Int, toIndex: Int) = playerManager.moveItem(fromIndex, toIndex)
 
     fun clearQueue() {
         playerManager.clearQueue()

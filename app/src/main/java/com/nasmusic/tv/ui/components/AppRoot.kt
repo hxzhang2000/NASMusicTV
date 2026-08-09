@@ -278,7 +278,8 @@ fun AppRoot(
                             onSwitchOrResearch = { viewModel.onSwitchOrResearch() },
                             onPreviousMv = { viewModel.onMvPrevious() },
                             onNextMv = { viewModel.onMvNext() },
-                            mvMessage = viewModel.mvMessage.collectAsState().value
+                            mvMessage = viewModel.mvMessage.collectAsState().value,
+                            remoteControlUrl = viewModel.remoteControlUrl.collectAsState().value
                         )
                     } else {
                         NowPlayingScreen(
@@ -313,6 +314,8 @@ fun AppRoot(
                             // === MTV 音乐视频 ===
                             mvAvailable = mvState is com.nasmusic.tv.ui.viewmodel.MvAvailability.Ready,
                             onEnterMv = { viewModel.enterMvMode() },
+                            remoteControlUrl = viewModel.remoteControlUrl.collectAsState().value,
+                            onEnterKaraokeMode = { viewModel.ensureRemoteControlStarted() },
                             onSeek = { viewModel.seekTo(it) },
                             onSwitchLyricsSource = { viewModel.switchLyricsSource(it) },
                             onChangeHighlightMode = { viewModel.setLyricsHighlightMode(it) },

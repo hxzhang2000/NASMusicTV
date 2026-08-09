@@ -1,6 +1,17 @@
 package com.nasmusic.tv.ui.components
 
 import androidx.compose.foundation.Image
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.graphics.asImageBitmap
+import com.nasmusic.tv.util.QrCodeGenerator
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import kotlinx.coroutines.delay
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -78,13 +89,44 @@ fun KaraokePlaybackScreen(
     onPlayPause: () -> Unit,
     onNext: () -> Unit,
     onPrevious: () -> Unit,
-    playPauseFocusRequester: FocusRequester? = null
+    playPauseFocusRequester: FocusRequester? = null,
+    remoteControlUrl: String? = null
 ) {
+    // ── 二维码自动显隐：5 秒无操作 -> 完全隐藏，操作时显化 ──
+    var controlsVisible by remember { mutableStateOf(true) }
+    var lastInteraction by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    fun activateControls() { lastInteraction = System.currentTimeMillis() }
+    LaunchedEffect(lastInteraction) {
+        controlsVisible = true
+        delay(5000)
+        if (System.currentTimeMillis() - lastInteraction >= 5000) controlsVisible = false
+    }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
             .background(Color(0xFF1A1A2E))
+            .onFocusChanged { if (it.hasFocus) activateControls() }
+            .onPreviewKeyEvent { activateControls(); false }
     ) {
+        // ── 手机遥控二维码（右上角，5 秒无操作完全隐藏）──
+        val qrBitmap = remember(remoteControlUrl) {
+            remoteControlUrl?.let { QrCodeGenerator.generateQrBitmap(it, 256) }
+        }
+        if (qrBitmap != null) {
+            Image(
+                bitmap = qrBitmap.asImageBitmap(),
+                contentDescription = "扫码遥控",
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(24.dp)
+                    .size(80.dp)
+                    .alpha(if (controlsVisible) 1f else 0f)
+                    .background(Color(0xCC000000), RoundedCornerShape(8.dp))
+                    .padding(4.dp)
+            )
+        }
+
         // ── 全屏封面背景 ──
         val bgUrl = coverCandidates.firstOrNull() ?: currentSong?.coverUrl
         if (bgUrl != null) {
@@ -210,7 +252,7 @@ fun KaraokePlaybackScreen(
         ) {
             // 返回按钮（左下角）
             MiniIconButton(
-                onClick = onExitKaraoke,
+                onClick = { activateControls(); onExitKaraoke() },
                 icon = Icons.AutoMirrored.Filled.ArrowBack,
                 contentDescription = "Back"
             )
@@ -221,13 +263,13 @@ fun KaraokePlaybackScreen(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 MiniIconButton(
-                    onClick = onPrevious,
+                    onClick = { activateControls(); onPrevious() },
                     icon = Icons.Filled.SkipPrevious,
                     contentDescription = "Previous"
                 )
                 Spacer(Modifier.width(20.dp))
                 MiniIconButton(
-                    onClick = onPlayPause,
+                    onClick = { activateControls(); onPlayPause() },
                     icon = if (isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
                     contentDescription = if (isPlaying) "Pause" else "Play",
                     primary = true,
@@ -235,7 +277,7 @@ fun KaraokePlaybackScreen(
                 )
                 Spacer(Modifier.width(20.dp))
                 MiniIconButton(
-                    onClick = onNext,
+                    onClick = { activateControls(); onNext() },
                     icon = Icons.Filled.SkipNext,
                     contentDescription = "Next"
                 )
@@ -243,7 +285,7 @@ fun KaraokePlaybackScreen(
                 // 原唱/伴唱切换（只切换音频，不退出页面）
                 VocalToggleButton(
                     label = if (vocalRemovalEnabled) "原唱" else "伴唱",
-                    onClick = onToggleVocalRemoval
+                    onClick = { activateControls(); onToggleVocalRemoval() }
                 )
             }
         }

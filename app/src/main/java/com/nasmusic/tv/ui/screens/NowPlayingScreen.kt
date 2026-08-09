@@ -105,6 +105,9 @@ fun NowPlayingScreen(
     // === MTV 音乐视频 ===
     mvAvailable: Boolean = false,
     onEnterMv: () -> Unit = {},
+    remoteControlUrl: String? = null,
+    // K 歌 / MTV 模式需要手机遥控服务器，由上层按需启动
+    onEnterKaraokeMode: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     var showInfoPanel by remember { mutableStateOf(false) }
@@ -118,6 +121,8 @@ fun NowPlayingScreen(
         showKaraoke = true
         // 进入 K 歌页默认开启人声消除（伴唱）
         if (!vocalRemovalEnabled) onToggleVocalRemoval()
+        // K 歌使用手机遥控页，按需启动遥控服务器
+        onEnterKaraokeMode()
     }
 
     fun exitKaraoke() {
@@ -143,7 +148,8 @@ fun NowPlayingScreen(
             onPlayPause = onPlayPause,
             onNext = onNext,
             onPrevious = onPrevious,
-            playPauseFocusRequester = playPauseFocusRequester
+            playPauseFocusRequester = playPauseFocusRequester,
+            remoteControlUrl = remoteControlUrl
         )
         return
     }

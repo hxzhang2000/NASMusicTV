@@ -37,6 +37,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.foundation.Image
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -56,6 +59,7 @@ import androidx.tv.material3.Text
 import com.nasmusic.tv.data.model.Lyrics
 import com.nasmusic.tv.data.model.MvInfo
 import com.nasmusic.tv.data.model.MvCandidate
+import com.nasmusic.tv.util.QrCodeGenerator
 import com.nasmusic.tv.ui.theme.NasMusicBrushes
 import com.nasmusic.tv.ui.theme.NasMusicColors
 import com.nasmusic.tv.util.AppLog
@@ -87,6 +91,7 @@ fun MvPlaybackScreen(
     onPreviousMv: () -> Unit = {},
     onNextMv: () -> Unit = {},
     mvMessage: String? = null,
+    remoteControlUrl: String? = null,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -111,6 +116,11 @@ fun MvPlaybackScreen(
         if (System.currentTimeMillis() - lastInteraction >= 5000) controlsVisible = false
     }
     val controlsAlpha = if (controlsVisible) 1f else 0.15f
+
+    // 手机遥控二维码（URL 不变只生成一次）
+    val qrBitmap = remember(remoteControlUrl) {
+        remoteControlUrl?.let { QrCodeGenerator.generateQrBitmap(it, 256) }
+    }
 
     // ── 独立视频 ExoPlayer ──
     // key 绑定 videoUrl：切歌/换源时重建播放器（直链带时效，URL 变化即重建最稳妥）
@@ -181,6 +191,7 @@ fun MvPlaybackScreen(
         modifier = modifier
             .fillMaxSize()
             .background(Color.Black)
+            .onPreviewKeyEvent { activateControls(); false }
     ) {
         // ── 全屏视频 ──
         AndroidView(
@@ -215,6 +226,21 @@ fun MvPlaybackScreen(
                     )
                 )
         )
+
+        // ── 手机遥控二维码（右上角，跟随控制条虚化）──
+        if (qrBitmap != null) {
+            Image(
+                bitmap = qrBitmap.asImageBitmap(),
+                contentDescription = "扫码遥控",
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(24.dp)
+                    .size(96.dp)
+                    .alpha(if (controlsVisible) 1f else 0f)
+                    .background(Color(0xCC000000), RoundedCornerShape(8.dp))
+                    .padding(4.dp)
+            )
+        }
 
         // ── 歌词浮层（默认隐藏；「歌词」按钮切换）──
         if (showMvLyrics && lyrics != null && lyrics.lines.isNotEmpty()) {
