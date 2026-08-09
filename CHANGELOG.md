@@ -11,12 +11,14 @@
 
 ### Added
 
-- **MV 持久缓存（跨会话复用）**：新增 `MvPersistentCache` 存 `songId -> bvid` 映射到 JSON 文件，只存 bvid（稳定不变）不存直链（小时级过期）；三层查询：内存缓存（45min TTL 含直链）-> 持久缓存（bvid 不过期，`resolveMv` 拿新鲜直链）-> B站 API 搜索；LRU 淘汰上限 500 条；MV 播完时 `markCompleted` 写入 `playCount++` + `lastPlayedAt`，用户切换后播完覆盖旧 bvid（追踪用户认可的版本）
-- **MTV「切换」按钮始终显示 + 强制重搜**：即使只搜到一个视频（无候选），「切换」按钮也常驻；无候选时点击触发 `onResearchMv`（`searchMvFor(forceRefresh=true)` 绕过内存+持久缓存直接打 B站 API 重新搜索），有候选时点击切换到下一个候选
+- **MV 持久缓存（跨会话复用）**：新增 `MvPersistentCache` 存 `songId -> bvid` 映射到 JSON 文件，只存 bvid（稳定不变）不存直链（小时级过期）；三层查询：内存缓存（45min TTL 含直链）-> 持久缓存（bvid 不过期，`resolveMv` 拿新鲜直链）-> B站 API 搜索；LRU 淘汰上限 5000 条；MV 播完时 `markCompleted` 写入 `playCount++` + `lastPlayedAt`，用户切换后播完覆盖旧 bvid（追踪用户认可的版本）
+- **MTV「切换」按钮状态机**：始终常驻；有候选时切换（2 轮循环），2 轮后或无候选时触发 `researchMv` 重搜（`excludeBvids` 排除已展示 bvid + `minSimilarity` 递降 0.5->0.3->0.1 获取更多结果）；`switchMv` 失败显示"切换失败"提示而非静默；重搜不打断当前播放（后台搜索，成功才切换，失败提示"未找到更多视频"）；重搜上限 2 次防无限循环
+- **备份/恢复补全**：`BackupData` 新增 MV 持久缓存条目（`mvCacheEntries`）+ 8 项遗漏设置（天气开关/手动城市/自动刷新、封面滤镜开关/模糊半径/暗色遮罩、音乐源、歌词字号）；天气 API Key 敏感不备份；旧版备份文件恢复时新字段用默认值，向后兼容
 
 ### Changed
 
 - **MTV 控制条自动虚化**：5 秒无遥控器操作 -> 控制条 + 底部渐变遮罩虚化至 0.15 alpha（几乎透明不挡视频）；任意按钮点击或 D-pad 焦点切换 -> 完全显化并重新计时
+- **MV 搜索候选上限 5 条**：`parseCandidatesFromSearch` 按相似度排序后 `take(5)`，避免候选太多切换轮次过长
 
 ### Fixed
 

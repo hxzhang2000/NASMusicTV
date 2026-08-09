@@ -872,7 +872,17 @@ class AppPreferences(private val context: Context) {
         val playRecords: List<com.nasmusic.tv.data.model.PlayRecord> = emptyList(),
         val searchHistory: List<SearchHistoryItem> = emptyList(),
         val equalizerPreset: EqualizerPreset? = null,
-        val equalizerBands: List<Float> = emptyList()
+        val equalizerBands: List<Float> = emptyList(),
+        // v2: 新增备份项（旧备份文件恢复时用默认值）
+        val mvCacheEntries: List<com.nasmusic.tv.data.model.MvCacheEntry> = emptyList(),
+        val weatherEnabled: Boolean = true,
+        val weatherManualCity: String = "",
+        val weatherAutoRefresh: Boolean = true,
+        val coverFilterEnabled: Boolean = false,
+        val coverFilterBlurRadius: Double = 8.0,
+        val coverFilterDarkOverlay: Double = 0.3,
+        val musicSource: String = "",
+        val lyricsFontScale: Double = 1.0
     )
 
     /**
@@ -880,6 +890,7 @@ class AppPreferences(private val context: Context) {
      */
     suspend fun exportBackupData(): BackupData {
         val config = serverConfig.first()
+        val ds = context.dataStore.data.first()
         return BackupData(
             serverConfig = if (config.baseUrl.isNotBlank()) {
                 config.copy(apiToken = "", password = "", isConnected = false)
@@ -893,7 +904,16 @@ class AppPreferences(private val context: Context) {
             playRecords = getPlayRecords(),
             searchHistory = getSearchHistory(),
             equalizerPreset = equalizerPreset.first(),
-            equalizerBands = equalizerBands.first()
+            equalizerBands = equalizerBands.first(),
+            // v2: 补全之前遗漏的设置项
+            weatherEnabled = ds[keyWeatherEnabled] ?: true,
+            weatherManualCity = ds[keyWeatherManualCity] ?: "",
+            weatherAutoRefresh = ds[keyWeatherAutoRefresh] ?: true,
+            coverFilterEnabled = ds[keyCoverFilterEnabled] ?: false,
+            coverFilterBlurRadius = ds[keyCoverFilterBlurRadius] ?: 8.0,
+            coverFilterDarkOverlay = ds[keyCoverFilterDarkOverlay] ?: 0.3,
+            musicSource = ds[keyMusicSource] ?: "",
+            lyricsFontScale = ds[keyLyricsFontScale] ?: 1.0
         )
     }
 
@@ -943,6 +963,15 @@ class AppPreferences(private val context: Context) {
             if (data.searchHistory.isNotEmpty()) {
                 prefs[keySearchHistory] = gson.toJson(data.searchHistory)
             }
+            // v2: 恢复之前遗漏的设置项
+            prefs[keyWeatherEnabled] = data.weatherEnabled
+            prefs[keyWeatherManualCity] = data.weatherManualCity
+            prefs[keyWeatherAutoRefresh] = data.weatherAutoRefresh
+            prefs[keyCoverFilterEnabled] = data.coverFilterEnabled
+            prefs[keyCoverFilterBlurRadius] = data.coverFilterBlurRadius
+            prefs[keyCoverFilterDarkOverlay] = data.coverFilterDarkOverlay
+            if (data.musicSource.isNotBlank()) prefs[keyMusicSource] = data.musicSource
+            prefs[keyLyricsFontScale] = data.lyricsFontScale
         }
     }
 }

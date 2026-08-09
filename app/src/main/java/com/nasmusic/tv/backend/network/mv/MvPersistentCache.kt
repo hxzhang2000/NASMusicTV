@@ -28,7 +28,7 @@ class MvPersistentCache(context: Context) {
 
     companion object {
         private const val TAG = "MvPersistentCache"
-        private const val MAX_ENTRIES = 500
+        private const val MAX_ENTRIES = 5000
     }
 
     init {
@@ -67,6 +67,18 @@ class MvPersistentCache(context: Context) {
     fun remove(songId: String) {
         cache.remove(songId)
         save()
+    }
+
+    /** 导出全部条目（供备份用） */
+    fun exportAll(): List<MvCacheEntry> = cache.values.toList()
+
+    /** 导入条目（恢复备份用，覆盖现有数据） */
+    fun importAll(entries: List<MvCacheEntry>) {
+        cache.clear()
+        entries.forEach { cache[it.songId] = it }
+        if (cache.size > MAX_ENTRIES) evictOldest()
+        save()
+        AppLog.d(TAG, "importAll: ${cache.size} entries")
     }
 
     private fun evictOldest() {

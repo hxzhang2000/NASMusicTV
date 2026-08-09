@@ -2190,7 +2190,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun exportBackup() {
         viewModelScope.launch {
             try {
-                val data = prefs.exportBackupData()
+                val data = prefs.exportBackupData().copy(
+                    mvCacheEntries = mvSearchManager.exportMvCache()
+                )
                 val json = Gson().toJson(data)
                 val result = BackupFileUtils.export(getApplication(), json)
                 result.onSuccess { fileName ->
@@ -2217,6 +2219,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 val json = BackupFileUtils.read(getApplication(), uri).getOrThrow()
                 val data = Gson().fromJson(json, AppPreferences.BackupData::class.java)
                 prefs.importBackupData(data)
+                mvSearchManager.importMvCache(data.mvCacheEntries)
                 // 刷新受备份影响的 UI 状态
                 refreshAfterImport()
                 _backupMessage.value = "恢复成功，请重新连接服务器"
@@ -2235,6 +2238,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         return try {
             val data = Gson().fromJson(json, AppPreferences.BackupData::class.java)
             prefs.importBackupData(data)
+            mvSearchManager.importMvCache(data.mvCacheEntries)
             refreshAfterImport()
             _backupMessage.value = "恢复成功，请重新连接服务器"
             true
@@ -2583,6 +2587,17 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     /** 静默推进索引时跳过 currentSong.collect 的 triggerMvSearch（避免覆盖预搜结果） */
     private var skipNextMvSearch = false
 
+    /** 当前搜索会话内「切换」已按次数（达到 2×候选总数后触发重搜） */
+    private var mvSwitchCount = 0
+    /** 重搜次数（上限 2 次，防止无限重搜） */
+    private var mvResearchCount = 0
+    /** 重搜时排除的 bvid 集合（已展示过的视频不再出现） */
+    private val mvExcludedBvids = mutableSetOf<String>()
+
+    /** MTV 页面短暂提示（切换失败/未找到更多视频），2 秒后自动清除 */
+    private val _mvMessage = MutableStateFlow<String?>(null)
+    val mvMessage: StateFlow<String?> = _mvMessage.asStateFlow()
+
     /**
      * 切歌/播放时自动搜索当前歌曲的 MV（MvSearchManager 内部有内存缓存，命中不重复请求）。
      * 置 Searching → searchMvFor → Ready/NotFound；由 UI 按钮消费决定亮/暗。
@@ -2590,6 +2605,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun triggerMvSearch(song: Song) {
         mvRetryDone = false
         pendingNextResult = null // 清除旧预搜
+        mvSwitchCount = 0 // 重置切换计数
+        mvResearchCount = 0 // 重置重搜计数
+        mvExcludedBvids.clear() // 清除排除列表
         mvSearchJob?.cancel()
         _mvState.value = MvAvailability.Searching
         mvSearchJob = viewModelScope.launch {
@@ -2759,40 +2777,87 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
      * 切换到候选列表中的另一个 MV（MTV 页面用户手动切换）。
      * 按需解析 bvid 直链，旧 MV 变为候选。
      */
-    fun switchMv(bvid: String) {
+    /**
+     * MTV 页面「切换」按钮统一入口：
+     * - 无候选 -> 直接重搜（排除当前 bvid）
+     * - 有候选，已切换 2 轮 -> 重搜（排除所有已展示 bvid）
+     * - 有候选，未满 2 轮 -> 切换到下一个候选
+     * - 重搜次数已达上限（2 次）-> 提示"未找到更多视频"
+     */
+    fun onSwitchOrResearch() {
         val ready = _mvState.value as? MvAvailability.Ready ?: return
-        if (ready.mv.bvid == bvid) return
-        viewModelScope.launch {
-            AppLog.d("NASMusic", "switchMv: resolving bvid=$bvid")
-            val newMv = mvSearchManager.resolveMv(bvid) ?: run {
-                AppLog.w("NASMusic", "switchMv: resolve failed for bvid=$bvid")
-                return@launch
-            }
-            val oldCandidate = MvCandidate(ready.mv.bvid, ready.mv.title, ready.mv.coverUrl)
-            val newAlternatives = ready.alternatives.filter { it.bvid != bvid } + oldCandidate
-            _mvState.value = MvAvailability.Ready(newMv, newAlternatives)
-            AppLog.d("NASMusic", "switchMv: switched to '${newMv.title}'")
+        val totalVideos = 1 + ready.alternatives.size
+
+        if (ready.alternatives.isEmpty()) {
+            if (mvResearchCount >= 2) { showMvMessage("未找到更多视频"); return }
+            researchMv(ready)
+            return
+        }
+
+        mvSwitchCount++
+        if (mvSwitchCount > 2 * totalVideos) {
+            if (mvResearchCount >= 2) { showMvMessage("未找到更多视频"); return }
+            researchMv(ready)
+        } else {
+            switchToNextCandidate(ready)
         }
     }
 
-    /**
-     * MTV 页面"切换"按钮在无候选视频时触发：绕过缓存重新搜索 B站 API，看能否找到更多结果。
-     */
-    fun onResearchMv() {
+    /** 切换到候选列表中的下一个视频 */
+    private fun switchToNextCandidate(ready: MvAvailability.Ready) {
+        val targetBvid = ready.alternatives.firstOrNull()?.bvid ?: return
+        viewModelScope.launch {
+            AppLog.d("NASMusic", "switchToNextCandidate: bvid=$targetBvid")
+            val newMv = mvSearchManager.resolveMv(targetBvid)
+            if (newMv == null) {
+                AppLog.w("NASMusic", "switchToNextCandidate: resolve failed")
+                showMvMessage("切换失败，请重试")
+                mvSwitchCount-- // 切换未成功，回退计数
+                return@launch
+            }
+            val oldCandidate = MvCandidate(ready.mv.bvid, ready.mv.title, ready.mv.coverUrl)
+            val newAlternatives = ready.alternatives.filter { it.bvid != targetBvid } + oldCandidate
+            _mvState.value = MvAvailability.Ready(newMv, newAlternatives)
+            AppLog.d("NASMusic", "switchToNextCandidate: switched to '${newMv.title}'")
+        }
+    }
+
+    /** 重搜：排除已展示 bvid + 降低相似度阈值，后台搜索不打断当前播放 */
+    private fun researchMv(ready: MvAvailability.Ready) {
         val song = currentSong.value ?: return
-        AppLog.d("NASMusic", "onResearchMv: force refresh for '${song.title}'")
-        _mvState.value = MvAvailability.Searching
+        mvExcludedBvids.add(ready.mv.bvid)
+        ready.alternatives.forEach { mvExcludedBvids.add(it.bvid) }
+        mvResearchCount++
+        val minSim = when (mvResearchCount) { 1 -> 0.3f; 2 -> 0.1f; else -> 0f }
+        AppLog.d("NASMusic", "researchMv: #${mvResearchCount} exclude=${mvExcludedBvids.size} minSim=$minSim")
+        showMvMessage("正在搜索更多视频...")
         mvSearchJob?.cancel()
         mvSearchJob = viewModelScope.launch {
             val result = try {
-                mvSearchManager.searchMvFor(song, forceRefresh = true)
+                mvSearchManager.searchMvFor(song, forceRefresh = true, excludeBvids = mvExcludedBvids.toSet(), minSimilarity = minSim)
             } catch (e: Exception) {
-                AppLog.e("NASMusic", "onResearchMv failed", e)
+                AppLog.e("NASMusic", "researchMv failed", e)
                 null
             }
-            _mvState.value = if (result != null) MvAvailability.Ready(result.mv, result.alternatives) else MvAvailability.NotFound
-            AppLog.d("NASMusic", "onResearchMv: '${song.title}' -> ${if (result != null) "found ${result.mv.title} + ${result.alternatives.size} alts" else "not found"}")
-            if (result != null && _showMv.value) preSearchNextMv()
+            if (result != null) {
+                mvSwitchCount = 0
+                _mvState.value = MvAvailability.Ready(result.mv, result.alternatives)
+                showMvMessage("找到 ${1 + result.alternatives.size} 个新视频")
+                if (_showMv.value) preSearchNextMv()
+            } else {
+                mvResearchCount--
+                showMvMessage("未找到更多视频")
+            }
+        }
+    }
+
+    private var mvMessageJob: Job? = null
+    private fun showMvMessage(msg: String) {
+        mvMessageJob?.cancel()
+        _mvMessage.value = msg
+        mvMessageJob = viewModelScope.launch {
+            delay(2000)
+            _mvMessage.value = null
         }
     }
 

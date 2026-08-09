@@ -140,4 +140,31 @@ class BilibiliMvServiceTest {
         """.trimIndent()
         assertEquals("https://example.com/valid.mp4", service.extractPlayUrl(body))
     }
+
+    @Test
+    fun `parseCandidates 排除指定 bvid`() {
+        val body = """
+            {"code":0,"data":{"result":[
+                {"type":"video","bvid":"BV1aaa","title":"晴天 周杰伦"},
+                {"type":"video","bvid":"BV2bbb","title":"晴天 cover 版本"}
+            ]}}
+        """.trimIndent()
+        val candidates = service.parseCandidatesFromSearch(body, "晴天 周杰伦", excludeBvids = setOf("BV1aaa"))
+        assertEquals(1, candidates?.size)
+        assertEquals("BV2bbb", candidates!![0].bvid)
+    }
+
+    @Test
+    fun `parseCandidates 降低相似度阈值返回更多结果`() {
+        val body = """
+            {"code":0,"data":{"result":[
+                {"type":"video","bvid":"BV1aaa","title":"晴天 周杰伦"},
+                {"type":"video","bvid":"BV2bbb","title":"abc def ghi"}
+            ]}}
+        """.trimIndent()
+        // 默认阈值 0.5 -> 只有 BV1aaa 通过
+        assertEquals(1, service.parseCandidatesFromSearch(body, "晴天 周杰伦")?.size)
+        // 降低阈值到 0.1 -> BV2bbb 也通过
+        assertEquals(2, service.parseCandidatesFromSearch(body, "晴天 周杰伦", minSimilarity = 0.1f)?.size)
+    }
 }

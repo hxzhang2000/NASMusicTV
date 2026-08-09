@@ -25,9 +25,16 @@ interface MvSearchService {
      *
      * @param title  歌曲标题
      * @param artist 艺术家名（可为空）
+     * @param excludeBvids 需排除的 bvid 集合（重搜时排除已展示的结果）
+     * @param minSimilarity 标题相似度阈值（首次搜索 0.5，重搜可降低以获取更多结果）
      * @return 搜索结果（最佳匹配已解析直链 + 候选列表）；null 表示未找到或获取失败
      */
-    suspend fun searchMv(title: String, artist: String): MvSearchResult?
+    suspend fun searchMv(
+        title: String,
+        artist: String,
+        excludeBvids: Set<String> = emptySet(),
+        minSimilarity: Float = 0.5f
+    ): MvSearchResult?
 
     /**
      * 按需解析指定 bvid 的直链（MTV 页面切换视频时调用）。

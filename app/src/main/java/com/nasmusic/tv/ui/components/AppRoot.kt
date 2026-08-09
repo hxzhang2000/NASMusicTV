@@ -275,10 +275,10 @@ fun AppRoot(
                             onExit = { viewModel.exitMvMode() },
                             onPlaybackError = { viewModel.onMvPlaybackError() },
                             onPlaybackEnded = { viewModel.onMvPlaybackEnded() },
-                            onSwitchMv = { viewModel.switchMv(it) },
+                            onSwitchOrResearch = { viewModel.onSwitchOrResearch() },
                             onPreviousMv = { viewModel.onMvPrevious() },
                             onNextMv = { viewModel.onMvNext() },
-                            onResearchMv = { viewModel.onResearchMv() }
+                            mvMessage = viewModel.mvMessage.collectAsState().value
                         )
                     } else {
                         NowPlayingScreen(

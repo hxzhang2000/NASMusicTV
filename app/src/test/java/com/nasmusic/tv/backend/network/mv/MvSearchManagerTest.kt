@@ -38,10 +38,18 @@ class MvSearchManagerTest {
         var callCount = 0; private set
         var lastTitle: String? = null; private set
         var lastArtist: String? = null; private set
+        var lastExcludeBvids: Set<String>? = null; private set
+        var lastMinSimilarity: Float? = null; private set
         var resolveCallCount = 0; private set
 
-        override suspend fun searchMv(title: String, artist: String): MvSearchResult? {
+        override suspend fun searchMv(
+            title: String,
+            artist: String,
+            excludeBvids: Set<String>,
+            minSimilarity: Float
+        ): MvSearchResult? {
             callCount++; lastTitle = title; lastArtist = artist
+            lastExcludeBvids = excludeBvids; lastMinSimilarity = minSimilarity
             error?.let { throw it }
             return result
         }
@@ -149,5 +157,14 @@ class MvSearchManagerTest {
         val svc = FakeMvService("svc", result = mvResult(bvid = "BV1"))
         val manager = MvSearchManager(listOf(svc))
         assertNull(manager.resolveMv("BV999"))
+    }
+
+    @Test
+    fun `searchMvFor 传递 excludeBvids 和 minSimilarity 到服务`() = runTest {
+        val svc = FakeMvService("svc", result = mvResult(bvid = "BV1"))
+        val manager = MvSearchManager(listOf(svc))
+        manager.searchMvFor(song(), excludeBvids = setOf("BV0"), minSimilarity = 0.3f)
+        assertEquals(setOf("BV0"), svc.lastExcludeBvids)
+        assertEquals(0.3f, svc.lastMinSimilarity)
     }
 }

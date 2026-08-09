@@ -34,7 +34,12 @@ class MvSearchManager(
      *
      * @return 匹配到的 MV；null 表示未找到或全部源失败（UI 置暗）
      */
-    suspend fun searchMvFor(song: Song, forceRefresh: Boolean = false): MvSearchResult? {
+    suspend fun searchMvFor(
+        song: Song,
+        forceRefresh: Boolean = false,
+        excludeBvids: Set<String> = emptySet(),
+        minSimilarity: Float = 0.5f
+    ): MvSearchResult? {
         val key = buildCacheKey(song.title, song.artist)
         // 清理过期条目
         val now = System.currentTimeMillis()
@@ -67,7 +72,7 @@ class MvSearchManager(
             for (svc in services) {
                 try {
                     AppLog.d(TAG, "searchMvFor: trying service ${svc::class.java.simpleName} for '$key'")
-                    val result = svc.searchMv(song.title, song.artist)
+                    val result = svc.searchMv(song.title, song.artist, excludeBvids, minSimilarity)
                     if (result != null) {
                         cache[key] = CachedResult(result, now)
                         // 存 bvid 到持久缓存（不存直链，直链会过期）
@@ -95,6 +100,15 @@ class MvSearchManager(
      */
     fun markCompleted(songId: String, songTitle: String, songArtist: String, bvid: String, mvTitle: String) {
         persistentCache?.markCompleted(songId, songTitle, songArtist, bvid, mvTitle)
+    }
+
+    /** 导出 MV 缓存（供备份用） */
+    fun exportMvCache(): List<com.nasmusic.tv.data.model.MvCacheEntry> =
+        persistentCache?.exportAll() ?: emptyList()
+
+    /** 导入 MV 缓存（恢复备份用） */
+    fun importMvCache(entries: List<com.nasmusic.tv.data.model.MvCacheEntry>) {
+        persistentCache?.importAll(entries)
     }
 
     /**

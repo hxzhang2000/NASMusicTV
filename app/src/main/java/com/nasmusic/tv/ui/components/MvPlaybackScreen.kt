@@ -83,10 +83,10 @@ fun MvPlaybackScreen(
     onExit: () -> Unit,
     onPlaybackError: () -> Unit = {},
     onPlaybackEnded: () -> Unit = {},
-    onSwitchMv: (bvid: String) -> Unit = {},
+    onSwitchOrResearch: () -> Unit = {},
     onPreviousMv: () -> Unit = {},
     onNextMv: () -> Unit = {},
-    onResearchMv: () -> Unit = {},
+    mvMessage: String? = null,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -252,6 +252,20 @@ fun MvPlaybackScreen(
             }
         }
 
+        // ── 短暂提示（切换失败/搜索结果等，顶部居中 2 秒）──
+        if (mvMessage != null) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .padding(top = 40.dp)
+                    .alpha(controlsAlpha)
+                    .background(Color(0x99000000), RoundedCornerShape(12.dp))
+                    .padding(horizontal = 28.dp, vertical = 14.dp)
+            ) {
+                Text(text = mvMessage, fontSize = 18.sp, color = Color.White)
+            }
+        }
+
         // ── 底部内容：控制条 + 进度细线（5 秒无操作虚化，焦点/操作时显化）──
         Column(
             modifier = Modifier
@@ -306,14 +320,7 @@ fun MvPlaybackScreen(
                     Spacer(Modifier.width(20.dp))
                     VocalToggleButton(
                         label = "切换",
-                        onClick = {
-                            activateControls()
-                            if (alternatives.isNotEmpty()) {
-                                alternatives.firstOrNull()?.let { onSwitchMv(it.bvid) }
-                            } else {
-                                onResearchMv()
-                            }
-                        }
+                        onClick = { activateControls(); onSwitchOrResearch() }
                     )
                 }
             }

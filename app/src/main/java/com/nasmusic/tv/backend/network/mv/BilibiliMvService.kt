@@ -77,16 +77,21 @@ class BilibiliMvService(
             .trim()
             .trimEnd('/')
 
-    override suspend fun searchMv(title: String, artist: String): MvSearchResult? = withContext(Dispatchers.IO) {
+    override suspend fun searchMv(
+        title: String,
+        artist: String,
+        excludeBvids: Set<String>,
+        minSimilarity: Float
+    ): MvSearchResult? = withContext(Dispatchers.IO) {
         try {
             val keyword = buildKeyword(title, artist)
             if (keyword.isBlank()) {
                 AppLog.w(TAG, "searchMv: empty keyword")
                 return@withContext null
             }
-            AppLog.d(TAG, "searchMv: keyword='$keyword'")
+            AppLog.d(TAG, "searchMv: keyword='$keyword' exclude=${excludeBvids.size} minSim=$minSimilarity")
 
-            val candidates = searchCandidates(keyword)
+            val candidates = searchCandidates(keyword, excludeBvids, minSimilarity)
             if (candidates.isEmpty()) {
                 AppLog.w(TAG, "searchMv: no candidates for '$keyword'")
                 return@withContext null
@@ -144,20 +149,25 @@ class BilibiliMvService(
      * Step 1 - 搜索：先试 wbi 搜索接口，失败（风控 412/异常）回退非 wbi 变体。
      * 返回按相似度排序的候选列表（含 bvid / 标题 / 封面）。
      */
-    private fun searchCandidates(keyword: String): List<MvCandidate> {
+    private fun searchCandidates(keyword: String, excludeBvids: Set<String>, minSimilarity: Float): List<MvCandidate> {
         val query = "search_type=video&keyword=${URLEncoder.encode(keyword, "UTF-8")}"
         val wbiBody = execGet("$baseUrl/x/web-interface/wbi/search/type?$query")
-        wbiBody?.let { parseCandidatesFromSearch(it, keyword)?.let { return it } }
+        wbiBody?.let { parseCandidatesFromSearch(it, keyword, excludeBvids, minSimilarity)?.let { return it } }
         // 回退：非 wbi 变体
         val legacyBody = execGet("$baseUrl/x/web-interface/search/type?$query")
-        return legacyBody?.let { parseCandidatesFromSearch(it, keyword) } ?: emptyList()
+        return legacyBody?.let { parseCandidatesFromSearch(it, keyword, excludeBvids, minSimilarity) } ?: emptyList()
     }
 
     /**
      * 解析搜索结果：返回按相似度排序的候选列表（≥ 阈值），含 bvid / 标题 / 封面。
      * null 表示接口异常；空列表表示正常但无匹配。
      */
-    internal fun parseCandidatesFromSearch(body: String, keyword: String): List<MvCandidate>? {
+    internal fun parseCandidatesFromSearch(
+        body: String,
+        keyword: String,
+        excludeBvids: Set<String> = emptySet(),
+        minSimilarity: Float = MIN_SIMILARITY
+    ): List<MvCandidate>? {
         try {
             val json = gson.fromJson(body, JsonObject::class.java) ?: return null
             if (json.get("code")?.asInt != 0) {
@@ -169,18 +179,20 @@ class BilibiliMvService(
             val scored = mutableListOf<ScoredCandidate>()
             for (item in resultArr) {
                 val obj = item?.asJsonObject ?: continue
-                // 仅保留 video 类型（过滤掉 upuser/bili_user 等混杂结果）
                 if (obj.get("type")?.asString != "video") continue
                 val bvid = obj.get("bvid")?.asString ?: continue
+                if (bvid in excludeBvids) continue // 排除已展示的
                 val title = stripHtml(obj.get("title")?.asString ?: "")
                 val pic = obj.get("pic")?.asString?.let { if (it.startsWith("//")) "https:$it" else it }
                 val score = similarity(title, keyword)
-                if (score >= MIN_SIMILARITY) {
+                if (score >= minSimilarity) {
                     scored.add(ScoredCandidate(MvCandidate(bvid, title, pic), score))
                 }
             }
-            AppLog.d(TAG, "search: ${scored.size} candidates for '$keyword'")
-            return scored.sortedByDescending { it.score }.map { it.candidate }
+            val sorted = scored.sortedByDescending { it.score }.map { it.candidate }
+            val limited = sorted.take(MAX_CANDIDATES)
+            AppLog.d(TAG, "search: ${scored.size} matched (excluded ${excludeBvids.size}), returning ${limited.size}")
+            return limited
         } catch (e: Exception) {
             AppLog.w(TAG, "search parse failed: ${e.message}", e)
             return null
@@ -343,5 +355,8 @@ class BilibiliMvService(
 
         /** 标题相似度最低阈值（低于则视为无匹配） */
         private const val MIN_SIMILARITY = 0.5f
+
+        /** 候选列表上限（按相似度取前 N 条，避免切换轮次过长） */
+        private const val MAX_CANDIDATES = 5
     }
 }
