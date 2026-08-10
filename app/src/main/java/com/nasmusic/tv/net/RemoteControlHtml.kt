@@ -123,6 +123,9 @@ function fmtDuration(ms) {
 
 // 获取队列
 function fetchQueue() {
+  // 触摸/拖拽期间跳过渲染：5s 轮询若重建队列 DOM，被拖拽元素会变成游离节点，
+  // 导致长按拖拽中（未松手）移动状态失效或激活失败
+  if (dragState) return;
   fetch(BASE + '/api/queue')
     .then(r => r.json())
     .then(data => {
@@ -312,6 +315,7 @@ function onTouchEnd(e) {
 
 document.addEventListener('touchmove', onTouchMove, { passive: false });
 document.addEventListener('touchend', onTouchEnd);
+document.addEventListener('touchcancel', onTouchEnd);
 
 // 启动轮询
 fetchQueue();
