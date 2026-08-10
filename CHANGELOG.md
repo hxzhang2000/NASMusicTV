@@ -7,6 +7,21 @@
 >
 > 类型：`Added`（新增） | `Changed`（变更） | `Fixed`（修复） | `Removed`（移除）
 
+## [v2.17.1] - 2026-08-10
+
+### Added
+
+- **遥控页队列删除**：`RemoteControlHtml` 队列行新增 ✕ 删除按钮 + `removeItem(index)`，遥控服务器新增 `/api/queue/remove` 路由（`handleRemove` -> `RemoteCallbacks.removeFromQueue` -> `MainViewModel.removeFromQueue` -> `PlayerManager.removeFromQueue`），与 TV 端队列页删除语义一致
+
+### Changed
+
+- **遥控 URL 去除 token**：家庭局域网场景下省去扫码后手动输入 token 的操作，URL 简化为 `http://<ip>:18082`（`RemoteControlServer` 删除 `sessionToken` 校验与 URL 拼接；`RemoteControlHtml` 删除 `TOKEN` 变量及全部 `?token=` 拼接）——家庭局域网信任环境，风险可接受
+- **遥控页移除播放按钮**：队列条目点击本身即播放，冗余的 `play-btn` 按钮行与样式删除，页面更简洁
+
+### Fixed
+
+- **K歌页二维码被覆盖不显示**：`KaraokePlaybackScreen` 的二维码 `Image` 加 `.zIndex(10f)`（补 `import androidx.compose.ui.zIndex`）。根因：Compose Box 中后声明元素绘制在上层，K歌页二维码先声明、被后声明的全屏背景 + 暗色遮罩覆盖；MTV 页二维码因在 Box 末尾声明正常
+
 ## [v2.17.0] - 2026-08-10
 
 ### Added

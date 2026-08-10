@@ -5453,3 +5453,30 @@ v2.6.0 天气电台功能使用 Open-Meteo（无需 API Key）作为主要天气
 
 - 遥控服务器仅 K歌/MTV 模式需要；按需启动避免 App 常驻额外端口/线程，降低 TV 资源受限设备上的 WiFi/ADB 不稳定风险
 - 版本号由 v2.16.0 -> v2.17.0（versionCode 49 -> 50）
+
+### 10.51 v2.17.1 - 遥控页去 token + 队列删除 + 移除播放按钮 + K歌二维码修复
+
+**功能描述**：
+
+1. **遥控 URL 去除 token**：家庭局域网信任环境，扫码即可直接进入遥控页，无需手动输入 token（`RemoteControlServer` 删除 `sessionToken` 生成/校验与 URL `#token` 拼接；`RemoteControlHtml` 删除 `TOKEN` 变量及全部 `?token=` 拼接）
+2. **遥控页队列删除**：队列行新增 ✕ 删除按钮，新增 `/api/queue/remove` 路由，走 `MainViewModel.removeFromQueue` -> `PlayerManager.removeFromQueue`，与 TV 端队列页删除语义一致
+3. **移除播放按钮**：队列条目点击即播放，冗余 `play-btn` 删除，页面更简洁
+4. **K歌页二维码修复**：二维码 `Image` 加 `.zIndex(10f)`——K歌页二维码在 Box 中先声明，被后声明的全屏背景 + 暗色遮罩绘制在上层覆盖；MTV 页二维码因声明顺序靠后一直正常
+
+**主要变更**：
+
+1. **`ui/components/KaraokePlaybackScreen.kt`**：二维码 `Image` 加 `.zIndex(10f)` + `import androidx.compose.ui.zIndex`
+2. **`net/RemoteControlServer.kt`**：删除 token 校验/拼接；新增 `/api/queue/remove` 路由 + `handleRemove`（读 `index`）；`RemoteCallbacks` 增 `removeFromQueue`
+3. **`net/RemoteControlHtml.kt`**：删除 `TOKEN` 与播放按钮；新增 `removeItem(index)` + `del-btn`；文件头注释同步更新
+4. **`ui/viewmodel/MainViewModel.kt`**：`RemoteCallbacks` 实现加 `override fun removeFromQueue(index)`
+
+#### 验证结果
+
+- ✅ `:app:compileDebugKotlin` BUILD SUCCESSFUL（exit 0，2 个既有 warning 与本次无关）
+- ✅ 电脑访问 `http://127.0.0.1:18082/` HTTP 200（页面 12.4KB）；模拟器 logcat 确认新 URL 无 token（`url=http://10.0.2.15:18082`）
+- ✅ 模拟器安装验证：遥控页点击播放、✕ 删除、无播放按钮、K歌二维码正常显示（用户确认）
+
+#### 注意事项
+
+- 去除 token 仅适用于家庭局域网信任场景；`LocalInputServer`(18080)/`BackupTransferServer`(18081) 为纯事件驱动短连接、无轮询无 token，不改
+- 版本号由 v2.17.0 -> v2.17.1（versionCode 50 -> 51）
