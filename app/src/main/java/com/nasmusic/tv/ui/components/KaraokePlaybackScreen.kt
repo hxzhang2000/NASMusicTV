@@ -48,6 +48,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.zIndex
 import androidx.tv.material3.ClickableSurfaceDefaults
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Icon
@@ -119,6 +120,8 @@ fun KaraokePlaybackScreen(
                 contentDescription = "扫码遥控",
                 modifier = Modifier
                     .align(Alignment.TopEnd)
+                    // 必须先于同 Box 中后声明的全屏背景/遮罩绘制，否则会被盖住
+                    .zIndex(10f)
                     .padding(24.dp)
                     .size(80.dp)
                     .alpha(if (controlsVisible) 1f else 0f)
