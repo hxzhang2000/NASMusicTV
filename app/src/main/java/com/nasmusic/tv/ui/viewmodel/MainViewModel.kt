@@ -2927,7 +2927,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
 
     fun addSongToQueue(song: Song) = playerManager.addToQueue(song)
 
-    fun removeFromQueue(index: Int) = playerManager.removeFromQueue(index)
+    override fun removeFromQueue(index: Int) = playerManager.removeFromQueue(index)
 
     /**
      * 切换歌曲在队列中的状态：不在队列则加入，在队列则移除。

@@ -3,8 +3,8 @@ package com.nasmusic.tv.net
 /**
  * 手机遥控控制页 HTML（单文件内嵌，零外部依赖）
  *
- * 功能：播放队列（当前歌曲高亮 + 点击播放 + 上下移排序）、
- *       搜索（NAS + 网络并发，分组显示，加入队列）、3 秒轮询。
+ * 功能：播放队列（当前歌曲高亮 + 点击条目播放 + 上下移排序 + 删除）、
+ *       搜索（NAS + 网络并发，分组显示，加入队列）、5 秒轮询。
  */
 internal val CONTROL_PAGE_HTML = """
 <!DOCTYPE html>
@@ -40,7 +40,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;b
 .queue-item.dragging{opacity:.5;z-index:100;box-shadow:0 4px 12px rgba(0,0,0,.4);transition:none}
 .queue-item.drop-target{border:2px solid #2DD4BF!important}
 .queue-item .info{cursor:pointer}
-.queue-item .actions button.play-btn{background:#2DD4BF;color:#000}
+.queue-item .actions button.del-btn{background:#3a1620;color:#e94560}
 .empty{text-align:center;color:#666;padding:40px 20px;font-size:14px}
 /* 搜索 */
 .search-bar{display:flex;gap:8px;margin-bottom:16px}
@@ -93,7 +93,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;b
 <div class="toast" id="toast"></div>
 
 <script>
-const TOKEN = location.hash.slice(1);
 const BASE = location.origin;
 var queueData = null;
 
@@ -124,7 +123,7 @@ function fmtDuration(ms) {
 
 // 获取队列
 function fetchQueue() {
-  fetch(BASE + '/api/queue?token=' + TOKEN)
+  fetch(BASE + '/api/queue')
     .then(r => r.json())
     .then(data => {
       queueData = data;
@@ -163,9 +162,9 @@ function renderQueue(data) {
     html += '<div class="info" onclick="if(!dragMoved)playAt(' + i + ')"><div class="title">' + song.title + netBadge + '</div>';
     html += '<div class="artist">' + song.artist + (dur ? ' · ' + dur : '') + '</div></div>';
     html += '<div class="actions">';
-    if (!isCurrent) html += '<button class="play-btn" onclick="playAt(' + i + ')" title="播放">▶</button>';
     if (i > 0) html += '<button onclick="moveItem(' + i + ',' + (i-1) + ')" title="上移">↑</button>';
     if (i < data.songs.length - 1) html += '<button onclick="moveItem(' + i + ',' + (i+1) + ')" title="下移">↓</button>';
+    html += '<button class="del-btn" onclick="removeItem(' + i + ')" title="删除">✕</button>';
     html += '</div></div>';
   });
   list.innerHTML = html;
@@ -173,7 +172,7 @@ function renderQueue(data) {
 
 // 播放指定歌曲
 function playAt(index) {
-  fetch(BASE + '/api/queue/play?token=' + TOKEN, {
+  fetch(BASE + '/api/queue/play', {
     method: 'POST',
     body: JSON.stringify({index: index})
   }).then(r => r.json()).then(d => {
@@ -183,7 +182,7 @@ function playAt(index) {
 
 // 移动队列顺序
 function moveItem(from, to) {
-  fetch(BASE + '/api/queue/move?token=' + TOKEN, {
+  fetch(BASE + '/api/queue/move', {
     method: 'POST',
     body: JSON.stringify({from: from, to: to})
   }).then(r => r.json()).then(d => {
@@ -197,7 +196,7 @@ function doSearch() {
   if (!q) return;
   var results = document.getElementById('search-results');
   results.innerHTML = '<div class="loading">搜索中...</div>';
-  fetch(BASE + '/api/search?q=' + encodeURIComponent(q) + '&token=' + TOKEN)
+  fetch(BASE + '/api/search?q=' + encodeURIComponent(q))
     .then(r => r.json())
     .then(data => {
       var html = '';
@@ -238,11 +237,21 @@ function renderSearchItem(song) {
 
 // 加入队列
 function addToQueue(song) {
-  fetch(BASE + '/api/queue/add?token=' + TOKEN, {
+  fetch(BASE + '/api/queue/add', {
     method: 'POST',
     body: JSON.stringify({song: song})
   }).then(r => r.json()).then(d => {
     if (d.ok) showToast('已加入队列');
+  });
+}
+
+// 从队列删除歌曲
+function removeItem(index) {
+  fetch(BASE + '/api/queue/remove', {
+    method: 'POST',
+    body: JSON.stringify({index: index})
+  }).then(r => r.json()).then(d => {
+    if (d.ok) { showToast('已删除'); setTimeout(fetchQueue, 300); }
   });
 }
 

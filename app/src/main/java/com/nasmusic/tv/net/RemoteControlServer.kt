@@ -14,7 +14,7 @@ import kotlinx.coroutines.runBlocking
  * 在 TV 上启动轻量 HTTP server，手机扫码后浏览器打开控制页，
  * 可查看/调整播放队列、搜索歌曲加入队列。
  *
- * 端口 [DEFAULT_PORT]，token 随服务器启动随机生成，二维码 URL 含 token。
+ * 端口 [DEFAULT_PORT]，URL 固定。
  * 生命周期：按需启动（进入 K 歌/MTV 模式时由 MainViewModel 调用），App 退出时停止。
  * 不再 App 启动常驻，避免 TV 资源受限设备上的无谓常驻开销。
  */
@@ -28,23 +28,21 @@ class RemoteControlServer(
     }
 
     private var server: Impl? = null
-    private var sessionToken: String = ""
     private var serverUrl: String? = null
 
     /**
      * 启动服务器
      * @param callbacks 操作回调（由 MainViewModel 实现）
-     * @return 服务器 URL（含 token），用于生成二维码；null 启动失败
+     * @return 服务器 URL，用于生成二维码；null 启动失败
      */
     fun start(callbacks: RemoteCallbacks): String? {
         if (server != null) return serverUrl
-        sessionToken = java.util.UUID.randomUUID().toString().take(8)
-        val impl = Impl(port, sessionToken, callbacks)
+        val impl = Impl(port, callbacks)
         return try {
             impl.start(30000, false) // 30 秒超时（默认 5 秒在 WiFi 环境下偏短）
             server = impl
             val ip = NetworkUtils.getLocalIpAddress()
-            serverUrl = if (ip != null) "http://$ip:$port/#$sessionToken" else null
+            serverUrl = if (ip != null) "http://$ip:$port" else null
             AppLog.i(TAG, "Started on port $port, url=$serverUrl")
             serverUrl
         } catch (e: Exception) {
@@ -72,7 +70,6 @@ class RemoteControlServer(
 
     private class Impl(
         port: Int,
-        private val token: String,
         private val callbacks: RemoteCallbacks
     ) : NanoHTTPD(port) {
 
@@ -83,18 +80,12 @@ class RemoteControlServer(
             val method = session.method
             val params = session.parameters
 
-            // 校验 token（HTML 首页不校验，从 URL hash 中提取）
-            val reqToken = params["token"]?.firstOrNull()
-            val isHtmlPage = uri == "/" && method == Method.GET
-            if (!isHtmlPage && reqToken != token) {
-                return jsonError(Response.Status.FORBIDDEN, "invalid token")
-            }
-
             val response = when {
                 uri == "/" && method == Method.GET -> serveControlPage()
                 uri == "/api/queue" && method == Method.GET -> handleGetQueue()
                 uri == "/api/queue/play" && method == Method.POST -> handlePlay(session)
                 uri == "/api/queue/move" && method == Method.POST -> handleMove(session)
+                uri == "/api/queue/remove" && method == Method.POST -> handleRemove(session)
                 uri == "/api/queue/add" && method == Method.POST -> handleAdd(session)
                 uri == "/api/search" && method == Method.GET -> handleSearch(params)
                 uri == "/api/status" && method == Method.GET -> handleStatus()
@@ -136,6 +127,13 @@ class RemoteControlServer(
             val from = body.get("from")?.asInt ?: return jsonError(Response.Status.BAD_REQUEST, "missing from")
             val to = body.get("to")?.asInt ?: return jsonError(Response.Status.BAD_REQUEST, "missing to")
             callbacks.moveQueueItem(from, to)
+            return jsonOk()
+        }
+
+        private fun handleRemove(session: IHTTPSession): Response {
+            val body = parseJsonBody(session) ?: return jsonError(Response.Status.BAD_REQUEST, "bad body")
+            val index = body.get("index")?.asInt ?: return jsonError(Response.Status.BAD_REQUEST, "missing index")
+            callbacks.removeFromQueue(index)
             return jsonOk()
         }
 
@@ -220,6 +218,7 @@ interface RemoteCallbacks {
     fun getDurationMs(): Long
     fun playAt(index: Int)
     fun moveQueueItem(from: Int, to: Int)
+    fun removeFromQueue(index: Int)
     fun addToQueue(song: Song)
     suspend fun search(keyword: String): RemoteSearchResult
 }
