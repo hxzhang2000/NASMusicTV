@@ -21,6 +21,7 @@
 ### Fixed
 
 - **K歌页二维码被覆盖不显示**：`KaraokePlaybackScreen` 的二维码 `Image` 加 `.zIndex(10f)`（补 `import androidx.compose.ui.zIndex`）。根因：Compose Box 中后声明元素绘制在上层，K歌页二维码先声明、被后声明的全屏背景 + 暗色遮罩覆盖；MTV 页二维码因在 Box 末尾声明正常
+- **遥控页长按拖拽超时失效**：`fetchQueue` 增加 `if (dragState) return;` 守卫 + 补 `touchcancel` 监听（复用 `onTouchEnd` 清理状态）。根因：队列每 5 秒轮询 `renderQueue` 会用 `innerHTML` 整表重建 DOM，长按激活拖拽后若按住超过一个轮询周期，被拖拽元素变成游离节点，移动状态在没有松手的情况下失效；守卫保证触摸/拖拽期间不重建队列 DOM，松手后轮询自动恢复
 
 ## [v2.17.0] - 2026-08-10
 

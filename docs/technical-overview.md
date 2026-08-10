@@ -5462,12 +5462,13 @@ v2.6.0 天气电台功能使用 Open-Meteo（无需 API Key）作为主要天气
 2. **遥控页队列删除**：队列行新增 ✕ 删除按钮，新增 `/api/queue/remove` 路由，走 `MainViewModel.removeFromQueue` -> `PlayerManager.removeFromQueue`，与 TV 端队列页删除语义一致
 3. **移除播放按钮**：队列条目点击即播放，冗余 `play-btn` 删除，页面更简洁
 4. **K歌页二维码修复**：二维码 `Image` 加 `.zIndex(10f)`——K歌页二维码在 Box 中先声明，被后声明的全屏背景 + 暗色遮罩绘制在上层覆盖；MTV 页二维码因声明顺序靠后一直正常
+5. **遥控页长按拖拽超时失效修复**：`fetchQueue` 加 `if (dragState) return;` 守卫 + 补 `touchcancel` 监听（复用 `onTouchEnd` 清理 `dragState`）。根因与细节：遥控页队列每 5 秒轮询 `renderQueue` 用 `innerHTML` 整表重建 DOM；长按 500ms 激活拖拽后，若按住超过一个轮询周期（5s），`list.innerHTML` 重绘使被拖拽元素 `dragState.item` 脱离文档成为游离节点，`onTouchMove` 的 `style.transform` 落空、`dragging` 样式消失——未松手移动状态即失效。守卫保证任何触摸/拖拽期间不重建队列 DOM（覆盖激活前 500ms 窗口期与激活后全程），松手后 `dragState = null` 下一轮轮询自动恢复；`touchcancel` 防止系统打断触摸（如来电）时 `dragState` 残留导致守卫永久跳过轮询
 
 **主要变更**：
 
 1. **`ui/components/KaraokePlaybackScreen.kt`**：二维码 `Image` 加 `.zIndex(10f)` + `import androidx.compose.ui.zIndex`
 2. **`net/RemoteControlServer.kt`**：删除 token 校验/拼接；新增 `/api/queue/remove` 路由 + `handleRemove`（读 `index`）；`RemoteCallbacks` 增 `removeFromQueue`
-3. **`net/RemoteControlHtml.kt`**：删除 `TOKEN` 与播放按钮；新增 `removeItem(index)` + `del-btn`；文件头注释同步更新
+3. **`net/RemoteControlHtml.kt`**：删除 `TOKEN` 与播放按钮；新增 `removeItem(index)` + `del-btn`；文件头注释同步更新；`fetchQueue` 拖拽守卫 + `touchcancel` 监听
 4. **`ui/viewmodel/MainViewModel.kt`**：`RemoteCallbacks` 实现加 `override fun removeFromQueue(index)`
 
 #### 验证结果
@@ -5475,6 +5476,7 @@ v2.6.0 天气电台功能使用 Open-Meteo（无需 API Key）作为主要天气
 - ✅ `:app:compileDebugKotlin` BUILD SUCCESSFUL（exit 0，2 个既有 warning 与本次无关）
 - ✅ 电脑访问 `http://127.0.0.1:18082/` HTTP 200（页面 12.4KB）；模拟器 logcat 确认新 URL 无 token（`url=http://10.0.2.15:18082`）
 - ✅ 模拟器安装验证：遥控页点击播放、✕ 删除、无播放按钮、K歌二维码正常显示（用户确认）
+- ✅ 拖拽守卫行为验证：node 模拟 3 场景（空闲 1 请求/1 渲染 / 拖拽中 0 新请求/0 渲染 / 松手后恢复 2 请求/1 渲染）；提取 HTML 内嵌 JS 过 `node --check` 语法检查
 
 #### 注意事项
 
