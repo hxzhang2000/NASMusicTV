@@ -1,4 +1,4 @@
-﻿# NAS Music TV — 技术架构概述
+# NAS Music TV — 技术架构概述
 
 > 版本：v2.8.1
 > 最后更新：2026-07-26
@@ -5482,3 +5482,50 @@ v2.6.0 天气电台功能使用 Open-Meteo（无需 API Key）作为主要天气
 
 - 去除 token 仅适用于家庭局域网信任场景；`LocalInputServer`(18080)/`BackupTransferServer`(18081) 为纯事件驱动短连接、无轮询无 token，不改
 - 版本号由 v2.17.0 -> v2.17.1（versionCode 50 -> 51）
+
+---
+
+### 10.52 v2.17.2 - 网络/播放稳定性修复（WiFi 掉线根因修复）
+
+**功能描述**：
+
+本次版本聚焦修复电视 WiFi 频繁掉线问题，并修复一批网络层与播放层的次要问题。通过用户提供的 34MB logcat 日志（1 小时 16 分钟 MV 连播测试），验证所有修复均生效，测试期间零掉线、零播放错误。
+
+#### 核心修复
+
+1. **电视 WiFi 频繁掉线（P0-A）**：根因是 `NetworkMonitor.onCapabilitiesChanged` 在 WiFi 信号波动时高频误触发 `onNetworkLost`/`onNetworkAvailable`。`onCapabilitiesChanged` 在 WiFi 信号波动、网络切换时高频触发（非真正断网），每次"恢复"都调用 `connectToSavedServer(silent=true)` 重新连接 NAS → 创建新的 `JellyfinAdapter` + `OkHttpClient`（旧的虽由 `BackendRegistry` 正确 close，但短时间内累积多套连接池/线程池拖垮电视网络栈）→ WiFi 进一步过载 → 更多抖动 → 正反馈死循环。修复：引入 `lastHasInternet` 状态跟踪，仅在状态真正转换（false → true）时回调 `onNetworkAvailable`，`onNetworkLost` 只由 `onLost` 触发（真正的网络丢失事件）。实测验证：1 小时 16 分钟 MV 连播期间 `NetworkMonitor` 仅 1 条 `register` 日志，零次误触发
+2. **MTV 页 ExoPlayer 每次 videoUrl 变化重建（V1）**：`remember(mv.videoUrl)` 导致每次切歌/换源都新建一个 ExoPlayer 实例，`release()` 是异步的，频繁切换时可能短期两个 Player 实例并存。修复：改为 `remember(context)` 页面级复用，切歌通过 `stop()+clearMediaItems()+setMediaItem()+prepare()+play()` 完成。实测验证：45 次切歌仅创建 1 个 ExoPlayer，零播放错误
+3. **PlayerManager 1000ms Handler 轮询健壮性（H4）**：`postDelayed` 在 `player?.let{}` 块外，player 为 null 也持续轮询浪费 CPU；`onPositionDiscontinuity(SEEK)` 未清除 `seekPending` 导致 2s 进度停滞。修复：`postDelayed` 移入 player 非空分支内（player 释放后自动停止轮询）；seek 完成时 `onPositionDiscontinuity(SEEK)` 立即清除 `seekPending` + 移除兜底 timeout；seek 兜底从 2s 缩短到 1s 且用独立 `seekTimeoutRunnable`
+4. **空 URI 传入 ExoPlayer 制造错误噪声（M4）**：网络歌曲 streamUrl 为空时 `MediaItem.fromUri("")` 让 ExoPlayer 抛异常，触发 `onPlayerError` ERROR 日志 + 错误 UI。修复：`onPlayerError` 中对 `streamUrl` 为空的预期错误提前 return（降级为 DEBUG 日志，不设 `_playerError`）
+
+#### 次要修复
+
+5. **MetingApiService.resolveLyrics 不 fallback（M3）**：`resolveLyrics` 只用 `baseUrl`，不像 `search`/`resolvePlayUrl`/`getPlaylist` 调用 `buildEndpointFallbackOrder`。修复：采用多端点 fallback，与同类方法一致
+6. **MetingApiService.parseSongs 逐条打日志刷屏（L1）**：每次搜索逐条打印 INFO 日志（`AppLog.i` 不被 ProGuard `-assumenosideeffects` 剥离）。修复：改为汇总日志（`result=X/Y`），首项 keySet 降为 DEBUG 级
+7. **extractIdFromUrl URI 解析失败后正则 fallback（L2）**：`java.net.URI` 对含空格/中文的 URL 抛异常。修复：改用 `android.net.Uri.parse`（Android 内置，不抛异常），正则降为兜底
+8. **HttpLoggingInterceptor 在 release 未关闭（M8）**：`JellyfinAdapter`/`NavidromeAdapter`/`LyricsNetworkProvider` 始终 `Level.BASIC`，release 中打印 URL（含 Jellyfin `api_key` token、酷狗 hash）。修复：用 `BuildConfig.DEBUG` 包裹
+9. **JellyfinAdapter utf8Body GBK 回退无日志（M7）**：GBK 回退触发时无任何标记。修复：回退时打 DEBUG 日志记录 URL，回退失败打 WARN
+10. **NavidromeAdapter API 版本硬编码（M6）**：`v=1.16.1` 和 `c=NASMusicTV` 内联在 URL 拼接中。修复：提取为 `companion object` 常量 `API_VERSION`/`CLIENT_NAME`，注释说明这是 Subsonic 协议版本
+
+#### 主要变更文件
+
+1. **`util/NetworkMonitor.kt`**：删除 `onCapabilitiesChanged` 中的 `onNetworkLost` 调用；引入 `lastHasInternet` 状态跟踪；`onAvailable`/`onLost`/`onCapabilitiesChanged` 均做状态转换判断
+2. **`ui/components/MvPlaybackScreen.kt`**：`remember(mv.videoUrl)` → `remember(context)`；切歌改用 `stop()+setMediaItem()`；新增 `onPlaybackStateChanged`/`onIsPlayingChanged`/`onMediaItemTransition` 详细日志
+3. **`player/PlayerManager.kt`**：`progressUpdateRunnable` 改为 player 为 null 时 return（不再 re-post）；新增 `seekTimeoutRunnable`；`onPositionDiscontinuity(SEEK)` 清除 `seekPending`；`onPlayerError` 空 URI 降级
+4. **`backend/BackendRegistry.kt`**：加注释确认旧 adapter close 逻辑的重要性
+5. **`backend/impl/JellyfinAdapter.kt`**：HttpLoggingInterceptor 用 `BuildConfig.DEBUG` 包裹；utf8Body GBK 回退加日志
+6. **`backend/impl/NavidromeAdapter.kt`**：HttpLoggingInterceptor 用 `BuildConfig.DEBUG` 包裹；API 版本提取为常量
+7. **`backend/network/MetingApiService.kt`**：resolveLyrics 加多端点 fallback；parseSongs 改汇总日志；extractIdFromUrl 改用 `Uri.parse`
+8. **`lyrics/LyricsNetworkProvider.kt`**：HttpLoggingInterceptor 用 `BuildConfig.DEBUG` 包裹
+
+#### 验证结果
+
+- ✅ `:app:compileDebugKotlin --rerun-tasks` BUILD SUCCESSFUL（2 个既有 warning 与本次无关）
+- ✅ 电视实测 1 小时 16 分钟 MV 连播（45 次切歌，15 首完整播放）：WiFi 零掉线、零播放错误、零 ANR、零 OOM
+- ✅ 日志分析：`NetworkMonitor` 仅 1 条 register 日志（修复前频繁误触发）；ExoPlayer 仅创建 1 次（V1 修复生效）；App 自身零 Error 日志；内存稳定 26-34MB
+
+#### 注意事项
+
+- `BackendRegistry` 的旧 adapter close 逻辑（`releaseAdapter` → `logout` + `close`）在修复前已正确存在，本次仅加注释强调其重要性
+- `WifiStateMachine` 每 3 秒打 `msg.what=131155`（CMD_RSSI_POLL）E 级日志是电视系统固件行为，与 App 无关
+- 版本号由 v2.17.1 -> v2.17.2（versionCode 51 -> 52）

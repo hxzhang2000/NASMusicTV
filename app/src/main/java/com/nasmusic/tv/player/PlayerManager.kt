@@ -37,15 +37,29 @@ class PlayerManager() {
     private val progressHandler = Handler(Looper.getMainLooper())
     private val progressUpdateRunnable = object : Runnable {
         override fun run() {
-            player?.let { p ->
-                // seek 期间不更新进度，防止 ExoPlayer 内部重置位置时覆盖 _progress
-                if (!seekPending) {
-                    _progress.value = p.currentPosition
-                }
-                val dur = p.duration
-                if (dur > 0) _duration.value = dur
+            val p = player
+            if (p == null) {
+                // player 已释放，停止轮询；下次 setPlayer + onIsPlayingChanged(true) 会重新启动
+                return
             }
+            // seek 期间不更新进度，防止 ExoPlayer 内部重置位置时覆盖 _progress
+            if (!seekPending) {
+                _progress.value = p.currentPosition
+            }
+            val dur = p.duration
+            if (dur > 0) _duration.value = dur
             progressHandler.postDelayed(this, 1000)
+        }
+    }
+
+    /**
+     * seek 兜底 timeout：防止 onPositionDiscontinuity(SEEK) 未触发时 seekPending 永久阻塞进度更新。
+     * 抽为独立 Runnable 以便 seek 完成后可移除。
+     */
+    private val seekTimeoutRunnable = Runnable {
+        if (seekPending) {
+            AppLog.d("NASMusic", "seekTimeout: clearing seekPending (onPositionDiscontinuity not received)")
+            seekPending = false
         }
     }
 
@@ -162,20 +176,23 @@ class PlayerManager() {
             // 此时不应覆盖 _progress，让 Handler 的轮询自然更新即可
             if (reason == Player.DISCONTINUITY_REASON_SEEK) {
                 _progress.value = newPosition.positionMs
+                // seek 完成，立即清除 pending 状态恢复进度轮询；移除兜底 timeout 避免重复清除
+                seekPending = false
+                progressHandler.removeCallbacks(seekTimeoutRunnable)
             }
         }
 
         override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
-            AppLog.e("PlayerManager", "Player error: ${error.message}", error)
-            _playerError.value = error.message ?: "播放错误"
-            // 当前歌曲 streamUrl 为空时（如恢复队列中的网络歌曲），不自动跳下一首，
-            // 避免级联错误（下一首也可能 streamUrl 为空）。
-            // 用户按播放时由 resolveAndPlayCurrentSong() 解析链接后正常播放。
             val currentSong = _queue.value.getOrNull(_currentIndex.value)
+            // 空 URI（streamUrl 为空的待解析网络歌曲）触发的错误是预期行为：
+            // onMediaItemTransition(AUTO) 已触发 onNeedResolveStreamUrl 异步解析，
+            // 此处不应污染错误 UI、不应 ERROR 级别日志、不应自动跳下一首。
             if (currentSong != null && currentSong.streamUrl.isNullOrBlank()) {
-                AppLog.d("PlayerManager", "onPlayerError: skipped auto-next (current song streamUrl is empty)")
+                AppLog.d("PlayerManager", "onPlayerError (expected, streamUrl empty): ${error.message}")
                 return
             }
+            AppLog.e("PlayerManager", "Player error: ${error.message}", error)
+            _playerError.value = error.message ?: "播放错误"
             // 播放链接可能已过期（入队时预解析的直链有时效，网络歌曲尤甚，约 5 首后集中出现）。
             // 出错时复用 onNeedResolveStreamUrl（→ ViewModel.resolveAndPlayByIndex）重新解析一次再播放；
             // 同一首歌只重试一次，若重解析后仍失败则继续自动跳下一首，避免死循环。
@@ -495,14 +512,13 @@ class PlayerManager() {
     fun seekTo(positionMs: Long) {
         AppLog.d("NASMusic", "seekTo: position=$positionMs, player=${player != null}, state=${player?.playbackState}")
         seekPending = true
+        // 先移除上一次未触发的兜底 timeout，避免重复清除
+        progressHandler.removeCallbacks(seekTimeoutRunnable)
         player?.seekTo(positionMs)
         _progress.value = positionMs
         AppLog.d("NASMusic", "seekTo: after seek, player.currentPosition=${player?.currentPosition}, seekPending=$seekPending")
-        // 2 秒后自动清除 seekPending，防止永久阻塞进度更新
-        progressHandler.postDelayed({
-            AppLog.d("NASMusic", "seekTo: timeout, seekPending=false, player.currentPosition=${player?.currentPosition}")
-            seekPending = false
-        }, 2000)
+        // 兜底：1 秒后清除 seekPending（正常路径由 onPositionDiscontinuity(SEEK) 立即清除）
+        progressHandler.postDelayed(seekTimeoutRunnable, 1000)
     }
 
     /**
@@ -779,6 +795,7 @@ class PlayerManager() {
      */
     fun release() {
         progressHandler.removeCallbacks(progressUpdateRunnable)
+        progressHandler.removeCallbacks(seekTimeoutRunnable)
         // 停止频谱重试（将所有回调从消息队列中移除）
         spectrumAnalyzerRetryCount = 5
         player?.removeListener(playerListener)

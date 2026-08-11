@@ -281,22 +281,33 @@ class MetingApiService(
 
     /**
      * 获取歌词
-     * Meting-API 的 lrc 端点直接返回 LRC 文本
+     *
+     * Meting-API 的 lrc 端点直接返回 LRC 文本。
+     * 与 search/resolvePlayUrl/getPlaylist 一致，采用多端点 fallback：
+     * 当前端点失败（异常或空结果）时依次尝试其他预设端点。
      */
     override suspend fun resolveLyrics(song: Song): String? = withContext(Dispatchers.IO) {
         val netId = song.networkId ?: return@withContext null
         val server = serverProvider()
-        try {
-            val url = "$baseUrl?server=$server&type=lrc&id=$netId"
-            val request = Request.Builder().url(url).build()
-            client.newCall(request).execute().use { response ->
-                val text = response.body?.string()
-                if (text.isNullOrBlank()) null else text
+        val endpoints = buildEndpointFallbackOrder(baseUrl)
+        for (endpoint in endpoints) {
+            try {
+                val url = "$endpoint?server=$server&type=lrc&id=$netId"
+                val request = Request.Builder().url(url).build()
+                client.newCall(request).execute().use { response ->
+                    val text = response.body?.string()
+                    if (!text.isNullOrBlank()) {
+                        AppLog.d(TAG, "resolveLyrics: resolved via '$endpoint' for netId=$netId, len=${text.length}")
+                        return@withContext text
+                    }
+                }
+                AppLog.w(TAG, "resolveLyrics: empty from '$endpoint' for netId=$netId")
+            } catch (e: Exception) {
+                AppLog.w(TAG, "resolveLyrics: endpoint '$endpoint' failed: ${e.message}")
             }
-        } catch (e: Exception) {
-            AppLog.w(TAG, "resolveLyrics error: ${e.message}", e)
-            null
         }
+        AppLog.w(TAG, "resolveLyrics: all endpoints failed for netId=$netId")
+        null
     }
 
     /**
@@ -379,15 +390,16 @@ class MetingApiService(
                 AppLog.w(DIAG, "parseSongs: gson returned null, body is not a JSON array")
                 return emptyList()
             }
-            AppLog.i(DIAG, "parseSongs: json array size=${items.size}")
             if (items.isEmpty()) {
                 AppLog.w(DIAG, "parseSongs: array empty")
                 return emptyList()
             }
-            // 打印第一个元素的所有 key，便于核对字段名
+            // 首项 key 集合打印一次（便于核对字段名），不再逐条打 INFO 日志
             items.firstOrNull()?.keySet()?.let { keys ->
-                AppLog.i(DIAG, "parseSongs: first item keys=$keys")
+                AppLog.d(DIAG, "parseSongs: json array size=${items.size}, first item keys=$keys")
             }
+            var skippedNoTitle = 0
+            var skippedNoId = 0
             val result = items.mapIndexedNotNull { idx, item ->
                 try {
                     // 兼容不同端点的字段名：
@@ -405,17 +417,15 @@ class MetingApiService(
                     val fixedTitle = EncodingUtils.fixEncoding(title)
                     val fixedAuthor = EncodingUtils.fixEncoding(author)
                     val fixedAlbum = EncodingUtils.fixEncoding(albumField)
-                    AppLog.i(DIAG, "parseSongs[$idx]: title=$fixedTitle author=$fixedAuthor album=$fixedAlbum pic=${pic?.take(60)} url=${urlField?.take(80)}")
                     if (fixedTitle == null) {
-                        AppLog.w(DIAG, "parseSongs[$idx]: title null, skip")
+                        skippedNoTitle++
                         return@mapIndexedNotNull null
                     }
                     val netId = extractIdFromUrl(urlField)
                     if (netId == null) {
-                        AppLog.w(DIAG, "parseSongs[$idx]: extractIdFromUrl null for url=$urlField, skip")
+                        skippedNoId++
                         return@mapIndexedNotNull null
                     }
-                    AppLog.i(DIAG, "parseSongs[$idx]: extracted netId=$netId")
                     Song(
                         id = "ntwk_${sourceId}_$netId",
                         title = fixedTitle,
@@ -431,7 +441,10 @@ class MetingApiService(
                     null
                 }
             }
-            AppLog.i(DIAG, "parseSongs: result size=${result.size}")
+            // 汇总日志：一次请求只打一条 INFO，避免逐条日志刷屏
+            AppLog.i(DIAG, "parseSongs: result=${result.size}/${items.size}" +
+                (if (skippedNoTitle > 0) " skippedNoTitle=$skippedNoTitle" else "") +
+                (if (skippedNoId > 0) " skippedNoId=$skippedNoId" else ""))
             result
         } catch (e: Exception) {
             AppLog.e(DIAG, "parseSongs error: ${e.javaClass.simpleName}: ${e.message}", e)
@@ -444,37 +457,25 @@ class MetingApiService(
      *
      * 示例输入：https://meting.mikus.ink/api?server=netease&type=url&id=2652820720
      * 输出：2652820720
+     *
+     * 使用 android.net.Uri（Android 内置，对含空格/中文的 URL 更稳健），
+     * 失败时回退正则作为防御兜底。
      */
     private fun extractIdFromUrl(url: String?): String? {
-        AppLog.i(DIAG, "extractIdFromUrl: input=$url")
-        if (url.isNullOrBlank()) {
-            AppLog.w(DIAG, "extractIdFromUrl: url null/blank")
-            return null
-        }
-        return try {
-            val uri = java.net.URI(url)
-            val query = uri.rawQuery
-            AppLog.i(DIAG, "extractIdFromUrl: rawQuery=$query")
-            if (query == null) {
-                AppLog.w(DIAG, "extractIdFromUrl: rawQuery null")
-                return null
-            }
-            query.split("&").forEach { param ->
-                val idx = param.indexOf("=")
-                if (idx > 0 && param.substring(0, idx) == "id") {
-                    val id = param.substring(idx + 1)
-                    AppLog.i(DIAG, "extractIdFromUrl: found id=$id")
-                    return id
-                }
-            }
-            AppLog.w(DIAG, "extractIdFromUrl: no id param found in query")
-            null
+        if (url.isNullOrBlank()) return null
+        // 优先用 android.net.Uri.parse，比 java.net.URI 更宽容（不抛异常）
+        try {
+            val id = android.net.Uri.parse(url).getQueryParameter("id")
+            if (!id.isNullOrBlank()) return id
         } catch (e: Exception) {
-            AppLog.w(DIAG, "extractIdFromUrl: URI parse failed (${e.message}), try regex fallback")
-            val regex = Regex("[?&]id=([^&]+)")
-            val matched = regex.find(url)?.groupValues?.getOrNull(1)
-            AppLog.i(DIAG, "extractIdFromUrl: regex result=$matched")
-            matched
+            AppLog.w(DIAG, "extractIdFromUrl: Uri.parse failed: ${e.message}")
+        }
+        // 兜底：正则提取（Uri.parse 失败或无 query parameter 时）
+        return try {
+            Regex("[?&]id=([^&]+)").find(url)?.groupValues?.getOrNull(1)
+        } catch (e: Exception) {
+            AppLog.w(DIAG, "extractIdFromUrl: regex fallback failed: ${e.message}")
+            null
         }
     }
 

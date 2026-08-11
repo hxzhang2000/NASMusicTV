@@ -36,12 +36,16 @@ class LyricsNetworkProvider {
     }
 
     private val client: OkHttpClient by lazy {
-        val logging = HttpLoggingInterceptor().apply {
-            level = HttpLoggingInterceptor.Level.BASIC
-        }
         OkHttpClient.Builder()
             .dispatcher(Dispatcher(daemonExecutor))
-            .addInterceptor(logging)
+            .apply {
+                // 日志拦截器仅在 debug 构建启用，避免 release 中 URL 写入 logcat
+                if (com.nasmusic.tv.BuildConfig.DEBUG) {
+                    addInterceptor(HttpLoggingInterceptor().apply {
+                        level = HttpLoggingInterceptor.Level.BASIC
+                    })
+                }
+            }
             .connectTimeout(15, TimeUnit.SECONDS)
             .readTimeout(15, TimeUnit.SECONDS)
             .build()

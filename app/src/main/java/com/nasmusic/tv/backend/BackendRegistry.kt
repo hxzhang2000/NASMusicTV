@@ -55,6 +55,9 @@ class BackendRegistry {
 
         if (success) {
             // 替换旧 adapter：先提取旧对象（锁内），再释放资源（锁外）
+            // 关键：必须释放旧 adapter 的 OkHttp 资源（连接池 + dispatcher 线程池），
+            // 否则网络重连风暴会累积多套 OkHttpClient，导致电视 WiFi 栈过载。
+            // JellyfinAdapter.close() / NavidromeAdapter.close() 负责实际的 shutdown + evictAll。
             val oldAdapter = synchronized(lock) {
                 val old = currentAdapter
                 currentAdapter = adapter
@@ -63,7 +66,7 @@ class BackendRegistry {
                 old
             }
             if (oldAdapter != null) {
-                AppLog.d("BackendRegistry", "initialize: replacing existing adapter")
+                AppLog.d("BackendRegistry", "initialize: replacing existing adapter, releasing old one")
                 releaseAdapter(oldAdapter)
             }
         } else {

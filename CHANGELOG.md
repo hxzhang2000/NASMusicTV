@@ -7,6 +7,21 @@
 >
 > 类型：`Added`（新增） | `Changed`（变更） | `Fixed`（修复） | `Removed`（移除）
 
+## [v2.17.2] - 2026-08-11
+
+### Fixed
+
+- **电视 WiFi 频繁掉线（核心修复）**：`NetworkMonitor.onCapabilitiesChanged` 在 WiFi 信号波动时高频误触发 `onNetworkLost`/`onNetworkAvailable`，每次"恢复"都重新连接 NAS 并创建新的 `OkHttpClient`，累积多套连接池/线程池拖垮电视网络栈。改为仅在状态真正转换（无 internet → 有 internet）时回调 `onNetworkAvailable`，`onNetworkLost` 只由 `onLost` 触发——实测 1 小时 16 分钟 MV 连播零掉线（修复前频繁掉线）
+- **MTV 页 ExoPlayer 每次 videoUrl 变化重建导致泄漏**：`remember(mv.videoUrl)` 改为 `remember(context)`，页面生命周期内复用同一个 ExoPlayer 实例，切歌通过 `stop()+setMediaItem()` 完成（实测 45 次切歌仅创建 1 个 ExoPlayer，零播放错误）
+- **PlayerManager 1000ms Handler 轮询健壮性**：`postDelayed` 移入 `player` 非空分支内（player 释放后自动停止轮询）；`onPositionDiscontinuity(SEEK)` 立即清除 `seekPending`（原代码漏了这步导致 2s 进度停滞）；seek 兜底 timeout 从 2s 缩短到 1s 且用独立 Runnable（避免重复清除）
+- **空 URI 传入 ExoPlayer 制造错误噪声**：`onPlayerError` 中对 `streamUrl` 为空的预期错误提前 return，不再设 `_playerError`（不污染错误 UI）+ 不打 ERROR 日志
+- **MetingApiService.resolveLyrics 不 fallback**：与 `search`/`resolvePlayUrl`/`getPlaylist` 对齐，采用 `buildEndpointFallbackOrder` 多端点 fallback
+- **MetingApiService.parseSongs 逐条打日志刷屏**：改为汇总日志（一次请求只打一条 INFO），首项 keySet 降为 DEBUG 级
+- **extractIdFromUrl URI 解析失败后正则 fallback**：改用 `android.net.Uri.parse`（更宽容不抛异常），正则降为兜底
+- **HttpLoggingInterceptor 在 release 未关闭**：`JellyfinAdapter`/`NavidromeAdapter`/`LyricsNetworkProvider` 三个 OkHttpClient 均用 `BuildConfig.DEBUG` 包裹日志拦截器，避免 release 中 URL（含 Jellyfin token、酷狗 hash）写入 logcat
+- **JellyfinAdapter utf8Body GBK 回退无日志**：GBK 回退触发时打 DEBUG 日志标记哪些响应触发了回退，便于排查编码问题
+- **NavidromeAdapter API 版本硬编码**：`v=1.16.1` 和 `c=NASMusicTV` 提取为 `companion object` 常量（`API_VERSION`/`CLIENT_NAME`），注释说明这是 Subsonic 协议版本
+
 ## [v2.17.1] - 2026-08-10
 
 ### Added

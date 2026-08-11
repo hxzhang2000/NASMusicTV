@@ -100,11 +100,9 @@ fun MvPlaybackScreen(
     var positionMs by remember { mutableLongStateOf(0L) }
     var mvDurationMs by remember { mutableLongStateOf(0L) }
     var playbackError by remember { mutableStateOf(false) }
-    // 防止 onPlaybackError 被同一播放器实例多次触发（ViewModel 侧也有一次/歌曲的兜底）
-    // key 绑定 videoUrl：无缝切歌时新 URL -> 新 ExoPlayer -> 标志重置，否则 endedHandled 持续 true 会导致后续 MV 的 STATE_ENDED 被忽略
-    var errorReported by remember(mv.videoUrl) { mutableStateOf(false) }
-    // 防止 STATE_ENDED 多次触发 onPlaybackEnded（同上，切歌时需重置）
-    var endedHandled by remember(mv.videoUrl) { mutableStateOf(false) }
+    // 播放状态标志（切歌时重置）
+    var errorReported by remember { mutableStateOf(false) }
+    var endedHandled by remember { mutableStateOf(false) }
 
     // ── 控制条自动虚化：5 秒无操作 -> 半透明（0.15），遥控器操作/焦点切换 -> 完全显化（1.0）──
     var controlsVisible by remember { mutableStateOf(true) }
@@ -122,10 +120,9 @@ fun MvPlaybackScreen(
         remoteControlUrl?.let { QrCodeGenerator.generateQrBitmap(it, 256) }
     }
 
-    // ── 独立视频 ExoPlayer ──
-    // key 绑定 videoUrl：切歌/换源时重建播放器（直链带时效，URL 变化即重建最稳妥）
-    val exoPlayer = remember(mv.videoUrl) {
-        AppLog.d(TAG, "create video ExoPlayer url=${mv.videoUrl.take(60)}")
+    // ── 独立视频 ExoPlayer（页面级复用，不再因 URL 变化重建）──
+    val exoPlayer = remember(context) {
+        AppLog.d(TAG, "create video ExoPlayer (reusable instance)")
         val httpDataSourceFactory = DefaultHttpDataSource.Factory()
             .setDefaultRequestProperties(
                 mapOf(
@@ -146,12 +143,18 @@ fun MvPlaybackScreen(
         }
     }
 
-    // ── 加载并自动播放 MV ──
+    // ── 加载并自动播放 MV（复用实例，通过 stop+setMediaItem 切歌）──
     LaunchedEffect(exoPlayer, mv.videoUrl) {
+        AppLog.d(TAG, "MV LaunchedEffect: videoUrl changed or initial, preparing new media item")
+        errorReported = false
+        endedHandled = false
         playbackError = false
+        exoPlayer.stop()
+        exoPlayer.clearMediaItems()
         exoPlayer.setMediaItem(MediaItem.fromUri(mv.videoUrl))
         exoPlayer.prepare()
         exoPlayer.play()
+        AppLog.d(TAG, "MV LaunchedEffect: started playback for ${mv.videoUrl.take(60)}")
     }
 
     // ── 进度轮询（视频自身进度；同时驱动歌词粗略对齐与播放状态图标）──
@@ -167,24 +170,65 @@ fun MvPlaybackScreen(
     // ── 播放错误监听（直链失效/风控 → 显示提示不崩溃）──
     DisposableEffect(exoPlayer) {
         val listener = object : Player.Listener {
-            override fun onPlayerError(error: PlaybackException) {
-                playbackError = true
-                if (!errorReported) {
-                    errorReported = true
-                    onPlaybackError()
-                }
-                AppLog.e(TAG, "MV playback error: ${error.message}", error)
-            }
             override fun onPlaybackStateChanged(playbackState: Int) {
+                val stateStr = when (playbackState) {
+                    Player.STATE_IDLE -> "IDLE"
+                    Player.STATE_BUFFERING -> "BUFFERING"
+                    Player.STATE_READY -> "READY"
+                    Player.STATE_ENDED -> "ENDED"
+                    else -> "UNKNOWN($playbackState)"
+                }
+                AppLog.d(TAG, "onPlaybackStateChanged: $stateStr")
+                
+                if (playbackState == Player.STATE_BUFFERING) {
+                    AppLog.d(TAG, "MV buffering... currentPosition=${exoPlayer.currentPosition}, duration=${exoPlayer.duration}")
+                }
+                
+                if (playbackState == Player.STATE_READY) {
+                    AppLog.d(TAG, "MV ready to play. currentPosition=${exoPlayer.currentPosition}")
+                }
+
                 if (playbackState == Player.STATE_ENDED && !endedHandled) {
                     endedHandled = true
                     AppLog.d(TAG, "MV playback ended -> advance to next song's MV")
                     onPlaybackEnded()
                 }
             }
+
+            override fun onIsPlayingChanged(isPlaying: Boolean) {
+                AppLog.d(TAG, "onIsPlayingChanged: isPlaying=$isPlaying, currentPosition=${exoPlayer.currentPosition}")
+            }
+
+            override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+                val reasonStr = when (reason) {
+                    Player.MEDIA_ITEM_TRANSITION_REASON_PLAYLIST_CHANGED -> "PLAYLIST_CHANGED"
+                    Player.MEDIA_ITEM_TRANSITION_REASON_REPEAT -> "REPEAT"
+                    Player.MEDIA_ITEM_TRANSITION_REASON_AUTO -> "AUTO"
+                    Player.MEDIA_ITEM_TRANSITION_REASON_SEEK -> "SEEK"
+                    else -> "UNKNOWN($reason)"
+                }
+                AppLog.d(TAG, "onMediaItemTransition: reason=$reasonStr, uri=${mediaItem?.localConfiguration?.uri}")
+            }
+
+            override fun onPlayerError(error: PlaybackException) {
+                AppLog.e(TAG, "onPlayerError: message=${error.message}, cause=${error.cause?.message}", error)
+                AppLog.e(TAG, "onPlayerError: errorCode=${error.errorCode}, currentPosition=${exoPlayer.currentPosition}")
+                AppLog.e(TAG, "onPlayerError: dataSource=${exoPlayer.currentMediaItem?.localConfiguration?.uri?.toString()?.take(80)}")
+                
+                playbackError = true
+                if (!errorReported) {
+                    errorReported = true
+                    AppLog.d(TAG, "onPlayerError: invoking onPlaybackError callback")
+                    onPlaybackError()
+                }
+            }
         }
         exoPlayer.addListener(listener)
-        onDispose { exoPlayer.removeListener(listener) }
+        AppLog.d(TAG, "Player.Listener added to exoPlayer")
+        onDispose {
+            AppLog.d(TAG, "Player.Listener removed from exoPlayer")
+            exoPlayer.removeListener(listener)
+        }
     }
 
     Box(

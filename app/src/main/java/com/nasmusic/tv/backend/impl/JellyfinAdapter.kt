@@ -42,15 +42,19 @@ class JellyfinAdapter : BackendAdapter {
     private val jsonMediaType = "application/json; charset=utf-8".toMediaType()
 
     private val client: OkHttpClient by lazy {
-        val logging = HttpLoggingInterceptor().apply {
-            level = HttpLoggingInterceptor.Level.BASIC
-        }
         // 使用守护线程的 ExecutorService，防止 OkHttp 线程阻止进程退出
         val daemonExecutor = java.util.concurrent.Executors.newCachedThreadPool { r ->
             Thread(r, "Jellyfin-OkHttp").apply { isDaemon = true }
         }
         OkHttpClient.Builder()
-            .addInterceptor(logging)
+            .apply {
+                // 日志拦截器仅在 debug 构建启用，避免 release 中 URL（含 api_key token）写入 logcat
+                if (com.nasmusic.tv.BuildConfig.DEBUG) {
+                    addInterceptor(HttpLoggingInterceptor().apply {
+                        level = HttpLoggingInterceptor.Level.BASIC
+                    })
+                }
+            }
             .connectTimeout(30, TimeUnit.SECONDS)
             .readTimeout(120, TimeUnit.SECONDS)
             .dispatcher(okhttp3.Dispatcher(daemonExecutor))
@@ -949,8 +953,12 @@ class JellyfinAdapter : BackendAdapter {
         // 尝试 GBK 解码（Jellyfin 服务端 ID3 标签可能以 GBK 存储）
         val gbk = try { String(rawBytes, Charset.forName("GBK")) } catch (_: Exception) { null }
         if (gbk != null && '\uFFFD' !in gbk) {
+            // 标记哪些响应触发了 GBK 回退，便于排查编码问题
+            // 注意：AGENTS.md 已说明部分双重编码情况不可恢复
+            AppLog.d("JellyfinAdapter", "utf8Body: GBK fallback applied for ${request.url} (U+FFFD detected in UTF-8)")
             return gbk
         }
+        AppLog.w("JellyfinAdapter", "utf8Body: U+FFFD present but GBK fallback failed for ${request.url}, using UTF-8 as-is")
         return utf8
     }
 

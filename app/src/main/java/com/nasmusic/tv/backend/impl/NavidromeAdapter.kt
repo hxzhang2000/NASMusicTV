@@ -42,15 +42,19 @@ class NavidromeAdapter : BackendAdapter {
 
     private val gson = Gson()
     private val client: OkHttpClient by lazy {
-        val logging = HttpLoggingInterceptor().apply {
-            level = HttpLoggingInterceptor.Level.BASIC
-        }
         // 使用守护线程的 ExecutorService，防止 OkHttp 线程阻止进程退出
         val daemonExecutor = java.util.concurrent.Executors.newCachedThreadPool { r ->
             Thread(r, "Navidrome-OkHttp").apply { isDaemon = true }
         }
         OkHttpClient.Builder()
-            .addInterceptor(logging)
+            .apply {
+                // 日志拦截器仅在 debug 构建启用，避免 release 中 URL 写入 logcat
+                if (com.nasmusic.tv.BuildConfig.DEBUG) {
+                    addInterceptor(HttpLoggingInterceptor().apply {
+                        level = HttpLoggingInterceptor.Level.BASIC
+                    })
+                }
+            }
             .connectTimeout(15, TimeUnit.SECONDS)
             .readTimeout(30, TimeUnit.SECONDS)
             .dispatcher(okhttp3.Dispatcher(daemonExecutor))
@@ -807,13 +811,15 @@ class NavidromeAdapter : BackendAdapter {
 
     private fun buildRestUrl(method: String): String {
         val salt = System.currentTimeMillis().toString()
+        // Subsonic API 认证规范：token = md5(password + salt) 的 hex 表示
+        // 这是协议规定的认证方式（非"过时"），Navidrome 完全兼容 Subsonic API。
         val token = md5(password + salt)
         return "$baseUrl/rest/$method.view?" +
                 "u=$username&" +
                 "t=$token&" +
                 "s=$salt&" +
-                "v=1.16.1&" +
-                "c=NASMusicTV&" +
+                "v=$API_VERSION&" +
+                "c=$CLIENT_NAME&" +
                 "f=json"
     }
 
@@ -849,5 +855,18 @@ class NavidromeAdapter : BackendAdapter {
         val md = MessageDigest.getInstance("MD5")
         return BigInteger(1, md.digest(input.toByteArray()))
             .toString(16).padStart(32, '0')
+    }
+
+    companion object {
+        /**
+         * Subsonic API 协议版本号。
+         * - 这是 API 协议版本（不是客户端版本），用于服务端兼容性判断
+         * - Subsonic API 当前稳定版本为 1.16.1，Navidrome 完全兼容
+         * - 升级前提：服务端明确要求更高版本（如新增 API 字段时）
+         */
+        private const val API_VERSION = "1.16.1"
+
+        /** 客户端标识（Subsonic API c 参数，服务端用于区分客户端类型） */
+        private const val CLIENT_NAME = "NASMusicTV"
     }
 }
