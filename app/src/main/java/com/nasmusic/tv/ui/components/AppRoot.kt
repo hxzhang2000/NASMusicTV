@@ -330,7 +330,17 @@ fun AppRoot(
                             onLoadTechnicalInfo = { viewModel.loadSongTechnicalInfo() },
                             spectrumData = spectrumData,
                             spectrumEnabled = settings.spectrumEnabled,
-                            visualizerTheme = settings.visualizerTheme
+                            visualizerTheme = settings.visualizerTheme,
+                            onSearchArtist = { keyword ->
+                                viewModel.navigateTo(com.nasmusic.tv.data.model.Screen.Network)
+                                viewModel.selectNetworkSubTab(com.nasmusic.tv.data.model.NetworkSubTab.SEARCH)
+                                viewModel.searchNetworkSongs(keyword)
+                            },
+                            onSearchSong = { keyword ->
+                                viewModel.navigateTo(com.nasmusic.tv.data.model.Screen.Network)
+                                viewModel.selectNetworkSubTab(com.nasmusic.tv.data.model.NetworkSubTab.SEARCH)
+                                viewModel.searchNetworkSongs(keyword)
+                            }
                         )
                     }
                 }

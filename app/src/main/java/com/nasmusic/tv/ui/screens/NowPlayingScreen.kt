@@ -108,6 +108,10 @@ fun NowPlayingScreen(
     remoteControlUrl: String? = null,
     // K 歌 / MTV 模式需要手机遥控服务器，由上层按需启动
     onEnterKaraokeMode: () -> Unit = {},
+    /** 点击歌手名跳转到网络搜索 */
+    onSearchArtist: (String) -> Unit = {},
+    /** 点击歌曲名跳转到网络搜索 */
+    onSearchSong: (String) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     var showInfoPanel by remember { mutableStateOf(false) }
@@ -254,7 +258,9 @@ fun NowPlayingScreen(
                             technicalInfo = technicalInfo,
                             onLoadTechnicalInfo = onLoadTechnicalInfo,
                             showInfoPanel = showInfoPanel,
-                            onToggleInfoPanel = { showInfoPanel = !showInfoPanel }
+                            onToggleInfoPanel = { showInfoPanel = !showInfoPanel },
+                            onSearchSong = onSearchSong,
+                            onSearchArtist = onSearchArtist
                         )
                         }
 
@@ -299,6 +305,13 @@ fun NowPlayingScreen(
                             available = lyricsAvailability.hasNetwork,
                             selected = currentSource == com.nasmusic.tv.data.model.LyricsSource.NETWORK,
                             onClick = { onSwitchLyricsSource(com.nasmusic.tv.data.model.LyricsSource.NETWORK) }
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        SourceTag(
+                            label = stringResource(R.string.player_highlight_cached),
+                            available = lyricsAvailability.hasCached,
+                            selected = currentSource == com.nasmusic.tv.data.model.LyricsSource.CACHED,
+                            onClick = { onSwitchLyricsSource(com.nasmusic.tv.data.model.LyricsSource.CACHED) }
                         )
                         Spacer(modifier = Modifier.width(12.dp))
                         // 高亮模式切换按钮
@@ -404,7 +417,9 @@ private fun CoverColumn(
     technicalInfo: com.nasmusic.tv.data.model.SongTechnicalInfo? = null,
     onLoadTechnicalInfo: () -> Unit = {},
     showInfoPanel: Boolean = false,
-    onToggleInfoPanel: () -> Unit = {}
+    onToggleInfoPanel: () -> Unit = {},
+    onSearchSong: (String) -> Unit = {},
+    onSearchArtist: (String) -> Unit = {}
 ) {
     Column(
         modifier = Modifier.width(300.dp),
@@ -417,13 +432,36 @@ private fun CoverColumn(
             horizontalArrangement = Arrangement.Center,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(
-                text = currentSong?.title ?: stringResource(R.string.player_no_song_selected),
-                color = NasMusicColors.TextPrimary,
-                fontSize = 27.sp,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.weight(1f)
-            )
+            // 歌曲名可聚焦，点击跳转到网络搜索
+            val title = currentSong?.title
+            if (!title.isNullOrBlank()) {
+                FocusableSurface(
+                    onClick = { onSearchSong(title) },
+                    shape = RoundedCornerShape(6.dp),
+                    focusedScale = 1.05f,
+                    animationDurationMs = 150,
+                    containerColor = Color.Transparent,
+                    focusedContainerColor = NasMusicColors.Primary.copy(alpha = 0.15f),
+                    contentColor = NasMusicColors.TextPrimary,
+                    focusedContentColor = NasMusicColors.Primary
+                ) {
+                    Text(
+                        text = title,
+                        color = NasMusicColors.TextPrimary,
+                        fontSize = 27.sp,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.weight(1f).padding(horizontal = 4.dp, vertical = 2.dp)
+                    )
+                }
+            } else {
+                Text(
+                    text = stringResource(R.string.player_no_song_selected),
+                    color = NasMusicColors.TextPrimary,
+                    fontSize = 27.sp,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.weight(1f)
+                )
+            }
             if (onToggleFavorite != null && currentSong != null) {
                 FavoriteButton(
                     isFavorite = isFavorite,
@@ -518,13 +556,36 @@ private fun CoverColumn(
         Spacer(modifier = Modifier.height(12.dp))
 
         // 艺术家（Task 3: 专辑名已移至封面图上方，此处只显示艺术家）
-        Text(
-            text = currentSong?.artist?.takeIf { it.isNotBlank() } ?: "—",
-            color = NasMusicColors.TextSecondary,
-            fontSize = 21.sp,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.fillMaxWidth()
-        )
+        // 可聚焦，点击跳转到网络搜索
+        val artist = currentSong?.artist?.takeIf { it.isNotBlank() }
+        if (artist != null) {
+            FocusableSurface(
+                onClick = { onSearchArtist(artist) },
+                shape = RoundedCornerShape(6.dp),
+                focusedScale = 1.05f,
+                animationDurationMs = 150,
+                containerColor = Color.Transparent,
+                focusedContainerColor = NasMusicColors.Primary.copy(alpha = 0.12f),
+                contentColor = NasMusicColors.TextSecondary,
+                focusedContentColor = NasMusicColors.Primary
+            ) {
+                Text(
+                    text = artist,
+                    color = NasMusicColors.TextSecondary,
+                    fontSize = 21.sp,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 2.dp)
+                )
+            }
+        } else {
+            Text(
+                text = "—",
+                color = NasMusicColors.TextSecondary,
+                fontSize = 21.sp,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
 
         // 信息按钮（封面/信息切换）
         Spacer(modifier = Modifier.height(6.dp))

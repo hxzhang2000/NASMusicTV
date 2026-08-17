@@ -725,6 +725,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
     private var lastRecordedSongId: String? = null
     private var lastRecordedSong: Song? = null
     private var lastRecordedPositionMs: Long = 0L
+    /** 上一首歌的歌词来源，用于在播放完成时判断是否提交网络歌词到持久化缓存 */
+    private var lastRecordedLyricsSource: LyricsSource? = null
 
     init {
         viewModelScope.launch {
@@ -753,9 +755,15 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
                 if (previousSong != null && previousPosition > 5000L
                     && previousSong.id != song?.id) {
                     recordPlayEvent(previousSong, previousPosition)
+                    // 上一首播放完成 → 如果歌词来源是网络歌词，提交到持久化缓存
+                    if (lastRecordedLyricsSource == LyricsSource.NETWORK) {
+                        lyricsManager.commitPendingNetworkLyrics(previousSong)
+                    }
                 }
 
                 if (song != null) {
+                    // 记录当前歌词来源（在 loadLyricsForCurrentSong 清除 _currentLyrics 之前）
+                    lastRecordedLyricsSource = _currentLyrics.value?.source
                     loadLyricsForCurrentSong()
                     // MTV 连播静默推进索引时跳过搜索（预搜结果已直接设为 Ready）
                     if (skipNextMvSearch) {
@@ -2994,13 +3002,15 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
         AppLog.d("NASMusic", "loadLyrics: loading for ${song.title} by ${song.artist}")
         lyricsLoadJob = viewModelScope.launch {
             try {
-                // 先检查可用来源
+                // 1. 先查持久化缓存（网络歌词，之前播放完成时提交的）
+                val cachedLyrics = lyricsManager.getCachedNetworkLyrics(song)
+                // 2. 再检查后端 + 网络可用来源
                 val availability = lyricsManager.checkAvailability(song)
-                _lyricsAvailability.value = availability
-                AppLog.d("NASMusic", "loadLyrics: backend=${availability.hasBackend}, network=${availability.hasNetwork}")
+                _lyricsAvailability.value = availability.copy(cached = cachedLyrics)
+                AppLog.d("NASMusic", "loadLyrics: cached=${cachedLyrics != null}, backend=${availability.hasBackend}, network=${availability.hasNetwork}")
 
-                // 自动选择第一个可用来源
-                val lyrics = availability.backend ?: availability.network
+                // 自动选择：缓存 > 后端 > 网络
+                val lyrics = cachedLyrics ?: availability.backend ?: availability.network
                 _currentLyrics.value = lyrics
                 // 自动检测歌词格式：含逐字时间戳时切到逐字高亮；否则保持用户上次选择（跨页面切换不丢失）
                 if (lyrics != null && lyrics.lines.any { it.wordTimestamps.isNotEmpty() }) {

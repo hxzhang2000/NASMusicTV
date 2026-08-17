@@ -17,8 +17,10 @@ data class Lyrics(
  */
 data class LyricsAvailability(
     val backend: Lyrics? = null,
-    val network: Lyrics? = null
+    val network: Lyrics? = null,
+    val cached: Lyrics? = null
 ) {
     val hasBackend: Boolean get() = backend != null
     val hasNetwork: Boolean get() = network != null
+    val hasCached: Boolean get() = cached != null
 }

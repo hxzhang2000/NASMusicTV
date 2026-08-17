@@ -7,11 +7,18 @@
 >
 > 类型：`Added`（新增） | `Changed`（变更） | `Fixed`（修复） | `Removed`（移除）
 
-## [v2.17.2] - 2026-08-11
+## [v2.17.3] - 2026-08-17
+
+### Added
+
+- **播放页歌手/歌名可聚焦跳转网络搜索**：播放页歌手名和歌曲名改为 `FocusableSurface`，D-Pad 可选中，按下确定键自动跳转到网络音乐搜索页并填入搜索词
+- **网络歌词持久化缓存**：新增 `LyricsPersistentCache`，参照 `MvPersistentCache` 模式——`lyrics_cache.json`（索引）+ `{songId}.lrc`（独立文件），LRU 2000 条；用户切到网络歌词时暂存（pending），歌曲播放完成时提交（commit）；下次播放时自动读取缓存并显示"缓存"来源标签，可选中高亮和切换
 
 ### Changed
 
 - **批量播放网络歌曲性能优化**：`playNetworkBatch` 不再预先串行解析全部 30 首歌的播放链接（延迟从 30×RTT 降至 1×RTT），改为只即时解析第一首后立即更新队列并开始播放，后续歌曲沿用现有的 `onNeedResolveStreamUrl` 懒加载机制
+
+## [v2.17.2] - 2026-08-11
 
 ### Fixed
 

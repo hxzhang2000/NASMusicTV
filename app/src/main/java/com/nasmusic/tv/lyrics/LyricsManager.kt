@@ -9,19 +9,21 @@ import com.nasmusic.tv.data.model.LyricsSource
 import com.nasmusic.tv.data.model.Song
 import com.nasmusic.tv.util.AppLog
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.util.concurrent.ConcurrentHashMap
 
 /**
  * 歌词管理器
  * 负责歌词的获取、缓存和匹配
  *
- * 来源优先级：
- * 1. 本地缓存
+ * 获取优先级：
+ * 1. 持久化缓存（仅网络歌词，用户主动切换后写入，按 songId 匹配）
  * 2. 后端API（NAS 歌曲）/ NetworkMusicManager（网络歌曲）
  * 3. 网络匹配（标题+艺术家模糊搜索）
+ *
+ * 持久化缓存写入时机：用户主动切换到网络歌词来源（[MainViewModel.switchLyricsSource]）
+ * 后端歌词不参与持久化缓存。
  */
 class LyricsManager(
     private val context: Context,
@@ -29,31 +31,37 @@ class LyricsManager(
     private val networkMusicManager: NetworkMusicManager? = null
 ) {
 
-    private val cacheDir: File by lazy {
-        File(context.cacheDir, "lyrics").apply { mkdirs() }
-    }
-
     private val networkProvider = LyricsNetworkProvider()
-    private val cacheMutex = Mutex()
+    private val persistentCache = LyricsPersistentCache(context)
+
+    /**
+     * 网络歌词暂存区（songId → lrcText）。
+     * 用户切到网络歌词时暂存，歌曲播放完成时提交到持久化缓存。
+     * 如果用户切歌或切换来源，暂存内容被丢弃（不写入持久化）。
+     */
+    private val pendingNetworkLyrics = ConcurrentHashMap<String, String>()
 
     /**
      * 获取歌词 - 按优先级尝试多个来源
-     * 1. 本地缓存
-     * 2. 后端API（Jellyfin歌词端点）
-     * 3. 网络匹配
+     * 1. 持久化缓存（仅网络歌词，按 songId 匹配）
+     * 2. 后端API / NetworkMusicManager
+     * 3. 网络模糊匹配
      */
     suspend fun getLyrics(song: Song): Lyrics? = withContext(Dispatchers.IO) {
         AppLog.d("LyricsManager", "getLyrics: song=${song.title}, artist=${song.artist}, id=${song.id}")
 
-        // 1. Try local cache
-        val cached = getCachedLyrics(song)
+        // 1. Try persistent cache (network lyrics only, by songId)
+        val cached = persistentCache.get(song.id)
         if (cached != null) {
-            AppLog.d("LyricsManager", "getLyrics: found in cache, ${cached.lines.size} lines")
-            return@withContext cached
+            val lyrics = LrcParser.parse(cached.lrcText, song.id)
+                .copy(source = LyricsSource.NETWORK)
+            AppLog.d("LyricsManager", "getLyrics: found in persistent cache, ${lyrics.lines.size} lines")
+            return@withContext lyrics
         }
-        AppLog.d("LyricsManager", "getLyrics: no cache")
+        AppLog.d("LyricsManager", "getLyrics: no persistent cache")
 
         // 2. Check availability (backend API → network fallback)
+        // 注意：此处不自动写入持久化缓存，仅获取并返回
         val availability = checkAvailability(song)
         val lyrics = availability.backend ?: availability.network
         if (lyrics != null) {
@@ -68,6 +76,7 @@ class LyricsManager(
     /**
      * 检查歌词来源可用性
      * 同时尝试后端 API 和网络匹配，两个来源互不影响。
+     * 不自动写入持久化缓存——持久化仅在用户主动切换网络歌词时触发。
      */
     suspend fun checkAvailability(song: Song): LyricsAvailability = withContext(Dispatchers.IO) {
         AppLog.d("LyricsManager", "checkAvailability: song=${song.title}, artist=${song.artist}, id=${song.id}")
@@ -77,7 +86,6 @@ class LyricsManager(
             val networkLyrics = try {
                 val text = networkMusicManager.resolveLyrics(song)
                 if (!text.isNullOrBlank() && LrcParser.isValidLrc(text)) {
-                    cacheLyrics(song, text)
                     LrcParser.parse(text, song.id).copy(source = LyricsSource.NETWORK)
                 } else null
             } catch (e: Exception) {
@@ -89,7 +97,6 @@ class LyricsManager(
                 try {
                     val text = networkProvider.fetchLyrics(song.title, song.artist)
                     if (text != null) {
-                        cacheLyrics(song, text)
                         LrcParser.parse(text, song.id).copy(source = LyricsSource.NETWORK)
                     } else null
                 } catch (e: Exception) {
@@ -108,7 +115,6 @@ class LyricsManager(
             try {
                 val text = adapter.getLyrics(song.id)
                 if (!text.isNullOrBlank() && LrcParser.isValidLrc(text)) {
-                    cacheLyrics(song, text)
                     LrcParser.parse(text, song.id).copy(source = LyricsSource.EMBEDDED)
                 } else null
                 } catch (e: Exception) {
@@ -121,7 +127,6 @@ class LyricsManager(
         val networkLyrics = try {
             val text = networkProvider.fetchLyrics(song.title, song.artist)
             if (text != null) {
-                cacheLyrics(song, text)
                 LrcParser.parse(text, song.id).copy(source = LyricsSource.NETWORK)
             } else null
         } catch (e: Exception) {
@@ -137,6 +142,9 @@ class LyricsManager(
     /**
      * 从指定来源获取歌词
      * @param candidateIndex 候选歌词索引（仅 NETWORK 来源有效），用于切换不同候选歌词
+     *
+     * 注意：此方法不自动写入持久化缓存。
+     * 持久化写入由 [MainViewModel.switchLyricsSource] 在网络歌词成功获取后显式调用 [saveNetworkLyricsToCache]。
      */
     suspend fun getLyricsFromSource(song: Song, source: LyricsSource, candidateIndex: Int = 0): Lyrics? = withContext(Dispatchers.IO) {
         when (source) {
@@ -145,7 +153,6 @@ class LyricsManager(
                     // 网络歌曲没有内嵌歌词，走 NetworkMusicManager 获取在线歌词
                     val text = networkMusicManager.resolveLyrics(song)
                     if (!text.isNullOrBlank() && LrcParser.isValidLrc(text)) {
-                        cacheLyrics(song, text)
                         LrcParser.parse(text, song.id).copy(source = LyricsSource.NETWORK)
                     } else null
                 } else {
@@ -155,7 +162,6 @@ class LyricsManager(
                         try {
                             val text = adapter.getLyrics(song.id)
                             if (!text.isNullOrBlank() && LrcParser.isValidLrc(text)) {
-                                cacheLyrics(song, text)
                                 LrcParser.parse(text, song.id).copy(source = LyricsSource.EMBEDDED)
                             } else null
                         } catch (e: Exception) { null }
@@ -163,16 +169,31 @@ class LyricsManager(
                 }
             }
             LyricsSource.LOCAL_FILE -> getLocalLrcFile(song)
-            LyricsSource.LOCAL_CACHE -> getCachedLyrics(song)
+            LyricsSource.LOCAL_CACHE -> {
+                // 从持久化缓存读取网络歌词（与 getLyrics 的缓存路径一致）
+                val cached = persistentCache.get(song.id)
+                if (cached != null) {
+                    LrcParser.parse(cached.lrcText, song.id)
+                        .copy(source = LyricsSource.LOCAL_CACHE)
+                } else null
+            }
+            LyricsSource.CACHED -> {
+                // 从持久化缓存读取网络歌词，标记为 CACHED 来源
+                val cached = persistentCache.get(song.id)
+                if (cached != null) {
+                    LrcParser.parse(cached.lrcText, song.id)
+                        .copy(source = LyricsSource.CACHED)
+                } else null
+            }
             LyricsSource.NETWORK -> {
                 val candidates = networkProvider.fetchLyricsCandidates(song.title, song.artist)
                 AppLog.d("LyricsManager", "getLyricsFromSource NETWORK: ${candidates.size} candidates, index=$candidateIndex")
                 val idx = candidateIndex.coerceIn(0, (candidates.size - 1).coerceAtLeast(0))
                 if (candidates.isNotEmpty() && idx < candidates.size) {
                     val text = candidates[idx]
-                    val lyrics = LrcParser.parse(text, song.id).copy(source = LyricsSource.NETWORK)
-                    cacheLyrics(song, text)
-                    lyrics
+                    // 暂存到 pending 区，歌曲播放完成时才提交到持久化缓存
+                    pendingNetworkLyrics[song.id] = text
+                    LrcParser.parse(text, song.id).copy(source = LyricsSource.NETWORK)
                 } else null
             }
             else -> null
@@ -180,61 +201,64 @@ class LyricsManager(
     }
 
     /**
-     * 从本地缓存获取歌词
+     * 从持久化缓存读取网络歌词（如果存在），返回 [LyricsSource.CACHED] 来源的歌词对象。
      */
-    private suspend fun getCachedLyrics(song: Song): Lyrics? {
-        cacheMutex.withLock {
-            val cacheFile = getCacheFile(song)
-            if (cacheFile.exists()) {
-                val text = cacheFile.readText()
-                if (LrcParser.isValidLrc(text)) {
-                    return LrcParser.parse(text, song.id)
-                        .copy(source = LyricsSource.LOCAL_CACHE)
-                }
-            }
-            return null
+    suspend fun getCachedNetworkLyrics(song: Song): Lyrics? = withContext(Dispatchers.IO) {
+        val cached = persistentCache.get(song.id)
+        if (cached != null) {
+            val lyrics = LrcParser.parse(cached.lrcText, song.id)
+                .copy(source = LyricsSource.CACHED)
+            AppLog.d("LyricsManager", "getCachedNetworkLyrics: hit for '${song.title}', id=${song.id}")
+            return@withContext lyrics
         }
+        AppLog.d("LyricsManager", "getCachedNetworkLyrics: miss for '${song.title}', id=${song.id}")
+        null
     }
 
     /**
-     * 缓存歌词到本地
+     * 将网络歌词暂存到 pending 区，歌曲播放完成时调用 [commitPendingNetworkLyrics] 提交到持久化缓存。
      */
-    suspend fun cacheLyrics(song: Song, lrcText: String) {
-        cacheMutex.withLock {
-            try {
-                val cacheFile = getCacheFile(song)
-                val tempFile = File(cacheDir, "${cacheFile.name}.tmp")
-                tempFile.writeText(lrcText)
-                tempFile.renameTo(cacheFile)
-            } catch (e: Exception) {
-                AppLog.w("LyricsManager", "cacheLyrics failed: ${e.message}")
-            }
-        }
+    fun savePendingNetworkLyrics(song: Song, lrcText: String) {
+        pendingNetworkLyrics[song.id] = lrcText
+        AppLog.d("LyricsManager", "savePendingNetworkLyrics: '${song.title}' by ${song.artist}, id=${song.id}")
     }
 
     /**
-     * 获取缓存文件路径
+     * 提交 pending 中的网络歌词到持久化缓存（歌曲播放完成时调用，对应 MV 的 markCompleted）。
+     * 如果该歌曲有暂存的网络歌词，写入持久化缓存并更新 lastPlayedAt。
      */
-    private fun getCacheFile(song: Song): File {
-        val fileName = "${song.artist}_${song.title}.lrc"
-            .replace(Regex("[\\\\/:*?\"<>|]"), "_")
-        return File(cacheDir, fileName)
+    fun commitPendingNetworkLyrics(song: Song) {
+        val lrcText = pendingNetworkLyrics.remove(song.id) ?: return
+        val entry = com.nasmusic.tv.data.model.LyricsCacheEntry(
+            songId = song.id,
+            songTitle = song.title,
+            songArtist = song.artist,
+            lrcText = lrcText,
+            lastPlayedAt = System.currentTimeMillis()
+        )
+        persistentCache.put(entry)
+        AppLog.d("LyricsManager", "commitPendingNetworkLyrics: '${song.title}' by ${song.artist}, id=${song.id}")
     }
 
     /**
-     * 清除所有缓存
+     * 丢弃某首歌的 pending 网络歌词（切歌或切换来源时调用）。
+     */
+    fun discardPendingNetworkLyrics(songId: String) {
+        pendingNetworkLyrics.remove(songId)
+    }
+
+    /**
+     * 清除所有持久化缓存
      */
     suspend fun clearCache() {
-        cacheMutex.withLock {
-            cacheDir.listFiles()?.forEach { it.delete() }
-        }
+        persistentCache.clear()
     }
 
     /**
-     * 获取缓存大小
+     * 获取缓存条目数
      */
-    fun getCacheSize(): Long {
-        return cacheDir.listFiles()?.sumOf { it.length() } ?: 0
+    fun getCacheSize(): Int {
+        return persistentCache.size()
     }
 
     /**

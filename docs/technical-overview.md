@@ -5532,19 +5532,55 @@ v2.6.0 天气电台功能使用 Open-Meteo（无需 API Key）作为主要天气
 
 ---
 
-### 10.53 v2.17.3 - 批量播放网络歌曲性能优化
+### 10.53 v2.17.3 - 播放页跳转网络搜索 + 网络歌词持久化缓存 + 批量播放性能优化
 
 **功能描述**：
 
-`playNetworkBatch` 批量播放网络歌曲时性能优化——不再预先串行解析全部歌曲（最多 30 首）的播放链接，改为只即时解析 `startIndex` 处第一首，立即更新队列并开始播放；后续歌曲沿用已有的 `onNeedResolveStreamUrl` → `resolveAndPlayByIndex` 懒加载机制，在播放到该曲时按需解析。
+本次版本新增三个功能/优化：
 
-**问题**：原代码将 30 首网络歌曲的 `resolvePlayUrl` 串行调用（每首 1 次网络请求），全部完成后才调用 `playQueue` 更新队列并开始播放。用户点击"全部播放"后需等待 30×RTT（约 10-30 秒，取决于网络延迟）才能听到音乐。
+1. **播放页歌手/歌名可聚焦跳转网络搜索**：播放页 `CoverColumn` 中的歌曲名和歌手名从纯 `Text` 改为 `FocusableSurface`，D-Pad 可选中，按下确定键自动跳转到网络音乐搜索页（`Screen.Network` + `selectNetworkSubTab(SEARCH)`）并填入搜索词
+2. **网络歌词持久化缓存（参照 MvPersistentCache 模式）**：新增 `LyricsPersistentCache`，存储结构为 `lyrics_cache.json`（索引，仅 metadata）+ `lyrics_cache/{songId}.lrc`（纯 LRC 文本）；保存时机类似 MV 的 `markCompleted`——用户切到网络歌词时暂存到 `pendingNetworkLyrics`，歌曲播放完成时 `commitPendingNetworkLyrics` 才写入持久化；下次播放时自动读取并显示独立的 `CACHED` 来源标签（"缓存"），可选中高亮和切换
+3. **批量播放网络歌曲性能优化**：`playNetworkBatch` 不再预先串行解析全部歌曲（最多 30 首）的播放链接，改为只即时解析第一首后立即更新队列并开始播放，后续歌曲沿用已有的 `onNeedResolveStreamUrl` 懒加载机制
 
-**修改**：`playNetworkBatch` 只即时解析第一首，其余歌曲带入队列（streamUrl 为空），队列立即更新并开始播放。后续歌曲的 URL 解析由 `onNeedResolveStreamUrl` 回调触发，与单首网络歌曲及"恢复队列"的播放路径一致。
+#### 详细说明
 
-**主要变更**：
+**功能 1：播放页跳转网络搜索**
 
-1. **`ui/viewmodel/MainViewModel.kt`**：`playNetworkBatch` 中 `songs.map` 串行解析改为只解析 `songs[safeStart]` 一档，`playQueue` 入参改为 `queue`（仅替换第一首）
+原代码：歌手名和歌曲名为纯 `Text` 不可聚焦，用户无法直接搜索当前播放歌曲的歌手或歌名。
+
+修改：`NowPlayingScreen` 新增 `onSearchArtist` / `onSearchSong` 两个回调参数；`CoverColumn` 的歌曲名和外部歌手名包裹在 `FocusableSurface` 中；`AppRoot` 接线：`navigateTo(Screen.Network)` + `selectNetworkSubTab(SEARCH)` + `searchNetworkSongs(keyword)`。
+
+**功能 2：网络歌词持久化缓存**
+
+原代码：`LyricsManager` 缓存到 `context.cacheDir/lyrics`（系统可回收），key 为不可靠的 `{artist}_{title}.lrc`，且每次获取歌词时无条件写入，无"用户认可"的概念。
+
+修改：新增 `LyricsPersistentCache`，参照 `MvPersistentCache` 设计模式：
+
+- **存储结构**：`lyrics_cache.json`（`Map<songId, IndexEntry>`，仅 metadata，~200KB）+ `lyrics_cache/{songId}.lrc`（纯 LRC 文本），避免单 JSON 体积过大
+- **保存时机（pending + commit）**：用户切到网络歌词时 `getLyricsFromSource(NETWORK)` 将原始 LRC 文本暂存到 `pendingNetworkLyrics`（`ConcurrentHashMap`）；歌曲播放完成时 `currentSong.collect` 检测到上一首结束，若 `lastRecordedLyricsSource == NETWORK` 则调用 `commitPendingNetworkLyrics` 写入持久化——对应 MV 的 `markCompleted` 语义
+- **读取**：`loadLyricsForCurrentSong()` 优先查 `getCachedNetworkLyrics(song)`，命中则返回 `CACHED` 来源歌词并显示"缓存"标签
+- **CACHED 来源**：新增 `LyricsSource.CACHED("缓存")` 枚举，`LyricsAvailability.cached` 字段；播放页标签栏显示"缓存"按钮，有缓存时可用、选中时高亮；用户可随时切回"后端"或"网络"
+- **LRU 淘汰**：2000 条，按 `lastPlayedAt` 排序，同时删索引项 + `.lrc` 文件
+- **备份**：`exportAll()`/`importAll()` 接口，与 `MvPersistentCache` 一致
+- **后端歌词不参与持久化**，仅网络歌词走此流程
+
+**功能 3：批量播放网络歌曲性能优化**
+
+原代码：`playNetworkBatch` 将最多 30 首网络歌曲的 `resolvePlayUrl` 串行调用（每首 1 次网络请求），全部完成后才调用 `playQueue` 更新队列并开始播放。用户点击"全部播放"后需等待 30×RTT（约 10-30 秒，取决于网络延迟）才能听到音乐。
+
+修改：只即时解析 `startIndex` 处第一首，其余歌曲带入队列（streamUrl 为空），队列立即更新并开始播放。后续歌曲的 URL 解析由 `onNeedResolveStreamUrl` → `resolveAndPlayByIndex` 懒加载触发，与单首网络歌曲及"恢复队列"的播放路径一致。
+
+**主要变更文件**：
+
+1. **`ui/screens/NowPlayingScreen.kt`**：新增 `onSearchArtist`/`onSearchSong` 回调；`CoverColumn` 的歌曲名和外部歌手名改为 `FocusableSurface`；新增"缓存" SourceTag 按钮
+2. **`ui/components/AppRoot.kt`**：接线新回调，跳转网络搜索页并自动搜索
+3. **`data/model/LyricsSource.kt`**：新增 `CACHED("缓存")` 枚举
+4. **`data/model/Lyrics.kt`**：`LyricsAvailability` 新增 `cached` 字段和 `hasCached`
+5. **`data/model/LyricsCacheEntry.kt`**（新增）：歌词缓存条目数据类
+6. **`lyrics/LyricsPersistentCache.kt`**（新增）：持久化缓存类，`lyrics_cache.json`（索引）+ `{songId}.lrc`（独立文件），LRU 2000，export/import
+7. **`lyrics/LyricsManager.kt`**：移除旧的 file-based 缓存，接入 `LyricsPersistentCache`；新增 `getCachedNetworkLyrics`/`savePendingNetworkLyrics`/`commitPendingNetworkLyrics`/`discardPendingNetworkLyrics`；`getLyricsFromSource(NETWORK)` 写入 pending 而非直接持久化
+8. **`ui/viewmodel/MainViewModel.kt`**：`loadLyricsForCurrentSong` 优先选缓存；`currentSong.collect` 中播放完成时 commit；`playNetworkBatch` 只解析第一首，其余走懒加载
+9. **`app/src/main/res/values/strings.xml`**：新增 `player_highlight_cached` 字符串
 
 **验证结果**：
 
@@ -5555,6 +5591,5 @@ v2.6.0 天气电台功能使用 Open-Meteo（无需 API Key）作为主要天气
 **注意事项**：
 
 - 首次播放的歌曲仍然是即时解析的，不影响首次播放体验
-- 懒加载路径 `onNeedResolveStreamUrl` 已在上游经过充分验证（单首网络歌曲和恢复队列均使用此路径）
-
+- 旧 `cacheDir/lyrics` 下的缓存文件不会自动迁移到新结构，后续播放时会重新获取
 - 版本号由 v2.17.2 -> v2.17.3（versionCode 52 -> 53）
