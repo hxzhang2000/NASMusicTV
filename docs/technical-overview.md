@@ -5529,3 +5529,32 @@ v2.6.0 天气电台功能使用 Open-Meteo（无需 API Key）作为主要天气
 - `BackendRegistry` 的旧 adapter close 逻辑（`releaseAdapter` → `logout` + `close`）在修复前已正确存在，本次仅加注释强调其重要性
 - `WifiStateMachine` 每 3 秒打 `msg.what=131155`（CMD_RSSI_POLL）E 级日志是电视系统固件行为，与 App 无关
 - 版本号由 v2.17.1 -> v2.17.2（versionCode 51 -> 52）
+
+---
+
+### 10.53 v2.17.3 - 批量播放网络歌曲性能优化
+
+**功能描述**：
+
+`playNetworkBatch` 批量播放网络歌曲时性能优化——不再预先串行解析全部歌曲（最多 30 首）的播放链接，改为只即时解析 `startIndex` 处第一首，立即更新队列并开始播放；后续歌曲沿用已有的 `onNeedResolveStreamUrl` → `resolveAndPlayByIndex` 懒加载机制，在播放到该曲时按需解析。
+
+**问题**：原代码将 30 首网络歌曲的 `resolvePlayUrl` 串行调用（每首 1 次网络请求），全部完成后才调用 `playQueue` 更新队列并开始播放。用户点击"全部播放"后需等待 30×RTT（约 10-30 秒，取决于网络延迟）才能听到音乐。
+
+**修改**：`playNetworkBatch` 只即时解析第一首，其余歌曲带入队列（streamUrl 为空），队列立即更新并开始播放。后续歌曲的 URL 解析由 `onNeedResolveStreamUrl` 回调触发，与单首网络歌曲及"恢复队列"的播放路径一致。
+
+**主要变更**：
+
+1. **`ui/viewmodel/MainViewModel.kt`**：`playNetworkBatch` 中 `songs.map` 串行解析改为只解析 `songs[safeStart]` 一档，`playQueue` 入参改为 `queue`（仅替换第一首）
+
+**验证结果**：
+
+- ✅ `:app:compileDebugKotlin` BUILD SUCCESSFUL
+- ✅ 播放器行为无变化：第一首正常解析并播放，后续歌曲在播放到时自动调起懒加载解析
+- ✅ 首首串行解析的总延迟由 30×RTT 降至 1×RTT
+
+**注意事项**：
+
+- 首次播放的歌曲仍然是即时解析的，不影响首次播放体验
+- 懒加载路径 `onNeedResolveStreamUrl` 已在上游经过充分验证（单首网络歌曲和恢复队列均使用此路径）
+
+- 版本号由 v2.17.2 -> v2.17.3（versionCode 52 -> 53）

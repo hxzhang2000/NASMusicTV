@@ -9,6 +9,10 @@
 
 ## [v2.17.2] - 2026-08-11
 
+### Changed
+
+- **批量播放网络歌曲性能优化**：`playNetworkBatch` 不再预先串行解析全部 30 首歌的播放链接（延迟从 30×RTT 降至 1×RTT），改为只即时解析第一首后立即更新队列并开始播放，后续歌曲沿用现有的 `onNeedResolveStreamUrl` 懒加载机制
+
 ### Fixed
 
 - **电视 WiFi 频繁掉线（核心修复）**：`NetworkMonitor.onCapabilitiesChanged` 在 WiFi 信号波动时高频误触发 `onNetworkLost`/`onNetworkAvailable`，每次"恢复"都重新连接 NAS 并创建新的 `OkHttpClient`，累积多套连接池/线程池拖垮电视网络栈。改为仅在状态真正转换（无 internet → 有 internet）时回调 `onNetworkAvailable`，`onNetworkLost` 只由 `onLost` 触发——实测 1 小时 16 分钟 MV 连播零掉线（修复前频繁掉线）

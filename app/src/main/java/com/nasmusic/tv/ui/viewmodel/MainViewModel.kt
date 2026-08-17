@@ -1751,25 +1751,34 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
     }
 
     /**
-     * 批量播放网络歌曲（解析 URL 后加入队列）。
+     * 批量播放网络歌曲。
+     *
+     * 性能优化：不再预先串行解析全部歌曲的播放链接（最多 30 首串行网络请求，
+     * 会导致"全部播放"后等待很久才更新队列并开始播放）。
+     * 改为只即时解析 [startIndex] 处第一首，立即更新队列并开始播放；
+     * 后续歌曲沿用已有的 onNeedResolveStreamUrl → resolveAndPlayByIndex 懒加载机制，
+     * 在播放到该曲（onMediaItemTransition AUTO）或切歌时按需解析，
+     * 与单首网络歌曲及"恢复队列"的播放路径一致。
+     * 首首串行解析的总延迟由 30×RTT 降至 1×RTT。
      */
     private fun playNetworkBatch(songs: List<Song>, startIndex: Int) {
         if (songs.isEmpty()) return
+        val safeStart = startIndex.coerceIn(0, songs.lastIndex)
         viewModelScope.launch {
-            val resolved = songs.map { song ->
-                if (song.streamUrl.isNullOrBlank()) {
-                    try {
-                        val url = nasMusicApp.networkMusicManager.resolvePlayUrl(song)
-                        if (!url.isNullOrBlank()) song.copy(streamUrl = url) else song
-                    } catch (e: Exception) {
-                        AppLog.e("NASMusic", "playNetworkBatch: resolve failed for ${song.title}", e)
-                        song
-                    }
-                } else {
-                    song
+            val first = songs[safeStart]
+            val resolvedFirst = if (first.streamUrl.isNullOrBlank()) {
+                try {
+                    val url = nasMusicApp.networkMusicManager.resolvePlayUrl(first)
+                    if (!url.isNullOrBlank()) first.copy(streamUrl = url) else first
+                } catch (e: Exception) {
+                    AppLog.e("NASMusic", "playNetworkBatch: resolve first failed for ${first.title}", e)
+                    first
                 }
+            } else {
+                first
             }
-            playQueue(resolved, startIndex)
+            val queue = songs.toMutableList().apply { this[safeStart] = resolvedFirst }
+            playQueue(queue, safeStart)
         }
     }
 

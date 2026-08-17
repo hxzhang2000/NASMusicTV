@@ -57,9 +57,16 @@ app/release/
 
 # CI / debug leftovers
 build_log.txt
+build_rel.log
+build_rel2.log
+release_build.log
 ci_logs.zip
 logs.zip
 jobs.json
 jobs3.json
+defex.txt
 screen.png
 screenshot.png
+
+# Dev tools
+.workbuddy/
