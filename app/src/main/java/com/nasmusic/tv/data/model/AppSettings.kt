@@ -17,6 +17,10 @@ data class AppSettings(
     val metingApiBaseUrl: String = "",
     // MTV 视频搜索端点 URL（由 AppPreferences.getMvApiBaseUrlSync() 提供默认值）
     val mvApiBaseUrl: String = "",
+    // 网络歌词酷狗端点 URL（由 AppPreferences.getLyricsKugouBaseUrlSync() 提供默认值）
+    val lyricsKugouBaseUrl: String = "",
+    // 网络歌词网易云端点 URL（由 AppPreferences.getLyricsNeteaseBaseUrlSync() 提供默认值）
+    val lyricsNeteaseBaseUrl: String = "",
     // 频谱显示开关（默认关闭）
     val spectrumEnabled: Boolean = false,
     // 可视化频谱主题

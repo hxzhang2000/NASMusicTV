@@ -5593,3 +5593,35 @@ v2.6.0 天气电台功能使用 Open-Meteo（无需 API Key）作为主要天气
 - 首次播放的歌曲仍然是即时解析的，不影响首次播放体验
 - 旧 `cacheDir/lyrics` 下的缓存文件不会自动迁移到新结构，后续播放时会重新获取
 - 版本号由 v2.17.2 -> v2.17.3（versionCode 52 -> 53）
+
+---
+
+### 10.54 v2.17.4 - 网络歌词候选缓存 + 换一批 + 端点可配置 + 加载性能优化
+
+**功能描述**：
+
+本次版本对网络歌词系统进行多项优化：
+
+1. **网络歌词候选缓存 + 换一批**：`getLyricsFromSource(NETWORK)` 首次请求后将候选列表缓存到 `cachedCandidates`（`ConcurrentHashMap`），切换索引时只读缓存不重新请求；候选耗尽时自动用变异后缀（`歌词`、`完整版`、`原唱`、`歌曲`、`lyrics`）重新搜索并追加新候选，所有变异用尽时返回 null
+2. **Kugou/Netease 歌词端点可配置**：`LyricsNetworkProvider` 构造函数接收 `kugouBaseUrl`/`kugouLrcUrl`/`neteaseBaseUrl` 参数；设置页"网络搜索"分区新增"歌词端点"子分区，支持酷狗和网易云两个端点独立编辑
+3. **歌词加载性能优化**：`loadLyricsForCurrentSong()` 中缓存命中时立即设置 `_currentLyrics.value`，不等待 `checkAvailability()` 的网络请求完成
+4. **歌词优先级调整**：自动加载时按 `缓存(CACHED) → 内嵌(EMBEDDED) → 网络(NETWORK)` 优先级选择
+
+**主要变更文件**：
+
+1. **`lyrics/LyricsNetworkProvider.kt`**：构造函数接收可配置端点参数；新增 `DEFAULT_KUGOU_BASE_URL`/`DEFAULT_KUGOU_LRC_URL`/`DEFAULT_NETEASE_BASE_URL` 常量
+2. **`lyrics/LyricsManager.kt`**：新增 `cachedCandidates`/`candidateVariantRound`；`getLyricsFromSource(NETWORK)` 实现缓存 + 换一批；新增 `clearCachedCandidates()`
+3. **`data/prefs/AppPreferences.kt`**：新增 `keyLyricsKugouBaseUrl`/`keyLyricsNeteaseBaseUrl` 及对应 sync getter/setter
+4. **`data/model/AppSettings.kt`**：新增 `lyricsKugouBaseUrl`/`lyricsNeteaseBaseUrl` 字段
+5. **`ui/viewmodel/MainViewModel.kt`**：构造 `LyricsManager` 时传入端点参数；`loadLyricsForCurrentSong()` 开头调 `clearCachedCandidates()`；新增 `updateLyricsKugouBaseUrl()`/`updateLyricsNeteaseBaseUrl()`
+6. **`ui/screens/SettingsScreen.kt`**：新增"歌词端点"分区 + 编辑对话框
+7. **`ui/components/AppRoot.kt`**：接线新回调
+
+**验证结果**：
+
+- ✅ `:app:compileDebugKotlin` BUILD SUCCESSFUL
+
+**注意事项**：
+
+- `kugouBaseUrl` 同时作用于搜索和歌词下载两个端点（默认 `mobilecdn.kugou.com` 和 `krcs.kugou.com`），自定义端点时需确保两个路径均可用
+- 版本号由 v2.17.3 -> v2.17.4（versionCode 53 -> 54）

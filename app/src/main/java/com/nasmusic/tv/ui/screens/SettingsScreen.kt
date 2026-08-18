@@ -87,6 +87,11 @@ fun SettingsScreen(
     // MTV 视频搜索端点配置
     mvApiBaseUrl: String = "",
     onChangeMvApiBaseUrl: ((String) -> Unit)? = null,
+    // 网络歌词端点配置
+    lyricsKugouBaseUrl: String = "",
+    onChangeLyricsKugouBaseUrl: ((String) -> Unit)? = null,
+    lyricsNeteaseBaseUrl: String = "",
+    onChangeLyricsNeteaseBaseUrl: ((String) -> Unit)? = null,
     // 封面滤镜设置
     coverFilterEnabled: Boolean = false,
     coverFilterBlurRadius: Float = 8f,
@@ -131,6 +136,11 @@ fun SettingsScreen(
 
     // 天气 API Key 编辑对话框状态
     var showWeatherApiKeyDialog by remember { mutableStateOf(false) }
+
+    // 歌词端点编辑对话框状态
+    var showLyricsKugouDialog by remember { mutableStateOf(false) }
+    var showLyricsNeteaseDialog by remember { mutableStateOf(false) }
+    var lyricsUrlError by remember { mutableStateOf<String?>(null) }
 
     // 待删除的备份文件（非空时显示确认弹窗）
     var backupToDelete by remember {
@@ -765,6 +775,112 @@ fun SettingsScreen(
                         }
                     }
 
+                    // --- 网络歌词端点配置 ---
+                    if (onChangeLyricsKugouBaseUrl != null || onChangeLyricsNeteaseBaseUrl != null) {
+                        item { Spacer(modifier = Modifier.height(24.dp)) }
+                        item {
+                            Text(
+                                text = stringResource(R.string.settings_lyrics_endpoint),
+                                color = NasMusicColors.Primary,
+                                fontSize = 23.sp,
+                                modifier = Modifier.padding(bottom = 8.dp, start = 4.dp)
+                            )
+                        }
+                        // 酷狗端点
+                        item {
+                            Text(
+                                text = stringResource(R.string.settings_lyrics_kugou_url),
+                                color = NasMusicColors.TextPrimary,
+                                fontSize = 19.sp,
+                                modifier = Modifier.padding(start = 4.dp, top = 4.dp, bottom = 4.dp)
+                            )
+                        }
+                        item {
+                            FocusableSurface(
+                                onClick = { showLyricsKugouDialog = true; lyricsUrlError = null },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 4.dp),
+                                shape = RoundedCornerShape(12.dp),
+                                focusedScale = 1.02f,
+                                animationDurationMs = 250,
+                                containerColor = NasMusicColors.Surface,
+                                contentColor = NasMusicColors.TextPrimary,
+                                focusedContainerColor = NasMusicColors.Primary.copy(alpha = 0.15f),
+                                focusedContentColor = NasMusicColors.TextPrimary,
+                                pressedScale = 0.98f,
+                                focusBorderColor = NasMusicColors.FocusRing.copy(alpha = 0.6f)
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 24.dp, vertical = 14.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = lyricsKugouBaseUrl.ifBlank { stringResource(R.string.settings_lyrics_url_reset) },
+                                            color = NasMusicColors.TextSecondary,
+                                            fontSize = 17.sp
+                                        )
+                                    }
+                                    Text(
+                                        text = stringResource(R.string.settings_lyrics_url_edit),
+                                        color = NasMusicColors.Primary,
+                                        fontSize = 19.sp
+                                    )
+                                }
+                            }
+                        }
+                        // 网易云端点
+                        item { Spacer(modifier = Modifier.height(12.dp)) }
+                        item {
+                            Text(
+                                text = stringResource(R.string.settings_lyrics_netease_url),
+                                color = NasMusicColors.TextPrimary,
+                                fontSize = 19.sp,
+                                modifier = Modifier.padding(start = 4.dp, top = 4.dp, bottom = 4.dp)
+                            )
+                        }
+                        item {
+                            FocusableSurface(
+                                onClick = { showLyricsNeteaseDialog = true; lyricsUrlError = null },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 4.dp),
+                                shape = RoundedCornerShape(12.dp),
+                                focusedScale = 1.02f,
+                                animationDurationMs = 250,
+                                containerColor = NasMusicColors.Surface,
+                                contentColor = NasMusicColors.TextPrimary,
+                                focusedContainerColor = NasMusicColors.Primary.copy(alpha = 0.15f),
+                                focusedContentColor = NasMusicColors.TextPrimary,
+                                pressedScale = 0.98f,
+                                focusBorderColor = NasMusicColors.FocusRing.copy(alpha = 0.6f)
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 24.dp, vertical = 14.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = lyricsNeteaseBaseUrl.ifBlank { stringResource(R.string.settings_lyrics_url_reset) },
+                                            color = NasMusicColors.TextSecondary,
+                                            fontSize = 17.sp
+                                        )
+                                    }
+                                    Text(
+                                        text = stringResource(R.string.settings_lyrics_url_edit),
+                                        color = NasMusicColors.Primary,
+                                        fontSize = 19.sp
+                                    )
+                                }
+                            }
+                        }
+                    }
+
                     // --- 天气 API Key 配置 ---
                     if (onChangeWeatherApiKey != null) {
                         item { Spacer(modifier = Modifier.height(24.dp)) }
@@ -975,6 +1091,68 @@ fun SettingsScreen(
             onDismiss = {
                 showMvUrlDialog = false
                 mvUrlError = null
+            }
+        )
+    }
+
+    // 酷狗歌词端点编辑对话框
+    if (showLyricsKugouDialog) {
+        val invalidMsg = stringResource(R.string.settings_lyrics_url_invalid)
+        val hint = stringResource(R.string.settings_lyrics_url_hint)
+        TextInputDialog(
+            title = stringResource(R.string.settings_lyrics_kugou_url),
+            hint = hint,
+            initialValue = lyricsKugouBaseUrl,
+            onConfirm = { input ->
+                val trimmed = input.trim()
+                if (trimmed.isEmpty()) {
+                    lyricsUrlError = null
+                    onChangeLyricsKugouBaseUrl?.invoke(
+                        com.nasmusic.tv.lyrics.LyricsNetworkProvider.DEFAULT_KUGOU_BASE_URL
+                    )
+                    showLyricsKugouDialog = false
+                } else if (!trimmed.startsWith("http://") && !trimmed.startsWith("https://")) {
+                    lyricsUrlError = invalidMsg
+                } else {
+                    lyricsUrlError = null
+                    onChangeLyricsKugouBaseUrl?.invoke(trimmed)
+                    showLyricsKugouDialog = false
+                }
+            },
+            onDismiss = {
+                showLyricsKugouDialog = false
+                lyricsUrlError = null
+            }
+        )
+    }
+
+    // 网易云歌词端点编辑对话框
+    if (showLyricsNeteaseDialog) {
+        val invalidMsg = stringResource(R.string.settings_lyrics_url_invalid)
+        val hint = stringResource(R.string.settings_lyrics_url_hint)
+        TextInputDialog(
+            title = stringResource(R.string.settings_lyrics_netease_url),
+            hint = hint,
+            initialValue = lyricsNeteaseBaseUrl,
+            onConfirm = { input ->
+                val trimmed = input.trim()
+                if (trimmed.isEmpty()) {
+                    lyricsUrlError = null
+                    onChangeLyricsNeteaseBaseUrl?.invoke(
+                        com.nasmusic.tv.lyrics.LyricsNetworkProvider.DEFAULT_NETEASE_BASE_URL
+                    )
+                    showLyricsNeteaseDialog = false
+                } else if (!trimmed.startsWith("http://") && !trimmed.startsWith("https://")) {
+                    lyricsUrlError = invalidMsg
+                } else {
+                    lyricsUrlError = null
+                    onChangeLyricsNeteaseBaseUrl?.invoke(trimmed)
+                    showLyricsNeteaseDialog = false
+                }
+            },
+            onDismiss = {
+                showLyricsNeteaseDialog = false
+                lyricsUrlError = null
             }
         )
     }

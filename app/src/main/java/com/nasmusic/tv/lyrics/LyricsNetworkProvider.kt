@@ -22,10 +22,20 @@ import java.util.concurrent.TimeUnit
  * - 日志统一使用 AppLog（Release 构建自动抑制调试日志）
  * - JSON 解析统一使用 Gson（与 MetingApiService 一致）
  */
-class LyricsNetworkProvider {
+class LyricsNetworkProvider(
+    /** 酷狗搜索端点基 URL（默认 https://mobilecdn.kugou.com） */
+    private val kugouBaseUrl: String = DEFAULT_KUGOU_BASE_URL,
+    /** 酷狗歌词端点基 URL（默认 https://krcs.kugou.com） */
+    private val kugouLrcUrl: String = DEFAULT_KUGOU_LRC_URL,
+    /** 网易云搜索端点基 URL（默认 https://music.163.com） */
+    private val neteaseBaseUrl: String = DEFAULT_NETEASE_BASE_URL
+) {
 
     companion object {
         private const val TAG = "LyricsNetwork"
+        const val DEFAULT_KUGOU_BASE_URL = "https://mobilecdn.kugou.com"
+        const val DEFAULT_KUGOU_LRC_URL = "https://krcs.kugou.com"
+        const val DEFAULT_NETEASE_BASE_URL = "https://music.163.com"
         /**
          * 守护线程池：防止 OkHttp 非守护线程阻止进程退出
          * 静态变量避免每个实例创建新线程池
@@ -116,7 +126,7 @@ class LyricsNetworkProvider {
      */
     private suspend fun fetchFromKugou(keyword: String, maxResults: Int = 1): List<String> {
         return try {
-            val searchUrl = "https://mobilecdn.kugou.com/api/v3/search/song?keyword=" +
+            val searchUrl = "${kugouBaseUrl.trimEnd('/')}/api/v3/search/song?keyword=" +
                     URLEncoder.encode(keyword, "UTF-8") +
                     "&page=1&pagesize=$maxResults&showtype=14"
             AppLog.d(TAG, "Kugou search: $searchUrl")
@@ -165,7 +175,7 @@ class LyricsNetworkProvider {
      */
     private suspend fun getLyricsByHash(hash: String): String? {
         return try {
-            val lyricUrl = "https://krcs.kugou.com/search?ver=1&man=yes&client=mobi&keyword=&duration=&hash=$hash&album_audio_id="
+            val lyricUrl = "${kugouLrcUrl.trimEnd('/')}/search?ver=1&man=yes&client=mobi&keyword=&duration=&hash=$hash&album_audio_id="
             AppLog.d(TAG, "Kugou lyrics by hash: $hash")
 
             val lyricRequest = Request.Builder()
@@ -196,7 +206,7 @@ class LyricsNetworkProvider {
      */
     private suspend fun fetchFromNetease(keyword: String, maxResults: Int = 1): List<String> {
         return try {
-            val searchUrl = "https://music.163.com/api/search/get/web?csrf_token=" +
+            val searchUrl = "${neteaseBaseUrl.trimEnd('/')}/api/search/get/web?csrf_token=" +
                     "&s=" + URLEncoder.encode(keyword, "UTF-8") +
                     "&type=1&offset=0&total=true&limit=$maxResults"
             AppLog.d(TAG, "Netease search: $searchUrl")
@@ -246,7 +256,7 @@ class LyricsNetworkProvider {
      */
     private suspend fun getLyricsBySongId(songId: String): String? {
         return try {
-            val lyricUrl = "https://music.163.com/api/song/lyric?os=pc&id=$songId&lv=-1&kv=-1&tv=-1"
+            val lyricUrl = "${neteaseBaseUrl.trimEnd('/')}/api/song/lyric?os=pc&id=$songId&lv=-1&kv=-1&tv=-1"
             AppLog.d(TAG, "Netease lyrics by songId: $songId")
 
             val lyricRequest = Request.Builder()
@@ -301,7 +311,7 @@ class LyricsNetworkProvider {
 
             if (id != null && accessKey != null) {
                 // 获取实际歌词内容
-                val lrcUrl = "https://krcs.kugou.com/download?ver=1&client=pc&id=$id&accesskey=$accessKey&fmt=lrc&charset=utf8"
+                val lrcUrl = "${kugouLrcUrl.trimEnd('/')}/download?ver=1&client=pc&id=$id&accesskey=$accessKey&fmt=lrc&charset=utf8"
                 val lrcRequest = Request.Builder()
                     .url(lrcUrl)
                     .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")

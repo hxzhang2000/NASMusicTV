@@ -205,6 +205,16 @@
     <string name="settings_mv_api_url_reset">恢复默认</string>
     <string name="settings_mv_api_url_hint">输入视频搜索端点 URL</string>
     <string name="settings_mv_api_url_invalid">URL 格式不正确，请以 http:// 或 https:// 开头</string>
+
+    <string name="settings_lyrics_endpoint">歌词端点</string>
+    <string name="settings_lyrics_kugou_url">酷狗歌词端点</string>
+    <string name="settings_lyrics_kugou_url_desc">酷狗音乐歌词搜索所用 API 地址，默认 https://mobilecdn.kugou.com</string>
+    <string name="settings_lyrics_netease_url">网易云歌词端点</string>
+    <string name="settings_lyrics_netease_url_desc">网易云音乐歌词搜索所用 API 地址，默认 https://music.163.com</string>
+    <string name="settings_lyrics_url_edit">修改端点</string>
+    <string name="settings_lyrics_url_reset">恢复默认</string>
+    <string name="settings_lyrics_url_hint">输入歌词搜索端点 URL</string>
+    <string name="settings_lyrics_url_invalid">URL 格式不正确，请以 http:// 或 https:// 开头</string>
     <string name="settings_mv_preset_endpoints">预设端点</string>
     <string name="settings_mv_custom_endpoint">自定义端点</string>
     <string name="settings_mv_custom_endpoint_desc">使用自建代理或其他镜像端点</string>

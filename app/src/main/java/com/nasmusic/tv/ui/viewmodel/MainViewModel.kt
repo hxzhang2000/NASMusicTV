@@ -104,7 +104,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
     private val _coverFilterDarkOverlay = MutableStateFlow(0.3f)
     val coverFilterDarkOverlay: StateFlow<Float> = _coverFilterDarkOverlay.asStateFlow()
     private val backendRegistry = nasMusicApp.backendRegistry
-    private val lyricsManager = LyricsManager(app, backendRegistry, nasMusicApp.networkMusicManager)
+    private val lyricsManager = LyricsManager(
+        app, backendRegistry, nasMusicApp.networkMusicManager,
+        kugouBaseUrl = prefs.getLyricsKugouBaseUrlSync(),
+        neteaseBaseUrl = prefs.getLyricsNeteaseBaseUrlSync()
+    )
 
     // --- 手机遥控服务器 ---
     private val remoteControlServer = RemoteControlServer()
@@ -2996,29 +3000,43 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
 
     private fun loadLyricsForCurrentSong() {
         lyricsLoadJob?.cancel()
+        // 切歌时清空候选缓存和轮次状态
+        lyricsManager.clearCachedCandidates()
         _currentLyrics.value = null
         _lyricsAvailability.value = LyricsAvailability()
         val song = currentSong.value ?: return
         AppLog.d("NASMusic", "loadLyrics: loading for ${song.title} by ${song.artist}")
         lyricsLoadJob = viewModelScope.launch {
             try {
-                // 1. 先查持久化缓存（网络歌词，之前播放完成时提交的）
+                // 1. 先查持久化缓存——快速读取，不阻塞歌词显示
                 val cachedLyrics = lyricsManager.getCachedNetworkLyrics(song)
-                // 2. 再检查后端 + 网络可用来源
+                if (cachedLyrics != null) {
+                    _currentLyrics.value = cachedLyrics
+                    _lyricsAvailability.value = LyricsAvailability(cached = cachedLyrics)
+                    if (cachedLyrics.lines.any { it.wordTimestamps.isNotEmpty() }) {
+                        _lyricsHighlightMode.value = LyricsHighlightMode.WORD_BY_WORD
+                    }
+                    AppLog.d("NASMusic", "loadLyrics: cached hit, shown immediately")
+                }
+
+                // 2. 后台检查后端 + 网络可用来源（更新标签状态，不影响已显示的歌词）
                 val availability = lyricsManager.checkAvailability(song)
-                _lyricsAvailability.value = availability.copy(cached = cachedLyrics)
+                // 保留已有的缓存状态
+                _lyricsAvailability.value = availability.copy(cached = _lyricsAvailability.value?.cached)
                 AppLog.d("NASMusic", "loadLyrics: cached=${cachedLyrics != null}, backend=${availability.hasBackend}, network=${availability.hasNetwork}")
 
-                // 自动选择：缓存 > 后端 > 网络
-                val lyrics = cachedLyrics ?: availability.backend ?: availability.network
-                _currentLyrics.value = lyrics
-                // 自动检测歌词格式：含逐字时间戳时切到逐字高亮；否则保持用户上次选择（跨页面切换不丢失）
-                if (lyrics != null && lyrics.lines.any { it.wordTimestamps.isNotEmpty() }) {
-                    _lyricsHighlightMode.value = LyricsHighlightMode.WORD_BY_WORD
+                // 3. 无缓存时使用后端或网络歌词
+                if (cachedLyrics == null) {
+                    val lyrics = availability.backend ?: availability.network
+                    if (lyrics != null) {
+                        _currentLyrics.value = lyrics
+                        if (lyrics.lines.any { it.wordTimestamps.isNotEmpty() }) {
+                            _lyricsHighlightMode.value = LyricsHighlightMode.WORD_BY_WORD
+                        }
+                    }
+                    AppLog.d("NASMusic", "loadLyrics: source=${lyrics?.source}, lines=${lyrics?.lines?.size}")
                 }
-                AppLog.d("NASMusic", "loadLyrics: source=${lyrics?.source}, lines=${lyrics?.lines?.size}")
             } catch (e: kotlinx.coroutines.CancellationException) {
-                // 协程被主动取消（如切歌时 lyricsLoadJob.cancel()），不是错误，不提示
                 throw e
             } catch (e: Exception) {
                 AppLog.e("NASMusic", "loadLyrics failed", e)
@@ -3175,6 +3193,24 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
             prefs.setMvApiBaseUrl(com.nasmusic.tv.backend.network.mv.BilibiliMvService.DEFAULT_BASE_URL)
         } else {
             prefs.setMvApiBaseUrl(normalized)
+        }
+    }
+
+    fun updateLyricsKugouBaseUrl(url: String) = viewModelScope.launch {
+        val normalized = url.trim()
+        if (normalized.isEmpty()) {
+            prefs.setLyricsKugouBaseUrl(com.nasmusic.tv.lyrics.LyricsNetworkProvider.DEFAULT_KUGOU_BASE_URL)
+        } else {
+            prefs.setLyricsKugouBaseUrl(normalized)
+        }
+    }
+
+    fun updateLyricsNeteaseBaseUrl(url: String) = viewModelScope.launch {
+        val normalized = url.trim()
+        if (normalized.isEmpty()) {
+            prefs.setLyricsNeteaseBaseUrl(com.nasmusic.tv.lyrics.LyricsNetworkProvider.DEFAULT_NETEASE_BASE_URL)
+        } else {
+            prefs.setLyricsNeteaseBaseUrl(normalized)
         }
     }
 

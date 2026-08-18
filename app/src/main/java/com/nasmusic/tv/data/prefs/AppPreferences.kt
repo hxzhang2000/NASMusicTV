@@ -63,6 +63,8 @@ class AppPreferences(private val context: Context) {
     private val keyDefaultNetworkSource = stringPreferencesKey("settings_default_network_source")
     private val keyMetingApiBaseUrl = stringPreferencesKey("settings_meting_api_base_url")
     private val keyMvApiBaseUrl = stringPreferencesKey("settings_mv_api_base_url")
+    private val keyLyricsKugouBaseUrl = stringPreferencesKey("settings_lyrics_kugou_base_url")
+    private val keyLyricsNeteaseBaseUrl = stringPreferencesKey("settings_lyrics_netease_base_url")
 
     // --- B-2 最近播放 & 播放次数（序列化为 JSON）---
     private val keyRecentSongs = stringPreferencesKey("recent_songs")
@@ -268,6 +270,8 @@ class AppPreferences(private val context: Context) {
             defaultNetworkSource = prefs[keyDefaultNetworkSource]?.let { NetworkSource.fromKey(it) ?: NetworkSource.fromName(it) } ?: NetworkSource.DEFAULT,
             metingApiBaseUrl = prefs[keyMetingApiBaseUrl] ?: MetingApiService.DEFAULT_BASE_URL,
             mvApiBaseUrl = prefs[keyMvApiBaseUrl] ?: BilibiliMvService.DEFAULT_BASE_URL,
+            lyricsKugouBaseUrl = prefs[keyLyricsKugouBaseUrl] ?: com.nasmusic.tv.lyrics.LyricsNetworkProvider.DEFAULT_KUGOU_BASE_URL,
+            lyricsNeteaseBaseUrl = prefs[keyLyricsNeteaseBaseUrl] ?: com.nasmusic.tv.lyrics.LyricsNetworkProvider.DEFAULT_NETEASE_BASE_URL,
             spectrumEnabled = prefs[keySpectrumEnabled] ?: false,
             visualizerTheme = prefs[keyVisualizerTheme]?.let { VisualizerTheme.fromKey(it) } ?: VisualizerTheme.COLOR_FLOW
         )
@@ -466,6 +470,39 @@ class AppPreferences(private val context: Context) {
             }
         }
     }
+
+    // --- 网络歌词端点（Kugou / Netease）---
+    fun getLyricsKugouBaseUrlSync(): String {
+        return runBlocking(Dispatchers.IO) {
+            try {
+                context.dataStore.data.first()[keyLyricsKugouBaseUrl]
+                    ?: com.nasmusic.tv.lyrics.LyricsNetworkProvider.DEFAULT_KUGOU_BASE_URL
+            } catch (e: Exception) {
+                com.nasmusic.tv.lyrics.LyricsNetworkProvider.DEFAULT_KUGOU_BASE_URL
+            }
+        }
+    }
+
+    fun getLyricsNeteaseBaseUrlSync(): String {
+        return runBlocking(Dispatchers.IO) {
+            try {
+                context.dataStore.data.first()[keyLyricsNeteaseBaseUrl]
+                    ?: com.nasmusic.tv.lyrics.LyricsNetworkProvider.DEFAULT_NETEASE_BASE_URL
+            } catch (e: Exception) {
+                com.nasmusic.tv.lyrics.LyricsNetworkProvider.DEFAULT_NETEASE_BASE_URL
+            }
+        }
+    }
+
+    suspend fun setLyricsKugouBaseUrl(url: String) =
+        context.dataStore.edit {
+            it[keyLyricsKugouBaseUrl] = url.trim().trim('`', '\'', '"').trim()
+        }
+
+    suspend fun setLyricsNeteaseBaseUrl(url: String) =
+        context.dataStore.edit {
+            it[keyLyricsNeteaseBaseUrl] = url.trim().trim('`', '\'', '"').trim()
+        }
 
     // --- 网络歌曲收藏 ---
 

@@ -28,10 +28,18 @@ import java.util.concurrent.ConcurrentHashMap
 class LyricsManager(
     private val context: Context,
     private val backendRegistry: BackendRegistry,
-    private val networkMusicManager: NetworkMusicManager? = null
+    private val networkMusicManager: NetworkMusicManager? = null,
+    /** 酷狗歌词端点（空字符串使用默认值） */
+    kugouBaseUrl: String = "",
+    /** 网易云歌词端点（空字符串使用默认值） */
+    neteaseBaseUrl: String = ""
 ) {
 
-    private val networkProvider = LyricsNetworkProvider()
+    private val networkProvider = LyricsNetworkProvider(
+        kugouBaseUrl = kugouBaseUrl.ifBlank { LyricsNetworkProvider.DEFAULT_KUGOU_BASE_URL },
+        kugouLrcUrl = kugouBaseUrl.ifBlank { LyricsNetworkProvider.DEFAULT_KUGOU_LRC_URL },
+        neteaseBaseUrl = neteaseBaseUrl.ifBlank { LyricsNetworkProvider.DEFAULT_NETEASE_BASE_URL }
+    )
     private val persistentCache = LyricsPersistentCache(context)
 
     /**
@@ -40,6 +48,22 @@ class LyricsManager(
      * 如果用户切歌或切换来源，暂存内容被丢弃（不写入持久化）。
      */
     private val pendingNetworkLyrics = ConcurrentHashMap<String, String>()
+
+    /**
+     * 网络歌词候选缓存（songId → 全部候选列表，跨轮次累积）。
+     * 首次搜索时获取，后续轮次追加新结果，切换索引时只读缓存不重新请求。
+     */
+    private val cachedCandidates = ConcurrentHashMap<String, List<String>>()
+
+    /**
+     * 当前搜索变异轮次索引（songId → round），用于候选耗尽时换一批重新搜索。
+     */
+    private val candidateVariantRound = ConcurrentHashMap<String, Int>()
+
+    companion object {
+        /** 搜索变异后缀，候选耗尽时依次尝试获取新候选 */
+        private val variantSuffixes = listOf("", "歌词", "完整版", "原唱", "歌曲", "lyrics")
+    }
 
     /**
      * 获取歌词 - 按优先级尝试多个来源
@@ -186,15 +210,42 @@ class LyricsManager(
                 } else null
             }
             LyricsSource.NETWORK -> {
-                val candidates = networkProvider.fetchLyricsCandidates(song.title, song.artist)
-                AppLog.d("LyricsManager", "getLyricsFromSource NETWORK: ${candidates.size} candidates, index=$candidateIndex")
-                val idx = candidateIndex.coerceIn(0, (candidates.size - 1).coerceAtLeast(0))
-                if (candidates.isNotEmpty() && idx < candidates.size) {
-                    val text = candidates[idx]
-                    // 暂存到 pending 区，歌曲播放完成时才提交到持久化缓存
+                // 1. 首次搜索或换一批时获取候选
+                if (!cachedCandidates.containsKey(song.id)) {
+                    val results = networkProvider.fetchLyricsCandidates(song.title, song.artist)
+                    cachedCandidates[song.id] = results
+                    candidateVariantRound[song.id] = 0
+                    AppLog.d("LyricsManager", "NETWORK: first fetch, ${results.size} candidates")
+                }
+                val candidates = cachedCandidates[song.id] ?: emptyList()
+
+                // 2. 当前候选足够 → 直接返回
+                if (candidateIndex < candidates.size) {
+                    val text = candidates[candidateIndex]
                     pendingNetworkLyrics[song.id] = text
-                    LrcParser.parse(text, song.id).copy(source = LyricsSource.NETWORK)
-                } else null
+                    return@withContext LrcParser.parse(text, song.id).copy(source = LyricsSource.NETWORK)
+                }
+
+                // 3. 候选耗尽 → 换一批重新搜索
+                val currentRound = candidateVariantRound[song.id] ?: 0
+                val nextRound = currentRound + 1
+                if (nextRound < variantSuffixes.size) {
+                    val suffix = variantSuffixes[nextRound]
+                    val keyword = if (suffix.isBlank()) song.title else "${song.title} $suffix"
+                    AppLog.d("LyricsManager", "NETWORK: candidates exhausted, re-search round=$nextRound keyword='$keyword'")
+                    val newResults = networkProvider.fetchLyricsCandidates(keyword, song.artist)
+                    if (newResults.isNotEmpty()) {
+                        val all = candidates + newResults
+                        cachedCandidates[song.id] = all
+                        candidateVariantRound[song.id] = nextRound
+                        val text = all[candidateIndex]
+                        pendingNetworkLyrics[song.id] = text
+                        return@withContext LrcParser.parse(text, song.id).copy(source = LyricsSource.NETWORK)
+                    }
+                }
+                // 所有变异轮次用尽 → 返回 null
+                AppLog.w("LyricsManager", "NETWORK: all variants exhausted, no more candidates")
+                null
             }
             else -> null
         }
@@ -245,6 +296,14 @@ class LyricsManager(
      */
     fun discardPendingNetworkLyrics(songId: String) {
         pendingNetworkLyrics.remove(songId)
+    }
+
+    /**
+     * 清空候选缓存和搜索轮次（切歌时调用）。
+     */
+    fun clearCachedCandidates() {
+        cachedCandidates.clear()
+        candidateVariantRound.clear()
     }
 
     /**
