@@ -1,6 +1,6 @@
 # NAS Music TV
 
-一款开源的 Android TV 端 NAS 音乐播放器，让电视上的歌词显示不再是奢望。
+一款开源的 Android TV 音乐播放器：聚合 NAS（Jellyfin / Navidrome）、网络音乐与百度网盘多音乐源，支持逐字卡拉OK歌词、K 歌伴奏、MTV 音乐视频、天气电台等电视专属体验。
 
 [![Release](https://img.shields.io/github/v/release/hxzhang2000/NASMusicTV?color=blue&label=Release)](https://github.com/hxzhang2000/NASMusicTV/releases)
 
