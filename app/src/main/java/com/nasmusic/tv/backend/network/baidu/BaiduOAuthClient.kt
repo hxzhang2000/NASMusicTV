@@ -96,7 +96,8 @@ class BaiduOAuthClient(
                     userCode = json.get("user_code")?.asString ?: "",
                     verificationUrl = json.get("verification_url")?.asString
                         ?: BaiduNetdiskConfig.VERIFICATION_URL,
-                    qrcodeUrl = json.get("qrcode_url")?.asString,
+                    // 校验为完整 http(s) URL，避免接口返回相对路径导致二维码不可扫描
+                    qrcodeUrl = json.get("qrcode_url")?.asString?.takeIf { it.startsWith("http://") || it.startsWith("https://") },
                     expiresIn = json.get("expires_in")?.asInt ?: BaiduNetdiskConfig.DEVICE_CODE_EXPIRE_SEC,
                     interval = json.get("interval")?.asInt ?: BaiduNetdiskConfig.DEFAULT_POLL_INTERVAL_SEC
                 )

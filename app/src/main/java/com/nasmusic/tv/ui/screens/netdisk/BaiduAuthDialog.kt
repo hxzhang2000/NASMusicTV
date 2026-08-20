@@ -1,7 +1,6 @@
 package com.nasmusic.tv.ui.screens.netdisk
 
 import android.graphics.Bitmap
-import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -11,10 +10,13 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -67,10 +69,9 @@ fun BaiduAuthDialog(
 ) {
     var qrBitmap by remember { mutableStateOf<Bitmap?>(null) }
 
-    // 二维码内容：优先 qrcodeUrl，否则回退 verificationUrl
-    val qrContent = remember(deviceCode) {
-        deviceCode?.let { it.qrcodeUrl ?: it.verificationUrl }
-    }
+    // 二维码内容：编码稳定的验证页（verificationUrl），扫码后打开标准验证页手动输入设备码。
+    // 不使用 qrcode_url：其一次性 token 链接（如 .../device/qrcode/<token>）扫码后经常打不开。
+    val qrContent = remember(deviceCode) { deviceCode?.verificationUrl }
     LaunchedEffect(qrContent) {
         qrBitmap = qrContent?.let { QrCodeGenerator.generateQrBitmap(it, 360) }
     }
@@ -86,12 +87,10 @@ fun BaiduAuthDialog(
         }
     }
 
-    BackHandler { onCancel() }
-
     Dialog(
-        onDismissRequest = {},
+        onDismissRequest = onCancel,
         properties = DialogProperties(
-            dismissOnBackPress = false,
+            dismissOnBackPress = true,
             dismissOnClickOutside = false,
             usePlatformDefaultWidth = false
         )
@@ -105,6 +104,8 @@ fun BaiduAuthDialog(
             Column(
                 modifier = Modifier
                     .width(600.dp)
+                    .heightIn(max = 760.dp)
+                    .verticalScroll(rememberScrollState())
                     .background(NasMusicColors.Surface, RoundedCornerShape(16.dp))
                     .padding(28.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
@@ -134,33 +135,51 @@ fun BaiduAuthDialog(
                         )
                         Spacer(modifier = Modifier.height(36.dp))
                     }
-                    // 已获取设备码：显示二维码 + 设备码
+                    // 已获取设备码：显示分步指引 + 二维码
                     deviceCode != null -> {
-                        qrBitmap?.let { bitmap ->
-                            Image(
-                                bitmap = bitmap.asImageBitmap(),
-                                contentDescription = stringResource(R.string.netdisk_auth_qr_desc),
-                                modifier = Modifier.size(280.dp)
-                            )
-                        }
-                        Spacer(modifier = Modifier.height(16.dp))
+                        // 主流程：分步说明（手机手动打开网址输入设备码，最可靠的授权方式）
                         Text(
-                            text = stringResource(R.string.netdisk_auth_user_code),
-                            color = NasMusicColors.TextSecondary,
-                            fontSize = 17.sp
+                            text = stringResource(R.string.netdisk_auth_step1),
+                            color = NasMusicColors.TextPrimary,
+                            fontSize = 18.sp,
+                            textAlign = TextAlign.Center
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            text = deviceCode.verificationUrl,
+                            color = NasMusicColors.Primary,
+                            fontSize = 18.sp,
+                            textAlign = TextAlign.Center
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Text(
+                            text = stringResource(R.string.netdisk_auth_step2),
+                            color = NasMusicColors.TextPrimary,
+                            fontSize = 18.sp,
+                            textAlign = TextAlign.Center
                         )
                         Text(
                             text = deviceCode.userCode,
                             color = NasMusicColors.Primary,
-                            fontSize = 30.sp
+                            fontSize = 34.sp,
+                            fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
                         )
-                        Spacer(modifier = Modifier.height(8.dp))
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        // 辅助：二维码（扫码可能因 App 拦截/网络不可用，故不作为主流程）
                         Text(
-                            text = deviceCode.verificationUrl,
+                            text = stringResource(R.string.netdisk_auth_qr_alt),
                             color = NasMusicColors.TextSecondary,
-                            fontSize = 16.sp,
-                            textAlign = TextAlign.Center
+                            fontSize = 15.sp
                         )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        qrBitmap?.let { bitmap ->
+                            Image(
+                                bitmap = bitmap.asImageBitmap(),
+                                contentDescription = stringResource(R.string.netdisk_auth_qr_desc),
+                                modifier = Modifier.size(200.dp)
+                            )
+                        }
                         Spacer(modifier = Modifier.height(12.dp))
                         Text(
                             text = stringResource(R.string.netdisk_auth_waiting),
