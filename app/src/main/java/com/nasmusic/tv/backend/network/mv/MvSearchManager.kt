@@ -72,7 +72,7 @@ class MvSearchManager(
             for (svc in services) {
                 try {
                     AppLog.d(TAG, "searchMvFor: trying service ${svc::class.java.simpleName} for '$key'")
-                    val result = svc.searchMv(song.title, song.artist, excludeBvids, minSimilarity)
+                    val result = svc.searchMv(song.title, song.artist, excludeBvids, minSimilarity, song)
                     if (result != null) {
                         cache[key] = CachedResult(result, now)
                         // 存 bvid 到持久缓存（不存直链，直链会过期）
@@ -125,6 +125,32 @@ class MvSearchManager(
                     AppLog.w(TAG, "resolveMv: service error: ${e.message}", e)
                 }
             }
+            null
+        }
+    }
+
+    /**
+     * 强制从非百度源搜索（MTV 页面「搜B站」按钮）。
+     *
+     * 当前 MV 来自百度（本地网盘文件）但用户不满意时调用：跳过 `source == "baidu"`
+     * 的结果，迭代 services 取首个非百度源结果（B 站）。
+     * 与 [searchMvFor] 的区别：不写缓存（用户主动触发，结果即时呈现，下次切歌仍走
+     * 常规优先序）。
+     */
+    suspend fun searchBilibiliFallback(song: Song): MvSearchResult? {
+        return withContext(Dispatchers.IO) {
+            for (svc in services) {
+                try {
+                    val result = svc.searchMv(song.title, song.artist, emptySet(), 0.5f, song)
+                    if (result != null && result.mv.source != "baidu") {
+                        AppLog.d(TAG, "searchBilibiliFallback: found '${result.mv.title}' via ${svc::class.java.simpleName}")
+                        return@withContext result
+                    }
+                } catch (e: Exception) {
+                    AppLog.w(TAG, "searchBilibiliFallback: service ${svc::class.java.simpleName} error: ${e.message}", e)
+                }
+            }
+            AppLog.w(TAG, "searchBilibiliFallback: no non-baidu MV found for '${song.title}'")
             null
         }
     }

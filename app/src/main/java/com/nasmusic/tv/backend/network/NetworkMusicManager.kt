@@ -19,7 +19,7 @@ import java.util.concurrent.ConcurrentHashMap
  * v2.2.0 适配：手动 DI（在 NasMusicApp.onCreate 初始化），不使用 getInstance()
  */
 class NetworkMusicManager(
-    private val services: Map<String, NetworkMusicService>,
+    services: Map<String, NetworkMusicService>,
     private val defaultSourceProvider: () -> String
 ) {
 
@@ -28,6 +28,12 @@ class NetworkMusicManager(
         /** 播放链接缓存过期时间（毫秒），5 分钟 */
         private const val PLAY_URL_CACHE_TTL_MS = 5 * 60 * 1000L
     }
+
+    /**
+     * 内部可变 services Map（支持运行时注册/注销，例如百度网盘开关切换）。
+     * 构造时拷贝传入的不可变 Map。
+     */
+    private val services: MutableMap<String, NetworkMusicService> = services.toMutableMap()
 
     /**
      * 播放链接缓存条目
@@ -209,6 +215,25 @@ class NetworkMusicManager(
      * 获取所有已注册源 ID（用于设置页面展示可选项）
      */
     fun availableSources(): List<String> = services.keys.toList()
+
+    /**
+     * 运行时注册网络音乐源（如百度网盘开关开启后）。
+     * 已存在同 sourceId 则覆盖。
+     */
+    fun registerService(service: NetworkMusicService) {
+        services[service.sourceId] = service
+        AppLog.i(TAG, "registerService: ${service.sourceId} (total=${services.size})")
+    }
+
+    /**
+     * 运行时注销网络音乐源（如百度网盘开关关闭后）。
+     */
+    fun unregisterService(sourceId: String) {
+        services.remove(sourceId)
+        // 清理该源相关的播放缓存
+        playUrlCache.entries.removeAll { it.key.startsWith("ntwk_${sourceId}_") }
+        AppLog.i(TAG, "unregisterService: $sourceId (total=${services.size})")
+    }
 
     /**
      * 构造按优先级排序的服务列表：默认源在前，其余按 Map 迭代顺序

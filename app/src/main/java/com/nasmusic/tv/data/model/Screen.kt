@@ -16,5 +16,6 @@ enum class Screen {
     Equalizer,
     PlaylistManagement,
     Network,
-    NetworkPlaylistDetail
+    NetworkPlaylistDetail,
+    Netdisk
 }

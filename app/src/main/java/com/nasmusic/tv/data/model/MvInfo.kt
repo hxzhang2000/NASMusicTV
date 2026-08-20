@@ -15,7 +15,9 @@ data class MvInfo(
     val coverUrl: String?,      // 封面
     val videoUrl: String,       // 直链 mp4
     val durationMs: Long = 0L,
-    val fetchedAt: Long = System.currentTimeMillis()  // 用于缓存过期判断
+    val fetchedAt: Long = System.currentTimeMillis(),  // 用于缓存过期判断
+    /** MV 来源标识：v1 仅 "bilibili"；v2.18 新增 "baidu"（网盘本地 MV）供 UI 渲染来源标签 */
+    val source: String = "bilibili"
 )
 
 /**

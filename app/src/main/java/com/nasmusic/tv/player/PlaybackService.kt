@@ -72,7 +72,10 @@ class PlaybackService : MediaLibraryService() {
                 androidx.media3.extractor.mp3.Mp3Extractor.FLAG_ENABLE_INDEX_SEEKING or
                 androidx.media3.extractor.mp3.Mp3Extractor.FLAG_ENABLE_CONSTANT_BITRATE_SEEKING
             )
-        val mediaSourceFactory = androidx.media3.exoplayer.source.DefaultMediaSourceFactory(this, extractorsFactory)
+        // DataSource.Factory：按 URL 域名条件注入百度 dlink 请求头（UA: pan.baidu.com + Referer）
+        // NAS/Meting/百度共同一链路，非百度域名原样透传（BaiduHttpDataSourceFactory 内部判断）
+        val dataSourceFactory = com.nasmusic.tv.backend.network.baidu.BaiduHttpDataSourceFactory.create(this)
+        val mediaSourceFactory = androidx.media3.exoplayer.source.DefaultMediaSourceFactory(dataSourceFactory, extractorsFactory)
 
         // 人声消除处理器（卡拉OK模式）
         val vocalRemovalProcessor = VocalRemovalProcessor()

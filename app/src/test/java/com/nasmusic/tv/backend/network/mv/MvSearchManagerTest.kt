@@ -40,16 +40,18 @@ class MvSearchManagerTest {
         var lastArtist: String? = null; private set
         var lastExcludeBvids: Set<String>? = null; private set
         var lastMinSimilarity: Float? = null; private set
+        var lastSong: Song? = null; private set
         var resolveCallCount = 0; private set
 
         override suspend fun searchMv(
             title: String,
             artist: String,
             excludeBvids: Set<String>,
-            minSimilarity: Float
+            minSimilarity: Float,
+            song: Song?
         ): MvSearchResult? {
             callCount++; lastTitle = title; lastArtist = artist
-            lastExcludeBvids = excludeBvids; lastMinSimilarity = minSimilarity
+            lastExcludeBvids = excludeBvids; lastMinSimilarity = minSimilarity; lastSong = song
             error?.let { throw it }
             return result
         }

@@ -7,6 +7,32 @@
 >
 > 类型：`Added`（新增） | `Changed`（变更） | `Fixed`（修复） | `Removed`（移除）
 
+## [v2.18.0] - 2026-08-20
+
+### Added
+
+- **百度网盘音乐播放**：设备码 OAuth 鉴权，连接百度网盘播放音乐（无需 NAS 后端）
+- **文件列表与搜索**：目录浏览 + 关键词搜索（参数名 `key`），支持递归 BFS 扫描
+- **音乐串流**：dlink 直链播放（补 `access_token` + `Referer` + `User-Agent`）
+- **歌词与封面**：侧车 LRC + 内嵌 ID3 USLT/APIC，网络匹配 fallback
+- **MV 索引搜索**：索引扫描时同步收录 MV 目录视频文件，播放时按同目录同名/歌手歌名在索引中搜索，零网络调用切换 MV
+- **本地索引缓存**：BFS 逐目录扫描 + 60ms 节流，增量更新，首次扫描后毫秒级搜索
+- **API 版本探测**：字段指纹 SHA-256 检测百度 API 静默升级，异常时一次性提示用户
+- **网盘设置页**：总开关、设备码登录、根目录/MV 目录配置、自填 AppKey/SecretKey
+- **独立网盘 Tab**：目录浏览 + 搜索 UI
+- **搜B站按钮**：百度 MV 搜索结果不理想时，一键切到 B 站搜索
+
+### Changed
+
+- **MV 搜索架构**：从实时 API 查询改为本地索引搜索，`BaiduIndexEntry` 新增 `category` 字段区分音频/视频
+- **BaiduOAuthClient**：`tokenUrl` 参数可注入，支持 MockWebServer 测试
+
+### Technical
+
+- 新增 7 个测试文件（53 个单测）：BaiduPanApiTest、BaiduMvFileServiceTest、CloudDriveConfigTest、BaiduDirPickerTest、ApiProbeTest、ApiDriftNotifyTest、BaiduFilenameParserTest
+- 编译通过：`BUILD SUCCESSFUL`，`testDebugUnitTest` 191 tests, 189 passed
+- ProGuard：显式 keep 百度 DTO 类
+
 ## [v2.17.4] - 2026-08-17
 
 ### Added

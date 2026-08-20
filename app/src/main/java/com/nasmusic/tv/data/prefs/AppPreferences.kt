@@ -14,6 +14,9 @@ import com.google.gson.reflect.TypeToken
 import com.nasmusic.tv.backend.network.MetingApiService
 import com.nasmusic.tv.backend.network.mv.BilibiliMvService
 import com.nasmusic.tv.data.model.AppSettings
+import com.nasmusic.tv.data.model.BaiduTokens
+import com.nasmusic.tv.data.model.CloudDriveConfig
+import com.nasmusic.tv.data.model.CloudDriveType
 import com.nasmusic.tv.data.model.EqualizerPreset
 import com.nasmusic.tv.data.model.LocalPlaylist
 import com.nasmusic.tv.data.model.NetworkFavoriteItem
@@ -106,6 +109,9 @@ class AppPreferences(private val context: Context) {
 
     // --- 搜索历史（序列化为 JSON，30 天 TTL + 上限 200 条）---
     private val keySearchHistory = stringPreferencesKey("search_history")
+
+    // --- 网盘配置（按 CloudDriveType 存取，JSON 序列化 CloudDriveConfig；token 字段加密）---
+    private val keyCloudDriveConfig = stringPreferencesKey("cloud_drive_configs")
 
     private val gson = Gson()
     private val recentSongsMaxSize = 50
@@ -896,6 +902,112 @@ class AppPreferences(private val context: Context) {
      * 注意：不包含敏感字段 —— 密码、API Token、天气 API Key 一律不导出。
      * 恢复后服务器需重新输入密码连接（isConnected=false）。
      */
+    // ===================== 网盘配置（CloudDriveConfig，按 CloudDriveType 存取）=====================
+    // 存储：keyCloudDriveConfig 存 JSON Map<type.key, CloudDriveConfigJson>，其中 tokens 的 accessToken/refreshToken 用 CryptoUtils 加密。
+
+    /** 同步读取某网盘配置（runBlocking，仅供 service/oauth 在初始化期使用） */
+    fun getCloudDriveConfigSync(type: CloudDriveType): CloudDriveConfig? {
+        return try {
+            runBlocking(Dispatchers.IO) {
+                val json = context.dataStore.data.first()[keyCloudDriveConfig] ?: return@runBlocking null
+                loadCloudDriveConfigs(json)[type.key]
+            }
+        } catch (e: Exception) {
+            AppLog.w(TAG, "getCloudDriveConfigSync error", e)
+            null
+        }
+    }
+
+    /** 百度专用：便捷同步读取（兜底默认配置，永不返回 null） */
+    fun getBaiduConfigSync(): CloudDriveConfig =
+        getCloudDriveConfigSync(CloudDriveType.BAIDU) ?: CloudDriveConfig(CloudDriveType.BAIDU)
+
+    /** 异步保存某网盘配置（增量合并到现有 Map） */
+    suspend fun saveCloudDriveConfig(config: CloudDriveConfig) {
+        context.dataStore.edit { prefs ->
+            val json = prefs[keyCloudDriveConfig] ?: "{}"
+            val map = loadCloudDriveConfigs(json).toMutableMap()
+            map[config.type.key] = config
+            prefs[keyCloudDriveConfig] = saveCloudDriveConfigs(map)
+        }
+    }
+
+    /** 同步保存（OAuth 客户端在非协程上下文调用） */
+    fun saveCloudDriveConfigSync(config: CloudDriveConfig) {
+        runBlocking(Dispatchers.IO) { saveCloudDriveConfig(config) }
+    }
+
+    // ---- 百度 token 便捷读写（加解密 accessToken/refreshToken）----
+
+    /** 同步读取百度 token（解密） */
+    fun getBaiduTokensSync(): BaiduTokens? {
+        val cfg = getBaiduConfigSync() ?: return null
+        val t = cfg.tokens ?: return null
+        return try {
+            t.copy(
+                accessToken = CryptoUtils.decrypt(t.accessToken).ifBlank { return null },
+                refreshToken = CryptoUtils.decrypt(t.refreshToken).ifBlank { return null }
+            )
+        } catch (e: Exception) {
+            AppLog.w(TAG, "getBaiduTokensSync decrypt error", e)
+            null
+        }
+    }
+
+    /** 同步保存百度 token（加密） */
+    fun saveBaiduTokensSync(tokens: BaiduTokens) {
+        val cfg = getBaiduConfigSync().copy(
+            tokens = tokens.copy(
+                accessToken = CryptoUtils.encrypt(tokens.accessToken),
+                refreshToken = CryptoUtils.encrypt(tokens.refreshToken)
+            )
+        )
+        saveCloudDriveConfigSync(cfg)
+    }
+
+    /** 清除百度 token（登出/刷新失败降级用） */
+    fun clearBaiduTokensSync() {
+        val cfg = getBaiduConfigSync().copy(tokens = null)
+        saveCloudDriveConfigSync(cfg)
+    }
+
+    // ---- 百度配置项便捷存取 ----
+
+    fun getBaiduEnabledSync(): Boolean = getBaiduConfigSync().enabled
+    fun setBaiduEnabledSync(enabled: Boolean) =
+        saveCloudDriveConfigSync(getBaiduConfigSync().copy(enabled = enabled))
+    fun getBaiduMusicRootDirSync(): String = getBaiduConfigSync().musicRootDir.ifBlank { "/音乐" }
+    fun setBaiduMusicRootDirSync(dir: String) =
+        saveCloudDriveConfigSync(getBaiduConfigSync().copy(musicRootDir = dir))
+    fun getBaiduMvDirSync(): String? = getBaiduConfigSync().mvDir
+    fun setBaiduMvDirSync(dir: String?) =
+        saveCloudDriveConfigSync(getBaiduConfigSync().copy(mvDir = dir))
+    fun getBaiduCustomAppKeySync(): String? = getBaiduConfigSync().customAppKey
+    fun setBaiduCustomAppKeySync(key: String?) =
+        saveCloudDriveConfigSync(getBaiduConfigSync().copy(customAppKey = key))
+    fun getBaiduCustomSecretKeySync(): String? = getBaiduConfigSync().customSecretKey
+    fun setBaiduCustomSecretKeySync(secret: String?) =
+        saveCloudDriveConfigSync(getBaiduConfigSync().copy(customSecretKey = secret))
+    fun getBaiduApiDriftNotifiedSync(): Boolean = getBaiduConfigSync().apiDriftNotified
+    fun setBaiduApiDriftNotifiedSync(v: Boolean) =
+        saveCloudDriveConfigSync(getBaiduConfigSync().copy(apiDriftNotified = v))
+
+    // ---- 内部：CloudDriveConfig Map <-> JSON（tokens 加密）----
+
+    private fun loadCloudDriveConfigs(json: String): Map<String, CloudDriveConfig> {
+        return try {
+            val type = object : TypeToken<Map<String, CloudDriveConfig>>() {}.type
+            val raw: Map<String, CloudDriveConfig> = gson.fromJson(json, type) ?: emptyMap()
+            raw
+        } catch (e: Exception) {
+            AppLog.w(TAG, "loadCloudDriveConfigs parse error", e)
+            emptyMap()
+        }
+    }
+
+    private fun saveCloudDriveConfigs(map: Map<String, CloudDriveConfig>): String =
+        try { gson.toJson(map) } catch (e: Exception) { "{}" }
+
     data class BackupData(
         val version: Int = 1,
         val exportedAt: Long = System.currentTimeMillis(),

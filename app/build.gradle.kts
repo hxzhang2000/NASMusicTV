@@ -19,6 +19,10 @@ val keystoreStorePassword = readKeystoreProperty("storePassword")
 val keystoreKeyAlias = readKeystoreProperty("keyAlias")
 val keystoreKeyPassword = readKeystoreProperty("keyPassword")
 
+// 百度网盘开放平台 AppKey/SecretKey（从 keystore.properties 读取，gitignored，不硬编码在源码）
+val baiduAppId = readKeystoreProperty("baiduAppId")
+val baiduAppSecret = readKeystoreProperty("baiduAppSecret")
+
 android {
     namespace = "com.nasmusic.tv"
     compileSdk = 34
@@ -27,12 +31,16 @@ android {
         applicationId = "com.nasmusic.tv"
         minSdk = 22
         targetSdk = 34
-        versionCode = 54
-        versionName = "2.17.4"
+versionCode = 55
+    versionName = "2.18.0"
 
         ndk {
             abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64")
         }
+
+        // 百度网盘 AppKey/SecretKey（运行时由 BaiduOAuthClient 经 BuildConfig 读取）
+        buildConfigField("String", "BAIDU_APP_ID", "\"$baiduAppId\"")
+        buildConfigField("String", "BAIDU_APP_SECRET", "\"$baiduAppSecret\"")
     }
 
     signingConfigs {
@@ -104,6 +112,7 @@ dependencies {
     implementation("androidx.media3:media3-exoplayer:1.2.1")
     implementation("androidx.media3:media3-session:1.2.1")
     implementation("androidx.media3:media3-ui:1.2.1")
+    implementation("androidx.media3:media3-datasource-okhttp:1.2.1")
 
     // Networking
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
@@ -140,6 +149,7 @@ dependencies {
     testImplementation("org.mockito:mockito-inline:5.2.0")
     testImplementation("androidx.test:core:1.5.0")
     testImplementation("org.robolectric:robolectric:4.11.1")
+    testImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")
     androidTestImplementation("androidx.test.ext:junit:1.1.5")
     androidTestImplementation("androidx.test.espresso:espresso-core:3.5.1")
 }

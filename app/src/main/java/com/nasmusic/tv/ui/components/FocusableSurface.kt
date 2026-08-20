@@ -37,6 +37,7 @@ import com.nasmusic.tv.util.AppLog
  * - 可选的焦点变化回调
  *
  * @param onClick 点击回调
+ * @param onLongClick 长按回调（tv.material3 Surface 的 onClick 重载支持，默认 null 不启用）
  * @param modifier 额外 Modifier（会附加在内部 Modifier 之前）
  * @param shape Surface 形状，默认 RoundedCornerShape(8.dp)
  * @param focusedScale 获得焦点时的缩放比例，默认 1.08f
@@ -56,6 +57,7 @@ import com.nasmusic.tv.util.AppLog
 @Composable
 fun FocusableSurface(
     onClick: () -> Unit,
+    onLongClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
     shape: Shape = RoundedCornerShape(8.dp),
     focusedScale: Float = 1.08f,
@@ -98,6 +100,7 @@ fun FocusableSurface(
 
     Surface(
         onClick = onClick,
+        onLongClick = onLongClick,
         modifier = modifier
             .scale(animScale.value)
             .then(

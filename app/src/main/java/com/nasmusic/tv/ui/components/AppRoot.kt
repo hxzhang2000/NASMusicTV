@@ -95,6 +95,11 @@ fun AppRoot(
     val coverFilterDarkOverlay by viewModel.prefs.coverFilterDarkOverlay.collectAsState(initial = 0.3f)
     // 天气 API Key
     val weatherApiKey by viewModel.prefs.weatherApiKey.collectAsState(initial = "")
+    // 百度网盘状态（设置页网盘分区）
+    val baiduConnectionState by viewModel.baiduConnectionState.collectAsState(initial = com.nasmusic.tv.ui.viewmodel.MainViewModel.BaiduConnectionState.Off)
+    val baiduDeviceCode by viewModel.baiduDeviceCode.collectAsState(initial = null)
+    val baiduIndexScanned by viewModel.baiduIndexScanned.collectAsState(initial = 0)
+    val baiduIndexScanning by viewModel.baiduIndexScanning.collectAsState(initial = false)
     // MTV 页面显隐（进入 MTV 全屏页时为 true）
     val showMv by viewModel.showMv.collectAsState(initial = false)
     // MTV 搜索状态（顶层收集，供 NotFound 自动退出保护与 NowPlaying 分支共用）
@@ -183,6 +188,11 @@ fun AppRoot(
                     label = "网络音乐",
                     selected = currentScreen == Screen.Network,
                     onClick = { viewModel.navigateTo(Screen.Network) }
+                )
+                NavItem(
+                    label = "网盘",
+                    selected = currentScreen == Screen.Netdisk,
+                    onClick = { viewModel.navigateTo(Screen.Netdisk) }
                 )
                 NavItem(
                     label = stringResource(R.string.nav_server),
@@ -276,6 +286,7 @@ fun AppRoot(
                             onPlaybackError = { viewModel.onMvPlaybackError() },
                             onPlaybackEnded = { viewModel.onMvPlaybackEnded() },
                             onSwitchOrResearch = { viewModel.onSwitchOrResearch() },
+                            onSearchBilibili = { viewModel.onSearchBilibili() },
                             onPreviousMv = { viewModel.onMvPrevious() },
                             onNextMv = { viewModel.onMvNext() },
                             mvMessage = viewModel.mvMessage.collectAsState().value,
@@ -518,6 +529,7 @@ fun AppRoot(
                 }
                 Screen.Settings -> {
                     var showBackupTransferDialog by remember { mutableStateOf(false) }
+                    val baiduConfig = viewModel.prefs.getBaiduConfigSync()
                     SettingsScreen(
                         settings = settings,
                         onToggleDarkTheme = { viewModel.updateDarkTheme(it) },
@@ -552,7 +564,29 @@ fun AppRoot(
                         onDeleteBackup = { uri -> viewModel.deleteBackup(uri) },
                         onConsumeBackupMessage = { viewModel.consumeBackupMessage() },
                         onScanTransferBackup = { showBackupTransferDialog = true },
-                    // 封面滤镜设置
+                        // 百度网盘设置
+                        baiduEnabled = baiduConfig.enabled,
+                        baiduLoggedIn = baiduConnectionState is com.nasmusic.tv.ui.viewmodel.MainViewModel.BaiduConnectionState.LoggedIn,
+                        baiduConnecting = baiduConnectionState is com.nasmusic.tv.ui.viewmodel.MainViewModel.BaiduConnectionState.Connecting,
+                        baiduConnectionState = baiduConnectionState,
+                        baiduDeviceCode = baiduDeviceCode,
+                        baiduMusicRootDir = baiduConfig.musicRootDir,
+                        baiduMvDir = baiduConfig.mvDir,
+                        baiduCustomAppKey = baiduConfig.customAppKey,
+                        baiduCustomSecretKey = baiduConfig.customSecretKey,
+                        baiduIndexScanned = baiduIndexScanned,
+                        baiduIndexScanning = baiduIndexScanning,
+                        onToggleBaiduEnabled = { viewModel.setBaiduEnabled(it) },
+                        onStartBaiduDeviceCode = { viewModel.startBaiduDeviceCodeFlow() },
+                        onCancelBaiduDeviceCode = { viewModel.cancelBaiduDeviceCode() },
+                        onLogoutBaidu = { viewModel.logoutBaidu() },
+                        onChangeBaiduMusicRootDir = { viewModel.setBaiduMusicRootDir(it) },
+                        onChangeBaiduMvDir = { viewModel.setBaiduMvDir(it) },
+                        onListBaiduDirs = { viewModel.listBaiduDirs(it) },
+                        onChangeBaiduCustomAppKey = { viewModel.setBaiduCustomAppKey(it) },
+                        onChangeBaiduCustomSecretKey = { viewModel.setBaiduCustomSecretKey(it) },
+                        onRebuildBaiduIndex = { viewModel.rebuildBaiduIndex() },
+                        // 封面滤镜设置
                     coverFilterEnabled = coverFilterEnabled,
                     coverFilterBlurRadius = coverFilterBlurRadius,
                     coverFilterDarkOverlay = coverFilterDarkOverlay,
@@ -805,6 +839,16 @@ fun AppRoot(
                             onDismiss = { pickerSong = null }
                         )
                     }
+                }
+                Screen.Netdisk -> {
+                    com.nasmusic.tv.ui.screens.netdisk.NetdiskScreen(
+                        viewModel = viewModel,
+                        onPlaySong = { song ->
+                            viewModel.playNetworkSong(song)
+                            viewModel.navigateTo(Screen.NowPlaying)
+                        },
+                        onBack = { viewModel.navigateTo(Screen.Home) }
+                    )
                 }
             }
         }

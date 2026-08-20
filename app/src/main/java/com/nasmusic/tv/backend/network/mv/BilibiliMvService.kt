@@ -5,6 +5,7 @@ import com.google.gson.JsonObject
 import com.nasmusic.tv.data.model.MvInfo
 import com.nasmusic.tv.data.model.MvCandidate
 import com.nasmusic.tv.data.model.MvSearchResult
+import com.nasmusic.tv.data.model.Song
 import com.nasmusic.tv.util.AppLog
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -81,7 +82,8 @@ class BilibiliMvService(
         title: String,
         artist: String,
         excludeBvids: Set<String>,
-        minSimilarity: Float
+        minSimilarity: Float,
+        song: Song?
     ): MvSearchResult? = withContext(Dispatchers.IO) {
         try {
             val keyword = buildKeyword(title, artist)

@@ -9,8 +9,14 @@ import com.nasmusic.tv.NasMusicApp
 import com.nasmusic.tv.backend.BackendRegistry
 import com.nasmusic.tv.backend.BackendAdapter
 import com.nasmusic.tv.backend.network.mv.MvSearchManager
+import com.nasmusic.tv.backend.network.baidu.BaiduFileIndexCache
+import com.nasmusic.tv.backend.network.baidu.BaiduOAuthClient
+import com.nasmusic.tv.backend.network.baidu.BaiduPanApi
+import com.nasmusic.tv.backend.network.baidu.BaiduNetdiskConfig
 import com.nasmusic.tv.data.model.Album
 import com.nasmusic.tv.data.model.Artist
+import com.nasmusic.tv.data.model.BaiduFile
+import com.nasmusic.tv.data.model.BaiduFileIndex
 import com.nasmusic.tv.data.model.BrowseDimension
 import com.nasmusic.tv.data.model.AppSettings
 import com.nasmusic.tv.data.model.Lyrics
@@ -2846,6 +2852,33 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
         }
     }
 
+    /**
+     * MTV 页面「搜B站」按钮：当前 MV 来自百度网盘本地文件（source == "baidu"）时，
+     * 强制从非百度源（B 站）重新搜索，替换当前 MV 状态。
+     */
+    fun onSearchBilibili() {
+        val song = currentSong.value ?: return
+        _mvState.value = MvAvailability.Searching
+        mvSearchJob?.cancel()
+        mvSearchJob = viewModelScope.launch {
+            val result = try {
+                mvSearchManager.searchBilibiliFallback(song)
+            } catch (e: Exception) {
+                AppLog.e("NASMusic", "onSearchBilibili failed", e)
+                null
+            }
+            if (result != null) {
+                _mvState.value = MvAvailability.Ready(result.mv, result.alternatives)
+                showMvMessage("已切换到B站搜索结果")
+                preSearchNextMv()
+            } else {
+                _mvState.value = MvAvailability.NotFound
+                showMvMessage("B站未找到匹配视频")
+            }
+            AppLog.d("NASMusic", "onSearchBilibili: '${song.title}' -> ${if (result != null) "found ${result.mv.title}" else "not found"}")
+        }
+    }
+
     /** 切换到候选列表中的下一个视频 */
     private fun switchToNextCandidate(ready: MvAvailability.Ready) {
         val targetBvid = ready.alternatives.firstOrNull()?.bvid ?: return
@@ -3406,4 +3439,277 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
             }
         }
     }
+
+    // ===================== 百度网盘 / 网盘 Tab =====================
+
+    /** 百度网盘连接状态 */
+    sealed class BaiduConnectionState {
+        object Off : BaiduConnectionState()           // 未开启或未登录
+        object Connecting : BaiduConnectionState()     // 设备码轮询中
+        object LoggedIn : BaiduConnectionState()      // 已登录
+        data class Failed(val message: String) : BaiduConnectionState()
+    }
+
+    private val _baiduConnectionState = MutableStateFlow<BaiduConnectionState>(BaiduConnectionState.Off)
+    val baiduConnectionState: StateFlow<BaiduConnectionState> = _baiduConnectionState.asStateFlow()
+
+    /** 设备码授权结果（供对话框显示） */
+    private val _baiduDeviceCode = MutableStateFlow<BaiduOAuthClient.DeviceCodeResult?>(null)
+    val baiduDeviceCode: StateFlow<BaiduOAuthClient.DeviceCodeResult?> = _baiduDeviceCode.asStateFlow()
+
+    /** 网盘目录浏览 */
+    private val _netdiskCurrentDir = MutableStateFlow("/音乐")
+    val netdiskCurrentDir: StateFlow<String> = _netdiskCurrentDir.asStateFlow()
+    private val _netdiskDirFiles = MutableStateFlow<List<BaiduFile>>(emptyList())
+    val netdiskDirFiles: StateFlow<List<BaiduFile>> = _netdiskDirFiles.asStateFlow()
+    private val _netdiskIsLoading = MutableStateFlow(false)
+    val netdiskIsLoading: StateFlow<Boolean> = _netdiskIsLoading.asStateFlow()
+
+    /** 网盘搜索 */
+    private val _netdiskSearchResults = MutableStateFlow<List<Song>>(emptyList())
+    val netdiskSearchResults: StateFlow<List<Song>> = _netdiskSearchResults.asStateFlow()
+    private val _netdiskSearchKeyword = MutableStateFlow("")
+    val netdiskSearchKeyword: StateFlow<String> = _netdiskSearchKeyword.asStateFlow()
+
+    /** 索引状态 */
+    private val _baiduIndexScanned = MutableStateFlow(0)
+    val baiduIndexScanned: StateFlow<Int> = _baiduIndexScanned.asStateFlow()
+    private val _baiduIndexScanning = MutableStateFlow(false)
+    val baiduIndexScanning: StateFlow<Boolean> = _baiduIndexScanning.asStateFlow()
+    private val _baiduIndexLastSync = MutableStateFlow(0L)
+    val baiduIndexLastSync: StateFlow<Long> = _baiduIndexLastSync.asStateFlow()
+
+    private val baiduOAuth: BaiduOAuthClient get() = nasMusicApp.baiduOAuthClient
+    private val baiduApi: BaiduPanApi get() = nasMusicApp.baiduPanApi
+    private val baiduIndexCache: BaiduFileIndexCache get() = nasMusicApp.baiduFileIndexCache
+
+    private var deviceCodePollJob: kotlinx.coroutines.Job? = null
+
+    /** 同步刷新连接状态（初始化与开关切换后调用） */
+    fun refreshBaiduConnectionState() {
+        val cfg = prefs.getBaiduConfigSync()
+        _baiduConnectionState.value = when {
+            !cfg.isActive -> BaiduConnectionState.Off
+            cfg.tokens != null -> BaiduConnectionState.LoggedIn
+            else -> BaiduConnectionState.Off
+        }
+        if (cfg.isActive) {
+            _netdiskCurrentDir.value = cfg.musicRootDir.ifBlank { "/音乐" }
+            _baiduIndexLastSync.value = baiduIndexCache.load()?.lastSyncAt ?: 0L
+        }
+        // 通知 NasMusicApp 运行时注册/注销百度 service
+        nasMusicApp.refreshBaiduServiceRegistration()
+    }
+
+    /** 设置百度源总开关 */
+    fun setBaiduEnabled(enabled: Boolean) {
+        prefs.setBaiduEnabledSync(enabled)
+        refreshBaiduConnectionState()
+    }
+
+    /** 启动设备码授权流程：请求设备码并开始轮询 */
+    fun startBaiduDeviceCodeFlow() {
+        viewModelScope.launch {
+            _baiduConnectionState.value = BaiduConnectionState.Connecting
+            val code = baiduOAuth.requestDeviceCode()
+            if (code == null) {
+                _baiduConnectionState.value = BaiduConnectionState.Failed("获取设备码失败")
+                return@launch
+            }
+            _baiduDeviceCode.value = code
+            pollDeviceCode(code)
+        }
+    }
+
+    /** 取消设备码轮询 */
+    fun cancelBaiduDeviceCode() {
+        deviceCodePollJob?.cancel()
+        deviceCodePollJob = null
+        _baiduDeviceCode.value = null
+        if (_baiduConnectionState.value is BaiduConnectionState.Connecting) {
+            _baiduConnectionState.value = BaiduConnectionState.Off
+        }
+    }
+
+    private fun pollDeviceCode(code: BaiduOAuthClient.DeviceCodeResult) {
+        deviceCodePollJob?.cancel()
+        deviceCodePollJob = viewModelScope.launch {
+            val deadline = System.currentTimeMillis() + code.expiresIn * 1000L
+            var interval = code.interval * 1000L
+            while (System.currentTimeMillis() < deadline && isActive()) {
+                when (val r = baiduOAuth.pollDeviceToken(code.deviceCode)) {
+                    is BaiduOAuthClient.PollResult.Success -> {
+                        _baiduConnectionState.value = BaiduConnectionState.LoggedIn
+                        _baiduDeviceCode.value = null
+                        nasMusicApp.refreshBaiduServiceRegistration()
+                        // 登录后自动触发首次索引扫描
+                        triggerBaiduIndexScanIfNeeded()
+                        return@launch
+                    }
+                    BaiduOAuthClient.PollResult.Pending -> {
+                        kotlinx.coroutines.delay(interval)
+                    }
+                    BaiduOAuthClient.PollResult.Declined -> {
+                        _baiduConnectionState.value = BaiduConnectionState.Failed("用户拒绝授权")
+                        _baiduDeviceCode.value = null
+                        return@launch
+                    }
+                    is BaiduOAuthClient.PollResult.SlowDown -> {
+                        interval = r.newInterval * 1000L
+                        kotlinx.coroutines.delay(interval)
+                    }
+                    is BaiduOAuthClient.PollResult.Failed -> {
+                        _baiduConnectionState.value = BaiduConnectionState.Failed(r.message)
+                        _baiduDeviceCode.value = null
+                        return@launch
+                    }
+                }
+            }
+            _baiduConnectionState.value = BaiduConnectionState.Failed("授权超时")
+            _baiduDeviceCode.value = null
+        }
+    }
+
+    private suspend fun isActive(): Boolean =
+        kotlin.coroutines.coroutineContext[kotlinx.coroutines.Job]?.isActive == true
+
+    /** 登出 */
+    fun logoutBaidu() {
+        viewModelScope.launch {
+            baiduOAuth.logout()
+            nasMusicApp.refreshBaiduServiceRegistration()
+            _baiduConnectionState.value = BaiduConnectionState.Off
+        }
+    }
+
+    // ---- 网盘目录浏览 ----
+
+    fun listBaiduDir(dir: String) {
+        _netdiskCurrentDir.value = dir
+        _netdiskIsLoading.value = true
+        viewModelScope.launch {
+            try {
+                val result = baiduApi.listDir(dir)
+                _netdiskDirFiles.value = result.files
+            } catch (e: Exception) {
+                AppLog.e("NASMusic", "listBaiduDir error", e)
+                showError("加载目录失败: ${e.message?.take(40)}")
+                _netdiskDirFiles.value = emptyList()
+            } finally {
+                _netdiskIsLoading.value = false
+            }
+        }
+    }
+
+    /**
+     * 列出网盘指定路径下的文件（供 [com.nasmusic.tv.ui.components.BaiduDirPickerDialog] 目录树选择使用）。
+     * 异常直接上抛，由对话框展示失败态并允许重试。
+     */
+    suspend fun listBaiduDirs(path: String): List<BaiduFile> =
+        baiduApi.listDir(path).files
+
+    fun navigateBaiduDirUp() {
+        val current = _netdiskCurrentDir.value
+        if (current == "/" || current.isBlank()) return
+        val parent = current.substringBeforeLast('/').ifBlank { "/" }
+        listBaiduDir(parent)
+    }
+
+    fun enterBaiduDir(name: String) {
+        val base = _netdiskCurrentDir.value.trimEnd('/')
+        listBaiduDir("$base/$name")
+    }
+
+    // ---- 网盘搜索 ----
+
+    fun searchBaidu(keyword: String) {
+        _netdiskSearchKeyword.value = keyword
+        if (keyword.isBlank()) {
+            _netdiskSearchResults.value = emptyList()
+            return
+        }
+        viewModelScope.launch {
+            _netdiskIsLoading.value = true
+            try {
+                val rootDir = prefs.getBaiduMusicRootDirSync().ifBlank { "/" }
+                val files = baiduApi.searchAudio(keyword, dir = rootDir)
+                _netdiskSearchResults.value = files.map { it.toSong() }
+            } catch (e: Exception) {
+                AppLog.e("NASMusic", "searchBaidu error", e)
+                _netdiskSearchResults.value = emptyList()
+            } finally {
+                _netdiskIsLoading.value = false
+            }
+        }
+    }
+
+    fun clearNetdiskSearch() {
+        _netdiskSearchKeyword.value = ""
+        _netdiskSearchResults.value = emptyList()
+    }
+
+    // ---- 索引管理 ----
+
+    fun triggerBaiduIndexScanIfNeeded() {
+        val index = baiduIndexCache.load()
+        val root = prefs.getBaiduMusicRootDirSync().ifBlank { "/音乐" }
+        if (index == null || index.rootPath != root) {
+            rebuildBaiduIndex()
+        } else {
+            _baiduIndexScanned.value = index.entries.size
+            _baiduIndexLastSync.value = index.lastSyncAt
+        }
+    }
+
+    fun rebuildBaiduIndex() {
+        if (_baiduIndexScanning.value) return
+        viewModelScope.launch {
+            _baiduIndexScanning.value = true
+            _baiduIndexScanned.value = 0
+            val root = prefs.getBaiduMusicRootDirSync().ifBlank { "/音乐" }
+            val callback = object : BaiduFileIndexCache.ProgressCallback {
+                override fun onProgress(scanned: Int) { _baiduIndexScanned.value = scanned }
+                override fun onComplete(total: Int) {
+                    _baiduIndexScanned.value = total
+                    _baiduIndexLastSync.value = System.currentTimeMillis()
+                }
+                override fun onFailed(message: String) {
+                    showError("索引扫描中断: $message")
+                }
+            }
+            try {
+                val mvDir = prefs.getBaiduMvDirSync()
+                baiduIndexCache.fullScan(root, baiduApi, mvDir, callback)
+            } catch (e: Exception) {
+                AppLog.e("NASMusic", "rebuildBaiduIndex error", e)
+            } finally {
+                _baiduIndexScanning.value = false
+            }
+        }
+    }
+
+    // ---- 配置项 ----
+
+    fun setBaiduMusicRootDir(dir: String) {
+        prefs.setBaiduMusicRootDirSync(dir)
+        _netdiskCurrentDir.value = dir
+        // 根目录变更后旧索引失效，触发重建
+        rebuildBaiduIndex()
+    }
+
+    fun setBaiduMvDir(dir: String?) {
+        prefs.setBaiduMvDirSync(dir)
+    }
+
+    fun setBaiduCustomAppKey(key: String) {
+        prefs.setBaiduCustomAppKeySync(key.ifBlank { null })
+    }
+
+    fun setBaiduCustomSecretKey(secret: String) {
+        prefs.setBaiduCustomSecretKeySync(secret.ifBlank { null })
+    }
+
+    /** 加载索引中的歌曲（供 NetdiskScreen 首页展示已扫描曲库） */
+    fun loadBaiduIndexedSongs(): List<Song> =
+        baiduIndexCache.load()?.entries?.map { it.toSong() } ?: emptyList()
 }

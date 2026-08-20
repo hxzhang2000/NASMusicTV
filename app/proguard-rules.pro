@@ -5,6 +5,10 @@
 -keep class com.nasmusic.tv.data.prefs.** { *; }
 -keep class com.nasmusic.tv.backend.** { *; }
 
+# 百度网盘 DTO 类（显式 keep，防御 Gson 类型擦除/R8 收缩——v2.5.1 曾因此崩溃；
+# 与上方 backend.** 宽规则冗余但明确，新增序列化模型时勿删）
+-keep class com.nasmusic.tv.backend.network.baidu.** { *; }
+
 # Gson
 -keep class com.google.gson.** { *; }
 -keep class * implements com.google.gson.TypeAdapterFactory

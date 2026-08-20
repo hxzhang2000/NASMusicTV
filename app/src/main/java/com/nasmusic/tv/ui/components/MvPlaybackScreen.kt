@@ -88,6 +88,7 @@ fun MvPlaybackScreen(
     onPlaybackError: () -> Unit = {},
     onPlaybackEnded: () -> Unit = {},
     onSwitchOrResearch: () -> Unit = {},
+    onSearchBilibili: () -> Unit = {},
     onPreviousMv: () -> Unit = {},
     onNextMv: () -> Unit = {},
     mvMessage: String? = null,
@@ -121,17 +122,13 @@ fun MvPlaybackScreen(
     }
 
     // ── 独立视频 ExoPlayer（页面级复用，不再因 URL 变化重建）──
+    // DataSource.Factory 按 URL 域名条件注入：百度 dlink → pan.baidu.com UA/Referer；
+    // B 站 → bilibili UA/Referer（BaiduHttpDataSourceFactory 内部拦截器处理，二者共用一链路）
     val exoPlayer = remember(context) {
         AppLog.d(TAG, "create video ExoPlayer (reusable instance)")
-        val httpDataSourceFactory = DefaultHttpDataSource.Factory()
-            .setDefaultRequestProperties(
-                mapOf(
-                    "Referer" to "https://www.bilibili.com",
-                    "User-Agent" to BILIBILI_UA
-                )
-            )
+        val dataSourceFactory = com.nasmusic.tv.backend.network.baidu.BaiduHttpDataSourceFactory.create(context)
         ExoPlayer.Builder(context)
-            .setMediaSourceFactory(DefaultMediaSourceFactory(httpDataSourceFactory))
+            .setMediaSourceFactory(androidx.media3.exoplayer.source.DefaultMediaSourceFactory(dataSourceFactory))
             .build()
     }
 
@@ -392,6 +389,15 @@ fun MvPlaybackScreen(
                         label = "切换",
                         onClick = { activateControls(); onSwitchOrResearch() }
                     )
+                    // 当前 MV 来自百度网盘本地文件时，提供「搜B站」兜底入口：
+                    // 强制从非百度源（B 站）重新搜索，见 MvSearchManager.searchBilibiliFallback
+                    if (mv.source == "baidu") {
+                        Spacer(Modifier.width(20.dp))
+                        VocalToggleButton(
+                            label = "搜B站",
+                            onClick = { activateControls(); onSearchBilibili() }
+                        )
+                    }
                 }
             }
 

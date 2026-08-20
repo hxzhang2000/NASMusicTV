@@ -27,5 +27,7 @@ data class Song(
     // 网络歌曲扩展字段（默认值保持向后兼容）
     val isNetworkSong: Boolean = false,
     val networkSource: String? = null,
-    val networkId: String? = null
+    val networkId: String? = null,
+    // 网盘文件绝对路径（百度源用，供侧车 LRC/cover 查找；其他源可空）
+    val path: String? = null
 )

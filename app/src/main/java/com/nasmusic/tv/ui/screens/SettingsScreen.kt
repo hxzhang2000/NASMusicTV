@@ -47,9 +47,12 @@ import androidx.tv.material3.Text
 import com.nasmusic.tv.NasMusicVersion
 import com.nasmusic.tv.R
 import com.nasmusic.tv.data.model.AppSettings
+import com.nasmusic.tv.data.model.BaiduFile
 import com.nasmusic.tv.data.model.PlayMode
+import com.nasmusic.tv.ui.components.BaiduDirPickerDialog
 import com.nasmusic.tv.ui.components.FocusableSurface
 import com.nasmusic.tv.data.model.VisualizerTheme
+import com.nasmusic.tv.ui.screens.netdisk.BaiduAuthDialog
 import com.nasmusic.tv.ui.theme.NasMusicColors
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -64,6 +67,7 @@ private enum class SettingsSection(val titleRes: Int) {
     LYRICS(R.string.settings_lyrics),
     CACHE(R.string.settings_cache),
     NETWORK(R.string.settings_network),
+    NETDISK(R.string.settings_netdisk),
     COVER(R.string.settings_cover),
     DATA(R.string.settings_data),
     ABOUT(R.string.settings_about)
@@ -117,6 +121,28 @@ fun SettingsScreen(
     onDeleteBackup: ((Uri) -> Unit)? = null,
     onConsumeBackupMessage: (() -> Unit)? = null,
     onScanTransferBackup: (() -> Unit)? = null,
+    // 百度网盘设置
+    baiduEnabled: Boolean = false,
+    baiduLoggedIn: Boolean = false,
+    baiduConnecting: Boolean = false,
+    baiduConnectionState: com.nasmusic.tv.ui.viewmodel.MainViewModel.BaiduConnectionState = com.nasmusic.tv.ui.viewmodel.MainViewModel.BaiduConnectionState.Off,
+    baiduDeviceCode: com.nasmusic.tv.backend.network.baidu.BaiduOAuthClient.DeviceCodeResult? = null,
+    baiduMusicRootDir: String = "/音乐",
+    baiduMvDir: String? = null,
+    baiduCustomAppKey: String? = null,
+    baiduCustomSecretKey: String? = null,
+    baiduIndexScanned: Int = 0,
+    baiduIndexScanning: Boolean = false,
+    onToggleBaiduEnabled: ((Boolean) -> Unit)? = null,
+    onStartBaiduDeviceCode: (() -> Unit)? = null,
+    onCancelBaiduDeviceCode: (() -> Unit)? = null,
+    onLogoutBaidu: (() -> Unit)? = null,
+    onChangeBaiduMusicRootDir: ((String) -> Unit)? = null,
+    onChangeBaiduMvDir: ((String?) -> Unit)? = null,
+    onListBaiduDirs: (suspend (String) -> List<BaiduFile>)? = null,
+    onChangeBaiduCustomAppKey: ((String) -> Unit)? = null,
+    onChangeBaiduCustomSecretKey: ((String) -> Unit)? = null,
+    onRebuildBaiduIndex: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     var activeSection by remember { mutableStateOf(SettingsSection.GENERAL) }
@@ -146,6 +172,21 @@ fun SettingsScreen(
     var backupToDelete by remember {
         mutableStateOf<com.nasmusic.tv.util.BackupFileUtils.BackupFile?>(null)
     }
+
+    // 百度网盘设备码授权对话框显隐
+    var showBaiduAuthDialog by remember { mutableStateOf(false) }
+
+    // 百度网盘目录/密钥编辑对话框状态
+    var showBaiduMusicRootDialog by remember { mutableStateOf(false) }
+    var showBaiduMvDirDialog by remember { mutableStateOf(false) }
+    var showBaiduAppKeyDialog by remember { mutableStateOf(false) }
+    var showBaiduSecretKeyDialog by remember { mutableStateOf(false) }
+
+    // 百度网盘本地编辑值（参数仅作初始值；编辑后本地立即生效，回调负责持久化）
+    var baiduMusicRootLocal by remember { mutableStateOf(baiduMusicRootDir) }
+    var baiduMvDirLocal by remember { mutableStateOf(baiduMvDir) }
+    var baiduAppKeyLocal by remember { mutableStateOf(baiduCustomAppKey) }
+    var baiduSecretKeyLocal by remember { mutableStateOf(baiduCustomSecretKey) }
 
     // 进入"数据管理"分区时刷新备份文件列表
     LaunchedEffect(activeSection) {
@@ -224,6 +265,7 @@ fun SettingsScreen(
                             SettingsSection.LYRICS -> Icons.AutoMirrored.Filled.QueueMusic
                             SettingsSection.CACHE -> Icons.Default.Settings
                             SettingsSection.NETWORK -> Icons.Default.Settings
+                            SettingsSection.NETDISK -> Icons.Default.Settings
                             SettingsSection.COVER -> Icons.Default.Audiotrack
                             SettingsSection.DATA -> Icons.Default.Info
                             SettingsSection.ABOUT -> Icons.Default.Info
@@ -309,6 +351,94 @@ fun SettingsScreen(
                             fontSize = 18.sp,
                             modifier = Modifier.padding(start = 4.dp, top = 8.dp)
                         )
+                    }
+                }
+                SettingsSection.NETDISK -> {
+                    item { SectionTitle(stringResource(R.string.settings_netdisk)) }
+                    item { SettingSwitch(label = stringResource(R.string.settings_netdisk_enable), description = stringResource(R.string.settings_netdisk_enable_desc), checked = baiduEnabled, onClick = { onToggleBaiduEnabled?.invoke(!baiduEnabled) }) }
+
+                    if (onStartBaiduDeviceCode != null) {
+                        item { Spacer(modifier = Modifier.height(16.dp)) }
+                        if (baiduLoggedIn) {
+                            item {
+                                SettingActionButton(
+                                    label = stringResource(R.string.settings_netdisk_logged_in),
+                                    description = stringResource(R.string.settings_netdisk_logout_desc),
+                                    onClick = { onLogoutBaidu?.invoke() }
+                                )
+                            }
+                        } else {
+                            item {
+                                SettingActionButton(
+                                    label = stringResource(R.string.settings_netdisk_login),
+                                    description = stringResource(R.string.settings_netdisk_login_desc),
+                                    onClick = {
+                                        showBaiduAuthDialog = true
+                                        onStartBaiduDeviceCode?.invoke()
+                                    }
+                                )
+                            }
+                        }
+                    }
+
+                    if (onChangeBaiduMusicRootDir != null) {
+                        item { Spacer(modifier = Modifier.height(16.dp)) }
+                        item {
+                            SettingActionButton(
+                                label = stringResource(R.string.settings_netdisk_music_root),
+                                description = baiduMusicRootLocal,
+                                onClick = { showBaiduMusicRootDialog = true }
+                            )
+                        }
+                    }
+                    if (onChangeBaiduMvDir != null) {
+                        item { Spacer(modifier = Modifier.height(16.dp)) }
+                        item {
+                            SettingActionButton(
+                                label = stringResource(R.string.settings_netdisk_mv_dir),
+                                description = baiduMvDirLocal?.takeIf { it.isNotBlank() } ?: stringResource(R.string.settings_netdisk_mv_dir_desc),
+                                onClick = { showBaiduMvDirDialog = true }
+                            )
+                        }
+                    }
+                    if (onChangeBaiduCustomAppKey != null) {
+                        item { Spacer(modifier = Modifier.height(16.dp)) }
+                        item {
+                            SettingActionButton(
+                                label = stringResource(R.string.settings_netdisk_app_key),
+                                description = baiduAppKeyLocal?.takeIf { it.isNotBlank() } ?: stringResource(R.string.settings_netdisk_app_key_desc),
+                                onClick = { showBaiduAppKeyDialog = true }
+                            )
+                        }
+                    }
+                    if (onChangeBaiduCustomSecretKey != null) {
+                        item { Spacer(modifier = Modifier.height(16.dp)) }
+                        item {
+                            SettingActionButton(
+                                label = stringResource(R.string.settings_netdisk_secret_key),
+                                description = baiduSecretKeyLocal?.takeIf { it.isNotBlank() } ?: stringResource(R.string.settings_netdisk_secret_key_desc),
+                                onClick = { showBaiduSecretKeyDialog = true }
+                            )
+                        }
+                    }
+                    if (onRebuildBaiduIndex != null) {
+                        item { Spacer(modifier = Modifier.height(16.dp)) }
+                        item {
+                            Text(
+                                text = if (baiduIndexScanning) stringResource(R.string.settings_netdisk_index_scanning)
+                                else stringResource(R.string.settings_netdisk_index_desc, baiduIndexScanned),
+                                color = NasMusicColors.TextSecondary,
+                                fontSize = 18.sp,
+                                modifier = Modifier.padding(start = 4.dp, bottom = 8.dp)
+                            )
+                        }
+                        item {
+                            SettingActionButton(
+                                label = stringResource(R.string.settings_netdisk_index_rebuild),
+                                description = stringResource(R.string.settings_netdisk_index_rebuild_desc),
+                                onClick = { onRebuildBaiduIndex?.invoke() }
+                            )
+                        }
                     }
                 }
                 SettingsSection.COVER -> {
@@ -1018,6 +1148,116 @@ fun SettingsScreen(
                 }
             }
         }
+    }
+
+    // 百度网盘设备码授权对话框
+    if (showBaiduAuthDialog && onStartBaiduDeviceCode != null) {
+        BaiduAuthDialog(
+            deviceCode = baiduDeviceCode,
+            connectionState = baiduConnectionState,
+            onCancel = {
+                onCancelBaiduDeviceCode?.invoke()
+                showBaiduAuthDialog = false
+            },
+            onDismiss = {
+                showBaiduAuthDialog = false
+            }
+        )
+    }
+
+    // 百度网盘音乐根目录选择对话框（优先目录树选择，无回调时回退文本输入）
+    if (showBaiduMusicRootDialog && onChangeBaiduMusicRootDir != null) {
+        if (onListBaiduDirs != null) {
+            BaiduDirPickerDialog(
+                initialPath = baiduMusicRootLocal.ifBlank { "/" },
+                onListDirs = onListBaiduDirs,
+                onConfirm = { path ->
+                    baiduMusicRootLocal = path
+                    onChangeBaiduMusicRootDir(path)
+                    showBaiduMusicRootDialog = false
+                },
+                onDismiss = { showBaiduMusicRootDialog = false }
+            )
+        } else {
+            TextInputDialog(
+                title = stringResource(R.string.settings_netdisk_music_root),
+                hint = stringResource(R.string.settings_netdisk_hint_dir),
+                initialValue = baiduMusicRootLocal,
+                onConfirm = { input ->
+                    val trimmed = input.trim()
+                    if (trimmed.isNotEmpty()) {
+                        baiduMusicRootLocal = trimmed
+                        onChangeBaiduMusicRootDir(trimmed)
+                    }
+                    showBaiduMusicRootDialog = false
+                },
+                onDismiss = { showBaiduMusicRootDialog = false }
+            )
+        }
+    }
+
+    // 百度网盘 MV 目录选择对话框（优先目录树选择，无回调时回退文本输入）
+    if (showBaiduMvDirDialog && onChangeBaiduMvDir != null) {
+        if (onListBaiduDirs != null) {
+            BaiduDirPickerDialog(
+                initialPath = baiduMvDirLocal?.takeIf { it.isNotBlank() }
+                    ?: baiduMusicRootLocal.ifBlank { "/" },
+                onListDirs = onListBaiduDirs,
+                onConfirm = { path ->
+                    baiduMvDirLocal = path
+                    onChangeBaiduMvDir(path)
+                    showBaiduMvDirDialog = false
+                },
+                onDismiss = { showBaiduMvDirDialog = false }
+            )
+        } else {
+            TextInputDialog(
+                title = stringResource(R.string.settings_netdisk_mv_dir),
+                hint = stringResource(R.string.settings_netdisk_hint_dir),
+                initialValue = baiduMvDirLocal.orEmpty(),
+                onConfirm = { input ->
+                    val trimmed = input.trim()
+                    baiduMvDirLocal = trimmed.ifEmpty { null }
+                    onChangeBaiduMvDir(baiduMvDirLocal)
+                    showBaiduMvDirDialog = false
+                },
+                onDismiss = { showBaiduMvDirDialog = false }
+            )
+        }
+    }
+
+    // 百度网盘自定义 AppKey 编辑对话框
+    if (showBaiduAppKeyDialog && onChangeBaiduCustomAppKey != null) {
+        TextInputDialog(
+            title = stringResource(R.string.settings_netdisk_app_key),
+            hint = stringResource(R.string.settings_netdisk_app_key_desc),
+            initialValue = baiduAppKeyLocal.orEmpty(),
+            masked = true,
+            onConfirm = { input ->
+                val appKey = input.trim()
+                baiduAppKeyLocal = appKey
+                onChangeBaiduCustomAppKey(appKey)
+                showBaiduAppKeyDialog = false
+            },
+            onDismiss = { showBaiduAppKeyDialog = false }
+        )
+    }
+
+    // 百度网盘自定义 SecretKey 编辑对话框
+    if (showBaiduSecretKeyDialog && onChangeBaiduCustomSecretKey != null) {
+        TextInputDialog(
+            title = stringResource(R.string.settings_netdisk_secret_key),
+            hint = stringResource(R.string.settings_netdisk_secret_key_desc),
+            initialValue = baiduSecretKeyLocal.orEmpty(),
+            masked = true,
+            onConfirm = { input ->
+                val secretKey = input.trim()
+                baiduSecretKeyLocal = secretKey
+                onChangeBaiduCustomSecretKey(secretKey)
+                showBaiduSecretKeyDialog = false
+            },
+            onDismiss = { showBaiduSecretKeyDialog = false }
+        )
     }
 
     // 天气 API Key 编辑对话框
