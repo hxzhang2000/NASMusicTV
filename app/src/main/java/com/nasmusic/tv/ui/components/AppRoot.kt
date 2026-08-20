@@ -195,11 +195,6 @@ fun AppRoot(
                     onClick = { viewModel.navigateTo(Screen.Netdisk) }
                 )
                 NavItem(
-                    label = stringResource(R.string.nav_server),
-                    selected = currentScreen == Screen.ServerConnect,
-                    onClick = { viewModel.navigateTo(Screen.ServerConnect) }
-                )
-                NavItem(
                     label = stringResource(R.string.nav_settings),
                     selected = currentScreen == Screen.Settings,
                     onClick = { viewModel.navigateTo(Screen.Settings) }
@@ -517,16 +512,6 @@ fun AppRoot(
                         onMoveItem = { from, to -> viewModel.moveQueueItem(from, to) }
                     )
                 }
-                Screen.ServerConnect -> {
-                    ServerConnectScreen(
-                        initialConfig = serverConfig,
-                        isConnected = isConnected,
-                        serverDisplayName = serverDisplayName,
-                        isConnecting = isLoading,
-                        onConnect = onConnect,
-                        onDisconnect = { viewModel.disconnect() }
-                    )
-                }
                 Screen.Settings -> {
                     var showBackupTransferDialog by remember { mutableStateOf(false) }
                     val baiduConfig = viewModel.prefs.getBaiduConfigSync()
@@ -572,8 +557,6 @@ fun AppRoot(
                         baiduDeviceCode = baiduDeviceCode,
                         baiduMusicRootDir = baiduConfig.musicRootDir,
                         baiduMvDir = baiduConfig.mvDir,
-                        baiduCustomAppKey = baiduConfig.customAppKey,
-                        baiduCustomSecretKey = baiduConfig.customSecretKey,
                         baiduIndexScanned = baiduIndexScanned,
                         baiduIndexScanning = baiduIndexScanning,
                         onToggleBaiduEnabled = { viewModel.setBaiduEnabled(it) },
@@ -583,9 +566,15 @@ fun AppRoot(
                         onChangeBaiduMusicRootDir = { viewModel.setBaiduMusicRootDir(it) },
                         onChangeBaiduMvDir = { viewModel.setBaiduMvDir(it) },
                         onListBaiduDirs = { viewModel.listBaiduDirs(it) },
-                        onChangeBaiduCustomAppKey = { viewModel.setBaiduCustomAppKey(it) },
-                        onChangeBaiduCustomSecretKey = { viewModel.setBaiduCustomSecretKey(it) },
                         onRebuildBaiduIndex = { viewModel.rebuildBaiduIndex() },
+                        onNavigateToServerConnect = { viewModel.navigateTo(Screen.ServerConnect) },
+                        // 服务器连接设置
+                        serverConfig = serverConfig,
+                        isConnected = isConnected,
+                        serverDisplayName = serverDisplayName,
+                        isConnecting = isLoading,
+                        onConnect = onConnect,
+                        onDisconnect = { viewModel.disconnect() },
                         // 封面滤镜设置
                     coverFilterEnabled = coverFilterEnabled,
                     coverFilterBlurRadius = coverFilterBlurRadius,
@@ -602,6 +591,16 @@ fun AppRoot(
                             onDismiss = { showBackupTransferDialog = false }
                         )
                     }
+                }
+                Screen.ServerConnect -> {
+                    ServerConnectScreen(
+                        initialConfig = serverConfig,
+                        isConnected = isConnected,
+                        serverDisplayName = serverDisplayName,
+                        isConnecting = isLoading,
+                        onConnect = onConnect,
+                        onDisconnect = { viewModel.disconnect() }
+                    )
                 }
                 Screen.AlbumDetail -> {
                     val selectedAlbum by viewModel.selectedAlbum.collectAsState(initial = null)
@@ -845,6 +844,10 @@ fun AppRoot(
                         viewModel = viewModel,
                         onPlaySong = { song ->
                             viewModel.playNetworkSong(song)
+                            viewModel.navigateTo(Screen.NowPlaying)
+                        },
+                        onPlayAllSongs = { songs ->
+                            viewModel.playQueue(songs, 0)
                             viewModel.navigateTo(Screen.NowPlaying)
                         },
                         onBack = { viewModel.navigateTo(Screen.Home) }

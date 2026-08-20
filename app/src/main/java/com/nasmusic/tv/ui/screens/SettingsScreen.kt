@@ -25,6 +25,7 @@ import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.material.icons.filled.Audiotrack
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Storage
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -65,6 +66,7 @@ private enum class SettingsSection(val titleRes: Int) {
     GENERAL(R.string.settings_general),
     PLAYBACK(R.string.settings_playback),
     LYRICS(R.string.settings_lyrics),
+    SERVER(R.string.nav_server),
     CACHE(R.string.settings_cache),
     NETWORK(R.string.settings_network),
     NETDISK(R.string.settings_netdisk),
@@ -121,6 +123,13 @@ fun SettingsScreen(
     onDeleteBackup: ((Uri) -> Unit)? = null,
     onConsumeBackupMessage: (() -> Unit)? = null,
     onScanTransferBackup: (() -> Unit)? = null,
+    // 服务器连接设置
+    serverConfig: com.nasmusic.tv.data.model.ServerConfig = com.nasmusic.tv.data.model.ServerConfig.Empty,
+    isConnected: Boolean = false,
+    serverDisplayName: String = "",
+    isConnecting: Boolean = false,
+    onConnect: ((com.nasmusic.tv.data.model.ServerConfig) -> Unit)? = null,
+    onDisconnect: (() -> Unit)? = null,
     // 百度网盘设置
     baiduEnabled: Boolean = false,
     baiduLoggedIn: Boolean = false,
@@ -129,8 +138,6 @@ fun SettingsScreen(
     baiduDeviceCode: com.nasmusic.tv.backend.network.baidu.BaiduOAuthClient.DeviceCodeResult? = null,
     baiduMusicRootDir: String = "/音乐",
     baiduMvDir: String? = null,
-    baiduCustomAppKey: String? = null,
-    baiduCustomSecretKey: String? = null,
     baiduIndexScanned: Int = 0,
     baiduIndexScanning: Boolean = false,
     onToggleBaiduEnabled: ((Boolean) -> Unit)? = null,
@@ -140,9 +147,8 @@ fun SettingsScreen(
     onChangeBaiduMusicRootDir: ((String) -> Unit)? = null,
     onChangeBaiduMvDir: ((String?) -> Unit)? = null,
     onListBaiduDirs: (suspend (String) -> List<BaiduFile>)? = null,
-    onChangeBaiduCustomAppKey: ((String) -> Unit)? = null,
-    onChangeBaiduCustomSecretKey: ((String) -> Unit)? = null,
     onRebuildBaiduIndex: (() -> Unit)? = null,
+    onNavigateToServerConnect: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     var activeSection by remember { mutableStateOf(SettingsSection.GENERAL) }
@@ -176,17 +182,13 @@ fun SettingsScreen(
     // 百度网盘设备码授权对话框显隐
     var showBaiduAuthDialog by remember { mutableStateOf(false) }
 
-    // 百度网盘目录/密钥编辑对话框状态
+    // 百度网盘目录编辑对话框状态
     var showBaiduMusicRootDialog by remember { mutableStateOf(false) }
     var showBaiduMvDirDialog by remember { mutableStateOf(false) }
-    var showBaiduAppKeyDialog by remember { mutableStateOf(false) }
-    var showBaiduSecretKeyDialog by remember { mutableStateOf(false) }
 
     // 百度网盘本地编辑值（参数仅作初始值；编辑后本地立即生效，回调负责持久化）
     var baiduMusicRootLocal by remember { mutableStateOf(baiduMusicRootDir) }
     var baiduMvDirLocal by remember { mutableStateOf(baiduMvDir) }
-    var baiduAppKeyLocal by remember { mutableStateOf(baiduCustomAppKey) }
-    var baiduSecretKeyLocal by remember { mutableStateOf(baiduCustomSecretKey) }
 
     // 进入"数据管理"分区时刷新备份文件列表
     LaunchedEffect(activeSection) {
@@ -263,6 +265,7 @@ fun SettingsScreen(
                             SettingsSection.GENERAL -> Icons.Default.Settings
                             SettingsSection.PLAYBACK -> Icons.Default.Audiotrack
                             SettingsSection.LYRICS -> Icons.AutoMirrored.Filled.QueueMusic
+                            SettingsSection.SERVER -> Icons.Default.Storage
                             SettingsSection.CACHE -> Icons.Default.Settings
                             SettingsSection.NETWORK -> Icons.Default.Settings
                             SettingsSection.NETDISK -> Icons.Default.Settings
@@ -307,6 +310,37 @@ fun SettingsScreen(
                     item { SectionTitle(stringResource(R.string.settings_lyrics)) }
                     item { SettingSwitch(label = stringResource(R.string.settings_cache_lyrics), description = stringResource(R.string.settings_cache_lyrics_desc), checked = settings.cacheLyrics, onClick = { onToggleCacheLyrics(!settings.cacheLyrics) }) }
                     item { SettingSwitch(label = stringResource(R.string.settings_cache_cover), description = stringResource(R.string.settings_cache_cover_desc), checked = settings.cacheCover, onClick = { onToggleCacheCover(!settings.cacheCover) }) }
+                }
+                SettingsSection.SERVER -> {
+                    item { SectionTitle(stringResource(R.string.nav_server)) }
+                    item { Spacer(modifier = Modifier.height(12.dp)) }
+                    item {
+                        val statusText = if (isConnected)
+                            stringResource(R.string.server_connected, serverDisplayName)
+                        else
+                            stringResource(R.string.server_connect_desc)
+                        Text(statusText, color = NasMusicColors.TextPrimary, fontSize = 19.sp,
+                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 8.dp))
+                    }
+                    item { Spacer(modifier = Modifier.height(12.dp)) }
+                    item {
+                        SettingActionButton(
+                            label = stringResource(R.string.server_config_title),
+                            description = if (isConnected) stringResource(R.string.server_connected, serverDisplayName)
+                                else stringResource(R.string.server_connect_desc),
+                            onClick = { onNavigateToServerConnect?.invoke() }
+                        )
+                    }
+                    if (isConnected && onDisconnect != null) {
+                        item { Spacer(modifier = Modifier.height(8.dp)) }
+                        item {
+                            SettingActionButton(
+                                label = stringResource(R.string.server_disconnect),
+                                description = stringResource(R.string.settings_disconnect_desc),
+                                onClick = onDisconnect
+                            )
+                        }
+                    }
                 }
                 SettingsSection.ABOUT -> {
                     item { SectionTitle(stringResource(R.string.settings_about)) }
@@ -398,26 +432,6 @@ fun SettingsScreen(
                                 label = stringResource(R.string.settings_netdisk_mv_dir),
                                 description = baiduMvDirLocal?.takeIf { it.isNotBlank() } ?: stringResource(R.string.settings_netdisk_mv_dir_desc),
                                 onClick = { showBaiduMvDirDialog = true }
-                            )
-                        }
-                    }
-                    if (onChangeBaiduCustomAppKey != null) {
-                        item { Spacer(modifier = Modifier.height(16.dp)) }
-                        item {
-                            SettingActionButton(
-                                label = stringResource(R.string.settings_netdisk_app_key),
-                                description = baiduAppKeyLocal?.takeIf { it.isNotBlank() } ?: stringResource(R.string.settings_netdisk_app_key_desc),
-                                onClick = { showBaiduAppKeyDialog = true }
-                            )
-                        }
-                    }
-                    if (onChangeBaiduCustomSecretKey != null) {
-                        item { Spacer(modifier = Modifier.height(16.dp)) }
-                        item {
-                            SettingActionButton(
-                                label = stringResource(R.string.settings_netdisk_secret_key),
-                                description = baiduSecretKeyLocal?.takeIf { it.isNotBlank() } ?: stringResource(R.string.settings_netdisk_secret_key_desc),
-                                onClick = { showBaiduSecretKeyDialog = true }
                             )
                         }
                     }
@@ -1224,40 +1238,6 @@ fun SettingsScreen(
                 onDismiss = { showBaiduMvDirDialog = false }
             )
         }
-    }
-
-    // 百度网盘自定义 AppKey 编辑对话框
-    if (showBaiduAppKeyDialog && onChangeBaiduCustomAppKey != null) {
-        TextInputDialog(
-            title = stringResource(R.string.settings_netdisk_app_key),
-            hint = stringResource(R.string.settings_netdisk_app_key_desc),
-            initialValue = baiduAppKeyLocal.orEmpty(),
-            masked = true,
-            onConfirm = { input ->
-                val appKey = input.trim()
-                baiduAppKeyLocal = appKey
-                onChangeBaiduCustomAppKey(appKey)
-                showBaiduAppKeyDialog = false
-            },
-            onDismiss = { showBaiduAppKeyDialog = false }
-        )
-    }
-
-    // 百度网盘自定义 SecretKey 编辑对话框
-    if (showBaiduSecretKeyDialog && onChangeBaiduCustomSecretKey != null) {
-        TextInputDialog(
-            title = stringResource(R.string.settings_netdisk_secret_key),
-            hint = stringResource(R.string.settings_netdisk_secret_key_desc),
-            initialValue = baiduSecretKeyLocal.orEmpty(),
-            masked = true,
-            onConfirm = { input ->
-                val secretKey = input.trim()
-                baiduSecretKeyLocal = secretKey
-                onChangeBaiduCustomSecretKey(secretKey)
-                showBaiduSecretKeyDialog = false
-            },
-            onDismiss = { showBaiduSecretKeyDialog = false }
-        )
     }
 
     // 天气 API Key 编辑对话框

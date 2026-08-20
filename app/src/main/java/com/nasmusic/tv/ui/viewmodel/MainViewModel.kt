@@ -750,10 +750,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
             if (config.baseUrl.isNotBlank()) {
                 // 有已保存的服务器配置，询问用户是否自动连接
                 _showConnectPrompt.value = true
-            } else {
-                // 没有已保存的配置，直接导航到服务器配置界面让用户输入
-                _currentScreen.value = Screen.ServerConnect
             }
+            // 无配置时不强制跳转，保持首页（用户可自行去 设置 → 服务器 配置）
         }
 
         // 监听 currentSong 变化，自动切歌时重新加载歌词，并记录播放历史
@@ -3462,6 +3460,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
     val netdiskCurrentDir: StateFlow<String> = _netdiskCurrentDir.asStateFlow()
     private val _netdiskDirFiles = MutableStateFlow<List<BaiduFile>>(emptyList())
     val netdiskDirFiles: StateFlow<List<BaiduFile>> = _netdiskDirFiles.asStateFlow()
+    /** 网盘根目录是否已从配置同步过（防止 refreshBaiduConnectionState 每次重置浏览位置） */
+    private var netdiskDirSynced = false
     private val _netdiskIsLoading = MutableStateFlow(false)
     val netdiskIsLoading: StateFlow<Boolean> = _netdiskIsLoading.asStateFlow()
 
@@ -3494,7 +3494,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
             else -> BaiduConnectionState.Off
         }
         if (cfg.isActive) {
-            _netdiskCurrentDir.value = cfg.musicRootDir.ifBlank { "/音乐" }
+            // 仅首次启用/登录时同步根目录到配置值；之后保留用户浏览位置，切换页面不重置
+            if (!netdiskDirSynced) {
+                _netdiskCurrentDir.value = cfg.musicRootDir.ifBlank { "/音乐" }
+                netdiskDirSynced = true
+            }
             _baiduIndexLastSync.value = baiduIndexCache.load()?.lastSyncAt ?: 0L
         }
         // 通知 NasMusicApp 运行时注册/注销百度 service
@@ -3648,6 +3652,69 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
         _netdiskSearchResults.value = emptyList()
     }
 
+    /** 播放全部网盘搜索结果 */
+    fun playAllNetdiskSearch() {
+        val results = _netdiskSearchResults.value
+        if (results.isEmpty()) {
+            showError("搜索无结果")
+            return
+        }
+        viewModelScope.launch {
+            playQueue(results, 0)
+        }
+    }
+
+    /**
+     * 播放当前目录（含子目录）的全部音频。
+     *
+     * 优先走本地索引（毫秒级）；索引未覆盖/缺失时回退递归 BFS 扫描网盘。
+     * @param onPlayAll 收集完成后回调（播放队列由调用方导航到 NowPlaying）
+     */
+    fun playAllNetdiskDir(dir: String, onPlayAll: (List<Song>) -> Unit) {
+        viewModelScope.launch {
+            val songs = collectAudioInDir(dir)
+            if (songs.isEmpty()) {
+                showError("目录下未找到音频文件")
+            } else {
+                onPlayAll(songs)
+            }
+        }
+    }
+
+    /** 收集目录（含子目录）内全部音频：优先索引，回退 API 递归扫描 */
+    private suspend fun collectAudioInDir(dir: String): List<Song> {
+        val base = dir.trimEnd('/')
+        val index = baiduIndexCache.load()
+        val indexed = index?.entries?.filter {
+            it.category == BaiduNetdiskConfig.CATEGORY_AUDIO &&
+                (it.path == base || it.path.startsWith("$base/"))
+        }?.map { it.toSong() }
+        if (indexed != null && indexed.isNotEmpty()) return indexed
+
+        // 回退：BFS 递归扫描（索引未建或未覆盖该目录时）
+        val songs = mutableListOf<Song>()
+        val queue = ArrayDeque<String>()
+        val visited = HashSet<String>()
+        queue.addLast(base)
+        visited.add(base)
+        try {
+            while (queue.isNotEmpty()) {
+                val dirPath = queue.removeFirst()
+                val result = baiduApi.listDir(dirPath)
+                for (f in result.files) {
+                    if (f.isDir) {
+                        if (visited.add(f.path)) queue.addLast(f.path)
+                    } else if (BaiduPanApi.isAudioFile(f.serverFilename, f.category)) {
+                        songs.add(f.toSong())
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            AppLog.e("NASMusic", "collectAudioInDir error", e)
+        }
+        return songs
+    }
+
     // ---- 索引管理 ----
 
     fun triggerBaiduIndexScanIfNeeded() {
@@ -3699,14 +3766,6 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
 
     fun setBaiduMvDir(dir: String?) {
         prefs.setBaiduMvDirSync(dir)
-    }
-
-    fun setBaiduCustomAppKey(key: String) {
-        prefs.setBaiduCustomAppKeySync(key.ifBlank { null })
-    }
-
-    fun setBaiduCustomSecretKey(secret: String) {
-        prefs.setBaiduCustomSecretKeySync(secret.ifBlank { null })
     }
 
     /** 加载索引中的歌曲（供 NetdiskScreen 首页展示已扫描曲库） */

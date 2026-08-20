@@ -85,9 +85,9 @@ fun BaiduDirPickerDialog(
     BackHandler { onDismiss() }
 
     Dialog(
-        onDismissRequest = {},
+        onDismissRequest = onDismiss,
         properties = DialogProperties(
-            dismissOnBackPress = false,
+            dismissOnBackPress = true,
             dismissOnClickOutside = false,
             usePlatformDefaultWidth = false
         )
@@ -101,6 +101,7 @@ fun BaiduDirPickerDialog(
             Column(
                 modifier = Modifier
                     .width(640.dp)
+                    .height(660.dp)
                     .background(NasMusicColors.Surface, RoundedCornerShape(16.dp))
                     .padding(28.dp)
             ) {
@@ -117,11 +118,21 @@ fun BaiduDirPickerDialog(
                 )
                 Spacer(modifier = Modifier.height(16.dp))
 
-                // 目录列表区（固定高度，内部滚动）
+                // 返回上级（始终可见，不受目录加载/空状态影响）
+                if (currentPath != "/" && currentPath.isNotBlank()) {
+                    DirRow(
+                        label = stringResource(R.string.netdisk_dir_picker_up),
+                        icon = Icons.AutoMirrored.Filled.ArrowBack,
+                        onClick = { currentPath = parentPath(currentPath) }
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
+
+                // 目录列表区（弹性高度，内部滚动，保证底部按钮始终可见）
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(340.dp)
+                        .weight(1f)
                 ) {
                     when {
                         loading -> {
@@ -175,16 +186,6 @@ fun BaiduDirPickerDialog(
                         }
                         else -> {
                             LazyColumn(modifier = Modifier.fillMaxSize()) {
-                                // 非根目录时提供"返回上级"项
-                                if (currentPath != "/" && currentPath.isNotBlank()) {
-                                    item {
-                                        DirRow(
-                                            label = stringResource(R.string.netdisk_dir_picker_up),
-                                            icon = Icons.AutoMirrored.Filled.ArrowBack,
-                                            onClick = { currentPath = parentPath(currentPath) }
-                                        )
-                                    }
-                                }
                                 items(dirs) { dir ->
                                     DirRow(
                                         label = dir.serverFilename,

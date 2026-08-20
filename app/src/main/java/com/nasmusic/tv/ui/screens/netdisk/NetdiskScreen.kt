@@ -1,22 +1,26 @@
 package com.nasmusic.tv.ui.screens.netdisk
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.MusicNote
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -27,24 +31,21 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Icon
-import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Folder
-import androidx.compose.material.icons.filled.MusicNote
-import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import com.nasmusic.tv.backend.network.baidu.BaiduNetdiskConfig
 import com.nasmusic.tv.backend.network.baidu.BaiduPanApi
 import com.nasmusic.tv.data.model.BaiduFile
 import com.nasmusic.tv.data.model.Song
 import com.nasmusic.tv.ui.components.FocusableSurface
 import com.nasmusic.tv.ui.screens.PlaylistPickerDialog
+import com.nasmusic.tv.ui.screens.SongRow
+import com.nasmusic.tv.ui.screens.TextInputDialog
 import com.nasmusic.tv.ui.theme.NasMusicColors
 import com.nasmusic.tv.ui.viewmodel.MainViewModel
 
@@ -58,6 +59,7 @@ import com.nasmusic.tv.ui.viewmodel.MainViewModel
 fun NetdiskScreen(
     viewModel: MainViewModel,
     onPlaySong: (Song) -> Unit,
+    onPlayAllSongs: (List<Song>) -> Unit,
     onBack: () -> Unit
 ) {
     val connectionState by viewModel.baiduConnectionState.collectAsState()
@@ -67,16 +69,16 @@ fun NetdiskScreen(
     val searchKeyword by viewModel.netdiskSearchKeyword.collectAsState()
     val searchResults by viewModel.netdiskSearchResults.collectAsState()
     val localPlaylists by viewModel.localPlaylists.collectAsState(initial = emptyList())
+    val favoriteIds by viewModel.networkFavoriteIds.collectAsState(initial = emptySet())
+    val queueSongIds by viewModel.queueSongIds.collectAsState(initial = emptySet())
 
-    var searchInput by remember { mutableStateOf("") }
+    var showSearchDialog by remember { mutableStateOf(false) }
     var actionSong by remember { mutableStateOf<Song?>(null) }
 
-    // 首次进入：刷新连接状态并加载根目录
+    // 首次进入：刷新连接状态并加载当前目录（不依赖时序上的首次连接状态，避免空列表）
     LaunchedEffect(Unit) {
         viewModel.refreshBaiduConnectionState()
-        if (connectionState is MainViewModel.BaiduConnectionState.LoggedIn) {
-            viewModel.listBaiduDir(currentDir)
-        }
+        viewModel.listBaiduDir(viewModel.netdiskCurrentDir.value)
     }
 
     Column(
@@ -100,37 +102,34 @@ fun NetdiskScreen(
             Text("网盘音乐", color = NasMusicColors.TextPrimary, fontSize = 28.sp)
             Spacer(modifier = Modifier.width(32.dp))
 
-            // 搜索框
+            // 搜索框（TV 遥控器点击弹出输入对话框）
             FocusableSurface(
-                onClick = {},
+                onClick = { showSearchDialog = true },
                 modifier = Modifier.width(420.dp).height(48.dp),
                 shape = RoundedCornerShape(24.dp),
-                containerColor = NasMusicColors.Surface
+                containerColor = NasMusicColors.Surface,
+                focusedContainerColor = NasMusicColors.Primary.copy(alpha = 0.25f)
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.padding(horizontal = 16.dp)
+                    modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp)
                 ) {
                     Icon(Icons.Default.Search, contentDescription = null, tint = NasMusicColors.TextSecondary, modifier = Modifier.size(20.dp))
                     Spacer(modifier = Modifier.width(10.dp))
-                    Box(modifier = Modifier.weight(1f)) {
-                        BasicTextField(
-                            value = searchInput,
-                            onValueChange = {
-                                searchInput = it
-                                if (it.isNotBlank()) {
-                                    viewModel.searchBaidu(it)
-                                } else {
-                                    viewModel.clearNetdiskSearch()
-                                }
-                            },
-                            textStyle = TextStyle(color = NasMusicColors.TextPrimary, fontSize = 18.sp),
-                            singleLine = true,
-                            cursorBrush = androidx.compose.ui.graphics.SolidColor(NasMusicColors.Primary),
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                        if (searchInput.isEmpty()) {
-                            Text("搜索网盘音乐...", color = NasMusicColors.TextSecondary, fontSize = 18.sp)
+                    Text(
+                        text = if (searchKeyword.isBlank()) "搜索网盘音乐..." else searchKeyword,
+                        color = if (searchKeyword.isBlank()) NasMusicColors.TextSecondary else NasMusicColors.TextPrimary,
+                        fontSize = 18.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f)
+                    )
+                    if (searchKeyword.isNotBlank()) {
+                        FocusableSurface(
+                            onClick = { viewModel.clearNetdiskSearch() },
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            Text("✕", color = NasMusicColors.TextSecondary, fontSize = 17.sp, modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp))
                         }
                     }
                 }
@@ -149,10 +148,60 @@ fun NetdiskScreen(
             }
             // 搜索结果优先展示
             searchKeyword.isNotBlank() -> {
-                Text("搜索 “$searchKeyword”：${searchResults.size} 首", color = NasMusicColors.TextSecondary, fontSize = 18.sp, modifier = Modifier.padding(bottom = 12.dp))
-                LazyColumn(modifier = Modifier.fillMaxSize()) {
-                    items(searchResults) { song ->
-                        SongRow(song = song, onClick = { onPlaySong(song) }, onMore = { actionSong = song })
+                if (searchResults.isEmpty()) {
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Text("无搜索结果", color = NasMusicColors.TextSecondary, fontSize = 20.sp)
+                    }
+                } else {
+                    LazyVerticalGrid(
+                        columns = GridCells.Fixed(2),
+                        modifier = Modifier.fillMaxSize(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        // 操作栏：播放全部
+                        item(key = "netdisk_search_action", span = { GridItemSpan(2) }) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(top = 2.dp, bottom = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                FocusableSurface(
+                                    onClick = { onPlayAllSongs(searchResults) },
+                                    shape = RoundedCornerShape(8.dp),
+                                    focusedScale = 1.08f,
+                                    animationDurationMs = 150,
+                                    containerColor = NasMusicColors.Primary.copy(alpha = 0.85f),
+                                    focusedContainerColor = NasMusicColors.Primary,
+                                    contentColor = Color.Black,
+                                    focusedContentColor = Color.Black
+                                ) {
+                                    Text(
+                                        text = "全部播放 ▶",
+                                        fontSize = 19.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                                    )
+                                }
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Text(
+                                    text = "搜索 “$searchKeyword”：${searchResults.size} 首",
+                                    color = NasMusicColors.TextSecondary,
+                                    fontSize = 18.sp
+                                )
+                            }
+                        }
+                        itemsIndexed(searchResults, key = { _, s -> "${s.networkId}_${s.title}" }) { index, song ->
+                            SongRow(
+                                song = song,
+                                index = index,
+                                onClick = { onPlaySong(song) },
+                                isFavorited = song.id in favoriteIds,
+                                onToggleFavorite = { viewModel.toggleNetworkFavorite(song) },
+                                isInQueue = song.id in queueSongIds,
+                                onToggleQueue = { viewModel.toggleQueueSong(song) },
+                                onAddToPlaylist = { actionSong = song }
+                            )
+                        }
                     }
                 }
             }
@@ -164,7 +213,22 @@ fun NetdiskScreen(
                 ) {
                     Text("目录：", color = NasMusicColors.TextSecondary, fontSize = 18.sp)
                     Text(currentDir, color = NasMusicColors.Primary, fontSize = 18.sp, modifier = Modifier.weight(1f))
+                    // 全部播放（含子目录）
+                    FocusableSurface(
+                        onClick = { viewModel.playAllNetdiskDir(currentDir, onPlayAllSongs) },
+                        modifier = Modifier.padding(end = 8.dp),
+                        shape = RoundedCornerShape(8.dp),
+                        focusedScale = 1.08f,
+                        animationDurationMs = 150,
+                        containerColor = NasMusicColors.Primary.copy(alpha = 0.85f),
+                        focusedContainerColor = NasMusicColors.Primary,
+                        contentColor = Color.Black,
+                        focusedContentColor = Color.Black
+                    ) {
+                        Text("全部播放 ▶", color = Color.Black, fontSize = 16.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp))
+                    }
                     if (currentDir != "/" && currentDir.isNotBlank()) {
+                        Spacer(modifier = Modifier.width(8.dp))
                         FocusableSurface(
                             onClick = { viewModel.navigateBaiduDirUp() },
                             modifier = Modifier.padding(end = 8.dp),
@@ -178,29 +242,63 @@ fun NetdiskScreen(
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         Text("加载中...", color = NasMusicColors.TextSecondary, fontSize = 18.sp)
                     }
+                } else if (dirFiles.isEmpty()) {
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Text("此目录下没有文件", color = NasMusicColors.TextSecondary, fontSize = 18.sp)
+                    }
                 } else {
-                    LazyColumn(modifier = Modifier.fillMaxSize()) {
-                        items(dirFiles) { file ->
-                            FileRow(
-                                file = file,
-                                onClick = {
-                                    if (file.isDir) {
-                                        viewModel.enterBaiduDir(file.serverFilename)
-                                    } else if (BaiduPanApi.isAudioFile(file.serverFilename, file.category)) {
-                                        onPlaySong(file.toSong())
-                                    }
-                                },
-                                onMore = {
-                                    if (!file.isDir && BaiduPanApi.isAudioFile(file.serverFilename, file.category)) {
-                                        actionSong = file.toSong()
-                                    }
-                                }
-                            )
+                    LazyVerticalGrid(
+                        columns = GridCells.Fixed(2),
+                        modifier = Modifier.fillMaxSize(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        itemsIndexed(
+                            items = dirFiles,
+                            key = { _, f -> "f_${f.fsId}" },
+                            span = { _, f -> if (f.isDir) GridItemSpan(2) else GridItemSpan(1) }
+                        ) { index, file ->
+                            if (file.isDir) {
+                                FileRow(
+                                    file = file,
+                                    onClick = { viewModel.enterBaiduDir(file.serverFilename) },
+                                    onMore = {}
+                                )
+                            } else if (BaiduPanApi.isAudioFile(file.serverFilename, file.category)) {
+                                val song = file.toSong()
+                                SongRow(
+                                    song = song,
+                                    index = index,
+                                    onClick = { onPlaySong(song) },
+                                    isFavorited = song.id in favoriteIds,
+                                    onToggleFavorite = { viewModel.toggleNetworkFavorite(song) },
+                                    isInQueue = song.id in queueSongIds,
+                                    onToggleQueue = { viewModel.toggleQueueSong(song) },
+                                    onAddToPlaylist = { actionSong = song }
+                                )
+                            }
                         }
                     }
                 }
             }
         }
+    }
+
+    // 网盘搜索输入对话框
+    if (showSearchDialog) {
+        TextInputDialog(
+            title = "搜索网盘音乐",
+            hint = "输入歌曲名或歌手名搜索网盘音乐",
+            initialValue = searchKeyword,
+            onConfirm = { input ->
+                val kw = input.trim()
+                if (kw.isNotBlank()) {
+                    viewModel.searchBaidu(kw)
+                    showSearchDialog = false
+                }
+            },
+            onDismiss = { showSearchDialog = false }
+        )
     }
 
     // 加入歌单选择弹窗
@@ -244,31 +342,6 @@ private fun FileRow(file: BaiduFile, onClick: () -> Unit, onMore: () -> Unit) {
             )
             if (isAudio) {
                 Text(formatSize(file.size), color = NasMusicColors.TextSecondary, fontSize = 15.sp)
-            }
-        }
-    }
-}
-
-@OptIn(ExperimentalTvMaterial3Api::class)
-@Composable
-private fun SongRow(song: Song, onClick: () -> Unit, onMore: () -> Unit) {
-    FocusableSurface(
-        onClick = onClick,
-        onLongClick = onMore,
-        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-        shape = RoundedCornerShape(10.dp)
-    ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)
-        ) {
-            Icon(Icons.Default.MusicNote, contentDescription = null, tint = NasMusicColors.Primary, modifier = Modifier.size(22.dp))
-            Spacer(modifier = Modifier.width(14.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(song.title, color = NasMusicColors.TextPrimary, fontSize = 19.sp)
-                if (song.artist.isNotBlank()) {
-                    Text(song.artist, color = NasMusicColors.TextSecondary, fontSize = 15.sp)
-                }
             }
         }
     }

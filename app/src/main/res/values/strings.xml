@@ -135,6 +135,7 @@
     <string name="server_reconnect_confirm">检测到已保存的服务器配置，是否连接？</string>
     <string name="server_disconnected">已断开连接</string>
     <string name="server_disconnect">断开</string>
+    <string name="settings_disconnect_desc">断开与当前 NAS 后端的连接</string>
     <string name="server_type_label">服务器类型</string>
     <string name="server_password_desc">密码（用于获取访问令牌）</string>
     <string name="server_address_required">请填写服务器地址</string>
@@ -253,10 +254,6 @@
     <string name="settings_netdisk_music_root_desc">网盘中存放音乐的目录，默认 /音乐</string>
     <string name="settings_netdisk_mv_dir">MV 目录</string>
     <string name="settings_netdisk_mv_dir_desc">网盘中存放 MV 视频的目录（可选，默认同音乐目录）</string>
-    <string name="settings_netdisk_app_key">自定义 AppKey</string>
-    <string name="settings_netdisk_app_key_desc">覆盖内置默认应用密钥（高级选项）</string>
-    <string name="settings_netdisk_secret_key">自定义 SecretKey</string>
-    <string name="settings_netdisk_secret_key_desc">与 AppKey 配套的应用密钥（高级选项）</string>
     <string name="settings_netdisk_index">索引</string>
     <string name="settings_netdisk_index_desc">已扫描 %1$d 首歌曲</string>
     <string name="settings_netdisk_index_scanning">索引扫描中...</string>
