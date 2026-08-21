@@ -526,6 +526,7 @@ fun AppRoot(
                         onChangeLyricsOffset = { viewModel.updateLyricsOffset(it) },
                         onClearLyricsCache = { viewModel.clearLyricsCache() },
                         onClearCoverCache = { viewModel.clearCoverCache() },
+                        onClearMvCache = { viewModel.clearMvPersistentCache() },
                         onOpenEqualizer = { viewModel.navigateTo(Screen.Equalizer) },
                         onChangeMetingApiBaseUrl = { viewModel.updateMetingApiBaseUrl(it) },
                         mvApiBaseUrl = settings.mvApiBaseUrl,

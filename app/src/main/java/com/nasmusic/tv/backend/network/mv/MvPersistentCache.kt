@@ -69,6 +69,20 @@ class MvPersistentCache(context: Context) {
         save()
     }
 
+    /**
+     * 清空全部 MV 持久缓存（内存 + 磁盘文件）。
+     * 供设置页"缓存管理"手动清除使用。
+     */
+    fun clear() {
+        cache.clear()
+        try {
+            if (file.exists()) file.delete()
+        } catch (e: Exception) {
+            AppLog.e(TAG, "clear failed: ${e.message}", e)
+        }
+        AppLog.d(TAG, "cleared")
+    }
+
     /** 导出全部条目（供备份用） */
     fun exportAll(): List<MvCacheEntry> = cache.values.toList()
 

@@ -38,6 +38,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.tv.material3.ClickableSurfaceDefaults
@@ -65,12 +66,10 @@ import kotlinx.coroutines.withContext
 private enum class SettingsSection(val titleRes: Int) {
     GENERAL(R.string.settings_general),
     PLAYBACK(R.string.settings_playback),
-    LYRICS(R.string.settings_lyrics),
     SERVER(R.string.nav_server),
     CACHE(R.string.settings_cache),
     NETWORK(R.string.settings_network),
     NETDISK(R.string.settings_netdisk),
-    COVER(R.string.settings_cover),
     DATA(R.string.settings_data),
     ABOUT(R.string.settings_about)
 }
@@ -88,6 +87,7 @@ fun SettingsScreen(
     onChangeLyricsOffset: (Long) -> Unit,
     onClearLyricsCache: (() -> Unit)? = null,
     onClearCoverCache: (() -> Unit)? = null,
+    onClearMvCache: (() -> Unit)? = null,
     onOpenEqualizer: (() -> Unit)? = null,
     onChangeMetingApiBaseUrl: ((String) -> Unit)? = null,
     // MTV 视频搜索端点配置
@@ -264,12 +264,10 @@ fun SettingsScreen(
                         val icon = when (section) {
                             SettingsSection.GENERAL -> Icons.Default.Settings
                             SettingsSection.PLAYBACK -> Icons.Default.Audiotrack
-                            SettingsSection.LYRICS -> Icons.AutoMirrored.Filled.QueueMusic
                             SettingsSection.SERVER -> Icons.Default.Storage
                             SettingsSection.CACHE -> Icons.Default.Settings
                             SettingsSection.NETWORK -> Icons.Default.Settings
                             SettingsSection.NETDISK -> Icons.Default.Settings
-                            SettingsSection.COVER -> Icons.Default.Audiotrack
                             SettingsSection.DATA -> Icons.Default.Info
                             SettingsSection.ABOUT -> Icons.Default.Info
                         }
@@ -305,158 +303,9 @@ fun SettingsScreen(
                             onClick = { onOpenEqualizer?.invoke() }
                         )
                     }
-                }
-                SettingsSection.LYRICS -> {
-                    item { SectionTitle(stringResource(R.string.settings_lyrics)) }
-                    item { SettingSwitch(label = stringResource(R.string.settings_cache_lyrics), description = stringResource(R.string.settings_cache_lyrics_desc), checked = settings.cacheLyrics, onClick = { onToggleCacheLyrics(!settings.cacheLyrics) }) }
-                    item { SettingSwitch(label = stringResource(R.string.settings_cache_cover), description = stringResource(R.string.settings_cache_cover_desc), checked = settings.cacheCover, onClick = { onToggleCacheCover(!settings.cacheCover) }) }
-                }
-                SettingsSection.SERVER -> {
-                    item { SectionTitle(stringResource(R.string.nav_server)) }
-                    item { Spacer(modifier = Modifier.height(12.dp)) }
-                    item {
-                        val statusText = if (isConnected)
-                            stringResource(R.string.server_connected, serverDisplayName)
-                        else
-                            stringResource(R.string.server_connect_desc)
-                        Text(statusText, color = NasMusicColors.TextPrimary, fontSize = 19.sp,
-                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 8.dp))
-                    }
-                    item { Spacer(modifier = Modifier.height(12.dp)) }
-                    item {
-                        SettingActionButton(
-                            label = stringResource(R.string.server_config_title),
-                            description = if (isConnected) stringResource(R.string.server_connected, serverDisplayName)
-                                else stringResource(R.string.server_connect_desc),
-                            onClick = { onNavigateToServerConnect?.invoke() }
-                        )
-                    }
-                    if (isConnected && onDisconnect != null) {
-                        item { Spacer(modifier = Modifier.height(8.dp)) }
-                        item {
-                            SettingActionButton(
-                                label = stringResource(R.string.server_disconnect),
-                                description = stringResource(R.string.settings_disconnect_desc),
-                                onClick = onDisconnect
-                            )
-                        }
-                    }
-                }
-                SettingsSection.ABOUT -> {
-                    item { SectionTitle(stringResource(R.string.settings_about)) }
-                    item { AboutRow(label = stringResource(R.string.settings_app_name), value = stringResource(R.string.app_name)) }
-                    item { AboutRow(label = stringResource(R.string.about_version), value = NasMusicVersion.DISPLAY) }
-                    item { AboutRow(label = stringResource(R.string.settings_build_type), value = NasMusicVersion.BUILD_TYPE) }
-                    item { AboutRow(label = stringResource(R.string.about_license), value = stringResource(R.string.about_license_value)) }
-                    item { AboutRow(label = stringResource(R.string.settings_supported_backends), value = "Jellyfin / Navidrome") }
-                }
-                SettingsSection.CACHE -> {
-                    item { SectionTitle(stringResource(R.string.settings_cache)) }
-                    if (onClearLyricsCache != null) {
-                        item {
-                            SettingActionButton(
-                                label = stringResource(R.string.settings_clear_lyrics_cache),
-                                description = stringResource(R.string.settings_clear_lyrics_cache_desc),
-                                onClick = onClearLyricsCache
-                            )
-                        }
-                    }
-                    if (onClearCoverCache != null) {
-                        item {
-                            SettingActionButton(
-                                label = stringResource(R.string.settings_clear_cover_cache),
-                                description = "清理 Coil 图片加载器的磁盘缓存",
-                                onClick = onClearCoverCache
-                            )
-                        }
-                    }
-                    item {
-                        val context = LocalContext.current
-                        val cacheDirSize = try {
-                            val cacheDir = context.cacheDir
-                            val sizeBytes = cacheDir?.walkTopDown()?.filter { it.isFile }?.sumOf { it.length() } ?: 0L
-                            if (sizeBytes > 1048576L) "${sizeBytes / 1048576} MB"
-                            else if (sizeBytes > 1024L) "${sizeBytes / 1024} KB"
-                            else "$sizeBytes B"
-                        } catch (_: Exception) { "—" }
-                        Text(
-                            text = "当前缓存目录大小: $cacheDirSize",
-                            color = NasMusicColors.TextSecondary,
-                            fontSize = 18.sp,
-                            modifier = Modifier.padding(start = 4.dp, top = 8.dp)
-                        )
-                    }
-                }
-                SettingsSection.NETDISK -> {
-                    item { SectionTitle(stringResource(R.string.settings_netdisk)) }
-                    item { SettingSwitch(label = stringResource(R.string.settings_netdisk_enable), description = stringResource(R.string.settings_netdisk_enable_desc), checked = baiduEnabled, onClick = { onToggleBaiduEnabled?.invoke(!baiduEnabled) }) }
-
-                    if (onStartBaiduDeviceCode != null) {
-                        item { Spacer(modifier = Modifier.height(16.dp)) }
-                        if (baiduLoggedIn) {
-                            item {
-                                SettingActionButton(
-                                    label = stringResource(R.string.settings_netdisk_logged_in),
-                                    description = stringResource(R.string.settings_netdisk_logout_desc),
-                                    onClick = { onLogoutBaidu?.invoke() }
-                                )
-                            }
-                        } else {
-                            item {
-                                SettingActionButton(
-                                    label = stringResource(R.string.settings_netdisk_login),
-                                    description = stringResource(R.string.settings_netdisk_login_desc),
-                                    onClick = {
-                                        showBaiduAuthDialog = true
-                                        onStartBaiduDeviceCode?.invoke()
-                                    }
-                                )
-                            }
-                        }
-                    }
-
-                    if (onChangeBaiduMusicRootDir != null) {
-                        item { Spacer(modifier = Modifier.height(16.dp)) }
-                        item {
-                            SettingActionButton(
-                                label = stringResource(R.string.settings_netdisk_music_root),
-                                description = baiduMusicRootLocal,
-                                onClick = { showBaiduMusicRootDialog = true }
-                            )
-                        }
-                    }
-                    if (onChangeBaiduMvDir != null) {
-                        item { Spacer(modifier = Modifier.height(16.dp)) }
-                        item {
-                            SettingActionButton(
-                                label = stringResource(R.string.settings_netdisk_mv_dir),
-                                description = baiduMvDirLocal?.takeIf { it.isNotBlank() } ?: stringResource(R.string.settings_netdisk_mv_dir_desc),
-                                onClick = { showBaiduMvDirDialog = true }
-                            )
-                        }
-                    }
-                    if (onRebuildBaiduIndex != null) {
-                        item { Spacer(modifier = Modifier.height(16.dp)) }
-                        item {
-                            Text(
-                                text = if (baiduIndexScanning) stringResource(R.string.settings_netdisk_index_scanning)
-                                else stringResource(R.string.settings_netdisk_index_desc, baiduIndexScanned),
-                                color = NasMusicColors.TextSecondary,
-                                fontSize = 18.sp,
-                                modifier = Modifier.padding(start = 4.dp, bottom = 8.dp)
-                            )
-                        }
-                        item {
-                            SettingActionButton(
-                                label = stringResource(R.string.settings_netdisk_index_rebuild),
-                                description = stringResource(R.string.settings_netdisk_index_rebuild_desc),
-                                onClick = { onRebuildBaiduIndex?.invoke() }
-                            )
-                        }
-                    }
-                }
-                SettingsSection.COVER -> {
-                    item { SectionTitle(stringResource(R.string.settings_cover)) }
+                    // ── 封面滤镜分组 ──
+                    item { Spacer(modifier = Modifier.height(24.dp)) }
+                    item { SubSectionTitle(stringResource(R.string.settings_cover)) }
                     item {
                         SettingSwitch(
                             label = stringResource(R.string.settings_cover_filter),
@@ -531,6 +380,193 @@ fun SettingsScreen(
                                 })
                             }
                         }
+                    }
+                }
+                SettingsSection.SERVER -> {
+                    item { SectionTitle(stringResource(R.string.nav_server)) }
+                    item { Spacer(modifier = Modifier.height(12.dp)) }
+                    item {
+                        val statusText = if (isConnected)
+                            stringResource(R.string.server_connected, serverDisplayName)
+                        else
+                            stringResource(R.string.server_connect_desc)
+                        Text(statusText, color = NasMusicColors.TextPrimary, fontSize = 19.sp,
+                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 8.dp))
+                    }
+                    item { Spacer(modifier = Modifier.height(12.dp)) }
+                    item {
+                        SettingActionButton(
+                            label = stringResource(R.string.server_config_title),
+                            description = if (isConnected) stringResource(R.string.server_connected, serverDisplayName)
+                                else stringResource(R.string.server_connect_desc),
+                            onClick = { onNavigateToServerConnect?.invoke() }
+                        )
+                    }
+                    if (isConnected && onDisconnect != null) {
+                        item { Spacer(modifier = Modifier.height(8.dp)) }
+                        item {
+                            SettingActionButton(
+                                label = stringResource(R.string.server_disconnect),
+                                description = stringResource(R.string.settings_disconnect_desc),
+                                onClick = onDisconnect
+                            )
+                        }
+                    }
+                }
+                SettingsSection.ABOUT -> {
+                    item { SectionTitle(stringResource(R.string.settings_about)) }
+                    item { AboutRow(label = stringResource(R.string.settings_app_name), value = stringResource(R.string.app_name)) }
+                    item { AboutRow(label = stringResource(R.string.about_version), value = NasMusicVersion.DISPLAY) }
+                    item { AboutRow(label = stringResource(R.string.settings_build_type), value = NasMusicVersion.BUILD_TYPE) }
+                    item { AboutRow(label = stringResource(R.string.about_license), value = stringResource(R.string.about_license_value)) }
+                    item { AboutRow(label = stringResource(R.string.settings_supported_backends), value = "Jellyfin / Navidrome") }
+                }
+                SettingsSection.CACHE -> {
+                    item { SectionTitle(stringResource(R.string.settings_cache)) }
+                    // 缓存目录大小（置顶，醒目可见）
+                    item {
+                        val context = LocalContext.current
+                        val cacheDirSize = try {
+                            val cacheDir = context.cacheDir
+                            val sizeBytes = cacheDir?.walkTopDown()?.filter { it.isFile }?.sumOf { it.length() } ?: 0L
+                            if (sizeBytes > 1048576L) "${sizeBytes / 1048576} MB"
+                            else if (sizeBytes > 1024L) "${sizeBytes / 1024} KB"
+                            else "$sizeBytes B"
+                        } catch (_: Exception) { "—" }
+                        Text(
+                            text = "当前缓存目录大小: $cacheDirSize",
+                            color = NasMusicColors.TextSecondary,
+                            fontSize = 18.sp,
+                            modifier = Modifier.padding(start = 4.dp, top = 8.dp)
+                        )
+                    }
+                    // ── 缓存开关（原歌词 tab 的歌词/封面缓存开关） ──
+                    item { SubSectionTitle(stringResource(R.string.settings_cache_switch)) }
+                    item { SettingSwitch(label = stringResource(R.string.settings_cache_lyrics), description = stringResource(R.string.settings_cache_lyrics_desc), checked = settings.cacheLyrics, onClick = { onToggleCacheLyrics(!settings.cacheLyrics) }) }
+                    item { SettingSwitch(label = stringResource(R.string.settings_cache_cover), description = stringResource(R.string.settings_cache_cover_desc), checked = settings.cacheCover, onClick = { onToggleCacheCover(!settings.cacheCover) }) }
+                    item { Spacer(modifier = Modifier.height(8.dp)) }
+                    // ── 缓存清理 ──
+                    item { SubSectionTitle(stringResource(R.string.settings_cache_clear)) }
+                    if (onClearLyricsCache != null) {
+                        item {
+                            SettingActionButton(
+                                label = stringResource(R.string.settings_clear_lyrics_cache),
+                                description = stringResource(R.string.settings_clear_lyrics_cache_desc),
+                                onClick = onClearLyricsCache
+                            )
+                        }
+                    }
+                    if (onClearCoverCache != null) {
+                        item {
+                            SettingActionButton(
+                                label = stringResource(R.string.settings_clear_cover_cache),
+                                description = "清理 Coil 图片加载器的磁盘缓存",
+                                onClick = onClearCoverCache
+                            )
+                        }
+                    }
+                    if (onClearMvCache != null) {
+                        item {
+                            SettingActionButton(
+                                label = stringResource(R.string.settings_clear_mv_cache),
+                                description = stringResource(R.string.settings_clear_mv_cache_desc),
+                                onClick = onClearMvCache
+                            )
+                        }
+                    }
+                    item {
+                        val context = LocalContext.current
+                        val cacheDirSize = try {
+                            val cacheDir = context.cacheDir
+                            val sizeBytes = cacheDir?.walkTopDown()?.filter { it.isFile }?.sumOf { it.length() } ?: 0L
+                            if (sizeBytes > 1048576L) "${sizeBytes / 1048576} MB"
+                            else if (sizeBytes > 1024L) "${sizeBytes / 1024} KB"
+                            else "$sizeBytes B"
+                        } catch (_: Exception) { "—" }
+                        Text(
+                            text = "当前缓存目录大小: $cacheDirSize",
+                            color = NasMusicColors.TextSecondary,
+                            fontSize = 18.sp,
+                            modifier = Modifier.padding(start = 4.dp, top = 8.dp)
+                        )
+                    }
+                }
+                SettingsSection.NETDISK -> {
+                    item { SectionTitle(stringResource(R.string.settings_netdisk)) }
+
+                    // ── 百度网盘（已支持）分组 ──
+                    item { SubSectionTitle(stringResource(R.string.settings_netdisk_group_baidu)) }
+                    item { SettingSwitch(label = stringResource(R.string.settings_netdisk_enable), description = stringResource(R.string.settings_netdisk_enable_desc), checked = baiduEnabled, onClick = { onToggleBaiduEnabled?.invoke(!baiduEnabled) }) }
+
+                    if (onStartBaiduDeviceCode != null) {
+                        item { Spacer(modifier = Modifier.height(16.dp)) }
+                        if (baiduLoggedIn) {
+                            item {
+                                SettingActionButton(
+                                    label = stringResource(R.string.settings_netdisk_logged_in),
+                                    description = stringResource(R.string.settings_netdisk_logout_desc),
+                                    onClick = { onLogoutBaidu?.invoke() }
+                                )
+                            }
+                        } else {
+                            item {
+                                SettingActionButton(
+                                    label = stringResource(R.string.settings_netdisk_login),
+                                    description = stringResource(R.string.settings_netdisk_login_desc),
+                                    onClick = {
+                                        showBaiduAuthDialog = true
+                                        onStartBaiduDeviceCode?.invoke()
+                                    }
+                                )
+                            }
+                        }
+                    }
+
+                    if (onChangeBaiduMusicRootDir != null) {
+                        item { Spacer(modifier = Modifier.height(16.dp)) }
+                        item {
+                            SettingActionButton(
+                                label = stringResource(R.string.settings_netdisk_music_root),
+                                description = baiduMusicRootLocal,
+                                onClick = { showBaiduMusicRootDialog = true }
+                            )
+                        }
+                    }
+                    if (onChangeBaiduMvDir != null) {
+                        item { Spacer(modifier = Modifier.height(16.dp)) }
+                        item {
+                            SettingActionButton(
+                                label = stringResource(R.string.settings_netdisk_mv_dir),
+                                description = baiduMvDirLocal?.takeIf { it.isNotBlank() } ?: stringResource(R.string.settings_netdisk_mv_dir_desc),
+                                onClick = { showBaiduMvDirDialog = true }
+                            )
+                        }
+                    }
+                    if (onRebuildBaiduIndex != null) {
+                        item { Spacer(modifier = Modifier.height(16.dp)) }
+                        item {
+                            Text(
+                                text = if (baiduIndexScanning) stringResource(R.string.settings_netdisk_index_scanning)
+                                else stringResource(R.string.settings_netdisk_index_desc, baiduIndexScanned),
+                                color = NasMusicColors.TextSecondary,
+                                fontSize = 18.sp,
+                                modifier = Modifier.padding(start = 4.dp, bottom = 8.dp)
+                            )
+                        }
+                        item {
+                            SettingActionButton(
+                                label = stringResource(R.string.settings_netdisk_index_rebuild),
+                                description = stringResource(R.string.settings_netdisk_index_rebuild_desc),
+                                onClick = { onRebuildBaiduIndex?.invoke() }
+                            )
+                        }
+                    }
+
+                    // ── 其他网盘（占位）分组 ──
+                    item { Spacer(modifier = Modifier.height(24.dp)) }
+                    item { SubSectionTitle(stringResource(R.string.settings_netdisk_group_others)) }
+                    com.nasmusic.tv.data.model.CloudDriveType.PLACEHOLDER.forEach { type ->
+                        item { PlaceholderRow(name = type.displayName) }
                     }
                 }
                 SettingsSection.NETWORK -> {
@@ -1467,6 +1503,37 @@ private fun SectionTitle(text: String) {
         fontSize = 23.sp,
         modifier = Modifier.padding(bottom = 12.dp, start = 4.dp)
     )
+}
+
+/** 分区内的分组小标题（用于"网盘"下区分百度/其他） */
+@Composable
+private fun SubSectionTitle(text: String) {
+    Text(
+        text = text,
+        color = NasMusicColors.Primary,
+        fontSize = 20.sp,
+        fontWeight = FontWeight.Bold,
+        modifier = Modifier.padding(bottom = 10.dp, start = 4.dp, top = 4.dp)
+    )
+}
+
+/** 未支持网盘占位行（灰显"敬请期待"，不可聚焦） */
+@Composable
+private fun PlaceholderRow(name: String) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 24.dp, vertical = 12.dp)
+            .background(NasMusicColors.Surface.copy(alpha = 0.4f), RoundedCornerShape(8.dp)),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(text = name, color = NasMusicColors.TextSecondary, fontSize = 19.sp, modifier = Modifier.weight(1f))
+        Text(
+            text = stringResource(R.string.settings_netdisk_group_others_desc),
+            color = NasMusicColors.TextSecondary.copy(alpha = 0.7f),
+            fontSize = 17.sp
+        )
+    }
 }
 
 @OptIn(ExperimentalTvMaterial3Api::class)

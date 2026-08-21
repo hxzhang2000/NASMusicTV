@@ -111,6 +111,11 @@ class MvSearchManager(
         persistentCache?.importAll(entries)
     }
 
+    /** 清空 MV 持久缓存（供设置页"缓存管理"手动清除） */
+    fun clearPersistentCache() {
+        persistentCache?.clear()
+    }
+
     /**
      * 按需解析指定 bvid 的直链（MTV 页面切换视频时调用）。
      * 不走缓存（直链有时效，切换时需重新解析）。

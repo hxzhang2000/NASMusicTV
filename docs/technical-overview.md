@@ -5695,3 +5695,44 @@ Phase 1-6 代码已全部落地并编译通过。Phase 7（测试与文档）新
 - `ApiProbe` 的 `API_PROBE_BASELINE` 当前为空字符串（漂移检测暂不生效），上线前实测百度 API 响应结构后回填 SHA-256 指纹
 - 步骤 34（BaiduOAuthClientTest）因 Mockito + Kotlin 非空参数冲突暂未包含，`needsRefresh` 纯逻辑已在 `BaiduTokens` 自身验证
 - 版本号由 v2.17.4 -> v2.18.0（versionCode 54 -> 55）
+
+### 10.56 v2.18.1 - 设置页重构 + 网盘 UI 全面升级
+
+**提交日期**：2026-08-21
+
+**主要变更**：
+
+1. **设置页重构（tab 合并/移入）**
+   - 移除独立"歌词" tab → 缓存开关（歌词/封面自动缓存）并入"缓存管理" tab 顶部
+   - 移除独立"封面" tab → 封面滤镜（模糊半径/暗色遮罩）并入"播放" tab 作为子分组
+   - 移除导航栏"服务器" tab → 设置页新增"服务器"分区（连接状态/配置/断开）
+   - 新增"清除 MV 缓存"按钮（`MvPersistentCache.clear()` + `MvSearchManager.clearPersistentCache()` + `MainViewModel.clearMvPersistentCache()`）
+   - 缓存目录大小置顶显示
+
+2. **网盘页面 UI 升级**
+   - 搜索 BasicTextField → 弹窗 `TextInputDialog`（支持扫码输入）
+   - 搜索结果/目录歌曲列表改为 2 列 `LazyVerticalGrid` + `SongRow`（支持收藏/加入队列）
+   - "播放全部"支持子目录递归
+   - 浏览位置保留（切换页面不重置）
+   - 目录选择器：固定窗口高度 + 上级按钮始终可见 + 返回键可关闭
+
+3. **百度授权对话框修复**
+   - 二维码改用 `verification_url` 稳定验证页
+   - 返回键可关闭（`dismissOnBackPress=true` + `onDismissRequest`）
+   - 分步操作说明
+
+4. **网盘设置分组**
+   - 设置页"网盘"分区新增"百度网盘"/"其他网盘"分组
+   - 阿里云盘/123 网盘/夸克网盘灰显"敬请期待"占位
+
+**涉及文件**：
+- `SettingsScreen.kt`：tab 移除/合并、MV 缓存清除、缓存大小置顶、分组/占位
+- `AppRoot.kt`：`onClearMvCache` 接线
+- `MvPersistentCache.kt`：`clear()` 方法
+- `MvSearchManager.kt`：`clearPersistentCache()` 方法
+- `MainViewModel.kt`：`clearMvPersistentCache()`
+- `NetdiskScreen.kt`：搜索弹窗、SongRow 2列网格、播放全部递归、浏览位置保留
+- `BaiduDirPickerDialog.kt`：固定窗口、上级按钮、返回键
+- `BaiduAuthDialog.kt`：verification_url + 返回键
+
+**版本号变更**：v2.18.0 → v2.18.1（versionCode 55 → 56）

@@ -187,6 +187,10 @@
     <string name="settings_clear_lyrics_cache_desc">删除所有已缓存的歌词文件</string>
     <string name="settings_clear_cover_cache">清除封面缓存</string>
     <string name="settings_clear_cover_cache_desc">删除所有已缓存的封面图片</string>
+    <string name="settings_cache_switch">缓存开关</string>
+    <string name="settings_cache_clear">缓存清理</string>
+    <string name="settings_clear_mv_cache">清除 MV 缓存</string>
+    <string name="settings_clear_mv_cache_desc">删除所有已缓存的 MV 搜索结果（bvid）</string>
     <string name="settings_network_test">测试网络</string>
     <string name="settings_network_testing">测试中...</string>
     <string name="settings_network_test_desc">测试设备是否能访问互联网</string>
@@ -242,6 +246,9 @@
     <string name="settings_delete_backup_confirm_message">确定删除备份文件「%1$s」吗？此操作不可恢复。</string>
     <string name="settings_netdisk">网盘</string>
     <string name="settings_netdisk_desc">开启百度网盘音乐源，需登录授权后使用</string>
+    <string name="settings_netdisk_group_baidu">百度网盘</string>
+    <string name="settings_netdisk_group_others">其他网盘</string>
+    <string name="settings_netdisk_group_others_desc">即将支持，敬请期待</string>
     <string name="settings_netdisk_enable">启用百度网盘</string>
     <string name="settings_netdisk_enable_desc">开启后可从网盘播放音乐（需登录）</string>
     <string name="settings_netdisk_login">登录百度网盘</string>

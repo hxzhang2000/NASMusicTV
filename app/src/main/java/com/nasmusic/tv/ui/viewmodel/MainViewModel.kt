@@ -3284,6 +3284,16 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
         }
     }
 
+    /** 清除 MV 持久缓存（设置页"缓存管理"手动清除用） */
+    fun clearMvPersistentCache() {
+        viewModelScope.launch {
+            mvSearchManager.clearPersistentCache()
+            _connectMessage.value = "MV 缓存已清除"
+            delay(2000)
+            _connectMessage.value = null
+        }
+    }
+
     // --- B-4 均衡器 ---
     val equalizerPreset: StateFlow<EqualizerPreset> = prefs.equalizerPreset.stateIn(
         scope = viewModelScope,
