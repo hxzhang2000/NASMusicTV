@@ -1,6 +1,6 @@
 # NAS Music TV
 
-一款开源的 Android TV 音乐播放器：聚合 NAS（Jellyfin / Navidrome）、网络音乐与百度网盘多音乐源，支持逐字卡拉OK歌词、K 歌伴奏、MTV 音乐视频、天气电台等电视专属体验。
+一款开源的 Android TV 音乐播放器：聚合 NAS（Jellyfin / Navidrome / Subsonic）、网络音乐与百度网盘多音乐源，支持逐字卡拉OK歌词、K 歌伴奏、MTV 音乐视频、天气电台等电视专属体验。
 
 [![Release](https://img.shields.io/github/v/release/hxzhang2000/NASMusicTV?color=blue&label=Release)](https://github.com/hxzhang2000/NASMusicTV/releases)
 
@@ -11,7 +11,7 @@
 - **播放统计**：自动记录每首歌的播放次数与最后播放时间，驱动首页"最近播放"列表
 
 ### 音乐播放
-- **NAS 音乐播放**：连接 Jellyfin / Navidrome 后端，播放 NAS 中的音乐
+- **NAS 音乐播放**：连接 Jellyfin / Navidrome / Subsonic 后端，播放 NAS 中的音乐
 - **网络音乐搜索**：通过 Meting-API 在线搜索网易云音乐，独立于 NAS 后端
 - **网络歌曲播放**：302 重定向解析真实 mp3 URL，播放链接实时解析不缓存
 - **播放模式**：顺序播放、单曲循环、列表循环、随机播放
@@ -98,7 +98,7 @@
 - **详情页**：专辑详情、艺术家详情（歌曲列表 + 播放全部）
 - **队列页**：播放队列管理（删除、移动、清空）
 - **设置页**：主题、动画、播放模式、缓存管理、均衡器、歌词缩放、封面滤镜、天气 API Key、网络音乐端点配置、MTV 视频端点配置（左侧导航栏支持遥控器滚动）
-- **连接页**：Jellyfin / Navidrome 服务器配置
+- **连接页**：Jellyfin / Navidrome / Subsonic 服务器配置
 
 ## 构建与运行
 

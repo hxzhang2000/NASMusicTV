@@ -18,6 +18,7 @@ data class ServerConfig(
     companion object {
         const val TYPE_JELLYFIN = "jellyfin"
         const val TYPE_NAVIDROME = "navidrome"
+        const val TYPE_SUBSONIC = "subsonic"
 
         val Empty = ServerConfig(
             backendType = TYPE_JELLYFIN,

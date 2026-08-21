@@ -7,6 +7,22 @@
 >
 > 类型：`Added`（新增） | `Changed`（变更） | `Fixed`（修复） | `Removed`（移除）
 
+## [v2.19.0] - 2026-08-21
+
+### Added
+
+- **Subsonic 后端支持**：新增 Subsonic 协议适配器（`SubsonicAdapter`），支持 lx-server、Navidrome、Airsonic 等 Subsonic 兼容服务器
+- **Subsonic 认证**：标准 token+salt 认证方式（`md5(password + salt)`），兼容所有 Subsonic 实现
+- **Subsonic 完整 API**：专辑/歌手/歌曲/搜索/收藏/播放列表/流派/随机歌曲/歌词/封面流等全部接口
+- **Subsonic 连接测试**：ping 端点验证连通性
+- **Subsonic 单元测试**：13 个测试覆盖认证逻辑和 API 调用
+
+### Changed
+
+- **服务器连接页**：新增 Subsonic 服务器类型选项，URL 占位符根据类型动态切换
+- **设置页**：支持后端列表更新为 "Jellyfin / Navidrome / Subsonic"
+- **README**：项目简介和功能说明更新，纳入 Subsonic 支持
+
 ## [v2.18.1] - 2026-08-21
 
 ### Added

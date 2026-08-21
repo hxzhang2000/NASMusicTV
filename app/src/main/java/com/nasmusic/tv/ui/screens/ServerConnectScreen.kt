@@ -243,6 +243,12 @@ fun ServerConnectScreen(
                     onClick = { backendType = ServerConfig.TYPE_NAVIDROME },
                     modifier = Modifier.weight(1f)
                 )
+                TypeCard(
+                    text = "Subsonic",
+                    selected = backendType == ServerConfig.TYPE_SUBSONIC,
+                    onClick = { backendType = ServerConfig.TYPE_SUBSONIC },
+                    modifier = Modifier.weight(1f)
+                )
             }
 
             Spacer(modifier = Modifier.height(24.dp))
@@ -254,6 +260,7 @@ fun ServerConnectScreen(
                 onOpenKeyboard = { activeInputField = InputField.BASE_URL },
                 isTesting = isTesting,
                 testStatus = testStatus,
+                backendType = backendType,
                 onTestClick = {
                     if (baseUrl.text.isBlank()) {
                         testStatus = "error:请先填写服务器地址"
@@ -600,7 +607,8 @@ private fun ServerAddressField(
     onOpenKeyboard: () -> Unit,
     isTesting: Boolean,
     testStatus: String,
-    onTestClick: () -> Unit
+    onTestClick: () -> Unit,
+    backendType: String = ServerConfig.TYPE_JELLYFIN
 ) {
     Column(modifier = Modifier.fillMaxWidth()) {
             Text(
@@ -636,8 +644,10 @@ private fun ServerAddressField(
                     contentAlignment = Alignment.CenterStart
                 ) {
                     Text(
-                        text = if (baseUrl.text.isEmpty()) "https://jellyfin.example.com 或 http://192.168.1.100:8096"
-                               else baseUrl.text,
+                        text = if (baseUrl.text.isEmpty()) when (backendType) {
+                            ServerConfig.TYPE_SUBSONIC -> "http://192.168.1.100:9527 或 https://music.example.com"
+                            else -> "https://jellyfin.example.com 或 http://192.168.1.100:8096"
+                        } else baseUrl.text,
                         color = if (baseUrl.text.isEmpty()) NasMusicColors.TextSecondary
                                 else NasMusicColors.TextPrimary,
                         fontSize = 20.sp,

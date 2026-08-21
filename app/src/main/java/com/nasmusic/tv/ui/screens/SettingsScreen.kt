@@ -419,7 +419,7 @@ fun SettingsScreen(
                     item { AboutRow(label = stringResource(R.string.about_version), value = NasMusicVersion.DISPLAY) }
                     item { AboutRow(label = stringResource(R.string.settings_build_type), value = NasMusicVersion.BUILD_TYPE) }
                     item { AboutRow(label = stringResource(R.string.about_license), value = stringResource(R.string.about_license_value)) }
-                    item { AboutRow(label = stringResource(R.string.settings_supported_backends), value = "Jellyfin / Navidrome") }
+                    item { AboutRow(label = stringResource(R.string.settings_supported_backends), value = "Jellyfin / Navidrome / Subsonic") }
                 }
                 SettingsSection.CACHE -> {
                     item { SectionTitle(stringResource(R.string.settings_cache)) }
