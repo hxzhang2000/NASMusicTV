@@ -181,7 +181,9 @@ fun NetworkMusicContainer(
                         Text(
                             text = stringResource(tab.displayNameResId),
                             fontSize = 19.sp,
-                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                            color = if (isSelected) NasMusicColors.Surface
+                                    else NasMusicColors.TextPrimary
                         )
                     }
                 }

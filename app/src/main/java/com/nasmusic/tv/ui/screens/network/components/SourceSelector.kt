@@ -67,7 +67,8 @@ fun SourceSelector(
                 Text(
                     text = label,
                     fontSize = 18.sp,
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                    color = if (isSelected) Color.Black else NasMusicColors.TextPrimary
                 )
             }
         }
