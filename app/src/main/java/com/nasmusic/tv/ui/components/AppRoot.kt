@@ -354,7 +354,7 @@ fun AppRoot(
                             onToggleVocalRemoval = { viewModel.toggleVocalRemoval() },
                             // === MTV 音乐视频 ===
                             mvAvailable = mvState is com.nasmusic.tv.ui.viewmodel.MvAvailability.Ready,
-                            onEnterMv = { if (isTV) viewModel.enterMvMode() },
+                            onEnterMv = { viewModel.enterMvMode() },
                             // 手机端不启动 HTTP 遥控服务（自身即控制端）
                             remoteControlUrl = if (isTV) viewModel.remoteControlUrl.collectAsState().value else null,
                             onEnterKaraokeMode = { if (isTV) viewModel.ensureRemoteControlStarted() },
