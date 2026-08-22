@@ -1,6 +1,6 @@
 # NAS Music TV — 技术架构概述
 
-> 版本：v2.9.0
+> 版本：v2.10.0
 > 最后更新：2026-08-22
 > 本文档记录项目当前的完整技术架构，作为后续迭代的基准参考。
 
@@ -5793,5 +5793,14 @@ Phase 1-6 代码已全部落地并编译通过。Phase 7（测试与文档）新
 **验证结果**：
 - `:app:compileDebugKotlin` / `:app:assembleDebug` BUILD SUCCESSFUL
 - `:app:testDebugUnitTest` 207 tests，205 passed，2 个 pre-existing NetworkMonitorTest 失败
+
+**修复记录（2026-08-22 实机反馈）**：
+
+1. **手机端所有页面无法点击**：根因为 `FocusableSurface` 原基于 `androidx.tv.material3.Surface`（tv 点击组件，onClick 绑定 D-Pad 焦点 + OK 键，不响应触摸；滑动是 foundation 手势所以正常）。已重写为 `Box + combinedClickable`：
+   - 触摸点击 / 长按（`onLongClick`，NetdiskScreen 使用）与遥控器 OK 键双兼容
+   - 焦点边框仅 TV 显示（组件内部 `hasSystemFeature("android.software.leanback")` 检测）
+   - 容器色随状态切换（按下 > 聚焦 > 默认），手机按下缩放反馈
+   - 涉及文件：`FocusableSurface.kt`（重写）
+2. **手机端默认竖屏（期望横屏）**：MainActivity 原"播放页横屏、其他页竖屏"，改为手机端全界面 `SCREEN_ORIENTATION_SENSOR_LANDSCAPE`（用户实测反馈）
 
 **版本号变更**：v2.19.0 → v2.20.0（versionCode 57 → 58）

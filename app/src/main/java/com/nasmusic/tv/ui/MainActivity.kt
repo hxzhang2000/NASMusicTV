@@ -67,18 +67,13 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             val settings by viewModel.appSettings.collectAsState(initial = com.nasmusic.tv.data.model.AppSettings())
-            // 手机端：播放页自动横屏，其它页面竖屏（TV 不干预）
-            val currentScreenForOrientation by viewModel.currentScreen.collectAsState(initial = Screen.Home)
+            // 手机端：默认横屏使用（TV 不干预）
             val isTVDevice = remember {
                 packageManager.hasSystemFeature("android.software.leanback")
             }
-            LaunchedEffect(currentScreenForOrientation, isTVDevice) {
+            LaunchedEffect(isTVDevice) {
                 if (!isTVDevice) {
-                    requestedOrientation = if (currentScreenForOrientation == Screen.NowPlaying) {
-                        android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
-                    } else {
-                        android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
-                    }
+                    requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
                 }
             }
             NASMusicTVTheme(darkTheme = settings.darkTheme) {
