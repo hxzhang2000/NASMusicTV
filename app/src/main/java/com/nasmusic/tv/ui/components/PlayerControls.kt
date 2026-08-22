@@ -4,6 +4,7 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
@@ -147,26 +148,17 @@ fun ProgressSection(
                     )
                 }
         ) {
-        Surface(
-            onClick = { /* TV 遥控器：进度条不响应 OK 键，仅通过左右键 seek */ },
+        Box(
             modifier = Modifier
                 .fillMaxSize()
                 .focusRequester(progressFocusRequester)
+                .focusable()
                 .onFocusChanged {
                     isProgressFocused = it.isFocused
                     onProgressFocusChanged(it.isFocused)
                 }
-                .onSizeChanged { progressBarSize = it },
-            colors = ClickableSurfaceDefaults.colors(
-                containerColor = NasMusicColors.Surface.copy(alpha = 0.15f),
-                focusedContainerColor = NasMusicColors.Surface.copy(alpha = 0.15f),
-                pressedContainerColor = NasMusicColors.Surface.copy(alpha = 0.15f)
-            ),
-            shape = ClickableSurfaceDefaults.shape(
-                shape = RoundedCornerShape(4.dp),
-                focusedShape = RoundedCornerShape(4.dp)
-            ),
-            scale = ClickableSurfaceDefaults.scale(focusedScale = 1f, pressedScale = 1f)
+                .onSizeChanged { progressBarSize = it }
+                .background(NasMusicColors.Surface.copy(alpha = 0.15f), RoundedCornerShape(4.dp))
         ) {
             Box(modifier = Modifier.fillMaxSize()) {
                 // 直播态：进度填充置 0、隐藏滑块圆点

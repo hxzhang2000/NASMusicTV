@@ -135,7 +135,7 @@ fun ServerConnectScreen(
                 Icon(
                     imageVector = Icons.Default.Storage,
                     contentDescription = null,
-                    tint = Color.Black,
+                    tint = NasMusicColors.TextPrimary,
                     modifier = Modifier.size(36.dp)
                 )
             }

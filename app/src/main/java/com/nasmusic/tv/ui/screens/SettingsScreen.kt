@@ -239,7 +239,7 @@ fun SettingsScreen(
                     ),
                     contentAlignment = Alignment.Center
                 ) {
-                    Icon(imageVector = Icons.Default.Settings, contentDescription = null, tint = Color.Black, modifier = Modifier.size(18.dp))
+                    Icon(imageVector = Icons.Default.Settings, contentDescription = null, tint = NasMusicColors.TextPrimary, modifier = Modifier.size(18.dp))
                 }
                 Spacer(modifier = Modifier.width(12.dp))
                 Text(text = stringResource(R.string.nav_settings), color = NasMusicColors.TextPrimary, fontSize = 27.sp)

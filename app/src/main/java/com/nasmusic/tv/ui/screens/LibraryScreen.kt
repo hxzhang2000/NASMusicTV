@@ -1195,7 +1195,7 @@ fun AlbumCard(
                         .padding(horizontal = 6.dp, vertical = 2.dp),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text(text = "${album.songCount}首", color = Color.Black, fontSize = 14.sp)
+                    Text(text = "${album.songCount}首", color = NasMusicColors.TextPrimary, fontSize = 14.sp)
                 }
             }
             Spacer(modifier = Modifier.height(4.dp))

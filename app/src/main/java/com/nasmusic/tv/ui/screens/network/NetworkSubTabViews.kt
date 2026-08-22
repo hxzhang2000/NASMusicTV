@@ -395,7 +395,7 @@ private fun PlaylistCard(
                     ) {
                         Text(
                             text = "${playlist.songCount}首",
-                            color = Color.Black,
+                            color = NasMusicColors.TextPrimary,
                             fontSize = 14.sp
                         )
                     }

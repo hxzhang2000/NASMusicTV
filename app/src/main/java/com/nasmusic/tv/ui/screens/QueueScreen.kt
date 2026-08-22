@@ -193,7 +193,7 @@ fun QueueScreen(
                 ) {
                     Icon(imageVector = if (isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
                         contentDescription = if (isPlaying) "Pause" else "Play",
-                        tint = Color.Black,
+                        tint = NasMusicColors.TextPrimary,
                         modifier = Modifier.size(28.dp)
                     )
                 }
