@@ -1,4 +1,4 @@
-package com.nasmusic.tv.ui.screens
+﻿package com.nasmusic.tv.ui.screens
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -262,7 +262,7 @@ private fun WelcomeSection(
                     .background(NasMusicColors.Primary, RoundedCornerShape(10.dp)),
                 contentAlignment = Alignment.Center
             ) {
-                Text(text = "\u266A", color = Color.Black, fontSize = 27.sp)
+                Text(text = "\u266A", color = NasMusicColors.TextPrimary, fontSize = 27.sp)
             }
             Spacer(modifier = Modifier.width(14.dp))
             Column {

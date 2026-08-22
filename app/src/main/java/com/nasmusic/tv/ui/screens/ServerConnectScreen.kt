@@ -1,4 +1,4 @@
-package com.nasmusic.tv.ui.screens
+﻿package com.nasmusic.tv.ui.screens
 
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
@@ -353,7 +353,7 @@ fun ServerConnectScreen(
                 focusedScale = 1.08f,
                 animationDurationMs = 150,
                 containerColor = NasMusicColors.Primary,
-                contentColor = Color.Black,
+                contentColor = NasMusicColors.TextPrimary,
                 focusedContainerColor = NasMusicColors.Primary.copy(alpha = 0.85f),
                 focusedContentColor = Color.Black,
                 pressedScale = 0.95f
@@ -516,7 +516,7 @@ private fun FormField(
             containerColor = NasMusicColors.SurfaceVariant,
             contentColor = NasMusicColors.TextPrimary,
             focusedContainerColor = NasMusicColors.Primary.copy(alpha = 0.2f),
-            focusedContentColor = NasMusicColors.TextPrimary,
+            focusedContentColor = Color.Black,
             pressedScale = 0.96f
         ) {
             Box(
@@ -636,7 +636,7 @@ private fun ServerAddressField(
                 containerColor = NasMusicColors.SurfaceVariant,
                 contentColor = NasMusicColors.TextPrimary,
                 focusedContainerColor = NasMusicColors.Primary.copy(alpha = 0.2f),
-                focusedContentColor = NasMusicColors.TextPrimary,
+                focusedContentColor = Color.Black,
                 pressedScale = 0.96f
             ) {
                 Box(

@@ -1,4 +1,4 @@
-package com.nasmusic.tv.ui.screens
+﻿package com.nasmusic.tv.ui.screens
 
 import android.graphics.Bitmap
 import androidx.activity.compose.BackHandler
@@ -164,7 +164,7 @@ fun BackupTransferDialog(
                         animationDurationMs = 120,
                         containerColor = NasMusicColors.Primary,
                         focusedContainerColor = NasMusicColors.Primary.copy(alpha = 0.85f),
-                        contentColor = Color.Black,
+                        contentColor = NasMusicColors.TextPrimary,
                         focusedContentColor = Color.Black,
                         focusRequester = closeFocusRequester,
                         requestFocusOnLaunch = true

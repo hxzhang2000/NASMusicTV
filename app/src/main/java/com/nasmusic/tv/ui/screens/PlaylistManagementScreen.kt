@@ -1,4 +1,4 @@
-package com.nasmusic.tv.ui.screens
+﻿package com.nasmusic.tv.ui.screens
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -324,7 +324,7 @@ private fun ButtonChipSmall(text: String, onClick: () -> Unit) {
         focusedScale = 1.08f,
         animationDurationMs = 200,
         containerColor = NasMusicColors.Primary.copy(alpha = 0.8f),
-        contentColor = Color.Black,
+        contentColor = NasMusicColors.TextPrimary,
         focusedContainerColor = NasMusicColors.Primary,
         focusedContentColor = Color.Black,
         pressedScale = 0.95f

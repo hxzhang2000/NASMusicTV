@@ -1,4 +1,4 @@
-package com.nasmusic.tv.ui.screens
+﻿package com.nasmusic.tv.ui.screens
 
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
@@ -1583,7 +1583,7 @@ private fun SearchBar(
                 containerColor = NasMusicColors.Surface.copy(alpha = 0.6f),
                 contentColor = NasMusicColors.TextPrimary,
                 focusedContainerColor = NasMusicColors.Surface.copy(alpha = 0.8f),
-                focusedContentColor = NasMusicColors.TextPrimary
+                focusedContentColor = Color.Black
             ),
             scale = ClickableSurfaceDefaults.scale(focusedScale = 1f, pressedScale = 0.97f)
         ) {
@@ -1632,7 +1632,7 @@ fun ButtonChip(text: String, onClick: () -> Unit, modifier: Modifier = Modifier)
         animationDurationMs = 200,
         containerColor = NasMusicColors.Primary,
         focusedContainerColor = NasMusicColors.Primary.copy(alpha = 0.85f),
-        contentColor = Color.Black,
+        contentColor = NasMusicColors.TextPrimary,
         focusedContentColor = Color.Black,
         pressedScale = 0.95f
     ) {

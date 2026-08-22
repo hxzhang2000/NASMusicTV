@@ -1,4 +1,4 @@
-package com.nasmusic.tv.ui.components
+﻿package com.nasmusic.tv.ui.components
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -174,7 +174,7 @@ fun AppRoot(
                             ),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text(text = "\u266A", color = Color.Black, fontSize = 23.sp)
+                        Text(text = "\u266A", color = NasMusicColors.TextPrimary, fontSize = 23.sp)
                     }
                     Spacer(modifier = Modifier.width(12.dp))
                     Text(text = "NAS Music", color = NasMusicColors.TextPrimary, fontSize = 23.sp)
@@ -343,10 +343,10 @@ fun AppRoot(
                             onToggleVocalRemoval = { viewModel.toggleVocalRemoval() },
                             // === MTV 音乐视频 ===
                             mvAvailable = mvState is com.nasmusic.tv.ui.viewmodel.MvAvailability.Ready,
-                            onEnterMv = { viewModel.enterMvMode() },
-                            // 手机端无需"手机遥控"二维码（自身即控制端）
+                            onEnterMv = { if (isTV) viewModel.enterMvMode() },
+                            // 手机端不启动 HTTP 遥控服务（自身即控制端）
                             remoteControlUrl = if (isTV) viewModel.remoteControlUrl.collectAsState().value else null,
-                            onEnterKaraokeMode = { viewModel.ensureRemoteControlStarted() },
+                            onEnterKaraokeMode = { if (isTV) viewModel.ensureRemoteControlStarted() },
                             onSeek = { viewModel.seekTo(it) },
                             onSwitchLyricsSource = { viewModel.switchLyricsSource(it) },
                             onChangeHighlightMode = { viewModel.setLyricsHighlightMode(it) },

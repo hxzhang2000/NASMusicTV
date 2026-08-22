@@ -1,4 +1,4 @@
-package com.nasmusic.tv.ui.screens
+﻿package com.nasmusic.tv.ui.screens
 
 import android.content.Context
 import android.graphics.Bitmap
@@ -113,8 +113,16 @@ fun TextInputDialog(
 ) {
     var text by remember(initialValue) { mutableStateOf(initialValue) }
     var isUpperCase by remember { mutableStateOf(false) }
+    val context = LocalContext.current
+    // 手机端：强制使用系统 IME（不显示自定义键盘、不启动 QR）；TV 端保持原样
+    val isTVDevice = context.packageManager.hasSystemFeature("android.software.leanback")
     // 是否切换到系统 IME 输入模式
-    var showSystemIme by remember { mutableStateOf(false) }
+    var showSystemIme by remember {
+        mutableStateOf(!isTVDevice)  // 手机端默认系统 IME
+    }
+    // 二维码扫码：仅 TV 启用（手机端直接触摸系统键盘输入）
+    val effectiveShowQrCode = if (isTVDevice) showQrCode else false
+    val effectiveShowHistory = showHistory  // 搜索历史手机端也可用
     // IME 不可用时的提示消息（null 表示无提示）
     var imeUnavailableMsg by remember { mutableStateOf<String?>(null) }
 
@@ -124,7 +132,6 @@ fun TextInputDialog(
     var qrText by remember { mutableStateOf<String?>(null) }
     val server = remember { LocalInputServer() }
 
-    val context = LocalContext.current
     val keyboardController = LocalSoftwareKeyboardController.current
     val textFieldFocusRequester = remember { FocusRequester() }
 
@@ -133,9 +140,9 @@ fun TextInputDialog(
     // IME 模式下"返回键盘"按钮的焦点
     val backToKeyboardFocusRequester = remember { FocusRequester() }
 
-    // 启动/停止本地输入服务器（仅 showQrCode=true 时）
-    DisposableEffect(showQrCode) {
-        if (showQrCode) {
+    // 启动/停止本地输入服务器（仅 TV 启用）
+    DisposableEffect(effectiveShowQrCode) {
+        if (effectiveShowQrCode) {
             val ip = NetworkUtils.getLocalIpAddress()
             if (ip != null) {
                 val url = "http://$ip:${LocalInputServer.DEFAULT_PORT}/"
@@ -198,7 +205,7 @@ fun TextInputDialog(
                 .background(Color(0xB3000000)),
             contentAlignment = Alignment.Center
         ) {
-            val showQrPanel = showQrCode && qrBitmap != null && serverUrl != null
+            val showQrPanel = effectiveShowQrCode && qrBitmap != null && serverUrl != null
             Column(
                 modifier = Modifier
                     .width(if (showQrPanel) 940.dp else 720.dp)
@@ -507,7 +514,7 @@ private fun HistoryRow(
                 containerColor = NasMusicColors.SurfaceVariant.copy(alpha = 0.5f),
                 focusedContainerColor = NasMusicColors.Primary.copy(alpha = 0.25f),
                 contentColor = NasMusicColors.TextPrimary,
-                focusedContentColor = NasMusicColors.TextPrimary,
+                focusedContentColor = Color.Black,
                 pressedScale = 0.95f
             ) {
                 Box(
@@ -541,7 +548,7 @@ private fun KeyButton(
         containerColor = NasMusicColors.SurfaceVariant,
         focusedContainerColor = NasMusicColors.Primary.copy(alpha = 0.25f),
         contentColor = NasMusicColors.TextPrimary,
-        focusedContentColor = NasMusicColors.TextPrimary,
+        focusedContentColor = Color.Black,
         pressedScale = 0.92f
     ) {
         Text(

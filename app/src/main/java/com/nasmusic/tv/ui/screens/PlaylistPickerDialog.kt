@@ -1,4 +1,4 @@
-package com.nasmusic.tv.ui.screens
+﻿package com.nasmusic.tv.ui.screens
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
@@ -137,7 +137,7 @@ fun PlaylistPickerDialog(
                                 containerColor = NasMusicColors.SurfaceVariant.copy(alpha = 0.6f),
                                 contentColor = NasMusicColors.TextPrimary,
                                 focusedContainerColor = NasMusicColors.Primary.copy(alpha = 0.25f),
-                                focusedContentColor = NasMusicColors.TextPrimary,
+                                focusedContentColor = Color.Black,
                                 pressedScale = 0.98f,
                                 requestFocusOnLaunch = index == 0
                             ) {
@@ -184,7 +184,7 @@ fun PlaylistPickerDialog(
                         focusedScale = 1.06f,
                         animationDurationMs = 150,
                         containerColor = NasMusicColors.Primary.copy(alpha = 0.8f),
-                        contentColor = Color.Black,
+                        contentColor = NasMusicColors.TextPrimary,
                         focusedContainerColor = NasMusicColors.Primary,
                         focusedContentColor = Color.Black,
                         pressedScale = 0.95f,
@@ -204,7 +204,7 @@ fun PlaylistPickerDialog(
                         containerColor = NasMusicColors.SurfaceVariant,
                         contentColor = NasMusicColors.TextPrimary,
                         focusedContainerColor = NasMusicColors.Primary.copy(alpha = 0.25f),
-                        focusedContentColor = NasMusicColors.TextPrimary,
+                        focusedContentColor = Color.Black,
                         pressedScale = 0.95f
                     ) {
                         Text(

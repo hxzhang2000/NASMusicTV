@@ -1,4 +1,4 @@
-package com.nasmusic.tv.ui.screens.network
+﻿package com.nasmusic.tv.ui.screens.network
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -77,7 +77,7 @@ fun JamendoSubTab(
                 containerColor = NasMusicColors.Surface.copy(alpha = 0.6f),
                 focusedContainerColor = NasMusicColors.Surface.copy(alpha = 0.6f),
                 contentColor = NasMusicColors.TextPrimary,
-                focusedContentColor = NasMusicColors.TextPrimary
+                focusedContentColor = Color.Black
             ) {
                 Text(
                     text = stringResource(R.string.network_jamendo_no_key),

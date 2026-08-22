@@ -1,4 +1,4 @@
-package com.nasmusic.tv.ui.screens.netdisk
+﻿package com.nasmusic.tv.ui.screens.netdisk
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -172,7 +172,7 @@ fun NetdiskScreen(
                                     animationDurationMs = 150,
                                     containerColor = NasMusicColors.Primary.copy(alpha = 0.85f),
                                     focusedContainerColor = NasMusicColors.Primary,
-                                    contentColor = Color.Black,
+                                    contentColor = NasMusicColors.TextPrimary,
                                     focusedContentColor = Color.Black
                                 ) {
                                     Text(
@@ -222,10 +222,10 @@ fun NetdiskScreen(
                         animationDurationMs = 150,
                         containerColor = NasMusicColors.Primary.copy(alpha = 0.85f),
                         focusedContainerColor = NasMusicColors.Primary,
-                        contentColor = Color.Black,
+                        contentColor = NasMusicColors.TextPrimary,
                         focusedContentColor = Color.Black
                     ) {
-                        Text("全部播放 ▶", color = Color.Black, fontSize = 16.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp))
+                        Text("全部播放 ▶", color = NasMusicColors.TextPrimary, fontSize = 16.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp))
                     }
                     if (currentDir != "/" && currentDir.isNotBlank()) {
                         Spacer(modifier = Modifier.width(8.dp))

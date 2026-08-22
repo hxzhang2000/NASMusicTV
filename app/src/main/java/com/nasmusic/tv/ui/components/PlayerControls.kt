@@ -1,4 +1,4 @@
-package com.nasmusic.tv.ui.components
+﻿package com.nasmusic.tv.ui.components
 
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween

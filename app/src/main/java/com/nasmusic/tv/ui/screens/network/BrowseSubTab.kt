@@ -1,4 +1,4 @@
-package com.nasmusic.tv.ui.screens.network
+﻿package com.nasmusic.tv.ui.screens.network
 
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Animatable
@@ -141,7 +141,7 @@ fun BrowseSubTab(
                         animationDurationMs = 150,
                         containerColor = NasMusicColors.Primary.copy(alpha = 0.85f),
                         focusedContainerColor = NasMusicColors.Primary,
-                        contentColor = Color.Black,
+                        contentColor = NasMusicColors.TextPrimary,
                         focusedContentColor = Color.Black
                     ) {
                         Text(

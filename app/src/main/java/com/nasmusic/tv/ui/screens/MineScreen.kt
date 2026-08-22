@@ -1,4 +1,4 @@
-package com.nasmusic.tv.ui.screens
+﻿package com.nasmusic.tv.ui.screens
 
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
@@ -197,7 +197,7 @@ fun MineScreen(
                     focusedScale = 1.08f,
                     animationDurationMs = 250,
                     containerColor = NasMusicColors.Primary.copy(alpha = 0.8f),
-                    contentColor = Color.Black,
+                    contentColor = NasMusicColors.TextPrimary,
                     focusedContainerColor = NasMusicColors.Primary,
                     focusedContentColor = Color.Black,
                     pressedScale = 0.96f

@@ -1,4 +1,4 @@
-package com.nasmusic.tv.ui.screens.network
+﻿package com.nasmusic.tv.ui.screens.network
 
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
@@ -161,7 +161,7 @@ fun SearchSubTab(
                                     animationDurationMs = 150,
                                     containerColor = NasMusicColors.Primary.copy(alpha = 0.85f),
                                     focusedContainerColor = NasMusicColors.Primary,
-                                    contentColor = Color.Black,
+                                    contentColor = NasMusicColors.TextPrimary,
                                     focusedContentColor = Color.Black
                                 ) {
                                     Text(
@@ -308,7 +308,7 @@ private fun SearchBar(
                 containerColor = NasMusicColors.Surface.copy(alpha = 0.6f),
                 contentColor = NasMusicColors.TextPrimary,
                 focusedContainerColor = NasMusicColors.Surface.copy(alpha = 0.8f),
-                focusedContentColor = NasMusicColors.TextPrimary
+                focusedContentColor = Color.Black
             ),
             scale = ClickableSurfaceDefaults.scale(focusedScale = 1f, pressedScale = 0.97f)
         ) {

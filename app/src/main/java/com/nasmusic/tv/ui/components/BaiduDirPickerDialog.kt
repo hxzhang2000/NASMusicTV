@@ -1,4 +1,4 @@
-package com.nasmusic.tv.ui.components
+﻿package com.nasmusic.tv.ui.components
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background

@@ -1,4 +1,4 @@
-package com.nasmusic.tv.ui.screens.network
+﻿package com.nasmusic.tv.ui.screens.network
 
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.background
@@ -373,7 +373,7 @@ private fun ActionBar(
             animationDurationMs = 150,
             containerColor = NasMusicColors.Primary.copy(alpha = 0.85f),
             focusedContainerColor = NasMusicColors.Primary,
-            contentColor = Color.Black,
+            contentColor = NasMusicColors.TextPrimary,
             focusedContentColor = Color.Black
         ) {
             Text(
@@ -457,7 +457,7 @@ private fun ForecastRow(
                     containerColor = bgColor,
                     focusedContainerColor = bgColor,
                     contentColor = NasMusicColors.TextPrimary,
-                    focusedContentColor = NasMusicColors.TextPrimary
+                    focusedContentColor = Color.Black
                 ) {
                     Column(
                         modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp),

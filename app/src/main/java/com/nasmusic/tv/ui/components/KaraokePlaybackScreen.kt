@@ -1,4 +1,4 @@
-package com.nasmusic.tv.ui.components
+﻿package com.nasmusic.tv.ui.components
 
 import androidx.compose.foundation.Image
 import androidx.compose.ui.draw.alpha
