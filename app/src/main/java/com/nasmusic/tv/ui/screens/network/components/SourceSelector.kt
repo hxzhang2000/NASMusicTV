@@ -61,7 +61,7 @@ fun SourceSelector(
                 focusedContainerColor = if (isSelected) NasMusicColors.Primary
                                         else NasMusicColors.Primary.copy(alpha = 0.3f),
                 contentColor = if (isSelected) Color.Black
-                               else NasMusicColors.TextSecondary,
+                               else NasMusicColors.TextPrimary,
                 focusedContentColor = if (isSelected) Color.Black else NasMusicColors.Primary
             ) {
                 Text(

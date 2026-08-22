@@ -277,7 +277,7 @@ fun SettingsScreen(
                             SettingsSection.DATA -> Icons.Default.Info
                             SettingsSection.ABOUT -> Icons.Default.Info
                         }
-                        Icon(imageVector = icon, contentDescription = null, tint = if (selected) NasMusicColors.Primary else NasMusicColors.TextSecondary, modifier = Modifier.size(18.dp))
+                        Icon(imageVector = icon, contentDescription = null, tint = if (selected) NasMusicColors.Primary else NasMusicColors.TextPrimary, modifier = Modifier.size(18.dp))
                         Spacer(modifier = Modifier.width(12.dp))
                         Text(text = stringResource(section.titleRes), color = if (selected) NasMusicColors.Primary else NasMusicColors.TextPrimary, fontSize = 21.sp)
                     }

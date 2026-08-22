@@ -102,7 +102,7 @@ fun JamendoSubTab(
                 animationDurationMs = 150,
                 containerColor = NasMusicColors.Surface.copy(alpha = 0.7f),
                 focusedContainerColor = NasMusicColors.Primary.copy(alpha = 0.3f),
-                contentColor = NasMusicColors.TextSecondary,
+                contentColor = NasMusicColors.TextPrimary,
                 focusedContentColor = NasMusicColors.Primary
             ) {
                 Text(
@@ -144,7 +144,7 @@ fun JamendoSubTab(
                     containerColor = if (isSelected) NasMusicColors.Primary
                                     else NasMusicColors.Surface.copy(alpha = 0.6f),
                     focusedContainerColor = NasMusicColors.Primary,
-                    contentColor = if (isSelected) Color.Black else NasMusicColors.TextSecondary,
+                    contentColor = if (isSelected) Color.Black else NasMusicColors.TextPrimary,
                     focusedContentColor = Color.Black
                 ) {
                     Text(

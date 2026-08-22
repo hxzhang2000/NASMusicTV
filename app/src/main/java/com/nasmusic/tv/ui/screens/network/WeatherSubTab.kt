@@ -332,7 +332,7 @@ private fun MoodSwitcherRow(
                     containerColor = bgColor,
                     focusedContainerColor = NasMusicColors.Primary,
                     contentColor = if (isSelected) NasMusicColors.Surface
-                                   else NasMusicColors.TextSecondary,
+                                   else NasMusicColors.TextPrimary,
                     focusedContentColor = NasMusicColors.Surface
                 ) {
                     Text(
@@ -394,7 +394,7 @@ private fun ActionBar(
             animationDurationMs = 150,
             containerColor = NasMusicColors.Surface.copy(alpha = 0.7f),
             focusedContainerColor = NasMusicColors.Primary.copy(alpha = 0.2f),
-            contentColor = NasMusicColors.TextSecondary,
+            contentColor = NasMusicColors.TextPrimary,
             focusedContentColor = NasMusicColors.Primary
         ) {
             Text(
