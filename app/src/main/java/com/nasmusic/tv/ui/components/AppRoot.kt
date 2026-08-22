@@ -1,6 +1,8 @@
 ﻿package com.nasmusic.tv.ui.components
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -183,6 +185,13 @@ fun AppRoot(
 
                 Spacer(modifier = Modifier.weight(1f))
 
+                // 导航项（可横向滑动——手机窄屏显示全部 tab）
+                Row(
+                    modifier = Modifier
+                        .weight(1f)
+                        .horizontalScroll(rememberScrollState()),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
                 NavItem(
                     label = stringResource(R.string.nav_home),
                     selected = currentScreen == Screen.Home,
@@ -224,6 +233,7 @@ fun AppRoot(
                     onClick = { viewModel.navigateTo(Screen.Settings) }
                 )
             }
+        }
         }
 
         // 内容区域

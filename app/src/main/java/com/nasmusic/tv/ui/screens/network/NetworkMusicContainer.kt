@@ -155,7 +155,7 @@ fun NetworkMusicContainer(
             // 子 Tab 按钮行（可横向滑动——手机窄屏滑动浏览全部 tab）
             Row(
                 modifier = Modifier
-                    .weight(1f, fill = false)
+                    .weight(1f)
                     .horizontalScroll(rememberScrollState()),
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
                 verticalAlignment = Alignment.CenterVertically
