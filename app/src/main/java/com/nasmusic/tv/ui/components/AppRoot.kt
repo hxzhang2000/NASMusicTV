@@ -936,7 +936,7 @@ private fun NavItem(
     FocusableSurface(
         onClick = onClick,
         modifier = modifier
-            .padding(horizontal = 8.dp)
+            .padding(horizontal = 4.dp)
             .defaultMinSize(minHeight = 48.dp),
         shape = RoundedCornerShape(10.dp),
         focusedScale = 1.12f,
