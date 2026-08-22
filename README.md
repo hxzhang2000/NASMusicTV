@@ -1,6 +1,6 @@
 # NAS Music TV
 
-一款开源的 Android TV 音乐播放器：聚合 NAS（Jellyfin / Navidrome / Subsonic）、网络音乐与百度网盘多音乐源，支持逐字卡拉OK歌词、K 歌伴奏、MTV 音乐视频、天气电台等电视专属体验。
+一款开源的 Android 音乐播放器（TV / 手机 / 平板通用）：聚合 NAS（Jellyfin / Navidrome / Subsonic）、网络音乐与百度网盘多音乐源，支持逐字卡拉OK歌词、K 歌伴奏、MTV 音乐视频、天气电台等电视专属体验。同一 APK 同时适配电视（遥控器）与手机（触屏）。
 
 [![Release](https://img.shields.io/github/v/release/hxzhang2000/NASMusicTV?color=blue&label=Release)](https://github.com/hxzhang2000/NASMusicTV/releases)
 
@@ -80,6 +80,15 @@
 - **前台通知**：媒体播放通知栏，支持 play/pause/next/previous
 - **多架构支持**：ARM64 / ARMv7 / x86_64
 
+### 手机适配
+- **同一 APK 双端支持**：运行时检测设备类型（`hasSystemFeature("android.software.leanback")`），TV 走顶部导航 + 遥控器焦点体系，手机走触屏交互，互不影响
+- **底部导航栏**：手机端底部导航（首页 / 曲库 / 网络音乐 / 我的），TV 保持顶部导航
+- **MiniPlayer 迷你播放条**：非播放页底部常驻，封面 / 歌名 / 播放暂停 / 下一首 / 细进度条，点击进入播放页
+- **触摸进度条**：播放页进度条支持点击与拖拽 seek
+- **播放页自动横屏**：进入播放页自动横屏，离开恢复竖屏
+- **曲库响应式网格**：网格列数随屏幕宽度自适应（TV / 手机横屏 / 手机竖屏三档）
+- **TV 功能按需隐藏**：手机端自动隐藏"手机遥控"二维码等 TV 专属入口
+
 ## 技术栈
 
 - Kotlin + Jetpack Compose for TV
@@ -99,6 +108,8 @@
 - **队列页**：播放队列管理（删除、移动、清空）
 - **设置页**：主题、动画、播放模式、缓存管理、均衡器、歌词缩放、封面滤镜、天气 API Key、网络音乐端点配置、MTV 视频端点配置（左侧导航栏支持遥控器滚动）
 - **连接页**：Jellyfin / Navidrome / Subsonic 服务器配置
+
+> 手机端额外提供：底部导航栏 + MiniPlayer 迷你播放条（详情见「手机适配」章节）。
 
 ## 构建与运行
 

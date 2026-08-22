@@ -15,8 +15,10 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Alignment
@@ -65,6 +67,20 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             val settings by viewModel.appSettings.collectAsState(initial = com.nasmusic.tv.data.model.AppSettings())
+            // 手机端：播放页自动横屏，其它页面竖屏（TV 不干预）
+            val currentScreenForOrientation by viewModel.currentScreen.collectAsState(initial = Screen.Home)
+            val isTVDevice = remember {
+                packageManager.hasSystemFeature("android.software.leanback")
+            }
+            LaunchedEffect(currentScreenForOrientation, isTVDevice) {
+                if (!isTVDevice) {
+                    requestedOrientation = if (currentScreenForOrientation == Screen.NowPlaying) {
+                        android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+                    } else {
+                        android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+                    }
+                }
+            }
             NASMusicTVTheme(darkTheme = settings.darkTheme) {
                 // 暴露当前 Activity 给子组件，用于注册对话框的 BACK 键处理
                 CompositionLocalProvider(

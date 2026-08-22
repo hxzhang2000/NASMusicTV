@@ -43,6 +43,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -76,6 +77,22 @@ enum class LibraryTab(val titleRes: Int) {
     YEARS(R.string.library_years),
     RECENT(R.string.library_recent),
     STATISTICS(com.nasmusic.tv.R.string.library_statistics)
+}
+
+/**
+ * 响应式网格列数：
+ * - 宽度 >= 1000dp：TV / 大屏（保留原有列数）
+ * - 600..1000dp：手机横屏 / 小平板（phoneLandscape）
+ * - < 600dp：手机竖屏（phone）
+ */
+@Composable
+private fun adaptiveColumns(tv: Int, phone: Int, phoneLandscape: Int = phone): Int {
+    val widthDp = LocalConfiguration.current.screenWidthDp
+    return when {
+        widthDp >= 1000 -> tv
+        widthDp >= 600 -> phoneLandscape
+        else -> phone
+    }
 }
 
 @Composable
@@ -412,7 +429,7 @@ private fun AlbumsTab(
         )
         LazyVerticalGrid(
             state = listState,
-            columns = GridCells.Fixed(6),
+            columns = GridCells.Fixed(adaptiveColumns(6, 2, 3)),
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -469,7 +486,7 @@ private fun ArtistsTab(
         )
         LazyVerticalGrid(
             state = listState,
-            columns = GridCells.Fixed(5),
+            columns = GridCells.Fixed(adaptiveColumns(5, 2, 3)),
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(10.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
@@ -580,7 +597,7 @@ private fun SongsTab(
         } else {
             LazyVerticalGrid(
                 state = listState,
-                columns = GridCells.Fixed(2),
+                columns = GridCells.Fixed(adaptiveColumns(2, 1, 2)),
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalArrangement = Arrangement.spacedBy(6.dp)
@@ -666,7 +683,7 @@ private fun GenresTab(
         } else {
             LazyVerticalGrid(
                 state = listState,
-                columns = GridCells.Fixed(4),
+                columns = GridCells.Fixed(adaptiveColumns(4, 2, 3)),
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
@@ -762,7 +779,7 @@ private fun YearsTab(
         } else {
             LazyVerticalGrid(
                 state = listState,
-                columns = GridCells.Fixed(5),
+                columns = GridCells.Fixed(adaptiveColumns(5, 2, 3)),
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
@@ -1104,7 +1121,7 @@ private fun RecentTab(
         } else {
             LazyVerticalGrid(
                 state = listState,
-                columns = GridCells.Fixed(2),
+                columns = GridCells.Fixed(adaptiveColumns(2, 1, 2)),
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalArrangement = Arrangement.spacedBy(6.dp)

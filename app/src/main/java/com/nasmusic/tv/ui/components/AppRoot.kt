@@ -22,12 +22,30 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.tv.material3.ExperimentalTvMaterial3Api
+import androidx.tv.material3.Icon
 import androidx.tv.material3.Text
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.size
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CloudQueue
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.LibraryMusic
+import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.SkipNext
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import coil.compose.AsyncImage
+import coil.request.ImageRequest
 import com.nasmusic.tv.R
 import com.nasmusic.tv.data.model.Album
 import com.nasmusic.tv.data.model.EqualizerPreset
@@ -68,6 +86,10 @@ fun AppRoot(
     isImmersiveMode: androidx.compose.runtime.MutableState<Boolean>,
     onConnect: (ServerConfig) -> Unit
 ) {
+    val context = LocalContext.current
+    val isTV = remember {
+        context.packageManager.hasSystemFeature("android.software.leanback")
+    }
     val currentScreen by viewModel.currentScreen.collectAsState(initial = Screen.Home)
     val currentSong by viewModel.currentSong.collectAsState(initial = null)
     val isPlaying by viewModel.isPlaying.collectAsState(initial = false)
@@ -129,8 +151,8 @@ fun AppRoot(
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
-        // 顶部导航栏（沉浸模式 / MTV 全屏页时隐藏）
-        if (!isImmersiveMode.value && !showMv) {
+        // 顶部导航栏（沉浸模式 / MTV 全屏页时隐藏；仅 TV 显示）
+        if (!isImmersiveMode.value && !showMv && isTV) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -285,7 +307,8 @@ fun AppRoot(
                             onPreviousMv = { viewModel.onMvPrevious() },
                             onNextMv = { viewModel.onMvNext() },
                             mvMessage = viewModel.mvMessage.collectAsState().value,
-                            remoteControlUrl = viewModel.remoteControlUrl.collectAsState().value
+                            // 手机端无需"手机遥控"二维码（自身即控制端）
+                            remoteControlUrl = if (isTV) viewModel.remoteControlUrl.collectAsState().value else null
                         )
                     } else {
                         NowPlayingScreen(
@@ -320,7 +343,8 @@ fun AppRoot(
                             // === MTV 音乐视频 ===
                             mvAvailable = mvState is com.nasmusic.tv.ui.viewmodel.MvAvailability.Ready,
                             onEnterMv = { viewModel.enterMvMode() },
-                            remoteControlUrl = viewModel.remoteControlUrl.collectAsState().value,
+                            // 手机端无需"手机遥控"二维码（自身即控制端）
+                            remoteControlUrl = if (isTV) viewModel.remoteControlUrl.collectAsState().value else null,
                             onEnterKaraokeMode = { viewModel.ensureRemoteControlStarted() },
                             onSeek = { viewModel.seekTo(it) },
                             onSwitchLyricsSource = { viewModel.switchLyricsSource(it) },
@@ -856,6 +880,26 @@ fun AppRoot(
                 }
             }
         }
+
+        // Phone: bottom navigation + MiniPlayer (hidden on TV / immersive / MV / NowPlaying)
+        if (!isTV && !isImmersiveMode.value && !showMv && currentScreen != Screen.NowPlaying) {
+            if (currentSong != null) {
+                PhoneMiniPlayer(
+                    song = currentSong!!,
+                    isPlaying = isPlaying,
+                    coverCandidates = coverCandidates,
+                    progress = progress,
+                    duration = duration,
+                    onPlayPause = { viewModel.playPause() },
+                    onOpenNowPlaying = { viewModel.navigateTo(Screen.NowPlaying) },
+                    onNext = { viewModel.next() }
+                )
+            }
+            PhoneBottomNav(
+                currentScreen = currentScreen,
+                onNavigate = { screen -> viewModel.navigateTo(screen) }
+            )
+        }
     }
 }
 
@@ -891,6 +935,207 @@ private fun NavItem(
                 fontSize = if (selected) 21.sp else 19.sp,
                 fontWeight = FontWeight.Bold,
                 maxLines = 1
+            )
+        }
+    }
+}
+
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+private fun PhoneBottomNav(
+    currentScreen: Screen,
+    onNavigate: (Screen) -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(NasMusicColors.Surface)
+            .padding(vertical = 6.dp),
+        horizontalArrangement = Arrangement.SpaceEvenly,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        PhoneNavItem(
+            label = stringResource(R.string.nav_home),
+            icon = Icons.Default.Home,
+            selected = currentScreen == Screen.Home,
+            onClick = { onNavigate(Screen.Home) }
+        )
+        PhoneNavItem(
+            label = stringResource(R.string.nav_library),
+            icon = Icons.Default.LibraryMusic,
+            selected = currentScreen == Screen.Library,
+            onClick = { onNavigate(Screen.Library) }
+        )
+        PhoneNavItem(
+            label = "\u7F51\u7EDC\u97F3\u4E50",
+            icon = Icons.Default.CloudQueue,
+            selected = currentScreen == Screen.Network,
+            onClick = { onNavigate(Screen.Network) }
+        )
+        PhoneNavItem(
+            label = stringResource(R.string.nav_mine),
+            icon = Icons.Default.Person,
+            selected = currentScreen == Screen.Mine,
+            onClick = { onNavigate(Screen.Mine) }
+        )
+    }
+}
+
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+private fun PhoneNavItem(
+    label: String,
+    icon: ImageVector,
+    selected: Boolean,
+    onClick: () -> Unit
+) {
+    FocusableSurface(
+        onClick = onClick,
+        modifier = Modifier
+            .defaultMinSize(minWidth = 64.dp, minHeight = 48.dp),
+        shape = RoundedCornerShape(10.dp),
+        focusedScale = 1f,
+        animationDurationMs = 150,
+        containerColor = Color.Transparent,
+        focusedContainerColor = if (selected) NasMusicColors.Primary.copy(alpha = 0.2f)
+                                else Color.Transparent,
+        contentColor = if (selected) NasMusicColors.Primary else NasMusicColors.TextSecondary,
+        focusedContentColor = NasMusicColors.Primary,
+        pressedScale = 0.94f
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                modifier = Modifier.size(24.dp),
+                tint = if (selected) NasMusicColors.Primary else NasMusicColors.TextSecondary
+            )
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text = label,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Medium,
+                maxLines = 1
+            )
+        }
+    }
+}
+
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+private fun PhoneMiniPlayer(
+    song: com.nasmusic.tv.data.model.Song,
+    isPlaying: Boolean,
+    coverCandidates: List<String>,
+    progress: Long,
+    duration: Long,
+    onPlayPause: () -> Unit,
+    onOpenNowPlaying: () -> Unit,
+    onNext: () -> Unit
+) {
+    val context = LocalContext.current
+    Column(modifier = Modifier.fillMaxWidth()) {
+        // 顶部细进度条
+        val fraction = if (duration > 0L) (progress.toFloat() / duration.toFloat()).coerceIn(0f, 1f) else 0f
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(2.dp)
+                .background(NasMusicColors.TextSecondary.copy(alpha = 0.3f))
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth(fraction)
+                    .height(2.dp)
+                    .background(NasMusicColors.Primary)
+            )
+        }
+        // 封面 + 歌名 + 控制
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(NasMusicColors.Surface),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            FocusableSurface(
+                onClick = onOpenNowPlaying,
+                modifier = Modifier.weight(1f),
+                shape = RoundedCornerShape(0.dp),
+                focusedScale = 1f,
+                animationDurationMs = 150,
+                containerColor = Color.Transparent,
+                focusedContainerColor = Color.Transparent,
+                contentColor = NasMusicColors.TextPrimary,
+                focusedContentColor = NasMusicColors.Primary,
+                pressedScale = 1f
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    if (coverCandidates.isNotEmpty()) {
+                        AsyncImage(
+                            model = ImageRequest.Builder(context)
+                                .data(coverCandidates.first())
+                                .crossfade(true)
+                                .build(),
+                            contentDescription = null,
+                            modifier = Modifier
+                                .size(40.dp)
+                                .clip(RoundedCornerShape(6.dp)),
+                            contentScale = ContentScale.Crop
+                        )
+                    } else {
+                        Box(
+                            modifier = Modifier
+                                .size(40.dp)
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(NasMusicColors.SurfaceVariant),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(text = "\u266A", fontSize = 18.sp, color = NasMusicColors.TextSecondary)
+                        }
+                    }
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = song.title,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Medium,
+                            maxLines = 1,
+                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                            color = NasMusicColors.TextPrimary
+                        )
+                        Text(
+                            text = song.artist,
+                            fontSize = 12.sp,
+                            maxLines = 1,
+                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                            color = NasMusicColors.TextSecondary
+                        )
+                    }
+                }
+            }
+            Icon(
+                imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                contentDescription = if (isPlaying) "Pause" else "Play",
+                tint = NasMusicColors.TextPrimary,
+                modifier = Modifier
+                    .size(40.dp)
+                    .padding(4.dp)
+                    .clickable { onPlayPause() }
+            )
+            Icon(
+                imageVector = Icons.Default.SkipNext,
+                contentDescription = "Next",
+                tint = NasMusicColors.TextPrimary,
+                modifier = Modifier
+                    .size(40.dp)
+                    .padding(4.dp)
+                    .clickable { onNext() }
             )
         }
     }

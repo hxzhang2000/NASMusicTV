@@ -4,6 +4,8 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
@@ -44,6 +46,7 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.graphics.Color
 
 import androidx.compose.ui.layout.onSizeChanged
@@ -112,6 +115,31 @@ fun ProgressSection(
                         onSeek(newPosition)
                         true
                     } else false
+                }
+                // 手机触摸：点击跳转
+                .pointerInput(progressMs, durationMs) {
+                    detectTapGestures { offset ->
+                        if (durationMs > 0) {
+                            val seekTo = (offset.x / size.width * durationMs).toLong().coerceIn(0, durationMs)
+                            onSeek(seekTo)
+                        }
+                    }
+                }
+                // 手机触摸：拖动 seek
+                .pointerInput(progressMs, durationMs) {
+                    detectDragGestures(
+                        onDragStart = { offset ->
+                            if (durationMs > 0) {
+                                onSeek((offset.x / size.width * durationMs).toLong().coerceIn(0, durationMs))
+                            }
+                        },
+                        onDrag = { change, _ ->
+                            change.consume()
+                            if (durationMs > 0) {
+                                onSeek((change.position.x / size.width * durationMs).toLong().coerceIn(0, durationMs))
+                            }
+                        }
+                    )
                 }
         ) {
         Surface(

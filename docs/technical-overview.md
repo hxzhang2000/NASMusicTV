@@ -5736,3 +5736,37 @@ Phase 1-6 代码已全部落地并编译通过。Phase 7（测试与文档）新
 - `BaiduAuthDialog.kt`：verification_url + 返回键
 
 **版本号变更**：v2.18.0 → v2.18.1（versionCode 55 → 56）
+
+### 10.57 v2.20.0 - 手机端支持（TV / 手机同 APK）
+
+**提交时间**：2026-08-22
+
+**背景**：原为纯 TV 应用（leanback 强制 + horizontal 锁定 + tv.material3 组件）。v2.20.0 使同一 APK 同时支持 TV 与手机/平板，运行时按设备类型切换交互。
+
+**主要改动**：
+
+1. **设备类型检测**：`hasSystemFeature("android.software.leanback")` 判断 TV；TV 走原有顶部导航 + D-Pad 焦点，手机走底部导航 + 触屏
+2. **Manifest**：`leanback` / `landscape` 改为 `required=false`，`screenOrientation` 改为 `fullSensor`——手机可安装、可旋转
+3. **手机底部导航 + MiniPlayer**（`AppRoot.kt`）：
+   - 手机端底部导航 4 项（首页 / 曲库 / 网络音乐 / 我的），TV 顶部导航不变
+   - 非播放页底部 MiniPlayer（封面 / 歌名 / 播放暂停 / 下一首 / 细进度条，点击进播放页）
+   - 沉浸模式 / MTV 全屏 / 播放页隐藏
+4. **曲库响应式网格**（`LibraryScreen.kt`）：`adaptiveColumns()` 三档——宽度 ≥1000dp（TV 原列数）/ 600-1000dp（手机横屏）/ <600dp（手机竖屏）；专辑 6→2、艺术家/年代 5→2、流派 4→2、歌曲/最近播放 2→1
+5. **触摸进度条**（`PlayerControls.kt`）：进度条 `pointerInput` + `detectTapGestures` / `detectDragGestures` 支持点击与拖拽 seek；TV 左右键 seek 保留
+6. **播放页自动横屏**（`MainActivity.kt`）：手机端 NowPlaying → `SCREEN_ORIENTATION_SENSOR_LANDSCAPE`，其他页 → `PORTRAIT`；TV 不干预
+7. **TV 功能按设备隐藏**（`AppRoot.kt`）：手机端 K歌/MTV/播放页"手机遥控"二维码传 `null`（自身即控制端，无需扫码遥控）
+
+**过程修正**：Phase 1.4 曾尝试全量替换 tv.material3 → material3（编码损坏 38 文件导致编译失败），已整体回滚到 HEAD 原版——tv-material 组件在手机端可正常运行，手机适配改为纯加法，最终仅改动 4 个源文件（+316 行）。
+
+**涉及文件**：
+- `AndroidManifest.xml`：leanback/landscape required=false、fullSensor
+- `AppRoot.kt`：isTV 检测、PhoneBottomNav/PhoneMiniPlayer、二维码条件隐藏
+- `MainActivity.kt`：播放页横屏逻辑
+- `LibraryScreen.kt`：adaptiveColumns 响应式列数
+- `PlayerControls.kt`：触摸 tap/drag seek
+
+**验证结果**：
+- `:app:compileDebugKotlin` / `:app:assembleDebug` BUILD SUCCESSFUL
+- `:app:testDebugUnitTest` 207 tests，205 passed，2 个 pre-existing NetworkMonitorTest 失败
+
+**版本号变更**：v2.19.0 → v2.20.0（versionCode 57 → 58）
