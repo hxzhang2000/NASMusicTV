@@ -84,8 +84,8 @@ fun RadioSubTab(
                 animationDurationMs = 150,
                 containerColor = NasMusicColors.Surface.copy(alpha = 0.7f),
                 focusedContainerColor = NasMusicColors.Primary.copy(alpha = 0.3f),
-                contentColor = NasMusicColors.TextSecondary,
-                focusedContentColor = NasMusicColors.Primary
+contentColor = NasMusicColors.TextPrimary,
+            focusedContentColor = NasMusicColors.Primary
             ) {
                 Text(
                     text = "\uD83D\uDD0D " + stringResource(R.string.network_search_hint),
@@ -105,7 +105,7 @@ fun RadioSubTab(
                     containerColor = if (isSelected) NasMusicColors.Primary
                                     else NasMusicColors.Surface.copy(alpha = 0.6f),
                     focusedContainerColor = NasMusicColors.Primary,
-                    contentColor = if (isSelected) Color.Black else NasMusicColors.TextSecondary,
+                    contentColor = if (isSelected) Color.Black else NasMusicColors.TextPrimary,
                     focusedContentColor = Color.Black
                 ) {
                     Text(

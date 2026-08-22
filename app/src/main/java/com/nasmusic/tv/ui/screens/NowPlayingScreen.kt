@@ -30,6 +30,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -362,16 +363,31 @@ fun NowPlayingScreen(
                                 RoundedCornerShape(8.dp)
                             )
                     ) {
-                        LyricsView(
-                            lyrics = lyrics,
-                            currentTimeMs = progressMs,
-                            highlightMode = highlightMode,
-                            isPlaying = isPlaying,
-                            fontSizeMultiplier = lyricsFontScale,
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .padding(horizontal = 4.dp, vertical = 4.dp)
-                        )
+                        if (currentSong?.networkSource?.isRadioSong() == true) {
+                            Box(
+                                modifier = Modifier.fillMaxSize(),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = "● 电台直播",
+                                    fontSize = 27.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = NasMusicColors.Primary,
+                                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                                )
+                            }
+                        } else {
+                            LyricsView(
+                                lyrics = lyrics,
+                                currentTimeMs = progressMs,
+                                highlightMode = highlightMode,
+                                isPlaying = isPlaying,
+                                fontSizeMultiplier = lyricsFontScale,
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(horizontal = 4.dp, vertical = 4.dp)
+                            )
+                        }
                     }
                 }
             }
@@ -606,7 +622,7 @@ private fun CoverColumn(
                 containerColor = if (showInfoPanel) NasMusicColors.Primary.copy(alpha = 0.2f)
                                  else NasMusicColors.Surface.copy(alpha = 0.3f),
                 focusedContainerColor = NasMusicColors.Primary.copy(alpha = 0.3f),
-                contentColor = if (showInfoPanel) NasMusicColors.Primary else NasMusicColors.TextSecondary,
+                contentColor = if (showInfoPanel) NasMusicColors.Primary else NasMusicColors.TextPrimary,
                 focusedContentColor = NasMusicColors.Primary
             ) {
                 Text(

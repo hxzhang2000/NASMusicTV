@@ -318,22 +318,20 @@ private fun MiniIconButton(
     val buttonSize = if (primary) 72.dp else 56.dp
     val iconSize = if (primary) 36.dp else 28.dp
 
-    Surface(
+    FocusableSurface(
         onClick = onClick,
         modifier = Modifier
             .size(buttonSize)
-            .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
-            .clip(RoundedCornerShape(50)),
-        shape = ClickableSurfaceDefaults.shape(
-            shape = RoundedCornerShape(50),
-            focusedShape = RoundedCornerShape(50)
-        ),
-        colors = ClickableSurfaceDefaults.colors(
-            containerColor = if (primary) NasMusicColors.Primary else NasMusicColors.Surface,
-            contentColor = if (primary) Color.Black else NasMusicColors.TextPrimary,
-            focusedContainerColor = if (primary) NasMusicColors.Primary else NasMusicColors.Primary.copy(alpha = 0.3f),
-            focusedContentColor = Color.Black
-        )
+            .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier),
+        shape = RoundedCornerShape(50),
+        focusedScale = 1.12f,
+        animationDurationMs = 200,
+        containerColor = if (primary) NasMusicColors.Primary else NasMusicColors.Surface,
+        focusedContainerColor = if (primary) NasMusicColors.Primary else NasMusicColors.Primary.copy(alpha = 0.3f),
+        contentColor = if (primary) NasMusicColors.TextPrimary else NasMusicColors.TextPrimary,
+        focusedContentColor = NasMusicColors.TextPrimary,
+        pressedScale = 0.92f,
+        focusBorderColor = NasMusicColors.FocusRing
     ) {
         Box(
             modifier = Modifier.fillMaxSize(),

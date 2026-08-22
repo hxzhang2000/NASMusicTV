@@ -249,7 +249,7 @@ fun LibraryScreen(
                             animationDurationMs = 200,
                             containerColor = if (selected) NasMusicColors.Primary.copy(alpha = 0.2f) else Color.Transparent,
                             focusedContainerColor = NasMusicColors.Primary.copy(alpha = 0.3f),
-                            contentColor = if (selected) NasMusicColors.Primary else NasMusicColors.TextSecondary,
+                            contentColor = if (selected) NasMusicColors.Primary else NasMusicColors.TextPrimary,
                             focusedContentColor = NasMusicColors.Primary
                         ) {
                             Text(

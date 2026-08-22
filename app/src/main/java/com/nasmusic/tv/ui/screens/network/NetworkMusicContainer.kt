@@ -175,7 +175,7 @@ fun NetworkMusicContainer(
                         containerColor = bgColor,
                         focusedContainerColor = NasMusicColors.Primary,
                         contentColor = if (isSelected) NasMusicColors.Surface
-                                       else NasMusicColors.TextSecondary,
+                                       else NasMusicColors.TextPrimary,
                         focusedContentColor = NasMusicColors.Surface
                     ) {
                         Text(
