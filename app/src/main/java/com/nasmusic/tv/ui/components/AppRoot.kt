@@ -946,7 +946,8 @@ private fun NavItem(
                 text = label,
                 fontSize = if (selected) 21.sp else 19.sp,
                 fontWeight = FontWeight.Bold,
-                maxLines = 1
+                maxLines = 1,
+                color = if (selected) NasMusicColors.Primary else NasMusicColors.TextPrimary
             )
         }
     }

@@ -59,7 +59,8 @@ fun VocalToggleButton(
             Text(
                 text = label,
                 fontSize = if (compact) 14.sp else 16.sp,
-                fontWeight = FontWeight.Bold
+                fontWeight = FontWeight.Bold,
+                color = NasMusicColors.TextPrimary
             )
         }
     }
