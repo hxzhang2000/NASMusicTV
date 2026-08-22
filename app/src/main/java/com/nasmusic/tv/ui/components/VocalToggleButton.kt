@@ -1,42 +1,30 @@
 package com.nasmusic.tv.ui.components
 
-import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.tween
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.draw.scale
-import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.tv.material3.ClickableSurfaceDefaults
 import androidx.tv.material3.ExperimentalTvMaterial3Api
-import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 import com.nasmusic.tv.ui.theme.NasMusicColors
-import kotlinx.coroutines.launch
 
 /**
- * 原唱/伴奏/K歌/MTV/歌词 切换按钮
+ * 原唱/伴奏/K歌/MTV 切换按钮
  *
- * 配色与其他控制按钮一致（Surface 底色 + 聚焦时 Primary 高亮），不使用红色。
+ * 触摸与遥控器双兼容（FocusableSurface）：手机直接点击，TV D-Pad 聚焦 + OK 键。
  *
  * @param label 按钮文字（入口按钮传 "K歌"/"MTV"/"歌词"，K 歌页内根据当前模式传 "原唱"/"伴唱"）
  * @param onClick 点击回调
  * @param compact 紧凑模式（NowPlayingScreen 控制栏用 true，KARAOKE/MTV 全屏页用 false）
+ * @param dimmed 半透明禁用态（如 MTV 无可用视频时）
  */
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
@@ -46,43 +34,23 @@ fun VocalToggleButton(
     compact: Boolean = false,
     dimmed: Boolean = false
 ) {
-    var isFocused by remember { mutableStateOf(false) }
-    val animScale = remember { Animatable(1f) }
-    val scope = rememberCoroutineScope()
     val buttonSize = if (compact) 48.dp else 72.dp
-
-    Surface(
+    FocusableSurface(
         onClick = onClick,
         modifier = Modifier
             .size(buttonSize)
-            .scale(animScale.value)
-            .alpha(if (dimmed) 0.35f else 1f)
-            .border(
-                width = if (isFocused) 2.dp else 0.dp,
-                color = if (isFocused) NasMusicColors.FocusRing else Color.Transparent,
-                shape = RoundedCornerShape(8.dp)
-            )
-            .onFocusChanged { state ->
-                isFocused = state.isFocused
-                scope.launch { animScale.animateTo(if (isFocused) 1.12f else 1f, tween(250)) }
-            },
-        shape = ClickableSurfaceDefaults.shape(
-            shape = RoundedCornerShape(8.dp),
-            focusedShape = RoundedCornerShape(8.dp),
-            pressedShape = RoundedCornerShape(8.dp)
-        ),
-        colors = ClickableSurfaceDefaults.colors(
-            containerColor = NasMusicColors.Surface,
-            contentColor = NasMusicColors.TextPrimary,
-            focusedContainerColor = NasMusicColors.Primary.copy(alpha = 0.3f),
-            focusedContentColor = Color.Black,
-            pressedContainerColor = NasMusicColors.SurfaceVariant,
-            pressedContentColor = NasMusicColors.TextPrimary
-        ),
-        scale = ClickableSurfaceDefaults.scale(
-            focusedScale = 1f,
-            pressedScale = 0.90f
-        )
+            .alpha(if (dimmed) 0.35f else 1f),
+        shape = RoundedCornerShape(8.dp),
+        focusedScale = 1.12f,
+        animationDurationMs = 250,
+        containerColor = NasMusicColors.Surface,
+        focusedContainerColor = NasMusicColors.Primary.copy(alpha = 0.3f),
+        contentColor = NasMusicColors.TextPrimary,
+        focusedContentColor = Color.Black,
+        pressedContainerColor = NasMusicColors.SurfaceVariant,
+        pressedContentColor = NasMusicColors.TextPrimary,
+        pressedScale = 0.90f,
+        focusBorderColor = NasMusicColors.FocusRing
     ) {
         Box(
             modifier = Modifier.fillMaxSize(),

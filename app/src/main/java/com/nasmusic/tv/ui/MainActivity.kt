@@ -76,6 +76,17 @@ class MainActivity : ComponentActivity() {
                     requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
                 }
             }
+            // 手机端紧凑 UI：全局 LocalDensity 缩放（字号/组件占位整体缩小，TV 不受影响）
+            val baseDensity = androidx.compose.ui.platform.LocalDensity.current
+            val uiDensity = if (isTVDevice) baseDensity
+                            else androidx.compose.ui.unit.Density(
+                                density = baseDensity.density * com.nasmusic.tv.ui.theme.CompactSizes.PHONE_UI_SCALE,
+                                fontScale = baseDensity.fontScale
+                            )
+            androidx.compose.runtime.CompositionLocalProvider(
+                androidx.compose.ui.platform.LocalDensity provides uiDensity,
+                com.nasmusic.tv.ui.theme.LocalPhoneCompact provides !isTVDevice
+            ) {
             NASMusicTVTheme(darkTheme = settings.darkTheme) {
                 // 暴露当前 Activity 给子组件，用于注册对话框的 BACK 键处理
                 CompositionLocalProvider(
@@ -183,11 +194,12 @@ class MainActivity : ComponentActivity() {
                             }
                         }
                     }
-                }
+}
             }
         }
+    }
 
-        // 分层 BACK 键处理：Level 0 → Level 1 → Level 1.5 → Level 2 → Level 3
+    // 分层 BACK 键处理：Level 0 → Level 1 → Level 1.5 → Level 2 → Level 3
         // Level 0: 沉浸模式 → 退出全屏
         // Level 1: 关闭对话框（由 dialogBackHandler 控制）
         // Level 1.5: 列表回到顶部（由 listBackHandler 控制，返回 true 表示已消费）

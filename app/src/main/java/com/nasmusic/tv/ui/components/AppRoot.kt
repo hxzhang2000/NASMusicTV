@@ -144,15 +144,16 @@ fun AppRoot(
         val handler: (() -> Unit)? = when {
             isImmersiveMode.value -> {{ isImmersiveMode.value = false }}
             showMv -> {{ viewModel.exitMvMode() }}
-            currentScreen == Screen.Home || currentScreen == Screen.NowPlaying -> null
+            currentScreen == Screen.NowPlaying -> if (isTV) null else {{ viewModel.navigateTo(Screen.Home) }}
+            currentScreen == Screen.Home -> null
             else -> {{ viewModel.navigateTo(Screen.Home) }}
         }
         navBackHandler.value = handler
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
-        // 顶部导航栏（沉浸模式 / MTV 全屏页时隐藏；仅 TV 显示）
-        if (!isImmersiveMode.value && !showMv && isTV) {
+        // 顶部导航栏（沉浸模式 / MTV 全屏页时隐藏；TV 与手机一致）
+        if (!isImmersiveMode.value && !showMv) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -909,30 +910,10 @@ fun AppRoot(
                     )
                 }
             }
-        }
-
-        // Phone: bottom navigation + MiniPlayer (hidden on TV / immersive / MV / NowPlaying)
-        if (!isTV && !isImmersiveMode.value && !showMv && currentScreen != Screen.NowPlaying) {
-            if (currentSong != null) {
-                PhoneMiniPlayer(
-                    song = currentSong!!,
-                    isPlaying = isPlaying,
-                    coverCandidates = coverCandidates,
-                    progress = progress,
-                    duration = duration,
-                    onPlayPause = { viewModel.playPause() },
-                    onOpenNowPlaying = { viewModel.navigateTo(Screen.NowPlaying) },
-                    onNext = { viewModel.next() }
-                )
-            }
-            PhoneBottomNav(
-                currentScreen = currentScreen,
-                onNavigate = { screen -> viewModel.navigateTo(screen) }
-            )
-        }
-    }
 }
+    }
 
+}
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 private fun NavItem(
@@ -965,207 +946,6 @@ private fun NavItem(
                 fontSize = if (selected) 21.sp else 19.sp,
                 fontWeight = FontWeight.Bold,
                 maxLines = 1
-            )
-        }
-    }
-}
-
-@OptIn(ExperimentalTvMaterial3Api::class)
-@Composable
-private fun PhoneBottomNav(
-    currentScreen: Screen,
-    onNavigate: (Screen) -> Unit
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(NasMusicColors.Surface)
-            .padding(vertical = 6.dp),
-        horizontalArrangement = Arrangement.SpaceEvenly,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        PhoneNavItem(
-            label = stringResource(R.string.nav_home),
-            icon = Icons.Default.Home,
-            selected = currentScreen == Screen.Home,
-            onClick = { onNavigate(Screen.Home) }
-        )
-        PhoneNavItem(
-            label = stringResource(R.string.nav_library),
-            icon = Icons.Default.LibraryMusic,
-            selected = currentScreen == Screen.Library,
-            onClick = { onNavigate(Screen.Library) }
-        )
-        PhoneNavItem(
-            label = "\u7F51\u7EDC\u97F3\u4E50",
-            icon = Icons.Default.CloudQueue,
-            selected = currentScreen == Screen.Network,
-            onClick = { onNavigate(Screen.Network) }
-        )
-        PhoneNavItem(
-            label = stringResource(R.string.nav_mine),
-            icon = Icons.Default.Person,
-            selected = currentScreen == Screen.Mine,
-            onClick = { onNavigate(Screen.Mine) }
-        )
-    }
-}
-
-@OptIn(ExperimentalTvMaterial3Api::class)
-@Composable
-private fun PhoneNavItem(
-    label: String,
-    icon: ImageVector,
-    selected: Boolean,
-    onClick: () -> Unit
-) {
-    FocusableSurface(
-        onClick = onClick,
-        modifier = Modifier
-            .defaultMinSize(minWidth = 64.dp, minHeight = 48.dp),
-        shape = RoundedCornerShape(10.dp),
-        focusedScale = 1f,
-        animationDurationMs = 150,
-        containerColor = Color.Transparent,
-        focusedContainerColor = if (selected) NasMusicColors.Primary.copy(alpha = 0.2f)
-                                else Color.Transparent,
-        contentColor = if (selected) NasMusicColors.Primary else NasMusicColors.TextSecondary,
-        focusedContentColor = NasMusicColors.Primary,
-        pressedScale = 0.94f
-    ) {
-        Column(
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                modifier = Modifier.size(24.dp),
-                tint = if (selected) NasMusicColors.Primary else NasMusicColors.TextSecondary
-            )
-            Spacer(modifier = Modifier.height(2.dp))
-            Text(
-                text = label,
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Medium,
-                maxLines = 1
-            )
-        }
-    }
-}
-
-@OptIn(ExperimentalTvMaterial3Api::class)
-@Composable
-private fun PhoneMiniPlayer(
-    song: com.nasmusic.tv.data.model.Song,
-    isPlaying: Boolean,
-    coverCandidates: List<String>,
-    progress: Long,
-    duration: Long,
-    onPlayPause: () -> Unit,
-    onOpenNowPlaying: () -> Unit,
-    onNext: () -> Unit
-) {
-    val context = LocalContext.current
-    Column(modifier = Modifier.fillMaxWidth()) {
-        // 顶部细进度条
-        val fraction = if (duration > 0L) (progress.toFloat() / duration.toFloat()).coerceIn(0f, 1f) else 0f
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(2.dp)
-                .background(NasMusicColors.TextSecondary.copy(alpha = 0.3f))
-        ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth(fraction)
-                    .height(2.dp)
-                    .background(NasMusicColors.Primary)
-            )
-        }
-        // 封面 + 歌名 + 控制
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(NasMusicColors.Surface),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            FocusableSurface(
-                onClick = onOpenNowPlaying,
-                modifier = Modifier.weight(1f),
-                shape = RoundedCornerShape(0.dp),
-                focusedScale = 1f,
-                animationDurationMs = 150,
-                containerColor = Color.Transparent,
-                focusedContainerColor = Color.Transparent,
-                contentColor = NasMusicColors.TextPrimary,
-                focusedContentColor = NasMusicColors.Primary,
-                pressedScale = 1f
-            ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    if (coverCandidates.isNotEmpty()) {
-                        AsyncImage(
-                            model = ImageRequest.Builder(context)
-                                .data(coverCandidates.first())
-                                .crossfade(true)
-                                .build(),
-                            contentDescription = null,
-                            modifier = Modifier
-                                .size(40.dp)
-                                .clip(RoundedCornerShape(6.dp)),
-                            contentScale = ContentScale.Crop
-                        )
-                    } else {
-                        Box(
-                            modifier = Modifier
-                                .size(40.dp)
-                                .clip(RoundedCornerShape(6.dp))
-                                .background(NasMusicColors.SurfaceVariant),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(text = "\u266A", fontSize = 18.sp, color = NasMusicColors.TextSecondary)
-                        }
-                    }
-                    Spacer(modifier = Modifier.width(12.dp))
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = song.title,
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.Medium,
-                            maxLines = 1,
-                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-                            color = NasMusicColors.TextPrimary
-                        )
-                        Text(
-                            text = song.artist,
-                            fontSize = 12.sp,
-                            maxLines = 1,
-                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-                            color = NasMusicColors.TextSecondary
-                        )
-                    }
-                }
-            }
-            Icon(
-                imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                contentDescription = if (isPlaying) "Pause" else "Play",
-                tint = NasMusicColors.TextPrimary,
-                modifier = Modifier
-                    .size(40.dp)
-                    .padding(4.dp)
-                    .clickable { onPlayPause() }
-            )
-            Icon(
-                imageVector = Icons.Default.SkipNext,
-                contentDescription = "Next",
-                tint = NasMusicColors.TextPrimary,
-                modifier = Modifier
-                    .size(40.dp)
-                    .padding(4.dp)
-                    .clickable { onNext() }
             )
         }
     }

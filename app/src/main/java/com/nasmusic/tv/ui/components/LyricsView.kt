@@ -59,6 +59,32 @@ fun LyricsView(
     isPlaying: Boolean = true,
     fontSizeMultiplier: Float = 1.0f
 ) {
+    // 手机紧凑模式：恢复原始密度，保持歌词字号不被全局缩放（用户独立调节）
+    if (com.nasmusic.tv.ui.theme.LocalPhoneCompact.current) {
+        val baseDensity = androidx.compose.ui.platform.LocalDensity.current
+        androidx.compose.runtime.CompositionLocalProvider(
+            androidx.compose.ui.platform.LocalDensity provides androidx.compose.ui.unit.Density(
+                density = baseDensity.density * com.nasmusic.tv.ui.theme.CompactSizes.LYRICS_RECOVER_SCALE,
+                fontScale = baseDensity.fontScale
+            )
+        ) {
+            LyricsViewInner(lyrics, currentTimeMs, modifier, highlightMode, isPlaying, fontSizeMultiplier)
+        }
+    } else {
+        LyricsViewInner(lyrics, currentTimeMs, modifier, highlightMode, isPlaying, fontSizeMultiplier)
+    }
+}
+
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+private fun LyricsViewInner(
+    lyrics: Lyrics?,
+    currentTimeMs: Long,
+    modifier: Modifier = Modifier,
+    highlightMode: LyricsHighlightMode = LyricsHighlightMode.LINE_BY_LINE,
+    isPlaying: Boolean = true,
+    fontSizeMultiplier: Float = 1.0f
+) {
     if (lyrics == null || lyrics.isEmpty) {
         Box(
             modifier = modifier.fillMaxSize(),

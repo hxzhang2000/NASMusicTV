@@ -310,21 +310,16 @@ private fun IconButton(
     focusRequester: FocusRequester? = null,
     icon: @Composable () -> Unit
 ) {
-    var isFocused by remember { mutableStateOf(false) }
-    val animScale = remember { Animatable(1f) }
-    val scope = rememberCoroutineScope()
     val buttonSize = when {
         primary && !compact -> 88.dp
         primary && compact -> 60.dp
         !primary && !compact -> 72.dp
         else -> 48.dp
     }
-    val glowElevation = if (compact) 6.dp else 12.dp
     // 主按钮（播放/暂停）添加青色发光边框效果（border 替代 shadow 以减少渲染开销）
     val glowModifier: Modifier = if (primary) {
         modifier
             .size(buttonSize)
-            .scale(animScale.value)
             .border(
                 width = 1.5.dp,
                 color = NasMusicColors.Primary.copy(alpha = 0.4f),
@@ -333,38 +328,22 @@ private fun IconButton(
     } else {
         modifier
             .size(buttonSize)
-            .scale(animScale.value)
     }
-    Surface(
+    FocusableSurface(
         onClick = onClick,
         modifier = glowModifier
-            .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
-            .border(
-                width = if (isFocused) 2.dp else 0.dp,
-                color = if (isFocused) NasMusicColors.FocusRing else Color.Transparent,
-                shape = CircleShape
-            )
-            .onFocusChanged {
-                isFocused = it.isFocused
-                scope.launch { animScale.animateTo(if (isFocused) 1.12f else 1f, tween(250)) }
-            },
-        shape = ClickableSurfaceDefaults.shape(
-            shape = CircleShape,
-            focusedShape = CircleShape,
-            pressedShape = CircleShape
-        ),
-        colors = ClickableSurfaceDefaults.colors(
-            containerColor = if (primary) NasMusicColors.Primary else NasMusicColors.Surface,
-            contentColor = if (primary) Color.Black else NasMusicColors.TextPrimary,
-            focusedContainerColor = if (primary) NasMusicColors.Primary else NasMusicColors.Primary.copy(alpha = 0.3f),
-            focusedContentColor = if (primary) Color.Black else Color.Black,
-            pressedContainerColor = NasMusicColors.SurfaceVariant,
-            pressedContentColor = NasMusicColors.TextPrimary
-        ),
-        scale = ClickableSurfaceDefaults.scale(
-            focusedScale = 1f,
-            pressedScale = 0.90f
-        )
+            .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier),
+        shape = CircleShape,
+        focusedScale = 1.12f,
+        animationDurationMs = 250,
+        containerColor = if (primary) NasMusicColors.Primary else NasMusicColors.Surface,
+        focusedContainerColor = if (primary) NasMusicColors.Primary else NasMusicColors.Primary.copy(alpha = 0.3f),
+        contentColor = if (primary) Color.Black else NasMusicColors.TextPrimary,
+        focusedContentColor = Color.Black,
+        pressedContainerColor = NasMusicColors.SurfaceVariant,
+        pressedContentColor = NasMusicColors.TextPrimary,
+        pressedScale = 0.90f,
+        focusBorderColor = NasMusicColors.FocusRing
     ) {
         Box(
             modifier = Modifier.fillMaxSize(),

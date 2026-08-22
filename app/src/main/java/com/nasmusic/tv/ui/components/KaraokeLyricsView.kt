@@ -54,6 +54,30 @@ fun KaraokeLyricsView(
     isPlaying: Boolean = true,
     modifier: Modifier = Modifier
 ) {
+    // 手机紧凑模式：恢复原始密度，保持歌词字号不被全局缩放
+    if (com.nasmusic.tv.ui.theme.LocalPhoneCompact.current) {
+        val baseDensity = androidx.compose.ui.platform.LocalDensity.current
+        androidx.compose.runtime.CompositionLocalProvider(
+            androidx.compose.ui.platform.LocalDensity provides androidx.compose.ui.unit.Density(
+                density = baseDensity.density * com.nasmusic.tv.ui.theme.CompactSizes.LYRICS_RECOVER_SCALE,
+                fontScale = baseDensity.fontScale
+            )
+        ) {
+            KaraokeLyricsViewInner(lyrics, progressMs, isPlaying, modifier)
+        }
+    } else {
+        KaraokeLyricsViewInner(lyrics, progressMs, isPlaying, modifier)
+    }
+}
+
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+private fun KaraokeLyricsViewInner(
+    lyrics: Lyrics?,
+    progressMs: Long,
+    isPlaying: Boolean = true,
+    modifier: Modifier = Modifier
+) {
     if (lyrics == null || lyrics.isEmpty) {
         Column(
             modifier = modifier.fillMaxWidth().padding(24.dp),

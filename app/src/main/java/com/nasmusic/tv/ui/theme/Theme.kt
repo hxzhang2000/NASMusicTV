@@ -196,3 +196,22 @@ object LyricsTheme {
         color = NasMusicColors.TextSecondary
     )
 }
+
+/**
+ * 手机端紧凑 UI 尺度
+ *
+ * 1080p 手机横屏下整体字号/组件占位过大。通过全局 LocalDensity 缩放实现"一键紧凑"，
+ * TV（大屏）不应用。
+ *
+ * - [PHONE_UI_SCALE]：手机端密度缩放系数（字号 sp 与尺寸 dp 同步缩小）
+ * - [LocalPhoneCompact]：标记当前是否为"手机紧凑模式"，供歌词等例外组件恢复原始密度
+ */
+object CompactSizes {
+    const val PHONE_UI_SCALE = 0.82f
+
+    /** 歌词恢复系数 = 1 / PHONE_UI_SCALE */
+    const val LYRICS_RECOVER_SCALE = 1.0f / PHONE_UI_SCALE
+}
+
+/** 当前是否处于手机紧凑模式（MainActivity 按设备类型提供） */
+val LocalPhoneCompact = androidx.compose.runtime.staticCompositionLocalOf { false }
