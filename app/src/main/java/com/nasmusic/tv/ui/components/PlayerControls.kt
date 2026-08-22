@@ -48,6 +48,8 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
+import com.nasmusic.tv.R
 
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.unit.IntOffset
@@ -81,7 +83,8 @@ fun ProgressSection(
     onSeek: (Long) -> Unit,
     onProgressFocusChanged: (Boolean) -> Unit = {},
     modifier: Modifier = Modifier,
-    compact: Boolean = false
+    compact: Boolean = false,
+    isLive: Boolean = false
 ) {
     var progressBarSize by remember { mutableStateOf(IntSize.Zero) }
     var isProgressFocused by remember { mutableStateOf(false) }
@@ -95,8 +98,10 @@ fun ProgressSection(
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(
-            text = TimeUtils.formatDuration(progressMs),
-            color = if (isProgressFocused) NasMusicColors.TextPrimary else NasMusicColors.TextSecondary,
+            text = if (isLive) "\u25CF " + stringResource(R.string.network_radio_live)
+                   else TimeUtils.formatDuration(progressMs),
+            color = if (isLive) NasMusicColors.Primary
+                    else if (isProgressFocused) NasMusicColors.TextPrimary else NasMusicColors.TextSecondary,
             fontSize = if (isProgressFocused) timeFontFocused else timeFont
         )
         Spacer(modifier = Modifier.width(progressSpacer))
@@ -106,9 +111,9 @@ fun ProgressSection(
                 .weight(1f)
                 .height(36.dp)
                 .onPreviewKeyEvent { event ->
-                    // 在焦点导航之前拦截左右键进行 seek
+                    // 在焦点导航之前拦截左右键进行 seek（直播态禁用）
                     if ((event.key == Key.DirectionLeft || event.key == Key.DirectionRight)
-                        && event.type == KeyEventType.KeyDown && durationMs > 0) {
+                        && event.type == KeyEventType.KeyDown && durationMs > 0 && !isLive) {
                         val delta = if (event.key == Key.DirectionLeft) -15000L else 15000L
                         val newPosition = (progressMs + delta).coerceIn(0, durationMs)
                         AppLog.d("NASMusic", "ProgressSection: seek by ${delta}ms, current=$progressMs, new=$newPosition, duration=$durationMs")
@@ -116,26 +121,26 @@ fun ProgressSection(
                         true
                     } else false
                 }
-                // 手机触摸：点击跳转
-                .pointerInput(progressMs, durationMs) {
+                // 手机触摸：点击跳转（直播态禁用）
+                .pointerInput(progressMs, durationMs, isLive) {
                     detectTapGestures { offset ->
-                        if (durationMs > 0) {
+                        if (durationMs > 0 && !isLive) {
                             val seekTo = (offset.x / size.width * durationMs).toLong().coerceIn(0, durationMs)
                             onSeek(seekTo)
                         }
                     }
                 }
-                // 手机触摸：拖动 seek
-                .pointerInput(progressMs, durationMs) {
+                // 手机触摸：拖动 seek（直播态禁用）
+                .pointerInput(progressMs, durationMs, isLive) {
                     detectDragGestures(
                         onDragStart = { offset ->
-                            if (durationMs > 0) {
+                            if (durationMs > 0 && !isLive) {
                                 onSeek((offset.x / size.width * durationMs).toLong().coerceIn(0, durationMs))
                             }
                         },
                         onDrag = { change, _ ->
                             change.consume()
-                            if (durationMs > 0) {
+                            if (durationMs > 0 && !isLive) {
                                 onSeek((change.position.x / size.width * durationMs).toLong().coerceIn(0, durationMs))
                             }
                         }
@@ -164,7 +169,9 @@ fun ProgressSection(
             scale = ClickableSurfaceDefaults.scale(focusedScale = 1f, pressedScale = 1f)
         ) {
             Box(modifier = Modifier.fillMaxSize()) {
-                val progress = if (durationMs > 0) progressMs.toFloat() / durationMs else 0f
+                // 直播态：进度填充置 0、隐藏滑块圆点
+                val progress = if (isLive) 0f
+                               else if (durationMs > 0) progressMs.toFloat() / durationMs else 0f
                 val thumbDiameter = 16.dp
 
                 // 背景轨道
@@ -185,7 +192,8 @@ fun ProgressSection(
                         .clip(RoundedCornerShape(3.dp))
                         .background(NasMusicBrushes.progressBar)
                 )
-                // 滑块圆点
+                // 滑块圆点（直播态隐藏）
+                if (!isLive) {
                 Box(
                     modifier = Modifier
                         .offset {
@@ -202,12 +210,13 @@ fun ProgressSection(
                         .clip(CircleShape)
                         .background(if (isProgressFocused) Color.Yellow else NasMusicColors.Primary)
                 )
+                }
             }
         }
         }
         Spacer(modifier = Modifier.width(progressSpacer))
         Text(
-            text = TimeUtils.formatDuration(durationMs),
+            text = if (isLive) "\u25CF LIVE" else TimeUtils.formatDuration(durationMs),
             color = if (isProgressFocused) NasMusicColors.TextPrimary else NasMusicColors.TextSecondary,
             fontSize = if (isProgressFocused) timeFontFocused else timeFont
         )

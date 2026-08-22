@@ -1,6 +1,8 @@
 package com.nasmusic.tv.ui.screens.network
 
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -107,6 +109,21 @@ fun NetworkMusicContainer(
     onRefreshBrowse: () -> Unit = {},
     onPlayAllBrowse: () -> Unit = {},
     onNavigateToScreen: (String) -> Unit = {},
+    // 电台子 Tab 参数
+    radioStations: UiState<List<com.nasmusic.tv.data.model.RadioStation>> = UiState.Success(emptyList()),
+    radioActiveTag: String? = null,
+    radioActiveQuery: String = "",
+    onRadioLoadDefault: () -> Unit = {},
+    onRadioLoadTag: (String) -> Unit = {},
+    onRadioSearch: (String) -> Unit = {},
+    onRadioPlayStation: (com.nasmusic.tv.data.model.RadioStation) -> Unit = {},
+    // Jamendo 子 Tab 参数
+    jamendoState: UiState<List<Song>> = UiState.Success(emptyList()),
+    jamendoActiveTag: String = "",
+    jamendoConfigured: Boolean = false,
+    onJamendoLoadHot: () -> Unit = {},
+    onJamendoLoadTag: (String) -> Unit = {},
+    onJamendoSearch: (String) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val scope = rememberCoroutineScope()
@@ -135,8 +152,11 @@ fun NetworkMusicContainer(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // 子 Tab 按钮行
+            // 子 Tab 按钮行（可横向滑动——手机窄屏滑动浏览全部 tab）
             Row(
+                modifier = Modifier
+                    .weight(1f, fill = false)
+                    .horizontalScroll(rememberScrollState()),
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -167,9 +187,7 @@ fun NetworkMusicContainer(
                 }
             }
 
-            Spacer(modifier = Modifier.weight(1f))
-
-            // 来源选择器
+            // 来源选择器（tab 行占剩余空间，紧随其后靠右排列）
             SourceSelector(
                 selectedSource = currentMusicSource,
                 onSelectSource = onSelectMusicSource
@@ -240,6 +258,32 @@ fun NetworkMusicContainer(
                         onPlayAll = onPlayAllSearch,
                         onShuffleSearch = onShuffleSearch,
                         onAddAllToQueue = onAddAllToQueue
+                    )
+                }
+                NetworkSubTab.RADIO -> {
+                    RadioSubTab(
+                        state = radioStations,
+                        activeTag = radioActiveTag,
+                        activeQuery = radioActiveQuery,
+                        onLoadDefault = onRadioLoadDefault,
+                        onLoadTag = onRadioLoadTag,
+                        onSearch = onRadioSearch,
+                        onPlayStation = onRadioPlayStation
+                    )
+                }
+                NetworkSubTab.JAMENDO -> {
+                    JamendoSubTab(
+                        state = jamendoState,
+                        activeTag = jamendoActiveTag,
+                        configured = jamendoConfigured,
+                        networkFavoriteIds = networkFavoriteIds,
+                        queueSongIds = queueSongIds,
+                        onLoadHot = onJamendoLoadHot,
+                        onLoadTag = onJamendoLoadTag,
+                        onSearch = onJamendoSearch,
+                        onPlaySong = onPlayNetworkSong,
+                        onToggleFavorite = onToggleNetworkFavorite,
+                        onToggleQueue = onToggleQueue
                     )
                 }
                 NetworkSubTab.BROWSE -> {

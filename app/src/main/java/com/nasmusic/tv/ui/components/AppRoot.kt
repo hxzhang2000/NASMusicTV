@@ -511,7 +511,11 @@ fun AppRoot(
                         onDeletePlaylist = { id -> viewModel.deleteLocalPlaylist(id) },
                         onPlayPlaylist = { playlist -> viewModel.playLocalPlaylist(playlist) },
                         onRemoveSongFromPlaylist = { playlistId, songId -> viewModel.removeSongFromPlaylist(playlistId, songId) },
-                        onAddSongToPlaylist = { playlistId, song -> viewModel.addSongToPlaylist(playlistId, song) }
+                        onAddSongToPlaylist = { playlistId, song -> viewModel.addSongToPlaylist(playlistId, song) },
+                        // 功能入口（手机端底部导航未覆盖：队列 / 网盘 / 设置）
+                        onOpenQueue = { viewModel.navigateTo(Screen.Queue) },
+                        onOpenNetdisk = { viewModel.navigateTo(Screen.Netdisk) },
+                        onOpenSettings = { viewModel.navigateTo(Screen.Settings) }
                     )
                 }
                 Screen.Queue -> {
@@ -559,6 +563,9 @@ fun AppRoot(
                         onChangeLyricsKugouBaseUrl = { viewModel.updateLyricsKugouBaseUrl(it) },
                         lyricsNeteaseBaseUrl = settings.lyricsNeteaseBaseUrl,
                         onChangeLyricsNeteaseBaseUrl = { viewModel.updateLyricsNeteaseBaseUrl(it) },
+                        // Jamendo（CC 独立音乐）
+                        jamendoClientId = viewModel.prefs.getJamendoClientIdSync(),
+                        onChangeJamendoClientId = { viewModel.updateJamendoClientId(it) },
                         weatherApiKey = weatherApiKey,
                         onChangeWeatherApiKey = { viewModel.updateWeatherApiKey(it) },
                         spectrumEnabled = settings.spectrumEnabled,
@@ -738,6 +745,14 @@ fun AppRoot(
                     val weatherError by viewModel.weatherError.collectAsState(initial = null)
                     val localPlaylists by viewModel.localPlaylists.collectAsState(initial = emptyList())
                     val searchHistory by viewModel.searchHistory.collectAsState(initial = emptyList())
+                    // 电台状态
+                    val radioStations by viewModel.radioStations.collectAsState(initial = UiState.Success(emptyList()))
+                    val radioActiveTag by viewModel.radioActiveTag.collectAsState(initial = null)
+                    val radioActiveQuery by viewModel.radioActiveQuery.collectAsState(initial = "")
+                    // Jamendo 状态
+                    val jamendoState by viewModel.jamendoState.collectAsState(initial = UiState.Success(emptyList()))
+                    val jamendoActiveTag by viewModel.jamendoActiveTag.collectAsState(initial = "")
+                    val jamendoConfigured = viewModel.jamendoConfigured
                     var pickerSong by remember { mutableStateOf<Song?>(null) }
                     NetworkMusicContainer(
                         currentSubTab = currentNetworkSubTab,
@@ -803,7 +818,22 @@ fun AppRoot(
                                 "queue" -> viewModel.navigateTo(Screen.Queue)
                                 "radio" -> viewModel.playPrivateRadio()
                             }
-                        }
+                        },
+                        // 电台子 Tab
+                        radioStations = radioStations,
+                        radioActiveTag = radioActiveTag,
+                        radioActiveQuery = radioActiveQuery,
+                        onRadioLoadDefault = { viewModel.loadRadioDefault() },
+                        onRadioLoadTag = { tag -> viewModel.loadRadioTag(tag) },
+                        onRadioSearch = { kw -> viewModel.searchRadio(kw) },
+                        onRadioPlayStation = { station -> viewModel.playRadioStation(station) },
+                        // Jamendo 子 Tab
+                        jamendoState = jamendoState,
+                        jamendoActiveTag = jamendoActiveTag,
+                        jamendoConfigured = jamendoConfigured,
+                        onJamendoLoadHot = { viewModel.loadJamendoHot() },
+                        onJamendoLoadTag = { tag -> viewModel.loadJamendoTag(tag) },
+                        onJamendoSearch = { kw -> viewModel.searchJamendo(kw) }
                     )
                     // 加入歌单选择弹窗（网络歌曲）
                     pickerSong?.let { song ->

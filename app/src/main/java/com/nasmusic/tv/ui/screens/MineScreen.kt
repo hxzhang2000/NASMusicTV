@@ -80,7 +80,11 @@ fun MineScreen(
     onDeletePlaylist: (String) -> Unit,
     onPlayPlaylist: (LocalPlaylist) -> Unit,
     onRemoveSongFromPlaylist: (String, String) -> Unit,
-    onAddSongToPlaylist: (String, Song) -> Unit
+    onAddSongToPlaylist: (String, Song) -> Unit,
+    // 功能入口（手机端底部导航未覆盖的页面：队列 / 网盘 / 设置）
+    onOpenQueue: () -> Unit = {},
+    onOpenNetdisk: () -> Unit = {},
+    onOpenSettings: () -> Unit = {}
 ) {
     // 收藏合并（本地 + 网络，按 id 去重）
     val favoriteSongsList = favoriteSongsState.dataOrNull() ?: emptyList()
@@ -100,7 +104,29 @@ fun MineScreen(
     // 重命名目标歌单
     var renameTarget by remember { mutableStateOf<LocalPlaylist?>(null) }
 
-    Row(modifier = Modifier.fillMaxSize().padding(32.dp)) {
+    Column(modifier = Modifier.fillMaxSize().padding(32.dp)) {
+        // ===== 功能入口行（手机端底部导航未覆盖：队列 / 网盘 / 设置）=====
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            MineEntryChip(
+                label = stringResource(R.string.nav_queue),
+                onClick = onOpenQueue
+            )
+            MineEntryChip(
+                label = "\u7F51\u76D8",
+                onClick = onOpenNetdisk
+            )
+            MineEntryChip(
+                label = stringResource(R.string.nav_settings),
+                onClick = onOpenSettings
+            )
+        }
+        Spacer(modifier = Modifier.height(20.dp))
+
+        Row(modifier = Modifier.weight(1f).fillMaxWidth()) {
         // ===== 左栏：收藏 =====
         Column(modifier = Modifier.weight(1f).fillMaxHeight()) {
             Row(
@@ -217,6 +243,7 @@ fun MineScreen(
                 }
             }
         }
+        }   // 内部 Row（左收藏 + 右歌单）闭合
     }
 
     // ===== 新建歌单输入弹窗 =====
@@ -569,10 +596,36 @@ private fun RemoveSongButton(
             .clickable { onClick() },
         contentAlignment = Alignment.Center
     ) {
-        Text(
-            text = "✕",
+Text(
+            text = "?",
             fontSize = 18.sp,
             color = if (isFocused) NasMusicColors.Warning else NasMusicColors.TextSecondary.copy(alpha = 0.5f)
+        )
+    }
+}
+
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+private fun MineEntryChip(
+    label: String,
+    onClick: () -> Unit
+) {
+    FocusableSurface(
+        onClick = onClick,
+        shape = RoundedCornerShape(10.dp),
+        focusedScale = 1.05f,
+        animationDurationMs = 150,
+        containerColor = NasMusicColors.Surface,
+        focusedContainerColor = NasMusicColors.Primary.copy(alpha = 0.3f),
+        contentColor = NasMusicColors.TextPrimary,
+        focusedContentColor = NasMusicColors.Primary,
+        pressedScale = 0.96f
+    ) {
+        Text(
+            text = label,
+            fontSize = 18.sp,
+            fontWeight = FontWeight.Medium,
+            modifier = Modifier.padding(horizontal = 18.dp, vertical = 10.dp)
         )
     }
 }

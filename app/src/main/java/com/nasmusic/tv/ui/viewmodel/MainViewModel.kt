@@ -40,6 +40,8 @@ import com.nasmusic.tv.data.model.MvInfo
 import com.nasmusic.tv.data.model.MvCandidate
 import com.nasmusic.tv.data.model.MvSearchResult
 import com.nasmusic.tv.data.model.NetworkSubTab
+import com.nasmusic.tv.data.model.RadioStation
+import com.nasmusic.tv.data.model.isRadioSong
 import com.nasmusic.tv.ui.screens.LibraryTab
 import com.nasmusic.tv.data.model.Screen
 import com.nasmusic.tv.data.model.SongsPagingState
@@ -3781,4 +3783,139 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
     /** 加载索引中的歌曲（供 NetdiskScreen 首页展示已扫描曲库） */
     fun loadBaiduIndexedSongs(): List<Song> =
         baiduIndexCache.load()?.entries?.map { it.toSong() } ?: emptyList()
+
+    // ===================== 电台（radio-browser）& Jamendo（CC 独立音乐） =====================
+
+    // --- 电台 ---
+    private val _radioStations = MutableStateFlow<UiState<List<RadioStation>>>(UiState.Success(emptyList()))
+    val radioStations: StateFlow<UiState<List<RadioStation>>> = _radioStations.asStateFlow()
+    private val _radioActiveTag = MutableStateFlow<String?>(null)
+    val radioActiveTag: StateFlow<String?> = _radioActiveTag.asStateFlow()
+    private val _radioActiveQuery = MutableStateFlow("")
+    val radioActiveQuery: StateFlow<String> = _radioActiveQuery.asStateFlow()
+
+    /**
+     * 加载默认电台列表（中文电台热门）。幂等：当前无筛选且已有数据则跳过。
+     */
+    fun loadRadioDefault() {
+        val tag = _radioActiveTag.value
+        val query = _radioActiveQuery.value
+        if (tag == null && query.isBlank() && _radioStations.value.dataOrNull()?.isNotEmpty() == true) return
+        _radioActiveTag.value = null
+        _radioActiveQuery.value = ""
+        loadRadioStations(tag = null, query = null, countryCode = "CN")
+    }
+
+    /** 按标签加载电台 */
+    fun loadRadioTag(tag: String) {
+        _radioActiveTag.value = tag
+        _radioActiveQuery.value = ""
+        loadRadioStations(tag = tag, query = null, countryCode = null)
+    }
+
+    /** 搜索电台 */
+    fun searchRadio(keyword: String) {
+        _radioActiveTag.value = null
+        _radioActiveQuery.value = keyword
+        loadRadioStations(tag = null, query = keyword, countryCode = null)
+    }
+
+    private fun loadRadioStations(tag: String?, query: String?, countryCode: String?) {
+        viewModelScope.launch {
+            _radioStations.value = UiState.Loading
+            try {
+                val stations = nasMusicApp.radioBrowserClient.searchStations(
+                    query = query, tag = tag, countryCode = countryCode, limit = 50
+                )
+                _radioStations.value = UiState.Success(stations)
+            } catch (e: Exception) {
+                AppLog.e("Radio", "loadRadioStations failed: ${e.message}", e)
+                _radioStations.value = UiState.Error(message = "电台加载失败")
+            }
+        }
+    }
+
+    /** 播放电台（即点即播直播流，进入播放页显示"直播"态） */
+    fun playRadioStation(station: RadioStation) {
+        viewModelScope.launch {
+            try {
+                nasMusicApp.radioBrowserClient.reportClick(station)
+            } catch (e: Exception) {
+                // 上报失败不影响播放
+            }
+            playQueue(listOf(station.toSong()))
+            navigateTo(Screen.NowPlaying)
+        }
+    }
+
+    // --- Jamendo ---
+    private val _jamendoState = MutableStateFlow<UiState<List<Song>>>(UiState.Success(emptyList()))
+    val jamendoState: StateFlow<UiState<List<Song>>> = _jamendoState.asStateFlow()
+    private val _jamendoActiveTag = MutableStateFlow("")
+    val jamendoActiveTag: StateFlow<String> = _jamendoActiveTag.asStateFlow()
+
+    /** 是否已配置 Jamendo Client ID（未配置时 JamendoSubTab 显示引导卡） */
+    val jamendoConfigured: Boolean
+        get() = prefs.getJamendoClientIdSync().isNotBlank()
+
+    /** 加载 Jamendo 热门榜（幂等：已有数据则不重复请求） */
+    fun loadJamendoHot() {
+        if (_jamendoActiveTag.value.isBlank() && _jamendoState.value.dataOrNull()?.isNotEmpty() == true) return
+        _jamendoActiveTag.value = ""
+        viewModelScope.launch {
+            _jamendoState.value = UiState.Loading
+            try {
+                val songs = nasMusicApp.jamendoService.hotTracks(limit = 30)
+                _jamendoState.value = UiState.Success(songs)
+            } catch (e: Exception) {
+                AppLog.e("Jamendo", "loadJamendoHot failed: ${e.message}", e)
+                _jamendoState.value = UiState.Error(message = "独立音乐加载失败")
+            }
+        }
+    }
+
+    /** 按风格标签加载 Jamendo */
+    fun loadJamendoTag(tag: String) {
+        if (_jamendoActiveTag.value == tag && _jamendoState.value.dataOrNull()?.isNotEmpty() == true) return
+        _jamendoActiveTag.value = tag
+        viewModelScope.launch {
+            _jamendoState.value = UiState.Loading
+            try {
+                val songs = nasMusicApp.jamendoService.tracksByTag(tag, limit = 30)
+                _jamendoState.value = UiState.Success(songs)
+            } catch (e: Exception) {
+                AppLog.e("Jamendo", "loadJamendoTag failed: ${e.message}", e)
+                _jamendoState.value = UiState.Error(message = "独立音乐加载失败")
+            }
+        }
+    }
+
+    /** 搜索 Jamendo 音乐 */
+    fun searchJamendo(keyword: String) {
+        _jamendoActiveTag.value = ""
+        viewModelScope.launch {
+            _jamendoState.value = UiState.Loading
+            try {
+                val songs = nasMusicApp.jamendoService.search(keyword, limit = 30)
+                _jamendoState.value = UiState.Success(songs)
+            } catch (e: Exception) {
+                AppLog.e("Jamendo", "searchJamendo failed: ${e.message}", e)
+                _jamendoState.value = UiState.Error(message = "独立音乐加载失败")
+            }
+        }
+    }
+
+    /** 更新 Jamendo Client ID 并动态注册/注销服务 */
+    fun updateJamendoClientId(id: String) {
+        viewModelScope.launch {
+            prefs.setJamendoClientId(id)
+            if (id.isNotBlank()) {
+                nasMusicApp.networkMusicManager.registerService(nasMusicApp.jamendoService)
+            } else {
+                nasMusicApp.networkMusicManager.unregisterService("jamendo")
+            }
+            _jamendoState.value = UiState.Success(emptyList())
+            _jamendoActiveTag.value = ""
+        }
+    }
 }

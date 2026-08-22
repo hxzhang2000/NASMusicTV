@@ -7,6 +7,8 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.focusable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -230,31 +232,37 @@ fun LibraryScreen(
                     modifier = Modifier.padding(end = 24.dp)
                 )
 
-                // TAB 切换
-                LibraryTab.values().forEach { tab ->
-                    val selected = tab == activeTab
-                    FocusableSurface(
-                        onClick = { onTabSelected(tab) },
-                        modifier = Modifier.padding(horizontal = 2.dp),
-                        shape = RoundedCornerShape(8.dp),
-                        focusedScale = 1.05f,
-                        animationDurationMs = 200,
-                        containerColor = if (selected) NasMusicColors.Primary.copy(alpha = 0.2f) else Color.Transparent,
-                        focusedContainerColor = NasMusicColors.Primary.copy(alpha = 0.3f),
-                        contentColor = if (selected) NasMusicColors.Primary else NasMusicColors.TextSecondary,
-                        focusedContentColor = NasMusicColors.Primary
-                    ) {
-                        Text(
-                            text = stringResource(tab.titleRes),
-                            fontSize = 19.sp,
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)
-                        )
+                // TAB 切换（可横向滑动——手机窄屏滑动浏览全部 tab）
+                Row(
+                    modifier = Modifier
+                        .weight(1f)
+                        .horizontalScroll(rememberScrollState()),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    LibraryTab.values().forEach { tab ->
+                        val selected = tab == activeTab
+                        FocusableSurface(
+                            onClick = { onTabSelected(tab) },
+                            modifier = Modifier.padding(horizontal = 2.dp),
+                            shape = RoundedCornerShape(8.dp),
+                            focusedScale = 1.05f,
+                            animationDurationMs = 200,
+                            containerColor = if (selected) NasMusicColors.Primary.copy(alpha = 0.2f) else Color.Transparent,
+                            focusedContainerColor = NasMusicColors.Primary.copy(alpha = 0.3f),
+                            contentColor = if (selected) NasMusicColors.Primary else NasMusicColors.TextSecondary,
+                            focusedContentColor = NasMusicColors.Primary
+                        ) {
+                            Text(
+                                text = stringResource(tab.titleRes),
+                                fontSize = 19.sp,
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)
+                            )
+                        }
                     }
                 }
 
-                // 搜索栏 + 播放全部（flex 约束区域，防止被 9 个 TAB 挤压）
+                // 搜索栏 + 播放全部（固定宽度区，避免挤压可滚动 TAB）
                 Row(
-                    modifier = Modifier.weight(1f),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.End
                 ) {
@@ -262,7 +270,7 @@ fun LibraryScreen(
                         query = filterQuery,
                         onOpenSearch = { showSearchDialog = true },
                         onClear = { filterQuery = "" },
-                        modifier = Modifier.weight(1f)
+                        modifier = Modifier.width(240.dp)
                     )
 
                     Spacer(modifier = Modifier.width(12.dp))

@@ -6,8 +6,10 @@ import coil.ImageLoaderFactory
 import coil.disk.DiskCache
 import coil.memory.MemoryCache
 import com.nasmusic.tv.backend.BackendRegistry
+import com.nasmusic.tv.backend.network.JamendoService
 import com.nasmusic.tv.backend.network.MetingApiService
 import com.nasmusic.tv.backend.network.NetworkMusicManager
+import com.nasmusic.tv.backend.radio.RadioBrowserClient
 import com.nasmusic.tv.backend.network.baidu.BaiduCoverProvider
 import com.nasmusic.tv.backend.network.baidu.BaiduFileIndexCache
 import com.nasmusic.tv.backend.network.baidu.BaiduHttpDataSourceFactory
@@ -77,6 +79,18 @@ class NasMusicApp : Application(), ImageLoaderFactory {
         )
     }
 
+    // ---- 电台 & Jamendo（纯公共 API，不自建后台）----
+    /** radio-browser 电台客户端 */
+    val radioBrowserClient: RadioBrowserClient by lazy {
+        RadioBrowserClient()
+    }
+    /** Jamendo（CC 独立音乐）服务：clientId 由设置页配置，未配置时 registerService 跳过 */
+    val jamendoService: JamendoService by lazy {
+        JamendoService(
+            clientIdProvider = { appPreferences.getJamendoClientIdSync() }
+        )
+    }
+
     /**
      * 应用级协程作用域，用于 onDestroy 等生命周期之后的异步操作
      * 使用 SupervisorJob 确保子协程失败不会取消其他子协程
@@ -102,6 +116,10 @@ class NasMusicApp : Application(), ImageLoaderFactory {
         // 百度网盘：仅在总开关开启且已登录时注册（运行时切换开关时动态注册/注销）
         if (appPreferences.getBaiduConfigSync().isActive) {
             networkMusicManager.registerService(baiduNetdiskService)
+        }
+        // Jamendo：仅当已配置 client_id 时注册（未配置时 Jamendo Tab 显示引导）
+        if (appPreferences.getJamendoClientIdSync().isNotBlank()) {
+            networkMusicManager.registerService(jamendoService)
         }
 
         // MV（音乐视频）搜索管理器：Bilibili 在线 + 百度本地 MV（百度优先）

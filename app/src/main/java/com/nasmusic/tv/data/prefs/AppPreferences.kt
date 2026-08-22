@@ -68,6 +68,7 @@ class AppPreferences(private val context: Context) {
     private val keyMvApiBaseUrl = stringPreferencesKey("settings_mv_api_base_url")
     private val keyLyricsKugouBaseUrl = stringPreferencesKey("settings_lyrics_kugou_base_url")
     private val keyLyricsNeteaseBaseUrl = stringPreferencesKey("settings_lyrics_netease_base_url")
+    private val keyJamendoClientId = stringPreferencesKey("settings_jamendo_client_id")
 
     // --- B-2 最近播放 & 播放次数（序列化为 JSON）---
     private val keyRecentSongs = stringPreferencesKey("recent_songs")
@@ -342,6 +343,25 @@ class AppPreferences(private val context: Context) {
 
     suspend fun setMusicSource(sourceKey: String) {
         context.dataStore.edit { it[keyMusicSource] = sourceKey }
+    }
+
+    // --- Jamendo（CC 独立音乐）设置 ---
+    suspend fun setJamendoClientId(id: String) {
+        context.dataStore.edit { it[keyJamendoClientId] = id.trim() }
+    }
+
+    /**
+     * 同步读取 Jamendo Client ID（用于 JamendoService 每次请求时读取）
+     */
+    fun getJamendoClientIdSync(): String {
+        return runBlocking(Dispatchers.IO) {
+            try {
+                context.dataStore.data.first()[keyJamendoClientId] ?: ""
+            } catch (e: Exception) {
+                AppLog.w(TAG, "Failed to read jamendo client id", e)
+                ""
+            }
+        }
     }
 
     // --- 天气电台设置 ---

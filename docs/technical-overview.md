@@ -1,7 +1,7 @@
 # NAS Music TV — 技术架构概述
 
-> 版本：v2.10.0
-> 最后更新：2026-08-22
+> 版本：v2.12.0
+> 最后更新：2026-08-23
 > 本文档记录项目当前的完整技术架构，作为后续迭代的基准参考。
 
 ---
@@ -5802,5 +5802,39 @@ Phase 1-6 代码已全部落地并编译通过。Phase 7（测试与文档）新
    - 容器色随状态切换（按下 > 聚焦 > 默认），手机按下缩放反馈
    - 涉及文件：`FocusableSurface.kt`（重写）
 2. **手机端默认竖屏（期望横屏）**：MainActivity 原"播放页横屏、其他页竖屏"，改为手机端全界面 `SCREEN_ORIENTATION_SENSOR_LANDSCAPE`（用户实测反馈）
+3. **手机端导航未覆盖全部页面**：TV 顶部导航 8 项 vs 手机底部导航仅 4 项，缺 播放页/队列/网盘/设置。修复："我的"页（`MineScreen`）顶部新增功能入口行（队列 / 网盘 / 设置，`MineEntryChip`），AppRoot 接线 `navigateTo`
+4. **tab 栏无法滑动**：曲库页（8 个 LibraryTab）与网络音乐页（NetworkSubTab）的 tab 行均为普通 `Row` 无滚动。修复：
+   - `LibraryScreen`：tab 行加 `weight(1f) + horizontalScroll`，搜索栏改固定宽度 240dp
+   - `NetworkMusicContainer`：子 tab 行加 `weight(1f, fill=false) + horizontalScroll`，去除中间 Spacer(weight)
 
 **版本号变更**：v2.19.0 → v2.20.0（versionCode 57 → 58）
+
+### 10.59 v2.21.0 - 电台 & Jamendo 新音源
+
+**提交时间**：2026-08-23
+
+**背景**：音源扩展（方案见 `docs/radio-and-jamendo-source-plan.md`）。原则：纯公共 API、**不自建后台**——radio-browser（公开广播目录，无 key）与 Jamendo（CC 独立音乐官方 API，仅需注册 client_id）。
+
+**主要改动**：
+
+1. **电台（radio-browser.info）**
+   - `backend/radio/RadioBrowserClient.kt`（新增）：多服务器容灾（预设服务器列表按序重试）、搜索/热门标签/单台查询/播放上报；UA 规范
+   - `data/model/RadioStation.kt`（新增）：`toSong()` 映射（`streamUrl` 直链、`durationMs=Long.MAX_VALUE`、`networkSource="radio"`）+ 顶层 `isRadioSong()` 判定
+   - `ui/screens/network/RadioSubTab.kt`（新增）：搜索 + 预置标签筛选（pop/rock/classical/jazz/instrumental/news/chinese）+ 2 列电台卡片（台标/名称/国家·标签/码率角标）
+2. **播放页直播态**：`PlayerControls.ProgressSection` 新增 `isLive`——左时间显示"● 直播"、进度填充置 0、隐藏滑块、禁 seek（TV 左右键 + 手机触摸均可）；`NowPlayingScreen` 依 `networkSource.isRadioSong()` 传递
+3. **Jamendo（CC 独立音乐）**
+   - `backend/network/JamendoModels.kt` / `JamendoService.kt`（新增）：实现 `NetworkMusicService`（sourceId="jamendo"），search/hotTracks/tracksByTag/search + resolvePlayUrl（直链）/resolveLyrics（纯文本→[00:00.00] LRC）；LRU 结果缓存控官方配额（35k/月）
+   - 注册：`NasMusicApp.onCreate` 按 `client_id` 是否配置动态 `registerService`；`MainViewModel.updateJamendoClientId` 运行时注册/注销（仿百度模式）
+   - `ui/screens/network/JamendoSubTab.kt`（新增）：热门榜 + 风格筛选 + 搜索，复用 `SongRow`（收藏/队列）；未配置显示引导卡
+   - 设置页新增 Jamendo Client ID 配置（`AppPreferences.jamendoClientId`）
+4. **子 Tab 扩展**：`NetworkSubTab` 新增 `RADIO` / `JAMENDO`（网络音乐页 6 个子 Tab），`NetworkMusicContainer` when 分支 + AppRoot 接线
+
+**测试修复**：`NetworkMonitorTest` 两个用例断言与防抖设计对齐（capabilities 丢 internet 不触发 lost、onLost 仅已连接后回调），新增"抖动序列"测试——209 个单元测试全部通过（此前 2 个 pre-existing 失败清零）。
+
+**验证结果**：
+- `:app:compileDebugKotlin` / `:app:assembleDebug` BUILD SUCCESSFUL
+- `:app:testDebugUnitTest` 209 tests 全通过（含 NetworkMonitor 防抖修复用例）
+
+**涉及文件**：RadioBrowserClient/RadioStation/RadioSubTab/JamendoService/JamendoModels/JamendoSubTab（新增）；PlayerControls/NowPlayingScreen/NetworkMusicContainer/NetworkSubTab/AppPreferences/strings.xml/MainViewModel/AppRoot/SettingsScreen/NasMusicApp（修改）；NetworkMonitorTest（测试修正）
+
+**版本号变更**：v2.20.0 → v2.21.0（versionCode 58 → 59）

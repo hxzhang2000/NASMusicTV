@@ -98,6 +98,9 @@ fun SettingsScreen(
     onChangeLyricsKugouBaseUrl: ((String) -> Unit)? = null,
     lyricsNeteaseBaseUrl: String = "",
     onChangeLyricsNeteaseBaseUrl: ((String) -> Unit)? = null,
+    // Jamendo（CC 独立音乐）Client ID
+    jamendoClientId: String = "",
+    onChangeJamendoClientId: ((String) -> Unit)? = null,
     // 封面滤镜设置
     coverFilterEnabled: Boolean = false,
     coverFilterBlurRadius: Float = 8f,
@@ -173,6 +176,9 @@ fun SettingsScreen(
     var showLyricsKugouDialog by remember { mutableStateOf(false) }
     var showLyricsNeteaseDialog by remember { mutableStateOf(false) }
     var lyricsUrlError by remember { mutableStateOf<String?>(null) }
+
+    // Jamendo Client ID 编辑对话框
+    var showJamendoClientIdDialog by remember { mutableStateOf(false) }
 
     // 待删除的备份文件（非空时显示确认弹窗）
     var backupToDelete by remember {
@@ -811,6 +817,70 @@ fun SettingsScreen(
                         }
                     }
 
+                    // --- 网络搜索：Jamendo Client ID（CC 独立音乐）---
+                    if (onChangeJamendoClientId != null) {
+                        item { Spacer(modifier = Modifier.height(24.dp)) }
+                        item {
+                            Text(
+                                text = stringResource(R.string.settings_jamendo_client_id),
+                                color = NasMusicColors.Primary,
+                                fontSize = 23.sp,
+                                modifier = Modifier.padding(bottom = 8.dp, start = 4.dp)
+                            )
+                        }
+                        item {
+                            Text(
+                                text = stringResource(R.string.settings_jamendo_client_id_desc),
+                                color = NasMusicColors.TextSecondary,
+                                fontSize = 18.sp,
+                                modifier = Modifier.padding(bottom = 8.dp, start = 4.dp)
+                            )
+                        }
+                        item {
+                            // 当前值状态卡 + 修改按钮
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                FocusableSurface(
+                                    onClick = { showJamendoClientIdDialog = true },
+                                    modifier = Modifier.weight(1f),
+                                    shape = RoundedCornerShape(12.dp),
+                                    focusedScale = 1.02f,
+                                    animationDurationMs = 250,
+                                    containerColor = NasMusicColors.Surface,
+                                    focusedContainerColor = NasMusicColors.Primary.copy(alpha = 0.15f),
+                                    contentColor = NasMusicColors.TextPrimary,
+                                    focusedContentColor = NasMusicColors.TextPrimary,
+                                    pressedScale = 0.98f
+                                ) {
+                                    Column(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 20.dp, vertical = 14.dp)
+                                    ) {
+                                        Text(
+                                            text = if (jamendoClientId.isBlank())
+                                                stringResource(R.string.settings_not_configured_hint)
+                                            else jamendoClientId.take(24) + if (jamendoClientId.length > 24) "…" else "",
+                                            color = if (jamendoClientId.isBlank()) NasMusicColors.TextSecondary
+                                                    else NasMusicColors.Primary,
+                                            fontSize = 19.sp,
+                                            maxLines = 1,
+                                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                                        )
+                                        Text(
+                                            text = stringResource(R.string.settings_tap_to_edit),
+                                            color = NasMusicColors.TextSecondary,
+                                            fontSize = 16.sp,
+                                            modifier = Modifier.padding(top = 2.dp)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+
                     // --- 网络搜索：MTV 视频端点配置 ---
                     if (onChangeMvApiBaseUrl != null) {
                         item { Spacer(modifier = Modifier.height(24.dp)) }
@@ -1318,6 +1388,22 @@ fun SettingsScreen(
             onDismiss = {
                 showMetingUrlDialog = false
                 metingUrlError = null
+            }
+        )
+    }
+
+    // Jamendo Client ID 编辑对话框
+    if (showJamendoClientIdDialog) {
+        TextInputDialog(
+            title = stringResource(R.string.settings_jamendo_client_id),
+            hint = stringResource(R.string.settings_jamendo_client_id),
+            initialValue = jamendoClientId,
+            onConfirm = { input ->
+                onChangeJamendoClientId?.invoke(input.trim())
+                showJamendoClientIdDialog = false
+            },
+            onDismiss = {
+                showJamendoClientIdDialog = false
             }
         )
     }

@@ -44,6 +44,7 @@ import com.nasmusic.tv.data.model.LyricsHighlightMode
 import com.nasmusic.tv.data.model.PlayMode
 import com.nasmusic.tv.data.model.Song
 import com.nasmusic.tv.data.model.VisualizerTheme
+import com.nasmusic.tv.data.model.isRadioSong
 import com.nasmusic.tv.ui.components.LyricsView
 import com.nasmusic.tv.ui.components.CoverCarousel
 import com.nasmusic.tv.ui.components.ControlButtonsRow
@@ -391,12 +392,13 @@ fun NowPlayingScreen(
                 Spacer(modifier = Modifier.height(4.dp))
             }
 
-            // 进度条（全宽，底部对齐）— Task 2
+            // 进度条（全宽，底部对齐）— Task 2；直播态（电台）禁用 seek
             ProgressSection(
                 progressMs = progressMs,
                 durationMs = durationMs,
                 onSeek = onSeek,
-                compact = true
+                compact = true,
+                isLive = currentSong?.networkSource?.isRadioSong() == true
             )
         }
     }

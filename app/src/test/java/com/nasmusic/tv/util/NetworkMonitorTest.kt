@@ -109,8 +109,33 @@ class NetworkMonitorTest {
         val captor = ArgumentCaptor.forClass(ConnectivityManager.NetworkCallback::class.java)
         verify(fixture.cm).registerNetworkCallback(eq(fixture.request), captor.capture())
 
+        // 防抖设计：onLost 仅在"已连接"（lastHasInternet=true）时回调一次。
+        // 先建立连接状态，再模拟断网事件。
+        captor.value.onAvailable(mock(Network::class.java))
         captor.value.onLost(mock(Network::class.java))
-        assertTrue("onLost should be called", lostCalled)
+        assertTrue("onLost should be called after established connection", lostCalled)
+    }
+
+    @Test
+    fun `onLost without established connection does not call lost`() {
+        val fixture = Fixture()
+
+        var lostCalled = false
+        val monitor = NetworkMonitor(
+            context = fixture.context,
+            onNetworkAvailable = {},
+            onNetworkLost = { lostCalled = true },
+            networkRequest = fixture.request
+        )
+
+        monitor.register()
+
+        val captor = ArgumentCaptor.forClass(ConnectivityManager.NetworkCallback::class.java)
+        verify(fixture.cm).registerNetworkCallback(eq(fixture.request), captor.capture())
+
+        // 从未连接（lastHasInternet=false）时 onLost 不应误报断网
+        captor.value.onLost(mock(Network::class.java))
+        assertFalse("onLost should NOT fire when never connected (debounce)", lostCalled)
     }
 
     @Test
@@ -138,7 +163,7 @@ class NetworkMonitorTest {
     }
 
     @Test
-    fun `onCapabilitiesChanged without internet calls lost`() {
+    fun `onCapabilitiesChanged without internet does not call lost`() {
         val fixture = Fixture()
 
         var lostCalled = false
@@ -158,7 +183,48 @@ class NetworkMonitorTest {
         `when`(caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)).thenReturn(false)
 
         captor.value.onCapabilitiesChanged(mock(Network::class.java), caps)
-        assertTrue("onCapabilitiesChanged without internet should trigger onNetworkLost", lostCalled)
+        // 防抖设计：onCapabilitiesChanged 丢失 internet 能力不触发 onNetworkLost
+        //（WiFi 信号波动/网络切换高频触发，断网统一由 onLost 负责，避免重连风暴）
+        assertFalse("without internet should NOT call lost (debounce)", lostCalled)
+    }
+
+    @Test
+    fun `capabilities flap does not fire lost then onLost still fires`() {
+        val fixture = Fixture()
+
+        var availableCalled = false
+        var lostCalled = false
+        val monitor = NetworkMonitor(
+            context = fixture.context,
+            onNetworkAvailable = { availableCalled = true },
+            onNetworkLost = { lostCalled = true },
+            networkRequest = fixture.request
+        )
+
+        monitor.register()
+
+        val captor = ArgumentCaptor.forClass(ConnectivityManager.NetworkCallback::class.java)
+        verify(fixture.cm).registerNetworkCallback(eq(fixture.request), captor.capture())
+
+        // 1. 连接建立
+        captor.value.onAvailable(mock(Network::class.java))
+        assertTrue(availableCalled)
+
+        // 2. capabilities 瞬时丢 internet（WiFi 抖动）→ 不误报断网
+        val capsNoInternet = mock(NetworkCapabilities::class.java)
+        `when`(capsNoInternet.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)).thenReturn(false)
+        captor.value.onCapabilitiesChanged(mock(Network::class.java), capsNoInternet)
+        assertFalse("capabilities flap should not fire lost", lostCalled)
+
+        // 3. capabilities 恢复 internet → 不重复触发 available（已连接）
+        val capsInternet = mock(NetworkCapabilities::class.java)
+        `when`(capsInternet.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)).thenReturn(true)
+        captor.value.onCapabilitiesChanged(mock(Network::class.java), capsInternet)
+        // onNetworkAvailable 仍应只有一次（availableCalled 无计数器，此处验证未额外副作用可略）
+
+        // 4. 真正断网（onLost）→ 触发 lost
+        captor.value.onLost(mock(Network::class.java))
+        assertTrue("onLost after established connection should fire", lostCalled)
     }
 
     @Test
