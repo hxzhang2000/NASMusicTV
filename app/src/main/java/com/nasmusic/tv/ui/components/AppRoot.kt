@@ -146,6 +146,7 @@ fun AppRoot(
             showMv -> {{ viewModel.exitMvMode() }}
             currentScreen == Screen.NowPlaying -> if (isTV) null else {{ viewModel.navigateTo(Screen.Home) }}
             currentScreen == Screen.Home -> null
+            currentScreen == Screen.ServerConnect -> {{ viewModel.navigateTo(Screen.Settings) }}
             else -> {{ viewModel.navigateTo(Screen.Home) }}
         }
         navBackHandler.value = handler
@@ -933,7 +934,7 @@ private fun NavItem(
         containerColor = Color.Transparent,
         focusedContainerColor = if (selected) NasMusicColors.Primary.copy(alpha = 0.3f)
                                 else NasMusicColors.Primary.copy(alpha = 0.2f),
-        contentColor = if (selected) NasMusicColors.Primary else NasMusicColors.TextSecondary,
+        contentColor = if (selected) NasMusicColors.Primary else NasMusicColors.TextPrimary,
         focusedContentColor = NasMusicColors.Primary,
         pressedScale = 0.96f
     ) {

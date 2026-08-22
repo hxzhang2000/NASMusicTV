@@ -117,41 +117,31 @@ fun EqualizerScreen(
                     modifier = Modifier.padding(bottom = 8.dp)
                 )
             }
-            items(presets, key = { it.name }) { preset ->
+items(presets, key = { it.name }) { preset ->
                 val isSelected = currentPreset?.name == preset.name
-                var isFocused by remember { mutableStateOf(false) }
-                val animScale = remember { Animatable(1f) }
-                val scope = rememberCoroutineScope()
-                Surface(
+                FocusableSurface(
                     onClick = { onSelectPreset(preset) },
                     modifier = Modifier
                         .fillMaxWidth()
-                        .scale(animScale.value)
                         .border(
-                            width = if (isFocused) 2.dp else if (isSelected) 1.dp else 0.dp,
-                            color = if (isFocused) NasMusicColors.FocusRing
-                                    else if (isSelected) NasMusicColors.Primary
-                                    else Color.Transparent,
+                            width = if (isSelected) 1.dp else 0.dp,
+                            color = if (isSelected) NasMusicColors.Primary else Color.Transparent,
                             shape = RoundedCornerShape(8.dp)
-                        )
-                        .onFocusChanged {
-                            isFocused = it.isFocused
-                            scope.launch {
-                                animScale.animateTo(if (isFocused) 1.02f else 1f, tween(200))
-                            }
-                        },
-                    shape = ClickableSurfaceDefaults.shape(
-                        shape = RoundedCornerShape(8.dp),
-                        focusedShape = RoundedCornerShape(8.dp)
-                    ),
-                    colors = ClickableSurfaceDefaults.colors(
-                        containerColor = if (isSelected) NasMusicColors.Primary.copy(alpha = 0.2f)
-                                        else NasMusicColors.Surface.copy(alpha = 0.5f),
-                        contentColor = if (isSelected) NasMusicColors.Primary else NasMusicColors.TextPrimary,
-                        focusedContainerColor = NasMusicColors.Primary.copy(alpha = 0.3f),
-                        focusedContentColor = NasMusicColors.Primary
-                    ),
-                    scale = ClickableSurfaceDefaults.scale(focusedScale = 1f, pressedScale = 0.98f)
+                        ),
+                    shape = RoundedCornerShape(8.dp),
+                    focusedScale = 1.02f,
+                    animationDurationMs = 200,
+                    containerColor = if (isSelected) NasMusicColors.Primary.copy(alpha = 0.2f)
+                                    else NasMusicColors.Surface.copy(alpha = 0.5f),
+                    focusedContainerColor = if (isSelected) NasMusicColors.Primary.copy(alpha = 0.3f)
+                                            else NasMusicColors.Primary.copy(alpha = 0.15f),
+                    contentColor = NasMusicColors.TextPrimary,
+                    focusedContentColor = NasMusicColors.Primary,
+                    pressedContainerColor = NasMusicColors.SurfaceVariant,
+                    pressedContentColor = NasMusicColors.TextPrimary,
+                    pressedScale = 0.96f,
+                    focusBorderColor = NasMusicColors.FocusRing,
+                    showFocusBorder = true,
                 ) {
                     Row(
                         modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),

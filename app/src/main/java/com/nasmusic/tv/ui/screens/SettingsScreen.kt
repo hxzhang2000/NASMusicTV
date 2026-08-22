@@ -426,6 +426,11 @@ fun SettingsScreen(
                     item { AboutRow(label = stringResource(R.string.settings_build_type), value = NasMusicVersion.BUILD_TYPE) }
                     item { AboutRow(label = stringResource(R.string.about_license), value = stringResource(R.string.about_license_value)) }
                     item { AboutRow(label = stringResource(R.string.settings_supported_backends), value = "Jellyfin / Navidrome / Subsonic") }
+                    item { AboutRow(label = "网络音乐", value = "网易云 / QQ音乐 / 酷狗 / 酷我 / 咪咕（Meting-API多端点") }
+                    item { AboutRow(label = "独立音乐", value = "Jamendo（CC授权，需配置Client ID）") }
+                    item { AboutRow(label = "电台", value = "radio-browser（全球公开目录，含中文电台）") }
+                    item { AboutRow(label = "网盘", value = "百度网盘") }
+                    item { AboutRow(label = "歌词", value = "酷狗 / 网易云 / 网络匹配") }
                 }
                 SettingsSection.CACHE -> {
                     item { SectionTitle(stringResource(R.string.settings_cache)) }

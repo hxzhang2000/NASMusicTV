@@ -444,38 +444,28 @@ private fun TypeCard(
     var isFocused by remember { mutableStateOf(false) }
     val animScale = remember { Animatable(1f) }
     val scope = rememberCoroutineScope()
-    Surface(
+    FocusableSurface(
         onClick = onClick,
         modifier = modifier
-            .scale(animScale.value)
             .border(
                 width = if (isFocused) 2.dp else if (selected) 2.dp else 0.dp,
                 color = if (isFocused) NasMusicColors.FocusRing
                         else if (selected) NasMusicColors.Primary
                         else Color.Transparent,
                 shape = RoundedCornerShape(12.dp)
-            )
-            .onFocusChanged {
-                isFocused = it.isFocused
-                scope.launch {
-                    animScale.animateTo(if (isFocused) 1.08f else 1f, tween(150))
-                }
-            },
-        shape = ClickableSurfaceDefaults.shape(
-            shape = RoundedCornerShape(12.dp),
-            focusedShape = RoundedCornerShape(12.dp)
-        ),
-        colors = ClickableSurfaceDefaults.colors(
-            containerColor = if (selected) NasMusicColors.Primary else NasMusicColors.Surface,
-            contentColor = if (selected) Color.Black else NasMusicColors.TextPrimary,
-            focusedContainerColor = if (selected) NasMusicColors.Primary else NasMusicColors.Primary.copy(alpha = 0.3f),
-            focusedContentColor = if (selected) Color.Black else NasMusicColors.TextPrimary
-        ),
-        scale = ClickableSurfaceDefaults.scale(
-            focusedScale = 1f,
-            pressedScale = 0.96f
-        )
-    ) {
+            ),
+        shape = RoundedCornerShape(12.dp),
+        focusedScale = 1.08f,
+        animationDurationMs = 150,
+        containerColor = if (selected) NasMusicColors.Primary else NasMusicColors.Surface,
+                    contentColor = if (selected) NasMusicColors.TextPrimary else NasMusicColors.TextPrimary,
+                    focusedContainerColor = if (selected) NasMusicColors.Primary else NasMusicColors.Primary.copy(alpha = 0.3f),
+                    focusedContentColor = if (selected) NasMusicColors.Primary else NasMusicColors.TextPrimary,
+                    pressedContainerColor = NasMusicColors.SurfaceVariant,
+                    pressedContentColor = NasMusicColors.TextPrimary,
+                    pressedScale = 0.96f,
+                    focusBorderColor = NasMusicColors.FocusRing
+                ) {
         Text(
             text = text,
             fontSize = 23.sp,
@@ -554,38 +544,29 @@ private fun TestConnectionButton(
     val animScale = remember { Animatable(1f) }
     val scope = rememberCoroutineScope()
 
-    Surface(
-        onClick = onClick,
-        enabled = !isTesting,
+FocusableSurface(
+        onClick = {
+            if (!isTesting) onClick()
+        },
         modifier = Modifier
             .width(100.dp)
             .height(56.dp)
-            .scale(animScale.value)
             .border(
                 width = if (isFocused) 2.dp else 0.dp,
                 color = if (isFocused) NasMusicColors.FocusRing else Color.Transparent,
                 shape = RoundedCornerShape(12.dp)
-            )
-            .onFocusChanged {
-                isFocused = it.isFocused
-                scope.launch {
-                    animScale.animateTo(if (isFocused) 1.05f else 1f, tween(150))
-                }
-            },
-        shape = ClickableSurfaceDefaults.shape(
-            shape = RoundedCornerShape(12.dp),
-            focusedShape = RoundedCornerShape(12.dp)
-        ),
-        colors = ClickableSurfaceDefaults.colors(
-            containerColor = if (isTesting) NasMusicColors.SurfaceVariant else NasMusicColors.Primary,
-            contentColor = if (isTesting) NasMusicColors.TextSecondary else Color.Black,
-            focusedContainerColor = if (isTesting) NasMusicColors.SurfaceVariant else NasMusicColors.Primary.copy(alpha = 0.85f),
-            focusedContentColor = if (isTesting) NasMusicColors.TextSecondary else Color.Black
-        ),
-        scale = ClickableSurfaceDefaults.scale(
-            focusedScale = 1f,
-            pressedScale = 0.96f
-        )
+            ),
+        shape = RoundedCornerShape(12.dp),
+        focusedScale = 1.05f,
+        animationDurationMs = 150,
+        containerColor = NasMusicColors.Primary,
+        focusedContainerColor = NasMusicColors.Primary,
+        contentColor = if (isTesting) NasMusicColors.TextSecondary else NasMusicColors.TextPrimary,
+        focusedContentColor = NasMusicColors.TextPrimary,
+        pressedContainerColor = NasMusicColors.Primary.copy(alpha = 0.8f),
+        pressedContentColor = NasMusicColors.TextPrimary,
+        pressedScale = 0.96f,
+        focusBorderColor = NasMusicColors.FocusRing
     ) {
         Box(
             modifier = Modifier.fillMaxSize(),
