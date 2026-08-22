@@ -164,7 +164,7 @@ fun AppRoot(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Row(
-                    modifier = Modifier.padding(end = 32.dp),
+                    modifier = Modifier.padding(end = 16.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Box(
@@ -936,7 +936,7 @@ private fun NavItem(
     FocusableSurface(
         onClick = onClick,
         modifier = modifier
-            .padding(horizontal = 4.dp)
+            .padding(horizontal = 8.dp)
             .defaultMinSize(minHeight = 48.dp),
         shape = RoundedCornerShape(10.dp),
         focusedScale = 1.12f,

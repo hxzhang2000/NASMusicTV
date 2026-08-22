@@ -438,21 +438,18 @@ private fun MiniIconButton(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     contentDescription: String?
 ) {
-    Surface(
+    FocusableSurface(
         onClick = onClick,
-        modifier = Modifier
-            .size(56.dp)
-            .background(Color.Transparent),
-        shape = ClickableSurfaceDefaults.shape(
-            shape = RoundedCornerShape(50),
-            focusedShape = RoundedCornerShape(50)
-        ),
-        colors = ClickableSurfaceDefaults.colors(
-            containerColor = NasMusicColors.Surface,
-            contentColor = NasMusicColors.TextPrimary,
-            focusedContainerColor = NasMusicColors.Primary.copy(alpha = 0.3f),
-            focusedContentColor = Color.Black
-        )
+        modifier = Modifier.size(56.dp),
+        shape = RoundedCornerShape(50),
+        focusedScale = 1.12f,
+        animationDurationMs = 200,
+        containerColor = NasMusicColors.Surface,
+        focusedContainerColor = NasMusicColors.Primary.copy(alpha = 0.3f),
+        contentColor = NasMusicColors.TextPrimary,
+        focusedContentColor = NasMusicColors.TextPrimary,
+        pressedScale = 0.92f,
+        focusBorderColor = NasMusicColors.FocusRing
     ) {
         Box(
             modifier = Modifier.fillMaxSize(),
