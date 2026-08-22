@@ -183,8 +183,6 @@ fun AppRoot(
                     Text(text = "NAS Music", color = NasMusicColors.TextPrimary, fontSize = 23.sp)
                 }
 
-                Spacer(modifier = Modifier.weight(1f))
-
                 // 导航项（可横向滑动——手机窄屏显示全部 tab）
                 Row(
                     modifier = Modifier
