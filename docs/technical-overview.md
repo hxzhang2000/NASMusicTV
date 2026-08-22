@@ -1,7 +1,7 @@
 # NAS Music TV — 技术架构概述
 
-> 版本：v2.8.1
-> 最后更新：2026-07-26
+> 版本：v2.9.0
+> 最后更新：2026-08-22
 > 本文档记录项目当前的完整技术架构，作为后续迭代的基准参考。
 
 ---
@@ -5737,7 +5737,32 @@ Phase 1-6 代码已全部落地并编译通过。Phase 7（测试与文档）新
 
 **版本号变更**：v2.18.0 → v2.18.1（versionCode 55 → 56）
 
-### 10.57 v2.20.0 - 手机端支持（TV / 手机同 APK）
+### 10.57 v2.19.0 - Subsonic 协议支持
+
+**提交时间**：2026-08-21
+
+**背景**：在 Jellyfin / Navidrome 之外新增第三类 NAS 后端——Subsonic 协议（兼容 lx-server、Navidrome、Airsonic 等 Subsonic 实现），通过标准 token+salt 认证接入。
+
+**主要改动**：
+
+1. **SubsonicAdapter**（`backend/impl/SubsonicAdapter.kt`，790 行）：完整实现 `BackendAdapter` 接口
+   - 认证：`md5(password + salt)` 标准 token+salt，兼容所有 Subsonic 实现
+   - API 覆盖：专辑 / 歌手 / 歌曲 / 搜索 / 收藏 / 播放列表 / 流派 / 随机歌曲 / 歌词 / 封面流等全部接口
+   - 连接测试：ping 端点验证连通性
+
+2. **后端注册**（`BackendRegistry.kt`）：注册 Subsonic 类型适配器
+
+3. **服务器配置**（`ServerConfig.kt` / `ServerConnectScreen.kt`）：新增 Subsonic 服务器类型选项，URL 占位符按类型动态切换
+
+4. **设置页**（`SettingsScreen.kt` / `strings.xml`）：支持后端列表更新为 "Jellyfin / Navidrome / Subsonic"
+
+**验证结果**：
+- `SubsonicAdapterTest` 13 个测试覆盖认证逻辑和 API 调用
+- `:app:testDebugUnitTest` 通过（含 Subsonic 测试）
+
+**版本号变更**：v2.18.1 → v2.19.0（versionCode 56 → 57）
+
+### 10.58 v2.20.0 - 手机端支持（TV / 手机同 APK）
 
 **提交时间**：2026-08-22
 
