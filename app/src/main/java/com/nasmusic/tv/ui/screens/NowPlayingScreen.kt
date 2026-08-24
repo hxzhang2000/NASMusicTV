@@ -627,6 +627,7 @@ private fun CoverColumn(
             ) {
                 Text(
                     text = if (showInfoPanel) "封面" else "信息",
+                    color = if (showInfoPanel) NasMusicColors.Primary else NasMusicColors.TextPrimary,
                     fontSize = 16.sp,
                     modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
                 )

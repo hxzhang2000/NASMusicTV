@@ -306,6 +306,7 @@ private fun FeatureCard(
             Spacer(modifier = Modifier.height(8.dp))
             Text(
                 text = title,
+                color = NasMusicColors.TextPrimary,
                 fontSize = 19.sp,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
