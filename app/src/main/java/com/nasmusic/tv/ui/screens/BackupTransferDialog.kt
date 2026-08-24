@@ -39,6 +39,7 @@ import androidx.tv.material3.Text
 import com.nasmusic.tv.net.BackupTransferServer
 import com.nasmusic.tv.ui.components.FocusableSurface
 import com.nasmusic.tv.ui.theme.NasMusicColors
+import com.nasmusic.tv.util.LinkUtils
 import com.nasmusic.tv.util.NetworkUtils
 import com.nasmusic.tv.util.QrCodeGenerator
 
@@ -138,11 +139,24 @@ fun BackupTransferDialog(
                     )
                     Spacer(modifier = Modifier.height(6.dp))
                     serverUrl?.let { url ->
-                        Text(
-                            text = url,
-                            color = NasMusicColors.TextSecondary,
-                            fontSize = 16.sp
-                        )
+                        // URL 可点击：直接打开浏览器访问备份管理页（手机端便捷操作）
+                        FocusableSurface(
+                            onClick = { LinkUtils.openInBrowser(context, url) },
+                            shape = RoundedCornerShape(6.dp),
+                            focusedScale = 1.05f,
+                            animationDurationMs = 150,
+                            containerColor = NasMusicColors.Primary.copy(alpha = 0.08f),
+                            focusedContainerColor = NasMusicColors.Primary.copy(alpha = 0.2f),
+                            contentColor = NasMusicColors.Primary,
+                            focusedContentColor = NasMusicColors.TextPrimary
+                        ) {
+                            Text(
+                                text = url,
+                                color = NasMusicColors.Primary,
+                                fontSize = 16.sp,
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp)
+                            )
+                        }
                     }
                 } ?: run {
                     // 无 QR 时显示状态

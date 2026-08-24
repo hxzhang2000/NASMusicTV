@@ -27,6 +27,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -40,6 +41,7 @@ import com.nasmusic.tv.backend.network.baidu.BaiduOAuthClient
 import com.nasmusic.tv.ui.components.FocusableSurface
 import com.nasmusic.tv.ui.theme.NasMusicColors
 import com.nasmusic.tv.ui.viewmodel.MainViewModel
+import com.nasmusic.tv.util.LinkUtils
 import com.nasmusic.tv.util.QrCodeGenerator
 
 /**
@@ -67,6 +69,7 @@ fun BaiduAuthDialog(
     onCancel: () -> Unit,
     onDismiss: () -> Unit
 ) {
+    val context = LocalContext.current
     var qrBitmap by remember { mutableStateOf<Bitmap?>(null) }
 
     // 二维码内容：编码稳定的验证页（verificationUrl），扫码后打开标准验证页手动输入设备码。
@@ -145,12 +148,25 @@ fun BaiduAuthDialog(
                             textAlign = TextAlign.Center
                         )
                         Spacer(modifier = Modifier.height(6.dp))
-                        Text(
-                            text = deviceCode.verificationUrl,
-                            color = NasMusicColors.Primary,
-                            fontSize = 18.sp,
-                            textAlign = TextAlign.Center
-                        )
+                        // 验证 URL：可点击直接打开浏览器（手机端便捷操作；TV 上无浏览器则无响应）
+                        FocusableSurface(
+                            onClick = { LinkUtils.openInBrowser(context, deviceCode.verificationUrl) },
+                            shape = RoundedCornerShape(6.dp),
+                            focusedScale = 1.05f,
+                            animationDurationMs = 150,
+                            containerColor = NasMusicColors.Primary.copy(alpha = 0.08f),
+                            focusedContainerColor = NasMusicColors.Primary.copy(alpha = 0.2f),
+                            contentColor = NasMusicColors.Primary,
+                            focusedContentColor = NasMusicColors.TextPrimary
+                        ) {
+                            Text(
+                                text = deviceCode.verificationUrl,
+                                color = NasMusicColors.Primary,
+                                fontSize = 18.sp,
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                            )
+                        }
                         Spacer(modifier = Modifier.height(12.dp))
                         Text(
                             text = stringResource(R.string.netdisk_auth_step2),
@@ -158,12 +174,35 @@ fun BaiduAuthDialog(
                             fontSize = 18.sp,
                             textAlign = TextAlign.Center
                         )
-                        Text(
-                            text = deviceCode.userCode,
-                            color = NasMusicColors.Primary,
-                            fontSize = 34.sp,
-                            fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
-                        )
+                        // 设备码 + 复制按钮
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Center
+                        ) {
+                            Text(
+                                text = deviceCode.userCode,
+                                color = NasMusicColors.Primary,
+                                fontSize = 34.sp,
+                                fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
+                            )
+                            Spacer(modifier = Modifier.width(12.dp))
+                            FocusableSurface(
+                                onClick = { LinkUtils.copyToClipboard(context, "百度网盘设备码", deviceCode.userCode) },
+                                shape = RoundedCornerShape(8.dp),
+                                focusedScale = 1.08f,
+                                animationDurationMs = 120,
+                                containerColor = NasMusicColors.Primary,
+                                focusedContainerColor = NasMusicColors.Primary.copy(alpha = 0.85f),
+                                contentColor = NasMusicColors.TextPrimary,
+                                focusedContentColor = NasMusicColors.TextPrimary
+                            ) {
+                                Text(
+                                    text = "复制",
+                                    fontSize = 17.sp,
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp)
+                                )
+                            }
+                        }
                         Spacer(modifier = Modifier.height(16.dp))
 
                         // 辅助：二维码（扫码可能因 App 拦截/网络不可用，故不作为主流程）
