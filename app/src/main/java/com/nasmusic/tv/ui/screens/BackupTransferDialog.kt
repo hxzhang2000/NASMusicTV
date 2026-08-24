@@ -6,14 +6,18 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -79,10 +83,6 @@ fun BackupTransferDialog(
         }
     }
 
-    BackHandler {
-        onDismiss()
-    }
-
     Dialog(
         onDismissRequest = {},
         properties = DialogProperties(
@@ -91,7 +91,13 @@ fun BackupTransferDialog(
             usePlatformDefaultWidth = false
         )
     ) {
-        Box(
+        // BACK 键必须在 Dialog 内部注册（Dialog 独立窗口会吞掉系统 BACK 事件，
+        // 注册在 Dialog 外的 BackHandler 收不到——用 dismissOnBackPress=false 时无法关闭）
+        BackHandler {
+            onDismiss()
+        }
+
+        BoxWithConstraints(
             modifier = Modifier
                 .fillMaxSize()
                 .background(Color(0xB3000000)),
@@ -100,6 +106,8 @@ fun BackupTransferDialog(
             Column(
                 modifier = Modifier
                     .width(560.dp)
+                    .heightIn(max = maxHeight - 32.dp)
+                    .verticalScroll(rememberScrollState())
                     .background(NasMusicColors.Surface, RoundedCornerShape(16.dp))
                     .padding(28.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
