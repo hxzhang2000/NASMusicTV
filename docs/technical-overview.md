@@ -5838,3 +5838,34 @@ Phase 1-6 代码已全部落地并编译通过。Phase 7（测试与文档）新
 **涉及文件**：RadioBrowserClient/RadioStation/RadioSubTab/JamendoService/JamendoModels/JamendoSubTab（新增）；PlayerControls/NowPlayingScreen/NetworkMusicContainer/NetworkSubTab/AppPreferences/strings.xml/MainViewModel/AppRoot/SettingsScreen/NasMusicApp（修改）；NetworkMonitorTest（测试修正）
 
 **版本号变更**：v2.20.0 → v2.21.0（versionCode 58 → 59）
+
+### 10.60 v2.22.0 - 歌曲列表设备自适应 + 按钮文字全面亮色
+
+**提交时间**：2026-08-24
+
+**背景**：统一手机端与 TV 端的交互体验（歌曲列表排布、搜索框样式、按钮文字颜色），修复多处崩溃与滚动问题。
+
+**主要改动**：
+
+1. **歌曲列表 TV 两列 / 手机单列**
+   - `CommonComponents.kt`：新增 `songGridColumns()` 函数（TV=2 列、手机=1 列，基于 `LocalPhoneCompact` 判断）
+   - 替换 8 处 `GridCells.Fixed(2)` → `songGridColumns()`（SearchSubTab、BrowseSubTab、NetworkPlaylistDetailScreen、NetdiskScreen×2、WeatherSubTab、NetworkSubTabViews、LibraryScreen×2）
+   - 所有 `GridItemSpan(2)` → `GridItemSpan(maxLineSpan)` 自动适配列数
+2. **我的页面手机端整体滚动**
+   - 手机端从上下两个独立 `LazyColumn` 改为单个 `LazyColumn` 统一承载收藏 + 歌单 + 展开歌曲，整体滑动
+   - 歌单展开的歌曲从 `PlaylistCard` 内 `forEach` 移出为 LazyColumn 独立 item
+3. **全面按钮文字亮色**（15 个文件）
+   - 所有 `FocusableSurface`/`clickable` 内 `Text` 增加显式 `color` 参数
+   - 涵盖键盘、对话框、设置页、播放页、首页、网络音乐各 tab 的所有按钮
+4. **搜索框统一**：电台/独立音乐 tab 搜索框统一为 `SearchField` 共享组件（胶囊形、无独立按钮）
+5. **键盘窗口可滑动**：`TextInputDialog` 改为 `BoxWithConstraints` + `heightIn` + `verticalScroll`
+6. **进度条聚焦反馈**：滑块圆点聚焦时放大（24dp）变黄 + 光晕 + 背景变亮
+7. **主 tab 右对齐**：AppRoot 导航栏 `Arrangement.End`，手机窄屏仍可横向滚动
+8. **播放页左侧滚动修复**：移除 weight Box，恢复 `verticalScroll`
+9. **信息按钮崩溃修复**：移除 `SongInfoPanel` 内层 `verticalScroll`（嵌套滚动崩溃）
+10. **启动崩溃保护**：`WindowInsetsControllerCompat.hide()` 加 `try-catch`
+11. **全屏白条修复**：手机端隐藏系统栏（状态栏+导航栏）
+
+**涉及文件**：CommonComponents/SearchSubTab/BrowseSubTab/NetworkPlaylistDetailScreen/NetdiskScreen/WeatherSubTab/NetworkSubTabViews/LibraryScreen/MineScreen（新增/修改）；MainActivity/PlayerControls/AppRoot/NowPlayingScreen/SongInfoPanel/TextInputDialog/BackupTransferDialog/BaiduAuthDialog + 8 个按钮亮色文件
+
+**版本号变更**：v2.21.0 → v2.22.0（versionCode 59 → 60）

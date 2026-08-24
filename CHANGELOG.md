@@ -7,6 +7,42 @@
 >
 > 类型：`Added`（新增） | `Changed`（变更） | `Fixed`（修复） | `Removed`（移除）
 
+## [v2.22.0] - 2026-08-24
+
+### Added
+
+- **歌曲列表设备自适应**：TV 保持两列网格、手机端自动切换为单列（一行一个歌曲条目），覆盖搜索结果、浏览筛选、歌单详情、网盘歌曲、天气电台、发现页推荐及曲库 SongsTab/RecentTab 共 8 处
+- **我的页面手机端整体滚动**：手机端"我的"页面改为单个 LazyColumn 统一承载收藏 + 歌单 + 展开歌曲，整个页面一起滑动；歌单展开的歌曲作为独立 item 渲染，支持滚动到底
+- **搜索框统一**：电台、独立音乐 tab 的搜索框统一为网盘样式（胶囊形、无独立搜索按钮、点击弹出输入窗口、内嵌 ✕ 清除按钮）
+- **键盘输入窗口可滑动**：TextInputDialog 支持 `BoxWithConstraints` + `heightIn` + `verticalScroll`，小屏显示不全时可上下滚动查看全部键盘和按钮
+- **启动崩溃保护**：`WindowInsetsControllerCompat.hide()` 加 `try-catch` 保护，避免部分设备兼容性问题导致启动闪退
+
+### Changed
+
+- **全面按钮文字亮色**：15 个文件中所有 `FocusableSurface`/`clickable` 内的 `Text` 显式指定 `color`（tv-material 的 `Text` 不读取自定义 `LocalFocusableContentColor`），包括：
+  - 键盘按钮（KeyButton、ActionButton、搜索历史项）
+  - 对话框按钮（ConnectPromptDialog、ExitConfirmDialog、BaiduDirPickerDialog、BaiduAuthDialog、PlaylistPickerDialog、LyricsSettingsDialog）
+  - 设置页按钮（播放模式、频谱主题、调节按钮）
+  - 播放页歌词来源标签（SourceTag）、信息按钮
+  - 首页查看全部、返回按钮、ButtonChip/ButtonChipSmall
+  - 歌单管理、队列操作按钮
+  - 网络音乐各 tab 按钮/提示文字（BrowseSubTab、RadioSubTab、JamendoSubTab、WeatherSubTab）
+- **进度条聚焦反馈**：播放页进度条聚焦时滑块圆点放大变黄、背景变亮、新增光晕效果
+- **主 tab 右对齐**：顶部导航栏主 tab 改为右对齐，手机窄屏仍可横向滚动
+- **搜索栏统一**：曲库页、网络音乐搜索页的搜索框统一为 `SearchField` 共享组件（胶囊形、无独立搜索按钮）
+- **表格列跨度自适应**：所有 `GridItemSpan(2)` 改为 `GridItemSpan(maxLineSpan)`，自动适配 TV 双列/手机单列
+
+### Fixed
+
+- **播放页左侧滚动修复**：NowPlayingScreen 左侧 Column 移除无效的 `weight(1f)` Box，恢复 `verticalScroll`（手机端可滑动查看完整内容）
+- **信息按钮崩溃**：移除 `SongInfoPanel` 内层 `verticalScroll`（嵌套滚动容器导致 `IllegalStateException`）
+- **备份弹窗返回键**：`BackHandler` 移入 Dialog 内部（Dialog 独立窗口吞掉系统 BACK 事件）
+- **备份弹窗手机可滑动**：`BoxWithConstraints` + `heightIn` + `verticalScroll` 支持手机横屏
+- **二维码弹窗 URL 可点击**：备份弹窗和百度登录弹窗的 URL 支持点击打开浏览器
+- **设备码复制功能**：百度登录弹窗设备码旁新增亮色【复制】按钮，复制后 Toast 提示
+- **手机端全屏白条**：`WindowInsetsControllerCompat` 隐藏系统栏，支持滑动临时唤醒
+- **曲库页 tab 标签亮色**：LibraryTab 标签文字显式指定亮色
+
 ## [v2.21.0] - 2026-08-23
 
 ### Added
