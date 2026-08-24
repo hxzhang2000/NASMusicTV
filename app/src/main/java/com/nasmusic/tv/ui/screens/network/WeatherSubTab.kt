@@ -337,6 +337,7 @@ private fun MoodSwitcherRow(
                 ) {
                     Text(
                         text = "${mood.icon} ${mood.displayName}",
+                        color = if (isSelected) NasMusicColors.Surface else NasMusicColors.TextPrimary,
                         fontSize = 17.sp,
                         modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
                     )
@@ -378,6 +379,7 @@ private fun ActionBar(
         ) {
             Text(
                 text = "▶ ${stringResource(R.string.common_play_all)}",
+                color = NasMusicColors.TextPrimary,
                 fontSize = 18.sp,
                 modifier = Modifier.padding(horizontal = 14.dp, vertical = 7.dp)
             )
@@ -400,6 +402,7 @@ private fun ActionBar(
             Text(
                 text = if (isLoading) "..."
                        else "刷新",
+                color = NasMusicColors.TextPrimary,
                 fontSize = 18.sp,
                 modifier = Modifier.padding(horizontal = 14.dp, vertical = 7.dp)
             )

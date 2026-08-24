@@ -42,6 +42,7 @@ import com.nasmusic.tv.data.model.RadioStation
 import com.nasmusic.tv.data.model.UiState
 import com.nasmusic.tv.ui.LocalListBackHandler
 import com.nasmusic.tv.ui.components.FocusableSurface
+import com.nasmusic.tv.ui.components.SearchField
 import com.nasmusic.tv.ui.screens.TextInputDialog
 import com.nasmusic.tv.ui.theme.NasMusicColors
 
@@ -77,22 +78,13 @@ fun RadioSubTab(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            FocusableSurface(
-                onClick = { showSearchDialog = true },
-                shape = RoundedCornerShape(8.dp),
-                focusedScale = 1.05f,
-                animationDurationMs = 150,
-                containerColor = NasMusicColors.Surface.copy(alpha = 0.7f),
-                focusedContainerColor = NasMusicColors.Primary.copy(alpha = 0.3f),
-contentColor = NasMusicColors.TextPrimary,
-            focusedContentColor = NasMusicColors.Primary
-            ) {
-                Text(
-                    text = "\uD83D\uDD0D " + stringResource(R.string.network_search_hint),
-                    fontSize = 17.sp,
-                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)
-                )
-            }
+            SearchField(
+                query = activeQuery,
+                placeholder = stringResource(R.string.network_search_hint),
+                onOpenSearch = { showSearchDialog = true },
+                onClear = { onLoadDefault() },
+                modifier = Modifier.width(340.dp)
+            )
             Spacer(modifier = Modifier.width(8.dp))
 
             RadioBrowserClient.PRESET_TAGS.forEach { tag ->
@@ -110,6 +102,7 @@ contentColor = NasMusicColors.TextPrimary,
                 ) {
                     Text(
                         text = tag,
+                        color = if (isSelected) Color.Black else NasMusicColors.TextPrimary,
                         fontSize = 16.sp,
                         modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp)
                     )

@@ -95,7 +95,8 @@ fun ProgressSection(
     val progressFocusRequester = remember { FocusRequester() }
 
     Row(
-        modifier = modifier.fillMaxWidth(),
+        modifier = modifier
+            .fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(
@@ -106,23 +107,49 @@ fun ProgressSection(
             fontSize = if (isProgressFocused) timeFontFocused else timeFont
         )
         Spacer(modifier = Modifier.width(progressSpacer))
-        // 进度条（Box 组合布局）
-        Box(
+// 进度条（外层 Row 处理 weight 缩放，内层 Box 渲染）
+        Row(
             modifier = Modifier
                 .weight(1f)
                 .height(36.dp)
+        ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .focusRequester(progressFocusRequester)
+                .focusable()
+                .onFocusChanged {
+                    isProgressFocused = it.isFocused
+                    AppLog.e("ProgressSection", "focused=${it.isFocused}")
+                    onProgressFocusChanged(it.isFocused)
+                }
                 .onPreviewKeyEvent { event ->
-                    // 在焦点导航之前拦截左右键进行 seek（直播态禁用）
-                    if ((event.key == Key.DirectionLeft || event.key == Key.DirectionRight)
-                        && event.type == KeyEventType.KeyDown && durationMs > 0 && !isLive) {
-                        val delta = if (event.key == Key.DirectionLeft) -15000L else 15000L
-                        val newPosition = (progressMs + delta).coerceIn(0, durationMs)
-                        AppLog.d("NASMusic", "ProgressSection: seek by ${delta}ms, current=$progressMs, new=$newPosition, duration=$durationMs")
-                        onSeek(newPosition)
-                        true
+                    if (event.type == KeyEventType.KeyDown) {
+                        when (event.key) {
+                            Key.DirectionUp, Key.DirectionDown -> {
+                                isProgressFocused = false
+                                false
+                            }
+                            Key.DirectionLeft, Key.DirectionRight -> {
+                                if (durationMs > 0 && !isLive) {
+                                    isProgressFocused = true
+                                    val delta = if (event.key == Key.DirectionLeft) -15000L else 15000L
+                                    val newPosition = (progressMs + delta).coerceIn(0, durationMs)
+                                    onSeek(newPosition)
+                                }
+                                true
+                            }
+                            Key.DirectionCenter, Key.Enter -> {
+                                isProgressFocused = true
+                                false
+                            }
+                            else -> {
+                                isProgressFocused = true
+                                false
+                            }
+                        }
                     } else false
                 }
-                // 手机触摸：点击跳转（直播态禁用）
                 .pointerInput(progressMs, durationMs, isLive) {
                     detectTapGestures { offset ->
                         if (durationMs > 0 && !isLive) {
@@ -151,12 +178,6 @@ fun ProgressSection(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .focusRequester(progressFocusRequester)
-                .focusable()
-                .onFocusChanged {
-                    isProgressFocused = it.isFocused
-                    onProgressFocusChanged(it.isFocused)
-                }
                 .onSizeChanged { progressBarSize = it }
                 .background(NasMusicColors.Surface.copy(alpha = 0.15f), RoundedCornerShape(4.dp))
         ) {
@@ -164,7 +185,7 @@ fun ProgressSection(
                 // 直播态：进度填充置 0、隐藏滑块圆点
                 val progress = if (isLive) 0f
                                else if (durationMs > 0) progressMs.toFloat() / durationMs else 0f
-                val thumbDiameter = 16.dp
+                val thumbDiameter = if (isProgressFocused && !isLive) 24.dp else 16.dp
 
                 // 背景轨道
                 Box(
@@ -186,6 +207,26 @@ fun ProgressSection(
                 )
                 // 滑块圆点（直播态隐藏）
                 if (!isLive) {
+                // 聚焦光晕
+                if (isProgressFocused) {
+                    Box(
+                        modifier = Modifier
+                            .offset {
+                                val trackW = progressBarSize.width.toFloat()
+                                val thumbR = thumbDiameter.toPx() / 2f
+                                val pos = trackW * progress.coerceIn(0f, 1f)
+                                val glowSize = thumbDiameter.toPx() + 12.dp.toPx()
+                                IntOffset(
+                                    x = (pos - glowSize / 2f).roundToInt()
+                                        .coerceIn(0, (trackW - glowSize).toInt()),
+                                    y = ((progressBarSize.height - glowSize) / 2f).roundToInt()
+                                )
+                            }
+                            .size(thumbDiameter + 12.dp)
+                            .clip(CircleShape)
+                            .background(NasMusicColors.Primary.copy(alpha = 0.2f))
+                    )
+                }
                 Box(
                     modifier = Modifier
                         .offset {
@@ -204,6 +245,7 @@ fun ProgressSection(
                 )
                 }
             }
+        }
         }
         }
         Spacer(modifier = Modifier.width(progressSpacer))

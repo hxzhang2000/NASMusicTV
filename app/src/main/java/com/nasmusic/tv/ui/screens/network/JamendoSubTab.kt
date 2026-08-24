@@ -32,6 +32,7 @@ import com.nasmusic.tv.backend.network.JamendoService
 import com.nasmusic.tv.data.model.Song
 import com.nasmusic.tv.data.model.UiState
 import com.nasmusic.tv.ui.components.FocusableSurface
+import com.nasmusic.tv.ui.components.SearchField
 import com.nasmusic.tv.ui.screens.SongRow
 import com.nasmusic.tv.ui.screens.TextInputDialog
 import com.nasmusic.tv.ui.theme.NasMusicColors
@@ -81,6 +82,7 @@ fun JamendoSubTab(
             ) {
                 Text(
                     text = stringResource(R.string.network_jamendo_no_key),
+                    color = NasMusicColors.TextPrimary,
                     fontSize = 18.sp,
                     modifier = Modifier.padding(horizontal = 24.dp, vertical = 18.dp)
                 )
@@ -95,22 +97,13 @@ fun JamendoSubTab(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            FocusableSurface(
-                onClick = { showSearchDialog = true },
-                shape = RoundedCornerShape(8.dp),
-                focusedScale = 1.05f,
-                animationDurationMs = 150,
-                containerColor = NasMusicColors.Surface.copy(alpha = 0.7f),
-                focusedContainerColor = NasMusicColors.Primary.copy(alpha = 0.3f),
-                contentColor = NasMusicColors.TextPrimary,
-                focusedContentColor = NasMusicColors.Primary
-            ) {
-                Text(
-                    text = "\uD83D\uDD0D " + stringResource(R.string.network_search_hint),
-                    fontSize = 17.sp,
-                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)
-                )
-            }
+            SearchField(
+                query = activeTag,
+                placeholder = stringResource(R.string.network_search_hint),
+                onOpenSearch = { showSearchDialog = true },
+                onClear = { onLoadHot() },
+                modifier = Modifier.width(340.dp)
+            )
             Spacer(modifier = Modifier.width(8.dp))
 
             // 热门
@@ -128,6 +121,7 @@ fun JamendoSubTab(
             ) {
                 Text(
                     text = stringResource(R.string.network_jamendo_hot),
+                    color = if (hotSelected) Color.Black else NasMusicColors.TextPrimary,
                     fontSize = 16.sp,
                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp)
                 )
@@ -149,6 +143,7 @@ fun JamendoSubTab(
                 ) {
                     Text(
                         text = tag,
+                        color = if (isSelected) Color.Black else NasMusicColors.TextPrimary,
                         fontSize = 16.sp,
                         modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp)
                     )

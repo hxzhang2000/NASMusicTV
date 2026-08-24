@@ -146,6 +146,7 @@ fun BrowseSubTab(
                     ) {
                         Text(
                             text = "全部播放 ▶",
+                            color = NasMusicColors.TextPrimary,
                             fontSize = 19.sp,
                             modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
                         )
@@ -165,6 +166,7 @@ fun BrowseSubTab(
                     ) {
                         Text(
                             text = "换一批 ↻",
+                            color = NasMusicColors.TextPrimary,
                             fontSize = 19.sp,
                             modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
                         )
@@ -326,7 +328,7 @@ private fun ChipButton(
     val textColor = when {
         isSelected -> Color.Black
         isFocused -> NasMusicColors.Primary
-        else -> NasMusicColors.TextSecondary
+        else -> NasMusicColors.TextPrimary
     }
 
     FocusableSurface(
@@ -348,6 +350,7 @@ private fun ChipButton(
     ) {
         Text(
             text = label,
+            color = textColor,
             fontSize = 18.sp,
             modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp)
         )
