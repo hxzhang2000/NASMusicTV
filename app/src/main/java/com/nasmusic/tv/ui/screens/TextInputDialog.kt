@@ -514,7 +514,7 @@ private fun HistoryRow(
                 containerColor = NasMusicColors.SurfaceVariant.copy(alpha = 0.5f),
                 focusedContainerColor = NasMusicColors.Primary.copy(alpha = 0.25f),
                 contentColor = NasMusicColors.TextPrimary,
-                focusedContentColor = Color.Black,
+                focusedContentColor = NasMusicColors.TextPrimary,
                 pressedScale = 0.95f
             ) {
                 Box(
@@ -548,7 +548,7 @@ private fun KeyButton(
         containerColor = NasMusicColors.SurfaceVariant,
         focusedContainerColor = NasMusicColors.Primary.copy(alpha = 0.25f),
         contentColor = NasMusicColors.TextPrimary,
-        focusedContentColor = Color.Black,
+        focusedContentColor = NasMusicColors.TextPrimary,
         pressedScale = 0.92f
     ) {
         Text(

@@ -137,7 +137,7 @@ fun PlaylistPickerDialog(
                                 containerColor = NasMusicColors.SurfaceVariant.copy(alpha = 0.6f),
                                 contentColor = NasMusicColors.TextPrimary,
                                 focusedContainerColor = NasMusicColors.Primary.copy(alpha = 0.25f),
-                                focusedContentColor = Color.Black,
+                                focusedContentColor = NasMusicColors.TextPrimary,
                                 pressedScale = 0.98f,
                                 requestFocusOnLaunch = index == 0
                             ) {
@@ -186,7 +186,7 @@ fun PlaylistPickerDialog(
                         containerColor = NasMusicColors.Primary.copy(alpha = 0.8f),
                         contentColor = NasMusicColors.TextPrimary,
                         focusedContainerColor = NasMusicColors.Primary,
-                        focusedContentColor = Color.Black,
+                        focusedContentColor = NasMusicColors.TextPrimary,
                         pressedScale = 0.95f,
                         requestFocusOnLaunch = playlists.isEmpty()
                     ) {
@@ -204,7 +204,7 @@ fun PlaylistPickerDialog(
                         containerColor = NasMusicColors.SurfaceVariant,
                         contentColor = NasMusicColors.TextPrimary,
                         focusedContainerColor = NasMusicColors.Primary.copy(alpha = 0.25f),
-                        focusedContentColor = Color.Black,
+                        focusedContentColor = NasMusicColors.TextPrimary,
                         pressedScale = 0.95f
                     ) {
                         Text(

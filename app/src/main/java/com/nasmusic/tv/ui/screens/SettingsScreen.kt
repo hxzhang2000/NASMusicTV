@@ -41,7 +41,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.tv.material3.ClickableSurfaceDefaults
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Icon
 import androidx.tv.material3.Surface
@@ -591,7 +590,7 @@ fun SettingsScreen(
                         )
                     }
                     item {
-                        Surface(
+                        FocusableSurface(
                             onClick = {
                                 if (!isNetworkTesting) {
                                     isNetworkTesting = true
@@ -623,7 +622,6 @@ fun SettingsScreen(
                                     }
                                 }
                             },
-                            enabled = !isNetworkTesting,
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .border(
@@ -631,20 +629,15 @@ fun SettingsScreen(
                                     color = NasMusicColors.Border,
                                     shape = RoundedCornerShape(12.dp)
                                 ),
-                            shape = ClickableSurfaceDefaults.shape(
-                                shape = RoundedCornerShape(12.dp),
-                                focusedShape = RoundedCornerShape(12.dp)
-                            ),
-                            colors = ClickableSurfaceDefaults.colors(
-                                containerColor = NasMusicColors.SurfaceVariant,
-                                contentColor = NasMusicColors.TextPrimary,
-                                focusedContainerColor = NasMusicColors.Primary.copy(alpha = 0.2f),
-                                focusedContentColor = Color.Black
-                            ),
-                            scale = ClickableSurfaceDefaults.scale(
-                                focusedScale = 1f,
-                                pressedScale = 0.96f
-                            )
+                            shape = RoundedCornerShape(12.dp),
+                            focusedScale = 1.03f,
+                            animationDurationMs = 200,
+                            containerColor = NasMusicColors.SurfaceVariant,
+                            contentColor = NasMusicColors.TextPrimary,
+                            focusedContainerColor = NasMusicColors.Primary.copy(alpha = 0.2f),
+                            focusedContentColor = NasMusicColors.TextPrimary,
+                            pressedScale = 0.96f,
+                            focusBorderColor = NasMusicColors.FocusRing.copy(alpha = 0.6f)
                         ) {
                             Row(
                                 modifier = Modifier
@@ -723,7 +716,7 @@ fun SettingsScreen(
                                     containerColor = if (selected) NasMusicColors.Primary.copy(alpha = 0.18f) else NasMusicColors.Surface,
                                     contentColor = NasMusicColors.TextPrimary,
                                     focusedContainerColor = if (selected) NasMusicColors.Primary.copy(alpha = 0.3f) else NasMusicColors.Primary.copy(alpha = 0.15f),
-                                    focusedContentColor = Color.Black,
+                                    focusedContentColor = NasMusicColors.TextPrimary,
                                     pressedScale = 0.98f,
                                     focusBorderColor = if (selected) NasMusicColors.Primary.copy(alpha = 0.5f) else NasMusicColors.FocusRing.copy(alpha = 0.6f)
                                 ) {
@@ -777,7 +770,7 @@ fun SettingsScreen(
                                 containerColor = if (customSelected) NasMusicColors.Primary.copy(alpha = 0.18f) else NasMusicColors.Surface,
                                 contentColor = NasMusicColors.TextPrimary,
                                 focusedContainerColor = if (customSelected) NasMusicColors.Primary.copy(alpha = 0.3f) else NasMusicColors.Primary.copy(alpha = 0.15f),
-                                focusedContentColor = Color.Black,
+                                focusedContentColor = NasMusicColors.TextPrimary,
                                 pressedScale = 0.98f,
                                 focusBorderColor = if (customSelected) NasMusicColors.Primary.copy(alpha = 0.5f) else NasMusicColors.FocusRing.copy(alpha = 0.6f)
                             ) {
@@ -856,7 +849,7 @@ fun SettingsScreen(
                                     containerColor = NasMusicColors.Surface,
                                     focusedContainerColor = NasMusicColors.Primary.copy(alpha = 0.15f),
                                     contentColor = NasMusicColors.TextPrimary,
-                                    focusedContentColor = Color.Black,
+                                    focusedContentColor = NasMusicColors.TextPrimary,
                                     pressedScale = 0.98f
                                 ) {
                                     Column(
@@ -931,7 +924,7 @@ fun SettingsScreen(
                                     containerColor = if (selected) NasMusicColors.Primary.copy(alpha = 0.18f) else NasMusicColors.Surface,
                                     contentColor = NasMusicColors.TextPrimary,
                                     focusedContainerColor = if (selected) NasMusicColors.Primary.copy(alpha = 0.3f) else NasMusicColors.Primary.copy(alpha = 0.15f),
-                                    focusedContentColor = Color.Black,
+                                    focusedContentColor = NasMusicColors.TextPrimary,
                                     pressedScale = 0.98f,
                                     focusBorderColor = if (selected) NasMusicColors.Primary.copy(alpha = 0.5f) else NasMusicColors.FocusRing.copy(alpha = 0.6f)
                                 ) {
@@ -985,7 +978,7 @@ fun SettingsScreen(
                                 containerColor = if (mvCustomSelected) NasMusicColors.Primary.copy(alpha = 0.18f) else NasMusicColors.Surface,
                                 contentColor = NasMusicColors.TextPrimary,
                                 focusedContainerColor = if (mvCustomSelected) NasMusicColors.Primary.copy(alpha = 0.3f) else NasMusicColors.Primary.copy(alpha = 0.15f),
-                                focusedContentColor = Color.Black,
+                                focusedContentColor = NasMusicColors.TextPrimary,
                                 pressedScale = 0.98f,
                                 focusBorderColor = if (mvCustomSelected) NasMusicColors.Primary.copy(alpha = 0.5f) else NasMusicColors.FocusRing.copy(alpha = 0.6f)
                             ) {
@@ -1062,7 +1055,7 @@ fun SettingsScreen(
                                 containerColor = NasMusicColors.Surface,
                                 contentColor = NasMusicColors.TextPrimary,
                                 focusedContainerColor = NasMusicColors.Primary.copy(alpha = 0.15f),
-                                focusedContentColor = Color.Black,
+                                focusedContentColor = NasMusicColors.TextPrimary,
                                 pressedScale = 0.98f,
                                 focusBorderColor = NasMusicColors.FocusRing.copy(alpha = 0.6f)
                             ) {
@@ -1109,7 +1102,7 @@ fun SettingsScreen(
                                 containerColor = NasMusicColors.Surface,
                                 contentColor = NasMusicColors.TextPrimary,
                                 focusedContainerColor = NasMusicColors.Primary.copy(alpha = 0.15f),
-                                focusedContentColor = Color.Black,
+                                focusedContentColor = NasMusicColors.TextPrimary,
                                 pressedScale = 0.98f,
                                 focusBorderColor = NasMusicColors.FocusRing.copy(alpha = 0.6f)
                             ) {
@@ -1167,7 +1160,7 @@ fun SettingsScreen(
                                 containerColor = NasMusicColors.Surface,
                                 contentColor = NasMusicColors.TextPrimary,
                                 focusedContainerColor = NasMusicColors.Primary.copy(alpha = 0.15f),
-                                focusedContentColor = Color.Black,
+                                focusedContentColor = NasMusicColors.TextPrimary,
                                 pressedScale = 0.98f,
                                 focusBorderColor = NasMusicColors.FocusRing.copy(alpha = 0.6f)
                             ) {
@@ -1547,7 +1540,7 @@ fun SettingsScreen(
                         containerColor = NasMusicColors.SurfaceVariant,
                         contentColor = NasMusicColors.TextPrimary,
                         focusedContainerColor = NasMusicColors.Primary.copy(alpha = 0.25f),
-                        focusedContentColor = Color.Black
+                        focusedContentColor = NasMusicColors.TextPrimary
                     ) {
                         Text(
                             text = stringResource(R.string.common_cancel),
@@ -1567,14 +1560,14 @@ fun SettingsScreen(
                         focusedScale = 1.08f,
                         animationDurationMs = 150,
                         containerColor = NasMusicColors.Warning,
-                        contentColor = androidx.compose.ui.graphics.Color.Black,
+                        contentColor = NasMusicColors.TextPrimary,
                         focusedContainerColor = NasMusicColors.Warning.copy(alpha = 0.85f),
-                        focusedContentColor = androidx.compose.ui.graphics.Color.Black,
+                        focusedContentColor = NasMusicColors.TextPrimary,
                         requestFocusOnLaunch = true
                     ) {
                         Text(
                             text = stringResource(R.string.settings_delete_backup),
-                            color = androidx.compose.ui.graphics.Color.Black,
+                            color = NasMusicColors.TextPrimary,
                             fontSize = 19.sp,
                             textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                             modifier = Modifier.fillMaxSize().padding(vertical = 12.dp)
@@ -1646,7 +1639,7 @@ private fun SettingSwitch(
         containerColor = NasMusicColors.Surface,
         contentColor = NasMusicColors.TextPrimary,
         focusedContainerColor = NasMusicColors.Primary.copy(alpha = 0.15f),
-        focusedContentColor = Color.Black,
+        focusedContentColor = NasMusicColors.TextPrimary,
         pressedScale = 0.98f,
         focusBorderColor = NasMusicColors.FocusRing.copy(alpha = 0.6f)
     ) {
@@ -1748,7 +1741,7 @@ private fun SettingActionButton(
         containerColor = NasMusicColors.Surface,
         contentColor = NasMusicColors.TextPrimary,
         focusedContainerColor = NasMusicColors.Primary.copy(alpha = 0.15f),
-        focusedContentColor = Color.Black,
+        focusedContentColor = NasMusicColors.TextPrimary,
         pressedScale = 0.98f,
         focusBorderColor = NasMusicColors.FocusRing.copy(alpha = 0.6f)
     ) {
@@ -1793,7 +1786,7 @@ private fun BackupFileRow(
             containerColor = NasMusicColors.Surface,
             contentColor = NasMusicColors.TextPrimary,
             focusedContainerColor = NasMusicColors.Primary.copy(alpha = 0.15f),
-            focusedContentColor = Color.Black,
+            focusedContentColor = NasMusicColors.TextPrimary,
             pressedScale = 0.98f,
             focusBorderColor = NasMusicColors.FocusRing.copy(alpha = 0.6f)
         ) {

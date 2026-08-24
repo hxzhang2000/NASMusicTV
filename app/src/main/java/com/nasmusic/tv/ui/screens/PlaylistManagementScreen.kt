@@ -255,7 +255,7 @@ fun PlaylistManagementScreen(
                                 containerColor = NasMusicColors.Surface.copy(alpha = 0.5f),
                                 contentColor = NasMusicColors.TextPrimary,
                                 focusedContainerColor = NasMusicColors.Primary.copy(alpha = 0.2f),
-                                focusedContentColor = Color.Black,
+                                focusedContentColor = NasMusicColors.TextPrimary,
                                 pressedContainerColor = NasMusicColors.SurfaceVariant,
                                 pressedScale = 0.98f,
                                 focusBorderColor = NasMusicColors.FocusRing.copy(alpha = 0.6f),
@@ -326,7 +326,7 @@ private fun ButtonChipSmall(text: String, onClick: () -> Unit) {
         containerColor = NasMusicColors.Primary.copy(alpha = 0.8f),
         contentColor = NasMusicColors.TextPrimary,
         focusedContainerColor = NasMusicColors.Primary,
-        focusedContentColor = Color.Black,
+        focusedContentColor = NasMusicColors.TextPrimary,
         pressedScale = 0.95f
     ) {
         Text(text = text, fontSize = 17.sp, modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp))

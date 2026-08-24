@@ -165,7 +165,7 @@ fun BackupTransferDialog(
                         containerColor = NasMusicColors.Primary,
                         focusedContainerColor = NasMusicColors.Primary.copy(alpha = 0.85f),
                         contentColor = NasMusicColors.TextPrimary,
-                        focusedContentColor = Color.Black,
+                        focusedContentColor = NasMusicColors.TextPrimary,
                         focusRequester = closeFocusRequester,
                         requestFocusOnLaunch = true
                     ) {

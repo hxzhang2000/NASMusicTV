@@ -213,7 +213,7 @@ fun BaiduAuthDialog(
                         containerColor = NasMusicColors.SurfaceVariant,
                         focusedContainerColor = NasMusicColors.Primary.copy(alpha = 0.85f),
                         contentColor = NasMusicColors.TextPrimary,
-                        focusedContentColor = Color.Black
+                        focusedContentColor = NasMusicColors.TextPrimary
                     ) {
                         Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
                             Text(text = stringResource(R.string.common_cancel), fontSize = 19.sp)

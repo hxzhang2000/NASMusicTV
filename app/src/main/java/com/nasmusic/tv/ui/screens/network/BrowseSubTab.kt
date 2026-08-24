@@ -142,7 +142,7 @@ fun BrowseSubTab(
                         containerColor = NasMusicColors.Primary.copy(alpha = 0.85f),
                         focusedContainerColor = NasMusicColors.Primary,
                         contentColor = NasMusicColors.TextPrimary,
-                        focusedContentColor = Color.Black
+                        focusedContentColor = NasMusicColors.TextPrimary
                     ) {
                         Text(
                             text = "全部播放 ▶",

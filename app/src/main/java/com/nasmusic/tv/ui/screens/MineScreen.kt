@@ -178,7 +178,7 @@ fun MineScreen(
                     containerColor = NasMusicColors.Primary.copy(alpha = 0.8f),
                     contentColor = NasMusicColors.TextPrimary,
                     focusedContainerColor = NasMusicColors.Primary,
-                    focusedContentColor = Color.Black,
+                    focusedContentColor = NasMusicColors.TextPrimary,
                     pressedScale = 0.96f
                 ) {
                     Text(

@@ -374,7 +374,7 @@ private fun ActionBar(
             containerColor = NasMusicColors.Primary.copy(alpha = 0.85f),
             focusedContainerColor = NasMusicColors.Primary,
             contentColor = NasMusicColors.TextPrimary,
-            focusedContentColor = Color.Black
+            focusedContentColor = NasMusicColors.TextPrimary
         ) {
             Text(
                 text = "▶ ${stringResource(R.string.common_play_all)}",
@@ -457,7 +457,7 @@ private fun ForecastRow(
                     containerColor = bgColor,
                     focusedContainerColor = bgColor,
                     contentColor = NasMusicColors.TextPrimary,
-                    focusedContentColor = Color.Black
+                    focusedContentColor = NasMusicColors.TextPrimary
                 ) {
                     Column(
                         modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp),

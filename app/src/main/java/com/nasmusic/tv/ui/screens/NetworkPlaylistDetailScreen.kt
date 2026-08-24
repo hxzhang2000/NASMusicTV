@@ -116,8 +116,8 @@ fun NetworkPlaylistDetailScreen(
                     animationDurationMs = 150,
                     containerColor = NasMusicColors.Primary.copy(alpha = 0.85f),
                     focusedContainerColor = NasMusicColors.Primary,
-                    contentColor = androidx.compose.ui.graphics.Color.Black,
-                    focusedContentColor = androidx.compose.ui.graphics.Color.Black
+                    contentColor = NasMusicColors.TextPrimary,
+                    focusedContentColor = NasMusicColors.TextPrimary
                 ) {
                     Text(
                         text = "全部播放 ▶",

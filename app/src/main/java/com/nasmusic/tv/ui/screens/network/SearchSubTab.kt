@@ -162,7 +162,7 @@ fun SearchSubTab(
                                     containerColor = NasMusicColors.Primary.copy(alpha = 0.85f),
                                     focusedContainerColor = NasMusicColors.Primary,
                                     contentColor = NasMusicColors.TextPrimary,
-                                    focusedContentColor = Color.Black
+                                    focusedContentColor = NasMusicColors.TextPrimary
                                 ) {
                                     Text(
                                         text = "全部播放 ▶",
@@ -308,7 +308,7 @@ private fun SearchBar(
                 containerColor = NasMusicColors.Surface.copy(alpha = 0.6f),
                 contentColor = NasMusicColors.TextPrimary,
                 focusedContainerColor = NasMusicColors.Surface.copy(alpha = 0.8f),
-                focusedContentColor = Color.Black
+                focusedContentColor = NasMusicColors.TextPrimary
             ),
             scale = ClickableSurfaceDefaults.scale(focusedScale = 1f, pressedScale = 0.97f)
         ) {

@@ -1,6 +1,8 @@
 package com.nasmusic.tv.ui.screens
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -239,14 +241,13 @@ fun NowPlayingScreen(
                 // 左侧：封面 + 歌曲信息（沉浸模式隐藏）
                 if (!isImmersiveMode) {
                     Column(
-                        modifier = Modifier.width(380.dp).fillMaxHeight(),
+                        modifier = Modifier
+                            .width(380.dp)
+                            .fillMaxHeight()
+                            .verticalScroll(rememberScrollState()),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        // 封面内容垂直居中
-                        Box(
-                            modifier = Modifier.weight(1f),
-                            contentAlignment = Alignment.Center
-                        ) {
+                        // 封面内容直接平铺（不可用 weight：verticalScroll 容器内 weight 无效）
                         CoverColumn(
                             currentSong = currentSong,
                             onToggleImmersive = onToggleImmersive,
@@ -264,7 +265,6 @@ fun NowPlayingScreen(
                             onSearchSong = onSearchSong,
                             onSearchArtist = onSearchArtist
                         )
-                        }
 
                         Spacer(modifier = Modifier.height(8.dp))
 

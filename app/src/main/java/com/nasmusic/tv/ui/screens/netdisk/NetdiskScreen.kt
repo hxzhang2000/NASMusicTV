@@ -173,7 +173,7 @@ fun NetdiskScreen(
                                     containerColor = NasMusicColors.Primary.copy(alpha = 0.85f),
                                     focusedContainerColor = NasMusicColors.Primary,
                                     contentColor = NasMusicColors.TextPrimary,
-                                    focusedContentColor = Color.Black
+                                    focusedContentColor = NasMusicColors.TextPrimary
                                 ) {
                                     Text(
                                         text = "全部播放 ▶",
@@ -223,7 +223,7 @@ fun NetdiskScreen(
                         containerColor = NasMusicColors.Primary.copy(alpha = 0.85f),
                         focusedContainerColor = NasMusicColors.Primary,
                         contentColor = NasMusicColors.TextPrimary,
-                        focusedContentColor = Color.Black
+                        focusedContentColor = NasMusicColors.TextPrimary
                     ) {
                         Text("全部播放 ▶", color = NasMusicColors.TextPrimary, fontSize = 16.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp))
                     }

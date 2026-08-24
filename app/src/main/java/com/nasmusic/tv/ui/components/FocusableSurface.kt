@@ -12,7 +12,10 @@ import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -28,6 +31,11 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.nasmusic.tv.ui.theme.NasMusicColors
 import com.nasmusic.tv.util.AppLog
+
+/**
+ * 供 FocusableSurface 子组件读取的当前内容颜色
+ */
+val LocalFocusableContentColor = staticCompositionLocalOf { NasMusicColors.TextPrimary }
 
 /**
  * 公共可点击 Surface 组件（TV / 手机双兼容）
@@ -114,11 +122,17 @@ fun FocusableSurface(
 
     // 按下时缩放反馈（TV 与手机一致——TV 遥控器 OK 键按下同样触发 PressInteraction）
     val currentScale = if (isPressed) pressedScale else animScale.value
-    // 容器色状态：按下 > 聚焦 > 默认（内容色由各调用点显式设置）
+    // 容器色状态：按下 > 聚焦 > 默认
     val targetContainerColor = when {
         isPressed && pressedContainerColor != null -> pressedContainerColor
         isFocused -> focusedContainerColor
         else -> containerColor
+    }
+    // 内容色状态：按下 > 聚焦 > 默认
+    val targetContentColor = when {
+        isPressed && pressedContentColor != null -> pressedContentColor
+        isFocused -> focusedContentColor
+        else -> contentColor
     }
 
     Box(
@@ -151,6 +165,8 @@ fun FocusableSurface(
                 onLongClick = onLongClick
             )
     ) {
-        content()
+        CompositionLocalProvider(LocalFocusableContentColor provides targetContentColor) {
+            content()
+        }
     }
 }

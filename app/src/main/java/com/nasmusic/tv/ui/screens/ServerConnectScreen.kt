@@ -144,7 +144,7 @@ fun ServerConnectScreen(
 
             Text(
                 text = stringResource(R.string.server_config_title),
-                color = NasMusicColors.TextPrimary,
+                color = Color.White,
                 fontSize = 41.sp
             )
             Spacer(modifier = Modifier.height(8.dp))
@@ -355,7 +355,7 @@ fun ServerConnectScreen(
                 containerColor = NasMusicColors.Primary,
                 contentColor = NasMusicColors.TextPrimary,
                 focusedContainerColor = NasMusicColors.Primary.copy(alpha = 0.85f),
-                focusedContentColor = Color.Black,
+                focusedContentColor = NasMusicColors.TextPrimary,
                 pressedScale = 0.95f
             ) {
                 Text(
@@ -506,7 +506,7 @@ private fun FormField(
             containerColor = NasMusicColors.SurfaceVariant,
             contentColor = NasMusicColors.TextPrimary,
             focusedContainerColor = NasMusicColors.Primary.copy(alpha = 0.2f),
-            focusedContentColor = Color.Black,
+            focusedContentColor = NasMusicColors.TextPrimary,
             pressedScale = 0.96f
         ) {
             Box(
@@ -617,7 +617,7 @@ private fun ServerAddressField(
                 containerColor = NasMusicColors.SurfaceVariant,
                 contentColor = NasMusicColors.TextPrimary,
                 focusedContainerColor = NasMusicColors.Primary.copy(alpha = 0.2f),
-                focusedContentColor = Color.Black,
+                focusedContentColor = NasMusicColors.TextPrimary,
                 pressedScale = 0.96f
             ) {
                 Box(

@@ -46,7 +46,7 @@ fun VocalToggleButton(
         containerColor = NasMusicColors.Surface,
         focusedContainerColor = NasMusicColors.Primary.copy(alpha = 0.3f),
         contentColor = NasMusicColors.TextPrimary,
-        focusedContentColor = Color.Black,
+        focusedContentColor = NasMusicColors.TextPrimary,
         pressedContainerColor = NasMusicColors.SurfaceVariant,
         pressedContentColor = NasMusicColors.TextPrimary,
         pressedScale = 0.90f,

@@ -3,6 +3,8 @@
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusGroup
@@ -119,6 +121,7 @@ fun QueueScreen(
                 .padding(end = 24.dp)
                 .clip(RoundedCornerShape(20.dp))
                 .background(NasMusicColors.Surface)
+                .verticalScroll(rememberScrollState())
                 .padding(24.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
@@ -381,7 +384,7 @@ fun MiniIconButton(onClick: () -> Unit, icon: androidx.compose.ui.graphics.vecto
         containerColor = NasMusicColors.SurfaceVariant,
         contentColor = NasMusicColors.TextPrimary,
         focusedContainerColor = NasMusicColors.Primary.copy(alpha = 0.3f),
-        focusedContentColor = Color.Black,
+        focusedContentColor = NasMusicColors.TextPrimary,
         pressedScale = 0.90f
     ) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {

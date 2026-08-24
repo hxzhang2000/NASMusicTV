@@ -106,7 +106,7 @@ contentColor = NasMusicColors.TextPrimary,
                                     else NasMusicColors.Surface.copy(alpha = 0.6f),
                     focusedContainerColor = NasMusicColors.Primary,
                     contentColor = if (isSelected) Color.Black else NasMusicColors.TextPrimary,
-                    focusedContentColor = Color.Black
+                    focusedContentColor = NasMusicColors.TextPrimary
                 ) {
                     Text(
                         text = tag,
@@ -142,7 +142,7 @@ contentColor = NasMusicColors.TextPrimary,
                         containerColor = NasMusicColors.Primary.copy(alpha = 0.85f),
                         focusedContainerColor = NasMusicColors.Primary,
                         contentColor = NasMusicColors.TextPrimary,
-                        focusedContentColor = Color.Black
+                        focusedContentColor = NasMusicColors.TextPrimary
                     ) {
                         Text(
                             text = stringResource(R.string.network_radio_retry),

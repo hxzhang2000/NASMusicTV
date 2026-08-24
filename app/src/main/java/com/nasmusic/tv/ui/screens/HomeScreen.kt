@@ -406,7 +406,7 @@ private fun QuickActionButton(
         containerColor = NasMusicColors.Surface.copy(alpha = 0.5f),
         focusedContainerColor = NasMusicColors.Primary.copy(alpha = 0.2f),
         contentColor = NasMusicColors.TextPrimary,
-        focusedContentColor = NasMusicColors.Primary
+        focusedContentColor = NasMusicColors.TextPrimary
     ) {
         Row(
             modifier = Modifier
@@ -418,6 +418,7 @@ private fun QuickActionButton(
             Spacer(modifier = Modifier.width(10.dp))
             Text(
                 text = label,
+                color = NasMusicColors.TextPrimary,
                 fontSize = 20.sp,
                 fontWeight = FontWeight.Medium
             )

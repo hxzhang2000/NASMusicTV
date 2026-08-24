@@ -1583,7 +1583,7 @@ private fun SearchBar(
                 containerColor = NasMusicColors.Surface.copy(alpha = 0.6f),
                 contentColor = NasMusicColors.TextPrimary,
                 focusedContainerColor = NasMusicColors.Surface.copy(alpha = 0.8f),
-                focusedContentColor = Color.Black
+                focusedContentColor = NasMusicColors.TextPrimary
             ),
             scale = ClickableSurfaceDefaults.scale(focusedScale = 1f, pressedScale = 0.97f)
         ) {
@@ -1633,7 +1633,7 @@ fun ButtonChip(text: String, onClick: () -> Unit, modifier: Modifier = Modifier)
         containerColor = NasMusicColors.Primary,
         focusedContainerColor = NasMusicColors.Primary.copy(alpha = 0.85f),
         contentColor = NasMusicColors.TextPrimary,
-        focusedContentColor = Color.Black,
+        focusedContentColor = NasMusicColors.TextPrimary,
         pressedScale = 0.95f
     ) {
         Text(text = text, fontSize = 19.sp, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
