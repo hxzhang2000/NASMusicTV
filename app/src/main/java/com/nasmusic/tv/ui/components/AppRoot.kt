@@ -183,11 +183,14 @@ fun AppRoot(
                     Text(text = "NAS Music", color = NasMusicColors.TextPrimary, fontSize = 23.sp)
                 }
 
-                // 导航项（可横向滑动——手机窄屏显示全部 tab）
+                // 导航项（外层固定宽度右对齐；内层可横向滑动——手机窄屏滚动浏览全部 tab）
                 Row(
-                    modifier = Modifier
-                        .weight(1f)
-                        .horizontalScroll(rememberScrollState()),
+                    modifier = Modifier.weight(1f),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.End
+                ) {
+                Row(
+                    modifier = Modifier.horizontalScroll(rememberScrollState()),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                 NavItem(
@@ -230,6 +233,7 @@ fun AppRoot(
                     selected = currentScreen == Screen.Settings,
                     onClick = { viewModel.navigateTo(Screen.Settings) }
                 )
+                }
             }
         }
         }

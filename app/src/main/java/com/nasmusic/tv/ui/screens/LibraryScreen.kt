@@ -254,6 +254,7 @@ fun LibraryScreen(
                         ) {
                             Text(
                                 text = stringResource(tab.titleRes),
+                                color = if (selected) NasMusicColors.Primary else NasMusicColors.TextPrimary,
                                 fontSize = 19.sp,
                                 modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)
                             )
