@@ -52,9 +52,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.tv.material3.ClickableSurfaceDefaults
 import androidx.tv.material3.ExperimentalTvMaterial3Api
-import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 import coil.compose.AsyncImage
 import com.nasmusic.tv.R
@@ -65,6 +63,7 @@ import com.nasmusic.tv.data.model.SearchHistoryItem
 import com.nasmusic.tv.data.model.Song
 import com.nasmusic.tv.ui.LocalListBackHandler
 import com.nasmusic.tv.ui.components.FocusableSurface
+import com.nasmusic.tv.ui.components.SearchField
 import com.nasmusic.tv.ui.theme.NasMusicColors
 import com.nasmusic.tv.data.model.SongsPagingState
 import com.nasmusic.tv.util.PinyinUtils
@@ -267,8 +266,9 @@ fun LibraryScreen(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.End
                 ) {
-                    SearchBar(
+                    SearchField(
                         query = filterQuery,
+                        placeholder = "搜索歌曲、专辑、歌手...",
                         onOpenSearch = { showSearchDialog = true },
                         onClear = { filterQuery = "" },
                         modifier = Modifier.width(240.dp)
@@ -1542,85 +1542,6 @@ fun FavoriteButton(
         )
     }
 }
-
-@OptIn(ExperimentalTvMaterial3Api::class)
-@Composable
-private fun SearchBar(
-    query: String,
-    onOpenSearch: () -> Unit,
-    onClear: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    var isFocused by remember { mutableStateOf(false) }
-    val animScale = remember { Animatable(1f) }
-    val scope = rememberCoroutineScope()
-
-    Row(
-        modifier = modifier,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        // 搜索输入框（点击弹出虚拟键盘）
-        Surface(
-            onClick = onOpenSearch,
-            modifier = Modifier
-                .weight(1f)
-                .widthIn(max = 340.dp)
-                .height(38.dp)
-                .scale(animScale.value)
-                .border(
-                    width = if (isFocused) 2.dp else 1.dp,
-                    color = if (isFocused) NasMusicColors.FocusRing else NasMusicColors.SurfaceVariant,
-                    shape = RoundedCornerShape(10.dp)
-                )
-                .onFocusChanged {
-                    isFocused = it.isFocused
-                    scope.launch { animScale.animateTo(if (isFocused) 1.04f else 1f, tween(200)) }
-                },
-            shape = ClickableSurfaceDefaults.shape(
-                shape = RoundedCornerShape(10.dp),
-                focusedShape = RoundedCornerShape(10.dp)
-            ),
-            colors = ClickableSurfaceDefaults.colors(
-                containerColor = NasMusicColors.Surface.copy(alpha = 0.6f),
-                contentColor = NasMusicColors.TextPrimary,
-                focusedContainerColor = NasMusicColors.Surface.copy(alpha = 0.8f),
-                focusedContentColor = NasMusicColors.TextPrimary
-            ),
-            scale = ClickableSurfaceDefaults.scale(focusedScale = 1f, pressedScale = 0.97f)
-        ) {
-            Row(
-                modifier = Modifier.fillMaxSize().padding(horizontal = 12.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "🔍",
-                    fontSize = 17.sp,
-                    modifier = Modifier.padding(end = 8.dp)
-                )
-                Text(
-                    text = if (query.isEmpty()) "搜索歌曲、专辑、歌手..." else query,
-                    color = if (query.isEmpty()) NasMusicColors.TextSecondary else NasMusicColors.TextPrimary,
-                    fontSize = 18.sp,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-        }
-
-        Spacer(modifier = Modifier.width(10.dp))
-
-        // 搜索按钮 / 清除按钮
-        ButtonChip(
-            text = if (query.isNotEmpty()) stringResource(R.string.common_clear) else stringResource(R.string.common_search),
-            onClick = {
-                if (query.isNotEmpty()) onClear()
-                else onOpenSearch()
-            },
-            modifier = Modifier.widthIn(min = 56.dp)
-        )
-    }
-}
-
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable

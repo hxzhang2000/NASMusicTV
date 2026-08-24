@@ -19,7 +19,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.MusicNote
-import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -32,7 +31,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.tv.material3.ExperimentalTvMaterial3Api
@@ -43,6 +41,7 @@ import com.nasmusic.tv.backend.network.baidu.BaiduPanApi
 import com.nasmusic.tv.data.model.BaiduFile
 import com.nasmusic.tv.data.model.Song
 import com.nasmusic.tv.ui.components.FocusableSurface
+import com.nasmusic.tv.ui.components.SearchField
 import com.nasmusic.tv.ui.screens.PlaylistPickerDialog
 import com.nasmusic.tv.ui.screens.SongRow
 import com.nasmusic.tv.ui.screens.TextInputDialog
@@ -102,38 +101,14 @@ fun NetdiskScreen(
             Text("网盘音乐", color = NasMusicColors.TextPrimary, fontSize = 28.sp)
             Spacer(modifier = Modifier.width(32.dp))
 
-            // 搜索框（TV 遥控器点击弹出输入对话框）
-            FocusableSurface(
-                onClick = { showSearchDialog = true },
-                modifier = Modifier.width(420.dp).height(48.dp),
-                shape = RoundedCornerShape(24.dp),
-                containerColor = NasMusicColors.Surface,
-                focusedContainerColor = NasMusicColors.Primary.copy(alpha = 0.25f)
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp)
-                ) {
-                    Icon(Icons.Default.Search, contentDescription = null, tint = NasMusicColors.TextSecondary, modifier = Modifier.size(20.dp))
-                    Spacer(modifier = Modifier.width(10.dp))
-                    Text(
-                        text = if (searchKeyword.isBlank()) "搜索网盘音乐..." else searchKeyword,
-                        color = if (searchKeyword.isBlank()) NasMusicColors.TextSecondary else NasMusicColors.TextPrimary,
-                        fontSize = 18.sp,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f)
-                    )
-                    if (searchKeyword.isNotBlank()) {
-                        FocusableSurface(
-                            onClick = { viewModel.clearNetdiskSearch() },
-                            shape = RoundedCornerShape(8.dp)
-                        ) {
-                            Text("✕", color = NasMusicColors.TextSecondary, fontSize = 17.sp, modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp))
-                        }
-                    }
-                }
-            }
+            // 搜索框（统一样式：点击弹出输入对话框，无独立搜索按钮）
+            SearchField(
+                query = searchKeyword,
+                placeholder = "搜索网盘音乐...",
+                onOpenSearch = { showSearchDialog = true },
+                onClear = { viewModel.clearNetdiskSearch() },
+                modifier = Modifier.width(420.dp)
+            )
         }
 
         when {
