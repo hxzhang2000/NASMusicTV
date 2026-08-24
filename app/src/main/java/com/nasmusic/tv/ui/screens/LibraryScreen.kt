@@ -64,6 +64,7 @@ import com.nasmusic.tv.data.model.Song
 import com.nasmusic.tv.ui.LocalListBackHandler
 import com.nasmusic.tv.ui.components.FocusableSurface
 import com.nasmusic.tv.ui.components.SearchField
+import com.nasmusic.tv.ui.components.songGridColumns
 import com.nasmusic.tv.ui.theme.NasMusicColors
 import com.nasmusic.tv.data.model.SongsPagingState
 import com.nasmusic.tv.util.PinyinUtils
@@ -606,7 +607,7 @@ private fun SongsTab(
         } else {
             LazyVerticalGrid(
                 state = listState,
-                columns = GridCells.Fixed(adaptiveColumns(2, 1, 2)),
+                columns = songGridColumns(),
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalArrangement = Arrangement.spacedBy(6.dp)
@@ -627,7 +628,7 @@ private fun SongsTab(
                 }
                 // 底部加载指示器
                 if (songsPaging.isLoading) {
-                    item(span = { GridItemSpan(2) }) {
+                    item(span = { GridItemSpan(maxLineSpan) }) {
                         Box(
                             modifier = Modifier.fillMaxWidth().padding(16.dp),
                             contentAlignment = Alignment.Center
@@ -1130,7 +1131,7 @@ private fun RecentTab(
         } else {
             LazyVerticalGrid(
                 state = listState,
-                columns = GridCells.Fixed(adaptiveColumns(2, 1, 2)),
+                columns = songGridColumns(),
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalArrangement = Arrangement.spacedBy(6.dp)

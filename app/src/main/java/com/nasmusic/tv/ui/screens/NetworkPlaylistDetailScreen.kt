@@ -33,6 +33,7 @@ import com.nasmusic.tv.data.model.Song
 import com.nasmusic.tv.ui.LocalListBackHandler
 import com.nasmusic.tv.ui.components.BackButton
 import com.nasmusic.tv.ui.components.FocusableSurface
+import com.nasmusic.tv.ui.components.songGridColumns
 import com.nasmusic.tv.ui.theme.NasMusicColors
 import kotlinx.coroutines.launch
 
@@ -149,7 +150,7 @@ fun NetworkPlaylistDetailScreen(
         } else {
             LazyVerticalGrid(
                 state = listState,
-                columns = GridCells.Fixed(2),
+                columns = songGridColumns(),
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalArrangement = Arrangement.spacedBy(6.dp)

@@ -44,6 +44,7 @@ import com.nasmusic.tv.data.model.Song
 import com.nasmusic.tv.ui.LocalListBackHandler
 import com.nasmusic.tv.ui.components.CoverCarousel
 import com.nasmusic.tv.ui.components.FocusableSurface
+import com.nasmusic.tv.ui.components.songGridColumns
 import com.nasmusic.tv.ui.screens.SongRow
 import com.nasmusic.tv.ui.theme.NasMusicColors
 import kotlinx.coroutines.launch
@@ -89,7 +90,7 @@ fun DiscoverContent(
     }
 
     LazyVerticalGrid(
-        columns = GridCells.Fixed(2),
+        columns = songGridColumns(),
         state = listState,
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -97,7 +98,7 @@ fun DiscoverContent(
     ) {
         // 1. 推荐歌单
         if (networkPlaylists.isNotEmpty()) {
-            item(key = "trending_header", span = { GridItemSpan(2) }) {
+            item(key = "trending_header", span = { GridItemSpan(maxLineSpan) }) {
                 Text(
                     text = "推荐歌单",
                     color = NasMusicColors.TextPrimary,
@@ -105,7 +106,7 @@ fun DiscoverContent(
                     modifier = Modifier.padding(bottom = 4.dp)
                 )
             }
-            item(key = "playlist_cards", span = { GridItemSpan(2) }) {
+            item(key = "playlist_cards", span = { GridItemSpan(maxLineSpan) }) {
                 LazyRow(
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
@@ -124,7 +125,7 @@ fun DiscoverContent(
         }
 
         // 3. 快捷功能入口
-        item(key = "feature_shortcuts", span = { GridItemSpan(2) }) {
+        item(key = "feature_shortcuts", span = { GridItemSpan(maxLineSpan) }) {
             FeatureShortcuts(
                 favoriteCount = networkFavoriteSongs.size,
                 onNavigateToFavorites = { onNavigateToScreen("favorites") },
@@ -137,7 +138,7 @@ fun DiscoverContent(
         val hasCurrentSong = currentNetworkSong != null
         val hasRecentSongs = recentNetworkSongs.isNotEmpty()
         if (hasCurrentSong || hasRecentSongs) {
-            item(key = "continue_listening_header", span = { GridItemSpan(2) }) {
+            item(key = "continue_listening_header", span = { GridItemSpan(maxLineSpan) }) {
                 Text(
                     text = "继续听",
                     color = NasMusicColors.TextPrimary,
@@ -147,7 +148,7 @@ fun DiscoverContent(
             }
             // 当前正在播放的网络歌曲
             if (hasCurrentSong) {
-                item(key = "now_playing_section", span = { GridItemSpan(2) }) {
+                item(key = "now_playing_section", span = { GridItemSpan(maxLineSpan) }) {
                     Text(
                         text = "正在播放",
                         color = NasMusicColors.TextSecondary,
@@ -169,7 +170,7 @@ fun DiscoverContent(
             // 队列中的其它网络歌曲
             if (hasRecentSongs) {
                 if (hasCurrentSong) {
-                    item(key = "up_next_header", span = { GridItemSpan(2) }) {
+                    item(key = "up_next_header", span = { GridItemSpan(maxLineSpan) }) {
                         Text(
                             text = "即将播放",
                             color = NasMusicColors.TextSecondary,
@@ -197,7 +198,7 @@ fun DiscoverContent(
 
         // 5. 我的收藏（最多显示最近 10 条）
         if (networkFavoriteSongs.isNotEmpty()) {
-            item(key = "favorites_header", span = { GridItemSpan(2) }) {
+            item(key = "favorites_header", span = { GridItemSpan(maxLineSpan) }) {
                 Text(
                     text = stringResource(R.string.network_my_favorites),
                     color = NasMusicColors.TextPrimary,
@@ -223,7 +224,7 @@ fun DiscoverContent(
         }
 
         // 底部间距
-        item(key = "bottom_spacer", span = { GridItemSpan(2) }) {
+        item(key = "bottom_spacer", span = { GridItemSpan(maxLineSpan) }) {
             Spacer(modifier = Modifier.height(16.dp))
         }
     }

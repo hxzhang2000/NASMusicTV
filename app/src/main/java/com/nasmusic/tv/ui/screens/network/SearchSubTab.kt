@@ -36,6 +36,7 @@ import com.nasmusic.tv.data.model.Song
 import com.nasmusic.tv.ui.LocalListBackHandler
 import com.nasmusic.tv.ui.components.FocusableSurface
 import com.nasmusic.tv.ui.components.SearchField
+import com.nasmusic.tv.ui.components.songGridColumns
 import com.nasmusic.tv.ui.screens.SongRow
 import com.nasmusic.tv.ui.screens.TextInputDialog
 import com.nasmusic.tv.ui.theme.NasMusicColors
@@ -132,7 +133,7 @@ fun SearchSubTab(
             searchKeyword.isNotBlank() -> {
                 // 搜索结果
                 LazyVerticalGrid(
-                    columns = GridCells.Fixed(2),
+                    columns = songGridColumns(),
                     state = listState,
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -140,7 +141,7 @@ fun SearchSubTab(
                 ) {
                     // 操作栏：播放全部 / 全部加入列表 / 换一批（去重由 ViewModel 处理）
                     if (searchResults.isNotEmpty()) {
-                        item(key = "search_action_bar", span = { GridItemSpan(2) }) {
+                        item(key = "search_action_bar", span = { GridItemSpan(maxLineSpan) }) {
                             Row(
                                 modifier = Modifier.fillMaxWidth().padding(top = 4.dp, bottom = 2.dp),
                                 verticalAlignment = Alignment.CenterVertically

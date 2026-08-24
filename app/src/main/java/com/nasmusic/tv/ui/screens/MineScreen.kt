@@ -47,6 +47,7 @@ import com.nasmusic.tv.data.model.LocalPlaylist
 import com.nasmusic.tv.data.model.Song
 import com.nasmusic.tv.data.model.UiState
 import com.nasmusic.tv.ui.components.FocusableSurface
+import com.nasmusic.tv.ui.theme.LocalPhoneCompact
 import com.nasmusic.tv.ui.theme.NasMusicColors
 import com.nasmusic.tv.util.TimeUtils
 import kotlinx.coroutines.launch
@@ -104,125 +105,181 @@ fun MineScreen(
     // 重命名目标歌单
     var renameTarget by remember { mutableStateOf<LocalPlaylist?>(null) }
 
+    // 外层容器：手机上下排布（单列）、TV 左右排布（双列）
     Column(modifier = Modifier.fillMaxSize().padding(32.dp)) {
-        Row(modifier = Modifier.weight(1f).fillMaxWidth()) {
-        // ===== 左栏：收藏 =====
-        Column(modifier = Modifier.weight(1f).fillMaxHeight()) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = stringResource(R.string.mine_favorites),
-                    color = NasMusicColors.TextPrimary,
-                    fontSize = 33.sp,
-                    modifier = Modifier.padding(end = 24.dp)
-                )
-                Spacer(modifier = Modifier.weight(1f))
-                if (mergedFavorites.isNotEmpty()) {
-                    ButtonChip(
-                        text = stringResource(R.string.common_play_all),
-                        onClick = { onPlayAll(mergedFavorites) }
-                    )
-                }
-            }
-            Spacer(modifier = Modifier.height(16.dp))
-            if (mergedFavorites.isEmpty()) {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text(
-                        text = stringResource(R.string.mine_favorites_empty),
-                        color = NasMusicColors.TextSecondary,
-                        fontSize = 21.sp
-                    )
-                }
-            } else {
-                LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    verticalArrangement = Arrangement.spacedBy(6.dp)
+    val isPhone = LocalPhoneCompact.current
+    if (isPhone) {
+        // 手机端：整个页面单个 LazyColumn —— 收藏标题+歌曲 → 歌单标题+卡片+展开歌曲，统一滚动
+        LazyColumn(
+            modifier = Modifier.weight(1f).fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            // ===== 收藏区 =====
+            item(key = "fav_header") {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    items(mergedFavorites, key = { it.id }) { song ->
-                        SongRow(
-                            song = song,
-                            onClick = { onPlaySong(song) },
-                            isFavorited = true,
-                            onToggleFavorite = { onToggleFavorite(song) },
-                            isInQueue = song.id in queueSongIds,
-                            onToggleQueue = { onToggleQueue(song) },
-                            onAddToPlaylist = { pickerSong = song }
+                    Text(
+                        text = stringResource(R.string.mine_favorites),
+                        color = NasMusicColors.TextPrimary,
+                        fontSize = 33.sp,
+                        modifier = Modifier.padding(end = 24.dp)
+                    )
+                    Spacer(modifier = Modifier.weight(1f))
+                    if (mergedFavorites.isNotEmpty()) {
+                        ButtonChip(
+                            text = stringResource(R.string.common_play_all),
+                            onClick = { onPlayAll(mergedFavorites) }
                         )
                     }
                 }
             }
-        }
-
-        Spacer(modifier = Modifier.width(24.dp))
-
-        // ===== 右栏：本地歌单 =====
-        Column(modifier = Modifier.weight(1f).fillMaxHeight()) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = stringResource(R.string.mine_playlists),
-                    color = NasMusicColors.TextPrimary,
-                    fontSize = 33.sp,
-                    modifier = Modifier.padding(end = 24.dp)
-                )
-                Spacer(modifier = Modifier.weight(1f))
-                FocusableSurface(
-                    onClick = { showCreateDialog = true },
-                    shape = RoundedCornerShape(12.dp),
-                    focusedScale = 1.08f,
-                    animationDurationMs = 250,
-                    containerColor = NasMusicColors.Primary.copy(alpha = 0.8f),
-                    contentColor = NasMusicColors.TextPrimary,
-                    focusedContainerColor = NasMusicColors.Primary,
-                    focusedContentColor = NasMusicColors.TextPrimary,
-                    pressedScale = 0.96f
-                ) {
-                    Text(
-                        text = "+ " + stringResource(R.string.mine_create_playlist),
-                        fontSize = 19.sp,
-                        modifier = Modifier.padding(horizontal = 18.dp, vertical = 10.dp)
+            if (mergedFavorites.isEmpty()) {
+                item(key = "fav_empty") {
+                    Box(modifier = Modifier.fillMaxWidth().padding(vertical = 24.dp), contentAlignment = Alignment.Center) {
+                        Text(
+                            text = stringResource(R.string.mine_favorites_empty),
+                            color = NasMusicColors.TextSecondary,
+                            fontSize = 21.sp
+                        )
+                    }
+                }
+            } else {
+                items(mergedFavorites, key = { "fav_${it.id}" }) { song ->
+                    SongRow(
+                        song = song,
+                        onClick = { onPlaySong(song) },
+                        isFavorited = true,
+                        onToggleFavorite = { onToggleFavorite(song) },
+                        isInQueue = song.id in queueSongIds,
+                        onToggleQueue = { onToggleQueue(song) },
+                        onAddToPlaylist = { pickerSong = song }
                     )
                 }
             }
-            Spacer(modifier = Modifier.height(16.dp))
-            if (localPlaylists.isEmpty()) {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+
+            // 分隔
+            item(key = "section_divider") { Spacer(modifier = Modifier.height(24.dp)) }
+
+            // ===== 歌单区 =====
+            item(key = "pl_header") {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
                     Text(
-                        text = stringResource(R.string.mine_playlists_empty),
-                        color = NasMusicColors.TextSecondary,
-                        fontSize = 21.sp
+                        text = stringResource(R.string.mine_playlists),
+                        color = NasMusicColors.TextPrimary,
+                        fontSize = 33.sp,
+                        modifier = Modifier.padding(end = 24.dp)
                     )
+                    Spacer(modifier = Modifier.weight(1f))
+                    FocusableSurface(
+                        onClick = { showCreateDialog = true },
+                        shape = RoundedCornerShape(12.dp),
+                        focusedScale = 1.08f,
+                        animationDurationMs = 250,
+                        containerColor = NasMusicColors.Primary.copy(alpha = 0.8f),
+                        contentColor = NasMusicColors.TextPrimary,
+                        focusedContainerColor = NasMusicColors.Primary,
+                        focusedContentColor = NasMusicColors.TextPrimary,
+                        pressedScale = 0.96f
+                    ) {
+                        Text(
+                            text = "+ " + stringResource(R.string.mine_create_playlist),
+                            fontSize = 19.sp,
+                            modifier = Modifier.padding(horizontal = 18.dp, vertical = 10.dp)
+                        )
+                    }
+                }
+            }
+            if (localPlaylists.isEmpty()) {
+                item(key = "pl_empty") {
+                    Box(modifier = Modifier.fillMaxWidth().padding(vertical = 24.dp), contentAlignment = Alignment.Center) {
+                        Text(
+                            text = stringResource(R.string.mine_playlists_empty),
+                            color = NasMusicColors.TextSecondary,
+                            fontSize = 21.sp
+                        )
+                    }
                 }
             } else {
-                LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    verticalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    items(localPlaylists, key = { it.id }) { playlist ->
+                localPlaylists.forEach { playlist ->
+                    item(key = "pl_card_${playlist.id}") {
                         PlaylistCard(
                             playlist = playlist,
                             expanded = expandedPlaylistId == playlist.id,
-                            queueSongIds = queueSongIds,
                             onToggleExpand = {
                                 expandedPlaylistId = if (expandedPlaylistId == playlist.id) null else playlist.id
                             },
                             onPlay = { onPlayPlaylist(playlist) },
                             onRename = { renameTarget = playlist },
-                            onDelete = { onDeletePlaylist(playlist.id) },
-                            onPlaySong = onPlaySong,
-                            onToggleQueue = onToggleQueue,
-                            onRemoveSong = { song -> onRemoveSongFromPlaylist(playlist.id, song.id) },
-                            onAddSongToPlaylist = { song -> pickerSong = song }
+                            onDelete = { onDeletePlaylist(playlist.id) }
                         )
+                    }
+                    // 展开的歌单：歌曲作为独立 item 渲染（随页面统一滚动）
+                    if (expandedPlaylistId == playlist.id) {
+                        if (playlist.songs.isEmpty()) {
+                            item(key = "pl_songs_empty_${playlist.id}") {
+                                Box(
+                                    modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = stringResource(R.string.mine_playlists_empty),
+                                        color = NasMusicColors.TextSecondary,
+                                        fontSize = 18.sp
+                                    )
+                                }
+                            }
+                        } else {
+                            items(playlist.songs, key = { "pl_song_${playlist.id}_${it.id}" }) { song ->
+                                PlaylistSongRow(
+                                    song = song,
+                                    isInQueue = song.id in queueSongIds,
+                                    onClick = { onPlaySong(song) },
+                                    onToggleQueue = { onToggleQueue(song) },
+                                    onRemove = { onRemoveSongFromPlaylist(playlist.id, song.id) },
+                                    onAddToPlaylist = { pickerSong = song }
+                                )
+                            }
+                        }
                     }
                 }
             }
         }
-        }   // 内部 Row（左收藏 + 右歌单）闭合
+    } else {
+        Row(modifier = Modifier.weight(1f).fillMaxWidth()) {
+            FavoritesPane(
+                songs = mergedFavorites,
+                onPlayAll = onPlayAll,
+                onPlaySong = onPlaySong,
+                onToggleFavorite = onToggleFavorite,
+                onToggleQueue = onToggleQueue,
+                queueSongIds = queueSongIds,
+                onAddToPlaylist = { pickerSong = it },
+                modifier = Modifier.weight(1f).fillMaxHeight()
+            )
+            Spacer(modifier = Modifier.width(24.dp))
+            PlaylistsPane(
+                playlists = localPlaylists,
+                expandedPlaylistId = expandedPlaylistId,
+                queueSongIds = queueSongIds,
+                onToggleExpand = { id ->
+                    expandedPlaylistId = if (expandedPlaylistId == id) null else id
+                },
+                onPlayPlaylist = onPlayPlaylist,
+                onRename = { renameTarget = it },
+                onDelete = { onDeletePlaylist(it) },
+                onPlaySong = onPlaySong,
+                onToggleQueue = onToggleQueue,
+                onRemoveSong = { playlistId, song -> onRemoveSongFromPlaylist(playlistId, song.id) },
+                onAddSongToPlaylist = { pickerSong = it },
+                onCreateClick = { showCreateDialog = true },
+                modifier = Modifier.weight(1f).fillMaxHeight()
+            )
+        }
     }
 
     // ===== 新建歌单输入弹窗 =====
@@ -273,6 +330,180 @@ fun MineScreen(
             onDismiss = { pickerSong = null }
         )
     }
+    }   // 外层 Column（手机上下 / TV 左右）
+}
+
+/**
+ * 收藏 Pane：标题行（含全部播放）+ 收藏歌曲列表（单列 SongRow）
+ */
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+private fun FavoritesPane(
+    songs: List<Song>,
+    queueSongIds: Set<String>,
+    onPlayAll: (List<Song>) -> Unit,
+    onPlaySong: (Song) -> Unit,
+    onToggleFavorite: (Song) -> Unit,
+    onToggleQueue: (Song) -> Unit,
+    onAddToPlaylist: (Song) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Column(modifier = modifier) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = stringResource(R.string.mine_favorites),
+                color = NasMusicColors.TextPrimary,
+                fontSize = 33.sp,
+                modifier = Modifier.padding(end = 24.dp)
+            )
+            Spacer(modifier = Modifier.weight(1f))
+            if (songs.isNotEmpty()) {
+                ButtonChip(
+                    text = stringResource(R.string.common_play_all),
+                    onClick = { onPlayAll(songs) }
+                )
+            }
+        }
+        Spacer(modifier = Modifier.height(16.dp))
+        if (songs.isEmpty()) {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Text(
+                    text = stringResource(R.string.mine_favorites_empty),
+                    color = NasMusicColors.TextSecondary,
+                    fontSize = 21.sp
+                )
+            }
+        } else {
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                items(songs, key = { it.id }) { song ->
+                    SongRow(
+                        song = song,
+                        onClick = { onPlaySong(song) },
+                        isFavorited = true,
+                        onToggleFavorite = { onToggleFavorite(song) },
+                        isInQueue = song.id in queueSongIds,
+                        onToggleQueue = { onToggleQueue(song) },
+                        onAddToPlaylist = { onAddToPlaylist(song) }
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * 本地歌单 Pane：标题行（含新建歌单）+ 歌单卡片列表
+ */
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+private fun PlaylistsPane(
+    playlists: List<LocalPlaylist>,
+    expandedPlaylistId: String?,
+    queueSongIds: Set<String>,
+    onToggleExpand: (String) -> Unit,
+    onPlayPlaylist: (LocalPlaylist) -> Unit,
+    onRename: (LocalPlaylist) -> Unit,
+    onDelete: (String) -> Unit,
+    onPlaySong: (Song) -> Unit,
+    onToggleQueue: (Song) -> Unit,
+    onRemoveSong: (String, Song) -> Unit,
+    onAddSongToPlaylist: (Song) -> Unit,
+    onCreateClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Column(modifier = modifier) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = stringResource(R.string.mine_playlists),
+                color = NasMusicColors.TextPrimary,
+                fontSize = 33.sp,
+                modifier = Modifier.padding(end = 24.dp)
+            )
+            Spacer(modifier = Modifier.weight(1f))
+            FocusableSurface(
+                onClick = onCreateClick,
+                shape = RoundedCornerShape(12.dp),
+                focusedScale = 1.08f,
+                animationDurationMs = 250,
+                containerColor = NasMusicColors.Primary.copy(alpha = 0.8f),
+                contentColor = NasMusicColors.TextPrimary,
+                focusedContainerColor = NasMusicColors.Primary,
+                focusedContentColor = NasMusicColors.TextPrimary,
+                pressedScale = 0.96f
+            ) {
+                Text(
+                    text = "+ " + stringResource(R.string.mine_create_playlist),
+                    fontSize = 19.sp,
+                    modifier = Modifier.padding(horizontal = 18.dp, vertical = 10.dp)
+                )
+            }
+        }
+        Spacer(modifier = Modifier.height(16.dp))
+        if (playlists.isEmpty()) {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Text(
+                    text = stringResource(R.string.mine_playlists_empty),
+                    color = NasMusicColors.TextSecondary,
+                    fontSize = 21.sp
+                )
+            }
+        } else {
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                playlists.forEach { playlist ->
+                    item(key = "playlist_${playlist.id}") {
+                        PlaylistCard(
+                            playlist = playlist,
+                            expanded = expandedPlaylistId == playlist.id,
+                            onToggleExpand = { onToggleExpand(playlist.id) },
+                            onPlay = { onPlayPlaylist(playlist) },
+                            onRename = { onRename(playlist) },
+                            onDelete = { onDelete(playlist.id) }
+                        )
+                    }
+                    // 展开的歌单：歌曲作为独立 item 渲染（避免塞进单个 item 导致超高无法滚动）
+                    if (expandedPlaylistId == playlist.id) {
+                        if (playlist.songs.isEmpty()) {
+                            item(key = "playlist_empty_${playlist.id}") {
+                                Box(
+                                    modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = stringResource(R.string.mine_playlists_empty),
+                                        color = NasMusicColors.TextSecondary,
+                                        fontSize = 18.sp
+                                    )
+                                }
+                            }
+                        } else {
+                            items(playlist.songs, key = { "playlist_song_${playlist.id}_${it.id}" }) { song ->
+                                PlaylistSongRow(
+                                    song = song,
+                                    isInQueue = song.id in queueSongIds,
+                                    onClick = { onPlaySong(song) },
+                                    onToggleQueue = { onToggleQueue(song) },
+                                    onRemove = { onRemoveSong(playlist.id, song) },
+                                    onAddToPlaylist = { onAddSongToPlaylist(song) }
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
 }
 
 /**
@@ -280,22 +511,17 @@ fun MineScreen(
  *
  * 布局与 SongRow 一致：外层 Box 用 focusGroup()，左侧可聚焦区域（点击展开/收起），
  * 右侧为独立可聚焦操作按钮（播放 / 重命名 / 删除）。
- * 展开后展示歌单内的歌曲列表（可播放 / 加入队列 / 移除 / 加入其他歌单）。
+ * 展开后的歌曲列表由外层 LazyColumn 作为独立 item 渲染（见 [PlaylistsPane]）。
  */
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 private fun PlaylistCard(
     playlist: LocalPlaylist,
     expanded: Boolean,
-    queueSongIds: Set<String>,
     onToggleExpand: () -> Unit,
     onPlay: () -> Unit,
     onRename: () -> Unit,
-    onDelete: () -> Unit,
-    onPlaySong: (Song) -> Unit,
-    onToggleQueue: (Song) -> Unit,
-    onRemoveSong: (Song) -> Unit,
-    onAddSongToPlaylist: (Song) -> Unit
+    onDelete: () -> Unit
 ) {
     var isRowFocused by remember { mutableStateOf(false) }
     val animScale = remember { Animatable(1f) }
@@ -380,39 +606,9 @@ private fun PlaylistCard(
                 )
             }
         }
-
-        // 展开的歌曲列表
+        // 展开提示（歌曲列表由外层 LazyColumn 作为独立 item 渲染）
         if (expanded) {
             Spacer(modifier = Modifier.height(4.dp))
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(NasMusicColors.Surface.copy(alpha = 0.35f))
-                    .padding(horizontal = 8.dp, vertical = 4.dp),
-                verticalArrangement = Arrangement.spacedBy(2.dp)
-            ) {
-                if (playlist.songs.isEmpty()) {
-                    Box(modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp), contentAlignment = Alignment.Center) {
-                        Text(
-                            text = stringResource(R.string.mine_playlists_empty),
-                            color = NasMusicColors.TextSecondary,
-                            fontSize = 18.sp
-                        )
-                    }
-                } else {
-                    playlist.songs.forEach { song ->
-                        PlaylistSongRow(
-                            song = song,
-                            isInQueue = song.id in queueSongIds,
-                            onClick = { onPlaySong(song) },
-                            onToggleQueue = { onToggleQueue(song) },
-                            onRemove = { onRemoveSong(song) },
-                            onAddToPlaylist = { onAddSongToPlaylist(song) }
-                        )
-                    }
-                }
-            }
         }
     }
 }

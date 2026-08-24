@@ -47,6 +47,7 @@ import com.nasmusic.tv.data.model.Song
 import com.nasmusic.tv.data.model.UiState
 import com.nasmusic.tv.ui.LocalListBackHandler
 import com.nasmusic.tv.ui.components.FocusableSurface
+import com.nasmusic.tv.ui.components.songGridColumns
 import com.nasmusic.tv.ui.screens.SongRow
 import com.nasmusic.tv.ui.theme.NasMusicColors
 import kotlinx.coroutines.launch
@@ -107,7 +108,7 @@ fun BrowseSubTab(
     }
 
     LazyVerticalGrid(
-        columns = GridCells.Fixed(2),
+        columns = songGridColumns(),
         state = listState,
         modifier = modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -115,7 +116,7 @@ fun BrowseSubTab(
     ) {
         // 各维度筛选行
         dimensions.forEachIndexed { dimIdx, dimension ->
-            item(key = "dim_${dimension.name}", span = { GridItemSpan(2) }) {
+            item(key = "dim_${dimension.name}", span = { GridItemSpan(maxLineSpan) }) {
                 DimensionRow(
                     dimension = dimension,
                     selectedIndex = selections.getOrNull(dimIdx) ?: 0,
@@ -128,7 +129,7 @@ fun BrowseSubTab(
         }
 
         // 操作栏：播放全部 + 换一批
-        item(key = "action_bar", span = { GridItemSpan(2) }) {
+        item(key = "action_bar", span = { GridItemSpan(maxLineSpan) }) {
             Row(
                 modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
                 verticalAlignment = Alignment.CenterVertically
@@ -184,7 +185,7 @@ fun BrowseSubTab(
         }
 
         // 内容区域
-        item(key = "content", span = { GridItemSpan(2) }) {
+        item(key = "content", span = { GridItemSpan(maxLineSpan) }) {
             when {
                 isSearching -> {
                     Box(
@@ -258,7 +259,7 @@ fun BrowseSubTab(
         }
 
         // 底部间距
-        item(key = "bottom_spacer", span = { GridItemSpan(2) }) {
+        item(key = "bottom_spacer", span = { GridItemSpan(maxLineSpan) }) {
             Spacer(modifier = Modifier.height(16.dp))
         }
     }

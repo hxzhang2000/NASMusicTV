@@ -46,6 +46,7 @@ import com.nasmusic.tv.data.model.WeatherMood
 import com.nasmusic.tv.data.model.WeatherRadioQueue
 import com.nasmusic.tv.ui.LocalListBackHandler
 import com.nasmusic.tv.ui.components.FocusableSurface
+import com.nasmusic.tv.ui.components.songGridColumns
 import com.nasmusic.tv.ui.screens.SongRow
 import com.nasmusic.tv.ui.theme.NasMusicColors
 import kotlinx.coroutines.launch
@@ -107,14 +108,14 @@ fun WeatherSubTab(
     }
 
     LazyVerticalGrid(
-        columns = GridCells.Fixed(2),
+        columns = songGridColumns(),
         state = listState,
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
         // 1. 天气信息展示区
-        item(key = "weather_info", span = { GridItemSpan(2) }) {
+        item(key = "weather_info", span = { GridItemSpan(maxLineSpan) }) {
             WeatherInfoCard(
                 weatherData = weatherData,
                 currentMood = currentMood,
@@ -126,13 +127,13 @@ fun WeatherSubTab(
 
         // 2. 天气预报（仅当有预报数据时显示）
         if (forecast.isNotEmpty()) {
-            item(key = "forecast", span = { GridItemSpan(2) }) {
+            item(key = "forecast", span = { GridItemSpan(maxLineSpan) }) {
                 ForecastRow(forecast = forecast)
             }
         }
 
         // 3. Mood 快捷切换行
-        item(key = "mood_switcher", span = { GridItemSpan(2) }) {
+        item(key = "mood_switcher", span = { GridItemSpan(maxLineSpan) }) {
             MoodSwitcherRow(
                 moods = WeatherMood.quickSwitches(),
                 selectedMood = currentMood,
@@ -141,7 +142,7 @@ fun WeatherSubTab(
         }
 
         // 4. 操作栏：全部播放 + 刷新
-        item(key = "action_bar", span = { GridItemSpan(2) }) {
+        item(key = "action_bar", span = { GridItemSpan(maxLineSpan) }) {
             ActionBar(
                 queue = weatherRadioQueue,
                 isLoading = isLoading,
@@ -166,7 +167,7 @@ fun WeatherSubTab(
                 )
             }
         } else if (!isLoading) {
-            item(key = "empty_hint", span = { GridItemSpan(2) }) {
+            item(key = "empty_hint", span = { GridItemSpan(maxLineSpan) }) {
                 Box(
                     modifier = Modifier.fillMaxWidth().padding(top = 32.dp),
                     contentAlignment = Alignment.Center
@@ -182,7 +183,7 @@ fun WeatherSubTab(
         }
 
         // 底部间距
-        item(key = "bottom_spacer", span = { GridItemSpan(2) }) {
+        item(key = "bottom_spacer", span = { GridItemSpan(maxLineSpan) }) {
             Spacer(modifier = Modifier.height(16.dp))
         }
     }

@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Search
@@ -20,6 +21,7 @@ import androidx.compose.ui.unit.sp
 import androidx.tv.material3.Icon
 import androidx.tv.material3.Text
 import com.nasmusic.tv.R
+import com.nasmusic.tv.ui.theme.LocalPhoneCompact
 import com.nasmusic.tv.ui.theme.NasMusicColors
 
 /**
@@ -99,3 +101,15 @@ fun SearchField(
         }
     }
 }
+
+/**
+ * 歌曲列表列数：TV 两列、手机单列（一行一个歌曲条目）
+ *
+ * 基于 [LocalPhoneCompact]（MainActivity 按设备类型提供）判定：
+ * - TV（leanback）：2 列，维持现有排布
+ * - 手机：1 列，SongRow 占满整行
+ */
+@Composable
+fun songGridColumns(): GridCells =
+    if (LocalPhoneCompact.current) GridCells.Fixed(1)
+    else GridCells.Fixed(2)

@@ -42,6 +42,7 @@ import com.nasmusic.tv.data.model.BaiduFile
 import com.nasmusic.tv.data.model.Song
 import com.nasmusic.tv.ui.components.FocusableSurface
 import com.nasmusic.tv.ui.components.SearchField
+import com.nasmusic.tv.ui.components.songGridColumns
 import com.nasmusic.tv.ui.screens.PlaylistPickerDialog
 import com.nasmusic.tv.ui.screens.SongRow
 import com.nasmusic.tv.ui.screens.TextInputDialog
@@ -129,13 +130,13 @@ fun NetdiskScreen(
                     }
                 } else {
                     LazyVerticalGrid(
-                        columns = GridCells.Fixed(2),
+                        columns = songGridColumns(),
                         modifier = Modifier.fillMaxSize(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
                         // 操作栏：播放全部
-                        item(key = "netdisk_search_action", span = { GridItemSpan(2) }) {
+                        item(key = "netdisk_search_action", span = { GridItemSpan(maxLineSpan) }) {
                             Row(
                                 modifier = Modifier.fillMaxWidth().padding(top = 2.dp, bottom = 6.dp),
                                 verticalAlignment = Alignment.CenterVertically
@@ -223,7 +224,7 @@ fun NetdiskScreen(
                     }
                 } else {
                     LazyVerticalGrid(
-                        columns = GridCells.Fixed(2),
+                        columns = songGridColumns(),
                         modifier = Modifier.fillMaxSize(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalArrangement = Arrangement.spacedBy(6.dp)
@@ -231,7 +232,7 @@ fun NetdiskScreen(
                         itemsIndexed(
                             items = dirFiles,
                             key = { _, f -> "f_${f.fsId}" },
-                            span = { _, f -> if (f.isDir) GridItemSpan(2) else GridItemSpan(1) }
+                            span = { _, f -> if (f.isDir) GridItemSpan(maxLineSpan) else GridItemSpan(1) }
                         ) { index, file ->
                             if (file.isDir) {
                                 FileRow(
