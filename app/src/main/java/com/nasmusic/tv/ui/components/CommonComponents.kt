@@ -48,8 +48,8 @@ fun BackButton(
             modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(text = stringResource(R.string.common_back_arrow), fontSize = 19.sp, modifier = Modifier.padding(end = 6.dp))
-            Text(text = stringResource(R.string.common_back), fontSize = 19.sp)
+            Text(text = stringResource(R.string.common_back_arrow), color = NasMusicColors.TextPrimary, fontSize = 19.sp, modifier = Modifier.padding(end = 6.dp))
+            Text(text = stringResource(R.string.common_back), color = NasMusicColors.TextPrimary, fontSize = 19.sp)
         }
     }
 }

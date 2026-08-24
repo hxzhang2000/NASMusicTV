@@ -327,7 +327,7 @@ fun QueueActionButton(text: String, onClick: () -> Unit, icon: androidx.compose.
         focusedContentColor = androidx.compose.ui.graphics.Color.White,
         pressedScale = 0.95f
     ) {
-        Text(text = text, fontSize = 19.sp, modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp))
+        Text(text = text, color = NasMusicColors.TextPrimary, fontSize = 19.sp, modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp))
     }
 }
 

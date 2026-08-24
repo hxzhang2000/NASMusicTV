@@ -329,6 +329,6 @@ private fun ButtonChipSmall(text: String, onClick: () -> Unit) {
         focusedContentColor = NasMusicColors.TextPrimary,
         pressedScale = 0.95f
     ) {
-        Text(text = text, fontSize = 17.sp, modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp))
+        Text(text = text, color = NasMusicColors.TextPrimary, fontSize = 17.sp, modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp))
     }
 }

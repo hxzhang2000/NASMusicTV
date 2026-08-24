@@ -1685,7 +1685,7 @@ private fun PlayModeSelector(current: PlayMode, onSelect: (PlayMode) -> Unit) {
                     focusedContentColor = if (selected) androidx.compose.ui.graphics.Color.Black else NasMusicColors.TextPrimary,
                     pressedScale = 0.95f
                 ) {
-                    Text(text = mode.displayName, fontSize = 19.sp, modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp))
+                    Text(text = mode.displayName, color = if (selected) androidx.compose.ui.graphics.Color.Black else NasMusicColors.TextPrimary, fontSize = 19.sp, modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp))
                 }
             }
         }
@@ -1716,7 +1716,7 @@ private fun VisualizerThemeSelector(current: VisualizerTheme, onSelect: (Visuali
                     focusedContentColor = if (selected) androidx.compose.ui.graphics.Color.Black else NasMusicColors.TextPrimary,
                     pressedScale = 0.95f
                 ) {
-                    Text(text = theme.displayName, fontSize = 19.sp, modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp))
+                    Text(text = theme.displayName, color = if (selected) androidx.compose.ui.graphics.Color.Black else NasMusicColors.TextPrimary, fontSize = 19.sp, modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp))
                 }
             }
         }
@@ -1872,7 +1872,7 @@ private fun AdjustButton(text: String, onClick: () -> Unit) {
         focusBorderColor = NasMusicColors.FocusRing.copy(alpha = 0.6f)
     ) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text(text = text, fontSize = 29.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
+            Text(text = text, color = NasMusicColors.TextPrimary, fontSize = 29.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
         }
     }
 }

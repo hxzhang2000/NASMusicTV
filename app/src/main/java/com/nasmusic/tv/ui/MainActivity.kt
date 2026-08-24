@@ -73,10 +73,14 @@ class MainActivity : ComponentActivity() {
         // Android 12+ 强制 edge-to-edge 后下方会露出白色导航栏。TV 无系统栏，无需处理。
         val isTVDevice = packageManager.hasSystemFeature(PackageManager.FEATURE_LEANBACK)
         if (!isTVDevice) {
-            WindowCompat.setDecorFitsSystemWindows(window, false)
-            WindowInsetsControllerCompat(window, window.decorView).apply {
-                hide(WindowInsetsCompat.Type.systemBars())
-                systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            try {
+                WindowCompat.setDecorFitsSystemWindows(window, false)
+                WindowInsetsControllerCompat(window, window.decorView).apply {
+                    hide(WindowInsetsCompat.Type.systemBars())
+                    systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+                }
+            } catch (e: Exception) {
+                AppLog.e("MainActivity", "system bars hide failed", e)
             }
         }
 

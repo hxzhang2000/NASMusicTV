@@ -192,6 +192,7 @@ fun PlaylistPickerDialog(
                     ) {
                         Text(
                             text = "+ " + stringResource(R.string.mine_create_playlist),
+                            color = NasMusicColors.TextPrimary,
                             fontSize = 18.sp,
                             modifier = Modifier.padding(horizontal = 18.dp, vertical = 9.dp)
                         )
@@ -209,6 +210,7 @@ fun PlaylistPickerDialog(
                     ) {
                         Text(
                             text = stringResource(R.string.common_cancel),
+                            color = NasMusicColors.TextPrimary,
                             fontSize = 18.sp,
                             modifier = Modifier.padding(horizontal = 24.dp, vertical = 9.dp)
                         )

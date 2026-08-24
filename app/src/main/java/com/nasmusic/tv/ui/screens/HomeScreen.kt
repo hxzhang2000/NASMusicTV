@@ -465,6 +465,7 @@ private fun SectionHeader(
             ) {
                     Text(
                         text = stringResource(R.string.home_view_all) + " >",
+                        color = NasMusicColors.Primary,
                         fontSize = 17.sp,
                     modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                 )

@@ -89,6 +89,7 @@ fun LyricsSettingsDialog(
                 ) {
                     Text(
                         text = label,
+                        color = if (isSelected) NasMusicColors.Surface else NasMusicColors.TextPrimary,
                         fontSize = 18.sp,
                         modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp)
                     )
@@ -119,6 +120,7 @@ fun LyricsSettingsDialog(
         ) {
             Text(
                 text = "关闭",
+                color = NasMusicColors.TextPrimary,
                 fontSize = 19.sp,
                 modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp)
             )

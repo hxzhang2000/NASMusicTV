@@ -170,7 +170,7 @@ fun BaiduDirPickerDialog(
                                     focusedContentColor = NasMusicColors.TextPrimary
                                 ) {
                                     Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
-                                        Text(text = stringResource(R.string.netdisk_dir_picker_retry), fontSize = 18.sp)
+                                        Text(text = stringResource(R.string.netdisk_dir_picker_retry), color = NasMusicColors.TextPrimary, fontSize = 18.sp)
                                     }
                                 }
                             }
@@ -215,7 +215,7 @@ fun BaiduDirPickerDialog(
                         focusedContentColor = NasMusicColors.TextPrimary
                     ) {
                         Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
-                            Text(text = stringResource(R.string.netdisk_dir_picker_select), fontSize = 19.sp)
+                            Text(text = stringResource(R.string.netdisk_dir_picker_select), color = NasMusicColors.TextPrimary, fontSize = 19.sp)
                         }
                     }
                     FocusableSurface(
@@ -232,7 +232,7 @@ fun BaiduDirPickerDialog(
                         focusedContentColor = NasMusicColors.TextPrimary
                     ) {
                         Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
-                            Text(text = stringResource(R.string.common_cancel), fontSize = 19.sp)
+                            Text(text = stringResource(R.string.common_cancel), color = NasMusicColors.TextPrimary, fontSize = 19.sp)
                         }
                     }
                 }

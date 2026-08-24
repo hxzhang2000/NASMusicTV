@@ -691,6 +691,9 @@ private fun SourceTag(
     ) {
         Text(
             text = label,
+            color = if (!available) NasMusicColors.TextSecondary.copy(alpha = 0.4f)
+                    else if (selected) Color.Black
+                    else NasMusicColors.TextPrimary,
             fontSize = 16.sp,
             modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
         )

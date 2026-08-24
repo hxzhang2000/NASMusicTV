@@ -133,6 +133,7 @@ private fun DialogButton(
         ) {
             Text(
                 text = label,
+                color = if (isPrimary) Color.Black else NasMusicColors.TextPrimary,
                 fontSize = 21.sp,
                 fontWeight = FontWeight.Bold
             )

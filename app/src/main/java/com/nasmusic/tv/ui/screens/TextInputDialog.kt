@@ -8,17 +8,21 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -199,7 +203,7 @@ fun TextInputDialog(
             }
         }
 
-        Box(
+        BoxWithConstraints(
             modifier = Modifier
                 .fillMaxSize()
                 .background(Color(0xB3000000)),
@@ -209,6 +213,8 @@ fun TextInputDialog(
             Column(
                 modifier = Modifier
                     .width(if (showQrPanel) 940.dp else 720.dp)
+                    .heightIn(max = maxHeight - 32.dp)
+                    .verticalScroll(rememberScrollState())
                     .background(NasMusicColors.Surface, RoundedCornerShape(16.dp))
                     .padding(20.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
@@ -456,7 +462,7 @@ fun TextInputDialog(
                             verticalArrangement = Arrangement.Center
                         ) {
                             Image(
-                                bitmap = qrBitmap!!.asImageBitmap(),
+                                bitmap = qrBitmap?.asImageBitmap() ?: return@Column,
                                 contentDescription = "扫码输入",
                                 modifier = Modifier.size(180.dp)
                             )
@@ -523,6 +529,7 @@ private fun HistoryRow(
                 ) {
                     Text(
                         text = item.query,
+                        color = NasMusicColors.TextPrimary,
                         fontSize = 17.sp,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
@@ -553,6 +560,7 @@ private fun KeyButton(
     ) {
         Text(
             text = label,
+            color = NasMusicColors.TextPrimary,
             fontSize = 19.sp,
             textAlign = TextAlign.Center,
             modifier = Modifier.fillMaxSize().padding(vertical = 10.dp)
@@ -581,14 +589,15 @@ private fun ActionButton(
         containerColor = color,
         focusedContainerColor = if (isPrimary) NasMusicColors.Primary.copy(alpha = 0.85f)
                                 else NasMusicColors.Primary.copy(alpha = 0.25f),
-        contentColor = if (isPrimary) Color.Black else NasMusicColors.TextPrimary,
-        focusedContentColor = if (isPrimary) Color.Black else NasMusicColors.TextPrimary,
+        contentColor = NasMusicColors.TextPrimary,
+        focusedContentColor = NasMusicColors.TextPrimary,
         pressedScale = 0.92f,
         focusRequester = focusRequester,
         requestFocusOnLaunch = requestFocusOnLaunch
     ) {
         Text(
             text = label,
+            color = NasMusicColors.TextPrimary,
             fontSize = 18.sp,
             textAlign = TextAlign.Center,
             modifier = Modifier.fillMaxSize().padding(vertical = 12.dp)
