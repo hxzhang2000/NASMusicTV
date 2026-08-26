@@ -63,12 +63,27 @@ class BaiduNetdiskService(
      *
      * 实现 [NetworkMusicService.searchByDirectory] 契约——发现页按"标签/目录"浏览
      * （粤语、经典老歌等），网盘常以这些词作目录名。
-     * 与 [search] 的区别：这里优先匹配 path 中的目录段，目录命中返回整个目录的歌曲；
-     * 无目录命中才回退文件名/歌手匹配。只查本地索引（发现页的标签浏览场景，
-     * 索引已覆盖用户网盘扫描结果），不触发额外的 API 搜索。
+     * 与 [search] 的区别：本地索引优先匹配 path 中的目录段，目录命中返回整个目录的歌曲；
+     * 无目录命中则回退文件名/歌手匹配。之后再调百度 search API 补全本地索引缺失的结果
+     * （与 [search] 一致，避免本地索引未扫描/不完整时发现页列不出网盘歌曲）。
      */
     override suspend fun searchByDirectory(keyword: String): List<Song> = withContext(Dispatchers.IO) {
-        indexCache.searchByDirectory(keyword)
+        // 1. 本地索引目录感知匹配（目录命中返回整个目录，否则回退文件名/歌手）
+        val localHits = indexCache.searchByDirectory(keyword)
+
+        // 2. 再调百度 search API 补全本地索引缺失的结果（与普通 search 一致）
+        val apiHits = try {
+            val rootDir = prefs.getBaiduMusicRootDirSync().ifBlank { "/" }
+            api.searchAudio(keyword, dir = rootDir).map { it.toSong() }
+        } catch (e: Exception) {
+            AppLog.w(TAG, "searchByDirectory API failed, fallback to index only", e)
+            emptyList()
+        }
+
+        // 3. 合并去重（id = ntwk_baidu_${fs_id}），本地索引优先保持顺序
+        if (apiHits.isEmpty()) return@withContext localHits
+        val seen = HashSet<String>(localHits.size + apiHits.size)
+        (localHits + apiHits).filter { seen.add(it.id) }
     }
 
     /** 解析播放 URL：fs_id -> dlink（复用 NetworkMusicManager 的 playUrlCache，全局 5min TTL） */
