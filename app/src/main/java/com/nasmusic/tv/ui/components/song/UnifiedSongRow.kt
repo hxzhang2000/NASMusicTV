@@ -89,6 +89,7 @@ fun UnifiedSongRow(
     isInQueue: Boolean = false,
     onToggleQueue: (() -> Unit)? = null,
     onAddToPlaylist: (() -> Unit)? = null,
+    onDelete: (() -> Unit)? = null,
     focusRequester: FocusRequester? = null,
     modifier: Modifier = Modifier
 ) {
@@ -102,6 +103,7 @@ fun UnifiedSongRow(
             isInQueue = isInQueue,
             onToggleQueue = onToggleQueue,
             onAddToPlaylist = onAddToPlaylist,
+            onDelete = onDelete,
             focusRequester = focusRequester,
             modifier = modifier
         )
@@ -134,6 +136,7 @@ private fun SongRowModeRow(
     isInQueue: Boolean,
     onToggleQueue: (() -> Unit)?,
     onAddToPlaylist: (() -> Unit)?,
+    onDelete: (() -> Unit)?,
     focusRequester: FocusRequester?,
     modifier: Modifier = Modifier
 ) {
@@ -267,6 +270,14 @@ private fun SongRowModeRow(
                         text = "+",
                         color = NasMusicColors.TextSecondary,
                         onClick = onAddToPlaylist
+                    )
+                }
+                if (onDelete != null) {
+                    Spacer(modifier = Modifier.width(10.dp))
+                    RowActionButton(
+                        text = "✕",
+                        color = NasMusicColors.Warning,
+                        onClick = onDelete
                     )
                 }
             }

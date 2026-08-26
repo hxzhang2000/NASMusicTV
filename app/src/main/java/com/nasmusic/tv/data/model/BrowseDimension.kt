@@ -64,6 +64,18 @@ enum class BrowseDimension(
             Option("古风", listOf("古风", "古风歌曲", "古风金曲")),
             Option("说唱", listOf("说唱", "中文说唱", "说唱歌曲"))
         )
+    ),
+    THEME(
+        displayName = "主题",
+        options = listOf(
+            Option.ALL,
+            Option("旅行", listOf("旅行", "旅行歌曲", "旅游音乐", "公路旅行")),
+            Option("驾车", listOf("驾车", "开车音乐", "公路音乐", "车载音乐")),
+            Option("咖啡", listOf("咖啡", "咖啡厅音乐", "咖啡馆", "下午茶音乐")),
+            Option("运动", listOf("运动", "健身音乐", "跑步音乐", "锻炼歌曲")),
+            Option("雨天", listOf("雨天", "下雨天", "雨天音乐", "雨声")),
+            Option("居家", listOf("居家", "宅家音乐", "放松音乐", "治愈音乐"))
+        )
     );
 
     /**

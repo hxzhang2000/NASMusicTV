@@ -281,29 +281,16 @@ fun MineScreen(
                             }
                         } else {
                             items(playlist.songs, key = { "pl_song_${playlist.id}_${it.id}" }) { song ->
-                                Box(modifier = Modifier.fillMaxWidth()) {
-                                    UnifiedSongRow(
-                                        song = song,
-                                        mode = SongRowMode.MODE_ROW,
-                                        onClick = { onPlaySong(song) },
-                                        isInQueue = song.id in queueSongIds,
-                                        onToggleQueue = { onToggleQueue(song) },
-                                        onAddToPlaylist = { pickerSong = song }
-                                    )
-                                    // 移除按钮（右上角叠加）
-                                    Box(
-                                        modifier = Modifier
-                                            .align(Alignment.TopEnd)
-                                            .padding(8.dp)
-                                            .size(36.dp)
-                                            .clip(RoundedCornerShape(4.dp))
-                                            .background(NasMusicColors.Warning.copy(alpha = 0.8f))
-                                            .clickable { onRemoveSongFromPlaylist(playlist.id, song.id) },
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Text(text = "?", color = NasMusicColors.TextPrimary, fontSize = 16.sp)
-                                    }
-                                }
+                                UnifiedSongRow(
+                                    song = song,
+                                    mode = SongRowMode.MODE_ROW,
+                                    onClick = { onPlaySong(song) },
+                                    isInQueue = song.id in queueSongIds,
+                                    onToggleQueue = { onToggleQueue(song) },
+                                    onAddToPlaylist = { pickerSong = song },
+                                    // 删除歌曲（行内操作按钮，与其他按钮同行）
+                                    onDelete = { onRemoveSongFromPlaylist(playlist.id, song.id) }
+                                )
                             }
                         }
                     }
@@ -620,29 +607,16 @@ private fun PlaylistsPane(
                             }
                         } else {
                             items(playlist.songs, key = { "playlist_song_${playlist.id}_${it.id}" }) { song ->
-                                Box(modifier = Modifier.fillMaxWidth()) {
-                                    UnifiedSongRow(
-                                        song = song,
-                                        mode = SongRowMode.MODE_ROW,
-                                        onClick = { onPlaySong(song) },
-                                        isInQueue = song.id in queueSongIds,
-                                        onToggleQueue = { onToggleQueue(song) },
-                                        onAddToPlaylist = { onAddSongToPlaylist(song) }
-                                    )
-                                    // 移除按钮（右上角叠加）
-                                    Box(
-                                        modifier = Modifier
-                                            .align(Alignment.TopEnd)
-                                            .padding(8.dp)
-                                            .size(36.dp)
-                                            .clip(RoundedCornerShape(4.dp))
-                                            .background(NasMusicColors.Warning.copy(alpha = 0.8f))
-                                            .clickable { onRemoveSong(playlist.id, song) },
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Text(text = "?", color = NasMusicColors.TextPrimary, fontSize = 16.sp)
-                                    }
-                                }
+                                UnifiedSongRow(
+                                    song = song,
+                                    mode = SongRowMode.MODE_ROW,
+                                    onClick = { onPlaySong(song) },
+                                    isInQueue = song.id in queueSongIds,
+                                    onToggleQueue = { onToggleQueue(song) },
+                                    onAddToPlaylist = { onAddSongToPlaylist(song) },
+                                    // 删除歌曲（行内操作按钮，与其他按钮同行）
+                                    onDelete = { onRemoveSong(playlist.id, song) }
+                                )
                             }
                         }
                     }

@@ -51,6 +51,7 @@ import com.nasmusic.tv.R
 import com.nasmusic.tv.data.model.Album
 import com.nasmusic.tv.data.model.Artist
 import com.nasmusic.tv.data.model.Genre
+import com.nasmusic.tv.data.model.MusicSourceType
 import com.nasmusic.tv.data.model.SearchHistoryItem
 import com.nasmusic.tv.data.model.Song
 import com.nasmusic.tv.ui.LocalListBackHandler
@@ -138,8 +139,13 @@ fun LibraryScreen(
     // 搜索关键词（跨导航记忆，由 ViewModel 驱动）
     filterQuery: String = "",
     onFilterQueryChange: (String) -> Unit = {},
+    // 搜索来源点亮状态（由 ViewModel 驱动）
+    enabledSearchSources: Set<MusicSourceType> = emptySet(),
+    onToggleSearchSource: (MusicSourceType) -> Unit = {},
+    onEnableAllSearchSources: () -> Unit = {},
     // ── SEARCH Tab ──
     onSearchTabPlayAll: () -> Unit = {},
+    onSearchTabAddAllToQueue: () -> Unit = {},
     onSearchTabShuffle: () -> Unit = {},
     // ── DISCOVER Tab ──
     discoverDimensions: List<com.nasmusic.tv.ui.screens.library.BrowseDimension> = emptyList(),
@@ -148,6 +154,7 @@ fun LibraryScreen(
     discoverCurrentDimensionValues: Map<String, String> = emptyMap(),
     onDiscoverDimensionChanged: (String, String) -> Unit = { _, _ -> },
     onDiscoverPlayAll: () -> Unit = {},
+    onDiscoverAddAllToQueue: () -> Unit = {},
     onDiscoverShuffle: () -> Unit = {},
     // ── RADIO Tab ──
     radioStations: UiState<List<com.nasmusic.tv.data.model.RadioStation>> = UiState.Success(emptyList()),
@@ -168,7 +175,8 @@ fun LibraryScreen(
             LibraryTab.ARTISTS -> onLoadArtists()
             LibraryTab.YEARS -> onLoadYears()
             LibraryTab.RADIO -> onLoadRadioDefault()
-            LibraryTab.DISCOVER -> onDiscoverPlayAll()
+            // DISCOVER：仅在无结果时加载（有结果则暂存，切页不重搜）
+            LibraryTab.DISCOVER -> if (discoverFilteredSongs.isEmpty()) onDiscoverShuffle()
             LibraryTab.SEARCH -> {}  // SearchTab handles its own loading
             else -> {}
         }
@@ -304,7 +312,8 @@ fun LibraryScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // 内容区域
+            // 内容区域（weight(1f) 限制高度，让内部可滚动列表正常工作）
+            Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
             // SEARCH, DISCOVER, RADIO tabs handle their own loading/empty states
             when (activeTab) {
                 LibraryTab.SEARCH -> {
@@ -314,11 +323,15 @@ fun LibraryScreen(
                         isSearching = isSearching,
                         favoriteIds = favoriteIds,
                         queueSongIds = queueSongIds,
+                        enabledSources = enabledSearchSources,
+                        onToggleSource = onToggleSearchSource,
+                        onEnableAllSources = onEnableAllSearchSources,
                         onPlaySong = onPlaySong,
                         onToggleFavorite = onToggleFavorite,
                         onToggleQueue = onToggleQueue,
                         onAddToPlaylist = onAddToPlaylist,
                         onPlayAll = onSearchTabPlayAll,
+                        onAddAllToQueue = onSearchTabAddAllToQueue,
                         onShuffleSearch = onSearchTabShuffle
                     )
                 }
@@ -333,9 +346,11 @@ fun LibraryScreen(
                         onDimensionChanged = onDiscoverDimensionChanged,
                         onPlayAll = onDiscoverPlayAll,
                         onShuffle = onDiscoverShuffle,
+                        onAddAllToQueue = onDiscoverAddAllToQueue,
                         onPlaySong = onPlaySong,
                         onToggleFavorite = onToggleFavorite,
-                        onToggleQueue = onToggleQueue
+                        onToggleQueue = onToggleQueue,
+                        onAddToPlaylist = onAddToPlaylist
                     )
                 }
                 LibraryTab.RADIO -> {
@@ -422,7 +437,7 @@ fun LibraryScreen(
                     }
                 }
             }
-        }
+            }   // 内容区域 Box
 
         // 搜索键盘弹窗
         if (showSearchDialog) {
@@ -446,6 +461,8 @@ fun LibraryScreen(
                 }
             )
         }
+        }
+
     }
 }
 

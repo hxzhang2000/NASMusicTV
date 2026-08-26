@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -71,9 +72,11 @@ fun DiscoverTab(
     onDimensionChanged: (String, String) -> Unit = { _, _ -> },
     onPlayAll: () -> Unit = {},
     onShuffle: () -> Unit = {},
+    onAddAllToQueue: () -> Unit = {},
     onPlaySong: (Song) -> Unit = {},
     onToggleFavorite: (Song) -> Unit = {},
     onToggleQueue: (Song) -> Unit = {},
+    onAddToPlaylist: (Song) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val listState = rememberLazyGridState()
@@ -99,85 +102,105 @@ fun DiscoverTab(
         onDispose { listBackHandler.value = null }
     }
 
-    Column(modifier = modifier.fillMaxWidth()) {
-        // 多维度筛选行
-        if (dimensions.isNotEmpty()) {
-            dimensions.forEach { dimension ->
-                DimensionRow(
-                    dimension = dimension,
-                    selectedValue = currentDimensionValues[dimension.label],
-                    onSelected = { onDimensionChanged(dimension.label, it) }
-                )
-                Spacer(modifier = Modifier.height(8.dp))
+    Column(modifier = modifier.fillMaxSize()) {
+        if (isLoading) {
+            Box(
+                modifier = Modifier.fillMaxWidth().weight(1f),
+                contentAlignment = Alignment.Center
+            ) {
+                LoadingIndicator()
             }
-        }
-
-        Spacer(modifier = Modifier.height(4.dp))
-
-        when {
-            isLoading -> {
-                Box(
-                    modifier = Modifier.fillMaxWidth().padding(top = 40.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    LoadingIndicator()
-                }
-            }
-            filteredSongs.isNotEmpty() -> {
-                // 操作栏
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    FocusableSurface(
-                        onClick = onPlayAll,
-                        shape = RoundedCornerShape(8.dp),
-                        focusedScale = 1.08f,
-                        animationDurationMs = 150,
-                        containerColor = NasMusicColors.Primary.copy(alpha = 0.85f),
-                        focusedContainerColor = NasMusicColors.Primary,
-                        contentColor = NasMusicColors.TextPrimary,
-                        focusedContentColor = NasMusicColors.TextPrimary
-                    ) {
-                        Text(
-                            text = "全部播放 ▶",
-                            fontSize = 19.sp,
-                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+        } else {
+            // 歌曲列表（维度行 + 操作栏 + 歌曲统一放在网格内，整体可滚动）
+            androidx.compose.foundation.lazy.grid.LazyVerticalGrid(
+                columns = songGridColumns(),
+                state = listState,
+                modifier = Modifier.fillMaxWidth().weight(1f),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                // 维度筛选行（始终显示，占满整行）
+                dimensions.forEach { dimension ->
+                    item(key = "dim_${dimension.label}", span = { GridItemSpan(maxLineSpan) }) {
+                        DimensionRow(
+                            dimension = dimension,
+                            selectedValue = currentDimensionValues[dimension.label],
+                            onSelected = { onDimensionChanged(dimension.label, it) }
                         )
                     }
-                    Spacer(modifier = Modifier.width(12.dp))
-                    FocusableSurface(
-                        onClick = onShuffle,
-                        shape = RoundedCornerShape(8.dp),
-                        focusedScale = 1.08f,
-                        animationDurationMs = 150,
-                        containerColor = NasMusicColors.SurfaceVariant.copy(alpha = 0.6f),
-                        focusedContainerColor = NasMusicColors.Primary.copy(alpha = 0.3f),
-                        contentColor = NasMusicColors.TextPrimary,
-                        focusedContentColor = NasMusicColors.Primary
-                    ) {
-                        Text(
-                            text = "换一批 ↻",
-                            fontSize = 19.sp,
-                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-                        )
-                    }
-                    Spacer(modifier = Modifier.width(12.dp))
-                    Text(
-                        text = "${filteredSongs.size} 首",
-                        color = NasMusicColors.TextSecondary,
-                        fontSize = 18.sp
-                    )
                 }
 
-                // 歌曲列表
-                androidx.compose.foundation.lazy.grid.LazyVerticalGrid(
-                    columns = songGridColumns(),
-                    state = listState,
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
+                // 有歌曲时才显示操作栏 + 歌曲列表
+                if (filteredSongs.isNotEmpty()) {
+                    // 操作栏（占满整行）
+                    item(key = "discover_actions", span = { GridItemSpan(maxLineSpan) }) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            FocusableSurface(
+                                onClick = onPlayAll,
+                                shape = RoundedCornerShape(8.dp),
+                                focusedScale = 1.08f,
+                                animationDurationMs = 150,
+                                containerColor = NasMusicColors.Primary.copy(alpha = 0.85f),
+                                focusedContainerColor = NasMusicColors.Primary,
+                                contentColor = NasMusicColors.TextPrimary,
+                                focusedContentColor = NasMusicColors.TextPrimary
+                            ) {
+                                Text(
+                                    text = "全部播放 ▶",
+                                    fontSize = 19.sp,
+                                    color = NasMusicColors.TextPrimary,
+                                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(12.dp))
+                            FocusableSurface(
+                                onClick = onAddAllToQueue,
+                                shape = RoundedCornerShape(8.dp),
+                                focusedScale = 1.08f,
+                                animationDurationMs = 150,
+                                containerColor = NasMusicColors.Surface.copy(alpha = 0.7f),
+                                focusedContainerColor = NasMusicColors.Primary.copy(alpha = 0.3f),
+                                contentColor = NasMusicColors.TextPrimary,
+                                focusedContentColor = NasMusicColors.Primary
+                            ) {
+                                Text(
+                                    text = "加入队列",
+                                    fontSize = 19.sp,
+                                    color = NasMusicColors.TextPrimary,
+                                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(12.dp))
+                            FocusableSurface(
+                                onClick = onShuffle,
+                                shape = RoundedCornerShape(8.dp),
+                                focusedScale = 1.08f,
+                                animationDurationMs = 150,
+                                containerColor = NasMusicColors.SurfaceVariant.copy(alpha = 0.6f),
+                                focusedContainerColor = NasMusicColors.Primary.copy(alpha = 0.3f),
+                                contentColor = NasMusicColors.TextPrimary,
+                                focusedContentColor = NasMusicColors.Primary
+                            ) {
+                                Text(
+                                    text = "换一批 ↻",
+                                    fontSize = 19.sp,
+                                    color = NasMusicColors.TextPrimary,
+                                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Text(
+                                text = "${filteredSongs.size} 首",
+                                color = NasMusicColors.TextSecondary,
+                                fontSize = 18.sp
+                            )
+                        }
+                    }
+
+                    // 歌曲
                     items(filteredSongs.size, key = { filteredSongs[it].id }) { index ->
                         val song = filteredSongs[index]
                         UnifiedSongRow(
@@ -188,22 +211,11 @@ fun DiscoverTab(
                             onToggleFavorite = { onToggleFavorite(song) },
                             isInQueue = song.id in queueSongIds,
                             onToggleQueue = { onToggleQueue(song) },
+                            onAddToPlaylist = { onAddToPlaylist(song) },
                             index = index,
                             focusRequester = if (index == 0) firstItemFocusRequester else null
                         )
                     }
-                }
-            }
-            else -> {
-                Box(
-                    modifier = Modifier.fillMaxWidth().padding(top = 40.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = "选择筛选条件浏览歌曲",
-                        color = NasMusicColors.TextSecondary,
-                        fontSize = 21.sp
-                    )
                 }
             }
         }
@@ -236,11 +248,13 @@ private fun DimensionRow(
             itemsIndexed(dimension.options) { index, option ->
                 val isSelected = option == selectedValue
                 val bgColor by animateColorAsState(
-                    targetValue = if (isSelected) NasMusicColors.Primary else Color.Transparent,
+                    targetValue = if (isSelected) NasMusicColors.Primary
+                    else NasMusicColors.Primary.copy(alpha = 0.2f),
                     label = "dim_bg"
                 )
                 val textColor by animateColorAsState(
-                    targetValue = if (isSelected) NasMusicColors.TextPrimary else NasMusicColors.TextSecondary,
+                    targetValue = if (isSelected) Color(0xFF0C1222)
+                    else NasMusicColors.TextPrimary,
                     label = "dim_text"
                 )
                 FocusableSurface(
@@ -251,7 +265,7 @@ private fun DimensionRow(
                     containerColor = bgColor,
                     focusedContainerColor = NasMusicColors.Primary,
                     contentColor = textColor,
-                    focusedContentColor = NasMusicColors.TextPrimary,
+                    focusedContentColor = Color(0xFF0C1222),
                     modifier = Modifier.onFocusChanged { focusState ->
                         if (focusState.isFocused) onSelected(option)
                     }
@@ -259,6 +273,7 @@ private fun DimensionRow(
                     Text(
                         text = option,
                         fontSize = 17.sp,
+                        color = textColor,
                         modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
                     )
                 }

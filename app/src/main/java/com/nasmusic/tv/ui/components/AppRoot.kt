@@ -389,6 +389,7 @@ fun AppRoot(
                     val isSearching = searchResultsState is UiState.Loading
                     val libraryActiveTab by viewModel.libraryActiveTab.collectAsState()
                     val librarySearchKeyword by viewModel.librarySearchKeyword.collectAsState()
+                    val enabledSearchSources by viewModel.enabledSearchSources.collectAsState()
                     val localPlaylists by viewModel.localPlaylists.collectAsState(initial = emptyList())
                     val searchHistory by viewModel.searchHistory.collectAsState(initial = emptyList())
                     var pickerSong by remember { mutableStateOf<Song?>(null) }
@@ -479,6 +480,9 @@ fun AppRoot(
                         onTabSelected = { tab -> viewModel.selectLibraryTab(tab) },
                         filterQuery = librarySearchKeyword,
                         onFilterQueryChange = { keyword -> viewModel.setLibrarySearchKeyword(keyword) },
+                        enabledSearchSources = enabledSearchSources,
+                        onToggleSearchSource = { source -> viewModel.toggleSearchSource(source) },
+                        onEnableAllSearchSources = { viewModel.enableAllSearchSources() },
                         // ── SEARCH Tab ──
                         onSearchTabPlayAll = {
                             val allSongs = searchResultsList
@@ -486,6 +490,10 @@ fun AppRoot(
                                 viewModel.playQueue(allSongs)
                                 viewModel.navigateTo(Screen.NowPlaying)
                             }
+                        },
+                        onSearchTabAddAllToQueue = {
+                            // 只加入队列，不播放
+                            searchResultsList.forEach { song -> viewModel.toggleQueueSong(song) }
                         },
                         onSearchTabShuffle = {
                             val allSongs = searchResultsList.shuffled()
@@ -514,6 +522,10 @@ fun AppRoot(
                                 viewModel.playQueue(browseResultsList)
                                 viewModel.navigateTo(Screen.NowPlaying)
                             }
+                        },
+                        onDiscoverAddAllToQueue = {
+                            // 只加入队列，不播放
+                            browseResultsList.forEach { song -> viewModel.toggleQueueSong(song) }
                         },
                         onDiscoverShuffle = {
                             viewModel.refreshBrowseSongs()

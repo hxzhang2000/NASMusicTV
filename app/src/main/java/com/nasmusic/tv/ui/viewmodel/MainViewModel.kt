@@ -37,6 +37,7 @@ import com.nasmusic.tv.data.model.LocalPlaylist
 import com.nasmusic.tv.data.model.Playlist
 import com.nasmusic.tv.data.model.EqualizerPreset
 import com.nasmusic.tv.data.model.MusicSource
+import com.nasmusic.tv.data.model.MusicSourceType
 import com.nasmusic.tv.data.model.MvInfo
 import com.nasmusic.tv.data.model.MvCandidate
 import com.nasmusic.tv.data.model.MvSearchResult
@@ -247,6 +248,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
     // --- 按需加载：搜索结果（服务端搜索）---
     private val _searchResults = MutableStateFlow<UiState<List<Song>>>(UiState.Success(emptyList()))
     val searchResults: StateFlow<UiState<List<Song>>> = _searchResults.asStateFlow()
+    /** 上次搜索的关键词：同词 + 结果已成功时不重复搜索（跨导航暂存搜索结果） */
+    private var lastSearchedKeyword: String? = null
 
     // --- 网络音乐搜索结果（NetworkMusicManager 搜索）---
     private val _networkSearchResults = MutableStateFlow<UiState<List<Song>>>(UiState.Success(emptyList()))
@@ -341,6 +344,40 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
         if (_librarySearchKeyword.value.isNotBlank()) {
             _librarySearchKeyword.value = ""
         }
+    }
+
+    // --- 搜索来源点亮状态（跨导航记忆，决定搜索哪些源） ---
+    private val _enabledSearchSources = MutableStateFlow(
+        setOf(
+            MusicSourceType.NAS,
+            MusicSourceType.NETWORK_MUSIC,
+            MusicSourceType.BAIDU_PAN,
+            MusicSourceType.JAMENDO
+        )
+    )
+    val enabledSearchSources: StateFlow<Set<MusicSourceType>> = _enabledSearchSources.asStateFlow()
+
+    /** 切换某来源的点亮/熄灭状态 */
+    fun toggleSearchSource(source: MusicSourceType) {
+        val current = _enabledSearchSources.value.toMutableSet()
+        if (source in current) current.remove(source) else current.add(source)
+        _enabledSearchSources.value = current
+        // 有活动关键词时按新来源范围立即重新搜索（force 跳过缓存）
+        val kw = _librarySearchKeyword.value
+        if (kw.isNotBlank()) searchSongsOnServer(kw, force = true)
+    }
+
+    /** 全部点亮（回到默认状态） */
+    fun enableAllSearchSources() {
+        _enabledSearchSources.value = setOf(
+            MusicSourceType.NAS,
+            MusicSourceType.NETWORK_MUSIC,
+            MusicSourceType.BAIDU_PAN,
+            MusicSourceType.JAMENDO
+        )
+        // 有活动关键词时按全部来源重新搜索（force 跳过缓存）
+        val kw = _librarySearchKeyword.value
+        if (kw.isNotBlank()) searchSongsOnServer(kw, force = true)
     }
 
     // --- 网络音乐平台来源 ---
@@ -1424,15 +1461,24 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
 
     /**
      * 服务端搜索歌曲（不依赖本地全量数据）
+     *
+     * @param force 设为 true 时跳过缓存（来源点亮切换后强制重搜）；默认 false 走缓存
      */
-    fun searchSongsOnServer(query: String) {
+    fun searchSongsOnServer(query: String, force: Boolean = false) {
         if (query.isBlank()) {
             _searchResults.value = UiState.Success(emptyList())
             return
         }
+        // 缓存命中：同一关键词且结果已是 Success（非 Loading/Error），不重复搜索
+        if (!force && query == lastSearchedKeyword && _searchResults.value is UiState.Success) {
+            AppLog.d("NASMusic", "searchSongsOnServer: cached result for '$query'")
+            return
+        }
+        lastSearchedKeyword = query
         _searchResults.value = UiState.Loading
         viewModelScope.launch {
             // 跨源融合搜索：NAS + 网络音乐 + 百度网盘 + Jamendo 并行搜索，合并去重
+            // 按当前点亮来源搜索（点亮模式）
             val aggregator = SearchAggregator(
                 backendAdapter = backendRegistry.getAdapter(),
                 networkMusicManager = nasMusicApp.networkMusicManager,
@@ -1440,7 +1486,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
                 jamendoService = nasMusicApp.jamendoService
             )
             try {
-                val result = aggregator.search(query)
+                val result = aggregator.search(query, sources = _enabledSearchSources.value)
                 val songs = result.allResults.map { it.song }
                 _searchResults.value = UiState.Success(songs)
                 // 搜索成功后才记录历史（空结果也算成功，记录用户确实搜过的词；
@@ -1463,6 +1509,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
      * 清除搜索结果
      */
     fun clearSearch() {
+        lastSearchedKeyword = null
         _searchResults.value = UiState.Success(emptyList())
     }
 
@@ -1706,19 +1753,33 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
 
         viewModelScope.launch {
             try {
+                // 构建组合关键词（与"换一批"逻辑一致），但跨源聚合搜索
+                fun buildCombo(): String {
+                    val combo = mutableListOf<String>()
+                    for (i in dimensions.indices) {
+                        val opt = dimensions[i].options.getOrNull(selections.getOrNull(i) ?: 0)
+                            ?: continue
+                        if (opt.label == "所有") continue
+                        if (opt.keywords.isEmpty()) continue
+                        combo.add(opt.keywords.random())
+                    }
+                    return combo.filter { it.isNotBlank() }.joinToString(" ").trim()
+                }
+
                 val (_, shown) = pickBestFreshBatch(
                     seenKeys = browseSeenKeys,
                     produce = {
-                        // 每次候选都重新随机取关键词，增加组合多样性
-                        val combo = mutableListOf<String>()
-                        for (i in dimensions.indices) {
-                            val opt = dimensions[i].options.getOrNull(selections.getOrNull(i) ?: 0)
-                                ?: continue
-                            if (opt.label == "所有") continue
-                            if (opt.keywords.isEmpty()) continue
-                            combo.add(opt.keywords.random())
-                        }
-                        nasMusicApp.networkMusicManager.searchByKeywords(combo)
+                        // 跨源聚合器：按当前点亮来源并行搜索（NAS/网络/百度/Jamendo）
+                        val keyword = buildCombo()
+                        if (keyword.isBlank()) return@pickBestFreshBatch emptyList()
+                        val aggregator = SearchAggregator(
+                            backendAdapter = backendRegistry.getAdapter(),
+                            networkMusicManager = nasMusicApp.networkMusicManager,
+                            baiduService = nasMusicApp.baiduNetdiskService,
+                            jamendoService = nasMusicApp.jamendoService
+                        )
+                        aggregator.search(keyword, sources = _enabledSearchSources.value)
+                            .allResults.map { it.song }
                     },
                     songsOf = { it }
                 )

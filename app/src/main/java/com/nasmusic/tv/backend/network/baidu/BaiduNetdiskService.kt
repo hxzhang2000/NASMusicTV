@@ -30,21 +30,32 @@ class BaiduNetdiskService(
     override val sourceId = "baidu"
 
     /**
-     * 搜索：优先本地索引（毫秒级），fallback 百度 search API（参数名 key）。
+     * 搜索：本地索引 + 百度 search API（参数名 key）合并去重。
      *
      * ⚠️ 注册副作用：注册本 service 后，[com.nasmusic.tv.backend.network.NetworkMusicManager.search()]
      * 在默认源无结果时也会 fallback 调用本方法（期望的多源聚合行为）。
      * 本方法只查索引与根目录范围，不触发全盘扫描。
+     *
+     * 为什么不只查索引：本地索引是增量/节流扫描，可能不完整（尤其用户新上传的歌）；
+     * 必须先查索引拿到零成本命中，再调 API 补全遗漏，最后按 id（ntwk_baidu_${fs_id}）去重。
      */
     override suspend fun search(keyword: String, limit: Int): List<Song> = withContext(Dispatchers.IO) {
-        // 1. 查本地索引
+        // 1. 查本地索引（毫秒级，可能不完整）
         val localHits = indexCache.search(keyword, limit)
-        if (localHits.isNotEmpty()) return@withContext localHits
 
-        // 2. fallback 百度 search API（参数名 key）
-        val rootDir = prefs.getBaiduMusicRootDirSync().ifBlank { "/" }
-        val files = api.searchAudio(keyword, dir = rootDir)
-        files.map { it.toSong() }
+        // 2. 再调百度 search API 补全本地索引缺失的结果
+        val apiHits = try {
+            val rootDir = prefs.getBaiduMusicRootDirSync().ifBlank { "/" }
+            api.searchAudio(keyword, dir = rootDir).map { it.toSong() }
+        } catch (e: Exception) {
+            AppLog.w(TAG, "search API failed, fallback to index only", e)
+            emptyList()
+        }
+
+        // 3. 合并去重（id = ntwk_baidu_${fs_id}），本地索引优先保持顺序
+        if (apiHits.isEmpty()) return@withContext localHits
+        val seen = HashSet<String>(localHits.size + apiHits.size)
+        (localHits + apiHits).filter { seen.add(it.id) }
     }
 
     /** 解析播放 URL：fs_id -> dlink（复用 NetworkMusicManager 的 playUrlCache，全局 5min TTL） */

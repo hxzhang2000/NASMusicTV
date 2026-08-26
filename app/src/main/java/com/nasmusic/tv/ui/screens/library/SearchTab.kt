@@ -3,10 +3,13 @@ package com.nasmusic.tv.ui.screens.library
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
@@ -14,12 +17,15 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Text
+import com.nasmusic.tv.data.model.MusicSourceType
 import com.nasmusic.tv.data.model.Song
 import com.nasmusic.tv.ui.LocalListBackHandler
+import com.nasmusic.tv.ui.components.FocusableSurface
 import com.nasmusic.tv.ui.components.common.ActionBar
 import com.nasmusic.tv.ui.components.common.LoadingIndicator
 import com.nasmusic.tv.ui.components.song.UnifiedSongRow
@@ -43,11 +49,16 @@ fun SearchTab(
     isSearching: Boolean,
     favoriteIds: Set<String>,
     queueSongIds: Set<String> = emptySet(),
+    // 来源点亮（搜索范围选择）
+    enabledSources: Set<MusicSourceType> = emptySet(),
+    onToggleSource: (MusicSourceType) -> Unit = {},
+    onEnableAllSources: () -> Unit = {},
     onPlaySong: (Song) -> Unit,
     onToggleFavorite: (Song) -> Unit,
     onToggleQueue: (Song) -> Unit = {},
     onAddToPlaylist: (Song) -> Unit = {},
     onPlayAll: () -> Unit = {},
+    onAddAllToQueue: () -> Unit = {},
     onShuffleSearch: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
@@ -76,6 +87,14 @@ fun SearchTab(
     }
 
     Column(modifier = modifier.fillMaxWidth()) {
+        // 来源点亮栏（决定搜索范围）
+        SearchSourceBar(
+            enabledSources = enabledSources,
+            onToggleSource = onToggleSource,
+            onEnableAll = onEnableAllSources
+        )
+        Spacer(modifier = Modifier.height(12.dp))
+
         when {
             isSearching -> {
                 Box(
@@ -102,7 +121,7 @@ fun SearchTab(
                 ActionBar(
                     songCount = searchResults.size,
                     onPlayAll = onPlayAll,
-                    onAddAllToQueue = onPlayAll
+                    onAddAllToQueue = onAddAllToQueue
                 )
                 Spacer(modifier = Modifier.height(8.dp))
 
@@ -144,6 +163,79 @@ fun SearchTab(
                     )
                 }
             }
+        }
+    }
+}
+
+/**
+ * 来源点亮栏（点亮模式）
+ *
+ * 决定"搜索哪些源"：点亮的源参与搜索，熄灭的源不参与。
+ * 每个来源一个可切换 chip（点亮 = 亮色，熄灭 = 暗色），外加"全部点亮"按钮。
+ */
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+private fun SearchSourceBar(
+    enabledSources: Set<MusicSourceType>,
+    onToggleSource: (MusicSourceType) -> Unit,
+    onEnableAll: () -> Unit
+) {
+    // 可点亮的搜索源（NAS / 网络 / 百度 / Jamendo）
+    val searchableSources = listOf(
+        MusicSourceType.NAS,
+        MusicSourceType.NETWORK_MUSIC,
+        MusicSourceType.BAIDU_PAN,
+        MusicSourceType.JAMENDO
+    )
+
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = "搜索来源",
+            color = NasMusicColors.TextSecondary,
+            fontSize = 17.sp,
+            modifier = Modifier.padding(end = 10.dp)
+        )
+        searchableSources.forEach { source ->
+            val isEnabled = source in enabledSources
+            Spacer(modifier = Modifier.width(8.dp))
+            FocusableSurface(
+                onClick = { onToggleSource(source) },
+                shape = RoundedCornerShape(8.dp),
+                focusedScale = 1.08f,
+                animationDurationMs = 150,
+                containerColor = if (isEnabled) NasMusicColors.Primary
+                else NasMusicColors.Primary.copy(alpha = 0.2f),
+                focusedContainerColor = NasMusicColors.Primary,
+                contentColor = if (isEnabled) Color(0xFF0C1222)
+                else NasMusicColors.TextPrimary,
+                focusedContentColor = Color(0xFF0C1222)
+            ) {
+                Text(
+                    text = (if (isEnabled) "● " else "○ ") + source.displayName,
+                    fontSize = 16.sp,
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                )
+            }
+        }
+        Spacer(modifier = Modifier.width(8.dp))
+        FocusableSurface(
+            onClick = onEnableAll,
+            shape = RoundedCornerShape(8.dp),
+            focusedScale = 1.08f,
+            animationDurationMs = 150,
+            containerColor = NasMusicColors.Primary.copy(alpha = 0.3f),
+            focusedContainerColor = NasMusicColors.Primary,
+            contentColor = NasMusicColors.TextPrimary,
+            focusedContentColor = NasMusicColors.TextPrimary
+        ) {
+            Text(
+                text = "全部点亮",
+                fontSize = 16.sp,
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+            )
         }
     }
 }
