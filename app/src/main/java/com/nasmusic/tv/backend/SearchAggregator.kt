@@ -39,13 +39,16 @@ class SearchAggregator(
      *
      * @param keyword 搜索关键词
      * @param sources 要搜索的源集合（默认全部）
+     * @param directoryMode 是否用"目录感知"搜索（发现页标签浏览用，适用于所有支持目录
+     *                      结构的源，如网盘）；false（默认）用普通文件名搜索（搜索页）
      * @return 聚合搜索结果
      */
     suspend fun search(
         keyword: String,
-        sources: Set<MusicSourceType> = MusicSourceType.entries.toSet()
+        sources: Set<MusicSourceType> = MusicSourceType.entries.toSet(),
+        directoryMode: Boolean = false
     ): SearchAggregatorResult = coroutineScope {
-        AppLog.i(TAG, "search: keyword='$keyword' sources=${sources.map { it.name }}")
+        AppLog.i(TAG, "search: keyword='$keyword' sources=${sources.map { it.name }} directoryMode=$directoryMode")
 
         if (keyword.isBlank()) {
             return@coroutineScope SearchAggregatorResult(
@@ -99,7 +102,14 @@ class SearchAggregator(
             if (MusicSourceType.BAIDU_PAN in sources && baiduService != null) {
                 try {
                     withTimeoutOrNull(BAIDU_TIMEOUT) {
-                        baiduService.search(keyword)
+                        val baiduSongs = if (directoryMode) {
+                            // 发现页：目录感知搜索（目录名命中则列出整个目录），走通用网盘契约
+                            baiduService.searchByDirectory(keyword)
+                        } else {
+                            // 搜索页：普通文件名/歌手搜索
+                            baiduService.search(keyword)
+                        }
+                        baiduSongs
                             .filter { it.title.isNotBlank() }
                             .map { song ->
                                 RankedSong(song = song, source = MusicSourceType.BAIDU_PAN)

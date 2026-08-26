@@ -58,6 +58,19 @@ class BaiduNetdiskService(
         (localHits + apiHits).filter { seen.add(it.id) }
     }
 
+    /**
+     * 目录感知搜索（发现页专用）：目录名命中则列出该目录下全部歌曲。
+     *
+     * 实现 [NetworkMusicService.searchByDirectory] 契约——发现页按"标签/目录"浏览
+     * （粤语、经典老歌等），网盘常以这些词作目录名。
+     * 与 [search] 的区别：这里优先匹配 path 中的目录段，目录命中返回整个目录的歌曲；
+     * 无目录命中才回退文件名/歌手匹配。只查本地索引（发现页的标签浏览场景，
+     * 索引已覆盖用户网盘扫描结果），不触发额外的 API 搜索。
+     */
+    override suspend fun searchByDirectory(keyword: String): List<Song> = withContext(Dispatchers.IO) {
+        indexCache.searchByDirectory(keyword)
+    }
+
     /** 解析播放 URL：fs_id -> dlink（复用 NetworkMusicManager 的 playUrlCache，全局 5min TTL） */
     override suspend fun resolvePlayUrl(song: Song): String? {
         val fsId = song.networkId?.toLongOrNull() ?: run {

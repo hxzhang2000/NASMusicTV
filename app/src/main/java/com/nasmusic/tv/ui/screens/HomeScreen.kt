@@ -75,7 +75,7 @@ fun HomeScreen(
     onPlayAlbum: (Album) -> Unit,
     onOpenAlbumDetail: (Album) -> Unit,
     onNavigateToLibrary: () -> Unit = {},
-    onNavigateToNetwork: () -> Unit = {},
+    onNavigateToSearch: () -> Unit = {},
     onNavigateToQueue: () -> Unit = {},
     onNavigateToNowPlaying: () -> Unit = {},
     onPlayAllRecent: () -> Unit = {},
@@ -136,7 +136,7 @@ fun HomeScreen(
         item(key = "quick_actions") {
             QuickActionRow(
                 onNavigateToLibrary = onNavigateToLibrary,
-                onNavigateToNetwork = onNavigateToNetwork,
+                onNavigateToSearch = onNavigateToSearch,
                 onNavigateToQueue = onNavigateToQueue
             )
         }
@@ -356,7 +356,7 @@ private fun StatCard(
 @Composable
 private fun QuickActionRow(
     onNavigateToLibrary: () -> Unit,
-    onNavigateToNetwork: () -> Unit,
+    onNavigateToSearch: () -> Unit,
     onNavigateToQueue: () -> Unit
 ) {
     Row(
@@ -372,9 +372,9 @@ private fun QuickActionRow(
         }
         Box(modifier = Modifier.weight(1f)) {
             QuickActionButton(
-                label = "网络音乐",
-                emoji = "\uD83C\uDFB5",
-                onClick = onNavigateToNetwork
+                label = stringResource(R.string.common_search),
+                emoji = "\uD83D\uDD0D",
+                onClick = onNavigateToSearch
             )
         }
         Box(modifier = Modifier.weight(1f)) {

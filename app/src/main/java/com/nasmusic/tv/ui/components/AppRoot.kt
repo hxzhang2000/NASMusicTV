@@ -277,6 +277,10 @@ fun AppRoot(
                         },
                         onOpenAlbumDetail = { album -> viewModel.openAlbumDetail(album) },
                         onNavigateToLibrary = { viewModel.navigateTo(Screen.Library) },
+                        onNavigateToSearch = {
+                            viewModel.selectLibraryTab(LibraryTab.SEARCH)
+                            viewModel.navigateTo(Screen.Library)
+                        },
                         onNavigateToQueue = { viewModel.navigateTo(Screen.Queue) },
                         onNavigateToNowPlaying = { viewModel.navigateTo(Screen.NowPlaying) },
                         onPlayAllRecent = {
@@ -565,6 +569,10 @@ fun AppRoot(
                     val recentSongsState by viewModel.recentSongs.collectAsState(initial = UiState.Success(emptyList()))
                     val recentSongsList = recentSongsState.dataOrNull() ?: emptyList()
                     val localPlaylists by viewModel.localPlaylists.collectAsState(initial = emptyList())
+                    // 进入"我的"页时刷新最近播放（首次进入/从播放页返回时更新）
+                    LaunchedEffect(Unit) {
+                        viewModel.loadRecentSongs()
+                    }
                     val queueSongIds by viewModel.queueSongIds.collectAsState(initial = emptySet())
                     MineScreen(
                         favoriteSongsState = favoriteSongsState,

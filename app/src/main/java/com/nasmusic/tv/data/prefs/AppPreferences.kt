@@ -72,6 +72,7 @@ class AppPreferences(private val context: Context) {
 
     // --- B-2 最近播放 & 播放次数（序列化为 JSON）---
     private val keyRecentSongs = stringPreferencesKey("recent_songs")
+    private val keyRecentSongObjects = stringPreferencesKey("recent_song_objects")
     private val keyPlayCounts = stringPreferencesKey("play_counts")
 
     // --- 网络歌曲收藏（序列化为 JSON）---
@@ -227,6 +228,51 @@ class AppPreferences(private val context: Context) {
 
             counts[songId] = (counts[songId] ?: 0) + 1
             prefs[keyPlayCounts] = gson.toJson(counts)
+        }
+    }
+
+    // --- B-2b 最近播放完整歌曲对象（含网络歌曲，供"最近播放"区展示/播放）---
+    private data class RecentSongObjectsData(val songs: List<Song> = emptyList())
+
+    /** 最近播放区最大保留歌曲数 */
+    private val recentSongsObjectsMaxSize = 50
+
+    /**
+     * 记录一次最近播放的完整歌曲对象（含网络歌曲，streamUrl 置空）。
+     * 与 recordPlay 的 id 列表互补：这里存完整元数据，支持网络歌曲/未连 NAS 时展示。
+     */
+    suspend fun recordRecentSongObject(song: Song) {
+        context.dataStore.edit { prefs ->
+            val json = prefs[keyRecentSongObjects] ?: "{\"songs\":[]}"
+            val data = try {
+                gson.fromJson(json, RecentSongObjectsData::class.java)
+            } catch (e: Exception) {
+                RecentSongObjectsData()
+            }
+            val list = data.songs.toMutableList()
+            list.removeAll { it.id == song.id } // 去重（保留最新一条）
+            // streamUrl 置空，避免持久化过期链接
+            list.add(0, song.copy(streamUrl = null))
+            if (list.size > recentSongsObjectsMaxSize) {
+                list.removeAt(list.lastIndex)
+            }
+            prefs[keyRecentSongObjects] = gson.toJson(RecentSongObjectsData(list))
+        }
+    }
+
+    /**
+     * 获取最近播放歌曲对象（最新在前，streamUrl 为空需播放时重新解析）
+     */
+    suspend fun getRecentSongObjects(): List<Song> {
+        return try {
+            context.dataStore.data.first().let { prefs ->
+                val json = prefs[keyRecentSongObjects] ?: "{\"songs\":[]}"
+                val data = gson.fromJson(json, RecentSongObjectsData::class.java)
+                data.songs
+            }
+        } catch (e: Exception) {
+            AppLog.w(TAG, "Failed to read recent song objects", e)
+            emptyList()
         }
     }
 
@@ -1037,6 +1083,7 @@ class AppPreferences(private val context: Context) {
         val localPlaylists: List<LocalPlaylist> = emptyList(),
         val lastQueue: LastQueueData? = null,
         val recentSongIds: List<String> = emptyList(),
+        val recentSongObjects: List<Song> = emptyList(),
         val playCounts: Map<String, Int> = emptyMap(),
         val playRecords: List<com.nasmusic.tv.data.model.PlayRecord> = emptyList(),
         val searchHistory: List<SearchHistoryItem> = emptyList(),
@@ -1069,6 +1116,7 @@ class AppPreferences(private val context: Context) {
             localPlaylists = getLocalPlaylists(),
             lastQueue = getLastQueue(),
             recentSongIds = getRecentSongIds(),
+            recentSongObjects = getRecentSongObjects(),
             playCounts = playCounts.first(),
             playRecords = getPlayRecords(),
             searchHistory = getSearchHistory(),
@@ -1116,6 +1164,9 @@ class AppPreferences(private val context: Context) {
             prefs[keyNetworkFavorites] = gson.toJson(data.networkFavorites)
             prefs[keyLocalPlaylists] = gson.toJson(data.localPlaylists)
             prefs[keyRecentSongs] = gson.toJson(data.recentSongIds)
+            prefs[keyRecentSongObjects] = gson.toJson(
+                RecentSongObjectsData(data.recentSongObjects.map { it.copy(streamUrl = null) })
+            )
             prefs[keyPlayCounts] = gson.toJson(data.playCounts)
             if (data.lastQueue != null) {
                 prefs[keyLastQueue] = gson.toJson(

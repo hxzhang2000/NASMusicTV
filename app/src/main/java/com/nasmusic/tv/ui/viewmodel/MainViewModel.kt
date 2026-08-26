@@ -1433,22 +1433,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
     fun loadRecentSongs(showLoading: Boolean = true) {
         if (showLoading) _recentSongs.value = UiState.Loading
         viewModelScope.launch {
-            val adapter = backendRegistry.getAdapter() ?: run {
-                _recentSongs.value = UiState.Error("后端未连接")
-                return@launch
-            }
             try {
-                val recentIds = prefs.getRecentSongIds().distinct().take(100)
-                if (recentIds.isEmpty()) {
-                    _recentSongs.value = UiState.Success(emptyList())
-                    return@launch
-                }
-                val songs = adapter.getSongsByIds(recentIds)
-                // 按最近播放顺序排序
-                val songMap = songs.associateBy { it.id }
-                val orderedSongs = recentIds.mapNotNull { songMap[it] }
-                _recentSongs.value = UiState.Success(orderedSongs)
-                AppLog.d("NASMusic", "loadRecentSongs: ${orderedSongs.size} recent songs loaded")
+                // 读取持久化的最近播放完整歌曲对象（含网络歌曲，不依赖 NAS 连接）
+                val recent = prefs.getRecentSongObjects()
+                _recentSongs.value = UiState.Success(recent)
+                AppLog.d("NASMusic", "loadRecentSongs: ${recent.size} recent songs loaded")
             } catch (e: Exception) {
                 AppLog.e("NASMusic", "loadRecentSongs failed", e)
                 _recentSongs.value = UiState.Error(
@@ -1786,6 +1775,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
                     seenKeys = browseSeenKeys,
                     produce = {
                         // 跨源聚合器：按当前点亮来源并行搜索（NAS/网络/百度/Jamendo）
+                        // directoryMode=true：发现页标签浏览，网盘源走目录感知搜索（适用于所有网盘模式）
                         val keyword = buildCombo()
                         if (keyword.isBlank()) return@pickBestFreshBatch emptyList()
                         val aggregator = SearchAggregator(
@@ -1794,7 +1784,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
                             baiduService = nasMusicApp.baiduNetdiskService,
                             jamendoService = nasMusicApp.jamendoService
                         )
-                        aggregator.search(keyword, sources = _enabledSearchSources.value)
+                        aggregator.search(keyword, sources = _enabledSearchSources.value, directoryMode = true)
                             .allResults.map { it.song }
                     },
                     songsOf = { it }
@@ -2289,6 +2279,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
     fun recordPlay(song: Song) {
         viewModelScope.launch {
             prefs.recordPlay(song.id)
+            // 存储完整歌曲对象（含网络歌曲，供最近播放区展示/播放）
+            prefs.recordRecentSongObject(song)
             // 刷新最近播放列表，不显示 loading 以避免闪烁
             loadRecentSongs(showLoading = false)
         }
@@ -2414,8 +2406,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
 
     fun playPause() {
         val song = currentSong.value
-        // 恢复队列后，当前歌曲的 streamUrl 可能为空，需要先解析再播放
-        if (song != null && song.streamUrl.isNullOrBlank() && !isPlaying.value) {
+        // 当前歌曲 streamUrl 为空（网络歌曲懒加载 / 恢复队列后未解析）时，
+        // 无论 isPlaying 状态如何都先解析再播放——空 URL 的 ExoPlayer 必然无法播放，
+        // 此时 isPlaying 若为 true 是误导状态（缓冲/错误残留），直接 play() 无效。
+        // 这样懒加载逻辑真正落到播放按钮：点击播放时始终确保有可播放的直链。
+        if (song != null && song.streamUrl.isNullOrBlank()) {
             resolveAndPlayCurrentSong(song)
             return
         }

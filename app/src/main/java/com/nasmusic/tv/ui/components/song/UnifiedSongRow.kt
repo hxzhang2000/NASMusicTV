@@ -176,14 +176,16 @@ private fun SongRowModeRow(
                 .padding(horizontal = 16.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // 左侧：封面 + 序号/图标 + 文字
+            // 左侧：封面 + 序号/图标 + 文字（可点击播放）
             Row(
                 modifier = Modifier
                     .weight(1f)
                     .then(
                         if (focusRequester != null) Modifier.focusRequester(focusRequester)
                         else Modifier
-                    ),
+                    )
+                    .focusable()
+                    .clickable { onClick() },
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 // 封面缩略图

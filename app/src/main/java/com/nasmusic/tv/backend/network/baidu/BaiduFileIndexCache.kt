@@ -84,6 +84,41 @@ class BaiduFileIndexCache(context: Context) {
         return matched.map { it.toSong() }
     }
 
+    /**
+     * 目录感知搜索（发现页专用）：优先按"目录名"匹配，目录命中则返回该目录下全部歌曲。
+     *
+     * 网盘常按"粤语 / 经典老歌 / 民谣"等目录组织音乐，目录名本身就是标签。
+     * 这里先匹配 path 中的目录段；若某目录名包含 keyword，把该目录下所有音频条目都列出；
+     * 无目录命中时回退到 [search]（按文件名/歌手匹配）。
+     *
+     * @param keyword 搜索词（可能是目录名或文件名片段）
+     * @return 匹配的歌曲；按目录聚合，同目录歌曲归在一起
+     */
+    fun searchByDirectory(keyword: String, limit: Int = 0): List<Song> {
+        val index = load() ?: return emptyList()
+        val k = keyword.trim().lowercase()
+        if (k.isBlank()) return emptyList()
+
+        // 找出 path 中目录段包含 keyword 的条目
+        val dirHits = index.entries.filter { entry ->
+            val dirSegments = entry.path.substringBeforeLast('/')
+            dirSegments.lowercase().contains(k)
+        }
+
+        if (dirHits.isNotEmpty()) {
+            // 命中目录：按"所属目录"分组，返回所有命中目录下的全部条目（去重 fsId）
+            val matchedDirs = dirHits.map { it.path.substringBeforeLast('/') }.toSet()
+            val result = index.entries
+                .filter { entry -> matchedDirs.any { dir -> entry.path.startsWith("$dir/") } }
+                .distinctBy { it.fsId }
+            val songs = result.map { it.toSong() }
+            return if (limit > 0) songs.take(limit) else songs
+        }
+
+        // 无目录命中：回退文件名/歌手匹配
+        return search(keyword, limit)
+    }
+
     /** 按 fs_id 反查 path（MV 同目录同名匹配用） */
     fun getPathByFsId(fsId: Long?): String? {
         if (fsId == null) return null

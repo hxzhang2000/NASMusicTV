@@ -31,6 +31,19 @@ interface NetworkMusicService {
     suspend fun search(keyword: String, limit: Int = 0): List<Song>
 
     /**
+     * 目录感知搜索（网盘等按目录组织文件的源专用）。
+     *
+     * 网盘常以"粤语 / 经典老歌 / 民谣"等标签作为目录名组织音乐。
+     * 目录名命中时返回该目录下全部歌曲（发现页按标签浏览场景），
+     * 无目录命中则回退文件名/歌手匹配。
+     *
+     * 默认实现直接回退 [search]（普通文件名搜索），
+     * 支持目录结构的源（如各网盘）应覆盖实现以启用该能力。
+     * 该逻辑应适用于所有网盘模式，而非某个具体网盘专属。
+     */
+    suspend fun searchByDirectory(keyword: String): List<Song> = search(keyword)
+
+    /**
      * 解析播放链接。
      *
      * Meting-API 返回的是 302 端点，需要跟随重定向拿到直联 URL；

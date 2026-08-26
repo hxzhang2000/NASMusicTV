@@ -135,6 +135,8 @@ private fun KaraokeLyricsViewInner(
         modifier = modifier.fillMaxWidth().padding(horizontal = 72.dp),
         horizontalAlignment = Alignment.Start
     ) {
+        // 手机紧凑模式使用更小字号，保证两行歌词在窄屏上都能放下
+        val lineFontSize = if (com.nasmusic.tv.ui.theme.LocalPhoneCompact.current) 34.sp else 50.sp
         // 顶部槽位：偶数索引行 -> 黄色平滑推进；奇数索引行 -> 白色预览（下一句）
         topLine?.let { line ->
             val progress = if (onTopIsCurrent) {
@@ -145,7 +147,7 @@ private fun KaraokeLyricsViewInner(
             KaraokeLineText(
                 text = line.text,
                 progress = progress,
-                fontSize = 50.sp,
+                fontSize = lineFontSize,
                 textAlign = TextAlign.Start,
                 modifier = Modifier.fillMaxWidth()
             )
@@ -163,7 +165,7 @@ private fun KaraokeLyricsViewInner(
             KaraokeLineText(
                 text = line.text,
                 progress = progress,
-                fontSize = 50.sp,
+                fontSize = lineFontSize,
                 textAlign = TextAlign.End,
                 modifier = Modifier.fillMaxWidth()
             )
