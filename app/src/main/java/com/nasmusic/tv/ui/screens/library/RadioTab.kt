@@ -1,4 +1,4 @@
-﻿package com.nasmusic.tv.ui.screens.network
+package com.nasmusic.tv.ui.screens.library
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -40,14 +40,13 @@ import com.nasmusic.tv.R
 import com.nasmusic.tv.backend.radio.RadioBrowserClient
 import com.nasmusic.tv.data.model.RadioStation
 import com.nasmusic.tv.data.model.UiState
-import com.nasmusic.tv.ui.LocalListBackHandler
 import com.nasmusic.tv.ui.components.FocusableSurface
 import com.nasmusic.tv.ui.components.SearchField
 import com.nasmusic.tv.ui.screens.TextInputDialog
 import com.nasmusic.tv.ui.theme.NasMusicColors
 
 /**
- * 电台子 Tab（radio-browser.info）
+ * 电台 Tab（曲库子 Tab）
  *
  * 顶部：搜索按钮 + 快捷筛选行（中文电台 + 预置标签，可横向滑动）
  * 主体：2 列电台卡片网格（台标 / 名称 / 国家·标签 / 码率角标）
@@ -55,10 +54,10 @@ import com.nasmusic.tv.ui.theme.NasMusicColors
  */
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
-fun RadioSubTab(
-    state: UiState<List<RadioStation>>,
-    activeTag: String?,
-    activeQuery: String,
+fun RadioTab(
+    radioStations: UiState<List<RadioStation>>,
+    radioActiveTag: String?,
+    radioActiveQuery: String,
     onLoadDefault: () -> Unit,
     onLoadTag: (String) -> Unit,
     onSearch: (String) -> Unit,
@@ -67,7 +66,6 @@ fun RadioSubTab(
     var showSearchDialog by remember { mutableStateOf(false) }
     val listState = androidx.compose.foundation.lazy.grid.rememberLazyGridState()
 
-    // 首次进入自动加载默认列表（ViewModel 幂等：已有数据则跳过）
     LaunchedEffect(Unit) {
         onLoadDefault()
     }
@@ -79,7 +77,7 @@ fun RadioSubTab(
             verticalAlignment = Alignment.CenterVertically
         ) {
             SearchField(
-                query = activeQuery,
+                query = radioActiveQuery,
                 placeholder = stringResource(R.string.network_search_hint),
                 onOpenSearch = { showSearchDialog = true },
                 onClear = { onLoadDefault() },
@@ -88,7 +86,7 @@ fun RadioSubTab(
             Spacer(modifier = Modifier.width(8.dp))
 
             RadioBrowserClient.PRESET_TAGS.forEach { tag ->
-                val isSelected = activeTag == tag && activeQuery.isBlank()
+                val isSelected = radioActiveTag == tag && radioActiveQuery.isBlank()
                 FocusableSurface(
                     onClick = { onLoadTag(tag) },
                     shape = RoundedCornerShape(8.dp),
@@ -113,7 +111,7 @@ fun RadioSubTab(
         Spacer(modifier = Modifier.height(12.dp))
 
         // ── 电台网格 ──
-        when (state) {
+        when (radioStations) {
             is UiState.Loading -> {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Text(stringResource(R.string.common_loading), color = NasMusicColors.TextSecondary, fontSize = 19.sp)
@@ -146,11 +144,11 @@ fun RadioSubTab(
                 }
             }
             is UiState.Success -> {
-                val stations = state.data
+                val stations = radioStations.data
                 if (stations.isEmpty()) {
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         Text(
-                            text = if (activeQuery.isNotBlank() || activeTag != null)
+                            text = if (radioActiveQuery.isNotBlank() || radioActiveTag != null)
                                 stringResource(R.string.network_radio_no_results)
                             else stringResource(R.string.network_radio_load_failed),
                             color = NasMusicColors.TextSecondary,
@@ -181,12 +179,11 @@ fun RadioSubTab(
         }
     }
 
-    // 搜索电台弹窗
     if (showSearchDialog) {
         TextInputDialog(
             title = stringResource(R.string.network_radio_search_hint),
             hint = stringResource(R.string.network_radio_search_hint),
-            initialValue = activeQuery,
+            initialValue = radioActiveQuery,
             onConfirm = { kw ->
                 if (kw.isNotBlank()) onSearch(kw)
                 showSearchDialog = false
@@ -196,9 +193,6 @@ fun RadioSubTab(
     }
 }
 
-/**
- * 电台卡片（台标 + 名称 + 国家/标签 + 码率角标）
- */
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 private fun RadioStationCard(
@@ -222,7 +216,6 @@ private fun RadioStationCard(
                 .padding(12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // 台标
             if (station.faviconUrl != null) {
                 AsyncImage(
                     model = station.faviconUrl,
@@ -259,7 +252,7 @@ private fun RadioStationCard(
                     text = listOf(
                         station.country.takeIf { it.isNotBlank() },
                         station.tags.take(2).joinToString(" / ").takeIf { it.isNotBlank() }
-                    ).filterNotNull().joinToString(" · "),
+                    ).filterNotNull().joinToString(" \u00B7 "),
                     fontSize = 13.sp,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,

@@ -1,4 +1,4 @@
-﻿package com.nasmusic.tv.ui.screens.network
+package com.nasmusic.tv.ui.screens.library
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -28,28 +28,30 @@ import androidx.compose.ui.unit.sp
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Text
 import com.nasmusic.tv.R
-import com.nasmusic.tv.backend.network.JamendoService
 import com.nasmusic.tv.data.model.Song
 import com.nasmusic.tv.data.model.UiState
 import com.nasmusic.tv.ui.components.FocusableSurface
 import com.nasmusic.tv.ui.components.SearchField
-import com.nasmusic.tv.ui.screens.SongRow
+import com.nasmusic.tv.ui.components.song.SongRowMode
+import com.nasmusic.tv.ui.components.song.UnifiedSongRow
 import com.nasmusic.tv.ui.screens.TextInputDialog
 import com.nasmusic.tv.ui.theme.NasMusicColors
 
+private val JAMENDO_PRESET_TAGS = listOf("ambient", "electronic", "jazz", "filmscore", "chillout", "instrumental", "pop", "rock")
+
 /**
- * Jamendo（CC 独立音乐）子 Tab
+ * Jamendo（CC 独立音乐）Tab（曲库子 Tab）
  *
  * 顶部：搜索按钮 + 快捷筛选行（热门 + 预置风格，可横向滑动）
- * 主体：单列 SongRow 歌曲列表（封面 / 歌名 / 歌手，支持收藏与加入队列）
+ * 主体：单列 UnifiedSongRow 歌曲列表（封面 / 歌名 / 歌手，支持收藏与加入队列）
  * 未配置 Client ID 时显示引导卡。
  */
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
-fun JamendoSubTab(
-    state: UiState<List<Song>>,
-    activeTag: String,
-    configured: Boolean,
+fun JamendoTab(
+    jamendoState: UiState<List<Song>>,
+    jamendoActiveTag: String,
+    jamendoConfigured: Boolean,
     networkFavoriteIds: Set<String>,
     queueSongIds: Set<String>,
     onLoadHot: () -> Unit,
@@ -62,13 +64,11 @@ fun JamendoSubTab(
     var showSearchDialog by remember { mutableStateOf(false) }
     val listState = androidx.compose.foundation.lazy.LazyListState()
 
-    // 首次进入自动加载热门榜（ViewModel 幂等）
     LaunchedEffect(Unit) {
         onLoadHot()
     }
 
-    if (!configured) {
-        // ── 未配置引导卡 ──
+    if (!jamendoConfigured) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             FocusableSurface(
                 onClick = {},
@@ -98,7 +98,7 @@ fun JamendoSubTab(
             verticalAlignment = Alignment.CenterVertically
         ) {
             SearchField(
-                query = activeTag,
+                query = jamendoActiveTag,
                 placeholder = stringResource(R.string.network_search_hint),
                 onOpenSearch = { showSearchDialog = true },
                 onClear = { onLoadHot() },
@@ -106,8 +106,7 @@ fun JamendoSubTab(
             )
             Spacer(modifier = Modifier.width(8.dp))
 
-            // 热门
-            val hotSelected = activeTag.isBlank()
+            val hotSelected = jamendoActiveTag.isBlank()
             FocusableSurface(
                 onClick = onLoadHot,
                 shape = RoundedCornerShape(8.dp),
@@ -128,8 +127,8 @@ fun JamendoSubTab(
             }
             Spacer(modifier = Modifier.width(4.dp))
 
-            JamendoService.PRESET_TAGS.forEach { tag ->
-                val isSelected = activeTag == tag
+            JAMENDO_PRESET_TAGS.forEach { tag ->
+                val isSelected = jamendoActiveTag == tag
                 FocusableSurface(
                     onClick = { onLoadTag(tag) },
                     shape = RoundedCornerShape(8.dp),
@@ -154,7 +153,7 @@ fun JamendoSubTab(
         Spacer(modifier = Modifier.height(12.dp))
 
         // ── 歌曲列表 ──
-        when (state) {
+        when (jamendoState) {
             is UiState.Loading -> {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Text(stringResource(R.string.common_loading), color = NasMusicColors.TextSecondary, fontSize = 19.sp)
@@ -168,7 +167,7 @@ fun JamendoSubTab(
                 )
             }
             is UiState.Success -> {
-                val songs = state.data
+                val songs = jamendoState.data
                 if (songs.isEmpty()) {
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         Text(
@@ -184,10 +183,11 @@ fun JamendoSubTab(
                         verticalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
                         itemsIndexed(songs, key = { _, s -> s.id }) { index, song ->
-                            SongRow(
+                            UnifiedSongRow(
                                 song = song,
                                 index = index,
                                 onClick = { onPlaySong(song) },
+                                mode = SongRowMode.MODE_ROW,
                                 isInQueue = song.id in queueSongIds,
                                 onToggleQueue = { onToggleQueue(song) },
                                 isFavorited = song.id in networkFavoriteIds,
@@ -201,12 +201,11 @@ fun JamendoSubTab(
         }
     }
 
-    // 搜索弹窗
     if (showSearchDialog) {
         TextInputDialog(
             title = stringResource(R.string.network_search_hint),
             hint = stringResource(R.string.network_search_hint),
-            initialValue = activeTag,
+            initialValue = jamendoActiveTag,
             onConfirm = { kw ->
                 if (kw.isNotBlank()) onSearch(kw)
                 showSearchDialog = false

@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -90,6 +91,7 @@ fun PlaylistPickerDialog(
             Column(
                 modifier = Modifier
                     .width(520.dp)
+                    .fillMaxHeight(0.9f)
                     .background(NasMusicColors.Surface, RoundedCornerShape(16.dp))
                     .padding(20.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
@@ -109,10 +111,10 @@ fun PlaylistPickerDialog(
 
                 Spacer(modifier = Modifier.height(16.dp))
 
-                // 歌单列表
+                // 歌单列表（占满剩余空间，过长可滚动）
                 if (playlists.isEmpty()) {
                     Box(
-                        modifier = Modifier.fillMaxWidth().padding(vertical = 24.dp),
+                        modifier = Modifier.weight(1f).fillMaxWidth(),
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
@@ -124,7 +126,7 @@ fun PlaylistPickerDialog(
                 } else {
                     LazyColumn(
                         state = listState,
-                        modifier = Modifier.fillMaxWidth().height(300.dp),
+                        modifier = Modifier.weight(1f).fillMaxWidth(),
                         verticalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
                         itemsIndexed(playlists, key = { _, it -> it.id }) { index, playlist ->

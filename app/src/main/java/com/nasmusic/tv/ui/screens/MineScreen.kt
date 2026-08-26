@@ -35,21 +35,21 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Text
-import coil.compose.AsyncImage
 import com.nasmusic.tv.R
 import com.nasmusic.tv.data.model.LocalPlaylist
 import com.nasmusic.tv.data.model.Song
 import com.nasmusic.tv.data.model.UiState
 import com.nasmusic.tv.ui.components.FocusableSurface
+import com.nasmusic.tv.ui.components.common.ActionBar
+import com.nasmusic.tv.ui.components.song.SongRowMode
+import com.nasmusic.tv.ui.components.song.UnifiedSongRow
 import com.nasmusic.tv.ui.theme.LocalPhoneCompact
 import com.nasmusic.tv.ui.theme.NasMusicColors
-import com.nasmusic.tv.util.TimeUtils
 import kotlinx.coroutines.launch
 
 /**
@@ -68,6 +68,8 @@ fun MineScreen(
     // 左栏：收藏数据
     favoriteSongsState: UiState<List<Song>>,
     networkFavoriteSongs: List<Song>,
+    // 最近播放
+    recentSongs: List<Song>,
     // 右栏：本地歌单数据
     localPlaylists: List<LocalPlaylist>,
     // 通用
@@ -116,21 +118,18 @@ fun MineScreen(
         ) {
             // ===== 收藏区 =====
             item(key = "fav_header") {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
+                Column(modifier = Modifier.fillMaxWidth()) {
                     Text(
                         text = stringResource(R.string.mine_favorites),
                         color = NasMusicColors.TextPrimary,
                         fontSize = 33.sp,
-                        modifier = Modifier.padding(end = 24.dp)
+                        modifier = Modifier.padding(bottom = 4.dp)
                     )
-                    Spacer(modifier = Modifier.weight(1f))
                     if (mergedFavorites.isNotEmpty()) {
-                        ButtonChip(
-                            text = stringResource(R.string.common_play_all),
-                            onClick = { onPlayAll(mergedFavorites) }
+                        ActionBar(
+                            songCount = mergedFavorites.size,
+                            onPlayAll = { onPlayAll(mergedFavorites) },
+                            onAddAllToQueue = { mergedFavorites.forEach { song -> onToggleQueue(song) } }
                         )
                     }
                 }
@@ -147,9 +146,10 @@ fun MineScreen(
                 }
             } else {
                 items(mergedFavorites, key = { "fav_${it.id}" }) { song ->
-                    SongRow(
+                    UnifiedSongRow(
                         song = song,
                         onClick = { onPlaySong(song) },
+                        mode = SongRowMode.MODE_ROW,
                         isFavorited = true,
                         onToggleFavorite = { onToggleFavorite(song) },
                         isInQueue = song.id in queueSongIds,
@@ -161,6 +161,52 @@ fun MineScreen(
 
             // 分隔
             item(key = "section_divider") { Spacer(modifier = Modifier.height(24.dp)) }
+
+            // ===== 最近播放区 =====
+            item(key = "recent_header") {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Text(
+                        text = stringResource(R.string.mine_recent),
+                        color = NasMusicColors.TextPrimary,
+                        fontSize = 33.sp,
+                        modifier = Modifier.padding(bottom = 4.dp)
+                    )
+                    if (recentSongs.isNotEmpty()) {
+                        ActionBar(
+                            songCount = recentSongs.size,
+                            onPlayAll = { onPlayAll(recentSongs) },
+                            onAddAllToQueue = { recentSongs.forEach { song -> onToggleQueue(song) } }
+                        )
+                    }
+                }
+            }
+            if (recentSongs.isEmpty()) {
+                item(key = "recent_empty") {
+                    Box(modifier = Modifier.fillMaxWidth().padding(vertical = 24.dp), contentAlignment = Alignment.Center) {
+                        Text(
+                            text = stringResource(R.string.library_no_recent),
+                            color = NasMusicColors.TextSecondary,
+                            fontSize = 21.sp
+                        )
+                    }
+                }
+            } else {
+                items(recentSongs, key = { "recent_${it.id}" }) { song ->
+                    UnifiedSongRow(
+                        song = song,
+                        onClick = { onPlaySong(song) },
+                        mode = SongRowMode.MODE_ROW,
+                        isFavorited = song.id in (favoriteSongsState.dataOrNull() ?: emptyList()).map { it.id }.toSet() || song.id in networkFavoriteSongs.map { it.id }.toSet(),
+                        onToggleFavorite = { onToggleFavorite(song) },
+                        isInQueue = song.id in queueSongIds,
+                        onToggleQueue = { onToggleQueue(song) },
+                        onAddToPlaylist = { pickerSong = song }
+                    )
+                }
+            }
+
+            // 分隔
+            item(key = "section_divider_2") { Spacer(modifier = Modifier.height(24.dp)) }
 
             // ===== 歌单区 =====
             item(key = "pl_header") {
@@ -235,14 +281,29 @@ fun MineScreen(
                             }
                         } else {
                             items(playlist.songs, key = { "pl_song_${playlist.id}_${it.id}" }) { song ->
-                                PlaylistSongRow(
-                                    song = song,
-                                    isInQueue = song.id in queueSongIds,
-                                    onClick = { onPlaySong(song) },
-                                    onToggleQueue = { onToggleQueue(song) },
-                                    onRemove = { onRemoveSongFromPlaylist(playlist.id, song.id) },
-                                    onAddToPlaylist = { pickerSong = song }
-                                )
+                                Box(modifier = Modifier.fillMaxWidth()) {
+                                    UnifiedSongRow(
+                                        song = song,
+                                        mode = SongRowMode.MODE_ROW,
+                                        onClick = { onPlaySong(song) },
+                                        isInQueue = song.id in queueSongIds,
+                                        onToggleQueue = { onToggleQueue(song) },
+                                        onAddToPlaylist = { pickerSong = song }
+                                    )
+                                    // 移除按钮（右上角叠加）
+                                    Box(
+                                        modifier = Modifier
+                                            .align(Alignment.TopEnd)
+                                            .padding(8.dp)
+                                            .size(36.dp)
+                                            .clip(RoundedCornerShape(4.dp))
+                                            .background(NasMusicColors.Warning.copy(alpha = 0.8f))
+                                            .clickable { onRemoveSongFromPlaylist(playlist.id, song.id) },
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text(text = "?", color = NasMusicColors.TextPrimary, fontSize = 16.sp)
+                                    }
+                                }
                             }
                         }
                     }
@@ -259,6 +320,17 @@ fun MineScreen(
                 onToggleQueue = onToggleQueue,
                 queueSongIds = queueSongIds,
                 onAddToPlaylist = { pickerSong = it },
+                modifier = Modifier.weight(1f).fillMaxHeight()
+            )
+            Spacer(modifier = Modifier.width(24.dp))
+            RecentPane(
+                songs = recentSongs,
+                onPlayAll = onPlayAll,
+                onPlaySong = onPlaySong,
+                onToggleFavorite = onToggleFavorite,
+                onToggleQueue = onToggleQueue,
+                queueSongIds = queueSongIds,
+                isFavorited = { song -> song.id in mergedFavorites.map { it.id }.toSet() },
                 modifier = Modifier.weight(1f).fillMaxHeight()
             )
             Spacer(modifier = Modifier.width(24.dp))
@@ -349,21 +421,18 @@ private fun FavoritesPane(
     modifier: Modifier = Modifier
 ) {
     Column(modifier = modifier) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
+        Column(modifier = Modifier.fillMaxWidth()) {
             Text(
                 text = stringResource(R.string.mine_favorites),
                 color = NasMusicColors.TextPrimary,
                 fontSize = 33.sp,
-                modifier = Modifier.padding(end = 24.dp)
+                modifier = Modifier.padding(bottom = 4.dp)
             )
-            Spacer(modifier = Modifier.weight(1f))
             if (songs.isNotEmpty()) {
-                ButtonChip(
-                    text = stringResource(R.string.common_play_all),
-                    onClick = { onPlayAll(songs) }
+                ActionBar(
+                    songCount = songs.size,
+                    onPlayAll = { onPlayAll(songs) },
+                    onAddAllToQueue = { songs.forEach { song -> onToggleQueue(song) } }
                 )
             }
         }
@@ -382,14 +451,76 @@ private fun FavoritesPane(
                 verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 items(songs, key = { it.id }) { song ->
-                    SongRow(
+                    UnifiedSongRow(
                         song = song,
+                        mode = SongRowMode.MODE_ROW,
                         onClick = { onPlaySong(song) },
                         isFavorited = true,
                         onToggleFavorite = { onToggleFavorite(song) },
                         isInQueue = song.id in queueSongIds,
                         onToggleQueue = { onToggleQueue(song) },
                         onAddToPlaylist = { onAddToPlaylist(song) }
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * 最近播放 Pane：标题行（含全部播放）+ 最近播放歌曲列表（单列 SongRow）
+ */
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+private fun RecentPane(
+    songs: List<Song>,
+    queueSongIds: Set<String>,
+    onPlayAll: (List<Song>) -> Unit,
+    onPlaySong: (Song) -> Unit,
+    onToggleFavorite: (Song) -> Unit,
+    onToggleQueue: (Song) -> Unit,
+    isFavorited: (Song) -> Boolean,
+    modifier: Modifier = Modifier
+) {
+    Column(modifier = modifier) {
+        Column(modifier = Modifier.fillMaxWidth()) {
+            Text(
+                text = stringResource(R.string.mine_recent),
+                color = NasMusicColors.TextPrimary,
+                fontSize = 33.sp,
+                modifier = Modifier.padding(bottom = 4.dp)
+            )
+            if (songs.isNotEmpty()) {
+                ActionBar(
+                    songCount = songs.size,
+                    onPlayAll = { onPlayAll(songs) },
+                    onAddAllToQueue = { songs.forEach { song -> onToggleQueue(song) } }
+                )
+            }
+        }
+        Spacer(modifier = Modifier.height(16.dp))
+        if (songs.isEmpty()) {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Text(
+                    text = stringResource(R.string.library_no_recent),
+                    color = NasMusicColors.TextSecondary,
+                    fontSize = 21.sp
+                )
+            }
+        } else {
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                items(songs, key = { "recent_${it.id}" }) { song ->
+                    UnifiedSongRow(
+                        song = song,
+                        mode = SongRowMode.MODE_ROW,
+                        onClick = { onPlaySong(song) },
+                        isFavorited = isFavorited(song),
+                        onToggleFavorite = { onToggleFavorite(song) },
+                        isInQueue = song.id in queueSongIds,
+                        onToggleQueue = { onToggleQueue(song) }
                     )
                 }
             }
@@ -489,14 +620,29 @@ private fun PlaylistsPane(
                             }
                         } else {
                             items(playlist.songs, key = { "playlist_song_${playlist.id}_${it.id}" }) { song ->
-                                PlaylistSongRow(
-                                    song = song,
-                                    isInQueue = song.id in queueSongIds,
-                                    onClick = { onPlaySong(song) },
-                                    onToggleQueue = { onToggleQueue(song) },
-                                    onRemove = { onRemoveSong(playlist.id, song) },
-                                    onAddToPlaylist = { onAddSongToPlaylist(song) }
-                                )
+                                Box(modifier = Modifier.fillMaxWidth()) {
+                                    UnifiedSongRow(
+                                        song = song,
+                                        mode = SongRowMode.MODE_ROW,
+                                        onClick = { onPlaySong(song) },
+                                        isInQueue = song.id in queueSongIds,
+                                        onToggleQueue = { onToggleQueue(song) },
+                                        onAddToPlaylist = { onAddSongToPlaylist(song) }
+                                    )
+                                    // 移除按钮（右上角叠加）
+                                    Box(
+                                        modifier = Modifier
+                                            .align(Alignment.TopEnd)
+                                            .padding(8.dp)
+                                            .size(36.dp)
+                                            .clip(RoundedCornerShape(4.dp))
+                                            .background(NasMusicColors.Warning.copy(alpha = 0.8f))
+                                            .clickable { onRemoveSong(playlist.id, song) },
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text(text = "?", color = NasMusicColors.TextPrimary, fontSize = 16.sp)
+                                    }
+                                }
                             }
                         }
                     }
@@ -614,79 +760,6 @@ private fun PlaylistCard(
 }
 
 /**
- * 歌单内歌曲行 — 仿 SongRow 结构（focusGroup），提供播放 / 队列 / 移除 / 加入歌单。
- */
-@OptIn(ExperimentalTvMaterial3Api::class)
-@Composable
-private fun PlaylistSongRow(
-    song: Song,
-    isInQueue: Boolean,
-    onClick: () -> Unit,
-    onToggleQueue: () -> Unit,
-    onRemove: () -> Unit,
-    onAddToPlaylist: () -> Unit
-) {
-    var isRowFocused by remember { mutableStateOf(false) }
-    val animScale = remember { Animatable(1f) }
-    val scope = rememberCoroutineScope()
-
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .focusGroup()
-            .scale(animScale.value)
-            .clip(RoundedCornerShape(6.dp))
-            .background(
-                color = if (isRowFocused) NasMusicColors.Primary.copy(alpha = 0.15f) else Color.Transparent
-            )
-            .onFocusChanged { state ->
-                isRowFocused = state.hasFocus
-                scope.launch {
-                    animScale.animateTo(
-                        if (isRowFocused) 1.02f else 1f,
-                        tween(200)
-                    )
-                }
-            }
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth().height(116.dp).padding(horizontal = 16.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Row(
-                modifier = Modifier.weight(1f).clickable { onClick() },
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                if (song.coverUrl != null) {
-                    AsyncImage(
-                        model = song.coverUrl,
-                        contentDescription = null,
-                        modifier = Modifier
-                            .size(88.dp)
-                            .clip(RoundedCornerShape(4.dp))
-                            .padding(end = 14.dp)
-                    )
-                }
-                Text(text = "▶", color = NasMusicColors.Primary, fontSize = 20.sp, modifier = Modifier.width(32.dp))
-                Spacer(modifier = Modifier.width(12.dp))
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(text = song.title, color = NasMusicColors.TextPrimary, fontSize = 23.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    Text(text = song.artist.ifBlank { "-" }, color = NasMusicColors.TextSecondary, fontSize = 20.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                }
-                Spacer(modifier = Modifier.width(12.dp))
-                Text(text = TimeUtils.formatDuration(song.durationMs), color = NasMusicColors.TextSecondary, fontSize = 20.sp)
-            }
-            Spacer(modifier = Modifier.width(8.dp))
-            QueueToggleButton(isInQueue = isInQueue, onClick = onToggleQueue)
-            Spacer(modifier = Modifier.width(8.dp))
-            AddToPlaylistButton(onClick = onAddToPlaylist)
-            Spacer(modifier = Modifier.width(8.dp))
-            RemoveSongButton(onClick = onRemove)
-        }
-    }
-}
-
-/**
  * 歌单操作小按钮（播放 / 重命名 / 删除）— Box + focusable + clickable，
  * 与 QueueToggleButton 相同的焦点处理方式。
  */
@@ -730,51 +803,6 @@ private fun PlaylistActionButton(
             fontSize = 21.sp,
             color = if (isFocused) color else color.copy(alpha = 0.75f),
             modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)
-        )
-    }
-}
-
-/**
- * 移除歌曲按钮 — 视觉：✕，聚焦高亮 Warning 色。
- */
-@Composable
-private fun RemoveSongButton(
-    onClick: () -> Unit
-) {
-    var isFocused by remember { mutableStateOf(false) }
-    val animScale = remember { Animatable(1f) }
-    val scope = rememberCoroutineScope()
-
-    Box(
-        modifier = Modifier
-            .size(44.dp)
-            .scale(animScale.value)
-            .border(
-                width = if (isFocused) 2.dp else 0.dp,
-                color = if (isFocused) NasMusicColors.FocusRing else Color.Transparent,
-                shape = RoundedCornerShape(6.dp)
-            )
-            .background(
-                color = if (isFocused) NasMusicColors.Warning.copy(alpha = 0.2f) else Color.Transparent,
-                shape = RoundedCornerShape(6.dp)
-            )
-            .onFocusChanged {
-                isFocused = it.isFocused
-                scope.launch {
-                    animScale.animateTo(
-                        if (isFocused) 1.1f else 1f,
-                        tween(200)
-                    )
-                }
-            }
-            .focusable()
-            .clickable { onClick() },
-        contentAlignment = Alignment.Center
-    ) {
-Text(
-            text = "?",
-            fontSize = 18.sp,
-            color = if (isFocused) NasMusicColors.Warning else NasMusicColors.TextSecondary.copy(alpha = 0.5f)
         )
     }
 }

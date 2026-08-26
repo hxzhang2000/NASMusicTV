@@ -33,7 +33,7 @@ class JamendoService(
     companion object {
         private const val TAG = "Jamendo"
 
-        /** 预置风格筛选（JamendoSubTab 顶部快捷筛选） */
+        /** 预置风格筛选（Jamendo 顶部快捷筛选） */
         val PRESET_TAGS = listOf("ambient", "electronic", "jazz", "filmscore", "chillout", "instrumental", "pop", "rock")
 
         /** 搜索结果 LRU 缓存（控制 API 配额） */

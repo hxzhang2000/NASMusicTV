@@ -66,8 +66,7 @@ import com.nasmusic.tv.ui.screens.HomeScreen
 import com.nasmusic.tv.ui.screens.LibraryScreen
 import com.nasmusic.tv.ui.screens.LibraryTab
 import com.nasmusic.tv.ui.screens.MineScreen
-import com.nasmusic.tv.ui.screens.NetworkPlaylistDetailScreen
-import com.nasmusic.tv.ui.screens.network.NetworkMusicContainer
+
 import com.nasmusic.tv.ui.screens.NowPlayingScreen
 import com.nasmusic.tv.ui.screens.PlaylistManagementScreen
 import com.nasmusic.tv.ui.screens.PlaylistPickerDialog
@@ -219,16 +218,6 @@ fun AppRoot(
                     onClick = { viewModel.navigateTo(Screen.Queue) }
                 )
                 NavItem(
-                    label = "网络音乐",
-                    selected = currentScreen == Screen.Network,
-                    onClick = { viewModel.navigateTo(Screen.Network) }
-                )
-                NavItem(
-                    label = "网盘",
-                    selected = currentScreen == Screen.Netdisk,
-                    onClick = { viewModel.navigateTo(Screen.Netdisk) }
-                )
-                NavItem(
                     label = stringResource(R.string.nav_settings),
                     selected = currentScreen == Screen.Settings,
                     onClick = { viewModel.navigateTo(Screen.Settings) }
@@ -288,7 +277,6 @@ fun AppRoot(
                         },
                         onOpenAlbumDetail = { album -> viewModel.openAlbumDetail(album) },
                         onNavigateToLibrary = { viewModel.navigateTo(Screen.Library) },
-                        onNavigateToNetwork = { viewModel.navigateTo(Screen.Network) },
                         onNavigateToQueue = { viewModel.navigateTo(Screen.Queue) },
                         onNavigateToNowPlaying = { viewModel.navigateTo(Screen.NowPlaying) },
                         onPlayAllRecent = {
@@ -376,13 +364,9 @@ fun AppRoot(
                             spectrumEnabled = settings.spectrumEnabled,
                             visualizerTheme = settings.visualizerTheme,
                             onSearchArtist = { keyword ->
-                                viewModel.navigateTo(com.nasmusic.tv.data.model.Screen.Network)
-                                viewModel.selectNetworkSubTab(com.nasmusic.tv.data.model.NetworkSubTab.SEARCH)
                                 viewModel.searchNetworkSongs(keyword)
                             },
                             onSearchSong = { keyword ->
-                                viewModel.navigateTo(com.nasmusic.tv.data.model.Screen.Network)
-                                viewModel.selectNetworkSubTab(com.nasmusic.tv.data.model.NetworkSubTab.SEARCH)
                                 viewModel.searchNetworkSongs(keyword)
                             }
                         )
@@ -391,8 +375,7 @@ fun AppRoot(
                 Screen.Library -> {
                     val genres by viewModel.genres.collectAsState(initial = UiState.Success(emptyList()))
                     val favoriteIds by viewModel.favoriteIds.collectAsState(initial = emptySet())
-                    val recentSongIds = viewModel.recentSongIds.collectAsState(initial = emptyList())
-                    val playCounts by viewModel.playCounts.collectAsState(initial = emptyMap())
+                    val networkFavoriteIds by viewModel.networkFavoriteIds.collectAsState(initial = emptySet())
                     val artistsState by viewModel.artists.collectAsState(initial = UiState.Success(emptyList()))
                     val yearsState by viewModel.years.collectAsState(initial = UiState.Success(emptyList()))
                     val songsPaging by viewModel.songsPaging.collectAsState(initial = com.nasmusic.tv.data.model.SongsPagingState())
@@ -402,24 +385,45 @@ fun AppRoot(
                     val genreList = genres.dataOrNull() ?: emptyList()
                     val artistsList = artistsState.dataOrNull() ?: emptyList()
                     val yearsList = yearsState.dataOrNull() ?: emptyList()
-                    val recentSongsState by viewModel.recentSongs.collectAsState(initial = UiState.Success(emptyList()))
-                    val recentSongsList = recentSongsState.dataOrNull() ?: emptyList()
                     val searchResultsList = searchResultsState.dataOrNull() ?: emptyList()
                     val isSearching = searchResultsState is UiState.Loading
                     val libraryActiveTab by viewModel.libraryActiveTab.collectAsState()
+                    val librarySearchKeyword by viewModel.librarySearchKeyword.collectAsState()
                     val localPlaylists by viewModel.localPlaylists.collectAsState(initial = emptyList())
                     val searchHistory by viewModel.searchHistory.collectAsState(initial = emptyList())
                     var pickerSong by remember { mutableStateOf<Song?>(null) }
+
+                    // ── RADIO Tab state ──
+                    val radioStations by viewModel.radioStations.collectAsState(initial = UiState.Success(emptyList()))
+                    val radioActiveTag by viewModel.radioActiveTag.collectAsState(initial = null)
+                    val radioActiveQuery by viewModel.radioActiveQuery.collectAsState(initial = "")
+                    // ── DISCOVER Tab state ──
+                    val browseSelections by viewModel.browseSelections.collectAsState(initial = emptyList())
+                    val browseResultsState by viewModel.browseResults.collectAsState(initial = UiState.Success(emptyList()))
+                    val browseIsLoading by viewModel.isBrowseSearching.collectAsState(initial = false)
+                    val browseResultsList = browseResultsState.dataOrNull() ?: emptyList()
+                    // Build DiscoverTab-compatible dimensions from BrowseDimension enum
+                    val discoverDimensions = remember {
+                        com.nasmusic.tv.data.model.BrowseDimension.entries.map { dim ->
+                            com.nasmusic.tv.ui.screens.library.BrowseDimension(
+                                label = dim.displayName,
+                                options = dim.options.map { it.label }
+                            )
+                        }
+                    }
+                    val discoverCurrentDimensionValues = remember(browseSelections) {
+                        com.nasmusic.tv.data.model.BrowseDimension.entries.mapIndexed { dimIdx, dim ->
+                            val selectedIdx = browseSelections.getOrElse(dimIdx) { 0 }
+                            dim.displayName to dim.options.getOrElse(selectedIdx) { dim.options.first() }.label
+                        }.toMap()
+                    }
                     LibraryScreen(
                         albums = albumList,
                         songs = songList,
                         isLoading = isLoading || isLibraryLoading,
                         isConnected = isConnected,
                         genres = genreList,
-                        favoriteIds = favoriteIds,
-                        recentSongIds = recentSongIds.value,
-                        recentSongs = recentSongsList,
-                        playCounts = playCounts,
+                        favoriteIds = favoriteIds + networkFavoriteIds,
                         artistSongsMap = viewModel.artistSongsMap.value,
                         artists = artistsList,
                         years = yearsList,
@@ -454,7 +458,11 @@ fun AppRoot(
                         },
                         queueSongIds = viewModel.queueSongIds.collectAsState(initial = emptySet()).value,
                         onToggleQueue = { song -> viewModel.toggleQueueSong(song) },
-                        onToggleFavorite = { song -> viewModel.toggleFavorite(song) },
+                        onToggleFavorite = { song ->
+                            // 网络歌曲走网络收藏，本地歌曲走本地收藏
+                            if (song.isNetworkSong) viewModel.toggleNetworkFavorite(song)
+                            else viewModel.toggleFavorite(song)
+                        },
                         onAddToPlaylist = { song -> pickerSong = song },
                         onOpenAlbumDetail = { album -> viewModel.openAlbumDetail(album) },
                         onOpenArtistDetail = { artist -> viewModel.openArtistDetail(artist) },
@@ -464,14 +472,60 @@ fun AppRoot(
                         onLoadSongsNextPage = { viewModel.loadSongsNextPage() },
                         onLoadArtists = { viewModel.loadArtists() },
                         onLoadYears = { viewModel.loadYears() },
-                        onLoadRecentSongs = { viewModel.loadRecentSongs() },
                         onSearch = { query -> viewModel.searchSongsOnServer(query) },
                         onClearSearch = { viewModel.clearSearch() },
                         historyItems = searchHistory,
-                        playStatistics = viewModel.playStatistics.collectAsState(initial = com.nasmusic.tv.data.model.PlayStatistics()).value,
-                        onClearPlayRecords = { viewModel.clearPlayRecords() },
                         activeTab = libraryActiveTab,
-                        onTabSelected = { tab -> viewModel.selectLibraryTab(tab) }
+                        onTabSelected = { tab -> viewModel.selectLibraryTab(tab) },
+                        filterQuery = librarySearchKeyword,
+                        onFilterQueryChange = { keyword -> viewModel.setLibrarySearchKeyword(keyword) },
+                        // ── SEARCH Tab ──
+                        onSearchTabPlayAll = {
+                            val allSongs = searchResultsList
+                            if (allSongs.isNotEmpty()) {
+                                viewModel.playQueue(allSongs)
+                                viewModel.navigateTo(Screen.NowPlaying)
+                            }
+                        },
+                        onSearchTabShuffle = {
+                            val allSongs = searchResultsList.shuffled()
+                            if (allSongs.isNotEmpty()) {
+                                viewModel.playQueue(allSongs)
+                                viewModel.navigateTo(Screen.NowPlaying)
+                            }
+                        },
+                        // ── DISCOVER Tab ──
+                        discoverDimensions = discoverDimensions,
+                        discoverFilteredSongs = browseResultsList,
+                        discoverIsLoading = browseIsLoading,
+                        discoverCurrentDimensionValues = discoverCurrentDimensionValues,
+                        onDiscoverDimensionChanged = { dimensionLabel, optionLabel ->
+                            val dimIdx = com.nasmusic.tv.data.model.BrowseDimension.entries.indexOfFirst { it.displayName == dimensionLabel }
+                            if (dimIdx >= 0) {
+                                val dim = com.nasmusic.tv.data.model.BrowseDimension.entries[dimIdx]
+                                val optIdx = dim.options.indexOfFirst { it.label == optionLabel }
+                                if (optIdx >= 0) {
+                                    viewModel.selectBrowseOption(dimIdx, optIdx)
+                                }
+                            }
+                        },
+                        onDiscoverPlayAll = {
+                            if (browseResultsList.isNotEmpty()) {
+                                viewModel.playQueue(browseResultsList)
+                                viewModel.navigateTo(Screen.NowPlaying)
+                            }
+                        },
+                        onDiscoverShuffle = {
+                            viewModel.refreshBrowseSongs()
+                        },
+                        // ── RADIO Tab ──
+                        radioStations = radioStations,
+                        radioActiveTag = radioActiveTag,
+                        radioActiveQuery = radioActiveQuery,
+                        onLoadRadioDefault = { viewModel.loadRadioDefault() },
+                        onLoadRadioTag = { tag -> viewModel.loadRadioTag(tag) },
+                        onSearchRadio = { keyword -> viewModel.searchRadio(keyword) },
+                        onPlayRadioStation = { station -> viewModel.playRadioStation(station) }
                     )
                     // 加入歌单选择弹窗
                     pickerSong?.let { song ->
@@ -493,11 +547,14 @@ fun AppRoot(
                 Screen.Mine -> {
                     val favoriteSongsState by viewModel.favoriteSongs.collectAsState(initial = UiState.Success(emptyList()))
                     val networkFavoriteSongs by viewModel.networkFavoriteSongs.collectAsState(initial = emptyList())
+                    val recentSongsState by viewModel.recentSongs.collectAsState(initial = UiState.Success(emptyList()))
+                    val recentSongsList = recentSongsState.dataOrNull() ?: emptyList()
                     val localPlaylists by viewModel.localPlaylists.collectAsState(initial = emptyList())
                     val queueSongIds by viewModel.queueSongIds.collectAsState(initial = emptySet())
                     MineScreen(
                         favoriteSongsState = favoriteSongsState,
                         networkFavoriteSongs = networkFavoriteSongs,
+                        recentSongs = recentSongsList,
                         localPlaylists = localPlaylists,
                         queueSongIds = queueSongIds,
                         onPlaySong = { song ->
@@ -734,179 +791,6 @@ fun AppRoot(
                         onRemoveSong = { songId -> viewModel.removeFromPlaylist(songId) },
                         onBack = { viewModel.navigateTo(Screen.Library) }
                     )
-                }
-                Screen.Network -> {
-                    val networkSearchResultsState by viewModel.networkSearchResults.collectAsState(initial = UiState.Success(emptyList()))
-                    val networkSearchKeyword by viewModel.networkSearchKeyword.collectAsState(initial = "")
-                    val networkFavoriteSongs by viewModel.networkFavoriteSongs.collectAsState(initial = emptyList())
-                    val networkFavoriteIds by viewModel.networkFavoriteIds.collectAsState(initial = emptySet())
-                    val networkPlaylists by viewModel.networkPlaylists.collectAsState(initial = emptyList())
-                    val queueSongIds by viewModel.queueSongIds.collectAsState(initial = emptySet())
-                    val currentNetworkSubTab by viewModel.currentNetworkSubTab.collectAsState(initial = com.nasmusic.tv.data.model.NetworkSubTab.DISCOVER)
-                    val currentMusicSource by viewModel.currentMusicSource.collectAsState(initial = com.nasmusic.tv.data.model.MusicSource.NETEASE)
-                    val recentNetworkSongs by viewModel.recentNetworkSongs.collectAsState(initial = emptyList())
-                    val currentNetworkSong by viewModel.currentNetworkSong.collectAsState(initial = null)
-                    val isNetworkSearching = networkSearchResultsState is UiState.Loading
-                    // 浏览状态
-                    val browseSelections by viewModel.browseSelections.collectAsState(initial = emptyList())
-                    val browseResults by viewModel.browseResults.collectAsState(initial = UiState.Success(emptyList()))
-                    val isBrowseSearching by viewModel.isBrowseSearching.collectAsState(initial = false)
-                    // 天气状态
-                    val weatherData by viewModel.weatherData.collectAsState(initial = null)
-                    val weatherRadioQueue by viewModel.weatherRadioQueue.collectAsState(initial = null)
-                    val currentWeatherMood by viewModel.currentWeatherMood.collectAsState(initial = com.nasmusic.tv.data.model.WeatherMood.SUNNY)
-                    val weatherLoading by viewModel.weatherLoading.collectAsState(initial = false)
-                    val weatherError by viewModel.weatherError.collectAsState(initial = null)
-                    val localPlaylists by viewModel.localPlaylists.collectAsState(initial = emptyList())
-                    val searchHistory by viewModel.searchHistory.collectAsState(initial = emptyList())
-                    // 电台状态
-                    val radioStations by viewModel.radioStations.collectAsState(initial = UiState.Success(emptyList()))
-                    val radioActiveTag by viewModel.radioActiveTag.collectAsState(initial = null)
-                    val radioActiveQuery by viewModel.radioActiveQuery.collectAsState(initial = "")
-                    // Jamendo 状态
-                    val jamendoState by viewModel.jamendoState.collectAsState(initial = UiState.Success(emptyList()))
-                    val jamendoActiveTag by viewModel.jamendoActiveTag.collectAsState(initial = "")
-                    val jamendoConfigured = viewModel.jamendoConfigured
-                    var pickerSong by remember { mutableStateOf<Song?>(null) }
-                    NetworkMusicContainer(
-                        currentSubTab = currentNetworkSubTab,
-                        currentMusicSource = currentMusicSource,
-                        searchKeyword = networkSearchKeyword,
-                        searchResults = networkSearchResultsState.dataOrNull() ?: emptyList(),
-                        isSearching = isNetworkSearching,
-                        historyItems = searchHistory,
-                        networkPlaylists = networkPlaylists,
-                        networkFavoriteSongs = networkFavoriteSongs,
-                        networkFavoriteIds = networkFavoriteIds,
-                        queueSongIds = queueSongIds,
-                        recentNetworkSongs = recentNetworkSongs,
-                        currentNetworkSong = currentNetworkSong,
-                        onSelectSubTab = { viewModel.selectNetworkSubTab(it) },
-                        onSelectMusicSource = { viewModel.selectMusicSource(it) },
-                        onSearch = { query -> viewModel.searchNetworkSongs(query) },
-                        onClearSearch = { viewModel.clearNetworkSearch() },
-                        onPlayNetworkSong = { song ->
-                            viewModel.playNetworkSong(song)
-                            viewModel.navigateTo(Screen.NowPlaying)
-                        },
-                        onToggleNetworkFavorite = { song -> viewModel.toggleNetworkFavorite(song) },
-                        onToggleQueue = { song -> viewModel.toggleQueueSong(song) },
-                        onAddToPlaylist = { song -> pickerSong = song },
-                        onPlayAllSongs = { songs ->
-                            viewModel.playQueue(songs, 0)
-                            viewModel.navigateTo(Screen.NowPlaying)
-                        },
-                        onPlayAllSearch = {
-                            viewModel.playAllSearchResults()
-                            viewModel.navigateTo(Screen.NowPlaying)
-                        },
-                        onShuffleSearch = { viewModel.shuffleNetworkSearch() },
-                        onAddAllToQueue = { viewModel.addAllSearchResultsToQueue() },
-                        onLoadPlaylistDetail = { (playlist, songs) -> viewModel.loadPlaylistDetail(playlist.id, playlist.name) },
-                        onNavigateToPlaylistDetail = { viewModel.navigateTo(Screen.NetworkPlaylistDetail) },
-                        weatherData = weatherData,
-                        weatherRadioQueue = weatherRadioQueue,
-                        currentWeatherMood = currentWeatherMood,
-                        weatherLoading = weatherLoading,
-                        weatherError = weatherError,
-                        weatherForecast = viewModel.weatherForecast.collectAsState(initial = emptyList()).value,
-                        weatherIconCode = viewModel.weatherIconCode.collectAsState(initial = null).value,
-                        onSwitchWeatherMood = { mood -> viewModel.switchWeatherMood(mood) },
-                        onRefreshWeather = { viewModel.fetchWeather() },
-                        onPlayWeatherAll = { viewModel.playWeatherRadioAll() },
-                        // 浏览子 Tab
-                        browseSelections = browseSelections,
-                        browseResults = browseResults,
-                        isBrowseSearching = isBrowseSearching,
-                        onSelectBrowseOption = { dimIdx, optIdx ->
-                            viewModel.selectBrowseOption(dimIdx, optIdx)
-                        },
-                        onRefreshBrowse = { viewModel.refreshBrowseSongs() },
-                        onPlayAllBrowse = {
-                            viewModel.playAllBrowseSongs()
-                            viewModel.navigateTo(Screen.NowPlaying)
-                        },
-                        onNavigateToScreen = { action ->
-                            when (action) {
-                                "favorites" -> viewModel.navigateTo(Screen.Mine)
-                                "queue" -> viewModel.navigateTo(Screen.Queue)
-                                "radio" -> viewModel.playPrivateRadio()
-                            }
-                        },
-                        // 电台子 Tab
-                        radioStations = radioStations,
-                        radioActiveTag = radioActiveTag,
-                        radioActiveQuery = radioActiveQuery,
-                        onRadioLoadDefault = { viewModel.loadRadioDefault() },
-                        onRadioLoadTag = { tag -> viewModel.loadRadioTag(tag) },
-                        onRadioSearch = { kw -> viewModel.searchRadio(kw) },
-                        onRadioPlayStation = { station -> viewModel.playRadioStation(station) },
-                        // Jamendo 子 Tab
-                        jamendoState = jamendoState,
-                        jamendoActiveTag = jamendoActiveTag,
-                        jamendoConfigured = jamendoConfigured,
-                        onJamendoLoadHot = { viewModel.loadJamendoHot() },
-                        onJamendoLoadTag = { tag -> viewModel.loadJamendoTag(tag) },
-                        onJamendoSearch = { kw -> viewModel.searchJamendo(kw) }
-                    )
-                    // 加入歌单选择弹窗（网络歌曲）
-                    pickerSong?.let { song ->
-                        PlaylistPickerDialog(
-                            playlists = localPlaylists,
-                            onPick = { playlist ->
-                                viewModel.addSongToPlaylist(playlist.id, song)
-                                pickerSong = null
-                            },
-                            onCreate = { name ->
-                                if (name.isNotBlank()) {
-                                    viewModel.createLocalPlaylist(name)
-                                }
-                            },
-                            onDismiss = { pickerSong = null }
-                        )
-                    }
-                }
-                Screen.NetworkPlaylistDetail -> {
-                    val playlistSongs by viewModel.playlistSongs.collectAsState(initial = emptyList())
-                    val playlistTitle by viewModel.selectedPlaylistTitle.collectAsState(initial = "")
-                    val networkFavoriteIds by viewModel.networkFavoriteIds.collectAsState(initial = emptySet())
-                    val queueSongIds by viewModel.queueSongIds.collectAsState(initial = emptySet())
-                    val localPlaylists by viewModel.localPlaylists.collectAsState(initial = emptyList())
-                    var pickerSong by remember { mutableStateOf<Song?>(null) }
-                    NetworkPlaylistDetailScreen(
-                        playlistSongs = playlistSongs,
-                        playlistTitle = playlistTitle,
-                        onPlaySong = { song ->
-                            viewModel.playNetworkSong(song)
-                            viewModel.navigateTo(Screen.NowPlaying)
-                        },
-                        onPlayAll = {
-                            viewModel.playQueue(playlistSongs, 0)
-                            viewModel.navigateTo(Screen.NowPlaying)
-                        },
-                        queueSongIds = queueSongIds,
-                        onToggleQueue = { song -> viewModel.toggleQueueSong(song) },
-                        networkFavoriteIds = networkFavoriteIds,
-                        onToggleFavorite = { song -> viewModel.toggleNetworkFavorite(song) },
-                        onAddToPlaylist = { song -> pickerSong = song },
-                        onBack = { viewModel.navigateTo(Screen.Network) }
-                    )
-                    // 加入歌单选择弹窗（网络歌单详情）
-                    pickerSong?.let { song ->
-                        PlaylistPickerDialog(
-                            playlists = localPlaylists,
-                            onPick = { playlist ->
-                                viewModel.addSongToPlaylist(playlist.id, song)
-                                pickerSong = null
-                            },
-                            onCreate = { name ->
-                                if (name.isNotBlank()) {
-                                    viewModel.createLocalPlaylist(name)
-                                }
-                            },
-                            onDismiss = { pickerSong = null }
-                        )
-                    }
                 }
                 Screen.Netdisk -> {
                     com.nasmusic.tv.ui.screens.netdisk.NetdiskScreen(

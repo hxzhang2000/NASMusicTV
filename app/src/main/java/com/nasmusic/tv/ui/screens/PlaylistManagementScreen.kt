@@ -1,6 +1,5 @@
 ﻿package com.nasmusic.tv.ui.screens
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -11,7 +10,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -20,20 +18,15 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import com.nasmusic.tv.ui.LocalDialogBackHandler
 import com.nasmusic.tv.ui.LocalListBackHandler
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -45,7 +38,8 @@ import com.nasmusic.tv.data.model.Song
 import com.nasmusic.tv.ui.theme.NasMusicColors
 import com.nasmusic.tv.ui.components.BackButton
 import com.nasmusic.tv.ui.components.FocusableSurface
-import com.nasmusic.tv.util.TimeUtils
+import com.nasmusic.tv.ui.components.song.SongRowMode
+import com.nasmusic.tv.ui.components.song.UnifiedSongRow
 import kotlinx.coroutines.launch
 
 /**
@@ -167,12 +161,13 @@ fun PlaylistManagementScreen(
                             FocusableSurface(
                                 onClick = { onSelectPlaylist(playlist) },
                                 modifier = Modifier.fillMaxWidth(),
-                                shape = RoundedCornerShape(8.dp),
-                                focusedScale = 1.02f,
+                                shape = RoundedCornerShape(10.dp),
+                                focusedScale = 1.06f,
                                 animationDurationMs = 200,
-                                containerColor = NasMusicColors.Surface.copy(alpha = 0.5f),
+                                containerColor = NasMusicColors.Surface,
                                 contentColor = NasMusicColors.TextPrimary,
                                 focusedContainerColor = NasMusicColors.Primary.copy(alpha = 0.2f),
+                                focusedContentColor = NasMusicColors.Primary,
                                 pressedScale = 0.98f,
                                 focusRequester = if (index == 0) playlistFirstFocusRequester else null
                             ) {
@@ -246,49 +241,13 @@ fun PlaylistManagementScreen(
                         verticalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
                         itemsIndexed(selectedPlaylistSongs, key = { _, it -> it.id }) { index, song ->
-                            FocusableSurface(
+                            UnifiedSongRow(
+                                song = song,
                                 onClick = { onRemoveSong(song.id) },
-                                modifier = Modifier.fillMaxWidth(),
-                                shape = RoundedCornerShape(6.dp),
-                                focusedScale = 1.02f,
-                                animationDurationMs = 200,
-                                containerColor = NasMusicColors.Surface.copy(alpha = 0.5f),
-                                contentColor = NasMusicColors.TextPrimary,
-                                focusedContainerColor = NasMusicColors.Primary.copy(alpha = 0.2f),
-                                focusedContentColor = NasMusicColors.TextPrimary,
-                                pressedContainerColor = NasMusicColors.SurfaceVariant,
-                                pressedScale = 0.98f,
-                                focusBorderColor = NasMusicColors.FocusRing.copy(alpha = 0.6f),
+                                mode = SongRowMode.MODE_COMPACT,
+                                index = index,
                                 focusRequester = if (index == 0) songsFirstFocusRequester else null
-                            ) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth().height(100.dp).padding(horizontal = 16.dp, vertical = 12.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        Text(
-                                            text = song.title,
-                                            color = NasMusicColors.TextPrimary,
-                                            fontSize = 23.sp,
-                                            maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis
-                                        )
-                                        Text(
-                                            text = song.artist.ifBlank { "—" },
-                                            color = NasMusicColors.TextSecondary,
-                                            fontSize = 20.sp,
-                                            maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis
-                                        )
-                                    }
-                                    Spacer(modifier = Modifier.width(12.dp))
-                                    Text(
-                                        text = TimeUtils.formatDuration(song.durationMs),
-                                        color = NasMusicColors.TextSecondary,
-                                        fontSize = 20.sp
-                                    )
-                                }
-                            }
+                            )
                         }
                     }
                 }

@@ -8,6 +8,7 @@ import com.google.gson.Gson
 import com.nasmusic.tv.NasMusicApp
 import com.nasmusic.tv.backend.BackendRegistry
 import com.nasmusic.tv.backend.BackendAdapter
+import com.nasmusic.tv.backend.SearchAggregator
 import com.nasmusic.tv.backend.network.mv.MvSearchManager
 import com.nasmusic.tv.backend.network.baidu.BaiduFileIndexCache
 import com.nasmusic.tv.backend.network.baidu.BaiduOAuthClient
@@ -39,7 +40,6 @@ import com.nasmusic.tv.data.model.MusicSource
 import com.nasmusic.tv.data.model.MvInfo
 import com.nasmusic.tv.data.model.MvCandidate
 import com.nasmusic.tv.data.model.MvSearchResult
-import com.nasmusic.tv.data.model.NetworkSubTab
 import com.nasmusic.tv.data.model.RadioStation
 import com.nasmusic.tv.data.model.isRadioSong
 import com.nasmusic.tv.ui.screens.LibraryTab
@@ -309,20 +309,6 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
     private val _localPlaylists = MutableStateFlow<List<LocalPlaylist>>(emptyList())
     val localPlaylists: StateFlow<List<LocalPlaylist>> = _localPlaylists.asStateFlow()
 
-    // --- 网络歌单（NetworkMusicManager 获取）---
-    private val _networkPlaylists = MutableStateFlow<List<Pair<Playlist, List<Song>>>>(emptyList())
-    val networkPlaylists: StateFlow<List<Pair<Playlist, List<Song>>>> = _networkPlaylists.asStateFlow()
-
-    // 网络歌单轮换索引（发现页推荐歌单数据来源）
-    private val _chartsRotationIndex = MutableStateFlow(0)
-    val chartsRotationIndex: StateFlow<Int> = _chartsRotationIndex.asStateFlow()
-
-    private val _playlistSongs = MutableStateFlow<List<Song>>(emptyList())
-    val playlistSongs: StateFlow<List<Song>> = _playlistSongs.asStateFlow()
-
-    private val _selectedPlaylistTitle = MutableStateFlow("")
-    val selectedPlaylistTitle: StateFlow<String> = _selectedPlaylistTitle.asStateFlow()
-
     private val _searchNetworkPlatform = MutableStateFlow("netease")
     val searchNetworkPlatform: StateFlow<String> = _searchNetworkPlatform.asStateFlow()
 
@@ -341,15 +327,19 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
         _libraryActiveTab.value = tab
     }
 
-    // --- 网络音乐页子 Tab 状态 ---
-    private val _currentNetworkSubTab = MutableStateFlow(NetworkSubTab.DISCOVER)
-    val currentNetworkSubTab: StateFlow<NetworkSubTab> = _currentNetworkSubTab.asStateFlow()
+    // --- 曲库页搜索关键词（跨导航记忆，切换页面后保留搜索框内容与结果） ---
+    private val _librarySearchKeyword = MutableStateFlow("")
+    val librarySearchKeyword: StateFlow<String> = _librarySearchKeyword.asStateFlow()
 
-    fun selectNetworkSubTab(tab: NetworkSubTab) {
-        _currentNetworkSubTab.value = tab
-        // 切换到天气子 Tab 时自动加载天气
-        if (tab == NetworkSubTab.WEATHER) {
-            fetchWeather()
+    fun setLibrarySearchKeyword(keyword: String) {
+        if (_librarySearchKeyword.value != keyword) {
+            _librarySearchKeyword.value = keyword
+        }
+    }
+
+    fun clearLibrarySearchKeyword() {
+        if (_librarySearchKeyword.value.isNotBlank()) {
+            _librarySearchKeyword.value = ""
         }
     }
 
@@ -835,11 +825,6 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
         // 解析 streamUrl 后重新播放
         playerManager.onNeedResolveStreamUrl = { index ->
             resolveAndPlayByIndex(index)
-        }
-
-        // 异步加载预配置的网络歌单
-        viewModelScope.launch {
-            loadNetworkPlaylists()
         }
 
         // 初始化网络音乐平台来源（从持久化存储读取）
@@ -1447,17 +1432,24 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
         }
         _searchResults.value = UiState.Loading
         viewModelScope.launch {
-            val adapter = backendRegistry.getAdapter() ?: run {
-                _searchResults.value = UiState.Error("后端未连接")
-                return@launch
-            }
+            // 跨源融合搜索：NAS + 网络音乐 + 百度网盘 + Jamendo 并行搜索，合并去重
+            val aggregator = SearchAggregator(
+                backendAdapter = backendRegistry.getAdapter(),
+                networkMusicManager = nasMusicApp.networkMusicManager,
+                baiduService = nasMusicApp.baiduNetdiskService,
+                jamendoService = nasMusicApp.jamendoService
+            )
             try {
-                val results = adapter.searchSongs(query)
-                _searchResults.value = UiState.Success(results)
+                val result = aggregator.search(query)
+                val songs = result.allResults.map { it.song }
+                _searchResults.value = UiState.Success(songs)
                 // 搜索成功后才记录历史（空结果也算成功，记录用户确实搜过的词；
-                // 失败/未连接不记录，避免污染热门榜）
+                // 失败不记录，避免污染热门榜）
                 prefs.recordSearch(query)
-                AppLog.d("NASMusic", "searchSongsOnServer: ${results.size} results for '$query'")
+                AppLog.d(
+                    "NASMusic",
+                    "searchSongsOnServer: ${songs.size} results for '$query' breakdown=${result.sourceBreakdown}"
+                )
             } catch (e: Exception) {
                 AppLog.e("NASMusic", "searchSongsOnServer failed", e)
                 _searchResults.value = UiState.Error(
@@ -1863,57 +1855,6 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
         return _networkFavorites.value.any { it.songId == songId }
     }
 
-    /**
-     * 播放私人电台 — 随机播放网络歌曲
-     *
-     * 策略：收藏优先，没有收藏时从随机歌单播放。
-     * 播放后自动导航到 NowPlaying 页。
-     */
-    fun playPrivateRadio() {
-        viewModelScope.launch {
-            // 收藏优先：使用网络收藏歌曲
-            val favorites = _networkFavorites.value
-            if (favorites.isNotEmpty()) {
-                val songs = favorites.map { item ->
-                    Song(
-                        id = item.songId,
-                        title = item.title,
-                        artist = item.artist,
-                        album = item.album,
-                        coverUrl = item.coverUrl,
-                        isNetworkSong = true,
-                        networkSource = item.networkSource,
-                        networkId = item.networkId
-                    )
-                }
-                val shuffled = songs.shuffled()
-                playQueue(shuffled, 0)
-                _currentScreen.value = Screen.NowPlaying
-                return@launch
-            }
-
-            // 无收藏时使用随机歌单
-            val playlists = _networkPlaylists.value
-            if (playlists.isNotEmpty()) {
-                val randomPlaylist = playlists.random()
-                if (randomPlaylist.second.isNotEmpty()) {
-                    playQueue(randomPlaylist.second, 0)
-                    _currentScreen.value = Screen.NowPlaying
-                    return@launch
-                }
-            }
-
-            // 没有收藏也没有歌单
-            showError("没有收藏或歌单可供播放，请先搜索并收藏歌曲")
-        }
-    }
-
-    /**
-     * 预配置的网络歌单列表（扩展版，用于榜单轮换）
-     *
-     * 每个 Triple 为 (id, name, source)。
-     * 每日轮换显示 CHART_PAGE_SIZE 个歌单，用 "换一批" 按钮切换到下一组。
-     */
     private val preconfiguredPlaylists = listOf(
         Triple("3778678", "热歌榜", "netease"),
         Triple("3779629", "新歌榜", "netease"),
@@ -1930,76 +1871,6 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
         Triple("5059631514", "K-POP 热榜", "netease"),
         Triple("3248421784", "说唱榜", "netease"),
     )
-    private val CHART_PAGE_SIZE = 6
-
-    /**
-     * 加载所有预配置的网络歌单（分页轮换）
-     *
-     * 从 _chartsRotationIndex 位置开始取 CHART_PAGE_SIZE 个歌单。
-     */
-    fun loadNetworkPlaylists() {
-        viewModelScope.launch {
-            val results = mutableListOf<Pair<Playlist, List<Song>>>()
-            var failCount = 0
-
-            // 计算本次显示的歌单子集
-            val startIdx = _chartsRotationIndex.value % preconfiguredPlaylists.size
-            val orderedIds = preconfiguredPlaylists.subList(startIdx, preconfiguredPlaylists.size) +
-                    preconfiguredPlaylists.subList(0, startIdx)
-            val visible = orderedIds.take(CHART_PAGE_SIZE)
-
-            for ((id, name, _) in visible) {
-                try {
-                    val songs = nasMusicApp.networkMusicManager.getPlaylist(id)
-                    if (songs.isEmpty()) {
-                        AppLog.d("NASMusic", "loadNetworkPlaylists: skip '$name' (empty)")
-                        failCount++
-                        continue
-                    }
-                    // coverUrls: 取前三首歌曲的封面
-                    val coverUrls = songs.take(3).mapNotNull { it.coverUrl }
-                    val playlist = Playlist(
-                        id = id,
-                        name = name,
-                        coverUrls = coverUrls,
-                        songCount = songs.size
-                    )
-                    results.add(playlist to songs)
-                    AppLog.d("NASMusic", "loadNetworkPlaylists: loaded '$name' (${songs.size} songs)")
-                } catch (e: Exception) {
-                    AppLog.w("NASMusic", "loadNetworkPlaylists: failed for '$name': ${e.message}", e)
-                    failCount++
-                }
-            }
-            _networkPlaylists.value = results
-            AppLog.d("NASMusic", "loadNetworkPlaylists: done, ${results.size}/${preconfiguredPlaylists.size} playlists loaded")
-            // 所有歌单都加载失败时提示用户
-            if (results.isEmpty() && failCount == preconfiguredPlaylists.size) {
-                showError("网络音乐端点连接失败，请在设置中检查端点配置")
-            }
-        }
-    }
-
-    /**
-     * 加载指定网络歌单的歌曲详情
-     *
-     * @param playlistId 歌单 ID
-     * @param playlistTitle 歌单标题（用于 UI 标题显示）
-     */
-    fun loadPlaylistDetail(playlistId: String, playlistTitle: String) {
-        _selectedPlaylistTitle.value = playlistTitle
-        viewModelScope.launch {
-            try {
-                val songs = nasMusicApp.networkMusicManager.getPlaylist(playlistId)
-                _playlistSongs.value = songs
-                AppLog.d("NASMusic", "loadPlaylistDetail: '$playlistTitle' (${songs.size} songs)")
-            } catch (e: Exception) {
-                AppLog.e("NASMusic", "loadPlaylistDetail failed for '$playlistTitle': ${e.message}", e)
-                _playlistSongs.value = emptyList()
-                showError("加载歌单失败: ${e.message?.take(50)}")
-            }
-        }
-    }
 
     fun refreshLibrary() {
         _albums.value = UiState.Loading
@@ -3854,7 +3725,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
     private val _jamendoActiveTag = MutableStateFlow("")
     val jamendoActiveTag: StateFlow<String> = _jamendoActiveTag.asStateFlow()
 
-    /** 是否已配置 Jamendo Client ID（未配置时 JamendoSubTab 显示引导卡） */
+    /** 是否已配置 Jamendo Client ID（未配置时 Jamendo 显示引导卡） */
     val jamendoConfigured: Boolean
         get() = prefs.getJamendoClientIdSync().isNotBlank()
 

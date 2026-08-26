@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.itemsIndexed
@@ -29,22 +28,22 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Icon
 import androidx.tv.material3.Text
-import com.nasmusic.tv.backend.network.baidu.BaiduNetdiskConfig
 import com.nasmusic.tv.backend.network.baidu.BaiduPanApi
 import com.nasmusic.tv.data.model.BaiduFile
 import com.nasmusic.tv.data.model.Song
 import com.nasmusic.tv.ui.components.FocusableSurface
 import com.nasmusic.tv.ui.components.SearchField
+import com.nasmusic.tv.ui.components.common.ActionBar
+import com.nasmusic.tv.ui.components.song.SongRowMode
+import com.nasmusic.tv.ui.components.song.UnifiedSongRow
 import com.nasmusic.tv.ui.components.songGridColumns
 import com.nasmusic.tv.ui.screens.PlaylistPickerDialog
-import com.nasmusic.tv.ui.screens.SongRow
 import com.nasmusic.tv.ui.screens.TextInputDialog
 import com.nasmusic.tv.ui.theme.NasMusicColors
 import com.nasmusic.tv.ui.viewmodel.MainViewModel
@@ -135,42 +134,20 @@ fun NetdiskScreen(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
-                        // 操作栏：播放全部
+                        // 操作栏：播放全部 + 加入队列
                         item(key = "netdisk_search_action", span = { GridItemSpan(maxLineSpan) }) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth().padding(top = 2.dp, bottom = 6.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                FocusableSurface(
-                                    onClick = { onPlayAllSongs(searchResults) },
-                                    shape = RoundedCornerShape(8.dp),
-                                    focusedScale = 1.08f,
-                                    animationDurationMs = 150,
-                                    containerColor = NasMusicColors.Primary.copy(alpha = 0.85f),
-                                    focusedContainerColor = NasMusicColors.Primary,
-                                    contentColor = NasMusicColors.TextPrimary,
-                                    focusedContentColor = NasMusicColors.TextPrimary
-                                ) {
-                                    Text(
-                                        text = "全部播放 ▶",
-                                        fontSize = 19.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-                                    )
-                                }
-                                Spacer(modifier = Modifier.width(12.dp))
-                                Text(
-                                    text = "搜索 “$searchKeyword”：${searchResults.size} 首",
-                                    color = NasMusicColors.TextSecondary,
-                                    fontSize = 18.sp
-                                )
-                            }
+                            ActionBar(
+                                songCount = searchResults.size,
+                                onPlayAll = { onPlayAllSongs(searchResults) },
+                                onAddAllToQueue = { searchResults.forEach { song -> viewModel.toggleQueueSong(song) } }
+                            )
                         }
                         itemsIndexed(searchResults, key = { _, s -> "${s.networkId}_${s.title}" }) { index, song ->
-                            SongRow(
+                            UnifiedSongRow(
                                 song = song,
-                                index = index,
                                 onClick = { onPlaySong(song) },
+                                mode = SongRowMode.MODE_ROW,
+                                index = index,
                                 isFavorited = song.id in favoriteIds,
                                 onToggleFavorite = { viewModel.toggleNetworkFavorite(song) },
                                 isInQueue = song.id in queueSongIds,
@@ -242,10 +219,11 @@ fun NetdiskScreen(
                                 )
                             } else if (BaiduPanApi.isAudioFile(file.serverFilename, file.category)) {
                                 val song = file.toSong()
-                                SongRow(
+                                UnifiedSongRow(
                                     song = song,
-                                    index = index,
                                     onClick = { onPlaySong(song) },
+                                    mode = SongRowMode.MODE_ROW,
+                                    index = index,
                                     isFavorited = song.id in favoriteIds,
                                     onToggleFavorite = { viewModel.toggleNetworkFavorite(song) },
                                     isInQueue = song.id in queueSongIds,

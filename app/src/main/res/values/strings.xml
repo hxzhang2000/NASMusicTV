@@ -39,6 +39,10 @@
     <string name="library_favorites">收藏</string>
     <string name="library_recent">最近播放</string>
     <string name="library_statistics">统计</string>
+    <string name="library_search">搜索</string>
+    <string name="library_discover">发现</string>
+    <string name="library_radio">电台</string>
+    <string name="library_jamendo">独立音乐</string>
     <string name="home_ready">已就绪</string>
     <string name="home_album_count">专辑</string>
     <string name="home_song_count">歌曲</string>
@@ -319,6 +323,7 @@
 
     <!-- Mine -->
     <string name="mine_favorites">收藏</string>
+    <string name="mine_recent">最近播放</string>
     <string name="mine_playlists">本地歌单</string>
     <string name="mine_favorites_empty">暂无收藏歌曲</string>
     <string name="mine_playlists_empty">暂无本地歌单</string>
