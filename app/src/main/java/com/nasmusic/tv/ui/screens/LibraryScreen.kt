@@ -156,6 +156,7 @@ fun LibraryScreen(
     onDiscoverPlayAll: () -> Unit = {},
     onDiscoverAddAllToQueue: () -> Unit = {},
     onDiscoverShuffle: () -> Unit = {},
+    onDiscoverEnsureLoaded: () -> Unit = {},
     // ── RADIO Tab ──
     radioStations: UiState<List<com.nasmusic.tv.data.model.RadioStation>> = UiState.Success(emptyList()),
     radioActiveTag: String? = null,
@@ -175,8 +176,8 @@ fun LibraryScreen(
             LibraryTab.ARTISTS -> onLoadArtists()
             LibraryTab.YEARS -> onLoadYears()
             LibraryTab.RADIO -> onLoadRadioDefault()
-            // DISCOVER：仅在无结果时加载（有结果则暂存，切页不重搜）
-            LibraryTab.DISCOVER -> if (discoverFilteredSongs.isEmpty()) onDiscoverShuffle()
+            // DISCOVER：幂等加载（有暂存结果/加载中则跳过，切页不重搜）
+            LibraryTab.DISCOVER -> onDiscoverEnsureLoaded()
             LibraryTab.SEARCH -> {}  // SearchTab handles its own loading
             else -> {}
         }

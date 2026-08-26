@@ -530,6 +530,9 @@ fun AppRoot(
                         onDiscoverShuffle = {
                             viewModel.refreshBrowseSongs()
                         },
+                        onDiscoverEnsureLoaded = {
+                            viewModel.ensureBrowseLoaded()
+                        },
                         // ── RADIO Tab ──
                         radioStations = radioStations,
                         radioActiveTag = radioActiveTag,

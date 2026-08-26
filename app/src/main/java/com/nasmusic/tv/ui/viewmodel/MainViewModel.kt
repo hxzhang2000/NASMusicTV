@@ -1723,6 +1723,22 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
     }
 
     /**
+     * 确保浏览结果已加载（幂等）：已有成功结果或正在加载中则跳过。
+     *
+     * 供"重新进入发现页面"触发：主tab/子tab切换回来时若结果仍在
+     * （跨导航暂存），不做无谓的重新搜索——与搜索页的 lastSearchedKeyword 缓存
+     * 逻辑一致，缓存判断放在 ViewModel 层而非依赖 UI collectAsState 初始值。
+     */
+    fun ensureBrowseLoaded() {
+        val current = _browseResults.value
+        // 已有成功结果（暂存内容）→ 不重搜
+        if (current is UiState.Success && current.data.isNotEmpty()) return
+        // 正在搜索中 → 不重复触发
+        if (current is UiState.Loading) return
+        refreshBrowseSongs()
+    }
+
+    /**
      * 刷新浏览结果：收集非"所有"选项的关键词，随机各取一个，组合搜索。
      *
      * 与网络搜索「换一批」共用同一套跨批次去重逻辑：在多个随机关键词组合中

@@ -33,6 +33,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -94,6 +95,12 @@ fun ProgressSection(
     val timeFontFocused = if (compact) 15.sp else 18.sp
     val progressFocusRequester = remember { FocusRequester() }
 
+    // 手势处理器读取最新值（progressMs 每秒更新，不能作为 pointerInput key 否则手势每秒重启）
+    val latestProgressMs by rememberUpdatedState(progressMs)
+    val latestDurationMs by rememberUpdatedState(durationMs)
+    val latestIsLive by rememberUpdatedState(isLive)
+    val latestOnSeek by rememberUpdatedState(onSeek)
+
     Row(
         modifier = modifier
             .fillMaxWidth(),
@@ -150,26 +157,33 @@ fun ProgressSection(
                         }
                     } else false
                 }
-                .pointerInput(progressMs, durationMs, isLive) {
+                .pointerInput(Unit) {
+                    // key 用 Unit：progressMs 每秒更新，作为 key 会导致手势每秒重启（手机触摸拖动失效）
+                    val duration = latestDurationMs
+                    val live = latestIsLive
+                    val seek = latestOnSeek
                     detectTapGestures { offset ->
-                        if (durationMs > 0 && !isLive) {
-                            val seekTo = (offset.x / size.width * durationMs).toLong().coerceIn(0, durationMs)
-                            onSeek(seekTo)
+                        if (duration > 0 && !live) {
+                            val seekTo = (offset.x / size.width * duration).toLong().coerceIn(0, duration)
+                            seek(seekTo)
                         }
                     }
                 }
                 // 手机触摸：拖动 seek（直播态禁用）
-                .pointerInput(progressMs, durationMs, isLive) {
+                .pointerInput(Unit) {
+                    val duration = latestDurationMs
+                    val live = latestIsLive
+                    val seek = latestOnSeek
                     detectDragGestures(
                         onDragStart = { offset ->
-                            if (durationMs > 0 && !isLive) {
-                                onSeek((offset.x / size.width * durationMs).toLong().coerceIn(0, durationMs))
+                            if (duration > 0 && !live) {
+                                seek((offset.x / size.width * duration).toLong().coerceIn(0, duration))
                             }
                         },
                         onDrag = { change, _ ->
                             change.consume()
-                            if (durationMs > 0 && !isLive) {
-                                onSeek((change.position.x / size.width * durationMs).toLong().coerceIn(0, durationMs))
+                            if (duration > 0 && !live) {
+                                seek((change.position.x / size.width * duration).toLong().coerceIn(0, duration))
                             }
                         }
                     )
