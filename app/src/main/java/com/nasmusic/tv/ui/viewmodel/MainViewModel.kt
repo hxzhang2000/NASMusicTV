@@ -8,6 +8,7 @@ import com.google.gson.Gson
 import com.nasmusic.tv.NasMusicApp
 import com.nasmusic.tv.backend.BackendRegistry
 import com.nasmusic.tv.backend.BackendAdapter
+import com.nasmusic.tv.backend.FilterMode
 import com.nasmusic.tv.backend.SearchAggregator
 import com.nasmusic.tv.backend.network.mv.MvSearchManager
 import com.nasmusic.tv.backend.network.baidu.BaiduFileIndexCache
@@ -1468,7 +1469,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
                 jamendoService = nasMusicApp.jamendoService
             )
             try {
-                val result = aggregator.search(query, sources = _enabledSearchSources.value)
+                val result = aggregator.search(
+                    query,
+                    sources = _enabledSearchSources.value,
+                    filterMode = FilterMode.PRECISE
+                )
                 val songs = result.allResults.map { it.song }
                 _searchResults.value = UiState.Success(songs)
                 // 搜索成功后才记录历史（空结果也算成功，记录用户确实搜过的词；
@@ -1752,6 +1757,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
         viewModelScope.launch {
             try {
                 // 构建组合关键词（与"换一批"逻辑一致），但跨源聚合搜索
+                // 构建组合关键词（展开词，给网络/NAS/Jamendo 用，支持换一批多样性）
                 fun buildCombo(): String {
                     val combo = mutableListOf<String>()
                     for (i in dimensions.indices) {
@@ -1764,6 +1770,18 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
                     return combo.filter { it.isNotBlank() }.joinToString(" ").trim()
                 }
 
+                // 构建维度标签组合（给百度用，目录+API 效果好）
+                fun buildLabelCombo(): String {
+                    val labels = mutableListOf<String>()
+                    for (i in dimensions.indices) {
+                        val opt = dimensions[i].options.getOrNull(selections.getOrNull(i) ?: 0)
+                            ?: continue
+                        if (opt.label == "所有") continue
+                        labels.add(opt.label)
+                    }
+                    return labels.filter { it.isNotBlank() }.joinToString(" ").trim()
+                }
+
                 // 构造一次聚合器（produce 内多次调用复用同一实例）
                 val aggregator = SearchAggregator(
                     backendAdapter = backendRegistry.getAdapter(),
@@ -1772,16 +1790,24 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
                     jamendoService = nasMusicApp.jamendoService
                 )
                 val enabledSources = _enabledSearchSources.value
+                val baiduLabelCombo = buildLabelCombo()
 
                 val (_, shown) = pickBestFreshBatch(
                     seenKeys = browseSeenKeys,
                     produce = {
                         // 跨源聚合器：按当前点亮来源并行搜索（NAS/网络/百度/Jamendo）
-                        // directoryMode=true：发现页标签浏览，网盘源走目录感知搜索（适用于所有网盘模式）
+                        // 网络/NAS/Jamendo 用展开词（支持换一批多样性）
+                        // 百度用维度标签（目录+API 效果好）
+                        // filterMode=NONE：发现页宽泛，各源返回什么就展示
                         val keyword = buildCombo()
                         if (keyword.isBlank()) return@pickBestFreshBatch emptyList()
-                        aggregator.search(keyword, sources = enabledSources, directoryMode = true)
-                            .allResults.map { it.song }
+                        aggregator.search(
+                            keyword,
+                            sources = enabledSources,
+                            directoryMode = true,
+                            baiduKeyword = baiduLabelCombo,
+                            filterMode = FilterMode.NONE
+                        ).allResults.map { it.song }
                     },
                     songsOf = { it }
                 )

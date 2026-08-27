@@ -99,11 +99,14 @@ class BaiduFileIndexCache(context: Context) {
         val k = keyword.trim().lowercase()
         if (k.isBlank()) return emptyList()
 
-        // 只匹配"直接父目录名"包含 keyword 的条目（而非整条 path 任意段），
-        // 避免搜"粤语"时命中上级目录"流行"下的歌曲（path /音乐/流行/粤语/ 不会被"流行"误命中）
+        // 双向 contains 匹配"直接父目录名"：
+        // - 目录名包含关键词（如目录"粤语经典"匹配搜"粤语"）
+        // - 关键词包含目录名（如关键词"粤语歌"匹配目录"粤语"——发现页传展开后的关键词）
+        // 这样发现页选"粤语"维度时，传来的"粤语歌/粤语歌曲"也能匹配到目录"粤语"
         val dirHits = index.entries.filter { entry ->
             val parentDir = entry.path.substringBeforeLast('/').substringAfterLast('/')
-            parentDir.lowercase().contains(k)
+            val dir = parentDir.lowercase()
+            dir.contains(k) || k.contains(dir)
         }
 
         if (dirHits.isNotEmpty()) {

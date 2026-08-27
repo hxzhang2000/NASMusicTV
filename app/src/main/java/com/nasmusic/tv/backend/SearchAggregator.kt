@@ -13,6 +13,17 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withTimeoutOrNull
 
 /**
+ * 搜索结果过滤模式
+ *
+ * - [PRECISE]：精细过滤——只保留标题/歌手/文件名包含关键词的歌曲（搜索页用）
+ * - [NONE]：不过滤——各源返回什么就展示什么，仅做同名同歌手去重（发现页用）
+ */
+enum class FilterMode {
+    PRECISE,
+    NONE
+}
+
+/**
  * 跨源搜索聚合器
  *
  * 并行搜索 NAS、网络音乐、百度网盘、Jamendo 四个数据源，
@@ -37,18 +48,23 @@ class SearchAggregator(
     /**
      * 并行搜索所有选定源，合并去重后返回结果
      *
-     * @param keyword 搜索关键词
+     * @param keyword 搜索关键词（给网络/NAS/Jamendo 用）
      * @param sources 要搜索的源集合（默认全部）
-     * @param directoryMode 是否用"目录感知"搜索（发现页标签浏览用，适用于所有支持目录
-     *                      结构的源，如网盘）；false（默认）用普通文件名搜索（搜索页）
+     * @param directoryMode 百度源是否用"目录感知"搜索（发现页用 true，搜索页用 false）
+     * @param baiduKeyword 百度源专用关键词（null 时用 keyword）。
+     *                      发现页传维度标签"粤语"，搜索页传 null（用用户输入）
+     * @param filterMode 结果过滤模式：PRECISE=精细过滤（搜索页），NONE=不过滤（发现页）
      * @return 聚合搜索结果
      */
     suspend fun search(
         keyword: String,
         sources: Set<MusicSourceType> = MusicSourceType.entries.toSet(),
-        directoryMode: Boolean = false
+        directoryMode: Boolean = false,
+        baiduKeyword: String? = null,
+        filterMode: FilterMode = FilterMode.NONE
     ): SearchAggregatorResult = coroutineScope {
-        AppLog.i(TAG, "search: keyword='$keyword' sources=${sources.map { it.name }} directoryMode=$directoryMode")
+        val baiduKw = baiduKeyword ?: keyword
+        AppLog.i(TAG, "search: keyword='$keyword' baiduKeyword='$baiduKw' sources=${sources.map { it.name }} directoryMode=$directoryMode filterMode=$filterMode")
 
         if (keyword.isBlank()) {
             return@coroutineScope SearchAggregatorResult(
@@ -103,11 +119,9 @@ class SearchAggregator(
                 try {
                     withTimeoutOrNull(BAIDU_TIMEOUT) {
                         val baiduSongs = if (directoryMode) {
-                            // 发现页：目录感知搜索（目录名命中则列出整个目录），走通用网盘契约
-                            baiduService.searchByDirectory(keyword)
+                            baiduService.searchByDirectory(baiduKw)
                         } else {
-                            // 搜索页：普通文件名/歌手搜索
-                            baiduService.search(keyword)
+                            baiduService.search(baiduKw)
                         }
                         baiduSongs
                             .filter { it.title.isNotBlank() }
@@ -154,8 +168,21 @@ class SearchAggregator(
         // 合并所有结果
         val allResults = nasResults + networkResults + baiduResults + jamendoResults
 
+        // 精细过滤（搜索页）：只保留标题/歌手/文件名包含关键词的歌曲
+        val filtered = if (filterMode == FilterMode.PRECISE) {
+            val k = keyword.trim().lowercase()
+            allResults.filter { ranked ->
+                val song = ranked.song
+                song.title.lowercase().contains(k) ||
+                    song.artist.lowercase().contains(k) ||
+                    song.path?.lowercase()?.contains(k) == true
+            }
+        } else {
+            allResults
+        }
+
         // 同源内去重：相同 title+artist 只保留第一个
-        val deduped = deduplicateWithinSource(allResults)
+        val deduped = deduplicateWithinSource(filtered)
 
         // 按来源优先级 + 匹配分排序
         val sorted = RankedSong.sortByPriority(deduped)

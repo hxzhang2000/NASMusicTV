@@ -62,7 +62,7 @@ class BaiduNetdiskService(
         keyword: String,
         localSearch: () -> List<Song>
     ): List<Song> = withContext(Dispatchers.IO) {
-        // 1. 查本地索引（毫秒级，可能不完整）
+        // 1. 查本地索引（毫秒级，可能不完整，但已有关键词精确过滤）
         val localHits = localSearch()
 
         // 2. 再调百度 search API 补全本地索引缺失的结果
