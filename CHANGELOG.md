@@ -7,6 +7,41 @@
 >
 > 类型：`Added`（新增） | `Changed`（变更） | `Fixed`（修复） | `Removed`（移除）
 
+## [v2.22.1] - 2026-08-27
+
+### Added
+
+- **统一数据源架构**：网络音乐/电台/Jamendo 并入曲库页，移除独立网络音乐 Screen；新增 SearchAggregator 跨源搜索聚合器（NAS+网络+百度+Jamendo 并行搜索，合并去重）
+- **搜索来源点亮模式**：搜索页新增来源点亮栏，可点亮/熄灭 NAS/网络/百度/Jamendo 四个源，切换即按新范围重搜
+- **发现页多源聚合**：发现页 `refreshBrowseSongs` 改用 SearchAggregator 聚合多源结果，复用点亮来源逻辑
+- **网盘目录感知搜索**：`NetworkMusicService` 接口新增 `searchByDirectory` 契约（目录名命中返回整目录歌曲），百度网盘实现；所有网盘模式通用
+- **搜索页精确过滤**：搜索结果精细过滤（标题/歌手/文件名包含关键词），不含搜索词的全部过滤
+- **发现页宽泛过滤**：各源返回什么就展示，只做同名同歌手去重
+- **不同源不同关键词**：发现页网络/NAS/Jamendo 用展开词（支持换一批多样性），百度用维度标签（目录+API效果更好）
+- **最近播放含网络歌曲**：持久化完整 Song 对象（含网络歌曲），不依赖 NAS 连接；我的页进入时刷新
+- **首页搜索按钮**：失效的"网络音乐"按钮改为"搜索"，跳转曲库搜索 Tab
+- **歌曲行点击播放**：UnifiedSongRow 左侧内容区加 `.clickable`，各页面歌曲条目统一可点击播放
+- **K歌手机端歌词字号缩小**：50sp→34sp，两行可放下
+- **发现页新增「主题」维度**：旅行/驾车/咖啡/运动/雨天/居家
+
+### Fixed
+
+- **播放按钮懒加载**：去掉 `!isPlaying` 条件，网络歌曲 streamUrl 为空时无论 isPlaying 状态都先解析
+- **网络歌曲 URL 过期重解析**：playPause 检查 ExoPlayer IDLE/ENDED 状态，强制重新解析过期直链
+- **发现页自动播放 bug**：切页不再自动操作队列（LaunchedEffect 改用 `onDiscoverShuffle` 加载不播放）
+- **百度搜索只返回索引 2 首**：本地索引 + API 合并去重（索引不完整不再短路）
+- **搜索结果跨页暂存**：搜索关键词提升到 ViewModel，切页回来不重搜（缓存命中跳过，空结果允许重试）
+- **发现页主tab切回不重搜**：ensureBrowseLoaded 幂等加载（与搜索页缓存逻辑一致）
+- **播放页进度条手机触摸可拖动**：pointerInput key 改用 Unit + rememberUpdatedState，修复 progressMs 每秒刷新导致手势重启
+- **发现页维度按钮选中态暗色文字**：选中背景亮色时文字改暗色
+- **发现页歌曲条目缺加入歌单按钮**：DiscoverTab 补齐 onAddToPlaylist
+- **加入队列语义修正**：SearchTab/DiscoverTab 新增"加入队列"按钮，仅入队不播放
+- **我的页歌单 ? 按钮改为行内删除图标**：UnifiedSongRow 新增 onDelete，移除右上角叠加
+
+### Changed
+
+- **深度review修复**：搜索源硬编码抽 DEFAULT_SEARCH_SOURCES 常量；BaiduNetdiskService 提取 searchInternal 共用方法；recordPlayWithSong 合并为单次 DataStore edit；refreshBrowseSongs 在 produce 外构造 aggregator
+
 ## [v2.22.0] - 2026-08-24
 
 ### Added
