@@ -59,7 +59,6 @@ fun SearchTab(
     onAddToPlaylist: (Song) -> Unit = {},
     onPlayAll: () -> Unit = {},
     onAddAllToQueue: () -> Unit = {},
-    onShuffleSearch: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val listState = androidx.compose.foundation.lazy.grid.rememberLazyGridState()
@@ -180,13 +179,8 @@ private fun SearchSourceBar(
     onToggleSource: (MusicSourceType) -> Unit,
     onEnableAll: () -> Unit
 ) {
-    // 可点亮的搜索源（NAS / 网络 / 百度 / Jamendo）
-    val searchableSources = listOf(
-        MusicSourceType.NAS,
-        MusicSourceType.NETWORK_MUSIC,
-        MusicSourceType.BAIDU_PAN,
-        MusicSourceType.JAMENDO
-    )
+    // 可点亮的搜索源（与 MusicSourceType.DEFAULT_SEARCH_SOURCES 一致）
+    val searchableSources = MusicSourceType.DEFAULT_SEARCH_SOURCES.toList()
 
     Row(
         modifier = Modifier.fillMaxWidth(),

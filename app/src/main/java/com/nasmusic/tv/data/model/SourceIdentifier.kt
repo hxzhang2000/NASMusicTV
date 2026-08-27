@@ -21,7 +21,17 @@ enum class MusicSourceType(
     BAIDU_PAN("百度", "☁", Color(0xFFFBBF24)),      // 橙色
     RADIO("电台", "📻", Color(0xFFA78BFA)),          // 紫色
     JAMENDO("Jamendo", "♪", Color(0xFFF472B6)),     // 粉色
-    WEATHER_RADIO("天气电台", "🌤", Color(0xFF67E8F9)) // 天蓝色
+    WEATHER_RADIO("天气电台", "🌤", Color(0xFF67E8F9)); // 天蓝色
+
+    companion object {
+        /** 默认参与搜索的来源（排除 RADIO / WEATHER_RADIO，它们不是搜索源） */
+        val DEFAULT_SEARCH_SOURCES: Set<MusicSourceType> = setOf(
+            NAS,
+            NETWORK_MUSIC,
+            BAIDU_PAN,
+            JAMENDO
+        )
+    }
 }
 
 /**

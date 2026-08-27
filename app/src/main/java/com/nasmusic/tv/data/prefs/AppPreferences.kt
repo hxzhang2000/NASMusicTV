@@ -261,6 +261,53 @@ class AppPreferences(private val context: Context) {
     }
 
     /**
+     * 合并记录播放：单次 DataStore edit 同时更新 id 列表 + 播放次数 + 完整歌曲对象。
+     * 替代分别调用 [recordPlay] + [recordRecentSongObject]（两次 DataStore 写）。
+     */
+    suspend fun recordPlayWithSong(song: Song) {
+        context.dataStore.edit { prefs ->
+            val songId = song.id
+
+            // 1. 更新最近播放 id 列表（去重 + LRU，最多 50 条）
+            val recentJson = prefs[keyRecentSongs] ?: "[]"
+            val recentList = try {
+                gson.fromJson(recentJson, object : TypeToken<MutableList<String>>() {}.type)
+                    ?: mutableListOf()
+            } catch (e: Exception) { mutableListOf<String>() }
+            recentList.remove(songId)
+            recentList.add(0, songId)
+            if (recentList.size > recentSongsMaxSize) {
+                recentList.removeAt(recentList.lastIndex)
+            }
+            prefs[keyRecentSongs] = gson.toJson(recentList)
+
+            // 2. 更新播放次数
+            val countsJson = prefs[keyPlayCounts] ?: "{}"
+            val counts = try {
+                gson.fromJson(countsJson, object : TypeToken<MutableMap<String, Int>>() {}.type)
+                    ?: mutableMapOf()
+            } catch (e: Exception) { mutableMapOf<String, Int>() }
+            counts[songId] = (counts[songId] ?: 0) + 1
+            prefs[keyPlayCounts] = gson.toJson(counts)
+
+            // 3. 更新完整歌曲对象（含网络歌曲，streamUrl 置空）
+            val objJson = prefs[keyRecentSongObjects] ?: "{\"songs\":[]}"
+            val objData = try {
+                gson.fromJson(objJson, RecentSongObjectsData::class.java)
+            } catch (e: Exception) {
+                RecentSongObjectsData()
+            }
+            val objList = objData.songs.toMutableList()
+            objList.removeAll { it.id == songId }
+            objList.add(0, song.copy(streamUrl = null))
+            if (objList.size > recentSongsObjectsMaxSize) {
+                objList.removeAt(objList.lastIndex)
+            }
+            prefs[keyRecentSongObjects] = gson.toJson(RecentSongObjectsData(objList))
+        }
+    }
+
+    /**
      * 获取最近播放歌曲对象（最新在前，streamUrl 为空需播放时重新解析）
      */
     suspend fun getRecentSongObjects(): List<Song> {

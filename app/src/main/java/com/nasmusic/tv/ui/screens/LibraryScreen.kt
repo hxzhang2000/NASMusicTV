@@ -146,7 +146,6 @@ fun LibraryScreen(
     // ── SEARCH Tab ──
     onSearchTabPlayAll: () -> Unit = {},
     onSearchTabAddAllToQueue: () -> Unit = {},
-    onSearchTabShuffle: () -> Unit = {},
     // ── DISCOVER Tab ──
     discoverDimensions: List<com.nasmusic.tv.ui.screens.library.BrowseDimension> = emptyList(),
     discoverFilteredSongs: List<Song> = emptyList(),
@@ -332,8 +331,7 @@ fun LibraryScreen(
                         onToggleQueue = onToggleQueue,
                         onAddToPlaylist = onAddToPlaylist,
                         onPlayAll = onSearchTabPlayAll,
-                        onAddAllToQueue = onSearchTabAddAllToQueue,
-                        onShuffleSearch = onSearchTabShuffle
+                        onAddAllToQueue = onSearchTabAddAllToQueue
                     )
                 }
                 LibraryTab.DISCOVER -> {

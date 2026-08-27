@@ -75,6 +75,8 @@ enum class SongRowMode {
  * @param isInQueue 是否在播放队列中
  * @param onToggleQueue 队列切换回调（null 时不显示队列按钮）
  * @param onAddToPlaylist 添加到歌单回调（null 时不显示按钮）
+ * @param onDelete 删除回调（null 时不显示按钮）。仅用于"可删除"上下文
+ *                   （如歌单内移除歌曲），搜索/发现/曲库页不应传入
  * @param focusRequester 焦点请求器
  */
 @OptIn(ExperimentalTvMaterial3Api::class)

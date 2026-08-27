@@ -39,24 +39,8 @@ class BaiduNetdiskService(
      * 为什么不只查索引：本地索引是增量/节流扫描，可能不完整（尤其用户新上传的歌）；
      * 必须先查索引拿到零成本命中，再调 API 补全遗漏，最后按 id（ntwk_baidu_${fs_id}）去重。
      */
-    override suspend fun search(keyword: String, limit: Int): List<Song> = withContext(Dispatchers.IO) {
-        // 1. 查本地索引（毫秒级，可能不完整）
-        val localHits = indexCache.search(keyword, limit)
-
-        // 2. 再调百度 search API 补全本地索引缺失的结果
-        val apiHits = try {
-            val rootDir = prefs.getBaiduMusicRootDirSync().ifBlank { "/" }
-            api.searchAudio(keyword, dir = rootDir).map { it.toSong() }
-        } catch (e: Exception) {
-            AppLog.w(TAG, "search API failed, fallback to index only", e)
-            emptyList()
-        }
-
-        // 3. 合并去重（id = ntwk_baidu_${fs_id}），本地索引优先保持顺序
-        if (apiHits.isEmpty()) return@withContext localHits
-        val seen = HashSet<String>(localHits.size + apiHits.size)
-        (localHits + apiHits).filter { seen.add(it.id) }
-    }
+    override suspend fun search(keyword: String, limit: Int): List<Song> =
+        searchInternal(keyword) { indexCache.search(keyword, limit) }
 
     /**
      * 目录感知搜索（发现页专用）：目录名命中则列出该目录下全部歌曲。
@@ -67,16 +51,26 @@ class BaiduNetdiskService(
      * 无目录命中则回退文件名/歌手匹配。之后再调百度 search API 补全本地索引缺失的结果
      * （与 [search] 一致，避免本地索引未扫描/不完整时发现页列不出网盘歌曲）。
      */
-    override suspend fun searchByDirectory(keyword: String): List<Song> = withContext(Dispatchers.IO) {
-        // 1. 本地索引目录感知匹配（目录命中返回整个目录，否则回退文件名/歌手）
-        val localHits = indexCache.searchByDirectory(keyword)
+    override suspend fun searchByDirectory(keyword: String): List<Song> =
+        searchInternal(keyword) { indexCache.searchByDirectory(keyword) }
 
-        // 2. 再调百度 search API 补全本地索引缺失的结果（与普通 search 一致）
+    /**
+     * 搜索内部实现：本地索引命中 + 百度 search API 补全，合并去重。
+     * [localSearch] 在 IO 上下文内执行，避免文件 I/O 阻塞调用线程。
+     */
+    private suspend fun searchInternal(
+        keyword: String,
+        localSearch: () -> List<Song>
+    ): List<Song> = withContext(Dispatchers.IO) {
+        // 1. 查本地索引（毫秒级，可能不完整）
+        val localHits = localSearch()
+
+        // 2. 再调百度 search API 补全本地索引缺失的结果
         val apiHits = try {
             val rootDir = prefs.getBaiduMusicRootDirSync().ifBlank { "/" }
             api.searchAudio(keyword, dir = rootDir).map { it.toSong() }
         } catch (e: Exception) {
-            AppLog.w(TAG, "searchByDirectory API failed, fallback to index only", e)
+            AppLog.w(TAG, "search API failed, fallback to index only", e)
             emptyList()
         }
 

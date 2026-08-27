@@ -499,13 +499,6 @@ fun AppRoot(
                             // 只加入队列，不播放
                             searchResultsList.forEach { song -> viewModel.toggleQueueSong(song) }
                         },
-                        onSearchTabShuffle = {
-                            val allSongs = searchResultsList.shuffled()
-                            if (allSongs.isNotEmpty()) {
-                                viewModel.playQueue(allSongs)
-                                viewModel.navigateTo(Screen.NowPlaying)
-                            }
-                        },
                         // ── DISCOVER Tab ──
                         discoverDimensions = discoverDimensions,
                         discoverFilteredSongs = browseResultsList,

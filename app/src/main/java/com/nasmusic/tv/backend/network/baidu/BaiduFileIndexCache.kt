@@ -99,10 +99,11 @@ class BaiduFileIndexCache(context: Context) {
         val k = keyword.trim().lowercase()
         if (k.isBlank()) return emptyList()
 
-        // 找出 path 中目录段包含 keyword 的条目
+        // 只匹配"直接父目录名"包含 keyword 的条目（而非整条 path 任意段），
+        // 避免搜"粤语"时命中上级目录"流行"下的歌曲（path /音乐/流行/粤语/ 不会被"流行"误命中）
         val dirHits = index.entries.filter { entry ->
-            val dirSegments = entry.path.substringBeforeLast('/')
-            dirSegments.lowercase().contains(k)
+            val parentDir = entry.path.substringBeforeLast('/').substringAfterLast('/')
+            parentDir.lowercase().contains(k)
         }
 
         if (dirHits.isNotEmpty()) {

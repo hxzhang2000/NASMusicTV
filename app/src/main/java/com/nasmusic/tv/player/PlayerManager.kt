@@ -331,6 +331,18 @@ class PlayerManager() {
         }
     }
 
+    /**
+     * 判断 ExoPlayer 是否处于"play() 无效"的状态（需重新解析/加载媒体）。
+     *
+     * - STATE_IDLE：未 prepare 或媒体为空（streamUrl 过期/未解析后 setMediaItem 失败）
+     * - STATE_ENDED：播放已结束（旧 URL 播完）
+     * 这两种状态下调 play() 无效，应触发重新解析 streamUrl。
+     */
+    fun isPlayerInactive(): Boolean {
+        val p = player ?: return true
+        return p.playbackState == Player.STATE_IDLE || p.playbackState == Player.STATE_ENDED
+    }
+
     /** 暂停主播放器（无条件设 playWhenReady=false，避免 BUFFERING 时 isPlaying=false 跳过暂停） */
     fun pause() {
         player?.pause()

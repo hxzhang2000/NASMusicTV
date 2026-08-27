@@ -347,14 +347,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
     }
 
     // --- 搜索来源点亮状态（跨导航记忆，决定搜索哪些源） ---
-    private val _enabledSearchSources = MutableStateFlow(
-        setOf(
-            MusicSourceType.NAS,
-            MusicSourceType.NETWORK_MUSIC,
-            MusicSourceType.BAIDU_PAN,
-            MusicSourceType.JAMENDO
-        )
-    )
+    private val _enabledSearchSources = MutableStateFlow(MusicSourceType.DEFAULT_SEARCH_SOURCES)
     val enabledSearchSources: StateFlow<Set<MusicSourceType>> = _enabledSearchSources.asStateFlow()
 
     /** 切换某来源的点亮/熄灭状态 */
@@ -369,12 +362,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
 
     /** 全部点亮（回到默认状态） */
     fun enableAllSearchSources() {
-        _enabledSearchSources.value = setOf(
-            MusicSourceType.NAS,
-            MusicSourceType.NETWORK_MUSIC,
-            MusicSourceType.BAIDU_PAN,
-            MusicSourceType.JAMENDO
-        )
+        // 已是全部点亮则跳过重搜，避免冗余网络请求
+        if (_enabledSearchSources.value == MusicSourceType.DEFAULT_SEARCH_SOURCES) return
+        _enabledSearchSources.value = MusicSourceType.DEFAULT_SEARCH_SOURCES
         // 有活动关键词时按全部来源重新搜索（force 跳过缓存）
         val kw = _librarySearchKeyword.value
         if (kw.isNotBlank()) searchSongsOnServer(kw, force = true)
@@ -1458,10 +1448,13 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
             _searchResults.value = UiState.Success(emptyList())
             return
         }
-        // 缓存命中：同一关键词且结果已是 Success（非 Loading/Error），不重复搜索
-        if (!force && query == lastSearchedKeyword && _searchResults.value is UiState.Success) {
-            AppLog.d("NASMusic", "searchSongsOnServer: cached result for '$query'")
-            return
+        // 缓存命中：同一关键词且结果已是 Success 且非空（空结果可能是临时性的，允许重试）
+        if (!force && query == lastSearchedKeyword) {
+            val cached = _searchResults.value
+            if (cached is UiState.Success && cached.data.isNotEmpty()) {
+                AppLog.d("NASMusic", "searchSongsOnServer: cached result for '$query'")
+                return
+            }
         }
         lastSearchedKeyword = query
         _searchResults.value = UiState.Loading
@@ -1771,6 +1764,15 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
                     return combo.filter { it.isNotBlank() }.joinToString(" ").trim()
                 }
 
+                // 构造一次聚合器（produce 内多次调用复用同一实例）
+                val aggregator = SearchAggregator(
+                    backendAdapter = backendRegistry.getAdapter(),
+                    networkMusicManager = nasMusicApp.networkMusicManager,
+                    baiduService = nasMusicApp.baiduNetdiskService,
+                    jamendoService = nasMusicApp.jamendoService
+                )
+                val enabledSources = _enabledSearchSources.value
+
                 val (_, shown) = pickBestFreshBatch(
                     seenKeys = browseSeenKeys,
                     produce = {
@@ -1778,13 +1780,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
                         // directoryMode=true：发现页标签浏览，网盘源走目录感知搜索（适用于所有网盘模式）
                         val keyword = buildCombo()
                         if (keyword.isBlank()) return@pickBestFreshBatch emptyList()
-                        val aggregator = SearchAggregator(
-                            backendAdapter = backendRegistry.getAdapter(),
-                            networkMusicManager = nasMusicApp.networkMusicManager,
-                            baiduService = nasMusicApp.baiduNetdiskService,
-                            jamendoService = nasMusicApp.jamendoService
-                        )
-                        aggregator.search(keyword, sources = _enabledSearchSources.value, directoryMode = true)
+                        aggregator.search(keyword, sources = enabledSources, directoryMode = true)
                             .allResults.map { it.song }
                     },
                     songsOf = { it }
@@ -2278,9 +2274,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
     // --- B-2 最近播放 & 播放次数 ---
     fun recordPlay(song: Song) {
         viewModelScope.launch {
-            prefs.recordPlay(song.id)
-            // 存储完整歌曲对象（含网络歌曲，供最近播放区展示/播放）
-            prefs.recordRecentSongObject(song)
+            // 单次 DataStore edit 同时更新 id 列表 + 播放次数 + 完整歌曲对象
+            prefs.recordPlayWithSong(song)
             // 刷新最近播放列表，不显示 loading 以避免闪烁
             loadRecentSongs(showLoading = false)
         }
@@ -2409,8 +2404,14 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
         // 当前歌曲 streamUrl 为空（网络歌曲懒加载 / 恢复队列后未解析）时，
         // 无论 isPlaying 状态如何都先解析再播放——空 URL 的 ExoPlayer 必然无法播放，
         // 此时 isPlaying 若为 true 是误导状态（缓冲/错误残留），直接 play() 无效。
-        // 这样懒加载逻辑真正落到播放按钮：点击播放时始终确保有可播放的直链。
         if (song != null && song.streamUrl.isNullOrBlank()) {
+            resolveAndPlayCurrentSong(song)
+            return
+        }
+        // 网络歌曲直链有时效（百度 dlink 8h / Meting 302 过期），
+        // ExoPlayer 处于 IDLE/ENDED 时 play() 无效 → 重新解析直链
+        if (song != null && song.isNetworkSong && !isPlaying.value && playerManager.isPlayerInactive()) {
+            AppLog.d("NASMusic", "playPause: network song URL may be expired, re-resolving '${song.title}'")
             resolveAndPlayCurrentSong(song)
             return
         }
