@@ -129,6 +129,7 @@ fun SettingsScreen(
     serverConfig: com.nasmusic.tv.data.model.ServerConfig = com.nasmusic.tv.data.model.ServerConfig.Empty,
     isConnected: Boolean = false,
     serverDisplayName: String = "",
+    backendApiVersion: String = "Unknown",
     isConnecting: Boolean = false,
     onConnect: ((com.nasmusic.tv.data.model.ServerConfig) -> Unit)? = null,
     onDisconnect: (() -> Unit)? = null,
@@ -424,7 +425,14 @@ fun SettingsScreen(
                     item { AboutRow(label = stringResource(R.string.about_version), value = NasMusicVersion.DISPLAY) }
                     item { AboutRow(label = stringResource(R.string.settings_build_type), value = NasMusicVersion.BUILD_TYPE) }
                     item { AboutRow(label = stringResource(R.string.about_license), value = stringResource(R.string.about_license_value)) }
-                    item { AboutRow(label = stringResource(R.string.settings_supported_backends), value = "Jellyfin / Navidrome / Subsonic") }
+                    item { AboutRow(label = stringResource(R.string.settings_supported_backends), value = "Jellyfin / Navidrome / Subsonic / 道理鱼 / 飞牛") }
+                    // 当前连接的后端信息
+                    if (isConnected) {
+                        item { AboutRow(label = "后端类型", value = serverDisplayName) }
+                        item { AboutRow(label = "API 版本", value = backendApiVersion) }
+                    } else {
+                        item { AboutRow(label = "后端状态", value = "未连接") }
+                    }
                     item { AboutRow(label = "网络音乐", value = "网易云 / QQ音乐 / 酷狗 / 酷我 / 咪咕（Meting-API多端点") }
                     item { AboutRow(label = "独立音乐", value = "Jamendo（CC授权，需配置Client ID）") }
                     item { AboutRow(label = "电台", value = "radio-browser（全球公开目录，含中文电台）") }

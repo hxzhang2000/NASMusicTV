@@ -32,6 +32,7 @@ import java.util.concurrent.TimeUnit
 class NavidromeAdapter : BackendAdapter {
 
     override val backendType: String = "navidrome"
+    override var apiVersion: String = "Navidrome (版本未知)"
 
     private var baseUrl: String = ""
     private var username: String = ""
@@ -86,7 +87,10 @@ class NavidromeAdapter : BackendAdapter {
                 val subsonic = json.getAsJsonObject("subsonic-response") ?: return@use false
                 val status = subsonic.get("status")?.asString ?: return@use false
                 val version = subsonic.get("version")?.asString ?: ""
-                if (version.isNotBlank()) serverName = "Navidrome $version"
+                if (version.isNotBlank()) {
+                    serverName = "Navidrome $version"
+                    apiVersion = "Subsonic API $version"
+                }
                 status == "ok"
             }
         } catch (e: Exception) {

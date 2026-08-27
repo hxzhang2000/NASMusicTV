@@ -19,6 +19,8 @@ data class ServerConfig(
         const val TYPE_JELLYFIN = "jellyfin"
         const val TYPE_NAVIDROME = "navidrome"
         const val TYPE_SUBSONIC = "subsonic"
+        const val TYPE_DAOLIYU = "daoliyu"   // 道理鱼音乐
+        const val TYPE_FEINIU = "feiniu"     // 飞牛音乐
 
         val Empty = ServerConfig(
             backendType = TYPE_JELLYFIN,

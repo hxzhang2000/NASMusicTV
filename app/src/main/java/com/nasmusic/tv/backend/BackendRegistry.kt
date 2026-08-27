@@ -1,5 +1,7 @@
 package com.nasmusic.tv.backend
 
+import com.nasmusic.tv.backend.impl.DaoliyuAdapter
+import com.nasmusic.tv.backend.impl.FeiniuAdapter
 import com.nasmusic.tv.backend.impl.JellyfinAdapter
 import com.nasmusic.tv.backend.impl.NavidromeAdapter
 import com.nasmusic.tv.backend.impl.SubsonicAdapter
@@ -17,6 +19,8 @@ class BackendRegistry {
     private val TYPE_JELLYFIN = ServerConfig.TYPE_JELLYFIN
     private val TYPE_NAVIDROME = ServerConfig.TYPE_NAVIDROME
     private val TYPE_SUBSONIC = ServerConfig.TYPE_SUBSONIC
+    private val TYPE_DAOLIYU = ServerConfig.TYPE_DAOLIYU
+    private val TYPE_FEINIU = ServerConfig.TYPE_FEINIU
 
     private val lock = Any()
     private var currentAdapter: BackendAdapter? = null
@@ -26,7 +30,7 @@ class BackendRegistry {
     /**
      * 获取所有支持的后端类型
      */
-    val supportedTypes: List<String> get() = listOf(TYPE_JELLYFIN, TYPE_NAVIDROME, TYPE_SUBSONIC)
+    val supportedTypes: List<String> get() = listOf(TYPE_JELLYFIN, TYPE_NAVIDROME, TYPE_SUBSONIC, TYPE_DAOLIYU, TYPE_FEINIU)
 
     /**
      * 初始化后端连接
@@ -36,6 +40,8 @@ class BackendRegistry {
             TYPE_JELLYFIN -> JellyfinAdapter()
             TYPE_NAVIDROME -> NavidromeAdapter()
             TYPE_SUBSONIC -> SubsonicAdapter()
+            TYPE_DAOLIYU -> DaoliyuAdapter()
+            TYPE_FEINIU -> FeiniuAdapter()
             else -> return@withContext false
         }
 
@@ -122,6 +128,8 @@ class BackendRegistry {
             TYPE_JELLYFIN -> JellyfinAdapter()
             TYPE_NAVIDROME -> NavidromeAdapter()
             TYPE_SUBSONIC -> SubsonicAdapter()
+            TYPE_DAOLIYU -> DaoliyuAdapter()
+            TYPE_FEINIU -> FeiniuAdapter()
             else -> return@withContext Pair(false, "不支持的后端类型")
         }
 
@@ -170,6 +178,8 @@ class BackendRegistry {
         TYPE_JELLYFIN -> "Jellyfin"
         TYPE_NAVIDROME -> "Navidrome"
         TYPE_SUBSONIC -> "Subsonic"
+        TYPE_DAOLIYU -> "道理鱼音乐"
+        TYPE_FEINIU -> "飞牛音乐"
         else -> type
     }
 }

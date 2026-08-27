@@ -716,6 +716,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
     private val _serverDisplayName = MutableStateFlow("")
     val serverDisplayName: StateFlow<String> = _serverDisplayName.asStateFlow()
 
+    /** 当前后端的 API 版本号（initialize 时获取，供设置→关于页展示） */
+    private val _backendApiVersion = MutableStateFlow("Unknown")
+    val backendApiVersion: StateFlow<String> = _backendApiVersion.asStateFlow()
+
     // --- 启动连接提示 ---
     private val _showConnectPrompt = MutableStateFlow(false)
     val showConnectPrompt: StateFlow<Boolean> = _showConnectPrompt.asStateFlow()
@@ -941,6 +945,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
             if (success) {
                 _isConnected.value = true
                 _serverDisplayName.value = backendRegistry.getServerDisplayName()
+                _backendApiVersion.value = backendRegistry.getAdapter()?.apiVersion ?: "Unknown"
                 prefs.saveServerConfig(config.copy(isConnected = true))
                 // 连接成功后加载初始数据
                 loadLibrary()
@@ -971,7 +976,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
                 AppLog.e("MainViewModel", "disconnect failed", e)
             }
             _isConnected.value = false
-            _serverDisplayName.value = ""
+                _serverDisplayName.value = ""
+                _backendApiVersion.value = "Unknown"
             _albums.value = UiState.Loading
             _songs.value = UiState.Loading
             _songsPaging.value = SongsPagingState()
@@ -1016,6 +1022,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
                 if (success) {
                     _isConnected.value = true
                     _serverDisplayName.value = backendRegistry.getServerDisplayName()
+                    _backendApiVersion.value = backendRegistry.getAdapter()?.apiVersion ?: "Unknown"
                     prefs.saveServerConfig(config.copy(isConnected = true))
                     loadLibrary()
                     if (!silent) {

@@ -2,6 +2,7 @@ package com.nasmusic.tv.backend.impl
 
 import com.google.gson.Gson
 import com.google.gson.JsonObject
+import com.google.gson.JsonParser
 import com.nasmusic.tv.backend.BackendAdapter
 import com.nasmusic.tv.data.model.Album
 import com.nasmusic.tv.data.model.Artist
@@ -31,6 +32,7 @@ import java.util.concurrent.TimeUnit
 class JellyfinAdapter : BackendAdapter {
 
     override val backendType: String = "jellyfin"
+    override var apiVersion: String = "Jellyfin (版本未知)"
 
     private var baseUrl: String = ""
     private var apiToken: String = ""
@@ -76,6 +78,7 @@ class JellyfinAdapter : BackendAdapter {
             if (userInfo != null) {
                 userId = userInfo.first
                 serverName = userInfo.second
+                fetchServerVersion()
                 return@withContext true
             }
         }
@@ -87,11 +90,29 @@ class JellyfinAdapter : BackendAdapter {
                 this@JellyfinAdapter.apiToken = result.first
                 userId = result.second
                 serverName = result.third
+                fetchServerVersion()
                 return@withContext true
             }
         }
 
         false
+    }
+
+    /** 从 /System/Info/Public 获取服务端版本号 */
+    private fun fetchServerVersion() {
+        try {
+            val request = Request.Builder()
+                .url("$baseUrl/System/Info/Public")
+                .build()
+            client.newCall(request).execute().use { response ->
+                if (response.isSuccessful) {
+                    val body = response.body?.string() ?: return
+                    val json = JsonParser.parseString(body).asJsonObject
+                    val version = json.get("Version")?.asString
+                    if (!version.isNullOrBlank()) apiVersion = "Jellyfin API $version"
+                }
+            }
+        } catch (_: Exception) {}
     }
 
     override suspend fun testConnection(): Boolean = withContext(Dispatchers.IO) {

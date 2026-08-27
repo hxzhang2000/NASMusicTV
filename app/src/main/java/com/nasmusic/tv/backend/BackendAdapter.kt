@@ -24,6 +24,23 @@ interface BackendAdapter {
     val serverName: String
 
     /**
+     * 后端 API 协议版本号（initialize 时从服务端获取，供设置→关于页展示）
+     *
+     * 接口默认 "Unknown"，各适配器用 `override var` 覆盖，在 initialize() 内赋值。
+     */
+    val apiVersion: String
+        get() = "Unknown"
+
+    /**
+     * 播放流时需要注入的 HTTP 请求头（如 Cookie / Authorization）
+     *
+     * 默认空 Map。飞牛音乐等 Cookie 认证的后端覆盖此属性，
+     * PlayerManager 播放时读取并注入到 ExoPlayer 的 HttpDataSource。
+     */
+    val streamHeaders: Map<String, String>
+        get() = emptyMap()
+
+    /**
      * 初始化连接
      */
     suspend fun initialize(baseUrl: String, apiToken: String, username: String = "", password: String = ""): Boolean

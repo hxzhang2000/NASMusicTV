@@ -110,6 +110,7 @@ fun AppRoot(
     val isLibraryLoading by viewModel.isLibraryLoading.collectAsState(initial = false)
     val isConnected by viewModel.isConnected.collectAsState(initial = false)
     val serverDisplayName by viewModel.serverDisplayName.collectAsState(initial = "")
+    val backendApiVersion by viewModel.backendApiVersion.collectAsState(initial = "Unknown")
     val serverConfig by viewModel.serverConfig.collectAsState(initial = ServerConfig.Empty)
     val settings by viewModel.appSettings.collectAsState(initial = com.nasmusic.tv.data.model.AppSettings())
     // 封面滤镜状态（跨屏幕共享，用于 NowPlaying + Settings）
@@ -691,6 +692,7 @@ fun AppRoot(
                         serverConfig = serverConfig,
                         isConnected = isConnected,
                         serverDisplayName = serverDisplayName,
+                        backendApiVersion = backendApiVersion,
                         isConnecting = isLoading,
                         onConnect = onConnect,
                         onDisconnect = { viewModel.disconnect() },

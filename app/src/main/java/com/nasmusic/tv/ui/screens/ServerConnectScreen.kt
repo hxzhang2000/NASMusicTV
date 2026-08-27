@@ -73,11 +73,38 @@ fun ServerConnectScreen(
     // 字段会重新初始化，确保显示已保存的配置
     // 若 DataStore 中无保存值，使用内置默认值方便首次配置
     var backendType by remember(initialConfig) { mutableStateOf(initialConfig.backendType) }
+
+    // 各后端默认端口
+    fun defaultPort(type: String): String = when (type) {
+        ServerConfig.TYPE_JELLYFIN -> "8096"
+        ServerConfig.TYPE_NAVIDROME -> "4533"
+        ServerConfig.TYPE_SUBSONIC -> "4533"
+        ServerConfig.TYPE_DAOLIYU -> "4000"
+        ServerConfig.TYPE_FEINIU -> "80"
+        else -> "8096"
+    }
+    fun defaultUrl(type: String): String = "http://192.168.0.190:${defaultPort(type)}"
+
     var baseUrl by remember(initialConfig) {
         mutableStateOf(
             if (initialConfig.baseUrl.isNotBlank()) TextFieldValue(initialConfig.baseUrl)
-            else TextFieldValue("http://192.168.0.190:8096")
+            else TextFieldValue(defaultUrl(initialConfig.backendType))
         )
+    }
+    // 切换后端类型时，若 baseUrl 为空或是某个后端的默认值（说明用户未自定义），自动变更为新后端的默认地址
+    LaunchedEffect(backendType) {
+        val currentUrl = baseUrl.text.trim().removeSuffix("/")
+        // 检查当前地址是否是任一后端的默认地址（用户没自定义过）
+        val isDefaultUrl = listOf(
+            ServerConfig.TYPE_JELLYFIN,
+            ServerConfig.TYPE_NAVIDROME,
+            ServerConfig.TYPE_SUBSONIC,
+            ServerConfig.TYPE_DAOLIYU,
+            ServerConfig.TYPE_FEINIU
+        ).any { defaultUrl(it) == currentUrl }
+        if (isDefaultUrl) {
+            baseUrl = TextFieldValue(defaultUrl(backendType))
+        }
     }
     var username by remember(initialConfig) {
         mutableStateOf(
@@ -229,7 +256,7 @@ fun ServerConnectScreen(
             )
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(16.dp)
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 TypeCard(
                     text = "Jellyfin",
@@ -247,6 +274,18 @@ fun ServerConnectScreen(
                     text = "Subsonic",
                     selected = backendType == ServerConfig.TYPE_SUBSONIC,
                     onClick = { backendType = ServerConfig.TYPE_SUBSONIC },
+                    modifier = Modifier.weight(1f)
+                )
+                TypeCard(
+                    text = "道理鱼",
+                    selected = backendType == ServerConfig.TYPE_DAOLIYU,
+                    onClick = { backendType = ServerConfig.TYPE_DAOLIYU },
+                    modifier = Modifier.weight(1f)
+                )
+                TypeCard(
+                    text = "飞牛",
+                    selected = backendType == ServerConfig.TYPE_FEINIU,
+                    onClick = { backendType = ServerConfig.TYPE_FEINIU },
                     modifier = Modifier.weight(1f)
                 )
             }
@@ -302,7 +341,26 @@ fun ServerConnectScreen(
                     masked = true,
                     onOpen = { activeInputField = InputField.PASSWORD }
                 )
+            } else if (backendType == ServerConfig.TYPE_DAOLIYU) {
+                // 道理鱼：邮箱 + 密码
+                FormField(
+                    label = "邮箱",
+                    hint = "user@example.com",
+                    value = username,
+                    onValueChange = { username = it },
+                    onOpen = { activeInputField = InputField.USERNAME }
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+                FormField(
+                    label = stringResource(R.string.server_password),
+                    hint = stringResource(R.string.server_password_hint),
+                    value = password,
+                    onValueChange = { password = it },
+                    masked = true,
+                    onOpen = { activeInputField = InputField.PASSWORD }
+                )
             } else {
+                // Navidrome / Subsonic / 飞牛：用户名 + 密码
                 FormField(
                     label = stringResource(R.string.server_username),
                     hint = stringResource(R.string.server_navidrome_username_hint),
@@ -627,6 +685,8 @@ private fun ServerAddressField(
                     Text(
                         text = if (baseUrl.text.isEmpty()) when (backendType) {
                             ServerConfig.TYPE_SUBSONIC -> "http://192.168.1.100:9527 或 https://music.example.com"
+                            ServerConfig.TYPE_DAOLIYU -> "http://192.168.1.100:4000"
+                            ServerConfig.TYPE_FEINIU -> "http://192.168.1.100"
                             else -> "https://jellyfin.example.com 或 http://192.168.1.100:8096"
                         } else baseUrl.text,
                         color = if (baseUrl.text.isEmpty()) NasMusicColors.TextSecondary
