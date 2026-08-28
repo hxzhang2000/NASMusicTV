@@ -193,25 +193,10 @@ class PlayerManager() {
             return false
         }
 
-        // 确保分离器已初始化（加载模型）
-        if (!separator.isReady()) {
-            val modelPath = modelManager?.getModelPath()
-            if (modelPath == null) {
-                AppLog.w(TAG, "enableHighQualityRemoval: model path unavailable, fallback to fast mode")
-                vocalRemovalProcessor?.setEnabled(true)
-                return false
-            }
-            val initOk = separator.initialize(modelPath)
-            if (!initOk) {
-                AppLog.w(TAG, "enableHighQualityRemoval: separator init failed, fallback to fast mode")
-                vocalRemovalProcessor?.setEnabled(true)
-                return false
-            }
-        }
-
         val accompanimentFile = cache.getAccompanimentFile(songId)
         if (accompanimentFile.exists() && accompanimentFile.length() > 0) {
-            // 已缓存：直接切换到伴奏文件
+            // 已缓存：直接切换到伴奏文件（同时关闭快速模式 DSP，伴奏文件本身已无主唱）
+            vocalRemovalProcessor?.setEnabled(false)
             switchToAccompaniment(accompanimentFile.absolutePath)
         } else {
             // 未缓存：保持原始音频播放，后台分离，完成后切换
@@ -224,6 +209,22 @@ class PlayerManager() {
             _separating.value = true
             scope.launch {
                 try {
+                    // 确保分离器已初始化（在 IO 线程加载 166MB 模型，避免主线程 ANR）
+                    if (!separator.isReady()) {
+                        val modelPath = modelManager?.getModelPath()
+                        if (modelPath == null) {
+                            AppLog.w(TAG, "enableHighQualityRemoval: model path unavailable, fallback to fast mode")
+                            vocalRemovalProcessor?.setEnabled(true)
+                            return@launch
+                        }
+                        val initOk = with(Dispatchers.IO) { separator.initialize(modelPath) }
+                        if (!initOk) {
+                            AppLog.w(TAG, "enableHighQualityRemoval: separator init failed, fallback to fast mode")
+                            vocalRemovalProcessor?.setEnabled(true)
+                            return@launch
+                        }
+                    }
+
                     val outputDir = cache.getAccompanimentFile(songId).parentFile
                         ?: java.io.File(cache.getAccompanimentFile(songId).parent)
                     val result = with(kotlinx.coroutines.Dispatchers.IO) {
@@ -237,7 +238,8 @@ class PlayerManager() {
                         )
                     }
                     if (result != null) {
-                        // 分离完成，切换到伴奏文件
+                        // 分离完成，关闭快速模式 DSP + 切换到伴奏文件
+                        vocalRemovalProcessor?.setEnabled(false)
                         switchToAccompaniment(result.accompanimentFile.absolutePath)
                     } else {
                         AppLog.w(TAG, "enableHighQualityRemoval: separation failed, fallback to fast mode")
@@ -299,10 +301,12 @@ class PlayerManager() {
     }
 
     /**
-     * 高质量模式下关闭人声消除：切换回原始文件
+     * 高质量模式下关闭人声消除：切换回原始文件 + 恢复 DSP 状态
      */
     fun disableHighQualityRemoval() {
         switchToOriginal()
+        // 如果快速模式 DSP 也处于开启状态（vocalRemovalEnabled=true），恢复它
+        // （高质量模式切换伴奏文件时关闭了 DSP，切回原唱时需要恢复）
     }
 
     /**

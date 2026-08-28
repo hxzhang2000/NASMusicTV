@@ -2589,26 +2589,24 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
 
         if (newValue) {
             // 开启人声消除（伴唱模式）
+            // 正在转换中，不允许重复触发
+            if (playerManager.separating.value) {
+                AppLog.w("NASMusic", "toggleVocalRemoval: separating in progress, ignored")
+                return
+            }
+            // 快速模式：实时 DSP（始终启用，作为兜底）
+            playerManager.setVocalRemovalEnabled(true)
+            // 高质量模式：额外切换到伴奏文件
             if (playerManager.isHighQualityMode()) {
-                // 正在转换中，不允许重复触发
-                if (playerManager.separating.value) {
-                    AppLog.w("NASMusic", "toggleVocalRemoval: separating in progress, ignored")
-                    return
-                }
-                // 高质量模式：使用 HT-Demucs 伴奏文件切换，不走 SpectralMaskProcessor
                 playerManager.enableHighQualityRemoval()
-            } else {
-                // 快速模式：实时 DSP 处理
-                playerManager.setVocalRemovalEnabled(true)
             }
         } else {
             // 关闭人声消除（原唱模式）
+            // 快速模式：关闭实时 DSP
+            playerManager.setVocalRemovalEnabled(false)
+            // 高质量模式：额外切换回原始文件
             if (playerManager.isHighQualityMode()) {
-                // 高质量模式：切换回原始音频文件
                 playerManager.disableHighQualityRemoval()
-            } else {
-                // 快速模式：关闭实时 DSP
-                playerManager.setVocalRemovalEnabled(false)
             }
         }
 
@@ -2686,7 +2684,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
         _modelDownloadProgress.value = 0f
         // 若当前处于高质量模式，回退到快速模式
         if (separationMode.value == AppPreferences.SeparationMode.HIGH_QUALITY) {
-            setSeparationMode(AppPreferences.SeparationMode.FAST)
+            applySeparationMode(AppPreferences.SeparationMode.FAST)
         }
     }
 
@@ -2698,48 +2696,45 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
         } else {
             AppPreferences.SeparationMode.FAST
         }
-        // 切换到高质量模式前检查模型是否已下载
-        if (newMode == AppPreferences.SeparationMode.HIGH_QUALITY) {
-            if (!modelDownloaded.value) {
-                AppLog.w("NASMusic", "toggleSeparationMode: model not downloaded, blocked")
-                return
-            }
-            playerManager.setSeparationMode(newMode)
-            viewModelScope.launch {
-                prefs.setSeparationMode(newMode)
-            }
-            playerManager.enableHighQualityRemoval()
-        } else {
-            playerManager.setSeparationMode(newMode)
-            viewModelScope.launch {
-                prefs.setSeparationMode(newMode)
-            }
-            playerManager.disableHighQualityRemoval()
-        }
-        AppLog.d("NASMusic", "toggleSeparationMode -> $newMode")
+        applySeparationMode(newMode)
     }
 
     /** 设置分离模式（从设置页调用） */
     fun setSeparationMode(mode: AppPreferences.SeparationMode) {
+        applySeparationMode(mode)
+    }
+
+    /** 统一分离模式切换逻辑 */
+    private fun applySeparationMode(newMode: AppPreferences.SeparationMode) {
         // 切换到高质量模式前检查模型是否已下载
-        if (mode == AppPreferences.SeparationMode.HIGH_QUALITY) {
-            if (!modelDownloaded.value) {
-                AppLog.w("NASMusic", "setSeparationMode: model not downloaded, blocked")
-                return
-            }
-            playerManager.setSeparationMode(mode)
-            viewModelScope.launch {
-                prefs.setSeparationMode(mode)
-            }
-            playerManager.enableHighQualityRemoval()
-        } else {
-            playerManager.setSeparationMode(mode)
-            viewModelScope.launch {
-                prefs.setSeparationMode(mode)
-            }
-            playerManager.disableHighQualityRemoval()
+        if (newMode == AppPreferences.SeparationMode.HIGH_QUALITY && !modelDownloaded.value) {
+            AppLog.w("NASMusic", "applySeparationMode: model not downloaded, blocked")
+            return
         }
-        AppLog.d("NASMusic", "setSeparationMode -> $mode")
+
+        playerManager.setSeparationMode(newMode)
+        viewModelScope.launch { prefs.setSeparationMode(newMode) }
+
+        if (_vocalRemovalEnabled.value) {
+            // K歌模式正在伴唱，切换模式时保持伴唱状态
+            if (newMode == AppPreferences.SeparationMode.HIGH_QUALITY) {
+                // 快速→高质量：关闭 DSP，切换到伴奏文件
+                playerManager.setVocalRemovalEnabled(false)
+                playerManager.enableHighQualityRemoval()
+            } else {
+                // 高质量→快速：切换回原始文件，重新开启 DSP
+                playerManager.disableHighQualityRemoval()
+                playerManager.setVocalRemovalEnabled(true)
+            }
+        } else {
+            // 非K歌/原唱模式，只切换模式标记
+            if (newMode == AppPreferences.SeparationMode.HIGH_QUALITY) {
+                // 不主动触发分离，等用户进入K歌时再分离
+            } else {
+                playerManager.disableHighQualityRemoval()
+            }
+        }
+        AppLog.d("NASMusic", "applySeparationMode -> $newMode (vocalRemoval=${_vocalRemovalEnabled.value})")
     }
 
     // --- K 歌页面：升降调 & 变速（全局记忆，重启恢复）---
