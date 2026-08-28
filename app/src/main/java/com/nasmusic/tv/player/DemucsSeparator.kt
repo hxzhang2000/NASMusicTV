@@ -181,10 +181,10 @@ class DemucsSeparator(private val context: Context) {
             // pcmData 不再需要，释放 ~80MB 帮助 GC
             pcmData = FloatArray(0)
 
-            // 3. 分段处理（overlap-add）
+            // 3. 分段处理（每段 SEGMENT_SAMPLES，直接回写，无 padding）
+            //    HT-Demucs ONNX 模型输入固定 343980 采样，padding 后被截断，无意义
             val vocalsLeft = FloatArray(totalSamples)
             val vocalsRight = FloatArray(totalSamples)
-            val weights = FloatArray(totalSamples)  // overlap 权重
 
             var startSample = 0
             var segmentIndex = 0
@@ -194,24 +194,19 @@ class DemucsSeparator(private val context: Context) {
                 val endSample = minOf(startSample + SEGMENT_SAMPLES, totalSamples)
                 val segLen = endSample - startSample
 
-                // 提取当前段（带 overlap padding）
-                val padLeft = minOf(OVERLAP_SAMPLES, startSample)
-                val padRight = minOf(OVERLAP_SAMPLES, totalSamples - endSample)
-                val segLeft = extractSegmentWithPadding(leftChannel, startSample, segLen, padLeft, padRight)
-                val segRight = extractSegmentWithPadding(rightChannel, startSample, segLen, padLeft, padRight)
+                // 提取当前段（无 padding，直接切片）
+                val segLeft = leftChannel.copyOfRange(startSample, endSample)
+                val segRight = rightChannel.copyOfRange(startSample, endSample)
 
                 // ONNX 推理
                 val (vocL, vocR) = processSegment(segLeft, segRight)
 
-                // overlap-add 回写
-                val writeStart = startSample - padLeft
-                val writeLen = padLeft + segLen + padRight
-                for (i in 0 until writeLen) {
-                    val idx = writeStart + i
+                // 直接写回（vocL.size == segLen，无越界风险）
+                for (i in 0 until vocL.size) {
+                    val idx = startSample + i
                     if (idx in 0 until totalSamples) {
                         vocalsLeft[idx] += vocL[i]
                         vocalsRight[idx] += vocR[i]
-                        weights[idx] += 1.0f
                     }
                 }
 
@@ -222,16 +217,6 @@ class DemucsSeparator(private val context: Context) {
                 // 移动到下一段
                 startSample += SEGMENT_SAMPLES
             }
-
-            // 归一化 overlap 权重
-            for (i in 0 until totalSamples) {
-                if (weights[i] > 0) {
-                    vocalsLeft[i] /= weights[i]
-                    vocalsRight[i] /= weights[i]
-                }
-            }
-            // weights 不再需要
-            // (FloatArray 不可变长度，但内容已用完)
 
             progress?.onProgress(0.85f, "写入人声")
 
