@@ -59,6 +59,10 @@ class DemucsSeparator(private val context: Context) {
     private var modelSession: OrtSession? = null
     private var isInitialized = false
 
+    /** 上次失败的具体原因（separate/initialize/decodeAudio 失败时设置） */
+    var lastError: String? = null
+        private set
+
     /**
      * 分离结果
      */
@@ -81,10 +85,11 @@ class DemucsSeparator(private val context: Context) {
      * @param modelPath 模型文件路径（由 ModelDownloadManager 提供）
      */
     fun initialize(modelPath: String): Boolean {
+        val modelFile = File(modelPath)
         return try {
-            val modelFile = File(modelPath)
             if (!modelFile.exists()) {
                 AppLog.e(TAG, "initialize: model file not found: $modelPath")
+                lastError = "模型文件不存在"
                 return false
             }
 
@@ -95,10 +100,17 @@ class DemucsSeparator(private val context: Context) {
             modelSession = ortEnv!!.createSession(modelBytes)
 
             isInitialized = true
+            lastError = null
             AppLog.d(TAG, "initialize: OK, model loaded from $modelPath (${modelBytes.size / (1024 * 1024)}MB)")
             true
+        } catch (e: OutOfMemoryError) {
+            AppLog.e(TAG, "initialize: OOM loading model", e)
+            lastError = "内存不足，无法加载模型（${modelFile.length() / (1024 * 1024)}MB）"
+            System.gc()
+            false
         } catch (e: Exception) {
             AppLog.e(TAG, "initialize: failed", e)
+            lastError = "模型初始化失败：${e.message?.take(40)}"
             false
         }
     }
@@ -136,6 +148,7 @@ class DemucsSeparator(private val context: Context) {
     ): SeparationResult? {
         if (!isReady()) {
             AppLog.e(TAG, "separate: not initialized")
+            lastError = "分离器未初始化"
             return null
         }
 
@@ -146,6 +159,7 @@ class DemucsSeparator(private val context: Context) {
             var pcmData = decodeAudio(inputPath, progress)
             if (pcmData == null) {
                 AppLog.e(TAG, "separate: decode failed")
+                // decodeAudio 内部已设置 lastError
                 return null
             }
 
@@ -232,13 +246,16 @@ class DemucsSeparator(private val context: Context) {
             progress?.onProgress(1f, "完成")
 
             AppLog.d(TAG, "separate: OK, vocals=${vocalsFile.absolutePath}, accompaniment=${accompanimentFile.absolutePath}")
+            lastError = null
             SeparationResult(vocalsFile, accompanimentFile, durationMs)
         } catch (e: OutOfMemoryError) {
             AppLog.e(TAG, "separate: OOM — 设备内存不足，无法完成高质量分离", e)
+            lastError = "内存不足（模型166MB+音频数据），设备内存不够"
             System.gc()
             null
         } catch (e: Exception) {
             AppLog.e(TAG, "separate: failed", e)
+            lastError = "分离异常：${e.message?.take(40)}"
             null
         }
     }
@@ -345,6 +362,7 @@ class DemucsSeparator(private val context: Context) {
 
             if (audioTrackIndex < 0 || format == null) {
                 AppLog.e(TAG, "decodeAudio: no audio track found")
+                lastError = "音频文件无音轨（格式不支持?）"
                 return null
             }
 
@@ -407,8 +425,14 @@ class DemucsSeparator(private val context: Context) {
             extractor.release()
 
             pcmData.toFloatArray()
+        } catch (e: OutOfMemoryError) {
+            AppLog.e(TAG, "decodeAudio: OOM", e)
+            lastError = "解码内存不足（音频过长?）"
+            System.gc()
+            null
         } catch (e: Exception) {
             AppLog.e(TAG, "decodeAudio: failed", e)
+            lastError = "音频解码失败：${e.message?.take(30)}"
             null
         }
     }

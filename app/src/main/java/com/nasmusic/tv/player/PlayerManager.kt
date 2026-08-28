@@ -182,6 +182,9 @@ class PlayerManager() {
         return _separationMode.value == AppPreferences.SeparationMode.HIGH_QUALITY
     }
 
+    /** 上次下载失败的具体原因（resolveInputPath 失败时设置） */
+    private var lastDownloadError: String? = null
+
     /**
      * 解析歌曲的本地输入路径，供 DemucsSeparator 使用。
      *
@@ -213,6 +216,7 @@ class PlayerManager() {
         val streamUrl = song.streamUrl
         if (streamUrl.isNullOrBlank()) {
             AppLog.w(TAG, "resolveInputPath: no path and no streamUrl for '${song.title}'")
+            lastDownloadError = "歌曲无本地文件且无流媒体地址"
             return null
         }
 
@@ -227,6 +231,7 @@ class PlayerManager() {
                 val response = httpClient.newCall(request).execute()
                 if (!response.isSuccessful) {
                     AppLog.w(TAG, "resolveInputPath: download failed, HTTP ${response.code}")
+                    lastDownloadError = "下载失败 HTTP ${response.code}"
                     return@withContext null
                 }
 
@@ -259,9 +264,24 @@ class PlayerManager() {
                 AppLog.d(TAG, "resolveInputPath: downloaded ${outFile.length()} bytes for '${song.title}'")
                 outFile.absolutePath
             }
-            tempFile
+            if (tempFile == null) {
+                // lastDownloadError 已在内部设置
+                null
+            } else {
+                lastDownloadError = null
+                tempFile
+            }
+        } catch (e: java.net.SocketTimeoutException) {
+            AppLog.e(TAG, "resolveInputPath: download timeout", e)
+            lastDownloadError = "下载超时（5分钟内未完成）"
+            null
+        } catch (e: java.net.SocketException) {
+            AppLog.e(TAG, "resolveInputPath: network error", e)
+            lastDownloadError = "网络错误：${e.message?.take(30)}"
+            null
         } catch (e: Exception) {
             AppLog.e(TAG, "resolveInputPath: download exception", e)
+            lastDownloadError = "下载异常：${e.message?.take(30)}"
             null
         }
     }
@@ -317,9 +337,12 @@ class PlayerManager() {
             vocalRemovalProcessor?.setEnabled(false)
             switchToAccompaniment(accompanimentFile.absolutePath)
         } else {
-            // 未缓存：保持原始音频播放，后台分离，完成后切换
+            // 未缓存：暂停播放 → 后台分离 → 完成后切换到伴奏并恢复播放
             val song = _currentSong.value ?: return false
             _hqError.value = null  // 清除上次错误
+            // 保存播放状态并暂停，避免分离期间继续播放原唱
+            val wasPlayingBeforeSeparation = player?.isPlaying == true
+            player?.pause()
             _separating.value = true
             var tempInputPath: String? = null
             scope.launch {
@@ -330,8 +353,9 @@ class PlayerManager() {
                     }
                     if (inputPath == null) {
                         AppLog.w(TAG, "enableHighQualityRemoval: cannot resolve input path, fallback to fast mode")
-                        _hqError.value = "无法获取音频文件，已切换快速模式"
+                        _hqError.value = "${lastDownloadError ?: "无法获取音频文件"}，已切换快速模式"
                         vocalRemovalProcessor?.setEnabled(true)
+                        if (wasPlayingBeforeSeparation) player?.play()
                         return@launch
                     }
                     // 记录是否为临时下载文件（分离后需清理）
@@ -344,14 +368,16 @@ class PlayerManager() {
                             AppLog.w(TAG, "enableHighQualityRemoval: model path unavailable, fallback to fast mode")
                             _hqError.value = "模型路径不可用，已切换快速模式"
                             vocalRemovalProcessor?.setEnabled(true)
+                            if (wasPlayingBeforeSeparation) player?.play()
                             return@launch
                         }
                         _separationProgress.value = 0.2f to "加载模型"
                         val initOk = with(Dispatchers.IO) { separator.initialize(modelPath) }
                         if (!initOk) {
                             AppLog.w(TAG, "enableHighQualityRemoval: separator init failed, fallback to fast mode")
-                            _hqError.value = "模型初始化失败，已切换快速模式"
+                            _hqError.value = "${separator.lastError ?: "模型初始化失败"}，已切换快速模式"
                             vocalRemovalProcessor?.setEnabled(true)
+                            if (wasPlayingBeforeSeparation) player?.play()
                             return@launch
                         }
                     }
@@ -369,19 +395,27 @@ class PlayerManager() {
                         )
                     }
                     if (result != null) {
-                        // 分离完成，关闭快速模式 DSP + 切换到伴奏文件
+                        // 分离完成，关闭快速模式 DSP + 切换到伴奏文件 + 恢复播放
                         _hqError.value = null
                         vocalRemovalProcessor?.setEnabled(false)
                         switchToAccompaniment(result.accompanimentFile.absolutePath)
+                        if (wasPlayingBeforeSeparation) player?.play()
                     } else {
                         AppLog.w(TAG, "enableHighQualityRemoval: separation failed, fallback to fast mode")
-                        _hqError.value = "高质量分离失败，已切换快速模式"
+                        _hqError.value = "${separator.lastError ?: "高质量分离失败"}，已切换快速模式"
                         vocalRemovalProcessor?.setEnabled(true)
+                        if (wasPlayingBeforeSeparation) player?.play()
                     }
+                } catch (e: OutOfMemoryError) {
+                    AppLog.e(TAG, "enableHighQualityRemoval: OOM", e)
+                    _hqError.value = "内存不足，已切换快速模式"
+                    vocalRemovalProcessor?.setEnabled(true)
+                    if (wasPlayingBeforeSeparation) player?.play()
                 } catch (e: Exception) {
                     AppLog.e(TAG, "enableHighQualityRemoval: exception", e)
                     _hqError.value = "分离过程出错：${e.message?.take(30)}，已切换快速模式"
                     vocalRemovalProcessor?.setEnabled(true)
+                    if (wasPlayingBeforeSeparation) player?.play()
                 } finally {
                     _separating.value = false
                     _separationProgress.value = 0f to ""
