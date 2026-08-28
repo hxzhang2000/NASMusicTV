@@ -253,40 +253,41 @@ class DemucsSeparator(private val context: Context) {
     /**
      * 处理单段音频：ONNX 推理提取 vocals
      *
-     * @param leftChannel 左声道样本
+     * @param leftChannel 左声道样本（长度 ≤ SEGMENT_SAMPLES）
      * @param rightChannel 右声道样本
-     * @return (vocalsLeft, vocalsRight)
+     * @return (vocalsLeft, vocalsRight)，长度 = leftChannel.size
      */
     private fun processSegment(
         leftChannel: FloatArray,
         rightChannel: FloatArray
     ): Pair<FloatArray, FloatArray> {
-        val segLen = minOf(leftChannel.size, SEGMENT_SAMPLES)
+        val actualLen = leftChannel.size  // 最后一段可能 < SEGMENT_SAMPLES
 
-        // 准备输入 tensor [1, 2, samples]
-        val inputData = FloatArray(2 * segLen)
-        for (i in 0 until segLen) {
+        // 总是 pad 到 SEGMENT_SAMPLES（模型要求固定输入 shape [1,2,343980]）
+        // 缺少的部分用零填充
+        val inputData = FloatArray(2 * SEGMENT_SAMPLES)
+        for (i in 0 until actualLen) {
             inputData[i] = leftChannel[i]
-            inputData[i + segLen] = rightChannel[i]
+            inputData[i + SEGMENT_SAMPLES] = rightChannel[i]
         }
 
         val inputTensor = OnnxTensor.createTensor(
             ortEnv!!,
             FloatBuffer.wrap(inputData),
-            longArrayOf(1, 2, segLen.toLong())
+            INPUT_SHAPE  // [1, 2, 343980]
         )
 
         // ONNX 推理
         val output = modelSession!!.run(mapOf(inputName to inputTensor))
 
-        // 输出 shape: [1, 4, 2, samples]
+        // 输出 shape: [1, 4, 2, 343980]，只取前 actualLen 个样本
         @Suppress("UNCHECKED_CAST")
         val outputData = output[0].value as Array<Array<Array<FloatArray>>>
 
         // 提取 vocals stem (index=3)
-        val vocalsLeft = FloatArray(segLen)
-        val vocalsRight = FloatArray(segLen)
-        for (i in 0 until segLen) {
+        val vocalsLeft = FloatArray(actualLen)
+        val vocalsRight = FloatArray(actualLen)
+        for (i in 0 until actualLen) {
             vocalsLeft[i] = outputData[0][VOCALS_INDEX][0][i]
             vocalsRight[i] = outputData[0][VOCALS_INDEX][1][i]
         }
