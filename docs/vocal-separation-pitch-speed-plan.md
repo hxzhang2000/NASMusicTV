@@ -97,7 +97,11 @@ class ModelDownloadManager(private val context: Context) {
 
     companion object {
         // HT-Demucs FT Vocals Specialist (FP16, 166MB)
-        private const val MODEL_URL = "https://huggingface.co/StemSplitio/htdemucs-ft-vocals-onnx/resolve/main/htdemucs_ft_vocals_fp16weights.onnx"
+        // 下载候选 URL：优先国内镜像 hf-mirror.com，失败回退 huggingface.co
+        private val MODEL_URLS = listOf(
+            "https://hf-mirror.com/StemSplitio/htdemucs-ft-vocals-onnx/resolve/main/htdemucs_ft_vocals_fp16weights.onnx",
+            "https://huggingface.co/StemSplitio/htdemucs-ft-vocals-onnx/resolve/main/htdemucs_ft_vocals_fp16weights.onnx"
+        )
         private const val MODEL_FILENAME = "htdemucs_ft_vocals.onnx"
         private const val EXPECTED_SIZE_BYTES = 166_000_000L  // ~166MB
     }
@@ -246,7 +250,7 @@ HT-Demucs FT 输出：
 
 | 风险 | 影响 | 应对 |
 |------|------|------|
-| HuggingFace 下载速度慢 | 用户等待时间长 | 支持断点续传；提示用户使用科学上网 |
+| HuggingFace 下载速度慢（中国大陆） | 用户等待时间长/下载失败 | **镜像回退机制**：优先 hf-mirror.com（国内加速），失败后回退 huggingface.co（见 §7） |
 | 模型文件损坏 | 推理失败 | 下载后校验文件大小；异常时提示重新下载 |
 | TV 盒子存储不足 | 无法下载模型 | 下载前检查可用空间；提示用户清理存储 |
 | HT-Demucs 推理太慢 | 首次分离等待 ~60s | 显示进度条；缓存后零延迟；提供快速模式作为备选 |
@@ -268,3 +272,48 @@ HT-Demucs FT 输出：
 | `ui/components/AppRoot.kt` | 修改 | Settings 作用域传递模型状态 |
 | `ui/components/KaraokePlaybackScreen.kt` | 修改 | 高质量按钮根据模型禁用 |
 | `CHANGELOG.md` | 修改 | 记录变更 |
+
+---
+
+## 7. 中国大陆镜像下载策略
+
+### 7.1 问题
+
+HuggingFace (`huggingface.co`) 在中国大陆无法直接访问，TV 盒子无法设置系统代理或环境变量，用户无法下载高质量分离模型。
+
+### 7.2 方案：代码级镜像回退
+
+在 `ModelDownloadManager` 中硬编码候选 URL 列表，优先使用 `hf-mirror.com`（国内 HuggingFace 镜像站），失败后回退官方 `huggingface.co`：
+
+```kotlin
+private val MODEL_URLS = listOf(
+    "https://hf-mirror.com/StemSplitio/htdemucs-ft-vocals-onnx/resolve/main/htdemucs_ft_vocals_fp16weights.onnx",
+    "https://huggingface.co/StemSplitio/htdemucs-ft-vocals-onnx/resolve/main/htdemucs_ft_vocals_fp16weights.onnx"
+)
+```
+
+下载流程：依次尝试每个 URL，首个成功即停止；全部失败返回 false。
+
+### 7.3 为什么不用其他方案
+
+| 方案 | 不适用原因 |
+|------|-----------|
+| `HF_ENDPOINT` 环境变量 | TV 盒子无法设置环境变量 |
+| 系统代理 | Android TV 没有全局代理设置入口 |
+| 用户手动配置镜像地址 | TV 遥控器输入 URL 体验极差 |
+| 自建中转服务器 | 维护成本高，单开发者无法承担 |
+| 打包模型到 APK | APK 从 ~20MB 膨胀到 ~186MB，所有用户承担 |
+
+### 7.4 hf-mirror.com 可靠性
+
+- 由国内社区维护的 HuggingFace 镜像，缓存机制：首次请求从 HuggingFace 拉取后缓存
+- URL 路径与 HuggingFace 完全一致，只需替换域名
+- 支持大文件下载（断点续传）
+- 已被多个国内 AI 项目采用（如 ChatGLM、ModelScope 文档推荐）
+
+### 7.5 实现细节
+
+- `downloadModel()` 循环遍历 `MODEL_URLS`，每个 URL 调用 `tryDownloadUrl()`
+- `tryDownloadUrl()` 封装单次 HTTP 下载，含连接超时 (15s) + 读取超时 (30s)
+- 单个 URL 失败后删除临时文件，继续尝试下一个 URL
+- 所有 URL 均失败时，最终返回 false（UI 显示错误 + 重试按钮）

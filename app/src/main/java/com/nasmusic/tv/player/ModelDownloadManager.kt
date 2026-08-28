@@ -25,7 +25,11 @@ class ModelDownloadManager(private val context: Context) {
 
         // HT-Demucs FT Vocals Specialist (FP16, ~166MB)
         // Source: https://huggingface.co/StemSplitio/htdemucs-ft-vocals-onnx
-        private const val MODEL_URL = "https://huggingface.co/StemSplitio/htdemucs-ft-vocals-onnx/resolve/main/htdemucs_ft_vocals_fp16weights.onnx"
+        // 下载候选 URL：优先国内镜像 hf-mirror.com（加速大陆下载），失败后回退官方 HuggingFace
+        private val MODEL_URLS = listOf(
+            "https://hf-mirror.com/StemSplitio/htdemucs-ft-vocals-onnx/resolve/main/htdemucs_ft_vocals_fp16weights.onnx",
+            "https://huggingface.co/StemSplitio/htdemucs-ft-vocals-onnx/resolve/main/htdemucs_ft_vocals_fp16weights.onnx"
+        )
         private const val MODEL_FILENAME = "htdemucs_ft_vocals.onnx"
 
         // 期望文件大小（~166MB），允许 10% 误差
@@ -97,10 +101,52 @@ class ModelDownloadManager(private val context: Context) {
         val tempFile = File(modelsDir, "$MODEL_FILENAME.download")
         val finalFile = getModelFile()
 
-        try {
-            AppLog.d(TAG, "downloadModel: starting download from $MODEL_URL")
+        // 依次尝试每个候选 URL（先镜像后官方），全部失败返回 false
+        for (urlStr in MODEL_URLS) {
+            tempFile.delete()
+            val ok = tryDownloadUrl(urlStr, tempFile, onProgress)
+            if (ok) {
+                // 检查下载的文件大小
+                if (tempFile.length() < EXPECTED_SIZE_BYTES * 0.8) {
+                    AppLog.e(TAG, "downloadModel: file too small (${tempFile.length()} bytes), expected ~${EXPECTED_SIZE_BYTES}")
+                    tempFile.delete()
+                    continue
+                }
 
-            val url = URL(MODEL_URL)
+                // 原子重命名（先删旧文件，再重命名新文件）
+                if (finalFile.exists()) {
+                    finalFile.delete()
+                }
+                if (!tempFile.renameTo(finalFile)) {
+                    AppLog.e(TAG, "downloadModel: rename failed")
+                    tempFile.delete()
+                    continue
+                }
+
+                AppLog.d(TAG, "downloadModel: success from $urlStr, size = ${getModelSizeMB()}MB")
+                return@withContext true
+            } else {
+                AppLog.w(TAG, "downloadModel: failed from $urlStr, trying next...")
+            }
+        }
+        tempFile.delete()
+        false
+    }
+
+    /**
+     * 从单个 URL 下载模型到临时文件
+     *
+     * @return 下载是否成功（连接建立 + 完整读取）
+     */
+    private fun tryDownloadUrl(
+        urlStr: String,
+        tempFile: File,
+        onProgress: (downloaded: Long, total: Long) -> Unit
+    ): Boolean {
+        return try {
+            AppLog.d(TAG, "tryDownloadUrl: starting download from $urlStr")
+
+            val url = URL(urlStr)
             val connection = url.openConnection() as HttpURLConnection
             connection.connectTimeout = CONNECT_TIMEOUT_MS
             connection.readTimeout = READ_TIMEOUT_MS
@@ -108,15 +154,15 @@ class ModelDownloadManager(private val context: Context) {
             connection.connect()
 
             if (connection.responseCode != HttpURLConnection.HTTP_OK) {
-                AppLog.e(TAG, "downloadModel: HTTP ${connection.responseCode}")
-                return@withContext false
+                AppLog.e(TAG, "tryDownloadUrl: HTTP ${connection.responseCode}")
+                return false
             }
 
             val totalBytes = connection.contentLength.toLong()
-            AppLog.d(TAG, "downloadModel: total size = ${totalBytes / (1024 * 1024)}MB")
+            AppLog.d(TAG, "tryDownloadUrl: total size = ${totalBytes / (1024 * 1024)}MB")
 
             connection.inputStream.use { input ->
-                FileOutputStream(tempFile).use { output ->
+                FileOutputStream(tempFile, true).use { output ->
                     val buffer = ByteArray(8192)
                     var downloadedBytes = 0L
                     var bytesRead: Int
@@ -132,30 +178,9 @@ class ModelDownloadManager(private val context: Context) {
                     }
                 }
             }
-
-            // 检查下载的文件大小
-            if (tempFile.length() < EXPECTED_SIZE_BYTES * 0.8) {
-                AppLog.e(TAG, "downloadModel: file too small (${tempFile.length()} bytes), expected ~${EXPECTED_SIZE_BYTES}")
-                tempFile.delete()
-                return@withContext false
-            }
-
-            // 原子重命名（先删旧文件，再重命名新文件）
-            if (finalFile.exists()) {
-                finalFile.delete()
-            }
-            val renamed = tempFile.renameTo(finalFile)
-            if (!renamed) {
-                AppLog.e(TAG, "downloadModel: rename failed")
-                tempFile.delete()
-                return@withContext false
-            }
-
-            AppLog.d(TAG, "downloadModel: success, size = ${getModelSizeMB()}MB")
             true
         } catch (e: Exception) {
-            AppLog.e(TAG, "downloadModel: failed", e)
-            tempFile.delete()
+            AppLog.e(TAG, "tryDownloadUrl: failed from $urlStr", e)
             false
         }
     }
@@ -173,7 +198,7 @@ class ModelDownloadManager(private val context: Context) {
     /**
      * 获取模型下载 URL（供 UI 显示）
      */
-    fun getModelDownloadUrl(): String = MODEL_URL
+    fun getModelDownloadUrl(): String = MODEL_URLS.first()
 
     /**
      * 获取模型文件名（供 UI 显示）
