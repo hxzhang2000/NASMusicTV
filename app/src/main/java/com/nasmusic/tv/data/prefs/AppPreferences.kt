@@ -129,7 +129,7 @@ class AppPreferences(private val context: Context) {
      */
     enum class SeparationMode(val value: String) {
         FAST("fast"),          // 快速模式：SpectralMaskProcessor 实时 DSP
-        HIGH_QUALITY("hq")     // 高质量模式：Spleeter ONNX 预分离
+        HIGH_QUALITY("hq")     // 高质量模式：HT-Demucs FT ONNX 预分离
     }
 
     val separationMode: Flow<SeparationMode> = context.dataStore.data.map { prefs ->

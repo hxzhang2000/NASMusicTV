@@ -57,6 +57,7 @@ import com.nasmusic.tv.backend.weather.WeatherApi
 import com.nasmusic.tv.backend.weather.WeatherRadioManager
 import com.nasmusic.tv.lyrics.LyricsManager
 import com.nasmusic.tv.player.PlayerManager
+import com.nasmusic.tv.player.ModelDownloadManager
 import com.nasmusic.tv.util.AppLog
 import com.nasmusic.tv.net.RemoteCallbacks
 import com.nasmusic.tv.net.RemoteControlServer
@@ -2596,6 +2597,72 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
     /** 高质量分离是否正在进行（委托 PlayerManager 状态） */
     val separating: StateFlow<Boolean> = playerManager.separating
 
+    // --- 高质量分离模型下载状态 ---
+    private val _modelDownloaded = MutableStateFlow(false)
+    val modelDownloaded: StateFlow<Boolean> = _modelDownloaded
+    private val _modelDownloading = MutableStateFlow(false)
+    val modelDownloading: StateFlow<Boolean> = _modelDownloading
+    private val _modelDownloadProgress = MutableStateFlow(0f)
+    val modelDownloadProgress: StateFlow<Float> = _modelDownloadProgress
+    private val _modelDownloadedMB = MutableStateFlow(0L)
+    val modelDownloadedMB: StateFlow<Long> = _modelDownloadedMB
+    private val _modelTotalMB = MutableStateFlow(0L)
+    val modelTotalMB: StateFlow<Long> = _modelTotalMB
+    private val _modelDownloadError = MutableStateFlow<String?>(null)
+    val modelDownloadError: StateFlow<String?> = _modelDownloadError
+    private val _modelSizeMB = MutableStateFlow(0.0)
+    val modelSizeMB: StateFlow<Double> = _modelSizeMB
+
+    private val modelDownloadManager: ModelDownloadManager
+        get() = (getApplication<NasMusicApp>()).modelDownloadManager
+
+    /** 刷新模型下载状态（启动时/设置页进入时调用） */
+    fun refreshModelStatus() {
+        val mgr = modelDownloadManager
+        _modelDownloaded.value = mgr.isModelDownloaded()
+        _modelSizeMB.value = mgr.getModelSizeMB()
+    }
+
+    /** 下载高质量分离模型（带进度回调） */
+    fun downloadModel() {
+        if (_modelDownloading.value) return
+        val mgr = modelDownloadManager
+        _modelDownloading.value = true
+        _modelDownloadError.value = null
+        _modelDownloadProgress.value = 0f
+        _modelDownloadedMB.value = 0L
+        _modelTotalMB.value = mgr.getExpectedSizeMB().toLong()
+        viewModelScope.launch {
+            val success = mgr.downloadModel { downloaded, total ->
+                _modelDownloadedMB.value = downloaded / (1024 * 1024)
+                _modelTotalMB.value = total / (1024 * 1024)
+                _modelDownloadProgress.value = if (total > 0) downloaded.toFloat() / total else 0f
+            }
+            _modelDownloading.value = false
+            if (success) {
+                _modelDownloaded.value = true
+                _modelSizeMB.value = mgr.getModelSizeMB()
+                _modelDownloadProgress.value = 1f
+            } else {
+                _modelDownloadError.value = "模型下载失败，请检查网络后重试"
+                _modelDownloaded.value = false
+            }
+        }
+    }
+
+    /** 删除已下载的模型文件 */
+    fun deleteModel() {
+        val mgr = modelDownloadManager
+        mgr.deleteModel()
+        _modelDownloaded.value = false
+        _modelSizeMB.value = 0.0
+        _modelDownloadProgress.value = 0f
+        // 若当前处于高质量模式，回退到快速模式
+        if (separationMode.value == AppPreferences.SeparationMode.HIGH_QUALITY) {
+            setSeparationMode(AppPreferences.SeparationMode.FAST)
+        }
+    }
+
     /** 切换分离模式（快速↔高质量），持久化到 AppPreferences */
     fun toggleSeparationMode() {
         val currentMode = separationMode.value
@@ -2604,14 +2671,22 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
         } else {
             AppPreferences.SeparationMode.FAST
         }
-        playerManager.setSeparationMode(newMode)
-        viewModelScope.launch {
-            prefs.setSeparationMode(newMode)
-        }
-        // 高质量模式切换时同步人声消除状态
+        // 切换到高质量模式前检查模型是否已下载
         if (newMode == AppPreferences.SeparationMode.HIGH_QUALITY) {
+            if (!modelDownloaded.value) {
+                AppLog.w("NASMusic", "toggleSeparationMode: model not downloaded, blocked")
+                return
+            }
+            playerManager.setSeparationMode(newMode)
+            viewModelScope.launch {
+                prefs.setSeparationMode(newMode)
+            }
             playerManager.enableHighQualityRemoval()
         } else {
+            playerManager.setSeparationMode(newMode)
+            viewModelScope.launch {
+                prefs.setSeparationMode(newMode)
+            }
             playerManager.disableHighQualityRemoval()
         }
         AppLog.d("NASMusic", "toggleSeparationMode -> $newMode")
@@ -2619,13 +2694,22 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
 
     /** 设置分离模式（从设置页调用） */
     fun setSeparationMode(mode: AppPreferences.SeparationMode) {
-        playerManager.setSeparationMode(mode)
-        viewModelScope.launch {
-            prefs.setSeparationMode(mode)
-        }
+        // 切换到高质量模式前检查模型是否已下载
         if (mode == AppPreferences.SeparationMode.HIGH_QUALITY) {
+            if (!modelDownloaded.value) {
+                AppLog.w("NASMusic", "setSeparationMode: model not downloaded, blocked")
+                return
+            }
+            playerManager.setSeparationMode(mode)
+            viewModelScope.launch {
+                prefs.setSeparationMode(mode)
+            }
             playerManager.enableHighQualityRemoval()
         } else {
+            playerManager.setSeparationMode(mode)
+            viewModelScope.launch {
+                prefs.setSeparationMode(mode)
+            }
             playerManager.disableHighQualityRemoval()
         }
         AppLog.d("NASMusic", "setSeparationMode -> $mode")

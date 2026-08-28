@@ -127,6 +127,8 @@ fun NowPlayingScreen(
     isHighQualityMode: Boolean = false,
     isSeparating: Boolean = false,
     onToggleSeparationMode: () -> Unit = {},
+    /** 高质量分离模型是否已下载（未下载时禁用高质量切换） */
+    modelDownloaded: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     var showInfoPanel by remember { mutableStateOf(false) }
@@ -176,6 +178,7 @@ fun NowPlayingScreen(
             isHighQualityMode = isHighQualityMode,
             isSeparating = isSeparating,
             onToggleSeparationMode = onToggleSeparationMode,
+            modelDownloaded = modelDownloaded,
             playPauseFocusRequester = playPauseFocusRequester,
             remoteControlUrl = remoteControlUrl
         )

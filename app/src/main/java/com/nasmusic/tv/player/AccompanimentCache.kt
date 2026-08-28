@@ -17,7 +17,7 @@ import java.io.File
  * 伴奏文件缓存管理 + 预分离队列
  *
  * 功能：
- * 1. 缓存 Spleeter 分离结果（伴奏 WAV 文件），避免重复分离
+ * 1. 缓存人声分离结果（伴奏 WAV 文件），避免重复分离
  * 2. LRU 淘汰：总缓存上限 500MB
  * 3. 预分离队列：当前歌曲播放进度 > 50% 时触发下一首预分离
  *
@@ -86,12 +86,12 @@ class AccompanimentCache(private val context: Context) {
      *
      * @param songId 当前歌曲 ID
      * @param inputPath 输入音频文件路径
-     * @param separator SpleeterSeparator 实例
+     * @param separator DemucsSeparator 实例
      */
     fun startPreSeparation(
         songId: String,
         inputPath: String,
-        separator: SpleeterSeparator
+        separator: DemucsSeparator
     ) {
         // 如果已经缓存，跳过
         if (hasAccompaniment(songId)) {

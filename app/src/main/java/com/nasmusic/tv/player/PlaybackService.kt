@@ -122,11 +122,11 @@ class PlaybackService : MediaLibraryService() {
         (application as NasMusicApp).playerManager.setPlayer(player)
         (application as NasMusicApp).playerManager.setVocalRemovalProcessor(vocalRemovalProcessor)
 
-        // 注入高质量人声分离组件（Spleeter ONNX 模式）
-        val spleeterSeparator = SpleeterSeparator(this)
+        // 注入高质量人声分离组件（HT-Demucs FT ONNX 模式）
+        // 注意：模型不在 APK 内，需在设置页下载。初始化延迟到 enableHighQualityRemoval 时（PlayerManager 内部检查模型）
+        val demucsSeparator = DemucsSeparator(this)
         val accompanimentCache = AccompanimentCache(this)
-        spleeterSeparator.initialize() // 加载 ONNX 模型
-        (application as NasMusicApp).playerManager.setSpleeterSeparator(spleeterSeparator)
+        (application as NasMusicApp).playerManager.setDemucsSeparator(demucsSeparator)
         (application as NasMusicApp).playerManager.setAccompanimentCache(accompanimentCache)
 
         // Start as foreground service with initial notification

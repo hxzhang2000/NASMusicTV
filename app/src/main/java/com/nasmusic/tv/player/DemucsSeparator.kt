@@ -1,64 +1,63 @@
 package com.nasmusic.tv.player
 
 import android.content.Context
-import android.media.AudioFormat
-import android.media.AudioRecord
 import android.media.MediaCodec
 import android.media.MediaExtractor
 import android.media.MediaFormat
-import android.media.MediaMuxer
 import com.nasmusic.tv.util.AppLog
 import ai.onnxruntime.OnnxTensor
 import ai.onnxruntime.OrtEnvironment
 import ai.onnxruntime.OrtSession
 import java.io.File
 import java.io.FileOutputStream
-import java.io.RandomAccessFile
-import java.nio.ByteBuffer
-import java.nio.ByteOrder
 import java.nio.FloatBuffer
-import kotlin.math.PI
-import kotlin.math.min
-import kotlin.math.roundToInt
-import kotlin.math.sqrt
 
 /**
- * Spleeter ONNX 高质量人声分离器
+ * HT-Demucs FT ONNX 高质量人声分离器
  *
  * 流程：
  * 1. 读取输入音频（支持 MP3/FLAC/WAV/OGG 等 ExoPlayer 支持的格式）
  * 2. 解码为 PCM 浮点数据（44100Hz 立体声）
- * 3. STFT → 复数频谱
- * 4. ONNX 推理 → soft mask（vocals + accompaniment）
- * 5. Wiener 归一化
- * 6. iSTFT → 时域信号
- * 7. 写入 accompaniment.wav（供 ExoPlayer 播放）
+ * 3. 分段处理（7.81s 段，overlap-add）
+ * 4. ONNX 推理 → 4 stems（drums, bass, other, vocals）
+ * 5. 提取 vocals stem → iSTFT（模型内部处理）
+ * 6. 写入伴奏文件（ex vocals from mix）
  *
  * 模型文件：
- * - vocals.fp16.onnx（人声模型）
- * - accompaniment.fp16.onnx（伴奏模型）
- * 放置在 app/src/main/assets/spleeter/ 目录
+ * - htdemucs_ft_vocals.onnx（HT-Demucs FT Vocals Specialist, FP16, ~166MB）
+ * 下载地址：https://huggingface.co/StemSplitio/htdemucs-ft-vocals-onnx
  *
- * 注意：模型文件需要从 Spleeter 官方仓库下载 .h5 权重，
- * 用 tf2onnx 转换为 ONNX，再做 FP16 量化。详见方案文档。
+ * 与旧 Spleeter 方案的区别：
+ * - 输入：立体声原始 PCM（不需要外部 STFT）
+ * - 输出：4 stems，取 vocals（index=3）
+ * - 模型内置 STFT/iSTFT，我们只需提供原始 PCM
+ * - 需要 overlap-add chunking 处理长音频
  */
-class SpleeterSeparator(private val context: Context) {
+class DemucsSeparator(private val context: Context) {
 
     companion object {
-        private const val TAG = "SpleeterSeparator"
+        private const val TAG = "DemucsSeparator"
 
         private const val SAMPLE_RATE = 44100
         private const val CHANNEL_COUNT = 2
 
-        // 模型文件名
-        private const val VOCALS_MODEL = "spleeter/vocals_fp16.onnx"
-        private const val ACCOMPANIMENT_MODEL = "spleeter/accompaniment_fp16.onnx"
+        // HT-Demucs FT 参数
+        private const val SEGMENT_SAMPLES = 343980  // 7.81s at 44100Hz
+        private const val OVERLAP_SAMPLES = 3440     // overlap for smooth transition (~78ms)
+        private const val TOTAL_SAMPLES_PER_SEG = SEGMENT_SAMPLES + OVERLAP_SAMPLES * 2
+
+        // 输出 stems: drums=0, bass=1, other=2, vocals=3
+        private const val VOCALS_INDEX = 3
+
+        // 模型输入 shape: [1, 2, samples]
+        private val INPUT_SHAPE = longArrayOf(1, 2, SEGMENT_SAMPLES.toLong())
+        // 模型输出 shape: [1, 4, 2, samples]
+        private val OUTPUT_SHAPE = longArrayOf(1, 4, 2, SEGMENT_SAMPLES.toLong())
     }
 
-    private val dsp = SpleeterDsp()
     private var ortEnv: OrtEnvironment? = null
-    private var vocalsSession: OrtSession? = null
-    private var accompanimentSession: OrtSession? = null
+    private var modelSession: OrtSession? = null
+    private var isInitialized = false
 
     /**
      * 分离结果
@@ -77,21 +76,26 @@ class SpleeterSeparator(private val context: Context) {
     }
 
     /**
-     * 初始化 ONNX Runtime 会话
+     * 初始化 ONNX Runtime 会话（从外部存储加载模型）
+     *
+     * @param modelPath 模型文件路径（由 ModelDownloadManager 提供）
      */
-    fun initialize(): Boolean {
+    fun initialize(modelPath: String): Boolean {
         return try {
+            val modelFile = File(modelPath)
+            if (!modelFile.exists()) {
+                AppLog.e(TAG, "initialize: model file not found: $modelPath")
+                return false
+            }
+
             ortEnv = OrtEnvironment.getEnvironment()
 
-            // 加载人声模型
-            val vocalsBytes = context.assets.open(VOCALS_MODEL).use { it.readBytes() }
-            vocalsSession = ortEnv!!.createSession(vocalsBytes)
+            // 加载模型（从文件读取字节）
+            val modelBytes = modelFile.readBytes()
+            modelSession = ortEnv!!.createSession(modelBytes)
 
-            // 加载伴奏模型
-            val accompanimentBytes = context.assets.open(ACCOMPANIMENT_MODEL).use { it.readBytes() }
-            accompanimentSession = ortEnv!!.createSession(accompanimentBytes)
-
-            AppLog.d(TAG, "initialize: OK, models loaded")
+            isInitialized = true
+            AppLog.d(TAG, "initialize: OK, model loaded from $modelPath (${modelBytes.size / (1024 * 1024)}MB)")
             true
         } catch (e: Exception) {
             AppLog.e(TAG, "initialize: failed", e)
@@ -103,13 +107,17 @@ class SpleeterSeparator(private val context: Context) {
      * 释放资源
      */
     fun release() {
-        vocalsSession?.close()
-        accompanimentSession?.close()
+        modelSession?.close()
         ortEnv?.close()
-        vocalsSession = null
-        accompanimentSession = null
+        modelSession = null
         ortEnv = null
+        isInitialized = false
     }
+
+    /**
+     * 检查是否已初始化
+     */
+    fun isReady(): Boolean = isInitialized && modelSession != null
 
     /**
      * 分离人声和伴奏
@@ -126,17 +134,22 @@ class SpleeterSeparator(private val context: Context) {
         songId: String,
         progress: ProgressCallback? = null
     ): SeparationResult? {
+        if (!isReady()) {
+            AppLog.e(TAG, "separate: not initialized")
+            return null
+        }
+
         return try {
             progress?.onProgress(0f, "解码音频")
 
-            // 1. 解码输入音频为 PCM 浮点
+            // 1. 解码输入音频为 PCM 浮点（立体声）
             val pcmData = decodeAudio(inputPath, progress)
             if (pcmData == null) {
                 AppLog.e(TAG, "separate: decode failed")
                 return null
             }
 
-            progress?.onProgress(0.3f, "STFT 变换")
+            progress?.onProgress(0.2f, "分段处理")
 
             // 2. 分离左右声道
             val leftChannel = FloatArray(pcmData.size / 2)
@@ -146,24 +159,75 @@ class SpleeterSeparator(private val context: Context) {
                 rightChannel[i] = pcmData[i * 2 + 1]
             }
 
-            // 3. 对每个声道做 STFT + ONNX 推理 + iSTFT
-            val vocalsLeft = processChannel(leftChannel, vocalsSession!!, progress)
-            val vocalsRight = processChannel(rightChannel, vocalsSession!!, progress)
+            // 3. 分段处理（overlap-add）
+            val totalSamples = leftChannel.size
+            val vocalsLeft = FloatArray(totalSamples)
+            val vocalsRight = FloatArray(totalSamples)
+            val weights = FloatArray(totalSamples)  // overlap 权重
 
-            val accompanimentLeft = processChannel(leftChannel, accompanimentSession!!, progress)
-            val accompanimentRight = processChannel(rightChannel, accompanimentSession!!, progress)
+            var startSample = 0
+            var segmentIndex = 0
+            val totalSegments = (totalSamples + SEGMENT_SAMPLES - 1) / SEGMENT_SAMPLES
 
-            progress?.onProgress(0.8f, "写入伴奏文件")
+            while (startSample < totalSamples) {
+                val endSample = minOf(startSample + SEGMENT_SAMPLES, totalSamples)
+                val segLen = endSample - startSample
 
-            // 4. 合并左右声道并写入 WAV
+                // 提取当前段（带 overlap padding）
+                val padLeft = minOf(OVERLAP_SAMPLES, startSample)
+                val padRight = minOf(OVERLAP_SAMPLES, totalSamples - endSample)
+                val segLeft = extractSegmentWithPadding(leftChannel, startSample, segLen, padLeft, padRight)
+                val segRight = extractSegmentWithPadding(rightChannel, startSample, segLen, padLeft, padRight)
+
+                // ONNX 推理
+                val (vocL, vocR) = processSegment(segLeft, segRight)
+
+                // overlap-add 回写
+                val writeStart = startSample - padLeft
+                val writeLen = padLeft + segLen + padRight
+                for (i in 0 until writeLen) {
+                    val idx = writeStart + i
+                    if (idx in 0 until totalSamples) {
+                        vocalsLeft[idx] += vocL[i]
+                        vocalsRight[idx] += vocR[i]
+                        weights[idx] += 1.0f
+                    }
+                }
+
+                // 进度
+                segmentIndex++
+                val segProgress = segmentIndex.toFloat() / totalSegments
+                progress?.onProgress(0.2f + segProgress * 0.6f, "分离中 ($segmentIndex/$totalSegments)")
+
+                // 移动到下一段
+                startSample += SEGMENT_SAMPLES
+            }
+
+            // 归一化 overlap 权重
+            for (i in 0 until totalSamples) {
+                if (weights[i] > 0) {
+                    vocalsLeft[i] /= weights[i]
+                    vocalsRight[i] /= weights[i]
+                }
+            }
+
+            progress?.onProgress(0.85f, "计算伴奏")
+
+            // 4. 伴奏 = 原始 - vocals（简单减法）
+            val accompanimentLeft = FloatArray(totalSamples) { leftChannel[it] - vocalsLeft[it] }
+            val accompanimentRight = FloatArray(totalSamples) { rightChannel[it] - vocalsRight[it] }
+
+            progress?.onProgress(0.9f, "写入文件")
+
+            // 5. 写入 WAV 文件
             val vocalsFile = File(outputDir, "${songId}_vocals.wav")
             val accompanimentFile = File(outputDir, "${songId}_accompaniment.wav")
 
             writeWav(vocalsFile, mergeChannels(vocalsLeft, vocalsRight))
             writeWav(accompanimentFile, mergeChannels(accompanimentLeft, accompanimentRight))
 
-            // 5. 计算时长
-            val durationMs = (pcmData.size.toFloat() / (SAMPLE_RATE * CHANNEL_COUNT) * 1000).toLong()
+            // 6. 计算时长
+            val durationMs = (totalSamples.toFloat() / SAMPLE_RATE * 1000).toLong()
 
             progress?.onProgress(1f, "完成")
 
@@ -176,55 +240,86 @@ class SpleeterSeparator(private val context: Context) {
     }
 
     /**
-     * 处理单个声道：STFT → ONNX 推理 → iSTFT
+     * 处理单段音频：ONNX 推理提取 vocals
+     *
+     * @param leftChannel 左声道样本
+     * @param rightChannel 右声道样本
+     * @return (vocalsLeft, vocalsRight)
      */
-    private fun processChannel(
-        samples: FloatArray,
-        session: OrtSession,
-        progress: ProgressCallback?
-    ): FloatArray {
-        // STFT
-        val (real, imag) = dsp.stft(samples)
-        val magnitude = dsp.magnitude(real, imag)
-        val phase = dsp.phase(real, imag)
+    private fun processSegment(
+        leftChannel: FloatArray,
+        rightChannel: FloatArray
+    ): Pair<FloatArray, FloatArray> {
+        val segLen = minOf(leftChannel.size, SEGMENT_SAMPLES)
 
-        // 准备输入 tensor [1, 1, numBins, numFrames]
-        val numFrames = real.size / SpleeterDsp.NUM_BINS
-        val inputData = FloatArray(1 * 1 * SpleeterDsp.NUM_BINS * numFrames)
-        for (frame in 0 until numFrames) {
-            for (k in 0 until SpleeterDsp.NUM_BINS) {
-                inputData[frame * SpleeterDsp.NUM_BINS + k] = magnitude[frame * SpleeterDsp.NUM_BINS + k]
-            }
+        // 准备输入 tensor [1, 2, samples]
+        val inputData = FloatArray(2 * segLen)
+        for (i in 0 until segLen) {
+            inputData[i] = leftChannel[i]
+            inputData[i + segLen] = rightChannel[i]
         }
+
+        val inputTensor = OnnxTensor.createTensor(
+            ortEnv!!,
+            FloatBuffer.wrap(inputData),
+            longArrayOf(1, 2, segLen.toLong())
+        )
 
         // ONNX 推理
-        val inputShape = longArrayOf(1, 1, SpleeterDsp.NUM_BINS.toLong(), numFrames.toLong())
-        val inputTensor = OnnxTensor.createTensor(ortEnv!!, FloatBuffer.wrap(inputData), inputShape)
+        val output = modelSession!!.run(mapOf("input" to inputTensor))
 
-        val output = session.run(mapOf("input_1" to inputTensor))
-        val outputTensor = output[0].value as Array<Array<Array<FloatArray>>>
-        val maskData = outputTensor[0][0]
+        // 输出 shape: [1, 4, 2, samples]
+        @Suppress("UNCHECKED_CAST")
+        val outputData = output[0].value as Array<Array<Array<FloatArray>>>
 
-        // 提取 mask [numBins, numFrames] → [numFrames * numBins]
-        val mask = FloatArray(numFrames * SpleeterDsp.NUM_BINS)
-        for (frame in 0 until numFrames) {
-            for (k in 0 until SpleeterDsp.NUM_BINS) {
-                mask[frame * SpleeterDsp.NUM_BINS + k] = maskData[k][frame]
-            }
+        // 提取 vocals stem (index=3)
+        val vocalsLeft = FloatArray(segLen)
+        val vocalsRight = FloatArray(segLen)
+        for (i in 0 until segLen) {
+            vocalsLeft[i] = outputData[0][VOCALS_INDEX][0][i]
+            vocalsRight[i] = outputData[0][VOCALS_INDEX][1][i]
         }
 
-        // Wiener 归一化（简单版本：直接使用 mask）
-        // 对于 2-stem 模型，mask 已经是 soft mask，无需额外归一化
+        // 释放 tensor
+        inputTensor.close()
+        output.close()
 
-        // 应用 mask 到 magnitude + phase → 复数频谱
-        val (maskedReal, maskedImag) = dsp.applyMask(magnitude, phase, mask)
-
-        // iSTFT
-        return dsp.istft(maskedReal, maskedImag)
+        return Pair(vocalsLeft, vocalsRight)
     }
 
     /**
-     * 解码音频文件为 PCM 浮点数据
+     * 提取带 padding 的段（用于 overlap-add）
+     */
+    private fun extractSegmentWithPadding(
+        channel: FloatArray,
+        start: Int,
+        segLen: Int,
+        padLeft: Int,
+        padRight: Int
+    ): FloatArray {
+        val totalLen = padLeft + segLen + padRight
+        val segment = FloatArray(totalLen)
+
+        // 左 padding（从前面复制）
+        for (i in 0 until padLeft) {
+            segment[i] = channel[start - padLeft + i]
+        }
+
+        // 主体
+        for (i in 0 until segLen) {
+            segment[padLeft + i] = channel[start + i]
+        }
+
+        // 右 padding（从后面复制）
+        for (i in 0 until padRight) {
+            segment[padLeft + segLen + i] = channel[start + segLen + i]
+        }
+
+        return segment
+    }
+
+    /**
+     * 解码音频文件为 PCM 浮点数据（立体声）
      */
     private fun decodeAudio(inputPath: String, progress: ProgressCallback?): FloatArray? {
         return try {
@@ -250,10 +345,6 @@ class SpleeterSeparator(private val context: Context) {
             }
 
             extractor.selectTrack(audioTrackIndex)
-
-            // 设置目标格式：44100Hz 立体声 16-bit
-            val targetSampleRate = SAMPLE_RATE
-            val targetChannelCount = CHANNEL_COUNT
 
             val codec = MediaCodec.createDecoderByType(
                 format.getString(MediaFormat.KEY_MIME)!!

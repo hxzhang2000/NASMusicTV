@@ -7,6 +7,25 @@
 >
 > 类型：`Added`（新增） | `Changed`（变更） | `Fixed`（修复） | `Removed`（移除）
 
+## [v2.23.0] - 2026-08-28
+
+### Added
+
+- **高质量分离模型下载管理**：新增 `ModelDownloadManager`，从 HuggingFace 下载 HT-Demucs FT 人声分离模型（约 166MB）到外部存储 `models/` 目录，带下载进度条 / 速度 / 百分比
+- **HT-Demucs FT 高质量分离器**：新增 `DemucsSeparator` 替代原 `SpleeterSeparator`，人声 SDR 从 6.9dB 提升至 9.19dB（开源最高），输入立体声 PCM 分段推理（overlap-add），内部 STFT 免外部 DSP 层
+- **设置页模型管理 UI**：新增"高质量分离模型"区块——显示下载状态 / 文件大小 / 下载进度，提供"下载模型"/"删除模型"按钮，未下载时显示下载引导
+- **K歌页模型状态感知**："质"按钮在模型未下载时显示 🔒 锁图标，点击无操作（禁止切换高质量模式），仅在模型已下载时允许切换到高质量
+
+### Changed
+
+- **模型与 APK 分离**：APK 不再内置 Spleeter 模型文件，release APK 体积从 ~186MB 降至 ~20MB；高质量模式需在设置页独立下载模型后才能启用
+- **高质量模式门控**：`MainViewModel.toggleSeparationMode` / `setSeparationMode` 在切换到高质量模式前检查模型是否已下载，未下载时拒绝切换并回退快速模式
+- **`SettingSwitch` 支持禁用态**：新增 `enabled` 参数，未下载模型时高质量开关置灰不可点
+
+### Removed
+
+- **Spleeter 模型与 DSP 层**：删除 `SpleeterSeparator.kt`（Spleeter ONNX）与 `SpleeterDsp.kt`（STFT/iSTFT/Wiener），由 HT-Demucs FT `DemucsSeparator` 取代
+
 ## [v2.22.2] - 2026-08-27
 
 ### Added

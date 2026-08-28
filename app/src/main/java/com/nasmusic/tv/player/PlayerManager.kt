@@ -32,9 +32,10 @@ class PlayerManager() {
     private var player: ExoPlayer? = null
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
 
-    // ── 高质量人声分离（Spleeter ONNX 模式）──
-    private var spleeterSeparator: SpleeterSeparator? = null
+    // ── 高质量人声分离（HT-Demucs FT ONNX 模式）──
+    private var demucsSeparator: DemucsSeparator? = null
     private var accompanimentCache: AccompanimentCache? = null
+    private var modelDownloadManager: ModelDownloadManager? = null
 
     /** 当前分离模式（快速/高质量），由 MainViewModel 从 AppPreferences 初始化 */
     private val _separationMode = MutableStateFlow(AppPreferences.SeparationMode.FAST)
@@ -134,16 +135,21 @@ class PlayerManager() {
         return vocalRemovalProcessor?.isEnabled() ?: false
     }
 
-    // ── 高质量人声分离（Spleeter ONNX 模式）──
+    // ── 高质量人声分离（HT-Demucs FT ONNX 模式）──
 
-    /** 注入 SpleeterSeparator 实例（由 PlaybackService 初始化后调用） */
-    fun setSpleeterSeparator(separator: SpleeterSeparator) {
-        spleeterSeparator = separator
+    /** 注入 DemucsSeparator 实例（由 PlaybackService 初始化后调用） */
+    fun setDemucsSeparator(separator: DemucsSeparator) {
+        demucsSeparator = separator
     }
 
     /** 注入 AccompanimentCache 实例（由 PlaybackService 初始化后调用） */
     fun setAccompanimentCache(cache: AccompanimentCache) {
         accompanimentCache = cache
+    }
+
+    /** 注入 ModelDownloadManager 实例（由 NasMusicApp 初始化后调用） */
+    fun setModelDownloadManager(manager: ModelDownloadManager) {
+        modelDownloadManager = manager
     }
 
     /** 切换分离模式（快速/高质量） */
@@ -159,19 +165,44 @@ class PlayerManager() {
 
     /**
      * 高质量模式下开启人声消除：
-     * 1. 检查伴奏文件是否已缓存
-     * 2. 若已缓存：直接切换 MediaItem 为伴奏文件
-     * 3. 若未缓存：启动 Spleeter 分离 → 完成后切换
+     * 1. 检查模型是否已下载
+     * 2. 检查伴奏文件是否已缓存
+     * 3. 若已缓存：直接切换 MediaItem 为伴奏文件
+     * 4. 若未缓存：启动 HT-Demucs FT 分离 → 完成后切换
      */
-    fun enableHighQualityRemoval() {
-        val separator = spleeterSeparator
+    fun enableHighQualityRemoval(): Boolean {
+        val separator = demucsSeparator
         val cache = accompanimentCache
         val songId = _currentSong.value?.id
 
         if (separator == null || cache == null || songId == null) {
             AppLog.w(TAG, "enableHighQualityRemoval: missing separator/cache/songId, fallback to fast mode")
             vocalRemovalProcessor?.setEnabled(true)
-            return
+            return false
+        }
+
+        // 检查模型是否已下载
+        val modelManager = modelDownloadManager
+        if (modelManager != null && !modelManager.isModelDownloaded()) {
+            AppLog.w(TAG, "enableHighQualityRemoval: model not downloaded, fallback to fast mode")
+            vocalRemovalProcessor?.setEnabled(true)
+            return false
+        }
+
+        // 确保分离器已初始化（加载模型）
+        if (!separator.isReady()) {
+            val modelPath = modelManager?.getModelPath()
+            if (modelPath == null) {
+                AppLog.w(TAG, "enableHighQualityRemoval: model path unavailable, fallback to fast mode")
+                vocalRemovalProcessor?.setEnabled(true)
+                return false
+            }
+            val initOk = separator.initialize(modelPath)
+            if (!initOk) {
+                AppLog.w(TAG, "enableHighQualityRemoval: separator init failed, fallback to fast mode")
+                vocalRemovalProcessor?.setEnabled(true)
+                return false
+            }
         }
 
         val accompanimentFile = cache.getAccompanimentFile(songId)
@@ -184,7 +215,7 @@ class PlayerManager() {
             if (inputPath == null) {
                 AppLog.w(TAG, "enableHighQualityRemoval: no filePath, fallback to fast mode")
                 vocalRemovalProcessor?.setEnabled(true)
-                return
+                return false
             }
             _separating.value = true
             scope.launch {
@@ -212,6 +243,7 @@ class PlayerManager() {
                 }
             }
         }
+        return true
     }
 
     /** 切换到伴奏文件播放 */
@@ -270,7 +302,7 @@ class PlayerManager() {
     fun checkPreSeparation(progressMs: Long, durationMs: Long) {
         if (!isHighQualityMode()) return
         val cache = accompanimentCache ?: return
-        val separator = spleeterSeparator ?: return
+        val separator = demucsSeparator ?: return
         if (durationMs <= 0L) return
         val progress = progressMs.toFloat() / durationMs.toFloat()
         if (progress < PRE_SEPARATION_THRESHOLD) return

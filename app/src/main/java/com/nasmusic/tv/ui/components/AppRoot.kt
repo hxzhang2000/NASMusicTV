@@ -303,6 +303,7 @@ fun AppRoot(
                     val playbackSpeed by viewModel.playbackSpeed.collectAsState()
                     val separationMode by viewModel.separationMode.collectAsState()
                     val separating by viewModel.separating.collectAsState()
+                    val modelDownloaded by viewModel.modelDownloaded.collectAsState()
                     val mvReady = mvState as? com.nasmusic.tv.ui.viewmodel.MvAvailability.Ready
                     if (showMv && mvReady != null) {
                         // MTV 音乐视频全屏页（独立播放器，退出时 MainViewModel 恢复主播放器）
@@ -388,7 +389,9 @@ fun AppRoot(
                             // === 分离模式（快速/高质量） ===
                             isHighQualityMode = separationMode == com.nasmusic.tv.data.prefs.AppPreferences.SeparationMode.HIGH_QUALITY,
                             isSeparating = separating,
-                            onToggleSeparationMode = { viewModel.toggleSeparationMode() }
+                            onToggleSeparationMode = { viewModel.toggleSeparationMode() },
+                            // 高质量分离模型是否已下载（未下载时 K 歌页禁用高质量切换）
+                            modelDownloaded = modelDownloaded
                         )
                     }
                 }
@@ -647,6 +650,15 @@ fun AppRoot(
                     var showBackupTransferDialog by remember { mutableStateOf(false) }
                     val baiduConfig = viewModel.prefs.getBaiduConfigSync()
                     val separationMode by viewModel.separationMode.collectAsState()
+                    val modelDownloaded by viewModel.modelDownloaded.collectAsState()
+                    val modelDownloading by viewModel.modelDownloading.collectAsState()
+                    val modelDownloadProgress by viewModel.modelDownloadProgress.collectAsState()
+                    val modelDownloadedMB by viewModel.modelDownloadedMB.collectAsState()
+                    val modelTotalMB by viewModel.modelTotalMB.collectAsState()
+                    val modelSizeMB by viewModel.modelSizeMB.collectAsState()
+                    val modelDownloadError by viewModel.modelDownloadError.collectAsState()
+                    // 进入设置页时刷新模型状态（检查文件是否已下载）
+                    LaunchedEffect(Unit) { viewModel.refreshModelStatus() }
                     SettingsScreen(
                         settings = settings,
                         onToggleDarkTheme = { viewModel.updateDarkTheme(it) },
@@ -721,7 +733,18 @@ fun AppRoot(
                     onChangeCoverDarkOverlay = { viewModel.updateCoverFilterDarkOverlay(it) },
                     // 分离模式设置
                     separationMode = separationMode,
-                    onChangeSeparationMode = { viewModel.setSeparationMode(it) }
+                    onChangeSeparationMode = { viewModel.setSeparationMode(it) },
+                    // 高质量分离模型下载状态
+                    modelDownloaded = modelDownloaded,
+                    modelDownloading = modelDownloading,
+                    modelDownloadProgress = modelDownloadProgress,
+                    modelDownloadedMB = modelDownloadedMB,
+                    modelTotalMB = modelTotalMB,
+                    modelSizeMB = modelSizeMB,
+                    modelDownloadError = modelDownloadError,
+                    onDownloadModel = { viewModel.downloadModel() },
+                    onDeleteModel = { viewModel.deleteModel() },
+                    onRefreshModelStatus = { viewModel.refreshModelStatus() }
                     )
                     // 扫码传输备份弹窗
                     if (showBackupTransferDialog) {

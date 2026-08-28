@@ -116,6 +116,17 @@ fun SettingsScreen(
     // 分离模式设置
     separationMode: com.nasmusic.tv.data.prefs.AppPreferences.SeparationMode = com.nasmusic.tv.data.prefs.AppPreferences.SeparationMode.FAST,
     onChangeSeparationMode: ((com.nasmusic.tv.data.prefs.AppPreferences.SeparationMode) -> Unit)? = null,
+    // 高质量分离模型下载状态
+    modelDownloaded: Boolean = false,
+    modelDownloading: Boolean = false,
+    modelDownloadProgress: Float = 0f,
+    modelDownloadedMB: Long = 0L,
+    modelTotalMB: Long = 0L,
+    modelSizeMB: Double = 0.0,
+    modelDownloadError: String? = null,
+    onDownloadModel: (() -> Unit)? = null,
+    onDeleteModel: (() -> Unit)? = null,
+    onRefreshModelStatus: (() -> Unit)? = null,
     // 可视化频谱主题
     visualizerTheme: VisualizerTheme = VisualizerTheme.COLOR_FLOW,
     onChangeVisualizerTheme: (VisualizerTheme) -> Unit = {},
@@ -317,12 +328,82 @@ fun SettingsScreen(
                     item { SubSectionTitle("伴奏分离模式") }
                     item {
                         val isHq = separationMode == com.nasmusic.tv.data.prefs.AppPreferences.SeparationMode.HIGH_QUALITY
+                        val hqLabel = if (modelDownloaded) "高质量模式（HT-Demucs FT）" else "高质量模式（未下载模型）"
+                        val hqDesc = when {
+                            !modelDownloaded -> "需先下载模型（166MB）后才能使用高质量模式"
+                            isHq -> "当前：高质量 ONNX 分离 ⭐⭐⭐⭐⭐"
+                            else -> "当前：快速实时 DSP 分离 ⭐⭐⭐"
+                        }
                         SettingSwitch(
-                            label = "高质量模式（Spleeter）",
-                            description = if (isHq) "当前：高质量 ONNX 分离 ⭐⭐⭐⭐" else "当前：快速实时 DSP 分离 ⭐⭐⭐",
+                            label = hqLabel,
+                            description = hqDesc,
                             checked = isHq,
+                            enabled = modelDownloaded,
                             onClick = { onChangeSeparationMode?.invoke(if (isHq) com.nasmusic.tv.data.prefs.AppPreferences.SeparationMode.FAST else com.nasmusic.tv.data.prefs.AppPreferences.SeparationMode.HIGH_QUALITY) }
                         )
+                    }
+                    // 模型下载区
+                    item { Spacer(modifier = Modifier.height(12.dp)) }
+                    item {
+                        Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp)) {
+                            if (modelDownloading) {
+                                // 下载中：进度条
+                                Text(
+                                    text = "正在下载高质量分离模型 (HT-Demucs FT)：${(modelDownloadProgress * 100).toInt()}%  (${modelDownloadedMB}MB / ${modelTotalMB}MB)",
+                                    color = NasMusicColors.TextPrimary,
+                                    fontSize = 17.sp
+                                )
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(8.dp)
+                                        .clip(RoundedCornerShape(4.dp))
+                                        .background(NasMusicColors.SurfaceVariant)
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth(modelDownloadProgress.coerceIn(0f, 1f))
+                                            .height(8.dp)
+                                            .background(NasMusicColors.Primary, RoundedCornerShape(4.dp))
+                                    )
+                                }
+                            } else if (modelDownloaded) {
+                                // 已下载：显示大小 + 删除按钮
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(
+                                        text = "高质量模型已下载 (%.1fMB)".format(modelSizeMB),
+                                        color = NasMusicColors.TextPrimary,
+                                        fontSize = 17.sp
+                                    )
+                                    Spacer(modifier = Modifier.width(16.dp))
+                                    SettingActionButton(
+                                        label = "删除模型",
+                                        description = "删除后高质量模式不可用",
+                                        onClick = { onDeleteModel?.invoke() }
+                                    )
+                                }
+                            } else {
+                                // 未下载：显示下载按钮
+                                Column {
+                                    Text(
+                                        text = "高质量分离模型未下载（HT-Demucs FT，约166MB）",
+                                        color = NasMusicColors.TextSecondary,
+                                        fontSize = 17.sp
+                                    )
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    SettingActionButton(
+                                        label = "下载高质量模型",
+                                        description = "从 HuggingFace 下载 HT-Demucs FT 人声分离模型（约166MB）",
+                                        onClick = { onDownloadModel?.invoke() }
+                                    )
+                                }
+                            }
+                            modelDownloadError?.let { err ->
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text(text = err, color = NasMusicColors.Danger, fontSize = 16.sp)
+                            }
+                        }
                     }
                     // ── 封面滤镜分组 ──
                     item { Spacer(modifier = Modifier.height(24.dp)) }
@@ -1649,20 +1730,21 @@ private fun SettingSwitch(
     label: String,
     description: String,
     checked: Boolean,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    enabled: Boolean = true
 ) {
     FocusableSurface(
-        onClick = onClick,
+        onClick = { if (enabled) onClick() },
         modifier = Modifier
             .fillMaxWidth()
             .padding(vertical = 4.dp),
         shape = RoundedCornerShape(12.dp),
         focusedScale = 1.03f,
         animationDurationMs = 250,
-        containerColor = NasMusicColors.Surface,
-        contentColor = NasMusicColors.TextPrimary,
-        focusedContainerColor = NasMusicColors.Primary.copy(alpha = 0.15f),
-        focusedContentColor = NasMusicColors.TextPrimary,
+        containerColor = if (enabled) NasMusicColors.Surface else NasMusicColors.Surface.copy(alpha = 0.5f),
+        contentColor = if (enabled) NasMusicColors.TextPrimary else NasMusicColors.TextSecondary,
+        focusedContainerColor = if (enabled) NasMusicColors.Primary.copy(alpha = 0.15f) else NasMusicColors.SurfaceVariant,
+        focusedContentColor = if (enabled) NasMusicColors.TextPrimary else NasMusicColors.TextSecondary,
         pressedScale = 0.98f,
         focusBorderColor = NasMusicColors.FocusRing.copy(alpha = 0.6f)
     ) {
@@ -1671,7 +1753,7 @@ private fun SettingSwitch(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column(modifier = Modifier.weight(1f)) {
-                Text(text = label, color = NasMusicColors.TextPrimary, fontSize = 21.sp)
+                Text(text = label, color = if (enabled) NasMusicColors.TextPrimary else NasMusicColors.TextSecondary, fontSize = 21.sp)
                 Text(text = description, color = NasMusicColors.TextSecondary, fontSize = 18.sp)
             }
             // Switch indicator

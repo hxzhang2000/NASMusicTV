@@ -24,6 +24,7 @@ import com.nasmusic.tv.backend.network.mv.MvSearchManager
 import com.nasmusic.tv.backend.network.mv.MvPersistentCache
 import com.nasmusic.tv.data.model.CloudDriveType
 import com.nasmusic.tv.data.prefs.AppPreferences
+import com.nasmusic.tv.player.ModelDownloadManager
 import com.nasmusic.tv.player.PlayerManager
 import com.nasmusic.tv.util.AppLog
 import kotlinx.coroutines.CoroutineScope
@@ -48,6 +49,10 @@ class NasMusicApp : Application(), ImageLoaderFactory {
     lateinit var networkMusicManager: NetworkMusicManager
         private set
     lateinit var mvSearchManager: MvSearchManager
+        private set
+
+    /** 高质量人声分离模型下载管理器（HT-Demucs FT ONNX） */
+    lateinit var modelDownloadManager: ModelDownloadManager
         private set
 
     // ---- 百度网盘组件（懒构造，仅在用户开启百度源时实例化）----
@@ -102,6 +107,9 @@ class NasMusicApp : Application(), ImageLoaderFactory {
         appPreferences = AppPreferences(this)
         backendRegistry = BackendRegistry()
         playerManager = PlayerManager()
+        // 模型下载管理器（HT-Demucs FT ONNX，与 APK 分离，设置页下载）
+        modelDownloadManager = ModelDownloadManager(this)
+        playerManager.setModelDownloadManager(modelDownloadManager)
         // 网络音乐管理器：注册所有网络源，默认源与 Meting 端点均由 AppSettings 动态提供
         val services = mapOf(
             "meting" to MetingApiService(

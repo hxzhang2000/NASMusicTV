@@ -106,6 +106,8 @@ fun KaraokePlaybackScreen(
     isHighQualityMode: Boolean = false,
     /** 高质量分离是否正在进行 */
     isSeparating: Boolean = false,
+    /** 高质量分离模型是否已下载（未下载时禁用高质量切换） */
+    modelDownloaded: Boolean = false,
     /** 切换分离模式回调（快速↔高质量） */
     onToggleSeparationMode: () -> Unit = {},
     playPauseFocusRequester: FocusRequester? = null,
@@ -344,9 +346,19 @@ fun KaraokePlaybackScreen(
                 // ── 分离模式切换（快速/高质量）──
                 KaraokeSettingButton(
                     label = "质",
-                    value = if (isHighQualityMode) "高质" else "快速",
+                    value = when {
+                        !modelDownloaded -> "🔒"
+                        isHighQualityMode -> "高质"
+                        else -> "快速"
+                    },
                     isModified = isHighQualityMode,
-                    onClick = { activateControls(); onToggleSeparationMode() }
+                    onClick = {
+                        activateControls()
+                        // 模型未下载时禁止切换到高质量，点击无操作（或提示）
+                        if (modelDownloaded || isHighQualityMode) {
+                            onToggleSeparationMode()
+                        }
+                    }
                 )
             }
         }
