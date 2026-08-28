@@ -113,6 +113,9 @@ fun SettingsScreen(
     // 频谱显示设置
     spectrumEnabled: Boolean = false,
     onToggleSpectrum: (Boolean) -> Unit = {},
+    // 分离模式设置
+    separationMode: com.nasmusic.tv.data.prefs.AppPreferences.SeparationMode = com.nasmusic.tv.data.prefs.AppPreferences.SeparationMode.FAST,
+    onChangeSeparationMode: ((com.nasmusic.tv.data.prefs.AppPreferences.SeparationMode) -> Unit)? = null,
     // 可视化频谱主题
     visualizerTheme: VisualizerTheme = VisualizerTheme.COLOR_FLOW,
     onChangeVisualizerTheme: (VisualizerTheme) -> Unit = {},
@@ -307,6 +310,18 @@ fun SettingsScreen(
                             label = stringResource(R.string.settings_equalizer),
                             description = stringResource(R.string.settings_equalizer_desc),
                             onClick = { onOpenEqualizer?.invoke() }
+                        )
+                    }
+                    // ── 人声分离模式 ──
+                    item { Spacer(modifier = Modifier.height(24.dp)) }
+                    item { SubSectionTitle("伴奏分离模式") }
+                    item {
+                        val isHq = separationMode == com.nasmusic.tv.data.prefs.AppPreferences.SeparationMode.HIGH_QUALITY
+                        SettingSwitch(
+                            label = "高质量模式（Spleeter）",
+                            description = if (isHq) "当前：高质量 ONNX 分离 ⭐⭐⭐⭐" else "当前：快速实时 DSP 分离 ⭐⭐⭐",
+                            checked = isHq,
+                            onClick = { onChangeSeparationMode?.invoke(if (isHq) com.nasmusic.tv.data.prefs.AppPreferences.SeparationMode.FAST else com.nasmusic.tv.data.prefs.AppPreferences.SeparationMode.HIGH_QUALITY) }
                         )
                     }
                     // ── 封面滤镜分组 ──

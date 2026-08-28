@@ -301,6 +301,8 @@ fun AppRoot(
                     val vocalRemovalEnabled by viewModel.vocalRemovalEnabled.collectAsState()
                     val pitchSemitones by viewModel.pitchSemitones.collectAsState()
                     val playbackSpeed by viewModel.playbackSpeed.collectAsState()
+                    val separationMode by viewModel.separationMode.collectAsState()
+                    val separating by viewModel.separating.collectAsState()
                     val mvReady = mvState as? com.nasmusic.tv.ui.viewmodel.MvAvailability.Ready
                     if (showMv && mvReady != null) {
                         // MTV 音乐视频全屏页（独立播放器，退出时 MainViewModel 恢复主播放器）
@@ -382,7 +384,11 @@ fun AppRoot(
                             onSetPitch = { viewModel.setPitchSemitones(it) },
                             onSetSpeed = { viewModel.setPlaybackSpeed(it) },
                             onResetPitch = { viewModel.resetPitch() },
-                            onResetSpeed = { viewModel.resetSpeed() }
+                            onResetSpeed = { viewModel.resetSpeed() },
+                            // === 分离模式（快速/高质量） ===
+                            isHighQualityMode = separationMode == com.nasmusic.tv.data.prefs.AppPreferences.SeparationMode.HIGH_QUALITY,
+                            isSeparating = separating,
+                            onToggleSeparationMode = { viewModel.toggleSeparationMode() }
                         )
                     }
                 }
@@ -640,6 +646,7 @@ fun AppRoot(
                 Screen.Settings -> {
                     var showBackupTransferDialog by remember { mutableStateOf(false) }
                     val baiduConfig = viewModel.prefs.getBaiduConfigSync()
+                    val separationMode by viewModel.separationMode.collectAsState()
                     SettingsScreen(
                         settings = settings,
                         onToggleDarkTheme = { viewModel.updateDarkTheme(it) },
@@ -711,7 +718,10 @@ fun AppRoot(
                     coverFilterDarkOverlay = coverFilterDarkOverlay,
                     onToggleCoverFilter = { viewModel.updateCoverFilterEnabled(it) },
                     onChangeCoverBlurRadius = { viewModel.updateCoverFilterBlurRadius(it) },
-                    onChangeCoverDarkOverlay = { viewModel.updateCoverFilterDarkOverlay(it) }
+                    onChangeCoverDarkOverlay = { viewModel.updateCoverFilterDarkOverlay(it) },
+                    // 分离模式设置
+                    separationMode = separationMode,
+                    onChangeSeparationMode = { viewModel.setSeparationMode(it) }
                     )
                     // 扫码传输备份弹窗
                     if (showBackupTransferDialog) {

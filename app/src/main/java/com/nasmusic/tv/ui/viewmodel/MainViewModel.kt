@@ -2590,6 +2590,47 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
         AppLog.d("NASMusic", "toggleVocalRemoval -> $newValue")
     }
 
+    // --- 分离模式（快速/高质量）---
+    /** 当前分离模式（委托 PlayerManager 状态） */
+    val separationMode: StateFlow<AppPreferences.SeparationMode> = playerManager.separationMode
+    /** 高质量分离是否正在进行（委托 PlayerManager 状态） */
+    val separating: StateFlow<Boolean> = playerManager.separating
+
+    /** 切换分离模式（快速↔高质量），持久化到 AppPreferences */
+    fun toggleSeparationMode() {
+        val currentMode = separationMode.value
+        val newMode = if (currentMode == AppPreferences.SeparationMode.FAST) {
+            AppPreferences.SeparationMode.HIGH_QUALITY
+        } else {
+            AppPreferences.SeparationMode.FAST
+        }
+        playerManager.setSeparationMode(newMode)
+        viewModelScope.launch {
+            prefs.setSeparationMode(newMode)
+        }
+        // 高质量模式切换时同步人声消除状态
+        if (newMode == AppPreferences.SeparationMode.HIGH_QUALITY) {
+            playerManager.enableHighQualityRemoval()
+        } else {
+            playerManager.disableHighQualityRemoval()
+        }
+        AppLog.d("NASMusic", "toggleSeparationMode -> $newMode")
+    }
+
+    /** 设置分离模式（从设置页调用） */
+    fun setSeparationMode(mode: AppPreferences.SeparationMode) {
+        playerManager.setSeparationMode(mode)
+        viewModelScope.launch {
+            prefs.setSeparationMode(mode)
+        }
+        if (mode == AppPreferences.SeparationMode.HIGH_QUALITY) {
+            playerManager.enableHighQualityRemoval()
+        } else {
+            playerManager.disableHighQualityRemoval()
+        }
+        AppLog.d("NASMusic", "setSeparationMode -> $mode")
+    }
+
     // --- K 歌页面：升降调 & 变速（全局记忆，重启恢复）---
 
     private val _pitchSemitones = MutableStateFlow(0)

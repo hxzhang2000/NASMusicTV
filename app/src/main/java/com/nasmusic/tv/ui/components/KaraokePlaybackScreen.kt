@@ -102,6 +102,12 @@ fun KaraokePlaybackScreen(
     onResetPitch: () -> Unit = {},
     /** 重置播放速度回调 */
     onResetSpeed: () -> Unit = {},
+    /** 是否为高质量分离模式 */
+    isHighQualityMode: Boolean = false,
+    /** 高质量分离是否正在进行 */
+    isSeparating: Boolean = false,
+    /** 切换分离模式回调（快速↔高质量） */
+    onToggleSeparationMode: () -> Unit = {},
     playPauseFocusRequester: FocusRequester? = null,
     remoteControlUrl: String? = null
 ) {
@@ -332,6 +338,15 @@ fun KaraokePlaybackScreen(
                 VocalToggleButton(
                     label = if (vocalRemovalEnabled) "原唱" else "伴唱",
                     onClick = { activateControls(); onToggleVocalRemoval() }
+                )
+                Spacer(Modifier.width(10.dp))
+
+                // ── 分离模式切换（快速/高质量）──
+                KaraokeSettingButton(
+                    label = "质",
+                    value = if (isHighQualityMode) "高质" else "快速",
+                    isModified = isHighQualityMode,
+                    onClick = { activateControls(); onToggleSeparationMode() }
                 )
             }
         }

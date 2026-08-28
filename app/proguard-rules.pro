@@ -28,6 +28,10 @@
 -keepnames class kotlinx.coroutines.internal.MainDispatcherFactory {}
 -keepnames class kotlinx.coroutines.CoroutineExceptionHandler {}
 
+# ONNX Runtime (Spleeter ONNX 人声分离)
+-keep class ai.onnxruntime.** { *; }
+-keep class com.microsoft.onnxruntime.** { *; }
+
 # Strip debug logs in release builds (ProGuard removes the entire Log.d/v call,
 # including string computation — more efficient than runtime if(BuildConfig.DEBUG) checks)
 -assumenosideeffects class android.util.Log {

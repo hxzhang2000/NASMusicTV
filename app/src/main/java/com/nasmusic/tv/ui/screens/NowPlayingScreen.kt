@@ -123,6 +123,10 @@ fun NowPlayingScreen(
     onSetSpeed: (Double) -> Unit = {},
     onResetPitch: () -> Unit = {},
     onResetSpeed: () -> Unit = {},
+    // === 分离模式（快速/高质量） ===
+    isHighQualityMode: Boolean = false,
+    isSeparating: Boolean = false,
+    onToggleSeparationMode: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     var showInfoPanel by remember { mutableStateOf(false) }
@@ -169,6 +173,9 @@ fun NowPlayingScreen(
             onSetSpeed = onSetSpeed,
             onResetPitch = onResetPitch,
             onResetSpeed = onResetSpeed,
+            isHighQualityMode = isHighQualityMode,
+            isSeparating = isSeparating,
+            onToggleSeparationMode = onToggleSeparationMode,
             playPauseFocusRequester = playPauseFocusRequester,
             remoteControlUrl = remoteControlUrl
         )

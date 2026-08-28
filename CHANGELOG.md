@@ -11,37 +11,23 @@
 
 ### Added
 
-- **道理鱼音乐后端支持**：新增 `DaoliyuAdapter`，对接道理鱼音乐服务端自定义 REST API（JWT 认证、邮箱+密码登录）。支持专辑/歌手/歌曲/搜索/歌单/收藏/歌词/流媒体全量功能。所有 API 端点标注 `⚠️ INFERRED`，需部署实例抓包确认后调整
-- **飞牛音乐后端支持**：新增 `FeiniuAdapter`，对接飞牛私有云（fnOS）内置音乐服务。Cookie 认证（`music-token`）、SHA256 密码哈希、deviceId 自动生成。支持曲目/专辑/歌手/搜索/歌单/收藏/风格全量功能。API 端点来自 FeiNiuMusic 项目逆向工程，标注 `⚠️ REVERSE_ENGINEERED`，未确认端点标注 `⚠️ UNCONFIRMED`
-- **API 版本号管理**：`BackendAdapter` 接口新增 `apiVersion` 属性，各适配器在 initialize 时从服务端动态获取版本号（Jellyfin 从 `/System/Info/Public`、Navidrome/Subsonic 从 ping 响应、道理鱼从 `/health`、飞牛待确认）
-- **设置→关于页后端信息卡片**：展示当前连接的后端类型、API 版本号、连接状态
-- **streamHeaders 属性**：`BackendAdapter` 新增 `streamHeaders` 通用属性，飞牛等 Cookie 认证的后端覆盖此属性供 PlayerManager 注入 ExoPlayer
-- **连接页后端默认端口自动切换**：选择不同后端类型时自动填充对应默认端口（Jellyfin:8096 / Navidrome:4533 / Subsonic:4533 / 道理鱼:4000 / 飞牛:80），用户自定义地址不受影响
-- **网盘目录感知搜索**：`BaiduFileIndexCache.searchByDirectory` 支持双向 contains 匹配（"粤语歌"匹配目录"粤语"），目录命中返回整目录歌曲
-- **开发方案文档**：`docs/daoliyu-feiniu-backend-plan.md`，含 12 章完整设计决策（SearchAggregator 集成、Song ID 格式、streamUrl 过期策略、HLS Cookie 注入、deviceId 生成、响应 JSON 结构推断、编码约定等）
+- **K歌页面升降调控制**：新增"调"按钮，支持 -12 ~ +12 半音步进调节（步长 1），持久化到 DataStore，重启后恢复上次设置
+- **K歌页面变速控制**：新增"速"按钮，支持 0.5x ~ 1.5x 速度调节（步长 0.1），持久化到 DataStore，重启后恢复上次设置
+- **频谱遮罩人声消除处理器**：新增 `SpectralMaskProcessor`（STFT + 自适应频谱遮罩），替代原有 `VocalRemovalProcessor`（Mid/Side DSP），人声消除效果从 ⭐⭐ 提升至 ⭐⭐⭐
+- **PlayerManager 升降调/变速 API**：新增 `setPitch(semitones)` / `setSpeed(speed)` / `resetPitch()` / `resetSpeed()` 方法
+- **Spleeter ONNX 高质量人声分离**：新增 `SpleeterSeparator`（ONNX Runtime 推理）+ `SpleeterDsp`（STFT/iSTFT/Wiener），支持 FP16 量化模型，人声消除效果从 ⭐⭐⭐ 提升至 ⭐⭐⭐⭐
+- **伴奏文件缓存**：新增 `AccompanimentCache`（LRU 500MB），避免重复分离；支持预分离队列（播放进度 >50% 时预分离下一首）
+- **分离模式切换**：K歌页面新增"质"按钮，快速/高质量模式一键切换；设置页新增默认分离模式选项
 
 ### Changed
 
-- **搜索页精确过滤**：搜索结果精细过滤（标题/歌手/文件名包含关键词），不含搜索词的全部过滤掉
-- **发现页宽泛过滤**：各源返回什么就展示，只做同名同歌手去重
-- **不同源不同关键词**：发现页网络/NAS/Jamendo 用展开词（支持换一批多样性），百度用维度标签（目录+API效果更好）
-- **搜索源硬编码去重**：`MusicSourceType.DEFAULT_SEARCH_SOURCES` 常量，三处统一引用
-- **道理鱼/飞牛参与跨源搜索**：复用 `MusicSourceType.NAS` 类型，通过 `BackendAdapter.searchSongs` 自动接入 SearchAggregator
+- **人声消除算法升级**：`PlaybackService` 注入 `SpectralMaskProcessor` 替代 `VocalRemovalProcessor`，频域处理精度更高
+- **K歌页面 UI 适配**：解决 TV Material3 Surface 无 `onClick` 参数问题，改用 Box+Column+clickable 模式
 
 ### Fixed
 
-- **百度搜索只返回索引 2 首**：本地索引 + API 合并去重（索引不完整不再短路）
-- **搜索结果跨页暂存**：搜索关键词提升到 ViewModel，切页回来不重搜（缓存命中跳过，空结果允许重试）
-- **发现页主tab切回不重搜**：ensureBrowseLoaded 幂等加载（与搜索页缓存逻辑一致）
-- **播放按钮懒加载**：去掉 `!isPlaying` 条件，网络歌曲 streamUrl 为空时无论 isPlaying 状态都先解析
-- **网络歌曲 URL 过期重解析**：playPause 检查 ExoPlayer IDLE/ENDED 状态，强制重新解析过期直链
-- **播放页进度条手机触摸可拖动**：pointerInput key 改用 Unit + rememberUpdatedState，修复 progressMs 每秒刷新导致手势重启
-- **发现页自动播放 bug**：切页不再自动操作队列（LaunchedEffect 改用 `onDiscoverShuffle` 加载不播放）
-- **发现页维度按钮选中态暗色文字**：选中背景亮色时文字改暗色
-- **加入队列语义修正**：SearchTab/DiscoverTab 新增"加入队列"按钮，仅入队不播放
-- **我的页歌单 ? 按钮改为行内删除图标**：UnifiedSongRow 新增 onDelete，移除右上角叠加
-- **recordPlay 合并为单次 DataStore edit**：`recordPlayWithSong` 方法同时更新 id 列表 + 播放次数 + 完整歌曲对象
-- **BaiduNetdiskService 代码去重**：提取 `searchInternal` 共用方法
+- **PlaybackParameters.withPitch() 编译错误**：改为使用 `PlaybackParameters(speed, pitch)` 构造函数（ExoPlayer API 差异）
+- **TV Surface onClick 编译错误**：`Surface` 无 `onClick` 参数，改用 `Box` + `Modifier.clickable`
 
 ## [v2.22.1] - 2026-08-27
 

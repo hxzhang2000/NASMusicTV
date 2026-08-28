@@ -142,6 +142,9 @@ dependencies {
     // Leanback (TV support)
     implementation("androidx.leanback:leanback:1.0.0")
 
+    // ONNX Runtime (Spleeter 高质量人声分离)
+    implementation("com.microsoft.onnxruntime:onnxruntime-android:1.17.1")
+
     // Testing
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.7.3")

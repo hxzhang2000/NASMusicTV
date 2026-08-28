@@ -9,9 +9,14 @@ import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
 import com.nasmusic.tv.data.model.PlayMode
 import com.nasmusic.tv.data.model.Song
+import com.nasmusic.tv.data.prefs.AppPreferences
 import com.nasmusic.tv.util.AppLog
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.launch
 import kotlin.random.Random
 
 /**
@@ -20,7 +25,30 @@ import kotlin.random.Random
  */
 class PlayerManager() {
 
+    companion object {
+        private const val TAG = "PlayerManager"
+    }
+
     private var player: ExoPlayer? = null
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+
+    // ── 高质量人声分离（Spleeter ONNX 模式）──
+    private var spleeterSeparator: SpleeterSeparator? = null
+    private var accompanimentCache: AccompanimentCache? = null
+
+    /** 当前分离模式（快速/高质量），由 MainViewModel 从 AppPreferences 初始化 */
+    private val _separationMode = MutableStateFlow(AppPreferences.SeparationMode.FAST)
+    val separationMode: StateFlow<AppPreferences.SeparationMode> = _separationMode
+
+    /** 高质量分离是否正在进行（用于 UI loading 状态） */
+    private val _separating = MutableStateFlow(false)
+    val separating: StateFlow<Boolean> = _separating
+
+    /** 原始 MediaItem 的 URI，用于切换回原始音频 */
+    private var originalMediaItemUri: String? = null
+
+    /** 预分离触发阈值（播放进度占比） */
+    private val PRE_SEPARATION_THRESHOLD = 0.5f
 
     /**
      * 当 ExoPlayer 自动过渡到 streamUrl 为空的歌曲时触发（如恢复队列中的网络歌曲）。
@@ -89,10 +117,10 @@ class PlayerManager() {
     val playerError: StateFlow<String?> = _playerError
 
     // 人声消除处理器引用（由 PlaybackService 注入）
-    private var vocalRemovalProcessor: VocalRemovalProcessor? = null
+    private var vocalRemovalProcessor: SpectralMaskProcessor? = null
 
     /** 由 PlaybackService 注入处理器实例 */
-    fun setVocalRemovalProcessor(processor: VocalRemovalProcessor) {
+    fun setVocalRemovalProcessor(processor: SpectralMaskProcessor) {
         vocalRemovalProcessor = processor
     }
 
@@ -104,6 +132,164 @@ class PlayerManager() {
     /** 查询当前是否启用人声消除 */
     fun isVocalRemovalEnabled(): Boolean {
         return vocalRemovalProcessor?.isEnabled() ?: false
+    }
+
+    // ── 高质量人声分离（Spleeter ONNX 模式）──
+
+    /** 注入 SpleeterSeparator 实例（由 PlaybackService 初始化后调用） */
+    fun setSpleeterSeparator(separator: SpleeterSeparator) {
+        spleeterSeparator = separator
+    }
+
+    /** 注入 AccompanimentCache 实例（由 PlaybackService 初始化后调用） */
+    fun setAccompanimentCache(cache: AccompanimentCache) {
+        accompanimentCache = cache
+    }
+
+    /** 切换分离模式（快速/高质量） */
+    fun setSeparationMode(mode: AppPreferences.SeparationMode) {
+        _separationMode.value = mode
+        AppLog.d(TAG, "setSeparationMode: $mode")
+    }
+
+    /** 查询当前是否为高质量模式 */
+    fun isHighQualityMode(): Boolean {
+        return _separationMode.value == AppPreferences.SeparationMode.HIGH_QUALITY
+    }
+
+    /**
+     * 高质量模式下开启人声消除：
+     * 1. 检查伴奏文件是否已缓存
+     * 2. 若已缓存：直接切换 MediaItem 为伴奏文件
+     * 3. 若未缓存：启动 Spleeter 分离 → 完成后切换
+     */
+    fun enableHighQualityRemoval() {
+        val separator = spleeterSeparator
+        val cache = accompanimentCache
+        val songId = _currentSong.value?.id
+
+        if (separator == null || cache == null || songId == null) {
+            AppLog.w(TAG, "enableHighQualityRemoval: missing separator/cache/songId, fallback to fast mode")
+            vocalRemovalProcessor?.setEnabled(true)
+            return
+        }
+
+        val accompanimentFile = cache.getAccompanimentFile(songId)
+        if (accompanimentFile.exists() && accompanimentFile.length() > 0) {
+            // 已缓存：直接切换到伴奏文件
+            switchToAccompaniment(accompanimentFile.absolutePath)
+        } else {
+            // 未缓存：后台分离
+            val inputPath = _currentSong.value?.path
+            if (inputPath == null) {
+                AppLog.w(TAG, "enableHighQualityRemoval: no filePath, fallback to fast mode")
+                vocalRemovalProcessor?.setEnabled(true)
+                return
+            }
+            _separating.value = true
+            scope.launch {
+                try {
+                    val outputDir = cache.getAccompanimentFile(songId).parentFile
+                        ?: java.io.File(cache.getAccompanimentFile(songId).parent)
+                    val result = with(kotlinx.coroutines.Dispatchers.IO) {
+                        separator.separate(
+                            inputPath = inputPath,
+                            outputDir = outputDir,
+                            songId = songId
+                        )
+                    }
+                    if (result != null) {
+                        switchToAccompaniment(result.accompanimentFile.absolutePath)
+                    } else {
+                        AppLog.w(TAG, "enableHighQualityRemoval: separation failed, fallback to fast mode")
+                        vocalRemovalProcessor?.setEnabled(true)
+                    }
+                } catch (e: Exception) {
+                    AppLog.e(TAG, "enableHighQualityRemoval: exception", e)
+                    vocalRemovalProcessor?.setEnabled(true)
+                } finally {
+                    _separating.value = false
+                }
+            }
+        }
+    }
+
+    /** 切换到伴奏文件播放 */
+    private fun switchToAccompaniment(accompanimentPath: String) {
+        val p = player ?: return
+        val currentPos = p.currentPosition
+        val wasPlaying = p.isPlaying
+
+        // 保存原始 URI
+        val currentItem = p.currentMediaItem
+        if (originalMediaItemUri == null && currentItem != null) {
+            originalMediaItemUri = currentItem.localConfiguration?.uri.toString()
+        }
+
+        // 构建新 MediaItem 指向伴奏文件
+        val accompanimentUri = android.net.Uri.parse("file://$accompanimentPath")
+        val newItem = currentItem?.buildUpon()?.setUri(accompanimentUri)?.build() ?: return
+
+        p.setMediaItem(newItem)
+        p.prepare()
+        p.seekTo(currentPos)
+        if (wasPlaying) p.play()
+
+        AppLog.d(TAG, "switchToAccompaniment: $accompanimentPath")
+    }
+
+    /** 切换回原始音频文件（关闭人声消除时） */
+    private fun switchToOriginal() {
+        val p = player ?: return
+        val uri = originalMediaItemUri ?: return
+        val currentPos = p.currentPosition
+        val wasPlaying = p.isPlaying
+
+        val originalUri = android.net.Uri.parse(uri)
+        val originalItem = p.currentMediaItem?.buildUpon()?.setUri(originalUri)?.build() ?: return
+
+        p.setMediaItem(originalItem)
+        p.prepare()
+        p.seekTo(currentPos)
+        if (wasPlaying) p.play()
+
+        originalMediaItemUri = null
+        AppLog.d(TAG, "switchToOriginal: restored")
+    }
+
+    /**
+     * 高质量模式下关闭人声消除：切换回原始文件
+     */
+    fun disableHighQualityRemoval() {
+        switchToOriginal()
+    }
+
+    /**
+     * 预分离触发：当播放进度 > 50% 时，预分离队列中的下一首歌
+     */
+    fun checkPreSeparation(progressMs: Long, durationMs: Long) {
+        if (!isHighQualityMode()) return
+        val cache = accompanimentCache ?: return
+        val separator = spleeterSeparator ?: return
+        if (durationMs <= 0L) return
+        val progress = progressMs.toFloat() / durationMs.toFloat()
+        if (progress < PRE_SEPARATION_THRESHOLD) return
+
+        // 获取下一首歌
+        val nextIndex = _currentIndex.value + 1
+        val queue = _queue.value
+        if (nextIndex >= queue.size) return
+        val nextSong = queue[nextIndex]
+
+        // 如果已缓存或已在预分离中，跳过
+        if (cache.hasAccompaniment(nextSong.id)) return
+        if (cache.preSeparationState.value.currentSongId == nextSong.id) return
+
+        // 启动预分离
+        val inputPath = nextSong.path
+        if (inputPath.isNullOrBlank()) return
+
+        cache.startPreSeparation(nextSong.id, inputPath, separator)
     }
 
     // ── 升降调 & 变速（仅 K 歌页面使用，由 MainViewModel 调用）──

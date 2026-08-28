@@ -121,6 +121,26 @@ class AppPreferences(private val context: Context) {
         context.dataStore.edit { it[keyPlaybackSpeed] = speed }
     }
 
+    // --- 伴奏分离模式（快速/高质量）---
+    private val keySeparationMode = stringPreferencesKey("k_separation_mode")
+
+    /**
+     * 分离模式枚举
+     */
+    enum class SeparationMode(val value: String) {
+        FAST("fast"),          // 快速模式：SpectralMaskProcessor 实时 DSP
+        HIGH_QUALITY("hq")     // 高质量模式：Spleeter ONNX 预分离
+    }
+
+    val separationMode: Flow<SeparationMode> = context.dataStore.data.map { prefs ->
+        val value = prefs[keySeparationMode] ?: SeparationMode.FAST.value
+        SeparationMode.entries.find { it.value == value } ?: SeparationMode.FAST
+    }
+
+    suspend fun setSeparationMode(mode: SeparationMode) {
+        context.dataStore.edit { it[keySeparationMode] = mode.value }
+    }
+
     // --- 播放统计 ---
     private val keyPlayRecords = stringPreferencesKey("play_records")
 

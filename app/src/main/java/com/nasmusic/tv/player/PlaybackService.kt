@@ -77,8 +77,8 @@ class PlaybackService : MediaLibraryService() {
         val dataSourceFactory = com.nasmusic.tv.backend.network.baidu.BaiduHttpDataSourceFactory.create(this)
         val mediaSourceFactory = androidx.media3.exoplayer.source.DefaultMediaSourceFactory(dataSourceFactory, extractorsFactory)
 
-        // 人声消除处理器（卡拉OK模式）
-        val vocalRemovalProcessor = VocalRemovalProcessor()
+        // 人声消除处理器（卡拉OK模式）— 频谱遮罩版本
+        val vocalRemovalProcessor = SpectralMaskProcessor()
 
         // 自定义 RenderersFactory，注入 VocalRemovalProcessor 到 AudioSink
         val renderersFactory = object : DefaultRenderersFactory(this) {
@@ -121,6 +121,13 @@ class PlaybackService : MediaLibraryService() {
         // Store player reference in manager + inject vocal removal processor
         (application as NasMusicApp).playerManager.setPlayer(player)
         (application as NasMusicApp).playerManager.setVocalRemovalProcessor(vocalRemovalProcessor)
+
+        // 注入高质量人声分离组件（Spleeter ONNX 模式）
+        val spleeterSeparator = SpleeterSeparator(this)
+        val accompanimentCache = AccompanimentCache(this)
+        spleeterSeparator.initialize() // 加载 ONNX 模型
+        (application as NasMusicApp).playerManager.setSpleeterSeparator(spleeterSeparator)
+        (application as NasMusicApp).playerManager.setAccompanimentCache(accompanimentCache)
 
         // Start as foreground service with initial notification
         startForeground(NOTIFICATION_ID, buildNotification(null, false))
