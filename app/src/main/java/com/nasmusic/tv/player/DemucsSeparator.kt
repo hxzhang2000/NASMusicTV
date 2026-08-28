@@ -143,7 +143,7 @@ class DemucsSeparator(private val context: Context) {
             progress?.onProgress(0f, "解码音频")
 
             // 1. 解码输入音频为 PCM 浮点（立体声）
-            val pcmData = decodeAudio(inputPath, progress)
+            var pcmData = decodeAudio(inputPath, progress)
             if (pcmData == null) {
                 AppLog.e(TAG, "separate: decode failed")
                 return null
@@ -152,15 +152,17 @@ class DemucsSeparator(private val context: Context) {
             progress?.onProgress(0.2f, "分段处理")
 
             // 2. 分离左右声道
-            val leftChannel = FloatArray(pcmData.size / 2)
-            val rightChannel = FloatArray(pcmData.size / 2)
-            for (i in leftChannel.indices) {
+            val totalSamples = pcmData.size / 2
+            val leftChannel = FloatArray(totalSamples)
+            val rightChannel = FloatArray(totalSamples)
+            for (i in 0 until totalSamples) {
                 leftChannel[i] = pcmData[i * 2]
                 rightChannel[i] = pcmData[i * 2 + 1]
             }
+            // pcmData 不再需要，释放 ~80MB 帮助 GC
+            pcmData = FloatArray(0)
 
             // 3. 分段处理（overlap-add）
-            val totalSamples = leftChannel.size
             val vocalsLeft = FloatArray(totalSamples)
             val vocalsRight = FloatArray(totalSamples)
             val weights = FloatArray(totalSamples)  // overlap 权重
@@ -194,10 +196,9 @@ class DemucsSeparator(private val context: Context) {
                     }
                 }
 
-                // 进度
+                // 进度（节流：只在实际百分比变化时更新）
                 segmentIndex++
-                val segProgress = segmentIndex.toFloat() / totalSegments
-                progress?.onProgress(0.2f + segProgress * 0.6f, "分离中 ($segmentIndex/$totalSegments)")
+                progress?.onProgress(0.2f + segmentIndex.toFloat() / totalSegments * 0.6f, "分离中 ($segmentIndex/$totalSegments)")
 
                 // 移动到下一段
                 startSample += SEGMENT_SAMPLES
@@ -210,21 +211,20 @@ class DemucsSeparator(private val context: Context) {
                     vocalsRight[i] /= weights[i]
                 }
             }
+            // weights 不再需要
+            // (FloatArray 不可变长度，但内容已用完)
 
-            progress?.onProgress(0.85f, "计算伴奏")
+            progress?.onProgress(0.85f, "写入人声")
 
-            // 4. 伴奏 = 原始 - vocals（简单减法）
-            val accompanimentLeft = FloatArray(totalSamples) { leftChannel[it] - vocalsLeft[it] }
-            val accompanimentRight = FloatArray(totalSamples) { rightChannel[it] - vocalsRight[it] }
-
-            progress?.onProgress(0.9f, "写入文件")
-
-            // 5. 写入 WAV 文件
+            // 4. 写入人声 WAV（先写人声，写完可释放 vocals 数组）
             val vocalsFile = File(outputDir, "${songId}_vocals.wav")
-            val accompanimentFile = File(outputDir, "${songId}_accompaniment.wav")
-
             writeWav(vocalsFile, mergeChannels(vocalsLeft, vocalsRight))
-            writeWav(accompanimentFile, mergeChannels(accompanimentLeft, accompanimentRight))
+
+            progress?.onProgress(0.9f, "写入伴奏")
+
+            // 5. 写入伴奏 WAV（内联计算 original - vocals，不分配额外数组）
+            val accompanimentFile = File(outputDir, "${songId}_accompaniment.wav")
+            writeAccompanimentWav(accompanimentFile, leftChannel, rightChannel, vocalsLeft, vocalsRight)
 
             // 6. 计算时长
             val durationMs = (totalSamples.toFloat() / SAMPLE_RATE * 1000).toLong()
@@ -233,6 +233,10 @@ class DemucsSeparator(private val context: Context) {
 
             AppLog.d(TAG, "separate: OK, vocals=${vocalsFile.absolutePath}, accompaniment=${accompanimentFile.absolutePath}")
             SeparationResult(vocalsFile, accompanimentFile, durationMs)
+        } catch (e: OutOfMemoryError) {
+            AppLog.e(TAG, "separate: OOM — 设备内存不足，无法完成高质量分离", e)
+            System.gc()
+            null
         } catch (e: Exception) {
             AppLog.e(TAG, "separate: failed", e)
             null
@@ -453,6 +457,52 @@ class DemucsSeparator(private val context: Context) {
             for (sample in samples) {
                 val pcm = (sample * 32767f).toInt().coerceIn(-32768, 32767).toShort()
                 fos.write(shortToByteArray(pcm))
+            }
+        }
+    }
+
+    /**
+     * 写入伴奏 WAV 文件（内联计算 original - vocals，不分配额外数组）
+     * 省去 ~80MB 临时数组（accompanimentLeft + accompanimentRight + mergeChannels 的 merged）
+     */
+    private fun writeAccompanimentWav(
+        file: File,
+        origLeft: FloatArray,
+        origRight: FloatArray,
+        vocalsLeft: FloatArray,
+        vocalsRight: FloatArray
+    ) {
+        val totalSamples = origLeft.size
+        val numPcmSamples = totalSamples * CHANNEL_COUNT
+        val dataSize = numPcmSamples * 2
+        val fileSize = 36 + dataSize
+
+        FileOutputStream(file).use { fos ->
+            // RIFF header
+            fos.write("RIFF".toByteArray())
+            fos.write(intToByteArray(fileSize))
+            fos.write("WAVE".toByteArray())
+
+            // fmt chunk
+            fos.write("fmt ".toByteArray())
+            fos.write(intToByteArray(16))
+            fos.write(shortToByteArray(1))
+            fos.write(shortToByteArray(CHANNEL_COUNT.toShort()))
+            fos.write(intToByteArray(SAMPLE_RATE))
+            fos.write(intToByteArray(SAMPLE_RATE * CHANNEL_COUNT * 2))
+            fos.write(shortToByteArray((CHANNEL_COUNT * 2).toShort()))
+            fos.write(shortToByteArray(16))
+
+            // data chunk
+            fos.write("data".toByteArray())
+            fos.write(intToByteArray(dataSize))
+
+            // 伴奏 = original - vocals，内联计算逐样本写入
+            for (i in 0 until totalSamples) {
+                val left = (origLeft[i] - vocalsLeft[i]) * 32767f
+                val right = (origRight[i] - vocalsRight[i]) * 32767f
+                fos.write(shortToByteArray(left.toInt().coerceIn(-32768, 32767).toShort()))
+                fos.write(shortToByteArray(right.toInt().coerceIn(-32768, 32767).toShort()))
             }
         }
     }

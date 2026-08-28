@@ -40,6 +40,7 @@ class PlayerManager() {
     private val httpClient = OkHttpClient.Builder()
         .connectTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
         .readTimeout(60, java.util.concurrent.TimeUnit.SECONDS)
+        .callTimeout(5, java.util.concurrent.TimeUnit.MINUTES)  // 整体超时，防止卡死
         .build()
 
     // ── 高质量人声分离（HT-Demucs FT ONNX 模式）──
@@ -232,6 +233,8 @@ class PlayerManager() {
                 val body = response.body ?: return@withContext null
                 val contentLength = body.contentLength()
                 var downloaded = 0L
+                // 节流：只在百分比整数变化 ≥1% 时才更新 StateFlow，避免淹没 Main 线程
+                var lastReportedPercent = -1
 
                 body.byteStream().use { input ->
                     outFile.outputStream().use { output ->
@@ -242,7 +245,12 @@ class PlayerManager() {
                             downloaded += bytesRead
                             if (contentLength > 0) {
                                 val pct = downloaded.toFloat() / contentLength.toFloat()
-                                _separationProgress.value = (0.05f + pct * 0.15f) to progressStage
+                                val intPercent = (pct * 100).toInt()
+                                // 只在整百分比变化 ≥1 时才更新，大幅减少 StateFlow 发射次数
+                                if (intPercent != lastReportedPercent) {
+                                    lastReportedPercent = intPercent
+                                    _separationProgress.value = (0.05f + pct * 0.15f) to progressStage
+                                }
                             }
                         }
                     }
