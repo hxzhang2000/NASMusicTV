@@ -1,6 +1,8 @@
 ﻿package com.nasmusic.tv.ui.components
 
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.asImageBitmap
 import com.nasmusic.tv.util.QrCodeGenerator
@@ -25,7 +27,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -49,7 +50,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
-import androidx.tv.material3.ClickableSurfaceDefaults
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Icon
 import androidx.tv.material3.Surface
@@ -67,7 +67,7 @@ import com.nasmusic.tv.ui.theme.NasMusicColors
  * - 全屏封面背景（ContentScale.Crop + blur + 暗色渐变遮罩）
  * - 中上部：歌曲名 + 歌手名
  * - 下方：歌词区域（置画面下方，字体放大，置于半透明黑色全宽色块中）
- * - 底部：左上角返回按钮 + 右下角控制栏（上一首/播放暂停/下一首/原唱伴唱切换）
+ * - 底部：左上角返回按钮 + 右下角控制栏（上一首/播放暂停/下一首/升降调/变速/原唱伴唱切换）
  *
  * 无进度条控制。原唱/伴唱按钮只切换音频，不退出页面。
  */
@@ -90,6 +90,18 @@ fun KaraokePlaybackScreen(
     onPlayPause: () -> Unit,
     onNext: () -> Unit,
     onPrevious: () -> Unit,
+    /** 升降调（半音 -12~+12，0 = 原调） */
+    pitchSemitones: Int = 0,
+    /** 播放速度（0.5~2.0，1.0 = 原速） */
+    playbackSpeed: Double = 1.0,
+    /** 设置升降调回调 */
+    onSetPitch: (Int) -> Unit = {},
+    /** 设置播放速度回调 */
+    onSetSpeed: (Double) -> Unit = {},
+    /** 重置升降调回调 */
+    onResetPitch: () -> Unit = {},
+    /** 重置播放速度回调 */
+    onResetSpeed: () -> Unit = {},
     playPauseFocusRequester: FocusRequester? = null,
     remoteControlUrl: String? = null
 ) {
@@ -102,6 +114,10 @@ fun KaraokePlaybackScreen(
         delay(5000)
         if (System.currentTimeMillis() - lastInteraction >= 5000) controlsVisible = false
     }
+
+    // ── 升降调 / 变速选择弹窗状态 ──
+    var showPitchPicker by remember { mutableStateOf(false) }
+    var showSpeedPicker by remember { mutableStateOf(false) }
 
     Box(
         modifier = Modifier
@@ -284,7 +300,34 @@ fun KaraokePlaybackScreen(
                     icon = Icons.Filled.SkipNext,
                     contentDescription = "Next"
                 )
-                Spacer(Modifier.width(20.dp))
+                Spacer(Modifier.width(16.dp))
+
+                // ── 升降调按钮 ──
+                KaraokeSettingButton(
+                    label = "调",
+                    value = when (pitchSemitones) {
+                        0 -> "原调"
+                        in 1..12 -> "+${pitchSemitones}"
+                        else -> "$pitchSemitones"
+                    },
+                    isModified = pitchSemitones != 0,
+                    onClick = { activateControls(); showPitchPicker = true }
+                )
+                Spacer(Modifier.width(10.dp))
+
+                // ── 变速按钮 ──
+                KaraokeSettingButton(
+                    label = "速",
+                    value = when {
+                        playbackSpeed == 1.0 -> "原速"
+                        playbackSpeed < 1.0 -> String.format("%.1f", playbackSpeed)
+                        else -> String.format("%.1f", playbackSpeed)
+                    },
+                    isModified = playbackSpeed != 1.0,
+                    onClick = { activateControls(); showSpeedPicker = true }
+                )
+                Spacer(Modifier.width(16.dp))
+
                 // 原唱/伴唱切换（只切换音频，不退出页面）
                 VocalToggleButton(
                     label = if (vocalRemovalEnabled) "原唱" else "伴唱",
@@ -300,6 +343,43 @@ fun KaraokePlaybackScreen(
             playPauseFocusRequester?.requestFocus()
         } catch (_: Exception) {
         }
+    }
+
+    // ── 升降调选择弹窗 ──
+    if (showPitchPicker) {
+        KaraokeStepPickerDialog(
+            title = "升降调",
+            steps = (-12..12).toList(),
+            currentValue = pitchSemitones,
+            formatLabel = { semitones ->
+                when (semitones) {
+                    0 -> "原调"
+                    in 1..12 -> "+${semitones}"
+                    else -> "$semitones"
+                }
+            },
+            onConfirm = { onSetPitch(it) },
+            onReset = { onResetPitch() },
+            onDismiss = { showPitchPicker = false }
+        )
+    }
+
+    // ── 变速选择弹窗 ──
+    if (showSpeedPicker) {
+        KaraokeStepPickerDialog(
+            title = "播放速度",
+            steps = listOf(0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 1.7, 1.8, 1.9, 2.0),
+            currentValue = playbackSpeed,
+            formatLabel = { speed ->
+                when (speed) {
+                    1.0 -> "原速"
+                    else -> String.format("%.1f", speed)
+                }
+            },
+            onConfirm = { onSetSpeed(it) },
+            onReset = { onResetSpeed() },
+            onDismiss = { showSpeedPicker = false }
+        )
     }
 }
 
@@ -342,6 +422,245 @@ private fun MiniIconButton(
                 contentDescription = contentDescription,
                 modifier = Modifier.size(iconSize)
             )
+        }
+    }
+}
+
+/**
+ * K 歌页设置按钮（升降调 / 变速）
+ *
+ * 显示 标签 + 当前值，修改后高亮提示，点击弹出步进选择弹窗。
+ */
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+private fun KaraokeSettingButton(
+    label: String,
+    value: String,
+    isModified: Boolean,
+    onClick: () -> Unit
+) {
+    FocusableSurface(
+        onClick = onClick,
+        modifier = Modifier.size(width = 72.dp, height = 56.dp),
+        shape = RoundedCornerShape(12.dp),
+        focusedScale = 1.08f,
+        animationDurationMs = 200,
+        containerColor = if (isModified) NasMusicColors.Primary.copy(alpha = 0.25f) else NasMusicColors.Surface,
+        focusedContainerColor = if (isModified) NasMusicColors.Primary.copy(alpha = 0.4f) else NasMusicColors.Primary.copy(alpha = 0.3f),
+        contentColor = NasMusicColors.TextPrimary,
+        focusedContentColor = NasMusicColors.TextPrimary,
+        pressedScale = 0.92f,
+        focusBorderColor = NasMusicColors.FocusRing
+    ) {
+        Column(
+            modifier = Modifier.fillMaxSize(),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            Text(
+                text = label,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Bold,
+                color = if (isModified) NasMusicColors.Primary else NasMusicColors.TextSecondary
+            )
+            Spacer(Modifier.height(2.dp))
+            Text(
+                text = value,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Bold,
+                color = NasMusicColors.TextPrimary,
+                maxLines = 1
+            )
+        }
+    }
+}
+
+/**
+ * K 歌步进选择弹窗（升降调 / 变速通用）
+ *
+ * TV 遥控器适配：D-Pad 左右切换选项，OK 键确认。
+ */
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+private fun <T> KaraokeStepPickerDialog(
+    title: String,
+    steps: List<T>,
+    currentValue: T,
+    formatLabel: (T) -> String,
+    onConfirm: (T) -> Unit,
+    onReset: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    val selectedIndex = remember(steps, currentValue) {
+        steps.indexOf(currentValue).coerceAtLeast(0)
+    }
+    var tempIndex by remember { mutableStateOf(selectedIndex) }
+    val focusRequester = remember { FocusRequester() }
+
+    // 弹窗打开时自动聚焦到选项区域
+    LaunchedEffect(Unit) {
+        try { focusRequester.requestFocus() } catch (_: Exception) {}
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color(0x80000000))
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = onDismiss
+            ),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            modifier = Modifier
+                .width(360.dp)
+                .padding(24.dp)
+                .background(NasMusicColors.Background, RoundedCornerShape(16.dp))
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null,
+                    onClick = {} // 阻止点击穿透到遮罩层
+                ),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Column(
+                modifier = Modifier.padding(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                // 标题
+                Text(
+                    text = title,
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = NasMusicColors.TextPrimary
+                )
+                Spacer(Modifier.height(20.dp))
+
+                // 选项区域：左右箭头 + 当前值
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center
+                ) {
+                    // 左箭头
+                    FocusableSurface(
+                        onClick = {
+                            if (tempIndex > 0) tempIndex--
+                        },
+                        modifier = Modifier.size(48.dp),
+                        shape = RoundedCornerShape(50),
+                        focusedScale = 1.1f,
+                        animationDurationMs = 200,
+                        containerColor = NasMusicColors.Surface,
+                        focusedContainerColor = NasMusicColors.Primary.copy(alpha = 0.3f),
+                        contentColor = NasMusicColors.TextPrimary,
+                        focusedContentColor = NasMusicColors.TextPrimary,
+                        pressedScale = 0.9f,
+                        focusBorderColor = NasMusicColors.FocusRing
+                    ) {
+                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            Text(text = "<", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = NasMusicColors.TextPrimary)
+                        }
+                    }
+
+                    // 当前值
+                    FocusableSurface(
+                        onClick = { onConfirm(steps[tempIndex]); onDismiss() },
+                        modifier = Modifier
+                            .width(160.dp)
+                            .height(56.dp)
+                            .then(if (tempIndex == selectedIndex) Modifier.focusRequester(focusRequester) else Modifier),
+                        shape = RoundedCornerShape(12.dp),
+                        focusedScale = 1.08f,
+                        animationDurationMs = 200,
+                        containerColor = NasMusicColors.Primary.copy(alpha = 0.2f),
+                        focusedContainerColor = NasMusicColors.Primary.copy(alpha = 0.4f),
+                        contentColor = NasMusicColors.TextPrimary,
+                        focusedContentColor = NasMusicColors.TextPrimary,
+                        pressedScale = 0.95f,
+                        focusBorderColor = NasMusicColors.FocusRing
+                    ) {
+                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            Text(
+                                text = formatLabel(steps[tempIndex]),
+                                fontSize = 22.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = NasMusicColors.TextPrimary
+                            )
+                        }
+                    }
+
+                    // 右箭头
+                    FocusableSurface(
+                        onClick = {
+                            if (tempIndex < steps.lastIndex) tempIndex++
+                        },
+                        modifier = Modifier.size(48.dp),
+                        shape = RoundedCornerShape(50),
+                        focusedScale = 1.1f,
+                        animationDurationMs = 200,
+                        containerColor = NasMusicColors.Surface,
+                        focusedContainerColor = NasMusicColors.Primary.copy(alpha = 0.3f),
+                        contentColor = NasMusicColors.TextPrimary,
+                        focusedContentColor = NasMusicColors.TextPrimary,
+                        pressedScale = 0.9f,
+                        focusBorderColor = NasMusicColors.FocusRing
+                    ) {
+                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            Text(text = ">", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = NasMusicColors.TextPrimary)
+                        }
+                    }
+                }
+
+                Spacer(Modifier.height(16.dp))
+
+                // 重置 + 取消按钮
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    FocusableSurface(
+                        onClick = { onReset(); onDismiss() },
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(44.dp),
+                        shape = RoundedCornerShape(8.dp),
+                        focusedScale = 1.05f,
+                        animationDurationMs = 200,
+                        containerColor = NasMusicColors.Surface,
+                        focusedContainerColor = NasMusicColors.Primary.copy(alpha = 0.3f),
+                        contentColor = NasMusicColors.TextSecondary,
+                        focusedContentColor = NasMusicColors.TextPrimary,
+                        pressedScale = 0.95f,
+                        focusBorderColor = NasMusicColors.FocusRing
+                    ) {
+                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            Text(text = "重置", fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+
+                    FocusableSurface(
+                        onClick = { onConfirm(steps[tempIndex]); onDismiss() },
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(44.dp),
+                        shape = RoundedCornerShape(8.dp),
+                        focusedScale = 1.05f,
+                        animationDurationMs = 200,
+                        containerColor = NasMusicColors.Primary,
+                        focusedContainerColor = NasMusicColors.Primary,
+                        contentColor = NasMusicColors.TextPrimary,
+                        focusedContentColor = NasMusicColors.TextPrimary,
+                        pressedScale = 0.95f,
+                        focusBorderColor = NasMusicColors.FocusRing
+                    ) {
+                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            Text(text = "确定", fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+            }
         }
     }
 }

@@ -4,6 +4,7 @@ import android.media.audiofx.Equalizer
 import android.os.Handler
 import android.os.Looper
 import androidx.media3.common.MediaItem
+import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
 import com.nasmusic.tv.data.model.PlayMode
@@ -104,6 +105,49 @@ class PlayerManager() {
     fun isVocalRemovalEnabled(): Boolean {
         return vocalRemovalProcessor?.isEnabled() ?: false
     }
+
+    // ── 升降调 & 变速（仅 K 歌页面使用，由 MainViewModel 调用）──
+
+    /**
+     * 设置升降调（半音单位，-12 ~ +12）
+     * 使用 ExoPlayer PlaybackParameters 构造函数，不依赖 SonicAudioProcessor。
+     */
+    fun setPitch(semitones: Int) {
+        val pitchFactor = Math.pow(2.0, semitones.toDouble() / 12.0).toFloat()
+        player?.let { p ->
+            p.playbackParameters = PlaybackParameters(p.playbackParameters.speed, pitchFactor)
+        }
+    }
+
+    /**
+     * 设置播放速度（0.5 ~ 2.0）
+     * 使用 ExoPlayer PlaybackParameters 构造函数，变速不变调。
+     */
+    fun setSpeed(speed: Float) {
+        player?.let { p ->
+            p.playbackParameters = PlaybackParameters(speed, p.playbackParameters.pitch)
+        }
+    }
+
+    /** 重置升降调到原调（0 半音） */
+    fun resetPitch() {
+        player?.let { p ->
+            p.playbackParameters = PlaybackParameters(p.playbackParameters.speed, 1.0f)
+        }
+    }
+
+    /** 重置播放速度到原速 */
+    fun resetSpeed() {
+        player?.let { p ->
+            p.playbackParameters = p.playbackParameters.withSpeed(1.0f)
+        }
+    }
+
+    /** 查询当前 pitch factor */
+    fun currentPitchFactor(): Float = player?.playbackParameters?.pitch ?: 1.0f
+
+    /** 查询当前 speed factor */
+    fun currentSpeedFactor(): Float = player?.playbackParameters?.speed ?: 1.0f
 
     // 随机播放历史记录，避免连续重复
     private val shuffleHistory = mutableListOf<Int>()

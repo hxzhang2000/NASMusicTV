@@ -2590,6 +2590,66 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
         AppLog.d("NASMusic", "toggleVocalRemoval -> $newValue")
     }
 
+    // --- K 歌页面：升降调 & 变速（全局记忆，重启恢复）---
+
+    private val _pitchSemitones = MutableStateFlow(0)
+    val pitchSemitones: StateFlow<Int> = _pitchSemitones.asStateFlow()
+
+    private val _playbackSpeed = MutableStateFlow(1.0)
+    val playbackSpeed: StateFlow<Double> = _playbackSpeed.asStateFlow()
+
+    /** 从 AppPreferences 加载上次保存的 pitch/speed，并应用到 PlayerManager */
+    fun loadPitchSpeedFromPrefs() {
+        viewModelScope.launch {
+            val savedPitch = prefs.pitchSemitones.first()
+            val savedSpeed = prefs.playbackSpeed.first()
+            _pitchSemitones.value = savedPitch
+            _playbackSpeed.value = savedSpeed
+            // 应用到播放器（仅在 player 已初始化时生效）
+            playerManager.setPitch(savedPitch)
+            playerManager.setSpeed(savedSpeed.toFloat())
+            AppLog.d("NASMusic", "loadPitchSpeedFromPrefs: pitch=$savedPitch, speed=$savedSpeed")
+        }
+    }
+
+    /** 设置升降调（半音 -12~+12）并持久化 */
+    fun setPitchSemitones(semitones: Int) {
+        val clamped = semitones.coerceIn(-12, 12)
+        _pitchSemitones.value = clamped
+        playerManager.setPitch(clamped)
+        viewModelScope.launch {
+            prefs.setPitchSemitones(clamped)
+        }
+        AppLog.d("NASMusic", "setPitchSemitones -> $clamped")
+    }
+
+    /** 设置播放速度（0.5~2.0）并持久化 */
+    fun setPlaybackSpeed(speed: Double) {
+        val clamped = speed.coerceIn(0.5, 2.0)
+        _playbackSpeed.value = clamped
+        playerManager.setSpeed(clamped.toFloat())
+        viewModelScope.launch {
+            prefs.setPlaybackSpeed(clamped)
+        }
+        AppLog.d("NASMusic", "setPlaybackSpeed -> $clamped")
+    }
+
+    /** 重置升降调到原调 */
+    fun resetPitch() {
+        _pitchSemitones.value = 0
+        playerManager.resetPitch()
+        viewModelScope.launch { prefs.setPitchSemitones(0) }
+        AppLog.d("NASMusic", "resetPitch -> 0")
+    }
+
+    /** 重置播放速度到原速 */
+    fun resetSpeed() {
+        _playbackSpeed.value = 1.0
+        playerManager.resetSpeed()
+        viewModelScope.launch { prefs.setPlaybackSpeed(1.0) }
+        AppLog.d("NASMusic", "resetSpeed -> 1.0")
+    }
+
     // --- MTV 音乐视频 ---
     private val _mvState = MutableStateFlow<MvAvailability>(MvAvailability.Idle)
     val mvState: StateFlow<MvAvailability> = _mvState.asStateFlow()

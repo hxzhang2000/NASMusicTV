@@ -106,6 +106,21 @@ class AppPreferences(private val context: Context) {
     private val keyEqualizerPreset = intPreferencesKey("equalizer_preset")
     private val keyEqualizerBands = stringPreferencesKey("equalizer_bands")
 
+    // --- K 歌模式：升降调 & 变速（全局记忆）---
+    private val keyPitchSemitones = intPreferencesKey("k_pitch_semitones")
+    private val keyPlaybackSpeed = doublePreferencesKey("k_playback_speed")
+
+    val pitchSemitones: Flow<Int> = context.dataStore.data.map { it[keyPitchSemitones] ?: 0 }
+    val playbackSpeed: Flow<Double> = context.dataStore.data.map { it[keyPlaybackSpeed] ?: 1.0 }
+
+    suspend fun setPitchSemitones(semitones: Int) {
+        context.dataStore.edit { it[keyPitchSemitones] = semitones }
+    }
+
+    suspend fun setPlaybackSpeed(speed: Double) {
+        context.dataStore.edit { it[keyPlaybackSpeed] = speed }
+    }
+
     // --- 播放统计 ---
     private val keyPlayRecords = stringPreferencesKey("play_records")
 

@@ -299,6 +299,8 @@ fun AppRoot(
                 Screen.NowPlaying -> {
                     val lyricsFontScale by viewModel.prefs.lyricsFontScale.collectAsState(initial = 1.0f)
                     val vocalRemovalEnabled by viewModel.vocalRemovalEnabled.collectAsState()
+                    val pitchSemitones by viewModel.pitchSemitones.collectAsState()
+                    val playbackSpeed by viewModel.playbackSpeed.collectAsState()
                     val mvReady = mvState as? com.nasmusic.tv.ui.viewmodel.MvAvailability.Ready
                     if (showMv && mvReady != null) {
                         // MTV 音乐视频全屏页（独立播放器，退出时 MainViewModel 恢复主播放器）
@@ -373,7 +375,14 @@ fun AppRoot(
                             },
                             onSearchSong = { keyword ->
                                 viewModel.searchNetworkSongs(keyword)
-                            }
+                            },
+                            // === K 歌页面：升降调 / 变速 ===
+                            pitchSemitones = pitchSemitones,
+                            playbackSpeed = playbackSpeed,
+                            onSetPitch = { viewModel.setPitchSemitones(it) },
+                            onSetSpeed = { viewModel.setPlaybackSpeed(it) },
+                            onResetPitch = { viewModel.resetPitch() },
+                            onResetSpeed = { viewModel.resetSpeed() }
                         )
                     }
                 }

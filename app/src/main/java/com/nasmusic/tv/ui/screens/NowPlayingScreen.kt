@@ -116,6 +116,13 @@ fun NowPlayingScreen(
     onSearchArtist: (String) -> Unit = {},
     /** 点击歌曲名跳转到网络搜索 */
     onSearchSong: (String) -> Unit = {},
+    // === K 歌页面：升降调 / 变速（全局记忆） ===
+    pitchSemitones: Int = 0,
+    playbackSpeed: Double = 1.0,
+    onSetPitch: (Int) -> Unit = {},
+    onSetSpeed: (Double) -> Unit = {},
+    onResetPitch: () -> Unit = {},
+    onResetSpeed: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     var showInfoPanel by remember { mutableStateOf(false) }
@@ -156,6 +163,12 @@ fun NowPlayingScreen(
             onPlayPause = onPlayPause,
             onNext = onNext,
             onPrevious = onPrevious,
+            pitchSemitones = pitchSemitones,
+            playbackSpeed = playbackSpeed,
+            onSetPitch = onSetPitch,
+            onSetSpeed = onSetSpeed,
+            onResetPitch = onResetPitch,
+            onResetSpeed = onResetSpeed,
             playPauseFocusRequester = playPauseFocusRequester,
             remoteControlUrl = remoteControlUrl
         )
