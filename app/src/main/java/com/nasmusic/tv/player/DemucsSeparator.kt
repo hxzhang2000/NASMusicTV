@@ -341,6 +341,9 @@ class DemucsSeparator(private val context: Context) {
 
     /**
      * 解码音频文件为 PCM 浮点数据（立体声）
+     *
+     * 优化：用预分配 FloatArray 替换 mutableListOf<Float>，避免装箱开销
+     * （装箱 Float 对象 ~16 字节 vs FloatArray 4 字节/元素，省 ~75% 内存）
      */
     private fun decodeAudio(inputPath: String, progress: ProgressCallback?): FloatArray? {
         return try {
@@ -374,7 +377,26 @@ class DemucsSeparator(private val context: Context) {
             codec.configure(format, null, null, 0)
             codec.start()
 
-            val pcmData = mutableListOf<Float>()
+            // 预分配 FloatArray：基于 MediaFormat 的 duration/sampleRate/channelCount 估算
+            val sampleRate = if (format.containsKey(MediaFormat.KEY_SAMPLE_RATE)) {
+                format.getInteger(MediaFormat.KEY_SAMPLE_RATE)
+            } else SAMPLE_RATE
+            val channelCount = if (format.containsKey(MediaFormat.KEY_CHANNEL_COUNT)) {
+                format.getInteger(MediaFormat.KEY_CHANNEL_COUNT)
+            } else CHANNEL_COUNT
+            val durationUs = if (format.containsKey(MediaFormat.KEY_DURATION)) {
+                format.getLong(MediaFormat.KEY_DURATION)
+            } else 0L
+            // 估算样本数（+10% 余量应对编码器 delay/padding）
+            val estimatedSamples = if (durationUs > 0) {
+                (durationUs.toDouble() * sampleRate / 1_000_000.0 * channelCount * 1.1).toInt()
+            } else {
+                // 无时长信息，初始 30 秒容量，动态增长
+                sampleRate * channelCount * 30
+            }
+
+            var pcmData = FloatArray(estimatedSamples)
+            var writeIdx = 0
             var inputDone = false
             var outputDone = false
 
@@ -409,10 +431,13 @@ class DemucsSeparator(private val context: Context) {
                         outputBuffer.position(bufferInfo.offset)
                         outputBuffer.limit(bufferInfo.offset + bufferInfo.size)
 
-                        // 读取 PCM 16-bit 数据并转换为浮点
+                        // 直接写入预分配 FloatArray，避免装箱开销
                         while (outputBuffer.hasRemaining()) {
-                            val sample = outputBuffer.short.toFloat() / 32768f
-                            pcmData.add(sample)
+                            if (writeIdx >= pcmData.size) {
+                                // 扩容 1.5 倍，减少拷贝次数
+                                pcmData = pcmData.copyOf((pcmData.size * 1.5).toInt())
+                            }
+                            pcmData[writeIdx++] = outputBuffer.short.toFloat() / 32768f
                         }
                     }
 
@@ -424,7 +449,13 @@ class DemucsSeparator(private val context: Context) {
             codec.release()
             extractor.release()
 
-            pcmData.toFloatArray()
+            // 修剪到实际大小
+            if (writeIdx < pcmData.size) {
+                pcmData = pcmData.copyOf(writeIdx)
+            }
+
+            AppLog.d(TAG, "decodeAudio: decoded $writeIdx samples, ${writeIdx / 2 / sampleRate}s at ${sampleRate}Hz")
+            pcmData
         } catch (e: OutOfMemoryError) {
             AppLog.e(TAG, "decodeAudio: OOM", e)
             lastError = "解码内存不足（音频过长?）"
