@@ -58,6 +58,8 @@ class DemucsSeparator(private val context: Context) {
     private var ortEnv: OrtEnvironment? = null
     private var modelSession: OrtSession? = null
     private var isInitialized = false
+    /** ONNX 模型的实际输入名（从 session 动态读取，不用硬编码 "input"） */
+    private var inputName: String = "input"
 
     /** 上次失败的具体原因（separate/initialize/decodeAudio 失败时设置） */
     var lastError: String? = null
@@ -99,9 +101,12 @@ class DemucsSeparator(private val context: Context) {
             val modelBytes = modelFile.readBytes()
             modelSession = ortEnv!!.createSession(modelBytes)
 
+            // 读取模型实际输入名（替代硬编码 "input"，避免 Unknown input name 错误）
+            inputName = modelSession!!.inputInfo.keys.firstOrNull() ?: "input"
+
             isInitialized = true
             lastError = null
-            AppLog.d(TAG, "initialize: OK, model loaded from $modelPath (${modelBytes.size / (1024 * 1024)}MB)")
+            AppLog.d(TAG, "initialize: OK, model loaded from $modelPath (${modelBytes.size / (1024 * 1024)}MB), input='$inputName'")
             true
         } catch (e: OutOfMemoryError) {
             AppLog.e(TAG, "initialize: OOM loading model", e)
@@ -287,7 +292,7 @@ class DemucsSeparator(private val context: Context) {
         )
 
         // ONNX 推理
-        val output = modelSession!!.run(mapOf("input" to inputTensor))
+        val output = modelSession!!.run(mapOf(inputName to inputTensor))
 
         // 输出 shape: [1, 4, 2, samples]
         @Suppress("UNCHECKED_CAST")
