@@ -12,15 +12,27 @@
 ### Added
 
 - **高质量分离模型下载管理**：新增 `ModelDownloadManager`，从 HuggingFace 下载 HT-Demucs FT 人声分离模型（约 166MB）到外部存储 `models/` 目录，带下载进度条 / 速度 / 百分比
+- **中国大陆镜像下载**：优先 `hf-mirror.com`（国内加速），失败后回退 `huggingface.co`，解决大陆 TV 盒子无法下载模型的问题
 - **HT-Demucs FT 高质量分离器**：新增 `DemucsSeparator` 替代原 `SpleeterSeparator`，人声 SDR 从 6.9dB 提升至 9.19dB（开源最高），输入立体声 PCM 分段推理（overlap-add），内部 STFT 免外部 DSP 层
 - **设置页模型管理 UI**：新增"高质量分离模型"区块——显示下载状态 / 文件大小 / 下载进度，提供"下载模型"/"删除模型"按钮，未下载时显示下载引导
-- **K歌页模型状态感知**："质"按钮在模型未下载时显示 🔒 锁图标，点击无操作（禁止切换高质量模式），仅在模型已下载时允许切换到高质量
+- **K歌页模型状态感知**："质量"按钮在模型未下载时显示 🔒 锁图标，转换中显示"转换中"并禁用点击
+- **K歌页分离进度提示**：高质量模式转换伴奏时显示"正在转换伴奏…"浮层（含进度百分比和阶段描述），转换期间原始音频正常播放
 
 ### Changed
 
 - **模型与 APK 分离**：APK 不再内置 Spleeter 模型文件，release APK 体积从 ~186MB 降至 ~20MB；高质量模式需在设置页独立下载模型后才能启用
 - **高质量模式门控**：`MainViewModel.toggleSeparationMode` / `setSeparationMode` 在切换到高质量模式前检查模型是否已下载，未下载时拒绝切换并回退快速模式
 - **`SettingSwitch` 支持禁用态**：新增 `enabled` 参数，未下载模型时高质量开关置灰不可点
+- **伴唱/原唱切换逻辑重构**：`toggleVocalRemoval` 同时协调 DSP（快速模式）和文件切换（高质量模式），修复快速模式伴唱无声和切换模式后状态错乱
+- **高质量模式模型加载异步化**：`separator.initialize()` 移到 IO 线程，避免加载 166MB 模型阻塞主线程导致 ANR 崩溃
+- **模式切换状态协调**：新增 `applySeparationMode()` 统一模式切换逻辑，正确处理伴唱中的快速↔高质量切换（DSP 与文件切换同步）
+
+### Fixed
+
+- **快速模式伴唱无声**：`toggleVocalRemoval` 原来只走高质量或只走 DSP 路径，快速模式下 DSP 状态与播放文件不同步，导致伴唱无声音
+- **高质量模式 ANR 崩溃**：`enableHighQualityRemoval()` 在主线程加载 166MB ONNX 模型 + 创建 Session，阻塞 >5s 触发系统 ANR 杀进程
+- **K歌"质量"按钮文字截断**：按钮宽度从 72dp 加宽至 84dp，label 从"质"改为"质量"
+- **高质量模式切换伴奏文件时 DSP 冲突**：切换到伴奏文件时自动关闭 SpectralMaskProcessor（伴奏已无主唱不需要再处理），切回原唱时恢复 DSP 状态
 
 ### Removed
 
