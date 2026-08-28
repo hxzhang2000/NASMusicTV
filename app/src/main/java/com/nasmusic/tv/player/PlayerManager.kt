@@ -17,6 +17,10 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import java.io.File
 import kotlin.random.Random
 
 /**
@@ -31,6 +35,12 @@ class PlayerManager() {
 
     private var player: ExoPlayer? = null
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+
+    /** 网络下载用的 HTTP 客户端（HQ 模式下载 streamUrl 到本地文件） */
+    private val httpClient = OkHttpClient.Builder()
+        .connectTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
+        .readTimeout(60, java.util.concurrent.TimeUnit.SECONDS)
+        .build()
 
     // ── 高质量人声分离（HT-Demucs FT ONNX 模式）──
     private var demucsSeparator: DemucsSeparator? = null
@@ -168,6 +178,100 @@ class PlayerManager() {
     }
 
     /**
+     * 解析歌曲的本地输入路径，供 DemucsSeparator 使用。
+     *
+     * - 如果 song.path 非空（百度网盘本地文件），直接返回
+     * - 否则如果 song.streamUrl 非空，下载到临时文件后返回路径
+     * - 都为空则返回 null
+     *
+     * 调用方应在分离完成后调用 [cleanupTempFile] 清理下载的临时文件。
+     *
+     * @param song 歌曲
+     * @param progressStage 下载进度阶段的标签（如 "下载音频"）
+     * @return 本地文件路径，或 null（无法获取）
+     */
+    private suspend fun resolveInputPath(
+        song: Song,
+        progressStage: String = "下载音频"
+    ): String? {
+        // 1. 本地文件优先（百度网盘歌曲）
+        val localPath = song.path
+        if (!localPath.isNullOrBlank()) {
+            val file = File(localPath)
+            if (file.exists() && file.length() > 0) {
+                AppLog.d(TAG, "resolveInputPath: using local file for '${song.title}'")
+                return localPath
+            }
+        }
+
+        // 2. 从 streamUrl 下载到临时文件
+        val streamUrl = song.streamUrl
+        if (streamUrl.isNullOrBlank()) {
+            AppLog.w(TAG, "resolveInputPath: no path and no streamUrl for '${song.title}'")
+            return null
+        }
+
+        return try {
+            _separationProgress.value = 0.05f to progressStage
+            val tempFile = withContext(Dispatchers.IO) {
+                val tempDir = File(System.getProperty("java.io.tmpdir", "/data/local/tmp"), "nasmusic_hq")
+                tempDir.mkdirs()
+                val outFile = File(tempDir, "${song.id}_input.tmp")
+
+                val request = Request.Builder().url(streamUrl).build()
+                val response = httpClient.newCall(request).execute()
+                if (!response.isSuccessful) {
+                    AppLog.w(TAG, "resolveInputPath: download failed, HTTP ${response.code}")
+                    return@withContext null
+                }
+
+                val body = response.body ?: return@withContext null
+                val contentLength = body.contentLength()
+                var downloaded = 0L
+
+                body.byteStream().use { input ->
+                    outFile.outputStream().use { output ->
+                        val buffer = ByteArray(8192)
+                        var bytesRead: Int
+                        while (input.read(buffer).also { bytesRead = it } != -1) {
+                            output.write(buffer, 0, bytesRead)
+                            downloaded += bytesRead
+                            if (contentLength > 0) {
+                                val pct = downloaded.toFloat() / contentLength.toFloat()
+                                _separationProgress.value = (0.05f + pct * 0.15f) to progressStage
+                            }
+                        }
+                    }
+                }
+
+                AppLog.d(TAG, "resolveInputPath: downloaded ${outFile.length()} bytes for '${song.title}'")
+                outFile.absolutePath
+            }
+            tempFile
+        } catch (e: Exception) {
+            AppLog.e(TAG, "resolveInputPath: download exception", e)
+            null
+        }
+    }
+
+    /**
+     * 清理 resolveInputPath 下载的临时文件。
+     * 仅删除以 _input.tmp 结尾的文件，避免误删。
+     */
+    private fun cleanupTempFile(path: String?) {
+        if (path == null) return
+        try {
+            val file = File(path)
+            if (file.exists() && file.name.endsWith("_input.tmp")) {
+                file.delete()
+                AppLog.d(TAG, "cleanupTempFile: deleted $path")
+            }
+        } catch (e: Exception) {
+            AppLog.w(TAG, "cleanupTempFile: failed", e)
+        }
+    }
+
+    /**
      * 高质量模式下开启人声消除：
      * 1. 检查模型是否已下载
      * 2. 检查伴奏文件是否已缓存
@@ -200,15 +304,23 @@ class PlayerManager() {
             switchToAccompaniment(accompanimentFile.absolutePath)
         } else {
             // 未缓存：保持原始音频播放，后台分离，完成后切换
-            val inputPath = _currentSong.value?.path
-            if (inputPath == null) {
-                AppLog.w(TAG, "enableHighQualityRemoval: no filePath, fallback to fast mode")
-                vocalRemovalProcessor?.setEnabled(true)
-                return false
-            }
+            val song = _currentSong.value ?: return false
             _separating.value = true
+            var tempInputPath: String? = null
             scope.launch {
                 try {
+                    // 解析输入路径（本地文件 或 下载 streamUrl）
+                    val inputPath = withContext(Dispatchers.IO) {
+                        resolveInputPath(song, "下载音频")
+                    }
+                    if (inputPath == null) {
+                        AppLog.w(TAG, "enableHighQualityRemoval: cannot resolve input path, fallback to fast mode")
+                        vocalRemovalProcessor?.setEnabled(true)
+                        return@launch
+                    }
+                    // 记录是否为临时下载文件（分离后需清理）
+                    tempInputPath = if (song.path.isNullOrBlank()) inputPath else null
+
                     // 确保分离器已初始化（在 IO 线程加载 166MB 模型，避免主线程 ANR）
                     if (!separator.isReady()) {
                         val modelPath = modelManager?.getModelPath()
@@ -217,6 +329,7 @@ class PlayerManager() {
                             vocalRemovalProcessor?.setEnabled(true)
                             return@launch
                         }
+                        _separationProgress.value = 0.2f to "加载模型"
                         val initOk = with(Dispatchers.IO) { separator.initialize(modelPath) }
                         if (!initOk) {
                             AppLog.w(TAG, "enableHighQualityRemoval: separator init failed, fallback to fast mode")
@@ -251,6 +364,8 @@ class PlayerManager() {
                 } finally {
                     _separating.value = false
                     _separationProgress.value = 0f to ""
+                    // 清理临时下载文件
+                    cleanupTempFile(tempInputPath)
                 }
             }
         }
@@ -330,11 +445,27 @@ class PlayerManager() {
         if (cache.hasAccompaniment(nextSong.id)) return
         if (cache.preSeparationState.value.currentSongId == nextSong.id) return
 
-        // 启动预分离
-        val inputPath = nextSong.path
-        if (inputPath.isNullOrBlank()) return
+        // 解析输入路径：本地文件优先，否则需要 streamUrl 下载
+        // 预分离在 AccompanimentCache 的 IO 协程中执行，
+        // 所以这里只检查可行性（有 path 或 streamUrl），实际下载由 cache 处理
+        val localPath = nextSong.path
+        if (!localPath.isNullOrBlank()) {
+            cache.startPreSeparation(nextSong.id, localPath, separator)
+            return
+        }
 
-        cache.startPreSeparation(nextSong.id, inputPath, separator)
+        // streamUrl 歌曲：启动带下载的预分离
+        val streamUrl = nextSong.streamUrl
+        if (streamUrl.isNullOrBlank()) return
+
+        scope.launch {
+            val inputPath = resolveInputPath(nextSong, "预下载")
+            if (inputPath != null) {
+                cache.startPreSeparation(nextSong.id, inputPath, separator)
+                // 注意：tempFile 清理在 AccompanimentCache 分离完成后由 cache 自行处理
+                // 如果 startPreSeparation 内部失败，tempFile 会在应用重启时被系统清理
+            }
+        }
     }
 
     // ── 升降调 & 变速（仅 K 歌页面使用，由 MainViewModel 调用）──
