@@ -2621,6 +2621,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
     val separating: StateFlow<Boolean> = playerManager.separating
     /** 高质量分离进度与阶段描述（委托 PlayerManager 状态） */
     val separationProgress: StateFlow<Pair<Float, String>> = playerManager.separationProgress
+    /** 高质量分离错误信息（非空表示最近一次失败，UI 应提示用户） */
+    val hqError: StateFlow<String?> = playerManager.hqError
 
     // --- 高质量分离模型下载状态 ---
     private val _modelDownloaded = MutableStateFlow(false)
@@ -2697,6 +2699,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
             AppPreferences.SeparationMode.FAST
         }
         applySeparationMode(newMode)
+    }
+
+    /** 清除高质量分离错误信息 */
+    fun clearHqError() {
+        playerManager.clearHqError()
     }
 
     /** 设置分离模式（从设置页调用） */

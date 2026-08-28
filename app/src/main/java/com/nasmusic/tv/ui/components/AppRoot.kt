@@ -304,6 +304,7 @@ fun AppRoot(
                     val separationMode by viewModel.separationMode.collectAsState()
                     val separating by viewModel.separating.collectAsState()
                     val separationProgress by viewModel.separationProgress.collectAsState()
+                    val hqError by viewModel.hqError.collectAsState()
                     val modelDownloaded by viewModel.modelDownloaded.collectAsState()
                     val mvReady = mvState as? com.nasmusic.tv.ui.viewmodel.MvAvailability.Ready
                     if (showMv && mvReady != null) {
@@ -391,7 +392,9 @@ fun AppRoot(
                             isHighQualityMode = separationMode == com.nasmusic.tv.data.prefs.AppPreferences.SeparationMode.HIGH_QUALITY,
                             isSeparating = separating,
                             separationProgress = separationProgress,
+                            hqError = hqError,
                             onToggleSeparationMode = { viewModel.toggleSeparationMode() },
+                            onClearHqError = { viewModel.clearHqError() },
                             // 高质量分离模型是否已下载（未下载时 K 歌页禁用高质量切换）
                             modelDownloaded = modelDownloaded
                         )

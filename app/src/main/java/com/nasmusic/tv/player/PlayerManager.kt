@@ -59,6 +59,10 @@ class PlayerManager() {
     private val _separationProgress = MutableStateFlow(0f to "")
     val separationProgress: StateFlow<Pair<Float, String>> = _separationProgress
 
+    /** 高质量分离错误信息（非空表示最近一次失败，UI 应提示用户） */
+    private val _hqError = MutableStateFlow<String?>(null)
+    val hqError: StateFlow<String?> = _hqError
+
     /** 原始 MediaItem 的 URI，用于切换回原始音频 */
     private var originalMediaItemUri: String? = null
 
@@ -285,6 +289,7 @@ class PlayerManager() {
 
         if (separator == null || cache == null || songId == null) {
             AppLog.w(TAG, "enableHighQualityRemoval: missing separator/cache/songId, fallback to fast mode")
+            _hqError.value = "分离组件未就绪，已切换快速模式"
             vocalRemovalProcessor?.setEnabled(true)
             return false
         }
@@ -293,6 +298,7 @@ class PlayerManager() {
         val modelManager = modelDownloadManager
         if (modelManager != null && !modelManager.isModelDownloaded()) {
             AppLog.w(TAG, "enableHighQualityRemoval: model not downloaded, fallback to fast mode")
+            _hqError.value = "高质量模型未下载，已切换快速模式"
             vocalRemovalProcessor?.setEnabled(true)
             return false
         }
@@ -305,6 +311,7 @@ class PlayerManager() {
         } else {
             // 未缓存：保持原始音频播放，后台分离，完成后切换
             val song = _currentSong.value ?: return false
+            _hqError.value = null  // 清除上次错误
             _separating.value = true
             var tempInputPath: String? = null
             scope.launch {
@@ -315,6 +322,7 @@ class PlayerManager() {
                     }
                     if (inputPath == null) {
                         AppLog.w(TAG, "enableHighQualityRemoval: cannot resolve input path, fallback to fast mode")
+                        _hqError.value = "无法获取音频文件，已切换快速模式"
                         vocalRemovalProcessor?.setEnabled(true)
                         return@launch
                     }
@@ -326,6 +334,7 @@ class PlayerManager() {
                         val modelPath = modelManager?.getModelPath()
                         if (modelPath == null) {
                             AppLog.w(TAG, "enableHighQualityRemoval: model path unavailable, fallback to fast mode")
+                            _hqError.value = "模型路径不可用，已切换快速模式"
                             vocalRemovalProcessor?.setEnabled(true)
                             return@launch
                         }
@@ -333,6 +342,7 @@ class PlayerManager() {
                         val initOk = with(Dispatchers.IO) { separator.initialize(modelPath) }
                         if (!initOk) {
                             AppLog.w(TAG, "enableHighQualityRemoval: separator init failed, fallback to fast mode")
+                            _hqError.value = "模型初始化失败，已切换快速模式"
                             vocalRemovalProcessor?.setEnabled(true)
                             return@launch
                         }
@@ -352,14 +362,17 @@ class PlayerManager() {
                     }
                     if (result != null) {
                         // 分离完成，关闭快速模式 DSP + 切换到伴奏文件
+                        _hqError.value = null
                         vocalRemovalProcessor?.setEnabled(false)
                         switchToAccompaniment(result.accompanimentFile.absolutePath)
                     } else {
                         AppLog.w(TAG, "enableHighQualityRemoval: separation failed, fallback to fast mode")
+                        _hqError.value = "高质量分离失败，已切换快速模式"
                         vocalRemovalProcessor?.setEnabled(true)
                     }
                 } catch (e: Exception) {
                     AppLog.e(TAG, "enableHighQualityRemoval: exception", e)
+                    _hqError.value = "分离过程出错：${e.message?.take(30)}，已切换快速模式"
                     vocalRemovalProcessor?.setEnabled(true)
                 } finally {
                     _separating.value = false
@@ -419,9 +432,15 @@ class PlayerManager() {
      * 高质量模式下关闭人声消除：切换回原始文件 + 恢复 DSP 状态
      */
     fun disableHighQualityRemoval() {
+        _hqError.value = null
         switchToOriginal()
         // 如果快速模式 DSP 也处于开启状态（vocalRemovalEnabled=true），恢复它
         // （高质量模式切换伴奏文件时关闭了 DSP，切回原唱时需要恢复）
+    }
+
+    /** 清除高质量分离错误信息 */
+    fun clearHqError() {
+        _hqError.value = null
     }
 
     /**

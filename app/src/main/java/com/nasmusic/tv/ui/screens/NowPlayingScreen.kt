@@ -127,7 +127,11 @@ fun NowPlayingScreen(
     isHighQualityMode: Boolean = false,
     isSeparating: Boolean = false,
     separationProgress: Pair<Float, String> = 0f to "",
+    /** 高质量分离错误信息（非空时 UI 应显示错误提示） */
+    hqError: String? = null,
     onToggleSeparationMode: () -> Unit = {},
+    /** 清除高质量分离错误 */
+    onClearHqError: () -> Unit = {},
     /** 高质量分离模型是否已下载（未下载时禁用高质量切换） */
     modelDownloaded: Boolean = false,
     modifier: Modifier = Modifier
@@ -179,7 +183,9 @@ fun NowPlayingScreen(
             isHighQualityMode = isHighQualityMode,
             isSeparating = isSeparating,
             separationProgress = separationProgress,
+            hqError = hqError,
             onToggleSeparationMode = onToggleSeparationMode,
+            onClearHqError = onClearHqError,
             modelDownloaded = modelDownloaded,
             playPauseFocusRequester = playPauseFocusRequester,
             remoteControlUrl = remoteControlUrl

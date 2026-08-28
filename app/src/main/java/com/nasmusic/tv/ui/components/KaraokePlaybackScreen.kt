@@ -108,6 +108,10 @@ fun KaraokePlaybackScreen(
     isSeparating: Boolean = false,
     /** 高质量分离进度（0f~1f）与阶段描述 */
     separationProgress: Pair<Float, String> = 0f to "",
+    /** 高质量分离错误信息（非空时显示红色错误提示，3秒后自动消失） */
+    hqError: String? = null,
+    /** 清除高质量分离错误 */
+    onClearHqError: () -> Unit = {},
     /** 高质量分离模型是否已下载（未下载时禁用高质量切换） */
     modelDownloaded: Boolean = false,
     /** 切换分离模式回调（快速↔高质量） */
@@ -183,6 +187,31 @@ fun KaraokePlaybackScreen(
                         )
                     }
                 }
+            }
+        }
+
+        // ── 高质量分离错误提示（3 秒后自动消失）──
+        if (hqError != null && !isSeparating) {
+            val errorKey = hqError
+            LaunchedEffect(errorKey) {
+                delay(3000)
+                onClearHqError()
+            }
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .padding(top = 64.dp)
+                    .zIndex(10f)
+                    .background(Color(0xDD331111), RoundedCornerShape(12.dp))
+                    .padding(horizontal = 24.dp, vertical = 14.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = hqError,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = Color(0xFFFF8888)
+                )
             }
         }
 
