@@ -106,6 +106,8 @@ fun KaraokePlaybackScreen(
     isHighQualityMode: Boolean = false,
     /** 高质量分离是否正在进行 */
     isSeparating: Boolean = false,
+    /** 高质量分离进度（0f~1f）与阶段描述 */
+    separationProgress: Pair<Float, String> = 0f to "",
     /** 高质量分离模型是否已下载（未下载时禁用高质量切换） */
     modelDownloaded: Boolean = false,
     /** 切换分离模式回调（快速↔高质量） */
@@ -152,6 +154,36 @@ fun KaraokePlaybackScreen(
                     .background(Color(0xCC000000), RoundedCornerShape(8.dp))
                     .padding(4.dp)
             )
+        }
+
+        // ── 高质量分离中浮层提示 ──
+        if (isSeparating && isHighQualityMode) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .padding(top = 64.dp)
+                    .zIndex(10f)
+                    .background(Color(0xDD000000), RoundedCornerShape(12.dp))
+                    .padding(horizontal = 24.dp, vertical = 14.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        text = "正在转换伴奏…",
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = NasMusicColors.TextPrimary
+                    )
+                    if (separationProgress.first > 0f) {
+                        Spacer(Modifier.height(6.dp))
+                        Text(
+                            text = "${(separationProgress.first * 100).toInt()}% · ${separationProgress.second}",
+                            fontSize = 13.sp,
+                            color = NasMusicColors.TextSecondary
+                        )
+                    }
+                }
+            }
         }
 
         // ── 全屏封面背景 ──
@@ -345,16 +377,18 @@ fun KaraokePlaybackScreen(
 
                 // ── 分离模式切换（快速/高质量）──
                 KaraokeSettingButton(
-                    label = "质",
+                    label = "质量",
                     value = when {
                         !modelDownloaded -> "🔒"
+                        isSeparating -> "转换中"
                         isHighQualityMode -> "高质"
                         else -> "快速"
                     },
                     isModified = isHighQualityMode,
                     onClick = {
                         activateControls()
-                        // 模型未下载时禁止切换到高质量，点击无操作（或提示）
+                        // 模型未下载或正在转换中时禁止切换
+                        if (isSeparating) return@KaraokeSettingButton
                         if (modelDownloaded || isHighQualityMode) {
                             onToggleSeparationMode()
                         }
@@ -468,7 +502,7 @@ private fun KaraokeSettingButton(
 ) {
     FocusableSurface(
         onClick = onClick,
-        modifier = Modifier.size(width = 72.dp, height = 56.dp),
+        modifier = Modifier.size(width = 84.dp, height = 56.dp),
         shape = RoundedCornerShape(12.dp),
         focusedScale = 1.08f,
         animationDurationMs = 200,

@@ -126,6 +126,7 @@ fun NowPlayingScreen(
     // === 分离模式（快速/高质量） ===
     isHighQualityMode: Boolean = false,
     isSeparating: Boolean = false,
+    separationProgress: Pair<Float, String> = 0f to "",
     onToggleSeparationMode: () -> Unit = {},
     /** 高质量分离模型是否已下载（未下载时禁用高质量切换） */
     modelDownloaded: Boolean = false,
@@ -177,6 +178,7 @@ fun NowPlayingScreen(
             onResetSpeed = onResetSpeed,
             isHighQualityMode = isHighQualityMode,
             isSeparating = isSeparating,
+            separationProgress = separationProgress,
             onToggleSeparationMode = onToggleSeparationMode,
             modelDownloaded = modelDownloaded,
             playPauseFocusRequester = playPauseFocusRequester,

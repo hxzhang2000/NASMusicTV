@@ -45,6 +45,10 @@ class PlayerManager() {
     private val _separating = MutableStateFlow(false)
     val separating: StateFlow<Boolean> = _separating
 
+    /** 高质量分离进度（0f~1f）与阶段描述 */
+    private val _separationProgress = MutableStateFlow(0f to "")
+    val separationProgress: StateFlow<Pair<Float, String>> = _separationProgress
+
     /** 原始 MediaItem 的 URI，用于切换回原始音频 */
     private var originalMediaItemUri: String? = null
 
@@ -168,7 +172,7 @@ class PlayerManager() {
      * 1. 检查模型是否已下载
      * 2. 检查伴奏文件是否已缓存
      * 3. 若已缓存：直接切换 MediaItem 为伴奏文件
-     * 4. 若未缓存：启动 HT-Demucs FT 分离 → 完成后切换
+     * 4. 若未缓存：保持原始音频播放 + 后台分离 → 完成后切换到伴奏
      */
     fun enableHighQualityRemoval(): Boolean {
         val separator = demucsSeparator
@@ -210,7 +214,7 @@ class PlayerManager() {
             // 已缓存：直接切换到伴奏文件
             switchToAccompaniment(accompanimentFile.absolutePath)
         } else {
-            // 未缓存：后台分离
+            // 未缓存：保持原始音频播放，后台分离，完成后切换
             val inputPath = _currentSong.value?.path
             if (inputPath == null) {
                 AppLog.w(TAG, "enableHighQualityRemoval: no filePath, fallback to fast mode")
@@ -226,10 +230,14 @@ class PlayerManager() {
                         separator.separate(
                             inputPath = inputPath,
                             outputDir = outputDir,
-                            songId = songId
+                            songId = songId,
+                            progress = DemucsSeparator.ProgressCallback { p, stage ->
+                                _separationProgress.value = p to stage
+                            }
                         )
                     }
                     if (result != null) {
+                        // 分离完成，切换到伴奏文件
                         switchToAccompaniment(result.accompanimentFile.absolutePath)
                     } else {
                         AppLog.w(TAG, "enableHighQualityRemoval: separation failed, fallback to fast mode")
@@ -240,6 +248,7 @@ class PlayerManager() {
                     vocalRemovalProcessor?.setEnabled(true)
                 } finally {
                     _separating.value = false
+                    _separationProgress.value = 0f to ""
                 }
             }
         }

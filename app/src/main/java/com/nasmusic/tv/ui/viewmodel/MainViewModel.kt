@@ -2586,9 +2586,34 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
 
     fun toggleVocalRemoval() {
         val newValue = !_vocalRemovalEnabled.value
+
+        if (newValue) {
+            // 开启人声消除（伴唱模式）
+            if (playerManager.isHighQualityMode()) {
+                // 正在转换中，不允许重复触发
+                if (playerManager.separating.value) {
+                    AppLog.w("NASMusic", "toggleVocalRemoval: separating in progress, ignored")
+                    return
+                }
+                // 高质量模式：使用 HT-Demucs 伴奏文件切换，不走 SpectralMaskProcessor
+                playerManager.enableHighQualityRemoval()
+            } else {
+                // 快速模式：实时 DSP 处理
+                playerManager.setVocalRemovalEnabled(true)
+            }
+        } else {
+            // 关闭人声消除（原唱模式）
+            if (playerManager.isHighQualityMode()) {
+                // 高质量模式：切换回原始音频文件
+                playerManager.disableHighQualityRemoval()
+            } else {
+                // 快速模式：关闭实时 DSP
+                playerManager.setVocalRemovalEnabled(false)
+            }
+        }
+
         _vocalRemovalEnabled.value = newValue
-        playerManager.setVocalRemovalEnabled(newValue)
-        AppLog.d("NASMusic", "toggleVocalRemoval -> $newValue")
+        AppLog.d("NASMusic", "toggleVocalRemoval -> $newValue (hq=${playerManager.isHighQualityMode()})")
     }
 
     // --- 分离模式（快速/高质量）---
@@ -2596,6 +2621,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
     val separationMode: StateFlow<AppPreferences.SeparationMode> = playerManager.separationMode
     /** 高质量分离是否正在进行（委托 PlayerManager 状态） */
     val separating: StateFlow<Boolean> = playerManager.separating
+    /** 高质量分离进度与阶段描述（委托 PlayerManager 状态） */
+    val separationProgress: StateFlow<Pair<Float, String>> = playerManager.separationProgress
 
     // --- 高质量分离模型下载状态 ---
     private val _modelDownloaded = MutableStateFlow(false)
