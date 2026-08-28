@@ -185,6 +185,9 @@ class PlayerManager() {
     /** 上次下载失败的具体原因（resolveInputPath 失败时设置） */
     private var lastDownloadError: String? = null
 
+    /** HQ 分离开始时间（用于计算耗时） */
+    private var separationStartTimeMs: Long = 0
+
     /**
      * 解析歌曲的本地输入路径，供 DemucsSeparator 使用。
      *
@@ -344,6 +347,7 @@ class PlayerManager() {
             val wasPlayingBeforeSeparation = player?.isPlaying == true
             player?.pause()
             _separating.value = true
+            separationStartTimeMs = System.currentTimeMillis()
             var tempInputPath: String? = null
             scope.launch {
                 try {
@@ -390,19 +394,24 @@ class PlayerManager() {
                             outputDir = outputDir,
                             songId = songId,
                             progress = DemucsSeparator.ProgressCallback { p, stage ->
-                                _separationProgress.value = p to stage
+                                val elapsedSec = (System.currentTimeMillis() - separationStartTimeMs) / 1000.0
+                                _separationProgress.value = p to "$stage [${String.format("%.1f", elapsedSec)}s]"
                             }
                         )
                     }
                     if (result != null) {
                         // 分离完成，关闭快速模式 DSP + 切换到伴奏文件 + 恢复播放
+                        val totalSec = (System.currentTimeMillis() - separationStartTimeMs) / 1000.0
+                        AppLog.d(TAG, "enableHighQualityRemoval: completed in ${String.format("%.1f", totalSec)}s")
+                        _separationProgress.value = 1f to "完成 [${String.format("%.1f", totalSec)}s]"
                         _hqError.value = null
                         vocalRemovalProcessor?.setEnabled(false)
                         switchToAccompaniment(result.accompanimentFile.absolutePath)
                         if (wasPlayingBeforeSeparation) player?.play()
                     } else {
-                        AppLog.w(TAG, "enableHighQualityRemoval: separation failed, fallback to fast mode")
-                        _hqError.value = "${separator.lastError ?: "高质量分离失败"}，已切换快速模式"
+                        val totalSec = (System.currentTimeMillis() - separationStartTimeMs) / 1000.0
+                        AppLog.w(TAG, "enableHighQualityRemoval: separation failed in ${String.format("%.1f", totalSec)}s, fallback to fast mode")
+                        _hqError.value = "${separator.lastError ?: "高质量分离失败"}(${String.format("%.1f", totalSec)}s)，已切换快速模式"
                         vocalRemovalProcessor?.setEnabled(true)
                         if (wasPlayingBeforeSeparation) player?.play()
                     }
