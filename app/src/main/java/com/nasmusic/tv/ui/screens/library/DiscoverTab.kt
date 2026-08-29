@@ -29,7 +29,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -266,10 +265,7 @@ private fun DimensionRow(
                     containerColor = bgColor,
                     focusedContainerColor = NasMusicColors.Primary,
                     contentColor = textColor,
-                    focusedContentColor = Color(0xFF0C1222),
-                    modifier = Modifier.onFocusChanged { focusState ->
-                        if (focusState.isFocused) onSelected(option)
-                    }
+                    focusedContentColor = Color(0xFF0C1222)
                 ) {
                     Text(
                         text = option,
