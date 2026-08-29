@@ -409,18 +409,24 @@ fun SettingsScreen(
                                         fontSize = FontSize.small()
                                     )
                                     Spacer(modifier = Modifier.height(8.dp))
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        SettingActionButton(
-                                            label = "删除模型",
-                                            description = "删除后高质量模式不可用",
-                                            onClick = { onDeleteModel?.invoke() }
-                                        )
-                                        Spacer(modifier = Modifier.width(12.dp))
-                                        SettingActionButton(
-                                            label = "扫码上传模型",
-                                            description = "手机扫码上传模型文件到电视",
-                                            onClick = { onScanTransferModel?.invoke() }
-                                        )
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                    ) {
+                                        Box(modifier = Modifier.weight(1f)) {
+                                            SettingActionButton(
+                                                label = "删除模型",
+                                                description = "删除后高质量模式不可用",
+                                                onClick = { onDeleteModel?.invoke() }
+                                            )
+                                        }
+                                        Box(modifier = Modifier.weight(1f)) {
+                                            SettingActionButton(
+                                                label = "扫码上传模型",
+                                                description = "手机扫码上传模型文件到电视",
+                                                onClick = { onScanTransferModel?.invoke() }
+                                            )
+                                        }
                                     }
                                 }
                             } else {
@@ -437,18 +443,24 @@ fun SettingsScreen(
                                         fontSize = FontSize.small()
                                     )
                                     Spacer(modifier = Modifier.height(8.dp))
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        SettingActionButton(
-                                            label = "下载高质量模型",
-                                            description = "从 HuggingFace 下载 HT-Demucs FT 人声分离模型（约166MB）",
-                                            onClick = { onDownloadModel?.invoke() }
-                                        )
-                                        Spacer(modifier = Modifier.width(12.dp))
-                                        SettingActionButton(
-                                            label = "扫码上传模型",
-                                            description = "手机扫码上传模型文件到电视",
-                                            onClick = { onScanTransferModel?.invoke() }
-                                        )
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                    ) {
+                                        Box(modifier = Modifier.weight(1f)) {
+                                            SettingActionButton(
+                                                label = "下载高质量模型",
+                                                description = "从 HuggingFace 下载 HT-Demucs FT 人声分离模型（约166MB）",
+                                                onClick = { onDownloadModel?.invoke() }
+                                            )
+                                        }
+                                        Box(modifier = Modifier.weight(1f)) {
+                                            SettingActionButton(
+                                                label = "扫码上传模型",
+                                                description = "手机扫码上传模型文件到电视",
+                                                onClick = { onScanTransferModel?.invoke() }
+                                            )
+                                        }
                                     }
                                 }
                             }

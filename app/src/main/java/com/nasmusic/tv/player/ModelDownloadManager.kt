@@ -44,7 +44,8 @@ class ModelDownloadManager(private val context: Context) {
      * 获取模型目录
      */
     private fun getModelsDir(): File {
-        val dir = File(context.getExternalFilesDir(null), "models")
+        val baseDir = context.getExternalFilesDir(null) ?: context.filesDir
+        val dir = File(baseDir, "models")
         if (!dir.exists()) {
             dir.mkdirs()
         }

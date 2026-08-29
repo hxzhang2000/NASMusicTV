@@ -7,6 +7,21 @@
 >
 > 类型：`Added`（新增） | `Changed`（变更） | `Fixed`（修复） | `Removed`（移除）
 
+## [v2.24.1] - 2026-08-29
+
+### Fixed
+
+- **模型扫码上传失败（HTTP 400/500）**：`ModelTransferServer` 重写上传处理，绕过 NanoHTTPD `parseBody()` 对 166MB 大文件的限制，改用流式 multipart 解析直接从 InputStream 读取 boundary，边读边写文件避免 OOM
+- **上传后 `FileNotFoundException: models/htdemucs_ft_vocals.onnx`**：电视 `getExternalFilesDir(null)` 返回 null 时回退到 `context.filesDir`，避免 `File(null, "models")` 变成相对路径；`ModelDownloadManager.getModelsDir()` 同步修复，保证上传路径与下载路径一致
+- **上传速度极慢**：`streamToFile` 改用 KMP 思路 + `ByteArrayOutputStream` 批量写入，复杂度从 O(n×bLen) 降至 O(n)；`BufferedInputStream` 缓冲区从 8KB 增至 256KB，读取缓冲从 64KB 增至 128KB
+- **上传错误信息不透明**：前端 JS 在非 200 响应时解析 JSON 显示后端返回的具体 `message`，而非仅显示 "HTTP 500"
+- **设置页"扫码上传模型"按钮不显示**：模型下载区按钮从 `Row + fillMaxWidth` 改为 `Box(weight(1f))` 分两列并排，修复按钮在 Row 内互相挤压导致不渲染的问题
+
+### Changed
+
+- **`ModelTransferServer` 路径管理统一**：新增 `getModelFile(context)` 静态工厂方法与 `create(context, onModelUploaded)` 工厂构造，`ModelTransferDialog` 不再自行构造 `modelFile`，避免路径不一致
+- **`ModelTransferServer` API 重命名**：`start()`/`stop()` → `startServer()`/`stopServer()`，避免遮蔽 `NanoHTTPD` 父类方法需要 `override` 修饰符
+
 ## [v2.24.0] - 2026-08-29
 
 ### Added

@@ -67,23 +67,23 @@ fun ModelTransferDialog(
     var qrBitmap by remember { mutableStateOf<Bitmap?>(null) }
     var serverUrl by remember { mutableStateOf<String?>(null) }
     var status by remember { mutableStateOf("启动中...") }
-    val server = remember { ModelTransferServer(context, onModelUploaded = onModelUploaded) }
+    val server = remember { ModelTransferServer.create(context, onModelUploaded) }
     val closeFocusRequester = remember { FocusRequester() }
 
     // 启动/停止服务器
     DisposableEffect(Unit) {
         val ip = NetworkUtils.getLocalIpAddress()
         if (ip != null) {
-            val url = "http://$ip:${ModelTransferServer.DEFAULT_PORT}/"
+            val url = "http://$ip:18082/"
             serverUrl = url
             qrBitmap = QrCodeGenerator.generateQrBitmap(url, 360)
-            val started = server.start()
+            val started = server.startServer()
             status = if (started) "等待手机扫码连接" else "服务器启动失败（端口被占）"
         } else {
             status = "无法获取网络 IP，请检查 Wi-Fi 连接"
         }
         onDispose {
-            server.stop()
+            server.stopServer()
         }
     }
 

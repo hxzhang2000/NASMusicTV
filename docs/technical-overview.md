@@ -5869,3 +5869,43 @@ Phase 1-6 代码已全部落地并编译通过。Phase 7（测试与文档）新
 **涉及文件**：CommonComponents/SearchSubTab/BrowseSubTab/NetworkPlaylistDetailScreen/NetdiskScreen/WeatherSubTab/NetworkSubTabViews/LibraryScreen/MineScreen（新增/修改）；MainActivity/PlayerControls/AppRoot/NowPlayingScreen/SongInfoPanel/TextInputDialog/BackupTransferDialog/BaiduAuthDialog + 8 个按钮亮色文件
 
 **版本号变更**：v2.21.0 → v2.22.0（versionCode 59 → 60）
+
+---
+
+### 10.61 v2.24.1 - 模型扫码上传修复（流式解析 + 路径 fallback）
+
+**提交时间**：2026-08-29
+
+**背景**：v2.24.0 新增的"扫码上传模型"功能在实际使用中失败——上传到 100% 后报 HTTP 400，改进错误信息后报 HTTP 500（`FileNotFoundException: models/htdemucs_ft_vocals.onnx`），且上传速度极慢。
+
+**根因分析**：
+
+1. **HTTP 400（未找到上传文件）**：NanoHTTPD `parseBody()` 将文件存到 `files` map 时，key 取决于表单 field name。前端 JS 用 `formData.append('file', ...)`，field name 是 `'file'`，但后端检查的是 `files["content"]` / `files["uploadedfile"]`——key 不匹配。
+2. **HTTP 500（`FileNotFoundException`）**：电视 `context.getExternalFilesDir(null)` 返回 null（部分电视外存未挂载），`File(null, "models")` 变成相对路径 `models`，`FileOutputStream` 写到 app 工作目录而非预期位置；且 `ModelDownloadManager` 与 `ModelTransferServer` 两处各自构造路径，可能不一致。
+3. **上传极慢**：`streamToFile` 滑动窗口算法每字节都调用 `output.write(int)`（系统调用）+ `System.arraycopy` 移动 ~50 字节 + `window.contentEquals` 全量比较，复杂度 O(n×bLen)，166MB 文件需要数十亿次操作。
+
+**主要改动**：
+
+1. **流式 multipart 解析**（`ModelTransferServer.kt`）
+   - 绕过 NanoHTTPD `parseBody()` 对大文件的限制
+   - `handleUpload` 从 `Content-Type` 提取 boundary，直接读 `session.inputStream`
+   - `skipToBoundary` 跳过 preamble，`readPartHeaders` 读 part 头，`streamToFile` 流式写文件
+2. **KMP + 批量写入优化**（`streamToFile`）
+   - 改用 `matched` 计数器 + `pending` 缓冲，每字节只 1 次字节比较
+   - `ByteArrayOutputStream` 累积写入，每 64KB flush 一次，减少 `FileOutputStream.write(int)` 系统调用
+   - `BufferedInputStream` 缓冲从 8KB 增至 256KB，读取缓冲从 64KB 增至 128KB
+3. **路径 fallback**（`ModelTransferServer.getModelFile` / `ModelDownloadManager.getModelsDir`）
+   - `context.getExternalFilesDir(null) ?: context.filesDir` 回退到内部存储
+   - 新增 `ModelTransferServer.getModelFile(context)` 静态方法 + `create(context, onModelUploaded)` 工厂构造
+   - `ModelTransferDialog` 不再自行构造 `modelFile`，改用工厂方法，保证上传路径与下载路径一致
+4. **前端错误信息透明化**（`MODEL_PAGE_HTML` JS）
+   - 非 200 响应时解析 JSON 显示后端返回的 `message`，而非仅显示 "HTTP 500"
+5. **设置页按钮布局修复**（`SettingsScreen.kt`）
+   - 模型下载区按钮从 `Row + fillMaxWidth` 改为 `Box(weight(1f))` 分两列并排，修复按钮在 Row 内互相挤压不渲染的问题
+6. **API 重命名**：`start()`/`stop()` → `startServer()`/`stopServer()`，避免遮蔽 `NanoHTTPD` 父类方法
+
+**涉及文件**：`ModelTransferServer.kt`（重写）、`ModelDownloadManager.kt`、`ModelTransferDialog.kt`、`SettingsScreen.kt`、`app/build.gradle.kts`、`CHANGELOG.md`、`docs/technical-overview.md`
+
+**验证结果**：✅ TV 实测上传 166MB 模型文件成功，速度接近 Wi-Fi 带宽。
+
+**版本号变更**：v2.24.0 → v2.24.1（versionCode 64 → 65）

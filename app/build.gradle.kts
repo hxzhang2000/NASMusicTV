@@ -31,8 +31,8 @@ android {
         applicationId = "com.nasmusic.tv"
         minSdk = 22
         targetSdk = 34
-versionCode = 64
-    versionName = "2.24.0"
+    versionCode = 65
+    versionName = "2.24.1"
 
         ndk {
             abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64")

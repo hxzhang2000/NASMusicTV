@@ -3,6 +3,7 @@ package com.nasmusic.tv.net
 import android.content.Context
 import com.nasmusic.tv.util.AppLog
 import fi.iki.elonen.NanoHTTPD
+import java.io.BufferedInputStream
 import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
@@ -15,172 +16,267 @@ import java.io.IOException
  *
  * 端点：
  * - GET  /         → 上传页面 HTML
- * - POST /api/upload → 接收模型文件（multipart/form-data）
+ * - POST /api/upload → 接收模型文件（multipart/form-data，流式解析避免大文件 OOM）
  * - GET  /api/status → 返回模型文件状态（JSON）
  */
 class ModelTransferServer(
     private val context: Context,
-    private val port: Int = DEFAULT_PORT,
-    private val onModelUploaded: () -> Unit = {}
-) {
+    private val modelFile: File,
+    private val onModelUploaded: () -> Unit
+) : NanoHTTPD(18082) {
 
     companion object {
-        const val DEFAULT_PORT = 18082
         private const val TAG = "ModelTransferServer"
+        private const val MIN_SIZE_BYTES = 50L * 1024 * 1024 // 50MB 最低阈值
         private const val MODEL_FILENAME = "htdemucs_ft_vocals.onnx"
-        private const val EXPECTED_SIZE_BYTES = 166_000_000L
+
+        /**
+         * 获取模型文件路径，与 ModelDownloadManager 保持一致。
+         * 优先用外部存储；若不可用则回退到内部存储。
+         */
+        fun getModelFile(context: Context): File {
+            val baseDir = context.getExternalFilesDir(null) ?: context.filesDir
+            val modelsDir = File(baseDir, "models").apply { if (!exists()) mkdirs() }
+            return File(modelsDir, MODEL_FILENAME)
+        }
+
+        fun create(context: Context, onModelUploaded: () -> Unit): ModelTransferServer {
+            return ModelTransferServer(context, getModelFile(context), onModelUploaded)
+        }
     }
 
-    private var server: Impl? = null
-
-    fun start(): Boolean {
-        if (server != null) return true
-        val impl = Impl(context, onModelUploaded, port)
+    fun startServer(): Boolean {
         return try {
-            impl.start(NanoHTTPD.SOCKET_READ_TIMEOUT, false)
-            server = impl
-            AppLog.i(TAG, "Started on port $port")
+            start(SOCKET_READ_TIMEOUT, false)
+            AppLog.i(TAG, "Started on port 18082")
             true
         } catch (e: IOException) {
-            AppLog.e(TAG, "Failed to start on port $port", e)
+            AppLog.e(TAG, "Failed to start on port 18082", e)
             false
         }
     }
 
-    fun stop() {
-        server?.let {
-            try {
-                it.stop()
-                AppLog.i(TAG, "Stopped")
-            } catch (e: Exception) {
-                AppLog.w(TAG, "Error stopping", e)
-            }
+    fun stopServer() {
+        try {
+            stop()
+            AppLog.i(TAG, "Stopped")
+        } catch (e: Exception) {
+            AppLog.w(TAG, "Error stopping", e)
         }
-        server = null
     }
 
-    /** 获取模型目录 */
-    private fun getModelsDir(): File {
-        val dir = File(context.getExternalFilesDir(null), "models")
-        if (!dir.exists()) dir.mkdirs()
-        return dir
+    override fun serve(session: IHTTPSession): Response {
+        val uri = session.uri
+        val method = session.method
+
+        return when {
+            uri == "/" && method == Method.GET -> servePage()
+            uri == "/api/upload" && method == Method.POST -> handleUpload(session)
+            uri == "/api/status" && method == Method.GET -> handleStatus()
+            else -> newFixedLengthResponse(Response.Status.NOT_FOUND, MIME_PLAINTEXT, "Not Found")
+        }
     }
 
-    // ---- NanoHTTPD 实现 ----
+    private fun servePage(): Response {
+        val exists = modelFile.exists()
+        val sizeMB = if (exists) "%.1f".format(modelFile.length() / (1024.0 * 1024.0)) else "0"
+        val page = MODEL_PAGE_HTML
+            .replace("{{MODEL_EXISTS}}", exists.toString())
+            .replace("{{MODEL_SIZE}}", sizeMB)
+            .replace("{{MODEL_PATH}}", modelFile.absolutePath)
+        return newFixedLengthResponse(Response.Status.OK, "text/html; charset=UTF-8", page)
+    }
 
-    private class Impl(
-        private val context: Context,
-        private val onModelUploaded: () -> Unit,
-        port: Int
-    ) : NanoHTTPD(port) {
+    private fun handleStatus(): Response {
+        val exists = modelFile.exists()
+        val json = """{"exists":$exists,"size":${modelFile.length()},"path":"${modelFile.absolutePath}"}"""
+        return newFixedLengthResponse(Response.Status.OK, "application/json; charset=UTF-8", json)
+    }
 
-        private val modelsDir: File by lazy {
-            File(context.getExternalFilesDir(null), "models").also { if (!it.exists()) it.mkdirs() }
+    /**
+     * 流式解析 multipart/form-data，绕过 NanoHTTPD parseBody() 的大文件限制。
+     * 直接从 InputStream 读取 boundary，将文件内容流式写入目标文件。
+     */
+    private fun handleUpload(session: IHTTPSession): Response {
+        // 1. 从 Content-Type 提取 boundary
+        val contentType = session.headers["content-type"] ?: ""
+        AppLog.d(TAG, "handleUpload: content-type=$contentType, headers=${session.headers.keys}")
+        val boundaryMatch = Regex("boundary=([^;]+)").find(contentType)
+        if (boundaryMatch == null) {
+            return newFixedLengthResponse(
+                Response.Status.BAD_REQUEST,
+                "application/json; charset=UTF-8",
+                """{"ok":false,"message":"缺少 multipart boundary，content-type=$contentType"}"""
+            )
         }
-        private val modelFile: File get() = File(modelsDir, MODEL_FILENAME)
+        val boundaryStr = boundaryMatch.groupValues[1].trim().trim('"')
+        // body 格式：--boundary\r\n<headers>\r\n\r\n<file content>\r\n--boundary--
+        // 用 "\r\n--boundary" 作为文件结束标记（boundary 前缀的 \r\n 不属于文件内容）
+        val endMarker = "\r\n--$boundaryStr".toByteArray()
+        val firstBoundary = "--$boundaryStr\r\n".toByteArray()
+        AppLog.d(TAG, "handleUpload: boundary=$boundaryStr, endMarker size=${endMarker.size}, firstBoundary size=${firstBoundary.size}")
 
-        override fun serve(session: IHTTPSession): Response {
-            return when {
-                session.uri == "/" && session.method == Method.GET -> servePage()
-                session.uri == "/api/upload" && session.method == Method.POST -> handleUpload(session)
-                session.uri == "/api/status" && session.method == Method.GET -> handleStatus()
-                else -> newFixedLengthResponse(Response.Status.NOT_FOUND, MIME_PLAINTEXT, "Not Found")
-            }
-        }
+        // 2. 流式解析
+        val target = modelFile
+        target.parentFile?.mkdirs()
+        if (target.exists()) target.delete()
 
-        private fun servePage(): Response {
-            val exists = modelFile.exists()
-            val sizeMB = if (exists) "%.1f".format(modelFile.length() / (1024.0 * 1024.0)) else "0"
-            val page = MODEL_PAGE_HTML
-                .replace("{{MODEL_EXISTS}}", exists.toString())
-                .replace("{{MODEL_SIZE}}", sizeMB)
-                .replace("{{MODEL_PATH}}", modelFile.absolutePath)
-            return newFixedLengthResponse(Response.Status.OK, "text/html; charset=UTF-8", page)
-        }
+        try {
+            val inputStream = BufferedInputStream(session.inputStream, 256 * 1024)
 
-        private fun handleStatus(): Response {
-            val exists = modelFile.exists()
-            val json = """{"exists":$exists,"size":${modelFile.length()},"path":"${modelFile.absolutePath}"}"""
-            return newFixedLengthResponse(Response.Status.OK, "application/json; charset=UTF-8", json)
-        }
+            // 跳过第一个 boundary 之前的 preamble
+            skipToBoundary(inputStream, firstBoundary)
+            AppLog.d(TAG, "handleUpload: first boundary skipped")
 
-        private fun handleUpload(session: IHTTPSession): Response {
-            return try {
-                // 解析 multipart/form-data
-                val files = HashMap<String, String>()
-                session.parseBody(files)
+            // 读取 part headers 直到空行
+            val partHeaders = readPartHeaders(inputStream)
+            AppLog.d(TAG, "handleUpload: part headers = $partHeaders")
 
-                // NanoHTTPD 会将文件存为临时文件，key 为 "content" 或 "uploadedfile"
-                val tmpFilePath = files["content"] ?: files["uploadedfile"]
-                if (tmpFilePath == null) {
-                    return newFixedLengthResponse(
-                        Response.Status.BAD_REQUEST,
-                        "application/json; charset=UTF-8",
-                        """{"ok":false,"message":"未找到上传文件"}"""
-                    )
-                }
+            // 3. 流式写入文件直到遇到 endMarker
+            val fileSize = streamToFile(inputStream, target, endMarker)
+            AppLog.d(TAG, "handleUpload: file written, size=${fileSize / (1024 * 1024)}MB, target.exists=${target.exists()}, target.size=${target.length()}")
 
-                val tmpFile = File(tmpFilePath)
-                if (!tmpFile.exists()) {
-                    return newFixedLengthResponse(
-                        Response.Status.BAD_REQUEST,
-                        "application/json; charset=UTF-8",
-                        """{"ok":false,"message":"临时文件不存在"}"""
-                    )
-                }
-
-                // 检查文件大小（允许 20% 误差）
-                val fileSize = tmpFile.length()
-                if (fileSize < EXPECTED_SIZE_BYTES * 0.8) {
-                    tmpFile.delete()
-                    return newFixedLengthResponse(
-                        Response.Status.BAD_REQUEST,
-                        "application/json; charset=UTF-8",
-                        """{"ok":false,"message":"文件大小异常（${fileSize / (1024 * 1024)}MB，预期约166MB），请确认上传的是正确的模型文件"}"""
-                    )
-                }
-
-                // 原子重命名到目标路径
-                val target = modelFile
-                if (target.exists()) target.delete()
-                val renamed = tmpFile.renameTo(target)
-
-                if (renamed) {
-                    AppLog.i(TAG, "Upload saved: ${target.absolutePath} (${fileSize / (1024 * 1024)}MB)")
-                    onModelUploaded.invoke()
-                    newFixedLengthResponse(
-                        Response.Status.OK,
-                        "application/json; charset=UTF-8",
-                        """{"ok":true,"message":"模型上传成功！文件已保存到 ${target.absolutePath}（${fileSize / (1024 * 1024)}MB）"}"""
-                    )
-                } else {
-                    // 重命名失败，尝试复制
-                    tmpFile.copyTo(target, overwrite = true)
-                    tmpFile.delete()
-                    if (target.exists() && target.length() == fileSize) {
-                        AppLog.i(TAG, "Upload copied: ${target.absolutePath} (${fileSize / (1024 * 1024)}MB)")
-                        onModelUploaded.invoke()
-                        newFixedLengthResponse(
-                            Response.Status.OK,
-                            "application/json; charset=UTF-8",
-                            """{"ok":true,"message":"模型上传成功！文件已保存到 ${target.absolutePath}（${fileSize / (1024 * 1024)}MB）"}"""
-                        )
-                    } else {
-                        newFixedLengthResponse(
-                            Response.Status.INTERNAL_ERROR,
-                            "application/json; charset=UTF-8",
-                            """{"ok":false,"message":"文件保存失败"}"""
-                        )
-                    }
-                }
-            } catch (e: Exception) {
-                AppLog.e(TAG, "handleUpload failed", e)
-                newFixedLengthResponse(
-                    Response.Status.INTERNAL_ERROR,
+            if (fileSize < MIN_SIZE_BYTES) {
+                target.delete()
+                return newFixedLengthResponse(
+                    Response.Status.BAD_REQUEST,
                     "application/json; charset=UTF-8",
-                    """{"ok":false,"message":"上传失败：${e.message?.take(60) ?: "未知错误"}"}"""
+                    """{"ok":false,"message":"文件太小（${fileSize / (1024 * 1024)}MB，预期约166MB），请确认上传的是 htdemucs_ft_vocals_fp16weights.onnx"}"""
                 )
             }
+
+            AppLog.i(TAG, "Upload saved: ${target.absolutePath} (${fileSize / (1024 * 1024)}MB)")
+            onModelUploaded.invoke()
+            return newFixedLengthResponse(
+                Response.Status.OK,
+                "application/json; charset=UTF-8",
+                """{"ok":true,"message":"模型上传成功！文件已保存（${fileSize / (1024 * 1024)}MB）"}"""
+            )
+        } catch (e: Exception) {
+            AppLog.e(TAG, "handleUpload failed", e)
+            target.delete()
+            return newFixedLengthResponse(
+                Response.Status.INTERNAL_ERROR,
+                "application/json; charset=UTF-8",
+                """{"ok":false,"message":"上传失败：${e.javaClass.simpleName}: ${e.message?.take(200) ?: "未知错误"}"}"""
+            )
+        }
+    }
+
+    /** 跳过输入流直到遇到 boundary 标记（boundary 本身被消费掉） */
+    private fun skipToBoundary(input: BufferedInputStream, boundary: ByteArray) {
+        var matched = 0
+        while (true) {
+            val b = input.read()
+            if (b == -1) {
+                AppLog.w(TAG, "skipToBoundary: EOF before boundary, matched=$matched/${boundary.size}")
+                break
+            }
+            if (b == boundary[matched].toInt()) {
+                matched++
+                if (matched == boundary.size) return
+            } else {
+                matched = 0
+            }
+        }
+    }
+
+    /** 读取 part headers 直到空行（CRLF CRLF 中的最后一个空行），返回 header 内容 */
+    private fun readPartHeaders(input: BufferedInputStream): String {
+        val sb = StringBuilder()
+        while (true) {
+            val line = readLine(input) ?: break
+            if (line.isEmpty()) break
+            sb.appendLine(line)
+        }
+        return sb.toString()
+    }
+
+    /** 读一行（\r\n 分隔） */
+    private fun readLine(input: BufferedInputStream): String? {
+        val sb = StringBuilder()
+        var prev = -1
+        while (true) {
+            val b = input.read()
+            if (b == -1) return if (sb.isNotEmpty()) sb.toString() else null
+            if (b == '\r'.code) {
+                val next = input.read()
+                if (next == '\n'.code) return sb.toString()
+                sb.append(b.toChar())
+                if (next != -1) sb.append(next.toChar())
+            } else {
+                sb.append(b.toChar())
+            }
+        }
+    }
+
+    /**
+     * 流式将数据写入文件，直到遇到 boundary 标记。
+     *
+     * 算法：KMP 思路 + 批量写入。
+     * 维护 matched（已匹配字节数）和 pending 缓冲（可能匹配 boundary 的字节）。
+     * - 匹配中：字节存到 pending，不写文件
+     * - 匹配失败：pending 批量 flush 到文件
+     * - 完全匹配：返回（pending 即 boundary，不写入）
+     *
+     * 时间复杂度 O(n)，每字节只 1 次比较；写入用批量 write(buf, off, len) 减少系统调用。
+     */
+    private fun streamToFile(input: BufferedInputStream, target: File, boundary: ByteArray): Long {
+        FileOutputStream(target).use { output ->
+            val bLen = boundary.size
+            var totalWritten = 0L
+            var totalRead = 0L
+            var matched = 0
+            val pending = ByteArray(bLen)
+            var pendingLen = 0
+            // 批量写入缓冲，减少 FileOutputStream.write(int) 系统调用
+            val writeBuf = java.io.ByteArrayOutputStream(128 * 1024)
+            val buf = ByteArray(128 * 1024)
+
+            while (true) {
+                val n = input.read(buf)
+                if (n == -1) {
+                    AppLog.w(TAG, "streamToFile: EOF, totalRead=$totalRead, written=$totalWritten, matched=$matched, no boundary")
+                    break
+                }
+                totalRead += n
+
+                for (i in 0 until n) {
+                    val b = buf[i]
+                    if (b == boundary[matched]) {
+                        // 继续匹配，存到 pending
+                        pending[pendingLen++] = b
+                        matched++
+                        if (matched == bLen) {
+                            // 完全匹配 boundary！pending 全是 boundary，不写入
+                            writeBuf.writeTo(output)
+                            totalWritten += writeBuf.size()
+                            AppLog.i(TAG, "streamToFile: boundary found, totalRead=$totalRead, written=$totalWritten")
+                            return totalWritten
+                        }
+                    } else {
+                        // 匹配失败，flush pending + 当前字节
+                        if (pendingLen > 0) {
+                            writeBuf.write(pending, 0, pendingLen)
+                            pendingLen = 0
+                        }
+                        writeBuf.write(b.toInt())
+                        matched = 0
+                        // 定期 flush，避免 writeBuf 过大
+                        if (writeBuf.size() >= 64 * 1024) {
+                            writeBuf.writeTo(output)
+                            totalWritten += writeBuf.size()
+                            writeBuf.reset()
+                        }
+                    }
+                }
+            }
+            // EOF，flush 剩余
+            writeBuf.writeTo(output)
+            totalWritten += writeBuf.size()
+            output.write(pending, 0, pendingLen)
+            totalWritten += pendingLen
+            return totalWritten
         }
     }
 }
@@ -284,19 +380,24 @@ function uploadModel(){
   };
 
   xhr.onload=function(){
+    var body=xhr.responseText||'';
+    var msg='';
+    try{
+      var d=JSON.parse(body);
+      msg=d.message||body.substring(0,300);
+    }catch(e){
+      msg=body.substring(0,300);
+    }
     if(xhr.status===200){
-      try{
-        var d=JSON.parse(xhr.responseText);
-        showStatus(d.message,d.ok?'ok':'err');
-        if(d.ok){
-          fileInput.value='';
-          refreshStatus();
-        }
-      }catch(e){
-        showStatus('上传完成，但响应解析失败','err');
+      var ok=false;
+      try{var d=JSON.parse(body);ok=d.ok;}catch(e){}
+      showStatus(msg,ok?'ok':'err');
+      if(ok){
+        fileInput.value='';
+        refreshStatus();
       }
     }else{
-      showStatus('上传失败（HTTP '+xhr.status+'）','err');
+      showStatus('上传失败（HTTP '+xhr.status+'）：'+msg,'err');
     }
     uploadBtn.disabled=false;
     uploadBtn.textContent='上传到电视';
