@@ -430,6 +430,11 @@ class PlayerManager() {
                 } finally {
                     _separating.value = false
                     _separationProgress.value = 0f to ""
+                    // 保存原唱文件到缓存（分离时下载的输入文件），用于切回原唱时直接使用
+                    val inputPath = tempInputPath
+                    if (inputPath != null && songId != null) {
+                        accompanimentCache?.saveOriginalFile(songId, inputPath)
+                    }
                     // 清理临时下载文件
                     cleanupTempFile(tempInputPath)
                 }
@@ -465,10 +470,30 @@ class PlayerManager() {
     /** 切换回原始音频文件（关闭人声消除时） */
     private fun switchToOriginal() {
         val p = player ?: return
-        val uri = originalMediaItemUri ?: return
         val currentPos = p.currentPosition
         val wasPlaying = p.isPlaying
 
+        // 优先使用本地缓存的原唱文件（分离时下载的）
+        val songId = _currentSong.value?.id
+        val cache = accompanimentCache
+        if (songId != null && cache != null) {
+            val originalFile = cache.getOriginalFile(songId)
+            if (originalFile.exists() && originalFile.length() > 0) {
+                val originalItem = p.currentMediaItem?.buildUpon()
+                    ?.setUri(android.net.Uri.parse("file://${originalFile.absolutePath}"))
+                    ?.build() ?: return
+                p.setMediaItem(originalItem)
+                p.prepare()
+                p.seekTo(currentPos)
+                if (wasPlaying) p.play()
+                originalMediaItemUri = null
+                AppLog.d(TAG, "switchToOriginal: using local cache ${originalFile.name}")
+                return
+            }
+        }
+
+        // 回退：使用原始 URI（可能是网络 URL）
+        val uri = originalMediaItemUri ?: return
         val originalUri = android.net.Uri.parse(uri)
         val originalItem = p.currentMediaItem?.buildUpon()?.setUri(originalUri)?.build() ?: return
 
@@ -478,7 +503,7 @@ class PlayerManager() {
         if (wasPlaying) p.play()
 
         originalMediaItemUri = null
-        AppLog.d(TAG, "switchToOriginal: restored")
+        AppLog.d(TAG, "switchToOriginal: restored from original URI")
     }
 
     /**

@@ -216,20 +216,41 @@ class AccompanimentCache(private val context: Context) {
     }
 
     /**
-     * 清除所有分离文件（伴奏+人声）
+     * 清除所有分离文件（伴奏+人声+原唱缓存）
      * 用户不需要保留人声文件，所有分离文件都可以删除
      */
     fun clearAccompaniments(): Int {
         cancelPreSeparation()
         var count = 0
         cacheDir.listFiles()?.forEach { file ->
-            if (file.name.endsWith("_accompaniment.wav") || file.name.endsWith("_vocals.wav")) {
+            if (file.name.endsWith("_accompaniment.wav") || file.name.endsWith("_vocals.wav") || file.name.endsWith("_original.wav")) {
                 file.delete()
                 count++
             }
         }
         AppLog.d(TAG, "clearAccompaniments: deleted $count separation files")
         return count
+    }
+
+    /**
+     * 获取原唱缓存文件
+     */
+    fun getOriginalFile(songId: String): File {
+        return File(cacheDir, "${songId}_original.wav")
+    }
+
+    /**
+     * 保存原唱文件（分离时下载的输入文件重命名保存）
+     */
+    fun saveOriginalFile(songId: String, sourcePath: String) {
+        val source = File(sourcePath)
+        if (source.exists() && source.length() > 0) {
+            val dest = getOriginalFile(songId)
+            if (!dest.exists()) {
+                source.copyTo(dest, overwrite = true)
+                AppLog.d(TAG, "saveOriginalFile: saved ${dest.name} (${dest.length()} bytes)")
+            }
+        }
     }
 
     /**
