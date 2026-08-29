@@ -70,7 +70,8 @@ class PlayerManager() {
     private var originalMediaItemUri: String? = null
 
     /** 预分离触发阈值（播放进度占比） */
-    private val PRE_SEPARATION_THRESHOLD = 0.5f
+    // 5% 开始预分离（分离需 ~400s，歌曲 ~240s，需在播放早期就启动）
+    private val PRE_SEPARATION_THRESHOLD = 0.05f
 
     /**
      * 当 ExoPlayer 自动过渡到 streamUrl 为空的歌曲时触发（如恢复队列中的网络歌曲）。
@@ -644,6 +645,13 @@ class PlayerManager() {
             _isPlaying.value = isPlaying
             if (isPlaying) {
                 progressHandler.post(progressUpdateRunnable)
+                // 播放开始时自动清除分离成功提示（延迟 3 秒让用户看到）
+                if (_hqSuccess.value != null) {
+                    scope.launch {
+                        kotlinx.coroutines.delay(3000)
+                        _hqSuccess.value = null
+                    }
+                }
             } else {
                 progressHandler.removeCallbacks(progressUpdateRunnable)
                 // 暂停时仍更新一次进度
