@@ -75,6 +75,7 @@ import com.nasmusic.tv.ui.screens.ServerConnectScreen
 import com.nasmusic.tv.ui.screens.SettingsScreen
 import com.nasmusic.tv.ui.screens.BackupTransferDialog
 import com.nasmusic.tv.ui.theme.NASMusicTVTheme
+import com.nasmusic.tv.ui.theme.FontSize
 import com.nasmusic.tv.ui.theme.NasMusicColors
 import com.nasmusic.tv.ui.viewmodel.MainViewModel
 import com.nasmusic.tv.data.model.Screen
@@ -177,10 +178,10 @@ fun AppRoot(
                             ),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text(text = "\u266A", color = NasMusicColors.TextPrimary, fontSize = 23.sp)
+                        Text(text = "\u266A", color = NasMusicColors.TextPrimary, fontSize = FontSize.Subtitle)
                     }
                     Spacer(modifier = Modifier.width(12.dp))
-                    Text(text = "NAS Music", color = NasMusicColors.TextPrimary, fontSize = 23.sp)
+                    Text(text = "NAS Music", color = NasMusicColors.TextPrimary, fontSize = FontSize.Subtitle)
                 }
 
                 // 导航项（外层固定宽度右对齐；内层可横向滑动——手机窄屏滚动浏览全部 tab）

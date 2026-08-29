@@ -37,6 +37,7 @@ import androidx.tv.material3.Icon
 import androidx.tv.material3.Text
 import com.nasmusic.tv.R
 import com.nasmusic.tv.data.model.BaiduFile
+import com.nasmusic.tv.ui.theme.FontSize
 import com.nasmusic.tv.ui.theme.NasMusicColors
 
 /**
@@ -108,13 +109,13 @@ fun BaiduDirPickerDialog(
                 Text(
                     text = stringResource(R.string.netdisk_dir_picker_title),
                     color = NasMusicColors.TextPrimary,
-                    fontSize = 23.sp
+                    fontSize = FontSize.Subtitle
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
                     text = currentPath,
                     color = NasMusicColors.Primary,
-                    fontSize = 17.sp
+                    fontSize = FontSize.Body
                 )
                 Spacer(modifier = Modifier.height(16.dp))
 
@@ -140,7 +141,7 @@ fun BaiduDirPickerDialog(
                                 Text(
                                     text = stringResource(R.string.netdisk_dir_picker_loading),
                                     color = NasMusicColors.TextSecondary,
-                                    fontSize = 18.sp
+                                    fontSize = FontSize.Body
                                 )
                             }
                         }
@@ -153,7 +154,7 @@ fun BaiduDirPickerDialog(
                                 Text(
                                     text = stringResource(R.string.netdisk_dir_picker_error),
                                     color = NasMusicColors.Warning,
-                                    fontSize = 18.sp
+                                    fontSize = FontSize.Body
                                 )
                                 Spacer(modifier = Modifier.height(16.dp))
                                 FocusableSurface(
@@ -170,7 +171,7 @@ fun BaiduDirPickerDialog(
                                     focusedContentColor = NasMusicColors.TextPrimary
                                 ) {
                                     Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
-                                        Text(text = stringResource(R.string.netdisk_dir_picker_retry), color = NasMusicColors.TextPrimary, fontSize = 18.sp)
+                                        Text(text = stringResource(R.string.netdisk_dir_picker_retry), color = NasMusicColors.TextPrimary, fontSize = FontSize.Body)
                                     }
                                 }
                             }
@@ -180,7 +181,7 @@ fun BaiduDirPickerDialog(
                                 Text(
                                     text = stringResource(R.string.netdisk_dir_picker_empty),
                                     color = NasMusicColors.TextSecondary,
-                                    fontSize = 18.sp
+                                    fontSize = FontSize.Body
                                 )
                             }
                         }
@@ -215,7 +216,7 @@ fun BaiduDirPickerDialog(
                         focusedContentColor = NasMusicColors.TextPrimary
                     ) {
                         Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
-                            Text(text = stringResource(R.string.netdisk_dir_picker_select), color = NasMusicColors.TextPrimary, fontSize = 19.sp)
+                            Text(text = stringResource(R.string.netdisk_dir_picker_select), color = NasMusicColors.TextPrimary, fontSize = FontSize.Button)
                         }
                     }
                     FocusableSurface(
@@ -232,7 +233,7 @@ fun BaiduDirPickerDialog(
                         focusedContentColor = NasMusicColors.TextPrimary
                     ) {
                         Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
-                            Text(text = stringResource(R.string.common_cancel), color = NasMusicColors.TextPrimary, fontSize = 19.sp)
+                            Text(text = stringResource(R.string.common_cancel), color = NasMusicColors.TextPrimary, fontSize = FontSize.Button)
                         }
                     }
                 }
@@ -265,7 +266,7 @@ private fun DirRow(
             Text(
                 text = label,
                 color = NasMusicColors.TextPrimary,
-                fontSize = 19.sp
+                fontSize = FontSize.Button
             )
         }
     }

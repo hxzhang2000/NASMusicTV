@@ -37,6 +37,7 @@ import com.nasmusic.tv.R
 import com.nasmusic.tv.data.model.LocalPlaylist
 import com.nasmusic.tv.ui.components.FocusableSurface
 import com.nasmusic.tv.ui.components.LocalFocusableContentColor
+import com.nasmusic.tv.ui.theme.FontSize
 import com.nasmusic.tv.ui.theme.NasMusicColors
 
 /**
@@ -98,16 +99,16 @@ fun PlaylistPickerDialog(
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 // 标题
-                Text(
+                    Text(
                     text = stringResource(R.string.mine_pick_playlist_title),
                     color = NasMusicColors.TextPrimary,
-                    fontSize = 23.sp
+                    fontSize = FontSize.Subtitle
                 )
                 Spacer(modifier = Modifier.height(8.dp))
-                Text(
+                    Text(
                     text = stringResource(R.string.mine_pick_playlist_hint),
                     color = NasMusicColors.TextSecondary,
-                    fontSize = 17.sp
+                    fontSize = FontSize.Body
                 )
 
                 Spacer(modifier = Modifier.height(16.dp))
@@ -121,7 +122,7 @@ fun PlaylistPickerDialog(
                         Text(
                             text = stringResource(R.string.mine_pick_playlist_empty),
                             color = NasMusicColors.TextSecondary,
-                            fontSize = 19.sp
+                            fontSize = FontSize.Button
                         )
                     }
                 } else {
@@ -151,21 +152,21 @@ fun PlaylistPickerDialog(
                                     Text(
                                         text = "♪",
                                         color = NasMusicColors.Primary,
-                                        fontSize = 21.sp,
+                                        fontSize = FontSize.Button,
                                         modifier = Modifier.padding(end = 12.dp)
                                     )
                                     Column(modifier = Modifier.weight(1f)) {
                                         Text(
                                             text = playlist.name,
                                             color = NasMusicColors.TextPrimary,
-                                            fontSize = 19.sp,
+                                            fontSize = FontSize.Button,
                                             maxLines = 1,
                                             overflow = TextOverflow.Ellipsis
                                         )
                                         Text(
                                             text = stringResource(R.string.mine_song_count, playlist.songs.size),
                                             color = LocalFocusableContentColor.current,
-                                            fontSize = 16.sp
+                                            fontSize = FontSize.Small
                                         )
                                     }
                                 }
@@ -196,7 +197,7 @@ fun PlaylistPickerDialog(
                         Text(
                             text = "+ " + stringResource(R.string.mine_create_playlist),
                             color = NasMusicColors.TextPrimary,
-                            fontSize = 18.sp,
+                            fontSize = FontSize.Body,
                             modifier = Modifier.padding(horizontal = 18.dp, vertical = 9.dp)
                         )
                     }
@@ -214,7 +215,7 @@ fun PlaylistPickerDialog(
                         Text(
                             text = stringResource(R.string.common_cancel),
                             color = NasMusicColors.TextPrimary,
-                            fontSize = 18.sp,
+                            fontSize = FontSize.Body,
                             modifier = Modifier.padding(horizontal = 24.dp, vertical = 9.dp)
                         )
                     }

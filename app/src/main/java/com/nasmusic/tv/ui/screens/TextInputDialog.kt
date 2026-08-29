@@ -53,6 +53,7 @@ import com.nasmusic.tv.R
 import com.nasmusic.tv.data.model.SearchHistoryItem
 import com.nasmusic.tv.net.LocalInputServer
 import com.nasmusic.tv.ui.components.FocusableSurface
+import com.nasmusic.tv.ui.theme.FontSize
 import com.nasmusic.tv.ui.theme.NasMusicColors
 import com.nasmusic.tv.util.NetworkUtils
 import com.nasmusic.tv.util.QrCodeGenerator
@@ -229,7 +230,7 @@ fun TextInputDialog(
                         Text(
                             text = title,
                             color = NasMusicColors.TextPrimary,
-                            fontSize = 23.sp
+                            fontSize = FontSize.Subtitle
                         )
                         Spacer(modifier = Modifier.height(12.dp))
 
@@ -250,7 +251,7 @@ fun TextInputDialog(
                                     .padding(horizontal = 12.dp, vertical = 12.dp),
                                 textStyle = TextStyle(
                                     color = NasMusicColors.TextPrimary,
-                                    fontSize = 20.sp
+                                    fontSize = FontSize.Button
                                 ),
                                 cursorBrush = SolidColor(NasMusicColors.Primary),
                                 decorationBox = { innerTextField ->
@@ -262,7 +263,7 @@ fun TextInputDialog(
                                             Text(
                                                 text = hint,
                                                 color = NasMusicColors.TextSecondary,
-                                                fontSize = 20.sp
+                                                fontSize = FontSize.Button
                                             )
                                         }
                                         innerTextField()
@@ -287,7 +288,7 @@ fun TextInputDialog(
                                            else text,
                                     color = if (text.isEmpty()) NasMusicColors.TextSecondary
                                             else NasMusicColors.TextPrimary,
-                                    fontSize = 20.sp,
+                                    fontSize = FontSize.Button,
                                     modifier = Modifier.padding(horizontal = 12.dp)
                                 )
                             }
@@ -299,7 +300,7 @@ fun TextInputDialog(
                             Text(
                                 text = imeUnavailableMsg!!,
                                 color = NasMusicColors.Warning,
-                                fontSize = 17.sp
+                                fontSize = FontSize.Body
                             )
                         }
 
@@ -470,13 +471,13 @@ fun TextInputDialog(
                             Text(
                                 text = "扫码用手机输入",
                                 color = NasMusicColors.TextPrimary,
-                                fontSize = 18.sp
+                                fontSize = FontSize.Body
                             )
                             Spacer(modifier = Modifier.height(2.dp))
                             Text(
                                 text = "手机浏览器打开",
                                 color = NasMusicColors.TextSecondary,
-                                fontSize = 16.sp
+                                fontSize = FontSize.Small
                             )
                         }
                     }
@@ -505,7 +506,7 @@ private fun HistoryRow(
         Text(
             text = label,
             color = NasMusicColors.TextSecondary,
-            fontSize = 17.sp,
+            fontSize = FontSize.Body,
             modifier = Modifier.width(28.dp)
         )
         items.forEach { item ->
@@ -530,7 +531,7 @@ private fun HistoryRow(
                     Text(
                         text = item.query,
                         color = NasMusicColors.TextPrimary,
-                        fontSize = 17.sp,
+                        fontSize = FontSize.Body,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.padding(horizontal = 8.dp)
@@ -561,7 +562,7 @@ private fun KeyButton(
         Text(
             text = label,
             color = NasMusicColors.TextPrimary,
-            fontSize = 19.sp,
+            fontSize = FontSize.Button,
             textAlign = TextAlign.Center,
             modifier = Modifier.fillMaxSize().padding(vertical = 10.dp)
         )
@@ -598,7 +599,7 @@ private fun ActionButton(
         Text(
             text = label,
             color = NasMusicColors.TextPrimary,
-            fontSize = 18.sp,
+            fontSize = FontSize.Body,
             textAlign = TextAlign.Center,
             modifier = Modifier.fillMaxSize().padding(vertical = 12.dp)
         )

@@ -32,6 +32,7 @@ import com.nasmusic.tv.ui.components.common.LoadingIndicator
 import com.nasmusic.tv.ui.components.song.UnifiedSongRow
 import com.nasmusic.tv.ui.components.song.SongRowMode
 import com.nasmusic.tv.ui.components.songGridColumns
+import com.nasmusic.tv.ui.theme.FontSize
 import com.nasmusic.tv.ui.theme.NasMusicColors
 import kotlinx.coroutines.launch
 
@@ -109,10 +110,10 @@ fun SearchTab(
                     modifier = Modifier.fillMaxWidth().padding(top = 40.dp),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text(
-                        text = "未找到相关结果",
-                        color = NasMusicColors.TextSecondary,
-                        fontSize = 21.sp
+                        Text(
+                            text = "未找到相关结果",
+                            color = NasMusicColors.TextSecondary,
+                            fontSize = FontSize.Button
                     )
                 }
             }
@@ -156,10 +157,10 @@ fun SearchTab(
                     modifier = Modifier.fillMaxWidth().padding(top = 60.dp),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text(
-                        text = "输入关键词搜索音乐",
-                        color = NasMusicColors.TextSecondary,
-                        fontSize = 21.sp
+                        Text(
+                            text = "输入关键词搜索音乐",
+                            color = NasMusicColors.TextSecondary,
+                            fontSize = FontSize.Button
                     )
                 }
             }
@@ -190,7 +191,7 @@ private fun SearchSourceBar(
         Text(
             text = "搜索来源",
             color = NasMusicColors.TextSecondary,
-            fontSize = 17.sp,
+            fontSize = FontSize.Body,
             modifier = Modifier.padding(end = 10.dp)
         )
         searchableSources.forEach { source ->
@@ -211,7 +212,7 @@ private fun SearchSourceBar(
                 Text(
                     text = (if (isEnabled) "● " else "○ ") + source.displayName,
                     color = LocalFocusableContentColor.current,
-                    fontSize = 16.sp,
+                    fontSize = FontSize.Small,
                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
                 )
             }
@@ -230,7 +231,7 @@ private fun SearchSourceBar(
             Text(
                 text = "全部点亮",
                 color = LocalFocusableContentColor.current,
-                fontSize = 16.sp,
+                fontSize = FontSize.Small,
                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
             )
         }

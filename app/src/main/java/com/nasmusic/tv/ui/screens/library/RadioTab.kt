@@ -44,6 +44,7 @@ import com.nasmusic.tv.ui.components.FocusableSurface
 import com.nasmusic.tv.ui.components.LocalFocusableContentColor
 import com.nasmusic.tv.ui.components.SearchField
 import com.nasmusic.tv.ui.screens.TextInputDialog
+import com.nasmusic.tv.ui.theme.FontSize
 import com.nasmusic.tv.ui.theme.NasMusicColors
 
 /**
@@ -99,10 +100,10 @@ fun RadioTab(
                     contentColor = if (isSelected) Color.Black else NasMusicColors.TextPrimary,
                     focusedContentColor = NasMusicColors.TextPrimary
                 ) {
-                    Text(
+                        Text(
                         text = tag,
                         color = if (isSelected) Color.Black else NasMusicColors.TextPrimary,
-                        fontSize = 16.sp,
+                        fontSize = FontSize.Small,
                         modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp)
                     )
                 }
@@ -115,7 +116,7 @@ fun RadioTab(
         when (radioStations) {
             is UiState.Loading -> {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text(stringResource(R.string.common_loading), color = NasMusicColors.TextSecondary, fontSize = 19.sp)
+                    Text(stringResource(R.string.common_loading), color = NasMusicColors.TextSecondary, fontSize = FontSize.Button)
                 }
             }
             is UiState.Error -> Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -123,7 +124,7 @@ fun RadioTab(
                     Text(
                         text = stringResource(R.string.network_radio_load_failed),
                         color = NasMusicColors.TextSecondary,
-                        fontSize = 19.sp
+                        fontSize = FontSize.Button
                     )
                     Spacer(modifier = Modifier.height(12.dp))
                     FocusableSurface(
@@ -139,7 +140,7 @@ fun RadioTab(
                         Text(
                             text = stringResource(R.string.network_radio_retry),
                             color = LocalFocusableContentColor.current,
-                            fontSize = 18.sp,
+                            fontSize = FontSize.Body,
                             modifier = Modifier.padding(horizontal = 16.dp, vertical = 9.dp)
                         )
                     }
@@ -154,7 +155,7 @@ fun RadioTab(
                                 stringResource(R.string.network_radio_no_results)
                             else stringResource(R.string.network_radio_load_failed),
                             color = NasMusicColors.TextSecondary,
-                            fontSize = 19.sp
+                            fontSize = FontSize.Button
                         )
                     }
                 } else {
@@ -236,14 +237,14 @@ private fun RadioStationCard(
                         .background(NasMusicColors.SurfaceVariant),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text(text = "\uD83D\uDCFB", fontSize = 22.sp)
+                    Text(text = "\uD83D\uDCFB", fontSize = FontSize.Subtitle)
                 }
             }
             Spacer(modifier = Modifier.width(10.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = station.name,
-                    fontSize = 16.sp,
+                    fontSize = FontSize.Small,
                     fontWeight = FontWeight.Medium,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
@@ -256,7 +257,7 @@ private fun RadioStationCard(
                         station.tags.take(2).joinToString(" / ").takeIf { it.isNotBlank() }
                     ).filterNotNull().joinToString(" \u00B7 "),
                     color = LocalFocusableContentColor.current,
-                    fontSize = 13.sp,
+                    fontSize = FontSize.Caption,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -270,7 +271,7 @@ private fun RadioStationCard(
                     Text(
                         text = "${station.bitrate}kb/s",
                         color = LocalFocusableContentColor.current,
-                        fontSize = 11.sp
+                        fontSize = FontSize.Caption
                     )
                 }
             }

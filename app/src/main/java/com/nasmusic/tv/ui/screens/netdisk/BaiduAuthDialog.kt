@@ -1,4 +1,4 @@
-ï»¿package com.nasmusic.tv.ui.screens.netdisk
+package com.nasmusic.tv.ui.screens.netdisk
 
 import android.graphics.Bitmap
 import androidx.compose.foundation.Image
@@ -39,27 +39,28 @@ import androidx.tv.material3.Text
 import com.nasmusic.tv.R
 import com.nasmusic.tv.backend.network.baidu.BaiduOAuthClient
 import com.nasmusic.tv.ui.components.FocusableSurface
+import com.nasmusic.tv.ui.theme.FontSize
 import com.nasmusic.tv.ui.theme.NasMusicColors
 import com.nasmusic.tv.ui.viewmodel.MainViewModel
 import com.nasmusic.tv.util.LinkUtils
 import com.nasmusic.tv.util.QrCodeGenerator
 
 /**
- * ç™¾åº¦ç½‘ç›˜è®¾å¤‡ç æˆæƒå¯¹è¯æ¡†
+ * °Ù¶ÈÍøÅÌÉè±¸ÂëÊÚÈ¨¶Ô»°¿ò
  *
- * ç”¨æˆ·ç‚¹å‡»"ç™»å½•"åå¼¹å‡ºï¼šæ˜¾ç¤ºè®¾å¤‡ç ã€éªŒè¯é“¾æ¥ä¸äºŒç»´ç ï¼ˆå¤ç”¨ [QrCodeGenerator]ï¼Œ
- * ä¸ [com.nasmusic.tv.ui.screens.BackupTransferDialog] åŒæ¬¾ï¼‰ï¼Œæ‰‹æœºæ‰«ç /æ‰“å¼€é“¾æ¥å¹¶è¾“å…¥
- * è®¾å¤‡ç å®Œæˆæˆæƒï¼ŒæœŸé—´è‡ªåŠ¨è½®è¯¢ã€‚
+ * ÓÃ»§µã»÷"µÇÂ¼"ºóµ¯³ö£ºÏÔÊ¾Éè±¸Âë¡¢ÑéÖ¤Á´½ÓÓë¶şÎ¬Âë£¨¸´ÓÃ [QrCodeGenerator]£¬
+ * Óë [com.nasmusic.tv.ui.screens.BackupTransferDialog] Í¬¿î£©£¬ÊÖ»úÉ¨Âë/´ò¿ªÁ´½Ó²¢ÊäÈë
+ * Éè±¸ÂëÍê³ÉÊÚÈ¨£¬ÆÚ¼ä×Ô¶¯ÂÖÑ¯¡£
  *
- * çŠ¶æ€æµè½¬ç”± [connectionState] é©±åŠ¨ï¼š
- * - [MainViewModel.BaiduConnectionState.LoggedIn] â†’ æˆæƒæˆåŠŸï¼Œè‡ªåŠ¨å…³é—­
- * - [MainViewModel.BaiduConnectionState.Failed] â†’ å¤±è´¥ï¼ˆæ‹’ç»/è¶…æ—¶/å¼‚å¸¸ï¼‰ï¼Œæ˜¾ç¤ºé”™è¯¯åè‡ªåŠ¨å…³é—­
- * - [MainViewModel.BaiduConnectionState.Connecting] â†’ ç­‰å¾…ç”¨æˆ·æ‰«ç æˆæƒ
+ * ×´Ì¬Á÷×ªÓÉ [connectionState] Çı¶¯£º
+ * - [MainViewModel.BaiduConnectionState.LoggedIn] ¡ú ÊÚÈ¨³É¹¦£¬×Ô¶¯¹Ø±Õ
+ * - [MainViewModel.BaiduConnectionState.Failed] ¡ú Ê§°Ü£¨¾Ü¾ø/³¬Ê±/Òì³££©£¬ÏÔÊ¾´íÎóºó×Ô¶¯¹Ø±Õ
+ * - [MainViewModel.BaiduConnectionState.Connecting] ¡ú µÈ´ıÓÃ»§É¨ÂëÊÚÈ¨
  *
- * @param deviceCode è®¾å¤‡ç ç»“æœï¼ˆnull è¡¨ç¤ºè¯·æ±‚ä¸­æˆ–å·²å¤±è´¥ï¼‰
- * @param connectionState å½“å‰è¿æ¥çŠ¶æ€
- * @param onCancel ç”¨æˆ·å–æ¶ˆæˆæƒï¼ˆè°ƒç”¨æ–¹è´Ÿè´£åœæ­¢è½®è¯¢ [MainViewModel.cancelBaiduDeviceCode]ï¼‰
- * @param onDismiss å…³é—­å¯¹è¯æ¡†
+ * @param deviceCode Éè±¸Âë½á¹û£¨null ±íÊ¾ÇëÇóÖĞ»òÒÑÊ§°Ü£©
+ * @param connectionState µ±Ç°Á¬½Ó×´Ì¬
+ * @param onCancel ÓÃ»§È¡ÏûÊÚÈ¨£¨µ÷ÓÃ·½¸ºÔğÍ£Ö¹ÂÖÑ¯ [MainViewModel.cancelBaiduDeviceCode]£©
+ * @param onDismiss ¹Ø±Õ¶Ô»°¿ò
  */
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
@@ -72,14 +73,14 @@ fun BaiduAuthDialog(
     val context = LocalContext.current
     var qrBitmap by remember { mutableStateOf<Bitmap?>(null) }
 
-    // äºŒç»´ç å†…å®¹ï¼šç¼–ç ç¨³å®šçš„éªŒè¯é¡µï¼ˆverificationUrlï¼‰ï¼Œæ‰«ç åæ‰“å¼€æ ‡å‡†éªŒè¯é¡µæ‰‹åŠ¨è¾“å…¥è®¾å¤‡ç ã€‚
-    // ä¸ä½¿ç”¨ qrcode_urlï¼šå…¶ä¸€æ¬¡æ€§ token é“¾æ¥ï¼ˆå¦‚ .../device/qrcode/<token>ï¼‰æ‰«ç åç»å¸¸æ‰“ä¸å¼€ã€‚
+    // ¶şÎ¬ÂëÄÚÈİ£º±àÂëÎÈ¶¨µÄÑéÖ¤Ò³£¨verificationUrl£©£¬É¨Âëºó´ò¿ª±ê×¼ÑéÖ¤Ò³ÊÖ¶¯ÊäÈëÉè±¸Âë¡£
+    // ²»Ê¹ÓÃ qrcode_url£ºÆäÒ»´ÎĞÔ token Á´½Ó£¨Èç .../device/qrcode/<token>£©É¨Âëºó¾­³£´ò²»¿ª¡£
     val qrContent = remember(deviceCode) { deviceCode?.verificationUrl }
     LaunchedEffect(qrContent) {
         qrBitmap = qrContent?.let { QrCodeGenerator.generateQrBitmap(it, 360) }
     }
 
-    // æˆæƒæˆåŠŸæˆ–å¤±è´¥ â†’ çŸ­æš‚å±•ç¤ºåè‡ªåŠ¨å…³é—­
+    // ÊÚÈ¨³É¹¦»òÊ§°Ü ¡ú ¶ÌÔİÕ¹Ê¾ºó×Ô¶¯¹Ø±Õ
     LaunchedEffect(connectionState) {
         if (connectionState is MainViewModel.BaiduConnectionState.LoggedIn) {
             kotlinx.coroutines.delay(600)
@@ -116,39 +117,39 @@ fun BaiduAuthDialog(
                 Text(
                     text = stringResource(R.string.netdisk_auth_title),
                     color = NasMusicColors.TextPrimary,
-                    fontSize = 23.sp
+                    fontSize = FontSize.Subtitle
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
                     text = stringResource(R.string.netdisk_auth_subtitle),
                     color = NasMusicColors.TextSecondary,
-                    fontSize = 17.sp,
+                    fontSize = FontSize.Body,
                     textAlign = TextAlign.Center
                 )
                 Spacer(modifier = Modifier.height(20.dp))
 
                 when {
-                    // è®¾å¤‡ç è¯·æ±‚ä¸­
+                    // Éè±¸ÂëÇëÇóÖĞ
                     deviceCode == null && connectionState is MainViewModel.BaiduConnectionState.Connecting -> {
                         Spacer(modifier = Modifier.height(36.dp))
                         Text(
                             text = stringResource(R.string.netdisk_auth_fetching),
                             color = NasMusicColors.Primary,
-                            fontSize = 19.sp
+                            fontSize = FontSize.Button
                         )
                         Spacer(modifier = Modifier.height(36.dp))
                     }
-                    // å·²è·å–è®¾å¤‡ç ï¼šæ˜¾ç¤ºåˆ†æ­¥æŒ‡å¼• + äºŒç»´ç 
+                    // ÒÑ»ñÈ¡Éè±¸Âë£ºÏÔÊ¾·Ö²½Ö¸Òı + ¶şÎ¬Âë
                     deviceCode != null -> {
-                        // ä¸»æµç¨‹ï¼šåˆ†æ­¥è¯´æ˜ï¼ˆæ‰‹æœºæ‰‹åŠ¨æ‰“å¼€ç½‘å€è¾“å…¥è®¾å¤‡ç ï¼Œæœ€å¯é çš„æˆæƒæ–¹å¼ï¼‰
+                        // Ö÷Á÷³Ì£º·Ö²½ËµÃ÷£¨ÊÖ»úÊÖ¶¯´ò¿ªÍøÖ·ÊäÈëÉè±¸Âë£¬×î¿É¿¿µÄÊÚÈ¨·½Ê½£©
                         Text(
                             text = stringResource(R.string.netdisk_auth_step1),
                             color = NasMusicColors.TextPrimary,
-                            fontSize = 18.sp,
+                            fontSize = FontSize.Body,
                             textAlign = TextAlign.Center
                         )
                         Spacer(modifier = Modifier.height(6.dp))
-                        // éªŒè¯ URLï¼šå¯ç‚¹å‡»ç›´æ¥æ‰“å¼€æµè§ˆå™¨ï¼ˆæ‰‹æœºç«¯ä¾¿æ·æ“ä½œï¼›TV ä¸Šæ— æµè§ˆå™¨åˆ™æ— å“åº”ï¼‰
+                        // ÑéÖ¤ URL£º¿Éµã»÷Ö±½Ó´ò¿ªä¯ÀÀÆ÷£¨ÊÖ»ú¶Ë±ã½İ²Ù×÷£»TV ÉÏÎŞä¯ÀÀÆ÷ÔòÎŞÏìÓ¦£©
                         FocusableSurface(
                             onClick = { LinkUtils.openInBrowser(context, deviceCode.verificationUrl) },
                             shape = RoundedCornerShape(6.dp),
@@ -162,7 +163,7 @@ fun BaiduAuthDialog(
                             Text(
                                 text = deviceCode.verificationUrl,
                                 color = NasMusicColors.Primary,
-                                fontSize = 18.sp,
+                                fontSize = FontSize.Body,
                                 textAlign = TextAlign.Center,
                                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
                             )
@@ -171,10 +172,10 @@ fun BaiduAuthDialog(
                         Text(
                             text = stringResource(R.string.netdisk_auth_step2),
                             color = NasMusicColors.TextPrimary,
-                            fontSize = 18.sp,
+                            fontSize = FontSize.Body,
                             textAlign = TextAlign.Center
                         )
-                        // è®¾å¤‡ç  + å¤åˆ¶æŒ‰é’®
+                        // Éè±¸Âë + ¸´ÖÆ°´Å¥
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.Center
@@ -182,12 +183,12 @@ fun BaiduAuthDialog(
                             Text(
                                 text = deviceCode.userCode,
                                 color = NasMusicColors.Primary,
-                                fontSize = 34.sp,
+                                fontSize = FontSize.Display,
                                 fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
                             )
                             Spacer(modifier = Modifier.width(12.dp))
                             FocusableSurface(
-                                onClick = { LinkUtils.copyToClipboard(context, "ç™¾åº¦ç½‘ç›˜è®¾å¤‡ç ", deviceCode.userCode) },
+                                onClick = { LinkUtils.copyToClipboard(context, "°Ù¶ÈÍøÅÌÉè±¸Âë", deviceCode.userCode) },
                                 shape = RoundedCornerShape(8.dp),
                                 focusedScale = 1.08f,
                                 animationDurationMs = 120,
@@ -197,19 +198,19 @@ fun BaiduAuthDialog(
                                 focusedContentColor = NasMusicColors.TextPrimary
                             ) {
                                 Text(
-                                    text = "å¤åˆ¶",
-                                    fontSize = 17.sp,
+                                    text = "¸´ÖÆ",
+                                    fontSize = FontSize.Body,
                                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp)
                                 )
                             }
                         }
                         Spacer(modifier = Modifier.height(16.dp))
 
-                        // è¾…åŠ©ï¼šäºŒç»´ç ï¼ˆæ‰«ç å¯èƒ½å›  App æ‹¦æˆª/ç½‘ç»œä¸å¯ç”¨ï¼Œæ•…ä¸ä½œä¸ºä¸»æµç¨‹ï¼‰
+                        // ¸¨Öú£º¶şÎ¬Âë£¨É¨Âë¿ÉÄÜÒò App À¹½Ø/ÍøÂç²»¿ÉÓÃ£¬¹Ê²»×÷ÎªÖ÷Á÷³Ì£©
                         Text(
                             text = stringResource(R.string.netdisk_auth_qr_alt),
                             color = NasMusicColors.TextSecondary,
-                            fontSize = 15.sp
+                            fontSize = FontSize.Small
                         )
                         Spacer(modifier = Modifier.height(6.dp))
                         qrBitmap?.let { bitmap ->
@@ -223,16 +224,16 @@ fun BaiduAuthDialog(
                         Text(
                             text = stringResource(R.string.netdisk_auth_waiting),
                             color = NasMusicColors.Primary,
-                            fontSize = 18.sp
+                            fontSize = FontSize.Body
                         )
                     }
-                    // è¯·æ±‚å¤±è´¥
+                    // ÇëÇóÊ§°Ü
                     else -> {
                         Spacer(modifier = Modifier.height(36.dp))
                         Text(
                             text = stringResource(R.string.netdisk_auth_fetch_failed),
                             color = NasMusicColors.Warning,
-                            fontSize = 19.sp
+                            fontSize = FontSize.Button
                         )
                         Spacer(modifier = Modifier.height(36.dp))
                     }
@@ -255,7 +256,7 @@ fun BaiduAuthDialog(
                         focusedContentColor = NasMusicColors.TextPrimary
                     ) {
                         Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
-                            Text(text = stringResource(R.string.common_cancel), color = NasMusicColors.TextPrimary, fontSize = 19.sp)
+                            Text(text = stringResource(R.string.common_cancel), color = NasMusicColors.TextPrimary, fontSize = FontSize.Button)
                         }
                     }
                 }

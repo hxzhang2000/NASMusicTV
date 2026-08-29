@@ -40,6 +40,7 @@ import com.nasmusic.tv.ui.components.AppRoot
 import com.nasmusic.tv.ui.components.ConnectPromptDialog
 import com.nasmusic.tv.ui.screens.ExitConfirmDialog
 import com.nasmusic.tv.ui.theme.NASMusicTVTheme
+import com.nasmusic.tv.ui.theme.FontSize
 import com.nasmusic.tv.ui.theme.NasMusicColors
 import com.nasmusic.tv.ui.viewmodel.MainViewModel
 import com.nasmusic.tv.data.model.Screen
@@ -187,7 +188,7 @@ class MainActivity : ComponentActivity() {
                                 Text(
                                     text = msg,
                                     color = NasMusicColors.TextPrimary,
-                                    fontSize = 21.sp,
+                                    fontSize = FontSize.Button,
                                     fontWeight = FontWeight.Medium
                                 )
                             }
@@ -210,7 +211,7 @@ class MainActivity : ComponentActivity() {
                                 Text(
                                     text = msg,
                                     color = NasMusicColors.TextPrimary,
-                                    fontSize = 21.sp,
+                                    fontSize = FontSize.Button,
                                     fontWeight = FontWeight.Medium
                                 )
                             }

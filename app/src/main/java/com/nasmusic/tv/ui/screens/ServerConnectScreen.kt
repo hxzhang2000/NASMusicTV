@@ -1,4 +1,6 @@
-﻿package com.nasmusic.tv.ui.screens
+package com.nasmusic.tv.ui.screens
+
+import com.nasmusic.tv.ui.theme.FontSize
 
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
@@ -173,13 +175,13 @@ fun ServerConnectScreen(
             Text(
                 text = stringResource(R.string.server_config_title),
                 color = Color.White,
-                fontSize = 41.sp
+                fontSize = FontSize.DisplayLarge
             )
             Spacer(modifier = Modifier.height(8.dp))
             Text(
                 text = stringResource(R.string.server_connect_desc),
                 color = NasMusicColors.TextSecondary,
-                fontSize = 21.sp,
+                fontSize = FontSize.Button,
                 textAlign = TextAlign.Center
             )
 
@@ -210,13 +212,13 @@ fun ServerConnectScreen(
                         Text(
                             text = stringResource(R.string.server_connected),
                             color = NasMusicColors.Primary,
-                            fontSize = 23.sp
+                            fontSize = FontSize.Subtitle
                         )
                         if (serverDisplayName.isNotBlank()) {
                             Text(
                                 text = serverDisplayName,
                                 color = NasMusicColors.TextSecondary,
-                                fontSize = 19.sp
+                                fontSize = FontSize.Button
                             )
                         }
                     }
@@ -238,7 +240,7 @@ fun ServerConnectScreen(
                         Text(
                             text = stringResource(R.string.server_disconnect),
                             color = LocalFocusableContentColor.current,
-                            fontSize = 19.sp,
+                            fontSize = FontSize.Button,
                             modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp)
                         )
                     }
@@ -251,7 +253,7 @@ fun ServerConnectScreen(
             Text(
                 text = stringResource(R.string.server_type_label),
                 color = NasMusicColors.TextPrimary,
-                fontSize = 23.sp,
+                fontSize = FontSize.Subtitle,
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(bottom = 12.dp)
@@ -387,7 +389,7 @@ fun ServerConnectScreen(
                 Text(
                     text = statusMessage,
                     color = NasMusicColors.TextSecondary,
-                    fontSize = 19.sp,
+                    fontSize = FontSize.Button,
                     modifier = Modifier.padding(bottom = 12.dp)
                 )
             }
@@ -421,7 +423,7 @@ fun ServerConnectScreen(
                 Text(
                     text = if (isConnecting) stringResource(R.string.server_connecting) else stringResource(R.string.server_connect_action),
                     color = LocalFocusableContentColor.current,
-                    fontSize = 23.sp,
+                    fontSize = FontSize.Subtitle,
                     modifier = Modifier.padding(horizontal = 32.dp, vertical = 16.dp)
                 )
             }
@@ -431,7 +433,7 @@ fun ServerConnectScreen(
             Text(
                 text = stringResource(R.string.server_privacy_notice),
                 color = NasMusicColors.TextSecondary,
-                fontSize = 18.sp
+                fontSize = FontSize.Body
             )
         }
 
@@ -530,7 +532,7 @@ private fun TypeCard(
         Text(
             text = text,
             color = LocalFocusableContentColor.current,
-            fontSize = 23.sp,
+            fontSize = FontSize.Subtitle,
             textAlign = TextAlign.Center,
             modifier = Modifier
                 .fillMaxWidth()
@@ -553,7 +555,7 @@ private fun FormField(
         Text(
             text = label,
             color = NasMusicColors.TextPrimary,
-            fontSize = 21.sp,
+            fontSize = FontSize.Button,
             modifier = Modifier.padding(bottom = 8.dp)
         )
 
@@ -580,7 +582,7 @@ private fun FormField(
                            else if (masked) "*".repeat(value.text.length)
                            else value.text,
                     color = LocalFocusableContentColor.current,
-                    fontSize = 21.sp,
+                    fontSize = FontSize.Button,
                     modifier = Modifier.padding(horizontal = 16.dp)
                 )
             }
@@ -589,7 +591,7 @@ private fun FormField(
         Text(
             text = stringResource(R.string.server_press_ok_edit),
             color = NasMusicColors.TextSecondary,
-            fontSize = 17.sp,
+            fontSize = FontSize.Body,
             modifier = Modifier.padding(top = 6.dp, start = 4.dp)
         )
     }
@@ -636,7 +638,7 @@ FocusableSurface(
             Text(
                 text = if (isTesting) stringResource(R.string.server_testing) else stringResource(R.string.server_connection_test),
                 color = LocalFocusableContentColor.current,
-                fontSize = 19.sp
+                fontSize = FontSize.Button
             )
         }
     }
@@ -657,7 +659,7 @@ private fun ServerAddressField(
             Text(
                 text = stringResource(R.string.server_address),
                 color = NasMusicColors.TextPrimary,
-            fontSize = 21.sp,
+            fontSize = FontSize.Button,
             modifier = Modifier.padding(bottom = 8.dp)
         )
 
@@ -694,7 +696,7 @@ private fun ServerAddressField(
                             else -> "https://jellyfin.example.com 或 http://192.168.1.100:8096"
                         } else baseUrl.text,
                         color = LocalFocusableContentColor.current,
-                        fontSize = 20.sp,
+                        fontSize = FontSize.Button,
                         modifier = Modifier.padding(horizontal = 16.dp)
                     )
                 }
@@ -711,7 +713,7 @@ private fun ServerAddressField(
         Text(
             text = stringResource(R.string.server_press_ok_edit),
             color = NasMusicColors.TextSecondary,
-            fontSize = 17.sp,
+            fontSize = FontSize.Body,
             modifier = Modifier.padding(top = 6.dp, start = 4.dp)
         )
 
@@ -723,7 +725,7 @@ private fun ServerAddressField(
             Text(
                 text = if (isSuccess) "✓ 连接成功：$message" else "✗ $message",
                 color = if (isSuccess) NasMusicColors.Primary else NasMusicColors.Warning,
-                fontSize = 18.sp
+                fontSize = FontSize.Body
             )
         }
     }

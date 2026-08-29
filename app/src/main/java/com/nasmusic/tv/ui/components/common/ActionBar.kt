@@ -14,6 +14,7 @@ import androidx.compose.ui.unit.sp
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Text
 import com.nasmusic.tv.ui.components.FocusableSurface
+import com.nasmusic.tv.ui.theme.FontSize
 import com.nasmusic.tv.ui.theme.NasMusicColors
 
 /**
@@ -56,7 +57,7 @@ fun ActionBar(
             Text(
                 text = "全部播放",
                 color = NasMusicColors.TextPrimary,
-                fontSize = 19.sp,
+                fontSize = FontSize.Button,
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
             )
         }
@@ -77,7 +78,7 @@ fun ActionBar(
             Text(
                 text = "加入队列",
                 color = NasMusicColors.TextPrimary,
-                fontSize = 19.sp,
+                fontSize = FontSize.Button,
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
             )
         }
@@ -98,7 +99,7 @@ fun ActionBar(
                 Text(
                     text = "收藏全部",
                     color = NasMusicColors.TextPrimary,
-                    fontSize = 19.sp,
+                    fontSize = FontSize.Button,
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
                 )
             }
@@ -112,7 +113,7 @@ fun ActionBar(
         Text(
             text = "$songCount 首",
             color = NasMusicColors.TextSecondary,
-            fontSize = 18.sp
+            fontSize = FontSize.Body
         )
     }
 }

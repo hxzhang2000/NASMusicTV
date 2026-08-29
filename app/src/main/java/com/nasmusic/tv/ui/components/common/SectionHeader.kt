@@ -14,6 +14,7 @@ import androidx.compose.ui.unit.sp
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Text
 import com.nasmusic.tv.ui.components.FocusableSurface
+import com.nasmusic.tv.ui.theme.FontSize
 import com.nasmusic.tv.ui.theme.NasMusicColors
 
 /**
@@ -42,12 +43,12 @@ fun SectionHeader(
         Text(
             text = title,
             color = NasMusicColors.TextPrimary,
-            fontSize = 23.sp
+            fontSize = FontSize.Subtitle
         )
         Text(
             text = " ($count)",
             color = NasMusicColors.TextSecondary,
-            fontSize = 19.sp
+            fontSize = FontSize.Button
         )
         Spacer(modifier = Modifier.weight(1f))
         if (onViewAll != null) {
@@ -64,7 +65,7 @@ fun SectionHeader(
                 Text(
                     text = "查看全部 >",
                     color = NasMusicColors.Primary,
-                    fontSize = 17.sp,
+                    fontSize = FontSize.Body,
                     modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                 )
             }

@@ -15,6 +15,7 @@ import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Text
 import com.nasmusic.tv.data.model.Playlist
 import com.nasmusic.tv.data.model.Song
+import com.nasmusic.tv.ui.theme.FontSize
 import com.nasmusic.tv.ui.theme.NasMusicColors
 
 /**
@@ -41,7 +42,7 @@ fun UnifiedPlaylistGrid(
         Text(
             text = header,
             color = NasMusicColors.TextPrimary,
-            fontSize = 21.sp,
+            fontSize = FontSize.Button,
             modifier = modifier.padding(bottom = 4.dp)
         )
     }

@@ -1,4 +1,6 @@
-﻿package com.nasmusic.tv.ui.screens
+package com.nasmusic.tv.ui.screens
+
+import com.nasmusic.tv.ui.theme.FontSize
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
@@ -251,7 +253,7 @@ fun LibraryScreen(
                 Text(
                     text = stringResource(R.string.nav_library),
                     color = NasMusicColors.TextPrimary,
-                    fontSize = 33.sp,
+                    fontSize = FontSize.Display,
                     modifier = Modifier.padding(end = 24.dp)
                 )
 
@@ -278,7 +280,7 @@ fun LibraryScreen(
                             Text(
                                 text = stringResource(tab.titleRes),
                                 color = if (selected) NasMusicColors.Primary else NasMusicColors.TextPrimary,
-                                fontSize = 19.sp,
+                                fontSize = FontSize.Button,
                                 modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)
                             )
                         }
@@ -369,12 +371,12 @@ fun LibraryScreen(
                     if (isLoading) {
                         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Text(text = "加载中...", color = NasMusicColors.TextSecondary, fontSize = 25.sp)
+                                Text(text = "加载中...", color = NasMusicColors.TextSecondary, fontSize = FontSize.Subtitle)
                                 Spacer(modifier = Modifier.height(8.dp))
                                 Text(
                                     text = "正在加载曲库...",
                                     color = NasMusicColors.TextSecondary,
-                                    fontSize = 21.sp
+                                    fontSize = FontSize.Button
                                 )
                             }
                         }
@@ -382,18 +384,18 @@ fun LibraryScreen(
                         // 未连接状态
                         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Text(text = stringResource(R.string.common_not_connected), color = NasMusicColors.TextSecondary, fontSize = 29.sp)
+                                Text(text = stringResource(R.string.common_not_connected), color = NasMusicColors.TextSecondary, fontSize = FontSize.Title)
                                 Spacer(modifier = Modifier.height(12.dp))
-                                Text(text = "请先在「服务器」页面配置 NAS 音乐服务", color = NasMusicColors.TextSecondary, fontSize = 21.sp)
+                                Text(text = "请先在「服务器」页面配置 NAS 音乐服务", color = NasMusicColors.TextSecondary, fontSize = FontSize.Button)
                             }
                         }
                     } else if (albums.isEmpty() && songs.isEmpty()) {
                         // 已连接但库为空
                         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Text(text = "曲库为空", color = NasMusicColors.TextSecondary, fontSize = 29.sp)
+                                Text(text = "曲库为空", color = NasMusicColors.TextSecondary, fontSize = FontSize.Title)
                                 Spacer(modifier = Modifier.height(12.dp))
-                                Text(text = "请在 NAS 音乐服务中添加音乐文件", color = NasMusicColors.TextSecondary, fontSize = 21.sp)
+                                Text(text = "请在 NAS 音乐服务中添加音乐文件", color = NasMusicColors.TextSecondary, fontSize = FontSize.Button)
                             }
                         }
                     } else {
@@ -501,7 +503,7 @@ private fun AlbumsTab(
         Text(
             text = "专辑 (${albums.size})",
             color = NasMusicColors.TextPrimary,
-            fontSize = 23.sp,
+            fontSize = FontSize.Subtitle,
             modifier = Modifier.padding(bottom = 12.dp)
         )
         LazyVerticalGrid(
@@ -558,7 +560,7 @@ private fun ArtistsTab(
         Text(
             text = "艺术家 (${artists.size})",
             color = NasMusicColors.TextPrimary,
-            fontSize = 23.sp,
+            fontSize = FontSize.Subtitle,
             modifier = Modifier.padding(bottom = 12.dp)
         )
         LazyVerticalGrid(
@@ -657,7 +659,7 @@ private fun SongsTab(
         Text(
             text = titleText,
             color = NasMusicColors.TextPrimary,
-            fontSize = 23.sp,
+            fontSize = FontSize.Subtitle,
             modifier = Modifier.padding(bottom = 12.dp)
         )
         if (songs.isEmpty() && !songsPaging.isLoading && !isSearching) {
@@ -668,7 +670,7 @@ private fun SongsTab(
                 Text(
                     text = "暂无歌曲",
                     color = NasMusicColors.TextSecondary,
-                    fontSize = 21.sp
+                    fontSize = FontSize.Button
                 )
             }
         } else {
@@ -703,7 +705,7 @@ private fun SongsTab(
                             Text(
                                 text = "加载更多...",
                                 color = NasMusicColors.TextSecondary,
-                                fontSize = 19.sp
+                                fontSize = FontSize.Button
                             )
                         }
                     }
@@ -747,14 +749,14 @@ private fun GenresTab(
         Text(
             text = "风格 (${genres.size})",
             color = NasMusicColors.TextPrimary,
-            fontSize = 23.sp,
+            fontSize = FontSize.Subtitle,
             modifier = Modifier.padding(bottom = 12.dp)
         )
         if (genres.isEmpty()) {
             Text(
                 text = stringResource(R.string.library_no_genres),
                 color = NasMusicColors.TextSecondary,
-                fontSize = 21.sp,
+                fontSize = FontSize.Button,
                 modifier = Modifier.padding(top = 24.dp)
             )
         } else {
@@ -791,7 +793,7 @@ private fun GenresTab(
                             Text(
                                 text = genre.name,
                                 color = NasMusicColors.TextPrimary,
-                                fontSize = 21.sp,
+                                fontSize = FontSize.Button,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )
@@ -799,7 +801,7 @@ private fun GenresTab(
                             Text(
                                 text = "${genre.songCount} 首",
                                 color = LocalFocusableContentColor.current,
-                                fontSize = 17.sp
+                                fontSize = FontSize.Body
                             )
                         }
                     }
@@ -843,14 +845,14 @@ private fun YearsTab(
         Text(
             text = "年代 (${years.size})",
             color = NasMusicColors.TextPrimary,
-            fontSize = 23.sp,
+            fontSize = FontSize.Subtitle,
             modifier = Modifier.padding(bottom = 12.dp)
         )
         if (years.isEmpty()) {
             Text(
                 text = stringResource(R.string.library_no_years),
                 color = NasMusicColors.TextSecondary,
-                fontSize = 21.sp,
+                fontSize = FontSize.Button,
                 modifier = Modifier.padding(top = 24.dp)
             )
         } else {
@@ -888,13 +890,13 @@ private fun YearsTab(
                             Text(
                                 text = "$year",
                                 color = NasMusicColors.TextPrimary,
-                                fontSize = 27.sp
+                                fontSize = FontSize.Title
                             )
                             Spacer(modifier = Modifier.height(4.dp))
                             Text(
                                 text = "点击播放",
                                 color = LocalFocusableContentColor.current,
-                                fontSize = 17.sp
+                                fontSize = FontSize.Body
                             )
                         }
                     }
@@ -933,7 +935,7 @@ fun AlbumCard(
                     AsyncImage(model = album.coverUrl, contentDescription = album.name, modifier = Modifier.fillMaxSize())
                 } else {
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Text(text = "♪", color = LocalFocusableContentColor.current, fontSize = 41.sp)
+                        Text(text = "♪", color = LocalFocusableContentColor.current, fontSize = FontSize.DisplayLarge)
                     }
                 }
                 Box(
@@ -944,15 +946,15 @@ fun AlbumCard(
                         .padding(horizontal = 6.dp, vertical = 2.dp),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text(text = "${album.songCount}首", color = NasMusicColors.TextPrimary, fontSize = 14.sp)
+                    Text(text = "${album.songCount}首", color = NasMusicColors.TextPrimary, fontSize = FontSize.Small)
                 }
             }
             Spacer(modifier = Modifier.height(4.dp))
-            Text(text = album.name, color = NasMusicColors.TextPrimary, fontSize = 17.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(text = album.name, color = NasMusicColors.TextPrimary, fontSize = FontSize.Body, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(text = album.artist.ifBlank { "—" }, color = LocalFocusableContentColor.current, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                Text(text = album.artist.ifBlank { "—" }, color = LocalFocusableContentColor.current, fontSize = FontSize.Small, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
                 if (onPlay != null) {
-                    Text(text = "▶" + stringResource(R.string.player_play), color = NasMusicColors.Primary, fontSize = 14.sp, modifier = Modifier.padding(start = 4.dp))
+                    Text(text = "▶" + stringResource(R.string.player_play), color = NasMusicColors.Primary, fontSize = FontSize.Small, modifier = Modifier.padding(start = 4.dp))
                 }
             }
         }
@@ -1003,16 +1005,16 @@ private fun ArtistCard(
                     Text(
                         text = artist.firstOrNull()?.uppercase() ?: "?",
                         color = NasMusicColors.Primary,
-                        fontSize = 25.sp
+                        fontSize = FontSize.Subtitle
                     )
                 }
             }
             Spacer(modifier = Modifier.height(6.dp))
-            Text(text = artist, color = NasMusicColors.TextPrimary, fontSize = 17.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(text = artist, color = NasMusicColors.TextPrimary, fontSize = FontSize.Body, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(text = "${songCount}首", color = LocalFocusableContentColor.current, fontSize = 15.sp, modifier = Modifier.weight(1f))
+                Text(text = "${songCount}首", color = LocalFocusableContentColor.current, fontSize = FontSize.Small, modifier = Modifier.weight(1f))
                 if (onPlay != null) {
-                    Text(text = "▶", color = NasMusicColors.Primary, fontSize = 14.sp, modifier = Modifier.padding(start = 4.dp))
+                    Text(text = "▶", color = NasMusicColors.Primary, fontSize = FontSize.Small, modifier = Modifier.padding(start = 4.dp))
                 }
             }
         }
@@ -1034,6 +1036,6 @@ fun ButtonChip(text: String, onClick: () -> Unit, modifier: Modifier = Modifier)
         focusedContentColor = NasMusicColors.TextPrimary,
         pressedScale = 0.95f
     ) {
-        Text(text = text, color = NasMusicColors.TextPrimary, fontSize = 19.sp, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
+        Text(text = text, color = NasMusicColors.TextPrimary, fontSize = FontSize.Button, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
     }
 }

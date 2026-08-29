@@ -25,6 +25,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.tv.material3.Text
 import com.nasmusic.tv.R
+import com.nasmusic.tv.ui.theme.FontSize
 import com.nasmusic.tv.ui.theme.NasMusicColors
 import com.nasmusic.tv.ui.LocalDialogBackHandler
 
@@ -67,7 +68,7 @@ fun ConnectPromptDialog(
             Text(
                 text = stringResource(R.string.server_connect_title),
                 color = NasMusicColors.TextPrimary,
-                fontSize = 27.sp,
+                fontSize = FontSize.Title,
                 fontWeight = FontWeight.Bold
             )
             Spacer(modifier = Modifier.height(16.dp))
@@ -77,7 +78,7 @@ fun ConnectPromptDialog(
                 else
                     stringResource(R.string.connect_prompt_message),
                 color = NasMusicColors.TextSecondary,
-                fontSize = 21.sp
+                fontSize = FontSize.Button
             )
             Spacer(modifier = Modifier.height(28.dp))
 
@@ -134,7 +135,7 @@ private fun DialogButton(
             Text(
                 text = label,
                 color = if (isPrimary) Color.Black else NasMusicColors.TextPrimary,
-                fontSize = 21.sp,
+                fontSize = FontSize.Button,
                 fontWeight = FontWeight.Bold
             )
         }

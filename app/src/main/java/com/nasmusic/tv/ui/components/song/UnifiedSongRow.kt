@@ -44,6 +44,7 @@ import com.nasmusic.tv.data.model.Song
 import com.nasmusic.tv.data.model.sourceType
 import com.nasmusic.tv.ui.components.common.CoverImage
 import com.nasmusic.tv.ui.components.common.SourceBadge
+import com.nasmusic.tv.ui.theme.FontSize
 import com.nasmusic.tv.ui.theme.NasMusicColors
 import com.nasmusic.tv.util.TimeUtils
 import kotlinx.coroutines.launch
@@ -201,18 +202,18 @@ private fun SongRowModeRow(
 
                 // 序号或播放图标
                 if (index != null) {
-                    Text(
+                        Text(
                         text = String.format("%02d", index + 1),
                         color = NasMusicColors.TextSecondary,
-                        fontSize = 21.sp,
+                        fontSize = FontSize.Button,
                         modifier = Modifier.width(36.dp),
                         textAlign = androidx.compose.ui.text.style.TextAlign.Center
                     )
                 } else {
-                    Text(
+                        Text(
                         text = "▶",
                         color = NasMusicColors.Primary,
-                        fontSize = 20.sp,
+                        fontSize = FontSize.Button,
                         modifier = Modifier.width(36.dp),
                         textAlign = androidx.compose.ui.text.style.TextAlign.Center
                     )
@@ -225,7 +226,7 @@ private fun SongRowModeRow(
                         Text(
                             text = song.title,
                             color = NasMusicColors.TextPrimary,
-                            fontSize = 23.sp,
+                            fontSize = FontSize.Subtitle,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                             modifier = Modifier.weight(1f, fill = false)
@@ -233,10 +234,10 @@ private fun SongRowModeRow(
                         Spacer(modifier = Modifier.width(8.dp))
                         SourceBadge(song = song)
                     }
-                    Text(
+                        Text(
                         text = song.artist.ifBlank { "-" },
                         color = NasMusicColors.TextSecondary,
-                        fontSize = 20.sp,
+                        fontSize = FontSize.Button,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
@@ -247,7 +248,7 @@ private fun SongRowModeRow(
                 Text(
                     text = TimeUtils.formatDuration(song.durationMs),
                     color = NasMusicColors.TextSecondary,
-                    fontSize = 20.sp
+                    fontSize = FontSize.Button
                 )
             }
 
@@ -333,7 +334,7 @@ private fun RowActionButton(
     ) {
         Text(
             text = text,
-            fontSize = 24.sp,
+            fontSize = FontSize.Subtitle,
             color = color
         )
     }
@@ -395,17 +396,17 @@ private fun SongRowModeCard(
                 cornerRadius = 8.dp
             )
             Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                text = song.title,
-                color = NasMusicColors.TextPrimary,
-                fontSize = 17.sp,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            Text(
-                text = song.artist.ifBlank { "-" },
-                color = NasMusicColors.TextSecondary,
-                fontSize = 15.sp,
+                Text(
+                    text = song.title,
+                    color = NasMusicColors.TextPrimary,
+                    fontSize = FontSize.Body,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    text = song.artist.ifBlank { "-" },
+                    color = NasMusicColors.TextSecondary,
+                    fontSize = FontSize.Small,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
@@ -467,26 +468,26 @@ private fun SongRowModeCompact(
         ) {
             // 序号
             if (index != null) {
-                Text(
+                    Text(
                     text = "${index + 1}.",
                     color = NasMusicColors.TextSecondary,
-                    fontSize = 18.sp,
+                    fontSize = FontSize.Body,
                     modifier = Modifier.width(30.dp)
                 )
             }
             // 歌曲信息
             Column(modifier = Modifier.weight(1f)) {
-                Text(
+                    Text(
                     text = song.title,
                     color = NasMusicColors.TextPrimary,
-                    fontSize = 20.sp,
+                    fontSize = FontSize.Button,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
                 Text(
                     text = song.artist.ifBlank { "-" },
                     color = NasMusicColors.TextSecondary,
-                    fontSize = 16.sp,
+                    fontSize = FontSize.Small,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -495,7 +496,7 @@ private fun SongRowModeCompact(
             Text(
                 text = TimeUtils.formatDuration(song.durationMs),
                 color = NasMusicColors.TextSecondary,
-                fontSize = 16.sp
+                fontSize = FontSize.Small
             )
         }
     }

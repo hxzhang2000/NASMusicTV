@@ -41,6 +41,7 @@ import com.nasmusic.tv.data.model.LyricsHighlightMode
 import com.nasmusic.tv.ui.theme.LyricsTheme
 import com.nasmusic.tv.ui.theme.LocalLyricsTheme
 import com.nasmusic.tv.ui.theme.NasMusicBrushes
+import com.nasmusic.tv.ui.theme.FontSize
 import com.nasmusic.tv.ui.theme.NasMusicColors
 import kotlinx.coroutines.delay
 
@@ -180,7 +181,7 @@ private fun LyricsViewInner(
                 Text(
                     text = lyrics.source.displayName,
                     color = NasMusicColors.TextSecondary,
-                    fontSize = 16.sp
+                    fontSize = FontSize.Small
                 )
             }
         }

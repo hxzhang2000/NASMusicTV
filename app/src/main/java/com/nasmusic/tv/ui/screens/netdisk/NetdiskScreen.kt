@@ -46,6 +46,7 @@ import com.nasmusic.tv.ui.components.song.UnifiedSongRow
 import com.nasmusic.tv.ui.components.songGridColumns
 import com.nasmusic.tv.ui.screens.PlaylistPickerDialog
 import com.nasmusic.tv.ui.screens.TextInputDialog
+import com.nasmusic.tv.ui.theme.FontSize
 import com.nasmusic.tv.ui.theme.NasMusicColors
 import com.nasmusic.tv.ui.viewmodel.MainViewModel
 
@@ -99,7 +100,7 @@ fun NetdiskScreen(
                 }
             }
             Spacer(modifier = Modifier.width(16.dp))
-            Text("网盘音乐", color = NasMusicColors.TextPrimary, fontSize = 28.sp)
+            Text("网盘音乐", color = NasMusicColors.TextPrimary, fontSize = FontSize.Title)
             Spacer(modifier = Modifier.width(32.dp))
 
             // 搜索框（统一样式：点击弹出输入对话框，无独立搜索按钮）
@@ -118,7 +119,7 @@ fun NetdiskScreen(
                     Text(
                         "百度网盘未登录，请前往 设置 → 网盘 开启并登录",
                         color = NasMusicColors.TextSecondary,
-                        fontSize = 20.sp
+                        fontSize = FontSize.Button
                     )
                 }
             }
@@ -126,7 +127,7 @@ fun NetdiskScreen(
             searchKeyword.isNotBlank() -> {
                 if (searchResults.isEmpty()) {
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Text("无搜索结果", color = NasMusicColors.TextSecondary, fontSize = 20.sp)
+                        Text("无搜索结果", color = NasMusicColors.TextSecondary, fontSize = FontSize.Button)
                     }
                 } else {
                     LazyVerticalGrid(
@@ -165,8 +166,8 @@ fun NetdiskScreen(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier.padding(bottom = 12.dp)
                 ) {
-                    Text("目录：", color = NasMusicColors.TextSecondary, fontSize = 18.sp)
-                    Text(currentDir, color = NasMusicColors.Primary, fontSize = 18.sp, modifier = Modifier.weight(1f))
+                    Text("目录：", color = NasMusicColors.TextSecondary, fontSize = FontSize.Body)
+                    Text(currentDir, color = NasMusicColors.Primary, fontSize = FontSize.Body, modifier = Modifier.weight(1f))
                     // 全部播放（含子目录）
                     FocusableSurface(
                         onClick = { viewModel.playAllNetdiskDir(currentDir, onPlayAllSongs) },
@@ -179,7 +180,7 @@ fun NetdiskScreen(
                         contentColor = NasMusicColors.TextPrimary,
                         focusedContentColor = NasMusicColors.TextPrimary
                     ) {
-                        Text("全部播放 ▶", color = NasMusicColors.TextPrimary, fontSize = 16.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp))
+                        Text("全部播放 ▶", color = NasMusicColors.TextPrimary, fontSize = FontSize.Small, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp))
                     }
                     if (currentDir != "/" && currentDir.isNotBlank()) {
                         Spacer(modifier = Modifier.width(8.dp))
@@ -188,17 +189,17 @@ fun NetdiskScreen(
                             modifier = Modifier.padding(end = 8.dp),
                             shape = RoundedCornerShape(8.dp)
                         ) {
-                            Text("上级", color = NasMusicColors.TextPrimary, fontSize = 16.sp, modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp))
+                            Text("上级", color = NasMusicColors.TextPrimary, fontSize = FontSize.Small, modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp))
                         }
                     }
                 }
                 if (isLoading) {
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Text("加载中...", color = NasMusicColors.TextSecondary, fontSize = 18.sp)
+                        Text("加载中...", color = NasMusicColors.TextSecondary, fontSize = FontSize.Body)
                     }
                 } else if (dirFiles.isEmpty()) {
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Text("此目录下没有文件", color = NasMusicColors.TextSecondary, fontSize = 18.sp)
+                        Text("此目录下没有文件", color = NasMusicColors.TextSecondary, fontSize = FontSize.Body)
                     }
                 } else {
                     LazyVerticalGrid(
@@ -292,11 +293,11 @@ private fun FileRow(file: BaiduFile, onClick: () -> Unit, onMore: () -> Unit) {
             Text(
                 file.serverFilename,
                 color = if (file.isDir || isAudio) NasMusicColors.TextPrimary else NasMusicColors.TextSecondary,
-                fontSize = 19.sp,
+                fontSize = FontSize.Button,
                 modifier = Modifier.weight(1f)
             )
             if (isAudio) {
-                Text(formatSize(file.size), color = LocalFocusableContentColor.current, fontSize = 15.sp)
+                Text(formatSize(file.size), color = LocalFocusableContentColor.current, fontSize = FontSize.Small)
             }
         }
     }

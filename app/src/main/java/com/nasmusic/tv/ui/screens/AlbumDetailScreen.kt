@@ -28,6 +28,7 @@ import androidx.tv.material3.Text
 import com.nasmusic.tv.data.model.Album
 import com.nasmusic.tv.data.model.Song
 import com.nasmusic.tv.ui.LocalListBackHandler
+import com.nasmusic.tv.ui.theme.FontSize
 import com.nasmusic.tv.ui.theme.NasMusicColors
 import com.nasmusic.tv.ui.components.BackButton
 import com.nasmusic.tv.ui.components.song.UnifiedSongRow
@@ -92,7 +93,7 @@ fun AlbumDetailScreen(
             Text(
                 text = album.name,
                 color = NasMusicColors.TextPrimary,
-                fontSize = 29.sp,
+                fontSize = FontSize.Title,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f)
@@ -118,7 +119,7 @@ fun AlbumDetailScreen(
                 Text(
                     text = album.artist.ifBlank { "—" },
                     color = NasMusicColors.TextSecondary,
-                    fontSize = 21.sp
+                    fontSize = FontSize.Button
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 Row {
@@ -126,13 +127,13 @@ fun AlbumDetailScreen(
                         Text(
                             text = "${album.year} · ",
                             color = NasMusicColors.TextSecondary,
-                            fontSize = 19.sp
+                            fontSize = FontSize.Button
                         )
                     }
                     Text(
                         text = "${album.songCount} 首曲目",
                         color = NasMusicColors.TextSecondary,
-                        fontSize = 19.sp
+                        fontSize = FontSize.Button
                     )
                 }
                 Spacer(modifier = Modifier.height(12.dp))

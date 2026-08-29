@@ -27,6 +27,7 @@ import androidx.compose.ui.unit.sp
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Text
 import com.nasmusic.tv.data.model.Lyrics
+import com.nasmusic.tv.ui.theme.FontSize
 import com.nasmusic.tv.ui.theme.NasMusicColors
 import kotlinx.coroutines.delay
 import kotlin.math.pow
@@ -85,7 +86,7 @@ private fun KaraokeLyricsViewInner(
         ) {
             Text(
                 text = "暂无歌词",
-                fontSize = 20.sp,
+                fontSize = FontSize.Button,
                 color = NasMusicColors.TextSecondary
             )
         }

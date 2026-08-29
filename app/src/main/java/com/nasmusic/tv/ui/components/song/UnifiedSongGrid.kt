@@ -17,6 +17,7 @@ import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Text
 import com.nasmusic.tv.data.model.Song
 import com.nasmusic.tv.ui.components.songGridColumns
+import com.nasmusic.tv.ui.theme.FontSize
 import com.nasmusic.tv.ui.theme.NasMusicColors
 
 /**
@@ -74,7 +75,7 @@ fun UnifiedSongGrid(
                     Text(
                         text = emptyMessage,
                         color = NasMusicColors.TextSecondary,
-                        fontSize = 20.sp
+                        fontSize = FontSize.Button
                     )
                 }
             }

@@ -35,6 +35,7 @@ import androidx.tv.material3.Text
 import com.nasmusic.tv.R
 import com.nasmusic.tv.data.model.Playlist
 import com.nasmusic.tv.data.model.Song
+import com.nasmusic.tv.ui.theme.FontSize
 import com.nasmusic.tv.ui.theme.NasMusicColors
 import com.nasmusic.tv.ui.components.BackButton
 import com.nasmusic.tv.ui.components.FocusableSurface
@@ -116,7 +117,7 @@ fun PlaylistManagementScreen(
                 Text(
                     text = stringResource(R.string.playlist_title),
                     color = NasMusicColors.TextPrimary,
-                    fontSize = 29.sp
+                    fontSize = FontSize.Title
                 )
             }
 
@@ -135,7 +136,7 @@ fun PlaylistManagementScreen(
                         Text(
                             text = stringResource(R.string.library_favorites) + " (${playlists.size})",
                             color = NasMusicColors.TextPrimary,
-                            fontSize = 21.sp
+                            fontSize = FontSize.Button
                         )
                         ButtonChip(
                             text = "+ " + stringResource(R.string.playlist_create),
@@ -147,11 +148,11 @@ fun PlaylistManagementScreen(
 
                 if (isLoading) {
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Text(text = stringResource(R.string.common_loading), color = NasMusicColors.TextSecondary, fontSize = 21.sp)
+                        Text(text = stringResource(R.string.common_loading), color = NasMusicColors.TextSecondary, fontSize = FontSize.Button)
                     }
                 } else if (playlists.isEmpty()) {
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Text(text = stringResource(R.string.playlist_empty), color = NasMusicColors.TextSecondary, fontSize = 21.sp)
+                        Text(text = stringResource(R.string.playlist_empty), color = NasMusicColors.TextSecondary, fontSize = FontSize.Button)
                     }
                 } else {
                     LazyColumn(
@@ -176,24 +177,24 @@ fun PlaylistManagementScreen(
                                     modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 10.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Text(
+                                        Text(
                                         text = "♪",
                                         color = NasMusicColors.Primary,
-                                        fontSize = 23.sp,
+                                        fontSize = FontSize.Subtitle,
                                         modifier = Modifier.padding(end = 12.dp)
                                     )
                                     Column(modifier = Modifier.weight(1f)) {
                                         Text(
-                                            text = playlist.name,
-                                            color = NasMusicColors.TextPrimary,
-                                            fontSize = 19.sp,
+                                        text = playlist.name,
+                                        color = NasMusicColors.TextPrimary,
+                                        fontSize = FontSize.Button,
                                             maxLines = 1,
                                             overflow = TextOverflow.Ellipsis
                                         )
                                         Text(
-                                            text = stringResource(R.string.playlist_song_count, playlist.songCount),
-                                            color = LocalFocusableContentColor.current,
-                                            fontSize = 16.sp
+                                        text = stringResource(R.string.playlist_song_count, playlist.songCount),
+                                        color = LocalFocusableContentColor.current,
+                                        fontSize = FontSize.Small
                                         )
                                     }
                                     Row {
@@ -223,7 +224,7 @@ fun PlaylistManagementScreen(
                 Text(
                     text = stringResource(R.string.playlist_track_list, selectedPlaylistSongs.size),
                     color = NasMusicColors.TextPrimary,
-                    fontSize = 21.sp
+                    fontSize = FontSize.Button
                 )
 
                 Spacer(modifier = Modifier.height(12.dp))
@@ -233,7 +234,7 @@ fun PlaylistManagementScreen(
                         Text(
                             text = stringResource(R.string.playlist_select_hint),
                             color = NasMusicColors.TextSecondary,
-                            fontSize = 21.sp
+                            fontSize = FontSize.Button
                         )
                     }
                 } else {
@@ -289,6 +290,6 @@ private fun ButtonChipSmall(text: String, onClick: () -> Unit) {
         focusedContentColor = NasMusicColors.TextPrimary,
         pressedScale = 0.95f
     ) {
-        Text(text = text, color = NasMusicColors.TextPrimary, fontSize = 17.sp, modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp))
+        Text(text = text, color = NasMusicColors.TextPrimary, fontSize = FontSize.Body, modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp))
     }
 }

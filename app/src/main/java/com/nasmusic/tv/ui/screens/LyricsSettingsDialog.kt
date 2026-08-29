@@ -23,6 +23,7 @@ import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Text
 import com.nasmusic.tv.R
 import com.nasmusic.tv.ui.components.FocusableSurface
+import com.nasmusic.tv.ui.theme.FontSize
 import com.nasmusic.tv.ui.theme.NasMusicColors
 
 /**
@@ -55,13 +56,13 @@ fun LyricsSettingsDialog(
         Text(
             text = "歌词设置",
             color = NasMusicColors.TextPrimary,
-            fontSize = 25.sp
+            fontSize = FontSize.Subtitle
         )
 
         Text(
             text = "字体大小",
             color = NasMusicColors.TextSecondary,
-            fontSize = 19.sp
+            fontSize = FontSize.Button
         )
 
         Row(
@@ -90,7 +91,7 @@ fun LyricsSettingsDialog(
                     Text(
                         text = label,
                         color = if (isSelected) NasMusicColors.Surface else NasMusicColors.TextPrimary,
-                        fontSize = 18.sp,
+                        fontSize = FontSize.Body,
                         modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp)
                     )
                 }
@@ -121,7 +122,7 @@ fun LyricsSettingsDialog(
             Text(
                 text = "关闭",
                 color = NasMusicColors.TextPrimary,
-                fontSize = 19.sp,
+                fontSize = FontSize.Button,
                 modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp)
             )
         }

@@ -21,6 +21,7 @@ import androidx.compose.ui.unit.sp
 import androidx.tv.material3.Icon
 import androidx.tv.material3.Text
 import com.nasmusic.tv.R
+import com.nasmusic.tv.ui.theme.FontSize
 import com.nasmusic.tv.ui.theme.LocalPhoneCompact
 import com.nasmusic.tv.ui.theme.NasMusicColors
 
@@ -48,8 +49,8 @@ fun BackButton(
             modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(text = stringResource(R.string.common_back_arrow), color = NasMusicColors.TextPrimary, fontSize = 19.sp, modifier = Modifier.padding(end = 6.dp))
-            Text(text = stringResource(R.string.common_back), color = NasMusicColors.TextPrimary, fontSize = 19.sp)
+            Text(text = stringResource(R.string.common_back_arrow), color = NasMusicColors.TextPrimary, fontSize = FontSize.Button, modifier = Modifier.padding(end = 6.dp))
+            Text(text = stringResource(R.string.common_back), color = NasMusicColors.TextPrimary, fontSize = FontSize.Button)
         }
     }
 }
@@ -85,7 +86,7 @@ fun SearchField(
             Text(
                 text = if (query.isBlank()) placeholder else query,
                 color = if (query.isBlank()) NasMusicColors.TextSecondary else NasMusicColors.TextPrimary,
-                fontSize = 18.sp,
+                fontSize = FontSize.Body,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f)
@@ -95,7 +96,7 @@ fun SearchField(
                     onClick = onClear,
                     shape = RoundedCornerShape(8.dp)
                 ) {
-                    Text("✕", color = NasMusicColors.TextPrimary, fontSize = 17.sp, modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp))
+                    Text("✕", color = NasMusicColors.TextPrimary, fontSize = FontSize.Body, modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp))
                 }
             }
         }

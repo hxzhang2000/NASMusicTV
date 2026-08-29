@@ -1,5 +1,7 @@
 package com.nasmusic.tv.ui.screens
 
+import com.nasmusic.tv.ui.theme.FontSize
+
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -77,7 +79,7 @@ fun EqualizerScreen(
             Text(
                 text = stringResource(R.string.equalizer_title),
                 color = NasMusicColors.TextPrimary,
-                fontSize = 29.sp
+                fontSize = FontSize.Title
             )
         }
 
@@ -96,7 +98,7 @@ fun EqualizerScreen(
                     Text(
                         text = stringResource(R.string.home_spectrum_preview),
                         color = NasMusicColors.TextSecondary,
-                        fontSize = 17.sp,
+                        fontSize = FontSize.Body,
                         modifier = Modifier.padding(bottom = 6.dp)
                     )
                     VisualEqualizer(
@@ -114,7 +116,7 @@ fun EqualizerScreen(
                 Text(
                     text = stringResource(R.string.equalizer_preset),
                     color = NasMusicColors.TextPrimary,
-                    fontSize = 21.sp,
+                    fontSize = FontSize.Button,
                     modifier = Modifier.padding(bottom = 8.dp)
                 )
             }
@@ -151,12 +153,12 @@ items(presets, key = { it.name }) { preset ->
                         Text(
                             text = if (isSelected) "✓  " else "   ",
                             color = NasMusicColors.Primary,
-                            fontSize = 19.sp
+                            fontSize = FontSize.Button
                         )
                         Text(
                             text = preset.displayName,
                             color = LocalFocusableContentColor.current,
-                            fontSize = 19.sp,
+                            fontSize = FontSize.Button,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
@@ -172,7 +174,7 @@ items(presets, key = { it.name }) { preset ->
                     Text(
                         text = stringResource(R.string.equalizer_bands),
                         color = NasMusicColors.TextPrimary,
-                        fontSize = 21.sp,
+                        fontSize = FontSize.Button,
                         modifier = Modifier.padding(bottom = 8.dp)
                     )
                 }
@@ -203,7 +205,7 @@ items(presets, key = { it.name }) { preset ->
                             Text(
                                 text = bandLabels[index],
                                 color = NasMusicColors.TextPrimary,
-                                fontSize = 18.sp,
+                                fontSize = FontSize.Body,
                                 modifier = Modifier.width(60.dp)
                             )
                             Spacer(modifier = Modifier.weight(1f))
@@ -214,7 +216,7 @@ items(presets, key = { it.name }) { preset ->
                                 color = if (band > 0) NasMusicColors.Primary
                                         else if (band < 0) Accent
                                         else NasMusicColors.TextSecondary,
-                                fontSize = 19.sp
+                                fontSize = FontSize.Button
                             )
                         }
                     }

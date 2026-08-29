@@ -39,6 +39,7 @@ import androidx.tv.material3.Text
 import com.nasmusic.tv.net.BackupTransferServer
 import com.nasmusic.tv.ui.components.FocusableSurface
 import com.nasmusic.tv.ui.components.LocalFocusableContentColor
+import com.nasmusic.tv.ui.theme.FontSize
 import com.nasmusic.tv.ui.theme.NasMusicColors
 import com.nasmusic.tv.util.LinkUtils
 import com.nasmusic.tv.util.NetworkUtils
@@ -114,10 +115,10 @@ fun BackupTransferDialog(
                     .padding(28.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Text(
+                    Text(
                     text = "扫码传输备份",
                     color = NasMusicColors.TextPrimary,
-                    fontSize = 23.sp
+                    fontSize = FontSize.Subtitle
                 )
                 Spacer(modifier = Modifier.height(8.dp))
 
@@ -128,15 +129,15 @@ fun BackupTransferDialog(
                         modifier = Modifier.size(280.dp)
                     )
                     Spacer(modifier = Modifier.height(12.dp))
-                    Text(
+                        Text(
                         text = "手机扫码打开备份管理页",
                         color = NasMusicColors.TextPrimary,
-                        fontSize = 19.sp
+                        fontSize = FontSize.Button
                     )
-                    Text(
+                        Text(
                         text = "可下载备份到手机 / 上传备份到电视 / 恢复备份",
                         color = NasMusicColors.TextSecondary,
-                        fontSize = 17.sp
+                        fontSize = FontSize.Body
                     )
                     Spacer(modifier = Modifier.height(6.dp))
                     serverUrl?.let { url ->
@@ -154,7 +155,7 @@ fun BackupTransferDialog(
                             Text(
                                 text = url,
                                 color = NasMusicColors.Primary,
-                                fontSize = 16.sp,
+                                fontSize = FontSize.Small,
                                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp)
                             )
                         }
@@ -162,11 +163,11 @@ fun BackupTransferDialog(
                 } ?: run {
                     // 无 QR 时显示状态
                     Spacer(modifier = Modifier.height(40.dp))
-                    Text(
+                        Text(
                         text = status,
                         color = if (status.startsWith("等待")) NasMusicColors.Primary
                                else NasMusicColors.Warning,
-                        fontSize = 19.sp
+                        fontSize = FontSize.Button
                     )
                     Spacer(modifier = Modifier.height(40.dp))
                 }
@@ -199,7 +200,7 @@ fun BackupTransferDialog(
                             Text(
                                 text = "关闭",
                                 color = LocalFocusableContentColor.current,
-                                fontSize = 19.sp
+                                fontSize = FontSize.Button
                             )
                         }
                     }

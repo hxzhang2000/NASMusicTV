@@ -32,6 +32,7 @@ import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Text
 import com.nasmusic.tv.data.model.Album
 import com.nasmusic.tv.ui.components.common.CoverImage
+import com.nasmusic.tv.ui.theme.FontSize
 import com.nasmusic.tv.ui.theme.NasMusicColors
 import kotlinx.coroutines.launch
 
@@ -96,14 +97,14 @@ fun UnifiedAlbumCard(
             Text(
                 text = album.name,
                 color = NasMusicColors.TextPrimary,
-                fontSize = 17.sp,
+                fontSize = FontSize.Body,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
             Text(
                 text = album.artist.ifBlank { "-" },
                 color = NasMusicColors.TextSecondary,
-                fontSize = 15.sp,
+                fontSize = FontSize.Small,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )

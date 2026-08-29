@@ -11,6 +11,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Text
+import com.nasmusic.tv.ui.theme.FontSize
 import com.nasmusic.tv.data.model.MusicSourceType
 import com.nasmusic.tv.data.model.Song
 import com.nasmusic.tv.data.model.sourceType
@@ -35,7 +36,7 @@ fun SourceBadge(
     Text(
         text = source.displayName,
         color = Color.White,
-        fontSize = 13.sp,
+        fontSize = FontSize.Caption,
         modifier = modifier
             .clip(RoundedCornerShape(4.dp))
             .background(source.color.copy(alpha = 0.85f))

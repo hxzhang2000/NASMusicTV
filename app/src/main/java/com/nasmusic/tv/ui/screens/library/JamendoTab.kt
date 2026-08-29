@@ -35,6 +35,7 @@ import com.nasmusic.tv.ui.components.SearchField
 import com.nasmusic.tv.ui.components.song.SongRowMode
 import com.nasmusic.tv.ui.components.song.UnifiedSongRow
 import com.nasmusic.tv.ui.screens.TextInputDialog
+import com.nasmusic.tv.ui.theme.FontSize
 import com.nasmusic.tv.ui.theme.NasMusicColors
 
 private val JAMENDO_PRESET_TAGS = listOf("ambient", "electronic", "jazz", "filmscore", "chillout", "instrumental", "pop", "rock")
@@ -83,7 +84,7 @@ fun JamendoTab(
                 Text(
                     text = stringResource(R.string.network_jamendo_no_key),
                     color = NasMusicColors.TextPrimary,
-                    fontSize = 18.sp,
+                    fontSize = FontSize.Body,
                     modifier = Modifier.padding(horizontal = 24.dp, vertical = 18.dp)
                 )
             }
@@ -121,7 +122,7 @@ fun JamendoTab(
                 Text(
                     text = stringResource(R.string.network_jamendo_hot),
                     color = if (hotSelected) Color.Black else NasMusicColors.TextPrimary,
-                    fontSize = 16.sp,
+                    fontSize = FontSize.Small,
                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp)
                 )
             }
@@ -143,7 +144,7 @@ fun JamendoTab(
                     Text(
                         text = tag,
                         color = if (isSelected) Color.Black else NasMusicColors.TextPrimary,
-                        fontSize = 16.sp,
+                        fontSize = FontSize.Small,
                         modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp)
                     )
                 }
@@ -156,14 +157,14 @@ fun JamendoTab(
         when (jamendoState) {
             is UiState.Loading -> {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text(stringResource(R.string.common_loading), color = NasMusicColors.TextSecondary, fontSize = 19.sp)
+                    Text(stringResource(R.string.common_loading), color = NasMusicColors.TextSecondary, fontSize = FontSize.Button)
                 }
             }
             is UiState.Error -> Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Text(
                     text = stringResource(R.string.network_jamendo_load_failed),
                     color = NasMusicColors.TextSecondary,
-                    fontSize = 19.sp
+                    fontSize = FontSize.Button
                 )
             }
             is UiState.Success -> {
@@ -173,7 +174,7 @@ fun JamendoTab(
                         Text(
                             text = stringResource(R.string.network_jamendo_no_results),
                             color = NasMusicColors.TextSecondary,
-                            fontSize = 19.sp
+                            fontSize = FontSize.Button
                         )
                     }
                 } else {

@@ -1,5 +1,7 @@
 package com.nasmusic.tv.ui.screens
 
+import com.nasmusic.tv.ui.theme.FontSize
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -408,7 +410,7 @@ fun NowPlayingScreen(
                             ) {
                                 Text(
                                     text = "● 电台直播",
-                                    fontSize = 27.sp,
+                                    fontSize = FontSize.Title,
                                     fontWeight = FontWeight.Bold,
                                     color = NasMusicColors.Primary,
                                     textAlign = androidx.compose.ui.text.style.TextAlign.Center
@@ -504,7 +506,7 @@ private fun CoverColumn(
                     Text(
                         text = title,
                         color = NasMusicColors.TextPrimary,
-                        fontSize = 27.sp,
+                        fontSize = FontSize.Title,
                         textAlign = TextAlign.Center,
                         modifier = Modifier.weight(1f).padding(horizontal = 4.dp, vertical = 2.dp)
                     )
@@ -513,7 +515,7 @@ private fun CoverColumn(
                 Text(
                     text = stringResource(R.string.player_no_song_selected),
                     color = NasMusicColors.TextPrimary,
-                    fontSize = 27.sp,
+                    fontSize = FontSize.Title,
                     textAlign = TextAlign.Center,
                     modifier = Modifier.weight(1f)
                 )
@@ -541,7 +543,7 @@ private fun CoverColumn(
                 Text(
                     text = "NET",
                     color = NasMusicColors.Primary,
-                    fontSize = 15.sp,
+                    fontSize = FontSize.Small,
                     textAlign = TextAlign.Center
                 )
             }
@@ -553,7 +555,7 @@ private fun CoverColumn(
             Text(
                 text = currentSong?.album ?: "",
                 color = NasMusicColors.TextSecondary.copy(alpha = 0.7f),
-                fontSize = 19.sp,
+                fontSize = FontSize.Button,
                 textAlign = TextAlign.Center,
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp)
             )
@@ -628,7 +630,7 @@ private fun CoverColumn(
                 Text(
                     text = artist,
                     color = LocalFocusableContentColor.current,
-                    fontSize = 21.sp,
+                    fontSize = FontSize.Button,
                     textAlign = TextAlign.Center,
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 2.dp)
                 )
@@ -637,7 +639,7 @@ private fun CoverColumn(
             Text(
                 text = "—",
                 color = NasMusicColors.TextSecondary,
-                fontSize = 21.sp,
+                fontSize = FontSize.Button,
                 textAlign = TextAlign.Center,
                 modifier = Modifier.fillMaxWidth()
             )
@@ -666,7 +668,7 @@ private fun CoverColumn(
                 Text(
                     text = if (showInfoPanel) "封面" else "信息",
                     color = if (showInfoPanel) NasMusicColors.Primary else NasMusicColors.TextPrimary,
-                    fontSize = 16.sp,
+                    fontSize = FontSize.Small,
                     modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
                 )
             }
@@ -696,7 +698,7 @@ private fun FavoriteButton(
         Text(
             text = if (isFavorite) "♥" else "♡",
             color = LocalFocusableContentColor.current,
-            fontSize = 25.sp,
+            fontSize = FontSize.Subtitle,
             modifier = Modifier.padding(10.dp)
         )
     }
@@ -733,7 +735,7 @@ private fun SourceTag(
             color = if (!available) NasMusicColors.TextSecondary.copy(alpha = 0.4f)
                     else if (selected) Color.Black
                     else NasMusicColors.TextPrimary,
-            fontSize = 16.sp,
+            fontSize = FontSize.Small,
             modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
         )
     }

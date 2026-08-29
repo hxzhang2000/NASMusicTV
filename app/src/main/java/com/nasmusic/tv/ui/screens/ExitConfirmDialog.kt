@@ -26,6 +26,7 @@ import androidx.compose.ui.unit.sp
 import androidx.tv.material3.Text
 import com.nasmusic.tv.R
 import com.nasmusic.tv.ui.components.FocusableSurface
+import com.nasmusic.tv.ui.theme.FontSize
 import com.nasmusic.tv.ui.theme.NasMusicColors
 import com.nasmusic.tv.ui.LocalDialogBackHandler
 
@@ -63,14 +64,14 @@ fun ExitConfirmDialog(
             Text(
                 text = stringResource(R.string.exit_title),
                 color = NasMusicColors.TextPrimary,
-                fontSize = 27.sp,
+                fontSize = FontSize.Title,
                 fontWeight = FontWeight.Bold
             )
             Spacer(modifier = Modifier.height(16.dp))
             Text(
                 text = stringResource(R.string.exit_confirm_message),
                 color = NasMusicColors.TextSecondary,
-                fontSize = 21.sp
+                fontSize = FontSize.Button
             )
             Spacer(modifier = Modifier.height(28.dp))
 
@@ -127,7 +128,7 @@ private fun ExitButton(
             Text(
                 text = label,
                 color = if (isPrimary) Color.Black else NasMusicColors.TextPrimary,
-                fontSize = 21.sp,
+                fontSize = FontSize.Button,
                 fontWeight = FontWeight.Bold
             )
         }

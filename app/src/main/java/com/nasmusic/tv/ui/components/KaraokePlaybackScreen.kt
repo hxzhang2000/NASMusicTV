@@ -57,6 +57,7 @@ import androidx.tv.material3.Text
 import coil.compose.rememberAsyncImagePainter
 import com.nasmusic.tv.data.model.Lyrics
 import com.nasmusic.tv.data.model.Song
+import com.nasmusic.tv.ui.theme.FontSize
 import com.nasmusic.tv.ui.theme.NasMusicBrushes
 import com.nasmusic.tv.ui.theme.NasMusicColors
 
@@ -178,7 +179,7 @@ fun KaraokePlaybackScreen(
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(
                         text = "正在转换伴奏…",
-                        fontSize = 16.sp,
+                        fontSize = FontSize.Small,
                         fontWeight = FontWeight.Bold,
                         color = NasMusicColors.TextPrimary
                     )
@@ -186,7 +187,7 @@ fun KaraokePlaybackScreen(
                         Spacer(Modifier.height(6.dp))
                         Text(
                             text = "${(separationProgress.first * 100).toInt()}% · ${separationProgress.second}",
-                            fontSize = 13.sp,
+                            fontSize = FontSize.Caption,
                             color = NasMusicColors.TextSecondary
                         )
                     }
@@ -212,7 +213,7 @@ fun KaraokePlaybackScreen(
             ) {
                 Text(
                     text = hqError,
-                    fontSize = 14.sp,
+                    fontSize = FontSize.Small,
                     fontWeight = FontWeight.Medium,
                     color = Color(0xFFFF8888)
                 )
@@ -237,7 +238,7 @@ fun KaraokePlaybackScreen(
             ) {
                 Text(
                     text = hqSuccess,
-                    fontSize = 14.sp,
+                    fontSize = FontSize.Small,
                     fontWeight = FontWeight.Medium,
                     color = Color(0xFF88FF88)
                 )
@@ -290,7 +291,7 @@ fun KaraokePlaybackScreen(
             ) {
                 Text(
                     text = currentSong?.title ?: "",
-                    fontSize = 27.sp,
+                    fontSize = FontSize.Title,
                     fontWeight = FontWeight.Bold,
                     color = NasMusicColors.TextPrimary,
                     textAlign = TextAlign.Center,
@@ -299,7 +300,7 @@ fun KaraokePlaybackScreen(
                 Spacer(Modifier.height(4.dp))
                 Text(
                     text = currentSong?.artist ?: "",
-                    fontSize = 20.sp,
+                    fontSize = FontSize.Button,
                     color = NasMusicColors.TextSecondary,
                     textAlign = TextAlign.Center,
                     maxLines = 1
@@ -578,14 +579,14 @@ private fun KaraokeSettingButton(
         ) {
             Text(
                 text = label,
-                fontSize = 12.sp,
+                fontSize = FontSize.Caption,
                 fontWeight = FontWeight.Bold,
                 color = if (isModified) NasMusicColors.Primary else LocalFocusableContentColor.current
             )
             Spacer(Modifier.height(2.dp))
             Text(
                 text = value,
-                fontSize = 14.sp,
+                fontSize = FontSize.Small,
                 fontWeight = FontWeight.Bold,
                 color = NasMusicColors.TextPrimary,
                 maxLines = 1
@@ -651,7 +652,7 @@ private fun <T> KaraokeStepPickerDialog(
                 // 标题
                 Text(
                     text = title,
-                    fontSize = 20.sp,
+                    fontSize = FontSize.Button,
                     fontWeight = FontWeight.Bold,
                     color = NasMusicColors.TextPrimary
                 )
@@ -679,7 +680,7 @@ private fun <T> KaraokeStepPickerDialog(
                         focusBorderColor = NasMusicColors.FocusRing
                     ) {
                         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            Text(text = "<", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = NasMusicColors.TextPrimary)
+                            Text(text = "<", fontSize = FontSize.Subtitle, fontWeight = FontWeight.Bold, color = NasMusicColors.TextPrimary)
                         }
                     }
 
@@ -703,7 +704,7 @@ private fun <T> KaraokeStepPickerDialog(
                         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                             Text(
                                 text = formatLabel(steps[tempIndex]),
-                                fontSize = 22.sp,
+                                fontSize = FontSize.Subtitle,
                                 fontWeight = FontWeight.Bold,
                                 color = NasMusicColors.TextPrimary
                             )
@@ -727,7 +728,7 @@ private fun <T> KaraokeStepPickerDialog(
                         focusBorderColor = NasMusicColors.FocusRing
                     ) {
                         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            Text(text = ">", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = NasMusicColors.TextPrimary)
+                            Text(text = ">", fontSize = FontSize.Subtitle, fontWeight = FontWeight.Bold, color = NasMusicColors.TextPrimary)
                         }
                     }
                 }
@@ -755,7 +756,7 @@ private fun <T> KaraokeStepPickerDialog(
                         focusBorderColor = NasMusicColors.FocusRing
                     ) {
                         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            Text(text = "重置", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = LocalFocusableContentColor.current)
+                            Text(text = "重置", fontSize = FontSize.Small, fontWeight = FontWeight.Bold, color = LocalFocusableContentColor.current)
                         }
                     }
 
@@ -775,7 +776,7 @@ private fun <T> KaraokeStepPickerDialog(
                         focusBorderColor = NasMusicColors.FocusRing
                     ) {
                         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            Text(text = "确定", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = LocalFocusableContentColor.current)
+                            Text(text = "确定", fontSize = FontSize.Small, fontWeight = FontWeight.Bold, color = LocalFocusableContentColor.current)
                         }
                     }
                 }

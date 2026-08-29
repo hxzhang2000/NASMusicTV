@@ -43,6 +43,7 @@ import com.nasmusic.tv.ui.components.common.SectionHeader
 import com.nasmusic.tv.ui.components.song.UnifiedSongRow
 import com.nasmusic.tv.ui.components.song.SongRowMode
 import com.nasmusic.tv.ui.components.songGridColumns
+import com.nasmusic.tv.ui.theme.FontSize
 import com.nasmusic.tv.ui.theme.NasMusicColors
 import kotlinx.coroutines.launch
 
@@ -150,7 +151,7 @@ fun DiscoverTab(
                             ) {
                                 Text(
                                     text = "全部播放 ▶",
-                                    fontSize = 19.sp,
+                                    fontSize = FontSize.Button,
                                     color = NasMusicColors.TextPrimary,
                                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
                                 )
@@ -168,7 +169,7 @@ fun DiscoverTab(
                             ) {
                                 Text(
                                     text = "加入队列",
-                                    fontSize = 19.sp,
+                                    fontSize = FontSize.Button,
                                     color = NasMusicColors.TextPrimary,
                                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
                                 )
@@ -186,7 +187,7 @@ fun DiscoverTab(
                             ) {
                                 Text(
                                     text = "换一批 ↻",
-                                    fontSize = 19.sp,
+                                    fontSize = FontSize.Button,
                                     color = NasMusicColors.TextPrimary,
                                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
                                 )
@@ -195,7 +196,7 @@ fun DiscoverTab(
                             Text(
                                 text = "${filteredSongs.size} 首",
                                 color = NasMusicColors.TextSecondary,
-                                fontSize = 18.sp
+                                fontSize = FontSize.Body
                             )
                         }
                     }
@@ -239,7 +240,7 @@ private fun DimensionRow(
         Text(
             text = dimension.label,
             color = NasMusicColors.TextSecondary,
-            fontSize = 17.sp,
+            fontSize = FontSize.Body,
             modifier = Modifier.width(70.dp)
         )
         LazyRow(
@@ -272,7 +273,7 @@ private fun DimensionRow(
                 ) {
                     Text(
                         text = option,
-                        fontSize = 17.sp,
+                        fontSize = FontSize.Body,
                         color = textColor,
                         modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
                     )

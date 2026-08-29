@@ -33,6 +33,7 @@ import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Text
 import com.nasmusic.tv.data.model.Artist
 import com.nasmusic.tv.ui.components.common.CoverImage
+import com.nasmusic.tv.ui.theme.FontSize
 import com.nasmusic.tv.ui.theme.NasMusicColors
 import kotlinx.coroutines.launch
 
@@ -98,7 +99,7 @@ fun UnifiedArtistCard(
             Text(
                 text = artist.name,
                 color = NasMusicColors.TextPrimary,
-                fontSize = 16.sp,
+                fontSize = FontSize.Small,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )

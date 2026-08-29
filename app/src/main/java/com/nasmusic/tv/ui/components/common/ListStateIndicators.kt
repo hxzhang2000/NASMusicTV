@@ -19,6 +19,7 @@ import androidx.compose.ui.unit.sp
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Text
 import com.nasmusic.tv.ui.components.FocusableSurface
+import com.nasmusic.tv.ui.theme.FontSize
 import com.nasmusic.tv.ui.theme.NasMusicColors
 
 /**
@@ -38,13 +39,13 @@ fun LoadingIndicator(
             Text(
                 text = "⟳",
                 color = NasMusicColors.Primary,
-                fontSize = 36.sp
+                fontSize = FontSize.Display
             )
             Spacer(modifier = Modifier.height(12.dp))
             Text(
                 text = text,
                 color = NasMusicColors.TextSecondary,
-                fontSize = 19.sp
+                fontSize = FontSize.Button
             )
         }
     }
@@ -71,12 +72,12 @@ fun ErrorDisplay(
             Text(
                 text = "⚠",
                 color = NasMusicColors.Warning,
-                fontSize = 36.sp
+                fontSize = FontSize.Display
             )
             Text(
                 text = message,
                 color = NasMusicColors.TextSecondary,
-                fontSize = 19.sp,
+                fontSize = FontSize.Button,
                 textAlign = TextAlign.Center
             )
             if (onRetry != null) {
@@ -93,7 +94,7 @@ fun ErrorDisplay(
                     Text(
                         text = "重试",
                         color = NasMusicColors.TextPrimary,
-                        fontSize = 19.sp,
+                        fontSize = FontSize.Button,
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
                     )
                 }
@@ -124,12 +125,12 @@ fun EmptyState(
             Text(
                 text = "📭",
                 color = NasMusicColors.TextSecondary,
-                fontSize = 36.sp
+                fontSize = FontSize.Display
             )
             Text(
                 text = message,
                 color = NasMusicColors.TextSecondary,
-                fontSize = 19.sp,
+                fontSize = FontSize.Button,
                 textAlign = TextAlign.Center
             )
             if (actionText != null && onAction != null) {
@@ -146,7 +147,7 @@ fun EmptyState(
                     Text(
                         text = actionText,
                         color = NasMusicColors.TextPrimary,
-                        fontSize = 19.sp,
+                        fontSize = FontSize.Button,
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
                     )
                 }

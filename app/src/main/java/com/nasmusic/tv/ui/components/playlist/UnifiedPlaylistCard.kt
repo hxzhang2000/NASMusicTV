@@ -23,6 +23,7 @@ import com.nasmusic.tv.data.model.Playlist
 import com.nasmusic.tv.ui.components.CoverCarousel
 import com.nasmusic.tv.ui.components.FocusableSurface
 import com.nasmusic.tv.ui.components.LocalFocusableContentColor
+import com.nasmusic.tv.ui.theme.FontSize
 import com.nasmusic.tv.ui.theme.NasMusicColors
 
 /**
@@ -86,7 +87,7 @@ fun UnifiedPlaylistCard(
                         Text(
                             text = "${playlist.songCount}首",
                             color = NasMusicColors.TextPrimary,
-                            fontSize = 14.sp
+                            fontSize = FontSize.Small
                         )
                     }
                 }
@@ -95,14 +96,14 @@ fun UnifiedPlaylistCard(
             Text(
                 text = playlist.name,
                 color = NasMusicColors.TextPrimary,
-                fontSize = 17.sp,
+                fontSize = FontSize.Body,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
             Text(
                 text = "${playlist.songCount}首",
                 color = LocalFocusableContentColor.current,
-                fontSize = 15.sp
+                fontSize = FontSize.Small
             )
         }
     }
