@@ -216,18 +216,19 @@ class AccompanimentCache(private val context: Context) {
     }
 
     /**
-     * 仅清除伴奏文件（保留人声文件，用于 K 歌对比）
+     * 清除所有分离文件（伴奏+人声）
+     * 用户不需要保留人声文件，所有分离文件都可以删除
      */
     fun clearAccompaniments(): Int {
         cancelPreSeparation()
         var count = 0
         cacheDir.listFiles()?.forEach { file ->
-            if (file.name.endsWith("_accompaniment.wav")) {
+            if (file.name.endsWith("_accompaniment.wav") || file.name.endsWith("_vocals.wav")) {
                 file.delete()
                 count++
             }
         }
-        AppLog.d(TAG, "clearAccompaniments: deleted $count accompaniment files")
+        AppLog.d(TAG, "clearAccompaniments: deleted $count separation files")
         return count
     }
 

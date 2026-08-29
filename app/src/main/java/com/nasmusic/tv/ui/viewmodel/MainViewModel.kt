@@ -770,6 +770,15 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
             _playMode.value = settings.defaultPlayMode
             playerManager.applyPlayMode(_playMode.value)
 
+            // 初始化升降调/变速（从 AppPreferences 恢复）
+            val savedPitch = prefs.pitchSemitones.first()
+            val savedSpeed = prefs.playbackSpeed.first()
+            _pitchSemitones.value = savedPitch
+            _playbackSpeed.value = savedSpeed
+            playerManager.setPitch(savedPitch)
+            playerManager.setSpeed(savedSpeed.toFloat())
+            AppLog.d("MainViewModel", "init: pitch=$savedPitch, speed=$savedSpeed")
+
             // 等待配置加载完成后判断是否显示连接提示
             val config = prefs.serverConfig.first()
             if (config.baseUrl.isNotBlank()) {
@@ -2615,8 +2624,19 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
     }
 
     // --- 分离模式（快速/高质量）---
-    /** 当前分离模式（委托 PlayerManager 状态） */
-    val separationMode: StateFlow<AppPreferences.SeparationMode> = playerManager.separationMode
+    /** 当前分离模式（同步 prefs → PlayerManager） */
+    val separationMode: StateFlow<AppPreferences.SeparationMode> = prefs.separationMode.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.Eagerly,
+        initialValue = AppPreferences.SeparationMode.FAST
+    ).also { flow ->
+        // 启动时将持久化的模式同步到 PlayerManager
+        viewModelScope.launch {
+            val savedMode = flow.value
+            playerManager.setSeparationMode(savedMode)
+            AppLog.d("MainViewModel", "init: loaded separationMode=$savedMode from prefs")
+        }
+    }
     /** 高质量分离是否正在进行（委托 PlayerManager 状态） */
     val separating: StateFlow<Boolean> = playerManager.separating
     /** 高质量分离进度与阶段描述（委托 PlayerManager 状态） */
