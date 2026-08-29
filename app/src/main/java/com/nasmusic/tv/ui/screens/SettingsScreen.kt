@@ -87,6 +87,7 @@ fun SettingsScreen(
     onClearLyricsCache: (() -> Unit)? = null,
     onClearCoverCache: (() -> Unit)? = null,
     onClearMvCache: (() -> Unit)? = null,
+    onClearAccompanimentCache: (() -> Unit)? = null,
     onOpenEqualizer: (() -> Unit)? = null,
     onChangeMetingApiBaseUrl: ((String) -> Unit)? = null,
     // MTV 视频搜索端点配置
@@ -588,21 +589,14 @@ fun SettingsScreen(
                             )
                         }
                     }
-                    item {
-                        val context = LocalContext.current
-                        val cacheDirSize = try {
-                            val cacheDir = context.cacheDir
-                            val sizeBytes = cacheDir?.walkTopDown()?.filter { it.isFile }?.sumOf { it.length() } ?: 0L
-                            if (sizeBytes > 1048576L) "${sizeBytes / 1048576} MB"
-                            else if (sizeBytes > 1024L) "${sizeBytes / 1024} KB"
-                            else "$sizeBytes B"
-                        } catch (_: Exception) { "—" }
-                        Text(
-                            text = "当前缓存目录大小: $cacheDirSize",
-                            color = NasMusicColors.TextSecondary,
-                            fontSize = 18.sp,
-                            modifier = Modifier.padding(start = 4.dp, top = 8.dp)
-                        )
+                    if (onClearAccompanimentCache != null) {
+                        item {
+                            SettingActionButton(
+                                label = "清除伴奏缓存",
+                                description = "删除 HQ 分离生成的伴奏文件（最多10首）",
+                                onClick = onClearAccompanimentCache
+                            )
+                        }
                     }
                 }
                 SettingsSection.NETDISK -> {

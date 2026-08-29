@@ -305,6 +305,7 @@ fun AppRoot(
                     val separating by viewModel.separating.collectAsState()
                     val separationProgress by viewModel.separationProgress.collectAsState()
                     val hqError by viewModel.hqError.collectAsState()
+                    val hqSuccess by viewModel.hqSuccess.collectAsState()
                     val modelDownloaded by viewModel.modelDownloaded.collectAsState()
                     val mvReady = mvState as? com.nasmusic.tv.ui.viewmodel.MvAvailability.Ready
                     if (showMv && mvReady != null) {
@@ -395,6 +396,8 @@ fun AppRoot(
                             hqError = hqError,
                             onToggleSeparationMode = { viewModel.toggleSeparationMode() },
                             onClearHqError = { viewModel.clearHqError() },
+                            hqSuccess = hqSuccess,
+                            onClearHqSuccess = { viewModel.clearHqSuccess() },
                             // 高质量分离模型是否已下载（未下载时 K 歌页禁用高质量切换）
                             modelDownloaded = modelDownloaded
                         )
@@ -676,6 +679,7 @@ fun AppRoot(
                         onClearLyricsCache = { viewModel.clearLyricsCache() },
                         onClearCoverCache = { viewModel.clearCoverCache() },
                         onClearMvCache = { viewModel.clearMvPersistentCache() },
+                        onClearAccompanimentCache = { viewModel.clearAccompanimentCache() },
                         onOpenEqualizer = { viewModel.navigateTo(Screen.Equalizer) },
                         onChangeMetingApiBaseUrl = { viewModel.updateMetingApiBaseUrl(it) },
                         mvApiBaseUrl = settings.mvApiBaseUrl,

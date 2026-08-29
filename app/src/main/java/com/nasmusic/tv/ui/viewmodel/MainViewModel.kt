@@ -2623,6 +2623,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
     val separationProgress: StateFlow<Pair<Float, String>> = playerManager.separationProgress
     /** 高质量分离错误信息（非空表示最近一次失败，UI 应提示用户） */
     val hqError: StateFlow<String?> = playerManager.hqError
+    /** 高质量分离成功信息（非空表示最近一次成功，UI 应提示用户） */
+    val hqSuccess: StateFlow<String?> = playerManager.hqSuccess
 
     // --- 高质量分离模型下载状态 ---
     private val _modelDownloaded = MutableStateFlow(false)
@@ -2704,6 +2706,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
     /** 清除高质量分离错误信息 */
     fun clearHqError() {
         playerManager.clearHqError()
+    }
+
+    /** 清除高质量分离成功信息 */
+    fun clearHqSuccess() {
+        playerManager.clearHqSuccess()
     }
 
     /** 设置分离模式（从设置页调用） */
@@ -3482,6 +3489,16 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
         viewModelScope.launch {
             mvSearchManager.clearPersistentCache()
             _connectMessage.value = "MV 缓存已清除"
+            delay(2000)
+            _connectMessage.value = null
+        }
+    }
+
+    /** 清除伴奏缓存（设置页"缓存管理"手动清除用） */
+    fun clearAccompanimentCache() {
+        viewModelScope.launch {
+            val count = playerManager.clearAccompanimentCache()
+            _connectMessage.value = "伴奏缓存已清除（$count 个文件）"
             delay(2000)
             _connectMessage.value = null
         }

@@ -63,6 +63,8 @@ class PlayerManager() {
     /** 高质量分离错误信息（非空表示最近一次失败，UI 应提示用户） */
     private val _hqError = MutableStateFlow<String?>(null)
     val hqError: StateFlow<String?> = _hqError
+    private val _hqSuccess = MutableStateFlow<String?>(null)
+    val hqSuccess: StateFlow<String?> = _hqSuccess
 
     /** 原始 MediaItem 的 URI，用于切换回原始音频 */
     private var originalMediaItemUri: String? = null
@@ -404,7 +406,7 @@ class PlayerManager() {
                         val totalSec = (System.currentTimeMillis() - separationStartTimeMs) / 1000.0
                         AppLog.d(TAG, "enableHighQualityRemoval: completed in ${String.format("%.1f", totalSec)}s")
                         _separationProgress.value = 1f to "完成 [${String.format("%.1f", totalSec)}s]"
-                        _hqError.value = null
+                        _hqSuccess.value = "✓ 分离完成 [${String.format("%.1f", totalSec)}s]"
                         vocalRemovalProcessor?.setEnabled(false)
                         switchToAccompaniment(result.accompanimentFile.absolutePath)
                         if (wasPlayingBeforeSeparation) player?.play()
@@ -492,6 +494,16 @@ class PlayerManager() {
     /** 清除高质量分离错误信息 */
     fun clearHqError() {
         _hqError.value = null
+    }
+
+    /** 清除高质量分离成功信息 */
+    fun clearHqSuccess() {
+        _hqSuccess.value = null
+    }
+
+    /** 清除伴奏缓存（返回删除的文件数） */
+    fun clearAccompanimentCache(): Int {
+        return accompanimentCache?.clearAccompaniments() ?: 0
     }
 
     /**

@@ -132,6 +132,10 @@ fun NowPlayingScreen(
     onToggleSeparationMode: () -> Unit = {},
     /** 清除高质量分离错误 */
     onClearHqError: () -> Unit = {},
+    /** 高质量分离成功信息（非空时 UI 应显示成功提示） */
+    hqSuccess: String? = null,
+    /** 清除高质量分离成功信息 */
+    onClearHqSuccess: () -> Unit = {},
     /** 高质量分离模型是否已下载（未下载时禁用高质量切换） */
     modelDownloaded: Boolean = false,
     modifier: Modifier = Modifier
@@ -186,6 +190,8 @@ fun NowPlayingScreen(
             hqError = hqError,
             onToggleSeparationMode = onToggleSeparationMode,
             onClearHqError = onClearHqError,
+            hqSuccess = hqSuccess,
+            onClearHqSuccess = onClearHqSuccess,
             modelDownloaded = modelDownloaded,
             playPauseFocusRequester = playPauseFocusRequester,
             remoteControlUrl = remoteControlUrl

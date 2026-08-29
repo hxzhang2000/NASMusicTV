@@ -32,6 +32,7 @@ class AccompanimentCache(private val context: Context) {
         private const val TAG = "AccompanimentCache"
         private const val CACHE_DIR_NAME = "accompaniment"
         private const val MAX_CACHE_SIZE_BYTES = 500L * 1024 * 1024 // 500MB
+        private const val MAX_CACHE_FILES = 10  // 最多保留10首伴奏
     }
 
     private val cacheDir: File by lazy {
@@ -154,17 +155,30 @@ class AccompanimentCache(private val context: Context) {
     }
 
     /**
-     * 清理缓存（LRU 淘汰）
+     * 清理缓存（LRU 淘汰：按大小 + 文件数）
      */
     private fun cleanupCache() {
         val files = cacheDir.listFiles() ?: return
-        val totalSize = files.sumOf { it.length() }
 
+        // 1. 按文件数淘汰（最多保留 MAX_CACHE_FILES 首）
+        if (files.size > MAX_CACHE_FILES) {
+            val sortedFiles = files.sortedBy { it.lastModified() }
+            val toDelete = files.size - MAX_CACHE_FILES
+            for (i in 0 until toDelete) {
+                val file = sortedFiles[i]
+                val fileSize = file.length()
+                if (file.delete()) {
+                    AppLog.d(TAG, "cleanupCache: deleted (count limit) ${file.name} (${fileSize} bytes)")
+                }
+            }
+        }
+
+        // 2. 按总大小淘汰（LRU）
+        val remainingFiles = cacheDir.listFiles() ?: return
+        val totalSize = remainingFiles.sumOf { it.length() }
         if (totalSize <= MAX_CACHE_SIZE_BYTES) return
 
-        // 按最后修改时间排序（最旧的在前）
-        val sortedFiles = files.sortedBy { it.lastModified() }
-
+        val sortedFiles = remainingFiles.sortedBy { it.lastModified() }
         var freedSize = 0L
         val targetFree = totalSize - MAX_CACHE_SIZE_BYTES
 
@@ -173,7 +187,7 @@ class AccompanimentCache(private val context: Context) {
             val fileSize = file.length()
             if (file.delete()) {
                 freedSize += fileSize
-                AppLog.d(TAG, "cleanupCache: deleted ${file.name} (${fileSize} bytes)")
+                AppLog.d(TAG, "cleanupCache: deleted (size limit) ${file.name} (${fileSize} bytes)")
             }
         }
     }
@@ -199,6 +213,22 @@ class AccompanimentCache(private val context: Context) {
         cancelPreSeparation()
         cacheDir.listFiles()?.forEach { it.delete() }
         AppLog.d(TAG, "clearCache: all files deleted")
+    }
+
+    /**
+     * 仅清除伴奏文件（保留人声文件，用于 K 歌对比）
+     */
+    fun clearAccompaniments(): Int {
+        cancelPreSeparation()
+        var count = 0
+        cacheDir.listFiles()?.forEach { file ->
+            if (file.name.endsWith("_accompaniment.wav")) {
+                file.delete()
+                count++
+            }
+        }
+        AppLog.d(TAG, "clearAccompaniments: deleted $count accompaniment files")
+        return count
     }
 
     /**

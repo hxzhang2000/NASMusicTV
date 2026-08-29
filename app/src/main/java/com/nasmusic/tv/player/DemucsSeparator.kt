@@ -390,6 +390,9 @@ class DemucsSeparator(private val context: Context) {
             var writeIdx = 0
             var inputDone = false
             var outputDone = false
+            // 解码进度：每解码 10% 更新一次
+            var lastDecodeProgressReport = 0
+            val decodeProgressInterval = if (durationUs > 0) (durationUs / 10) else Long.MAX_VALUE
 
             while (!outputDone) {
                 // 输入
@@ -429,6 +432,16 @@ class DemucsSeparator(private val context: Context) {
                                 pcmData = pcmData.copyOf((pcmData.size * 1.5).toInt())
                             }
                             pcmData[writeIdx++] = outputBuffer.short.toFloat() / 32768f
+                        }
+
+                        // 解码进度（节流：每10%更新一次，从0%到20%）
+                        if (durationUs > 0) {
+                            val ptsMs = bufferInfo.presentationTimeUs / 1000
+                            val progress10 = (ptsMs * 10 / (durationUs / 1000)).toInt()
+                            if (progress10 > lastDecodeProgressReport && progress10 <= 10) {
+                                lastDecodeProgressReport = progress10
+                                progress?.onProgress(progress10.toFloat() * 0.2f, "解码音频 (${progress10 * 10}%)")
+                            }
                         }
                     }
 
