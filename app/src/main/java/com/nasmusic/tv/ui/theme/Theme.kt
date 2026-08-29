@@ -105,35 +105,35 @@ val LocalFontAdjustment = androidx.compose.runtime.staticCompositionLocalOf { 0 
 object FontSize {
     // 档位 1: Caption（注释、徽章、最小文字）
     val Caption = 12.sp        // 手机
-    val CaptionTv = 24.sp      // TV = 12 + 12
+    val CaptionTv = 18.sp      // TV = 12 + 6
 
     // 档位 2: Small（次要文字、设置值、按钮小字）
     val Small = 14.sp
-    val SmallTv = 26.sp        // TV = 14 + 12
+    val SmallTv = 20.sp        // TV = 14 + 6
 
     // 档位 3: Body（正文、列表项、主要文字）
     val Body = 17.sp
-    val BodyTv = 29.sp         // TV = 17 + 12
+    val BodyTv = 23.sp         // TV = 17 + 6
 
     // 档位 4: Button（按钮文字、标签）
     val Button = 19.sp
-    val ButtonTv = 31.sp       // TV = 19 + 12
+    val ButtonTv = 25.sp       // TV = 19 + 6
 
     // 档位 5: Subtitle（副标题、卡片标题、对话框标题）
     val Subtitle = 23.sp
-    val SubtitleTv = 35.sp     // TV = 23 + 12
+    val SubtitleTv = 29.sp     // TV = 23 + 6
 
     // 档位 6: Title（大标题、歌词普通行）
     val Title = 27.sp
-    val TitleTv = 39.sp        // TV = 27 + 12
+    val TitleTv = 33.sp        // TV = 27 + 6
 
     // 档位 7: Display（展示文字、歌词当前行、大数字）
     val Display = 33.sp
-    val DisplayTv = 45.sp      // TV = 33 + 12
+    val DisplayTv = 39.sp      // TV = 33 + 6
 
     // 档位 8: DisplayLarge（超大展示）
     val DisplayLarge = 41.sp
-    val DisplayLargeTv = 53.sp // TV = 41 + 12
+    val DisplayLargeTv = 47.sp // TV = 41 + 6
 
     /** 根据当前设备返回对应档位的字号（含用户全局字体调整） */
     @Composable

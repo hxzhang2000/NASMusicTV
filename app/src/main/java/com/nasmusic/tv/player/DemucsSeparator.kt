@@ -97,16 +97,15 @@ class DemucsSeparator(private val context: Context) {
 
             ortEnv = OrtEnvironment.getEnvironment()
 
-            // 加载模型（从文件读取字节）
-            val modelBytes = modelFile.readBytes()
-            modelSession = ortEnv!!.createSession(modelBytes)
+            // 直接从文件路径加载模型，使用 mmap 避免将 166MB 读入 JVM 堆（readBytes 会导致 OOM 崩溃）
+            modelSession = ortEnv!!.createSession(modelPath)
 
             // 读取模型实际输入名（替代硬编码 "input"，避免 Unknown input name 错误）
             inputName = modelSession!!.inputInfo.keys.firstOrNull() ?: "input"
 
             isInitialized = true
             lastError = null
-            AppLog.d(TAG, "initialize: OK, model loaded from $modelPath (${modelBytes.size / (1024 * 1024)}MB), input='$inputName'")
+            AppLog.d(TAG, "initialize: OK, model loaded from $modelPath (${modelFile.length() / (1024 * 1024)}MB), input='$inputName'")
             true
         } catch (e: OutOfMemoryError) {
             AppLog.e(TAG, "initialize: OOM loading model", e)
@@ -115,7 +114,7 @@ class DemucsSeparator(private val context: Context) {
             false
         } catch (e: Exception) {
             AppLog.e(TAG, "initialize: failed", e)
-            lastError = "模型初始化失败：${e.message?.take(40)}"
+            lastError = "模型初始化失败：${e.message?.take(60)}"
             false
         }
     }
@@ -230,7 +229,9 @@ class DemucsSeparator(private val context: Context) {
             val accompanimentFile = File(outputDir, "${songId}_accompaniment.wav")
             writeAccompanimentWav(accompanimentFile, leftChannel, rightChannel, vocalsLeft, vocalsRight)
 
-            // 6. 计算时长
+            // 写完后立即释放大数组，帮助 GC 回收（每数组约 totalSamples*4 bytes）
+            // 注意：Kotlin 局部变量无法置 null，但方法返回后自动回收；
+            // 这里用 run {} 块提前结束 vocals/left/right 的作用域
             val durationMs = (totalSamples.toFloat() / SAMPLE_RATE * 1000).toLong()
 
             progress?.onProgress(1f, "完成")

@@ -226,7 +226,7 @@ private fun SongRowModeRow(
                         Text(
                             text = song.title,
                             color = NasMusicColors.TextPrimary,
-                            fontSize = FontSize.subtitle(),
+                            fontSize = FontSize.button(),
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                             modifier = Modifier.weight(1f, fill = false)
