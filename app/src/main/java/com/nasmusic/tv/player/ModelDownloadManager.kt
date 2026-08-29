@@ -92,22 +92,25 @@ class ModelDownloadManager(private val context: Context) {
      * 下载模型文件（带进度回调）
      *
      * @param onProgress 进度回调：(已下载字节, 总字节)
-     * @return 下载是否成功
+     * @return 下载成功返回 null；失败返回具体错误提示（供 UI 显示）
      */
     suspend fun downloadModel(
         onProgress: (downloaded: Long, total: Long) -> Unit
-    ): Boolean = withContext(Dispatchers.IO) {
+    ): String? = withContext(Dispatchers.IO) {
         val modelsDir = getModelsDir()
         val tempFile = File(modelsDir, "$MODEL_FILENAME.download")
         val finalFile = getModelFile()
 
-        // 依次尝试每个候选 URL（先镜像后官方），全部失败返回 false
+        // 依次尝试每个候选 URL（先镜像后官方），全部失败返回最后的错误信息
+        var lastError: String? = null
         for (urlStr in MODEL_URLS) {
             tempFile.delete()
-            val ok = tryDownloadUrl(urlStr, tempFile, onProgress)
-            if (ok) {
-                // 检查下载的文件大小
+            val err = tryDownloadUrl(urlStr, tempFile, onProgress)
+            if (err == null) {
+                // 下载完成，检查文件大小
                 if (tempFile.length() < EXPECTED_SIZE_BYTES * 0.8) {
+                    val got = tempFile.length() / (1024 * 1024)
+                    lastError = "下载文件大小异常（${got}MB，预期约${EXPECTED_SIZE_BYTES / (1024 * 1024)}MB）"
                     AppLog.e(TAG, "downloadModel: file too small (${tempFile.length()} bytes), expected ~${EXPECTED_SIZE_BYTES}")
                     tempFile.delete()
                     continue
@@ -118,31 +121,33 @@ class ModelDownloadManager(private val context: Context) {
                     finalFile.delete()
                 }
                 if (!tempFile.renameTo(finalFile)) {
+                    lastError = "文件保存失败（重命名失败）"
                     AppLog.e(TAG, "downloadModel: rename failed")
                     tempFile.delete()
                     continue
                 }
 
                 AppLog.d(TAG, "downloadModel: success from $urlStr, size = ${getModelSizeMB()}MB")
-                return@withContext true
+                return@withContext null
             } else {
-                AppLog.w(TAG, "downloadModel: failed from $urlStr, trying next...")
+                lastError = err
+                AppLog.w(TAG, "downloadModel: failed from $urlStr, trying next... ($err)")
             }
         }
         tempFile.delete()
-        false
+        lastError ?: "所有下载源均失败，请检查网络后重试"
     }
 
     /**
      * 从单个 URL 下载模型到临时文件
      *
-     * @return 下载是否成功（连接建立 + 完整读取）
+     * @return 下载成功返回 null；失败返回具体错误信息
      */
     private fun tryDownloadUrl(
         urlStr: String,
         tempFile: File,
         onProgress: (downloaded: Long, total: Long) -> Unit
-    ): Boolean {
+    ): String? {
         return try {
             AppLog.d(TAG, "tryDownloadUrl: starting download from $urlStr")
 
@@ -155,7 +160,7 @@ class ModelDownloadManager(private val context: Context) {
 
             if (connection.responseCode != HttpURLConnection.HTTP_OK) {
                 AppLog.e(TAG, "tryDownloadUrl: HTTP ${connection.responseCode}")
-                return false
+                return "服务器返回错误（HTTP ${connection.responseCode}）"
             }
 
             val totalBytes = connection.contentLength.toLong()
@@ -178,10 +183,16 @@ class ModelDownloadManager(private val context: Context) {
                     }
                 }
             }
-            true
+            null
         } catch (e: Exception) {
+            val msg = when (e) {
+                is java.net.SocketTimeoutException -> "连接超时，请检查网络"
+                is java.net.UnknownHostException -> "无法解析服务器地址，请检查网络/DNS"
+                is java.io.FileNotFoundException -> "服务器上未找到模型文件（404）"
+                else -> "网络异常：${e.message?.take(60) ?: "未知错误"}"
+            }
             AppLog.e(TAG, "tryDownloadUrl: failed from $urlStr", e)
-            false
+            msg
         }
     }
 

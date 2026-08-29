@@ -2682,18 +2682,18 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
         _modelDownloadedMB.value = 0L
         _modelTotalMB.value = mgr.getExpectedSizeMB().toLong()
         viewModelScope.launch {
-            val success = mgr.downloadModel { downloaded, total ->
+            val error = mgr.downloadModel { downloaded, total ->
                 _modelDownloadedMB.value = downloaded / (1024 * 1024)
                 _modelTotalMB.value = total / (1024 * 1024)
                 _modelDownloadProgress.value = if (total > 0) downloaded.toFloat() / total else 0f
             }
             _modelDownloading.value = false
-            if (success) {
+            if (error == null) {
                 _modelDownloaded.value = true
                 _modelSizeMB.value = mgr.getModelSizeMB()
                 _modelDownloadProgress.value = 1f
             } else {
-                _modelDownloadError.value = "模型下载失败，请检查网络后重试"
+                _modelDownloadError.value = error
                 _modelDownloaded.value = false
             }
         }
