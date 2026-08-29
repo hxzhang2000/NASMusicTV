@@ -116,6 +116,9 @@ fun SettingsScreen(
     // 频谱显示设置
     spectrumEnabled: Boolean = false,
     onToggleSpectrum: (Boolean) -> Unit = {},
+    // 全局字体字号调整
+    fontAdjustment: Int = 0,
+    onChangeFontAdjustment: (Int) -> Unit = {},
     // 分离模式设置
     separationMode: com.nasmusic.tv.data.prefs.AppPreferences.SeparationMode = com.nasmusic.tv.data.prefs.AppPreferences.SeparationMode.FAST,
     onChangeSeparationMode: ((com.nasmusic.tv.data.prefs.AppPreferences.SeparationMode) -> Unit)? = null,
@@ -309,6 +312,25 @@ fun SettingsScreen(
                     item { SectionTitle(stringResource(R.string.settings_general)) }
                     item { SettingSwitch(label = stringResource(R.string.settings_dark_theme), description = stringResource(R.string.settings_dark_theme_desc), checked = settings.darkTheme, onClick = { onToggleDarkTheme(!settings.darkTheme) }) }
                     item { SettingSwitch(label = stringResource(R.string.settings_animations), description = stringResource(R.string.settings_animations_desc), checked = settings.animationsEnabled, onClick = { onToggleAnimations(!settings.animationsEnabled) }) }
+                    item { SubSectionTitle(stringResource(R.string.settings_font_size)) }
+                    item {
+                        // 字体字号调整（在当前Theme档位基础上增减）
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            AdjustButton("-", onClick = { onChangeFontAdjustment((fontAdjustment - 1).coerceAtLeast(-8)) })
+                            Text(
+                                text = if (fontAdjustment == 0) "标准" else if (fontAdjustment > 0) "+${fontAdjustment}" else "$fontAdjustment",
+                                color = NasMusicColors.Primary,
+                                fontSize = FontSize.title(),
+                                modifier = Modifier.width(80.dp).padding(horizontal = 8.dp)
+                            )
+                            AdjustButton("+", onClick = { onChangeFontAdjustment((fontAdjustment + 1).coerceAtMost(8)) })
+                        }
+                    }
+                    item { Spacer(modifier = Modifier.height(12.dp)) }
                 }
                 SettingsSection.PLAYBACK -> {
                     item { SectionTitle(stringResource(R.string.settings_playback)) }

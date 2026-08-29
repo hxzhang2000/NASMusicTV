@@ -65,6 +65,7 @@ import androidx.tv.material3.Icon
 import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 import com.nasmusic.tv.data.model.PlayMode
+import com.nasmusic.tv.ui.theme.FontSize
 import com.nasmusic.tv.ui.theme.NasMusicBrushes
 import com.nasmusic.tv.ui.theme.NasMusicColors
 import com.nasmusic.tv.util.AppLog
@@ -91,8 +92,8 @@ fun ProgressSection(
     var progressBarSize by remember { mutableStateOf(IntSize.Zero) }
     var isProgressFocused by remember { mutableStateOf(false) }
     val progressSpacer = if (compact) 8.dp else 16.dp
-    val timeFont = if (compact) 12.sp else 14.sp
-    val timeFontFocused = if (compact) 15.sp else 18.sp
+    val timeFont = if (compact) FontSize.caption() else FontSize.small()
+    val timeFontFocused = if (compact) FontSize.small() else FontSize.body()
     val progressFocusRequester = remember { FocusRequester() }
 
     // 手势处理器读取最新值（progressMs 每秒更新，不能作为 pointerInput key 否则手势每秒重启）

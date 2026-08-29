@@ -8,6 +8,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import com.nasmusic.tv.ui.theme.FontSize
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -58,7 +59,7 @@ fun VocalToggleButton(
         ) {
             Text(
                 text = label,
-                fontSize = if (compact) 14.sp else 16.sp,
+                fontSize = FontSize.small(),
                 fontWeight = FontWeight.Bold,
                 color = NasMusicColors.TextPrimary
             )

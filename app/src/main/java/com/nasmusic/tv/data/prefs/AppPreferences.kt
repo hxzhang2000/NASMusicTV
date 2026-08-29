@@ -99,6 +99,9 @@ class AppPreferences(private val context: Context) {
     private val keySpectrumEnabled = booleanPreferencesKey("settings_spectrum_enabled")
     private val keyVisualizerTheme = stringPreferencesKey("settings_visualizer_theme")
 
+    // --- 全局字体字号调整 ---
+    private val keyFontAdjustment = intPreferencesKey("settings_font_adjustment")
+
     // --- 网络音乐平台来源 ---
     private val keyMusicSource = stringPreferencesKey("music_source")
 
@@ -408,9 +411,14 @@ class AppPreferences(private val context: Context) {
             lyricsKugouBaseUrl = prefs[keyLyricsKugouBaseUrl] ?: com.nasmusic.tv.lyrics.LyricsNetworkProvider.DEFAULT_KUGOU_BASE_URL,
             lyricsNeteaseBaseUrl = prefs[keyLyricsNeteaseBaseUrl] ?: com.nasmusic.tv.lyrics.LyricsNetworkProvider.DEFAULT_NETEASE_BASE_URL,
             spectrumEnabled = prefs[keySpectrumEnabled] ?: false,
-            visualizerTheme = prefs[keyVisualizerTheme]?.let { VisualizerTheme.fromKey(it) } ?: VisualizerTheme.COLOR_FLOW
+            visualizerTheme = prefs[keyVisualizerTheme]?.let { VisualizerTheme.fromKey(it) } ?: VisualizerTheme.COLOR_FLOW,
+            fontAdjustment = prefs[keyFontAdjustment] ?: 0
         )
     }
+
+    // --- 全局字体字号调整 ---
+    suspend fun setFontAdjustment(adjustment: Int) =
+        context.dataStore.edit { it[keyFontAdjustment] = adjustment }
 
     suspend fun setDarkTheme(enabled: Boolean) = context.dataStore.edit { it[keyDarkTheme] = enabled }
 

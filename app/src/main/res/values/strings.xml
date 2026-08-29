@@ -191,6 +191,8 @@
     <string name="settings_dark_theme_desc">使用深色背景保护视力</string>
     <string name="settings_animations">界面动画</string>
     <string name="settings_animations_desc">页面切换和焦点动画</string>
+    <string name="settings_font_size">字体字号</string>
+    <string name="settings_font_size_desc">在当前主题字号基础上增加或减少字号</string>
     <string name="settings_auto_play">自动播放下一首</string>
     <string name="settings_auto_play_desc">歌曲结束后自动播放队列中的下一首</string>
     <string name="settings_play_mode">默认播放模式</string>

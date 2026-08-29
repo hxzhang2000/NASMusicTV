@@ -109,7 +109,8 @@ class MainActivity : ComponentActivity() {
                             )
             androidx.compose.runtime.CompositionLocalProvider(
                 androidx.compose.ui.platform.LocalDensity provides uiDensity,
-                com.nasmusic.tv.ui.theme.LocalPhoneCompact provides !isTVDevice
+                com.nasmusic.tv.ui.theme.LocalPhoneCompact provides !isTVDevice,
+                com.nasmusic.tv.ui.theme.LocalFontAdjustment provides settings.fontAdjustment
             ) {
             NASMusicTVTheme(darkTheme = settings.darkTheme) {
                 // 暴露当前 Activity 给子组件，用于注册对话框的 BACK 键处理

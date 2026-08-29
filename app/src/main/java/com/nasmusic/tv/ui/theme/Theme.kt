@@ -15,6 +15,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.tv.material3.MaterialTheme
@@ -93,61 +94,72 @@ object NasMusicDimens {
  *
  * 所有字号统一归入 8 个档位，每个档位对应手机/TV 两套数值：
  * - 手机端保持设计稿原始值
- * - TV 端统一 +20sp（比手机端大 20 号，适配大屏）
+ * - TV 端统一 +12sp（比手机端大 12 号，适配大屏）
  *
  * 使用方式：直接引用 FontSize.XX，例如 Text(fontSize = FontSize.Body)
  * 或通过 Composable 函数获取设备适配值：FontSize.body()
  */
+/** 全局字体字号调整量（sp）。用户在设置中增减，正值放大、负值缩小。 */
+val LocalFontAdjustment = androidx.compose.runtime.staticCompositionLocalOf { 0 }
+
 object FontSize {
     // 档位 1: Caption（注释、徽章、最小文字）
     val Caption = 12.sp        // 手机
-    val CaptionTv = 32.sp      // TV = 12 + 20
+    val CaptionTv = 24.sp      // TV = 12 + 12
 
     // 档位 2: Small（次要文字、设置值、按钮小字）
     val Small = 14.sp
-    val SmallTv = 34.sp        // TV = 14 + 20
+    val SmallTv = 26.sp        // TV = 14 + 12
 
     // 档位 3: Body（正文、列表项、主要文字）
     val Body = 17.sp
-    val BodyTv = 37.sp         // TV = 17 + 20
+    val BodyTv = 29.sp         // TV = 17 + 12
 
     // 档位 4: Button（按钮文字、标签）
     val Button = 19.sp
-    val ButtonTv = 39.sp       // TV = 19 + 20
+    val ButtonTv = 31.sp       // TV = 19 + 12
 
     // 档位 5: Subtitle（副标题、卡片标题、对话框标题）
     val Subtitle = 23.sp
-    val SubtitleTv = 43.sp     // TV = 23 + 20
+    val SubtitleTv = 35.sp     // TV = 23 + 12
 
     // 档位 6: Title（大标题、歌词普通行）
     val Title = 27.sp
-    val TitleTv = 47.sp        // TV = 27 + 20
+    val TitleTv = 39.sp        // TV = 27 + 12
 
     // 档位 7: Display（展示文字、歌词当前行、大数字）
     val Display = 33.sp
-    val DisplayTv = 53.sp      // TV = 33 + 20
+    val DisplayTv = 45.sp      // TV = 33 + 12
 
     // 档位 8: DisplayLarge（超大展示）
     val DisplayLarge = 41.sp
-    val DisplayLargeTv = 61.sp // TV = 41 + 20
+    val DisplayLargeTv = 53.sp // TV = 41 + 12
 
-    /** 根据当前设备返回对应档位的字号 */
+    /** 根据当前设备返回对应档位的字号（含用户全局字体调整） */
     @Composable
-    fun caption() = if (LocalPhoneCompact.current) Caption else CaptionTv
+    fun caption(): TextUnit = adjustedSize(Caption, CaptionTv)
     @Composable
-    fun small() = if (LocalPhoneCompact.current) Small else SmallTv
+    fun small(): TextUnit = adjustedSize(Small, SmallTv)
     @Composable
-    fun body() = if (LocalPhoneCompact.current) Body else BodyTv
+    fun body(): TextUnit = adjustedSize(Body, BodyTv)
     @Composable
-    fun button() = if (LocalPhoneCompact.current) Button else ButtonTv
+    fun button(): TextUnit = adjustedSize(Button, ButtonTv)
     @Composable
-    fun subtitle() = if (LocalPhoneCompact.current) Subtitle else SubtitleTv
+    fun subtitle(): TextUnit = adjustedSize(Subtitle, SubtitleTv)
     @Composable
-    fun title() = if (LocalPhoneCompact.current) Title else TitleTv
+    fun title(): TextUnit = adjustedSize(Title, TitleTv)
     @Composable
-    fun display() = if (LocalPhoneCompact.current) Display else DisplayTv
+    fun display(): TextUnit = adjustedSize(Display, DisplayTv)
     @Composable
-    fun displayLarge() = if (LocalPhoneCompact.current) DisplayLarge else DisplayLargeTv
+    fun displayLarge(): TextUnit = adjustedSize(DisplayLarge, DisplayLargeTv)
+}
+
+/** 根据设备与用户全局字体调整量，计算最终字号 */
+@Composable
+private fun adjustedSize(phone: TextUnit, tv: TextUnit): TextUnit {
+    val adjustment = LocalFontAdjustment.current
+    val base = if (LocalPhoneCompact.current) phone else tv
+    return if (adjustment == 0) base else (base.value + adjustment).sp
 }
 
 /**

@@ -3480,6 +3480,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
         prefs.setVisualizerTheme(theme)
     }
 
+    fun updateFontAdjustment(adjustment: Int) = viewModelScope.launch {
+        prefs.setFontAdjustment(adjustment)
+    }
+
     // --- E-4 缓存管理 ---
     fun clearLyricsCache() {
         viewModelScope.launch {

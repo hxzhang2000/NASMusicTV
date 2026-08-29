@@ -698,6 +698,8 @@ fun AppRoot(
                         onToggleSpectrum = { viewModel.updateSpectrumEnabled(it) },
                         visualizerTheme = settings.visualizerTheme,
                         onChangeVisualizerTheme = { viewModel.updateVisualizerTheme(it) },
+                        fontAdjustment = settings.fontAdjustment,
+                        onChangeFontAdjustment = { viewModel.updateFontAdjustment(it) },
                         // 数据管理（备份/恢复）
                         backupFiles = viewModel.backupFiles.collectAsState(initial = emptyList()).value,
                         backupMessage = viewModel.backupMessage.collectAsState(initial = null).value,
@@ -910,7 +912,7 @@ private fun NavItem(
         ) {
             Text(
                 text = label,
-                fontSize = if (selected) 21.sp else 19.sp,
+                fontSize = if (selected) FontSize.subtitle() else FontSize.button(),
                 fontWeight = FontWeight.Bold,
                 maxLines = 1,
                 color = if (selected) NasMusicColors.Primary else NasMusicColors.TextPrimary

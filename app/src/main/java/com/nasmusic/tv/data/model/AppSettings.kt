@@ -24,7 +24,9 @@ data class AppSettings(
     // 频谱显示开关（默认关闭）
     val spectrumEnabled: Boolean = false,
     // 可视化频谱主题
-    val visualizerTheme: VisualizerTheme = VisualizerTheme.COLOR_FLOW
+    val visualizerTheme: VisualizerTheme = VisualizerTheme.COLOR_FLOW,
+    // 全局字体字号调整（sp，在当前Theme档位基础上增减，默认0）
+    val fontAdjustment: Int = 0
 )
 
 enum class VisualizerTheme(val displayName: String) {
