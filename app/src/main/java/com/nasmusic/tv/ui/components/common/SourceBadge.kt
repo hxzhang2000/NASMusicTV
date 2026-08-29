@@ -36,7 +36,7 @@ fun SourceBadge(
     Text(
         text = source.displayName,
         color = Color.White,
-        fontSize = FontSize.Caption,
+        fontSize = FontSize.caption(),
         modifier = modifier
             .clip(RoundedCornerShape(4.dp))
             .background(source.color.copy(alpha = 0.85f))

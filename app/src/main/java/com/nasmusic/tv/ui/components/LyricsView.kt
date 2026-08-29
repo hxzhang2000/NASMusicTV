@@ -181,7 +181,7 @@ private fun LyricsViewInner(
                 Text(
                     text = lyrics.source.displayName,
                     color = NasMusicColors.TextSecondary,
-                    fontSize = FontSize.Small
+                    fontSize = FontSize.small()
                 )
             }
         }

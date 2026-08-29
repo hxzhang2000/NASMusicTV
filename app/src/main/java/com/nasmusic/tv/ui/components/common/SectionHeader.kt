@@ -43,12 +43,12 @@ fun SectionHeader(
         Text(
             text = title,
             color = NasMusicColors.TextPrimary,
-            fontSize = FontSize.Subtitle
+            fontSize = FontSize.subtitle()
         )
         Text(
             text = " ($count)",
             color = NasMusicColors.TextSecondary,
-            fontSize = FontSize.Button
+            fontSize = FontSize.button()
         )
         Spacer(modifier = Modifier.weight(1f))
         if (onViewAll != null) {
@@ -65,7 +65,7 @@ fun SectionHeader(
                 Text(
                     text = "查看全部 >",
                     color = NasMusicColors.Primary,
-                    fontSize = FontSize.Body,
+                    fontSize = FontSize.body(),
                     modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                 )
             }

@@ -125,7 +125,7 @@ fun MineScreen(
                     Text(
                         text = stringResource(R.string.mine_favorites),
                         color = NasMusicColors.TextPrimary,
-                        fontSize = FontSize.Display,
+                        fontSize = FontSize.display(),
                         modifier = Modifier.padding(bottom = 4.dp)
                     )
                     if (mergedFavorites.isNotEmpty()) {
@@ -143,7 +143,7 @@ fun MineScreen(
                         Text(
                             text = stringResource(R.string.mine_favorites_empty),
                             color = NasMusicColors.TextSecondary,
-                            fontSize = FontSize.Button
+                            fontSize = FontSize.button()
                         )
                     }
                 }
@@ -171,7 +171,7 @@ fun MineScreen(
                     Text(
                         text = stringResource(R.string.mine_recent),
                         color = NasMusicColors.TextPrimary,
-                        fontSize = FontSize.Display,
+                        fontSize = FontSize.display(),
                         modifier = Modifier.padding(bottom = 4.dp)
                     )
                     if (recentSongs.isNotEmpty()) {
@@ -189,7 +189,7 @@ fun MineScreen(
                         Text(
                             text = stringResource(R.string.library_no_recent),
                             color = NasMusicColors.TextSecondary,
-                            fontSize = FontSize.Button
+                            fontSize = FontSize.button()
                         )
                     }
                 }
@@ -220,7 +220,7 @@ fun MineScreen(
                     Text(
                         text = stringResource(R.string.mine_playlists),
                         color = NasMusicColors.TextPrimary,
-                        fontSize = FontSize.Display,
+                        fontSize = FontSize.display(),
                         modifier = Modifier.padding(end = 24.dp)
                     )
                     Spacer(modifier = Modifier.weight(1f))
@@ -238,7 +238,7 @@ fun MineScreen(
                         Text(
                             text = "+ " + stringResource(R.string.mine_create_playlist),
                             color = LocalFocusableContentColor.current,
-                            fontSize = FontSize.Button,
+                            fontSize = FontSize.button(),
                             modifier = Modifier.padding(horizontal = 18.dp, vertical = 10.dp)
                         )
                     }
@@ -250,7 +250,7 @@ fun MineScreen(
                         Text(
                             text = stringResource(R.string.mine_playlists_empty),
                             color = NasMusicColors.TextSecondary,
-                            fontSize = FontSize.Button
+                            fontSize = FontSize.button()
                         )
                     }
                 }
@@ -279,7 +279,7 @@ fun MineScreen(
                                     Text(
                                         text = stringResource(R.string.mine_playlists_empty),
                                         color = NasMusicColors.TextSecondary,
-                                        fontSize = FontSize.Body
+                                        fontSize = FontSize.body()
                                     )
                                 }
                             }
@@ -416,7 +416,7 @@ private fun FavoritesPane(
             Text(
                 text = stringResource(R.string.mine_favorites),
                 color = NasMusicColors.TextPrimary,
-                fontSize = FontSize.Display,
+                fontSize = FontSize.display(),
                 modifier = Modifier.padding(bottom = 4.dp)
             )
             if (songs.isNotEmpty()) {
@@ -433,7 +433,7 @@ private fun FavoritesPane(
                 Text(
                     text = stringResource(R.string.mine_favorites_empty),
                     color = NasMusicColors.TextSecondary,
-                    fontSize = FontSize.Button
+                    fontSize = FontSize.button()
                 )
             }
         } else {
@@ -478,7 +478,7 @@ private fun RecentPane(
             Text(
                 text = stringResource(R.string.mine_recent),
                 color = NasMusicColors.TextPrimary,
-                fontSize = FontSize.Display,
+                fontSize = FontSize.display(),
                 modifier = Modifier.padding(bottom = 4.dp)
             )
             if (songs.isNotEmpty()) {
@@ -495,7 +495,7 @@ private fun RecentPane(
                 Text(
                     text = stringResource(R.string.library_no_recent),
                     color = NasMusicColors.TextSecondary,
-                    fontSize = FontSize.Button
+                    fontSize = FontSize.button()
                 )
             }
         } else {
@@ -547,7 +547,7 @@ private fun PlaylistsPane(
             Text(
                 text = stringResource(R.string.mine_playlists),
                 color = NasMusicColors.TextPrimary,
-                fontSize = FontSize.Display,
+                fontSize = FontSize.display(),
                 modifier = Modifier.padding(end = 24.dp)
             )
             Spacer(modifier = Modifier.weight(1f))
@@ -565,7 +565,7 @@ private fun PlaylistsPane(
                 Text(
                     text = "+ " + stringResource(R.string.mine_create_playlist),
                     color = LocalFocusableContentColor.current,
-                    fontSize = FontSize.Button,
+                    fontSize = FontSize.button(),
                     modifier = Modifier.padding(horizontal = 18.dp, vertical = 10.dp)
                 )
             }
@@ -576,7 +576,7 @@ private fun PlaylistsPane(
                 Text(
                     text = stringResource(R.string.mine_playlists_empty),
                     color = NasMusicColors.TextSecondary,
-                    fontSize = FontSize.Button
+                    fontSize = FontSize.button()
                 )
             }
         } else {
@@ -606,7 +606,7 @@ private fun PlaylistsPane(
                                     Text(
                                         text = stringResource(R.string.mine_playlists_empty),
                                         color = NasMusicColors.TextSecondary,
-                                        fontSize = FontSize.Body
+                                        fontSize = FontSize.body()
                                     )
                                 }
                             }
@@ -691,7 +691,7 @@ private fun PlaylistCard(
                     Text(
                         text = if (expanded) "▾" else "♪",
                         color = NasMusicColors.Primary,
-                        fontSize = FontSize.Subtitle,
+                        fontSize = FontSize.subtitle(),
                         modifier = Modifier.width(36.dp)
                     )
                     Spacer(modifier = Modifier.width(12.dp))
@@ -699,14 +699,14 @@ private fun PlaylistCard(
                         Text(
                             text = playlist.name,
                             color = NasMusicColors.TextPrimary,
-                            fontSize = FontSize.Subtitle,
+                            fontSize = FontSize.subtitle(),
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
                         Text(
                             text = stringResource(R.string.mine_song_count, playlist.songs.size),
                             color = NasMusicColors.TextSecondary,
-                            fontSize = FontSize.Button
+                            fontSize = FontSize.button()
                         )
                     }
                 }
@@ -779,7 +779,7 @@ private fun PlaylistActionButton(
     ) {
         Text(
             text = text,
-            fontSize = FontSize.Button,
+            fontSize = FontSize.button(),
             color = if (isFocused) color else color.copy(alpha = 0.75f),
             modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)
         )

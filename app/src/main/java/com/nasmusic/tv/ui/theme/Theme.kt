@@ -253,7 +253,7 @@ fun NASMusicTVTheme(
     content: @Composable () -> Unit
 ) {
     val colorScheme = if (darkTheme) DarkColorScheme else LightColorScheme
-    // TV 端字体由 MainActivity 的 fontScale=1.25 统一缩放，此处无需区分
+    // TV 端字号由 FontSize.xx() @Composable 函数返回 +6sp 的 TV 值，无需 fontScale 缩放
     val lyricsTheme = LyricsThemeData(
         currentLine = LyricsTheme.currentLine,
         normalLine = LyricsTheme.normalLine,

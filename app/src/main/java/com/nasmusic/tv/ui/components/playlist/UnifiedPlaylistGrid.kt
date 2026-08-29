@@ -42,7 +42,7 @@ fun UnifiedPlaylistGrid(
         Text(
             text = header,
             color = NasMusicColors.TextPrimary,
-            fontSize = FontSize.Button,
+            fontSize = FontSize.button(),
             modifier = modifier.padding(bottom = 4.dp)
         )
     }

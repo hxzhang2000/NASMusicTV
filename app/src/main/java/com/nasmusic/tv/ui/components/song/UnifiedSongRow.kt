@@ -205,7 +205,7 @@ private fun SongRowModeRow(
                         Text(
                         text = String.format("%02d", index + 1),
                         color = NasMusicColors.TextSecondary,
-                        fontSize = FontSize.Button,
+                        fontSize = FontSize.button(),
                         modifier = Modifier.width(36.dp),
                         textAlign = androidx.compose.ui.text.style.TextAlign.Center
                     )
@@ -213,7 +213,7 @@ private fun SongRowModeRow(
                         Text(
                         text = "▶",
                         color = NasMusicColors.Primary,
-                        fontSize = FontSize.Button,
+                        fontSize = FontSize.button(),
                         modifier = Modifier.width(36.dp),
                         textAlign = androidx.compose.ui.text.style.TextAlign.Center
                     )
@@ -226,7 +226,7 @@ private fun SongRowModeRow(
                         Text(
                             text = song.title,
                             color = NasMusicColors.TextPrimary,
-                            fontSize = FontSize.Subtitle,
+                            fontSize = FontSize.subtitle(),
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                             modifier = Modifier.weight(1f, fill = false)
@@ -237,7 +237,7 @@ private fun SongRowModeRow(
                         Text(
                         text = song.artist.ifBlank { "-" },
                         color = NasMusicColors.TextSecondary,
-                        fontSize = FontSize.Button,
+                        fontSize = FontSize.button(),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
@@ -248,7 +248,7 @@ private fun SongRowModeRow(
                 Text(
                     text = TimeUtils.formatDuration(song.durationMs),
                     color = NasMusicColors.TextSecondary,
-                    fontSize = FontSize.Button
+                    fontSize = FontSize.button()
                 )
             }
 
@@ -334,7 +334,7 @@ private fun RowActionButton(
     ) {
         Text(
             text = text,
-            fontSize = FontSize.Subtitle,
+            fontSize = FontSize.subtitle(),
             color = color
         )
     }
@@ -399,14 +399,14 @@ private fun SongRowModeCard(
                 Text(
                     text = song.title,
                     color = NasMusicColors.TextPrimary,
-                    fontSize = FontSize.Body,
+                    fontSize = FontSize.body(),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
                 Text(
                     text = song.artist.ifBlank { "-" },
                     color = NasMusicColors.TextSecondary,
-                    fontSize = FontSize.Small,
+                    fontSize = FontSize.small(),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
@@ -471,7 +471,7 @@ private fun SongRowModeCompact(
                     Text(
                     text = "${index + 1}.",
                     color = NasMusicColors.TextSecondary,
-                    fontSize = FontSize.Body,
+                    fontSize = FontSize.body(),
                     modifier = Modifier.width(30.dp)
                 )
             }
@@ -480,14 +480,14 @@ private fun SongRowModeCompact(
                     Text(
                     text = song.title,
                     color = NasMusicColors.TextPrimary,
-                    fontSize = FontSize.Button,
+                    fontSize = FontSize.button(),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
                 Text(
                     text = song.artist.ifBlank { "-" },
                     color = NasMusicColors.TextSecondary,
-                    fontSize = FontSize.Small,
+                    fontSize = FontSize.small(),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -496,7 +496,7 @@ private fun SongRowModeCompact(
             Text(
                 text = TimeUtils.formatDuration(song.durationMs),
                 color = NasMusicColors.TextSecondary,
-                fontSize = FontSize.Small
+                fontSize = FontSize.small()
             )
         }
     }

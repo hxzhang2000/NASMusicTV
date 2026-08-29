@@ -86,7 +86,7 @@ private fun KaraokeLyricsViewInner(
         ) {
             Text(
                 text = "暂无歌词",
-                fontSize = FontSize.Button,
+                fontSize = FontSize.button(),
                 color = NasMusicColors.TextSecondary
             )
         }

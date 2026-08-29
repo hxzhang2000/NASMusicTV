@@ -151,7 +151,7 @@ fun DiscoverTab(
                             ) {
                                 Text(
                                     text = "全部播放 ▶",
-                                    fontSize = FontSize.Button,
+                                    fontSize = FontSize.button(),
                                     color = NasMusicColors.TextPrimary,
                                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
                                 )
@@ -169,7 +169,7 @@ fun DiscoverTab(
                             ) {
                                 Text(
                                     text = "加入队列",
-                                    fontSize = FontSize.Button,
+                                    fontSize = FontSize.button(),
                                     color = NasMusicColors.TextPrimary,
                                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
                                 )
@@ -187,7 +187,7 @@ fun DiscoverTab(
                             ) {
                                 Text(
                                     text = "换一批 ↻",
-                                    fontSize = FontSize.Button,
+                                    fontSize = FontSize.button(),
                                     color = NasMusicColors.TextPrimary,
                                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
                                 )
@@ -196,7 +196,7 @@ fun DiscoverTab(
                             Text(
                                 text = "${filteredSongs.size} 首",
                                 color = NasMusicColors.TextSecondary,
-                                fontSize = FontSize.Body
+                                fontSize = FontSize.body()
                             )
                         }
                     }
@@ -240,7 +240,7 @@ private fun DimensionRow(
         Text(
             text = dimension.label,
             color = NasMusicColors.TextSecondary,
-            fontSize = FontSize.Body,
+            fontSize = FontSize.body(),
             modifier = Modifier.width(70.dp)
         )
         LazyRow(
@@ -273,7 +273,7 @@ private fun DimensionRow(
                 ) {
                     Text(
                         text = option,
-                        fontSize = FontSize.Body,
+                        fontSize = FontSize.body(),
                         color = textColor,
                         modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
                     )

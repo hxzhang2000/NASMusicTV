@@ -57,7 +57,7 @@ fun ActionBar(
             Text(
                 text = "全部播放",
                 color = NasMusicColors.TextPrimary,
-                fontSize = FontSize.Button,
+                fontSize = FontSize.button(),
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
             )
         }
@@ -78,7 +78,7 @@ fun ActionBar(
             Text(
                 text = "加入队列",
                 color = NasMusicColors.TextPrimary,
-                fontSize = FontSize.Button,
+                fontSize = FontSize.button(),
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
             )
         }
@@ -99,7 +99,7 @@ fun ActionBar(
                 Text(
                     text = "收藏全部",
                     color = NasMusicColors.TextPrimary,
-                    fontSize = FontSize.Button,
+                    fontSize = FontSize.button(),
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
                 )
             }
@@ -113,7 +113,7 @@ fun ActionBar(
         Text(
             text = "$songCount 首",
             color = NasMusicColors.TextSecondary,
-            fontSize = FontSize.Body
+            fontSize = FontSize.body()
         )
     }
 }

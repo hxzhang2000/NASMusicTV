@@ -1,4 +1,4 @@
-﻿package com.nasmusic.tv.ui.components
+package com.nasmusic.tv.ui.components
 
 import android.view.ViewGroup
 import androidx.compose.foundation.background
@@ -314,7 +314,7 @@ fun MvPlaybackScreen(
             ) {
                 Text(
                     text = "视频加载失败，按返回键退出",
-                    fontSize = FontSize.Button,
+                    fontSize = FontSize.button(),
                     color = Color.White
                 )
             }
@@ -330,7 +330,7 @@ fun MvPlaybackScreen(
                     .background(Color(0x99000000), RoundedCornerShape(12.dp))
                     .padding(horizontal = 28.dp, vertical = 14.dp)
             ) {
-                Text(text = mvMessage, fontSize = FontSize.Body, color = Color.White)
+                Text(text = mvMessage, fontSize = FontSize.body(), color = Color.White)
             }
         }
 

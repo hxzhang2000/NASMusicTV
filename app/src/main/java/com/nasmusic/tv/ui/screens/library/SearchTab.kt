@@ -113,7 +113,7 @@ fun SearchTab(
                         Text(
                             text = "未找到相关结果",
                             color = NasMusicColors.TextSecondary,
-                            fontSize = FontSize.Button
+                            fontSize = FontSize.button()
                     )
                 }
             }
@@ -160,7 +160,7 @@ fun SearchTab(
                         Text(
                             text = "输入关键词搜索音乐",
                             color = NasMusicColors.TextSecondary,
-                            fontSize = FontSize.Button
+                            fontSize = FontSize.button()
                     )
                 }
             }
@@ -191,7 +191,7 @@ private fun SearchSourceBar(
         Text(
             text = "搜索来源",
             color = NasMusicColors.TextSecondary,
-            fontSize = FontSize.Body,
+            fontSize = FontSize.body(),
             modifier = Modifier.padding(end = 10.dp)
         )
         searchableSources.forEach { source ->
@@ -212,7 +212,7 @@ private fun SearchSourceBar(
                 Text(
                     text = (if (isEnabled) "● " else "○ ") + source.displayName,
                     color = LocalFocusableContentColor.current,
-                    fontSize = FontSize.Small,
+                    fontSize = FontSize.small(),
                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
                 )
             }
@@ -231,7 +231,7 @@ private fun SearchSourceBar(
             Text(
                 text = "全部点亮",
                 color = LocalFocusableContentColor.current,
-                fontSize = FontSize.Small,
+                fontSize = FontSize.small(),
                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
             )
         }

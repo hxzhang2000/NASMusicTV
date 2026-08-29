@@ -97,14 +97,14 @@ fun UnifiedAlbumCard(
             Text(
                 text = album.name,
                 color = NasMusicColors.TextPrimary,
-                fontSize = FontSize.Body,
+                fontSize = FontSize.body(),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
             Text(
                 text = album.artist.ifBlank { "-" },
                 color = NasMusicColors.TextSecondary,
-                fontSize = FontSize.Small,
+                fontSize = FontSize.small(),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )

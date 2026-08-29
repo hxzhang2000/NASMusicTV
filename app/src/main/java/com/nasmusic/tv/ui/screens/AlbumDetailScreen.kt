@@ -93,7 +93,7 @@ fun AlbumDetailScreen(
             Text(
                 text = album.name,
                 color = NasMusicColors.TextPrimary,
-                fontSize = FontSize.Title,
+                fontSize = FontSize.title(),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f)
@@ -119,7 +119,7 @@ fun AlbumDetailScreen(
                 Text(
                     text = album.artist.ifBlank { "—" },
                     color = NasMusicColors.TextSecondary,
-                    fontSize = FontSize.Button
+                    fontSize = FontSize.button()
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 Row {
@@ -127,13 +127,13 @@ fun AlbumDetailScreen(
                         Text(
                             text = "${album.year} · ",
                             color = NasMusicColors.TextSecondary,
-                            fontSize = FontSize.Button
+                            fontSize = FontSize.button()
                         )
                     }
                     Text(
                         text = "${album.songCount} 首曲目",
                         color = NasMusicColors.TextSecondary,
-                        fontSize = FontSize.Button
+                        fontSize = FontSize.button()
                     )
                 }
                 Spacer(modifier = Modifier.height(12.dp))

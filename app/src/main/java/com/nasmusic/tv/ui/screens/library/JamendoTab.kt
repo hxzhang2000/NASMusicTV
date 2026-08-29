@@ -84,7 +84,7 @@ fun JamendoTab(
                 Text(
                     text = stringResource(R.string.network_jamendo_no_key),
                     color = NasMusicColors.TextPrimary,
-                    fontSize = FontSize.Body,
+                    fontSize = FontSize.body(),
                     modifier = Modifier.padding(horizontal = 24.dp, vertical = 18.dp)
                 )
             }
@@ -122,7 +122,7 @@ fun JamendoTab(
                 Text(
                     text = stringResource(R.string.network_jamendo_hot),
                     color = if (hotSelected) Color.Black else NasMusicColors.TextPrimary,
-                    fontSize = FontSize.Small,
+                    fontSize = FontSize.small(),
                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp)
                 )
             }
@@ -144,7 +144,7 @@ fun JamendoTab(
                     Text(
                         text = tag,
                         color = if (isSelected) Color.Black else NasMusicColors.TextPrimary,
-                        fontSize = FontSize.Small,
+                        fontSize = FontSize.small(),
                         modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp)
                     )
                 }
@@ -157,14 +157,14 @@ fun JamendoTab(
         when (jamendoState) {
             is UiState.Loading -> {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text(stringResource(R.string.common_loading), color = NasMusicColors.TextSecondary, fontSize = FontSize.Button)
+                    Text(stringResource(R.string.common_loading), color = NasMusicColors.TextSecondary, fontSize = FontSize.button())
                 }
             }
             is UiState.Error -> Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Text(
                     text = stringResource(R.string.network_jamendo_load_failed),
                     color = NasMusicColors.TextSecondary,
-                    fontSize = FontSize.Button
+                    fontSize = FontSize.button()
                 )
             }
             is UiState.Success -> {
@@ -174,7 +174,7 @@ fun JamendoTab(
                         Text(
                             text = stringResource(R.string.network_jamendo_no_results),
                             color = NasMusicColors.TextSecondary,
-                            fontSize = FontSize.Button
+                            fontSize = FontSize.button()
                         )
                     }
                 } else {

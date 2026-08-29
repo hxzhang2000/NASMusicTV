@@ -75,7 +75,7 @@ fun UnifiedSongGrid(
                     Text(
                         text = emptyMessage,
                         color = NasMusicColors.TextSecondary,
-                        fontSize = FontSize.Button
+                        fontSize = FontSize.button()
                     )
                 }
             }

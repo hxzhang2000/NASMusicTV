@@ -67,7 +67,7 @@ fun SongInfoPanel(
                     Text(
                         text = stringResource(R.string.home_song_info),
                     color = NasMusicColors.TextPrimary,
-                    fontSize = FontSize.Subtitle,
+                    fontSize = FontSize.subtitle(),
                     fontWeight = FontWeight.Bold
                 )
                 FocusableSurface(
@@ -83,7 +83,7 @@ fun SongInfoPanel(
                     Text(
                         text = "关闭",
                         color = LocalFocusableContentColor.current,
-                        fontSize = FontSize.Body,
+                        fontSize = FontSize.body(),
                         modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
                     )
                 }
@@ -107,7 +107,7 @@ fun SongInfoPanel(
                 Text(
                     text = "技术参数",
                     color = NasMusicColors.Primary,
-                    fontSize = FontSize.Button,
+                    fontSize = FontSize.button(),
                     fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.padding(bottom = 8.dp)
                 )
@@ -156,13 +156,13 @@ private fun InfoRow(
         Text(
             text = label,
             color = NasMusicColors.TextSecondary,
-            fontSize = FontSize.Body,
+            fontSize = FontSize.body(),
             modifier = Modifier.weight(0.35f)
         )
         Text(
             text = value,
             color = NasMusicColors.TextPrimary,
-            fontSize = FontSize.Body,
+            fontSize = FontSize.body(),
             fontWeight = FontWeight.Medium,
             modifier = Modifier.weight(0.65f)
         )

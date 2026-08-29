@@ -99,7 +99,7 @@ fun UnifiedArtistCard(
             Text(
                 text = artist.name,
                 color = NasMusicColors.TextPrimary,
-                fontSize = FontSize.Small,
+                fontSize = FontSize.small(),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )

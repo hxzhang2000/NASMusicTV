@@ -87,7 +87,7 @@ fun UnifiedPlaylistCard(
                         Text(
                             text = "${playlist.songCount}首",
                             color = NasMusicColors.TextPrimary,
-                            fontSize = FontSize.Small
+                            fontSize = FontSize.small()
                         )
                     }
                 }
@@ -96,14 +96,14 @@ fun UnifiedPlaylistCard(
             Text(
                 text = playlist.name,
                 color = NasMusicColors.TextPrimary,
-                fontSize = FontSize.Body,
+                fontSize = FontSize.body(),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
             Text(
                 text = "${playlist.songCount}首",
                 color = LocalFocusableContentColor.current,
-                fontSize = FontSize.Small
+                fontSize = FontSize.small()
             )
         }
     }

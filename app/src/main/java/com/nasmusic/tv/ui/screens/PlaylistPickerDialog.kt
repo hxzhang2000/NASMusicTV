@@ -1,4 +1,4 @@
-﻿package com.nasmusic.tv.ui.screens
+package com.nasmusic.tv.ui.screens
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
@@ -102,13 +102,13 @@ fun PlaylistPickerDialog(
                     Text(
                     text = stringResource(R.string.mine_pick_playlist_title),
                     color = NasMusicColors.TextPrimary,
-                    fontSize = FontSize.Subtitle
+                    fontSize = FontSize.subtitle()
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                     Text(
                     text = stringResource(R.string.mine_pick_playlist_hint),
                     color = NasMusicColors.TextSecondary,
-                    fontSize = FontSize.Body
+                    fontSize = FontSize.body()
                 )
 
                 Spacer(modifier = Modifier.height(16.dp))
@@ -122,7 +122,7 @@ fun PlaylistPickerDialog(
                         Text(
                             text = stringResource(R.string.mine_pick_playlist_empty),
                             color = NasMusicColors.TextSecondary,
-                            fontSize = FontSize.Button
+                            fontSize = FontSize.button()
                         )
                     }
                 } else {
@@ -152,21 +152,21 @@ fun PlaylistPickerDialog(
                                     Text(
                                         text = "♪",
                                         color = NasMusicColors.Primary,
-                                        fontSize = FontSize.Button,
+                                        fontSize = FontSize.button(),
                                         modifier = Modifier.padding(end = 12.dp)
                                     )
                                     Column(modifier = Modifier.weight(1f)) {
                                         Text(
                                             text = playlist.name,
                                             color = NasMusicColors.TextPrimary,
-                                            fontSize = FontSize.Button,
+                                            fontSize = FontSize.button(),
                                             maxLines = 1,
                                             overflow = TextOverflow.Ellipsis
                                         )
                                         Text(
                                             text = stringResource(R.string.mine_song_count, playlist.songs.size),
                                             color = LocalFocusableContentColor.current,
-                                            fontSize = FontSize.Small
+                                            fontSize = FontSize.small()
                                         )
                                     }
                                 }
@@ -197,7 +197,7 @@ fun PlaylistPickerDialog(
                         Text(
                             text = "+ " + stringResource(R.string.mine_create_playlist),
                             color = NasMusicColors.TextPrimary,
-                            fontSize = FontSize.Body,
+                            fontSize = FontSize.body(),
                             modifier = Modifier.padding(horizontal = 18.dp, vertical = 9.dp)
                         )
                     }
@@ -215,7 +215,7 @@ fun PlaylistPickerDialog(
                         Text(
                             text = stringResource(R.string.common_cancel),
                             color = NasMusicColors.TextPrimary,
-                            fontSize = FontSize.Body,
+                            fontSize = FontSize.body(),
                             modifier = Modifier.padding(horizontal = 24.dp, vertical = 9.dp)
                         )
                     }

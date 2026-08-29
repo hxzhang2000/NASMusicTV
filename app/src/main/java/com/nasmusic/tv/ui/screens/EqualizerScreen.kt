@@ -79,7 +79,7 @@ fun EqualizerScreen(
             Text(
                 text = stringResource(R.string.equalizer_title),
                 color = NasMusicColors.TextPrimary,
-                fontSize = FontSize.Title
+                fontSize = FontSize.title()
             )
         }
 
@@ -98,7 +98,7 @@ fun EqualizerScreen(
                     Text(
                         text = stringResource(R.string.home_spectrum_preview),
                         color = NasMusicColors.TextSecondary,
-                        fontSize = FontSize.Body,
+                        fontSize = FontSize.body(),
                         modifier = Modifier.padding(bottom = 6.dp)
                     )
                     VisualEqualizer(
@@ -116,7 +116,7 @@ fun EqualizerScreen(
                 Text(
                     text = stringResource(R.string.equalizer_preset),
                     color = NasMusicColors.TextPrimary,
-                    fontSize = FontSize.Button,
+                    fontSize = FontSize.button(),
                     modifier = Modifier.padding(bottom = 8.dp)
                 )
             }
@@ -153,12 +153,12 @@ items(presets, key = { it.name }) { preset ->
                         Text(
                             text = if (isSelected) "✓  " else "   ",
                             color = NasMusicColors.Primary,
-                            fontSize = FontSize.Button
+                            fontSize = FontSize.button()
                         )
                         Text(
                             text = preset.displayName,
                             color = LocalFocusableContentColor.current,
-                            fontSize = FontSize.Button,
+                            fontSize = FontSize.button(),
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
@@ -174,7 +174,7 @@ items(presets, key = { it.name }) { preset ->
                     Text(
                         text = stringResource(R.string.equalizer_bands),
                         color = NasMusicColors.TextPrimary,
-                        fontSize = FontSize.Button,
+                        fontSize = FontSize.button(),
                         modifier = Modifier.padding(bottom = 8.dp)
                     )
                 }
@@ -205,7 +205,7 @@ items(presets, key = { it.name }) { preset ->
                             Text(
                                 text = bandLabels[index],
                                 color = NasMusicColors.TextPrimary,
-                                fontSize = FontSize.Body,
+                                fontSize = FontSize.body(),
                                 modifier = Modifier.width(60.dp)
                             )
                             Spacer(modifier = Modifier.weight(1f))
@@ -216,7 +216,7 @@ items(presets, key = { it.name }) { preset ->
                                 color = if (band > 0) NasMusicColors.Primary
                                         else if (band < 0) Accent
                                         else NasMusicColors.TextSecondary,
-                                fontSize = FontSize.Button
+                                fontSize = FontSize.button()
                             )
                         }
                     }

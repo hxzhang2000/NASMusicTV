@@ -96,11 +96,11 @@ class MainActivity : ComponentActivity() {
                     requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
                 }
             }
-            // 密度缩放：手机端紧凑 UI 缩小，TV 端字体放大两号（fontScale 1.25 ≈ +2 档字号）
+            // 密度缩放：手机端紧凑 UI 缩小（density * 0.82），TV 端字号由 FontSize.xx() 函数返回 +6sp 的 TV 值
             val baseDensity = androidx.compose.ui.platform.LocalDensity.current
             val uiDensity = if (isTVDevice) androidx.compose.ui.unit.Density(
                                 density = baseDensity.density,
-                                fontScale = baseDensity.fontScale * 1.25f
+                                fontScale = baseDensity.fontScale
                             )
                             else androidx.compose.ui.unit.Density(
                                 density = baseDensity.density * com.nasmusic.tv.ui.theme.CompactSizes.PHONE_UI_SCALE,
@@ -188,7 +188,7 @@ class MainActivity : ComponentActivity() {
                                 Text(
                                     text = msg,
                                     color = NasMusicColors.TextPrimary,
-                                    fontSize = FontSize.Button,
+                                    fontSize = FontSize.button(),
                                     fontWeight = FontWeight.Medium
                                 )
                             }
@@ -211,7 +211,7 @@ class MainActivity : ComponentActivity() {
                                 Text(
                                     text = msg,
                                     color = NasMusicColors.TextPrimary,
-                                    fontSize = FontSize.Button,
+                                    fontSize = FontSize.button(),
                                     fontWeight = FontWeight.Medium
                                 )
                             }

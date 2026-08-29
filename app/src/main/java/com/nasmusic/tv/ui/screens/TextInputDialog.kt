@@ -1,4 +1,4 @@
-﻿package com.nasmusic.tv.ui.screens
+package com.nasmusic.tv.ui.screens
 
 import android.content.Context
 import android.graphics.Bitmap
@@ -230,7 +230,7 @@ fun TextInputDialog(
                         Text(
                             text = title,
                             color = NasMusicColors.TextPrimary,
-                            fontSize = FontSize.Subtitle
+                            fontSize = FontSize.subtitle()
                         )
                         Spacer(modifier = Modifier.height(12.dp))
 
@@ -251,7 +251,7 @@ fun TextInputDialog(
                                     .padding(horizontal = 12.dp, vertical = 12.dp),
                                 textStyle = TextStyle(
                                     color = NasMusicColors.TextPrimary,
-                                    fontSize = FontSize.Button
+                                    fontSize = FontSize.button()
                                 ),
                                 cursorBrush = SolidColor(NasMusicColors.Primary),
                                 decorationBox = { innerTextField ->
@@ -263,7 +263,7 @@ fun TextInputDialog(
                                             Text(
                                                 text = hint,
                                                 color = NasMusicColors.TextSecondary,
-                                                fontSize = FontSize.Button
+                                                fontSize = FontSize.button()
                                             )
                                         }
                                         innerTextField()
@@ -288,7 +288,7 @@ fun TextInputDialog(
                                            else text,
                                     color = if (text.isEmpty()) NasMusicColors.TextSecondary
                                             else NasMusicColors.TextPrimary,
-                                    fontSize = FontSize.Button,
+                                    fontSize = FontSize.button(),
                                     modifier = Modifier.padding(horizontal = 12.dp)
                                 )
                             }
@@ -300,7 +300,7 @@ fun TextInputDialog(
                             Text(
                                 text = imeUnavailableMsg!!,
                                 color = NasMusicColors.Warning,
-                                fontSize = FontSize.Body
+                                fontSize = FontSize.body()
                             )
                         }
 
@@ -471,13 +471,13 @@ fun TextInputDialog(
                             Text(
                                 text = "扫码用手机输入",
                                 color = NasMusicColors.TextPrimary,
-                                fontSize = FontSize.Body
+                                fontSize = FontSize.body()
                             )
                             Spacer(modifier = Modifier.height(2.dp))
                             Text(
                                 text = "手机浏览器打开",
                                 color = NasMusicColors.TextSecondary,
-                                fontSize = FontSize.Small
+                                fontSize = FontSize.small()
                             )
                         }
                     }
@@ -506,7 +506,7 @@ private fun HistoryRow(
         Text(
             text = label,
             color = NasMusicColors.TextSecondary,
-            fontSize = FontSize.Body,
+            fontSize = FontSize.body(),
             modifier = Modifier.width(28.dp)
         )
         items.forEach { item ->
@@ -531,7 +531,7 @@ private fun HistoryRow(
                     Text(
                         text = item.query,
                         color = NasMusicColors.TextPrimary,
-                        fontSize = FontSize.Body,
+                        fontSize = FontSize.body(),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.padding(horizontal = 8.dp)
@@ -562,7 +562,7 @@ private fun KeyButton(
         Text(
             text = label,
             color = NasMusicColors.TextPrimary,
-            fontSize = FontSize.Button,
+            fontSize = FontSize.button(),
             textAlign = TextAlign.Center,
             modifier = Modifier.fillMaxSize().padding(vertical = 10.dp)
         )
@@ -599,7 +599,7 @@ private fun ActionButton(
         Text(
             text = label,
             color = NasMusicColors.TextPrimary,
-            fontSize = FontSize.Body,
+            fontSize = FontSize.body(),
             textAlign = TextAlign.Center,
             modifier = Modifier.fillMaxSize().padding(vertical = 12.dp)
         )

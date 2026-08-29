@@ -64,14 +64,14 @@ fun ExitConfirmDialog(
             Text(
                 text = stringResource(R.string.exit_title),
                 color = NasMusicColors.TextPrimary,
-                fontSize = FontSize.Title,
+                fontSize = FontSize.title(),
                 fontWeight = FontWeight.Bold
             )
             Spacer(modifier = Modifier.height(16.dp))
             Text(
                 text = stringResource(R.string.exit_confirm_message),
                 color = NasMusicColors.TextSecondary,
-                fontSize = FontSize.Button
+                fontSize = FontSize.button()
             )
             Spacer(modifier = Modifier.height(28.dp))
 
@@ -128,7 +128,7 @@ private fun ExitButton(
             Text(
                 text = label,
                 color = if (isPrimary) Color.Black else NasMusicColors.TextPrimary,
-                fontSize = FontSize.Button,
+                fontSize = FontSize.button(),
                 fontWeight = FontWeight.Bold
             )
         }

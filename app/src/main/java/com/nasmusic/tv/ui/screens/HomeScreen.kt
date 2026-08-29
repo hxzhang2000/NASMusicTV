@@ -265,7 +265,7 @@ private fun WelcomeSection(
                     .background(NasMusicColors.Primary, RoundedCornerShape(10.dp)),
                 contentAlignment = Alignment.Center
             ) {
-                Text(text = "\u266A", color = NasMusicColors.TextPrimary, fontSize = FontSize.Title)
+                Text(text = "\u266A", color = NasMusicColors.TextPrimary, fontSize = FontSize.title())
             }
             Spacer(modifier = Modifier.width(14.dp))
             Column {
@@ -273,7 +273,7 @@ private fun WelcomeSection(
                     text = if (isConnected) serverDisplayName.ifBlank { stringResource(R.string.app_name) }
                            else stringResource(R.string.app_name),
                     color = NasMusicColors.TextPrimary,
-                    fontSize = FontSize.Display,
+                    fontSize = FontSize.display(),
                     fontWeight = FontWeight.Bold
                 )
                 Text(
@@ -281,7 +281,7 @@ private fun WelcomeSection(
                            else if (!isConnected) stringResource(R.string.common_not_connected)
                            else stringResource(R.string.home_ready),
                     color = if (isConnected) NasMusicColors.Success else NasMusicColors.TextSecondary,
-                    fontSize = FontSize.Body
+                    fontSize = FontSize.body()
                 )
             }
         }
@@ -339,13 +339,13 @@ private fun StatCard(
         ) {
             Text(
                 text = value,
-                fontSize = FontSize.Display,
+                fontSize = FontSize.display(),
                 fontWeight = FontWeight.Bold,
                 color = NasMusicColors.Primary
             )
             Text(
                 text = label,
-                fontSize = FontSize.Body,
+                fontSize = FontSize.body(),
                 color = LocalFocusableContentColor.current
             )
         }
@@ -417,12 +417,12 @@ private fun QuickActionButton(
                 .padding(horizontal = 16.dp, vertical = 14.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(text = emoji, fontSize = FontSize.Title, color = LocalFocusableContentColor.current)
+            Text(text = emoji, fontSize = FontSize.title(), color = LocalFocusableContentColor.current)
             Spacer(modifier = Modifier.width(10.dp))
             Text(
                 text = label,
                 color = LocalFocusableContentColor.current,
-                fontSize = FontSize.Button,
+                fontSize = FontSize.button(),
                 fontWeight = FontWeight.Medium
             )
         }
@@ -446,13 +446,13 @@ private fun SectionHeader(
         Text(
             text = title,
             color = NasMusicColors.TextPrimary,
-            fontSize = FontSize.Subtitle,
+            fontSize = FontSize.subtitle(),
             fontWeight = FontWeight.SemiBold
         )
         Text(
             text = " ($count)",
             color = NasMusicColors.TextSecondary,
-            fontSize = FontSize.Button
+            fontSize = FontSize.button()
         )
         Spacer(modifier = Modifier.weight(1f))
         if (onViewAll != null) {
@@ -469,7 +469,7 @@ private fun SectionHeader(
                     Text(
                         text = stringResource(R.string.home_view_all) + " >",
                         color = NasMusicColors.Primary,
-                        fontSize = FontSize.Body,
+                        fontSize = FontSize.body(),
                     modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                 )
             }
@@ -517,21 +517,21 @@ private fun HomeAlbumCard(
                         modifier = Modifier.fillMaxSize()
                     )
                 } else {
-                    Text(text = "\u266A", color = LocalFocusableContentColor.current, fontSize = FontSize.Display)
+                    Text(text = "\u266A", color = LocalFocusableContentColor.current, fontSize = FontSize.display())
                 }
             }
             Spacer(modifier = Modifier.height(4.dp))
             Text(
                 text = album.name,
                 color = NasMusicColors.TextPrimary,
-                fontSize = FontSize.Body,
+                fontSize = FontSize.body(),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
             Text(
                 text = album.artist.ifBlank { "\u2014" },
                 color = LocalFocusableContentColor.current,
-                fontSize = FontSize.Small,
+                fontSize = FontSize.small(),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
@@ -578,21 +578,21 @@ private fun HomeSongCard(
                         modifier = Modifier.fillMaxSize()
                     )
                 } else {
-                    Text(text = "\u266A", color = LocalFocusableContentColor.current, fontSize = FontSize.Display)
+                    Text(text = "\u266A", color = LocalFocusableContentColor.current, fontSize = FontSize.display())
                 }
             }
             Spacer(modifier = Modifier.height(4.dp))
             Text(
                 text = song.title,
                 color = NasMusicColors.TextPrimary,
-                fontSize = FontSize.Body,
+                fontSize = FontSize.body(),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
             Text(
                 text = song.artist.ifBlank { "\u2014" },
                 color = LocalFocusableContentColor.current,
-                fontSize = FontSize.Small,
+                fontSize = FontSize.small(),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
@@ -648,7 +648,7 @@ private fun NowPlayingCard(
                         modifier = Modifier.fillMaxSize()
                     )
                 } else {
-                    Text(text = "\u266A", color = LocalFocusableContentColor.current, fontSize = FontSize.Title)
+                    Text(text = "\u266A", color = LocalFocusableContentColor.current, fontSize = FontSize.title())
                 }
             }
             Spacer(modifier = Modifier.width(12.dp))
@@ -656,7 +656,7 @@ private fun NowPlayingCard(
                 Text(
                     text = song.title,
                     color = NasMusicColors.TextPrimary,
-                    fontSize = FontSize.Button,
+                    fontSize = FontSize.button(),
                     fontWeight = FontWeight.SemiBold,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
@@ -665,7 +665,7 @@ private fun NowPlayingCard(
                     Text(
                         text = song.artist,
                         color = LocalFocusableContentColor.current,
-                        fontSize = FontSize.Body,
+                        fontSize = FontSize.body(),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
@@ -675,7 +675,7 @@ private fun NowPlayingCard(
             Text(
                 text = stringResource(R.string.nav_now_playing) + " \u25B6",
                 color = NasMusicColors.Primary,
-                fontSize = FontSize.Body
+                fontSize = FontSize.body()
             )
         }
     }
@@ -720,42 +720,42 @@ private fun HomeWeatherCard(
                 Text(
                     text = stringResource(R.string.common_loading),
                     color = LocalFocusableContentColor.current,
-                    fontSize = FontSize.Button
+                    fontSize = FontSize.button()
                 )
             } else if (weatherData != null) {
                 val mood = WeatherMood.fromWeather(weatherData)
-                Text(text = mood.icon, fontSize = FontSize.DisplayLarge, color = LocalFocusableContentColor.current)
+                Text(text = mood.icon, fontSize = FontSize.displayLarge(), color = LocalFocusableContentColor.current)
                 Spacer(modifier = Modifier.width(14.dp))
                 Column {
                     Text(
                         text = "${weatherData.temperature.toInt()}\u00B0C",
-                        fontSize = FontSize.Title,
+                        fontSize = FontSize.title(),
                         fontWeight = FontWeight.Bold,
                         color = NasMusicColors.TextPrimary
                     )
                     Text(
                         text = "${weatherData.cityName}  \u00B7  ${weatherData.description}",
-                        fontSize = FontSize.Body,
+                        fontSize = FontSize.body(),
                         color = LocalFocusableContentColor.current
                     )
                 }
                 Spacer(modifier = Modifier.weight(1f))
                 Text(
                     text = "\uD83C\uDFB2 " + stringResource(R.string.home_weather_radio),
-                    fontSize = FontSize.Body,
+                    fontSize = FontSize.body(),
                     color = NasMusicColors.Primary
                 )
             } else if (errorMessage != null) {
                 Text(
                     text = "⚠ $errorMessage",
                     color = NasMusicColors.Warning,
-                    fontSize = FontSize.Body
+                    fontSize = FontSize.body()
                 )
             } else {
                 Text(
                     text = stringResource(R.string.common_loading),
                     color = LocalFocusableContentColor.current,
-                    fontSize = FontSize.Button
+                    fontSize = FontSize.button()
                 )
             }
         }

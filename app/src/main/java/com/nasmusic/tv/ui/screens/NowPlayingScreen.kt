@@ -410,7 +410,7 @@ fun NowPlayingScreen(
                             ) {
                                 Text(
                                     text = "● 电台直播",
-                                    fontSize = FontSize.Title,
+                                    fontSize = FontSize.title(),
                                     fontWeight = FontWeight.Bold,
                                     color = NasMusicColors.Primary,
                                     textAlign = androidx.compose.ui.text.style.TextAlign.Center
@@ -506,7 +506,7 @@ private fun CoverColumn(
                     Text(
                         text = title,
                         color = NasMusicColors.TextPrimary,
-                        fontSize = FontSize.Title,
+                        fontSize = FontSize.title(),
                         textAlign = TextAlign.Center,
                         modifier = Modifier.weight(1f).padding(horizontal = 4.dp, vertical = 2.dp)
                     )
@@ -515,7 +515,7 @@ private fun CoverColumn(
                 Text(
                     text = stringResource(R.string.player_no_song_selected),
                     color = NasMusicColors.TextPrimary,
-                    fontSize = FontSize.Title,
+                    fontSize = FontSize.title(),
                     textAlign = TextAlign.Center,
                     modifier = Modifier.weight(1f)
                 )
@@ -543,7 +543,7 @@ private fun CoverColumn(
                 Text(
                     text = "NET",
                     color = NasMusicColors.Primary,
-                    fontSize = FontSize.Small,
+                    fontSize = FontSize.small(),
                     textAlign = TextAlign.Center
                 )
             }
@@ -555,7 +555,7 @@ private fun CoverColumn(
             Text(
                 text = currentSong?.album ?: "",
                 color = NasMusicColors.TextSecondary.copy(alpha = 0.7f),
-                fontSize = FontSize.Button,
+                fontSize = FontSize.button(),
                 textAlign = TextAlign.Center,
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp)
             )
@@ -630,7 +630,7 @@ private fun CoverColumn(
                 Text(
                     text = artist,
                     color = LocalFocusableContentColor.current,
-                    fontSize = FontSize.Button,
+                    fontSize = FontSize.button(),
                     textAlign = TextAlign.Center,
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 2.dp)
                 )
@@ -639,7 +639,7 @@ private fun CoverColumn(
             Text(
                 text = "—",
                 color = NasMusicColors.TextSecondary,
-                fontSize = FontSize.Button,
+                fontSize = FontSize.button(),
                 textAlign = TextAlign.Center,
                 modifier = Modifier.fillMaxWidth()
             )
@@ -668,7 +668,7 @@ private fun CoverColumn(
                 Text(
                     text = if (showInfoPanel) "封面" else "信息",
                     color = if (showInfoPanel) NasMusicColors.Primary else NasMusicColors.TextPrimary,
-                    fontSize = FontSize.Small,
+                    fontSize = FontSize.small(),
                     modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
                 )
             }
@@ -698,7 +698,7 @@ private fun FavoriteButton(
         Text(
             text = if (isFavorite) "♥" else "♡",
             color = LocalFocusableContentColor.current,
-            fontSize = FontSize.Subtitle,
+            fontSize = FontSize.subtitle(),
             modifier = Modifier.padding(10.dp)
         )
     }
@@ -735,7 +735,7 @@ private fun SourceTag(
             color = if (!available) NasMusicColors.TextSecondary.copy(alpha = 0.4f)
                     else if (selected) Color.Black
                     else NasMusicColors.TextPrimary,
-            fontSize = FontSize.Small,
+            fontSize = FontSize.small(),
             modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
         )
     }

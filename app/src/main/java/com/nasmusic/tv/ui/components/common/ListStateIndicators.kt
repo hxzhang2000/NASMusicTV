@@ -39,13 +39,13 @@ fun LoadingIndicator(
             Text(
                 text = "⟳",
                 color = NasMusicColors.Primary,
-                fontSize = FontSize.Display
+                fontSize = FontSize.display()
             )
             Spacer(modifier = Modifier.height(12.dp))
             Text(
                 text = text,
                 color = NasMusicColors.TextSecondary,
-                fontSize = FontSize.Button
+                fontSize = FontSize.button()
             )
         }
     }
@@ -72,12 +72,12 @@ fun ErrorDisplay(
             Text(
                 text = "⚠",
                 color = NasMusicColors.Warning,
-                fontSize = FontSize.Display
+                fontSize = FontSize.display()
             )
             Text(
                 text = message,
                 color = NasMusicColors.TextSecondary,
-                fontSize = FontSize.Button,
+                fontSize = FontSize.button(),
                 textAlign = TextAlign.Center
             )
             if (onRetry != null) {
@@ -94,7 +94,7 @@ fun ErrorDisplay(
                     Text(
                         text = "重试",
                         color = NasMusicColors.TextPrimary,
-                        fontSize = FontSize.Button,
+                        fontSize = FontSize.button(),
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
                     )
                 }
@@ -125,12 +125,12 @@ fun EmptyState(
             Text(
                 text = "📭",
                 color = NasMusicColors.TextSecondary,
-                fontSize = FontSize.Display
+                fontSize = FontSize.display()
             )
             Text(
                 text = message,
                 color = NasMusicColors.TextSecondary,
-                fontSize = FontSize.Button,
+                fontSize = FontSize.button(),
                 textAlign = TextAlign.Center
             )
             if (actionText != null && onAction != null) {
@@ -147,7 +147,7 @@ fun EmptyState(
                     Text(
                         text = actionText,
                         color = NasMusicColors.TextPrimary,
-                        fontSize = FontSize.Button,
+                        fontSize = FontSize.button(),
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
                     )
                 }

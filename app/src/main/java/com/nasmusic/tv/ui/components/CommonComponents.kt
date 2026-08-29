@@ -49,8 +49,8 @@ fun BackButton(
             modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(text = stringResource(R.string.common_back_arrow), color = NasMusicColors.TextPrimary, fontSize = FontSize.Button, modifier = Modifier.padding(end = 6.dp))
-            Text(text = stringResource(R.string.common_back), color = NasMusicColors.TextPrimary, fontSize = FontSize.Button)
+            Text(text = stringResource(R.string.common_back_arrow), color = NasMusicColors.TextPrimary, fontSize = FontSize.button(), modifier = Modifier.padding(end = 6.dp))
+            Text(text = stringResource(R.string.common_back), color = NasMusicColors.TextPrimary, fontSize = FontSize.button())
         }
     }
 }
@@ -86,7 +86,7 @@ fun SearchField(
             Text(
                 text = if (query.isBlank()) placeholder else query,
                 color = if (query.isBlank()) NasMusicColors.TextSecondary else NasMusicColors.TextPrimary,
-                fontSize = FontSize.Body,
+                fontSize = FontSize.body(),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f)
@@ -96,7 +96,7 @@ fun SearchField(
                     onClick = onClear,
                     shape = RoundedCornerShape(8.dp)
                 ) {
-                    Text("✕", color = NasMusicColors.TextPrimary, fontSize = FontSize.Body, modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp))
+                    Text("✕", color = NasMusicColors.TextPrimary, fontSize = FontSize.body(), modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp))
                 }
             }
         }

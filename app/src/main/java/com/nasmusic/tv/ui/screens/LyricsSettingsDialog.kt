@@ -56,13 +56,13 @@ fun LyricsSettingsDialog(
         Text(
             text = "歌词设置",
             color = NasMusicColors.TextPrimary,
-            fontSize = FontSize.Subtitle
+            fontSize = FontSize.subtitle()
         )
 
         Text(
             text = "字体大小",
             color = NasMusicColors.TextSecondary,
-            fontSize = FontSize.Button
+            fontSize = FontSize.button()
         )
 
         Row(
@@ -91,7 +91,7 @@ fun LyricsSettingsDialog(
                     Text(
                         text = label,
                         color = if (isSelected) NasMusicColors.Surface else NasMusicColors.TextPrimary,
-                        fontSize = FontSize.Body,
+                        fontSize = FontSize.body(),
                         modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp)
                     )
                 }
@@ -122,7 +122,7 @@ fun LyricsSettingsDialog(
             Text(
                 text = "关闭",
                 color = NasMusicColors.TextPrimary,
-                fontSize = FontSize.Button,
+                fontSize = FontSize.button(),
                 modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp)
             )
         }

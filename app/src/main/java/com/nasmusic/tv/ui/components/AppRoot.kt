@@ -1,4 +1,4 @@
-﻿package com.nasmusic.tv.ui.components
+package com.nasmusic.tv.ui.components
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
@@ -178,10 +178,10 @@ fun AppRoot(
                             ),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text(text = "\u266A", color = NasMusicColors.TextPrimary, fontSize = FontSize.Subtitle)
+                        Text(text = "\u266A", color = NasMusicColors.TextPrimary, fontSize = FontSize.subtitle())
                     }
                     Spacer(modifier = Modifier.width(12.dp))
-                    Text(text = "NAS Music", color = NasMusicColors.TextPrimary, fontSize = FontSize.Subtitle)
+                    Text(text = "NAS Music", color = NasMusicColors.TextPrimary, fontSize = FontSize.subtitle())
                 }
 
                 // 导航项（外层固定宽度右对齐；内层可横向滑动——手机窄屏滚动浏览全部 tab）

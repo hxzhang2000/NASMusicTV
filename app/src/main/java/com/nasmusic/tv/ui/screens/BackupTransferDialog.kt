@@ -1,4 +1,4 @@
-﻿package com.nasmusic.tv.ui.screens
+package com.nasmusic.tv.ui.screens
 
 import android.graphics.Bitmap
 import androidx.activity.compose.BackHandler
@@ -118,7 +118,7 @@ fun BackupTransferDialog(
                     Text(
                     text = "扫码传输备份",
                     color = NasMusicColors.TextPrimary,
-                    fontSize = FontSize.Subtitle
+                    fontSize = FontSize.subtitle()
                 )
                 Spacer(modifier = Modifier.height(8.dp))
 
@@ -132,12 +132,12 @@ fun BackupTransferDialog(
                         Text(
                         text = "手机扫码打开备份管理页",
                         color = NasMusicColors.TextPrimary,
-                        fontSize = FontSize.Button
+                        fontSize = FontSize.button()
                     )
                         Text(
                         text = "可下载备份到手机 / 上传备份到电视 / 恢复备份",
                         color = NasMusicColors.TextSecondary,
-                        fontSize = FontSize.Body
+                        fontSize = FontSize.body()
                     )
                     Spacer(modifier = Modifier.height(6.dp))
                     serverUrl?.let { url ->
@@ -155,7 +155,7 @@ fun BackupTransferDialog(
                             Text(
                                 text = url,
                                 color = NasMusicColors.Primary,
-                                fontSize = FontSize.Small,
+                                fontSize = FontSize.small(),
                                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp)
                             )
                         }
@@ -167,7 +167,7 @@ fun BackupTransferDialog(
                         text = status,
                         color = if (status.startsWith("等待")) NasMusicColors.Primary
                                else NasMusicColors.Warning,
-                        fontSize = FontSize.Button
+                        fontSize = FontSize.button()
                     )
                     Spacer(modifier = Modifier.height(40.dp))
                 }
@@ -200,7 +200,7 @@ fun BackupTransferDialog(
                             Text(
                                 text = "关闭",
                                 color = LocalFocusableContentColor.current,
-                                fontSize = FontSize.Button
+                                fontSize = FontSize.button()
                             )
                         }
                     }
