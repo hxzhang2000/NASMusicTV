@@ -580,7 +580,7 @@ private fun KaraokeSettingButton(
                 text = label,
                 fontSize = 12.sp,
                 fontWeight = FontWeight.Bold,
-                color = if (isModified) NasMusicColors.Primary else NasMusicColors.TextSecondary
+                color = if (isModified) NasMusicColors.Primary else LocalFocusableContentColor.current
             )
             Spacer(Modifier.height(2.dp))
             Text(
@@ -755,7 +755,7 @@ private fun <T> KaraokeStepPickerDialog(
                         focusBorderColor = NasMusicColors.FocusRing
                     ) {
                         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            Text(text = "重置", fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                            Text(text = "重置", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = LocalFocusableContentColor.current)
                         }
                     }
 
@@ -775,7 +775,7 @@ private fun <T> KaraokeStepPickerDialog(
                         focusBorderColor = NasMusicColors.FocusRing
                     ) {
                         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            Text(text = "确定", fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                            Text(text = "确定", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = LocalFocusableContentColor.current)
                         }
                     }
                 }

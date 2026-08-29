@@ -56,6 +56,7 @@ import com.nasmusic.tv.data.model.SearchHistoryItem
 import com.nasmusic.tv.data.model.Song
 import com.nasmusic.tv.ui.LocalListBackHandler
 import com.nasmusic.tv.ui.components.FocusableSurface
+import com.nasmusic.tv.ui.components.LocalFocusableContentColor
 import com.nasmusic.tv.ui.components.SearchField
 import com.nasmusic.tv.ui.components.songGridColumns
 import com.nasmusic.tv.ui.theme.NasMusicColors
@@ -797,7 +798,7 @@ private fun GenresTab(
                             Spacer(modifier = Modifier.height(4.dp))
                             Text(
                                 text = "${genre.songCount} 首",
-                                color = NasMusicColors.TextSecondary,
+                                color = LocalFocusableContentColor.current,
                                 fontSize = 17.sp
                             )
                         }
@@ -892,7 +893,7 @@ private fun YearsTab(
                             Spacer(modifier = Modifier.height(4.dp))
                             Text(
                                 text = "点击播放",
-                                color = NasMusicColors.TextSecondary,
+                                color = LocalFocusableContentColor.current,
                                 fontSize = 17.sp
                             )
                         }
@@ -932,7 +933,7 @@ fun AlbumCard(
                     AsyncImage(model = album.coverUrl, contentDescription = album.name, modifier = Modifier.fillMaxSize())
                 } else {
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Text(text = "♪", color = NasMusicColors.TextSecondary, fontSize = 41.sp)
+                        Text(text = "♪", color = LocalFocusableContentColor.current, fontSize = 41.sp)
                     }
                 }
                 Box(
@@ -949,7 +950,7 @@ fun AlbumCard(
             Spacer(modifier = Modifier.height(4.dp))
             Text(text = album.name, color = NasMusicColors.TextPrimary, fontSize = 17.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(text = album.artist.ifBlank { "—" }, color = NasMusicColors.TextSecondary, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                Text(text = album.artist.ifBlank { "—" }, color = LocalFocusableContentColor.current, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
                 if (onPlay != null) {
                     Text(text = "▶" + stringResource(R.string.player_play), color = NasMusicColors.Primary, fontSize = 14.sp, modifier = Modifier.padding(start = 4.dp))
                 }
@@ -1009,7 +1010,7 @@ private fun ArtistCard(
             Spacer(modifier = Modifier.height(6.dp))
             Text(text = artist, color = NasMusicColors.TextPrimary, fontSize = 17.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(text = "${songCount}首", color = NasMusicColors.TextSecondary, fontSize = 15.sp, modifier = Modifier.weight(1f))
+                Text(text = "${songCount}首", color = LocalFocusableContentColor.current, fontSize = 15.sp, modifier = Modifier.weight(1f))
                 if (onPlay != null) {
                     Text(text = "▶", color = NasMusicColors.Primary, fontSize = 14.sp, modifier = Modifier.padding(start = 4.dp))
                 }

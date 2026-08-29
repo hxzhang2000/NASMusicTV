@@ -45,6 +45,7 @@ import com.nasmusic.tv.data.model.LocalPlaylist
 import com.nasmusic.tv.data.model.Song
 import com.nasmusic.tv.data.model.UiState
 import com.nasmusic.tv.ui.components.FocusableSurface
+import com.nasmusic.tv.ui.components.LocalFocusableContentColor
 import com.nasmusic.tv.ui.components.common.ActionBar
 import com.nasmusic.tv.ui.components.song.SongRowMode
 import com.nasmusic.tv.ui.components.song.UnifiedSongRow
@@ -234,6 +235,7 @@ fun MineScreen(
                     ) {
                         Text(
                             text = "+ " + stringResource(R.string.mine_create_playlist),
+                            color = LocalFocusableContentColor.current,
                             fontSize = 19.sp,
                             modifier = Modifier.padding(horizontal = 18.dp, vertical = 10.dp)
                         )
@@ -560,6 +562,7 @@ private fun PlaylistsPane(
             ) {
                 Text(
                     text = "+ " + stringResource(R.string.mine_create_playlist),
+                    color = LocalFocusableContentColor.current,
                     fontSize = 19.sp,
                     modifier = Modifier.padding(horizontal = 18.dp, vertical = 10.dp)
                 )
@@ -713,9 +716,9 @@ private fun PlaylistCard(
                     onClick = onPlay
                 )
                 Spacer(modifier = Modifier.width(10.dp))
-                PlaylistActionButton(
-                    text = stringResource(R.string.mine_rename_playlist),
-                    color = NasMusicColors.TextSecondary,
+                    PlaylistActionButton(
+                        text = stringResource(R.string.mine_rename_playlist),
+                        color = NasMusicColors.TextPrimary,
                     onClick = onRename
                 )
                 Spacer(modifier = Modifier.width(10.dp))

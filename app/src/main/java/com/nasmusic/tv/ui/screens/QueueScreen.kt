@@ -368,7 +368,7 @@ private fun MoveButton(text: String, onClick: () -> Unit) {
         Text(
             text = text,
             fontSize = 21.sp,
-            color = if (isFocused) NasMusicColors.Primary else NasMusicColors.TextSecondary
+            color = if (isFocused) NasMusicColors.Primary else NasMusicColors.TextPrimary
         )
     }
 }

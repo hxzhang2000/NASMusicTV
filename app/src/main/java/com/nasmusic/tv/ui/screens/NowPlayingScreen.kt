@@ -52,6 +52,7 @@ import com.nasmusic.tv.ui.components.LyricsView
 import com.nasmusic.tv.ui.components.CoverCarousel
 import com.nasmusic.tv.ui.components.ControlButtonsRow
 import com.nasmusic.tv.ui.components.FocusableSurface
+import com.nasmusic.tv.ui.components.LocalFocusableContentColor
 import com.nasmusic.tv.ui.components.KaraokePlaybackScreen
 import com.nasmusic.tv.ui.components.ProgressSection
 import com.nasmusic.tv.ui.components.SongInfoPanel
@@ -626,7 +627,7 @@ private fun CoverColumn(
             ) {
                 Text(
                     text = artist,
-                    color = NasMusicColors.TextSecondary,
+                    color = LocalFocusableContentColor.current,
                     fontSize = 21.sp,
                     textAlign = TextAlign.Center,
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 2.dp)
@@ -694,6 +695,7 @@ private fun FavoriteButton(
     ) {
         Text(
             text = if (isFavorite) "♥" else "♡",
+            color = LocalFocusableContentColor.current,
             fontSize = 25.sp,
             modifier = Modifier.padding(10.dp)
         )

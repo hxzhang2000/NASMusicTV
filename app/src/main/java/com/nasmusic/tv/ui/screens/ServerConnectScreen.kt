@@ -51,6 +51,7 @@ import com.nasmusic.tv.R
 import com.nasmusic.tv.backend.BackendRegistry
 import com.nasmusic.tv.data.model.ServerConfig
 import com.nasmusic.tv.ui.components.FocusableSurface
+import com.nasmusic.tv.ui.components.LocalFocusableContentColor
 import com.nasmusic.tv.ui.theme.NasMusicColors
 import kotlinx.coroutines.launch
 
@@ -236,6 +237,7 @@ fun ServerConnectScreen(
                     ) {
                         Text(
                             text = stringResource(R.string.server_disconnect),
+                            color = LocalFocusableContentColor.current,
                             fontSize = 19.sp,
                             modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp)
                         )
@@ -418,6 +420,7 @@ fun ServerConnectScreen(
             ) {
                 Text(
                     text = if (isConnecting) stringResource(R.string.server_connecting) else stringResource(R.string.server_connect_action),
+                    color = LocalFocusableContentColor.current,
                     fontSize = 23.sp,
                     modifier = Modifier.padding(horizontal = 32.dp, vertical = 16.dp)
                 )
@@ -526,6 +529,7 @@ private fun TypeCard(
                 ) {
         Text(
             text = text,
+            color = LocalFocusableContentColor.current,
             fontSize = 23.sp,
             textAlign = TextAlign.Center,
             modifier = Modifier
@@ -575,8 +579,7 @@ private fun FormField(
                     text = if (value.text.isEmpty()) hint
                            else if (masked) "*".repeat(value.text.length)
                            else value.text,
-                    color = if (value.text.isEmpty()) NasMusicColors.TextSecondary
-                            else NasMusicColors.TextPrimary,
+                    color = LocalFocusableContentColor.current,
                     fontSize = 21.sp,
                     modifier = Modifier.padding(horizontal = 16.dp)
                 )
@@ -632,6 +635,7 @@ FocusableSurface(
         ) {
             Text(
                 text = if (isTesting) stringResource(R.string.server_testing) else stringResource(R.string.server_connection_test),
+                color = LocalFocusableContentColor.current,
                 fontSize = 19.sp
             )
         }
@@ -689,8 +693,7 @@ private fun ServerAddressField(
                             ServerConfig.TYPE_FEINIU -> "http://192.168.1.100"
                             else -> "https://jellyfin.example.com 或 http://192.168.1.100:8096"
                         } else baseUrl.text,
-                        color = if (baseUrl.text.isEmpty()) NasMusicColors.TextSecondary
-                                else NasMusicColors.TextPrimary,
+                        color = LocalFocusableContentColor.current,
                         fontSize = 20.sp,
                         modifier = Modifier.padding(horizontal = 16.dp)
                     )

@@ -91,45 +91,45 @@ object NasMusicDimens {
 /**
  * 字号分级系统
  *
- * 所有字号统一归入 7 个档位，每个档位对应手机/TV 两套数值：
+ * 所有字号统一归入 8 个档位，每个档位对应手机/TV 两套数值：
  * - 手机端保持设计稿原始值
- * - TV 端统一 +2sp（比全局 fontScale 1.25 更精确可控）
+ * - TV 端统一 +6sp（比手机端大 6 号，适配大屏）
  *
- * 使用方式：直接引用 FontSize.XX，例如 MaterialTheme.typography.bodyLarge.fontSize
- * 或在 Composable 中写 Text(fontSize = FontSize.Body)
+ * 使用方式：直接引用 FontSize.XX，例如 Text(fontSize = FontSize.Body)
+ * 或通过 Composable 函数获取设备适配值：FontSize.body()
  */
 object FontSize {
     // 档位 1: Caption（注释、徽章、最小文字）
     val Caption = 12.sp        // 手机
-    val CaptionTv = 14.sp      // TV
+    val CaptionTv = 18.sp      // TV = 12 + 6
 
     // 档位 2: Small（次要文字、设置值、按钮小字）
     val Small = 14.sp
-    val SmallTv = 16.sp
+    val SmallTv = 20.sp        // TV = 14 + 6
 
     // 档位 3: Body（正文、列表项、主要文字）
     val Body = 17.sp
-    val BodyTv = 19.sp
+    val BodyTv = 23.sp         // TV = 17 + 6
 
     // 档位 4: Button（按钮文字、标签）
     val Button = 19.sp
-    val ButtonTv = 21.sp
+    val ButtonTv = 25.sp       // TV = 19 + 6
 
     // 档位 5: Subtitle（副标题、卡片标题、对话框标题）
     val Subtitle = 23.sp
-    val SubtitleTv = 25.sp
+    val SubtitleTv = 29.sp     // TV = 23 + 6
 
     // 档位 6: Title（大标题、歌词普通行）
     val Title = 27.sp
-    val TitleTv = 29.sp
+    val TitleTv = 33.sp        // TV = 27 + 6
 
     // 档位 7: Display（展示文字、歌词当前行、大数字）
     val Display = 33.sp
-    val DisplayTv = 35.sp
+    val DisplayTv = 39.sp      // TV = 33 + 6
 
     // 档位 8: DisplayLarge（超大展示）
     val DisplayLarge = 41.sp
-    val DisplayLargeTv = 43.sp
+    val DisplayLargeTv = 47.sp // TV = 41 + 6
 
     /** 根据当前设备返回对应档位的字号 */
     @Composable

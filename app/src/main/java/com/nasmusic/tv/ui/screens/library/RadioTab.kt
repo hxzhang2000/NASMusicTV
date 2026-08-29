@@ -41,6 +41,7 @@ import com.nasmusic.tv.backend.radio.RadioBrowserClient
 import com.nasmusic.tv.data.model.RadioStation
 import com.nasmusic.tv.data.model.UiState
 import com.nasmusic.tv.ui.components.FocusableSurface
+import com.nasmusic.tv.ui.components.LocalFocusableContentColor
 import com.nasmusic.tv.ui.components.SearchField
 import com.nasmusic.tv.ui.screens.TextInputDialog
 import com.nasmusic.tv.ui.theme.NasMusicColors
@@ -137,6 +138,7 @@ fun RadioTab(
                     ) {
                         Text(
                             text = stringResource(R.string.network_radio_retry),
+                            color = LocalFocusableContentColor.current,
                             fontSize = 18.sp,
                             modifier = Modifier.padding(horizontal = 16.dp, vertical = 9.dp)
                         )
@@ -253,10 +255,10 @@ private fun RadioStationCard(
                         station.country.takeIf { it.isNotBlank() },
                         station.tags.take(2).joinToString(" / ").takeIf { it.isNotBlank() }
                     ).filterNotNull().joinToString(" \u00B7 "),
+                    color = LocalFocusableContentColor.current,
                     fontSize = 13.sp,
                     maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    color = NasMusicColors.TextSecondary
+                    overflow = TextOverflow.Ellipsis
                 )
             }
             if (station.bitrate > 0) {
@@ -267,8 +269,8 @@ private fun RadioStationCard(
                 ) {
                     Text(
                         text = "${station.bitrate}kb/s",
-                        fontSize = 11.sp,
-                        color = NasMusicColors.TextSecondary
+                        color = LocalFocusableContentColor.current,
+                        fontSize = 11.sp
                     )
                 }
             }

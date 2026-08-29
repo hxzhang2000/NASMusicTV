@@ -95,7 +95,7 @@ fun SearchField(
                     onClick = onClear,
                     shape = RoundedCornerShape(8.dp)
                 ) {
-                    Text("✕", color = NasMusicColors.TextSecondary, fontSize = 17.sp, modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp))
+                    Text("✕", color = NasMusicColors.TextPrimary, fontSize = 17.sp, modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp))
                 }
             }
         }

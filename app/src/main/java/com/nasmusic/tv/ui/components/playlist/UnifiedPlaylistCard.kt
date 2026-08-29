@@ -22,6 +22,7 @@ import androidx.tv.material3.Text
 import com.nasmusic.tv.data.model.Playlist
 import com.nasmusic.tv.ui.components.CoverCarousel
 import com.nasmusic.tv.ui.components.FocusableSurface
+import com.nasmusic.tv.ui.components.LocalFocusableContentColor
 import com.nasmusic.tv.ui.theme.NasMusicColors
 
 /**
@@ -100,7 +101,7 @@ fun UnifiedPlaylistCard(
             )
             Text(
                 text = "${playlist.songCount}首",
-                color = NasMusicColors.TextSecondary,
+                color = LocalFocusableContentColor.current,
                 fontSize = 15.sp
             )
         }

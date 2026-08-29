@@ -26,6 +26,7 @@ import com.nasmusic.tv.data.model.MusicSourceType
 import com.nasmusic.tv.data.model.Song
 import com.nasmusic.tv.ui.LocalListBackHandler
 import com.nasmusic.tv.ui.components.FocusableSurface
+import com.nasmusic.tv.ui.components.LocalFocusableContentColor
 import com.nasmusic.tv.ui.components.common.ActionBar
 import com.nasmusic.tv.ui.components.common.LoadingIndicator
 import com.nasmusic.tv.ui.components.song.UnifiedSongRow
@@ -209,6 +210,7 @@ private fun SearchSourceBar(
             ) {
                 Text(
                     text = (if (isEnabled) "● " else "○ ") + source.displayName,
+                    color = LocalFocusableContentColor.current,
                     fontSize = 16.sp,
                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
                 )
@@ -227,6 +229,7 @@ private fun SearchSourceBar(
         ) {
             Text(
                 text = "全部点亮",
+                color = LocalFocusableContentColor.current,
                 fontSize = 16.sp,
                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
             )

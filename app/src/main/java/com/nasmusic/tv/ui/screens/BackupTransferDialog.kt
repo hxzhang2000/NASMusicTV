@@ -38,6 +38,7 @@ import androidx.compose.ui.window.DialogProperties
 import androidx.tv.material3.Text
 import com.nasmusic.tv.net.BackupTransferServer
 import com.nasmusic.tv.ui.components.FocusableSurface
+import com.nasmusic.tv.ui.components.LocalFocusableContentColor
 import com.nasmusic.tv.ui.theme.NasMusicColors
 import com.nasmusic.tv.util.LinkUtils
 import com.nasmusic.tv.util.NetworkUtils
@@ -197,6 +198,7 @@ fun BackupTransferDialog(
                         ) {
                             Text(
                                 text = "关闭",
+                                color = LocalFocusableContentColor.current,
                                 fontSize = 19.sp
                             )
                         }

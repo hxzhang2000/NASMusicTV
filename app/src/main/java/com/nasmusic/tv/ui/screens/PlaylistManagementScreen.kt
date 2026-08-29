@@ -38,6 +38,7 @@ import com.nasmusic.tv.data.model.Song
 import com.nasmusic.tv.ui.theme.NasMusicColors
 import com.nasmusic.tv.ui.components.BackButton
 import com.nasmusic.tv.ui.components.FocusableSurface
+import com.nasmusic.tv.ui.components.LocalFocusableContentColor
 import com.nasmusic.tv.ui.components.song.SongRowMode
 import com.nasmusic.tv.ui.components.song.UnifiedSongRow
 import kotlinx.coroutines.launch
@@ -191,7 +192,7 @@ fun PlaylistManagementScreen(
                                         )
                                         Text(
                                             text = stringResource(R.string.playlist_song_count, playlist.songCount),
-                                            color = NasMusicColors.TextSecondary,
+                                            color = LocalFocusableContentColor.current,
                                             fontSize = 16.sp
                                         )
                                     }

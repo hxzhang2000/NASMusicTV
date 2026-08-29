@@ -81,6 +81,7 @@ fun SongInfoPanel(
                 ) {
                     Text(
                         text = "关闭",
+                        color = LocalFocusableContentColor.current,
                         fontSize = 18.sp,
                         modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
                     )

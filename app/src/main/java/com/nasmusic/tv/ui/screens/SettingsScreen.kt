@@ -52,6 +52,7 @@ import com.nasmusic.tv.data.model.BaiduFile
 import com.nasmusic.tv.data.model.PlayMode
 import com.nasmusic.tv.ui.components.BaiduDirPickerDialog
 import com.nasmusic.tv.ui.components.FocusableSurface
+import com.nasmusic.tv.ui.components.LocalFocusableContentColor
 import com.nasmusic.tv.data.model.VisualizerTheme
 import com.nasmusic.tv.ui.screens.netdisk.BaiduAuthDialog
 import com.nasmusic.tv.ui.theme.NasMusicColors
@@ -752,6 +753,7 @@ fun SettingsScreen(
                                 Spacer(modifier = Modifier.width(12.dp))
                                 Text(
                                     text = if (isNetworkTesting) stringResource(R.string.settings_network_testing) else stringResource(R.string.settings_network_test),
+                                    color = LocalFocusableContentColor.current,
                                     fontSize = 21.sp
                                 )
                                 Spacer(modifier = Modifier.weight(1f))
@@ -832,7 +834,7 @@ fun SettingsScreen(
                                             )
                                             Text(
                                                 text = url,
-                                                color = NasMusicColors.TextSecondary,
+                                                color = LocalFocusableContentColor.current,
                                                 fontSize = 17.sp,
                                                 modifier = Modifier.padding(top = 2.dp)
                                             )
@@ -886,7 +888,7 @@ fun SettingsScreen(
                                         )
                                         Text(
                                             text = if (customSelected) settings.metingApiBaseUrl else stringResource(R.string.settings_meting_custom_endpoint_desc),
-                                            color = NasMusicColors.TextSecondary,
+                                            color = LocalFocusableContentColor.current,
                                             fontSize = 17.sp,
                                             modifier = Modifier.padding(top = 2.dp)
                                         )
@@ -967,7 +969,7 @@ fun SettingsScreen(
                                         )
                                         Text(
                                             text = stringResource(R.string.settings_tap_to_edit),
-                                            color = NasMusicColors.TextSecondary,
+                                            color = LocalFocusableContentColor.current,
                                             fontSize = 16.sp,
                                             modifier = Modifier.padding(top = 2.dp)
                                         )
@@ -1040,7 +1042,7 @@ fun SettingsScreen(
                                             )
                                             Text(
                                                 text = url,
-                                                color = NasMusicColors.TextSecondary,
+                                                color = LocalFocusableContentColor.current,
                                                 fontSize = 17.sp,
                                                 modifier = Modifier.padding(top = 2.dp)
                                             )
@@ -1094,7 +1096,7 @@ fun SettingsScreen(
                                         )
                                         Text(
                                             text = if (mvCustomSelected) mvApiBaseUrl else stringResource(R.string.settings_mv_custom_endpoint_desc),
-                                            color = NasMusicColors.TextSecondary,
+                                            color = LocalFocusableContentColor.current,
                                             fontSize = 17.sp,
                                             modifier = Modifier.padding(top = 2.dp)
                                         )
@@ -1166,7 +1168,7 @@ fun SettingsScreen(
                                     Column(modifier = Modifier.weight(1f)) {
                                         Text(
                                             text = lyricsKugouBaseUrl.ifBlank { stringResource(R.string.settings_lyrics_url_reset) },
-                                            color = NasMusicColors.TextSecondary,
+                                            color = LocalFocusableContentColor.current,
                                             fontSize = 17.sp
                                         )
                                     }
@@ -1213,7 +1215,7 @@ fun SettingsScreen(
                                     Column(modifier = Modifier.weight(1f)) {
                                         Text(
                                             text = lyricsNeteaseBaseUrl.ifBlank { stringResource(R.string.settings_lyrics_url_reset) },
-                                            color = NasMusicColors.TextSecondary,
+                                            color = LocalFocusableContentColor.current,
                                             fontSize = 17.sp
                                         )
                                     }
@@ -1748,7 +1750,7 @@ private fun SettingSwitch(
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(text = label, color = if (enabled) NasMusicColors.TextPrimary else NasMusicColors.TextSecondary, fontSize = 21.sp)
-                Text(text = description, color = NasMusicColors.TextSecondary, fontSize = 18.sp)
+                Text(text = description, color = LocalFocusableContentColor.current, fontSize = 18.sp)
             }
             // Switch indicator
             Text(
@@ -1850,7 +1852,7 @@ private fun SettingActionButton(
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(text = label, color = NasMusicColors.TextPrimary, fontSize = 21.sp)
-                Text(text = description, color = NasMusicColors.TextSecondary, fontSize = 18.sp)
+                Text(text = description, color = LocalFocusableContentColor.current, fontSize = 18.sp)
             }
             Text(
                 text = stringResource(R.string.common_confirm),
@@ -1905,7 +1907,7 @@ private fun BackupFileRow(
                     Text(
                         text = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.getDefault())
                             .format(java.util.Date(file.lastModified)),
-                        color = NasMusicColors.TextSecondary,
+                        color = LocalFocusableContentColor.current,
                         fontSize = 17.sp
                     )
                 }

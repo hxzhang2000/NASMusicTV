@@ -44,6 +44,7 @@ import com.nasmusic.tv.ui.theme.NasMusicColors
 import com.nasmusic.tv.ui.components.BackButton
 import com.nasmusic.tv.data.model.VisualizerTheme
 import com.nasmusic.tv.ui.components.FocusableSurface
+import com.nasmusic.tv.ui.components.LocalFocusableContentColor
 import com.nasmusic.tv.ui.components.VisualEqualizer
 import kotlinx.coroutines.launch
 
@@ -154,6 +155,7 @@ items(presets, key = { it.name }) { preset ->
                         )
                         Text(
                             text = preset.displayName,
+                            color = LocalFocusableContentColor.current,
                             fontSize = 19.sp,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis

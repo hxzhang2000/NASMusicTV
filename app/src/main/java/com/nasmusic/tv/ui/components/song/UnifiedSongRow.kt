@@ -256,7 +256,7 @@ private fun SongRowModeRow(
                 if (onToggleFavorite != null) {
                     RowActionButton(
                         text = if (isFavorited) "♥" else "♡",
-                        color = if (isFavorited) NasMusicColors.Warning else NasMusicColors.TextSecondary,
+                        color = if (isFavorited) NasMusicColors.Warning else NasMusicColors.TextPrimary,
                         onClick = onToggleFavorite
                     )
                 }
@@ -264,7 +264,7 @@ private fun SongRowModeRow(
                     Spacer(modifier = Modifier.width(10.dp))
                     RowActionButton(
                         text = if (isInQueue) "✓" else "☰",
-                        color = if (isInQueue) NasMusicColors.Primary else NasMusicColors.TextSecondary,
+                        color = if (isInQueue) NasMusicColors.Primary else NasMusicColors.TextPrimary,
                         onClick = onToggleQueue
                     )
                 }
@@ -272,7 +272,7 @@ private fun SongRowModeRow(
                     Spacer(modifier = Modifier.width(10.dp))
                     RowActionButton(
                         text = "+",
-                        color = NasMusicColors.TextSecondary,
+                        color = NasMusicColors.TextPrimary,
                         onClick = onAddToPlaylist
                     )
                 }

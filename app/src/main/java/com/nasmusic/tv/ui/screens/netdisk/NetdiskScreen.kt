@@ -38,6 +38,7 @@ import com.nasmusic.tv.backend.network.baidu.BaiduPanApi
 import com.nasmusic.tv.data.model.BaiduFile
 import com.nasmusic.tv.data.model.Song
 import com.nasmusic.tv.ui.components.FocusableSurface
+import com.nasmusic.tv.ui.components.LocalFocusableContentColor
 import com.nasmusic.tv.ui.components.SearchField
 import com.nasmusic.tv.ui.components.common.ActionBar
 import com.nasmusic.tv.ui.components.song.SongRowMode
@@ -295,7 +296,7 @@ private fun FileRow(file: BaiduFile, onClick: () -> Unit, onMore: () -> Unit) {
                 modifier = Modifier.weight(1f)
             )
             if (isAudio) {
-                Text(formatSize(file.size), color = NasMusicColors.TextSecondary, fontSize = 15.sp)
+                Text(formatSize(file.size), color = LocalFocusableContentColor.current, fontSize = 15.sp)
             }
         }
     }

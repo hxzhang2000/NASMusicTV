@@ -36,6 +36,7 @@ import androidx.tv.material3.Text
 import com.nasmusic.tv.R
 import com.nasmusic.tv.data.model.LocalPlaylist
 import com.nasmusic.tv.ui.components.FocusableSurface
+import com.nasmusic.tv.ui.components.LocalFocusableContentColor
 import com.nasmusic.tv.ui.theme.NasMusicColors
 
 /**
@@ -163,7 +164,7 @@ fun PlaylistPickerDialog(
                                         )
                                         Text(
                                             text = stringResource(R.string.mine_song_count, playlist.songs.size),
-                                            color = NasMusicColors.TextSecondary,
+                                            color = LocalFocusableContentColor.current,
                                             fontSize = 16.sp
                                         )
                                     }
