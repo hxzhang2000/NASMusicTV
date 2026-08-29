@@ -83,6 +83,16 @@ android {
         compose = true
         buildConfig = true
     }
+
+    // APK 文件名格式：NASMusicTV-release-v2-24-2.apk（版本号点号替换为横线）
+    applicationVariants.all {
+        val variant = this
+        variant.outputs.all {
+            val output = this as com.android.build.gradle.internal.api.ApkVariantOutputImpl
+            val vName = variant.versionName.replace(".", "-")
+            output.outputFileName = "NASMusicTV-${variant.name}-v${vName}.apk"
+        }
+    }
 }
 
 dependencies {

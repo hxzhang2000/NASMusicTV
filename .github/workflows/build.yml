@@ -46,10 +46,18 @@ jobs:
       - name: Build release APK
         run: ./gradlew assembleRelease --stacktrace
 
+      - name: Rename APK
+        run: |
+          VERSION=$(grep 'versionName' app/build.gradle.kts | head -1 | sed 's/.*"\(.*\)".*/\1/')
+          VERSION_DASHED=$(echo "$VERSION" | tr '.' '-')
+          echo "APK_VERSION=$VERSION" >> $GITHUB_ENV
+          echo "APK_VERSION_DASHED=$VERSION_DASHED" >> $GITHUB_ENV
+          ls -la app/build/outputs/apk/release/
+
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: app-release
+          name: NASMusicTV-release-v${{ env.APK_VERSION_DASHED }}
           path: app/build/outputs/apk/release/
 
       - name: Extract release notes from CHANGELOG
@@ -96,7 +104,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           TAG="${{ github.ref_name }}"
-          APK="app/build/outputs/apk/release/app-release.apk"
+          APK="app/build/outputs/apk/release/NASMusicTV-release-v${{ env.APK_VERSION_DASHED }}.apk"
           # 删除已存在的 release（如果有），重新创建
           if gh release view "$TAG" --json tagName &>/dev/null; then
             echo "Deleting existing release $TAG..."
