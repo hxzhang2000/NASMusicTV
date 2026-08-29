@@ -29,6 +29,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import com.nasmusic.tv.ui.theme.ButtonColors
 import com.nasmusic.tv.ui.theme.NasMusicColors
 import com.nasmusic.tv.util.AppLog
 
@@ -82,8 +83,8 @@ fun FocusableSurface(
     animationDurationMs: Int = 200,
     containerColor: Color = NasMusicColors.Surface,
     focusedContainerColor: Color = NasMusicColors.Primary.copy(alpha = 0.2f),
-    contentColor: Color = NasMusicColors.TextPrimary,
-    focusedContentColor: Color = NasMusicColors.Primary,
+    contentColor: Color = ButtonColors.DefaultContent,
+    focusedContentColor: Color = ButtonColors.FocusedContent,
     pressedScale: Float = 0.96f,
     pressedContainerColor: Color? = null,
     pressedContentColor: Color? = null,

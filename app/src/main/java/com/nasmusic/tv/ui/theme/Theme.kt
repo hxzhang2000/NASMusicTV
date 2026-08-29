@@ -89,6 +89,91 @@ object NasMusicDimens {
 }
 
 /**
+ * 字号分级系统
+ *
+ * 所有字号统一归入 7 个档位，每个档位对应手机/TV 两套数值：
+ * - 手机端保持设计稿原始值
+ * - TV 端统一 +2sp（比全局 fontScale 1.25 更精确可控）
+ *
+ * 使用方式：直接引用 FontSize.XX，例如 MaterialTheme.typography.bodyLarge.fontSize
+ * 或在 Composable 中写 Text(fontSize = FontSize.Body)
+ */
+object FontSize {
+    // 档位 1: Caption（注释、徽章、最小文字）
+    val Caption = 12.sp        // 手机
+    val CaptionTv = 14.sp      // TV
+
+    // 档位 2: Small（次要文字、设置值、按钮小字）
+    val Small = 14.sp
+    val SmallTv = 16.sp
+
+    // 档位 3: Body（正文、列表项、主要文字）
+    val Body = 17.sp
+    val BodyTv = 19.sp
+
+    // 档位 4: Button（按钮文字、标签）
+    val Button = 19.sp
+    val ButtonTv = 21.sp
+
+    // 档位 5: Subtitle（副标题、卡片标题、对话框标题）
+    val Subtitle = 23.sp
+    val SubtitleTv = 25.sp
+
+    // 档位 6: Title（大标题、歌词普通行）
+    val Title = 27.sp
+    val TitleTv = 29.sp
+
+    // 档位 7: Display（展示文字、歌词当前行、大数字）
+    val Display = 33.sp
+    val DisplayTv = 35.sp
+
+    // 档位 8: DisplayLarge（超大展示）
+    val DisplayLarge = 41.sp
+    val DisplayLargeTv = 43.sp
+
+    /** 根据当前设备返回对应档位的字号 */
+    @Composable
+    fun caption() = if (LocalPhoneCompact.current) Caption else CaptionTv
+    @Composable
+    fun small() = if (LocalPhoneCompact.current) Small else SmallTv
+    @Composable
+    fun body() = if (LocalPhoneCompact.current) Body else BodyTv
+    @Composable
+    fun button() = if (LocalPhoneCompact.current) Button else ButtonTv
+    @Composable
+    fun subtitle() = if (LocalPhoneCompact.current) Subtitle else SubtitleTv
+    @Composable
+    fun title() = if (LocalPhoneCompact.current) Title else TitleTv
+    @Composable
+    fun display() = if (LocalPhoneCompact.current) Display else DisplayTv
+    @Composable
+    fun displayLarge() = if (LocalPhoneCompact.current) DisplayLarge else DisplayLargeTv
+}
+
+/**
+ * 按钮文字颜色系统
+ *
+ * 统一管理按钮在不同状态下的文字颜色：
+ * - 默认（未选中）：TextPrimary（亮白色），确保可读性
+ * - 聚焦：Primary（青色），视觉反馈
+ * - 按下：Primary，与聚焦一致
+ * - 禁用：TextSecondary（灰色），降低视觉权重
+ */
+object ButtonColors {
+    /** 默认（未选中）文字颜色 —— 亮色，确保可读性 */
+    val DefaultContent = NasMusicColors.TextPrimary
+
+    /** 聚焦时文字颜色 —— Primary 青色 */
+    val FocusedContent = NasMusicColors.Primary
+
+    /** 按下时文字颜色 —— Primary 青色 */
+    val PressedContent = NasMusicColors.Primary
+
+    /** 禁用时文字颜色 —— TextSecondary 灰色 */
+    val DisabledContent = NasMusicColors.TextSecondary
+}
+
+/**
  * 类型系统
  */
 private val DarkColorScheme = darkColorScheme(
@@ -112,44 +197,44 @@ private val LightColorScheme = lightColorScheme(
 
 private val AppTypography = Typography(
     displayLarge = TextStyle(
-        fontSize = 53.sp,
+        fontSize = FontSize.DisplayLarge,
         fontWeight = FontWeight.Bold,
         letterSpacing = 0.sp
     ),
     displayMedium = TextStyle(
-        fontSize = 41.sp,
+        fontSize = FontSize.DisplayLarge,
         fontWeight = FontWeight.Bold
     ),
     headlineLarge = TextStyle(
-        fontSize = 33.sp,
+        fontSize = FontSize.Display,
         fontWeight = FontWeight.SemiBold
     ),
     headlineMedium = TextStyle(
-        fontSize = 27.sp,
+        fontSize = FontSize.Title,
         fontWeight = FontWeight.SemiBold
     ),
     titleLarge = TextStyle(
-        fontSize = 25.sp,
+        fontSize = FontSize.Subtitle,
         fontWeight = FontWeight.Medium
     ),
     titleMedium = TextStyle(
-        fontSize = 23.sp,
+        fontSize = FontSize.Subtitle,
         fontWeight = FontWeight.Medium
     ),
     bodyLarge = TextStyle(
-        fontSize = 21.sp,
+        fontSize = FontSize.Button,
         fontWeight = FontWeight.Normal
     ),
     bodyMedium = TextStyle(
-        fontSize = 19.sp,
+        fontSize = FontSize.Body,
         fontWeight = FontWeight.Normal
     ),
     labelLarge = TextStyle(
-        fontSize = 19.sp,
+        fontSize = FontSize.Button,
         fontWeight = FontWeight.Medium
     ),
     labelMedium = TextStyle(
-        fontSize = 17.sp,
+        fontSize = FontSize.Body,
         fontWeight = FontWeight.Normal
     )
 )
@@ -191,17 +276,17 @@ fun NASMusicTVTheme(
  */
 object LyricsTheme {
     val currentLine = TextStyle(
-        fontSize = 41.sp,
+        fontSize = FontSize.DisplayLarge,
         fontWeight = FontWeight.SemiBold,
         color = NasMusicColors.Primary
     )
     val normalLine = TextStyle(
-        fontSize = 33.sp,
+        fontSize = FontSize.Display,
         fontWeight = FontWeight.Normal,
         color = NasMusicColors.TextPrimary
     )
     val dimLine = TextStyle(
-        fontSize = 27.sp,
+        fontSize = FontSize.Title,
         fontWeight = FontWeight.Normal,
         color = NasMusicColors.TextSecondary
     )

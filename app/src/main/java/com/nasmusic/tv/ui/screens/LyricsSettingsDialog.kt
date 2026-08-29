@@ -84,7 +84,7 @@ fun LyricsSettingsDialog(
                     contentColor = if (isSelected)
                         NasMusicColors.Surface
                     else
-                        NasMusicColors.TextSecondary,
+                        NasMusicColors.TextPrimary,
                     focusedContentColor = NasMusicColors.Surface
                 ) {
                     Text(
@@ -115,7 +115,7 @@ fun LyricsSettingsDialog(
             animationDurationMs = 150,
             containerColor = NasMusicColors.Surface.copy(alpha = 0.7f),
             focusedContainerColor = NasMusicColors.Primary.copy(alpha = 0.3f),
-            contentColor = NasMusicColors.TextSecondary,
+            contentColor = NasMusicColors.TextPrimary,
             focusedContentColor = NasMusicColors.Primary
         ) {
             Text(

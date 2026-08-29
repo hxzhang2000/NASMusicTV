@@ -621,7 +621,7 @@ private fun CoverColumn(
                 animationDurationMs = 150,
                 containerColor = Color.Transparent,
                 focusedContainerColor = NasMusicColors.Primary.copy(alpha = 0.12f),
-                contentColor = NasMusicColors.TextSecondary,
+                contentColor = NasMusicColors.TextPrimary,
                 focusedContentColor = NasMusicColors.Primary
             ) {
                 Text(
@@ -688,7 +688,7 @@ private fun FavoriteButton(
         animationDurationMs = 150,
         containerColor = if (isFavorite) NasMusicColors.Warning.copy(alpha = 0.2f) else Color.Transparent,
         focusedContainerColor = NasMusicColors.Warning.copy(alpha = 0.3f),
-        contentColor = if (isFavorite) NasMusicColors.Warning else NasMusicColors.TextSecondary,
+        contentColor = if (isFavorite) NasMusicColors.Warning else NasMusicColors.TextPrimary,
         focusedContentColor = NasMusicColors.Warning,
         pressedScale = 0.95f
     ) {
@@ -721,7 +721,7 @@ private fun SourceTag(
                                 else NasMusicColors.Primary.copy(alpha = 0.3f),
         contentColor = if (!available) NasMusicColors.TextSecondary.copy(alpha = 0.4f)
                        else if (selected) Color.Black
-                       else NasMusicColors.TextSecondary,
+                       else NasMusicColors.TextPrimary,
         focusedContentColor = if (selected) Color.Black else NasMusicColors.Primary,
         pressedScale = 0.95f,
         showFocusBorder = available
