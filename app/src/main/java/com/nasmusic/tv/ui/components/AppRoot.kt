@@ -74,6 +74,7 @@ import com.nasmusic.tv.ui.screens.QueueScreen
 import com.nasmusic.tv.ui.screens.ServerConnectScreen
 import com.nasmusic.tv.ui.screens.SettingsScreen
 import com.nasmusic.tv.ui.screens.BackupTransferDialog
+import com.nasmusic.tv.ui.screens.ModelTransferDialog
 import com.nasmusic.tv.ui.theme.NASMusicTVTheme
 import com.nasmusic.tv.ui.theme.FontSize
 import com.nasmusic.tv.ui.theme.NasMusicColors
@@ -657,6 +658,7 @@ fun AppRoot(
                 }
                 Screen.Settings -> {
                     var showBackupTransferDialog by remember { mutableStateOf(false) }
+                    var showModelTransferDialog by remember { mutableStateOf(false) }
                     val baiduConfig = viewModel.prefs.getBaiduConfigSync()
                     val separationMode by viewModel.separationMode.collectAsState()
                     val modelDownloaded by viewModel.modelDownloaded.collectAsState()
@@ -666,6 +668,7 @@ fun AppRoot(
                     val modelTotalMB by viewModel.modelTotalMB.collectAsState()
                     val modelSizeMB by viewModel.modelSizeMB.collectAsState()
                     val modelDownloadError by viewModel.modelDownloadError.collectAsState()
+                    val modelPath by viewModel.modelPath.collectAsState()
                     // 进入设置页时刷新模型状态（检查文件是否已下载）
                     LaunchedEffect(Unit) { viewModel.refreshModelStatus() }
                     SettingsScreen(
@@ -754,9 +757,11 @@ fun AppRoot(
                     modelTotalMB = modelTotalMB,
                     modelSizeMB = modelSizeMB,
                     modelDownloadError = modelDownloadError,
+                    modelPath = modelPath,
                     onDownloadModel = { viewModel.downloadModel() },
                     onDeleteModel = { viewModel.deleteModel() },
-                    onRefreshModelStatus = { viewModel.refreshModelStatus() }
+                    onRefreshModelStatus = { viewModel.refreshModelStatus() },
+                    onScanTransferModel = { showModelTransferDialog = true }
                     )
                     // 扫码传输备份弹窗
                     if (showBackupTransferDialog) {
@@ -764,6 +769,15 @@ fun AppRoot(
                             onRestore = { json -> viewModel.restoreBackupFromJsonBlocking(json) },
                             onBackupChanged = { viewModel.refreshBackupFiles() },
                             onDismiss = { showBackupTransferDialog = false }
+                        )
+                    }
+                    // 扫码传输模型弹窗
+                    if (showModelTransferDialog) {
+                        ModelTransferDialog(
+                            modelPath = modelPath,
+                            modelSizeMB = modelSizeMB,
+                            onModelUploaded = { viewModel.refreshModelStatus() },
+                            onDismiss = { showModelTransferDialog = false }
                         )
                     }
                 }

@@ -2661,6 +2661,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
     val modelDownloadError: StateFlow<String?> = _modelDownloadError
     private val _modelSizeMB = MutableStateFlow(0.0)
     val modelSizeMB: StateFlow<Double> = _modelSizeMB
+    private val _modelPath = MutableStateFlow("")
+    val modelPath: StateFlow<String> = _modelPath
 
     private val modelDownloadManager: ModelDownloadManager
         get() = (getApplication<NasMusicApp>()).modelDownloadManager
@@ -2670,6 +2672,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
         val mgr = modelDownloadManager
         _modelDownloaded.value = mgr.isModelDownloaded()
         _modelSizeMB.value = mgr.getModelSizeMB()
+        _modelPath.value = mgr.getModelFile().absolutePath
     }
 
     /** 下载高质量分离模型（带进度回调） */

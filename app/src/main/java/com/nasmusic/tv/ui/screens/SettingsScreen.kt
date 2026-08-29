@@ -130,9 +130,11 @@ fun SettingsScreen(
     modelTotalMB: Long = 0L,
     modelSizeMB: Double = 0.0,
     modelDownloadError: String? = null,
+    modelPath: String = "",
     onDownloadModel: (() -> Unit)? = null,
     onDeleteModel: (() -> Unit)? = null,
     onRefreshModelStatus: (() -> Unit)? = null,
+    onScanTransferModel: (() -> Unit)? = null,
     // 可视化频谱主题
     visualizerTheme: VisualizerTheme = VisualizerTheme.COLOR_FLOW,
     onChangeVisualizerTheme: (VisualizerTheme) -> Unit = {},
@@ -394,34 +396,60 @@ fun SettingsScreen(
                                     )
                                 }
                             } else if (modelDownloaded) {
-                                // 已下载：显示大小 + 删除按钮
-                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                // 已下载：显示路径 + 大小 + 删除按钮
+                                Column {
                                     Text(
                                         text = "高质量模型已下载 (%.1fMB)".format(modelSizeMB),
                                         color = NasMusicColors.TextPrimary,
                                         fontSize = FontSize.body()
                                     )
-                                    Spacer(modifier = Modifier.width(16.dp))
-                                    SettingActionButton(
-                                        label = "删除模型",
-                                        description = "删除后高质量模式不可用",
-                                        onClick = { onDeleteModel?.invoke() }
+                                    Text(
+                                        text = "路径：$modelPath",
+                                        color = NasMusicColors.TextSecondary,
+                                        fontSize = FontSize.small()
                                     )
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        SettingActionButton(
+                                            label = "删除模型",
+                                            description = "删除后高质量模式不可用",
+                                            onClick = { onDeleteModel?.invoke() }
+                                        )
+                                        Spacer(modifier = Modifier.width(12.dp))
+                                        SettingActionButton(
+                                            label = "扫码上传模型",
+                                            description = "手机扫码上传模型文件到电视",
+                                            onClick = { onScanTransferModel?.invoke() }
+                                        )
+                                    }
                                 }
                             } else {
-                                // 未下载：显示下载按钮
+                                // 未下载：显示下载按钮 + 路径 + 扫码上传
                                 Column {
                                     Text(
                                         text = "高质量分离模型未下载（HT-Demucs FT，约166MB）",
                                         color = NasMusicColors.TextSecondary,
                                         fontSize = FontSize.body()
                                     )
-                                    Spacer(modifier = Modifier.height(8.dp))
-                                    SettingActionButton(
-                                        label = "下载高质量模型",
-                                        description = "从 HuggingFace 下载 HT-Demucs FT 人声分离模型（约166MB）",
-                                        onClick = { onDownloadModel?.invoke() }
+                                    Text(
+                                        text = "存储路径：$modelPath",
+                                        color = NasMusicColors.TextSecondary,
+                                        fontSize = FontSize.small()
                                     )
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        SettingActionButton(
+                                            label = "下载高质量模型",
+                                            description = "从 HuggingFace 下载 HT-Demucs FT 人声分离模型（约166MB）",
+                                            onClick = { onDownloadModel?.invoke() }
+                                        )
+                                        Spacer(modifier = Modifier.width(12.dp))
+                                        SettingActionButton(
+                                            label = "扫码上传模型",
+                                            description = "手机扫码上传模型文件到电视",
+                                            onClick = { onScanTransferModel?.invoke() }
+                                        )
+                                    }
                                 }
                             }
                             modelDownloadError?.let { err ->

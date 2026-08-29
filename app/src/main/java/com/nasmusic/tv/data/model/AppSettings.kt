@@ -26,7 +26,9 @@ data class AppSettings(
     // 可视化频谱主题
     val visualizerTheme: VisualizerTheme = VisualizerTheme.COLOR_FLOW,
     // 全局字体字号调整（sp，在当前Theme档位基础上增减，默认0）
-    val fontAdjustment: Int = 0
+    val fontAdjustment: Int = 0,
+    // 高质量分离模型自定义下载 URL（空=用默认镜像；国内网络AWS CDN被墙时，可指向自建镜像/NAS）
+    val modelDownloadUrl: String = ""
 )
 
 enum class VisualizerTheme(val displayName: String) {
