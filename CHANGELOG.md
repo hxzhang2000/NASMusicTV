@@ -7,6 +7,17 @@
 >
 > 类型：`Added`（新增） | `Changed`（变更） | `Fixed`（修复） | `Removed`（移除）
 
+## [v2.24.2] - 2026-08-29
+
+### Fixed
+
+- **DemucsSeparator 初始化 OOM 崩溃**：`initialize()` 从 `modelFile.readBytes()` + `createSession(bytes)` 改为 `createSession(modelPath)`，ONNX Runtime 底层 mmap 加载 166MB 模型，不再占用 JVM 堆内存，避免电视设备堆内存不足被系统 SIGKILL
+
+### Changed
+
+- **TV 全局字号 -6sp**：`FontSize` 所有 `*Tv` 常量减小 6sp（Caption 24→18, Small 26→20, Body 29→23, Button 31→25, Subtitle 35→29, Title 39→33, Display 45→39, DisplayLarge 53→47），界面文字整体更紧凑
+- **曲库歌曲条目文字统一**：`UnifiedSongRow` 歌曲标题从 `FontSize.subtitle()` 改为 `FontSize.button()`，与歌手名、时长、按钮文字大小一致
+
 ## [v2.24.1] - 2026-08-29
 
 ### Fixed
