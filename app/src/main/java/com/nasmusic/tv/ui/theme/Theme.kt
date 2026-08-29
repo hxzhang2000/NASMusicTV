@@ -168,12 +168,22 @@ fun NASMusicTVTheme(
     content: @Composable () -> Unit
 ) {
     val colorScheme = if (darkTheme) DarkColorScheme else LightColorScheme
-    MaterialTheme(
-        colorScheme = colorScheme,
-        typography = AppTypography,
-        shapes = AppShapes,
-        content = content
+    // TV 端字体由 MainActivity 的 fontScale=1.25 统一缩放，此处无需区分
+    val lyricsTheme = LyricsThemeData(
+        currentLine = LyricsTheme.currentLine,
+        normalLine = LyricsTheme.normalLine,
+        dimLine = LyricsTheme.dimLine
     )
+    androidx.compose.runtime.CompositionLocalProvider(
+        LocalLyricsTheme provides lyricsTheme
+    ) {
+        MaterialTheme(
+            colorScheme = colorScheme,
+            typography = AppTypography,
+            shapes = AppShapes,
+            content = content
+        )
+    }
 }
 
 /**
@@ -197,6 +207,22 @@ object LyricsTheme {
     )
 }
 
+/** 歌词主题容器（TV/手机自动切换） */
+data class LyricsThemeData(
+    val currentLine: TextStyle,
+    val normalLine: TextStyle,
+    val dimLine: TextStyle
+)
+
+/** CompositionLocal：提供当前设备对应的歌词主题 */
+val LocalLyricsTheme = androidx.compose.runtime.staticCompositionLocalOf {
+    LyricsThemeData(
+        currentLine = LyricsTheme.currentLine,
+        normalLine = LyricsTheme.normalLine,
+        dimLine = LyricsTheme.dimLine
+    )
+}
+
 /**
  * 手机端紧凑 UI 尺度
  *
@@ -215,3 +241,5 @@ object CompactSizes {
 
 /** 当前是否处于手机紧凑模式（MainActivity 按设备类型提供） */
 val LocalPhoneCompact = androidx.compose.runtime.staticCompositionLocalOf { false }
+
+

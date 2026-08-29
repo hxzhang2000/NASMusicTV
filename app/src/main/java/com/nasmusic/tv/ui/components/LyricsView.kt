@@ -39,6 +39,7 @@ import com.nasmusic.tv.R
 import com.nasmusic.tv.data.model.Lyrics
 import com.nasmusic.tv.data.model.LyricsHighlightMode
 import com.nasmusic.tv.ui.theme.LyricsTheme
+import com.nasmusic.tv.ui.theme.LocalLyricsTheme
 import com.nasmusic.tv.ui.theme.NasMusicBrushes
 import com.nasmusic.tv.ui.theme.NasMusicColors
 import kotlinx.coroutines.delay
@@ -99,7 +100,7 @@ private fun LyricsViewInner(
                 )
                 Text(
                     text = stringResource(R.string.player_no_lyrics),
-                    style = LyricsTheme.normalLine,
+                    style = LocalLyricsTheme.current.normalLine,
                     color = NasMusicColors.TextSecondary
                 )
             }

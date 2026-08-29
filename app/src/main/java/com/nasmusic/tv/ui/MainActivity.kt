@@ -95,9 +95,12 @@ class MainActivity : ComponentActivity() {
                     requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
                 }
             }
-            // 手机端紧凑 UI：全局 LocalDensity 缩放（字号/组件占位整体缩小，TV 不受影响）
+            // 密度缩放：手机端紧凑 UI 缩小，TV 端字体放大两号（fontScale 1.25 ≈ +2 档字号）
             val baseDensity = androidx.compose.ui.platform.LocalDensity.current
-            val uiDensity = if (isTVDevice) baseDensity
+            val uiDensity = if (isTVDevice) androidx.compose.ui.unit.Density(
+                                density = baseDensity.density,
+                                fontScale = baseDensity.fontScale * 1.25f
+                            )
                             else androidx.compose.ui.unit.Density(
                                 density = baseDensity.density * com.nasmusic.tv.ui.theme.CompactSizes.PHONE_UI_SCALE,
                                 fontScale = baseDensity.fontScale
