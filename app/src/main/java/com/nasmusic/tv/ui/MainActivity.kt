@@ -89,7 +89,8 @@ class MainActivity : ComponentActivity() {
             val settings by viewModel.appSettings.collectAsState(initial = com.nasmusic.tv.data.model.AppSettings())
             // 手机端：默认横屏使用（TV 不干预）
             val isTVDevice = remember {
-                packageManager.hasSystemFeature("android.software.leanback")
+                packageManager.hasSystemFeature("android.software.leanback") ||
+                packageManager.hasSystemFeature("android.hardware.type.television")
             }
             LaunchedEffect(isTVDevice) {
                 if (!isTVDevice) {
