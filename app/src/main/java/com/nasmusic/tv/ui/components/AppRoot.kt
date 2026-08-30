@@ -126,16 +126,12 @@ fun AppRoot(
     val baiduDeviceCode by viewModel.baiduDeviceCode.collectAsState(initial = null)
     val baiduIndexScanned by viewModel.baiduIndexScanned.collectAsState(initial = 0)
     val baiduIndexScanning by viewModel.baiduIndexScanning.collectAsState(initial = false)
+    // K 歌页面显隐（切 Tab 时保持，退出 K 歌页时清除）
+    val showKaraoke by viewModel.showKaraoke.collectAsState(initial = false)
     // MTV 页面显隐（进入 MTV 全屏页时为 true）
     val showMv by viewModel.showMv.collectAsState(initial = false)
     // MTV 搜索状态（顶层收集，供 NotFound 自动退出保护与 NowPlaying 分支共用）
     val mvState by viewModel.mvState.collectAsState()
-    // 安全兜底：离开 NowPlaying（如媒体键改变播放状态）时自动退出 MTV 全屏，避免主播放器一直暂停
-    LaunchedEffect(currentScreen, showMv) {
-        if (showMv && currentScreen != Screen.NowPlaying) {
-            viewModel.exitMvMode()
-        }
-    }
     // 安全兜底：切歌后新歌无 MV（NotFound）时自动退出 MTV 全屏，避免卡在无导航栏的播放页
     LaunchedEffect(mvState, showMv) {
         if (showMv && mvState is com.nasmusic.tv.ui.viewmodel.MvAvailability.NotFound) {
@@ -357,12 +353,15 @@ fun AppRoot(
                             // === KARAOKE 人声消除 ===
                             vocalRemovalEnabled = vocalRemovalEnabled,
                             onToggleVocalRemoval = { viewModel.toggleVocalRemoval() },
+                            // === K 歌页面状态 ===
+                            showKaraoke = showKaraoke,
+                            onEnterKaraoke = { viewModel.enterKaraoke() },
+                            onExitKaraoke = { viewModel.exitKaraoke() },
                             // === MTV 音乐视频 ===
                             mvAvailable = mvState is com.nasmusic.tv.ui.viewmodel.MvAvailability.Ready,
                             onEnterMv = { viewModel.enterMvMode() },
                             // 手机端不启动 HTTP 遥控服务（自身即控制端）
                             remoteControlUrl = if (isTV) viewModel.remoteControlUrl.collectAsState().value else null,
-                            onEnterKaraokeMode = { if (isTV) viewModel.ensureRemoteControlStarted() },
                             onSeek = { viewModel.seekTo(it) },
                             onSwitchLyricsSource = { viewModel.switchLyricsSource(it) },
                             onChangeHighlightMode = { viewModel.setLyricsHighlightMode(it) },

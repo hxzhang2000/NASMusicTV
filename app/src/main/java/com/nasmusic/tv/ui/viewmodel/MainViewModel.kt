@@ -2834,6 +2834,41 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
         AppLog.d("NASMusic", "resetSpeed -> 1.0")
     }
 
+    // --- K 歌页面状态（切 Tab 时保持，退出 K 歌页时清除） ---
+    private val _showKaraoke = MutableStateFlow(false)
+    val showKaraoke: StateFlow<Boolean> = _showKaraoke.asStateFlow()
+
+    /** 进入 K 歌页面：开启人声消除 + 启动遥控服务器 */
+    fun enterKaraoke() {
+        _showKaraoke.value = true
+        if (!_vocalRemovalEnabled.value) {
+            toggleVocalRemoval()
+        }
+        ensureRemoteControlStarted()
+        AppLog.d("NASMusic", "enterKaraoke")
+    }
+
+    /**
+     * 退出 K 歌页面：清除人声消除 + 升降调 + 播放速度，恢复原唱状态。
+     * 仅清理音频效果，不改变播放队列或当前歌曲。
+     */
+    fun exitKaraoke() {
+        _showKaraoke.value = false
+        // 关闭人声消除（恢复原唱）
+        if (_vocalRemovalEnabled.value) {
+            toggleVocalRemoval()
+        }
+        // 重置升降调
+        if (_pitchSemitones.value != 0) {
+            resetPitch()
+        }
+        // 重置播放速度
+        if (_playbackSpeed.value != 1.0) {
+            resetSpeed()
+        }
+        AppLog.d("NASMusic", "exitKaraoke: reset vocalRemoval, pitch, speed")
+    }
+
     // --- MTV 音乐视频 ---
     private val _mvState = MutableStateFlow<MvAvailability>(MvAvailability.Idle)
     val mvState: StateFlow<MvAvailability> = _mvState.asStateFlow()

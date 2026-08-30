@@ -106,6 +106,10 @@ fun NowPlayingScreen(
     spectrumEnabled: Boolean = false,
     /** 可视化频谱主题 */
     visualizerTheme: VisualizerTheme = VisualizerTheme.COLOR_FLOW,
+    // === K 歌页面状态（由 ViewModel 管理，切 Tab 时保持） ===
+    showKaraoke: Boolean = false,
+    onEnterKaraoke: () -> Unit = {},
+    onExitKaraoke: () -> Unit = {},
     // === KARAOKE 人声消除 ===
     vocalRemovalEnabled: Boolean = false,
     onToggleVocalRemoval: () -> Unit = {},
@@ -113,8 +117,6 @@ fun NowPlayingScreen(
     mvAvailable: Boolean = false,
     onEnterMv: () -> Unit = {},
     remoteControlUrl: String? = null,
-    // K 歌 / MTV 模式需要手机遥控服务器，由上层按需启动
-    onEnterKaraokeMode: () -> Unit = {},
     /** 点击歌手名跳转到网络搜索 */
     onSearchArtist: (String) -> Unit = {},
     /** 点击歌曲名跳转到网络搜索 */
@@ -146,24 +148,6 @@ fun NowPlayingScreen(
     var showInfoPanel by remember { mutableStateOf(false) }
     val playPauseFocusRequester = remember { FocusRequester() }
 
-    // ── 是否显示全屏 KARAOKE 页面（与 vocalRemovalEnabled 音频开关分离）──
-    // 不依赖 currentSong key：切歌（含自动下一首）时保持 K 歌页面，不跳回普通播放页
-    var showKaraoke by remember { mutableStateOf(false) }
-
-    fun enterKaraoke() {
-        showKaraoke = true
-        // 进入 K 歌页默认开启人声消除（伴唱）
-        if (!vocalRemovalEnabled) onToggleVocalRemoval()
-        // K 歌使用手机遥控页，按需启动遥控服务器
-        onEnterKaraokeMode()
-    }
-
-    fun exitKaraoke() {
-        showKaraoke = false
-        // 退出 K 歌页恢复原唱
-        if (vocalRemovalEnabled) onToggleVocalRemoval()
-    }
-
     // ── 全屏 KARAOKE 页面 ──
     if (showKaraoke) {
         KaraokePlaybackScreen(
@@ -177,7 +161,7 @@ fun NowPlayingScreen(
             durationMs = durationMs,
             vocalRemovalEnabled = vocalRemovalEnabled,
             onToggleVocalRemoval = onToggleVocalRemoval,
-            onExitKaraoke = { exitKaraoke() },
+            onExitKaraoke = { onExitKaraoke() },
             onPlayPause = onPlayPause,
             onNext = onNext,
             onPrevious = onPrevious,
@@ -317,7 +301,7 @@ fun NowPlayingScreen(
                             onPrevious = onPrevious,
                             onTogglePlayMode = onTogglePlayMode,
                             showVocalButton = currentSong != null,
-                            onEnterKaraoke = { enterKaraoke() },
+                            onEnterKaraoke = onEnterKaraoke,
                             showMvButton = true,
                             mvAvailable = mvAvailable,
                             onEnterMv = onEnterMv,
