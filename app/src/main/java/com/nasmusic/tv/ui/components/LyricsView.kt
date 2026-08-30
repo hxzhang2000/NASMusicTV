@@ -156,36 +156,6 @@ private fun LyricsViewInner(
 
     // Box 叠加：下方是滚动歌词，上下各一层 fade mask
     Box(modifier = modifier.fillMaxSize()) {
-        // --- 歌词来源 badge ---
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 8.dp)
-                .align(Alignment.TopCenter),
-            contentAlignment = Alignment.Center
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier
-                    .background(NasMusicColors.Surface.copy(alpha = 0.6f),
-                        shape = RoundedCornerShape(12.dp))
-                    .padding(horizontal = 12.dp, vertical = 6.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Default.MusicNote,
-                    contentDescription = null,
-                    tint = NasMusicColors.Primary,
-                    modifier = Modifier.size(12.dp)
-                )
-                Spacer(modifier = Modifier.width(6.dp))
-                Text(
-                    text = lyrics.source.displayName,
-                    color = NasMusicColors.TextSecondary,
-                    fontSize = FontSize.small()
-                )
-            }
-        }
-
         // --- 滚动歌词列表（使用 TV 焦点管理，移除了与焦点冲突的 pointerInput）---
         LazyColumn(
             modifier = Modifier.fillMaxSize(),

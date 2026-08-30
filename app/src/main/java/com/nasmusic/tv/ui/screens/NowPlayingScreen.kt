@@ -520,27 +520,7 @@ private fun CoverColumn(
             }
         }
 
-        // 网络歌曲来源标识
-        if (currentSong?.isNetworkSong == true) {
-            Spacer(modifier = Modifier.height(4.dp))
-            Box(
-                modifier = Modifier
-                    .background(
-                        NasMusicColors.Primary.copy(alpha = 0.2f),
-                        RoundedCornerShape(4.dp)
-                    )
-                    .padding(horizontal = 8.dp, vertical = 2.dp)
-            ) {
-                Text(
-                    text = "NET",
-                    color = NasMusicColors.Primary,
-                    fontSize = FontSize.small(),
-                    textAlign = TextAlign.Center
-                )
-            }
-        }
-
-        // Task 3: 专辑名移至封面图上方
+        // 任务 3: 专辑名移至封面图上方
         if (!currentSong?.album.isNullOrBlank()) {
             Spacer(modifier = Modifier.height(6.dp))
             Text(
@@ -640,7 +620,8 @@ private fun CoverColumn(
         Spacer(modifier = Modifier.height(6.dp))
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.Center
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically
         ) {
             FocusableSurface(
                 onClick = {
@@ -662,6 +643,25 @@ private fun CoverColumn(
                     fontSize = FontSize.small(),
                     modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
                 )
+            }
+            // 网络歌曲来源标识
+            if (currentSong?.isNetworkSong == true) {
+                Spacer(modifier = Modifier.width(8.dp))
+                Box(
+                    modifier = Modifier
+                        .background(
+                            NasMusicColors.Primary.copy(alpha = 0.2f),
+                            RoundedCornerShape(4.dp)
+                        )
+                        .padding(horizontal = 8.dp, vertical = 2.dp)
+                ) {
+                    Text(
+                        text = "NET",
+                        color = NasMusicColors.Primary,
+                        fontSize = FontSize.small(),
+                        textAlign = TextAlign.Center
+                    )
+                }
             }
         }
     }
