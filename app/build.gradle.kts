@@ -2,6 +2,7 @@ plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
+    id("com.google.devtools.ksp")
 }
 
 fun readKeystoreProperty(name: String): String {
@@ -72,11 +73,13 @@ versionName = "2.24.5"
         targetCompatibility = JavaVersion.VERSION_17
     }
 
-    kotlinOptions {
-        jvmTarget = "17"
-        freeCompilerArgs += listOf(
-            "-opt-in=androidx.tv.material3.ExperimentalTvMaterial3Api"
-        )
+    kotlin {
+        compilerOptions {
+            jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
+            freeCompilerArgs.addAll(
+                "-opt-in=androidx.tv.material3.ExperimentalTvMaterial3Api"
+            )
+        }
     }
 
     buildFeatures {
@@ -154,6 +157,11 @@ dependencies {
 
     // ONNX Runtime (Spleeter 高质量人声分离)
     implementation("com.microsoft.onnxruntime:onnxruntime-android:1.17.1")
+
+    // Room (本地音乐索引持久化)
+    implementation("androidx.room:room-runtime:2.7.1")
+    implementation("androidx.room:room-ktx:2.7.1")
+    ksp("androidx.room:room-compiler:2.7.1")
 
     // Testing
     testImplementation("junit:junit:4.13.2")

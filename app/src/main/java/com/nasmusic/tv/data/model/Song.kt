@@ -3,11 +3,14 @@ package com.nasmusic.tv.data.model
 /**
  * 歌曲
  *
- * 统一承载 NAS 本地歌曲与网络搜索歌曲：
+ * 统一承载 NAS 本地歌曲、网络搜索歌曲与本地存储歌曲：
  * - NAS 歌曲：isNetworkSong=false，id 为后端原始 ID
  * - 网络歌曲：isNetworkSong=true，id 格式为 "ntwk_${source}_${sourceId}"，
  *   networkSource 标识来源（"meting"/"alapi"/"jiosaavn"），networkId 为源平台原始 ID。
  *   streamUrl 在播放时由 NetworkMusicManager.resolvePlayUrl() 实时解析赋值，不持久化。
+ * - 本地歌曲：isLocalSong=true，id 格式为 "local_${mediaStoreId}"，
+ *   path 为文件绝对路径，streamUrl 为 content:// 或 file:// URI（ExoPlayer 直接可播），
+ *   storageType 标识存储类型（"INTERNAL"/"EXTERNAL"/"USB"）。
  */
 data class Song(
     val id: String,
@@ -28,6 +31,9 @@ data class Song(
     val isNetworkSong: Boolean = false,
     val networkSource: String? = null,
     val networkId: String? = null,
-    // 网盘文件绝对路径（百度源用，供侧车 LRC/cover 查找；其他源可空）
-    val path: String? = null
+    // 文件绝对路径（百度网盘 / 本地音乐共用）
+    val path: String? = null,
+    // 本地音乐扩展字段
+    val isLocalSong: Boolean = false,
+    val storageType: String? = null    // "INTERNAL" / "EXTERNAL" / "USB" / "UNKNOWN"
 )

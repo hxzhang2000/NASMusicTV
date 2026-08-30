@@ -7,7 +7,9 @@
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"
         android:maxSdkVersion="28" />
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
-        android:maxSdkVersion="28" />
+        android:maxSdkVersion="32" />
+    <!-- Android 13+ 分区存储：只读音频文件 -->
+    <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
@@ -25,6 +27,10 @@
         android:required="false" />
     <uses-feature
         android:name="android.hardware.screen.landscape"
+        android:required="false" />
+    <!-- USB host 特性（可选，TV 设备可能无 USB 口） -->
+    <uses-feature
+        android:name="android.hardware.usb.host"
         android:required="false" />
 
     <application

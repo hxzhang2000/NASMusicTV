@@ -410,6 +410,8 @@ fun AppRoot(
                     val favoriteIds by viewModel.favoriteIds.collectAsState(initial = emptySet())
                     val networkFavoriteIds by viewModel.networkFavoriteIds.collectAsState(initial = emptySet())
                     val artistsState by viewModel.artists.collectAsState(initial = UiState.Success(emptyList()))
+                    val mergedAlbumList by viewModel.mergedAlbums.collectAsState(initial = emptyList())
+                    val mergedArtistsList by viewModel.mergedArtists.collectAsState(initial = emptyList())
                     val yearsState by viewModel.years.collectAsState(initial = UiState.Success(emptyList()))
                     val songsPaging by viewModel.songsPaging.collectAsState(initial = com.nasmusic.tv.data.model.SongsPagingState())
                     val searchResultsState by viewModel.searchResults.collectAsState(initial = UiState.Success(emptyList()))
@@ -452,14 +454,14 @@ fun AppRoot(
                         }.toMap()
                     }
                     LibraryScreen(
-                        albums = albumList,
+                        albums = mergedAlbumList,
                         songs = songList,
                         isLoading = isLoading || isLibraryLoading,
                         isConnected = isConnected,
                         genres = genreList,
                         favoriteIds = favoriteIds + networkFavoriteIds,
                         artistSongsMap = viewModel.artistSongsMap.value,
-                        artists = artistsList,
+                        artists = mergedArtistsList,
                         years = yearsList,
                         songsPaging = songsPaging,
                         searchResults = searchResultsList,

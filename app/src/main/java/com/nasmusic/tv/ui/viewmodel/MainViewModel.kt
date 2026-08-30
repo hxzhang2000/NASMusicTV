@@ -10,6 +10,7 @@ import com.nasmusic.tv.backend.BackendRegistry
 import com.nasmusic.tv.backend.BackendAdapter
 import com.nasmusic.tv.backend.FilterMode
 import com.nasmusic.tv.backend.SearchAggregator
+import com.nasmusic.tv.backend.local.MusicMerger
 import com.nasmusic.tv.backend.network.mv.MvSearchManager
 import com.nasmusic.tv.backend.network.baidu.BaiduFileIndexCache
 import com.nasmusic.tv.backend.network.baidu.BaiduOAuthClient
@@ -239,6 +240,18 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
     // ArtistSplitter 拆分前的原始艺术家列表，用于 Navidrome 多 ID 查询合作歌曲
     private var _rawArtistList: List<Artist> = emptyList()
 
+    // --- 本地音乐（USB / 设备存储，独立数据源）---
+    private val _localSongs = MutableStateFlow<List<Song>>(emptyList())
+    val localSongs: StateFlow<List<Song>> = _localSongs.asStateFlow()
+
+    /** 合并后的专辑（NAS + 本地，按 albumName 去重） */
+    private val _mergedAlbums = MutableStateFlow<List<Album>>(emptyList())
+    val mergedAlbums: StateFlow<List<Album>> = _mergedAlbums.asStateFlow()
+
+    /** 合并后的艺术家（NAS + 本地，按 artistName 去重） */
+    private val _mergedArtists = MutableStateFlow<List<Artist>>(emptyList())
+    val mergedArtists: StateFlow<List<Artist>> = _mergedArtists.asStateFlow()
+
     // --- 按需加载：年份列表（独立 API）---
     private val _years = MutableStateFlow<UiState<List<Int>>>(UiState.Success(emptyList()))
     val years: StateFlow<UiState<List<Int>>> = _years.asStateFlow()
@@ -288,20 +301,22 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
     /** 天气电台换一批已展示过的歌曲（歌手, 歌名）集合：跨构建去重，mood 变化时重置 */
     private val weatherSeenKeys = mutableSetOf<Pair<String, String>>()
 
-    // --- 网络歌曲收藏 ---
+    // --- 统一收藏（NAS 走 adapter，网络/本地走 DataStore NetworkFavoriteItem）---
     private val _networkFavorites = MutableStateFlow<List<NetworkFavoriteItem>>(emptyList())
-    // 供 UI 使用：转换为 Song 对象列表（设置 isNetworkSong 等标记字段）
+    // 供 UI 使用：转换为 Song 对象列表（根据 source 标记 isLocalSong / isNetworkSong 字段）
     val networkFavoriteSongs: StateFlow<List<Song>> = _networkFavorites.map { favorites ->
         favorites.map { item ->
+            val isLocal = item.networkSource == "local"
             Song(
                 id = item.songId,
                 title = item.title,
                 artist = item.artist,
                 album = item.album,
                 coverUrl = item.coverUrl,
-                isNetworkSong = true,
-                networkSource = item.networkSource,
-                networkId = item.networkId
+                isNetworkSong = !isLocal,
+                networkSource = item.networkSource.takeIf { !isLocal },
+                networkId = item.networkId,
+                isLocalSong = isLocal
             )
         }
     }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
@@ -885,6 +900,58 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
 
         // 加载播放记录
         loadPlayRecords()
+
+        // 本地音乐初始化：先加载缓存，再后台增量扫描，监听 USB 插拔
+        viewModelScope.launch {
+            try {
+                // 1. 立即从缓存加载（毫秒级）
+                _localSongs.value = nasMusicApp.localMusicRepository.loadFromCache()
+                updateMergedData()
+                AppLog.d("MainViewModel", "local music cache loaded: ${_localSongs.value.size} songs")
+            } catch (e: Exception) {
+                AppLog.e("MainViewModel", "load local music cache failed: ${e.message}", e)
+            }
+
+            // 2. 后台增量扫描（不阻塞 UI）
+            launch(Dispatchers.IO) {
+                try {
+                    val result = nasMusicApp.localMusicRepository.incrementalScan()
+                    if (result.hasChanges()) {
+                        _localSongs.value = nasMusicApp.localMusicRepository.loadFromCache()
+                        updateMergedData()
+                        AppLog.i("MainViewModel", "local scan: +${result.newSongs.size} new, -${result.deletedPaths.size} deleted")
+                    }
+                } catch (e: Exception) {
+                    AppLog.e("MainViewModel", "local incremental scan failed: ${e.message}", e)
+                }
+            }
+
+            // 3. 监听 USB 设备插拔
+            nasMusicApp.storageMonitor.onDeviceMounted
+                .collect { device ->
+                    try {
+                        val result = nasMusicApp.localMusicRepository.scanUsbDevice(device.path)
+                        if (result.hasChanges()) {
+                            _localSongs.value = nasMusicApp.localMusicRepository.loadFromCache()
+                            updateMergedData()
+                            AppLog.i("MainViewModel", "USB mounted scan: ${result.newSongs.size} songs")
+                        }
+                    } catch (e: Exception) {
+                        AppLog.e("MainViewModel", "USB mount scan failed: ${e.message}", e)
+                    }
+                }
+        }
+        // 监听 NAS 专辑/艺术家加载完成，重新合并（本地+NAS 去重）
+        viewModelScope.launch {
+            _albums.collect {
+                updateMergedData()
+            }
+        }
+        viewModelScope.launch {
+            _artists.collect {
+                updateMergedData()
+            }
+        }
     }
 
     // --- 导航 ---
@@ -1477,14 +1544,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
         lastSearchedKeyword = query
         _searchResults.value = UiState.Loading
         viewModelScope.launch {
-            // 跨源融合搜索：NAS + 网络音乐 + 百度网盘 + Jamendo 并行搜索，合并去重
+            // 跨源融合搜索：NAS + 网络音乐 + 百度网盘 + Jamendo + 本地 并行搜索，合并去重
             // 按当前点亮来源搜索（点亮模式）
-            val aggregator = SearchAggregator(
-                backendAdapter = backendRegistry.getAdapter(),
-                networkMusicManager = nasMusicApp.networkMusicManager,
-                baiduService = nasMusicApp.baiduNetdiskService,
-                jamendoService = nasMusicApp.jamendoService
-            )
+            val aggregator = nasMusicApp.searchAggregator
             try {
                 val result = aggregator.search(
                     query,
@@ -1800,12 +1862,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
                 }
 
                 // 构造一次聚合器（produce 内多次调用复用同一实例）
-                val aggregator = SearchAggregator(
-                    backendAdapter = backendRegistry.getAdapter(),
-                    networkMusicManager = nasMusicApp.networkMusicManager,
-                    baiduService = nasMusicApp.baiduNetdiskService,
-                    jamendoService = nasMusicApp.jamendoService
-                )
+                val aggregator = nasMusicApp.searchAggregator
                 val enabledSources = _enabledSearchSources.value
                 val baiduLabelCombo = buildLabelCombo()
 
@@ -1932,25 +1989,52 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
     }
 
     /**
-     * 切换网络歌曲收藏状态
+     * 切换歌曲收藏状态（统一模型）
      *
-     * 仅对网络歌曲生效（isNetworkSong=true）。收藏信息持久化到 DataStore，
-     * 不存储 streamUrl（有时效性），播放时重新解析。
+     * 所有歌曲共用一套收藏：网络/本地歌曲持久化到 DataStore（NetworkFavoriteItem，
+     * 本地歌曲 networkSource="local"），NAS 歌曲仍走后端 adapter.toggleFavorite。
+     * 收藏列表通过 SourceBadge 标明来源。
      */
     fun toggleNetworkFavorite(song: Song) {
-        if (!song.isNetworkSong) return
-        viewModelScope.launch {
-            val item = NetworkFavoriteItem(
-                songId = song.id,
-                title = song.title,
-                artist = song.artist,
-                album = song.album,
-                coverUrl = song.coverUrl,
-                networkSource = song.networkSource ?: return@launch,
-                networkId = song.networkId ?: return@launch,
-                addedAtMs = System.currentTimeMillis()
-            )
-            prefs.toggleNetworkFavorite(item)
+        if (song.isNetworkSong || song.isLocalSong) {
+            // 网络 / 本地歌曲：DataStore 持久化
+            viewModelScope.launch {
+                val item = NetworkFavoriteItem(
+                    songId = song.id,
+                    title = song.title,
+                    artist = song.artist,
+                    album = song.album,
+                    coverUrl = song.coverUrl,
+                    networkSource = if (song.isLocalSong) "local" else song.networkSource ?: "network",
+                    networkId = song.networkId ?: "",
+                    addedAtMs = System.currentTimeMillis()
+                )
+                prefs.toggleNetworkFavorite(item)
+            }
+        } else {
+            // NAS 歌曲：走后端 adapter
+            viewModelScope.launch {
+                val adapter = backendRegistry.getAdapter() ?: return@launch
+                try {
+                    val success = adapter.toggleFavorite(song.id)
+                    if (success) {
+                        val newIds = _favoriteIds.value.toMutableSet()
+                        if (song.id in newIds) {
+                            newIds.remove(song.id)
+                            val currentFavs = _favoriteSongs.value.dataOrNull() ?: emptyList()
+                            _favoriteSongs.value = UiState.Success(currentFavs.filter { it.id != song.id })
+                        } else {
+                            newIds.add(song.id)
+                            val currentFavs = _favoriteSongs.value.dataOrNull() ?: emptyList()
+                            _favoriteSongs.value = UiState.Success(currentFavs + song)
+                        }
+                        _favoriteIds.value = newIds
+                    }
+                } catch (e: Exception) {
+                    AppLog.e("NASMusic", "toggleFavorite failed", e)
+                    showError("切换收藏失败: ${e.message?.take(50)}")
+                }
+            }
         }
     }
 
@@ -1987,6 +2071,40 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
         _recentSongs.value = UiState.Success(emptyList())
         _searchResults.value = UiState.Success(emptyList())
         loadLibrary()
+    }
+
+    /**
+     * 刷新合并后的专辑 / 艺术家列表
+     * NAS 数据（albums/artists） + 本地歌曲（localSongs）按 name 去重合并
+     */
+    private fun updateMergedData() {
+        val nasAlbums = _albums.value.dataOrNull() ?: emptyList()
+        val nasArtists = _artists.value.dataOrNull() ?: emptyList()
+        val localSongs = _localSongs.value
+
+        _mergedAlbums.value = MusicMerger.mergeAlbums(
+            nasAlbums = nasAlbums,
+            localAlbums = MusicMerger.buildLocalAlbums(localSongs)
+        )
+        _mergedArtists.value = MusicMerger.mergeArtists(
+            nasArtists = nasArtists,
+            localArtists = MusicMerger.buildLocalArtists(localSongs)
+        )
+    }
+
+    /** 手动刷新本地音乐库（全量重扫） */
+    fun refreshLocalMusic() {
+        viewModelScope.launch {
+            try {
+                val scanned = nasMusicApp.localMusicRepository.fullScan()
+                _localSongs.value = scanned
+                updateMergedData()
+                showError("本地音乐已刷新（${scanned.size} 首）")
+            } catch (e: Exception) {
+                AppLog.e("MainViewModel", "full local scan failed: ${e.message}", e)
+                showError("刷新本地音乐失败: ${e.message?.take(50)}")
+            }
+        }
     }
 
     fun loadAlbumSongs(albumId: String) {

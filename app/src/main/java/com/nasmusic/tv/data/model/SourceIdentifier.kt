@@ -5,7 +5,7 @@ import androidx.compose.ui.graphics.Color
 /**
  * 统一音乐来源标识
  *
- * 涵盖所有已知数据源：NAS 后端、网络音乐（Meting-API）、百度网盘、电台、Jamendo。
+ * 涵盖所有已知数据源：NAS 后端、网络音乐（Meting-API）、百度网盘、电台、Jamendo、本地音乐。
  * 每个类型包含中文显示名、图标字符、主题色，供 UI 组件（SourceBadge 等）使用。
  */
 enum class MusicSourceType(
@@ -21,7 +21,8 @@ enum class MusicSourceType(
     BAIDU_PAN("百度", "☁", Color(0xFFFBBF24)),      // 橙色
     RADIO("电台", "📻", Color(0xFFA78BFA)),          // 紫色
     JAMENDO("Jamendo", "♪", Color(0xFFF472B6)),     // 粉色
-    WEATHER_RADIO("天气电台", "🌤", Color(0xFF67E8F9)); // 天蓝色
+    WEATHER_RADIO("天气电台", "🌤", Color(0xFF67E8F9)), // 天蓝色
+    LOCAL("本地", "📱", Color(0xFFFB923C));          // 橙色（本地音乐）
 
     companion object {
         /** 默认参与搜索的来源（排除 RADIO / WEATHER_RADIO，它们不是搜索源） */
@@ -29,7 +30,8 @@ enum class MusicSourceType(
             NAS,
             NETWORK_MUSIC,
             BAIDU_PAN,
-            JAMENDO
+            JAMENDO,
+            LOCAL
         )
     }
 }
@@ -37,11 +39,13 @@ enum class MusicSourceType(
 /**
  * 歌曲来源类型扩展属性
  *
- * 从 Song 的 isNetworkSong + networkSource 字段自动推导来源类型。
+ * 从 Song 的 isLocalSong / isNetworkSong + networkSource 字段自动推导来源类型。
  * 不改动现有 Song 数据类字段，仅通过扩展属性提供统一访问。
  */
 val Song.sourceType: MusicSourceType
     get() = when {
+        // 本地音乐优先识别
+        isLocalSong -> MusicSourceType.LOCAL
         !isNetworkSong -> MusicSourceType.NAS
         networkSource == RadioStation.SOURCE_ID -> MusicSourceType.RADIO
         networkSource == "baidu" -> MusicSourceType.BAIDU_PAN
@@ -65,12 +69,13 @@ data class RankedSong(
     companion object {
         /** 来源优先级排序（数值越小优先级越高） */
         private val SOURCE_PRIORITY = mapOf(
-            MusicSourceType.NAS to 0,
-            MusicSourceType.NETWORK_MUSIC to 1,
-            MusicSourceType.BAIDU_PAN to 2,
-            MusicSourceType.JAMENDO to 3,
-            MusicSourceType.RADIO to 4,
-            MusicSourceType.WEATHER_RADIO to 5
+            MusicSourceType.LOCAL to 0,
+            MusicSourceType.NAS to 1,
+            MusicSourceType.NETWORK_MUSIC to 2,
+            MusicSourceType.BAIDU_PAN to 3,
+            MusicSourceType.JAMENDO to 4,
+            MusicSourceType.RADIO to 5,
+            MusicSourceType.WEATHER_RADIO to 6
         )
 
         /** 按来源优先级 + 匹配分降序排序 */

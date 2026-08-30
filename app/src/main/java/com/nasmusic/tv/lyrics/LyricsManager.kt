@@ -74,6 +74,16 @@ class LyricsManager(
     suspend fun getLyrics(song: Song): Lyrics? = withContext(Dispatchers.IO) {
         AppLog.d("LyricsManager", "getLyrics: song=${song.title}, artist=${song.artist}, id=${song.id}")
 
+        // 0. 本地歌曲：优先读取同目录同名 .lrc 文件（本地音乐专用，最高优先级）
+        if (song.isLocalSong) {
+            LocalLyricsProvider.getLocalLyrics(song)?.let { text ->
+                val lyrics = LrcParser.parse(text, song.id)
+                    .copy(source = LyricsSource.LOCAL_FILE)
+                AppLog.d("LyricsManager", "getLyrics: local LRC file, ${lyrics.lines.size} lines")
+                return@withContext lyrics
+            }
+        }
+
         // 1. Try persistent cache (network lyrics only, by songId)
         val cached = persistentCache.get(song.id)
         if (cached != null) {
@@ -104,6 +114,22 @@ class LyricsManager(
      */
     suspend fun checkAvailability(song: Song): LyricsAvailability = withContext(Dispatchers.IO) {
         AppLog.d("LyricsManager", "checkAvailability: song=${song.title}, artist=${song.artist}, id=${song.id}")
+
+        // 本地歌曲：无 NAS 后端，直接走网络模糊匹配（本地 LRC 已在 getLyrics 优先处理）
+        if (song.isLocalSong) {
+            val networkLyrics = try {
+                val text = networkProvider.fetchLyrics(song.title, song.artist)
+                if (text != null) {
+                    LrcParser.parse(text, song.id).copy(source = LyricsSource.NETWORK)
+                } else null
+            } catch (e: Exception) {
+                AppLog.w("LyricsManager", "local song network fetch failed: ${e.message}")
+                null
+            }
+            val result = LyricsAvailability(backend = null, network = networkLyrics)
+            AppLog.d("LyricsManager", "checkAvailability(local song): network=${result.hasNetwork}")
+            return@withContext result
+        }
 
         // 网络歌曲：通过 NetworkMusicManager 获取歌词，不走后端 API
         if (song.isNetworkSong && networkMusicManager != null) {

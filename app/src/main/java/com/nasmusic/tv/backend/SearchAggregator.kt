@@ -1,5 +1,6 @@
 package com.nasmusic.tv.backend
 
+import com.nasmusic.tv.backend.local.LocalMusicRepository
 import com.nasmusic.tv.backend.network.JamendoService
 import com.nasmusic.tv.backend.network.NetworkMusicManager
 import com.nasmusic.tv.backend.network.baidu.BaiduNetdiskService
@@ -26,16 +27,17 @@ enum class FilterMode {
 /**
  * 跨源搜索聚合器
  *
- * 并行搜索 NAS、网络音乐、百度网盘、Jamendo 四个数据源，
+ * 并行搜索 NAS、网络音乐、百度网盘、Jamendo、本地音乐五个数据源，
  * 合并去重后返回统一结果。单个源超时或异常不影响其他源。
  *
- * 超时策略：NAS 5s、网络音乐 5s、百度网盘 8s、Jamendo 5s
+ * 超时策略：NAS 5s、网络音乐 5s、百度网盘 8s、Jamendo 5s、本地 2s
  */
 class SearchAggregator(
     private val backendAdapter: BackendAdapter?,
     private val networkMusicManager: NetworkMusicManager?,
     private val baiduService: BaiduNetdiskService?,
-    private val jamendoService: JamendoService?
+    private val jamendoService: JamendoService?,
+    private val localMusicRepository: LocalMusicRepository? = null
 ) {
     companion object {
         private const val TAG = "SearchAggregator"
@@ -43,6 +45,7 @@ class SearchAggregator(
         private const val NETWORK_TIMEOUT = 5_000L
         private const val BAIDU_TIMEOUT = 8_000L
         private const val JAMENDO_TIMEOUT = 5_000L
+        private const val LOCAL_TIMEOUT = 2_000L
     }
 
     /**
@@ -159,14 +162,36 @@ class SearchAggregator(
             } else emptyList()
         }
 
+        // 新增：本地音乐搜索（只查索引，不做文件扫描）
+        val localDeferred = async {
+            if (MusicSourceType.LOCAL in sources && localMusicRepository != null) {
+                try {
+                    withTimeoutOrNull(LOCAL_TIMEOUT) {
+                        localMusicRepository.search(keyword)
+                            .filter { it.title.isNotBlank() }
+                            .map { song ->
+                                RankedSong(song = song, source = MusicSourceType.LOCAL)
+                            }
+                    } ?: run {
+                        AppLog.w(TAG, "Local search timed out")
+                        emptyList()
+                    }
+                } catch (e: Exception) {
+                    AppLog.e(TAG, "Local search failed: ${e.message}", e)
+                    emptyList()
+                }
+            } else emptyList()
+        }
+
         // 等待所有协程完成
         val nasResults = nasDeferred.await()
         val networkResults = networkDeferred.await()
         val baiduResults = baiduDeferred.await()
         val jamendoResults = jamendoDeferred.await()
+        val localResults = localDeferred.await()
 
         // 合并所有结果
-        val allResults = nasResults + networkResults + baiduResults + jamendoResults
+        val allResults = nasResults + networkResults + baiduResults + jamendoResults + localResults
 
         // 精细过滤（搜索页）：只保留标题/歌手/文件名包含关键词的歌曲
         val filtered = if (filterMode == FilterMode.PRECISE) {

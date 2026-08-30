@@ -6,6 +6,11 @@ import coil.ImageLoaderFactory
 import coil.disk.DiskCache
 import coil.memory.MemoryCache
 import com.nasmusic.tv.backend.BackendRegistry
+import com.nasmusic.tv.backend.SearchAggregator
+import com.nasmusic.tv.backend.local.LocalMusicRepository
+import com.nasmusic.tv.backend.local.MusicScanner
+import com.nasmusic.tv.backend.local.StorageMonitor
+import com.nasmusic.tv.backend.local.db.LocalMusicDatabase
 import com.nasmusic.tv.backend.network.JamendoService
 import com.nasmusic.tv.backend.network.MetingApiService
 import com.nasmusic.tv.backend.network.NetworkMusicManager
@@ -49,6 +54,18 @@ class NasMusicApp : Application(), ImageLoaderFactory {
     lateinit var networkMusicManager: NetworkMusicManager
         private set
     lateinit var mvSearchManager: MvSearchManager
+        private set
+
+    /** 跨源搜索聚合器（含本地音乐源） */
+    lateinit var searchAggregator: SearchAggregator
+        private set
+
+    /** 本地音乐仓库（索引持久化 + 增量扫描 + 索引搜索） */
+    lateinit var localMusicRepository: LocalMusicRepository
+        private set
+
+    /** 存储设备监听器（USB / SD 卡插拔） */
+    lateinit var storageMonitor: StorageMonitor
         private set
 
     /** 高质量人声分离模型下载管理器（HT-Demucs FT ONNX） */
@@ -140,6 +157,21 @@ class NasMusicApp : Application(), ImageLoaderFactory {
         mvSearchManager = MvSearchManager(
             services = mvServices,
             persistentCache = MvPersistentCache(this)
+        )
+
+        // 本地音乐组件：索引仓库 + USB 插拔监听
+        val localMusicDao = LocalMusicDatabase.get(this).localMusicDao()
+        localMusicRepository = LocalMusicRepository(this, localMusicDao, MusicScanner(this))
+        storageMonitor = StorageMonitor(this)
+        storageMonitor.startListening()
+
+        // 跨源搜索聚合器（注入本地音乐源）
+        searchAggregator = SearchAggregator(
+            backendAdapter = backendRegistry.getAdapter(),
+            networkMusicManager = networkMusicManager,
+            baiduService = baiduNetdiskService,
+            jamendoService = jamendoService,
+            localMusicRepository = localMusicRepository
         )
 
         // 启动时清理超过 30 天的搜索历史
