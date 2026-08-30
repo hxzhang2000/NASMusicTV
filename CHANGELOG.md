@@ -7,6 +7,12 @@
 >
 > 类型：`Added`（新增） | `Changed`（变更） | `Fixed`（修复） | `Removed`（移除）
 
+## [v2.24.5] - 2026-08-30
+
+### Fixed
+
+- **人声分离 OOM 崩溃**：`DemucsSeparator.separate()` 重构为逐段流式写入，不再累积全长度 vocals 数组（~60MB），改为边推理边写入 WAV 文件；新增内存预检（低于 200MB 可用空间时拒绝执行），避免被 Android lowmemorykiller 杀掉前台进程
+
 ## [v2.24.4] - 2026-08-30
 
 ### Added

@@ -1,5 +1,6 @@
 package com.nasmusic.tv.player
 
+import android.app.ActivityManager
 import android.content.Context
 import android.media.MediaCodec
 import android.media.MediaExtractor
@@ -8,6 +9,7 @@ import com.nasmusic.tv.util.AppLog
 import ai.onnxruntime.OnnxTensor
 import ai.onnxruntime.OrtEnvironment
 import ai.onnxruntime.OrtSession
+import java.io.BufferedOutputStream
 import java.io.File
 import java.io.FileOutputStream
 import java.nio.FloatBuffer
@@ -156,6 +158,15 @@ class DemucsSeparator(private val context: Context) {
             return null
         }
 
+        // 内存预检：低于 200MB 可用空间时拒绝执行，避免被 LMK 杀掉
+        val runtime = Runtime.getRuntime()
+        val availableMB = (runtime.maxMemory() - runtime.totalMemory() + runtime.freeMemory()) / (1024 * 1024)
+        if (availableMB < 200) {
+            AppLog.e(TAG, "separate: available memory too low: ${availableMB}MB")
+            lastError = "可用内存不足（${availableMB}MB < 200MB），请关闭其他应用后重试"
+            return null
+        }
+
         return try {
             progress?.onProgress(0f, "解码音频")
 
@@ -163,7 +174,6 @@ class DemucsSeparator(private val context: Context) {
             var pcmData = decodeAudio(inputPath, progress)
             if (pcmData == null) {
                 AppLog.e(TAG, "separate: decode failed")
-                // decodeAudio 内部已设置 lastError
                 return null
             }
 
@@ -177,61 +187,59 @@ class DemucsSeparator(private val context: Context) {
                 leftChannel[i] = pcmData[i * 2]
                 rightChannel[i] = pcmData[i * 2 + 1]
             }
-            // pcmData 不再需要，释放 ~80MB 帮助 GC
-            pcmData = FloatArray(0)
+            pcmData = FloatArray(0) // 释放 ~60MB
 
-            // 3. 分段处理（每段 SEGMENT_SAMPLES，直接回写，无 padding）
-            //    HT-Demucs ONNX 模型输入固定 343980 采样，padding 后被截断，无意义
-            val vocalsLeft = FloatArray(totalSamples)
-            val vocalsRight = FloatArray(totalSamples)
+            // 3. 打开输出流，先写 WAV 头（用总采样数计算精确大小）
+            val vocalsFile = File(outputDir, "${songId}_vocals.wav")
+            val accompanimentFile = File(outputDir, "${songId}_accompaniment.wav")
+            val vocalsFos = BufferedOutputStream(FileOutputStream(vocalsFile))
+            val accFos = BufferedOutputStream(FileOutputStream(accompanimentFile))
+            writeWavHeader(vocalsFos, totalSamples)
+            writeWavHeader(accFos, totalSamples)
 
+            // 4. 逐段处理：ONNX 推理 → 直接写入文件（不累积全长度 vocals 数组，节省 ~60MB）
             var startSample = 0
             var segmentIndex = 0
             val totalSegments = (totalSamples + SEGMENT_SAMPLES - 1) / SEGMENT_SAMPLES
+            val segmentInputBuf = FloatArray(2 * SEGMENT_SAMPLES) // 预分配，每段复用
 
             while (startSample < totalSamples) {
                 val endSample = minOf(startSample + SEGMENT_SAMPLES, totalSamples)
                 val segLen = endSample - startSample
 
-                // 提取当前段（无 padding，直接切片）
-                val segLeft = leftChannel.copyOfRange(startSample, endSample)
-                val segRight = rightChannel.copyOfRange(startSample, endSample)
-
-                // ONNX 推理
-                val (vocL, vocR) = processSegment(segLeft, segRight)
-
-                // 直接写回（vocL.size == segLen，无越界风险）
-                for (i in 0 until vocL.size) {
-                    val idx = startSample + i
-                    if (idx in 0 until totalSamples) {
-                        vocalsLeft[idx] += vocL[i]
-                        vocalsRight[idx] += vocR[i]
-                    }
+                // 提取当前段左/右声道
+                for (i in 0 until segLen) {
+                    segmentInputBuf[i] = leftChannel[startSample + i]
+                    segmentInputBuf[i + SEGMENT_SAMPLES] = rightChannel[startSample + i]
                 }
 
-                // 进度（节流：只在实际百分比变化时更新）
-                segmentIndex++
-                progress?.onProgress(0.2f + segmentIndex.toFloat() / totalSegments * 0.6f, "分离中 ($segmentIndex/$totalSegments)")
+                // ONNX 推理
+                val (vocL, vocR) = processSegmentFromBuffer(segmentInputBuf, segLen)
 
-                // 移动到下一段
+                // 写入人声段（交织立体声 PCM 16-bit）
+                for (i in vocL.indices) {
+                    vocalsFos.write(shortToByteArray((vocL[i] * 32767f).toInt().coerceIn(-32768, 32767).toShort()))
+                    vocalsFos.write(shortToByteArray((vocR[i] * 32767f).toInt().coerceIn(-32768, 32767).toShort()))
+                }
+
+                // 写入伴奏段（original - vocals，逐样本内联计算）
+                for (i in 0 until segLen) {
+                    val left = ((leftChannel[startSample + i] - vocL[i]) * 32767f).toInt().coerceIn(-32768, 32767).toShort()
+                    val right = ((rightChannel[startSample + i] - vocR[i]) * 32767f).toInt().coerceIn(-32768, 32767).toShort()
+                    accFos.write(shortToByteArray(left))
+                    accFos.write(shortToByteArray(right))
+                }
+
+                segmentIndex++
+                progress?.onProgress(0.2f + segmentIndex.toFloat() / totalSegments * 0.7f, "分离中 ($segmentIndex/$totalSegments)")
+
                 startSample += SEGMENT_SAMPLES
             }
 
-            progress?.onProgress(0.85f, "写入人声")
+            vocalsFos.close()
+            accFos.close()
 
-            // 4. 写入人声 WAV（先写人声，写完可释放 vocals 数组）
-            val vocalsFile = File(outputDir, "${songId}_vocals.wav")
-            writeWav(vocalsFile, mergeChannels(vocalsLeft, vocalsRight))
-
-            progress?.onProgress(0.9f, "写入伴奏")
-
-            // 5. 写入伴奏 WAV（内联计算 original - vocals，不分配额外数组）
-            val accompanimentFile = File(outputDir, "${songId}_accompaniment.wav")
-            writeAccompanimentWav(accompanimentFile, leftChannel, rightChannel, vocalsLeft, vocalsRight)
-
-            // 写完后立即释放大数组，帮助 GC 回收（每数组约 totalSamples*4 bytes）
-            // 注意：Kotlin 局部变量无法置 null，但方法返回后自动回收；
-            // 这里用 run {} 块提前结束 vocals/left/right 的作用域
+            // 释放大数组
             val durationMs = (totalSamples.toFloat() / SAMPLE_RATE * 1000).toLong()
 
             progress?.onProgress(1f, "完成")
@@ -249,6 +257,69 @@ class DemucsSeparator(private val context: Context) {
             lastError = "分离异常：${e.message?.take(40)}"
             null
         }
+    }
+
+    /**
+     * 处理单段音频：从预分配缓冲区推理提取 vocals（避免每段创建新 FloatArray）
+     *
+     * @param inputBuf 预分配的交错缓冲区 [left(0..SEGMENT_SAMPLES-1), right(SEGMENT_SAMPLES..2*SEGMENT_SAMPLES-1)]
+     * @param actualLen 本段实际采样数（最后一段可能 < SEGMENT_SAMPLES）
+     * @return (vocalsLeft, vocalsRight)，长度 = actualLen
+     */
+    private fun processSegmentFromBuffer(
+        inputBuf: FloatArray,
+        actualLen: Int
+    ): Pair<FloatArray, FloatArray> {
+        val inputTensor = OnnxTensor.createTensor(
+            ortEnv!!,
+            FloatBuffer.wrap(inputBuf),
+            INPUT_SHAPE  // [1, 2, 343980]
+        )
+
+        val output = modelSession!!.run(mapOf(inputName to inputTensor))
+
+        @Suppress("UNCHECKED_CAST")
+        val outputData = output[0].value as Array<Array<Array<FloatArray>>>
+
+        val vocalsLeft = FloatArray(actualLen)
+        val vocalsRight = FloatArray(actualLen)
+        for (i in 0 until actualLen) {
+            vocalsLeft[i] = outputData[0][VOCALS_INDEX][0][i]
+            vocalsRight[i] = outputData[0][VOCALS_INDEX][1][i]
+        }
+
+        inputTensor.close()
+        output.close()
+
+        return Pair(vocalsLeft, vocalsRight)
+    }
+
+    /**
+     * 写入 WAV 文件头（占位 data size，调用方后续追加 PCM 数据）
+     */
+    private fun writeWavHeader(fos: BufferedOutputStream, totalSamples: Int) {
+        val numPcmSamples = totalSamples * CHANNEL_COUNT
+        val dataSize = numPcmSamples * 2 // 16-bit = 2 bytes per sample
+        val fileSize = 36 + dataSize
+
+        // RIFF header
+        fos.write("RIFF".toByteArray())
+        fos.write(intToByteArray(fileSize))
+        fos.write("WAVE".toByteArray())
+
+        // fmt chunk
+        fos.write("fmt ".toByteArray())
+        fos.write(intToByteArray(16))
+        fos.write(shortToByteArray(1)) // PCM
+        fos.write(shortToByteArray(CHANNEL_COUNT.toShort()))
+        fos.write(intToByteArray(SAMPLE_RATE))
+        fos.write(intToByteArray(SAMPLE_RATE * CHANNEL_COUNT * 2))
+        fos.write(shortToByteArray((CHANNEL_COUNT * 2).toShort()))
+        fos.write(shortToByteArray(16))
+
+        // data chunk
+        fos.write("data".toByteArray())
+        fos.write(intToByteArray(dataSize))
     }
 
     /**
@@ -470,100 +541,6 @@ class DemucsSeparator(private val context: Context) {
             AppLog.e(TAG, "decodeAudio: failed", e)
             lastError = "音频解码失败：${e.message?.take(30)}"
             null
-        }
-    }
-
-    /**
-     * 合并左右声道
-     */
-    private fun mergeChannels(left: FloatArray, right: FloatArray): FloatArray {
-        val merged = FloatArray(left.size * 2)
-        for (i in left.indices) {
-            merged[i * 2] = left[i]
-            merged[i * 2 + 1] = right[i]
-        }
-        return merged
-    }
-
-    /**
-     * 写入 WAV 文件
-     */
-    private fun writeWav(file: File, samples: FloatArray) {
-        val numSamples = samples.size
-        val dataSize = numSamples * 2 // 16-bit = 2 bytes per sample
-        val fileSize = 36 + dataSize
-
-        FileOutputStream(file).use { fos ->
-            // RIFF header
-            fos.write("RIFF".toByteArray())
-            fos.write(intToByteArray(fileSize))
-            fos.write("WAVE".toByteArray())
-
-            // fmt chunk
-            fos.write("fmt ".toByteArray())
-            fos.write(intToByteArray(16)) // chunk size
-            fos.write(shortToByteArray(1)) // PCM format
-            fos.write(shortToByteArray(CHANNEL_COUNT.toShort()))
-            fos.write(intToByteArray(SAMPLE_RATE))
-            fos.write(intToByteArray(SAMPLE_RATE * CHANNEL_COUNT * 2)) // byte rate
-            fos.write(shortToByteArray((CHANNEL_COUNT * 2).toShort())) // block align
-            fos.write(shortToByteArray(16)) // bits per sample
-
-            // data chunk
-            fos.write("data".toByteArray())
-            fos.write(intToByteArray(dataSize))
-
-            // PCM data
-            for (sample in samples) {
-                val pcm = (sample * 32767f).toInt().coerceIn(-32768, 32767).toShort()
-                fos.write(shortToByteArray(pcm))
-            }
-        }
-    }
-
-    /**
-     * 写入伴奏 WAV 文件（内联计算 original - vocals，不分配额外数组）
-     * 省去 ~80MB 临时数组（accompanimentLeft + accompanimentRight + mergeChannels 的 merged）
-     */
-    private fun writeAccompanimentWav(
-        file: File,
-        origLeft: FloatArray,
-        origRight: FloatArray,
-        vocalsLeft: FloatArray,
-        vocalsRight: FloatArray
-    ) {
-        val totalSamples = origLeft.size
-        val numPcmSamples = totalSamples * CHANNEL_COUNT
-        val dataSize = numPcmSamples * 2
-        val fileSize = 36 + dataSize
-
-        FileOutputStream(file).use { fos ->
-            // RIFF header
-            fos.write("RIFF".toByteArray())
-            fos.write(intToByteArray(fileSize))
-            fos.write("WAVE".toByteArray())
-
-            // fmt chunk
-            fos.write("fmt ".toByteArray())
-            fos.write(intToByteArray(16))
-            fos.write(shortToByteArray(1))
-            fos.write(shortToByteArray(CHANNEL_COUNT.toShort()))
-            fos.write(intToByteArray(SAMPLE_RATE))
-            fos.write(intToByteArray(SAMPLE_RATE * CHANNEL_COUNT * 2))
-            fos.write(shortToByteArray((CHANNEL_COUNT * 2).toShort()))
-            fos.write(shortToByteArray(16))
-
-            // data chunk
-            fos.write("data".toByteArray())
-            fos.write(intToByteArray(dataSize))
-
-            // 伴奏 = original - vocals，内联计算逐样本写入
-            for (i in 0 until totalSamples) {
-                val left = (origLeft[i] - vocalsLeft[i]) * 32767f
-                val right = (origRight[i] - vocalsRight[i]) * 32767f
-                fos.write(shortToByteArray(left.toInt().coerceIn(-32768, 32767).toShort()))
-                fos.write(shortToByteArray(right.toInt().coerceIn(-32768, 32767).toShort()))
-            }
         }
     }
 
