@@ -1,8 +1,10 @@
 package com.nasmusic.tv.ui.screens
 
+import android.content.Intent
 import android.net.Uri
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -613,6 +615,31 @@ fun SettingsScreen(
                             color = NasMusicColors.TextSecondary,
                             fontSize = FontSize.small(),
                             lineHeight = FontSize.small() * 1.5
+                        )
+                    }
+                    // GitHub 项目链接
+                    item {
+                        Spacer(modifier = Modifier.height(20.dp))
+                        val context = LocalContext.current
+                        Text(
+                            text = "⭐ 如果本项目对您有帮助，欢迎到 GitHub 点个 Star 支持一下！",
+                            color = NasMusicColors.Primary,
+                            fontSize = FontSize.button(),
+                            modifier = Modifier.padding(bottom = 8.dp)
+                        )
+                        Text(
+                            text = "https://github.com/hxzhang2000/NasMusicTV",
+                            color = NasMusicColors.TextSecondary,
+                            fontSize = FontSize.small(),
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(8.dp))
+                                .clickable {
+                                    try {
+                                        val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/hxzhang2000/NasMusicTV"))
+                                        context.startActivity(intent)
+                                    } catch (_: Exception) {}
+                                }
+                                .padding(vertical = 4.dp)
                         )
                     }
                 }
