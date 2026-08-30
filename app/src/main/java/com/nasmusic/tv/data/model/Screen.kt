@@ -15,5 +15,6 @@ enum class Screen {
     ArtistDetail,
     Equalizer,
     PlaylistManagement,
-    Netdisk
+    Netdisk,
+    WeatherRadio
 }

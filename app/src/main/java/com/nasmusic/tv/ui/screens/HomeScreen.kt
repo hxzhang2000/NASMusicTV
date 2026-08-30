@@ -82,6 +82,7 @@ fun HomeScreen(
     onNavigateToQueue: () -> Unit = {},
     onNavigateToNowPlaying: () -> Unit = {},
     onPlayAllRecent: () -> Unit = {},
+    onNavigateToWeatherRadio: () -> Unit = {},
     randomSongs: List<Song> = emptyList(),
     onPlayRandomSongs: (List<Song>, Int) -> Unit = { _, _ -> },
     modifier: Modifier = Modifier
@@ -233,7 +234,8 @@ fun HomeScreen(
             HomeWeatherCard(
                 weatherData = weatherData,
                 isLoading = weatherLoading,
-                errorMessage = weatherError
+                errorMessage = weatherError,
+                onClick = onNavigateToWeatherRadio
             )
         }
 
@@ -689,7 +691,8 @@ private fun NowPlayingCard(
 private fun HomeWeatherCard(
     weatherData: WeatherData?,
     isLoading: Boolean = false,
-    errorMessage: String? = null
+    errorMessage: String? = null,
+    onClick: () -> Unit = {}
 ) {
     val bgColor = if (weatherData != null) {
         val mood = WeatherMood.fromWeather(weatherData)
@@ -699,7 +702,7 @@ private fun HomeWeatherCard(
     }
 
     FocusableSurface(
-        onClick = {},
+        onClick = onClick,
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(14.dp),
         focusedScale = 1.01f,

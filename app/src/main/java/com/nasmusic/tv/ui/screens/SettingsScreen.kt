@@ -599,6 +599,22 @@ fun SettingsScreen(
                     item { AboutRow(label = "电台", value = "radio-browser（全球公开目录，含中文电台）") }
                     item { AboutRow(label = "网盘", value = "百度网盘") }
                     item { AboutRow(label = "歌词", value = "酷狗 / 网易云 / 网络匹配") }
+                    // 版权说明
+                    item {
+                        Spacer(modifier = Modifier.height(20.dp))
+                        Text(
+                            text = "版权说明",
+                            color = NasMusicColors.TextPrimary,
+                            fontSize = FontSize.button(),
+                            modifier = Modifier.padding(bottom = 8.dp)
+                        )
+                        Text(
+                            text = "本应用中涉及的网络音乐资源均来自第三方公开 Meting-API 端点，所有音频内容的版权归属于原始版权方。本应用仅为技术聚合工具，不存储、不分发任何音乐文件，亦不对网络音乐资源的合法性、准确性及可用性承担任何责任。如权利人认为相关内容侵犯了您的合法权益，请通过 GitHub Issues 联系我们，我们将及时予以处理。",
+                            color = NasMusicColors.TextSecondary,
+                            fontSize = FontSize.small(),
+                            lineHeight = FontSize.small() * 1.5
+                        )
+                    }
                 }
                 SettingsSection.CACHE -> {
                     item { SectionTitle(stringResource(R.string.settings_cache)) }

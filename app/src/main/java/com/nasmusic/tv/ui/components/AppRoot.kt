@@ -282,6 +282,7 @@ fun AppRoot(
                         },
                         onNavigateToQueue = { viewModel.navigateTo(Screen.Queue) },
                         onNavigateToNowPlaying = { viewModel.navigateTo(Screen.NowPlaying) },
+                        onNavigateToWeatherRadio = { viewModel.navigateTo(Screen.WeatherRadio) },
                         onPlayAllRecent = {
                             if (recentSongsList.isNotEmpty()) {
                                 viewModel.playQueue(recentSongsList)
@@ -887,6 +888,33 @@ fun AppRoot(
                         onPlayAllSongs = { songs ->
                             viewModel.playQueue(songs, 0)
                             viewModel.navigateTo(Screen.NowPlaying)
+                        },
+                        onBack = { viewModel.navigateTo(Screen.Home) }
+                    )
+                }
+                Screen.WeatherRadio -> {
+                    val weatherRadioQueue by viewModel.weatherRadioQueue.collectAsState(initial = null)
+                    val weatherData by viewModel.weatherData.collectAsState(initial = null)
+                    val currentWeatherMood by viewModel.currentWeatherMood.collectAsState()
+                    val weatherLoading by viewModel.weatherLoading.collectAsState(initial = false)
+
+                    com.nasmusic.tv.ui.screens.WeatherRadioScreen(
+                        weatherRadioQueue = weatherRadioQueue,
+                        weatherData = weatherData,
+                        currentMood = currentWeatherMood,
+                        isLoading = weatherLoading,
+                        onPlaySong = { _, index ->
+                            val songs = weatherRadioQueue?.songs ?: emptyList()
+                            if (songs.isNotEmpty()) {
+                                viewModel.playQueue(songs, index)
+                                viewModel.navigateTo(Screen.NowPlaying)
+                            }
+                        },
+                        onPlayAll = {
+                            viewModel.playWeatherRadioAll()
+                        },
+                        onSwitchMood = { mood ->
+                            viewModel.switchWeatherMood(mood)
                         },
                         onBack = { viewModel.navigateTo(Screen.Home) }
                     )
