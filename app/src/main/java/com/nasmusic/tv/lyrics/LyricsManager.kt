@@ -75,11 +75,18 @@ class LyricsManager(
         AppLog.d("LyricsManager", "getLyrics: song=${song.title}, artist=${song.artist}, id=${song.id}")
 
         // 0. 本地歌曲：优先读取同目录同名 .lrc 文件（本地音乐专用，最高优先级）
+        //    若无侧车 LRC，fallback 到内嵌歌词（ID3 USLT 帧）
         if (song.isLocalSong) {
-            LocalLyricsProvider.getLocalLyrics(song)?.let { text ->
+            LocalLyricsProvider.getSidecarLyrics(song)?.let { text ->
                 val lyrics = LrcParser.parse(text, song.id)
                     .copy(source = LyricsSource.LOCAL_FILE)
-                AppLog.d("LyricsManager", "getLyrics: local LRC file, ${lyrics.lines.size} lines")
+                AppLog.d("LyricsManager", "getLyrics: sidecar LRC, ${lyrics.lines.size} lines")
+                return@withContext lyrics
+            }
+            LocalLyricsProvider.getEmbeddedLyrics(song)?.let { text ->
+                val lyrics = LrcParser.parse(text, song.id)
+                    .copy(source = LyricsSource.EMBEDDED)
+                AppLog.d("LyricsManager", "getLyrics: embedded ID3 lyrics, ${lyrics.lines.size} lines")
                 return@withContext lyrics
             }
         }
@@ -88,7 +95,7 @@ class LyricsManager(
         val cached = persistentCache.get(song.id)
         if (cached != null) {
             val lyrics = LrcParser.parse(cached.lrcText, song.id)
-                .copy(source = LyricsSource.NETWORK)
+                .copy(source = LyricsSource.CACHED)
             AppLog.d("LyricsManager", "getLyrics: found in persistent cache, ${lyrics.lines.size} lines")
             return@withContext lyrics
         }
@@ -199,34 +206,18 @@ class LyricsManager(
     suspend fun getLyricsFromSource(song: Song, source: LyricsSource, candidateIndex: Int = 0): Lyrics? = withContext(Dispatchers.IO) {
         when (source) {
             LyricsSource.EMBEDDED -> {
-                if (song.isNetworkSong && networkMusicManager != null) {
-                    // 网络歌曲没有内嵌歌词，走 NetworkMusicManager 获取在线歌词
-                    val text = networkMusicManager.resolveLyrics(song)
-                    if (!text.isNullOrBlank() && LrcParser.isValidLrc(text)) {
-                        LrcParser.parse(text, song.id).copy(source = LyricsSource.NETWORK)
-                    } else null
-                } else {
-                    // NAS 歌曲从后端API获取
-                    val adapter = backendRegistry.getAdapter()
-                    if (adapter != null) {
-                        try {
-                            val text = adapter.getLyrics(song.id)
-                            if (!text.isNullOrBlank() && LrcParser.isValidLrc(text)) {
-                                LrcParser.parse(text, song.id).copy(source = LyricsSource.EMBEDDED)
-                            } else null
-                        } catch (e: Exception) { null }
-                    } else null
-                }
-            }
-            LyricsSource.LOCAL_FILE -> getLocalLrcFile(song)
-            LyricsSource.LOCAL_CACHE -> {
-                // 从持久化缓存读取网络歌词（与 getLyrics 的缓存路径一致）
-                val cached = persistentCache.get(song.id)
-                if (cached != null) {
-                    LrcParser.parse(cached.lrcText, song.id)
-                        .copy(source = LyricsSource.LOCAL_CACHE)
+                // NAS 歌曲从后端API获取（网络歌曲的"后端"按钮已置灰，不会到达这里）
+                val adapter = backendRegistry.getAdapter()
+                if (adapter != null) {
+                    try {
+                        val text = adapter.getLyrics(song.id)
+                        if (!text.isNullOrBlank() && LrcParser.isValidLrc(text)) {
+                            LrcParser.parse(text, song.id).copy(source = LyricsSource.EMBEDDED)
+                        } else null
+                    } catch (e: Exception) { null }
                 } else null
             }
+            LyricsSource.LOCAL_FILE -> getLocalLrcFile(song)
             LyricsSource.CACHED -> {
                 // 从持久化缓存读取网络歌词，标记为 CACHED 来源
                 val cached = persistentCache.get(song.id)
@@ -273,7 +264,6 @@ class LyricsManager(
                 AppLog.w("LyricsManager", "NETWORK: all variants exhausted, no more candidates")
                 null
             }
-            else -> null
         }
     }
 

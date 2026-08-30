@@ -13,14 +13,23 @@ import java.io.File
 /**
  * 本地专辑封面提取器
  *
- * 从本地音频文件内嵌元数据提取专辑封面并缓存到应用缓存目录。
+ * 从本地音频文件提取专辑封面并缓存到应用缓存目录。
  * 延迟提取策略：扫描时不做封面提取（避免启动慢），在展示时按需提取。
  *
- * 封面优先级：内嵌封面缓存 > MediaStore 专辑封面 URI（Album art）
+ * 封面优先级：侧车封面（同目录 cover.jpg/folder.jpg/album.jpg/front.jpg）
+ *           > 内嵌封面（ID3 APIC 帧）
+ *           > MediaStore 专辑封面 URI（Album art）
  */
 class LocalCoverExtractor(private val context: Context) {
 
-    companion object { private const val TAG = "LocalCover" }
+    companion object {
+        private const val TAG = "LocalCover"
+        /** 侧车封面文件名（不区分大小写，按优先级排序） */
+        private val SIDE_CAR_COVER_NAMES = listOf(
+            "cover.jpg", "folder.jpg", "album.jpg", "front.jpg",
+            "cover.png", "folder.png", "album.png", "front.png"
+        )
+    }
 
     /** 从音频文件内嵌元数据提取封面图片 */
     fun extractEmbeddedCover(audioPath: String): Bitmap? {
@@ -34,6 +43,26 @@ class LocalCoverExtractor(private val context: Context) {
             AppLog.w(TAG, "extract embedded cover failed: ${e.message}")
             null
         }
+    }
+
+    /**
+     * 查找同目录下的侧车封面图
+     *
+     * 扫描顺序：cover.jpg → folder.jpg → album.jpg → front.jpg → cover.png → folder.png
+     * 不区分大小写。
+     */
+    fun findSidecarCover(audioPath: String): File? {
+        val realPath = audioPath.removePrefix("file://").removePrefix("content://")
+        val audioFile = File(realPath)
+        val parent = audioFile.parentFile ?: return null
+        for (name in SIDE_CAR_COVER_NAMES) {
+            val cover = File(parent, name)
+            if (cover.exists() && cover.isFile && cover.length() > 0) {
+                AppLog.d(TAG, "found sidecar cover: ${cover.absolutePath}")
+                return cover
+            }
+        }
+        return null
     }
 
     /** 保存封面位图到缓存目录 */
@@ -52,13 +81,23 @@ class LocalCoverExtractor(private val context: Context) {
     }
 
     /**
-     * 提取并缓存内嵌封面，返回缓存文件绝对路径
-     * @return 封面缓存路径，无内嵌封面返回 null
+     * 提取并缓存封面，返回缓存文件绝对路径
+     * 优先级：侧车封面 > 内嵌封面
+     * @return 封面缓存路径，无封面返回 null
      */
     fun extractAndCache(entity: LocalSongEntity): String? {
         val filePath = entity.path.removePrefix("file://").removePrefix("content://")
         val realFile = File(filePath)
         if (!realFile.exists()) return null
+        // 1. 侧车封面（同目录 cover.jpg / folder.jpg 等）
+        val sidecar = findSidecarCover(realFile.absolutePath)
+        if (sidecar != null) {
+            val bitmap = BitmapFactory.decodeFile(sidecar.absolutePath)
+            if (bitmap != null) {
+                return saveCoverToCache(entity.mediaStoreId, bitmap)?.absolutePath
+            }
+        }
+        // 2. 内嵌封面（ID3 APIC）
         val bitmap = extractEmbeddedCover(realFile.absolutePath) ?: return null
         return saveCoverToCache(entity.mediaStoreId, bitmap)?.absolutePath
     }

@@ -327,6 +327,13 @@ fun NowPlayingScreen(
                         )
                         Spacer(modifier = Modifier.width(6.dp))
                         SourceTag(
+                            label = stringResource(R.string.player_highlight_local),
+                            available = currentSource == com.nasmusic.tv.data.model.LyricsSource.LOCAL_FILE,
+                            selected = currentSource == com.nasmusic.tv.data.model.LyricsSource.LOCAL_FILE,
+                            onClick = { }
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        SourceTag(
                             label = stringResource(R.string.player_highlight_network),
                             available = lyricsAvailability.hasNetwork,
                             selected = currentSource == com.nasmusic.tv.data.model.LyricsSource.NETWORK,

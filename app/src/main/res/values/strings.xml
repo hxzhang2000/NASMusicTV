@@ -135,7 +135,8 @@
     <string name="player_no_song_selected">未选择歌曲</string>
     <string name="player_highlight_word">逐字</string>
     <string name="player_highlight_line">逐行</string>
-    <string name="player_highlight_backend">后端</string>
+    <string name="player_highlight_backend">内嵌</string>
+    <string name="player_highlight_local">本地</string>
     <string name="player_highlight_network">网络</string>
     <string name="player_highlight_cached">缓存</string>
 
