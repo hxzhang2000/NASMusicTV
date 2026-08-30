@@ -324,6 +324,7 @@ class PlayerManager() {
         if (separator == null || cache == null || songId == null) {
             AppLog.w(TAG, "enableHighQualityRemoval: missing separator/cache/songId, fallback to fast mode")
             _hqError.value = "分离组件未就绪，已切换快速模式"
+            _separationMode.value = AppPreferences.SeparationMode.FAST
             vocalRemovalProcessor?.setEnabled(true)
             return false
         }
@@ -333,6 +334,7 @@ class PlayerManager() {
         if (modelManager != null && !modelManager.isModelDownloaded()) {
             AppLog.w(TAG, "enableHighQualityRemoval: model not downloaded, fallback to fast mode")
             _hqError.value = "高质量模型未下载，已切换快速模式"
+            _separationMode.value = AppPreferences.SeparationMode.FAST
             vocalRemovalProcessor?.setEnabled(true)
             return false
         }
@@ -361,6 +363,7 @@ class PlayerManager() {
                     if (inputPath == null) {
                         AppLog.w(TAG, "enableHighQualityRemoval: cannot resolve input path, fallback to fast mode")
                         _hqError.value = "${lastDownloadError ?: "无法获取音频文件"}，已切换快速模式"
+                        _separationMode.value = AppPreferences.SeparationMode.FAST
                         vocalRemovalProcessor?.setEnabled(true)
                         if (wasPlayingBeforeSeparation) player?.play()
                         return@launch
@@ -374,6 +377,7 @@ class PlayerManager() {
                         if (modelPath == null) {
                             AppLog.w(TAG, "enableHighQualityRemoval: model path unavailable, fallback to fast mode")
                             _hqError.value = "模型路径不可用，已切换快速模式"
+                            _separationMode.value = AppPreferences.SeparationMode.FAST
                             vocalRemovalProcessor?.setEnabled(true)
                             if (wasPlayingBeforeSeparation) player?.play()
                             return@launch
@@ -383,6 +387,7 @@ class PlayerManager() {
                         if (!initOk) {
                             AppLog.w(TAG, "enableHighQualityRemoval: separator init failed, fallback to fast mode")
                             _hqError.value = "${separator.lastError ?: "模型初始化失败"}，已切换快速模式"
+                            _separationMode.value = AppPreferences.SeparationMode.FAST
                             vocalRemovalProcessor?.setEnabled(true)
                             if (wasPlayingBeforeSeparation) player?.play()
                             return@launch
@@ -415,17 +420,20 @@ class PlayerManager() {
                         val totalSec = (System.currentTimeMillis() - separationStartTimeMs) / 1000.0
                         AppLog.w(TAG, "enableHighQualityRemoval: separation failed in ${String.format("%.1f", totalSec)}s, fallback to fast mode")
                         _hqError.value = "${separator.lastError ?: "高质量分离失败"}(${String.format("%.1f", totalSec)}s)，已切换快速模式"
+                        _separationMode.value = AppPreferences.SeparationMode.FAST
                         vocalRemovalProcessor?.setEnabled(true)
                         if (wasPlayingBeforeSeparation) player?.play()
                     }
                 } catch (e: OutOfMemoryError) {
                     AppLog.e(TAG, "enableHighQualityRemoval: OOM", e)
                     _hqError.value = "内存不足，已切换快速模式"
+                    _separationMode.value = AppPreferences.SeparationMode.FAST
                     vocalRemovalProcessor?.setEnabled(true)
                     if (wasPlayingBeforeSeparation) player?.play()
                 } catch (e: Exception) {
                     AppLog.e(TAG, "enableHighQualityRemoval: exception", e)
                     _hqError.value = "分离过程出错：${e.message?.take(30)}，已切换快速模式"
+                    _separationMode.value = AppPreferences.SeparationMode.FAST
                     vocalRemovalProcessor?.setEnabled(true)
                     if (wasPlayingBeforeSeparation) player?.play()
                 } finally {
