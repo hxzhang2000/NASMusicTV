@@ -1,6 +1,5 @@
 package com.nasmusic.tv.player
 
-import android.app.ActivityManager
 import android.content.Context
 import android.media.MediaCodec
 import android.media.MediaExtractor
@@ -10,8 +9,13 @@ import ai.onnxruntime.OnnxTensor
 import ai.onnxruntime.OrtEnvironment
 import ai.onnxruntime.OrtSession
 import java.io.BufferedOutputStream
+import java.io.BufferedInputStream
+import java.io.DataInputStream
 import java.io.File
+import java.io.FileInputStream
 import java.io.FileOutputStream
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 import java.nio.FloatBuffer
 
 /**
@@ -138,7 +142,24 @@ class DemucsSeparator(private val context: Context) {
     fun isReady(): Boolean = isInitialized && modelSession != null
 
     /**
+     * 解码结果（不含实际 PCM 数据，数据写入 tempFile）
+     */
+    private data class DecodeResult(
+        val totalSamples: Int,  // 单声道采样数（立体声 = pcmBytes / 4 / 2）
+        val sampleRate: Int,
+        val channelCount: Int,
+        val tempFile: File     // 原始 PCM 浮点数据（little-endian float32 交织）
+    )
+
+    /**
      * 分离人声和伴奏
+     *
+     * 内存优化：PCM 数据写入临时文件，逐段从磁盘读取处理，
+     * 峰值内存仅 ~200MB（模型166MB + 段缓冲5MB + ONNX运行时30MB），
+     * 而非旧方案的 ~384MB（pcmData + left + right + 模型）。
+     *
+     * 伴奏计算：原始音频 - 人声 = 伴奏。segmentInputBuf 中已保存原始数据，
+     * 无需重新从磁盘读取。
      *
      * @param inputPath 输入音频文件路径
      * @param outputDir 输出目录
@@ -158,38 +179,33 @@ class DemucsSeparator(private val context: Context) {
             return null
         }
 
-        // 内存预检：低于 200MB 可用空间时拒绝执行，避免被 LMK 杀掉
+        // 内存预检：低于 150MB 可用空间时拒绝执行
         val runtime = Runtime.getRuntime()
         val availableMB = (runtime.maxMemory() - runtime.totalMemory() + runtime.freeMemory()) / (1024 * 1024)
-        if (availableMB < 200) {
+        if (availableMB < 150) {
             AppLog.e(TAG, "separate: available memory too low: ${availableMB}MB")
-            lastError = "可用内存不足（${availableMB}MB < 200MB），请关闭其他应用后重试"
+            lastError = "可用内存不足（${availableMB}MB < 150MB），请关闭其他应用后重试"
             return null
         }
 
-        return try {
+        var tempFile: File? = null
+        try {
             progress?.onProgress(0f, "解码音频")
 
-            // 1. 解码输入音频为 PCM 浮点（立体声）
-            var pcmData = decodeAudio(inputPath, progress)
-            if (pcmData == null) {
+            // 1. 解码音频 → 写入临时文件（不在内存中保留完整 FloatArray）
+            val decode = decodeAudioToTempFile(inputPath, progress)
+            if (decode == null) {
                 AppLog.e(TAG, "separate: decode failed")
                 return null
             }
+            tempFile = decode.tempFile
 
             progress?.onProgress(0.2f, "分段处理")
 
-            // 2. 分离左右声道
-            val totalSamples = pcmData.size / 2
-            val leftChannel = FloatArray(totalSamples)
-            val rightChannel = FloatArray(totalSamples)
-            for (i in 0 until totalSamples) {
-                leftChannel[i] = pcmData[i * 2]
-                rightChannel[i] = pcmData[i * 2 + 1]
-            }
-            pcmData = FloatArray(0) // 释放 ~60MB
+            val totalSamples = decode.totalSamples
+            val sampleRate = decode.sampleRate
 
-            // 3. 打开输出流，先写 WAV 头（用总采样数计算精确大小）
+            // 2. 打开输出流，写 WAV 头
             val vocalsFile = File(outputDir, "${songId}_vocals.wav")
             val accompanimentFile = File(outputDir, "${songId}_accompaniment.wav")
             val vocalsFos = BufferedOutputStream(FileOutputStream(vocalsFile))
@@ -197,65 +213,217 @@ class DemucsSeparator(private val context: Context) {
             writeWavHeader(vocalsFos, totalSamples)
             writeWavHeader(accFos, totalSamples)
 
-            // 4. 逐段处理：ONNX 推理 → 直接写入文件（不累积全长度 vocals 数组，节省 ~60MB）
+            // 3. 逐段从磁盘读取 → ONNX 推理 → 直接写入输出文件
+            //    峰值内存：segmentInputBuf(5.4MB) + vocL/vocR(2.7MB each, 短命) + 模型(166MB)
             var startSample = 0
             var segmentIndex = 0
             val totalSegments = (totalSamples + SEGMENT_SAMPLES - 1) / SEGMENT_SAMPLES
-            val segmentInputBuf = FloatArray(2 * SEGMENT_SAMPLES) // 预分配，每段复用
+            // 交错缓冲区：[left(0..SEGMENT_SAMPLES-1), right(SEGMENT_SAMPLES..2*SEGMENT_SAMPLES-1)]
+            val segmentInputBuf = FloatArray(2 * SEGMENT_SAMPLES)
 
-            while (startSample < totalSamples) {
-                val endSample = minOf(startSample + SEGMENT_SAMPLES, totalSamples)
-                val segLen = endSample - startSample
+            DataInputStream(BufferedInputStream(FileInputStream(tempFile))).use { dis ->
+                while (startSample < totalSamples) {
+                    val segLen = minOf(SEGMENT_SAMPLES, totalSamples - startSample)
 
-                // 提取当前段左/右声道
-                for (i in 0 until segLen) {
-                    segmentInputBuf[i] = leftChannel[startSample + i]
-                    segmentInputBuf[i + SEGMENT_SAMPLES] = rightChannel[startSample + i]
+                    // 从磁盘读取当前段的交织 PCM float32，直接 deinterleave 到 segmentInputBuf
+                    // [left(0..segLen-1), right(SEGMENT_SAMPLES..SEGMENT_SAMPLES+segLen-1)]
+                    for (i in 0 until segLen) {
+                        segmentInputBuf[i] = dis.readFloat()           // left
+                        segmentInputBuf[i + SEGMENT_SAMPLES] = dis.readFloat() // right
+                    }
+                    // 跳过剩余（如果需要，例如最后一段 < SEGMENT_SAMPLES 时跳过填充区）
+                    val skipFloats = (totalSamples - startSample - segLen) * 2L
+                    if (skipFloats > 0 && startSample + segLen < totalSamples) {
+                        dis.skipBytes((skipFloats * 4).toInt())
+                    }
+
+                    // ONNX 推理
+                    val (vocL, vocR) = processSegmentFromBuffer(segmentInputBuf, segLen)
+
+                    // 写入人声段 + 伴奏段（交织立体声 PCM 16-bit）
+                    // 伴奏 = 原始音频 - 人声（segmentInputBuf 中已保存原始数据）
+                    for (i in 0 until segLen) {
+                        // 人声
+                        vocalsFos.write(shortToByteArray((vocL[i] * 32767f).toInt().coerceIn(-32768, 32767).toShort()))
+                        vocalsFos.write(shortToByteArray((vocR[i] * 32767f).toInt().coerceIn(-32768, 32767).toShort()))
+                        // 伴奏 = 原始 - 人声
+                        val origLeft = segmentInputBuf[i]
+                        val origRight = segmentInputBuf[i + SEGMENT_SAMPLES]
+                        accFos.write(shortToByteArray(((origLeft - vocL[i]) * 32767f).toInt().coerceIn(-32768, 32767).toShort()))
+                        accFos.write(shortToByteArray(((origRight - vocR[i]) * 32767f).toInt().coerceIn(-32768, 32767).toShort()))
+                    }
+
+                    segmentIndex++
+                    progress?.onProgress(0.2f + segmentIndex.toFloat() / totalSegments * 0.7f, "分离中 ($segmentIndex/$totalSegments)")
+
+                    startSample += segLen
                 }
-
-                // ONNX 推理
-                val (vocL, vocR) = processSegmentFromBuffer(segmentInputBuf, segLen)
-
-                // 写入人声段（交织立体声 PCM 16-bit）
-                for (i in vocL.indices) {
-                    vocalsFos.write(shortToByteArray((vocL[i] * 32767f).toInt().coerceIn(-32768, 32767).toShort()))
-                    vocalsFos.write(shortToByteArray((vocR[i] * 32767f).toInt().coerceIn(-32768, 32767).toShort()))
-                }
-
-                // 写入伴奏段（original - vocals，逐样本内联计算）
-                for (i in 0 until segLen) {
-                    val left = ((leftChannel[startSample + i] - vocL[i]) * 32767f).toInt().coerceIn(-32768, 32767).toShort()
-                    val right = ((rightChannel[startSample + i] - vocR[i]) * 32767f).toInt().coerceIn(-32768, 32767).toShort()
-                    accFos.write(shortToByteArray(left))
-                    accFos.write(shortToByteArray(right))
-                }
-
-                segmentIndex++
-                progress?.onProgress(0.2f + segmentIndex.toFloat() / totalSegments * 0.7f, "分离中 ($segmentIndex/$totalSegments)")
-
-                startSample += SEGMENT_SAMPLES
             }
 
             vocalsFos.close()
             accFos.close()
 
-            // 释放大数组
-            val durationMs = (totalSamples.toFloat() / SAMPLE_RATE * 1000).toLong()
+            val durationMs = (totalSamples.toFloat() / sampleRate * 1000).toLong()
 
             progress?.onProgress(1f, "完成")
 
             AppLog.d(TAG, "separate: OK, vocals=${vocalsFile.absolutePath}, accompaniment=${accompanimentFile.absolutePath}")
             lastError = null
-            SeparationResult(vocalsFile, accompanimentFile, durationMs)
+            return SeparationResult(vocalsFile, accompanimentFile, durationMs)
         } catch (e: OutOfMemoryError) {
-            AppLog.e(TAG, "separate: OOM — 设备内存不足，无法完成高质量分离", e)
-            lastError = "内存不足（模型166MB+音频数据），设备内存不够"
+            AppLog.e(TAG, "separate: OOM", e)
+            lastError = "内存不足，设备内存不够完成分离"
             System.gc()
-            null
+            return null
         } catch (e: Exception) {
             AppLog.e(TAG, "separate: failed", e)
             lastError = "分离异常：${e.message?.take(40)}"
-            null
+            return null
+        } finally {
+            tempFile?.delete()
+        }
+    }
+
+    /**
+     * 解码音频并写入临时文件（不在 JVM 堆中保留完整 FloatArray）
+     *
+     * 临时文件格式：原始 little-endian float32 交织立体声（L0,R0,L1,R1,...）
+     * 读取时按需解交织，峰值内存仅段缓冲区 ~5MB。
+     */
+    private fun decodeAudioToTempFile(inputPath: String, progress: ProgressCallback?): DecodeResult? {
+        val tempFile = File(context.cacheDir, "demucs_pcm_${System.nanoTime()}.tmp")
+        try {
+            val extractor = MediaExtractor()
+            extractor.setDataSource(inputPath)
+
+            var audioTrackIndex = -1
+            var format: MediaFormat? = null
+            for (i in 0 until extractor.trackCount) {
+                val trackFormat = extractor.getTrackFormat(i)
+                val mime = trackFormat.getString(MediaFormat.KEY_MIME) ?: continue
+                if (mime.startsWith("audio/")) {
+                    audioTrackIndex = i
+                    format = trackFormat
+                    break
+                }
+            }
+
+            if (audioTrackIndex < 0 || format == null) {
+                AppLog.e(TAG, "decodeAudio: no audio track found")
+                lastError = "音频文件无音轨（格式不支持?）"
+                tempFile.delete()
+                return null
+            }
+
+            extractor.selectTrack(audioTrackIndex)
+
+            val codec = MediaCodec.createDecoderByType(format.getString(MediaFormat.KEY_MIME)!!)
+            codec.configure(format, null, null, 0)
+            codec.start()
+
+            val sampleRate = if (format.containsKey(MediaFormat.KEY_SAMPLE_RATE)) {
+                format.getInteger(MediaFormat.KEY_SAMPLE_RATE)
+            } else SAMPLE_RATE
+            val channelCount = if (format.containsKey(MediaFormat.KEY_CHANNEL_COUNT)) {
+                format.getInteger(MediaFormat.KEY_CHANNEL_COUNT)
+            } else CHANNEL_COUNT
+            val durationUs = if (format.containsKey(MediaFormat.KEY_DURATION)) {
+                format.getLong(MediaFormat.KEY_DURATION)
+            } else 0L
+
+            // 输出通道数固定为 2（立体声），模型要求
+            val outChannels = 2
+
+            var totalFloatsWritten = 0L
+            var inputDone = false
+            var outputDone = false
+            var lastDecodeProgressReport = 0
+
+            // 使用 DirectByteBuffer 直接将 short 转为 float 写入文件
+            val byteBuffer = ByteArray(8) // 每次读2个 float = 8 bytes
+
+            FileOutputStream(tempFile).use { fos ->
+                while (!outputDone) {
+                    // 输入
+                    if (!inputDone) {
+                        val inputIndex = codec.dequeueInputBuffer(10000)
+                        if (inputIndex >= 0) {
+                            val inputBuffer = codec.getInputBuffer(inputIndex)!!
+                            val sampleSize = extractor.readSampleData(inputBuffer, 0)
+                            if (sampleSize < 0) {
+                                codec.queueInputBuffer(inputIndex, 0, 0, 0, MediaCodec.BUFFER_FLAG_END_OF_STREAM)
+                                inputDone = true
+                            } else {
+                                val pts = extractor.sampleTime
+                                codec.queueInputBuffer(inputIndex, 0, sampleSize, pts, 0)
+                                extractor.advance()
+                            }
+                        }
+                    }
+
+                    // 输出
+                    val bufferInfo = MediaCodec.BufferInfo()
+                    val outputIndex = codec.dequeueOutputBuffer(bufferInfo, 10000)
+                    if (outputIndex >= 0) {
+                        if (bufferInfo.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0) {
+                            outputDone = true
+                        }
+
+                        if (bufferInfo.size > 0) {
+                            val outputBuffer = codec.getOutputBuffer(outputIndex)!!
+                            outputBuffer.position(bufferInfo.offset)
+                            outputBuffer.limit(bufferInfo.offset + bufferInfo.size)
+
+                            // 读取 shorts，转为 floats，直接写入临时文件
+                            // MediaCodec 输出是 interleaved PCM 16-bit
+                            while (outputBuffer.remaining() >= 2) {
+                                val left = outputBuffer.short.toFloat() / 32768f
+                                val right = if (outputBuffer.remaining() >= 2) {
+                                    outputBuffer.short.toFloat() / 32768f
+                                } else left  // 奇数样本时复制
+
+                                val bb = ByteBuffer.allocate(8).order(ByteOrder.LITTLE_ENDIAN)
+                                bb.putFloat(left)
+                                bb.putFloat(right)
+                                fos.write(bb.array())
+                                totalFloatsWritten += 2
+                            }
+
+                            // 解码进度
+                            if (durationUs > 0) {
+                                val ptsMs = bufferInfo.presentationTimeUs / 1000
+                                val progress10 = (ptsMs * 10 / (durationUs / 1000)).toInt()
+                                if (progress10 > lastDecodeProgressReport && progress10 <= 10) {
+                                    lastDecodeProgressReport = progress10
+                                    progress?.onProgress(progress10.toFloat() * 0.2f, "解码音频 (${progress10 * 10}%)")
+                                }
+                            }
+                        }
+
+                        codec.releaseOutputBuffer(outputIndex, false)
+                    }
+                }
+            }
+
+            codec.stop()
+            codec.release()
+            extractor.release()
+
+            val totalSamples = (totalFloatsWritten / outChannels).toInt()
+
+            AppLog.d(TAG, "decodeAudioToTempFile: wrote $totalFloatsWritten floats ($totalSamples stereo samples), temp=${tempFile.absolutePath}, size=${tempFile.length() / (1024*1024)}MB")
+            return DecodeResult(totalSamples, sampleRate, outChannels, tempFile)
+        } catch (e: OutOfMemoryError) {
+            AppLog.e(TAG, "decodeAudioToTempFile: OOM", e)
+            lastError = "解码内存不足（音频过长?）"
+            tempFile.delete()
+            System.gc()
+            return null
+        } catch (e: Exception) {
+            AppLog.e(TAG, "decodeAudioToTempFile: failed", e)
+            lastError = "音频解码失败：${e.message?.take(30)}"
+            tempFile.delete()
+            return null
         }
     }
 
@@ -320,228 +488,6 @@ class DemucsSeparator(private val context: Context) {
         // data chunk
         fos.write("data".toByteArray())
         fos.write(intToByteArray(dataSize))
-    }
-
-    /**
-     * 处理单段音频：ONNX 推理提取 vocals
-     *
-     * @param leftChannel 左声道样本（长度 ≤ SEGMENT_SAMPLES）
-     * @param rightChannel 右声道样本
-     * @return (vocalsLeft, vocalsRight)，长度 = leftChannel.size
-     */
-    private fun processSegment(
-        leftChannel: FloatArray,
-        rightChannel: FloatArray
-    ): Pair<FloatArray, FloatArray> {
-        val actualLen = leftChannel.size  // 最后一段可能 < SEGMENT_SAMPLES
-
-        // 总是 pad 到 SEGMENT_SAMPLES（模型要求固定输入 shape [1,2,343980]）
-        // 缺少的部分用零填充
-        val inputData = FloatArray(2 * SEGMENT_SAMPLES)
-        for (i in 0 until actualLen) {
-            inputData[i] = leftChannel[i]
-            inputData[i + SEGMENT_SAMPLES] = rightChannel[i]
-        }
-
-        val inputTensor = OnnxTensor.createTensor(
-            ortEnv!!,
-            FloatBuffer.wrap(inputData),
-            INPUT_SHAPE  // [1, 2, 343980]
-        )
-
-        // ONNX 推理
-        val output = modelSession!!.run(mapOf(inputName to inputTensor))
-
-        // 输出 shape: [1, 4, 2, 343980]，只取前 actualLen 个样本
-        @Suppress("UNCHECKED_CAST")
-        val outputData = output[0].value as Array<Array<Array<FloatArray>>>
-
-        // 提取 vocals stem (index=3)
-        val vocalsLeft = FloatArray(actualLen)
-        val vocalsRight = FloatArray(actualLen)
-        for (i in 0 until actualLen) {
-            vocalsLeft[i] = outputData[0][VOCALS_INDEX][0][i]
-            vocalsRight[i] = outputData[0][VOCALS_INDEX][1][i]
-        }
-
-        // 释放 tensor
-        inputTensor.close()
-        output.close()
-
-        return Pair(vocalsLeft, vocalsRight)
-    }
-
-    /**
-     * 提取带 padding 的段（用于 overlap-add）
-     */
-    private fun extractSegmentWithPadding(
-        channel: FloatArray,
-        start: Int,
-        segLen: Int,
-        padLeft: Int,
-        padRight: Int
-    ): FloatArray {
-        val totalLen = padLeft + segLen + padRight
-        val segment = FloatArray(totalLen)
-
-        // 左 padding（从前面复制）
-        for (i in 0 until padLeft) {
-            segment[i] = channel[start - padLeft + i]
-        }
-
-        // 主体
-        for (i in 0 until segLen) {
-            segment[padLeft + i] = channel[start + i]
-        }
-
-        // 右 padding（从后面复制）
-        for (i in 0 until padRight) {
-            segment[padLeft + segLen + i] = channel[start + segLen + i]
-        }
-
-        return segment
-    }
-
-    /**
-     * 解码音频文件为 PCM 浮点数据（立体声）
-     *
-     * 优化：用预分配 FloatArray 替换 mutableListOf<Float>，避免装箱开销
-     * （装箱 Float 对象 ~16 字节 vs FloatArray 4 字节/元素，省 ~75% 内存）
-     */
-    private fun decodeAudio(inputPath: String, progress: ProgressCallback?): FloatArray? {
-        return try {
-            val extractor = MediaExtractor()
-            extractor.setDataSource(inputPath)
-
-            // 查找音频轨道
-            var audioTrackIndex = -1
-            var format: MediaFormat? = null
-            for (i in 0 until extractor.trackCount) {
-                val trackFormat = extractor.getTrackFormat(i)
-                val mime = trackFormat.getString(MediaFormat.KEY_MIME) ?: continue
-                if (mime.startsWith("audio/")) {
-                    audioTrackIndex = i
-                    format = trackFormat
-                    break
-                }
-            }
-
-            if (audioTrackIndex < 0 || format == null) {
-                AppLog.e(TAG, "decodeAudio: no audio track found")
-                lastError = "音频文件无音轨（格式不支持?）"
-                return null
-            }
-
-            extractor.selectTrack(audioTrackIndex)
-
-            val codec = MediaCodec.createDecoderByType(
-                format.getString(MediaFormat.KEY_MIME)!!
-            )
-            codec.configure(format, null, null, 0)
-            codec.start()
-
-            // 预分配 FloatArray：基于 MediaFormat 的 duration/sampleRate/channelCount 估算
-            val sampleRate = if (format.containsKey(MediaFormat.KEY_SAMPLE_RATE)) {
-                format.getInteger(MediaFormat.KEY_SAMPLE_RATE)
-            } else SAMPLE_RATE
-            val channelCount = if (format.containsKey(MediaFormat.KEY_CHANNEL_COUNT)) {
-                format.getInteger(MediaFormat.KEY_CHANNEL_COUNT)
-            } else CHANNEL_COUNT
-            val durationUs = if (format.containsKey(MediaFormat.KEY_DURATION)) {
-                format.getLong(MediaFormat.KEY_DURATION)
-            } else 0L
-            // 估算样本数（+10% 余量应对编码器 delay/padding）
-            val estimatedSamples = if (durationUs > 0) {
-                (durationUs.toDouble() * sampleRate / 1_000_000.0 * channelCount * 1.1).toInt()
-            } else {
-                // 无时长信息，初始 30 秒容量，动态增长
-                sampleRate * channelCount * 30
-            }
-
-            var pcmData = FloatArray(estimatedSamples)
-            var writeIdx = 0
-            var inputDone = false
-            var outputDone = false
-            // 解码进度：每解码 10% 更新一次
-            var lastDecodeProgressReport = 0
-            val decodeProgressInterval = if (durationUs > 0) (durationUs / 10) else Long.MAX_VALUE
-
-            while (!outputDone) {
-                // 输入
-                if (!inputDone) {
-                    val inputIndex = codec.dequeueInputBuffer(10000)
-                    if (inputIndex >= 0) {
-                        val inputBuffer = codec.getInputBuffer(inputIndex)!!
-                        val sampleSize = extractor.readSampleData(inputBuffer, 0)
-                        if (sampleSize < 0) {
-                            codec.queueInputBuffer(inputIndex, 0, 0, 0, MediaCodec.BUFFER_FLAG_END_OF_STREAM)
-                            inputDone = true
-                        } else {
-                            val pts = extractor.sampleTime
-                            codec.queueInputBuffer(inputIndex, 0, sampleSize, pts, 0)
-                            extractor.advance()
-                        }
-                    }
-                }
-
-                // 输出
-                val bufferInfo = MediaCodec.BufferInfo()
-                val outputIndex = codec.dequeueOutputBuffer(bufferInfo, 10000)
-                if (outputIndex >= 0) {
-                    if (bufferInfo.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0) {
-                        outputDone = true
-                    }
-
-                    if (bufferInfo.size > 0) {
-                        val outputBuffer = codec.getOutputBuffer(outputIndex)!!
-                        outputBuffer.position(bufferInfo.offset)
-                        outputBuffer.limit(bufferInfo.offset + bufferInfo.size)
-
-                        // 直接写入预分配 FloatArray，避免装箱开销
-                        while (outputBuffer.hasRemaining()) {
-                            if (writeIdx >= pcmData.size) {
-                                // 扩容 1.5 倍，减少拷贝次数
-                                pcmData = pcmData.copyOf((pcmData.size * 1.5).toInt())
-                            }
-                            pcmData[writeIdx++] = outputBuffer.short.toFloat() / 32768f
-                        }
-
-                        // 解码进度（节流：每10%更新一次，从0%到20%）
-                        if (durationUs > 0) {
-                            val ptsMs = bufferInfo.presentationTimeUs / 1000
-                            val progress10 = (ptsMs * 10 / (durationUs / 1000)).toInt()
-                            if (progress10 > lastDecodeProgressReport && progress10 <= 10) {
-                                lastDecodeProgressReport = progress10
-                                progress?.onProgress(progress10.toFloat() * 0.2f, "解码音频 (${progress10 * 10}%)")
-                            }
-                        }
-                    }
-
-                    codec.releaseOutputBuffer(outputIndex, false)
-                }
-            }
-
-            codec.stop()
-            codec.release()
-            extractor.release()
-
-            // 修剪到实际大小
-            if (writeIdx < pcmData.size) {
-                pcmData = pcmData.copyOf(writeIdx)
-            }
-
-            AppLog.d(TAG, "decodeAudio: decoded $writeIdx samples, ${writeIdx / 2 / sampleRate}s at ${sampleRate}Hz")
-            pcmData
-        } catch (e: OutOfMemoryError) {
-            AppLog.e(TAG, "decodeAudio: OOM", e)
-            lastError = "解码内存不足（音频过长?）"
-            System.gc()
-            null
-        } catch (e: Exception) {
-            AppLog.e(TAG, "decodeAudio: failed", e)
-            lastError = "音频解码失败：${e.message?.take(30)}"
-            null
-        }
     }
 
     private fun intToByteArray(value: Int): ByteArray {
