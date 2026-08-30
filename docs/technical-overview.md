@@ -5909,3 +5909,66 @@ Phase 1-6 代码已全部落地并编译通过。Phase 7（测试与文档）新
 **验证结果**：✅ TV 实测上传 166MB 模型文件成功，速度接近 Wi-Fi 带宽。
 
 **版本号变更**：v2.24.0 → v2.24.1（versionCode 64 → 65）
+
+---
+
+### 10.62 v2.24.2 - Demucs OOM 修复 + TV 字号调整
+
+**提交时间**：2026-08-29
+
+**背景**：v2.24.1 在电视上启动人声分轨时，`DemucsSeparator.initialize()` 读取 166MB ONNX 模型到 JVM 堆内存（`modelFile.readBytes()` + `createSession(bytes)`），触发电视设备堆内存不足被系统 SIGKILL。
+
+**根因分析**：ONNX Runtime `createSession(ByteArray)` 重载会将整个模型字节数组加载到 JVM 堆，166MB 模型 + 原有 Compose TV 框架占用超出电视堆内存上限。
+
+**主要改动**：
+
+1. **Demucs OOM 修复**（`DemucsSeparator.initialize()`）
+   - `modelFile.readBytes()` + `createSession(bytes)` → `createSession(modelPath)`
+   - ONNX Runtime 底层 mmap 加载模型文件，不占用 JVM 堆内存
+2. **TV 全局字号 -6sp**（`FontSize` object）
+   - 所有 `*Tv` 常量减小 6sp：Caption 24→18, Small 26→20, Body 29→23, Button 31→25, Subtitle 35→29, Title 39→33, Display 45→39, DisplayLarge 53→47
+3. **曲库歌曲条目文字统一**（`UnifiedSongRow`）
+   - 歌曲标题 `FontSize.subtitle()` → `FontSize.button()`，与歌手名、时长、按钮文字大小一致
+
+**涉及文件**：`app/src/main/java/com/nasmusic/tv/player/DemucsSeparator.kt`、`app/src/main/java/com/nasmusic/tv/ui/theme/Theme.kt`、`app/src/main/java/com/nasmusic/tv/ui/components/song/UnifiedSongRow.kt`、`app/build.gradle.kts`、`CHANGELOG.md`、`docs/technical-overview.md`
+
+**验证结果**：✅ TV 实测启动人声分轨不再 OOM 崩溃，界面字号紧凑易读。
+
+**版本号变更**：v2.24.1 → v2.24.2（versionCode 65 → 66）
+
+---
+
+### 10.63 v2.24.3 - 百度授权对话框乱码修复 + APK 文件名格式统一
+
+**提交时间**：2026-08-30
+
+**背景**：用户反馈百度网盘授权对话框中，设备码后的「复制」按钮文字显示为乱码。
+
+**根因分析**：
+
+1. **BaiduAuthDialog.kt 编码损坏**：commit `face859`（重构 fontSize `XX.sp` → `FontSize.xx()`）使用了脚本/工具读取文件时编码处理错误，将原本 UTF-8 编码的文件错误转码为 GBK+U+FFFD 混杂，中文字符变成 U+FFFD 替换字符（不可恢复）。Kotlin 编译器将 U+FFFD 字节序列视为合法 UTF-8 字符串存入 APK，导致运行时显示为乱码方块/问号。
+2. **APK 文件名不统一**：本地构建输出默认 `app-release.apk`，CI 上传 artifact 名为 `app-release`，GitHub Release 也用默认名，无法从文件名直接识别版本。
+
+**主要改动**：
+
+1. **BaiduAuthDialog.kt 中文恢复**
+   - 从 commit `9c44159`（face859 之前最后一个版本）恢复原始 UTF-8 中文字符
+   - 保留 `face859` 的 `FontSize.xx()` 调用与 `65a912b` 的 TV +6sp 字号
+   - 恢复的中文文本包括：KDoc 注释（「百度网盘设备码授权对话框」等）、UI 文字（「复制」按钮）、剪贴板标签（「百度网盘设备码」）、行内注释
+2. **APK 文件名格式统一**（`NASMusicTV-release-v2-24-3.apk`）
+   - `app/build.gradle.kts` 新增 `applicationVariants.all` 配置，`outputFileName` 改为 `NASMusicTV-${variant.name}-v${versionName 点转横线}.apk`
+   - `.github/workflows/build.yml` 新增「Rename APK」步骤：从 `build.gradle.kts` 读取 `versionName`，生成 `APK_VERSION_DASHED` 环境变量，artifact 名与 Release APK 路径统一使用新格式
+
+**根因分析（编码损坏溯源）**：
+
+- commit `8d03b78`（v2.24.0 系列）创建文件时为正常 UTF-8
+- commit `9c44159`（v2.24.x）仍为 UTF-8
+- commit `face859`（fontSize 重构）引入损坏：脚本读取 UTF-8 文件时按 GBK 解码再以 UTF-8 写回，导致中文字节被替换为 U+FFFD
+- commit `65a912b`（TV +6sp）继承损坏状态
+- 本次 v2.24.3 修复
+
+**涉及文件**：`app/src/main/java/com/nasmusic/tv/ui/screens/netdisk/BaiduAuthDialog.kt`、`app/build.gradle.kts`、`.github/workflows/build.yml`、`CHANGELOG.md`、`docs/technical-overview.md`
+
+**验证结果**：✅ 本地 `assembleRelease` 编译通过，输出文件名 `NASMusicTV-release-v2-24-3.apk`，源文件字节验证为合法 UTF-8（无 U+FFFD 字节序列）。
+
+**版本号变更**：v2.24.2 → v2.24.3（versionCode 66 → 67）

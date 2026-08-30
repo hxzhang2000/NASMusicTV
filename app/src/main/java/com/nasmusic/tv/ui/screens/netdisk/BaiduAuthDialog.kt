@@ -46,21 +46,21 @@ import com.nasmusic.tv.util.LinkUtils
 import com.nasmusic.tv.util.QrCodeGenerator
 
 /**
- * �ٶ������豸����Ȩ�Ի���
+ * 百度网盘设备码授权对话框
  *
- * �û����"��¼"�󵯳�����ʾ�豸�롢��֤�������ά�루���� [QrCodeGenerator]��
- * �� [com.nasmusic.tv.ui.screens.BackupTransferDialog] ͬ����ֻ�ɨ��/�����Ӳ�����
- * �豸�������Ȩ���ڼ��Զ���ѯ��
+ * 用户点击"登录"后弹出：显示设备码、验证链接与二维码（复用 [QrCodeGenerator]，
+ * 与 [com.nasmusic.tv.ui.screens.BackupTransferDialog] 同款），手机扫码/打开链接并输入
+ * 设备码完成授权，期间自动轮询。
  *
- * ״̬��ת�� [connectionState] ������
- * - [MainViewModel.BaiduConnectionState.LoggedIn] �� ��Ȩ�ɹ����Զ��ر�
- * - [MainViewModel.BaiduConnectionState.Failed] �� ʧ�ܣ��ܾ�/��ʱ/�쳣������ʾ������Զ��ر�
- * - [MainViewModel.BaiduConnectionState.Connecting] �� �ȴ��û�ɨ����Ȩ
+ * 状态流转由 [connectionState] 驱动：
+ * - [MainViewModel.BaiduConnectionState.LoggedIn] → 授权成功，自动关闭
+ * - [MainViewModel.BaiduConnectionState.Failed] → 失败（拒绝/超时/异常），显示错误后自动关闭
+ * - [MainViewModel.BaiduConnectionState.Connecting] → 等待用户扫码授权
  *
- * @param deviceCode �豸������null ��ʾ�����л���ʧ�ܣ�
- * @param connectionState ��ǰ����״̬
- * @param onCancel �û�ȡ����Ȩ�����÷�����ֹͣ��ѯ [MainViewModel.cancelBaiduDeviceCode]��
- * @param onDismiss �رնԻ���
+ * @param deviceCode 设备码结果（null 表示请求中或已失败）
+ * @param connectionState 当前连接状态
+ * @param onCancel 用户取消授权（调用方负责停止轮询 [MainViewModel.cancelBaiduDeviceCode]）
+ * @param onDismiss 关闭对话框
  */
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
@@ -73,14 +73,14 @@ fun BaiduAuthDialog(
     val context = LocalContext.current
     var qrBitmap by remember { mutableStateOf<Bitmap?>(null) }
 
-    // ��ά�����ݣ������ȶ�����֤ҳ��verificationUrl����ɨ���򿪱�׼��֤ҳ�ֶ������豸�롣
-    // ��ʹ�� qrcode_url����һ���� token ���ӣ��� .../device/qrcode/<token>��ɨ��󾭳��򲻿���
+    // 二维码内容：编码稳定的验证页（verificationUrl），扫码后打开标准验证页手动输入设备码。
+    // 不使用 qrcode_url：其一次性 token 链接（如 .../device/qrcode/<token>）扫码后经常打不开。
     val qrContent = remember(deviceCode) { deviceCode?.verificationUrl }
     LaunchedEffect(qrContent) {
         qrBitmap = qrContent?.let { QrCodeGenerator.generateQrBitmap(it, 360) }
     }
 
-    // ��Ȩ�ɹ���ʧ�� �� ����չʾ���Զ��ر�
+    // 授权成功或失败 → 短暂展示后自动关闭
     LaunchedEffect(connectionState) {
         if (connectionState is MainViewModel.BaiduConnectionState.LoggedIn) {
             kotlinx.coroutines.delay(600)
@@ -129,7 +129,7 @@ fun BaiduAuthDialog(
                 Spacer(modifier = Modifier.height(20.dp))
 
                 when {
-                    // �豸��������
+                    // 设备码请求中
                     deviceCode == null && connectionState is MainViewModel.BaiduConnectionState.Connecting -> {
                         Spacer(modifier = Modifier.height(36.dp))
                         Text(
@@ -139,9 +139,9 @@ fun BaiduAuthDialog(
                         )
                         Spacer(modifier = Modifier.height(36.dp))
                     }
-                    // �ѻ�ȡ�豸�룺��ʾ�ֲ�ָ�� + ��ά��
+                    // 已获取设备码：显示分步指引 + 二维码
                     deviceCode != null -> {
-                        // �����̣��ֲ�˵�����ֻ��ֶ�����ַ�����豸�룬��ɿ�����Ȩ��ʽ��
+                        // 主流程：分步说明（手机手动打开网址输入设备码，最可靠的授权方式）
                         Text(
                             text = stringResource(R.string.netdisk_auth_step1),
                             color = NasMusicColors.TextPrimary,
@@ -149,7 +149,7 @@ fun BaiduAuthDialog(
                             textAlign = TextAlign.Center
                         )
                         Spacer(modifier = Modifier.height(6.dp))
-                        // ��֤ URL���ɵ��ֱ�Ӵ���������ֻ��˱�ݲ�����TV ���������������Ӧ��
+                        // 验证 URL：可点击直接打开浏览器（手机端便捷操作；TV 上无浏览器则无响应）
                         FocusableSurface(
                             onClick = { LinkUtils.openInBrowser(context, deviceCode.verificationUrl) },
                             shape = RoundedCornerShape(6.dp),
@@ -175,7 +175,7 @@ fun BaiduAuthDialog(
                             fontSize = FontSize.body(),
                             textAlign = TextAlign.Center
                         )
-                        // �豸�� + ���ư�ť
+                        // 设备码 + 复制按钮
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.Center
@@ -188,7 +188,7 @@ fun BaiduAuthDialog(
                             )
                             Spacer(modifier = Modifier.width(12.dp))
                             FocusableSurface(
-                                onClick = { LinkUtils.copyToClipboard(context, "�ٶ������豸��", deviceCode.userCode) },
+                                onClick = { LinkUtils.copyToClipboard(context, "百度网盘设备码", deviceCode.userCode) },
                                 shape = RoundedCornerShape(8.dp),
                                 focusedScale = 1.08f,
                                 animationDurationMs = 120,
@@ -198,7 +198,7 @@ fun BaiduAuthDialog(
                                 focusedContentColor = NasMusicColors.TextPrimary
                             ) {
                                 Text(
-                                    text = "����",
+                                    text = "复制",
                                     fontSize = FontSize.body(),
                                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp)
                                 )
@@ -206,7 +206,7 @@ fun BaiduAuthDialog(
                         }
                         Spacer(modifier = Modifier.height(16.dp))
 
-                        // ��������ά�루ɨ������� App ����/���粻���ã��ʲ���Ϊ�����̣�
+                        // 辅助：二维码（扫码可能因 App 拦截/网络不可用，故不作为主流程）
                         Text(
                             text = stringResource(R.string.netdisk_auth_qr_alt),
                             color = NasMusicColors.TextSecondary,
@@ -227,7 +227,7 @@ fun BaiduAuthDialog(
                             fontSize = FontSize.body()
                         )
                     }
-                    // ����ʧ��
+                    // 请求失败
                     else -> {
                         Spacer(modifier = Modifier.height(36.dp))
                         Text(

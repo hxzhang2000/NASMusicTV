@@ -7,6 +7,13 @@
 >
 > 类型：`Added`（新增） | `Changed`（变更） | `Fixed`（修复） | `Removed`（移除）
 
+## [v2.24.3] - 2026-08-30
+
+### Fixed
+
+- **百度网盘授权对话框中文乱码**：`BaiduAuthDialog.kt` 在 `face859` 重构（fontSize `XX.sp` → `FontSize.xx()`）时文件编码从 UTF-8 损坏为 GBK+U+FFFD 混杂，导致 KDoc 注释与「复制」按钮文字、「百度网盘设备码」剪贴板标签等中文字符串在编译后显示为乱码。从 `9c44159` 版本恢复中文字符，保留 `face859` 的 `FontSize.xx()` 调用与 `65a912b` 的 TV +6sp 字号
+- **APK 文件名格式统一**：本地 `assembleRelease` 输出与 GitHub Actions CI 上传/发布均使用 `NASMusicTV-release-v{版本号点转横线}.apk` 格式（如 `NASMusicTV-release-v2-24-3.apk`），CI 从 `build.gradle.kts` 读取 `versionName` 自动生成文件名
+
 ## [v2.24.2] - 2026-08-29
 
 ### Fixed
