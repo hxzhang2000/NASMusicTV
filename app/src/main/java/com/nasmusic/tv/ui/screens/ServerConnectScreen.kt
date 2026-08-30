@@ -144,7 +144,7 @@ fun ServerConnectScreen(
     ) {
         Column(
             modifier = Modifier
-                .width(560.dp)
+                .width(760.dp)
                 .heightIn(max = 900.dp)
                 .clip(RoundedCornerShape(24.dp))
                 .background(NasMusicColors.Surface)

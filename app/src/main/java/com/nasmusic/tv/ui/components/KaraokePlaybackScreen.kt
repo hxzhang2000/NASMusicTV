@@ -13,6 +13,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.type
 import kotlinx.coroutines.delay
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -659,9 +663,14 @@ private fun <T> KaraokeStepPickerDialog(
                 Spacer(Modifier.height(20.dp))
 
                 // 选项区域：左右箭头 + 当前值
+                // TV焦点：消费UP键防止焦点逃出弹窗上边界
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.Center
+                    horizontalArrangement = Arrangement.spacedBy(20.dp, Alignment.CenterHorizontally),
+                    modifier = Modifier.onPreviewKeyEvent { event ->
+                        event.key == Key.DirectionUp
+                            && event.type == KeyEventType.KeyDown
+                    }
                 ) {
                     // 左箭头
                     FocusableSurface(
@@ -735,10 +744,15 @@ private fun <T> KaraokeStepPickerDialog(
 
                 Spacer(Modifier.height(16.dp))
 
-                // 重置 + 取消按钮
+                // 重置 + 确定按钮
+                // TV焦点：消费DOWN键防止焦点逃出弹窗下边界
                 Row(
-                    horizontalArrangement = Arrangement.spacedBy(16.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                    horizontalArrangement = Arrangement.spacedBy(24.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.onPreviewKeyEvent { event ->
+                        event.key == Key.DirectionDown
+                            && event.type == KeyEventType.KeyDown
+                    }
                 ) {
                     FocusableSurface(
                         onClick = { onReset(); onDismiss() },
