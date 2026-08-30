@@ -195,11 +195,11 @@ fun KaraokePlaybackScreen(
             }
         }
 
-        // ── 高质量分离错误提示（测试期间保持30分钟）──
+        // ── 高质量分离错误提示（5秒自动消失）──
         if (hqError != null && !isSeparating) {
             val errorKey = hqError
             LaunchedEffect(errorKey) {
-                delay(30 * 60 * 1000L)  // 测试期间保持 30 分钟，正常后改为 3-5 秒
+                delay(5000L)
                 onClearHqError()
             }
             Box(
@@ -220,11 +220,11 @@ fun KaraokePlaybackScreen(
             }
         }
 
-        // ── 高质量分离成功提示（绿色，测试期间保持30分钟）──
+        // ── 高质量分离成功提示（绿色，5秒自动消失）──
         if (hqSuccess != null && !isSeparating) {
             val successKey = hqSuccess
             LaunchedEffect(successKey) {
-                delay(30 * 60 * 1000L)  // 测试期间保持 30 分钟，正常后改为 3-5 秒
+                delay(5000L)
                 onClearHqSuccess()
             }
             Box(
