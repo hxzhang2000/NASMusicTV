@@ -143,13 +143,7 @@ fun WeatherRadioScreen(
                 }
 
                 // 右侧：心情选择按钮（占 2/3 宽度，两行排列）
-                Column(modifier = Modifier.weight(2f)) {
-                    Text(
-                        text = "选择心情",
-                        color = NasMusicColors.TextSecondary,
-                        fontSize = FontSize.button(),
-                        modifier = Modifier.padding(bottom = 8.dp)
-                    )
+                Column(modifier = Modifier.weight(2f), verticalArrangement = Arrangement.Center) {
                     FlowRow(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
