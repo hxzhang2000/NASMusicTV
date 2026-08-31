@@ -7,6 +7,28 @@
 >
 > 类型：`Added`（新增） | `Changed`（变更） | `Fixed`（修复） | `Removed`（移除）
 
+## [v2.25.2] - 2026-08-31
+
+### Changed
+
+- **UI 字符串外部化（第二批 — MainViewModel）**：将 MainViewModel.kt 中剩余的 ~60 处用户可见硬编码中文字符串迁移至 `res/values/strings.xml`，使用 `getApplication<Application>().getString()` 模式。覆盖范围：
+  - 连接状态消息（成功/失败/检查设置）
+  - 错误提示（加载失败、搜索失败、播放失败、收藏失败、刷新失败等）
+  - 播放列表操作（创建/删除/重命名/添加/移除）
+  - 备份操作（导出/恢复/删除）
+  - 网盘操作（加载目录/搜索/索引扫描）
+  - MV 消息（未找到视频/切换搜索源/搜索更多）
+  - 歌词操作（加载/切换来源/缓存清除）
+  - 电台/Jamendo 加载失败
+  - 天气心情切换失败
+  - 百度网盘认证（获取设备码/用户拒绝/授权超时）
+- **strings.xml 新增 18 行字符串资源**，覆盖 weather_switch_mood_error、network_search_failed、browse_search_failed、resolve_url_*、play_failed_with_msg、local_music_refreshed、backup_* 等
+
+### Notes
+
+- MainViewModel.kt 中的运行时错误/Toast 消息已全部外部化
+- 代码注释、过滤关键词、电台预设列表、AppLog 消息中的中文保持原样（非用户可见 UI 字符串）
+
 ## [v2.25.1] - 2026-08-31
 
 ### Changed
@@ -25,7 +47,7 @@
 
 ### Notes
 
-- MainViewModel.kt 中的 138 个运行时错误/Toast 消息（含字符串插值）暂未迁移，留待后续处理（涉及与 SettingsScreen 备份消息颜色判断逻辑的耦合重构）
+- ~~MainViewModel.kt 中的 138 个运行时错误/Toast 消息（含字符串插值）~~ → 已在 v2.25.2 中完成迁移
 - 代码注释中的中文保持原样（非用户可见 UI 字符串）
 
 ## [v2.25.0] - 2026-08-30

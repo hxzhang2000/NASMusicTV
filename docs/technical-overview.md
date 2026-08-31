@@ -6015,3 +6015,35 @@ Phase 1-6 代码已全部落地并编译通过。Phase 7（测试与文档）新
 **涉及文件**：`app/src/main/res/values/strings.xml`、`app/build.gradle.kts`、`CHANGELOG.md`、`docs/technical-overview.md`，以及 26 个 UI Kotlin 文件（详见 CHANGELOG v2.25.1 条目）。
 
 **版本号变更**：v2.25.0 → v2.25.1（versionCode 70 → 71）
+
+### 10.65 v2.25.2 - UI 字符串外部化（第二批：MainViewModel）
+
+**提交时间**：2026-08-31
+
+**背景**：MainViewModel.kt 中剩余 ~60 处用户可见硬编码中文字符串（连接状态、错误提示、播放列表操作、备份操作、网盘操作、MV 消息、歌词操作等），需迁移至 `res/values/strings.xml`。
+
+**主要改动**：
+
+1. **strings.xml 新增 18 行字符串资源**，覆盖 weather_switch_mood_error、network_search_failed、browse_search_failed、resolve_url_*、play_failed_with_msg、local_music_refreshed、backup_* 等。
+
+2. **MainViewModel.kt 约 60 处替换**，使用 `getApplication<Application>().getString(R.string.xxx)` 模式：
+   - 连接状态消息（成功/失败/检查设置）
+   - 错误提示（加载失败、搜索失败、播放失败、收藏失败、刷新失败等）
+   - 播放列表操作（创建/删除/重命名/添加/移除）
+   - 备份操作（导出/恢复/删除）— 与 SettingsScreen.kt 的 `backupMessage` 状态判断解耦
+   - 网盘操作（加载目录/搜索/索引扫描）
+   - MV 消息（未找到视频/切换搜索源/搜索更多）
+   - 歌词操作（加载/切换来源/缓存清除）
+   - 电台/Jamendo 加载失败
+   - 天气心情切换失败
+   - 百度网盘认证（获取设备码/用户拒绝/授权超时）
+
+3. **BackupMessage 数据类**：新增 `app/src/main/java/com/nasmusic/tv/data/model/BackupMessage.kt`，将 `_backupMessage` 类型从 `MutableStateFlow<String?>` 改为 `MutableStateFlow<BackupMessage?>`，携带 `isError` 标志。SettingsScreen.kt 的颜色判断逻辑从 `startsWith("恢复")/contains("失败")` 改为 `backupMessage.isError`。
+
+4. **build.gradle.kts**：versionCode 71→72，versionName 2.25.1→2.25.2
+
+**验证结果**：✅ `assembleDebug` 编译通过（无 error，仅 pre-existing warning）。Python 脚本扫描确认：MainViewModel.kt 中无用户可见硬编码中文字符串（注释、过滤关键词、电台预设、AppLog 消息中的中文保持原样）。
+
+**涉及文件**：`app/src/main/res/values/strings.xml`、`app/src/main/java/com/nasmusic/tv/ui/viewmodel/MainViewModel.kt`、`app/src/main/java/com/nasmusic/tv/data/model/BackupMessage.kt`（新增）、`app/src/main/java/com/nasmusic/tv/ui/screens/SettingsScreen.kt`、`app/build.gradle.kts`、`CHANGELOG.md`、`docs/technical-overview.md`
+
+**版本号变更**：v2.25.1 → v2.25.2（versionCode 71 → 72）

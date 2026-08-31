@@ -142,7 +142,7 @@ fun SettingsScreen(
     onChangeVisualizerTheme: (VisualizerTheme) -> Unit = {},
     // 数据管理（备份/恢复）
     backupFiles: List<com.nasmusic.tv.util.BackupFileUtils.BackupFile> = emptyList(),
-    backupMessage: String? = null,
+    backupMessage: com.nasmusic.tv.data.model.BackupMessage? = null,
     onRefreshBackupFiles: (() -> Unit)? = null,
     onExportBackup: (() -> Unit)? = null,
     onImportBackup: ((Uri) -> Unit)? = null,
@@ -1462,8 +1462,8 @@ fun SettingsScreen(
                         item { Spacer(modifier = Modifier.height(16.dp)) }
                         item {
                             Text(
-                                text = backupMessage!!,
-                                color = if (backupMessage!!.startsWith("恢复") || backupMessage!!.startsWith("备份失败") || backupMessage!!.contains("失败"))
+                                text = backupMessage!!.text,
+                                color = if (backupMessage!!.isError)
                                     NasMusicColors.Warning else NasMusicColors.Primary,
                                 fontSize = FontSize.button(),
                                 modifier = Modifier.padding(start = 4.dp)

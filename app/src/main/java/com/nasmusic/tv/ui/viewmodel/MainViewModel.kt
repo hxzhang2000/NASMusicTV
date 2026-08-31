@@ -6,6 +6,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.gson.Gson
 import com.nasmusic.tv.NasMusicApp
+import com.nasmusic.tv.R
 import com.nasmusic.tv.backend.BackendRegistry
 import com.nasmusic.tv.backend.BackendAdapter
 import com.nasmusic.tv.backend.FilterMode
@@ -18,6 +19,7 @@ import com.nasmusic.tv.backend.network.baidu.BaiduPanApi
 import com.nasmusic.tv.backend.network.baidu.BaiduNetdiskConfig
 import com.nasmusic.tv.data.model.Album
 import com.nasmusic.tv.data.model.Artist
+import com.nasmusic.tv.data.model.BackupMessage
 import com.nasmusic.tv.data.model.BaiduFile
 import com.nasmusic.tv.data.model.BaiduFileIndex
 import com.nasmusic.tv.data.model.BrowseDimension
@@ -459,16 +461,16 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
                     }
                 } else {
                     _weatherError.value = if (apiKey.isBlank()) {
-                        "无法获取天气信息，请在 设置→网络 中配置 OpenWeatherMap API Key"
+                        getApplication<Application>().getString(R.string.weather_error_no_api_key)
                     } else {
-                        "无法获取天气信息，请检查网络连接或 API Key 是否有效"
+                        getApplication<Application>().getString(R.string.weather_error_check_network)
                     }
                     // 即使天气获取失败，仍按默认心情（阳光）加载歌曲
                     loadRadioForDefaultMood()
                 }
             } catch (e: Exception) {
                 AppLog.e("MainViewModel", "fetchWeather failed", e)
-                _weatherError.value = "获取天气失败: ${e.message?.take(50)}"
+                _weatherError.value = getApplication<Application>().getString(R.string.weather_fetch_failed, e.message?.take(50) ?: "")
                 // 即使天气获取失败，仍按默认心情（阳光）加载歌曲
                 loadRadioForDefaultMood()
             } finally {
@@ -497,7 +499,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
                 _weatherRadioQueue.value = queue
             } catch (e: Exception) {
                 AppLog.e("MainViewModel", "switchWeatherMood failed", e)
-                _weatherError.value = "切换心情失败: ${e.message?.take(50)}"
+                _weatherError.value = getApplication<Application>().getString(R.string.weather_switch_mood_error, e.message?.take(50))
             } finally {
                 _weatherLoading.value = false
             }
@@ -1034,7 +1036,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
             }
             success
         } catch (e: Exception) {
-            _connectMessage.value = "连接失败: ${e.message?.take(50)}"
+            _connectMessage.value = getApplication<Application>().getString(R.string.connect_failed_with_msg, e.message?.take(50))
             viewModelScope.launch {
                 delay(3000)
                 _connectMessage.value = null
@@ -1083,7 +1085,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
             val config = prefs.serverConfig.first()
             if (config.baseUrl.isBlank()) {
                 if (!silent) {
-                    _connectMessage.value = "没有已保存的服务器配置"
+                    _connectMessage.value = getApplication<Application>().getString(R.string.status_no_saved_server)
                     delay(3000)
                     _connectMessage.value = null
                 }
@@ -1103,14 +1105,14 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
                     prefs.saveServerConfig(config.copy(isConnected = true))
                     loadLibrary()
                     if (!silent) {
-                        _connectMessage.value = "已连接到 ${backendRegistry.getServerDisplayName()}"
+                        _connectMessage.value = getApplication<Application>().getString(R.string.connect_to_server_success, backendRegistry.getServerDisplayName())
                         delay(3000)
                         _connectMessage.value = null
                     }
                 } else {
                     AppLog.w("NASMusic", "connectToSavedServer: initialize returned false")
                     if (!silent) {
-                        _connectMessage.value = "连接失败，请检查服务器设置"
+                        _connectMessage.value = getApplication<Application>().getString(R.string.connect_failed_check_settings, "")
                         delay(3000)
                         _connectMessage.value = null
                     }
@@ -1118,7 +1120,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
             } catch (e: Exception) {
                 AppLog.e("NASMusic", "connectToSavedServer failed", e)
                 if (!silent) {
-                    _connectMessage.value = "连接失败: ${e.message}"
+                    _connectMessage.value = getApplication<Application>().getString(R.string.connect_failed_with_msg, e.message)
                     delay(3000)
                     _connectMessage.value = null
                 }
@@ -1186,7 +1188,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
         } catch (e: Exception) {
             AppLog.e("NASMusic", "loadFavorites failed", e)
             _favoriteSongs.value = UiState.Error(
-                message = "加载收藏失败: ${e.message?.take(50)}"
+                message = getApplication<Application>().getString(R.string.load_favorites_error, e.message?.take(50))
             )
         }
     }
@@ -1202,7 +1204,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
         } catch (e: Exception) {
             AppLog.e("NASMusic", "loadGenres failed", e)
             _genres.value = UiState.Error(
-                message = "加载流派列表失败: ${e.message?.take(50)}"
+                message = getApplication<Application>().getString(R.string.load_genres_error, e.message?.take(50))
             )
         }
     }
@@ -1215,8 +1217,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
         viewModelScope.launch {
             val adapter = backendRegistry.getAdapter() ?: run {
                 _isLibraryLoading.value = false
-                _albums.value = UiState.Error("后端未连接")
-                _songs.value = UiState.Error("后端未连接")
+_albums.value = UiState.Error(getApplication<Application>().getString(R.string.backend_not_connected))
+        _songs.value = UiState.Error(getApplication<Application>().getString(R.string.backend_not_connected))
                 return@launch
             }
 
@@ -1230,7 +1232,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
                 } catch (e: Exception) {
                     AppLog.e("NASMusic", "loadLibrary albums failed", e)
                     _albums.value = UiState.Error(
-                        message = "加载专辑列表失败: ${e.message?.take(50)}",
+                        message = getApplication<Application>().getString(R.string.load_albums_error, e.message?.take(50)),
                         retry = { loadLibrary() }
                     )
                 }
@@ -1295,7 +1297,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
             } catch (e: Exception) {
                 AppLog.e("NASMusic", "loadSongsNextPage failed", e)
                 _songsPaging.value = state.copy(isLoading = false)
-                showError("加载歌曲失败: ${e.message?.take(50)}")
+                showError(getApplication<Application>().getString(R.string.load_songs_error, e.message?.take(50)))
             }
         }
     }
@@ -1435,7 +1437,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
         _artists.value = UiState.Loading
         viewModelScope.launch {
             val adapter = backendRegistry.getAdapter() ?: run {
-                _artists.value = UiState.Error("后端未连接")
+                _artists.value = UiState.Error(getApplication<Application>().getString(R.string.backend_not_connected))
                 return@launch
             }
             try {
@@ -1470,7 +1472,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
             } catch (e: Exception) {
                 AppLog.e("NASMusic", "loadArtists failed", e)
                 _artists.value = UiState.Error(
-                    message = "加载艺术家失败: ${e.message?.take(50)}",
+                    message = getApplication<Application>().getString(R.string.load_favorites_error, e.message?.take(50)),
                     retry = { loadArtists() }
                 )
             }
@@ -1485,7 +1487,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
         _years.value = UiState.Loading
         viewModelScope.launch {
             val adapter = backendRegistry.getAdapter() ?: run {
-                _years.value = UiState.Error("后端未连接")
+                _years.value = UiState.Error(getApplication<Application>().getString(R.string.backend_not_connected))
                 return@launch
             }
             try {
@@ -1495,7 +1497,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
             } catch (e: Exception) {
                 AppLog.e("NASMusic", "loadYears failed", e)
                 _years.value = UiState.Error(
-                    message = "加载年份失败: ${e.message?.take(50)}",
+                    message = getApplication<Application>().getString(R.string.load_year_songs_error, e.message?.take(50)),
                     retry = { loadYears() }
                 )
             }
@@ -1516,7 +1518,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
             } catch (e: Exception) {
                 AppLog.e("NASMusic", "loadRecentSongs failed", e)
                 _recentSongs.value = UiState.Error(
-                    message = "加载最近播放失败: ${e.message?.take(50)}",
+                    message = getApplication<Application>().getString(R.string.load_favorites_error, e.message?.take(50)),
                     retry = { loadRecentSongs() }
                 )
             }
@@ -1565,7 +1567,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
             } catch (e: Exception) {
                 AppLog.e("NASMusic", "searchSongsOnServer failed", e)
                 _searchResults.value = UiState.Error(
-                    message = "搜索失败: ${e.message?.take(50)}"
+                    message = getApplication<Application>().getString(R.string.network_search_error, e.message?.take(50))
                 )
             }
         }
@@ -1697,7 +1699,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
         } catch (e: Exception) {
             AppLog.e("MetingDiag", "doNetworkSearch failed: ${e.message}", e)
             _networkSearchResults.value = UiState.Error(
-                message = "网络搜索失败: ${e.message?.take(50)}"
+                message = getApplication<Application>().getString(R.string.network_search_failed, e.message?.take(50))
             )
             null
         }
@@ -1742,11 +1744,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
             .distinctBy { it.artist.trim() to it.title.trim() }
             .filterNot { (it.artist.trim() to it.title.trim()) in existingKeys }
         if (toAdd.isEmpty()) {
-            showError("队列已包含全部搜索结果")
+            showError(getApplication<Application>().getString(R.string.queue_contains_all_results))
             return
         }
         playerManager.addToQueue(toAdd)
-        _connectMessage.value = "已加入 ${toAdd.size} 首到队列（跳过 ${results.size - toAdd.size} 首重复）"
+        _connectMessage.value = getApplication<Application>().getString(R.string.added_to_queue_with_skipped, toAdd.size, results.size - toAdd.size)
         viewModelScope.launch {
             delay(3000)
             _connectMessage.value = null
@@ -1889,7 +1891,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
             } catch (e: Exception) {
                 AppLog.e("NASMusic", "refreshBrowseSongs failed: ${e.message}", e)
                 _browseResults.value = UiState.Error(
-                    message = "浏览搜索失败: ${e.message?.take(50)}"
+                    message = getApplication<Application>().getString(R.string.browse_search_failed, e.message?.take(50))
                 )
             } finally {
                 _isBrowseSearching.value = false
@@ -1975,7 +1977,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
             try {
                 val playUrl = nasMusicApp.networkMusicManager.resolvePlayUrl(song)
                 if (playUrl.isNullOrBlank()) {
-                    showError("无法解析播放链接，请稍后重试")
+                    showError(getApplication<Application>().getString(R.string.resolve_url_failed_retry))
                     return@launch
                 }
                 val playable = song.copy(streamUrl = playUrl)
@@ -1983,7 +1985,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
                 playSong(playable)
             } catch (e: Exception) {
                 AppLog.e("NASMusic", "playNetworkSong failed", e)
-                showError("播放失败: ${e.message?.take(50)}")
+                showError(getApplication<Application>().getString(R.string.play_failed_with_msg, e.message?.take(50)))
             }
         }
     }
@@ -2032,7 +2034,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
                     }
                 } catch (e: Exception) {
                     AppLog.e("NASMusic", "toggleFavorite failed", e)
-                    showError("切换收藏失败: ${e.message?.take(50)}")
+showError(getApplication<Application>().getString(R.string.toggle_favorite_error, e.message?.take(50)))
                 }
             }
         }
@@ -2099,10 +2101,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
                 val scanned = nasMusicApp.localMusicRepository.fullScan()
                 _localSongs.value = scanned
                 updateMergedData()
-                showError("本地音乐已刷新（${scanned.size} 首）")
+                showError(getApplication<Application>().getString(R.string.local_music_refreshed, scanned.size))
             } catch (e: Exception) {
                 AppLog.e("MainViewModel", "full local scan failed: ${e.message}", e)
-                showError("刷新本地音乐失败: ${e.message?.take(50)}")
+                showError(getApplication<Application>().getString(R.string.refresh_local_music_error, e.message?.take(50)))
             }
         }
     }
@@ -2117,7 +2119,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
                 _albumSongsCache.value = cache
             } catch (e: Exception) {
                 AppLog.e("NASMusic", "loadAlbumSongs failed", e)
-                showError("加载专辑歌曲失败: ${e.message?.take(50)}")
+                showError(getApplication<Application>().getString(R.string.load_album_songs_error, e.message?.take(50)))
             }
         }
     }
@@ -2193,7 +2195,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
                 buildArtistMapsIncremental(matchingSongs)
             } catch (e: Exception) {
                 AppLog.e("NASMusic", "loadArtistSongs failed", e)
-                showError("加载艺术家歌曲失败: ${e.message?.take(50)}")
+                showError(getApplication<Application>().getString(R.string.load_favorites_error, e.message?.take(50)))
             }
         }
     }
@@ -2219,7 +2221,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
                 }
             } catch (e: Exception) {
                 AppLog.e("NASMusic", "toggleFavorite failed", e)
-                showError("切换收藏失败: ${e.message?.take(50)}")
+                showError(getApplication<Application>().getString(R.string.toggle_favorite_error, e.message?.take(50)))
             }
         }
     }
@@ -2238,7 +2240,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
                 prefs.createLocalPlaylist(name)
             } catch (e: Exception) {
                 AppLog.e("NASMusic", "createLocalPlaylist failed", e)
-                showError("创建歌单失败: ${e.message?.take(50)}")
+                showError(getApplication<Application>().getString(R.string.create_playlist_error, e.message?.take(50)))
             }
         }
     }
@@ -2253,7 +2255,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
                 prefs.renameLocalPlaylist(id, newName)
             } catch (e: Exception) {
                 AppLog.e("NASMusic", "renameLocalPlaylist failed", e)
-                showError("重命名歌单失败: ${e.message?.take(50)}")
+                showError(getApplication<Application>().getString(R.string.rename_playlist_error, e.message?.take(50)))
             }
         }
     }
@@ -2267,7 +2269,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
                 prefs.deleteLocalPlaylist(id)
             } catch (e: Exception) {
                 AppLog.e("NASMusic", "deleteLocalPlaylist failed", e)
-                showError("删除歌单失败: ${e.message?.take(50)}")
+                showError(getApplication<Application>().getString(R.string.delete_playlist_error, e.message?.take(50)))
             }
         }
     }
@@ -2280,11 +2282,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
             try {
                 val added = prefs.addSongToPlaylist(playlistId, song)
                 if (!added) {
-                    showError("歌曲已在歌单中")
+                    showError(getApplication<Application>().getString(R.string.song_already_in_playlist, ""))
                 }
             } catch (e: Exception) {
                 AppLog.e("NASMusic", "addSongToPlaylist failed", e)
-                showError("添加到歌单失败: ${e.message?.take(50)}")
+                showError(getApplication<Application>().getString(R.string.add_to_playlist_error, e.message?.take(50)))
             }
         }
     }
@@ -2298,7 +2300,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
                 prefs.removeSongFromPlaylist(playlistId, songId)
             } catch (e: Exception) {
                 AppLog.e("NASMusic", "removeSongFromPlaylist failed", e)
-                showError("从歌单移除失败: ${e.message?.take(50)}")
+                showError(getApplication<Application>().getString(R.string.remove_from_local_playlist_error, e.message?.take(50)))
             }
         }
     }
@@ -2319,8 +2321,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
     val backupFiles: StateFlow<List<BackupFileUtils.BackupFile>> = _backupFiles.asStateFlow()
 
     /** 备份操作结果消息（导出成功/失败、导入成功/失败） */
-    private val _backupMessage = MutableStateFlow<String?>(null)
-    val backupMessage: StateFlow<String?> = _backupMessage.asStateFlow()
+    private val _backupMessage = MutableStateFlow<BackupMessage?>(null)
+    val backupMessage: StateFlow<BackupMessage?> = _backupMessage.asStateFlow()
 
     /** 刷新备份文件列表（进入设置页时调用） */
     fun refreshBackupFiles() {
@@ -2340,14 +2342,14 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
                 val result = BackupFileUtils.export(getApplication(), json)
                 result.onSuccess { fileName ->
                     _backupFiles.value = BackupFileUtils.listBackups(getApplication())
-                    _backupMessage.value = "备份成功：$fileName"
+                    _backupMessage.value = BackupMessage(getApplication<Application>().getString(R.string.backup_exported, fileName))
                 }.onFailure { e ->
                     AppLog.e("NASMusic", "exportBackup failed", e)
-                    _backupMessage.value = "备份失败：${e.message?.take(60) ?: "未知错误"}"
+                    _backupMessage.value = BackupMessage(getApplication<Application>().getString(R.string.backup_export_failed, e.message?.take(60) ?: ""), isError = true)
                 }
             } catch (e: Exception) {
                 AppLog.e("NASMusic", "exportBackup failed", e)
-                _backupMessage.value = "备份失败：${e.message?.take(60) ?: "未知错误"}"
+                _backupMessage.value = BackupMessage(getApplication<Application>().getString(R.string.backup_export_failed, e.message?.take(60) ?: ""), isError = true)
             }
         }
     }
@@ -2365,10 +2367,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
                 mvSearchManager.importMvCache(data.mvCacheEntries)
                 // 刷新受备份影响的 UI 状态
                 refreshAfterImport()
-                _backupMessage.value = "恢复成功，请重新连接服务器"
+                _backupMessage.value = BackupMessage(getApplication<Application>().getString(R.string.backup_restored))
             } catch (e: Exception) {
                 AppLog.e("NASMusic", "importBackup failed", e)
-                _backupMessage.value = "恢复失败：${e.message?.take(60) ?: "未知错误"}"
+                _backupMessage.value = BackupMessage(getApplication<Application>().getString(R.string.backup_restore_failed, e.message?.take(60) ?: ""), isError = true)
             }
         }
     }
@@ -2383,7 +2385,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
             prefs.importBackupData(data)
             mvSearchManager.importMvCache(data.mvCacheEntries)
             refreshAfterImport()
-            _backupMessage.value = "恢复成功，请重新连接服务器"
+            _backupMessage.value = BackupMessage(getApplication<Application>().getString(R.string.backup_restored))
             true
         } catch (e: Exception) {
             AppLog.e("NASMusic", "restoreBackupFromJson failed", e)
@@ -2415,14 +2417,14 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
                 val result = BackupFileUtils.delete(getApplication(), uri)
                 _backupFiles.value = BackupFileUtils.listBackups(getApplication())
                 result.onSuccess {
-                    _backupMessage.value = "备份已删除"
+                    _backupMessage.value = BackupMessage(getApplication<Application>().getString(R.string.backup_deleted))
                 }.onFailure { e ->
                     AppLog.e("NASMusic", "deleteBackup failed", e)
-                    _backupMessage.value = "删除失败：${e.message?.take(60) ?: "未知错误"}"
+                    _backupMessage.value = BackupMessage(getApplication<Application>().getString(R.string.backup_delete_failed, e.message?.take(60) ?: ""), isError = true)
                 }
             } catch (e: Exception) {
                 AppLog.e("NASMusic", "deleteBackup failed", e)
-                _backupMessage.value = "删除失败：${e.message?.take(60) ?: "未知错误"}"
+                _backupMessage.value = BackupMessage(getApplication<Application>().getString(R.string.backup_delete_failed, e.message?.take(60) ?: ""), isError = true)
             }
         }
     }
@@ -2454,7 +2456,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
                 onResult(adapter.getSongsByGenre(genre))
             } catch (e: Exception) {
                 AppLog.e("NASMusic", "getSongsByGenre failed", e)
-                showError("按流派加载歌曲失败: ${e.message?.take(50)}")
+                showError(getApplication<Application>().getString(R.string.load_genre_songs_error, e.message?.take(50)))
                 onResult(emptyList())
             }
         }
@@ -2467,7 +2469,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
                 onResult(adapter.getSongsByYearRange(fromYear, toYear))
             } catch (e: Exception) {
                 AppLog.e("NASMusic", "getSongsByYearRange failed", e)
-                showError("按年代加载歌曲失败: ${e.message?.take(50)}")
+                showError(getApplication<Application>().getString(R.string.load_year_songs_error, e.message?.take(50)))
                 onResult(emptyList())
             }
         }
@@ -2482,7 +2484,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
         _isNetworkAvailable.value = true
         // MTV 模式下不弹提示（MV 视频流请求可能导致网络抖动，频繁弹"网络已恢复"打扰观看）
         if (!_showMv.value) {
-            _connectMessage.value = "网络已恢复"
+            _connectMessage.value = getApplication<Application>().getString(R.string.status_network_restored)
             viewModelScope.launch {
                 delay(2000)
                 _connectMessage.value = null
@@ -2500,7 +2502,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
         _isNetworkAvailable.value = false
         reconnectAttempts = 0
         if (!_showMv.value) {
-            _connectMessage.value = "网络已断开"
+            _connectMessage.value = getApplication<Application>().getString(R.string.status_network_disconnected)
             viewModelScope.launch {
                 delay(5000)
                 _connectMessage.value = null
@@ -2549,7 +2551,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
                 val resolvedFirst = resolved.getOrNull(startIndex)
                 if (resolvedFirst != null && resolvedFirst.isNetworkSong && resolvedFirst.streamUrl.isNullOrBlank()) {
                     AppLog.w("NASMusic", "playQueue: all endpoints failed to resolve URL for ${resolvedFirst.title}")
-                    showError("无法解析播放链接，网络音乐端点连接失败")
+                    showError(getApplication<Application>().getString(R.string.resolve_url_endpoint_failed))
                 }
                 playerManager.playQueue(resolved, startIndex)
                 recordPlay(firstSong)
@@ -2602,7 +2604,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
 
                 if (playUrl.isNullOrBlank()) {
                     AppLog.w("NASMusic", "resolveAndPlayCurrentSong: failed to resolve streamUrl for ${song.title}")
-                    showError("无法解析播放链接，请稍后重试")
+                    showError(getApplication<Application>().getString(R.string.resolve_url_failed_retry))
                     return@launch
                 }
 
@@ -2617,10 +2619,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
                 playerManager.playQueue(updatedQueue, currentIndexValue)
             } catch (e: Exception) {
                 AppLog.e("NASMusic", "resolveAndPlayCurrentSong failed", e)
-                showError("播放失败: ${e.message?.take(50)}")
+showError(getApplication<Application>().getString(R.string.play_failed_with_msg, e.message?.take(50)))
             }
         }
     }
+
     fun next() {
         // 恢复队列后，下一首歌曲的 streamUrl 可能为空，需要先解析
         val queueValue = queue.value
@@ -2680,7 +2683,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
                 if (playUrl.isNullOrBlank()) {
                     // 重试仍失败：不再静默卡在"已切歌未播放"状态，自动跳到下一首
                     AppLog.w("NASMusic", "resolveAndPlayByIndex: failed after retry, skipping ${song.title}")
-                    showError("无法解析播放链接，自动跳过《${song.title}》")
+                    showError(getApplication<Application>().getString(R.string.resolve_url_auto_skip_with_title, song.title))
                     playerManager.next(_playMode.value)
                     return@launch
                 }
@@ -2693,10 +2696,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
                 playerManager.playQueue(updatedQueue, targetIndex)
             } catch (e: Exception) {
                 AppLog.e("NASMusic", "resolveAndPlayByIndex failed", e)
-                showError("播放失败: ${e.message?.take(50)}")
-            }
+showError(getApplication<Application>().getString(R.string.play_failed_with_msg, e.message?.take(50)))
         }
     }
+}
     fun seekTo(positionMs: Long) = playerManager.seekTo(positionMs)
 
     fun togglePlayMode() {
@@ -3212,14 +3215,14 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
         val totalVideos = 1 + ready.alternatives.size
 
         if (ready.alternatives.isEmpty()) {
-            if (mvResearchCount >= 2) { showMvMessage("未找到更多视频"); return }
+            if (mvResearchCount >= 2) { showMvMessage(getApplication<Application>().getString(R.string.mv_no_more_videos)); return }
             researchMv(ready)
             return
         }
 
         mvSwitchCount++
         if (mvSwitchCount > 2 * totalVideos) {
-            if (mvResearchCount >= 2) { showMvMessage("未找到更多视频"); return }
+            if (mvResearchCount >= 2) { showMvMessage(getApplication<Application>().getString(R.string.mv_no_more_videos)); return }
             researchMv(ready)
         } else {
             switchToNextCandidate(ready)
@@ -3243,11 +3246,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
             }
             if (result != null) {
                 _mvState.value = MvAvailability.Ready(result.mv, result.alternatives)
-                showMvMessage("已切换到B站搜索结果")
+                showMvMessage(getApplication<Application>().getString(R.string.mv_switched_to_bilibili))
                 preSearchNextMv()
             } else {
                 _mvState.value = MvAvailability.NotFound
-                showMvMessage("B站未找到匹配视频")
+                showMvMessage(getApplication<Application>().getString(R.string.mv_bilibili_not_found))
             }
             AppLog.d("NASMusic", "onSearchBilibili: '${song.title}' -> ${if (result != null) "found ${result.mv.title}" else "not found"}")
         }
@@ -3261,7 +3264,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
             val newMv = mvSearchManager.resolveMv(targetBvid)
             if (newMv == null) {
                 AppLog.w("NASMusic", "switchToNextCandidate: resolve failed")
-                showMvMessage("切换失败，请重试")
+                showMvMessage(getApplication<Application>().getString(R.string.mv_switch_failed_retry))
                 mvSwitchCount-- // 切换未成功，回退计数
                 return@launch
             }
@@ -3280,7 +3283,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
         mvResearchCount++
         val minSim = when (mvResearchCount) { 1 -> 0.3f; 2 -> 0.1f; else -> 0f }
         AppLog.d("NASMusic", "researchMv: #${mvResearchCount} exclude=${mvExcludedBvids.size} minSim=$minSim")
-        showMvMessage("正在搜索更多视频...")
+        showMvMessage(getApplication<Application>().getString(R.string.mv_searching_more))
         mvSearchJob?.cancel()
         mvSearchJob = viewModelScope.launch {
             val result = try {
@@ -3292,11 +3295,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
             if (result != null) {
                 mvSwitchCount = 0
                 _mvState.value = MvAvailability.Ready(result.mv, result.alternatives)
-                showMvMessage("找到 ${1 + result.alternatives.size} 个新视频")
+                showMvMessage(getApplication<Application>().getString(R.string.mv_found_new_videos, 1 + result.alternatives.size))
                 if (_showMv.value) preSearchNextMv()
             } else {
                 mvResearchCount--
-                showMvMessage("未找到更多视频")
+                showMvMessage(getApplication<Application>().getString(R.string.mv_no_more_videos))
             }
         }
     }
@@ -3447,7 +3450,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
                 throw e
             } catch (e: Exception) {
                 AppLog.e("NASMusic", "loadLyrics failed", e)
-                showError("加载歌词失败: ${e.message?.take(50)}")
+                showError(getApplication<Application>().getString(R.string.load_lyrics_error, e.message?.take(50)))
             }
         }
     }
@@ -3526,7 +3529,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
                 }
             } catch (e: Exception) {
                 AppLog.e("NASMusic", "switchLyricsSource failed", e)
-                showError("切换歌词来源失败: ${e.message?.take(50)}")
+                showError(getApplication<Application>().getString(R.string.switch_lyrics_source_error, e.message?.take(50)))
             }
         }
     }
@@ -3644,7 +3647,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
     fun clearLyricsCache() {
         viewModelScope.launch {
             lyricsManager.clearCache()
-            _connectMessage.value = "歌词缓存已清除"
+            _connectMessage.value = getApplication<Application>().getString(R.string.status_lyrics_cache_cleared)
             delay(2000)
             _connectMessage.value = null
         }
@@ -3658,7 +3661,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
             imageLoader.memoryCache?.clear()
             imageLoader.diskCache?.clear()
             AppLog.d("MainViewModel", "clearCoverCache: cache cleared")
-            _connectMessage.value = "封面缓存已清除"
+            _connectMessage.value = getApplication<Application>().getString(R.string.status_cover_cache_cleared)
             delay(2000)
             _connectMessage.value = null
         }
@@ -3668,7 +3671,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
     fun clearMvPersistentCache() {
         viewModelScope.launch {
             mvSearchManager.clearPersistentCache()
-            _connectMessage.value = "MV 缓存已清除"
+            _connectMessage.value = getApplication<Application>().getString(R.string.status_mv_cache_cleared)
             delay(2000)
             _connectMessage.value = null
         }
@@ -3678,7 +3681,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
     fun clearAccompanimentCache() {
         viewModelScope.launch {
             val count = playerManager.clearAccompanimentCache()
-            _connectMessage.value = "伴奏缓存已清除（$count 个文件）"
+            _connectMessage.value = getApplication<Application>().getString(R.string.status_accompaniment_cache_cleared, count)
             delay(2000)
             _connectMessage.value = null
         }
@@ -3726,7 +3729,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
         _playlists.value = UiState.Loading
         viewModelScope.launch {
             val adapter = backendRegistry.getAdapter() ?: run {
-                _playlists.value = UiState.Error("后端未连接")
+                _playlists.value = UiState.Error(getApplication<Application>().getString(R.string.backend_not_connected))
                 return@launch
             }
             try {
@@ -3734,7 +3737,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
             } catch (e: Exception) {
                 AppLog.e("NASMusic", "loadPlaylists failed", e)
                 _playlists.value = UiState.Error(
-                    message = "加载播放列表失败: ${e.message?.take(50)}",
+                    message = getApplication<Application>().getString(R.string.load_playlists_error, e.message?.take(50)),
                     retry = { loadPlaylists() }
                 )
             }
@@ -3745,7 +3748,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
         _selectedPlaylistSongs.value = UiState.Loading
         viewModelScope.launch {
             val adapter = backendRegistry.getAdapter() ?: run {
-                _selectedPlaylistSongs.value = UiState.Error("后端未连接")
+                _selectedPlaylistSongs.value = UiState.Error(getApplication<Application>().getString(R.string.backend_not_connected))
                 return@launch
             }
             try {
@@ -3754,7 +3757,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
             } catch (e: Exception) {
                 AppLog.e("NASMusic", "selectPlaylist songs failed", e)
                 _selectedPlaylistSongs.value = UiState.Error(
-                    message = "加载播放列表歌曲失败: ${e.message?.take(50)}",
+                    message = getApplication<Application>().getString(R.string.load_playlist_songs_error, e.message?.take(50)),
                     retry = { selectPlaylist(playlist) }
                 )
             }
@@ -3769,12 +3772,12 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
                 if (result != null) {
                     val current = _playlists.value.dataOrNull() ?: emptyList()
                     _playlists.value = UiState.Success(current + result)
-                    _connectMessage.value = "播放列表已创建"
+                    _connectMessage.value = getApplication<Application>().getString(R.string.playlist_created)
                 } else {
-                    _connectMessage.value = "创建失败"
+                    _connectMessage.value = getApplication<Application>().getString(R.string.create_failed)
                 }
             } catch (e: Exception) {
-                _connectMessage.value = "创建失败: ${e.message}"
+                _connectMessage.value = getApplication<Application>().getString(R.string.create_failed_with_msg, e.message)
             }
             delay(2000)
             _connectMessage.value = null
@@ -3793,12 +3796,12 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
                     if (selSongs != null && selSongs.any { it.albumId == playlist.id }) {
                         _selectedPlaylistSongs.value = UiState.Success(emptyList())
                     }
-                    _connectMessage.value = "播放列表已删除"
+                    _connectMessage.value = getApplication<Application>().getString(R.string.playlist_deleted)
                 } else {
-                    _connectMessage.value = "删除失败"
+                    _connectMessage.value = getApplication<Application>().getString(R.string.delete_failed)
                 }
             } catch (e: Exception) {
-                _connectMessage.value = "删除失败: ${e.message}"
+                _connectMessage.value = getApplication<Application>().getString(R.string.delete_failed_with_msg, e.message)
             }
             delay(2000)
             _connectMessage.value = null
@@ -3816,7 +3819,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
                 }
             } catch (e: Exception) {
                 AppLog.e("NASMusic", "playPlaylist failed", e)
-                showError("播放播放列表失败: ${e.message?.take(50)}")
+                showError(getApplication<Application>().getString(R.string.play_playlist_error, e.message?.take(50)))
             }
         }
     }
@@ -3833,7 +3836,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
                 }
             } catch (e: Exception) {
                 AppLog.e("NASMusic", "removeFromPlaylist failed", e)
-                showError("从播放列表移除失败: ${e.message?.take(50)}")
+                showError(getApplication<Application>().getString(R.string.remove_from_playlist_error, e.message?.take(50)))
             }
         }
     }
@@ -3917,7 +3920,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
             _baiduConnectionState.value = BaiduConnectionState.Connecting
             val code = baiduOAuth.requestDeviceCode()
             if (code == null) {
-                _baiduConnectionState.value = BaiduConnectionState.Failed("获取设备码失败")
+                _baiduConnectionState.value = BaiduConnectionState.Failed(getApplication<Application>().getString(R.string.baidu_get_device_code_failed))
                 return@launch
             }
             _baiduDeviceCode.value = code
@@ -3954,7 +3957,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
                         kotlinx.coroutines.delay(interval)
                     }
                     BaiduOAuthClient.PollResult.Declined -> {
-                        _baiduConnectionState.value = BaiduConnectionState.Failed("用户拒绝授权")
+                        _baiduConnectionState.value = BaiduConnectionState.Failed(getApplication<Application>().getString(R.string.baidu_user_declined))
                         _baiduDeviceCode.value = null
                         return@launch
                     }
@@ -3969,7 +3972,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
                     }
                 }
             }
-            _baiduConnectionState.value = BaiduConnectionState.Failed("授权超时")
+            _baiduConnectionState.value = BaiduConnectionState.Failed(getApplication<Application>().getString(R.string.baidu_auth_timeout))
             _baiduDeviceCode.value = null
         }
     }
@@ -3997,7 +4000,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
                 _netdiskDirFiles.value = result.files
             } catch (e: Exception) {
                 AppLog.e("NASMusic", "listBaiduDir error", e)
-                showError("加载目录失败: ${e.message?.take(40)}")
+                showError(getApplication<Application>().getString(R.string.netdisk_load_dir_error, e.message?.take(40)))
                 _netdiskDirFiles.value = emptyList()
             } finally {
                 _netdiskIsLoading.value = false
@@ -4056,7 +4059,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
     fun playAllNetdiskSearch() {
         val results = _netdiskSearchResults.value
         if (results.isEmpty()) {
-            showError("搜索无结果")
+            showError(getApplication<Application>().getString(R.string.netdisk_search_no_results))
             return
         }
         viewModelScope.launch {
@@ -4074,7 +4077,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
         viewModelScope.launch {
             val songs = collectAudioInDir(dir)
             if (songs.isEmpty()) {
-                showError("目录下未找到音频文件")
+                showError(getApplication<Application>().getString(R.string.netdisk_no_audio_files))
             } else {
                 onPlayAll(songs)
             }
@@ -4141,7 +4144,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
                     _baiduIndexLastSync.value = System.currentTimeMillis()
                 }
                 override fun onFailed(message: String) {
-                    showError("索引扫描中断: $message")
+                    showError(getApplication<Application>().getString(R.string.netdisk_index_scan_interrupted, message))
                 }
             }
             try {
@@ -4218,7 +4221,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
                 _radioStations.value = UiState.Success(stations)
             } catch (e: Exception) {
                 AppLog.e("Radio", "loadRadioStations failed: ${e.message}", e)
-                _radioStations.value = UiState.Error(message = "电台加载失败")
+                _radioStations.value = UiState.Error(message = getApplication<Application>().getString(R.string.radio_load_failed))
             }
         }
     }
@@ -4257,7 +4260,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
                 _jamendoState.value = UiState.Success(songs)
             } catch (e: Exception) {
                 AppLog.e("Jamendo", "loadJamendoHot failed: ${e.message}", e)
-                _jamendoState.value = UiState.Error(message = "独立音乐加载失败")
+                _jamendoState.value = UiState.Error(message = getApplication<Application>().getString(R.string.jamendo_load_failed))
             }
         }
     }
@@ -4273,7 +4276,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
                 _jamendoState.value = UiState.Success(songs)
             } catch (e: Exception) {
                 AppLog.e("Jamendo", "loadJamendoTag failed: ${e.message}", e)
-                _jamendoState.value = UiState.Error(message = "独立音乐加载失败")
+                _jamendoState.value = UiState.Error(message = getApplication<Application>().getString(R.string.jamendo_load_failed))
             }
         }
     }
@@ -4288,7 +4291,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
                 _jamendoState.value = UiState.Success(songs)
             } catch (e: Exception) {
                 AppLog.e("Jamendo", "searchJamendo failed: ${e.message}", e)
-                _jamendoState.value = UiState.Error(message = "独立音乐加载失败")
+                _jamendoState.value = UiState.Error(message = getApplication<Application>().getString(R.string.jamendo_load_failed))
             }
         }
     }
