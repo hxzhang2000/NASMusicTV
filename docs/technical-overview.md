@@ -5972,3 +5972,46 @@ Phase 1-6 代码已全部落地并编译通过。Phase 7（测试与文档）新
 **验证结果**：✅ 本地 `assembleRelease` 编译通过，输出文件名 `NASMusicTV-release-v2-24-3.apk`，源文件字节验证为合法 UTF-8（无 U+FFFD 字节序列）。
 
 **版本号变更**：v2.24.2 → v2.24.3（versionCode 66 → 67）
+
+### 10.64 v2.25.1 - UI 字符串外部化（第一批：Screens + Components）
+
+**提交时间**：2026-08-31
+
+**背景**：UI 中大量硬编码中文字符串散布在 Composable 函数内，无法集中管理与本地化。需将用户可见字符串迁移至 `res/values/strings.xml`，为后续多语言适配奠定基础。
+
+**主要改动**：
+
+1. **strings.xml 新增 258 行字符串资源**，按模块组织：
+   - Library Screen（搜索占位、加载状态、空态、计数格式等）
+   - Common UI（关闭、重试、选择等通用按钮）
+   - Model Transfer / Backup Transfer Dialog（启动状态、QR 描述、操作提示）
+   - Text Input Dialog（历史标签、扫码输入）
+   - Lyrics Settings Dialog（字号档位、标题）
+   - Server Connect（后端类型名「道理鱼」「飞牛」、邮箱、地址提示、测试结果格式）
+   - Netdisk（标题、搜索占位、登录提示、目录操作、空态）
+   - Search/Discover Tab（无结果、关键词提示、来源筛选、全部播放/换一批/加入队列）
+   - Karaoke Lyrics / Mv Playback / Player Controls（暂无歌词、扫码遥控、视频加载失败、K 歌按钮）
+   - ActionBar / SectionHeader / ListStateIndicators（全部播放、加入队列、收藏全部、查看全部、加载中/加载失败/重试/暂无数据）
+   - Album Detail / Queue / Weather Radio（曲目计数、电台歌曲、暂无电台歌曲）
+   - Baidu Auth（设备码标签）
+
+2. **26 个 Kotlin 源文件迁移**（共 493 处替换）：
+   - **Composable 作用域**：使用 `stringResource(R.string.xxx)` 替换字面量
+   - **非 Composable 作用域**（onClick lambda、coroutine、DisposableEffect）：
+     - `context.getString(R.string.xxx)`（SettingsScreen 网络测试、BaiduAuthDialog onClick、ModelTransferDialog status 赋值）
+     - `networkTestCtx.getString()`（在 `item {}` Composable 块声明 `val ctx = LocalContext.current`，closure 捕获至 coroutine）
+   - **默认参数**（ListStateIndicators 的 `LoadingIndicator(text)/ErrorDisplay(message)/EmptyState(message)`、UnifiedSongGrid 的 `emptyMessage`）：改为 `String? = null` + 函数体内 `val resolved = text ?: stringResource(R.string.xxx)` 解析
+   - **回调 lambda**（KaraokePlaybackScreen 的 `formatLabel`）：在 Composable 作用域预解析 `val originalTuneLabel = stringResource(...)`，lambda 内引用局部变量
+   - **import 补充**：对未引入 `stringResource`/`R` 的文件（ModelTransferDialog、BackupTransferDialog、NetdiskScreen、AlbumDetailScreen、DiscoverTab、SearchTab、KaraokeLyricsView、ActionBar、SectionHeader、UnifiedPlaylistCard、MvPlaybackScreen、ListStateIndicators、UnifiedSongGrid）添加 `import androidx.compose.ui.res.stringResource` + `import com.nasmusic.tv.R`
+
+3. **build.gradle.kts**：versionCode 70→71，versionName 2.25.0→2.25.1
+
+**验证结果**：✅ `assembleDebug` 编译通过（无 error，仅 10 条 pre-existing warning：unnecessary safe call / non-null assertion）。✅ `./gradlew test` 单元测试全部通过。
+
+**遗留项**：
+- MainViewModel.kt 中 138 个运行时错误/Toast 消息（含 `${e.message?.take(50)}` 插值）暂未迁移。其中备份消息（`_backupMessage.value = "备份成功：$fileName"` 等）与 SettingsScreen.kt L1465 的 `startsWith("恢复")/contains("失败")` 颜色判断逻辑耦合，迁移需重构为状态标志（enum/sealed class）而非字符串比较，留待下批次处理。
+- 代码注释中的中文保持原样（非用户可见 UI 字符串）。
+
+**涉及文件**：`app/src/main/res/values/strings.xml`、`app/build.gradle.kts`、`CHANGELOG.md`、`docs/technical-overview.md`，以及 26 个 UI Kotlin 文件（详见 CHANGELOG v2.25.1 条目）。
+
+**版本号变更**：v2.25.0 → v2.25.1（versionCode 70 → 71）

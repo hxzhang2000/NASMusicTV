@@ -182,7 +182,7 @@ fun WeatherRadioScreen(
             LoadingIndicator()
         } else if (weatherRadioQueue != null && weatherRadioQueue.songs.isNotEmpty()) {
             SectionHeader(
-                title = "电台歌曲",
+                title = stringResource(R.string.weather_radio_songs_title),
                 count = weatherRadioQueue.songs.size
             )
             Spacer(modifier = Modifier.height(8.dp))
@@ -216,7 +216,7 @@ fun WeatherRadioScreen(
                 )
                 Spacer(modifier = Modifier.height(12.dp))
                 Text(
-                    text = "暂无电台歌曲",
+                    text = stringResource(R.string.weather_radio_no_songs),
                     color = NasMusicColors.TextSecondary,
                     fontSize = FontSize.button()
                 )

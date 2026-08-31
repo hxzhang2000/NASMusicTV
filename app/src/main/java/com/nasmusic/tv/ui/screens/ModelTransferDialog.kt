@@ -31,10 +31,12 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.tv.material3.Text
+import com.nasmusic.tv.R
 import com.nasmusic.tv.net.ModelTransferServer
 import com.nasmusic.tv.ui.components.FocusableSurface
 import com.nasmusic.tv.ui.components.LocalFocusableContentColor
@@ -66,7 +68,7 @@ fun ModelTransferDialog(
     val context = LocalContext.current
     var qrBitmap by remember { mutableStateOf<Bitmap?>(null) }
     var serverUrl by remember { mutableStateOf<String?>(null) }
-    var status by remember { mutableStateOf("启动中...") }
+    var status by remember { mutableStateOf(context.getString(R.string.model_transfer_starting)) }
     val server = remember { ModelTransferServer.create(context, onModelUploaded) }
     val closeFocusRequester = remember { FocusRequester() }
 
@@ -78,9 +80,9 @@ fun ModelTransferDialog(
             serverUrl = url
             qrBitmap = QrCodeGenerator.generateQrBitmap(url, 360)
             val started = server.startServer()
-            status = if (started) "等待手机扫码连接" else "服务器启动失败（端口被占）"
+            status = if (started) context.getString(R.string.model_transfer_waiting) else context.getString(R.string.model_transfer_start_failed)
         } else {
-            status = "无法获取网络 IP，请检查 Wi-Fi 连接"
+            status = context.getString(R.string.model_transfer_no_ip)
         }
         onDispose {
             server.stopServer()
@@ -115,7 +117,7 @@ fun ModelTransferDialog(
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Text(
-                    text = "扫码上传模型",
+                    text = stringResource(R.string.model_transfer_title),
                     color = NasMusicColors.TextPrimary,
                     fontSize = FontSize.subtitle()
                 )
@@ -129,24 +131,24 @@ fun ModelTransferDialog(
                         .padding(12.dp)
                 ) {
                     Text(
-                        text = "文件名：htdemucs_ft_vocals.onnx",
+                        text = stringResource(R.string.model_transfer_filename),
                         color = NasMusicColors.TextPrimary,
                         fontSize = FontSize.small()
                     )
                     Text(
-                        text = "预期大小：约 166MB（fp16weights 格式）",
+                        text = stringResource(R.string.model_transfer_expected_size),
                         color = NasMusicColors.TextSecondary,
                         fontSize = FontSize.small()
                     )
                     if (modelSizeMB > 0) {
                         Text(
-                            text = "当前已下载：%.1fMB".format(modelSizeMB),
+                            text = context.getString(R.string.model_transfer_downloaded, modelSizeMB),
                             color = NasMusicColors.Primary,
                             fontSize = FontSize.small()
                         )
                     }
                     Text(
-                        text = "存储路径：$modelPath",
+                        text = stringResource(R.string.model_transfer_storage_path, modelPath),
                         color = NasMusicColors.TextSecondary,
                         fontSize = FontSize.small()
                     )
@@ -157,17 +159,17 @@ fun ModelTransferDialog(
                 qrBitmap?.let { bitmap ->
                     Image(
                         bitmap = bitmap.asImageBitmap(),
-                        contentDescription = "模型上传二维码",
+                        contentDescription = stringResource(R.string.model_transfer_qr_desc),
                         modifier = Modifier.size(280.dp)
                     )
                     Spacer(modifier = Modifier.height(12.dp))
                     Text(
-                        text = "手机扫码打开模型上传页面",
+                        text = stringResource(R.string.model_transfer_scan_hint),
                         color = NasMusicColors.TextPrimary,
                         fontSize = FontSize.button()
                     )
                     Text(
-                        text = "可下载模型文件后上传到电视",
+                        text = stringResource(R.string.model_transfer_select_hint),
                         color = NasMusicColors.TextSecondary,
                         fontSize = FontSize.body()
                     )
@@ -195,7 +197,7 @@ fun ModelTransferDialog(
                     Spacer(modifier = Modifier.height(40.dp))
                     Text(
                         text = status,
-                        color = if (status.startsWith("等待")) NasMusicColors.Primary
+                        color = if (status.startsWith(stringResource(R.string.model_transfer_status_waiting_prefix))) NasMusicColors.Primary
                                else NasMusicColors.Warning,
                         fontSize = FontSize.button()
                     )
@@ -228,7 +230,7 @@ fun ModelTransferDialog(
                             contentAlignment = Alignment.Center
                         ) {
                             Text(
-                                text = "关闭",
+                                text = stringResource(R.string.common_close),
                                 color = LocalFocusableContentColor.current,
                                 fontSize = FontSize.button()
                             )

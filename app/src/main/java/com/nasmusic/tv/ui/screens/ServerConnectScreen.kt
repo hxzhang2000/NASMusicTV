@@ -281,13 +281,13 @@ fun ServerConnectScreen(
                     modifier = Modifier.weight(1f)
                 )
                 TypeCard(
-                    text = "道理鱼",
+                    text = stringResource(R.string.server_connect_type_daoliyu),
                     selected = backendType == ServerConfig.TYPE_DAOLIYU,
                     onClick = { backendType = ServerConfig.TYPE_DAOLIYU },
                     modifier = Modifier.weight(1f)
                 )
                 TypeCard(
-                    text = "飞牛",
+                    text = stringResource(R.string.server_connect_type_feiniu),
                     selected = backendType == ServerConfig.TYPE_FEINIU,
                     onClick = { backendType = ServerConfig.TYPE_FEINIU },
                     modifier = Modifier.weight(1f)
@@ -306,7 +306,7 @@ fun ServerConnectScreen(
                 backendType = backendType,
                 onTestClick = {
                     if (baseUrl.text.isBlank()) {
-                        testStatus = "error:请先填写服务器地址"
+                        testStatus = context.getString(R.string.server_connect_error_empty)
                     } else {
                         isTesting = true
                         testStatus = ""
@@ -348,7 +348,7 @@ fun ServerConnectScreen(
             } else if (backendType == ServerConfig.TYPE_DAOLIYU) {
                 // 道理鱼：邮箱 + 密码
                 FormField(
-                    label = "邮箱",
+                    label = stringResource(R.string.server_connect_email),
                     hint = "user@example.com",
                     value = username,
                     onValueChange = { username = it },
@@ -446,7 +446,7 @@ fun ServerConnectScreen(
             when (activeInputField) {
                 InputField.BASE_URL -> {
                     dialogTitle = stringResource(R.string.server_address_dialog_title)
-                    dialogHint = "https://jellyfin.example.com 或 http://192.168.1.100:8096"
+                    dialogHint = stringResource(R.string.server_connect_hint_jellyfin)
                     dialogValue = baseUrl.text
                     dialogMasked = false
                 }
@@ -690,10 +690,10 @@ private fun ServerAddressField(
                 ) {
                     Text(
                         text = if (baseUrl.text.isEmpty()) when (backendType) {
-                            ServerConfig.TYPE_SUBSONIC -> "http://192.168.1.100:9527 或 https://music.example.com"
-                            ServerConfig.TYPE_DAOLIYU -> "http://192.168.1.100:4000"
-                            ServerConfig.TYPE_FEINIU -> "http://192.168.1.100"
-                            else -> "https://jellyfin.example.com 或 http://192.168.1.100:8096"
+                            ServerConfig.TYPE_SUBSONIC -> stringResource(R.string.server_connect_hint_subsonic)
+                            ServerConfig.TYPE_DAOLIYU -> stringResource(R.string.server_connect_hint_daoliyu)
+                            ServerConfig.TYPE_FEINIU -> stringResource(R.string.server_connect_hint_feiniu)
+                            else -> stringResource(R.string.server_connect_hint_default)
                         } else baseUrl.text,
                         color = LocalFocusableContentColor.current,
                         fontSize = FontSize.button(),
@@ -723,7 +723,7 @@ private fun ServerAddressField(
             val isSuccess = testStatus.startsWith("success:")
             val message = if (isSuccess) testStatus.removePrefix("success:") else testStatus.removePrefix("error:")
             Text(
-                text = if (isSuccess) "✓ 连接成功：$message" else "✗ $message",
+                text = if (isSuccess) stringResource(R.string.server_connect_success, message) else stringResource(R.string.server_connect_failed, message),
                 color = if (isSuccess) NasMusicColors.Primary else NasMusicColors.Warning,
                 fontSize = FontSize.body()
             )

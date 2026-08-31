@@ -400,7 +400,7 @@ fun NowPlayingScreen(
                                 contentAlignment = Alignment.Center
                             ) {
                                 Text(
-                                    text = "● 电台直播",
+                                    text = stringResource(R.string.player_radio_live),
                                     fontSize = FontSize.title(),
                                     fontWeight = FontWeight.Bold,
                                     color = NasMusicColors.Primary,
@@ -638,7 +638,7 @@ private fun CoverColumn(
                 focusedContentColor = NasMusicColors.Primary
             ) {
                 Text(
-                    text = if (showInfoPanel) "封面" else "信息",
+                    text = if (showInfoPanel) stringResource(R.string.player_cover) else stringResource(R.string.player_info),
                     color = if (showInfoPanel) NasMusicColors.Primary else NasMusicColors.TextPrimary,
                     fontSize = FontSize.small(),
                     modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)

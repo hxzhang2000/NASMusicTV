@@ -9,10 +9,12 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Text
+import com.nasmusic.tv.R
 import com.nasmusic.tv.ui.components.FocusableSurface
 import com.nasmusic.tv.ui.theme.FontSize
 import com.nasmusic.tv.ui.theme.NasMusicColors
@@ -55,7 +57,7 @@ fun ActionBar(
             focusedContentColor = NasMusicColors.TextPrimary
         ) {
             Text(
-                text = "全部播放",
+                text = stringResource(R.string.action_play_all),
                 color = NasMusicColors.TextPrimary,
                 fontSize = FontSize.button(),
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
@@ -76,7 +78,7 @@ fun ActionBar(
             focusedContentColor = NasMusicColors.Primary
         ) {
             Text(
-                text = "加入队列",
+                text = stringResource(R.string.action_add_queue),
                 color = NasMusicColors.TextPrimary,
                 fontSize = FontSize.button(),
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
@@ -97,7 +99,7 @@ fun ActionBar(
                 focusedContentColor = NasMusicColors.Primary
             ) {
                 Text(
-                    text = "收藏全部",
+                    text = stringResource(R.string.action_favorite_all),
                     color = NasMusicColors.TextPrimary,
                     fontSize = FontSize.button(),
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
@@ -111,7 +113,7 @@ fun ActionBar(
         // 歌曲计数
         Spacer(modifier = Modifier.width(12.dp))
         Text(
-            text = "$songCount 首",
+            text = stringResource(R.string.action_song_count, songCount),
             color = NasMusicColors.TextSecondary,
             fontSize = FontSize.body()
         )

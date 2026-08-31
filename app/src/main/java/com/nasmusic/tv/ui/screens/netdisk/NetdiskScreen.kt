@@ -28,12 +28,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Icon
 import androidx.tv.material3.Text
+import com.nasmusic.tv.R
 import com.nasmusic.tv.backend.network.baidu.BaiduPanApi
 import com.nasmusic.tv.data.model.BaiduFile
 import com.nasmusic.tv.data.model.Song
@@ -96,17 +98,17 @@ fun NetdiskScreen(
                 shape = RoundedCornerShape(12.dp)
             ) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回", tint = NasMusicColors.TextPrimary)
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.netdisk_back), tint = NasMusicColors.TextPrimary)
                 }
             }
             Spacer(modifier = Modifier.width(16.dp))
-            Text("网盘音乐", color = NasMusicColors.TextPrimary, fontSize = FontSize.title())
+            Text(stringResource(R.string.netdisk_title), color = NasMusicColors.TextPrimary, fontSize = FontSize.title())
             Spacer(modifier = Modifier.width(32.dp))
 
             // 搜索框（统一样式：点击弹出输入对话框，无独立搜索按钮）
             SearchField(
                 query = searchKeyword,
-                placeholder = "搜索网盘音乐...",
+                placeholder = stringResource(R.string.netdisk_search_placeholder),
                 onOpenSearch = { showSearchDialog = true },
                 onClear = { viewModel.clearNetdiskSearch() },
                 modifier = Modifier.width(420.dp)
@@ -117,7 +119,7 @@ fun NetdiskScreen(
             connectionState !is MainViewModel.BaiduConnectionState.LoggedIn -> {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Text(
-                        "百度网盘未登录，请前往 设置 → 网盘 开启并登录",
+                        stringResource(R.string.netdisk_status_baidu_not_logged_in),
                         color = NasMusicColors.TextSecondary,
                         fontSize = FontSize.button()
                     )
@@ -127,7 +129,7 @@ fun NetdiskScreen(
             searchKeyword.isNotBlank() -> {
                 if (searchResults.isEmpty()) {
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Text("无搜索结果", color = NasMusicColors.TextSecondary, fontSize = FontSize.button())
+                        Text(stringResource(R.string.search_no_results), color = NasMusicColors.TextSecondary, fontSize = FontSize.button())
                     }
                 } else {
                     LazyVerticalGrid(
@@ -166,7 +168,7 @@ fun NetdiskScreen(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier.padding(bottom = 12.dp)
                 ) {
-                    Text("目录：", color = NasMusicColors.TextSecondary, fontSize = FontSize.body())
+                    Text(stringResource(R.string.netdisk_path_label), color = NasMusicColors.TextSecondary, fontSize = FontSize.body())
                     Text(currentDir, color = NasMusicColors.Primary, fontSize = FontSize.body(), modifier = Modifier.weight(1f))
                     // 全部播放（含子目录）
                     FocusableSurface(
@@ -180,7 +182,7 @@ fun NetdiskScreen(
                         contentColor = NasMusicColors.TextPrimary,
                         focusedContentColor = NasMusicColors.TextPrimary
                     ) {
-                        Text("全部播放 ▶", color = NasMusicColors.TextPrimary, fontSize = FontSize.small(), fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp))
+                        Text(stringResource(R.string.netdisk_play_all), color = NasMusicColors.TextPrimary, fontSize = FontSize.small(), fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp))
                     }
                     if (currentDir != "/" && currentDir.isNotBlank()) {
                         Spacer(modifier = Modifier.width(8.dp))
@@ -189,17 +191,17 @@ fun NetdiskScreen(
                             modifier = Modifier.padding(end = 8.dp),
                             shape = RoundedCornerShape(8.dp)
                         ) {
-                            Text("上级", color = NasMusicColors.TextPrimary, fontSize = FontSize.small(), modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp))
+                            Text(stringResource(R.string.netdisk_parent_dir), color = NasMusicColors.TextPrimary, fontSize = FontSize.small(), modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp))
                         }
                     }
                 }
                 if (isLoading) {
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Text("加载中...", color = NasMusicColors.TextSecondary, fontSize = FontSize.body())
+                        Text(stringResource(R.string.netdisk_loading_files), color = NasMusicColors.TextSecondary, fontSize = FontSize.body())
                     }
                 } else if (dirFiles.isEmpty()) {
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Text("此目录下没有文件", color = NasMusicColors.TextSecondary, fontSize = FontSize.body())
+                        Text(stringResource(R.string.netdisk_empty_dir), color = NasMusicColors.TextSecondary, fontSize = FontSize.body())
                     }
                 } else {
                     LazyVerticalGrid(
@@ -243,8 +245,8 @@ fun NetdiskScreen(
     // 网盘搜索输入对话框
     if (showSearchDialog) {
         TextInputDialog(
-            title = "搜索网盘音乐",
-            hint = "输入歌曲名或歌手名搜索网盘音乐",
+            title = stringResource(R.string.netdisk_search_title),
+            hint = stringResource(R.string.netdisk_search_hint),
             initialValue = searchKeyword,
             onConfirm = { input ->
                 val kw = input.trim()

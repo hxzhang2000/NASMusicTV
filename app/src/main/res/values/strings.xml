@@ -139,6 +139,108 @@
     <string name="player_highlight_local">本地</string>
     <string name="player_highlight_network">网络</string>
     <string name="player_highlight_cached">缓存</string>
+    <string name="player_radio_live">● 电台直播</string>
+    <string name="player_cover">封面</string>
+    <string name="player_info">信息</string>
+
+    <!-- Karaoke -->
+    <string name="karaoke_scan_remote">扫码遥控</string>
+    <string name="karaoke_converting_accompaniment">正在转换伴奏…</string>
+    <string name="karaoke_pitch_label">调</string>
+    <string name="karaoke_speed_label">速</string>
+    <string name="karaoke_original_tune">原调</string>
+    <string name="karaoke_original_speed">原速</string>
+    <string name="karaoke_original_vocal">原唱</string>
+    <string name="karaoke_accompaniment">伴唱</string>
+    <string name="karaoke_quality_label">质量</string>
+    <string name="karaoke_converting">转换中</string>
+    <string name="karaoke_high_quality">高质</string>
+    <string name="karaoke_fast">快速</string>
+    <string name="karaoke_pitch_title">升降调</string>
+    <string name="karaoke_speed_title">播放速度</string>
+    <string name="karaoke_reset">重置</string>
+    <string name="karaoke_confirm">确定</string>
+
+    <!-- Song Info Panel -->
+    <string name="song_info_close">关闭</string>
+    <string name="song_info_title_label">标题</string>
+    <string name="song_info_artist_label">艺术家</string>
+    <string name="song_info_album_label">专辑</string>
+    <string name="song_info_year_label">年份</string>
+    <string name="song_info_genre_label">风格</string>
+    <string name="song_info_duration_label">时长</string>
+    <string name="song_info_track_label">音轨号</string>
+    <string name="song_info_technical_params">技术参数</string>
+    <string name="song_info_codec_label">编码格式</string>
+    <string name="song_info_bitrate_label">比特率</string>
+    <string name="song_info_sample_rate_label">采样率</string>
+    <string name="song_info_channels_label">声道</string>
+    <string name="song_info_channels_mono">单声道</string>
+    <string name="song_info_channels_stereo">立体声</string>
+    <string name="song_info_channels_51">5.1 环绕</string>
+    <string name="song_info_channels_71">7.1 环绕</string>
+    <string name="song_info_channels_format">%d 声道</string>
+    <string name="song_info_file_size_label">文件大小</string>
+    <string name="song_info_container_label">容器格式</string>
+    <string name="song_info_network_source_label">网络来源</string>
+    <string name="song_info_unknown_source">未知</string>
+
+    <!-- Settings Screen -->
+    <string name="settings_default_music_dir">/音乐</string>
+    <string name="settings_font_standard">标准</string>
+    <string name="settings_separation_mode_title">人声分离模式</string>
+    <string name="settings_hq_mode_downloaded">高质量模式（HT-Demucs FT）</string>
+    <string name="settings_hq_mode_not_downloaded">高质量模式（未下载模型）</string>
+    <string name="settings_download_model_hint">下载分离模型（166MB），以使用高质量模式</string>
+    <string name="settings_onnx_inference">当前使用 ONNX 推理 🧠</string>
+    <string name="settings_dsp_inference">当前使用实时 DSP 推理 ⚡</string>
+    <string name="settings_downloading_model">正在下载分离模型…（HT-Demucs FT）</string>
+    <string name="settings_model_downloaded_size">分离模型已下载 (%.1fMB)</string>
+    <string name="settings_model_path">路径: %s</string>
+    <string name="settings_delete_model">删除模型</string>
+    <string name="settings_delete_model_desc">删除分离模式所需模型</string>
+    <string name="settings_scan_upload_model">扫描上传模型</string>
+    <string name="settings_scan_upload_model_desc">手机扫描上传模型文件到电视</string>
+    <string name="settings_network_model_not_downloaded">网络分离模型未下载（HT-Demucs FT，约166MB）</string>
+    <string name="settings_storage_path">存储路径: %s</string>
+    <string name="settings_download_separation_model">下载分离模型</string>
+    <string name="settings_download_separation_model_desc">从 HuggingFace 下载 HT-Demucs FT 分离模型（约166MB）</string>
+    <string name="settings_supported_backends_value">Jellyfin / Navidrome / Subsonic / 道理鱼 / 飞牛</string>
+    <string name="settings_backend_type">后端类型</string>
+    <string name="settings_api_version">API 版本</string>
+    <string name="settings_connection_status">连接状态</string>
+    <string name="settings_not_connected">未连接</string>
+    <string name="settings_network_music_info">网络音乐</string>
+    <string name="settings_network_music_value">网易云 / QQ音乐 / 酷狗 / 酷我 / 咪咕(Meting-API 端点)</string>
+    <string name="settings_independent_music">独立音乐</string>
+    <string name="settings_independent_music_value">Jamendo（CC授权音乐库，需 Client ID）</string>
+    <string name="settings_radio_info">电台</string>
+    <string name="settings_radio_value">radio-browser（全球公开电台目录，含中文电台）</string>
+    <string name="settings_baidu_netdisk_info">百度网盘</string>
+    <string name="settings_baidu_netdisk_value">百度网盘</string>
+    <string name="settings_lyrics_info">歌词</string>
+    <string name="settings_lyrics_value">酷狗 / 网易云 / 网络匹配</string>
+    <string name="settings_copyright">版权说明</string>
+    <string name="settings_copyright_text">本应用涉及的网络音乐搜索功能通过 Meting-API 端点获取公开数据，仅提供元数据索引。原始版权归原始版权方所有，本应用仅为聚合浏览工具，不存储、分发或转售任何媒体文件，也不对第三方音乐资源的合法性、准确性及可用性承担任何责任。如版权方认为其合法权益受到侵害，请通过 GitHub Issues 联系我们，我们将及时处理。</string>
+    <string name="settings_star_prompt">如果这个项目对你有帮助，欢迎到 GitHub 给个 Star 支持一下！</string>
+    <string name="settings_cache_dir_size">当前缓存目录大小: %s</string>
+    <string name="settings_clear_coil_cache">清除 Coil 图片缓存器的磁盘缓存</string>
+    <string name="settings_clear_all_cache">清除全部缓存</string>
+    <string name="settings_clear_all_cache_desc">删除 HQ 模式缓存和网络歌曲缓存（约10秒）</string>
+    <string name="settings_network_test_success">网络连通 (HTTP %d)</string>
+    <string name="settings_network_test_http_error">HTTP 响应 %d</string>
+    <string name="settings_network_test_timeout">网络超时，无法连接到目标</string>
+    <string name="settings_network_test_dns_error">DNS 解析失败，请检查网络设置</string>
+    <string name="settings_network_test_connection_refused">连接被拒绝</string>
+    <string name="settings_network_test_error">网络异常: %s</string>
+    <string name="settings_scan_transfer">扫描传输设备</string>
+    <string name="settings_scan_transfer_desc">手机扫描传输数据，传到手机 / 上传到服务器 / 远程恢复</string>
+    <string name="settings_restore_prefix">恢复</string>
+    <string name="settings_restore_failed_prefix">恢复失败</string>
+    <string name="settings_restore_failed_contains">失败</string>
+    <string name="settings_wifi_on">✓ 开启</string>
+    <string name="settings_wifi_off">   关闭</string>
+    <string name="settings_video_cache">视频缓存</string>
 
     <!-- Server Connection -->
     <string name="server_connect_title">连接服务器</string>
@@ -385,4 +487,160 @@
     <string name="about_license_value">GPL v3</string>
     <string name="about_github">GitHub</string>
     <string name="about_credits">致谢</string>
+
+    <!-- Settings Screen -->
+    <string name="settings_spectrum_theme">频谱主题</string>
+
+    <!-- Library Screen -->
+    <string name="library_search_placeholder">搜索歌曲、专辑、歌手…</string>
+    <string name="library_loading_library">正在加载曲库…</string>
+    <string name="library_connect_server_hint">请先在「服务器」页面配置 NAS 音乐服务</string>
+    <string name="library_empty_title">曲库为空</string>
+    <string name="library_empty_hint">请在 NAS 音乐服务中添加音乐文件</string>
+    <string name="library_albums_count">专辑 (%d)</string>
+    <string name="library_artists_count">艺术家 (%d)</string>
+    <string name="library_searching">搜索中…</string>
+    <string name="library_songs_count_with_total">歌曲 (%1$d/%2$d)</string>
+    <string name="library_songs_loading">歌曲 (加载中…)</string>
+    <string name="library_songs_count">歌曲 (%d)</string>
+    <string name="library_no_songs">暂无歌曲</string>
+    <string name="library_load_more">加载更多…</string>
+    <string name="library_genres_count">风格 (%d)</string>
+    <string name="library_song_count_suffix">%d首</string>
+    <string name="library_years_count">年代 (%d)</string>
+    <string name="library_no_playlists">暂无歌单</string>
+    <string name="library_no_artists">暂无艺术家</string>
+    <string name="library_tap_to_play">点击播放</string>
+    <string name="library_song_count_short">%d首</string>
+
+    <!-- Common UI -->
+    <string name="common_close">关闭</string>
+    <string name="common_retry">重试</string>
+    <string name="common_select">选择</string>
+
+    <!-- Model Transfer Dialog -->
+    <string name="model_transfer_starting">启动中…</string>
+    <string name="model_transfer_waiting">等待手机扫码连接</string>
+    <string name="model_transfer_start_failed">服务器启动失败（端口被占）</string>
+    <string name="model_transfer_no_ip">无法获取网络 IP，请检查 Wi-Fi 连接</string>
+    <string name="model_transfer_title">扫码上传模型</string>
+    <string name="model_transfer_filename">文件名：htdemucs_ft_vocals.onnx</string>
+    <string name="model_transfer_expected_size">预期大小：约 166MB（fp16weights 格式）</string>
+    <string name="model_transfer_downloaded">当前已下载：%.1fMB</string>
+    <string name="model_transfer_storage_path">存储路径：%s</string>
+    <string name="model_transfer_qr_desc">模型上传二维码</string>
+    <string name="model_transfer_scan_hint">手机扫码打开模型上传页面</string>
+    <string name="model_transfer_select_hint">可下载模型文件后上传到电视</string>
+    <string name="model_transfer_status_waiting_prefix">等待</string>
+
+    <!-- Backup Transfer Dialog -->
+    <string name="backup_transfer_starting">启动中…</string>
+    <string name="backup_transfer_waiting">等待手机扫码连接</string>
+    <string name="backup_transfer_start_failed">服务器启动失败（端口被占）</string>
+    <string name="backup_transfer_no_ip">无法获取网络 IP，请检查 Wi-Fi 连接</string>
+    <string name="backup_transfer_title">扫码传输备份</string>
+    <string name="backup_transfer_qr_desc">备份传输二维码</string>
+    <string name="backup_transfer_scan_hint">手机扫码打开备份管理页</string>
+    <string name="backup_transfer_operations_hint">可下载备份到手机 / 上传备份到电视 / 恢复备份</string>
+    <string name="backup_transfer_status_waiting_prefix">等待</string>
+
+    <!-- Text Input Dialog -->
+    <string name="text_input_history_recent">最近</string>
+    <string name="text_input_history_top">热门</string>
+    <string name="text_input_scan_code">扫码输入</string>
+    <string name="text_input_scan_phone_hint">扫码用手机输入</string>
+    <string name="text_input_phone_search">手机浏览器打开</string>
+
+    <!-- Lyrics Settings Dialog -->
+    <string name="lyrics_settings_size_small">小</string>
+    <string name="lyrics_settings_size_medium">中</string>
+    <string name="lyrics_settings_size_large">大</string>
+    <string name="lyrics_settings_size_xlarge">超大</string>
+    <string name="lyrics_settings_adjust_font">歌词设置</string>
+    <string name="lyrics_settings_font_size">字体大小</string>
+    <string name="lyrics_settings_preview">预览文字</string>
+
+    <!-- Server Connect Screen -->
+    <string name="server_connect_test">测试</string>
+    <string name="server_connect_port">端口</string>
+    <string name="server_connect_error_empty">error:请先填写服务器地址</string>
+    <string name="server_connect_address">地址</string>
+    <string name="server_connect_type_daoliyu">道理鱼</string>
+    <string name="server_connect_type_feiniu">飞牛</string>
+    <string name="server_connect_email">邮箱</string>
+    <string name="server_connect_hint_jellyfin">https://jellyfin.example.com 或 http://192.168.1.100:8096</string>
+    <string name="server_connect_hint_subsonic">http://192.168.1.100:9527 或 https://music.example.com</string>
+    <string name="server_connect_hint_daoliyu">http://192.168.1.100:4000</string>
+    <string name="server_connect_hint_feiniu">http://192.168.1.100</string>
+    <string name="server_connect_hint_default">https://jellyfin.example.com 或 http://192.168.1.100:8096</string>
+    <string name="server_connect_success">✓ 连接成功：%s</string>
+    <string name="server_connect_failed">✗ %s</string>
+
+    <!-- Netdisk Screen -->
+    <string name="netdisk_back">返回</string>
+    <string name="netdisk_title">网盘音乐</string>
+    <string name="netdisk_search_placeholder">搜索网盘音乐…</string>
+    <string name="netdisk_status_baidu_not_logged_in">百度网盘未登录，请前往 设置 → 网盘 开启并登录</string>
+    <string name="netdisk_loading">正在加载目录…</string>
+    <string name="netdisk_path_label">目录：</string>
+    <string name="netdisk_play_all">全部播放 ▶</string>
+    <string name="netdisk_parent_dir">上级</string>
+    <string name="netdisk_loading_files">加载中…</string>
+    <string name="netdisk_empty_dir">此目录下没有文件</string>
+    <string name="netdisk_search_title">搜索网盘音乐</string>
+    <string name="netdisk_search_hint">输入歌曲名或歌手名搜索网盘音乐</string>
+
+    <!-- Search Tab -->
+    <string name="search_no_results">未找到相关结果</string>
+    <string name="search_enter_keyword">输入关键词搜索音乐</string>
+    <string name="search_filter_sources">搜索来源</string>
+    <string name="search_all_sources">全部点亮</string>
+
+    <!-- Discover Tab -->
+    <string name="discover_play_all">全部播放 ▶</string>
+    <string name="discover_add_queue">加入队列</string>
+    <string name="discover_change_batch">换一批 ↻</string>
+    <string name="discover_next_batch">下一批 →</string>
+    <string name="discover_song_count">%d 首</string>
+
+    <!-- Album Detail -->
+    <string name="album_song_count_tracks">%d 首曲目</string>
+
+    <!-- Queue -->
+    <string name="queue_song_count">%d 首</string>
+
+    <!-- Weather Radio -->
+    <string name="weather_radio_songs_title">电台歌曲</string>
+    <string name="weather_radio_no_songs">暂无电台歌曲</string>
+
+    <!-- Baidu Auth -->
+    <string name="baidu_device_code_label">百度网盘设备码</string>
+
+    <!-- Karaoke Lyrics View -->
+    <string name="karaoke_no_lyrics">暂无歌词</string>
+
+    <!-- Mv Playback -->
+    <string name="mv_scan_remote">扫码遥控</string>
+    <string name="mv_load_failed">视频加载失败，按返回键退出</string>
+    <string name="mv_lyrics">歌词</string>
+    <string name="mv_switch">切换</string>
+    <string name="mv_search_bilibili">搜B站</string>
+
+    <!-- Player Controls -->
+    <string name="player_karaoke">K歌</string>
+
+    <!-- ActionBar -->
+    <string name="action_play_all">全部播放</string>
+    <string name="action_add_queue">加入队列</string>
+    <string name="action_favorite_all">收藏全部</string>
+    <string name="action_song_count">%d 首</string>
+
+    <!-- List State Indicators -->
+    <string name="list_loading">加载中…</string>
+    <string name="list_load_failed">加载失败</string>
+    <string name="list_retry">重试</string>
+    <string name="list_empty">暂无数据</string>
+
+    <!-- Section Header -->
+    <string name="section_view_all">查看全部 ></string>
 </resources>

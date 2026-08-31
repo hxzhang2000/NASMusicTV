@@ -40,10 +40,10 @@ fun LyricsSettingsDialog(
     onDismiss: () -> Unit
 ) {
     val scales = listOf(
-        0.7f to "小",
-        1.0f to "中",
-        1.3f to "大",
-        1.6f to "超大"
+        0.7f to stringResource(R.string.lyrics_settings_size_small),
+        1.0f to stringResource(R.string.lyrics_settings_size_medium),
+        1.3f to stringResource(R.string.lyrics_settings_size_large),
+        1.6f to stringResource(R.string.lyrics_settings_size_xlarge)
     )
 
     Column(
@@ -54,13 +54,13 @@ fun LyricsSettingsDialog(
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         Text(
-            text = "歌词设置",
+            text = stringResource(R.string.lyrics_settings_adjust_font),
             color = NasMusicColors.TextPrimary,
             fontSize = FontSize.subtitle()
         )
 
         Text(
-            text = "字体大小",
+            text = stringResource(R.string.lyrics_settings_font_size),
             color = NasMusicColors.TextSecondary,
             fontSize = FontSize.button()
         )
@@ -101,7 +101,7 @@ fun LyricsSettingsDialog(
         // 显示当前预览文字
         val previewSize = 14 * currentFontScale
         Text(
-            text = "预览文字",
+            text = stringResource(R.string.lyrics_settings_preview),
             color = NasMusicColors.TextPrimary,
             fontSize = previewSize.sp
         )
@@ -120,7 +120,7 @@ fun LyricsSettingsDialog(
             focusedContentColor = NasMusicColors.Primary
         ) {
             Text(
-                text = "关闭",
+                text = stringResource(R.string.common_close),
                 color = NasMusicColors.TextPrimary,
                 fontSize = FontSize.button(),
                 modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp)

@@ -81,7 +81,7 @@ fun SongInfoPanel(
                     focusedContentColor = NasMusicColors.Primary
                 ) {
                     Text(
-                        text = "关闭",
+                        text = stringResource(R.string.song_info_close),
                         color = LocalFocusableContentColor.current,
                         fontSize = FontSize.body(),
                         modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
@@ -92,51 +92,51 @@ fun SongInfoPanel(
             Spacer(modifier = Modifier.height(16.dp))
 
             // ---- 基本信息 ----
-            InfoRow("标题", song.title)
-            InfoRow("艺术家", song.artist.ifBlank { "—" })
-            InfoRow("专辑", song.album.ifBlank { "—" })
-            if (song.year != null) InfoRow("年份", "${song.year}")
-            if (song.genre != null) InfoRow("风格", song.genre)
-            InfoRow("时长", TimeUtils.formatDuration(song.durationMs))
-            InfoRow("音轨号", if (song.trackNumber > 0) "${song.trackNumber}" else "—")
+            InfoRow(stringResource(R.string.song_info_title_label), song.title)
+            InfoRow(stringResource(R.string.song_info_artist_label), song.artist.ifBlank { "—" })
+            InfoRow(stringResource(R.string.song_info_album_label), song.album.ifBlank { "—" })
+            if (song.year != null) InfoRow(stringResource(R.string.song_info_year_label), "${song.year}")
+            if (song.genre != null) InfoRow(stringResource(R.string.song_info_genre_label), song.genre)
+            InfoRow(stringResource(R.string.song_info_duration_label), TimeUtils.formatDuration(song.durationMs))
+            InfoRow(stringResource(R.string.song_info_track_label), if (song.trackNumber > 0) "${song.trackNumber}" else "—")
 
             Spacer(modifier = Modifier.height(12.dp))
 
             // ---- 技术参数 ----
             if (technicalInfo != null) {
                 Text(
-                    text = "技术参数",
+                    text = stringResource(R.string.song_info_technical_params),
                     color = NasMusicColors.Primary,
                     fontSize = FontSize.button(),
                     fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.padding(bottom = 8.dp)
                 )
 
-                InfoRow("编码格式", technicalInfo.codec.ifBlank { "—" })
-                InfoRow("比特率", if (technicalInfo.bitrate > 0) "${technicalInfo.bitrate} kbps" else "—")
-                InfoRow("采样率", if (technicalInfo.sampleRate > 0) "${technicalInfo.sampleRate / 1000} kHz" else "—")
+                InfoRow(stringResource(R.string.song_info_codec_label), technicalInfo.codec.ifBlank { "—" })
+                InfoRow(stringResource(R.string.song_info_bitrate_label), if (technicalInfo.bitrate > 0) "${technicalInfo.bitrate} kbps" else "—")
+                InfoRow(stringResource(R.string.song_info_sample_rate_label), if (technicalInfo.sampleRate > 0) "${technicalInfo.sampleRate / 1000} kHz" else "—")
 
                 val channelText = when (technicalInfo.channels) {
-                    1 -> "单声道"
-                    2 -> "立体声"
-                    6 -> "5.1 环绕"
-                    8 -> "7.1 环绕"
-                    else -> if (technicalInfo.channels > 0) "${technicalInfo.channels} 声道" else "—"
+                    1 -> stringResource(R.string.song_info_channels_mono)
+                    2 -> stringResource(R.string.song_info_channels_stereo)
+                    6 -> stringResource(R.string.song_info_channels_51)
+                    8 -> stringResource(R.string.song_info_channels_71)
+                    else -> if (technicalInfo.channels > 0) stringResource(R.string.song_info_channels_format, technicalInfo.channels) else "—"
                 }
-                InfoRow("声道", channelText)
+                InfoRow(stringResource(R.string.song_info_channels_label), channelText)
 
                 if (technicalInfo.fileSize > 0L) {
                     val sizeMb = technicalInfo.fileSize / (1024.0 * 1024.0)
-                    InfoRow("文件大小", "%.1f MB".format(sizeMb))
+                    InfoRow(stringResource(R.string.song_info_file_size_label), "%.1f MB".format(sizeMb))
                 }
 
-                InfoRow("容器格式", technicalInfo.format.ifBlank { "—" })
+                InfoRow(stringResource(R.string.song_info_container_label), technicalInfo.format.ifBlank { "—" })
             }
 
             // 网络歌曲来源
             if (song.isNetworkSong) {
                 Spacer(modifier = Modifier.height(8.dp))
-                InfoRow("网络来源", song.networkSource?.uppercase() ?: "未知")
+                InfoRow(stringResource(R.string.song_info_network_source_label), song.networkSource?.uppercase() ?: stringResource(R.string.song_info_unknown_source))
             }
         }
     }

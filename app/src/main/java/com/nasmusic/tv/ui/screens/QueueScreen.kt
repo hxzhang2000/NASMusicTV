@@ -214,7 +214,7 @@ fun QueueScreen(
             Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Text(text = stringResource(R.string.queue_title), color = NasMusicColors.TextPrimary, fontSize = FontSize.displayLarge())
                 Spacer(modifier = Modifier.weight(1f))
-                Text(text = "${queue.size} 首", color = NasMusicColors.TextSecondary, fontSize = FontSize.button())
+                Text(text = stringResource(R.string.queue_song_count, queue.size), color = NasMusicColors.TextSecondary, fontSize = FontSize.button())
                 if (queue.isNotEmpty()) {
                     Spacer(modifier = Modifier.width(24.dp))
                     QueueActionButton(text = stringResource(R.string.queue_clear), onClick = onClearQueue, icon = null)

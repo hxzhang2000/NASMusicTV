@@ -30,10 +30,12 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Text
+import com.nasmusic.tv.R
 import com.nasmusic.tv.data.model.Song
 import com.nasmusic.tv.ui.LocalListBackHandler
 import com.nasmusic.tv.ui.components.FocusableSurface
@@ -149,7 +151,7 @@ fun DiscoverTab(
                                 focusedContentColor = NasMusicColors.TextPrimary
                             ) {
                                 Text(
-                                    text = "全部播放 ▶",
+                                    text = stringResource(R.string.discover_play_all),
                                     fontSize = FontSize.button(),
                                     color = NasMusicColors.TextPrimary,
                                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
@@ -167,7 +169,7 @@ fun DiscoverTab(
                                 focusedContentColor = NasMusicColors.Primary
                             ) {
                                 Text(
-                                    text = "加入队列",
+                                    text = stringResource(R.string.discover_add_queue),
                                     fontSize = FontSize.button(),
                                     color = NasMusicColors.TextPrimary,
                                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
@@ -185,7 +187,7 @@ fun DiscoverTab(
                                 focusedContentColor = NasMusicColors.Primary
                             ) {
                                 Text(
-                                    text = "换一批 ↻",
+                                    text = stringResource(R.string.discover_change_batch),
                                     fontSize = FontSize.button(),
                                     color = NasMusicColors.TextPrimary,
                                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
@@ -193,7 +195,7 @@ fun DiscoverTab(
                             }
                             Spacer(modifier = Modifier.width(12.dp))
                             Text(
-                                text = "${filteredSongs.size} 首",
+                                text = stringResource(R.string.discover_song_count, filteredSongs.size),
                                 color = NasMusicColors.TextSecondary,
                                 fontSize = FontSize.body()
                             )

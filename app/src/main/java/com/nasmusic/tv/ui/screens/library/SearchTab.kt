@@ -18,10 +18,12 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Text
+import com.nasmusic.tv.R
 import com.nasmusic.tv.data.model.MusicSourceType
 import com.nasmusic.tv.data.model.Song
 import com.nasmusic.tv.ui.LocalListBackHandler
@@ -111,7 +113,7 @@ fun SearchTab(
                     contentAlignment = Alignment.Center
                 ) {
                         Text(
-                            text = "未找到相关结果",
+                            text = stringResource(R.string.search_no_results),
                             color = NasMusicColors.TextSecondary,
                             fontSize = FontSize.button()
                     )
@@ -158,7 +160,7 @@ fun SearchTab(
                     contentAlignment = Alignment.Center
                 ) {
                         Text(
-                            text = "输入关键词搜索音乐",
+                            text = stringResource(R.string.search_enter_keyword),
                             color = NasMusicColors.TextSecondary,
                             fontSize = FontSize.button()
                     )
@@ -189,7 +191,7 @@ private fun SearchSourceBar(
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(
-            text = "搜索来源",
+            text = stringResource(R.string.search_filter_sources),
             color = NasMusicColors.TextSecondary,
             fontSize = FontSize.body(),
             modifier = Modifier.padding(end = 10.dp)
@@ -229,7 +231,7 @@ private fun SearchSourceBar(
             focusedContentColor = NasMusicColors.TextPrimary
         ) {
             Text(
-                text = "全部点亮",
+                text = stringResource(R.string.search_all_sources),
                 color = LocalFocusableContentColor.current,
                 fontSize = FontSize.small(),
                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)

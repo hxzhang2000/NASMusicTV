@@ -331,7 +331,7 @@ fun ControlButtonsRow(
         if (showVocalButton) {
             Spacer(modifier = Modifier.width(if (compact) 12.dp else 20.dp))
             VocalToggleButton(
-                label = "K歌",
+                label = stringResource(R.string.player_karaoke),
                 onClick = onEnterKaraoke,
                 compact = compact
             )

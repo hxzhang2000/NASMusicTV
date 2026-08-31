@@ -1,5 +1,8 @@
 package com.nasmusic.tv.ui.components
 
+import androidx.compose.ui.res.stringResource
+import com.nasmusic.tv.R
+
 import android.view.ViewGroup
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -273,7 +276,7 @@ fun MvPlaybackScreen(
         if (qrBitmap != null) {
             Image(
                 bitmap = qrBitmap.asImageBitmap(),
-                contentDescription = "扫码遥控",
+                contentDescription = stringResource(R.string.mv_scan_remote),
                 modifier = Modifier
                     .align(Alignment.TopEnd)
                     .padding(24.dp)
@@ -313,7 +316,7 @@ fun MvPlaybackScreen(
                     .padding(horizontal = 28.dp, vertical = 14.dp)
             ) {
                 Text(
-                    text = "视频加载失败，按返回键退出",
+                    text = stringResource(R.string.mv_load_failed),
                     fontSize = FontSize.button(),
                     color = Color.White
                 )
@@ -382,12 +385,12 @@ fun MvPlaybackScreen(
                     )
                     Spacer(Modifier.width(20.dp))
                     VocalToggleButton(
-                        label = "歌词",
+                        label = stringResource(R.string.mv_lyrics),
                         onClick = { activateControls(); showMvLyrics = !showMvLyrics }
                     )
                     Spacer(Modifier.width(20.dp))
                     VocalToggleButton(
-                        label = "切换",
+                        label = stringResource(R.string.mv_switch),
                         onClick = { activateControls(); onSwitchOrResearch() }
                     )
                     // 当前 MV 来自百度网盘本地文件时，提供「搜B站」兜底入口：
@@ -395,7 +398,7 @@ fun MvPlaybackScreen(
                     if (mv.source == "baidu") {
                         Spacer(Modifier.width(20.dp))
                         VocalToggleButton(
-                            label = "搜B站",
+                            label = stringResource(R.string.mv_search_bilibili),
                             onClick = { activateControls(); onSearchBilibili() }
                         )
                     }

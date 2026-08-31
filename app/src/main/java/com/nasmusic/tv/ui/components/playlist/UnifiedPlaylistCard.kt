@@ -1,5 +1,8 @@
 package com.nasmusic.tv.ui.components.playlist
 
+import androidx.compose.ui.res.stringResource
+import com.nasmusic.tv.R
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -85,7 +88,7 @@ fun UnifiedPlaylistCard(
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
-                            text = "${playlist.songCount}首",
+                            text = stringResource(R.string.library_song_count_short, playlist.songCount),
                             color = NasMusicColors.TextPrimary,
                             fontSize = FontSize.small()
                         )
@@ -101,7 +104,7 @@ fun UnifiedPlaylistCard(
                 overflow = TextOverflow.Ellipsis
             )
             Text(
-                text = "${playlist.songCount}首",
+                text = stringResource(R.string.library_song_count_short, playlist.songCount),
                 color = LocalFocusableContentColor.current,
                 fontSize = FontSize.small()
             )

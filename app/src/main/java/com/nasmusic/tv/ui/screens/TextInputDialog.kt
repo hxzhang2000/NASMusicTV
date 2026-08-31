@@ -318,12 +318,12 @@ fun TextInputDialog(
                                 verticalArrangement = Arrangement.spacedBy(4.dp)
                             ) {
                                 if (recent.isNotEmpty()) {
-                                    HistoryRow(label = "最近", items = recent) { query ->
+                                    HistoryRow(label = stringResource(R.string.text_input_history_recent), items = recent) { query ->
                                         onHistorySelect?.invoke(query)
                                     }
                                 }
                                 if (top.isNotEmpty()) {
-                                    HistoryRow(label = "热门", items = top) { query ->
+                                    HistoryRow(label = stringResource(R.string.text_input_history_top), items = top) { query ->
                                         onHistorySelect?.invoke(query)
                                     }
                                 }
@@ -464,18 +464,18 @@ fun TextInputDialog(
                         ) {
                             Image(
                                 bitmap = qrBitmap?.asImageBitmap() ?: return@Column,
-                                contentDescription = "扫码输入",
+                                contentDescription = stringResource(R.string.text_input_scan_code),
                                 modifier = Modifier.size(180.dp)
                             )
                             Spacer(modifier = Modifier.height(8.dp))
                             Text(
-                                text = "扫码用手机输入",
+                                text = stringResource(R.string.text_input_scan_phone_hint),
                                 color = NasMusicColors.TextPrimary,
                                 fontSize = FontSize.body()
                             )
                             Spacer(modifier = Modifier.height(2.dp))
                             Text(
-                                text = "手机浏览器打开",
+                                text = stringResource(R.string.text_input_phone_search),
                                 color = NasMusicColors.TextSecondary,
                                 fontSize = FontSize.small()
                             )

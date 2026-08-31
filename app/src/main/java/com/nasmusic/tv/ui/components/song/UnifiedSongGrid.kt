@@ -11,10 +11,12 @@ import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Text
+import com.nasmusic.tv.R
 import com.nasmusic.tv.data.model.Song
 import com.nasmusic.tv.ui.components.songGridColumns
 import com.nasmusic.tv.ui.theme.FontSize
@@ -46,10 +48,11 @@ fun UnifiedSongGrid(
     onToggleQueue: (Song) -> Unit = {},
     isFavorited: (String) -> Boolean = { false },
     isInQueue: (String) -> Boolean = { false },
-    emptyMessage: String = "暂无歌曲",
+    emptyMessage: String? = null,
     header: @Composable (() -> Unit)? = null
 ) {
     val listState = rememberLazyGridState()
+    val resolvedEmptyMessage = emptyMessage ?: stringResource(R.string.library_no_songs)
 
     LazyVerticalGrid(
         columns = songGridColumns(),
@@ -73,7 +76,7 @@ fun UnifiedSongGrid(
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        text = emptyMessage,
+                        text = resolvedEmptyMessage,
                         color = NasMusicColors.TextSecondary,
                         fontSize = FontSize.button()
                     )

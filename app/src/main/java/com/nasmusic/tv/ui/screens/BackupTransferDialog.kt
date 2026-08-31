@@ -31,11 +31,13 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.tv.material3.Text
+import com.nasmusic.tv.R
 import com.nasmusic.tv.net.BackupTransferServer
 import com.nasmusic.tv.ui.components.FocusableSurface
 import com.nasmusic.tv.ui.components.LocalFocusableContentColor
@@ -65,7 +67,7 @@ fun BackupTransferDialog(
     val context = LocalContext.current
     var qrBitmap by remember { mutableStateOf<Bitmap?>(null) }
     var serverUrl by remember { mutableStateOf<String?>(null) }
-    var status by remember { mutableStateOf("启动中...") }
+    var status by remember { mutableStateOf(context.getString(R.string.backup_transfer_starting)) }
     val server = remember { BackupTransferServer(context, onRestore, onBackupChanged) }
     val closeFocusRequester = remember { FocusRequester() }
 
@@ -77,9 +79,9 @@ fun BackupTransferDialog(
             serverUrl = url
             qrBitmap = QrCodeGenerator.generateQrBitmap(url, 360)
             val started = server.start()
-            status = if (started) "等待手机扫码连接" else "服务器启动失败（端口被占）"
+            status = if (started) context.getString(R.string.backup_transfer_waiting) else context.getString(R.string.backup_transfer_start_failed)
         } else {
-            status = "无法获取网络 IP，请检查 Wi-Fi 连接"
+            status = context.getString(R.string.backup_transfer_no_ip)
         }
         onDispose {
             server.stop()
@@ -116,7 +118,7 @@ fun BackupTransferDialog(
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                     Text(
-                    text = "扫码传输备份",
+                    text = stringResource(R.string.backup_transfer_title),
                     color = NasMusicColors.TextPrimary,
                     fontSize = FontSize.subtitle()
                 )
@@ -125,17 +127,17 @@ fun BackupTransferDialog(
                 qrBitmap?.let { bitmap ->
                     Image(
                         bitmap = bitmap.asImageBitmap(),
-                        contentDescription = "备份传输二维码",
+                        contentDescription = stringResource(R.string.backup_transfer_qr_desc),
                         modifier = Modifier.size(280.dp)
                     )
                     Spacer(modifier = Modifier.height(12.dp))
                         Text(
-                        text = "手机扫码打开备份管理页",
+                        text = stringResource(R.string.backup_transfer_scan_hint),
                         color = NasMusicColors.TextPrimary,
                         fontSize = FontSize.button()
                     )
                         Text(
-                        text = "可下载备份到手机 / 上传备份到电视 / 恢复备份",
+                        text = stringResource(R.string.backup_transfer_operations_hint),
                         color = NasMusicColors.TextSecondary,
                         fontSize = FontSize.body()
                     )
@@ -165,7 +167,7 @@ fun BackupTransferDialog(
                     Spacer(modifier = Modifier.height(40.dp))
                         Text(
                         text = status,
-                        color = if (status.startsWith("等待")) NasMusicColors.Primary
+                        color = if (status.startsWith(stringResource(R.string.backup_transfer_status_waiting_prefix))) NasMusicColors.Primary
                                else NasMusicColors.Warning,
                         fontSize = FontSize.button()
                     )
@@ -198,7 +200,7 @@ fun BackupTransferDialog(
                             contentAlignment = Alignment.Center
                         ) {
                             Text(
-                                text = "关闭",
+                                text = stringResource(R.string.common_close),
                                 color = LocalFocusableContentColor.current,
                                 fontSize = FontSize.button()
                             )

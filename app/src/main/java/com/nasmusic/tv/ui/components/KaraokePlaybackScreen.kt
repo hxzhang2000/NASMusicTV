@@ -5,6 +5,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.asImageBitmap
+import com.nasmusic.tv.R
 import com.nasmusic.tv.util.QrCodeGenerator
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.mutableStateOf
@@ -48,6 +49,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -156,7 +158,7 @@ fun KaraokePlaybackScreen(
         if (qrBitmap != null) {
             Image(
                 bitmap = qrBitmap.asImageBitmap(),
-                contentDescription = "扫码遥控",
+                contentDescription = stringResource(R.string.karaoke_scan_remote),
                 modifier = Modifier
                     .align(Alignment.TopEnd)
                     // 必须先于同 Box 中后声明的全屏背景/遮罩绘制，否则会被盖住
@@ -182,7 +184,7 @@ fun KaraokePlaybackScreen(
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(
-                        text = "正在转换伴奏…",
+                        text = stringResource(R.string.karaoke_converting_accompaniment),
                         fontSize = FontSize.small(),
                         fontWeight = FontWeight.Bold,
                         color = NasMusicColors.TextPrimary
@@ -407,9 +409,9 @@ fun KaraokePlaybackScreen(
 
                 // ── 升降调按钮 ──
                 KaraokeSettingButton(
-                    label = "调",
+                    label = stringResource(R.string.karaoke_pitch_label),
                     value = when (pitchSemitones) {
-                        0 -> "原调"
+                        0 -> stringResource(R.string.karaoke_original_tune)
                         in 1..12 -> "+${pitchSemitones}"
                         else -> "$pitchSemitones"
                     },
@@ -420,9 +422,9 @@ fun KaraokePlaybackScreen(
 
                 // ── 变速按钮 ──
                 KaraokeSettingButton(
-                    label = "速",
+                    label = stringResource(R.string.karaoke_speed_label),
                     value = when {
-                        playbackSpeed == 1.0 -> "原速"
+                        playbackSpeed == 1.0 -> stringResource(R.string.karaoke_original_speed)
                         playbackSpeed < 1.0 -> String.format("%.1f", playbackSpeed)
                         else -> String.format("%.1f", playbackSpeed)
                     },
@@ -433,19 +435,19 @@ fun KaraokePlaybackScreen(
 
                 // 原唱/伴唱切换（只切换音频，不退出页面）
                 VocalToggleButton(
-                    label = if (vocalRemovalEnabled) "原唱" else "伴唱",
+                    label = if (vocalRemovalEnabled) stringResource(R.string.karaoke_original_vocal) else stringResource(R.string.karaoke_accompaniment),
                     onClick = { activateControls(); onToggleVocalRemoval() }
                 )
                 Spacer(Modifier.width(10.dp))
 
                 // ── 分离模式切换（快速/高质量）──
                 KaraokeSettingButton(
-                    label = "质量",
+                    label = stringResource(R.string.karaoke_quality_label),
                     value = when {
                         !modelDownloaded -> "🔒"
-                        isSeparating -> "转换中"
-                        isHighQualityMode -> "高质"
-                        else -> "快速"
+                        isSeparating -> stringResource(R.string.karaoke_converting)
+                        isHighQualityMode -> stringResource(R.string.karaoke_high_quality)
+                        else -> stringResource(R.string.karaoke_fast)
                     },
                     isModified = isHighQualityMode,
                     onClick = {
@@ -471,13 +473,14 @@ fun KaraokePlaybackScreen(
 
     // ── 升降调选择弹窗 ──
     if (showPitchPicker) {
+        val originalTuneLabel = stringResource(R.string.karaoke_original_tune)
         KaraokeStepPickerDialog(
-            title = "升降调",
+            title = stringResource(R.string.karaoke_pitch_title),
             steps = (-12..12).toList(),
             currentValue = pitchSemitones,
             formatLabel = { semitones ->
                 when (semitones) {
-                    0 -> "原调"
+                    0 -> originalTuneLabel
                     in 1..12 -> "+${semitones}"
                     else -> "$semitones"
                 }
@@ -490,13 +493,14 @@ fun KaraokePlaybackScreen(
 
     // ── 变速选择弹窗 ──
     if (showSpeedPicker) {
+        val originalSpeedLabel = stringResource(R.string.karaoke_original_speed)
         KaraokeStepPickerDialog(
-            title = "播放速度",
+            title = stringResource(R.string.karaoke_speed_title),
             steps = listOf(0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 1.7, 1.8, 1.9, 2.0),
             currentValue = playbackSpeed,
             formatLabel = { speed ->
                 when (speed) {
-                    1.0 -> "原速"
+                    1.0 -> originalSpeedLabel
                     else -> String.format("%.1f", speed)
                 }
             },
@@ -770,7 +774,7 @@ private fun <T> KaraokeStepPickerDialog(
                         focusBorderColor = NasMusicColors.FocusRing
                     ) {
                         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            Text(text = "重置", fontSize = FontSize.small(), fontWeight = FontWeight.Bold, color = LocalFocusableContentColor.current)
+                            Text(text = stringResource(R.string.karaoke_reset), fontSize = FontSize.small(), fontWeight = FontWeight.Bold, color = LocalFocusableContentColor.current)
                         }
                     }
 
@@ -790,7 +794,7 @@ private fun <T> KaraokeStepPickerDialog(
                         focusBorderColor = NasMusicColors.FocusRing
                     ) {
                         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            Text(text = "确定", fontSize = FontSize.small(), fontWeight = FontWeight.Bold, color = LocalFocusableContentColor.current)
+                            Text(text = stringResource(R.string.karaoke_confirm), fontSize = FontSize.small(), fontWeight = FontWeight.Bold, color = LocalFocusableContentColor.current)
                         }
                     }
                 }

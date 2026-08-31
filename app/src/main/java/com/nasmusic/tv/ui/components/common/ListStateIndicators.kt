@@ -15,9 +15,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.sp
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Text
+import com.nasmusic.tv.R
 import com.nasmusic.tv.ui.components.FocusableSurface
 import com.nasmusic.tv.ui.theme.FontSize
 import com.nasmusic.tv.ui.theme.NasMusicColors
@@ -28,9 +30,10 @@ import com.nasmusic.tv.ui.theme.NasMusicColors
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 fun LoadingIndicator(
-    text: String = "加载中...",
+    text: String? = null,
     modifier: Modifier = Modifier
 ) {
+    val resolvedText = text ?: stringResource(R.string.list_loading)
     Box(
         modifier = modifier.fillMaxWidth(),
         contentAlignment = Alignment.Center
@@ -43,7 +46,7 @@ fun LoadingIndicator(
             )
             Spacer(modifier = Modifier.height(12.dp))
             Text(
-                text = text,
+                text = resolvedText,
                 color = NasMusicColors.TextSecondary,
                 fontSize = FontSize.button()
             )
@@ -57,10 +60,11 @@ fun LoadingIndicator(
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 fun ErrorDisplay(
-    message: String = "加载失败",
+    message: String? = null,
     onRetry: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
+    val resolvedMessage = message ?: stringResource(R.string.list_load_failed)
     Box(
         modifier = modifier.fillMaxWidth(),
         contentAlignment = Alignment.Center
@@ -75,7 +79,7 @@ fun ErrorDisplay(
                 fontSize = FontSize.display()
             )
             Text(
-                text = message,
+                text = resolvedMessage,
                 color = NasMusicColors.TextSecondary,
                 fontSize = FontSize.button(),
                 textAlign = TextAlign.Center
@@ -92,7 +96,7 @@ fun ErrorDisplay(
                     focusedContentColor = NasMusicColors.TextPrimary
                 ) {
                     Text(
-                        text = "重试",
+                        text = stringResource(R.string.list_retry),
                         color = NasMusicColors.TextPrimary,
                         fontSize = FontSize.button(),
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
@@ -109,11 +113,12 @@ fun ErrorDisplay(
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 fun EmptyState(
-    message: String = "暂无数据",
+    message: String? = null,
     actionText: String? = null,
     onAction: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
+    val resolvedMessage = message ?: stringResource(R.string.list_empty)
     Box(
         modifier = modifier.fillMaxWidth(),
         contentAlignment = Alignment.Center
@@ -128,7 +133,7 @@ fun EmptyState(
                 fontSize = FontSize.display()
             )
             Text(
-                text = message,
+                text = resolvedMessage,
                 color = NasMusicColors.TextSecondary,
                 fontSize = FontSize.button(),
                 textAlign = TextAlign.Center

@@ -326,7 +326,7 @@ fun SettingsScreen(
                         ) {
                             AdjustButton("-", onClick = { onChangeFontAdjustment((fontAdjustment - 1).coerceAtLeast(-8)) })
                             Text(
-                                text = if (fontAdjustment == 0) "标准" else if (fontAdjustment > 0) "+${fontAdjustment}" else "$fontAdjustment",
+                                text = if (fontAdjustment == 0) stringResource(R.string.settings_font_standard) else if (fontAdjustment > 0) "+${fontAdjustment}" else "$fontAdjustment",
                                 color = NasMusicColors.Primary,
                                 fontSize = FontSize.title(),
                                 modifier = Modifier.width(80.dp).padding(horizontal = 8.dp)
@@ -354,14 +354,14 @@ fun SettingsScreen(
                     }
                     // ── 人声分离模式 ──
                     item { Spacer(modifier = Modifier.height(24.dp)) }
-                    item { SubSectionTitle("伴奏分离模式") }
+                    item { SubSectionTitle(stringResource(R.string.settings_separation_mode_title)) }
                     item {
                         val isHq = separationMode == com.nasmusic.tv.data.prefs.AppPreferences.SeparationMode.HIGH_QUALITY
-                        val hqLabel = if (modelDownloaded) "高质量模式（HT-Demucs FT）" else "高质量模式（未下载模型）"
+                        val hqLabel = if (modelDownloaded) stringResource(R.string.settings_hq_mode_downloaded) else stringResource(R.string.settings_hq_mode_not_downloaded)
                         val hqDesc = when {
-                            !modelDownloaded -> "需先下载模型（166MB）后才能使用高质量模式"
-                            isHq -> "当前：高质量 ONNX 分离 ⭐⭐⭐⭐⭐"
-                            else -> "当前：快速实时 DSP 分离 ⭐⭐⭐"
+                            !modelDownloaded -> stringResource(R.string.settings_download_model_hint)
+                            isHq -> stringResource(R.string.settings_onnx_inference)
+                            else -> stringResource(R.string.settings_dsp_inference)
                         }
                         SettingSwitch(
                             label = hqLabel,
@@ -378,7 +378,7 @@ fun SettingsScreen(
                             if (modelDownloading) {
                                 // 下载中：进度条
                                 Text(
-                                    text = "正在下载高质量分离模型 (HT-Demucs FT)：${(modelDownloadProgress * 100).toInt()}%  (${modelDownloadedMB}MB / ${modelTotalMB}MB)",
+                                    text = stringResource(R.string.settings_downloading_model) + "：${(modelDownloadProgress * 100).toInt()}%  (${modelDownloadedMB}MB / ${modelTotalMB}MB)",
                                     color = NasMusicColors.TextPrimary,
                                     fontSize = FontSize.body()
                                 )
@@ -401,12 +401,12 @@ fun SettingsScreen(
                                 // 已下载：显示路径 + 大小 + 删除按钮
                                 Column {
                                     Text(
-                                        text = "高质量模型已下载 (%.1fMB)".format(modelSizeMB),
+                                        text = stringResource(R.string.settings_model_downloaded_size, modelSizeMB),
                                         color = NasMusicColors.TextPrimary,
                                         fontSize = FontSize.body()
                                     )
                                     Text(
-                                        text = "路径：$modelPath",
+                                        text = stringResource(R.string.settings_model_path, modelPath),
                                         color = NasMusicColors.TextSecondary,
                                         fontSize = FontSize.small()
                                     )
@@ -417,15 +417,15 @@ fun SettingsScreen(
                                     ) {
                                         Box(modifier = Modifier.weight(1f)) {
                                             SettingActionButton(
-                                                label = "删除模型",
-                                                description = "删除后高质量模式不可用",
+                                                label = stringResource(R.string.settings_delete_model),
+                                                description = stringResource(R.string.settings_delete_model_desc),
                                                 onClick = { onDeleteModel?.invoke() }
                                             )
                                         }
                                         Box(modifier = Modifier.weight(1f)) {
                                             SettingActionButton(
-                                                label = "扫码上传模型",
-                                                description = "手机扫码上传模型文件到电视",
+                                                label = stringResource(R.string.settings_scan_upload_model),
+                                                description = stringResource(R.string.settings_scan_upload_model_desc),
                                                 onClick = { onScanTransferModel?.invoke() }
                                             )
                                         }
@@ -435,12 +435,12 @@ fun SettingsScreen(
                                 // 未下载：显示下载按钮 + 路径 + 扫码上传
                                 Column {
                                     Text(
-                                        text = "高质量分离模型未下载（HT-Demucs FT，约166MB）",
+                                        text = stringResource(R.string.settings_network_model_not_downloaded),
                                         color = NasMusicColors.TextSecondary,
                                         fontSize = FontSize.body()
                                     )
                                     Text(
-                                        text = "存储路径：$modelPath",
+                                        text = stringResource(R.string.settings_storage_path, modelPath),
                                         color = NasMusicColors.TextSecondary,
                                         fontSize = FontSize.small()
                                     )
@@ -451,15 +451,15 @@ fun SettingsScreen(
                                     ) {
                                         Box(modifier = Modifier.weight(1f)) {
                                             SettingActionButton(
-                                                label = "下载高质量模型",
-                                                description = "从 HuggingFace 下载 HT-Demucs FT 人声分离模型（约166MB）",
+                                                label = stringResource(R.string.settings_download_separation_model),
+                                                description = stringResource(R.string.settings_download_separation_model_desc),
                                                 onClick = { onDownloadModel?.invoke() }
                                             )
                                         }
                                         Box(modifier = Modifier.weight(1f)) {
                                             SettingActionButton(
-                                                label = "扫码上传模型",
-                                                description = "手机扫码上传模型文件到电视",
+                                                label = stringResource(R.string.settings_scan_upload_model),
+                                                description = stringResource(R.string.settings_scan_upload_model_desc),
                                                 onClick = { onScanTransferModel?.invoke() }
                                             )
                                         }
@@ -588,30 +588,30 @@ fun SettingsScreen(
                     item { AboutRow(label = stringResource(R.string.about_version), value = NasMusicVersion.DISPLAY) }
                     item { AboutRow(label = stringResource(R.string.settings_build_type), value = NasMusicVersion.BUILD_TYPE) }
                     item { AboutRow(label = stringResource(R.string.about_license), value = stringResource(R.string.about_license_value)) }
-                    item { AboutRow(label = stringResource(R.string.settings_supported_backends), value = "Jellyfin / Navidrome / Subsonic / 道理鱼 / 飞牛") }
+                    item { AboutRow(label = stringResource(R.string.settings_supported_backends), value = stringResource(R.string.settings_supported_backends_value)) }
                     // 当前连接的后端信息
                     if (isConnected) {
-                        item { AboutRow(label = "后端类型", value = serverDisplayName) }
-                        item { AboutRow(label = "API 版本", value = backendApiVersion) }
+                        item { AboutRow(label = stringResource(R.string.settings_backend_type), value = serverDisplayName) }
+                        item { AboutRow(label = stringResource(R.string.settings_api_version), value = backendApiVersion) }
                     } else {
-                        item { AboutRow(label = "后端状态", value = "未连接") }
+                        item { AboutRow(label = stringResource(R.string.settings_backend_type), value = stringResource(R.string.settings_not_connected)) }
                     }
-                    item { AboutRow(label = "网络音乐", value = "网易云 / QQ音乐 / 酷狗 / 酷我 / 咪咕（Meting-API多端点") }
-                    item { AboutRow(label = "独立音乐", value = "Jamendo（CC授权，需配置Client ID）") }
-                    item { AboutRow(label = "电台", value = "radio-browser（全球公开目录，含中文电台）") }
-                    item { AboutRow(label = "网盘", value = "百度网盘") }
-                    item { AboutRow(label = "歌词", value = "酷狗 / 网易云 / 网络匹配") }
+                    item { AboutRow(label = stringResource(R.string.settings_network_music_info), value = stringResource(R.string.settings_network_music_value)) }
+                    item { AboutRow(label = stringResource(R.string.settings_independent_music), value = stringResource(R.string.settings_independent_music_value)) }
+                    item { AboutRow(label = stringResource(R.string.settings_radio_info), value = stringResource(R.string.settings_radio_value)) }
+                    item { AboutRow(label = stringResource(R.string.settings_baidu_netdisk_info), value = stringResource(R.string.settings_baidu_netdisk_value)) }
+                    item { AboutRow(label = stringResource(R.string.settings_lyrics_info), value = stringResource(R.string.settings_lyrics_value)) }
                     // 版权说明
                     item {
                         Spacer(modifier = Modifier.height(20.dp))
                         Text(
-                            text = "版权说明",
+                            text = stringResource(R.string.settings_copyright),
                             color = NasMusicColors.TextPrimary,
                             fontSize = FontSize.button(),
                             modifier = Modifier.padding(bottom = 8.dp)
                         )
                         Text(
-                            text = "本应用中涉及的网络音乐资源均来自第三方公开 Meting-API 端点，所有音频内容的版权归属于原始版权方。本应用仅为技术聚合工具，不存储、不分发任何音乐文件，亦不对网络音乐资源的合法性、准确性及可用性承担任何责任。如权利人认为相关内容侵犯了您的合法权益，请通过 GitHub Issues 联系我们，我们将及时予以处理。",
+                            text = stringResource(R.string.settings_copyright_text),
                             color = NasMusicColors.TextSecondary,
                             fontSize = FontSize.small(),
                             lineHeight = FontSize.small() * 1.5
@@ -622,7 +622,7 @@ fun SettingsScreen(
                         Spacer(modifier = Modifier.height(20.dp))
                         val context = LocalContext.current
                         Text(
-                            text = "⭐ 如果本项目对您有帮助，欢迎到 GitHub 点个 Star 支持一下！",
+                            text = stringResource(R.string.settings_star_prompt),
                             color = NasMusicColors.Primary,
                             fontSize = FontSize.button(),
                             modifier = Modifier.padding(bottom = 8.dp)
@@ -656,7 +656,7 @@ fun SettingsScreen(
                             else "$sizeBytes B"
                         } catch (_: Exception) { "—" }
                         Text(
-                            text = "当前缓存目录大小: $cacheDirSize",
+                            text = stringResource(R.string.settings_cache_dir_size, cacheDirSize),
                             color = NasMusicColors.TextSecondary,
                             fontSize = FontSize.body(),
                             modifier = Modifier.padding(start = 4.dp, top = 8.dp)
@@ -682,7 +682,7 @@ fun SettingsScreen(
                         item {
                             SettingActionButton(
                                 label = stringResource(R.string.settings_clear_cover_cache),
-                                description = "清理 Coil 图片加载器的磁盘缓存",
+                                description = stringResource(R.string.settings_clear_coil_cache),
                                 onClick = onClearCoverCache
                             )
                         }
@@ -699,8 +699,8 @@ fun SettingsScreen(
                     if (onClearAccompanimentCache != null) {
                         item {
                             SettingActionButton(
-                                label = "清除伴奏缓存",
-                                description = "删除 HQ 分离生成的伴奏文件（最多10首）",
+                                label = stringResource(R.string.settings_clear_all_cache),
+                                description = stringResource(R.string.settings_clear_all_cache_desc),
                                 onClick = onClearAccompanimentCache
                             )
                         }
@@ -795,6 +795,7 @@ fun SettingsScreen(
                         )
                     }
                     item {
+                        val networkTestCtx = LocalContext.current
                         FocusableSurface(
                             onClick = {
                                 if (!isNetworkTesting) {
@@ -810,16 +811,16 @@ fun SettingsScreen(
                                                 conn.requestMethod = "HEAD"
                                                 val code = conn.responseCode
                                                 conn.disconnect()
-                                                if (code in 200..399) "success:网络连通 (HTTP $code)"
-                                                else "error:HTTP 响应码 $code"
+                                                if (code in 200..399) "success:${networkTestCtx.getString(R.string.settings_network_test_success, code)}"
+                                                else "error:${networkTestCtx.getString(R.string.settings_network_test_http_error, code)}"
                                             } catch (e: java.net.SocketTimeoutException) {
-                                                "error:连接超时，无法访问外网"
+                                                "error:${networkTestCtx.getString(R.string.settings_network_test_timeout)}"
                                             } catch (e: java.net.UnknownHostException) {
-                                                "error:DNS 解析失败，无网络连接"
+                                                "error:${networkTestCtx.getString(R.string.settings_network_test_dns_error)}"
                                             } catch (e: java.net.ConnectException) {
-                                                "error:连接被拒绝"
+                                                "error:${networkTestCtx.getString(R.string.settings_network_test_connection_refused)}"
                                             } catch (e: Exception) {
-                                                "error:网络异常: ${e.message ?: e.javaClass.simpleName}"
+                                                "error:${networkTestCtx.getString(R.string.settings_network_test_error, e.message ?: e.javaClass.simpleName)}"
                                             }
                                         }
                                         networkTestStatus = result
@@ -1419,8 +1420,8 @@ fun SettingsScreen(
                     if (onScanTransferBackup != null) {
                         item {
                             SettingActionButton(
-                                label = "扫码传输备份",
-                                description = "手机扫码管理备份：下载到手机 / 上传到电视 / 远程恢复",
+                                label = stringResource(R.string.settings_scan_transfer),
+                                description = stringResource(R.string.settings_scan_transfer_desc),
                                 onClick = { onScanTransferBackup?.invoke() }
                             )
                         }
@@ -1860,7 +1861,7 @@ private fun SettingSwitch(
             }
             // Switch indicator
             Text(
-                text = if (checked) "✓  开启" else "   关闭",
+                text = if (checked) stringResource(R.string.settings_wifi_on) else stringResource(R.string.settings_wifi_off),
                 color = if (checked) NasMusicColors.Primary else NasMusicColors.TextSecondary,
                 fontSize = FontSize.button()
             )
@@ -1904,7 +1905,7 @@ private fun PlayModeSelector(current: PlayMode, onSelect: (PlayMode) -> Unit) {
 private fun VisualizerThemeSelector(current: VisualizerTheme, onSelect: (VisualizerTheme) -> Unit) {
     Column {
         Text(
-            text = "频谱主题",
+            text = stringResource(R.string.settings_spectrum_theme),
             color = NasMusicColors.TextPrimary,
             fontSize = FontSize.button(),
             modifier = Modifier.padding(vertical = 8.dp)

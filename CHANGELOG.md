@@ -7,6 +7,27 @@
 >
 > 类型：`Added`（新增） | `Changed`（变更） | `Fixed`（修复） | `Removed`（移除）
 
+## [v2.25.1] - 2026-08-31
+
+### Changed
+
+- **UI 字符串外部化（第一批）**：将所有用户可见的硬编码中文字符串迁移至 `res/values/strings.xml`，实现文本与代码分离，为后续多语言适配奠定基础。迁移覆盖范围：
+  - **播放页**：NowPlayingScreen、KaraokePlaybackScreen、SongInfoPanel、PlayerControls
+  - **曲库页**：LibraryScreen、AlbumDetailScreen、QueueScreen、library/DiscoverTab、library/SearchTab
+  - **设置页**：SettingsScreen（含网络测试、缓存管理、网盘配置、备份等子模块）、LyricsSettingsDialog
+  - **对话框**：ModelTransferDialog、BackupTransferDialog、TextInputDialog、PlaylistPickerDialog、ExitConfirmDialog
+  - **连接页**：ServerConnectScreen（Jellyfin/Navidrome/Subsonic/道理鱼/飞牛 五种后端类型名、地址提示、测试结果）
+  - **网盘页**：netdisk/NetdiskScreen、netdisk/BaiduAuthDialog
+  - **其他**：WeatherRadioScreen、MvPlaybackScreen、KaraokeLyricsView、VocalToggleButton
+  - **通用组件**：common/ActionBar、common/SectionHeader、common/ListStateIndicators（LoadingIndicator/ErrorDisplay/EmptyState 默认参数改用 stringResource 解析）、playlist/UnifiedPlaylistCard、song/UnifiedSongGrid
+- **strings.xml 新增 258 行字符串资源**，覆盖 26 个文件共 493 处替换（含 `stringResource` Composable 调用与 `context.getString()` 用于非 Composable 作用域）
+- **build.gradle.kts**：versionCode 70→71，versionName 2.25.0→2.25.1
+
+### Notes
+
+- MainViewModel.kt 中的 138 个运行时错误/Toast 消息（含字符串插值）暂未迁移，留待后续处理（涉及与 SettingsScreen 备份消息颜色判断逻辑的耦合重构）
+- 代码注释中的中文保持原样（非用户可见 UI 字符串）
+
 ## [v2.25.0] - 2026-08-30
 
 ### Added

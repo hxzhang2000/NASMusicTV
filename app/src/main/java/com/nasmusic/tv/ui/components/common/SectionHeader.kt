@@ -9,10 +9,12 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Text
+import com.nasmusic.tv.R
 import com.nasmusic.tv.ui.components.FocusableSurface
 import com.nasmusic.tv.ui.theme.FontSize
 import com.nasmusic.tv.ui.theme.NasMusicColors
@@ -63,7 +65,7 @@ fun SectionHeader(
                 focusedContentColor = NasMusicColors.Primary
             ) {
                 Text(
-                    text = "查看全部 >",
+                    text = stringResource(R.string.section_view_all),
                     color = NasMusicColors.Primary,
                     fontSize = FontSize.body(),
                     modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)

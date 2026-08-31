@@ -188,7 +188,7 @@ fun BaiduAuthDialog(
                             )
                             Spacer(modifier = Modifier.width(12.dp))
                             FocusableSurface(
-                                onClick = { LinkUtils.copyToClipboard(context, "百度网盘设备码", deviceCode.userCode) },
+                                onClick = { LinkUtils.copyToClipboard(context, context.getString(R.string.baidu_device_code_label), deviceCode.userCode) },
                                 shape = RoundedCornerShape(8.dp),
                                 focusedScale = 1.08f,
                                 animationDurationMs = 120,
