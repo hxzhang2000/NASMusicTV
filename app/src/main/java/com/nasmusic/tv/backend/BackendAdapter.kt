@@ -6,6 +6,7 @@ import com.nasmusic.tv.data.model.Genre
 import com.nasmusic.tv.data.model.Playlist
 import com.nasmusic.tv.data.model.Song
 import com.nasmusic.tv.data.model.SongTechnicalInfo
+import com.nasmusic.tv.data.model.VersionInfo
 
 /**
  * 后端适配器接口
@@ -27,9 +28,22 @@ interface BackendAdapter {
      * 后端 API 协议版本号（initialize 时从服务端获取，供设置→关于页展示）
      *
      * 接口默认 "Unknown"，各适配器用 `override var` 覆盖，在 initialize() 内赋值。
+     * @deprecated 请使用 [getApiVersion] 获取更详细的版本信息
      */
+    @Deprecated("Use getApiVersion() instead", ReplaceWith("getApiVersion().displayVersion"))
     val apiVersion: String
         get() = "Unknown"
+
+    /**
+     * 获取当前 API 版本号详细信息（用于设置→关于页展示）
+     *
+     * 返回 [VersionInfo] 密封接口，包含四种状态：
+     * - [VersionInfo.Static]   硬编码常量版本
+     * - [VersionInfo.Runtime]  运行时从服务端获取
+     * - [VersionInfo.NoVersion] 无版本号服务（仅展示服务名）
+     * - [VersionInfo.Disconnected] 未连接
+     */
+    suspend fun getApiVersion(): VersionInfo
 
     /**
      * 播放流时需要注入的 HTTP 请求头（如 Cookie / Authorization）

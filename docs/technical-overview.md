@@ -6148,3 +6148,44 @@ Phase 1-6 代码已全部落地并编译通过。Phase 7（测试与文档）新
 **验证结果**：✅ `assembleDebug` 编译通过（无 error）。
 
 **版本号变更**：v2.25.4 → v2.25.5（versionCode 74 → 75）
+
+### 10.69 关于页新增后端 API 版本号展示（v2.25.6）
+
+**日期**：2026-09-01
+
+**新增功能**：
+
+1. **数据模型 — `VersionInfo` 密封接口**：
+   - 新增 `app/src/main/java/com/nasmusic/tv/data/model/VersionInfo.kt`，四种状态：
+     - `Static`：硬编码常量版本（如 Jamendo v3.0、百度网盘 PCS rest/2.0）
+     - `Runtime`：运行时从服务端获取（如 Jellyfin、Navidrome、Subsonic、道理鱼）
+     - `NoVersion`：无版本号服务（如 Meting-API、Bilibili MV），仅展示服务名
+     - `Disconnected`：后端已配置但当前未连接
+
+2. **接口扩展 — `BackendAdapter.getApiVersion()`**：
+   - `app/src/main/java/com/nasmusic/tv/backend/BackendAdapter.kt` 新增 `suspend fun getApiVersion(): VersionInfo`
+   - 旧 `apiVersion` 字段标记 `@Deprecated`
+   - 各适配器实现：
+     - Jellyfin：`/System/Info/Public` → `Version` 字段
+     - Navidrome / Subsonic：`rest/ping.view` → `subsonic-response.version`
+     - 道理鱼：`/health` → `version` 字段
+     - 飞牛：硬编码 `v1`（URL 路径前缀，UNCONFIRMED，待部署 fnOS 抓包确认）
+
+3. **ViewModel 聚合 — `apiVersions` StateFlow**：
+   - `MainViewModel` 新增 `apiVersions: StateFlow<List<VersionInfo>>` + `refreshApiVersions()`
+   - 调用时机：初始化、连接成功、断开连接
+   - 聚合内容：当前后端 + 百度网盘（静态）+ Jamendo / Open-Meteo / OpenWeatherMap（静态）+ Meting-API / Bilibili MV（NoVersion）
+
+4. **UI 渲染 — 设置页关于页分段展示**：
+   - `app/src/main/java/com/nasmusic/tv/ui/screens/SettingsScreen.kt` 关于页新增「API 版本号」段
+   - 新增 `formatVersionInfo()` 按状态格式化 label/value
+   - 所有按钮/文字显式指定颜色（未选中态亮色，遵循 SettingsScreen 修复规范）
+
+5. **i18n**：
+   - `values/strings.xml` + `values-en/strings.xml` 新增 `settings_api_versions`、`settings_api_versions_empty`
+
+**涉及文件**：`app/src/main/java/com/nasmusic/tv/data/model/VersionInfo.kt`、`app/src/main/java/com/nasmusic/tv/backend/BackendAdapter.kt`、`app/src/main/java/com/nasmusic/tv/backend/impl/JellyfinAdapter.kt`、`app/src/main/java/com/nasmusic/tv/backend/impl/NavidromeAdapter.kt`、`app/src/main/java/com/nasmusic/tv/backend/impl/SubsonicAdapter.kt`、`app/src/main/java/com/nasmusic/tv/backend/impl/DaoliyuAdapter.kt`、`app/src/main/java/com/nasmusic/tv/backend/impl/FeiniuAdapter.kt`、`app/src/main/java/com/nasmusic/tv/ui/viewmodel/MainViewModel.kt`、`app/src/main/java/com/nasmusic/tv/ui/screens/SettingsScreen.kt`、`app/src/main/java/com/nasmusic/tv/ui/components/AppRoot.kt`、`app/src/main/res/values/strings.xml`、`app/src/main/res/values-en/strings.xml`、`app/build.gradle.kts`、`CHANGELOG.md`、`docs/technical-overview.md`
+
+**验证结果**：✅ `assembleRelease` 编译通过（无 error），已部署电视验证。
+
+**版本号变更**：v2.25.5 → v2.25.6（versionCode 75 → 76）

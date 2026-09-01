@@ -45,6 +45,25 @@ import okhttp3.OkHttpClient
  */
 class NasMusicApp : Application(), ImageLoaderFactory {
 
+    companion object {
+        /**
+         * 读取系统当前 locale（不受 Application.updateConfiguration 影响）。
+         *
+         * Locale.getDefault() 在进程存活期间可被 Resources.updateConfiguration() 污染，
+         * 不能作为"跟随系统"的判断依据。Resources.getSystem() 是系统级 Resources，
+         * 其 configuration 总是反映真正的系统 locale。
+         */
+        fun getSystemLocale(): java.util.Locale {
+            val sysConfig = android.content.res.Resources.getSystem().configuration
+            return if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N) {
+                sysConfig.locales[0]
+            } else {
+                @Suppress("DEPRECATION")
+                sysConfig.locale ?: java.util.Locale.getDefault()
+            }
+        }
+    }
+
     lateinit var backendRegistry: BackendRegistry
         private set
     lateinit var appPreferences: AppPreferences
@@ -194,7 +213,7 @@ class NasMusicApp : Application(), ImageLoaderFactory {
         val locale = when (lang) {
             "zh" -> java.util.Locale.SIMPLIFIED_CHINESE
             "en" -> java.util.Locale.US
-            else -> java.util.Locale.getDefault() // 跟随系统
+            else -> getSystemLocale() // 跟随系统：读取真正的系统 locale，而非被污染的 Locale.getDefault()
         }
         val config = android.content.res.Configuration(resources.configuration)
         config.setLocale(locale)

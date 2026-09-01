@@ -45,7 +45,6 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
-import androidx.activity.ComponentActivity
 import androidx.compose.ui.platform.LocalContext
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
@@ -116,6 +115,7 @@ fun AppRoot(
     val isConnected by viewModel.isConnected.collectAsState(initial = false)
     val serverDisplayName by viewModel.serverDisplayName.collectAsState(initial = "")
     val backendApiVersion by viewModel.backendApiVersion.collectAsState(initial = "Unknown")
+    val apiVersions by viewModel.apiVersions.collectAsState(initial = emptyList())
     val serverConfig by viewModel.serverConfig.collectAsState(initial = ServerConfig.Empty)
     val settings by viewModel.appSettings.collectAsState(initial = com.nasmusic.tv.data.model.AppSettings())
     // 封面滤镜状态（跨屏幕共享，用于 NowPlaying + Settings）
@@ -713,8 +713,9 @@ fun AppRoot(
                         onChangeLanguage = { lang ->
                             coroutineScope.launch {
                                 viewModel.updateLanguage(lang)
-                                // 用 finish + 新 Intent 重启，避免 recreate() 导致双 DataStore 冲突
-                                val activity = context as? ComponentActivity
+                                // 用 finish + 新 Intent 重启，避免 recreate() 导致双 DataStore 冲突。
+                                // 不调用 Runtime.exit(0) —— 进程自然回收，避免中断 PlaybackService 播放。
+                                val activity = context as? android.app.Activity
                                 if (activity != null) {
                                     val pkg = activity.packageName
                                     val mgr = activity.packageManager
@@ -722,7 +723,6 @@ fun AppRoot(
                                     intent?.addFlags(android.content.Intent.FLAG_ACTIVITY_CLEAR_TASK or android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
                                     if (intent != null) activity.startActivity(intent)
                                     activity.finish()
-                                    Runtime.getRuntime().exit(0)
                                 }
                             }
                         },
@@ -759,6 +759,7 @@ fun AppRoot(
                         isConnected = isConnected,
                         serverDisplayName = serverDisplayName,
                         backendApiVersion = backendApiVersion,
+                        apiVersions = apiVersions,
                         isConnecting = isLoading,
                         onConnect = onConnect,
                         onDisconnect = { viewModel.disconnect() },

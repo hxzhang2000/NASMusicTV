@@ -9,6 +9,7 @@ import com.nasmusic.tv.data.model.Genre
 import com.nasmusic.tv.data.model.Playlist
 import com.nasmusic.tv.data.model.Song
 import com.nasmusic.tv.data.model.SongTechnicalInfo
+import com.nasmusic.tv.data.model.VersionInfo
 import com.nasmusic.tv.util.AppLog
 import com.nasmusic.tv.util.EncodingUtils
 import com.nasmusic.tv.util.RetryConfig
@@ -108,6 +109,30 @@ class SubsonicAdapter : BackendAdapter {
         } catch (e: Exception) {
             AppLog.w("SubsonicAdapter", "testConnection failed", e)
             false
+        }
+    }
+
+    override suspend fun getApiVersion(): VersionInfo = withContext(Dispatchers.IO) {
+        try {
+            val url = buildRestUrl("ping")
+            val request = Request.Builder().url(url).build()
+            val result = client.newCall(request).execute().use { response ->
+                val body = response.body?.string() ?: return@use VersionInfo.Disconnected("Subsonic")
+                if (!response.isSuccessful) return@use VersionInfo.Disconnected("Subsonic")
+                val json = gson.fromJson(body, JsonObject::class.java)
+                val subsonic = json.getAsJsonObject("subsonic-response") ?: return@use VersionInfo.Disconnected("Subsonic")
+                val status = subsonic.get("status")?.asString ?: return@use VersionInfo.Disconnected("Subsonic")
+                val version = subsonic.get("version")?.asString ?: ""
+                if (status == "ok" && version.isNotBlank()) {
+                    VersionInfo.Runtime("Subsonic", version, "rest/ping.view", System.currentTimeMillis())
+                } else {
+                    VersionInfo.Disconnected("Subsonic")
+                }
+            }
+            result
+        } catch (e: Exception) {
+            AppLog.w("SubsonicAdapter", "getApiVersion failed", e)
+            VersionInfo.Disconnected("Subsonic")
         }
     }
 

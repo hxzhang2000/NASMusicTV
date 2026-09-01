@@ -10,6 +10,7 @@ import com.nasmusic.tv.data.model.Genre
 import com.nasmusic.tv.data.model.Playlist
 import com.nasmusic.tv.data.model.Song
 import com.nasmusic.tv.data.model.SongTechnicalInfo
+import com.nasmusic.tv.data.model.VersionInfo
 import com.nasmusic.tv.util.AppLog
 import com.nasmusic.tv.util.EncodingUtils
 import com.nasmusic.tv.util.RetryConfig
@@ -113,6 +114,28 @@ class JellyfinAdapter : BackendAdapter {
                 }
             }
         } catch (_: Exception) {}
+    }
+
+    override suspend fun getApiVersion(): VersionInfo = withContext(Dispatchers.IO) {
+        try {
+            val request = Request.Builder()
+                .url("$baseUrl/System/Info/Public")
+                .build()
+            val result = client.newCall(request).execute().use { response ->
+                if (response.isSuccessful) {
+                    val body = response.body?.string() ?: return@use VersionInfo.Disconnected("Jellyfin")
+                    val json = JsonParser.parseString(body).asJsonObject
+                    val version = json.get("Version")?.asString ?: "未知"
+                    VersionInfo.Runtime("Jellyfin", version, "/System/Info/Public", System.currentTimeMillis())
+                } else {
+                    VersionInfo.Disconnected("Jellyfin")
+                }
+            }
+            result
+        } catch (e: Exception) {
+            AppLog.w("JellyfinAdapter", "getApiVersion failed", e)
+            VersionInfo.Disconnected("Jellyfin")
+        }
     }
 
     override suspend fun testConnection(): Boolean = withContext(Dispatchers.IO) {

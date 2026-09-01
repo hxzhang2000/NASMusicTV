@@ -22,6 +22,7 @@ import com.nasmusic.tv.data.model.Artist
 import com.nasmusic.tv.data.model.BackupMessage
 import com.nasmusic.tv.data.model.BaiduFile
 import com.nasmusic.tv.data.model.BaiduFileIndex
+import com.nasmusic.tv.data.model.VersionInfo
 import com.nasmusic.tv.data.model.BrowseDimension
 import com.nasmusic.tv.data.model.AppSettings
 import com.nasmusic.tv.data.model.Lyrics
@@ -738,6 +739,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
     private val _backendApiVersion = MutableStateFlow("Unknown")
     val backendApiVersion: StateFlow<String> = _backendApiVersion.asStateFlow()
 
+    /** 全量后端/服务 API 版本号聚合（供设置→关于页分段展示） */
+    private val _apiVersions = MutableStateFlow<List<VersionInfo>>(emptyList())
+    val apiVersions: StateFlow<List<VersionInfo>> = _apiVersions.asStateFlow()
+
     // --- 启动连接提示 ---
     private val _showConnectPrompt = MutableStateFlow(false)
     val showConnectPrompt: StateFlow<Boolean> = _showConnectPrompt.asStateFlow()
@@ -782,6 +787,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
 
     init {
         viewModelScope.launch {
+            // 初始化全量 API 版本号聚合（静态外部服务 + 已连接后端）
+            refreshApiVersions()
             // 初始化播放模式（B-13: 从预设置恢复）
             val settings = prefs.appSettings.first()
             _playMode.value = settings.defaultPlayMode
@@ -1025,6 +1032,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
                 _isConnected.value = true
                 _serverDisplayName.value = backendRegistry.getServerDisplayName()
                 _backendApiVersion.value = backendRegistry.getAdapter()?.apiVersion ?: "Unknown"
+                refreshApiVersions()
                 prefs.saveServerConfig(config.copy(isConnected = true))
                 // 连接成功后加载初始数据
                 loadLibrary()
@@ -1057,6 +1065,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
             _isConnected.value = false
                 _serverDisplayName.value = ""
                 _backendApiVersion.value = "Unknown"
+            refreshApiVersions()
             _albums.value = UiState.Loading
             _songs.value = UiState.Loading
             _songsPaging.value = SongsPagingState()
@@ -1074,6 +1083,40 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
                 AppLog.e("MainViewModel", "disconnect: save config failed", e)
             }
         }
+    }
+
+    /**
+     * 刷新全量后端/服务的 API 版本号聚合（供设置→关于页展示）。
+     *
+     * 调用时机：连接成功、断开连接、进入关于页。
+     * 后端用运行时获取（[VersionInfo.Runtime]），未连接显示 Disconnected；
+     * 外部服务（Jamendo/Open-Meteo/OpenWeatherMap）用静态常量；
+     * 无版本号服务（Meting-API/Bilibili MV）用 NoVersion 仅展示服务名；
+     * 百度网盘用静态常量展示 PCS 版本。
+     */
+    suspend fun refreshApiVersions() {
+        val app = getApplication<Application>()
+        val result = mutableListOf<VersionInfo>()
+
+        // 1. 当前 NAS 后端（运行时获取）
+        val adapter = backendRegistry.getAdapter()
+        if (adapter != null) {
+            result.add(try { adapter.getApiVersion() } catch (e: Exception) { VersionInfo.Disconnected(adapter.backendType) })
+        }
+
+        // 2. 百度网盘（静态常量）
+        result.add(VersionInfo.Static("百度网盘", "PCS rest/2.0", "接口静默演进，无显式版本号"))
+
+        // 3. 外部服务（静态常量）
+        result.add(VersionInfo.Static("Jamendo", "v3.0"))
+        result.add(VersionInfo.Static("Open-Meteo", "v1.0", "默认天气源"))
+        result.add(VersionInfo.Static("OpenWeatherMap", "v2.5", "备用天气源"))
+
+        // 4. 无版本号服务（仅展示服务名）
+        result.add(VersionInfo.NoVersion("Meting-API"))
+        result.add(VersionInfo.NoVersion("Bilibili MV"))
+
+        _apiVersions.value = result
     }
 
     /**
@@ -1102,6 +1145,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
                     _isConnected.value = true
                     _serverDisplayName.value = backendRegistry.getServerDisplayName()
                     _backendApiVersion.value = backendRegistry.getAdapter()?.apiVersion ?: "Unknown"
+                    refreshApiVersions()
+                    refreshApiVersions()
                     prefs.saveServerConfig(config.copy(isConnected = true))
                     loadLibrary()
                     if (!silent) {

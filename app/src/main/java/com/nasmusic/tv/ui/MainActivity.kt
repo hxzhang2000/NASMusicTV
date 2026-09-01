@@ -79,7 +79,7 @@ class MainActivity : ComponentActivity() {
         val locale = when (lang) {
             "zh" -> java.util.Locale.SIMPLIFIED_CHINESE
             "en" -> java.util.Locale.US
-            else -> java.util.Locale.getDefault()
+            else -> com.nasmusic.tv.NasMusicApp.getSystemLocale() // 跟随系统：读取真正的系统 locale
         }
         val config = Configuration(newBase.resources.configuration)
         config.setLocale(locale)

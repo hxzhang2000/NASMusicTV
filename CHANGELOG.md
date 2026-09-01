@@ -7,6 +7,19 @@
 >
 > 类型：`Added`（新增） | `Changed`（变更） | `Fixed`（修复） | `Removed`（移除）
 
+## [v2.25.6] - 2026-09-01
+
+### Added
+
+- **关于页新增「API 版本号」展示区**：集中展示所有已接入后端/服务的 API 版本号。后端（Jellyfin / Navidrome / Subsonic / 道理鱼 / 飞牛）运行时从各自端点获取真实版本；百度网盘 / Jamendo / Open-Meteo / OpenWeatherMap 展示静态常量版本；Meting-API / Bilibili MV 无版本号仅展示服务名
+- **`VersionInfo` 数据模型**：新增密封接口 `Static` / `Runtime` / `NoVersion` / `Disconnected` 四种状态，统一描述各后端的版本号来源与展示方式
+- **`BackendAdapter.getApiVersion()` 接口**：各后端适配器实现该方法，返回结构化版本信息（`apiVersion` 旧字段标记为 deprecated）
+
+### Changed
+
+- **设置页关于页分段渲染**：后端连接段 + API 版本号段 + 外部服务段，按钮文字显式指定颜色（未选中态亮色，遵循 SettingsScreen 修复规范）
+- **`MainViewModel` 版本聚合**：新增 `apiVersions` StateFlow + `refreshApiVersions()`，在初始化 / 连接成功 / 断开连接时刷新
+
 ## [v2.25.5] - 2026-09-01
 
 ### Fixed

@@ -157,6 +157,8 @@ fun SettingsScreen(
     isConnected: Boolean = false,
     serverDisplayName: String = "",
     backendApiVersion: String = "Unknown",
+    // 全量后端/服务的 API 版本号聚合（供关于页展示）
+    apiVersions: List<com.nasmusic.tv.data.model.VersionInfo> = emptyList(),
     isConnecting: Boolean = false,
     onConnect: ((com.nasmusic.tv.data.model.ServerConfig) -> Unit)? = null,
     onDisconnect: (() -> Unit)? = null,
@@ -640,6 +642,27 @@ fun SettingsScreen(
                         item { AboutRow(label = stringResource(R.string.settings_api_version), value = backendApiVersion) }
                     } else {
                         item { AboutRow(label = stringResource(R.string.settings_backend_type), value = stringResource(R.string.settings_not_connected)) }
+                    }
+                    // 全量 API 版本号（后端 + 外部服务）
+                    item {
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Text(
+                            text = stringResource(R.string.settings_api_versions),
+                            color = NasMusicColors.Primary,
+                            fontSize = FontSize.button(),
+                            fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
+                            modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp)
+                        )
+                    }
+                    if (apiVersions.isEmpty()) {
+                        item { AboutRow(label = stringResource(R.string.settings_api_versions_empty), value = "") }
+                    } else {
+                        apiVersions.forEach { v ->
+                            item {
+                                val (labelText, valueText) = formatVersionInfo(v)
+                                AboutRow(label = labelText, value = valueText)
+                            }
+                        }
                     }
                     item { AboutRow(label = stringResource(R.string.settings_network_music_info), value = stringResource(R.string.settings_network_music_value)) }
                     item { AboutRow(label = stringResource(R.string.settings_independent_music), value = stringResource(R.string.settings_independent_music_value)) }
@@ -2105,6 +2128,37 @@ private fun AboutRow(label: String, value: String) {
         Text(text = label, color = NasMusicColors.TextSecondary, fontSize = FontSize.button(), modifier = Modifier.padding(end = 16.dp))
         Spacer(modifier = Modifier.weight(1f))
         Text(text = value, color = NasMusicColors.TextPrimary, fontSize = FontSize.button())
+    }
+}
+
+/**
+ * 格式化 [com.nasmusic.tv.data.model.VersionInfo] 为 (label, value) 对。
+ *
+ * - Static：有版本 → (服务名, 版本号)；有 description → (服务名, 版本号·描述)
+ * - Runtime：有版本 → (服务名, 版本号)；无 → (服务名, 未连接)
+ * - NoVersion：无版本 → (服务名, "") 仅展示服务名
+ * - Disconnected：(服务名, 未连接)
+ */
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+private fun formatVersionInfo(v: com.nasmusic.tv.data.model.VersionInfo): Pair<String, String> {
+    return when (v) {
+        is com.nasmusic.tv.data.model.VersionInfo.Static -> {
+            if (v.description.isNotBlank()) {
+                v.serviceName to "${v.version} · ${v.description}"
+            } else {
+                v.serviceName to v.version
+            }
+        }
+        is com.nasmusic.tv.data.model.VersionInfo.Runtime -> {
+            v.serviceName to v.version
+        }
+        is com.nasmusic.tv.data.model.VersionInfo.NoVersion -> {
+            v.serviceName to ""
+        }
+        is com.nasmusic.tv.data.model.VersionInfo.Disconnected -> {
+            v.serviceName to stringResource(R.string.settings_not_connected)
+        }
     }
 }
 

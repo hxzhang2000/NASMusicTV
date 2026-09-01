@@ -12,6 +12,7 @@ import com.nasmusic.tv.data.model.Playlist
 import com.nasmusic.tv.data.model.ServerConfig
 import com.nasmusic.tv.data.model.Song
 import com.nasmusic.tv.data.model.SongTechnicalInfo
+import com.nasmusic.tv.data.model.VersionInfo
 import com.nasmusic.tv.util.AppLog
 import com.nasmusic.tv.util.EncodingUtils
 import kotlinx.coroutines.Dispatchers
@@ -162,6 +163,21 @@ class DaoliyuAdapter : BackendAdapter {
             apiVersion = if (!version.isNullOrBlank()) "Daoliyu API $version" else "Daoliyu (版本未知)"
         } catch (e: Exception) {
             apiVersion = "Daoliyu (版本未知)"
+        }
+    }
+
+    override suspend fun getApiVersion(): VersionInfo = withContext(Dispatchers.IO) {
+        try {
+            val json = executeGet("$baseUrl/health")  // ⚠️ INFERRED
+            val version = json?.get("version")?.asString
+            if (!version.isNullOrBlank()) {
+                VersionInfo.Runtime("Daoliyu", version, "/health", System.currentTimeMillis())
+            } else {
+                VersionInfo.Disconnected("Daoliyu", "版本未知")
+            }
+        } catch (e: Exception) {
+            AppLog.w(TAG, "getApiVersion failed", e)
+            VersionInfo.Disconnected("Daoliyu")
         }
     }
 

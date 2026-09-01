@@ -10,6 +10,7 @@ import com.nasmusic.tv.data.model.Playlist
 import com.nasmusic.tv.data.model.ServerConfig
 import com.nasmusic.tv.data.model.Song
 import com.nasmusic.tv.data.model.SongTechnicalInfo
+import com.nasmusic.tv.data.model.VersionInfo
 import com.nasmusic.tv.util.AppLog
 import com.nasmusic.tv.util.EncodingUtils
 import kotlinx.coroutines.Dispatchers
@@ -202,6 +203,16 @@ class FeiniuAdapter : BackendAdapter {
         apiVersion = "飞牛音乐 API"
         // ⚠️ UNCONFIRMED: fnOS 系统信息或音乐服务 /music/api/v1/version
         // 待部署 fnOS 后抓包确认具体版本号获取方式
+    }
+
+    override suspend fun getApiVersion(): VersionInfo = withContext(Dispatchers.IO) {
+        try {
+            // ⚠️ UNCONFIRMED: 目前硬编码 v1（URL 路径前缀），待部署 fnOS 后抓包确认真实版本
+            VersionInfo.Static("飞牛音乐", "v1", "URL /music/api/v1/")
+        } catch (e: Exception) {
+            AppLog.w(TAG, "getApiVersion failed", e)
+            VersionInfo.Static("飞牛音乐", "v1", "URL /music/api/v1/")
+        }
     }
 
     override suspend fun testConnection(): Boolean = withContext(Dispatchers.IO) {

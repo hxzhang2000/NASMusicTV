@@ -208,6 +208,8 @@
     <string name="settings_supported_backends_value">Jellyfin / Navidrome / Subsonic / 道理鱼 / 飞牛</string>
     <string name="settings_backend_type">后端类型</string>
     <string name="settings_api_version">API 版本</string>
+    <string name="settings_api_versions">API 版本号</string>
+    <string name="settings_api_versions_empty">暂无版本信息</string>
     <string name="settings_connection_status">连接状态</string>
     <string name="settings_not_connected">未连接</string>
     <string name="settings_network_music_info">网络音乐</string>

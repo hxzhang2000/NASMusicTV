@@ -208,6 +208,8 @@
     <string name="settings_supported_backends_value">Jellyfin / Navidrome / Subsonic / Daoliyu / Feiniu</string>
     <string name="settings_backend_type">Backend Type</string>
     <string name="settings_api_version">API Version</string>
+    <string name="settings_api_versions">API Versions</string>
+    <string name="settings_api_versions_empty">No version info</string>
     <string name="settings_connection_status">Connection Status</string>
     <string name="settings_not_connected">Not connected</string>
     <string name="settings_network_music_info">Network Music</string>
