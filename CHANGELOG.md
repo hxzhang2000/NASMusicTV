@@ -7,6 +7,21 @@
 >
 > 类型：`Added`（新增） | `Changed`（变更） | `Fixed`（修复） | `Removed`（移除）
 
+## [v2.25.3] - 2026-09-01
+
+### Changed
+
+- **UI 字符串外部化（第三批 — PlayerManager + DemucsSeparator）**：将播放引擎层剩余的 ~35 处用户可见硬编码中文字符串迁移至 `res/values/strings.xml`，使用 `applicationContext.getString()` / `context.getString()` 模式。覆盖范围：
+  - PlayerManager：下载错误（无文件/HTTP失败/超时/网络错误/异常）、高质量分离错误（组件未就绪/模型未下载/模型路径不可用/初始化失败/分离失败/OOM/异常）、分离进度（下载音频/加载模型/预下载/完成/分离完成）、播放错误
+  - DemucsSeparator：模型错误（文件不存在/OOM/初始化失败/未初始化/内存不足）、分离错误（OOM/异常/无音轨/解码OOM/解码失败）、分离进度（解码音频/分段处理/分离中/完成）
+  - NasMusicApp：`PlayerManager()` → `PlayerManager(this)` 传入 applicationContext
+- **strings.xml 新增 39 行字符串资源**，覆盖 player_error_*、hq_error_*、hq_progress_*、hq_success_*、demucs_error_*、demucs_progress_* 等
+
+### Notes
+
+- PlayerManager 和 DemucsSeparator 的构造函数已接受 Context 参数
+- 剩余中文字符串仅存在于：Web 页面 HTML（BackupTransferServer/ModelTransferServer/RemoteControlHtml）、数据常量（天气描述/枚举标签/过滤关键词/错误码映射）、代码注释
+
 ## [v2.25.2] - 2026-08-31
 
 ### Changed

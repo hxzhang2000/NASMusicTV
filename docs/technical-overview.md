@@ -6047,3 +6047,34 @@ Phase 1-6 代码已全部落地并编译通过。Phase 7（测试与文档）新
 **涉及文件**：`app/src/main/res/values/strings.xml`、`app/src/main/java/com/nasmusic/tv/ui/viewmodel/MainViewModel.kt`、`app/src/main/java/com/nasmusic/tv/data/model/BackupMessage.kt`（新增）、`app/src/main/java/com/nasmusic/tv/ui/screens/SettingsScreen.kt`、`app/build.gradle.kts`、`CHANGELOG.md`、`docs/technical-overview.md`
 
 **版本号变更**：v2.25.1 → v2.25.2（versionCode 71 → 72）
+
+---
+
+### 10.66 v2.25.3 - UI 字符串外部化（第三批：PlayerManager + DemucsSeparator）
+
+**提交时间**：2026-09-01
+
+**目标**：将播放引擎层（PlayerManager + DemucsSeparator）剩余的 ~35 处用户可见硬编码中文字符串迁移至 `res/values/strings.xml`。
+
+**主要变更**：
+
+1. **strings.xml 新增 39 行字符串资源**，覆盖 `player_error_*`、`hq_error_*`、`hq_progress_*`、`hq_success_*`、`demucs_error_*`、`demucs_progress_*` 等。
+
+2. **PlayerManager.kt 约 20 处替换**，使用 `applicationContext.getString(R.string.xxx)` 模式：
+   - 下载错误（无文件 / HTTP 失败 / 超时 / 网络错误 / 异常）
+   - 高质量分离错误（组件未就绪 / 模型未下载 / 模型路径不可用 / 初始化失败 / 分离失败 / OOM / 异常）
+   - 分离进度（下载音频 / 加载模型 / 预下载 / 完成 / 分离完成）
+   - 播放错误
+
+3. **DemucsSeparator.kt 约 15 处替换**，使用 `context.getString(R.string.xxx)` 模式：
+   - 模型错误（文件不存在 / OOM / 初始化失败 / 未初始化 / 内存不足）
+   - 分离错误（OOM / 异常 / 无音轨 / 解码 OOM / 解码失败）
+   - 分离进度（解码音频 / 分段处理 / 分离中 / 完成）
+
+4. **NasMusicApp.kt**：`PlayerManager()` → `PlayerManager(this)` 传入 applicationContext。
+
+**验证结果**：✅ `assembleDebug` 编译通过（无 error）。
+
+**涉及文件**：`app/src/main/res/values/strings.xml`、`app/src/main/java/com/nasmusic/tv/player/PlayerManager.kt`、`app/src/main/java/com/nasmusic/tv/player/DemucsSeparator.kt`、`app/src/main/java/com/nasmusic/tv/NasMusicApp.kt`、`app/build.gradle.kts`、`CHANGELOG.md`、`docs/technical-overview.md`
+
+**版本号变更**：v2.25.2 → v2.25.3（versionCode 72 → 73）

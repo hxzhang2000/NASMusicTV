@@ -626,6 +626,45 @@
     <string name="mv_switch">切换</string>
     <string name="mv_search_bilibili">搜B站</string>
 
+    <!-- Player & Separation -->
+    <string name="player_error_no_file">歌曲无本地文件且无流媒体地址</string>
+    <string name="player_download_http_error">下载失败 HTTP %d</string>
+    <string name="player_download_timeout">下载超时（5分钟内未完成）</string>
+    <string name="player_download_network_error">网络错误：%s</string>
+    <string name="player_download_exception">下载异常：%s</string>
+    <string name="player_error_playback">播放错误</string>
+    <string name="hq_error_component_not_ready">分离组件未就绪，已切换快速模式</string>
+    <string name="hq_error_model_not_downloaded">高质量模型未下载，已切换快速模式</string>
+    <string name="hq_error_no_audio_file">无法获取音频文件</string>
+    <string name="hq_error_with_fallback">%s，已切换快速模式</string>
+    <string name="hq_error_model_path_unavailable">模型路径不可用，已切换快速模式</string>
+    <string name="hq_error_separator_init_failed">模型初始化失败</string>
+    <string name="hq_error_separation_failed">高质量分离失败</string>
+    <string name="hq_error_oom">内存不足，已切换快速模式</string>
+    <string name="hq_error_exception_with_suffix">分离过程出错：%s，已切换快速模式</string>
+    <string name="hq_error_with_time_and_suffix">%1$s（%2$.1fs），已切换快速模式</string>
+    <string name="hq_progress_downloading">下载音频</string>
+    <string name="hq_progress_loading_model">加载模型</string>
+    <string name="hq_progress_pre_download">预下载</string>
+    <string name="hq_progress_stage_elapsed">%1$s [%2$.1fs]</string>
+    <string name="hq_progress_done">完成 [%1$.1fs]</string>
+    <string name="hq_success_separation_done">✓ 分离完成 [%1$.1fs]</string>
+    <string name="demucs_error_model_not_found">模型文件不存在</string>
+    <string name="demucs_error_oom_load_model">内存不足，无法加载模型（%dMB）</string>
+    <string name="demucs_error_init_failed">模型初始化失败：%s</string>
+    <string name="demucs_error_not_initialized">分离器未初始化</string>
+    <string name="demucs_error_low_memory">可用内存不足（%dMB &lt; 150MB），请关闭其他应用后重试</string>
+    <string name="demucs_error_oom_separate">内存不足，设备内存不够完成分离</string>
+    <string name="demucs_error_separate_exception">分离异常：%s</string>
+    <string name="demucs_progress_decoding">解码音频</string>
+    <string name="demucs_progress_decoding_percent">解码音频 (%d%%)</string>
+    <string name="demucs_progress_segmenting">分段处理</string>
+    <string name="demucs_progress_separating">分离中 (%1$d/%2$d)</string>
+    <string name="demucs_progress_done">完成</string>
+    <string name="demucs_error_no_audio_track">音频文件无音轨（格式不支持?）</string>
+    <string name="demucs_error_decode_oom">解码内存不足（音频过长?）</string>
+    <string name="demucs_error_decode_failed">音频解码失败：%s</string>
+
     <!-- Player Controls -->
     <string name="player_karaoke">K歌</string>
 

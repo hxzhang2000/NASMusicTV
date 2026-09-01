@@ -1,5 +1,6 @@
 package com.nasmusic.tv.player
 
+import android.content.Context
 import android.media.audiofx.Equalizer
 import android.os.Handler
 import android.os.Looper
@@ -7,6 +8,7 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
+import com.nasmusic.tv.R
 import com.nasmusic.tv.data.model.PlayMode
 import com.nasmusic.tv.data.model.Song
 import com.nasmusic.tv.data.prefs.AppPreferences
@@ -27,7 +29,7 @@ import kotlin.random.Random
  * 播放管理器
  * 单例模式，管理播放状态、队列和播放模式
  */
-class PlayerManager() {
+class PlayerManager(private val applicationContext: Context) {
 
     companion object {
         private const val TAG = "PlayerManager"
@@ -206,7 +208,7 @@ class PlayerManager() {
      */
     private suspend fun resolveInputPath(
         song: Song,
-        progressStage: String = "下载音频"
+        progressStage: String = applicationContext.getString(R.string.hq_progress_downloading)
     ): String? {
         // 1. 本地文件优先（百度网盘歌曲）
         val localPath = song.path
@@ -222,7 +224,7 @@ class PlayerManager() {
         val streamUrl = song.streamUrl
         if (streamUrl.isNullOrBlank()) {
             AppLog.w(TAG, "resolveInputPath: no path and no streamUrl for '${song.title}'")
-            lastDownloadError = "歌曲无本地文件且无流媒体地址"
+            lastDownloadError = applicationContext.getString(R.string.player_error_no_file)
             return null
         }
 
@@ -237,7 +239,7 @@ class PlayerManager() {
                 val response = httpClient.newCall(request).execute()
                 if (!response.isSuccessful) {
                     AppLog.w(TAG, "resolveInputPath: download failed, HTTP ${response.code}")
-                    lastDownloadError = "下载失败 HTTP ${response.code}"
+                    lastDownloadError = applicationContext.getString(R.string.player_download_http_error, response.code)
                     return@withContext null
                 }
 
@@ -279,15 +281,15 @@ class PlayerManager() {
             }
         } catch (e: java.net.SocketTimeoutException) {
             AppLog.e(TAG, "resolveInputPath: download timeout", e)
-            lastDownloadError = "下载超时（5分钟内未完成）"
+            lastDownloadError = applicationContext.getString(R.string.player_download_timeout)
             null
         } catch (e: java.net.SocketException) {
             AppLog.e(TAG, "resolveInputPath: network error", e)
-            lastDownloadError = "网络错误：${e.message?.take(30)}"
+            lastDownloadError = applicationContext.getString(R.string.player_download_network_error, e.message?.take(30))
             null
         } catch (e: Exception) {
             AppLog.e(TAG, "resolveInputPath: download exception", e)
-            lastDownloadError = "下载异常：${e.message?.take(30)}"
+            lastDownloadError = applicationContext.getString(R.string.player_download_exception, e.message?.take(30))
             null
         }
     }
@@ -323,7 +325,7 @@ class PlayerManager() {
 
         if (separator == null || cache == null || songId == null) {
             AppLog.w(TAG, "enableHighQualityRemoval: missing separator/cache/songId, fallback to fast mode")
-            _hqError.value = "分离组件未就绪，已切换快速模式"
+            _hqError.value = applicationContext.getString(R.string.hq_error_component_not_ready)
             _separationMode.value = AppPreferences.SeparationMode.FAST
             vocalRemovalProcessor?.setEnabled(true)
             return false
@@ -333,7 +335,7 @@ class PlayerManager() {
         val modelManager = modelDownloadManager
         if (modelManager != null && !modelManager.isModelDownloaded()) {
             AppLog.w(TAG, "enableHighQualityRemoval: model not downloaded, fallback to fast mode")
-            _hqError.value = "高质量模型未下载，已切换快速模式"
+            _hqError.value = applicationContext.getString(R.string.hq_error_model_not_downloaded)
             _separationMode.value = AppPreferences.SeparationMode.FAST
             vocalRemovalProcessor?.setEnabled(true)
             return false
@@ -358,11 +360,11 @@ class PlayerManager() {
                 try {
                     // 解析输入路径（本地文件 或 下载 streamUrl）
                     val inputPath = withContext(Dispatchers.IO) {
-                        resolveInputPath(song, "下载音频")
+                        resolveInputPath(song, applicationContext.getString(R.string.hq_progress_downloading))
                     }
                     if (inputPath == null) {
                         AppLog.w(TAG, "enableHighQualityRemoval: cannot resolve input path, fallback to fast mode")
-                        _hqError.value = "${lastDownloadError ?: "无法获取音频文件"}，已切换快速模式"
+                        _hqError.value = applicationContext.getString(R.string.hq_error_with_fallback, lastDownloadError ?: applicationContext.getString(R.string.hq_error_no_audio_file))
                         _separationMode.value = AppPreferences.SeparationMode.FAST
                         vocalRemovalProcessor?.setEnabled(true)
                         if (wasPlayingBeforeSeparation) player?.play()
@@ -376,17 +378,17 @@ class PlayerManager() {
                         val modelPath = modelManager?.getModelPath()
                         if (modelPath == null) {
                             AppLog.w(TAG, "enableHighQualityRemoval: model path unavailable, fallback to fast mode")
-                            _hqError.value = "模型路径不可用，已切换快速模式"
+                            _hqError.value = applicationContext.getString(R.string.hq_error_model_path_unavailable)
                             _separationMode.value = AppPreferences.SeparationMode.FAST
                             vocalRemovalProcessor?.setEnabled(true)
                             if (wasPlayingBeforeSeparation) player?.play()
                             return@launch
                         }
-                        _separationProgress.value = 0.2f to "加载模型"
+                        _separationProgress.value = 0.2f to applicationContext.getString(R.string.hq_progress_loading_model)
                         val initOk = with(Dispatchers.IO) { separator.initialize(modelPath) }
                         if (!initOk) {
                             AppLog.w(TAG, "enableHighQualityRemoval: separator init failed, fallback to fast mode")
-                            _hqError.value = "${separator.lastError ?: "模型初始化失败"}，已切换快速模式"
+                            _hqError.value = applicationContext.getString(R.string.hq_error_with_fallback, separator.lastError ?: applicationContext.getString(R.string.hq_error_separator_init_failed))
                             _separationMode.value = AppPreferences.SeparationMode.FAST
                             vocalRemovalProcessor?.setEnabled(true)
                             if (wasPlayingBeforeSeparation) player?.play()
@@ -403,7 +405,7 @@ class PlayerManager() {
                             songId = songId,
                             progress = DemucsSeparator.ProgressCallback { p, stage ->
                                 val elapsedSec = (System.currentTimeMillis() - separationStartTimeMs) / 1000.0
-                                _separationProgress.value = p to "$stage [${String.format("%.1f", elapsedSec)}s]"
+                                _separationProgress.value = p to applicationContext.getString(R.string.hq_progress_stage_elapsed, stage, elapsedSec)
                             }
                         )
                     }
@@ -411,28 +413,28 @@ class PlayerManager() {
                         // 分离完成，关闭快速模式 DSP + 切换到伴奏文件 + 恢复播放
                         val totalSec = (System.currentTimeMillis() - separationStartTimeMs) / 1000.0
                         AppLog.d(TAG, "enableHighQualityRemoval: completed in ${String.format("%.1f", totalSec)}s")
-                        _separationProgress.value = 1f to "完成 [${String.format("%.1f", totalSec)}s]"
-                        _hqSuccess.value = "✓ 分离完成 [${String.format("%.1f", totalSec)}s]"
+                        _separationProgress.value = 1f to applicationContext.getString(R.string.hq_progress_done, totalSec)
+                        _hqSuccess.value = applicationContext.getString(R.string.hq_success_separation_done, totalSec)
                         vocalRemovalProcessor?.setEnabled(false)
                         switchToAccompaniment(result.accompanimentFile.absolutePath)
                         if (wasPlayingBeforeSeparation) player?.play()
                     } else {
                         val totalSec = (System.currentTimeMillis() - separationStartTimeMs) / 1000.0
                         AppLog.w(TAG, "enableHighQualityRemoval: separation failed in ${String.format("%.1f", totalSec)}s, fallback to fast mode")
-                        _hqError.value = "${separator.lastError ?: "高质量分离失败"}(${String.format("%.1f", totalSec)}s)，已切换快速模式"
+                        _hqError.value = applicationContext.getString(R.string.hq_error_with_time_and_suffix, separator.lastError ?: applicationContext.getString(R.string.hq_error_separation_failed), totalSec)
                         _separationMode.value = AppPreferences.SeparationMode.FAST
                         vocalRemovalProcessor?.setEnabled(true)
                         if (wasPlayingBeforeSeparation) player?.play()
                     }
                 } catch (e: OutOfMemoryError) {
                     AppLog.e(TAG, "enableHighQualityRemoval: OOM", e)
-                    _hqError.value = "内存不足，已切换快速模式"
+                    _hqError.value = applicationContext.getString(R.string.hq_error_oom)
                     _separationMode.value = AppPreferences.SeparationMode.FAST
                     vocalRemovalProcessor?.setEnabled(true)
                     if (wasPlayingBeforeSeparation) player?.play()
                 } catch (e: Exception) {
                     AppLog.e(TAG, "enableHighQualityRemoval: exception", e)
-                    _hqError.value = "分离过程出错：${e.message?.take(30)}，已切换快速模式"
+                    _hqError.value = applicationContext.getString(R.string.hq_error_exception_with_suffix, e.message?.take(30))
                     _separationMode.value = AppPreferences.SeparationMode.FAST
                     vocalRemovalProcessor?.setEnabled(true)
                     if (wasPlayingBeforeSeparation) player?.play()
@@ -575,7 +577,7 @@ class PlayerManager() {
         if (streamUrl.isNullOrBlank()) return
 
         scope.launch {
-            val inputPath = resolveInputPath(nextSong, "预下载")
+            val inputPath = resolveInputPath(nextSong, applicationContext.getString(R.string.hq_progress_pre_download))
             if (inputPath != null) {
                 cache.startPreSeparation(nextSong.id, inputPath, separator)
                 // 注意：tempFile 清理在 AccompanimentCache 分离完成后由 cache 自行处理
@@ -721,7 +723,7 @@ class PlayerManager() {
                 return
             }
             AppLog.e("PlayerManager", "Player error: ${error.message}", error)
-            _playerError.value = error.message ?: "播放错误"
+            _playerError.value = error.message ?: applicationContext.getString(R.string.player_error_playback)
             // 播放链接可能已过期（入队时预解析的直链有时效，网络歌曲尤甚，约 5 首后集中出现）。
             // 出错时复用 onNeedResolveStreamUrl（→ ViewModel.resolveAndPlayByIndex）重新解析一次再播放；
             // 同一首歌只重试一次，若重解析后仍失败则继续自动跳下一首，避免死循环。

@@ -4,6 +4,7 @@ import android.content.Context
 import android.media.MediaCodec
 import android.media.MediaExtractor
 import android.media.MediaFormat
+import com.nasmusic.tv.R
 import com.nasmusic.tv.util.AppLog
 import ai.onnxruntime.OnnxTensor
 import ai.onnxruntime.OrtEnvironment
@@ -97,7 +98,7 @@ class DemucsSeparator(private val context: Context) {
         return try {
             if (!modelFile.exists()) {
                 AppLog.e(TAG, "initialize: model file not found: $modelPath")
-                lastError = "模型文件不存在"
+                lastError = context.getString(R.string.demucs_error_model_not_found)
                 return false
             }
 
@@ -115,12 +116,12 @@ class DemucsSeparator(private val context: Context) {
             true
         } catch (e: OutOfMemoryError) {
             AppLog.e(TAG, "initialize: OOM loading model", e)
-            lastError = "内存不足，无法加载模型（${modelFile.length() / (1024 * 1024)}MB）"
+            lastError = context.getString(R.string.demucs_error_oom_load_model, (modelFile.length() / (1024 * 1024)).toInt())
             System.gc()
             false
         } catch (e: Exception) {
             AppLog.e(TAG, "initialize: failed", e)
-            lastError = "模型初始化失败：${e.message?.take(60)}"
+            lastError = context.getString(R.string.demucs_error_init_failed, e.message?.take(60))
             false
         }
     }
@@ -175,7 +176,7 @@ class DemucsSeparator(private val context: Context) {
     ): SeparationResult? {
         if (!isReady()) {
             AppLog.e(TAG, "separate: not initialized")
-            lastError = "分离器未初始化"
+            lastError = context.getString(R.string.demucs_error_not_initialized)
             return null
         }
 
@@ -184,13 +185,13 @@ class DemucsSeparator(private val context: Context) {
         val availableMB = (runtime.maxMemory() - runtime.totalMemory() + runtime.freeMemory()) / (1024 * 1024)
         if (availableMB < 150) {
             AppLog.e(TAG, "separate: available memory too low: ${availableMB}MB")
-            lastError = "可用内存不足（${availableMB}MB < 150MB），请关闭其他应用后重试"
+            lastError = context.getString(R.string.demucs_error_low_memory, availableMB)
             return null
         }
 
         var tempFile: File? = null
         try {
-            progress?.onProgress(0f, "解码音频")
+            progress?.onProgress(0f, context.getString(R.string.demucs_progress_decoding))
 
             // 1. 解码音频 → 写入临时文件（不在内存中保留完整 FloatArray）
             val decode = decodeAudioToTempFile(inputPath, progress)
@@ -200,7 +201,7 @@ class DemucsSeparator(private val context: Context) {
             }
             tempFile = decode.tempFile
 
-            progress?.onProgress(0.2f, "分段处理")
+            progress?.onProgress(0.2f, context.getString(R.string.demucs_progress_segmenting))
 
             val totalSamples = decode.totalSamples
             val sampleRate = decode.sampleRate
@@ -254,7 +255,7 @@ class DemucsSeparator(private val context: Context) {
                     }
 
                     segmentIndex++
-                    progress?.onProgress(0.2f + segmentIndex.toFloat() / totalSegments * 0.7f, "分离中 ($segmentIndex/$totalSegments)")
+                    progress?.onProgress(0.2f + segmentIndex.toFloat() / totalSegments * 0.7f, context.getString(R.string.demucs_progress_separating, segmentIndex, totalSegments))
 
                     startSample += segLen
                 }
@@ -265,19 +266,19 @@ class DemucsSeparator(private val context: Context) {
 
             val durationMs = (totalSamples.toFloat() / sampleRate * 1000).toLong()
 
-            progress?.onProgress(1f, "完成")
+            progress?.onProgress(1f, context.getString(R.string.demucs_progress_done))
 
             AppLog.d(TAG, "separate: OK, vocals=${vocalsFile.absolutePath}, accompaniment=${accompanimentFile.absolutePath}")
             lastError = null
             return SeparationResult(vocalsFile, accompanimentFile, durationMs)
         } catch (e: OutOfMemoryError) {
             AppLog.e(TAG, "separate: OOM", e)
-            lastError = "内存不足，设备内存不够完成分离"
+            lastError = context.getString(R.string.demucs_error_oom_separate)
             System.gc()
             return null
         } catch (e: Exception) {
             AppLog.e(TAG, "separate: failed", e)
-            lastError = "分离异常：${e.message?.take(40)}"
+            lastError = context.getString(R.string.demucs_error_separate_exception, e.message?.take(40))
             return null
         } finally {
             tempFile?.delete()
@@ -310,7 +311,7 @@ class DemucsSeparator(private val context: Context) {
 
             if (audioTrackIndex < 0 || format == null) {
                 AppLog.e(TAG, "decodeAudio: no audio track found")
-                lastError = "音频文件无音轨（格式不支持?）"
+                lastError = context.getString(R.string.demucs_error_no_audio_track)
                 tempFile.delete()
                 return null
             }
@@ -395,7 +396,7 @@ class DemucsSeparator(private val context: Context) {
                                 val progress10 = (ptsMs * 10 / (durationUs / 1000)).toInt()
                                 if (progress10 > lastDecodeProgressReport && progress10 <= 10) {
                                     lastDecodeProgressReport = progress10
-                                    progress?.onProgress(progress10.toFloat() * 0.2f, "解码音频 (${progress10 * 10}%)")
+                                    progress?.onProgress(progress10.toFloat() * 0.2f, context.getString(R.string.demucs_progress_decoding_percent, progress10 * 10))
                                 }
                             }
                         }
@@ -415,13 +416,13 @@ class DemucsSeparator(private val context: Context) {
             return DecodeResult(totalSamples, sampleRate, outChannels, tempFile)
         } catch (e: OutOfMemoryError) {
             AppLog.e(TAG, "decodeAudioToTempFile: OOM", e)
-            lastError = "解码内存不足（音频过长?）"
+            lastError = context.getString(R.string.demucs_error_decode_oom)
             tempFile.delete()
             System.gc()
             return null
         } catch (e: Exception) {
             AppLog.e(TAG, "decodeAudioToTempFile: failed", e)
-            lastError = "音频解码失败：${e.message?.take(30)}"
+            lastError = context.getString(R.string.demucs_error_decode_failed, e.message?.take(30))
             tempFile.delete()
             return null
         }

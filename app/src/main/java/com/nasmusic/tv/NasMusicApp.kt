@@ -123,7 +123,7 @@ class NasMusicApp : Application(), ImageLoaderFactory {
         super.onCreate()
         appPreferences = AppPreferences(this)
         backendRegistry = BackendRegistry()
-        playerManager = PlayerManager()
+        playerManager = PlayerManager(this)
         // 模型下载管理器（HT-Demucs FT ONNX，与 APK 分离，设置页下载）
         modelDownloadManager = ModelDownloadManager(this)
         playerManager.setModelDownloadManager(modelDownloadManager)
