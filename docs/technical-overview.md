@@ -1,7 +1,7 @@
 # NAS Music TV — 技术架构概述
 
-> 版本：v2.12.0
-> 最后更新：2026-08-23
+> 版本：v2.13.0
+> 最后更新：2026-09-01
 > 本文档记录项目当前的完整技术架构，作为后续迭代的基准参考。
 
 ---
@@ -6078,3 +6078,49 @@ Phase 1-6 代码已全部落地并编译通过。Phase 7（测试与文档）新
 **涉及文件**：`app/src/main/res/values/strings.xml`、`app/src/main/java/com/nasmusic/tv/player/PlayerManager.kt`、`app/src/main/java/com/nasmusic/tv/player/DemucsSeparator.kt`、`app/src/main/java/com/nasmusic/tv/NasMusicApp.kt`、`app/build.gradle.kts`、`CHANGELOG.md`、`docs/technical-overview.md`
 
 **版本号变更**：v2.25.2 → v2.25.3（versionCode 72 → 73）
+
+---
+
+### 10.67 v2.25.4 - 中英文语言切换功能
+
+**提交时间**：2026-09-01
+
+**目标**：实现运行时中文/英文/跟随系统语言切换，覆盖 Compose UI + Web 页面 HTML，设置页新增语言选择器。
+
+**主要变更**：
+
+1. **数据层**：
+   - `AppSettings.kt`：新增 `language: String = "system"` 字段
+   - `AppPreferences.kt`：新增 `keyLanguage`、`language` Flow、`setLanguage()`、`getLanguageSync()`，语言偏好纳入 `appSettings` Flow
+
+2. **应用初始化**：
+   - `NasMusicApp.kt`：`onCreate()` 调用 `applyLocale()` 在初始化阶段恢复用户语言偏好；`applyLocale()` 使用 `AppCompatDelegate.setApplicationLocales(LocaleListCompat)` 实现运行时切换
+
+3. **ViewModel**：
+   - `MainViewModel.kt`：新增 `updateLanguage()` 处理器；`RemoteControlServer(app)` 传入 context
+
+4. **UI**：
+   - `SettingsScreen.kt`：通用设置区块顶部新增语言选择器，三按钮横向排列（跟随系统 / 中文 / English），选中态高亮
+   - `AppRoot.kt`：接线 `language` 和 `onChangeLanguage` 到 SettingsScreen
+
+5. **Web 页面 HTML 国际化**：
+   - `BackupTransferServer.kt`：静态 `BACKUP_PAGE_HTML` 常量 → 动态 `buildBackupPageHtml(context)` 函数
+   - `RemoteControlHtml.kt`：静态 HTML → 动态 `buildControlPageHtml(context)` 函数（顶层函数）
+   - `RemoteControlServer.kt`：构造函数新增 `context` 参数，`Impl` 内部类接收 context 传给 `buildControlPageHtml(context)`
+   - `ModelTransferServer.kt`：静态 `MODEL_PAGE_HTML` 常量 → 动态 `buildModelTransferPageHtml(context)` 函数
+   - 所有 HTML 文本走 `context.getString(R.string.xxx)`，JS 字符串通过注入 `var STR = {...}` 对象实现多语言
+
+6. **依赖**：
+   - `build.gradle.kts`：新增 `androidx.appcompat:appcompat:1.6.1`、`androidx.core:core-ktx:1.12.0`
+
+7. **字符串资源**：
+   - `values/strings.xml`：新增 ~70 行 `html_backup_*`、`html_model_*`、`html_remote_*`、`html_common_*` 字符串 + 5 行 `settings_language*` 字符串
+   - `values-en/strings.xml`：完整英文翻译覆盖（~870 行），含 Compose UI、Web 页面 HTML、播放器错误信息等
+
+**未迁移的硬编码字符串**：数据常量（天气描述/枚举标签/过滤关键词/错误码映射）、AppLog 日志、代码注释
+
+**验证结果**：✅ `assembleDebug` 编译通过（无 error）。
+
+**涉及文件**：`app/src/main/java/com/nasmusic/tv/data/model/AppSettings.kt`、`app/src/main/java/com/nasmusic/tv/data/prefs/AppPreferences.kt`、`app/src/main/java/com/nasmusic/tv/NasMusicApp.kt`、`app/src/main/java/com/nasmusic/tv/ui/viewmodel/MainViewModel.kt`、`app/src/main/java/com/nasmusic/tv/ui/screens/SettingsScreen.kt`、`app/src/main/java/com/nasmusic/tv/ui/components/AppRoot.kt`、`app/src/main/java/com/nasmusic/tv/net/BackupTransferServer.kt`、`app/src/main/java/com/nasmusic/tv/net/ModelTransferServer.kt`、`app/src/main/java/com/nasmusic/tv/net/RemoteControlHtml.kt`、`app/src/main/java/com/nasmusic/tv/net/RemoteControlServer.kt`、`app/src/main/res/values/strings.xml`、`app/src/main/res/values-en/strings.xml`、`app/build.gradle.kts`、`CHANGELOG.md`、`docs/technical-overview.md`
+
+**版本号变更**：v2.25.3 → v2.25.4（versionCode 73 → 74）

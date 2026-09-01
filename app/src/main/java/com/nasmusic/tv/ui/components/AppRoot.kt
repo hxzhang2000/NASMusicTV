@@ -705,6 +705,9 @@ fun AppRoot(
                         onChangeVisualizerTheme = { viewModel.updateVisualizerTheme(it) },
                         fontAdjustment = settings.fontAdjustment,
                         onChangeFontAdjustment = { viewModel.updateFontAdjustment(it) },
+                        // 语言设置
+                        language = settings.language,
+                        onChangeLanguage = { viewModel.updateLanguage(it) },
                         // 数据管理（备份/恢复）
                         backupFiles = viewModel.backupFiles.collectAsState(initial = emptyList()).value,
                         backupMessage = viewModel.backupMessage.collectAsState(initial = null).value,

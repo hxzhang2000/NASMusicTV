@@ -125,7 +125,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
     )
 
     // --- 手机遥控服务器 ---
-    private val remoteControlServer = RemoteControlServer()
+    private val remoteControlServer = RemoteControlServer(app)
     private val _remoteControlUrl = MutableStateFlow<String?>(null)
     val remoteControlUrl: StateFlow<String?> = _remoteControlUrl.asStateFlow()
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -3566,6 +3566,12 @@ showError(getApplication<Application>().getString(R.string.play_failed_with_msg,
 
     fun updateLyricsFontScale(scale: Float) = viewModelScope.launch {
         prefs.setLyricsFontScale(scale)
+    }
+
+    fun updateLanguage(lang: String) = viewModelScope.launch {
+        prefs.setLanguage(lang)
+        // 立即应用语言变更（重启 Activity 以重新加载所有资源）
+        (getApplication() as? NasMusicApp)?.applyLocale(lang)
     }
 
     fun updateCoverFilterEnabled(enabled: Boolean) = viewModelScope.launch {

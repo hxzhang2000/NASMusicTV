@@ -109,6 +109,25 @@ class AppPreferences(private val context: Context) {
     private val keyEqualizerPreset = intPreferencesKey("equalizer_preset")
     private val keyEqualizerBands = stringPreferencesKey("equalizer_bands")
 
+    // --- 语言设置 ---
+    private val keyLanguage = stringPreferencesKey("settings_language")
+
+    // --- 语言设置 Flow ---
+    val language: Flow<String> = context.dataStore.data.map { it[keyLanguage] ?: "system" }
+
+    suspend fun setLanguage(lang: String) {
+        context.dataStore.edit { it[keyLanguage] = lang }
+    }
+
+    /**
+     * 同步获取当前语言设置（用于 AppCompatDelegate.setApplicationLocales）
+     */
+    fun getLanguageSync(): String {
+        return runBlocking(Dispatchers.IO) {
+            context.dataStore.data.first()[keyLanguage] ?: "system"
+        }
+    }
+
     // --- K 歌模式：升降调 & 变速（全局记忆）---
     private val keyPitchSemitones = intPreferencesKey("k_pitch_semitones")
     private val keyPlaybackSpeed = doublePreferencesKey("k_playback_speed")
@@ -412,7 +431,8 @@ class AppPreferences(private val context: Context) {
             lyricsNeteaseBaseUrl = prefs[keyLyricsNeteaseBaseUrl] ?: com.nasmusic.tv.lyrics.LyricsNetworkProvider.DEFAULT_NETEASE_BASE_URL,
             spectrumEnabled = prefs[keySpectrumEnabled] ?: false,
             visualizerTheme = prefs[keyVisualizerTheme]?.let { VisualizerTheme.fromKey(it) } ?: VisualizerTheme.COLOR_FLOW,
-            fontAdjustment = prefs[keyFontAdjustment] ?: 0
+            fontAdjustment = prefs[keyFontAdjustment] ?: 0,
+            language = prefs[keyLanguage] ?: "system"
         )
     }
 

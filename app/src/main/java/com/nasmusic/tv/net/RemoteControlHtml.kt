@@ -1,18 +1,21 @@
 package com.nasmusic.tv.net
 
+import android.content.Context
+import com.nasmusic.tv.R
+
 /**
  * 手机遥控控制页 HTML（单文件内嵌，零外部依赖）
  *
  * 功能：播放队列（当前歌曲高亮 + 点击条目播放 + 上下移排序 + 删除）、
  *       搜索（NAS + 网络并发，分组显示，加入队列）、5 秒轮询。
  */
-internal val CONTROL_PAGE_HTML = """
+fun buildControlPageHtml(context: Context): String = """
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no">
-<title>NASMusicTV 遥控</title>
+<title>${context.getString(R.string.html_remote_title)}</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:#0f0f1e;color:#e0e0e0;min-height:100vh}
@@ -65,16 +68,16 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;b
 </style>
 </head>
 <body>
-<div class="header">🎵 NASMusicTV 遥控</div>
+<div class="header">🎵 ${context.getString(R.string.html_remote_title)}</div>
 <div class="tabs">
-  <div class="tab active" onclick="showTab('queue')">播放队列</div>
-  <div class="tab" onclick="showTab('search')">搜索</div>
+  <div class="tab active" onclick="showTab('queue')">${context.getString(R.string.html_remote_tab_queue)}</div>
+  <div class="tab" onclick="showTab('search')">${context.getString(R.string.html_remote_tab_search)}</div>
 </div>
 
 <!-- Tab 1: 队列 -->
 <div id="tab-queue" class="tab-content active">
   <div id="now-playing" class="now-playing" style="display:none">
-    <div class="label">正在播放</div>
+    <div class="label">${context.getString(R.string.html_remote_now_playing)}</div>
     <div class="title" id="np-title"></div>
     <div class="artist" id="np-artist"></div>
   </div>
@@ -84,8 +87,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;b
 <!-- Tab 2: 搜索 -->
 <div id="tab-search" class="tab-content">
   <div class="search-bar">
-    <input type="text" id="search-input" placeholder="搜索歌曲/歌手..." onkeydown="if(event.key==='Enter')doSearch()">
-    <button onclick="doSearch()">搜索</button>
+    <input type="text" id="search-input" placeholder="${context.getString(R.string.html_remote_search_placeholder)}" onkeydown="if(event.key==='Enter')doSearch()">
+    <button onclick="doSearch()">${context.getString(R.string.html_remote_search_btn)}</button>
   </div>
   <div id="search-results"></div>
 </div>
@@ -94,6 +97,19 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;b
 
 <script>
 const BASE = location.origin;
+var STR = {
+  queueEmpty: '${context.getString(R.string.html_remote_queue_empty).replace("'", "\\'")}',
+  switched: '${context.getString(R.string.html_remote_switched).replace("'", "\\'")}',
+  deleted: '${context.getString(R.string.html_remote_deleted).replace("'", "\\'")}',
+  added: '${context.getString(R.string.html_remote_added).replace("'", "\\'")}',
+  searching: '${context.getString(R.string.html_remote_searching).replace("'", "\\'")}',
+  noResults: '${context.getString(R.string.html_remote_no_results).replace("'", "\\'")}',
+  searchFailed: '${context.getString(R.string.html_remote_search_failed).replace("'", "\\'")}',
+  nasLibrary: '${context.getString(R.string.html_remote_nas_library).replace("'", "\\'")}',
+  networkSearch: '${context.getString(R.string.html_remote_network_search).replace("'", "\\'")}',
+  networkLabel: '${context.getString(R.string.html_remote_network_label).replace("'", "\\'")}',
+  addToQueue: '${context.getString(R.string.html_remote_add_to_queue).replace("'", "\\'")}'
+};
 var queueData = null;
 
 // Tab 切换
@@ -141,7 +157,7 @@ function renderQueue(data) {
   var np = document.getElementById('now-playing');
 
   if (!data.songs || data.songs.length === 0) {
-    list.innerHTML = '<div class="empty">队列为空</div>';
+    list.innerHTML = '<div class="empty">' + STR.queueEmpty + '</div>';
     np.style.display = 'none';
     return;
   }
@@ -151,7 +167,7 @@ function renderQueue(data) {
   if (current) {
     np.style.display = 'block';
     document.getElementById('np-title').textContent = current.title;
-    document.getElementById('np-artist').textContent = current.artist + (current.isNetworkSong ? ' (网络)' : '');
+    document.getElementById('np-artist').textContent = current.artist + (current.isNetworkSong ? ' ' + STR.networkLabel : '');
   }
 
   // 队列列表
@@ -165,9 +181,9 @@ function renderQueue(data) {
     html += '<div class="info" onclick="if(!dragMoved)playAt(' + i + ')"><div class="title">' + song.title + netBadge + '</div>';
     html += '<div class="artist">' + song.artist + (dur ? ' · ' + dur : '') + '</div></div>';
     html += '<div class="actions">';
-    if (i > 0) html += '<button onclick="moveItem(' + i + ',' + (i-1) + ')" title="上移">↑</button>';
-    if (i < data.songs.length - 1) html += '<button onclick="moveItem(' + i + ',' + (i+1) + ')" title="下移">↓</button>';
-    html += '<button class="del-btn" onclick="removeItem(' + i + ')" title="删除">✕</button>';
+    if (i > 0) html += '<button onclick="moveItem(' + i + ',' + (i-1) + ')" title="${context.getString(R.string.html_remote_move_up)}">↑</button>';
+    if (i < data.songs.length - 1) html += '<button onclick="moveItem(' + i + ',' + (i+1) + ')" title="${context.getString(R.string.html_remote_move_down)}">↓</button>';
+    html += '<button class="del-btn" onclick="removeItem(' + i + ')" title="${context.getString(R.string.html_remote_delete)}">✕</button>';
     html += '</div></div>';
   });
   list.innerHTML = html;
@@ -179,7 +195,7 @@ function playAt(index) {
     method: 'POST',
     body: JSON.stringify({index: index})
   }).then(r => r.json()).then(d => {
-    if (d.ok) { showToast('已切换'); setTimeout(fetchQueue, 500); }
+    if (d.ok) { showToast(STR.switched); setTimeout(fetchQueue, 500); }
   });
 }
 
@@ -198,14 +214,14 @@ function doSearch() {
   var q = document.getElementById('search-input').value.trim();
   if (!q) return;
   var results = document.getElementById('search-results');
-  results.innerHTML = '<div class="loading">搜索中...</div>';
+  results.innerHTML = '<div class="loading">' + STR.searching + '</div>';
   fetch(BASE + '/api/search?q=' + encodeURIComponent(q))
     .then(r => r.json())
     .then(data => {
       var html = '';
       // NAS 结果
       if (data.nasResults && data.nasResults.length > 0) {
-        html += '<div class="result-group"><h3>📁 NAS 曲库 <span class="count">(' + data.nasResults.length + ')</span></h3>';
+        html += '<div class="result-group"><h3>' + STR.nasLibrary + ' <span class="count">(' + data.nasResults.length + ')</span></h3>';
         data.nasResults.forEach(function(song) {
           html += renderSearchItem(song);
         });
@@ -213,16 +229,16 @@ function doSearch() {
       }
       // 网络结果
       if (data.networkResults && data.networkResults.length > 0) {
-        html += '<div class="result-group"><h3>🌐 网络搜索 <span class="count">(' + data.networkResults.length + ')</span></h3>';
+        html += '<div class="result-group"><h3>' + STR.networkSearch + ' <span class="count">(' + data.networkResults.length + ')</span></h3>';
         data.networkResults.forEach(function(song) {
           html += renderSearchItem(song);
         });
         html += '</div>';
       }
-      if (!html) html = '<div class="empty">未找到结果</div>';
+      if (!html) html = '<div class="empty">' + STR.noResults + '</div>';
       results.innerHTML = html;
     })
-    .catch(() => { results.innerHTML = '<div class="empty">搜索失败，请重试</div>'; });
+    .catch(() => { results.innerHTML = '<div class="empty">' + STR.searchFailed + '</div>'; });
 }
 
 function renderSearchItem(song) {
@@ -234,7 +250,7 @@ function renderSearchItem(song) {
     '<div class="info"><div class="title">' + song.title + netBadge + '</div>' +
     '<div class="artist">' + song.artist + (dur ? ' · ' + dur : '') + '</div>' +
     album + '</div>' +
-    '<button onclick=\'addToQueue(' + songJson + ')\'>加入队列</button>' +
+    '<button onclick=\'addToQueue(' + songJson + ')\'>' + STR.addToQueue + '</button>' +
     '</div>';
 }
 
@@ -244,7 +260,7 @@ function addToQueue(song) {
     method: 'POST',
     body: JSON.stringify({song: song})
   }).then(r => r.json()).then(d => {
-    if (d.ok) showToast('已加入队列');
+    if (d.ok) showToast(STR.added);
   });
 }
 
@@ -254,7 +270,7 @@ function removeItem(index) {
     method: 'POST',
     body: JSON.stringify({index: index})
   }).then(r => r.json()).then(d => {
-    if (d.ok) { showToast('已删除'); setTimeout(fetchQueue, 300); }
+    if (d.ok) { showToast(STR.deleted); setTimeout(fetchQueue, 300); }
   });
 }
 

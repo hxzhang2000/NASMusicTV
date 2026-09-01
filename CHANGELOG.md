@@ -7,6 +7,27 @@
 >
 > 类型：`Added`（新增） | `Changed`（变更） | `Fixed`（修复） | `Removed`（移除）
 
+## [v2.25.4] - 2026-09-01
+
+### Added
+
+- **中英文语言切换功能**：设置页新增语言选择器，支持「跟随系统 / 中文 / English」三种模式，运行时切换无需重启应用。实现方式：`AppCompatDelegate.setApplicationLocales(LocaleListCompat)` + DataStore 持久化
+- **英文翻译资源文件** `values-en/strings.xml`：完整覆盖所有用户可见 UI 字符串（~870 行），含 Compose UI、Web 页面 HTML、播放器错误信息等
+- **Web 页面 HTML 国际化**：BackupTransferServer / ModelTransferServer / RemoteControlHtml 三个 HTTP 服务器的静态 HTML 常量改为动态生成函数（`buildXxxHtml(context)`），所有文本走 `context.getString()`，JS 字符串通过注入 `var STR = {...}` 对象实现多语言
+
+### Changed
+
+- **Settings 新增语言设置项**：通用设置区块顶部新增语言选择器，三按钮横向排列（跟随系统 / 中文 / English），选中态高亮
+- **数据层扩展**：`AppSettings` 新增 `language` 字段，`AppPreferences` 新增 `setLanguage()` / `getLanguageSync()` / `language` Flow
+- **应用启动流程**：`NasMusicApp.onCreate()` 调用 `applyLocale()` 在初始化阶段恢复用户语言偏好
+- **依赖新增**：`androidx.appcompat:appcompat:1.6.1`（AppCompatDelegate）、`androidx.core:core-ktx:1.12.0`（LocaleListCompat）
+
+### Notes
+
+- RemoteControlServer 构造函数新增 `context` 参数，Impl 内部类接收 context 传给 `buildControlPageHtml(context)`
+- 未迁移的硬编码字符串：数据常量（天气描述/枚举标签/过滤关键词/错误码映射）、AppLog 日志、代码注释
+- 所有 `html_backup_*` / `html_model_*` / `html_remote_*` / `html_common_*` 字符串资源已添加到 `values/strings.xml` 和 `values-en/strings.xml`
+
 ## [v2.25.3] - 2026-09-01
 
 ### Changed

@@ -32,6 +32,8 @@ import com.nasmusic.tv.data.prefs.AppPreferences
 import com.nasmusic.tv.player.ModelDownloadManager
 import com.nasmusic.tv.player.PlayerManager
 import com.nasmusic.tv.util.AppLog
+import androidx.appcompat.app.AppCompatDelegate
+import androidx.core.os.LocaleListCompat
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -122,6 +124,8 @@ class NasMusicApp : Application(), ImageLoaderFactory {
     override fun onCreate() {
         super.onCreate()
         appPreferences = AppPreferences(this)
+        // 启动时应用语言设置
+        applyLocale(appPreferences.getLanguageSync())
         backendRegistry = BackendRegistry()
         playerManager = PlayerManager(this)
         // 模型下载管理器（HT-Demucs FT ONNX，与 APK 分离，设置页下载）
@@ -182,6 +186,19 @@ class NasMusicApp : Application(), ImageLoaderFactory {
                 AppLog.w("NasMusicApp", "Failed to purge search history", e)
             }
         }
+    }
+
+    /**
+     * 应用语言设置
+     * @param lang "system"=跟随系统, "zh"=中文, "en"=English
+     */
+    fun applyLocale(lang: String) {
+        val localeList = when (lang) {
+            "zh" -> LocaleListCompat.forLanguageTags("zh-CN")
+            "en" -> LocaleListCompat.forLanguageTags("en-US")
+            else -> LocaleListCompat.getEmptyLocaleList() // 跟随系统
+        }
+        AppCompatDelegate.setApplicationLocales(localeList)
     }
 
     /**

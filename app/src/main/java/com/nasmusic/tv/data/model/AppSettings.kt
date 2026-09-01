@@ -28,7 +28,9 @@ data class AppSettings(
     // 全局字体字号调整（sp，在当前Theme档位基础上增减，默认0）
     val fontAdjustment: Int = 0,
     // 高质量分离模型自定义下载 URL（空=用默认镜像；国内网络AWS CDN被墙时，可指向自建镜像/NAS）
-    val modelDownloadUrl: String = ""
+    val modelDownloadUrl: String = "",
+    // 语言设置："system"=跟随系统, "zh"=中文, "en"=English
+    val language: String = "system"
 )
 
 enum class VisualizerTheme(val displayName: String) {

@@ -1,0 +1,885 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">NAS Music TV</string>
+    <string name="app_description">Open-source TV NAS music player</string>
+
+    <!-- Common -->
+    <string name="common_cancel">Cancel</string>
+    <string name="common_confirm">OK</string>
+    <string name="common_not_set">Not set</string>
+    <string name="common_back">Back</string>
+    <string name="common_back_arrow">←</string>
+    <string name="common_search">Search</string>
+    <string name="common_clear">Clear</string>
+    <string name="common_delete">Delete</string>
+    <string name="common_play_all">Play All</string>
+    <string name="common_loading">Loading…</string>
+    <string name="common_no_data">No data</string>
+    <string name="common_not_connected">Not connected to server</string>
+
+    <!-- Navigation -->
+    <string name="nav_now_playing">Now Playing</string>
+    <string name="nav_library">Library</string>
+    <string name="nav_queue">Queue</string>
+    <string name="nav_settings">Settings</string>
+    <string name="nav_server">Server</string>
+    <string name="nav_network">Network Music</string>
+    <string name="nav_home">Home</string>
+    <string name="nav_mine">Mine</string>
+
+    <!-- Library -->
+    <string name="library_albums">Albums</string>
+    <string name="library_artists">Artists</string>
+    <string name="library_artists_alt">Artists</string>
+    <string name="library_songs">Songs</string>
+    <string name="library_playlists">Playlists</string>
+    <string name="library_folders">Folders</string>
+    <string name="library_genres">Genres</string>
+    <string name="library_years">Years</string>
+    <string name="library_favorites">Favorites</string>
+    <string name="library_recent">Recently Played</string>
+    <string name="library_statistics">Statistics</string>
+    <string name="library_search">Search</string>
+    <string name="library_discover">Discover</string>
+    <string name="library_radio">Radio</string>
+    <string name="library_jamendo">Jamendo</string>
+    <string name="home_ready">Ready</string>
+    <string name="home_album_count">Albums</string>
+    <string name="home_song_count">Songs</string>
+    <string name="home_artist_count">Artists</string>
+    <string name="home_playlist_count">Playlists</string>
+    <string name="home_view_all">View All</string>
+    <string name="home_weather_radio">Weather Radio</string>
+    <string name="home_song_info">Song Info</string>
+    <string name="home_spectrum_preview">Real-time Spectrum Preview</string>
+    <string name="home_no_play_records">No play history</string>
+    <string name="home_matching_covers">Weather-matched Covers</string>
+    <string name="home_shuffle_play">Shuffle Play</string>
+    <string name="stats_title">Play Statistics</string>
+    <string name="stats_total_plays">Total Plays</string>
+    <string name="stats_total_time">Total Play Time</string>
+    <string name="stats_unique_songs">Unique Songs</string>
+    <string name="stats_top_songs">Top 10 Songs</string>
+    <string name="stats_top_artists">Top 10 Artists</string>
+    <string name="stats_clear_records">Clear All Play History</string>
+    <string name="stats_forecast">Weather Forecast</string>
+
+    <string name="library_recently_added">Recently Added</string>
+    <string name="library_search_hint">Enter song, artist, or pinyin initials</string>
+    <string name="library_no_genres">No genre data</string>
+    <string name="library_no_years">No year data</string>
+    <string name="library_no_recent">No play history</string>
+
+    <!-- Network Music -->
+    <string name="network_hot_songs">Hot Charts</string>
+    <string name="network_new_songs">New Charts</string>
+    <string name="network_my_favorites">My Favorites</string>
+    <string name="network_recommend_playlists">Recommended Playlists</string>
+    <string name="network_platform_netease">NetEase</string>
+    <string name="network_platform_qq">QQ Music</string>
+    <string name="network_platform_kugou">KuGou</string>
+    <string name="network_platform_kuwo">KuWo</string>
+    <string name="network_platform_migu">MiGu</string>
+    <string name="network_search_hint">Search network music by song or artist name</string>
+    <string name="network_no_results">No matching network music found</string>
+    <string name="network_tab_discover">Discover</string>
+    <string name="network_tab_weather">Weather</string>
+    <string name="network_tab_search">Search</string>
+    <string name="network_tab_browse">Browse</string>
+    <string name="network_tab_radio">Radio</string>
+    <string name="network_tab_jamendo">Jamendo</string>
+    <string name="network_radio_chinese">Chinese Radio</string>
+    <string name="network_radio_search_hint">Search radio stations / tags</string>
+    <string name="network_radio_live">Live</string>
+    <string name="network_radio_no_results">No radio stations found</string>
+    <string name="network_radio_load_failed">Radio list failed to load, tap to retry</string>
+    <string name="network_radio_retry">Retry</string>
+    <string name="network_jamendo_no_key">Jamendo Client ID not configured: go to Settings → Network Music → Jamendo Client ID</string>
+    <string name="network_jamendo_hot">Hot</string>
+    <string name="network_jamendo_no_results">No music found</string>
+    <string name="network_jamendo_load_failed">Jamendo failed to load, tap to retry</string>
+    <string name="settings_jamendo_client_id">Jamendo Client ID</string>
+    <string name="settings_jamendo_client_id_desc">Jamendo (CC music library) open API application ID, register at devportal.jamendo.com</string>
+    <string name="settings_not_configured_hint">Not configured</string>
+    <string name="settings_tap_to_edit">Tap to edit</string>
+    <string name="network_weather_coming_soon">Weather Radio coming soon</string>
+    <string name="network_weather_current">Current Weather</string>
+    <string name="network_weather_refresh">Refresh</string>
+    <string name="network_weather_switch_mood">Switch Mood</string>
+    <string name="network_weather_current_mood">Current Mood</string>
+    <string name="network_weather_fetch_failed">Unable to fetch weather info</string>
+    <string name="settings_weather_api_key">OpenWeatherMap API Key</string>
+    <string name="settings_weather_api_key_desc">Fallback API when Open-Meteo is unavailable (free registration at openweathermap.org)</string>
+    <string name="settings_weather_api_key_hint">Enter API Key (leave empty = disable)</string>
+    <string name="settings_weather_api_key_edit">Edit</string>
+    <string name="network_discover_weather_entry">Weather Radio</string>
+    <string name="network_discover_weather_desc">Match music to current weather for an immersive listening experience</string>
+    <string name="network_discover_feature_playlist">Recommended Playlists</string>
+    <string name="network_discover_feature_favorites">My Favorites</string>
+    <string name="network_discover_feature_radio">Personal Radio</string>
+    <string name="network_discover_feature_queue">Play Queue</string>
+
+    <!-- Player -->
+    <string name="player_play">Play</string>
+    <string name="player_pause">Pause</string>
+    <string name="player_next">Next</string>
+    <string name="player_previous">Previous</string>
+    <string name="player_shuffle">Shuffle</string>
+    <string name="player_repeat">Repeat</string>
+    <string name="player_lyrics">Lyrics</string>
+    <string name="player_no_lyrics">No lyrics</string>
+    <string name="player_lyrics_source_embedded">Embedded</string>
+    <string name="player_lyrics_source_local">Local Cache</string>
+    <string name="player_lyrics_source_network">Network</string>
+    <string name="player_lyrics_source_server">Server</string>
+    <string name="player_no_song_selected">No song selected</string>
+    <string name="player_highlight_word">Word</string>
+    <string name="player_highlight_line">Line</string>
+    <string name="player_highlight_backend">Embedded</string>
+    <string name="player_highlight_local">Local</string>
+    <string name="player_highlight_network">Network</string>
+    <string name="player_highlight_cached">Cached</string>
+    <string name="player_radio_live">● Live Radio</string>
+    <string name="player_cover">Cover</string>
+    <string name="player_info">Info</string>
+
+    <!-- Karaoke -->
+    <string name="karaoke_scan_remote">Scan Remote</string>
+    <string name="karaoke_converting_accompaniment">Converting accompaniment…</string>
+    <string name="karaoke_pitch_label">Pitch</string>
+    <string name="karaoke_speed_label">Speed</string>
+    <string name="karaoke_original_tune">Original Key</string>
+    <string name="karaoke_original_speed">Original Speed</string>
+    <string name="karaoke_original_vocal">Original Vocal</string>
+    <string name="karaoke_accompaniment">Accompaniment</string>
+    <string name="karaoke_quality_label">Quality</string>
+    <string name="karaoke_converting">Converting</string>
+    <string name="karaoke_high_quality">High Quality</string>
+    <string name="karaoke_fast">Fast</string>
+    <string name="karaoke_pitch_title">Pitch Adjustment</string>
+    <string name="karaoke_speed_title">Playback Speed</string>
+    <string name="karaoke_reset">Reset</string>
+    <string name="karaoke_confirm">Confirm</string>
+
+    <!-- Song Info Panel -->
+    <string name="song_info_close">Close</string>
+    <string name="song_info_title_label">Title</string>
+    <string name="song_info_artist_label">Artist</string>
+    <string name="song_info_album_label">Album</string>
+    <string name="song_info_year_label">Year</string>
+    <string name="song_info_genre_label">Genre</string>
+    <string name="song_info_duration_label">Duration</string>
+    <string name="song_info_track_label">Track #</string>
+    <string name="song_info_technical_params">Technical Parameters</string>
+    <string name="song_info_codec_label">Codec</string>
+    <string name="song_info_bitrate_label">Bitrate</string>
+    <string name="song_info_sample_rate_label">Sample Rate</string>
+    <string name="song_info_channels_label">Channels</string>
+    <string name="song_info_channels_mono">Mono</string>
+    <string name="song_info_channels_stereo">Stereo</string>
+    <string name="song_info_channels_51">5.1 Surround</string>
+    <string name="song_info_channels_71">7.1 Surround</string>
+    <string name="song_info_channels_format">%d Channels</string>
+    <string name="song_info_file_size_label">File Size</string>
+    <string name="song_info_container_label">Container</string>
+    <string name="song_info_network_source_label">Network Source</string>
+    <string name="song_info_unknown_source">Unknown</string>
+
+    <!-- Settings Screen -->
+    <string name="settings_default_music_dir">/Music</string>
+    <string name="settings_font_standard">Standard</string>
+    <string name="settings_separation_mode_title">Vocal Separation Mode</string>
+    <string name="settings_hq_mode_downloaded">High Quality Mode (HT-Demucs FT)</string>
+    <string name="settings_hq_mode_not_downloaded">High Quality Mode (Model not downloaded)</string>
+    <string name="settings_download_model_hint">Download separation model (166MB) for high quality mode</string>
+    <string name="settings_onnx_inference">Using ONNX inference 🧠</string>
+    <string name="settings_dsp_inference">Using real-time DSP inference ⚡</string>
+    <string name="settings_downloading_model">Downloading separation model… (HT-Demucs FT)</string>
+    <string name="settings_model_downloaded_size">Separation model downloaded (%.1fMB)</string>
+    <string name="settings_model_path">Path: %s</string>
+    <string name="settings_delete_model">Delete Model</string>
+    <string name="settings_delete_model_desc">Delete model needed for separation mode</string>
+    <string name="settings_scan_upload_model">Scan &amp; Upload Model</string>
+    <string name="settings_scan_upload_model_desc">Use phone to scan and upload model file to TV</string>
+    <string name="settings_network_model_not_downloaded">Network separation model not downloaded (HT-Demucs FT, ~166MB)</string>
+    <string name="settings_storage_path">Storage path: %s</string>
+    <string name="settings_download_separation_model">Download Separation Model</string>
+    <string name="settings_download_separation_model_desc">Download HT-Demucs FT separation model from HuggingFace (~166MB)</string>
+    <string name="settings_supported_backends_value">Jellyfin / Navidrome / Subsonic / Daoliyu / Feiniu</string>
+    <string name="settings_backend_type">Backend Type</string>
+    <string name="settings_api_version">API Version</string>
+    <string name="settings_connection_status">Connection Status</string>
+    <string name="settings_not_connected">Not connected</string>
+    <string name="settings_network_music_info">Network Music</string>
+    <string name="settings_network_music_value">NetEase / QQ Music / KuGou / KuWo / MiGu (Meting-API endpoints)</string>
+    <string name="settings_independent_music">Independent Music</string>
+    <string name="settings_independent_music_value">Jamendo (CC-licensed music library, requires Client ID)</string>
+    <string name="settings_radio_info">Radio</string>
+    <string name="settings_radio_value">radio-browser (global public radio directory, including Chinese stations)</string>
+    <string name="settings_baidu_netdisk_info">Baidu Netdisk</string>
+    <string name="settings_baidu_netdisk_value">Baidu Netdisk</string>
+    <string name="settings_lyrics_info">Lyrics</string>
+    <string name="settings_lyrics_value">KuGou / NetEase / Network matching</string>
+    <string name="settings_copyright">Copyright Notice</string>
+    <string name="settings_copyright_text">The network music search feature retrieves public data through Meting-API endpoints, providing only metadata indexing. Original copyrights belong to their respective owners. This app is an aggregation browsing tool only, it does not store, distribute, or resell any media files, and assumes no responsibility for the legality, accuracy, or availability of third-party music resources. If copyright holders believe their rights have been infringed, please contact us via GitHub Issues for timely resolution.</string>
+    <string name="settings_star_prompt">If this project helps you, please give us a Star on GitHub!</string>
+    <string name="settings_cache_dir_size">Current cache directory size: %s</string>
+    <string name="settings_clear_coil_cache">Clear Coil image cache disk cache</string>
+    <string name="settings_clear_all_cache">Clear All Cache</string>
+    <string name="settings_clear_all_cache_desc">Delete HQ mode cache and network song cache (~10 seconds)</string>
+    <string name="settings_network_test_success">Network OK (HTTP %d)</string>
+    <string name="settings_network_test_http_error">HTTP response %d</string>
+    <string name="settings_network_test_timeout">Network timeout, unable to connect</string>
+    <string name="settings_network_test_dns_error">DNS resolution failed, check network settings</string>
+    <string name="settings_network_test_connection_refused">Connection refused</string>
+    <string name="settings_network_test_error">Network error: %s</string>
+    <string name="settings_scan_transfer">Scan &amp; Transfer</string>
+    <string name="settings_scan_transfer_desc">Scan with phone to transfer data / upload to server / remote restore</string>
+    <string name="settings_restore_prefix">Restore</string>
+    <string name="settings_restore_failed_prefix">Restore failed</string>
+    <string name="settings_restore_failed_contains">failed</string>
+    <string name="settings_wifi_on">✓ On</string>
+    <string name="settings_wifi_off">   Off</string>
+    <string name="settings_video_cache">Video Cache</string>
+
+    <!-- Server Connection -->
+    <string name="server_connect_title">Connect Server</string>
+    <string name="server_config_title">Server Configuration</string>
+    <string name="server_connect_desc">Select your NAS music backend type</string>
+    <string name="server_address">Server Address</string>
+    <string name="server_token">API Token</string>
+    <string name="server_username">Username</string>
+    <string name="server_password">Password</string>
+    <string name="server_connect">Connect</string>
+    <string name="server_type_jellyfin">Jellyfin</string>
+    <string name="server_type_navidrome">Navidrome</string>
+    <string name="server_type_subsonic">Subsonic</string>
+    <string name="server_connected">Connected</string>
+    <string name="server_connection_failed">Connection failed</string>
+    <string name="server_reconnect_confirm">Saved server config detected. Connect now?</string>
+    <string name="server_disconnected">Disconnected</string>
+    <string name="server_disconnect">Disconnect</string>
+    <string name="settings_disconnect_desc">Disconnect from current NAS backend</string>
+    <string name="server_type_label">Server Type</string>
+    <string name="server_password_desc">Password (used to obtain access token)</string>
+    <string name="server_address_required">Please enter server address</string>
+    <string name="server_connecting">Connecting…</string>
+    <string name="server_connect_action">Connect Server</string>
+    <string name="server_privacy_notice">Note: Your credentials are only used to obtain an access token and will not be uploaded to any third party.</string>
+    <string name="server_address_dialog_title">Enter Server Address</string>
+    <string name="server_username_dialog_title">Enter Username</string>
+    <string name="server_username_dialog_hint">Enter username</string>
+    <string name="server_password_dialog_title">Enter Password</string>
+    <string name="server_password_dialog_hint">Enter password</string>
+    <string name="server_token_dialog_title">Enter Access Token</string>
+    <string name="server_token_dialog_hint">Enter access token</string>
+    <string name="server_press_ok_edit">Press OK to edit</string>
+    <string name="server_testing">Testing…</string>
+    <string name="server_connection_test">Connection Test</string>
+    <string name="server_username_hint">Username</string>
+    <string name="server_password_hint">Password (used to obtain access token)</string>
+    <string name="server_navidrome_username_hint">Navidrome username</string>
+    <string name="server_navidrome_password_hint">Navidrome password</string>
+    <string name="server_subsonic_hint">http://your-server:9527 (lx-server) or http://192.168.1.100:4533 (Airsonic)</string>
+    <string name="server_url_hint">https://jellyfin.example.com or http://192.168.1.100:8096</string>
+
+    <!-- Settings - Language -->
+    <string name="settings_language">Language</string>
+    <string name="settings_language_desc">Choose app interface language</string>
+    <string name="settings_language_system">Follow System</string>
+    <string name="settings_language_zh">中文</string>
+    <string name="settings_language_en">English</string>
+
+    <!-- Settings -->
+    <string name="settings_general">General</string>
+    <string name="settings_playback">Playback</string>
+    <string name="settings_lyrics">Lyrics</string>
+    <string name="settings_cache">Cache Management</string>
+    <string name="settings_network">Network Test</string>
+    <string name="settings_about">About</string>
+    <string name="settings_dark_theme">Dark Theme</string>
+    <string name="settings_dark_theme_desc">Use dark background to protect eyes</string>
+    <string name="settings_animations">Animations</string>
+    <string name="settings_animations_desc">Page transitions and focus animations</string>
+    <string name="settings_font_size">Font Size</string>
+    <string name="settings_font_size_desc">Adjust font size above or below the current theme default</string>
+    <string name="settings_auto_play">Auto Play Next</string>
+    <string name="settings_auto_play_desc">Automatically play next song in queue when current ends</string>
+    <string name="settings_play_mode">Default Play Mode</string>
+    <string name="settings_play_mode_desc">Select default loop mode for play queue</string>
+    <string name="settings_cache_lyrics">Auto Cache Lyrics</string>
+    <string name="settings_cache_lyrics_desc">Automatically save matched lyrics to local storage</string>
+    <string name="settings_cache_cover">Auto Cache Covers</string>
+    <string name="settings_cache_cover_desc">Download and cache album covers locally</string>
+    <string name="settings_lyrics_offset">Lyrics Offset</string>
+    <string name="settings_lyrics_offset_desc">Adjust lyrics display timing (milliseconds)</string>
+    <string name="settings_equalizer">Equalizer</string>
+    <string name="settings_equalizer_desc">Adjust frequency band gains</string>
+    <string name="settings_spectrum">Spectrum Display</string>
+    <string name="settings_spectrum_desc">Show real-time spectrum animation on player screen</string>
+    <string name="settings_clear_lyrics_cache">Clear Lyrics Cache</string>
+    <string name="settings_clear_lyrics_cache_desc">Delete all cached lyrics files</string>
+    <string name="settings_clear_cover_cache">Clear Cover Cache</string>
+    <string name="settings_clear_cover_cache_desc">Delete all cached cover images</string>
+    <string name="settings_cache_switch">Cache Switch</string>
+    <string name="settings_cache_clear">Cache Cleanup</string>
+    <string name="settings_clear_mv_cache">Clear MV Cache</string>
+    <string name="settings_clear_mv_cache_desc">Delete all cached MV search results (bvid)</string>
+    <string name="settings_network_test">Test Network</string>
+    <string name="settings_network_testing">Testing…</string>
+    <string name="settings_network_test_desc">Test if device can access the Internet</string>
+    <string name="settings_network_search">Network Search</string>
+    <string name="settings_meting_api_url">Meting-API Endpoint</string>
+    <string name="settings_meting_api_url_desc">API address for network search, can self-host or use other public endpoints</string>
+    <string name="settings_meting_api_url_edit">Change Endpoint</string>
+    <string name="settings_meting_api_url_reset">Reset to Default</string>
+    <string name="settings_meting_api_url_hint">Enter Meting-API endpoint URL</string>
+    <string name="settings_meting_api_url_invalid">Invalid URL format, must start with http:// or https://</string>
+    <string name="settings_meting_preset_endpoints">Preset Endpoints</string>
+    <string name="settings_meting_custom_endpoint">Custom Endpoint</string>
+    <string name="settings_meting_custom_endpoint_desc">Use other public or self-hosted endpoint</string>
+    <string name="settings_mv_api_url">Video Endpoint</string>
+    <string name="settings_mv_api_url_desc">API address for MTV music video search, can use self-hosted proxy or other endpoints</string>
+    <string name="settings_mv_api_url_edit">Change Endpoint</string>
+    <string name="settings_mv_api_url_reset">Reset to Default</string>
+    <string name="settings_mv_api_url_hint">Enter video search endpoint URL</string>
+    <string name="settings_mv_api_url_invalid">Invalid URL format, must start with http:// or https://</string>
+
+    <string name="settings_lyrics_endpoint">Lyrics Endpoint</string>
+    <string name="settings_lyrics_kugou_url">KuGou Lyrics Endpoint</string>
+    <string name="settings_lyrics_kugou_url_desc">KuGou lyrics search API address, default https://mobilecdn.kugou.com</string>
+    <string name="settings_lyrics_netease_url">NetEase Lyrics Endpoint</string>
+    <string name="settings_lyrics_netease_url_desc">NetEase lyrics search API address, default https://music.163.com</string>
+    <string name="settings_lyrics_url_edit">Change Endpoint</string>
+    <string name="settings_lyrics_url_reset">Reset to Default</string>
+    <string name="settings_lyrics_url_hint">Enter lyrics search endpoint URL</string>
+    <string name="settings_lyrics_url_invalid">Invalid URL format, must start with http:// or https://</string>
+    <string name="settings_mv_preset_endpoints">Preset Endpoints</string>
+    <string name="settings_mv_custom_endpoint">Custom Endpoint</string>
+    <string name="settings_mv_custom_endpoint_desc">Use self-hosted proxy or other mirror endpoints</string>
+    <string name="settings_app_name">App Name</string>
+    <string name="settings_build_type">Build Type</string>
+    <string name="settings_supported_backends">Supported Backends</string>
+    <string name="settings_cover">Cover</string>
+    <string name="settings_cover_filter">Cover Filter</string>
+    <string name="settings_cover_filter_desc">Apply blur and dark overlay effects to current cover</string>
+    <string name="settings_cover_blur_radius">Blur Strength: %dpx</string>
+    <string name="settings_cover_dark_overlay">Dark Overlay: %d%%</string>
+    <string name="settings_data">Data Management</string>
+    <string name="settings_data_desc">Export or restore favorites, playlists, play statistics, etc.</string>
+    <string name="settings_export_backup">Export Backup</string>
+    <string name="settings_export_backup_desc">Export favorites, playlists, play statistics, etc. to local file</string>
+    <string name="settings_backup_list">Backup Files</string>
+    <string name="settings_backup_empty">No backup files</string>
+    <string name="settings_import_backup">Restore</string>
+    <string name="settings_import_backup_desc">Restore data from backup file</string>
+    <string name="settings_backup_exported">Backup exported</string>
+    <string name="settings_backup_imported">Backup restored</string>
+    <string name="settings_delete_backup">Delete</string>
+    <string name="settings_delete_backup_confirm_title">Delete Backup</string>
+    <string name="settings_delete_backup_confirm_message">Delete backup file \"%1$s\"? This cannot be undone.</string>
+    <string name="settings_netdisk">Netdisk</string>
+    <string name="settings_netdisk_desc">Enable Baidu Netdisk music source, login required</string>
+    <string name="settings_netdisk_group_baidu">Baidu Netdisk</string>
+    <string name="settings_netdisk_group_others">Other Netdisks</string>
+    <string name="settings_netdisk_group_others_desc">Coming soon</string>
+    <string name="settings_netdisk_enable">Enable Baidu Netdisk</string>
+    <string name="settings_netdisk_enable_desc">Enable to play music from netdisk (login required)</string>
+    <string name="settings_netdisk_login">Login to Baidu Netdisk</string>
+    <string name="settings_netdisk_login_desc">Scan QR code to authorize access to your netdisk music</string>
+    <string name="settings_netdisk_logout">Logout</string>
+    <string name="settings_netdisk_logout_desc">Clear netdisk authorization info</string>
+    <string name="settings_netdisk_logged_in">Logged in</string>
+    <string name="settings_netdisk_not_logged_in">Not logged in</string>
+    <string name="settings_netdisk_music_root">Music Root Directory</string>
+    <string name="settings_netdisk_music_root_desc">Directory in netdisk for music, default /Music</string>
+    <string name="settings_netdisk_mv_dir">MV Directory</string>
+    <string name="settings_netdisk_mv_dir_desc">Directory in netdisk for MV videos (optional, defaults to music directory)</string>
+    <string name="settings_netdisk_index">Index</string>
+    <string name="settings_netdisk_index_desc">%1$d songs scanned</string>
+    <string name="settings_netdisk_index_scanning">Indexing…</string>
+    <string name="settings_netdisk_index_rebuild">Rebuild Index</string>
+    <string name="settings_netdisk_index_rebuild_desc">Rescan music root directory to rebuild song index</string>
+    <string name="settings_netdisk_hint_dir">Enter netdisk directory path (starting with /)</string>
+    <string name="netdisk_auth_title">Baidu Netdisk Authorization</string>
+    <string name="netdisk_auth_subtitle">Complete authorization on your phone (manual device code entry recommended)</string>
+    <string name="netdisk_auth_fetching">Getting device code…</string>
+    <string name="netdisk_auth_qr_desc">Baidu Netdisk Authorization QR Code</string>
+    <string name="netdisk_auth_user_code">Device Code</string>
+    <string name="netdisk_auth_step1">① Open in phone browser:</string>
+    <string name="netdisk_auth_step2">② Enter device code:</string>
+    <string name="netdisk_auth_qr_alt">Or scan QR code below (if scan fails, use the URL in step ①)</string>
+    <string name="netdisk_auth_waiting">Waiting for phone authorization…</string>
+    <string name="netdisk_auth_fetch_failed">Failed to get device code, please try again later</string>
+    <string name="netdisk_dir_picker_title">Select Netdisk Directory</string>
+    <string name="netdisk_dir_picker_loading">Loading…</string>
+    <string name="netdisk_dir_picker_error">Failed to load directory</string>
+    <string name="netdisk_dir_picker_retry">Retry</string>
+    <string name="netdisk_dir_picker_empty">No subfolders in this directory</string>
+    <string name="netdisk_dir_picker_up">Back to parent</string>
+    <string name="netdisk_dir_picker_select">Select this directory</string>
+
+    <!-- Equalizer -->
+    <string name="equalizer_title">Equalizer</string>
+    <string name="equalizer_preset">Preset</string>
+    <string name="equalizer_bands">Band Gains</string>
+
+    <!-- Playlist -->
+    <string name="playlist_title">Playlist Management</string>
+    <string name="playlist_empty">No playlists</string>
+    <string name="playlist_create">Create Playlist</string>
+    <string name="playlist_create_hint">Enter playlist name</string>
+    <string name="playlist_select_hint">Select a playlist to view tracks</string>
+    <string name="playlist_song_count">%d tracks</string>
+    <string name="playlist_track_list">Tracks (%d)</string>
+
+    <!-- Mine -->
+    <string name="mine_favorites">Favorites</string>
+    <string name="mine_recent">Recently Played</string>
+    <string name="mine_playlists">Local Playlists</string>
+    <string name="mine_favorites_empty">No favorite songs</string>
+    <string name="mine_playlists_empty">No local playlists</string>
+    <string name="mine_create_playlist">New Playlist</string>
+    <string name="mine_rename_playlist">Rename</string>
+    <string name="mine_play_playlist">Play</string>
+    <string name="mine_remove_song">Remove</string>
+    <string name="mine_song_count">%d songs</string>
+    <string name="mine_add_to_playlist">Add to Playlist</string>
+    <string name="mine_pick_playlist_title">Add to Playlist</string>
+    <string name="mine_pick_playlist_hint">Select playlist to add to</string>
+    <string name="mine_pick_playlist_empty">No playlists, create one first</string>
+    <string name="mine_playlist_name_hint">Enter playlist name</string>
+    <string name="mine_rename_playlist_title">Rename Playlist</string>
+    <string name="mine_added_to_playlist">Added to playlist</string>
+    <string name="mine_not_added_to_playlist">Failed to add</string>
+
+    <!-- Queue -->
+    <string name="queue_title">Play Queue</string>
+    <string name="queue_clear">Clear</string>
+    <string name="queue_empty">Queue is empty</string>
+    <string name="queue_go_to_library">Go to Library to add songs</string>
+
+    <!-- Text Input -->
+    <string name="text_input_space">Space</string>
+    <string name="text_input_chinese">Chinese Input</string>
+    <string name="text_input_back_keyboard">Back to Keyboard</string>
+    <string name="text_input_no_ime">No Chinese input method detected, install one in system settings first</string>
+
+    <!-- Exit Confirm -->
+    <string name="exit_title">Exit App</string>
+    <string name="exit_confirm_message">Exit NAS Music?</string>
+
+    <!-- Connect Prompt -->
+    <string name="connect_prompt_message">Saved server config detected. Connect now?</string>
+    <string name="connect_prompt_message_with_name">Saved server config detected (%s). Connect now?</string>
+
+    <!-- Playback / Notification -->
+    <string name="playback_channel_name">Music Playback</string>
+    <string name="playback_channel_desc">Control music playback and show current song</string>
+    <string name="playback_playing">Playing</string>
+    <string name="playback_paused">Paused</string>
+    <string name="playback_previous">Previous</string>
+    <string name="playback_next">Next</string>
+
+    <!-- Status Messages -->
+    <string name="status_no_saved_server">No saved server config</string>
+    <string name="status_network_restored">Network restored</string>
+    <string name="status_network_disconnected">Network disconnected</string>
+    <string name="status_lyrics_cache_cleared">Lyrics cache cleared</string>
+    <string name="status_cover_cache_cleared">Cover cache cleared</string>
+
+    <!-- About -->
+    <string name="about_version">Version</string>
+    <string name="about_license">License</string>
+    <string name="about_license_value">GPL v3</string>
+    <string name="about_github">GitHub</string>
+    <string name="about_credits">Credits</string>
+
+    <!-- Settings Screen -->
+    <string name="settings_spectrum_theme">Spectrum Theme</string>
+
+    <!-- Library Screen -->
+    <string name="library_search_placeholder">Search songs, albums, artists…</string>
+    <string name="library_loading_library">Loading library…</string>
+    <string name="library_connect_server_hint">Please configure NAS music service on the Server page first</string>
+    <string name="library_empty_title">Library is empty</string>
+    <string name="library_empty_hint">Add music files to your NAS music service</string>
+    <string name="library_albums_count">Albums (%d)</string>
+    <string name="library_artists_count">Artists (%d)</string>
+    <string name="library_searching">Searching…</string>
+    <string name="library_songs_count_with_total">Songs (%1$d/%2$d)</string>
+    <string name="library_songs_loading">Songs (Loading…)</string>
+    <string name="library_songs_count">Songs (%d)</string>
+    <string name="library_no_songs">No songs</string>
+    <string name="library_load_more">Load more…</string>
+    <string name="library_genres_count">Genres (%d)</string>
+    <string name="library_song_count_suffix">%d songs</string>
+    <string name="library_years_count">Years (%d)</string>
+    <string name="library_no_playlists">No playlists</string>
+    <string name="library_no_artists">No artists</string>
+    <string name="library_tap_to_play">Tap to play</string>
+    <string name="library_song_count_short">%d songs</string>
+
+    <!-- Common UI -->
+    <string name="common_close">Close</string>
+    <string name="common_retry">Retry</string>
+    <string name="common_select">Select</string>
+
+    <!-- Model Transfer Dialog -->
+    <string name="model_transfer_starting">Starting…</string>
+    <string name="model_transfer_waiting">Waiting for phone to scan QR</string>
+    <string name="model_transfer_start_failed">Server failed to start (port occupied)</string>
+    <string name="model_transfer_no_ip">Unable to get network IP, check Wi-Fi connection</string>
+    <string name="model_transfer_title">Scan to Upload Model</string>
+    <string name="model_transfer_filename">Filename: htdemucs_ft_vocals.onnx</string>
+    <string name="model_transfer_expected_size">Expected size: ~166MB (fp16weights format)</string>
+    <string name="model_transfer_downloaded">Currently downloaded: %.1fMB</string>
+    <string name="model_transfer_storage_path">Storage path: %s</string>
+    <string name="model_transfer_qr_desc">Model upload QR code</string>
+    <string name="model_transfer_scan_hint">Scan with phone to open model upload page</string>
+    <string name="model_transfer_select_hint">Download model file then upload to TV</string>
+    <string name="model_transfer_status_waiting_prefix">Waiting for</string>
+
+    <!-- Backup Transfer Dialog -->
+    <string name="backup_transfer_starting">Starting…</string>
+    <string name="backup_transfer_waiting">Waiting for phone to scan QR</string>
+    <string name="backup_transfer_start_failed">Server failed to start (port occupied)</string>
+    <string name="backup_transfer_no_ip">Unable to get network IP, check Wi-Fi connection</string>
+    <string name="backup_transfer_title">Scan to Transfer Backup</string>
+    <string name="backup_transfer_qr_desc">Backup transfer QR code</string>
+    <string name="backup_transfer_scan_hint">Scan with phone to open backup management page</string>
+    <string name="backup_transfer_operations_hint">Download backup to phone / Upload backup to TV / Restore backup</string>
+    <string name="backup_transfer_status_waiting_prefix">Waiting for</string>
+
+    <!-- Text Input Dialog -->
+    <string name="text_input_history_recent">Recent</string>
+    <string name="text_input_history_top">Popular</string>
+    <string name="text_input_scan_code">Scan Code</string>
+    <string name="text_input_scan_phone_hint">Scan to input from phone</string>
+    <string name="text_input_phone_search">Open in phone browser</string>
+
+    <!-- Lyrics Settings Dialog -->
+    <string name="lyrics_settings_size_small">Small</string>
+    <string name="lyrics_settings_size_medium">Medium</string>
+    <string name="lyrics_settings_size_large">Large</string>
+    <string name="lyrics_settings_size_xlarge">X-Large</string>
+    <string name="lyrics_settings_adjust_font">Lyrics Settings</string>
+    <string name="lyrics_settings_font_size">Font Size</string>
+    <string name="lyrics_settings_preview">Preview Text</string>
+
+    <!-- Server Connect Screen -->
+    <string name="server_connect_test">Test</string>
+    <string name="server_connect_port">Port</string>
+    <string name="server_connect_error_empty">error:Please enter server address first</string>
+    <string name="server_connect_address">Address</string>
+    <string name="server_connect_type_daoliyu">Daoliyu</string>
+    <string name="server_connect_type_feiniu">Feiniu</string>
+    <string name="server_connect_email">Email</string>
+    <string name="server_connect_hint_jellyfin">https://jellyfin.example.com or http://192.168.1.100:8096</string>
+    <string name="server_connect_hint_subsonic">http://192.168.1.100:9527 or https://music.example.com</string>
+    <string name="server_connect_hint_daoliyu">http://192.168.1.100:4000</string>
+    <string name="server_connect_hint_feiniu">http://192.168.1.100</string>
+    <string name="server_connect_hint_default">https://jellyfin.example.com or http://192.168.1.100:8096</string>
+    <string name="server_connect_success">✓ Connected: %s</string>
+    <string name="server_connect_failed">✗ %s</string>
+
+    <!-- Netdisk Screen -->
+    <string name="netdisk_back">Back</string>
+    <string name="netdisk_title">Netdisk Music</string>
+    <string name="netdisk_search_placeholder">Search netdisk music…</string>
+    <string name="netdisk_status_baidu_not_logged_in">Baidu Netdisk not logged in, go to Settings → Netdisk to enable and login</string>
+    <string name="netdisk_loading">Loading directory…</string>
+    <string name="netdisk_path_label">Directory:</string>
+    <string name="netdisk_play_all">Play All ▶</string>
+    <string name="netdisk_parent_dir">Up</string>
+    <string name="netdisk_loading_files">Loading…</string>
+    <string name="netdisk_empty_dir">No files in this directory</string>
+    <string name="netdisk_search_title">Search Netdisk Music</string>
+    <string name="netdisk_search_hint">Search netdisk music by song or artist name</string>
+
+    <!-- Search Tab -->
+    <string name="search_no_results">No results found</string>
+    <string name="search_enter_keyword">Enter keywords to search music</string>
+    <string name="search_filter_sources">Search Sources</string>
+    <string name="search_all_sources">Enable All</string>
+
+    <!-- Discover Tab -->
+    <string name="discover_play_all">Play All ▶</string>
+    <string name="discover_add_queue">Add to Queue</string>
+    <string name="discover_change_batch">Refresh ↻</string>
+    <string name="discover_next_batch">Next →</string>
+    <string name="discover_song_count">%d songs</string>
+
+    <!-- Album Detail -->
+    <string name="album_song_count_tracks">%d tracks</string>
+
+    <!-- Queue -->
+    <string name="queue_song_count">%d songs</string>
+
+    <!-- Weather Radio -->
+    <string name="weather_radio_songs_title">Radio Songs</string>
+    <string name="weather_radio_no_songs">No radio songs</string>
+
+    <!-- Baidu Auth -->
+    <string name="baidu_device_code_label">Baidu Netdisk Device Code</string>
+
+    <!-- Karaoke Lyrics View -->
+    <string name="karaoke_no_lyrics">No lyrics</string>
+
+    <!-- Mv Playback -->
+    <string name="mv_scan_remote">Scan Remote</string>
+    <string name="mv_load_failed">Video failed to load, press Back to exit</string>
+    <string name="mv_lyrics">Lyrics</string>
+    <string name="mv_switch">Switch</string>
+    <string name="mv_search_bilibili">Search Bilibili</string>
+
+    <!-- Player & Separation -->
+    <string name="player_error_no_file">Song has no local file and no stream URL</string>
+    <string name="player_download_http_error">Download failed HTTP %d</string>
+    <string name="player_download_timeout">Download timeout (not completed within 5 minutes)</string>
+    <string name="player_download_network_error">Network error: %s</string>
+    <string name="player_download_exception">Download exception: %s</string>
+    <string name="player_error_playback">Playback error</string>
+    <string name="hq_error_component_not_ready">Separation component not ready, switched to fast mode</string>
+    <string name="hq_error_model_not_downloaded">HQ model not downloaded, switched to fast mode</string>
+    <string name="hq_error_no_audio_file">Unable to get audio file</string>
+    <string name="hq_error_with_fallback">%s, switched to fast mode</string>
+    <string name="hq_error_model_path_unavailable">Model path unavailable, switched to fast mode</string>
+    <string name="hq_error_separator_init_failed">Model initialization failed</string>
+    <string name="hq_error_separation_failed">HQ separation failed</string>
+    <string name="hq_error_oom">Out of memory, switched to fast mode</string>
+    <string name="hq_error_exception_with_suffix">Separation error: %s, switched to fast mode</string>
+    <string name="hq_error_with_time_and_suffix">%1$s (%2$.1fs), switched to fast mode</string>
+    <string name="hq_progress_downloading">Downloading audio</string>
+    <string name="hq_progress_loading_model">Loading model</string>
+    <string name="hq_progress_pre_download">Pre-download</string>
+    <string name="hq_progress_stage_elapsed">%1$s [%2$.1fs]</string>
+    <string name="hq_progress_done">Done [%1$.1fs]</string>
+    <string name="hq_success_separation_done">✓ Separation complete [%1$.1fs]</string>
+    <string name="demucs_error_model_not_found">Model file not found</string>
+    <string name="demucs_error_oom_load_model">Out of memory, unable to load model (%dMB)</string>
+    <string name="demucs_error_init_failed">Model initialization failed: %s</string>
+    <string name="demucs_error_not_initialized">Separator not initialized</string>
+    <string name="demucs_error_low_memory">Insufficient available memory (%dMB &lt; 150MB), close other apps and retry</string>
+    <string name="demucs_error_oom_separate">Out of memory, device cannot complete separation</string>
+    <string name="demucs_error_separate_exception">Separation exception: %s</string>
+    <string name="demucs_progress_decoding">Decoding audio</string>
+    <string name="demucs_progress_decoding_percent">Decoding audio (%d%%)</string>
+    <string name="demucs_progress_segmenting">Segmenting</string>
+    <string name="demucs_progress_separating">Separating (%1$d/%2$d)</string>
+    <string name="demucs_progress_done">Done</string>
+    <string name="demucs_error_no_audio_track">Audio file has no audio track (unsupported format?)</string>
+    <string name="demucs_error_decode_oom">Decode out of memory (audio too long?)</string>
+    <string name="demucs_error_decode_failed">Audio decode failed: %s</string>
+
+    <!-- Player Controls -->
+    <string name="player_karaoke">Karaoke</string>
+
+    <!-- ActionBar -->
+    <string name="action_play_all">Play All</string>
+    <string name="action_add_queue">Add to Queue</string>
+    <string name="action_favorite_all">Favorite All</string>
+    <string name="action_song_count">%d songs</string>
+
+    <!-- List State Indicators -->
+    <string name="list_loading">Loading…</string>
+    <string name="list_load_failed">Load failed</string>
+    <string name="list_retry">Retry</string>
+    <string name="list_empty">No data</string>
+
+    <!-- Section Header -->
+    <string name="section_view_all">View All ></string>
+
+    <!-- Connection (MainViewModel) -->
+    <string name="connect_failed_with_msg">Connection failed: %s</string>
+    <string name="connect_to_server_success">Connected to %s server</string>
+    <string name="connect_failed_check_settings">Connection failed: %s, check settings</string>
+
+    <!-- Library / Browse (MainViewModel) -->
+    <string name="load_favorites_error">Failed to load favorites: %s</string>
+    <string name="load_genres_error">Failed to load genres: %s</string>
+    <string name="backend_not_connected">Backend not connected, connect server in settings first</string>
+    <string name="load_albums_error">Failed to load albums: %s</string>
+    <string name="load_songs_error">Failed to load songs: %s</string>
+
+    <!-- Network Search (MainViewModel) -->
+    <string name="network_search_error">Search failed: %s</string>
+    <string name="queue_contains_all_results">Queue already contains all search results</string>
+    <string name="added_to_queue_skipped">Added to queue, skipped duplicates: %s</string>
+
+    <!-- Network Play (MainViewModel) -->
+    <string name="resolve_url_trying_endpoint">Trying %1$d/%2$d: %3$s</string>
+    <string name="play_failed_no_source">Play failed: no available source</string>
+    <string name="resolve_url_auto_skip">Skipped: %s</string>
+
+    <!-- Artist / Fav / Queue (MainViewModel) -->
+    <string name="load_artist_songs_error">Failed to load artist songs: %s</string>
+    <string name="toggle_favorite_error">Failed to toggle favorite: %s</string>
+    <string name="add_to_queue_error">Failed to add to queue: %s</string>
+
+    <!-- Playlist Ops (MainViewModel) -->
+    <string name="create_playlist_error">Failed to create playlist: %s</string>
+    <string name="rename_playlist_error">Failed to rename playlist: %s</string>
+    <string name="delete_playlist_error">Failed to delete playlist: %s</string>
+    <string name="song_already_in_playlist">Song already in playlist: %s</string>
+    <string name="add_to_playlist_error">Failed to add to playlist: %s</string>
+
+    <!-- Genre / Year (MainViewModel) -->
+    <string name="load_genre_songs_error">Failed to load genre songs: %s</string>
+    <string name="load_year_songs_error">Failed to load year songs: %s</string>
+
+    <!-- Lyrics (MainViewModel) -->
+    <string name="load_lyrics_error">Failed to load lyrics: %s</string>
+    <string name="switch_lyrics_source_error">Failed to switch lyrics source: %s</string>
+
+    <!-- Cache Status (MainViewModel) -->
+    <string name="status_mv_cache_cleared">MV cache cleared</string>
+    <string name="status_accompaniment_cache_cleared">Accompaniment cache cleared (%d files)</string>
+
+    <!-- NAS Playlists (MainViewModel) -->
+    <string name="load_playlists_error">Failed to load playlists: %s</string>
+    <string name="load_playlist_songs_error">Failed to load playlist songs: %s</string>
+    <string name="playlist_created">Playlist created</string>
+    <string name="create_failed">Create failed</string>
+    <string name="create_failed_with_msg">Create failed: %s</string>
+    <string name="playlist_deleted">Playlist deleted</string>
+    <string name="delete_failed">Delete failed</string>
+    <string name="delete_failed_with_msg">Delete failed: %s</string>
+    <string name="play_playlist_error">Failed to play playlist: %s</string>
+    <string name="remove_from_playlist_error">Failed to remove from playlist: %s</string>
+
+    <!-- Netdisk (MainViewModel) -->
+    <string name="netdisk_load_dir_error">Failed to load directory: %s</string>
+    <string name="netdisk_search_no_results">No search results</string>
+    <string name="netdisk_no_audio_files">No audio files found in directory</string>
+    <string name="netdisk_index_scan_interrupted">Index scan interrupted: %s</string>
+
+    <!-- Baidu OAuth (MainViewModel) -->
+    <string name="baidu_get_device_code_failed">Failed to get device code</string>
+    <string name="baidu_user_declined">User declined authorization</string>
+    <string name="baidu_auth_timeout">Authorization timed out</string>
+
+    <!-- Radio (MainViewModel) -->
+    <string name="radio_load_failed">Radio failed to load</string>
+
+    <!-- Jamendo (MainViewModel) -->
+    <string name="jamendo_load_failed">Jamendo failed to load</string>
+
+    <!-- Weather (MainViewModel) -->
+    <string name="weather_error_no_api_key">Unable to fetch weather, configure OpenWeatherMap API Key in Settings → Network</string>
+    <string name="weather_error_check_network">Unable to fetch weather, check network connection or API Key</string>
+    <string name="weather_fetch_failed">Failed to fetch weather: %s</string>
+
+    <!-- Weather Switch Mood (MainViewModel) -->
+    <string name="weather_switch_mood_error">Failed to switch mood: %s</string>
+
+    <!-- Network Search Advanced (MainViewModel) -->
+    <string name="network_search_failed">Network search failed: %s</string>
+    <string name="added_to_queue_with_skipped">Added %1$d songs to queue (skipped %2$d duplicates)</string>
+    <string name="browse_search_failed">Browse search failed: %s</string>
+
+    <!-- Resolve URL (MainViewModel) -->
+    <string name="resolve_url_failed_retry">Unable to resolve playback URL, please retry later</string>
+    <string name="resolve_url_endpoint_failed">Unable to resolve playback URL, network music endpoint connection failed</string>
+    <string name="resolve_url_auto_skip_with_title">Unable to resolve playback URL, auto-skipping «%s»</string>
+
+    <!-- Play (MainViewModel) -->
+    <string name="play_failed_with_msg">Play failed: %s</string>
+
+    <!-- Local Music (MainViewModel) -->
+    <string name="local_music_refreshed">Local music refreshed (%d songs)</string>
+    <string name="refresh_local_music_error">Failed to refresh local music: %s</string>
+    <string name="load_album_songs_error">Failed to load album songs: %s</string>
+    <string name="remove_from_local_playlist_error">Failed to remove from playlist: %s</string>
+
+    <!-- Backup (MainViewModel) -->
+    <string name="backup_exported">Backup exported: %s</string>
+    <string name="backup_export_failed">Backup failed: %s</string>
+    <string name="backup_restored">Restore complete, please reconnect to server</string>
+    <string name="backup_restore_failed">Restore failed: %s</string>
+    <string name="backup_deleted">Backup deleted</string>
+    <string name="backup_delete_failed">Delete failed: %s</string>
+
+    <!-- MV (MainViewModel) -->
+    <string name="mv_no_more_videos">No more videos found</string>
+    <string name="mv_switched_to_bilibili">Switched to Bilibili search results</string>
+    <string name="mv_bilibili_not_found">No matching videos on Bilibili</string>
+    <string name="mv_switch_failed_retry">Switch failed, please retry</string>
+    <string name="mv_searching_more">Searching for more videos…</string>
+    <string name="mv_found_new_videos">Found %d new videos</string>
+
+
+    <!-- BackupTransferServer HTML Page -->
+    <string name="html_backup_title">NAS Music TV Backup</string>
+    <string name="html_backup_subtitle">Backup Management - Download / Upload / Restore</string>
+    <string name="html_backup_section_files">Backup files on TV</string>
+    <string name="html_backup_loading">Loading...</string>
+    <string name="html_backup_empty">No backup files on TV</string>
+    <string name="html_backup_load_error">Load failed</string>
+    <string name="html_backup_download">Download</string>
+    <string name="html_backup_restore">Restore</string>
+    <string name="html_backup_section_upload">Upload backup to TV</string>
+    <string name="html_backup_upload_btn">Upload to TV</string>
+    <string name="html_backup_uploading">Uploading...</string>
+    <string name="html_backup_status_downloading">Downloading...</string>
+    <string name="html_backup_status_download_started">Download started</string>
+    <string name="html_backup_status_restoring">Restoring...</string>
+    <string name="html_backup_status_restore_failed">Restore failed</string>
+    <string name="html_backup_status_uploading">Uploading %s...</string>
+    <string name="html_backup_status_upload_failed">Upload failed</string>
+    <string name="html_backup_confirm_restore">Restore backup %s?\nCurrent data will be overwritten (server needs reconnection).</string>
+
+    <!-- ModelTransferServer HTML Page -->
+    <string name="html_model_title">NAS Music TV - Model Upload</string>
+    <string name="html_model_subtitle">High-Quality Separation Model Upload</string>
+    <string name="html_model_section_info">Model Info</string>
+    <string name="html_model_filename">Filename:</string>
+    <string name="html_model_expected_size">Expected size: ~166MB (fp16weights format)</string>
+    <string name="html_model_current_status">Current status:</string>
+    <string name="html_model_downloaded_size">Downloaded size:</string>
+    <string name="html_model_storage_path">Storage path:</string>
+    <string name="html_model_section_upload">Upload model to TV</string>
+    <string name="html_model_instruction_1">1. Download the model file on computer/phone (see link below)</string>
+    <string name="html_model_instruction_2">2. Select the downloaded htdemucs_ft_vocals.onnx file</string>
+    <string name="html_model_instruction_3">3. Click the \"Upload to TV\" button</string>
+    <string name="html_model_warning">Note: Do not close the page during upload, takes about 1-2 minutes</string>
+    <string name="html_model_download_link">Download model file (HuggingFace, 166MB)</string>
+    <string name="html_model_upload_btn">Upload to TV</string>
+    <string name="html_model_status_please_select">Please select the model file to upload</string>
+    <string name="html_model_status_selected">Selected: %1$s (%2$.1fMB)</string>
+    <string name="html_model_status_uploading">Uploading %1$s (%2$.1fMB) to TV...Do not close the page</string>
+    <string name="html_model_status_upload_pct">Uploading...%1$d%% (%2$.1f/%3$.1fMB)</string>
+    <string name="html_model_status_upload_failed">Upload failed (HTTP %1$d): %2$s</string>
+    <string name="html_model_status_network_error">Network error, upload failed</string>
+    <string name="html_model_status_timeout">Upload timeout, check network connection</string>
+    <string name="html_model_status_exist">Downloaded</string>
+    <string name="html_model_status_not_exist">Not downloaded</string>
+    <string name="html_model_file_too_small">File too small (%1$dMB, expected ~166MB), confirm you uploaded htdemucs_ft_vocals_fp16weights.onnx</string>
+    <string name="html_model_upload_saved">Model upload successful! File saved (%1$dMB)</string>
+    <string name="html_model_upload_generic_error">Upload failed: %1$s</string>
+
+    <!-- RemoteControlHtml Page -->
+    <string name="html_remote_title">NASMusicTV Remote</string>
+    <string name="html_remote_tab_queue">Playlist</string>
+    <string name="html_remote_tab_search">Search</string>
+    <string name="html_remote_now_playing">Now Playing</string>
+    <string name="html_remote_queue_empty">Queue is empty</string>
+    <string name="html_remote_search_placeholder">Search songs/artists...</string>
+    <string name="html_remote_search_btn">Search</string>
+    <string name="html_remote_searching">Searching...</string>
+    <string name="html_remote_nas_library">📁 NAS Library</string>
+    <string name="html_remote_network_search">🌐 Network Search</string>
+    <string name="html_remote_no_results">No results found</string>
+    <string name="html_remote_search_failed">Search failed, please try again</string>
+    <string name="html_remote_add_to_queue">Add to Queue</string>
+    <string name="html_remote_added">Added to queue</string>
+    <string name="html_remote_switched">Switched</string>
+    <string name="html_remote_deleted">Deleted</string>
+    <string name="html_remote_network_label">(Network)</string>
+    <string name="html_remote_move_up">Move up</string>
+    <string name="html_remote_move_down">Move down</string>
+    <string name="html_remote_delete">Delete</string>
+
+    <!-- Common HTML strings -->
+    <string name="html_common_network_badge">NET</string>
+</resources>

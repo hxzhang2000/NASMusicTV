@@ -1,5 +1,6 @@
 package com.nasmusic.tv.net
 
+import android.content.Context
 import com.google.gson.Gson
 import com.google.gson.JsonObject
 import com.nasmusic.tv.data.model.Song
@@ -19,6 +20,7 @@ import kotlinx.coroutines.runBlocking
  * 不再 App 启动常驻，避免 TV 资源受限设备上的无谓常驻开销。
  */
 class RemoteControlServer(
+    private val context: Context,
     private val port: Int = DEFAULT_PORT
 ) {
 
@@ -37,7 +39,7 @@ class RemoteControlServer(
      */
     fun start(callbacks: RemoteCallbacks): String? {
         if (server != null) return serverUrl
-        val impl = Impl(port, callbacks)
+        val impl = Impl(port, callbacks, context)
         return try {
             impl.start(30000, false) // 30 秒超时（默认 5 秒在 WiFi 环境下偏短）
             server = impl
@@ -70,7 +72,8 @@ class RemoteControlServer(
 
     private class Impl(
         port: Int,
-        private val callbacks: RemoteCallbacks
+        private val callbacks: RemoteCallbacks,
+        private val context: Context
     ) : NanoHTTPD(port) {
 
         private val gson = Gson()
@@ -97,7 +100,7 @@ class RemoteControlServer(
         }
 
         private fun serveControlPage(): Response {
-            val response = newFixedLengthResponse(Response.Status.OK, "text/html; charset=UTF-8", CONTROL_PAGE_HTML)
+            val response = newFixedLengthResponse(Response.Status.OK, "text/html; charset=UTF-8", buildControlPageHtml(context))
             response.addHeader("Cache-Control", "no-cache, no-store, must-revalidate")
             return response
         }

@@ -32,8 +32,8 @@ android {
         applicationId = "com.nasmusic.tv"
         minSdk = 22
         targetSdk = 34
-versionCode = 73
-        versionName = "2.25.3"
+versionCode = 74
+        versionName = "2.25.4"
 
         ndk {
             abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64")
@@ -151,6 +151,12 @@ dependencies {
 
     // 拼音转换（兼容 API 22+，不依赖 ICU）
     implementation("com.github.promeg:tinypinyin:2.0.3")
+
+    // AppCompat (for AppCompatDelegate.setApplicationLocales)
+    implementation("androidx.appcompat:appcompat:1.6.1")
+
+    // Core KTX (for LocaleListCompat)
+    implementation("androidx.core:core-ktx:1.12.0")
 
     // Leanback (TV support)
     implementation("androidx.leanback:leanback:1.0.0")

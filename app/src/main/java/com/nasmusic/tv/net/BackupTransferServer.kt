@@ -2,6 +2,7 @@ package com.nasmusic.tv.net
 
 import android.content.Context
 import com.google.gson.Gson
+import com.nasmusic.tv.R
 import com.nasmusic.tv.util.AppLog
 import com.nasmusic.tv.util.BackupFileUtils
 import fi.iki.elonen.NanoHTTPD
@@ -93,8 +94,164 @@ class BackupTransferServer(
             return newFixedLengthResponse(
                 Response.Status.OK,
                 "text/html; charset=UTF-8",
-                BACKUP_PAGE_HTML
+                buildBackupPageHtml(context)
             )
+        }
+
+        private fun buildBackupPageHtml(context: Context): String {
+            return """
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>${context.getString(R.string.html_backup_title)}</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:#1a1a2e;color:#eee;min-height:100vh;padding:16px}
+.card{background:#16213e;border-radius:16px;padding:24px;max-width:640px;margin:0 auto;box-shadow:0 8px 32px rgba(0,0,0,.3)}
+h2{text-align:center;margin-bottom:4px;font-size:20px}
+.sub{text-align:center;color:#888;font-size:13px;margin-bottom:20px}
+.section{margin-bottom:20px}
+.section h3{font-size:15px;color:#e94560;margin-bottom:10px}
+.backup-item{background:#0a0a23;border-radius:10px;padding:12px 14px;margin-bottom:8px;display:flex;flex-direction:column;gap:4px}
+.backup-name{font-size:13px;word-break:break-all;color:#eee}
+.backup-time{font-size:12px;color:#666}
+.backup-actions{display:flex;gap:8px;margin-top:6px}
+.btn{padding:8px 16px;font-size:13px;border:none;border-radius:8px;cursor:pointer;font-weight:600}
+.btn-download{background:#0f3460;color:#eee}
+.btn-download:active{background:#1a4a80}
+.btn-restore{background:#e94560;color:#fff}
+.btn-restore:active{background:#c73e54}
+.btn-upload{width:100%;padding:14px;font-size:16px;background:#e94560;color:#fff;border:none;border-radius:10px;font-weight:600;cursor:pointer;margin-top:10px}
+.btn-upload:active{background:#c73e54}
+.btn-upload:disabled{background:#555;color:#999}
+input[type=file]{width:100%;padding:10px;font-size:14px;background:#0a0a23;border:2px solid #0f3460;border-radius:8px;color:#eee;margin-bottom:4px}
+.status{text-align:center;margin-top:12px;font-size:14px;min-height:20px}
+.status.ok{color:#4ecca3}
+.status.err{color:#e94560}
+.empty{text-align:center;color:#555;font-size:14px;padding:20px}
+.loading{text-align:center;color:#666;font-size:14px;padding:20px}
+</style>
+</head>
+<body>
+<div class="card">
+<h2>NAS Music TV</h2>
+<p class="sub">${context.getString(R.string.html_backup_subtitle)}</p>
+
+<div class="section">
+<h3>${context.getString(R.string.html_backup_section_files)}</h3>
+<div id="backupList" class="loading">${context.getString(R.string.html_backup_loading)}</div>
+</div>
+
+<div class="section">
+<h3>${context.getString(R.string.html_backup_section_upload)}</h3>
+<input type="file" id="fileInput" accept=".json,application/json">
+<button class="btn-upload" id="uploadBtn" onclick="uploadBackup()" disabled>${context.getString(R.string.html_backup_upload_btn)}</button>
+</div>
+
+<div id="status" class="status"></div>
+</div>
+
+<script>
+var STR = {
+  empty: '${context.getString(R.string.html_backup_empty).replace("'", "\\'")}',
+  loadError: '${context.getString(R.string.html_backup_load_error).replace("'", "\\'")}',
+  downloading: '${context.getString(R.string.html_backup_status_downloading).replace("'", "\\'")}',
+  downloadStarted: '${context.getString(R.string.html_backup_status_download_started).replace("'", "\\'")}',
+  confirmRestore: '${context.getString(R.string.html_backup_confirm_restore).replace("'", "\\'")}',
+  restoring: '${context.getString(R.string.html_backup_status_restoring).replace("'", "\\'")}',
+  restoreFailed: '${context.getString(R.string.html_backup_status_restore_failed).replace("'", "\\'")}',
+  uploading: '${context.getString(R.string.html_backup_uploading).replace("'", "\\'")}',
+  uploadFailed: '${context.getString(R.string.html_backup_status_upload_failed).replace("'", "\\'")}',
+  uploadBtn: '${context.getString(R.string.html_backup_upload_btn).replace("'", "\\'")}'
+};
+function loadBackups(){
+  fetch('/api/list')
+    .then(function(r){return r.json()})
+    .then(function(d){
+      var list=document.getElementById('backupList');
+      if(!d.backups||d.backups.length===0){
+        list.innerHTML='<div class="empty">'+STR.empty+'</div>';
+        return;
+      }
+      list.innerHTML=d.backups.map(function(b){
+        return '<div class="backup-item">'+
+          '<div class="backup-name">'+b.name+'</div>'+
+          '<div class="backup-time">'+b.time+'</div>'+
+          '<div class="backup-actions">'+
+            '<button class="btn btn-download" onclick="downloadBackup(\''+b.name+'\')">${context.getString(R.string.html_backup_download)}</button>'+
+            '<button class="btn btn-restore" onclick="restoreBackup(\''+b.name+'\')">${context.getString(R.string.html_backup_restore)}</button>'+
+          '</div>'+
+        '</div>';
+      }).join('');
+    })
+    .catch(function(e){
+      document.getElementById('backupList').innerHTML='<div class="empty">'+STR.loadError+'</div>';
+    });
+}
+
+function downloadBackup(name){
+  showStatus(STR.downloading,'');
+  window.location='/api/download?name='+encodeURIComponent(name);
+  setTimeout(function(){showStatus(STR.downloadStarted,'ok');},1000);
+}
+
+function restoreBackup(name){
+  if(!confirm(STR.confirmRestore.replace('%s',name)))return;
+  showStatus(STR.restoring,'');
+  fetch('/api/restore?name='+encodeURIComponent(name),{method:'POST'})
+    .then(function(r){return r.json()})
+    .then(function(d){
+      showStatus(d.message, d.ok?'ok':'err');
+      if(d.ok) setTimeout(loadBackups,2000);
+    })
+    .catch(function(e){showStatus(STR.restoreFailed,'err');});
+}
+
+function uploadBackup(){
+  var input=document.getElementById('fileInput');
+  if(!input.files||!input.files[0])return;
+  var file=input.files[0];
+  var btn=document.getElementById('uploadBtn');
+  btn.disabled=true;
+  btn.textContent=STR.uploading;
+  showStatus('${context.getString(R.string.html_backup_status_uploading).replace("'", "\\'")}'.replace('%s',file.name),'');
+  file.text().then(function(text){
+    return fetch('/api/upload',{method:'POST',body:text});
+  }).then(function(r){return r.json()})
+    .then(function(d){
+      showStatus(d.message, d.ok?'ok':'err');
+      if(d.ok){
+        input.value='';
+        loadBackups();
+      }
+    })
+    .catch(function(e){showStatus(STR.uploadFailed,'err');})
+    .finally(function(){
+      btn.disabled=false;
+      btn.textContent=STR.uploadBtn;
+      var hasFile=input.files&&input.files[0];
+      if(!hasFile)btn.disabled=true;
+    });
+}
+
+function showStatus(msg,type){
+  var s=document.getElementById('status');
+  s.textContent=msg;
+  s.className='status'+(type?' '+type:'');
+}
+
+document.getElementById('fileInput').addEventListener('change',function(){
+  var hasFile=this.files&&this.files[0];
+  document.getElementById('uploadBtn').disabled=!hasFile;
+});
+
+loadBackups();
+</script>
+</body>
+</html>
+""".trimIndent()
         }
 
         /** 列出 TV 端备份文件 */
@@ -232,146 +389,3 @@ class BackupTransferServer(
         }
     }
 }
-
-/** 备份管理 HTML 页面 */
-private val BACKUP_PAGE_HTML = """
-<!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>NAS Music TV 备份管理</title>
-<style>
-*{box-sizing:border-box;margin:0;padding:0}
-body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:#1a1a2e;color:#eee;min-height:100vh;padding:16px}
-.card{background:#16213e;border-radius:16px;padding:24px;max-width:640px;margin:0 auto;box-shadow:0 8px 32px rgba(0,0,0,.3)}
-h2{text-align:center;margin-bottom:4px;font-size:20px}
-.sub{text-align:center;color:#888;font-size:13px;margin-bottom:20px}
-.section{margin-bottom:20px}
-.section h3{font-size:15px;color:#e94560;margin-bottom:10px}
-.backup-item{background:#0a0a23;border-radius:10px;padding:12px 14px;margin-bottom:8px;display:flex;flex-direction:column;gap:4px}
-.backup-name{font-size:13px;word-break:break-all;color:#eee}
-.backup-time{font-size:12px;color:#666}
-.backup-actions{display:flex;gap:8px;margin-top:6px}
-.btn{padding:8px 16px;font-size:13px;border:none;border-radius:8px;cursor:pointer;font-weight:600}
-.btn-download{background:#0f3460;color:#eee}
-.btn-download:active{background:#1a4a80}
-.btn-restore{background:#e94560;color:#fff}
-.btn-restore:active{background:#c73e54}
-.btn-upload{width:100%;padding:14px;font-size:16px;background:#e94560;color:#fff;border:none;border-radius:10px;font-weight:600;cursor:pointer;margin-top:10px}
-.btn-upload:active{background:#c73e54}
-.btn-upload:disabled{background:#555;color:#999}
-input[type=file]{width:100%;padding:10px;font-size:14px;background:#0a0a23;border:2px solid #0f3460;border-radius:8px;color:#eee;margin-bottom:4px}
-.status{text-align:center;margin-top:12px;font-size:14px;min-height:20px}
-.status.ok{color:#4ecca3}
-.status.err{color:#e94560}
-.empty{text-align:center;color:#555;font-size:14px;padding:20px}
-.loading{text-align:center;color:#666;font-size:14px;padding:20px}
-</style>
-</head>
-<body>
-<div class="card">
-<h2>NAS Music TV</h2>
-<p class="sub">备份管理 - 下载 / 上传 / 恢复</p>
-
-<div class="section">
-<h3>TV 上的备份文件</h3>
-<div id="backupList" class="loading">加载中...</div>
-</div>
-
-<div class="section">
-<h3>上传备份到电视</h3>
-<input type="file" id="fileInput" accept=".json,application/json">
-<button class="btn-upload" id="uploadBtn" onclick="uploadBackup()" disabled>上传到电视</button>
-</div>
-
-<div id="status" class="status"></div>
-</div>
-
-<script>
-function loadBackups(){
-  fetch('/api/list')
-    .then(function(r){return r.json()})
-    .then(function(d){
-      var list=document.getElementById('backupList');
-      if(!d.backups||d.backups.length===0){
-        list.innerHTML='<div class="empty">TV 上暂无备份文件</div>';
-        return;
-      }
-      list.innerHTML=d.backups.map(function(b){
-        return '<div class="backup-item">'+
-          '<div class="backup-name">'+b.name+'</div>'+
-          '<div class="backup-time">'+b.time+'</div>'+
-          '<div class="backup-actions">'+
-            '<button class="btn btn-download" onclick="downloadBackup(\''+b.name+'\')">下载</button>'+
-            '<button class="btn btn-restore" onclick="restoreBackup(\''+b.name+'\')">恢复</button>'+
-          '</div>'+
-        '</div>';
-      }).join('');
-    })
-    .catch(function(e){
-      document.getElementById('backupList').innerHTML='<div class="empty">加载失败</div>';
-    });
-}
-
-function downloadBackup(name){
-  showStatus('正在下载...','');
-  window.location='/api/download?name='+encodeURIComponent(name);
-  setTimeout(function(){showStatus('下载已开始','ok');},1000);
-}
-
-function restoreBackup(name){
-  if(!confirm('确认恢复备份 '+name+' ?\\n当前数据将被覆盖（服务器需重新连接）。'))return;
-  showStatus('正在恢复...','');
-  fetch('/api/restore?name='+encodeURIComponent(name),{method:'POST'})
-    .then(function(r){return r.json()})
-    .then(function(d){
-      showStatus(d.message, d.ok?'ok':'err');
-      if(d.ok) setTimeout(loadBackups,2000);
-    })
-    .catch(function(e){showStatus('恢复失败','err');});
-}
-
-function uploadBackup(){
-  var input=document.getElementById('fileInput');
-  if(!input.files||!input.files[0])return;
-  var file=input.files[0];
-  var btn=document.getElementById('uploadBtn');
-  btn.disabled=true;
-  btn.textContent='上传中...';
-  showStatus('正在上传 '+file.name+'...','');
-  file.text().then(function(text){
-    return fetch('/api/upload',{method:'POST',body:text});
-  }).then(function(r){return r.json()})
-    .then(function(d){
-      showStatus(d.message, d.ok?'ok':'err');
-      if(d.ok){
-        input.value='';
-        loadBackups();
-      }
-    })
-    .catch(function(e){showStatus('上传失败','err');})
-    .finally(function(){
-      btn.disabled=false;
-      btn.textContent='上传到电视';
-      var hasFile=input.files&&input.files[0];
-      if(!hasFile)btn.disabled=true;
-    });
-}
-
-function showStatus(msg,type){
-  var s=document.getElementById('status');
-  s.textContent=msg;
-  s.className='status'+(type?' '+type:'');
-}
-
-document.getElementById('fileInput').addEventListener('change',function(){
-  var hasFile=this.files&&this.files[0];
-  document.getElementById('uploadBtn').disabled=!hasFile;
-});
-
-loadBackups();
-</script>
-</body>
-</html>
-""".trimIndent()

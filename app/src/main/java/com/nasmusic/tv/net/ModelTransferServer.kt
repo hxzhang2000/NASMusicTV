@@ -1,6 +1,7 @@
 package com.nasmusic.tv.net
 
 import android.content.Context
+import com.nasmusic.tv.R
 import com.nasmusic.tv.util.AppLog
 import fi.iki.elonen.NanoHTTPD
 import java.io.BufferedInputStream
@@ -80,7 +81,7 @@ class ModelTransferServer(
     private fun servePage(): Response {
         val exists = modelFile.exists()
         val sizeMB = if (exists) "%.1f".format(modelFile.length() / (1024.0 * 1024.0)) else "0"
-        val page = MODEL_PAGE_HTML
+        val page = buildModelTransferPageHtml(context)
             .replace("{{MODEL_EXISTS}}", exists.toString())
             .replace("{{MODEL_SIZE}}", sizeMB)
             .replace("{{MODEL_PATH}}", modelFile.absolutePath)
@@ -281,14 +282,18 @@ class ModelTransferServer(
     }
 }
 
-/** 模型上传 HTML 页面 */
-private val MODEL_PAGE_HTML = """
+/** 模型上传 HTML 页面 — 动态生成，所有 UI 字符串走 context.getString() */
+private fun buildModelTransferPageHtml(context: Context): String {
+    // Escape single quotes for JS string injection
+    fun esc(s: String): String = s.replace("'", "\\'")
+
+    return """
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>NAS Music TV - 模型上传</title>
+<title>${context.getString(R.string.html_model_title)}</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:#1a1a2e;color:#eee;min-height:100vh;padding:16px}
@@ -313,48 +318,57 @@ input[type=file]{width:100%;padding:10px;font-size:14px;background:#0a0a23;borde
 <body>
 <div class="card">
 <h2>NAS Music TV</h2>
-<p class="sub">高质量分离模型上传</p>
+<p class="sub">${context.getString(R.string.html_model_subtitle)}</p>
 
 <div class="section">
-<h3>模型信息</h3>
+<h3>${context.getString(R.string.html_model_section_info)}</h3>
 <div class="info-box">
-<div>文件名：<code>htdemucs_ft_vocals.onnx</code></div>
-<div>预期大小：约 166MB（fp16weights 格式）</div>
-<div>当前状态：<span id="modelStatus">{{MODEL_EXISTS}}</span></div>
-<div>已下载大小：<span id="modelSize">{{MODEL_SIZE}}</span> MB</div>
-<div style="margin-top:8px">存储路径：</div>
+<div>${context.getString(R.string.html_model_filename)}<code>htdemucs_ft_vocals.onnx</code></div>
+<div>${context.getString(R.string.html_model_expected_size)}</div>
+<div>${context.getString(R.string.html_model_current_status)}<span id="modelStatus">{{MODEL_EXISTS}}</span></div>
+<div>${context.getString(R.string.html_model_downloaded_size)}<span id="modelSize">{{MODEL_SIZE}}</span> MB</div>
+<div style="margin-top:8px">${context.getString(R.string.html_model_storage_path)}</div>
 <code>{{MODEL_PATH}}</code>
 </div>
 </div>
 
 <div class="section">
-<h3>上传模型到电视</h3>
+<h3>${context.getString(R.string.html_model_section_upload)}</h3>
 <div class="info-box">
-<div>1. 在电脑/手机上下载模型文件（见下方链接）</div>
-<div>2. 选择下载好的 <code>htdemucs_ft_vocals.onnx</code> 文件</div>
-<div>3. 点击"上传到电视"按钮</div>
-<div style="margin-top:8px;color:#e94560">注意：上传过程请勿关闭页面，约需 1-2 分钟</div>
+<div>${context.getString(R.string.html_model_instruction_1)}</div>
+<div>${context.getString(R.string.html_model_instruction_2).replace("htdemucs_ft_vocals.onnx", "<code>htdemucs_ft_vocals.onnx</code>")}</div>
+<div>${context.getString(R.string.html_model_instruction_3)}</div>
+<div style="margin-top:8px;color:#e94560">${context.getString(R.string.html_model_warning)}</div>
 </div>
 
 <a class="download-link" href="https://huggingface.co/StemSplitio/htdemucs-ft-vocals-onnx/resolve/main/htdemucs_ft_vocals_fp16weights.onnx" target="_blank">
-下载模型文件（HuggingFace，166MB）
+${context.getString(R.string.html_model_download_link)}
 </a>
 
 <input type="file" id="fileInput" accept=".onnx,application/octet-stream">
-<button class="btn" id="uploadBtn" onclick="uploadModel()" disabled>上传到电视</button>
+<button class="btn" id="uploadBtn" onclick="uploadModel()" disabled>${context.getString(R.string.html_model_upload_btn)}</button>
 </div>
 
-<div id="status" class="status info">请选择要上传的模型文件</div>
+<div id="status" class="status info">${context.getString(R.string.html_model_status_please_select)}</div>
 </div>
 
 <script>
+var STR = {
+  statusExist: '${esc(context.getString(R.string.html_model_status_exist))}',
+  statusNotExist: '${esc(context.getString(R.string.html_model_status_not_exist))}',
+  uploading: '${esc(context.getString(R.string.html_model_status_uploading))}',
+  pleaseSelect: '${esc(context.getString(R.string.html_model_status_please_select))}',
+  networkError: '${esc(context.getString(R.string.html_model_status_network_error))}',
+  timeout: '${esc(context.getString(R.string.html_model_status_timeout))}',
+  uploadBtn: '${esc(context.getString(R.string.html_model_upload_btn))}'
+};
 var fileInput=document.getElementById('fileInput');
 var uploadBtn=document.getElementById('uploadBtn');
 fileInput.addEventListener('change',function(){
   uploadBtn.disabled=!fileInput.files||!fileInput.files[0];
   if(fileInput.files&&fileInput.files[0]){
     var f=fileInput.files[0];
-    showStatus('已选择：'+f.name+'（'+(f.size/(1024*1024)).toFixed(1)+'MB）','info');
+    showStatus(STR.pleaseSelect+': '+f.name+' ('+(f.size/(1024*1024)).toFixed(1)+'MB)','info');
   }
 });
 
@@ -362,8 +376,8 @@ function uploadModel(){
   if(!fileInput.files||!fileInput.files[0])return;
   var file=fileInput.files[0];
   uploadBtn.disabled=true;
-  uploadBtn.textContent='上传中...';
-  showStatus('正在上传 '+file.name+'（'+(file.size/(1024*1024)).toFixed(1)+'MB）到电视...请勿关闭页面','info');
+  uploadBtn.textContent=STR.uploading;
+  showStatus(STR.uploading+' '+file.name+' ('+(file.size/(1024*1024)).toFixed(1)+'MB)','info');
 
   var formData=new FormData();
   formData.append('file',file,file.name);
@@ -375,7 +389,7 @@ function uploadModel(){
   xhr.upload.onprogress=function(e){
     if(e.lengthComputable){
       var pct=Math.round(e.loaded/e.total*100);
-      showStatus('上传中...'+pct+'%（'+(e.loaded/(1024*1024)).toFixed(1)+'/'+(e.total/(1024*1024)).toFixed(1)+'MB）','info');
+      showStatus(STR.uploading+'...'+pct+'% ('+(e.loaded/(1024*1024)).toFixed(1)+'/'+(e.total/(1024*1024)).toFixed(1)+'MB)','info');
     }
   };
 
@@ -397,22 +411,22 @@ function uploadModel(){
         refreshStatus();
       }
     }else{
-      showStatus('上传失败（HTTP '+xhr.status+'）：'+msg,'err');
+      showStatus('HTTP '+xhr.status+': '+msg,'err');
     }
     uploadBtn.disabled=false;
-    uploadBtn.textContent='上传到电视';
+    uploadBtn.textContent=STR.uploadBtn;
   };
 
   xhr.onerror=function(){
-    showStatus('网络错误，上传失败','err');
+    showStatus(STR.networkError,'err');
     uploadBtn.disabled=false;
-    uploadBtn.textContent='上传到电视';
+    uploadBtn.textContent=STR.uploadBtn;
   };
 
   xhr.ontimeout=function(){
-    showStatus('上传超时，请检查网络连接','err');
+    showStatus(STR.timeout,'err');
     uploadBtn.disabled=false;
-    uploadBtn.textContent='上传到电视';
+    uploadBtn.textContent=STR.uploadBtn;
   };
 
   xhr.send(formData);
@@ -422,7 +436,7 @@ function refreshStatus(){
   fetch('/api/status')
     .then(function(r){return r.json()})
     .then(function(d){
-      document.getElementById('modelStatus').textContent=d.exists?'已下载':'未下载';
+      document.getElementById('modelStatus').textContent=d.exists?STR.statusExist:STR.statusNotExist;
       document.getElementById('modelSize').textContent=(d.size/(1024*1024)).toFixed(1);
     })
     .catch(function(){});
@@ -437,3 +451,4 @@ function showStatus(msg,cls){
 </body>
 </html>
 """
+}

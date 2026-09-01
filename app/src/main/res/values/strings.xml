@@ -283,6 +283,13 @@
     <string name="server_subsonic_hint">http://your-server:9527 (lx-server) 或 http://192.168.1.100:4533 (Airsonic)</string>
     <string name="server_url_hint">https://jellyfin.example.com 或 http://192.168.1.100:8096</string>
 
+    <!-- Settings - Language -->
+    <string name="settings_language">语言</string>
+    <string name="settings_language_desc">选择应用界面语言</string>
+    <string name="settings_language_system">跟随系统</string>
+    <string name="settings_language_zh">中文</string>
+    <string name="settings_language_en">English</string>
+
     <!-- Settings -->
     <string name="settings_general">通用</string>
     <string name="settings_playback">播放</string>
@@ -800,4 +807,78 @@
     <string name="mv_switch_failed_retry">切换失败，请重试</string>
     <string name="mv_searching_more">正在搜索更多视频…</string>
     <string name="mv_found_new_videos">找到 %d 个新视频</string>
+
+    <!-- BackupTransferServer HTML 页面 -->
+    <string name="html_backup_title">NAS Music TV 备份管理</string>
+    <string name="html_backup_subtitle">备份管理 - 下载 / 上传 / 恢复</string>
+    <string name="html_backup_section_files">TV 上的备份文件</string>
+    <string name="html_backup_loading">加载中...</string>
+    <string name="html_backup_empty">TV 上暂无备份文件</string>
+    <string name="html_backup_load_error">加载失败</string>
+    <string name="html_backup_download">下载</string>
+    <string name="html_backup_restore">恢复</string>
+    <string name="html_backup_section_upload">上传备份到电视</string>
+    <string name="html_backup_upload_btn">上传到电视</string>
+    <string name="html_backup_uploading">上传中...</string>
+    <string name="html_backup_status_downloading">正在下载...</string>
+    <string name="html_backup_status_download_started">下载已开始</string>
+    <string name="html_backup_status_restoring">正在恢复...</string>
+    <string name="html_backup_status_restore_failed">恢复失败</string>
+    <string name="html_backup_status_uploading">正在上传 %s...</string>
+    <string name="html_backup_status_upload_failed">上传失败</string>
+    <string name="html_backup_confirm_restore">确认恢复备份 %s ?\n当前数据将被覆盖（服务器需重新连接）。</string>
+
+    <!-- ModelTransferServer HTML 页面 -->
+    <string name="html_model_title">NAS Music TV - 模型上传</string>
+    <string name="html_model_subtitle">高质量分离模型上传</string>
+    <string name="html_model_section_info">模型信息</string>
+    <string name="html_model_filename">文件名：</string>
+    <string name="html_model_expected_size">预期大小：约 166MB（fp16weights 格式）</string>
+    <string name="html_model_current_status">当前状态：</string>
+    <string name="html_model_downloaded_size">已下载大小：</string>
+    <string name="html_model_storage_path">存储路径：</string>
+    <string name="html_model_section_upload">上传模型到电视</string>
+    <string name="html_model_instruction_1">1. 在电脑/手机上下载模型文件（见下方链接）</string>
+    <string name="html_model_instruction_2">2. 选择下载好的 htdemucs_ft_vocals.onnx 文件</string>
+    <string name="html_model_instruction_3">3. 点击\"上传到电视\"按钮</string>
+    <string name="html_model_warning">注意：上传过程请勿关闭页面，约需 1-2 分钟</string>
+    <string name="html_model_download_link">下载模型文件（HuggingFace，166MB）</string>
+    <string name="html_model_upload_btn">上传到电视</string>
+    <string name="html_model_status_please_select">请选择要上传的模型文件</string>
+    <string name="html_model_status_selected">已选择：%1$s（%2$.1fMB）</string>
+    <string name="html_model_status_uploading">正在上传 %1$s（%2$.1fMB）到电视...请勿关闭页面</string>
+    <string name="html_model_status_upload_pct">上传中...%1$d%%（%2$.1f/%3$.1fMB）</string>
+    <string name="html_model_status_upload_failed">上传失败（HTTP %1$d）：%2$s</string>
+    <string name="html_model_status_network_error">网络错误，上传失败</string>
+    <string name="html_model_status_timeout">上传超时，请检查网络连接</string>
+    <string name="html_model_status_exist">已下载</string>
+    <string name="html_model_status_not_exist">未下载</string>
+    <string name="html_model_file_too_small">文件太小（%1$dMB，预期约166MB），请确认上传的是 htdemucs_ft_vocals_fp16weights.onnx</string>
+    <string name="html_model_upload_saved">模型上传成功！文件已保存（%1$dMB）</string>
+    <string name="html_model_upload_generic_error">上传失败：%1$s</string>
+
+    <!-- RemoteControlHtml 页面 -->
+    <string name="html_remote_title">NASMusicTV 遥控</string>
+    <string name="html_remote_tab_queue">播放队列</string>
+    <string name="html_remote_tab_search">搜索</string>
+    <string name="html_remote_now_playing">正在播放</string>
+    <string name="html_remote_queue_empty">队列为空</string>
+    <string name="html_remote_search_placeholder">搜索歌曲/歌手...</string>
+    <string name="html_remote_search_btn">搜索</string>
+    <string name="html_remote_searching">搜索中...</string>
+    <string name="html_remote_nas_library">📁 NAS 曲库</string>
+    <string name="html_remote_network_search">🌐 网络搜索</string>
+    <string name="html_remote_no_results">未找到结果</string>
+    <string name="html_remote_search_failed">搜索失败，请重试</string>
+    <string name="html_remote_add_to_queue">加入队列</string>
+    <string name="html_remote_added">已加入队列</string>
+    <string name="html_remote_switched">已切换</string>
+    <string name="html_remote_deleted">已删除</string>
+    <string name="html_remote_network_label">（网络）</string>
+    <string name="html_remote_move_up">上移</string>
+    <string name="html_remote_move_down">下移</string>
+    <string name="html_remote_delete">删除</string>
+
+    <!-- HTML 通用字符串 -->
+    <string name="html_common_network_badge">NET</string>
 </resources>

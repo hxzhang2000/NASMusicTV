@@ -121,6 +121,9 @@ fun SettingsScreen(
     // 全局字体字号调整
     fontAdjustment: Int = 0,
     onChangeFontAdjustment: (Int) -> Unit = {},
+    // 语言设置
+    language: String = "system",
+    onChangeLanguage: ((String) -> Unit)? = null,
     // 分离模式设置
     separationMode: com.nasmusic.tv.data.prefs.AppPreferences.SeparationMode = com.nasmusic.tv.data.prefs.AppPreferences.SeparationMode.FAST,
     onChangeSeparationMode: ((com.nasmusic.tv.data.prefs.AppPreferences.SeparationMode) -> Unit)? = null,
@@ -314,6 +317,46 @@ fun SettingsScreen(
             when (activeSection) {
                 SettingsSection.GENERAL -> {
                     item { SectionTitle(stringResource(R.string.settings_general)) }
+                    // 语言设置
+                    item {
+                        SubSectionTitle(stringResource(R.string.settings_language))
+                        Text(
+                            text = stringResource(R.string.settings_language_desc),
+                            color = NasMusicColors.TextSecondary,
+                            fontSize = FontSize.small(),
+                            modifier = Modifier.padding(start = 4.dp, bottom = 8.dp)
+                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            listOf(
+                                "system" to stringResource(R.string.settings_language_system),
+                                "zh" to stringResource(R.string.settings_language_zh),
+                                "en" to stringResource(R.string.settings_language_en)
+                            ).forEach { (value, label) ->
+                                val selected = language == value
+                                FocusableSurface(
+                                    onClick = { onChangeLanguage?.invoke(value) },
+                                    modifier = Modifier.weight(1f),
+                                    shape = RoundedCornerShape(10.dp),
+                                    containerColor = if (selected) NasMusicColors.Primary.copy(alpha = 0.18f) else NasMusicColors.SurfaceVariant,
+                                    contentColor = if (selected) NasMusicColors.Primary else NasMusicColors.TextSecondary,
+                                    focusedContainerColor = if (selected) NasMusicColors.Primary.copy(alpha = 0.3f) else NasMusicColors.SurfaceVariant,
+                                    focusedContentColor = if (selected) NasMusicColors.Primary else NasMusicColors.TextPrimary,
+                                    focusedScale = 1.05f
+                                ) {
+                                    Text(
+                                        text = label,
+                                        fontSize = FontSize.body(),
+                                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                    item { Spacer(modifier = Modifier.height(8.dp)) }
                     item { SettingSwitch(label = stringResource(R.string.settings_dark_theme), description = stringResource(R.string.settings_dark_theme_desc), checked = settings.darkTheme, onClick = { onToggleDarkTheme(!settings.darkTheme) }) }
                     item { SettingSwitch(label = stringResource(R.string.settings_animations), description = stringResource(R.string.settings_animations_desc), checked = settings.animationsEnabled, onClick = { onToggleAnimations(!settings.animationsEnabled) }) }
                     item { SubSectionTitle(stringResource(R.string.settings_font_size)) }
