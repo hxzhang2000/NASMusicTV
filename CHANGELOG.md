@@ -7,6 +7,13 @@
 >
 > 类型：`Added`（新增） | `Changed`（变更） | `Fixed`（修复） | `Removed`（移除）
 
+## [v2.25.5] - 2026-09-01
+
+### Fixed
+
+- **语言切换不生效**：`MainActivity` 从 `ComponentActivity` 改为 `AppCompatActivity`，使 `AppCompatDelegate.setApplicationLocales()` 生效。之前 `ComponentActivity` 不触发 `AppCompatDelegate` 的 locale 切换和 Activity 重建，导致切换语言后界面无变化
+- **语言选择器按钮对比度不足**：设置页语言按钮未选中时改为亮色文字（`TextPrimary`），背景透明；选中时背景使用 `Primary.copy(alpha=0.18f)`，文字加粗（`FontWeight.Medium`），与歌词来源按钮风格对齐
+
 ## [v2.25.4] - 2026-09-01
 
 ### Added

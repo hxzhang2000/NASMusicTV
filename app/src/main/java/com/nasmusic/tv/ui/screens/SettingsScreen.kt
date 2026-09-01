@@ -341,8 +341,8 @@ fun SettingsScreen(
                                     onClick = { onChangeLanguage?.invoke(value) },
                                     modifier = Modifier.weight(1f),
                                     shape = RoundedCornerShape(10.dp),
-                                    containerColor = if (selected) NasMusicColors.Primary.copy(alpha = 0.18f) else NasMusicColors.SurfaceVariant,
-                                    contentColor = if (selected) NasMusicColors.Primary else NasMusicColors.TextSecondary,
+                                    containerColor = if (selected) NasMusicColors.Primary.copy(alpha = 0.18f) else Color.Transparent,
+                                    contentColor = if (selected) NasMusicColors.Primary else NasMusicColors.TextPrimary,
                                     focusedContainerColor = if (selected) NasMusicColors.Primary.copy(alpha = 0.3f) else NasMusicColors.SurfaceVariant,
                                     focusedContentColor = if (selected) NasMusicColors.Primary else NasMusicColors.TextPrimary,
                                     focusedScale = 1.05f
@@ -350,6 +350,7 @@ fun SettingsScreen(
                                     Text(
                                         text = label,
                                         fontSize = FontSize.body(),
+                                        fontWeight = if (selected) FontWeight.Medium else FontWeight.Normal,
                                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)
                                     )
                                 }

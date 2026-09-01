@@ -1,6 +1,6 @@
 # NAS Music TV — 技术架构概述
 
-> 版本：v2.13.0
+> 版本：v2.13.1
 > 最后更新：2026-09-01
 > 本文档记录项目当前的完整技术架构，作为后续迭代的基准参考。
 
@@ -6124,3 +6124,27 @@ Phase 1-6 代码已全部落地并编译通过。Phase 7（测试与文档）新
 **涉及文件**：`app/src/main/java/com/nasmusic/tv/data/model/AppSettings.kt`、`app/src/main/java/com/nasmusic/tv/data/prefs/AppPreferences.kt`、`app/src/main/java/com/nasmusic/tv/NasMusicApp.kt`、`app/src/main/java/com/nasmusic/tv/ui/viewmodel/MainViewModel.kt`、`app/src/main/java/com/nasmusic/tv/ui/screens/SettingsScreen.kt`、`app/src/main/java/com/nasmusic/tv/ui/components/AppRoot.kt`、`app/src/main/java/com/nasmusic/tv/net/BackupTransferServer.kt`、`app/src/main/java/com/nasmusic/tv/net/ModelTransferServer.kt`、`app/src/main/java/com/nasmusic/tv/net/RemoteControlHtml.kt`、`app/src/main/java/com/nasmusic/tv/net/RemoteControlServer.kt`、`app/src/main/res/values/strings.xml`、`app/src/main/res/values-en/strings.xml`、`app/build.gradle.kts`、`CHANGELOG.md`、`docs/technical-overview.md`
 
 **版本号变更**：v2.25.3 → v2.25.4（versionCode 73 → 74）
+
+---
+
+### 10.68 修复语言切换不生效 + 语言按钮对比度（v2.13.1 / v2.25.5）
+
+**日期**：2026-09-01
+
+**修改内容**：
+
+1. **根因修复 — MainActivity 改为 AppCompatActivity**：
+   - `app/src/main/java/com/nasmusic/tv/ui/MainActivity.kt`：类声明从 `ComponentActivity` 改为 `AppCompatActivity`
+   - 原因：`AppCompatDelegate.setApplicationLocales()` 需要 `AppCompatActivity` 才能触发 locale 变更和 Activity 重建。`ComponentActivity` 不使用 `AppCompatDelegate`，调用被静默忽略
+
+2. **UI 修复 — 语言选择器按钮对比度**：
+   - `app/src/main/java/com/nasmusic/tv/ui/screens/SettingsScreen.kt`（~行 339-355）：
+     - 未选中按钮：背景 `Color.Transparent`，文字 `TextPrimary`（白色），与歌词来源按钮风格对齐
+     - 选中按钮：背景 `Primary.copy(alpha=0.18f)`，文字 `Primary`，`FontWeight.Medium`
+     - Focused 状态：未选中时 `SurfaceVariant`，选中时 `Primary.copy(alpha=0.3f)`
+
+**涉及文件**：`app/src/main/java/com/nasmusic/tv/ui/MainActivity.kt`、`app/src/main/java/com/nasmusic/tv/ui/screens/SettingsScreen.kt`、`app/build.gradle.kts`、`CHANGELOG.md`、`docs/technical-overview.md`
+
+**验证结果**：✅ `assembleDebug` 编译通过（无 error）。
+
+**版本号变更**：v2.25.4 → v2.25.5（versionCode 74 → 75）
