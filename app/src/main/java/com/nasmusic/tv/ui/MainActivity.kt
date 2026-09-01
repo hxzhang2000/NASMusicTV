@@ -1,11 +1,13 @@
 package com.nasmusic.tv.ui
 
+import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.content.res.Configuration
 import android.os.Bundle
 import android.view.KeyEvent
 import android.view.WindowManager
-import androidx.appcompat.app.AppCompatActivity
+import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
 import androidx.activity.OnBackPressedCallback
@@ -52,7 +54,7 @@ import kotlinx.coroutines.launch
 /**
  * 主 TV Activity —— NAS Music TV
  */
-class MainActivity : AppCompatActivity() {
+class MainActivity : ComponentActivity() {
 
     private val viewModel: MainViewModel by viewModels()
     // Level 1: 对话框 BACK 键回调 —— 当对话框（输入对话框、退出确认等）打开时设置
@@ -66,6 +68,24 @@ class MainActivity : AppCompatActivity() {
     // 全屏沉浸模式状态 — 由 AppRoot 持有一份引用，同时 Activity.onKeyDown 也需要读取
     private val isImmersiveMode: MutableState<Boolean> = mutableStateOf(false)
     private lateinit var networkMonitor: NetworkMonitor
+
+    /**
+     * 在每次 Activity 创建（含 recreate）时应用存储的语言设置。
+     * resources.updateConfiguration() 仅影响 Application 级别资源，
+     * 通过 attachBaseContext 创建带正确 locale 的 Context，确保 Compose 使用正确的资源配置。
+     */
+    override fun attachBaseContext(newBase: Context) {
+        val lang = com.nasmusic.tv.data.prefs.AppPreferences.getInstance(newBase).getLanguageSync()
+        val locale = when (lang) {
+            "zh" -> java.util.Locale.SIMPLIFIED_CHINESE
+            "en" -> java.util.Locale.US
+            else -> java.util.Locale.getDefault()
+        }
+        val config = Configuration(newBase.resources.configuration)
+        config.setLocale(locale)
+        val updatedContext = newBase.createConfigurationContext(config)
+        super.attachBaseContext(updatedContext)
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)

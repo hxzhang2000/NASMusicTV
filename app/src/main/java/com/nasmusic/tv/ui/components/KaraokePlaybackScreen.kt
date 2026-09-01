@@ -643,7 +643,7 @@ private fun <T> KaraokeStepPickerDialog(
     ) {
         Column(
             modifier = Modifier
-                .width(360.dp)
+                .width(420.dp)
                 .padding(24.dp)
                 .background(NasMusicColors.Background, RoundedCornerShape(16.dp))
                 .clickable(
@@ -701,7 +701,7 @@ private fun <T> KaraokeStepPickerDialog(
                     FocusableSurface(
                         onClick = { onConfirm(steps[tempIndex]); onDismiss() },
                         modifier = Modifier
-                            .width(160.dp)
+                            .width(200.dp)
                             .height(56.dp)
                             .then(if (tempIndex == selectedIndex) Modifier.focusRequester(focusRequester) else Modifier),
                         shape = RoundedCornerShape(12.dp),

@@ -13,6 +13,11 @@
 
 - **语言切换不生效**：`MainActivity` 从 `ComponentActivity` 改为 `AppCompatActivity`，使 `AppCompatDelegate.setApplicationLocales()` 生效。之前 `ComponentActivity` 不触发 `AppCompatDelegate` 的 locale 切换和 Activity 重建，导致切换语言后界面无变化
 - **语言选择器按钮对比度不足**：设置页语言按钮未选中时改为亮色文字（`TextPrimary`），背景透明；选中时背景使用 `Primary.copy(alpha=0.18f)`，文字加粗（`FontWeight.Medium`），与歌词来源按钮风格对齐
+- **语言切换方式修正**：放弃 `AppCompatActivity` + `AppCompatDelegate.setApplicationLocales()` 方案（与 Leanback Theme 冲突），改用 `attachBaseContext()` + `createConfigurationContext()` 原生方案，`MainViewModel` 增加 `suspend fun updateLanguage()` 协程调用，`AppRoot` 通过 `finish() + newIntent + exit(0)` 实现冷重启切换
+- **API 24 以下设备 StorageMonitor 崩溃**：`StorageMonitor.refreshStorageDevices()` 增加 `if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) return` 守卫，防止在低版本设备上调用 `getStorageVolume()` 导致崩溃
+- **DataStore 双实例冷启动崩溃**：`AppPreferences` 改为单例模式（`companion object getInstance()`），DataStore 使用 `PreferenceDataStoreFactory.create()` 替代 `preferencesDataStore` 委托，避免 Application 创建阶段多个协程同时初始化 DataStore 导致 `IllegalStateException`
+- **DataStore 冲突导致切换语言闪退**：`AppRoot` 中 `onChangeLanguage` 从 `recreate()` 改为 `finish() + newIntent + exit(0)` 三连，避免 `recreate()` 触发 DataStore 并发写入冲突
+- **K歌变速弹窗文字折行**：`KaraokeStepPickerDialog` 弹窗宽度从 360dp 拉宽至 420dp，当前值按钮宽度从 160dp 拉宽至 200dp，防止 "Original speed" 等较长文本折行
 
 ## [v2.25.4] - 2026-09-01
 

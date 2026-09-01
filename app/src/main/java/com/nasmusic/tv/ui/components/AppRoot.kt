@@ -45,6 +45,7 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
+import androidx.activity.ComponentActivity
 import androidx.compose.ui.platform.LocalContext
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
@@ -81,6 +82,7 @@ import com.nasmusic.tv.ui.theme.NasMusicColors
 import com.nasmusic.tv.ui.viewmodel.MainViewModel
 import com.nasmusic.tv.data.model.Screen
 import kotlinx.coroutines.launch
+import androidx.compose.runtime.rememberCoroutineScope
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
@@ -90,6 +92,7 @@ fun AppRoot(
     onConnect: (ServerConfig) -> Unit
 ) {
     val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
     val isTV = remember {
         context.packageManager.hasSystemFeature("android.software.leanback")
     }
@@ -707,7 +710,22 @@ fun AppRoot(
                         onChangeFontAdjustment = { viewModel.updateFontAdjustment(it) },
                         // 语言设置
                         language = settings.language,
-                        onChangeLanguage = { viewModel.updateLanguage(it) },
+                        onChangeLanguage = { lang ->
+                            coroutineScope.launch {
+                                viewModel.updateLanguage(lang)
+                                // 用 finish + 新 Intent 重启，避免 recreate() 导致双 DataStore 冲突
+                                val activity = context as? ComponentActivity
+                                if (activity != null) {
+                                    val pkg = activity.packageName
+                                    val mgr = activity.packageManager
+                                    val intent = mgr.getLaunchIntentForPackage(pkg)
+                                    intent?.addFlags(android.content.Intent.FLAG_ACTIVITY_CLEAR_TASK or android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                                    if (intent != null) activity.startActivity(intent)
+                                    activity.finish()
+                                    Runtime.getRuntime().exit(0)
+                                }
+                            }
+                        },
                         // 数据管理（备份/恢复）
                         backupFiles = viewModel.backupFiles.collectAsState(initial = emptyList()).value,
                         backupMessage = viewModel.backupMessage.collectAsState(initial = null).value,

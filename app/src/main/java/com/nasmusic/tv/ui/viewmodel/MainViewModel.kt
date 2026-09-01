@@ -3568,7 +3568,7 @@ showError(getApplication<Application>().getString(R.string.play_failed_with_msg,
         prefs.setLyricsFontScale(scale)
     }
 
-    fun updateLanguage(lang: String) = viewModelScope.launch {
+    suspend fun updateLanguage(lang: String) {
         prefs.setLanguage(lang)
         // 立即应用语言变更（重启 Activity 以重新加载所有资源）
         (getApplication() as? NasMusicApp)?.applyLocale(lang)

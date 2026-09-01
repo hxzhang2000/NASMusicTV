@@ -86,6 +86,11 @@ class StorageMonitor(private val context: Context) {
 
     /** 刷新存储设备列表 */
     fun refreshStorageDevices() {
+        // StorageManager.getStorageVolumes() 需要 API 24+，低版本跳过
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) {
+            _storageDevices.value = emptyList()
+            return
+        }
         val sm = context.getSystemService(Context.STORAGE_SERVICE) as android.os.storage.StorageManager
         val devices = sm.storageVolumes.mapNotNull { volume ->
             val path = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {

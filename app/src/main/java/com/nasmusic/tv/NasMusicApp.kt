@@ -32,8 +32,6 @@ import com.nasmusic.tv.data.prefs.AppPreferences
 import com.nasmusic.tv.player.ModelDownloadManager
 import com.nasmusic.tv.player.PlayerManager
 import com.nasmusic.tv.util.AppLog
-import androidx.appcompat.app.AppCompatDelegate
-import androidx.core.os.LocaleListCompat
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -123,7 +121,7 @@ class NasMusicApp : Application(), ImageLoaderFactory {
 
     override fun onCreate() {
         super.onCreate()
-        appPreferences = AppPreferences(this)
+        appPreferences = AppPreferences.getInstance(this)
         // 启动时应用语言设置
         applyLocale(appPreferences.getLanguageSync())
         backendRegistry = BackendRegistry()
@@ -189,16 +187,19 @@ class NasMusicApp : Application(), ImageLoaderFactory {
     }
 
     /**
-     * 应用语言设置
+     * 应用语言设置（手动 Configuration 更新，无需 AppCompat）
      * @param lang "system"=跟随系统, "zh"=中文, "en"=English
      */
     fun applyLocale(lang: String) {
-        val localeList = when (lang) {
-            "zh" -> LocaleListCompat.forLanguageTags("zh-CN")
-            "en" -> LocaleListCompat.forLanguageTags("en-US")
-            else -> LocaleListCompat.getEmptyLocaleList() // 跟随系统
+        val locale = when (lang) {
+            "zh" -> java.util.Locale.SIMPLIFIED_CHINESE
+            "en" -> java.util.Locale.US
+            else -> java.util.Locale.getDefault() // 跟随系统
         }
-        AppCompatDelegate.setApplicationLocales(localeList)
+        val config = android.content.res.Configuration(resources.configuration)
+        config.setLocale(locale)
+        @Suppress("DEPRECATION")
+        resources.updateConfiguration(config, resources.displayMetrics)
     }
 
     /**

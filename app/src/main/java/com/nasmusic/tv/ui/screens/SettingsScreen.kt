@@ -349,6 +349,7 @@ fun SettingsScreen(
                                 ) {
                                     Text(
                                         text = label,
+                                        color = LocalFocusableContentColor.current,
                                         fontSize = FontSize.body(),
                                         fontWeight = if (selected) FontWeight.Medium else FontWeight.Normal,
                                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)

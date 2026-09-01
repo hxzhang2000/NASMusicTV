@@ -8,7 +8,8 @@ import androidx.datastore.preferences.core.doublePreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
-import androidx.datastore.preferences.preferencesDataStore
+import androidx.datastore.preferences.core.PreferenceDataStoreFactory
+import java.io.File
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import com.nasmusic.tv.backend.network.MetingApiService
@@ -38,13 +39,26 @@ import kotlinx.coroutines.runBlocking
  * 应用偏好存储
  * 使用 DataStore 持久化服务器配置与通用设置
  */
-class AppPreferences(private val context: Context) {
+class AppPreferences private constructor(private val context: Context) {
 
     companion object {
         private const val TAG = "AppPreferences"
+
+        @Volatile
+        private var INSTANCE: AppPreferences? = null
+
+        fun getInstance(context: Context): AppPreferences {
+            return INSTANCE ?: synchronized(this) {
+                INSTANCE ?: AppPreferences(context.applicationContext).also { INSTANCE = it }
+            }
+        }
     }
 
-    private val Context.dataStore by preferencesDataStore(name = "nas_music_tv")
+    private val dataStore: androidx.datastore.core.DataStore<androidx.datastore.preferences.core.Preferences> by lazy {
+        PreferenceDataStoreFactory.create {
+            File(context.filesDir, "datastore/nas_music_tv.preferences_pb")
+        }
+    }
 
     // --- 服务器配置 ---
     private val keyBackendType = stringPreferencesKey("server_backend_type")
@@ -113,10 +127,10 @@ class AppPreferences(private val context: Context) {
     private val keyLanguage = stringPreferencesKey("settings_language")
 
     // --- 语言设置 Flow ---
-    val language: Flow<String> = context.dataStore.data.map { it[keyLanguage] ?: "system" }
+    val language: Flow<String> = dataStore.data.map { it[keyLanguage] ?: "system" }
 
     suspend fun setLanguage(lang: String) {
-        context.dataStore.edit { it[keyLanguage] = lang }
+        dataStore.edit { it[keyLanguage] = lang }
     }
 
     /**
@@ -124,7 +138,7 @@ class AppPreferences(private val context: Context) {
      */
     fun getLanguageSync(): String {
         return runBlocking(Dispatchers.IO) {
-            context.dataStore.data.first()[keyLanguage] ?: "system"
+            dataStore.data.first()[keyLanguage] ?: "system"
         }
     }
 
@@ -132,15 +146,15 @@ class AppPreferences(private val context: Context) {
     private val keyPitchSemitones = intPreferencesKey("k_pitch_semitones")
     private val keyPlaybackSpeed = doublePreferencesKey("k_playback_speed")
 
-    val pitchSemitones: Flow<Int> = context.dataStore.data.map { it[keyPitchSemitones] ?: 0 }
-    val playbackSpeed: Flow<Double> = context.dataStore.data.map { it[keyPlaybackSpeed] ?: 1.0 }
+    val pitchSemitones: Flow<Int> = dataStore.data.map { it[keyPitchSemitones] ?: 0 }
+    val playbackSpeed: Flow<Double> = dataStore.data.map { it[keyPlaybackSpeed] ?: 1.0 }
 
     suspend fun setPitchSemitones(semitones: Int) {
-        context.dataStore.edit { it[keyPitchSemitones] = semitones }
+        dataStore.edit { it[keyPitchSemitones] = semitones }
     }
 
     suspend fun setPlaybackSpeed(speed: Double) {
-        context.dataStore.edit { it[keyPlaybackSpeed] = speed }
+        dataStore.edit { it[keyPlaybackSpeed] = speed }
     }
 
     // --- 伴奏分离模式（快速/高质量）---
@@ -154,13 +168,13 @@ class AppPreferences(private val context: Context) {
         HIGH_QUALITY("hq")     // 高质量模式：HT-Demucs FT ONNX 预分离
     }
 
-    val separationMode: Flow<SeparationMode> = context.dataStore.data.map { prefs ->
+    val separationMode: Flow<SeparationMode> = dataStore.data.map { prefs ->
         val value = prefs[keySeparationMode] ?: SeparationMode.FAST.value
         SeparationMode.entries.find { it.value == value } ?: SeparationMode.FAST
     }
 
     suspend fun setSeparationMode(mode: SeparationMode) {
-        context.dataStore.edit { it[keySeparationMode] = mode.value }
+        dataStore.edit { it[keySeparationMode] = mode.value }
     }
 
     // --- 播放统计 ---
@@ -179,7 +193,7 @@ class AppPreferences(private val context: Context) {
     private val searchHistoryTtlMs = 30L * 24 * 60 * 60 * 1000  // 30 天
 
     // --- ServerConfig Flow ---
-    val serverConfig: Flow<ServerConfig> = context.dataStore.data.map { prefs ->
+    val serverConfig: Flow<ServerConfig> = dataStore.data.map { prefs ->
         ServerConfig(
             backendType = prefs[keyBackendType] ?: ServerConfig.TYPE_JELLYFIN,
             baseUrl = prefs[keyBaseUrl] ?: "",
@@ -192,7 +206,7 @@ class AppPreferences(private val context: Context) {
     }
 
     suspend fun saveServerConfig(config: ServerConfig) {
-        context.dataStore.edit { prefs ->
+        dataStore.edit { prefs ->
             prefs[keyBackendType] = config.backendType
             prefs[keyBaseUrl] = config.baseUrl
             prefs[keyApiToken] = CryptoUtils.encrypt(config.apiToken)
@@ -204,7 +218,7 @@ class AppPreferences(private val context: Context) {
     }
 
     suspend fun setServerConnected(connected: Boolean, displayName: String = "") {
-        context.dataStore.edit { prefs ->
+        dataStore.edit { prefs ->
             prefs[keyServerConnected] = connected
             if (displayName.isNotBlank()) {
                 prefs[keyServerDisplayName] = displayName
@@ -213,7 +227,7 @@ class AppPreferences(private val context: Context) {
     }
 
     suspend fun clearServerConfig() {
-        context.dataStore.edit { prefs ->
+        dataStore.edit { prefs ->
             prefs.remove(keyBackendType)
             prefs.remove(keyBaseUrl)
             prefs.remove(keyApiToken)
@@ -225,7 +239,7 @@ class AppPreferences(private val context: Context) {
     }
 
     // --- B-2 最近播放 Flow ---
-    val recentSongIds: Flow<List<String>> = context.dataStore.data.map { prefs ->
+    val recentSongIds: Flow<List<String>> = dataStore.data.map { prefs ->
         val json = prefs[keyRecentSongs] ?: "[]"
         try {
             gson.fromJson(json, object : TypeToken<List<String>>() {}.type)
@@ -233,7 +247,7 @@ class AppPreferences(private val context: Context) {
     }
 
     // --- B-2 播放次数 Flow ---
-    val playCounts: Flow<Map<String, Int>> = context.dataStore.data.map { prefs ->
+    val playCounts: Flow<Map<String, Int>> = dataStore.data.map { prefs ->
         val json = prefs[keyPlayCounts] ?: "{}"
         try {
             gson.fromJson(json, object : TypeToken<Map<String, Int>>() {}.type)
@@ -245,7 +259,7 @@ class AppPreferences(private val context: Context) {
      */
     suspend fun getRecentSongIds(): List<String> {
         return try {
-            context.dataStore.data.first().let { prefs ->
+            dataStore.data.first().let { prefs ->
                 val recentJson = prefs[keyRecentSongs] ?: "[]"
                 gson.fromJson(recentJson, object : TypeToken<List<String>>() {}.type) ?: emptyList()
             }
@@ -260,7 +274,7 @@ class AppPreferences(private val context: Context) {
      * 2. 播放次数 +1
      */
     suspend fun recordPlay(songId: String) {
-        context.dataStore.edit { prefs ->
+        dataStore.edit { prefs ->
             // 更新最近播放
             val recentJson = prefs[keyRecentSongs] ?: "[]"
             val recentList = try {
@@ -299,7 +313,7 @@ class AppPreferences(private val context: Context) {
      * 与 recordPlay 的 id 列表互补：这里存完整元数据，支持网络歌曲/未连 NAS 时展示。
      */
     suspend fun recordRecentSongObject(song: Song) {
-        context.dataStore.edit { prefs ->
+        dataStore.edit { prefs ->
             val json = prefs[keyRecentSongObjects] ?: "{\"songs\":[]}"
             val data = try {
                 gson.fromJson(json, RecentSongObjectsData::class.java)
@@ -322,7 +336,7 @@ class AppPreferences(private val context: Context) {
      * 替代分别调用 [recordPlay] + [recordRecentSongObject]（两次 DataStore 写）。
      */
     suspend fun recordPlayWithSong(song: Song) {
-        context.dataStore.edit { prefs ->
+        dataStore.edit { prefs ->
             val songId = song.id
 
             // 1. 更新最近播放 id 列表（去重 + LRU，最多 50 条）
@@ -369,7 +383,7 @@ class AppPreferences(private val context: Context) {
      */
     suspend fun getRecentSongObjects(): List<Song> {
         return try {
-            context.dataStore.data.first().let { prefs ->
+            dataStore.data.first().let { prefs ->
                 val json = prefs[keyRecentSongObjects] ?: "{\"songs\":[]}"
                 val data = gson.fromJson(json, RecentSongObjectsData::class.java)
                 data.songs
@@ -381,16 +395,16 @@ class AppPreferences(private val context: Context) {
     }
 
     // --- B-4 均衡器 ---
-    val equalizerPreset: Flow<EqualizerPreset> = context.dataStore.data.map { prefs ->
+    val equalizerPreset: Flow<EqualizerPreset> = dataStore.data.map { prefs ->
         val ordinal = prefs[keyEqualizerPreset] ?: 0
         EqualizerPreset.entries.getOrElse(ordinal) { EqualizerPreset.NORMAL }
     }
 
     suspend fun setEqualizerPreset(preset: EqualizerPreset) {
-        context.dataStore.edit { it[keyEqualizerPreset] = preset.ordinal }
+        dataStore.edit { it[keyEqualizerPreset] = preset.ordinal }
     }
 
-    val equalizerBands: Flow<List<Float>> = context.dataStore.data.map { prefs ->
+    val equalizerBands: Flow<List<Float>> = dataStore.data.map { prefs ->
         val json = prefs[keyEqualizerBands] ?: "[]"
         try {
             gson.fromJson(json, object : TypeToken<List<Float>>() {}.type)
@@ -398,11 +412,11 @@ class AppPreferences(private val context: Context) {
     }
 
     suspend fun setEqualizerBands(bands: List<Float>) {
-        context.dataStore.edit { it[keyEqualizerBands] = gson.toJson(bands) }
+        dataStore.edit { it[keyEqualizerBands] = gson.toJson(bands) }
     }
 
     suspend fun setEqualizerBand(index: Int, value: Float) {
-        context.dataStore.edit { prefs ->
+        dataStore.edit { prefs ->
             val json = prefs[keyEqualizerBands] ?: "[]"
             val bands: MutableList<Float> = try {
                 val list: List<Float> = gson.fromJson(json, object : TypeToken<List<Float>>() {}.type)
@@ -415,7 +429,7 @@ class AppPreferences(private val context: Context) {
     }
 
     // --- AppSettings Flow ---
-    val appSettings: Flow<AppSettings> = context.dataStore.data.map { prefs ->
+    val appSettings: Flow<AppSettings> = dataStore.data.map { prefs ->
         AppSettings(
             darkTheme = prefs[keyDarkTheme] ?: true,
             animationsEnabled = prefs[keyAnimations] ?: true,
@@ -438,46 +452,46 @@ class AppPreferences(private val context: Context) {
 
     // --- 全局字体字号调整 ---
     suspend fun setFontAdjustment(adjustment: Int) =
-        context.dataStore.edit { it[keyFontAdjustment] = adjustment }
+        dataStore.edit { it[keyFontAdjustment] = adjustment }
 
-    suspend fun setDarkTheme(enabled: Boolean) = context.dataStore.edit { it[keyDarkTheme] = enabled }
+    suspend fun setDarkTheme(enabled: Boolean) = dataStore.edit { it[keyDarkTheme] = enabled }
 
-    suspend fun setAnimationsEnabled(enabled: Boolean) = context.dataStore.edit { it[keyAnimations] = enabled }
+    suspend fun setAnimationsEnabled(enabled: Boolean) = dataStore.edit { it[keyAnimations] = enabled }
 
-    suspend fun setAutoPlayNext(enabled: Boolean) = context.dataStore.edit { it[keyAutoPlayNext] = enabled }
+    suspend fun setAutoPlayNext(enabled: Boolean) = dataStore.edit { it[keyAutoPlayNext] = enabled }
 
-    suspend fun setDefaultPlayMode(mode: PlayMode) = context.dataStore.edit { it[keyPlayMode] = mode.ordinal }
+    suspend fun setDefaultPlayMode(mode: PlayMode) = dataStore.edit { it[keyPlayMode] = mode.ordinal }
 
-    suspend fun setCacheLyrics(enabled: Boolean) = context.dataStore.edit { it[keyCacheLyrics] = enabled }
+    suspend fun setCacheLyrics(enabled: Boolean) = dataStore.edit { it[keyCacheLyrics] = enabled }
 
-    suspend fun setCacheCover(enabled: Boolean) = context.dataStore.edit { it[keyCacheCover] = enabled }
+    suspend fun setCacheCover(enabled: Boolean) = dataStore.edit { it[keyCacheCover] = enabled }
 
-    suspend fun setLyricsOffset(offsetMs: Long) = context.dataStore.edit { it[keyLyricsOffset] = offsetMs }
+    suspend fun setLyricsOffset(offsetMs: Long) = dataStore.edit { it[keyLyricsOffset] = offsetMs }
 
     // --- 歌词显示设置 ---
     private val keyLyricsFontScale = doublePreferencesKey("lyrics_font_scale")
 
-    val lyricsFontScale: Flow<Float> = context.dataStore.data.map { prefs ->
+    val lyricsFontScale: Flow<Float> = dataStore.data.map { prefs ->
         (prefs[keyLyricsFontScale] ?: 1.0).toFloat()
     }
 
     suspend fun setLyricsFontScale(scale: Float) {
-        context.dataStore.edit { it[keyLyricsFontScale] = scale.coerceIn(0.7f, 1.6f).toDouble() }
+        dataStore.edit { it[keyLyricsFontScale] = scale.coerceIn(0.7f, 1.6f).toDouble() }
     }
 
     suspend fun setDefaultNetworkSource(source: NetworkSource) =
-        context.dataStore.edit { it[keyDefaultNetworkSource] = source.key }
+        dataStore.edit { it[keyDefaultNetworkSource] = source.key }
 
     suspend fun setVisualizerTheme(theme: VisualizerTheme) =
-        context.dataStore.edit { it[keyVisualizerTheme] = theme.name }
+        dataStore.edit { it[keyVisualizerTheme] = theme.name }
 
     suspend fun setMetingApiBaseUrl(url: String) =
-        context.dataStore.edit {
+        dataStore.edit {
             it[keyMetingApiBaseUrl] = url.trim().trim('`', '\'', '"').trim()
         }
 
     suspend fun setMvApiBaseUrl(url: String) =
-        context.dataStore.edit {
+        dataStore.edit {
             it[keyMvApiBaseUrl] = url.trim().trim('`', '\'', '"').trim()
         }
 
@@ -490,7 +504,7 @@ class AppPreferences(private val context: Context) {
     fun getMusicSourceSync(): String {
         return runBlocking(Dispatchers.IO) {
             try {
-                context.dataStore.data.first()[keyMusicSource] ?: com.nasmusic.tv.data.model.MusicSource.DEFAULT_API_KEY
+                dataStore.data.first()[keyMusicSource] ?: com.nasmusic.tv.data.model.MusicSource.DEFAULT_API_KEY
             } catch (e: Exception) {
                 com.nasmusic.tv.data.model.MusicSource.DEFAULT_API_KEY
             }
@@ -498,12 +512,12 @@ class AppPreferences(private val context: Context) {
     }
 
     suspend fun setMusicSource(sourceKey: String) {
-        context.dataStore.edit { it[keyMusicSource] = sourceKey }
+        dataStore.edit { it[keyMusicSource] = sourceKey }
     }
 
     // --- Jamendo（CC 独立音乐）设置 ---
     suspend fun setJamendoClientId(id: String) {
-        context.dataStore.edit { it[keyJamendoClientId] = id.trim() }
+        dataStore.edit { it[keyJamendoClientId] = id.trim() }
     }
 
     /**
@@ -512,7 +526,7 @@ class AppPreferences(private val context: Context) {
     fun getJamendoClientIdSync(): String {
         return runBlocking(Dispatchers.IO) {
             try {
-                context.dataStore.data.first()[keyJamendoClientId] ?: ""
+                dataStore.data.first()[keyJamendoClientId] ?: ""
             } catch (e: Exception) {
                 AppLog.w(TAG, "Failed to read jamendo client id", e)
                 ""
@@ -525,48 +539,48 @@ class AppPreferences(private val context: Context) {
     /**
      * 获取天气是否启用
      */
-    val weatherEnabled: Flow<Boolean> = context.dataStore.data.map { prefs ->
+    val weatherEnabled: Flow<Boolean> = dataStore.data.map { prefs ->
         prefs[keyWeatherEnabled] ?: true
     }
 
     suspend fun setWeatherEnabled(enabled: Boolean) {
-        context.dataStore.edit { it[keyWeatherEnabled] = enabled }
+        dataStore.edit { it[keyWeatherEnabled] = enabled }
     }
 
     /**
      * 获取手动设置的城市名（空串=自动定位）
      */
-    val weatherManualCity: Flow<String> = context.dataStore.data.map { prefs ->
+    val weatherManualCity: Flow<String> = dataStore.data.map { prefs ->
         prefs[keyWeatherManualCity] ?: ""
     }
 
     suspend fun setWeatherManualCity(city: String) {
-        context.dataStore.edit { it[keyWeatherManualCity] = city }
+        dataStore.edit { it[keyWeatherManualCity] = city }
     }
 
     /**
      * 获取天气自动刷新开关
      */
-    val weatherAutoRefresh: Flow<Boolean> = context.dataStore.data.map { prefs ->
+    val weatherAutoRefresh: Flow<Boolean> = dataStore.data.map { prefs ->
         prefs[keyWeatherAutoRefresh] ?: true
     }
 
     suspend fun setWeatherAutoRefresh(enabled: Boolean) {
-        context.dataStore.edit { it[keyWeatherAutoRefresh] = enabled }
+        dataStore.edit { it[keyWeatherAutoRefresh] = enabled }
     }
 
     /**
      * OpenWeatherMap API Key
      * 当 Open-Meteo 不可用时的备选天气数据源
      */
-    val weatherApiKey: Flow<String> = context.dataStore.data.map { prefs ->
+    val weatherApiKey: Flow<String> = dataStore.data.map { prefs ->
         prefs[keyWeatherApiKey] ?: ""
     }
 
     fun getWeatherApiKeySync(): String {
         return runBlocking(Dispatchers.IO) {
             try {
-                context.dataStore.data.first()[keyWeatherApiKey] ?: ""
+                dataStore.data.first()[keyWeatherApiKey] ?: ""
             } catch (e: Exception) {
                 AppLog.w(TAG, "Failed to read weather API key", e)
                 ""
@@ -575,37 +589,37 @@ class AppPreferences(private val context: Context) {
     }
 
     suspend fun setWeatherApiKey(key: String) {
-        context.dataStore.edit { it[keyWeatherApiKey] = key.trim() }
+        dataStore.edit { it[keyWeatherApiKey] = key.trim() }
     }
 
     // --- 封面滤镜设置 ---
 
-    val coverFilterEnabled: Flow<Boolean> = context.dataStore.data.map { prefs ->
+    val coverFilterEnabled: Flow<Boolean> = dataStore.data.map { prefs ->
         prefs[keyCoverFilterEnabled] ?: false
     }
 
     suspend fun setCoverFilterEnabled(enabled: Boolean) {
-        context.dataStore.edit { it[keyCoverFilterEnabled] = enabled }
+        dataStore.edit { it[keyCoverFilterEnabled] = enabled }
     }
 
-    val coverFilterBlurRadius: Flow<Float> = context.dataStore.data.map { prefs ->
+    val coverFilterBlurRadius: Flow<Float> = dataStore.data.map { prefs ->
         (prefs[keyCoverFilterBlurRadius] ?: 8.0).toFloat()
     }
 
     suspend fun setCoverFilterBlurRadius(radius: Float) {
-        context.dataStore.edit { it[keyCoverFilterBlurRadius] = radius.toDouble() }
+        dataStore.edit { it[keyCoverFilterBlurRadius] = radius.toDouble() }
     }
 
-    val coverFilterDarkOverlay: Flow<Float> = context.dataStore.data.map { prefs ->
+    val coverFilterDarkOverlay: Flow<Float> = dataStore.data.map { prefs ->
         (prefs[keyCoverFilterDarkOverlay] ?: 0.3).toFloat()
     }
 
     suspend fun setCoverFilterDarkOverlay(overlay: Float) {
-        context.dataStore.edit { it[keyCoverFilterDarkOverlay] = overlay.toDouble() }
+        dataStore.edit { it[keyCoverFilterDarkOverlay] = overlay.toDouble() }
     }
 
     suspend fun setSpectrumEnabled(enabled: Boolean) {
-        context.dataStore.edit { it[keySpectrumEnabled] = enabled }
+        dataStore.edit { it[keySpectrumEnabled] = enabled }
     }
 
     /**
@@ -615,7 +629,7 @@ class AppPreferences(private val context: Context) {
     fun getDefaultNetworkSourceSync(): String {
         return runBlocking(Dispatchers.IO) {
             try {
-                val stored = context.dataStore.data.first()[keyDefaultNetworkSource]
+                val stored = dataStore.data.first()[keyDefaultNetworkSource]
                 NetworkSource.fromKey(stored ?: "")?.key ?: stored ?: NetworkSource.DEFAULT.key
             } catch (e: Exception) {
                 NetworkSource.DEFAULT.key
@@ -630,7 +644,7 @@ class AppPreferences(private val context: Context) {
     fun getMetingApiBaseUrlSync(): String {
         return runBlocking(Dispatchers.IO) {
             try {
-                context.dataStore.data.first()[keyMetingApiBaseUrl]
+                dataStore.data.first()[keyMetingApiBaseUrl]
                     ?: MetingApiService.DEFAULT_BASE_URL
             } catch (e: Exception) {
                 MetingApiService.DEFAULT_BASE_URL
@@ -645,7 +659,7 @@ class AppPreferences(private val context: Context) {
     fun getMvApiBaseUrlSync(): String {
         return runBlocking(Dispatchers.IO) {
             try {
-                context.dataStore.data.first()[keyMvApiBaseUrl]
+                dataStore.data.first()[keyMvApiBaseUrl]
                     ?: BilibiliMvService.DEFAULT_BASE_URL
             } catch (e: Exception) {
                 BilibiliMvService.DEFAULT_BASE_URL
@@ -657,7 +671,7 @@ class AppPreferences(private val context: Context) {
     fun getLyricsKugouBaseUrlSync(): String {
         return runBlocking(Dispatchers.IO) {
             try {
-                context.dataStore.data.first()[keyLyricsKugouBaseUrl]
+                dataStore.data.first()[keyLyricsKugouBaseUrl]
                     ?: com.nasmusic.tv.lyrics.LyricsNetworkProvider.DEFAULT_KUGOU_BASE_URL
             } catch (e: Exception) {
                 com.nasmusic.tv.lyrics.LyricsNetworkProvider.DEFAULT_KUGOU_BASE_URL
@@ -668,7 +682,7 @@ class AppPreferences(private val context: Context) {
     fun getLyricsNeteaseBaseUrlSync(): String {
         return runBlocking(Dispatchers.IO) {
             try {
-                context.dataStore.data.first()[keyLyricsNeteaseBaseUrl]
+                dataStore.data.first()[keyLyricsNeteaseBaseUrl]
                     ?: com.nasmusic.tv.lyrics.LyricsNetworkProvider.DEFAULT_NETEASE_BASE_URL
             } catch (e: Exception) {
                 com.nasmusic.tv.lyrics.LyricsNetworkProvider.DEFAULT_NETEASE_BASE_URL
@@ -677,12 +691,12 @@ class AppPreferences(private val context: Context) {
     }
 
     suspend fun setLyricsKugouBaseUrl(url: String) =
-        context.dataStore.edit {
+        dataStore.edit {
             it[keyLyricsKugouBaseUrl] = url.trim().trim('`', '\'', '"').trim()
         }
 
     suspend fun setLyricsNeteaseBaseUrl(url: String) =
-        context.dataStore.edit {
+        dataStore.edit {
             it[keyLyricsNeteaseBaseUrl] = url.trim().trim('`', '\'', '"').trim()
         }
 
@@ -691,7 +705,7 @@ class AppPreferences(private val context: Context) {
     /**
      * 网络收藏列表 Flow（响应式，收藏变化时自动更新）
      */
-    val networkFavorites: Flow<List<NetworkFavoriteItem>> = context.dataStore.data.map { prefs ->
+    val networkFavorites: Flow<List<NetworkFavoriteItem>> = dataStore.data.map { prefs ->
         val json = prefs[keyNetworkFavorites] ?: "[]"
         try {
             gson.fromJson(json, object : TypeToken<List<NetworkFavoriteItem>>() {}.type)
@@ -703,7 +717,7 @@ class AppPreferences(private val context: Context) {
      */
     suspend fun getNetworkFavorites(): List<NetworkFavoriteItem> {
         return try {
-            context.dataStore.data.first().let { prefs ->
+            dataStore.data.first().let { prefs ->
                 val json = prefs[keyNetworkFavorites] ?: "[]"
                 gson.fromJson(json, object : TypeToken<List<NetworkFavoriteItem>>() {}.type) ?: emptyList()
             }
@@ -718,7 +732,7 @@ class AppPreferences(private val context: Context) {
      * 超过 networkFavoritesMaxSize（500 条）时自动清理最旧的收藏
      */
     suspend fun toggleNetworkFavorite(item: NetworkFavoriteItem) {
-        context.dataStore.edit { prefs ->
+        dataStore.edit { prefs ->
             val json = prefs[keyNetworkFavorites] ?: "[]"
             val list = try {
                 gson.fromJson(json, object : TypeToken<MutableList<NetworkFavoriteItem>>() {}.type)
@@ -745,7 +759,7 @@ class AppPreferences(private val context: Context) {
     /**
      * 本地歌单列表 Flow（响应式，歌单变化时自动更新）
      */
-    val localPlaylists: Flow<List<LocalPlaylist>> = context.dataStore.data.map { prefs ->
+    val localPlaylists: Flow<List<LocalPlaylist>> = dataStore.data.map { prefs ->
         val json = prefs[keyLocalPlaylists] ?: "[]"
         try {
             gson.fromJson(json, object : TypeToken<List<LocalPlaylist>>() {}.type)
@@ -757,7 +771,7 @@ class AppPreferences(private val context: Context) {
      */
     suspend fun getLocalPlaylists(): List<LocalPlaylist> {
         return try {
-            context.dataStore.data.first().let { prefs ->
+            dataStore.data.first().let { prefs ->
                 val json = prefs[keyLocalPlaylists] ?: "[]"
                 gson.fromJson(json, object : TypeToken<List<LocalPlaylist>>() {}.type) ?: emptyList()
             }
@@ -773,7 +787,7 @@ class AppPreferences(private val context: Context) {
         val trimmed = name.trim()
         require(trimmed.isNotEmpty()) { "Playlist name must not be empty" }
         lateinit var created: LocalPlaylist
-        context.dataStore.edit { prefs ->
+        dataStore.edit { prefs ->
             val json = prefs[keyLocalPlaylists] ?: "[]"
             val list = try {
                 gson.fromJson(json, object : TypeToken<MutableList<LocalPlaylist>>() {}.type)
@@ -799,7 +813,7 @@ class AppPreferences(private val context: Context) {
     suspend fun renameLocalPlaylist(id: String, newName: String) {
         val trimmed = newName.trim()
         if (trimmed.isEmpty()) return
-        context.dataStore.edit { prefs ->
+        dataStore.edit { prefs ->
             val json = prefs[keyLocalPlaylists] ?: "[]"
             val list = try {
                 gson.fromJson(json, object : TypeToken<MutableList<LocalPlaylist>>() {}.type)
@@ -819,7 +833,7 @@ class AppPreferences(private val context: Context) {
      * 删除本地歌单
      */
     suspend fun deleteLocalPlaylist(id: String) {
-        context.dataStore.edit { prefs ->
+        dataStore.edit { prefs ->
             val json = prefs[keyLocalPlaylists] ?: "[]"
             val list = try {
                 gson.fromJson(json, object : TypeToken<MutableList<LocalPlaylist>>() {}.type)
@@ -839,7 +853,7 @@ class AppPreferences(private val context: Context) {
      */
     suspend fun addSongToPlaylist(playlistId: String, song: Song): Boolean {
         var added = false
-        context.dataStore.edit { prefs ->
+        dataStore.edit { prefs ->
             val json = prefs[keyLocalPlaylists] ?: "[]"
             val list = try {
                 gson.fromJson(json, object : TypeToken<MutableList<LocalPlaylist>>() {}.type)
@@ -868,7 +882,7 @@ class AppPreferences(private val context: Context) {
      * 从本地歌单移除歌曲
      */
     suspend fun removeSongFromPlaylist(playlistId: String, songId: String) {
-        context.dataStore.edit { prefs ->
+        dataStore.edit { prefs ->
             val json = prefs[keyLocalPlaylists] ?: "[]"
             val list = try {
                 gson.fromJson(json, object : TypeToken<MutableList<LocalPlaylist>>() {}.type)
@@ -902,7 +916,7 @@ class AppPreferences(private val context: Context) {
      * streamUrl 置空后序列化，避免持久化过期的播放链接
      */
     suspend fun saveLastQueue(songs: List<Song>, currentIndex: Int) {
-        context.dataStore.edit { prefs ->
+        dataStore.edit { prefs ->
             // streamUrl 置空，避免持久化过期链接
             val songsToSave = songs.map { it.copy(streamUrl = null) }
             val data = LastQueueData(songsToSave, currentIndex)
@@ -915,7 +929,7 @@ class AppPreferences(private val context: Context) {
      */
     suspend fun getLastQueue(): LastQueueData? {
         return try {
-            context.dataStore.data.first().let { prefs ->
+            dataStore.data.first().let { prefs ->
                 val json = prefs[keyLastQueue] ?: return@let null
                 gson.fromJson(json, LastQueueData::class.java)
             }
@@ -928,7 +942,7 @@ class AppPreferences(private val context: Context) {
      * 清除上次播放队列（用户主动清空队列时调用）
      */
     suspend fun clearLastQueue() {
-        context.dataStore.edit { prefs ->
+        dataStore.edit { prefs ->
             prefs.remove(keyLastQueue)
         }
     }
@@ -943,7 +957,7 @@ class AppPreferences(private val context: Context) {
      * 记录一次播放
      */
     suspend fun addPlayRecord(record: com.nasmusic.tv.data.model.PlayRecord) {
-        context.dataStore.edit { prefs ->
+        dataStore.edit { prefs ->
             val json = prefs[keyPlayRecords] ?: "{\"records\":[]}"
             val data = try {
                 gson.fromJson(json, PlayRecordsData::class.java)
@@ -963,7 +977,7 @@ class AppPreferences(private val context: Context) {
      */
     suspend fun getPlayRecords(): List<com.nasmusic.tv.data.model.PlayRecord> {
         return try {
-            context.dataStore.data.first().let { prefs ->
+            dataStore.data.first().let { prefs ->
                 val json = prefs[keyPlayRecords] ?: return emptyList()
                 val data = gson.fromJson(json, PlayRecordsData::class.java)
                 data.records
@@ -978,7 +992,7 @@ class AppPreferences(private val context: Context) {
      * 清除所有播放记录
      */
     suspend fun clearPlayRecords() {
-        context.dataStore.edit { prefs ->
+        dataStore.edit { prefs ->
             prefs.remove(keyPlayRecords)
         }
     }
@@ -989,7 +1003,7 @@ class AppPreferences(private val context: Context) {
      * 搜索历史列表 Flow（响应式）
      * 列表按 lastSearchedAt 降序（最新在前）
      */
-    val searchHistory: Flow<List<SearchHistoryItem>> = context.dataStore.data.map { prefs ->
+    val searchHistory: Flow<List<SearchHistoryItem>> = dataStore.data.map { prefs ->
         val json = prefs[keySearchHistory] ?: "[]"
         try {
             gson.fromJson(json, object : TypeToken<List<SearchHistoryItem>>() {}.type)
@@ -1001,7 +1015,7 @@ class AppPreferences(private val context: Context) {
      */
     suspend fun getSearchHistory(): List<SearchHistoryItem> {
         return try {
-            context.dataStore.data.first().let { prefs ->
+            dataStore.data.first().let { prefs ->
                 val json = prefs[keySearchHistory] ?: "[]"
                 gson.fromJson(json, object : TypeToken<List<SearchHistoryItem>>() {}.type) ?: emptyList()
             }
@@ -1020,7 +1034,7 @@ class AppPreferences(private val context: Context) {
         val trimmed = query.trim()
         if (trimmed.isEmpty()) return
         val now = System.currentTimeMillis()
-        context.dataStore.edit { prefs ->
+        dataStore.edit { prefs ->
             val json = prefs[keySearchHistory] ?: "[]"
             val list = try {
                 gson.fromJson(json, object : TypeToken<MutableList<SearchHistoryItem>>() {}.type)
@@ -1054,7 +1068,7 @@ class AppPreferences(private val context: Context) {
     suspend fun purgeExpiredSearchHistory() {
         val now = System.currentTimeMillis()
         val cutoff = now - searchHistoryTtlMs
-        context.dataStore.edit { prefs ->
+        dataStore.edit { prefs ->
             val json = prefs[keySearchHistory] ?: return@edit
             val list = try {
                 gson.fromJson(json, object : TypeToken<MutableList<SearchHistoryItem>>() {}.type)
@@ -1085,7 +1099,7 @@ class AppPreferences(private val context: Context) {
     fun getCloudDriveConfigSync(type: CloudDriveType): CloudDriveConfig? {
         return try {
             runBlocking(Dispatchers.IO) {
-                val json = context.dataStore.data.first()[keyCloudDriveConfig] ?: return@runBlocking null
+                val json = dataStore.data.first()[keyCloudDriveConfig] ?: return@runBlocking null
                 loadCloudDriveConfigs(json)[type.key]
             }
         } catch (e: Exception) {
@@ -1100,7 +1114,7 @@ class AppPreferences(private val context: Context) {
 
     /** 异步保存某网盘配置（增量合并到现有 Map） */
     suspend fun saveCloudDriveConfig(config: CloudDriveConfig) {
-        context.dataStore.edit { prefs ->
+        dataStore.edit { prefs ->
             val json = prefs[keyCloudDriveConfig] ?: "{}"
             val map = loadCloudDriveConfigs(json).toMutableMap()
             map[config.type.key] = config
@@ -1216,7 +1230,7 @@ class AppPreferences(private val context: Context) {
      */
     suspend fun exportBackupData(): BackupData {
         val config = serverConfig.first()
-        val ds = context.dataStore.data.first()
+        val ds = dataStore.data.first()
         return BackupData(
             serverConfig = if (config.baseUrl.isNotBlank()) {
                 config.copy(apiToken = "", password = "", isConnected = false)
@@ -1255,7 +1269,7 @@ class AppPreferences(private val context: Context) {
             )
         }
         data.appSettings?.let { settings ->
-            context.dataStore.edit { prefs ->
+            dataStore.edit { prefs ->
                 prefs[keyDarkTheme] = settings.darkTheme
                 prefs[keyAnimations] = settings.animationsEnabled
                 prefs[keyAutoPlayNext] = settings.autoPlayNext
@@ -1270,7 +1284,7 @@ class AppPreferences(private val context: Context) {
                 prefs[keyVisualizerTheme] = settings.visualizerTheme.name
             }
         }
-        context.dataStore.edit { prefs ->
+        dataStore.edit { prefs ->
             prefs[keyNetworkFavorites] = gson.toJson(data.networkFavorites)
             prefs[keyLocalPlaylists] = gson.toJson(data.localPlaylists)
             prefs[keyRecentSongs] = gson.toJson(data.recentSongIds)
