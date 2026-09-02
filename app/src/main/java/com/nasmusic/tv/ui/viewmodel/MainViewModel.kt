@@ -10,6 +10,7 @@ import com.nasmusic.tv.R
 import com.nasmusic.tv.backend.BackendRegistry
 import com.nasmusic.tv.backend.BackendAdapter
 import com.nasmusic.tv.backend.FilterMode
+import com.nasmusic.tv.backend.SearchType
 import com.nasmusic.tv.backend.SearchAggregator
 import com.nasmusic.tv.backend.local.MusicMerger
 import com.nasmusic.tv.backend.network.mv.MvSearchManager
@@ -266,8 +267,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
     // --- 按需加载：搜索结果（服务端搜索）---
     private val _searchResults = MutableStateFlow<UiState<List<Song>>>(UiState.Success(emptyList()))
     val searchResults: StateFlow<UiState<List<Song>>> = _searchResults.asStateFlow()
-    /** 上次搜索的关键词：同词 + 结果已成功时不重复搜索（跨导航暂存搜索结果） */
+    /** 上次搜索的关键词：同词 + 同 searchType + 结果已成功时不重复搜索（跨导航暂存搜索结果） */
     private var lastSearchedKeyword: String? = null
+    private var lastSearchType: SearchType = SearchType.SONG_NAME_OR_ARTIST
 
     // --- 网络音乐搜索结果（NetworkMusicManager 搜索）---
     private val _networkSearchResults = MutableStateFlow<UiState<List<Song>>>(UiState.Success(emptyList()))
@@ -1260,10 +1262,13 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
         _albums.value = UiState.Loading
         _songs.value = UiState.Loading
         viewModelScope.launch {
-            val adapter = backendRegistry.getAdapter() ?: run {
+            val adapter = backendRegistry.getAdapter()
+            if (adapter == null) {
+                // 无 NAS 连接时，仍允许本地 + 百度数据展示
+                _albums.value = UiState.Success(emptyList())
+                _songs.value = UiState.Success(emptyList())
                 _isLibraryLoading.value = false
-_albums.value = UiState.Error(getApplication<Application>().getString(R.string.backend_not_connected))
-        _songs.value = UiState.Error(getApplication<Application>().getString(R.string.backend_not_connected))
+                updateMergedData()
                 return@launch
             }
 
@@ -1580,8 +1585,14 @@ _albums.value = UiState.Error(getApplication<Application>().getString(R.string.b
             _searchResults.value = UiState.Success(emptyList())
             return
         }
-        // 缓存命中：同一关键词且结果已是 Success 且非空（空结果可能是临时性的，允许重试）
-        if (!force && query == lastSearchedKeyword) {
+        // 缓存命中：同一关键词 + 同一 searchType 且结果已是 Success 且非空
+        val currentSearchType = when (_libraryActiveTab.value) {
+            LibraryTab.ALBUMS -> SearchType.ALBUM
+            LibraryTab.ARTISTS -> SearchType.ARTIST
+            LibraryTab.SONGS -> SearchType.SONG_NAME_ONLY
+            else -> SearchType.SONG_NAME_OR_ARTIST
+        }
+        if (!force && query == lastSearchedKeyword && currentSearchType == lastSearchType) {
             val cached = _searchResults.value
             if (cached is UiState.Success && cached.data.isNotEmpty()) {
                 AppLog.d("NASMusic", "searchSongsOnServer: cached result for '$query'")
@@ -1589,6 +1600,7 @@ _albums.value = UiState.Error(getApplication<Application>().getString(R.string.b
             }
         }
         lastSearchedKeyword = query
+        lastSearchType = currentSearchType
         _searchResults.value = UiState.Loading
         viewModelScope.launch {
             // 跨源融合搜索：NAS + 网络音乐 + 百度网盘 + Jamendo + 本地 并行搜索，合并去重
@@ -1601,6 +1613,7 @@ _albums.value = UiState.Error(getApplication<Application>().getString(R.string.b
                     query,
                     sources = _enabledSearchSources.value,
                     filterMode = FilterMode.PRECISE,
+                    searchType = currentSearchType,
                     nasLocalSongs = _songsPaging.value.songs,
                     localDeviceSongs = _localSongs.value,
                     baiduLocalSongs = baiduIndexCache.allSongs()
@@ -2127,20 +2140,23 @@ showError(getApplication<Application>().getString(R.string.toggle_favorite_error
 
     /**
      * 刷新合并后的专辑 / 艺术家列表
-     * NAS 数据（albums/artists） + 本地歌曲（localSongs）按 name 去重合并
-     */
+      * NAS 数据（albums/artists） + 本地歌曲（localSongs）+ 百度网盘索引 按 name 去重合并
+      */
     private fun updateMergedData() {
         val nasAlbums = _albums.value.dataOrNull() ?: emptyList()
         val nasArtists = _artists.value.dataOrNull() ?: emptyList()
         val localSongs = _localSongs.value
+        val baiduSongs = baiduIndexCache.allSongs()
 
         _mergedAlbums.value = MusicMerger.mergeAlbums(
             nasAlbums = nasAlbums,
-            localAlbums = MusicMerger.buildLocalAlbums(localSongs)
+            localAlbums = MusicMerger.buildLocalAlbums(localSongs),
+            baiduAlbums = MusicMerger.buildBaiduAlbums(baiduSongs)
         )
         _mergedArtists.value = MusicMerger.mergeArtists(
             nasArtists = nasArtists,
-            localArtists = MusicMerger.buildLocalArtists(localSongs)
+            localArtists = MusicMerger.buildLocalArtists(localSongs),
+            baiduArtists = MusicMerger.buildBaiduArtists(baiduSongs)
         )
     }
 
@@ -2202,50 +2218,74 @@ showError(getApplication<Application>().getString(R.string.toggle_favorite_error
 
         // 从后端加载
         viewModelScope.launch {
-            val adapter = backendRegistry.getAdapter() ?: return@launch
-            try {
-                // 从原始艺术家列表中找出所有与目标歌手相关的条目
-                // 例如 "李宗盛" 可能匹配到独立条目 "李宗盛" 以及合作条目 "李宗盛 & 周华健"
-                val rawMatchingIds = _rawArtistList
-                    .filter { artistName in ArtistSplitter.split(it.name) }
-                    .map { it.id }
-                    .distinct()
-                    .ifEmpty {
-                        // fallback: 从拆分后的列表中提取原始 ID
-                        val artists = _artists.value.dataOrNull() ?: emptyList()
-                        val artist = artists.find { it.name == artistName }
-                        if (artist != null) listOf(artist.id.substringBefore("|", artist.id)) else emptyList()
+            val adapter = backendRegistry.getAdapter()
+            if (adapter != null) {
+                try {
+                    // 从原始艺术家列表中找出所有与目标歌手相关的条目
+                    // 例如 "李宗盛" 可能匹配到独立条目 "李宗盛" 以及合作条目 "李宗盛 & 周华健"
+                    val rawMatchingIds = _rawArtistList
+                        .filter { artistName in ArtistSplitter.split(it.name) }
+                        .map { it.id }
+                        .distinct()
+                        .ifEmpty {
+                            // fallback: 从拆分后的列表中提取原始 ID
+                            val artists = _artists.value.dataOrNull() ?: emptyList()
+                            val artist = artists.find { it.name == artistName }
+                            if (artist != null) listOf(artist.id.substringBefore("|", artist.id)) else emptyList()
+                        }
+
+                    AppLog.d("NASMusic", "loadArtistSongs('$artistName') rawMatchingIds=${rawMatchingIds.size}: $rawMatchingIds")
+
+                    // 分别查询每个原始 ID 的歌曲后合并去重（解决 Navidrome 合作歌曲不完整的问题）
+                    val allSongs = rawMatchingIds.flatMap { id ->
+                        try {
+                            adapter.getArtistSongs(id, artistName)
+                        } catch (e: Exception) {
+                            AppLog.w("NASMusic", "loadArtistSongs: ID=$id query failed: ${e.message?.take(50)}")
+                            emptyList()
+                        }
+                    }.distinctBy { it.id }
+
+                    AppLog.d("NASMusic", "loadArtistSongs('$artistName') allSongs=${allSongs.size} (from ${rawMatchingIds.size} IDs)")
+                    allSongs.take(3).forEach { s ->
+                        AppLog.d("NASMusic", "  song artist='${s.artist}' title='${s.title}' album='${s.album}'")
                     }
-
-                AppLog.d("NASMusic", "loadArtistSongs('$artistName') rawMatchingIds=${rawMatchingIds.size}: $rawMatchingIds")
-
-                // 分别查询每个原始 ID 的歌曲后合并去重（解决 Navidrome 合作歌曲不完整的问题）
-                val allSongs = rawMatchingIds.flatMap { id ->
-                    try {
-                        adapter.getArtistSongs(id, artistName)
-                    } catch (e: Exception) {
-                        AppLog.w("NASMusic", "loadArtistSongs: ID=$id query failed: ${e.message?.take(50)}")
-                        emptyList()
+                    // 将返回的歌曲按 ArtistSplitter 拆分后，只取包含该艺术家的歌曲
+                    val matchingSongs = allSongs.filter { song ->
+                        artistName in ArtistSplitter.split(song.artist)
                     }
-                }.distinctBy { it.id }
-
-                AppLog.d("NASMusic", "loadArtistSongs('$artistName') allSongs=${allSongs.size} (from ${rawMatchingIds.size} IDs)")
-                allSongs.take(3).forEach { s ->
-                    AppLog.d("NASMusic", "  song artist='${s.artist}' title='${s.title}' album='${s.album}'")
+                    AppLog.d("NASMusic", "  matchingSongs=${matchingSongs.size} (raw=${allSongs.size})")
+                    _artistDetailSongsCache.value = _artistDetailSongsCache.value.toMutableMap().apply {
+                        put(artistName, matchingSongs)
+                    }
+                    // 同时按拆分后的艺术家名更新 artistSongsMap 缓存
+                    buildArtistMapsIncremental(matchingSongs)
+                } catch (e: Exception) {
+                    AppLog.e("NASMusic", "loadArtistSongs failed", e)
+                    showError(getApplication<Application>().getString(R.string.load_favorites_error, e.message?.take(50)))
                 }
-                // 将返回的歌曲按 ArtistSplitter 拆分后，只取包含该艺术家的歌曲
-                val matchingSongs = allSongs.filter { song ->
-                    artistName in ArtistSplitter.split(song.artist)
+            } else {
+                // 无 NAS 连接：走多源搜索获取艺术家歌曲
+                try {
+                    val aggregator = nasMusicApp.searchAggregator
+                    val result = aggregator.search(
+                        artistName,
+                        filterMode = FilterMode.PRECISE,
+                        searchType = SearchType.ARTIST,
+                        nasLocalSongs = _songsPaging.value.songs,
+                        localDeviceSongs = _localSongs.value,
+                        baiduLocalSongs = baiduIndexCache.allSongs()
+                    )
+                    val matchingSongs = result.allResults.map { it.song }.filter { song ->
+                        artistName in ArtistSplitter.split(song.artist)
+                    }
+                    AppLog.d("NASMusic", "loadArtistSongs('$artistName') multi-source: ${matchingSongs.size} songs")
+                    _artistDetailSongsCache.value = _artistDetailSongsCache.value.toMutableMap().apply {
+                        put(artistName, matchingSongs)
+                    }
+                } catch (e: Exception) {
+                    AppLog.e("NASMusic", "loadArtistSongs multi-source failed", e)
                 }
-                AppLog.d("NASMusic", "  matchingSongs=${matchingSongs.size} (raw=${allSongs.size})")
-                _artistDetailSongsCache.value = _artistDetailSongsCache.value.toMutableMap().apply {
-                    put(artistName, matchingSongs)
-                }
-                // 同时按拆分后的艺术家名更新 artistSongsMap 缓存
-                buildArtistMapsIncremental(matchingSongs)
-            } catch (e: Exception) {
-                AppLog.e("NASMusic", "loadArtistSongs failed", e)
-                showError(getApplication<Application>().getString(R.string.load_favorites_error, e.message?.take(50)))
             }
         }
     }
@@ -3960,6 +4000,8 @@ showError(getApplication<Application>().getString(R.string.play_failed_with_msg,
             }
             _baiduIndexLastSync.value = baiduIndexCache.load()?.lastSyncAt ?: 0L
         }
+        // 百度连接状态变化可能影响合并数据（启用/停用百度源）
+        updateMergedData()
         // 通知 NasMusicApp 运行时注册/注销百度 service
         nasMusicApp.refreshBaiduServiceRegistration()
     }
@@ -4198,6 +4240,7 @@ showError(getApplication<Application>().getString(R.string.play_failed_with_msg,
                 override fun onComplete(total: Int) {
                     _baiduIndexScanned.value = total
                     _baiduIndexLastSync.value = System.currentTimeMillis()
+                    updateMergedData()
                 }
                 override fun onFailed(message: String) {
                     showError(getApplication<Application>().getString(R.string.netdisk_index_scan_interrupted, message))

@@ -400,6 +400,7 @@
     <string name="settings_netdisk_index">索引</string>
     <string name="settings_netdisk_index_desc">已扫描 %1$d 首歌曲</string>
     <string name="settings_netdisk_index_scanning">索引扫描中...</string>
+    <string name="settings_netdisk_index_scanning_progress">索引扫描中…已发现 %1$d 首</string>
     <string name="settings_netdisk_index_rebuild">重建索引</string>
     <string name="settings_netdisk_index_rebuild_desc">重新扫描音乐根目录建立歌曲索引</string>
     <string name="settings_netdisk_hint_dir">请输入网盘目录路径（以 / 开头）</string>
@@ -504,6 +505,7 @@
     <string name="library_search_placeholder">搜索歌曲、专辑、歌手…</string>
     <string name="library_loading_library">正在加载曲库…</string>
     <string name="library_connect_server_hint">请先在「服务器」页面配置 NAS 音乐服务</string>
+    <string name="library_connect_or_local_hint">请连接 NAS 服务器、扫描本地音乐或索引百度网盘</string>
     <string name="library_empty_title">曲库为空</string>
     <string name="library_empty_hint">请在 NAS 音乐服务中添加音乐文件</string>
     <string name="library_albums_count">专辑 (%d)</string>

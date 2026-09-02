@@ -15,6 +15,8 @@ class SongWithPinyin(song: Song) {
     val initials: String by lazy { PinyinUtils.toPinyinInitials(song.title) }
     val artistPinyin: String by lazy { PinyinUtils.toPinyin(song.artist) }
     val artistInitials: String by lazy { PinyinUtils.toPinyinInitials(song.artist) }
+    val albumPinyin: String by lazy { PinyinUtils.toPinyin(song.album) }
+    val albumInitials: String by lazy { PinyinUtils.toPinyinInitials(song.album) }
 
     companion object {
         /**

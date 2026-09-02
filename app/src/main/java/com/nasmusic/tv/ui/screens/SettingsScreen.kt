@@ -829,7 +829,7 @@ fun SettingsScreen(
                         item { Spacer(modifier = Modifier.height(16.dp)) }
                         item {
                             Text(
-                                text = if (baiduIndexScanning) stringResource(R.string.settings_netdisk_index_scanning)
+                                text = if (baiduIndexScanning) stringResource(R.string.settings_netdisk_index_scanning_progress, baiduIndexScanned)
                                 else stringResource(R.string.settings_netdisk_index_desc, baiduIndexScanned),
                                 color = NasMusicColors.TextSecondary,
                                 fontSize = FontSize.body(),
@@ -839,8 +839,9 @@ fun SettingsScreen(
                         item {
                             SettingActionButton(
                                 label = stringResource(R.string.settings_netdisk_index_rebuild),
-                                description = stringResource(R.string.settings_netdisk_index_rebuild_desc),
-                                onClick = { onRebuildBaiduIndex?.invoke() }
+                                description = if (baiduIndexScanning) stringResource(R.string.settings_netdisk_index_scanning_progress, baiduIndexScanned)
+                                               else stringResource(R.string.settings_netdisk_index_rebuild_desc),
+                                onClick = { if (!baiduIndexScanning) onRebuildBaiduIndex?.invoke() }
                             )
                         }
                     }

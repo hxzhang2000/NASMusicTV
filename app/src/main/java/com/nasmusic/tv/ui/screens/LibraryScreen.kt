@@ -194,30 +194,92 @@ fun LibraryScreen(
         }
     }
 
-    // 按当前 tab 类型过滤数据（仅对本地已加载数据过滤）
-    val filteredAlbums by remember(filterQuery, albums) {
+    // 按当前 tab 类型过滤数据
+    // ALBUMS Tab：搜索时用多源搜索结果按专辑聚合；无搜索时用本地加载的专辑
+    val filteredAlbums by remember(filterQuery, albums, searchResults) {
         derivedStateOf {
             if (filterQuery.isBlank()) albums
-            else albums.filter { PinyinUtils.matches(it.name, filterQuery) || PinyinUtils.matches(it.artist, filterQuery) }
+            else {
+                // 多源搜索结果中提取专辑（按 albumId 或 albumName 去重聚合）
+                val searchAlbums = searchResults
+                    .filter { it.album.isNotBlank() }
+                    .groupBy { it.albumId ?: it.album.lowercase() }
+                    .map { (_, songs) ->
+                        val first = songs.first()
+                        Album(
+                            id = first.albumId ?: first.album,
+                            name = first.album,
+                            artist = first.artist,
+                            songCount = songs.size,
+                            year = first.year
+                        )
+                    }
+                // 合并本地过滤的专辑（可能有多源搜索未覆盖的本地专辑）
+                val localFiltered = albums.filter {
+                    PinyinUtils.matches(it.name, filterQuery) || PinyinUtils.matches(it.artist, filterQuery)
+                }
+                // 去重合并：同名同艺术家的只保留一个
+                val seen = mutableSetOf<String>()
+                (localFiltered + searchAlbums).filter { album ->
+                    val key = "${album.name.lowercase()}:${album.artist.lowercase()}"
+                    seen.add(key)
+                }
+            }
         }
     }
-    // SONGS Tab：有搜索结果时用搜索结果，否则用分页数据
+    // SONGS Tab：有搜索结果时用搜索结果（SearchType.SONG_NAME_ONLY 过滤后的），否则用分页数据
     val displaySongs by remember(filterQuery, songsPaging.songs, searchResults) {
         derivedStateOf {
             if (filterQuery.isNotBlank()) searchResults
             else songsPaging.songs
         }
     }
-    // ARTISTS Tab：使用独立 API 加载的艺术家列表
-    val filteredArtists by remember(filterQuery, artists) {
+    // ARTISTS Tab：搜索时用多源搜索结果按艺术家聚合；无搜索时用本地加载的艺术家
+    val filteredArtists by remember(filterQuery, artists, searchResults) {
         derivedStateOf {
             if (filterQuery.isBlank()) artists
-            else artists.filter { PinyinUtils.matches(it.name, filterQuery) }
+            else {
+                // 多源搜索结果中提取艺术家（按艺术家名去重）
+                val searchArtists = searchResults
+                    .groupBy { it.artist.lowercase() }
+                    .map { (_, songs) ->
+                        val artistName = songs.first().artist
+                        Artist(id = artistName.lowercase(), name = artistName, songCount = songs.size)
+                    }
+                // 合并本地过滤的艺术家
+                val localFiltered = artists.filter {
+                    PinyinUtils.matches(it.name, filterQuery)
+                }
+                val seen = mutableSetOf<String>()
+                (localFiltered + searchArtists).filter { artist ->
+                    val key = artist.name.lowercase()
+                    seen.add(key)
+                }
+            }
+        }
+    }
+
+    // 艺术家搜索时的歌曲映射：多源搜索结果按艺术家分组，与本地 artistSongsMap 合并
+    val displayArtistSongsMap by remember(filterQuery, searchResults, artistSongsMap) {
+        derivedStateOf {
+            if (filterQuery.isBlank()) artistSongsMap
+            else {
+                val searchMap = searchResults.groupBy { it.artist }
+                // 合并：本地数据 + 搜索结果
+                val merged = artistSongsMap.toMutableMap()
+                for ((artist, songs) in searchMap) {
+                    val existing = merged[artist].orEmpty()
+                    // 去重合并
+                    val existingIds = existing.map { it.id }.toSet()
+                    merged[artist] = existing + songs.filter { it.id !in existingIds }
+                }
+                merged
+            }
         }
     }
 
     // 播放全部按钮的歌曲列表：按当前 Tab + 搜索状态动态计算
-    val playAllSongs by remember(activeTab, filterQuery, songs, displaySongs, searchResults, filteredAlbums, filteredArtists, artistSongsMap) {
+    val playAllSongs by remember(activeTab, filterQuery, songs, displaySongs, searchResults, filteredAlbums, filteredArtists, displayArtistSongsMap) {
         derivedStateOf {
             when (activeTab) {
                 LibraryTab.ALBUMS -> {
@@ -230,7 +292,7 @@ fun LibraryScreen(
                     }
                 }
                 LibraryTab.ARTISTS -> {
-                    val listed = filteredArtists.flatMap { artistSongsMap[it.name].orEmpty() }
+                    val listed = filteredArtists.flatMap { displayArtistSongsMap[it.name].orEmpty() }
                     if (listed.isNotEmpty()) listed
                     else if (searchResults.isNotEmpty()) searchResults
                     else songs
@@ -367,48 +429,25 @@ fun LibraryScreen(
                     )
                 }
                 else -> {
-                    // NAS-backed tabs: show loading/empty states
-                    if (isLoading) {
-                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Text(text = stringResource(R.string.common_loading), color = NasMusicColors.TextSecondary, fontSize = FontSize.subtitle())
-                                Spacer(modifier = Modifier.height(8.dp))
-                                Text(
-                                    text = stringResource(R.string.library_loading_library),
-                                    color = NasMusicColors.TextSecondary,
-                                    fontSize = FontSize.button()
-                                )
-                            }
-                        }
-                    } else if (!isConnected) {
-                        // 未连接状态
-                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Text(text = stringResource(R.string.common_not_connected), color = NasMusicColors.TextSecondary, fontSize = FontSize.title())
-                                Spacer(modifier = Modifier.height(12.dp))
-                                Text(text = stringResource(R.string.library_connect_server_hint), color = NasMusicColors.TextSecondary, fontSize = FontSize.button())
-                            }
-                        }
-                    } else if (albums.isEmpty() && songs.isEmpty()) {
-                        // 已连接但库为空
-                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Text(text = stringResource(R.string.library_empty_title), color = NasMusicColors.TextSecondary, fontSize = FontSize.title())
-                                Spacer(modifier = Modifier.height(12.dp))
-                                Text(text = stringResource(R.string.library_empty_hint), color = NasMusicColors.TextSecondary, fontSize = FontSize.button())
-                            }
-                        }
-                    } else {
+                    // 专辑/艺术家/歌曲 tab 搜索时有结果直接展示（多源搜索，不依赖 NAS 连接）
+                    val hasSearchResults = filterQuery.isNotBlank() && searchResults.isNotEmpty()
+                    val showSearchContent = hasSearchResults && (
+                        activeTab == LibraryTab.ALBUMS ||
+                        activeTab == LibraryTab.ARTISTS ||
+                        activeTab == LibraryTab.SONGS
+                    )
+                    if (showSearchContent) {
+                        // 搜索模式：直接展示搜索结果，跳过加载/连接/空状态检查
                         when (activeTab) {
                             LibraryTab.ALBUMS -> AlbumsTab(
                                 albums = filteredAlbums,
-                                songs = songs,
+                                songs = searchResults,
                                 onPlayAlbum = onPlayAlbum,
                                 onOpenAlbumDetail = onOpenAlbumDetail
                             )
                             LibraryTab.ARTISTS -> ArtistsTab(
                                 artists = filteredArtists,
-                                artistSongsMap = artistSongsMap,
+                                artistSongsMap = displayArtistSongsMap,
                                 onPlaySongs = onPlaySongs,
                                 onOpenArtistDetail = onOpenArtistDetail
                             )
@@ -424,6 +463,59 @@ fun LibraryScreen(
                                 onToggleFavorite = onToggleFavorite,
                                 onAddToPlaylist = onAddToPlaylist
                             )
+                            else -> {}
+                        }
+                    } else if (isLoading) {
+                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text(text = stringResource(R.string.common_loading), color = NasMusicColors.TextSecondary, fontSize = FontSize.subtitle())
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text(
+                                    text = stringResource(R.string.library_loading_library),
+                                    color = NasMusicColors.TextSecondary,
+                                    fontSize = FontSize.button()
+                                )
+                            }
+                        }
+                    } else {
+                        // 有数据时直接展示（无论 NAS 是否连接，本地/百度/网络数据同样展示）
+                        when (activeTab) {
+                            LibraryTab.ALBUMS -> if (filteredAlbums.isEmpty()) {
+                                EmptyHint(isConnected = isConnected)
+                            } else {
+                                AlbumsTab(
+                                    albums = filteredAlbums,
+                                    songs = songs,
+                                    onPlayAlbum = onPlayAlbum,
+                                    onOpenAlbumDetail = onOpenAlbumDetail
+                                )
+                            }
+                            LibraryTab.ARTISTS -> if (filteredArtists.isEmpty()) {
+                                EmptyHint(isConnected = isConnected)
+                            } else {
+                                ArtistsTab(
+                                    artists = filteredArtists,
+                                    artistSongsMap = displayArtistSongsMap,
+                                    onPlaySongs = onPlaySongs,
+                                    onOpenArtistDetail = onOpenArtistDetail
+                                )
+                            }
+                            LibraryTab.SONGS -> if (displaySongs.isEmpty() && songsPaging.songs.isEmpty()) {
+                                EmptyHint(isConnected = isConnected)
+                            } else {
+                                SongsTab(
+                                    songs = displaySongs,
+                                    favoriteIds = favoriteIds,
+                                    songsPaging = songsPaging,
+                                    isSearching = isSearching,
+                                    onLoadMore = onLoadSongsNextPage,
+                                    onPlaySong = onPlaySong,
+                                    queueSongIds = queueSongIds,
+                                    onToggleQueue = onToggleQueue,
+                                    onToggleFavorite = onToggleFavorite,
+                                    onAddToPlaylist = onAddToPlaylist
+                                )
+                            }
                             LibraryTab.GENRES -> GenresTab(
                                 genres = genres,
                                 onSongsByGenre = onSongsByGenre,
@@ -450,7 +542,13 @@ fun LibraryScreen(
                 onConfirm = { query ->
                     onFilterQueryChange(query)
                     showSearchDialog = false
-                    onTabSelected(LibraryTab.SEARCH)
+                    // 只在非搜索 tab 时跳到搜索 tab；其他 tab 留在当前页做维度搜索
+                    if (activeTab != LibraryTab.SEARCH &&
+                        activeTab != LibraryTab.ALBUMS &&
+                        activeTab != LibraryTab.ARTISTS &&
+                        activeTab != LibraryTab.SONGS) {
+                        onTabSelected(LibraryTab.SEARCH)
+                    }
                 },
                 onDismiss = { showSearchDialog = false },
                 showQrCode = true,
@@ -459,7 +557,12 @@ fun LibraryScreen(
                 onHistorySelect = { query ->
                     onFilterQueryChange(query)
                     showSearchDialog = false
-                    onTabSelected(LibraryTab.SEARCH)
+                    if (activeTab != LibraryTab.SEARCH &&
+                        activeTab != LibraryTab.ALBUMS &&
+                        activeTab != LibraryTab.ARTISTS &&
+                        activeTab != LibraryTab.SONGS) {
+                        onTabSelected(LibraryTab.SEARCH)
+                    }
                 }
             )
         }
@@ -1037,5 +1140,45 @@ fun ButtonChip(text: String, onClick: () -> Unit, modifier: Modifier = Modifier)
         pressedScale = 0.95f
     ) {
         Text(text = text, color = NasMusicColors.TextPrimary, fontSize = FontSize.button(), modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
+    }
+}
+
+/**
+ * 库内容为空时的提示组件
+ *
+ * 根据连接状态和可用数据源显示不同提示：
+ * - 未连接 NAS 且无任何数据源 → 提示连接服务器或扫描本地音乐
+ * - 已连接 NAS 但库为空 → 提示库为空
+ */
+@Composable
+private fun EmptyHint(isConnected: Boolean) {
+    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            if (!isConnected) {
+                Text(
+                    text = stringResource(R.string.common_not_connected),
+                    color = NasMusicColors.TextSecondary,
+                    fontSize = FontSize.title()
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                Text(
+                    text = stringResource(R.string.library_connect_or_local_hint),
+                    color = NasMusicColors.TextSecondary,
+                    fontSize = FontSize.button()
+                )
+            } else {
+                Text(
+                    text = stringResource(R.string.library_empty_title),
+                    color = NasMusicColors.TextSecondary,
+                    fontSize = FontSize.title()
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                Text(
+                    text = stringResource(R.string.library_empty_hint),
+                    color = NasMusicColors.TextSecondary,
+                    fontSize = FontSize.button()
+                )
+            }
+        }
     }
 }
