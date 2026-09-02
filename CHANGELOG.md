@@ -7,6 +7,20 @@
 >
 > 类型：`Added`（新增） | `Changed`（变更） | `Fixed`（修复） | `Removed`（移除）
 
+## [v2.25.7] - 2026-09-02
+
+### Added
+
+- **搜索页拼音匹配（TV 端）**：曲库搜索页输入拼音首字母（如 "zjl"）或全拼（如 "zhoujielun"）即可匹配中文歌曲，支持多词搜索（如 "zjl 周杰"）。仅 TV 端启用（手机端触屏输入汉字方便，无需拼音），中文输入完全保留原有子串匹配行为
+- **`PinyinMatcher` 工具类**：统一搜索匹配逻辑（子串 OR 拼音全拼 OR 拼音首字母），`isTVDevice` 参数控制是否启用拼音匹配
+- **`SongWithPinyin` 拼音缓存**：搜索过滤阶段一次性生成拼音缓存，避免重复计算；使用 `lazy` 延迟计算，仅访问到的字段才生成
+- **`PinyinUtils.toPinyin()` 全拼方法**：新增完整拼音转换（"周杰伦" → "zhoujielun"），原有 `getInitials()` 重命名为 `toPinyinInitials()`（保留兼容别名）
+
+### Changed
+
+- **`SearchAggregator` 新增 `isTVDevice` 构造参数**：PRECISE 过滤阶段根据设备类型决定是否启用拼音匹配，手机端零额外开销
+- **`NasMusicApp` 构造 `SearchAggregator` 时传入 `isTVDevice`**：通过 `packageManager.hasSystemFeature("android.software.leanback")` 检测
+
 ## [v2.25.6] - 2026-09-01
 
 ### Added

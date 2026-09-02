@@ -186,13 +186,15 @@ class NasMusicApp : Application(), ImageLoaderFactory {
         storageMonitor = StorageMonitor(this)
         storageMonitor.startListening()
 
-        // 跨源搜索聚合器（注入本地音乐源）
+        // 跨源搜索聚合器（注入本地音乐源，检测 TV 设备以启用拼音搜索）
+        val isTVDevice = packageManager.hasSystemFeature("android.software.leanback")
         searchAggregator = SearchAggregator(
             backendAdapter = backendRegistry.getAdapter(),
             networkMusicManager = networkMusicManager,
             baiduService = baiduNetdiskService,
             jamendoService = jamendoService,
-            localMusicRepository = localMusicRepository
+            localMusicRepository = localMusicRepository,
+            isTVDevice = isTVDevice
         )
 
         // 启动时清理超过 30 天的搜索历史

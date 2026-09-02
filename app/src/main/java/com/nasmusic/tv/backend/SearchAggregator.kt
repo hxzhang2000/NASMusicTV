@@ -8,7 +8,9 @@ import com.nasmusic.tv.data.model.MusicSourceType
 import com.nasmusic.tv.data.model.RankedSong
 import com.nasmusic.tv.data.model.SearchAggregatorResult
 import com.nasmusic.tv.data.model.Song
+import com.nasmusic.tv.data.model.SongWithPinyin
 import com.nasmusic.tv.util.AppLog
+import com.nasmusic.tv.util.PinyinMatcher
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withTimeoutOrNull
@@ -37,7 +39,8 @@ class SearchAggregator(
     private val networkMusicManager: NetworkMusicManager?,
     private val baiduService: BaiduNetdiskService?,
     private val jamendoService: JamendoService?,
-    private val localMusicRepository: LocalMusicRepository? = null
+    private val localMusicRepository: LocalMusicRepository? = null,
+    private val isTVDevice: Boolean = false
 ) {
     companion object {
         private const val TAG = "SearchAggregator"
@@ -193,14 +196,26 @@ class SearchAggregator(
         // 合并所有结果
         val allResults = nasResults + networkResults + baiduResults + jamendoResults + localResults
 
-        // 精细过滤（搜索页）：只保留标题/歌手/文件名包含关键词的歌曲
+        // 精细过滤（搜索页）：子串匹配 OR 拼音全拼匹配 OR 拼音首字母匹配
+        // 中文输入走子串匹配，拼音输入走拼音匹配，互不干扰
+        // 仅 TV 端启用拼音匹配（手机端触屏输入汉字方便，无需拼音）
         val filtered = if (filterMode == FilterMode.PRECISE) {
             val k = keyword.trim().lowercase()
+
+            // 仅 TV 设备且需要拼音匹配时，提前生成拼音缓存
+            val pinyinCache = if (isTVDevice) {
+                SongWithPinyin.fromSongs(allResults.map { it.song })
+            } else {
+                emptyMap()
+            }
+
             allResults.filter { ranked ->
-                val song = ranked.song
-                song.title.lowercase().contains(k) ||
-                    song.artist.lowercase().contains(k) ||
-                    song.path?.lowercase()?.contains(k) == true
+                PinyinMatcher.matchesMultipleWords(
+                    song = ranked.song,
+                    keyword = k,
+                    isTVDevice = isTVDevice,
+                    pinyinCache = pinyinCache
+                )
             }
         } else {
             allResults

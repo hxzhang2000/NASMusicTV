@@ -6189,3 +6189,48 @@ Phase 1-6 代码已全部落地并编译通过。Phase 7（测试与文档）新
 **验证结果**：✅ `assembleRelease` 编译通过（无 error），已部署电视验证。
 
 **版本号变更**：v2.25.5 → v2.25.6（versionCode 75 → 76）
+
+### 10.70 搜索页拼音匹配功能（v2.25.7）
+
+**日期**：2026-09-02
+
+**新增功能**：
+
+1. **拼音匹配工具类 — `PinyinMatcher`**：
+   - 新增 `app/src/main/java/com/nasmusic/tv/util/PinyinMatcher.kt`
+   - 统一搜索匹配逻辑：子串匹配 OR 拼音全拼匹配 OR 拼音首字母匹配
+   - `isTVDevice: Boolean` 参数控制是否启用拼音匹配（TV=true，手机=false）
+   - `matchesMultipleWords()` 支持空格分词搜索（如 "zjl 周杰"）
+
+2. **拼音缓存包装器 — `SongWithPinyin`**：
+   - 新增 `app/src/main/java/com/nasmusic/tv/data/model/SongWithPinyin.kt`
+   - 搜索过滤阶段一次性生成拼音缓存（`Map<songId, SongWithPinyin>`），避免重复计算
+   - 字段使用 `lazy` 延迟计算，仅访问到的字段才生成拼音
+   - `fromSongs()` 工厂方法批量生成缓存
+
+3. **PinyinUtils 扩展**：
+   - 新增 `toPinyin(text)`：完整拼音转换（"周杰伦" → "zhoujielun"）
+   - `getInitials()` 重命名为 `toPinyinInitials()`（保留 `getInitials()` 兼容别名）
+   - `matches()` 内部调用同步更新
+
+4. **SearchAggregator 改造**：
+   - 新增 `isTVDevice: Boolean` 构造参数（默认 false）
+   - PRECISE 过滤块从硬编码子串匹配改为调用 `PinyinMatcher.matchesMultipleWords()`
+   - TV 端：提前生成 `SongWithPinyin` 缓存，传入 matcher
+   - 手机端：`isTVDevice=false` → 不生成缓存，PinyinMatcher 仅执行子串匹配，零额外开销
+
+5. **NasMusicApp 接入**：
+   - 构造 `SearchAggregator` 时传入 `isTVDevice = packageManager.hasSystemFeature("android.software.leanback")`
+
+**设计约束**：
+- 仅 TV 端启用拼音匹配（手机端触屏输入汉字方便，无需拼音）
+- 中文输入完全保留原有子串匹配行为（拼音匹配作为额外 OR 条件追加）
+- 不需要设置页开关（默认开启，仅 TV 端生效）
+- 不需要发现页支持（仅 FilterMode.PRECISE / 搜索页）
+- 不需要新增拼音输入窗口（已有 TextInputDialog）
+
+**涉及文件**：`app/src/main/java/com/nasmusic/tv/util/PinyinMatcher.kt`（新增）、`app/src/main/java/com/nasmusic/tv/data/model/SongWithPinyin.kt`（新增）、`app/src/main/java/com/nasmusic/tv/util/PinyinUtils.kt`、`app/src/main/java/com/nasmusic/tv/backend/SearchAggregator.kt`、`app/src/main/java/com/nasmusic/tv/NasMusicApp.kt`、`app/build.gradle.kts`、`CHANGELOG.md`、`docs/technical-overview.md`
+
+**验证结果**：✅ `assembleRelease` 编译通过（无 error），已部署电视验证。
+
+**版本号变更**：v2.25.6 → v2.25.7（versionCode 76 → 77）
