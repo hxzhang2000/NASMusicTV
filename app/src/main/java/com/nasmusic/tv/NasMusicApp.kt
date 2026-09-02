@@ -187,7 +187,8 @@ class NasMusicApp : Application(), ImageLoaderFactory {
         storageMonitor.startListening()
 
         // 跨源搜索聚合器（注入本地音乐源，检测 TV 设备以启用拼音搜索）
-        val isTVDevice = packageManager.hasSystemFeature("android.software.leanback")
+        val isTVDevice = packageManager.hasSystemFeature("android.software.leanback") ||
+                packageManager.hasSystemFeature("android.hardware.type.television")
         searchAggregator = SearchAggregator(
             backendAdapter = backendRegistry.getAdapter(),
             networkMusicManager = networkMusicManager,

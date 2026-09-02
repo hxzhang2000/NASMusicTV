@@ -1595,10 +1595,15 @@ _albums.value = UiState.Error(getApplication<Application>().getString(R.string.b
             // 按当前点亮来源搜索（点亮模式）
             val aggregator = nasMusicApp.searchAggregator
             try {
+                // 拼音搜索时需要本地缓存：NAS 歌曲、本地音乐、百度网盘索引
+                // 服务端不认拼音关键词，改用客户端 PinyinUtils.matches() 过滤
                 val result = aggregator.search(
                     query,
                     sources = _enabledSearchSources.value,
-                    filterMode = FilterMode.PRECISE
+                    filterMode = FilterMode.PRECISE,
+                    nasLocalSongs = _songsPaging.value.songs,
+                    localDeviceSongs = _localSongs.value,
+                    baiduLocalSongs = baiduIndexCache.allSongs()
                 )
                 val songs = result.allResults.map { it.song }
                 _searchResults.value = UiState.Success(songs)

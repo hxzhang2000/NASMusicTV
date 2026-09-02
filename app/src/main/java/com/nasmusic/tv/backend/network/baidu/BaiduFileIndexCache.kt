@@ -70,6 +70,14 @@ class BaiduFileIndexCache(context: Context) {
     }
 
     /** 本地搜索（标题或艺术家包含 keyword） */
+    /**
+     * 获取本地索引中的全部歌曲（用于拼音搜索客户端过滤）
+     */
+    fun allSongs(): List<Song> {
+        val index = load() ?: return emptyList()
+        return index.entries.map { it.toSong() }
+    }
+
     fun search(keyword: String, limit: Int = 0): List<Song> {
         val index = load() ?: return emptyList()
         val k = keyword.trim().lowercase()

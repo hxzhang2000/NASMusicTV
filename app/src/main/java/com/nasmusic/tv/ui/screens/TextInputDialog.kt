@@ -120,10 +120,12 @@ fun TextInputDialog(
     var isUpperCase by remember { mutableStateOf(false) }
     val context = LocalContext.current
     // 手机端：强制使用系统 IME（不显示自定义键盘、不启动 QR）；TV 端保持原样
-    val isTVDevice = context.packageManager.hasSystemFeature("android.software.leanback")
+    // 与 MainActivity 一致，同时检查 leanback 和 television 特性
+    val isTVDevice = context.packageManager.hasSystemFeature("android.software.leanback") ||
+            context.packageManager.hasSystemFeature("android.hardware.type.television")
     // 是否切换到系统 IME 输入模式
     var showSystemIme by remember {
-        mutableStateOf(!isTVDevice)  // 手机端默认系统 IME
+        mutableStateOf(!isTVDevice)  // 手机端默认系统 IME，TV 端默认自定义键盘
     }
     // 二维码扫码：仅 TV 启用（手机端直接触摸系统键盘输入）
     val effectiveShowQrCode = if (isTVDevice) showQrCode else false
@@ -242,13 +244,13 @@ fun TextInputDialog(
                                 onValueChange = { text = it },
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .height(44.dp)
+                                    .height(52.dp)
                                     .background(
                                         NasMusicColors.SurfaceVariant,
                                         RoundedCornerShape(10.dp)
                                     )
                                     .focusRequester(textFieldFocusRequester)
-                                    .padding(horizontal = 12.dp, vertical = 12.dp),
+                                    .padding(horizontal = 12.dp, vertical = 10.dp),
                                 textStyle = TextStyle(
                                     color = NasMusicColors.TextPrimary,
                                     fontSize = FontSize.button()
@@ -275,7 +277,7 @@ fun TextInputDialog(
                             Box(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .height(44.dp)
+                                    .height(52.dp)
                                     .background(
                                         NasMusicColors.SurfaceVariant,
                                         RoundedCornerShape(10.dp)
@@ -352,13 +354,13 @@ fun TextInputDialog(
                                 ActionButton(
                                     label = stringResource(R.string.common_clear),
                                     onClick = { text = "" },
-                                    width = 80.dp,
+                                    width = 84.dp,
                                     color = NasMusicColors.Warning
                                 )
                                 ActionButton(
                                     label = stringResource(R.string.common_cancel),
                                     onClick = { onDismiss() },
-                                    width = 80.dp,
+                                    width = 84.dp,
                                     color = NasMusicColors.SurfaceVariant
                                 )
                                 ActionButton(
@@ -376,12 +378,12 @@ fun TextInputDialog(
                             Column(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalAlignment = Alignment.CenterHorizontally,
-                                verticalArrangement = Arrangement.spacedBy(4.dp)
+                                verticalArrangement = Arrangement.spacedBy(6.dp)
                             ) {
                                 currentRows.forEach { row ->
                                     Row(
                                         modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.spacedBy(4.dp, Alignment.CenterHorizontally)
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally)
                                     ) {
                                         row.forEach { ch ->
                                             KeyButton(label = ch, onClick = { text += ch })
@@ -389,17 +391,17 @@ fun TextInputDialog(
                                     }
                                 }
 
-                                Spacer(modifier = Modifier.height(4.dp))
+                                Spacer(modifier = Modifier.height(6.dp))
 
                                 // 底部功能行：Shift切换 / 中文输入 / @ / 空格 / 删除 / 清除 / 取消 / 确认
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally)
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp, Alignment.CenterHorizontally)
                                 ) {
                                     ActionButton(
                                         label = if (isUpperCase) "shift↓" else "SHIFT↑",
                                         onClick = { isUpperCase = !isUpperCase },
-                                        width = 70.dp,
+                                        width = 80.dp,
                                         color = if (isUpperCase) NasMusicColors.Primary.copy(alpha = 0.4f) else NasMusicColors.SurfaceVariant
                                     )
                                     // 中文输入按钮：切换到系统 IME 模式
@@ -413,37 +415,37 @@ fun TextInputDialog(
                                                 imeUnavailableMsg = context.getString(R.string.text_input_no_ime)
                                             }
                                         },
-                                        width = 80.dp,
+                                        width = 84.dp,
                                         color = NasMusicColors.Primary.copy(alpha = 0.2f)
                                     )
-                                    ActionButton(label = "@", onClick = { text += "@" }, width = 40.dp)
+                                    ActionButton(label = "@", onClick = { text += "@" }, width = 44.dp)
                                     ActionButton(
                                         label = stringResource(R.string.text_input_space),
                                         onClick = { text += " " },
-                                        width = 110.dp
+                                        width = 116.dp
                                     )
                                     ActionButton(
                                         label = stringResource(R.string.common_delete),
                                         onClick = { if (text.isNotEmpty()) text = text.dropLast(1) },
-                                        width = 70.dp,
+                                        width = 80.dp,
                                         color = NasMusicColors.Warning
                                     )
                                     ActionButton(
                                         label = stringResource(R.string.common_clear),
                                         onClick = { text = "" },
-                                        width = 70.dp,
+                                        width = 80.dp,
                                         color = NasMusicColors.Warning
                                     )
                                     ActionButton(
                                         label = stringResource(R.string.common_cancel),
                                         onClick = { onDismiss() },
-                                        width = 70.dp,
+                                        width = 80.dp,
                                         color = NasMusicColors.SurfaceVariant
                                     )
                                     ActionButton(
                                         label = stringResource(R.string.common_confirm),
                                         onClick = { onConfirm(text) },
-                                        width = 90.dp,
+                                        width = 96.dp,
                                         color = NasMusicColors.Primary,
                                         isPrimary = true,
                                         focusRequester = confirmFocusRequester,
@@ -549,9 +551,9 @@ private fun KeyButton(
 ) {
     FocusableSurface(
         onClick = onClick,
-        modifier = Modifier.size(42.dp),
+        modifier = Modifier.size(56.dp),
         shape = RoundedCornerShape(8.dp),
-        focusedScale = 1.12f,
+        focusedScale = 1.10f,
         animationDurationMs = 120,
         containerColor = NasMusicColors.SurfaceVariant,
         focusedContainerColor = NasMusicColors.Primary.copy(alpha = 0.25f),
@@ -564,7 +566,7 @@ private fun KeyButton(
             color = NasMusicColors.TextPrimary,
             fontSize = FontSize.button(),
             textAlign = TextAlign.Center,
-            modifier = Modifier.fillMaxSize().padding(vertical = 10.dp)
+            modifier = Modifier.fillMaxSize().padding(vertical = 14.dp)
         )
     }
 }
@@ -583,9 +585,9 @@ private fun ActionButton(
         onClick = onClick,
         modifier = Modifier
             .width(width)
-            .height(44.dp),
+            .height(52.dp),
         shape = RoundedCornerShape(8.dp),
-        focusedScale = 1.1f,
+        focusedScale = 1.08f,
         animationDurationMs = 120,
         containerColor = color,
         focusedContainerColor = if (isPrimary) NasMusicColors.Primary.copy(alpha = 0.85f)
@@ -601,7 +603,9 @@ private fun ActionButton(
             color = NasMusicColors.TextPrimary,
             fontSize = FontSize.body(),
             textAlign = TextAlign.Center,
-            modifier = Modifier.fillMaxSize().padding(vertical = 12.dp)
+            modifier = Modifier.fillMaxSize().padding(vertical = 9.dp, horizontal = 4.dp),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
         )
     }
 }
