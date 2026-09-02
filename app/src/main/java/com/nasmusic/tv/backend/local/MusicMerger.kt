@@ -3,6 +3,7 @@ package com.nasmusic.tv.backend.local
 import com.nasmusic.tv.data.model.Album
 import com.nasmusic.tv.data.model.Artist
 import com.nasmusic.tv.data.model.Song
+import com.nasmusic.tv.util.ArtistSplitter
 
 /**
  * 本地音乐与 NAS 数据合并器
@@ -135,20 +136,32 @@ object MusicMerger {
 
     /**
      * 从本地歌曲生成本地艺术家列表（按 artistName 去重分组）
+     *
+     * 合唱艺术家拆分：用 ArtistSplitter 将 "张三/李四" 拆为 "张三"、"李四"，
+     * 合唱歌曲在每个拆分后的艺术家下都列出（songCount 累加）。
      */
-    fun buildLocalArtists(localSongs: List<Song>): List<Artist> =
-        localSongs
-            .filter { it.artist.isNotBlank() }
-            .groupBy { it.artist.lowercase().trim() }
-            .map { (_, songs) ->
-                val first = songs.first()
-                Artist(
-                    id = "local_artist_${first.artist ?: first.id}",
-                    name = first.artist,
-                    songCount = songs.size,
-                    albumCount = songs.map { it.album }.distinct().size
-                )
+    fun buildLocalArtists(localSongs: List<Song>): List<Artist> {
+        val artistMap = linkedMapOf<String, Pair<String, MutableList<Song>>>() // key=lowercase, value=(displayName, songs)
+        for (song in localSongs) {
+            if (song.artist.isBlank()) continue
+            val names = ArtistSplitter.split(song.artist)
+            for (name in names) {
+                val key = name.lowercase().trim()
+                if (key.isBlank()) continue
+                val pair = artistMap.getOrPut(key) { name to mutableListOf() }
+                pair.second.add(song)
             }
+        }
+        return artistMap.map { (key, pair) ->
+            val (displayName, songs) = pair
+            Artist(
+                id = "local_artist_$key",
+                name = displayName,
+                songCount = songs.size,
+                albumCount = songs.map { it.album }.filter { it.isNotBlank() }.distinct().size
+            )
+        }
+    }
 
     /**
      * 从百度网盘歌曲列表构建专辑列表
@@ -201,19 +214,29 @@ object MusicMerger {
     /**
      * 从百度网盘歌曲列表构建艺术家列表
      *
-     * 直接按 Song.artist 分组（百度索引条目已从文件名解析了 artist 字段）。
+     * 合唱艺术家拆分：用 ArtistSplitter 将 "张三/李四" 拆为 "张三"、"李四"，
+     * 合唱歌曲在每个拆分后的艺术家下都列出。
      */
-    fun buildBaiduArtists(baiduSongs: List<Song>): List<Artist> =
-        baiduSongs
-            .filter { it.artist.isNotBlank() }
-            .groupBy { it.artist.lowercase().trim() }
-            .map { (_, songs) ->
-                val first = songs.first()
-                Artist(
-                    id = "baidu_artist_${first.artist.lowercase().replace(" ", "_")}",
-                    name = first.artist,
-                    songCount = songs.size,
-                    albumCount = songs.map { it.album }.filter { it.isNotBlank() }.distinct().size
-                )
+    fun buildBaiduArtists(baiduSongs: List<Song>): List<Artist> {
+        val artistMap = linkedMapOf<String, Pair<String, MutableList<Song>>>()
+        for (song in baiduSongs) {
+            if (song.artist.isBlank()) continue
+            val names = ArtistSplitter.split(song.artist)
+            for (name in names) {
+                val key = name.lowercase().trim()
+                if (key.isBlank()) continue
+                val pair = artistMap.getOrPut(key) { name to mutableListOf() }
+                pair.second.add(song)
             }
+        }
+        return artistMap.map { (key, pair) ->
+            val (displayName, songs) = pair
+            Artist(
+                id = "baidu_artist_$key",
+                name = displayName,
+                songCount = songs.size,
+                albumCount = songs.map { it.album }.filter { it.isNotBlank() }.distinct().size
+            )
+        }
+    }
 }
