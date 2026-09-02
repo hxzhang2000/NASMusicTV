@@ -117,6 +117,8 @@ object MusicMerger {
 
     /**
      * 从本地歌曲生成本地专辑列表（按 albumName 去重分组）
+     *
+     * 封面优先级：专辑内第一首有 coverUrl 的歌曲 → null（留给上层异步解析）
      */
     fun buildLocalAlbums(localSongs: List<Song>): List<Album> =
         localSongs
@@ -128,7 +130,7 @@ object MusicMerger {
                     id = "local_album_${first.albumId ?: first.id}",
                     name = first.album,
                     artist = first.artist,
-                    coverUrl = first.coverUrl,
+                    coverUrl = songs.firstOrNull { it.coverUrl != null }?.coverUrl,
                     songCount = songs.size,
                     durationMs = songs.sumOf { it.durationMs }
                 )
@@ -204,7 +206,7 @@ object MusicMerger {
                     id = "baidu_album_${albumName.lowercase().replace(" ", "_")}",
                     name = albumName,
                     artist = first.artist,
-                    coverUrl = null,
+                    coverUrl = songs.firstOrNull { it.coverUrl != null }?.coverUrl,
                     songCount = songs.size,
                     durationMs = songs.sumOf { it.durationMs }
                 )

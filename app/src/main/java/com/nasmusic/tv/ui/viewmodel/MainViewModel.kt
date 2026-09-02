@@ -812,6 +812,21 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
                 _showConnectPrompt.value = true
             }
             // 无配置时不强制跳转，保持首页（用户可自行去 设置 → 服务器 配置）
+
+            // 从磁盘恢复百度网盘索引状态（已扫描歌曲数 + 连接状态）
+            val baiduCfg = prefs.getBaiduConfigSync()
+            if (baiduCfg.isActive) {
+                val savedIndex = baiduIndexCache.load()
+                if (savedIndex != null && savedIndex.entries.isNotEmpty()) {
+                    _baiduIndexScanned.value = savedIndex.entries.size
+                    _baiduIndexLastSync.value = savedIndex.lastSyncAt
+                }
+                _baiduConnectionState.value = if (baiduCfg.tokens != null) BaiduConnectionState.LoggedIn else BaiduConnectionState.Off
+                // 百度索引有数据时触发合并
+                if (savedIndex != null && savedIndex.entries.isNotEmpty()) {
+                    updateMergedData()
+                }
+            }
         }
 
         // 监听 currentSong 变化，自动切歌时重新加载歌词，并记录播放历史
@@ -2158,6 +2173,59 @@ showError(getApplication<Application>().getString(R.string.toggle_favorite_error
             localArtists = MusicMerger.buildLocalArtists(localSongs),
             baiduArtists = MusicMerger.buildBaiduArtists(baiduSongs)
         )
+
+        // 异步解析缺失封面（百度侧车/APIC → iTunes → 本地ID3 → 歌曲 coverUrl 兜底）
+        resolveAlbumCoversAsync()
+
+        // 用全量歌曲反向统计艺术家 songCount
+        updateArtistSongCounts()
+    }
+
+    /**
+     * 用全量歌曲（NAS + 本地 + 百度）反向统计每个艺术家的歌曲数，
+     * 使艺术家卡片立即显示正确的 songCount，不必等到详情页加载。
+     */
+    private fun updateArtistSongCounts() {
+        val allSongs = _songsPaging.value.songs + _localSongs.value + baiduIndexCache.allSongs()
+        // 按 ArtistSplitter 拆分后的艺术家名统计歌曲数
+        val artistSongCounts = mutableMapOf<String, Int>()
+        for (song in allSongs) {
+            if (song.artist.isBlank()) continue
+            val names = com.nasmusic.tv.util.ArtistSplitter.split(song.artist)
+            for (name in names) {
+                val key = name.lowercase().trim()
+                if (key.isNotBlank()) {
+                    artistSongCounts[key] = (artistSongCounts[key] ?: 0) + 1
+                }
+            }
+        }
+        // 更新 mergedArtists 列表中的 songCount
+        val artists = _mergedArtists.value
+        if (artistSongCounts.isNotEmpty()) {
+            _mergedArtists.value = artists.map { artist ->
+                val key = artist.name.lowercase().trim()
+                val countedSongs = artistSongCounts[key]
+                if (countedSongs != null && countedSongs > 0) {
+                    artist.copy(songCount = countedSongs)
+                } else {
+                    artist
+                }
+            }
+        }
+    }
+
+    private var coverResolveJob: kotlinx.coroutines.Job? = null
+
+    private fun resolveAlbumCoversAsync() {
+        // 取消上一次未完成的解析
+        coverResolveJob?.cancel()
+        coverResolveJob = viewModelScope.launch {
+            val albums = _mergedAlbums.value
+            val allSongs = _songsPaging.value.songs + _localSongs.value + baiduIndexCache.allSongs()
+            nasMusicApp.albumCoverResolver.resolveCovers(albums, allSongs) { updated ->
+                _mergedAlbums.value = updated
+            }
+        }
     }
 
     /** 手动刷新本地音乐库（全量重扫） */
