@@ -22,6 +22,8 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.tv.material3.ExperimentalTvMaterial3Api
@@ -33,10 +35,10 @@ import com.nasmusic.tv.ui.LocalListBackHandler
 import com.nasmusic.tv.ui.theme.FontSize
 import com.nasmusic.tv.ui.theme.NasMusicColors
 import com.nasmusic.tv.ui.components.BackButton
+import com.nasmusic.tv.ui.components.FocusableSurface
 import com.nasmusic.tv.ui.components.song.UnifiedSongRow
 import com.nasmusic.tv.ui.components.song.SongRowMode
 import com.nasmusic.tv.ui.components.common.CoverImage
-import com.nasmusic.tv.ui.components.common.ActionBar
 import kotlinx.coroutines.launch
 
 /**
@@ -85,7 +87,7 @@ fun AlbumDetailScreen(
     Column(
         modifier = modifier.fillMaxSize().padding(horizontal = 32.dp, vertical = 20.dp)
     ) {
-        // 返回 + 标题行
+        // 返回 + 标题行 + 操作按钮 + 歌曲数
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
@@ -99,6 +101,51 @@ fun AlbumDetailScreen(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f)
+            )
+            Spacer(modifier = Modifier.width(12.dp))
+            // 播放全部
+            FocusableSurface(
+                onClick = { if (songs.isNotEmpty()) onPlayAll(songs) },
+                shape = RoundedCornerShape(8.dp),
+                focusedScale = 1.08f,
+                animationDurationMs = 150,
+                containerColor = NasMusicColors.Primary.copy(alpha = 0.85f),
+                focusedContainerColor = NasMusicColors.Primary,
+                contentColor = NasMusicColors.TextPrimary,
+                focusedContentColor = NasMusicColors.TextPrimary
+            ) {
+                Text(
+                    text = stringResource(R.string.action_play_all),
+                    color = NasMusicColors.TextPrimary,
+                    fontSize = FontSize.button(),
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                )
+            }
+            Spacer(modifier = Modifier.width(12.dp))
+            // 加入队列
+            FocusableSurface(
+                onClick = { songs.forEach { song -> onToggleQueue(song) } },
+                shape = RoundedCornerShape(8.dp),
+                focusedScale = 1.08f,
+                animationDurationMs = 150,
+                containerColor = NasMusicColors.Surface.copy(alpha = 0.7f),
+                focusedContainerColor = NasMusicColors.Primary.copy(alpha = 0.3f),
+                contentColor = NasMusicColors.TextPrimary,
+                focusedContentColor = NasMusicColors.Primary
+            ) {
+                Text(
+                    text = stringResource(R.string.action_add_queue),
+                    color = NasMusicColors.TextPrimary,
+                    fontSize = FontSize.button(),
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                )
+            }
+            Spacer(modifier = Modifier.width(12.dp))
+            // 歌曲数
+            Text(
+                text = stringResource(R.string.action_song_count, songs.size),
+                color = NasMusicColors.TextSecondary,
+                fontSize = FontSize.body()
             )
         }
 
@@ -127,26 +174,26 @@ fun AlbumDetailScreen(
                 Row {
                     if (album.year != null) {
                         Text(
-                            text = "${album.year} · ",
+                            text = "${album.year}",
                             color = NasMusicColors.TextSecondary,
                             fontSize = FontSize.button()
                         )
                     }
-                    Text(
-                        text = stringResource(R.string.album_song_count_tracks, album.songCount),
-                        color = NasMusicColors.TextSecondary,
-                        fontSize = FontSize.button()
-                    )
+                    if (!album.genre.isNullOrBlank()) {
+                        if (album.year != null) {
+                            Text(
+                                text = " · ",
+                                color = NasMusicColors.TextSecondary,
+                                fontSize = FontSize.button()
+                            )
+                        }
+                        Text(
+                            text = album.genre,
+                            color = NasMusicColors.TextSecondary,
+                            fontSize = FontSize.button()
+                        )
+                    }
                 }
-                Spacer(modifier = Modifier.height(12.dp))
-
-                // 操作栏
-                ActionBar(
-                    songCount = songs.size,
-                    onPlayAll = { if (songs.isNotEmpty()) onPlayAll(songs) },
-                    onAddAllToQueue = { songs.forEach { song -> onToggleQueue(song) } }
-                )
-
                 Spacer(modifier = Modifier.height(16.dp))
 
                 // 曲目列表

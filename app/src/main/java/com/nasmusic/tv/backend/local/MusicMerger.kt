@@ -4,6 +4,7 @@ import com.nasmusic.tv.data.model.Album
 import com.nasmusic.tv.data.model.Artist
 import com.nasmusic.tv.data.model.Song
 import com.nasmusic.tv.util.ArtistSplitter
+import com.nasmusic.tv.util.PinyinUtils
 
 /**
  * 本地音乐与 NAS 数据合并器
@@ -64,7 +65,7 @@ object MusicMerger {
             }
         }
 
-        return albumMap.values.toList()
+        return sortByPinyin(albumMap.values.toList()) { it.name }
     }
 
     /**
@@ -112,7 +113,7 @@ object MusicMerger {
             }
         }
 
-        return artistMap.values.toList()
+        return sortByPinyin(artistMap.values.toList()) { it.name }
     }
 
     /**
@@ -240,5 +241,17 @@ object MusicMerger {
                 albumCount = songs.map { it.album }.filter { it.isNotBlank() }.distinct().size
             )
         }
+    }
+
+    /**
+     * 双键拼音排序：主键 groupLetter（A→Z, #排最后），副键 fullPinyin（同组内全拼排序）
+     *
+     * # 组使用 "{" 作为 sort key（ASCII 码在 'Z' 之后），保证 # 排在所有字母组之后。
+     */
+    private fun <T> sortByPinyin(items: List<T>, nameSelector: (T) -> String): List<T> {
+        return items.sortedWith(compareBy(
+            { val letter = PinyinUtils.getGroupLetter(nameSelector(it)); if (letter == '#') '{' else letter },
+            { PinyinUtils.toPinyin(nameSelector(it)) }
+        ))
     }
 }

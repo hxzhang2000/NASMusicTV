@@ -116,6 +116,9 @@ class AppPreferences private constructor(private val context: Context) {
     // --- 全局字体字号调整 ---
     private val keyFontAdjustment = intPreferencesKey("settings_font_adjustment")
 
+    // --- 首次曲库快捷键提示 ---
+    private val keyShowLibraryShortcutHint = booleanPreferencesKey("show_library_shortcut_hint")
+
     // --- 网络音乐平台来源 ---
     private val keyMusicSource = stringPreferencesKey("music_source")
 
@@ -128,6 +131,13 @@ class AppPreferences private constructor(private val context: Context) {
 
     // --- 语言设置 Flow ---
     val language: Flow<String> = dataStore.data.map { it[keyLanguage] ?: "system" }
+
+    // --- 首次曲库快捷键提示 Flow ---
+    val showLibraryShortcutHint: Flow<Boolean> = dataStore.data.map { it[keyShowLibraryShortcutHint] ?: true }
+
+    suspend fun setShowLibraryShortcutHint(show: Boolean) {
+        dataStore.edit { it[keyShowLibraryShortcutHint] = show }
+    }
 
     suspend fun setLanguage(lang: String) {
         dataStore.edit { it[keyLanguage] = lang }

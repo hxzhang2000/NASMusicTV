@@ -16,6 +16,7 @@ import com.nasmusic.tv.backend.network.MetingApiService
 import com.nasmusic.tv.backend.network.NetworkMusicManager
 import com.nasmusic.tv.backend.radio.RadioBrowserClient
 import com.nasmusic.tv.backend.local.AlbumCoverResolver
+import com.nasmusic.tv.backend.local.ArtistCoverResolver
 import com.nasmusic.tv.backend.network.baidu.BaiduCoverProvider
 import com.nasmusic.tv.backend.network.baidu.BaiduFileIndexCache
 import com.nasmusic.tv.backend.network.baidu.BaiduHttpDataSourceFactory
@@ -102,6 +103,7 @@ class NasMusicApp : Application(), ImageLoaderFactory {
     val baiduLyricsProvider: BaiduLyricsProvider by lazy { BaiduLyricsProvider(baiduPanApi, baiduOkHttpClient) }
     val baiduCoverProvider: BaiduCoverProvider by lazy { BaiduCoverProvider(baiduPanApi, baiduOkHttpClient) }
     val albumCoverResolver: AlbumCoverResolver by lazy { AlbumCoverResolver(baiduCoverProvider, baiduOkHttpClient) }
+    val artistCoverResolver: ArtistCoverResolver by lazy { ArtistCoverResolver(baiduOkHttpClient) }
     val baiduNetdiskService: BaiduNetdiskService by lazy {
         BaiduNetdiskService(
             oauth = baiduOAuthClient,

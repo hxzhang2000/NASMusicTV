@@ -353,6 +353,29 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
         _libraryActiveTab.value = tab
     }
 
+    // --- 曲库页滚动位置记忆（切换 Tab 后恢复上次滚动位置） ---
+    private val _albumScrollIndex = MutableStateFlow(0)
+    val albumScrollIndex: StateFlow<Int> = _albumScrollIndex.asStateFlow()
+
+    private val _albumScrollOffset = MutableStateFlow(0)
+    val albumScrollOffset: StateFlow<Int> = _albumScrollOffset.asStateFlow()
+
+    private val _artistScrollIndex = MutableStateFlow(0)
+    val artistScrollIndex: StateFlow<Int> = _artistScrollIndex.asStateFlow()
+
+    private val _artistScrollOffset = MutableStateFlow(0)
+    val artistScrollOffset: StateFlow<Int> = _artistScrollOffset.asStateFlow()
+
+    fun saveAlbumScrollPosition(index: Int, offset: Int) {
+        _albumScrollIndex.value = index
+        _albumScrollOffset.value = offset
+    }
+
+    fun saveArtistScrollPosition(index: Int, offset: Int) {
+        _artistScrollIndex.value = index
+        _artistScrollOffset.value = offset
+    }
+
     // --- 曲库页搜索关键词（跨导航记忆，切换页面后保留搜索框内容与结果） ---
     private val _librarySearchKeyword = MutableStateFlow("")
     val librarySearchKeyword: StateFlow<String> = _librarySearchKeyword.asStateFlow()
@@ -1549,6 +1572,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
                 _artists.value = UiState.Success(merged)
                 AppLog.d("NASMusic", "loadArtists: ${artistsList.size} raw → ${merged.size} after splitting")
                 // 艺术家歌曲数量由歌曲 Tab 的 buildArtistMapsIncremental 全量加载后自动填充
+                // 异步解析缺失封面（iTunes → 百度音乐 API）
+                resolveArtistCoversAsync()
             } catch (e: Exception) {
                 AppLog.e("NASMusic", "loadArtists failed", e)
                 _artists.value = UiState.Error(
@@ -2232,6 +2257,7 @@ showError(getApplication<Application>().getString(R.string.toggle_favorite_error
     }
 
     private var coverResolveJob: kotlinx.coroutines.Job? = null
+    private var artistCoverResolveJob: kotlinx.coroutines.Job? = null
 
     private fun resolveAlbumCoversAsync() {
         // 取消上一次未完成的解析
@@ -2241,6 +2267,16 @@ showError(getApplication<Application>().getString(R.string.toggle_favorite_error
             val allSongs = _songsPaging.value.songs + _localSongs.value + baiduIndexCache.allSongs()
             nasMusicApp.albumCoverResolver.resolveCovers(albums, allSongs) { updated ->
                 _mergedAlbums.value = updated
+            }
+        }
+    }
+
+    private fun resolveArtistCoversAsync() {
+        artistCoverResolveJob?.cancel()
+        artistCoverResolveJob = viewModelScope.launch {
+            val artists = _artists.value.dataOrNull() ?: return@launch
+            nasMusicApp.artistCoverResolver.resolveCovers(artists) { updated ->
+                _artists.value = UiState.Success(updated)
             }
         }
     }

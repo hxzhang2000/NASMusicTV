@@ -1,10 +1,16 @@
 package com.nasmusic.tv.ui.screens
 
 import com.nasmusic.tv.ui.theme.FontSize
+import com.nasmusic.tv.ui.theme.HighContrastColors
+import com.nasmusic.tv.ui.theme.LocalHighContrast
+import com.nasmusic.tv.ui.theme.LocalPhoneCompact
+import com.nasmusic.tv.ui.components.AlbumSkeletonGrid
+import com.nasmusic.tv.ui.components.ArtistSkeletonGrid
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -32,19 +38,29 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.focusTarget
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.tv.material3.Icon
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Album
+import androidx.compose.material.icons.filled.CloudOff
+import androidx.compose.material.icons.filled.MusicNote
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.ui.unit.sp
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Text
@@ -72,6 +88,20 @@ import com.nasmusic.tv.ui.screens.library.RadioTab
 import com.nasmusic.tv.data.model.UiState
 import com.nasmusic.tv.util.PinyinUtils
 import kotlinx.coroutines.launch
+import androidx.compose.runtime.snapshotFlow
+import androidx.compose.foundation.lazy.grid.LazyGridState
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.PointerEventType
 
 enum class LibraryTab(val titleRes: Int) {
     SEARCH(R.string.library_search),
@@ -167,9 +197,50 @@ fun LibraryScreen(
     onLoadRadioTag: (String) -> Unit = {},
     onSearchRadio: (String) -> Unit = {},
     onPlayRadioStation: (com.nasmusic.tv.data.model.RadioStation) -> Unit = {},
+    // Task 8: 滚动位置记忆（跨 Tab 切换保留）
+    albumScrollIndex: Int = 0,
+    albumScrollOffset: Int = 0,
+    artistScrollIndex: Int = 0,
+    artistScrollOffset: Int = 0,
+    onAlbumScrollPositionChange: (Int, Int) -> Unit = { _, _ -> },
+    onArtistScrollPositionChange: (Int, Int) -> Unit = { _, _ -> },
     modifier: Modifier = Modifier
 ) {
     var showSearchDialog by remember { mutableStateOf(false) }
+
+    // Task 14: 首次曲库快捷键提示（3s 自动消失）
+    val context = LocalContext.current
+    val appPrefs = remember { com.nasmusic.tv.data.prefs.AppPreferences.getInstance(context) }
+    val showShortcutHint by appPrefs.showLibraryShortcutHint.collectAsState(initial = true)
+    var shortcutHintVisible by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        if (showShortcutHint) {
+            shortcutHintVisible = true
+            kotlinx.coroutines.delay(3000)
+            shortcutHintVisible = false
+            appPrefs.setShowLibraryShortcutHint(false)
+        }
+    }
+
+    // Task 8: 滚动位置记忆 — 从 ViewModel 恢复初始位置
+    val albumListState = rememberLazyGridState(
+        initialFirstVisibleItemIndex = albumScrollIndex,
+        initialFirstVisibleItemScrollOffset = albumScrollOffset
+    )
+    val artistListState = rememberLazyGridState(
+        initialFirstVisibleItemIndex = artistScrollIndex,
+        initialFirstVisibleItemScrollOffset = artistScrollOffset
+    )
+
+    // 滚动位置变化时保存到 ViewModel（节流：仅在滚动停止后保存）
+    LaunchedEffect(albumListState) {
+        snapshotFlow { albumListState.firstVisibleItemIndex to albumListState.firstVisibleItemScrollOffset }
+            .collect { pair: Pair<Int, Int> -> onAlbumScrollPositionChange(pair.first, pair.second) }
+    }
+    LaunchedEffect(artistListState) {
+        snapshotFlow { artistListState.firstVisibleItemIndex to artistListState.firstVisibleItemScrollOffset }
+            .collect { pair: Pair<Int, Int> -> onArtistScrollPositionChange(pair.first, pair.second) }
+    }
 
     // Tab 切换时触发按需加载
     LaunchedEffect(activeTab) {
@@ -443,13 +514,15 @@ fun LibraryScreen(
                                 albums = filteredAlbums,
                                 songs = searchResults,
                                 onPlayAlbum = onPlayAlbum,
-                                onOpenAlbumDetail = onOpenAlbumDetail
+                                onOpenAlbumDetail = onOpenAlbumDetail,
+                                listState = albumListState
                             )
                             LibraryTab.ARTISTS -> ArtistsTab(
                                 artists = filteredArtists,
                                 artistSongsMap = displayArtistSongsMap,
                                 onPlaySongs = onPlaySongs,
-                                onOpenArtistDetail = onOpenArtistDetail
+                                onOpenArtistDetail = onOpenArtistDetail,
+                                listState = artistListState
                             )
                             LibraryTab.SONGS -> SongsTab(
                                 songs = displaySongs,
@@ -466,42 +539,51 @@ fun LibraryScreen(
                             else -> {}
                         }
                     } else if (isLoading) {
-                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Text(text = stringResource(R.string.common_loading), color = NasMusicColors.TextSecondary, fontSize = FontSize.subtitle())
-                                Spacer(modifier = Modifier.height(8.dp))
-                                Text(
-                                    text = stringResource(R.string.library_loading_library),
-                                    color = NasMusicColors.TextSecondary,
-                                    fontSize = FontSize.button()
-                                )
+                        Column(modifier = Modifier.fillMaxSize()) {
+                            // 顶部骨架标题条
+                            Box(
+                                modifier = Modifier
+                                    .width(180.dp)
+                                    .height(24.dp)
+                                    .clip(RoundedCornerShape(4.dp))
+                                    .background(NasMusicColors.SurfaceVariant)
+                            )
+                            Spacer(modifier = Modifier.height(12.dp))
+                            // 按 Tab 类型显示对应骨架
+                            when (activeTab) {
+                                LibraryTab.ALBUMS -> AlbumSkeletonGrid()
+                                LibraryTab.ARTISTS -> ArtistSkeletonGrid()
+                                else -> AlbumSkeletonGrid()  // 默认专辑骨架
                             }
                         }
+
                     } else {
                         // 有数据时直接展示（无论 NAS 是否连接，本地/百度/网络数据同样展示）
                         when (activeTab) {
                             LibraryTab.ALBUMS -> if (filteredAlbums.isEmpty()) {
-                                EmptyHint(isConnected = isConnected)
+                                EmptyHint(isConnected = isConnected, tab = LibraryTab.ALBUMS)
                             } else {
                                 AlbumsTab(
                                     albums = filteredAlbums,
                                     songs = songs,
                                     onPlayAlbum = onPlayAlbum,
-                                    onOpenAlbumDetail = onOpenAlbumDetail
+                                    onOpenAlbumDetail = onOpenAlbumDetail,
+                                    listState = albumListState
                                 )
                             }
                             LibraryTab.ARTISTS -> if (filteredArtists.isEmpty()) {
-                                EmptyHint(isConnected = isConnected)
+                                EmptyHint(isConnected = isConnected, tab = LibraryTab.ARTISTS)
                             } else {
                                 ArtistsTab(
                                     artists = filteredArtists,
                                     artistSongsMap = displayArtistSongsMap,
                                     onPlaySongs = onPlaySongs,
-                                    onOpenArtistDetail = onOpenArtistDetail
+                                    onOpenArtistDetail = onOpenArtistDetail,
+                                    listState = artistListState
                                 )
                             }
                             LibraryTab.SONGS -> if (displaySongs.isEmpty() && songsPaging.songs.isEmpty()) {
-                                EmptyHint(isConnected = isConnected)
+                                EmptyHint(isConnected = isConnected, tab = LibraryTab.SONGS)
                             } else {
                                 SongsTab(
                                     songs = displaySongs,
@@ -531,7 +613,31 @@ fun LibraryScreen(
                     }
                 }
             }
-            }   // 内容区域 Box
+
+                // Task 14: 遥控器快捷键提示浮层（3s 自动消失）
+                androidx.compose.animation.AnimatedVisibility(
+                    visible = shortcutHintVisible,
+                    enter = androidx.compose.animation.fadeIn(),
+                    exit = androidx.compose.animation.fadeOut(),
+                    modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 12.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(NasMusicColors.SurfaceVariant)
+                            .padding(horizontal = 20.dp, vertical = 10.dp)
+                    ) {
+                        Text(
+                            text = "◀ ▶ 导航  |  ◀◀ ▶▶ 切歌  |  确认 播放  |  长按 菜单  |  侧边索引 跳转",
+                            color = NasMusicColors.TextSecondary,
+                            fontSize = FontSize.button(),
+                            maxLines = 1
+                        )
+                    }
+                }
+            }   // AnimatedVisibility
+
+        }   // 内容区域 Box
 
         // 搜索键盘弹窗
         if (showSearchDialog) {
@@ -566,7 +672,6 @@ fun LibraryScreen(
                 }
             )
         }
-        }
 
     }
 }
@@ -576,9 +681,9 @@ private fun AlbumsTab(
     albums: List<Album>,
     songs: List<Song>,
     onPlayAlbum: (Album) -> Unit,
-    onOpenAlbumDetail: ((Album) -> Unit)? = null
+    onOpenAlbumDetail: ((Album) -> Unit)? = null,
+    listState: LazyGridState = rememberLazyGridState()
 ) {
-    val listState = rememberLazyGridState()
     val firstItemFocusRequester = remember { FocusRequester() }
     val scope = rememberCoroutineScope()
     val listBackHandler = LocalListBackHandler.current
@@ -600,6 +705,33 @@ private fun AlbumsTab(
         }
         listBackHandler.value = handler
         onDispose { listBackHandler.value = null }
+    }
+
+    // A-Z 分组：按首字母分组，保留组内排序
+    val groupedItems = remember(albums) {
+        val items = mutableListOf<Pair<Char?, Album>>() // null = header
+        albums.groupBy { PinyinUtils.getGroupLetter(it.name) }
+            .toSortedMap(compareBy { if (it == '#') '{' else it })
+            .forEach { (letter, groupAlbums) ->
+                items.add(letter to groupAlbums.first()) // header 标记：用第一个 album 的 letter
+                groupAlbums.forEach { album ->
+                    items.add(null to album) // null key = 数据行
+                }
+            }
+        items
+    }
+
+    // 分组 header 的 index 映射（letter → grid index），供侧边索引用
+    val groupHeaderIndices = remember(groupedItems) {
+        val map = mutableMapOf<Char, Int>()
+        var gridIndex = 0
+        groupedItems.forEach { (letter, album) ->
+            if (letter != null) {
+                map[letter] = gridIndex
+            }
+            gridIndex++
+        }
+        map
     }
 
     Column {
@@ -609,21 +741,73 @@ private fun AlbumsTab(
             fontSize = FontSize.subtitle(),
             modifier = Modifier.padding(bottom = 12.dp)
         )
-        LazyVerticalGrid(
-            state = listState,
-            columns = GridCells.Fixed(adaptiveColumns(6, 2, 3)),
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            itemsIndexed(albums, key = { _, it -> it.id }) { index, album ->
-                AlbumCard(
-                    album = album,
-                    onClick = { onOpenAlbumDetail?.invoke(album) ?: onPlayAlbum(album) },
-                    onPlay = { onPlayAlbum(album) },
-                    focusRequester = if (index == 0) firstItemFocusRequester else null
-                )
+        Row(modifier = Modifier.fillMaxSize()) {
+            // Task 11: 横向滚动边缘渐变提示
+            val canScrollHorizontally by remember {
+                derivedStateOf { listState.canScrollForward || listState.canScrollBackward }
             }
+            Box(modifier = Modifier.weight(1f)) {
+                LazyVerticalGrid(
+                    state = listState,
+                    columns = GridCells.Fixed(adaptiveColumns(6, 3, 6)),
+                    modifier = Modifier.fillMaxSize(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    groupedItems.forEachIndexed { index, (letter, album) ->
+                        if (letter != null) {
+                            // 分组 header：横跨整行
+                            item(key = "header_$letter", span = { GridItemSpan(maxLineSpan) }) {
+                                Column {
+                                    Text(
+                                        text = letter.toString(),
+                                        color = NasMusicColors.Primary,
+                                        fontSize = 20.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        modifier = Modifier.padding(start = 4.dp, top = 8.dp, bottom = 4.dp)
+                                    )
+                                    val dividerThickness = if (LocalHighContrast.current) 2.dp else 1.dp
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .height(dividerThickness)
+                                            .background(if (LocalHighContrast.current) HighContrastColors.BorderStrong else NasMusicColors.Border)
+                                    )
+                                }
+                            }
+                        }
+                        // 数据行（key 加 index 防重名：同名专辑可来自多个源）
+                        item(key = "album_${index}_${album.id}", span = { GridItemSpan(1) }) {
+                            AlbumCard(
+                                album = album,
+                                onClick = { onOpenAlbumDetail?.invoke(album) ?: onPlayAlbum(album) },
+                                onPlay = { onPlayAlbum(album) },
+                                focusRequester = if (index == 1) firstItemFocusRequester else null
+                            )
+                        }
+                    }
+                }
+            }
+            // 侧边 A-Z 索引条
+            val activeLetters = remember(groupedItems) {
+                groupedItems.mapNotNull { (letter, _) -> letter }.toSet()
+            }
+            val currentLetter by remember {
+                derivedStateOf {
+                    listState.layoutInfo.visibleItemsInfo.firstOrNull()?.key?.let { key ->
+                        if (key is String && key.startsWith("header_")) key.removePrefix("header_").firstOrNull() else null
+                    }
+                }
+            }
+            SideLetterIndex(
+                currentLetter = currentLetter,
+                activeLetters = activeLetters,
+                onLetterSelect = { letter ->
+                    groupHeaderIndices[letter]?.let { idx ->
+                        scope.launch { listState.scrollToItem(idx) }
+                    }
+                }
+            )
         }
     }
 }
@@ -633,9 +817,9 @@ private fun ArtistsTab(
     artists: List<Artist>,
     artistSongsMap: Map<String, List<Song>> = emptyMap(),
     onPlaySongs: (List<Song>) -> Unit,
-    onOpenArtistDetail: ((String) -> Unit)? = null
+    onOpenArtistDetail: ((String) -> Unit)? = null,
+    listState: LazyGridState = rememberLazyGridState()
 ) {
-    val listState = rememberLazyGridState()
     val firstItemFocusRequester = remember { FocusRequester() }
     val scope = rememberCoroutineScope()
     val listBackHandler = LocalListBackHandler.current
@@ -659,6 +843,33 @@ private fun ArtistsTab(
         onDispose { listBackHandler.value = null }
     }
 
+    // A-Z 分组：按首字母分组，保留组内排序
+    val groupedItems = remember(artists) {
+        val items = mutableListOf<Pair<Char?, Artist>>() // null = header
+        artists.groupBy { PinyinUtils.getGroupLetter(it.name) }
+            .toSortedMap(compareBy { if (it == '#') '{' else it })
+            .forEach { (letter, groupArtists) ->
+                items.add(letter to groupArtists.first()) // header 标记
+                groupArtists.forEach { artist ->
+                    items.add(null to artist) // null key = 数据行
+                }
+            }
+        items
+    }
+
+    // 分组 header 的 index 映射（letter → grid index），供侧边索引用
+    val groupHeaderIndices = remember(groupedItems) {
+        val map = mutableMapOf<Char, Int>()
+        var gridIndex = 0
+        groupedItems.forEach { (letter, artist) ->
+            if (letter != null) {
+                map[letter] = gridIndex
+            }
+            gridIndex++
+        }
+        map
+    }
+
     Column {
         Text(
             text = stringResource(R.string.library_artists_count, artists.size),
@@ -666,33 +877,90 @@ private fun ArtistsTab(
             fontSize = FontSize.subtitle(),
             modifier = Modifier.padding(bottom = 12.dp)
         )
-        LazyVerticalGrid(
-            state = listState,
-            columns = GridCells.Fixed(adaptiveColumns(5, 2, 3)),
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            itemsIndexed(artists, key = { _, it -> it.id }) { index, artist ->
-                val artistSongs = artistSongsMap[artist.name]
-                    ?: emptyList()
-                val songCount = artistSongs.size
-                ArtistCard(
-                    artist = artist.name,
-                    coverUrl = artist.coverUrl,
-                    songCount = songCount,
-                    onClick = {
-                        // 点击打开详情页，如果没有详情回调则直接播放
-                        if (onOpenArtistDetail != null) {
-                            onOpenArtistDetail(artist.name)
-                        } else if (artistSongs.isNotEmpty()) {
-                            onPlaySongs(artistSongs)
-                        }
-                    },
-                    onPlay = if (artistSongs.isNotEmpty()) {{ onPlaySongs(artistSongs) }} else null,
-                    focusRequester = if (index == 0) firstItemFocusRequester else null
-                )
+        Row(modifier = Modifier.fillMaxSize()) {
+            // Task 11: 横向滚动边缘渐变提示
+            val canScrollHorizontally by remember {
+                derivedStateOf { listState.canScrollForward || listState.canScrollBackward }
             }
+            Box(modifier = Modifier.weight(1f)) {
+                LazyVerticalGrid(
+                    state = listState,
+                    columns = GridCells.Fixed(adaptiveColumns(6, 3, 6)),
+                    modifier = Modifier.fillMaxSize(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    groupedItems.forEachIndexed { index, (letter, artist) ->
+                        if (letter != null) {
+                            // 分组 header：横跨整行
+                            item(key = "header_$letter", span = { GridItemSpan(maxLineSpan) }) {
+                                Column {
+                                    Text(
+                                        text = letter.toString(),
+                                        color = NasMusicColors.Primary,
+                                        fontSize = 20.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        modifier = Modifier.padding(start = 4.dp, top = 8.dp, bottom = 4.dp)
+                                    )
+                                    val dividerThickness = if (LocalHighContrast.current) 2.dp else 1.dp
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .height(dividerThickness)
+                                            .background(if (LocalHighContrast.current) HighContrastColors.BorderStrong else NasMusicColors.Border)
+                                    )
+                                }
+                            }
+                        }
+                        // 数据行（key 加 index 防重名）
+                        item(key = "artist_${index}_${artist.id}", span = { GridItemSpan(1) }) {
+                            val artistSongs = artistSongsMap[artist.name] ?: emptyList()
+                            val songCount = artistSongs.size
+                            // Task 10: 计算专辑数和主要流派
+                            val albumCountForArtist = artist.albumCount
+                            val primaryGenreForArtist = remember(artistSongs) {
+                                artistSongs.mapNotNull { it.genre }.groupingBy { it }.eachCount().maxByOrNull { it.value }?.key
+                            }
+                            ArtistCard(
+                                artist = artist.name,
+                                coverUrl = artist.coverUrl,
+                                songCount = songCount,
+                                albumCount = albumCountForArtist,
+                                primaryGenre = primaryGenreForArtist,
+                                onClick = {
+                                    if (onOpenArtistDetail != null) {
+                                        onOpenArtistDetail(artist.name)
+                                    } else if (artistSongs.isNotEmpty()) {
+                                        onPlaySongs(artistSongs)
+                                    }
+                                },
+                                onPlay = if (artistSongs.isNotEmpty()) {{ onPlaySongs(artistSongs) }} else null,
+                                focusRequester = if (index == 1) firstItemFocusRequester else null
+                            )
+                        }
+                    }
+                }
+            }
+            // 侧边 A-Z 索引条
+            val activeLetters = remember(groupedItems) {
+                groupedItems.mapNotNull { (letter, _) -> letter }.toSet()
+            }
+            val currentLetter by remember {
+                derivedStateOf {
+                    listState.layoutInfo.visibleItemsInfo.firstOrNull()?.key?.let { key ->
+                        if (key is String && key.startsWith("header_")) key.removePrefix("header_").firstOrNull() else null
+                    }
+                }
+            }
+            SideLetterIndex(
+                currentLetter = currentLetter,
+                activeLetters = activeLetters,
+                onLetterSelect = { letter ->
+                    groupHeaderIndices[letter]?.let { idx ->
+                        scope.launch { listState.scrollToItem(idx) }
+                    }
+                }
+            )
         }
     }
 }
@@ -1041,19 +1309,45 @@ fun AlbumCard(
                         Text(text = "♪", color = LocalFocusableContentColor.current, fontSize = FontSize.displayLarge())
                     }
                 }
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.TopEnd)
-                        .padding(4.dp)
-                        .background(NasMusicColors.Primary.copy(alpha = 0.95f), shape = RoundedCornerShape(12.dp))
-                        .padding(horizontal = 6.dp, vertical = 2.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(text = stringResource(R.string.library_song_count_short, album.songCount), color = NasMusicColors.TextPrimary, fontSize = FontSize.small())
+                // Task 9: 右上角来源徽标
+                if (album.sourceType != null) {
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(4.dp)
+                            .background(album.sourceType.color.copy(alpha = 0.9f), shape = RoundedCornerShape(4.dp))
+                            .padding(horizontal = 4.dp, vertical = 1.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(text = album.sourceType.displayName, color = Color.White, fontSize = 9.sp)
+                    }
+                } else {
+                    // 无来源时仍显示歌曲数
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(4.dp)
+                            .background(NasMusicColors.Primary.copy(alpha = 0.95f), shape = RoundedCornerShape(12.dp))
+                            .padding(horizontal = 6.dp, vertical = 2.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(text = stringResource(R.string.library_song_count_short, album.songCount), color = NasMusicColors.TextPrimary, fontSize = FontSize.small())
+                    }
                 }
             }
             Spacer(modifier = Modifier.height(4.dp))
             Text(text = album.name, color = NasMusicColors.TextPrimary, fontSize = FontSize.body(), maxLines = 1, overflow = TextOverflow.Ellipsis)
+            // Task 9: 年份 + 流派行
+            val infoText = buildString {
+                if (album.year != null) append(album.year.toString())
+                if (!album.genre.isNullOrBlank()) {
+                    if (isNotEmpty()) append(" · ")
+                    append(album.genre)
+                }
+            }
+            if (infoText.isNotEmpty()) {
+                Text(text = infoText, color = NasMusicColors.TextSecondary, fontSize = FontSize.caption(), maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(text = album.artist.ifBlank { "—" }, color = LocalFocusableContentColor.current, fontSize = FontSize.small(), maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
                 if (onPlay != null) {
@@ -1070,6 +1364,8 @@ private fun ArtistCard(
     artist: String,
     coverUrl: String? = null,
     songCount: Int,
+    albumCount: Int = 0,
+    primaryGenre: String? = null,
     onClick: () -> Unit,
     onPlay: (() -> Unit)? = null,
     focusRequester: FocusRequester? = null
@@ -1114,11 +1410,24 @@ private fun ArtistCard(
             }
             Spacer(modifier = Modifier.height(6.dp))
             Text(text = artist, color = NasMusicColors.TextPrimary, fontSize = FontSize.body(), maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(text = stringResource(R.string.library_song_count_short, songCount), color = LocalFocusableContentColor.current, fontSize = FontSize.small(), modifier = Modifier.weight(1f))
-                if (onPlay != null) {
-                    Text(text = "▶", color = NasMusicColors.Primary, fontSize = FontSize.small(), modifier = Modifier.padding(start = 4.dp))
+            // Task 10: 专辑数 + 歌曲数
+            val countText = buildString {
+                if (albumCount > 0) append(stringResource(R.string.library_album_count_short, albumCount))
+                if (songCount > 0) {
+                    if (isNotEmpty()) append(" · ")
+                    append(stringResource(R.string.library_song_count_short, songCount))
                 }
+            }
+            if (countText.isNotEmpty()) {
+                Text(text = countText, color = NasMusicColors.TextSecondary, fontSize = FontSize.small(), maxLines = 1)
+            }
+            // Task 10: 流派标签
+            if (!primaryGenre.isNullOrBlank()) {
+                Text(text = primaryGenre, color = NasMusicColors.TextSecondary.copy(alpha = 0.7f), fontSize = FontSize.caption(), maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+            if (onPlay != null) {
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(text = "▶" + stringResource(R.string.player_play), color = NasMusicColors.Primary, fontSize = FontSize.small())
             }
         }
     }
@@ -1151,32 +1460,155 @@ fun ButtonChip(text: String, onClick: () -> Unit, modifier: Modifier = Modifier)
  * - 已连接 NAS 但库为空 → 提示库为空
  */
 @Composable
-private fun EmptyHint(isConnected: Boolean) {
+private fun EmptyHint(isConnected: Boolean, tab: LibraryTab = LibraryTab.ALBUMS) {
+    val (icon, title, subtitle) = if (!isConnected) {
+        Triple(
+            Icons.Default.CloudOff,
+            stringResource(R.string.common_not_connected),
+            stringResource(R.string.library_connect_or_local_hint)
+        )
+    } else when (tab) {
+        LibraryTab.ARTISTS -> Triple(
+            Icons.Default.Person,
+            stringResource(R.string.library_empty_artists),
+            stringResource(R.string.library_empty_artists_hint)
+        )
+        LibraryTab.SONGS -> Triple(
+            Icons.Default.MusicNote,
+            stringResource(R.string.library_empty_songs),
+            stringResource(R.string.library_empty_songs_hint)
+        )
+        else -> Triple(
+            Icons.Default.Album,
+            stringResource(R.string.library_empty_albums),
+            stringResource(R.string.library_empty_albums_hint)
+        )
+    }
     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            if (!isConnected) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                modifier = Modifier.size(64.dp),
+                tint = NasMusicColors.TextSecondary.copy(alpha = 0.5f)
+            )
+            Spacer(modifier = Modifier.height(16.dp))
+            Text(
+                text = title,
+                color = NasMusicColors.TextSecondary,
+                fontSize = FontSize.title()
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = subtitle,
+                color = NasMusicColors.TextSecondary.copy(alpha = 0.7f),
+                fontSize = FontSize.button()
+            )
+        }
+    }
+}
+
+/**
+ * 侧边 A-Z 索引条
+ *
+ * - 触摸：拖拽选择字母，松手回弹
+ * - 遥控器：聚焦后上下键选择，确认键跳转
+ * - currentLetter：当前可见区域的首字母，高亮显示
+ * - activeLetters：实际有数据的字母集合，其余灰显
+ * - onLetterSelect：点击/拖拽到某字母时回调，调用方负责 scroll
+ */
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+private fun SideLetterIndex(
+    currentLetter: Char?,
+    activeLetters: Set<Char>,
+    onLetterSelect: (Char) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val allLetters = remember { PinyinUtils.getAllGroupLetters() }
+    val focusRequester = remember { FocusRequester() }
+    var focusedLetter by remember { mutableStateOf<Char?>(null) }
+
+    // 手机横屏时字母排不下，用更小尺寸 + 可滚动
+    val isPhone = LocalPhoneCompact.current
+    val letterSize = if (isPhone) 14.dp else 20.dp
+    val letterFontSize = if (isPhone) 7.sp else 10.sp
+    val scrollState = rememberScrollState()
+
+    Column(
+        modifier = modifier
+            .fillMaxHeight()
+            .padding(end = 4.dp)
+            .then(if (isPhone) Modifier.verticalScroll(scrollState) else Modifier)
+            .focusRequester(focusRequester)
+            .focusTarget()
+            .onKeyEvent { event ->
+                if (event.type != KeyEventType.KeyDown) return@onKeyEvent false
+                val current = focusedLetter ?: currentLetter ?: return@onKeyEvent false
+                val idx = allLetters.indexOf(current)
+                when (event.key) {
+                    Key.DirectionUp -> {
+                        val prev = allLetters.getOrNull(idx - 1)
+                        if (prev != null) { focusedLetter = prev; onLetterSelect(prev) }
+                        true
+                    }
+                    Key.DirectionDown -> {
+                        val next = allLetters.getOrNull(idx + 1)
+                        if (next != null) { focusedLetter = next; onLetterSelect(next) }
+                        true
+                    }
+                    Key.Enter, Key.NumPadEnter -> {
+                        focusedLetter?.let(onLetterSelect)
+                        true
+                    }
+                    else -> false
+                }
+            }
+            .pointerInput(allLetters, letterSize) {
+                awaitPointerEventScope {
+                    while (true) {
+                        val event = awaitPointerEvent()
+                        if (event.type == PointerEventType.Press || event.type == PointerEventType.Release) {
+                            val change = event.changes.firstOrNull() ?: continue
+                            val y = change.position.y
+                            // SpaceBetween: first item starts at top, last at bottom
+                            val letterHeight = size.height.toFloat() / allLetters.size
+                            val idx = (y / letterHeight).toInt().coerceIn(0, allLetters.size - 1)
+                            val letter = allLetters[idx]
+                            if (event.type == PointerEventType.Press) {
+                                focusedLetter = letter
+                                onLetterSelect(letter)
+                            }
+                        }
+                    }
+                }
+            },
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = if (isPhone) Arrangement.Top else Arrangement.SpaceBetween
+    ) {
+        allLetters.forEach { letter ->
+            val isActive = letter in activeLetters
+            val isCurrent = letter == (focusedLetter ?: currentLetter)
+            Box(
+                modifier = Modifier
+                    .size(letterSize)
+                    .then(
+                        if (isCurrent) Modifier.background(
+                            NasMusicColors.Primary.copy(alpha = 0.3f),
+                            RoundedCornerShape(4.dp)
+                        ) else Modifier
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
                 Text(
-                    text = stringResource(R.string.common_not_connected),
-                    color = NasMusicColors.TextSecondary,
-                    fontSize = FontSize.title()
-                )
-                Spacer(modifier = Modifier.height(12.dp))
-                Text(
-                    text = stringResource(R.string.library_connect_or_local_hint),
-                    color = NasMusicColors.TextSecondary,
-                    fontSize = FontSize.button()
-                )
-            } else {
-                Text(
-                    text = stringResource(R.string.library_empty_title),
-                    color = NasMusicColors.TextSecondary,
-                    fontSize = FontSize.title()
-                )
-                Spacer(modifier = Modifier.height(12.dp))
-                Text(
-                    text = stringResource(R.string.library_empty_hint),
-                    color = NasMusicColors.TextSecondary,
-                    fontSize = FontSize.button()
+                    text = letter.toString(),
+                    color = when {
+                        isCurrent -> NasMusicColors.Primary
+                        isActive -> NasMusicColors.TextSecondary
+                        else -> NasMusicColors.TextSecondary.copy(alpha = 0.3f)
+                    },
+                    fontSize = letterFontSize,
+                    fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.Normal
                 )
             }
         }

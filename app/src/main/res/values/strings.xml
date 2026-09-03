@@ -508,6 +508,12 @@
     <string name="library_connect_or_local_hint">请连接 NAS 服务器、扫描本地音乐或索引百度网盘</string>
     <string name="library_empty_title">曲库为空</string>
     <string name="library_empty_hint">请在 NAS 音乐服务中添加音乐文件</string>
+    <string name="library_empty_albums">暂无专辑</string>
+    <string name="library_empty_albums_hint">连接 NAS 或扫描本地音乐后，专辑将在此显示</string>
+    <string name="library_empty_artists">暂无艺术家</string>
+    <string name="library_empty_artists_hint">播放音乐后，艺术家信息将自动聚合</string>
+    <string name="library_empty_songs">暂无歌曲</string>
+    <string name="library_empty_songs_hint">连接服务器或索引本地文件即可浏览歌曲</string>
     <string name="library_albums_count">专辑 (%d)</string>
     <string name="library_artists_count">艺术家 (%d)</string>
     <string name="library_searching">搜索中…</string>
@@ -523,6 +529,7 @@
     <string name="library_no_artists">暂无艺术家</string>
     <string name="library_tap_to_play">点击播放</string>
     <string name="library_song_count_short">%d首</string>
+    <string name="library_album_count_short">%d专辑</string>
 
     <!-- Common UI -->
     <string name="common_close">关闭</string>

@@ -436,6 +436,11 @@ fun AppRoot(
                     val radioStations by viewModel.radioStations.collectAsState(initial = UiState.Success(emptyList()))
                     val radioActiveTag by viewModel.radioActiveTag.collectAsState(initial = null)
                     val radioActiveQuery by viewModel.radioActiveQuery.collectAsState(initial = "")
+                    // ── Task 8: 滚动位置记忆 ──
+                    val albumScrollIndex by viewModel.albumScrollIndex.collectAsState()
+                    val albumScrollOffset by viewModel.albumScrollOffset.collectAsState()
+                    val artistScrollIndex by viewModel.artistScrollIndex.collectAsState()
+                    val artistScrollOffset by viewModel.artistScrollOffset.collectAsState()
                     // ── DISCOVER Tab state ──
                     val browseSelections by viewModel.browseSelections.collectAsState(initial = emptyList())
                     val browseResultsState by viewModel.browseResults.collectAsState(initial = UiState.Success(emptyList()))
@@ -571,7 +576,14 @@ fun AppRoot(
                         onLoadRadioDefault = { viewModel.loadRadioDefault() },
                         onLoadRadioTag = { tag -> viewModel.loadRadioTag(tag) },
                         onSearchRadio = { keyword -> viewModel.searchRadio(keyword) },
-                        onPlayRadioStation = { station -> viewModel.playRadioStation(station) }
+                        onPlayRadioStation = { station -> viewModel.playRadioStation(station) },
+                        // ── Task 8: 滚动位置记忆 ──
+                        albumScrollIndex = albumScrollIndex,
+                        albumScrollOffset = albumScrollOffset,
+                        artistScrollIndex = artistScrollIndex,
+                        artistScrollOffset = artistScrollOffset,
+                        onAlbumScrollPositionChange = { index, offset -> viewModel.saveAlbumScrollPosition(index, offset) },
+                        onArtistScrollPositionChange = { index, offset -> viewModel.saveArtistScrollPosition(index, offset) }
                     )
                     // 加入歌单选择弹窗
                     pickerSong?.let { song ->

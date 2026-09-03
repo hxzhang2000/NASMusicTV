@@ -82,4 +82,32 @@ object PinyinUtils {
         val initials = toPinyinInitials(text)
         return initials.isNotEmpty() && initials.contains(q)
     }
+
+    /**
+     * 获取文本的分组首字母（用于 A-Z 分组索引）。
+     * - 中文：取拼音首字母大写（"周杰伦" → 'Z'）
+     * - 英文/字母：首字符大写（"Taylor Swift" → 'T'）
+     * - 数字/符号/空：返回 '#'
+     *
+     * 用于专辑/艺术家列表的 A-Z 分组展示与侧边索引跳转。
+     */
+    fun getGroupLetter(text: String): Char {
+        if (text.isBlank()) return '#'
+        val firstChar = text.trim().first()
+        return when {
+            firstChar.code in 0x4E00..0x9FFF -> {
+                // CJK 统一表意文字：取拼音首字母大写
+                val py = Pinyin.toPinyin(firstChar)
+                if (py.isNotEmpty()) py.first().uppercaseChar() else '#'
+            }
+            firstChar.isLetter() -> firstChar.uppercaseChar()
+            else -> '#'
+        }
+    }
+
+    /**
+     * 索引条所有可能的字母列表（A-Z + #），用于侧边索引条渲染。
+     * 实际显示时由调用方过滤掉无数据的字母。
+     */
+    fun getAllGroupLetters(): List<Char> = ('A'..'Z').toList() + '#'
 }

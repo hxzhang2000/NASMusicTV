@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
@@ -271,8 +272,16 @@ fun NASMusicTVTheme(
         normalLine = LyricsTheme.normalLine,
         dimLine = LyricsTheme.dimLine
     )
+    // Task 12: 检测系统高对比度模式
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val isHighContrast = remember {
+        val uiMode = context.resources.configuration.uiMode
+        (uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK) == android.content.res.Configuration.UI_MODE_NIGHT_YES &&
+        (uiMode and 0x20000) != 0 // UI_MODE_NIGHT_YES 高对比度标志
+    }
     androidx.compose.runtime.CompositionLocalProvider(
-        LocalLyricsTheme provides lyricsTheme
+        LocalLyricsTheme provides lyricsTheme,
+        LocalHighContrast provides isHighContrast
     ) {
         MaterialTheme(
             colorScheme = colorScheme,
@@ -338,5 +347,25 @@ object CompactSizes {
 
 /** 当前是否处于手机紧凑模式（MainActivity 按设备类型提供） */
 val LocalPhoneCompact = androidx.compose.runtime.staticCompositionLocalOf { false }
+
+/**
+ * Task 12: 高对比度模式
+ *
+ * 读取系统 UI_MODE_MASK_HIGH_CONTRAST 标志，提供 CompositionLocal 供组件使用。
+ * 高对比度模式下：分割线加粗、焦点边框加宽、文字对比增强。
+ */
+val LocalHighContrast = androidx.compose.runtime.staticCompositionLocalOf { false }
+
+/**
+ * 高对比度模式下的颜色增强
+ */
+object HighContrastColors {
+    /** 加强的主色 — 比 Primary 更亮 */
+    val PrimaryBright = Color(0xFF5EEAD4)
+    /** 加强的文字色 — 纯白 */
+    val TextPrimary = Color(0xFFFFFFFF)
+    /** 加强的分割线色 */
+    val BorderStrong = Color(0xFF4A5A72)
+}
 
 
