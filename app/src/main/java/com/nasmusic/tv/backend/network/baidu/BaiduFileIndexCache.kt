@@ -32,6 +32,11 @@ class BaiduFileIndexCache(context: Context) {
     private val file: File = File(context.filesDir, "baidu_index.json")
     private val gson = Gson()
 
+    /** 内存缓存：避免每次 allSongs() 都从磁盘反序列化 */
+    @Volatile
+    private var cachedIndex: BaiduFileIndex? = null
+    private val cacheLock = Any()
+
     /** 扫描进度回调 */
     interface ProgressCallback {
         /** @param scanned 已扫描文件数 */
@@ -42,13 +47,18 @@ class BaiduFileIndexCache(context: Context) {
         fun onFailed(message: String)
     }
 
-    /** 加载索引 */
+    /** 加载索引（带内存缓存） */
     fun load(): BaiduFileIndex? {
+        cachedIndex?.let { return it }
         return try {
             if (!file.exists()) return null
             val json = file.readText()
             val type = object : TypeToken<BaiduFileIndex>() {}.type
-            gson.fromJson<BaiduFileIndex>(json, type)
+            val index = gson.fromJson<BaiduFileIndex>(json, type)
+            synchronized(cacheLock) {
+                cachedIndex = index
+            }
+            index
         } catch (e: Exception) {
             AppLog.w(TAG, "load error", e)
             null
@@ -58,6 +68,9 @@ class BaiduFileIndexCache(context: Context) {
     fun save(index: BaiduFileIndex) {
         try {
             file.writeText(gson.toJson(index))
+            synchronized(cacheLock) {
+                cachedIndex = index
+            }
         } catch (e: Exception) {
             AppLog.w(TAG, "save error", e)
         }
@@ -66,6 +79,9 @@ class BaiduFileIndexCache(context: Context) {
     fun clear() {
         try { if (file.exists()) file.delete() } catch (e: Exception) {
             AppLog.w(TAG, "clear error", e)
+        }
+        synchronized(cacheLock) {
+            cachedIndex = null
         }
     }
 

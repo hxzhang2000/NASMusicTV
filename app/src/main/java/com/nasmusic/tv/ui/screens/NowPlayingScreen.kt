@@ -36,6 +36,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.tv.material3.ExperimentalTvMaterial3Api
@@ -494,11 +495,13 @@ private fun CoverColumn(
                     contentColor = NasMusicColors.TextPrimary,
                     focusedContentColor = NasMusicColors.Primary
                 ) {
-                    Text(
+Text(
                         text = title,
                         color = NasMusicColors.TextPrimary,
                         fontSize = FontSize.title(),
                         textAlign = TextAlign.Center,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.weight(1f).padding(horizontal = 4.dp, vertical = 2.dp)
                     )
                 }
@@ -598,11 +601,13 @@ private fun CoverColumn(
                 contentColor = NasMusicColors.TextPrimary,
                 focusedContentColor = NasMusicColors.Primary
             ) {
-                Text(
+Text(
                     text = artist,
                     color = LocalFocusableContentColor.current,
                     fontSize = FontSize.button(),
                     textAlign = TextAlign.Center,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 2.dp)
                 )
             }

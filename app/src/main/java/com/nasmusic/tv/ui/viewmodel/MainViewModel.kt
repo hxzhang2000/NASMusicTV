@@ -75,6 +75,7 @@ import kotlinx.coroutines.Dispatchers
 import com.nasmusic.tv.util.ArtistSplitter
 import com.nasmusic.tv.util.BackupFileUtils
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.delay
@@ -789,8 +790,6 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
 
     init {
         viewModelScope.launch {
-            // 初始化全量 API 版本号聚合（静态外部服务 + 已连接后端）
-            refreshApiVersions()
             // 初始化播放模式（B-13: 从预设置恢复）
             val settings = prefs.appSettings.first()
             _playMode.value = settings.defaultPlayMode
@@ -812,19 +811,32 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
                 _showConnectPrompt.value = true
             }
             // 无配置时不强制跳转，保持首页（用户可自行去 设置 → 服务器 配置）
+        }
 
-            // 从磁盘恢复百度网盘索引状态（已扫描歌曲数 + 连接状态）
-            val baiduCfg = prefs.getBaiduConfigSync()
-            if (baiduCfg.isActive) {
-                val savedIndex = baiduIndexCache.load()
-                if (savedIndex != null && savedIndex.entries.isNotEmpty()) {
-                    _baiduIndexScanned.value = savedIndex.entries.size
-                    _baiduIndexLastSync.value = savedIndex.lastSyncAt
-                }
-                _baiduConnectionState.value = if (baiduCfg.tokens != null) BaiduConnectionState.LoggedIn else BaiduConnectionState.Off
-                // 百度索引有数据时触发合并
-                if (savedIndex != null && savedIndex.entries.isNotEmpty()) {
-                    updateMergedData()
+        // 后台异步：API 版本号聚合（网络请求，不阻塞启动）
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) {
+                refreshApiVersions()
+            }
+        }
+
+        // 后台异步：从磁盘恢复百度网盘索引状态 + 触发合并
+        // 注意：不能用 launch(Dispatchers.Default) 直接启动，否则协程可能在
+        // _baiduConnectionState 等属性初始化之前执行导致 NPE
+        viewModelScope.launch {
+            withContext(Dispatchers.Default) {
+                val baiduCfg = prefs.getBaiduConfigSync()
+                if (baiduCfg.isActive) {
+                    val savedIndex = baiduIndexCache.load()
+                    if (savedIndex != null && savedIndex.entries.isNotEmpty()) {
+                        _baiduIndexScanned.value = savedIndex.entries.size
+                        _baiduIndexLastSync.value = savedIndex.lastSyncAt
+                    }
+                    _baiduConnectionState.value = if (baiduCfg.tokens != null) BaiduConnectionState.LoggedIn else BaiduConnectionState.Off
+                    // 百度索引有数据时触发合并（在 Default 线程计算，不卡 UI）
+                    if (savedIndex != null && savedIndex.entries.isNotEmpty()) {
+                        updateMergedData()
+                    }
                 }
             }
         }
@@ -1224,18 +1236,21 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
      * @param newSongs 新增的歌曲列表
      */
     private fun buildArtistMapsIncremental(newSongs: List<Song>) {
-        val songMap = _songArtistMap.value.toMutableMap()
-        val artistMap = _artistSongsMap.value.mapValues { it.value.toMutableList() }.toMutableMap()
+        if (newSongs.isEmpty()) return
+        viewModelScope.launch(Dispatchers.Default) {
+            val songMap = _songArtistMap.value.toMutableMap()
+            val artistMap = _artistSongsMap.value.mapValues { it.value.toMutableList() }.toMutableMap()
 
-        for (song in newSongs) {
-            val artists = ArtistSplitter.split(song.artist)
-            songMap[song.id] = artists
-            for (name in artists) {
-                artistMap.getOrPut(name) { mutableListOf() }.add(song)
+            for (song in newSongs) {
+                val artists = ArtistSplitter.split(song.artist)
+                songMap[song.id] = artists
+                for (name in artists) {
+                    artistMap.getOrPut(name) { mutableListOf() }.add(song)
+                }
             }
+            _songArtistMap.value = songMap
+            _artistSongsMap.value = artistMap
         }
-        _songArtistMap.value = songMap
-        _artistSongsMap.value = artistMap
     }
 
     /**
@@ -2158,27 +2173,29 @@ showError(getApplication<Application>().getString(R.string.toggle_favorite_error
       * NAS 数据（albums/artists） + 本地歌曲（localSongs）+ 百度网盘索引 按 name 去重合并
       */
     private fun updateMergedData() {
-        val nasAlbums = _albums.value.dataOrNull() ?: emptyList()
-        val nasArtists = _artists.value.dataOrNull() ?: emptyList()
-        val localSongs = _localSongs.value
-        val baiduSongs = baiduIndexCache.allSongs()
+        viewModelScope.launch(Dispatchers.Default) {
+            val nasAlbums = _albums.value.dataOrNull() ?: emptyList()
+            val nasArtists = _artists.value.dataOrNull() ?: emptyList()
+            val localSongs = _localSongs.value
+            val baiduSongs = baiduIndexCache.allSongs()
 
-        _mergedAlbums.value = MusicMerger.mergeAlbums(
-            nasAlbums = nasAlbums,
-            localAlbums = MusicMerger.buildLocalAlbums(localSongs),
-            baiduAlbums = MusicMerger.buildBaiduAlbums(baiduSongs)
-        )
-        _mergedArtists.value = MusicMerger.mergeArtists(
-            nasArtists = nasArtists,
-            localArtists = MusicMerger.buildLocalArtists(localSongs),
-            baiduArtists = MusicMerger.buildBaiduArtists(baiduSongs)
-        )
+            _mergedAlbums.value = MusicMerger.mergeAlbums(
+                nasAlbums = nasAlbums,
+                localAlbums = MusicMerger.buildLocalAlbums(localSongs),
+                baiduAlbums = MusicMerger.buildBaiduAlbums(baiduSongs)
+            )
+            _mergedArtists.value = MusicMerger.mergeArtists(
+                nasArtists = nasArtists,
+                localArtists = MusicMerger.buildLocalArtists(localSongs),
+                baiduArtists = MusicMerger.buildBaiduArtists(baiduSongs)
+            )
 
-        // 异步解析缺失封面（百度侧车/APIC → iTunes → 本地ID3 → 歌曲 coverUrl 兜底）
-        resolveAlbumCoversAsync()
+            // 用全量歌曲反向统计艺术家 songCount
+            updateArtistSongCounts()
 
-        // 用全量歌曲反向统计艺术家 songCount
-        updateArtistSongCounts()
+            // 异步解析缺失封面（百度侧车/APIC → iTunes → 本地ID3 → 歌曲 coverUrl 兜底）
+            resolveAlbumCoversAsync()
+        }
     }
 
     /**
@@ -2320,14 +2337,12 @@ showError(getApplication<Application>().getString(R.string.toggle_favorite_error
     val artistDetailSongsCache: StateFlow<Map<String, List<Song>>> = _artistDetailSongsCache.asStateFlow()
 
     fun loadArtistSongs(artistName: String) {
-        // 清掉当前歌手的缓存，确保用新格式重新拉取
-        val currentMap = _artistSongsMap.value.toMutableMap()
-        currentMap.remove(artistName)
-        _artistSongsMap.value = currentMap
-        _artistDetailSongsCache.value = _artistDetailSongsCache.value.toMutableMap().apply { remove(artistName) }
+        viewModelScope.launch(Dispatchers.Default) {
+            // 清掉当前歌手的缓存，确保用新格式重新拉取（在后台线程避免复制大Map卡UI）
+            _artistSongsMap.value = _artistSongsMap.value.toMutableMap().apply { remove(artistName) }
+            _artistDetailSongsCache.value = _artistDetailSongsCache.value.toMutableMap().apply { remove(artistName) }
 
-        // 从后端加载
-        viewModelScope.launch {
+            // 从后端加载
             val adapter = backendRegistry.getAdapter()
             if (adapter != null) {
                 try {
