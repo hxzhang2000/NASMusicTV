@@ -122,6 +122,9 @@ fun AppRoot(
     val coverFilterEnabled by viewModel.prefs.coverFilterEnabled.collectAsState(initial = false)
     val coverFilterBlurRadius by viewModel.prefs.coverFilterBlurRadius.collectAsState(initial = 8f)
     val coverFilterDarkOverlay by viewModel.prefs.coverFilterDarkOverlay.collectAsState(initial = 0.3f)
+
+    // 加入歌单弹窗目标歌曲（提升到 AppRoot 顶层，供 Library / 专辑详情 / 艺术家详情 共用）
+    var pickerSong by remember { mutableStateOf<Song?>(null) }
     // 天气 API Key
     val weatherApiKey by viewModel.prefs.weatherApiKey.collectAsState(initial = "")
     // 百度网盘状态（设置页网盘分区）
@@ -428,7 +431,6 @@ fun AppRoot(
                     val libraryActiveTab by viewModel.libraryActiveTab.collectAsState()
                     val librarySearchKeyword by viewModel.librarySearchKeyword.collectAsState()
                     val enabledSearchSources by viewModel.enabledSearchSources.collectAsState()
-                    val localPlaylists by viewModel.localPlaylists.collectAsState(initial = emptyList())
                     val searchHistory by viewModel.searchHistory.collectAsState(initial = emptyList())
                     var pickerSong by remember { mutableStateOf<Song?>(null) }
 
@@ -585,22 +587,6 @@ fun AppRoot(
                         onAlbumScrollPositionChange = { index, offset -> viewModel.saveAlbumScrollPosition(index, offset) },
                         onArtistScrollPositionChange = { index, offset -> viewModel.saveArtistScrollPosition(index, offset) }
                     )
-                    // 加入歌单选择弹窗
-                    pickerSong?.let { song ->
-                        PlaylistPickerDialog(
-                            playlists = localPlaylists,
-                            onPick = { playlist ->
-                                viewModel.addSongToPlaylist(playlist.id, song)
-                                pickerSong = null
-                            },
-                            onCreate = { name ->
-                                if (name.isNotBlank()) {
-                                    viewModel.createLocalPlaylist(name)
-                                }
-                            },
-                            onDismiss = { pickerSong = null }
-                        )
-                    }
                 }
                 Screen.Mine -> {
                     val favoriteSongsState by viewModel.favoriteSongs.collectAsState(initial = UiState.Success(emptyList()))
@@ -829,12 +815,15 @@ fun AppRoot(
                 }
                 Screen.AlbumDetail -> {
                     val selectedAlbum by viewModel.selectedAlbum.collectAsState(initial = null)
+                    val mergedAlbums by viewModel.mergedAlbums.collectAsState(initial = emptyList())
                     val albumSongsCache by viewModel.albumSongsCache.collectAsState(initial = emptyMap())
-                    val albumSongs = selectedAlbum?.let { albumSongsCache[it.id] } ?: emptyList()
+                    // 用 mergedAlbums 中的实时专辑（含已异步解析封面），避免 openAlbumDetail 时冻结快照无封面
+                    val liveAlbum = selectedAlbum?.let { sa -> mergedAlbums.firstOrNull { it.id == sa.id } ?: sa }
+                    val albumSongs = liveAlbum?.let { albumSongsCache[it.id] } ?: emptyList()
                     val favoriteIds by viewModel.favoriteIds.collectAsState(initial = emptySet())
-                    if (selectedAlbum != null) {
+                    if (liveAlbum != null) {
                         AlbumDetailScreen(
-                            album = selectedAlbum!!,
+                            album = liveAlbum,
                             songs = albumSongs,
                             onPlaySong = { song ->
                                 val albumSongs = selectedAlbum?.let { viewModel.getAlbumSongsCache(it.id) } ?: listOf(song)
@@ -849,7 +838,8 @@ fun AppRoot(
                             queueSongIds = viewModel.queueSongIds.collectAsState(initial = emptySet()).value,
                             onToggleQueue = { song -> viewModel.toggleQueueSong(song) },
                             favoriteIds = favoriteIds,
-                            onToggleFavorite = { song -> viewModel.toggleFavorite(song) }
+                            onToggleFavorite = { song -> viewModel.toggleFavorite(song) },
+                            onAddToPlaylist = { song -> pickerSong = song }
                         )
                     }
                 }
@@ -879,7 +869,8 @@ fun AppRoot(
                             queueSongIds = viewModel.queueSongIds.collectAsState(initial = emptySet()).value,
                             onToggleQueue = { song -> viewModel.toggleQueueSong(song) },
                             favoriteIds = favoriteIds,
-                            onToggleFavorite = { song -> viewModel.toggleFavorite(song) }
+                            onToggleFavorite = { song -> viewModel.toggleFavorite(song) },
+                            onAddToPlaylist = { song -> pickerSong = song }
                         )
                     }
                 }
@@ -957,6 +948,25 @@ fun AppRoot(
                 }
             }
 }
+
+    // 加入歌单弹窗（Library / 专辑详情 / 艺术家详情 共用，提升到 AppRoot 顶层跨页面生效）
+    pickerSong?.let { song ->
+        val dlgPlaylists by viewModel.localPlaylists.collectAsState(initial = emptyList())
+        PlaylistPickerDialog(
+            playlists = dlgPlaylists,
+            onPick = { playlist ->
+                viewModel.addSongToPlaylist(playlist.id, song)
+                pickerSong = null
+            },
+            onCreate = { name ->
+                if (name.isNotBlank()) {
+                    viewModel.createLocalPlaylist(name)
+                }
+            },
+            onDismiss = { pickerSong = null }
+        )
+    }
+
     }
 
 }

@@ -64,8 +64,13 @@ object BaiduHttpDataSourceFactory {
             val req = chain.request()
             val urlStr = req.url.toString()
             val host = req.url.host
-            // 百度 dlink 域名：注入 pan.baidu.com UA + Referer
-            val isBaiduHost = BaiduNetdiskConfig.DLINK_HOST_MARKERS.any { host.contains(it) || urlStr.contains(it) }
+            // 百度 dlink 域名：注入 pan.baidu.com UA + Referer。
+            // 早期写死 3 个 marker（d.pcs.baidu.com / pan.baidu.com / dDownList），
+            // 但百度 dlink 实际下发/重定向到的 CDN 主机常不在这 3 个里面，
+            // 导致 UA 未注入 → dlink 请求被 403 → 播放无声。
+            // 改为匹配任意 *.baidu.com 主机，确保 dlink 请求一定带 UA；
+            // API 请求本就用 pan.baidu.com UA（BaiduPanApi.execute 已设），此处为幂等。
+            val isBaiduHost = host.contains("baidu.com") || urlStr.contains("baidu.com")
             // B 站域名：注入浏览器 UA + bilibili Referer（与 BilibiliMvService 防盗链一致）
             val isBilibiliHost = host.contains("bilibili") || host.contains("bilivideo") ||
                 host.contains("bilivideo") || urlStr.contains("bilivideo")

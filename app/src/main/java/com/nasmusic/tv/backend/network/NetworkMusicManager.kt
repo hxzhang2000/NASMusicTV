@@ -91,13 +91,20 @@ class NetworkMusicManager(
      * 缓存策略：同一歌曲 5 分钟内复用缓存的播放链接，避免重复网络请求。
      * 播放链接有时效性，缓存过期后重新解析。
      */
+    /** 运行时查询某源是否已注册（供播放前自愈判断） */
+    fun isServiceRegistered(sourceId: String): Boolean = services.containsKey(sourceId)
+
     suspend fun resolvePlayUrl(song: Song): String? {
         if (!song.isNetworkSong) return song.streamUrl
-        val src = song.networkSource ?: return null
-        val svc = services[src] ?: run {
-            AppLog.w(TAG, "resolvePlayUrl: unknown source=$src")
+        val src = song.networkSource ?: run {
+            AppLog.e(TAG, "resolvePlayUrl: networkSource 为 null（song id=${song.id} title=${song.title}），无法路由")
             return null
         }
+        val svc = services[src] ?: run {
+            AppLog.e(TAG, "resolvePlayUrl: 未注册源 source=$src（song id=${song.id}）；已注册源=${services.keys}")
+            return null
+        }
+        AppLog.e(TAG, "resolvePlayUrl: 路由到 source=$src (song id=${song.id} networkId=${song.networkId})")
 
         // 清理过期缓存条目
         val now = System.currentTimeMillis()

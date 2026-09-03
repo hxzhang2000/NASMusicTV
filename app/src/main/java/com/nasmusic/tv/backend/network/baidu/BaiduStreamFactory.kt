@@ -31,16 +31,27 @@ class BaiduStreamFactory(
      */
     suspend fun resolveStreamUrl(fsId: Long): String? = withContext(Dispatchers.IO) {
         val metas = api.fileMetas(listOf(fsId))
-        val dlink = metas.firstOrNull()?.dlink ?: run {
-            AppLog.w(TAG, "resolveStreamUrl: dlink missing for fsId=$fsId")
+        val dlink = metas.firstOrNull()?.dlink
+        if (dlink.isNullOrBlank()) {
+            AppLog.e(TAG, "resolveStreamUrl: dlink missing/empty for fsId=$fsId (metas=${metas.size}) —— filemetas 可能 errno 非 0 或 token 失效")
             return@withContext null
         }
-        val token = oauth.getValidAccessToken() ?: return@withContext null
-        // dlink 可能不含 access_token，需手动补
-        if (!dlink.contains("access_token=")) {
+        val token = oauth.getValidAccessToken()
+        if (token.isNullOrBlank()) {
+            AppLog.e(TAG, "resolveStreamUrl: access_token 不可用（fsId=$fsId），用户可能需重新授权百度网盘")
+            return@withContext null
+        }
+        // dlink 可能不含 access_token，需手动补（Baidu 要求 dlink 携带 token 才能下载）
+        val finalUrl = if (!dlink.contains("access_token=")) {
             dlink + (if (dlink.contains('?')) "&" else "?") +
                 "access_token=" + URLEncoder.encode(token, "UTF-8")
         } else dlink
+        // 记录 dlink 主机，便于回放时确认 UA 拦截器是否命中（命中条件：host 含 baidu.com）
+        val dlinkHost = finalUrl.substringBefore('?').let { url ->
+            url.substringAfter("//").substringBefore('/').ifBlank { url }
+        }
+        AppLog.e(TAG, "resolveStreamUrl: fsId=$fsId → dlink host=$dlinkHost (UA 注入需 host 含 baidu.com)")
+        finalUrl
     }
 
     companion object {

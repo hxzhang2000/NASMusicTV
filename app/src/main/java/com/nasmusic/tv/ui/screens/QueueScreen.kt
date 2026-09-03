@@ -66,6 +66,7 @@ import com.nasmusic.tv.ui.components.FocusableSurface
 import com.nasmusic.tv.ui.theme.NasMusicBrushes
 import com.nasmusic.tv.ui.theme.NasMusicColors
 import com.nasmusic.tv.util.TimeUtils
+import com.nasmusic.tv.ui.components.common.SourceBadge
 import kotlinx.coroutines.launch
 
 /**
@@ -293,6 +294,8 @@ fun QueueScreen(
                                         Text(text = song.title, color = if (isCurrent) NasMusicColors.Primary else NasMusicColors.TextPrimary, fontSize = FontSize.subtitle(), maxLines = 1, overflow = TextOverflow.Ellipsis)
                                         Text(text = song.artist.ifBlank { "-" }, color = NasMusicColors.TextSecondary, fontSize = FontSize.button(), maxLines = 1, overflow = TextOverflow.Ellipsis)
                                     }
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    SourceBadge(song = song)
                                     Spacer(modifier = Modifier.width(12.dp))
                                     Text(text = TimeUtils.formatDuration(song.durationMs), color = NasMusicColors.TextSecondary, fontSize = FontSize.button())
                                 }

@@ -24,7 +24,8 @@ class BaiduNetdiskService(
     private val lyricsProvider: BaiduLyricsProvider,
     private val coverProvider: BaiduCoverProvider,
     private val indexCache: BaiduFileIndexCache,
-    private val prefs: AppPreferences
+    private val prefs: AppPreferences,
+    private val networkCoverSearch: suspend (title: String, artist: String) -> String? = { _, _ -> null }
 ) : NetworkMusicService {
 
     override val sourceId = "baidu"
@@ -83,7 +84,7 @@ class BaiduNetdiskService(
     /** 解析播放 URL：fs_id -> dlink（复用 NetworkMusicManager 的 playUrlCache，全局 5min TTL） */
     override suspend fun resolvePlayUrl(song: Song): String? {
         val fsId = song.networkId?.toLongOrNull() ?: run {
-            AppLog.w(TAG, "resolvePlayUrl: missing networkId for ${song.id}")
+            AppLog.e(TAG, "resolvePlayUrl: missing networkId for ${song.id}")
             return null
         }
         return streamFactory.resolveStreamUrl(fsId)
@@ -95,10 +96,15 @@ class BaiduNetdiskService(
         return lyricsProvider.getLyrics(fsId, song.title, song.artist.ifBlank { null }, song.path)
     }
 
-    /** 封面：侧车 cover → 内嵌 APIC → 上层网络匹配 fallback */
+    /** 封面：侧车 cover → 内嵌 APIC → 网络封面（Meting/网易云）fallback */
     override suspend fun resolveCoverUrl(song: Song): String? {
         val fsId = song.networkId?.toLongOrNull() ?: return null
-        return coverProvider.getCover(fsId, song.title, song.artist.ifBlank { null }, song.path)
+        // 优先百度侧车/内嵌 APIC；百度歌曲大多无内嵌封面，回退到网络封面
+        val local = coverProvider.getCover(fsId, song.title, song.artist.ifBlank { null }, song.path)
+        if (local != null) return local
+        return runCatching {
+            networkCoverSearch(song.title, song.artist.ifBlank { "" })
+        }.getOrNull()
     }
 
     /** 网络封面搜索由 Meting 等源承担，百度源不单独实现 */

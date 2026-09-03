@@ -46,6 +46,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusTarget
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
@@ -684,6 +685,8 @@ private fun AlbumsTab(
     listState: LazyGridState = rememberLazyGridState()
 ) {
     val firstItemFocusRequester = remember { FocusRequester() }
+    val letterFocusRequester = remember { FocusRequester() }
+    var focusedGridIndex by remember { mutableStateOf(-1) }
     val scope = rememberCoroutineScope()
     val listBackHandler = LocalListBackHandler.current
 
@@ -740,16 +743,30 @@ private fun AlbumsTab(
             fontSize = FontSize.subtitle(),
             modifier = Modifier.padding(bottom = 12.dp)
         )
-        Row(modifier = Modifier.fillMaxSize()) {
+        Box(modifier = Modifier.fillMaxSize()) {
             // Task 11: 横向滚动边缘渐变提示
             val canScrollHorizontally by remember {
                 derivedStateOf { listState.canScrollForward || listState.canScrollBackward }
             }
-            Box(modifier = Modifier.weight(1f)) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .onKeyEvent { event ->
+                        if (event.type == KeyEventType.KeyDown && event.key == Key.DirectionRight) {
+                            val items = listState.layoutInfo.visibleItemsInfo
+                            val info = items.firstOrNull { it.index == focusedGridIndex }
+                            val lastColumn = items.maxOfOrNull { it.column } ?: 0
+                            if (info != null && info.column == lastColumn) {
+                                letterFocusRequester.requestFocus()
+                                true
+                            } else false
+                        } else false
+                    }
+            ) {
                 LazyVerticalGrid(
                     state = listState,
                     columns = GridCells.Fixed(adaptiveColumns(6, 3, 6)),
-                    modifier = Modifier.fillMaxSize(),
+                    modifier = Modifier.fillMaxSize().padding(end = 24.dp),
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
@@ -777,12 +794,14 @@ private fun AlbumsTab(
                         }
                         // 数据行（key 加 index 防重名：同名专辑可来自多个源）
                         item(key = "album_${index}_${album.id}", span = { GridItemSpan(1) }) {
-                            AlbumCard(
-                                album = album,
-                                onClick = { onOpenAlbumDetail?.invoke(album) ?: onPlayAlbum(album) },
-                                onPlay = { onPlayAlbum(album) },
-                                focusRequester = if (index == 1) firstItemFocusRequester else null
-                            )
+                            Box(Modifier.onFocusChanged { if (it.isFocused) focusedGridIndex = index }) {
+                                AlbumCard(
+                                    album = album,
+                                    onClick = { onOpenAlbumDetail?.invoke(album) ?: onPlayAlbum(album) },
+                                    onPlay = { onPlayAlbum(album) },
+                                    focusRequester = if (index == 1) firstItemFocusRequester else null
+                                )
+                            }
                         }
                     }
                 }
@@ -799,8 +818,11 @@ private fun AlbumsTab(
                 }
             }
             SideLetterIndex(
+                modifier = Modifier.align(Alignment.CenterEnd).padding(end = 2.dp),
                 currentLetter = currentLetter,
                 activeLetters = activeLetters,
+                contentFocusRequester = firstItemFocusRequester,
+                letterFocusRequester = letterFocusRequester,
                 onLetterSelect = { letter ->
                     groupHeaderIndices[letter]?.let { idx ->
                         scope.launch { listState.scrollToItem(idx) }
@@ -820,6 +842,8 @@ private fun ArtistsTab(
     listState: LazyGridState = rememberLazyGridState()
 ) {
     val firstItemFocusRequester = remember { FocusRequester() }
+    val letterFocusRequester = remember { FocusRequester() }
+    var focusedGridIndex by remember { mutableStateOf(-1) }
     val scope = rememberCoroutineScope()
     val listBackHandler = LocalListBackHandler.current
 
@@ -876,16 +900,30 @@ private fun ArtistsTab(
             fontSize = FontSize.subtitle(),
             modifier = Modifier.padding(bottom = 12.dp)
         )
-        Row(modifier = Modifier.fillMaxSize()) {
+        Box(modifier = Modifier.fillMaxSize()) {
             // Task 11: 横向滚动边缘渐变提示
             val canScrollHorizontally by remember {
                 derivedStateOf { listState.canScrollForward || listState.canScrollBackward }
             }
-            Box(modifier = Modifier.weight(1f)) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .onKeyEvent { event ->
+                        if (event.type == KeyEventType.KeyDown && event.key == Key.DirectionRight) {
+                            val items = listState.layoutInfo.visibleItemsInfo
+                            val info = items.firstOrNull { it.index == focusedGridIndex }
+                            val lastColumn = items.maxOfOrNull { it.column } ?: 0
+                            if (info != null && info.column == lastColumn) {
+                                letterFocusRequester.requestFocus()
+                                true
+                            } else false
+                        } else false
+                    }
+            ) {
                 LazyVerticalGrid(
                     state = listState,
                     columns = GridCells.Fixed(adaptiveColumns(6, 3, 6)),
-                    modifier = Modifier.fillMaxSize(),
+                    modifier = Modifier.fillMaxSize().padding(end = 24.dp),
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
@@ -920,22 +958,24 @@ private fun ArtistsTab(
                             val primaryGenreForArtist = remember(artistSongs) {
                                 artistSongs.mapNotNull { it.genre }.groupingBy { it }.eachCount().maxByOrNull { it.value }?.key
                             }
-                            ArtistCard(
-                                artist = artist.name,
-                                coverUrl = artist.coverUrl,
-                                songCount = songCount,
-                                albumCount = albumCountForArtist,
-                                primaryGenre = primaryGenreForArtist,
-                                onClick = {
-                                    if (onOpenArtistDetail != null) {
-                                        onOpenArtistDetail(artist.name)
-                                    } else if (artistSongs.isNotEmpty()) {
-                                        onPlaySongs(artistSongs)
-                                    }
-                                },
-                                onPlay = if (artistSongs.isNotEmpty()) {{ onPlaySongs(artistSongs) }} else null,
-                                focusRequester = if (index == 1) firstItemFocusRequester else null
-                            )
+                            Box(Modifier.onFocusChanged { if (it.isFocused) focusedGridIndex = index }) {
+                                ArtistCard(
+                                    artist = artist.name,
+                                    coverUrl = artist.coverUrl,
+                                    songCount = songCount,
+                                    albumCount = albumCountForArtist,
+                                    primaryGenre = primaryGenreForArtist,
+                                    onClick = {
+                                        if (onOpenArtistDetail != null) {
+                                            onOpenArtistDetail(artist.name)
+                                        } else if (artistSongs.isNotEmpty()) {
+                                            onPlaySongs(artistSongs)
+                                        }
+                                    },
+                                    onPlay = if (artistSongs.isNotEmpty()) {{ onPlaySongs(artistSongs) }} else null,
+                                    focusRequester = if (index == 1) firstItemFocusRequester else null
+                                )
+                            }
                         }
                     }
                 }
@@ -952,8 +992,11 @@ private fun ArtistsTab(
                 }
             }
             SideLetterIndex(
+                modifier = Modifier.align(Alignment.CenterEnd).padding(end = 2.dp),
                 currentLetter = currentLetter,
                 activeLetters = activeLetters,
+                contentFocusRequester = firstItemFocusRequester,
+                letterFocusRequester = letterFocusRequester,
                 onLetterSelect = { letter ->
                     groupHeaderIndices[letter]?.let { idx ->
                         scope.launch { listState.scrollToItem(idx) }
@@ -1523,10 +1566,11 @@ private fun SideLetterIndex(
     currentLetter: Char?,
     activeLetters: Set<Char>,
     onLetterSelect: (Char) -> Unit,
+    contentFocusRequester: FocusRequester,
+    letterFocusRequester: FocusRequester = remember { FocusRequester() },
     modifier: Modifier = Modifier
 ) {
     val allLetters = remember { PinyinUtils.getAllGroupLetters() }
-    val focusRequester = remember { FocusRequester() }
     var focusedLetter by remember { mutableStateOf<Char?>(null) }
 
     // 手机横屏时字母排不下，用更小尺寸 + 可滚动
@@ -1541,9 +1585,10 @@ private fun SideLetterIndex(
     Column(
         modifier = modifier
             .fillMaxHeight()
+            .width(letterSize + 8.dp)
             .padding(end = 4.dp)
             .then(if (isPhone) Modifier.verticalScroll(scrollState) else Modifier)
-            .focusRequester(focusRequester)
+            .focusRequester(letterFocusRequester)
             .focusTarget()
             .onKeyEvent { event ->
                 if (event.type != KeyEventType.KeyDown) return@onKeyEvent false
@@ -1562,6 +1607,11 @@ private fun SideLetterIndex(
                     }
                     Key.Enter, Key.NumPadEnter -> {
                         focusedLetter?.let(onLetterSelect)
+                        true
+                    }
+                    Key.DirectionLeft -> {
+                        // 从字母索引条返回左侧内容区
+                        contentFocusRequester.requestFocus()
                         true
                     }
                     else -> false

@@ -133,6 +133,8 @@ class BaiduPanApi(
         }
         execute(url) { json ->
             val list = pickListArray(json)
+            val firstDlink = list.firstOrNull()?.get("dlink")?.asString?.take(90)
+            AppLog.e(TAG, "fileMetas: fsIds=$fsIds → listSize=${list.size} firstDlink=${firstDlink}")
             list.mapNotNull { parseBaiduFileMeta(it) }
         } ?: emptyList()
     }

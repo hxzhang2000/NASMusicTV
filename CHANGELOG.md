@@ -7,6 +7,30 @@
 >
 > 类型：`Added`（新增） | `Changed`（变更） | `Fixed`（修复） | `Removed`（移除）
 
+## [v2.26.0] - 2026-09-03
+
+### Added
+
+- **专辑/艺术家详情页歌曲「加入歌单」按钮**：`AlbumDetailScreen`/`ArtistDetailScreen` 的歌曲行新增 `onAddToPlaylist` 回调，复用 `UnifiedSongRow` 已有的 `+` 按钮；`AppRoot` 将 `pickerSong` 提升到顶层，使加入歌单弹窗在曲库/专辑详情/艺术家详情三处共用
+
+### Changed
+
+- **曲库字母索引条焦点导航对称化**：`SideLetterIndex` 新增 `contentFocusRequester`/`letterFocusRequester`，显式处理「内容区按右→字母条」「字母条按左→内容区」的焦点交接；`AlbumsTab`/`ArtistsTab` 均加 `onKeyEvent`（最右列右移聚焦字母条）与逐条 `onFocusChanged` 跟踪，艺术家页与专辑页行为一致
+- **播放队列歌曲行显示来源标签**：`QueueScreen` 队列行新增 `SourceBadge(song)`，展示 NAS/百度网盘等来源
+- **百度网盘歌曲封面来源扩展**：`AlbumCoverResolver` 新增网络封面回退（按歌曲标题+艺术家检索 Meting/网易云），`BaiduNetdiskService.resolveCoverUrl` 在侧车/内嵌 APIC 失败后回退到网络封面；专辑详情页改用 `mergedAlbums` 实时专辑（含异步解析封面），修复「openAlbumDetail 冻结快照无封面」问题
+
+### Removed
+
+- **「我的」页移除「最近播放」分区**：首页已有最近播放，移除以避免三栏过窄；保留收藏 + 本地歌单两栏
+
+## [v2.25.8] - 2026-09-03
+
+### Fixed
+
+- **曲库专辑/艺术家页面空白**：`LibraryScreen.kt` 的 `AlbumsTab`/`ArtistsTab` 原用 `Row(fillMaxSize) + Box(weight(1f)) + LazyVerticalGrid(fillMaxSize)`，网格高度被塌缩为 0，只剩中间 A‑Z 字母条可见。改为与可用的 `SongsTab` 同构：`Box(fillMaxSize)` 父容器 + 内部 `Box(fillMaxSize)` 放网格 + `SideLetterIndex`。真机验证：内容正常显示 ✅
+- **曲库字母索引条位置错误（居中而非右边缘）**：`SideLetterIndex` 内部 `Column` 的子项用 `Box(fillMaxWidth())`，在父 `Box(align(CenterEnd))` 中把整列撑成全宽，导致 `align(CenterEnd)` 失效、字母靠 `Column(CenterHorizontally)` 居中。给 `Column` 加固定窄宽 `.width(letterSize + 8.dp)`，让 `align(CenterEnd)` 把整条钉在右边缘。`AlbumsTab`/`ArtistsTab` 共用该 Composable，一处修复两处生效。真机验证：字母条已归位到右边缘 ✅
+- **百度网盘歌曲无法播放（根因：TV/盒子 ROM 的 AndroidKeyStore 不支持 AES KeyGenerator）**：`util/CryptoUtils.kt` 的 `getOrCreateKey()` 用 `KeyGenerator.getInstance("AES", "AndroidKeyStore")`，在电视 ROM 上抛 `NoSuchAlgorithmException`，导致百度 access_token 解密失败 → `resolveStreamUrl` 取不到 dlink → 播放失败。改为由固定口令 SHA‑256 派生软件密钥（`SecretKeySpec`，不依赖 KeyGenerator/KeyStore），`decrypt` 先试软件密钥、回退旧 AndroidKeyStore 密钥以兼容手机端存量加密数据。`AppPreferences` 的百度 token、NAS 的 apiToken/password 均走此工具，一并变稳。代码已推电视、运行无崩溃；**行为验证待用户在电视上重新授权（重登）百度网盘一次**——旧 token 由旧密钥加密、电视解不开，须重登用新密钥重新加密，之后点歌复测
+
 ## [v2.25.7] - 2026-09-02
 
 ### Added

@@ -24,7 +24,8 @@ import org.json.JSONObject
  */
 class AlbumCoverResolver(
     private val baiduCoverProvider: BaiduCoverProvider?,
-    private val client: OkHttpClient
+    private val client: OkHttpClient,
+    private val searchCover: suspend (title: String, artist: String) -> String? = { _, _ -> null }
 ) {
     companion object {
         private const val TAG = "AlbumCoverResolver"
@@ -83,6 +84,16 @@ class AlbumCoverResolver(
             // P2: iTunes 在线搜索
             if (resolvedUrl == null) {
                 resolvedUrl = resolveItunesCover(album.name, album.artist)
+            }
+
+            // P2.5: 网络封面（Meting/网易云）— 主要针对无内嵌封面的百度网盘专辑
+            if (resolvedUrl == null && songs.any { it.networkSource == "baidu" }) {
+                val repSong = songs.firstOrNull { it.title.isNotBlank() }
+                if (repSong != null) {
+                    resolvedUrl = runCatching {
+                        searchCover(repSong.title, repSong.artist.ifBlank { "" })
+                    }.getOrNull()
+                }
             }
 
             // P3: 本地 ID3 — 对于本地歌曲，MediaStore 已提取到 song.coverUrl；

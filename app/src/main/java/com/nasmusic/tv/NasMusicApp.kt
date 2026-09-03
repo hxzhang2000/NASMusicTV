@@ -102,7 +102,11 @@ class NasMusicApp : Application(), ImageLoaderFactory {
     val baiduFileIndexCache: BaiduFileIndexCache by lazy { BaiduFileIndexCache(this) }
     val baiduLyricsProvider: BaiduLyricsProvider by lazy { BaiduLyricsProvider(baiduPanApi, baiduOkHttpClient) }
     val baiduCoverProvider: BaiduCoverProvider by lazy { BaiduCoverProvider(baiduPanApi, baiduOkHttpClient) }
-    val albumCoverResolver: AlbumCoverResolver by lazy { AlbumCoverResolver(baiduCoverProvider, baiduOkHttpClient) }
+    val albumCoverResolver: AlbumCoverResolver by lazy {
+        AlbumCoverResolver(baiduCoverProvider, baiduOkHttpClient) { title, artist ->
+            networkMusicManager.searchCoverUrl(title, artist)
+        }
+    }
     val artistCoverResolver: ArtistCoverResolver by lazy { ArtistCoverResolver(baiduOkHttpClient) }
     val baiduNetdiskService: BaiduNetdiskService by lazy {
         BaiduNetdiskService(
@@ -112,7 +116,8 @@ class NasMusicApp : Application(), ImageLoaderFactory {
             lyricsProvider = baiduLyricsProvider,
             coverProvider = baiduCoverProvider,
             indexCache = baiduFileIndexCache,
-            prefs = appPreferences
+            prefs = appPreferences,
+            networkCoverSearch = { title, artist -> networkMusicManager.searchCoverUrl(title, artist) }
         )
     }
     val baiduMvFileService: BaiduMvFileService by lazy {

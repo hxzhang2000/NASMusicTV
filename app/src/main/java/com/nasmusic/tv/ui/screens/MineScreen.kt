@@ -165,52 +165,6 @@ fun MineScreen(
             // 分隔
             item(key = "section_divider") { Spacer(modifier = Modifier.height(24.dp)) }
 
-            // ===== 最近播放区 =====
-            item(key = "recent_header") {
-                Column(modifier = Modifier.fillMaxWidth()) {
-                    Text(
-                        text = stringResource(R.string.mine_recent),
-                        color = NasMusicColors.TextPrimary,
-                        fontSize = FontSize.display(),
-                        modifier = Modifier.padding(bottom = 4.dp)
-                    )
-                    if (recentSongs.isNotEmpty()) {
-                        ActionBar(
-                            songCount = recentSongs.size,
-                            onPlayAll = { onPlayAll(recentSongs) },
-                            onAddAllToQueue = { recentSongs.forEach { song -> onToggleQueue(song) } }
-                        )
-                    }
-                }
-            }
-            if (recentSongs.isEmpty()) {
-                item(key = "recent_empty") {
-                    Box(modifier = Modifier.fillMaxWidth().padding(vertical = 24.dp), contentAlignment = Alignment.Center) {
-                        Text(
-                            text = stringResource(R.string.library_no_recent),
-                            color = NasMusicColors.TextSecondary,
-                            fontSize = FontSize.button()
-                        )
-                    }
-                }
-            } else {
-                items(recentSongs, key = { "recent_${it.id}" }) { song ->
-                    UnifiedSongRow(
-                        song = song,
-                        onClick = { onPlaySong(song) },
-                        mode = SongRowMode.MODE_ROW,
-                        isFavorited = song.id in (favoriteSongsState.dataOrNull() ?: emptyList()).map { it.id }.toSet() || song.id in networkFavoriteSongs.map { it.id }.toSet(),
-                        onToggleFavorite = { onToggleFavorite(song) },
-                        isInQueue = song.id in queueSongIds,
-                        onToggleQueue = { onToggleQueue(song) },
-                        onAddToPlaylist = { pickerSong = song }
-                    )
-                }
-            }
-
-            // 分隔
-            item(key = "section_divider_2") { Spacer(modifier = Modifier.height(24.dp)) }
-
             // ===== 歌单区 =====
             item(key = "pl_header") {
                 Row(
@@ -311,17 +265,6 @@ fun MineScreen(
                 onToggleQueue = onToggleQueue,
                 queueSongIds = queueSongIds,
                 onAddToPlaylist = { pickerSong = it },
-                modifier = Modifier.weight(1f).fillMaxHeight()
-            )
-            Spacer(modifier = Modifier.width(24.dp))
-            RecentPane(
-                songs = recentSongs,
-                onPlayAll = onPlayAll,
-                onPlaySong = onPlaySong,
-                onToggleFavorite = onToggleFavorite,
-                onToggleQueue = onToggleQueue,
-                queueSongIds = queueSongIds,
-                isFavorited = { song -> song.id in mergedFavorites.map { it.id }.toSet() },
                 modifier = Modifier.weight(1f).fillMaxHeight()
             )
             Spacer(modifier = Modifier.width(24.dp))

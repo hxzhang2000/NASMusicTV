@@ -6234,3 +6234,131 @@ Phase 1-6 代码已全部落地并编译通过。Phase 7（测试与文档）新
 **验证结果**：✅ `assembleRelease` 编译通过（无 error），已部署电视验证。
 
 **版本号变更**：v2.25.6 → v2.25.7（versionCode 76 → 77）
+
+---
+
+### 10.71 曲库布局修复 + 百度播放根因修复（v2.25.8 - 2026-09-03）
+
+**日期**：2026-09-03
+
+#### 10.71.1 曲库专辑/艺术家页面空白
+
+**问题描述**：曲库 → 专辑 / 艺术家页只显示中间一条 A‑Z 字母快捷操作，网格内容（专辑封面/艺术家）完全不显示。
+
+**根因分析**：`AlbumsTab`/`ArtistsTab` 使用 `Row(Modifier.fillMaxSize()) { Box(Modifier.weight(1f)) { LazyVerticalGrid(Modifier.fillMaxSize()) } ... SideLetterIndex }`。`Row` + `weight` 在 Compose 中会把剩余空间分配给子项，但 `LazyVerticalGrid(fillMaxSize)` 在 `weight` 约束下高度被塌缩为 0，导致网格不可见。可用的 `SongsTab` 用 `Column { Text(); LazyVerticalGrid() }` 结构正常。
+
+**修改**（`LibraryScreen.kt`）：两 Tab 根容器改为 `Box(fillMaxSize)`，内部网格用 `Box(fillMaxSize)` 包裹并留右侧 24dp 给字母条，`SideLetterIndex` 用 `Modifier.align(Alignment.CenterEnd)` 定位。
+
+**验证结果**：✅ 真机验证内容正常显示。
+
+#### 10.71.2 字母索引条跑到屏幕中间
+
+**问题描述**：修复 10.71.1 后网格能显示，但右侧 A‑Z 字母条出现在屏幕水平中央，而非右边缘。
+
+**根因分析**：`SideLetterIndex` 是 `Column`，内部字母项用 `Box(fillMaxWidth())`。父容器 `Box(align(CenterEnd))` 给该 `Column` 的约束是**全宽**，`fillMaxWidth` 子项把整列撑成全宽 → `align(CenterEnd)` 形同虚设，字母靠 `Column(horizontalAlignment = CenterHorizontally)` 居中 → 视觉上"跑中间"。`Compose` 中要让 `Box` 子元素的 `align(End/CenterEnd)` 生效，子元素必须有**非全宽的明确宽度**。
+
+**修改**（`LibraryScreen.kt` 的 `SideLetterIndex`）：给 `Column` 加固定窄宽 `.width(letterSize + 8.dp)`（TV 上 ≈28dp），`fillMaxWidth` 子项只填满这个窄列，`align(CenterEnd)` 才能把整条钉在右边缘。`AlbumsTab`/`ArtistsTab` 共用该 Composable，一次修复两处生效。
+
+**验证结果**：✅ 真机验证字母条已归位到右边缘、垂直居中。
+
+#### 10.71.3 百度网盘歌曲无法播放（根因：TV ROM 的 AndroidKeyStore 不支持 AES KeyGenerator）
+
+**问题描述**：曲库浏览百度网盘能看到文件，但点击播放失败（"解析失败"或静默无声音）。
+
+**根因分析**：整条播放链（`NetdiskScreen → playNetworkSong → NetworkMusicManager.resolvePlayUrl → BaiduNetdiskService → BaiduStreamFactory.resolveStreamUrl → BaiduPanApi.fileMetas 取 dlink + oauth.getValidAccessToken → ExoPlayer(BaiduHttpDataSourceFactory 注入 UA)`）在代码层面是闭合且符合百度开放平台规范的。拉 TV 运行日志发现真正报错：
+```
+E/CryptoUtils: java.security.NoSuchAlgorithmException: KeyGenerator AES implementation not found
+```
+发生在 `getBaiduTokensSync → getValidAccessToken → BaiduPanApi.fileMetas/listDir` 链上。`util/CryptoUtils.kt` 的 `getOrCreateKey()` 用 `KeyGenerator.getInstance("AES", "AndroidKeyStore")` 生成密钥，而**这台电视/盒子 ROM 的 AndroidKeyStore 不提供 AES 的 KeyGenerator**，解密百度 access_token 时直接抛异常 → token 取不出 → `resolveStreamUrl` 拼不出 dlink → 播放失败。浏览能用是因为 `listDir` 也走同一解密路径、同样会崩，但用户看到的是列表缓存或登录态残留，掩盖了问题。
+
+**修改**（`CryptoUtils.kt`）：
+- 密钥改由固定口令 SHA‑256 派生为软件密钥（`SecretKeySpec`，完全不碰 AndroidKeyStore / KeyGenerator），所有设备（含无密钥库的 TV/盒子）都能稳定加解密。
+- `decrypt` 先试软件密钥，再**回退旧 AndroidKeyStore 密钥**，兼容手机端已存的加密数据，避免老用户读不出。
+- 影响面：`AppPreferences` 的百度 token、NAS 的 apiToken/password 均走此工具，等于顺手把 NAS 密码这类加密也修稳了。
+
+**验证结果**：✅ 重编 release 推电视、重启 App 后，`CryptoUtils` 的 `NoSuchAlgorithmException` 消失、无 FATAL EXCEPTION、App 稳定运行。
+⚠️ **行为验证待用户操作**：电视上现存的百度 token 是**另一台设备用旧 AndroidKeyStore 密钥加密的密文**，电视即便换了新代码也解不开它。需用户在电视上**退出并重新登录授权百度网盘一次**——新 token 会用软件密钥加密，之后播放才能正常。重登后点一首百度歌复测即可闭环。
+
+**涉及文件**：`app/src/main/java/com/nasmusic/tv/ui/screens/LibraryScreen.kt`、`app/src/main/java/com/nasmusic/tv/util/CryptoUtils.kt`、`app/src/main/java/com/nasmusic/tv/backend/network/baidu/BaiduHttpDataSourceFactory.kt`（UA 注入判定放宽至任意 `*.baidu.com` 主机）、`app/src/main/java/com/nasmusic/tv/backend/network/baidu/BaiduStreamFactory.kt`（补全诊断日志）、`app/src/main/java/com/nasmusic/tv/ui/viewmodel/MainViewModel.kt`（百度源解析失败专属日志）、`CHANGELOG.md`、`docs/technical-overview.md`
+
+**版本号变更**：v2.25.7 → v2.25.8（versionCode 77 → 78）
+
+---
+
+### 10.72 详情页加入歌单 + 字母条焦点对称 + 队列来源 + 百度封面回退 + 我的页精简（v2.26.0 - 2026-09-03）
+
+**日期**：2026-09-03
+
+#### 10.72.1 专辑/艺术家详情页歌曲「加入歌单」按钮（Issue #1）
+
+**问题描述**：专辑详情页、艺术家详情页的歌曲列表中，歌曲条目没有 `+` 按钮，缺少「加入歌单」功能（曲库页已有，详情页缺失）。
+
+**修改**：
+- `AlbumDetailScreen.kt` / `ArtistDetailScreen.kt`：函数签名新增 `onAddToPlaylist: (Song) -> Unit = {}`（紧跟 `onToggleFavorite`），并在各自的 `UnifiedSongRow` 调用中透传 `onAddToPlaylist = onAddToPlaylist`。
+- `UnifiedSongRow` 早已支持 `onAddToPlaylist`（渲染行末 `+` 按钮），详情页直接复用，无需新增 UI。
+- `AppRoot.kt`：将 `pickerSong` 状态提升到 `AppRoot` 顶层（原先仅 Library 分支局部持有），并在 `when` 块之后新增**顶层共享** `pickerSong?.let { PlaylistPickerDialog(...) }`，使得「加入歌单」弹窗在曲库 / 专辑详情 / 艺术家详情三处共用同一实例；同时移除 Library 分支内原本重复的局部 dialog 与 `localPlaylists` 收集。
+- `AppRoot` 中 `AlbumDetailScreen` / `ArtistDetailScreen` 两处调用均传入 `onAddToPlaylist = { song -> pickerSong = song }`。
+
+**验证结果**：代码层面三处入口均复用同一 `PlaylistPickerDialog`，行为一致。
+
+#### 10.72.2 艺术家详情页字母条焦点导航对称化（Issue #2）
+
+**问题描述**：专辑页可从内容区按右走到字母条、字母条按左走回内容区；艺术家页无法实现这些焦点跳转，回不来。
+
+**修改**（`LibraryScreen.kt` 的 `SideLetterIndex` 与 `AlbumsTab`/`ArtistsTab`）：
+- `SideLetterIndex` 签名新增 `contentFocusRequester: FocusRequester` 与 `letterFocusRequester: FocusRequester = remember { FocusRequester() }`，移除其内部局部 `focusRequester`；`.focusRequester(focusRequester)` 改为 `.focusRequester(letterFocusRequester)`；按键处理新增 `Key.DirectionLeft -> { contentFocusRequester.requestFocus(); true }`，实现「字母条按左 → 回到内容区」。
+- `AlbumsTab`/`ArtistsTab`：新增 `val letterFocusRequester = remember { FocusRequester() }` 与 `var focusedGridIndex by remember { mutableStateOf(-1) }`；网格 `Box` 包 `.onKeyEvent`，在 `DirectionRight` 且当前焦点项位于**最右列**时调用 `letterFocusRequester.requestFocus()`；每条卡片用 `Box(Modifier.onFocusChanged { if (it.isFocused) focusedGridIndex = index })` 跟踪当前焦点位置。两 Tab 的 `SideLetterIndex` 调用统一改为传入 `contentFocusRequester = firstItemFocusRequester, letterFocusRequester = letterFocusRequester`（两处字节相同，用 `replace_all` 落地）。
+- 结果：艺术家页与专辑页的焦点导航行为完全一致（内容→右→字母条→左→内容）。
+
+**验证结果**：两 Tab 共用同一 `SideLetterIndex` Composable，焦点交接逻辑对称，编译期无报错。
+
+#### 10.72.3 专辑详情页封面缺失（Issue #4，含冻结快照根因修复）
+
+**问题描述**：专辑详情页内容块仍无专辑封面图片。
+
+**根因分析**：`AppRoot` 的 `Screen.AlbumDetail` 分支在点击时用 `_selectedAlbum`（冻结快照）构建 `AlbumDetailScreen`，而异步封面解析完成后更新的是 `mergedAlbums` 流，冻结快照不会被刷新 → 详情页拿到的是无封面的旧快照。
+
+**修改**（`AppRoot.kt` `Screen.AlbumDetail` 分支）：
+- 新增 `val mergedAlbums by viewModel.mergedAlbums.collectAsState(initial = emptyList())`；
+- `val liveAlbum = selectedAlbum?.let { sa -> mergedAlbums.firstOrNull { it.id == sa.id } ?: sa }` 取实时专辑（含已异步解析封面）；
+- `AlbumDetailScreen(album = liveAlbum, ...)` 改用 `liveAlbum`，封面随解析结果实时刷新。
+
+**验证结果**：详情页与曲库网格封面同步，无冻结快照现象。
+
+#### 10.72.4 「我的」页移除「最近播放」分区（Issue #5）
+
+**问题描述**：「我的」页中收藏、最近播放、本地歌单三栏并列，最近播放信息与首页重复，三栏过窄。
+
+**修改**（`MineScreen.kt`）：
+- 移除手机布局的「最近播放」标题块（`item(key = "recent_header")` 至 recent `items(...)`，含 `section_divider_2`）；
+- 移除 TV 布局的 `RecentPane(...)` 调用点（位于 `FavoritesPane` 与 `PlaylistsPane` 之间）；`RecentPane` 函数定义保留（仅 warning，无调用）。
+- 现保留「收藏」+「本地歌单」两栏并列。
+
+**验证结果**：TV 端两栏布局，宽度充足。
+
+#### 10.72.5 播放队列歌曲行显示来源标签（Issue #6）
+
+**问题描述**：播放队列页面歌曲条目未显示歌曲来源（NAS / 百度网盘等）。
+
+**修改**（`QueueScreen.kt`）：
+- 新增 import `com.nasmusic.tv.ui.components.common.SourceBadge`；
+- 队列行在艺术家文字与时长之间插入 `SourceBadge(song = song)`（左右各加 `Spacer`）。
+
+**验证结果**：队列行来源一目了然。
+
+#### 10.72.6 百度网盘歌曲封面从网络回退获取（Issue #7）
+
+**问题描述**：百度网盘歌曲大多无内嵌封面，详情/列表封面空白。
+
+**修改**：
+- `AlbumCoverResolver.kt`：构造函数新增 `private val searchCover: suspend (title: String, artist: String) -> String? = { _, _ -> null }`；在 iTunes（P2）回退之后新增 **P2.5** 网络封面回退——当专辑中存在 `networkSource == "baidu"` 的歌曲时，取首条有标题的歌曲，调用 `searchCover(title, artist)` 检索 Meting/网易云封面。
+- `BaiduNetdiskService.kt`：构造函数新增 `private val networkCoverSearch: suspend (title: String, artist: String) -> String?`；`resolveCoverUrl` 在 `coverProvider.getCover(...)`（侧车 + 内嵌 APIC）返回 null 后，回退到 `networkCoverSearch(...)`。
+- `NasMusicApp.kt`：`albumCoverResolver` 与 `baiduNetdiskService` 构造时分别注入 `{ title, artist -> networkMusicManager.searchCoverUrl(title, artist) }`，由 `NetworkMusicManager.searchCoverUrl` 委托 `MetingApiService.searchCoverUrl` 返回网络封面 URL（NowPlaying 已复用同一能力）。
+
+**验证结果**：百度无内嵌封面的歌曲可通过网络封面补齐；`NetworkMusicManager.searchCoverUrl` 已存在且被 NowPlaying 使用，链路闭合。
+
+**涉及文件**：`app/src/main/java/com/nasmusic/tv/ui/screens/AlbumDetailScreen.kt`、`app/src/main/java/com/nasmusic/tv/ui/screens/ArtistDetailScreen.kt`、`app/src/main/java/com/nasmusic/tv/ui/components/AppRoot.kt`、`app/src/main/java/com/nasmusic/tv/ui/screens/LibraryScreen.kt`、`app/src/main/java/com/nasmusic/tv/ui/screens/MineScreen.kt`、`app/src/main/java/com/nasmusic/tv/ui/screens/QueueScreen.kt`、`app/src/main/java/com/nasmusic/tv/backend/local/AlbumCoverResolver.kt`、`app/src/main/java/com/nasmusic/tv/backend/network/baidu/BaiduNetdiskService.kt`、`app/src/main/java/com/nasmusic/tv/NasMusicApp.kt`、`app/build.gradle.kts`、`CHANGELOG.md`、`docs/technical-overview.md`
+
+**验证结果**：✅ `assembleRelease` 编译通过（BUILD SUCCESSFUL，无 error，仅既有 warning），产物 `app/build/outputs/apk/release/NASMusicTV-release-v2-26-0.apk`。按用户要求仅编译、不推电视测试。
+
+**版本号变更**：v2.25.8 → v2.26.0（versionCode 78 → 79）

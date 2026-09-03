@@ -2086,15 +2086,25 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
      * 解析失败时显示错误提示。
      */
     fun playNetworkSong(song: Song) {
+        AppLog.e("NASMusic", "playNetworkSong ENTRY: id=${song.id} title=${song.title} networkSource=${song.networkSource} networkId=${song.networkId} isNetworkSong=${song.isNetworkSong}")
         if (!song.isNetworkSong) {
             // 非 network 歌曲，走普通播放流程
             playSong(song)
             return
         }
+        // 防御：百度源若因登录时序未注册（浏览用 baiduApi 直连不需要注册，但播放需 services["baidu"]），
+        // 播放时自愈注册，避免"能浏览不能播"
+        if (song.networkSource == "baidu" && !nasMusicApp.networkMusicManager.isServiceRegistered("baidu")) {
+            AppLog.e("NASMusic", "playNetworkSong: 检测到 baidu 服务未注册，尝试自愈注册后播放")
+            nasMusicApp.refreshBaiduServiceRegistration()
+        }
         viewModelScope.launch {
             try {
                 val playUrl = nasMusicApp.networkMusicManager.resolvePlayUrl(song)
                 if (playUrl.isNullOrBlank()) {
+                    if (song.networkSource == "baidu") {
+                        AppLog.w("NASMusic", "playNetworkSong: 百度网盘 resolvePlayUrl 返回 null（检查 token 授权 / filemetas dlink / 网络，详见 BaiduStreamFactory 日志）")
+                    }
                     showError(getApplication<Application>().getString(R.string.resolve_url_failed_retry))
                     return@launch
                 }

@@ -58,6 +58,7 @@ fun AlbumDetailScreen(
     onToggleQueue: (Song) -> Unit = {},
     favoriteIds: Set<String> = emptySet(),
     onToggleFavorite: (Song) -> Unit = {},
+    onAddToPlaylist: (Song) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val listState = rememberLazyListState()
@@ -211,6 +212,7 @@ fun AlbumDetailScreen(
                             onToggleFavorite = { onToggleFavorite(song) },
                             isInQueue = song.id in queueSongIds,
                             onToggleQueue = { onToggleQueue(song) },
+                            onAddToPlaylist = { onAddToPlaylist(song) },
                             focusRequester = if (index == 0) firstItemFocusRequester else null
                         )
                     }
