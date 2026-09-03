@@ -2204,16 +2204,33 @@ showError(getApplication<Application>().getString(R.string.toggle_favorite_error
             val localSongs = _localSongs.value
             val baiduSongs = baiduIndexCache.allSongs()
 
-            _mergedAlbums.value = MusicMerger.mergeAlbums(
+            var mergedAlbums = MusicMerger.mergeAlbums(
                 nasAlbums = nasAlbums,
                 localAlbums = MusicMerger.buildLocalAlbums(localSongs),
                 baiduAlbums = MusicMerger.buildBaiduAlbums(baiduSongs)
             )
-            _mergedArtists.value = MusicMerger.mergeArtists(
+            // 应用已解析的封面缓存，避免每次重建丢失 coverUrl
+            if (resolvedAlbumCovers.isNotEmpty()) {
+                mergedAlbums = mergedAlbums.map { album ->
+                    val cached = resolvedAlbumCovers[album.id]
+                    if (cached != null && album.coverUrl == null) album.copy(coverUrl = cached) else album
+                }
+            }
+            _mergedAlbums.value = mergedAlbums
+
+            var mergedArtists = MusicMerger.mergeArtists(
                 nasArtists = nasArtists,
                 localArtists = MusicMerger.buildLocalArtists(localSongs),
                 baiduArtists = MusicMerger.buildBaiduArtists(baiduSongs)
             )
+            // 应用已解析的艺术家封面缓存
+            if (resolvedArtistCovers.isNotEmpty()) {
+                mergedArtists = mergedArtists.map { artist ->
+                    val cached = resolvedArtistCovers[artist.id]
+                    if (cached != null && artist.coverUrl == null) artist.copy(coverUrl = cached) else artist
+                }
+            }
+            _mergedArtists.value = mergedArtists
 
             // 用全量歌曲反向统计艺术家 songCount
             updateArtistSongCounts()
@@ -2259,6 +2276,12 @@ showError(getApplication<Application>().getString(R.string.toggle_favorite_error
     private var coverResolveJob: kotlinx.coroutines.Job? = null
     private var artistCoverResolveJob: kotlinx.coroutines.Job? = null
 
+    /** 已解析的专辑封面缓存（albumId → coverUrl），跨 updateMergedData 保持 */
+    private val resolvedAlbumCovers = mutableMapOf<String, String>()
+
+    /** 已解析的艺术家封面缓存（artistId → coverUrl），跨 updateMergedData 保持 */
+    private val resolvedArtistCovers = mutableMapOf<String, String>()
+
     private fun resolveAlbumCoversAsync() {
         // 取消上一次未完成的解析
         coverResolveJob?.cancel()
@@ -2266,7 +2289,16 @@ showError(getApplication<Application>().getString(R.string.toggle_favorite_error
             val albums = _mergedAlbums.value
             val allSongs = _songsPaging.value.songs + _localSongs.value + baiduIndexCache.allSongs()
             nasMusicApp.albumCoverResolver.resolveCovers(albums, allSongs) { updated ->
-                _mergedAlbums.value = updated
+                // 仅更新封面缓存，不直接写 _mergedAlbums（避免与 updateMergedData 竞争覆盖）
+                for (album in updated) {
+                    if (album.coverUrl != null) {
+                        resolvedAlbumCovers[album.id] = album.coverUrl
+                    }
+                }
+            }
+            // 解析完成后重建 mergedAlbums，使封面同步到 UI
+            withContext(Dispatchers.Main) {
+                updateMergedData()
             }
         }
     }
@@ -2276,7 +2308,16 @@ showError(getApplication<Application>().getString(R.string.toggle_favorite_error
         artistCoverResolveJob = viewModelScope.launch {
             val artists = _artists.value.dataOrNull() ?: return@launch
             nasMusicApp.artistCoverResolver.resolveCovers(artists) { updated ->
-                _artists.value = UiState.Success(updated)
+                // 仅更新封面缓存，不直接写 _artists（避免与 updateMergedData 竞争覆盖）
+                for (artist in updated) {
+                    if (artist.coverUrl != null) {
+                        resolvedArtistCovers[artist.id] = artist.coverUrl
+                    }
+                }
+            }
+            // 解析完成后重建 mergedArtists，使封面同步到 UI
+            withContext(Dispatchers.Main) {
+                updateMergedData()
             }
         }
     }

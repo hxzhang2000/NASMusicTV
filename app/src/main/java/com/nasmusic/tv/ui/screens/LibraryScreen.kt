@@ -100,8 +100,7 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.type
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.foundation.clickable
 
 enum class LibraryTab(val titleRes: Int) {
     SEARCH(R.string.library_search),
@@ -1389,26 +1388,27 @@ private fun ArtistCard(
         ) {
             Box(
                 modifier = Modifier
-                    .size(48.dp)
-                    .clip(RoundedCornerShape(24.dp))
-                    .background(NasMusicColors.Primary.copy(alpha = 0.2f)),
+                    .fillMaxWidth()
+                    .aspectRatio(1f)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(NasMusicColors.SurfaceVariant),
                 contentAlignment = Alignment.Center
             ) {
                 if (coverUrl != null) {
                     AsyncImage(
                         model = coverUrl,
                         contentDescription = artist,
-                        modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(24.dp))
+                        modifier = Modifier.fillMaxSize()
                     )
                 } else {
                     Text(
                         text = artist.firstOrNull()?.uppercase() ?: "?",
                         color = NasMusicColors.Primary,
-                        fontSize = FontSize.subtitle()
+                        fontSize = FontSize.displayLarge()
                     )
                 }
             }
-            Spacer(modifier = Modifier.height(6.dp))
+            Spacer(modifier = Modifier.height(4.dp))
             Text(text = artist, color = NasMusicColors.TextPrimary, fontSize = FontSize.body(), maxLines = 1, overflow = TextOverflow.Ellipsis)
             // Task 10: 专辑数 + 歌曲数
             val countText = buildString {
@@ -1535,6 +1535,9 @@ private fun SideLetterIndex(
     val letterFontSize = if (isPhone) 7.sp else 10.sp
     val scrollState = rememberScrollState()
 
+    // 固定每项高度，使触摸映射精确（不再依赖 SpaceBetween 坐标计算）
+    val itemHeight = letterSize
+
     Column(
         modifier = modifier
             .fillMaxHeight()
@@ -1563,35 +1566,20 @@ private fun SideLetterIndex(
                     }
                     else -> false
                 }
-            }
-            .pointerInput(allLetters, letterSize) {
-                awaitPointerEventScope {
-                    while (true) {
-                        val event = awaitPointerEvent()
-                        if (event.type == PointerEventType.Press || event.type == PointerEventType.Release) {
-                            val change = event.changes.firstOrNull() ?: continue
-                            val y = change.position.y
-                            // SpaceBetween: first item starts at top, last at bottom
-                            val letterHeight = size.height.toFloat() / allLetters.size
-                            val idx = (y / letterHeight).toInt().coerceIn(0, allLetters.size - 1)
-                            val letter = allLetters[idx]
-                            if (event.type == PointerEventType.Press) {
-                                focusedLetter = letter
-                                onLetterSelect(letter)
-                            }
-                        }
-                    }
-                }
             },
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = if (isPhone) Arrangement.Top else Arrangement.SpaceBetween
+        horizontalAlignment = Alignment.CenterHorizontally
     ) {
         allLetters.forEach { letter ->
             val isActive = letter in activeLetters
             val isCurrent = letter == (focusedLetter ?: currentLetter)
             Box(
                 modifier = Modifier
-                    .size(letterSize)
+                    .fillMaxWidth()
+                    .height(itemHeight)
+                    .clickable {
+                        focusedLetter = letter
+                        onLetterSelect(letter)
+                    }
                     .then(
                         if (isCurrent) Modifier.background(
                             NasMusicColors.Primary.copy(alpha = 0.3f),

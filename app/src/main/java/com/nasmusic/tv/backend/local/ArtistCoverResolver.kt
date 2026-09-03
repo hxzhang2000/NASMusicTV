@@ -179,8 +179,11 @@ class ArtistCoverResolver(
                 val body = resp.body?.string() ?: return null
                 val json = JSONObject(body)
                 val result = json.optJSONObject("result") ?: return null
-                val artistInfo = result.optJSONObject("artist") ?: return null
+                val artistArray = result.optJSONArray("artist") ?: return null
+                if (artistArray.length() == 0) return null
+                val artistInfo = artistArray.getJSONObject(0)
                 val avatar = artistInfo.optString("avatar", null) ?: return null
+                if (avatar.isBlank()) return null
                 // 确保是 HTTPS
                 if (avatar.startsWith("http://")) {
                     avatar.replace("http://", "https://")

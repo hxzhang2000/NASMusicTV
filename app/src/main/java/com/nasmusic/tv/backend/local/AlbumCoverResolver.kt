@@ -70,8 +70,6 @@ class AlbumCoverResolver(
         for (album in albums) {
             // 已有封面 → 跳过
             if (album.coverUrl != null) continue
-            // 只处理百度/本地专辑（NAS 专辑封面由后端返回）
-            if (!album.id.startsWith("baidu_album_") && !album.id.startsWith("local_album_")) continue
 
             val albumKey = album.name.lowercase().trim()
             val songs = albumSongsMap[albumKey] ?: emptyList()
