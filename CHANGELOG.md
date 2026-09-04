@@ -7,6 +7,14 @@
 >
 > 类型：`Added`（新增） | `Changed`（变更） | `Fixed`（修复） | `Removed`（移除）
 
+## [v2.26.4] - 2026-09-04
+
+### Fixed
+
+- **HQ 人声分离 >7.8s 歌曲 100% 失败（Demucs 段读取 skip 误跳）**：`DemucsSeparator.separate()` 逐段从临时文件读 float32 时，误加的 `skipBytes((totalSamples - startSample - segLen) * 2 * 4)` 会把指针一次性跳到剩余段末尾，第 2 段起 `readFloat()` 抛 EOFException 被 catch 吞掉，导致分离结果只有第一段（约 7.8s）。根因：临时文件是**连续交织 float32**（`L0,R0,L1,R1,...`，无段间填充），逐采样连续 `readFloat()` 即为正确读取，本无需任何 skip —— 该 skip 是 temp-file streaming 重构（`096b3d7`）时误引入。已删除 skip 块。
+- **PlayerManager `with` 误用致主线程加载 166MB 模型 ANR**：`enableHighQualityRemoval` 中 `separator.initialize(modelPath)`（166MB 模型加载）与 `separator.separate(...)` 两处误用 `with(Dispatchers.IO)`（Kotlin 作用域函数，接收者传入但仍在当前线程内联执行），应为 `withContext(Dispatchers.IO)` 真正切到 IO 线程。已改为 `withContext`，消除开伴唱即 ANR/黑屏。
+- **Demucs 输出流失败不关闭 + 残缺 WAV 缓存投毒**：`separate()` 的输出流在异常路径不关闭、失败时残留「44 字节 WAV 头 + 部分 PCM」的残缺文件。已把输出流/输出文件提升到 `try` 外，`finally` 统一关闭流，并在失败（`success=false`）时删除残缺 WAV，避免伴奏缓存误判为有效。
+
 ## [v2.26.3] - 2026-09-04
 
 ### Changed

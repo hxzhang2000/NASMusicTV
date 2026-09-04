@@ -385,7 +385,7 @@ class PlayerManager(private val applicationContext: Context) {
                             return@launch
                         }
                         _separationProgress.value = 0.2f to applicationContext.getString(R.string.hq_progress_loading_model)
-                        val initOk = with(Dispatchers.IO) { separator.initialize(modelPath) }
+                        val initOk = withContext(Dispatchers.IO) { separator.initialize(modelPath) }
                         if (!initOk) {
                             AppLog.w(TAG, "enableHighQualityRemoval: separator init failed, fallback to fast mode")
                             _hqError.value = applicationContext.getString(R.string.hq_error_with_fallback, separator.lastError ?: applicationContext.getString(R.string.hq_error_separator_init_failed))
@@ -398,7 +398,7 @@ class PlayerManager(private val applicationContext: Context) {
 
                     val outputDir = cache.getAccompanimentFile(songId).parentFile
                         ?: java.io.File(cache.getAccompanimentFile(songId).parent)
-                    val result = with(kotlinx.coroutines.Dispatchers.IO) {
+                    val result = withContext(kotlinx.coroutines.Dispatchers.IO) {
                         separator.separate(
                             inputPath = inputPath,
                             outputDir = outputDir,

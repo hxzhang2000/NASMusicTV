@@ -190,6 +190,13 @@ class DemucsSeparator(private val context: Context) {
         }
 
         var tempFile: File? = null
+        // 输出流与输出文件提升到 try 外，便于 finally 统一关闭 + 失败时清理残缺文件
+        // （避免残留「44 字节 WAV 头 + 部分 PCM」的残缺文件被伴奏缓存误判为有效）
+        var vocalsFos: BufferedOutputStream? = null
+        var accFos: BufferedOutputStream? = null
+        var vocalsFile: File? = null
+        var accompanimentFile: File? = null
+        var success = false
         try {
             progress?.onProgress(0f, context.getString(R.string.demucs_progress_decoding))
 
@@ -207,12 +214,12 @@ class DemucsSeparator(private val context: Context) {
             val sampleRate = decode.sampleRate
 
             // 2. 打开输出流，写 WAV 头
-            val vocalsFile = File(outputDir, "${songId}_vocals.wav")
-            val accompanimentFile = File(outputDir, "${songId}_accompaniment.wav")
-            val vocalsFos = BufferedOutputStream(FileOutputStream(vocalsFile))
-            val accFos = BufferedOutputStream(FileOutputStream(accompanimentFile))
-            writeWavHeader(vocalsFos, totalSamples)
-            writeWavHeader(accFos, totalSamples)
+            vocalsFile = File(outputDir, "${songId}_vocals.wav")
+            accompanimentFile = File(outputDir, "${songId}_accompaniment.wav")
+            vocalsFos = BufferedOutputStream(FileOutputStream(vocalsFile!!))
+            accFos = BufferedOutputStream(FileOutputStream(accompanimentFile!!))
+            writeWavHeader(vocalsFos!!, totalSamples)
+            writeWavHeader(accFos!!, totalSamples)
 
             // 3. 逐段从磁盘读取 → ONNX 推理 → 直接写入输出文件
             //    峰值内存：segmentInputBuf(5.4MB) + vocL/vocR(2.7MB each, 短命) + 模型(166MB)
@@ -232,11 +239,10 @@ class DemucsSeparator(private val context: Context) {
                         segmentInputBuf[i] = dis.readFloat()           // left
                         segmentInputBuf[i + SEGMENT_SAMPLES] = dis.readFloat() // right
                     }
-                    // 跳过剩余（如果需要，例如最后一段 < SEGMENT_SAMPLES 时跳过填充区）
-                    val skipFloats = (totalSamples - startSample - segLen) * 2L
-                    if (skipFloats > 0 && startSample + segLen < totalSamples) {
-                        dis.skipBytes((skipFloats * 4).toInt())
-                    }
+                    // 临时文件为连续交织 float32（L0,R0,L1,R1,...，无段间填充），
+                    // 逐采样连续 readFloat() 即为正确读取，无需任何 skip。
+                    // （此前错误地 skipBytes 到剩余段末尾，导致 >7.8s 的歌曲第 2 段起
+                    //   readFloat() 直接抛 EOFException 被吞，HQ 分离 100% 只出第一段）
 
                     // ONNX 推理
                     val (vocL, vocR) = processSegmentFromBuffer(segmentInputBuf, segLen)
@@ -245,13 +251,13 @@ class DemucsSeparator(private val context: Context) {
                     // 伴奏 = 原始音频 - 人声（segmentInputBuf 中已保存原始数据）
                     for (i in 0 until segLen) {
                         // 人声
-                        vocalsFos.write(shortToByteArray((vocL[i] * 32767f).toInt().coerceIn(-32768, 32767).toShort()))
-                        vocalsFos.write(shortToByteArray((vocR[i] * 32767f).toInt().coerceIn(-32768, 32767).toShort()))
+                        vocalsFos!!.write(shortToByteArray((vocL[i] * 32767f).toInt().coerceIn(-32768, 32767).toShort()))
+                        vocalsFos!!.write(shortToByteArray((vocR[i] * 32767f).toInt().coerceIn(-32768, 32767).toShort()))
                         // 伴奏 = 原始 - 人声
                         val origLeft = segmentInputBuf[i]
                         val origRight = segmentInputBuf[i + SEGMENT_SAMPLES]
-                        accFos.write(shortToByteArray(((origLeft - vocL[i]) * 32767f).toInt().coerceIn(-32768, 32767).toShort()))
-                        accFos.write(shortToByteArray(((origRight - vocR[i]) * 32767f).toInt().coerceIn(-32768, 32767).toShort()))
+                        accFos!!.write(shortToByteArray(((origLeft - vocL[i]) * 32767f).toInt().coerceIn(-32768, 32767).toShort()))
+                        accFos!!.write(shortToByteArray(((origRight - vocR[i]) * 32767f).toInt().coerceIn(-32768, 32767).toShort()))
                     }
 
                     segmentIndex++
@@ -261,16 +267,17 @@ class DemucsSeparator(private val context: Context) {
                 }
             }
 
-            vocalsFos.close()
-            accFos.close()
+            vocalsFos!!.close()
+            accFos!!.close()
+            success = true
 
             val durationMs = (totalSamples.toFloat() / sampleRate * 1000).toLong()
 
             progress?.onProgress(1f, context.getString(R.string.demucs_progress_done))
 
-            AppLog.d(TAG, "separate: OK, vocals=${vocalsFile.absolutePath}, accompaniment=${accompanimentFile.absolutePath}")
+            AppLog.d(TAG, "separate: OK, vocals=${vocalsFile!!.absolutePath}, accompaniment=${accompanimentFile!!.absolutePath}")
             lastError = null
-            return SeparationResult(vocalsFile, accompanimentFile, durationMs)
+            return SeparationResult(vocalsFile!!, accompanimentFile!!, durationMs)
         } catch (e: OutOfMemoryError) {
             AppLog.e(TAG, "separate: OOM", e)
             lastError = context.getString(R.string.demucs_error_oom_separate)
@@ -282,6 +289,13 @@ class DemucsSeparator(private val context: Context) {
             return null
         } finally {
             tempFile?.delete()
+            // 统一关闭输出流；失败时删除残缺 WAV，避免缓存投毒
+            runCatching { vocalsFos?.close() }
+            runCatching { accFos?.close() }
+            if (!success) {
+                vocalsFile?.delete()
+                accompanimentFile?.delete()
+            }
         }
     }
 

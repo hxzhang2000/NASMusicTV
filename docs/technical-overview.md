@@ -6500,3 +6500,59 @@ private suspend fun ensureAccessToken(dlink: String): String {
 **验证结果**：✅ `assembleRelease` 编译通过（BUILD SUCCESSFUL，无 error，仅既有 warning），产物 `app/build/outputs/apk/release/NASMusicTV-release-v2-26-3.apk`。按用户要求仅编译、不推电视测试。
 
 **版本号变更**：v2.26.2 → v2.26.3（versionCode 81 → 82）
+
+---
+
+### 10.76 Demucs 段读取 skip 修复 + `with`→`withContext` + 输出流关闭（v2.26.4 - 2026-09-04）
+
+**日期**：2026-09-04
+
+> 承接 2026-09-03 代码复审的 P0 项（§二 Demucs P1/P3、PlayerManager P3），逐条核对当前源码后修复。
+
+#### 10.76.1 HQ 人声分离 >7.8s 歌曲 100% 失败（skip 误跳）
+
+**问题描述**：HQ 人声分离对超过 7.8s（`SEGMENT_SAMPLES=343980`）的歌曲失败，只产出第一段。
+
+**根因分析**：`DemucsSeparator.separate()` 逐段从临时文件读 float32，误加的 skip：
+
+```kotlin
+val skipFloats = (totalSamples - startSample - segLen) * 2L
+if (skipFloats > 0 && startSample + segLen < totalSamples) {
+    dis.skipBytes((skipFloats * 4).toInt())
+}
+```
+
+在非最后一段（`totalSamples - startSample > SEGMENT_SAMPLES`）时，`segLen = SEGMENT_SAMPLES`，`skipFloats` 为正且巨大，`skipBytes` 会把指针一次性跳到剩余所有样本之后；下一轮 `readFloat()` 直接抛 `EOFException`，被 `catch (e: Exception)` 吞掉 → 分离结果只含第一段。
+
+**关键判断**：临时文件是**连续交织 float32**（`L0,R0,L1,R1,...`，见 `decodeAudioToTempFile` 的写入逻辑与 `outChannels=2` 硬编码），逐采样连续 `readFloat()` 即为正确读取，**本无需任何 skip**。该 skip 是 temp-file streaming 重构（commit `096b3d7`，把原先的内存数组 `leftChannel/rightChannel` 读取改成磁盘流）时误引入的 —— 重构前无 skip 逻辑，读内存数组天然连续。
+
+**修改**：删除 skip 块（原 235-239 行），改为注释说明「连续交织、无需 skip」。
+
+#### 10.76.2 PlayerManager `with` 误用致主线程加载 166MB 模型 ANR
+
+**问题描述**：开启 HQ 人声分离时 ANR/黑屏。
+
+**根因分析**：`PlayerManager.enableHighQualityRemoval` 中两处：
+
+```kotlin
+val initOk = with(Dispatchers.IO) { separator.initialize(modelPath) }          // :388
+val result = with(kotlinx.coroutines.Dispatchers.IO) { separator.separate(...) } // :401
+```
+
+`with` 是 Kotlin 标准库作用域函数（把 `Dispatchers.IO` 作为 `it`/接收者传入，但**仍在当前线程内联执行**），并非协程切换。`separator.initialize` 加载 166MB 模型、`separate` 做 ONNX 推理，本应在 IO 线程执行。同方法内 `:362` 的 `withContext(Dispatchers.IO) { resolveInputPath(...) }` 才是正确写法，佐证这两处是笔误。
+
+**修改**：两处 `with(...)` → `withContext(...)`（`withContext`/`Dispatchers` 均已 import）。
+
+#### 10.76.3 Demucs 输出流失败不关闭 + 残缺 WAV 缓存投毒
+
+**问题描述**：分离失败时残留残缺 WAV 文件，伴奏缓存可能误判为有效。
+
+**根因分析**：`separate()` 的 `vocalsFos`/`accFos` 在 `try` 内创建，成功路径 `:270-271` 手动 `close()`，但异常路径不关闭；且失败时 `_vocals.wav`/`_accompaniment.wav` 已写入 WAV 头（44 字节）+ 部分 PCM，残留在磁盘。`AccompanimentCache.hasAccompaniment()` 只判 `exists() && length() > 0`，会把残缺文件误判为有效缓存（缓存投毒）。
+
+**修改**：把 `vocalsFos`/`accFos`/`vocalsFile`/`accompanimentFile` 提升为 `try` 外的可空变量，新增 `success` 标记；`finally` 中 `runCatching { vocalsFos?.close() }` / `runCatching { accFos?.close() }` 统一关闭流，`!success` 时 `delete()` 两个输出文件。成功路径 `close()` 后置 `success = true`。
+
+**涉及文件**：`app/src/main/java/com/nasmusic/tv/player/DemucsSeparator.kt`、`app/src/main/java/com/nasmusic/tv/player/PlayerManager.kt`、`app/build.gradle.kts`、`CHANGELOG.md`、`docs/technical-overview.md`
+
+**验证结果**：✅ `assembleRelease` 编译通过（BUILD SUCCESSFUL，无 error，仅既有 warning），产物 `app/build/outputs/apk/release/NASMusicTV-release-v2-26-4.apk`。真机 HQ 分离行为验证需 TV 复测，本版按用户要求不推电视。
+
+**版本号变更**：v2.26.3 → v2.26.4（versionCode 82 → 83）
