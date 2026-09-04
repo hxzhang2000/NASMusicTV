@@ -202,6 +202,26 @@ class AppPreferences private constructor(private val context: Context) {
     private val searchHistoryMaxSize = 200
     private val searchHistoryTtlMs = 30L * 24 * 60 * 60 * 1000  // 30 天
 
+    /**
+     * 安全解析 JSON 偏好：解析失败时记录告警并返回 null（调用方应跳过回写，保留原数据），
+     * 而非返回空集合后被无条件回写覆盖 —— 后者会把用户积累的数据（播放记录/收藏/歌单等）
+     * 一次 JSON 异常（写入截断/字段变更）后抹成空。
+     *
+     * @param keyName 偏好键名（仅用于日志定位）
+     * @param json 原始 JSON 字符串
+     * @param parse 解析 lambda
+     * @return 解析结果；解析失败返回 null
+     */
+    private inline fun <T> safeParseJson(keyName: String, json: String, parse: () -> T): T? {
+        return try {
+            parse()
+        } catch (e: Exception) {
+            AppLog.w(TAG, "JSON 解析失败，跳过回写以保留原数据 [$keyName]: ${e.message?.take(80)}")
+            null
+        }
+    }
+
+
     // --- ServerConfig Flow ---
     val serverConfig: Flow<ServerConfig> = dataStore.data.map { prefs ->
         ServerConfig(
@@ -252,7 +272,7 @@ class AppPreferences private constructor(private val context: Context) {
     val recentSongIds: Flow<List<String>> = dataStore.data.map { prefs ->
         val json = prefs[keyRecentSongs] ?: "[]"
         try {
-            gson.fromJson(json, object : TypeToken<List<String>>() {}.type)
+            gson.fromJson<List<String>>(json, object : TypeToken<List<String>>() {}.type)
         } catch (e: Exception) { emptyList() }
     }
 
@@ -260,7 +280,7 @@ class AppPreferences private constructor(private val context: Context) {
     val playCounts: Flow<Map<String, Int>> = dataStore.data.map { prefs ->
         val json = prefs[keyPlayCounts] ?: "{}"
         try {
-            gson.fromJson(json, object : TypeToken<Map<String, Int>>() {}.type)
+            gson.fromJson<Map<String, Int>>(json, object : TypeToken<Map<String, Int>>() {}.type)
         } catch (e: Exception) { emptyMap() }
     }
 
@@ -271,7 +291,7 @@ class AppPreferences private constructor(private val context: Context) {
         return try {
             dataStore.data.first().let { prefs ->
                 val recentJson = prefs[keyRecentSongs] ?: "[]"
-                gson.fromJson(recentJson, object : TypeToken<List<String>>() {}.type) ?: emptyList()
+                gson.fromJson<List<String>>(recentJson, object : TypeToken<List<String>>() {}.type) ?: emptyList()
             }
         } catch (e: Exception) {
             emptyList()
@@ -287,28 +307,28 @@ class AppPreferences private constructor(private val context: Context) {
         dataStore.edit { prefs ->
             // 更新最近播放
             val recentJson = prefs[keyRecentSongs] ?: "[]"
-            val recentList = try {
-                gson.fromJson(recentJson, object : TypeToken<MutableList<String>>() {}.type)
-                    ?: mutableListOf()
-            } catch (e: Exception) { mutableListOf<String>() }
-
-            val mutableRecent = recentList.toMutableList()
-            mutableRecent.remove(songId) // 去重
-            mutableRecent.add(0, songId)  // 最新放最前面
-            if (mutableRecent.size > recentSongsMaxSize) {
-                mutableRecent.removeAt(mutableRecent.lastIndex)
+            val recentList = safeParseJson("recent_songs", recentJson) {
+                gson.fromJson<MutableList<String>>(recentJson, object : TypeToken<MutableList<String>>() {}.type)
             }
-            prefs[keyRecentSongs] = gson.toJson(mutableRecent)
+            if (recentList != null) {
+                val mutableRecent = recentList.toMutableList()
+                mutableRecent.remove(songId) // 去重
+                mutableRecent.add(0, songId)  // 最新放最前面
+                if (mutableRecent.size > recentSongsMaxSize) {
+                    mutableRecent.removeAt(mutableRecent.lastIndex)
+                }
+                prefs[keyRecentSongs] = gson.toJson(mutableRecent)
+            }
 
             // 更新播放次数
             val countsJson = prefs[keyPlayCounts] ?: "{}"
-            val counts = try {
-                gson.fromJson(countsJson, object : TypeToken<MutableMap<String, Int>>() {}.type)
-                    ?: mutableMapOf()
-            } catch (e: Exception) { mutableMapOf<String, Int>() }
-
-            counts[songId] = (counts[songId] ?: 0) + 1
-            prefs[keyPlayCounts] = gson.toJson(counts)
+            val counts = safeParseJson("play_counts", countsJson) {
+                gson.fromJson<MutableMap<String, Int>>(countsJson, object : TypeToken<MutableMap<String, Int>>() {}.type)
+            }
+            if (counts != null) {
+                counts[songId] = (counts[songId] ?: 0) + 1
+                prefs[keyPlayCounts] = gson.toJson(counts)
+            }
         }
     }
 
@@ -325,11 +345,9 @@ class AppPreferences private constructor(private val context: Context) {
     suspend fun recordRecentSongObject(song: Song) {
         dataStore.edit { prefs ->
             val json = prefs[keyRecentSongObjects] ?: "{\"songs\":[]}"
-            val data = try {
-                gson.fromJson(json, RecentSongObjectsData::class.java)
-            } catch (e: Exception) {
-                RecentSongObjectsData()
-            }
+            val data = safeParseJson("recent_song_objects", json) {
+                gson.fromJson<RecentSongObjectsData>(json, RecentSongObjectsData::class.java)
+            } ?: return@edit
             val list = data.songs.toMutableList()
             list.removeAll { it.id == song.id } // 去重（保留最新一条）
             // streamUrl 置空，避免持久化过期链接
@@ -351,40 +369,42 @@ class AppPreferences private constructor(private val context: Context) {
 
             // 1. 更新最近播放 id 列表（去重 + LRU，最多 50 条）
             val recentJson = prefs[keyRecentSongs] ?: "[]"
-            val recentList = try {
-                gson.fromJson(recentJson, object : TypeToken<MutableList<String>>() {}.type)
-                    ?: mutableListOf()
-            } catch (e: Exception) { mutableListOf<String>() }
-            recentList.remove(songId)
-            recentList.add(0, songId)
-            if (recentList.size > recentSongsMaxSize) {
-                recentList.removeAt(recentList.lastIndex)
+            val recentList = safeParseJson("recent_songs", recentJson) {
+                gson.fromJson<MutableList<String>>(recentJson, object : TypeToken<MutableList<String>>() {}.type)
             }
-            prefs[keyRecentSongs] = gson.toJson(recentList)
+            if (recentList != null) {
+                recentList.remove(songId)
+                recentList.add(0, songId)
+                if (recentList.size > recentSongsMaxSize) {
+                    recentList.removeAt(recentList.lastIndex)
+                }
+                prefs[keyRecentSongs] = gson.toJson(recentList)
+            }
 
             // 2. 更新播放次数
             val countsJson = prefs[keyPlayCounts] ?: "{}"
-            val counts = try {
-                gson.fromJson(countsJson, object : TypeToken<MutableMap<String, Int>>() {}.type)
-                    ?: mutableMapOf()
-            } catch (e: Exception) { mutableMapOf<String, Int>() }
-            counts[songId] = (counts[songId] ?: 0) + 1
-            prefs[keyPlayCounts] = gson.toJson(counts)
+            val counts = safeParseJson("play_counts", countsJson) {
+                gson.fromJson<MutableMap<String, Int>>(countsJson, object : TypeToken<MutableMap<String, Int>>() {}.type)
+            }
+            if (counts != null) {
+                counts[songId] = (counts[songId] ?: 0) + 1
+                prefs[keyPlayCounts] = gson.toJson(counts)
+            }
 
             // 3. 更新完整歌曲对象（含网络歌曲，streamUrl 置空）
             val objJson = prefs[keyRecentSongObjects] ?: "{\"songs\":[]}"
-            val objData = try {
-                gson.fromJson(objJson, RecentSongObjectsData::class.java)
-            } catch (e: Exception) {
-                RecentSongObjectsData()
+            val objData = safeParseJson("recent_song_objects", objJson) {
+                gson.fromJson<RecentSongObjectsData>(objJson, RecentSongObjectsData::class.java)
             }
-            val objList = objData.songs.toMutableList()
-            objList.removeAll { it.id == songId }
-            objList.add(0, song.copy(streamUrl = null))
-            if (objList.size > recentSongsObjectsMaxSize) {
-                objList.removeAt(objList.lastIndex)
+            if (objData != null) {
+                val objList = objData.songs.toMutableList()
+                objList.removeAll { it.id == songId }
+                objList.add(0, song.copy(streamUrl = null))
+                if (objList.size > recentSongsObjectsMaxSize) {
+                    objList.removeAt(objList.lastIndex)
+                }
+                prefs[keyRecentSongObjects] = gson.toJson(RecentSongObjectsData(objList))
             }
-            prefs[keyRecentSongObjects] = gson.toJson(RecentSongObjectsData(objList))
         }
     }
 
@@ -395,7 +415,7 @@ class AppPreferences private constructor(private val context: Context) {
         return try {
             dataStore.data.first().let { prefs ->
                 val json = prefs[keyRecentSongObjects] ?: "{\"songs\":[]}"
-                val data = gson.fromJson(json, RecentSongObjectsData::class.java)
+                val data = gson.fromJson<RecentSongObjectsData>(json, RecentSongObjectsData::class.java)
                 data.songs
             }
         } catch (e: Exception) {
@@ -417,7 +437,7 @@ class AppPreferences private constructor(private val context: Context) {
     val equalizerBands: Flow<List<Float>> = dataStore.data.map { prefs ->
         val json = prefs[keyEqualizerBands] ?: "[]"
         try {
-            gson.fromJson(json, object : TypeToken<List<Float>>() {}.type)
+            gson.fromJson<List<Float>>(json, object : TypeToken<List<Float>>() {}.type)
         } catch (e: Exception) { emptyList() }
     }
 
@@ -428,10 +448,10 @@ class AppPreferences private constructor(private val context: Context) {
     suspend fun setEqualizerBand(index: Int, value: Float) {
         dataStore.edit { prefs ->
             val json = prefs[keyEqualizerBands] ?: "[]"
-            val bands: MutableList<Float> = try {
-                val list: List<Float> = gson.fromJson(json, object : TypeToken<List<Float>>() {}.type)
-                list.toMutableList()
-            } catch (e: Exception) { mutableListOf() }
+            val bands = safeParseJson("equalizer_bands", json) {
+                gson.fromJson<List<Float>>(json, object : TypeToken<List<Float>>() {}.type)
+                    .toMutableList()
+            } ?: return@edit
             while (bands.size <= index) bands.add(0f)
             bands[index] = value
             prefs[keyEqualizerBands] = gson.toJson(bands)
@@ -718,7 +738,7 @@ class AppPreferences private constructor(private val context: Context) {
     val networkFavorites: Flow<List<NetworkFavoriteItem>> = dataStore.data.map { prefs ->
         val json = prefs[keyNetworkFavorites] ?: "[]"
         try {
-            gson.fromJson(json, object : TypeToken<List<NetworkFavoriteItem>>() {}.type)
+            gson.fromJson<List<NetworkFavoriteItem>>(json, object : TypeToken<List<NetworkFavoriteItem>>() {}.type)
         } catch (e: Exception) { emptyList() }
     }
 
@@ -729,7 +749,7 @@ class AppPreferences private constructor(private val context: Context) {
         return try {
             dataStore.data.first().let { prefs ->
                 val json = prefs[keyNetworkFavorites] ?: "[]"
-                gson.fromJson(json, object : TypeToken<List<NetworkFavoriteItem>>() {}.type) ?: emptyList()
+                gson.fromJson<List<NetworkFavoriteItem>>(json, object : TypeToken<List<NetworkFavoriteItem>>() {}.type) ?: emptyList()
             }
         } catch (e: Exception) {
             emptyList()
@@ -744,10 +764,9 @@ class AppPreferences private constructor(private val context: Context) {
     suspend fun toggleNetworkFavorite(item: NetworkFavoriteItem) {
         dataStore.edit { prefs ->
             val json = prefs[keyNetworkFavorites] ?: "[]"
-            val list = try {
-                gson.fromJson(json, object : TypeToken<MutableList<NetworkFavoriteItem>>() {}.type)
-                    ?: mutableListOf()
-            } catch (e: Exception) { mutableListOf<NetworkFavoriteItem>() }
+            val list = safeParseJson("network_favorites", json) {
+                gson.fromJson<MutableList<NetworkFavoriteItem>>(json, object : TypeToken<MutableList<NetworkFavoriteItem>>() {}.type)
+            } ?: return@edit  // 解析失败：跳过回写，保留原数据
 
             val mutable = list.toMutableList()
             val existing = mutable.indexOfFirst { it.songId == item.songId }
@@ -772,7 +791,7 @@ class AppPreferences private constructor(private val context: Context) {
     val localPlaylists: Flow<List<LocalPlaylist>> = dataStore.data.map { prefs ->
         val json = prefs[keyLocalPlaylists] ?: "[]"
         try {
-            gson.fromJson(json, object : TypeToken<List<LocalPlaylist>>() {}.type)
+            gson.fromJson<List<LocalPlaylist>>(json, object : TypeToken<List<LocalPlaylist>>() {}.type)
         } catch (e: Exception) { emptyList() }
     }
 
@@ -783,7 +802,7 @@ class AppPreferences private constructor(private val context: Context) {
         return try {
             dataStore.data.first().let { prefs ->
                 val json = prefs[keyLocalPlaylists] ?: "[]"
-                gson.fromJson(json, object : TypeToken<List<LocalPlaylist>>() {}.type) ?: emptyList()
+                gson.fromJson<List<LocalPlaylist>>(json, object : TypeToken<List<LocalPlaylist>>() {}.type) ?: emptyList()
             }
         } catch (e: Exception) {
             emptyList()
@@ -799,10 +818,9 @@ class AppPreferences private constructor(private val context: Context) {
         lateinit var created: LocalPlaylist
         dataStore.edit { prefs ->
             val json = prefs[keyLocalPlaylists] ?: "[]"
-            val list = try {
-                gson.fromJson(json, object : TypeToken<MutableList<LocalPlaylist>>() {}.type)
-                    ?: mutableListOf()
-            } catch (e: Exception) { mutableListOf<LocalPlaylist>() }
+            val list = safeParseJson("local_playlists", json) {
+                gson.fromJson<MutableList<LocalPlaylist>>(json, object : TypeToken<MutableList<LocalPlaylist>>() {}.type)
+            } ?: mutableListOf()  // 歌单数据损坏时仍可创建新歌单（原数据保留，本函数不覆盖）
 
             val playlist = LocalPlaylist(
                 id = java.util.UUID.randomUUID().toString(),
@@ -825,10 +843,9 @@ class AppPreferences private constructor(private val context: Context) {
         if (trimmed.isEmpty()) return
         dataStore.edit { prefs ->
             val json = prefs[keyLocalPlaylists] ?: "[]"
-            val list = try {
-                gson.fromJson(json, object : TypeToken<MutableList<LocalPlaylist>>() {}.type)
-                    ?: mutableListOf()
-            } catch (e: Exception) { mutableListOf<LocalPlaylist>() }
+            val list = safeParseJson("local_playlists", json) {
+                gson.fromJson<MutableList<LocalPlaylist>>(json, object : TypeToken<MutableList<LocalPlaylist>>() {}.type)
+            } ?: return@edit
 
             val mutable = list.toMutableList()
             val idx = mutable.indexOfFirst { it.id == id }
@@ -845,10 +862,9 @@ class AppPreferences private constructor(private val context: Context) {
     suspend fun deleteLocalPlaylist(id: String) {
         dataStore.edit { prefs ->
             val json = prefs[keyLocalPlaylists] ?: "[]"
-            val list = try {
-                gson.fromJson(json, object : TypeToken<MutableList<LocalPlaylist>>() {}.type)
-                    ?: mutableListOf()
-            } catch (e: Exception) { mutableListOf<LocalPlaylist>() }
+            val list = safeParseJson("local_playlists", json) {
+                gson.fromJson<MutableList<LocalPlaylist>>(json, object : TypeToken<MutableList<LocalPlaylist>>() {}.type)
+            } ?: return@edit
 
             val mutable = list.toMutableList()
             if (mutable.removeAll { it.id == id }) {
@@ -865,10 +881,9 @@ class AppPreferences private constructor(private val context: Context) {
         var added = false
         dataStore.edit { prefs ->
             val json = prefs[keyLocalPlaylists] ?: "[]"
-            val list = try {
-                gson.fromJson(json, object : TypeToken<MutableList<LocalPlaylist>>() {}.type)
-                    ?: mutableListOf()
-            } catch (e: Exception) { mutableListOf<LocalPlaylist>() }
+            val list = safeParseJson("local_playlists", json) {
+                gson.fromJson<MutableList<LocalPlaylist>>(json, object : TypeToken<MutableList<LocalPlaylist>>() {}.type)
+            } ?: return@edit
 
             val mutable = list.toMutableList()
             val idx = mutable.indexOfFirst { it.id == playlistId }
@@ -894,10 +909,9 @@ class AppPreferences private constructor(private val context: Context) {
     suspend fun removeSongFromPlaylist(playlistId: String, songId: String) {
         dataStore.edit { prefs ->
             val json = prefs[keyLocalPlaylists] ?: "[]"
-            val list = try {
-                gson.fromJson(json, object : TypeToken<MutableList<LocalPlaylist>>() {}.type)
-                    ?: mutableListOf()
-            } catch (e: Exception) { mutableListOf<LocalPlaylist>() }
+            val list = safeParseJson("local_playlists", json) {
+                gson.fromJson<MutableList<LocalPlaylist>>(json, object : TypeToken<MutableList<LocalPlaylist>>() {}.type)
+            } ?: return@edit
 
             val mutable = list.toMutableList()
             val idx = mutable.indexOfFirst { it.id == playlistId }
@@ -941,7 +955,7 @@ class AppPreferences private constructor(private val context: Context) {
         return try {
             dataStore.data.first().let { prefs ->
                 val json = prefs[keyLastQueue] ?: return@let null
-                gson.fromJson(json, LastQueueData::class.java)
+                gson.fromJson<LastQueueData>(json, LastQueueData::class.java)
             }
         } catch (e: Exception) {
             null
@@ -969,11 +983,9 @@ class AppPreferences private constructor(private val context: Context) {
     suspend fun addPlayRecord(record: com.nasmusic.tv.data.model.PlayRecord) {
         dataStore.edit { prefs ->
             val json = prefs[keyPlayRecords] ?: "{\"records\":[]}"
-            val data = try {
-                gson.fromJson(json, PlayRecordsData::class.java)
-            } catch (e: Exception) {
-                PlayRecordsData()
-            }
+            val data = safeParseJson("play_records", json) {
+                gson.fromJson<PlayRecordsData>(json, PlayRecordsData::class.java)
+            } ?: return@edit  // 解析失败：跳过回写，保留原数据
             // 最多保留 500 条记录
             val updated = PlayRecordsData(
                 records = (listOf(record) + data.records).take(500)
@@ -989,7 +1001,7 @@ class AppPreferences private constructor(private val context: Context) {
         return try {
             dataStore.data.first().let { prefs ->
                 val json = prefs[keyPlayRecords] ?: return emptyList()
-                val data = gson.fromJson(json, PlayRecordsData::class.java)
+                val data = gson.fromJson<PlayRecordsData>(json, PlayRecordsData::class.java)
                 data.records
             }
         } catch (e: Exception) {
@@ -1016,7 +1028,7 @@ class AppPreferences private constructor(private val context: Context) {
     val searchHistory: Flow<List<SearchHistoryItem>> = dataStore.data.map { prefs ->
         val json = prefs[keySearchHistory] ?: "[]"
         try {
-            gson.fromJson(json, object : TypeToken<List<SearchHistoryItem>>() {}.type)
+            gson.fromJson<List<SearchHistoryItem>>(json, object : TypeToken<List<SearchHistoryItem>>() {}.type)
         } catch (e: Exception) { emptyList() }
     }
 
@@ -1027,7 +1039,7 @@ class AppPreferences private constructor(private val context: Context) {
         return try {
             dataStore.data.first().let { prefs ->
                 val json = prefs[keySearchHistory] ?: "[]"
-                gson.fromJson(json, object : TypeToken<List<SearchHistoryItem>>() {}.type) ?: emptyList()
+                gson.fromJson<List<SearchHistoryItem>>(json, object : TypeToken<List<SearchHistoryItem>>() {}.type) ?: emptyList()
             }
         } catch (e: Exception) {
             emptyList()
@@ -1046,10 +1058,9 @@ class AppPreferences private constructor(private val context: Context) {
         val now = System.currentTimeMillis()
         dataStore.edit { prefs ->
             val json = prefs[keySearchHistory] ?: "[]"
-            val list = try {
-                gson.fromJson(json, object : TypeToken<MutableList<SearchHistoryItem>>() {}.type)
-                    ?: mutableListOf()
-            } catch (e: Exception) { mutableListOf<SearchHistoryItem>() }
+            val list = safeParseJson("search_history", json) {
+                gson.fromJson<MutableList<SearchHistoryItem>>(json, object : TypeToken<MutableList<SearchHistoryItem>>() {}.type)
+            } ?: return@edit
 
             val mutable = list.toMutableList()
             // 合并同名条目
@@ -1080,10 +1091,9 @@ class AppPreferences private constructor(private val context: Context) {
         val cutoff = now - searchHistoryTtlMs
         dataStore.edit { prefs ->
             val json = prefs[keySearchHistory] ?: return@edit
-            val list = try {
-                gson.fromJson(json, object : TypeToken<MutableList<SearchHistoryItem>>() {}.type)
-                    ?: mutableListOf()
-            } catch (e: Exception) { mutableListOf<SearchHistoryItem>() }
+            val list = safeParseJson("search_history", json) {
+                gson.fromJson<MutableList<SearchHistoryItem>>(json, object : TypeToken<MutableList<SearchHistoryItem>>() {}.type)
+            } ?: return@edit
 
             val mutable = list.toMutableList()
             val beforeSize = mutable.size

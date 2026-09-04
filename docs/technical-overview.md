@@ -6556,3 +6556,37 @@ val result = with(kotlinx.coroutines.Dispatchers.IO) { separator.separate(...) }
 **验证结果**：✅ `assembleRelease` 编译通过（BUILD SUCCESSFUL，无 error，仅既有 warning），产物 `app/build/outputs/apk/release/NASMusicTV-release-v2-26-4.apk`。真机 HQ 分离行为验证需 TV 复测，本版按用户要求不推电视。
 
 **版本号变更**：v2.26.3 → v2.26.4（versionCode 82 → 83）
+
+---
+
+### 10.77 AppPreferences JSON 偏好「解析失败→回写空」数据丢失修复（v2.26.5 - 2026-09-04）
+
+**日期**：2026-09-04
+
+> 承接 2026-09-03 代码复审 P0 项「C2 AppPreferences 数据丢失模式」。
+
+**问题描述**：所有 JSON 型偏好的「读-改-写」写入点，都是「`try { gson.fromJson(...) } catch (e) { 空集合 }` → 无条件 `gson.toJson(updated)` 回写」。一旦某条偏好 JSON 损坏（写入截断 / 字段变更 / 版本不兼容），解析失败被静默吞掉、转成空集合，随后**用空数据回写覆盖原值** —— 用户积累的数百条播放记录、收藏、歌单在**一次异常后永久抹除**，且日志只有一行 `AppLog.w`，几乎无法追溯。
+
+**根因分析**：`gson.fromJson` 的 Java 签名是 `<T> T fromJson(String, Type)`，返回**平台类型** `T!`。Kotlin 里 `catch` 分支用空集合兜底 + 后续无条件 `toJson` 回写，构成了「读取失败也照常写空」的危险路径。
+
+**修改**（`AppPreferences.kt`）：
+
+1. **新增统一安全解析辅助函数** `safeParseJson(keyName, json) { parse() }`：解析失败时记 `AppLog.w`（含 keyName 与异常信息）并返回 `null`，成功返回解析结果。
+2. **改造全部「读-改-写」写入点为「解析失败即跳过回写」**（`return@edit`，保留原数据）：
+   - `addPlayRecord`（播放记录，500 条上限）
+   - `recordPlay` / `recordPlayWithSong`（最近播放 id、播放次数、最近歌曲对象，各 3 处）
+   - `recordRecentSongObject`（最近歌曲对象）
+   - `toggleNetworkFavorite`（网络收藏，500 条上限）
+   - `createLocalPlaylist` / `renameLocalPlaylist` / `deleteLocalPlaylist` / `addSongToPlaylist` / `removeSongFromPlaylist`（本地歌单，5 处）
+   - `recordSearch` / `purgeExpiredSearchHistory`（搜索历史）
+   - `setEqualizerBand`（均衡器 bands）
+3. **`gson.fromJson` 统一补显式泛型实参**（`gson.fromJson<Type>(...)`），消除平台类型导致的泛型推断失败（`safeParseJson<T>` 的 `T` 无法从平台类型唯一推断）。
+   - 注：`createLocalPlaylist` 是唯一例外 —— 歌单数据损坏时仍允许创建新歌单（`?: mutableListOf()`），因为该函数是「新增」而非「覆盖」，不构成数据丢失。
+
+**设计权衡**：解析失败时**放弃本次写入**（而非尝试恢复），代价是本次操作（如一次播放记录）不会落盘；收益是**绝不以空数据覆盖历史数据**。考虑到播放记录/收藏/歌单对用户价值远高于单次写入，此取舍合理。
+
+**涉及文件**：`app/src/main/java/com/nasmusic/tv/data/prefs/AppPreferences.kt`、`app/build.gradle.kts`、`CHANGELOG.md`、`docs/technical-overview.md`
+
+**验证结果**：✅ `assembleRelease` 编译通过（BUILD SUCCESSFUL，无 error，仅既有 warning），产物 `app/build/outputs/apk/release/NASMusicTV-release-v2-26-5.apk`。行为验证需真机，本版按用户要求不推电视。
+
+**版本号变更**：v2.26.4 → v2.26.5（versionCode 83 → 84）
