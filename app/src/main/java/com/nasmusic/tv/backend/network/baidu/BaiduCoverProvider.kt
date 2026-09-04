@@ -21,7 +21,8 @@ import android.util.Base64
  */
 class BaiduCoverProvider(
     private val api: BaiduPanApi,
-    private val client: OkHttpClient
+    private val client: OkHttpClient,
+    private val oauth: BaiduOAuthClient
 ) {
 
     suspend fun getCover(fsId: Long, title: String, artist: String?, path: String?): String? =
@@ -60,10 +61,21 @@ class BaiduCoverProvider(
         return "data:$dataMime;base64,$b64"
     }
 
-    /** dlink 可能不含 access_token，需手动补（与 BaiduStreamFactory.resolveStreamUrl 一致） */
-    private suspend fun ensureAccessToken(dlink: String): String {
-        return if (dlink.contains("access_token=")) dlink
-        else dlink + (if (dlink.contains('?')) "&" else "?") + "access_token="
+    /**
+     * dlink 可能不含 access_token，需手动补（与 BaiduStreamFactory.resolveStreamUrl 一致）
+     *
+     * 修复：此前只拼了**空的** `access_token=`（从未取 token），导致侧车封面 dlink 一律 403。
+     * 现改为真正调用 [BaiduOAuthClient.getValidAccessToken] 并 URL 编码；
+     * 取不到 token 时返回 null，交由上层继续走内嵌 APIC / 网络封面 fallback。
+     */
+    private suspend fun ensureAccessToken(dlink: String): String? {
+        if (dlink.contains("access_token=")) return dlink
+        val token = oauth.getValidAccessToken() ?: run {
+            AppLog.w(TAG, "ensureAccessToken: access_token 不可用，侧车封面 dlink 无法访问")
+            return null
+        }
+        return dlink + (if (dlink.contains('?')) "&" else "?") +
+            "access_token=" + java.net.URLEncoder.encode(token, "UTF-8")
     }
 
     private fun downloadRange(url: String, start: Long, end: Long): ByteArray? {

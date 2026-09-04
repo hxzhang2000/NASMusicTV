@@ -7,6 +7,12 @@
 >
 > 类型：`Added`（新增） | `Changed`（变更） | `Fixed`（修复） | `Removed`（移除）
 
+## [v2.26.1] - 2026-09-04
+
+### Fixed
+
+- **百度网盘侧车封面 dlink 缺少 access_token（封面一律 403）**：`BaiduCoverProvider.ensureAccessToken()` 原先只拼接**空的** `access_token=`（从未获取 token 值），导致所有不含 token 的侧车封面 dlink 请求被百度拒绝、Coil 加载失败；且该类构造时未注入 `BaiduOAuthClient`，根本无从取 token。现注入 `BaiduOAuthClient`（`NasMusicApp`），改为真正调用 `getValidAccessToken()` 并做 URL 编码（与 `BaiduStreamFactory.resolveStreamUrl` 处理一致）；取不到 token 时返回 `null`，交由后续「内嵌 APIC → 网络封面」fallback 继续处理，不再产生无效 URL。
+
 ## [v2.26.0] - 2026-09-03
 
 ### Added

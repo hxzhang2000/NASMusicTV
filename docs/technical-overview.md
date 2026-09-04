@@ -6362,3 +6362,76 @@ E/CryptoUtils: java.security.NoSuchAlgorithmException: KeyGenerator AES implemen
 **验证结果**：✅ `assembleRelease` 编译通过（BUILD SUCCESSFUL，无 error，仅既有 warning），产物 `app/build/outputs/apk/release/NASMusicTV-release-v2-26-0.apk`。按用户要求仅编译、不推电视测试。
 
 **版本号变更**：v2.25.8 → v2.26.0（versionCode 78 → 79）
+
+---
+
+### 10.73 侧车封面 access_token 缺失修复 + 专辑封面获取逻辑全景梳理（v2.26.1 - 2026-09-04）
+
+**日期**：2026-09-04
+
+#### 10.73.1 百度侧车封面 dlink 缺少 access_token（Issue #4 排查中发现）
+
+**问题描述**：梳理封面获取逻辑时发现，百度网盘的「侧车封面」（同目录 cover.jpg 等）即使成功定位到文件，产出的 dlink 也必然加载失败。
+
+**根因分析**：`BaiduCoverProvider.ensureAccessToken()` 原实现为：
+
+```kotlin
+private suspend fun ensureAccessToken(dlink: String): String {
+    return if (dlink.contains("access_token=")) dlink
+    else dlink + (if (dlink.contains('?')) "&" else "?") + "access_token="
+}
+```
+
+它只拼了 `access_token=` **后面没有 token 值**；函数虽声明为 `suspend` 却从不挂起取 token —— 因为 `BaiduCoverProvider` 构造时只拿到 `BaiduPanApi` 与 `OkHttpClient`，**从未注入 `BaiduOAuthClient`**，根本无从取 token。对比同包 `BaiduStreamFactory.resolveStreamUrl` 的正确实现（`oauth.getValidAccessToken()` + `URLEncoder.encode`），可确认这是遗留的未完成实现。后果：侧车封面 URL 一律被百度拒绝（403），Coil 加载失败。
+
+**修改**：
+
+- `BaiduCoverProvider` 构造新增 `private val oauth: BaiduOAuthClient`（同包，无需 import）。
+- `ensureAccessToken` 返回类型改为 `String?`；真正调用 `oauth.getValidAccessToken()` 并 `URLEncoder.encode(token, "UTF-8")`；取不到 token 时打 warning 并返回 `null`，使 `findSidecarCover` 返回 null、`getCover` 继续走内嵌 APIC / 上层网络封面 fallback，不再产出无效 URL。
+- `NasMusicApp`：`BaiduCoverProvider(baiduPanApi, baiduOkHttpClient, baiduOAuthClient)`。
+
+**验证结果**：✅ `assembleRelease` 编译通过（BUILD SUCCESSFUL，无 error）。
+
+#### 10.73.2 专辑封面获取逻辑全景（应 Issue #4「列出来我也分析一下」要求）
+
+**Stage 0 — 基线（构建专辑时同步得出）**
+
+- `MusicMerger.buildLocalAlbums()`：`coverUrl = songs.firstOrNull { it.coverUrl != null }?.coverUrl`（`MusicMerger.kt:134`）
+- `MusicMerger.buildBaiduAlbums()`：同上（`MusicMerger.kt:210`）
+- 即专辑封面初始值 = 专辑内第一首有 `coverUrl` 的歌曲封面。百度歌曲索引时通常无内嵌封面 → `song.coverUrl` 多为 null → 百度专辑基线多为 null，从而进入异步解析。
+
+**Stage 1 — 异步解析（`AlbumCoverResolver.resolveCovers`）**
+
+只对 `album.coverUrl == null` 的专辑执行，优先级链：
+
+| 优先级 | 来源 | 实现 | 说明 |
+|---|---|---|---|
+| P1 | 百度侧车/APIC | `resolveBaiduCover` → `BaiduCoverProvider.getCover` | ① 侧车：listDir 父目录找 category=IMAGE 且文件名∈{cover, folder, album, front, cover.jpg} → fileMetas 取 dlink → 补 access_token；② 内嵌 APIC：Range 下载前 256KB → `Id3v2Parser.findApic` → Base64 → `data:image/...;base64,...` |
+| P2 | iTunes | `resolveItunesCover` | `https://itunes.apple.com/search?term={album+artist}&entity=album&limit=1` → `results[0].artworkUrl100`，并把 `100x100` 替换为 `600x600` |
+| P2.5 | 网络（Meting/网易云） | `searchCover(title, artist)` → `NetworkMusicManager.searchCoverUrl` | v2.26.0 新增；仅在专辑内含 `networkSource=="baidu"` 的歌时触发，取首条有标题的歌按「标题+艺术家」检索 |
+| P3 | 本地 ID3 补充 | `songs.firstOrNull { it.coverUrl != null }?.coverUrl` | 本地歌 MediaStore 通常已提取，此步为补充 |
+| P4 | 兜底 | — | 已在 Stage 0 处理，此处不再重复 |
+
+**Stage 2 — 回写与缓存（`MainViewModel`）**
+
+- `resolveCovers` 的 `onUpdated` 每 `MAX_CONCURRENT=5` 个回调一次 + 结束时最终回调。
+- `resolveAlbumCoversAsync()`（`MainViewModel.kt:2295`）在回调里**只写** `resolvedAlbumCovers[albumId] = coverUrl` 缓存，**不直接改** `_mergedAlbums`（避免与 `updateMergedData` 竞争覆盖）。
+- 解析结束后调用 `updateMergedData()` 重建；`updateMergedData`（:2223-2228）从 `resolvedAlbumCovers` 回填，但**仅当 `album.coverUrl == null` 时才填**。
+- 缓存跨多次 `updateMergedData` 保持，避免重复网络请求。
+
+**Stage 3 — UI 渲染**
+
+- `AlbumDetailScreen` 用 `CoverImage(coverUrl = album.coverUrl, size = 280.dp)`（:158）；曲库网格同理。
+- Coil 加载；百度 dlink 需 UA `pan.baidu.com`，由 `NasMusicApp` 实现 `ImageLoaderFactory` 注入 `BaiduHttpDataSourceFactory.createOkHttpClientForCoil`。
+
+**已知弱点 / 待决策项（供后续分析）**
+
+1. **P2 iTunes 对中文专辑命中率低**：搜索词是「专辑名 + 艺术家」，而百度专辑名是从**目录名**推断的（`buildBaiduAlbums` 取 path 倒数第二段），目录名常不规范（如「周杰伦」这类艺术家名、或「新建文件夹」）；且 `buildBaiduAlbums` 会**过滤掉与歌手同名的目录**（视为艺术家目录），这类歌曲根本不生成专辑。
+2. **P2.5 依赖歌曲标题质量**：若百度文件命名不规范（`01.mp3`、乱码标题），`repSong.title` 质量差 → 检索不到封面。
+3. **`updateMergedData` ↔ `resolveAlbumCoversAsync` 存在无条件循环调用链**：`updateMergedData()`（:2249）末尾无条件调用 `resolveAlbumCoversAsync()`；而 `resolveAlbumCoversAsync()`（:2310-2312）在 `resolveCovers` 返回后（**不判断是否有成果**）无条件再调 `updateMergedData()`，形成 `updateMergedData → resolveAlbumCoversAsync → updateMergedData → …` 的循环。因 `resolveCovers` 对已解析（缓存命中）的专辑会快速跳过，实际表现为后台持续循环执行 merge + 艺术家计数（而非卡死 UI），但存在 CPU/电量开销、以及对无法解析专辑的重复网络请求。此前代码复审（2026-09-03）曾判定该循环「已收敛」并列为 P1；本次代码通读未发现中断条件，**建议增加收敛护栏**（例如仅在存在 `coverUrl == null` 且尚未尝试过的专辑时才再次触发解析）。此项待决策后再改。
+
+**涉及文件**：`app/src/main/java/com/nasmusic/tv/backend/network/baidu/BaiduCoverProvider.kt`、`app/src/main/java/com/nasmusic/tv/NasMusicApp.kt`、`app/build.gradle.kts`、`CHANGELOG.md`、`docs/technical-overview.md`
+
+**验证结果**：✅ `assembleRelease` 编译通过（BUILD SUCCESSFUL，无 error）。
+
+**版本号变更**：v2.26.0 → v2.26.1（versionCode 79 → 80）
