@@ -7,6 +7,16 @@
 >
 > 类型：`Added`（新增） | `Changed`（变更） | `Fixed`（修复） | `Removed`（移除）
 
+## [v2.26.22] - 2026-09-04
+
+### Fixed
+
+- **LocalMusicDatabase 无破坏性迁移（方案 A）**：`LocalMusicDatabase` 原仅配 `.fallbackToDestructiveMigrationOnDowngrade()`，即 schema 版本**升级**时不会触发破坏性重建、且无任何 `Migration` 实现——一旦后续给实体加字段/索引导致 `version` 提升，Room 会抛 `IllegalStateException: A migration from 1 to 2 was required but not found`，本地音乐库直接崩溃不可用。改为 `.fallbackToDestructiveMigration(true)`（含 `dropAllTables` 的重载，避免 no-arg 版本在新 Room 中的 deprecation 警告），升级与降级均走破坏性重建。本地索引可由重扫重建，无需维护 `Migration` 类，消除版本演进时的迁移代码负担与崩溃风险。
+
+### Changed
+
+- **versionCode 100 → 101，versionName 2.26.21 → 2.26.22**
+
 ## [v2.26.21] - 2026-09-04
 
 ### Fixed

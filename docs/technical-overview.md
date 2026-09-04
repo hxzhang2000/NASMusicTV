@@ -7010,3 +7010,34 @@ val result = with(kotlinx.coroutines.Dispatchers.IO) { separator.separate(...) }
 **涉及文件**：`ui/viewmodel/MainViewModel.kt`、`ui/components/AppRoot.kt`、`app/build.gradle.kts`、`CHANGELOG.md`
 
 **版本号变更**：v2.26.20 → v2.26.21（versionCode 99 → 100）
+
+### 10.93 LocalMusicDatabase 无破坏性迁移（方案 A，v2.26.22 - 2026-09-04）
+
+**日期**：2026-09-04
+
+> 本地音乐索引 DB 仅配 `fallbackToDestructiveMigrationOnDowngrade()`，升级无 Migration 实现——未来 `version` 提升会直接抛 `IllegalStateException` 致本地库崩溃。改为全破坏性重建。
+
+#### 10.93.1 根因
+
+`LocalMusicDatabase`（单例 Room，实体仅 `LocalSongEntity`，当前 `version = 1`，`exportSchema = true`）的 `companion.get()` 仅调用 `.fallbackToDestructiveMigrationOnDowngrade()`：
+- **降级**（新版本号 < 旧版本号）时回退破坏性重建；
+- **升级**（新版本号 > 旧版本号）时没有任何 `Migration` 实现，Room 会抛 `IllegalStateException: A migration from 1 to 2 was required but not found`。
+
+本地音乐库是「可重扫重建」的索引型数据，本不应维护迁移代码，但原配置在**升级方向**上缺了兜底——一旦后续给实体加字段/索引导致 `version` 提升，线上将直接崩溃、本地歌单全失。这是静默埋雷：当前 `version=1` 不触发，但任何一次 schema 演进都会引爆。
+
+#### 10.93.2 修复
+
+- `LocalMusicDatabase.kt` 第 33 行由 `.fallbackToDestructiveMigrationOnDowngrade()` 改为 `.fallbackToDestructiveMigration(true)`。
+  - 选用带 `dropAllTables` 参数的重载而非 no-arg 版：no-arg `fallbackToDestructiveMigration()` 在新 Room 版本已 deprecate（警告提示「Replace by overloaded version with parameter to indicate if all tables should be dropped or not」），`true` 等价于原 no-arg 的「丢弃全部表、破坏性重建」语义，同时消除 deprecation 警告。
+  - 升级与降级现在**都**走破坏性重建：本地索引可由重扫重建，无需编写 `Migration` 类，彻底消除版本演进时的迁移代码负担与崩溃风险。
+- 同步更新类 doc：明确「schema 变化时（含升级与降级）回退到破坏性迁移」。
+
+#### 10.93.3 影响与兼容
+
+- 行为变化仅发生在**未来 schema 版本提升时**——当前 `version=1` 不会触发任何重建，已扫描的本地索引、收藏照常保留，无数据副作用。
+- 用户侧的代价：若某次发版带了 schema 变更，升级后本地库会被清空、需重扫；本地音乐是设备端可重新扫描的索引，可接受。
+- `exportSchema = true` 仍保留（Room 仅在没有配置 `room.schemaLocation` 时给一条提示性 warning，不影响功能，属历史既有配置，不在本次范围）。
+
+**涉及文件**：`backend/local/db/LocalMusicDatabase.kt`、`app/build.gradle.kts`、`CHANGELOG.md`
+
+**版本号变更**：v2.26.21 → v2.26.22（versionCode 100 → 101）
