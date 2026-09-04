@@ -6851,4 +6851,26 @@ val result = with(kotlinx.coroutines.Dispatchers.IO) { separator.separate(...) }
 
 **版本号变更**：v2.26.13 → v2.26.14（versionCode 92 → 93）
 
+### 10.87 频谱采样率硬编码 + 冗余 WAKE_LOCK 权限（v2.26.15 - 2026-09-04）
+
+**日期**：2026-09-04
+
+> 承接 2026-09-03 代码复审 P2 项。
+
+#### 10.87.1 频谱分析采样率硬编码 44100
+
+**问题**：`SpectrumAnalyzer.processFft` 已收到 Visualizer 回调的真实 `samplingRate`，但频率映射硬用常量 `SAMPLING_RATE=44100`。设备实际采样率非 44100（如 48000）时 `freqPerBin` 算错，32 根频谱柱的频率映射整体漂移，低频/高频分配失真。
+
+**修复**：改用回调提供的真实 `samplingRate`（异常时回退 44100）计算 `freqPerBin`。
+
+#### 10.87.2 冗余 WAKE_LOCK 权限声明
+
+**问题**：`AndroidManifest.xml` 声明 `android.permission.WAKE_LOCK`，但全代码库无任何 `WakeLock`/`PowerManager` 引用，Media3 `MediaLibraryService` 自行管理唤醒锁，应用层声明属冗余。
+
+**修复**：删除该权限声明。
+
+**涉及文件**：`player/SpectrumAnalyzer.kt`、`app/src/main/AndroidManifest.xml`、`app/build.gradle.kts`、`CHANGELOG.md`
+
+**版本号变更**：v2.26.14 → v2.26.15（versionCode 93 → 94）
+
 **补充判断（P11/P12/P13 暂缓）**：P11（shuffleModeEnabled 与 playRandom 双轨错歌）需引入独立播放模式状态字段、解耦「随机模式标志」与 ExoPlayer 有副作用的 `shuffleModeEnabled` 属性，中等复杂度且需真机验证随机播放不回归；P12/P13（未注册 MediaButtonReceiver 致通知栏按钮失效）完整修复需实现 `onPlaybackResumption` + 播放队列持久化恢复，属架构级改动。二者风险/收益比不佳，暂缓。

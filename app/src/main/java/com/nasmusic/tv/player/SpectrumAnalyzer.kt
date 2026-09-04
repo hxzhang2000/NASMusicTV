@@ -190,7 +190,10 @@ class SpectrumAnalyzer {
         // 柱子布局（┃ = 分段边界）：
         // [0-4] 20~80Hz │ [5-19] 80~250Hz │ [20-27] 250Hz~3kHz │ [28-31] 3kHz~20kHz
         //  └─5根─┘        └───15根───┘        └───8根───┘         └──4根───┘
-        val freqPerBin = SAMPLING_RATE.toFloat() / (numBins * 2)
+        // 使用 Visualizer 回调提供的真实采样率。设备实际采样率未必是 44100
+        // （如 48000），硬用常量会导致 freqPerBin 算错、频谱柱频率映射整体漂移。
+        val effectiveRate = if (samplingRate > 0) samplingRate else SAMPLING_RATE
+        val freqPerBin = effectiveRate.toFloat() / (numBins * 2)
         val result = FloatArray(BAR_COUNT)
 
         for (bin in 1 until numBins) {  // 跳过直流分量

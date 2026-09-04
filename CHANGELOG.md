@@ -7,6 +7,16 @@
 >
 > 类型：`Added`（新增） | `Changed`（变更） | `Fixed`（修复） | `Removed`（移除）
 
+## [v2.26.15] - 2026-09-04
+
+### Fixed
+
+- **频谱分析采样率硬编码 44100（P2）**：`SpectrumAnalyzer.processFft` 收到 Visualizer 回调的真实 `samplingRate`，但频率映射硬用常量 `SAMPLING_RATE=44100`，设备实际采样率非 44100（如 48000）时 `freqPerBin` 算错、频谱柱频率映射整体漂移。已改用回调真实采样率（异常时回退 44100）。
+
+### Removed
+
+- **冗余 `WAKE_LOCK` 权限声明（P2）**：全代码库无任何 `WakeLock`/`PowerManager` 引用，Media3 `MediaLibraryService` 自行管理唤醒锁，应用层声明属冗余，已删除。
+
 ## [v2.26.14] - 2026-09-04
 
 ### Fixed
