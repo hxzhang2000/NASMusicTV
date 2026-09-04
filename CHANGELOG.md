@@ -7,6 +7,16 @@
 >
 > 类型：`Added`（新增） | `Changed`（变更） | `Fixed`（修复） | `Removed`（移除）
 
+## [v2.26.11] - 2026-09-04
+
+### Fixed
+
+- **Demucs 解码临时文件字节序不匹配导致分离输入即噪声（P9）**：`decodeAudioToTempFile` 用 `ByteBuffer.order(LITTLE_ENDIAN)` 写临时文件，但 `separate()` 读回用 `DataInputStream.readFloat()`（JVM 默认 BIG_ENDIAN），字节序相反导致读回的 float 全部错乱，人声分离输入即噪声。已统一为 BIG_ENDIAN 写入（与 `readFloat()` 一致）。
+
+- **Demucs 解码逐样本分配 ByteBuffer + 无缓冲 IO 拖慢分离（P15）**：原实现每 2 个采样就 `ByteBuffer.allocate(8)` + 逐次 `fos.write`，全程无缓冲、频繁分配与系统调用。已改为复用 64KB 预分配缓冲批量写入（写满即 flush，结束冲刷余量）。
+
+- **Demucs 解码器/抽取器异常路径泄漏（P8）**：`decodeAudioToTempFile` 的 `MediaCodec`/`MediaExtractor` 仅在正常路径 `release()`，catch 分支未释放，解码异常时资源泄漏。已将二者提升为函数级变量，`finally` 块统一 `stop()`/`release()`。
+
 ## [v2.26.10] - 2026-09-04
 
 ### Fixed

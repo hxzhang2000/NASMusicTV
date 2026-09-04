@@ -15,8 +15,6 @@ import java.io.DataInputStream
 import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
-import java.nio.ByteBuffer
-import java.nio.ByteOrder
 import java.nio.FloatBuffer
 
 /**
@@ -149,7 +147,7 @@ class DemucsSeparator(private val context: Context) {
         val totalSamples: Int,  // 单声道采样数（立体声 = pcmBytes / 4 / 2）
         val sampleRate: Int,
         val channelCount: Int,
-        val tempFile: File     // 原始 PCM 浮点数据（little-endian float32 交织）
+        val tempFile: File     // 原始 PCM 浮点数据（big-endian float32 交织）
     )
 
     /**
@@ -302,13 +300,15 @@ class DemucsSeparator(private val context: Context) {
     /**
      * 解码音频并写入临时文件（不在 JVM 堆中保留完整 FloatArray）
      *
-     * 临时文件格式：原始 little-endian float32 交织立体声（L0,R0,L1,R1,...）
+     * 临时文件格式：原始 big-endian float32 交织立体声（L0,R0,L1,R1,...）
      * 读取时按需解交织，峰值内存仅段缓冲区 ~5MB。
      */
     private fun decodeAudioToTempFile(inputPath: String, progress: ProgressCallback?): DecodeResult? {
         val tempFile = File(context.cacheDir, "demucs_pcm_${System.nanoTime()}.tmp")
+        var extractor: MediaExtractor? = null
+        var codec: MediaCodec? = null
         try {
-            val extractor = MediaExtractor()
+            extractor = MediaExtractor()
             extractor.setDataSource(inputPath)
 
             var audioTrackIndex = -1
@@ -332,7 +332,7 @@ class DemucsSeparator(private val context: Context) {
 
             extractor.selectTrack(audioTrackIndex)
 
-            val codec = MediaCodec.createDecoderByType(format.getString(MediaFormat.KEY_MIME)!!)
+            codec = MediaCodec.createDecoderByType(format.getString(MediaFormat.KEY_MIME)!!)
             codec.configure(format, null, null, 0)
             codec.start()
 
@@ -354,8 +354,11 @@ class DemucsSeparator(private val context: Context) {
             var outputDone = false
             var lastDecodeProgressReport = 0
 
-            // 使用 DirectByteBuffer 直接将 short 转为 float 写入文件
-            val byteBuffer = ByteArray(8) // 每次读2个 float = 8 bytes
+            // 复用预分配的 float32 写入缓冲（BIG_ENDIAN，与 readFloat 一致），
+            // 批量写入减少逐样本 IO；flush 剩余不足一段的字节。
+            // 临时文件为连续交织 float32（L0,R0,L1,R1,...），无段间填充。
+            val writeBuf = ByteArray(64 * 1024) // 64KB 缓冲
+            var writeBufPos = 0
 
             FileOutputStream(tempFile).use { fos ->
                 while (!outputDone) {
@@ -389,7 +392,7 @@ class DemucsSeparator(private val context: Context) {
                             outputBuffer.position(bufferInfo.offset)
                             outputBuffer.limit(bufferInfo.offset + bufferInfo.size)
 
-                            // 读取 shorts，转为 floats，直接写入临时文件
+                            // 读取 shorts，转为 floats，写入临时文件（BIG_ENDIAN，与 readFloat 一致）
                             // MediaCodec 输出是 interleaved PCM 16-bit
                             while (outputBuffer.remaining() >= 2) {
                                 val left = outputBuffer.short.toFloat() / 32768f
@@ -397,10 +400,22 @@ class DemucsSeparator(private val context: Context) {
                                     outputBuffer.short.toFloat() / 32768f
                                 } else left  // 奇数样本时复制
 
-                                val bb = ByteBuffer.allocate(8).order(ByteOrder.LITTLE_ENDIAN)
-                                bb.putFloat(left)
-                                bb.putFloat(right)
-                                fos.write(bb.array())
+                                // 预分配缓冲区写满即 flush，避免逐样本 fos.write
+                                if (writeBufPos + 8 > writeBuf.size) {
+                                    fos.write(writeBuf, 0, writeBufPos)
+                                    writeBufPos = 0
+                                }
+                                val lb = java.lang.Float.floatToIntBits(left)
+                                val rb = java.lang.Float.floatToIntBits(right)
+                                // 显式 BIG_ENDIAN 写入，保证与 DataInputStream.readFloat() 一致
+                                writeBuf[writeBufPos++] = (lb ushr 24).toByte()
+                                writeBuf[writeBufPos++] = (lb ushr 16).toByte()
+                                writeBuf[writeBufPos++] = (lb ushr 8).toByte()
+                                writeBuf[writeBufPos++] = lb.toByte()
+                                writeBuf[writeBufPos++] = (rb ushr 24).toByte()
+                                writeBuf[writeBufPos++] = (rb ushr 16).toByte()
+                                writeBuf[writeBufPos++] = (rb ushr 8).toByte()
+                                writeBuf[writeBufPos++] = rb.toByte()
                                 totalFloatsWritten += 2
                             }
 
@@ -418,11 +433,19 @@ class DemucsSeparator(private val context: Context) {
                         codec.releaseOutputBuffer(outputIndex, false)
                     }
                 }
+
+                // 冲刷剩余不足 64KB 的字节
+                if (writeBufPos > 0) {
+                    fos.write(writeBuf, 0, writeBufPos)
+                    writeBufPos = 0
+                }
             }
 
             codec.stop()
             codec.release()
+            codec = null
             extractor.release()
+            extractor = null
 
             val totalSamples = (totalFloatsWritten / outChannels).toInt()
 
@@ -439,6 +462,11 @@ class DemucsSeparator(private val context: Context) {
             lastError = context.getString(R.string.demucs_error_decode_failed, e.message?.take(30))
             tempFile.delete()
             return null
+        } finally {
+            // 异常路径也确保释放解码器/抽取器，避免资源泄漏
+            runCatching { codec?.stop() }
+            runCatching { codec?.release() }
+            runCatching { extractor?.release() }
         }
     }
 

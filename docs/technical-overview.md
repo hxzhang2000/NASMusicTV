@@ -6766,3 +6766,31 @@ val result = with(kotlinx.coroutines.Dispatchers.IO) { separator.separate(...) }
 **涉及文件**：`backend/local/AlbumCoverResolver.kt`、`app/build.gradle.kts`、`CHANGELOG.md`
 
 **版本号变更**：v2.26.9 → v2.26.10（versionCode 88 → 89）
+
+### 10.83 Demucs 解码字节序不匹配 + 无缓冲 IO + 解码器泄漏（v2.26.11 - 2026-09-04）
+
+**日期**：2026-09-04
+
+> 承接 2026-09-03 代码复审 P0/P1 项 P8、P9、P15（Demucs 人声分离器）。
+
+#### 10.83.1 解码临时文件字节序不匹配（P9）
+
+**问题**：`decodeAudioToTempFile` 写入临时文件用 `ByteBuffer.allocate(8).order(ByteOrder.LITTLE_ENDIAN)`，而 `separate()` 读回用 `DataInputStream.readFloat()`（JVM 默认 BIG_ENDIAN）。写入/读取字节序相反，读回的 float 全部错乱，人声分离输入即噪声——这是最严重的正确性缺陷。
+
+**修复**：统一为 BIG_ENDIAN 写入（用 `Float.floatToIntBits` + 显式 4 字节 `ushr` 拆分写高字节在前），与 `readFloat()` 完全一致。同步更新 `DecodeResult` 与 `decodeAudioToTempFile` 注释中的「little-endian」→「big-endian」。
+
+#### 10.83.2 解码逐样本分配 + 无缓冲 IO（P15）
+
+**问题**：原实现每 2 个采样就 `ByteBuffer.allocate(8)` 并逐次 `fos.write(bb.array())`，全程无缓冲，频繁堆分配与系统调用拖慢整段解码。
+
+**修复**：复用 64KB 预分配 `ByteArray` 缓冲，手动按 BIG_ENDIAN 写字节；写满即 `fos.write(writeBuf, 0, pos)` 冲刷，循环结束冲刷剩余不足 64KB 的字节。
+
+#### 10.83.3 解码器/抽取器异常路径泄漏（P8）
+
+**问题**：`MediaCodec`/`MediaExtractor` 仅在正常路径 `stop()`/`release()`，`catch` 分支直接 `return null` 未释放，解码异常时资源泄漏。
+
+**修复**：将二者提升为函数级 `var codec`/`var extractor` 可空变量，正常路径 release 后置 `null`，新增 `finally` 块 `runCatching { codec?.stop(); codec?.release(); extractor?.release() }` 兜底释放。
+
+**涉及文件**：`player/DemucsSeparator.kt`、`app/build.gradle.kts`、`CHANGELOG.md`
+
+**版本号变更**：v2.26.10 → v2.26.11（versionCode 89 → 90）
