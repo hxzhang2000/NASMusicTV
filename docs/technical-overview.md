@@ -7041,3 +7041,31 @@ val result = with(kotlinx.coroutines.Dispatchers.IO) { separator.separate(...) }
 **涉及文件**：`backend/local/db/LocalMusicDatabase.kt`、`app/build.gradle.kts`、`CHANGELOG.md`
 
 **版本号变更**：v2.26.21 → v2.26.22（versionCode 100 → 101）
+
+### 10.94 path.hashCode() 作主键碰撞丢 USB 歌（复审 P2，方案 A，v2.26.23 - 2026-09-04）
+
+**日期**：2026-09-04
+
+> 三项暂缓分析里最后一个：USB 文件用 32-bit 路径哈希作主键，大曲库碰撞静默丢歌。改用 64-bit FNV-1a，版本号 bump 触发干净重建。
+
+#### 10.94.1 根因
+
+`LocalSongEntity.mediaStoreId` 是 `@PrimaryKey`（Long）。USB / 无 MediaStore ID 的文件在 `MusicScanner.scanFile` 用 `file.absolutePath.hashCode().toLong()` 生成主键——这是 Java `String.hashCode` 的 **32-bit** 值拓宽为 Long。32-bit 哈希的生日碰撞：约 √(2^32)≈6.5 万次即 50% 碰撞概率，对大容量 USB 曲库（十万级）几乎必然出现不同文件映射到同一 `mediaStoreId`；而本地库写入用 `@Insert(REPLACE)`（冲突即替换），碰撞条目互相覆盖 → **静默丢歌**，且难以察觉。
+
+公开 `Song.id = "local_$mediaStoreId"`（`LocalMusicRepository.ScannedSong.toSong` / `LocalSongEntity.toSong`），因此该主键同时是收藏 / 歌单 / 播放历史的业务键。
+
+#### 10.94.2 修复
+
+- 新增 `util/HashUtils.kt`：`stablePathHash64(path)` 用 **FNV-1a 64-bit**（offset basis `0xcbf29ce484222325`、prime `0x100000001b3`）。64-bit 哈希的碰撞概率降至 (n/2^64)^2 量级，对百万级文件仍可忽略；纯路径函数、无随机盐，同一文件跨进程/启动/设备恒得同一 id（不破坏增量扫描 / 收藏匹配）。
+- `MusicScanner.scanFile`：`mediaStoreId = file.absolutePath.hashCode().toLong()` → `HashUtils.stablePathHash64(file.absolutePath)`。MediaStore 通道（`scanAllMusic`）仍用真实 `cursor.getLong(_ID)`，不受影响。
+- `LocalMusicDatabase` 版本 `1 → 2`：因主键 id 取值整体改变，若不 bump，旧 32-bit id 行残留、新 64-bit id 行以不同主键插入 → 同一文件出现重复条目。bump 后 `fallbackToDestructiveMigration(true)` 在升级时清空本地索引、由启动 `incrementalScan`（MediaStore 重扫内部/外部真实 ID）+ USB 挂载 `scanUsbDevice`（新 64-bit id）自动重建，无需 Migration 类。
+
+#### 10.94.3 影响与兼容（数据副作用，已提前告知用户）
+
+- **升级一次性清空本地索引**：版本 1→2 触发破坏性重建，本地库短暂清空后由上述自动扫描自愈（启动即恢复内部/外部歌；USB 歌在设备挂载后恢复），不会长期为空。
+- **USB 歌的收藏 / 歌单 / 播放历史失效**：这些记录以 `"local_<旧 32-bit 哈希>"` 为键，升级后 USB 歌 id 变为 `"local_<64-bit 哈希>"`，旧键匹配不上 → 对应 USB 收藏/歌单/历史条目表现为「丢失」，需重新收藏/加入。内部/外部存储歌（真实 MediaStore ID，未变）的收藏等**不受影响**。属可接受的一次性代价（本地音乐是设备端可重扫索引，且 USB 收藏本就可重新建立）。
+- 不 bump 版本号 / 不引入 Migration：靠 `fallbackToDestructiveMigration(true)` 的升级破坏性重建完成「换主键 + 清旧数据」，零迁移代码。
+
+**涉及文件**：`util/HashUtils.kt`（新增）、`backend/local/MusicScanner.kt`、`backend/local/db/LocalMusicDatabase.kt`、`app/build.gradle.kts`、`CHANGELOG.md`
+
+**版本号变更**：v2.26.22 → v2.26.23（versionCode 101 → 102；LocalMusicDatabase version 1 → 2）

@@ -7,6 +7,16 @@
 >
 > 类型：`Added`（新增） | `Changed`（变更） | `Fixed`（修复） | `Removed`（移除）
 
+## [v2.26.23] - 2026-09-04
+
+### Fixed
+
+- **`path.hashCode()` 作主键碰撞丢 USB 歌（复审 P2，方案 A）**：USB / 文件遍历扫描（`MusicScanner.scanFile`）原用 `file.absolutePath.hashCode().toLong()` 作 `LocalSongEntity.mediaStoreId` 主键。32-bit 哈希在约 7.7 万文件时碰撞概率≈50%，`@Insert(REPLACE)` 下碰撞条目互相覆盖、静默丢歌。改为 `HashUtils.stablePathHash64()`（FNV-1a 64-bit），分布均匀、碰撞概率可忽略，且对同一 path 跨进程/启动/设备完全确定。因 id 取值整体变化，同步将 `LocalMusicDatabase` 版本 1→2（`fallbackToDestructiveMigration(true)` 已配，升级即破坏性重建），避免旧 32-bit id 行残留造成重复条目。MediaStore 通道（`scanAllMusic`）始终用真实 MediaStore ID，不受影响。
+
+### Changed
+
+- **versionCode 101 → 102，versionName 2.26.22 → 2.26.23**
+
 ## [v2.26.22] - 2026-09-04
 
 ### Fixed

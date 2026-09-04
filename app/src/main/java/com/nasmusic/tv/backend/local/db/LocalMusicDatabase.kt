@@ -13,7 +13,7 @@ import androidx.room.RoomDatabase
  */
 @Database(
     entities = [LocalSongEntity::class],
-    version = 1,
+    version = 2,
     exportSchema = true
 )
 abstract class LocalMusicDatabase : RoomDatabase() {

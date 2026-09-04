@@ -7,6 +7,7 @@ import android.net.Uri
 import android.provider.MediaStore
 import com.nasmusic.tv.data.model.StorageType
 import com.nasmusic.tv.util.AppLog
+import com.nasmusic.tv.util.HashUtils
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -142,7 +143,10 @@ class MusicScanner(private val context: Context) {
                 ?.toLongOrNull() ?: 0L
 
             ScannedSong(
-                mediaStoreId = file.absolutePath.hashCode().toLong(),
+                // 复审 P2 修复：原为 file.absolutePath.hashCode().toLong()（32-bit 哈希拓宽），
+                // 大曲库碰撞概率高、@Insert(REPLACE) 下静默覆盖丢歌。改用稳定 64-bit FNV-1a 哈希，
+                // 避免主键碰撞。因 id 取值变化，LocalMusicDatabase 已 bump 至 version=2 触发干净重建。
+                mediaStoreId = HashUtils.stablePathHash64(file.absolutePath),
                 title = title,
                 artist = artist,
                 album = album,
