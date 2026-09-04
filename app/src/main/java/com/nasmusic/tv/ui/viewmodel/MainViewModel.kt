@@ -2289,16 +2289,40 @@ showError(getApplication<Application>().getString(R.string.toggle_favorite_error
     /** 已解析的专辑封面缓存（albumId → coverUrl），跨 updateMergedData 保持 */
     private val resolvedAlbumCovers = mutableMapOf<String, String>()
 
+    /**
+     * 专辑封面解析尝试次数（albumId → 次数）。
+     *
+     * 收敛护栏：`updateMergedData()` 末尾会无条件调用 `resolveAlbumCoversAsync()`，
+     * 而后者解析结束后又回调 `updateMergedData()`，二者形成**无中断条件**的后台循环
+     * （持续 merge + 统计 songCount + 对解析不出的专辑重复发网络请求，造成 CPU/电量与流量开销）。
+     * 以「每个专辑最多尝试 [albumCoverMaxAttempts] 次」让该链条必然收敛；
+     * 新出现的专辑不在表中，仍会被正常解析。
+     */
+    private val albumCoverAttempts = mutableMapOf<String, Int>()
+
+    /** 单个专辑最多解析封面的次数（含首次），保留 1 次重试以容忍瞬时网络失败 */
+    private val albumCoverMaxAttempts = 2
+
     /** 已解析的艺术家封面缓存（artistId → coverUrl），跨 updateMergedData 保持 */
     private val resolvedArtistCovers = mutableMapOf<String, String>()
 
     private fun resolveAlbumCoversAsync() {
+        // 收敛护栏：只对「仍缺封面」且「尝试次数未达上限」的专辑发起解析。
+        // 全部已解析或已达上限时直接返回，切断 updateMergedData ↔ 本方法 的循环。
+        val pending = _mergedAlbums.value.filter {
+            it.coverUrl == null && (albumCoverAttempts[it.id] ?: 0) < albumCoverMaxAttempts
+        }
+        if (pending.isEmpty()) return
+
         // 取消上一次未完成的解析
         coverResolveJob?.cancel()
         coverResolveJob = viewModelScope.launch {
-            val albums = _mergedAlbums.value
             val allSongs = _songsPaging.value.songs + _localSongs.value + baiduIndexCache.allSongs()
-            nasMusicApp.albumCoverResolver.resolveCovers(albums, allSongs) { updated ->
+            val before = resolvedAlbumCovers.size
+            for (album in pending) {
+                albumCoverAttempts[album.id] = (albumCoverAttempts[album.id] ?: 0) + 1
+            }
+            nasMusicApp.albumCoverResolver.resolveCovers(pending, allSongs) { updated ->
                 // 仅更新封面缓存，不直接写 _mergedAlbums（避免与 updateMergedData 竞争覆盖）
                 for (album in updated) {
                     if (album.coverUrl != null) {
@@ -2306,9 +2330,12 @@ showError(getApplication<Application>().getString(R.string.toggle_favorite_error
                     }
                 }
             }
-            // 解析完成后重建 mergedAlbums，使封面同步到 UI
-            withContext(Dispatchers.Main) {
-                updateMergedData()
+            // 仅当本轮确实解析出**新**封面时才重建 UI 数据。
+            // 无成果时不再回调 updateMergedData，否则会再次触发本方法形成循环。
+            if (resolvedAlbumCovers.size > before) {
+                withContext(Dispatchers.Main) {
+                    updateMergedData()
+                }
             }
         }
     }
@@ -2317,6 +2344,7 @@ showError(getApplication<Application>().getString(R.string.toggle_favorite_error
         artistCoverResolveJob?.cancel()
         artistCoverResolveJob = viewModelScope.launch {
             val artists = _artists.value.dataOrNull() ?: return@launch
+            val before = resolvedArtistCovers.size
             nasMusicApp.artistCoverResolver.resolveCovers(artists) { updated ->
                 // 仅更新封面缓存，不直接写 _artists（避免与 updateMergedData 竞争覆盖）
                 for (artist in updated) {
@@ -2325,9 +2353,12 @@ showError(getApplication<Application>().getString(R.string.toggle_favorite_error
                     }
                 }
             }
-            // 解析完成后重建 mergedArtists，使封面同步到 UI
-            withContext(Dispatchers.Main) {
-                updateMergedData()
+            // 仅当本轮确实解析出**新**封面时才重建，避免无成果时的多余 merge
+            // （本方法由 loadArtists 触发，不与 updateMergedData 互调，本身不构成循环）
+            if (resolvedArtistCovers.size > before) {
+                withContext(Dispatchers.Main) {
+                    updateMergedData()
+                }
             }
         }
     }

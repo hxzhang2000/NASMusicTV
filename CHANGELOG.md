@@ -7,6 +7,13 @@
 >
 > 类型：`Added`（新增） | `Changed`（变更） | `Fixed`（修复） | `Removed`（移除）
 
+## [v2.26.2] - 2026-09-04
+
+### Fixed
+
+- **封面解析循环收敛（消除 CPU/电量/流量开销）**：`updateMergedData()` 末尾无条件调用 `resolveAlbumCoversAsync()`，而后者解析结束后**不判断是否有成果**又无条件回调 `updateMergedData()`，形成 `updateMergedData → resolveAlbumCoversAsync → updateMergedData → …` 的**无中断条件**后台循环 —— 持续重复 merge 专辑/艺术家、统计 songCount，并对解析不出的专辑反复发网络请求（iTunes/百度）。现加两道收敛护栏：① 只对「仍缺封面且尝试次数未达上限」的专辑发起解析（每专辑最多 2 次，保留 1 次重试以容忍瞬时网络失败），无待解析项时直接返回；② 仅在**确实解析出新封面**时才回调 `updateMergedData()` 重建 UI。新出现的专辑不在尝试表中，仍会被正常解析，不影响首次封面获取。
+- **艺术家封面解析去除冗余重建**：`resolveArtistCoversAsync()` 原先无论有无成果都回调 `updateMergedData()` 触发全量 merge；改为仅在解析出新封面时重建（该方法由 `loadArtists` 触发，不与 `updateMergedData` 互调，本身不构成循环，此项为消除多余开销）。
+
 ## [v2.26.1] - 2026-09-04
 
 ### Fixed

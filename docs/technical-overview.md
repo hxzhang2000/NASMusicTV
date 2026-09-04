@@ -6428,10 +6428,42 @@ private suspend fun ensureAccessToken(dlink: String): String {
 
 1. **P2 iTunes 对中文专辑命中率低**：搜索词是「专辑名 + 艺术家」，而百度专辑名是从**目录名**推断的（`buildBaiduAlbums` 取 path 倒数第二段），目录名常不规范（如「周杰伦」这类艺术家名、或「新建文件夹」）；且 `buildBaiduAlbums` 会**过滤掉与歌手同名的目录**（视为艺术家目录），这类歌曲根本不生成专辑。
 2. **P2.5 依赖歌曲标题质量**：若百度文件命名不规范（`01.mp3`、乱码标题），`repSong.title` 质量差 → 检索不到封面。
-3. **`updateMergedData` ↔ `resolveAlbumCoversAsync` 存在无条件循环调用链**：`updateMergedData()`（:2249）末尾无条件调用 `resolveAlbumCoversAsync()`；而 `resolveAlbumCoversAsync()`（:2310-2312）在 `resolveCovers` 返回后（**不判断是否有成果**）无条件再调 `updateMergedData()`，形成 `updateMergedData → resolveAlbumCoversAsync → updateMergedData → …` 的循环。因 `resolveCovers` 对已解析（缓存命中）的专辑会快速跳过，实际表现为后台持续循环执行 merge + 艺术家计数（而非卡死 UI），但存在 CPU/电量开销、以及对无法解析专辑的重复网络请求。此前代码复审（2026-09-03）曾判定该循环「已收敛」并列为 P1；本次代码通读未发现中断条件，**建议增加收敛护栏**（例如仅在存在 `coverUrl == null` 且尚未尝试过的专辑时才再次触发解析）。此项待决策后再改。
+3. **`updateMergedData` ↔ `resolveAlbumCoversAsync` 存在无条件循环调用链**：`updateMergedData()`（:2249）末尾无条件调用 `resolveAlbumCoversAsync()`；而 `resolveAlbumCoversAsync()`（:2310-2312）在 `resolveCovers` 返回后（**不判断是否有成果**）无条件再调 `updateMergedData()`，形成 `updateMergedData → resolveAlbumCoversAsync → updateMergedData → …` 的循环。因 `resolveCovers` 对已解析（缓存命中）的专辑会快速跳过，实际表现为后台持续循环执行 merge + 艺术家计数（而非卡死 UI），但存在 CPU/电量开销、以及对无法解析专辑的重复网络请求。此前代码复审（2026-09-03）曾判定该循环「已收敛」并列为 P1；本次代码通读未发现中断条件。✅ **已在 §10.74（v2.26.2）加收敛护栏修复。**
 
 **涉及文件**：`app/src/main/java/com/nasmusic/tv/backend/network/baidu/BaiduCoverProvider.kt`、`app/src/main/java/com/nasmusic/tv/NasMusicApp.kt`、`app/build.gradle.kts`、`CHANGELOG.md`、`docs/technical-overview.md`
 
 **验证结果**：✅ `assembleRelease` 编译通过（BUILD SUCCESSFUL，无 error）。
 
 **版本号变更**：v2.26.0 → v2.26.1（versionCode 79 → 80）
+
+---
+
+### 10.74 封面解析循环收敛护栏（v2.26.2 - 2026-09-04）
+
+**日期**：2026-09-04
+
+**问题描述**：`updateMergedData()` 与 `resolveAlbumCoversAsync()` 相互无条件调用，形成**没有中断条件**的后台循环。
+
+**根因分析**：
+
+- `updateMergedData()`（`MainViewModel.kt`）末尾无条件调用 `resolveAlbumCoversAsync()`。
+- `resolveAlbumCoversAsync()` 在 `resolveCovers` 返回后，**不判断本轮是否有成果**，无条件执行 `withContext(Dispatchers.Main) { updateMergedData() }`。
+- 二者构成 `updateMergedData → resolveAlbumCoversAsync → updateMergedData → …` 的闭环，且链路上**不存在任何收敛条件**。
+- 实际表现：`resolveCovers` 对已解析（缓存命中）的专辑会快速跳过，因此不会卡死 UI，但后台会持续重复执行 merge 专辑/艺术家、统计 songCount，并对**永远解析不出封面**的专辑反复发起 iTunes / 百度网络请求 —— 造成 CPU、电量与流量开销。
+- 注：2026-09-03 代码复审曾判定该循环「已收敛」并列为 P1；本次（§10.73.2）通读未发现中断条件，故实际修复。
+
+**修改**（`MainViewModel.kt`）：加两道收敛护栏
+
+1. **尝试次数上限**：新增 `albumCoverAttempts: MutableMap<String, Int>`（专辑 ID → 已尝试次数）与 `albumCoverMaxAttempts = 2`。`resolveAlbumCoversAsync()` 开头先筛出「仍缺封面 **且** 尝试次数未达上限」的 `pending` 专辑；`pending` 为空则**直接 return**，切断循环。发起解析前把 `pending` 各专辑计数 +1。
+   - 上限取 2 而非 1：保留 1 次重试以容忍启动瞬间的网络失败，避免封面永久缺失。
+   - 新出现的专辑不在 `albumCoverAttempts` 表中，仍会被正常解析，不影响首次封面获取。
+2. **有成果才重建**：记录解析前 `resolvedAlbumCovers.size`，仅当本轮**确实解析出新封面**（size 变大）时才回调 `updateMergedData()`；无成果时不再回调，彻底断开闭环。
+   - 附带优化：`resolveCovers` 改传 `pending`（原先传全部专辑），减少无谓遍历。
+
+**同步修复（艺术家侧）**：`resolveArtistCoversAsync()` 原先同样无条件回调 `updateMergedData()`。该方法由 `loadArtists()` 触发，不与 `updateMergedData` 互调，**本身不构成循环**；但仍加上「仅在解析出新封面时才重建」的对称护栏，消除无成果时的多余全量 merge 开销。
+
+**涉及文件**：`app/src/main/java/com/nasmusic/tv/ui/viewmodel/MainViewModel.kt`、`app/build.gradle.kts`、`CHANGELOG.md`、`docs/technical-overview.md`
+
+**验证结果**：✅ `assembleRelease` 编译通过（BUILD SUCCESSFUL，无 error，仅既有 warning），产物 `app/build/outputs/apk/release/NASMusicTV-release-v2-26-2.apk`。按用户要求仅编译、不推电视测试。
+
+**版本号变更**：v2.26.1 → v2.26.2（versionCode 80 → 81）
