@@ -35,6 +35,18 @@ class BaiduCoverProvider(
             null
         }
 
+    /** 仅找同目录侧车封面图（不取 APIC）。专辑级封面链路第 1 步用。 */
+    suspend fun findSidecarCoverOnly(songPath: String?): String? =
+        if (songPath.isNullOrBlank()) null else withContext(Dispatchers.IO) {
+            findSidecarCover(songPath)
+        }
+
+    /** 仅取内嵌 ID3 APIC 帧封面（不找侧车）。专辑级封面链路第 4 步（取第一首 baidu 歌）用。 */
+    suspend fun extractApicOnly(fsId: Long?): String? =
+        if (fsId == null) null else withContext(Dispatchers.IO) {
+            extractEmbeddedCover(fsId)
+        }
+
     private suspend fun findSidecarCover(songPath: String): String? {
         val parentDir = songPath.substringBeforeLast('/').ifEmpty { "/" }
         val dirResult = api.listDir(parentDir, limit = BaiduNetdiskConfig.PAGE_SIZE)

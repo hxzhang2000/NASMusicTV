@@ -25,7 +25,9 @@ class BaiduNetdiskService(
     private val coverProvider: BaiduCoverProvider,
     private val indexCache: BaiduFileIndexCache,
     private val prefs: AppPreferences,
-    private val networkCoverSearch: suspend (title: String, artist: String) -> String? = { _, _ -> null }
+    private val networkCoverSearch: suspend (title: String, artist: String) -> String? = { _, _ -> null },
+    /** iTunes 封面搜索（歌曲+歌手）。未注入时为 null，跳过该步。 */
+    private val itunesCoverSearch: (suspend (title: String, artist: String) -> String?)? = null
 ) : NetworkMusicService {
 
     override val sourceId = "baidu"
@@ -96,15 +98,40 @@ class BaiduNetdiskService(
         return lyricsProvider.getLyrics(fsId, song.title, song.artist.ifBlank { null }, song.path)
     }
 
-    /** 封面：侧车 cover → 内嵌 APIC → 网络封面（Meting/网易云）fallback */
+    /** 封面：索引缓存 → 侧车/APIC → iTunes(歌曲+歌手) → 网络封面(Meting/网易云) */
     override suspend fun resolveCoverUrl(song: Song): String? {
         val fsId = song.networkId?.toLongOrNull() ?: return null
-        // 优先百度侧车/内嵌 APIC；百度歌曲大多无内嵌封面，回退到网络封面
-        val local = coverProvider.getCover(fsId, song.title, song.artist.ifBlank { null }, song.path)
-        if (local != null) return local
-        return runCatching {
-            networkCoverSearch(song.title, song.artist.ifBlank { "" })
-        }.getOrNull()
+        var result: String? = null
+        // 0. 优先复用索引中已持久化的稳定封面（避免重复网络搜索）
+        if (result == null) {
+            result = indexCache.getCoverUrl(fsId)
+        }
+        // 1+2. 侧车封面 / 内嵌 APIC
+        if (result == null) {
+            result = coverProvider.getCover(fsId, song.title, song.artist.ifBlank { null }, song.path)
+        }
+        // 3. iTunes 在线搜索（歌曲+歌手），命中后写入索引缓存
+        if (result == null && itunesCoverSearch != null) {
+            val itunesUrl = runCatching {
+                itunesCoverSearch(song.title, song.artist.ifBlank { "" })
+            }.getOrNull()
+            if (!itunesUrl.isNullOrBlank()) {
+                indexCache.setCoverUrl(fsId, itunesUrl)
+                result = itunesUrl
+            }
+        }
+        // 4. 网络封面搜索（Meting/网易云），命中后写入索引缓存
+        if (result == null) {
+            val netUrl = runCatching {
+                networkCoverSearch(song.title, song.artist.ifBlank { "" })
+            }.getOrNull()
+            if (!netUrl.isNullOrBlank()) {
+                indexCache.setCoverUrl(fsId, netUrl)
+                result = netUrl
+            }
+        }
+        // 5. 上层走默认图
+        return result
     }
 
     /** 网络封面搜索由 Meting 等源承担，百度源不单独实现 */

@@ -14,10 +14,13 @@ import org.json.JSONObject
  * 专辑封面异步解析器
  *
  * 按优先级链为缺少封面的专辑解析封面：
- * 1. 百度侧车/APIC — 同目录 cover.jpg 或内嵌 ID3 APIC
+ * 0. 索引缓存 — 优先复用已持久化的稳定封面（iTunes/网络搜索的 HTTP URL）
+ * 1. 百度侧车封面 — 同目录 cover/folder/album/front 图（不取 APIC）
  * 2. iTunes 在线搜索 — 按 album+artist 搜封面图
- * 3. 本地ID3 — 从本地音频文件重新提取（MediaStore 通常已做，此步为补充）
- * 4. 歌曲 coverUrl — 最终兜底（buildLocalAlbums/buildBaiduAlbums 已做）
+ * 3. 网络封面搜索 — 按 album+artist 搜（Meting/网易云）
+ * 4. 第一首 baidu 歌的内嵌 APIC — 从歌曲文件头部 Range 解析 ID3 APIC 帧
+ * 5. 第一首有 coverUrl 的歌曲封面 — 最终兜底
+ * 6. 仍为空 → 上层用默认图
  *
  * 只处理 coverUrl 为 null 的专辑；已有封面的跳过。
  * 解析结果通过回调更新到 mergedAlbums 列表。
@@ -25,7 +28,9 @@ import org.json.JSONObject
 class AlbumCoverResolver(
     private val baiduCoverProvider: BaiduCoverProvider?,
     private val client: OkHttpClient,
-    private val searchCover: suspend (title: String, artist: String) -> String? = { _, _ -> null }
+    private val searchCover: suspend (title: String, artist: String) -> String? = { _, _ -> null },
+    /** 百度网盘索引缓存（持久化稳定封面 URL 用），未注入时为 null */
+    private val baiduIndexCache: com.nasmusic.tv.backend.network.baidu.BaiduFileIndexCache? = null
 ) {
     companion object {
         private const val TAG = "AlbumCoverResolver"
@@ -74,56 +79,52 @@ class AlbumCoverResolver(
 
             val albumKey = album.name.lowercase().trim()
             val songs = albumSongsMap[albumKey] ?: emptyList()
+            // 专辑内第一首 baidu 歌（用于侧车/APIC/索引缓存）
+            val baiduSong = songs.firstOrNull { it.networkSource == "baidu" && it.networkId != null }
+            val baiduFsId = baiduSong?.networkId?.toLongOrNull()
             var resolvedUrl: String? = null
 
-            // P1: 百度侧车/APIC
-            if (resolvedUrl == null && baiduCoverProvider != null) {
-                resolvedUrl = resolveBaiduCover(songs)
+            // 0. 优先复用索引中已持久化的稳定封面（避免重复网络搜索）
+            if (baiduIndexCache != null && baiduFsId != null) {
+                resolvedUrl = baiduIndexCache.getCoverUrl(baiduFsId)
             }
 
-            // P2: iTunes 在线搜索
+            // P1: 侧车封面（同目录 cover 图，不取 APIC）
+            if (resolvedUrl == null && baiduCoverProvider != null) {
+                resolvedUrl = baiduCoverProvider.findSidecarCoverOnly(baiduSong?.path)
+            }
+
+            // P2: iTunes 在线搜索（专辑名+歌手）
             if (resolvedUrl == null) {
                 resolvedUrl = resolveItunesCover(album.name, album.artist)
-            }
-
-            // P2.5: 网络封面（Meting/网易云）— 主要针对无内嵌封面的百度网盘专辑
-            //
-            // 百度专辑名是从**目录名**推断的（见 MusicMerger.buildBaiduAlbums），目录名常不规范
-            // （"周杰伦"、"新建文件夹" 等），直接拿它当检索词命中率很低。
-            // 因此按「信息可靠度」依次尝试多组检索词：优先用歌曲标题（来自文件名/ID3，质量更高），
-            // 标题失败再退回目录名推断的专辑名；每组都再试一次「不带艺术家」的宽检索。
-            // （searchCover 实现见 MetingApiService：artist 为空时按纯标题检索，安全）
-            if (resolvedUrl == null && songs.any { it.networkSource == "baidu" }) {
-                val repSong = songs.firstOrNull { it.title.isNotBlank() }
-                if (repSong != null) {
-                    val title = repSong.title.trim()
-                    val artist = repSong.artist.trim()
-                    val albumName = album.name.trim()
-                    val candidates = listOf(
-                        title to artist,
-                        title to "",
-                        albumName to artist,
-                        albumName to ""
-                    ).distinct().filter { it.first.isNotBlank() }
-
-                    for ((qTitle, qArtist) in candidates) {
-                        val hit = runCatching { searchCover(qTitle, qArtist) }.getOrNull()
-                        if (!hit.isNullOrBlank()) {
-                            resolvedUrl = hit
-                            break
-                        }
-                    }
+                // 命中稳定网络封面 → 写入索引缓存
+                if (resolvedUrl != null && baiduIndexCache != null && baiduFsId != null) {
+                    baiduIndexCache.setCoverUrl(baiduFsId, resolvedUrl)
                 }
             }
 
-            // P3: 本地 ID3 — 对于本地歌曲，MediaStore 已提取到 song.coverUrl；
-            //     这里取专辑内第一首有 coverUrl 的歌曲封面
+            // P3: 网络封面搜索（专辑名+歌手）— 针对无内嵌封面的百度网盘专辑
+            if (resolvedUrl == null) {
+                resolvedUrl = runCatching {
+                    searchCover(album.name.trim(), album.artist.trim())
+                }.getOrNull()
+                // 命中稳定网络封面 → 写入索引缓存
+                if (resolvedUrl != null && baiduIndexCache != null && baiduFsId != null) {
+                    baiduIndexCache.setCoverUrl(baiduFsId, resolvedUrl)
+                }
+            }
+
+            // P4: 取专辑内第一首 baidu 歌的内嵌 APIC
+            if (resolvedUrl == null && baiduCoverProvider != null) {
+                resolvedUrl = baiduCoverProvider.extractApicOnly(baiduFsId)
+            }
+
+            // P5: 取专辑内第一首有 coverUrl 的歌曲封面
             if (resolvedUrl == null) {
                 resolvedUrl = songs.firstOrNull { it.coverUrl != null }?.coverUrl
             }
 
-            // P4: 歌曲 coverUrl 兜底 — 已在 buildLocalAlbums/buildBaiduAlbums 中处理
-            // 此处 resolvedUrl 可能为 null，表示所有方法都未能解析
+            // P6: 仍为空 → 上层走默认图
 
             if (resolvedUrl != null) {
                 val idx = updatedAlbums.indexOfFirst { it.id == album.id }
@@ -146,26 +147,6 @@ class AlbumCoverResolver(
         }
 
         AppLog.d(TAG, "resolveCovers: processed=$processed/${albums.count { it.coverUrl == null }}")
-    }
-
-    /**
-     * P1: 百度侧车/APIC 封面
-     * 取专辑内第一首百度歌曲，用 BaiduCoverProvider 解析
-     */
-    private suspend fun resolveBaiduCover(songs: List<Song>): String? {
-        val baiduSong = songs.firstOrNull { it.networkSource == "baidu" && it.networkId != null }
-            ?: return null
-        return try {
-            baiduCoverProvider?.getCover(
-                fsId = baiduSong.networkId!!.toLong(),
-                title = baiduSong.title,
-                artist = baiduSong.artist.ifBlank { null },
-                path = baiduSong.path
-            )
-        } catch (e: Exception) {
-            AppLog.w(TAG, "resolveBaiduCover failed: ${e.message?.take(50)}")
-            null
-        }
     }
 
     /**

@@ -23,7 +23,10 @@ data class BaiduIndexEntry(
     val serverMtime: Long,
     /** 文件分类（[com.nasmusic.tv.backend.network.baidu.BaiduNetdiskConfig] CATEGORY_*），
      *  默认 AUDIO 保持与早期索引兼容 */
-    val category: Int = com.nasmusic.tv.backend.network.baidu.BaiduNetdiskConfig.CATEGORY_AUDIO
+    val category: Int = com.nasmusic.tv.backend.network.baidu.BaiduNetdiskConfig.CATEGORY_AUDIO,
+    /** 持久化的稳定封面 URL（iTunes/网络搜索返回的 HTTP URL）。
+     *  侧车 dlink（8h 过期）与内嵌 APIC data URI（过大）不落盘，实时解析。 */
+    val coverUrl: String? = null
 ) {
     /** 转 Song（与 BaiduFile.toSong 等价，但不重新解析文件名——索引已缓存） */
     fun toSong(durationMs: Long = 0L, coverUrl: String? = null): Song {

@@ -17,6 +17,7 @@ import com.nasmusic.tv.backend.network.NetworkMusicManager
 import com.nasmusic.tv.backend.radio.RadioBrowserClient
 import com.nasmusic.tv.backend.local.AlbumCoverResolver
 import com.nasmusic.tv.backend.local.ArtistCoverResolver
+import com.nasmusic.tv.backend.local.ItunesCoverSearcher
 import com.nasmusic.tv.backend.network.baidu.BaiduCoverProvider
 import com.nasmusic.tv.backend.network.baidu.BaiduFileIndexCache
 import com.nasmusic.tv.backend.network.baidu.BaiduHttpDataSourceFactory
@@ -105,11 +106,12 @@ class NasMusicApp : Application(), ImageLoaderFactory {
         BaiduCoverProvider(baiduPanApi, baiduOkHttpClient, baiduOAuthClient)
     }
     val albumCoverResolver: AlbumCoverResolver by lazy {
-        AlbumCoverResolver(baiduCoverProvider, baiduOkHttpClient) { title, artist ->
+        AlbumCoverResolver(baiduCoverProvider, baiduOkHttpClient, { title, artist ->
             networkMusicManager.searchCoverUrl(title, artist)
-        }
+        }, baiduFileIndexCache)
     }
     val artistCoverResolver: ArtistCoverResolver by lazy { ArtistCoverResolver(baiduOkHttpClient) }
+    val itunesCoverSearcher: ItunesCoverSearcher by lazy { ItunesCoverSearcher(baiduOkHttpClient) }
     val baiduNetdiskService: BaiduNetdiskService by lazy {
         BaiduNetdiskService(
             oauth = baiduOAuthClient,
@@ -119,7 +121,8 @@ class NasMusicApp : Application(), ImageLoaderFactory {
             coverProvider = baiduCoverProvider,
             indexCache = baiduFileIndexCache,
             prefs = appPreferences,
-            networkCoverSearch = { title, artist -> networkMusicManager.searchCoverUrl(title, artist) }
+            networkCoverSearch = { title, artist -> networkMusicManager.searchCoverUrl(title, artist) },
+            itunesCoverSearch = { title, artist -> itunesCoverSearcher.searchTrack(title, artist) }
         )
     }
     val baiduMvFileService: BaiduMvFileService by lazy {

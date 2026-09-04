@@ -2328,35 +2328,44 @@ showError(getApplication<Application>().getString(R.string.toggle_favorite_error
             it.coverUrl == null && (albumCoverAttempts[it.id] ?: 0) < albumCoverMaxAttempts
         }
         if (pending.isEmpty()) return
+        // 已有解析 job 在运行 → 不取消、不重启，直接复用。
+        // （updateMergedData 每次末尾都会调本方法，若这里 cancel 上一个 job，
+        //   解析会被连续触发重建的 updateMergedData 反复取消，永远跑不完，
+        //   resolvedAlbumCovers 不增长 → UI 一直无封面。）
+        if (coverResolveJob?.isActive == true) return
 
-        // 取消上一次未完成的解析
-        coverResolveJob?.cancel()
         coverResolveJob = viewModelScope.launch {
             val allSongs = _songsPaging.value.songs + _localSongs.value + baiduIndexCache.allSongs()
-            val before = resolvedAlbumCovers.size
             for (album in pending) {
                 albumCoverAttempts[album.id] = (albumCoverAttempts[album.id] ?: 0) + 1
             }
             nasMusicApp.albumCoverResolver.resolveCovers(pending, allSongs) { updated ->
                 // 仅更新封面缓存，不直接写 _mergedAlbums（避免与 updateMergedData 竞争覆盖）
+                var added = 0
                 for (album in updated) {
                     if (album.coverUrl != null) {
                         resolvedAlbumCovers[album.id] = album.coverUrl
+                        added++
+                    }
+                }
+                // 每批回调后立即刷新 UI（不必等全部专辑解析完）。
+                // 否则 1732 个专辑串行解析要几分钟，期间封面解析了但 UI 一直不刷新。
+                if (added > 0) {
+                    viewModelScope.launch(Dispatchers.Main) {
+                        updateMergedData()
                     }
                 }
             }
-            // 仅当本轮确实解析出**新**封面时才重建 UI 数据。
-            // 无成果时不再回调 updateMergedData，否则会再次触发本方法形成循环。
-            if (resolvedAlbumCovers.size > before) {
-                withContext(Dispatchers.Main) {
-                    updateMergedData()
-                }
+            // 全部解析完成后，若仍有新封面未刷新（理论上 onUpdated 已刷新），兜底刷新一次
+            withContext(Dispatchers.Main) {
+                if (resolvedAlbumCovers.isNotEmpty()) updateMergedData()
             }
         }
     }
 
     private fun resolveArtistCoversAsync() {
-        artistCoverResolveJob?.cancel()
+        // 已有解析在跑 → 不取消（避免重复触发时打断）
+        if (artistCoverResolveJob?.isActive == true) return
         artistCoverResolveJob = viewModelScope.launch {
             val artists = _artists.value.dataOrNull() ?: return@launch
             val before = resolvedArtistCovers.size

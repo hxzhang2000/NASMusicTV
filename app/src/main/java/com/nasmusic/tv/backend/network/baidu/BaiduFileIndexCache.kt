@@ -76,6 +76,31 @@ class BaiduFileIndexCache(context: Context) {
         }
     }
 
+    /** 读取索引中已持久化的稳定封面 URL（iTunes/网络搜索的 HTTP URL，非动态 dlink/APIC） */
+    fun getCoverUrl(fsId: Long): String? {
+        val index = load() ?: return null
+        return index.entries.firstOrNull { it.fsId == fsId }?.coverUrl
+    }
+
+    /**
+     * 将解析到的稳定封面 URL 写入索引并落盘（内存 + JSON 文件）。
+     * 仅写 HTTP 网络封面；动态 dlink（8h 过期）与 APIC data URI（过大）不落盘。
+     * @return 是否写入成功
+     */
+    fun setCoverUrl(fsId: Long, coverUrl: String): Boolean {
+        val index = load() ?: return false
+        val idx = index.entries.indexOfFirst { it.fsId == fsId }
+        if (idx < 0) return false
+        val old = index.entries[idx].coverUrl
+        if (old == coverUrl) return false // 无变化不落盘，避免频繁写文件
+        val newEntries = index.entries.toMutableList().apply {
+            this[idx] = index.entries[idx].copy(coverUrl = coverUrl)
+        }
+        save(index.copy(entries = newEntries))
+        AppLog.d(TAG, "setCoverUrl fsId=$fsId -> ${coverUrl.take(60)}")
+        return true
+    }
+
     fun clear() {
         try { if (file.exists()) file.delete() } catch (e: Exception) {
             AppLog.w(TAG, "clear error", e)
