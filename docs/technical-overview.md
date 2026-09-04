@@ -6642,3 +6642,37 @@ val result = with(kotlinx.coroutines.Dispatchers.IO) { separator.separate(...) }
 **涉及文件**：`backend/local/LocalMusicRepository.kt`、`backend/local/MusicScanner.kt`、`backend/local/db/LocalMusicDao.kt`、`backend/BackendRegistry.kt`、`backend/impl/NavidromeAdapter.kt`、`app/build.gradle.kts`、`CHANGELOG.md`
 
 **版本号变更**：v2.26.5 → v2.26.6（versionCode 84 → 85）
+
+### 10.79 快速切歌队列回滚 + K 歌切换无法切歌 + Subsonic 收藏失效/N+1（v2.26.7 - 2026-09-04）
+
+**日期**：2026-09-04
+
+> 承接 2026-09-03 代码复审 P0 项 P4/P6、P1 项 B9/B13。
+
+#### 10.79.1 快速切歌队列回滚（P4）
+
+**问题**：`resolveAndPlayByIndex` 入口用 `queue.value` 取旧队列快照，挂起解析（可能含 1.5s 重试）后无条件 `playQueue(updatedQueue, targetIndex)` 整体重建播放列表。快速连续切歌时 N 个在飞解析，最后响应者获胜但内容可能是最旧的快照 → 队列回滚。
+
+**修复**：引入 `resolveGeneration` 代数计数器（`MainViewModel` 成员）。每次发起解析 +1，解析完成回写前比对代数，过期即丢弃；回写改为基于「当前最新 `queue.value`」更新目标歌曲 streamUrl，而非入口旧快照。
+
+#### 10.79.2 K 歌伴奏/原唱切换后无法切歌（P6）
+
+**问题**：`switchToAccompaniment`/`switchToOriginal` 用 `setMediaItem(newItem)` 把整个播放队列替换成单曲，开一次伴唱后 `seekToNextMediaItem()` 无目标。
+
+**修复**：改用 Media3 `replaceMediaItem(index, newItem)`（已通过 javap 确认 media3-common 1.2.1 的 `Player` 接口存在该方法），只替换当前索引的 item，保留队列其余部分与播放位置。
+
+#### 10.79.3 Subsonic 收藏整体失效（B9）
+
+**问题**：`getFavorites()` 调 `getStarred2` 端点却解析 `subsonic-response > starred` 节点（实际返回 `starred2`），收藏列表恒空，`toggleFavorite` 永远判定「未收藏」只能加不能取消。
+
+**修复**：优先解析 `starred2`，兼容 `starred`。
+
+#### 10.79.4 Subsonic `getSongsByIds` 串行 N+1（B13）
+
+**问题**：逐个 `getSong` 串行请求，队列恢复数十首歌时 RTT 累加成秒级卡顿。
+
+**修复**：`supervisorScope` + `async` 并发 + 8 路信号量限流，失败单曲不影响整体。
+
+**涉及文件**：`ui/viewmodel/MainViewModel.kt`、`player/PlayerManager.kt`、`backend/impl/SubsonicAdapter.kt`、`app/build.gradle.kts`、`CHANGELOG.md`
+
+**版本号变更**：v2.26.6 → v2.26.7（versionCode 85 → 86）

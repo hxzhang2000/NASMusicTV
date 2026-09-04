@@ -440,8 +440,13 @@ class SubsonicAdapter : BackendAdapter {
 
             val json = executeRequest(url) ?: return@withContext emptyList<Song>()
             val subsonic = json.getAsJsonObject("subsonic-response")
-            val starred = subsonic?.getAsJsonObject("starred")
-            val songs = starred?.getAsJsonArray("song")
+            // B9 修复：getStarred2 端点返回的是 `starred2` 节点，而非 `starred`。
+            // 原实现解析 `starred` 导致收藏列表恒空、toggleFavorite 无法取消收藏
+            // （每次 getFavorites 都返回空 → isFavorited 恒 false → 永远走 star 分支）。
+            // 优先解析 `starred2`，兼容部分实现返回的 `starred`。
+            val starredNode = subsonic?.getAsJsonObject("starred2")
+                ?: subsonic?.getAsJsonObject("starred")
+            val songs = starredNode?.getAsJsonArray("song")
                 ?: return@withContext emptyList<Song>()
 
             songs.mapNotNull { item ->
@@ -669,36 +674,46 @@ class SubsonicAdapter : BackendAdapter {
     override suspend fun getSongsByIds(ids: List<String>): List<Song> = withContext(Dispatchers.IO) {
         if (ids.isEmpty()) return@withContext emptyList()
         try {
-            // Subsonic 没有直接的批量查询端点，逐个查询
-            val songs = ids.mapNotNull { id ->
-                try {
-                    val url = buildRestUrl("getSong") + "&id=$id"
-                    val json = executeRequest(url) ?: return@mapNotNull null
-                    val subsonic = json.getAsJsonObject("subsonic-response")
-                    val song = subsonic?.getAsJsonObject("song") ?: return@mapNotNull null
-                    val title = EncodingUtils.fixEncoding(song.get("title")?.asString) ?: "Unknown"
-                    val artist = EncodingUtils.fixEncoding(song.get("artist")?.asString) ?: ""
-                    val album = EncodingUtils.fixEncoding(song.get("album")?.asString) ?: ""
-                    val albumId = song.get("albumId")?.asString ?: ""
-                    val coverId = song.get("coverArt")?.asString ?: ""
-                    val durationSec = song.get("duration")?.asLong ?: 0L
-                    Song(
-                        id = id,
-                        title = title,
-                        artist = artist,
-                        album = album,
-                        albumId = albumId,
-                        coverUrl = if (coverId.isNotBlank()) buildCoverUrl(coverId) else null,
-                        streamUrl = getStreamUrl(id),
-                        durationMs = durationSec * 1000,
-                        trackNumber = song.get("track")?.asInt ?: 0,
-                        discNumber = song.get("discNumber")?.asInt ?: 1,
-                        year = song.get("year")?.asInt,
-                        bitrate = song.get("bitRate")?.asInt ?: 0
-                    )
-                } catch (e: Exception) {
-                    null
-                }
+            // Subsonic 没有直接的批量查询端点。
+            // B13 修复：原实现串行逐个 getSong（N+1），队列恢复数十首歌时 RTT 累加成秒级卡顿。
+            // 改为并发请求（受信号量限流 8 路，避免打爆服务器），失败单曲不影响整体。
+            val semaphore = java.util.concurrent.Semaphore(8)
+            val songs = supervisorScope {
+                ids.map { id ->
+                    async {
+                        semaphore.acquire()
+                        try {
+                            val url = buildRestUrl("getSong") + "&id=$id"
+                            val json = executeRequest(url) ?: return@async null
+                            val subsonic = json.getAsJsonObject("subsonic-response")
+                            val song = subsonic?.getAsJsonObject("song") ?: return@async null
+                            val title = EncodingUtils.fixEncoding(song.get("title")?.asString) ?: "Unknown"
+                            val artist = EncodingUtils.fixEncoding(song.get("artist")?.asString) ?: ""
+                            val album = EncodingUtils.fixEncoding(song.get("album")?.asString) ?: ""
+                            val albumId = song.get("albumId")?.asString ?: ""
+                            val coverId = song.get("coverArt")?.asString ?: ""
+                            val durationSec = song.get("duration")?.asLong ?: 0L
+                            Song(
+                                id = id,
+                                title = title,
+                                artist = artist,
+                                album = album,
+                                albumId = albumId,
+                                coverUrl = if (coverId.isNotBlank()) buildCoverUrl(coverId) else null,
+                                streamUrl = getStreamUrl(id),
+                                durationMs = durationSec * 1000,
+                                trackNumber = song.get("track")?.asInt ?: 0,
+                                discNumber = song.get("discNumber")?.asInt ?: 1,
+                                year = song.get("year")?.asInt,
+                                bitrate = song.get("bitRate")?.asInt ?: 0
+                            )
+                        } catch (e: Exception) {
+                            null
+                        } finally {
+                            semaphore.release()
+                        }
+                    }
+                }.awaitAll().filterNotNull()
             }
             songs
         } catch (e: Exception) {

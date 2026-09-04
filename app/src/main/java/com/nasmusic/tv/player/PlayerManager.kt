@@ -470,7 +470,10 @@ class PlayerManager(private val applicationContext: Context) {
         val accompanimentUri = android.net.Uri.parse("file://$accompanimentPath")
         val newItem = currentItem?.buildUpon()?.setUri(accompanimentUri)?.build() ?: return
 
-        p.setMediaItem(newItem)
+        // P6 修复：用 replaceMediaItem 替换当前索引的 item，而非 setMediaItem（后者会
+        // 把整个播放队列替换成单曲，导致 seekToNextMediaItem 无目标、K 歌后无法切歌）。
+        val index = p.currentMediaItemIndex
+        p.replaceMediaItem(index, newItem)
         p.prepare()
         p.seekTo(currentPos)
         if (wasPlaying) p.play()
@@ -483,6 +486,7 @@ class PlayerManager(private val applicationContext: Context) {
         val p = player ?: return
         val currentPos = p.currentPosition
         val wasPlaying = p.isPlaying
+        val index = p.currentMediaItemIndex
 
         // 优先使用本地缓存的原唱文件（分离时下载的）
         val songId = _currentSong.value?.id
@@ -493,7 +497,7 @@ class PlayerManager(private val applicationContext: Context) {
                 val originalItem = p.currentMediaItem?.buildUpon()
                     ?.setUri(android.net.Uri.parse("file://${originalFile.absolutePath}"))
                     ?.build() ?: return
-                p.setMediaItem(originalItem)
+                p.replaceMediaItem(index, originalItem)
                 p.prepare()
                 p.seekTo(currentPos)
                 if (wasPlaying) p.play()
@@ -508,7 +512,7 @@ class PlayerManager(private val applicationContext: Context) {
         val originalUri = android.net.Uri.parse(uri)
         val originalItem = p.currentMediaItem?.buildUpon()?.setUri(originalUri)?.build() ?: return
 
-        p.setMediaItem(originalItem)
+        p.replaceMediaItem(index, originalItem)
         p.prepare()
         p.seekTo(currentPos)
         if (wasPlaying) p.play()

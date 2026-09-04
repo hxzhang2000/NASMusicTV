@@ -751,6 +751,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
     private val _playMode = MutableStateFlow(PlayMode.SEQUENTIAL)
     val playMode: StateFlow<PlayMode> = _playMode.asStateFlow()
 
+    // P4 修复：播放解析代数计数器。每次发起新的 resolveAndPlayByIndex（切歌解析）时 +1，
+    // 解析完成回写队列前比对代数，若已过期（期间又发生切歌）则丢弃本次结果，
+    // 避免用旧队列快照回滚用户后续操作。
+    private var resolveGeneration = 0
+
     // --- 连接状态 ---
     private val _isConnected = MutableStateFlow(false)
     val isConnected: StateFlow<Boolean> = _isConnected.asStateFlow()
@@ -3002,6 +3007,9 @@ showError(getApplication<Application>().getString(R.string.play_failed_with_msg,
     }
 
     private fun resolveAndPlayByIndex(targetIndex: Int) {
+        // P4 修复：进入即递增代数，标记本次解析为「最新」；解析期间若有新的切歌解析
+        // 会再次递增，使本次挂起解析在回写前被判定为过期。
+        val generation = ++resolveGeneration
         val queueValue = queue.value
         val song = queueValue.getOrNull(targetIndex) ?: return
         viewModelScope.launch {
@@ -3015,15 +3023,24 @@ showError(getApplication<Application>().getString(R.string.play_failed_with_msg,
                 }
                 if (playUrl.isNullOrBlank()) {
                     // 重试仍失败：不再静默卡在"已切歌未播放"状态，自动跳到下一首
+                    if (generation != resolveGeneration) return@launch
                     AppLog.w("NASMusic", "resolveAndPlayByIndex: failed after retry, skipping ${song.title}")
                     showError(getApplication<Application>().getString(R.string.resolve_url_auto_skip_with_title, song.title))
                     playerManager.next(_playMode.value)
                     return@launch
                 }
 
+                // P4 修复：回写前校验代数。若期间用户又切歌（resolveGeneration 已变），
+                // 丢弃本次结果，避免用旧快照回滚队列。
+                if (generation != resolveGeneration) {
+                    AppLog.d("NASMusic", "resolveAndPlayByIndex: stale resolve discarded for ${song.title}")
+                    return@launch
+                }
+
                 AppLog.d("NASMusic", "resolveAndPlayByIndex: resolved ${song.title} → $playUrl")
-                // 更新队列中目标歌曲的 streamUrl，然后播放
-                val updatedQueue = queueValue.mapIndexed { index, s ->
+                // 基于「当前最新队列」更新目标歌曲的 streamUrl（而非入口旧快照），然后播放
+                val latestQueue = queue.value
+                val updatedQueue = latestQueue.mapIndexed { index, s ->
                     if (index == targetIndex) s.copy(streamUrl = playUrl) else s
                 }
                 playerManager.playQueue(updatedQueue, targetIndex)

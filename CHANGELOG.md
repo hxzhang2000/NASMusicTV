@@ -7,6 +7,18 @@
 >
 > 类型：`Added`（新增） | `Changed`（变更） | `Fixed`（修复） | `Removed`（移除）
 
+## [v2.26.7] - 2026-09-04
+
+### Fixed
+
+- **快速切歌队列回滚（P4）**：`resolveAndPlayByIndex` 入口取旧队列快照，挂起解析后无条件 `playQueue(updatedQueue, targetIndex)` 整体重建播放列表；快速连续切歌时，在飞的多次解析最后响应者获胜但内容可能是最旧的旧快照，导致队列回滚。现引入 `resolveGeneration` 代数计数器：每次发起解析 +1，解析完成回写前比对代数，过期即丢弃；且回写改为基于「当前最新队列」更新目标歌曲的 streamUrl，而非入口旧快照。
+
+- **K 歌伴奏/原唱切换后无法切歌（P6）**：`switchToAccompaniment`/`switchToOriginal` 用 `setMediaItem(newItem)` 把整个播放队列替换成单曲，开一次伴唱后 `seekToNextMediaItem()` 无目标、K 歌后无法切歌。改用 Media3 `replaceMediaItem(index, newItem)` 只替换当前索引的 item，保留队列其余部分与播放位置。
+
+- **Subsonic 收藏整体失效（B9）**：`getFavorites()` 调 `getStarred2` 端点却解析 `subsonic-response > starred` 节点（应为 `starred2`），导致收藏列表恒空、`toggleFavorite` 永远判定「未收藏」只能加不能取消。改为优先解析 `starred2`、兼容 `starred`。
+
+- **Subsonic `getSongsByIds` 串行 N+1（B13）**：逐个 `getSong` 串行请求，队列恢复数十首歌时 RTT 累加成秒级卡顿。改为并发请求（`supervisorScope` + `async` + 8 路信号量限流），失败单曲不影响整体。
+
 ## [v2.26.6] - 2026-09-04
 
 ### Fixed
