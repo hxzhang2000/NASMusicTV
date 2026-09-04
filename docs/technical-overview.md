@@ -6716,3 +6716,31 @@ val result = with(kotlinx.coroutines.Dispatchers.IO) { separator.separate(...) }
 **涉及文件**：`ui/components/AppRoot.kt`、`player/SpectralMaskProcessor.kt`、`player/PlayerManager.kt`、`player/AccompanimentCache.kt`、`ui/viewmodel/MainViewModel.kt`、`app/build.gradle.kts`、`CHANGELOG.md`
 
 **版本号变更**：v2.26.7 → v2.26.8（versionCode 86 → 87）
+
+### 10.81 StorageMonitor 反射崩溃 + 伴奏中文路径 + 死代码清理（v2.26.9 - 2026-09-04）
+
+**日期**：2026-09-04
+
+> 承接 2026-09-03 代码复审 P1 项 B15、P2 项（`Uri.parse("file://")` 未编码、`checkPreSeparation` 死代码）。
+
+#### 10.81.1 StorageMonitor 隐藏 API 反射崩溃（B15）
+
+**问题**：`refreshStorageDevices()` 在 API 24–29 用 `volume.javaClass.getMethod("getPath").invoke(volume)` 反射取卷路径，无 try/catch；个别 ROM 隐藏该 API 时 `BroadcastReceiver.onReceive`（主线程）直接崩溃。
+
+**修复**：捕获异常跳过该卷。
+
+#### 10.81.2 伴奏/原唱中文/空格路径无法播放
+
+**问题**：`switchToAccompaniment`/`switchToOriginal` 用 `Uri.parse("file://$path")` 构造本地文件 URI，遇中文/空格路径产生非法 URI。
+
+**修复**：改为 `Uri.fromFile(File(path))` 正确编码路径。
+
+#### 10.81.3 删除 `checkPreSeparation` 死代码
+
+**问题**：预分离触发函数无任何调用点，注释「进度 > 50%」与实现「阈值 5%」矛盾。
+
+**修复**：删除该函数及其独占的 `PRE_SEPARATION_THRESHOLD` 常量。`AccompanimentCache.startPreSeparation` 预分离 API 保留（未来可复用）。
+
+**涉及文件**：`backend/local/StorageMonitor.kt`、`player/PlayerManager.kt`、`app/build.gradle.kts`、`CHANGELOG.md`
+
+**版本号变更**：v2.26.8 → v2.26.9（versionCode 87 → 88）

@@ -7,6 +7,18 @@
 >
 > 类型：`Added`（新增） | `Changed`（变更） | `Fixed`（修复） | `Removed`（移除）
 
+## [v2.26.9] - 2026-09-04
+
+### Fixed
+
+- **StorageMonitor 隐藏 API 反射崩溃（B15）**：`refreshStorageDevices()` 在 API 24–29 用 `volume.javaClass.getMethod("getPath").invoke(volume)` 反射取卷路径，无 try/catch；个别 ROM 隐藏该 API 时 `BroadcastReceiver.onReceive`（主线程）直接崩溃。已改为捕获异常跳过该卷。
+
+- **伴奏/原唱文件中文/空格路径无法播放**：`switchToAccompaniment`/`switchToOriginal` 用 `Uri.parse("file://$path")` 构造本地文件 URI，遇中文/空格路径产生非法 URI、ExoPlayer 无法播放。改为 `Uri.fromFile(File(path))` 正确编码路径。
+
+### Removed
+
+- **删除 `checkPreSeparation` 死代码**：预分离触发函数无任何调用点（`AccompanimentCache.startPreSeparation` 也因此无外部调用），且注释「进度 > 50%」与实现「阈值 5%」矛盾。已删除该函数及其独占的 `PRE_SEPARATION_THRESHOLD` 常量。
+
 ## [v2.26.8] - 2026-09-04
 
 ### Fixed

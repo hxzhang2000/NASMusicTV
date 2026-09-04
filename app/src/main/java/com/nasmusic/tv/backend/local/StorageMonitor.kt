@@ -96,10 +96,17 @@ class StorageMonitor(private val context: Context) {
             val path = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
                 volume.directory?.absolutePath ?: return@mapNotNull null
             } else {
+                // B15 修复：API 24–29 用隐藏 API 反射 `getPath`，可能抛
+                // NoSuchMethodException/InvocationTargetException/IllegalAccessException。
+                // 原实现无 try/catch，个别 ROM 隐藏该 API 时 BroadcastReceiver.onReceive
+                // 直接崩溃。改为捕获异常并跳过该卷。
                 @Suppress("DEPRECATION")
-                val dir = volume.javaClass.getMethod("getPath").invoke(volume) as? String
-                    ?: return@mapNotNull null
-                dir
+                try {
+                    volume.javaClass.getMethod("getPath").invoke(volume) as? String
+                        ?: return@mapNotNull null
+                } catch (_: Exception) {
+                    return@mapNotNull null
+                }
             }
             val type = when {
                 path.contains("usb", ignoreCase = true) -> StorageType.USB

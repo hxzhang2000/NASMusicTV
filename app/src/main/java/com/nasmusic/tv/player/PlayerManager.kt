@@ -71,10 +71,6 @@ class PlayerManager(private val applicationContext: Context) {
     /** 原始 MediaItem 的 URI，用于切换回原始音频 */
     private var originalMediaItemUri: String? = null
 
-    /** 预分离触发阈值（播放进度占比） */
-    // 5% 开始预分离（分离需 ~400s，歌曲 ~240s，需在播放早期就启动）
-    private val PRE_SEPARATION_THRESHOLD = 0.05f
-
     /**
      * 当 ExoPlayer 自动过渡到 streamUrl 为空的歌曲时触发（如恢复队列中的网络歌曲）。
      * 外部（MainViewModel）应解析 streamUrl 后重新播放该索引的歌曲。
@@ -467,7 +463,9 @@ class PlayerManager(private val applicationContext: Context) {
         }
 
         // 构建新 MediaItem 指向伴奏文件
-        val accompanimentUri = android.net.Uri.parse("file://$accompanimentPath")
+        // 用 Uri.fromFile 正确编码中文/空格路径（原 Uri.parse("file://$path") 遇中文/空格
+        // 产生非法 URI，导致 ExoPlayer 无法播放伴奏）。
+        val accompanimentUri = android.net.Uri.fromFile(java.io.File(accompanimentPath))
         val newItem = currentItem?.buildUpon()?.setUri(accompanimentUri)?.build() ?: return
 
         // P6 修复：用 replaceMediaItem 替换当前索引的 item，而非 setMediaItem（后者会
@@ -495,7 +493,7 @@ class PlayerManager(private val applicationContext: Context) {
             val originalFile = cache.getOriginalFile(songId)
             if (originalFile.exists() && originalFile.length() > 0) {
                 val originalItem = p.currentMediaItem?.buildUpon()
-                    ?.setUri(android.net.Uri.parse("file://${originalFile.absolutePath}"))
+                    ?.setUri(android.net.Uri.fromFile(originalFile))
                     ?.build() ?: return
                 p.replaceMediaItem(index, originalItem)
                 p.prepare()
@@ -544,50 +542,6 @@ class PlayerManager(private val applicationContext: Context) {
     /** 清除伴奏缓存（返回删除的文件数） */
     fun clearAccompanimentCache(): Int {
         return accompanimentCache?.clearAccompaniments() ?: 0
-    }
-
-    /**
-     * 预分离触发：当播放进度 > 50% 时，预分离队列中的下一首歌
-     */
-    fun checkPreSeparation(progressMs: Long, durationMs: Long) {
-        if (!isHighQualityMode()) return
-        val cache = accompanimentCache ?: return
-        val separator = demucsSeparator ?: return
-        if (durationMs <= 0L) return
-        val progress = progressMs.toFloat() / durationMs.toFloat()
-        if (progress < PRE_SEPARATION_THRESHOLD) return
-
-        // 获取下一首歌
-        val nextIndex = _currentIndex.value + 1
-        val queue = _queue.value
-        if (nextIndex >= queue.size) return
-        val nextSong = queue[nextIndex]
-
-        // 如果已缓存或已在预分离中，跳过
-        if (cache.hasAccompaniment(nextSong.id)) return
-        if (cache.preSeparationState.value.currentSongId == nextSong.id) return
-
-        // 解析输入路径：本地文件优先，否则需要 streamUrl 下载
-        // 预分离在 AccompanimentCache 的 IO 协程中执行，
-        // 所以这里只检查可行性（有 path 或 streamUrl），实际下载由 cache 处理
-        val localPath = nextSong.path
-        if (!localPath.isNullOrBlank()) {
-            cache.startPreSeparation(nextSong.id, localPath, separator)
-            return
-        }
-
-        // streamUrl 歌曲：启动带下载的预分离
-        val streamUrl = nextSong.streamUrl
-        if (streamUrl.isNullOrBlank()) return
-
-        scope.launch {
-            val inputPath = resolveInputPath(nextSong, applicationContext.getString(R.string.hq_progress_pre_download))
-            if (inputPath != null) {
-                cache.startPreSeparation(nextSong.id, inputPath, separator)
-                // 注意：tempFile 清理在 AccompanimentCache 分离完成后由 cache 自行处理
-                // 如果 startPreSeparation 内部失败，tempFile 会在应用重启时被系统清理
-            }
-        }
     }
 
     // ── 升降调 & 变速（仅 K 歌页面使用，由 MainViewModel 调用）──
