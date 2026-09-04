@@ -7,6 +7,14 @@
 >
 > 类型：`Added`（新增） | `Changed`（变更） | `Fixed`（修复） | `Removed`（移除）
 
+## [v2.26.12] - 2026-09-04
+
+### Fixed
+
+- **Navidrome 封面 URL 每次重建 salt+token 致缓存失效（B11）**：`buildRestUrl` 每次调用都 `System.currentTimeMillis()` 生成新 salt，导致 `buildCoverUrl` 产出的封面 URL 每次都不同，Coil 缓存 key 失效、同一封面反复下载。已改为在 `initialize` 时固定 salt（与 Subsonic 一致），`buildRestUrl` 复用，封面/流 URL 稳定可缓存。
+
+- **Navidrome/Subsonic 专辑列表硬上限 500 无分页（B10）**：`getAlbums` 硬编码 `size=500`，超过 500 张专辑的用户会丢失专辑。已改为按页循环拉取（每页 500，`offset` 递增），直到返回不足一页或达到安全上限（100 页 / 5 万张）。
+
 ## [v2.26.11] - 2026-09-04
 
 ### Fixed

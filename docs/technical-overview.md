@@ -6794,3 +6794,25 @@ val result = with(kotlinx.coroutines.Dispatchers.IO) { separator.separate(...) }
 **涉及文件**：`player/DemucsSeparator.kt`、`app/build.gradle.kts`、`CHANGELOG.md`
 
 **版本号变更**：v2.26.10 → v2.26.11（versionCode 89 → 90）
+
+### 10.84 Navidrome 封面 URL 缓存失效 + 专辑列表硬上限（v2.26.12 - 2026-09-04）
+
+**日期**：2026-09-04
+
+> 承接 2026-09-03 代码复审 P1 项 B10、B11。
+
+#### 10.84.1 Navidrome 封面 URL 每次重建 salt+token（B11）
+
+**问题**：Navidrome `buildRestUrl` 每次调用都 `System.currentTimeMillis()` 现场生成新 salt，`buildCoverUrl`（内部调 `buildRestUrl("getCoverArt")`）产出的封面 URL 每次都不同。Coil 以 URL 字符串为缓存 key，URL 不稳定导致内存/磁盘缓存命中失效，同一张封面反复下载，封面页滚动时频繁网络请求。
+
+**修复**：新增 `salt` 字段，在 `initialize` 时固定一次（`System.currentTimeMillis()`），`buildRestUrl` 复用该 salt（`token = md5(password + salt)` 仍在现场计算）。与 Subsonic 的固定 salt 实现对齐。
+
+#### 10.84.2 专辑列表硬上限 500 无分页（B10）
+
+**问题**：Navidrome/Subsonic 的 `getAlbums` 均硬编码 `size=500`、无 `offset` 分页，超过 500 张专辑的曲库会静默丢失专辑。
+
+**修复**：改为按页循环拉取（每页 500、`offset` 递增），直到返回不足一页（末页）或达到安全上限（100 页 / 5 万张，防异常循环）。两个 adapter 同步修改。
+
+**涉及文件**：`backend/impl/NavidromeAdapter.kt`、`backend/impl/SubsonicAdapter.kt`、`app/build.gradle.kts`、`CHANGELOG.md`
+
+**版本号变更**：v2.26.11 → v2.26.12（versionCode 90 → 91）

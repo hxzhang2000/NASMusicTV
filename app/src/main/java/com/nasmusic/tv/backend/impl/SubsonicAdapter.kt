@@ -138,34 +138,51 @@ class SubsonicAdapter : BackendAdapter {
 
     override suspend fun getAlbums(): List<Album> = withContext(Dispatchers.IO) {
         try {
-            val url = buildRestUrl("getAlbumList2") +
-                    "&type=alphabeticalByName&size=500"
+            // B10 修复：原硬编码 size=500 无分页，超过 500 张专辑的用户会丢专辑。
+            // 改为按页循环拉取（每页 500），直到返回不足一页或达到安全上限。
+            val pageSize = 500
+            val allAlbums = mutableListOf<Album>()
+            var offset = 0
+            var maxPages = 100 // 安全上限：最多 5 万张专辑，防止异常循环
 
-            val json = executeRequest(url) ?: return@withContext emptyList<Album>()
-            val subsonic = json.getAsJsonObject("subsonic-response")
-            val albumList = subsonic?.getAsJsonObject("albumList2")
-            val albums = albumList?.getAsJsonArray("album")
-                ?: return@withContext emptyList<Album>()
+            while (maxPages-- > 0) {
+                val url = buildRestUrl("getAlbumList2") +
+                        "&type=alphabeticalByName&size=$pageSize&offset=$offset"
 
-            albums.mapNotNull { item ->
-                val obj = item.asJsonObject
-                val id = obj.get("id")?.asString ?: return@mapNotNull null
-                val name = EncodingUtils.fixEncoding(obj.get("name")?.asString) ?: "Unknown Album"
-                val artist = EncodingUtils.fixEncoding(obj.get("artist")?.asString) ?: ""
-                val year = obj.get("year")?.asInt
-                val songCount = obj.get("songCount")?.asInt ?: 0
-                val durationSec = obj.get("duration")?.asLong ?: 0L
+                val json = executeRequest(url) ?: break
+                val subsonic = json.getAsJsonObject("subsonic-response")
+                val albumList = subsonic?.getAsJsonObject("albumList2")
+                val albums = albumList?.getAsJsonArray("album") ?: break
 
-                Album(
-                    id = id,
-                    name = name,
-                    artist = artist,
-                    coverUrl = buildCoverUrl(id),
-                    year = year,
-                    songCount = songCount,
-                    durationMs = durationSec * 1000
-                )
+                if (albums.size() == 0) break
+
+                for (i in 0 until albums.size()) {
+                    val obj = albums[i].asJsonObject
+                    val id = obj.get("id")?.asString ?: continue
+                    val name = EncodingUtils.fixEncoding(obj.get("name")?.asString) ?: "Unknown Album"
+                    val artist = EncodingUtils.fixEncoding(obj.get("artist")?.asString) ?: ""
+                    val year = obj.get("year")?.asInt
+                    val songCount = obj.get("songCount")?.asInt ?: 0
+                    val durationSec = obj.get("duration")?.asLong ?: 0L
+
+                    allAlbums.add(
+                        Album(
+                            id = id,
+                            name = name,
+                            artist = artist,
+                            coverUrl = buildCoverUrl(id),
+                            year = year,
+                            songCount = songCount,
+                            durationMs = durationSec * 1000
+                        )
+                    )
+                }
+
+                // 本页不足一页 → 已到末页，停止
+                if (albums.size() < pageSize) break
+                offset += pageSize
             }
+            allAlbums
         } catch (e: Exception) {
             AppLog.e("SubsonicAdapter", "getAlbums failed", e)
             emptyList()
