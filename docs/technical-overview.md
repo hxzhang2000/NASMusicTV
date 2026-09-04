@@ -6958,3 +6958,31 @@ val result = with(kotlinx.coroutines.Dispatchers.IO) { separator.separate(...) }
 **涉及文件**：`backend/impl/FeiniuAdapter.kt`、`backend/impl/NavidromeAdapter.kt`、`app/build.gradle.kts`、`CHANGELOG.md`
 
 **版本号变更**：v2.26.17 → v2.26.18（versionCode 96 → 97）
+
+### 10.91 专辑合并「只留 NAS id」导致详情页丢本地歌（方案 B，v2.26.20 - 2026-09-04）
+
+**日期**：2026-09-04
+
+> 承接 2026-09-03 代码复审 B20（数据正确性问题）。方案 A（最小局部改 `loadAlbumSongs` 追加本地歌）未采用，采用方案 B 从模型层根上解决。
+
+#### 10.91.1 根因
+
+`MusicMerger.mergeAlbums` 同名碰撞时执行 `existing.copy(...)`，保留的是 `existing`（NAS 专辑）的 `id`；本地/百度同名专辑的 `id`（`local_album_xxx` / `baidu_album_xxx`）被丢弃。而 `MainViewModel.loadAlbumSongs` 按 `id` 前缀路由——合并专辑 `id` 是 NAS id → 只走 `adapter.getAlbumSongs(albumId)`，本地/百度同名歌不可见、不可播。`songCount` 却显示 `NAS+Local`，点进去数量对不上。
+
+#### 10.91.2 修复（方案 B）
+
+- `Album` 新增 `val sourceIds: List<String> = emptyList()`。
+- `MusicMerger.mergeAlbums`：引入 `sourceIdsMap`（去重键 → 来源 id 列表），`mergeInto` 在碰撞/新建时 `putSource(key, album.id)` 收集全部来源；函数末尾统一 `album.copy(sourceIds = sourceIdsMap[key].orEmpty())` 回填。单源条目 `sourceIds = [自身 id]`。
+- `MainViewModel.loadAlbumSongs`：优先读 `album.sourceIds`（空则回退 `listOf(albumId)`，向后兼容），对每个来源分别取数（NAS → `adapter.getAlbumSongs`；`local_album_` → 本地+百度按名匹配；`baidu_album_` → 百度按名匹配），拼接后按 `title|artist|durationMs` 跨源去重写入 `_albumSongsCache`。
+- 抽取 `private fun filterSongsByAlbumName(albumName, candidates)` 统一本地/百度/无 NAS 三处按名匹配逻辑（含百度 path 倒数第二段目录名匹配）。
+
+#### 10.91.3 影响与兼容
+
+- 未合并的单源专辑（`sourceIds` 为空）回退到旧 `albumId` 单源逻辑，行为不变。
+- 合并专辑缓存键仍为 `album.id`（= NAS id），`resolvedAlbumCovers` 按 `album.id` 索引不受影响。
+- 列表 `songCount` 累加与详情页取数现已自洽：列表显示 `NAS+Local+百度` 总数，详情页也能取到对应全部歌曲。
+- **未覆盖项**：播放整张专辑（`AppRoot` 的 `onPlayAlbum` 用 `songs.filter { it.albumId == album.id }`）仍只取 NAS 歌，属同根因的「播放」路径，本次方案 B 仅覆盖详情页显示，建议另立任务修复播放路径（或复用 `loadAlbumSongs` 已缓存的多源结果）。
+
+**涉及文件**：`data/model/Album.kt`、`backend/local/MusicMerger.kt`、`ui/viewmodel/MainViewModel.kt`、`app/build.gradle.kts`、`CHANGELOG.md`
+
+**版本号变更**：v2.26.19 → v2.26.20（versionCode 98 → 99）

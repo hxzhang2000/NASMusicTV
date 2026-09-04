@@ -7,6 +7,16 @@
 >
 > 类型：`Added`（新增） | `Changed`（变更） | `Fixed`（修复） | `Removed`（移除）
 
+## [v2.26.20] - 2026-09-04
+
+### Fixed
+
+- **B20：专辑合并后「只留 NAS id」导致详情页丢本地歌（方案 B，从根上解决）**：`MusicMerger.mergeAlbums` 同名碰撞时保留 NAS 专辑的 `id`，本地/百度同名专辑的 `id` 被丢弃，而 `MainViewModel.loadAlbumSongs` 按 `id` 前缀路由——合并专辑 `id` 是 NAS id，点进去只返回 NAS 歌曲，本地/百度同名歌在详情页不可见、不可播。现给 `Album` 增加 `sourceIds: List<String>` 字段，`mergeAlbums` 在碰撞/新建时把 NAS、本地、百度的原始来源 id 全部收集进 `sourceIds`；`loadAlbumSongs` 改为读取 `album.sourceIds`（单源 album 回退到 `albumId`，向后兼容），对每个来源分别取数——NAS 走 `adapter.getAlbumSongs`、本地/百度按专辑名匹配——再拼接并跨源去重（按 `title|artist|durationMs`）后写入缓存。
+
+### Changed
+
+- **versionCode 98 → 99，versionName 2.26.19 → 2.26.20**
+
 ## [v2.26.19] - 2026-09-04
 
 ### Fixed

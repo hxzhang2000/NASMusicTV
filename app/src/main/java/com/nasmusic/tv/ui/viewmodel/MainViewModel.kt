@@ -2393,59 +2393,81 @@ showError(getApplication<Application>().getString(R.string.toggle_favorite_error
         }
     }
 
+    /**
+     * 按专辑名（含百度 path 倒数第二段目录名）从候选歌曲中筛选同名专辑歌曲。
+     * 复用于本地 / 百度 / 无 NAS 三种来源，统一匹配逻辑。
+     */
+    private fun filterSongsByAlbumName(albumName: String, candidates: List<Song>): List<Song> {
+        val name = albumName.lowercase().trim()
+        if (name.isBlank()) return emptyList()
+        return candidates.filter { song ->
+            val songAlbum = song.album.lowercase().trim()
+            val matchAlbum = songAlbum == name
+            val matchPath = !matchAlbum && songAlbum.isBlank() && song.path != null && run {
+                val segments = song.path!!.trim('/').split("/")
+                segments.getOrNull(segments.size - 2)?.lowercase()?.trim() == name
+            }
+            matchAlbum || matchPath
+        }
+    }
+
+    /**
+     * 加载专辑详情歌曲。
+     *
+     * 多源取数：合并专辑（[Album.sourceIds] 携带 NAS / 本地 / 百度全部来源 id）
+     * 分别取数后拼接并跨源去重；非合并专辑回退到单源 albumId，行为与旧版一致。
+     * 从根上解决 B20：合并后只取 NAS 歌导致本地/百度同名歌在详情页不可见的问题。
+     */
     fun loadAlbumSongs(albumId: String) {
         viewModelScope.launch {
-            // 本地/百度专辑不走 NAS adapter，直接从本地歌曲列表匹配
-            if (albumId.startsWith("local_album_") || albumId.startsWith("baidu_album_")) {
-                val album = _selectedAlbum.value
-                val albumName = album?.name?.lowercase()?.trim() ?: ""
-                val candidates = _localSongs.value + baiduIndexCache.allSongs()
-                val result = candidates.filter { song ->
-                    val songAlbum = song.album.lowercase().trim()
-                    val matchAlbum = albumName.isNotBlank() && songAlbum == albumName
-                    // 百度歌曲 album 字段可能为空，尝试 path 倒数第二段目录名匹配
-                    val matchPath = if (!matchAlbum && albumName.isNotBlank() && songAlbum.isBlank() && song.path != null) {
-                        val segments = song.path!!.trim('/').split("/")
-                        segments.getOrNull(segments.size - 2)?.lowercase()?.trim() == albumName
-                    } else false
-                    matchAlbum || matchPath
+            val album = _selectedAlbum.value
+            val albumName = album?.name?.lowercase()?.trim().orEmpty()
+            // 合并专辑携带多源 id；单源（旧数据/未合并）回退到 albumId，向后兼容
+            val sources = album?.sourceIds?.takeIf { it.isNotEmpty() } ?: listOf(albumId)
+
+            val collected = mutableListOf<Song>()
+            var nasError: Exception? = null
+            val adapter = backendRegistry.getAdapter()
+
+            for (src in sources) {
+                when {
+                    src.startsWith("local_album_") -> {
+                        // 本地专辑详情：同时列出本地 + 百度同名歌（保留原行为）
+                        collected += filterSongsByAlbumName(albumName, _localSongs.value)
+                        collected += filterSongsByAlbumName(albumName, baiduIndexCache.allSongs())
+                    }
+                    src.startsWith("baidu_album_") -> {
+                        collected += filterSongsByAlbumName(albumName, baiduIndexCache.allSongs())
+                    }
+                    else -> {
+                        if (adapter != null) {
+                            try {
+                                collected += adapter.getAlbumSongs(src)
+                            } catch (e: Exception) {
+                                nasError = e
+                            }
+                        } else {
+                            // 无 NAS 连接：用已加载歌曲按名兜底（保留原无 NAS 行为）
+                            val candidates = _localSongs.value + baiduIndexCache.allSongs() + _songsPaging.value.songs
+                            collected += filterSongsByAlbumName(albumName, candidates)
+                        }
+                    }
                 }
-                val cache = _albumSongsCache.value.toMutableMap()
-                cache[albumId] = result
-                _albumSongsCache.value = cache
-                AppLog.d("NASMusic", "loadAlbumSongs local/baidu: album=$albumName, ${result.size} songs")
-                return@launch
             }
 
-            val adapter = backendRegistry.getAdapter()
-            if (adapter != null) {
-                try {
-                    val songs = adapter.getAlbumSongs(albumId)
-                    val cache = _albumSongsCache.value.toMutableMap()
-                    cache[albumId] = songs
-                    _albumSongsCache.value = cache
-                } catch (e: Exception) {
-                    AppLog.e("NASMusic", "loadAlbumSongs failed", e)
-                    showError(getApplication<Application>().getString(R.string.load_album_songs_error, e.message?.take(50)))
-                }
-            } else {
-                // 无 NAS 连接：从本地+百度+已加载的歌曲中按专辑名匹配
-                val album = _selectedAlbum.value
-                val albumName = album?.name?.lowercase()?.trim() ?: ""
-                val candidates = _localSongs.value + baiduIndexCache.allSongs() + _songsPaging.value.songs
-                val result = candidates.filter { song ->
-                    val songAlbum = song.album.lowercase().trim()
-                    val matchAlbum = albumName.isNotBlank() && songAlbum == albumName
-                    val matchPath = if (!matchAlbum && albumName.isNotBlank() && songAlbum.isBlank() && song.path != null) {
-                        val segments = song.path!!.trim('/').split("/")
-                        segments.getOrNull(segments.size - 2)?.lowercase()?.trim() == albumName
-                    } else false
-                    matchAlbum || matchPath
-                }
-                val cache = _albumSongsCache.value.toMutableMap()
-                cache[albumId] = result
-                _albumSongsCache.value = cache
-                AppLog.d("NASMusic", "loadAlbumSongs multi-source: album=$albumName, ${result.size} songs")
+            // 跨源去重：同一首歌可能同时命中 NAS 与本地/百度（id 不同但曲目标识相同）
+            val seen = mutableSetOf<String>()
+            val result = collected.filter { song ->
+                seen.add("${song.title.lowercase().trim()}|${song.artist.lowercase().trim()}|${song.durationMs}")
+            }
+
+            val cache = _albumSongsCache.value.toMutableMap()
+            cache[albumId] = result
+            _albumSongsCache.value = cache
+            AppLog.d("NASMusic", "loadAlbumSongs multi-source: album=$albumName, ${result.size} songs, sources=${sources.size}")
+            if (nasError != null) {
+                AppLog.e("NASMusic", "loadAlbumSongs NAS source failed", nasError)
+                showError(getApplication<Application>().getString(R.string.load_album_songs_error, nasError.message?.take(50)))
             }
         }
     }

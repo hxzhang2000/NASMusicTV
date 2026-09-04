@@ -13,5 +13,6 @@ data class Album(
     val songCount: Int = 0,
     val durationMs: Long = 0L,
     val genre: String? = null,
-    val sourceType: MusicSourceType? = null
+    val sourceType: MusicSourceType? = null,
+    val sourceIds: List<String> = emptyList()
 )

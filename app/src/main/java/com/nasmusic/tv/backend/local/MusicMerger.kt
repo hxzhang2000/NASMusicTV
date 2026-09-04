@@ -30,43 +30,48 @@ object MusicMerger {
         baiduAlbums: List<Album> = emptyList()
     ): List<Album> {
         val albumMap = linkedMapOf<String, Album>()
+        // 去重键 -> 来源 id 列表：保留合并前各源的原始 id，详情页据此多源分别取数
+        val sourceIdsMap = linkedMapOf<String, MutableList<String>>()
+
+        fun putSource(key: String, id: String) {
+            sourceIdsMap.getOrPut(key) { mutableListOf() }.apply {
+                if (id !in this) add(id)
+            }
+        }
+
+        fun mergeInto(key: String, album: Album) {
+            val existing = albumMap[key]
+            if (existing == null) {
+                albumMap[key] = album
+            } else {
+                albumMap[key] = existing.copy(
+                    songCount = existing.songCount + album.songCount,
+                    durationMs = existing.durationMs + album.durationMs,
+                    coverUrl = existing.coverUrl ?: album.coverUrl
+                )
+            }
+            putSource(key, album.id)
+        }
 
         nasAlbums.forEach { album ->
             val key = album.name.lowercase().trim()
-            if (key.isNotBlank()) albumMap[key] = album
+            if (key.isNotBlank()) mergeInto(key, album)
         }
-
         localAlbums.forEach { album ->
             val key = album.name.lowercase().trim()
-            if (key.isBlank()) return@forEach
-            if (key in albumMap) {
-                val existing = albumMap[key]!!
-                albumMap[key] = existing.copy(
-                    songCount = existing.songCount + album.songCount,
-                    durationMs = existing.durationMs + album.durationMs,
-                    coverUrl = existing.coverUrl ?: album.coverUrl
-                )
-            } else {
-                albumMap[key] = album
-            }
+            if (key.isNotBlank()) mergeInto(key, album)
         }
-
         baiduAlbums.forEach { album ->
             val key = album.name.lowercase().trim()
-            if (key.isBlank()) return@forEach
-            if (key in albumMap) {
-                val existing = albumMap[key]!!
-                albumMap[key] = existing.copy(
-                    songCount = existing.songCount + album.songCount,
-                    durationMs = existing.durationMs + album.durationMs,
-                    coverUrl = existing.coverUrl ?: album.coverUrl
-                )
-            } else {
-                albumMap[key] = album
-            }
+            if (key.isNotBlank()) mergeInto(key, album)
         }
 
-        return sortByPinyin(albumMap.values.toList()) { it.name }
+        // 回填 sourceIds：让每个合并条目携带全部来源 id（含 NAS / 本地 / 百度），
+        // 详情页 loadAlbumSongs 据此分别取数再拼接，从根上解决"合并后只取 NAS 歌"的丢歌问题
+        val merged = albumMap.map { (key, album) ->
+            album.copy(sourceIds = sourceIdsMap[key].orEmpty())
+        }
+        return sortByPinyin(merged) { it.name }
     }
 
     /**
