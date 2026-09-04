@@ -7,6 +7,12 @@
 >
 > 类型：`Added`（新增） | `Changed`（变更） | `Fixed`（修复） | `Removed`（移除）
 
+## [v2.26.14] - 2026-09-04
+
+### Fixed
+
+- **seek 窗口内暂停/播放状态失真（P5）**：`onIsPlayingChanged` 在 `seekPending` 时直接 `return`，seek 期间（≤1 秒）的暂停/播放事件被吞，`_isPlaying` 不更新，播放按钮卡在错误状态直到下次回调。已改为 seek 期间仍同步 `_isPlaying`（纯状态记录），仅跳过进度轮询启停等有副作用的操作。
+
 ## [v2.26.13] - 2026-09-04
 
 ### Fixed

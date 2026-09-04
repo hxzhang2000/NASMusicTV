@@ -6834,3 +6834,21 @@ val result = with(kotlinx.coroutines.Dispatchers.IO) { separator.separate(...) }
 **版本号变更**：v2.26.12 → v2.26.13（versionCode 91 → 92）
 
 **补充判断（B17 暂不处理）**：`SearchAggregator` 的 `withTimeoutOrNull` 对阻塞式 OkHttp `execute()` 无法软取消（5s/8s 超时形同虚设），但各 adapter 的 OkHttp 已设 `readTimeout(30s)`，最坏 30s 后 `SocketTimeoutException` 被 catch 兜底，不会永久卡死；属延迟/体验层面而非正确性 bug，修复需将 `execute()` 改为支持取消的调用方式、改动面大，故维持暂不处理。
+
+### 10.86 seek 窗口内暂停/播放状态失真（v2.26.14 - 2026-09-04）
+
+**日期**：2026-09-04
+
+> 承接 2026-09-03 代码复审 P1 项 P5。
+
+#### 10.86.1 seekPending 吞 onIsPlayingChanged（P5）
+
+**问题**：`PlayerManager` 的 `onIsPlayingChanged` 在 `seekPending == true` 时直接 `return`，既不更新 `_isPlaying` 也不移除轮询回调。seek 窗口内（`seekTo` 后到 `onPositionDiscontinuity(SEEK)` 或 1 秒兜底 timeout 之间）若用户暂停/播放，`_isPlaying` 不更新，播放按钮卡在错误状态直到下一次 `onIsPlayingChanged` 触发。
+
+**修复**：将 `_isPlaying.value = isPlaying` 移到 `seekPending` 判断之前（纯状态记录、无副作用，总是同步）；`seekPending` 时仅跳过进度轮询的启停（有副作用，防止播放按钮闪烁与 ExoPlayer 内部位置重置干扰）。
+
+**涉及文件**：`player/PlayerManager.kt`、`app/build.gradle.kts`、`CHANGELOG.md`
+
+**版本号变更**：v2.26.13 → v2.26.14（versionCode 92 → 93）
+
+**补充判断（P11/P12/P13 暂缓）**：P11（shuffleModeEnabled 与 playRandom 双轨错歌）需引入独立播放模式状态字段、解耦「随机模式标志」与 ExoPlayer 有副作用的 `shuffleModeEnabled` 属性，中等复杂度且需真机验证随机播放不回归；P12/P13（未注册 MediaButtonReceiver 致通知栏按钮失效）完整修复需实现 `onPlaybackResumption` + 播放队列持久化恢复，属架构级改动。二者风险/收益比不佳，暂缓。

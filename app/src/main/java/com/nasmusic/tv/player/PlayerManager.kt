@@ -605,12 +605,15 @@ class PlayerManager(private val applicationContext: Context) {
 
     private val playerListener = object : Player.Listener {
         override fun onIsPlayingChanged(isPlaying: Boolean) {
-            // seek 期间忽略播放状态变化，防止播放按钮闪烁
+            // P5 修复：seek 期间仍需同步 _isPlaying（纯状态记录），否则 seek 窗口内暂停/播放
+            // 会导致播放按钮卡在错误状态（原实现直接 return，_isPlaying 永久失真直到下次回调）。
+            _isPlaying.value = isPlaying
+            // seek 期间跳过进度轮询的启停（有副作用），防止播放按钮闪烁与 ExoPlayer 内部位置重置干扰；
+            // 轮询至多多跑 1 秒，由 seekTimeout 兜底恢复。
             if (seekPending) {
-                AppLog.d("NASMusic", "playerListener: onIsPlayingChanged=$isPlaying ignored (seekPending)")
+                AppLog.d("NASMusic", "playerListener: onIsPlayingChanged=$isPlaying (seekPending, only syncing isPlaying)")
                 return
             }
-            _isPlaying.value = isPlaying
             if (isPlaying) {
                 progressHandler.post(progressUpdateRunnable)
                 // 播放开始时自动清除分离成功提示（延迟 3 秒让用户看到）
