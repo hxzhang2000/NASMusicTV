@@ -274,11 +274,7 @@ fun AppRoot(
                             viewModel.navigateTo(Screen.NowPlaying)
                         },
                         onPlayAlbum = { album ->
-                            val albumSongs = songs.dataOrNull()?.filter { it.albumId == album.id } ?: emptyList()
-                            if (albumSongs.isNotEmpty()) {
-                                viewModel.playQueue(albumSongs)
-                                viewModel.navigateTo(Screen.NowPlaying)
-                            }
+                            viewModel.playAlbumMultiSource(album)
                         },
                         onOpenAlbumDetail = { album -> viewModel.openAlbumDetail(album) },
                         onNavigateToLibrary = { viewModel.navigateTo(Screen.Library) },
@@ -481,11 +477,7 @@ fun AppRoot(
                         searchResults = searchResultsList,
                         isSearching = isSearching,
                         onPlayAlbum = { album ->
-                            val albumSongs = songList.filter { it.albumId == album.id }
-                            if (albumSongs.isNotEmpty()) {
-                                viewModel.playQueue(albumSongs)
-                                viewModel.navigateTo(Screen.NowPlaying)
-                            }
+                            viewModel.playAlbumMultiSource(album)
                         },
                         onPlaySong = { song ->
                             // 网络歌曲需要先解析播放链接，本地歌曲直接播放

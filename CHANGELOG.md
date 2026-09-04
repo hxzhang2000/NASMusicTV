@@ -7,6 +7,16 @@
 >
 > 类型：`Added`（新增） | `Changed`（变更） | `Fixed`（修复） | `Removed`（移除）
 
+## [v2.26.21] - 2026-09-04
+
+### Fixed
+
+- **B20 续：播放整张合并专辑仍只取 NAS 歌（同根因的播放路径）**：`AppRoot` 的 `onPlayAlbum`（HomeScreen / LibraryScreen）原用 `songs.filter { it.albumId == album.id }`，合并专辑 `id` 是 NAS id，本地/百度同名歌整张播放时仍被漏掉。改为调用 `MainViewModel.playAlbumMultiSource(album)`——复用 `loadAlbumSongs` 的 `filterSongsByAlbumName` 多源取数（NAS → `adapter.getAlbumSongs`；本地/百度 → 按专辑名匹配），按 `title|artist|durationMs` 跨源去重后整张播放。方案 B 对 B20 的覆盖现已完整（详情页显示 + 整张播放）。
+
+### Changed
+
+- **versionCode 99 → 100，versionName 2.26.20 → 2.26.21**
+
 ## [v2.26.20] - 2026-09-04
 
 ### Fixed

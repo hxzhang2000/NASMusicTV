@@ -2475,6 +2475,51 @@ showError(getApplication<Application>().getString(R.string.toggle_favorite_error
     fun getAlbumSongsCache(albumId: String): List<Song> =
         _albumSongsCache.value[albumId] ?: emptyList()
 
+    /**
+     * 播放整张专辑（多源）。合并专辑按 [Album.sourceIds] 分别取数并跨源去重，
+     * 与 [loadAlbumSongs] 共用 [filterSongsByAlbumName]，从根上解决 B20 播放路径只取 NAS 歌的问题。
+     */
+    fun playAlbumMultiSource(album: Album) {
+        viewModelScope.launch {
+            val albumName = album.name.lowercase().trim()
+            val sources = album.sourceIds.takeIf { it.isNotEmpty() } ?: listOf(album.id)
+            val collected = mutableListOf<Song>()
+            val adapter = backendRegistry.getAdapter()
+            for (src in sources) {
+                when {
+                    src.startsWith("local_album_") -> {
+                        collected += filterSongsByAlbumName(albumName, _localSongs.value)
+                        collected += filterSongsByAlbumName(albumName, baiduIndexCache.allSongs())
+                    }
+                    src.startsWith("baidu_album_") -> {
+                        collected += filterSongsByAlbumName(albumName, baiduIndexCache.allSongs())
+                    }
+                    else -> {
+                        if (adapter != null) {
+                            try {
+                                collected += adapter.getAlbumSongs(src)
+                            } catch (e: Exception) {
+                                AppLog.e("NASMusic", "playAlbumMultiSource NAS failed", e)
+                                showError(getApplication<Application>().getString(R.string.load_album_songs_error, e.message?.take(50)))
+                            }
+                        } else {
+                            val candidates = _localSongs.value + baiduIndexCache.allSongs() + _songsPaging.value.songs
+                            collected += filterSongsByAlbumName(albumName, candidates)
+                        }
+                    }
+                }
+            }
+            val seen = mutableSetOf<String>()
+            val result = collected.filter { song ->
+                seen.add("${song.title.lowercase().trim()}|${song.artist.lowercase().trim()}|${song.durationMs}")
+            }
+            if (result.isNotEmpty()) {
+                playQueue(result)
+                navigateTo(Screen.NowPlaying)
+            }
+        }
+    }
+
     // --- 详情页导航（A-1, A-2）---
     fun openAlbumDetail(album: Album) {
         _selectedAlbum.value = album

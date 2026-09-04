@@ -6986,3 +6986,27 @@ val result = with(kotlinx.coroutines.Dispatchers.IO) { separator.separate(...) }
 **涉及文件**：`data/model/Album.kt`、`backend/local/MusicMerger.kt`、`ui/viewmodel/MainViewModel.kt`、`app/build.gradle.kts`、`CHANGELOG.md`
 
 **版本号变更**：v2.26.19 → v2.26.20（versionCode 98 → 99）
+
+### 10.92 播放整张合并专辑只取 NAS 歌（B20 续，v2.26.21 - 2026-09-04）
+
+**日期**：2026-09-04
+
+> B20 方案 B（v2.26.20）仅覆盖详情页显示，播放整张专辑（`AppRoot.onPlayAlbum`）仍按 `albumId` 单源过滤，本地/百度同名歌漏播。本次补齐播放路径。
+
+#### 10.92.1 根因
+
+`AppRoot.onPlayAlbum` 两处（HomeScreen、LibraryScreen）实现为 `songs.filter { it.albumId == album.id }`。合并专辑 `id` = NAS id，本地歌 `albumId` 是 MediaStore id / `"0"`，百度歌 `albumId` 也不是 `album.id` → 只匹配到 NAS 歌，本地/百度同名歌整张播放时丢失。
+
+#### 10.92.2 修复
+
+- `MainViewModel` 新增 `fun playAlbumMultiSource(album: Album)`：在 `viewModelScope.launch` 内读 `album.sourceIds`（空则回退 `listOf(album.id)`），对每个来源分别取数（NAS → `adapter.getAlbumSongs`；`local_album_` → 本地+百度按名匹配；`baidu_album_` → 百度按名匹配；无 NAS 按名兜底），拼接后按 `title|artist|durationMs` 跨源去重，`result.isNotEmpty()` 才 `playQueue` + 跳转 NowPlaying。复用 v2.26.20 的 `filterSongsByAlbumName`，多源逻辑与 `loadAlbumSongs` 完全一致。
+- `AppRoot` 两处 `onPlayAlbum = { album -> viewModel.playAlbumMultiSource(album) }`，删除原单源 `filter { it.albumId == album.id }` 逻辑。
+
+#### 10.92.3 影响与兼容
+
+- 单源专辑（本地/百度/NAS 独立）：`sourceIds` 为空 → 回退 `listOf(album.id)`；但本地专辑 `album.id` 是 `local_album_xxx`，而旧 `onPlayAlbum` 用 `albumId == album.id` 也匹配不上本地歌 `albumId`（MediaStore id）——旧版本地专辑「播放整张」本就为空/失效，新逻辑按名匹配反而修好了这一历史问题。
+- NAS 专辑、合并专辑行为正确，本地/百度同名歌现在可整张播放。
+
+**涉及文件**：`ui/viewmodel/MainViewModel.kt`、`ui/components/AppRoot.kt`、`app/build.gradle.kts`、`CHANGELOG.md`
+
+**版本号变更**：v2.26.20 → v2.26.21（versionCode 99 → 100）
