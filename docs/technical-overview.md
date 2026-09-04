@@ -6676,3 +6676,43 @@ val result = with(kotlinx.coroutines.Dispatchers.IO) { separator.separate(...) }
 **涉及文件**：`ui/viewmodel/MainViewModel.kt`、`player/PlayerManager.kt`、`backend/impl/SubsonicAdapter.kt`、`app/build.gradle.kts`、`CHANGELOG.md`
 
 **版本号变更**：v2.26.6 → v2.26.7（versionCode 85 → 86）
+
+### 10.80 NowPlaying 收藏不刷新 + 伴唱 DSP 失效 + Demucs 泄漏 + 缓存无限增长 + 重复调用（v2.26.8 - 2026-09-04）
+
+**日期**：2026-09-04
+
+> 承接 2026-09-03 代码复审 P0/P1 项 C7/P7/P10/P14/C9。
+
+#### 10.80.1 NowPlaying 收藏星标不刷新（C7）
+
+**问题**：NowPlaying 页 `isFavorite` 用 `isFavorite(song.id)` 直读 `_favoriteIds.value` 不建立订阅，点收藏后星标要到切歌/重组才刷新。
+
+**修复**：NowPlaying 分支 `collectAsState` 订阅 `favoriteIds` 与 `networkFavoriteIds`，收藏状态即时刷新。
+
+#### 10.80.2 伴唱 DSP 切歌后静默失效（P7）
+
+**问题**：`SpectralMaskProcessor.reset()`（Media3 切歌/重建 AudioSink 时调用）错误 `enabled = false`，切歌后伴唱失效，但 `MainViewModel._vocalRemovalEnabled` 仍 true、UI 与真实状态不一致且无法自愈。
+
+**修复**：`enabled` 是用户意图状态、由 `setEnabled()` 管理，从 `reset()` 移除该行，只重置内部音频状态。
+
+#### 10.80.3 Demucs ONNX 会话进程级泄漏（P10）
+
+**问题**：`DemucsSeparator.release()`（关闭 166MB 模型 `modelSession`/`ortEnv`）从未被调用，播放服务销毁后模型会话泄漏。
+
+**修复**：`PlayerManager.release()` 中调用 `demucsSeparator?.release()`。
+
+#### 10.80.4 伴奏缓存无限增长（P14）
+
+**问题**：`cleanupCache()`（LRU，500MB/10 首）只在预分离路径触发；HQ 主路径 + `saveOriginalFile` 永不淘汰。
+
+**修复**：`saveOriginalFile` 成功保存后触发 `cleanupCache()`。
+
+#### 10.80.5 `refreshApiVersions()` 重复调用（C9）
+
+**问题**：`connectToSavedServer` 成功路径连续调用两次，多一次网络请求。
+
+**修复**：删除重复调用。
+
+**涉及文件**：`ui/components/AppRoot.kt`、`player/SpectralMaskProcessor.kt`、`player/PlayerManager.kt`、`player/AccompanimentCache.kt`、`ui/viewmodel/MainViewModel.kt`、`app/build.gradle.kts`、`CHANGELOG.md`
+
+**版本号变更**：v2.26.7 → v2.26.8（versionCode 86 → 87）

@@ -1203,7 +1203,6 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
                     _serverDisplayName.value = backendRegistry.getServerDisplayName()
                     _backendApiVersion.value = backendRegistry.getAdapter()?.apiVersion ?: "Unknown"
                     refreshApiVersions()
-                    refreshApiVersions()
                     prefs.saveServerConfig(config.copy(isConnected = true))
                     loadLibrary()
                     if (!silent) {

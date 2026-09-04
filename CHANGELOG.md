@@ -7,6 +7,20 @@
 >
 > 类型：`Added`（新增） | `Changed`（变更） | `Fixed`（修复） | `Removed`（移除）
 
+## [v2.26.8] - 2026-09-04
+
+### Fixed
+
+- **NowPlaying 收藏星标不刷新（C7）**：NowPlaying 页 `isFavorite` 用 `isFavorite(song.id)` 直读 `_favoriteIds.value`、不建立订阅，点收藏后星标要到切歌/重组才刷新。现改为在 NowPlaying 分支 `collectAsState` 订阅 `favoriteIds` 与 `networkFavoriteIds`，收藏状态即时刷新。
+
+- **伴唱 DSP 切歌后静默失效（P7）**：`SpectralMaskProcessor.reset()`（Media3 在切歌/重建 AudioSink 时调用）错误地 `enabled = false`，导致切歌后伴唱失效，但 `MainViewModel._vocalRemovalEnabled` 仍为 true、UI 与真实状态不一致且无法自愈。`enabled` 是用户意图状态、应由 `setEnabled()` 管理，已从 `reset()` 中移除该行，只重置内部音频状态。
+
+- **Demucs ONNX 会话进程级泄漏（P10）**：`DemucsSeparator.release()`（关闭 166MB 模型的 `modelSession`/`ortEnv`）从未被任何代码调用，播放服务销毁后模型会话泄漏、多次启停内存持续增长。已在 `PlayerManager.release()` 中调用 `demucsSeparator?.release()`。
+
+- **伴奏缓存无限增长写满存储（P14）**：`cleanupCache()`（LRU 淘汰，500MB/10 首上限）原先只在预分离路径触发；HQ 主路径分离 + `saveOriginalFile` 保存原唱文件永不淘汰。已在 `saveOriginalFile` 成功保存后触发 LRU 淘汰。
+
+- **`refreshApiVersions()` 重复调用（C9）**：`connectToSavedServer` 成功路径连续调用两次（多一次网络请求），已删除重复调用。
+
 ## [v2.26.7] - 2026-09-04
 
 ### Fixed

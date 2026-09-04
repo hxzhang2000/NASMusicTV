@@ -1350,6 +1350,10 @@ class PlayerManager(private val applicationContext: Context) {
         equalizer?.release()
         equalizer = null
         spectrumAnalyzer.release()
+        // P10 修复：释放 Demucs 的 ONNX 会话（166MB 模型 + OrtSession）。
+        // 原实现 release() 从未调用 demucsSeparator.release()，导致播放服务销毁后
+        // modelSession/ortEnv 进程级泄漏，多次启停后内存持续增长。
+        demucsSeparator?.release()
     }
 
     // --- B-4 均衡器支持 ---

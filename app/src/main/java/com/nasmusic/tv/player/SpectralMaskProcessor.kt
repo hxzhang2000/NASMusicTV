@@ -147,7 +147,10 @@ class SpectralMaskProcessor : AudioProcessor {
 
     override fun reset() {
         AppLog.d(TAG, "reset")
-        enabled = false
+        // P7 修复：reset() 是 Media3 在切歌/重建 AudioSink 时调用的接口方法，
+        // 只应重置处理器内部音频状态，不应清零 `enabled`（用户是否开启人声消除的意图）。
+        // 原实现 `enabled = false` 导致切歌后伴唱 DSP 静默失效，但 MainViewModel 的
+        // `_vocalRemovalEnabled` 仍为 true，UI 与真实状态不一致且无法自愈。
         configured = false
         ended = false
         outputFormat = AudioProcessor.AudioFormat.NOT_SET

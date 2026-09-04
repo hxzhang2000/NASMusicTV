@@ -312,6 +312,10 @@ fun AppRoot(
                     val hqError by viewModel.hqError.collectAsState()
                     val hqSuccess by viewModel.hqSuccess.collectAsState()
                     val modelDownloaded by viewModel.modelDownloaded.collectAsState()
+                    // C7 修复：收藏状态建立订阅，点收藏后星标即时刷新。
+                    // 原实现直读 isFavorite(song.id) 不订阅，点收藏后需切歌才刷新。
+                    val favoriteIds by viewModel.favoriteIds.collectAsState(initial = emptySet())
+                    val networkFavoriteIds by viewModel.networkFavoriteIds.collectAsState(initial = emptySet())
                     val mvReady = mvState as? com.nasmusic.tv.ui.viewmodel.MvAvailability.Ready
                     if (showMv && mvReady != null) {
                         // MTV 音乐视频全屏页（独立播放器，退出时 MainViewModel 恢复主播放器）
@@ -346,10 +350,10 @@ fun AppRoot(
                             coverFilterEnabled = coverFilterEnabled,
                             coverFilterBlurRadius = coverFilterBlurRadius,
                             coverFilterDarkOverlay = coverFilterDarkOverlay,
-                            // 网络歌曲用网络收藏判断，本地歌曲用本地收藏判断
+                            // 网络歌曲用网络收藏判断，本地歌曲用本地收藏判断（基于订阅的 StateFlow）
                             isFavorite = currentSong?.let { song ->
-                                if (song.isNetworkSong) viewModel.isNetworkFavorite(song.id)
-                                else viewModel.isFavorite(song.id)
+                                if (song.isNetworkSong) song.id in networkFavoriteIds
+                                else song.id in favoriteIds
                             } ?: false,
                             isImmersiveMode = isImmersiveMode.value,
                             onToggleImmersive = { isImmersiveMode.value = !isImmersiveMode.value },

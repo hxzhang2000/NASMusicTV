@@ -249,6 +249,10 @@ class AccompanimentCache(private val context: Context) {
             if (!dest.exists()) {
                 source.copyTo(dest, overwrite = true)
                 AppLog.d(TAG, "saveOriginalFile: saved ${dest.name} (${dest.length()} bytes)")
+                // P14 修复：原唱文件也占用缓存目录，保存后立即触发 LRU 淘汰。
+                // 原实现 cleanupCache 仅在预分离路径触发，HQ 主路径分离 + saveOriginalFile
+                // 永不淘汰，缓存无限增长写满 TV 内置存储。
+                cleanupCache()
             }
         }
     }
