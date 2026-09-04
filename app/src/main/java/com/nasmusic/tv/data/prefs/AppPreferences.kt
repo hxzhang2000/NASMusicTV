@@ -38,8 +38,13 @@ import kotlinx.coroutines.runBlocking
 /**
  * 应用偏好存储
  * 使用 DataStore 持久化服务器配置与通用设置
+ *
+ * 构造期为 `internal`：生产代码一律走 [getInstance] 单例（DataStore 要求同一文件
+ * 只能有一个实例）；单元测试通过 internal 构造器为每个用例构造独立实例，避免
+ * 单例跨用例串扰（Robolectric 每个用例有独立 dataDir，共享单例会导致 DataStore
+ * 文件锁冲突与标记位污染）。
  */
-class AppPreferences private constructor(private val context: Context) {
+class AppPreferences internal constructor(private val context: Context) {
 
     companion object {
         private const val TAG = "AppPreferences"

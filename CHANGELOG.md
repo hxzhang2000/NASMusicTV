@@ -7,6 +7,32 @@
 >
 > 类型：`Added`（新增） | `Changed`（变更） | `Fixed`（修复） | `Removed`（移除）
 
+## [v2.26.19] - 2026-09-04
+
+### Fixed
+
+- **艺术家同名出现多个卡片（用户反馈·古天乐）**：ARTISTS Tab 搜索时，艺术家块来自「多源搜索结果按 `it.artist` 原样分组」，
+  未做合唱拆分、去重键也只是 `name.lowercase()`（不 trim、不做全角归一化）。于是 `古天乐` 与 `古天乐 `（尾部空白）
+  被判成两个 key，显示成两块同名卡片、点进去是同一批歌。现改为：搜索结果走 `MusicMerger.buildArtistsFromSongs`
+  先按 `ArtistSplitter` 拆分，去重键统一为 `ArtistSplitter.normalizeKey`（NFKC 全角转半角 + trim + 折叠内部空白 + 小写）。
+- **合唱艺术家被当成独立艺术家（用户反馈·古天乐/萱萱）**：同上，搜索结果未按分隔符拆分，`古天乐/萱萱` 整串成为一个
+  艺术家块；详情页用整串去匹配 `song.artist`，任何歌都匹配不上，详情页一片空白。现拆分后两位艺术家各自成块、
+  合唱歌同时计入两人；详情页 `loadArtistSongs` 另加入「本地已加载歌曲（NAS 分页 + 本地设备 + 百度）按拆分名过滤」
+  兜底，后端返回为空时也不再空白。
+- **`buildLocalArtists` / `buildBaiduArtists` 去重键不一致**：本地与百度两路用 `name.lowercase().trim()`、
+  与 NAS 路的归一化键不同源，`MusicMerger.mergeArtists` 两侧同理。三路现已统一走 `normalizeKey`，
+  并把重复实现合并为 `MusicMerger.buildArtistsFromSongs(songs, idPrefix)`。
+
+### Added
+
+- `ArtistSplitter.normalizeKey(name)`：艺术家同名判定的唯一权威实现（NFKC + trim + 折叠空白 + 小写）。
+- `ArtistSplitter.containsArtist(rawArtistField, artistName)`：替代原先 `artistName in ArtistSplitter.split(...)` 的裸串比较。
+- 回归测试 `ArtistSplitterTest`（15 例）与 `MusicMergerTest`（4 例），覆盖合唱拆分与同名不同写法合并。
+
+### Changed
+
+- **versionCode 97 → 98，versionName 2.26.18 → 2.26.19**
+
 ## [v2.26.16] - 2026-09-04
 
 ### Fixed

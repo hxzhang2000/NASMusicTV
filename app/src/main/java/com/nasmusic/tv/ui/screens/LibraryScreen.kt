@@ -87,7 +87,9 @@ import com.nasmusic.tv.ui.screens.library.DiscoverTab
 import com.nasmusic.tv.ui.screens.library.RadioTab
 
 import com.nasmusic.tv.data.model.UiState
+import com.nasmusic.tv.util.ArtistSplitter
 import com.nasmusic.tv.util.PinyinUtils
+import com.nasmusic.tv.backend.local.MusicMerger
 import kotlinx.coroutines.launch
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.foundation.lazy.grid.LazyGridState
@@ -310,39 +312,40 @@ fun LibraryScreen(
         derivedStateOf {
             if (filterQuery.isBlank()) artists
             else {
-                // 多源搜索结果中提取艺术家（按艺术家名去重）
-                val searchArtists = searchResults
-                    .groupBy { it.artist.lowercase() }
-                    .map { (_, songs) ->
-                        val artistName = songs.first().artist
-                        Artist(id = artistName.lowercase(), name = artistName, songCount = songs.size)
-                    }
+                // 多源搜索结果中提取艺术家：
+                // 必须先按 ArtistSplitter 拆分合唱名（"古天乐/萱萱" → 古天乐、萱萱），
+                // 否则合唱名会变成一个独立艺术家块，且详情页按整串匹配永远查不到歌
+                val searchArtists = MusicMerger.buildArtistsFromSongs(searchResults, "search_artist_")
+                    .filter { PinyinUtils.matches(it.name, filterQuery) }
                 // 合并本地过滤的艺术家
                 val localFiltered = artists.filter {
                     PinyinUtils.matches(it.name, filterQuery)
                 }
+                // 归一化去重（NFKC + trim + 小写），同名不同写法只保留一块
                 val seen = mutableSetOf<String>()
                 (localFiltered + searchArtists).filter { artist ->
-                    val key = artist.name.lowercase()
-                    seen.add(key)
+                    seen.add(ArtistSplitter.normalizeKey(artist.name))
                 }
             }
         }
     }
 
-    // 艺术家搜索时的歌曲映射：多源搜索结果按艺术家分组，与本地 artistSongsMap 合并
+    // 艺术家搜索时的歌曲映射：多源搜索结果按「拆分后的艺术家名」分组，与本地 artistSongsMap 合并
     val displayArtistSongsMap by remember(filterQuery, searchResults, artistSongsMap) {
         derivedStateOf {
             if (filterQuery.isBlank()) artistSongsMap
             else {
-                val searchMap = searchResults.groupBy { it.artist }
-                // 合并：本地数据 + 搜索结果
                 val merged = artistSongsMap.toMutableMap()
-                for ((artist, songs) in searchMap) {
-                    val existing = merged[artist].orEmpty()
-                    // 去重合并
-                    val existingIds = existing.map { it.id }.toSet()
-                    merged[artist] = existing + songs.filter { it.id !in existingIds }
+                for (song in searchResults) {
+                    for (name in ArtistSplitter.split(song.artist)) {
+                        val key = ArtistSplitter.normalizeKey(name)
+                        if (key.isBlank()) continue
+                        val existing = merged[key].orEmpty()
+                        // 去重合并
+                        if (song.id !in existing.map { it.id }.toSet()) {
+                            merged[key] = existing + song
+                        }
+                    }
                 }
                 merged
             }
@@ -363,7 +366,7 @@ fun LibraryScreen(
                     }
                 }
                 LibraryTab.ARTISTS -> {
-                    val listed = filteredArtists.flatMap { displayArtistSongsMap[it.name].orEmpty() }
+                    val listed = filteredArtists.flatMap { displayArtistSongsMap[ArtistSplitter.normalizeKey(it.name)].orEmpty() }
                     if (listed.isNotEmpty()) listed
                     else if (searchResults.isNotEmpty()) searchResults
                     else songs
@@ -951,7 +954,7 @@ private fun ArtistsTab(
                         }
                         // 数据行（key 加 index 防重名）
                         item(key = "artist_${index}_${artist.id}", span = { GridItemSpan(1) }) {
-                            val artistSongs = artistSongsMap[artist.name] ?: emptyList()
+                            val artistSongs = artistSongsMap[ArtistSplitter.normalizeKey(artist.name)] ?: emptyList()
                             val songCount = artistSongs.size
                             // Task 10: 计算专辑数和主要流派
                             val albumCountForArtist = artist.albumCount

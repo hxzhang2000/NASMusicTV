@@ -1272,7 +1272,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
                 val artists = ArtistSplitter.split(song.artist)
                 songMap[song.id] = artists
                 for (name in artists) {
-                    artistMap.getOrPut(name) { mutableListOf() }.add(song)
+                    // 归一化键：同一个人的不同写法（全角/空白/大小写）合并到一块
+                    val key = ArtistSplitter.normalizeKey(name)
+                    if (key.isBlank()) continue
+                    artistMap.getOrPut(key) { mutableListOf() }.add(song)
                 }
             }
             _songArtistMap.value = songMap
@@ -1567,12 +1570,20 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
                     }
                 }
                 // 合并重复艺术家（同一名字可能来自独立条目和拆分条目）
-                val merged = splitArtists.groupBy { it.name }.map { (name, group) ->
-                    group.first().copy(
-                        songCount = group.maxOf { it.songCount },
-                        albumCount = group.sumOf { it.albumCount }
+                // 归一化去重：NFKC + trim + 折叠空白 + 小写，
+                // 避免 "古天乐" 与 "古天乐 " 这类肉眼同名、字符串不同的条目变成两块
+                val mergedMap = linkedMapOf<String, Artist>()
+                for (item in splitArtists) {
+                    val key = ArtistSplitter.normalizeKey(item.name)
+                    if (key.isBlank()) continue
+                    val existing = mergedMap[key]
+                    mergedMap[key] = if (existing == null) item else existing.copy(
+                        songCount = maxOf(existing.songCount, item.songCount),
+                        albumCount = existing.albumCount + item.albumCount,
+                        coverUrl = existing.coverUrl ?: item.coverUrl
                     )
                 }
+                val merged = mergedMap.values.toList()
                 _artists.value = UiState.Success(merged)
                 AppLog.d("NASMusic", "loadArtists: ${artistsList.size} raw → ${merged.size} after splitting")
                 // 艺术家歌曲数量由歌曲 Tab 的 buildArtistMapsIncremental 全量加载后自动填充
@@ -2264,9 +2275,9 @@ showError(getApplication<Application>().getString(R.string.toggle_favorite_error
         val artistSongCounts = mutableMapOf<String, Int>()
         for (song in allSongs) {
             if (song.artist.isBlank()) continue
-            val names = com.nasmusic.tv.util.ArtistSplitter.split(song.artist)
+            val names = ArtistSplitter.split(song.artist)
             for (name in names) {
-                val key = name.lowercase().trim()
+                val key = ArtistSplitter.normalizeKey(name)
                 if (key.isNotBlank()) {
                     artistSongCounts[key] = (artistSongCounts[key] ?: 0) + 1
                 }
@@ -2276,7 +2287,7 @@ showError(getApplication<Application>().getString(R.string.toggle_favorite_error
         val artists = _mergedArtists.value
         if (artistSongCounts.isNotEmpty()) {
             _mergedArtists.value = artists.map { artist ->
-                val key = artist.name.lowercase().trim()
+                val key = ArtistSplitter.normalizeKey(artist.name)
                 val countedSongs = artistSongCounts[key]
                 if (countedSongs != null && countedSongs > 0) {
                     artist.copy(songCount = countedSongs)
@@ -2461,7 +2472,10 @@ showError(getApplication<Application>().getString(R.string.toggle_favorite_error
     fun loadArtistSongs(artistName: String) {
         viewModelScope.launch(Dispatchers.Default) {
             // 清掉当前歌手的缓存，确保用新格式重新拉取（在后台线程避免复制大Map卡UI）
-            _artistSongsMap.value = _artistSongsMap.value.toMutableMap().apply { remove(artistName) }
+            // artistSongsMap 以归一化名为键，此处同样按归一化名清除
+            _artistSongsMap.value = _artistSongsMap.value.toMutableMap().apply {
+                remove(ArtistSplitter.normalizeKey(artistName))
+            }
             _artistDetailSongsCache.value = _artistDetailSongsCache.value.toMutableMap().apply { remove(artistName) }
 
             // 从后端加载
@@ -2470,14 +2484,15 @@ showError(getApplication<Application>().getString(R.string.toggle_favorite_error
                 try {
                     // 从原始艺术家列表中找出所有与目标歌手相关的条目
                     // 例如 "李宗盛" 可能匹配到独立条目 "李宗盛" 以及合作条目 "李宗盛 & 周华健"
+                    val artistKey = ArtistSplitter.normalizeKey(artistName)
                     val rawMatchingIds = _rawArtistList
-                        .filter { artistName in ArtistSplitter.split(it.name) }
+                        .filter { ArtistSplitter.containsArtist(it.name, artistName) }
                         .map { it.id }
                         .distinct()
                         .ifEmpty {
                             // fallback: 从拆分后的列表中提取原始 ID
                             val artists = _artists.value.dataOrNull() ?: emptyList()
-                            val artist = artists.find { it.name == artistName }
+                            val artist = artists.find { ArtistSplitter.normalizeKey(it.name) == artistKey }
                             if (artist != null) listOf(artist.id.substringBefore("|", artist.id)) else emptyList()
                         }
 
@@ -2499,14 +2514,20 @@ showError(getApplication<Application>().getString(R.string.toggle_favorite_error
                     }
                     // 将返回的歌曲按 ArtistSplitter 拆分后，只取包含该艺术家的歌曲
                     val matchingSongs = allSongs.filter { song ->
-                        artistName in ArtistSplitter.split(song.artist)
+                        ArtistSplitter.containsArtist(song.artist, artistName)
                     }
                     AppLog.d("NASMusic", "  matchingSongs=${matchingSongs.size} (raw=${allSongs.size})")
+                    // 后端返回为空时的兜底：从本地已加载歌曲（NAS 分页 + 本地设备 + 百度）
+                    // 按拆分名过滤，避免合唱艺术家详情页一片空白
+                    val localMatched = (_songsPaging.value.songs + _localSongs.value + baiduIndexCache.allSongs())
+                        .filter { ArtistSplitter.containsArtist(it.artist, artistName) }
+                    val finalSongs = (matchingSongs + localMatched).distinctBy { it.id }
+                    AppLog.d("NASMusic", "  finalSongs=${finalSongs.size} (backend=${matchingSongs.size}, local=${localMatched.size})")
                     _artistDetailSongsCache.value = _artistDetailSongsCache.value.toMutableMap().apply {
-                        put(artistName, matchingSongs)
+                        put(artistName, finalSongs)
                     }
                     // 同时按拆分后的艺术家名更新 artistSongsMap 缓存
-                    buildArtistMapsIncremental(matchingSongs)
+                    buildArtistMapsIncremental(finalSongs)
                 } catch (e: Exception) {
                     AppLog.e("NASMusic", "loadArtistSongs failed", e)
                     showError(getApplication<Application>().getString(R.string.load_favorites_error, e.message?.take(50)))
@@ -2524,7 +2545,7 @@ showError(getApplication<Application>().getString(R.string.toggle_favorite_error
                         baiduLocalSongs = baiduIndexCache.allSongs()
                     )
                     val matchingSongs = result.allResults.map { it.song }.filter { song ->
-                        artistName in ArtistSplitter.split(song.artist)
+                        ArtistSplitter.containsArtist(song.artist, artistName)
                     }
                     AppLog.d("NASMusic", "loadArtistSongs('$artistName') multi-source: ${matchingSongs.size} songs")
                     _artistDetailSongsCache.value = _artistDetailSongsCache.value.toMutableMap().apply {

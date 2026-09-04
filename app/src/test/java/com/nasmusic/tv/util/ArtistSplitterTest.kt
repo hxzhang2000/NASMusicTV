@@ -79,4 +79,42 @@ class ArtistSplitterTest {
         val result = ArtistSplitter.split("  A  &  B  ")
         assertEquals(listOf("A", "B"), result)
     }
+
+    @Test
+    fun `split full width slash delimiter`() {
+        assertEquals(
+            listOf("古天乐", "萱萱"),
+            ArtistSplitter.split("古天乐／萱萱")
+        )
+    }
+
+    @Test
+    fun `split collaboration names written with half width slash`() {
+        assertEquals(
+            listOf("古天乐", "萱萱"),
+            ArtistSplitter.split("古天乐/萱萱")
+        )
+    }
+
+    @Test
+    fun `split trims full width whitespace`() {
+        assertEquals(listOf("古天乐"), ArtistSplitter.split("　古天乐 "))
+    }
+
+    @Test
+    fun `normalizeKey merges visually identical names`() {
+        assertEquals(ArtistSplitter.normalizeKey("古天乐"), ArtistSplitter.normalizeKey("古天乐 "))
+        assertEquals(ArtistSplitter.normalizeKey("古天乐"), ArtistSplitter.normalizeKey("　古天乐　"))
+        assertEquals(ArtistSplitter.normalizeKey("abc"), ArtistSplitter.normalizeKey("ＡＢＣ"))
+        assertEquals(ArtistSplitter.normalizeKey("a b"), ArtistSplitter.normalizeKey("A　B"))
+    }
+
+    @Test
+    fun `containsArtist matches by split and normalized name`() {
+        assertEquals(true, ArtistSplitter.containsArtist("古天乐/萱萱", "古天乐"))
+        assertEquals(true, ArtistSplitter.containsArtist("古天乐/萱萱", "萱萱 "))
+        assertEquals(true, ArtistSplitter.containsArtist("古天乐", "古天乐"))
+        // 未拆分的合唱名不应被当成独立艺术家匹配到歌曲
+        assertEquals(false, ArtistSplitter.containsArtist("古天乐/萱萱", "古天乐/萱萱"))
+    }
 }

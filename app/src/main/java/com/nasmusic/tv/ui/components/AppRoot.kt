@@ -853,7 +853,10 @@ fun AppRoot(
                     val artistSongs = selectedArtistName?.let { artistDetailSongsCache[it] } ?: emptyList()
                     val artistsState by viewModel.artists.collectAsState(initial = UiState.Success(emptyList()))
                     val selectedArtist = selectedArtistName?.let { name ->
-                        artistsState.dataOrNull()?.find { it.name == name }
+                        val key = com.nasmusic.tv.util.ArtistSplitter.normalizeKey(name)
+                        artistsState.dataOrNull()?.find {
+                            com.nasmusic.tv.util.ArtistSplitter.normalizeKey(it.name) == key
+                        }
                     }
                     val favoriteIds by viewModel.favoriteIds.collectAsState(initial = emptySet())
                     if (selectedArtistName != null) {

@@ -16,7 +16,8 @@ import com.nasmusic.tv.util.PinyinUtils
  * 因此此处合并是"条目去重 + 计数累加"；本地条目用 local_ 前缀 ID 参与合并，
  * 歌曲明细由详情页分别查询 NAS 与本地后合并展示。
  *
- * 去重键：`name.lowercase().trim()`（大小写不敏感、忽略首尾空白）。
+ * 去重键：`ArtistSplitter.normalizeKey(name)`（NFKC 全角转半角 + 忽略首尾空白 +
+ * 折叠内部空白 + 大小写不敏感）。
  */
 object MusicMerger {
 
@@ -79,12 +80,12 @@ object MusicMerger {
         val artistMap = linkedMapOf<String, Artist>()
 
         nasArtists.forEach { artist ->
-            val key = artist.name.lowercase().trim()
+            val key = ArtistSplitter.normalizeKey(artist.name)
             if (key.isNotBlank()) artistMap[key] = artist
         }
 
         localArtists.forEach { artist ->
-            val key = artist.name.lowercase().trim()
+            val key = ArtistSplitter.normalizeKey(artist.name)
             if (key.isBlank()) return@forEach
             if (key in artistMap) {
                 val existing = artistMap[key]!!
@@ -99,7 +100,7 @@ object MusicMerger {
         }
 
         baiduArtists.forEach { artist ->
-            val key = artist.name.lowercase().trim()
+            val key = ArtistSplitter.normalizeKey(artist.name)
             if (key.isBlank()) return@forEach
             if (key in artistMap) {
                 val existing = artistMap[key]!!
@@ -143,28 +144,8 @@ object MusicMerger {
      * 合唱艺术家拆分：用 ArtistSplitter 将 "张三/李四" 拆为 "张三"、"李四"，
      * 合唱歌曲在每个拆分后的艺术家下都列出（songCount 累加）。
      */
-    fun buildLocalArtists(localSongs: List<Song>): List<Artist> {
-        val artistMap = linkedMapOf<String, Pair<String, MutableList<Song>>>() // key=lowercase, value=(displayName, songs)
-        for (song in localSongs) {
-            if (song.artist.isBlank()) continue
-            val names = ArtistSplitter.split(song.artist)
-            for (name in names) {
-                val key = name.lowercase().trim()
-                if (key.isBlank()) continue
-                val pair = artistMap.getOrPut(key) { name to mutableListOf() }
-                pair.second.add(song)
-            }
-        }
-        return artistMap.map { (key, pair) ->
-            val (displayName, songs) = pair
-            Artist(
-                id = "local_artist_$key",
-                name = displayName,
-                songCount = songs.size,
-                albumCount = songs.map { it.album }.filter { it.isNotBlank() }.distinct().size
-            )
-        }
-    }
+    fun buildLocalArtists(localSongs: List<Song>): List<Artist> =
+        buildArtistsFromSongs(localSongs, "local_artist_")
 
     /**
      * 从百度网盘歌曲列表构建专辑列表
@@ -220,25 +201,41 @@ object MusicMerger {
      * 合唱艺术家拆分：用 ArtistSplitter 将 "张三/李四" 拆为 "张三"、"李四"，
      * 合唱歌曲在每个拆分后的艺术家下都列出。
      */
-    fun buildBaiduArtists(baiduSongs: List<Song>): List<Artist> {
+    fun buildBaiduArtists(baiduSongs: List<Song>): List<Artist> =
+        buildArtistsFromSongs(baiduSongs, "baidu_artist_")
+
+    /**
+     * 从任意歌曲列表构建艺术家列表（按拆分后的艺术家名去重分组）。
+     *
+     * 合唱艺术家拆分：用 ArtistSplitter 将 "张三/李四" 拆为 "张三"、"李四"，
+     * 合唱歌曲在每个拆分后的艺术家下都列出（songCount 累加），
+     * 因此搜索结果、本地歌曲、百度歌曲都不会再出现 "张三/李四" 这样的合唱块。
+     *
+     * 去重键为 [ArtistSplitter.normalizeKey]（NFKC + trim + 折叠空白 + 小写），
+     * 保证 "古天乐" 与 "古天乐 " 不会被当成两个艺术家。
+     *
+     * @param songs 歌曲列表（NAS 全量 / 本地设备 / 百度网盘 / 多源搜索结果均可）
+     * @param idPrefix 生成 Artist.id 的前缀，便于区分来源
+     */
+    fun buildArtistsFromSongs(songs: List<Song>, idPrefix: String): List<Artist> {
+        // key = 归一化艺术家名，value = (展示名, 歌曲列表)
         val artistMap = linkedMapOf<String, Pair<String, MutableList<Song>>>()
-        for (song in baiduSongs) {
+        for (song in songs) {
             if (song.artist.isBlank()) continue
-            val names = ArtistSplitter.split(song.artist)
-            for (name in names) {
-                val key = name.lowercase().trim()
+            for (name in ArtistSplitter.split(song.artist)) {
+                val key = ArtistSplitter.normalizeKey(name)
                 if (key.isBlank()) continue
                 val pair = artistMap.getOrPut(key) { name to mutableListOf() }
                 pair.second.add(song)
             }
         }
         return artistMap.map { (key, pair) ->
-            val (displayName, songs) = pair
+            val (displayName, artistSongs) = pair
             Artist(
-                id = "baidu_artist_$key",
+                id = "$idPrefix$key",
                 name = displayName,
-                songCount = songs.size,
-                albumCount = songs.map { it.album }.filter { it.isNotBlank() }.distinct().size
+                songCount = artistSongs.size,
+                albumCount = artistSongs.map { it.album }.filter { it.isNotBlank() }.distinct().size
             )
         }
     }
