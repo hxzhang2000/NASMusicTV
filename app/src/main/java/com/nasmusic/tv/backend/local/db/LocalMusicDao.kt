@@ -17,9 +17,6 @@ interface LocalMusicDao {
     @Query("SELECT * FROM local_songs")
     suspend fun getAllSongs(): List<LocalSongEntity>
 
-    @Query("SELECT path FROM local_songs")
-    suspend fun getAllPaths(): List<String>
-
     @Query("SELECT * FROM local_songs WHERE mediaStoreId = :id")
     suspend fun getSongById(id: Long): LocalSongEntity?
 

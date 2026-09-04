@@ -124,8 +124,8 @@ class MusicScanner(private val context: Context) {
         }
 
     private fun scanFile(file: File, storageType: StorageType): ScannedSong? {
+        val retriever = MediaMetadataRetriever()
         return try {
-            val retriever = MediaMetadataRetriever()
             retriever.setDataSource(file.absolutePath)
             val title = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_TITLE)
                 ?: file.nameWithoutExtension
@@ -133,7 +133,6 @@ class MusicScanner(private val context: Context) {
             val album = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_ALBUM) ?: "Unknown"
             val duration = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)
                 ?.toLongOrNull() ?: 0L
-            retriever.release()
 
             ScannedSong(
                 mediaStoreId = file.absolutePath.hashCode().toLong(),
@@ -152,6 +151,10 @@ class MusicScanner(private val context: Context) {
         } catch (e: Exception) {
             AppLog.e(TAG, "Failed to scan ${file.absolutePath}: ${e.message}", e)
             null
+        } finally {
+            // B 修复：无论成功/异常都释放 MediaMetadataRetriever，防止 TV 上
+            // 元数据提取器实例泄漏（原实现仅在成功后 release，异常路径泄漏）。
+            try { retriever.release() } catch (_: Exception) {}
         }
     }
 

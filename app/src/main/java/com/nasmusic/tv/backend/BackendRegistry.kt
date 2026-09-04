@@ -157,10 +157,13 @@ class BackendRegistry {
 
     /**
      * 释放适配器资源（logout + close），不操作锁状态
+     *
+     * 必须在 IO 线程执行，避免 [disconnect] 从 Main dispatcher（viewModelScope.launch）
+     * 调用时在 [kotlinx.coroutines.runBlocking] 中阻塞主线程。
      */
-    private fun releaseAdapter(adapter: BackendAdapter) {
+    private suspend fun releaseAdapter(adapter: BackendAdapter) = withContext(Dispatchers.IO) {
         try {
-            kotlinx.coroutines.runBlocking { adapter.logout() }
+            adapter.logout()
         } catch (e: Exception) {
             AppLog.w("BackendRegistry", "releaseAdapter: logout failed", e)
         }

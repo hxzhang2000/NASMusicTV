@@ -276,11 +276,18 @@ class NavidromeAdapter : BackendAdapter {
             // 尝试标准格式: subsonic-response > songs > song[]
             var songs = subsonic.getAsJsonObject("songs")?.getAsJsonArray("song")
             // 尝试替代格式: subsonic-response > song[]（直接数组）
-            if (songs == null || songs.size() == 0) {
+            if (songs == null) {
                 songs = subsonic.getAsJsonArray("song")
             }
-            if (songs == null || songs.size() == 0) {
+            // B8 修复：只有当 songs 字段完全缺失（端点异常/格式不兼容）时才走 fallback。
+            // 原实现把「songs 存在但为空数组」也当作异常触发 fallback，导致翻到末页时
+            // （正常返回空数组）每次都遍历全部专辑做 N+1 请求，大曲库下卡死。
+            if (songs == null) {
                 return@withContext fallbackGetSongs(limit, offset)
+            }
+            // songs 存在但为空 → 正常末页，直接返回空列表，不再 fallback
+            if (songs.size() == 0) {
+                return@withContext emptyList<Song>()
             }
 
             songs.mapNotNull { item ->

@@ -7,6 +7,22 @@
 >
 > 类型：`Added`（新增） | `Changed`（变更） | `Fixed`（修复） | `Removed`（移除）
 
+## [v2.26.6] - 2026-09-04
+
+### Fixed
+
+- **本地音乐 5 项 P0 稳定性修复（后端本地音乐模块）**：
+  - **全量扫描非原子（B3）**：`fullScan()` 原实现「先 `deleteAll()` 再 `scanAllMusic()`」，一旦扫描抛异常（MediaStore 查询失败 / 权限变更），用户曲库被清空。改为「先扫描成功，再重建索引」，扫描失败时旧索引保持不变。
+  - **USB 索引每次启动被误删（B4）**：`incrementalScan()` 原做 `cachedKeys - scannedKeys` 全量差集，USB 拔出后 MediaStore 不再返回该卷条目，导致所有 USB 歌被判定为「已删除」、每次启动丢失 USB 索引。改为按 `storageType`/`volumeName` 区分：仅对「本次扫描覆盖到的卷」做删除比对，未挂载的 USB/外部 SD 条目保留，挂载时由 `scanUsbDevice` 定向更新。
+  - **`IN (:paths)` 超变量上限崩溃（B5）**：`deleteByPaths` 一次性传参超 SQLite 999 变量上限时抛「too many SQL variables」。新增 `deleteByPathsChunked` 按 500 条分批删除，覆盖增量/全量/USB 扫描三条路径。
+  - **本地歌双 ID 跨会话失效（B6）**：`ScannedSong.toSong()` 用 `contentUri.hashCode()`、`LocalSongEntity.toSong()` 用 `mediaStoreId`，同一首歌扫描时与从缓存加载时 ID 不一致，导致收藏/播放记录/队列跨会话失效。统一为 `local_$mediaStoreId`。
+  - **MediaMetadataRetriever 异常路径泄漏**：`MusicScanner.scanFile` 原仅在成功后 `release()`，`setDataSource`/`extractMetadata` 抛异常时泄漏。改为 `try/finally` 确保无论成功/异常都释放。
+  - 删除死代码 `LocalMusicDao.getAllPaths()`（改用 `getAllSongs()` 后无调用点）。
+
+- **BackendRegistry `releaseAdapter` 主线程 runBlocking（C3）**：`releaseAdapter()` 原用 `runBlocking { adapter.logout() }`，从 `disconnect()`（`viewModelScope.launch`，Main dispatcher）调用时在主线程阻塞等待 logout 完成。改为 `suspend` 函数并用 `withContext(Dispatchers.IO)` 包裹 logout + close，彻底消除主线程阻塞。
+
+- **Navidrome `getSongs` 末页 N+1 遍历（B8）**：翻页到末页时，服务端正常返回空 `songs` 数组，原实现把「空数组」误判为端点异常，每次都触发 `fallbackGetSongs` 遍历全部专辑逐个 `getAlbumSongs`（N+1），大曲库下卡死。改为仅当 `songs` 字段**完全缺失**（格式不兼容）才走 fallback；空数组直接返回空列表（正常末页）。
+
 ## [v2.26.5] - 2026-09-04
 
 ### Fixed

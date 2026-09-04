@@ -6590,3 +6590,55 @@ val result = with(kotlinx.coroutines.Dispatchers.IO) { separator.separate(...) }
 **验证结果**：✅ `assembleRelease` 编译通过（BUILD SUCCESSFUL，无 error，仅既有 warning），产物 `app/build/outputs/apk/release/NASMusicTV-release-v2-26-5.apk`。行为验证需真机，本版按用户要求不推电视。
 
 **版本号变更**：v2.26.4 → v2.26.5（versionCode 83 → 84）
+
+### 10.78 本地音乐 5 项 P0 稳定性修复 + BackendRegistry runBlocking + Navidrome 末页 N+1（v2.26.6 - 2026-09-04）
+
+**日期**：2026-09-04
+
+> 承接 2026-09-03 代码复审 §二 P0 项 B3–B6、B 项 MediaMetadataRetriever 泄漏、§四路线图项 8（主线程 runBlocking）、项 10（Navidrome 末页 N+1）。
+
+#### 10.78.1 全量扫描非原子（B3）
+
+**问题**：`LocalMusicRepository.fullScan()` 原实现「先 `dao.deleteAll()` 再 `scanner.scanAllMusic()`」，一旦扫描抛异常（MediaStore 查询失败 / 权限变更 / IO 异常），用户曲库被清空且无法恢复。
+
+**修复**：改为「先扫描成功，再重建索引」——扫描失败直接抛回，旧索引保持不变。
+
+#### 10.78.2 USB 索引每次启动被误删（B4）
+
+**问题**：`incrementalScan()` 原做 `cachedKeys - scannedKeys` 全量差集。USB 拔出后 MediaStore 不再返回该卷条目，所有 USB 歌的 key 都不在 `scannedKeys`，被判定为「已删除」而清除——每次启动丢失 USB 索引。
+
+**修复**：按 `storageType`/`volumeName` 区分。仅对「本次扫描覆盖到的卷」做删除比对：内置存储条目始终参与比对；USB/外部 SD 条目仅当对应卷仍在挂载时参与比对，否则保留（挂载时由 `scanUsbDevice` 定向更新）。
+
+#### 10.78.3 `IN (:paths)` 超变量上限崩溃（B5）
+
+**问题**：`LocalMusicDao.deleteByPaths` 用 `IN (:paths)`，一次性传参超 SQLite 变量上限（999）时抛「too many SQL variables」，3000 首 USB 歌触发崩溃。
+
+**修复**：新增 `deleteByPathsChunked` 按 500 条分批删除，覆盖增量/全量/USB 扫描三条路径。
+
+#### 10.78.4 本地歌双 ID 跨会话失效（B6）
+
+**问题**：`ScannedSong.toSong()` 用 `id = "local_${contentUri.hashCode()}"`，`LocalSongEntity.toSong()` 用 `id = "local_$mediaStoreId"`——同一首歌扫描时与从缓存加载时 ID 不一致，收藏/播放记录/队列跨会话失效。
+
+**修复**：统一为 `local_$mediaStoreId`。
+
+#### 10.78.5 MediaMetadataRetriever 异常路径泄漏
+
+**问题**：`MusicScanner.scanFile()` 原仅在成功后 `release()`，`setDataSource`/`extractMetadata` 抛异常时泄漏，TV 上元数据提取器实例有限，扫描多个坏文件后耗尽。
+
+**修复**：改为 `try/finally` 确保无论成功/异常都释放。同时删除死代码 `LocalMusicDao.getAllPaths()`。
+
+#### 10.78.6 BackendRegistry `releaseAdapter` 主线程 runBlocking（C3）
+
+**问题**：`releaseAdapter()` 原用 `runBlocking { adapter.logout() }`，从 `disconnect()`（`viewModelScope.launch`，Main dispatcher）调用时在主线程阻塞等待 logout 完成。
+
+**修复**：改为 `suspend` 函数并用 `withContext(Dispatchers.IO)` 包裹 logout + close，彻底消除主线程阻塞（无论从 `initialize` 的 IO 块还是 `disconnect` 调用都安全）。
+
+#### 10.78.7 Navidrome `getSongs` 末页 N+1 遍历（B8）
+
+**问题**：翻页到末页时服务端正常返回空 `songs` 数组，原实现把「空数组」误判为端点异常，每次触发 `fallbackGetSongs` 遍历全部专辑逐个 `getAlbumSongs`（N+1），大曲库下卡死。
+
+**修复**：仅当 `songs` 字段**完全缺失**（格式不兼容）才走 fallback；空数组直接返回空列表（正常末页）。
+
+**涉及文件**：`backend/local/LocalMusicRepository.kt`、`backend/local/MusicScanner.kt`、`backend/local/db/LocalMusicDao.kt`、`backend/BackendRegistry.kt`、`backend/impl/NavidromeAdapter.kt`、`app/build.gradle.kts`、`CHANGELOG.md`
+
+**版本号变更**：v2.26.5 → v2.26.6（versionCode 84 → 85）
