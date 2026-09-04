@@ -310,8 +310,11 @@ fun LibraryScreen(
     // ARTISTS Tab：搜索时用多源搜索结果按艺术家聚合；无搜索时用本地加载的艺术家
     val filteredArtists by remember(filterQuery, artists, searchResults) {
         derivedStateOf {
-            if (filterQuery.isBlank()) artists
-            else {
+            if (filterQuery.isBlank()) {
+                // 无搜索时也按 normalizeKey 去重，防止数据源因不可见字符导致重复
+                val seen = mutableSetOf<String>()
+                artists.filter { seen.add(ArtistSplitter.normalizeKey(it.name)) }
+            } else {
                 // 多源搜索结果中提取艺术家：
                 // 必须先按 ArtistSplitter 拆分合唱名（"古天乐/萱萱" → 古天乐、萱萱），
                 // 否则合唱名会变成一个独立艺术家块，且详情页按整串匹配永远查不到歌
@@ -325,7 +328,7 @@ fun LibraryScreen(
                 val seen = mutableSetOf<String>()
                 (localFiltered + searchArtists).filter { artist ->
                     seen.add(ArtistSplitter.normalizeKey(artist.name))
-                }
+                }.distinctBy { ArtistSplitter.normalizeKey(it.name) }
             }
         }
     }
@@ -844,6 +847,8 @@ private fun ArtistsTab(
     onOpenArtistDetail: ((String) -> Unit)? = null,
     listState: LazyGridState = rememberLazyGridState()
 ) {
+// 最终兜底：在渲染层按 id 去重，防止上游任何边缘情况导致重复
+    val dedupedArtists = remember(artists) { artists.distinctBy { it.id } }
     val firstItemFocusRequester = remember { FocusRequester() }
     val letterFocusRequester = remember { FocusRequester() }
     var focusedGridIndex by remember { mutableStateOf(-1) }
@@ -870,9 +875,9 @@ private fun ArtistsTab(
     }
 
     // A-Z 分组：按首字母分组，保留组内排序
-    val groupedItems = remember(artists) {
+    val groupedItems = remember(dedupedArtists) {
         val items = mutableListOf<Pair<Char?, Artist>>() // null = header
-        artists.groupBy { PinyinUtils.getGroupLetter(it.name) }
+        dedupedArtists.groupBy { PinyinUtils.getGroupLetter(it.name) }
             .toSortedMap(compareBy { if (it == '#') '{' else it })
             .forEach { (letter, groupArtists) ->
                 items.add(letter to groupArtists.first()) // header 标记
@@ -898,7 +903,7 @@ private fun ArtistsTab(
 
     Column {
         Text(
-            text = stringResource(R.string.library_artists_count, artists.size),
+            text = stringResource(R.string.library_artists_count, dedupedArtists.size),
             color = NasMusicColors.TextPrimary,
             fontSize = FontSize.subtitle(),
             modifier = Modifier.padding(bottom = 12.dp)
@@ -951,33 +956,34 @@ private fun ArtistsTab(
                                     )
                                 }
                             }
-                        }
-                        // 数据行（key 加 index 防重名）
-                        item(key = "artist_${index}_${artist.id}", span = { GridItemSpan(1) }) {
-                            val artistSongs = artistSongsMap[ArtistSplitter.normalizeKey(artist.name)] ?: emptyList()
-                            val songCount = artistSongs.size
-                            // Task 10: 计算专辑数和主要流派
-                            val albumCountForArtist = artist.albumCount
-                            val primaryGenreForArtist = remember(artistSongs) {
-                                artistSongs.mapNotNull { it.genre }.groupingBy { it }.eachCount().maxByOrNull { it.value }?.key
-                            }
-                            Box(Modifier.onFocusChanged { if (it.isFocused) focusedGridIndex = index }) {
-                                ArtistCard(
-                                    artist = artist.name,
-                                    coverUrl = artist.coverUrl,
-                                    songCount = songCount,
-                                    albumCount = albumCountForArtist,
-                                    primaryGenre = primaryGenreForArtist,
-                                    onClick = {
-                                        if (onOpenArtistDetail != null) {
-                                            onOpenArtistDetail(artist.name)
-                                        } else if (artistSongs.isNotEmpty()) {
-                                            onPlaySongs(artistSongs)
-                                        }
-                                    },
-                                    onPlay = if (artistSongs.isNotEmpty()) {{ onPlaySongs(artistSongs) }} else null,
-                                    focusRequester = if (index == 1) firstItemFocusRequester else null
-                                )
+                        } else {
+                            // 数据行（key 加 index 防重名）
+                            item(key = "artist_${index}_${artist.id}", span = { GridItemSpan(1) }) {
+                                val artistSongs = artistSongsMap[ArtistSplitter.normalizeKey(artist.name)] ?: emptyList()
+                                val songCount = artistSongs.size
+                                // Task 10: 计算专辑数和主要流派
+                                val albumCountForArtist = artist.albumCount
+                                val primaryGenreForArtist = remember(artistSongs) {
+                                    artistSongs.mapNotNull { it.genre }.groupingBy { it }.eachCount().maxByOrNull { it.value }?.key
+                                }
+                                Box(Modifier.onFocusChanged { if (it.isFocused) focusedGridIndex = index }) {
+                                    ArtistCard(
+                                        artist = artist.name,
+                                        coverUrl = artist.coverUrl,
+                                        songCount = songCount,
+                                        albumCount = albumCountForArtist,
+                                        primaryGenre = primaryGenreForArtist,
+                                        onClick = {
+                                            if (onOpenArtistDetail != null) {
+                                                onOpenArtistDetail(artist.name)
+                                            } else if (artistSongs.isNotEmpty()) {
+                                                onPlaySongs(artistSongs)
+                                            }
+                                        },
+                                        onPlay = if (artistSongs.isNotEmpty()) {{ onPlaySongs(artistSongs) }} else null,
+                                        focusRequester = if (index == 1) firstItemFocusRequester else null
+                                    )
+                                }
                             }
                         }
                     }

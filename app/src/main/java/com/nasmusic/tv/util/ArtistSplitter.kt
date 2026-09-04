@@ -38,15 +38,26 @@ object ArtistSplitter {
     /**
      * 艺术家名归一化键：用于「是否同一艺术家」的判定。
      *
-     * - NFKC：全角字符转半角（"ＧＵＴ" → "GUT"）
-     * - trim：去掉首尾空白（含全角空格 U+3000）
+     * - NFKC：全角字符转半角（"ＧＶＴ" → "GUT"），全角空格 U+3000 → 半角空格
+     * - 移除所有不可见字符（零宽空格 U+200B / BOM U+FEFF / LTR-RTL 标记 / FORMAT 类）
      * - 折叠内部连续空白为一个半角空格
+     * - trim：去掉首尾所有 Unicode 空白（Character.isWhitespace，比 String.trim 更全）
      * - lowercase：大小写不敏感
      */
     fun normalizeKey(name: String): String {
         if (name.isBlank()) return ""
-        return Normalizer.normalize(name, Normalizer.Form.NFKC)
-            .replace(whitespace, " ")
+        // NFKC 归一化 + 移除所有不可见/格式字符（零宽空格、BOM、LTR/RTL 标记等 NFKC 不处理的字符）
+        val cleaned = Normalizer.normalize(name, Normalizer.Form.NFKC).filter { ch ->
+            val type = Character.getType(ch).toByte()
+            // 保留：字母、数字、标点、符号、空格（普通空白，已被 whitespace 正则覆盖）
+            // 移除：FORMAT (Cf)、CONTROL (Cc)、SURROGATE (Cs)、未分配
+            type != Character.FORMAT && type != Character.CONTROL && type != Character.SURROGATE &&
+                type != Character.UNASSIGNED && ch.code != 0xFEFF && ch.code != 0x200B &&
+                ch.code != 0x200C && ch.code != 0x200D && ch.code != 0x200E && ch.code != 0x200F &&
+                ch.code != 0x2060 && ch.code != 0x2061 && ch.code != 0x2062 && ch.code != 0x2063 &&
+                ch.code != 0x2064
+        }
+        return cleaned.replace(whitespace, " ")
             .trim()
             .lowercase()
     }

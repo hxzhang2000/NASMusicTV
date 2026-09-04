@@ -86,7 +86,10 @@ object MusicMerger {
 
         nasArtists.forEach { artist ->
             val key = ArtistSplitter.normalizeKey(artist.name)
-            if (key.isNotBlank()) artistMap[key] = artist
+            if (key.isNotBlank()) {
+                // 存储的 name 做 trim，避免带首尾空格的原始 NAS 数据进入 UI 显示
+                artistMap[key] = artist.copy(name = artist.name.trim())
+            }
         }
 
         localArtists.forEach { artist ->
