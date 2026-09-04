@@ -6896,3 +6896,41 @@ val result = with(kotlinx.coroutines.Dispatchers.IO) { separator.separate(...) }
 **版本号变更**：v2.26.15 → v2.26.16（versionCode 94 → 95）
 
 **补充判断（P11/P12/P13 暂缓）**：P11（shuffleModeEnabled 与 playRandom 双轨错歌）需引入独立播放模式状态字段、解耦「随机模式标志」与 ExoPlayer 有副作用的 `shuffleModeEnabled` 属性，中等复杂度且需真机验证随机播放不回归；P12/P13（未注册 MediaButtonReceiver 致通知栏按钮失效）完整修复需实现 `onPlaybackResumption` + 播放队列持久化恢复，属架构级改动。二者风险/收益比不佳，暂缓。
+
+---
+
+### 10.89 本地专辑 id 塌缩 + 电台上报静默 + 拼音缓存 + Jellyfin 计数（v2.26.17 - 2026-09-04）
+
+**日期**：2026-09-04
+
+> 承接 2026-09-03 代码复审 P2 / B20 项，并收尾此前未提交的 Jellyfin `Limit=0` 改动。
+
+#### 10.89.1 本地专辑 id 塌缩为 `local_album_0`（B20，小改动部分）
+
+**问题**：`MusicMerger.buildLocalAlbums` 的 `id = "local_album_${first.albumId ?: first.id}"`。`Song.albumId` 为 `String?`，本地歌曲来自 MediaStore，未知专辑恒为 `0L` → `albumId.toString()` 得 `"0"`（非 null），`?:` 兜底不触发，所有 `albumId="0"` 的本地专辑共享同一 id `local_album_0`；详情页 `albumSongsCache` 以 id 为键，不同专辑条目互相覆盖。
+
+**修复**：改为基于专辑名去重键派生稳定唯一 id `local_album_<name>`，消除塌缩。详情页 `loadAlbumSongs` 用 `_selectedAlbum.name` 反查歌曲（不解析 id 字符串），故 id 格式变更不影响解析。
+
+**未处理（设计级，属大改动，按约束暂缓）**：同名本地专辑并入 NAS 后保留 NAS id，详情页只查 NAS 漏掉本地同名词曲，需详情页改为多源按名查询，留待独立任务。
+
+#### 10.89.2 RadioBrowser 播放上报失败静默（P2）
+
+**问题**：`reportClick` 失败仅 `AppLog.w`，release 构建 `AppLog.w` 为 no-op，上报失败不可见。
+
+**修复**：改 `AppLog.e`，使失败在 release 可观测。
+
+#### 10.89.3 拼音重复计算（P2 / O(N²) 列表复制·拼音重复计算）
+
+**问题**：`PinyinUtils.toPinyin`/`toPinyinInitials` 无缓存纯函数，LibraryScreen 过滤每次按键都对全量歌名/歌手重算 TinyPinyin；SearchAggregator 虽自建缓存但其它调用方仍裸调。
+
+**修复**：`PinyinUtils` 内加有界 LRU 缓存（上限 4096，`Collections.synchronizedMap` 线程安全，accessOrder=true 淘汰最久未用），零行为变更、覆盖全部调用方。
+
+#### 10.89.4 Jellyfin 曲库计数 `Limit=0` 语义风险（P2）
+
+**问题**：`getSongsTotalCount` 用 `Limit=0` 取 `TotalRecordCount`，但 Jellyfin 中 `Limit=0` 表示「无限制返回全部」，会拉全量曲库（返回值仍正确，但浪费带宽、与注释矛盾）。
+
+**修复**：改 `Limit=1` 澄清意图，返回值不变。
+
+**涉及文件**：`backend/local/MusicMerger.kt`、`backend/radio/RadioBrowserClient.kt`、`util/PinyinUtils.kt`、`backend/impl/JellyfinAdapter.kt`、`app/build.gradle.kts`、`CHANGELOG.md`
+
+**版本号变更**：v2.26.16 → v2.26.17（versionCode 95 → 96）

@@ -124,7 +124,7 @@ class RadioBrowserClient(
                 get("$server/json/url?uuid=${encode(station.uuid)}")
                 return
             } catch (e: Exception) {
-                AppLog.w(TAG, "reportClick: $server failed: ${e.message}")
+                AppLog.e(TAG, "reportClick: $server failed: ${e.message}")
             }
         }
     }

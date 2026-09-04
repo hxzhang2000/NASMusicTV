@@ -125,10 +125,10 @@ object MusicMerger {
         localSongs
             .filter { it.album.isNotBlank() }
             .groupBy { it.album.lowercase().trim() }
-            .map { (_, songs) ->
+            .map { (key, songs) ->
                 val first = songs.first()
                 Album(
-                    id = "local_album_${first.albumId ?: first.id}",
+                    id = "local_album_$key",
                     name = first.album,
                     artist = first.artist,
                     coverUrl = songs.firstOrNull { it.coverUrl != null }?.coverUrl,

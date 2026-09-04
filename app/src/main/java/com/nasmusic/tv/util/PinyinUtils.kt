@@ -1,6 +1,8 @@
 package com.nasmusic.tv.util
 
 import com.github.promeg.pinyinhelper.Pinyin
+import java.util.Collections
+import java.util.LinkedHashMap
 
 /**
  * 拼音首字母匹配工具
@@ -14,13 +16,33 @@ import com.github.promeg.pinyinhelper.Pinyin
 object PinyinUtils {
 
     /**
+     * 拼音计算结果缓存（有界 LRU）。
+     *
+     * 列表过滤（LibraryScreen）、搜索聚合等场景会对同一批歌名/歌手反复调用
+     * toPinyin / toPinyinInitials，而 TinyPinyin 逐字符转换有一定开销。
+     * 输入均为短文本（歌名/歌手/专辑），条目数有界，内存占用可忽略。
+     */
+    private const val MAX_PINYIN_CACHE = 4096
+    private val pinyinCache = Collections.synchronizedMap(
+        object : LinkedHashMap<String, String>(64, 0.75f, true) {
+            override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, String>) = size > MAX_PINYIN_CACHE
+        }
+    )
+    private val initialsCache = Collections.synchronizedMap(
+        object : LinkedHashMap<String, String>(64, 0.75f, true) {
+            override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, String>) = size > MAX_PINYIN_CACHE
+        }
+    )
+
+    /**
      * 获取文本的拼音全拼。
      * 中文字符转换为完整拼音（"周杰伦" → "zhoujielun"），
      * 英文字母和数字原样保留（小写），拼音之间无分隔符。
      */
     fun toPinyin(text: String): String {
         if (text.isBlank()) return ""
-        return buildString {
+        pinyinCache[text]?.let { return it }
+        val result = buildString {
             for (c in text) {
                 if (c.code in 0x4E00..0x9FFF) {
                     // CJK 统一表意文字：取完整拼音
@@ -34,6 +56,8 @@ object PinyinUtils {
                 // 其他字符（空格、标点等）跳过
             }
         }
+        pinyinCache[text] = result
+        return result
     }
 
     /**

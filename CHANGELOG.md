@@ -14,6 +14,19 @@
 - **MusicScanner 递归无深度限制（P2）**：`scanPath` 用 `walkTopDown()` 递归整个目录树、无上限，深目录或符号链接循环会无限递归、主线程 IO 卡死。已加 `.maxDepth(8)` 防护。
 - **Bilibili MV 标题解析每次编译正则（P2）**：`stripHtml` 每次调用都 `Regex("<[^>]+>")` 重新编译，已将正则提为 companion object 预编译常量 `HTML_TAG_REGEX`。
 
+## [v2.26.17] - 2026-09-04
+
+### Fixed
+
+- **本地专辑 id 塌缩为 `local_album_0`（B20）**：`MusicMerger.buildLocalAlbums` 用 `id = "local_album_${first.albumId ?: first.id}"`，而本地歌曲 `albumId` 来自 MediaStore 且未知专辑恒为 `0L`（`albumId.toString()` 得字符串 `"0"`），`?:` 不触发，导致所有 `albumId=0` 的本地专辑共享同一 id，详情页 `albumSongsCache`（以 id 为键）互相覆盖。已改为基于专辑名（去重键）派生稳定唯一 id `local_album_<name>`。详情页 `loadAlbumSongs` 本就用 `_selectedAlbum.name` 反查，不受 id 格式影响。
+- **RadioBrowser 播放上报失败静默（P2）**：`reportClick` 失败仅 `AppLog.w`，而 release 构建 `AppLog.w` 是 no-op，上报失败不可见。已改 `AppLog.e`，使失败在 release 也可观测。
+- **拼音重复计算（P2 / O(N²) 列表复制·拼音重复计算）**：`PinyinUtils.toPinyin`/`toPinyinInitials` 是无缓存纯函数，LibraryScreen 过滤每次按键都对全量歌名/歌手重算，SearchAggregator 虽自建缓存但其它调用方仍裸调。已在 `PinyinUtils` 内加有界 LRU 缓存（上限 4096，syncedMap 线程安全），零行为变更、覆盖全部调用方。
+- **Jellyfin 曲库计数 `Limit=0` 语义风险（P2）**：`getSongsTotalCount` 意图「只取 1 条拿 `TotalRecordCount`」，但 `Limit=0` 在 Jellyfin 表示「无限制返回全部」，会拉全量曲库。已改 `Limit=1` 澄清意图（返回值不变）。
+
+### Changed
+
+- **versionCode 95 → 96，versionName 2.26.16 → 2.26.17**
+
 ## [v2.26.15] - 2026-09-04
 
 ### Fixed

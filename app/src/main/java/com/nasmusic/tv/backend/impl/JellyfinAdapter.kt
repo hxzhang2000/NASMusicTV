@@ -341,7 +341,7 @@ class JellyfinAdapter : BackendAdapter {
                     "IncludeItemTypes=Audio&" +
                     "Recursive=true&" +
                     "UserId=$userId&" +
-                    "Limit=0"
+                    "Limit=1"
             val json = executeJsonRequest(url) ?: return@withContext 0
             json.get("TotalRecordCount")?.asInt ?: 0
         } catch (e: Exception) {
