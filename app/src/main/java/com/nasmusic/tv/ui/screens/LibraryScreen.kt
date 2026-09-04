@@ -797,16 +797,17 @@ private fun AlbumsTab(
                                     )
                                 }
                             }
-                        }
-                        // 数据行（key 加 index 防重名：同名专辑可来自多个源）
-                        item(key = "album_${index}_${album.id}", span = { GridItemSpan(1) }) {
-                            Box(Modifier.onFocusChanged { if (it.isFocused) focusedGridIndex = index }) {
-                                AlbumCard(
-                                    album = album,
-                                    onClick = { onOpenAlbumDetail?.invoke(album) ?: onPlayAlbum(album) },
-                                    onPlay = { onPlayAlbum(album) },
-                                    focusRequester = if (index == 1) firstItemFocusRequester else null
-                                )
+                        } else {
+                            // 数据行（key 加 index 防重名：同名专辑可来自多个源）
+                            item(key = "album_${index}_${album.id}", span = { GridItemSpan(1) }) {
+                                Box(Modifier.onFocusChanged { if (it.isFocused) focusedGridIndex = index }) {
+                                    AlbumCard(
+                                        album = album,
+                                        onClick = { onOpenAlbumDetail?.invoke(album) ?: onPlayAlbum(album) },
+                                        onPlay = { onPlayAlbum(album) },
+                                        focusRequester = if (index == 1) firstItemFocusRequester else null
+                                    )
+                                }
                             }
                         }
                     }
