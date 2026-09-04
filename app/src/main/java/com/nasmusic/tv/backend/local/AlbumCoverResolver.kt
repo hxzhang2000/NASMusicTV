@@ -87,12 +87,32 @@ class AlbumCoverResolver(
             }
 
             // P2.5: 网络封面（Meting/网易云）— 主要针对无内嵌封面的百度网盘专辑
+            //
+            // 百度专辑名是从**目录名**推断的（见 MusicMerger.buildBaiduAlbums），目录名常不规范
+            // （"周杰伦"、"新建文件夹" 等），直接拿它当检索词命中率很低。
+            // 因此按「信息可靠度」依次尝试多组检索词：优先用歌曲标题（来自文件名/ID3，质量更高），
+            // 标题失败再退回目录名推断的专辑名；每组都再试一次「不带艺术家」的宽检索。
+            // （searchCover 实现见 MetingApiService：artist 为空时按纯标题检索，安全）
             if (resolvedUrl == null && songs.any { it.networkSource == "baidu" }) {
                 val repSong = songs.firstOrNull { it.title.isNotBlank() }
                 if (repSong != null) {
-                    resolvedUrl = runCatching {
-                        searchCover(repSong.title, repSong.artist.ifBlank { "" })
-                    }.getOrNull()
+                    val title = repSong.title.trim()
+                    val artist = repSong.artist.trim()
+                    val albumName = album.name.trim()
+                    val candidates = listOf(
+                        title to artist,
+                        title to "",
+                        albumName to artist,
+                        albumName to ""
+                    ).distinct().filter { it.first.isNotBlank() }
+
+                    for ((qTitle, qArtist) in candidates) {
+                        val hit = runCatching { searchCover(qTitle, qArtist) }.getOrNull()
+                        if (!hit.isNullOrBlank()) {
+                            resolvedUrl = hit
+                            break
+                        }
+                    }
                 }
             }
 

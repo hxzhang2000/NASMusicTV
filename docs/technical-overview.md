@@ -6426,8 +6426,8 @@ private suspend fun ensureAccessToken(dlink: String): String {
 
 **已知弱点 / 待决策项（供后续分析）**
 
-1. **P2 iTunes 对中文专辑命中率低**：搜索词是「专辑名 + 艺术家」，而百度专辑名是从**目录名**推断的（`buildBaiduAlbums` 取 path 倒数第二段），目录名常不规范（如「周杰伦」这类艺术家名、或「新建文件夹」）；且 `buildBaiduAlbums` 会**过滤掉与歌手同名的目录**（视为艺术家目录），这类歌曲根本不生成专辑。
-2. **P2.5 依赖歌曲标题质量**：若百度文件命名不规范（`01.mp3`、乱码标题），`repSong.title` 质量差 → 检索不到封面。
+1. **P2 iTunes 对中文专辑命中率低**：搜索词是「专辑名 + 艺术家」，而百度专辑名是从**目录名**推断的（`buildBaiduAlbums` 取 path 倒数第二段），目录名常不规范（如「周杰伦」这类艺术家名、或「新建文件夹」）；且 `buildBaiduAlbums` 会**过滤掉与歌手同名的目录**（视为艺术家目录），这类歌曲根本不生成专辑。→ 其中「搜索词质量」已由 §10.75（v2.26.3）的多候选回退缓解；**「过滤与歌手同名的目录」属产品决策（放开会改变曲库结构、可能生成大量单一专辑），未改动，待定夺**。
+2. **P2.5 依赖歌曲标题质量**：若百度文件命名不规范（`01.mp3`、乱码标题），`repSong.title` 质量差 → 检索不到封面。→ ✅ 已在 §10.75（v2.26.3）改为多候选回退缓解。
 3. **`updateMergedData` ↔ `resolveAlbumCoversAsync` 存在无条件循环调用链**：`updateMergedData()`（:2249）末尾无条件调用 `resolveAlbumCoversAsync()`；而 `resolveAlbumCoversAsync()`（:2310-2312）在 `resolveCovers` 返回后（**不判断是否有成果**）无条件再调 `updateMergedData()`，形成 `updateMergedData → resolveAlbumCoversAsync → updateMergedData → …` 的循环。因 `resolveCovers` 对已解析（缓存命中）的专辑会快速跳过，实际表现为后台持续循环执行 merge + 艺术家计数（而非卡死 UI），但存在 CPU/电量开销、以及对无法解析专辑的重复网络请求。此前代码复审（2026-09-03）曾判定该循环「已收敛」并列为 P1；本次代码通读未发现中断条件。✅ **已在 §10.74（v2.26.2）加收敛护栏修复。**
 
 **涉及文件**：`app/src/main/java/com/nasmusic/tv/backend/network/baidu/BaiduCoverProvider.kt`、`app/src/main/java/com/nasmusic/tv/NasMusicApp.kt`、`app/build.gradle.kts`、`CHANGELOG.md`、`docs/technical-overview.md`
@@ -6467,3 +6467,36 @@ private suspend fun ensureAccessToken(dlink: String): String {
 **验证结果**：✅ `assembleRelease` 编译通过（BUILD SUCCESSFUL，无 error，仅既有 warning），产物 `app/build/outputs/apk/release/NASMusicTV-release-v2-26-2.apk`。按用户要求仅编译、不推电视测试。
 
 **版本号变更**：v2.26.1 → v2.26.2（versionCode 80 → 81）
+
+---
+
+### 10.75 网络封面检索改为多候选回退（v2.26.3 - 2026-09-04）
+
+**日期**：2026-09-04
+
+**问题描述**：P2.5 网络封面（Meting/网易云）只对「代表歌曲标题 + 艺术家」检索一次，失败即放弃，百度网盘专辑封面命中率不稳定。
+
+**根因分析**：百度网盘歌曲有两个先天弱点 —— ① 常缺艺术家标签（`artist` 为空）；② 文件名可能不规范（`01.mp3`、乱码），导致 `repSong.title` 质量差。原实现只构造一组检索词，任一环节缺失即整体失败。此外，百度专辑名是从**目录名**推断的（`MusicMerger.buildBaiduAlbums` 取 path 倒数第二段），常为「周杰伦」「新建文件夹」之类，单独作为检索词命中率极低。
+
+**修改**（`AlbumCoverResolver.kt` P2.5 块）：改为按**信息可靠度**依次尝试多组检索词，取首个非空结果即停：
+
+| 顺序 | 检索词 | 说明 |
+|---|---|---|
+| 1 | 标题 + 艺术家 | 信息最全，优先 |
+| 2 | 仅标题 | 艺术家为空时的自然退化 |
+| 3 | 专辑名（目录名推断）+ 艺术家 | 标题不可靠时退到专辑名 |
+| 4 | 仅专辑名 | 最后兜底 |
+
+- 候选构造后用 `distinct()` 去重、并过滤掉标题为空的组合，避免重复请求。
+- 每组用 `runCatching { }.getOrNull()` 包裹，单组失败（网络异常等）不影响后续组。
+- 结果用 `isNullOrBlank()` 判定，避免拿到空串被当作成功。
+
+**兼容性确认**：`MetingApiService.searchCoverUrl` 的实现是 `val keyword = if (artist.isNotBlank()) "$title $artist" else title` —— **空艺术家会被正确处理为纯标题检索**，因此传 `""` 安全，调用侧无需额外分支。
+
+**未改动 / 待定夺**：`buildBaiduAlbums` 会**过滤与歌手同名的目录**（视为艺术家目录），这类歌曲根本不生成专辑。放开会改变曲库结构（可能生成大量单一专辑），属产品决策，未改动。
+
+**涉及文件**：`app/src/main/java/com/nasmusic/tv/backend/local/AlbumCoverResolver.kt`、`app/build.gradle.kts`、`CHANGELOG.md`、`docs/technical-overview.md`
+
+**验证结果**：✅ `assembleRelease` 编译通过（BUILD SUCCESSFUL，无 error，仅既有 warning），产物 `app/build/outputs/apk/release/NASMusicTV-release-v2-26-3.apk`。按用户要求仅编译、不推电视测试。
+
+**版本号变更**：v2.26.2 → v2.26.3（versionCode 81 → 82）
