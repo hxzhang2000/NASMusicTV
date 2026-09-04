@@ -7,6 +7,12 @@
 >
 > 类型：`Added`（新增） | `Changed`（变更） | `Fixed`（修复） | `Removed`（移除）
 
+## [v2.26.13] - 2026-09-04
+
+### Fixed
+
+- **飞牛/道理鱼 getSongs 除零崩溃（B14）**：`getSongs(limit, offset)` 里 `(offset / limit)` 在 `limit <= 0` 时抛 `ArithmeticException`。已改为 `safeLimit = if (limit > 0) limit else PAGE_SIZE`，两个 adapter 同步修复。
+
 ## [v2.26.12] - 2026-09-04
 
 ### Fixed

@@ -6816,3 +6816,21 @@ val result = with(kotlinx.coroutines.Dispatchers.IO) { separator.separate(...) }
 **涉及文件**：`backend/impl/NavidromeAdapter.kt`、`backend/impl/SubsonicAdapter.kt`、`app/build.gradle.kts`、`CHANGELOG.md`
 
 **版本号变更**：v2.26.11 → v2.26.12（versionCode 90 → 91）
+
+### 10.85 飞牛/道理鱼 getSongs 除零崩溃（v2.26.13 - 2026-09-04）
+
+**日期**：2026-09-04
+
+> 承接 2026-09-03 代码复审 P1 项 B14。
+
+#### 10.85.1 getSongs 除零崩溃（B14）
+
+**问题**：`FeiniuAdapter`/`DaoliyuAdapter` 的 `getSongs(limit, offset)` 用 `(offset / limit) + 1` 反推页码，当 `limit <= 0`（调用方传入非法值）时抛 `ArithmeticException` 除零崩溃。
+
+**修复**：引入 `safeLimit = if (limit > 0) limit else PAGE_SIZE`，除零时回退到默认页大小 500，两个 adapter 同步修改。
+
+**涉及文件**：`backend/impl/FeiniuAdapter.kt`、`backend/impl/DaoliyuAdapter.kt`、`app/build.gradle.kts`、`CHANGELOG.md`
+
+**版本号变更**：v2.26.12 → v2.26.13（versionCode 91 → 92）
+
+**补充判断（B17 暂不处理）**：`SearchAggregator` 的 `withTimeoutOrNull` 对阻塞式 OkHttp `execute()` 无法软取消（5s/8s 超时形同虚设），但各 adapter 的 OkHttp 已设 `readTimeout(30s)`，最坏 30s 后 `SocketTimeoutException` 被 catch 兜底，不会永久卡死；属延迟/体验层面而非正确性 bug，修复需将 `execute()` 改为支持取消的调用方式、改动面大，故维持暂不处理。

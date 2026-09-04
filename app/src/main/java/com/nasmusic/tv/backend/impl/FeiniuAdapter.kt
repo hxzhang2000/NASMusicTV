@@ -315,8 +315,10 @@ class FeiniuAdapter : BackendAdapter {
     /** REVERSE_ENGINEERED: GET /music/api/v1/track/list?page=1&limit=500 */
     override suspend fun getSongs(limit: Int, offset: Int): List<Song> = withContext(Dispatchers.IO) {
         try {
-            val page = (offset / limit) + 1
-            val json = executeGet("$baseUrl$API_PREFIX/track/list?page=$page&limit=$limit") ?: return@withContext emptyList()
+            // B14 修复：limit <= 0 时除零崩溃，回退到默认页大小
+            val safeLimit = if (limit > 0) limit else PAGE_SIZE
+            val page = (offset / safeLimit) + 1
+            val json = executeGet("$baseUrl$API_PREFIX/track/list?page=$page&limit=$safeLimit") ?: return@withContext emptyList()
             val data = extractDataArray(json) ?: return@withContext emptyList()
             data.mapNotNull { parseSong(it.asJsonObject, null) }
         } catch (e: Exception) {
