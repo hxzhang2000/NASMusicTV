@@ -66,7 +66,7 @@ class FeiniuAdapter : BackendAdapter {
     private val gson = Gson()
 
     /** Cookie 存储：自动维护 music-token Cookie */
-    private val cookieStore = mutableMapOf<String, List<Cookie>>()
+    private val cookieStore = java.util.Collections.synchronizedMap(mutableMapOf<String, List<Cookie>>())
 
     private val cookieJar = object : CookieJar {
         override fun loadForRequest(url: HttpUrl): List<Cookie> {

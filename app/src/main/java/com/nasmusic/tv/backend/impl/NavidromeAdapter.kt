@@ -654,7 +654,7 @@ class NavidromeAdapter : BackendAdapter {
 
     // --- 收藏 ---
     // 本地缓存收藏状态，避免每次 toggle 都拉取全量收藏列表
-    private val _favoriteIds = mutableSetOf<String>()
+    private val _favoriteIds = java.util.Collections.synchronizedSet(mutableSetOf<String>())
     private var _favoritesLoaded = false
 
     override suspend fun toggleFavorite(songId: String): Boolean = withContext(Dispatchers.IO) {

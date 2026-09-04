@@ -6934,3 +6934,27 @@ val result = with(kotlinx.coroutines.Dispatchers.IO) { separator.separate(...) }
 **涉及文件**：`backend/local/MusicMerger.kt`、`backend/radio/RadioBrowserClient.kt`、`util/PinyinUtils.kt`、`backend/impl/JellyfinAdapter.kt`、`app/build.gradle.kts`、`CHANGELOG.md`
 
 **版本号变更**：v2.26.16 → v2.26.17（versionCode 95 → 96）
+
+---
+
+### 10.90 跨线程可变集合无同步（v2.26.18 - 2026-09-04）
+
+**日期**：2026-09-04
+
+> 承接 2026-09-03 代码复审 P2「可变集合无同步」。
+
+#### 10.90.1 FeiniuAdapter.cookieStore 并发损坏
+
+**问题**：`private val cookieStore = mutableMapOf<String, List<Cookie>>()` 被 OkHttp `CookieJar` 的 `loadForRequest` / `saveFromResponse` 回调在 dispatcher 线程池上并发读写，基础 `LinkedHashMap` 非线程安全，并发 `put` 可能触发结构损坏（resize 期间丢失/错链）。
+
+**修复**：改为 `java.util.Collections.synchronizedMap(mutableMapOf(...))`，单方法读写原子化。
+
+#### 10.90.2 NavidromeAdapter._favoriteIds 并发读写
+
+**问题**：`private val _favoriteIds = mutableSetOf<String>()` 在 `Dispatchers.IO` 的 `toggleFavorite` / `loadFavorites` / `getFavorites` 等多个 suspend 函数里并发读写收藏状态，基础 `LinkedHashSet` 非线程安全。
+
+**修复**：改为 `java.util.Collections.synchronizedSet(mutableSetOf(...))`，保持 `MutableSet` 接口、零行为变更。
+
+**涉及文件**：`backend/impl/FeiniuAdapter.kt`、`backend/impl/NavidromeAdapter.kt`、`app/build.gradle.kts`、`CHANGELOG.md`
+
+**版本号变更**：v2.26.17 → v2.26.18（versionCode 96 → 97）

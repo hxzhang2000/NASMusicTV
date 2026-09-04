@@ -14,6 +14,16 @@
 - **MusicScanner 递归无深度限制（P2）**：`scanPath` 用 `walkTopDown()` 递归整个目录树、无上限，深目录或符号链接循环会无限递归、主线程 IO 卡死。已加 `.maxDepth(8)` 防护。
 - **Bilibili MV 标题解析每次编译正则（P2）**：`stripHtml` 每次调用都 `Regex("<[^>]+>")` 重新编译，已将正则提为 companion object 预编译常量 `HTML_TAG_REGEX`。
 
+## [v2.26.18] - 2026-09-04
+
+### Fixed
+
+- **跨线程可变集合无同步（P2）**：`FeiniuAdapter.cookieStore`（`mutableMapOf`）被 OkHttp `CookieJar` 回调在 dispatcher 线程池并发读写，HashMap 非线程安全，并发 `put` 可能结构损坏；`NavidromeAdapter._favoriteIds`（`mutableSetOf`）在 `Dispatchers.IO` 的多个 suspend 函数里并发读写收藏状态。二者均改为 `java.util.Collections.synchronizedMap` / `synchronizedSet` 包装，零行为变更。
+
+### Changed
+
+- **versionCode 96 → 97，versionName 2.26.17 → 2.26.18**
+
 ## [v2.26.17] - 2026-09-04
 
 ### Fixed
