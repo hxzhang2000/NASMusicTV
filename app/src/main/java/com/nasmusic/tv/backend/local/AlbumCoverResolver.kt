@@ -184,7 +184,10 @@ class AlbumCoverResolver(
                     append(" ")
                     append(artistName)
                 }
-            }.replace(" ", "+")
+            }
+            // B16 修复：不再 `.replace(" ", "+")`。URLEncoder.encode 本身会把空格编码为 `+`、
+            // 中文编码为 %XX；先 replace 成 `+` 再 encode 会把 `+` 二次编码成 `%2B`，
+            // 导致中文搜索词被破坏（iTunes 搜到「字面加号」而非空格分隔的词）。
             val url = "$ITUNES_SEARCH_URL?term=${java.net.URLEncoder.encode(query, "UTF-8")}&entity=album&limit=1"
             val request = Request.Builder().url(url)
                 .header("User-Agent", "NASMusicTV/1.0")
@@ -197,7 +200,8 @@ class AlbumCoverResolver(
                 if (results.length() == 0) return null
                 val first = results.getJSONObject(0)
                 val artworkUrl = first.optString("artworkUrl100", null) ?: return null
-                // 替换为更高分辨率
+                // B16 修复：返回替换后的高清图（原实现 `replace` 结果被丢弃，
+                // 实际永远返回 100x100 低清图）。
                 artworkUrl.replace("100x100", "600x600")
             }
         } catch (e: Exception) {

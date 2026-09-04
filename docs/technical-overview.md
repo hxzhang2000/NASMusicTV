@@ -6744,3 +6744,25 @@ val result = with(kotlinx.coroutines.Dispatchers.IO) { separator.separate(...) }
 **涉及文件**：`backend/local/StorageMonitor.kt`、`player/PlayerManager.kt`、`app/build.gradle.kts`、`CHANGELOG.md`
 
 **版本号变更**：v2.26.8 → v2.26.9（versionCode 87 → 88）
+
+### 10.82 iTunes 封面搜索双重编码 + 低清图（v2.26.10 - 2026-09-04）
+
+**日期**：2026-09-04
+
+> 承接 2026-09-03 代码复审 P1 项 B16。
+
+#### 10.82.1 双重编码破坏中文搜索词（B16）
+
+**问题**：`resolveItunesCover` 先 `query.replace(" ", "+")` 再用 `URLEncoder.encode`，`+` 被二次编码为 `%2B`，iTunes 收到「字面加号」而非空格分隔词，中文专辑封面命中率低。
+
+**修复**：移除多余的 `replace(" ", "+")`（`URLEncoder.encode` 本身把空格编码为 `+`、中文编码为 `%XX`）。
+
+#### 10.82.2 封面永远返回低清图（B16）
+
+**问题**：`artworkUrl.replace("100x100", "600x600")` 的返回值被丢弃（未 `return`），实际永远返回 100×100 低清封面。
+
+**修复**：返回替换后的 600×600 高清图。
+
+**涉及文件**：`backend/local/AlbumCoverResolver.kt`、`app/build.gradle.kts`、`CHANGELOG.md`
+
+**版本号变更**：v2.26.9 → v2.26.10（versionCode 88 → 89）

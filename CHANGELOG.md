@@ -7,6 +7,14 @@
 >
 > 类型：`Added`（新增） | `Changed`（变更） | `Fixed`（修复） | `Removed`（移除）
 
+## [v2.26.10] - 2026-09-04
+
+### Fixed
+
+- **iTunes 封面搜索双重编码破坏中文搜索词（B16）**：`resolveItunesCover` 先 `query.replace(" ", "+")` 再用 `URLEncoder.encode`，`+` 被二次编码为 `%2B`，导致中文搜索词被破坏（iTunes 收到「字面加号」而非空格分隔的词），中文专辑封面命中率低。已移除多余的 `replace(" ", "+")`（`URLEncoder.encode` 本身就把空格编码为 `+`、中文编码为 `%XX`）。
+
+- **iTunes 封面永远返回低清图（B16）**：`artworkUrl.replace("100x100", "600x600")` 的返回值被丢弃（未 `return`），实际永远返回 100×100 低清封面。已改为返回替换后的 600×600 高清图。
+
 ## [v2.26.9] - 2026-09-04
 
 ### Fixed
