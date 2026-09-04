@@ -307,7 +307,7 @@ class BilibiliMvService(
     }
 
     /** 去掉 B 站搜索结果标题中的 <em class="keyword"> 高亮标签 */
-    private fun stripHtml(s: String): String = s.replace(Regex("<[^>]+>"), "").trim()
+    private fun stripHtml(s: String): String = s.replace(HTML_TAG_REGEX, "").trim()
 
     /**
      * 标题相似度（0..1）：
@@ -342,6 +342,9 @@ class BilibiliMvService(
 
     companion object {
         private const val TAG = "BilibiliMvService"
+
+        /** 预编译的 HTML 标签正则，避免每次解析 MV 标题时重复编译 */
+        private val HTML_TAG_REGEX = Regex("<[^>]+>")
 
         // 默认 B 站官方 API 端点
         const val DEFAULT_BASE_URL = "https://api.bilibili.com"

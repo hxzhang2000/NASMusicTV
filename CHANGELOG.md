@@ -7,6 +7,13 @@
 >
 > 类型：`Added`（新增） | `Changed`（变更） | `Fixed`（修复） | `Removed`（移除）
 
+## [v2.26.16] - 2026-09-04
+
+### Fixed
+
+- **MusicScanner 递归无深度限制（P2）**：`scanPath` 用 `walkTopDown()` 递归整个目录树、无上限，深目录或符号链接循环会无限递归、主线程 IO 卡死。已加 `.maxDepth(8)` 防护。
+- **Bilibili MV 标题解析每次编译正则（P2）**：`stripHtml` 每次调用都 `Regex("<[^>]+>")` 重新编译，已将正则提为 companion object 预编译常量 `HTML_TAG_REGEX`。
+
 ## [v2.26.15] - 2026-09-04
 
 ### Fixed

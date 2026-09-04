@@ -6873,4 +6873,26 @@ val result = with(kotlinx.coroutines.Dispatchers.IO) { separator.separate(...) }
 
 **版本号变更**：v2.26.14 → v2.26.15（versionCode 93 → 94）
 
+### 10.88 MusicScanner 递归深度限制 + Bilibili 正则预编译（v2.26.16 - 2026-09-04）
+
+**日期**：2026-09-04
+
+> 承接 2026-09-03 代码复审 P2 项。
+
+#### 10.88.1 MusicScanner 递归无深度限制
+
+**问题**：`scanPath` 用 `walkTopDown()` 递归整个目录树、无上限，深目录或符号链接循环会无限递归、主线程 IO 卡死。
+
+**修复**：加 `.maxDepth(8)` 防护（常量 `MAX_SCAN_DEPTH`）。
+
+#### 10.88.2 Bilibili MV 标题解析每次编译正则
+
+**问题**：`stripHtml` 每次调用都 `Regex("<[^>]+>")` 重新编译正则，微性能浪费。
+
+**修复**：正则提为 companion object 预编译常量 `HTML_TAG_REGEX`。
+
+**涉及文件**：`backend/local/MusicScanner.kt`、`backend/network/mv/BilibiliMvService.kt`、`app/build.gradle.kts`、`CHANGELOG.md`
+
+**版本号变更**：v2.26.15 → v2.26.16（versionCode 94 → 95）
+
 **补充判断（P11/P12/P13 暂缓）**：P11（shuffleModeEnabled 与 playRandom 双轨错歌）需引入独立播放模式状态字段、解耦「随机模式标志」与 ExoPlayer 有副作用的 `shuffleModeEnabled` 属性，中等复杂度且需真机验证随机播放不回归；P12/P13（未注册 MediaButtonReceiver 致通知栏按钮失效）完整修复需实现 `onPlaybackResumption` + 播放队列持久化恢复，属架构级改动。二者风险/收益比不佳，暂缓。

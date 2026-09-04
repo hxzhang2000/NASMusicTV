@@ -27,6 +27,12 @@ class MusicScanner(private val context: Context) {
 
         /** 支持的音乐文件扩展名（文件系统扫描用） */
         private val SUPPORTED_EXTENSIONS = setOf("mp3", "flac", "m4a", "ogg", "wav", "aac", "wma")
+
+        /**
+         * 扫描目录树的最大递归深度。
+         * 防止深层目录结构（或符号链接循环）导致扫描无限递归、主线程 IO 卡死。
+         */
+        private const val MAX_SCAN_DEPTH = 8
     }
 
     /**
@@ -113,6 +119,7 @@ class MusicScanner(private val context: Context) {
             if (!root.exists() || !root.isDirectory) return@withContext songs
 
             root.walkTopDown()
+                .maxDepth(MAX_SCAN_DEPTH)
                 .filter { it.isFile && it.extension.lowercase() in SUPPORTED_EXTENSIONS }
                 .forEach { file ->
                     val song = scanFile(file, storageType)
