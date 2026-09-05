@@ -1,5 +1,7 @@
 package com.nasmusic.tv.data.model
 
+import com.nasmusic.tv.backend.network.baidu.BaiduNetdiskConfig
+
 /**
  * 单网盘配置（按 [CloudDriveType] 存取）
  *
@@ -24,7 +26,7 @@ data class CloudDriveConfig(
     val type: CloudDriveType,
     val enabled: Boolean = false,
     val tokens: BaiduTokens? = null,
-    val musicRootDir: String = "/音乐",
+    val musicRootDir: String = BaiduNetdiskConfig.APP_DIR,
     val mvDir: String? = null,
     val customAppKey: String? = null,
     val customSecretKey: String? = null,

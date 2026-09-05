@@ -10,7 +10,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import okhttp3.FormBody
+import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.security.cert.X509Certificate
@@ -83,16 +83,37 @@ class BaiduOAuthClient(
                 "response_type=device_code" +
                 "&client_id=$appKey" +
                 "&scope=${BaiduNetdiskConfig.SCOPE}"
-            val req = Request.Builder().url(url).get().build()
+            AppLog.d(TAG, "requestDeviceCode: requesting, appKey=${appKey.take(8)}***")
+            val req = Request.Builder().url(url).get()
+                .header("User-Agent", "pan.baidu.com")
+                .build()
             client.newCall(req).execute().use { resp ->
-                val body = resp.body?.string() ?: return@use null
-                val json = gson.fromJson(body, JsonObject::class.java) ?: return@use null
+                val body = resp.body?.string() ?: run {
+                    AppLog.w(TAG, "requestDeviceCode: empty response body, code=${resp.code}")
+                    return@use null
+                }
+                AppLog.d(TAG, "requestDeviceCode: resp code=${resp.code}, body=${body.take(300)}")
                 if (resp.code != 200) {
                     AppLog.w(TAG, "requestDeviceCode failed: code=${resp.code} body=${body.take(200)}")
                     return@use null
                 }
+                val json = gson.fromJson(body, JsonObject::class.java) ?: run {
+                    AppLog.w(TAG, "requestDeviceCode: JSON parse failed, body=${body.take(200)}")
+                    return@use null
+                }
+                // 检查百度返回的 error 字段（即使 HTTP 200 也可能带 error）
+                val error = json.get("error")?.asString
+                if (error != null) {
+                    val desc = json.get("error_description")?.asString ?: error
+                    AppLog.w(TAG, "requestDeviceCode: API error='$error' desc='$desc'")
+                    return@use null
+                }
+                val deviceCode = json.get("device_code")?.asString ?: run {
+                    AppLog.w(TAG, "requestDeviceCode: missing device_code in response, keys=${json.keySet()}")
+                    return@use null
+                }
                 DeviceCodeResult(
-                    deviceCode = json.get("device_code")?.asString ?: return@use null,
+                    deviceCode = deviceCode,
                     userCode = json.get("user_code")?.asString ?: "",
                     verificationUrl = json.get("verification_url")?.asString
                         ?: BaiduNetdiskConfig.VERIFICATION_URL,
@@ -117,27 +138,35 @@ class BaiduOAuthClient(
         val appKey = resolveAppKey() ?: return@withContext PollResult.Failed("AppKey 未配置")
         val secret = resolveSecretKey() ?: return@withContext PollResult.Failed("SecretKey 未配置")
         try {
-            val form = FormBody.Builder()
-                .add("grant_type", "device_token")
-                .add("code", deviceCode)
-                .add("client_id", appKey)
-                .add("client_secret", secret)
+            // 官方文档要求 GET + URL query 参数（非 POST FormBody）
+            val url = BaiduNetdiskConfig.TOKEN_URL.toHttpUrl().newBuilder()
+                .addQueryParameter("grant_type", "device_token")
+                .addQueryParameter("code", deviceCode)
+                .addQueryParameter("client_id", appKey)
+                .addQueryParameter("client_secret", secret)
                 .build()
-            val req = Request.Builder().url(BaiduNetdiskConfig.TOKEN_URL).post(form).build()
+            val req = Request.Builder().url(url).get()
+                .header("User-Agent", "pan.baidu.com")
+                .build()
             client.newCall(req).execute().use { resp ->
                 val body = resp.body?.string() ?: return@use PollResult.Failed("空响应")
                 val json = gson.fromJson(body, JsonObject::class.java)
                     ?: return@use PollResult.Failed("响应解析失败: ${body.take(100)}")
                 if (resp.code == 200 && json.has("access_token")) {
+                    val grantedScope = json.get("scope")?.asString ?: BaiduNetdiskConfig.SCOPE
+                    AppLog.i(TAG, "pollDeviceToken: granted scope='$grantedScope'")
+                    if (!grantedScope.contains("netdisk")) {
+                        AppLog.w(TAG, "pollDeviceToken: scope 缺少 netdisk! granted='$grantedScope', 这将导致文件 API errno=-6")
+                    }
                     val tokens = BaiduTokens(
                         accessToken = json.get("access_token").asString,
                         refreshToken = json.get("refresh_token").asString,
                         expiresAt = System.currentTimeMillis() +
                             (json.get("expires_in")?.asLong ?: 2592000L) * 1000,
-                        scope = json.get("scope")?.asString ?: BaiduNetdiskConfig.SCOPE
+                        scope = grantedScope
                     )
                     prefs.saveBaiduTokensSync(tokens)
-                    AppLog.i(TAG, "device code auth success")
+                    AppLog.i(TAG, "device code auth success, scope='$grantedScope'")
                     return@use PollResult.Success(tokens)
                 }
                 // 错误码判定
@@ -164,8 +193,16 @@ class BaiduOAuthClient(
      * @return 有效 token；未登录或刷新失败返回 null
      */
     suspend fun getValidAccessToken(): String? = withContext(Dispatchers.IO) {
-        val tokens = prefs.getBaiduTokensSync() ?: return@withContext null
-        if (!tokens.needsRefresh()) return@withContext tokens.accessToken
+        val tokens = prefs.getBaiduTokensSync()
+        if (tokens == null) {
+            AppLog.d(TAG, "getValidAccessToken: no tokens in prefs")
+            return@withContext null
+        }
+        if (!tokens.needsRefresh()) {
+            AppLog.d(TAG, "getValidAccessToken: token valid, expiresAt=${java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.getDefault()).format(java.util.Date(tokens.expiresAt))}")
+            return@withContext tokens.accessToken
+        }
+        AppLog.d(TAG, "getValidAccessToken: token needs refresh, calling refreshAccessToken...")
         refreshAccessToken(tokens.refreshToken)
     }
 
@@ -180,34 +217,47 @@ class BaiduOAuthClient(
             // 加锁后复查：可能已有协程刷新过
             val current = prefs.getBaiduTokensSync()
             if (current != null && current.refreshToken != refreshToken && !current.needsRefresh()) {
+                AppLog.d(TAG, "refreshAccessToken: already refreshed by another coroutine")
                 return@withContext current.accessToken
             }
-            val appKey = resolveAppKey() ?: return@withContext null
-            val secret = resolveSecretKey() ?: return@withContext null
+            val appKey = resolveAppKey()
+            val secret = resolveSecretKey()
+            if (appKey == null || secret == null) {
+                AppLog.w(TAG, "refreshAccessToken: AppKey/SecretKey not configured")
+                return@withContext null
+            }
             try {
-                val form = FormBody.Builder()
-                    .add("grant_type", "refresh_token")
-                    .add("refresh_token", refreshToken)
-                    .add("client_id", appKey)
-                    .add("client_secret", secret)
+                // 官方文档要求 GET + URL query 参数（非 POST FormBody）
+                val url = tokenUrl.toHttpUrl().newBuilder()
+                    .addQueryParameter("grant_type", "refresh_token")
+                    .addQueryParameter("refresh_token", refreshToken)
+                    .addQueryParameter("client_id", appKey)
+                    .addQueryParameter("client_secret", secret)
                     .build()
-                val req = Request.Builder().url(tokenUrl).post(form).build()
+                val req = Request.Builder().url(url).get()
+                    .header("User-Agent", "pan.baidu.com")
+                    .build()
                 client.newCall(req).execute().use { resp ->
                     val body = resp.body?.string() ?: return@use null
                     val json = gson.fromJson(body, JsonObject::class.java) ?: return@use null
                     if (resp.code == 200 && json.has("access_token")) {
+                        val grantedScope = json.get("scope")?.asString ?: BaiduNetdiskConfig.SCOPE
+                        AppLog.i(TAG, "refreshAccessToken: granted scope='$grantedScope'")
+                        if (!grantedScope.contains("netdisk")) {
+                            AppLog.w(TAG, "refreshAccessToken: scope 缺少 netdisk! granted='$grantedScope', 文件 API 将返回 errno=-6")
+                        }
                         val newTokens = BaiduTokens(
                             accessToken = json.get("access_token").asString,
                             refreshToken = json.get("refresh_token").asString,
                             expiresAt = System.currentTimeMillis() +
                                 (json.get("expires_in")?.asLong ?: 2592000L) * 1000,
-                            scope = json.get("scope")?.asString ?: BaiduNetdiskConfig.SCOPE
+                            scope = grantedScope
                         )
                         prefs.saveBaiduTokensSync(newTokens)
-                        AppLog.i(TAG, "access_token refreshed")
+                        AppLog.i(TAG, "access_token refreshed successfully, scope='$grantedScope'")
                         newTokens.accessToken
                     } else {
-                        AppLog.w(TAG, "refresh failed: ${body.take(200)}")
+                        AppLog.w(TAG, "refresh failed: code=${resp.code}, body=${body.take(200)}")
                         null
                     }
                 }

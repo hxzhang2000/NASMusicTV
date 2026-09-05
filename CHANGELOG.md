@@ -7,6 +7,24 @@
 >
 > 类型：`Added`（新增） | `Changed`（变更） | `Fixed`（修复） | `Removed`（移除）
 
+## [v2.26.26] - 2026-09-05
+
+### Fixed
+
+- **百度网盘目录不存在不再误报"授权失败"**：`onApiError` 回调仅对认证错误（errno=-6）设 Failed，其他错误（如目录不存在 errno=-9）仅记日志，不再翻转连接状态
+- **新增 DirMissing 状态**：`BaiduConnectionState.DirMissing` — 已登录但配置的音乐根目录不存在，设置页和网盘页显示醒目提示引导用户重新设置目录
+- **验证流程两步化**：`verifyBaiduTokenAsync()` 先验 APP_DIR（自动创建缺失的沙盒目录），再 `checkMusicRootDirAfterVerify()` 检查用户音乐根目录是否存在
+- **设置目录后自动恢复**：`DirMissing` 状态下修改音乐根目录后自动重新验证，通过则恢复 LoggedIn
+- **百度网盘旧配置自动纠正**：`AppPreferences.getBaiduMusicRootDirSync()` / `getBaiduMvDirSync()` 读取时检测路径是否在沙盒 `/apps/NASMusicTV` 下，不在则自动纠正并回写
+- **设置页目录默认描述更新**：音乐根目录和 MV 目录的默认描述从旧路径 `/音乐` 改为百度沙盒路径 `/apps/NASMusicTV`（中/英双语）
+
+## [v2.26.25] - 2026-09-05
+
+### Fixed
+
+- **百度网盘设置页目录默认描述更新**：音乐根目录和 MV 目录的默认描述从旧路径 `/音乐` 改为百度沙盒路径 `/apps/NASMusicTV`，与实际权限和代码默认值一致（中/英双语）
+- **百度网盘旧配置自动纠正**：`AppPreferences.getBaiduMusicRootDirSync()` / `getBaiduMvDirSync()` 读取时检测路径是否在沙盒 `/apps/NASMusicTV` 下，不在则自动纠正为沙盒目录并回写，解决 DataStore 中残留旧路径 `/音乐` 导致设置页仍显示无权限路径的问题
+
 ## [v2.26.24] - 2026-09-05
 
 ### Changed

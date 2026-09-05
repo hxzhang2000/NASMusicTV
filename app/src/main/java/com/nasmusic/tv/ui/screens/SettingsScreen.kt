@@ -168,7 +168,7 @@ fun SettingsScreen(
     baiduConnecting: Boolean = false,
     baiduConnectionState: com.nasmusic.tv.ui.viewmodel.MainViewModel.BaiduConnectionState = com.nasmusic.tv.ui.viewmodel.MainViewModel.BaiduConnectionState.Off,
     baiduDeviceCode: com.nasmusic.tv.backend.network.baidu.BaiduOAuthClient.DeviceCodeResult? = null,
-    baiduMusicRootDir: String = "/音乐",
+    baiduMusicRootDir: String = com.nasmusic.tv.backend.network.baidu.BaiduNetdiskConfig.APP_DIR,
     baiduMvDir: String? = null,
     baiduIndexScanned: Int = 0,
     baiduIndexScanning: Boolean = false,
@@ -783,6 +783,50 @@ fun SettingsScreen(
                     // ── 百度网盘（已支持）分组 ──
                     item { SubSectionTitle(stringResource(R.string.settings_netdisk_group_baidu)) }
                     item { SettingSwitch(label = stringResource(R.string.settings_netdisk_enable), description = stringResource(R.string.settings_netdisk_enable_desc), checked = baiduEnabled, onClick = { onToggleBaiduEnabled?.invoke(!baiduEnabled) }) }
+
+                    // 授权失败时，在登录按钮上方持续显示失败原因（即使对话框关闭也能看到）
+                    val baiduFailedState = baiduConnectionState as? com.nasmusic.tv.ui.viewmodel.MainViewModel.BaiduConnectionState.Failed
+                    if (baiduFailedState != null) {
+                        item { Spacer(modifier = Modifier.height(12.dp)) }
+                        item {
+                            Column(modifier = Modifier.padding(horizontal = 4.dp, vertical = 8.dp)) {
+                                Text(
+                                    text = stringResource(R.string.netdisk_auth_failed),
+                                    color = NasMusicColors.Warning,
+                                    fontSize = FontSize.body(),
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = baiduFailedState.message,
+                                    color = NasMusicColors.TextSecondary,
+                                    fontSize = FontSize.small()
+                                )
+                            }
+                        }
+                    }
+
+                    // 已登录但音乐根目录不存在，提示用户重新设置
+                    val baiduDirMissing = baiduConnectionState is com.nasmusic.tv.ui.viewmodel.MainViewModel.BaiduConnectionState.DirMissing
+                    if (baiduDirMissing) {
+                        item { Spacer(modifier = Modifier.height(12.dp)) }
+                        item {
+                            Column(modifier = Modifier.padding(horizontal = 4.dp, vertical = 8.dp)) {
+                                Text(
+                                    text = stringResource(R.string.netdisk_dir_missing),
+                                    color = NasMusicColors.Warning,
+                                    fontSize = FontSize.body(),
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = stringResource(R.string.netdisk_dir_missing_desc),
+                                    color = NasMusicColors.TextSecondary,
+                                    fontSize = FontSize.small()
+                                )
+                            }
+                        }
+                    }
 
                     if (onStartBaiduDeviceCode != null) {
                         item { Spacer(modifier = Modifier.height(16.dp)) }
@@ -1601,7 +1645,7 @@ fun SettingsScreen(
     if (showBaiduMusicRootDialog && onChangeBaiduMusicRootDir != null) {
         if (onListBaiduDirs != null) {
             BaiduDirPickerDialog(
-                initialPath = baiduMusicRootLocal.ifBlank { "/" },
+                initialPath = baiduMusicRootLocal.ifBlank { com.nasmusic.tv.backend.network.baidu.BaiduNetdiskConfig.APP_DIR },
                 onListDirs = onListBaiduDirs,
                 onConfirm = { path ->
                     baiduMusicRootLocal = path
@@ -1633,7 +1677,7 @@ fun SettingsScreen(
         if (onListBaiduDirs != null) {
             BaiduDirPickerDialog(
                 initialPath = baiduMvDirLocal?.takeIf { it.isNotBlank() }
-                    ?: baiduMusicRootLocal.ifBlank { "/" },
+                    ?: baiduMusicRootLocal.ifBlank { com.nasmusic.tv.backend.network.baidu.BaiduNetdiskConfig.APP_DIR },
                 onListDirs = onListBaiduDirs,
                 onConfirm = { path ->
                     baiduMvDirLocal = path

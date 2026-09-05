@@ -80,13 +80,12 @@ fun BaiduAuthDialog(
         qrBitmap = qrContent?.let { QrCodeGenerator.generateQrBitmap(it, 360) }
     }
 
-    // 授权成功或失败 → 短暂展示后自动关闭
+    // 授权成功 → 短暂展示后自动关闭；目录缺失也视为认证成功，自动关闭
+    // （失败原因同时持久化在 SettingsScreen 登录按钮上方，对话框关闭后仍可见）
     LaunchedEffect(connectionState) {
-        if (connectionState is MainViewModel.BaiduConnectionState.LoggedIn) {
+        if (connectionState is MainViewModel.BaiduConnectionState.LoggedIn
+            || connectionState is MainViewModel.BaiduConnectionState.DirMissing) {
             kotlinx.coroutines.delay(600)
-            onDismiss()
-        } else if (connectionState is MainViewModel.BaiduConnectionState.Failed) {
-            kotlinx.coroutines.delay(1500)
             onDismiss()
         }
     }
@@ -226,6 +225,23 @@ fun BaiduAuthDialog(
                             color = NasMusicColors.Primary,
                             fontSize = FontSize.body()
                         )
+                    }
+                    // 授权失败：显示具体错误信息
+                    connectionState is MainViewModel.BaiduConnectionState.Failed -> {
+                        Spacer(modifier = Modifier.height(36.dp))
+                        Text(
+                            text = stringResource(R.string.netdisk_auth_fetch_failed),
+                            color = NasMusicColors.Warning,
+                            fontSize = FontSize.button()
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = connectionState.message,
+                            color = NasMusicColors.TextSecondary,
+                            fontSize = FontSize.small(),
+                            textAlign = TextAlign.Center
+                        )
+                        Spacer(modifier = Modifier.height(36.dp))
                     }
                     // 请求失败
                     else -> {

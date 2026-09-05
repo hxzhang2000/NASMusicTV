@@ -393,8 +393,10 @@
     <string name="settings_netdisk_logout_desc">Clear netdisk authorization info</string>
     <string name="settings_netdisk_logged_in">Logged in</string>
     <string name="settings_netdisk_not_logged_in">Not logged in</string>
+    <string name="netdisk_dir_missing">Music root directory not found</string>
+    <string name="netdisk_dir_missing_desc">Baidu netdisk is logged in, but the configured music root directory does not exist. Please reconfigure the music root directory below.</string>
     <string name="settings_netdisk_music_root">Music Root Directory</string>
-    <string name="settings_netdisk_music_root_desc">Directory in netdisk for music, default /Music</string>
+    <string name="settings_netdisk_music_root_desc">Directory in netdisk for music, default /apps/NASMusicTV</string>
     <string name="settings_netdisk_mv_dir">MV Directory</string>
     <string name="settings_netdisk_mv_dir_desc">Directory in netdisk for MV videos (optional, defaults to music directory)</string>
     <string name="settings_netdisk_index">Index</string>

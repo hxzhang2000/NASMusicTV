@@ -851,16 +851,50 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
         // 后台异步：从磁盘恢复百度网盘索引状态 + 触发合并
         // 注意：不能用 launch(Dispatchers.Default) 直接启动，否则协程可能在
         // _baiduConnectionState 等属性初始化之前执行导致 NPE
+        // 注册百度 API 错误回调：仅认证错误（errno=-6）设 Failed，其他仅日志
+        baiduApi.onApiError = { errno, desc ->
+            if (errno == -6) {
+                AppLog.w("BaiduAuth", "onApiError: errno=-6 (auth failed), setting state=Failed")
+                _baiduConnectionState.value = BaiduConnectionState.Failed(desc)
+            } else {
+                AppLog.d("BaiduAuth", "onApiError: errno=$errno ($desc), not auth-related, ignored")
+            }
+        }
+
         viewModelScope.launch {
             withContext(Dispatchers.Default) {
                 val baiduCfg = prefs.getBaiduConfigSync()
+                AppLog.d("BaiduAuth", "init: cfg.isActive=${baiduCfg.isActive}, tokens=${baiduCfg.tokens != null}")
                 if (baiduCfg.isActive) {
                     val savedIndex = baiduIndexCache.load()
                     if (savedIndex != null && savedIndex.entries.isNotEmpty()) {
                         _baiduIndexScanned.value = savedIndex.entries.size
                         _baiduIndexLastSync.value = savedIndex.lastSyncAt
                     }
-                    _baiduConnectionState.value = if (baiduCfg.tokens != null) BaiduConnectionState.LoggedIn else BaiduConnectionState.Off
+                    // 有 token 时先设 Connecting（验证中），避免闪烁"已登录"再变"授权失败"
+                    if (baiduCfg.tokens != null) {
+                        _baiduConnectionState.value = BaiduConnectionState.Connecting
+                        AppLog.d("BaiduAuth", "init: set state=Connecting, verifying token...")
+                        try {
+                            val verifyResult = baiduApi.listDir(BaiduNetdiskConfig.APP_DIR)
+                            if (verifyResult.errno != 0) {
+                                // 直接从结果读取 errno，不依赖回调
+                                val desc = com.nasmusic.tv.backend.network.baidu.BaiduNetdiskConfig.describeErrno(verifyResult.errno)
+                                _baiduConnectionState.value = BaiduConnectionState.Failed(desc)
+                                AppLog.w("BaiduAuth", "init: verify failed errno=${verifyResult.errno}, set state=Failed($desc)")
+                            } else {
+                                _baiduConnectionState.value = BaiduConnectionState.LoggedIn
+                                AppLog.d("BaiduAuth", "init: verify OK, set state=LoggedIn, ${verifyResult.files.size} items in /")
+                            }
+                        } catch (e: Exception) {
+                            // 网络异常等，保守设 LoggedIn（可能是临时网络问题，不是 token 失效）
+                            _baiduConnectionState.value = BaiduConnectionState.LoggedIn
+                            AppLog.w("BaiduAuth", "init: verify network error, fallback to LoggedIn: ${e.message}")
+                        }
+                    } else {
+                        _baiduConnectionState.value = BaiduConnectionState.Off
+                        AppLog.d("BaiduAuth", "init: no tokens, set state=Off")
+                    }
                     // 百度索引有数据时触发合并（在 Default 线程计算，不卡 UI）
                     if (savedIndex != null && savedIndex.entries.isNotEmpty()) {
                         updateMergedData()
@@ -4300,6 +4334,7 @@ showError(getApplication<Application>().getString(R.string.play_failed_with_msg,
         object Off : BaiduConnectionState()           // 未开启或未登录
         object Connecting : BaiduConnectionState()     // 设备码轮询中
         object LoggedIn : BaiduConnectionState()      // 已登录
+        object DirMissing : BaiduConnectionState()    // 已登录但音乐根目录不存在，需重新设置
         data class Failed(val message: String) : BaiduConnectionState()
     }
 
@@ -4311,7 +4346,7 @@ showError(getApplication<Application>().getString(R.string.play_failed_with_msg,
     val baiduDeviceCode: StateFlow<BaiduOAuthClient.DeviceCodeResult?> = _baiduDeviceCode.asStateFlow()
 
     /** 网盘目录浏览 */
-    private val _netdiskCurrentDir = MutableStateFlow("/音乐")
+    private val _netdiskCurrentDir = MutableStateFlow(BaiduNetdiskConfig.APP_DIR)
     val netdiskCurrentDir: StateFlow<String> = _netdiskCurrentDir.asStateFlow()
     private val _netdiskDirFiles = MutableStateFlow<List<BaiduFile>>(emptyList())
     val netdiskDirFiles: StateFlow<List<BaiduFile>> = _netdiskDirFiles.asStateFlow()
@@ -4351,23 +4386,125 @@ showError(getApplication<Application>().getString(R.string.play_failed_with_msg,
     /** 同步刷新连接状态（初始化与开关切换后调用） */
     fun refreshBaiduConnectionState() {
         val cfg = prefs.getBaiduConfigSync()
+        val prevState = _baiduConnectionState.value
         _baiduConnectionState.value = when {
             !cfg.isActive -> BaiduConnectionState.Off
-            cfg.tokens != null -> BaiduConnectionState.LoggedIn
+            // 当前正在验证、已失败或目录缺失时保留，不被 "tokens 存在" 覆盖回 LoggedIn
+            prevState is BaiduConnectionState.Connecting -> prevState
+            prevState is BaiduConnectionState.Failed -> prevState
+            prevState is BaiduConnectionState.DirMissing -> prevState
+            // 有 token 但未验证时，先设 Connecting 再异步验证，不直接设 LoggedIn
+            cfg.tokens != null -> BaiduConnectionState.Connecting
             else -> BaiduConnectionState.Off
         }
+        AppLog.d("BaiduAuth", "refreshBaiduConnectionState: isActive=${cfg.isActive}, hasTokens=${cfg.tokens != null}, $prevState -> ${_baiduConnectionState.value}")
         if (cfg.isActive) {
             // 仅首次启用/登录时同步根目录到配置值；之后保留用户浏览位置，切换页面不重置
             if (!netdiskDirSynced) {
-                _netdiskCurrentDir.value = cfg.musicRootDir.ifBlank { "/音乐" }
+                _netdiskCurrentDir.value = cfg.musicRootDir.ifBlank { BaiduNetdiskConfig.APP_DIR }
                 netdiskDirSynced = true
             }
             _baiduIndexLastSync.value = baiduIndexCache.load()?.lastSyncAt ?: 0L
+            // 有 token 且当前是 Connecting（刚从 Off/LoggedIn 转来）→ 异步验证
+            if (cfg.tokens != null && _baiduConnectionState.value is BaiduConnectionState.Connecting) {
+                verifyBaiduTokenAsync()
+            }
         }
         // 百度连接状态变化可能影响合并数据（启用/停用百度源）
         updateMergedData()
         // 通知 NasMusicApp 运行时注册/注销百度 service
         nasMusicApp.refreshBaiduServiceRegistration()
+    }
+
+     /** 异步验证百度 token 有效性：调 listDir(APP_DIR) 检查 errno */
+    private fun verifyBaiduTokenAsync() {
+        viewModelScope.launch {
+            withContext(Dispatchers.Default) {
+                try {
+                    val result = baiduApi.listDir(BaiduNetdiskConfig.APP_DIR)
+                    if (result.errno == -9) {
+                        // APP_DIR 不存在，尝试自动创建
+                        AppLog.i("BaiduAuth", "verifyBaiduTokenAsync: APP_DIR not found (errno=-9), auto-creating...")
+                        val createErrno = baiduApi.createDir(BaiduNetdiskConfig.APP_DIR)
+                        if (createErrno == 0 || createErrno == -8) {
+                            AppLog.i("BaiduAuth", "verifyBaiduTokenAsync: createDir returned errno=$createErrno, retrying listDir...")
+                            val retryResult = baiduApi.listDir(BaiduNetdiskConfig.APP_DIR)
+                            if (retryResult.errno != 0) {
+                                val desc = BaiduNetdiskConfig.describeErrno(retryResult.errno)
+                                _baiduConnectionState.value = BaiduConnectionState.Failed(desc)
+                                AppLog.w("BaiduAuth", "verifyBaiduTokenAsync: retry after create failed errno=${retryResult.errno}")
+                            } else {
+                                // APP_DIR 创建成功，检查用户音乐根目录是否存在
+                                checkMusicRootDirAfterVerify()
+                            }
+                        } else {
+                            val desc = "目录不存在且创建失败 (errno=$createErrno)"
+                            _baiduConnectionState.value = BaiduConnectionState.Failed(desc)
+                            AppLog.w("BaiduAuth", "verifyBaiduTokenAsync: createDir failed errno=$createErrno")
+                        }
+                    } else if (result.errno == -6) {
+                        // access_token 无效
+                        val desc = BaiduNetdiskConfig.describeErrno(result.errno)
+                        _baiduConnectionState.value = BaiduConnectionState.Failed(desc)
+                        AppLog.w("BaiduAuth", "verifyBaiduTokenAsync: errno=-6 (auth failed), set state=Failed")
+                    } else if (result.errno != 0) {
+                        // 其他 API 错误（非认证），token 本身有效，按登录处理
+                        val desc = BaiduNetdiskConfig.describeErrno(result.errno)
+                        AppLog.w("BaiduAuth", "verifyBaiduTokenAsync: errno=${result.errno} ($desc), not auth-related, treating as logged in")
+                        checkMusicRootDirAfterVerify()
+                    } else {
+                        // APP_DIR 存在，检查用户音乐根目录
+                        checkMusicRootDirAfterVerify()
+                    }
+                } catch (e: Exception) {
+                    _baiduConnectionState.value = BaiduConnectionState.LoggedIn
+                    AppLog.w("BaiduAuth", "verifyBaiduTokenAsync: network error, fallback to LoggedIn: ${e.message}")
+                    triggerBaiduIndexScanIfNeeded()
+                }
+            }
+        }
+    }
+
+    /** 验证 token 有效后，检查用户配置的音乐根目录是否存在 */
+    private fun checkMusicRootDirAfterVerify() {
+        val musicRoot = prefs.getBaiduMusicRootDirSync()
+        // 如果音乐根目录就是 APP_DIR 本身，不需要额外检查
+        if (musicRoot == BaiduNetdiskConfig.APP_DIR) {
+            onVerifyBaiduSuccess()
+            return
+        }
+        viewModelScope.launch {
+            withContext(Dispatchers.Default) {
+                try {
+                    val result = baiduApi.listDir(musicRoot)
+                    if (result.errno == -9) {
+                        // 音乐根目录不存在：auth 没问题，但目录需要重新设置
+                        AppLog.i("BaiduAuth", "checkMusicRootDirAfterVerify: musicRootDir='$musicRoot' not found (errno=-9), set state=DirMissing")
+                        _baiduConnectionState.value = BaiduConnectionState.DirMissing
+                    } else {
+                        onVerifyBaiduSuccess()
+                    }
+                } catch (e: Exception) {
+                    // 网络错误不影响判定，按登录处理
+                    AppLog.w("BaiduAuth", "checkMusicRootDirAfterVerify: network error, fallback to LoggedIn: ${e.message}")
+                    onVerifyBaiduSuccess()
+                }
+            }
+        }
+    }
+
+    /** 百度验证成功后：设 LoggedIn + 修正旧根目录 + 触发索引扫描 */
+    private fun onVerifyBaiduSuccess() {
+        _baiduConnectionState.value = BaiduConnectionState.LoggedIn
+        AppLog.d("BaiduAuth", "onVerifyBaiduSuccess: set state=LoggedIn")
+        // 沙箱策略修正：如果用户保存的根目录不在 /apps/NASMusicTV 下，自动修正
+        val savedRoot = prefs.getBaiduMusicRootDirSync()
+        if (!savedRoot.startsWith(BaiduNetdiskConfig.APP_DIR)) {
+            AppLog.i("BaiduAuth", "onVerifyBaiduSuccess: musicRootDir='$savedRoot' outside sandbox, resetting to ${BaiduNetdiskConfig.APP_DIR}")
+            prefs.setBaiduMusicRootDirSync(BaiduNetdiskConfig.APP_DIR)
+            _netdiskCurrentDir.value = BaiduNetdiskConfig.APP_DIR
+        }
+        triggerBaiduIndexScanIfNeeded()
     }
 
     /** 设置百度源总开关 */
@@ -4378,13 +4515,17 @@ showError(getApplication<Application>().getString(R.string.play_failed_with_msg,
 
     /** 启动设备码授权流程：请求设备码并开始轮询 */
     fun startBaiduDeviceCodeFlow() {
+        AppLog.d("BaiduAuth", "startBaiduDeviceCodeFlow: called, current state=${_baiduConnectionState.value}")
         viewModelScope.launch {
             _baiduConnectionState.value = BaiduConnectionState.Connecting
+            AppLog.d("BaiduAuth", "startBaiduDeviceCodeFlow: set state=Connecting, requesting device code...")
             val code = baiduOAuth.requestDeviceCode()
             if (code == null) {
+                AppLog.w("BaiduAuth", "startBaiduDeviceCodeFlow: requestDeviceCode returned null")
                 _baiduConnectionState.value = BaiduConnectionState.Failed(getApplication<Application>().getString(R.string.baidu_get_device_code_failed))
                 return@launch
             }
+            AppLog.d("BaiduAuth", "startBaiduDeviceCodeFlow: got device code=${code.userCode}, expiresIn=${code.expiresIn}s, starting poll")
             _baiduDeviceCode.value = code
             pollDeviceCode(code)
         }
@@ -4392,11 +4533,13 @@ showError(getApplication<Application>().getString(R.string.play_failed_with_msg,
 
     /** 取消设备码轮询 */
     fun cancelBaiduDeviceCode() {
+        AppLog.d("BaiduAuth", "cancelBaiduDeviceCode: called, current state=${_baiduConnectionState.value}")
         deviceCodePollJob?.cancel()
         deviceCodePollJob = null
         _baiduDeviceCode.value = null
         if (_baiduConnectionState.value is BaiduConnectionState.Connecting) {
             _baiduConnectionState.value = BaiduConnectionState.Off
+            AppLog.d("BaiduAuth", "cancelBaiduDeviceCode: was Connecting, set state=Off")
         }
     }
 
@@ -4405,35 +4548,41 @@ showError(getApplication<Application>().getString(R.string.play_failed_with_msg,
         deviceCodePollJob = viewModelScope.launch {
             val deadline = System.currentTimeMillis() + code.expiresIn * 1000L
             var interval = code.interval * 1000L
+            AppLog.d("BaiduAuth", "pollDeviceCode: start, deadline=${code.expiresIn}s, interval=${code.interval}s")
             while (System.currentTimeMillis() < deadline && isActive()) {
                 when (val r = baiduOAuth.pollDeviceToken(code.deviceCode)) {
                     is BaiduOAuthClient.PollResult.Success -> {
-                        _baiduConnectionState.value = BaiduConnectionState.LoggedIn
+                        AppLog.d("BaiduAuth", "pollDeviceCode: Success, verifying token before setting LoggedIn...")
                         _baiduDeviceCode.value = null
+                        // 先设 Connecting，异步验证 token 后再决定 LoggedIn/Failed
+                        _baiduConnectionState.value = BaiduConnectionState.Connecting
                         nasMusicApp.refreshBaiduServiceRegistration()
-                        // 登录后自动触发首次索引扫描
-                        triggerBaiduIndexScanIfNeeded()
+                        verifyBaiduTokenAsync()
                         return@launch
                     }
                     BaiduOAuthClient.PollResult.Pending -> {
                         kotlinx.coroutines.delay(interval)
                     }
                     BaiduOAuthClient.PollResult.Declined -> {
+                        AppLog.d("BaiduAuth", "pollDeviceCode: Declined -> Failed")
                         _baiduConnectionState.value = BaiduConnectionState.Failed(getApplication<Application>().getString(R.string.baidu_user_declined))
                         _baiduDeviceCode.value = null
                         return@launch
                     }
                     is BaiduOAuthClient.PollResult.SlowDown -> {
+                        AppLog.d("BaiduAuth", "pollDeviceCode: SlowDown, newInterval=${r.newInterval}s")
                         interval = r.newInterval * 1000L
                         kotlinx.coroutines.delay(interval)
                     }
                     is BaiduOAuthClient.PollResult.Failed -> {
+                        AppLog.d("BaiduAuth", "pollDeviceCode: Failed -> ${r.message}")
                         _baiduConnectionState.value = BaiduConnectionState.Failed(r.message)
                         _baiduDeviceCode.value = null
                         return@launch
                     }
                 }
             }
+            AppLog.d("BaiduAuth", "pollDeviceCode: timeout -> Failed")
             _baiduConnectionState.value = BaiduConnectionState.Failed(getApplication<Application>().getString(R.string.baidu_auth_timeout))
             _baiduDeviceCode.value = null
         }
@@ -4444,21 +4593,31 @@ showError(getApplication<Application>().getString(R.string.play_failed_with_msg,
 
     /** 登出 */
     fun logoutBaidu() {
+        AppLog.d("BaiduAuth", "logoutBaidu: called, current state=${_baiduConnectionState.value}")
         viewModelScope.launch {
             baiduOAuth.logout()
             nasMusicApp.refreshBaiduServiceRegistration()
             _baiduConnectionState.value = BaiduConnectionState.Off
+            AppLog.d("BaiduAuth", "logoutBaidu: set state=Off")
         }
     }
 
     // ---- 网盘目录浏览 ----
 
     fun listBaiduDir(dir: String) {
+        AppLog.d("BaiduAuth", "listBaiduDir: dir=$dir, current state=${_baiduConnectionState.value}")
         _netdiskCurrentDir.value = dir
         _netdiskIsLoading.value = true
         viewModelScope.launch {
             try {
                 val result = baiduApi.listDir(dir)
+                AppLog.d("BaiduAuth", "listBaiduDir: got ${result.files.size} files, hasMore=${result.hasMore}, errno=${result.errno}")
+                // API 返回错误时设置 Failed 状态（不再依赖回调）
+                if (result.errno != 0) {
+                    val desc = com.nasmusic.tv.backend.network.baidu.BaiduNetdiskConfig.describeErrno(result.errno)
+                    AppLog.w("BaiduAuth", "listBaiduDir: errno=${result.errno} ($desc), setting state=Failed")
+                    _baiduConnectionState.value = BaiduConnectionState.Failed(desc)
+                }
                 _netdiskDirFiles.value = result.files
             } catch (e: Exception) {
                 AppLog.e("NASMusic", "listBaiduDir error", e)
@@ -4500,7 +4659,7 @@ showError(getApplication<Application>().getString(R.string.play_failed_with_msg,
         viewModelScope.launch {
             _netdiskIsLoading.value = true
             try {
-                val rootDir = prefs.getBaiduMusicRootDirSync().ifBlank { "/" }
+                val rootDir = prefs.getBaiduMusicRootDirSync().ifBlank { BaiduNetdiskConfig.APP_DIR }
                 val files = baiduApi.searchAudio(keyword, dir = rootDir)
                 _netdiskSearchResults.value = files.map { it.toSong() }
             } catch (e: Exception) {
@@ -4584,7 +4743,7 @@ showError(getApplication<Application>().getString(R.string.play_failed_with_msg,
 
     fun triggerBaiduIndexScanIfNeeded() {
         val index = baiduIndexCache.load()
-        val root = prefs.getBaiduMusicRootDirSync().ifBlank { "/音乐" }
+        val root = prefs.getBaiduMusicRootDirSync().ifBlank { BaiduNetdiskConfig.APP_DIR }
         if (index == null || index.rootPath != root) {
             rebuildBaiduIndex()
         } else {
@@ -4598,7 +4757,7 @@ showError(getApplication<Application>().getString(R.string.play_failed_with_msg,
         viewModelScope.launch {
             _baiduIndexScanning.value = true
             _baiduIndexScanned.value = 0
-            val root = prefs.getBaiduMusicRootDirSync().ifBlank { "/音乐" }
+            val root = prefs.getBaiduMusicRootDirSync().ifBlank { BaiduNetdiskConfig.APP_DIR }
             val callback = object : BaiduFileIndexCache.ProgressCallback {
                 override fun onProgress(scanned: Int) { _baiduIndexScanned.value = scanned }
                 override fun onComplete(total: Int) {
@@ -4665,6 +4824,10 @@ showError(getApplication<Application>().getString(R.string.play_failed_with_msg,
         _netdiskCurrentDir.value = dir
         // 根目录变更后旧索引失效，触发重建
         rebuildBaiduIndex()
+        // 如果之前是 DirMissing，重新验证新目录
+        if (_baiduConnectionState.value is BaiduConnectionState.DirMissing) {
+            checkMusicRootDirAfterVerify()
+        }
     }
 
     fun setBaiduMvDir(dir: String?) {

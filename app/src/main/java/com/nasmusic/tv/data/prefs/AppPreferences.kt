@@ -1191,10 +1191,31 @@ class AppPreferences internal constructor(private val context: Context) {
     fun getBaiduEnabledSync(): Boolean = getBaiduConfigSync().enabled
     fun setBaiduEnabledSync(enabled: Boolean) =
         saveCloudDriveConfigSync(getBaiduConfigSync().copy(enabled = enabled))
-    fun getBaiduMusicRootDirSync(): String = getBaiduConfigSync().musicRootDir.ifBlank { "/音乐" }
+    fun getBaiduMusicRootDirSync(): String {
+        val saved = getBaiduConfigSync().musicRootDir
+        val appDir = com.nasmusic.tv.backend.network.baidu.BaiduNetdiskConfig.APP_DIR
+        // 空白或不在沙盒 /apps/NASMusicTV 下的旧路径，自动纠正为沙盒目录
+        val corrected = saved.ifBlank { appDir }
+        if (corrected != appDir && !corrected.startsWith(appDir)) {
+            com.nasmusic.tv.util.AppLog.w("AppPreferences", "musicRootDir='$corrected' outside sandbox, resetting to $appDir")
+            setBaiduMusicRootDirSync(appDir)
+            return appDir
+        }
+        return corrected
+    }
     fun setBaiduMusicRootDirSync(dir: String) =
         saveCloudDriveConfigSync(getBaiduConfigSync().copy(musicRootDir = dir))
-    fun getBaiduMvDirSync(): String? = getBaiduConfigSync().mvDir
+    fun getBaiduMvDirSync(): String? {
+        val saved = getBaiduConfigSync().mvDir
+        val appDir = com.nasmusic.tv.backend.network.baidu.BaiduNetdiskConfig.APP_DIR
+        // MV 目录不在沙盒下则视为无效，返回 null（调用方会 fallback 到 musicRootDir）
+        if (saved != null && saved.isNotBlank() && !saved.startsWith(appDir)) {
+            com.nasmusic.tv.util.AppLog.w("AppPreferences", "mvDir='$saved' outside sandbox, clearing")
+            setBaiduMvDirSync(null)
+            return null
+        }
+        return saved
+    }
     fun setBaiduMvDirSync(dir: String?) =
         saveCloudDriveConfigSync(getBaiduConfigSync().copy(mvDir = dir))
     fun getBaiduCustomAppKeySync(): String? = getBaiduConfigSync().customAppKey

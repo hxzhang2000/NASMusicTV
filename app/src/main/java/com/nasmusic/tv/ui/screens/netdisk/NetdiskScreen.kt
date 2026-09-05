@@ -116,6 +116,24 @@ fun NetdiskScreen(
         }
 
         when {
+            connectionState is MainViewModel.BaiduConnectionState.DirMissing -> {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(
+                            stringResource(R.string.netdisk_dir_missing),
+                            color = NasMusicColors.Warning,
+                            fontSize = FontSize.button(),
+                            fontWeight = FontWeight.Bold
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            stringResource(R.string.netdisk_dir_missing_desc),
+                            color = NasMusicColors.TextSecondary,
+                            fontSize = FontSize.small()
+                        )
+                    }
+                }
+            }
             connectionState !is MainViewModel.BaiduConnectionState.LoggedIn -> {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Text(

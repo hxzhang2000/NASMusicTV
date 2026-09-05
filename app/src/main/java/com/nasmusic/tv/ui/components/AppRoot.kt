@@ -734,7 +734,8 @@ fun AppRoot(
                         onScanTransferBackup = { showBackupTransferDialog = true },
                         // 百度网盘设置
                         baiduEnabled = baiduConfig.enabled,
-                        baiduLoggedIn = baiduConnectionState is com.nasmusic.tv.ui.viewmodel.MainViewModel.BaiduConnectionState.LoggedIn,
+                        baiduLoggedIn = baiduConnectionState is com.nasmusic.tv.ui.viewmodel.MainViewModel.BaiduConnectionState.LoggedIn
+                            || baiduConnectionState is com.nasmusic.tv.ui.viewmodel.MainViewModel.BaiduConnectionState.DirMissing,
                         baiduConnecting = baiduConnectionState is com.nasmusic.tv.ui.viewmodel.MainViewModel.BaiduConnectionState.Connecting,
                         baiduConnectionState = baiduConnectionState,
                         baiduDeviceCode = baiduDeviceCode,

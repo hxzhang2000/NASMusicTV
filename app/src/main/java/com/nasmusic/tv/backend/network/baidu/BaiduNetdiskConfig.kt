@@ -24,6 +24,14 @@ object BaiduNetdiskConfig {
     /** 默认轮询间隔（秒） */
     const val DEFAULT_POLL_INTERVAL_SEC = 5
 
+    // ---- 应用沙箱目录 ----
+    /**
+     * 百度网盘应用默认可访问目录。
+     * 自 2026-08-31 起，应用仅可访问 /apps/{应用名称} 目录。
+     * 验证 token 和默认音乐根目录都应在此目录下。
+     */
+    const val APP_DIR = "/apps/NASMusicTV"
+
     // ---- 文件接口 base（列表/搜索与元数据的端点不同，勿混用）----
     /** 列表 / 搜索 */
     const val FILE_BASE = "https://pan.baidu.com/rest/2.0/xpan/file"
@@ -35,6 +43,8 @@ object BaiduNetdiskConfig {
     const val METHOD_LISTALL = "listall"
     const val METHOD_SEARCH = "search"
     const val METHOD_FILEMETAS = "filemetas"
+    /** 创建文件/目录 */
+    const val METHOD_CREATE = "create"
 
     // ---- 文件分类 category 代码 ----
     const val CATEGORY_VIDEO = 1
@@ -70,13 +80,22 @@ object BaiduNetdiskConfig {
     // ---- API 错误码映射表（errno）----
     val ERRNO_MAP: Map<Int, String> = mapOf(
         -1 to "未知错误",
-        -6 to "access_token 失效（需重新授权）",
+        -6 to "身份验证失败或应用无接口权限，请检查百度开放平台应用权限",
         -7 to "文件名或路径名非法",
+        -8 to "文件或目录已存在",
         -9 to "文件不存在",
         -111 to "请求过于频繁（限流）",
         -118 to "带 dlink 参数的请求过于频繁",
+        2 to "参数错误",
+        6 to "应用无该接口访问权限",
         31034 to "命中接口频控",
-        31045 to "用户未授权该 scope"
+        31045 to "用户未授权该 scope",
+        20011 to "应用审核中，仅限测试用户",
+        20012 to "调用次数超限",
+        20013 to "应用无接口权限，请在开放平台开通",
+        20016 to "access_token 已过期",
+        20017 to "access_token 无效（授权被撤销）",
+        20020 to "路径不在允许的访问范围内（仅限 /apps/应用名 目录）"
     )
 
     /** 网盘类型（首批仅百度） */

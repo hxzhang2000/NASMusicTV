@@ -70,7 +70,7 @@ class BaiduNetdiskService(
 
         // 2. 再调百度 search API 补全本地索引缺失的结果
         val apiHits = try {
-            val rootDir = prefs.getBaiduMusicRootDirSync().ifBlank { "/" }
+            val rootDir = prefs.getBaiduMusicRootDirSync().ifBlank { BaiduNetdiskConfig.APP_DIR }
             api.searchAudio(keyword, dir = rootDir).map { it.toSong() }
         } catch (e: Exception) {
             AppLog.w(TAG, "search API failed, fallback to index only", e)

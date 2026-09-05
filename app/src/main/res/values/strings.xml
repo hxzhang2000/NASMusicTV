@@ -393,8 +393,10 @@
     <string name="settings_netdisk_logout_desc">清除网盘授权信息</string>
     <string name="settings_netdisk_logged_in">已登录</string>
     <string name="settings_netdisk_not_logged_in">未登录</string>
+    <string name="netdisk_dir_missing">音乐根目录不存在</string>
+    <string name="netdisk_dir_missing_desc">百度网盘已登录成功，但配置的音乐根目录不存在。请在下方重新设置音乐根目录。</string>
     <string name="settings_netdisk_music_root">音乐根目录</string>
-    <string name="settings_netdisk_music_root_desc">网盘中存放音乐的目录，默认 /音乐</string>
+    <string name="settings_netdisk_music_root_desc">网盘中存放音乐的目录，默认 /apps/NASMusicTV</string>
     <string name="settings_netdisk_mv_dir">MV 目录</string>
     <string name="settings_netdisk_mv_dir_desc">网盘中存放 MV 视频的目录（可选，默认同音乐目录）</string>
     <string name="settings_netdisk_index">索引</string>
@@ -414,6 +416,11 @@
     <string name="netdisk_auth_qr_alt">也可扫描下方二维码（若扫码打不开，请用步骤①的网址）</string>
     <string name="netdisk_auth_waiting">等待手机授权...</string>
     <string name="netdisk_auth_fetch_failed">获取设备码失败，请稍后重试</string>
+    <string name="netdisk_auth_failed">授权失败</string>
+    <string name="baidu_token_expired">登录已过期，请重新授权</string>
+    <string name="baidu_user_declined">用户拒绝授权</string>
+    <string name="baidu_auth_timeout">授权超时，请重试</string>
+    <string name="baidu_get_device_code_failed">获取设备码失败，请检查网络</string>
     <string name="netdisk_dir_picker_title">选择网盘目录</string>
     <string name="netdisk_dir_picker_loading">加载中...</string>
     <string name="netdisk_dir_picker_error">目录加载失败</string>
@@ -764,11 +771,6 @@
     <string name="netdisk_search_no_results">搜索无结果</string>
     <string name="netdisk_no_audio_files">目录下未找到音频文件</string>
     <string name="netdisk_index_scan_interrupted">索引扫描中断: %s</string>
-
-    <!-- Baidu OAuth (MainViewModel) -->
-    <string name="baidu_get_device_code_failed">获取设备码失败</string>
-    <string name="baidu_user_declined">用户拒绝授权</string>
-    <string name="baidu_auth_timeout">授权超时</string>
 
     <!-- Radio (MainViewModel) -->
     <string name="radio_load_failed">电台加载失败</string>

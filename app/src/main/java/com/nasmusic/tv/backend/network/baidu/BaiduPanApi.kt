@@ -11,6 +11,7 @@ import kotlinx.coroutines.withContext
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.FormBody
 import java.net.URLEncoder
 
 /**
@@ -28,12 +29,16 @@ class BaiduPanApi(
     private val oauth: BaiduOAuthClient,
     private val gson: Gson = Gson()
 ) {
+    /** 当百度 API 返回 errno!=0 时回调，由 MainViewModel 注册，参数为用户可读错误描述 */
+    var onApiError: ((Int, String) -> Unit)? = null
 
     /** list 响应 */
     data class BaiduListResult(
         val files: List<BaiduFile>,
         /** 顶层 has_more：=1 时继续翻页 */
-        val hasMore: Boolean
+        val hasMore: Boolean,
+        /** API 返回的 errno（0=成功，非0=失败，-6=token失效） */
+        val errno: Int = 0
     )
 
     /** 列出目录 */
@@ -44,7 +49,8 @@ class BaiduPanApi(
         order: String = "name",
         desc: Int = 0
     ): BaiduListResult = withContext(Dispatchers.IO) {
-        val token = oauth.getValidAccessToken() ?: return@withContext BaiduListResult(emptyList(), false)
+        val token = oauth.getValidAccessToken() ?: return@withContext BaiduListResult(emptyList(), false, errno = -6)
+        AppLog.d(TAG, "listDir: dir=$dir start=$start limit=$limit")
         val url = buildUrl(BaiduNetdiskConfig.FILE_BASE, token) {
             addQueryParameter("method", BaiduNetdiskConfig.METHOD_LIST)
             addQueryParameter("dir", dir)
@@ -55,7 +61,57 @@ class BaiduPanApi(
             addQueryParameter("web", "1")     // 返回缩略图 thumbs
             addQueryParameter("folder", "0")
         }
-        execute(url) { json -> parseListResponse(json) } ?: BaiduListResult(emptyList(), false)
+        executeWithErrno(url) { json -> parseListResponse(json) }
+    }
+
+    /**
+     * 创建目录。
+     *
+     * 百度 xpan/file?method=create，POST 请求，body 传 path/isdir/size/rtype。
+     * errno=0 创建成功，errno=-8 目录已存在（视为成功）。
+     *
+     * @param dir 要创建的目录路径（如 /apps/NASMusicTV）
+     * @return errno（0 或 -8 表示成功）
+     */
+    suspend fun createDir(dir: String): Int = withContext(Dispatchers.IO) {
+        val token = oauth.getValidAccessToken() ?: return@withContext -6
+        val url = buildUrl(BaiduNetdiskConfig.FILE_BASE, token) {
+            addQueryParameter("method", BaiduNetdiskConfig.METHOD_CREATE)
+        }
+        val formBody = FormBody.Builder()
+            .add("path", dir)
+            .add("isdir", "1")
+            .add("size", "0")
+            .add("rtype", "0")   // 不允许重命名重名目录，重名时返回 -8
+            .build()
+        try {
+            val req = Request.Builder().url(url)
+                .header("User-Agent", BaiduNetdiskConfig.BAIDU_UA)
+                .post(formBody)
+                .build()
+            client.newCall(req).execute().use { resp ->
+                val body = resp.body?.string() ?: return@withContext -1
+                if (!resp.isSuccessful) {
+                    AppLog.w(TAG, "createDir failed code=${resp.code} body=${body.take(200)}")
+                    return@withContext -1
+                }
+                val json = gson.fromJson(body, JsonObject::class.java)
+                val errno = json?.get("errno")?.asInt ?: 0
+                if (errno == 0) {
+                    AppLog.i(TAG, "createDir: created dir=$dir")
+                } else if (errno == -8) {
+                    AppLog.i(TAG, "createDir: dir already exists dir=$dir")
+                } else {
+                    val desc = BaiduNetdiskConfig.describeErrno(errno)
+                    AppLog.w(TAG, "createDir: errno=$errno $desc dir=$dir")
+                    onApiError?.invoke(errno, desc)
+                }
+                errno
+            }
+        } catch (e: Exception) {
+            AppLog.e(TAG, "createDir error dir=$dir", e)
+            -1
+        }
     }
 
     /**
@@ -203,14 +259,42 @@ class BaiduPanApi(
                 val json = gson.fromJson(body, JsonObject::class.java) ?: return null
                 val errno = json.get("errno")?.asInt ?: 0
                 if (errno != 0) {
-                    AppLog.w(TAG, "errno=$errno ${BaiduNetdiskConfig.describeErrno(errno)} url=${url.take(120)}")
-                    // errno 非零时通常 list 字段缺失，仍尝试解析（容错）
+                    val desc = BaiduNetdiskConfig.describeErrno(errno)
+                    AppLog.w(TAG, "errno=$errno $desc url=${url.take(120)}")
+                    onApiError?.invoke(errno, desc)
                 }
                 parser(json)
             }
         } catch (e: Exception) {
             AppLog.e(TAG, "execute error url=${url.take(120)}", e)
             null
+        }
+    }
+
+    /** 专供 listDir 使用的执行方法，返回包含 errno 的 BaiduListResult */
+    private inline fun executeWithErrno(url: String, parser: (JsonObject) -> BaiduListResult): BaiduListResult {
+        return try {
+            val req = Request.Builder().url(url)
+                .header("User-Agent", BaiduNetdiskConfig.BAIDU_UA)
+                .build()
+            client.newCall(req).execute().use { resp ->
+                val body = resp.body?.string() ?: return BaiduListResult(emptyList(), false, errno = -1)
+                if (!resp.isSuccessful) {
+                    AppLog.w(TAG, "request failed url=${url.take(120)} code=${resp.code} body=${body.take(200)}")
+                    return BaiduListResult(emptyList(), false, errno = -1)
+                }
+                val json = gson.fromJson(body, JsonObject::class.java) ?: return BaiduListResult(emptyList(), false, errno = -1)
+                val errno = json.get("errno")?.asInt ?: 0
+                if (errno != 0) {
+                    val desc = BaiduNetdiskConfig.describeErrno(errno)
+                    AppLog.w(TAG, "errno=$errno $desc url=${url.take(120)}")
+                    onApiError?.invoke(errno, desc)
+                }
+                parser(json).copy(errno = errno)
+            }
+        } catch (e: Exception) {
+            AppLog.e(TAG, "executeWithErrno error url=${url.take(120)}", e)
+            BaiduListResult(emptyList(), false, errno = -1)
         }
     }
 
