@@ -4772,12 +4772,21 @@ showError(getApplication<Application>().getString(R.string.play_failed_with_msg,
             try {
                 val mvDir = prefs.getBaiduMvDirSync()
                 baiduIndexCache.fullScan(root, baiduApi, mvDir, callback)
+                // 扫描成功后，对 coverUrl 为空的音频条目启动 APIC 后台提取。
+                // listall+web=1 返回的 thumbs 仅对图片/视频有效，音频文件几乎都为 null。
+                val index = baiduIndexCache.load()
+                val pendingCovers = index?.entries?.count {
+                    it.coverUrl == null && it.category != BaiduNetdiskConfig.CATEGORY_VIDEO
+                } ?: 0
+                if (pendingCovers > 0) {
+                    AppLog.i("NASMusic", "rebuildBaiduIndex: $pendingCovers entries pending cover extraction, starting APIC")
+                    startApicExtraction()
+                }
             } catch (e: Exception) {
                 AppLog.e("NASMusic", "rebuildBaiduIndex error", e)
             } finally {
                 _baiduIndexScanning.value = false
             }
-            // listall+web=1 已在扫描时直接返回缩略图作为封面，无需 APIC 后台提取
         }
     }
 

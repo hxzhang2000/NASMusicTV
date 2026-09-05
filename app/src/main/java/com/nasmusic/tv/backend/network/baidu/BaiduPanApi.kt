@@ -134,7 +134,10 @@ class BaiduPanApi(
         val limit = 10000  // 百度 listall 上限
 
         while (true) {
-            val url = buildUrl(BaiduNetdiskConfig.FILE_BASE, token) {
+            // ⚠️ listall 必须走 xpan/multimedia 端点（百度官方文档 2026-09-02）。
+            // 此前误用 FILE_BASE(xpan/file)，百度静默降级为 list 语义，不递归，
+            // 导致只拿到根目录第一层 ~4493 首，4 万+ 歌曲无法索引。
+            val url = buildUrl(BaiduNetdiskConfig.MULTIMEDIA_BASE, token) {
                 addQueryParameter("method", BaiduNetdiskConfig.METHOD_LISTALL)
                 addQueryParameter("path", rootPath)
                 addQueryParameter("recursion", "1")

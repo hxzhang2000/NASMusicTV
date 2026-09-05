@@ -7,6 +7,13 @@
 >
 > 类型：`Added`（新增） | `Changed`（变更） | `Fixed`（修复） | `Removed`（移除）
 
+## [v2.26.27] - 2026-09-05
+
+### Fixed
+
+- **百度网盘索引只扫到约 4493 首（实际 4 万+）**：`BaiduPanApi.listAllAudioPaged` 误用 `FILE_BASE`（`xpan/file`）端点调用 `listall`，百度静默降级为 `list` 语义不递归，只拿到根目录第一层文件。修正为 `MULTIMEDIA_BASE`（`xpan/multimedia`），与百度官方文档 `listall` 接口规范一致，递归分页（`has_more`/`cursor`）正常工作。
+- **索引后不提取封面**：`rebuildBaiduIndex` 此前误以为 `listall+web=1` 返回的 `thumbs` 能覆盖音频封面，实际百度只为图片/视频生成缩略图，音频文件 `coverThumb` 几乎全为 null，`startApicExtraction()` 从未被调用。现扫描完成后统计 `coverUrl == null` 的音频条目，如有则自动触发 APIC 后台提取内嵌 ID3 封面。
+
 ## [v2.26.26] - 2026-09-05
 
 ### Fixed

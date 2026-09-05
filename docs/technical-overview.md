@@ -7115,3 +7115,37 @@ val result = with(kotlinx.coroutines.Dispatchers.IO) { separator.separate(...) }
 **涉及文件**：`data/model/BaiduFile.kt`、`backend/network/baidu/BaiduPanApi.kt`、`backend/network/baidu/BaiduFileIndexCache.kt`、`ui/viewmodel/MainViewModel.kt`
 
 **版本号变更**：v2.26.23 → v2.26.24（versionCode 102 → 103）
+
+### 10.96 v2.26.27 - 百度网盘索引全量递归扫描 + 封面 APIC 自动提取
+
+**提交日期**：2026-09-05
+
+**问题现象**：
+1. 百度网盘重建索引只能扫到约 4493 首，实际曲库 4 万+ 歌曲
+2. 索引完成后不触发歌曲封面提取流程
+
+**根因分析**：
+
+1. **索引只扫到 4493 首**：`BaiduPanApi.listAllAudioPaged` 调用 `listall` 接口时误用 `FILE_BASE`（`xpan/file`）端点。百度官方文档（2026-09-02 版）明确 `listall` 必须走 `xpan/multimedia` 端点。错误端点被百度静默降级为 `list` 语义（不递归），只返回根目录第一层文件，过滤音频后恰好 ~4493 首。
+2. **封面不提取**：`MainViewModel.rebuildBaiduIndex` 中有一行错误注释"listall+web=1 已在扫描时直接返回缩略图作为封面，无需 APIC 后台提取"。实际上百度只为图片/视频生成 `thumbs` 缩略图，音频文件 `coverThumb` 几乎全为 null，`startApicExtraction()` 从未被调用。
+
+**修复内容**：
+
+1. **`BaiduPanApi.kt:137`**：`listAllAudioPaged` 的 `buildUrl` 第一参数由 `FILE_BASE` 改为 `MULTIMEDIA_BASE`，与百度 `listall` 官方端点规范一致。分页逻辑（`has_more`/`cursor`）本就符合文档"当 has_more=1 时必须用 cursor 作为下一次 start"，无需改动。
+2. **`MainViewModel.rebuildBaiduIndex`**：`fullScan` 成功后加载索引，统计 `coverUrl == null && category != CATEGORY_VIDEO` 的音频条目数 `pendingCovers`，若 > 0 则调用 `startApicExtraction()` 启动 APIC 后台提取（`BaiduCoverProvider.extractApicOnly` 从音频文件内嵌 ID3 APIC 帧提取封面，并发 5，批量 20 写入索引）。删除错误注释。
+
+**涉及文件**：
+- `backend/network/baidu/BaiduPanApi.kt`：`listAllAudioPaged` 端点修正
+- `ui/viewmodel/MainViewModel.kt`：`rebuildBaiduIndex` 扫描后触发 APIC 提取
+
+**验证结果**：
+- ✅ `./gradlew.bat assembleDebug` BUILD SUCCESSFUL
+- ✅ adb 安装到手机（91846823），logcat 确认 `listAllAudioPaged` 走 `xpan/multimedia`，分页递归扫描拿到 4 万+ 歌曲
+- ✅ logcat 确认 `rebuildBaiduIndex: N entries pending cover extraction, starting APIC`，APIC 提取协程启动
+
+**注意事项**：
+- 百度 `listall` 文档明确"当 has_more=1 时必须用响应中的 cursor 作为下一次请求的 start，不要自行累加固定步长"——代码本就符合此规范，端点修正后分页正常
+- `listall` 的 `limit` 参数文档说"建议不超过 1000，上限 10000"，代码用 10000（合法），若服务端限制会更少，`has_more`/`cursor` 会自动分页
+- APIC 提取并发 5、批量 20，大曲库（4 万+）提取耗时较长（每首需下载部分文件内容解析 ID3），用户可在设置页看到提取进度
+
+**版本号变更**：v2.26.26 → v2.26.27（versionCode 105 → 106）
