@@ -101,6 +101,35 @@ class BaiduFileIndexCache(context: Context) {
         return true
     }
 
+    /**
+     * 批量写入封面 URL（单次文件写入）。
+     *
+     * 用于全量解析完成后一次性持久化所有封面，避免逐条写入时反复序列化整个索引（O(n²)）。
+     * 仅更新 coverUrl 有变化的条目。
+     *
+     * @param updates fsId → coverUrl 映射
+     * @return 实际更新的条目数
+     */
+    fun setCoverUrls(updates: Map<Long, String>): Int {
+        if (updates.isEmpty()) return 0
+        val index = load() ?: return 0
+        val entries = index.entries.toMutableList()
+        var changed = 0
+        for ((fsId, coverUrl) in updates) {
+            val idx = entries.indexOfFirst { it.fsId == fsId }
+            if (idx < 0) continue
+            val old = entries[idx].coverUrl
+            if (old == coverUrl) continue
+            entries[idx] = entries[idx].copy(coverUrl = coverUrl)
+            changed++
+        }
+        if (changed > 0) {
+            save(index.copy(entries = entries))
+            AppLog.d(TAG, "setCoverUrls batch: $changed/${updates.size} entries updated")
+        }
+        return changed
+    }
+
     fun clear() {
         try { if (file.exists()) file.delete() } catch (e: Exception) {
             AppLog.w(TAG, "clear error", e)
@@ -116,7 +145,7 @@ class BaiduFileIndexCache(context: Context) {
      */
     fun allSongs(): List<Song> {
         val index = load() ?: return emptyList()
-        return index.entries.map { it.toSong() }
+        return index.entries.map { it.toSong(coverUrl = it.coverUrl) }
     }
 
     fun search(keyword: String, limit: Int = 0): List<Song> {
@@ -130,7 +159,7 @@ class BaiduFileIndexCache(context: Context) {
             }
             .let { stream -> if (limit > 0) stream.take(limit) else stream }
             .toList()
-        return matched.map { it.toSong() }
+        return matched.map { it.toSong(coverUrl = it.coverUrl) }
     }
 
     /**
@@ -164,7 +193,7 @@ class BaiduFileIndexCache(context: Context) {
             val result = index.entries
                 .filter { entry -> matchedDirs.any { dir -> entry.path.startsWith("$dir/") } }
                 .distinctBy { it.fsId }
-            val songs = result.map { it.toSong() }
+            val songs = result.map { it.toSong(coverUrl = it.coverUrl) }
             return if (limit > 0) songs.take(limit) else songs
         }
 
@@ -228,7 +257,8 @@ class BaiduFileIndexCache(context: Context) {
         rootPath: String,
         api: BaiduPanApi,
         mvDir: String? = null,
-        onProgress: ProgressCallback? = null
+        onProgress: ProgressCallback? = null,
+        coverProvider: BaiduCoverProvider? = null
     ): BaiduFileIndex = withContext(Dispatchers.IO) {
         val entries = mutableListOf<BaiduIndexEntry>()
         val visited = HashSet<String>()
@@ -239,7 +269,7 @@ class BaiduFileIndexCache(context: Context) {
 
         // ---- Pass 1: BFS 扫描 rootPath 内的音频文件 ----
         try {
-            scanDirTree(queue, visited, api, entries, scanned, onProgress)
+            scanDirTree(queue, visited, api, entries, scanned, onProgress, coverProvider)
         } catch (e: Exception) {
             AppLog.e(TAG, "fullScan interrupted, partial saved", e)
             val partial = BaiduFileIndex(rootPath = rootPath, lastSyncAt = System.currentTimeMillis(), entries = entries)
@@ -314,7 +344,8 @@ class BaiduFileIndexCache(context: Context) {
         api: BaiduPanApi,
         entries: MutableList<BaiduIndexEntry>,
         scanned: Int,
-        onProgress: ProgressCallback?
+        onProgress: ProgressCallback?,
+        coverProvider: BaiduCoverProvider? = null
     ) {
         var s = scanned
         while (queue.isNotEmpty()) {
@@ -327,6 +358,13 @@ class BaiduFileIndexCache(context: Context) {
                         if (visited.add(f.path)) queue.addLast(f.path)
                     } else if (BaiduPanApi.isAudioFile(f.serverFilename, f.category)) {
                         val (artist, title) = BaiduFilenameParser.parse(f.serverFilename)
+                        // 扫描时提取内嵌 APIC 封面（失败不影响条目创建）
+                        val coverUrl = try {
+                            coverProvider?.extractApicOnly(f.fsId)
+                        } catch (e: Exception) {
+                            AppLog.d(TAG, "APIC extract failed for ${f.serverFilename}: ${e.message}")
+                            null
+                        }
                         entries.add(
                             BaiduIndexEntry(
                                 fsId = f.fsId,
@@ -335,7 +373,8 @@ class BaiduFileIndexCache(context: Context) {
                                 title = title,
                                 artist = artist.ifBlank { null },
                                 size = f.size,
-                                serverMtime = f.serverMtime
+                                serverMtime = f.serverMtime,
+                                coverUrl = coverUrl
                             )
                         )
                         s++

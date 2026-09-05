@@ -4604,7 +4604,7 @@ showError(getApplication<Application>().getString(R.string.play_failed_with_msg,
             }
             try {
                 val mvDir = prefs.getBaiduMvDirSync()
-                baiduIndexCache.fullScan(root, baiduApi, mvDir, callback)
+                baiduIndexCache.fullScan(root, baiduApi, mvDir, callback, nasMusicApp.baiduCoverProvider)
             } catch (e: Exception) {
                 AppLog.e("NASMusic", "rebuildBaiduIndex error", e)
             } finally {
