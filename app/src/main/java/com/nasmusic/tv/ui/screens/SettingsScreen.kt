@@ -172,6 +172,9 @@ fun SettingsScreen(
     baiduMvDir: String? = null,
     baiduIndexScanned: Int = 0,
     baiduIndexScanning: Boolean = false,
+    baiduApicExtracting: Boolean = false,
+    baiduApicExtracted: Int = 0,
+    baiduApicTotal: Int = 0,
     onToggleBaiduEnabled: ((Boolean) -> Unit)? = null,
     onStartBaiduDeviceCode: (() -> Unit)? = null,
     onCancelBaiduDeviceCode: (() -> Unit)? = null,
@@ -843,6 +846,41 @@ fun SettingsScreen(
                                                else stringResource(R.string.settings_netdisk_index_rebuild_desc),
                                 onClick = { if (!baiduIndexScanning) onRebuildBaiduIndex?.invoke() }
                             )
+                        }
+                        // APIC 封面提取进度
+                        if (baiduApicExtracting || baiduApicTotal > 0) {
+                            item { Spacer(modifier = Modifier.height(8.dp)) }
+                            item {
+                                Text(
+                                    text = if (baiduApicExtracting) {
+                                        "封面提取中… $baiduApicExtracted/$baiduApicTotal"
+                                    } else {
+                                        "封面提取完成：$baiduApicTotal 首"
+                                    },
+                                    color = if (baiduApicExtracting) NasMusicColors.Primary else NasMusicColors.TextSecondary,
+                                    fontSize = FontSize.body(),
+                                    modifier = Modifier.padding(start = 4.dp, bottom = 8.dp)
+                                )
+                            }
+                            if (baiduApicExtracting && baiduApicTotal > 0) {
+                                item {
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(start = 4.dp, end = 16.dp)
+                                            .height(4.dp)
+                                            .clip(RoundedCornerShape(2.dp))
+                                            .background(NasMusicColors.SurfaceVariant)
+                                    ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .fillMaxWidth((baiduApicExtracted.toFloat() / baiduApicTotal).coerceIn(0f, 1f))
+                                                .height(4.dp)
+                                                .background(NasMusicColors.Primary, RoundedCornerShape(2.dp))
+                                        )
+                                    }
+                                }
+                            }
                         }
                     }
 

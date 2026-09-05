@@ -4334,6 +4334,14 @@ showError(getApplication<Application>().getString(R.string.play_failed_with_msg,
     private val _baiduIndexLastSync = MutableStateFlow(0L)
     val baiduIndexLastSync: StateFlow<Long> = _baiduIndexLastSync.asStateFlow()
 
+    // APIC 后台提取进度
+    private val _baiduApicExtracting = MutableStateFlow(false)
+    val baiduApicExtracting: StateFlow<Boolean> = _baiduApicExtracting.asStateFlow()
+    private val _baiduApicExtracted = MutableStateFlow(0)
+    val baiduApicExtracted: StateFlow<Int> = _baiduApicExtracted.asStateFlow()
+    private val _baiduApicTotal = MutableStateFlow(0)
+    val baiduApicTotal: StateFlow<Int> = _baiduApicTotal.asStateFlow()
+
     private val baiduOAuth: BaiduOAuthClient get() = nasMusicApp.baiduOAuthClient
     private val baiduApi: BaiduPanApi get() = nasMusicApp.baiduPanApi
     private val baiduIndexCache: BaiduFileIndexCache get() = nasMusicApp.baiduFileIndexCache
@@ -4604,11 +4612,49 @@ showError(getApplication<Application>().getString(R.string.play_failed_with_msg,
             }
             try {
                 val mvDir = prefs.getBaiduMvDirSync()
-                baiduIndexCache.fullScan(root, baiduApi, mvDir, callback, nasMusicApp.baiduCoverProvider)
+                baiduIndexCache.fullScan(root, baiduApi, mvDir, callback)
             } catch (e: Exception) {
                 AppLog.e("NASMusic", "rebuildBaiduIndex error", e)
             } finally {
                 _baiduIndexScanning.value = false
+            }
+            // 扫描完成后，后台并发提取 APIC 封面
+            startApicExtraction()
+        }
+    }
+
+    /** 后台提取 APIC 封面（扫描完成后自动触发，也可手动调用） */
+    private fun startApicExtraction() {
+        if (_baiduApicExtracting.value) return
+        viewModelScope.launch {
+            _baiduApicExtracting.value = true
+            _baiduApicExtracted.value = 0
+            _baiduApicTotal.value = 0
+            try {
+                val callback = object : BaiduFileIndexCache.ApicProgressCallback {
+                    override fun onProgress(extracted: Int, total: Int) {
+                        _baiduApicExtracted.value = extracted
+                        _baiduApicTotal.value = total
+                    }
+                    override fun onComplete(totalExtracted: Int) {
+                        _baiduApicExtracted.value = totalExtracted
+                        _baiduApicTotal.value = totalExtracted
+                        if (totalExtracted > 0) updateMergedData()
+                    }
+                    override fun onFailed(message: String) {
+                        AppLog.e("NASMusic", "APIC extraction failed: $message")
+                    }
+                }
+                baiduIndexCache.extractApicInBackground(
+                    coverProvider = nasMusicApp.baiduCoverProvider,
+                    concurrency = 5,
+                    batchSize = 20,
+                    onProgress = callback
+                )
+            } catch (e: Exception) {
+                AppLog.e("NASMusic", "startApicExtraction error", e)
+            } finally {
+                _baiduApicExtracting.value = false
             }
         }
     }

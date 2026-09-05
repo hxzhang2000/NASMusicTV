@@ -132,6 +132,9 @@ fun AppRoot(
     val baiduDeviceCode by viewModel.baiduDeviceCode.collectAsState(initial = null)
     val baiduIndexScanned by viewModel.baiduIndexScanned.collectAsState(initial = 0)
     val baiduIndexScanning by viewModel.baiduIndexScanning.collectAsState(initial = false)
+    val baiduApicExtracting by viewModel.baiduApicExtracting.collectAsState(initial = false)
+    val baiduApicExtracted by viewModel.baiduApicExtracted.collectAsState(initial = 0)
+    val baiduApicTotal by viewModel.baiduApicTotal.collectAsState(initial = 0)
     // K 歌页面显隐（切 Tab 时保持，退出 K 歌页时清除）
     val showKaraoke by viewModel.showKaraoke.collectAsState(initial = false)
     // MTV 页面显隐（进入 MTV 全屏页时为 true）
@@ -739,6 +742,9 @@ fun AppRoot(
                         baiduMvDir = baiduConfig.mvDir,
                         baiduIndexScanned = baiduIndexScanned,
                         baiduIndexScanning = baiduIndexScanning,
+                        baiduApicExtracting = baiduApicExtracting,
+                        baiduApicExtracted = baiduApicExtracted,
+                        baiduApicTotal = baiduApicTotal,
                         onToggleBaiduEnabled = { viewModel.setBaiduEnabled(it) },
                         onStartBaiduDeviceCode = { viewModel.startBaiduDeviceCodeFlow() },
                         onCancelBaiduDeviceCode = { viewModel.cancelBaiduDeviceCode() },

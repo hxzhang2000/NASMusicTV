@@ -10,6 +10,8 @@ import com.nasmusic.tv.data.model.Song
 import com.nasmusic.tv.util.BaiduFilenameParser
 import com.nasmusic.tv.util.AppLog
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.withContext
 import java.io.File
 
@@ -257,8 +259,7 @@ class BaiduFileIndexCache(context: Context) {
         rootPath: String,
         api: BaiduPanApi,
         mvDir: String? = null,
-        onProgress: ProgressCallback? = null,
-        coverProvider: BaiduCoverProvider? = null
+        onProgress: ProgressCallback? = null
     ): BaiduFileIndex = withContext(Dispatchers.IO) {
         val entries = mutableListOf<BaiduIndexEntry>()
         val visited = HashSet<String>()
@@ -269,7 +270,7 @@ class BaiduFileIndexCache(context: Context) {
 
         // ---- Pass 1: BFS 扫描 rootPath 内的音频文件 ----
         try {
-            scanDirTree(queue, visited, api, entries, scanned, onProgress, coverProvider)
+            scanDirTree(queue, visited, api, entries, scanned, onProgress)
         } catch (e: Exception) {
             AppLog.e(TAG, "fullScan interrupted, partial saved", e)
             val partial = BaiduFileIndex(rootPath = rootPath, lastSyncAt = System.currentTimeMillis(), entries = entries)
@@ -344,8 +345,7 @@ class BaiduFileIndexCache(context: Context) {
         api: BaiduPanApi,
         entries: MutableList<BaiduIndexEntry>,
         scanned: Int,
-        onProgress: ProgressCallback?,
-        coverProvider: BaiduCoverProvider? = null
+        onProgress: ProgressCallback?
     ) {
         var s = scanned
         while (queue.isNotEmpty()) {
@@ -358,13 +358,6 @@ class BaiduFileIndexCache(context: Context) {
                         if (visited.add(f.path)) queue.addLast(f.path)
                     } else if (BaiduPanApi.isAudioFile(f.serverFilename, f.category)) {
                         val (artist, title) = BaiduFilenameParser.parse(f.serverFilename)
-                        // 扫描时提取内嵌 APIC 封面（失败不影响条目创建）
-                        val coverUrl = try {
-                            coverProvider?.extractApicOnly(f.fsId)
-                        } catch (e: Exception) {
-                            AppLog.d(TAG, "APIC extract failed for ${f.serverFilename}: ${e.message}")
-                            null
-                        }
                         entries.add(
                             BaiduIndexEntry(
                                 fsId = f.fsId,
@@ -373,8 +366,7 @@ class BaiduFileIndexCache(context: Context) {
                                 title = title,
                                 artist = artist.ifBlank { null },
                                 size = f.size,
-                                serverMtime = f.serverMtime,
-                                coverUrl = coverUrl
+                                serverMtime = f.serverMtime
                             )
                         )
                         s++
@@ -410,5 +402,87 @@ class BaiduFileIndexCache(context: Context) {
 
     companion object {
         private const val TAG = "BaiduFileIndexCache"
+    }
+
+    // ---- APIC 后台提取 ----
+
+    /** APIC 提取进度回调 */
+    interface ApicProgressCallback {
+        fun onProgress(extracted: Int, total: Int)
+        fun onComplete(totalExtracted: Int)
+        fun onFailed(message: String)
+    }
+
+    /**
+     * 后台并发提取 APIC 封面。
+     *
+     * 扫描完成（fullScan/incrementalUpdate）后调用，遍历索引中 coverUrl 为空的音频条目，
+     * 并发提取内嵌 ID3 APIC 帧封面，写入索引。
+     *
+     * @param coverProvider APIC 提取器
+     * @param concurrency 并发数（默认 5，过高可能触发百度限流）
+     * @param batchSize 每批写入索引的条数（默认 20）
+     * @param onProgress 进度回调（可为 null）
+     */
+    suspend fun extractApicInBackground(
+        coverProvider: BaiduCoverProvider,
+        concurrency: Int = 5,
+        batchSize: Int = 20,
+        onProgress: ApicProgressCallback? = null
+    ) = withContext(Dispatchers.IO) {
+        val index = load() ?: run {
+            onProgress?.onFailed("索引不存在")
+            return@withContext
+        }
+        // 筛选：音频文件（非视频）且 coverUrl 为空
+        val pending = index.entries
+            .filter { it.coverUrl == null && it.category != BaiduNetdiskConfig.CATEGORY_VIDEO }
+        val total = pending.size
+        if (total == 0) {
+            onProgress?.onComplete(0)
+            return@withContext
+        }
+        AppLog.d(TAG, "extractApicInBackground: $total entries pending")
+
+        var extracted = 0
+        val updates = mutableMapOf<Long, String>()
+        val lock = Any()
+
+        // 按 concurrency 分批，并发提取
+        pending.chunked(concurrency).forEach { chunk ->
+            kotlinx.coroutines.coroutineScope {
+                val results = chunk.map { entry ->
+                    async {
+                        try {
+                            val coverUrl = coverProvider.extractApicOnly(entry.fsId)
+                            if (coverUrl != null) {
+                                synchronized(lock) { updates[entry.fsId] = coverUrl }
+                            }
+                            coverUrl != null
+                        } catch (e: Exception) {
+                            AppLog.d(TAG, "APIC extract failed for ${entry.filename}: ${e.message}")
+                            false
+                        }
+                    }
+                }
+                results.awaitAll()
+            }
+            extracted += chunk.size
+
+            // 每 batchSize 条或最后一批时写入索引
+            if (updates.size >= batchSize || extracted == total) {
+                synchronized(lock) {
+                    if (updates.isNotEmpty()) {
+                        setCoverUrls(updates.toMap())
+                        updates.clear()
+                    }
+                }
+            }
+
+            onProgress?.onProgress(extracted, total)
+        }
+
+        onProgress?.onComplete(total)
+        AppLog.d(TAG, "extractApicInBackground done: $total entries processed")
     }
 }
