@@ -59,23 +59,60 @@ class BaiduPanApi(
     }
 
     /**
-     * 递归列出全部音频文件（建索引用，主路径：BFS 逐目录 list + 节流，
-     * 由 [BaiduFileIndexCache] 协调；此方法作为可选加速封装 listall 端点，未验证）。
+     * 递归列出全部音频文件（建索引用）。
+     *
+     * 使用 listall + recursion=1 端点，自动分页（has_more/cursor），
+     * 每次请求最多返回 10000 条（百度官方上限）。
+     *
+     * @param rootPath 音乐根目录
+     * @param onProgress 进度回调（已获取的条目数）
+     * @return 音频文件列表（含 coverThumb）
      */
-    suspend fun listAllAudio(rootPath: String): List<BaiduFile> = withContext(Dispatchers.IO) {
+    suspend fun listAllAudioPaged(
+        rootPath: String,
+        onProgress: ((Int) -> Unit)? = null
+    ): List<BaiduFile> = withContext(Dispatchers.IO) {
         val token = oauth.getValidAccessToken() ?: return@withContext emptyList()
-        val url = buildUrl(BaiduNetdiskConfig.FILE_BASE, token) {
-            addQueryParameter("method", BaiduNetdiskConfig.METHOD_LISTALL)
-            addQueryParameter("path", rootPath)
-            addQueryParameter("recursion", "1")
-            addQueryParameter("web", "1")
+        val allFiles = mutableListOf<BaiduFile>()
+        var start = 0
+        val limit = 10000  // 百度 listall 上限
+
+        while (true) {
+            val url = buildUrl(BaiduNetdiskConfig.FILE_BASE, token) {
+                addQueryParameter("method", BaiduNetdiskConfig.METHOD_LISTALL)
+                addQueryParameter("path", rootPath)
+                addQueryParameter("recursion", "1")
+                addQueryParameter("web", "1")
+                addQueryParameter("start", start.toString())
+                addQueryParameter("limit", limit.toString())
+            }
+            val result = execute(url) { json ->
+                val list = pickListArray(json)
+                val files = list.mapNotNull { parseBaiduFile(it) }
+                    .filter { !it.isDir && BaiduPanApi.isAudioFile(it.serverFilename, it.category) }
+                val hasMore = json.get("has_more")?.asInt == 1 ||
+                    json.getAsJsonObject("data")?.get("has_more")?.asInt == 1
+                val cursor = json.get("cursor")?.asInt ?:
+                    json.getAsJsonObject("data")?.get("cursor")?.asInt ?: 0
+                PagedResult(files, hasMore, cursor)
+            } ?: break
+
+            allFiles.addAll(result.files)
+            onProgress?.invoke(allFiles.size)
+            AppLog.d(TAG, "listAllAudioPaged: start=$start, got=${result.files.size}, total=${allFiles.size}, hasMore=${result.hasMore}")
+
+            if (!result.hasMore) break
+            start = result.cursor
         }
-        execute(url) { json ->
-            val list = pickListArray(json)
-            list.mapNotNull { parseBaiduFile(it) }
-                .filter { !it.isDir && it.category == BaiduNetdiskConfig.CATEGORY_AUDIO }
-        } ?: emptyList()
+
+        allFiles
     }
+
+    private data class PagedResult(
+        val files: List<BaiduFile>,
+        val hasMore: Boolean,
+        val cursor: Int
+    )
 
     /** 关键词搜索音频（参数名 key 非 word） */
     suspend fun searchAudio(
@@ -207,7 +244,8 @@ class BaiduPanApi(
                 size = o.get("size")?.asLong ?: 0L,
                 category = o.get("category")?.asInt ?: BaiduNetdiskConfig.CATEGORY_BT,
                 md5 = o.get("md5")?.asString,
-                serverMtime = o.get("server_mtime")?.asLong ?: 0L
+                serverMtime = o.get("server_mtime")?.asLong ?: 0L,
+                coverThumb = parseThumbs(o)?.url
             )
         } catch (e: Exception) {
             AppLog.w(TAG, "parseBaiduFile error", e)

@@ -247,7 +247,11 @@ class BaiduFileIndexCache(context: Context) {
     }
 
     /**
-     * 全量扫描建索引（BFS 逐目录 + 60ms 节流）。
+     * 全量扫描建索引（listall 单次递归获取全部音频 + 缩略图）。
+     *
+     * 使用 [BaiduPanApi.listAllAudioPaged] 替代 BFS 逐目录扫描：
+     * - 1 次分页请求获取全部音频（~5 次 API 调用 vs 数百次 listDir）
+     * - 同时返回 thumbs 缩略图 URL，直接作为封面
      *
      * @param rootPath 音乐根目录
      * @param api BaiduPanApi 实例
@@ -262,15 +266,32 @@ class BaiduFileIndexCache(context: Context) {
         onProgress: ProgressCallback? = null
     ): BaiduFileIndex = withContext(Dispatchers.IO) {
         val entries = mutableListOf<BaiduIndexEntry>()
-        val visited = HashSet<String>()
-        val queue = ArrayDeque<String>()
-        queue.addLast(rootPath)
-        visited.add(rootPath)
         var scanned = 0
 
-        // ---- Pass 1: BFS 扫描 rootPath 内的音频文件 ----
+        // ---- Pass 1: listall 递归获取全部音频文件 ----
         try {
-            scanDirTree(queue, visited, api, entries, scanned, onProgress)
+            val audioFiles = api.listAllAudioPaged(rootPath) { count ->
+                scanned = count
+                if (scanned % 100 == 0) onProgress?.onProgress(scanned)
+            }
+            for (f in audioFiles) {
+                val (artist, title) = BaiduFilenameParser.parse(f.serverFilename)
+                entries.add(
+                    BaiduIndexEntry(
+                        fsId = f.fsId,
+                        path = f.path,
+                        filename = f.serverFilename,
+                        title = title,
+                        artist = artist.ifBlank { null },
+                        size = f.size,
+                        serverMtime = f.serverMtime,
+                        category = f.category,
+                        coverUrl = f.coverThumb  // listall+web=1 直接返回缩略图
+                    )
+                )
+                scanned++
+            }
+            onProgress?.onProgress(scanned)
         } catch (e: Exception) {
             AppLog.e(TAG, "fullScan interrupted, partial saved", e)
             val partial = BaiduFileIndex(rootPath = rootPath, lastSyncAt = System.currentTimeMillis(), entries = entries)
@@ -337,7 +358,7 @@ class BaiduFileIndexCache(context: Context) {
     }
 
     /**
-     * BFS 逐目录扫描音频文件（提取为方法供 fullScan 复用）。
+     * BFS 逐目录扫描音频文件（保留供未来可能的增量更新使用）。
      */
     private suspend fun scanDirTree(
         queue: ArrayDeque<String>,

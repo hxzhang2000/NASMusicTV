@@ -25,7 +25,9 @@ data class BaiduFile(
     val size: Long,
     val category: Int,
     val md5: String?,
-    val serverMtime: Long
+    val serverMtime: Long,
+    /** listall+web=1 返回的缩略图 URL（url2 > url1 > url3），可直接作为封面 */
+    val coverThumb: String? = null
 ) {
     /**
      * 转 [Song]（音频文件）。
@@ -36,11 +38,12 @@ data class BaiduFile(
      */
     fun toSong(durationMs: Long = 0L, coverUrl: String? = null): Song {
         val (artist, title) = BaiduFilenameParser.parse(serverFilename)
+        // coverUrl 优先使用显式传入的，否则 fallback 到 coverThumb
         return Song(
             id = "ntwk_baidu_$fsId",
             title = title,
             artist = artist,
-            coverUrl = coverUrl,
+            coverUrl = coverUrl ?: coverThumb,
             streamUrl = null,
             durationMs = durationMs,
             isNetworkSong = true,

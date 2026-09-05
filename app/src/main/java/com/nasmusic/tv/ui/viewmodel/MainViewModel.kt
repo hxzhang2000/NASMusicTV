@@ -4618,8 +4618,7 @@ showError(getApplication<Application>().getString(R.string.play_failed_with_msg,
             } finally {
                 _baiduIndexScanning.value = false
             }
-            // 扫描完成后，后台并发提取 APIC 封面
-            startApicExtraction()
+            // listall+web=1 已在扫描时直接返回缩略图作为封面，无需 APIC 后台提取
         }
     }
 
