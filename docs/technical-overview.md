@@ -7069,3 +7069,49 @@ val result = with(kotlinx.coroutines.Dispatchers.IO) { separator.separate(...) }
 **涉及文件**：`util/HashUtils.kt`（新增）、`backend/local/MusicScanner.kt`、`backend/local/db/LocalMusicDatabase.kt`、`app/build.gradle.kts`、`CHANGELOG.md`
 
 **版本号变更**：v2.26.22 → v2.26.23（versionCode 101 → 102；LocalMusicDatabase version 1 → 2）
+
+### 10.95 百度网盘索引重构：listall 分页 + 缩略图替代 BFS 扫描（v2.26.24 - 2026-09-05）
+
+> 百度网盘音乐索引重建从 BFS 逐目录扫描改为 listall 递归端点分页获取，同时利用 listall+web=1 返回的 thumbs 缩略图直接作为封面，消除 APIC 后台提取。
+
+#### 10.95.1 背景
+
+原 `BaiduFileIndexCache.fullScan()` 使用 BFS 逐目录调用 `listDir`，对 46,595 个文件需要数百次 API 请求（每次仅返回 1000 条），耗时极长。封面方面，原方案在扫描完成后启动 `extractApicInBackground` 逐首解析内嵌 APIC 图片，又增加了数百次 HTTP 请求。
+
+百度官方 `listall` 端点支持 `recursion=1` 递归列出全部文件，配合 `web=1` 返回缩略图 URL，一次分页请求最多返回 10,000 条。46,595 个文件仅需 ~5 次 API 请求即可完成，且直接获得封面缩略图，无需额外 APIC 提取。
+
+#### 10.95.2 修改内容
+
+1. **`BaiduFile.kt`**：新增 `coverThumb: String?` 字段，存储 listall+web=1 返回的缩略图 URL（优先 url2 > url1 > url3）；`toSong()` 方法增加 `coverThumb` 作为 coverUrl 的 fallback。
+
+2. **`BaiduPanApi.kt`**：
+   - `parseBaiduFile()` 增加 `thumbs` JSON 解析，提取 `thumbs.url` 赋值给 `coverThumb`
+   - 新增 `listAllAudioPaged()` 方法：循环调用 `listall` 端点（recursion=1, web=1），通过 `has_more`/`cursor` 手动分页，limit=10000，每批次回调进度
+   - 保留原 `listAllAudio`（非分页）供其他场景使用
+
+3. **`BaiduFileIndexCache.kt`**：
+   - `fullScan()` 改为调用 `api.listAllAudioPaged()` 替代 BFS `scanDirTree`，遍历全部音频文件时直接从 `BaiduFile.coverThumb` 赋值 `coverUrl`
+   - 保留 `scanDirTree()` 方法（BFS）供 MV 目录扫描使用
+   - `extractApicInBackground()` 保留但不再在扫描后自动触发
+
+4. **`MainViewModel.kt`**：移除 `rebuildBaiduIndex()` 中扫描完成后的 `startApicExtraction()` 调用，注释说明 listall+web=1 已在扫描时直接返回缩略图作为封面。
+
+#### 10.95.3 性能对比
+
+| 指标 | 改前（BFS + APIC） | 改后（listall 分页 + thumbs） |
+|------|-------------------|-------------------------------|
+| API 请求数 | 数百次 listDir + 数百次 fileMetas | ~5 次 listall |
+| 封面获取 | 扫描后逐首 APIC 提取（数百次 HTTP） | 扫描时直接返回 thumbs URL |
+| 扫描耗时（46K 文件） | 数分钟 | 数秒 |
+| 覆盖率 | 仅 ID3 内嵌 APIC 的文件有封面 | 所有文件均有缩略图（百度网盘自动提取） |
+
+#### 10.95.4 兼容性
+
+- `BaiduFile.coverThumb` 有默认值 `null`，不影响现有 `toSong()` 调用方
+- `extractApicInBackground` 保留未删除，未来可作为 fallback 或手动触发使用
+- MV 目录扫描仍使用 BFS `listDir`（视频文件不适用 listall 音频过滤）
+- 百度官方 listall 端点限制：每次最多 10,000 条，超过需分页（已实现）；rate limit 8-10 req/min（5 次请求远低于限制）
+
+**涉及文件**：`data/model/BaiduFile.kt`、`backend/network/baidu/BaiduPanApi.kt`、`backend/network/baidu/BaiduFileIndexCache.kt`、`ui/viewmodel/MainViewModel.kt`
+
+**版本号变更**：v2.26.23 → v2.26.24（versionCode 102 → 103）
