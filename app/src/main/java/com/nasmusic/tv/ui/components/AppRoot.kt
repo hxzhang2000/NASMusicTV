@@ -850,10 +850,13 @@ fun AppRoot(
                     val selectedArtistName by viewModel.selectedArtistName.collectAsState(initial = null)
                     val artistDetailSongsCache by viewModel.artistDetailSongsCache.collectAsState(initial = emptyMap())
                     val artistSongs = selectedArtistName?.let { artistDetailSongsCache[it] } ?: emptyList()
-                    val artistsState by viewModel.artists.collectAsState(initial = UiState.Success(emptyList()))
+                    // 用合并后的 _mergedArtists（已应用 resolvedArtistCovers 封面缓存）查找，
+                    // 而非原始 _artists：百度/本地艺术家不在 _artists，且 _artists 的 coverUrl 未应用解析缓存，
+                    // 导致详情页左侧封面不显示。
+                    val artistsState by viewModel.mergedArtists.collectAsState(initial = emptyList())
                     val selectedArtist = selectedArtistName?.let { name ->
                         val key = com.nasmusic.tv.util.ArtistSplitter.normalizeKey(name)
-                        artistsState.dataOrNull()?.find {
+                        artistsState.find {
                             com.nasmusic.tv.util.ArtistSplitter.normalizeKey(it.name) == key
                         }
                     }

@@ -1620,9 +1620,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
                 val merged = mergedMap.values.toList()
                 _artists.value = UiState.Success(merged)
                 AppLog.d("NASMusic", "loadArtists: ${artistsList.size} raw → ${merged.size} after splitting")
-                // 艺术家歌曲数量由歌曲 Tab 的 buildArtistMapsIncremental 全量加载后自动填充
-                // 异步解析缺失封面（iTunes → 百度音乐 API）
-                resolveArtistCoversAsync()
+                // 触发合并（updateMergedData 末尾会解析 NAS + 百度 + 本地缺失的艺术家封面）
+                updateMergedData()
             } catch (e: Exception) {
                 AppLog.e("NASMusic", "loadArtists failed", e)
                 _artists.value = UiState.Error(
@@ -2296,6 +2295,10 @@ showError(getApplication<Application>().getString(R.string.toggle_favorite_error
 
             // 异步解析缺失封面（百度侧车/APIC → iTunes → 本地ID3 → 歌曲 coverUrl 兜底）
             resolveAlbumCoversAsync()
+            // 异步解析缺失的艺术家封面（iTunes → 百度音乐）。
+            // 读 _mergedArtists 覆盖 NAS + 本地 + 百度三个来源；
+            // 百度/本地艺术家在 updateMergedData 生成，此前只靠 loadArtists（NAS 连接）触发导致漏解析。
+            resolveArtistCoversAsync()
         }
     }
 
@@ -2336,7 +2339,14 @@ showError(getApplication<Application>().getString(R.string.toggle_favorite_error
     private var artistCoverResolveJob: kotlinx.coroutines.Job? = null
 
     /** 已解析的专辑封面缓存（albumId → coverUrl），跨 updateMergedData 保持 */
-    private val resolvedAlbumCovers = mutableMapOf<String, String>()
+    private val resolvedAlbumCovers: MutableMap<String, String> by lazy {
+    // 从持久缓存预加载已解析的专辑封面（跨会话复用，避免重复网络搜索）
+    val m = mutableMapOf<String, String>()
+    nasMusicApp.coverUrlPersistentCache.exportAll().forEach { (k, v) ->
+        if (k.startsWith("album:")) m[k.removePrefix("album:")] = v
+    }
+    m
+}
 
     /**
      * 专辑封面解析尝试次数（albumId → 次数）。
@@ -2353,7 +2363,24 @@ showError(getApplication<Application>().getString(R.string.toggle_favorite_error
     private val albumCoverMaxAttempts = 2
 
     /** 已解析的艺术家封面缓存（artistId → coverUrl），跨 updateMergedData 保持 */
-    private val resolvedArtistCovers = mutableMapOf<String, String>()
+    private val resolvedArtistCovers: MutableMap<String, String> by lazy {
+    // 从持久缓存预加载已解析的艺术家封面（跨会话复用，避免重复网络搜索）
+    val m = mutableMapOf<String, String>()
+    nasMusicApp.coverUrlPersistentCache.exportAll().forEach { (k, v) ->
+        if (k.startsWith("artist:")) m[k.removePrefix("artist:")] = v
+    }
+    m
+}
+
+    /**
+     * 艺术家封面解析尝试次数。收敛护栏：`updateMergedData()` 末尾会调 `resolveArtistCoversAsync()`，
+     * 后者解析结束若解析到新封面又回调 `updateMergedData()`，可能形成后台循环。
+     * 以「每个艺术家最多尝试 [artistCoverMaxAttempts] 次」让链条必然收敛。
+     */
+    private val artistCoverAttempts = mutableMapOf<String, Int>()
+
+    /** 单个艺术家最多解析封面的次数（含首次），保留 1 次重试以容忍瞬时网络失败 */
+    private val artistCoverMaxAttempts = 2
 
     private fun resolveAlbumCoversAsync() {
         // 收敛护栏：只对「仍缺封面」且「尝试次数未达上限」的专辑发起解析。
@@ -2379,6 +2406,10 @@ showError(getApplication<Application>().getString(R.string.toggle_favorite_error
                 for (album in updated) {
                     if (album.coverUrl != null) {
                         resolvedAlbumCovers[album.id] = album.coverUrl
+                        // 仅持久化稳定 HTTP 封面 URL（动态 dlink / data URI 不适合落盘）
+                        if (album.coverUrl.startsWith("http")) {
+                            nasMusicApp.coverUrlPersistentCache.putAlbumCover(album.id, album.coverUrl)
+                        }
                         added++
                     }
                 }
@@ -2398,23 +2429,38 @@ showError(getApplication<Application>().getString(R.string.toggle_favorite_error
     }
 
     private fun resolveArtistCoversAsync() {
+        // 收敛护栏：只对「仍缺封面」且「尝试次数未达上限」的艺术家发起解析。
+        // 读取合并后的 _mergedArtists（NAS + 本地 + 百度），确保百度/本地艺术家也被覆盖。
+        // 全部已解析或已达上限时直接返回，切断 updateMergedData ↔ 本方法 的循环。
+        val pending = _mergedArtists.value.filter {
+            it.coverUrl == null && (artistCoverAttempts[it.id] ?: 0) < artistCoverMaxAttempts
+        }
+        if (pending.isEmpty()) return
         // 已有解析在跑 → 不取消（避免重复触发时打断）
         if (artistCoverResolveJob?.isActive == true) return
         artistCoverResolveJob = viewModelScope.launch {
-            val artists = _artists.value.dataOrNull() ?: return@launch
             val before = resolvedArtistCovers.size
-            nasMusicApp.artistCoverResolver.resolveCovers(artists) { updated ->
-                // 仅更新封面缓存，不直接写 _artists（避免与 updateMergedData 竞争覆盖）
+            for (artist in pending) {
+                artistCoverAttempts[artist.id] = (artistCoverAttempts[artist.id] ?: 0) + 1
+            }
+            // 全量歌曲（NAS + 本地 + 百度），用于 P4 歌曲封面兜底
+            val allSongs = _songsPaging.value.songs + _localSongs.value + baiduIndexCache.allSongs()
+            nasMusicApp.artistCoverResolver.resolveCovers(pending, allSongs) { updated ->
+                // 仅更新封面缓存，不直接写 _mergedArtists（避免与 updateMergedData 竞争覆盖）
+                var added = 0
                 for (artist in updated) {
                     if (artist.coverUrl != null) {
                         resolvedArtistCovers[artist.id] = artist.coverUrl
+                        // 仅持久化稳定 HTTP 封面 URL（P4 歌曲封面可能是 data URI / content://，不适合落盘）
+                        if (artist.coverUrl.startsWith("http")) {
+                            nasMusicApp.coverUrlPersistentCache.putArtistCover(artist.id, artist.coverUrl)
+                        }
+                        added++
                     }
                 }
-            }
-            // 仅当本轮确实解析出**新**封面时才重建，避免无成果时的多余 merge
-            // （本方法由 loadArtists 触发，不与 updateMergedData 互调，本身不构成循环）
-            if (resolvedArtistCovers.size > before) {
-                withContext(Dispatchers.Main) {
+                // 每批解析到新封面立即刷新 UI（不必等全部艺术家解析完）。
+                // updateMergedData 内部已 launch(Dispatchers.Default)，此处直接调用即可。
+                if (added > 0 && resolvedArtistCovers.size > before) {
                     updateMergedData()
                 }
             }

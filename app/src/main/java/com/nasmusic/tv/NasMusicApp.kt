@@ -17,6 +17,7 @@ import com.nasmusic.tv.backend.network.NetworkMusicManager
 import com.nasmusic.tv.backend.radio.RadioBrowserClient
 import com.nasmusic.tv.backend.local.AlbumCoverResolver
 import com.nasmusic.tv.backend.local.ArtistCoverResolver
+import com.nasmusic.tv.backend.local.CoverUrlPersistentCache
 import com.nasmusic.tv.backend.local.ItunesCoverSearcher
 import com.nasmusic.tv.backend.network.baidu.BaiduCoverProvider
 import com.nasmusic.tv.backend.network.baidu.BaiduFileIndexCache
@@ -111,6 +112,8 @@ class NasMusicApp : Application(), ImageLoaderFactory {
         }, baiduFileIndexCache)
     }
     val artistCoverResolver: ArtistCoverResolver by lazy { ArtistCoverResolver(baiduOkHttpClient) }
+    /** 专辑/艺术家封面 URL 持久缓存（JSON 文件，跨会话复用，避免重复网络搜索） */
+    val coverUrlPersistentCache: CoverUrlPersistentCache by lazy { CoverUrlPersistentCache(this) }
     val itunesCoverSearcher: ItunesCoverSearcher by lazy { ItunesCoverSearcher(baiduOkHttpClient) }
     val baiduNetdiskService: BaiduNetdiskService by lazy {
         BaiduNetdiskService(

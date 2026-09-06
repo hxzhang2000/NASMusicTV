@@ -1,4 +1,4 @@
-# NAS Music TV — 技术架构概述
+﻿# NAS Music TV — 技术架构概述
 
 > 版本：v2.13.1
 > 最后更新：2026-09-01
@@ -7149,3 +7149,115 @@ val result = with(kotlinx.coroutines.Dispatchers.IO) { separator.separate(...) }
 - APIC 提取并发 5、批量 20，大曲库（4 万+）提取耗时较长（每首需下载部分文件内容解析 ID3），用户可在设置页看到提取进度
 
 **版本号变更**：v2.26.26 → v2.26.27（versionCode 105 → 106）
+
+
+### 10.97 v2.26.28 - 艺术家封面来源修复：百度/本地艺术家封面解析 + 移除已下线百度音乐API
+
+**提交日期**：2026-09-05
+
+**问题现象**：
+1. 仅连接百度网盘（无 NAS）时，百度艺术家的封面永远空白
+2. 本地艺术家的封面恒为空（即使其歌曲有封面）
+3. 百度音乐在线 API（musicapi.taihe.com）已下线，DNS 解析失败
+
+**根因分析**：
+
+1. **百度艺术家封面不解析**：`resolveArtistCoversAsync()` 只在 `loadArtists()`（NAS 连接）末尾调用，而 `loadArtists()` 需 NAS adapter，无 NAS 时直接走 Error 分支返回。百度艺术家由 `MusicMerger.buildBaiduArtists` 在 `updateMergedData()` 内从索引聚合生成（id=baidu_artist_{name}，coverUrl 恒 null），但 `updateMergedData()` 末尾只调 `resolveAlbumCoversAsync()`，从不调 `resolveArtistCoversAsync()`。且 `resolveArtistCoversAsync` 内部读 `_artists`（仅 NAS），即使被调用也看不到百度艺术家。
+2. **本地艺术家封面恒空**：`buildLocalArtists` 生成的 artist 无 coverUrl，且 `ArtistCoverResolver.resolveCovers` 跳过 `local_` 前缀。
+3. **百度音乐 API 已下线**：`musicapi.taihe.com` DNS 解析失败（No address associated with hostname），P2 兜底无效，对 4 万+ 艺术家反复发无效请求还触发限流。
+
+**修复内容**：
+
+1. **`MusicMerger.kt`**：`buildArtistsFromSongs` 新增 `useSongCover: Boolean = false` 参数。`buildLocalArtists` 传 `useSongCover = true`，本地艺术家 coverUrl = 名下第一首有封面的歌曲封面（侧车 cover.jpg / 内嵌 ID3 APIC）。`buildBaiduArtists` 同样传 `useSongCover = true`，百度艺术家从 APIC 提取的歌曲封面兜底。参数默认 false 保证现有测试与调用不破。
+2. **`MainViewModel.resolveArtistCoversAsync`**：改读 `_mergedArtists`（NAS + 本地 + 百度合并后），并新增 `artistCoverAttempts` / `artistCoverMaxAttempts`（默认 2）收敛护栏 + pending 过滤，切断无成果时的重复请求循环。
+3. **`MainViewModel.updateMergedData`**：末尾 `resolveAlbumCoversAsync()` 后新增 `resolveArtistCoversAsync()`，确保百度/本地艺术家无需 NAS 连接也能被解析。
+4. **`MainViewModel.loadArtists`**：设置 `_artists.value` 后由 `resolveArtistCoversAsync()` 改为 `updateMergedData()`，保证 NAS 艺术家封面解析不丢失。
+5. **`ArtistCoverResolver.kt`**：移除已下线的 P2 百度音乐搜索（`resolveBaiduArtistCover` 方法 + `BAIDU_MUSIC_SEARCH_URL` 常量），在线补全仅保留 iTunes。
+
+**涉及文件**：
+- `backend/local/MusicMerger.kt`：`buildArtistsFromSongs` 加 `useSongCover`；本地/百度艺术家均用歌曲封面兜底
+- `ui/viewmodel/MainViewModel.kt`：`resolveArtistCoversAsync` 读 merged + 收敛护栏；`updateMergedData` 末尾触发；`loadArtists` 改触发 merge
+- `backend/local/ArtistCoverResolver.kt`：移除 P2 百度音乐搜索
+
+**验证结果**：
+- ✅ `:app:compileDebugKotlin` BUILD SUCCESSFUL
+- ✅ `:app:testDebugUnitTest --tests "*MusicMergerTest"` 通过
+- ✅ `./gradlew.bat assembleDebug` BUILD SUCCESSFUL
+- ✅ logcat 确认百度艺术家进入 resolveCovers 解析流程（此前仅连百度时永不解析）
+
+**注意事项**：
+- 本地/百度艺术家封面取"第一首有封面歌曲的封面"，可能是个别单曲的专辑封面而非歌手本人照片
+- 在线补全仅剩 iTunes，对中文歌手命中率低；如需歌手本人照片后续需接入可用中文歌手图 API
+- 艺术家封面补全无持久化缓存（resolvedArtistCovers 为内存 Map），App 重启后需重新解析
+
+**版本号变更**：v2.26.27 → v2.26.28（versionCode 106 → 107）
+### 10.98 v2.26.29 - 艺术家封面来源优先级链：网易云 → 酷狗 → iTunes → 歌曲封面 → 占位
+
+**提交日期**：2026-09-05
+
+**背景**：上一版本为百度/本地艺术家设歌曲封面兜底（useSongCover），但那样会跳过在线补全，无法优先拿到歌手本人照片。用户明确优先级链：网易云音乐 → 酷狗音乐 → iTunes → 该艺术家歌曲封面 → 首字母占位。
+
+**修复内容**：
+
+1. **`ArtistCoverResolver.kt`**：
+   - 新增 P1 网易云（`music.163.com/api/search/get/web?csrf_token=&s={artist}&type=100` 取 `result.artists[0].img1v1Url`，转 https）
+   - 新增 P2 酷狗（`msearch.kugou.com/api/v3/search/singer?keyword={artist}` 取 `data.info[0].img`，转 https）
+   - iTunes 降为 P3（保留原有实现）
+   - 新增 P4 `findArtistSongCover(artistName, allSongs)`：在线源全失败时，用 ArtistSplitter.normalizeKey 匹配，从全量歌曲找该艺术家第一首有封面的歌曲封面
+   - `resolveCovers` 增加 `allSongs` 参数
+2. **`MainViewModel.resolveArtistCoversAsync`**：计算全量歌曲（`_songsPaging + _localSongs + baiduIndexCache.allSongs()`）传给 `resolveCovers` 供 P4 兜底。
+3. **`MusicMerger.buildBaiduArtists`**：改回 `useSongCover=false`，百度艺术家走在线补全（优先歌手本人照片）；`buildLocalArtists` 保留 `useSongCover=true`（本地曲库大，全量在线请求会限流）。
+
+**涉及文件**：
+- `backend/local/ArtistCoverResolver.kt`：P1 网易云 + P2 酷狗 + P3 iTunes + P4 歌曲封面
+- `ui/viewmodel/MainViewModel.kt`：resolveArtistCoversAsync 传 allSongs
+- `backend/local/MusicMerger.kt`：buildBaiduArtists 改回 false
+
+**验证结果**：
+- ✅ `:app:compileDebugKotlin` BUILD SUCCESSFUL
+- ✅ `:app:testDebugUnitTest --tests "*MusicMergerTest"` 通过
+
+**注意事项**：
+- 网易云/酷狗为非官方接口，可能变动或被风控；失败时自动降级下一级，不崩（try-catch 返回 null）
+- P4 歌曲封面兜底返回的可能是个别单曲的专辑封面，非歌手本人照片；在线源命中时优先歌手照片
+- 艺术家封面补全无持久化缓存（resolvedArtistCovers 为内存 Map），App 重启后需重新解析
+- 收敛护栏 artistCoverMaxAttempts=2 限制每个艺术家最多解析 2 次，防止对 4 万+ 艺术家反复请求触发限流
+
+**版本号变更**：v2.26.28 → v2.26.29（versionCode 107 → 108）
+### 10.99 v2.26.30 - 封面持久化 + 艺术家详情页封面修复
+
+**提交日期**：2026-09-05
+
+**背景**：艺术家/专辑封面 URL 此前仅存内存（resolvedAlbumCovers/resolvedArtistCovers），App 重启丢失，每次重新网络解析（受 maxAttempts 限制但仍有请求开销）。百度专辑封面已通过 baiduIndexCache（fsId→url，JSON 文件）持久化，但 NAS/本地专辑与全部艺术家无持久化。另艺术家详情页左侧封面不显示。
+
+**新增：CoverUrlPersistentCache**（ackend/local/CoverUrlPersistentCache.kt）
+- 存储：pp filesDir/cover_url_cache.json，JSON Map<String,String>，LRU 上限 10000。
+- key 前缀：专辑 lbum:{id}、艺术家 rtist:{id}（id 跨会话稳定：后端 GUID / local_* / baidu_*）。
+- 只存稳定 HTTP URL（不存动态 dlink / data URI / content://，那些会过期或过大）。
+- 参考 MvPersistentCache 模式：init load、put save、clear/export/import。
+
+**接线**：
+- NasMusicApp：新增 coverUrlPersistentCache lazy 属性。
+- MainViewModel.resolvedAlbumCovers / esolvedArtistCovers：改为 lazy，首次访问时从持久缓存 exportAll() 预填充（lbum:/rtist: 前缀剥离）。
+- esolveAlbumCoversAsync / esolveArtistCoversAsync 回调：解析到 http 封面 URL 时同步写持久缓存（putAlbumCover/putArtistCover）。
+
+**修复：艺术家详情页左侧封面不显示**
+- 根因：AppRoot 查 selectedArtist 用 iewModel.artists（原始 _artists，NAS 未合并列表）。其 coverUrl 未应用 esolvedArtistCovers 解析缓存；且百度/本地艺术家不在 _artists 中，导致详情页左侧 coverUrl 恒 null。
+- 修复：改用 iewModel.mergedArtists（line 2286 已应用 resolvedArtistCovers 缓存），normalizeKey 匹配歌手名，详情页左侧封面正常显示。
+
+**涉及文件**：
+- ackend/local/CoverUrlPersistentCache.kt（新增）
+- NasMusicApp.kt：注入 coverUrlPersistentCache
+- ui/viewmodel/MainViewModel.kt：resolvedAlbumCovers/resolvedArtistCovers lazy 预加载 + 解析写入
+- ui/components/AppRoot.kt：ArtistDetailScreen 用 mergedArtists 找 selectedArtist
+
+**验证结果**：
+- ✅ :app:compileDebugKotlin BUILD SUCCESSFUL
+- ✅ :app:assembleDebug BUILD SUCCESSFUL
+
+**注意事项**：
+- 持久缓存只存 HTTP 封面 URL；P4 歌曲封面若是 data URI（内嵌 APIC Base64）不落盘，重启后重新解析
+- 换后端时旧专辑/艺术家 id 作废，LRU 上限 10000 自动淘汰
+- 设置页"缓存管理"的 clearCoverCache 清 Coil 图片缓存，未清 cover_url_cache.json（可按需扩展）
+
+**版本号变更**：v2.26.29 → v2.26.30（versionCode 108 → 109）

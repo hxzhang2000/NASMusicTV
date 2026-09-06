@@ -7,6 +7,39 @@
 >
 > 类型：`Added`（新增） | `Changed`（变更） | `Fixed`（修复） | `Removed`（移除）
 
+## [v2.26.30] - 2026-09-05
+
+### Added
+
+- **专辑/艺术家封面持久化**：新增 `CoverUrlPersistentCache`（`app filesDir/cover_url_cache.json`，JSON Map + LRU 10000）。专辑 key `album:{id}`、艺术家 key `artist:{id}`，只存稳定 HTTP 封面 URL（不存动态 dlink / data URI）。
+  - 写入：`resolveAlbumCoversAsync` / `resolveArtistCoversAsync` 解析到 HTTP 封面时同步写持久缓存。
+  - 读取：App 启动后 `resolvedAlbumCovers` / `resolvedArtistCovers` 懒加载从持久缓存预填充，已有封面不再重复网络解析（配合 maxAttempts 收敛护栏）。
+  - 百度专辑封面原本已通过 `baiduIndexCache`（fsId→url）持久化，统一缓存对其双写无害。
+
+### Fixed
+
+- **艺术家详情页左侧封面不显示**：`AppRoot` 查 `selectedArtist` 用的是原始 `_artists`（NAS 未合并列表），其 coverUrl 未应用 `resolvedArtistCovers` 解析缓存，且百度/本地艺术家不在其中。改用 `viewModel.mergedArtists`（已应用封面缓存）查找，详情页左侧封面正常显示。
+
+## [v2.26.29] - 2026-09-05
+
+### Changed
+
+- **艺术家封面来源优先级链**：调整为 网易云音乐 → 酷狗音乐 → iTunes → 该艺术家歌曲封面 → 首字母占位。
+  - `ArtistCoverResolver` 新增 P1 网易云（`music.163.com/api/search/get/web?type=100` 取 `result.artists[0].img1v1Url`）和 P2 酷狗（`msearch.kugou.com/api/v3/search/singer` 取 `data.info[0].img`），iTunes 降为 P3。
+  - 新增 P4 `findArtistSongCover`：在线源全失败时，从全量歌曲（NAS+本地+百度）找该艺术家第一首有封面的歌曲封面兜底。
+  - `resolveCovers` 增加 `allSongs` 参数，`resolveArtistCoversAsync` 传入全量歌曲。
+- **百度艺术家改回走在线补全**：`MusicMerger.buildBaiduArtists` 由 `useSongCover=true` 改回 `false`，保证百度艺术家优先尝试网易云/酷狗/iTunes 拿歌手本人照片，拿不到才由 P4 歌曲封面兜底。`buildLocalArtists` 保留 `useSongCover=true`（本地曲库大，全量在线请求会限流，直接用歌曲封面）。
+- **移除已下线的百度音乐 API**：`musicapi.taihe.com` DNS 解析失败，已从 `ArtistCoverResolver` 移除 P2 百度音乐搜索。
+
+## [v2.26.28] - 2026-09-05
+
+### Fixed
+
+- **百度网盘艺术家封面不解析**：艺术家封面解析 `resolveArtistCoversAsync()` 此前只在 `loadArtists()`（NAS 连接）末尾触发，而百度艺术家由 `updateMergedData()` 从索引聚合生成，仅连百度网盘时其封面永远空白。现将 `resolveArtistCoversAsync()` 移到 `updateMergedData()` 末尾与专辑封面解析并列，并改读合并后的 `_mergedArtists`（NAS + 本地 + 百度），无 NAS 时百度艺术家也能被补全。
+- **本地艺术家封面恒空**：`MusicMerger.buildLocalArtists` 生成的艺术家 coverUrl 恒为 null 且被 `ArtistCoverResolver` 跳过。现 `buildArtistsFromSongs` 新增 `useSongCover` 参数，本地艺术家取名下第一首有封面的歌曲封面兜底（侧车 cover.jpg / 内嵌 ID3 APIC）。百度艺术家同样用歌曲封面兜底（APIC 提取后即有封面）。
+- **移除已下线的百度音乐 API**：`musicapi.taihe.com` DNS 解析失败已不可用，从 `ArtistCoverResolver` 移除 P2 百度音乐搜索兜底，避免对 4 万+ 艺术家发无效请求触发限流。在线补全仅保留 iTunes。
+- **艺术家封面解析收敛护栏**：为 `resolveArtistCoversAsync` 新增 `artistCoverAttempts` / `artistCoverMaxAttempts`，与专辑封面解析一致，切断 `updateMergedData ↔ resolveArtistCoversAsync` 无成果时的重复请求循环。
+
 ## [v2.26.27] - 2026-09-05
 
 ### Fixed

@@ -153,7 +153,9 @@ object MusicMerger {
      * 合唱歌曲在每个拆分后的艺术家下都列出（songCount 累加）。
      */
     fun buildLocalArtists(localSongs: List<Song>): List<Artist> =
-        buildArtistsFromSongs(localSongs, "local_artist_")
+        // 本地艺术家无独立封面，用其名下第一首有封面的歌曲封面兜底
+        // （本地歌封面来自 LocalCoverExtractor 提取的侧车 cover.jpg / 内嵌 ID3 APIC）
+        buildArtistsFromSongs(localSongs, "local_artist_", useSongCover = true)
 
     /**
      * 从百度网盘歌曲列表构建专辑列表
@@ -210,7 +212,9 @@ object MusicMerger {
      * 合唱歌曲在每个拆分后的艺术家下都列出。
      */
     fun buildBaiduArtists(baiduSongs: List<Song>): List<Artist> =
-        buildArtistsFromSongs(baiduSongs, "baidu_artist_")
+        // 百度艺术家走在线补全（网易云→酷狗→iTunes→歌曲封面兜底，见 ArtistCoverResolver）。
+        // 不直接用歌曲封面兜底，保证能优先拿到歌手本人照片。
+        buildArtistsFromSongs(baiduSongs, "baidu_artist_", useSongCover = false)
 
     /**
      * 从任意歌曲列表构建艺术家列表（按拆分后的艺术家名去重分组）。
@@ -224,8 +228,10 @@ object MusicMerger {
      *
      * @param songs 歌曲列表（NAS 全量 / 本地设备 / 百度网盘 / 多源搜索结果均可）
      * @param idPrefix 生成 Artist.id 的前缀，便于区分来源
+     * @param useSongCover 为 true 时用该艺术家名下第一首有封面的歌曲封面作为 coverUrl
+     *                     （本地艺术家用；百度艺术家留 null 走在线 iTunes/百度补全）
      */
-    fun buildArtistsFromSongs(songs: List<Song>, idPrefix: String): List<Artist> {
+    fun buildArtistsFromSongs(songs: List<Song>, idPrefix: String, useSongCover: Boolean = false): List<Artist> {
         // key = 归一化艺术家名，value = (展示名, 歌曲列表)
         val artistMap = linkedMapOf<String, Pair<String, MutableList<Song>>>()
         for (song in songs) {
@@ -243,7 +249,8 @@ object MusicMerger {
                 id = "$idPrefix$key",
                 name = displayName,
                 songCount = artistSongs.size,
-                albumCount = artistSongs.map { it.album }.filter { it.isNotBlank() }.distinct().size
+                albumCount = artistSongs.map { it.album }.filter { it.isNotBlank() }.distinct().size,
+                coverUrl = if (useSongCover) artistSongs.firstOrNull { it.coverUrl != null }?.coverUrl else null
             )
         }
     }
