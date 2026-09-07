@@ -13,13 +13,18 @@ import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
+import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.audio.AudioSink
 import androidx.media3.exoplayer.audio.DefaultAudioSink
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import androidx.media3.session.LibraryResult
 import androidx.media3.session.MediaLibraryService
 import androidx.media3.session.MediaSession
+import coil.Coil
+import com.google.common.collect.ImmutableList
+import com.google.common.util.concurrent.Futures
 import com.nasmusic.tv.NasMusicApp
 import com.nasmusic.tv.R
 import com.nasmusic.tv.ui.MainActivity
@@ -30,10 +35,12 @@ import com.nasmusic.tv.util.AppLog
  * 基于 Media3 MediaLibraryService
  * 支持前台通知 (D-1)
  */
+@UnstableApi
 class PlaybackService : MediaLibraryService() {
 
     private var mediaLibrarySession: MediaLibrarySession? = null
     private var lastNotificationState: Pair<String?, Boolean>? = null
+    private lateinit var mediaLibraryTree: MediaLibraryTree
 
     private val playerListener = object : Player.Listener {
         override fun onIsPlayingChanged(isPlaying: Boolean) {
@@ -111,11 +118,52 @@ class PlaybackService : MediaLibraryService() {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
 
+        // 初始化媒体库树（用于 Android Auto / Wear OS 浏览）
+        mediaLibraryTree = MediaLibraryTree(this)
+
         mediaLibrarySession = MediaLibrarySession.Builder(
-            this, player, object : MediaLibrarySession.Callback {
+            this, player,
+            object : MediaLibrarySession.Callback {
+                override fun onGetLibraryRoot(
+                    session: MediaLibrarySession,
+                    controller: MediaSession.ControllerInfo,
+                    params: MediaLibraryService.LibraryParams?
+                ): com.google.common.util.concurrent.ListenableFuture<LibraryResult<MediaItem>> {
+                    return Futures.immediateFuture(
+                        LibraryResult.ofItem(mediaLibraryTree.getLibraryRoot(), params)
+                    )
+                }
+
+                override fun onGetItem(
+                    session: MediaLibrarySession,
+                    controller: MediaSession.ControllerInfo,
+                    mediaId: String
+                ): com.google.common.util.concurrent.ListenableFuture<LibraryResult<MediaItem>> {
+                    val item = mediaLibraryTree.getItem(mediaId)
+                    return if (item != null) {
+                        Futures.immediateFuture(LibraryResult.ofItem(item, null))
+                    } else {
+                        Futures.immediateFuture(LibraryResult.ofError(LibraryResult.RESULT_ERROR_BAD_VALUE))
+                    }
+                }
+
+                override fun onGetChildren(
+                    session: MediaLibrarySession,
+                    controller: MediaSession.ControllerInfo,
+                    parentId: String,
+                    page: Int,
+                    pageSize: Int,
+                    params: MediaLibraryService.LibraryParams?
+                ): com.google.common.util.concurrent.ListenableFuture<LibraryResult<ImmutableList<MediaItem>>> {
+                    val children = mediaLibraryTree.getChildren(parentId)
+                    return Futures.immediateFuture(
+                        LibraryResult.ofItemList(ImmutableList.copyOf(children), params)
+                    )
+                }
             }
         )
             .setSessionActivity(pendingIntent)
+            .setBitmapLoader(CoilBitmapLoader(Coil.imageLoader(this), this))
             .build()
 
         // Store player reference in manager + inject vocal removal processor
@@ -161,8 +209,17 @@ class PlaybackService : MediaLibraryService() {
     }
 
     override fun onTaskRemoved(rootIntent: Intent?) {
-        // 用户从最近任务列表移除应用时，停止播放和服务
-        AppLog.d("PlaybackService", "onTaskRemoved: stopping service")
+        // 用户从最近任务列表移除应用时：
+        // - 播放中 → 继续播放（不退出）
+        // - 已暂停 → 停止服务
+        val player = mediaLibrarySession?.player
+        val isPlaying = player?.isPlaying == true
+        AppLog.d("PlaybackService", "onTaskRemoved: isPlaying=$isPlaying")
+        if (isPlaying) {
+            // 播放中移除任务栏：继续播放，不退出服务
+            return
+        }
+        // 已暂停：停止服务
         stopSelf()
     }
 
