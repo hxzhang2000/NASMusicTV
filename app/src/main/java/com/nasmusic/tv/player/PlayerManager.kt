@@ -5,6 +5,7 @@ import android.media.audiofx.Equalizer
 import android.os.Handler
 import android.os.Looper
 import androidx.media3.common.MediaItem
+import androidx.media3.common.MediaMetadata
 import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
@@ -13,6 +14,7 @@ import com.nasmusic.tv.data.model.PlayMode
 import com.nasmusic.tv.data.model.Song
 import com.nasmusic.tv.data.prefs.AppPreferences
 import com.nasmusic.tv.util.AppLog
+import android.net.Uri
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -144,6 +146,12 @@ class PlayerManager(private val applicationContext: Context) {
     fun setVocalRemovalProcessor(processor: SpectralMaskProcessor) {
         vocalRemovalProcessor = processor
     }
+
+    /** 获取 ExoPlayer 实例（供 MediaLibraryTree 等需要直接访问 player 的场景） */
+    fun getPlayer(): ExoPlayer? = player
+
+    /** 获取当前播放队列的只读副本（供 MediaLibraryTree 构建媒体树） */
+    fun getQueueSnapshot(): List<Song> = _queue.value.toList()
 
     /** 开关人声消除（实时生效） */
     fun setVocalRemovalEnabled(enabled: Boolean) {
@@ -717,6 +725,30 @@ class PlayerManager(private val applicationContext: Context) {
         AppLog.d("PlayerManager", "setPlayer: player initialized")
     }
 
+    /**
+     * 构建带完整 MediaMetadata 的 MediaItem，供蓝牙/锁屏/通知等系统级显示使用。
+     *
+     * MediaMetadata 包含 title、artist、album、artworkUri 等字段，
+     * 蓝牙 AVRCP 和 MediaStyle 通知会读取这些字段显示歌曲信息和封面。
+     */
+    private fun buildMediaItem(song: Song, streamUrl: String): MediaItem {
+        val artworkUri = song.coverUrl?.takeIf { it.isNotBlank() }?.let { Uri.parse(it) }
+        val metadata = MediaMetadata.Builder()
+            .setTitle(song.title)
+            .setArtist(song.artist.ifBlank { null })
+            .setAlbumTitle(song.album.ifBlank { null })
+            .setArtworkUri(artworkUri)
+            .setTrackNumber(song.trackNumber.takeIf { it > 0 })
+            .setRecordingYear(song.year)
+            .setGenre(song.genre)
+            .build()
+        return MediaItem.Builder()
+            .setMediaId(streamUrl)
+            .setUri(Uri.parse(streamUrl))
+            .setMediaMetadata(metadata)
+            .build()
+    }
+
     fun playSong(song: Song) {
         val streamUrl = song.streamUrl ?: return
         val p = player
@@ -742,7 +774,7 @@ class PlayerManager(private val applicationContext: Context) {
             // New song — replace queue with single item and preload next if available
             _queue.value = listOf(song)
             _currentIndex.value = 0
-            val mediaItem = MediaItem.fromUri(streamUrl)
+            val mediaItem = buildMediaItem(song, streamUrl)
             try {
                 p.setMediaItem(mediaItem)
                 // Preload next item if this song is in a known queue context
@@ -771,7 +803,7 @@ class PlayerManager(private val applicationContext: Context) {
         _currentIndex.value = startIndex
 
         val mediaItems = songs.map { song ->
-            MediaItem.fromUri(song.streamUrl ?: "")
+            buildMediaItem(song, song.streamUrl ?: "")
         }
 
         try {
@@ -801,7 +833,7 @@ class PlayerManager(private val applicationContext: Context) {
         val currentQueue = _queue.value.toMutableList()
         currentQueue.addAll(songs)
         _queue.value = currentQueue
-        val mediaItems = songs.map { MediaItem.fromUri(it.streamUrl ?: "") }
+        val mediaItems = songs.map { buildMediaItem(it, it.streamUrl ?: "") }
         try {
             p.addMediaItems(mediaItems)
         } catch (e: Exception) {
