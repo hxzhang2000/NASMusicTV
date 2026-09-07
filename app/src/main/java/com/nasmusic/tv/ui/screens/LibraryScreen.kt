@@ -106,6 +106,8 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.foundation.clickable
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.focus.FocusDirection
 
 enum class LibraryTab(val titleRes: Int) {
     SEARCH(R.string.library_search),
@@ -1604,6 +1606,7 @@ private fun SideLetterIndex(
 ) {
     val allLetters = remember { PinyinUtils.getAllGroupLetters() }
     var focusedLetter by remember { mutableStateOf<Char?>(null) }
+    val focusManager = LocalFocusManager.current
 
     // 手机横屏时字母排不下，用更小尺寸 + 可滚动
     val isPhone = LocalPhoneCompact.current
@@ -1643,7 +1646,11 @@ private fun SideLetterIndex(
                     }
                     Key.DirectionLeft -> {
                         // 从字母索引条返回左侧内容区
-                        contentFocusRequester.requestFocus()
+                        // firstItemFocusRequester 绑定在 index 1，列表滚动后该 item 可能不在视口内
+                        // （未组合 → requestFocus 抛 IllegalStateException），用 runCatching 防崩溃；
+                        // 失败时用 moveFocus(Left) 回退到最近的可聚焦 grid item
+                        val focused = runCatching { contentFocusRequester.requestFocus() }.isSuccess
+                        if (!focused) focusManager.moveFocus(FocusDirection.Left)
                         true
                     }
                     else -> false
