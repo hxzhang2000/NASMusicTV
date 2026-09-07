@@ -4,11 +4,13 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.res.Configuration
+import android.net.Uri
 import android.os.Bundle
 import android.view.KeyEvent
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.activity.OnBackPressedCallback
 import androidx.core.view.WindowCompat
@@ -69,6 +71,18 @@ class MainActivity : ComponentActivity() {
     private val isImmersiveMode: MutableState<Boolean> = mutableStateOf(false)
     private lateinit var networkMonitor: NetworkMonitor
 
+    // SAF 树选择器（§8.8.4）：导出到外接设备时启动系统文件夹选择器
+    private val exportTreeLauncher = registerForActivityResult(
+        ActivityResultContracts.OpenDocumentTree()
+    ) { uri: Uri? ->
+        val app = application as NasMusicApp
+        if (uri != null) {
+            app.exportCoordinator.onTreeGranted(uri)
+        } else {
+            app.exportCoordinator.onTreeUnavailable()
+        }
+    }
+
     /**
      * 在每次 Activity 创建（含 recreate）时应用存储的语言设置。
      * resources.updateConfiguration() 仅影响 Application 级别资源，
@@ -107,6 +121,11 @@ class MainActivity : ComponentActivity() {
 
         // 手机端：检查电池优化白名单，确保后台播放稳定
         com.nasmusic.tv.player.BatteryOptimizationHelper.checkAndRequest(this)
+
+        // SAF 树选择器（§8.8.4）：注入到 ExportCoordinator，导出时启动系统文件夹选择器
+        (application as NasMusicApp).exportCoordinator.treePickLauncher = {
+            exportTreeLauncher.launch(null)
+        }
 
         setContent {
             val settings by viewModel.appSettings.collectAsState(initial = com.nasmusic.tv.data.model.AppSettings())

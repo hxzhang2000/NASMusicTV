@@ -30,7 +30,12 @@ data class AppSettings(
     // 高质量分离模型自定义下载 URL（空=用默认镜像；国内网络AWS CDN被墙时，可指向自建镜像/NAS）
     val modelDownloadUrl: String = "",
     // 语言设置："system"=跟随系统, "zh"=中文, "en"=English
-    val language: String = "system"
+    val language: String = "system",
+    // ── 离线下载（需求 6/7/8/9）──
+    val downloadEnabled: Boolean = true,       // 本地下载总开关（关=禁止一切下载，已下载仍可播放）
+    val autoDownloadOnPlay: Boolean = false,   // 播放时自动下载
+    val autoDownloadLimit: Int = 50,           // 自动下载数量上限（1-5000）
+    val downloadLocation: String = "INTERNAL"  // 下载位置（当前仅 INTERNAL，CUSTOM 为 P1 预留）
 )
 
 enum class VisualizerTheme(val displayName: String) {

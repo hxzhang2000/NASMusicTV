@@ -295,6 +295,18 @@
     <!-- Settings -->
     <string name="settings_general">通用</string>
     <string name="settings_playback">播放</string>
+    <string name="settings_download">下载</string>
+    <string name="settings_download_basic">下载设置</string>
+    <string name="settings_download_enabled">启用下载</string>
+    <string name="settings_download_enabled_desc">关闭后停止所有下载（已下载歌曲仍可播放）</string>
+    <string name="settings_auto_download_on_play">播放时自动下载</string>
+    <string name="settings_auto_download_on_play_desc">播放到未下载的歌曲时自动加入下载队列</string>
+    <string name="settings_auto_download_limit">自动下载数量上限：%d</string>
+    <string name="settings_auto_download_limit_desc">达到上限后自动下载暂停，手动下载不受限制</string>
+    <string name="settings_download_location">下载位置</string>
+    <string name="settings_download_location_internal">内部存储（默认）</string>
+    <string name="settings_download_location_custom">外部存储（自定义）</string>
+    <string name="settings_download_location_desc">外接设备导出功能可在「我的 → 下载」中使用</string>
     <string name="settings_lyrics">歌词</string>
     <string name="settings_cache">缓存管理</string>
     <string name="settings_network">网络检测</string>
@@ -497,6 +509,27 @@
     <string name="status_network_disconnected">网络已断开</string>
     <string name="status_lyrics_cache_cleared">歌词缓存已清除</string>
     <string name="status_cover_cache_cleared">封面缓存已清除</string>
+
+    <!-- Download management (§8.7.3) -->
+    <string name="download_cleared">已清空全部下载（%1$s）</string>
+    <string name="download_deleted">已删除：%1$s</string>
+    <string name="download_confirm_clear_title">清空全部下载？</string>
+    <string name="download_confirm_clear_message">此操作将删除所有已下载的歌曲，无法恢复。</string>
+    <string name="download_confirm_delete_title">删除此歌曲？</string>
+    <string name="download_confirm_delete_message">将删除已下载的歌曲文件，此操作无法恢复。</string>
+
+    <!-- Export (§8.8.9) -->
+    <string name="settings_download_export">导出到外接设备</string>
+    <string name="settings_download_export_desc">将已下载的歌曲复制到 U 盘或 SD 卡</string>
+    <string name="dialog_export_device_title">选择导出目标</string>
+    <string name="dialog_export_no_device">未检测到外接存储设备</string>
+    <string name="status_export_progress">正在导出 %1$d / %2$d</string>
+    <string name="status_export_done">导出完成：%1$d 首，跳过 %2$d 首，失败 %3$d 首</string>
+    <string name="status_export_cancelled">导出已取消，已完成 %1$d 首（可继续）</string>
+    <string name="msg_export_no_space">目标设备空间不足，需要 %1$s，可用 %2$s</string>
+    <string name="msg_export_removed">设备已断开，导出中止</string>
+    <string name="msg_export_nothing">还没有已下载的歌曲</string>
+    <string name="msg_export_fallback_path">已导出至 %1$s</string>
 
     <!-- About -->
     <string name="about_version">版本</string>

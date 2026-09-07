@@ -38,3 +38,8 @@
     public static int d(...);
     public static int v(...);
 }
+
+# jaudiotagger: Android 上不存在 java.awt / javax.imageio，忽略引用
+-dontwarn java.awt.image.BufferedImage
+-dontwarn javax.imageio.ImageIO
+-dontwarn javax.imageio.stream.ImageInputStream

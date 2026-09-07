@@ -121,6 +121,16 @@ class AppPreferences internal constructor(private val context: Context) {
     // --- 全局字体字号调整 ---
     private val keyFontAdjustment = intPreferencesKey("settings_font_adjustment")
 
+    // --- 离线下载（需求 6/7/8/9）---
+    private val keyDownloadEnabled = booleanPreferencesKey("settings_download_enabled")
+    private val keyAutoDownloadOnPlay = booleanPreferencesKey("settings_auto_download_on_play")
+    private val keyAutoDownloadLimit = intPreferencesKey("settings_auto_download_limit")
+    private val keyDownloadLocation = stringPreferencesKey("settings_download_location")
+
+    // --- 导出到外接设备：SAF 授权持久化 ---
+    private val keyExportTreeUri = stringPreferencesKey("export_tree_uri")
+    private val keyExportVolumeId = stringPreferencesKey("export_volume_id")
+
     // --- 首次曲库快捷键提示 ---
     private val keyShowLibraryShortcutHint = booleanPreferencesKey("show_library_shortcut_hint")
 
@@ -481,7 +491,11 @@ class AppPreferences internal constructor(private val context: Context) {
             spectrumEnabled = prefs[keySpectrumEnabled] ?: false,
             visualizerTheme = prefs[keyVisualizerTheme]?.let { VisualizerTheme.fromKey(it) } ?: VisualizerTheme.COLOR_FLOW,
             fontAdjustment = prefs[keyFontAdjustment] ?: 0,
-            language = prefs[keyLanguage] ?: "system"
+            language = prefs[keyLanguage] ?: "system",
+            downloadEnabled = prefs[keyDownloadEnabled] ?: true,
+            autoDownloadOnPlay = prefs[keyAutoDownloadOnPlay] ?: false,
+            autoDownloadLimit = prefs[keyAutoDownloadLimit] ?: 50,
+            downloadLocation = prefs[keyDownloadLocation] ?: "INTERNAL"
         )
     }
 
@@ -490,6 +504,17 @@ class AppPreferences internal constructor(private val context: Context) {
         dataStore.edit { it[keyFontAdjustment] = adjustment }
 
     suspend fun setDarkTheme(enabled: Boolean) = dataStore.edit { it[keyDarkTheme] = enabled }
+
+    suspend fun setDownloadEnabled(v: Boolean) = dataStore.edit { it[keyDownloadEnabled] = v }
+    suspend fun setAutoDownloadOnPlay(v: Boolean) = dataStore.edit { it[keyAutoDownloadOnPlay] = v }
+    suspend fun setAutoDownloadLimit(v: Int) = dataStore.edit { it[keyAutoDownloadLimit] = v.coerceIn(1, 5000) }
+    suspend fun setDownloadLocation(v: String) = dataStore.edit { it[keyDownloadLocation] = v }
+
+    // --- 导出 SAF 授权持久化 ---
+    val exportTreeUri: Flow<String?> = dataStore.data.map { it[keyExportTreeUri] }
+    val exportVolumeId: Flow<String?> = dataStore.data.map { it[keyExportVolumeId] }
+    suspend fun setExportTreeUri(uri: String?) = dataStore.edit { if (uri == null) it.remove(keyExportTreeUri) else it[keyExportTreeUri] = uri }
+    suspend fun setExportVolumeId(id: String?) = dataStore.edit { if (id == null) it.remove(keyExportVolumeId) else it[keyExportVolumeId] = id }
 
     suspend fun setAnimationsEnabled(enabled: Boolean) = dataStore.edit { it[keyAnimations] = enabled }
 

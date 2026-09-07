@@ -12,7 +12,13 @@ import com.nasmusic.tv.backend.BackendAdapter
 import com.nasmusic.tv.backend.FilterMode
 import com.nasmusic.tv.backend.SearchType
 import com.nasmusic.tv.backend.SearchAggregator
+import com.nasmusic.tv.backend.download.AutoDownloadController
+import com.nasmusic.tv.backend.download.SongDownloadManager
+import com.nasmusic.tv.backend.download.model.DownloadState
+import com.nasmusic.tv.backend.download.model.downloadKey
+import com.nasmusic.tv.backend.export.ExportState
 import com.nasmusic.tv.backend.local.MusicMerger
+import com.nasmusic.tv.backend.local.StorageMonitor
 import com.nasmusic.tv.backend.network.mv.MvSearchManager
 import com.nasmusic.tv.backend.network.baidu.BaiduFileIndexCache
 import com.nasmusic.tv.backend.network.baidu.BaiduOAuthClient
@@ -20,6 +26,7 @@ import com.nasmusic.tv.backend.network.baidu.BaiduPanApi
 import com.nasmusic.tv.backend.network.baidu.BaiduNetdiskConfig
 import com.nasmusic.tv.data.model.Album
 import com.nasmusic.tv.data.model.Artist
+import com.nasmusic.tv.data.model.StorageDevice
 import com.nasmusic.tv.data.model.BackupMessage
 import com.nasmusic.tv.data.model.BaiduFile
 import com.nasmusic.tv.data.model.BaiduFileIndex
@@ -919,6 +926,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
                 }
 
                 if (song != null) {
+                    // 自动下载判定链（总开关/可下载源/已下载/配额/空间）——切歌即触发，不等播放进度
+                    autoDownloadController.onSongChanged(song)
                     // 记录当前歌词来源（在 loadLyricsForCurrentSong 清除 _currentLyrics 之前）
                     lastRecordedLyricsSource = _currentLyrics.value?.source
                     loadLyricsForCurrentSong()
@@ -945,6 +954,20 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
             while (true) {
                 delay(30000)
                 lastRecordedPositionMs = progress.value
+            }
+        }
+
+        // 监听下载完成：songDownloadStates 中 Completed 数量增加时即时刷新本地曲库
+        // （SongDownloadManager.onCompleted 已把 ScannedSong 插入 local_songs，这里只需 reload）
+        viewModelScope.launch {
+            var lastCompletedCount = 0
+            songDownloadManager.downloadStates.collect { states ->
+                val completedCount = states.values.count { it is DownloadState.Completed }
+                if (completedCount > lastCompletedCount) {
+                    lastCompletedCount = completedCount
+                    _localSongs.value = nasMusicApp.localMusicRepository.loadFromCache()
+                    updateMergedData()
+                }
             }
         }
 
@@ -3314,6 +3337,19 @@ showError(getApplication<Application>().getString(R.string.play_failed_with_msg,
     private val modelDownloadManager: ModelDownloadManager
         get() = (getApplication<NasMusicApp>()).modelDownloadManager
 
+    // ===== 歌曲下载（方案：离线下载与本地存储管理）=====
+    private val songDownloadManager: SongDownloadManager
+        get() = (getApplication<NasMusicApp>()).songDownloadManager
+    private val autoDownloadController: AutoDownloadController
+        get() = (getApplication<NasMusicApp>()).autoDownloadController
+
+    /**
+     * 歌曲下载状态表 songKey → [DownloadState]。
+     * 由 [SongDownloadManager] 维护的 StateFlow，UI 列表外层 collect 一次后作为参数传入行组件。
+     */
+    val songDownloadStates: StateFlow<Map<String, DownloadState>>
+        get() = songDownloadManager.downloadStates
+
     /** 刷新模型下载状态（启动时/设置页进入时调用） */
     fun refreshModelStatus() {
         val mgr = modelDownloadManager
@@ -4171,8 +4207,183 @@ showError(getApplication<Application>().getString(R.string.play_failed_with_msg,
         prefs.setVisualizerTheme(theme)
     }
 
+    // --- 歌曲离线下载设置 ---
+    fun updateDownloadEnabled(enabled: Boolean) = viewModelScope.launch {
+        prefs.setDownloadEnabled(enabled)
+    }
+
+    fun updateAutoDownloadOnPlay(enabled: Boolean) = viewModelScope.launch {
+        prefs.setAutoDownloadOnPlay(enabled)
+    }
+
+    fun updateAutoDownloadLimit(limit: Int) = viewModelScope.launch {
+        prefs.setAutoDownloadLimit(limit)
+    }
+
+    fun updateDownloadLocation(location: String) = viewModelScope.launch {
+        prefs.setDownloadLocation(location)
+    }
+
+    /** 手动下载单曲（歌曲行 ⬇ 按钮）。受总开关与空间限制，不受自动下载配额限制 */
+    fun downloadSong(song: Song) {
+        viewModelScope.launch {
+            val key = song.downloadKey
+            val state = songDownloadStates.value[key]
+            // 已下载 / 下载中 / 已入队 → 不重复入队
+            if (state is DownloadState.Completed ||
+                state is DownloadState.Downloading ||
+                state is DownloadState.Queued
+            ) {
+                return@launch
+            }
+            songDownloadManager.enqueue(song, auto = false)
+        }
+    }
+
     fun updateFontAdjustment(adjustment: Int) = viewModelScope.launch {
         prefs.setFontAdjustment(adjustment)
+    }
+
+    // --- 下载管理（§8.7.3） ---
+
+    /**
+     * 清空所有已下载歌曲：删除文件 + 清空 download_songs + 刷新 local_songs
+     */
+    fun clearAllDownloads() {
+        viewModelScope.launch {
+            val app = getApplication<NasMusicApp>()
+            val repo = app.downloadRepository
+            val completed = repo.getCompleted()
+            if (completed.isEmpty()) return@launch
+
+            // 1. 删除所有音频文件
+            var deletedBytes = 0L
+            for (e in completed) {
+                e.audioPath?.let { path ->
+                    val f = java.io.File(path)
+                    if (f.exists()) {
+                        deletedBytes += f.length()
+                        f.delete()
+                    }
+                }
+                // 清理旁路文件
+                e.coverPath?.let { java.io.File(it).delete() }
+                e.lyricPath?.let { java.io.File(it).delete() }
+            }
+
+            // 2. 清空 download_songs 表
+            repo.deleteAll()
+
+            // 3. 从 local_songs 移除（按 storageType="DOWNLOAD" 过滤）
+            val downloadPaths = completed.mapNotNull { it.audioPath }
+            if (downloadPaths.isNotEmpty()) {
+                app.localMusicRepository.removeByPaths(downloadPaths)
+            }
+
+            // 4. 刷新内存
+            _localSongs.value = app.localMusicRepository.loadFromCache()
+            updateMergedData()
+
+            // 5. 提示
+            val msg = getApplication<Application>().getString(
+                R.string.download_cleared, deletedBytes
+            )
+            _connectMessage.value = msg
+            delay(2000)
+            _connectMessage.value = null
+        }
+    }
+
+    /**
+     * 删除单首已下载歌曲：删文件 + 删 download_songs 记录 + 从 local_songs 移除
+     */
+    fun deleteDownload(song: Song) {
+        viewModelScope.launch {
+            val app = getApplication<NasMusicApp>()
+            val repo = app.downloadRepository
+            val key = song.downloadKey
+            val entity = repo.get(key) ?: return@launch
+
+            // 1. 如果当前正在播放此歌 → 暂停
+            val current = playerManager.currentSong.value
+            if (current?.id == song.id) {
+                playerManager.pause()
+            }
+
+            // 2. 删除文件
+            var deletedBytes = 0L
+            entity.audioPath?.let { path ->
+                val f = java.io.File(path)
+                if (f.exists()) {
+                    deletedBytes = f.length()
+                    f.delete()
+                }
+            }
+            entity.coverPath?.let { java.io.File(it).delete() }
+            entity.lyricPath?.let { java.io.File(it).delete() }
+
+            // 3. 删除 download_songs 记录
+            repo.delete(key)
+
+            // 4. 从 local_songs 移除
+            entity.audioPath?.let { path ->
+                app.localMusicRepository.removeByPaths(listOf(path))
+            }
+
+            // 5. 刷新内存
+            _localSongs.value = app.localMusicRepository.loadFromCache()
+            updateMergedData()
+
+            // 6. 提示
+            val msg = getApplication<Application>().getString(
+                R.string.download_deleted, song.title
+            )
+            _connectMessage.value = msg
+            delay(2000)
+            _connectMessage.value = null
+        }
+    }
+
+    // --- 导出功能（§8.8） ---
+    private val exportCoordinator by lazy {
+        (getApplication<NasMusicApp>()).exportCoordinator
+    }
+
+    /** 导出状态（供设置页 UI 订阅） */
+    val exportState: StateFlow<ExportState> = exportCoordinator.state
+
+    /** 导出设备列表（刷新后更新） */
+    private val _exportDevices = MutableStateFlow<List<StorageDevice>>(emptyList())
+    val exportDevices: StateFlow<List<StorageDevice>> = _exportDevices.asStateFlow()
+
+    /** 设备选择弹窗显隐 */
+    private val _showExportDeviceDialog = MutableStateFlow(false)
+    val showExportDeviceDialog: StateFlow<Boolean> = _showExportDeviceDialog.asStateFlow()
+
+    /** 显示设备选择弹窗（刷新设备列表后弹出） */
+    fun showExportDeviceDialog() {
+        viewModelScope.launch {
+            val devices = nasMusicApp.storageMonitor.storageDevices.value
+            exportCoordinator.refreshDevices(devices)
+            _exportDevices.value = exportCoordinator.requestExportDevices()
+            _showExportDeviceDialog.value = true
+        }
+    }
+
+    /** 用户选择设备后触发导出 */
+    fun onExportDeviceSelected(device: StorageDevice) {
+        _showExportDeviceDialog.value = false
+        exportCoordinator.exportTo(device)
+    }
+
+    /** 用户取消导出 */
+    fun cancelExport() {
+        exportCoordinator.cancel()
+    }
+
+    /** 重置导出状态（完成后/关闭弹窗后） */
+    fun resetExportState() {
+        exportCoordinator.reset()
     }
 
     // --- E-4 缓存管理 ---

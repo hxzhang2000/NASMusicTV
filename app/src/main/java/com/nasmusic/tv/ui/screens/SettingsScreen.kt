@@ -26,6 +26,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.material.icons.filled.Audiotrack
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Storage
 import androidx.compose.runtime.Composable
@@ -69,6 +70,7 @@ import kotlinx.coroutines.withContext
 private enum class SettingsSection(val titleRes: Int) {
     GENERAL(R.string.settings_general),
     PLAYBACK(R.string.settings_playback),
+    DOWNLOAD(R.string.settings_download),
     SERVER(R.string.nav_server),
     CACHE(R.string.settings_cache),
     NETWORK(R.string.settings_network),
@@ -127,6 +129,20 @@ fun SettingsScreen(
     // 分离模式设置
     separationMode: com.nasmusic.tv.data.prefs.AppPreferences.SeparationMode = com.nasmusic.tv.data.prefs.AppPreferences.SeparationMode.FAST,
     onChangeSeparationMode: ((com.nasmusic.tv.data.prefs.AppPreferences.SeparationMode) -> Unit)? = null,
+    // 歌曲离线下载设置
+    downloadEnabled: Boolean = true,
+    autoDownloadOnPlay: Boolean = false,
+    autoDownloadLimit: Int = 50,
+    downloadLocation: String = "INTERNAL",
+    onToggleDownloadEnabled: ((Boolean) -> Unit)? = null,
+    onToggleAutoDownloadOnPlay: ((Boolean) -> Unit)? = null,
+    onChangeAutoDownloadLimit: ((Int) -> Unit)? = null,
+    onChangeDownloadLocation: ((String) -> Unit)? = null,
+    // 导出到外接设备
+    exportState: com.nasmusic.tv.backend.export.ExportState = com.nasmusic.tv.backend.export.ExportState.Idle,
+    onExportToDevice: (() -> Unit)? = null,
+    onCancelExport: (() -> Unit)? = null,
+    onResetExportState: (() -> Unit)? = null,
     // 高质量分离模型下载状态
     modelDownloaded: Boolean = false,
     modelDownloading: Boolean = false,
@@ -302,6 +318,7 @@ fun SettingsScreen(
                         val icon = when (section) {
                             SettingsSection.GENERAL -> Icons.Default.Settings
                             SettingsSection.PLAYBACK -> Icons.Default.Audiotrack
+                            SettingsSection.DOWNLOAD -> Icons.Default.Download
                             SettingsSection.SERVER -> Icons.Default.Storage
                             SettingsSection.CACHE -> Icons.Default.Settings
                             SettingsSection.NETWORK -> Icons.Default.Settings
@@ -597,6 +614,159 @@ fun SettingsScreen(
                                     val new = (coverFilterDarkOverlay + 0.1f).coerceAtMost(1f)
                                     onChangeCoverDarkOverlay(new)
                                 })
+                            }
+                        }
+                    }
+                }
+                SettingsSection.DOWNLOAD -> {
+                    item { SectionTitle(stringResource(R.string.settings_download)) }
+                    item { SubSectionTitle(stringResource(R.string.settings_download_basic)) }
+                    item {
+                        SettingSwitch(
+                            label = stringResource(R.string.settings_download_enabled),
+                            description = stringResource(R.string.settings_download_enabled_desc),
+                            checked = downloadEnabled,
+                            onClick = { onToggleDownloadEnabled?.invoke(!downloadEnabled) }
+                        )
+                    }
+                    item {
+                        SettingSwitch(
+                            label = stringResource(R.string.settings_auto_download_on_play),
+                            description = stringResource(R.string.settings_auto_download_on_play_desc),
+                            checked = autoDownloadOnPlay,
+                            enabled = downloadEnabled,
+                            onClick = { onToggleAutoDownloadOnPlay?.invoke(!autoDownloadOnPlay) }
+                        )
+                    }
+                    // 自动下载数量上限（手动下载不受限）
+                    item { Spacer(modifier = Modifier.height(12.dp)) }
+                    item {
+                        Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp)) {
+                            Text(
+                                text = stringResource(R.string.settings_auto_download_limit, autoDownloadLimit),
+                                color = NasMusicColors.TextPrimary,
+                                fontSize = FontSize.button()
+                            )
+                            Text(
+                                text = stringResource(R.string.settings_auto_download_limit_desc),
+                                color = NasMusicColors.TextSecondary,
+                                fontSize = FontSize.body()
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                                AdjustButton("-", onClick = {
+                                    onChangeAutoDownloadLimit?.invoke((autoDownloadLimit - 10).coerceAtLeast(1))
+                                })
+                                Text(text = autoDownloadLimit.toString(), color = NasMusicColors.TextPrimary, fontSize = FontSize.title())
+                                AdjustButton("+", onClick = {
+                                    onChangeAutoDownloadLimit?.invoke((autoDownloadLimit + 10).coerceAtMost(5000))
+                                })
+                            }
+                        }
+                    }
+                    // 下载位置
+                    item { Spacer(modifier = Modifier.height(12.dp)) }
+                    item { SubSectionTitle(stringResource(R.string.settings_download_location)) }
+                    item {
+                        Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp)) {
+                            Text(
+                                text = if (downloadLocation == "CUSTOM") stringResource(R.string.settings_download_location_custom) else stringResource(R.string.settings_download_location_internal),
+                                color = NasMusicColors.TextPrimary,
+                                fontSize = FontSize.button()
+                            )
+                            Text(
+                                text = stringResource(R.string.settings_download_location_desc),
+                                color = NasMusicColors.TextSecondary,
+                                fontSize = FontSize.body()
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                AdjustButton("内", onClick = { onChangeDownloadLocation?.invoke("INTERNAL") })
+                                AdjustButton("外", onClick = { onChangeDownloadLocation?.invoke("CUSTOM") })
+                            }
+                        }
+                    }
+                    // 导出到外接设备（§8.8.9）
+                    item { Spacer(modifier = Modifier.height(12.dp)) }
+                    item { SubSectionTitle(stringResource(R.string.settings_download_export)) }
+                    item {
+                        Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp)) {
+                            Text(
+                                text = stringResource(R.string.settings_download_export_desc),
+                                color = NasMusicColors.TextSecondary,
+                                fontSize = FontSize.body()
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            when (val state = exportState) {
+                                is com.nasmusic.tv.backend.export.ExportState.Running -> {
+                                    // 导出进行中：进度条 + 取消按钮
+                                    Text(
+                                        text = stringResource(R.string.status_export_progress, state.done, state.total),
+                                        color = NasMusicColors.Primary,
+                                        fontSize = FontSize.button()
+                                    )
+                                    if (state.current.isNotEmpty()) {
+                                        Text(
+                                            text = state.current,
+                                            color = NasMusicColors.TextSecondary,
+                                            fontSize = FontSize.small()
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    // 自定义进度条（TV Material3 无 LinearProgressIndicator）
+                                    val progress = if (state.total > 0) state.done.toFloat() / state.total else 0f
+                                    Box(
+                                        modifier = Modifier.fillMaxWidth().height(6.dp)
+                                            .clip(RoundedCornerShape(3.dp))
+                                            .background(NasMusicColors.TextSecondary.copy(alpha = 0.3f))
+                                    ) {
+                                        Box(
+                                            modifier = Modifier.fillMaxHeight()
+                                                .fillMaxWidth(progress.coerceIn(0f, 1f))
+                                                .background(NasMusicColors.Primary)
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    AdjustButton("X", onClick = { onCancelExport?.invoke() })
+                                }
+                                is com.nasmusic.tv.backend.export.ExportState.Completed -> {
+                                    Text(
+                                        text = stringResource(R.string.status_export_done, state.done, state.skipped),
+                                        color = NasMusicColors.Primary,
+                                        fontSize = FontSize.button()
+                                    )
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    AdjustButton(stringResource(R.string.common_confirm), onClick = { onResetExportState?.invoke() })
+                                }
+                                is com.nasmusic.tv.backend.export.ExportState.Failed -> {
+                                    val errMsg = when (state.reason) {
+                                        com.nasmusic.tv.backend.export.ExportError.NO_DEVICE -> stringResource(R.string.dialog_export_no_device)
+                                        com.nasmusic.tv.backend.export.ExportError.NO_PERMISSION -> stringResource(R.string.dialog_export_no_device)
+                                        com.nasmusic.tv.backend.export.ExportError.NO_SPACE -> stringResource(R.string.msg_export_no_space)
+                                        com.nasmusic.tv.backend.export.ExportError.NOTHING_TO_EXPORT -> stringResource(R.string.msg_export_nothing)
+                                        else -> stringResource(R.string.status_export_cancelled)
+                                    }
+                                    Text(text = errMsg, color = Color.Red, fontSize = FontSize.button())
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    AdjustButton(stringResource(R.string.common_confirm), onClick = { onResetExportState?.invoke() })
+                                }
+                                is com.nasmusic.tv.backend.export.ExportState.Cancelled -> {
+                                    Text(
+                                        text = stringResource(R.string.status_export_cancelled),
+                                        color = NasMusicColors.TextSecondary,
+                                        fontSize = FontSize.button()
+                                    )
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    AdjustButton(stringResource(R.string.common_confirm), onClick = { onResetExportState?.invoke() })
+                                }
+                                else -> {
+                                    // Idle / Preparing → 显示导出按钮
+                                    SettingActionButton(
+                                        label = stringResource(R.string.settings_download_export),
+                                        description = "",
+                                        onClick = { onExportToDevice?.invoke() }
+                                    )
+                                }
                             }
                         }
                     }

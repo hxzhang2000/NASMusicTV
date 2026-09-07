@@ -7,6 +7,7 @@ enum class StorageType {
     INTERNAL,   // 内置存储
     EXTERNAL,   // 外部 SD 卡
     USB,        // USB 存储
+    DOWNLOAD,   // 应用专属目录下载的歌曲（与 INTERNAL/USB/EXTERNAL 并列；始终挂载、独立删除判定）
     UNKNOWN
 }
 

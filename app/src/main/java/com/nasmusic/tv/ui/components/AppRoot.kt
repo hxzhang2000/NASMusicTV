@@ -106,6 +106,7 @@ fun AppRoot(
     val lyricsAvailability by viewModel.lyricsAvailability.collectAsState(initial = com.nasmusic.tv.data.model.LyricsAvailability())
     val lyricsHighlightMode by viewModel.lyricsHighlightMode.collectAsState(initial = com.nasmusic.tv.data.model.LyricsHighlightMode.LINE_BY_LINE)
     val networkCoverUrl by viewModel.networkCoverUrl.collectAsState(initial = null)
+    val songDownloadStates by viewModel.songDownloadStates.collectAsState(initial = emptyMap())
     val albums by viewModel.albums.collectAsState(initial = UiState.Loading as UiState<List<Album>>)
     val songs by viewModel.songs.collectAsState(initial = UiState.Loading as UiState<List<Song>>)
     val queue by viewModel.queue.collectAsState(initial = emptyList())
@@ -584,7 +585,10 @@ fun AppRoot(
                         artistScrollIndex = artistScrollIndex,
                         artistScrollOffset = artistScrollOffset,
                         onAlbumScrollPositionChange = { index, offset -> viewModel.saveAlbumScrollPosition(index, offset) },
-                        onArtistScrollPositionChange = { index, offset -> viewModel.saveArtistScrollPosition(index, offset) }
+                        onArtistScrollPositionChange = { index, offset -> viewModel.saveArtistScrollPosition(index, offset) },
+                        // ── 歌曲下载状态 ──
+                        downloadStates = songDownloadStates,
+                        onDownloadSong = { song -> viewModel.downloadSong(song) }
                     )
                 }
                 Screen.Mine -> {
@@ -633,7 +637,10 @@ fun AppRoot(
                         // 功能入口（手机端底部导航未覆盖：队列 / 网盘 / 设置）
                         onOpenQueue = { viewModel.navigateTo(Screen.Queue) },
                         onOpenNetdisk = { viewModel.navigateTo(Screen.Netdisk) },
-                        onOpenSettings = { viewModel.navigateTo(Screen.Settings) }
+                        onOpenSettings = { viewModel.navigateTo(Screen.Settings) },
+                        // 歌曲下载状态
+                        downloadStates = songDownloadStates,
+                        onDownloadSong = { song -> viewModel.downloadSong(song) }
                     )
                 }
                 Screen.Queue -> {
@@ -786,7 +793,21 @@ fun AppRoot(
                     onDownloadModel = { viewModel.downloadModel() },
                     onDeleteModel = { viewModel.deleteModel() },
                     onRefreshModelStatus = { viewModel.refreshModelStatus() },
-                    onScanTransferModel = { showModelTransferDialog = true }
+                    onScanTransferModel = { showModelTransferDialog = true },
+                    // 歌曲离线下载设置
+                    downloadEnabled = settings.downloadEnabled,
+                    autoDownloadOnPlay = settings.autoDownloadOnPlay,
+                    autoDownloadLimit = settings.autoDownloadLimit,
+                    downloadLocation = settings.downloadLocation,
+                    onToggleDownloadEnabled = { viewModel.updateDownloadEnabled(it) },
+                    onToggleAutoDownloadOnPlay = { viewModel.updateAutoDownloadOnPlay(it) },
+                    onChangeAutoDownloadLimit = { viewModel.updateAutoDownloadLimit(it) },
+                    onChangeDownloadLocation = { viewModel.updateDownloadLocation(it) },
+                    // 导出到外接设备
+                    exportState = viewModel.exportState.collectAsState().value,
+                    onExportToDevice = { viewModel.showExportDeviceDialog() },
+                    onCancelExport = { viewModel.cancelExport() },
+                    onResetExportState = { viewModel.resetExportState() }
                     )
                     // 扫码传输备份弹窗
                     if (showBackupTransferDialog) {
@@ -842,7 +863,9 @@ fun AppRoot(
                             onToggleQueue = { song -> viewModel.toggleQueueSong(song) },
                             favoriteIds = favoriteIds,
                             onToggleFavorite = { song -> viewModel.toggleFavorite(song) },
-                            onAddToPlaylist = { song -> pickerSong = song }
+                            onAddToPlaylist = { song -> pickerSong = song },
+                            downloadStates = songDownloadStates,
+                            onDownloadSong = { song -> viewModel.downloadSong(song) }
                         )
                     }
                 }
@@ -879,7 +902,9 @@ fun AppRoot(
                             onToggleQueue = { song -> viewModel.toggleQueueSong(song) },
                             favoriteIds = favoriteIds,
                             onToggleFavorite = { song -> viewModel.toggleFavorite(song) },
-                            onAddToPlaylist = { song -> pickerSong = song }
+                            onAddToPlaylist = { song -> pickerSong = song },
+                            downloadStates = songDownloadStates,
+                            onDownloadSong = { song -> viewModel.downloadSong(song) }
                         )
                     }
                 }
@@ -952,7 +977,9 @@ fun AppRoot(
                         onSwitchMood = { mood ->
                             viewModel.switchWeatherMood(mood)
                         },
-                        onBack = { viewModel.navigateTo(Screen.Home) }
+                        onBack = { viewModel.navigateTo(Screen.Home) },
+                        downloadStates = songDownloadStates,
+                        onDownloadSong = { song -> viewModel.downloadSong(song) }
                     )
                 }
             }

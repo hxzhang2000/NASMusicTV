@@ -172,6 +172,9 @@ dependencies {
     implementation("androidx.room:room-ktx:2.7.1")
     ksp("androidx.room:room-compiler:2.7.1")
 
+    // jaudiotagger (音频元数据读写：封面/歌词内嵌，LGPL；GPL v3 项目整体合规)
+    implementation("net.jthink:jaudiotagger:3.0.1")
+
     // Testing
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.7.3")

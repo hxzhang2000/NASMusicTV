@@ -22,10 +22,11 @@ enum class MusicSourceType(
     RADIO("电台", "📻", Color(0xFFA78BFA)),          // 紫色
     JAMENDO("Jamendo", "♪", Color(0xFFF472B6)),     // 粉色
     WEATHER_RADIO("天气电台", "🌤", Color(0xFF67E8F9)), // 天蓝色
-    LOCAL("本地", "📱", Color(0xFFFB923C));          // 橙色（本地音乐）
+    LOCAL("本地", "📱", Color(0xFFFB923C)),          // 橙色（本地音乐）
+    DOWNLOAD("已下载", "⬇", Color(0xFF22D3EE));      // 青色（应用专属目录下载的歌曲）
 
     companion object {
-        /** 默认参与搜索的来源（排除 RADIO / WEATHER_RADIO，它们不是搜索源） */
+        /** 默认参与搜索的来源（排除 RADIO / WEATHER_RADIO / DOWNLOAD，它们不是搜索源） */
         val DEFAULT_SEARCH_SOURCES: Set<MusicSourceType> = setOf(
             NAS,
             NETWORK_MUSIC,
@@ -44,6 +45,8 @@ enum class MusicSourceType(
  */
 val Song.sourceType: MusicSourceType
     get() = when {
+        // 已下载歌曲优先识别（path 在应用专属目录且 storageType="DOWNLOAD"）
+        storageType == "DOWNLOAD" -> MusicSourceType.DOWNLOAD
         // 本地音乐优先识别
         isLocalSong -> MusicSourceType.LOCAL
         !isNetworkSong -> MusicSourceType.NAS
@@ -70,6 +73,7 @@ data class RankedSong(
         /** 来源优先级排序（数值越小优先级越高） */
         private val SOURCE_PRIORITY = mapOf(
             MusicSourceType.LOCAL to 0,
+            MusicSourceType.DOWNLOAD to 0,    // 已下载与本地同等优先级（均为本地可播）
             MusicSourceType.NAS to 1,
             MusicSourceType.NETWORK_MUSIC to 2,
             MusicSourceType.BAIDU_PAN to 3,

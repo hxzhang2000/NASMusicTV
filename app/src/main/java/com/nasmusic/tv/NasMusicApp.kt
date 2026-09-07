@@ -40,8 +40,10 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import okhttp3.OkHttpClient
+import java.io.File
 
 /**
  * Application 类 — 手动 DI 容器
@@ -94,6 +96,34 @@ class NasMusicApp : Application(), ImageLoaderFactory {
     /** 高质量人声分离模型下载管理器（HT-Demucs FT ONNX） */
     lateinit var modelDownloadManager: ModelDownloadManager
         private set
+
+    // ---- 离线下载组件（需求 6/7/8/9/10）----
+    /** 下载索引仓库（downloads.db） */
+    lateinit var downloadRepository: com.nasmusic.tv.backend.download.DownloadRepository
+        private set
+    /** 存储空间守护 */
+    lateinit var storageGuard: com.nasmusic.tv.backend.download.StorageGuard
+        private set
+    /** 下载编排器（串行队列 / 状态机 / 进度 / 重试） */
+    lateinit var songDownloadManager: com.nasmusic.tv.backend.download.SongDownloadManager
+        private set
+    /** 播放时自动下载控制器 */
+    lateinit var autoDownloadController: com.nasmusic.tv.backend.download.AutoDownloadController
+        private set
+    /** 导出到外接设备协调器 */
+    lateinit var exportCoordinator: com.nasmusic.tv.backend.export.ExportCoordinator
+        private set
+
+    /** 懒构造 LyricsManager（供下载器歌词注入；与 MainViewModel 共用同一后端/网络上下文） */
+    private val downloadLyricsManager: com.nasmusic.tv.lyrics.LyricsManager by lazy {
+        com.nasmusic.tv.lyrics.LyricsManager(
+            this,
+            backendRegistry,
+            networkMusicManager,
+            kugouBaseUrl = appPreferences.getLyricsKugouBaseUrlSync(),
+            neteaseBaseUrl = appPreferences.getLyricsNeteaseBaseUrlSync()
+        )
+    }
 
     // ---- 百度网盘组件（懒构造，仅在用户开启百度源时实例化）----
     /** 百度专用 OkHttpClient（守护线程池 + 信任所有证书 + 百度 UA 拦截器复用） */
@@ -202,6 +232,121 @@ class NasMusicApp : Application(), ImageLoaderFactory {
         localMusicRepository = LocalMusicRepository(this, localMusicDao, MusicScanner(this))
         storageMonitor = StorageMonitor(this)
         storageMonitor.startListening()
+
+        // 离线下载组件（需求 6/7/8/9/10）
+        downloadRepository = com.nasmusic.tv.backend.download.DownloadRepository(this)
+        val downloadDao = downloadRepository.getDao()
+        // 让本地曲库合并下载目录（扫描短路 MMR）与删除判定分支用
+        localMusicRepository.attachDownloadSource(
+            downloadDao,
+            downloadRootProvider = { getExternalFilesDir(android.os.Environment.DIRECTORY_MUSIC) }
+        )
+        storageGuard = com.nasmusic.tv.backend.download.StorageGuard(
+            this,
+            rootProvider = { getExternalFilesDir(android.os.Environment.DIRECTORY_MUSIC) ?: File(filesDir, "music") }
+        )
+        val downloadResolver = com.nasmusic.tv.backend.download.StreamUrlResolver(
+            adapter = { backendRegistry.getAdapter() },
+            network = { song -> networkMusicManager.resolvePlayUrl(song) },
+            baidu = { song -> networkMusicManager.resolvePlayUrl(song) }
+        )
+        val pathBuilder = com.nasmusic.tv.backend.download.DownloadPathBuilder {
+            getExternalFilesDir(android.os.Environment.DIRECTORY_MUSIC) ?: File(filesDir, "music")
+        }
+        val coverWriter = com.nasmusic.tv.backend.download.CoverFileWriter(
+            baiduOkHttpClient,
+            networkMusicManager,
+            itunesCoverSearcher,
+            artistCoverResolver
+        )
+        songDownloadManager = com.nasmusic.tv.backend.download.SongDownloadManager(
+            context = this,
+            scope = applicationScope,
+            repo = downloadRepository,
+            storage = storageGuard,
+            paths = pathBuilder,
+            resolver = downloadResolver,
+            tagWriter = com.nasmusic.tv.backend.download.MediaTagWriter,
+            coverWriter = coverWriter,
+            lyricsProvider = { song ->
+                val lyr = downloadLyricsManager.getLyrics(song)
+                if (lyr != null) com.nasmusic.tv.lyrics.LrcParser.toLrcText(lyr) else null
+            },
+            settings = {
+                com.nasmusic.tv.backend.download.model.DownloadSettings(
+                    downloadEnabled = appPreferences.appSettings.first().downloadEnabled,
+                    autoDownloadOnPlay = appPreferences.appSettings.first().autoDownloadOnPlay,
+                    autoDownloadLimit = appPreferences.appSettings.first().autoDownloadLimit,
+                    downloadLocation = appPreferences.appSettings.first().downloadLocation
+                )
+            },
+            onNotify = { msg ->
+                // 通过 MainViewModel 的 errorMessage 通道提示（无耦合：只发一个 Application 级回调由 UI 层接）
+                // 这里直接回调给 MainViewModel.showError，由 MainViewModel 在 init 时注册
+                com.nasmusic.tv.util.AppLog.d("NasMusicApp", "download notify: $msg")
+            },
+            onCompleted = { entity ->
+                // §7.5.5 即时入库：把下载完成的实体构建为 ScannedSong 插入 local_songs，
+                // 之后刷新 _localSongs（由 MainViewModel 监听 observeCompleted 自行处理，
+                // 这里只负责落库，保证 storageType="DOWNLOAD" 且 MusicSourceType.DOWNLOAD 徽章可命中）
+                runCatching {
+                    val mediaStoreId = com.nasmusic.tv.util.HashUtils.stablePathHash64(entity.audioPath ?: entity.songKey)
+                    val scanned = com.nasmusic.tv.backend.local.ScannedSong(
+                        mediaStoreId = mediaStoreId,
+                        title = entity.title,
+                        artist = entity.artist,
+                        album = entity.album,
+                        albumId = mediaStoreId,
+                        duration = entity.durationMs,
+                        size = entity.fileSize,
+                        dateAdded = entity.completedAt ?: System.currentTimeMillis(),
+                        mimeType = when (entity.containerExt.lowercase()) {
+                            "mp3" -> "audio/mpeg"
+                            "flac" -> "audio/flac"
+                            "m4a" -> "audio/mp4"
+                            "aac" -> "audio/aac"
+                            "ogg" -> "audio/ogg"
+                            "opus" -> "audio/opus"
+                            "wav" -> "audio/wav"
+                            else -> "audio/*"
+                        },
+                        contentUri = android.net.Uri.fromFile(java.io.File(entity.audioPath ?: return@runCatching)),
+                        volumeName = "local_download",
+                        storageType = com.nasmusic.tv.data.model.StorageType.DOWNLOAD
+                    )
+                    localMusicRepository.upsertDownloaded(scanned)
+                }.onFailure {
+                    com.nasmusic.tv.util.AppLog.w("NasMusicApp", "onCompleted upsert failed: ${it.message}", it)
+                }
+            }
+        )
+        autoDownloadController = com.nasmusic.tv.backend.download.AutoDownloadController(
+            settings = {
+                com.nasmusic.tv.backend.download.model.DownloadSettings(
+                    downloadEnabled = appPreferences.appSettings.first().downloadEnabled,
+                    autoDownloadOnPlay = appPreferences.appSettings.first().autoDownloadOnPlay,
+                    autoDownloadLimit = appPreferences.appSettings.first().autoDownloadLimit,
+                    downloadLocation = appPreferences.appSettings.first().downloadLocation
+                )
+            },
+            repo = downloadRepository,
+            storage = storageGuard,
+            resolver = downloadResolver,
+            manager = songDownloadManager,
+            notify = { msg -> com.nasmusic.tv.util.AppLog.d("NasMusicApp", "auto-dl: $msg") },
+            scope = applicationScope
+        )
+        exportCoordinator = com.nasmusic.tv.backend.export.ExportCoordinator(
+            context = this,
+            appPreferences = appPreferences,
+            downloadRepository = downloadRepository,
+            downloadPathBuilder = pathBuilder
+        )
+
+        // 存储守护启动 + 崩溃恢复 + MediaTagWriter 全局配置
+        com.nasmusic.tv.backend.download.MediaTagWriter.configure()
+        storageGuard.start(applicationScope)
+        applicationScope.launch { songDownloadManager.recoverAfterCrash() }
 
         // 跨源搜索聚合器（注入本地音乐源，检测 TV 设备以启用拼音搜索）
         val isTVDevice = packageManager.hasSystemFeature("android.software.leanback") ||

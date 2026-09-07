@@ -295,6 +295,18 @@
     <!-- Settings -->
     <string name="settings_general">General</string>
     <string name="settings_playback">Playback</string>
+    <string name="settings_download">Downloads</string>
+    <string name="settings_download_basic">Download Settings</string>
+    <string name="settings_download_enabled">Enable Downloads</string>
+    <string name="settings_download_enabled_desc">Disable to stop all downloads (downloaded songs still playable)</string>
+    <string name="settings_auto_download_on_play">Auto-download on play</string>
+    <string name="settings_auto_download_on_play_desc">Auto-queue undownloaded songs when played</string>
+    <string name="settings_auto_download_limit">Auto-download limit: %d</string>
+    <string name="settings_auto_download_limit_desc">Pauses auto-download at limit; manual downloads are unlimited</string>
+    <string name="settings_download_location">Download Location</string>
+    <string name="settings_download_location_internal">Internal storage (default)</string>
+    <string name="settings_download_location_custom">External storage (custom)</string>
+    <string name="settings_download_location_desc">Export to external devices via "Profile → Downloads"</string>
     <string name="settings_lyrics">Lyrics</string>
     <string name="settings_cache">Cache Management</string>
     <string name="settings_network">Network Test</string>
@@ -491,6 +503,27 @@
     <string name="status_network_disconnected">Network disconnected</string>
     <string name="status_lyrics_cache_cleared">Lyrics cache cleared</string>
     <string name="status_cover_cache_cleared">Cover cache cleared</string>
+
+    <!-- Download management (§8.7.3) -->
+    <string name="download_cleared">All downloads cleared (%1$s)</string>
+    <string name="download_deleted">Deleted: %1$s</string>
+    <string name="download_confirm_clear_title">Clear all downloads?</string>
+    <string name="download_confirm_clear_message">This will delete all downloaded songs. This cannot be undone.</string>
+    <string name="download_confirm_delete_title">Delete this song?</string>
+    <string name="download_confirm_delete_message">The downloaded file will be deleted. This cannot be undone.</string>
+
+    <!-- Export (§8.8.9) -->
+    <string name="settings_download_export">Export to external device</string>
+    <string name="settings_download_export_desc">Copy downloaded songs to a USB drive or SD card</string>
+    <string name="dialog_export_device_title">Choose export destination</string>
+    <string name="dialog_export_no_device">No external storage device detected</string>
+    <string name="status_export_progress">Exporting %1$d / %2$d</string>
+    <string name="status_export_done">Export finished: %1$d done, %2$d skipped, %3$d failed</string>
+    <string name="status_export_cancelled">Export cancelled, %1$d done (resumable)</string>
+    <string name="msg_export_no_space">Not enough space on target: needs %1$s, available %2$s</string>
+    <string name="msg_export_removed">Device disconnected, export aborted</string>
+    <string name="msg_export_nothing">No downloaded songs yet</string>
+    <string name="msg_export_fallback_path">Exported to %1$s</string>
 
     <!-- About -->
     <string name="about_version">Version</string>

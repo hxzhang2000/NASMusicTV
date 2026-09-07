@@ -7310,3 +7310,106 @@ val result = with(kotlinx.coroutines.Dispatchers.IO) { separator.separate(...) }
 - L2 厂商增强（华为实况窗 Notification extra、OPPO 跨设备 SDK 等）暂不开发，待 L1 实测后评估
 
 **版本号变更**：v2.26.30 → v2.26.31（versionCode 109 → 110）
+
+### 10.101 v2.26.31 锁屏通知与媒体按钮修复
+
+**问题描述**：
+
+1. 锁屏点击上一首/下一首按钮后，歌曲不自动播放
+2. 通知栏显示"已暂停，正在..."截断文字
+
+**根因分析**：
+
+1. `buildMediaButtonPendingIntent` 使用 `PendingIntent.getBroadcast` 发送 `ACTION_MEDIA_BUTTON`，但 manifest 未注册 `MediaButtonReceiver`，广播无人接收
+2. `contentText` 设为播放状态文字（"已暂停"/"正在播放"），在锁屏界面被截断
+
+**修复内容**：
+
+1. **`PlaybackService.kt`** — `buildMediaButtonPendingIntent` 改用 `PendingIntent.getService`，直接发送到 `PlaybackService`，`MediaLibraryService.onStartCommand` 自动路由到 `MediaSession`
+2. **`PlaybackService.kt`** — `buildNotification` 的 `contentText` 从播放状态文字改为显示歌手名，播放状态由 MediaStyle 图标隐含表示
+
+**涉及文件**：
+- `player/PlaybackService.kt`：修复 `buildMediaButtonPendingIntent` + `buildNotification`
+
+**验证结果**：
+- ✅ `:app:compileDebugKotlin` BUILD SUCCESSFUL
+- ✅ 手机端测试通过：锁屏上一首/下一首按钮正常工作，通知栏显示歌名 + 歌手名
+
+---
+
+### 10.102 v2.26.32 - 歌曲离线下载与本地存储管理（Tasks 1-15, 17）
+
+**提交日期**：2026-09-06
+
+**背景**：实现 `docs/歌曲离线下载与本地存储管理开发方案.md` 设计方案，完成歌曲离线下载、本地存储管理和导出到外接设备功能。
+
+**实现内容**：
+
+#### 1. 下载后端基础设施（Tasks 1-9）
+- **`backend/download/DownloadDatabase`** — 独立 Room 数据库（downloads.db, v1），含 `DownloadSongEntity` + `ExportRecordEntity`，不并入 LocalMusicDatabase（避免 destructive migration 丢数据）
+- **`backend/download/DownloadPathBuilder`** — 目录与文件名构造器，支持艺术家/专辑/标题清洗、曲目号前缀、同名文件去重、空目录回收
+- **`backend/download/DownloadRepository`** — 下载索引 CRUD + 统计封装，提供 `reindexFromDisk()` 兜底、`toUiState()` 映射
+- **`backend/download/SongDownloadManager`** — 下载执行器，支持串行队列、超时监控、空间检测、去重校验
+- **`backend/download/CoverFileWriter`** — 封面文件写入（artist.jpg / cover.jpg）
+- **`backend/download/MediaTagWriter`** — ID3/FLAC 内嵌元数据写入（封面+歌词）
+- **`backend/download/StreamUrlResolver`** — 流地址解析（网络歌曲下载前重新解析）
+- **`backend/download/StorageGuard`** — 存储空间守护，双 StatFs 取 min、100MB 预留、30s 轮询、节流提示
+- **`backend/download/AutoDownloadController`** — 自动下载控制器，播放 ≥5s 触发、配额限制、5分钟提示节流
+
+#### 2. 设置页 UI 与集成（Task 10）
+- **`SettingsScreen.kt`** — 新增 DOWNLOAD 区块：自动下载开关、最大下载数量滑块、存储空间显示、已下载歌曲统计、清空下载按钮、导出到外接设备入口
+- **`AppRoot.kt`** — 参数链传递：下载状态、自动下载开关、存储空间、已下载统计等 8 个参数
+- **`strings.xml` / `strings.xml (en)`** — 12 条下载相关字符串资源
+
+#### 3. 自动下载集成（Task 11）
+- **`AutoDownloadController`** — 播放 ≥5s 触发下载、配额限制（默认50）、5分钟提示节流
+- **`MainViewModel`** — 集成 AutoDownloadController，监听播放状态变化
+
+#### 4. 歌曲行下载按钮（Task 12）
+- **`UnifiedSongRow`** — 重构为 16 个调用点，新增 `SongRowModeRow` 模式支持下载按钮
+- 下载按钮状态：Idle（⬇）、Queued（⋯）、Downloading（⇣ 进度%）、Completed（✓）、Failed（✕）
+
+#### 5. 下载完成与管理（Task 14）
+- **`ConfirmDialog`** — 删除已下载歌曲二次确认弹窗
+- **`MainViewModel`** — `clearAllDownloads()`、`deleteDownload()` 方法
+- 下载完成回调：更新 UI 状态、触发媒体扫描
+
+#### 6. 导出到外接设备（Task 15）
+- **`backend/export/ExportCoordinator`** — 导出协调器，编排 SAF 授权/设备探测/导出执行
+- **`backend/export/SongExporter`** — 导出执行器，字节复制、增量过滤、可取消/可续跑
+- **`backend/export/ExportPermissionHelper`** — SAF 权限辅助，TV 桩实现探测、持久化授权校验
+- **`ui/components/ExportDeviceDialog.kt`** — 设备选择对话框
+- **`MainActivity.kt`** — SAF 树选择器 `registerForActivityResult(ActivityResultContracts.OpenDocumentTree())`
+- **导出状态机**：Idle → Preparing → Running → Completed/Failed/Cancelled
+- **导出错误枚举**：NO_DEVICE、NO_PERMISSION、NO_SPACE、DEVICE_REMOVED、IO、NOTHING_TO_EXPORT
+
+#### 7. 单元测试（Task 17）
+- **`DownloadPathBuilderTest`** — 25 个测试用例，覆盖 sanitize()、extOf()、build()、cleanupEmptyDirs()
+- **`ExportStateTest`** — 13 个测试用例，覆盖状态创建、属性、错误枚举
+
+**涉及文件**：
+- `backend/download/` — DownloadDatabase, DownloadPathBuilder, DownloadRepository, SongDownloadManager, CoverFileWriter, MediaTagWriter, StreamUrlResolver, StorageGuard, AutoDownloadController
+- `backend/export/` — ExportCoordinator, SongExporter, ExportPermissionHelper
+- `backend/download/db/` — DownloadSongEntity, ExportRecordEntity, DownloadSongDao, ExportRecordDao, DownloadDatabase
+- `backend/download/model/` — DownloadState
+- `ui/screens/SettingsScreen.kt` — DOWNLOAD 区块 + 导出 UI
+- `ui/components/AppRoot.kt` — 参数链
+- `ui/components/ExportDeviceDialog.kt` — 设备选择对话框
+- `ui/viewmodel/MainViewModel.kt` — 导出方法、下载管理
+- `ui/MainActivity.kt` — SAF 树选择器
+- `res/values/strings.xml` / `res/values-en/strings.xml` — 12 条下载字符串
+- `app/src/test/.../DownloadPathBuilderTest.kt` — 25 个测试
+- `app/src/test/.../ExportStateTest.kt` — 13 个测试
+
+**验证结果**：
+- ✅ `:app:compileDebugKotlin` BUILD SUCCESSFUL
+- ✅ `:app:testDebugUnitTest` — 38 个测试全部通过
+- ✅ 下载流程：点击下载 → 文件落在 Music/\<歌手\>/\<专辑\>/ → 重启后仍可离线播放
+- ✅ 导出流程：设置页 → 导出到外接设备 → 选择 U 盘 → SAF 授权 → 字节复制 → NASMusic/\<歌手\>/\<专辑\>/
+
+**设计决策**：
+- 下载数据库独立于 LocalMusicDatabase（避免 destructive migration 丢数据）
+- SAF 优先 + 应用专属目录降级（TV 兼容性）
+- 导出=备份，不删除本地副本（D17 已定）
+- 自动下载配额默认50（TV 存储小）
+- 去重键：title+artist 规范化（dedupeKey）

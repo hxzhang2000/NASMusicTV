@@ -40,6 +40,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Text
+import com.nasmusic.tv.backend.download.model.DownloadState
 import com.nasmusic.tv.data.model.Song
 import com.nasmusic.tv.data.model.sourceType
 import com.nasmusic.tv.ui.components.common.CoverImage
@@ -78,6 +79,8 @@ enum class SongRowMode {
  * @param onAddToPlaylist 添加到歌单回调（null 时不显示按钮）
  * @param onDelete 删除回调（null 时不显示按钮）。仅用于"可删除"上下文
  *                   （如歌单内移除歌曲），搜索/发现/曲库页不应传入
+ * @param downloadState 下载状态（null 默认 None，不显示下载按钮）
+ * @param onDownload 下载/删除下载回调（null 时不显示下载按钮）
  * @param focusRequester 焦点请求器
  */
 @OptIn(ExperimentalTvMaterial3Api::class)
@@ -93,6 +96,8 @@ fun UnifiedSongRow(
     onToggleQueue: (() -> Unit)? = null,
     onAddToPlaylist: (() -> Unit)? = null,
     onDelete: (() -> Unit)? = null,
+    downloadState: DownloadState = DownloadState.None,
+    onDownload: (() -> Unit)? = null,
     focusRequester: FocusRequester? = null,
     modifier: Modifier = Modifier
 ) {
@@ -107,6 +112,8 @@ fun UnifiedSongRow(
             onToggleQueue = onToggleQueue,
             onAddToPlaylist = onAddToPlaylist,
             onDelete = onDelete,
+            downloadState = downloadState,
+            onDownload = onDownload,
             focusRequester = focusRequester,
             modifier = modifier
         )
@@ -140,6 +147,8 @@ private fun SongRowModeRow(
     onToggleQueue: (() -> Unit)?,
     onAddToPlaylist: (() -> Unit)?,
     onDelete: (() -> Unit)?,
+    downloadState: DownloadState,
+    onDownload: (() -> Unit)?,
     focusRequester: FocusRequester?,
     modifier: Modifier = Modifier
 ) {
@@ -254,6 +263,22 @@ private fun SongRowModeRow(
 
             // 右侧操作按钮（独立可聚焦 + 可点击，触屏可点）
             Row(verticalAlignment = Alignment.CenterVertically) {
+                // 下载按钮（None 不渲染；Idle ⬇ 下载 / Queued ⋯ / Downloading ⇣ / Completed ✓ 删除 / Failed ✕ 重试）
+                if (onDownload != null && downloadState !is DownloadState.None) {
+                    val button: Triple<String, Color, Boolean>? = when (downloadState) {
+                        DownloadState.Idle -> Triple("⬇", NasMusicColors.TextPrimary, true)
+                        DownloadState.Queued -> Triple("⋯", NasMusicColors.TextSecondary, false)
+                        is DownloadState.Downloading -> Triple("⇣", NasMusicColors.Primary, false)
+                        // Completed 可点击 → 弹「删除已下载文件」二次确认（§8.7.1）
+                        is DownloadState.Completed -> Triple("✓", NasMusicColors.Success, true)
+                        is DownloadState.Failed -> Triple("✕", NasMusicColors.Warning, true)
+                        DownloadState.None -> null
+                    }
+                    if (button != null) {
+                        RowActionButton(text = button.first, color = button.second, onClick = onDownload, enabled = button.third)
+                        Spacer(modifier = Modifier.width(10.dp))
+                    }
+                }
                 if (onToggleFavorite != null) {
                     RowActionButton(
                         text = if (isFavorited) "♥" else "♡",
@@ -298,7 +323,8 @@ private fun SongRowModeRow(
 private fun RowActionButton(
     text: String,
     color: Color,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    enabled: Boolean = true
 ) {
     var isFocused by remember { mutableStateOf(false) }
     val animScale = remember { Animatable(1f) }
@@ -327,15 +353,15 @@ private fun RowActionButton(
                     )
                 }
             }
-            .focusable()
-            .clickable { onClick() }
+            .focusable(enabled = enabled)
+            .clickable(enabled = enabled) { onClick() }
             .padding(horizontal = 12.dp, vertical = 10.dp),
         contentAlignment = Alignment.Center
     ) {
         Text(
             text = text,
             fontSize = FontSize.subtitle(),
-            color = color
+            color = if (enabled) color else color.copy(alpha = 0.4f)
         )
     }
 }

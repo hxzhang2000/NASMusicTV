@@ -7,6 +7,48 @@
 >
 > 类型：`Added`（新增） | `Changed`（变更） | `Fixed`（修复） | `Removed`（移除）
 
+## [v2.26.32] - 2026-09-06
+
+### Added
+
+- **歌曲离线下载**：搜索可下载源歌曲后点击下载按钮，文件保存到 `Music/<歌手>/<专辑>/` 目录，支持 MP3/FLAC/M4A/OGG/WAV 格式，重启后仍可离线播放。
+  - 下载后端基础设施：`DownloadDatabase`（独立 Room 数据库）、`DownloadPathBuilder`（目录构造）、`DownloadRepository`（索引 CRUD）、`SongDownloadManager`（执行器）、`StorageGuard`（空间守护）
+  - ID3/FLAC 内嵌元数据：自动写入封面（artist.jpg / cover.jpg）和歌词（MP3 USLT / FLAC VORBIS_COMMENT）
+  - 去重机制：`dedupeKey`（title+artist 规范化）防止同一首歌重复下载
+  - 空间检测：双 StatFs 取 min、100MB 预留、下载中空间跌破阈值自动中断并清理临时文件
+
+- **自动下载**：设置页开启后，播放歌曲 ≥5s 自动触发下载，配额限制（默认50首），达到上限自动停止并提示。
+  - `AutoDownloadController`：播放状态监听、配额管理、5分钟提示节流
+  - 仅自动下载受限，手动下载不受限制
+
+- **下载状态 UI**：歌曲行内显示下载按钮，支持 5 种状态：
+  - Idle（⬇）、Queued（⋯）、Downloading（⇣ 进度%）、Completed（✓）、Failed（✕）
+  - 已下载歌曲点击删除弹出二次确认对话框
+
+- **设置页下载管理**：DOWNLOAD 区块显示自动下载开关、最大下载数量滑块、存储空间、已下载统计、清空下载按钮
+
+- **导出到外接设备**：设置页新增"导出到外接设备"入口，支持导出到 U 盘/SD 卡。
+  - SAF（Storage Access Framework）优先 + 应用专属目录降级（TV 兼容性）
+  - `ExportCoordinator`：SAF 授权、设备探测、导出编排
+  - `SongExporter`：字节复制、增量过滤（已导出不重复）、可取消/可续跑
+  - 导出结构：`NASMusic/<歌手>/<专辑>/`（含音频、封面、歌词）
+  - 导出状态机：Idle → Preparing → Running → Completed/Failed/Cancelled
+  - SAF 持久化授权：重启 App 后无需重新授权
+
+- **单元测试**：新增 38 个测试用例
+  - `DownloadPathBuilderTest`（25 个）：覆盖 sanitize()、extOf()、build()、cleanupEmptyDirs()
+  - `ExportStateTest`（13 个）：覆盖状态创建、属性、错误枚举
+
+### Changed
+
+- **UnifiedSongRow 重构**：重构为 16 个调用点，新增 `SongRowModeRow` 模式支持下载按钮，歌曲行操作按钮行内排列
+
+### Fixed
+
+- **下载数据库独立**：`DownloadDatabase` 独立于 `LocalMusicDatabase`（避免 destructive migration 丢下载记录）
+- **SAF TV 兼容性**：探测 TV 桩实现（`com.google.android.tv.frameworkpackagestubs`），无 SAF 时自动降级到应用专属目录
+- **导出空间检测**：每 50MB 复检目标设备空间，跌破 100MB 预留自动中止
+
 ## [v2.26.31] - 2026-09-05
 
 ### Added
@@ -21,6 +63,8 @@
 
 ### Fixed
 
+- **锁屏媒体按钮不响应**：`buildMediaButtonPendingIntent` 从 `PendingIntent.getBroadcast` 改为 `PendingIntent.getService`，`MediaLibraryService.onStartCommand` 自动路由到 `MediaSession`。
+- **通知栏截断文字**：`contentText` 从"已暂停/正在播放"改为显示歌手名，播放状态由 MediaStyle 图标隐含表示。
 - **PlaybackService.onTaskRemoved 切后台停歌**：原实现直接 `stopSelf()` 导致服务销毁，改为播放中保留服务。
 
 ## [v2.26.30] - 2026-09-05
