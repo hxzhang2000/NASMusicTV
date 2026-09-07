@@ -588,7 +588,8 @@ fun AppRoot(
                         onArtistScrollPositionChange = { index, offset -> viewModel.saveArtistScrollPosition(index, offset) },
                         // ── 歌曲下载状态 ──
                         downloadStates = songDownloadStates,
-                        onDownloadSong = { song -> viewModel.downloadSong(song) }
+                        onDownloadSong = { song -> viewModel.downloadSong(song) },
+                        onDeleteDownloadSong = { song -> viewModel.deleteDownload(song) }
                     )
                 }
                 Screen.Mine -> {
@@ -640,7 +641,8 @@ fun AppRoot(
                         onOpenSettings = { viewModel.navigateTo(Screen.Settings) },
                         // 歌曲下载状态
                         downloadStates = songDownloadStates,
-                        onDownloadSong = { song -> viewModel.downloadSong(song) }
+                        onDownloadSong = { song -> viewModel.downloadSong(song) },
+                        onDeleteDownloadSong = { song -> viewModel.deleteDownload(song) }
                     )
                 }
                 Screen.Queue -> {
@@ -803,6 +805,7 @@ fun AppRoot(
                     onToggleAutoDownloadOnPlay = { viewModel.updateAutoDownloadOnPlay(it) },
                     onChangeAutoDownloadLimit = { viewModel.updateAutoDownloadLimit(it) },
                     onChangeDownloadLocation = { viewModel.updateDownloadLocation(it) },
+                    onClearAllDownloads = { viewModel.clearAllDownloads() },
                     // 导出到外接设备
                     exportState = viewModel.exportState.collectAsState().value,
                     onExportToDevice = { viewModel.showExportDeviceDialog() },
@@ -865,7 +868,8 @@ fun AppRoot(
                             onToggleFavorite = { song -> viewModel.toggleFavorite(song) },
                             onAddToPlaylist = { song -> pickerSong = song },
                             downloadStates = songDownloadStates,
-                            onDownloadSong = { song -> viewModel.downloadSong(song) }
+                            onDownloadSong = { song -> viewModel.downloadSong(song) },
+                            onDeleteDownloadSong = { song -> viewModel.deleteDownload(song) }
                         )
                     }
                 }
@@ -904,7 +908,8 @@ fun AppRoot(
                             onToggleFavorite = { song -> viewModel.toggleFavorite(song) },
                             onAddToPlaylist = { song -> pickerSong = song },
                             downloadStates = songDownloadStates,
-                            onDownloadSong = { song -> viewModel.downloadSong(song) }
+                            onDownloadSong = { song -> viewModel.downloadSong(song) },
+                            onDeleteDownloadSong = { song -> viewModel.deleteDownload(song) }
                         )
                     }
                 }

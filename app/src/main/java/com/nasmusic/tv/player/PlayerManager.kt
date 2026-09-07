@@ -743,7 +743,7 @@ class PlayerManager(private val applicationContext: Context) {
             .setGenre(song.genre)
             .build()
         return MediaItem.Builder()
-            .setMediaId(streamUrl)
+            .setMediaId(song.id)
             .setUri(Uri.parse(streamUrl))
             .setMediaMetadata(metadata)
             .build()
@@ -991,7 +991,7 @@ class PlayerManager(private val applicationContext: Context) {
                 // 恢复完整队列并 seek 到当前索引（不能用 setMediaItem 替换为单曲，
                 // 否则 ExoPlayer currentMediaItemIndex=0，updateCurrentSongFromPlayer 会把 _currentIndex 覆盖回 0，
                 // 且 seekToNextMediaItem 无处可跳 -> 退出 MTV 后切歌乱套）
-                val mediaItems = queue.map { MediaItem.fromUri(it.streamUrl ?: "") }
+                val mediaItems = queue.map { buildMediaItem(it, it.streamUrl ?: "") }
                 p.setMediaItems(mediaItems, index, 0)
                 p.prepare()
                 if (!suppressPlayback) p.play()
@@ -1077,7 +1077,7 @@ class PlayerManager(private val applicationContext: Context) {
 
         // Add to player queue if already playing
         if (player?.currentMediaItem != null) {
-            val mediaItem = MediaItem.fromUri(song.streamUrl ?: "")
+            val mediaItem = buildMediaItem(song, song.streamUrl ?: "")
             player?.addMediaItem(mediaItem)
         }
     }
@@ -1237,7 +1237,7 @@ class PlayerManager(private val applicationContext: Context) {
         val p = player
         if (p != null && !currentSong.streamUrl.isNullOrBlank()) {
             val mediaItems = songs.map { song ->
-                MediaItem.fromUri(song.streamUrl ?: "")
+                buildMediaItem(song, song.streamUrl ?: "")
             }
             try {
                 p.setMediaItems(mediaItems, safeIndex, 0)

@@ -229,8 +229,21 @@ fun BaiduAuthDialog(
                     // 授权失败：显示具体错误信息
                     connectionState is MainViewModel.BaiduConnectionState.Failed -> {
                         Spacer(modifier = Modifier.height(36.dp))
+                        // 根据 message 内容区分失败阶段
+                        val failTitle = if (connectionState.message.contains("设备码") ||
+                            connectionState.message.contains("网络") ||
+                            connectionState.message.contains("scope") ||
+                            connectionState.message.contains("网盘权限")) {
+                            stringResource(R.string.baidu_auth_scope_missing)
+                        } else if (connectionState.message.contains("拒绝")) {
+                            stringResource(R.string.baidu_user_declined)
+                        } else if (connectionState.message.contains("超时")) {
+                            stringResource(R.string.baidu_auth_timeout)
+                        } else {
+                            stringResource(R.string.netdisk_auth_failed)
+                        }
                         Text(
-                            text = stringResource(R.string.netdisk_auth_fetch_failed),
+                            text = failTitle,
                             color = NasMusicColors.Warning,
                             fontSize = FontSize.button()
                         )

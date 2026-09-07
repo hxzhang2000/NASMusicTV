@@ -1184,10 +1184,10 @@ class AppPreferences internal constructor(private val context: Context) {
         val cfg = getBaiduConfigSync() ?: return null
         val t = cfg.tokens ?: return null
         return try {
-            t.copy(
-                accessToken = CryptoUtils.decrypt(t.accessToken).ifBlank { return null },
-                refreshToken = CryptoUtils.decrypt(t.refreshToken).ifBlank { return null }
-            )
+            val decAt = CryptoUtils.decrypt(t.accessToken).ifBlank { return null }
+            val decRt = CryptoUtils.decrypt(t.refreshToken).ifBlank { return null }
+            AppLog.d(TAG, "getBaiduTokensSync: accessToken prefix=${decAt.take(10)}... (len=${decAt.length}), expiresAt=${t.expiresAt}")
+            t.copy(accessToken = decAt, refreshToken = decRt)
         } catch (e: Exception) {
             AppLog.w(TAG, "getBaiduTokensSync decrypt error", e)
             null

@@ -211,6 +211,7 @@ fun LibraryScreen(
     // ── 歌曲下载状态 ──
     downloadStates: Map<String, DownloadState> = emptyMap(),
     onDownloadSong: (Song) -> Unit = {},
+    onDeleteDownloadSong: ((Song) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     var showSearchDialog by remember { mutableStateOf(false) }
@@ -551,7 +552,8 @@ fun LibraryScreen(
                                 onToggleFavorite = onToggleFavorite,
                                 onAddToPlaylist = onAddToPlaylist,
                                 downloadStates = downloadStates,
-                                onDownloadSong = onDownloadSong
+                                onDownloadSong = onDownloadSong,
+                                onDeleteDownloadSong = onDeleteDownloadSong
                             )
                             else -> {}
                         }
@@ -614,7 +616,8 @@ fun LibraryScreen(
                                     onToggleFavorite = onToggleFavorite,
                                     onAddToPlaylist = onAddToPlaylist,
                                     downloadStates = downloadStates,
-                                    onDownloadSong = onDownloadSong
+                                    onDownloadSong = onDownloadSong,
+                                    onDeleteDownloadSong = onDeleteDownloadSong
                                 )
                             }
                             LibraryTab.GENRES -> GenresTab(
@@ -1043,7 +1046,8 @@ private fun SongsTab(
     onToggleFavorite: (Song) -> Unit = {},
     onAddToPlaylist: (Song) -> Unit = {},
     downloadStates: Map<String, DownloadState> = emptyMap(),
-    onDownloadSong: (Song) -> Unit = {}
+    onDownloadSong: (Song) -> Unit = {},
+    onDeleteDownloadSong: ((Song) -> Unit)? = null
 ) {
     val listState = rememberLazyGridState()
     val firstItemFocusRequester = remember { FocusRequester() }
@@ -1132,6 +1136,7 @@ private fun SongsTab(
                         onAddToPlaylist = { onAddToPlaylist(song) },
                         downloadState = downloadStates[song.downloadKey] ?: DownloadState.None,
                         onDownload = { onDownloadSong(song) },
+                        onDeleteDownload = onDeleteDownloadSong?.let { cb -> { cb(song) } },
                         focusRequester = if (index == 0) firstItemFocusRequester else null
                     )
                 }

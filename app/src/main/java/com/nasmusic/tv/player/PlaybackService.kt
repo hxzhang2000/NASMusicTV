@@ -155,9 +155,17 @@ class PlaybackService : MediaLibraryService() {
                     pageSize: Int,
                     params: MediaLibraryService.LibraryParams?
                 ): com.google.common.util.concurrent.ListenableFuture<LibraryResult<ImmutableList<MediaItem>>> {
-                    val children = mediaLibraryTree.getChildren(parentId)
+                    val allChildren = mediaLibraryTree.getChildren(parentId)
+                    val effectivePageSize = if (pageSize > 0) pageSize else 50
+                    val start = page * effectivePageSize
+                    val end = minOf(start + effectivePageSize, allChildren.size)
+                    val pageChildren = if (start < allChildren.size) {
+                        allChildren.subList(start, end)
+                    } else {
+                        emptyList()
+                    }
                     return Futures.immediateFuture(
-                        LibraryResult.ofItemList(ImmutableList.copyOf(children), params)
+                        LibraryResult.ofItemList(ImmutableList.copyOf(pageChildren), params)
                     )
                 }
             }

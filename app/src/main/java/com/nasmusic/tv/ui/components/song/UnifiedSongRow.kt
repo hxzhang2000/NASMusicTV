@@ -40,9 +40,13 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Text
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import com.nasmusic.tv.backend.download.model.DownloadState
+import com.nasmusic.tv.backend.download.model.isDownloadableSong
 import com.nasmusic.tv.data.model.Song
 import com.nasmusic.tv.data.model.sourceType
+import com.nasmusic.tv.ui.components.ConfirmDialog
 import com.nasmusic.tv.ui.components.common.CoverImage
 import com.nasmusic.tv.ui.components.common.SourceBadge
 import com.nasmusic.tv.ui.theme.FontSize
@@ -81,6 +85,7 @@ enum class SongRowMode {
  *                   （如歌单内移除歌曲），搜索/发现/曲库页不应传入
  * @param downloadState 下载状态（null 默认 None，不显示下载按钮）
  * @param onDownload 下载/删除下载回调（null 时不显示下载按钮）
+ * @param onDeleteDownload 删除已下载文件回调（null 时 Completed 状态点击不响应）
  * @param focusRequester 焦点请求器
  */
 @OptIn(ExperimentalTvMaterial3Api::class)
@@ -98,6 +103,7 @@ fun UnifiedSongRow(
     onDelete: (() -> Unit)? = null,
     downloadState: DownloadState = DownloadState.None,
     onDownload: (() -> Unit)? = null,
+    onDeleteDownload: (() -> Unit)? = null,
     focusRequester: FocusRequester? = null,
     modifier: Modifier = Modifier
 ) {
@@ -114,6 +120,7 @@ fun UnifiedSongRow(
             onDelete = onDelete,
             downloadState = downloadState,
             onDownload = onDownload,
+            onDeleteDownload = onDeleteDownload,
             focusRequester = focusRequester,
             modifier = modifier
         )
@@ -149,12 +156,23 @@ private fun SongRowModeRow(
     onDelete: (() -> Unit)?,
     downloadState: DownloadState,
     onDownload: (() -> Unit)?,
+    onDeleteDownload: (() -> Unit)?,
     focusRequester: FocusRequester?,
     modifier: Modifier = Modifier
 ) {
     var isRowFocused by remember { mutableStateOf(false) }
     val animScale = remember { Animatable(1f) }
     val scope = rememberCoroutineScope()
+
+    // P0-12: 未下载过的可下载歌曲 fallback 到 Idle 而非 None，使下载按钮可见
+    val effectiveDownloadState = if (downloadState is DownloadState.None && isDownloadableSong(song)) {
+        DownloadState.Idle
+    } else {
+        downloadState
+    }
+
+    // P1-16: Completed 状态点击弹出删除确认而非死按钮
+    var showDeleteConfirm by remember { mutableStateOf(false) }
 
     Box(
         modifier = modifier
@@ -264,18 +282,29 @@ private fun SongRowModeRow(
             // 右侧操作按钮（独立可聚焦 + 可点击，触屏可点）
             Row(verticalAlignment = Alignment.CenterVertically) {
                 // 下载按钮（None 不渲染；Idle ⬇ 下载 / Queued ⋯ / Downloading ⇣ / Completed ✓ 删除 / Failed ✕ 重试）
-                if (onDownload != null && downloadState !is DownloadState.None) {
-                    val button: Triple<String, Color, Boolean>? = when (downloadState) {
+                if (onDownload != null && effectiveDownloadState !is DownloadState.None) {
+                    val button: Triple<String, Color, Boolean>? = when (effectiveDownloadState) {
                         DownloadState.Idle -> Triple("⬇", NasMusicColors.TextPrimary, true)
                         DownloadState.Queued -> Triple("⋯", NasMusicColors.TextSecondary, false)
                         is DownloadState.Downloading -> Triple("⇣", NasMusicColors.Primary, false)
-                        // Completed 可点击 → 弹「删除已下载文件」二次确认（§8.7.1）
+                        // Completed 可点击 → 弹出「删除已下载文件」二次确认（§8.7.1）
                         is DownloadState.Completed -> Triple("✓", NasMusicColors.Success, true)
                         is DownloadState.Failed -> Triple("✕", NasMusicColors.Warning, true)
                         DownloadState.None -> null
                     }
                     if (button != null) {
-                        RowActionButton(text = button.first, color = button.second, onClick = onDownload, enabled = button.third)
+                        RowActionButton(
+                            text = button.first,
+                            color = button.second,
+                            onClick = {
+                                if (effectiveDownloadState is DownloadState.Completed && onDeleteDownload != null) {
+                                    showDeleteConfirm = true
+                                } else {
+                                    onDownload.invoke()
+                                }
+                            },
+                            enabled = button.third
+                        )
                         Spacer(modifier = Modifier.width(10.dp))
                     }
                 }
@@ -311,6 +340,29 @@ private fun SongRowModeRow(
                     )
                 }
             }
+        }
+    }
+
+    // P1-16: Completed 状态点击弹出删除确认
+    if (showDeleteConfirm) {
+        Dialog(
+            onDismissRequest = { showDeleteConfirm = false },
+            properties = DialogProperties(
+                dismissOnBackPress = false,
+                dismissOnClickOutside = false,
+                usePlatformDefaultWidth = false
+            )
+        ) {
+            ConfirmDialog(
+                title = "删除下载",
+                message = "确认删除「${song.title}」的已下载文件？",
+                destructive = true,
+                onConfirm = {
+                    onDeleteDownload?.invoke()
+                    showDeleteConfirm = false
+                },
+                onDismiss = { showDeleteConfirm = false }
+            )
         }
     }
 }

@@ -433,6 +433,7 @@
     <string name="baidu_user_declined">用户拒绝授权</string>
     <string name="baidu_auth_timeout">授权超时，请重试</string>
     <string name="baidu_get_device_code_failed">获取设备码失败，请检查网络</string>
+    <string name="baidu_auth_scope_missing">授权范围不足</string>
     <string name="netdisk_dir_picker_title">选择网盘目录</string>
     <string name="netdisk_dir_picker_loading">加载中...</string>
     <string name="netdisk_dir_picker_error">目录加载失败</string>

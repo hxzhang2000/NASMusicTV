@@ -39,7 +39,10 @@
     public static int v(...);
 }
 
-# jaudiotagger: Android 上不存在 java.awt / javax.imageio，忽略引用
--dontwarn java.awt.image.BufferedImage
+# jaudiotagger — R8 下反射访问字段需要保留
+-keep class org.jaudiotagger.** { *; }
+-dontwarn org.jaudiotagger.**
+# Android 上不存在 java.awt / javax.imageio，忽略引用
+-dontwarn java.awt.**
 -dontwarn javax.imageio.ImageIO
 -dontwarn javax.imageio.stream.ImageInputStream

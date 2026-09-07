@@ -1,6 +1,7 @@
 package com.nasmusic.tv.backend.export
 
 import android.content.Context
+import android.content.Intent
 import android.net.Uri
 import com.nasmusic.tv.backend.download.DownloadPathBuilder
 import com.nasmusic.tv.backend.download.DownloadRepository
@@ -73,6 +74,14 @@ class ExportCoordinator(
 
     /** SAF 授权回调（MainActivity registerForActivityResult 完成后调用） */
     fun onTreeGranted(uri: Uri) {
+        try {
+            context.contentResolver.takePersistableUriPermission(
+                uri,
+                Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+            )
+        } catch (e: SecurityException) {
+            AppLog.w(TAG, "Failed to take persistable URI permission: ${e.message}")
+        }
         scope.launch {
             appPreferences.setExportTreeUri(uri.toString())
             // 记录当前卷（由 UI 传入，这里先用已选设备）

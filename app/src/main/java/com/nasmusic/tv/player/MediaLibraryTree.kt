@@ -74,6 +74,7 @@ class MediaLibraryTree(
         return songs.map { song ->
             MediaItem.Builder()
                 .setMediaId(song.id)
+                .setUri(song.streamUrl?.takeIf { it.isNotBlank() }?.let { Uri.parse(it) })
                 .setMediaMetadata(
                     MediaMetadata.Builder()
                         .setTitle(song.title)

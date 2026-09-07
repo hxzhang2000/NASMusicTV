@@ -4,6 +4,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.os.Build
 import android.os.StatFs
 import com.nasmusic.tv.util.AppLog
 import com.nasmusic.tv.util.StorageUtils
@@ -98,7 +99,11 @@ class StorageGuard(
             }
         }
         runCatching {
-            context.registerReceiver(receiver, IntentFilter(Intent.ACTION_DEVICE_STORAGE_LOW))
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                context.registerReceiver(receiver, IntentFilter(Intent.ACTION_DEVICE_STORAGE_LOW), Context.RECEIVER_NOT_EXPORTED)
+            } else {
+                context.registerReceiver(receiver, IntentFilter(Intent.ACTION_DEVICE_STORAGE_LOW))
+            }
         }.onFailure {
             AppLog.w(TAG, "registerReceiver failed: ${it.message}")
         }

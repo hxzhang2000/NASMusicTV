@@ -44,6 +44,8 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Icon
 import androidx.tv.material3.Surface
@@ -54,6 +56,7 @@ import com.nasmusic.tv.data.model.AppSettings
 import com.nasmusic.tv.data.model.BaiduFile
 import com.nasmusic.tv.data.model.PlayMode
 import com.nasmusic.tv.ui.components.BaiduDirPickerDialog
+import com.nasmusic.tv.ui.components.ConfirmDialog
 import com.nasmusic.tv.ui.components.FocusableSurface
 import com.nasmusic.tv.ui.components.LocalFocusableContentColor
 import com.nasmusic.tv.data.model.VisualizerTheme
@@ -138,6 +141,7 @@ fun SettingsScreen(
     onToggleAutoDownloadOnPlay: ((Boolean) -> Unit)? = null,
     onChangeAutoDownloadLimit: ((Int) -> Unit)? = null,
     onChangeDownloadLocation: ((String) -> Unit)? = null,
+    onClearAllDownloads: (() -> Unit)? = null,
     // 导出到外接设备
     exportState: com.nasmusic.tv.backend.export.ExportState = com.nasmusic.tv.backend.export.ExportState.Idle,
     onExportToDevice: (() -> Unit)? = null,
@@ -227,6 +231,9 @@ fun SettingsScreen(
 
     // Jamendo Client ID 编辑对话框
     var showJamendoClientIdDialog by remember { mutableStateOf(false) }
+
+    // P1-17: 清空所有下载确认弹窗
+    var showClearDownloadsConfirm by remember { mutableStateOf(false) }
 
     // 待删除的备份文件（非空时显示确认弹窗）
     var backupToDelete by remember {
@@ -685,6 +692,15 @@ fun SettingsScreen(
                                 AdjustButton("外", onClick = { onChangeDownloadLocation?.invoke("CUSTOM") })
                             }
                         }
+                    }
+                    // P1-17: 清空所有下载
+                    item { Spacer(modifier = Modifier.height(12.dp)) }
+                    item {
+                        SettingActionButton(
+                            label = "清空所有下载",
+                            description = "删除所有已下载的歌曲文件，此操作不可撤销",
+                            onClick = { showClearDownloadsConfirm = true }
+                        )
                     }
                     // 导出到外接设备（§8.8.9）
                     item { Spacer(modifier = Modifier.height(12.dp)) }
@@ -2103,6 +2119,29 @@ fun SettingsScreen(
                     }
                 }
             }
+        }
+    }
+
+    // P1-17: 清空所有下载确认弹窗
+    if (showClearDownloadsConfirm) {
+        Dialog(
+            onDismissRequest = { showClearDownloadsConfirm = false },
+            properties = DialogProperties(
+                dismissOnBackPress = false,
+                dismissOnClickOutside = false,
+                usePlatformDefaultWidth = false
+            )
+        ) {
+            ConfirmDialog(
+                title = "清空所有下载",
+                message = "确认删除所有已下载的歌曲文件？此操作不可撤销。",
+                destructive = true,
+                onConfirm = {
+                    onClearAllDownloads?.invoke()
+                    showClearDownloadsConfirm = false
+                },
+                onDismiss = { showClearDownloadsConfirm = false }
+            )
         }
     }
 }

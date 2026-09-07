@@ -6,6 +6,13 @@ import com.google.gson.reflect.TypeToken
 import com.nasmusic.tv.util.AppLog
 import java.io.File
 import java.util.concurrent.ConcurrentHashMap
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 /**
  * 封面 URL 持久缓存（跨会话复用专辑/艺术家封面，避免重复网络搜索）
@@ -25,6 +32,11 @@ class CoverUrlPersistentCache(context: Context) {
     private val cache = ConcurrentHashMap<String, String>()
     private val gson = Gson()
     private val file by lazy { File(context.filesDir, "cover_url_cache.json") }
+
+    @Volatile private var dirty = false
+    private val saveScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+    private var saveJob: Job? = null
+    private val saveLock = Any()
 
     companion object {
         private const val TAG = "CoverUrlPersistentCache"
@@ -53,11 +65,36 @@ class CoverUrlPersistentCache(context: Context) {
         if (url.isBlank()) return
         cache[key] = url
         if (cache.size > MAX_ENTRIES) evictOldest()
-        save()
+        dirty = true
+        scheduleSave()
+    }
+
+    /** 延迟落盘（2秒 debounce），避免频繁 put 时每次都写文件 */
+    private fun scheduleSave() {
+        saveJob?.cancel()
+        saveJob = saveScope.launch {
+            delay(2000) // 2秒 debounce
+            if (dirty) {
+                save()
+                dirty = false
+            }
+        }
+    }
+
+    /** 关闭缓存，取消延迟落盘协程并强制写盘。供 Application.onTerminate / onTrimMemory 调用 */
+    fun close() {
+        saveJob?.cancel()
+        if (dirty) {
+            save()
+            dirty = false
+        }
+        saveScope.cancel()
     }
 
     /** 清空全部持久缓存（内存 + 磁盘文件）。供设置页"缓存管理"手动清除 */
     fun clear() {
+        saveJob?.cancel()
+        dirty = false
         cache.clear()
         try {
             if (file.exists()) file.delete()
@@ -72,10 +109,12 @@ class CoverUrlPersistentCache(context: Context) {
 
     /** 导入条目（恢复备份用，覆盖现有数据） */
     fun importAll(entries: Map<String, String>) {
+        saveJob?.cancel()
         cache.clear()
         entries.forEach { (k, v) -> if (v.isNotBlank()) cache[k] = v }
         if (cache.size > MAX_ENTRIES) evictOldest()
         save()
+        dirty = false
         AppLog.d(TAG, "importAll: ${cache.size} entries")
     }
 
@@ -101,11 +140,19 @@ class CoverUrlPersistentCache(context: Context) {
     }
 
     private fun save() {
-        try {
-            val json = gson.toJson(cache.toMap())
-            file.writeText(json)
-        } catch (e: Exception) {
-            AppLog.e(TAG, "save failed: ${e.message}", e)
+        synchronized(saveLock) {
+            try {
+                val json = gson.toJson(cache.toMap())
+                val tmpFile = File(file.path + ".tmp")
+                tmpFile.writeText(json)
+                // 原子 rename：避免写文件中途崩溃导致缓存损坏
+                if (!tmpFile.renameTo(file)) {
+                    // rename 失败时回退为直接写
+                    file.writeText(json)
+                }
+            } catch (e: Exception) {
+                AppLog.e(TAG, "save failed: ${e.message}", e)
+            }
         }
     }
 }

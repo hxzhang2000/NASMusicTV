@@ -2,6 +2,7 @@ package com.nasmusic.tv.backend.export
 
 import android.content.Context
 import android.media.MediaScannerConnection
+import androidx.documentfile.provider.DocumentFile
 import com.nasmusic.tv.backend.download.DownloadRepository
 import com.nasmusic.tv.backend.download.db.DownloadSongEntity
 import com.nasmusic.tv.backend.download.db.ExportRecordEntity
@@ -41,8 +42,9 @@ class SongExporter(
     private val _state = MutableStateFlow<ExportState>(ExportState.Idle)
     val state: StateFlow<ExportState> = _state.asStateFlow()
 
-    private var isActive = false
-    private var cancelRequested = false
+    @Volatile private var isActive = false
+    @Volatile private var cancelRequested = false
+    private var currentRoot: ExportRoot = ExportRoot.Unavailable
 
     fun cancel() {
         cancelRequested = true
@@ -79,12 +81,14 @@ class SongExporter(
             audio.parentFile?.let { albumDir ->
                 val key = albumDir.absolutePath
                 if (exportedCovers.add(key)) {
+                    val albumName = albumDir.name
+                    val artistName = albumDir.parentFile?.name ?: "未知歌手"
                     File(albumDir, "cover.jpg").takeIf { it.exists() }?.let {
-                        tasks.add(FileTask(it, "cover.jpg"))
+                        tasks.add(FileTask(it, "$artistName/$albumName/cover.jpg"))
                     }
                     albumDir.parentFile?.let { artistDir ->
                         File(artistDir, "artist.jpg").takeIf { it.exists() }?.let {
-                            tasks.add(FileTask(it, "artist.jpg"))
+                            tasks.add(FileTask(it, "$artistName/artist.jpg"))
                         }
                     }
                 }
@@ -119,6 +123,7 @@ class SongExporter(
         var writtenSinceCheck = 0L
 
         _state.value = ExportState.Running(0, tasks.size, "", skipped, failed)
+        currentRoot = root
         isActive = true
         cancelRequested = false
 
@@ -192,8 +197,7 @@ class SongExporter(
         when (root) {
             is ExportRoot.Saf -> {
                 val parent = root.dir
-                val doc = parent.findFile(task.relPath) ?: parent.createFile("audio/*", task.relPath)
-                    ?: return@withContext false
+                val doc = resolveChildDoc(parent, task.relPath) ?: return@withContext false
                 try {
                     val output = context.contentResolver.openOutputStream(doc.uri) ?: return@withContext false
                     output.use { out ->
@@ -241,8 +245,23 @@ class SongExporter(
 
     /** 目标文件路径（相对导出根） */
     private fun targetFile(task: FileTask): File? {
-        // 对 File 根：导出根是应用专属 Music 目录，目标 = root + relPath
-        return null   // 由 caller 决定具体实现，这里返回 null 兜底
+        return when (val root = currentRoot) {
+            is ExportRoot.File -> File(root.dir, task.relPath)
+            else -> null
+        }
+    }
+
+    /** SAF 嵌套目录解析：逐级 findFile/createDirectory 定位到叶子目录，再 createFile 文件名 */
+    private fun resolveChildDoc(root: DocumentFile, relPath: String): DocumentFile? {
+        val segments = relPath.split("/").toMutableList()
+        val fileName = segments.removeLast() // 最后一段是文件名
+        var current = root
+        for (dir in segments) {
+            current = current.findFile(dir)
+                ?: current.createDirectory(dir)
+                ?: return null
+        }
+        return current.findFile(fileName) ?: current.createFile("audio/*", fileName)
     }
 
     /** 音频相对路径（歌手/专辑/文件名） */

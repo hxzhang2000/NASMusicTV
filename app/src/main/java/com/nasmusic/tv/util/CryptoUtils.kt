@@ -7,6 +7,7 @@ import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
 import javax.crypto.spec.SecretKeySpec
 import java.security.MessageDigest
+import java.security.SecureRandom
 
 /**
  * 加密工具类：AES-256-GCM，用于加密敏感数据（密码、token）。
@@ -51,17 +52,25 @@ object CryptoUtils {
             val cipher = Cipher.getInstance("AES/GCM/NoPadding")
             cipher.init(Cipher.DECRYPT_MODE, key, GCMParameterSpec(GCM_TAG_LENGTH, iv))
             String(cipher.doFinal(encrypted), Charsets.UTF_8)
-        } catch (_: Exception) { null }
+        } catch (e: Exception) {
+            AppLog.w("CryptoUtils", "tryDecrypt failed (text prefix=${encryptedText.take(16)}..., len=${encryptedText.length})", e)
+            null
+        }
     }
 
     /**
-     * 加密明文，返回 Base64 编码的 "iv:ciphertext" 字符串
+     * 加密明文，返回 Base64 编码的 "iv + ciphertext + tag" 字符串。
+     *
+     * ⚠️ 必须显式生成 IV 并通过 GCMParameterSpec 传入 cipher.init()——
+     * 部分 Android TV ROM 在 ENCRYPT_MODE 不传 IV 时 cipher.iv 返回空数组
+     * （0 字节而非 12 字节），导致密文缺少 IV 前缀，decrypt 时提取到错误的
+     * IV → GCM tag 验证失败 → 返回密文原样 → 密文被当 token 发出 → API 报 -6。
      */
     fun encrypt(plainText: String): String {
         return try {
             val cipher = Cipher.getInstance("AES/GCM/NoPadding")
-            cipher.init(Cipher.ENCRYPT_MODE, softwareKey)
-            val iv = cipher.iv
+            val iv = ByteArray(GCM_IV_LENGTH).also { SecureRandom().nextBytes(it) }
+            cipher.init(Cipher.ENCRYPT_MODE, softwareKey, GCMParameterSpec(GCM_TAG_LENGTH, iv))
             val encrypted = cipher.doFinal(plainText.toByteArray(Charsets.UTF_8))
             val combined = iv + encrypted
             Base64.encodeToString(combined, Base64.NO_WRAP)
@@ -72,12 +81,13 @@ object CryptoUtils {
     }
 
     /**
-     * 解密 Base64 编码的 "iv:ciphertext" 字符串。
+     * 解密 Base64 编码的 "iv + ciphertext + tag" 字符串。
      * 先尝试通用软件密钥，再回退 AndroidKeyStore 旧密钥；都失败则原样返回（可能是明文，兼容旧版本）。
      */
     fun decrypt(encryptedText: String): String {
         tryDecrypt(softwareKey, encryptedText)?.let { return it }
         getKeyStoreKey()?.let { ks -> tryDecrypt(ks, encryptedText)?.let { return it } }
+        AppLog.w("CryptoUtils", "decrypt: all keys failed, returning original (len=${encryptedText.length}, prefix=${encryptedText.take(16)}...)")
         return encryptedText
     }
 

@@ -63,6 +63,7 @@ fun AlbumDetailScreen(
     onAddToPlaylist: (Song) -> Unit = {},
     downloadStates: Map<String, DownloadState> = emptyMap(),
     onDownloadSong: (Song) -> Unit = {},
+    onDeleteDownloadSong: ((Song) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val listState = rememberLazyListState()
@@ -219,6 +220,7 @@ fun AlbumDetailScreen(
                             onAddToPlaylist = { onAddToPlaylist(song) },
                             downloadState = downloadStates[song.downloadKey] ?: DownloadState.None,
                             onDownload = { onDownloadSong(song) },
+                            onDeleteDownload = onDeleteDownloadSong?.let { cb -> { cb(song) } },
                             focusRequester = if (index == 0) firstItemFocusRequester else null
                         )
                     }

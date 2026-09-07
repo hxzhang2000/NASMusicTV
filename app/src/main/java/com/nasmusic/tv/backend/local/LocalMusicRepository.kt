@@ -147,9 +147,11 @@ class LocalMusicRepository(
     /** 全量扫描（手动刷新时） */
     suspend fun fullScan(): List<Song> = withContext(Dispatchers.IO) {
         // B3 修复：先扫描，扫描成功后再重建索引。原实现先 deleteAll() 再 scan，
-        // 一旦 scanAllMusic() 抛异常（MediaStore 查询失败 / 权限变更），用户曲库被清空。
+        // 一旦扫描抛异常（MediaStore 查询失败 / 权限变更），用户曲库被清空。
         // 现在：扫描失败直接抛回空结果，旧索引保持不变。
-        val scanned = scanner.scanAllMusic()
+        // P0-2 修复：使用 buildScannedList() 替代 scanner.scanAllMusic()，
+        // 确保下载目录也被扫描（buildScannedList 合并 MediaStore + 下载目录）。
+        val scanned = buildScannedList()
         dao.deleteAll()
         dao.insertAll(scanned.map { it.toEntity() })
         scanned.map { it.toSong() }
@@ -170,7 +172,7 @@ class LocalMusicRepository(
     suspend fun scanUsbDevice(devicePath: String): ScanResult = withContext(Dispatchers.IO) {
         val scanned = scanner.scanPath(devicePath, StorageType.USB)
         val deletedPaths = dao.getAllSongs()
-            .filter { it.storageType == StorageType.USB.name }
+            .filter { it.storageType == StorageType.USB.name && it.path.startsWith(devicePath) }
             .map { it.path }
 
         // 重建该 USB 设备的索引（先删旧再插新，避免残留已移除文件）

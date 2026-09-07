@@ -28,6 +28,7 @@ class CoilBitmapLoader(
         val future = ResolvableFuture.create<Bitmap>()
         val request = ImageRequest.Builder(appContext)
             .data(uri)
+            .size(96, 96)
             .allowHardware(false)
             .target { drawable ->
                 future.set(drawable.toBitmap())
@@ -44,6 +45,7 @@ class CoilBitmapLoader(
         val future = ResolvableFuture.create<Bitmap>()
         val request = ImageRequest.Builder(appContext)
             .data(data)
+            .size(96, 96)
             .allowHardware(false)
             .target { drawable ->
                 future.set(drawable.toBitmap())

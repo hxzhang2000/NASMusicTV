@@ -9,8 +9,10 @@ import com.nasmusic.tv.backend.download.model.dedupeKey
 import com.nasmusic.tv.backend.download.model.downloadKey
 import com.nasmusic.tv.data.model.Song
 import com.nasmusic.tv.util.AppLog
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -59,7 +61,7 @@ class SongDownloadManager(
         private const val PROGRESS_STEP = 512 * 1024          // 每 512KB 更新进度
         private const val MAX_RETRY = 3
         private val RETRY_DELAYS = longArrayOf(2000, 8000, 30_000)  // 2s / 8s / 30s
-        private val NO_RETRY_CODES = setOf(404, 403)          // 404 不重试
+        private val NO_RETRY_CODES = setOf(404, 403)          // 404/403 不重试
         private const val MAX_FILE_SIZE_FALLBACK = 8L * 1024 * 1024  // 8MB 预估兜底
     }
 
@@ -69,8 +71,17 @@ class SongDownloadManager(
     private val manualQueue = Channel<Pair<Song, Boolean>>(Channel.UNLIMITED)
     private val autoQueue = Channel<Pair<Song, Boolean>>(Channel.UNLIMITED)
 
+    /** 当前下载协程（loop 所在 coroutine），cancelAll 可取消以中断进行中的下载 */
+    @Volatile
+    private var currentDownloadJob: Job? = null
+
+    /** 启动串行下载循环，返回的 Job 保存到 [currentDownloadJob] 供 cancelAll 中断 */
+    private fun startLoop() {
+        currentDownloadJob = scope.launch(Dispatchers.IO) { loop() }
+    }
+
     init {
-        scope.launch(Dispatchers.IO) { loop() }
+        startLoop()
     }
 
     /** 手动 / 自动入队（手动优先：手动队列非空时自动任务不抢占） */
@@ -90,55 +101,25 @@ class SongDownloadManager(
     }
 
     /**
-     * 立即下载单曲（供 UI 手动点击或自动触发）。
-     *
-     * 幂等：已 COMPLETED / DOWNLOADING 直接返回，避免重复入队。
-     */
-    suspend fun downloadNow(song: Song, auto: Boolean): DownloadResult = withContext(Dispatchers.IO) {
-        val key = song.downloadKey
-
-        // 总开关
-        if (!settings().downloadEnabled) {
-            onNotify("本地下载已关闭，请在设置中开启")
-            return@withContext DownloadResult.Disabled
-        }
-        // 不可下载源（本地歌曲 / 电台）
-        if (!resolver.isDownloadable(song)) return@withContext DownloadResult.NotDownloadable
-
-        val existing = repo.get(key)
-        if (existing?.status == DownloadStatus.COMPLETED.name) {
-            _downloadStates.value = _downloadStates.value + (key to DownloadState.Completed(existing.audioPath ?: ""))
-            onNotify("该歌曲已下载")
-            return@withContext DownloadResult.Already
-        }
-        if (existing?.status == DownloadStatus.DOWNLOADING.name ||
-            existing?.status == DownloadStatus.PENDING.name) {
-            return@withContext DownloadResult.Duplicated
-        }
-        // 跨源去重：同一首歌（标题+艺术家规范化）已有完成记录 → 复用
-        repo.findCompletedByDedupe(song.dedupeKey)?.let {
-            _downloadStates.value = _downloadStates.value + (key to DownloadState.Completed(it.audioPath ?: ""))
-            onNotify("该歌曲已下载")
-            return@withContext DownloadResult.Already
-        }
-        // 配额（仅自动下载受限）
-        if (auto && repo.countAutoCompleted() >= settings().autoDownloadLimit) {
-            val limit = settings().autoDownloadLimit
-            onNotify("已达设置的最大下载数量（$limit），可在设置中调整（手动下载不受限制）")
-            return@withContext DownloadResult.QuotaExceeded
-        }
-
-        // 入队（去重后真正开始）
-        _downloadStates.value = _downloadStates.value + (key to DownloadState.Queued)
-        executeDownload(song, auto)
-    }
-
-    /**
-     * 实际执行一次下载（已通过去重 / 配额 / 开关判定）。
+     * 实际执行一次下载。
      * 带重试：失败在 [MAX_RETRY] 内按退避重试。
+     *
+     * 幂等：入口处检查 DB 状态，已 COMPLETED / DOWNLOADING 直接返回，避免重复下载。
      */
     private suspend fun executeDownload(song: Song, auto: Boolean): DownloadResult {
         val key = song.downloadKey
+
+        // 幂等检查：已在下载队列中或已完成 → 不重复下载
+        val current = repo.get(key)
+        if (current?.status == DownloadStatus.COMPLETED.name) {
+            _downloadStates.value = _downloadStates.value +
+                (key to DownloadState.Completed(current.audioPath ?: ""))
+            return DownloadResult.Already
+        }
+        if (current?.status == DownloadStatus.DOWNLOADING.name) {
+            return DownloadResult.Duplicated
+        }
+
         var attempt = 0
         while (true) {
             attempt++
@@ -148,6 +129,8 @@ class SongDownloadManager(
             } catch (e: StorageFullException) {
                 onNotify("存储空间不足（已预留 100MB），请清理后重试")
                 DownloadResult.StorageFull
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 AppLog.w(TAG, "download failed: ${song.title} - ${e.message}", e)
                 DownloadResult.Failure(e.message)
@@ -157,9 +140,11 @@ class SongDownloadManager(
             if (result is DownloadResult.QuotaExceeded || result is DownloadResult.Disabled) return result
             if (result is DownloadResult.StorageFull || result is DownloadResult.NotDownloadable) return result
 
-            // 可重试失败
+            // 可重试失败：从 reason 中提取 HTTP 状态码，404/403 等不重试
             val reason = (result as? DownloadResult.Failure)?.reason
-            if (attempt <= MAX_RETRY && reason?.contains("404", ignoreCase = true) != true) {
+            val httpCode = reason?.removePrefix("HTTP ")?.toIntOrNull()
+            val shouldNotRetry = httpCode != null && httpCode in NO_RETRY_CODES
+            if (attempt <= MAX_RETRY && !shouldNotRetry) {
                 val delayMs = RETRY_DELAYS.getOrElse(attempt - 1) { RETRY_DELAYS.last() }
                 AppLog.d(TAG, "retry $attempt/$MAX_RETRY for ${song.title} in ${delayMs}ms")
                 _downloadStates.value = _downloadStates.value + (key to DownloadState.Queued)
@@ -329,6 +314,9 @@ class SongDownloadManager(
 
     /** 取消所有进行中任务 + 删除 .part 临时文件 */
     suspend fun cancelAll() {
+        // 中断进行中的下载协程（loop → executeDownload → singleAttempt）
+        currentDownloadJob?.cancel()
+        currentDownloadJob = null
         repo.getUnfinished().forEach { entity ->
             entity.tmpPath?.let {
                 runCatching { File(it).delete() }
@@ -336,6 +324,8 @@ class SongDownloadManager(
             repo.updateStatus(entity.songKey, DownloadStatus.FAILED, 0, "已取消")
             _downloadStates.value = _downloadStates.value - entity.songKey
         }
+        // 重启下载循环，使后续 enqueue 仍可处理
+        startLoop()
     }
 
     /**
@@ -399,7 +389,7 @@ class SongDownloadManager(
     /**
      * 崩溃恢复（NasMusicApp.onCreate 调用）：
      * 1. 清理 .tmp/.part
-     * 2. 重置 PENDING/DOWNLOADING → FAILED
+     * 2. 重置 PENDING/DOWNLOADING → 检查最终文件是否已存在：存在 → COMPLETED，否则 → FAILED
      * 3. 校验 COMPLETED 记录文件是否存在，缺失 → FAILED
      */
     suspend fun recoverAfterCrash() {
@@ -410,8 +400,21 @@ class SongDownloadManager(
             if (tmpDir != null && tmpDir.exists()) {
                 tmpDir.listFiles()?.filter { it.extension == "part" }?.forEach { it.delete() }
             }
-            // 2. 重置未完成任务
-            repo.resetUnfinished("已中断")
+            // 2. 逐条恢复未完成任务：最终文件已存在 → COMPLETED，否则清理残留 + FAILED
+            repo.getUnfinished().forEach { entity ->
+                val finalPath = entity.audioPath
+                if (finalPath != null && File(finalPath).exists()) {
+                    // 下载已完成但 DB 未更新（崩溃在 rename 后、upsert 前）
+                    repo.updateStatus(entity.songKey, DownloadStatus.COMPLETED, 100, null)
+                    _downloadStates.value = _downloadStates.value +
+                        (entity.songKey to DownloadState.Completed(finalPath))
+                } else {
+                    // 清理残留 .part 临时文件
+                    entity.tmpPath?.let { runCatching { File(it).delete() } }
+                    repo.updateStatus(entity.songKey, DownloadStatus.FAILED, 0, "已中断")
+                    _downloadStates.value = _downloadStates.value - entity.songKey
+                }
+            }
             // 3. 校验 COMPLETED 文件
             val completed = repo.getCompleted()
             completed.forEach { entity ->

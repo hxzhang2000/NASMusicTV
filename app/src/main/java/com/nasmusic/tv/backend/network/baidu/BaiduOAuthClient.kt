@@ -156,7 +156,8 @@ class BaiduOAuthClient(
                     val grantedScope = json.get("scope")?.asString ?: BaiduNetdiskConfig.SCOPE
                     AppLog.i(TAG, "pollDeviceToken: granted scope='$grantedScope'")
                     if (!grantedScope.contains("netdisk")) {
-                        AppLog.w(TAG, "pollDeviceToken: scope 缺少 netdisk! granted='$grantedScope', 这将导致文件 API errno=-6")
+                        AppLog.e(TAG, "pollDeviceToken: scope 缺少 netdisk! granted='$grantedScope', 阻断保存 token")
+                        return@use PollResult.Failed("授权范围缺少网盘权限(netdisk)，请在手机授权页面勾选网盘权限后重试")
                     }
                     val tokens = BaiduTokens(
                         accessToken = json.get("access_token").asString,
@@ -244,7 +245,7 @@ class BaiduOAuthClient(
                         val grantedScope = json.get("scope")?.asString ?: BaiduNetdiskConfig.SCOPE
                         AppLog.i(TAG, "refreshAccessToken: granted scope='$grantedScope'")
                         if (!grantedScope.contains("netdisk")) {
-                            AppLog.w(TAG, "refreshAccessToken: scope 缺少 netdisk! granted='$grantedScope', 文件 API 将返回 errno=-6")
+                            AppLog.w(TAG, "refreshAccessToken: scope 缺少 netdisk! granted='$grantedScope', 文件 API 将返回百度 errno=-6")
                         }
                         val newTokens = BaiduTokens(
                             accessToken = json.get("access_token").asString,

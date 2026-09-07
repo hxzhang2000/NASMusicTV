@@ -16,6 +16,7 @@ import com.nasmusic.tv.backend.download.AutoDownloadController
 import com.nasmusic.tv.backend.download.SongDownloadManager
 import com.nasmusic.tv.backend.download.model.DownloadState
 import com.nasmusic.tv.backend.download.model.downloadKey
+import com.nasmusic.tv.backend.download.model.isDownloadableSong
 import com.nasmusic.tv.backend.export.ExportState
 import com.nasmusic.tv.backend.local.MusicMerger
 import com.nasmusic.tv.backend.local.StorageMonitor
@@ -91,6 +92,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
@@ -959,16 +961,19 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
 
         // 监听下载完成：songDownloadStates 中 Completed 数量增加时即时刷新本地曲库
         // （SongDownloadManager.onCompleted 已把 ScannedSong 插入 local_songs，这里只需 reload）
+        // P1-19: distinctUntilChanged 避免相同 count 值触发无谓的 reload（Downloading 高频进度更新时）
         viewModelScope.launch {
             var lastCompletedCount = 0
-            songDownloadManager.downloadStates.collect { states ->
-                val completedCount = states.values.count { it is DownloadState.Completed }
-                if (completedCount > lastCompletedCount) {
-                    lastCompletedCount = completedCount
-                    _localSongs.value = nasMusicApp.localMusicRepository.loadFromCache()
-                    updateMergedData()
+            songDownloadManager.downloadStates
+                .map { states -> states.values.count { it is DownloadState.Completed } }
+                .distinctUntilChanged()
+                .collect { completedCount ->
+                    if (completedCount > lastCompletedCount) {
+                        lastCompletedCount = completedCount
+                        _localSongs.value = nasMusicApp.localMusicRepository.loadFromCache()
+                        updateMergedData()
+                    }
                 }
-            }
         }
 
         // 监听网络收藏变化（DataStore 持久化，响应式更新）
@@ -4227,9 +4232,16 @@ showError(getApplication<Application>().getString(R.string.play_failed_with_msg,
     /** 手动下载单曲（歌曲行 ⬇ 按钮）。受总开关与空间限制，不受自动下载配额限制 */
     fun downloadSong(song: Song) {
         viewModelScope.launch {
+            // P1-15: 补齐 downloadNow 中的安全检查（enqueue → executeDownload 会跳过这些）
+            // 1. 总开关
+            val settings = prefs.appSettings.first()
+            if (!settings.downloadEnabled) return@launch
+            // 2. 可下载性（本地歌曲 / 天气电台不可下载）
+            if (!isDownloadableSong(song)) return@launch
+
             val key = song.downloadKey
             val state = songDownloadStates.value[key]
-            // 已下载 / 下载中 / 已入队 → 不重复入队
+            // 3. 已下载 / 下载中 / 已入队 → 不重复入队
             if (state is DownloadState.Completed ||
                 state is DownloadState.Downloading ||
                 state is DownloadState.Queued

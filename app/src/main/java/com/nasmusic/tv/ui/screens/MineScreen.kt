@@ -95,7 +95,8 @@ fun MineScreen(
     onOpenSettings: () -> Unit = {},
     // 歌曲下载状态
     downloadStates: Map<String, DownloadState> = emptyMap(),
-    onDownloadSong: (Song) -> Unit = {}
+    onDownloadSong: (Song) -> Unit = {},
+    onDeleteDownloadSong: ((Song) -> Unit)? = null
 ) {
     // 收藏合并（本地 + 网络，按 id 去重）
     val favoriteSongsList = favoriteSongsState.dataOrNull() ?: emptyList()
@@ -164,7 +165,8 @@ fun MineScreen(
                         onToggleQueue = { onToggleQueue(song) },
                         onAddToPlaylist = { pickerSong = song },
                         downloadState = downloadStates[song.downloadKey] ?: DownloadState.None,
-                        onDownload = { onDownloadSong(song) }
+                        onDownload = { onDownloadSong(song) },
+                        onDeleteDownload = onDeleteDownloadSong?.let { cb -> { cb(song) } }
                     )
                 }
             }
@@ -256,7 +258,8 @@ fun MineScreen(
                                     // 删除歌曲（行内操作按钮，与其他按钮同行）
                                     onDelete = { onRemoveSongFromPlaylist(playlist.id, song.id) },
                                     downloadState = downloadStates[song.downloadKey] ?: DownloadState.None,
-                                    onDownload = { onDownloadSong(song) }
+                                    onDownload = { onDownloadSong(song) },
+                                    onDeleteDownload = onDeleteDownloadSong?.let { cb -> { cb(song) } }
                                 )
                             }
                         }
@@ -276,6 +279,7 @@ fun MineScreen(
                 onAddToPlaylist = { pickerSong = it },
                 downloadStates = downloadStates,
                 onDownloadSong = onDownloadSong,
+                onDeleteDownloadSong = onDeleteDownloadSong,
                 modifier = Modifier.weight(1f).fillMaxHeight()
             )
             Spacer(modifier = Modifier.width(24.dp))
@@ -296,6 +300,7 @@ fun MineScreen(
                 onCreateClick = { showCreateDialog = true },
                 downloadStates = downloadStates,
                 onDownloadSong = onDownloadSong,
+                onDeleteDownloadSong = onDeleteDownloadSong,
                 modifier = Modifier.weight(1f).fillMaxHeight()
             )
         }
@@ -367,6 +372,7 @@ private fun FavoritesPane(
     onAddToPlaylist: (Song) -> Unit,
     downloadStates: Map<String, DownloadState> = emptyMap(),
     onDownloadSong: (Song) -> Unit = {},
+    onDeleteDownloadSong: ((Song) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     Column(modifier = modifier) {
@@ -410,7 +416,8 @@ private fun FavoritesPane(
                         onToggleQueue = { onToggleQueue(song) },
                         onAddToPlaylist = { onAddToPlaylist(song) },
                         downloadState = downloadStates[song.downloadKey] ?: DownloadState.None,
-                        onDownload = { onDownloadSong(song) }
+                        onDownload = { onDownloadSong(song) },
+                        onDeleteDownload = onDeleteDownloadSong?.let { cb -> { cb(song) } }
                     )
                 }
             }
@@ -433,6 +440,7 @@ private fun RecentPane(
     isFavorited: (Song) -> Boolean,
     downloadStates: Map<String, DownloadState> = emptyMap(),
     onDownloadSong: (Song) -> Unit = {},
+    onDeleteDownloadSong: ((Song) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     Column(modifier = modifier) {
@@ -475,7 +483,8 @@ private fun RecentPane(
                         isInQueue = song.id in queueSongIds,
                         onToggleQueue = { onToggleQueue(song) },
                         downloadState = downloadStates[song.downloadKey] ?: DownloadState.None,
-                        onDownload = { onDownloadSong(song) }
+                        onDownload = { onDownloadSong(song) },
+                        onDeleteDownload = onDeleteDownloadSong?.let { cb -> { cb(song) } }
                     )
                 }
             }
@@ -503,6 +512,7 @@ private fun PlaylistsPane(
     onCreateClick: () -> Unit,
     downloadStates: Map<String, DownloadState> = emptyMap(),
     onDownloadSong: (Song) -> Unit = {},
+    onDeleteDownloadSong: ((Song) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     Column(modifier = modifier) {
@@ -588,7 +598,8 @@ private fun PlaylistsPane(
                                     // 删除歌曲（行内操作按钮，与其他按钮同行）
                                     onDelete = { onRemoveSong(playlist.id, song) },
                                     downloadState = downloadStates[song.downloadKey] ?: DownloadState.None,
-                                    onDownload = { onDownloadSong(song) }
+                                    onDownload = { onDownloadSong(song) },
+                                    onDeleteDownload = onDeleteDownloadSong?.let { cb -> { cb(song) } }
                                 )
                             }
                         }

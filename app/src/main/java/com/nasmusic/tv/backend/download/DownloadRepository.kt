@@ -24,7 +24,7 @@ import java.io.File
  * - 提供 [reindexFromDisk] 兜底：DB 损坏或文件已存在但无索引时重建
  *
  * 使用约定：
- * - 进入 [downloadNow] 前调 [get]/[findCompletedByDedupe] 判定是否已下载
+ * - 进入 [executeDownload] 前调 [get]/[findCompletedByDedupe] 判定是否已下载
  * - 下载开始时 [upsert] 一条 DOWNLOADING 记录
  * - 下载成功 [upsert] COMPLETED 记录，失败 [updateStatus] FAILED
  */

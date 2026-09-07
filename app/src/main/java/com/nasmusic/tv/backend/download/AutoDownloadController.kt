@@ -6,12 +6,15 @@ import com.nasmusic.tv.backend.download.model.downloadKey
 import com.nasmusic.tv.data.model.Song
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /**
  * 播放时自动下载控制器（见方案 §9）
  *
- * 判定链（[onSongChanged]，切歌即触发，不等播放进度）：
+ * 判定链（[onSongChanged]，切歌后延迟 5s 确认用户未切走再触发）：
+ * 0. 延迟 5s → 若期间切歌则取消上一次延迟，确认用户在听这首歌
  * 1. 总开关 & 自动下载开关
  * 2. 可下载源（非本地 / 非电台）
  * 3. 是否已下载（songKey / dedupeKey 命中）
@@ -33,12 +36,26 @@ class AutoDownloadController(
     companion object {
         private const val NOTIFY_THROTTLE_MS = 5 * 60 * 1000L
         private const val MAX_FILE_SIZE_FALLBACK = 8L * 1024 * 1024
+        private const val DELAY_BEFORE_AUTO_DOWNLOAD = 5000L  // 播放≥5s 后才触发自动下载
     }
+
+    /** 当前播放歌曲（切歌时更新，用于 5s 延迟后判断用户是否仍在听同一首） */
+    @Volatile
+    private var currentSong: Song? = null
+
+    /** 待执行的自动下载延迟协程，切歌时取消上一次 */
+    private var pendingAutoDownloadJob: Job? = null
 
     private var lastQuotaNotifyAt = 0L
 
     fun onSongChanged(song: Song) {
-        scope.launch(Dispatchers.IO) {
+        currentSong = song
+        // 取消上一次的延迟（5s 内切歌 → 放弃上一次的自动下载）
+        pendingAutoDownloadJob?.cancel()
+        pendingAutoDownloadJob = scope.launch(Dispatchers.IO) {
+            delay(DELAY_BEFORE_AUTO_DOWNLOAD)
+            // 延迟期间用户切歌 → currentSong 已更新，不再等于 song → 放弃
+            if (currentSong != song) return@launch
             // 1. 总开关 + 自动下载开关
             val s = settings()
             if (!s.downloadEnabled || !s.autoDownloadOnPlay) return@launch
