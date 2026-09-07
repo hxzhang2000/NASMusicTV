@@ -1,6 +1,7 @@
 package com.nasmusic.tv.backend.local
 
 import android.content.Context
+import com.nasmusic.tv.backend.download.DownloadPathBuilder
 import com.nasmusic.tv.backend.local.db.LocalMusicDao
 import com.nasmusic.tv.backend.local.db.LocalSongEntity
 import com.nasmusic.tv.data.model.ScanResult
@@ -23,9 +24,20 @@ import kotlinx.coroutines.withContext
 class LocalMusicRepository(
     private val context: Context,
     private val dao: LocalMusicDao,
-    private val scanner: MusicScanner
+    private val scanner: MusicScanner,
+    private var downloadDao: com.nasmusic.tv.backend.download.db.DownloadSongDao? = null,
+    private var downloadRootProvider: () -> java.io.File? = { context.getExternalFilesDir(android.os.Environment.DIRECTORY_MUSIC) }
 ) {
     companion object { private const val TAG = "LocalMusicRepo" }
+
+    /** 注入下载源（供增量扫描合并下载目录 + DOWNLOAD 删除判定分支；NasMusicApp 启动时调用） */
+    fun attachDownloadSource(
+        downloadDao: com.nasmusic.tv.backend.download.db.DownloadSongDao,
+        downloadRootProvider: () -> java.io.File?
+    ) {
+        this.downloadDao = downloadDao
+        this.downloadRootProvider = downloadRootProvider
+    }
 
     /** 启动时：从缓存加载（毫秒级） */
     suspend fun loadFromCache(): List<Song> = withContext(Dispatchers.IO) {
@@ -34,7 +46,7 @@ class LocalMusicRepository(
 
     /** 启动时：后台增量扫描更新索引 */
     suspend fun incrementalScan(): ScanResult = withContext(Dispatchers.IO) {
-        val scanned = scanner.scanAllMusic()
+        val scanned = buildScannedList()
         // 以 contentUri 字符串作为唯一标识（MediaStore 与 file:// 均唯一）
         val scannedKeys = scanned.map { it.contentUri.toString() }.toSet()
         val cached = dao.getAllSongs()
@@ -43,26 +55,29 @@ class LocalMusicRepository(
         val newSongs = scanned.filter { it.contentUri.toString() !in cachedKeys }
 
         // B4 修复：USB / 外部 SD 歌曲在对应卷未挂载时不应被判定为「已删除」。
-        // MediaStore 在 USB 拔出后不再返回该卷上的条目，若简单做 cachedKeys - scannedKeys
-        // 会把所有 USB 歌一次性清空（每次启动丢失 USB 索引）。
-        // 仅对「本次扫描覆盖到的卷」内的缓存条目做删除比对；USB/EXTERNAL 条目若
-        // 对应卷当前未挂载则保留（挂载时由 scanUsbDevice 定向更新）。
         val mountedVolumeNames = scanned.map { it.volumeName }.filter { it.isNotEmpty() }.toSet()
         val hasInternal = scanned.any { it.storageType == StorageType.INTERNAL }
 
-        val deletedPaths = cached
-            .filter { entity ->
-                // 内置存储条目：MediaStore 始终返回，直接参与比对
-                if (entity.storageType == StorageType.INTERNAL.name) {
-                    entity.path !in scannedKeys
-                } else {
-                    // USB/EXTERNAL：仅当对应卷仍在挂载时参与比对，否则保留（卷可能被拔出）
-                    val stillMounted = mountedVolumeNames.contains(entity.volumeName) ||
-                        (entity.storageType == StorageType.EXTERNAL.name && hasInternal)
-                    stillMounted && entity.path !in scannedKeys
+        // 空扫描保护：若本次一个文件都没扫到（MediaStore 查询异常 / 权限变更），
+        // 跳过全部删除判定，避免把整个本地曲库误判为"已删除"。
+        val deletedPaths = if (scanned.isEmpty()) {
+            emptyList()
+        } else {
+            cached
+                .filter { entity ->
+                    // 内置存储 / 下载目录条目：始终参与比对
+                    if (entity.storageType == StorageType.INTERNAL.name ||
+                        entity.storageType == StorageType.DOWNLOAD.name) {
+                        entity.path !in scannedKeys
+                    } else {
+                        // USB/EXTERNAL：仅当对应卷仍在挂载时参与比对
+                        val stillMounted = mountedVolumeNames.contains(entity.volumeName) ||
+                            (entity.storageType == StorageType.EXTERNAL.name && hasInternal)
+                        stillMounted && entity.path !in scannedKeys
+                    }
                 }
-            }
-            .map { it.path }
+                .map { it.path }
+        }
 
         if (newSongs.isNotEmpty()) {
             dao.insertAll(newSongs.map { it.toEntity() })
@@ -77,6 +92,50 @@ class LocalMusicRepository(
             deletedPaths = deletedPaths,
             updatedSongs = emptyList()
         )
+    }
+
+    /** 合并 MediaStore 通道 + 下载目录文件通道，并按 contentUri 去重（防 MediaStore 重复收录下载目录） */
+    private suspend fun buildScannedList(): List<ScannedSong> {
+        val scanned = mutableListOf<ScannedSong>()
+        scanned += scanner.scanAllMusic()
+        // 下载目录：优先走 downloads.db 元数据（metadataResolver），跳过 MMR
+        val downloadRoot = downloadRootProvider()
+        if (downloadRoot != null && downloadRoot.exists()) {
+            scanned += scanner.scanPath(
+                downloadRoot.absolutePath,
+                StorageType.DOWNLOAD,
+                excludeDirs = setOf(DownloadPathBuilder.TMP_DIR),
+                metadataResolver = { f -> metadataForDownloadedFile(f) }
+            )
+        }
+        // 关键：防 MediaStore 重复收录下载目录（Android 11+ 通常不索引，但部分 ROM 会）。
+        // 优先保留 DOWNLOAD 通道（元数据来自 downloads.db，比 MediaStore 更准）。
+        return scanned
+            .distinctBy { it.contentUri.toString() }
+            .let { distinct ->
+                // 若 DOWNLOAD 与 MediaStore 同 path 冲突，保留 DOWNLOAD 通道
+                val downloadKeys = distinct.filter { it.storageType == StorageType.DOWNLOAD }
+                    .map { it.contentUri.toString() }.toSet()
+                distinct.filter { it.storageType != StorageType.INTERNAL || it.contentUri.toString() !in downloadKeys }
+            }
+    }
+
+    /** 从 downloads.db 读取下载歌曲元数据，构造 ScannedSong（短路 MMR） */
+    private suspend fun metadataForDownloadedFile(file: java.io.File): ScannedSong? {
+        // 通过 DownloadDatabase 查该路径的下载记录
+        val entity = downloadDao?.let { dao -> runCatching { dao.metadataByPath(file.absolutePath) }.getOrNull() }
+        return if (entity != null) {
+            scanner.metadataFor(
+                path = file.absolutePath,
+                title = entity.title,
+                artist = entity.artist,
+                album = entity.album,
+                durationMs = entity.durationMs
+            )
+        } else {
+            // 无下载记录（用户手动放入）：走 MMR
+            null
+        }
     }
 
     /** 搜索：只查询索引，不扫描文件 */
@@ -128,6 +187,21 @@ class LocalMusicRepository(
             deletedPaths = deletedPaths,
             updatedSongs = emptyList()
         )
+    }
+
+    /** 下载完成时即时入库（不等下次启动；见 §7.5.5） */
+    suspend fun upsertDownloaded(song: ScannedSong) = withContext(Dispatchers.IO) {
+        dao.insertAll(listOf(song.toEntity()))
+    }
+
+    /** 删除下载歌曲时移除 local_songs 中对应条目（分批删除，避 SQLite 999 变量上限） */
+    suspend fun removeByPaths(paths: List<String>) = withContext(Dispatchers.IO) {
+        deleteByPathsChunked(paths)
+    }
+
+    /** 全量加载本地曲库（清除/删除后刷新用） */
+    suspend fun loadAll(): List<Song> = withContext(Dispatchers.IO) {
+        dao.getAllSongs().map { it.toSong() }
     }
 
     // ── 转换函数 ──

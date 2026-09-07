@@ -110,26 +110,74 @@ class MusicScanner(private val context: Context) {
     }
 
     /**
-     * 扫描指定根路径的音乐文件（USB / SD 卡挂载点）
+     * 扫描指定根路径的音乐文件（USB / SD 卡挂载点 / 应用专属下载目录）
      * 使用文件系统遍历 + MediaMetadataRetriever 提取元数据
+     *
+     * @param rootPath 根路径
+     * @param storageType 存储类型（USB / EXTERNAL / DOWNLOAD）
+     * @param excludeDirs 需要跳过的子目录名（如 ".tmp"），防止下载临时文件被扫描
+     * @param metadataResolver 命中则跳过 MMR 直接构造元数据（下载歌曲元数据已在 downloads.db，
+     *                          避免上千首下载目录让启动扫描卡到秒级）
      */
-    suspend fun scanPath(rootPath: String, storageType: StorageType = StorageType.USB): List<ScannedSong> =
-        withContext(Dispatchers.IO) {
-            val songs = mutableListOf<ScannedSong>()
-            val root = File(rootPath)
-            if (!root.exists() || !root.isDirectory) return@withContext songs
+    suspend fun scanPath(
+        rootPath: String,
+        storageType: StorageType = StorageType.USB,
+        excludeDirs: Set<String> = emptySet(),
+        metadataResolver: (suspend (File) -> ScannedSong?)? = null
+    ): List<ScannedSong> = withContext(Dispatchers.IO) {
+        val songs = mutableListOf<ScannedSong>()
+        val root = File(rootPath)
+        if (!root.exists() || !root.isDirectory) return@withContext songs
 
-            root.walkTopDown()
-                .maxDepth(MAX_SCAN_DEPTH)
-                .filter { it.isFile && it.extension.lowercase() in SUPPORTED_EXTENSIONS }
-                .forEach { file ->
-                    val song = scanFile(file, storageType)
-                    if (song != null) songs.add(song)
-                }
+        root.walkTopDown()
+            // 跳过 .tmp / 含 .nomedia 的目录（避免 .part 临时文件与下载目录被媒体扫描器读到）
+            .onEnter { dir ->
+                dir.name !in excludeDirs && !File(dir, ".nomedia").exists()
+            }
+            .maxDepth(MAX_SCAN_DEPTH)
+            .filter { it.isFile && it.extension.lowercase() in SUPPORTED_EXTENSIONS }
+            .forEach { file ->
+                val song = metadataResolver?.invoke(file) ?: scanFile(file, storageType)
+                if (song != null) songs.add(song)
+            }
 
-            AppLog.d(TAG, "Scanned ${songs.size} songs from $rootPath")
-            songs
-        }
+        AppLog.d(TAG, "Scanned ${songs.size} songs from $rootPath")
+        songs
+    }
+
+    /**
+     * 从下载索引的元数据直接构造 [ScannedSong]（短路 MMR，供 [scanPath] 的 metadataResolver 注入）。
+     *
+     * @param path 音频文件绝对路径
+     * @param title 标题
+     * @param artist 艺术家
+     * @param album 专辑
+     * @param durationMs 时长
+     */
+    fun metadataFor(
+        path: String,
+        title: String,
+        artist: String,
+        album: String,
+        durationMs: Long
+    ): ScannedSong? {
+        val file = File(path)
+        if (!file.exists() || !file.isFile) return null
+        return ScannedSong(
+            mediaStoreId = HashUtils.stablePathHash64(path),
+            title = title,
+            artist = artist,
+            album = album,
+            albumId = 0L,
+            duration = durationMs,
+            size = file.length(),
+            dateAdded = file.lastModified() / 1000,
+            mimeType = guessMimeType(file.extension),
+            contentUri = Uri.fromFile(file),
+            volumeName = "",
+            storageType = StorageType.DOWNLOAD
+        )
+    }
 
     private fun scanFile(file: File, storageType: StorageType): ScannedSong? {
         val retriever = MediaMetadataRetriever()

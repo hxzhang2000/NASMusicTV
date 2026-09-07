@@ -132,8 +132,5 @@ class StorageMonitor(private val context: Context) {
         AppLog.d(TAG, "Found ${devices.size} storage devices")
     }
 
-    private fun getAvailableSpace(path: String): Long = try {
-        val stat = StatFs(path)
-        stat.availableBlocksLong * stat.blockSizeLong
-    } catch (e: Exception) { 0L }
+    private fun getAvailableSpace(path: String): Long = com.nasmusic.tv.util.StorageUtils.availableBytesAt(java.io.File(path))
 }

@@ -36,6 +36,8 @@ import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Icon
 import androidx.tv.material3.Text
 import com.nasmusic.tv.R
+import com.nasmusic.tv.backend.download.model.DownloadState
+import com.nasmusic.tv.backend.download.model.downloadKey
 import com.nasmusic.tv.backend.network.baidu.BaiduPanApi
 import com.nasmusic.tv.data.model.BaiduFile
 import com.nasmusic.tv.data.model.Song
@@ -72,8 +74,9 @@ fun NetdiskScreen(
     val searchKeyword by viewModel.netdiskSearchKeyword.collectAsState()
     val searchResults by viewModel.netdiskSearchResults.collectAsState()
     val localPlaylists by viewModel.localPlaylists.collectAsState(initial = emptyList())
-    val favoriteIds by viewModel.networkFavoriteIds.collectAsState(initial = emptySet())
-    val queueSongIds by viewModel.queueSongIds.collectAsState(initial = emptySet())
+val favoriteIds by viewModel.networkFavoriteIds.collectAsState(initial = emptySet())
+val queueSongIds by viewModel.queueSongIds.collectAsState(initial = emptySet())
+val downloadStates by viewModel.songDownloadStates.collectAsState(initial = emptyMap())
 
     var showSearchDialog by remember { mutableStateOf(false) }
     var actionSong by remember { mutableStateOf<Song?>(null) }
@@ -174,7 +177,9 @@ fun NetdiskScreen(
                                 onToggleFavorite = { viewModel.toggleNetworkFavorite(song) },
                                 isInQueue = song.id in queueSongIds,
                                 onToggleQueue = { viewModel.toggleQueueSong(song) },
-                                onAddToPlaylist = { actionSong = song }
+                                onAddToPlaylist = { actionSong = song },
+                                downloadState = downloadStates[song.downloadKey] ?: DownloadState.None,
+                                onDownload = { viewModel.downloadSong(song) }
                             )
                         }
                     }
@@ -250,7 +255,9 @@ fun NetdiskScreen(
                                     onToggleFavorite = { viewModel.toggleNetworkFavorite(song) },
                                     isInQueue = song.id in queueSongIds,
                                     onToggleQueue = { viewModel.toggleQueueSong(song) },
-                                    onAddToPlaylist = { actionSong = song }
+                                    onAddToPlaylist = { actionSong = song },
+                                    downloadState = downloadStates[song.downloadKey] ?: DownloadState.None,
+                                    onDownload = { viewModel.downloadSong(song) }
                                 )
                             }
                         }

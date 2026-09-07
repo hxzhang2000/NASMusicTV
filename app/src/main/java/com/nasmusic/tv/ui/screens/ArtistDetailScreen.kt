@@ -28,6 +28,8 @@ import androidx.compose.ui.unit.sp
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Text
 import com.nasmusic.tv.R
+import com.nasmusic.tv.backend.download.model.DownloadState
+import com.nasmusic.tv.backend.download.model.downloadKey
 import com.nasmusic.tv.data.model.Song
 import com.nasmusic.tv.ui.LocalListBackHandler
 import com.nasmusic.tv.ui.theme.FontSize
@@ -58,6 +60,8 @@ fun ArtistDetailScreen(
     favoriteIds: Set<String> = emptySet(),
     onToggleFavorite: (Song) -> Unit = {},
     onAddToPlaylist: (Song) -> Unit = {},
+    downloadStates: Map<String, DownloadState> = emptyMap(),
+    onDownloadSong: (Song) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val listState = rememberLazyListState()
@@ -181,6 +185,8 @@ fun ArtistDetailScreen(
                             isInQueue = song.id in queueSongIds,
                             onToggleQueue = { onToggleQueue(song) },
                             onAddToPlaylist = { onAddToPlaylist(song) },
+                            downloadState = downloadStates[song.downloadKey] ?: DownloadState.None,
+                            onDownload = { onDownloadSong(song) },
                             focusRequester = if (index == 0) firstItemFocusRequester else null
                         )
                     }

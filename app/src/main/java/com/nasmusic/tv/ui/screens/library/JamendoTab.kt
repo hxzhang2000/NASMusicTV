@@ -28,6 +28,8 @@ import androidx.compose.ui.unit.sp
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Text
 import com.nasmusic.tv.R
+import com.nasmusic.tv.backend.download.model.DownloadState
+import com.nasmusic.tv.backend.download.model.downloadKey
 import com.nasmusic.tv.data.model.Song
 import com.nasmusic.tv.data.model.UiState
 import com.nasmusic.tv.ui.components.FocusableSurface
@@ -60,7 +62,9 @@ fun JamendoTab(
     onSearch: (String) -> Unit,
     onPlaySong: (Song) -> Unit,
     onToggleFavorite: (Song) -> Unit,
-    onToggleQueue: (Song) -> Unit
+    onToggleQueue: (Song) -> Unit,
+    downloadStates: Map<String, DownloadState> = emptyMap(),
+    onDownloadSong: (Song) -> Unit = {}
 ) {
     var showSearchDialog by remember { mutableStateOf(false) }
     val listState = androidx.compose.foundation.lazy.LazyListState()
@@ -192,7 +196,9 @@ fun JamendoTab(
                                 isInQueue = song.id in queueSongIds,
                                 onToggleQueue = { onToggleQueue(song) },
                                 isFavorited = song.id in networkFavoriteIds,
-                                onToggleFavorite = { onToggleFavorite(song) }
+                                onToggleFavorite = { onToggleFavorite(song) },
+                                downloadState = downloadStates[song.downloadKey] ?: DownloadState.None,
+                                onDownload = { onDownloadSong(song) }
                             )
                         }
                         item { Spacer(modifier = Modifier.height(16.dp)) }

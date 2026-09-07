@@ -23,6 +23,8 @@ import androidx.compose.ui.unit.dp
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Text
 import com.nasmusic.tv.R
+import com.nasmusic.tv.backend.download.model.DownloadState
+import com.nasmusic.tv.backend.download.model.downloadKey
 import com.nasmusic.tv.data.model.Song
 import com.nasmusic.tv.data.model.WeatherData
 import com.nasmusic.tv.data.model.WeatherMood
@@ -54,6 +56,8 @@ fun WeatherRadioScreen(
     onPlayAll: () -> Unit,
     onSwitchMood: (WeatherMood) -> Unit,
     onBack: () -> Unit,
+    downloadStates: Map<String, DownloadState> = emptyMap(),
+    onDownloadSong: (Song) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     Column(
@@ -198,7 +202,9 @@ fun WeatherRadioScreen(
                         song = song,
                         onClick = { onPlaySong(song, index) },
                         mode = SongRowMode.MODE_ROW,
-                        index = index
+                        index = index,
+                        downloadState = downloadStates[song.downloadKey] ?: DownloadState.None,
+                        onDownload = { onDownloadSong(song) }
                     )
                 }
             }

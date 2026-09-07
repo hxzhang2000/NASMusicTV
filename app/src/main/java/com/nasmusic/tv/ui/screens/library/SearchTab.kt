@@ -24,6 +24,8 @@ import androidx.compose.ui.unit.sp
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Text
 import com.nasmusic.tv.R
+import com.nasmusic.tv.backend.download.model.DownloadState
+import com.nasmusic.tv.backend.download.model.downloadKey
 import com.nasmusic.tv.data.model.MusicSourceType
 import com.nasmusic.tv.data.model.Song
 import com.nasmusic.tv.ui.LocalListBackHandler
@@ -63,6 +65,8 @@ fun SearchTab(
     onAddToPlaylist: (Song) -> Unit = {},
     onPlayAll: () -> Unit = {},
     onAddAllToQueue: () -> Unit = {},
+    downloadStates: Map<String, DownloadState> = emptyMap(),
+    onDownloadSong: (Song) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val listState = androidx.compose.foundation.lazy.grid.rememberLazyGridState()
@@ -147,6 +151,8 @@ fun SearchTab(
                             isInQueue = song.id in queueSongIds,
                             onToggleQueue = { onToggleQueue(song) },
                             onAddToPlaylist = { onAddToPlaylist(song) },
+                            downloadState = downloadStates[song.downloadKey] ?: DownloadState.None,
+                            onDownload = { onDownloadSong(song) },
                             index = index,
                             focusRequester = if (index == 0) firstItemFocusRequester else null
                         )

@@ -67,6 +67,8 @@ import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Text
 import coil.compose.AsyncImage
 import com.nasmusic.tv.R
+import com.nasmusic.tv.backend.download.model.DownloadState
+import com.nasmusic.tv.backend.download.model.downloadKey
 import com.nasmusic.tv.data.model.Album
 import com.nasmusic.tv.data.model.Artist
 import com.nasmusic.tv.data.model.Genre
@@ -206,6 +208,9 @@ fun LibraryScreen(
     artistScrollOffset: Int = 0,
     onAlbumScrollPositionChange: (Int, Int) -> Unit = { _, _ -> },
     onArtistScrollPositionChange: (Int, Int) -> Unit = { _, _ -> },
+    // ── 歌曲下载状态 ──
+    downloadStates: Map<String, DownloadState> = emptyMap(),
+    onDownloadSong: (Song) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     var showSearchDialog by remember { mutableStateOf(false) }
@@ -473,7 +478,9 @@ fun LibraryScreen(
                         onToggleQueue = onToggleQueue,
                         onAddToPlaylist = onAddToPlaylist,
                         onPlayAll = onSearchTabPlayAll,
-                        onAddAllToQueue = onSearchTabAddAllToQueue
+                        onAddAllToQueue = onSearchTabAddAllToQueue,
+                        downloadStates = downloadStates,
+                        onDownloadSong = onDownloadSong
                     )
                 }
                 LibraryTab.DISCOVER -> {
@@ -491,7 +498,9 @@ fun LibraryScreen(
                         onPlaySong = onPlaySong,
                         onToggleFavorite = onToggleFavorite,
                         onToggleQueue = onToggleQueue,
-                        onAddToPlaylist = onAddToPlaylist
+                        onAddToPlaylist = onAddToPlaylist,
+                        downloadStates = downloadStates,
+                        onDownloadSong = onDownloadSong
                     )
                 }
                 LibraryTab.RADIO -> {
@@ -540,7 +549,9 @@ fun LibraryScreen(
                                 queueSongIds = queueSongIds,
                                 onToggleQueue = onToggleQueue,
                                 onToggleFavorite = onToggleFavorite,
-                                onAddToPlaylist = onAddToPlaylist
+                                onAddToPlaylist = onAddToPlaylist,
+                                downloadStates = downloadStates,
+                                onDownloadSong = onDownloadSong
                             )
                             else -> {}
                         }
@@ -601,7 +612,9 @@ fun LibraryScreen(
                                     queueSongIds = queueSongIds,
                                     onToggleQueue = onToggleQueue,
                                     onToggleFavorite = onToggleFavorite,
-                                    onAddToPlaylist = onAddToPlaylist
+                                    onAddToPlaylist = onAddToPlaylist,
+                                    downloadStates = downloadStates,
+                                    onDownloadSong = onDownloadSong
                                 )
                             }
                             LibraryTab.GENRES -> GenresTab(
@@ -1028,7 +1041,9 @@ private fun SongsTab(
     queueSongIds: Set<String> = emptySet(),
     onToggleQueue: (Song) -> Unit = {},
     onToggleFavorite: (Song) -> Unit = {},
-    onAddToPlaylist: (Song) -> Unit = {}
+    onAddToPlaylist: (Song) -> Unit = {},
+    downloadStates: Map<String, DownloadState> = emptyMap(),
+    onDownloadSong: (Song) -> Unit = {}
 ) {
     val listState = rememberLazyGridState()
     val firstItemFocusRequester = remember { FocusRequester() }
@@ -1115,6 +1130,8 @@ private fun SongsTab(
                         isInQueue = song.id in queueSongIds,
                         onToggleQueue = { onToggleQueue(song) },
                         onAddToPlaylist = { onAddToPlaylist(song) },
+                        downloadState = downloadStates[song.downloadKey] ?: DownloadState.None,
+                        onDownload = { onDownloadSong(song) },
                         focusRequester = if (index == 0) firstItemFocusRequester else null
                     )
                 }

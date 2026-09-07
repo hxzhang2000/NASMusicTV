@@ -39,6 +39,22 @@ class ArtistCoverResolver(
     }
 
     /**
+     * 单曲级艺术家封面 URL 解析（暴露现有私有的网易/酷狗/iTunes 链）。
+     *
+     * 用于下载流程的 [com.nasmusic.tv.backend.download.CoverFileWriter.writeArtistCover]：
+     * 在不调用批量 [resolveCovers] 的前提下获取单歌手的封面 URL。
+     *
+     * 优先级链与 [resolveCovers] 一致：网易云 → 酷狗 → iTunes（不含 P4 歌曲兜底，
+     * 因为单曲流程下游会自己用 song.coverUrl 兜底）。
+     */
+    suspend fun resolveArtistCoverUrl(name: String): String? = withContext(Dispatchers.IO) {
+        if (name.isBlank()) return@withContext null
+        resolveNeteaseArtistCover(name)
+            ?: resolveKugouArtistCover(name)
+            ?: resolveItunesArtistCover(name)
+    }
+
+    /**
      * 批量解析艺术家封面，对缺少封面的艺术家按优先级链尝试解析。
      *
      * 优先级链：网易云音乐 → 酷狗音乐 → iTunes → 该艺术家歌曲封面 → 首字母占位（UI 层）。
