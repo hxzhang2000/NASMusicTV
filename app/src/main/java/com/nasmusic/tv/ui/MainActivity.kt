@@ -105,6 +105,9 @@ class MainActivity : ComponentActivity() {
             }
         }
 
+        // 手机端：检查电池优化白名单，确保后台播放稳定
+        com.nasmusic.tv.player.BatteryOptimizationHelper.checkAndRequest(this)
+
         setContent {
             val settings by viewModel.appSettings.collectAsState(initial = com.nasmusic.tv.data.model.AppSettings())
             // 手机端：默认横屏使用（TV 不干预）
