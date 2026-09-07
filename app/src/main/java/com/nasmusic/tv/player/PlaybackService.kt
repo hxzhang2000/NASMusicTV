@@ -285,14 +285,22 @@ class PlaybackService : MediaLibraryService() {
             buildMediaButtonPendingIntent(KeyEvent.KEYCODE_MEDIA_NEXT)
         ).build()
 
+        // contentText 显示歌手名（播放状态由 MediaStyle 图标隐含）
+        val artist = mediaLibrarySession?.player?.currentMediaItem?.mediaMetadata?.artist?.toString()
+
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle(title ?: "NAS Music TV")
-            .setContentText(if (isPlaying) getString(R.string.playback_playing) else getString(R.string.playback_paused))
+            .setContentText(artist)
             .setSmallIcon(android.R.drawable.ic_media_play)
             .setContentIntent(pendingIntent)
             .addAction(prevAction)
             .addAction(playPauseAction)
             .addAction(nextAction)
+            .setStyle(
+                androidx.media.app.NotificationCompat.MediaStyle()
+                    .setMediaSession(mediaLibrarySession?.sessionCompatToken)
+                    .setShowActionsInCompactView(0, 1, 2)  // prev, play/pause, next
+            )
             .setOngoing(isPlaying)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
@@ -303,17 +311,18 @@ class PlaybackService : MediaLibraryService() {
     /**
      * 构建媒体按钮 PendingIntent
      * 通过 ACTION_MEDIA_BUTTON Intent + KeyEvent 转发控制指令到 MediaSession
-     * MediaLibraryService 会自动处理此 Intent 并调用对应的 Player 方法
+     * MediaLibraryService.onStartCommand 会自动处理此 Intent 并调用对应的 Player 方法
+     * 注意：用 PendingIntent.getService 而非 getBroadcast，否则无人接收
      */
     private fun buildMediaButtonPendingIntent(keyCode: Int): PendingIntent {
         val keyEvent = KeyEvent(KeyEvent.ACTION_DOWN, keyCode)
         val intent = Intent(Intent.ACTION_MEDIA_BUTTON).apply {
-            setPackage(packageName)
+            setClass(this@PlaybackService, PlaybackService::class.java)
             putExtra(Intent.EXTRA_KEY_EVENT, keyEvent)
         }
-        return PendingIntent.getBroadcast(
+        return PendingIntent.getService(
             this, keyCode, intent,
-            PendingIntent.FLAG_IMMUTABLE
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
     }
 

@@ -7261,3 +7261,52 @@ val result = with(kotlinx.coroutines.Dispatchers.IO) { separator.separate(...) }
 - 设置页"缓存管理"的 clearCoverCache 清 Coil 图片缓存，未清 cover_url_cache.json（可按需扩展）
 
 **版本号变更**：v2.26.29 → v2.26.30（versionCode 108 → 109）
+### 10.100 v2.26.31 - 手机端媒体播放 L1 适配（蓝牙元数据/后台保活/锁屏控制）
+
+**提交日期**：2026-09-05
+
+**背景**：实现 `docs/phone-media-display-plan.md` 阶段1（P0），解决三大核心问题：
+1. 汽车蓝牙连接时车机屏无歌曲信息
+2. 应用切后台歌曲停止
+3. 锁屏页面无歌曲信息和控制键
+
+**根因分析**：
+1. `PlayerManager.playSong` 把 `Song` 转 `MediaItem` 时未填充 `MediaMetadata`。Media3 `MediaLibrarySession` 向系统 `MediaSessionManager` 发布元数据，但 `MediaItem.mediaMetadata` 为空时蓝牙 AVRCP 读不到。
+2. `PlaybackService.onTaskRemoved` 直接 `stopSelf()` → 服务销毁 → player release → 停止播放。
+3. 锁屏媒体控件由 `MediaSession` 自动驱动，但元数据依赖 `MediaItem.mediaMetadata`，同问题1。
+
+**修复内容**：
+
+1. **`PlayerManager.kt`** — 新增 `buildMediaItem(song: Song): MediaItem`，填充完整 `MediaMetadata`（title/artist/albumTitle/artworkUri/trackNumber/releaseYear/genre）。`playSong()` 改用此方法构建 MediaItem。
+
+2. **新增 `CoilBitmapLoader.kt`** — 实现 `MediaSession.BitmapLoader` 接口，内部走 Coil `ImageLoader` 加载封面（复用 NasMusicApp 已注入的百度 dlink UA 拦截器）。方法：`loadBitmap(uri)` / `decodeBitmap(data)`。
+
+3. **`PlaybackService.kt`** — `onCreate` 注入 `CoilBitmapLoader(Coil.imageLoader(this), this)` 到 `MediaLibrarySession.Builder.setBitmapLoader()`。Media3 自动驱动系统 `MediaSession` → 锁屏/SMSC/蓝牙/厂商实况窗自动生效。
+
+4. **`PlaybackService.onTaskRemoved`** — 改为：`player.isPlaying` → return（继续播放）；否则 → `stopSelf()`（已暂停才停止）。
+
+5. **新增 `BatteryOptimizationHelper.kt`** — 检测 `PowerManager.isIgnoringBatteryOptimizations`，未加入白名单时弹 Dialog 引导用户加入（`ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS`）。集成到 `MainActivity.onCreate`。
+
+6. **新增 `MediaLibraryTree.kt`** — 为 Android Auto/Wear OS 实现媒体浏览树（`getLibraryRoot()` / `getChildren(parentId)` / `getItem(mediaId)`），使用 `PlayerManager.getQueueSnapshot()` 获取队列快照。`PlaybackService` 中 `MediaLibrarySession.Callback` 实现 `onGetLibraryRoot`/`onGetItem`/`onGetChildren`，通过 `LibraryResult` + `Futures.immediateFuture` 返回结果。
+
+7. **`PlayerManager.kt`** — 新增 `getPlayer(): ExoPlayer?` 和 `getQueueSnapshot(): List<Song>` 公开方法，供 `MediaLibraryTree` 和外部访问。
+
+**涉及文件**：
+- `player/PlayerManager.kt`：`buildMediaItem()` + `getPlayer()` + `getQueueSnapshot()`
+- `player/CoilBitmapLoader.kt`（新增）：`MediaSession.BitmapLoader` 实现
+- `player/PlaybackService.kt`：注入 CoilBitmapLoader + 修复 onTaskRemoved
+- `player/BatteryOptimizationHelper.kt`（新增）：电池优化白名单引导
+- `player/MediaLibraryTree.kt`（新增）：Android Auto/Wear 媒体树工具类 + MediaLibrarySession.Callback 实现
+- `ui/MainActivity.kt`：BatteryOptimizationHelper 调用
+
+**验证结果**：
+- ✅ `:app:compileDebugKotlin` BUILD SUCCESSFUL
+- ✅ `:app:assembleDebug` BUILD SUCCESSFUL
+
+**注意事项**：
+- `LibraryResult` 正确 import 路径为 `androidx.media3.session.LibraryResult`，已在 `PlaybackService` 中实现
+- 蓝牙 AVRCP 协议只支持标题/艺术家/专辑/时长/封面，不支持歌词
+- 厂商省电策略（小米神隐模式、华为应用冻结等）仍需用户手动加入白名单
+- L2 厂商增强（华为实况窗 Notification extra、OPPO 跨设备 SDK 等）暂不开发，待 L1 实测后评估
+
+**版本号变更**：v2.26.30 → v2.26.31（versionCode 109 → 110）

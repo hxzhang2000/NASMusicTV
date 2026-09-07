@@ -32,8 +32,8 @@ android {
         applicationId = "com.nasmusic.tv"
         minSdk = 22
         targetSdk = 34
-        versionCode = 109
-        versionName = "2.26.30"
+        versionCode = 110
+        versionName = "2.26.31"
 
         ndk {
             abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64")
@@ -126,6 +126,9 @@ dependencies {
     implementation("androidx.media3:media3-session:1.2.1")
     implementation("androidx.media3:media3-ui:1.2.1")
     implementation("androidx.media3:media3-datasource-okhttp:1.2.1")
+
+    // Concurrent Futures (for ResolvableFuture used in CoilBitmapLoader)
+    implementation("androidx.concurrent:concurrent-futures:1.1.0")
 
     // Networking
     implementation("com.squareup.okhttp3:okhttp:4.12.0")

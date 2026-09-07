@@ -7,6 +7,22 @@
 >
 > 类型：`Added`（新增） | `Changed`（变更） | `Fixed`（修复） | `Removed`（移除）
 
+## [v2.26.31] - 2026-09-05
+
+### Added
+
+- **手机端媒体播放功能**：实现 `docs/phone-media-display-plan.md` 阶段1（P0），解决蓝牙车机无歌曲信息、切后台停歌、锁屏无控制键三大问题。
+  - `PlayerManager.buildMediaItem()`：播放歌曲时填充完整 `MediaMetadata`（title/artist/album/artworkUri/trackNumber/year/genre），蓝牙 AVRCP 自动读取元数据。
+  - `CoilBitmapLoader`：实现 `MediaSession.BitmapLoader`，通过 Coil 加载封面（复用百度 dlink UA 拦截器）。
+  - `PlaybackService`：注入 `CoilBitmapLoader`，MediaSession 自动驱动系统锁屏/SMSC/蓝牙/厂商实况窗。
+  - `onTaskRemoved`：播放中移除任务栏 → 继续播放；已暂停 → 停止服务（与主流音乐 App 一致）。
+  - `BatteryOptimizationHelper`：首次播放检测电池优化白名单，未加入时引导用户加入（解决厂商省电杀后台）。
+  - `MediaLibraryTree`：为 Android Auto/Wear OS 实现媒体浏览树（`onGetLibraryRoot`/`onGetItem`/`onGetChildren`），暴露当前播放队列为可浏览媒体树。
+
+### Fixed
+
+- **PlaybackService.onTaskRemoved 切后台停歌**：原实现直接 `stopSelf()` 导致服务销毁，改为播放中保留服务。
+
 ## [v2.26.30] - 2026-09-05
 
 ### Added
