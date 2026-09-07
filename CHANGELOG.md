@@ -7,6 +7,26 @@
 >
 > 类型：`Added`（新增） | `Changed`（变更） | `Fixed`（修复） | `Removed`（移除）
 
+## [v2.26.33] - 2026-09-08
+
+### Fixed
+
+- **百度网盘 TV 端登录 errno=-6 根因修复**：`CryptoUtils.encrypt()` 在 AES-GCM 加密时未显式传入 IV，部分 Android TV ROM 的 `cipher.iv` 返回空数组导致密文缺少 IV 前缀，解密失败后密文被当作 token 发给百度，百度返回 `errno=-6`。改为用 `SecureRandom` 显式生成 12 字节 IV 并通过 `GCMParameterSpec` 传入。
+  - 修复后 TV 端日志确认 token 格式正确（`126.xxx` 前缀），`listAllAudioPaged` 成功返回 31,251 个文件
+- **ERRNO_MAP 对照百度官方文档全面修正**：`-1` 改为"权益已过期"，`-6` 去除混入的 20013 语义，移除不在官方表中的 `-111`/`-118`
+- **本地错误码与百度 errno 分离**：新增 `LOCAL_ERRNO_NO_TOKEN=-100` / `LOCAL_ERRNO_NETWORK=-101`，本地生成的错误不再伪装为百度 `-6`
+- **scope 缺少 netdisk 时阻断保存**：`pollDeviceToken()` 中检测到授权 scope 不含 `netdisk` 时返回 Failed 而非仅警告
+- **createDir 移除未定义参数**：移除百度文档未定义的 `size` 参数
+- **BaiduAuthDialog 错误文案区分**：Failed 状态根据实际失败原因动态显示（授权范围不足/用户拒绝/超时/授权失败）
+
+### Changed
+
+- `getBaiduTokensSync()` 增加解密后 token 前缀诊断日志
+- `CryptoUtils.tryDecrypt()` / `decrypt()` 增加解密失败诊断日志（text prefix、length）
+- `BaiduPanApi.executeWithErrno()` 增加完整 response body 日志
+
+---
+
 ## [v2.26.32] - 2026-09-06
 
 ### Added

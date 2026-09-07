@@ -7413,3 +7413,139 @@ val result = with(kotlinx.coroutines.Dispatchers.IO) { separator.separate(...) }
 - 导出=备份，不删除本地副本（D17 已定）
 - 自动下载配额默认50（TV 存储小）
 - 去重键：title+artist 规范化（dedupeKey）
+
+---
+
+### 10.103 v2.26.33 - 修复 TV 端百度网盘 token 加密 IV 缺失导致 API errno=-6
+
+**提交日期**：2026-09-08
+
+**提交哈希**：`4be8994`
+
+**背景**：百度网盘登录在 TV 端始终失败——设备码授权流程正常完成（scope=`basic netdisk`，token 保存成功），但随后调用百度文件 API（list/listall）时百度返回 `errno=-6`（authorized fail）。使用同一 AppKey 在本机 curl 测试证明 token 本身有效（`uinfo` 返回用户信息），但 TV 端发出的 token 格式异常（`mHm8Whc/3X+2czB1Bth...`，非百度标准格式 `126.xxx.Yyy.Zzz`），确认为 token 在存储/读取过程中被篡改。
+
+**根因分析**：
+
+`CryptoUtils.encrypt()` 在 `cipher.init(Cipher.ENCRYPT_MODE, softwareKey)` 时**未显式传入 `GCMParameterSpec`/IV**，依赖平台自动生成 IV。在目标 Android TV ROM（Hisense/Android 11）上，`cipher.iv` 在 ENCRYPT_MODE 不传 IV 时返回**空数组**（0 字节而非 12 字节），导致：
+
+1. `encrypt()` 执行 `iv + encrypted` 拼接时，`iv` 为空 → 密文缺少 12 字节 IV 前缀
+2. `decrypt()` 提取前 12 字节作为 IV（实际取到 ciphertext 的前 12 字节）→ IV 错误
+3. GCM tag 验证失败 → `tryDecrypt` 返回 null → `decrypt()` 原样返回密文
+4. 密文（Base64 字符串）被当作 accessToken 发给百度 → 百度无法识别 → 返回 `errno=-6`
+
+**修复内容**：
+
+#### 1. CryptoUtils IV 显式生成（核心修复）
+
+**文件**：`util/CryptoUtils.kt`
+
+- `encrypt()`：改用 `SecureRandom` 显式生成 12 字节随机 IV，通过 `GCMParameterSpec(GCM_TAG_LENGTH, iv)` 传入 `cipher.init()`，确保密文始终包含有效 IV 前缀
+- `tryDecrypt()`：catch 块增加诊断日志（text prefix、length），便于定位解密失败
+- `decrypt()`：all-keys-failed 路径增加日志，区分"密文解密失败"与"明文直传"
+
+```kotlin
+// 修复前（有 bug）
+cipher.init(Cipher.ENCRYPT_MODE, softwareKey)  // 不传 IV，依赖平台自动生成
+val iv = cipher.iv  // ← TV ROM 返回空数组！
+
+// 修复后
+val iv = ByteArray(GCM_IV_LENGTH).also { SecureRandom().nextBytes(it) }
+cipher.init(Cipher.ENCRYPT_MODE, softwareKey, GCMParameterSpec(GCM_TAG_LENGTH, iv))
+```
+
+#### 2. 百度网盘模块对照官方文档全面修正
+
+**文件**：`backend/network/baidu/BaiduNetdiskConfig.kt`
+
+- `ERRNO_MAP` 对照百度开放平台错误码文档全面修正：
+  - `-1` → "权益已过期"（原误标为"应用无接口权限"）
+  - `-6` → "授权失败（access_token 无效或过期）"，去除混入的 20013 语义
+  - 移除不在官方表中的 `-111` / `-118`
+- 新增本地错误码常量：
+  - `LOCAL_ERRNO_NO_TOKEN = -100`（本地无 token 时使用，不再伪装百度 -6）
+  - `LOCAL_ERRNO_NETWORK = -101`（本地网络异常时使用）
+
+**文件**：`backend/network/baidu/BaiduPanApi.kt`
+
+- `listDir()` / `createDir()` 中本地生成的 `-6` 替换为 `LOCAL_ERRNO_NO_TOKEN`，确保只有百度服务器真正返回的 `-6` 才显示为 `-6`
+- `createDir()` 移除官方文档未定义的 `size` 参数
+- `executeWithErrno()` 增加完整 response body 日志，便于诊断
+
+**文件**：`backend/network/baidu/BaiduOAuthClient.kt`
+
+- `pollDeviceToken()`：当授权 scope 缺少 `netdisk` 时，改为返回 `Failed`（阻断保存 token）而非仅打印警告
+- `refreshAccessToken()`：日志文案微调
+
+#### 3. BaiduAuthDialog 错误文案区分
+
+**文件**：`ui/screens/netdisk/BaiduAuthDialog.kt`
+
+- `Failed` 状态标题改为根据 message 内容动态区分：授权范围不足 / 用户拒绝 / 超时 / 授权失败
+- `strings.xml` 新增 `baidu_auth_scope_missing` = "授权范围不足"
+
+#### 4. AppPreferences 解密诊断日志
+
+**文件**：`data/prefs/AppPreferences.kt`
+
+- `getBaiduTokensSync()`：解密后打印 token 前缀和长度，便于在 logcat 中快速判断 token 是否被篡改
+
+#### 5. 其他修复（同一提交）
+
+**下载模块**：
+- `AutoDownloadController`：切歌后延迟 5s 确认用户未切走再触发下载（避免快速切歌导致无效下载）
+- `SongDownloadManager`：`cancelAll()` 中断协程、崩溃恢复检查文件是否存在
+- `StorageGuard`：空间检测优化
+
+**导出功能**：
+- `ExportCoordinator` / `SongExporter`：SAF 嵌套目录解析、`takePersistableUriPermission`、封面路径修正
+
+**播放器**：
+- `PlayerManager`：`buildMediaItem` 替代 `fromUri` 保留元数据
+- `MediaLibraryTree`：MediaLibrary 分页
+- `PlaybackService`：`exported=true` + `RECEIVER_NOT_EXPORTED` 兼容 Android 13
+
+**本地音乐**：
+- `LocalMusicRepository`：`fullScan` 使用 `buildScannedList` 避免重复扫描
+- `CoverUrlPersistentCache`：debounce 落盘 + 原子写入
+
+**涉及文件**：
+- `util/CryptoUtils.kt` — IV 显式生成（核心修复）
+- `data/prefs/AppPreferences.kt` — 解密诊断日志
+- `backend/network/baidu/BaiduNetdiskConfig.kt` — ERRNO_MAP 修正 + 本地错误码
+- `backend/network/baidu/BaiduOAuthClient.kt` — scope 阻断
+- `backend/network/baidu/BaiduPanApi.kt` — 本地错误码替换 + createDir 参数修正
+- `ui/screens/netdisk/BaiduAuthDialog.kt` — 错误文案区分
+- `res/values/strings.xml` — 新增 baidu_auth_scope_missing
+- `backend/download/AutoDownloadController.kt` — 延迟确认
+- `backend/download/SongDownloadManager.kt` — cancelAll + 崩溃恢复
+- `backend/download/StorageGuard.kt` — 空间检测
+- `backend/export/ExportCoordinator.kt` — SAF 嵌套目录
+- `backend/export/SongExporter.kt` — 封面路径
+- `backend/local/LocalMusicRepository.kt` — fullScan 优化
+- `backend/local/CoverUrlPersistentCache.kt` — debounce 落盘
+- `backend/local/StorageMonitor.kt` — 存储监控
+- `player/PlayerManager.kt` — buildMediaItem
+- `player/MediaLibraryTree.kt` — 分页
+- `player/PlaybackService.kt` — exported + RECEIVER_NOT_EXPORTED
+- `player/CoilBitmapLoader.kt` — 图片加载
+- `ui/components/AppRoot.kt` — 参数链
+- `ui/components/song/UnifiedSongRow.kt` — 歌曲行
+- `ui/screens/AlbumDetailScreen.kt` — 专辑详情
+- `ui/screens/ArtistDetailScreen.kt` — 艺术家详情
+- `ui/screens/LibraryScreen.kt` — 曲库
+- `ui/screens/MineScreen.kt` — 我的
+- `ui/screens/SettingsScreen.kt` — 设置
+- `ui/viewmodel/MainViewModel.kt` — ViewModel 集成
+- `app/proguard-rules.pro` — jaudiotagger keep 规则
+- `app/src/main/AndroidManifest.xml` — 权限与服务声明
+
+**验证结果**：
+- ✅ `:app:compileDebugKotlin` BUILD SUCCESSFUL
+- ✅ TV 端日志确认：`getBaiduTokensSync: accessToken prefix=126.fc3ca9... (len=83)` — token 格式正确
+- ✅ `listAllAudioPaged` 成功返回 31,251 个文件（`errno=0`），翻页正常
+- ✅ 百度网盘登录 → 授权 → 列目录 → 全量扫描 全流程通过
+
+**设计决策**：
+- IV 显式生成而非依赖平台：Android TV ROM 的 AES-GCM 实现不一致，`cipher.iv` 在不传 GCMParameterSpec 时可能返回空数组，必须显式生成
+- 本地错误码 -100/-101 与百度 errno 分离：避免本地错误伪装为百度返回，干扰诊断
+- 解密失败仍返回原样（而非抛异常）：兼容旧版本明文存储数据，不强制迁移
