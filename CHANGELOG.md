@@ -7,6 +7,12 @@
 >
 > 类型：`Added`（新增） | `Changed`（变更） | `Fixed`（修复） | `Removed`（移除）
 
+## [v2.26.38] - 2026-09-08
+
+### Fixed
+
+- **扫码传输备份上传失败**：`BackupTransferServer` 的 HTML 模板中，`strings.xml` 的 `html_backup_confirm_restore` 含 `\n` 换行符，经 `getString()` 解析后变为真实换行，插入 JS 单引号字符串导致语法错误，整个 `<script>` 块不执行，页面 JS 全部失效（无 `GET /api/list`、无 alert、无 POST）。改用 `gson.toJson()` 序列化 STR 对象，自动转义特殊字符。同时前端 `readAsText` 改为 `readAsArrayBuffer` + `Blob` 避免文本编码问题，服务端 `session.inputStream` 改为 `parseBody()` 标准方式读取 POST body。
+
 ## [v2.26.37] - 2026-09-08
 
 ### Fixed

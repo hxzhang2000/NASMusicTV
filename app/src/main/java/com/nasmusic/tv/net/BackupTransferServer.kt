@@ -42,26 +42,31 @@ class BackupTransferServer(
     private var server: Impl? = null
 
     fun start(): Boolean {
-        if (server != null) return true
+        AppLog.i(TAG, "start: called, server=$server")
+        if (server != null) {
+            AppLog.i(TAG, "start: already running, returning true")
+            return true
+        }
         val impl = Impl(context, onRestore, onBackupChanged, port)
         return try {
             impl.start(NanoHTTPD.SOCKET_READ_TIMEOUT, false)
             server = impl
-            AppLog.i(TAG, "Started on port $port")
+            AppLog.i(TAG, "start: started on port $port")
             true
         } catch (e: IOException) {
-            AppLog.e(TAG, "Failed to start on port $port", e)
+            AppLog.e(TAG, "start: failed on port $port", e)
             false
         }
     }
 
     fun stop() {
+        AppLog.i(TAG, "stop: called, server=$server")
         server?.let {
             try {
                 it.stop()
-                AppLog.i(TAG, "Stopped")
+                AppLog.i(TAG, "stop: stopped")
             } catch (e: Exception) {
-                AppLog.w(TAG, "Error stopping", e)
+                AppLog.w(TAG, "stop: error", e)
             }
         }
         server = null
@@ -80,13 +85,17 @@ class BackupTransferServer(
         private val timeFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US)
 
         override fun serve(session: IHTTPSession): Response {
+            AppLog.i(TAG, "serve: ${session.method} ${session.uri}")
             return when {
                 session.uri == "/" && session.method == Method.GET -> servePage()
                 session.uri == "/api/list" && session.method == Method.GET -> handleList()
                 session.uri.startsWith("/api/download") && session.method == Method.GET -> handleDownload(session)
                 session.uri == "/api/upload" && session.method == Method.POST -> handleUpload(session)
                 session.uri.startsWith("/api/restore") && session.method == Method.POST -> handleRestore(session)
-                else -> newFixedLengthResponse(Response.Status.NOT_FOUND, MIME_PLAINTEXT, "Not Found")
+                else -> {
+                    AppLog.w(TAG, "serve: 404 for ${session.method} ${session.uri}")
+                    newFixedLengthResponse(Response.Status.NOT_FOUND, MIME_PLAINTEXT, "Not Found")
+                }
             }
         }
 
@@ -99,6 +108,21 @@ class BackupTransferServer(
         }
 
         private fun buildBackupPageHtml(context: Context): String {
+            // 用 Gson 生成 STR JSON，自动转义换行符/引号等特殊字符
+            // 避免 Android strings.xml 中的 \n 被解析为真实换行后破坏 JS 单引号字符串
+            val strMap = mapOf(
+                "empty" to context.getString(R.string.html_backup_empty),
+                "loadError" to context.getString(R.string.html_backup_load_error),
+                "downloading" to context.getString(R.string.html_backup_status_downloading),
+                "downloadStarted" to context.getString(R.string.html_backup_status_download_started),
+                "confirmRestore" to context.getString(R.string.html_backup_confirm_restore),
+                "restoring" to context.getString(R.string.html_backup_status_restoring),
+                "restoreFailed" to context.getString(R.string.html_backup_status_restore_failed),
+                "uploading" to context.getString(R.string.html_backup_uploading),
+                "uploadFailed" to context.getString(R.string.html_backup_status_upload_failed),
+                "uploadBtn" to context.getString(R.string.html_backup_upload_btn)
+            )
+            val strJson = gson.toJson(strMap)
             return """
 <!DOCTYPE html>
 <html lang="zh-CN">
@@ -147,25 +171,14 @@ input[type=file]{width:100%;padding:10px;font-size:14px;background:#0a0a23;borde
 <div class="section">
 <h3>${context.getString(R.string.html_backup_section_upload)}</h3>
 <input type="file" id="fileInput" accept=".json,application/json">
-<button class="btn-upload" id="uploadBtn" onclick="uploadBackup()" disabled>${context.getString(R.string.html_backup_upload_btn)}</button>
+<button class="btn-upload" id="uploadBtn" onclick="uploadBackup()">${context.getString(R.string.html_backup_upload_btn)}</button>
 </div>
 
 <div id="status" class="status"></div>
 </div>
 
 <script>
-var STR = {
-  empty: '${context.getString(R.string.html_backup_empty).replace("'", "\\'")}',
-  loadError: '${context.getString(R.string.html_backup_load_error).replace("'", "\\'")}',
-  downloading: '${context.getString(R.string.html_backup_status_downloading).replace("'", "\\'")}',
-  downloadStarted: '${context.getString(R.string.html_backup_status_download_started).replace("'", "\\'")}',
-  confirmRestore: '${context.getString(R.string.html_backup_confirm_restore).replace("'", "\\'")}',
-  restoring: '${context.getString(R.string.html_backup_status_restoring).replace("'", "\\'")}',
-  restoreFailed: '${context.getString(R.string.html_backup_status_restore_failed).replace("'", "\\'")}',
-  uploading: '${context.getString(R.string.html_backup_uploading).replace("'", "\\'")}',
-  uploadFailed: '${context.getString(R.string.html_backup_status_upload_failed).replace("'", "\\'")}',
-  uploadBtn: '${context.getString(R.string.html_backup_upload_btn).replace("'", "\\'")}'
-};
+var STR = $strJson;
 function loadBackups(){
   fetch('/api/list')
     .then(function(r){return r.json()})
@@ -211,15 +224,19 @@ function restoreBackup(name){
 
 function uploadBackup(){
   var input=document.getElementById('fileInput');
-  if(!input.files||input.files.length===0)return;
-  var file=input.files[0];
   var btn=document.getElementById('uploadBtn');
+  if(!input.files||input.files.length===0){
+    showStatus(STR.uploadFailed,'err');
+    return;
+  }
+  var file=input.files[0];
   btn.disabled=true;
   btn.textContent=STR.uploading;
-  showStatus('${context.getString(R.string.html_backup_status_uploading).replace("'", "\\'")}'.replace('%s',file.name),'');
+  showStatus(STR.uploading.replace('%s',file.name),'');
   var reader=new FileReader();
   reader.onload=function(){
-    fetch('/api/upload',{method:'POST',body:reader.result})
+    var blob=new Blob([reader.result],{type:'application/json'});
+    fetch('/api/upload',{method:'POST',body:blob})
       .then(function(r){return r.json()})
       .then(function(d){
         showStatus(d.message, d.ok?'ok':'err');
@@ -228,20 +245,20 @@ function uploadBackup(){
           loadBackups();
         }
       })
-      .catch(function(e){showStatus(STR.uploadFailed,'err');})
+      .catch(function(e){
+        showStatus(STR.uploadFailed+': '+e.message,'err');
+      })
       .finally(function(){
         btn.disabled=false;
         btn.textContent=STR.uploadBtn;
-        var hasFile=input.files&&input.files.length>0;
-        if(!hasFile)btn.disabled=true;
       });
   };
   reader.onerror=function(){
-    showStatus(STR.uploadFailed,'err');
+    showStatus(STR.uploadFailed+': reader error','err');
     btn.disabled=false;
     btn.textContent=STR.uploadBtn;
   };
-  reader.readAsText(file);
+  reader.readAsArrayBuffer(file);
 }
 
 function showStatus(msg,type){
@@ -249,14 +266,6 @@ function showStatus(msg,type){
   s.textContent=msg;
   s.className='status'+(type?' '+type:'');
 }
-
-var fileInput=document.getElementById('fileInput');
-function updateUploadBtn(){
-  var hasFile=fileInput.files&&fileInput.files.length>0;
-  document.getElementById('uploadBtn').disabled=!hasFile;
-}
-fileInput.addEventListener('change',updateUploadBtn);
-fileInput.addEventListener('input',updateUploadBtn);
 
 loadBackups();
 </script>
@@ -324,27 +333,21 @@ loadBackups();
 
         /** 上传备份文件（raw body = JSON 内容） */
         private fun handleUpload(session: IHTTPSession): Response {
+            AppLog.i(TAG, "handleUpload: called, method=${session.method}, uri=${session.uri}")
+            AppLog.i(TAG, "handleUpload: headers=${session.headers}")
             return try {
-                // 直接从 inputStream 读取 body，绕过 parseBody 的字符集/大小限制问题
-                val contentLength = session.headers["content-length"]?.toLongOrNull() ?: -1L
-                if (contentLength <= 0) {
-                    return jsonResponse(false, "上传内容为空（Content-Length=$contentLength）")
-                }
-                val bytes = ByteArray(contentLength.toInt())
-                var totalRead = 0
-                while (totalRead < contentLength) {
-                    val read = session.inputStream.read(bytes, totalRead, (contentLength - totalRead).toInt())
-                    if (read < 0) break
-                    totalRead += read
-                }
-                val json = String(bytes, 0, totalRead, Charsets.UTF_8)
+                // 用 parseBody 读取 POST body，NanoHTTPD 将非 multipart 内容存入 files["postData"]
+                val files = HashMap<String, String>()
+                session.parseBody(files)
+                val json = files["postData"] ?: ""
+                AppLog.i(TAG, "handleUpload: body length=${json.length}")
                 if (json.isEmpty()) {
-                    return jsonResponse(false, "上传内容为空（读取到 0 字节）")
+                    return jsonResponse(false, "上传内容为空")
                 }
                 val result = BackupFileUtils.export(context, json)
                 if (result.isSuccess) {
                     val savedName = result.getOrThrow()
-                    AppLog.i(TAG, "Upload saved: $savedName (${json.length} chars, $totalRead bytes)")
+                    AppLog.i(TAG, "Upload saved: $savedName (${json.length} chars)")
                     onBackupChanged.invoke()
                     jsonResponse(true, "已保存: $savedName")
                 } else {
