@@ -462,6 +462,11 @@ class SongDownloadManager(
 
     /** 获取已下载状态 Map（供 UI 列表 collect） */
     fun snapshotStates(): Map<String, DownloadState> = _downloadStates.value
+
+    /** 清空所有下载状态（供 MainViewModel.clearAllDownloads() 调用，同步内存 Map） */
+    fun clearAllStates() {
+        _downloadStates.value = emptyMap()
+    }
 }
 
 /** 下载结果枚举 */

@@ -4424,6 +4424,9 @@ showError(getApplication<Application>().getString(R.string.play_failed_with_msg,
             // 2. 清空 download_songs 表
             repo.deleteAll()
 
+            // 2b. 清空 SongDownloadManager 内存状态 Map（否则搜索仍显示"已下载"）
+            app.songDownloadManager.clearAllStates()
+
             // 3. 从 local_songs 移除（按 storageType="DOWNLOAD" 过滤）
             val downloadPaths = completed.mapNotNull { it.audioPath }
             if (downloadPaths.isNotEmpty()) {
