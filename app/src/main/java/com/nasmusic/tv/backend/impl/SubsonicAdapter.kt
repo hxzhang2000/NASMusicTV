@@ -433,7 +433,7 @@ class SubsonicAdapter : BackendAdapter {
     }
 
     // --- 收藏 ---
-    override suspend fun toggleFavorite(songId: String): Boolean = withContext(Dispatchers.IO) {
+    override suspend fun toggleFavorite(songId: String, isCurrentlyFavorite: Boolean): Boolean = withContext(Dispatchers.IO) {
         try {
             // 先获取当前收藏状态
             val starredSongs = getFavorites()

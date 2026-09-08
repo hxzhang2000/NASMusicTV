@@ -531,6 +531,8 @@ Text(
                 color = NasMusicColors.TextSecondary.copy(alpha = 0.7f),
                 fontSize = FontSize.button(),
                 textAlign = TextAlign.Center,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp)
             )
         }

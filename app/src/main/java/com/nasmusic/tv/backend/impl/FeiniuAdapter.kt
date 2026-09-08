@@ -471,7 +471,7 @@ class FeiniuAdapter : BackendAdapter {
     // ==================== 收藏 ====================
 
     /** REVERSE_ENGINEERED: POST /music/api/v1/favorite/add 或 /favorite/remove */
-    override suspend fun toggleFavorite(songId: String): Boolean = withContext(Dispatchers.IO) {
+    override suspend fun toggleFavorite(songId: String, isCurrentlyFavorite: Boolean): Boolean = withContext(Dispatchers.IO) {
         try {
             val rawId = stripPrefix(songId)
             // ⚠️ REVERSE_ENGINEERED: 先尝试 add，如果已收藏则尝试 remove

@@ -657,7 +657,7 @@ class NavidromeAdapter : BackendAdapter {
     private val _favoriteIds = java.util.Collections.synchronizedSet(mutableSetOf<String>())
     private var _favoritesLoaded = false
 
-    override suspend fun toggleFavorite(songId: String): Boolean = withContext(Dispatchers.IO) {
+    override suspend fun toggleFavorite(songId: String, isCurrentlyFavorite: Boolean): Boolean = withContext(Dispatchers.IO) {
         try {
             // 懒加载收藏列表
             if (!_favoritesLoaded) {

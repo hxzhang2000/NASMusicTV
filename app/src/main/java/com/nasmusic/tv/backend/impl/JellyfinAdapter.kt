@@ -776,23 +776,25 @@ class JellyfinAdapter : BackendAdapter {
     }
 
     // --- 收藏 ---
-    override suspend fun toggleFavorite(songId: String): Boolean = withContext(Dispatchers.IO) {
+    override suspend fun toggleFavorite(songId: String, isCurrentlyFavorite: Boolean): Boolean = withContext(Dispatchers.IO) {
         try {
-            // Jellyfin API: POST /Users/{userId}/FavoriteItems/{itemId} 添加收藏
-            //               DELETE /Users/{userId}/FavoriteItems/{itemId} 取消收藏
-            val isCurrentlyFavorite = queryFavoriteStatus(songId)
+            // 直接使用调用方传入的本地收藏状态，不再调用 queryFavoriteStatus 做二次查询。
+            // queryFavoriteStatus 在 UserData 为 null / 网络超时时会错误返回 false，
+            // 导致取消收藏时发成 POST（加收藏），永远无法取消。
             val requestBuilder = Request.Builder()
                 .url("$baseUrl/Users/$userId/FavoriteItems/$songId")
                 .header("X-Emby-Authorization", buildAuthHeader())
 
             val request = if (isCurrentlyFavorite) {
-                requestBuilder.delete("".toRequestBody(null)).build()
+                // 当前已收藏 → DELETE 取消收藏
+                requestBuilder.delete().build()
             } else {
+                // 当前未收藏 → POST 添加收藏
                 requestBuilder.post("".toRequestBody(null)).build()
             }
 
             client.newCall(request).execute().use { response ->
-                AppLog.d("JellyfinAdapter", "toggleFavorite: HTTP ${response.code} for $songId")
+                AppLog.d("JellyfinAdapter", "toggleFavorite: ${if (isCurrentlyFavorite) "DELETE" else "POST"} HTTP ${response.code} for $songId")
                 response.isSuccessful
             }
         } catch (e: Exception) {

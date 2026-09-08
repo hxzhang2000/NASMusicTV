@@ -2223,10 +2223,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
             viewModelScope.launch {
                 val adapter = backendRegistry.getAdapter() ?: return@launch
                 try {
-                    val success = adapter.toggleFavorite(song.id)
+                    val isCurrentlyFavorite = song.id in _favoriteIds.value
+                    val success = adapter.toggleFavorite(song.id, isCurrentlyFavorite)
                     if (success) {
                         val newIds = _favoriteIds.value.toMutableSet()
-                        if (song.id in newIds) {
+                        if (isCurrentlyFavorite) {
                             newIds.remove(song.id)
                             val currentFavs = _favoriteSongs.value.dataOrNull() ?: emptyList()
                             _favoriteSongs.value = UiState.Success(currentFavs.filter { it.id != song.id })
@@ -2797,10 +2798,13 @@ showError(getApplication<Application>().getString(R.string.toggle_favorite_error
         viewModelScope.launch {
             val adapter = backendRegistry.getAdapter() ?: return@launch
             try {
-                val success = adapter.toggleFavorite(song.id)
+                // 从本地缓存获取当前收藏状态，直接传给 adapter，
+                // 避免 adapter 二次查询服务端（queryFavoriteStatus 在 UserData=null/超时时误返回 false）
+                val isCurrentlyFavorite = song.id in _favoriteIds.value
+                val success = adapter.toggleFavorite(song.id, isCurrentlyFavorite)
                 if (success) {
                     val newIds = _favoriteIds.value.toMutableSet()
-                    if (song.id in newIds) {
+                    if (isCurrentlyFavorite) {
                         newIds.remove(song.id)
                         val currentFavs = _favoriteSongs.value.dataOrNull() ?: emptyList()
                         _favoriteSongs.value = UiState.Success(currentFavs.filter { it.id != song.id })

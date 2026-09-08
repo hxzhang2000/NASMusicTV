@@ -173,7 +173,13 @@ interface BackendAdapter {
     suspend fun removeFromPlaylist(playlistId: String, songId: String): Boolean = false
 
     // --- 收藏 ---
-    suspend fun toggleFavorite(songId: String): Boolean = false
+    /**
+     * 切换收藏状态。
+     * @param songId 歌曲 ID
+     * @param isCurrentlyFavorite 调用方已知的当前收藏状态（从本地缓存获取，避免服务端二次查询）
+     * @return 是否成功
+     */
+    suspend fun toggleFavorite(songId: String, isCurrentlyFavorite: Boolean = false): Boolean = false
     suspend fun getFavorites(): List<Song> = emptyList()
 
     // --- 评分 ---

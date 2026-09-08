@@ -404,7 +404,7 @@ class DaoliyuAdapter : BackendAdapter {
     // ==================== 收藏 ====================
 
     /** ⚠️ INFERRED: POST /api/songs/{id}/favorite 或 /api/favorites/toggle */
-    override suspend fun toggleFavorite(songId: String): Boolean = withContext(Dispatchers.IO) {
+    override suspend fun toggleFavorite(songId: String, isCurrentlyFavorite: Boolean): Boolean = withContext(Dispatchers.IO) {
         try {
             val rawId = stripPrefix(songId)
             val result = executePost("$baseUrl/api/songs/$rawId/favorite", "")  // ⚠️ INFERRED
