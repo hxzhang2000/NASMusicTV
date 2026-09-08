@@ -7,6 +7,29 @@
 >
 > 类型：`Added`（新增） | `Changed`（变更） | `Fixed`（修复） | `Removed`（移除）
 
+## [v2.26.34] - 2026-09-08
+
+### Fixed
+
+- **网络歌词搜索失败**：酷狗搜索端点 `mobilecdn.kugou.com` 的 HTTPS 证书 hostname 不匹配，OkHttp 拒绝连接导致搜索结果为空。改为使用 HTTP（应用已开启 `usesCleartextTraffic`），歌词下载端点 `krcs.kugou.com` 保持 HTTPS（证书正常）。
+- **网易云歌词搜索失败**：`/api/search/get/web`（GET）已废弃返回 HTTP 405，改为 POST `/api/search/get`（`FormBody` 传参）。
+- **LyricsManager 构造参数错误**：`kugouLrcUrl` 误用 `kugouBaseUrl` 赋值，导致自定义酷狗搜索端点时歌词下载端点也被错误覆盖。修正为独立使用 `DEFAULT_KUGOU_LRC_URL`。
+
+### Added
+
+- **无歌词时自动搜索网络歌词**：歌曲无内嵌歌词和后端歌词时，自动触发网络歌词搜索并显示，歌词来源正确标记为 `NETWORK`。自动搜索到的网络歌词暂存到 `pendingNetworkLyrics`，播放完成后持久化缓存。
+- **无封面时自动搜索网络封面**：所有源歌曲（NAS/本地/百度网盘/网络音乐）在无封面时自动调用 `networkMusicManager.searchCoverUrl` 搜索网络封面。切歌时重置 `_networkCoverUrl` 避免残留。
+
+### Changed
+
+- **艺术家详情页加载性能优化**：`loadArtistSongs` 五个音乐源从串行改为真正并行（`coroutineScope` + `async`），慢源（NAS API、Meting 搜索）不再互相阻塞。
+- **百度索引过滤优化**：新增 `BaiduFileIndexCache.songsByArtist()`，在 raw entry 上直接按艺术家过滤，只对匹配项创建 Song 对象（从 38837 个降至 ~12 个），避免全量 `allSongs()` + 客户端 filter 的开销。
+- **ArtistSplitter 新增 `containsArtistWithKey`**：接受预计算的归一化 key，避免在循环内对同一艺术家名重复执行 NFKC 归一化 + 正则拆分。
+- `getCoverCandidates` 网络歌曲也纳入 `_networkCoverUrl` 候选（原先只对 NAS 歌曲）。
+- 实测赵传详情页加载从 ~53s 降至 ~9s。
+
+---
+
 ## [v2.26.33] - 2026-09-08
 
 ### Fixed
