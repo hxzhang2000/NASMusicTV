@@ -11,6 +11,8 @@
 
 ### Fixed
 
+- **艺术家详情页歌曲列表过一会变空**：`loadArtistSongs` 在加载开始时立即删除 `_artistDetailSongsCache` 中对应 key，2-3 秒后才写入新数据；当该方法被二次触发时（TV 遥控器焦点变化或 Compose 重组），缓存被清空导致 UI 立即显示空列表。改为不在加载开始时清空缓存，旧数据保持显示直到新数据就绪后直接覆盖。
+  - `_artistSongsMap` 的清理保留（仅被 LibraryScreen 使用，ArtistDetail 页时该屏幕未组合，不会看到空窗）
 - **百度网盘 TV 端登录 errno=-6 根因修复**：`CryptoUtils.encrypt()` 在 AES-GCM 加密时未显式传入 IV，部分 Android TV ROM 的 `cipher.iv` 返回空数组导致密文缺少 IV 前缀，解密失败后密文被当作 token 发给百度，百度返回 `errno=-6`。改为用 `SecureRandom` 显式生成 12 字节 IV 并通过 `GCMParameterSpec` 传入。
   - 修复后 TV 端日志确认 token 格式正确（`126.xxx` 前缀），`listAllAudioPaged` 成功返回 31,251 个文件
 - **ERRNO_MAP 对照百度官方文档全面修正**：`-1` 改为"权益已过期"，`-6` 去除混入的 20013 语义，移除不在官方表中的 `-111`/`-118`

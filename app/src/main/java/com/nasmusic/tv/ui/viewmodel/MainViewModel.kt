@@ -17,6 +17,7 @@ import com.nasmusic.tv.backend.download.SongDownloadManager
 import com.nasmusic.tv.backend.download.model.DownloadState
 import com.nasmusic.tv.backend.download.model.downloadKey
 import com.nasmusic.tv.backend.download.model.isDownloadableSong
+import com.nasmusic.tv.backend.download.model.dedupeKey
 import com.nasmusic.tv.backend.export.ExportState
 import com.nasmusic.tv.backend.local.MusicMerger
 import com.nasmusic.tv.backend.local.StorageMonitor
@@ -2655,89 +2656,84 @@ showError(getApplication<Application>().getString(R.string.toggle_favorite_error
 
     fun loadArtistSongs(artistName: String) {
         viewModelScope.launch(Dispatchers.Default) {
-            // 清掉当前歌手的缓存，确保用新格式重新拉取（在后台线程避免复制大Map卡UI）
-            // artistSongsMap 以归一化名为键，此处同样按归一化名清除
+            // 注意：不在加载开始时清空 _artistDetailSongsCache，否则在重新加载期间 UI 会显示空列表。
+            // 旧数据保持显示，直到新数据就绪后直接覆盖。
+            // artistSongsMap 以归一化名为键，此处理由同上，但 artistSongsMap 仅被 LibraryScreen 使用，
+            // 用户在 ArtistDetail 页时 LibraryScreen 未组合，不会看到中间空窗，所以可以安全清除。
             _artistSongsMap.value = _artistSongsMap.value.toMutableMap().apply {
                 remove(ArtistSplitter.normalizeKey(artistName))
             }
-            _artistDetailSongsCache.value = _artistDetailSongsCache.value.toMutableMap().apply { remove(artistName) }
 
-            // 从后端加载
-            val adapter = backendRegistry.getAdapter()
-            if (adapter != null) {
-                try {
-                    // 从原始艺术家列表中找出所有与目标歌手相关的条目
-                    // 例如 "李宗盛" 可能匹配到独立条目 "李宗盛" 以及合作条目 "李宗盛 & 周华健"
+            try {
+                // ---- 所有音乐源同级并行查找 ----
+                // 1. NAS 后端（如果已连接）：按原始艺术家 ID 查询，解决合作歌曲不完整的问题
+                val adapter = backendRegistry.getAdapter()
+                val nasSongs = if (adapter != null) {
                     val artistKey = ArtistSplitter.normalizeKey(artistName)
                     val rawMatchingIds = _rawArtistList
                         .filter { ArtistSplitter.containsArtist(it.name, artistName) }
                         .map { it.id }
                         .distinct()
                         .ifEmpty {
-                            // fallback: 从拆分后的列表中提取原始 ID
                             val artists = _artists.value.dataOrNull() ?: emptyList()
                             val artist = artists.find { ArtistSplitter.normalizeKey(it.name) == artistKey }
                             if (artist != null) listOf(artist.id.substringBefore("|", artist.id)) else emptyList()
                         }
-
-                    AppLog.d("NASMusic", "loadArtistSongs('$artistName') rawMatchingIds=${rawMatchingIds.size}: $rawMatchingIds")
-
-                    // 分别查询每个原始 ID 的歌曲后合并去重（解决 Navidrome 合作歌曲不完整的问题）
-                    val allSongs = rawMatchingIds.flatMap { id ->
+                    AppLog.d("NASMusic", "loadArtistSongs('$artistName') NAS rawMatchingIds=${rawMatchingIds.size}")
+                    rawMatchingIds.flatMap { id ->
                         try {
                             adapter.getArtistSongs(id, artistName)
                         } catch (e: Exception) {
-                            AppLog.w("NASMusic", "loadArtistSongs: ID=$id query failed: ${e.message?.take(50)}")
+                            AppLog.w("NASMusic", "loadArtistSongs: NAS ID=$id query failed: ${e.message?.take(50)}")
                             emptyList()
                         }
-                    }.distinctBy { it.id }
+                    }
+                } else {
+                    emptyList()
+                }
 
-                    AppLog.d("NASMusic", "loadArtistSongs('$artistName') allSongs=${allSongs.size} (from ${rawMatchingIds.size} IDs)")
-                    allSongs.take(3).forEach { s ->
-                        AppLog.d("NASMusic", "  song artist='${s.artist}' title='${s.title}' album='${s.album}'")
-                    }
-                    // 将返回的歌曲按 ArtistSplitter 拆分后，只取包含该艺术家的歌曲
-                    val matchingSongs = allSongs.filter { song ->
-                        ArtistSplitter.containsArtist(song.artist, artistName)
-                    }
-                    AppLog.d("NASMusic", "  matchingSongs=${matchingSongs.size} (raw=${allSongs.size})")
-                    // 后端返回为空时的兜底：从本地已加载歌曲（NAS 分页 + 本地设备 + 百度）
-                    // 按拆分名过滤，避免合唱艺术家详情页一片空白
-                    val localMatched = (_songsPaging.value.songs + _localSongs.value + baiduIndexCache.allSongs())
-                        .filter { ArtistSplitter.containsArtist(it.artist, artistName) }
-                    val finalSongs = (matchingSongs + localMatched).distinctBy { it.id }
-                    AppLog.d("NASMusic", "  finalSongs=${finalSongs.size} (backend=${matchingSongs.size}, local=${localMatched.size})")
-                    _artistDetailSongsCache.value = _artistDetailSongsCache.value.toMutableMap().apply {
-                        put(artistName, finalSongs)
-                    }
-                    // 同时按拆分后的艺术家名更新 artistSongsMap 缓存
-                    buildArtistMapsIncremental(finalSongs)
+                // 2. NAS 分页缓存（已加载到内存的歌曲，不依赖 adapter 在线查询）
+                val pagingSongs = _songsPaging.value.songs
+
+                // 3. 本地设备歌曲
+                val localDeviceSongs = _localSongs.value
+
+                // 4. 百度网盘索引缓存
+                val baiduSongs = baiduIndexCache.allSongs()
+
+                // 5. 网络音乐源（Meting-API 等）：按艺术家名在线搜索
+                val networkSongs = try {
+                    nasMusicApp.networkMusicManager.search(artistName)
                 } catch (e: Exception) {
-                    AppLog.e("NASMusic", "loadArtistSongs failed", e)
-                    showError(getApplication<Application>().getString(R.string.load_favorites_error, e.message?.take(50)))
+                    AppLog.w("NASMusic", "loadArtistSongs: network search failed: ${e.message?.take(50)}")
+                    emptyList()
                 }
-            } else {
-                // 无 NAS 连接：走多源搜索获取艺术家歌曲
-                try {
-                    val aggregator = nasMusicApp.searchAggregator
-                    val result = aggregator.search(
-                        artistName,
-                        filterMode = FilterMode.PRECISE,
-                        searchType = SearchType.ARTIST,
-                        nasLocalSongs = _songsPaging.value.songs,
-                        localDeviceSongs = _localSongs.value,
-                        baiduLocalSongs = baiduIndexCache.allSongs()
-                    )
-                    val matchingSongs = result.allResults.map { it.song }.filter { song ->
-                        ArtistSplitter.containsArtist(song.artist, artistName)
-                    }
-                    AppLog.d("NASMusic", "loadArtistSongs('$artistName') multi-source: ${matchingSongs.size} songs")
-                    _artistDetailSongsCache.value = _artistDetailSongsCache.value.toMutableMap().apply {
-                        put(artistName, matchingSongs)
-                    }
-                } catch (e: Exception) {
-                    AppLog.e("NASMusic", "loadArtistSongs multi-source failed", e)
+
+                // 合并所有源，按 ArtistSplitter 拆分后只取包含该艺术家的歌曲
+                // 去重用 dedupeKey（标题+艺术家规范化），而非 id（不同源同一首歌 id 不同）
+                // 优先级：NAS > 本地设备 > 百度 > 网络（本地源音质更稳定，优先保留）
+                val allCandidates = (nasSongs + pagingSongs + localDeviceSongs + baiduSongs + networkSongs)
+                    .filter { ArtistSplitter.containsArtist(it.artist, artistName) }
+                val seenKeys = mutableSetOf<String>()
+                val finalSongs = allCandidates.filter { seenKeys.add(it.dedupeKey) }
+
+                AppLog.d("NASMusic", "loadArtistSongs('$artistName') final=${finalSongs.size} (nas=${nasSongs.size}, paging=${pagingSongs.size}, local=${localDeviceSongs.size}, baidu=${baiduSongs.size}, network=${networkSongs.size}, beforeDedup=${allCandidates.size})")
+                // 诊断：打印重复 dedupeKey 的歌曲，定位去重失败原因
+                val duplicates = allCandidates.groupBy { it.dedupeKey }.filter { it.value.size > 1 }
+                duplicates.entries.take(5).forEach { (key, songs) ->
+                    AppLog.d("NASMusic", "  DUP key='$key' count=${songs.size}: ${songs.joinToString { "[${it.networkSource ?: "local"}/${it.id}] '${it.title}'/'${it.artist}'" }}")
                 }
+                finalSongs.take(3).forEach { s ->
+                    AppLog.d("NASMusic", "  song artist='${s.artist}' title='${s.title}' album='${s.album}'")
+                }
+                _artistDetailSongsCache.value = _artistDetailSongsCache.value.toMutableMap().apply {
+                    put(artistName, finalSongs)
+                }
+                // 同时按拆分后的艺术家名更新 artistSongsMap 缓存
+                buildArtistMapsIncremental(finalSongs)
+            } catch (e: Exception) {
+                AppLog.e("NASMusic", "loadArtistSongs failed", e)
+                showError(getApplication<Application>().getString(R.string.load_favorites_error, e.message?.take(50)))
             }
         }
     }

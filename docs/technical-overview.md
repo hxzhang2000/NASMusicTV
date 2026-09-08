@@ -7549,3 +7549,28 @@ cipher.init(Cipher.ENCRYPT_MODE, softwareKey, GCMParameterSpec(GCM_TAG_LENGTH, i
 - IV 显式生成而非依赖平台：Android TV ROM 的 AES-GCM 实现不一致，`cipher.iv` 在不传 GCMParameterSpec 时可能返回空数组，必须显式生成
 - 本地错误码 -100/-101 与百度 errno 分离：避免本地错误伪装为百度返回，干扰诊断
 - 解密失败仍返回原样（而非抛异常）：兼容旧版本明文存储数据，不强制迁移
+
+---
+
+### 10.104 v2.26.33 - 修复艺术家详情页歌曲列表过一会变空
+
+**提交日期**：2026-09-08
+
+**背景**：在 TV 端打开艺术家详情页后，歌曲列表能正确显示，但过几秒后列表突然变空。页面本身不变（不崩溃、不导航），仅歌曲区域变空。手机端不复现。
+
+**根因分析**：
+
+`loadArtistSongs()` 在加载开始时立即删除 `_artistDetailSongsCache` 中对应艺术家的 key，2-3 秒后才写入新数据。当该方法被二次触发时（TV 上遥控器焦点变化或 Compose 重组），缓存被清空 → UI 立即显示空列表 → 用户看到"过一会歌曲消失"。
+
+手机端不复现的原因：手机触屏交互不触发二次调用，且手机上 `updateMergedData` 每 5-6 秒执行一次但从不触碰 `_artistDetailSongsCache`，缓存保持稳定。
+
+**修复内容**：
+
+**文件**：`ui/viewmodel/MainViewModel.kt`
+
+- `loadArtistSongs()`：不在加载开始时清空 `_artistDetailSongsCache`，旧数据保持显示直到新数据就绪后直接覆盖
+- `_artistSongsMap` 的清理保留（仅被 LibraryScreen 使用，ArtistDetail 页时该屏幕未组合，不会看到空窗）
+
+**验证结果**：
+- ✅ TV 端：打开艺术家详情页，歌曲列表显示后不再消失
+- ✅ 手机端：同样确认不再复现

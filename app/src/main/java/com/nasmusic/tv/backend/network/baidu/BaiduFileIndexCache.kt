@@ -147,7 +147,9 @@ class BaiduFileIndexCache(context: Context) {
      */
     fun allSongs(): List<Song> {
         val index = load() ?: return emptyList()
-        return index.entries.map { it.toSong(coverUrl = it.coverUrl) }
+        return index.entries
+            .distinctBy { it.fsId }  // 索引中同一 fsId 可能出现多次（扫描重复），先按 fsId 去重
+            .map { it.toSong(coverUrl = it.coverUrl) }
     }
 
     fun search(keyword: String, limit: Int = 0): List<Song> {
