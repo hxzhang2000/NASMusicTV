@@ -20,6 +20,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.selects.select
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -93,10 +94,18 @@ class SongDownloadManager(
 
     private suspend fun loop() {
         while (true) {
-            // 手动优先：先 drain 手动队列，再 drain 自动队列
+            // 手动优先：先非阻塞检查手动队列
             val task = manualQueue.tryReceive().getOrNull()
-                ?: autoQueue.receive()
-            executeDownload(task.first, task.second)
+            if (task != null) {
+                executeDownload(task.first, task.second)
+                continue
+            }
+            // 两队列都空时阻塞等待，select 按 clause 顺序优先（手动优先）
+            val polled = select<Pair<Song, Boolean>> {
+                manualQueue.onReceive { it }
+                autoQueue.onReceive { it }
+            }
+            executeDownload(polled.first, polled.second)
         }
     }
 
