@@ -1069,15 +1069,7 @@ fun SettingsScreen(
                                 modifier = Modifier.padding(start = 4.dp, bottom = 8.dp)
                             )
                         }
-                        item {
-                            SettingActionButton(
-                                label = stringResource(R.string.settings_netdisk_index_rebuild),
-                                description = if (baiduIndexScanning) stringResource(R.string.settings_netdisk_index_scanning_progress, baiduIndexScanned)
-                                               else stringResource(R.string.settings_netdisk_index_rebuild_desc),
-                                onClick = { if (!baiduIndexScanning) onRebuildBaiduIndex?.invoke() }
-                            )
-                        }
-                        // APIC 封面提取进度
+                        // APIC 封面提取进度（放在已扫描歌曲数量下方、重建索引按钮上方）
                         if (baiduApicExtracting || baiduApicTotal > 0) {
                             item { Spacer(modifier = Modifier.height(8.dp)) }
                             item {
@@ -1111,6 +1103,14 @@ fun SettingsScreen(
                                     }
                                 }
                             }
+                        }
+                        item {
+                            SettingActionButton(
+                                label = stringResource(R.string.settings_netdisk_index_rebuild),
+                                description = if (baiduIndexScanning) stringResource(R.string.settings_netdisk_index_scanning_progress, baiduIndexScanned)
+                                               else stringResource(R.string.settings_netdisk_index_rebuild_desc),
+                                onClick = { if (!baiduIndexScanning) onRebuildBaiduIndex?.invoke() }
+                            )
                         }
                     }
 
