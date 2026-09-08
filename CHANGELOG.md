@@ -13,6 +13,10 @@
 
 - **扫码传输备份上传失败**：`BackupTransferServer` 的 HTML 模板中，`strings.xml` 的 `html_backup_confirm_restore` 含 `\n` 换行符，经 `getString()` 解析后变为真实换行，插入 JS 单引号字符串导致语法错误，整个 `<script>` 块不执行，页面 JS 全部失效（无 `GET /api/list`、无 alert、无 POST）。改用 `gson.toJson()` 序列化 STR 对象，自动转义特殊字符。同时前端 `readAsText` 改为 `readAsArrayBuffer` + `Blob` 避免文本编码问题，服务端 `session.inputStream` 改为 `parseBody()` 标准方式读取 POST body。
 
+### Changed
+
+- **统一所有扫码页面 STR 序列化方式**：`RemoteControlHtml.kt`（遥控页）和 `ModelTransferServer.kt`（模型上传页）的 STR 对象从手工 `replace("'", "\\'")` / `esc()` 拼接改为 `gson.toJson()` 序列化，与备份页保持一致。防御性修复：未来在 `strings.xml` 中添加 `\n` 等特殊字符时不再导致 JS 语法错误使整个页面脚本失效。`LocalInputServer.kt`（文字输入页）纯硬编码 HTML，无需修改。
+
 ## [v2.26.37] - 2026-09-08
 
 ### Fixed
