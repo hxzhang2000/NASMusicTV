@@ -122,7 +122,12 @@ class SongDownloadManager(
         val current = repo.get(key)
         if (current?.status == DownloadStatus.COMPLETED.name) {
             _downloadStates.value = _downloadStates.value +
-                (key to DownloadState.Completed(current.audioPath ?: ""))
+                (key to DownloadState.Completed(
+                    current.audioPath ?: "",
+                    coverPath = current.coverPath,
+                    lyricPath = current.lyricPath,
+                    embedded = current.embedded
+                ))
             return DownloadResult.Already
         }
         if (current?.status == DownloadStatus.DOWNLOADING.name) {
@@ -205,8 +210,20 @@ class SongDownloadManager(
         val coverBytes = coverWriter.writeAlbumCover(p.albumDir, song)
         val lrc = runCatching { lyricsProvider(song) }.getOrNull()
 
-        // 7. 元数据内嵌（失败走旁路）
-        val embedded = tagWriter.embed(p.tmpFile, song, coverBytes, lrc)
+        // 7. 原子 rename 到最终路径（必须在 embed 之前，否则 .part 扩展名
+        //    不在 EMBEDDABLE 集合中，supportsEmbedding() 返回 false 导致永远不内嵌）
+        if (!p.tmpFile.renameTo(p.finalFile)) {
+            // 跨目录 rename 失败（极少数情况）：复制 + 删除
+            val copied = runCatching { p.tmpFile.copyTo(p.finalFile, overwrite = true) }.isSuccess
+            if (!copied) {
+                p.tmpFile.delete()
+                return DownloadResult.Failure("文件保存失败")
+            }
+            p.tmpFile.delete()
+        }
+
+        // 8. 元数据内嵌（失败走旁路）
+        val embedded = tagWriter.embed(p.finalFile, song, coverBytes, lrc)
         var coverPath: String? = null
         var lyricPath: String? = null
         if (!embedded) {
@@ -218,17 +235,6 @@ class SongDownloadManager(
                 val jpgFile = File(p.albumDir, "${p.baseName}.jpg")
                 runCatching { jpgFile.writeBytes(it) }.onSuccess { coverPath = jpgFile.absolutePath }
             }
-        }
-
-        // 8. 原子 rename 到最终路径
-        if (!p.tmpFile.renameTo(p.finalFile)) {
-            // 跨目录 rename 失败（极少数情况）：复制 + 删除
-            val copied = runCatching { p.tmpFile.copyTo(p.finalFile, overwrite = true) }.isSuccess
-            if (!copied) {
-                p.tmpFile.delete()
-                return DownloadResult.Failure("文件保存失败")
-            }
-            p.tmpFile.delete()
         }
 
         // 9. 更新 COMPLETED 记录
@@ -244,7 +250,12 @@ class SongDownloadManager(
         )
         repo.upsert(completed)
         _downloadStates.value = _downloadStates.value +
-            (key to DownloadState.Completed(p.finalFile.absolutePath))
+            (key to DownloadState.Completed(
+                p.finalFile.absolutePath,
+                coverPath = coverPath,
+                lyricPath = lyricPath,
+                embedded = embedded
+            ))
 
         // 10. 触发媒体扫描（best-effort）
         triggerMediaScan(p.finalFile)
@@ -416,7 +427,12 @@ class SongDownloadManager(
                     // 下载已完成但 DB 未更新（崩溃在 rename 后、upsert 前）
                     repo.updateStatus(entity.songKey, DownloadStatus.COMPLETED, 100, null)
                     _downloadStates.value = _downloadStates.value +
-                        (entity.songKey to DownloadState.Completed(finalPath))
+                        (entity.songKey to DownloadState.Completed(
+                            finalPath,
+                            coverPath = entity.coverPath,
+                            lyricPath = entity.lyricPath,
+                            embedded = entity.embedded
+                        ))
                 } else {
                     // 清理残留 .part 临时文件
                     entity.tmpPath?.let { runCatching { File(it).delete() } }
@@ -433,7 +449,12 @@ class SongDownloadManager(
                     _downloadStates.value = _downloadStates.value - entity.songKey
                 } else if (f != null) {
                     _downloadStates.value = _downloadStates.value +
-                        (entity.songKey to DownloadState.Completed(f.absolutePath))
+                        (entity.songKey to DownloadState.Completed(
+                            f.absolutePath,
+                            coverPath = entity.coverPath,
+                            lyricPath = entity.lyricPath,
+                            embedded = entity.embedded
+                        ))
                 }
             }
         }

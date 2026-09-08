@@ -11,6 +11,8 @@
 
 ### Fixed
 
+- **下载歌曲封面/歌词永远不内嵌**：`SongDownloadManager.singleAttempt()` 中 `tagWriter.embed()` 传入的是临时文件 `p.tmpFile`，其扩展名为 `.part`，而 `MediaTagWriter.supportsEmbedding()` 检查 `file.extension` 是否在 `EMBEDDABLE` 集合中——`.part` 不在其中，导致 `embed()` 第一行就返回 false，封面和歌词永远走旁路 `.jpg`/`.lrc` 文件。修复：将原子 rename 移到 embed 调用之前，对 `p.finalFile`（有正确 `.mp3`/`.flac` 扩展名）执行内嵌。
+- **已下载歌曲在搜索/列表中不使用本地封面和歌词**：`UnifiedSongRow` 直接用 `song.coverUrl`（后端 URL），不检查本地旁路封面；`getCoverCandidates()` 不查本地下载记录；`loadLyricsForCurrentSong()` 不读本地 `.lrc` 文件。修复：`DownloadState.Completed` 扩展携带 `coverPath`/`lyricPath`/`embedded`；`UnifiedSongRow` 和 `getCoverCandidates()` 优先使用本地 `file://` 封面；`loadLyricsForCurrentSong()` 优先通过 `LocalLyricsProvider.getLyricsFromPath()` 读取本地歌词。
 - **扫码传输备份上传失败**：`BackupTransferServer` 的 HTML 模板中，`strings.xml` 的 `html_backup_confirm_restore` 含 `\n` 换行符，经 `getString()` 解析后变为真实换行，插入 JS 单引号字符串导致语法错误，整个 `<script>` 块不执行，页面 JS 全部失效（无 `GET /api/list`、无 alert、无 POST）。改用 `gson.toJson()` 序列化 STR 对象，自动转义特殊字符。同时前端 `readAsText` 改为 `readAsArrayBuffer` + `Blob` 避免文本编码问题。
 - **扫码传输备份导入后中文乱码**：`handleUpload` 使用 `session.parseBody()` 读取 POST body，NanoHTTPD 内部用 `Charset.defaultCharset()` 解码，MIUI ROM 上默认字符集非 UTF-8，导致中文 UTF-8 字节被按错误字符集解码为乱码后写入备份文件。改为直接从 `session.inputStream` 读取原始字节并显式用 `Charsets.UTF_8` 解码，同时处理 UTF-8 BOM。
 - **下载按钮点击无反应**：`SongDownloadManager.loop()` 中 `manualQueue.tryReceive() ?: autoQueue.receive()` 有竞态条件——启动时 `tryReceive()` 返回 null 后阻塞在 `autoQueue.receive()` 上，此后不再检查 `manualQueue`，导致手动下载入队后永远不被消费。改用 `select` 同时监听两个 Channel，按 clause 顺序保证手动优先，两个队列都能正常消费。自动下载走同一个 `loop()`，修复同时覆盖。

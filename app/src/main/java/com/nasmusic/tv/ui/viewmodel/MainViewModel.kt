@@ -40,6 +40,7 @@ import com.nasmusic.tv.data.model.Lyrics
 import com.nasmusic.tv.data.model.LyricsAvailability
 import com.nasmusic.tv.data.model.LyricsHighlightMode
 import com.nasmusic.tv.data.model.LyricsSource
+import com.nasmusic.tv.lyrics.LocalLyricsProvider
 import com.nasmusic.tv.data.model.NetworkFavoriteItem
 import com.nasmusic.tv.data.model.PlayMode
 import com.nasmusic.tv.data.model.PlayRecord
@@ -4059,6 +4060,34 @@ showError(getApplication<Application>().getString(R.string.play_failed_with_msg,
         AppLog.d("NASMusic", "loadLyrics: loading for ${song.title} by ${song.artist}")
         lyricsLoadJob = viewModelScope.launch {
             try {
+                // 0. 本地已下载歌词（最高优先级，不走网络）
+                val dlState = songDownloadStates.value[song.downloadKey]
+                if (dlState is DownloadState.Completed && dlState.path.isNotBlank()) {
+                    val localLrc = LocalLyricsProvider.getLyricsFromPath(
+                        dlState.path, dlState.lyricPath
+                    )
+                    if (localLrc != null && LrcParser.isValidLrc(localLrc)) {
+                        val lyrics = LrcParser.parse(localLrc, song.id)
+                            .copy(source = LyricsSource.LOCAL_FILE)
+                        _currentLyrics.value = lyrics
+                        if (lyrics.lines.any { it.wordTimestamps.isNotEmpty() }) {
+                            _lyricsHighlightMode.value = LyricsHighlightMode.WORD_BY_WORD
+                        }
+                        AppLog.d("NASMusic", "loadLyrics: local downloaded lyrics, ${lyrics.lines.size} lines")
+                        // 本地歌词已加载，仍异步检查后端/网络可用性（供用户手动切换）
+                        val availability = lyricsManager.checkAvailability(song)
+                        _lyricsAvailability.value = availability.copy(cached = lyrics)
+                        // 自动搜索封面（如果本地无旁路封面且无后端封面）
+                        if (getCoverCandidates(song).isEmpty()) {
+                            val networkCover = nasMusicApp.networkMusicManager.searchCoverUrl(song.title, song.artist)
+                            if (networkCover != null) {
+                                _networkCoverUrl.value = networkCover
+                            }
+                        }
+                        return@launch
+                    }
+                }
+
                 // 1. 先查持久化缓存——快速读取，不阻塞歌词显示
                 val cachedLyrics = lyricsManager.getCachedNetworkLyrics(song)
                 if (cachedLyrics != null) {
@@ -4123,6 +4152,20 @@ showError(getApplication<Application>().getString(R.string.play_failed_with_msg,
      */
     fun getCoverCandidates(song: Song): List<String> {
         val candidates = mutableListOf<String>()
+
+        // 0. 本地已下载封面（最高优先级）
+        val dlState = songDownloadStates.value[song.downloadKey]
+        if (dlState is DownloadState.Completed) {
+            // 旁路封面 .jpg 文件
+            dlState.coverPath?.let { cp ->
+                if (cp.isNotBlank() && java.io.File(cp).exists()) {
+                    candidates.add("file://$cp")
+                }
+            }
+            // 内嵌封面：封面在音频文件内，Coil 无法直接提取显示在列表中
+            // 不加入候选，依赖后续网络 URL fallback
+        }
+
         if (song.isNetworkSong) {
             // 网络歌曲：pic 封面 + 自动搜索的网络封面
             song.coverUrl?.let { candidates.add(it) }

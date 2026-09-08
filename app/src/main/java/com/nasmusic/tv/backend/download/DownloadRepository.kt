@@ -137,7 +137,12 @@ class DownloadRepository(
         null -> DownloadState.Idle
         DownloadStatus.PENDING.name -> DownloadState.Queued
         DownloadStatus.DOWNLOADING.name -> DownloadState.Downloading(entity.progress)
-        DownloadStatus.COMPLETED.name -> DownloadState.Completed(entity.audioPath ?: "")
+        DownloadStatus.COMPLETED.name -> DownloadState.Completed(
+            entity.audioPath ?: "",
+            coverPath = entity.coverPath,
+            lyricPath = entity.lyricPath,
+            embedded = entity.embedded
+        )
         DownloadStatus.FAILED.name -> DownloadState.Failed(entity.errorMsg)
         DownloadStatus.DELETED.name -> DownloadState.Idle
         else -> DownloadState.Idle
@@ -145,7 +150,14 @@ class DownloadRepository(
 
     /** 批量构建 UI 状态 Map（供 UI 列表外层 collect 一次得到） */
     fun toUiStateMap(completed: List<DownloadSongEntity>): Map<String, DownloadState> =
-        completed.associate { it.songKey to DownloadState.Completed(it.audioPath ?: "") }
+        completed.associate {
+            it.songKey to DownloadState.Completed(
+                it.audioPath ?: "",
+                coverPath = it.coverPath,
+                lyricPath = it.lyricPath,
+                embedded = it.embedded
+            )
+        }
 
     /**
      * 根据 [Song] 构造一条 DOWNLOADING 初始记录（供 SongDownloadManager 在开始下载时调用）

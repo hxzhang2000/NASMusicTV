@@ -101,6 +101,51 @@ object LocalLyricsProvider {
     }
 
     /**
+     * 从音频文件路径获取歌词（不依赖 Song 对象，供已下载的非本地歌曲使用）
+     *
+     * 优先级：同目录同名 .lrc 侧车文件 → ID3v2 USLT 内嵌帧
+     *
+     * @param audioPath 音频文件绝对路径
+     * @param lyricPath 显式的 .lrc 文件路径（旁路歌词），若已知可直接传入
+     * @return LRC 文本，未找到返回 null
+     */
+    fun getLyricsFromPath(audioPath: String, lyricPath: String? = null): String? {
+        val realPath = audioPath.removePrefix("file://").removePrefix("content://")
+        val audioFile = File(realPath)
+        if (!audioFile.exists() || !audioFile.isFile) return null
+
+        // 1. 显式旁路 LRC 路径
+        if (lyricPath != null) {
+            val lrcFile = File(lyricPath)
+            if (lrcFile.exists() && lrcFile.isFile) {
+                readLrc(lrcFile)?.let { if (LrcParser.isValidLrc(it)) return it }
+            }
+        }
+
+        // 2. 同目录同名 .lrc（兜底）
+        val parent = audioFile.parentFile
+        val baseName = audioFile.nameWithoutExtension
+        parent?.let {
+            val sidecar = File(it, "$baseName.lrc")
+            if (sidecar.exists() && sidecar.isFile) {
+                readLrc(sidecar)?.let { if (LrcParser.isValidLrc(it)) return it }
+            }
+        }
+
+        // 3. 内嵌 ID3v2 USLT 帧
+        return try {
+            val headerSize = minOf(ID3_HEADER_SIZE.toLong(), audioFile.length())
+            val headerBytes = ByteArray(headerSize.toInt())
+            RandomAccessFile(audioFile, "r").use { raf -> raf.readFully(headerBytes) }
+            val lyrics = Id3v2Parser.findUslt(headerBytes)
+            if (!lyrics.isNullOrBlank()) lyrics else null
+        } catch (e: Exception) {
+            AppLog.w(TAG, "getLyricsFromPath embedded failed: ${e.message}")
+            null
+        }
+    }
+
+    /**
      * 从音频文件内嵌 ID3v2 元数据提取歌词（USLT 帧）
      *
      * 读取文件头部前 256KB 解析 ID3v2 帧，与百度网盘的 Id3v2Parser.findUslt() 复用同一逻辑。

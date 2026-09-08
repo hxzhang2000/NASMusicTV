@@ -127,6 +127,7 @@ fun UnifiedSongRow(
         SongRowMode.MODE_CARD -> SongRowModeCard(
             song = song,
             onClick = onClick,
+            downloadState = downloadState,
             focusRequester = focusRequester
         )
         SongRowMode.MODE_COMPACT -> SongRowModeCompact(
@@ -218,9 +219,20 @@ private fun SongRowModeRow(
                     .clickable { onClick() },
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // 封面缩略图
+                // 封面缩略图：已下载且有旁路封面 → 优先用本地文件
+                val effectiveCoverUrl = when (downloadState) {
+                    is DownloadState.Completed -> {
+                        val cp = downloadState.coverPath
+                        if (cp != null && cp.isNotBlank() && java.io.File(cp).exists()) {
+                            "file://$cp"
+                        } else {
+                            song.coverUrl
+                        }
+                    }
+                    else -> song.coverUrl
+                }
                 CoverImage(
-                    coverUrl = song.coverUrl,
+                    coverUrl = effectiveCoverUrl,
                     contentDescription = song.title,
                     size = 92.dp,
                     cornerRadius = 4.dp
@@ -427,6 +439,7 @@ private fun RowActionButton(
 private fun SongRowModeCard(
     song: Song,
     onClick: () -> Unit,
+    downloadState: DownloadState = DownloadState.None,
     focusRequester: FocusRequester?
 ) {
     var isFocused by remember { mutableStateOf(false) }
@@ -466,9 +479,20 @@ private fun SongRowModeCard(
         Column(
             modifier = Modifier.fillMaxWidth().padding(6.dp)
         ) {
-            // 封面
+            // 封面：已下载且有旁路封面 → 优先用本地文件
+            val cardCoverUrl = when (downloadState) {
+                is DownloadState.Completed -> {
+                    val cp = downloadState.coverPath
+                    if (cp != null && cp.isNotBlank() && java.io.File(cp).exists()) {
+                        "file://$cp"
+                    } else {
+                        song.coverUrl
+                    }
+                }
+                else -> song.coverUrl
+            }
             CoverImage(
-                coverUrl = song.coverUrl,
+                coverUrl = cardCoverUrl,
                 contentDescription = song.title,
                 size = 148.dp,
                 cornerRadius = 8.dp

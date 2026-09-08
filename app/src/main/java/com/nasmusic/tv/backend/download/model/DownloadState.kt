@@ -25,7 +25,12 @@ sealed interface DownloadState {
     data class Downloading(val progress: Int) : DownloadState
 
     /** 已完成（✓），点击删除二次确认 */
-    data class Completed(val path: String) : DownloadState
+    data class Completed(
+        val path: String,
+        val coverPath: String? = null,
+        val lyricPath: String? = null,
+        val embedded: Boolean = false
+    ) : DownloadState
 
     /** 失败（✕），点击重试，[reason] 用于提示 */
     data class Failed(val reason: String?) : DownloadState
