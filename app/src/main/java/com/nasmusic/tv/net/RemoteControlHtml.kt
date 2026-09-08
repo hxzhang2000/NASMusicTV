@@ -1,6 +1,7 @@
 package com.nasmusic.tv.net
 
 import android.content.Context
+import com.google.gson.Gson
 import com.nasmusic.tv.R
 
 /**
@@ -9,7 +10,23 @@ import com.nasmusic.tv.R
  * 功能：播放队列（当前歌曲高亮 + 点击条目播放 + 上下移排序 + 删除）、
  *       搜索（NAS + 网络并发，分组显示，加入队列）、5 秒轮询。
  */
-fun buildControlPageHtml(context: Context): String = """
+fun buildControlPageHtml(context: Context): String {
+    // 用 Gson 生成 STR JSON，自动转义换行符/引号等特殊字符
+    val strMap = mapOf(
+        "queueEmpty" to context.getString(R.string.html_remote_queue_empty),
+        "switched" to context.getString(R.string.html_remote_switched),
+        "deleted" to context.getString(R.string.html_remote_deleted),
+        "added" to context.getString(R.string.html_remote_added),
+        "searching" to context.getString(R.string.html_remote_searching),
+        "noResults" to context.getString(R.string.html_remote_no_results),
+        "searchFailed" to context.getString(R.string.html_remote_search_failed),
+        "nasLibrary" to context.getString(R.string.html_remote_nas_library),
+        "networkSearch" to context.getString(R.string.html_remote_network_search),
+        "networkLabel" to context.getString(R.string.html_remote_network_label),
+        "addToQueue" to context.getString(R.string.html_remote_add_to_queue)
+    )
+    val strJson = Gson().toJson(strMap)
+    return """
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
@@ -97,19 +114,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;b
 
 <script>
 const BASE = location.origin;
-var STR = {
-  queueEmpty: '${context.getString(R.string.html_remote_queue_empty).replace("'", "\\'")}',
-  switched: '${context.getString(R.string.html_remote_switched).replace("'", "\\'")}',
-  deleted: '${context.getString(R.string.html_remote_deleted).replace("'", "\\'")}',
-  added: '${context.getString(R.string.html_remote_added).replace("'", "\\'")}',
-  searching: '${context.getString(R.string.html_remote_searching).replace("'", "\\'")}',
-  noResults: '${context.getString(R.string.html_remote_no_results).replace("'", "\\'")}',
-  searchFailed: '${context.getString(R.string.html_remote_search_failed).replace("'", "\\'")}',
-  nasLibrary: '${context.getString(R.string.html_remote_nas_library).replace("'", "\\'")}',
-  networkSearch: '${context.getString(R.string.html_remote_network_search).replace("'", "\\'")}',
-  networkLabel: '${context.getString(R.string.html_remote_network_label).replace("'", "\\'")}',
-  addToQueue: '${context.getString(R.string.html_remote_add_to_queue).replace("'", "\\'")}'
-};
+var STR = $strJson;
 var queueData = null;
 
 // Tab 切换
@@ -340,3 +345,4 @@ setInterval(fetchQueue, 5000);
 </body>
 </html>
 """.trimIndent()
+}

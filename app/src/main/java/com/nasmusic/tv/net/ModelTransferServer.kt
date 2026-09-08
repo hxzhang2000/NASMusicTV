@@ -284,8 +284,17 @@ class ModelTransferServer(
 
 /** 模型上传 HTML 页面 — 动态生成，所有 UI 字符串走 context.getString() */
 private fun buildModelTransferPageHtml(context: Context): String {
-    // Escape single quotes for JS string injection
-    fun esc(s: String): String = s.replace("'", "\\'")
+    // 用 Gson 生成 STR JSON，自动转义换行符/引号等特殊字符
+    val strMap = mapOf(
+        "statusExist" to context.getString(R.string.html_model_status_exist),
+        "statusNotExist" to context.getString(R.string.html_model_status_not_exist),
+        "uploading" to context.getString(R.string.html_model_status_uploading),
+        "pleaseSelect" to context.getString(R.string.html_model_status_please_select),
+        "networkError" to context.getString(R.string.html_model_status_network_error),
+        "timeout" to context.getString(R.string.html_model_status_timeout),
+        "uploadBtn" to context.getString(R.string.html_model_upload_btn)
+    )
+    val strJson = com.google.gson.Gson().toJson(strMap)
 
     return """
 <!DOCTYPE html>
@@ -353,15 +362,7 @@ ${context.getString(R.string.html_model_download_link)}
 </div>
 
 <script>
-var STR = {
-  statusExist: '${esc(context.getString(R.string.html_model_status_exist))}',
-  statusNotExist: '${esc(context.getString(R.string.html_model_status_not_exist))}',
-  uploading: '${esc(context.getString(R.string.html_model_status_uploading))}',
-  pleaseSelect: '${esc(context.getString(R.string.html_model_status_please_select))}',
-  networkError: '${esc(context.getString(R.string.html_model_status_network_error))}',
-  timeout: '${esc(context.getString(R.string.html_model_status_timeout))}',
-  uploadBtn: '${esc(context.getString(R.string.html_model_upload_btn))}'
-};
+var STR = $strJson;
 var fileInput=document.getElementById('fileInput');
 var uploadBtn=document.getElementById('uploadBtn');
 fileInput.addEventListener('change',function(){

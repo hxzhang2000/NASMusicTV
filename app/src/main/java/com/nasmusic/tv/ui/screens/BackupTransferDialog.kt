@@ -43,6 +43,7 @@ import com.nasmusic.tv.ui.components.FocusableSurface
 import com.nasmusic.tv.ui.components.LocalFocusableContentColor
 import com.nasmusic.tv.ui.theme.FontSize
 import com.nasmusic.tv.ui.theme.NasMusicColors
+import com.nasmusic.tv.util.AppLog
 import com.nasmusic.tv.util.LinkUtils
 import com.nasmusic.tv.util.NetworkUtils
 import com.nasmusic.tv.util.QrCodeGenerator
@@ -78,13 +79,18 @@ fun BackupTransferDialog(
             val url = "http://$ip:${BackupTransferServer.DEFAULT_PORT}/"
             serverUrl = url
             qrBitmap = QrCodeGenerator.generateQrBitmap(url, 360)
+            AppLog.i("BackupTransferDialog", "DisposableEffect: starting server at $url")
             val started = server.start()
+            AppLog.i("BackupTransferDialog", "DisposableEffect: server.start() returned $started")
             status = if (started) context.getString(R.string.backup_transfer_waiting) else context.getString(R.string.backup_transfer_start_failed)
         } else {
+            AppLog.w("BackupTransferDialog", "DisposableEffect: no IP address")
             status = context.getString(R.string.backup_transfer_no_ip)
         }
         onDispose {
+            AppLog.i("BackupTransferDialog", "onDispose: stopping server")
             server.stop()
+            AppLog.i("BackupTransferDialog", "onDispose: server stopped")
         }
     }
 
