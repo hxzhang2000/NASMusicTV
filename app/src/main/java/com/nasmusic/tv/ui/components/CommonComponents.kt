@@ -22,7 +22,6 @@ import androidx.tv.material3.Icon
 import androidx.tv.material3.Text
 import com.nasmusic.tv.R
 import com.nasmusic.tv.ui.theme.FontSize
-import com.nasmusic.tv.ui.theme.LocalPhoneCompact
 import com.nasmusic.tv.ui.theme.NasMusicColors
 
 /**
@@ -106,11 +105,10 @@ fun SearchField(
 /**
  * 歌曲列表列数：TV 两列、手机单列（一行一个歌曲条目）
  *
- * 基于 [LocalPhoneCompact]（MainActivity 按设备类型提供）判定：
- * - TV（leanback）：2 列，维持现有排布
- * - 手机：1 列，SongRow 占满整行
+ * 始终返回 1 列：歌曲条目信息较多（标题+艺术家+专辑+时长+操作按钮），
+ * 两列布局下歌名被压缩不可读。统一用一列让 SongRow 占满整行。
+ *
+ * 注意："我的"页面不使用此函数，其 TV/手机版式差异保持不变。
  */
 @Composable
-fun songGridColumns(): GridCells =
-    if (LocalPhoneCompact.current) GridCells.Fixed(1)
-    else GridCells.Fixed(2)
+fun songGridColumns(): GridCells = GridCells.Fixed(1)
