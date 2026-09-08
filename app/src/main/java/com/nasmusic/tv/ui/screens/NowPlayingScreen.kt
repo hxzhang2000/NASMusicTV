@@ -336,7 +336,7 @@ fun NowPlayingScreen(
                         Spacer(modifier = Modifier.width(6.dp))
                         SourceTag(
                             label = stringResource(R.string.player_highlight_network),
-                            available = lyricsAvailability.hasNetwork,
+                            available = true,
                             selected = currentSource == com.nasmusic.tv.data.model.LyricsSource.NETWORK,
                             onClick = { onSwitchLyricsSource(com.nasmusic.tv.data.model.LyricsSource.NETWORK) }
                         )

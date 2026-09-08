@@ -152,6 +152,29 @@ class BaiduFileIndexCache(context: Context) {
             .map { it.toSong(coverUrl = it.coverUrl) }
     }
 
+    /**
+     * 按艺术家过滤索引条目，只对匹配项创建 Song 对象。
+     *
+     * 与 [allSongs] + 客户端 filter 的区别：
+     * - 不创建全部 N 个 Song 对象（典型 38000+），只创建匹配的 ~50 个
+     * - 预计算 normalizeKey(artistName) 一次，不在循环里重复 NFKC 归一化
+     * - 直接在 raw entry 上过滤，避免 Song 对象的中间分配
+     */
+    fun songsByArtist(artistName: String): List<Song> {
+        val index = load() ?: return emptyList()
+        val artistKey = com.nasmusic.tv.util.ArtistSplitter.normalizeKey(artistName)
+        if (artistKey.isBlank()) return emptyList()
+        val seen = mutableSetOf<Long>()
+        return index.entries
+            .filter { seen.add(it.fsId) }  // 按 fsId 去重
+            .filter { entry ->
+                val rawArtist = entry.artist ?: ""
+                if (rawArtist.isBlank()) return@filter false
+                com.nasmusic.tv.util.ArtistSplitter.containsArtistWithKey(rawArtist, artistKey)
+            }
+            .map { it.toSong(coverUrl = it.coverUrl) }
+    }
+
     fun search(keyword: String, limit: Int = 0): List<Song> {
         val index = load() ?: return emptyList()
         val k = keyword.trim().lowercase()

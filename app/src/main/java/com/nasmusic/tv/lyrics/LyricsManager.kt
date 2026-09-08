@@ -37,7 +37,9 @@ class LyricsManager(
 
     private val networkProvider = LyricsNetworkProvider(
         kugouBaseUrl = kugouBaseUrl.ifBlank { LyricsNetworkProvider.DEFAULT_KUGOU_BASE_URL },
-        kugouLrcUrl = kugouBaseUrl.ifBlank { LyricsNetworkProvider.DEFAULT_KUGOU_LRC_URL },
+        // kugouLrcUrl 独立于 kugouBaseUrl：搜索端点用 HTTP（SSL 证书不匹配），
+        // 但歌词下载端点 krcs.kugou.com 的 HTTPS 正常
+        kugouLrcUrl = LyricsNetworkProvider.DEFAULT_KUGOU_LRC_URL,
         neteaseBaseUrl = neteaseBaseUrl.ifBlank { LyricsNetworkProvider.DEFAULT_NETEASE_BASE_URL }
     )
     private val persistentCache = LyricsPersistentCache(context)

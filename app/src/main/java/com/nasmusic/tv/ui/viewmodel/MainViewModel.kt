@@ -70,6 +70,7 @@ import com.nasmusic.tv.data.prefs.AppPreferences
 import com.nasmusic.tv.backend.weather.WeatherApi
 import com.nasmusic.tv.backend.weather.WeatherRadioManager
 import com.nasmusic.tv.lyrics.LyricsManager
+import com.nasmusic.tv.lyrics.LrcParser
 import com.nasmusic.tv.player.PlayerManager
 import com.nasmusic.tv.player.ModelDownloadManager
 import com.nasmusic.tv.util.AppLog
@@ -2654,6 +2655,15 @@ showError(getApplication<Application>().getString(R.string.toggle_favorite_error
     private val _artistDetailSongsCache = MutableStateFlow<Map<String, List<Song>>>(emptyMap())
     val artistDetailSongsCache: StateFlow<Map<String, List<Song>>> = _artistDetailSongsCache.asStateFlow()
 
+    /** 五个音乐源并行查找的临时容器 */
+    private data class FiveSources(
+        val nas: List<Song>,
+        val paging: List<Song>,
+        val local: List<Song>,
+        val baidu: List<Song>,
+        val network: List<Song>
+    )
+
     fun loadArtistSongs(artistName: String) {
         viewModelScope.launch(Dispatchers.Default) {
             // 注意：不在加载开始时清空 _artistDetailSongsCache，否则在重新加载期间 UI 会显示空列表。
@@ -2665,55 +2675,69 @@ showError(getApplication<Application>().getString(R.string.toggle_favorite_error
             }
 
             try {
-                // ---- 所有音乐源同级并行查找 ----
-                // 1. NAS 后端（如果已连接）：按原始艺术家 ID 查询，解决合作歌曲不完整的问题
+                // ---- 所有音乐源真正并行查找 ----
+                // 快源（内存缓存）几乎瞬时返回，慢源（NAS API、Meting 搜索）并行不阻塞彼此
                 val adapter = backendRegistry.getAdapter()
-                val nasSongs = if (adapter != null) {
-                    val artistKey = ArtistSplitter.normalizeKey(artistName)
-                    val rawMatchingIds = _rawArtistList
-                        .filter { ArtistSplitter.containsArtist(it.name, artistName) }
-                        .map { it.id }
-                        .distinct()
-                        .ifEmpty {
-                            val artists = _artists.value.dataOrNull() ?: emptyList()
-                            val artist = artists.find { ArtistSplitter.normalizeKey(it.name) == artistKey }
-                            if (artist != null) listOf(artist.id.substringBefore("|", artist.id)) else emptyList()
-                        }
-                    AppLog.d("NASMusic", "loadArtistSongs('$artistName') NAS rawMatchingIds=${rawMatchingIds.size}")
-                    rawMatchingIds.flatMap { id ->
-                        try {
-                            adapter.getArtistSongs(id, artistName)
-                        } catch (e: Exception) {
-                            AppLog.w("NASMusic", "loadArtistSongs: NAS ID=$id query failed: ${e.message?.take(50)}")
+                val (nasSongs, pagingSongs, localDeviceSongs, baiduSongs, networkSongs) = coroutineScope {
+                    // 快源：纯内存读取，不放在 async 里直接同步取
+                    val fastPaging = async(Dispatchers.Default) { _songsPaging.value.songs }
+                    val fastLocal = async(Dispatchers.Default) { _localSongs.value }
+                    // 百度索引：按艺术家直接在 raw entry 上过滤，不创建全部 Song 对象
+                    val fastBaidu = async(Dispatchers.Default) { baiduIndexCache.songsByArtist(artistName) }
+
+                    // 慢源1: NAS 后端
+                    val nasDeferred = async(Dispatchers.IO) {
+                        if (adapter != null) {
+                            val artistKey = ArtistSplitter.normalizeKey(artistName)
+                            val rawMatchingIds = _rawArtistList
+                                .filter { ArtistSplitter.containsArtist(it.name, artistName) }
+                                .map { it.id }
+                                .distinct()
+                                .ifEmpty {
+                                    val artists = _artists.value.dataOrNull() ?: emptyList()
+                                    val artist = artists.find { ArtistSplitter.normalizeKey(it.name) == artistKey }
+                                    if (artist != null) listOf(artist.id.substringBefore("|", artist.id)) else emptyList()
+                                }
+                            AppLog.d("NASMusic", "loadArtistSongs('$artistName') NAS rawMatchingIds=${rawMatchingIds.size}")
+                            rawMatchingIds.flatMap { id ->
+                                try {
+                                    adapter.getArtistSongs(id, artistName)
+                                } catch (e: Exception) {
+                                    AppLog.w("NASMusic", "loadArtistSongs: NAS ID=$id query failed: ${e.message?.take(50)}")
+                                    emptyList()
+                                }
+                            }
+                        } else {
                             emptyList()
                         }
                     }
-                } else {
-                    emptyList()
-                }
 
-                // 2. NAS 分页缓存（已加载到内存的歌曲，不依赖 adapter 在线查询）
-                val pagingSongs = _songsPaging.value.songs
+                    // 慢源2: 网络音乐源（Meting-API 等，最慢，10-15s）
+                    val networkDeferred = async(Dispatchers.IO) {
+                        try {
+                            nasMusicApp.networkMusicManager.search(artistName)
+                        } catch (e: Exception) {
+                            AppLog.w("NASMusic", "loadArtistSongs: network search failed: ${e.message?.take(50)}")
+                            emptyList()
+                        }
+                    }
 
-                // 3. 本地设备歌曲
-                val localDeviceSongs = _localSongs.value
-
-                // 4. 百度网盘索引缓存
-                val baiduSongs = baiduIndexCache.allSongs()
-
-                // 5. 网络音乐源（Meting-API 等）：按艺术家名在线搜索
-                val networkSongs = try {
-                    nasMusicApp.networkMusicManager.search(artistName)
-                } catch (e: Exception) {
-                    AppLog.w("NASMusic", "loadArtistSongs: network search failed: ${e.message?.take(50)}")
-                    emptyList()
+                    FiveSources(
+                        nas = nasDeferred.await(),
+                        paging = fastPaging.await(),
+                        local = fastLocal.await(),
+                        baidu = fastBaidu.await(),
+                        network = networkDeferred.await()
+                    )
                 }
 
                 // 合并所有源，按 ArtistSplitter 拆分后只取包含该艺术家的歌曲
                 // 去重用 dedupeKey（标题+艺术家规范化），而非 id（不同源同一首歌 id 不同）
                 // 优先级：NAS > 本地设备 > 百度 > 网络（本地源音质更稳定，优先保留）
+                // 注意：baiduSongs 已通过 songsByArtist 预过滤，这里只过滤其余源
+                val artistKey = ArtistSplitter.normalizeKey(artistName)
                 val allCandidates = (nasSongs + pagingSongs + localDeviceSongs + baiduSongs + networkSongs)
-                    .filter { ArtistSplitter.containsArtist(it.artist, artistName) }
+                    .filter { ArtistSplitter.containsArtistWithKey(it.artist, artistKey) }
                 val seenKeys = mutableSetOf<String>()
                 val finalSongs = allCandidates.filter { seenKeys.add(it.dedupeKey) }
 
@@ -3067,30 +3091,33 @@ showError(getApplication<Application>().getString(R.string.toggle_favorite_error
         // 网络歌曲的 streamUrl 需要异步解析，否则 ExoPlayer 收到空 URI 不会开始播放
         val needsResolve = songs.any { it.isNetworkSong && it.streamUrl.isNullOrBlank() }
         if (needsResolve) {
-            // 立即更新队列状态，避免异步解析期间 UI 读到旧的队列数据（如恢复队列中的网络歌曲）
-            // ExoPlayer 的 prepare 延迟到解析完成后统一进行
+            // 只解析第一首歌曲的 URL，立即播放；后续歌曲在播放器自动过渡时懒加载。
+            // 原实现逐首解析所有歌曲（songs.map），30 首可能耗时 30-90s 才开始播放。
+            AppLog.d("NASMusic", "playQueue: needsResolve, resolving first song only: ${firstSong.title}")
+            // 立即更新队列状态，避免异步解析期间 UI 读到旧的队列数据
             playerManager.restoreQueue(songs, startIndex)
 
             viewModelScope.launch {
-                val resolved = songs.map { song ->
-                    if (song.isNetworkSong && song.streamUrl.isNullOrBlank()) {
-                        try {
-                            val url = nasMusicApp.networkMusicManager.resolvePlayUrl(song)
-                            if (!url.isNullOrBlank()) song.copy(streamUrl = url) else song
-                        } catch (e: Exception) {
-                            AppLog.e("NASMusic", "playQueue: resolveUrl failed for ${song.title}", e)
-                            song
-                        }
-                    } else {
-                        song
+                val resolvedFirst = if (firstSong.isNetworkSong && firstSong.streamUrl.isNullOrBlank()) {
+                    try {
+                        val url = nasMusicApp.networkMusicManager.resolvePlayUrl(firstSong)
+                        if (!url.isNullOrBlank()) firstSong.copy(streamUrl = url) else firstSong
+                    } catch (e: Exception) {
+                        AppLog.e("NASMusic", "playQueue: resolveUrl failed for ${firstSong.title}", e)
+                        firstSong
                     }
+                } else {
+                    firstSong
                 }
                 // 检查第一首歌是否仍然无法解析
-                val resolvedFirst = resolved.getOrNull(startIndex)
-                if (resolvedFirst != null && resolvedFirst.isNetworkSong && resolvedFirst.streamUrl.isNullOrBlank()) {
-                    AppLog.w("NASMusic", "playQueue: all endpoints failed to resolve URL for ${resolvedFirst.title}")
+                if (resolvedFirst.isNetworkSong && resolvedFirst.streamUrl.isNullOrBlank()) {
+                    AppLog.w("NASMusic", "playQueue: failed to resolve URL for ${resolvedFirst.title}")
                     showError(getApplication<Application>().getString(R.string.resolve_url_endpoint_failed))
                 }
+                // 只更新第一首歌的 streamUrl，其余歌曲保持空 URL，在播放器过渡时按需解析
+                val resolved = songs.toMutableList()
+                resolved[startIndex.coerceIn(0, songs.lastIndex)] = resolvedFirst
+                AppLog.d("NASMusic", "playQueue: first song resolved, starting playback (url=${resolvedFirst.streamUrl?.take(30)}...)")
                 playerManager.playQueue(resolved, startIndex)
                 recordPlay(firstSong)
             }
@@ -3977,6 +4004,8 @@ showError(getApplication<Application>().getString(R.string.play_failed_with_msg,
         lyricsManager.clearCachedCandidates()
         _currentLyrics.value = null
         _lyricsAvailability.value = LyricsAvailability()
+        // 重置网络封面（切歌时清除上一首的网络封面）
+        _networkCoverUrl.value = null
         val song = currentSong.value ?: return
         AppLog.d("NASMusic", "loadLyrics: loading for ${song.title} by ${song.artist}")
         lyricsLoadJob = viewModelScope.launch {
@@ -4006,8 +4035,28 @@ showError(getApplication<Application>().getString(R.string.play_failed_with_msg,
                         if (lyrics.lines.any { it.wordTimestamps.isNotEmpty() }) {
                             _lyricsHighlightMode.value = LyricsHighlightMode.WORD_BY_WORD
                         }
+                        // 如果歌词来自网络（非用户手动切换），暂存以便播放完成后持久化
+                        if (lyrics.source == LyricsSource.NETWORK) {
+                            // checkAvailability 内部已通过 fetchLyrics 获取文本，
+                            // 这里用解析后的行文本重建 LRC 暂存
+                            val lrcText = LrcParser.toLrcText(lyrics)
+                            if (lrcText.isNotBlank()) {
+                                lyricsManager.savePendingNetworkLyrics(song, lrcText)
+                            }
+                        }
                     }
                     AppLog.d("NASMusic", "loadLyrics: source=${lyrics?.source}, lines=${lyrics?.lines?.size}")
+                }
+
+                // 4. 无封面时自动搜索网络封面（所有源歌曲通用）
+                if (getCoverCandidates(song).isEmpty()) {
+                    val networkCover = nasMusicApp.networkMusicManager.searchCoverUrl(song.title, song.artist)
+                    if (networkCover != null) {
+                        _networkCoverUrl.value = networkCover
+                        AppLog.d("NASMusic", "loadLyrics: auto-search cover found: ${networkCover.take(60)}")
+                    } else {
+                        AppLog.d("NASMusic", "loadLyrics: auto-search cover: no result")
+                    }
                 }
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
@@ -4026,8 +4075,9 @@ showError(getApplication<Application>().getString(R.string.play_failed_with_msg,
     fun getCoverCandidates(song: Song): List<String> {
         val candidates = mutableListOf<String>()
         if (song.isNetworkSong) {
-            // 网络歌曲：只有 1 张 pic 封面
+            // 网络歌曲：pic 封面 + 自动搜索的网络封面
             song.coverUrl?.let { candidates.add(it) }
+            _networkCoverUrl.value?.let { candidates.add(it) }
         } else {
             // NAS 歌曲：后端 3 类封面
             val adapter = backendRegistry.getAdapter()

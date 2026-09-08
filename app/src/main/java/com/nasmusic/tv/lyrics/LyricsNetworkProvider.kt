@@ -33,7 +33,9 @@ class LyricsNetworkProvider(
 
     companion object {
         private const val TAG = "LyricsNetwork"
-        const val DEFAULT_KUGOU_BASE_URL = "https://mobilecdn.kugou.com"
+        // mobilecdn.kugou.com 的 HTTPS 证书 hostname 不匹配，OkHttp 会拒绝连接，
+        // 改用 HTTP（应用已开启 usesCleartextTraffic）
+        const val DEFAULT_KUGOU_BASE_URL = "http://mobilecdn.kugou.com"
         const val DEFAULT_KUGOU_LRC_URL = "https://krcs.kugou.com"
         const val DEFAULT_NETEASE_BASE_URL = "https://music.163.com"
         /**
@@ -206,15 +208,24 @@ class LyricsNetworkProvider(
      */
     private suspend fun fetchFromNetease(keyword: String, maxResults: Int = 1): List<String> {
         return try {
-            val searchUrl = "${neteaseBaseUrl.trimEnd('/')}/api/search/get/web?csrf_token=" +
-                    "&s=" + URLEncoder.encode(keyword, "UTF-8") +
-                    "&type=1&offset=0&total=true&limit=$maxResults"
-            AppLog.d(TAG, "Netease search: $searchUrl")
+            // 网易云 /api/search/get/web (GET) 已废弃，返回 405；
+            // 改用 POST /api/search/get
+            val searchUrl = "${neteaseBaseUrl.trimEnd('/')}/api/search/get"
+            val formBody = okhttp3.FormBody.Builder()
+                .add("s", keyword)
+                .add("type", "1")
+                .add("offset", "0")
+                .add("total", "true")
+                .add("limit", maxResults.toString())
+                .build()
+            AppLog.d(TAG, "Netease search(POST): $searchUrl, s=$keyword")
 
             val searchRequest = Request.Builder()
                 .url(searchUrl)
+                .post(formBody)
                 .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
                 .header("Referer", "https://music.163.com")
+                .header("Content-Type", "application/x-www-form-urlencoded")
                 .build()
 
             val searchBody = client.newCall(searchRequest).execute().use { searchResponse ->
@@ -224,7 +235,7 @@ class LyricsNetworkProvider(
                 }
                 val body = searchResponse.body?.string()
                 if (body == null) { AppLog.w(TAG, "Netease search: null body"); return@use null }
-                AppLog.d(TAG, "Netease search: status=${searchResponse.code}, body=${body.take(200)}")
+                AppLog.d(TAG, "Netease search(POST): status=${searchResponse.code}, body=${body.take(200)}")
                 body
             } ?: return emptyList()
 

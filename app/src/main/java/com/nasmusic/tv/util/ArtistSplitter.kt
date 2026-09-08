@@ -106,4 +106,20 @@ object ArtistSplitter {
         if (key.isBlank()) return false
         return split(rawArtistField).any { normalizeKey(it) == key }
     }
+
+    /**
+     * 与 [containsArtist] 相同，但接受预计算的归一化 key，
+     * 避免在批量过滤时对同一个 artistName 重复做 NFKC 归一化。
+     *
+     * 用法：
+     * ```
+     * val key = ArtistSplitter.normalizeKey("赵传")
+     * songs.filter { ArtistSplitter.containsArtistWithKey(it.artist, key) }
+     * ```
+     */
+    fun containsArtistWithKey(rawArtistField: String, artistKey: String): Boolean {
+        if (artistKey.isBlank()) return false
+        if (rawArtistField.isBlank()) return false
+        return split(rawArtistField).any { normalizeKey(it) == artistKey }
+    }
 }
