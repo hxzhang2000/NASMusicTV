@@ -1,0 +1,215 @@
+跳转到内容
+百度网盘
+百度网盘开放平台
+技术文档
+规范标准
+更新日志
+
+搜索
+控制台
+使用概述
+注册登录百度账号
+创建应用
+简介
+快速授权
+授权码模式授权
+简化模式授权
+设备码模式授权
+设置授权回调地址
+设置授权展示方式
+FAQ
+权限与配额
+获取用户信息
+获取网盘容量信息
+获取文件列表
+递归获取文件列表
+获取文档列表
+获取图片列表
+获取视频列表
+获取bt列表
+获取分类文件总个数
+获取分类文件列表
+查询文件信息
+搜索文件（关键词搜索）
+搜索文件（语义搜索）
+管理文件
+下载
+创建文件夹
+获取播单列表
+获取播单下文件列表
+播单下音频播放
+播单下文件下载
+简介
+创建分享链接
+分享提取码验证
+查询分享详情
+查询分享文件信息
+分享文件转存
+转存任务查询
+获取分享下载地址
+获取分享链接音视频文件流数据
+外链数据回调
+错误码说明
+最近服务
+业务简介
+NAS服务
+反馈与支持
+创建文件夹
+更新时间： 2022-12-05
+
+接口描述
+权限说明
+注意事项
+请求结构
+请求参数
+响应参数
+错误码
+请求示例
+响应示例
+
+ 
+
+接口描述
+本接口用于创建文件夹。
+
+同时，本接口也是上传文件的创建文件接口，详情参见《上传/创建文件》。
+
+ 
+
+权限说明
+本接口必须经过用户授权后才可正常使用，具体的授权流程和机制的可参考《使用入门 > 接入授权》。
+
+ 
+
+注意事项
+执行示例代码时，请将示例代码中的access_token参数值替换为自行获取的access_token
+ 
+
+请求结构
+POST /rest/2.0/xpan/file?method=create&access_token=xxx HTTP/1.1
+Host: pan.baidu.com
+
+ 
+
+请求参数
+参数名称	类型	是否必填	示例	参数位置	描述
+method	string	是	create	URL参数	本接口固定为create
+access_token	string	是	12.a6b7dbd428f731035f771b8d15063f61.86400.1292922000-2346678-124328	URL参数	接口鉴权认证参数，标识用户
+path	string	是	/apps/appName/mydir	RequestBody参数	创建文件夹的绝对路径，需要urlencode
+isdir	string	是	1	RequestBody参数	本接口固定为1
+rtype	int	否	1	RequestBody参数	文件命名策略，默认0
+0 为不重命名，返回冲突
+1 为只要path冲突即重命名
+local_ctime	int	否	1596009229	RequestBody参数	客户端创建时间(精确到秒)，默认为当前时间戳
+local_mtime	int	否	1596009229	RequestBody参数	客户端修改时间(精确到秒)，默认为当前时间戳
+mode	int	否	1	RequestBody参数	上传方式
+1 手动、2 批量上传、3 文件自动备份
+4 相册自动备份、5 视频自动备份
+ 
+
+响应参数
+参数名称	类型	描述
+errno	int	错误码
+fs_id	uint64	文件在云端的唯一标识ID
+category	int	分类类型, 6 文件夹
+path	string	上传后使用的文件绝对路径
+ctime	uint64	文件创建时间
+mtime	uint64	文件修改时间
+isdir	int	是否目录，0 文件、1 目录
+ 
+
+错误码
+错误码	错误描述	排查方向
+-7	文件或目录名错误或无权访问	无
+-8	文件或目录已存在	无
+-10	云端容量已满	无
+更多错误码请参考《开发者须知 > 错误码》中“公共错误码”部分。
+
+ 
+
+请求示例
+curl示例
+Terminal window
+curl -L -X POST 'https://pan.baidu.com/rest/2.0/xpan/file?method=create&access_token=123.420743972dc5688841c6dcbef8b47778.Yl9FwyKU0AO3bgVOoedfUKspT7FV-Dcb-y2sIYS.8MZeTA' \
+-H 'Content-Type: application/x-www-form-urlencoded' \
+-d 'path=/apps/tes11111/mydir&isdir=1&rtype=0'
+
+ 
+
+python 示例
+import requests
+
+url = "https://pan.baidu.com/rest/2.0/xpan/file?method=create&access_token=12.a6b7dbd428f731035f771b8d15063f61.86400.1292922000-2346678-124328"
+
+payload = {'path': '/apps/appName/mydir',
+'rtype': '1',
+'isdir': '1'}
+files = [
+
+]
+headers = {
+}
+
+response = requests.request("POST", url, headers=headers, data = payload, files = files)
+
+print(response.text.encode('utf8'))
+
+ 
+
+java示例
+Terminal window
+import java.io.*;
+import java.net.HttpURLConnection;
+import java.net.URL;
+
+public class HttpPostRequestExample {
+    public static void main(String[] args) {
+        try {
+            URL url = new URL("https://pan.baidu.com/rest/2.0/xpan/file?method=create&access_token=12.a6b7dbd428f731035f771b8d15063f61.86400.1292922000-2346678-124328");
+            HttpURLConnection httpConn = (HttpURLConnection) url.openConnection();
+            httpConn.setRequestMethod("POST");
+            httpConn.setDoOutput(true);
+
+            OutputStreamWriter writer = new OutputStreamWriter(httpConn.getOutputStream());
+            writer.write("path=/apps/test/mydir&isdir=1&rtype=1");
+            writer.flush();
+            writer.close();
+            httpConn.getOutputStream().close();
+
+            int responseCode = httpConn.getResponseCode();
+            System.out.println("Response Code : " + responseCode);
+            BufferedReader in = new BufferedReader(new InputStreamReader(httpConn.getInputStream()));
+            String inputLine;
+            StringBuffer response = new StringBuffer();
+            while ((inputLine = in.readLine()) != null) {
+                response.append(inputLine);
+            }
+            in.close();
+            System.out.println(response.toString());
+        } catch (Exception e) {
+            System.out.println(e);
+        }
+    }
+}
+
+ 
+
+响应示例
+创建/apps/appName/mydir文件夹成功
+{
+    "ctime": 1670242019,
+    "fs_id": 178943825547945,
+    "isdir": 1,
+    "mtime": 1670242019,
+    "path": "/apps/appName/mydir",
+    "status": 0,
+    "errno": 0,
+    "category": 6
+}
+
+ 
+
+上一页
+下载
+下一页
+获取播单列表

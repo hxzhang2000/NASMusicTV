@@ -1,0 +1,270 @@
+跳转到内容
+百度网盘
+百度网盘开放平台
+技术文档
+规范标准
+更新日志
+
+搜索
+控制台
+使用概述
+注册登录百度账号
+创建应用
+简介
+快速授权
+授权码模式授权
+简化模式授权
+设备码模式授权
+设置授权回调地址
+设置授权展示方式
+FAQ
+权限与配额
+获取用户信息
+获取网盘容量信息
+获取文件列表
+递归获取文件列表
+获取文档列表
+获取图片列表
+获取视频列表
+获取bt列表
+获取分类文件总个数
+获取分类文件列表
+查询文件信息
+搜索文件（关键词搜索）
+搜索文件（语义搜索）
+管理文件
+下载
+创建文件夹
+获取播单列表
+获取播单下文件列表
+播单下音频播放
+播单下文件下载
+简介
+创建分享链接
+分享提取码验证
+查询分享详情
+查询分享文件信息
+分享文件转存
+转存任务查询
+获取分享下载地址
+获取分享链接音视频文件流数据
+外链数据回调
+错误码说明
+最近服务
+业务简介
+NAS服务
+反馈与支持
+管理文件
+更新时间： 2022-05-23
+
+接口描述
+权限说明
+注意事项
+请求结构
+请求参数
+响应参数
+错误码
+请求示例
+SDK获取
+
+接口描述
+本接口用于对指定的文件进行复制、移动、重命名和删除操作 。
+
+如果想要实现文件夹创建，可以使用【上传-创建文件】中秒速的接口实现。
+
+ 
+
+权限说明
+本接口必须经过用户授权后才可正常使用，具体的授权流程和机制的可参考《使用入门 > 接入授权》。
+
+/rest/2.0/xpan/file?method=download、/rest/2.0/xpan/file?method=filemanager、/rest/2.0/xpan/file?method=meta、/rest/2.0/xpan/file?method=move 仅支持访问 /apps/{appname} 目录下的文件。
+
+ 
+
+注意事项
+执行请求示例代码时，请将示例代码中的access_token参数替换为自行获取的access_token。
+ondup参数分为全局ondup参数和文件对应的ondup参数，后者具有更高优先级。
+设置async参数为0或2时，则服务端一定会按照同步或异步方式处理，async参数为1时，则服务端按照文件数目自适应选择同步或异步方式，以返回的taskid为准。
+delete操作没有ondup选项，当失败时，可以选择再次发送请求。
+开放平台对异常行为已进行相应限制，不会影响到您的正常使用。如果您在正常使用接口的过程中有任何问题都可与我们取得联系，具体方式参考文档：反馈与支持。
+ 
+
+ 
+
+请求结构
+POST /rest/2.0/xpan/file?method=filemanager HTTP
+Host: pan.baidu.com
+
+ 
+
+请求参数
+参数名称	类型	是否必填	示例	参数位置	描述
+method	string	是	filemanager	URL参数	本接口固定为filemanager
+access_token	string	是	12.a6b7dbd428f731035f771b8d15063f61.86400.1292922000-2346678-124328	URL参数	接口鉴权参数
+opera	string	是	copy	URL参数	文件操作参数，可实现文件复制、移动、重命名、删除，依次对应的参数值为：copy、move、rename、delete
+async	int	是	1	RequestBody参数	0 同步，1 自适应，2 异步
+filelist	json array	是	[{“path”:“/test/123456.docx”,“dest”:“/test/abc”,“newname”:“11223.docx”}]【copy/move示例】
+
+[{“path”:“/test/123456.docx”,“newname”:“123.docx”}]【rename示例】
+
+[“/test/123456.docx”]【delete示例】	RequestBody参数	待操作文件
+ondup	string	否	overwrite	RequestBody参数	全局ondup,遇到重复文件的处理策略,
+fail(默认，直接返回失败)、newcopy(重命名文件)、overwrite、skip
+ 
+
+响应参数
+参数名称	类型	描述
+info	array	文件信息
+taskid	uint64	异步任务id, 当async=2时返回
+ 
+
+错误码
+参数名称	错误描述
+-9	文件不存在
+111	有其他异步任务正在执行
+-7	文件名非法
+更多错误码请参考《平台简介 > 错误码》中“公共错误码”部分。
+
+ 
+
+请求示例
+1. curl 示例
+rename 重命名
+采用同步方式，重命名【/测试目录/abc】为【/测试目录test】:
+
+Terminal window
+curl 'https://pan.baidu.com/rest/2.0/xpan/file?method=filemanager&access_token=12.53c9523518840783bada572ddafc2831.YaT0UDVITrNy_UhBGlVLnzFXQLnsuXqWeKQwRVY.nupc9w&opera=rename' -d 'async=1&filelist=[{"path":"%2F%E6%B5%8B%E8%AF%95%E7%9B%AE%E5%BD%95%2Fabc","newname":"%2F%E6%B5%8B%E8%AF%95%E7%9B%AE%E5%BD%95%2Ftest"}]&ondup=overwrite'
+
+响应：
+
+{
+    "errno":0,
+    "info":[
+        {
+            "errno":0,
+            "path":"\/\u6d4b\u8bd5\u76ee\u5f55\/abc"
+        }
+    ],
+    "request_id":9131857965670515801
+}
+
+copy 复制
+复制 【/ML/机器学习_周志华.pdf】 到 【/测试目录/test】 下，命名为【西瓜书.pdf】示例:
+
+Terminal window
+curl "https://pan.baidu.com/rest/2.0/xpan/file?method=filemanager&access_token=12.53c9523518840783bada572ddafc2831.YaT0UDVITrNy_UhBGlVLnzFXQLnsuXqWeKQwRVY.nupc9w&opera=copy" \
+-d 'async=2&filelist=[{"path":"%2FML%2F%E6%9C%BA%E5%99%A8%E5%AD%A6%E4%B9%A0_%E5%91%A8%E5%BF%97%E5%8D%8E.pdf","dest":"%2F%E6%B5%8B%E8%AF%95%E7%9B%AE%E5%BD%95%2Ftest","newname":"%E8%A5%BF%E7%93%9C%E4%B9%A6.pdf"}]'
+
+响应：
+
+{
+"errno":0,
+"info":[],
+"request_id":9132303301733449639,
+"taskid":569942193355668
+}
+异步下返回有taskid。
+
+delete 删除
+delete【/测试目录/test/西瓜书.pdf】:
+
+Terminal window
+curl "https://pan.baidu.com/rest/2.0/xpan/file?method=filemanager&access_token=12.53c9523518840783bada572ddafc2831.YaT0UDVITrNy_UhBGlVLnzFXQLnsuXqWeKQwRVY.nupc9w&opera=delete" \
+-d 'async=2&filelist=["%2F%E6%B5%8B%E8%AF%95%E7%9B%AE%E5%BD%95%2Ftest%2F%E8%A5%BF%E7%93%9C%E4%B9%A6.pdf"]'
+
+响应：
+
+{
+"errno":0,
+"info":[],
+"request_id":9135012437578302233,
+"taskid":109078799891710
+}
+
+ 
+
+2. python 示例
+rename 重命名
+import requests
+
+url = "https://pan.baidu.com/rest/2.0/xpan/file?method=filemanager&access_token=12.a6b7dbd428f731035f771b8d15063f61.86400.1292922000-2346678-124328&opera=rename"
+
+payload = {'async': '2',
+'ondup':'fail',
+'filelist': '[{"path":"/test/a.txt","newname":"11223.docx"}]'}
+
+response = requests.request("POST", url, data = payload)
+
+print(response.text.encode('utf8'))
+
+3. java 示例
+rename 重命名
+import java.io.*;
+import java.net.HttpURLConnection;
+import java.net.URL;
+
+public class HttpPostRequestExample {
+    public static void main(String[] args) {
+        try {
+            URL url = new URL("https://pan.baidu.com/rest/2.0/xpan/file?method=filemanager&access_token=12.a6b7dbd428f731035f771b8d15063f61.86400.1292922000-2346678-124328&opera=rename");
+            HttpURLConnection httpConn = (HttpURLConnection) url.openConnection();
+            httpConn.setRequestMethod("POST");
+            httpConn.setRequestProperty("User-Agent", "pan.baidu.com");
+            httpConn.setRequestProperty("Content-Type", "application/x-www-form-urlencoded");
+            httpConn.setDoOutput(true);
+
+            OutputStreamWriter writer = new OutputStreamWriter(httpConn.getOutputStream());
+            writer.write("async=1&filelist=[{\"path\":\"/apps/test\",\"newname\":\"/test1\"}]&ondup=fail");
+            writer.flush();
+            writer.close();
+            httpConn.getOutputStream().close();
+
+            int responseCode = httpConn.getResponseCode();
+            System.out.println("Response Code : " + responseCode);
+            BufferedReader in = new BufferedReader(new InputStreamReader(httpConn.getInputStream()));
+            String inputLine;
+            StringBuffer response = new StringBuffer();
+            while ((inputLine = in.readLine()) != null) {
+                response.append(inputLine);
+            }
+            in.close();
+            System.out.println(response.toString());
+        } catch (Exception e) {
+            System.out.println(e);
+        }
+    }
+}
+
+ 
+
+SDK获取
+我们提供了Go版本SDK帮助开发者快速实现此功能，具体实现流程如下：
+
+点击下载Go版本SDK：filemanagersdk.tar.gz
+
+下载完成，用tar -zxvf *.tar.gz命令解压即可。
+
+解压后，您可以看到目录结构如下：
+
+.
+├── demo
+│   ├── filemanager_copy.go
+│   ├── filemanager_delete.go
+│   ├── filemanager_move.go
+│   └── filemanager_rename.go
+├── filemanager
+│   ├── file_manager.go
+│   └── types.go
+└── utils
+    └── util.go
+
+其中，filemanager和utils下为实现源码。
+
+demo为使用示例，包括复制文件、删除文件、移动文件、重命名文件四个步骤。
+
+ 
+
+上一页
+搜索文件（语义搜索）
+下一页
+能力说明

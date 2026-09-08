@@ -1,0 +1,195 @@
+跳转到内容
+百度网盘
+百度网盘开放平台
+技术文档
+规范标准
+更新日志
+
+搜索
+控制台
+获取用户信息
+获取网盘容量信息
+获取文件列表
+递归获取文件列表
+获取文档列表
+获取图片列表
+获取视频列表
+获取bt列表
+获取分类文件总个数
+获取分类文件列表
+查询文件信息
+搜索文件（关键词搜索）
+搜索文件（语义搜索）
+管理文件
+下载
+创建文件夹
+最近服务
+NAS服务
+反馈与支持
+获取文件列表
+更新时间： 2026-09-02
+接口描述
+权限说明
+请求结构
+请求参数
+响应参数
+错误码
+请求示例
+响应示例
+SDK获取
+注意事项
+
+接口描述
+本接口用于获取用户网盘中指定目录下的文件和目录列表，支持排序、分页、仅返回文件夹以及 Web 展示字段。
+
+权限说明
+调用前请完成用户授权，并取得有效的 access_token。
+
+鉴权详情：接入授权。
+
+请求结构
+项目	内容
+HTTP Method	GET
+HTTP URL	https://pan.baidu.com/rest/2.0/xpan/file?method=list
+固定查询参数	method=list
+请求参数
+参数名称	类型	是否必填	描述
+method	string	是	示例：list；本接口固定为 list。
+access_token	string	是	示例：<ACCESS_TOKEN>；OAuth 2.0 Token。
+dir	string	否	示例：%2F%E6%B5%8B%E8%AF%95%E7%9B%AE%E5%BD%95；需要列出的目录，以 / 开头的绝对路径，默认为 /；路径包含中文时需要 URL Encode 编码。
+num	int	否	示例：100；数量，每页返回的文件条数。
+page	int	否	示例：1；页数，分页页码，与 num 配合使用。
+channel	string	否	示例：<CHANNEL>；频道或渠道标识。
+clienttype	string	否	示例：<CLIENT_TYPE>；客户端类型。
+app_id	string	否	示例：<APP_ID>；调用方应用 ID。
+order	string	否	示例：name；排序字段：默认为 name；time 按修改时间排序；name 按文件名称排序；size 按文件大小排序。排序按字符串处理，如有剧集排序需求需自行开发。
+desc	int	否	示例：1；默认为升序，设置为 1 实现降序；排序对象是当前目录下所有文件，不是当前分页下的文件。
+start	int	否	示例：0；起始位置，从 0 开始。
+limit	int	否	示例：100；查询数目，默认为 1000，建议最大不超过 1000。
+web	int	否	示例：1；值为 1 时返回 dir_empty 属性和缩略图数据；不传该参数则不返回缩略图地址。
+folder	int	否	示例：0；是否只返回文件夹：0 返回全部，1 只返回文件夹，且属性只返回 path 字段。
+showempty	int	否	示例：0；是否返回 dir_empty 属性：0 不返回，1 返回。
+响应参数
+字段路径	类型	返回条件	描述
+errno	int	成功/失败均返回	业务错误码，0 表示成功。
+newno	string	部分响应返回	新错误码。
+request_id	uint64	成功/失败均返回	请求 ID。
+server_time	uint64	部分响应返回	服务端时间戳。
+show_msg	string	失败时返回	可展示的错误描述。
+data	object	部分响应返回	数据体。
+data.errno	int	data 存在时	数据体内错误码。
+data.guid_info	string	data 存在时	GUID 信息。
+data.list	array	data 存在时	文件或目录列表。
+data.request_id	int64	data 存在时	数据体内请求 ID。
+data.guid	int	data 存在时	GUID。
+guid_info	string	成功时返回	GUID 信息，一般为空。
+guid	int	成功时返回	GUID，通常为 0。
+list	array	成功时返回	当前目录下的文件或目录列表。
+list[].fs_id	uint64	条目存在时	文件在云端的唯一标识 ID。
+list[].path	string	条目存在时	文件或目录的绝对路径。
+list[].server_filename	string	条目存在时	服务端文件名。
+list[].size	uint	文件条目	文件大小，单位字节。
+list[].server_mtime	uint	条目存在时	服务端修改时间，Unix 时间戳。
+list[].server_ctime	uint	条目存在时	服务端创建时间，Unix 时间戳。
+list[].local_mtime	uint	条目存在时	客户端记录的修改时间。
+list[].local_ctime	uint	条目存在时	客户端记录的创建时间。
+list[].isdir	uint	条目存在时	是否目录：0 文件，1 目录。
+list[].category	uint	条目存在时	文件类型：1 视频、2 音频、3 图片、4 文档、5 应用、6 其他、7 种子。
+list[].md5	string	文件条目	云端哈希（非文件真实 MD5），仅文件条目存在。
+list[].dir_empty	int	web=1 且条目为目录时	目录是否存在子目录；0 表示存在，1 表示不存在。
+list[].thumbs	array	web=1 且条目为图片时	包含三个尺寸的缩略图 URL；不传 web 参数则不返回缩略图地址。
+list[].privacy	int	条目存在时	文件隐私状态。
+list[].unlist	int	条目存在时	是否不在列表中。
+list[].server_atime	uint	条目存在时	服务端访问时间，Unix 时间戳。
+list[].share	int	条目存在时	是否被分享过。
+list[].empty	int	目录条目	目录是否为空。
+list[].oper_id	uint64	条目存在时	操作者用户 ID。
+list[].lodocpreview	string	接口返回该字段时	该返回参数已废弃下线，请勿关注。
+list[].docpreview	string	接口返回该字段时	该返回参数已废弃下线，请勿关注。
+错误码
+HTTP 状态	业务码	含义	排查 / 修复	是否可重试
+200	0	查询成功	读取 list，按 start + limit 继续分页。	否
+200	-7	文件或目录无权访问	确认用户授权、应用目录范围和 dir。	否
+200	-9	文件或目录不存在	确认绝对路径和 URL 编码。	否
+公共错误码中心：《平台简介 > 错误码》。
+
+请求示例
+cURL
+Python
+Java
+Terminal window
+curl --location --get 'https://pan.baidu.com/rest/2.0/xpan/file' \
+--data-urlencode 'method=list' \
+--data-urlencode 'dir=/apps/<APP_NAME>/<FOLDER_NAME>' \
+--data-urlencode 'order=time' \
+--data-urlencode 'start=0' \
+--data-urlencode 'limit=10' \
+--data-urlencode 'web=1' \
+--data-urlencode 'folder=0' \
+--data-urlencode 'access_token=<ACCESS_TOKEN>' \
+--data-urlencode 'desc=1' \
+-H 'User-Agent: pan.baidu.com'
+
+响应示例
+{
+  "errno": 0,
+  "guid_info": "",
+  "request_id": 1234567890,
+  "list": [
+    {
+      "server_filename": "<FOLDER_NAME>",
+      "privacy": 0,
+      "category": 4,
+      "unlist": 0,
+      "fs_id": 123456789012345,
+      "dir_empty": 1,
+      "server_atime": 0,
+      "isdir": 1,
+      "path": "/apps/<APP_NAME>/<FOLDER_NAME>",
+      "size": 0,
+      "server_ctime": 1596078019,
+      "server_mtime": 1596078019,
+      "local_ctime": 1596078019,
+      "local_mtime": 1596078019,
+      "share": 0,
+      "empty": 0,
+      "oper_id": 1234567890
+    },
+    {
+      "server_filename": "<IMAGE_FILE>",
+      "privacy": 0,
+      "category": 3,
+      "unlist": 0,
+      "fs_id": 123456789012346,
+      "isdir": 0,
+      "path": "/apps/<APP_NAME>/<IMAGE_FILE>",
+      "size": 233999,
+      "md5": "<FILE_MD5>",
+      "share": 0,
+      "server_atime": 0,
+      "oper_id": 1234567890,
+      "thumbs": {
+        "url1": "<THUMB_URL_1>",
+        "url2": "<THUMB_URL_2>",
+        "url3": "<THUMB_URL_3>"
+      }
+    }
+  ],
+  "guid": 0
+}
+
+SDK获取
+我们提供了 Go 版本 SDK，帮助开发者快速实现文件列表能力。
+
+下载 Go 版本 SDK（fileinfosdk.tar.gz）。
+下载后，使用 tar -zxvf *.tar.gz 命令解压。
+解压后，修改接口参数值并运行即可。
+注意事项
+执行请求示例代码时，请将示例代码中的 access_token 参数替换为自行获取的 access_token。
+start 与 limit 共同控制分页；start 从 0 开始。
+web=1 时才返回 dir_empty 或图片 thumbs；不传 web 参数则不返回缩略图地址，缩略图地址具有时效性。
+folder=1 只返回文件夹，且属性只返回 path 字段。
+上一页
+获取网盘容量信息
+下一页
+递归获取文件列表

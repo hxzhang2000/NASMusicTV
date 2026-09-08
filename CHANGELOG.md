@@ -7,6 +7,18 @@
 >
 > 类型：`Added`（新增） | `Changed`（变更） | `Fixed`（修复） | `Removed`（移除）
 
+## [v2.26.37] - 2026-09-08
+
+### Fixed
+
+- **艺术家/专辑封面大量缺失**：`JellyfinAdapter.getArtists()` 和 `getAlbums()` 中 `buildCoverUrl(id, imageTag) ?: getCoverUrl(id)` 的 `getCoverUrl(id)` 对无图艺术家也返回 URL（Jellyfin 返回 404），导致 `ArtistCoverResolver` 因 `coverUrl != null` 跳过所有缺图艺术家，在线源和歌曲封面兜底从未被触发。改为 Primary tag → Backdrop → null，无图时 `coverUrl = null`，交给 `ArtistCoverResolver` 处理。
+- **P4 歌曲封面兜底性能优化**：`ArtistCoverResolver.resolveCovers()` 中 `findArtistSongCover()` 对每个艺术家遍历全量歌曲（O(artists × songs)），3 万首歌 + 5000 艺术家时极慢。改为预构建 `normalizeKey(artistName) → coverUrl` 索引（O(songs) 一次构建），P4 查找降为 O(1)。
+- **在线源耗尽后无法补充封面**：`artistCoverMaxAttempts = 2` 耗尽后不再解析，但 NAS 全量歌曲需 12-13 分钟才加载完，P4 歌曲封面兜底在歌曲未加载完时无效。新增 `resolveSongCoversOnly()` 方法，在线源尝试次数耗尽后，每次歌曲库更新仍重新用 P4 匹配新加载的歌曲封面，不消耗在线源尝试次数。
+
+### Changed
+
+- **封面多级回退链完善**：完整链路为 Jellyfin Primary tag → Jellyfin Backdrop → 网易云 → 酜狗 → iTunes → 歌曲封面(P4) → P4-only 补充通道（歌曲库更新后持续重试） → 首字母占位(UI)。
+
 ## [v2.26.36] - 2026-09-08
 
 ### Fixed

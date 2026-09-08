@@ -1,0 +1,194 @@
+跳转到内容
+百度网盘
+百度网盘开放平台
+技术文档
+规范标准
+更新日志
+
+搜索
+控制台
+百度网盘开放平台简介
+接入流程
+错误码
+获取用户信息
+获取网盘容量信息
+获取文件列表
+递归获取文件列表
+获取文档列表
+获取图片列表
+获取视频列表
+获取bt列表
+获取分类文件总个数
+获取分类文件列表
+查询文件信息
+搜索文件（关键词搜索）
+搜索文件（语义搜索）
+管理文件
+下载
+创建文件夹
+最近服务
+NAS服务
+反馈与支持
+接入流程
+更新时间： 2026-08-10
+
+成为开发者
+创建应用
+获取授权
+授权说明
+常见问题
+
+1.成为开发者
+step1：使用百度账号登录开放平台官网
+
+请在官网首页右上角找到登录入口，使用百度账号进行登录。如果您还没有百度账号，请按照百度账号统一注册流程进行注册。
+
+
+step2: 申请账号认证并接入
+
+登录后，点击官网首页图中【快速接入】进入申请接入页面。
+
+
+在使用平台服务之前，您需要同意《百度网盘开放平台开发者服务协议》
+
+
+2.创建应用
+按照指示完成认证后，可前往控制台创建应用。
+
+
+step1:创建应用
+
+选择应用类别，填写应用分类、名称、描述后，即可创建应用。
+
+
+step2：获取Appid、ak、sk和Signkey
+
+应用创建成功后，你可在应用详情页获取到应用的关键凭证：Appid、Appkey、Secretkeyk和Signkey。
+
+
+点击接入能力，即可参照技术文档，调用接口进行接入。
+
+step3：配置redirect_uri
+
+应用创建成功后，可以进入【应用详情】页，通过【安全设置】进行授权回调地址，即第三步，获取授权时所需redirect_uri参数的配置。 回调地址支持配置多个
+
+3.获取授权
+step1: 了解百度OAuth
+
+a. OAuth2.0(开放授权): 是一个开放标准，用户授权后，第三方应用无需获取用户的用户名和密码就可以访问该用户在某一网站上存储的私密的资源（如照片，视频，联系人列表）
+
+b. Access_token: 用户身份验证和授权的凭证。第三方应用在调用百度网盘开放API之前，首先需要获取Access Token。
+
+step2: 根据自身业务场景，选择合适的授权方式
+
+server端获取授权模式：如果应用有自己的server端，推荐使用 授权码模式(grant_type=authorization code) 获取授权。详情请参考以下步骤。
+
+2.1：引导用户到如下地址授权。
+
+GET http://openapi.baidu.com/oauth/2.0/authorize?response_type=code&client_id=YOUR_CLIENT_ID&redirect_uri=YOUR_REGISTERED_REDIRECT_URI&scope=basic,netdisk&display=tv&qrcode=1&force_login=1&device_id=820921428tp8x63q51
+
+参数说明
+
+参数	类型	是否必须	备注
+response_type	string	是	固定参数，必为code
+client_id	string	是	用自己应用的APP KRY替换示例中的YOUR_CLIENT_ID
+redirect_uri	string	是	授权回调地址，可在控制台应用详情页【安全配置】入口进行配置，更多说明见授权说明
+scope	string	是	固定参数，必须为basic,netdisk
+display	string	否	授权页的展示方式，更多说明见授权说明
+state	string	否	重定向后会带上state参数。建议开发者利用state参数来防止CSRF攻击
+qrcode	int	否	如传递“qrcode=1”，则展示登录二维码
+qrloginfrom	string	否	此参数在已传“qrcode=1”参数时有效，可选值 watch 用于对二维码展示样式调整。
+qrcodeW	int	否	此参数在已传“qrcode=1”参数时有效，用于设置二维码展示宽度。
+qrcodeH	int	否	此参数在已传“qrcode=1”参数时有效，用于设置二维码展示高度。
+force_login	int	否	如传递“force_login=1”，则加载登录页时强制用户输入用户名和口令，不会从cookie中读取百度用户的登录状态
+device_id	string	否	设备注册接口返回，硬件接入时需要传此参数
+2.2：如果用户同意授权，页面跳转至
+
+YOUR_REGISTERED_REDIRECT_URI/?code=CODE
+
+2.3 ：用CODE换取Access_token
+
+GET https://openapi.baidu.com/oauth/2.0/token?grant_type=authorization_code&code=CODE&client_id=YOUR_CLIENT_ID&client_secret=YOUR_CLIENT_SECRET&redirect_uri=YOUR_REGISTERED_REDIRECT_URI
+
+code说明：code作为换取access_token的票据，每次用户授权带上的code将不一样，code只能使用一次，10分钟未被使用自动过期。
+
+参数说明
+
+参数	类型	是否必须	备注
+grant_type	string	是	固定值，必须为authorization_code 
+code	string	是	获取用户授权后得到的code
+client_id	string	是	应用的APP KEY
+client_secret	string	是	应用的SECRET KEY
+redirect_uri	string	是	必须与获取授权code时传递的保持一致
+返回值说明
+
+参数	类型	备注
+access_token	string	获取到的授权token，作为调用其他接口访问用户数据的凭证
+expires_in	int	access_token的有效期，单位：秒
+refresh_token	string	用于刷新access_token, 有效期为10年
+scope	string	access_token最终的访问权限，即用户的实际授权列表
+2.4 ：刷新Access_token
+
+GET https://openapi.baidu.com/oauth/2.0/token?grant_type=refresh_token&refresh_token=REFRESH_TOKEN&client_id=API_KEY&client_secret=SECRET_KEY 
+
+参数说明
+
+参数	类型	是否必须	备注
+grant_type	string	是	固定值，必须为refresh_token
+refresh_token	string	是	第三步中返回的refresh_toekn
+client_id	string	是	应用的APP KEY
+client_secret	string	是	应用的SECRET KEY
+返回值说明
+
+参数	类型	备注
+access_token	string	获取到的授权token，作为调用其他接口访问用户数据的凭证
+expires_in	int	access_token的有效期，单位：秒
+refresh_token	string	用于刷新access_token, 有效期为10年
+scope	string	access_token最终的访问权限，即用户的实际授权列表
+移动端获取授权模式：如果应用没有自己的server端，推荐使用简化模式(implicit grant),跳过授权码步骤，直接获取access_token。 简化模式有效期较短，不支持刷新access_token，过期后用户需重新登录授权。
+
+3.1: 引导用户到如下地址授权。
+
+http://openapi.baidu.com/oauth/2.0/authorize?response_type=token&client_id=YOUR_CLIENT_ID&redirect_uri=YOUR_REGISTERED_REDIRECT_URI&scope=basic,netdisk&display=popup&state=xxx
+
+参数说明
+
+参数	参数值	备注
+response_type	token	固定参数
+client_id	应用的APP KEY	用自己应用的APP key替换示例中的YOUR_CLIENT_ID
+redirect_uri	授权回调地址	可在获取应用AK,SK的页面【安全配置】入口进行配置，更多说明见授权说明
+scope	basic,netdisk	固定参数
+display	popup	授权页的展示方式，更多说明见授权说明
+3.2：如果用户同意授权,页面跳转至 YOUR_REGISTERED_REDIRECT_URI 在Fragment中追加如下参数。
+
+YOUR_REGISTERED_REDIRECT_URI#access_token=1.a6b7dbd428f731035f771b8d15063f61.86400.1292922000-2346678-124328&expires_in=86400&scope=basic%20netdisk&session_key=ANXxSNjwQDugf8615OnqeikRMu2bKaXCdlLxn&session_secret=248APxvxjCZ0VEC43EYrvxqaK4oZExMB&state=xxx
+
+4.授权说明
+4.1 授权回调地址
+a. 对于有server的应用： 开发者必须在 控制台->应用->安全设置 里配置授权回调地址，用以OAuth2.0检验授权请求中的“redirect_uri”参数。以便保证OAuth2.0在回调过程中，会回调到安全域名。
+
+
+b. 对于无server的应用 : 可传redirect_uri=oob。回调后会返回一个平台提供默认回调地址
+
+4.2 授权展示方式
+display参数值	参数值说明
+page	全屏形式的授权页面(默认)，适用于web应用
+popup	弹框形式的授权页面，适用于桌面软件应用和web应用
+dialog	浮层形式的授权页面，只能用于站内web应用
+mobile	Iphone/Android等智能移动终端上用的授权页面，适用于Iphone/Android等智能移动终端上的应用
+tv	电视等超大显示屏使用的授权页面
+pad	IPad/Android等智能平板电脑使用的授权页面
+4.3 其他注意事项
+a. 在引导用户授权时，注意：scope参数固定传 basic,netdisk
+
+b. 对于硬件厂商，需要在请求http://openapi.baidu.com/oauth/2.0/authorize?response_type=code时，多增加一个参数device_id，该device_id为设备注册接口返回的device_id。(参考开放平台设备管理接口文档)
+
+c. 参考文档
+
+5.常见问题
+oauth接入指南
+
+上一页
+百度网盘开放平台简介
+下一页
+错误码

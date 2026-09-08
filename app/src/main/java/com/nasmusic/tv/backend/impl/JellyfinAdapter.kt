@@ -180,14 +180,23 @@ class JellyfinAdapter : BackendAdapter {
                     val year = obj.get("ProductionYear")?.asInt
                     val childCount = obj.get("ChildCount")?.asInt ?: 0
                     val runTime = obj.get("RunTimeTicks")?.asLong ?: 0L
-                    val imageTag = obj.get("ImageTags")?.asJsonObject?.get("Primary")?.asString
+                    val imageTags = obj.get("ImageTags")?.asJsonObject
+                    val primaryTag = imageTags?.get("Primary")?.asString
+                    val backdropTags = obj.get("BackdropImageTags")?.asJsonArray
+                    // Primary tag → Backdrop → null（交给 AlbumCoverResolver 兜底）
+                    val coverUrl = when {
+                        primaryTag != null -> buildCoverUrl(id, primaryTag)
+                        backdropTags != null && backdropTags.size() > 0 ->
+                            "$baseUrl/Items/$id/Images/Backdrop/0?maxWidth=512&quality=90&api_key=$apiToken"
+                        else -> null
+                    }
 
                     allAlbums.add(
                         Album(
                             id = id,
                             name = name,
                             artist = artist,
-                            coverUrl = buildCoverUrl(id, imageTag) ?: getCoverUrl(id),
+                            coverUrl = coverUrl,
                             year = year,
                             songCount = childCount,
                             durationMs = runTime / 10000
@@ -254,9 +263,19 @@ class JellyfinAdapter : BackendAdapter {
                     val id = obj.get("Id")?.asString ?: continue
                     val rawName = obj.get("Name")?.asString
                     val name = EncodingUtils.fixEncoding(rawName) ?: "Unknown Artist"
-                    val imageTag = obj.get("ImageTags")?.asJsonObject?.get("Primary")?.asString
-                    val coverUrl = buildCoverUrl(id, imageTag) ?: getCoverUrl(id)
-                    AppLog.d("NASMusic", "getArtists: raw='${rawName?.take(30)}' fixed='${name.take(30)}'")
+                    val imageTags = obj.get("ImageTags")?.asJsonObject
+                    val primaryTag = imageTags?.get("Primary")?.asString
+                    val backdropTags = obj.get("BackdropImageTags")?.asJsonArray
+                    // 多级回退：Primary tag → Backdrop → null（交给 ArtistCoverResolver 在线源+歌曲封面兜底）
+                    // 不再用 getCoverUrl(id) 兜底——该方法对无图艺术家也返回 URL（Jellyfin 返回 404），
+                    // 导致 ArtistCoverResolver 因 coverUrl != null 而跳过所有缺图艺术家。
+                    val coverUrl = when {
+                        primaryTag != null -> buildCoverUrl(id, primaryTag)
+                        backdropTags != null && backdropTags.size() > 0 ->
+                            "$baseUrl/Items/$id/Images/Backdrop/0?maxWidth=512&quality=90&api_key=$apiToken"
+                        else -> null
+                    }
+                    AppLog.d("NASMusic", "getArtists: raw='${rawName?.take(30)}' fixed='${name.take(30)}' hasCover=${coverUrl != null}")
                     allArtists.add(Artist(id = id, name = name, coverUrl = coverUrl))
                 }
 

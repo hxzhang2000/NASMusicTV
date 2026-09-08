@@ -1,0 +1,149 @@
+跳转到内容
+百度网盘
+百度网盘开放平台
+技术文档
+规范标准
+更新日志
+
+搜索
+控制台
+获取用户信息
+获取网盘容量信息
+获取文件列表
+递归获取文件列表
+获取文档列表
+获取图片列表
+获取视频列表
+获取bt列表
+获取分类文件总个数
+获取分类文件列表
+查询文件信息
+搜索文件（关键词搜索）
+搜索文件（语义搜索）
+管理文件
+下载
+创建文件夹
+最近服务
+NAS服务
+反馈与支持
+递归获取文件列表
+更新时间： 2026-09-02
+接口描述
+权限说明
+请求结构
+请求参数
+响应参数
+错误码
+请求示例
+响应示例
+注意事项
+
+接口描述
+本接口可以获取指定目录下的文件列表。当目录下存在文件夹并需要获取子目录中的文件时，将 recursion 设置为 1，即可递归获取更深目录层级的文件。
+
+权限说明
+所有 API 的安全认证一律采用 OAuth 2.0 鉴权认证机制。本接口仅支持访问 /apps/{appname} 目录下的文件。
+
+鉴权详情：接入授权。
+
+请求结构
+项目	内容
+HTTP Method	GET
+HTTP URL	https://pan.baidu.com/rest/2.0/xpan/multimedia?method=listall
+Host	pan.baidu.com
+固定查询参数	method=listall
+请求参数
+参数名称	类型	是否必填	描述
+method	string	是	示例：listall；固定值 listall。
+access_token	string	是	示例：<ACCESS_TOKEN>；接口鉴权参数。
+path	string	是	示例：%2F%E6%B5%8B%E8%AF%95%E7%9B%AE%E5%BD%95；目录名称绝对路径，必须以 / 开头；仅支持应用有权访问的 /apps/{appname} 路径；中文路径需 URL 编码。
+recursion	int	否	示例：0；是否递归：0 不递归，1 递归，默认为 0。
+order	string	否	示例：name；排序字段：time（修改时间）、name（文件名）、size（大小，目录无大小），默认为 name。
+desc	int	否	示例：0；0 为升序，1 为降序，默认为 0。
+start	int	否	示例：0；查询起点，默认为 0；当返回 has_more=1 时，应使用返回的 cursor 作为下一次查询的起点。
+limit	int	否	示例：1000；查询数目，默认为 1000，上限为 10000。
+ctime	int	否	示例：1609430400；只返回创建时间大于该时间戳的文件。
+mtime	int	否	示例：1619798400；设置后只返回修改时间大于该时间戳的文件。
+web	int	否	示例：0；默认为 0，为 1 时返回缩略图地址。
+device_id	string	否	示例：<DEVICE_ID>；设备 ID，硬件设备必传。
+响应参数
+字段路径	类型	返回条件	描述
+errno	int	成功/失败均返回	业务错误码，0 表示成功。
+errmsg	string	成功/失败均返回	错误描述；成功时通常为 succ。
+request_id	string	成功/失败均返回	请求唯一标识，用于问题排查。
+has_more	int	分页时返回	是否还有下一页：1 有，0 无。
+cursor	int	has_more=1 时返回	下一页起点；下一次请求将其作为 start 传入。
+list	array	成功时返回	文件或目录列表。
+list[].fs_id	uint64	列表元素返回	文件在网盘中的唯一 ID。
+list[].path	string	列表元素返回	文件全路径。
+list[].server_filename	string	列表元素返回	文件名。
+list[].size	uint64	列表元素返回	文件大小，单位为字节。
+list[].md5	string	列表元素返回	云端哈希值，非文件真实 MD5。
+list[].category	int	列表元素返回	文件类型：1 视频、2 音频、3 图片、4 文档、5 应用、6 其他、7 种子。
+list[].isdir	int	列表元素返回	是否为目录：0 否，1 是。
+list[].server_ctime	uint64	列表元素返回	服务端创建时间，Unix 时间戳。
+list[].server_mtime	uint64	列表元素返回	服务端修改时间，Unix 时间戳。
+list[].local_ctime	uint64	列表元素返回	上传时客户端记录的创建时间。
+list[].local_mtime	uint64	列表元素返回	上传时客户端记录的修改时间。
+list[].thumbs	object	web=1 时返回	缩略图地址对象；未传 web=1 时可能不返回。
+错误码
+HTTP 状态	业务码	含义	排查 / 修复	是否可重试
+200	0	查询成功	读取 list，按 has_more/cursor 继续分页。	否
+200	42213	没有共享目录的权限	确认用户授权与 path 是否在应用可访问范围内。	否
+200	31034	命中频控	listall 接口请求频率建议不超过每分钟 8–10 次，退避后重试。	是
+200	31066	文件不存在	确认 path 存在且已正确 URL 编码。	否
+公共错误码中心：《平台简介 > 错误码》。
+
+请求示例
+cURL
+Python
+Java
+Terminal window
+curl --location --get 'https://pan.baidu.com/rest/2.0/xpan/multimedia' \
+--data-urlencode 'method=listall' \
+--data-urlencode 'access_token=<ACCESS_TOKEN>' \
+--data-urlencode 'path=/apps/<APP_NAME>' \
+--data-urlencode 'web=1' \
+--data-urlencode 'recursion=1' \
+--data-urlencode 'start=0' \
+--data-urlencode 'limit=5' \
+-H 'User-Agent: pan.baidu.com'
+
+响应示例
+{
+  "cursor": 5,
+  "errmsg": "succ",
+  "errno": 0,
+  "has_more": 1,
+  "list": [
+    {
+      "category": 4,
+      "fs_id": 123456789012345,
+      "isdir": 0,
+      "local_ctime": 1547097900,
+      "local_mtime": 1547097900,
+      "md5": "<FILE_MD5>",
+      "path": "/apps/<APP_NAME>/<FILE_NAME>.txt",
+      "server_ctime": 1578310087,
+      "server_filename": "<FILE_NAME>.txt",
+      "server_mtime": 1596078161,
+      "size": 1120,
+      "thumbs": {
+        "url1": "<THUMB_URL_1>",
+        "url2": "<THUMB_URL_2>",
+        "url3": "<THUMB_URL_3>"
+      }
+    }
+  ],
+  "request_id": "<REQUEST_ID>"
+}
+
+注意事项
+执行请求示例代码时，请将示例代码中的 access_token 参数替换为自行获取的 access_token。
+仅支持访问应用有权访问的 /apps/{appname} 目录；共享目录权限不足时返回 42213。
+当 has_more=1 时，必须使用响应中的 cursor 作为下一次请求的 start，不要自行累加固定步长。
+当同时设置 start 和 limit 时，建议 limit 最大不超过 1000；参数上限为 10000，调用时以实际服务限制为准。
+上一页
+获取文件列表
+下一页
+获取文档列表

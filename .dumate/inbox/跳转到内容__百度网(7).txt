@@ -1,0 +1,233 @@
+跳转到内容
+百度网盘
+百度网盘开放平台
+技术文档
+规范标准
+更新日志
+
+搜索
+控制台
+使用概述
+注册登录百度账号
+创建应用
+简介
+快速授权
+授权码模式授权
+简化模式授权
+设备码模式授权
+设置授权回调地址
+设置授权展示方式
+FAQ
+权限与配额
+获取用户信息
+获取网盘容量信息
+获取文件列表
+递归获取文件列表
+获取文档列表
+获取图片列表
+获取视频列表
+获取bt列表
+获取分类文件总个数
+获取分类文件列表
+查询文件信息
+搜索文件（关键词搜索）
+搜索文件（语义搜索）
+管理文件
+下载
+创建文件夹
+获取播单列表
+获取播单下文件列表
+播单下音频播放
+播单下文件下载
+简介
+创建分享链接
+分享提取码验证
+查询分享详情
+查询分享文件信息
+分享文件转存
+转存任务查询
+获取分享下载地址
+获取分享链接音视频文件流数据
+外链数据回调
+错误码说明
+最近服务
+业务简介
+NAS服务
+反馈与支持
+下载
+更新时间： 2026-09-02
+接口描述
+权限说明
+请求结构
+header参数
+请求参数
+响应参数
+错误码
+请求示例
+响应示例
+SDK获取
+注意事项
+
+接口描述
+本接口用于将用户存储在网盘的云端文件下载到本地。文件下载分为三个阶段：先通过获取文件列表取得文件 fs_id，再通过查询文件信息并将 dlink 设为 1 获取下载地址，最后对返回的 dlink 发起 GET 请求。第二阶段依赖第一阶段返回结果，第三阶段依赖第二阶段返回结果，三个阶段串行完成后文件下载到本地。
+
+文件下载三阶段流程
+
+权限说明
+所有 API 的安全认证一律采用百度 OAuth 2.0 鉴权认证机制。百度 OAuth 2.0 鉴权认证机制的详细内容参见《开发者须知 > 接入流程》。
+
+第三方应用在网盘只能拥有一个文件夹用于存储、上传和下载文件，该文件夹必须位于 /apps 目录下，apps 下的文件夹名称为申请接入时填写的产品名称。例如申请接入的产品名称为“云存储”，那么该文件夹为 /apps/云存储，用户看到的文件夹为 /我的应用数据/云存储。
+
+鉴权详情：接入授权。
+
+请求结构
+源接口请求
+项目	内容
+HTTP Method	GET
+HTTP URL	https://pan.baidu.com/rest/2.0/xpan/file?method=download
+固定查询参数	method=download、check_blue=1、esl=1
+dlink 下载请求
+项目	内容
+HTTP Method	GET
+HTTP URL	<DLINK_URL>&access_token=<ACCESS_TOKEN>
+Host	以 dlink 返回的实际域名为准
+DLINK 下载地址通过查询文件信息接口返回
+header参数
+参数名称	类型	是否必填	描述
+User-Agent	string	是	示例：pan.baidu.com；请求头部，固定使用 pan.baidu.com。
+Range	string	否	示例：bytes=0-499；用于断点续传，下载文件指定范围的数据。
+请求参数
+源接口请求参数
+参数名称	类型	是否必填	描述
+method	string	是	固定值 download。
+access_token	string	是	OAuth 2.0 Token。
+app_id	string	是	调用方应用 ID，标识调用产品。
+user_id	uint64	是	用户 UID，指定访问哪个用户的文件。
+path	string	是	文件在网盘内的完整绝对路径，需 URL 编码。
+check_blue	int	是	固定值 1，开启路径合规校验。
+esl	int	是	固定值 1。
+channel	string	否	渠道标识。
+clienttyp	string	否	客户端类型。
+version	string	否	SDK 版本号。
+logid	string	否	日志 ID，用于链路追踪和问题排查。
+devuid	string	否	设备唯一标识。
+cuid	string	否	客户端用户标识。
+rand	string	否	反作弊参数。
+bid	string	否	业务标识，用于区分不同业务来源，建议携带。
+time	int64	否	请求时间戳。
+rt	string	否	访问关系类型，默认 pr，表示访问用户自己的文件。
+device_type	string	否	设备类型。
+version_app	string	否	端（App）版本号。
+region	string	否	指定机房；当文件 meta 信息不在用户所在机房时，将请求路由到 meta 所在机房，例如 jp、dm。
+dlink 请求参数
+参数名称	类型	是否必填	描述
+access_token	string	是	示例：<ACCESS_TOKEN>；OAuth 2.0 Token，拼接在 dlink 查询串中。
+响应参数
+源接口响应
+字段路径	类型	返回条件	描述
+errno	int	成功/失败均返回	业务错误码，0 表示成功，非 0 表示业务失败。
+newno	string	部分响应返回	新错误码。
+request_id	uint64	成功/失败均返回	请求 ID。
+server_time	uint64	部分响应返回	服务端时间戳。
+show_msg	string	失败时返回	可展示的错误描述。
+data	object	服务端返回数据时	数据体。
+data.error_code	int	data 存在时	数据体内错误码。
+data.request_id	uint64	data 存在时	数据体内请求 ID。
+dlink 下载响应
+字段路径	类型	返回条件	描述
+响应体	binary	下载成功	响应内容即为文件；服务端可能先返回 HTTP 302，再跳转到实际文件地址。
+errno	int	下载失败且返回 JSON 时	业务错误码。
+request_id	uint64	失败响应中	请求 ID，用于问题排查。
+错误码
+HTTP 状态	业务码	含义	排查 / 修复	是否可重试
+200	0	请求成功	按响应 Content-Type 读取文件。	否
+200	20011	路径不在允许访问范围内	确认路径位于 /apps/<APP_NAME>/，并检查应用目录权限。	否
+200	31045	access_token 校验未通过	刷新 Token，并确认用户已授权网盘权限。	否
+200	31362	签名错误，下载链接不完整	完整保留 dlink 查询串，不要截断或改写签名。	否
+200	31326	命中防盗链	确认请求 Header 中 User-Agent 为 pan.baidu.com。	否
+200	31360	下载链接过期	重新查询文件信息获取新的 dlink。	是
+公共错误码中心：《平台简介 > 错误码》。
+
+请求示例
+源接口请求
+Terminal window
+curl --get 'https://pan.baidu.com/rest/2.0/xpan/file' \
+--data-urlencode 'method=download' \
+--data-urlencode 'access_token=<ACCESS_TOKEN>' \
+--data-urlencode 'app_id=<APP_ID>' \
+--data-urlencode 'user_id=<USER_ID>' \
+--data-urlencode 'path=/apps/<APP_NAME>/<FILE_NAME>' \
+--data-urlencode 'check_blue=1' \
+--data-urlencode 'esl=1'
+
+dlink 下载请求
+cURL
+Python
+Java
+Terminal window
+curl --location --get '<DLINK_URL>' \
+--data-urlencode 'access_token=<ACCESS_TOKEN>' \
+-H 'User-Agent: pan.baidu.com'
+
+响应示例
+源接口返回失败或封装信息时可能为 JSON：
+
+{
+  "errno": 0,
+  "newno": "",
+  "request_id": 1234567890,
+  "server_time": 1596078019,
+  "show_msg": "",
+  "data": {
+    "error_code": 0,
+    "request_id": 1234567890
+  }
+}
+
+成功时响应体为文件二进制：
+
+<FILE_BINARY_CONTENT>
+
+失败时可能返回 JSON：
+
+{
+  "errno": 31360,
+  "show_msg": "download link expired",
+  "request_id": 1234567890
+}
+
+SDK获取
+我们提供了 Go 版本 SDK，帮助开发者快速实现下载能力。
+
+下载 Go 版本 SDK（download.tar.gz）。
+下载后，使用 tar -zxvf *.tar.gz 命令解压。
+解压后，在 download 目录下可看到如下目录结构：
+.
+├── demo
+│   ├── download.go
+│   └── file_metas.go
+├── download
+│   ├── download.go
+│   ├── file_metas.go
+│   └── types.go
+└── utils
+    └── util.go
+
+其中，demo 为使用示例，可参考其中的接口参数进行调用并获取接口返回结果；download/file_metas.go 用于获取文件信息并获得下载地址 dlink；download/download.go 用于使用 dlink 地址下载文件；utils/utils.go 为发送 HTTP 请求的函数实现，供获取文件信息和下载文件调用。
+
+注意： 目前下载 SDK 仅支持小文件下载；涉及大文件时，可参考该 demo 升级改造，加入分片下载、断点下载等能力。
+
+注意事项
+通过列表类接口获取文件的唯一标识 fs_id，例如请求获取文件列表。
+通过查询文件信息获取文件下载地址，请求时将 dlink 置为 1，接口返回的 dlink 即为下载地址。
+使用 dlink 时，必须拼接 &access_token=<ACCESS_TOKEN> 参数。
+使用 dlink 时，必须在请求 Header 中设置 User-Agent: pan.baidu.com。
+设置好请求 Header，并在 dlink 后拼接 access_token 后再进行下载。
+dlink 有效期为 8 小时，过期后失效，需要重新查询文件信息获取新的地址。
+dlink 可能发生 HTTP 302 跳转，客户端应允许跟随跳转并保留鉴权参数。
+不允许使用浏览器直接下载超过 50 MB 的文件；超过 50 MB 的文件需使用开发者原生软件或 App 下载。
+Range: bytes=0-499 表示文件起始的 500 字节；bytes=500-999 表示第二个 500 字节；bytes=-500 表示文件最后 500 字节；bytes=500- 表示文件 500 字节以后的范围。
+上一页
+获取上传域名
+下一页
+创建文件夹

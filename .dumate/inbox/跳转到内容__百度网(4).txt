@@ -1,0 +1,359 @@
+跳转到内容
+百度网盘
+百度网盘开放平台
+技术文档
+规范标准
+更新日志
+
+搜索
+控制台
+使用概述
+注册登录百度账号
+创建应用
+简介
+快速授权
+授权码模式授权
+简化模式授权
+设备码模式授权
+设置授权回调地址
+设置授权展示方式
+FAQ
+权限与配额
+NAS服务
+反馈与支持
+设备码模式授权
+更新时间： 2022-04-13
+
+设备码模式（Device Code）
+授权时序图
+具体授权实现
+
+设备码模式（Device Code）
+对于弱输入设备，不支持浏览器或输入受限的设备（如儿童手表），推荐使用设备码模式接入授权。
+
+开发者获取设备码，用户授权成功后，开发者通过设备码成功换取 Access Token。
+
+Access Token 有效期30天，过期后支持刷新，刷新后的 Access Token 有效期仍为 30 天，刷新Access Token请按需刷新，不需要不停的刷新。
+
+刷新请求，如果API返回失败，旧的refresh_token会失效，此时需要重新发起授权请求，获取新的 Access Token、refresh_token，而不是使用旧的 refresh_token 循环再发起刷新请求。
+
+refresh_token 只支持使用一次，refresh_token 使用后失效，下次刷新 Access Token 时需要使用上一次刷新请求响应中的 refresh_token。
+
+使用 device_code 轮询换取 Access Token 时，注意轮询间隔，一般不能低于为 5 秒。
+
+用户授权有两种方式：一种是扫描二维码方式，另一种是输入用户码方式。关于用户码，在开发者获取设备码的同时，会返回用户码。
+
+ 
+
+授权时序图
+image.png
+
+简单介绍时序图的流程，如下：
+
+1.开发者应用请求设备码、用户码。
+
+2-3.百度 OAuth 服务器返回设备码、用户码、二维码url。
+
+4.开发者应用根据二维码url呈现二维码，用户通过手机等智能终端扫描二维码。
+这里开发者应用也可选择根据授权url（2-3会返回授权url），呈现用户输入用户码的页面，用户输入用户码实现对设备授权。
+
+5.为用户返回授权页面，用户登录百度帐号并授权。当用户使用已登录百度帐号的设备扫描二维码时，无需登录直接授权。
+
+6.用户完成授权后，开发者应用周期性用第1步返回的设备码请求 Access Token 凭证。
+
+7.百度 OAuth 服务器在用户确认授权后，返回 Access Token。
+
+ 
+
+具体授权实现
+设备码模式授权，主要依赖以下 3 步：
+
+获取设备码 device code 、用户码 user code。
+引导用户授权。
+用 device code 轮询换取 access token。
+ 
+
+1. 获取设备码、用户码
+
+既获取设备码 device code 、用户码 user code，依赖于以下请求链接：
+
+https://openapi.baidu.com/oauth/2.0/device/code?response_type=device_code&
+client_id=您应用的AppKey&
+scope=basic,netdisk
+
+关于应用的相关信息，您可在控制台，点进去您对应的应用，查看应用详情获得。
+
+请求示例
+curl示例
+Terminal window
+curl -L -X GET 'https://openapi.baidu.com/oauth/2.0/device/code?response_type=device_code&client_id=EVaI5x0U6lEmP125G0Su55ROEXZtItdD&scope=basic,netdisk' \
+-H 'User-Agent: pan.baidu.com'
+
+java示例
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
+import java.net.HttpURLConnection;
+import java.net.URL;
+
+public class HttpGetRequestExample {
+    public static void main(String[] args) {
+        try {
+            URL url = new URL("https://openapi.baidu.com/oauth/2.0/device/code?response_type=device_code&client_id=EVaI5x0U6lEmP125G0Su55ROEXZtItdD&scope=basic,netdisk");
+            HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+            conn.setRequestMethod("GET");
+            BufferedReader in = new BufferedReader(new InputStreamReader(conn.getInputStream()));
+            String inputLine;
+            StringBuffer response = new StringBuffer();
+            while ((inputLine = in.readLine()) != null) {
+                response.append(inputLine);
+            }
+            in.close();
+            System.out.println(response.toString());
+        } catch (Exception e) {
+            System.out.println(e);
+        }
+    }
+}
+
+python示例
+import requests
+
+url = "https://openapi.baidu.com/oauth/2.0/device/code?response_type=device_code&client_id=EVaI5x0U6lEmP125G0Su55ROEXZtItdD&scope=basic,netdisk"
+
+payload = {}
+headers = {
+  'User-Agent': 'pan.baidu.com'
+}
+
+response = requests.request("GET", url, headers=headers, data = payload)
+
+print(response.text.encode('utf8'))
+
+响应示例：
+
+{
+    device_code: "984c2459ec41415c9f5b0137a017fc49",
+    user_code: "8drp69hk",
+    verification_url: "https://openapi.baidu.com/device",
+    qrcode_url: "https://openapi.baidu.com/device/qrcode/a52610ef0eec30da5e45870872317478/8drp69hk",
+    expires_in: 300,
+    interval: 5
+}
+
+参数说明：
+
+参数	类型	必选(M)/可选(O)	备注
+response_type	string	M	固定值，值必须为device_code。
+client_id	string	M	您应用的AppKey。
+scope	string	M	固定值，值必须为basic,netdisk。
+返回值说明：
+
+参数	类型	备注
+device_code	string	设备码，可用于生成单次凭证 Access Token。
+user_code	string	用户码。
+如果选择让用户输入 user code 方式，来引导用户授权，设备需要展示 user code 给用户。
+verification_url	string	用户输入 user code 进行授权的 url。
+qrcode_url	string	二维码url，用户用手机等智能终端扫描该二维码完成授权。
+expires_in	int	device_code 的过期时间，单位：秒。
+到期后 device_code 不能换 Access Token。
+interval	int	device_code 换 Access Token 轮询间隔时间，单位：秒。
+轮询次数限制小于 expire_in/interval。
+注：二维码内容拼接规则https://openapi.baidu.com/device?display=mobile&code=u6rgnvp4 其中code为接口返回内容的user_code字段。  
+
+2. 引导用户授权
+
+选择以下两种方式之一引导用户授权：
+
+（1）扫二维码方式授权
+
+在上一步，您同时获取到了一个二维码url（qrcode_url）。您根据返回的二维码url展示给用户二维码，用户通过手机等智能终端扫描二维码（如百度app扫码、百度网盘扫码、微信扫码等），使用百度帐号完成授权。
+
+（2）输入用户码方式授权
+
+在上一步，您获取到了用户码 user code，同时获取到了授权url（verification_url）。您展示用户码给用户，展示授权url提供的页面给用户，用户在该页面输入用户码完成授权。
+
+ 
+
+3. 用 Device Code 轮询换取 Access Token
+
+通过 Device Code 轮询换取 Access Token。换取Access Token 的实现依赖于以下请求链接：
+
+https://openapi.baidu.com/oauth/2.0/token?grant_type=device_token&
+code=第一步生成的设备码device_code&
+client_id=您应用的AppKey&
+client_secret=您应用的SecretKey
+
+关于应用的相关信息，您可在控制台，点进去您对应的应用，查看应用详情获得。
+
+注意：轮询此接口每两次请求时间间隔应大于5秒。
+
+请求示例
+curl示例
+Terminal window
+curl -L -X GET 'https://openapi.baidu.com/oauth/2.0/token?grant_type=device_token&code=d5a53cd0ca7799d033399487b23ec992&client_id=EVaI5x0U6lEmP125G0Su55ROEXZtItdD&client_secret=VPgfmrt8UBM5kgkeUemwRVmr5AjhFuEV' \
+-H 'User-Agent: pan.baidu.com'
+
+java示例
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
+import java.net.HttpURLConnection;
+import java.net.URL;
+
+public class HttpGetRequestExample {
+    public static void main(String[] args) {
+        try {
+            URL url = new URL("https://openapi.baidu.com/oauth/2.0/token?grant_type=device_token&code=d5a53cd0ca7799d033399487b23ec992&client_id=EVaI5x0U6lEmP125G0Su55ROEXZtItdD&client_secret=VPgfmrt8UBM5kgkeUemwRVmr5AjhFuEV");
+            HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+            conn.setRequestMethod("GET");
+            BufferedReader in = new BufferedReader(new InputStreamReader(conn.getInputStream()));
+            String inputLine;
+            StringBuffer response = new StringBuffer();
+            while ((inputLine = in.readLine()) != null) {
+                response.append(inputLine);
+            }
+            in.close();
+            System.out.println(response.toString());
+        } catch (Exception e) {
+            System.out.println(e);
+        }
+    }
+}
+
+python示例
+import requests
+
+url = "https://openapi.baidu.com/oauth/2.0/token?grant_type=device_token&code=d5a53cd0ca7799d033399487b23ec992&client_id=EVaI5x0U6lEmP125G0Su55ROEXZtItdD&client_secret=VPgfmrt8UBM5kgkeUemwRVmr5AjhFuEV"
+
+payload = {}
+headers = {
+  'User-Agent': 'pan.baidu.com'
+}
+
+response = requests.request("GET", url, headers=headers, data = payload)
+
+print(response.text.encode('utf8'))
+
+响应示例：
+
+{
+    expires_in: 2592000,
+    refresh_token: "127.e4971f7944a192c9023bf054ec66c091.YHe2H-QUlWRoj7RmX_F-PeKiQtjKKruvkQgBmfY.PtsH-Q",
+    access_token: "126.ee2ca5592d5289e2885eeba126bc98ff.YHmyFbqEz_EUyG0EnsTXREp9VqDJmyIDpxeA1zw.EzfneA",
+    session_secret: "",
+    session_key: "",
+    scope: "basic netdisk"
+}
+
+参数说明：
+
+参数	类型	必选(M)/可选(O)	备注
+response_type	string	M	固定值，值必须为token。
+client_id	string	M	您应用的AppKey。
+client_secret	string	M	您应用的SecretKey。
+返回值说明：
+
+参数	类型	备注
+access_token	string	获取到的Access Token，Access Token是调用网盘开放API访问用户授权资源的凭证。
+expires_in	int	Access Token的有效期，单位为秒。
+refresh_token	string	用于刷新 Access Token, 有效期为10年。
+scope	string	Access Token 最终的访问权限，即用户的实际授权列表。
+至此，恭喜您！您已经拿到了 Access Token。
+
+ 
+
+刷新 Access Token
+设备码模式下支持刷新 Access Token。
+
+通过 Refresh Token 刷新，具体依赖于以下链接：
+
+GET https://openapi.baidu.com/oauth/2.0/token?
+grant_type=refresh_token&
+refresh_token=Refresh Token的值&
+client_id=您应用的AppKey&
+client_secret=您应用的SecretKey
+
+以上链接示例中参数仅给出了必选参数。
+关于应用的相关信息，您可在控制台，点进去您对应的应用，查看应用详情获得。
+关于 Refresh Token的值，在换取 Access Token 凭证时，您可在响应信息中拿到。
+
+请求示例
+curl示例
+Terminal window
+curl -L -X GET 'https://openapi.baidu.com/oauth/2.0/token?grant_type=refresh_token&refresh_token=127.e4971f7944a192c9023bf054ec66c091.YHe2H-QUlWRoj7RmX_F-PeKiQtjKKruvkQgBmfY.PtsH-Q&client_id=EVaI5x0U6lEmP125G0Su55ROEXZtItdD&client_secret=VPgfmrt8UBM5kgkeUemwRVmr5AjhFuEV' \
+-H 'User-Agent: pan.baidu.com'
+
+java示例
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
+import java.net.HttpURLConnection;
+import java.net.URL;
+
+public class HttpGetRequestExample {
+    public static void main(String[] args) {
+        try {
+            URL url = new URL("https://openapi.baidu.com/oauth/2.0/token?grant_type=refresh_token&refresh_token=127.e4971f7944a192c9023bf054ec66c091.YHe2H-QUlWRoj7RmX_F-PeKiQtjKKruvkQgBmfY.PtsH-Q&client_id=EVaI5x0U6lEmP125G0Su55ROEXZtItdD&client_secret=VPgfmrt8UBM5kgkeUemwRVmr5AjhFuEV");
+            HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+            conn.setRequestMethod("GET");
+            BufferedReader in = new BufferedReader(new InputStreamReader(conn.getInputStream()));
+            String inputLine;
+            StringBuffer response = new StringBuffer();
+            while ((inputLine = in.readLine()) != null) {
+                response.append(inputLine);
+            }
+            in.close();
+            System.out.println(response.toString());
+        } catch (Exception e) {
+            System.out.println(e);
+        }
+    }
+}
+
+python示例
+import requests
+
+url = "https://openapi.baidu.com/oauth/2.0/token?grant_type=refresh_token&refresh_token=127.e4971f7944a192c9023bf054ec66c091.YHe2H-QUlWRoj7RmX_F-PeKiQtjKKruvkQgBmfY.PtsH-Q&client_id=EVaI5x0U6lEmP125G0Su55ROEXZtItdD&client_secret=VPgfmrt8UBM5kgkeUemwRVmr5AjhFuEV"
+
+payload = {}
+headers = {
+  'User-Agent': 'pan.baidu.com'
+}
+
+response = requests.request("GET", url, headers=headers, data = payload)
+
+print(response.text.encode('utf8'))
+
+响应示例：
+
+{
+expires_in: 2592000,
+refresh_token: "122.51265f007055bc895cb02c639410a90d.YDLFcE2nee3Cyu-Bsn7SAFVCAfdCkvSm4EnCdkO.Zs_FiF",
+access_token: "121.60bf4c9911cb554aac39a1c701a4dae8.YDjwYds0zFgbM1rifQhjMLwsfb6xYus5tUhNEoA.XNNoOW",
+session_secret: "",
+session_key: "",
+scope: "basic netdisk"
+}
+
+详细请求参数说明如下：
+
+参数	类型	必选(M)/可选(O)	备注
+grant_type	string	M	固定值，值必须为 refresh_token。
+refresh_token	string	M	固定值，值必须为换取 Access Token时候返回的 refresh_token 值。
+client_id	string	M	您应用的AppKey。
+client_secret	string	M	您应用的SecretKey。
+返回值说明如下：
+
+参数	类型	备注
+access_token	string	获取到的Access Token，Access Token是调用网盘开放API访问用户授权资源的凭证。
+expires_in	int	Access Token的有效期，单位为秒。
+refresh_token	string	用于刷新Access Token, 有效期为10年。
+scope	string	Access Token 最终的访问权限，即用户的实际授权列表。
+至此您就实现了刷新 Access Token。
+
+ 
+
+ 
+
+上一页
+简化模式授权
+下一页
+设置授权回调地址

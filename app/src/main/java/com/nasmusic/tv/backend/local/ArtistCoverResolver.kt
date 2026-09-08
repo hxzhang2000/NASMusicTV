@@ -13,12 +13,23 @@ import org.json.JSONObject
 /**
  * 艺术家封面异步解析器
  *
- * 为缺少封面的艺术家按优先级链解析封面：
+ * 为缺少封面的艺术家按完整优先级链解析封面：
+ *
+ * **Jellyfin 层**（由 [com.nasmusic.tv.backend.impl.JellyfinAdapter.getArtists] 构造）：
+ * 0a. Jellyfin Primary 图片 tag → 带 tag 的精确 URL
+ * 0b. Jellyfin Backdrop 图片 → Backdrop URL
+ * 0c. 以上均无 → coverUrl = null，交给本解析器
+ *
+ * **在线源 + 本地兜底**（本解析器）：
  * 1. 网易云音乐 API — 按 artist 搜歌手头像（华语歌手覆盖率最高）
  * 2. 酷狗音乐 API — 按 artist 搜歌手头像
  * 3. iTunes — 按 artist 搜艺术家图片（欧美歌手命中率高）
- * 4. 该艺术家名下第一首有封面的歌曲封面（兜底）
- * 5. 首字母占位（UI 层，无封面时显示）
+ * 4. 该艺术家名下第一首有封面的歌曲封面（预构建索引 O(1) 查找）
+ *
+ * **P4 补充通道**（[resolveSongCoversOnly]）：
+ * 当在线源尝试次数耗尽后，每次歌曲库更新仍会重新用 P4 匹配新加载的歌曲封面。
+ *
+ * **UI 层**：以上均未命中时显示首字母占位。
  *
  * 只处理 coverUrl 为 null 的艺术家；已有封面的跳过。
  * 解析结果通过回调更新到 artist 列表。
@@ -71,6 +82,10 @@ class ArtistCoverResolver(
         var updatedArtists = artists
         var processed = 0
 
+        // 预构建 P4 索引：normalizeKey(artistName) → 第一首有封面歌曲的 coverUrl
+        // O(songs) 构建一次，后续每个艺术家 O(1) 查找（旧实现 O(artists × songs) 遍历）
+        val songCoverByArtist = buildSongCoverIndex(allSongs)
+
         for (artist in artists) {
             // 已有封面 → 跳过
             if (artist.coverUrl != null) continue
@@ -95,9 +110,10 @@ class ArtistCoverResolver(
                 resolvedUrl = resolveItunesArtistCover(artistName)
             }
 
-            // P4: 该艺术家名下第一首有封面的歌曲封面（兜底，避免在线源全失败时空白）
+            // P4: 该艺术家名下第一首有封面的歌曲封面（O(1) 查找预构建索引）
             if (resolvedUrl == null) {
-                resolvedUrl = findArtistSongCover(artistName, allSongs)
+                val key = ArtistSplitter.normalizeKey(artistName)
+                resolvedUrl = songCoverByArtist[key]
             }
 
             if (resolvedUrl != null) {
@@ -120,7 +136,69 @@ class ArtistCoverResolver(
             onUpdated(updatedArtists)
         }
 
-        AppLog.d(TAG, "resolveCovers: processed=$processed/${artists.count { it.coverUrl == null }}")
+        AppLog.d(TAG, "resolveCovers: processed=$processed/${artists.count { it.coverUrl == null }}, songCoverMap=${songCoverByArtist.size}")
+    }
+
+    /**
+     * 仅用 P4 歌曲封面兜底（不调在线源），用于在线源已耗尽但歌曲库有新数据时的补充解析。
+     *
+     * 当 [resolveCovers] 因 [com.nasmusic.tv.ui.viewmodel.MainViewModel.artistCoverMaxAttempts]
+     * 限制不再对某艺术家调用在线源时，此方法在每次歌曲库更新后重新扫描，确保 P4 能命中
+     * 新加载的歌曲封面。不消耗在线源尝试次数。
+     */
+    suspend fun resolveSongCoversOnly(
+        artists: List<Artist>,
+        allSongs: List<Song>,
+        onUpdated: (List<Artist>) -> Unit
+    ) = withContext(Dispatchers.IO) {
+        if (allSongs.isEmpty()) return@withContext
+
+        val songCoverByArtist = buildSongCoverIndex(allSongs)
+        var updatedArtists = artists
+        var processed = 0
+
+        for (artist in artists) {
+            if (artist.coverUrl != null) continue
+            if (artist.id.startsWith("local_")) continue
+
+            val key = ArtistSplitter.normalizeKey(artist.name.trim())
+            val resolvedUrl = songCoverByArtist[key]
+
+            if (resolvedUrl != null) {
+                val idx = updatedArtists.indexOfFirst { it.id == artist.id }
+                if (idx >= 0) {
+                    updatedArtists = updatedArtists.toMutableList().apply {
+                        this[idx] = artist.copy(coverUrl = resolvedUrl)
+                    }
+                    processed++
+                    if (processed % MAX_CONCURRENT == 0) {
+                        onUpdated(updatedArtists)
+                    }
+                }
+            }
+        }
+
+        if (processed > 0) {
+            onUpdated(updatedArtists)
+        }
+
+        AppLog.d(TAG, "resolveSongCoversOnly: processed=$processed, songCoverMap=${songCoverByArtist.size}")
+    }
+
+    /**
+     * 从全量歌曲构建 P4 索引：normalizeKey(artistName) → 第一首有封面歌曲的 coverUrl。
+     * 只保留每个艺术家名下第一首有封面的歌曲，避免重复。
+     */
+    private fun buildSongCoverIndex(allSongs: List<Song>): Map<String, String> {
+        val map = mutableMapOf<String, String>()
+        for (song in allSongs) {
+            if (song.coverUrl == null || song.artist.isBlank()) continue
+            val key = ArtistSplitter.normalizeKey(song.artist)
+            if (key.isNotBlank() && key !in map) {
+                map[key] = song.coverUrl
+            }
+        }
+        return map
     }
 
     /**
@@ -271,6 +349,9 @@ class ArtistCoverResolver(
      *
      * 在线源（网易云/酷狗/iTunes）全失败时，从全量歌曲里找该艺术家的第一首有封面歌曲。
      * 用 ArtistSplitter.normalizeKey 归一化匹配，兼容 "古天乐" 与 "古天乐 " 这类差异。
+     *
+     * 注意：[resolveCovers] 已改为使用预构建的 [buildSongCoverIndex] 进行 O(1) 查找，
+     * 此方法保留供 [resolveArtistCoverUrl] 单曲流程或其他场景使用。
      *
      * @param allSongs 全量歌曲（NAS + 本地 + 百度）
      */

@@ -2466,7 +2466,12 @@ showError(getApplication<Application>().getString(R.string.toggle_favorite_error
         val pending = _mergedArtists.value.filter {
             it.coverUrl == null && (artistCoverAttempts[it.id] ?: 0) < artistCoverMaxAttempts
         }
-        if (pending.isEmpty()) return
+        // P4-only 候选：在线源已耗尽（attempts >= max）但封面仍为 null，
+        // 歌曲库后续可能加载了更多歌曲 → 每次歌曲更新后重新用 P4 歌曲封面兜底
+        val p4OnlyCandidates = _mergedArtists.value.filter {
+            it.coverUrl == null && (artistCoverAttempts[it.id] ?: 0) >= artistCoverMaxAttempts
+        }
+        if (pending.isEmpty() && p4OnlyCandidates.isEmpty()) return
         // 已有解析在跑 → 不取消（避免重复触发时打断）
         if (artistCoverResolveJob?.isActive == true) return
         artistCoverResolveJob = viewModelScope.launch {
@@ -2476,23 +2481,47 @@ showError(getApplication<Application>().getString(R.string.toggle_favorite_error
             }
             // 全量歌曲（NAS + 本地 + 百度），用于 P4 歌曲封面兜底
             val allSongs = _songsPaging.value.songs + _localSongs.value + (cachedBaiduSongs ?: baiduIndexCache.allSongs())
-            nasMusicApp.artistCoverResolver.resolveCovers(pending, allSongs) { updated ->
-                // 仅更新封面缓存，不直接写 _mergedArtists（避免与 updateMergedData 竞争覆盖）
-                var added = 0
-                for (artist in updated) {
-                    if (artist.coverUrl != null) {
-                        resolvedArtistCovers[artist.id] = artist.coverUrl
-                        // 仅持久化稳定 HTTP 封面 URL（P4 歌曲封面可能是 data URI / content://，不适合落盘）
-                        if (artist.coverUrl.startsWith("http")) {
-                            nasMusicApp.coverUrlPersistentCache.putArtistCover(artist.id, artist.coverUrl)
+
+            // 1. 主解析：P1(网易云) → P2(酷狗) → P3(iTunes) → P4(歌曲封面)
+            if (pending.isNotEmpty()) {
+                nasMusicApp.artistCoverResolver.resolveCovers(pending, allSongs) { updated ->
+                    // 仅更新封面缓存，不直接写 _mergedArtists（避免与 updateMergedData 竞争覆盖）
+                    var added = 0
+                    for (artist in updated) {
+                        if (artist.coverUrl != null) {
+                            resolvedArtistCovers[artist.id] = artist.coverUrl
+                            // 仅持久化稳定 HTTP 封面 URL（P4 歌曲封面可能是 data URI / content://，不适合落盘）
+                            if (artist.coverUrl.startsWith("http")) {
+                                nasMusicApp.coverUrlPersistentCache.putArtistCover(artist.id, artist.coverUrl)
+                            }
+                            added++
                         }
-                        added++
+                    }
+                    // 每批解析到新封面立即刷新 UI（不必等全部艺术家解析完）。
+                    // updateMergedData 内部已 launch(Dispatchers.Default)，此处直接调用即可。
+                    if (added > 0 && resolvedArtistCovers.size > before) {
+                        updateMergedData()
                     }
                 }
-                // 每批解析到新封面立即刷新 UI（不必等全部艺术家解析完）。
-                // updateMergedData 内部已 launch(Dispatchers.Default)，此处直接调用即可。
-                if (added > 0 && resolvedArtistCovers.size > before) {
-                    updateMergedData()
+            }
+
+            // 2. P4-only 补充：在线源已耗尽，但歌曲库可能已加载更多数据。
+            //    不消耗在线源尝试次数，纯本地 O(artists) 查找。
+            if (p4OnlyCandidates.isNotEmpty()) {
+                nasMusicApp.artistCoverResolver.resolveSongCoversOnly(p4OnlyCandidates, allSongs) { updated ->
+                    var added = 0
+                    for (artist in updated) {
+                        if (artist.coverUrl != null) {
+                            resolvedArtistCovers[artist.id] = artist.coverUrl
+                            if (artist.coverUrl.startsWith("http")) {
+                                nasMusicApp.coverUrlPersistentCache.putArtistCover(artist.id, artist.coverUrl)
+                            }
+                            added++
+                        }
+                    }
+                    if (added > 0) {
+                        updateMergedData()
+                    }
                 }
             }
         }

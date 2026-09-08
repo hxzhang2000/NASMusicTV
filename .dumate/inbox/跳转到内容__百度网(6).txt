@@ -1,0 +1,374 @@
+跳转到内容
+百度网盘
+百度网盘开放平台
+技术文档
+规范标准
+更新日志
+
+搜索
+控制台
+使用概述
+注册登录百度账号
+创建应用
+简介
+快速授权
+授权码模式授权
+简化模式授权
+设备码模式授权
+设置授权回调地址
+设置授权展示方式
+FAQ
+权限与配额
+获取用户信息
+获取网盘容量信息
+获取文件列表
+递归获取文件列表
+获取文档列表
+获取图片列表
+获取视频列表
+获取bt列表
+获取分类文件总个数
+获取分类文件列表
+查询文件信息
+搜索文件（关键词搜索）
+搜索文件（语义搜索）
+管理文件
+下载
+创建文件夹
+获取播单列表
+获取播单下文件列表
+播单下音频播放
+播单下文件下载
+简介
+创建分享链接
+分享提取码验证
+查询分享详情
+查询分享文件信息
+分享文件转存
+转存任务查询
+获取分享下载地址
+获取分享链接音视频文件流数据
+外链数据回调
+错误码说明
+最近服务
+业务简介
+NAS服务
+反馈与支持
+查询文件信息
+更新时间： 2026-09-02
+接口描述
+权限说明
+请求结构
+请求参数
+响应参数
+错误码
+请求示例
+响应示例
+SDK获取
+注意事项
+
+接口描述
+本接口用于查询文件元信息，包括文件名、创建和修改时间、大小、类型、缩略图、媒体信息以及可选的下载地址 dlink。主调用方式为 method=meta，同时支持 method=filemetas 的路径批量方式；线上页面当前展示 method=filemetas 的 multimedia/fsids 批量方式。
+
+权限说明
+调用前请完成用户授权，并取得有效的 access_token。
+
+鉴权详情：接入授权。
+
+硬件设备文件场景需要传入 device_id。from_apaas=1 仅适用于已购买对应极速流量权益的应用；如需购买极速流量权益服务，可联系商务合作邮箱 ext_mars-union@baidu.com 咨询。
+
+请求结构
+单文件请求（method=meta）
+项目	内容
+HTTP Method	GET
+HTTP URL	https://pan.baidu.com/rest/2.0/xpan/file?method=meta
+固定查询参数	method=meta
+路径批量请求（method=filemetas）
+项目	内容
+HTTP Method	POST
+HTTP URL	https://pan.baidu.com/rest/2.0/xpan/file?method=filemetas
+固定查询参数	method=filemetas
+fsids 批量请求（method=filemetas）
+项目	内容
+HTTP Method	GET
+HTTP URL	https://pan.baidu.com/rest/2.0/xpan/multimedia?method=filemetas
+固定查询参数	method=filemetas
+请求参数
+单文件请求参数（method=meta）
+参数名称	类型	是否必填	描述
+method	string	是	固定值 meta，指定查询文件元信息。
+access_token	string	是	OAuth 2.0 Token。
+path	string	是	文件的网盘绝对路径，需 URL 编码，例如 /apps/<APP_NAME>/<FILE_NAME>。
+dlink	int	否	传 1 时返回下载地址。
+thumb	int	否	传 1 时返回图片或视频缩略图地址。
+extra	int	否	传 1 时返回图片拍摄时间、宽高等信息。
+needmedia	int	否	传 1 时返回视频时长等媒体信息。
+web	int	否	传 1 时返回 Web 展示字段。
+路径批量请求参数（method=filemetas）
+参数名称	类型	是否必填	描述
+method	string	是	示例：filemetas；固定值 filemetas，指定本次操作为批量查询文件元信息。
+access_token	string	是	示例：<ACCESS_TOKEN>；用户授权凭证，标识访问哪个用户的网盘。
+target	array	是	示例：["/apps/<APP_NAME>/<FILE_NAME>"]；文件路径的 JSON 数组，需 URL 编码，支持一次查询多个文件。
+dlink	int	否	示例：1；是否返回下载直链：1 返回，0 不返回，默认 0。
+blocks	int	否	示例：0；是否返回文件分片的 MD5 列表 block_list：1 返回，0 不返回，默认 0。
+media	int	否	示例：0；是否返回视频时长等媒体信息：1 返回，0 不返回，默认 0。
+web	int	否	示例：1；是否返回额外的 Web 端展示字段。
+fsids 批量请求参数（method=filemetas）
+参数名称	类型	是否必填	描述
+method	string	是	示例：filemetas；本接口固定为 filemetas。
+access_token	string	是	示例：<ACCESS_TOKEN>；OAuth 2.0 Token。
+fsids	array	是	示例：[123456789012345,123456789012346]；文件 ID 数组，元素为 uint64，最多 100 个；作为 JSON 数组 URL 编码。
+dlink	int	否	示例：0；是否需要下载地址：0 否，1 是，默认 0。获取到 dlink 后参考下载文档进行下载。
+thumb	int	否	示例：0；是否需要缩略图地址：0 否，1 是，默认 0。
+extra	int	否	示例：0；图片是否需要拍摄时间、原图分辨率等额外信息：0 否，1 是，默认 0。
+needmedia	int	否	示例：0；视频是否需要展示时长信息：0 否，1 是，默认 0；返回 duration，单位为秒并向上取整。
+detail	int	否	示例：0；视频是否需要展示长宽等信息：0 否，1 是，默认 0；返回信息在 media_info 字段内。
+path	string	否	示例：/123-571234；查询共享目录或专属空间内文件时使用。共享目录格式为 /uk-fsid，专属空间格式为 /_pcs_.appdata/xpan/；此参数生效时不会返回正常目录下文件的信息。
+device_id	string	否	示例：<DEVICE_ID>；设备 ID，硬件设备场景必传。
+from_apaas	int	否	示例：1；为下载地址 dlink 附加极速流量权益；该权益为付费权益，否则此参数无效。
+响应参数
+通用响应（list 结构）
+字段路径	类型	返回条件	描述
+errno	int	成功/失败均返回	顶层业务错误码，0 表示成功。
+errmsg	string	成功/失败均可能返回	错误描述，成功时通常为 succ。
+request_id	string	成功/失败均返回	请求 ID。
+list	array	成功时返回	文件信息列表。
+names	object	查询共享目录时	共享目录文件上传者信息。
+list[].errno	int	批量查询且该文件失败时	该文件单独的错误码，0 表示该文件查询成功。
+list[].category	int	文件条目	文件类型：1 视频、2 音频、3 图片、4 文档、5 应用、6 其他、7 种子。
+list[].fs_id	uint64	文件条目	文件在网盘中的唯一 ID，永不变化。
+list[].path	string	文件条目	文件绝对路径。
+list[].parent_path	string	文件条目	文件所在目录路径。
+list[].filename	string	文件条目	文件名。
+list[].server_filename	string	接口返回该字段时	服务端文件名。
+list[].isdir	int	文件条目	是否目录：1 是，0 否。
+list[].size	int	文件条目	文件大小，单位字节。
+list[].md5	string	文件条目	文件内容 MD5，可用于校验和秒传。
+list[].real_category	string	文件条目	更细的文件格式分类，例如 pptx、xlsx、docx、zip。
+list[].server_ctime	int	文件条目	服务端创建时间，Unix 时间戳。
+list[].server_mtime	int	文件条目	服务端修改时间，Unix 时间戳。
+list[].local_ctime	int	文件条目	上传时客户端记录的创建时间。
+list[].local_mtime	int	文件条目	上传时客户端记录的修改时间。
+list[].block_list	array	文件条目且请求启用分片信息时	文件分片 MD5 列表，按 4 MB 分片。
+list[].isdelete	int	文件条目	是否已进入回收站：0 表示正常。
+list[].share	int	文件条目	是否被分享过。
+list[].privacy	int	文件条目	文件隐私状态。
+list[].oper_id	uint64	文件条目	操作者用户 ID。
+list[].owner_id	uint64	文件条目	文件所有者 ID。
+list[].user_id	uint64	文件条目	所属用户 ID。
+list[].s3_handle	string	接口返回该字段时	底层存储的临时签名地址，一般不直接使用。
+list[].file_key	string	批量查询且接口返回该字段时	底层存储对象标识，一般不直接使用。
+list[].dlink	string	dlink=1 且查询成功	文件下载直链，仅传 dlink=1 时返回，通常 8 小时有效；使用时拼接 access_token 并携带 User-Agent: pan.baidu.com。注意 unicode 解码处理。
+list[].thumbs	object	thumb=1 且文件支持缩略图	各尺寸缩略图 URL，仅传 thumb=1 时返回。
+list[].docpreview	string	批量查询且接口返回该字段时	文档在线预览地址。
+list[].lodocpreview	string	批量查询且接口返回该字段时	文档转成 PDF 的低清预览地址。
+list[].picdocpreview	string	批量查询且接口返回该字段时	文档图片化预览的接口地址。
+list[].from_type	string	接口返回该字段时	文件来源类型，内部标记字段，普通场景可忽略。
+list[].videotag	string	接口返回该字段时	内部视频标记字段，普通场景可忽略。
+list[].wpfile	int	接口返回该字段时	内部工作空间文件标记，普通场景可忽略。
+list[].black_tag	int	接口返回该字段时	内部标记字段，普通场景可忽略。
+list[].height / width	int	图片且 extra=1	图片高度和宽度。
+list[].date_taken	int	图片且 extra=1	图片拍摄时间。
+list[].orientation	string	图片有方向信息	图片旋转方向。
+list[].duration	int	视频且启用时长信息	视频时长，单位秒；单文件方式使用 needmedia=1，路径批量方式使用 media=1。
+list[].media_info	object	视频且 detail=1	视频信息，包含 channels、duration、duration_ms、extra_info、file_size、frame_rate、height、meta_info、resolution、rotate、sample_rate、use_segment、width 等字段。
+路径批量响应（method=filemetas + target）
+字段路径	类型	返回条件	描述
+errno	int	成功/失败均返回	顶层业务错误码，0 表示成功。
+request_id	uint64	成功/失败均返回	请求 ID，用于排查问题。
+info	array	成功时返回	文件信息列表，与 target 中的路径一一对应。
+info[].errno	int	批量查询且该文件有结果时	该文件单独的错误码，0 表示该文件查询成功。
+info[].fs_id	uint64	文件条目	文件在网盘中的唯一 ID，永不变化。
+info[].path	string	文件条目	文件全路径。
+info[].server_filename	string	文件条目	文件名。
+info[].size	uint64	文件条目	文件大小，单位字节。
+info[].md5	string	文件条目	文件内容 MD5。
+info[].category	int	文件条目	文件类型：1 视频、2 音频、3 图片、4 文档、5 应用、6 其他、7 种子。
+info[].real_category	string	文件条目	更细的格式归类，如 pptx、xlsx、docx、zip。
+info[].isdir	int	文件条目	是否目录：0 文件，1 目录。
+info[].dlink	string	dlink=1 且查询成功	文件下载直链，8 小时有效；下载时需拼接 access_token 并携带 User-Agent: pan.baidu.com。
+info[].block_list	array	blocks=1 且查询成功	文件分片 MD5 列表。
+info[].thumbs	object	thumb=1 且文件支持缩略图	各尺寸缩略图 URL。
+info[].docpreview / lodocpreview	string	接口返回该字段时	文档在线预览地址；lodocpreview 为转成 PDF 的低清版。
+info[].picdocpreview	string	接口返回该字段时	文档图片化预览接口地址。
+info[].server_ctime / server_mtime	uint64	文件条目	服务端创建/修改时间，Unix 时间戳。
+info[].local_ctime / local_mtime	uint64	文件条目	上传时客户端记录的创建/修改时间。
+info[].share	int	文件条目	是否被分享过。
+info[].privacy	int	文件条目	文件隐私状态。
+info[].oper_id / owner_id	uint64	文件条目	操作者/文件所有者 ID。
+info[].file_key	string	接口返回该字段时	底层存储对象标识，一般不直接使用。
+info[].duration	int	media=1 且为视频	视频时长，单位秒。
+info[].videotag / wpfile / black_tag / from_type	内部字段	接口返回该字段时	内部标记字段，普通场景可忽略。
+错误码
+HTTP 状态	业务码	含义	排查 / 修复	是否可重试
+200	0	查询成功	读取 list；设置 dlink=1 时按下载页要求处理直链。	否
+200	42211	图片详细信息查询失败	去掉或稍后重试 extra=1。	是
+200	42212	共享目录文件上传者信息查询失败	确认共享目录权限后重试。	是
+200	42213	共享目录鉴权失败	重新授权，并确认共享目录 path 正确。	否
+200	42214	文件基础信息查询失败	确认 fsids 对应文件存在且有访问权限。	是
+公共错误码中心：《平台简介 > 错误码》。
+
+请求示例
+cURL
+Python
+Java
+单文件请求（method=meta）
+
+Terminal window
+curl --get 'https://pan.baidu.com/rest/2.0/xpan/file' \
+--data-urlencode 'method=meta' \
+--data-urlencode 'access_token=<ACCESS_TOKEN>' \
+--data-urlencode 'path=/apps/<APP_NAME>/<FILE_NAME>' \
+--data-urlencode 'dlink=1'
+
+路径批量请求（method=filemetas）
+
+Terminal window
+curl -X POST 'https://pan.baidu.com/rest/2.0/xpan/file' \
+--data-urlencode 'method=filemetas' \
+--data-urlencode 'access_token=<ACCESS_TOKEN>' \
+--data-urlencode 'target=["/apps/<APP_NAME>/<FILE_NAME>"]' \
+--data-urlencode 'blocks=0' \
+--data-urlencode 'dlink=1' \
+--data-urlencode 'media=0'
+
+fsids 批量请求（method=filemetas）
+
+Terminal window
+curl --location --get 'https://pan.baidu.com/rest/2.0/xpan/multimedia' \
+--data-urlencode 'method=filemetas' \
+--data-urlencode 'access_token=<ACCESS_TOKEN>' \
+--data-urlencode 'fsids=[123456789012345,123456789012346]' \
+--data-urlencode 'thumb=1' \
+--data-urlencode 'dlink=1' \
+--data-urlencode 'extra=1' \
+--data-urlencode 'needmedia=1' \
+--data-urlencode 'detail=1' \
+-H 'User-Agent: pan.baidu.com'
+
+响应示例
+fsids 批量方式返回 list 数组，示例依次为图片、音频和视频：
+
+{
+  "errmsg": "succ",
+  "errno": 0,
+  "list": [
+    {
+      "category": 3,
+      "date_taken": 1364134922,
+      "dlink": "<DLINK_URL>",
+      "filename": "<IMAGE_FILE>.jpg",
+      "fs_id": 123456789012345,
+      "height": 1379,
+      "isdir": 0,
+      "md5": "<IMAGE_MD5>",
+      "oper_id": 1234567890,
+      "path": "/apps/<APP_NAME>/<IMAGE_FILE>.jpg",
+      "server_ctime": 1475996301,
+      "server_mtime": 1596077947,
+      "size": 642374,
+      "thumbs": {
+        "icon": "<THUMB_ICON_URL>",
+        "url1": "<THUMB_URL_1>",
+        "url2": "<THUMB_URL_2>",
+        "url3": "<THUMB_URL_3>"
+      },
+      "width": 1600
+    },
+    {
+      "category": 2,
+      "dlink": "<DLINK_URL>",
+      "filename": "<AUDIO_FILE>.mp3",
+      "fs_id": 123456789012346,
+      "isdir": 0,
+      "md5": "<AUDIO_MD5>",
+      "oper_id": 1234567890,
+      "orientation": "RightTopOrientation",
+      "path": "/apps/<APP_NAME>/<AUDIO_FILE>.mp3",
+      "server_ctime": 1563282091,
+      "server_mtime": 1596077717,
+      "size": 4842585,
+      "thumbs": {}
+    },
+    {
+      "category": 1,
+      "duration": 3603,
+      "filename": "<VIDEO_FILE>.rmvb",
+      "fs_id": 123456789012347,
+      "isdir": 0,
+      "local_ctime": 1402216960,
+      "local_mtime": 1402216960,
+      "md5": "<VIDEO_MD5>",
+      "media_info": {
+        "channels": 2,
+        "duration": 3602,
+        "duration_ms": 3602788,
+        "extra_info": "<EXTRA_INFO>",
+        "file_size": "674334920",
+        "frame_rate": 23.974426,
+        "height": 720,
+        "meta_info": "<META_INFO>",
+        "resolution": "width:1280,height:720",
+        "rotate": 0,
+        "sample_rate": 44100,
+        "use_segment": 1,
+        "width": 1280
+      },
+      "oper_id": 0,
+      "path": "/apps/<APP_NAME>/<VIDEO_FILE>.rmvb",
+      "server_ctime": 1402216961,
+      "server_mtime": 1553530713,
+      "size": 674334920
+    }
+  ],
+  "names": {},
+  "request_id": "1234567890"
+}
+
+路径批量方式（target）返回 info 数组，并可在单个文件结果中返回独立错误码：
+
+{
+  "errno": 0,
+  "request_id": 1234567890,
+  "info": [
+    {
+      "errno": 0,
+      "fs_id": 123456789012345,
+      "path": "/apps/<APP_NAME>/<FILE_NAME>",
+      "server_filename": "<FILE_NAME>",
+      "size": 233999,
+      "md5": "<FILE_MD5>",
+      "category": 4,
+      "isdir": 0,
+      "dlink": "<DLINK_URL>",
+      "block_list": ["<BLOCK_MD5_1>", "<BLOCK_MD5_2>"]
+    }
+  ]
+}
+
+SDK获取
+我们提供了 Go 版本 SDK，帮助开发者快速实现文件元信息查询能力。
+
+下载 Go 版本 SDK（download.tar.gz）。
+下载后，使用 tar -zxvf *.tar.gz 命令解压。
+解压后，在 download 目录下可看到如下目录结构：
+├── demo
+│   ├── download.go
+│   └── file_metas.go
+├── download.go
+├── file_metas.go
+└── types.go
+
+其中，demo 为使用示例，可参考其中的接口参数进行调用并获取接口返回结果；download/file_metas.go 用于获取文件信息；download/download.go 用于将文件下载至本地，如果不需要下载则无需关注此步骤。
+
+注意事项
+执行请求示例代码时，请将示例代码中的 access_token 参数替换为自行获取的 access_token。
+fsids 批量方式最多包含 100 个文件 ID；批量查询时先判断顶层 errno，再按 list 条目处理结果。
+只有设置 dlink=1 才返回下载直链，直链通常有效 8 小时；下载时需携带 User-Agent: pan.baidu.com，详见下载。
+fsids 批量方式只有设置 thumb=1 且文件支持缩略图时才返回 thumbs；extra=1 用于图片信息，needmedia=1 和 detail=1 用于视频信息。
+路径批量方式使用 target 路径数组，blocks=1 返回 block_list，media=1 返回视频时长等媒体信息。
+查询共享目录时，path 用于指定共享目录或专属空间，不是普通文件路径；设置该参数后不会返回正常目录下文件的信息。
+上一页
+获取分类文件列表
+下一页
+搜索文件（关键词搜索）
