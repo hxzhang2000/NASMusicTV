@@ -7,6 +7,22 @@
 >
 > 类型：`Added`（新增） | `Changed`（变更） | `Fixed`（修复） | `Removed`（移除）
 
+## [v2.26.35] - 2026-09-08
+
+### Changed
+
+- **百度索引全量加载瓶颈消除**：排查所有调用 `baiduIndexCache.allSongs()`（38000+ Song 对象全量创建后再客户端过滤）的热路径，替换为 entry 级预过滤方法：
+  - 新增 `BaiduFileIndexCache.songsByAlbumName()` / `searchSongs()`：在 raw entry 级别过滤，只对匹配项创建 Song 对象。
+  - `loadAlbumSongs` / `playAlbumMultiSource`：`filterSongsByAlbumName(allSongs())` → `songsByAlbumName()`，38000→~20。
+  - `searchSongsOnServer` 拼音搜索：`allSongs()` → `searchSongs(query, pinyinMatch=true)`。
+  - `updateMergedData`：`allSongs()` 从 5 次重复调用收敛为 1 次加载 + 参数传递。
+
+### Fixed
+
+- **发现页 `searchByDirectory` 性能**：双轮 O(N) 全量扫描改为预建目录索引 O(D) 查找（D=唯一目录数，典型 100-500），目录命中后直接按 key 取值。
+- **百度搜索本地索引+API 串行**：`BaiduNetdiskService.searchInternal` 中本地索引和 API 从串行改为 `async` 并行，总耗时从 `本地索引 + API` 降为 `max(本地索引, API)`。
+- **歌曲列表两列布局歌名被压缩**：歌曲条目信息多（标题+艺术家+专辑+时长+操作按钮），TV 两列布局下歌名被压缩不可读。`songGridColumns()` 从 TV=2列/手机=1列 改为始终 1 列，影响曲库/发现/搜索/网盘页面。"我的"页面不受影响（其 TV/手机版式差异保持不变）。
+
 ## [v2.26.34] - 2026-09-08
 
 ### Fixed
