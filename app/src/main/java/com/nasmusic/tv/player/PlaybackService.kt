@@ -41,9 +41,13 @@ class PlaybackService : MediaLibraryService() {
     private var mediaLibrarySession: MediaLibrarySession? = null
     private var lastNotificationState: Pair<String?, Boolean>? = null
     private lateinit var mediaLibraryTree: MediaLibraryTree
+    private var isForeground = false
 
     private val playerListener = object : Player.Listener {
         override fun onIsPlayingChanged(isPlaying: Boolean) {
+            if (isPlaying) {
+                ensureMediaSessionActive()
+            }
             updateNotification()
         }
 
@@ -110,6 +114,37 @@ class PlaybackService : MediaLibraryService() {
 
         player.addListener(playerListener)
 
+        // 注入高质量人声分离组件（HT-Demucs FT ONNX 模式）
+        // 注意：模型不在 APK 内，需在设置页下载。初始化延迟到 enableHighQualityRemoval 时（PlayerManager 内部检查模型）
+        val demucsSeparator = DemucsSeparator(this)
+        val accompanimentCache = AccompanimentCache(this)
+
+        // 初始化媒体库树（用于 Android Auto / Wear OS 浏览）
+        mediaLibraryTree = MediaLibraryTree(this)
+
+        // Store player reference in manager + inject vocal removal processor
+        (application as NasMusicApp).playerManager.setPlayer(player)
+        (application as NasMusicApp).playerManager.setVocalRemovalProcessor(vocalRemovalProcessor)
+        (application as NasMusicApp).playerManager.setDemucsSeparator(demucsSeparator)
+        (application as NasMusicApp).playerManager.setAccompanimentCache(accompanimentCache)
+
+        // 不在 onCreate 中创建 MediaSession 或 startForeground
+        // MediaSession 和前台通知延迟到首次播放时创建，避免 app 启动即显示锁屏小窗
+        AppLog.d("PlaybackService", "onCreate: player created, MediaSession deferred to first play")
+    }
+
+    /**
+     * 首次播放时创建 MediaSession 并进入前台模式。
+     * 由 Player.Listener.onIsPlayingChanged(isPlaying=true) 触发。
+     * 幂等：已创建则跳过。
+     */
+    private fun ensureMediaSessionActive() {
+        if (mediaLibrarySession != null) return
+
+        AppLog.d("PlaybackService", "ensureMediaSessionActive: creating MediaSession + startForeground")
+
+        val player = (application as NasMusicApp).playerManager.getPlayer() ?: return
+
         val intent = Intent(this, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_SINGLE_TOP
         }
@@ -117,9 +152,6 @@ class PlaybackService : MediaLibraryService() {
             this, 0, intent,
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
-
-        // 初始化媒体库树（用于 Android Auto / Wear OS 浏览）
-        mediaLibraryTree = MediaLibraryTree(this)
 
         mediaLibrarySession = MediaLibrarySession.Builder(
             this, player,
@@ -174,19 +206,9 @@ class PlaybackService : MediaLibraryService() {
             .setBitmapLoader(CoilBitmapLoader(Coil.imageLoader(this), this))
             .build()
 
-        // Store player reference in manager + inject vocal removal processor
-        (application as NasMusicApp).playerManager.setPlayer(player)
-        (application as NasMusicApp).playerManager.setVocalRemovalProcessor(vocalRemovalProcessor)
-
-        // 注入高质量人声分离组件（HT-Demucs FT ONNX 模式）
-        // 注意：模型不在 APK 内，需在设置页下载。初始化延迟到 enableHighQualityRemoval 时（PlayerManager 内部检查模型）
-        val demucsSeparator = DemucsSeparator(this)
-        val accompanimentCache = AccompanimentCache(this)
-        (application as NasMusicApp).playerManager.setDemucsSeparator(demucsSeparator)
-        (application as NasMusicApp).playerManager.setAccompanimentCache(accompanimentCache)
-
-        // Start as foreground service with initial notification
+        // 进入前台模式 + 显示通知
         startForeground(NOTIFICATION_ID, buildNotification(null, false))
+        isForeground = true
     }
 
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaLibrarySession? {
@@ -208,10 +230,13 @@ class PlaybackService : MediaLibraryService() {
         }
         mediaLibrarySession = null
         // 移除前台通知
-        try {
-            ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
-        } catch (e: Exception) {
-            AppLog.w("PlaybackService", "stopForeground failed", e)
+        if (isForeground) {
+            try {
+                ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
+            } catch (e: Exception) {
+                AppLog.w("PlaybackService", "stopForeground failed", e)
+            }
+            isForeground = false
         }
         super.onDestroy()
     }
@@ -222,12 +247,12 @@ class PlaybackService : MediaLibraryService() {
         // - 已暂停 → 停止服务
         val player = mediaLibrarySession?.player
         val isPlaying = player?.isPlaying == true
-        AppLog.d("PlaybackService", "onTaskRemoved: isPlaying=$isPlaying")
+        AppLog.d("PlaybackService", "onTaskRemoved: isPlaying=$isPlaying, hasSession=${mediaLibrarySession != null}")
         if (isPlaying) {
             // 播放中移除任务栏：继续播放，不退出服务
             return
         }
-        // 已暂停：停止服务
+        // 已暂停或未播放：停止服务
         stopSelf()
     }
 
@@ -246,7 +271,8 @@ class PlaybackService : MediaLibraryService() {
     }
 
     private fun updateNotification() {
-        val player = mediaLibrarySession?.player ?: return
+        val session = mediaLibrarySession ?: return
+        val player = session.player
         val currentMediaItem = player.currentMediaItem
         val title = currentMediaItem?.mediaMetadata?.title?.toString()
             ?: currentMediaItem?.mediaId

@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -403,7 +404,8 @@ fun SettingsScreen(
                                 text = if (fontAdjustment == 0) stringResource(R.string.settings_font_standard) else if (fontAdjustment > 0) "+${fontAdjustment}" else "$fontAdjustment",
                                 color = NasMusicColors.Primary,
                                 fontSize = FontSize.title(),
-                                modifier = Modifier.width(80.dp).padding(horizontal = 8.dp)
+                                modifier = Modifier.widthIn(min = 100.dp).padding(horizontal = 8.dp),
+                                textAlign = androidx.compose.ui.text.style.TextAlign.Center
                             )
                             AdjustButton("+", onClick = { onChangeFontAdjustment((fontAdjustment + 1).coerceAtMost(8)) })
                         }
