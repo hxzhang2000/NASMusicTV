@@ -6,9 +6,11 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.graphics.Bitmap
 import android.view.KeyEvent
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
+import androidx.core.graphics.drawable.toBitmap
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
@@ -23,12 +25,19 @@ import androidx.media3.session.LibraryResult
 import androidx.media3.session.MediaLibraryService
 import androidx.media3.session.MediaSession
 import coil.Coil
+import coil.request.ImageRequest
 import com.google.common.collect.ImmutableList
 import com.google.common.util.concurrent.Futures
 import com.nasmusic.tv.NasMusicApp
 import com.nasmusic.tv.R
 import com.nasmusic.tv.ui.MainActivity
 import com.nasmusic.tv.util.AppLog
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 
 /**
  * 后台播放服务
@@ -42,6 +51,12 @@ class PlaybackService : MediaLibraryService() {
     private var lastNotificationState: Pair<String?, Boolean>? = null
     private lateinit var mediaLibraryTree: MediaLibraryTree
     private var isForeground = false
+    /** 当前歌曲封面 bitmap，由 onMediaItemTransition 异步加载，用于通知 largeIcon */
+    private var cachedArtworkBitmap: Bitmap? = null
+    /** 封面加载协程 */
+    private var artworkLoadJob: Job? = null
+    /** 服务级协程作用域 */
+    private val serviceScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
 
     private val playerListener = object : Player.Listener {
         override fun onIsPlayingChanged(isPlaying: Boolean) {
@@ -59,6 +74,7 @@ class PlaybackService : MediaLibraryService() {
         }
 
         override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+            loadArtworkForCurrentItem()
             updateNotification()
         }
     }
@@ -217,6 +233,7 @@ class PlaybackService : MediaLibraryService() {
 
     override fun onDestroy() {
         AppLog.d("PlaybackService", "onDestroy: cleaning up")
+        serviceScope.cancel()
         // 释放 PlayerManager 资源（Handler、listener），防止内存泄漏
         try {
             (application as NasMusicApp).playerManager.release()
@@ -268,6 +285,43 @@ class PlaybackService : MediaLibraryService() {
         }
         val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         notificationManager.createNotificationChannel(channel)
+    }
+
+    /**
+     * 异步加载当前歌曲封面 bitmap，加载完成后刷新通知。
+     * 首次显示时通知可能无封面，加载完成后 lastNotificationState 被重置以强制刷新。
+     */
+    private fun loadArtworkForCurrentItem() {
+        val mediaItem = mediaLibrarySession?.player?.currentMediaItem
+        val artworkUri = mediaItem?.mediaMetadata?.artworkUri
+        if (artworkUri == null) {
+            cachedArtworkBitmap = null
+            return
+        }
+        artworkLoadJob?.cancel()
+        artworkLoadJob = serviceScope.launch(Dispatchers.IO) {
+            try {
+                val result = Coil.imageLoader(this@PlaybackService).execute(
+                    ImageRequest.Builder(this@PlaybackService)
+                        .data(artworkUri)
+                        .size(256)
+                        .allowHardware(false)
+                        .build()
+                )
+                val drawable = result.drawable
+                val bitmap = drawable?.toBitmap()
+                if (bitmap != null) {
+                    cachedArtworkBitmap = bitmap
+                    // 重置去重状态，强制下次 updateNotification 重建通知（含新封面）
+                    lastNotificationState = null
+                    serviceScope.launch(Dispatchers.Main) {
+                        updateNotification()
+                    }
+                }
+            } catch (e: Exception) {
+                AppLog.w("PlaybackService", "loadArtwork failed: ${e.message}")
+            }
+        }
     }
 
     private fun updateNotification() {
@@ -326,6 +380,7 @@ class PlaybackService : MediaLibraryService() {
             .setContentTitle(title ?: "NAS Music TV")
             .setContentText(artist)
             .setSmallIcon(android.R.drawable.ic_media_play)
+            .also { builder -> cachedArtworkBitmap?.let { builder.setLargeIcon(it) } }
             .setContentIntent(pendingIntent)
             .addAction(prevAction)
             .addAction(playPauseAction)
