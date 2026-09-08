@@ -334,12 +334,26 @@ loadBackups();
         /** 上传备份文件（raw body = JSON 内容） */
         private fun handleUpload(session: IHTTPSession): Response {
             AppLog.i(TAG, "handleUpload: called, method=${session.method}, uri=${session.uri}")
-            AppLog.i(TAG, "handleUpload: headers=${session.headers}")
             return try {
-                // 用 parseBody 读取 POST body，NanoHTTPD 将非 multipart 内容存入 files["postData"]
-                val files = HashMap<String, String>()
-                session.parseBody(files)
-                val json = files["postData"] ?: ""
+                // 直接从 inputStream 读取原始字节，用 UTF-8 解码
+                // 不用 parseBody()：某些 ROM 上 Charset.defaultCharset() 非 UTF-8，导致中文乱码
+                val contentLength = session.headers["content-length"]?.toLongOrNull() ?: -1L
+                AppLog.i(TAG, "handleUpload: contentLength=$contentLength")
+                if (contentLength <= 0) {
+                    return jsonResponse(false, "上传内容为空")
+                }
+                val bytes = ByteArray(contentLength.toInt())
+                var totalRead = 0
+                while (totalRead < contentLength) {
+                    val read = session.inputStream.read(bytes, totalRead, (contentLength - totalRead).toInt())
+                    if (read < 0) break
+                    totalRead += read
+                }
+                var json = String(bytes, 0, totalRead, Charsets.UTF_8)
+                // 去掉 UTF-8 BOM（如果有）
+                if (json.startsWith("\uFEFF")) {
+                    json = json.substring(1)
+                }
                 AppLog.i(TAG, "handleUpload: body length=${json.length}")
                 if (json.isEmpty()) {
                     return jsonResponse(false, "上传内容为空")
