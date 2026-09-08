@@ -35,15 +35,18 @@ object EmbeddedCoverExtractor {
      * @return "file:///.../cover_cache_xxx.jpg" 或 null（无内嵌封面）
      */
     fun extractCoverUri(audioPath: String, cacheDir: File): String? {
-        val realPath = audioPath.removePrefix("file://").removePrefix("content://")
+        val realPath = android.net.Uri.decode(audioPath.removePrefix("file://").removePrefix("content://"))
         val audioFile = File(realPath)
+        AppLog.d(TAG, "extractCoverUri: path=$realPath, exists=${audioFile.exists()}, isFile=${audioFile.isFile}")
         if (!audioFile.exists() || !audioFile.isFile) return null
 
         // 1. 内存缓存命中
         cache[realPath]?.let { cachedPath ->
             val cachedFile = File(cachedPath)
-            if (cachedFile.exists()) return "file://$cachedPath"
-            // 缓存文件被清理了，移除条目重新提取
+            if (cachedFile.exists()) {
+                AppLog.d(TAG, "extractCoverUri: cache hit")
+                return "file://$cachedPath"
+            }
             cache.remove(realPath)
         }
 
@@ -52,13 +55,15 @@ object EmbeddedCoverExtractor {
             val headerSize = minOf(ID3_HEADER_SIZE.toLong(), audioFile.length())
             val headerBytes = ByteArray(headerSize.toInt())
             RandomAccessFile(audioFile, "r").use { raf -> raf.readFully(headerBytes) }
+            AppLog.d(TAG, "extractCoverUri: read ${headerBytes.size} bytes, parsing APIC...")
             val apic = Id3v2Parser.findApic(headerBytes)
             if (apic == null) {
-                AppLog.d(TAG, "no APIC frame in ${audioFile.name}")
+                AppLog.d(TAG, "extractCoverUri: no APIC frame in ${audioFile.name}")
                 return null
             }
 
-            val (_, pictureBytes) = apic
+            val (mime, pictureBytes) = apic
+            AppLog.d(TAG, "extractCoverUri: APIC found, mime=$mime, size=${pictureBytes.size}")
             // 写入缓存文件，用 audioPath 的 hash 做文件名避免冲突
             val hash = MessageDigest.getInstance("MD5")
                 .digest(realPath.toByteArray())

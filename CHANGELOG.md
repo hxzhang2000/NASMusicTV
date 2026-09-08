@@ -16,6 +16,7 @@
 - **扫码传输备份上传失败**：`BackupTransferServer` 的 HTML 模板中，`strings.xml` 的 `html_backup_confirm_restore` 含 `\n` 换行符，经 `getString()` 解析后变为真实换行，插入 JS 单引号字符串导致语法错误，整个 `<script>` 块不执行，页面 JS 全部失效（无 `GET /api/list`、无 alert、无 POST）。改用 `gson.toJson()` 序列化 STR 对象，自动转义特殊字符。同时前端 `readAsText` 改为 `readAsArrayBuffer` + `Blob` 避免文本编码问题。
 - **扫码传输备份导入后中文乱码**：`handleUpload` 使用 `session.parseBody()` 读取 POST body，NanoHTTPD 内部用 `Charset.defaultCharset()` 解码，MIUI ROM 上默认字符集非 UTF-8，导致中文 UTF-8 字节被按错误字符集解码为乱码后写入备份文件。改为直接从 `session.inputStream` 读取原始字节并显式用 `Charsets.UTF_8` 解码，同时处理 UTF-8 BOM。
 - **下载按钮点击无反应**：`SongDownloadManager.loop()` 中 `manualQueue.tryReceive() ?: autoQueue.receive()` 有竞态条件——启动时 `tryReceive()` 返回 null 后阻塞在 `autoQueue.receive()` 上，此后不再检查 `manualQueue`，导致手动下载入队后永远不被消费。改用 `select` 同时监听两个 Channel，按 clause 顺序保证手动优先，两个队列都能正常消费。自动下载走同一个 `loop()`，修复同时覆盖。
+- **已下载歌曲以 LOCAL 源出现时封面不显示、歌词走网络**：下载完成后歌曲经 MediaStore 扫描以 LOCAL 源重新出现在搜索结果中，其 `downloadKey`（`local_local_xxx`）与下载记录 key（`ntwk_meting_xxx`）不匹配，`downloadStates` 查询返回 null，本地封面/歌词分支全被跳过。同时 LOCAL 源歌曲的 `song.path` 是 URL 编码的（如 `%E8%B5%B5%E4%BC%A0`），而 `EmbeddedCoverExtractor` 和 `LocalLyricsProvider` 只做 `removePrefix("file://")` 未做 URL 解码，`File(encodedPath).exists()` 返回 false。修复：`UnifiedSongRow`、`loadLyricsForCurrentSong`、`getCoverCandidates` 增加 `song.isLocalSong` 兜底，`downloadStates` 匹配不到时直接从 `song.path` 提取内嵌封面/歌词；三处路径解析均加 `android.net.Uri.decode()` 解码 percent-encoding。
 
 ### Changed
 

@@ -220,14 +220,15 @@ private fun SongRowModeRow(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 // 封面缩略图：已下载 → 内嵌封面（提取到缓存）→ 旁路 .jpg → 后端 URL
-                val effectiveCoverUrl = when (downloadState) {
-                    is DownloadState.Completed -> {
+                // 本地歌曲（下载后以 LOCAL 源出现）：downloadKey 不匹配但 song.path 有效
+                val effectiveCoverUrl = when {
+                    downloadState is DownloadState.Completed -> {
                         val ctx = androidx.compose.ui.platform.LocalContext.current
                         // 优先提取内嵌 APIC 封面
                         val embedded = com.nasmusic.tv.backend.local.EmbeddedCoverExtractor.extractCoverUri(
                             downloadState.path, ctx.cacheDir
                         )
-                        when {
+                        val result = when {
                             embedded != null -> embedded
                             downloadState.coverPath != null &&
                                 downloadState.coverPath!!.isNotBlank() &&
@@ -235,8 +236,27 @@ private fun SongRowModeRow(
                                 "file://${downloadState.coverPath}"
                             else -> song.coverUrl
                         }
+                        com.nasmusic.tv.util.AppLog.d("UnifiedSongRow",
+                            "Row cover: song=${song.title}, dlState=Completed, path=${downloadState.path}, " +
+                            "coverPath=${downloadState.coverPath}, embedded=$embedded, result=$result")
+                        result
                     }
-                    else -> song.coverUrl
+                    song.isLocalSong && !song.path.isNullOrBlank() -> {
+                        val ctx = androidx.compose.ui.platform.LocalContext.current
+                        val embedded = com.nasmusic.tv.backend.local.EmbeddedCoverExtractor.extractCoverUri(
+                            song.path!!, ctx.cacheDir
+                        )
+                        val result = embedded ?: song.coverUrl
+                        com.nasmusic.tv.util.AppLog.d("UnifiedSongRow",
+                            "Row cover: song=${song.title}, isLocalSong fallback, path=${song.path}, " +
+                            "embedded=$embedded, result=$result")
+                        result
+                    }
+                    else -> {
+                        com.nasmusic.tv.util.AppLog.d("UnifiedSongRow",
+                            "Row cover: song=${song.title}, dlState=${downloadState.javaClass.simpleName}, using song.coverUrl=${song.coverUrl}")
+                        song.coverUrl
+                    }
                 }
                 CoverImage(
                     coverUrl = effectiveCoverUrl,

@@ -4064,10 +4064,20 @@ showError(getApplication<Application>().getString(R.string.play_failed_with_msg,
                 // 0. 本地已下载歌词（最高优先级，不走网络）
                 val dlState = songDownloadStates.value[song.downloadKey]
                 AppLog.d("NASMusic", "loadLyrics: dlState=${dlState?.javaClass?.simpleName}, key=${song.downloadKey}")
-                if (dlState is DownloadState.Completed && dlState.path.isNotBlank()) {
-                    AppLog.d("NASMusic", "loadLyrics: completed path=${dlState.path}, lyricPath=${dlState.lyricPath}, embedded=${dlState.embedded}")
+                // 确定本地音频路径：优先用下载状态，否则用 song.path（下载后以 LOCAL 源出现，downloadKey 不匹配）
+                val localAudioPath: String? = when {
+                    dlState is DownloadState.Completed && dlState.path.isNotBlank() -> dlState.path
+                    song.isLocalSong && !song.path.isNullOrBlank() -> {
+                        AppLog.d("NASMusic", "loadLyrics: isLocalSong fallback, song.path=${song.path}")
+                        song.path
+                    }
+                    else -> null
+                }
+                if (localAudioPath != null) {
+                    val localLyricPath = (dlState as? DownloadState.Completed)?.lyricPath
+                    AppLog.d("NASMusic", "loadLyrics: localAudioPath=$localAudioPath, lyricPath=$localLyricPath")
                     val localLrc = LocalLyricsProvider.getLyricsFromPath(
-                        dlState.path, dlState.lyricPath
+                        localAudioPath, localLyricPath
                     )
                     AppLog.d("NASMusic", "loadLyrics: localLrc=${localLrc != null}, validLrc=${localLrc?.let { LrcParser.isValidLrc(it) }}")
                     if (localLrc != null && LrcParser.isValidLrc(localLrc)) {
@@ -4159,17 +4169,23 @@ showError(getApplication<Application>().getString(R.string.play_failed_with_msg,
 
         // 1. 已下载歌曲：优先内嵌封面 → 旁路封面
         val dlState = songDownloadStates.value[song.downloadKey]
-        if (dlState is DownloadState.Completed && dlState.path.isNotBlank()) {
+        // 确定本地音频路径：优先用下载状态，否则用 song.path（下载后以 LOCAL 源出现，downloadKey 不匹配）
+        val localAudioPath: String? = when {
+            dlState is DownloadState.Completed && dlState.path.isNotBlank() -> dlState.path
+            song.isLocalSong && !song.path.isNullOrBlank() -> song.path
+            else -> null
+        }
+        if (localAudioPath != null) {
             // 1a. 内嵌封面（APIC 帧）→ 提取到缓存文件供 Coil 加载
             val embeddedUri = EmbeddedCoverExtractor.extractCoverUri(
-                dlState.path,
+                localAudioPath,
                 getApplication<Application>().cacheDir
             )
             if (embeddedUri != null) {
                 candidates.add(embeddedUri)
             }
             // 1b. 旁路封面 .jpg 文件（内嵌失败时才有）
-            dlState.coverPath?.let { cp ->
+            (dlState as? DownloadState.Completed)?.coverPath?.let { cp ->
                 if (cp.isNotBlank() && java.io.File(cp).exists()) {
                     candidates.add("file://$cp")
                 }

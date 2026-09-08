@@ -110,7 +110,7 @@ object LocalLyricsProvider {
      * @return LRC 文本，未找到返回 null
      */
     fun getLyricsFromPath(audioPath: String, lyricPath: String? = null): String? {
-        val realPath = audioPath.removePrefix("file://").removePrefix("content://")
+        val realPath = android.net.Uri.decode(audioPath.removePrefix("file://").removePrefix("content://"))
         val audioFile = File(realPath)
         if (!audioFile.exists() || !audioFile.isFile) return null
 
@@ -156,7 +156,7 @@ object LocalLyricsProvider {
      */
     private fun extractEmbeddedLyrics(song: Song): String? {
         val audioPath = song.path ?: return null
-        val realPath = audioPath.removePrefix("file://").removePrefix("content://")
+        val realPath = android.net.Uri.decode(audioPath.removePrefix("file://").removePrefix("content://"))
         val file = File(realPath)
         if (!file.exists() || !file.isFile) return null
 

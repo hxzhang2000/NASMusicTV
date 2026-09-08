@@ -223,7 +223,10 @@ class SongDownloadManager(
         }
 
         // 8. 元数据内嵌（失败走旁路）
+        val fileExt = p.finalFile.extension.lowercase()
+        AppLog.d(TAG, "embed: file=${p.finalFile.name}, ext=$fileExt, supportsEmbed=${MediaTagWriter.supportsEmbedding(p.finalFile)}, coverBytes=${coverBytes?.size}, lrc=${lrc?.take(50)}")
         val embedded = tagWriter.embed(p.finalFile, song, coverBytes, lrc)
+        AppLog.d(TAG, "embed: result=$embedded, coverPath will be=${if (!embedded) "sidecar" else "null"}")
         var coverPath: String? = null
         var lyricPath: String? = null
         if (!embedded) {
@@ -237,6 +240,7 @@ class SongDownloadManager(
                 runCatching { jpgFile.writeBytes(it) }.onSuccess { coverPath = jpgFile.absolutePath }
             }
         }
+        AppLog.d(TAG, "embed: final coverPath=$coverPath, lyricPath=$lyricPath, embedded=$embedded")
 
         // 9. 更新 COMPLETED 记录
         val completed = entity.copy(
