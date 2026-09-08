@@ -227,6 +227,7 @@ class SongDownloadManager(
         var coverPath: String? = null
         var lyricPath: String? = null
         if (!embedded) {
+            // 内嵌失败才写 sidecar
             lrc?.let {
                 val lrcFile = File(p.albumDir, "${p.baseName}.lrc")
                 runCatching { lrcFile.writeText(it, Charsets.UTF_8) }.onSuccess { lyricPath = lrcFile.absolutePath }

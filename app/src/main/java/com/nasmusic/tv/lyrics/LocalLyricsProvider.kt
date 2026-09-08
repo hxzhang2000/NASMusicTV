@@ -103,7 +103,7 @@ object LocalLyricsProvider {
     /**
      * 从音频文件路径获取歌词（不依赖 Song 对象，供已下载的非本地歌曲使用）
      *
-     * 优先级：同目录同名 .lrc 侧车文件 → ID3v2 USLT 内嵌帧
+     * 优先级：1. 内嵌 ID3v2 USLT 帧 → 2. 本地 sidecar .lrc 文件
      *
      * @param audioPath 音频文件绝对路径
      * @param lyricPath 显式的 .lrc 文件路径（旁路歌词），若已知可直接传入
@@ -114,7 +114,21 @@ object LocalLyricsProvider {
         val audioFile = File(realPath)
         if (!audioFile.exists() || !audioFile.isFile) return null
 
-        // 1. 显式旁路 LRC 路径
+        // 1. 内嵌 ID3v2 USLT 帧（最高优先级）
+        try {
+            val headerSize = minOf(ID3_HEADER_SIZE.toLong(), audioFile.length())
+            val headerBytes = ByteArray(headerSize.toInt())
+            RandomAccessFile(audioFile, "r").use { raf -> raf.readFully(headerBytes) }
+            val lyrics = Id3v2Parser.findUslt(headerBytes)
+            if (!lyrics.isNullOrBlank() && LrcParser.isValidLrc(lyrics)) {
+                AppLog.d(TAG, "getLyricsFromPath: embedded USLT hit")
+                return lyrics
+            }
+        } catch (e: Exception) {
+            AppLog.w(TAG, "getLyricsFromPath embedded failed: ${e.message}")
+        }
+
+        // 2. 本地 sidecar .lrc 文件
         if (lyricPath != null) {
             val lrcFile = File(lyricPath)
             if (lrcFile.exists() && lrcFile.isFile) {
@@ -122,7 +136,7 @@ object LocalLyricsProvider {
             }
         }
 
-        // 2. 同目录同名 .lrc（兜底）
+        // 2b. 同目录同名 .lrc（兜底）
         val parent = audioFile.parentFile
         val baseName = audioFile.nameWithoutExtension
         parent?.let {
@@ -132,17 +146,7 @@ object LocalLyricsProvider {
             }
         }
 
-        // 3. 内嵌 ID3v2 USLT 帧
-        return try {
-            val headerSize = minOf(ID3_HEADER_SIZE.toLong(), audioFile.length())
-            val headerBytes = ByteArray(headerSize.toInt())
-            RandomAccessFile(audioFile, "r").use { raf -> raf.readFully(headerBytes) }
-            val lyrics = Id3v2Parser.findUslt(headerBytes)
-            if (!lyrics.isNullOrBlank()) lyrics else null
-        } catch (e: Exception) {
-            AppLog.w(TAG, "getLyricsFromPath embedded failed: ${e.message}")
-            null
-        }
+        return null
     }
 
     /**

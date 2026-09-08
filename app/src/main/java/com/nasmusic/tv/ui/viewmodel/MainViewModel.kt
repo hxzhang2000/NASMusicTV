@@ -20,6 +20,7 @@ import com.nasmusic.tv.backend.download.model.downloadKey
 import com.nasmusic.tv.backend.download.model.isDownloadableSong
 import com.nasmusic.tv.backend.download.model.dedupeKey
 import com.nasmusic.tv.backend.export.ExportState
+import com.nasmusic.tv.backend.local.EmbeddedCoverExtractor
 import com.nasmusic.tv.backend.local.MusicMerger
 import com.nasmusic.tv.backend.local.StorageMonitor
 import com.nasmusic.tv.backend.network.mv.MvSearchManager
@@ -4062,10 +4063,13 @@ showError(getApplication<Application>().getString(R.string.play_failed_with_msg,
             try {
                 // 0. 本地已下载歌词（最高优先级，不走网络）
                 val dlState = songDownloadStates.value[song.downloadKey]
+                AppLog.d("NASMusic", "loadLyrics: dlState=${dlState?.javaClass?.simpleName}, key=${song.downloadKey}")
                 if (dlState is DownloadState.Completed && dlState.path.isNotBlank()) {
+                    AppLog.d("NASMusic", "loadLyrics: completed path=${dlState.path}, lyricPath=${dlState.lyricPath}, embedded=${dlState.embedded}")
                     val localLrc = LocalLyricsProvider.getLyricsFromPath(
                         dlState.path, dlState.lyricPath
                     )
+                    AppLog.d("NASMusic", "loadLyrics: localLrc=${localLrc != null}, validLrc=${localLrc?.let { LrcParser.isValidLrc(it) }}")
                     if (localLrc != null && LrcParser.isValidLrc(localLrc)) {
                         val lyrics = LrcParser.parse(localLrc, song.id)
                             .copy(source = LyricsSource.LOCAL_FILE)
@@ -4153,30 +4157,34 @@ showError(getApplication<Application>().getString(R.string.play_failed_with_msg,
     fun getCoverCandidates(song: Song): List<String> {
         val candidates = mutableListOf<String>()
 
-        // 0. 本地已下载封面（最高优先级）
+        // 1. 已下载歌曲：优先内嵌封面 → 旁路封面
         val dlState = songDownloadStates.value[song.downloadKey]
-        if (dlState is DownloadState.Completed) {
-            // 旁路封面 .jpg 文件
+        if (dlState is DownloadState.Completed && dlState.path.isNotBlank()) {
+            // 1a. 内嵌封面（APIC 帧）→ 提取到缓存文件供 Coil 加载
+            val embeddedUri = EmbeddedCoverExtractor.extractCoverUri(
+                dlState.path,
+                getApplication<Application>().cacheDir
+            )
+            if (embeddedUri != null) {
+                candidates.add(embeddedUri)
+            }
+            // 1b. 旁路封面 .jpg 文件（内嵌失败时才有）
             dlState.coverPath?.let { cp ->
                 if (cp.isNotBlank() && java.io.File(cp).exists()) {
                     candidates.add("file://$cp")
                 }
             }
-            // 内嵌封面：封面在音频文件内，Coil 无法直接提取显示在列表中
-            // 不加入候选，依赖后续网络 URL fallback
         }
 
+        // 2. 网络/后端封面
         if (song.isNetworkSong) {
-            // 网络歌曲：pic 封面 + 自动搜索的网络封面
             song.coverUrl?.let { candidates.add(it) }
             _networkCoverUrl.value?.let { candidates.add(it) }
         } else {
-            // NAS 歌曲：后端 3 类封面
             val adapter = backendRegistry.getAdapter()
             if (adapter != null) {
                 candidates.addAll(adapter.getCoverUrlCandidates(song))
             }
-            // 如果有网络封面（切换网络歌词时获取），追加到列表
             _networkCoverUrl.value?.let { candidates.add(it) }
         }
         return candidates.distinct().filter { it.isNotBlank() }

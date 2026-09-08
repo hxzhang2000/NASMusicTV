@@ -219,14 +219,21 @@ private fun SongRowModeRow(
                     .clickable { onClick() },
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // 封面缩略图：已下载且有旁路封面 → 优先用本地文件
+                // 封面缩略图：已下载 → 内嵌封面（提取到缓存）→ 旁路 .jpg → 后端 URL
                 val effectiveCoverUrl = when (downloadState) {
                     is DownloadState.Completed -> {
-                        val cp = downloadState.coverPath
-                        if (cp != null && cp.isNotBlank() && java.io.File(cp).exists()) {
-                            "file://$cp"
-                        } else {
-                            song.coverUrl
+                        val ctx = androidx.compose.ui.platform.LocalContext.current
+                        // 优先提取内嵌 APIC 封面
+                        val embedded = com.nasmusic.tv.backend.local.EmbeddedCoverExtractor.extractCoverUri(
+                            downloadState.path, ctx.cacheDir
+                        )
+                        when {
+                            embedded != null -> embedded
+                            downloadState.coverPath != null &&
+                                downloadState.coverPath!!.isNotBlank() &&
+                                java.io.File(downloadState.coverPath!!).exists() ->
+                                "file://${downloadState.coverPath}"
+                            else -> song.coverUrl
                         }
                     }
                     else -> song.coverUrl
@@ -479,14 +486,20 @@ private fun SongRowModeCard(
         Column(
             modifier = Modifier.fillMaxWidth().padding(6.dp)
         ) {
-            // 封面：已下载且有旁路封面 → 优先用本地文件
+            // 封面：已下载 → 内嵌封面（提取到缓存）→ 旁路 .jpg → 后端 URL
             val cardCoverUrl = when (downloadState) {
                 is DownloadState.Completed -> {
-                    val cp = downloadState.coverPath
-                    if (cp != null && cp.isNotBlank() && java.io.File(cp).exists()) {
-                        "file://$cp"
-                    } else {
-                        song.coverUrl
+                    val ctx = androidx.compose.ui.platform.LocalContext.current
+                    val embedded = com.nasmusic.tv.backend.local.EmbeddedCoverExtractor.extractCoverUri(
+                        downloadState.path, ctx.cacheDir
+                    )
+                    when {
+                        embedded != null -> embedded
+                        downloadState.coverPath != null &&
+                            downloadState.coverPath!!.isNotBlank() &&
+                            java.io.File(downloadState.coverPath!!).exists() ->
+                            "file://${downloadState.coverPath}"
+                        else -> song.coverUrl
                     }
                 }
                 else -> song.coverUrl
