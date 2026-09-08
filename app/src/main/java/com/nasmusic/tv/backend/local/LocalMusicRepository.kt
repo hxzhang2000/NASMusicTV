@@ -201,6 +201,11 @@ class LocalMusicRepository(
         deleteByPathsChunked(paths)
     }
 
+    /** 按 storageType 批量删除（如清除所有下载类歌曲） */
+    suspend fun deleteByStorageType(storageType: String) = withContext(Dispatchers.IO) {
+        dao.deleteByStorageType(storageType)
+    }
+
     /** 全量加载本地曲库（清除/删除后刷新用） */
     suspend fun loadAll(): List<Song> = withContext(Dispatchers.IO) {
         dao.getAllSongs().map { it.toSong() }

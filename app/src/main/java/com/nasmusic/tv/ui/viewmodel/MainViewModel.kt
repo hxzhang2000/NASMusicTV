@@ -4404,7 +4404,21 @@ showError(getApplication<Application>().getString(R.string.play_failed_with_msg,
             val app = getApplication<NasMusicApp>()
             val repo = app.downloadRepository
             val completed = repo.getCompleted()
-            if (completed.isEmpty()) return@launch
+
+            // 0. 无论 DB 是否有记录，都必须清空内存状态 Map
+            //    （否则搜索结果仍显示"已下载"）
+            app.songDownloadManager.clearAllStates()
+
+            if (completed.isEmpty()) {
+                // DB 已空，但 local_songs 可能有残留（路径不匹配导致之前没删干净）
+                app.localMusicRepository.deleteByStorageType(
+                    com.nasmusic.tv.data.model.StorageType.DOWNLOAD.name
+                )
+                _localSongs.value = app.localMusicRepository.loadFromCache()
+                updateMergedData()
+                _downloadStats.value = DownloadStats()
+                return@launch
+            }
 
             // 1. 删除所有音频文件
             var deletedBytes = 0L
@@ -4424,14 +4438,12 @@ showError(getApplication<Application>().getString(R.string.play_failed_with_msg,
             // 2. 清空 download_songs 表
             repo.deleteAll()
 
-            // 2b. 清空 SongDownloadManager 内存状态 Map（否则搜索仍显示"已下载"）
-            app.songDownloadManager.clearAllStates()
-
-            // 3. 从 local_songs 移除（按 storageType="DOWNLOAD" 过滤）
-            val downloadPaths = completed.mapNotNull { it.audioPath }
-            if (downloadPaths.isNotEmpty()) {
-                app.localMusicRepository.removeByPaths(downloadPaths)
-            }
+            // 3. 从 local_songs 移除所有下载类歌曲
+            //    用 deleteByStorageType 而非 removeByPaths（后者按 audioPath 匹配，
+            //    但 LocalSongEntity.path 存的是 "file://..." URI，与 audioPath 不匹配）
+            app.localMusicRepository.deleteByStorageType(
+                com.nasmusic.tv.data.model.StorageType.DOWNLOAD.name
+            )
 
             // 4. 刷新内存
             _localSongs.value = app.localMusicRepository.loadFromCache()
@@ -4481,9 +4493,9 @@ showError(getApplication<Application>().getString(R.string.play_failed_with_msg,
             // 3. 删除 download_songs 记录
             repo.delete(key)
 
-            // 4. 从 local_songs 移除
+            // 4. 从 local_songs 移除（path 存的是 "file://..." URI，需加前缀匹配）
             entity.audioPath?.let { path ->
-                app.localMusicRepository.removeByPaths(listOf(path))
+                app.localMusicRepository.removeByPaths(listOf("file://$path"))
             }
 
             // 5. 刷新内存
