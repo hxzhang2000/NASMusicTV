@@ -39,6 +39,10 @@ class BaiduFileIndexCache(context: Context) {
     private var cachedIndex: BaiduFileIndex? = null
     private val cacheLock = Any()
 
+    /** 目录索引：parentDir → entries，惰性构建，searchByDirectory 用它将 O(N) 扫描降为 O(D) */
+    @Volatile
+    private var dirIndex: Map<String, List<BaiduIndexEntry>>? = null
+
     /** 扫描进度回调 */
     interface ProgressCallback {
         /** @param scanned 已扫描文件数 */
@@ -59,6 +63,7 @@ class BaiduFileIndexCache(context: Context) {
             val index = gson.fromJson<BaiduFileIndex>(json, type)
             synchronized(cacheLock) {
                 cachedIndex = index
+                dirIndex = null  // 失效目录索引，下次 searchByDirectory 时重建
             }
             index
         } catch (e: Exception) {
@@ -72,6 +77,7 @@ class BaiduFileIndexCache(context: Context) {
             file.writeText(gson.toJson(index))
             synchronized(cacheLock) {
                 cachedIndex = index
+                dirIndex = null
             }
         } catch (e: Exception) {
             AppLog.w(TAG, "save error", e)
@@ -175,6 +181,64 @@ class BaiduFileIndexCache(context: Context) {
             .map { it.toSong(coverUrl = it.coverUrl) }
     }
 
+    /**
+     * 按专辑名（目录名）过滤索引条目，只对匹配项创建 Song 对象。
+     *
+     * 匹配逻辑与 [MainViewModel.filterSongsByAlbumName] 一致：
+     * - song.album 精确匹配（忽略大小写）
+     * - album 字段为空时，取 path 倒数第二段目录名匹配
+     *
+     * @param albumName 专辑名（原始大小写，内部统一 lowercase 比较）
+     */
+    fun songsByAlbumName(albumName: String): List<Song> {
+        val index = load() ?: return emptyList()
+        val name = albumName.lowercase().trim()
+        if (name.isBlank()) return emptyList()
+        val seen = mutableSetOf<Long>()
+        return index.entries
+            .filter { seen.add(it.fsId) }
+            .filter { entry ->
+                // entry 没有 album 字段，专辑名只能从 path 推断
+                val path = entry.path.trim('/')
+                val segments = path.split("/")
+                if (segments.size < 2) return@filter false
+                val dirName = segments.getOrNull(segments.size - 2)
+                dirName?.lowercase()?.trim() == name
+            }
+            .map { it.toSong(coverUrl = it.coverUrl) }
+    }
+
+    /**
+     * 按关键词搜索索引条目（标题/艺术家），只对匹配项创建 Song 对象。
+     *
+     * 与 [search] 的区别：返回 Song 而非 BaiduIndexEntry，且支持拼音匹配（PinyinUtils）。
+     * 用于 SearchAggregator 的拼音搜索场景，避免全量 allSongs() + 客户端 filter。
+     *
+     * @param keyword 搜索关键词
+     * @param pinyinMatch 为 true 时用 PinyinUtils.matches() 做拼音模糊匹配
+     * @param limit 最多返回条数（0=不限）
+     */
+    fun searchSongs(keyword: String, pinyinMatch: Boolean = false, limit: Int = 0): List<Song> {
+        val index = load() ?: return emptyList()
+        val k = keyword.trim().lowercase()
+        if (k.isBlank()) return emptyList()
+        val seen = mutableSetOf<Long>()
+        return index.entries.asSequence()
+            .filter { seen.add(it.fsId) }
+            .filter { entry ->
+                if (pinyinMatch) {
+                    com.nasmusic.tv.util.PinyinUtils.matches(entry.title, k) ||
+                        (entry.artist?.let { com.nasmusic.tv.util.PinyinUtils.matches(it, k) } == true)
+                } else {
+                    entry.title.lowercase().contains(k) ||
+                        (entry.artist?.lowercase()?.contains(k) == true)
+                }
+            }
+            .let { stream -> if (limit > 0) stream.take(limit) else stream }
+            .toList()
+            .map { it.toSong(coverUrl = it.coverUrl) }
+    }
+
     fun search(keyword: String, limit: Int = 0): List<Song> {
         val index = load() ?: return emptyList()
         val k = keyword.trim().lowercase()
@@ -196,6 +260,10 @@ class BaiduFileIndexCache(context: Context) {
      * 这里先匹配 path 中的目录段；若某目录名包含 keyword，把该目录下所有音频条目都列出；
      * 无目录命中时回退到 [search]（按文件名/歌手匹配）。
      *
+     * 性能：使用预建的 [dirIndex]（parentDir → entries 映射），将目录匹配从 O(N) 降为 O(D)
+     * （D = 唯一目录数，典型 100-500，远小于 N=38000+）。目录命中后直接按 key 取值，
+     * 不再对全量 entries 做第二轮 O(N×M) 扫描。
+     *
      * @param keyword 搜索词（可能是目录名或文件名片段）
      * @return 匹配的歌曲；按目录聚合，同目录歌曲归在一起
      */
@@ -204,28 +272,47 @@ class BaiduFileIndexCache(context: Context) {
         val k = keyword.trim().lowercase()
         if (k.isBlank()) return emptyList()
 
+        val di = getOrBuildDirIndex()
+
         // 双向 contains 匹配"直接父目录名"：
         // - 目录名包含关键词（如目录"粤语经典"匹配搜"粤语"）
         // - 关键词包含目录名（如关键词"粤语歌"匹配目录"粤语"——发现页传展开后的关键词）
         // 这样发现页选"粤语"维度时，传来的"粤语歌/粤语歌曲"也能匹配到目录"粤语"
-        val dirHits = index.entries.filter { entry ->
-            val parentDir = entry.path.substringBeforeLast('/').substringAfterLast('/')
-            val dir = parentDir.lowercase()
+        val matchedDirKeys = di.keys.filter { dirKey ->
+            val dir = dirKey.lowercase()
             dir.contains(k) || k.contains(dir)
         }
 
-        if (dirHits.isNotEmpty()) {
-            // 命中目录：按"所属目录"分组，返回所有命中目录下的全部条目（去重 fsId）
-            val matchedDirs = dirHits.map { it.path.substringBeforeLast('/') }.toSet()
-            val result = index.entries
-                .filter { entry -> matchedDirs.any { dir -> entry.path.startsWith("$dir/") } }
-                .distinctBy { it.fsId }
+        if (matchedDirKeys.isNotEmpty()) {
+            // 命中目录：直接从目录映射取值，不再全量扫描 entries
+            val seen = mutableSetOf<Long>()
+            val result = matchedDirKeys.flatMap { dirKey ->
+                di[dirKey].orEmpty().filter { seen.add(it.fsId) }
+            }
             val songs = result.map { it.toSong(coverUrl = it.coverUrl) }
             return if (limit > 0) songs.take(limit) else songs
         }
 
         // 无目录命中：回退文件名/歌手匹配
         return search(keyword, limit)
+    }
+
+    /**
+     * 获取或构建目录索引：parentDir → entries。
+     * 惰性构建，首次 [searchByDirectory] 调用时 O(N) 遍历一次，后续调用复用。
+     * 索引 [save]/[load] 时自动失效重建。
+     */
+    private fun getOrBuildDirIndex(): Map<String, List<BaiduIndexEntry>> {
+        dirIndex?.let { return it }
+        val index = cachedIndex ?: return emptyMap()
+        val map = index.entries.groupBy { entry ->
+            // parentDir = path 去掉尾部文件名后的目录路径
+            entry.path.substringBeforeLast('/')
+        }
+        synchronized(cacheLock) {
+            if (dirIndex == null) dirIndex = map
+        }
+        return dirIndex!!
     }
 
     /** 按 fs_id 反查 path（MV 同目录同名匹配用） */

@@ -1749,7 +1749,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
                     searchType = currentSearchType,
                     nasLocalSongs = _songsPaging.value.songs,
                     localDeviceSongs = _localSongs.value,
-                    baiduLocalSongs = baiduIndexCache.allSongs()
+                    baiduLocalSongs = baiduIndexCache.searchSongs(query, pinyinMatch = true)
                 )
                 val songs = result.allResults.map { it.song }
                 _searchResults.value = UiState.Success(songs)
@@ -2290,7 +2290,7 @@ showError(getApplication<Application>().getString(R.string.toggle_favorite_error
             val nasAlbums = _albums.value.dataOrNull() ?: emptyList()
             val nasArtists = _artists.value.dataOrNull() ?: emptyList()
             val localSongs = _localSongs.value
-            val baiduSongs = baiduIndexCache.allSongs()
+            val baiduSongs = baiduIndexCache.allSongs()  // 全量加载一次，供 buildBaiduAlbums/buildBaiduArtists 共用
 
             var mergedAlbums = MusicMerger.mergeAlbums(
                 nasAlbums = nasAlbums,
@@ -2320,24 +2320,26 @@ showError(getApplication<Application>().getString(R.string.toggle_favorite_error
             }
             _mergedArtists.value = mergedArtists
 
-            // 用全量歌曲反向统计艺术家 songCount
-            updateArtistSongCounts()
+            // 用全量歌曲反向统计艺术家 songCount（复用已加载的 baiduSongs，避免再次 allSongs()）
+            updateArtistSongCounts(baiduSongs)
 
             // 异步解析缺失封面（百度侧车/APIC → iTunes → 本地ID3 → 歌曲 coverUrl 兜底）
-            resolveAlbumCoversAsync()
+            resolveAlbumCoversAsync(baiduSongs)
             // 异步解析缺失的艺术家封面（iTunes → 百度音乐）。
             // 读 _mergedArtists 覆盖 NAS + 本地 + 百度三个来源；
             // 百度/本地艺术家在 updateMergedData 生成，此前只靠 loadArtists（NAS 连接）触发导致漏解析。
-            resolveArtistCoversAsync()
+            resolveArtistCoversAsync(baiduSongs)
         }
     }
 
     /**
      * 用全量歌曲（NAS + 本地 + 百度）反向统计每个艺术家的歌曲数，
      * 使艺术家卡片立即显示正确的 songCount，不必等到详情页加载。
+     *
+     * @param baiduSongs 已加载的百度歌曲列表（由 updateMergedData 传入，避免重复 allSongs()）
      */
-    private fun updateArtistSongCounts() {
-        val allSongs = _songsPaging.value.songs + _localSongs.value + baiduIndexCache.allSongs()
+    private fun updateArtistSongCounts(baiduSongs: List<Song> = baiduIndexCache.allSongs()) {
+        val allSongs = _songsPaging.value.songs + _localSongs.value + baiduSongs
         // 按 ArtistSplitter 拆分后的艺术家名统计歌曲数
         val artistSongCounts = mutableMapOf<String, Int>()
         for (song in allSongs) {
@@ -2412,7 +2414,7 @@ showError(getApplication<Application>().getString(R.string.toggle_favorite_error
     /** 单个艺术家最多解析封面的次数（含首次），保留 1 次重试以容忍瞬时网络失败 */
     private val artistCoverMaxAttempts = 2
 
-    private fun resolveAlbumCoversAsync() {
+    private fun resolveAlbumCoversAsync(cachedBaiduSongs: List<Song>? = null) {
         // 收敛护栏：只对「仍缺封面」且「尝试次数未达上限」的专辑发起解析。
         // 全部已解析或已达上限时直接返回，切断 updateMergedData ↔ 本方法 的循环。
         val pending = _mergedAlbums.value.filter {
@@ -2426,7 +2428,7 @@ showError(getApplication<Application>().getString(R.string.toggle_favorite_error
         if (coverResolveJob?.isActive == true) return
 
         coverResolveJob = viewModelScope.launch {
-            val allSongs = _songsPaging.value.songs + _localSongs.value + baiduIndexCache.allSongs()
+            val allSongs = _songsPaging.value.songs + _localSongs.value + (cachedBaiduSongs ?: baiduIndexCache.allSongs())
             for (album in pending) {
                 albumCoverAttempts[album.id] = (albumCoverAttempts[album.id] ?: 0) + 1
             }
@@ -2458,7 +2460,7 @@ showError(getApplication<Application>().getString(R.string.toggle_favorite_error
         }
     }
 
-    private fun resolveArtistCoversAsync() {
+    private fun resolveArtistCoversAsync(cachedBaiduSongs: List<Song>? = null) {
         // 收敛护栏：只对「仍缺封面」且「尝试次数未达上限」的艺术家发起解析。
         // 读取合并后的 _mergedArtists（NAS + 本地 + 百度），确保百度/本地艺术家也被覆盖。
         // 全部已解析或已达上限时直接返回，切断 updateMergedData ↔ 本方法 的循环。
@@ -2474,7 +2476,7 @@ showError(getApplication<Application>().getString(R.string.toggle_favorite_error
                 artistCoverAttempts[artist.id] = (artistCoverAttempts[artist.id] ?: 0) + 1
             }
             // 全量歌曲（NAS + 本地 + 百度），用于 P4 歌曲封面兜底
-            val allSongs = _songsPaging.value.songs + _localSongs.value + baiduIndexCache.allSongs()
+            val allSongs = _songsPaging.value.songs + _localSongs.value + (cachedBaiduSongs ?: baiduIndexCache.allSongs())
             nasMusicApp.artistCoverResolver.resolveCovers(pending, allSongs) { updated ->
                 // 仅更新封面缓存，不直接写 _mergedArtists（避免与 updateMergedData 竞争覆盖）
                 var added = 0
@@ -2553,10 +2555,10 @@ showError(getApplication<Application>().getString(R.string.toggle_favorite_error
                     src.startsWith("local_album_") -> {
                         // 本地专辑详情：同时列出本地 + 百度同名歌（保留原行为）
                         collected += filterSongsByAlbumName(albumName, _localSongs.value)
-                        collected += filterSongsByAlbumName(albumName, baiduIndexCache.allSongs())
+                        collected += baiduIndexCache.songsByAlbumName(albumName)
                     }
                     src.startsWith("baidu_album_") -> {
-                        collected += filterSongsByAlbumName(albumName, baiduIndexCache.allSongs())
+                        collected += baiduIndexCache.songsByAlbumName(albumName)
                     }
                     else -> {
                         if (adapter != null) {
@@ -2567,7 +2569,7 @@ showError(getApplication<Application>().getString(R.string.toggle_favorite_error
                             }
                         } else {
                             // 无 NAS 连接：用已加载歌曲按名兜底（保留原无 NAS 行为）
-                            val candidates = _localSongs.value + baiduIndexCache.allSongs() + _songsPaging.value.songs
+                            val candidates = _localSongs.value + baiduIndexCache.songsByAlbumName(albumName) + _songsPaging.value.songs
                             collected += filterSongsByAlbumName(albumName, candidates)
                         }
                     }
@@ -2608,10 +2610,10 @@ showError(getApplication<Application>().getString(R.string.toggle_favorite_error
                 when {
                     src.startsWith("local_album_") -> {
                         collected += filterSongsByAlbumName(albumName, _localSongs.value)
-                        collected += filterSongsByAlbumName(albumName, baiduIndexCache.allSongs())
+                        collected += baiduIndexCache.songsByAlbumName(albumName)
                     }
                     src.startsWith("baidu_album_") -> {
-                        collected += filterSongsByAlbumName(albumName, baiduIndexCache.allSongs())
+                        collected += baiduIndexCache.songsByAlbumName(albumName)
                     }
                     else -> {
                         if (adapter != null) {
@@ -2622,7 +2624,7 @@ showError(getApplication<Application>().getString(R.string.toggle_favorite_error
                                 showError(getApplication<Application>().getString(R.string.load_album_songs_error, e.message?.take(50)))
                             }
                         } else {
-                            val candidates = _localSongs.value + baiduIndexCache.allSongs() + _songsPaging.value.songs
+                            val candidates = _localSongs.value + baiduIndexCache.songsByAlbumName(albumName) + _songsPaging.value.songs
                             collected += filterSongsByAlbumName(albumName, candidates)
                         }
                     }

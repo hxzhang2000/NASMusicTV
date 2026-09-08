@@ -5,6 +5,7 @@ import com.nasmusic.tv.data.model.Song
 import com.nasmusic.tv.data.prefs.AppPreferences
 import com.nasmusic.tv.util.AppLog
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
 import kotlinx.coroutines.withContext
 
 /**
@@ -59,25 +60,28 @@ class BaiduNetdiskService(
 
     /**
      * 搜索内部实现：本地索引命中 + 百度 search API 补全，合并去重。
+     * 本地索引和 API 并行执行（[async]），本地索引毫秒级返回不阻塞 API 调用。
      * [localSearch] 在 IO 上下文内执行，避免文件 I/O 阻塞调用线程。
      */
     private suspend fun searchInternal(
         keyword: String,
         localSearch: () -> List<Song>
     ): List<Song> = withContext(Dispatchers.IO) {
-        // 1. 查本地索引（毫秒级，可能不完整，但已有关键词精确过滤）
-        val localHits = localSearch()
-
-        // 2. 再调百度 search API 补全本地索引缺失的结果
-        val apiHits = try {
-            val rootDir = prefs.getBaiduMusicRootDirSync().ifBlank { BaiduNetdiskConfig.APP_DIR }
-            api.searchAudio(keyword, dir = rootDir).map { it.toSong() }
-        } catch (e: Exception) {
-            AppLog.w(TAG, "search API failed, fallback to index only", e)
-            emptyList()
+        // 本地索引和 API 并行：本地索引毫秒级，API 通常 2-5s，并行不浪费时间
+        val localDeferred = async { localSearch() }
+        val apiDeferred = async {
+            try {
+                val rootDir = prefs.getBaiduMusicRootDirSync().ifBlank { BaiduNetdiskConfig.APP_DIR }
+                api.searchAudio(keyword, dir = rootDir).map { it.toSong() }
+            } catch (e: Exception) {
+                AppLog.w(TAG, "search API failed, fallback to index only", e)
+                emptyList()
+            }
         }
+        val localHits = localDeferred.await()
+        val apiHits = apiDeferred.await()
 
-        // 3. 合并去重（id = ntwk_baidu_${fs_id}），本地索引优先保持顺序
+        // 合并去重（id = ntwk_baidu_${fs_id}），本地索引优先保持顺序
         if (apiHits.isEmpty()) return@withContext localHits
         val seen = HashSet<String>(localHits.size + apiHits.size)
         (localHits + apiHits).filter { seen.add(it.id) }
