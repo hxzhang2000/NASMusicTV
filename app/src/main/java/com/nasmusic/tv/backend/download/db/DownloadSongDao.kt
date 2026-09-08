@@ -39,6 +39,14 @@ interface DownloadSongDao {
     @Query("SELECT COUNT(*) FROM download_songs WHERE status = 'COMPLETED'")
     suspend fun countCompleted(): Int
 
+    /** 已下载歌词数（内嵌或旁路 .lrc 文件） */
+    @Query("SELECT COUNT(*) FROM download_songs WHERE status = 'COMPLETED' AND (embedded = 1 OR lyricPath IS NOT NULL)")
+    suspend fun countLyrics(): Int
+
+    /** 已下载封面数（内嵌或旁路 .jpg 文件） */
+    @Query("SELECT COUNT(*) FROM download_songs WHERE status = 'COMPLETED' AND (embedded = 1 OR coverPath IS NOT NULL)")
+    suspend fun countCovers(): Int
+
     @Upsert
     suspend fun upsert(e: DownloadSongEntity)
 

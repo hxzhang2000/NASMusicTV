@@ -680,8 +680,11 @@ fun AppRoot(
                     val modelSizeMB by viewModel.modelSizeMB.collectAsState()
                     val modelDownloadError by viewModel.modelDownloadError.collectAsState()
                     val modelPath by viewModel.modelPath.collectAsState()
-                    // 进入设置页时刷新模型状态（检查文件是否已下载）
-                    LaunchedEffect(Unit) { viewModel.refreshModelStatus() }
+                    // 进入设置页时刷新模型状态（检查文件是否已下载）和下载统计
+                    LaunchedEffect(Unit) {
+                        viewModel.refreshModelStatus()
+                        viewModel.refreshDownloadStats()
+                    }
                     SettingsScreen(
                         settings = settings,
                         onToggleDarkTheme = { viewModel.updateDarkTheme(it) },
@@ -806,6 +809,7 @@ fun AppRoot(
                     onChangeAutoDownloadLimit = { viewModel.updateAutoDownloadLimit(it) },
                     onChangeDownloadLocation = { viewModel.updateDownloadLocation(it) },
                     onClearAllDownloads = { viewModel.clearAllDownloads() },
+                    downloadStats = viewModel.downloadStats.collectAsState().value,
                     // 导出到外接设备
                     exportState = viewModel.exportState.collectAsState().value,
                     onExportToDevice = { viewModel.showExportDeviceDialog() },

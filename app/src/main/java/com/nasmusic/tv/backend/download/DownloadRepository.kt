@@ -50,6 +50,18 @@ class DownloadRepository(
     suspend fun countAutoCompleted(): Int = withContext(Dispatchers.IO) { dao.countAutoCompleted() }
     suspend fun countCompleted(): Int = withContext(Dispatchers.IO) { dao.countCompleted() }
     suspend fun sumCompletedSize(): Long = withContext(Dispatchers.IO) { dao.sumCompletedSize() }
+    suspend fun countLyrics(): Int = withContext(Dispatchers.IO) { dao.countLyrics() }
+    suspend fun countCovers(): Int = withContext(Dispatchers.IO) { dao.countCovers() }
+
+    /** 聚合下载统计信息（供设置页一次性获取） */
+    suspend fun getDownloadStats(): DownloadStats = withContext(Dispatchers.IO) {
+        DownloadStats(
+            songCount = dao.countCompleted(),
+            lyricsCount = dao.countLyrics(),
+            coverCount = dao.countCovers(),
+            totalBytes = dao.sumCompletedSize()
+        )
+    }
 
     suspend fun upsert(e: DownloadSongEntity) = withContext(Dispatchers.IO) { dao.upsert(e) }
 
@@ -162,3 +174,11 @@ class DownloadRepository(
         createdAt = System.currentTimeMillis()
     )
 }
+
+/** 下载统计信息（供设置页展示） */
+data class DownloadStats(
+    val songCount: Int = 0,
+    val lyricsCount: Int = 0,
+    val coverCount: Int = 0,
+    val totalBytes: Long = 0L
+)

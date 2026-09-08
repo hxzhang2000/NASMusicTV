@@ -143,6 +143,8 @@ fun SettingsScreen(
     onChangeAutoDownloadLimit: ((Int) -> Unit)? = null,
     onChangeDownloadLocation: ((String) -> Unit)? = null,
     onClearAllDownloads: (() -> Unit)? = null,
+    // 下载统计信息
+    downloadStats: com.nasmusic.tv.backend.download.DownloadStats = com.nasmusic.tv.backend.download.DownloadStats(),
     // 导出到外接设备
     exportState: com.nasmusic.tv.backend.export.ExportState = com.nasmusic.tv.backend.export.ExportState.Idle,
     onExportToDevice: (() -> Unit)? = null,
@@ -629,6 +631,20 @@ fun SettingsScreen(
                 }
                 SettingsSection.DOWNLOAD -> {
                     item { SectionTitle(stringResource(R.string.settings_download)) }
+                    // 下载统计信息
+                    item { SubSectionTitle(stringResource(R.string.settings_download_stats)) }
+                    item {
+                        Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp)) {
+                            val stats = downloadStats
+                            InfoRow(stringResource(R.string.settings_download_stats_songs), stats.songCount.toString())
+                            InfoRow(stringResource(R.string.settings_download_stats_lyrics), stats.lyricsCount.toString())
+                            InfoRow(stringResource(R.string.settings_download_stats_covers), stats.coverCount.toString())
+                            InfoRow(
+                                stringResource(R.string.settings_download_stats_size),
+                                formatBytes(stats.totalBytes)
+                            )
+                        }
+                    }
                     item { SubSectionTitle(stringResource(R.string.settings_download_basic)) }
                     item {
                         SettingSwitch(
@@ -2475,5 +2491,39 @@ private fun AdjustButton(text: String, onClick: () -> Unit) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Text(text = text, color = NasMusicColors.TextPrimary, fontSize = FontSize.title(), fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
         }
+    }
+}
+
+/** 下载统计行：标签 + 值 */
+@Composable
+private fun InfoRow(label: String, value: String) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = label,
+            color = NasMusicColors.TextSecondary,
+            fontSize = FontSize.body()
+        )
+        Text(
+            text = value,
+            color = NasMusicColors.TextPrimary,
+            fontSize = FontSize.body(),
+            fontWeight = androidx.compose.ui.text.font.FontWeight.Medium
+        )
+    }
+}
+
+/** 格式化字节数为人类可读字符串 */
+private fun formatBytes(bytes: Long): String {
+    if (bytes <= 0) return "0 MB"
+    val mb = bytes / (1024.0 * 1024.0)
+    val gb = mb / 1024.0
+    return when {
+        gb >= 1.0 -> String.format(java.util.Locale.US, "%.2f GB", gb)
+        mb >= 1.0 -> String.format(java.util.Locale.US, "%.1f MB", mb)
+        else -> String.format(java.util.Locale.US, "%.1f KB", bytes / 1024.0)
     }
 }

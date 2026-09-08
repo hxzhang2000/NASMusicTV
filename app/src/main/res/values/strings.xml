@@ -297,6 +297,11 @@
     <string name="settings_playback">播放</string>
     <string name="settings_download">下载</string>
     <string name="settings_download_basic">下载设置</string>
+    <string name="settings_download_stats">下载统计</string>
+    <string name="settings_download_stats_songs">已下载歌曲</string>
+    <string name="settings_download_stats_lyrics">已下载歌词</string>
+    <string name="settings_download_stats_covers">已下载封面</string>
+    <string name="settings_download_stats_size">占用空间</string>
     <string name="settings_download_enabled">启用下载</string>
     <string name="settings_download_enabled_desc">关闭后停止所有下载（已下载歌曲仍可播放）</string>
     <string name="settings_auto_download_on_play">播放时自动下载</string>

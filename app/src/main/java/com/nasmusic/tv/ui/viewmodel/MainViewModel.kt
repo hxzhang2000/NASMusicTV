@@ -13,6 +13,7 @@ import com.nasmusic.tv.backend.FilterMode
 import com.nasmusic.tv.backend.SearchType
 import com.nasmusic.tv.backend.SearchAggregator
 import com.nasmusic.tv.backend.download.AutoDownloadController
+import com.nasmusic.tv.backend.download.DownloadStats
 import com.nasmusic.tv.backend.download.SongDownloadManager
 import com.nasmusic.tv.backend.download.model.DownloadState
 import com.nasmusic.tv.backend.download.model.downloadKey
@@ -974,6 +975,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
                         lastCompletedCount = completedCount
                         _localSongs.value = nasMusicApp.localMusicRepository.loadFromCache()
                         updateMergedData()
+                        // 刷新下载统计
+                        _downloadStats.value = nasMusicApp.downloadRepository.getDownloadStats()
                     }
                 }
         }
@@ -3412,6 +3415,18 @@ showError(getApplication<Application>().getString(R.string.play_failed_with_msg,
     val songDownloadStates: StateFlow<Map<String, DownloadState>>
         get() = songDownloadManager.downloadStates
 
+    /** 下载统计信息（歌曲数/歌词数/封面数/占用空间），供设置页展示 */
+    private val _downloadStats = MutableStateFlow(DownloadStats())
+    val downloadStats: StateFlow<DownloadStats> = _downloadStats.asStateFlow()
+
+    /** 刷新下载统计（设置页进入时 + 下载完成时调用） */
+    fun refreshDownloadStats() {
+        viewModelScope.launch {
+            val app = getApplication<NasMusicApp>()
+            _downloadStats.value = app.downloadRepository.getDownloadStats()
+        }
+    }
+
     /** 刷新模型下载状态（启动时/设置页进入时调用） */
     fun refreshModelStatus() {
         val mgr = modelDownloadManager
@@ -4383,6 +4398,9 @@ showError(getApplication<Application>().getString(R.string.play_failed_with_msg,
             _connectMessage.value = msg
             delay(2000)
             _connectMessage.value = null
+
+            // 刷新下载统计
+            _downloadStats.value = DownloadStats()
         }
     }
 
@@ -4433,6 +4451,9 @@ showError(getApplication<Application>().getString(R.string.play_failed_with_msg,
             _connectMessage.value = msg
             delay(2000)
             _connectMessage.value = null
+
+            // 刷新下载统计
+            _downloadStats.value = app.downloadRepository.getDownloadStats()
         }
     }
 

@@ -297,6 +297,11 @@
     <string name="settings_playback">Playback</string>
     <string name="settings_download">Downloads</string>
     <string name="settings_download_basic">Download Settings</string>
+    <string name="settings_download_stats">Download Statistics</string>
+    <string name="settings_download_stats_songs">Downloaded songs</string>
+    <string name="settings_download_stats_lyrics">Downloaded lyrics</string>
+    <string name="settings_download_stats_covers">Downloaded covers</string>
+    <string name="settings_download_stats_size">Storage used</string>
     <string name="settings_download_enabled">Enable Downloads</string>
     <string name="settings_download_enabled_desc">Disable to stop all downloads (downloaded songs still playable)</string>
     <string name="settings_auto_download_on_play">Auto-download on play</string>
