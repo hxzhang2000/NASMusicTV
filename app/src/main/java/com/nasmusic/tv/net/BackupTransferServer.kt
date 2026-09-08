@@ -211,29 +211,37 @@ function restoreBackup(name){
 
 function uploadBackup(){
   var input=document.getElementById('fileInput');
-  if(!input.files||!input.files[0])return;
+  if(!input.files||input.files.length===0)return;
   var file=input.files[0];
   var btn=document.getElementById('uploadBtn');
   btn.disabled=true;
   btn.textContent=STR.uploading;
   showStatus('${context.getString(R.string.html_backup_status_uploading).replace("'", "\\'")}'.replace('%s',file.name),'');
-  file.text().then(function(text){
-    return fetch('/api/upload',{method:'POST',body:text});
-  }).then(function(r){return r.json()})
-    .then(function(d){
-      showStatus(d.message, d.ok?'ok':'err');
-      if(d.ok){
-        input.value='';
-        loadBackups();
-      }
-    })
-    .catch(function(e){showStatus(STR.uploadFailed,'err');})
-    .finally(function(){
-      btn.disabled=false;
-      btn.textContent=STR.uploadBtn;
-      var hasFile=input.files&&input.files[0];
-      if(!hasFile)btn.disabled=true;
-    });
+  var reader=new FileReader();
+  reader.onload=function(){
+    fetch('/api/upload',{method:'POST',body:reader.result})
+      .then(function(r){return r.json()})
+      .then(function(d){
+        showStatus(d.message, d.ok?'ok':'err');
+        if(d.ok){
+          input.value='';
+          loadBackups();
+        }
+      })
+      .catch(function(e){showStatus(STR.uploadFailed,'err');})
+      .finally(function(){
+        btn.disabled=false;
+        btn.textContent=STR.uploadBtn;
+        var hasFile=input.files&&input.files.length>0;
+        if(!hasFile)btn.disabled=true;
+      });
+  };
+  reader.onerror=function(){
+    showStatus(STR.uploadFailed,'err');
+    btn.disabled=false;
+    btn.textContent=STR.uploadBtn;
+  };
+  reader.readAsText(file);
 }
 
 function showStatus(msg,type){
@@ -242,10 +250,13 @@ function showStatus(msg,type){
   s.className='status'+(type?' '+type:'');
 }
 
-document.getElementById('fileInput').addEventListener('change',function(){
-  var hasFile=this.files&&this.files[0];
+var fileInput=document.getElementById('fileInput');
+function updateUploadBtn(){
+  var hasFile=fileInput.files&&fileInput.files.length>0;
   document.getElementById('uploadBtn').disabled=!hasFile;
-});
+}
+fileInput.addEventListener('change',updateUploadBtn);
+fileInput.addEventListener('input',updateUploadBtn);
 
 loadBackups();
 </script>
