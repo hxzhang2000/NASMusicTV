@@ -48,23 +48,23 @@ enum class SearchType {
  * 并行搜索 NAS、网络音乐、百度网盘、Jamendo、本地音乐五个数据源，
  * 合并去重后返回统一结果。单个源超时或异常不影响其他源。
  *
- * 超时策略：NAS 5s、网络音乐 5s、百度网盘 8s、Jamendo 5s、本地 2s
- */
-class SearchAggregator(
-    private val backendAdapter: BackendAdapter?,
-    private val networkMusicManager: NetworkMusicManager?,
-    private val baiduService: BaiduNetdiskService?,
-    private val jamendoService: JamendoService?,
-    private val localMusicRepository: LocalMusicRepository? = null,
-    private val isTVDevice: Boolean = false
-) {
-    companion object {
-        private const val TAG = "SearchAggregator"
-        private const val NAS_TIMEOUT = 5_000L
-        private const val NETWORK_TIMEOUT = 5_000L
-        private const val BAIDU_TIMEOUT = 8_000L
-        private const val JAMENDO_TIMEOUT = 5_000L
-        private const val LOCAL_TIMEOUT = 2_000L
+     * 超时策略：NAS 15s、网络音乐 5s、百度网盘 8s、Jamendo 5s、本地 2s
+     */
+    class SearchAggregator(
+        private val backendRegistry: BackendRegistry?,
+        private val networkMusicManager: NetworkMusicManager?,
+        private val baiduService: BaiduNetdiskService?,
+        private val jamendoService: JamendoService?,
+        private val localMusicRepository: LocalMusicRepository? = null,
+        private val isTVDevice: Boolean = false
+    ) {
+        companion object {
+            private const val TAG = "SearchAggregator"
+            private const val NAS_TIMEOUT = 15_000L
+            private const val NETWORK_TIMEOUT = 5_000L
+            private const val BAIDU_TIMEOUT = 8_000L
+            private const val JAMENDO_TIMEOUT = 5_000L
+            private const val LOCAL_TIMEOUT = 2_000L
     }
 
     /**
@@ -111,6 +111,9 @@ class SearchAggregator(
 
         // 为每个源创建独立协程，并行搜索
         val nasDeferred = async {
+            // 实时从 registry 获取当前 adapter：SearchAggregator 在 onCreate 时创建，
+            // 此时 NAS 可能未连接（adapter=null）；用户后续连接后需实时拿到新 adapter
+            val backendAdapter = backendRegistry?.getAdapter()
             if (MusicSourceType.NAS in sources && backendAdapter != null) {
                 try {
                     if (isPinyinQuery && nasLocalSongs.isNotEmpty() && isTVDevice) {

@@ -352,7 +352,7 @@ class NasMusicApp : Application(), ImageLoaderFactory {
         val isTVDevice = packageManager.hasSystemFeature("android.software.leanback") ||
                 packageManager.hasSystemFeature("android.hardware.type.television")
         searchAggregator = SearchAggregator(
-            backendAdapter = backendRegistry.getAdapter(),
+            backendRegistry = backendRegistry,
             networkMusicManager = networkMusicManager,
             baiduService = baiduNetdiskService,
             jamendoService = jamendoService,

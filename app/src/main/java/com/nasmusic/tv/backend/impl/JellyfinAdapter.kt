@@ -16,6 +16,7 @@ import com.nasmusic.tv.util.EncodingUtils
 import com.nasmusic.tv.util.RetryConfig
 import com.nasmusic.tv.util.withRetry
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -394,7 +395,12 @@ class JellyfinAdapter : BackendAdapter {
         try {
             val fields = "PrimaryImageAspectRatio,SortName,ParentId,RunTimeTicks"
             val encodedQuery = java.net.URLEncoder.encode(query, "UTF-8")
-            val url = "$baseUrl/Items?" +
+
+            // Jellyfin 的 SearchTerm 只搜索 Name/SortName 字段，不搜索 Artists 字段。
+            // 需要两条查询并行：
+            //   1. SearchTerm=赵传 → 歌名包含"赵传"的歌曲
+            //   2. Artists=赵传    → 艺术家为"赵传"的歌曲（Jellyfin 对 Artists 数组逐项精确匹配）
+            val nameSearchUrl = "$baseUrl/Items?" +
                     "SearchTerm=$encodedQuery&" +
                     "IncludeItemTypes=Audio&" +
                     "Recursive=true&" +
@@ -402,9 +408,45 @@ class JellyfinAdapter : BackendAdapter {
                     "UserId=$userId&" +
                     "StartIndex=0&Limit=200"
 
-            val json = executeJsonRequest(url) ?: return@withContext emptyList<Song>()
-            val items = json.getAsJsonArray("Items") ?: return@withContext emptyList<Song>()
-            items.mapNotNull { jsonObjectToSong(it.asJsonObject, null) }
+            val artistSearchUrl = "$baseUrl/Items?" +
+                    "Artists=$encodedQuery&" +
+                    "IncludeItemTypes=Audio&" +
+                    "Recursive=true&" +
+                    "fields=$fields&" +
+                    "UserId=$userId&" +
+                    "StartIndex=0&Limit=200"
+
+            // 并行发起两条查询
+            val nameResults = mutableListOf<Song>()
+            val artistResults = mutableListOf<Song>()
+
+            val jobs = listOf(
+                async {
+                    val json = executeJsonRequest(nameSearchUrl)
+                    val items = json?.getAsJsonArray("Items")
+                    items?.mapNotNull { jsonObjectToSong(it.asJsonObject, null) }
+                        ?.let { nameResults.addAll(it) }
+                },
+                async {
+                    val json = executeJsonRequest(artistSearchUrl)
+                    val items = json?.getAsJsonArray("Items")
+                    items?.mapNotNull { jsonObjectToSong(it.asJsonObject, null) }
+                        ?.let { artistResults.addAll(it) }
+                }
+            )
+            jobs.forEach { it.await() }
+
+            // 合并去重（按 song id 去重，歌名搜索结果优先）
+            val seen = mutableSetOf<String>()
+            val merged = mutableListOf<Song>()
+            for (song in (nameResults + artistResults)) {
+                if (song.id !in seen) {
+                    seen.add(song.id)
+                    merged.add(song)
+                }
+            }
+            AppLog.d("JellyfinAdapter", "searchSongs: nameSearch=${nameResults.size}, artistSearch=${artistResults.size}, merged=${merged.size}")
+            merged
         } catch (e: Exception) {
             AppLog.e("JellyfinAdapter", "searchSongs failed", e)
             emptyList()

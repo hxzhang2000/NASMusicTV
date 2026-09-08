@@ -235,7 +235,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
     // --- 按需加载：歌曲分页状态 ---
     private val _songsPaging = MutableStateFlow(SongsPagingState())
     val songsPaging: StateFlow<SongsPagingState> = _songsPaging.asStateFlow()
-    private val pageSize = 200
+    private val pageSize = 500
     /** 网络音乐"播放全部"单次加入队列的上限（去重后取前 N 首） */
     private val maxNetworkBatchPlayCount = 30
 
@@ -1396,13 +1396,15 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
                 return@launch
             }
 
-            // 并行加载专辑、流派、收藏（秒级响应）
-            val albumsDeferred = async {
+            // 专辑、流派、收藏并行异步加载——不互相阻塞，也不阻塞首页就绪状态
+            // 大曲库（3万+首）下 getAlbums 可能需要数十秒，不应阻塞 _isLibraryLoading
+            launch {
                 try {
                     AppLog.d("NASMusic", "loadLibrary: loading albums...")
                     val loadedAlbums = adapter.getAlbums()
                     _albums.value = UiState.Success(loadedAlbums)
                     AppLog.d("NASMusic", "loadLibrary: ${loadedAlbums.size} albums loaded")
+                    loadHomeDashboard()
                 } catch (e: Exception) {
                     AppLog.e("NASMusic", "loadLibrary albums failed", e)
                     _albums.value = UiState.Error(
@@ -1412,25 +1414,22 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
                 }
             }
 
-            val genresDeferred = async { loadGenres(adapter) }
-            val favoritesDeferred = async { loadFavorites(adapter) }
+            launch { loadGenres(adapter) }
+            launch { loadFavorites(adapter) }
 
-            albumsDeferred.await()
-            genresDeferred.await()
-            favoritesDeferred.await()
-
-            // 全量加载艺术家列表（数据量通常比专辑少，提前加载让 ARTISTS Tab 免等待）
-            loadArtists()
+            // 艺术家列表异步加载（不阻塞首页就绪）
+            launch { loadArtists() }
 
             // 后台逐步加载全量歌曲：每加载一页立即显示，继续加载直到全部完成
             _songsPaging.value = SongsPagingState()
             loadAllSongsBackground()
 
-            // 加载随机歌曲（随心听）
-            loadRandomSongs(adapter)
+            // 随心听随机歌曲异步加载（不阻塞首页就绪状态）
+            launch { loadRandomSongs(adapter) }
 
+            // 首页立即就绪——各数据源异步完成后自动更新 UI
             _isLibraryLoading.value = false
-            AppLog.d("NASMusic", "loadLibrary: initial data loaded (albums/genres/favorites), starting background song loading")
+            AppLog.d("NASMusic", "loadLibrary: dispatched all async loads, home ready")
         }
     }
 
@@ -1722,7 +1721,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
         val currentSearchType = when (_libraryActiveTab.value) {
             LibraryTab.ALBUMS -> SearchType.ALBUM
             LibraryTab.ARTISTS -> SearchType.ARTIST
-            LibraryTab.SONGS -> SearchType.SONG_NAME_ONLY
+            LibraryTab.SONGS -> SearchType.SONG_NAME_OR_ARTIST
             else -> SearchType.SONG_NAME_OR_ARTIST
         }
         if (!force && query == lastSearchedKeyword && currentSearchType == lastSearchType) {

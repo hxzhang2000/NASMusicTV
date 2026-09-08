@@ -7,6 +7,19 @@
 >
 > 类型：`Added`（新增） | `Changed`（变更） | `Fixed`（修复） | `Removed`（移除）
 
+## [v2.26.36] - 2026-09-08
+
+### Fixed
+
+- **搜索艺术家名无法返回对应歌曲**：Jellyfin 的 `SearchTerm` 参数只搜索 `Name`/`SortName` 字段（歌曲标题），不搜索 `Artists` 字段。搜"赵传"时只能搜到歌名含"赵传"的歌，艺术家为"赵传"的歌不出现。`JellyfinAdapter.searchSongs()` 增加按 `Artists=` 参数并行查询，与 `SearchTerm=` 结果合并去重。
+- **首页一直显示"加载中"**：`loadLibrary()` 中 `albumsDeferred.await()` 阻塞整个协程，大曲库（3 万+首）下 `getAlbums()` 每页 1000 条耗时 30-40 秒，多页合计数分钟，`_isLibraryLoading` 一直为 `true`。改为所有加载任务（专辑/流派/收藏/艺术家/歌曲/随心听）独立 `launch` 异步执行，首页立即就绪。
+- **艺术家详情页无法列出 NAS 歌曲**：`loadArtists()` 在 `await()` 之后才执行，`_rawArtistList` 为空导致 NAS 分支跳过。随 `loadLibrary` 异步化修复一并解决。
+- **搜索 NAS 结果被超时截断**：`SearchAggregator` 的 `NAS_TIMEOUT` 从 5s 增至 15s，防止大曲库搜索被过早截断返回空结果。
+
+### Changed
+
+- **全量歌曲分页大小**：`pageSize` 从 200 增至 500，3 万首歌的 HTTP 请求次数从约 150 次降至约 60 次，减少网络开销。
+
 ## [v2.26.35] - 2026-09-08
 
 ### Changed
