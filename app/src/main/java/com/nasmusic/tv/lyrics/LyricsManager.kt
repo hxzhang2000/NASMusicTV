@@ -32,15 +32,24 @@ class LyricsManager(
     /** 酷狗歌词端点（空字符串使用默认值） */
     kugouBaseUrl: String = "",
     /** 网易云歌词端点（空字符串使用默认值） */
-    neteaseBaseUrl: String = ""
+    neteaseBaseUrl: String = "",
+    /**
+     * F-3（R-7 并行项）：端点动态 provider（优先于上面的急切值）。
+     * 传入后设置页改歌词源 URL 即时生效（经 AppPreferences 的 @Volatile 镜像读取，无 IO）。
+     */
+    kugouBaseUrlProvider: (() -> String)? = null,
+    neteaseBaseUrlProvider: (() -> String)? = null
 ) {
 
     private val networkProvider = LyricsNetworkProvider(
-        kugouBaseUrl = kugouBaseUrl.ifBlank { LyricsNetworkProvider.DEFAULT_KUGOU_BASE_URL },
+        // F-3：优先用 provider（即时生效）；未传时回退急切值（向后兼容）
+        kugouBaseUrl = (kugouBaseUrlProvider?.invoke() ?: kugouBaseUrl)
+            .ifBlank { LyricsNetworkProvider.DEFAULT_KUGOU_BASE_URL },
         // kugouLrcUrl 独立于 kugouBaseUrl：搜索端点用 HTTP（SSL 证书不匹配），
         // 但歌词下载端点 krcs.kugou.com 的 HTTPS 正常
         kugouLrcUrl = LyricsNetworkProvider.DEFAULT_KUGOU_LRC_URL,
-        neteaseBaseUrl = neteaseBaseUrl.ifBlank { LyricsNetworkProvider.DEFAULT_NETEASE_BASE_URL }
+        neteaseBaseUrl = (neteaseBaseUrlProvider?.invoke() ?: neteaseBaseUrl)
+            .ifBlank { LyricsNetworkProvider.DEFAULT_NETEASE_BASE_URL }
     )
     private val persistentCache = LyricsPersistentCache(context)
 

@@ -32,6 +32,8 @@ import com.nasmusic.tv.util.CryptoUtils
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 
@@ -64,6 +66,75 @@ class AppPreferences internal constructor(private val context: Context) {
             File(context.filesDir, "datastore/nas_music_tv.preferences_pb")
         }
     }
+
+    // =====================================================================
+    // R-7（方案 2026-09）：
+    // 1. 语言键双写（SharedPreferences 镜像 + DataStore 事实源）——
+    //    attachBaseContext 只读镜像，零 IO、无 runBlocking（第一类修复）。
+    // 2. provider 类键的 @Volatile 内存镜像（DataStore Flow 常驻收集更新）——
+    //    get*Sync 读镜像，调用点零改动（第三类修复，路 A）。
+    // =====================================================================
+
+    /** 语言镜像（只服务冷启动 attachBaseContext，其余设置项不搞双写） */
+    private val mirrorPrefs = context.getSharedPreferences("language_mirror", Context.MODE_PRIVATE)
+
+    // ---- provider 键内存镜像（Application scope 常驻收集更新）----
+    @Volatile private var cachedMusicSource: String = com.nasmusic.tv.data.model.MusicSource.DEFAULT_API_KEY
+    @Volatile private var cachedDefaultNetworkSource: String = NetworkSource.DEFAULT.key
+    @Volatile private var cachedJamendoClientId: String = ""
+    @Volatile private var cachedMetingApiBaseUrl: String = MetingApiService.DEFAULT_BASE_URL
+    @Volatile private var cachedMvApiBaseUrl: String = BilibiliMvService.DEFAULT_BASE_URL
+    @Volatile private var cachedLyricsKugouBaseUrl: String = com.nasmusic.tv.lyrics.LyricsNetworkProvider.DEFAULT_KUGOU_BASE_URL
+    @Volatile private var cachedLyricsNeteaseBaseUrl: String = com.nasmusic.tv.lyrics.LyricsNetworkProvider.DEFAULT_NETEASE_BASE_URL
+    @Volatile private var cachedWeatherApiKey: String = ""
+
+    /** 镜像已启动收集标志（ensureMirrorScopeLoaded 只执行一次） */
+    @Volatile private var mirrorStarted = false
+    private val mirrorLock = Any()
+
+    /**
+     * 启动 provider 键镜像收集（由 NasMusicApp.onCreate 注入 applicationScope 调用，仅一次）。
+     * 设置页改动 → DataStore 写入 → Flow 发射 → @Volatile 镜像更新 → get*Sync 立即生效。
+     */
+    fun startProviderMirrors(scope: kotlinx.coroutines.CoroutineScope) {
+        synchronized(mirrorLock) {
+            if (mirrorStarted) return
+            mirrorStarted = true
+        }
+        scope.launch {
+            dataStore.data.map { it[keyMusicSource] ?: com.nasmusic.tv.data.model.MusicSource.DEFAULT_API_KEY }
+                .distinctUntilChanged().collect { cachedMusicSource = it }
+        }
+        scope.launch {
+            dataStore.data.map { it[keyDefaultNetworkSource] ?: NetworkSource.DEFAULT.key }
+                .distinctUntilChanged().collect { cachedDefaultNetworkSource = NetworkSource.fromKey(it)?.key ?: it }
+        }
+        scope.launch {
+            dataStore.data.map { it[keyJamendoClientId] ?: "" }
+                .distinctUntilChanged().collect { cachedJamendoClientId = it }
+        }
+        scope.launch {
+            dataStore.data.map { it[keyMetingApiBaseUrl] ?: MetingApiService.DEFAULT_BASE_URL }
+                .distinctUntilChanged().collect { cachedMetingApiBaseUrl = it }
+        }
+        scope.launch {
+            dataStore.data.map { it[keyMvApiBaseUrl] ?: BilibiliMvService.DEFAULT_BASE_URL }
+                .distinctUntilChanged().collect { cachedMvApiBaseUrl = it }
+        }
+        scope.launch {
+            dataStore.data.map { it[keyLyricsKugouBaseUrl] ?: com.nasmusic.tv.lyrics.LyricsNetworkProvider.DEFAULT_KUGOU_BASE_URL }
+                .distinctUntilChanged().collect { cachedLyricsKugouBaseUrl = it }
+        }
+        scope.launch {
+            dataStore.data.map { it[keyLyricsNeteaseBaseUrl] ?: com.nasmusic.tv.lyrics.LyricsNetworkProvider.DEFAULT_NETEASE_BASE_URL }
+                .distinctUntilChanged().collect { cachedLyricsNeteaseBaseUrl = it }
+        }
+        scope.launch {
+            dataStore.data.map { it[keyWeatherApiKey] ?: "" }
+                .distinctUntilChanged().collect { cachedWeatherApiKey = it }
+        }
+    }
+
 
     // --- 服务器配置 ---
     private val keyBackendType = stringPreferencesKey("server_backend_type")
@@ -154,16 +225,36 @@ class AppPreferences internal constructor(private val context: Context) {
         dataStore.edit { it[keyShowLibraryShortcutHint] = show }
     }
 
+    /**
+     * 同步获取当前语言设置。
+     *
+     * R-7 第一类修复：attachBaseContext 无法挂起，改读 SharedPreferences 镜像
+     * （[setLanguage] 双写保证一致；镜像未命中时回退默认值并打点）。
+     */
+    fun getLanguageSync(): String {
+        val mirrored = mirrorPrefs.getString("language", null)
+        return mirrored ?: "system"
+    }
+
+    /** 语言双写：DataStore 事实源 + SharedPreferences 镜像（只服务冷启动） */
     suspend fun setLanguage(lang: String) {
         dataStore.edit { it[keyLanguage] = lang }
+        mirrorPrefs.edit().putString("language", lang).apply()
     }
 
     /**
-     * 同步获取当前语言设置（用于 AppCompatDelegate.setApplicationLocales）
+     * R-7（第一类）：老版本升级迁移——DataStore 已有语言值但镜像为空时补写镜像。
+     * 由 NasMusicApp.onCreate 在首次读取镜像前调用（一次性，幂等）。
      */
-    fun getLanguageSync(): String {
-        return runBlocking(Dispatchers.IO) {
-            dataStore.data.first()[keyLanguage] ?: "system"
+    fun migrateLanguageMirrorIfNeeded() {
+        if (mirrorPrefs.contains("language")) return
+        try {
+            val stored = runBlocking(Dispatchers.IO) {
+                dataStore.data.first()[keyLanguage] ?: "system"
+            }
+            mirrorPrefs.edit().putString("language", stored).apply()
+        } catch (e: Exception) {
+            AppLog.w(TAG, "migrateLanguageMirrorIfNeeded failed", e)
         }
     }
 
@@ -559,17 +650,11 @@ class AppPreferences internal constructor(private val context: Context) {
 
     /**
      * 同步获取当前音乐平台来源（用于 MetingApiService 的 serverProvider）
-     * 在每次请求时同步读取，支持运行时切换平台
+     * 在每次请求时同步读取，支持运行时切换平台。
+     *
+     * R-7 第三类修复（路 A）：读 @Volatile 内存镜像，无 IO 无阻塞。
      */
-    fun getMusicSourceSync(): String {
-        return runBlocking(Dispatchers.IO) {
-            try {
-                dataStore.data.first()[keyMusicSource] ?: com.nasmusic.tv.data.model.MusicSource.DEFAULT_API_KEY
-            } catch (e: Exception) {
-                com.nasmusic.tv.data.model.MusicSource.DEFAULT_API_KEY
-            }
-        }
-    }
+    fun getMusicSourceSync(): String = cachedMusicSource
 
     suspend fun setMusicSource(sourceKey: String) {
         dataStore.edit { it[keyMusicSource] = sourceKey }
@@ -581,18 +666,10 @@ class AppPreferences internal constructor(private val context: Context) {
     }
 
     /**
-     * 同步读取 Jamendo Client ID（用于 JamendoService 每次请求时读取）
+     * 同步读取 Jamendo Client ID（用于 JamendoService 每次请求时读取）。
+     * R-7 第三类修复（路 A）：读 @Volatile 内存镜像。
      */
-    fun getJamendoClientIdSync(): String {
-        return runBlocking(Dispatchers.IO) {
-            try {
-                dataStore.data.first()[keyJamendoClientId] ?: ""
-            } catch (e: Exception) {
-                AppLog.w(TAG, "Failed to read jamendo client id", e)
-                ""
-            }
-        }
-    }
+    fun getJamendoClientIdSync(): String = cachedJamendoClientId
 
     // --- 天气电台设置 ---
 
@@ -637,16 +714,12 @@ class AppPreferences internal constructor(private val context: Context) {
         prefs[keyWeatherApiKey] ?: ""
     }
 
-    fun getWeatherApiKeySync(): String {
-        return runBlocking(Dispatchers.IO) {
-            try {
-                dataStore.data.first()[keyWeatherApiKey] ?: ""
-            } catch (e: Exception) {
-                AppLog.w(TAG, "Failed to read weather API key", e)
-                ""
-            }
-        }
-    }
+    /**
+     * R-7 第二类修复：天气 API Key 同步读改 @Volatile 内存镜像。
+     * 调用点 WeatherRadioViewModel.fetchWeather 在 Main 协程内——原先此处
+     * runBlocking 会冻住主线程触发 ANR。
+     */
+    fun getWeatherApiKeySync(): String = cachedWeatherApiKey
 
     suspend fun setWeatherApiKey(key: String) {
         dataStore.edit { it[keyWeatherApiKey] = key.trim() }
@@ -683,72 +756,29 @@ class AppPreferences internal constructor(private val context: Context) {
     }
 
     /**
-     * 同步获取当前默认网络源（用于 NetworkMusicManager 的 defaultSourceProvider）
-     * 在 NetworkMusicManager.search() 调用时同步读取，避免协程上下文切换
+     * 同步获取当前默认网络源（用于 NetworkMusicManager 的 defaultSourceProvider）。
+     * R-7 第三类修复（路 A）：读 @Volatile 内存镜像。
      */
-    fun getDefaultNetworkSourceSync(): String {
-        return runBlocking(Dispatchers.IO) {
-            try {
-                val stored = dataStore.data.first()[keyDefaultNetworkSource]
-                NetworkSource.fromKey(stored ?: "")?.key ?: stored ?: NetworkSource.DEFAULT.key
-            } catch (e: Exception) {
-                NetworkSource.DEFAULT.key
-            }
-        }
-    }
+    fun getDefaultNetworkSourceSync(): String = cachedDefaultNetworkSource
 
     /**
-     * 同步获取 Meting-API 端点 URL（用于 MetingApiService 的 baseUrlProvider）
-     * 在每次请求时同步读取，支持运行时切换端点
+     * 同步获取 Meting-API 端点 URL（用于 MetingApiService 的 baseUrlProvider）。
+     * R-7 第三类修复（路 A）：读 @Volatile 内存镜像。
      */
-    fun getMetingApiBaseUrlSync(): String {
-        return runBlocking(Dispatchers.IO) {
-            try {
-                dataStore.data.first()[keyMetingApiBaseUrl]
-                    ?: MetingApiService.DEFAULT_BASE_URL
-            } catch (e: Exception) {
-                MetingApiService.DEFAULT_BASE_URL
-            }
-        }
-    }
+    fun getMetingApiBaseUrlSync(): String = cachedMetingApiBaseUrl
 
     /**
-     * 同步获取 MTV 视频搜索端点 URL（用于 BilibiliMvService 的 baseUrlProvider）
-     * 在每次请求时同步读取，支持运行时切换端点
+     * 同步获取 MTV 视频搜索端点 URL（用于 BilibiliMvService 的 baseUrlProvider）。
+     * R-7 第三类修复（路 A）：读 @Volatile 内存镜像。
      */
-    fun getMvApiBaseUrlSync(): String {
-        return runBlocking(Dispatchers.IO) {
-            try {
-                dataStore.data.first()[keyMvApiBaseUrl]
-                    ?: BilibiliMvService.DEFAULT_BASE_URL
-            } catch (e: Exception) {
-                BilibiliMvService.DEFAULT_BASE_URL
-            }
-        }
-    }
+    fun getMvApiBaseUrlSync(): String = cachedMvApiBaseUrl
 
     // --- 网络歌词端点（Kugou / Netease）---
-    fun getLyricsKugouBaseUrlSync(): String {
-        return runBlocking(Dispatchers.IO) {
-            try {
-                dataStore.data.first()[keyLyricsKugouBaseUrl]
-                    ?: com.nasmusic.tv.lyrics.LyricsNetworkProvider.DEFAULT_KUGOU_BASE_URL
-            } catch (e: Exception) {
-                com.nasmusic.tv.lyrics.LyricsNetworkProvider.DEFAULT_KUGOU_BASE_URL
-            }
-        }
-    }
+    /** R-7 第三类修复（路 A）：读 @Volatile 内存镜像（原主线程急切求值 runBlocking） */
+    fun getLyricsKugouBaseUrlSync(): String = cachedLyricsKugouBaseUrl
 
-    fun getLyricsNeteaseBaseUrlSync(): String {
-        return runBlocking(Dispatchers.IO) {
-            try {
-                dataStore.data.first()[keyLyricsNeteaseBaseUrl]
-                    ?: com.nasmusic.tv.lyrics.LyricsNetworkProvider.DEFAULT_NETEASE_BASE_URL
-            } catch (e: Exception) {
-                com.nasmusic.tv.lyrics.LyricsNetworkProvider.DEFAULT_NETEASE_BASE_URL
-            }
-        }
-    }
+    /** R-7 第三类修复（路 A）：读 @Volatile 内存镜像（原主线程急切求值 runBlocking） */
+    fun getLyricsNeteaseBaseUrlSync(): String = cachedLyricsNeteaseBaseUrl
 
     suspend fun setLyricsKugouBaseUrl(url: String) =
         dataStore.edit {
@@ -1145,7 +1175,14 @@ class AppPreferences internal constructor(private val context: Context) {
     // ===================== 网盘配置（CloudDriveConfig，按 CloudDriveType 存取）=====================
     // 存储：keyCloudDriveConfig 存 JSON Map<type.key, CloudDriveConfigJson>，其中 tokens 的 accessToken/refreshToken 用 CryptoUtils 加密。
 
-    /** 同步读取某网盘配置（runBlocking，仅供 service/oauth 在初始化期使用） */
+    /**
+     * 同步读取某网盘配置。
+     *
+     * R-7 第四类：保留 runBlocking（现有调用点均在 IO 协程上下文：
+     * BaiduOAuthClient/BaiduMvFileService/BaiduNetdiskService 的 withContext(IO)、
+     * NasMusicApp.onCreate 主线程一次性初始化），禁止主线程协程内调用。
+     */
+    @androidx.annotation.WorkerThread
     fun getCloudDriveConfigSync(type: CloudDriveType): CloudDriveConfig? {
         return try {
             runBlocking(Dispatchers.IO) {
@@ -1183,7 +1220,8 @@ class AppPreferences internal constructor(private val context: Context) {
         }
     }
 
-    /** 同步保存（OAuth 客户端在非协程上下文调用） */
+    /** 同步保存（OAuth 客户端在非协程上下文调用；R-7 第四类：保留 runBlocking，禁止主线程协程内调用） */
+    @androidx.annotation.WorkerThread
     fun saveCloudDriveConfigSync(config: CloudDriveConfig) {
         runBlocking(Dispatchers.IO) { saveCloudDriveConfig(config) }
     }

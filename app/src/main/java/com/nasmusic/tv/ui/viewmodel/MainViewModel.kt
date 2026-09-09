@@ -137,8 +137,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
     private val backendRegistry = nasMusicApp.backendRegistry
     private val lyricsManager = LyricsManager(
         app, backendRegistry, nasMusicApp.networkMusicManager,
-        kugouBaseUrl = prefs.getLyricsKugouBaseUrlSync(),
-        neteaseBaseUrl = prefs.getLyricsNeteaseBaseUrlSync()
+        // F-3：改 provider（读 @Volatile 镜像）——构造期零 IO，设置页改歌词源即时生效
+        kugouBaseUrlProvider = { prefs.getLyricsKugouBaseUrlSync() },
+        neteaseBaseUrlProvider = { prefs.getLyricsNeteaseBaseUrlSync() }
     )
 
     // --- 手机遥控服务器 ---

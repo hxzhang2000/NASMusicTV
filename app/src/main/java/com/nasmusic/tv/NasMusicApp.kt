@@ -120,8 +120,9 @@ class NasMusicApp : Application(), ImageLoaderFactory {
             this,
             backendRegistry,
             networkMusicManager,
-            kugouBaseUrl = appPreferences.getLyricsKugouBaseUrlSync(),
-            neteaseBaseUrl = appPreferences.getLyricsNeteaseBaseUrlSync()
+            // F-3：改 provider（读 @Volatile 镜像）——设置页改歌词源即时生效，且构造期零 IO
+            kugouBaseUrlProvider = { appPreferences.getLyricsKugouBaseUrlSync() },
+            neteaseBaseUrlProvider = { appPreferences.getLyricsNeteaseBaseUrlSync() }
         )
     }
 
@@ -188,7 +189,11 @@ class NasMusicApp : Application(), ImageLoaderFactory {
     override fun onCreate() {
         super.onCreate()
         appPreferences = AppPreferences.getInstance(this)
-        // 启动时应用语言设置
+        // R-7（第三类）：启动 provider 键内存镜像收集（DataStore Flow → @Volatile）
+        appPreferences.startProviderMirrors(applicationScope)
+        // R-7（第一类）：语言镜像一次性迁移（老版本 DataStore 已有语言值，镜像为空时补写）
+        appPreferences.migrateLanguageMirrorIfNeeded()
+        // 启动时应用语言设置（读 SharedPreferences 镜像，零 IO）
         applyLocale(appPreferences.getLanguageSync())
         backendRegistry = BackendRegistry()
         playerManager = PlayerManager(this)
