@@ -164,13 +164,19 @@ class LyricsPersistentCache(context: Context) {
         }
     }
 
-    /** 保存索引文件 */
+    /** F-5：saveIndex 写互斥锁——put/remove/clear/exportAll 各方法并发调用时（切歌与备份
+     *  并发），防止全量覆盖写交错（ConcurrentHashMap 只保证内存安全，文件写无互斥） */
+    private val saveLock = Any()
+
+    /** 保存索引文件（F-5：synchronized 互斥 + H-5 原子写盘语义保持） */
     private fun saveIndex() {
-        try {
-            val json = gson.toJson(index.toMap())
-            indexFile.writeText(json)
-        } catch (e: Exception) {
-            AppLog.e(TAG, "saveIndex failed: ${e.message}", e)
+        synchronized(saveLock) {
+            try {
+                val json = gson.toJson(index.toMap())
+                indexFile.writeText(json)
+            } catch (e: Exception) {
+                AppLog.e(TAG, "saveIndex failed: ${e.message}", e)
+            }
         }
     }
 

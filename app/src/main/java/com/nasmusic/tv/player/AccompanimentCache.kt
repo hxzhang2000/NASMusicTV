@@ -26,7 +26,11 @@ import java.io.File
  * - 文件名：{songId}_accompaniment.wav
  * - LRU 淘汰：按最后访问时间排序，超过 500MB 时删除最旧的文件
  */
-class AccompanimentCache(private val context: Context) {
+class AccompanimentCache(
+    private val context: Context,
+    /** F-4：注入应用级 scope；未注入时回退私有 scope（PlaybackService 创建处保持兼容） */
+    externalScope: CoroutineScope? = null
+) {
 
     companion object {
         private const val TAG = "AccompanimentCache"
@@ -39,7 +43,7 @@ class AccompanimentCache(private val context: Context) {
         File(context.cacheDir, CACHE_DIR_NAME).also { it.mkdirs() }
     }
 
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val scope: CoroutineScope = externalScope ?: CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var preSeparationJob: Job? = null
 
     /**

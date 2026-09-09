@@ -133,7 +133,8 @@ class PlaybackService : MediaLibraryService() {
         // 注入高质量人声分离组件（HT-Demucs FT ONNX 模式）
         // 注意：模型不在 APK 内，需在设置页下载。初始化延迟到 enableHighQualityRemoval 时（PlayerManager 内部检查模型）
         val demucsSeparator = DemucsSeparator(this)
-        val accompanimentCache = AccompanimentCache(this)
+        // F-4：注入应用级 scope（NasMusicApp.applicationScope）
+        val accompanimentCache = AccompanimentCache(this, (application as NasMusicApp).applicationScope)
 
         // 初始化媒体库树（用于 Android Auto / Wear OS 浏览）
         mediaLibraryTree = MediaLibraryTree(this)

@@ -345,7 +345,9 @@ class NasMusicApp : Application(), ImageLoaderFactory {
             context = this,
             appPreferences = appPreferences,
             downloadRepository = downloadRepository,
-            downloadPathBuilder = pathBuilder
+            downloadPathBuilder = pathBuilder,
+            // F-4：注入应用级 scope，删除组件私有 scope（单例场景语义不变）
+            externalScope = applicationScope
         )
 
         // 存储守护启动 + 崩溃恢复 + MediaTagWriter 全局配置

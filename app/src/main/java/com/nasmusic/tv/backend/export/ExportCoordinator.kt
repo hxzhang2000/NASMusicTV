@@ -32,7 +32,9 @@ class ExportCoordinator(
     private val context: Context,
     private val appPreferences: AppPreferences,
     private val downloadRepository: DownloadRepository,
-    private val downloadPathBuilder: DownloadPathBuilder
+    private val downloadPathBuilder: DownloadPathBuilder,
+    /** F-4：注入应用级 scope（NasMusicApp.applicationScope，SupervisorJob+IO，进程级单例语义） */
+    private val externalScope: CoroutineScope? = null
 ) {
     companion object { private const val TAG = "ExportCoordinator" }
 
@@ -42,7 +44,8 @@ class ExportCoordinator(
     private var _exportDevices: List<com.nasmusic.tv.data.model.StorageDevice> = emptyList()
     val exportDevices: List<com.nasmusic.tv.data.model.StorageDevice> get() = _exportDevices
 
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    // F-4：优先注入的 applicationScope（单例场景不 cancel 是正确语义）；未注入时回退私有 scope
+    private val scope: CoroutineScope = externalScope ?: CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val exporter by lazy {
         SongExporter(
             context,
