@@ -7,6 +7,17 @@
 >
 > 类型：`Added`（新增） | `Changed`（变更） | `Fixed`（修复） | `Removed`（移除）
 
+## [v2.26.39] - 2026-09-09
+
+### Fixed
+
+- **搜索页 / NowPlaying / 我的页的本地/下载歌曲无法收藏**：`AppRoot.kt` 三处收藏接线（NowPlaying / LibraryScreen / MineScreen）只判断 `song.isNetworkSong`，漏判 `song.isLocalSong`，导致本地/下载歌曲落入 NAS-only 的 `viewModel.toggleFavorite()`——NAS adapter 收到 `local_xxx` ID 必然失败，收藏静默无效。同时 `MainViewModel.toggleFavorite` 与 `toggleNetworkFavorite` 的 NAS 分支逻辑完全相同，属冗余函数。修复：统一改为 `viewModel.toggleNetworkFavorite(song)`（内部已按 `isNetworkSong || isLocalSong` 分流：NAS→adapter，其他→DataStore），删除冗余的 `toggleFavorite`。
+- **专辑/艺术家详情页的本地歌曲收藏后爱心不亮**：`AppRoot.kt` 的 AlbumDetail / ArtistDetail 传入 `viewModel.favoriteIds`（NAS-only），未与 `networkFavoriteIds` 合并；而 `toggleNetworkFavorite` 已将本地收藏保存到 DataStore `networkFavoriteIds`。结果收藏实际已持久化，但 `favoriteIds` 集合不含该 ID，`isFavorited = song.id in favoriteIds` 恒为 false，爱心永不亮。修复：`MainViewModel.favoriteIds` 改为 `combine(_favoriteIds, networkFavoriteIds)` 的统一合并集合，AppRoot 各屏幕统一读取（LibraryScreen 移除 `+ networkFavoriteIds` 散点拼接），NowPlaying 的 `isFavorite` 显示同步修正。
+
+### Changed
+
+- **收藏架构收敛为单一路径**：NAS 歌曲走服务端 adapter，网络/本地/下载歌曲走本机 DataStore `NetworkFavoriteItem`；UI 侧统一订阅合并后的 `favoriteIds`，不再在各屏幕自行按歌曲类型分流判断。
+
 ## [v2.26.38] - 2026-09-08
 
 ### Fixed

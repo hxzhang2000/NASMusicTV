@@ -32,5 +32,7 @@ data class LocalSongEntity(
     val storageType: String,
     val path: String,
     val lastModified: Long,
-    val coverPath: String? = null
+    val coverPath: String? = null,
+    val year: Int? = null,
+    val genre: String? = null
 )

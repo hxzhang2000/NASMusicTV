@@ -315,7 +315,6 @@ fun AppRoot(
                     // C7 修复：收藏状态建立订阅，点收藏后星标即时刷新。
                     // 原实现直读 isFavorite(song.id) 不订阅，点收藏后需切歌才刷新。
                     val favoriteIds by viewModel.favoriteIds.collectAsState(initial = emptySet())
-                    val networkFavoriteIds by viewModel.networkFavoriteIds.collectAsState(initial = emptySet())
                     val mvReady = mvState as? com.nasmusic.tv.ui.viewmodel.MvAvailability.Ready
                     if (showMv && mvReady != null) {
                         // MTV 音乐视频全屏页（独立播放器，退出时 MainViewModel 恢复主播放器）
@@ -350,11 +349,8 @@ fun AppRoot(
                             coverFilterEnabled = coverFilterEnabled,
                             coverFilterBlurRadius = coverFilterBlurRadius,
                             coverFilterDarkOverlay = coverFilterDarkOverlay,
-                            // 网络歌曲用网络收藏判断，本地歌曲用本地收藏判断（基于订阅的 StateFlow）
-                            isFavorite = currentSong?.let { song ->
-                                if (song.isNetworkSong) song.id in networkFavoriteIds
-                                else song.id in favoriteIds
-                            } ?: false,
+                            // 统一用合并后的 favoriteIds（NAS + 网络/本地），无需按歌曲类型分流
+                            isFavorite = currentSong?.let { song -> song.id in favoriteIds } ?: false,
                             isImmersiveMode = isImmersiveMode.value,
                             onToggleImmersive = { isImmersiveMode.value = !isImmersiveMode.value },
                             onPlayPause = { viewModel.playPause() },
@@ -376,12 +372,9 @@ fun AppRoot(
                             onSeek = { viewModel.seekTo(it) },
                             onSwitchLyricsSource = { viewModel.switchLyricsSource(it) },
                             onChangeHighlightMode = { viewModel.setLyricsHighlightMode(it) },
-                            // 网络歌曲调用 toggleNetworkFavorite，本地歌曲调用 toggleFavorite
+                            // 统一走 toggleNetworkFavorite：内部按歌曲类型分流（NAS→adapter，其他→DataStore）
                             onToggleFavorite = currentSong?.let { song ->
-                                {
-                                    if (song.isNetworkSong) viewModel.toggleNetworkFavorite(song)
-                                    else viewModel.toggleFavorite(song)
-                                }
+                                { viewModel.toggleNetworkFavorite(song) }
                             },
                             technicalInfo = viewModel.songTechnicalInfo.collectAsState(initial = null).value,
                             onLoadTechnicalInfo = { viewModel.loadSongTechnicalInfo() },
@@ -418,18 +411,40 @@ fun AppRoot(
                 Screen.Library -> {
                     val genres by viewModel.genres.collectAsState(initial = UiState.Success(emptyList()))
                     val favoriteIds by viewModel.favoriteIds.collectAsState(initial = emptySet())
-                    val networkFavoriteIds by viewModel.networkFavoriteIds.collectAsState(initial = emptySet())
                     val artistsState by viewModel.artists.collectAsState(initial = UiState.Success(emptyList()))
                     val mergedAlbumList by viewModel.mergedAlbums.collectAsState(initial = emptyList())
                     val mergedArtistsList by viewModel.mergedArtists.collectAsState(initial = emptyList())
                     val yearsState by viewModel.years.collectAsState(initial = UiState.Success(emptyList()))
                     val songsPaging by viewModel.songsPaging.collectAsState(initial = com.nasmusic.tv.data.model.SongsPagingState())
+                    val localSongsList by viewModel.localSongs.collectAsState(initial = emptyList())
                     val searchResultsState by viewModel.searchResults.collectAsState(initial = UiState.Success(emptyList()))
                     val albumList = albums.dataOrNull() ?: emptyList()
                     val songList = songs.dataOrNull() ?: emptyList()
                     val genreList = genres.dataOrNull() ?: emptyList()
                     val artistsList = artistsState.dataOrNull() ?: emptyList()
                     val yearsList = yearsState.dataOrNull() ?: emptyList()
+                    // 合并 NAS 分页歌曲 + 本地歌曲（含下载歌曲），供曲库歌曲页展示
+                    val mergedSongsPaging = remember(songsPaging, localSongsList) {
+                        if (localSongsList.isEmpty()) songsPaging
+                        else songsPaging.copy(
+                            songs = (songsPaging.songs + localSongsList).distinctBy { it.id },
+                            totalCount = songsPaging.totalCount + localSongsList.size
+                        )
+                    }
+                    // 合并 NAS 流派 + 本地歌曲流派（去重）
+                    val mergedGenreList = remember(genreList, localSongsList) {
+                        val localGenres = localSongsList.mapNotNull { it.genre?.takeIf { g -> g.isNotBlank() } }
+                            .groupBy { it }.map { (name, songs) ->
+                                com.nasmusic.tv.data.model.Genre(id = "local_$name", name = name, songCount = songs.size)
+                            }
+                        if (localGenres.isEmpty()) genreList
+                        else (genreList + localGenres).distinctBy { it.name }
+                    }
+                    // 合并 NAS 年代 + 本地歌曲年代（去重）
+                    val mergedYearsList = remember(yearsList, localSongsList) {
+                        val localYears = localSongsList.mapNotNull { it.year?.takeIf { y -> y > 0 } }.distinct()
+                        (yearsList + localYears).distinct().sortedDescending()
+                    }
                     val searchResultsList = searchResultsState.dataOrNull() ?: emptyList()
                     val isSearching = searchResultsState is UiState.Loading
                     val libraryActiveTab by viewModel.libraryActiveTab.collectAsState()
@@ -472,12 +487,12 @@ fun AppRoot(
                         songs = songList,
                         isLoading = isLoading || isLibraryLoading,
                         isConnected = isConnected,
-                        genres = genreList,
-                        favoriteIds = favoriteIds + networkFavoriteIds,
+                        genres = mergedGenreList,
+                        favoriteIds = favoriteIds,
                         artistSongsMap = viewModel.artistSongsMap.value,
                         artists = mergedArtistsList,
-                        years = yearsList,
-                        songsPaging = songsPaging,
+                        years = mergedYearsList,
+                        songsPaging = mergedSongsPaging,
                         searchResults = searchResultsList,
                         isSearching = isSearching,
                         onPlayAlbum = { album ->
@@ -504,11 +519,7 @@ fun AppRoot(
                         },
                         queueSongIds = viewModel.queueSongIds.collectAsState(initial = emptySet()).value,
                         onToggleQueue = { song -> viewModel.toggleQueueSong(song) },
-                        onToggleFavorite = { song ->
-                            // 网络歌曲走网络收藏，本地歌曲走本地收藏
-                            if (song.isNetworkSong) viewModel.toggleNetworkFavorite(song)
-                            else viewModel.toggleFavorite(song)
-                        },
+                        onToggleFavorite = { song -> viewModel.toggleNetworkFavorite(song) },
                         onAddToPlaylist = { song -> pickerSong = song },
                         onOpenAlbumDetail = { album -> viewModel.openAlbumDetail(album) },
                         onOpenArtistDetail = { artist -> viewModel.openArtistDetail(artist) },
@@ -624,10 +635,7 @@ fun AppRoot(
                                 viewModel.navigateTo(Screen.NowPlaying)
                             }
                         },
-                        onToggleFavorite = { song ->
-                            if (song.isNetworkSong) viewModel.toggleNetworkFavorite(song)
-                            else viewModel.toggleFavorite(song)
-                        },
+                        onToggleFavorite = { song -> viewModel.toggleNetworkFavorite(song) },
                         onToggleQueue = { song -> viewModel.toggleQueueSong(song) },
                         onCreatePlaylist = { name -> viewModel.createLocalPlaylist(name) },
                         onRenamePlaylist = { id, newName -> viewModel.renameLocalPlaylist(id, newName) },
@@ -869,7 +877,7 @@ fun AppRoot(
                             queueSongIds = viewModel.queueSongIds.collectAsState(initial = emptySet()).value,
                             onToggleQueue = { song -> viewModel.toggleQueueSong(song) },
                             favoriteIds = favoriteIds,
-                            onToggleFavorite = { song -> viewModel.toggleFavorite(song) },
+                            onToggleFavorite = { song -> viewModel.toggleNetworkFavorite(song) },
                             onAddToPlaylist = { song -> pickerSong = song },
                             downloadStates = songDownloadStates,
                             onDownloadSong = { song -> viewModel.downloadSong(song) },
@@ -909,7 +917,7 @@ fun AppRoot(
                             queueSongIds = viewModel.queueSongIds.collectAsState(initial = emptySet()).value,
                             onToggleQueue = { song -> viewModel.toggleQueueSong(song) },
                             favoriteIds = favoriteIds,
-                            onToggleFavorite = { song -> viewModel.toggleFavorite(song) },
+                            onToggleFavorite = { song -> viewModel.toggleNetworkFavorite(song) },
                             onAddToPlaylist = { song -> pickerSong = song },
                             downloadStates = songDownloadStates,
                             onDownloadSong = { song -> viewModel.downloadSong(song) },

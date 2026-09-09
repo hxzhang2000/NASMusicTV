@@ -53,7 +53,8 @@ class MusicScanner(private val context: Context) {
             MediaStore.Audio.Media.SIZE,
             MediaStore.Audio.Media.DATE_ADDED,
             MediaStore.Audio.Media.MIME_TYPE,
-            MediaStore.Audio.Media.VOLUME_NAME
+            MediaStore.Audio.Media.VOLUME_NAME,
+            MediaStore.Audio.Media.YEAR
         )
 
         val selection = "${MediaStore.Audio.Media.IS_MUSIC} != 0"
@@ -73,6 +74,7 @@ class MusicScanner(private val context: Context) {
                 val dateAddedCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DATE_ADDED)
                 val mimeCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.MIME_TYPE)
                 val volumeCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.VOLUME_NAME)
+                val yearCol = cursor.getColumnIndex(MediaStore.Audio.Media.YEAR)
 
                 while (cursor.moveToNext()) {
                     val id = cursor.getLong(idCol)
@@ -96,7 +98,8 @@ class MusicScanner(private val context: Context) {
                             mimeType = cursor.getString(mimeCol) ?: "",
                             contentUri = uri,
                             volumeName = volumeName,
-                            storageType = storageType
+                            storageType = storageType,
+                            year = if (yearCol >= 0) cursor.getInt(yearCol).takeIf { it > 0 } else null
                         )
                     )
                 }
@@ -159,7 +162,9 @@ class MusicScanner(private val context: Context) {
         title: String,
         artist: String,
         album: String,
-        durationMs: Long
+        durationMs: Long,
+        year: Int? = null,
+        genre: String? = null
     ): ScannedSong? {
         val file = File(path)
         if (!file.exists() || !file.isFile) return null
@@ -175,7 +180,9 @@ class MusicScanner(private val context: Context) {
             mimeType = guessMimeType(file.extension),
             contentUri = Uri.fromFile(file),
             volumeName = "",
-            storageType = StorageType.DOWNLOAD
+            storageType = StorageType.DOWNLOAD,
+            year = year,
+            genre = genre
         )
     }
 
@@ -189,6 +196,10 @@ class MusicScanner(private val context: Context) {
             val album = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_ALBUM) ?: "Unknown"
             val duration = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)
                 ?.toLongOrNull() ?: 0L
+            val year = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_YEAR)
+                ?.toIntOrNull()?.takeIf { it > 0 }
+            val genre = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_GENRE)
+                ?.takeIf { it.isNotBlank() }
 
             ScannedSong(
                 // 复审 P2 修复：原为 file.absolutePath.hashCode().toLong()（32-bit 哈希拓宽），
@@ -205,7 +216,9 @@ class MusicScanner(private val context: Context) {
                 mimeType = guessMimeType(file.extension),
                 contentUri = Uri.fromFile(file),
                 volumeName = "",
-                storageType = storageType
+                storageType = storageType,
+                year = year,
+                genre = genre
             )
         } catch (e: Exception) {
             AppLog.e(TAG, "Failed to scan ${file.absolutePath}: ${e.message}", e)
@@ -252,5 +265,7 @@ data class ScannedSong(
     val mimeType: String,
     val contentUri: Uri,
     val volumeName: String,
-    val storageType: StorageType
+    val storageType: StorageType,
+    val year: Int? = null,
+    val genre: String? = null
 )

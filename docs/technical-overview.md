@@ -7574,3 +7574,42 @@ cipher.init(Cipher.ENCRYPT_MODE, softwareKey, GCMParameterSpec(GCM_TAG_LENGTH, i
 **验证结果**：
 - ✅ TV 端：打开艺术家详情页，歌曲列表显示后不再消失
 - ✅ 手机端：同样确认不再复现
+
+---
+
+### 10.105 v2.26.39 - 收藏功能统一重构（本地/下载歌曲收藏修复）
+
+**提交日期**：2026-09-09
+
+**背景**：两处收藏缺陷：
+1. 曲库搜索页查询到本地下载歌曲时无法收藏，但其他搜索到的歌曲（网络/NAS）可收藏。
+2. 曲库专辑/艺术家详情页的歌曲列表中的歌曲无法收藏（收藏后爱心不亮）。
+
+**根因分析**：
+
+两处缺陷根源相同——收藏分流与 `favoriteIds` 集合在 AppRoot 接线层分散且不一致：
+
+- **Bug 1（分流漏判）**：`AppRoot.kt` 的 NowPlaying / LibraryScreen / MineScreen 三处 `onToggleFavorite` 只判断 `song.isNetworkSong`，漏判 `song.isLocalSong`。本地/下载歌曲落入 NAS-only 的 `viewModel.toggleFavorite()` → NAS adapter 收到 `local_xxx` ID 必然失败（`success=false`）→ UI 不更新 → 收藏静默无效。而 LibraryScreen 的 `favoriteIds` 已正确合并（`favoriteIds + networkFavoriteIds`，L499），只要走对函数就会立即反映。
+- **Bug 2（集合未合并）**：`AppRoot.kt` 的 AlbumDetail / ArtistDetail 传入 `viewModel.favoriteIds`（NAS-only，L877/L920 的 `collectAsState`），未与 `networkFavoriteIds` 合并。其 `onToggleFavorite` 接线虽正确调用 `toggleNetworkFavorite`（DataStore 已成功保存本地收藏），但 `favoriteIds` 集合不含该 ID → `isFavorited = song.id in favoriteIds` 恒为 false → 爱心永不亮。
+- **架构冗余**：`MainViewModel.toggleFavorite`（L2802）与 `toggleNetworkFavorite`（L2210）的 NAS 分支逻辑完全相同，`toggleFavorite` 是纯冗余函数；`favoriteIds`（NAS）与 `networkFavoriteIds`（网络/本地）两套集合分散在 AppRoot 各屏幕手动拼接。
+
+**修复内容**：
+
+**文件**：`ui/viewmodel/MainViewModel.kt`、`ui/components/AppRoot.kt`
+
+- **MainViewModel.kt**：
+  - `favoriteIds` 改为统一合并集合：`combine(_favoriteIds, networkFavoriteIds) { nas, net -> nas + net }`。`_favoriteIds` 保留私有（NAS-only），供 `toggleNetworkFavorite` 的 NAS 分支读取当前状态。
+  - 删除冗余的 `toggleFavorite()` 函数（与 `toggleNetworkFavorite` NAS 分支逻辑重复）。
+  - `isFavorite()` 同步改为同时查 `_favoriteIds` 与 `networkFavoriteIds`。
+- **AppRoot.kt**：
+  - 5 处 `onToggleFavorite` 接线（NowPlaying / LibraryScreen / MineScreen / AlbumDetail / ArtistDetail）统一为 `viewModel.toggleNetworkFavorite(song)`，删除各自 `isNetworkSong`/`isLocalSong` 分流判断。
+  - NowPlaying 的 `isFavorite` 显示改用统一 `favoriteIds`（原为 `if (isNetworkSong) in networkFavoriteIds else in favoriteIds`，漏判本地）。
+  - LibraryScreen 的 `favoriteIds = favoriteIds + networkFavoriteIds` 去掉散点拼接，改直接用统一 `favoriteIds`。
+  - 清理 NowPlaying / LibraryScreen 两个已失效的 `networkFavoriteIds` 收集变量。
+
+**设计说明**：收藏路径收敛为「NAS 歌曲走服务端 adapter，其余（网络/本地/下载）走本机 DataStore `NetworkFavoriteItem`」，`toggleNetworkFavorite` 是唯一入口；UI 层只读统一合并的 `favoriteIds` 判断收藏态，不再按歌曲类型自行分流。
+
+**验证结果**：
+- ✅ `assembleDebug` 编译通过（5 个既有 warning 与本次改动无关）
+- ✅ 搜索页本地下载歌曲走 `toggleNetworkFavorite` → DataStore 保存 → 统一 `favoriteIds` 反映爱心
+- ✅ 专辑/艺术家详情页本地歌曲收藏后，统一 `favoriteIds` 包含该 ID → 爱心即时点亮

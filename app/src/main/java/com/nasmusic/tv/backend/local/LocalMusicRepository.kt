@@ -228,7 +228,9 @@ class LocalMusicRepository(
         streamUrl = contentUri.toString(),
         path = contentUri.toString(),
         isLocalSong = true,
-        storageType = storageType.name
+        storageType = storageType.name,
+        year = year,
+        genre = genre
     )
 
     private fun ScannedSong.toEntity(): LocalSongEntity = LocalSongEntity(
@@ -247,7 +249,9 @@ class LocalMusicRepository(
         // 唯一键：content URI 字符串（MediaStore 与 file:// 均唯一，用于增量去重）
         path = contentUri.toString(),
         lastModified = dateAdded,
-        coverPath = null
+        coverPath = null,
+        year = year,
+        genre = genre
     )
 
     private fun LocalSongEntity.toSong(): Song = Song(
@@ -264,6 +268,8 @@ class LocalMusicRepository(
         streamUrl = contentUri,
         path = path,
         isLocalSong = true,
-        storageType = storageType
+        storageType = storageType,
+        year = year,
+        genre = genre
     )
 }

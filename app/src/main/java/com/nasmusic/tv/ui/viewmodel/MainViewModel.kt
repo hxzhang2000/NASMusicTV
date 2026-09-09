@@ -601,7 +601,16 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
 
     // --- B-1 收藏（B-12: UiState）---
     private val _favoriteIds = MutableStateFlow<Set<String>>(emptySet())
-    val favoriteIds: StateFlow<Set<String>> = _favoriteIds.asStateFlow()
+    /**
+     * 统一收藏 ID 集合（NAS + 网络/本地），UI 只读这一个，无需自行拼装。
+     * - NAS 收藏：由 adapter.getFavorites() 填充 _favoriteIds（服务端存储）
+     * - 网络/本地收藏：由 DataStore NetworkFavoriteItem 填充 networkFavoriteIds（本机存储）
+     *
+     * _favoriteIds 仍保留私有，供 toggleNetworkFavorite 的 NAS 分支读取"当前是否已收藏"。
+     */
+    val favoriteIds: StateFlow<Set<String>> = combine(_favoriteIds, networkFavoriteIds) { nas, net ->
+        nas + net
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, emptySet())
     private val _favoriteSongs = MutableStateFlow<UiState<List<Song>>>(UiState.Success(emptyList()))
     val favoriteSongs: StateFlow<UiState<List<Song>>> = _favoriteSongs.asStateFlow()
 
@@ -2799,35 +2808,13 @@ showError(getApplication<Application>().getString(R.string.toggle_favorite_error
     }
 
     // --- B-1 收藏控制 ---
-    fun toggleFavorite(song: Song) {
-        viewModelScope.launch {
-            val adapter = backendRegistry.getAdapter() ?: return@launch
-            try {
-                // 从本地缓存获取当前收藏状态，直接传给 adapter，
-                // 避免 adapter 二次查询服务端（queryFavoriteStatus 在 UserData=null/超时时误返回 false）
-                val isCurrentlyFavorite = song.id in _favoriteIds.value
-                val success = adapter.toggleFavorite(song.id, isCurrentlyFavorite)
-                if (success) {
-                    val newIds = _favoriteIds.value.toMutableSet()
-                    if (isCurrentlyFavorite) {
-                        newIds.remove(song.id)
-                        val currentFavs = _favoriteSongs.value.dataOrNull() ?: emptyList()
-                        _favoriteSongs.value = UiState.Success(currentFavs.filter { it.id != song.id })
-                    } else {
-                        newIds.add(song.id)
-                        val currentFavs = _favoriteSongs.value.dataOrNull() ?: emptyList()
-                        _favoriteSongs.value = UiState.Success(currentFavs + song)
-                    }
-                    _favoriteIds.value = newIds
-                }
-            } catch (e: Exception) {
-                AppLog.e("NASMusic", "toggleFavorite failed", e)
-                showError(getApplication<Application>().getString(R.string.toggle_favorite_error, e.message?.take(50)))
-            }
-        }
-    }
-
-    fun isFavorite(songId: String): Boolean = songId in _favoriteIds.value
+    /**
+     * 判断歌曲是否已收藏（同步，用于 UI 快速判断）。
+     * 同时查 NAS 收藏（_favoriteIds）与网络/本地收藏（networkFavoriteIds）。
+     * 推荐优先用 [favoriteIds] StateFlow 订阅以获得即时刷新；本方法仅用于一次性查询。
+     */
+    fun isFavorite(songId: String): Boolean =
+        songId in _favoriteIds.value || songId in networkFavoriteIds.value
 
     // --- 本地歌单操作（「我的」Tab，DataStore 持久化）---
 
@@ -3052,26 +3039,42 @@ showError(getApplication<Application>().getString(R.string.toggle_favorite_error
     // --- A-3 流派/年代歌曲加载 ---
     fun getSongsByGenre(genre: String, onResult: (List<Song>) -> Unit) {
         viewModelScope.launch {
-            val adapter = backendRegistry.getAdapter() ?: return@launch
+            // 本地歌曲按 genre 过滤（不依赖 NAS）
+            val localMatches = _localSongs.value.filter { it.genre?.equals(genre, ignoreCase = true) == true }
+            val adapter = backendRegistry.getAdapter()
+            if (adapter == null) {
+                onResult(localMatches)
+                return@launch
+            }
             try {
-                onResult(adapter.getSongsByGenre(genre))
+                val nasSongs = adapter.getSongsByGenre(genre)
+                onResult((nasSongs + localMatches).distinctBy { it.id })
             } catch (e: Exception) {
                 AppLog.e("NASMusic", "getSongsByGenre failed", e)
                 showError(getApplication<Application>().getString(R.string.load_genre_songs_error, e.message?.take(50)))
-                onResult(emptyList())
+                onResult(localMatches)
             }
         }
     }
 
     fun getSongsByYearRange(fromYear: Int, toYear: Int, onResult: (List<Song>) -> Unit) {
         viewModelScope.launch {
-            val adapter = backendRegistry.getAdapter() ?: return@launch
+            // 本地歌曲按 year 过滤（不依赖 NAS）
+            val localMatches = _localSongs.value.filter { song ->
+                song.year != null && song.year in fromYear..toYear
+            }
+            val adapter = backendRegistry.getAdapter()
+            if (adapter == null) {
+                onResult(localMatches)
+                return@launch
+            }
             try {
-                onResult(adapter.getSongsByYearRange(fromYear, toYear))
+                val nasSongs = adapter.getSongsByYearRange(fromYear, toYear)
+                onResult((nasSongs + localMatches).distinctBy { it.id })
             } catch (e: Exception) {
                 AppLog.e("NASMusic", "getSongsByYearRange failed", e)
                 showError(getApplication<Application>().getString(R.string.load_year_songs_error, e.message?.take(50)))
-                onResult(emptyList())
+                onResult(localMatches)
             }
         }
     }
