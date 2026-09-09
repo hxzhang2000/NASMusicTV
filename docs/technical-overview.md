@@ -7721,3 +7721,31 @@ onSearchSong = { keyword -> viewModel.searchNetworkSongs(keyword) },
 - ✅ :app:compileDebugKotlin 通过
 - ✅ :app:testDebugUnitTest 256/256 通过
 - ✅ :app:assembleRelease 通过（修复在 v2.26.41 版本号下构建验证；正式发布以 v2.27.0 重新构建）
+
+### 10.109 R-1/F-1 重构第一批：日志凭证脱敏 + MainViewModel 拆分（2026-09-09）
+
+依据 `docs/codebase-refactoring-plan-2026-09.md`（v1.4）实施，分支 `refactor/r1-viewmodel-split`，5 个独立提交，每步 assembleDebug 通过。
+
+**F-1 日志凭证脱敏（提交 9985bf9）**：
+1. 新增 `util/UrlSanitizer.kt`：统一打码 URL 查询参数（api_key/token/access_token/t=/s=/u=/p=/password/apikey，大小写不敏感）。
+2. 五个后端适配器（Jellyfin/Navidrome/Subsonic/Daoliyu/Feiniu）的 w/e 级错误日志全部过 sanitize——此前 release 包连 logcat 即可读到 api_key 与 Subsonic md5 密码令牌。
+3. JellyfinAdapter.authenticateByName 错误日志不再回显响应体（可能回显含密码的请求体）；utf8Body 日志同样脱敏。
+4. BackendRegistry.initialize 日志 username 改记 hasUser 布尔。
+5. 新增 UrlSanitizerTest（纯函数单测 8 项，全绿）。
+
+**R-1 MainViewModel 拆分（提交 59dc6b9 / e03b4bc / adbcb37 / 9efa630）**：
+按 W0 冻结清单落位 13 个子 ViewModel（`ui/viewmodel/` 下，与 MainViewModel 同包）：
+- 第一步：WeatherRadioViewModel（保留 manager 可空延迟语义）、BackupViewModel、PlaylistViewModel
+- 第二步：DownloadViewModel、MvSearchViewModel（playMode 参数化下发）、VocalSeparationViewModel
+- 第三步：ServerViewModel、SearchViewModel、NetworkMusicViewModel（BaiduConnectionState 归属随之迁移，AppRoot/NetdiskScreen/BaiduAuthDialog/SettingsScreen 引用同步）
+- 第四步：PlayerViewModel（播放解析代数 P4 逻辑随迁）、NavigationViewModel、PlayHistoryViewModel
+- MainViewModel 5451 → 3186 行，保留兼容转发层（AppRoot 的既有引用不变）；跨域通信走 init 注入回调 + 事件契约（ViewModelEvents.kt，W0 冻结版）
+- 领域边界保留：pickBestFreshBatch（多维度浏览换一批）、baiduIndexCache（曲库合并取数）、NAS 收藏分支 toggleNasFavorite
+
+**已知缺口（后续批次处理）**：MainViewModel 3186 行仍超 DoD 的 ≤600 行；AppRoot collectAsState 仍走 MainViewModel 过渡访问器（计划允许的迁移期形态）；TV 手测回归待设备可用时执行。
+
+**验证结果**：
+- ✅ 每个提交前 assembleDebug 通过
+- ✅ UrlSanitizerTest 8/8 通过
+- ✅ 既有 256 个单测未受影响（compileDebugKotlin + testDebugUnitTest 路径验证）
+

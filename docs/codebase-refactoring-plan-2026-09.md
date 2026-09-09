@@ -9,6 +9,10 @@
 > - R-9 修复标记表补全：B15（StorageMonitor 反射防护）、H-4（端口冲突）、H-5（原子写盘）此前未登记
 > - 同时确认了 11 个既有修复标记（M-1/2/5/7/9/14a-d/15/16、H-2/3/4/5、B4/B11/C-1）在代码中真实存在且有效；SearchAggregator 各源均有 withTimeoutOrNull；歌词/MV 持久缓存均有 LRU 上限——这些作为「已验证无问题项」记录，防止未来误报
 >
+> **实施进度（2026-09-09，分支 refactor/r1-viewmodel-split）**：
+> - F-1 已完成（提交 9985bf9）：UrlSanitizer + 5 适配器 + BackendRegistry 脱敏，UrlSanitizerTest 8/8 绿
+> - R-1 四步拆分完成（提交 59dc6b9/e03b4bc/adbcb37/9efa630）：13 个子 VM 全部落位，MainViewModel 5451→3186 行；剩余收尾（≤600 行目标、AppRoot 重组、手测回归）见「问题总览」状态列与 R-1 迁移检查清单
+>
 > **v1.3 修订说明（开发前最终完善）**：本版目标是让方案**达到可直接开发的层次**，主要变更：
 > - 新增「**W0 接口冻结清单**」章节：12 个子 ViewModel 的包路径/构造签名骨架、跨 VM 事件契约（sealed class 全量定义）、State/Actions 分组样板——动工前逐项勾选冻结，拆分期间以此仲裁
 > - 新增「**开发实施规约**」章节：Git 分支/提交规范（对齐 `.opencode/rules.md`）、每步验证命令（Windows 环境实测路径）、进度标记规范、CHANGELOG/技术文档同步要求
@@ -68,18 +72,19 @@
 
 ## 问题总览
 
-| 编号 | 问题 | 严重级别 | 影响范围 | 预计工时 |
-|------|------|---------|---------|---------|
-| R-1 | MainViewModel 5451行巨型文件 | 🔴 P0 | 可维护性/可测试性 | 5-8天（+联动改造AppRoot，见架构决策） |
-| R-2 | SettingsScreen 135.9KB 单文件 | 🔴 P0 | UI可维护性 | 2-3天 |
-| R-3 | LibraryScreen 76.4KB 单文件 | 🔴 P0 | UI可维护性 | 2-3天 |
-| R-4 | AppPreferences 58KB 单类 | 🟡 P1 | 偏好管理可维护性 | 2-3天 |
-| R-5 | PlayerManager 62.6KB 人声分离耦合 | 🟡 P1 | 播放器可维护性 | 1-2天 |
-| R-6 | OkHttpClient 每适配器独立实例 | 🟡 P1 | 资源管理 | 1天 |
-| R-7 | AppPreferences 11 处 runBlocking 物理调用点 | 🟡 P1 | ANR风险 | 1-2天 |
-| R-8 | 手动DI vs Hilt/Dagger | 🟢 P2 | 依赖管理 | 3-5天 |
-| R-9 | 重复import/颜色硬编码/注释残留 | 🟢 P2 | 代码规范 | 0.5天 |
-| R-10 | JellyfinAdapter 1215行 / NavidromeAdapter 932行 | 🟡 P1 | 后端层可维护性 | 3-5天 |
+| 编号 | 问题 | 严重级别 | 影响范围 | 预计工时 | 状态 |
+|------|------|---------|---------|---------|------|
+| R-1 | MainViewModel 5451行巨型文件 | 🔴 P0 | 可维护性/可测试性 | 5-8天（+联动改造AppRoot，见架构决策） | 🔶 四步拆分完成（13 子 VM 落位，5451→3186 行），MainViewModel ≤600 行目标未达 |
+| R-2 | SettingsScreen 135.9KB 单文件 | 🔴 P0 | UI可维护性 | 2-3天 | ⬜ |
+| R-3 | LibraryScreen 76.4KB 单文件 | 🔴 P0 | UI可维护性 | 2-3天 | ⬜ |
+| R-4 | AppPreferences 58KB 单类 | 🟡 P1 | 偏好管理可维护性 | 2-3天 | ⬜ |
+| R-5 | PlayerManager 62.6KB 人声分离耦合 | 🟡 P1 | 播放器可维护性 | 1-2天 | ⬜ |
+| R-6 | OkHttpClient 每适配器独立实例 | 🟡 P1 | 资源管理 | 1天 | ⬜ |
+| R-7 | AppPreferences 11 处 runBlocking 物理调用点 | 🟡 P1 | ANR风险 | 1-2天 | ⬜ |
+| R-8 | 手动DI vs Hilt/Dagger | 🟢 P2 | 依赖管理 | 3-5天 | ⬜ 可选项，暂缓 |
+| R-9 | 重复import/颜色硬编码/注释残留 | 🟢 P2 | 代码规范 | 0.5天 | ⬜ |
+| R-10 | JellyfinAdapter 1215行 / NavidromeAdapter 932行 | 🟡 P1 | 后端层可维护性 | 3-5天 | ⬜ |
+| F-1 | 敏感凭证 URL 泄露到 release 日志 | 🔴 P0 | 安全 | 0.5天 | ✅ 2026-09-09 完成 |
 
 ---
 
@@ -285,14 +290,14 @@ fun LibraryScreen(
 
 #### 迁移检查清单
 
-- [ ] 每个拆出的ViewModel独立编译通过
-- [ ] AppRoot 的 123 处 `collectAsState` 与全部 `viewModel::xxx` 引用已按域重组，无遗漏
-- [ ] 原有UI功能不退化（逐Screen验证）
-- [ ] StateFlow生命周期正确（ViewModel作用域内）
-- [ ] RemoteCallbacks接口实现正确委托
-- [ ] WeatherRadioManager 可空延迟创建语义保留（无 NAS 时不实例化）
-- [ ] 内存无泄漏（onCleared正确释放资源）
-- [ ] 并发安全（共享状态访问同步）
+- [x] 每个拆出的ViewModel独立编译通过 ✅ 2026-09-09（四步均 assembleDebug 通过）
+- [ ] AppRoot 的 123 处 `collectAsState` 与全部 `viewModel::xxx` 引用已按域重组，无遗漏（迁移期过渡访问器形态，见 W0「AppRoot 重组约定」）
+- [ ] 原有UI功能不退化（逐Screen验证）（待 TV 手测回归）
+- [x] StateFlow生命周期正确（ViewModel作用域内）✅ 2026-09-09（子 VM 均为 AndroidViewModel，随 MainViewModel 持有）
+- [x] RemoteCallbacks接口实现正确委托 ✅ 2026-09-09（仍由 MainViewModel 收口，经转发调用 PlayerViewModel/PlayerManager）
+- [x] WeatherRadioManager 可空延迟创建语义保留（无 NAS 时不实例化）✅ 2026-09-09
+- [ ] 内存无泄漏（onCleared正确释放资源）（待手测）
+- [x] 并发安全（共享状态访问同步）✅ 2026-09-09（逐行搬迁，共享状态仍经 PlayerManager/AppPreferences 等单例）
 
 ---
 
@@ -1174,10 +1179,10 @@ BaiduOAuthClient 内的调用大多已在 `withContext(IO)` 内（:211 等），
 
 **冻结检查**：
 
-- [ ] 13 个文件名与包路径确认（含 MainViewModel 保留为协调者）
-- [ ] 各构造签名评审通过（依赖方向：子 VM 不得互相持有构造期引用，跨域通信只走事件）
-- [ ] WeatherRadioViewModel 不在构造期创建 WeatherRadioManager（保留 :159 可空延迟语义）
-- [ ] NetworkMusicViewModel 保留百度属性委托（:4847-4849 形式）
+- [x] 13 个文件名与包路径确认（含 MainViewModel 保留为协调者）✅ 2026-09-09 全部落位
+- [x] 各构造签名评审通过（依赖方向：子 VM 不得互相持有构造期引用，跨域通信只走事件）✅ 2026-09-09（迁移期以 init 注入回调实现，未引入构造期相互引用）
+- [x] WeatherRadioViewModel 不在构造期创建 WeatherRadioManager（保留 :159 可空延迟语义）✅ 2026-09-09
+- [x] NetworkMusicViewModel 保留百度属性委托（:4847-4849 形式）✅ 2026-09-09
 
 ### 2. 跨 ViewModel 事件契约（sealed class 全量冻结）
 

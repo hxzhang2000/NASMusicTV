@@ -7,6 +7,15 @@
 >
 > 类型：`Added`（新增） | `Changed`（变更） | `Fixed`（修复） | `Removed`（移除）
 
+## [Unreleased]
+
+### Changed
+- 重构：MainViewModel（5451 行）按 W0 冻结清单拆分为 13 个领域子 ViewModel（WeatherRadio/Backup/Playlist/Download/MvSearch/VocalSeparation/Server/Search/NetworkMusic/Player/Navigation/PlayHistory + 事件契约 ViewModelEvents），MainViewModel 精简为协调者 + 兼容转发层（3186 行），AppRoot 引用保持不变；详见 docs/codebase-refactoring-plan-2026-09.md R-1
+- 重构：BaiduConnectionState 归属从 MainViewModel 迁移至 NetworkMusicViewModel
+
+### Fixed
+- 安全：五个后端适配器（Jellyfin/Navidrome/Subsonic/道理鱼/飞牛）的 w/e 级错误日志统一经 UrlSanitizer 脱敏，release 包 logcat 不再泄露 api_key / Subsonic 密码令牌 / 登录 token（重构方案 F-1）；新增 UrlSanitizerTest 单测 8 项
+
 ## [v2.27.0] - 2026-09-09
 
 ### Fixed
