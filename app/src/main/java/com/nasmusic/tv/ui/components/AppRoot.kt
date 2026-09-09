@@ -99,8 +99,9 @@ fun AppRoot(
     val currentSong by viewModel.currentSong.collectAsState(initial = null)
     val isPlaying by viewModel.isPlaying.collectAsState(initial = false)
     val playMode by viewModel.playMode.collectAsState(initial = com.nasmusic.tv.data.model.PlayMode.SEQUENTIAL)
-    val progress by viewModel.progress.collectAsState(initial = 0L)
-    val duration by viewModel.duration.collectAsState(initial = 0L)
+    // F-2（修复）：progress/duration 不再顶层收集——PlayerManager 的进度由 1000ms
+    // Handler 轮询驱动，顶层收集会每秒驱动 AppRoot 全树重组（含 LazyColumn 状态与
+    // D-Pad 焦点搜索）；下沉到 NowPlayingScreen 分支内收集（与 H-3 频谱流下沉同向）。
     val lyrics by viewModel.currentLyrics.collectAsState(initial = null)
     val lyricsAvailability by viewModel.lyricsAvailability.collectAsState(initial = com.nasmusic.tv.data.model.LyricsAvailability())
     val lyricsHighlightMode by viewModel.lyricsHighlightMode.collectAsState(initial = com.nasmusic.tv.data.model.LyricsHighlightMode.LINE_BY_LINE)
@@ -342,6 +343,10 @@ fun AppRoot(
                             remoteControlUrl = if (isTV) viewModel.remoteControlUrl.collectAsState().value else null
                         )
                     } else {
+                        // F-2：progress/duration 在本分支内收集，播放期间的每秒重组
+                        // 只影响 NowPlayingScreen，不再驱动 AppRoot 全树
+                        val progress by viewModel.progress.collectAsState(initial = 0L)
+                        val duration by viewModel.duration.collectAsState(initial = 0L)
                         NowPlayingScreen(
                             currentSong = currentSong,
                             isPlaying = isPlaying,
