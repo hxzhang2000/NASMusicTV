@@ -721,11 +721,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
             _playMode.value = settings.defaultPlayMode
             playerManager.applyPlayMode(_playMode.value)
 
-            // 初始化升降调/变速（从 AppPreferences 恢复）
+            // 初始化升降调/变速（从 AppPreferences 恢复）——R-1 后委托 VocalSeparationViewModel
             val savedPitch = prefs.pitchSemitones.first()
             val savedSpeed = prefs.playbackSpeed.first()
-            _pitchSemitones.value = savedPitch
-            _playbackSpeed.value = savedSpeed
             playerManager.setPitch(savedPitch)
             playerManager.setSpeed(savedSpeed.toFloat())
             AppLog.d("MainViewModel", "init: pitch=$savedPitch, speed=$savedSpeed")
@@ -818,14 +816,12 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
 
                 if (song != null) {
                     // 自动下载判定链（总开关/可下载源/已下载/配额/空间）——切歌即触发，不等播放进度
-                    autoDownloadController.onSongChanged(song)
+                    _downloadVM.onSongChanged(song)
                     // 记录当前歌词来源（在 loadLyricsForCurrentSong 清除 _currentLyrics 之前）
                     lastRecordedLyricsSource = _currentLyrics.value?.source
                     loadLyricsForCurrentSong()
                     // MTV 连播静默推进索引时跳过搜索（预搜结果已直接设为 Ready）
-                    if (skipNextMvSearch) {
-                        skipNextMvSearch = false
-                    } else {
+                    if (!_mvVM.shouldSkipNextSearch()) {
                         triggerMvSearch(song)
                     }
                     // 记录当前歌的开始
@@ -835,7 +831,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
                     recordPlay(song)
                 } else {
                     // 无当前歌曲（清空队列等）→ 重置 MV 状态
-                    _mvState.value = MvAvailability.Idle
+                    _mvVM.resetIdle()
                 }
             }
         }
@@ -853,7 +849,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
         // P1-19: distinctUntilChanged 避免相同 count 值触发无谓的 reload（Downloading 高频进度更新时）
         viewModelScope.launch {
             var lastCompletedCount = 0
-            songDownloadManager.downloadStates
+            _downloadVM.songDownloadStates
                 .map { states -> states.values.count { it is DownloadState.Completed } }
                 .distinctUntilChanged()
                 .collect { completedCount ->
@@ -862,7 +858,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
                         _localSongs.value = nasMusicApp.localMusicRepository.loadFromCache()
                         updateMergedData()
                         // 刷新下载统计
-                        _downloadStats.value = nasMusicApp.downloadRepository.getDownloadStats()
+                        _downloadVM.refreshDownloadStats()
                     }
                 }
         }
@@ -2769,7 +2765,7 @@ showError(getApplication<Application>().getString(R.string.toggle_favorite_error
         if (_isNetworkAvailable.value) return // 已是可用状态，跳过（防止 NetworkMonitor 重复回调）
         _isNetworkAvailable.value = true
         // MTV 模式下不弹提示（MV 视频流请求可能导致网络抖动，频繁弹"网络已恢复"打扰观看）
-        if (!_showMv.value) {
+        if (!_mvVM.showMv.value) {
             _connectMessage.value = getApplication<Application>().getString(R.string.status_network_restored)
             viewModelScope.launch {
                 delay(2000)
@@ -2787,7 +2783,7 @@ showError(getApplication<Application>().getString(R.string.toggle_favorite_error
     fun onNetworkLost() {
         _isNetworkAvailable.value = false
         reconnectAttempts = 0
-        if (!_showMv.value) {
+        if (!_mvVM.showMv.value) {
             _connectMessage.value = getApplication<Application>().getString(R.string.status_network_disconnected)
             viewModelScope.launch {
                 delay(5000)
@@ -3010,633 +3006,117 @@ showError(getApplication<Application>().getString(R.string.play_failed_with_msg,
         _playMode.value = newMode
         playerManager.applyPlayMode(newMode)
     }
+    // =====================================================================
+    // R-1 第二步拆分：Download / MvSearch / VocalSeparation 已迁至子 ViewModel，
+    // 以下为兼容转发层（AppRoot 的既有引用不变）。
+    // =====================================================================
 
-    // --- KARAOKE 伴奏模式（人声消除）---
-    private val _vocalRemovalEnabled = MutableStateFlow(false)
-    val vocalRemovalEnabled: StateFlow<Boolean> = _vocalRemovalEnabled.asStateFlow()
+    private val _downloadVM = DownloadViewModel(
+        app,
+        nasMusicApp.songDownloadManager,
+        nasMusicApp.modelDownloadManager,
+        nasMusicApp.autoDownloadController
+    )
+    private val _vocalVM = VocalSeparationViewModel(app, playerManager)
+    private val _mvVM = MvSearchViewModel(app, mvSearchManager, playerManager)
 
-    fun toggleVocalRemoval() {
-        val newValue = !_vocalRemovalEnabled.value
-
-        if (newValue) {
-            // 开启人声消除（伴唱模式）
-            // 正在转换中，不允许重复触发
-            if (playerManager.separating.value) {
-                AppLog.w("NASMusic", "toggleVocalRemoval: separating in progress, ignored")
-                return
-            }
-            // 快速模式：实时 DSP（始终启用，作为兜底）
-            playerManager.setVocalRemovalEnabled(true)
-            // 高质量模式：额外切换到伴奏文件
-            if (playerManager.isHighQualityMode()) {
-                playerManager.enableHighQualityRemoval()
-            }
-        } else {
-            // 关闭人声消除（原唱模式）
-            // 快速模式：关闭实时 DSP
-            playerManager.setVocalRemovalEnabled(false)
-            // 高质量模式：额外切换回原始文件
-            if (playerManager.isHighQualityMode()) {
-                playerManager.disableHighQualityRemoval()
+    init {
+        // 下载域刷新本地歌曲时联动合并数据
+        _downloadVM.onLocalSongsChanged = {
+            viewModelScope.launch {
+                _localSongs.value = nasMusicApp.localMusicRepository.loadFromCache()
+                updateMergedData()
             }
         }
-
-        _vocalRemovalEnabled.value = newValue
-        AppLog.d("NASMusic", "toggleVocalRemoval -> $newValue (hq=${playerManager.isHighQualityMode()})")
-    }
-
-    // --- 分离模式（快速/高质量）---
-    /** 当前分离模式（同步 prefs → PlayerManager） */
-    val separationMode: StateFlow<AppPreferences.SeparationMode> = prefs.separationMode.stateIn(
-        scope = viewModelScope,
-        started = SharingStarted.Eagerly,
-        initialValue = AppPreferences.SeparationMode.FAST
-    ).also { flow ->
-        // 启动时将持久化的模式同步到 PlayerManager
+        // 模型下载状态同步给人声分离域（模式切换门槛判断）
         viewModelScope.launch {
-            val savedMode = flow.value
-            playerManager.setSeparationMode(savedMode)
-            AppLog.d("MainViewModel", "init: loaded separationMode=$savedMode from prefs")
+            _downloadVM.modelDownloaded.collect { downloaded -> _vocalVM.setModelDownloaded(downloaded) }
         }
-    }
-    /** 高质量分离是否正在进行（委托 PlayerManager 状态） */
-    val separating: StateFlow<Boolean> = playerManager.separating
-    /** 高质量分离进度与阶段描述（委托 PlayerManager 状态） */
-    val separationProgress: StateFlow<Pair<Float, String>> = playerManager.separationProgress
-    /** 高质量分离错误信息（非空表示最近一次失败，UI 应提示用户） */
-    val hqError: StateFlow<String?> = playerManager.hqError
-    /** 高质量分离成功信息（非空表示最近一次成功，UI 应提示用户） */
-    val hqSuccess: StateFlow<String?> = playerManager.hqSuccess
-
-    // --- 高质量分离模型下载状态 ---
-    private val _modelDownloaded = MutableStateFlow(false)
-    val modelDownloaded: StateFlow<Boolean> = _modelDownloaded
-    private val _modelDownloading = MutableStateFlow(false)
-    val modelDownloading: StateFlow<Boolean> = _modelDownloading
-    private val _modelDownloadProgress = MutableStateFlow(0f)
-    val modelDownloadProgress: StateFlow<Float> = _modelDownloadProgress
-    private val _modelDownloadedMB = MutableStateFlow(0L)
-    val modelDownloadedMB: StateFlow<Long> = _modelDownloadedMB
-    private val _modelTotalMB = MutableStateFlow(0L)
-    val modelTotalMB: StateFlow<Long> = _modelTotalMB
-    private val _modelDownloadError = MutableStateFlow<String?>(null)
-    val modelDownloadError: StateFlow<String?> = _modelDownloadError
-    private val _modelSizeMB = MutableStateFlow(0.0)
-    val modelSizeMB: StateFlow<Double> = _modelSizeMB
-    private val _modelPath = MutableStateFlow("")
-    val modelPath: StateFlow<String> = _modelPath
-
-    private val modelDownloadManager: ModelDownloadManager
-        get() = (getApplication<NasMusicApp>()).modelDownloadManager
-
-    // ===== 歌曲下载（方案：离线下载与本地存储管理）=====
-    private val songDownloadManager: SongDownloadManager
-        get() = (getApplication<NasMusicApp>()).songDownloadManager
-    private val autoDownloadController: AutoDownloadController
-        get() = (getApplication<NasMusicApp>()).autoDownloadController
-
-    /**
-     * 歌曲下载状态表 songKey → [DownloadState]。
-     * 由 [SongDownloadManager] 维护的 StateFlow，UI 列表外层 collect 一次后作为参数传入行组件。
-     */
-    val songDownloadStates: StateFlow<Map<String, DownloadState>>
-        get() = songDownloadManager.downloadStates
-
-    /** 下载统计信息（歌曲数/歌词数/封面数/占用空间），供设置页展示 */
-    private val _downloadStats = MutableStateFlow(DownloadStats())
-    val downloadStats: StateFlow<DownloadStats> = _downloadStats.asStateFlow()
-
-    /** 刷新下载统计（设置页进入时 + 下载完成时调用） */
-    fun refreshDownloadStats() {
+        // K 歌进入时启动遥控服务器
+        _vocalVM.onEnsureRemoteControlStarted = { ensureRemoteControlStarted() }
+        // MV 播放模式同步（playMode 由 MainViewModel 拥有，作为方法参数下发）
         viewModelScope.launch {
-            val app = getApplication<NasMusicApp>()
-            _downloadStats.value = app.downloadRepository.getDownloadStats()
+            _playMode.collect { _mvVM.currentPlayMode = it }
         }
     }
 
-    /** 刷新模型下载状态（启动时/设置页进入时调用） */
-    fun refreshModelStatus() {
-        val mgr = modelDownloadManager
-        _modelDownloaded.value = mgr.isModelDownloaded()
-        _modelSizeMB.value = mgr.getModelSizeMB()
-        _modelPath.value = mgr.getModelFile().absolutePath
-    }
+    // ---- DownloadViewModel 转发 ----
+    val songDownloadStates: StateFlow<Map<String, com.nasmusic.tv.backend.download.model.DownloadState>>
+        get() = _downloadVM.songDownloadStates
+    val downloadStats: StateFlow<com.nasmusic.tv.backend.download.DownloadStats> get() = _downloadVM.downloadStats
+    val modelDownloaded: StateFlow<Boolean> get() = _downloadVM.modelDownloaded
+    val modelDownloading: StateFlow<Boolean> get() = _downloadVM.modelDownloading
+    val modelDownloadProgress: StateFlow<Float> get() = _downloadVM.modelDownloadProgress
+    val modelDownloadedMB: StateFlow<Long> get() = _downloadVM.modelDownloadedMB
+    val modelTotalMB: StateFlow<Long> get() = _downloadVM.modelTotalMB
+    val modelDownloadError: StateFlow<String?> get() = _downloadVM.modelDownloadError
+    val modelSizeMB: StateFlow<Double> get() = _downloadVM.modelSizeMB
+    val modelPath: StateFlow<String> get() = _downloadVM.modelPath
 
-    /** 下载高质量分离模型（带进度回调） */
-    fun downloadModel() {
-        if (_modelDownloading.value) return
-        val mgr = modelDownloadManager
-        _modelDownloading.value = true
-        _modelDownloadError.value = null
-        _modelDownloadProgress.value = 0f
-        _modelDownloadedMB.value = 0L
-        _modelTotalMB.value = mgr.getExpectedSizeMB().toLong()
+    fun refreshDownloadStats() = _downloadVM.refreshDownloadStats()
+    fun refreshModelStatus() = _downloadVM.refreshModelStatus()
+    fun downloadModel() = _downloadVM.downloadModel()
+    fun deleteModel() = _downloadVM.deleteModel(onModeFallback = { _vocalVM.onModelDeleted() })
+    fun downloadSong(song: Song) = _downloadVM.downloadSong(song)
+    fun clearAllDownloads() = _downloadVM.clearAllDownloads()
+    fun deleteDownload(song: Song) = _downloadVM.deleteDownload(song)
+
+    // ---- VocalSeparationViewModel 转发 ----
+    val vocalRemovalEnabled: StateFlow<Boolean> get() = _vocalVM.vocalRemovalEnabled
+    val separationMode: StateFlow<AppPreferences.SeparationMode> get() = _vocalVM.separationMode
+    val separating: StateFlow<Boolean> get() = _vocalVM.separating
+    val separationProgress: StateFlow<Pair<Float, String>> get() = _vocalVM.separationProgress
+    val hqError: StateFlow<String?> get() = _vocalVM.hqError
+    val hqSuccess: StateFlow<String?> get() = _vocalVM.hqSuccess
+    val pitchSemitones: StateFlow<Int> get() = _vocalVM.pitchSemitones
+    val playbackSpeed: StateFlow<Double> get() = _vocalVM.playbackSpeed
+    val showKaraoke: StateFlow<Boolean> get() = _vocalVM.showKaraoke
+
+    fun toggleVocalRemoval() = _vocalVM.toggleVocalRemoval()
+    fun setSeparationMode(mode: AppPreferences.SeparationMode) = _vocalVM.setSeparationMode(mode)
+    fun toggleSeparationMode() = _vocalVM.toggleSeparationMode()
+    fun clearHqError() = _vocalVM.clearHqError()
+    fun clearHqSuccess() = _vocalVM.clearHqSuccess()
+    fun loadPitchSpeedFromPrefs() = _vocalVM.loadPitchSpeedFromPrefs()
+    fun setPitchSemitones(semitones: Int) = _vocalVM.setPitchSemitones(semitones)
+    fun setPlaybackSpeed(speed: Double) = _vocalVM.setPlaybackSpeed(speed)
+    fun resetPitch() = _vocalVM.resetPitch()
+    fun resetSpeed() = _vocalVM.resetSpeed()
+    fun enterKaraoke() = _vocalVM.enterKaraoke()
+    fun exitKaraoke() = _vocalVM.exitKaraoke()
+    fun clearAccompanimentCache() {
         viewModelScope.launch {
-            val error = mgr.downloadModel { downloaded, total ->
-                _modelDownloadedMB.value = downloaded / (1024 * 1024)
-                _modelTotalMB.value = total / (1024 * 1024)
-                _modelDownloadProgress.value = if (total > 0) downloaded.toFloat() / total else 0f
-            }
-            _modelDownloading.value = false
-            if (error == null) {
-                _modelDownloaded.value = true
-                _modelSizeMB.value = mgr.getModelSizeMB()
-                _modelDownloadProgress.value = 1f
-            } else {
-                _modelDownloadError.value = error
-                _modelDownloaded.value = false
-            }
-        }
-    }
-
-    /** 删除已下载的模型文件 */
-    fun deleteModel() {
-        val mgr = modelDownloadManager
-        mgr.deleteModel()
-        _modelDownloaded.value = false
-        _modelSizeMB.value = 0.0
-        _modelDownloadProgress.value = 0f
-        // 若当前处于高质量模式，回退到快速模式
-        if (separationMode.value == AppPreferences.SeparationMode.HIGH_QUALITY) {
-            applySeparationMode(AppPreferences.SeparationMode.FAST)
-        }
-    }
-
-    /** 切换分离模式（快速↔高质量），持久化到 AppPreferences */
-    fun toggleSeparationMode() {
-        val currentMode = separationMode.value
-        val newMode = if (currentMode == AppPreferences.SeparationMode.FAST) {
-            AppPreferences.SeparationMode.HIGH_QUALITY
-        } else {
-            AppPreferences.SeparationMode.FAST
-        }
-        applySeparationMode(newMode)
-    }
-
-    /** 清除高质量分离错误信息 */
-    fun clearHqError() {
-        playerManager.clearHqError()
-    }
-
-    /** 清除高质量分离成功信息 */
-    fun clearHqSuccess() {
-        playerManager.clearHqSuccess()
-    }
-
-    /** 设置分离模式（从设置页调用） */
-    fun setSeparationMode(mode: AppPreferences.SeparationMode) {
-        applySeparationMode(mode)
-    }
-
-    /** 统一分离模式切换逻辑 */
-    private fun applySeparationMode(newMode: AppPreferences.SeparationMode) {
-        // 切换到高质量模式前检查模型是否已下载
-        if (newMode == AppPreferences.SeparationMode.HIGH_QUALITY && !modelDownloaded.value) {
-            AppLog.w("NASMusic", "applySeparationMode: model not downloaded, blocked")
-            return
-        }
-
-        playerManager.setSeparationMode(newMode)
-        viewModelScope.launch { prefs.setSeparationMode(newMode) }
-
-        if (_vocalRemovalEnabled.value) {
-            // K歌模式正在伴唱，切换模式时保持伴唱状态
-            if (newMode == AppPreferences.SeparationMode.HIGH_QUALITY) {
-                // 快速→高质量：关闭 DSP，切换到伴奏文件
-                playerManager.setVocalRemovalEnabled(false)
-                playerManager.enableHighQualityRemoval()
-            } else {
-                // 高质量→快速：切换回原始文件，重新开启 DSP
-                playerManager.disableHighQualityRemoval()
-                playerManager.setVocalRemovalEnabled(true)
-            }
-        } else {
-            // 非K歌/原唱模式，只切换模式标记
-            if (newMode == AppPreferences.SeparationMode.HIGH_QUALITY) {
-                // 不主动触发分离，等用户进入K歌时再分离
-            } else {
-                playerManager.disableHighQualityRemoval()
-            }
-        }
-        AppLog.d("NASMusic", "applySeparationMode -> $newMode (vocalRemoval=${_vocalRemovalEnabled.value})")
-    }
-
-    // --- K 歌页面：升降调 & 变速（全局记忆，重启恢复）---
-
-    private val _pitchSemitones = MutableStateFlow(0)
-    val pitchSemitones: StateFlow<Int> = _pitchSemitones.asStateFlow()
-
-    private val _playbackSpeed = MutableStateFlow(1.0)
-    val playbackSpeed: StateFlow<Double> = _playbackSpeed.asStateFlow()
-
-    /** 从 AppPreferences 加载上次保存的 pitch/speed，并应用到 PlayerManager */
-    fun loadPitchSpeedFromPrefs() {
-        viewModelScope.launch {
-            val savedPitch = prefs.pitchSemitones.first()
-            val savedSpeed = prefs.playbackSpeed.first()
-            _pitchSemitones.value = savedPitch
-            _playbackSpeed.value = savedSpeed
-            // 应用到播放器（仅在 player 已初始化时生效）
-            playerManager.setPitch(savedPitch)
-            playerManager.setSpeed(savedSpeed.toFloat())
-            AppLog.d("NASMusic", "loadPitchSpeedFromPrefs: pitch=$savedPitch, speed=$savedSpeed")
-        }
-    }
-
-    /** 设置升降调（半音 -12~+12）并持久化 */
-    fun setPitchSemitones(semitones: Int) {
-        val clamped = semitones.coerceIn(-12, 12)
-        _pitchSemitones.value = clamped
-        playerManager.setPitch(clamped)
-        viewModelScope.launch {
-            prefs.setPitchSemitones(clamped)
-        }
-        AppLog.d("NASMusic", "setPitchSemitones -> $clamped")
-    }
-
-    /** 设置播放速度（0.5~2.0）并持久化 */
-    fun setPlaybackSpeed(speed: Double) {
-        val clamped = speed.coerceIn(0.5, 2.0)
-        _playbackSpeed.value = clamped
-        playerManager.setSpeed(clamped.toFloat())
-        viewModelScope.launch {
-            prefs.setPlaybackSpeed(clamped)
-        }
-        AppLog.d("NASMusic", "setPlaybackSpeed -> $clamped")
-    }
-
-    /** 重置升降调到原调 */
-    fun resetPitch() {
-        _pitchSemitones.value = 0
-        playerManager.resetPitch()
-        viewModelScope.launch { prefs.setPitchSemitones(0) }
-        AppLog.d("NASMusic", "resetPitch -> 0")
-    }
-
-    /** 重置播放速度到原速 */
-    fun resetSpeed() {
-        _playbackSpeed.value = 1.0
-        playerManager.resetSpeed()
-        viewModelScope.launch { prefs.setPlaybackSpeed(1.0) }
-        AppLog.d("NASMusic", "resetSpeed -> 1.0")
-    }
-
-    // --- K 歌页面状态（切 Tab 时保持，退出 K 歌页时清除） ---
-    private val _showKaraoke = MutableStateFlow(false)
-    val showKaraoke: StateFlow<Boolean> = _showKaraoke.asStateFlow()
-
-    /** 进入 K 歌页面：开启人声消除 + 启动遥控服务器 */
-    fun enterKaraoke() {
-        _showKaraoke.value = true
-        if (!_vocalRemovalEnabled.value) {
-            toggleVocalRemoval()
-        }
-        ensureRemoteControlStarted()
-        AppLog.d("NASMusic", "enterKaraoke")
-    }
-
-    /**
-     * 退出 K 歌页面：清除人声消除 + 升降调 + 播放速度，恢复原唱状态。
-     * 仅清理音频效果，不改变播放队列或当前歌曲。
-     */
-    fun exitKaraoke() {
-        _showKaraoke.value = false
-        // 关闭人声消除（恢复原唱）
-        if (_vocalRemovalEnabled.value) {
-            toggleVocalRemoval()
-        }
-        // 重置升降调
-        if (_pitchSemitones.value != 0) {
-            resetPitch()
-        }
-        // 重置播放速度
-        if (_playbackSpeed.value != 1.0) {
-            resetSpeed()
-        }
-        AppLog.d("NASMusic", "exitKaraoke: reset vocalRemoval, pitch, speed")
-    }
-
-    // --- MTV 音乐视频 ---
-    private val _mvState = MutableStateFlow<MvAvailability>(MvAvailability.Idle)
-    val mvState: StateFlow<MvAvailability> = _mvState.asStateFlow()
-
-    /** MTV 页面显隐（进入 MTV 页面时为 true） */
-    private val _showMv = MutableStateFlow(false)
-    val showMv: StateFlow<Boolean> = _showMv.asStateFlow()
-
-    private var mvSearchJob: Job? = null
-
-    /** 当前歌曲的 MV 播放失败是否已重搜过一次（防止死循环；切歌时在 triggerMvSearch 内重置） */
-    private var mvRetryDone = false
-
-    /** 预搜的下一首 MV 结果（null = 未搜到或尚未完成预搜） */
-    private var pendingNextResult: MvSearchResult? = null
-
-    /** MTV 连播是否已静默推进队列索引（退出时据此决定 syncAndPlay 还是 resume） */
-    private var mvAdvanced = false
-
-    /** 静默推进索引时跳过 currentSong.collect 的 triggerMvSearch（避免覆盖预搜结果） */
-    private var skipNextMvSearch = false
-
-    /** 当前搜索会话内「切换」已按次数（达到 2×候选总数后触发重搜） */
-    private var mvSwitchCount = 0
-    /** 重搜次数（上限 2 次，防止无限重搜） */
-    private var mvResearchCount = 0
-    /** 重搜时排除的 bvid 集合（已展示过的视频不再出现） */
-    private val mvExcludedBvids = mutableSetOf<String>()
-
-    /** MTV 页面短暂提示（切换失败/未找到更多视频），2 秒后自动清除 */
-    private val _mvMessage = MutableStateFlow<String?>(null)
-    val mvMessage: StateFlow<String?> = _mvMessage.asStateFlow()
-
-    /**
-     * 切歌/播放时自动搜索当前歌曲的 MV（MvSearchManager 内部有内存缓存，命中不重复请求）。
-     * 置 Searching → searchMvFor → Ready/NotFound；由 UI 按钮消费决定亮/暗。
-     */
-    fun triggerMvSearch(song: Song) {
-        mvRetryDone = false
-        pendingNextResult = null // 清除旧预搜
-        mvSwitchCount = 0 // 重置切换计数
-        mvResearchCount = 0 // 重置重搜计数
-        mvExcludedBvids.clear() // 清除排除列表
-        mvSearchJob?.cancel()
-        _mvState.value = MvAvailability.Searching
-        mvSearchJob = viewModelScope.launch {
-            val result = try {
-                mvSearchManager.searchMvFor(song)
-            } catch (e: Exception) {
-                AppLog.e("NASMusic", "triggerMvSearch failed", e)
-                null
-            }
-            _mvState.value = if (result != null) MvAvailability.Ready(result.mv, result.alternatives) else MvAvailability.NotFound
-            AppLog.d("NASMusic", "triggerMvSearch: ${song.title} -> ${if (result != null) "found ${result.mv.title} + ${result.alternatives.size} alts" else "not found"}")
-            // MTV 模式下预搜下一首
-            if (result != null && _showMv.value) preSearchNextMv()
-        }
-    }
-
-    /**
-     * 进入 MTV 页面：暂停主播放器 + 显示 MTV 页 + 预搜下一首 MV。
-     */
-    fun enterMvMode() {
-        val ready = _mvState.value as? MvAvailability.Ready ?: return
-        mvAdvanced = false
-        AppLog.d("NASMusic", "enterMvMode: ${ready.mv.title}")
-        ensureRemoteControlStarted()
-        playerManager.suppressPlayback = true
-        playerManager.pause()
-        _showMv.value = true
-        preSearchNextMv()
-    }
-
-    /**
-     * 退出 MTV 页面：隐藏 MTV 页 + 恢复主播放器。
-     * 若 MTV 连播已静默推进队列索引（mvAdvanced），用 syncAndPlayCurrent 同步到新歌；
-     * 否则 resume 从暂停位置续播。
-     */
-    fun exitMvMode() {
-        AppLog.d("NASMusic", "exitMvMode: mvAdvanced=$mvAdvanced")
-        _showMv.value = false
-        pendingNextResult = null
-        playerManager.suppressPlayback = false // 恢复播放前先解除限制
-        if (mvAdvanced) {
-            playerManager.syncAndPlayCurrent()
-        } else {
-            playerManager.resume()
-        }
-    }
-
-    /**
-     * MV 播放失败回调：清缓存 + 重搜一次（同一首歌只重搜一次防死循环）。
-     */
-    fun onMvPlaybackError() {
-        if (mvRetryDone) {
-            AppLog.d("NASMusic", "onMvPlaybackError: already retried, skip")
-            return
-        }
-        val song = currentSong.value ?: return
-        mvRetryDone = true
-        AppLog.d("NASMusic", "onMvPlaybackError: clearCache + re-search '${song.title}'")
-        mvSearchManager.clearCache()
-        triggerMvSearch(song)
-    }
-
-    /**
-     * MV 播放结束回调（连播模式）：
-     * - 有预搜结果 -> 静默推进队列索引 + 直接设 Ready（无缝切换，无 Searching 闪烁，无混音）
-     * - 无预搜结果 -> 静默推进 + 设 NotFound -> AppRoot 自动 exitMvMode -> syncAndPlayCurrent 播下一首
-     */
-    fun onMvPlaybackEnded() {
-        // 标记当前 MV 播放完成（用户认可这个版本）-> 持久缓存 playCount++，下次优先用这个 bvid
-        val completedSong = currentSong.value
-        val completedMv = (_mvState.value as? MvAvailability.Ready)?.mv
-        if (completedSong != null && completedMv != null) {
-            mvSearchManager.markCompleted(completedSong.id, completedSong.title, completedSong.artist, completedMv.bvid, completedMv.title)
-        }
-
-        val pending = pendingNextResult
-        skipNextMvSearch = true // advanceIndexSilently 会更新 _currentSong，跳过 collect 的 triggerMvSearch
-        playerManager.advanceIndexSilently(_playMode.value)
-        mvAdvanced = true
-
-        if (pending != null) {
-            _mvState.value = MvAvailability.Ready(pending.mv, pending.alternatives)
-            pendingNextResult = null
-            AppLog.d("NASMusic", "onMvPlaybackEnded: seamless switch to '${pending.mv.title}'")
-            preSearchNextMv()
-        } else {
-            _mvState.value = MvAvailability.NotFound // 触发 AppRoot 自动 exitMvMode
-            AppLog.d("NASMusic", "onMvPlaybackEnded: no pre-searched MV, exiting to playback")
-        }
-    }
-
-    /**
-     * MTV 页面"上一首"按钮：回退队列索引 + 搜索前一首的 MV（无预搜，走 Searching）。
-     */
-    fun onMvPrevious() {
-        skipNextMvSearch = true
-        val prevSong = playerManager.advanceIndexBackward(_playMode.value)
-        if (prevSong == null) {
-            skipNextMvSearch = false
-            return
-        }
-        mvAdvanced = true
-        _mvState.value = MvAvailability.Searching
-        mvSearchJob?.cancel()
-        mvSearchJob = viewModelScope.launch {
-            val result = try {
-                mvSearchManager.searchMvFor(prevSong)
-            } catch (e: Exception) {
-                null
-            }
-            _mvState.value = if (result != null) MvAvailability.Ready(result.mv, result.alternatives) else MvAvailability.NotFound
-            AppLog.d("NASMusic", "onMvPrevious: '${prevSong.title}' -> ${if (result != null) "found" else "not found"}")
-            if (result != null) preSearchNextMv()
-        }
-    }
-
-    /**
-     * MTV 页面"下一首"按钮：有预搜则无缝切换，无则同步搜索。
-     */
-    fun onMvNext() {
-        val pending = pendingNextResult
-        if (pending != null) {
-            skipNextMvSearch = true
-            playerManager.advanceIndexSilently(_playMode.value)
-            mvAdvanced = true
-            _mvState.value = MvAvailability.Ready(pending.mv, pending.alternatives)
-            pendingNextResult = null
-            AppLog.d("NASMusic", "onMvNext: seamless switch to '${pending.mv.title}'")
-            preSearchNextMv()
-        } else {
-            skipNextMvSearch = true
-            val nextSong = playerManager.advanceIndexSilently(_playMode.value)
-            if (nextSong == null) { skipNextMvSearch = false; return }
-            mvAdvanced = true
-            _mvState.value = MvAvailability.Searching
-            mvSearchJob?.cancel()
-            mvSearchJob = viewModelScope.launch {
-                val result = try { mvSearchManager.searchMvFor(nextSong) } catch (e: Exception) { null }
-                _mvState.value = if (result != null) MvAvailability.Ready(result.mv, result.alternatives) else MvAvailability.NotFound
-                AppLog.d("NASMusic", "onMvNext: '${nextSong.title}' -> ${if (result != null) "found" else "not found"}")
-                if (result != null) preSearchNextMv()
-            }
-        }
-    }
-
-    /**
-     * 预搜下一首歌曲的 MV（后台协程，不阻塞 UI）。
-     * MTV 模式下当前 MV 搜到后调用，结果存入 [pendingNextResult] 供 onMvPlaybackEnded 无缝切换。
-     */
-    private fun preSearchNextMv() {
-        val nextSong = playerManager.peekNextSong(_playMode.value) ?: run {
-            pendingNextResult = null
-            return
-        }
-        viewModelScope.launch {
-            val result = try {
-                mvSearchManager.searchMvFor(nextSong)
-            } catch (e: Exception) {
-                AppLog.w("NASMusic", "preSearchNextMv failed: ${e.message}", e)
-                null
-            }
-            pendingNextResult = result
-            AppLog.d("NASMusic", "preSearchNextMv: '${nextSong.title}' -> ${if (result != null) "found ${result.mv.title}" else "not found"}")
-        }
-    }
-
-    /**
-     * 切换到候选列表中的另一个 MV（MTV 页面用户手动切换）。
-     * 按需解析 bvid 直链，旧 MV 变为候选。
-     */
-    /**
-     * MTV 页面「切换」按钮统一入口：
-     * - 无候选 -> 直接重搜（排除当前 bvid）
-     * - 有候选，已切换 2 轮 -> 重搜（排除所有已展示 bvid）
-     * - 有候选，未满 2 轮 -> 切换到下一个候选
-     * - 重搜次数已达上限（2 次）-> 提示"未找到更多视频"
-     */
-    fun onSwitchOrResearch() {
-        val ready = _mvState.value as? MvAvailability.Ready ?: return
-        val totalVideos = 1 + ready.alternatives.size
-
-        if (ready.alternatives.isEmpty()) {
-            if (mvResearchCount >= 2) { showMvMessage(getApplication<Application>().getString(R.string.mv_no_more_videos)); return }
-            researchMv(ready)
-            return
-        }
-
-        mvSwitchCount++
-        if (mvSwitchCount > 2 * totalVideos) {
-            if (mvResearchCount >= 2) { showMvMessage(getApplication<Application>().getString(R.string.mv_no_more_videos)); return }
-            researchMv(ready)
-        } else {
-            switchToNextCandidate(ready)
-        }
-    }
-
-    /**
-     * MTV 页面「搜B站」按钮：当前 MV 来自百度网盘本地文件（source == "baidu"）时，
-     * 强制从非百度源（B 站）重新搜索，替换当前 MV 状态。
-     */
-    fun onSearchBilibili() {
-        val song = currentSong.value ?: return
-        _mvState.value = MvAvailability.Searching
-        mvSearchJob?.cancel()
-        mvSearchJob = viewModelScope.launch {
-            val result = try {
-                mvSearchManager.searchBilibiliFallback(song)
-            } catch (e: Exception) {
-                AppLog.e("NASMusic", "onSearchBilibili failed", e)
-                null
-            }
-            if (result != null) {
-                _mvState.value = MvAvailability.Ready(result.mv, result.alternatives)
-                showMvMessage(getApplication<Application>().getString(R.string.mv_switched_to_bilibili))
-                preSearchNextMv()
-            } else {
-                _mvState.value = MvAvailability.NotFound
-                showMvMessage(getApplication<Application>().getString(R.string.mv_bilibili_not_found))
-            }
-            AppLog.d("NASMusic", "onSearchBilibili: '${song.title}' -> ${if (result != null) "found ${result.mv.title}" else "not found"}")
-        }
-    }
-
-    /** 切换到候选列表中的下一个视频 */
-    private fun switchToNextCandidate(ready: MvAvailability.Ready) {
-        val targetBvid = ready.alternatives.firstOrNull()?.bvid ?: return
-        viewModelScope.launch {
-            AppLog.d("NASMusic", "switchToNextCandidate: bvid=$targetBvid")
-            val newMv = mvSearchManager.resolveMv(targetBvid)
-            if (newMv == null) {
-                AppLog.w("NASMusic", "switchToNextCandidate: resolve failed")
-                showMvMessage(getApplication<Application>().getString(R.string.mv_switch_failed_retry))
-                mvSwitchCount-- // 切换未成功，回退计数
-                return@launch
-            }
-            val oldCandidate = MvCandidate(ready.mv.bvid, ready.mv.title, ready.mv.coverUrl)
-            val newAlternatives = ready.alternatives.filter { it.bvid != targetBvid } + oldCandidate
-            _mvState.value = MvAvailability.Ready(newMv, newAlternatives)
-            AppLog.d("NASMusic", "switchToNextCandidate: switched to '${newMv.title}'")
-        }
-    }
-
-    /** 重搜：排除已展示 bvid + 降低相似度阈值，后台搜索不打断当前播放 */
-    private fun researchMv(ready: MvAvailability.Ready) {
-        val song = currentSong.value ?: return
-        mvExcludedBvids.add(ready.mv.bvid)
-        ready.alternatives.forEach { mvExcludedBvids.add(it.bvid) }
-        mvResearchCount++
-        val minSim = when (mvResearchCount) { 1 -> 0.3f; 2 -> 0.1f; else -> 0f }
-        AppLog.d("NASMusic", "researchMv: #${mvResearchCount} exclude=${mvExcludedBvids.size} minSim=$minSim")
-        showMvMessage(getApplication<Application>().getString(R.string.mv_searching_more))
-        mvSearchJob?.cancel()
-        mvSearchJob = viewModelScope.launch {
-            val result = try {
-                mvSearchManager.searchMvFor(song, forceRefresh = true, excludeBvids = mvExcludedBvids.toSet(), minSimilarity = minSim)
-            } catch (e: Exception) {
-                AppLog.e("NASMusic", "researchMv failed", e)
-                null
-            }
-            if (result != null) {
-                mvSwitchCount = 0
-                _mvState.value = MvAvailability.Ready(result.mv, result.alternatives)
-                showMvMessage(getApplication<Application>().getString(R.string.mv_found_new_videos, 1 + result.alternatives.size))
-                if (_showMv.value) preSearchNextMv()
-            } else {
-                mvResearchCount--
-                showMvMessage(getApplication<Application>().getString(R.string.mv_no_more_videos))
-            }
-        }
-    }
-
-    private var mvMessageJob: Job? = null
-    private fun showMvMessage(msg: String) {
-        mvMessageJob?.cancel()
-        _mvMessage.value = msg
-        mvMessageJob = viewModelScope.launch {
+            val count = _vocalVM.clearAccompanimentCache()
+            _connectMessage.value = getApplication<Application>().getString(R.string.status_accompaniment_cache_cleared, count)
             delay(2000)
-            _mvMessage.value = null
+            _connectMessage.value = null
+        }
+    }
+
+    // ---- MvSearchViewModel 转发 ----
+    val mvState: StateFlow<MvAvailability> get() = _mvVM.mvState
+    val showMv: StateFlow<Boolean> get() = _mvVM.showMv
+    val mvMessage: StateFlow<String?> get() = _mvVM.mvMessage
+
+    fun triggerMvSearch(song: Song) = _mvVM.triggerMvSearch(song)
+    fun enterMvMode() {
+        ensureRemoteControlStarted()
+        _mvVM.enterMvMode()
+    }
+    fun exitMvMode() = _mvVM.exitMvMode()
+    fun onMvPlaybackError() = _mvVM.onMvPlaybackError(currentSong.value)
+    fun onMvPlaybackEnded() = _mvVM.onMvPlaybackEnded(currentSong.value, _playMode.value)
+    fun onMvPrevious() = _mvVM.onMvPrevious(_playMode.value)
+    fun onMvNext() = _mvVM.onMvNext(_playMode.value)
+    fun onSwitchOrResearch() = _mvVM.onSwitchOrResearch(currentSong.value)
+    fun onSearchBilibili() = _mvVM.onSearchBilibili(currentSong.value)
+    fun clearMvPersistentCache() {
+        _mvVM.clearPersistentCache {
+            viewModelScope.launch {
+                _connectMessage.value = getApplication<Application>().getString(R.string.status_mv_cache_cleared)
+                delay(2000)
+                _connectMessage.value = null
+            }
         }
     }
 
@@ -4086,153 +3566,11 @@ showError(getApplication<Application>().getString(R.string.play_failed_with_msg,
         prefs.setDownloadLocation(location)
     }
 
-    /** 手动下载单曲（歌曲行 ⬇ 按钮）。受总开关与空间限制，不受自动下载配额限制 */
-    fun downloadSong(song: Song) {
-        viewModelScope.launch {
-            // P1-15: 补齐 downloadNow 中的安全检查（enqueue → executeDownload 会跳过这些）
-            // 1. 总开关
-            val settings = prefs.appSettings.first()
-            if (!settings.downloadEnabled) return@launch
-            // 2. 可下载性（本地歌曲 / 天气电台不可下载）
-            if (!isDownloadableSong(song)) return@launch
-
-            val key = song.downloadKey
-            val state = songDownloadStates.value[key]
-            // 3. 已下载 / 下载中 / 已入队 → 不重复入队
-            if (state is DownloadState.Completed ||
-                state is DownloadState.Downloading ||
-                state is DownloadState.Queued
-            ) {
-                return@launch
-            }
-            songDownloadManager.enqueue(song, auto = false)
-        }
-    }
-
     fun updateFontAdjustment(adjustment: Int) = viewModelScope.launch {
         prefs.setFontAdjustment(adjustment)
     }
 
-    // --- 下载管理（§8.7.3） ---
-
-    /**
-     * 清空所有已下载歌曲：删除文件 + 清空 download_songs + 刷新 local_songs
-     */
-    fun clearAllDownloads() {
-        viewModelScope.launch {
-            val app = getApplication<NasMusicApp>()
-            val repo = app.downloadRepository
-            val completed = repo.getCompleted()
-
-            // 0. 无论 DB 是否有记录，都必须清空内存状态 Map
-            //    （否则搜索结果仍显示"已下载"）
-            app.songDownloadManager.clearAllStates()
-
-            if (completed.isEmpty()) {
-                // DB 已空，但 local_songs 可能有残留（路径不匹配导致之前没删干净）
-                app.localMusicRepository.deleteByStorageType(
-                    com.nasmusic.tv.data.model.StorageType.DOWNLOAD.name
-                )
-                _localSongs.value = app.localMusicRepository.loadFromCache()
-                updateMergedData()
-                _downloadStats.value = DownloadStats()
-                return@launch
-            }
-
-            // 1. 删除所有音频文件
-            var deletedBytes = 0L
-            for (e in completed) {
-                e.audioPath?.let { path ->
-                    val f = java.io.File(path)
-                    if (f.exists()) {
-                        deletedBytes += f.length()
-                        f.delete()
-                    }
-                }
-                // 清理旁路文件
-                e.coverPath?.let { java.io.File(it).delete() }
-                e.lyricPath?.let { java.io.File(it).delete() }
-            }
-
-            // 2. 清空 download_songs 表
-            repo.deleteAll()
-
-            // 3. 从 local_songs 移除所有下载类歌曲
-            //    用 deleteByStorageType 而非 removeByPaths（后者按 audioPath 匹配，
-            //    但 LocalSongEntity.path 存的是 "file://..." URI，与 audioPath 不匹配）
-            app.localMusicRepository.deleteByStorageType(
-                com.nasmusic.tv.data.model.StorageType.DOWNLOAD.name
-            )
-
-            // 4. 刷新内存
-            _localSongs.value = app.localMusicRepository.loadFromCache()
-            updateMergedData()
-
-            // 5. 提示
-            val msg = getApplication<Application>().getString(
-                R.string.download_cleared, deletedBytes
-            )
-            _connectMessage.value = msg
-            delay(2000)
-            _connectMessage.value = null
-
-            // 刷新下载统计
-            _downloadStats.value = DownloadStats()
-        }
-    }
-
-    /**
-     * 删除单首已下载歌曲：删文件 + 删 download_songs 记录 + 从 local_songs 移除
-     */
-    fun deleteDownload(song: Song) {
-        viewModelScope.launch {
-            val app = getApplication<NasMusicApp>()
-            val repo = app.downloadRepository
-            val key = song.downloadKey
-            val entity = repo.get(key) ?: return@launch
-
-            // 1. 如果当前正在播放此歌 → 暂停
-            val current = playerManager.currentSong.value
-            if (current?.id == song.id) {
-                playerManager.pause()
-            }
-
-            // 2. 删除文件
-            var deletedBytes = 0L
-            entity.audioPath?.let { path ->
-                val f = java.io.File(path)
-                if (f.exists()) {
-                    deletedBytes = f.length()
-                    f.delete()
-                }
-            }
-            entity.coverPath?.let { java.io.File(it).delete() }
-            entity.lyricPath?.let { java.io.File(it).delete() }
-
-            // 3. 删除 download_songs 记录
-            repo.delete(key)
-
-            // 4. 从 local_songs 移除（path 存的是 "file://..." URI，需加前缀匹配）
-            entity.audioPath?.let { path ->
-                app.localMusicRepository.removeByPaths(listOf("file://$path"))
-            }
-
-            // 5. 刷新内存
-            _localSongs.value = app.localMusicRepository.loadFromCache()
-            updateMergedData()
-
-            // 6. 提示
-            val msg = getApplication<Application>().getString(
-                R.string.download_deleted, song.title
-            )
-            _connectMessage.value = msg
-            delay(2000)
-            _connectMessage.value = null
-
-            // 刷新下载统计
-            _downloadStats.value = app.downloadRepository.getDownloadStats()
-        }
-    }
+    /** 手动下载单曲（歌曲行 ⬇ 按钮）——已迁至 DownloadViewModel.downloadSong */
 
     // --- 导出功能（§8.8） ---
     private val exportCoordinator by lazy {
@@ -4300,25 +3638,7 @@ showError(getApplication<Application>().getString(R.string.play_failed_with_msg,
         }
     }
 
-    /** 清除 MV 持久缓存（设置页"缓存管理"手动清除用） */
-    fun clearMvPersistentCache() {
-        viewModelScope.launch {
-            mvSearchManager.clearPersistentCache()
-            _connectMessage.value = getApplication<Application>().getString(R.string.status_mv_cache_cleared)
-            delay(2000)
-            _connectMessage.value = null
-        }
-    }
-
-    /** 清除伴奏缓存（设置页"缓存管理"手动清除用） */
-    fun clearAccompanimentCache() {
-        viewModelScope.launch {
-            val count = playerManager.clearAccompanimentCache()
-            _connectMessage.value = getApplication<Application>().getString(R.string.status_accompaniment_cache_cleared, count)
-            delay(2000)
-            _connectMessage.value = null
-        }
-    }
+    // （clearMvPersistentCache / clearAccompanimentCache 已迁至子 ViewModel 转发区，勿重复定义）
 
     // --- B-4 均衡器 ---
     val equalizerPreset: StateFlow<EqualizerPreset> = prefs.equalizerPreset.stateIn(
