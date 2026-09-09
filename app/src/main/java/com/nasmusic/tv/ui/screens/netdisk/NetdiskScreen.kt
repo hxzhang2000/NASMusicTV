@@ -53,6 +53,7 @@ import com.nasmusic.tv.ui.screens.TextInputDialog
 import com.nasmusic.tv.ui.theme.FontSize
 import com.nasmusic.tv.ui.theme.NasMusicColors
 import com.nasmusic.tv.ui.viewmodel.MainViewModel
+import com.nasmusic.tv.ui.viewmodel.NetworkMusicViewModel
 
 /**
  * 网盘 Tab：目录浏览 + 关键词搜索 + 文件操作（播放/加队列/加歌单/查看 MV）
@@ -119,7 +120,7 @@ val downloadStates by viewModel.songDownloadStates.collectAsState(initial = empt
         }
 
         when {
-            connectionState is MainViewModel.BaiduConnectionState.DirMissing -> {
+            connectionState is NetworkMusicViewModel.BaiduConnectionState.DirMissing -> {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text(
@@ -137,7 +138,7 @@ val downloadStates by viewModel.songDownloadStates.collectAsState(initial = empt
                     }
                 }
             }
-            connectionState !is MainViewModel.BaiduConnectionState.LoggedIn -> {
+            connectionState !is NetworkMusicViewModel.BaiduConnectionState.LoggedIn -> {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Text(
                         stringResource(R.string.netdisk_status_baidu_not_logged_in),

@@ -189,7 +189,7 @@ fun SettingsScreen(
     baiduEnabled: Boolean = false,
     baiduLoggedIn: Boolean = false,
     baiduConnecting: Boolean = false,
-    baiduConnectionState: com.nasmusic.tv.ui.viewmodel.MainViewModel.BaiduConnectionState = com.nasmusic.tv.ui.viewmodel.MainViewModel.BaiduConnectionState.Off,
+    baiduConnectionState: com.nasmusic.tv.ui.viewmodel.NetworkMusicViewModel.BaiduConnectionState = com.nasmusic.tv.ui.viewmodel.NetworkMusicViewModel.BaiduConnectionState.Off,
     baiduDeviceCode: com.nasmusic.tv.backend.network.baidu.BaiduOAuthClient.DeviceCodeResult? = null,
     baiduMusicRootDir: String = com.nasmusic.tv.backend.network.baidu.BaiduNetdiskConfig.APP_DIR,
     baiduMvDir: String? = null,
@@ -989,7 +989,7 @@ fun SettingsScreen(
                     item { SettingSwitch(label = stringResource(R.string.settings_netdisk_enable), description = stringResource(R.string.settings_netdisk_enable_desc), checked = baiduEnabled, onClick = { onToggleBaiduEnabled?.invoke(!baiduEnabled) }) }
 
                     // 授权失败时，在登录按钮上方持续显示失败原因（即使对话框关闭也能看到）
-                    val baiduFailedState = baiduConnectionState as? com.nasmusic.tv.ui.viewmodel.MainViewModel.BaiduConnectionState.Failed
+                    val baiduFailedState = baiduConnectionState as? com.nasmusic.tv.ui.viewmodel.NetworkMusicViewModel.BaiduConnectionState.Failed
                     if (baiduFailedState != null) {
                         item { Spacer(modifier = Modifier.height(12.dp)) }
                         item {
@@ -1011,7 +1011,7 @@ fun SettingsScreen(
                     }
 
                     // 已登录但音乐根目录不存在，提示用户重新设置
-                    val baiduDirMissing = baiduConnectionState is com.nasmusic.tv.ui.viewmodel.MainViewModel.BaiduConnectionState.DirMissing
+                    val baiduDirMissing = baiduConnectionState is com.nasmusic.tv.ui.viewmodel.NetworkMusicViewModel.BaiduConnectionState.DirMissing
                     if (baiduDirMissing) {
                         item { Spacer(modifier = Modifier.height(12.dp)) }
                         item {

@@ -175,6 +175,60 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
         _currentScreen.value = Screen.NowPlaying
     }
 
+    // =====================================================================
+    // R-1 第三步拆分：Server / Search / NetworkMusic 已迁至子 ViewModel。
+    // =====================================================================
+    private val _serverVM = ServerViewModel(app, backendRegistry)
+    private val _searchVM = SearchViewModel(app, backendRegistry, nasMusicApp.searchAggregator)
+    private val _netVM = NetworkMusicViewModel(app)
+
+    init {
+        // ---- ServerViewModel 接线 ----
+        _serverVM.onConnected = {
+            loadLibrary()
+            // 更新恢复队列中 NAS 歌曲的 streamUrl
+            updateRestoredQueueStreamUrls()
+            // 导航到首页
+            _currentScreen.value = Screen.Home
+            loadHomeDashboard()
+        }
+        _serverVM.onDisconnected = {
+            _albums.value = UiState.Loading
+            _songs.value = UiState.Loading
+            _songsPaging.value = SongsPagingState()
+            _artists.value = UiState.Success(emptyList())
+            _years.value = UiState.Success(emptyList())
+            _recentSongs.value = UiState.Success(emptyList())
+            _searchVM.clearSearch()
+            _genres.value = UiState.Success(emptyList())
+            _favoriteSongs.value = UiState.Success(emptyList())
+            _playlists.value = UiState.Success(emptyList())
+        }
+        _serverVM.checkSavedConfigOnStart()
+        _serverVM.refreshApiVersionsAsync()
+
+        // ---- SearchViewModel 接线 ----
+        _searchVM.libraryActiveTabProvider = { _libraryActiveTab.value }
+        _searchVM.librarySearchKeywordProvider = { _librarySearchKeyword.value }
+        _searchVM.nasLocalSongsProvider = { _songsPaging.value.songs }
+        _searchVM.localDeviceSongsProvider = { _localSongs.value }
+        _searchVM.onAddToQueue = { playerManager.addToQueue(it) }
+        _searchVM.onPlayBatch = { songs, startIndex -> playNetworkBatch(songs, startIndex) }
+        _searchVM.showMessage = { showError(it) }
+        _searchVM.showMessageFor = { added, skipped, _ ->
+            _serverVM.postConnectMessage(
+                getApplication<Application>().getString(R.string.added_to_queue_with_skipped, added, skipped)
+            )
+        }
+
+        // ---- NetworkMusicViewModel 接线 ----
+        _netVM.onPlayQueue = { songs, startIndex -> playQueue(songs, startIndex) }
+        _netVM.showMessage = { showError(it) }
+        _netVM.onMergedDataInvalidated = { updateMergedData() }
+        // 启动期恢复百度索引状态 + 触发合并
+        _netVM.restoreBaiduIndexOnStart { _ -> updateMergedData() }
+    }
+
     // --- 导航状态 ---
     private val _currentScreen = MutableStateFlow(Screen.Home)
     val currentScreen: StateFlow<Screen> = _currentScreen.asStateFlow()
@@ -274,49 +328,72 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
     private val _recentSongs = MutableStateFlow<UiState<List<Song>>>(UiState.Success(emptyList()))
     val recentSongs: StateFlow<UiState<List<Song>>> = _recentSongs.asStateFlow()
 
-    // --- 按需加载：搜索结果（服务端搜索）---
-    private val _searchResults = MutableStateFlow<UiState<List<Song>>>(UiState.Success(emptyList()))
-    val searchResults: StateFlow<UiState<List<Song>>> = _searchResults.asStateFlow()
-    /** 上次搜索的关键词：同词 + 同 searchType + 结果已成功时不重复搜索（跨导航暂存搜索结果） */
-    private var lastSearchedKeyword: String? = null
-    private var lastSearchType: SearchType = SearchType.SONG_NAME_OR_ARTIST
-
-    // --- 网络音乐搜索结果（NetworkMusicManager 搜索）---
-    private val _networkSearchResults = MutableStateFlow<UiState<List<Song>>>(UiState.Success(emptyList()))
-    val networkSearchResults: StateFlow<UiState<List<Song>>> = _networkSearchResults.asStateFlow()
-    // 网络搜索关键词（跨页面导航时保留，避免回来后丢失搜索状态）
-    private val _networkSearchKeyword = MutableStateFlow("")
-    val networkSearchKeyword: StateFlow<String> = _networkSearchKeyword.asStateFlow()
-
-    /** 搜索变异词后缀表：换一批时在原词后追加，用于突破单次搜索 30 首上限 */
-    private val searchVariantSuffixes = listOf(
-        "翻唱", "live", "现场", "伴奏", "钢琴", "吉他", "remix", "串烧",
-        "经典", "怀旧", "演唱会", "DJ版", "纯音乐", "古风", "钢琴版", "吉他版",
-        "慢速", "混音", "国语", "粤语", "英文", "日文", "韩文", "原唱"
-    )
-
-    /** 换一批时新歌数量达到该值才展示（否则继续尝试下一后缀） */
-    private val minNewResultsForShuffle = 5
-
-    /** 换一批单次点击最多尝试的后缀数量（避免搜索结果长期重复时空转） */
-    private val maxShuffleAttemptsPerClick = 6
-
-    /** 用户输入的原始搜索词（换一批的基准） */
-    private var networkSearchBaseKeyword = ""
-
-    /** 已用过的变异后缀（一轮内不重复，用尽后重置） */
-    private val usedSearchVariants = mutableSetOf<String>()
-
-    /** 换一批已展示过的歌曲（歌手, 歌名）集合：跨批次去重，保证每次换一批只出新歌 */
-    private val seenNetworkSearchKeys = mutableSetOf<Pair<String, String>>()
+    // --- 搜索域（R-1：已迁至 SearchViewModel，仅保留跨导航暂存的状态镜像）---
+    val searchResults: StateFlow<UiState<List<Song>>> get() = _searchVM.searchResults
+    val networkSearchResults: StateFlow<UiState<List<Song>>> get() = _searchVM.networkSearchResults
+    val networkSearchKeyword: StateFlow<String> get() = _searchVM.networkSearchKeyword
+    val enabledSearchSources: StateFlow<Set<MusicSourceType>> get() = _searchVM.enabledSearchSources
 
     /** 浏览换一批已展示过的歌曲（歌手, 歌名）集合：跨批次去重，筛选条件变化时重置 */
     private val browseSeenKeys = mutableSetOf<Pair<String, String>>()
 
-    // --- 统一收藏（NAS 走 adapter，网络/本地走 DataStore NetworkFavoriteItem）---
-    private val _networkFavorites = MutableStateFlow<List<NetworkFavoriteItem>>(emptyList())
+    /** 换一批单次点击最多尝试的后缀数量（避免搜索结果长期重复时空转） */
+    private val maxShuffleAttemptsPerClick = 6
+
+    /** 换一批时新歌数量达到该值才展示（否则继续尝试下一后缀） */
+    private val minNewResultsForShuffle = 5
+
+    /**
+     * 统一的「换一批」核心逻辑（多维度浏览专用；网络搜索/天气电台版已随域迁出）。
+     *
+     * 反复调用 [produce] 生成候选（最多 [maxShuffleAttemptsPerClick] 次），用 [songsOf]
+     * 取出其中的歌曲列表，过滤掉 [seenKeys] 中已展示过的歌曲，返回新歌最多的候选与
+     * 新歌列表；新歌数量达到 [minNewResultsForShuffle] 即提前停止。
+     *
+     * 若所有候选都没有新歌（已见集合饱和），清空 [seenKeys] 后重新生成一次候选并返回
+     * （从头再来，保证每次点击都有内容）。返回前把本次真正展示的新歌记入 [seenKeys]
+     * （未展示的候选歌曲保留，之后批次仍可出现）。
+     *
+     * 调用方负责在「上下文变化」（新筛选）时清空对应的 [seenKeys]。
+     */
+    private suspend fun <T> pickBestFreshBatch(
+        seenKeys: MutableSet<Pair<String, String>>,
+        maxAttempts: Int = maxShuffleAttemptsPerClick,
+        minNewResults: Int = minNewResultsForShuffle,
+        produce: suspend () -> T,
+        songsOf: (T) -> List<Song>
+    ): Pair<T, List<Song>> {
+        var best: T? = null
+        var bestFresh: List<Song> = emptyList()
+        var attempts = 0
+        while (attempts < maxAttempts) {
+            attempts++
+            val candidate = produce()
+            val fresh = songsOf(candidate).filterNot { (it.artist.trim() to it.title.trim()) in seenKeys }
+            if (fresh.size > bestFresh.size) {
+                best = candidate
+                bestFresh = fresh
+            }
+            if (fresh.size >= minNewResults) break
+        }
+        val chosen = best
+        val result = if (chosen == null || bestFresh.isEmpty()) {
+            // 所有候选都没有新歌：已见集合饱和，从头再来一批
+            seenKeys.clear()
+            val freshProduce = produce()
+            freshProduce to songsOf(freshProduce)
+        } else {
+            chosen to bestFresh
+        }
+        // 修复（M-9）：硬上限防长期挂机场景集合无限增长（饱和 clear 之外的双保险）
+        if (seenKeys.size >= 4000) seenKeys.clear()
+        result.second.forEach { seenKeys.add(it.artist.trim() to it.title.trim()) }
+        return result
+    }
+
+    // --- 统一收藏（R-1：收藏数据迁至 NetworkMusicViewModel，此处派生只读视图）---
     // 供 UI 使用：转换为 Song 对象列表（根据 source 标记 isLocalSong / isNetworkSong 字段）
-    val networkFavoriteSongs: StateFlow<List<Song>> = _networkFavorites.map { favorites ->
+    val networkFavoriteSongs: StateFlow<List<Song>> = _netVM.networkFavorites.map { favorites ->
         favorites.map { item ->
             val isLocal = item.networkSource == "local"
             Song(
@@ -333,7 +410,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
         }
     }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
     // 网络收藏 ID 集合（用于快速判断是否已收藏）
-    val networkFavoriteIds: StateFlow<Set<String>> = _networkFavorites.map { favorites ->
+    val networkFavoriteIds: StateFlow<Set<String>> = _netVM.networkFavorites.map { favorites ->
         favorites.map { it.songId }.toSet()
     }.stateIn(viewModelScope, SharingStarted.Eagerly, emptySet())
 
@@ -397,29 +474,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
         }
     }
 
-    // --- 搜索来源点亮状态（跨导航记忆，决定搜索哪些源） ---
-    private val _enabledSearchSources = MutableStateFlow(MusicSourceType.DEFAULT_SEARCH_SOURCES)
-    val enabledSearchSources: StateFlow<Set<MusicSourceType>> = _enabledSearchSources.asStateFlow()
-
-    /** 切换某来源的点亮/熄灭状态 */
-    fun toggleSearchSource(source: MusicSourceType) {
-        val current = _enabledSearchSources.value.toMutableSet()
-        if (source in current) current.remove(source) else current.add(source)
-        _enabledSearchSources.value = current
-        // 有活动关键词时按新来源范围立即重新搜索（force 跳过缓存）
-        val kw = _librarySearchKeyword.value
-        if (kw.isNotBlank()) searchSongsOnServer(kw, force = true)
-    }
-
-    /** 全部点亮（回到默认状态） */
-    fun enableAllSearchSources() {
-        // 已是全部点亮则跳过重搜，避免冗余网络请求
-        if (_enabledSearchSources.value == MusicSourceType.DEFAULT_SEARCH_SOURCES) return
-        _enabledSearchSources.value = MusicSourceType.DEFAULT_SEARCH_SOURCES
-        // 有活动关键词时按全部来源重新搜索（force 跳过缓存）
-        val kw = _librarySearchKeyword.value
-        if (kw.isNotBlank()) searchSongsOnServer(kw, force = true)
-    }
+    // （R-1：搜索来源点亮状态已迁至 SearchViewModel，转发见下方搜索转发区）
 
     // --- 网络音乐平台来源 ---
     private val _currentMusicSource = MutableStateFlow(MusicSource.NETEASE)
@@ -447,9 +502,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
         _searchNetworkPlatform.value = source.apiKey
         viewModelScope.launch {
             prefs.setMusicSource(source.apiKey)
-            // 有搜索关键词时自动重新搜索
-            if (_networkSearchKeyword.value.isNotBlank()) {
-                searchNetworkSongs(_networkSearchKeyword.value)
+            // 有搜索关键词时自动重新搜索（R-1：经 SearchViewModel）
+            val kw = _searchVM.networkSearchKeyword.value
+            if (kw.isNotBlank()) {
+                searchNetworkSongs(kw)
             }
         }
     }
@@ -497,9 +553,16 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
     private val _isNetworkAvailable = MutableStateFlow(true)
     val isNetworkAvailable: StateFlow<Boolean> = _isNetworkAvailable.asStateFlow()
 
-    // --- 加载状态 ---
+    // --- 加载状态（R-1：连接加载态归 ServerViewModel，本地镜像合并供 AppRoot 单点订阅）---
     private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
+
+    init {
+        // 合并 ServerViewModel 的加载态到本地通道
+        viewModelScope.launch {
+            _serverVM.isLoading.collect { _isLoading.value = it }
+        }
+    }
 
     // --- 歌词 ---
     private val _currentLyrics = MutableStateFlow<Lyrics?>(null)
@@ -654,31 +717,20 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
     // 避免用旧队列快照回滚用户后续操作。
     private var resolveGeneration = 0
 
-    // --- 连接状态 ---
-    private val _isConnected = MutableStateFlow(false)
-    val isConnected: StateFlow<Boolean> = _isConnected.asStateFlow()
-
+    // --- 连接状态（R-1：已迁至 ServerViewModel，保留本地 connectMessage 通道供多域共用）---
     private val _isLibraryLoading = MutableStateFlow(false)
     val isLibraryLoading: StateFlow<Boolean> = _isLibraryLoading.asStateFlow()
 
-    private val _serverDisplayName = MutableStateFlow("")
-    val serverDisplayName: StateFlow<String> = _serverDisplayName.asStateFlow()
-
-    /** 当前后端的 API 版本号（initialize 时获取，供设置→关于页展示） */
-    private val _backendApiVersion = MutableStateFlow("Unknown")
-    val backendApiVersion: StateFlow<String> = _backendApiVersion.asStateFlow()
-
-    /** 全量后端/服务 API 版本号聚合（供设置→关于页分段展示） */
-    private val _apiVersions = MutableStateFlow<List<VersionInfo>>(emptyList())
-    val apiVersions: StateFlow<List<VersionInfo>> = _apiVersions.asStateFlow()
-
-    // --- 启动连接提示 ---
-    private val _showConnectPrompt = MutableStateFlow(false)
-    val showConnectPrompt: StateFlow<Boolean> = _showConnectPrompt.asStateFlow()
-
-    // --- 连接结果提示消息（显示几秒后自动清除）---
+    // --- 连接结果提示消息（显示几秒后自动清除；主通道归 ServerViewModel，此处镜像合并）---
     private val _connectMessage = MutableStateFlow<String?>(null)
     val connectMessage: StateFlow<String?> = _connectMessage.asStateFlow()
+
+    init {
+        // 合并 ServerViewModel 的连接消息到本地通道（AppRoot 只订阅一处）
+        viewModelScope.launch {
+            _serverVM.connectMessage.collect { _connectMessage.value = it }
+        }
+    }
 
     // --- D-3 常规错误消息（数据加载失败、操作失败等）---
     private val _errorMessage = MutableStateFlow<String?>(null)
@@ -731,8 +783,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
             // 等待配置加载完成后判断是否显示连接提示
             val config = prefs.serverConfig.first()
             if (config.baseUrl.isNotBlank()) {
-                // 有已保存的服务器配置，询问用户是否自动连接
-                _showConnectPrompt.value = true
+                // 有已保存的服务器配置，询问用户是否自动连接（R-1：由 ServerViewModel 处理，
+                // 但保留此处删除以避免双重触发——init 接线区已调用 checkSavedConfigOnStart()）
             }
             // 无配置时不强制跳转，保持首页（用户可自行去 设置 → 服务器 配置）
         }
@@ -744,58 +796,14 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
             }
         }
 
-        // 后台异步：从磁盘恢复百度网盘索引状态 + 触发合并
-        // 注意：不能用 launch(Dispatchers.Default) 直接启动，否则协程可能在
-        // _baiduConnectionState 等属性初始化之前执行导致 NPE
-        // 注册百度 API 错误回调：仅认证错误（errno=-6）设 Failed，其他仅日志
-        baiduApi.onApiError = { errno, desc ->
+        // 百度网盘启动恢复（R-1：已迁至 NetworkMusicViewModel.restoreBaiduIndexOnStart，
+        // 接线区已调用；API 错误回调在此注册，指向子 VM 状态）
+        nasMusicApp.baiduPanApi.onApiError = { errno, desc ->
             if (errno == -6) {
                 AppLog.w("BaiduAuth", "onApiError: errno=-6 (auth failed), setting state=Failed")
-                _baiduConnectionState.value = BaiduConnectionState.Failed(desc)
+                _netVM.onBaiduAuthFailed(desc)
             } else {
                 AppLog.d("BaiduAuth", "onApiError: errno=$errno ($desc), not auth-related, ignored")
-            }
-        }
-
-        viewModelScope.launch {
-            withContext(Dispatchers.Default) {
-                val baiduCfg = prefs.getBaiduConfigSync()
-                AppLog.d("BaiduAuth", "init: cfg.isActive=${baiduCfg.isActive}, tokens=${baiduCfg.tokens != null}")
-                if (baiduCfg.isActive) {
-                    val savedIndex = baiduIndexCache.load()
-                    if (savedIndex != null && savedIndex.entries.isNotEmpty()) {
-                        _baiduIndexScanned.value = savedIndex.entries.size
-                        _baiduIndexLastSync.value = savedIndex.lastSyncAt
-                    }
-                    // 有 token 时先设 Connecting（验证中），避免闪烁"已登录"再变"授权失败"
-                    if (baiduCfg.tokens != null) {
-                        _baiduConnectionState.value = BaiduConnectionState.Connecting
-                        AppLog.d("BaiduAuth", "init: set state=Connecting, verifying token...")
-                        try {
-                            val verifyResult = baiduApi.listDir(BaiduNetdiskConfig.APP_DIR)
-                            if (verifyResult.errno != 0) {
-                                // 直接从结果读取 errno，不依赖回调
-                                val desc = com.nasmusic.tv.backend.network.baidu.BaiduNetdiskConfig.describeErrno(verifyResult.errno)
-                                _baiduConnectionState.value = BaiduConnectionState.Failed(desc)
-                                AppLog.w("BaiduAuth", "init: verify failed errno=${verifyResult.errno}, set state=Failed($desc)")
-                            } else {
-                                _baiduConnectionState.value = BaiduConnectionState.LoggedIn
-                                AppLog.d("BaiduAuth", "init: verify OK, set state=LoggedIn, ${verifyResult.files.size} items in /")
-                            }
-                        } catch (e: Exception) {
-                            // 网络异常等，保守设 LoggedIn（可能是临时网络问题，不是 token 失效）
-                            _baiduConnectionState.value = BaiduConnectionState.LoggedIn
-                            AppLog.w("BaiduAuth", "init: verify network error, fallback to LoggedIn: ${e.message}")
-                        }
-                    } else {
-                        _baiduConnectionState.value = BaiduConnectionState.Off
-                        AppLog.d("BaiduAuth", "init: no tokens, set state=Off")
-                    }
-                    // 百度索引有数据时触发合并（在 Default 线程计算，不卡 UI）
-                    if (savedIndex != null && savedIndex.entries.isNotEmpty()) {
-                        updateMergedData()
-                    }
-                }
             }
         }
 
@@ -863,12 +871,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
                 }
         }
 
-        // 监听网络收藏变化（DataStore 持久化，响应式更新）
-        viewModelScope.launch {
-            prefs.networkFavorites.collect { favorites ->
-                _networkFavorites.value = favorites
-            }
-        }
+        // 监听网络收藏变化（R-1：已由 NetworkMusicViewModel 内部 collect，MainViewModel 派生视图直接读子 VM）
 
         // 监听本地歌单变化（已由 PlaylistViewModel 内部 collect）
 
@@ -1025,166 +1028,20 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
     }
 
     // --- 连接 ---
-    suspend fun connectToServer(config: ServerConfig): Boolean {
-        _isLoading.value = true
-        return try {
-            val success = backendRegistry.initialize(config)
-            if (success) {
-                _isConnected.value = true
-                _serverDisplayName.value = backendRegistry.getServerDisplayName()
-                _backendApiVersion.value = backendRegistry.getAdapter()?.apiVersion ?: "Unknown"
-                refreshApiVersions()
-                prefs.saveServerConfig(config.copy(isConnected = true))
-                // 连接成功后加载初始数据
-                loadLibrary()
-                // 更新恢复队列中 NAS 歌曲的 streamUrl
-                updateRestoredQueueStreamUrls()
-                // 导航到首页
-                _currentScreen.value = Screen.Home
-                loadHomeDashboard()
-            }
-            success
-        } catch (e: Exception) {
-            _connectMessage.value = getApplication<Application>().getString(R.string.connect_failed_with_msg, e.message?.take(50))
-            viewModelScope.launch {
-                delay(3000)
-                _connectMessage.value = null
-            }
-            false
-        } finally {
-            _isLoading.value = false
-        }
-    }
-
-    fun disconnect() {
-        viewModelScope.launch {
-            try {
-                backendRegistry.disconnect()
-            } catch (e: Exception) {
-                AppLog.e("MainViewModel", "disconnect failed", e)
-            }
-            _isConnected.value = false
-                _serverDisplayName.value = ""
-                _backendApiVersion.value = "Unknown"
-            refreshApiVersions()
-            _albums.value = UiState.Loading
-            _songs.value = UiState.Loading
-            _songsPaging.value = SongsPagingState()
-            _artists.value = UiState.Success(emptyList())
-            _years.value = UiState.Success(emptyList())
-            _recentSongs.value = UiState.Success(emptyList())
-            _searchResults.value = UiState.Success(emptyList())
-            _genres.value = UiState.Success(emptyList())
-            _favoriteSongs.value = UiState.Success(emptyList())
-            _playlists.value = UiState.Success(emptyList())
-            try {
-                val current = serverConfig.value
-                prefs.saveServerConfig(current.copy(isConnected = false))
-            } catch (e: Exception) {
-                AppLog.e("MainViewModel", "disconnect: save config failed", e)
-            }
-        }
-    }
-
     /**
-     * 刷新全量后端/服务的 API 版本号聚合（供设置→关于页展示）。
-     *
-     * 调用时机：连接成功、断开连接、进入关于页。
-     * 后端用运行时获取（[VersionInfo.Runtime]），未连接显示 Disconnected；
-     * 外部服务（Jamendo/Open-Meteo/OpenWeatherMap）用静态常量；
-     * 无版本号服务（Meting-API/Bilibili MV）用 NoVersion 仅展示服务名；
-     * 百度网盘用静态常量展示 PCS 版本。
+     * 连接域已迁至 ServerViewModel（R-1 第三步）。以下为兼容转发。
      */
-    suspend fun refreshApiVersions() {
-        val app = getApplication<Application>()
-        val result = mutableListOf<VersionInfo>()
+    val isConnected: StateFlow<Boolean> get() = _serverVM.isConnected
+    val serverDisplayName: StateFlow<String> get() = _serverVM.serverDisplayName
+    val backendApiVersion: StateFlow<String> get() = _serverVM.backendApiVersion
+    val apiVersions: StateFlow<List<VersionInfo>> get() = _serverVM.apiVersions
+    val showConnectPrompt: StateFlow<Boolean> get() = _serverVM.showConnectPrompt
 
-        // 1. 当前 NAS 后端（运行时获取）
-        val adapter = backendRegistry.getAdapter()
-        if (adapter != null) {
-            result.add(try { adapter.getApiVersion() } catch (e: Exception) { VersionInfo.Disconnected(adapter.backendType) })
-        }
-
-        // 2. 百度网盘（静态常量）
-        result.add(VersionInfo.Static("百度网盘", "PCS rest/2.0", "接口静默演进，无显式版本号"))
-
-        // 3. 外部服务（静态常量）
-        result.add(VersionInfo.Static("Jamendo", "v3.0"))
-        result.add(VersionInfo.Static("Open-Meteo", "v1.0", "默认天气源"))
-        result.add(VersionInfo.Static("OpenWeatherMap", "v2.5", "备用天气源"))
-
-        // 4. 无版本号服务（仅展示服务名）
-        result.add(VersionInfo.NoVersion("Meting-API"))
-        result.add(VersionInfo.NoVersion("Bilibili MV"))
-
-        _apiVersions.value = result
-    }
-
-    /**
-     * 使用已保存的服务器配置自动连接
-     * @param silent 静默模式（不显示提示消息）
-     */
-    fun connectToSavedServer(silent: Boolean = false) {
-        viewModelScope.launch {
-            val config = prefs.serverConfig.first()
-            if (config.baseUrl.isBlank()) {
-                if (!silent) {
-                    _connectMessage.value = getApplication<Application>().getString(R.string.status_no_saved_server)
-                    delay(3000)
-                    _connectMessage.value = null
-                }
-                return@launch
-            }
-
-            if (!silent) {
-                _showConnectPrompt.value = false
-            }
-            _isLoading.value = true
-            try {
-                val success = backendRegistry.initialize(config)
-                if (success) {
-                    _isConnected.value = true
-                    _serverDisplayName.value = backendRegistry.getServerDisplayName()
-                    _backendApiVersion.value = backendRegistry.getAdapter()?.apiVersion ?: "Unknown"
-                    refreshApiVersions()
-                    prefs.saveServerConfig(config.copy(isConnected = true))
-                    loadLibrary()
-                    if (!silent) {
-                        _connectMessage.value = getApplication<Application>().getString(R.string.connect_to_server_success, backendRegistry.getServerDisplayName())
-                        delay(3000)
-                        _connectMessage.value = null
-                    }
-                } else {
-                    AppLog.w("NASMusic", "connectToSavedServer: initialize returned false")
-                    if (!silent) {
-                        _connectMessage.value = getApplication<Application>().getString(R.string.connect_failed_check_settings, "")
-                        delay(3000)
-                        _connectMessage.value = null
-                    }
-                }
-            } catch (e: Exception) {
-                AppLog.e("NASMusic", "connectToSavedServer failed", e)
-                if (!silent) {
-                    _connectMessage.value = getApplication<Application>().getString(R.string.connect_failed_with_msg, e.message)
-                    delay(3000)
-                    _connectMessage.value = null
-                }
-} finally {
-                _isLoading.value = false
-            }
-        }
-    }
-
-    /**
-     * 天气获取失败时按默认心情加载的逻辑已迁至 WeatherRadioViewModel.loadRadioForDefaultMood。
-     */
-
-    /**
-     * 关闭连接提示对话框
-     */
-    fun dismissConnectPrompt() {
-        _showConnectPrompt.value = false
-    }
+    suspend fun connectToServer(config: ServerConfig): Boolean = _serverVM.connectToServer(config)
+    fun disconnect() = _serverVM.disconnect()
+    suspend fun refreshApiVersions() = _serverVM.refreshApiVersions()
+    fun connectToSavedServer(silent: Boolean = false) = _serverVM.connectToSavedServer(silent)
+    fun dismissConnectPrompt() = _serverVM.dismissConnectPrompt()
 
     /**
      * 增量构建艺术家映射（避免每次分页都全量重建）
@@ -1571,251 +1428,6 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
         }
     }
 
-    /**
-     * 服务端搜索歌曲（不依赖本地全量数据）
-     *
-     * @param force 设为 true 时跳过缓存（来源点亮切换后强制重搜）；默认 false 走缓存
-     */
-    fun searchSongsOnServer(query: String, force: Boolean = false) {
-        if (query.isBlank()) {
-            _searchResults.value = UiState.Success(emptyList())
-            return
-        }
-        // 缓存命中：同一关键词 + 同一 searchType 且结果已是 Success 且非空
-        val currentSearchType = when (_libraryActiveTab.value) {
-            LibraryTab.ALBUMS -> SearchType.ALBUM
-            LibraryTab.ARTISTS -> SearchType.ARTIST
-            LibraryTab.SONGS -> SearchType.SONG_NAME_OR_ARTIST
-            else -> SearchType.SONG_NAME_OR_ARTIST
-        }
-        if (!force && query == lastSearchedKeyword && currentSearchType == lastSearchType) {
-            val cached = _searchResults.value
-            if (cached is UiState.Success && cached.data.isNotEmpty()) {
-                AppLog.d("NASMusic", "searchSongsOnServer: cached result for '$query'")
-                return
-            }
-        }
-        lastSearchedKeyword = query
-        lastSearchType = currentSearchType
-        _searchResults.value = UiState.Loading
-        viewModelScope.launch {
-            // 跨源融合搜索：NAS + 网络音乐 + 百度网盘 + Jamendo + 本地 并行搜索，合并去重
-            // 按当前点亮来源搜索（点亮模式）
-            val aggregator = nasMusicApp.searchAggregator
-            try {
-                // 拼音搜索时需要本地缓存：NAS 歌曲、本地音乐、百度网盘索引
-                // 服务端不认拼音关键词，改用客户端 PinyinUtils.matches() 过滤
-                val result = aggregator.search(
-                    query,
-                    sources = _enabledSearchSources.value,
-                    filterMode = FilterMode.PRECISE,
-                    searchType = currentSearchType,
-                    nasLocalSongs = _songsPaging.value.songs,
-                    localDeviceSongs = _localSongs.value,
-                    baiduLocalSongs = baiduIndexCache.searchSongs(query, pinyinMatch = true)
-                )
-                val songs = result.allResults.map { it.song }
-                _searchResults.value = UiState.Success(songs)
-                // 搜索成功后才记录历史（空结果也算成功，记录用户确实搜过的词；
-                // 失败不记录，避免污染热门榜）
-                prefs.recordSearch(query)
-                AppLog.d(
-                    "NASMusic",
-                    "searchSongsOnServer: ${songs.size} results for '$query' breakdown=${result.sourceBreakdown}"
-                )
-            } catch (e: Exception) {
-                AppLog.e("NASMusic", "searchSongsOnServer failed", e)
-                _searchResults.value = UiState.Error(
-                    message = getApplication<Application>().getString(R.string.network_search_error, e.message?.take(50))
-                )
-            }
-        }
-    }
-
-    /**
-     * 清除搜索结果
-     */
-    fun clearSearch() {
-        lastSearchedKeyword = null
-        _searchResults.value = UiState.Success(emptyList())
-    }
-
-    /**
-     * 搜索网络歌曲（通过 NetworkMusicManager，不依赖 NAS 连接）
-     *
-     * 策略：默认源优先，失败时 fallback 到其他源。
-     * 搜索结果为统一 Song 模型（isNetworkSong=true）。
-     */
-    fun searchNetworkSongs(keyword: String) {
-        AppLog.i("MetingDiag", "=== MainViewModel.searchNetworkSongs === keyword='$keyword'")
-        if (keyword.isBlank()) {
-            AppLog.i("MetingDiag", "searchNetworkSongs: keyword blank")
-            _networkSearchResults.value = UiState.Success(emptyList())
-            _networkSearchKeyword.value = ""
-            networkSearchBaseKeyword = ""
-            usedSearchVariants.clear()
-            return
-        }
-        // 用户手动搜索：重置换一批状态（基准词 + 已用变异词 + 已见歌曲集合）
-        // 搜索历史记录在 doNetworkSearch 成功路径里，失败不记录
-        networkSearchBaseKeyword = keyword
-        usedSearchVariants.clear()
-        seenNetworkSearchKeys.clear()
-        doNetworkSearch(keyword)
-    }
-
-    /**
-     * 换一批：用原搜索词 + 变异后缀重新搜索，突破单次搜索 30 首上限。
-     * 跨批次去重：已展示过的歌曲会被过滤；在 [maxShuffleAttemptsPerClick] 个后缀
-     * 中挑选新歌最多的批次展示，保证每次点击都有新歌且不会空转。
-     */
-    fun shuffleNetworkSearch() {
-        val base = networkSearchBaseKeyword
-        if (base.isBlank()) return
-        viewModelScope.launch {
-            var failed = false
-            val (chosen, shown) = pickBestFreshBatch(
-                seenKeys = seenNetworkSearchKeys,
-                produce = {
-                    val available = searchVariantSuffixes.filterNot { it in usedSearchVariants }
-                    if (available.isEmpty()) usedSearchVariants.clear()
-                    val suffix = searchVariantSuffixes
-                        .filterNot { it in usedSearchVariants }
-                        .shuffled()
-                        .first()
-                    usedSearchVariants.add(suffix)
-                    val keyword = "$base $suffix"
-                    val results = searchNetworkSongsBlocking(keyword)
-                    if (results == null) failed = true
-                    keyword to (results ?: emptyList())
-                },
-                songsOf = { it.second }
-            )
-            // 全部候选都搜索失败时保留错误态（searchNetworkSongsBlocking 已设置）
-            if (failed && shown.isEmpty()) return@launch
-            _networkSearchKeyword.value = chosen.first
-            _networkSearchResults.value = UiState.Success(shown)
-        }
-    }
-
-    /**
-     * 统一的「换一批」核心逻辑（网络搜索 / 多维度浏览 / 天气电台共用）。
-     *
-     * 反复调用 [produce] 生成候选（最多 [maxShuffleAttemptsPerClick] 次），用 [songsOf]
-     * 取出其中的歌曲列表，过滤掉 [seenKeys] 中已展示过的歌曲，返回新歌最多的候选与
-     * 新歌列表；新歌数量达到 [minNewResultsForShuffle] 即提前停止。
-     *
-     * 若所有候选都没有新歌（已见集合饱和），清空 [seenKeys] 后重新生成一次候选并返回
-     * （从头再来，保证每次点击都有内容）。返回前把本次真正展示的新歌记入 [seenKeys]
-     * （未展示的候选歌曲保留，之后批次仍可出现）。
-     *
-     * 调用方负责在「上下文变化」（新搜索词 / 新筛选 / 新 mood）时清空对应的 [seenKeys]。
-     *
-     * @param seenKeys 该场景的跨批次已见歌曲集合
-     * @param produce 生成一个候选（如变异后缀搜索、随机关键词组合、重建天气电台）
-     * @param songsOf 从候选 T 中取出歌曲列表
-     * @return Pair(选中的候选 T, 本次展示的新歌列表)
-     */
-    private suspend fun <T> pickBestFreshBatch(
-        seenKeys: MutableSet<Pair<String, String>>,
-        maxAttempts: Int = maxShuffleAttemptsPerClick,
-        minNewResults: Int = minNewResultsForShuffle,
-        produce: suspend () -> T,
-        songsOf: (T) -> List<Song>
-    ): Pair<T, List<Song>> {
-        var best: T? = null
-        var bestFresh: List<Song> = emptyList()
-        var attempts = 0
-        while (attempts < maxAttempts) {
-            attempts++
-            val candidate = produce()
-            val fresh = songsOf(candidate).filterNot { (it.artist.trim() to it.title.trim()) in seenKeys }
-            if (fresh.size > bestFresh.size) {
-                best = candidate
-                bestFresh = fresh
-            }
-            if (fresh.size >= minNewResults) break
-        }
-        val chosen = best
-        val result = if (chosen == null || bestFresh.isEmpty()) {
-            // 所有候选都没有新歌：已见集合饱和，从头再来一批
-            seenKeys.clear()
-            val freshProduce = produce()
-            freshProduce to songsOf(freshProduce)
-        } else {
-            chosen to bestFresh
-        }
-        // 修复（M-9）：硬上限防长期挂机场景集合无限增长（饱和 clear 之外的双保险）
-        if (seenKeys.size >= 4000) seenKeys.clear()
-        result.second.forEach { seenKeys.add(it.artist.trim() to it.title.trim()) }
-        return result
-    }
-
-    /** 实际执行网络搜索（换一批与手动搜索共用），失败返回 null 并设置错误态 */
-    private suspend fun searchNetworkSongsBlocking(keyword: String): List<Song>? {
-        _networkSearchKeyword.value = keyword
-        _networkSearchResults.value = UiState.Loading
-        return try {
-            nasMusicApp.networkMusicManager.search(keyword)
-        } catch (e: Exception) {
-            AppLog.e("MetingDiag", "doNetworkSearch failed: ${e.message}", e)
-            _networkSearchResults.value = UiState.Error(
-                message = getApplication<Application>().getString(R.string.network_search_failed, e.message?.take(50))
-            )
-            null
-        }
-    }
-
-    /** 实际执行网络搜索（换一批与手动搜索共用） */
-    private fun doNetworkSearch(keyword: String) {
-        viewModelScope.launch {
-            val results = searchNetworkSongsBlocking(keyword)
-            if (results != null) {
-                AppLog.i("MetingDiag", "doNetworkSearch: got ${results.size} results for '$keyword'")
-                _networkSearchResults.value = UiState.Success(results)
-                // 搜索成功后才记录历史（空结果也算成功；shuffleNetworkSearch 不走此路径，不会重复记录）
-                prefs.recordSearch(keyword)
-            }
-        }
-    }
-
-    /**
-     * 清除网络搜索结果
-     */
-    fun clearNetworkSearch() {
-        _networkSearchResults.value = UiState.Success(emptyList())
-        _networkSearchKeyword.value = ""
-        networkSearchBaseKeyword = ""
-        usedSearchVariants.clear()
-        seenNetworkSearchKeys.clear()
-    }
-
-    /**
-     * 全部加入列表：将当前搜索结果追加到播放队列末尾（不替换队列），
-     * 与队列已有歌曲按（歌手, 歌曲名）去重，保证队列中没有重复歌曲。
-     * 每次追加前实时读取队列，反复「换一批 → 全部加入列表」可持续扩充队列。
-     */
-    fun addAllSearchResultsToQueue() {
-        val results = _networkSearchResults.value.dataOrNull() ?: return
-        if (results.isEmpty()) return
-        val existingKeys = queue.value
-            .map { it.artist.trim() to it.title.trim() }
-            .toSet()
-        val toAdd = results
-            .distinctBy { it.artist.trim() to it.title.trim() }
-            .filterNot { (it.artist.trim() to it.title.trim()) in existingKeys }
-        if (toAdd.isEmpty()) {
-            showError(getApplication<Application>().getString(R.string.queue_contains_all_results))
-            return
-        }
-        playerManager.addToQueue(toAdd)
-        _connectMessage.value = getApplication<Application>().getString(R.string.added_to_queue_with_skipped, toAdd.size, results.size - toAdd.size)
-        viewModelScope.launch {
-            delay(3000)
-            _connectMessage.value = null
-        }
-    }
-
     // --- 多维度浏览（语种/纯音乐/年代/情怀/风格） ---
 
     /** 各维度当前选中的选项索引，默认全是 0（"所有"） */
@@ -1926,7 +1538,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
 
                 // 构造一次聚合器（produce 内多次调用复用同一实例）
                 val aggregator = nasMusicApp.searchAggregator
-                val enabledSources = _enabledSearchSources.value
+                val enabledSources = _searchVM.enabledSearchSources.value
                 val baiduLabelCombo = buildLabelCombo()
 
                 val (_, shown) = pickBestFreshBatch(
@@ -1977,7 +1589,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
      * 不足 30 首时有多少加多少。不触发导航，由调用方（AppRoot）处理 navigateTo(NowPlaying)。
      */
     fun playAllSearchResults() {
-        val results = _networkSearchResults.value.dataOrNull() ?: return
+        val results = _searchVM.networkSearchResults.value.dataOrNull() ?: return
         if (results.isEmpty()) return
         val deduped = results
             .distinctBy { it.artist.trim() to it.title.trim() }
@@ -2019,95 +1631,45 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
     }
 
     /**
-     * 播放网络歌曲
-     *
-     * 网络歌曲的 streamUrl 不持久化，播放前实时解析：
-     * 1. 通过 NetworkMusicManager.resolvePlayUrl() 获取直联 URL
-     * 2. 将解析后的 URL 填入 song.streamUrl
-     * 3. 交给 PlayerManager 播放
-     *
-     * 解析失败时显示错误提示。
+     * 播放网络歌曲（R-1：已迁至 NetworkMusicViewModel，此处转发；NAS 收藏分支回本类处理）
      */
-    fun playNetworkSong(song: Song) {
-        AppLog.e("NASMusic", "playNetworkSong ENTRY: id=${song.id} title=${song.title} networkSource=${song.networkSource} networkId=${song.networkId} isNetworkSong=${song.isNetworkSong}")
-        if (!song.isNetworkSong) {
-            // 非 network 歌曲，走普通播放流程
-            playSong(song)
-            return
-        }
-        // 防御：百度源若因登录时序未注册（浏览用 baiduApi 直连不需要注册，但播放需 services["baidu"]），
-        // 播放时自愈注册，避免"能浏览不能播"
-        if (song.networkSource == "baidu" && !nasMusicApp.networkMusicManager.isServiceRegistered("baidu")) {
-            AppLog.e("NASMusic", "playNetworkSong: 检测到 baidu 服务未注册，尝试自愈注册后播放")
-            nasMusicApp.refreshBaiduServiceRegistration()
-        }
-        viewModelScope.launch {
-            try {
-                val playUrl = nasMusicApp.networkMusicManager.resolvePlayUrl(song)
-                if (playUrl.isNullOrBlank()) {
-                    if (song.networkSource == "baidu") {
-                        AppLog.w("NASMusic", "playNetworkSong: 百度网盘 resolvePlayUrl 返回 null（检查 token 授权 / filemetas dlink / 网络，详见 BaiduStreamFactory 日志）")
-                    }
-                    showError(getApplication<Application>().getString(R.string.resolve_url_failed_retry))
-                    return@launch
-                }
-                val playable = song.copy(streamUrl = playUrl)
-                AppLog.d("NASMusic", "playNetworkSong: ${song.title} → $playUrl")
-                playSong(playable)
-            } catch (e: Exception) {
-                AppLog.e("NASMusic", "playNetworkSong failed", e)
-                showError(getApplication<Application>().getString(R.string.play_failed_with_msg, e.message?.take(50)))
-            }
-        }
-    }
+    fun playNetworkSong(song: Song) = _netVM.playNetworkSong(song, onPlaySong = { playable -> playSong(playable) })
 
     /**
-     * 切换歌曲收藏状态（统一模型）
+     * 切换歌曲收藏状态（统一模型，R-1：网络/本地分支已迁至 NetworkMusicViewModel）
      *
      * 所有歌曲共用一套收藏：网络/本地歌曲持久化到 DataStore（NetworkFavoriteItem，
      * 本地歌曲 networkSource="local"），NAS 歌曲仍走后端 adapter.toggleFavorite。
      * 收藏列表通过 SourceBadge 标明来源。
      */
-    fun toggleNetworkFavorite(song: Song) {
-        if (song.isNetworkSong || song.isLocalSong) {
-            // 网络 / 本地歌曲：DataStore 持久化
-            viewModelScope.launch {
-                val item = NetworkFavoriteItem(
-                    songId = song.id,
-                    title = song.title,
-                    artist = song.artist,
-                    album = song.album,
-                    coverUrl = song.coverUrl,
-                    networkSource = if (song.isLocalSong) "local" else song.networkSource ?: "network",
-                    networkId = song.networkId ?: "",
-                    addedAtMs = System.currentTimeMillis()
-                )
-                prefs.toggleNetworkFavorite(item)
-            }
-        } else {
-            // NAS 歌曲：走后端 adapter
-            viewModelScope.launch {
-                val adapter = backendRegistry.getAdapter() ?: return@launch
-                try {
-                    val isCurrentlyFavorite = song.id in _favoriteIds.value
-                    val success = adapter.toggleFavorite(song.id, isCurrentlyFavorite)
-                    if (success) {
-                        val newIds = _favoriteIds.value.toMutableSet()
-                        if (isCurrentlyFavorite) {
-                            newIds.remove(song.id)
-                            val currentFavs = _favoriteSongs.value.dataOrNull() ?: emptyList()
-                            _favoriteSongs.value = UiState.Success(currentFavs.filter { it.id != song.id })
-                        } else {
-                            newIds.add(song.id)
-                            val currentFavs = _favoriteSongs.value.dataOrNull() ?: emptyList()
-                            _favoriteSongs.value = UiState.Success(currentFavs + song)
-                        }
-                        _favoriteIds.value = newIds
+    fun toggleNetworkFavorite(song: Song) = _netVM.toggleNetworkFavorite(
+        song,
+        isNasFavorite = song.id in _favoriteIds.value,
+        onNasToggle = { nasSong, isFav -> toggleNasFavorite(nasSong, isFav) }
+    )
+
+    /** NAS 收藏分支（留在 MainViewModel：依赖本类 _favoriteIds/_favoriteSongs 状态） */
+    private fun toggleNasFavorite(song: Song, isCurrentlyFavorite: Boolean) {
+        viewModelScope.launch {
+            val adapter = backendRegistry.getAdapter() ?: return@launch
+            try {
+                val success = adapter.toggleFavorite(song.id, isCurrentlyFavorite)
+                if (success) {
+                    val newIds = _favoriteIds.value.toMutableSet()
+                    if (isCurrentlyFavorite) {
+                        newIds.remove(song.id)
+                        val currentFavs = _favoriteSongs.value.dataOrNull() ?: emptyList()
+                        _favoriteSongs.value = UiState.Success(currentFavs.filter { it.id != song.id })
+                    } else {
+                        newIds.add(song.id)
+                        val currentFavs = _favoriteSongs.value.dataOrNull() ?: emptyList()
+                        _favoriteSongs.value = UiState.Success(currentFavs + song)
                     }
-                } catch (e: Exception) {
-                    AppLog.e("NASMusic", "toggleFavorite failed", e)
-showError(getApplication<Application>().getString(R.string.toggle_favorite_error, e.message?.take(50)))
+                    _favoriteIds.value = newIds
                 }
+            } catch (e: Exception) {
+                AppLog.e("NASMusic", "toggleFavorite failed", e)
+showError(getApplication<Application>().getString(R.string.toggle_favorite_error, e.message?.take(50)))
             }
         }
     }
@@ -2115,9 +1677,7 @@ showError(getApplication<Application>().getString(R.string.toggle_favorite_error
     /**
      * 判断网络歌曲是否已收藏（同步，用于 UI 快速判断）
      */
-    fun isNetworkFavorite(songId: String): Boolean {
-        return _networkFavorites.value.any { it.songId == songId }
-    }
+    fun isNetworkFavorite(songId: String): Boolean = _netVM.isNetworkFavorite(songId)
 
     private val preconfiguredPlaylists = listOf(
         Triple("3778678", "热歌榜", "netease"),
@@ -2143,9 +1703,63 @@ showError(getApplication<Application>().getString(R.string.toggle_favorite_error
         _artists.value = UiState.Success(emptyList())
         _years.value = UiState.Success(emptyList())
         _recentSongs.value = UiState.Success(emptyList())
-        _searchResults.value = UiState.Success(emptyList())
+        _searchVM.clearSearch()
         loadLibrary()
     }
+
+    // =====================================================================
+    // R-1 第三步转发区：Search / NetworkMusic（百度网盘）
+    // =====================================================================
+
+    // ---- SearchViewModel 转发 ----
+    fun searchSongsOnServer(query: String, force: Boolean = false) = _searchVM.searchSongsOnServer(query, force)
+    fun clearSearch() = _searchVM.clearSearch()
+    fun searchNetworkSongs(keyword: String) = _searchVM.searchNetworkSongs(keyword)
+    fun shuffleNetworkSearch() = _searchVM.shuffleNetworkSearch()
+    fun clearNetworkSearch() = _searchVM.clearNetworkSearch()
+    fun toggleSearchSource(source: MusicSourceType) = _searchVM.toggleSearchSource(source)
+    fun enableAllSearchSources() = _searchVM.enableAllSearchSources()
+    fun addAllSearchResultsToQueue() = _searchVM.addAllSearchResultsToQueue(
+        existingQueueKeysProvider = {
+            playerManager.queue.value.map { it.artist.trim() to it.title.trim() }.toSet()
+        }
+    )
+
+    // ---- NetworkMusicViewModel（百度网盘）转发 ----
+    /** 百度索引缓存（曲库合并/详情取数仍由 MainViewModel 使用） */
+    private val baiduIndexCache: BaiduFileIndexCache get() = nasMusicApp.baiduFileIndexCache
+
+    val baiduConnectionState: StateFlow<NetworkMusicViewModel.BaiduConnectionState> get() = _netVM.baiduConnectionState
+    val baiduDeviceCode get() = _netVM.baiduDeviceCode
+    val netdiskCurrentDir get() = _netVM.netdiskCurrentDir
+    val netdiskDirFiles get() = _netVM.netdiskDirFiles
+    val netdiskIsLoading get() = _netVM.netdiskIsLoading
+    val netdiskSearchResults get() = _netVM.netdiskSearchResults
+    val netdiskSearchKeyword get() = _netVM.netdiskSearchKeyword
+    val baiduIndexScanned get() = _netVM.baiduIndexScanned
+    val baiduIndexScanning get() = _netVM.baiduIndexScanning
+    val baiduIndexLastSync get() = _netVM.baiduIndexLastSync
+    val baiduApicExtracting get() = _netVM.baiduApicExtracting
+    val baiduApicExtracted get() = _netVM.baiduApicExtracted
+    val baiduApicTotal get() = _netVM.baiduApicTotal
+
+    fun refreshBaiduConnectionState() = _netVM.refreshBaiduConnectionState()
+    fun setBaiduEnabled(enabled: Boolean) = _netVM.setBaiduEnabled(enabled)
+    fun startBaiduDeviceCodeFlow() = _netVM.startBaiduDeviceCodeFlow()
+    fun cancelBaiduDeviceCode() = _netVM.cancelBaiduDeviceCode()
+    fun logoutBaidu() = _netVM.logoutBaidu()
+    fun listBaiduDir(dir: String) = _netVM.listBaiduDir(dir)
+    suspend fun listBaiduDirs(path: String) = _netVM.listBaiduDirs(path)
+    fun navigateBaiduDirUp() = _netVM.navigateBaiduDirUp()
+    fun enterBaiduDir(name: String) = _netVM.enterBaiduDir(name)
+    fun searchBaidu(keyword: String) = _netVM.searchBaidu(keyword)
+    fun clearNetdiskSearch() = _netVM.clearNetdiskSearch()
+    fun playAllNetdiskSearch() = _netVM.playAllNetdiskSearch()
+    fun playAllNetdiskDir(dir: String, onPlayAll: (List<Song>) -> Unit) = _netVM.playAllNetdiskDir(dir, onPlayAll)
+    fun rebuildBaiduIndex() = _netVM.rebuildBaiduIndex()
+    fun setBaiduMusicRootDir(dir: String) = _netVM.setBaiduMusicRootDir(dir)
+    fun setBaiduMvDir(dir: String?) = _netVM.setBaiduMvDir(dir)
+    fun loadBaiduIndexedSongs(): List<Song> = _netVM.loadBaiduIndexedSongs()
 
     /**
      * 刷新合并后的专辑 / 艺术家列表
@@ -2773,7 +2387,7 @@ showError(getApplication<Application>().getString(R.string.toggle_favorite_error
             }
         }
         // 自动重连
-        if (!_isConnected.value && reconnectAttempts < maxReconnectAttempts) {
+        if (!_serverVM.isConnected.value && reconnectAttempts < maxReconnectAttempts) {
             reconnectAttempts++
             AppLog.d("NASMusic", "onNetworkAvailable: reconnecting (attempt $reconnectAttempts/$maxReconnectAttempts)")
             connectToSavedServer(silent = true)
@@ -3793,526 +3407,6 @@ showError(getApplication<Application>().getString(R.string.play_failed_with_msg,
             }
         }
     }
-
-    // ===================== 百度网盘 / 网盘 Tab =====================
-
-    /** 百度网盘连接状态 */
-    sealed class BaiduConnectionState {
-        object Off : BaiduConnectionState()           // 未开启或未登录
-        object Connecting : BaiduConnectionState()     // 设备码轮询中
-        object LoggedIn : BaiduConnectionState()      // 已登录
-        object DirMissing : BaiduConnectionState()    // 已登录但音乐根目录不存在，需重新设置
-        data class Failed(val message: String) : BaiduConnectionState()
-    }
-
-    private val _baiduConnectionState = MutableStateFlow<BaiduConnectionState>(BaiduConnectionState.Off)
-    val baiduConnectionState: StateFlow<BaiduConnectionState> = _baiduConnectionState.asStateFlow()
-
-    /** 设备码授权结果（供对话框显示） */
-    private val _baiduDeviceCode = MutableStateFlow<BaiduOAuthClient.DeviceCodeResult?>(null)
-    val baiduDeviceCode: StateFlow<BaiduOAuthClient.DeviceCodeResult?> = _baiduDeviceCode.asStateFlow()
-
-    /** 网盘目录浏览 */
-    private val _netdiskCurrentDir = MutableStateFlow(BaiduNetdiskConfig.APP_DIR)
-    val netdiskCurrentDir: StateFlow<String> = _netdiskCurrentDir.asStateFlow()
-    private val _netdiskDirFiles = MutableStateFlow<List<BaiduFile>>(emptyList())
-    val netdiskDirFiles: StateFlow<List<BaiduFile>> = _netdiskDirFiles.asStateFlow()
-    /** 网盘根目录是否已从配置同步过（防止 refreshBaiduConnectionState 每次重置浏览位置） */
-    private var netdiskDirSynced = false
-    private val _netdiskIsLoading = MutableStateFlow(false)
-    val netdiskIsLoading: StateFlow<Boolean> = _netdiskIsLoading.asStateFlow()
-
-    /** 网盘搜索 */
-    private val _netdiskSearchResults = MutableStateFlow<List<Song>>(emptyList())
-    val netdiskSearchResults: StateFlow<List<Song>> = _netdiskSearchResults.asStateFlow()
-    private val _netdiskSearchKeyword = MutableStateFlow("")
-    val netdiskSearchKeyword: StateFlow<String> = _netdiskSearchKeyword.asStateFlow()
-
-    /** 索引状态 */
-    private val _baiduIndexScanned = MutableStateFlow(0)
-    val baiduIndexScanned: StateFlow<Int> = _baiduIndexScanned.asStateFlow()
-    private val _baiduIndexScanning = MutableStateFlow(false)
-    val baiduIndexScanning: StateFlow<Boolean> = _baiduIndexScanning.asStateFlow()
-    private val _baiduIndexLastSync = MutableStateFlow(0L)
-    val baiduIndexLastSync: StateFlow<Long> = _baiduIndexLastSync.asStateFlow()
-
-    // APIC 后台提取进度
-    private val _baiduApicExtracting = MutableStateFlow(false)
-    val baiduApicExtracting: StateFlow<Boolean> = _baiduApicExtracting.asStateFlow()
-    private val _baiduApicExtracted = MutableStateFlow(0)
-    val baiduApicExtracted: StateFlow<Int> = _baiduApicExtracted.asStateFlow()
-    private val _baiduApicTotal = MutableStateFlow(0)
-    val baiduApicTotal: StateFlow<Int> = _baiduApicTotal.asStateFlow()
-
-    private val baiduOAuth: BaiduOAuthClient get() = nasMusicApp.baiduOAuthClient
-    private val baiduApi: BaiduPanApi get() = nasMusicApp.baiduPanApi
-    private val baiduIndexCache: BaiduFileIndexCache get() = nasMusicApp.baiduFileIndexCache
-
-    private var deviceCodePollJob: kotlinx.coroutines.Job? = null
-
-    /** 同步刷新连接状态（初始化与开关切换后调用） */
-    fun refreshBaiduConnectionState() {
-        val cfg = prefs.getBaiduConfigSync()
-        val prevState = _baiduConnectionState.value
-        _baiduConnectionState.value = when {
-            !cfg.isActive -> BaiduConnectionState.Off
-            // 当前正在验证、已失败或目录缺失时保留，不被 "tokens 存在" 覆盖回 LoggedIn
-            prevState is BaiduConnectionState.Connecting -> prevState
-            prevState is BaiduConnectionState.Failed -> prevState
-            prevState is BaiduConnectionState.DirMissing -> prevState
-            // 有 token 但未验证时，先设 Connecting 再异步验证，不直接设 LoggedIn
-            cfg.tokens != null -> BaiduConnectionState.Connecting
-            else -> BaiduConnectionState.Off
-        }
-        AppLog.d("BaiduAuth", "refreshBaiduConnectionState: isActive=${cfg.isActive}, hasTokens=${cfg.tokens != null}, $prevState -> ${_baiduConnectionState.value}")
-        if (cfg.isActive) {
-            // 仅首次启用/登录时同步根目录到配置值；之后保留用户浏览位置，切换页面不重置
-            if (!netdiskDirSynced) {
-                _netdiskCurrentDir.value = cfg.musicRootDir.ifBlank { BaiduNetdiskConfig.APP_DIR }
-                netdiskDirSynced = true
-            }
-            _baiduIndexLastSync.value = baiduIndexCache.load()?.lastSyncAt ?: 0L
-            // 有 token 且当前是 Connecting（刚从 Off/LoggedIn 转来）→ 异步验证
-            if (cfg.tokens != null && _baiduConnectionState.value is BaiduConnectionState.Connecting) {
-                verifyBaiduTokenAsync()
-            }
-        }
-        // 百度连接状态变化可能影响合并数据（启用/停用百度源）
-        updateMergedData()
-        // 通知 NasMusicApp 运行时注册/注销百度 service
-        nasMusicApp.refreshBaiduServiceRegistration()
-    }
-
-     /** 异步验证百度 token 有效性：调 listDir(APP_DIR) 检查 errno */
-    private fun verifyBaiduTokenAsync() {
-        viewModelScope.launch {
-            withContext(Dispatchers.Default) {
-                try {
-                    val result = baiduApi.listDir(BaiduNetdiskConfig.APP_DIR)
-                    if (result.errno == -9) {
-                        // APP_DIR 不存在，尝试自动创建
-                        AppLog.i("BaiduAuth", "verifyBaiduTokenAsync: APP_DIR not found (errno=-9), auto-creating...")
-                        val createErrno = baiduApi.createDir(BaiduNetdiskConfig.APP_DIR)
-                        if (createErrno == 0 || createErrno == -8) {
-                            AppLog.i("BaiduAuth", "verifyBaiduTokenAsync: createDir returned errno=$createErrno, retrying listDir...")
-                            val retryResult = baiduApi.listDir(BaiduNetdiskConfig.APP_DIR)
-                            if (retryResult.errno != 0) {
-                                val desc = BaiduNetdiskConfig.describeErrno(retryResult.errno)
-                                _baiduConnectionState.value = BaiduConnectionState.Failed(desc)
-                                AppLog.w("BaiduAuth", "verifyBaiduTokenAsync: retry after create failed errno=${retryResult.errno}")
-                            } else {
-                                // APP_DIR 创建成功，检查用户音乐根目录是否存在
-                                checkMusicRootDirAfterVerify()
-                            }
-                        } else {
-                            val desc = "目录不存在且创建失败 (errno=$createErrno)"
-                            _baiduConnectionState.value = BaiduConnectionState.Failed(desc)
-                            AppLog.w("BaiduAuth", "verifyBaiduTokenAsync: createDir failed errno=$createErrno")
-                        }
-                    } else if (result.errno == -6) {
-                        // access_token 无效
-                        val desc = BaiduNetdiskConfig.describeErrno(result.errno)
-                        _baiduConnectionState.value = BaiduConnectionState.Failed(desc)
-                        AppLog.w("BaiduAuth", "verifyBaiduTokenAsync: errno=-6 (auth failed), set state=Failed")
-                    } else if (result.errno != 0) {
-                        // 其他 API 错误（非认证），token 本身有效，按登录处理
-                        val desc = BaiduNetdiskConfig.describeErrno(result.errno)
-                        AppLog.w("BaiduAuth", "verifyBaiduTokenAsync: errno=${result.errno} ($desc), not auth-related, treating as logged in")
-                        checkMusicRootDirAfterVerify()
-                    } else {
-                        // APP_DIR 存在，检查用户音乐根目录
-                        checkMusicRootDirAfterVerify()
-                    }
-                } catch (e: Exception) {
-                    _baiduConnectionState.value = BaiduConnectionState.LoggedIn
-                    AppLog.w("BaiduAuth", "verifyBaiduTokenAsync: network error, fallback to LoggedIn: ${e.message}")
-                    triggerBaiduIndexScanIfNeeded()
-                }
-            }
-        }
-    }
-
-    /** 验证 token 有效后，检查用户配置的音乐根目录是否存在 */
-    private fun checkMusicRootDirAfterVerify() {
-        val musicRoot = prefs.getBaiduMusicRootDirSync()
-        // 如果音乐根目录就是 APP_DIR 本身，不需要额外检查
-        if (musicRoot == BaiduNetdiskConfig.APP_DIR) {
-            onVerifyBaiduSuccess()
-            return
-        }
-        viewModelScope.launch {
-            withContext(Dispatchers.Default) {
-                try {
-                    val result = baiduApi.listDir(musicRoot)
-                    if (result.errno == -9) {
-                        // 音乐根目录不存在：auth 没问题，但目录需要重新设置
-                        AppLog.i("BaiduAuth", "checkMusicRootDirAfterVerify: musicRootDir='$musicRoot' not found (errno=-9), set state=DirMissing")
-                        _baiduConnectionState.value = BaiduConnectionState.DirMissing
-                    } else {
-                        onVerifyBaiduSuccess()
-                    }
-                } catch (e: Exception) {
-                    // 网络错误不影响判定，按登录处理
-                    AppLog.w("BaiduAuth", "checkMusicRootDirAfterVerify: network error, fallback to LoggedIn: ${e.message}")
-                    onVerifyBaiduSuccess()
-                }
-            }
-        }
-    }
-
-    /** 百度验证成功后：设 LoggedIn + 修正旧根目录 + 触发索引扫描 */
-    private fun onVerifyBaiduSuccess() {
-        _baiduConnectionState.value = BaiduConnectionState.LoggedIn
-        AppLog.d("BaiduAuth", "onVerifyBaiduSuccess: set state=LoggedIn")
-        // 沙箱策略修正：如果用户保存的根目录不在 /apps/NASMusicTV 下，自动修正
-        val savedRoot = prefs.getBaiduMusicRootDirSync()
-        if (!savedRoot.startsWith(BaiduNetdiskConfig.APP_DIR)) {
-            AppLog.i("BaiduAuth", "onVerifyBaiduSuccess: musicRootDir='$savedRoot' outside sandbox, resetting to ${BaiduNetdiskConfig.APP_DIR}")
-            prefs.setBaiduMusicRootDirSync(BaiduNetdiskConfig.APP_DIR)
-            _netdiskCurrentDir.value = BaiduNetdiskConfig.APP_DIR
-        }
-        triggerBaiduIndexScanIfNeeded()
-    }
-
-    /** 设置百度源总开关 */
-    fun setBaiduEnabled(enabled: Boolean) {
-        prefs.setBaiduEnabledSync(enabled)
-        refreshBaiduConnectionState()
-    }
-
-    /** 启动设备码授权流程：请求设备码并开始轮询 */
-    fun startBaiduDeviceCodeFlow() {
-        AppLog.d("BaiduAuth", "startBaiduDeviceCodeFlow: called, current state=${_baiduConnectionState.value}")
-        viewModelScope.launch {
-            _baiduConnectionState.value = BaiduConnectionState.Connecting
-            AppLog.d("BaiduAuth", "startBaiduDeviceCodeFlow: set state=Connecting, requesting device code...")
-            val code = baiduOAuth.requestDeviceCode()
-            if (code == null) {
-                AppLog.w("BaiduAuth", "startBaiduDeviceCodeFlow: requestDeviceCode returned null")
-                _baiduConnectionState.value = BaiduConnectionState.Failed(getApplication<Application>().getString(R.string.baidu_get_device_code_failed))
-                return@launch
-            }
-            AppLog.d("BaiduAuth", "startBaiduDeviceCodeFlow: got device code=${code.userCode}, expiresIn=${code.expiresIn}s, starting poll")
-            _baiduDeviceCode.value = code
-            pollDeviceCode(code)
-        }
-    }
-
-    /** 取消设备码轮询 */
-    fun cancelBaiduDeviceCode() {
-        AppLog.d("BaiduAuth", "cancelBaiduDeviceCode: called, current state=${_baiduConnectionState.value}")
-        deviceCodePollJob?.cancel()
-        deviceCodePollJob = null
-        _baiduDeviceCode.value = null
-        if (_baiduConnectionState.value is BaiduConnectionState.Connecting) {
-            _baiduConnectionState.value = BaiduConnectionState.Off
-            AppLog.d("BaiduAuth", "cancelBaiduDeviceCode: was Connecting, set state=Off")
-        }
-    }
-
-    private fun pollDeviceCode(code: BaiduOAuthClient.DeviceCodeResult) {
-        deviceCodePollJob?.cancel()
-        deviceCodePollJob = viewModelScope.launch {
-            val deadline = System.currentTimeMillis() + code.expiresIn * 1000L
-            var interval = code.interval * 1000L
-            AppLog.d("BaiduAuth", "pollDeviceCode: start, deadline=${code.expiresIn}s, interval=${code.interval}s")
-            while (System.currentTimeMillis() < deadline && isActive()) {
-                when (val r = baiduOAuth.pollDeviceToken(code.deviceCode)) {
-                    is BaiduOAuthClient.PollResult.Success -> {
-                        AppLog.d("BaiduAuth", "pollDeviceCode: Success, verifying token before setting LoggedIn...")
-                        _baiduDeviceCode.value = null
-                        // 先设 Connecting，异步验证 token 后再决定 LoggedIn/Failed
-                        _baiduConnectionState.value = BaiduConnectionState.Connecting
-                        nasMusicApp.refreshBaiduServiceRegistration()
-                        verifyBaiduTokenAsync()
-                        return@launch
-                    }
-                    BaiduOAuthClient.PollResult.Pending -> {
-                        kotlinx.coroutines.delay(interval)
-                    }
-                    BaiduOAuthClient.PollResult.Declined -> {
-                        AppLog.d("BaiduAuth", "pollDeviceCode: Declined -> Failed")
-                        _baiduConnectionState.value = BaiduConnectionState.Failed(getApplication<Application>().getString(R.string.baidu_user_declined))
-                        _baiduDeviceCode.value = null
-                        return@launch
-                    }
-                    is BaiduOAuthClient.PollResult.SlowDown -> {
-                        AppLog.d("BaiduAuth", "pollDeviceCode: SlowDown, newInterval=${r.newInterval}s")
-                        interval = r.newInterval * 1000L
-                        kotlinx.coroutines.delay(interval)
-                    }
-                    is BaiduOAuthClient.PollResult.Failed -> {
-                        AppLog.d("BaiduAuth", "pollDeviceCode: Failed -> ${r.message}")
-                        _baiduConnectionState.value = BaiduConnectionState.Failed(r.message)
-                        _baiduDeviceCode.value = null
-                        return@launch
-                    }
-                }
-            }
-            AppLog.d("BaiduAuth", "pollDeviceCode: timeout -> Failed")
-            _baiduConnectionState.value = BaiduConnectionState.Failed(getApplication<Application>().getString(R.string.baidu_auth_timeout))
-            _baiduDeviceCode.value = null
-        }
-    }
-
-    private suspend fun isActive(): Boolean =
-        kotlin.coroutines.coroutineContext[kotlinx.coroutines.Job]?.isActive == true
-
-    /** 登出 */
-    fun logoutBaidu() {
-        AppLog.d("BaiduAuth", "logoutBaidu: called, current state=${_baiduConnectionState.value}")
-        viewModelScope.launch {
-            baiduOAuth.logout()
-            nasMusicApp.refreshBaiduServiceRegistration()
-            _baiduConnectionState.value = BaiduConnectionState.Off
-            AppLog.d("BaiduAuth", "logoutBaidu: set state=Off")
-        }
-    }
-
-    // ---- 网盘目录浏览 ----
-
-    fun listBaiduDir(dir: String) {
-        AppLog.d("BaiduAuth", "listBaiduDir: dir=$dir, current state=${_baiduConnectionState.value}")
-        _netdiskCurrentDir.value = dir
-        _netdiskIsLoading.value = true
-        viewModelScope.launch {
-            try {
-                val result = baiduApi.listDir(dir)
-                AppLog.d("BaiduAuth", "listBaiduDir: got ${result.files.size} files, hasMore=${result.hasMore}, errno=${result.errno}")
-                // API 返回错误时设置 Failed 状态（不再依赖回调）
-                if (result.errno != 0) {
-                    val desc = com.nasmusic.tv.backend.network.baidu.BaiduNetdiskConfig.describeErrno(result.errno)
-                    AppLog.w("BaiduAuth", "listBaiduDir: errno=${result.errno} ($desc), setting state=Failed")
-                    _baiduConnectionState.value = BaiduConnectionState.Failed(desc)
-                }
-                _netdiskDirFiles.value = result.files
-            } catch (e: Exception) {
-                AppLog.e("NASMusic", "listBaiduDir error", e)
-                showError(getApplication<Application>().getString(R.string.netdisk_load_dir_error, e.message?.take(40)))
-                _netdiskDirFiles.value = emptyList()
-            } finally {
-                _netdiskIsLoading.value = false
-            }
-        }
-    }
-
-    /**
-     * 列出网盘指定路径下的文件（供 [com.nasmusic.tv.ui.components.BaiduDirPickerDialog] 目录树选择使用）。
-     * 异常直接上抛，由对话框展示失败态并允许重试。
-     */
-    suspend fun listBaiduDirs(path: String): List<BaiduFile> =
-        baiduApi.listDir(path).files
-
-    fun navigateBaiduDirUp() {
-        val current = _netdiskCurrentDir.value
-        if (current == "/" || current.isBlank()) return
-        val parent = current.substringBeforeLast('/').ifBlank { "/" }
-        listBaiduDir(parent)
-    }
-
-    fun enterBaiduDir(name: String) {
-        val base = _netdiskCurrentDir.value.trimEnd('/')
-        listBaiduDir("$base/$name")
-    }
-
-    // ---- 网盘搜索 ----
-
-    fun searchBaidu(keyword: String) {
-        _netdiskSearchKeyword.value = keyword
-        if (keyword.isBlank()) {
-            _netdiskSearchResults.value = emptyList()
-            return
-        }
-        viewModelScope.launch {
-            _netdiskIsLoading.value = true
-            try {
-                val rootDir = prefs.getBaiduMusicRootDirSync().ifBlank { BaiduNetdiskConfig.APP_DIR }
-                val files = baiduApi.searchAudio(keyword, dir = rootDir)
-                _netdiskSearchResults.value = files.map { it.toSong() }
-            } catch (e: Exception) {
-                AppLog.e("NASMusic", "searchBaidu error", e)
-                _netdiskSearchResults.value = emptyList()
-            } finally {
-                _netdiskIsLoading.value = false
-            }
-        }
-    }
-
-    fun clearNetdiskSearch() {
-        _netdiskSearchKeyword.value = ""
-        _netdiskSearchResults.value = emptyList()
-    }
-
-    /** 播放全部网盘搜索结果 */
-    fun playAllNetdiskSearch() {
-        val results = _netdiskSearchResults.value
-        if (results.isEmpty()) {
-            showError(getApplication<Application>().getString(R.string.netdisk_search_no_results))
-            return
-        }
-        viewModelScope.launch {
-            playQueue(results, 0)
-        }
-    }
-
-    /**
-     * 播放当前目录（含子目录）的全部音频。
-     *
-     * 优先走本地索引（毫秒级）；索引未覆盖/缺失时回退递归 BFS 扫描网盘。
-     * @param onPlayAll 收集完成后回调（播放队列由调用方导航到 NowPlaying）
-     */
-    fun playAllNetdiskDir(dir: String, onPlayAll: (List<Song>) -> Unit) {
-        viewModelScope.launch {
-            val songs = collectAudioInDir(dir)
-            if (songs.isEmpty()) {
-                showError(getApplication<Application>().getString(R.string.netdisk_no_audio_files))
-            } else {
-                onPlayAll(songs)
-            }
-        }
-    }
-
-    /** 收集目录（含子目录）内全部音频：优先索引，回退 API 递归扫描 */
-    private suspend fun collectAudioInDir(dir: String): List<Song> {
-        val base = dir.trimEnd('/')
-        val index = baiduIndexCache.load()
-        val indexed = index?.entries?.filter {
-            it.category == BaiduNetdiskConfig.CATEGORY_AUDIO &&
-                (it.path == base || it.path.startsWith("$base/"))
-        }?.map { it.toSong() }
-        if (indexed != null && indexed.isNotEmpty()) return indexed
-
-        // 回退：BFS 递归扫描（索引未建或未覆盖该目录时）
-        val songs = mutableListOf<Song>()
-        val queue = ArrayDeque<String>()
-        val visited = HashSet<String>()
-        queue.addLast(base)
-        visited.add(base)
-        try {
-            while (queue.isNotEmpty()) {
-                val dirPath = queue.removeFirst()
-                val result = baiduApi.listDir(dirPath)
-                for (f in result.files) {
-                    if (f.isDir) {
-                        if (visited.add(f.path)) queue.addLast(f.path)
-                    } else if (BaiduPanApi.isAudioFile(f.serverFilename, f.category)) {
-                        songs.add(f.toSong())
-                    }
-                }
-            }
-        } catch (e: Exception) {
-            AppLog.e("NASMusic", "collectAudioInDir error", e)
-        }
-        return songs
-    }
-
-    // ---- 索引管理 ----
-
-    fun triggerBaiduIndexScanIfNeeded() {
-        val index = baiduIndexCache.load()
-        val root = prefs.getBaiduMusicRootDirSync().ifBlank { BaiduNetdiskConfig.APP_DIR }
-        if (index == null || index.rootPath != root) {
-            rebuildBaiduIndex()
-        } else {
-            _baiduIndexScanned.value = index.entries.size
-            _baiduIndexLastSync.value = index.lastSyncAt
-        }
-    }
-
-    fun rebuildBaiduIndex() {
-        if (_baiduIndexScanning.value) return
-        viewModelScope.launch {
-            _baiduIndexScanning.value = true
-            _baiduIndexScanned.value = 0
-            val root = prefs.getBaiduMusicRootDirSync().ifBlank { BaiduNetdiskConfig.APP_DIR }
-            val callback = object : BaiduFileIndexCache.ProgressCallback {
-                override fun onProgress(scanned: Int) { _baiduIndexScanned.value = scanned }
-                override fun onComplete(total: Int) {
-                    _baiduIndexScanned.value = total
-                    _baiduIndexLastSync.value = System.currentTimeMillis()
-                    updateMergedData()
-                }
-                override fun onFailed(message: String) {
-                    showError(getApplication<Application>().getString(R.string.netdisk_index_scan_interrupted, message))
-                }
-            }
-            try {
-                val mvDir = prefs.getBaiduMvDirSync()
-                baiduIndexCache.fullScan(root, baiduApi, mvDir, callback)
-                // 扫描成功后，对 coverUrl 为空的音频条目启动 APIC 后台提取。
-                // listall+web=1 返回的 thumbs 仅对图片/视频有效，音频文件几乎都为 null。
-                val index = baiduIndexCache.load()
-                val pendingCovers = index?.entries?.count {
-                    it.coverUrl == null && it.category != BaiduNetdiskConfig.CATEGORY_VIDEO
-                } ?: 0
-                if (pendingCovers > 0) {
-                    AppLog.i("NASMusic", "rebuildBaiduIndex: $pendingCovers entries pending cover extraction, starting APIC")
-                    startApicExtraction()
-                }
-            } catch (e: Exception) {
-                AppLog.e("NASMusic", "rebuildBaiduIndex error", e)
-            } finally {
-                _baiduIndexScanning.value = false
-            }
-        }
-    }
-
-    /** 后台提取 APIC 封面（扫描完成后自动触发，也可手动调用） */
-    private fun startApicExtraction() {
-        if (_baiduApicExtracting.value) return
-        viewModelScope.launch {
-            _baiduApicExtracting.value = true
-            _baiduApicExtracted.value = 0
-            _baiduApicTotal.value = 0
-            try {
-                val callback = object : BaiduFileIndexCache.ApicProgressCallback {
-                    override fun onProgress(extracted: Int, total: Int) {
-                        _baiduApicExtracted.value = extracted
-                        _baiduApicTotal.value = total
-                    }
-                    override fun onComplete(totalExtracted: Int) {
-                        _baiduApicExtracted.value = totalExtracted
-                        _baiduApicTotal.value = totalExtracted
-                        if (totalExtracted > 0) updateMergedData()
-                    }
-                    override fun onFailed(message: String) {
-                        AppLog.e("NASMusic", "APIC extraction failed: $message")
-                    }
-                }
-                baiduIndexCache.extractApicInBackground(
-                    coverProvider = nasMusicApp.baiduCoverProvider,
-                    concurrency = 5,
-                    batchSize = 20,
-                    onProgress = callback
-                )
-            } catch (e: Exception) {
-                AppLog.e("NASMusic", "startApicExtraction error", e)
-            } finally {
-                _baiduApicExtracting.value = false
-            }
-        }
-    }
-
-    // ---- 配置项 ----
-
-    fun setBaiduMusicRootDir(dir: String) {
-        prefs.setBaiduMusicRootDirSync(dir)
-        _netdiskCurrentDir.value = dir
-        // 根目录变更后旧索引失效，触发重建
-        rebuildBaiduIndex()
-        // 如果之前是 DirMissing，重新验证新目录
-        if (_baiduConnectionState.value is BaiduConnectionState.DirMissing) {
-            checkMusicRootDirAfterVerify()
-        }
-    }
-
-    fun setBaiduMvDir(dir: String?) {
-        prefs.setBaiduMvDirSync(dir)
-    }
-
-    /** 加载索引中的歌曲（供 NetdiskScreen 首页展示已扫描曲库） */
-    fun loadBaiduIndexedSongs(): List<Song> =
-        baiduIndexCache.load()?.entries?.map { it.toSong() } ?: emptyList()
 
     // ===================== 电台（radio-browser）& Jamendo（CC 独立音乐） =====================
 

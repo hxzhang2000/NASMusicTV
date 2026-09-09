@@ -128,7 +128,7 @@ fun AppRoot(
     // 天气 API Key
     val weatherApiKey by viewModel.prefs.weatherApiKey.collectAsState(initial = "")
     // 百度网盘状态（设置页网盘分区）
-    val baiduConnectionState by viewModel.baiduConnectionState.collectAsState(initial = com.nasmusic.tv.ui.viewmodel.MainViewModel.BaiduConnectionState.Off)
+    val baiduConnectionState by viewModel.baiduConnectionState.collectAsState(initial = com.nasmusic.tv.ui.viewmodel.NetworkMusicViewModel.BaiduConnectionState.Off)
     val baiduDeviceCode by viewModel.baiduDeviceCode.collectAsState(initial = null)
     val baiduIndexScanned by viewModel.baiduIndexScanned.collectAsState(initial = 0)
     val baiduIndexScanning by viewModel.baiduIndexScanning.collectAsState(initial = false)
@@ -771,9 +771,9 @@ fun AppRoot(
                         onScanTransferBackup = { showBackupTransferDialog = true },
                         // 百度网盘设置
                         baiduEnabled = baiduConfig.enabled,
-                        baiduLoggedIn = baiduConnectionState is com.nasmusic.tv.ui.viewmodel.MainViewModel.BaiduConnectionState.LoggedIn
-                            || baiduConnectionState is com.nasmusic.tv.ui.viewmodel.MainViewModel.BaiduConnectionState.DirMissing,
-                        baiduConnecting = baiduConnectionState is com.nasmusic.tv.ui.viewmodel.MainViewModel.BaiduConnectionState.Connecting,
+                        baiduLoggedIn = baiduConnectionState is com.nasmusic.tv.ui.viewmodel.NetworkMusicViewModel.BaiduConnectionState.LoggedIn
+                            || baiduConnectionState is com.nasmusic.tv.ui.viewmodel.NetworkMusicViewModel.BaiduConnectionState.DirMissing,
+                        baiduConnecting = baiduConnectionState is com.nasmusic.tv.ui.viewmodel.NetworkMusicViewModel.BaiduConnectionState.Connecting,
                         baiduConnectionState = baiduConnectionState,
                         baiduDeviceCode = baiduDeviceCode,
                         baiduMusicRootDir = baiduConfig.musicRootDir,

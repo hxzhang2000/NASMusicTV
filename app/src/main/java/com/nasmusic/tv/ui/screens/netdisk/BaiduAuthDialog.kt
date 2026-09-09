@@ -42,6 +42,7 @@ import com.nasmusic.tv.ui.components.FocusableSurface
 import com.nasmusic.tv.ui.theme.FontSize
 import com.nasmusic.tv.ui.theme.NasMusicColors
 import com.nasmusic.tv.ui.viewmodel.MainViewModel
+import com.nasmusic.tv.ui.viewmodel.NetworkMusicViewModel
 import com.nasmusic.tv.util.LinkUtils
 import com.nasmusic.tv.util.QrCodeGenerator
 
@@ -53,9 +54,9 @@ import com.nasmusic.tv.util.QrCodeGenerator
  * 设备码完成授权，期间自动轮询。
  *
  * 状态流转由 [connectionState] 驱动：
- * - [MainViewModel.BaiduConnectionState.LoggedIn] → 授权成功，自动关闭
- * - [MainViewModel.BaiduConnectionState.Failed] → 失败（拒绝/超时/异常），显示错误后自动关闭
- * - [MainViewModel.BaiduConnectionState.Connecting] → 等待用户扫码授权
+ * - [NetworkMusicViewModel.BaiduConnectionState.LoggedIn] → 授权成功，自动关闭
+ * - [NetworkMusicViewModel.BaiduConnectionState.Failed] → 失败（拒绝/超时/异常），显示错误后自动关闭
+ * - [NetworkMusicViewModel.BaiduConnectionState.Connecting] → 等待用户扫码授权
  *
  * @param deviceCode 设备码结果（null 表示请求中或已失败）
  * @param connectionState 当前连接状态
@@ -66,7 +67,7 @@ import com.nasmusic.tv.util.QrCodeGenerator
 @Composable
 fun BaiduAuthDialog(
     deviceCode: BaiduOAuthClient.DeviceCodeResult?,
-    connectionState: MainViewModel.BaiduConnectionState,
+    connectionState: NetworkMusicViewModel.BaiduConnectionState,
     onCancel: () -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -83,8 +84,8 @@ fun BaiduAuthDialog(
     // 授权成功 → 短暂展示后自动关闭；目录缺失也视为认证成功，自动关闭
     // （失败原因同时持久化在 SettingsScreen 登录按钮上方，对话框关闭后仍可见）
     LaunchedEffect(connectionState) {
-        if (connectionState is MainViewModel.BaiduConnectionState.LoggedIn
-            || connectionState is MainViewModel.BaiduConnectionState.DirMissing) {
+        if (connectionState is NetworkMusicViewModel.BaiduConnectionState.LoggedIn
+            || connectionState is NetworkMusicViewModel.BaiduConnectionState.DirMissing) {
             kotlinx.coroutines.delay(600)
             onDismiss()
         }
@@ -129,7 +130,7 @@ fun BaiduAuthDialog(
 
                 when {
                     // 设备码请求中
-                    deviceCode == null && connectionState is MainViewModel.BaiduConnectionState.Connecting -> {
+                    deviceCode == null && connectionState is NetworkMusicViewModel.BaiduConnectionState.Connecting -> {
                         Spacer(modifier = Modifier.height(36.dp))
                         Text(
                             text = stringResource(R.string.netdisk_auth_fetching),
@@ -227,7 +228,7 @@ fun BaiduAuthDialog(
                         )
                     }
                     // 授权失败：显示具体错误信息
-                    connectionState is MainViewModel.BaiduConnectionState.Failed -> {
+                    connectionState is NetworkMusicViewModel.BaiduConnectionState.Failed -> {
                         Spacer(modifier = Modifier.height(36.dp))
                         // 根据 message 内容区分失败阶段
                         val failTitle = if (connectionState.message.contains("设备码") ||
