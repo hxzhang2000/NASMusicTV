@@ -7,6 +7,12 @@
 >
 > 类型：`Added`（新增） | `Changed`（变更） | `Fixed`（修复） | `Removed`（移除）
 
+## [v2.26.41] - 2026-09-09
+
+### Fixed
+
+- **播放页点击艺术家/歌名未跳转到搜索页**：`AppRoot.kt` 的 NowPlaying `onSearchArtist`/`onSearchSong` 接线错误地调用 `viewModel.searchNetworkSongs(keyword)`，该方法只更新独立的网络音乐搜索数据流 `_networkSearchResults`，既不导航也不设置曲库搜索关键词，导致点击后界面停留播放页、无任何跳转。修复：改为沿用已有的 `onNavigateToSearch` 模式（`selectLibraryTab(LibraryTab.SEARCH)` + `setLibrarySearchKeyword(keyword)` + `navigateTo(Screen.Library)`），跳转到曲库 SEARCH Tab 并触发跨源融合搜索（NAS + 网络 + 百度 + Jamendo + 本地）。
+
 ## [v2.26.40] - 2026-09-09
 
 ### Fixed

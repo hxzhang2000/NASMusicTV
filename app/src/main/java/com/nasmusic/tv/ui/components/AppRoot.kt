@@ -382,10 +382,15 @@ fun AppRoot(
                             spectrumEnabled = settings.spectrumEnabled,
                             visualizerTheme = settings.visualizerTheme,
                             onSearchArtist = { keyword ->
-                                viewModel.searchNetworkSongs(keyword)
+                                // 跳转到曲库 SEARCH Tab 并触发跨源搜索（NAS+网络+百度+Jamendo+本地）
+                                viewModel.selectLibraryTab(LibraryTab.SEARCH)
+                                viewModel.setLibrarySearchKeyword(keyword)
+                                viewModel.navigateTo(Screen.Library)
                             },
                             onSearchSong = { keyword ->
-                                viewModel.searchNetworkSongs(keyword)
+                                viewModel.selectLibraryTab(LibraryTab.SEARCH)
+                                viewModel.setLibrarySearchKeyword(keyword)
+                                viewModel.navigateTo(Screen.Library)
                             },
                             // === K 歌页面：升降调 / 变速 ===
                             pitchSemitones = pitchSemitones,

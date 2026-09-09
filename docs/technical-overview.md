@@ -7642,3 +7642,34 @@ cipher.init(Cipher.ENCRYPT_MODE, softwareKey, GCMParameterSpec(GCM_TAG_LENGTH, i
 **验证结果**：
 - ✅ `compileDebugKotlin` 编译通过
 - ✅ 曲库搜索/发现/歌曲三页点击 `+` → 设置顶层 `pickerSong` → 弹窗正常弹出
+
+---
+
+### 10.107 v2.26.41 - 播放页点击艺术家/歌名未跳转搜索
+
+**提交日期**：2026-09-09
+
+**背景**：播放页点击艺术家名或歌名，期望跳转到搜索页面并直接搜索对应关键词，但当前点击后界面停留播放页、无任何跳转。
+
+**根因分析**：
+
+`AppRoot.kt` 的 NowPlaying 块将 `onSearchArtist` / `onSearchSong` 错误地接线为：
+
+```kotlin
+onSearchArtist = { keyword -> viewModel.searchNetworkSongs(keyword) },
+onSearchSong = { keyword -> viewModel.searchNetworkSongs(keyword) },
+```
+
+`MainViewModel.searchNetworkSongs()`（`L1799`）只更新独立的**网络音乐搜索数据流** `_networkSearchResults`（旧网络音乐 Tab 的遗留入口），既不设置曲库搜索关键词 `_librarySearchKeyword`，也不调用 `navigateTo()`，更不切换子 Tab。因此点击后网络搜索在后台执行，但界面完全不跳转。
+
+而项目当前的搜索主入口是**曲库 SEARCH Tab**（`Screen.Library` + `LibraryTab.SEARCH`），其搜索数据流是 `_searchResults`（`L283`，由 `searchSongsOnServer()` 跨源聚合 NAS+网络+百度+Jamendo+本地）。AppRoot 已有一个正确的"跳转曲库搜索"参照——HomeScreen 的 `onNavigateToSearch`（`L285-288`）。
+
+**修复内容**：
+
+**文件**：`ui/components/AppRoot.kt`
+
+- `onSearchArtist` / `onSearchSong` 改为沿用 `onNavigateToSearch` 模式：先 `selectLibraryTab(LibraryTab.SEARCH)` 切到曲库 SEARCH Tab，再 `setLibrarySearchKeyword(keyword)` 设置搜索关键词，最后 `navigateTo(Screen.Library)` 跳转。LibraryScreen 的 `LaunchedEffect(filterQuery)` 检测到关键词非空后自动调用 `onSearch` → `searchSongsOnServer` 触发跨源融合搜索。
+
+**验证结果**：
+- ✅ `compileDebugKotlin` 编译通过
+- ✅ 播放页点击艺术家/歌名 → 跳转到曲库 SEARCH Tab 并自动搜索该关键词（跨源融合结果）
