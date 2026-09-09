@@ -122,6 +122,21 @@ class MainActivity : ComponentActivity() {
         // 手机端：检查电池优化白名单，确保后台播放稳定
         com.nasmusic.tv.player.BatteryOptimizationHelper.checkAndRequest(this)
 
+        // 修复（M-5）：Android 13+ 通知运行时权限——媒体通知/下载通知依赖 POST_NOTIFICATIONS
+        if (android.os.Build.VERSION.SDK_INT >= 33 &&
+            androidx.core.content.ContextCompat.checkSelfPermission(
+                this, android.Manifest.permission.POST_NOTIFICATIONS
+            ) != android.content.pm.PackageManager.PERMISSION_GRANTED
+        ) {
+            try {
+                androidx.core.app.ActivityCompat.requestPermissions(
+                    this, arrayOf(android.Manifest.permission.POST_NOTIFICATIONS), 2001
+                )
+            } catch (e: Exception) {
+                AppLog.w("MainActivity", "request POST_NOTIFICATIONS failed", e)
+            }
+        }
+
         // SAF 树选择器（§8.8.4）：注入到 ExportCoordinator，导出时启动系统文件夹选择器
         (application as NasMusicApp).exportCoordinator.treePickLauncher = {
             exportTreeLauncher.launch(null)
@@ -191,10 +206,16 @@ class MainActivity : ComponentActivity() {
                                     app.playerManager.release()
                                     stopService(Intent(this@MainActivity, PlaybackService::class.java))
                                     // 同步注销 Jellyfin session，确保 HTTP 请求完成后再杀进程
+                                    // 修复（M-1）：logout 网络请求限时 1.5s——OkHttp 超时最长 15s，
+                                    // 无限等待会在网络异常时造成主线程 ANR；超时仍照常退出。
                                     kotlinx.coroutines.runBlocking {
                                         try {
-                                            app.backendRegistry.disconnect()
+                                            kotlinx.coroutines.withTimeout(1500) {
+                                                app.backendRegistry.disconnect()
+                                            }
                                             AppLog.d("MainActivity", "exit: backend disconnected")
+                                        } catch (e: kotlinx.coroutines.TimeoutCancellationException) {
+                                            AppLog.w("MainActivity", "exit: disconnect timeout (1.5s), exiting anyway")
                                         } catch (e: Exception) {
                                             AppLog.w("MainActivity", "exit: disconnect failed", e)
                                         }
@@ -326,6 +347,10 @@ class MainActivity : ComponentActivity() {
         networkMonitor.unregister()
         // 兜底清理：确保播放服务和后端连接被释放
         // 正常退出流程（退出对话框）已在 onConfirm 中处理，这里处理异常退出场景
+        // 修复（M-2）：仅在本页真正结束（isFinishing，如退出确认/finishAffinity）时才清理；
+        // 配置重建（旋转/主题切换/分屏）isFinishing=false，原无条件 release+stopService 会误杀后台播放；
+        // 从最近任务划掉应用同样保留播放（通知栏可控），符合媒体类应用预期
+        if (!isFinishing) return
         val app = (application as NasMusicApp)
         // 停止播放服务（如果仍在运行）
         try {

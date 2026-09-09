@@ -151,7 +151,9 @@ class RemoteControlServer(
         private fun handleSearch(params: Map<String, List<String>>): Response {
             val query = params["q"]?.firstOrNull() ?: return jsonError(Response.Status.BAD_REQUEST, "missing q")
             return try {
-                val result = runBlocking { callbacks.search(query) }
+                // 修复（M-7）：跨源搜索限时 10s——原 runBlocking 无超时，
+                // 各搜索端点同时慢响应时会长时间占用 NanoHTTPD worker 线程
+                val result = runBlocking { kotlinx.coroutines.withTimeout(10_000) { callbacks.search(query) } }
                 val json = JsonObject().apply {
                     add("nasResults", gson.toJsonTree(result.nasResults.map { it.toLightMap() }))
                     add("networkResults", gson.toJsonTree(result.networkResults.map { it.toLightMap() }))

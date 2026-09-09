@@ -999,7 +999,9 @@ private fun ArtistsTab(
                                                 onPlaySongs(artistSongs)
                                             }
                                         },
-                                        onPlay = if (artistSongs.isNotEmpty()) {{ onPlaySongs(artistSongs) }} else null,
+                                        // C-2 撤回：原 {{ }} 写法在 if 分支中按“块+尾部 lambda”解析，本就可用；
+                                        // 改用括号包裹的 lambda 表达式，语义相同且更清晰
+                                        onPlay = if (artistSongs.isNotEmpty()) ({ onPlaySongs(artistSongs) }) else null,
                                         focusRequester = if (index == 1) firstItemFocusRequester else null
                                     )
                                 }

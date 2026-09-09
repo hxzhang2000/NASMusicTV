@@ -24,10 +24,12 @@ class ModelTransferServer(
     private val context: Context,
     private val modelFile: File,
     private val onModelUploaded: () -> Unit
-) : NanoHTTPD(18082) {
+) : NanoHTTPD(MODEL_TRANSFER_PORT) {
 
     companion object {
         private const val TAG = "ModelTransferServer"
+        /** 修复（H-4）：18082 已被手机遥控服务器占用，后启动者 bind 失败静默失效；改用独立端口 */
+        const val MODEL_TRANSFER_PORT = 18083
         private const val MIN_SIZE_BYTES = 50L * 1024 * 1024 // 50MB 最低阈值
         private const val MODEL_FILENAME = "htdemucs_ft_vocals.onnx"
 

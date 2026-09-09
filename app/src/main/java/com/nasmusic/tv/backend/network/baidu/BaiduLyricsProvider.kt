@@ -16,7 +16,8 @@ import okhttp3.Request
  */
 class BaiduLyricsProvider(
     private val api: BaiduPanApi,
-    private val client: OkHttpClient
+    private val client: OkHttpClient,
+    private val oauth: BaiduOAuthClient
 ) {
 
     /**
@@ -48,15 +49,31 @@ class BaiduLyricsProvider(
         // 用 filemetas 拿 dlink，再下载文本
         val metas = api.fileMetas(listOf(lrcFile.fsId))
         val dlink = metas.firstOrNull()?.dlink ?: return null
-        return downloadText(dlink)
+        // 修复（M-15）：dlink 需补 access_token（与封面/音频流一致），否则侧车 LRC 间歇 403
+        return downloadText(ensureAccessToken(dlink) ?: return null)
     }
 
     /** Range 请求音频文件头部前 256KB，解析 ID3v2 USLT 帧 */
     private suspend fun extractEmbeddedLyrics(fsId: Long): String? {
         val metas = api.fileMetas(listOf(fsId))
         val dlink = metas.firstOrNull()?.dlink ?: return null
-        val headerBytes = downloadRange(dlink, 0L, (ID3_HEADER_BYTES - 1).toLong()) ?: return null
+        val authorizedUrl = ensureAccessToken(dlink) ?: return null
+        val headerBytes = downloadRange(authorizedUrl, 0L, (ID3_HEADER_BYTES - 1).toLong()) ?: return null
         return Id3v2Parser.findUslt(headerBytes)
+    }
+
+    /**
+     * dlink 可能不含 access_token，需手动补（与 BaiduCoverProvider.ensureAccessToken 一致）。
+     * 修复（M-15）：缺 token 时侧车 LRC / 内嵌歌词读取会 403 并静默降级到网络匹配。
+     */
+    private suspend fun ensureAccessToken(dlink: String): String? {
+        if (dlink.contains("access_token=")) return dlink
+        val token = oauth.getValidAccessToken() ?: run {
+            AppLog.w(TAG, "ensureAccessToken: access_token 不可用，歌词 dlink 无法访问")
+            return null
+        }
+        return dlink + (if (dlink.contains('?')) "&" else "?") +
+            "access_token=" + java.net.URLEncoder.encode(token, "UTF-8")
     }
 
     private fun downloadText(url: String): String? {
@@ -87,8 +104,9 @@ class BaiduLyricsProvider(
                 .header("Range", "bytes=$start-$end")
                 .build()
             client.newCall(req).execute().use { resp ->
-                if (resp.code !in setOf(200, 206)) {
-                    AppLog.w(TAG, "downloadRange failed code=${resp.code}")
+                // 修复（M-14d）：只接受 206，防止 Range 被忽略时整文件读入内存
+                if (resp.code != 206) {
+                    AppLog.w(TAG, "downloadRange: non-206 (code=${resp.code}), skip")
                     return null
                 }
                 resp.body?.bytes()

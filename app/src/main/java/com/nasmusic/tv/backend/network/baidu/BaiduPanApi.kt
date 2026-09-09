@@ -166,6 +166,11 @@ class BaiduPanApi(
             AppLog.d(TAG, "listAllAudioPaged: start=$start, got=${result.files.size}, total=${allFiles.size}, hasMore=${result.hasMore}")
 
             if (!result.hasMore) break
+            // 修复（M-14b）：游标停滞保护——hasMore=true 但 cursor 未前进时终止，防止死循环
+            if (result.cursor <= start) {
+                AppLog.w(TAG, "listAllAudioPaged: cursor stalled (start=$start → cursor=${result.cursor}), stop paging")
+                break
+            }
             start = result.cursor
         }
 
@@ -211,6 +216,8 @@ class BaiduPanApi(
             addQueryParameter("recursion", "1")
             addQueryParameter("web", "1")
             addQueryParameter("category", category.toString())
+            // 修复（M-14a）：补传 start——原实现接收 start 参数却未拼入 URL，分页恒为第一页
+            addQueryParameter("start", start.toString())
         }
         execute(url) { json ->
             val list = pickListArray(json)
@@ -235,12 +242,16 @@ class BaiduPanApi(
         execute(url) { json ->
             val list = pickListArray(json)
             val firstDlink = list.firstOrNull()?.get("dlink")?.asString?.take(90)
-            AppLog.e(TAG, "fileMetas: fsIds=$fsIds → listSize=${list.size} firstDlink=${firstDlink}")
+            AppLog.d(TAG, "fileMetas: fsIds=$fsIds → listSize=${list.size} firstDlink=${firstDlink}")
             list.mapNotNull { parseBaiduFileMeta(it) }
         } ?: emptyList()
     }
 
     // ---- 内部工具 ----
+
+    /** 日志脱敏（修复 M-13）：w/e 级日志在 release 也会输出，URL 中的 access_token 必须打码 */
+    private fun sanitizeUrl(url: String): String =
+        url.take(160).replace(Regex("access_token=[^&]+"), "access_token=***")
 
     private inline fun buildUrl(
         base: String,
@@ -261,20 +272,20 @@ class BaiduPanApi(
             client.newCall(req).execute().use { resp ->
                 val body = resp.body?.string() ?: return null
                 if (!resp.isSuccessful) {
-                    AppLog.w(TAG, "request failed url=${url.take(120)} code=${resp.code} body=${body.take(200)}")
+                    AppLog.w(TAG, "request failed url=${sanitizeUrl(url)} code=${resp.code} body=${body.take(200)}")
                     return null
                 }
                 val json = gson.fromJson(body, JsonObject::class.java) ?: return null
                 val errno = json.get("errno")?.asInt ?: 0
                 if (errno != 0) {
                     val desc = BaiduNetdiskConfig.describeErrno(errno)
-                    AppLog.w(TAG, "errno=$errno $desc url=${url.take(120)}")
+                    AppLog.w(TAG, "errno=$errno $desc url=${sanitizeUrl(url)}")
                     onApiError?.invoke(errno, desc)
                 }
                 parser(json)
             }
         } catch (e: Exception) {
-            AppLog.e(TAG, "execute error url=${url.take(120)}", e)
+            AppLog.e(TAG, "execute error url=${sanitizeUrl(url)}", e)
             null
         }
     }
@@ -288,14 +299,14 @@ class BaiduPanApi(
             client.newCall(req).execute().use { resp ->
                 val body = resp.body?.string() ?: return BaiduListResult(emptyList(), false, errno = -1)
                 if (!resp.isSuccessful) {
-                    AppLog.w(TAG, "request failed url=${url.take(200)} code=${resp.code} body=$body")
+                    AppLog.w(TAG, "request failed url=${sanitizeUrl(url)} code=${resp.code} body=$body")
                     return BaiduListResult(emptyList(), false, errno = -1)
                 }
                 val json = gson.fromJson(body, JsonObject::class.java) ?: return BaiduListResult(emptyList(), false, errno = -1)
                 val errno = json.get("errno")?.asInt ?: 0
                 if (errno != 0) {
                     val desc = BaiduNetdiskConfig.describeErrno(errno)
-                    AppLog.w(TAG, "errno=$errno $desc url=${url.take(200)}")
+                    AppLog.w(TAG, "errno=$errno $desc url=${sanitizeUrl(url)}")
                     AppLog.w(TAG, "full response body: $body")
                     onApiError?.invoke(errno, desc)
                 }

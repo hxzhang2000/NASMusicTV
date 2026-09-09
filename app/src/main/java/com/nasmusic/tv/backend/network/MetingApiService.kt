@@ -11,12 +11,7 @@ import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.net.URLEncoder
-import java.security.cert.X509Certificate
 import java.util.concurrent.TimeUnit
-import javax.net.ssl.HostnameVerifier
-import javax.net.ssl.SSLContext
-import javax.net.ssl.TrustManager
-import javax.net.ssl.X509TrustManager
 
 /**
  * Meting-API 网络音乐服务实现
@@ -61,28 +56,15 @@ class MetingApiService(
         Thread(r, "Meting-OkHttp").apply { isDaemon = true }
     }
 
-    /**
-     * 信任所有证书的 TrustManager
-     *
-     * TV 盒子系统版本较低时，可能缺少 Let's Encrypt 等新 CA 的根证书，
-     * 导致 SSLHandshakeException。Meting-API 为公开搜索服务，不涉及敏感数据，
-     * 此处放宽证书校验以保证可用性。
-     */
-    private val trustAllManager: X509TrustManager = object : X509TrustManager {
-        override fun checkClientTrusted(chain: Array<out X509Certificate>?, authType: String?) {}
-        override fun checkServerTrusted(chain: Array<out X509Certificate>?, authType: String?) {}
-        override fun getAcceptedIssuers(): Array<X509Certificate> = arrayOf()
-    }
-
-    /** 信任所有主机名 */
-    private val trustAllHostnameVerifier = HostnameVerifier { _, _ -> true }
+    // 安全修复（C-1）：移除 trust-all，恢复系统默认证书校验。
+    // 原实现因老盒子缺 Let's Encrypt 根证书而放宽校验；现恢复严格校验，
+    // 老设备遇 https LE 端点握手失败时改用 http 端点即可（应用已允许明文流量）。
 
     private val client: OkHttpClient by lazy {
         OkHttpClient.Builder()
             .dispatcher(okhttp3.Dispatcher(daemonExecutor))
             .connectTimeout(15, TimeUnit.SECONDS)
             .readTimeout(15, TimeUnit.SECONDS)
-            .applyTrustAllSsl()
             .build()
     }
 
@@ -93,21 +75,7 @@ class MetingApiService(
             .connectTimeout(15, TimeUnit.SECONDS)
             .readTimeout(15, TimeUnit.SECONDS)
             .followRedirects(false)
-            .applyTrustAllSsl()
             .build()
-    }
-
-    /** 将 OkHttpClient.Builder 配置为信任所有 SSL 证书 */
-    private fun OkHttpClient.Builder.applyTrustAllSsl(): OkHttpClient.Builder {
-        try {
-            val sslContext = SSLContext.getInstance("TLS")
-            sslContext.init(null, arrayOf<TrustManager>(trustAllManager), java.security.SecureRandom())
-            this.sslSocketFactory(sslContext.socketFactory, trustAllManager)
-            this.hostnameVerifier(trustAllHostnameVerifier)
-        } catch (e: Exception) {
-            AppLog.e(DIAG, "applyTrustAllSsl failed: ${e.message}", e)
-        }
-        return this
     }
 
     private val gson = Gson()
@@ -256,7 +224,7 @@ class MetingApiService(
         val endpoints = buildEndpointFallbackOrder(baseUrl)
         for (endpoint in endpoints) {
             try {
-                val url = "$endpoint?server=$server&type=url&id=$netId"
+                val url = "$endpoint?server=$server&type=url&id=${URLEncoder.encode(netId, "UTF-8")}"
                 val request = Request.Builder().url(url).build()
                 var playUrl: String? = null
                 noRedirectClient.newCall(request).execute().use { response ->
@@ -292,7 +260,7 @@ class MetingApiService(
         val endpoints = buildEndpointFallbackOrder(baseUrl)
         for (endpoint in endpoints) {
             try {
-                val url = "$endpoint?server=$server&type=lrc&id=$netId"
+                val url = "$endpoint?server=$server&type=lrc&id=${URLEncoder.encode(netId, "UTF-8")}"
                 val request = Request.Builder().url(url).build()
                 client.newCall(request).execute().use { response ->
                     val text = response.body?.string()
@@ -345,7 +313,7 @@ class MetingApiService(
         val endpoints = buildEndpointFallbackOrder(baseUrl)
         for (endpoint in endpoints) {
             try {
-                val url = "$endpoint?server=$server&type=playlist&id=$playlistId"
+                val url = "$endpoint?server=$server&type=playlist&id=${URLEncoder.encode(playlistId, "UTF-8")}"
                 AppLog.i(DIAG, "getPlaylist: trying endpoint='$endpoint' url='$url'")
                 val request = Request.Builder()
                     .url(url)

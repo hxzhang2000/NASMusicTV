@@ -13,12 +13,7 @@ import kotlinx.coroutines.sync.withLock
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.OkHttpClient
 import okhttp3.Request
-import java.security.cert.X509Certificate
 import java.util.concurrent.TimeUnit
-import javax.net.ssl.HostnameVerifier
-import javax.net.ssl.SSLContext
-import javax.net.ssl.TrustManager
-import javax.net.ssl.X509TrustManager
 
 /**
  * 百度网盘 OAuth 客户端（设备码模式 + token 刷新）
@@ -208,6 +203,17 @@ class BaiduOAuthClient(
     }
 
     /**
+     * 强制刷新 access_token（修复 M-16）：网盘 API 返回 errno=-6/31045（token 被服务端
+     * 判定失效，本地 expiresAt 未必到期）时调用一次并重试，避免一直静默失败到用户手动重授权。
+     * @return 新 token；未登录或刷新失败返回 null
+     */
+    suspend fun forceRefreshAccessToken(): String? = withContext(Dispatchers.IO) {
+        val tokens = prefs.getBaiduTokensSync() ?: return@withContext null
+        AppLog.w(TAG, "forceRefreshAccessToken: token 被服务端判定失效，强制刷新一次")
+        refreshAccessToken(tokens.refreshToken)
+    }
+
+    /**
      * 刷新 access_token（并发加锁 + 原子写回新 refresh_token）。
      *
      * ⚠️ 百度官方语义：refresh_token 单次有效，刷新响应带新值须一并保存；
@@ -278,36 +284,21 @@ class BaiduOAuthClient(
         private const val TAG = "BaiduOAuth"
 
         /**
-         * 构建百度专用 OkHttpClient（守护线程池 + 信任所有证书，与 MetingApiService 一致）
+         * 构建百度专用 OkHttpClient（守护线程池；系统默认证书校验）
+         *
+         * 安全修复（C-1）：移除 trust-all TLS——该 client 承载 OAuth token 交换与
+         * 网盘 API 调用，放宽校验会让局域网中间人窃取账号级 access_token/refresh_token。
+         * 百度端点均为正规 CA 证书，系统默认校验即可。
          */
         fun buildClient(): OkHttpClient {
             val daemonExecutor = java.util.concurrent.Executors.newCachedThreadPool { r ->
                 Thread(r, "Baidu-OkHttp").apply { isDaemon = true }
             }
-            val trustAllManager: X509TrustManager = object : X509TrustManager {
-                override fun checkClientTrusted(chain: Array<out X509Certificate>?, authType: String?) {}
-                override fun checkServerTrusted(chain: Array<out X509Certificate>?, authType: String?) {}
-                override fun getAcceptedIssuers(): Array<X509Certificate> = arrayOf()
-            }
-            val trustAllHostnameVerifier = HostnameVerifier { _, _ -> true }
-            return try {
-                val sslContext = SSLContext.getInstance("TLS")
-                sslContext.init(null, arrayOf<TrustManager>(trustAllManager), java.security.SecureRandom())
-                OkHttpClient.Builder()
-                    .dispatcher(okhttp3.Dispatcher(daemonExecutor))
-                    .connectTimeout(15, TimeUnit.SECONDS)
-                    .readTimeout(20, TimeUnit.SECONDS)
-                    .sslSocketFactory(sslContext.socketFactory, trustAllManager)
-                    .hostnameVerifier(trustAllHostnameVerifier)
-                    .build()
-            } catch (e: Exception) {
-                AppLog.e(TAG, "buildClient SSL fallback", e)
-                OkHttpClient.Builder()
-                    .dispatcher(okhttp3.Dispatcher(daemonExecutor))
-                    .connectTimeout(15, TimeUnit.SECONDS)
-                    .readTimeout(20, TimeUnit.SECONDS)
-                    .build()
-            }
+            return OkHttpClient.Builder()
+                .dispatcher(okhttp3.Dispatcher(daemonExecutor))
+                .connectTimeout(15, TimeUnit.SECONDS)
+                .readTimeout(20, TimeUnit.SECONDS)
+                .build()
         }
     }
 }

@@ -1895,6 +1895,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
         } else {
             chosen to bestFresh
         }
+        // 修复（M-9）：硬上限防长期挂机场景集合无限增长（饱和 clear 之外的双保险）
+        if (seenKeys.size >= 4000) seenKeys.clear()
         result.second.forEach { seenKeys.add(it.artist.trim() to it.title.trim()) }
         return result
     }
@@ -4003,6 +4005,16 @@ showError(getApplication<Application>().getString(R.string.play_failed_with_msg,
     fun addSongToQueue(song: Song) = playerManager.addToQueue(song)
 
     override fun removeFromQueue(index: Int) = playerManager.removeFromQueue(index)
+
+    /**
+     * 批量加入队列（修复 M-8）：只增不删、按 id 去重并跳过已在队列中的歌曲。
+     * 用于曲库搜索/发现页的「全部加入队列」——原实现逐首 toggle 会把已入队歌曲反向移除。
+     */
+    fun addSongsToQueue(songs: List<Song>) {
+        val existingIds = playerManager.queue.value.map { it.id }.toHashSet()
+        val toAdd = songs.filter { it.id !in existingIds }.distinctBy { it.id }
+        if (toAdd.isNotEmpty()) playerManager.addToQueue(toAdd)
+    }
 
     /**
      * 切换歌曲在队列中的状态：不在队列则加入，在队列则移除。

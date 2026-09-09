@@ -112,13 +112,14 @@ fun ServerConnectScreen(
     var username by remember(initialConfig) {
         mutableStateOf(
             if (initialConfig.username.isNotBlank()) TextFieldValue(initialConfig.username)
-            else TextFieldValue("hxzhang")
+            // 修复（凭据硬编码）：移除写死的开发者 NAS 账号/密码（公开仓库严重泄露，需同步改密）
+            else TextFieldValue()
         )
     }
     var password by remember(initialConfig) {
         mutableStateOf(
             if (initialConfig.password.isNotBlank()) TextFieldValue(initialConfig.password)
-            else TextFieldValue("wfxzhx2000")
+            else TextFieldValue()
         )
     }
     var apiToken by remember(initialConfig) {

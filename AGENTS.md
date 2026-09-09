@@ -71,3 +71,12 @@ util/                  AppLog, EncodingUtils, PinyinUtils, ArtistSplitter, ...
 data/model/            all data classes (Song, Album, Artist, Playlist, Genre,
                        Lyrics*, UiState, Screen, Weather*, Network*)
 ```
+
+
+## 2026-09-09 深度审查与修复纪要
+
+- 全量审查报告（15 项发现 + 修复明细）由审查会话产出：NASMusicTV-代码审查报告.html。本文只补正最关键的滞后信息：
+- 后端已不止 Jellyfin/Navidrome：共 5 个（+Subsonic/道理鱼/飞牛）；另有百度网盘源、离线下载、K 歌（ONNX 人声分离）、MTV、天气电台、手机遥控/扫码传输等大模块
+- 安全基线：TLS 已恢复系统默认证书校验（2026-09-09 移除 6 处 trust-all，勿再引入）；凭据 AES-GCM 加密存储；本地 HTTP 服务无鉴权是所有者接受的取舍（家庭局域网场景）
+- 已确认的设计取舍（勿"修复"）：gradle wrapper 指向本地 file://（离线构建）、全局 usesCleartextTraffic（用户自填任意 NAS http 地址所需）、连接页默认预填开发者局域网 IP
+- ServerConnectScreen 的账号密码硬编码已清除；历史提交中的密码已泄露，必须轮换

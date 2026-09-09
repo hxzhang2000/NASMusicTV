@@ -12,12 +12,7 @@ import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.net.URLEncoder
-import java.security.cert.X509Certificate
 import java.util.concurrent.TimeUnit
-import javax.net.ssl.HostnameVerifier
-import javax.net.ssl.SSLContext
-import javax.net.ssl.TrustManager
-import javax.net.ssl.X509TrustManager
 
 /**
  * Bilibili MV（音乐视频）搜索服务实现
@@ -50,21 +45,13 @@ class BilibiliMvService(
         Thread(r, "BiliMv-OkHttp").apply { isDaemon = true }
     }
 
-    /** 信任所有证书的 TrustManager（旧 TV 盒子可能缺新 CA 根证书，与 MetingApiService 一致） */
-    private val trustAllManager: X509TrustManager = object : X509TrustManager {
-        override fun checkClientTrusted(chain: Array<out X509Certificate>?, authType: String?) {}
-        override fun checkServerTrusted(chain: Array<out X509Certificate>?, authType: String?) {}
-        override fun getAcceptedIssuers(): Array<X509Certificate> = arrayOf()
-    }
-
-    private val trustAllHostnameVerifier = HostnameVerifier { _, _ -> true }
+    // 安全修复（C-1）：移除 trust-all，使用系统默认证书校验（详见 BaiduOAuthClient.buildClient 注释）。
 
     private val client: OkHttpClient by lazy {
         OkHttpClient.Builder()
             .dispatcher(okhttp3.Dispatcher(daemonExecutor))
             .connectTimeout(15, TimeUnit.SECONDS)
             .readTimeout(15, TimeUnit.SECONDS)
-            .applyTrustAllSsl()
             .build()
     }
 
@@ -293,18 +280,6 @@ class BilibiliMvService(
     }
 
     private fun String.requestUrl(): String = take(90)
-
-    private fun OkHttpClient.Builder.applyTrustAllSsl(): OkHttpClient.Builder {
-        try {
-            val sslContext = SSLContext.getInstance("TLS")
-            sslContext.init(null, arrayOf<TrustManager>(trustAllManager), java.security.SecureRandom())
-            this.sslSocketFactory(sslContext.socketFactory, trustAllManager)
-            this.hostnameVerifier(trustAllHostnameVerifier)
-        } catch (e: Exception) {
-            AppLog.e(TAG, "applyTrustAllSsl failed: ${e.message}", e)
-        }
-        return this
-    }
 
     /** 去掉 B 站搜索结果标题中的 <em class="keyword"> 高亮标签 */
     private fun stripHtml(s: String): String = s.replace(HTML_TAG_REGEX, "").trim()

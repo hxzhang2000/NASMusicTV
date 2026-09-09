@@ -132,7 +132,7 @@ class NasMusicApp : Application(), ImageLoaderFactory {
     val baiduPanApi: BaiduPanApi by lazy { BaiduPanApi(baiduOkHttpClient, baiduOAuthClient) }
     val baiduStreamFactory: BaiduStreamFactory by lazy { BaiduStreamFactory(baiduPanApi, baiduOAuthClient) }
     val baiduFileIndexCache: BaiduFileIndexCache by lazy { BaiduFileIndexCache(this) }
-    val baiduLyricsProvider: BaiduLyricsProvider by lazy { BaiduLyricsProvider(baiduPanApi, baiduOkHttpClient) }
+    val baiduLyricsProvider: BaiduLyricsProvider by lazy { BaiduLyricsProvider(baiduPanApi, baiduOkHttpClient, baiduOAuthClient) }
     val baiduCoverProvider: BaiduCoverProvider by lazy {
         BaiduCoverProvider(baiduPanApi, baiduOkHttpClient, baiduOAuthClient)
     }

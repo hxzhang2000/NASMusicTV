@@ -7238,11 +7238,15 @@ val result = with(kotlinx.coroutines.Dispatchers.IO) { separator.separate(...) }
 
 **接线**：
 - NasMusicApp：新增 coverUrlPersistentCache lazy 属性。
-- MainViewModel.resolvedAlbumCovers / esolvedArtistCovers：改为 lazy，首次访问时从持久缓存 exportAll() 预填充（lbum:/rtist: 前缀剥离）。
-- esolveAlbumCoversAsync / esolveArtistCoversAsync 回调：解析到 http 封面 URL 时同步写持久缓存（putAlbumCover/putArtistCover）。
+- MainViewModel.resolvedAlbumCovers / 
+esolvedArtistCovers：改为 lazy，首次访问时从持久缓存 exportAll() 预填充（lbum:/rtist: 前缀剥离）。
+- 
+esolveAlbumCoversAsync / 
+esolveArtistCoversAsync 回调：解析到 http 封面 URL 时同步写持久缓存（putAlbumCover/putArtistCover）。
 
 **修复：艺术家详情页左侧封面不显示**
-- 根因：AppRoot 查 selectedArtist 用 iewModel.artists（原始 _artists，NAS 未合并列表）。其 coverUrl 未应用 esolvedArtistCovers 解析缓存；且百度/本地艺术家不在 _artists 中，导致详情页左侧 coverUrl 恒 null。
+- 根因：AppRoot 查 selectedArtist 用 iewModel.artists（原始 _artists，NAS 未合并列表）。其 coverUrl 未应用 
+esolvedArtistCovers 解析缓存；且百度/本地艺术家不在 _artists 中，导致详情页左侧 coverUrl 恒 null。
 - 修复：改用 iewModel.mergedArtists（line 2286 已应用 resolvedArtistCovers 缓存），normalizeKey 匹配歌手名，详情页左侧封面正常显示。
 
 **涉及文件**：
@@ -7673,3 +7677,47 @@ onSearchSong = { keyword -> viewModel.searchNetworkSongs(keyword) },
 **验证结果**：
 - ✅ `compileDebugKotlin` 编译通过
 - ✅ 播放页点击艺术家/歌名 → 跳转到曲库 SEARCH Tab 并自动搜索该关键词（跨源融合结果）
+---
+
+### 10.108 v2.27.0 - 深度审查修复（安全与健壮性 22 项）
+
+**提交日期**：2026-09-09
+
+**背景**：全量深度代码审查（227 文件 / 4.7 万行）发现严重/高/中低共 22 项问题，本版本一次性修复。完整清单与证据见审查报告（NASMusicTV-代码审查报告.html）。
+
+**安全**：
+1. 移除全部 6 处 trust-all TLS 配置（BaiduHttpDataSourceFactory / BaiduOAuthClient / MetingApiService / DaoliyuAdapter / FeiniuAdapter / BilibiliMvService），恢复系统默认证书校验。影响面：主播放器 DataSource（PlaybackService.kt:104 统一工厂）、Coil 图片加载、百度 OAuth。老设备遇 Let's Encrypt 端点将得到可见 SSLHandshakeException，改用 http 端点即可。
+2. 清除 ServerConnectScreen 硬编码的开发者 NAS 账号密码（公开仓库历史提交已泄露，需轮换凭据）。
+
+**健壮性**：
+3. HQ 人声分离临时目录改 context.cacheDir（原 java.io.tmpdir 回退 /data/local/tmp 不可写，HQ 分离下载必败）。
+4. 扫码传模型服务器端口 18082→18083（MODEL_TRANSFER_PORT），消除与遥控服务器的 bind 冲突。
+5. 网盘索引 save() 原子写盘（临时文件 + rename），写盘中断不再丢全库。
+6. resolveStreamUrl 在 dlink 缺失时强制刷新 token 重试一次（新增 BaiduOAuthClient.forceRefreshAccessToken，覆盖 errno -6/31045）。
+7. BaiduPanApi：search 补传 start（原接收参数未拼 URL）；listAllAudioPaged 游标停滞保护；BaiduFileIndexCache.clear() 同步清目录倒排。
+8. Range 请求仅接受 206（BaiduCoverProvider/BaiduLyricsProvider），防 200 时整文件读入内存 OOM。
+9. 退出确认 disconnect 限时 1.5s（runBlocking + withTimeout），消除主线程 ANR 风险。
+10. MainActivity.onDestroy 仅 isFinishing 时清理播放服务与后端连接（配置重建不再误杀后台播放）。
+11. Android 13+ POST_NOTIFICATIONS 运行时权限请求。
+12. MetingApiService search/lrc/playlist 三处 id 参数 URL 编码。
+13. 遥控服务器搜索 runBlocking 加 10s 超时。
+14. 换一批去重集合 4000 硬上限。
+15. 新增备份规则（res/xml/backup_rules.xml + data_extraction_rules.xml），DataStore 不随备份提取。
+
+**性能**：
+16. spectrumData（20fps）从 AppRoot 顶层移至 NowPlaying 分支收集，不再驱动全树重组。
+17. AppPreferences 新增 baiduConfigFlow / jamendoClientIdFlow，设置页组合内 runBlocking 同步读改为订阅。
+
+**其他**：
+18. AppRoot 返回键处理器与 LibraryScreen onPlay 改具名 lambda（行为不变；澄清 when/if 分支 {{ }} 为"块+尾部 lambda"，并非 no-op）。
+19. 「全部加入队列」改为只增不删（MainViewModel.addSongsToQueue），原 toggle 语义会反向移除已入队歌曲。
+20. CI 增加 testDebugUnitTest 步骤（此前只构建不测试）。
+21. 日志脱敏：BaiduPanApi / DaoliyuAdapter 的 token 与 dlink 打码，部分 e 级日志降级 d。
+22. EncodingUtils 空 catch 补日志；AGENTS.md 追加 2026-09-09 审查纪要。
+
+**保留项（评估后不改，理由见审查报告 §9）**：M-3 全局明文（任意内网 NAS 需求）、M-10 密钥托管（TV ROM 兼容取舍）、L-3 ProGuard 宽规则（Gson 崩溃前科）、L-5 依赖升级（需专门回归）、L-6 仓库根目录整理。L-1 默认 IP、H-1 无鉴权、L-7 本地 gradle 分发由所有者确认保留。
+
+**验证结果**：
+- ✅ :app:compileDebugKotlin 通过
+- ✅ :app:testDebugUnitTest 256/256 通过
+- ✅ :app:assembleRelease 通过（修复在 v2.26.41 版本号下构建验证；正式发布以 v2.27.0 重新构建）

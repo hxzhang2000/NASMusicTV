@@ -20,12 +20,7 @@ import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
-import java.security.cert.X509Certificate
 import java.util.concurrent.TimeUnit
-import javax.net.ssl.HostnameVerifier
-import javax.net.ssl.SSLContext
-import javax.net.ssl.TrustManager
-import javax.net.ssl.X509TrustManager
 
 /**
  * 道理鱼音乐后端适配器
@@ -56,23 +51,22 @@ class DaoliyuAdapter : BackendAdapter {
 
     private val gson = Gson()
 
-    /** 守护线程池 + 信任所有证书（与 JellyfinAdapter 一致） */
+    /** 日志脱敏（修复 L-2）：token 走 URL 查询参数（协议限制），w/e 级日志 release 仍输出，必须打码 */
+    private fun sanitizeUrl(url: String): String =
+        url.take(160).replace(Regex("token=[^&]+"), "token=***")
+
+    /** 守护线程池（防止 OkHttp 非守护线程阻止进程退出） */
     private val daemonExecutor = java.util.concurrent.Executors.newCachedThreadPool { r ->
         Thread(r, "Daoliyu-OkHttp").apply { isDaemon = true }
     }
-    private val trustAllManager: X509TrustManager = object : X509TrustManager {
-        override fun checkClientTrusted(chain: Array<out X509Certificate>?, authType: String?) {}
-        override fun checkServerTrusted(chain: Array<out X509Certificate>?, authType: String?) {}
-        override fun getAcceptedIssuers(): Array<X509Certificate> = arrayOf()
-    }
-    private val trustAllHostnameVerifier = HostnameVerifier { _, _ -> true }
+
+    // 安全修复（C-1）：移除 trust-all，使用系统默认证书校验（详见 BaiduOAuthClient.buildClient 注释）。
 
     private val client: OkHttpClient by lazy {
         OkHttpClient.Builder()
             .dispatcher(okhttp3.Dispatcher(daemonExecutor))
             .connectTimeout(15, TimeUnit.SECONDS)
             .readTimeout(30, TimeUnit.SECONDS)
-            .applyTrustAllSsl()
             .build()
     }
 
@@ -470,13 +464,13 @@ class DaoliyuAdapter : BackendAdapter {
                 .build()
             val response = client.newCall(request).execute()
             if (!response.isSuccessful) {
-                AppLog.w(TAG, "GET failed: ${response.code} url=${url.take(80)}")
+                AppLog.w(TAG, "GET failed: ${response.code} url=${sanitizeUrl(url)}")
                 return null
             }
             val body = response.body?.string() ?: return null
             JsonParser.parseString(body).asJsonObject
         } catch (e: Exception) {
-            AppLog.e(TAG, "GET error url=${url.take(80)}", e)
+            AppLog.e(TAG, "GET error url=${sanitizeUrl(url)}", e)
             null
         }
     }
@@ -495,13 +489,13 @@ class DaoliyuAdapter : BackendAdapter {
                 .build()
             val response = client.newCall(request).execute()
             if (!response.isSuccessful) {
-                AppLog.w(TAG, "POST failed: ${response.code} url=${url.take(80)}")
+                AppLog.w(TAG, "POST failed: ${response.code} url=${sanitizeUrl(url)}")
                 return null
             }
             val responseBody = response.body?.string() ?: return null
             if (responseBody.isBlank()) JsonObject() else JsonParser.parseString(responseBody).asJsonObject
         } catch (e: Exception) {
-            AppLog.e(TAG, "POST error url=${url.take(80)}", e)
+            AppLog.e(TAG, "POST error url=${sanitizeUrl(url)}", e)
             null
         }
     }
@@ -561,12 +555,4 @@ class DaoliyuAdapter : BackendAdapter {
         )
     }
 
-    /** 配置信任所有 SSL 证书 */
-    private fun OkHttpClient.Builder.applyTrustAllSsl(): OkHttpClient.Builder {
-        val sslContext = SSLContext.getInstance("TLS")
-        sslContext.init(null, arrayOf<TrustManager>(trustAllManager), java.security.SecureRandom())
-        this.sslSocketFactory(sslContext.socketFactory, trustAllManager)
-        this.hostnameVerifier(trustAllHostnameVerifier)
-        return this
-    }
 }

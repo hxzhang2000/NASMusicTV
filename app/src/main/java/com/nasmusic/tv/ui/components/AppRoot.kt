@@ -101,7 +101,6 @@ fun AppRoot(
     val playMode by viewModel.playMode.collectAsState(initial = com.nasmusic.tv.data.model.PlayMode.SEQUENTIAL)
     val progress by viewModel.progress.collectAsState(initial = 0L)
     val duration by viewModel.duration.collectAsState(initial = 0L)
-    val spectrumData by viewModel.spectrumData.collectAsState(initial = FloatArray(0))
     val lyrics by viewModel.currentLyrics.collectAsState(initial = null)
     val lyricsAvailability by viewModel.lyricsAvailability.collectAsState(initial = com.nasmusic.tv.data.model.LyricsAvailability())
     val lyricsHighlightMode by viewModel.lyricsHighlightMode.collectAsState(initial = com.nasmusic.tv.data.model.LyricsHighlightMode.LINE_BY_LINE)
@@ -151,13 +150,20 @@ fun AppRoot(
     // Level 2: 根据当前屏幕和沉浸模式动态设置导航 BACK 键处理函数
     val navBackHandler = LocalNavigateBackHandler.current
     LaunchedEffect(currentScreen, isImmersiveMode.value, showMv) {
+        // C-2 修正说明：初版审查把 when/if-else 分支里的 {{ ... }} 误判为 no-op（lambda 内 lambda）。
+        // 实测编译行为：when/if 分支的 { } 按“块”解析，{{ X }} = 块 + 尾部 lambda 表达式，
+        // 分支值就是可用的 lambda——原实现功能正常，并非 bug。此处改用具名 lambda 仅作可读性清理。
+        val navigateHome: () -> Unit = { viewModel.navigateTo(Screen.Home) }
+        val exitImmersive: () -> Unit = { isImmersiveMode.value = false }
+        val exitMv: () -> Unit = { viewModel.exitMvMode() }
+        val navSettings: () -> Unit = { viewModel.navigateTo(Screen.Settings) }
         val handler: (() -> Unit)? = when {
-            isImmersiveMode.value -> {{ isImmersiveMode.value = false }}
-            showMv -> {{ viewModel.exitMvMode() }}
-            currentScreen == Screen.NowPlaying -> if (isTV) null else {{ viewModel.navigateTo(Screen.Home) }}
+            isImmersiveMode.value -> exitImmersive
+            showMv -> exitMv
+            currentScreen == Screen.NowPlaying -> if (isTV) null else navigateHome
             currentScreen == Screen.Home -> null
-            currentScreen == Screen.ServerConnect -> {{ viewModel.navigateTo(Screen.Settings) }}
-            else -> {{ viewModel.navigateTo(Screen.Home) }}
+            currentScreen == Screen.ServerConnect -> navSettings
+            else -> navigateHome
         }
         navBackHandler.value = handler
     }
@@ -302,6 +308,8 @@ fun AppRoot(
                     )
                 }
                 Screen.NowPlaying -> {
+                    // 修复（H-3）：20fps 频谱流只在本页收集，不再驱动 AppRoot 全树重组
+                    val spectrumData by viewModel.spectrumData.collectAsState(initial = FloatArray(0))
                     val lyricsFontScale by viewModel.prefs.lyricsFontScale.collectAsState(initial = 1.0f)
                     val vocalRemovalEnabled by viewModel.vocalRemovalEnabled.collectAsState()
                     val pitchSemitones by viewModel.pitchSemitones.collectAsState()
@@ -552,8 +560,9 @@ fun AppRoot(
                             }
                         },
                         onSearchTabAddAllToQueue = {
-                            // 只加入队列，不播放
-                            searchResultsList.forEach { song -> viewModel.toggleQueueSong(song) }
+                            // 只加入队列，不播放（修复 M-8：改用只增不删的批量加入，
+                            // 原 toggle 语义会把已在队列中的歌曲反向移除）
+                            viewModel.addSongsToQueue(searchResultsList)
                         },
                         // ── DISCOVER Tab ──
                         discoverDimensions = discoverDimensions,
@@ -577,8 +586,8 @@ fun AppRoot(
                             }
                         },
                         onDiscoverAddAllToQueue = {
-                            // 只加入队列，不播放
-                            browseResultsList.forEach { song -> viewModel.toggleQueueSong(song) }
+                            // 只加入队列，不播放（修复 M-8，同上）
+                            viewModel.addSongsToQueue(browseResultsList)
                         },
                         onDiscoverShuffle = {
                             viewModel.refreshBrowseSongs()
@@ -682,7 +691,11 @@ fun AppRoot(
                 Screen.Settings -> {
                     var showBackupTransferDialog by remember { mutableStateOf(false) }
                     var showModelTransferDialog by remember { mutableStateOf(false) }
-                    val baiduConfig = viewModel.prefs.getBaiduConfigSync()
+                    // 修复（H-3）：组合内 runBlocking 同步读改为 Flow 订阅
+                    val baiduConfig by viewModel.prefs.baiduConfigFlow.collectAsState(
+                        initial = com.nasmusic.tv.data.model.CloudDriveConfig(com.nasmusic.tv.data.model.CloudDriveType.BAIDU)
+                    )
+                    val jamendoClientId by viewModel.prefs.jamendoClientIdFlow.collectAsState(initial = "")
                     val separationMode by viewModel.separationMode.collectAsState()
                     val modelDownloaded by viewModel.modelDownloaded.collectAsState()
                     val modelDownloading by viewModel.modelDownloading.collectAsState()
@@ -719,7 +732,7 @@ fun AppRoot(
                         lyricsNeteaseBaseUrl = settings.lyricsNeteaseBaseUrl,
                         onChangeLyricsNeteaseBaseUrl = { viewModel.updateLyricsNeteaseBaseUrl(it) },
                         // Jamendo（CC 独立音乐）
-                        jamendoClientId = viewModel.prefs.getJamendoClientIdSync(),
+                        jamendoClientId = jamendoClientId,
                         onChangeJamendoClientId = { viewModel.updateJamendoClientId(it) },
                         weatherApiKey = weatherApiKey,
                         onChangeWeatherApiKey = { viewModel.updateWeatherApiKey(it) },

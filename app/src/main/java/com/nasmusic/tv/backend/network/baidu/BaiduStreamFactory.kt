@@ -30,10 +30,20 @@ class BaiduStreamFactory(
      * @return 可直接播放的 URL；解析失败返回 null
      */
     suspend fun resolveStreamUrl(fsId: Long): String? = withContext(Dispatchers.IO) {
-        val metas = api.fileMetas(listOf(fsId))
-        val dlink = metas.firstOrNull()?.dlink
+        var metas = api.fileMetas(listOf(fsId))
+        var dlink = metas.firstOrNull()?.dlink
         if (dlink.isNullOrBlank()) {
-            AppLog.e(TAG, "resolveStreamUrl: dlink missing/empty for fsId=$fsId (metas=${metas.size}) —— filemetas 可能 errno 非 0 或 token 失效")
+            // 修复（M-16）：dlink 拿不到常见于 token 被服务端判定失效（errno -6/31045），
+            // 强制刷新一次并重试，避免静默失败直到用户手动重新授权
+            AppLog.w(TAG, "resolveStreamUrl: dlink missing, force-refresh token once (fsId=$fsId)")
+            val refreshed = oauth.forceRefreshAccessToken()
+            if (!refreshed.isNullOrBlank()) {
+                metas = api.fileMetas(listOf(fsId))
+                dlink = metas.firstOrNull()?.dlink
+            }
+        }
+        if (dlink.isNullOrBlank()) {
+            AppLog.d(TAG, "resolveStreamUrl: dlink missing/empty for fsId=$fsId (metas=${metas.size})")
             return@withContext null
         }
         val token = oauth.getValidAccessToken()
@@ -50,7 +60,7 @@ class BaiduStreamFactory(
         val dlinkHost = finalUrl.substringBefore('?').let { url ->
             url.substringAfter("//").substringBefore('/').ifBlank { url }
         }
-        AppLog.e(TAG, "resolveStreamUrl: fsId=$fsId → dlink host=$dlinkHost (UA 注入需 host 含 baidu.com)")
+        AppLog.d(TAG, "resolveStreamUrl: fsId=$fsId → dlink host=$dlinkHost (UA 注入需 host 含 baidu.com)")
         finalUrl
     }
 

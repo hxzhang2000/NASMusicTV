@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 修复（M-4）：排除 DataStore（含加密后的凭据密文与全部偏好），避免云备份/adb backup 提取 -->
+<full-backup-content>
+    <exclude domain="file" path="datastore" />
+</full-backup-content>

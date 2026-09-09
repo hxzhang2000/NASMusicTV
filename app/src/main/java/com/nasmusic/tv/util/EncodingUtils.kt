@@ -37,7 +37,7 @@ object EncodingUtils {
                     AppLog.d("EncodingUtils", "fixEncoding: U+FFFD GBK fallback: '${fixed.take(30)}' -> '${gbkDecoded.take(30)}'")
                     return gbkDecoded
                 }
-            } catch (_: Exception) { }
+            } catch (e: Exception) { AppLog.d("EncodingUtils", "fixEncoding GBK fallback error: ${e.message}") }
         }
 
         // 第二步：移除末尾的乱码模式：�?（U+FFFD + ?）或单独的 ?
@@ -71,7 +71,7 @@ object EncodingUtils {
                         AppLog.d("EncodingUtils", "fixEncoding: converted Latin-1 to GBK: '$fixed' -> '$decoded'")
                         fixed = decoded
                     }
-                } catch (e2: Exception) { }
+                } catch (e2: Exception) { AppLog.d("EncodingUtils", "fixEncoding GBK fallback error: ${e2.message}") }
             }
         }
 

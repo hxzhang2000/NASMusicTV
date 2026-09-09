@@ -74,7 +74,16 @@ class BaiduFileIndexCache(context: Context) {
 
     fun save(index: BaiduFileIndex) {
         try {
-            file.writeText(gson.toJson(index))
+            // 修复（H-5）：原子写盘——先写临时文件再 rename 替换。
+            // 原实现 writeText 先截断后写，写盘中途被杀会导致索引 JSON 损坏，
+            // load() 返回 null 等效全库丢失并触发整盘重扫。
+            val tmp = java.io.File(file.parentFile, file.name + ".tmp")
+            tmp.writeText(gson.toJson(index))
+            if (!tmp.renameTo(file)) {
+                // rename 失败（罕见）时退回覆盖写
+                tmp.copyTo(file, overwrite = true)
+                tmp.delete()
+            }
             synchronized(cacheLock) {
                 cachedIndex = index
                 dirIndex = null
@@ -144,6 +153,7 @@ class BaiduFileIndexCache(context: Context) {
         }
         synchronized(cacheLock) {
             cachedIndex = null
+            dirIndex = null  // 修复（M-14c）：清库须同时清目录倒排，否则旧目录搜索结果仍可命中
         }
     }
 

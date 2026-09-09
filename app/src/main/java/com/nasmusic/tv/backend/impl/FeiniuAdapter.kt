@@ -23,13 +23,8 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.security.MessageDigest
-import java.security.cert.X509Certificate
 import java.util.UUID
 import java.util.concurrent.TimeUnit
-import javax.net.ssl.HostnameVerifier
-import javax.net.ssl.SSLContext
-import javax.net.ssl.TrustManager
-import javax.net.ssl.X509TrustManager
 
 /**
  * 飞牛音乐后端适配器
@@ -80,12 +75,7 @@ class FeiniuAdapter : BackendAdapter {
     private val daemonExecutor = java.util.concurrent.Executors.newCachedThreadPool { r ->
         Thread(r, "Feiniu-OkHttp").apply { isDaemon = true }
     }
-    private val trustAllManager: X509TrustManager = object : X509TrustManager {
-        override fun checkClientTrusted(chain: Array<out X509Certificate>?, authType: String?) {}
-        override fun checkServerTrusted(chain: Array<out X509Certificate>?, authType: String?) {}
-        override fun getAcceptedIssuers(): Array<X509Certificate> = arrayOf()
-    }
-    private val trustAllHostnameVerifier = HostnameVerifier { _, _ -> true }
+    // 安全修复（C-1）：移除 trust-all，使用系统默认证书校验（详见 BaiduOAuthClient.buildClient 注释）。
 
     private val client: OkHttpClient by lazy {
         OkHttpClient.Builder()
@@ -93,7 +83,6 @@ class FeiniuAdapter : BackendAdapter {
             .connectTimeout(15, TimeUnit.SECONDS)
             .readTimeout(30, TimeUnit.SECONDS)
             .cookieJar(cookieJar)
-            .applyTrustAllSsl()
             .build()
     }
 
@@ -669,12 +658,4 @@ class FeiniuAdapter : BackendAdapter {
         )
     }
 
-    /** 配置信任所有 SSL 证书 */
-    private fun OkHttpClient.Builder.applyTrustAllSsl(): OkHttpClient.Builder {
-        val sslContext = SSLContext.getInstance("TLS")
-        sslContext.init(null, arrayOf<TrustManager>(trustAllManager), java.security.SecureRandom())
-        this.sslSocketFactory(sslContext.socketFactory, trustAllManager)
-        this.hostnameVerifier(trustAllHostnameVerifier)
-        return this
-    }
 }

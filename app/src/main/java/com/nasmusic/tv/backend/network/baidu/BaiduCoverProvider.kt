@@ -98,8 +98,10 @@ class BaiduCoverProvider(
                 .header("Range", "bytes=$start-$end")
                 .build()
             client.newCall(req).execute().use { resp ->
-                if (resp.code !in setOf(200, 206)) {
-                    AppLog.w(TAG, "downloadRange failed code=${resp.code}")
+                // 修复（M-14d）：只接受 206——服务器忽略 Range 返回 200 时，
+                // body.bytes() 会把整文件读入内存（音频可上百 MB，OOM 风险）
+                if (resp.code != 206) {
+                    AppLog.w(TAG, "downloadRange: non-206 (code=${resp.code}), skip")
                     return null
                 }
                 resp.body?.bytes()

@@ -235,7 +235,9 @@ class PlayerManager(private val applicationContext: Context) {
         return try {
             _separationProgress.value = 0.05f to progressStage
             val tempFile = withContext(Dispatchers.IO) {
-                val tempDir = File(System.getProperty("java.io.tmpdir", "/data/local/tmp"), "nasmusic_hq")
+                // 修复（H-2）：java.io.tmpdir 在 Android 上通常未定义，回退 /data/local/tmp
+                // 对普通应用不可写，导致 HQ 分离下载输入文件失败；改用应用私有 cacheDir。
+                val tempDir = File(applicationContext.cacheDir, "nasmusic_hq")
                 tempDir.mkdirs()
                 val outFile = File(tempDir, "${song.id}_input.tmp")
 

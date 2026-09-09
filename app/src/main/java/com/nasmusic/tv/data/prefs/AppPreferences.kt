@@ -1162,6 +1162,17 @@ class AppPreferences internal constructor(private val context: Context) {
     fun getBaiduConfigSync(): CloudDriveConfig =
         getCloudDriveConfigSync(CloudDriveType.BAIDU) ?: CloudDriveConfig(CloudDriveType.BAIDU)
 
+    /** 百度配置 Flow（修复 H-3：UI 订阅用，替代组合内 runBlocking 同步读） */
+    val baiduConfigFlow: Flow<CloudDriveConfig> = dataStore.data.map { prefs ->
+        loadCloudDriveConfigs(prefs[keyCloudDriveConfig] ?: "{}")[CloudDriveType.BAIDU.key]
+            ?: CloudDriveConfig(CloudDriveType.BAIDU)
+    }
+
+    /** Jamendo Client ID Flow（修复 H-3：同上） */
+    val jamendoClientIdFlow: Flow<String> = dataStore.data.map { prefs ->
+        prefs[keyJamendoClientId] ?: ""
+    }
+
     /** 异步保存某网盘配置（增量合并到现有 Map） */
     suspend fun saveCloudDriveConfig(config: CloudDriveConfig) {
         dataStore.edit { prefs ->

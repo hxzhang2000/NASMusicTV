@@ -8,12 +8,7 @@ import com.nasmusic.tv.util.AppLog
 import okhttp3.Interceptor
 import okhttp3.OkHttpClient
 import okhttp3.Response
-import java.security.cert.X509Certificate
 import java.util.concurrent.TimeUnit
-import javax.net.ssl.HostnameVerifier
-import javax.net.ssl.SSLContext
-import javax.net.ssl.TrustManager
-import javax.net.ssl.X509TrustManager
 
 /**
  * 百度网盘 HTTP DataSource 工厂
@@ -54,12 +49,6 @@ object BaiduHttpDataSourceFactory {
         val daemonExecutor = java.util.concurrent.Executors.newCachedThreadPool { r ->
             Thread(r, "Baidu-Exo-OkHttp").apply { isDaemon = true }
         }
-        val trustAllManager: X509TrustManager = object : X509TrustManager {
-            override fun checkClientTrusted(chain: Array<out X509Certificate>?, authType: String?) {}
-            override fun checkServerTrusted(chain: Array<out X509Certificate>?, authType: String?) {}
-            override fun getAcceptedIssuers(): Array<X509Certificate> = arrayOf()
-        }
-        val trustAllHostnameVerifier = HostnameVerifier { _, _ -> true }
         val baiduInterceptor = Interceptor { chain ->
             val req = chain.request()
             val urlStr = req.url.toString()
@@ -90,26 +79,15 @@ object BaiduHttpDataSourceFactory {
             }
             chain.proceed(newReq)
         }
-        return try {
-            val sslContext = SSLContext.getInstance("TLS")
-            sslContext.init(null, arrayOf<TrustManager>(trustAllManager), java.security.SecureRandom())
-            OkHttpClient.Builder()
-                .dispatcher(okhttp3.Dispatcher(daemonExecutor))
-                .addInterceptor(baiduInterceptor)
-                .connectTimeout(15, TimeUnit.SECONDS)
-                .readTimeout(30, TimeUnit.SECONDS)
-                .sslSocketFactory(sslContext.socketFactory, trustAllManager)
-                .hostnameVerifier(trustAllHostnameVerifier)
-                .build()
-        } catch (e: Exception) {
-            AppLog.e(TAG, "SSL init failed, fallback", e)
-            OkHttpClient.Builder()
-                .dispatcher(okhttp3.Dispatcher(daemonExecutor))
-                .addInterceptor(baiduInterceptor)
-                .connectTimeout(15, TimeUnit.SECONDS)
-                .readTimeout(30, TimeUnit.SECONDS)
-                .build()
-        }
+        // 安全修复（C-1）：移除 trust-all，恢复系统默认证书校验。
+        // 百度/B 站等端点均为正规 CA 证书；老设备若遇 Let's Encrypt 端点握手失败，
+        // 属可见的 SSLHandshakeException（改用 http 端点即可），不再静默放宽校验。
+        return OkHttpClient.Builder()
+            .dispatcher(okhttp3.Dispatcher(daemonExecutor))
+            .addInterceptor(baiduInterceptor)
+            .connectTimeout(15, TimeUnit.SECONDS)
+            .readTimeout(30, TimeUnit.SECONDS)
+            .build()
     }
 
     /** 供 Coil 封面加载复用的 OkHttpClient（同样带百度 UA 拦截器） */
