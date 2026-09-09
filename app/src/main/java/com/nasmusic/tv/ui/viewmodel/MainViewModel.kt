@@ -89,7 +89,6 @@ import com.nasmusic.tv.util.ArtistSplitter
 import com.nasmusic.tv.util.BackupFileUtils
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.withContext
-import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
