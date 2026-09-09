@@ -101,6 +101,16 @@ class AppPreferences internal constructor(private val context: Context) {
             if (mirrorStarted) return
             mirrorStarted = true
         }
+        // F-7：先做天气 Key 明文→加密一次性迁移（幂等），镜像再从加密键读
+        scope.launch { migrateWeatherApiKeyIfNeeded() }
+        scope.launch {
+            dataStore.data.map { prefs ->
+                val enc = prefs[keyWeatherApiKeyEnc]
+                if (!enc.isNullOrBlank()) {
+                    try { com.nasmusic.tv.util.CryptoUtils.decrypt(enc) } catch (e: Exception) { "" }
+                } else ""
+            }.distinctUntilChanged().collect { cachedWeatherApiKey = it }
+        }
         scope.launch {
             dataStore.data.map { it[keyMusicSource] ?: com.nasmusic.tv.data.model.MusicSource.DEFAULT_API_KEY }
                 .distinctUntilChanged().collect { cachedMusicSource = it }
@@ -129,10 +139,7 @@ class AppPreferences internal constructor(private val context: Context) {
             dataStore.data.map { it[keyLyricsNeteaseBaseUrl] ?: com.nasmusic.tv.lyrics.LyricsNetworkProvider.DEFAULT_NETEASE_BASE_URL }
                 .distinctUntilChanged().collect { cachedLyricsNeteaseBaseUrl = it }
         }
-        scope.launch {
-            dataStore.data.map { it[keyWeatherApiKey] ?: "" }
-                .distinctUntilChanged().collect { cachedWeatherApiKey = it }
-        }
+        // （F-7：weather 镜像改读加密键，见上方 migrateWeatherApiKeyIfNeeded 后的收集块）
     }
 
 
@@ -179,6 +186,11 @@ class AppPreferences internal constructor(private val context: Context) {
     private val keyWeatherManualCity = stringPreferencesKey("weather_manual_city")
     private val keyWeatherAutoRefresh = booleanPreferencesKey("weather_auto_refresh")
     private val keyWeatherApiKey = stringPreferencesKey("weather_openweathermap_api_key")
+    /**
+     * F-7：加密存储键（OpenWeatherMap key 属付费资源凭证，泄露可被刷量；
+     * 与服务器密码/百度 token 一致走 CryptoUtils AES-GCM。旧明文键保留做一次性迁移读取）。
+     */
+    private val keyWeatherApiKeyEnc = stringPreferencesKey("weather_openweathermap_api_key_enc")
 
     // --- 封面滤镜设置（Phase 5） ---
     private val keyCoverFilterEnabled = booleanPreferencesKey("cover_filter_enabled")
@@ -709,9 +721,13 @@ class AppPreferences internal constructor(private val context: Context) {
     /**
      * OpenWeatherMap API Key
      * 当 Open-Meteo 不可用时的备选天气数据源
+     * F-7：读加密键（AES-GCM 解密）；解密失败回退空串
      */
     val weatherApiKey: Flow<String> = dataStore.data.map { prefs ->
-        prefs[keyWeatherApiKey] ?: ""
+        val enc = prefs[keyWeatherApiKeyEnc]
+        if (!enc.isNullOrBlank()) {
+            try { com.nasmusic.tv.util.CryptoUtils.decrypt(enc) } catch (e: Exception) { "" }
+        } else ""
     }
 
     /**
@@ -721,8 +737,26 @@ class AppPreferences internal constructor(private val context: Context) {
      */
     fun getWeatherApiKeySync(): String = cachedWeatherApiKey
 
+    /** F-7：写入加密键（同时清除旧明文键） */
     suspend fun setWeatherApiKey(key: String) {
-        dataStore.edit { it[keyWeatherApiKey] = key.trim() }
+        val trimmed = key.trim()
+        dataStore.edit { prefs ->
+            prefs[keyWeatherApiKeyEnc] = com.nasmusic.tv.util.CryptoUtils.encrypt(trimmed)
+            prefs.remove(keyWeatherApiKey)  // 迁移后清除明文
+        }
+    }
+
+    /**
+     * F-7：一次性迁移——旧明文键有值且加密键为空时，加密搬移。
+     * 幂等；由 startProviderMirrors 前（NasMusicApp.onCreate）调用。
+     */
+    private suspend fun migrateWeatherApiKeyIfNeeded() {
+        val prefs = dataStore.data.first()
+        val legacy = prefs[keyWeatherApiKey]
+        if (!legacy.isNullOrBlank() && prefs[keyWeatherApiKeyEnc].isNullOrBlank()) {
+            setWeatherApiKey(legacy)
+            AppLog.i(TAG, "weather API key migrated to encrypted storage")
+        }
     }
 
     // --- 封面滤镜设置 ---
