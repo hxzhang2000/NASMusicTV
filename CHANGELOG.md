@@ -7,6 +7,12 @@
 >
 > 类型：`Added`（新增） | `Changed`（变更） | `Fixed`（修复） | `Removed`（移除）
 
+## [v2.26.40] - 2026-09-09
+
+### Fixed
+
+- **曲库搜索/发现/歌曲页面的加入歌单（`+`）无反应**：`AppRoot.kt` 的 `pickerSong` 状态被声明了两次——L128 顶层（供加入歌单弹窗 `PlaylistPickerDialog` 读取）与 L454 的 `Screen.Library` 分支内（遮蔽了顶层）。曲库页 `onAddToPlaylist = { song -> pickerSong = song }` 设置的是 L454 的遮蔽变量，而弹窗渲染读取的是 L128 的顶层变量，两者不是同一个 → 设置后弹窗读不到 → 永不弹出。修复：删除 L454 的冗余遮蔽变量，让曲库页的 `pickerSong` 引用顶层变量，与专辑/艺术家详情页、我的页、网盘页的加入歌单逻辑一致。
+
 ## [v2.26.39] - 2026-09-09
 
 ### Fixed

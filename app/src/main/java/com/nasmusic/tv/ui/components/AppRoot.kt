@@ -451,7 +451,6 @@ fun AppRoot(
                     val librarySearchKeyword by viewModel.librarySearchKeyword.collectAsState()
                     val enabledSearchSources by viewModel.enabledSearchSources.collectAsState()
                     val searchHistory by viewModel.searchHistory.collectAsState(initial = emptyList())
-                    var pickerSong by remember { mutableStateOf<Song?>(null) }
 
                     // ── RADIO Tab state ──
                     val radioStations by viewModel.radioStations.collectAsState(initial = UiState.Success(emptyList()))

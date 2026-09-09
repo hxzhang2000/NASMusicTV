@@ -7613,3 +7613,32 @@ cipher.init(Cipher.ENCRYPT_MODE, softwareKey, GCMParameterSpec(GCM_TAG_LENGTH, i
 - ✅ `assembleDebug` 编译通过（5 个既有 warning 与本次改动无关）
 - ✅ 搜索页本地下载歌曲走 `toggleNetworkFavorite` → DataStore 保存 → 统一 `favoriteIds` 反映爱心
 - ✅ 专辑/艺术家详情页本地歌曲收藏后，统一 `favoriteIds` 包含该 ID → 爱心即时点亮
+
+---
+
+### 10.106 v2.26.40 - 曲库加入歌单弹窗失效（pickerSong 作用域遮蔽）
+
+**提交日期**：2026-09-09
+
+**背景**：曲库的搜索页、发现页、歌曲页三个页面点击歌曲条目的 `+`（加入歌单）无反应，不弹出歌单选择弹窗。但专辑/艺术家详情页、我的页、网盘页的加入歌单功能正常。
+
+**根因分析**：
+
+`AppRoot.kt` 的 `pickerSong` 状态被声明了两次，存在**作用域遮蔽**：
+
+- `L128`（AppRoot 函数体顶层）：`var pickerSong by remember { mutableStateOf<Song?>(null) }`——供加入歌单弹窗 `PlaylistPickerDialog` 读取（`L1006` 的 `pickerSong?.let { ... }`）。
+- `L454`（`Screen.Library` 的 when 分支内）：`var pickerSong by remember { mutableStateOf<Song?>(null) }`——**遮蔽了 L128 的顶层变量**。
+
+曲库页 `onAddToPlaylist = { song -> pickerSong = song }`（`L523`）在 L454 的作用域内，词法解析捕获的是 **L454 的遮蔽变量**；而弹窗渲染 `L1006` 读取的是 **L128 的顶层变量**。两者不是同一个对象 → 点击 `+` 设置了 L454 的变量，但 L1006 读取的 L128 变量始终为 `null` → 弹窗永不弹出。
+
+正常页面的原因：专辑/艺术家详情页在 `Screen.AlbumDetail` / `Screen.ArtistDetail` 分支内（L454 的 Library 块已结束），`L881`/`L921` 直接引用 L128 顶层变量，与 L1006 弹窗一致 → 正常；我的页（MineScreen）与网盘页（NetdiskScreen）各自内部自含 `pickerSong`/`actionSong` 与 `PlaylistPickerDialog` → 正常。
+
+**修复内容**：
+
+**文件**：`ui/components/AppRoot.kt`
+
+- 删除 `L454` 的冗余遮蔽变量 `var pickerSong by remember { mutableStateOf<Song?>(null) }`，让曲库页 `L523` 的 `pickerSong = song` 词法解析到 L128 顶层变量，与 L1006 弹窗读取一致。
+
+**验证结果**：
+- ✅ `compileDebugKotlin` 编译通过
+- ✅ 曲库搜索/发现/歌曲三页点击 `+` → 设置顶层 `pickerSong` → 弹窗正常弹出
