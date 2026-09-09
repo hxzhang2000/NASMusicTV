@@ -55,16 +55,15 @@ class DaoliyuAdapter : BackendAdapter {
     /** 日志脱敏（修复 L-2 + F-1 统一收编）：token 走 URL 查询参数（协议限制），w/e 级日志 release 仍输出，必须打码 */
     private fun sanitizeUrl(url: String): String = UrlSanitizer.sanitize(url)
 
-    /** 守护线程池（防止 OkHttp 非守护线程阻止进程退出） */
-    private val daemonExecutor = java.util.concurrent.Executors.newCachedThreadPool { r ->
-        Thread(r, "Daoliyu-OkHttp").apply { isDaemon = true }
-    }
+    // （R-6：原私有 daemonExecutor 已由 BackendRegistry.sharedDaemonExecutor 取代）
 
     // 安全修复（C-1）：移除 trust-all，使用系统默认证书校验（详见 BaiduOAuthClient.buildClient 注释）。
 
     private val client: OkHttpClient by lazy {
+        // R-6：注入共享连接池/Dispatcher（BackendRegistry 持有，切后端不再累积线程池）
         OkHttpClient.Builder()
-            .dispatcher(okhttp3.Dispatcher(daemonExecutor))
+            .dispatcher(com.nasmusic.tv.backend.BackendRegistry.sharedDispatcher)
+            .connectionPool(com.nasmusic.tv.backend.BackendRegistry.sharedConnectionPool)
             .connectTimeout(15, TimeUnit.SECONDS)
             .readTimeout(30, TimeUnit.SECONDS)
             .build()
@@ -197,8 +196,10 @@ class DaoliyuAdapter : BackendAdapter {
     }
 
     override fun close() {
-        client.dispatcher.executorService.shutdown()
-        client.connectionPool.evictAll()
+        // R-6：连接池/线程池已共享（BackendRegistry 持有），此处禁止 shutdown/evictAll
+        baseUrl = ""
+        token = ""
+        userId = ""
     }
 
     // ==================== 专辑 ====================

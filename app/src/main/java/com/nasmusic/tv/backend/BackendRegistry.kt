@@ -10,6 +10,8 @@ import com.nasmusic.tv.util.AppLog
 import com.nasmusic.tv.util.UrlSanitizer
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import okhttp3.ConnectionPool
+import java.util.concurrent.TimeUnit
 
 /**
  * 后端注册中心
@@ -22,6 +24,38 @@ class BackendRegistry {
     private val TYPE_SUBSONIC = ServerConfig.TYPE_SUBSONIC
     private val TYPE_DAOLIYU = ServerConfig.TYPE_DAOLIYU
     private val TYPE_FEINIU = ServerConfig.TYPE_FEINIU
+
+    companion object {
+        /**
+         * R-6（方案A）：跨适配器共享的 OkHttp 资源。
+         *
+         * 历史问题：5 个适配器各自 lazy 创建独立 OkHttpClient（独立连接池 + dispatcher 线程池），
+         * 后端切换频繁时新旧适配器短暂共存，累积多套线程池导致电视 WiFi 栈过载（见 close() 注释）。
+         *
+         * 共享后：
+         * - [sharedConnectionPool]：5 空闲连接、5 分钟 keep-alive，所有适配器复用
+         * - [sharedDaemonExecutor]：守护线程的缓存线程池（防 OkHttp 非守护线程阻止进程退出）
+         * - [sharedDispatcher]：全局并发上限（maxRequests=16 / perHost=8）
+         *
+         * ⚠️ 适配器 close() 必须【禁止】调用 executorService.shutdown() / evictAll()
+         * （会废掉全局线程池/清掉其他适配器的连接），只清理自身认证态。
+         */
+        internal val sharedDaemonExecutor: java.util.concurrent.ExecutorService =
+            java.util.concurrent.Executors.newCachedThreadPool { r ->
+                Thread(r, "NAS-OkHttp-Shared").apply { isDaemon = true }
+            }
+
+        internal val sharedConnectionPool: ConnectionPool = ConnectionPool(
+            maxIdleConnections = 5,
+            keepAliveDuration = 5,
+            timeUnit = TimeUnit.MINUTES
+        )
+
+        internal val sharedDispatcher: okhttp3.Dispatcher = okhttp3.Dispatcher(sharedDaemonExecutor).apply {
+            maxRequests = 16
+            maxRequestsPerHost = 8
+        }
+    }
 
     private val lock = Any()
     private var currentAdapter: BackendAdapter? = null

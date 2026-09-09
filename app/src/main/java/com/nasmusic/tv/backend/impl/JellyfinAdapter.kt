@@ -47,10 +47,7 @@ class JellyfinAdapter : BackendAdapter {
     private val jsonMediaType = "application/json; charset=utf-8".toMediaType()
 
     private val client: OkHttpClient by lazy {
-        // 使用守护线程的 ExecutorService，防止 OkHttp 线程阻止进程退出
-        val daemonExecutor = java.util.concurrent.Executors.newCachedThreadPool { r ->
-            Thread(r, "Jellyfin-OkHttp").apply { isDaemon = true }
-        }
+        // R-6：注入共享连接池/Dispatcher（BackendRegistry 持有，切后端不再累积线程池）
         OkHttpClient.Builder()
             .apply {
                 // 日志拦截器仅在 debug 构建启用，避免 release 中 URL（含 api_key token）写入 logcat
@@ -62,7 +59,8 @@ class JellyfinAdapter : BackendAdapter {
             }
             .connectTimeout(30, TimeUnit.SECONDS)
             .readTimeout(120, TimeUnit.SECONDS)
-            .dispatcher(okhttp3.Dispatcher(daemonExecutor))
+            .connectionPool(com.nasmusic.tv.backend.BackendRegistry.sharedConnectionPool)
+            .dispatcher(com.nasmusic.tv.backend.BackendRegistry.sharedDispatcher)
             .build()
     }
 
@@ -1023,10 +1021,13 @@ class JellyfinAdapter : BackendAdapter {
      * logout() 处理服务端 session，此处关闭客户端连接池，防止连接泄漏。
      */
     override fun close() {
+        // R-6：连接池/线程池已共享（BackendRegistry 持有），此处禁止 shutdown/evictAll
+        //（否则第一次切换后端就会废掉全局线程池），只清理自身认证态。
         try {
-            client.dispatcher.executorService.shutdown()
-            client.connectionPool.evictAll()
-            AppLog.d("JellyfinAdapter", "close: OkHttp resources released")
+            baseUrl = ""
+            apiToken = ""
+            userId = ""
+            AppLog.d("JellyfinAdapter", "close: auth state cleared (shared OkHttp pool retained)")
         } catch (e: Exception) {
             AppLog.w("JellyfinAdapter", "close failed", e)
         }

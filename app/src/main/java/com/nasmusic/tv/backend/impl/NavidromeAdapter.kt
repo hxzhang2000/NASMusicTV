@@ -49,10 +49,7 @@ class NavidromeAdapter : BackendAdapter {
 
     private val gson = Gson()
     private val client: OkHttpClient by lazy {
-        // 使用守护线程的 ExecutorService，防止 OkHttp 线程阻止进程退出
-        val daemonExecutor = java.util.concurrent.Executors.newCachedThreadPool { r ->
-            Thread(r, "Navidrome-OkHttp").apply { isDaemon = true }
-        }
+        // R-6：注入共享连接池/Dispatcher（BackendRegistry 持有，切后端不再累积线程池）
         OkHttpClient.Builder()
             .apply {
                 // 日志拦截器仅在 debug 构建启用，避免 release 中 URL 写入 logcat
@@ -64,7 +61,8 @@ class NavidromeAdapter : BackendAdapter {
             }
             .connectTimeout(15, TimeUnit.SECONDS)
             .readTimeout(30, TimeUnit.SECONDS)
-            .dispatcher(okhttp3.Dispatcher(daemonExecutor))
+            .connectionPool(com.nasmusic.tv.backend.BackendRegistry.sharedConnectionPool)
+            .dispatcher(com.nasmusic.tv.backend.BackendRegistry.sharedDispatcher)
             .build()
     }
 
@@ -859,10 +857,14 @@ class NavidromeAdapter : BackendAdapter {
      * 此处关闭客户端连接池，防止连接泄漏。
      */
     override fun close() {
+        // R-6：连接池/线程池已共享（BackendRegistry 持有），此处禁止 shutdown/evictAll
         try {
-            client.dispatcher.executorService.shutdown()
-            client.connectionPool.evictAll()
-            AppLog.d("NavidromeAdapter", "close: OkHttp resources released")
+            baseUrl = ""
+            username = ""
+            password = ""
+            apiToken = ""
+            salt = ""
+            AppLog.d("NavidromeAdapter", "close: auth state cleared (shared OkHttp pool retained)")
         } catch (e: Exception) {
             AppLog.w("NavidromeAdapter", "close failed", e)
         }
