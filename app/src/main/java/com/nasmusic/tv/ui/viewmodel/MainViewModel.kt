@@ -154,31 +154,26 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
         }
     }
 
-    // --- 天气电台 ---
-    val weatherApi = WeatherApi()
-    var weatherRadioManager: WeatherRadioManager? = null
-        private set
+    // --- 天气电台（R-1：已拆分至 WeatherRadioViewModel，此处为兼容转发）---
+    private val _weatherRadioVM = WeatherRadioViewModel(app, playerManager, nasMusicApp.networkMusicManager)
+    val weatherData: StateFlow<WeatherData?> get() = _weatherRadioVM.weatherData
+    val weatherRadioQueue: StateFlow<WeatherRadioQueue?> get() = _weatherRadioVM.weatherRadioQueue
+    val currentWeatherMood: StateFlow<WeatherMood> get() = _weatherRadioVM.currentWeatherMood
+    val weatherLoading: StateFlow<Boolean> get() = _weatherRadioVM.weatherLoading
+    val weatherError: StateFlow<String?> get() = _weatherRadioVM.weatherError
+    val weatherForecast: StateFlow<List<WeatherForecast>> get() = _weatherRadioVM.weatherForecast
+    val weatherIconCode: StateFlow<String?> get() = _weatherRadioVM.weatherIconCode
 
-    private val _weatherData = MutableStateFlow<WeatherData?>(null)
-    val weatherData: StateFlow<WeatherData?> = _weatherData.asStateFlow()
-
-    private val _weatherRadioQueue = MutableStateFlow<WeatherRadioQueue?>(null)
-    val weatherRadioQueue: StateFlow<WeatherRadioQueue?> = _weatherRadioQueue.asStateFlow()
-
-    private val _currentWeatherMood = MutableStateFlow(WeatherMood.SUNNY)
-    val currentWeatherMood: StateFlow<WeatherMood> = _currentWeatherMood.asStateFlow()
-
-    private val _weatherLoading = MutableStateFlow(false)
-    val weatherLoading: StateFlow<Boolean> = _weatherLoading.asStateFlow()
-
-    private val _weatherError = MutableStateFlow<String?>(null)
-    val weatherError: StateFlow<String?> = _weatherError.asStateFlow()
-
-    private val _weatherForecast = MutableStateFlow<List<WeatherForecast>>(emptyList())
-    val weatherForecast: StateFlow<List<WeatherForecast>> = _weatherForecast.asStateFlow()
-
-    private val _weatherIconCode = MutableStateFlow<String?>(null)
-    val weatherIconCode: StateFlow<String?> = _weatherIconCode.asStateFlow()
+    fun fetchWeather() = _weatherRadioVM.fetchWeather()
+    fun switchWeatherMood(mood: WeatherMood) = _weatherRadioVM.switchWeatherMood(mood)
+    fun playWeatherRadioAll() {
+        val songs = _weatherRadioVM.weatherRadioQueue.value?.songs ?: return
+        if (songs.isEmpty()) return
+        // 网络歌曲需要解析 streamUrl，但这里统一走 playQueue 的逻辑
+        playQueue(songs, 0)
+        // 导航到播放页
+        _currentScreen.value = Screen.NowPlaying
+    }
 
     // --- 导航状态 ---
     private val _currentScreen = MutableStateFlow(Screen.Home)
@@ -318,9 +313,6 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
     /** 浏览换一批已展示过的歌曲（歌手, 歌名）集合：跨批次去重，筛选条件变化时重置 */
     private val browseSeenKeys = mutableSetOf<Pair<String, String>>()
 
-    /** 天气电台换一批已展示过的歌曲（歌手, 歌名）集合：跨构建去重，mood 变化时重置 */
-    private val weatherSeenKeys = mutableSetOf<Pair<String, String>>()
-
     // --- 统一收藏（NAS 走 adapter，网络/本地走 DataStore NetworkFavoriteItem）---
     private val _networkFavorites = MutableStateFlow<List<NetworkFavoriteItem>>(emptyList())
     // 供 UI 使用：转换为 Song 对象列表（根据 source 标记 isLocalSong / isNetworkSong 字段）
@@ -346,8 +338,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
     }.stateIn(viewModelScope, SharingStarted.Eagerly, emptySet())
 
     // --- 本地歌单（「我的」Tab，DataStore 持久化，可混合 NAS/网络歌曲）---
-    private val _localPlaylists = MutableStateFlow<List<LocalPlaylist>>(emptyList())
-    val localPlaylists: StateFlow<List<LocalPlaylist>> = _localPlaylists.asStateFlow()
+    // （R-1：状态与操作已迁至 PlaylistViewModel，见上方转发区）
 
     private val _searchNetworkPlatform = MutableStateFlow("netease")
     val searchNetworkPlatform: StateFlow<String> = _searchNetworkPlatform.asStateFlow()
@@ -463,123 +454,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
         }
     }
 
-    // --- 天气电台 ---
-
-    /**
-     * 获取当前天气并构建天气电台
-     */
-    fun fetchWeather() {
-        viewModelScope.launch {
-            _weatherLoading.value = true
-            _weatherError.value = null
-            try {
-                val apiKey = nasMusicApp.appPreferences.getWeatherApiKeySync()
-                val weather = weatherApi.fetchCurrentWeather(
-                    openWeatherMapApiKey = apiKey.ifBlank { null }
-                )
-                if (weather != null) {
-                    _weatherData.value = weather
-                    // 获取天气图标代码（从 OpenWeatherMap）
-                    _weatherIconCode.value = null // 由 Open-Meteo 数据时无图标
-
-                    // 获取天气预报（需要 API Key）
-                    if (apiKey.isNotBlank()) {
-                        val forecast = weatherApi.fetchForecast(apiKey.ifBlank { null })
-                        _weatherForecast.value = forecast
-                    }
-
-                    // 延迟初始化 WeatherRadioManager（需要 BackendAdapter 和 NetworkMusicManager）
-                    val adapter = backendRegistry.getAdapter()
-                    if (weatherRadioManager == null) {
-                        weatherRadioManager = WeatherRadioManager(adapter, nasMusicApp.networkMusicManager)
-                    }
-                    weatherRadioManager?.let { mgr ->
-                        // 天气变化 = 新上下文，重置电台已见集合（跨构建去重从头开始）
-                        weatherSeenKeys.clear()
-                        val queue = buildWeatherRadioDeduped(mgr, WeatherMood.fromWeather(weather), weather)
-                        _weatherRadioQueue.value = queue
-                        _currentWeatherMood.value = queue.mood
-                    }
-                } else {
-                    _weatherError.value = if (apiKey.isBlank()) {
-                        getApplication<Application>().getString(R.string.weather_error_no_api_key)
-                    } else {
-                        getApplication<Application>().getString(R.string.weather_error_check_network)
-                    }
-                    // 即使天气获取失败，仍按默认心情（阳光）加载歌曲
-                    loadRadioForDefaultMood()
-                }
-            } catch (e: Exception) {
-                AppLog.e("MainViewModel", "fetchWeather failed", e)
-                _weatherError.value = getApplication<Application>().getString(R.string.weather_fetch_failed, e.message?.take(50) ?: "")
-                // 即使天气获取失败，仍按默认心情（阳光）加载歌曲
-                loadRadioForDefaultMood()
-            } finally {
-                _weatherLoading.value = false
-            }
-        }
-    }
-
-    /**
-     * 切换天气电台 mood
-     */
-    fun switchWeatherMood(mood: WeatherMood) {
-        if (_currentWeatherMood.value == mood) return
-        _currentWeatherMood.value = mood
-        // mood 变化 = 新上下文，重置电台已见集合（跨构建去重从头开始）
-        weatherSeenKeys.clear()
-        viewModelScope.launch {
-            _weatherLoading.value = true
-            try {
-                // 延迟初始化（可能在无后端连接时通过 fetchWeather() 创建）
-                val mgr = weatherRadioManager ?: run {
-                    val adapter = backendRegistry.getAdapter()
-                    WeatherRadioManager(adapter, nasMusicApp.networkMusicManager).also { weatherRadioManager = it }
-                }
-                val queue = buildWeatherRadioDeduped(mgr, mood, _weatherData.value)
-                _weatherRadioQueue.value = queue
-            } catch (e: Exception) {
-                AppLog.e("MainViewModel", "switchWeatherMood failed", e)
-                _weatherError.value = getApplication<Application>().getString(R.string.weather_switch_mood_error, e.message?.take(50))
-            } finally {
-                _weatherLoading.value = false
-            }
-        }
-    }
-
-    /**
-     * 播放天气电台全部歌曲
-     */
-    fun playWeatherRadioAll() {
-        val songs = _weatherRadioQueue.value?.songs ?: return
-        if (songs.isEmpty()) return
-        // 网络歌曲需要解析 streamUrl，但这里统一走 playQueue 的逻辑
-        playQueue(songs, 0)
-        // 导航到播放页
-        _currentScreen.value = Screen.NowPlaying
-    }
-
-    /**
-     * 构建天气电台并跨构建去重（「换一批」）。
-     *
-     * 与网络搜索 / 多维度浏览共用 [pickBestFreshBatch]：每次候选都重新构建一次电台
-     * （NAS 匹配与网络搜索结果已打乱，故每次基础集合不同），在多个候选中挑选
-     * 新歌最多的展示，保证同一 mood 下反复「换一批」只出新歌。
-     *
-     * mood 变化（新上下文）时调用方负责清空 [weatherSeenKeys]。
-     */
-    private suspend fun buildWeatherRadioDeduped(
-        mgr: WeatherRadioManager,
-        mood: WeatherMood,
-        weather: WeatherData?
-    ): WeatherRadioQueue {
-        val (chosen, shown) = pickBestFreshBatch(
-            seenKeys = weatherSeenKeys,
-            produce = { mgr.buildRadioWithMood(mood, weather) },
-            songsOf = { it.songs }
-        )
-        return chosen.copy(songs = shown)
-    }
+    // ================= 天气电台（R-1：逻辑已迁至 WeatherRadioViewModel，以上为转发） =================
 
     // --- 详情页状态 ---
     private val _selectedAlbum = MutableStateFlow<Album?>(null)
@@ -999,12 +874,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
             }
         }
 
-        // 监听本地歌单变化（DataStore 持久化，响应式更新）
-        viewModelScope.launch {
-            prefs.localPlaylists.collect { playlists ->
-                _localPlaylists.value = playlists
-            }
-        }
+        // 监听本地歌单变化（已由 PlaylistViewModel 内部 collect）
 
         // 恢复上次播放队列（仅恢复 UI 状态，不自动播放）— 协程异步读取 DataStore，避免阻塞主线程
         viewModelScope.launch {
@@ -1310,24 +1180,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
     }
 
     /**
-     * 天气获取失败时，按默认心情（阳光）加载歌曲。
+     * 天气获取失败时按默认心情加载的逻辑已迁至 WeatherRadioViewModel.loadRadioForDefaultMood。
      */
-    private fun loadRadioForDefaultMood() {
-        viewModelScope.launch {
-            try {
-                val mgr = weatherRadioManager ?: run {
-                    val adapter = backendRegistry.getAdapter()
-                    WeatherRadioManager(adapter, nasMusicApp.networkMusicManager).also { weatherRadioManager = it }
-                }
-                // 天气获取失败也走同一套跨构建去重：反复「换一批」仍只出新歌
-                val queue = buildWeatherRadioDeduped(mgr, WeatherMood.SUNNY, null)
-                _weatherRadioQueue.value = queue
-                _currentWeatherMood.value = queue.mood
-            } catch (e: Exception) {
-                AppLog.e("MainViewModel", "loadRadioForDefaultMood failed", e)
-            }
-        }
-    }
 
     /**
      * 关闭连接提示对话框
@@ -2818,82 +2672,15 @@ showError(getApplication<Application>().getString(R.string.toggle_favorite_error
     fun isFavorite(songId: String): Boolean =
         songId in _favoriteIds.value || songId in networkFavoriteIds.value
 
-    // --- 本地歌单操作（「我的」Tab，DataStore 持久化）---
+    // --- 本地歌单操作（R-1：已拆分至 PlaylistViewModel，此处为兼容转发）---
+    private val _playlistVM = PlaylistViewModel(app)
+    val localPlaylists: StateFlow<List<LocalPlaylist>> get() = _playlistVM.localPlaylists
 
-    /**
-     * 创建本地歌单（空名称忽略）
-     */
-    fun createLocalPlaylist(name: String) {
-        if (name.isBlank()) return
-        viewModelScope.launch {
-            try {
-                prefs.createLocalPlaylist(name)
-            } catch (e: Exception) {
-                AppLog.e("NASMusic", "createLocalPlaylist failed", e)
-                showError(getApplication<Application>().getString(R.string.create_playlist_error, e.message?.take(50)))
-            }
-        }
-    }
-
-    /**
-     * 重命名本地歌单
-     */
-    fun renameLocalPlaylist(id: String, newName: String) {
-        if (newName.isBlank()) return
-        viewModelScope.launch {
-            try {
-                prefs.renameLocalPlaylist(id, newName)
-            } catch (e: Exception) {
-                AppLog.e("NASMusic", "renameLocalPlaylist failed", e)
-                showError(getApplication<Application>().getString(R.string.rename_playlist_error, e.message?.take(50)))
-            }
-        }
-    }
-
-    /**
-     * 删除本地歌单
-     */
-    fun deleteLocalPlaylist(id: String) {
-        viewModelScope.launch {
-            try {
-                prefs.deleteLocalPlaylist(id)
-            } catch (e: Exception) {
-                AppLog.e("NASMusic", "deleteLocalPlaylist failed", e)
-                showError(getApplication<Application>().getString(R.string.delete_playlist_error, e.message?.take(50)))
-            }
-        }
-    }
-
-    /**
-     * 添加歌曲到本地歌单（已存在则提示）
-     */
-    fun addSongToPlaylist(playlistId: String, song: Song) {
-        viewModelScope.launch {
-            try {
-                val added = prefs.addSongToPlaylist(playlistId, song)
-                if (!added) {
-                    showError(getApplication<Application>().getString(R.string.song_already_in_playlist, ""))
-                }
-            } catch (e: Exception) {
-                AppLog.e("NASMusic", "addSongToPlaylist failed", e)
-                showError(getApplication<Application>().getString(R.string.add_to_playlist_error, e.message?.take(50)))
-            }
-        }
-    }
-
-    /**
-     * 从本地歌单移除歌曲
-     */
-    fun removeSongFromPlaylist(playlistId: String, songId: String) {
-        viewModelScope.launch {
-            try {
-                prefs.removeSongFromPlaylist(playlistId, songId)
-            } catch (e: Exception) {
-                AppLog.e("NASMusic", "removeSongFromPlaylist failed", e)
-                showError(getApplication<Application>().getString(R.string.remove_from_local_playlist_error, e.message?.take(50)))
-            }
-        }
-    }
+    fun createLocalPlaylist(name: String) = _playlistVM.createLocalPlaylist(name)
+    fun renameLocalPlaylist(id: String, newName: String) = _playlistVM.renameLocalPlaylist(id, newName)
+    fun deleteLocalPlaylist(id: String) = _playlistVM.deleteLocalPlaylist(id)
+    fun addSongToPlaylist(playlistId: String, song: Song) = _playlistVM.addSongToPlaylist(playlistId, song)
+    fun removeSongFromPlaylist(playlistId: String, songId: String) = _playlistVM.removeSongFromPlaylist(playlistId, songId)
 
     /**
      * 播放整个本地歌单（含网络歌曲时自动解析 streamUrl）
@@ -2904,125 +2691,18 @@ showError(getApplication<Application>().getString(R.string.toggle_favorite_error
         navigateTo(Screen.NowPlaying)
     }
 
-    // --- 数据备份（设置页入口，含服务器地址但不含密码）---
+    // --- 数据备份（R-1：已拆分至 BackupViewModel，此处为兼容转发）---
+    private val _backupVM = BackupViewModel(app)
+    val backupFiles: StateFlow<List<BackupFileUtils.BackupFile>> get() = _backupVM.backupFiles
+    val backupMessage: StateFlow<BackupMessage?> get() = _backupVM.backupMessage
 
-    /** 当前可用的备份文件列表（按修改时间倒序） */
-    private val _backupFiles = MutableStateFlow<List<BackupFileUtils.BackupFile>>(emptyList())
-    val backupFiles: StateFlow<List<BackupFileUtils.BackupFile>> = _backupFiles.asStateFlow()
-
-    /** 备份操作结果消息（导出成功/失败、导入成功/失败） */
-    private val _backupMessage = MutableStateFlow<BackupMessage?>(null)
-    val backupMessage: StateFlow<BackupMessage?> = _backupMessage.asStateFlow()
-
-    /** 刷新备份文件列表（进入设置页时调用） */
-    fun refreshBackupFiles() {
-        viewModelScope.launch {
-            _backupFiles.value = BackupFileUtils.listBackups(getApplication())
-        }
-    }
-
-    /** 导出完整备份到 Downloads/NASMusic/（含服务器地址，不含密码/Token） */
-    fun exportBackup() {
-        viewModelScope.launch {
-            try {
-                val data = prefs.exportBackupData().copy(
-                    mvCacheEntries = mvSearchManager.exportMvCache()
-                )
-                val json = Gson().toJson(data)
-                val result = BackupFileUtils.export(getApplication(), json)
-                result.onSuccess { fileName ->
-                    _backupFiles.value = BackupFileUtils.listBackups(getApplication())
-                    _backupMessage.value = BackupMessage(getApplication<Application>().getString(R.string.backup_exported, fileName))
-                }.onFailure { e ->
-                    AppLog.e("NASMusic", "exportBackup failed", e)
-                    _backupMessage.value = BackupMessage(getApplication<Application>().getString(R.string.backup_export_failed, e.message?.take(60) ?: ""), isError = true)
-                }
-            } catch (e: Exception) {
-                AppLog.e("NASMusic", "exportBackup failed", e)
-                _backupMessage.value = BackupMessage(getApplication<Application>().getString(R.string.backup_export_failed, e.message?.take(60) ?: ""), isError = true)
-            }
-        }
-    }
-
-    /**
-     * 从指定备份文件恢复数据
-     * 恢复后服务器未连接（密码不备份），需重新连接
-     */
-    fun importBackup(uri: Uri) {
-        viewModelScope.launch {
-            try {
-                val json = BackupFileUtils.read(getApplication(), uri).getOrThrow()
-                val data = Gson().fromJson(json, AppPreferences.BackupData::class.java)
-                prefs.importBackupData(data)
-                mvSearchManager.importMvCache(data.mvCacheEntries)
-                // 刷新受备份影响的 UI 状态
-                refreshAfterImport()
-                _backupMessage.value = BackupMessage(getApplication<Application>().getString(R.string.backup_restored))
-            } catch (e: Exception) {
-                AppLog.e("NASMusic", "importBackup failed", e)
-                _backupMessage.value = BackupMessage(getApplication<Application>().getString(R.string.backup_restore_failed, e.message?.take(60) ?: ""), isError = true)
-            }
-        }
-    }
-
-    /**
-     * 从 JSON 字符串恢复备份（用于扫码传输）
-     * @return true 恢复成功；false 失败
-     */
-    suspend fun restoreBackupFromJson(json: String): Boolean {
-        return try {
-            val data = Gson().fromJson(json, AppPreferences.BackupData::class.java)
-            prefs.importBackupData(data)
-            mvSearchManager.importMvCache(data.mvCacheEntries)
-            refreshAfterImport()
-            _backupMessage.value = BackupMessage(getApplication<Application>().getString(R.string.backup_restored))
-            true
-        } catch (e: Exception) {
-            AppLog.e("NASMusic", "restoreBackupFromJson failed", e)
-            false
-        }
-    }
-
-    /**
-     * 非挂起版本的 [restoreBackupFromJson]，供 BackupTransferServer 回调用。
-     *
-     * NanoHTTPD 的 `serve()` 是同步的，必须立即返回响应；此方法用 `runBlocking`
-     * 在 NanoHTTPD 工作线程上桥接 suspend 调用（非主线程，安全）。
-     * 桥接职责集中在 ViewModel，使 BackupTransferServer / BackupTransferDialog
-     * 不依赖协程库。
-     */
-    fun restoreBackupFromJsonBlocking(json: String): Boolean =
-        kotlinx.coroutines.runBlocking { restoreBackupFromJson(json) }
-
-    /** 导入备份后刷新相关 StateFlow（收藏、歌单、队列、统计等由 prefs Flow 自动更新） */
-    private fun refreshAfterImport() {
-        // 服务器连接状态保持断开（密码不备份），其余由 collect 自动同步
-        _backupFiles.value = BackupFileUtils.listBackups(getApplication())
-    }
-
-    /** 删除指定备份文件 */
-    fun deleteBackup(uri: Uri) {
-        viewModelScope.launch {
-            try {
-                val result = BackupFileUtils.delete(getApplication(), uri)
-                _backupFiles.value = BackupFileUtils.listBackups(getApplication())
-                result.onSuccess {
-                    _backupMessage.value = BackupMessage(getApplication<Application>().getString(R.string.backup_deleted))
-                }.onFailure { e ->
-                    AppLog.e("NASMusic", "deleteBackup failed", e)
-                    _backupMessage.value = BackupMessage(getApplication<Application>().getString(R.string.backup_delete_failed, e.message?.take(60) ?: ""), isError = true)
-                }
-            } catch (e: Exception) {
-                AppLog.e("NASMusic", "deleteBackup failed", e)
-                _backupMessage.value = BackupMessage(getApplication<Application>().getString(R.string.backup_delete_failed, e.message?.take(60) ?: ""), isError = true)
-            }
-        }
-    }
-
-    /** 消费备份结果消息（UI 显示后调用） */
-    fun consumeBackupMessage() {
-        _backupMessage.value = null
-    }
+    fun refreshBackupFiles() = _backupVM.refreshBackupFiles()
+    fun exportBackup() = _backupVM.exportBackup()
+    fun importBackup(uri: Uri) = _backupVM.importBackup(uri)
+    suspend fun restoreBackupFromJson(json: String): Boolean = _backupVM.restoreBackupFromJson(json)
+    fun restoreBackupFromJsonBlocking(json: String): Boolean = _backupVM.restoreBackupFromJsonBlocking(json)
+    fun deleteBackup(uri: Uri) = _backupVM.deleteBackup(uri)
+    fun consumeBackupMessage() = _backupVM.consumeBackupMessage()
 
     // --- B-2 最近播放 & 播放次数 ---
     fun recordPlay(song: Song) {
