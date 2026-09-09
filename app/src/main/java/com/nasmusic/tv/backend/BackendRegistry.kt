@@ -7,6 +7,7 @@ import com.nasmusic.tv.backend.impl.NavidromeAdapter
 import com.nasmusic.tv.backend.impl.SubsonicAdapter
 import com.nasmusic.tv.data.model.ServerConfig
 import com.nasmusic.tv.util.AppLog
+import com.nasmusic.tv.util.UrlSanitizer
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -45,7 +46,8 @@ class BackendRegistry {
             else -> return@withContext false
         }
 
-        AppLog.d("BackendRegistry", "initialize: type=${config.backendType}, baseUrl=${config.baseUrl}, username=${config.username}, hasPw=${config.password.isNotEmpty()}, hasToken=${config.apiToken.isNotEmpty()}")
+        // F-1：username 不落日志（debug 亦脱敏），只记布尔存在性
+        AppLog.d("BackendRegistry", "initialize: type=${config.backendType}, baseUrl=${UrlSanitizer.sanitize(config.baseUrl)}, hasUser=${config.username.isNotEmpty()}, hasPw=${config.password.isNotEmpty()}, hasToken=${config.apiToken.isNotEmpty()}")
 
         val success = try {
             val ok = adapter.initialize(

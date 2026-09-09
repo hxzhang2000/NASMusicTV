@@ -13,6 +13,7 @@ import com.nasmusic.tv.data.model.VersionInfo
 import com.nasmusic.tv.util.AppLog
 import com.nasmusic.tv.util.EncodingUtils
 import com.nasmusic.tv.util.RetryConfig
+import com.nasmusic.tv.util.UrlSanitizer
 import com.nasmusic.tv.util.withRetry
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
@@ -891,7 +892,7 @@ class NavidromeAdapter : BackendAdapter {
             withRetry(
                 config = RetryConfig(maxAttempts = 3, baseDelayMs = 500L),
                 onError = { attempt, e ->
-                    AppLog.w("NavidromeAdapter", "executeRequest retry attempt=$attempt for $url", e)
+                    AppLog.w("NavidromeAdapter", "executeRequest retry attempt=$attempt for ${UrlSanitizer.sanitize(url)}", e)
                 }
             ) {
                 val request = Request.Builder().url(url).build()
@@ -906,7 +907,7 @@ class NavidromeAdapter : BackendAdapter {
                 }
             }
         } catch (e: Exception) {
-            AppLog.e("NavidromeAdapter", "executeRequest failed for $url", e)
+            AppLog.e("NavidromeAdapter", "executeRequest failed for ${UrlSanitizer.sanitize(url)}", e)
             null
         }
     }

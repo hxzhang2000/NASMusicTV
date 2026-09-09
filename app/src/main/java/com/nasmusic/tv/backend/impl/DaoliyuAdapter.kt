@@ -14,6 +14,7 @@ import com.nasmusic.tv.data.model.Song
 import com.nasmusic.tv.data.model.SongTechnicalInfo
 import com.nasmusic.tv.data.model.VersionInfo
 import com.nasmusic.tv.util.AppLog
+import com.nasmusic.tv.util.UrlSanitizer
 import com.nasmusic.tv.util.EncodingUtils
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -51,9 +52,8 @@ class DaoliyuAdapter : BackendAdapter {
 
     private val gson = Gson()
 
-    /** 日志脱敏（修复 L-2）：token 走 URL 查询参数（协议限制），w/e 级日志 release 仍输出，必须打码 */
-    private fun sanitizeUrl(url: String): String =
-        url.take(160).replace(Regex("token=[^&]+"), "token=***")
+    /** 日志脱敏（修复 L-2 + F-1 统一收编）：token 走 URL 查询参数（协议限制），w/e 级日志 release 仍输出，必须打码 */
+    private fun sanitizeUrl(url: String): String = UrlSanitizer.sanitize(url)
 
     /** 守护线程池（防止 OkHttp 非守护线程阻止进程退出） */
     private val daemonExecutor = java.util.concurrent.Executors.newCachedThreadPool { r ->

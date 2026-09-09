@@ -14,6 +14,7 @@ import com.nasmusic.tv.data.model.VersionInfo
 import com.nasmusic.tv.util.AppLog
 import com.nasmusic.tv.util.EncodingUtils
 import com.nasmusic.tv.util.RetryConfig
+import com.nasmusic.tv.util.UrlSanitizer
 import com.nasmusic.tv.util.withRetry
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
@@ -1065,7 +1066,7 @@ class JellyfinAdapter : BackendAdapter {
             AppLog.d("JellyfinAdapter", "utf8Body: GBK fallback applied for ${request.url} (U+FFFD detected in UTF-8)")
             return gbk
         }
-        AppLog.w("JellyfinAdapter", "utf8Body: U+FFFD present but GBK fallback failed for ${request.url}, using UTF-8 as-is")
+        AppLog.w("JellyfinAdapter", "utf8Body: U+FFFD present but GBK fallback failed for ${UrlSanitizer.sanitize(request.url.toString())}, using UTF-8 as-is")
         return utf8
     }
 
@@ -1074,7 +1075,7 @@ class JellyfinAdapter : BackendAdapter {
             withRetry(
                 config = RetryConfig(maxAttempts = 3, baseDelayMs = 500L),
                 onError = { attempt, e ->
-                    AppLog.w("JellyfinAdapter", "executeJsonRequest retry attempt=$attempt for $url", e)
+                    AppLog.w("JellyfinAdapter", "executeJsonRequest retry attempt=$attempt for ${UrlSanitizer.sanitize(url)}", e)
                 }
             ) {
                 val request = Request.Builder()
@@ -1089,13 +1090,13 @@ class JellyfinAdapter : BackendAdapter {
                             gson.fromJson(body, JsonObject::class.java)
                         } else null
                     } else {
-                        AppLog.w("JellyfinAdapter", "executeJsonRequest: ${response.code} for $url")
+                        AppLog.w("JellyfinAdapter", "executeJsonRequest: ${response.code} for ${UrlSanitizer.sanitize(url)}")
                         null
                     }
                 }
             }
         } catch (e: Exception) {
-            AppLog.e("JellyfinAdapter", "executeJsonRequest failed for $url", e)
+            AppLog.e("JellyfinAdapter", "executeJsonRequest failed for ${UrlSanitizer.sanitize(url)}", e)
             null
         }
     }
@@ -1172,7 +1173,8 @@ class JellyfinAdapter : BackendAdapter {
             client.newCall(request).execute().use { response ->
                 val body = response.utf8Body() ?: return@use null
                 if (!response.isSuccessful) {
-                    AppLog.w("JellyfinAdapter", "authenticateByName: HTTP ${response.code} for $baseUrl/Users/AuthenticateByName, body=${body.take(200)}")
+                    // F-1：错误响应 body 可能回显请求体（含密码），不落入日志
+                    AppLog.w("JellyfinAdapter", "authenticateByName: HTTP ${response.code} for ${UrlSanitizer.sanitize(baseUrl)}/Users/AuthenticateByName")
                     return@use null
                 }
                 val json = gson.fromJson(body, JsonObject::class.java)

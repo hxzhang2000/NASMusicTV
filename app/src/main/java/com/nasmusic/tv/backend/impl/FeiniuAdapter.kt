@@ -13,6 +13,7 @@ import com.nasmusic.tv.data.model.SongTechnicalInfo
 import com.nasmusic.tv.data.model.VersionInfo
 import com.nasmusic.tv.util.AppLog
 import com.nasmusic.tv.util.EncodingUtils
+import com.nasmusic.tv.util.UrlSanitizer
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.Cookie
@@ -530,13 +531,13 @@ class FeiniuAdapter : BackendAdapter {
                 .build()
             val response = client.newCall(request).execute()
             if (!response.isSuccessful) {
-                AppLog.w(TAG, "GET failed: ${response.code} url=${url.take(80)}")
+                AppLog.w(TAG, "GET failed: ${response.code} url=${UrlSanitizer.sanitize(url)}")
                 return null
             }
             val body = response.body?.string() ?: return null
             JsonParser.parseString(body).asJsonObject
         } catch (e: Exception) {
-            AppLog.e(TAG, "GET error url=${url.take(80)}", e)
+            AppLog.e(TAG, "GET error url=${UrlSanitizer.sanitize(url)}", e)
             null
         }
     }
@@ -555,13 +556,13 @@ class FeiniuAdapter : BackendAdapter {
                 .build()
             val response = client.newCall(request).execute()
             if (!response.isSuccessful) {
-                AppLog.w(TAG, "POST failed: ${response.code} url=${url.take(80)}")
+                AppLog.w(TAG, "POST failed: ${response.code} url=${UrlSanitizer.sanitize(url)}")
                 return null
             }
             val responseBody = response.body?.string() ?: return null
             if (responseBody.isBlank()) JsonObject() else JsonParser.parseString(responseBody).asJsonObject
         } catch (e: Exception) {
-            AppLog.e(TAG, "POST error url=${url.take(80)}", e)
+            AppLog.e(TAG, "POST error url=${UrlSanitizer.sanitize(url)}", e)
             null
         }
     }
