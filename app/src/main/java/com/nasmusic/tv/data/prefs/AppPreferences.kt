@@ -289,12 +289,10 @@ class AppPreferences internal constructor(private val context: Context) {
     private val keySeparationMode = stringPreferencesKey("k_separation_mode")
 
     /**
-     * 分离模式枚举
+     * 分离模式枚举（R-5：已上提为 player 层顶层 [com.nasmusic.tv.player.SeparationMode]，
+     * 此处 typealias 保持既有引用兼容；新代码请直接用 player 层类型）
      */
-    enum class SeparationMode(val value: String) {
-        FAST("fast"),          // 快速模式：SpectralMaskProcessor 实时 DSP
-        HIGH_QUALITY("hq")     // 高质量模式：HT-Demucs FT ONNX 预分离
-    }
+    typealias SeparationMode = com.nasmusic.tv.player.SeparationMode
 
     val separationMode: Flow<SeparationMode> = dataStore.data.map { prefs ->
         val value = prefs[keySeparationMode] ?: SeparationMode.FAST.value
