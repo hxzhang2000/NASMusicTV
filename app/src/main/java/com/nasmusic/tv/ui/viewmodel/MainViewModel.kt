@@ -4,6 +4,8 @@ import android.app.Application
 import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import coil.Coil
+import coil.annotation.ExperimentalCoilApi
 import com.google.gson.Gson
 import com.nasmusic.tv.NasMusicApp
 import com.nasmusic.tv.R
@@ -1839,7 +1841,7 @@ showError(getApplication<Application>().getString(R.string.toggle_favorite_error
             val songAlbum = song.album.lowercase().trim()
             val matchAlbum = songAlbum == name
             val matchPath = !matchAlbum && songAlbum.isBlank() && song.path != null && run {
-                val segments = song.path!!.trim('/').split("/")
+                val segments = song.path.trim('/').split("/")
                 segments.getOrNull(segments.size - 2)?.lowercase()?.trim() == name
             }
             matchAlbum || matchPath
@@ -2415,7 +2417,7 @@ showError(getApplication<Application>().getString(R.string.toggle_favorite_error
                 // 2. 后台检查后端 + 网络可用来源（更新标签状态，不影响已显示的歌词）
                 val availability = lyricsManager.checkAvailability(song)
                 // 保留已有的缓存状态
-                _lyricsAvailability.value = availability.copy(cached = _lyricsAvailability.value?.cached)
+                _lyricsAvailability.value = availability.copy(cached = _lyricsAvailability.value.cached)
                 AppLog.d("NASMusic", "loadLyrics: cached=${cachedLyrics != null}, backend=${availability.hasBackend}, network=${availability.hasNetwork}")
 
                 // 3. 无缓存时使用后端或网络歌词
@@ -2748,11 +2750,14 @@ showError(getApplication<Application>().getString(R.string.toggle_favorite_error
         }
     }
 
+    @OptIn(ExperimentalCoilApi::class)
     fun clearCoverCache() {
         viewModelScope.launch {
             val context = getApplication<android.app.Application>()
-            // 直接使用 Coil 全局 ImageLoader 清除缓存，而非新建 CoverArtManager 实例
-            val imageLoader = coil.ImageLoader(context)
+            // 取 Coil 全局 ImageLoader（与 PlaybackService/CoilBitmapLoader 同一实例）。
+            // 此前用 coil.ImageLoader(context) 工厂函数会创建全新无配置实例，
+            // 其 memoryCache/diskCache 与 UI 实际使用的缓存不是同一个，清除不生效。
+            val imageLoader = Coil.imageLoader(context)
             imageLoader.memoryCache?.clear()
             imageLoader.diskCache?.clear()
             AppLog.d("MainViewModel", "clearCoverCache: cache cleared")

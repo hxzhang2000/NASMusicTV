@@ -159,7 +159,8 @@ class PlayerEqualizer(private val retryHandler: Handler) {
      */
     fun getEqualizerCenterFreq(bandIndex: Int): Int {
         return try {
-            equalizer?.getCenterFreq(bandIndex.toShort())?.toInt() ?: 0
+            // getCenterFreq 返回 int，无需 toInt()（消除冗余转换告警）
+            equalizer?.getCenterFreq(bandIndex.toShort()) ?: 0
         } catch (e: Exception) {
             0
         }

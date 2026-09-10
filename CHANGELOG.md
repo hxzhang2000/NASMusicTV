@@ -18,6 +18,7 @@
 - 重构：PlayerManager（64.1KB）拆分——HQ 人声分离编排提取 HqSeparationOrchestrator（PlayerHost 窄接口，延续 R-5 模式）、均衡器/频谱提取 PlayerEqualizer，PlayerManager 精简为播放核心+队列状态机（41.5KB），外部调用面零改动（N-4；MediaSession/音频焦点实为 PlaybackService 职责，不涉及）
 
 ### Fixed
+- 封面缓存清除不生效：`clearCoverCache()` 用 `coil.ImageLoader(context)` 工厂函数创建全新无配置实例，其 `memoryCache`/`diskCache` 与 UI 实际使用的全局 ImageLoader（`NasMusicApp.newImageLoader()`，已注入百度 dlink UA 拦截器）不是同一个，清除操作打在了无人使用的实例上、磁盘 100MB 缓存目录也未被清理。改为 `Coil.imageLoader(context)` 取全局单例，与 `PlaybackService`/`CoilBitmapLoader` 同一实例。顺带消除该处 `ExperimentalCoilApi` 未 opt-in 告警
 - CI：`keystore.properties` 缺失时不再阻塞单测任务——`signingConfigs` 仅在配置存在时创建 release 签名，`signingConfig` 改用 `findByName`（返回 null）替代 `getByName`（配置期抛 `NoSuchElementException`）；此前 `file("")` 在配置期抛 `IllegalArgumentException`，导致 CI 的 `testDebugUnitTest` 整体失败。test job 同步补显式 Android SDK 安装步骤，不再依赖 runner 预装的隐含状态。
 
 ## [v2.28.0] - 2026-09-10
