@@ -68,7 +68,7 @@ class VocalSeparationViewModel(
 
     // --- 分离模式（快速/高质量）---
     /** 当前分离模式（同步 prefs → PlayerManager） */
-    val separationMode: StateFlow<AppPreferences.SeparationMode> = prefs.separationMode.stateIn(
+    val separationMode: StateFlow<AppPreferences.SeparationMode> = prefs.player.separationMode.stateIn(
         scope = viewModelScope,
         started = SharingStarted.Eagerly,
         initialValue = AppPreferences.SeparationMode.FAST
@@ -131,7 +131,7 @@ class VocalSeparationViewModel(
         }
 
         playerManager.setSeparationMode(newMode)
-        viewModelScope.launch { prefs.setSeparationMode(newMode) }
+        viewModelScope.launch { prefs.player.setSeparationMode(newMode) }
 
         if (_vocalRemovalEnabled.value) {
             // K歌模式正在伴唱，切换模式时保持伴唱状态
@@ -175,8 +175,8 @@ class VocalSeparationViewModel(
     /** 从 AppPreferences 加载上次保存的 pitch/speed，并应用到 PlayerManager */
     fun loadPitchSpeedFromPrefs() {
         viewModelScope.launch {
-            val savedPitch = prefs.pitchSemitones.first()
-            val savedSpeed = prefs.playbackSpeed.first()
+            val savedPitch = prefs.player.pitchSemitones.first()
+            val savedSpeed = prefs.player.playbackSpeed.first()
             _pitchSemitones.value = savedPitch
             _playbackSpeed.value = savedSpeed
             // 应用到播放器（仅在 player 已初始化时生效）
@@ -192,7 +192,7 @@ class VocalSeparationViewModel(
         _pitchSemitones.value = clamped
         playerManager.setPitch(clamped)
         viewModelScope.launch {
-            prefs.setPitchSemitones(clamped)
+            prefs.player.setPitchSemitones(clamped)
         }
         AppLog.d("VocalSeparationViewModel", "setPitchSemitones -> $clamped")
     }
@@ -203,7 +203,7 @@ class VocalSeparationViewModel(
         _playbackSpeed.value = clamped
         playerManager.setSpeed(clamped.toFloat())
         viewModelScope.launch {
-            prefs.setPlaybackSpeed(clamped)
+            prefs.player.setPlaybackSpeed(clamped)
         }
         AppLog.d("VocalSeparationViewModel", "setPlaybackSpeed -> $clamped")
     }
@@ -212,7 +212,7 @@ class VocalSeparationViewModel(
     fun resetPitch() {
         _pitchSemitones.value = 0
         playerManager.resetPitch()
-        viewModelScope.launch { prefs.setPitchSemitones(0) }
+        viewModelScope.launch { prefs.player.setPitchSemitones(0) }
         AppLog.d("VocalSeparationViewModel", "resetPitch -> 0")
     }
 
@@ -220,7 +220,7 @@ class VocalSeparationViewModel(
     fun resetSpeed() {
         _playbackSpeed.value = 1.0
         playerManager.resetSpeed()
-        viewModelScope.launch { prefs.setPlaybackSpeed(1.0) }
+        viewModelScope.launch { prefs.player.setPlaybackSpeed(1.0) }
         AppLog.d("VocalSeparationViewModel", "resetSpeed -> 1.0")
     }
 

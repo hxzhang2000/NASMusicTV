@@ -176,7 +176,7 @@ class NasMusicApp : Application(), ImageLoaderFactory {
     /** Jamendo（CC 独立音乐）服务：clientId 由设置页配置，未配置时 registerService 跳过 */
     val jamendoService: JamendoService by lazy {
         JamendoService(
-            clientIdProvider = { appPreferences.getJamendoClientIdSync() }
+            clientIdProvider = { appPreferences.network.getJamendoClientIdSync() }
         )
     }
 
@@ -203,20 +203,20 @@ class NasMusicApp : Application(), ImageLoaderFactory {
         // 网络音乐管理器：注册所有网络源，默认源与 Meting 端点均由 AppSettings 动态提供
         val services = mapOf(
             "meting" to MetingApiService(
-                baseUrlProvider = { appPreferences.getMetingApiBaseUrlSync() },
-                serverProvider = { appPreferences.getMusicSourceSync() }
+                baseUrlProvider = { appPreferences.network.getMetingApiBaseUrlSync() },
+                serverProvider = { appPreferences.network.getMusicSourceSync() }
             )
         )
         networkMusicManager = NetworkMusicManager(
             services = services,
-            defaultSourceProvider = { appPreferences.getDefaultNetworkSourceSync() }
+            defaultSourceProvider = { appPreferences.network.getDefaultNetworkSourceSync() }
         )
         // 百度网盘：仅在总开关开启且已登录时注册（运行时切换开关时动态注册/注销）
-        if (appPreferences.getBaiduConfigSync().isActive) {
+        if (appPreferences.baidu.getBaiduConfigSync().isActive) {
             networkMusicManager.registerService(baiduNetdiskService)
         }
         // Jamendo：仅当已配置 client_id 时注册（未配置时 Jamendo Tab 显示引导）
-        if (appPreferences.getJamendoClientIdSync().isNotBlank()) {
+        if (appPreferences.network.getJamendoClientIdSync().isNotBlank()) {
             networkMusicManager.registerService(jamendoService)
         }
 
@@ -224,7 +224,7 @@ class NasMusicApp : Application(), ImageLoaderFactory {
         val mvServices = listOf(
             baiduMvFileService,    // 本地 MV 优先（仅对百度歌曲生效，非百度歌曲返回 null）
             BilibiliMvService(
-                baseUrlProvider = { appPreferences.getMvApiBaseUrlSync() }
+                baseUrlProvider = { appPreferences.network.getMvApiBaseUrlSync() }
             )
         )
         mvSearchManager = MvSearchManager(
@@ -399,7 +399,7 @@ class NasMusicApp : Application(), ImageLoaderFactory {
      * - 关闭或登出：注销
      */
     fun refreshBaiduServiceRegistration() {
-        val cfg = appPreferences.getBaiduConfigSync()
+        val cfg = appPreferences.baidu.getBaiduConfigSync()
         if (cfg.isActive) {
             networkMusicManager.registerService(baiduNetdiskService)
         } else {

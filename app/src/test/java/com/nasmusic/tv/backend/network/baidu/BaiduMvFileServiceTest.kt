@@ -43,6 +43,9 @@ class BaiduMvFileServiceTest {
         streamFactory = mock(BaiduStreamFactory::class.java)
         indexCache = mock(BaiduFileIndexCache::class.java)
         prefs = mock(AppPreferences::class.java)
+        // R-4 门面：用 doReturn 避免 when() 内嵌 mock 调用（UnfinishedStubbing）；
+        // 真实 BaiduPrefs 包装内部仍委托 mock 的旧 API
+        org.mockito.Mockito.doReturn(com.nasmusic.tv.data.prefs.BaiduPrefs(prefs)).`when`(prefs).baidu
         service = BaiduMvFileService(api, streamFactory, indexCache, prefs)
     }
 

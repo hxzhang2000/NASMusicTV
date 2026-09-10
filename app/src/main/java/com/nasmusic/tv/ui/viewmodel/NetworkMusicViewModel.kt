@@ -49,7 +49,7 @@ class NetworkMusicViewModel(app: Application) : AndroidViewModel(app) {
     init {
         // 监听网络收藏变化（DataStore 持久化，响应式更新）
         viewModelScope.launch {
-            prefs.networkFavorites.collect { favorites ->
+            prefs.history.networkFavorites.collect { favorites ->
                 _networkFavorites.value = favorites
             }
         }
@@ -78,7 +78,7 @@ class NetworkMusicViewModel(app: Application) : AndroidViewModel(app) {
                     networkId = song.networkId ?: "",
                     addedAtMs = System.currentTimeMillis()
                 )
-                prefs.toggleNetworkFavorite(item)
+                prefs.history.toggleNetworkFavorite(item)
             }
         } else {
             // NAS 歌曲：走后端 adapter
@@ -198,7 +198,7 @@ class NetworkMusicViewModel(app: Application) : AndroidViewModel(app) {
 
     /** 同步刷新连接状态（初始化与开关切换后调用） */
     fun refreshBaiduConnectionState() {
-        val cfg = prefs.getBaiduConfigSync()
+        val cfg = prefs.baidu.getBaiduConfigSync()
         val prevState = _baiduConnectionState.value
         _baiduConnectionState.value = when {
             !cfg.isActive -> BaiduConnectionState.Off
@@ -280,7 +280,7 @@ class NetworkMusicViewModel(app: Application) : AndroidViewModel(app) {
 
     /** 验证 token 有效后，检查用户配置的音乐根目录是否存在 */
     private fun checkMusicRootDirAfterVerify() {
-        val musicRoot = prefs.getBaiduMusicRootDirSync()
+        val musicRoot = prefs.baidu.getBaiduMusicRootDirSync()
         // 如果音乐根目录就是 APP_DIR 本身，不需要额外检查
         if (musicRoot == BaiduNetdiskConfig.APP_DIR) {
             onVerifyBaiduSuccess()
@@ -311,10 +311,10 @@ class NetworkMusicViewModel(app: Application) : AndroidViewModel(app) {
         _baiduConnectionState.value = BaiduConnectionState.LoggedIn
         AppLog.d("BaiduAuth", "onVerifyBaiduSuccess: set state=LoggedIn")
         // 沙箱策略修正：如果用户保存的根目录不在 /apps/NASMusicTV 下，自动修正
-        val savedRoot = prefs.getBaiduMusicRootDirSync()
+        val savedRoot = prefs.baidu.getBaiduMusicRootDirSync()
         if (!savedRoot.startsWith(BaiduNetdiskConfig.APP_DIR)) {
             AppLog.i("BaiduAuth", "onVerifyBaiduSuccess: musicRootDir='$savedRoot' outside sandbox, resetting to ${BaiduNetdiskConfig.APP_DIR}")
-            prefs.setBaiduMusicRootDirSync(BaiduNetdiskConfig.APP_DIR)
+            prefs.baidu.setBaiduMusicRootDirSync(BaiduNetdiskConfig.APP_DIR)
             _netdiskCurrentDir.value = BaiduNetdiskConfig.APP_DIR
         }
         triggerBaiduIndexScanIfNeeded()
@@ -322,7 +322,7 @@ class NetworkMusicViewModel(app: Application) : AndroidViewModel(app) {
 
     /** 设置百度源总开关 */
     fun setBaiduEnabled(enabled: Boolean) {
-        prefs.setBaiduEnabledSync(enabled)
+        prefs.baidu.setBaiduEnabledSync(enabled)
         refreshBaiduConnectionState()
     }
 
@@ -472,7 +472,7 @@ class NetworkMusicViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             _netdiskIsLoading.value = true
             try {
-                val rootDir = prefs.getBaiduMusicRootDirSync().ifBlank { BaiduNetdiskConfig.APP_DIR }
+                val rootDir = prefs.baidu.getBaiduMusicRootDirSync().ifBlank { BaiduNetdiskConfig.APP_DIR }
                 val files = baiduApi.searchAudio(keyword, dir = rootDir)
                 _netdiskSearchResults.value = files.map { it.toSong() }
             } catch (e: Exception) {
@@ -554,7 +554,7 @@ class NetworkMusicViewModel(app: Application) : AndroidViewModel(app) {
 
     fun triggerBaiduIndexScanIfNeeded() {
         val index = baiduIndexCache.load()
-        val root = prefs.getBaiduMusicRootDirSync().ifBlank { BaiduNetdiskConfig.APP_DIR }
+        val root = prefs.baidu.getBaiduMusicRootDirSync().ifBlank { BaiduNetdiskConfig.APP_DIR }
         if (index == null || index.rootPath != root) {
             rebuildBaiduIndex()
         } else {
@@ -568,7 +568,7 @@ class NetworkMusicViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             _baiduIndexScanning.value = true
             _baiduIndexScanned.value = 0
-            val root = prefs.getBaiduMusicRootDirSync().ifBlank { BaiduNetdiskConfig.APP_DIR }
+            val root = prefs.baidu.getBaiduMusicRootDirSync().ifBlank { BaiduNetdiskConfig.APP_DIR }
             val callback = object : BaiduFileIndexCache.ProgressCallback {
                 override fun onProgress(scanned: Int) { _baiduIndexScanned.value = scanned }
                 override fun onComplete(total: Int) {
@@ -581,7 +581,7 @@ class NetworkMusicViewModel(app: Application) : AndroidViewModel(app) {
                 }
             }
             try {
-                val mvDir = prefs.getBaiduMvDirSync()
+                val mvDir = prefs.baidu.getBaiduMvDirSync()
                 baiduIndexCache.fullScan(root, baiduApi, mvDir, callback)
                 // 扫描成功后，对 coverUrl 为空的音频条目启动 APIC 后台提取。
                 // listall+web=1 返回的 thumbs 仅对图片/视频有效，音频文件几乎都为 null。
@@ -640,7 +640,7 @@ class NetworkMusicViewModel(app: Application) : AndroidViewModel(app) {
     // ---- 配置项 ----
 
     fun setBaiduMusicRootDir(dir: String) {
-        prefs.setBaiduMusicRootDirSync(dir)
+        prefs.baidu.setBaiduMusicRootDirSync(dir)
         _netdiskCurrentDir.value = dir
         // 根目录变更后旧索引失效，触发重建
         rebuildBaiduIndex()
@@ -651,7 +651,7 @@ class NetworkMusicViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun setBaiduMvDir(dir: String?) {
-        prefs.setBaiduMvDirSync(dir)
+        prefs.baidu.setBaiduMvDirSync(dir)
     }
 
     /** 加载索引中的歌曲（供 NetdiskScreen 首页展示已扫描曲库） */
@@ -662,7 +662,7 @@ class NetworkMusicViewModel(app: Application) : AndroidViewModel(app) {
     fun restoreBaiduIndexOnStart(onIndexLoaded: (com.nasmusic.tv.data.model.BaiduFileIndex) -> Unit) {
         viewModelScope.launch {
             kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
-                val baiduCfg = prefs.getBaiduConfigSync()
+                val baiduCfg = prefs.baidu.getBaiduConfigSync()
                 AppLog.d("BaiduAuth", "init: cfg.isActive=${baiduCfg.isActive}, tokens=${baiduCfg.tokens != null}")
                 if (baiduCfg.isActive) {
                     val savedIndex = baiduIndexCache.load()

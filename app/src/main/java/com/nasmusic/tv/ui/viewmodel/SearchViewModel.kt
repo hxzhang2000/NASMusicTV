@@ -163,7 +163,7 @@ class SearchViewModel(
                 _searchResults.value = UiState.Success(songs)
                 // 搜索成功后才记录历史（空结果也算成功，记录用户确实搜过的词；
                 // 失败不记录，避免污染热门榜）
-                prefs.recordSearch(query)
+                prefs.history.recordSearch(query)
                 AppLog.d(
                     "SearchViewModel",
                     "searchSongsOnServer: ${songs.size} results for '$query' breakdown=${result.sourceBreakdown}"
@@ -266,7 +266,7 @@ class SearchViewModel(
                 AppLog.i("MetingDiag", "doNetworkSearch: got ${results.size} results for '$keyword'")
                 _networkSearchResults.value = UiState.Success(results)
                 // 搜索成功后才记录历史（空结果也算成功；shuffleNetworkSearch 不走此路径，不会重复记录）
-                prefs.recordSearch(keyword)
+                prefs.history.recordSearch(keyword)
             }
         }
     }

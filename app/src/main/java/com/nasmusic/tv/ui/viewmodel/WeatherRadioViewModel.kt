@@ -83,7 +83,7 @@ class WeatherRadioViewModel(
             _weatherLoading.value = true
             _weatherError.value = null
             try {
-                val apiKey = prefs.getWeatherApiKeySync()
+                val apiKey = prefs.weather.getWeatherApiKeySync()
                 val weather = weatherApi.fetchCurrentWeather(
                     openWeatherMapApiKey = apiKey.ifBlank { null }
                 )

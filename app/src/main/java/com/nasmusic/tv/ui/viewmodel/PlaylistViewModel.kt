@@ -30,7 +30,7 @@ class PlaylistViewModel(app: Application) : AndroidViewModel(app) {
     init {
         // 监听本地歌单变化（DataStore 持久化，响应式更新）
         viewModelScope.launch {
-            prefs.localPlaylists.collect { playlists ->
+            prefs.playlist.localPlaylists.collect { playlists ->
                 _localPlaylists.value = playlists
             }
         }
@@ -43,7 +43,7 @@ class PlaylistViewModel(app: Application) : AndroidViewModel(app) {
         if (name.isBlank()) return
         viewModelScope.launch {
             try {
-                prefs.createLocalPlaylist(name)
+                prefs.playlist.createLocalPlaylist(name)
             } catch (e: Exception) {
                 AppLog.e("PlaylistViewModel", "createLocalPlaylist failed", e)
                 showError(getApplication<Application>().getString(R.string.create_playlist_error, e.message?.take(50)))
@@ -58,7 +58,7 @@ class PlaylistViewModel(app: Application) : AndroidViewModel(app) {
         if (newName.isBlank()) return
         viewModelScope.launch {
             try {
-                prefs.renameLocalPlaylist(id, newName)
+                prefs.playlist.renameLocalPlaylist(id, newName)
             } catch (e: Exception) {
                 AppLog.e("PlaylistViewModel", "renameLocalPlaylist failed", e)
                 showError(getApplication<Application>().getString(R.string.rename_playlist_error, e.message?.take(50)))
@@ -72,7 +72,7 @@ class PlaylistViewModel(app: Application) : AndroidViewModel(app) {
     fun deleteLocalPlaylist(id: String) {
         viewModelScope.launch {
             try {
-                prefs.deleteLocalPlaylist(id)
+                prefs.playlist.deleteLocalPlaylist(id)
             } catch (e: Exception) {
                 AppLog.e("PlaylistViewModel", "deleteLocalPlaylist failed", e)
                 showError(getApplication<Application>().getString(R.string.delete_playlist_error, e.message?.take(50)))
@@ -86,7 +86,7 @@ class PlaylistViewModel(app: Application) : AndroidViewModel(app) {
     fun addSongToPlaylist(playlistId: String, song: Song) {
         viewModelScope.launch {
             try {
-                val added = prefs.addSongToPlaylist(playlistId, song)
+                val added = prefs.playlist.addSongToPlaylist(playlistId, song)
                 if (!added) {
                     showError(getApplication<Application>().getString(R.string.song_already_in_playlist, ""))
                 }
@@ -103,7 +103,7 @@ class PlaylistViewModel(app: Application) : AndroidViewModel(app) {
     fun removeSongFromPlaylist(playlistId: String, songId: String) {
         viewModelScope.launch {
             try {
-                prefs.removeSongFromPlaylist(playlistId, songId)
+                prefs.playlist.removeSongFromPlaylist(playlistId, songId)
             } catch (e: Exception) {
                 AppLog.e("PlaylistViewModel", "removeSongFromPlaylist failed", e)
                 showError(getApplication<Application>().getString(R.string.remove_from_local_playlist_error, e.message?.take(50)))

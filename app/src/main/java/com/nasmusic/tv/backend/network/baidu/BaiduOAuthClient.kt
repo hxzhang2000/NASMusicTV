@@ -39,8 +39,8 @@ class BaiduOAuthClient(
     private val refreshLock = Mutex()
 
     /** 解析 AppKey/SecretKey：优先用户自填，否则用编译期嵌入的默认值 */
-    private fun resolveAppKey(): String? = prefs.getBaiduCustomAppKeySync() ?: BuildConfig.BAIDU_APP_ID.takeIf { it.isNotBlank() }
-    private fun resolveSecretKey(): String? = prefs.getBaiduCustomSecretKeySync() ?: BuildConfig.BAIDU_APP_SECRET.takeIf { it.isNotBlank() }
+    private fun resolveAppKey(): String? = prefs.baidu.getBaiduCustomAppKeySync() ?: BuildConfig.BAIDU_APP_ID.takeIf { it.isNotBlank() }
+    private fun resolveSecretKey(): String? = prefs.baidu.getBaiduCustomSecretKeySync() ?: BuildConfig.BAIDU_APP_SECRET.takeIf { it.isNotBlank() }
 
     /** 设备码请求结果（供 UI 显示） */
     data class DeviceCodeResult(
@@ -161,7 +161,7 @@ class BaiduOAuthClient(
                             (json.get("expires_in")?.asLong ?: 2592000L) * 1000,
                         scope = grantedScope
                     )
-                    prefs.saveBaiduTokensSync(tokens)
+                    prefs.baidu.saveBaiduTokensSync(tokens)
                     AppLog.i(TAG, "device code auth success, scope='$grantedScope'")
                     return@use PollResult.Success(tokens)
                 }
@@ -189,7 +189,7 @@ class BaiduOAuthClient(
      * @return 有效 token；未登录或刷新失败返回 null
      */
     suspend fun getValidAccessToken(): String? = withContext(Dispatchers.IO) {
-        val tokens = prefs.getBaiduTokensSync()
+        val tokens = prefs.baidu.getBaiduTokensSync()
         if (tokens == null) {
             AppLog.d(TAG, "getValidAccessToken: no tokens in prefs")
             return@withContext null
@@ -208,7 +208,7 @@ class BaiduOAuthClient(
      * @return 新 token；未登录或刷新失败返回 null
      */
     suspend fun forceRefreshAccessToken(): String? = withContext(Dispatchers.IO) {
-        val tokens = prefs.getBaiduTokensSync() ?: return@withContext null
+        val tokens = prefs.baidu.getBaiduTokensSync() ?: return@withContext null
         AppLog.w(TAG, "forceRefreshAccessToken: token 被服务端判定失效，强制刷新一次")
         refreshAccessToken(tokens.refreshToken)
     }
@@ -222,7 +222,7 @@ class BaiduOAuthClient(
     suspend fun refreshAccessToken(refreshToken: String): String? = refreshLock.withLock {
         withContext(Dispatchers.IO) {
             // 加锁后复查：可能已有协程刷新过
-            val current = prefs.getBaiduTokensSync()
+            val current = prefs.baidu.getBaiduTokensSync()
             if (current != null && current.refreshToken != refreshToken && !current.needsRefresh()) {
                 AppLog.d(TAG, "refreshAccessToken: already refreshed by another coroutine")
                 return@withContext current.accessToken
@@ -260,7 +260,7 @@ class BaiduOAuthClient(
                                 (json.get("expires_in")?.asLong ?: 2592000L) * 1000,
                             scope = grantedScope
                         )
-                        prefs.saveBaiduTokensSync(newTokens)
+                        prefs.baidu.saveBaiduTokensSync(newTokens)
                         AppLog.i(TAG, "access_token refreshed successfully, scope='$grantedScope'")
                         newTokens.accessToken
                     } else {
@@ -277,7 +277,7 @@ class BaiduOAuthClient(
 
     /** 登出：清除 token */
     suspend fun logout() {
-        prefs.clearBaiduTokensSync()
+        prefs.baidu.clearBaiduTokensSync()
     }
 
     companion object {

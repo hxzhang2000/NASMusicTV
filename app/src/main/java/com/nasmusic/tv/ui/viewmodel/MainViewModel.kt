@@ -125,7 +125,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
     private val mvSearchManager = nasMusicApp.mvSearchManager
     val prefs = nasMusicApp.appPreferences
     /** 搜索历史（最近输入 + 最多搜索） */
-    val searchHistory = prefs.searchHistory
+    val searchHistory = prefs.history.searchHistory
     // --- 封面滤镜设置 ---
     private val _coverFilterEnabled = MutableStateFlow(false)
     val coverFilterEnabled: StateFlow<Boolean> = _coverFilterEnabled.asStateFlow()
@@ -484,7 +484,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
      * 初始化音乐来源（从持久化存储读取）
      */
     private fun initMusicSource() {
-        val savedKey = prefs.getMusicSourceSync()
+        val savedKey = prefs.network.getMusicSourceSync()
         val source = MusicSource.fromApiKey(savedKey)
         _currentMusicSource.value = source
         _searchNetworkPlatform.value = source.apiKey
@@ -501,7 +501,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
         _currentMusicSource.value = source
         _searchNetworkPlatform.value = source.apiKey
         viewModelScope.launch {
-            prefs.setMusicSource(source.apiKey)
+            prefs.network.setMusicSource(source.apiKey)
             // 有搜索关键词时自动重新搜索（R-1：经 SearchViewModel）
             val kw = _searchVM.networkSearchKeyword.value
             if (kw.isNotBlank()) {
@@ -685,8 +685,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
             _playerVM.initPlayModeFromSettings(settings.defaultPlayMode)
 
             // 初始化升降调/变速（从 AppPreferences 恢复）——R-1 后委托 VocalSeparationViewModel
-            val savedPitch = prefs.pitchSemitones.first()
-            val savedSpeed = prefs.playbackSpeed.first()
+            val savedPitch = prefs.player.pitchSemitones.first()
+            val savedSpeed = prefs.player.playbackSpeed.first()
             playerManager.setPitch(savedPitch)
             playerManager.setSpeed(savedSpeed.toFloat())
             AppLog.d("MainViewModel", "init: pitch=$savedPitch, speed=$savedSpeed")
@@ -797,7 +797,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
                 songs to index
             }.collect { (songs, index) ->
                 if (songs.isNotEmpty()) {
-                    prefs.saveLastQueue(songs, index)
+                    prefs.queue.saveLastQueue(songs, index)
                 }
             }
         }
@@ -1280,7 +1280,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
         viewModelScope.launch {
             try {
                 // 读取持久化的最近播放完整歌曲对象（含网络歌曲，不依赖 NAS 连接）
-                val recent = prefs.getRecentSongObjects()
+                val recent = prefs.history.getRecentSongObjects()
                 _recentSongs.value = UiState.Success(recent)
                 AppLog.d("NASMusic", "loadRecentSongs: ${recent.size} recent songs loaded")
             } catch (e: Exception) {
@@ -2183,14 +2183,14 @@ showError(getApplication<Application>().getString(R.string.toggle_favorite_error
     fun recordPlay(song: Song) {
         viewModelScope.launch {
             // 单次 DataStore edit 同时更新 id 列表 + 播放次数 + 完整歌曲对象
-            prefs.recordPlayWithSong(song)
+            prefs.history.recordPlayWithSong(song)
             // 刷新最近播放列表，不显示 loading 以避免闪烁
             loadRecentSongs(showLoading = false)
         }
     }
 
-    val recentSongIds = prefs.recentSongIds
-    val playCounts = prefs.playCounts
+    val recentSongIds = prefs.history.recentSongIds
+    val playCounts = prefs.history.playCounts
 
 
     // --- A-3 流派/年代歌曲加载 ---
@@ -2476,7 +2476,7 @@ showError(getApplication<Application>().getString(R.string.toggle_favorite_error
         _currentLyrics.value = null
         _lyricsAvailability.value = LyricsAvailability()
         // 清除持久化的上次播放队列
-        viewModelScope.launch { prefs.clearLastQueue() }
+        viewModelScope.launch { prefs.queue.clearLastQueue() }
     }
 
     private fun loadLyricsForCurrentSong() {
@@ -2695,54 +2695,54 @@ showError(getApplication<Application>().getString(R.string.toggle_favorite_error
 
     // --- 设置 ---
     fun updateDarkTheme(enabled: Boolean) = viewModelScope.launch {
-        prefs.setDarkTheme(enabled)
+        prefs.player.setDarkTheme(enabled)
     }
 
     fun updateAnimationsEnabled(enabled: Boolean) = viewModelScope.launch {
-        prefs.setAnimationsEnabled(enabled)
+        prefs.player.setAnimationsEnabled(enabled)
     }
 
     fun updateAutoPlayNext(enabled: Boolean) = viewModelScope.launch {
-        prefs.setAutoPlayNext(enabled)
+        prefs.player.setAutoPlayNext(enabled)
     }
 
     fun updateDefaultPlayMode(mode: PlayMode) = viewModelScope.launch {
-        prefs.setDefaultPlayMode(mode)
+        prefs.player.setDefaultPlayMode(mode)
         setPlayMode(mode)
     }
 
     fun updateCacheLyrics(enabled: Boolean) = viewModelScope.launch {
-        prefs.setCacheLyrics(enabled)
+        prefs.lyrics.setCacheLyrics(enabled)
     }
 
     fun updateCacheCover(enabled: Boolean) = viewModelScope.launch {
-        prefs.setCacheCover(enabled)
+        prefs.lyrics.setCacheCover(enabled)
     }
 
     fun updateLyricsOffset(offsetMs: Long) = viewModelScope.launch {
-        prefs.setLyricsOffset(offsetMs)
+        prefs.lyrics.setLyricsOffset(offsetMs)
     }
 
     fun updateLyricsFontScale(scale: Float) = viewModelScope.launch {
-        prefs.setLyricsFontScale(scale)
+        prefs.lyrics.setLyricsFontScale(scale)
     }
 
     suspend fun updateLanguage(lang: String) {
-        prefs.setLanguage(lang)
+        prefs.languagePrefs.setLanguage(lang)
         // 立即应用语言变更（重启 Activity 以重新加载所有资源）
         (getApplication() as? NasMusicApp)?.applyLocale(lang)
     }
 
     fun updateCoverFilterEnabled(enabled: Boolean) = viewModelScope.launch {
-        prefs.setCoverFilterEnabled(enabled)
+        prefs.visualizer.setCoverFilterEnabled(enabled)
     }
 
     fun updateCoverFilterBlurRadius(radius: Float) = viewModelScope.launch {
-        prefs.setCoverFilterBlurRadius(radius)
+        prefs.visualizer.setCoverFilterBlurRadius(radius)
     }
 
     fun updateCoverFilterDarkOverlay(overlay: Float) = viewModelScope.launch {
-        prefs.setCoverFilterDarkOverlay(overlay)
+        prefs.visualizer.setCoverFilterDarkOverlay(overlay)
     }
 
     /**
@@ -2752,9 +2752,9 @@ showError(getApplication<Application>().getString(R.string.toggle_favorite_error
     fun updateMetingApiBaseUrl(url: String) = viewModelScope.launch {
         val normalized = url.trim()
         if (normalized.isEmpty()) {
-            prefs.setMetingApiBaseUrl(com.nasmusic.tv.backend.network.MetingApiService.DEFAULT_BASE_URL)
+            prefs.network.setMetingApiBaseUrl(com.nasmusic.tv.backend.network.MetingApiService.DEFAULT_BASE_URL)
         } else {
-            prefs.setMetingApiBaseUrl(normalized)
+            prefs.network.setMetingApiBaseUrl(normalized)
         }
     }
 
@@ -2765,27 +2765,27 @@ showError(getApplication<Application>().getString(R.string.toggle_favorite_error
     fun updateMvApiBaseUrl(url: String) = viewModelScope.launch {
         val normalized = url.trim()
         if (normalized.isEmpty()) {
-            prefs.setMvApiBaseUrl(com.nasmusic.tv.backend.network.mv.BilibiliMvService.DEFAULT_BASE_URL)
+            prefs.network.setMvApiBaseUrl(com.nasmusic.tv.backend.network.mv.BilibiliMvService.DEFAULT_BASE_URL)
         } else {
-            prefs.setMvApiBaseUrl(normalized)
+            prefs.network.setMvApiBaseUrl(normalized)
         }
     }
 
     fun updateLyricsKugouBaseUrl(url: String) = viewModelScope.launch {
         val normalized = url.trim()
         if (normalized.isEmpty()) {
-            prefs.setLyricsKugouBaseUrl(com.nasmusic.tv.lyrics.LyricsNetworkProvider.DEFAULT_KUGOU_BASE_URL)
+            prefs.lyrics.setLyricsKugouBaseUrl(com.nasmusic.tv.lyrics.LyricsNetworkProvider.DEFAULT_KUGOU_BASE_URL)
         } else {
-            prefs.setLyricsKugouBaseUrl(normalized)
+            prefs.lyrics.setLyricsKugouBaseUrl(normalized)
         }
     }
 
     fun updateLyricsNeteaseBaseUrl(url: String) = viewModelScope.launch {
         val normalized = url.trim()
         if (normalized.isEmpty()) {
-            prefs.setLyricsNeteaseBaseUrl(com.nasmusic.tv.lyrics.LyricsNetworkProvider.DEFAULT_NETEASE_BASE_URL)
+            prefs.lyrics.setLyricsNeteaseBaseUrl(com.nasmusic.tv.lyrics.LyricsNetworkProvider.DEFAULT_NETEASE_BASE_URL)
         } else {
-            prefs.setLyricsNeteaseBaseUrl(normalized)
+            prefs.lyrics.setLyricsNeteaseBaseUrl(normalized)
         }
     }
 
@@ -2793,36 +2793,36 @@ showError(getApplication<Application>().getString(R.string.toggle_favorite_error
      * 更新 OpenWeatherMap API Key
      */
     fun updateWeatherApiKey(key: String) = viewModelScope.launch {
-        prefs.setWeatherApiKey(key.trim())
+        prefs.weather.setWeatherApiKey(key.trim())
     }
 
     fun updateSpectrumEnabled(enabled: Boolean) = viewModelScope.launch {
-        prefs.setSpectrumEnabled(enabled)
+        prefs.visualizer.setSpectrumEnabled(enabled)
     }
 
     fun updateVisualizerTheme(theme: com.nasmusic.tv.data.model.VisualizerTheme) = viewModelScope.launch {
-        prefs.setVisualizerTheme(theme)
+        prefs.visualizer.setVisualizerTheme(theme)
     }
 
     // --- 歌曲离线下载设置 ---
     fun updateDownloadEnabled(enabled: Boolean) = viewModelScope.launch {
-        prefs.setDownloadEnabled(enabled)
+        prefs.download.setDownloadEnabled(enabled)
     }
 
     fun updateAutoDownloadOnPlay(enabled: Boolean) = viewModelScope.launch {
-        prefs.setAutoDownloadOnPlay(enabled)
+        prefs.download.setAutoDownloadOnPlay(enabled)
     }
 
     fun updateAutoDownloadLimit(limit: Int) = viewModelScope.launch {
-        prefs.setAutoDownloadLimit(limit)
+        prefs.download.setAutoDownloadLimit(limit)
     }
 
     fun updateDownloadLocation(location: String) = viewModelScope.launch {
-        prefs.setDownloadLocation(location)
+        prefs.download.setDownloadLocation(location)
     }
 
     fun updateFontAdjustment(adjustment: Int) = viewModelScope.launch {
-        prefs.setFontAdjustment(adjustment)
+        prefs.visualizer.setFontAdjustment(adjustment)
     }
 
     /** 手动下载单曲（歌曲行 ⬇ 按钮）——已迁至 DownloadViewModel.downloadSong */
@@ -2896,13 +2896,13 @@ showError(getApplication<Application>().getString(R.string.toggle_favorite_error
     // （clearMvPersistentCache / clearAccompanimentCache 已迁至子 ViewModel 转发区，勿重复定义）
 
     // --- B-4 均衡器 ---
-    val equalizerPreset: StateFlow<EqualizerPreset> = prefs.equalizerPreset.stateIn(
+    val equalizerPreset: StateFlow<EqualizerPreset> = prefs.visualizer.equalizerPreset.stateIn(
         scope = viewModelScope,
         started = SharingStarted.Eagerly,
         initialValue = EqualizerPreset.NORMAL
     )
 
-    val equalizerBands: StateFlow<List<Float>> = prefs.equalizerBands.stateIn(
+    val equalizerBands: StateFlow<List<Float>> = prefs.visualizer.equalizerBands.stateIn(
         scope = viewModelScope,
         started = SharingStarted.Eagerly,
         initialValue = emptyList()
@@ -2910,9 +2910,9 @@ showError(getApplication<Application>().getString(R.string.toggle_favorite_error
 
     fun setEqualizerPreset(preset: EqualizerPreset) {
         viewModelScope.launch {
-            prefs.setEqualizerPreset(preset)
+            prefs.visualizer.setEqualizerPreset(preset)
             // 同时持久化频段数据到 DataStore，确保 UI 能正确显示 currentBands
-            prefs.setEqualizerBands(preset.bandGains)
+            prefs.visualizer.setEqualizerBands(preset.bandGains)
             // 应用频段到 PlayerManager
             playerManager.setEqualizerBands(preset.bandGains)
         }
@@ -2920,7 +2920,7 @@ showError(getApplication<Application>().getString(R.string.toggle_favorite_error
 
     fun setEqualizerBand(index: Int, value: Float) {
         viewModelScope.launch {
-            prefs.setEqualizerBand(index, value)
+            prefs.visualizer.setEqualizerBand(index, value)
             // Apply to PlayerManager audio engine
             playerManager.setEqualizerBand(index, value)
         }
@@ -3121,7 +3121,7 @@ showError(getApplication<Application>().getString(R.string.toggle_favorite_error
 
     /** 是否已配置 Jamendo Client ID（未配置时 Jamendo 显示引导卡） */
     val jamendoConfigured: Boolean
-        get() = prefs.getJamendoClientIdSync().isNotBlank()
+        get() = prefs.network.getJamendoClientIdSync().isNotBlank()
 
     /** 加载 Jamendo 热门榜（幂等：已有数据则不重复请求） */
     fun loadJamendoHot() {
@@ -3173,7 +3173,7 @@ showError(getApplication<Application>().getString(R.string.toggle_favorite_error
     /** 更新 Jamendo Client ID 并动态注册/注销服务 */
     fun updateJamendoClientId(id: String) {
         viewModelScope.launch {
-            prefs.setJamendoClientId(id)
+            prefs.network.setJamendoClientId(id)
             if (id.isNotBlank()) {
                 nasMusicApp.networkMusicManager.registerService(nasMusicApp.jamendoService)
             } else {

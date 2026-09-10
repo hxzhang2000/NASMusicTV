@@ -71,7 +71,7 @@ class BaiduNetdiskService(
         val localDeferred = async { localSearch() }
         val apiDeferred = async {
             try {
-                val rootDir = prefs.getBaiduMusicRootDirSync().ifBlank { BaiduNetdiskConfig.APP_DIR }
+                val rootDir = prefs.baidu.getBaiduMusicRootDirSync().ifBlank { BaiduNetdiskConfig.APP_DIR }
                 api.searchAudio(keyword, dir = rootDir).map { it.toSong() }
             } catch (e: Exception) {
                 AppLog.w(TAG, "search API failed, fallback to index only", e)

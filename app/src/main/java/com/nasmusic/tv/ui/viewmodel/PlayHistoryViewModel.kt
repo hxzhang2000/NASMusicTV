@@ -46,7 +46,7 @@ class PlayHistoryViewModel(app: Application) : AndroidViewModel(app) {
             durationTotalMs = song.durationMs
         )
         viewModelScope.launch {
-            prefs.addPlayRecord(record)
+            prefs.history.addPlayRecord(record)
             // 更新内存中的记录列表
             _playRecords.value = listOf(record) + _playRecords.value.take(499)
             refreshPlayStatistics()
@@ -100,7 +100,7 @@ class PlayHistoryViewModel(app: Application) : AndroidViewModel(app) {
      */
     fun loadPlayRecords() {
         viewModelScope.launch {
-            val records = prefs.getPlayRecords()
+            val records = prefs.history.getPlayRecords()
             _playRecords.value = records
             refreshPlayStatistics()
         }
@@ -111,7 +111,7 @@ class PlayHistoryViewModel(app: Application) : AndroidViewModel(app) {
      */
     fun clearPlayRecords() {
         viewModelScope.launch {
-            prefs.clearPlayRecords()
+            prefs.history.clearPlayRecords()
             _playRecords.value = emptyList()
             _playStatistics.value = PlayStatistics()
         }

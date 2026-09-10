@@ -48,7 +48,7 @@ class BackupViewModel(app: Application) : AndroidViewModel(app) {
     fun exportBackup() {
         viewModelScope.launch {
             try {
-                val data = prefs.exportBackupData().copy(
+                val data = prefs.backup.exportBackupData().copy(
                     mvCacheEntries = mvSearchManager.exportMvCache()
                 )
                 val json = Gson().toJson(data)
@@ -76,7 +76,7 @@ class BackupViewModel(app: Application) : AndroidViewModel(app) {
             try {
                 val json = BackupFileUtils.read(getApplication(), uri).getOrThrow()
                 val data = Gson().fromJson(json, AppPreferences.BackupData::class.java)
-                prefs.importBackupData(data)
+                prefs.backup.importBackupData(data)
                 mvSearchManager.importMvCache(data.mvCacheEntries)
                 // 刷新受备份影响的 UI 状态
                 refreshAfterImport()
@@ -95,7 +95,7 @@ class BackupViewModel(app: Application) : AndroidViewModel(app) {
     suspend fun restoreBackupFromJson(json: String): Boolean {
         return try {
             val data = Gson().fromJson(json, AppPreferences.BackupData::class.java)
-            prefs.importBackupData(data)
+            prefs.backup.importBackupData(data)
             mvSearchManager.importMvCache(data.mvCacheEntries)
             refreshAfterImport()
             _backupMessage.value = BackupMessage(getApplication<Application>().getString(R.string.backup_restored))

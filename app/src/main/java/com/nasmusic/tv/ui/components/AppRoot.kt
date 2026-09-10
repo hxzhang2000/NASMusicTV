@@ -120,14 +120,14 @@ fun AppRoot(
     val serverConfig by viewModel.serverConfig.collectAsState(initial = ServerConfig.Empty)
     val settings by viewModel.appSettings.collectAsState(initial = com.nasmusic.tv.data.model.AppSettings())
     // 封面滤镜状态（跨屏幕共享，用于 NowPlaying + Settings）
-    val coverFilterEnabled by viewModel.prefs.coverFilterEnabled.collectAsState(initial = false)
-    val coverFilterBlurRadius by viewModel.prefs.coverFilterBlurRadius.collectAsState(initial = 8f)
-    val coverFilterDarkOverlay by viewModel.prefs.coverFilterDarkOverlay.collectAsState(initial = 0.3f)
+    val coverFilterEnabled by viewModel.prefs.visualizer.coverFilterEnabled.collectAsState(initial = false)
+    val coverFilterBlurRadius by viewModel.prefs.visualizer.coverFilterBlurRadius.collectAsState(initial = 8f)
+    val coverFilterDarkOverlay by viewModel.prefs.visualizer.coverFilterDarkOverlay.collectAsState(initial = 0.3f)
 
     // 加入歌单弹窗目标歌曲（提升到 AppRoot 顶层，供 Library / 专辑详情 / 艺术家详情 共用）
     var pickerSong by remember { mutableStateOf<Song?>(null) }
     // 天气 API Key
-    val weatherApiKey by viewModel.prefs.weatherApiKey.collectAsState(initial = "")
+    val weatherApiKey by viewModel.prefs.weather.weatherApiKey.collectAsState(initial = "")
     // 百度网盘状态（设置页网盘分区）
     val baiduConnectionState by viewModel.baiduConnectionState.collectAsState(initial = com.nasmusic.tv.ui.viewmodel.NetworkMusicViewModel.BaiduConnectionState.Off)
     val baiduDeviceCode by viewModel.baiduDeviceCode.collectAsState(initial = null)
@@ -311,7 +311,7 @@ fun AppRoot(
                 Screen.NowPlaying -> {
                     // 修复（H-3）：20fps 频谱流只在本页收集，不再驱动 AppRoot 全树重组
                     val spectrumData by viewModel.spectrumData.collectAsState(initial = FloatArray(0))
-                    val lyricsFontScale by viewModel.prefs.lyricsFontScale.collectAsState(initial = 1.0f)
+                    val lyricsFontScale by viewModel.prefs.lyrics.lyricsFontScale.collectAsState(initial = 1.0f)
                     val vocalRemovalEnabled by viewModel.vocalRemovalEnabled.collectAsState()
                     val pitchSemitones by viewModel.pitchSemitones.collectAsState()
                     val playbackSpeed by viewModel.playbackSpeed.collectAsState()
@@ -697,10 +697,10 @@ fun AppRoot(
                     var showBackupTransferDialog by remember { mutableStateOf(false) }
                     var showModelTransferDialog by remember { mutableStateOf(false) }
                     // 修复（H-3）：组合内 runBlocking 同步读改为 Flow 订阅
-                    val baiduConfig by viewModel.prefs.baiduConfigFlow.collectAsState(
+                    val baiduConfig by viewModel.prefs.baidu.baiduConfigFlow.collectAsState(
                         initial = com.nasmusic.tv.data.model.CloudDriveConfig(com.nasmusic.tv.data.model.CloudDriveType.BAIDU)
                     )
-                    val jamendoClientId by viewModel.prefs.jamendoClientIdFlow.collectAsState(initial = "")
+                    val jamendoClientId by viewModel.prefs.network.jamendoClientIdFlow.collectAsState(initial = "")
                     val separationMode by viewModel.separationMode.collectAsState()
                     val modelDownloaded by viewModel.modelDownloaded.collectAsState()
                     val modelDownloading by viewModel.modelDownloading.collectAsState()

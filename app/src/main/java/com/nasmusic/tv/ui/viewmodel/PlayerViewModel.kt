@@ -290,7 +290,7 @@ class PlayerViewModel(
      * 网络歌曲的 streamUrl 在播放时由 NetworkMusicManager.resolvePlayUrl() 解析。
      */
     suspend fun restoreLastQueue() {
-        val lastQueue = prefs.getLastQueue() ?: return
+        val lastQueue = prefs.queue.getLastQueue() ?: return
         val songs = lastQueue.songs
         if (songs.isNullOrEmpty()) return
         AppLog.d("PlayerViewModel", "restoreLastQueue: ${lastQueue.songs.size} songs, index=${lastQueue.currentIndex}")
@@ -359,7 +359,7 @@ class PlayerViewModel(
 
     fun clearQueue(onCleared: () -> Unit) {
         playerManager.clearQueue()
-        viewModelScope.launch { prefs.clearLastQueue() }
+        viewModelScope.launch { prefs.queue.clearLastQueue() }
         onCleared()
     }
 }

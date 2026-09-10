@@ -39,7 +39,7 @@ class BaiduMvFileService(
     ): MvSearchResult? = withContext(Dispatchers.IO) {
         if (song?.networkSource != "baidu") return@withContext null
 
-        val mvDir = prefs.getBaiduMvDirSync() ?: prefs.getBaiduMusicRootDirSync().ifBlank { null }
+        val mvDir = prefs.baidu.getBaiduMvDirSync() ?: prefs.baidu.getBaiduMusicRootDirSync().ifBlank { null }
             ?: return@withContext null
 
         val index = indexCache.load() ?: return@withContext null
