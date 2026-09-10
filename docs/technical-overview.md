@@ -7749,3 +7749,37 @@ onSearchSong = { keyword -> viewModel.searchNetworkSongs(keyword) },
 - ✅ UrlSanitizerTest 8/8 通过
 - ✅ 既有 256 个单测未受影响（compileDebugKotlin + testDebugUnitTest 路径验证）
 
+
+### 10.110 R-2/R-3/R-5/R-6/R-7/R-9 + F-2/F-4~F-7 重构第二批（2026-09-09）
+
+依据 `docs/codebase-refactoring-plan-2026-09.md`（v1.4）实施，分支 `refactor/r1-viewmodel-split`，8 个独立提交，每步 assembleDebug 通过。
+
+**R-2 SettingsScreen 拆分**：9 个 Section 迁至 `ui/screens/settings/`（General/Player/Download/Server/About/Cache/NetworkMusic/BaiduPan/Data，均 State/Actions data class 签名）；共享组件归 SettingsComponents.kt（InfoRow 重命名 SettingsInfoRow 规避同名冲突）；主文件 2529→924 行（保留侧栏/路由/8 个对话框宿主，AppRoot 零改动）。计划字面的 16 Section 按实际 9 个侧栏分区映射（Karaoke/Visualizer 等为 Player/Cache 内部子分组）。
+
+**R-3 LibraryScreen 拆分**：五个 NAS 浏览 Tab 迁至 `ui/screens/library/browse/`（AlbumGrid/ArtistList/SongList/GenreYearLists + BrowseComponents 共享件）；SEARCH/DISCOVER/RADIO 网络音乐 Tab 维持原 library/ 包不动（计划明确的处置）；主文件 1695→647 行；详情页按 v1.2 定案复用现役 AlbumDetailScreen/ArtistDetailScreen 未新写。
+
+**R-7 runBlocking 治理（含 F-3）**：
+1. 语言键双写（SharedPreferences 镜像 + DataStore 事实源）——attachBaseContext 零 IO；老版本一次性迁移 migrateLanguageMirrorIfNeeded。
+2. 8 个 provider 键 @Volatile 内存镜像（musicSource/defaultNetworkSource/jamendoClientId/metingUrl/mvUrl/lyricsKugou/lyricsNetease/weatherApiKey）——NasMusicApp.onCreate 注入 applicationScope 启动 `startProviderMirrors` 常驻收集，设置改动 ≤1s 生效；新增 ProviderMirrorTest（Robolectric 6 用例全绿）。
+3. F-3：LyricsManager baseUrl 改 lambda provider（两处构造点同步），设置页改歌词源即时生效，构造期零 IO。
+4. getCloudDriveConfigSync/saveCloudDriveConfigSync 保留 runBlocking（调用点均在 IO 协程）+ @WorkerThread 标注。
+
+**R-6 OkHttpClient 资源池化**：BackendRegistry companion 持共享资源（ConnectionPool 5 连接/5min keep-alive + Dispatcher 16 并发/8 perHost + 守护线程池 NAS-OkHttp-Shared）；5 个适配器全部注入并从 close() 移除 executorService.shutdown()/evictAll()（改为清自身认证态）——修复历史上切后端累积线程池导致电视 WiFi 栈过载的隐患路径。
+
+**R-5 人声分离提取**：SeparationMode 上提为 player 层顶层枚举（AppPreferences 保留 typealias 兼容，消除 player→data.prefs 反向依赖）；新增 VocalSeparationController（模式状态/DSP 开关/伴奏缓存清理/PlayerAdapter 窄接口切源）；HQ 分离编排（输入解析/模型加载/暂停恢复）保留 PlayerManager——与播放状态机深耦合，强搬移会造成接口爆炸。
+
+**R-9**：MainViewModel 重复 import（kotlinx.coroutines.async）删除；颜色硬编码与修复标记按计划评估保持现状。
+
+**F-2 AppRoot 重组热点**：progress/duration 收集从顶层移入 NowPlayingScreen 分支——PlayerManager 的 1000ms 轮询进度不再每秒驱动全树重组（与 H-3 频谱流下沉同向）。
+
+**F-4/F-5**：ExportCoordinator/AccompanimentCache 改注入 NasMusicApp.applicationScope（删除组件私有 scope，单例场景不 cancel 是正确语义）；LyricsPersistentCache.saveIndex 加 synchronized 写互斥（复用 H-5 原子写盘语义）。
+
+**F-6 双网卡 IP**：NetworkUtils.getLocalIpAddress 改接口优先级排序（isUp 加权 + eth>wlan），兜底保持原行为；API 22 兼容（接口名前缀匹配，不用 ConnectivityManager/ICU）。
+
+**F-7 天气 Key 加密**：新键 weather_openweathermap_api_key_enc 走 CryptoUtils AES-GCM；旧明文键一次性迁移后清除；镜像与 Flow 改读解密值（ProviderMirrorTest 加密路径下依然全绿）。
+
+**待办**：R-4（调用面分析完毕：90 个访问器分布 BaiduOAuthClient/NasMusicApp/各 VM/UI）；R-10（未启动）；文档勾选已同步本节；TV 手测回归待设备。
+
+**验证结果**：
+- ✅ 每个提交前 assembleDebug 通过
+- ✅ ProviderMirrorTest 6/6、UrlSanitizerTest 8/8、全量单测通过

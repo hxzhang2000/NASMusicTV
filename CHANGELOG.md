@@ -12,9 +12,18 @@
 ### Changed
 - 重构：MainViewModel（5451 行）按 W0 冻结清单拆分为 13 个领域子 ViewModel（WeatherRadio/Backup/Playlist/Download/MvSearch/VocalSeparation/Server/Search/NetworkMusic/Player/Navigation/PlayHistory + 事件契约 ViewModelEvents），MainViewModel 精简为协调者 + 兼容转发层（3186 行），AppRoot 引用保持不变；详见 docs/codebase-refactoring-plan-2026-09.md R-1
 - 重构：BaiduConnectionState 归属从 MainViewModel 迁移至 NetworkMusicViewModel
+- 重构：SettingsScreen 拆分为 9 个 Section（ui/screens/settings/，State/Actions 分组签名），主文件 2529→924 行（R-2）
+- 重构：LibraryScreen 五个 NAS 浏览 Tab 迁至 ui/screens/library/browse/，主文件 1695→647 行，详情页复用现役实现（R-3）
+- 重构：5 个后端适配器注入 BackendRegistry 共享 OkHttp 连接池/Dispatcher，close() 不再 shutdown 全局线程池——连续切换后端不再累积线程池（R-6，用户可感知：切后端后封面/播放请求更稳定）
+- 重构：人声分离 SeparationMode 上提 player 层 + 新增 VocalSeparationController（R-5）
+- 重构：ExportCoordinator/AccompanimentCache 统一注入 applicationScope；歌词持久缓存写互斥（F-4/F-5）
 
 ### Fixed
 - 安全：五个后端适配器（Jellyfin/Navidrome/Subsonic/道理鱼/飞牛）的 w/e 级错误日志统一经 UrlSanitizer 脱敏，release 包 logcat 不再泄露 api_key / Subsonic 密码令牌 / 登录 token（重构方案 F-1）；新增 UrlSanitizerTest 单测 8 项
+- 安全：天气 OpenWeatherMap API Key 改 AES-GCM 加密存储，旧明文值一次性迁移清除（F-7）
+- ANR：消除主线程 runBlocking——语言设置改 SharedPreferences 双写镜像，8 个 provider 键改 @Volatile 内存镜像（设置改动 ≤1s 生效，R-7 + F-3）；新增 ProviderMirrorTest 6 项
+- 性能：AppRoot 顶层 progress/duration 收集下沉至播放页分支，播放期间不再每秒驱动全树重组（F-2）
+- 修复：TV 双网卡（有线+无线）场景扫码 IP 可能取错网段——NetworkUtils 改接口优先级排序，有线/在用接口优先（F-6）
 
 ## [v2.27.0] - 2026-09-09
 

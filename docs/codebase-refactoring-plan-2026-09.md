@@ -12,6 +12,12 @@
 > **实施进度（2026-09-09，分支 refactor/r1-viewmodel-split）**：
 > - F-1 已完成（提交 9985bf9）：UrlSanitizer + 5 适配器 + BackendRegistry 脱敏，UrlSanitizerTest 8/8 绿
 > - R-1 四步拆分完成（提交 59dc6b9/e03b4bc/adbcb37/9efa630）：13 个子 VM 全部落位，MainViewModel 5451→3186 行；剩余收尾（≤600 行目标、AppRoot 重组、手测回归）见「问题总览」状态列与 R-1 迁移检查清单
+> - R-2 完成：9 个 Section 迁至 ui/screens/settings/（State/Actions 签名），主文件 2529→924 行
+> - R-3 完成：NAS 浏览 5 Tab 迁至 library/browse/，主文件 1695→647 行，详情页复用现役实现
+> - R-7 + F-3 完成：语言键 SharedPreferences 双写镜像、8 provider 键 @Volatile 内存镜像（ProviderMirrorTest 6/6）、Baidu 系 @WorkerThread、LyricsManager baseUrl 改 provider
+> - R-6 完成：BackendRegistry 共享 ConnectionPool/Dispatcher，5 适配器 close() 移除 shutdown/evictAll
+> - R-5 部分：SeparationMode 上提 player 层（typealias 兼容）+ VocalSeparationController 落位；HQ 编排保留 PlayerManager
+> - R-9/F-2/F-4/F-5/F-6/F-7 完成；R-4 调用面分析完毕待实施；R-10 未启动
 >
 > **v1.3 修订说明（开发前最终完善）**：本版目标是让方案**达到可直接开发的层次**，主要变更：
 > - 新增「**W0 接口冻结清单**」章节：12 个子 ViewModel 的包路径/构造签名骨架、跨 VM 事件契约（sealed class 全量定义）、State/Actions 分组样板——动工前逐项勾选冻结，拆分期间以此仲裁
@@ -75,14 +81,14 @@
 | 编号 | 问题 | 严重级别 | 影响范围 | 预计工时 | 状态 |
 |------|------|---------|---------|---------|------|
 | R-1 | MainViewModel 5451行巨型文件 | 🔴 P0 | 可维护性/可测试性 | 5-8天（+联动改造AppRoot，见架构决策） | 🔶 四步拆分完成（13 子 VM 落位，5451→3186 行），MainViewModel ≤600 行目标未达 |
-| R-2 | SettingsScreen 135.9KB 单文件 | 🔴 P0 | UI可维护性 | 2-3天 | ⬜ |
-| R-3 | LibraryScreen 76.4KB 单文件 | 🔴 P0 | UI可维护性 | 2-3天 | ⬜ |
-| R-4 | AppPreferences 58KB 单类 | 🟡 P1 | 偏好管理可维护性 | 2-3天 | ⬜ |
-| R-5 | PlayerManager 62.6KB 人声分离耦合 | 🟡 P1 | 播放器可维护性 | 1-2天 | ⬜ |
-| R-6 | OkHttpClient 每适配器独立实例 | 🟡 P1 | 资源管理 | 1天 | ⬜ |
-| R-7 | AppPreferences 11 处 runBlocking 物理调用点 | 🟡 P1 | ANR风险 | 1-2天 | ⬜ |
+| R-2 | SettingsScreen 135.9KB 单文件 | 🔴 P0 | UI可维护性 | 2-3天 | ✅ 2026-09-09 完成（按 9 个实际侧栏分区拆分，主文件 2529→924 行） |
+| R-3 | LibraryScreen 76.4KB 单文件 | 🔴 P0 | UI可维护性 | 2-3天 | ✅ 2026-09-09 完成（library/browse/ 5 文件，主文件 1695→647 行，详情页复用现役实现） |
+| R-4 | AppPreferences 58KB 单类 | 🟡 P1 | 偏好管理可维护性 | 2-3天 | 🔶 调用面分析完毕（90 访问器），待实施 |
+| R-5 | PlayerManager 62.6KB 人声分离耦合 | 🟡 P1 | 播放器可维护性 | 1-2天 | 🔶 SeparationMode 上提 + VocalSeparationController 落位（DoD ①②），HQ 编排保留 PlayerManager，手测待设备 |
+| R-6 | OkHttpClient 每适配器独立实例 | 🟡 P1 | 资源管理 | 1天 | ✅ 2026-09-09 完成（共享池注入 + 5 适配器 close() 移除 shutdown/evictAll），连续切后端手测待设备 |
+| R-7 | AppPreferences 11 处 runBlocking 物理调用点 | 🟡 P1 | ANR风险 | 1-2天 | ✅ 2026-09-09 完成（语言双写镜像 + 8 provider 键 @Volatile 镜像 + Baidu 系 @WorkerThread + F-3），ProviderMirrorTest 6/6 绿 |
 | R-8 | 手动DI vs Hilt/Dagger | 🟢 P2 | 依赖管理 | 3-5天 | ⬜ 可选项，暂缓 |
-| R-9 | 重复import/颜色硬编码/注释残留 | 🟢 P2 | 代码规范 | 0.5天 | ⬜ |
+| R-9 | 重复import/颜色硬编码/注释残留 | 🟢 P2 | 代码规范 | 0.5天 | ✅ 2026-09-09 完成（重复 import 已删；颜色硬编码/修复标记按计划保持现状） |
 | R-10 | JellyfinAdapter 1215行 / NavidromeAdapter 932行 | 🟡 P1 | 后端层可维护性 | 3-5天 | ⬜ |
 | F-1 | 敏感凭证 URL 泄露到 release 日志 | 🔴 P0 | 安全 | 0.5天 | ✅ 2026-09-09 完成 |
 
