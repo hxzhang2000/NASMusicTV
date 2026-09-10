@@ -9,6 +9,8 @@
 
 ## [Unreleased]
 
+## [v2.28.1] - 2026-09-10
+
 ### Changed
 - 重构（N 系列，2026-09-10，经所有者确认实施）：MainViewModel 兼容转发层消除——12 个子 VM 公开为只读属性（手动 DI，不引入 Hilt），删除 121 个纯透传转发、保留 12 个胶水转发，AppRoot/NetdiskScreen/MainActivity/MediaKeyHandler 改经子 VM 直调，MainViewModel 3186→3055 行（N-1）
 - 重构：DomainPrefs.kt（179 行 10 类）拆为 10 个独立子 Prefs 文件，data/prefs/ 达 14 文件单类单文件（N-2）
