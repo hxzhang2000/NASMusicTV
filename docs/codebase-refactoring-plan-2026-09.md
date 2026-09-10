@@ -17,7 +17,7 @@
 > - R-7 + F-3 完成：语言键 SharedPreferences 双写镜像、8 provider 键 @Volatile 内存镜像（ProviderMirrorTest 6/6）、Baidu 系 @WorkerThread、LyricsManager baseUrl 改 provider
 > - R-6 完成：BackendRegistry 共享 ConnectionPool/Dispatcher，5 适配器 close() 移除 shutdown/evictAll
 > - R-5 部分：SeparationMode 上提 player 层（typealias 兼容）+ VocalSeparationController 落位；HQ 编排保留 PlayerManager
-> - R-9/F-2/F-4/F-5/F-6/F-7 完成；R-4 调用面分析完毕待实施；R-10 未启动
+> - R-9/F-2/F-4/F-5/F-6/F-7 完成；R-4 完成（12 子 Prefs 门面 + 全库调用点迁移，270 单测全绿）；R-10 Subsonic 公共层完成、Jellyfin 域拆分评估后暂缓（状态列注明理由）
 >
 > **v1.3 修订说明（开发前最终完善）**：本版目标是让方案**达到可直接开发的层次**，主要变更：
 > - 新增「**W0 接口冻结清单**」章节：12 个子 ViewModel 的包路径/构造签名骨架、跨 VM 事件契约（sealed class 全量定义）、State/Actions 分组样板——动工前逐项勾选冻结，拆分期间以此仲裁
@@ -83,13 +83,13 @@
 | R-1 | MainViewModel 5451行巨型文件 | 🔴 P0 | 可维护性/可测试性 | 5-8天（+联动改造AppRoot，见架构决策） | 🔶 四步拆分完成（13 子 VM 落位，5451→3186 行），MainViewModel ≤600 行目标未达 |
 | R-2 | SettingsScreen 135.9KB 单文件 | 🔴 P0 | UI可维护性 | 2-3天 | ✅ 2026-09-09 完成（按 9 个实际侧栏分区拆分，主文件 2529→924 行） |
 | R-3 | LibraryScreen 76.4KB 单文件 | 🔴 P0 | UI可维护性 | 2-3天 | ✅ 2026-09-09 完成（library/browse/ 5 文件，主文件 1695→647 行，详情页复用现役实现） |
-| R-4 | AppPreferences 58KB 单类 | 🟡 P1 | 偏好管理可维护性 | 2-3天 | 🔶 调用面分析完毕（90 访问器），待实施 |
+| R-4 | AppPreferences 58KB 单类 | 🟡 P1 | 偏好管理可维护性 | 2-3天 | ✅ 2026-09-09 完成（12 领域子 Prefs 门面 + 全库调用点迁移，270 单测全绿；旧 API 保留为转发实现，未标 @Deprecated——门面与旧 API 并存，新代码走子域） |
 | R-5 | PlayerManager 62.6KB 人声分离耦合 | 🟡 P1 | 播放器可维护性 | 1-2天 | 🔶 SeparationMode 上提 + VocalSeparationController 落位（DoD ①②），HQ 编排保留 PlayerManager，手测待设备 |
 | R-6 | OkHttpClient 每适配器独立实例 | 🟡 P1 | 资源管理 | 1天 | ✅ 2026-09-09 完成（共享池注入 + 5 适配器 close() 移除 shutdown/evictAll），连续切后端手测待设备 |
 | R-7 | AppPreferences 11 处 runBlocking 物理调用点 | 🟡 P1 | ANR风险 | 1-2天 | ✅ 2026-09-09 完成（语言双写镜像 + 8 provider 键 @Volatile 镜像 + Baidu 系 @WorkerThread + F-3），ProviderMirrorTest 6/6 绿 |
 | R-8 | 手动DI vs Hilt/Dagger | 🟢 P2 | 依赖管理 | 3-5天 | ⬜ 可选项，暂缓 |
 | R-9 | 重复import/颜色硬编码/注释残留 | 🟢 P2 | 代码规范 | 0.5天 | ✅ 2026-09-09 完成（重复 import 已删；颜色硬编码/修复标记按计划保持现状） |
-| R-10 | JellyfinAdapter 1215行 / NavidromeAdapter 932行 | 🟡 P1 | 后端层可维护性 | 3-5天 | ⬜ |
+| R-10 | JellyfinAdapter 1215行 / NavidromeAdapter 932行 | 🟡 P1 | 后端层可维护性 | 3-5天 | 🔶 Subsonic 公共层完成（SubsonicRestClient，Navidrome 全量委托/Subsonic 部分）；Jellyfin 域拆分评估后暂缓（方法间经实例状态耦合，拆文件需构造 context 传参，回归风险高于收益，待手测回归保障后再专项细化） |
 | F-1 | 敏感凭证 URL 泄露到 release 日志 | 🔴 P0 | 安全 | 0.5天 | ✅ 2026-09-09 完成 |
 
 ---

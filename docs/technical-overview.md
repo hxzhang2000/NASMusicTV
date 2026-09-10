@@ -7783,3 +7783,15 @@ onSearchSong = { keyword -> viewModel.searchNetworkSongs(keyword) },
 **验证结果**：
 - ✅ 每个提交前 assembleDebug 通过
 - ✅ ProviderMirrorTest 6/6、UrlSanitizerTest 8/8、全量单测通过
+
+### 10.111 R-4 门面调用点全量迁移 + R-10 收尾决策（2026-09-09）
+
+**R-4 完成**（分支 `refactor/r1-viewmodel-split`，2 个提交）：
+1. 12 个领域子 Prefs（ServerPrefs/PlayerPrefs/LyricsPrefs 独立文件 + DomainPrefs.kt 承载 NetworkMusic/Baidu/Download/Weather/Visualizer/History/Playlist/Queue/Language/Backup），键不迁移只搬访问器、DataStore 单例不变。
+2. 全库调用点迁移至 `prefs.<domain>.xxx`：BaiduOAuthClient/BaiduMvFileService/BaiduNetdiskService（baidu 域）、NasMusicApp（network/baidu 域 provider）、MainViewModel（player/lyrics/network/visualizer/download/history/queue/weather/languagePrefs 域）、各子 VM（Backup/Playlist/PlayHistory/NetworkMusic/Search/VocalSeparation/Player）、AppRoot（visualizer/weather/lyrics/baidu/network Flow）。
+3. 旧 API 保留为转发实现（不标 @Deprecated）：门面与旧 API 并存，新代码一律走子域；与计划 DoD 的差异已在状态列注明。
+4. BaiduMvFileServiceTest 适配：mock 的 AppPreferences 需 `doReturn(BaiduPrefs(prefs)).when(prefs).baidu` 打桩（when() 内嵌 mock 调用会触发 UnfinishedStubbing）。**270 单测全绿**。
+
+**R-10 收尾决策**：Subsonic 公共层（SubsonicRestClient）已完成并全量接入；JellyfinAdapter（1218 行）域拆分评估后**暂缓**——其方法间经 baseUrl/apiToken 等实例状态耦合，拆文件需构造 context 传参改写全部私有方法签名，在无 TV 手测回归保障下回归风险高于可维护性收益。待本轮重构手测回归通过后再专项细化（计划原文即标注「方向性，实施前需专项细化」）。
+
+**验证**：assembleDebug + testDebugUnitTest 270/270 通过。

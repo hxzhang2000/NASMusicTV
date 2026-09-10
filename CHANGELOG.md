@@ -16,6 +16,8 @@
 - 重构：LibraryScreen 五个 NAS 浏览 Tab 迁至 ui/screens/library/browse/，主文件 1695→647 行，详情页复用现役实现（R-3）
 - 重构：5 个后端适配器注入 BackendRegistry 共享 OkHttp 连接池/Dispatcher，close() 不再 shutdown 全局线程池——连续切换后端不再累积线程池（R-6，用户可感知：切后端后封面/播放请求更稳定）
 - 重构：人声分离 SeparationMode 上提 player 层 + 新增 VocalSeparationController（R-5）
+- 重构：AppPreferences 按领域拆分为 12 个子 Prefs 门面（server/player/lyrics/network/baidu/download/weather/visualizer/history/playlist/queue/languagePrefs/backup），全库调用点迁移至 prefs.<domain>.xxx（R-4）
+- 重构：Subsonic 系公共层下沉 SubsonicRestClient（Navidrome 全量委托；Subsonic 因 URL 格式差异保留自有 buildRestUrl）（R-10 部分）
 - 重构：ExportCoordinator/AccompanimentCache 统一注入 applicationScope；歌词持久缓存写互斥（F-4/F-5）
 
 ### Fixed
