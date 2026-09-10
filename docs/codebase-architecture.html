@@ -58,6 +58,27 @@ td code{color:var(--link);font-family:Consolas,monospace;font-size:12px}
 .note{font-size:12px;color:var(--muted);margin-top:10px;padding-top:8px;border-top:1px dashed var(--border)}
 footer{text-align:center;color:var(--muted);font-size:12px;margin-top:48px}
 @media(max-width:720px){.di ol{column-count:1}}
+
+/* ── 类级调用图谱 ── */
+#graphWrap{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px}
+#gtoolbar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:10px}
+#gtoolbar button{background:var(--card2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:5px 14px;font-size:12.5px;cursor:pointer}
+#gtoolbar button:hover{border-color:var(--link)}
+.glegend{display:flex;flex-wrap:wrap;gap:8px;font-size:12px;color:var(--muted)}
+.glegend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:3px;vertical-align:-1px}
+#gsvgBox{border:1px solid var(--border);border-radius:8px;background:#0a0e14;overflow:hidden}
+#gsvg{display:block;width:100%;height:820px;touch-action:none;user-select:none;cursor:grab}
+#gsvg:active{cursor:grabbing}
+.gnode rect{fill:var(--card2);stroke-width:1.4;cursor:move}
+.gnode text{fill:var(--text);font-size:11.5px;font-family:Consolas,monospace;pointer-events:none}
+.gnode.dim{opacity:.16}
+.gnode.hl rect{stroke-width:2.4;filter:drop-shadow(0 0 5px rgba(88,166,255,.55))}
+.gedge{fill:none;stroke:#58a6ff;stroke-opacity:.2}
+.gedge.hl{stroke-opacity:.95;stroke-width:2!important}
+.gedge.dim{stroke-opacity:.04}
+.gcluster{fill:rgba(139,148,158,.05);stroke:#8b949e;stroke-dasharray:5 4;stroke-opacity:.55;stroke-width:1.2}
+.gclabel{fill:#8b949e;font-size:10.5px;font-family:Consolas,monospace}
+.ghint{font-size:12px;color:var(--muted);margin-top:10px}
 </style>
 </head>
 <body>
@@ -330,9 +351,131 @@ footer{text-align:center;color:var(--muted);font-size:12px;margin-top:48px}
 <p class="note">版本发布基线：v2.28.0（versionCode 122，2026-09-10）已 TV 手测基本功能有效；N 系列在 v2.28.0 之后实施，待随下一版本装包回归（重点：N-4 播放全路径 / N-1 遥控与导航 / N-3 四页 D-Pad）。质量门：assembleDebug + 270 单测全绿 + assembleRelease（R8/lintVital）。</p>
 </div>
 
+<h2>六、类级调用图谱 <span style="font-size:14px;color:var(--muted)">（可拖动 · 以类为单位 · 虚线外框=同文件多类 · 边=跨文件调用）</span></h2>
+<div id="graphWrap">
+  <div id="gtoolbar">
+    <button id="greset">重置布局</button>
+    <button id="gfit">适配视口</button>
+    <span class="glegend">
+      <span><i style="background:#ff7b72"></i>app</span>
+      <span><i style="background:#f778ba"></i>viewmodel</span>
+      <span><i style="background:#a371f7"></i>player</span>
+      <span><i style="background:#3fb950"></i>backend</span>
+      <span><i style="background:#58a6ff"></i>data</span>
+      <span><i style="background:#e3b341"></i>lyrics</span>
+      <span><i style="background:#ffa657"></i>net</span>
+      <span><i style="background:#8b949e"></i>util</span>
+    </span>
+  </div>
+  <div id="gsvgBox"><svg id="gsvg" xmlns="http://www.w3.org/2000/svg"><g id="groot"></g></svg></div>
+  <p class="ghint">节点=类（按层分列，层内同文件相邻，同文件多类以灰色虚线外框包围并标注文件名）；边=跨文件调用引用（箭头：调用方→被调方，透明度随调用频次增强；同文件内部引用不画边，由外框表达）。交互：拖动节点=移动类；拖空白处=平移画布；滚轮=缩放；悬停节点=高亮其直接调用关系。</p>
+</div>
+
 <footer>
 <p>NASMusicTV 代码架构图 · 生成于 2026-09-10 · 数据来源：代码库实测统计（252 文件 / 53,389 行）· 与 docs/technical-overview.md §10.113 对应</p>
 </footer>
 </div>
+
+<script>
+const GN=[["NasMusicApp","NasMusicApp.kt","app"],["BackupViewModel","BackupViewModel.kt","vm"],["DownloadViewModel","DownloadViewModel.kt","vm"],["LibraryEvent","ViewModelEvents.kt","vm"],["MainViewModel","MainViewModel.kt","vm"],["MvAvailability","MainViewModel.kt","vm"],["MvSearchViewModel","MvSearchViewModel.kt","vm"],["NavigationViewModel","NavigationViewModel.kt","vm"],["NetworkMusicEvent","ViewModelEvents.kt","vm"],["NetworkMusicViewModel","NetworkMusicViewModel.kt","vm"],["PlayHistoryViewModel","PlayHistoryViewModel.kt","vm"],["PlayerCommandHub","ViewModelEvents.kt","vm"],["PlayerEvent","ViewModelEvents.kt","vm"],["PlayerViewModel","PlayerViewModel.kt","vm"],["PlaylistViewModel","PlaylistViewModel.kt","vm"],["SearchEvent","ViewModelEvents.kt","vm"],["SearchViewModel","SearchViewModel.kt","vm"],["ServerViewModel","ServerViewModel.kt","vm"],["VocalSeparationViewModel","VocalSeparationViewModel.kt","vm"],["WeatherRadioEvent","ViewModelEvents.kt","vm"],["WeatherRadioViewModel","WeatherRadioViewModel.kt","vm"],["AccompanimentCache","AccompanimentCache.kt","player"],["BatteryOptimizationHelper","BatteryOptimizationHelper.kt","player"],["CoilBitmapLoader","CoilBitmapLoader.kt","player"],["DemucsSeparator","DemucsSeparator.kt","player"],["HqSeparationOrchestrator","HqSeparationOrchestrator.kt","player"],["MediaLibraryTree","MediaLibraryTree.kt","player"],["ModelDownloadManager","ModelDownloadManager.kt","player"],["PlaybackService","PlaybackService.kt","player"],["PlayerEqualizer","PlayerEqualizer.kt","player"],["PlayerManager","PlayerManager.kt","player"],["SeparationMode","SeparationMode.kt","player"],["SpectralMaskProcessor","SpectralMaskProcessor.kt","player"],["SpectrumAnalyzer","SpectrumAnalyzer.kt","player"],["VocalRemovalProcessor","VocalRemovalProcessor.kt","player"],["VocalSeparationController","VocalSeparationController.kt","player"],["AlbumCoverResolver","AlbumCoverResolver.kt","backend"],["AutoDownloadController","AutoDownloadController.kt","backend"],["BackendAdapter","BackendAdapter.kt","backend"],["BackendRegistry","BackendRegistry.kt","backend"],["DaoliyuAdapter","DaoliyuAdapter.kt","backend"],["DownloadRepository","DownloadRepository.kt","backend"],["DownloadResult","SongDownloadManager.kt","backend"],["DownloadStats","DownloadRepository.kt","backend"],["ExportCoordinator","ExportCoordinator.kt","backend"],["FeiniuAdapter","FeiniuAdapter.kt","backend"],["FilterMode","SearchAggregator.kt","backend"],["JamendoService","JamendoService.kt","backend"],["JellyfinAdapter","JellyfinAdapter.kt","backend"],["LocalMusicRepository","LocalMusicRepository.kt","backend"],["MetingApiService","MetingApiService.kt","backend"],["MusicMerger","MusicMerger.kt","backend"],["MusicScanner","MusicScanner.kt","backend"],["NavidromeAdapter","NavidromeAdapter.kt","backend"],["NetworkMusicManager","NetworkMusicManager.kt","backend"],["NetworkMusicService","NetworkMusicService.kt","backend"],["ScannedSong","MusicScanner.kt","backend"],["SearchAggregator","SearchAggregator.kt","backend"],["SearchType","SearchAggregator.kt","backend"],["SongDownloadManager","SongDownloadManager.kt","backend"],["StorageFullException","StorageGuard.kt","backend"],["StorageGuard","StorageGuard.kt","backend"],["StorageMonitor","StorageMonitor.kt","backend"],["StreamUrlResolver","StreamUrlResolver.kt","backend"],["SubsonicAdapter","SubsonicAdapter.kt","backend"],["WeatherApi","WeatherApi.kt","backend"],["WeatherRadioManager","WeatherRadioManager.kt","backend"],["AppPreferences","AppPreferences.kt","data"],["BackupPrefs","BackupPrefs.kt","data"],["BaiduPrefs","BaiduPrefs.kt","data"],["DownloadPrefs","DownloadPrefs.kt","data"],["HistoryPrefs","HistoryPrefs.kt","data"],["LanguagePrefs","LanguagePrefs.kt","data"],["LyricsPrefs","LyricsPrefs.kt","data"],["NetworkMusicPrefs","NetworkMusicPrefs.kt","data"],["PlayerPrefs","PlayerPrefs.kt","data"],["PlaylistPrefs","PlaylistPrefs.kt","data"],["QueuePrefs","QueuePrefs.kt","data"],["ServerPrefs","ServerPrefs.kt","data"],["VisualizerPrefs","VisualizerPrefs.kt","data"],["WeatherPrefs","WeatherPrefs.kt","data"],["LocalLyricsProvider","LocalLyricsProvider.kt","lyrics"],["LrcParser","LrcParser.kt","lyrics"],["LyricsManager","LyricsManager.kt","lyrics"],["LyricsNetworkProvider","LyricsNetworkProvider.kt","lyrics"],["LyricsPersistentCache","LyricsPersistentCache.kt","lyrics"],["Mp3MetadataExtractor","Mp3MetadataExtractor.kt","lyrics"],["BackupTransferServer","BackupTransferServer.kt","net"],["LocalInputServer","LocalInputServer.kt","net"],["ModelTransferServer","ModelTransferServer.kt","net"],["RemoteCallbacks","RemoteControlServer.kt","net"],["RemoteControlServer","RemoteControlServer.kt","net"],["RemoteSearchResult","RemoteControlServer.kt","net"],["AppLog","AppLog.kt","util"],["CryptoUtils","CryptoUtils.kt","util"],["EncodingUtils","EncodingUtils.kt","util"],["MediaKeyHandler","MediaKeyHandler.kt","util"],["NetworkMonitor","NetworkMonitor.kt","util"],["NetworkUtils","NetworkUtils.kt","util"],["PinyinUtils","PinyinUtils.kt","util"],["UrlSanitizer","UrlSanitizer.kt","util"]];
+const GE=[[4,93,80],[48,93,63],[9,93,47],[30,93,38],[50,93,35],[84,93,34],[53,93,31],[53,95,31],[64,95,29],[6,5,26],[64,93,24],[83,93,23],[25,93,22],[54,93,21],[6,93,20],[83,82,18],[13,93,18],[45,93,17],[40,93,17],[87,93,17],[24,93,14],[89,93,14],[25,31,12],[57,93,12],[48,95,12],[18,93,12],[18,67,12],[18,31,12],[29,93,11],[67,94,11],[67,93,11],[21,93,10],[39,93,10],[27,93,9],[33,93,9],[59,93,9],[28,0,8],[28,93,8],[45,95,8],[22,93,7],[40,95,7],[65,93,7],[67,31,7],[85,93,7],[16,93,7],[57,99,6],[49,56,6],[67,84,6],[81,93,6],[95,93,6],[1,93,6],[4,51,6],[16,58,6],[32,93,5],[34,93,5],[48,100,5],[47,93,5],[91,93,5],[88,93,5],[14,93,5],[20,66,5],[0,93,4],[35,31,4],[45,100,4],[54,55,4],[52,93,4],[83,84,4],[81,82,4],[2,43,4],[4,82,4],[17,93,4],[25,24,3],[39,38,3],[50,95,3],[62,93,3],[66,93,3],[67,50,3],[68,67,3],[94,93,3],[4,0,3],[4,38,3],[20,19,3],[20,93,3],[0,39,2],[0,67,2],[0,30,2],[0,54,2],[0,57,2],[0,49,2],[0,62,2],[0,27,2],[0,41,2],[0,61,2],[0,59,2],[0,37,2],[0,44,2],[0,83,2],[0,36,2],[0,47,2],[30,25,2],[30,32,2],[30,31,2],[25,21,2],[25,27,2],[35,32,2],[28,26,2],[26,0,2],[39,48,2],[39,53,2],[39,64,2],[39,40,2],[39,45,2],[48,39,2],[53,39,2],[64,39,2],[45,39,2],[40,39,2],[51,99,2],[49,93,2],[36,93,2],[59,60,2],[44,93,2],[67,78,2],[67,75,2],[67,73,2],[67,74,2],[67,69,2],[67,70,2],[67,80,2],[67,79,2],[67,71,2],[67,76,2],[67,77,2],[67,72,2],[67,68,2],[75,31,2],[77,67,2],[83,81,2],[82,93,2],[86,82,2],[97,93,2],[1,67,2],[4,92,2],[4,84,2],[0,50,1],[0,63,1],[0,82,1],[30,24,1],[30,21,1],[30,27,1],[30,67,1],[25,30,1],[29,30,1],[35,93,1],[35,21,1],[28,24,1],[28,21,1],[28,30,1],[21,24,1],[39,100,1],[57,39,1],[57,54,1],[48,38,1],[53,38,1],[64,38,1],[45,38,1],[40,38,1],[40,100,1],[59,41,1],[59,61,1],[59,63,1],[41,93,1],[37,41,1],[37,61,1],[37,63,1],[37,59,1],[63,38,1],[63,93,1],[61,93,1],[44,67,1],[44,41,1],[66,38,1],[66,54,1],[78,67,1],[75,67,1],[73,67,1],[74,67,1],[69,67,1],[70,67,1],[80,67,1],[79,67,1],[71,67,1],[76,67,1],[72,67,1],[83,39,1],[83,54,1],[98,93,1],[1,0,1],[2,59,1],[2,27,1],[2,0,1],[2,30,1],[4,13,1],[4,50,1],[6,30,1],[9,0,1],[10,0,1],[13,30,1],[13,0,1],[14,0,1],[16,39,1],[16,0,1],[17,39,1],[17,0,1],[15,13,1],[3,13,1],[19,13,1],[12,67,1],[12,13,1],[8,13,1],[18,30,1],[18,0,1],[20,30,1],[20,54,1],[20,0,1]];
+const GMULTI={"backend/SearchAggregator.kt":["FilterMode","SearchAggregator","SearchType"],"backend/local/MusicScanner.kt":["MusicScanner","ScannedSong"],"backend/download/SongDownloadManager.kt":["DownloadResult","SongDownloadManager"],"backend/download/DownloadRepository.kt":["DownloadRepository","DownloadStats"],"backend/download/StorageGuard.kt":["StorageFullException","StorageGuard"],"net/RemoteControlServer.kt":["RemoteCallbacks","RemoteControlServer","RemoteSearchResult"],"ui/viewmodel/MainViewModel.kt":["MainViewModel","MvAvailability"],"ui/viewmodel/ViewModelEvents.kt":["LibraryEvent","NetworkMusicEvent","PlayerCommandHub","PlayerEvent","SearchEvent","WeatherRadioEvent"]};
+(function(){
+'use strict';
+const svg=document.getElementById('gsvg'),root=document.getElementById('groot');
+const NS='http://www.w3.org/2000/svg';
+const LORDER=['app','vm','player','backend','data','lyrics','net','util'];
+const LC={app:'#ff7b72',vm:'#f778ba',player:'#a371f7',backend:'#3fb950',data:'#58a6ff',lyrics:'#e3b341',net:'#ffa657',util:'#8b949e'};
+const NH=24,VG=12,COLW=250,PX=100,PY=46;
+const nodes=GN.map(g=>({name:g[0],file:g[1],layer:g[2],w:0,x:0,y:0,el:null}));
+nodes.forEach(n=>n.w=Math.max(86,n.name.length*7.4+18));
+const fidx={};GN.forEach((g,i)=>fidx[g[0]]=i);
+const col={};LORDER.forEach(l=>col[l]=[]);
+nodes.forEach((n,i)=>col[n.layer].push(i));
+for(const l of LORDER)col[l].sort((a,b)=>nodes[a].file.localeCompare(nodes[b].file)||nodes[a].name.localeCompare(nodes[b].name));
+const initPos=()=>{LORDER.forEach(l=>{let y=PY;col[l].forEach(i=>{nodes[i].x=PX+LORDER.indexOf(l)*COLW;nodes[i].y=y;y+=NH+VG;});});};
+initPos();
+const mk=(t,at,parent)=>{const e=document.createElementNS(NS,t);for(const k in at)e.setAttribute(k,at[k]);(parent||root).appendChild(e);return e;};
+const defs=mk('defs',{});
+const mk0=mk('marker',{id:'garrow',viewBox:'0 0 10 10',refX:9,refY:5,markerWidth:6,markerHeight:6,orient:'auto-start-reverse'},defs);
+mk('path',{d:'M0,0 L10,5 L0,10 z',fill:'#58a6ff'},mk0);
+const gE=mk('g',{}),gC=mk('g',{}),gN=mk('g',{});
+nodes.forEach((n,i)=>{
+ const g=mk('g',{class:'gnode'},gN);
+ g.dataset.i=i;n.el=g;
+ mk('rect',{x:0,y:0,width:n.w,height:NH,rx:5,stroke:LC[n.layer]},g);
+ const t=mk('text',{x:n.w/2,y:16,'text-anchor':'middle'},g);
+ t.textContent=n.name;
+ const ti=mk('title',{},g);ti.textContent=n.file+' · '+n.layer;
+});
+const epath=ei=>{const s=nodes[GE[ei][0]],t=nodes[GE[ei][1]];
+ const sx=s.x+s.w/2,sy=s.y+NH/2,tx=t.x+t.w/2,ty=t.y+NH/2,mx=(sx+tx)/2;
+ return 'M'+sx+','+sy+' C'+mx+','+sy+' '+mx+','+ty+' '+tx+','+ty;};
+const eEls=[];
+GE.forEach((e,ei)=>{
+ const op=Math.min(.55,.1+Math.log2(1+e[2])*.07);
+ eEls.push(mk('path',{class:'gedge',d:epath(ei),'stroke-width':Math.min(3,.8+Math.log2(1+e[2])*.25),'stroke-opacity':op,'marker-end':'url(#garrow)'},gE));
+});
+const clusterEls=[];
+Object.keys(GMULTI).forEach(f=>{
+ const members=GMULTI[f].map(nm=>fidx[nm]);
+ const r=mk('rect',{class:'gcluster'},gC);
+ const lb=mk('text',{class:'gclabel'},gC);lb.textContent=f.split('/').pop();
+ clusterEls.push({members,r,lb});
+});
+const layoutClusters=()=>{clusterEls.forEach(c=>{
+ let x1=1e9,y1=1e9,x2=-1e9,y2=-1e9;
+ c.members.forEach(i=>{const n=nodes[i];x1=Math.min(x1,n.x);y1=Math.min(y1,n.y);x2=Math.max(x2,n.x+n.w);y2=Math.max(y2,n.y+NH);});
+ c.r.setAttribute('x',x1-8);c.r.setAttribute('y',y1-18);c.r.setAttribute('width',x2-x1+16);c.r.setAttribute('height',y2-y1+26);
+ c.lb.setAttribute('x',x1-2);c.lb.setAttribute('y',y1-22);
+});};
+const placeNodes=()=>{nodes.forEach(n=>n.el.setAttribute('transform','translate('+n.x+','+n.y+')'));
+ GE.forEach((e,ei)=>eEls[ei].setAttribute('d',epath(ei)));layoutClusters();};
+placeNodes();
+let vt={x:0,y:0,s:1};
+const apply=()=>root.setAttribute('transform','translate('+vt.x+','+vt.y+') scale('+vt.s+')');
+const clientPt=e=>{const r=svg.getBoundingClientRect();return{x:e.clientX-r.left,y:e.clientY-r.top};};
+const toWorld=p=>({x:(p.x-vt.x)/vt.s,y:(p.y-vt.y)/vt.s});
+const fit=()=>{let x1=1e9,y1=1e9,x2=-1e9,y2=-1e9;
+ nodes.forEach(n=>{x1=Math.min(x1,n.x);y1=Math.min(y1,n.y);x2=Math.max(x2,n.x+n.w);y2=Math.max(y2,n.y+NH);});
+ const r=svg.getBoundingClientRect(),pad=30;
+ const s=Math.max(.08,Math.min(2.5,Math.min((r.width-pad*2)/(x2-x1),(r.height-pad*2)/(y2-y1))));
+ vt.s=s;vt.x=(r.width-(x2-x1)*s)/2-x1*s;vt.y=(r.height-(y2-y1)*s)/2-y1*s;apply();};
+let drag=null;
+svg.addEventListener('pointerdown',e=>{
+ const g=e.target.closest?e.target.closest('.gnode'):null;
+ if(g){const i=+g.dataset.i,p=toWorld(clientPt(e));
+  drag={node:i,dx:p.x-nodes[i].x,dy:p.y-nodes[i].y};g.setPointerCapture(e.pointerId);}
+ else{const p=clientPt(e);drag={pan:true,sx:p.x,sy:p.y,ox:vt.x,oy:vt.y};svg.setPointerCapture(e.pointerId);}
+ svg.style.cursor='grabbing';e.preventDefault();
+});
+svg.addEventListener('pointermove',e=>{
+ if(!drag)return;
+ if(drag.pan){const p=clientPt(e);vt.x=drag.ox+(p.x-drag.sx);vt.y=drag.oy+(p.y-drag.sy);apply();}
+ else{const n=nodes[drag.node],p=toWorld(clientPt(e));n.x=p.x-drag.dx;n.y=p.y-drag.dy;
+  n.el.setAttribute('transform','translate('+n.x+','+n.y+')');
+  GE.forEach((ed,ei)=>{if(ed[0]===drag.node||ed[1]===drag.node)eEls[ei].setAttribute('d',epath(ei));});
+  layoutClusters();}
+});
+const endDrag=()=>{drag=null;svg.style.cursor='grab';};
+svg.addEventListener('pointerup',endDrag);svg.addEventListener('pointercancel',endDrag);
+svg.addEventListener('wheel',e=>{e.preventDefault();const p=clientPt(e),f=Math.pow(1.0015,-e.deltaY);
+ const ns=Math.max(.08,Math.min(3,vt.s*f));vt.x=p.x-(p.x-vt.x)*ns/vt.s;vt.y=p.y-(p.y-vt.y)*ns/vt.s;vt.s=ns;apply();},{passive:false});
+nodes.forEach((n,i)=>{
+ n.el.addEventListener('pointerenter',()=>{
+  const rel=new Set([i]);
+  GE.forEach((ed,ei)=>{const h=ed[0]===i||ed[1]===i;eEls[ei].classList.toggle('hl',h);eEls[ei].classList.toggle('dim',!h);if(h){rel.add(ed[0]);rel.add(ed[1]);}});
+  nodes.forEach((m,j)=>m.el.classList.toggle('dim',!rel.has(j)));
+ });
+ n.el.addEventListener('pointerleave',()=>{
+  eEls.forEach(p=>{p.classList.remove('hl');p.classList.remove('dim');});
+  nodes.forEach(m=>m.el.classList.remove('dim'));
+ });
+});
+document.getElementById('greset').addEventListener('click',()=>{initPos();placeNodes();fit();});
+document.getElementById('gfit').addEventListener('click',fit);
+fit();
+})();
+</script>
 </body>
 </html>
