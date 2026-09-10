@@ -263,6 +263,10 @@ class PlayerManager(private val applicationContext: Context) {
             }
             if (isPlaying) {
                 progressHandler.post(progressUpdateRunnable)
+                // 成功起播说明当前歌曲链接有效，重置重试标记——
+                // 同一首歌在播放中再次链接过期时，允许 onPlayerError 再自动重解析一次
+                // （原逻辑仅切歌时重置，长歌/直播流场景下第二轮过期只能跳歌）
+                lastErrorRetryIndex = -1
                 // 播放开始时自动清除分离成功提示（延迟 3 秒让用户看到）（N-4：迁至 HqSeparationOrchestrator）
                 hqOrchestrator.scheduleHqSuccessClearOnPlay()
             } else {
@@ -290,7 +294,8 @@ class PlayerManager(private val applicationContext: Context) {
             }
             // 自动过渡（播放完一首）到 streamUrl 为空的歌曲时（如恢复队列中的网络歌曲），
             // ExoPlayer 会因空 URI 出错。此时暂停并通知外部解析 streamUrl 后再播放。
-            if (reason == Player.MEDIA_ITEM_TRANSITION_REASON_AUTO) {
+            // SEEK 原因（playAt 手机遥控直 seek 等）同样需要检测——不依赖 AUTO 才触发解析。
+            if (reason == Player.MEDIA_ITEM_TRANSITION_REASON_AUTO || reason == Player.MEDIA_ITEM_TRANSITION_REASON_SEEK) {
                 val currentSong = _queue.value.getOrNull(_currentIndex.value)
                 if (currentSong != null && currentSong.streamUrl.isNullOrBlank()) {
                     AppLog.d("PlayerManager", "onMediaItemTransition: auto-transition to empty streamUrl, index=${_currentIndex.value}, resolving")
@@ -636,8 +641,66 @@ class PlayerManager(private val applicationContext: Context) {
         }
     }
 
+    /**
+     * 出错恢复专用的手动切歌（IDLE 状态安全网）。
+     *
+     * 出错后 ExoPlayer 处于 STATE_IDLE，seekToNextMediaItem() 既不触发
+     * onMediaItemTransition（索引/空 URL 检测全部失效），也不会重新 prepare，
+     * 播放器会静默停在原地（用户症状：某首歌跳过后，下一首不自动播放）。
+     * 此方法手动同步索引并恢复播放：
+     * - 目标歌曲 streamUrl 为空（网络歌曲懒加载）→ 暂停并触发 onNeedResolveStreamUrl 解析
+     * - 否则 seekTo + prepare + play（IDLE 下的标准恢复路径）
+     */
+    fun transitionToIndex(index: Int) {
+        val p = player ?: return
+        val queue = _queue.value
+        if (index !in queue.indices) return
+        val song = queue[index]
+        _currentIndex.value = index
+        _currentSong.value = song
+        if (song.durationMs > 0) _duration.value = song.durationMs
+        if (song.streamUrl.isNullOrBlank()) {
+            AppLog.d("PlayerManager", "transitionToIndex: empty streamUrl at $index '${song.title}', resolving")
+            p.pause()
+            onNeedResolveStreamUrl?.invoke(index)
+            return
+        }
+        try {
+            p.seekTo(index, 0)
+            p.prepare()
+            if (!suppressPlayback) p.play()
+            AppLog.d("PlayerManager", "transitionToIndex: playing '${song.title}' at index=$index")
+        } catch (e: Exception) {
+            AppLog.e("PlayerManager", "transitionToIndex failed", e)
+        }
+    }
+
+    /**
+     * ExoPlayer 是否处于 IDLE（出错后未恢复）状态。
+     * IDLE 下 next()/previous() 不能依赖 seekToNextMediaItem 的过渡回调，
+     * 需走 transitionToIndex 手动恢复。
+     */
+    private fun isIdle(): Boolean = player?.playbackState == Player.STATE_IDLE
+
     fun next(playMode: PlayMode) {
         val p = player ?: return
+        // 出错恢复路径：IDLE 下 seekToNextMediaItem 不触发过渡回调也不 prepare，
+        // 统一走手动恢复（含空 URL 网络歌曲的解析触发）
+        if (isIdle()) {
+            val target = when (playMode) {
+                PlayMode.SHUFFLE -> {
+                    // 随机模式：排除已播历史后随机选（与 playRandom 同策略，但走手动恢复路径）
+                    val available = (0 until _queue.value.size).filter { it !in shuffleHistory }
+                    if (available.isEmpty()) shuffleHistory.clear()
+                    ((0 until _queue.value.size).filter { it !in shuffleHistory }).randomOrNull()
+                        ?: ((_currentIndex.value + 1) % _queue.value.size.coerceAtLeast(1))
+                }
+                else -> if (_currentIndex.value + 1 < _queue.value.size) _currentIndex.value + 1 else 0
+            }
+            if (playMode == PlayMode.SHUFFLE) shuffleHistory.add(target)
+            transitionToIndex(target)
+            return
+        }
         when (playMode) {
             PlayMode.SHUFFLE -> playRandom()
             PlayMode.REPEAT_ONE -> {
@@ -666,6 +729,14 @@ class PlayerManager(private val applicationContext: Context) {
     }
 
     fun previous(playMode: PlayMode) {
+        // 出错恢复路径：IDLE 下 seekToPreviousMediaItem 不触发过渡回调也不 prepare
+        if (isIdle()) {
+            val queueSize = _queue.value.size
+            if (queueSize == 0) return
+            val prevIndex = if (_currentIndex.value - 1 >= 0) _currentIndex.value - 1 else queueSize - 1
+            transitionToIndex(prevIndex)
+            return
+        }
         when (playMode) {
             PlayMode.SHUFFLE -> playRandom()
             else -> {

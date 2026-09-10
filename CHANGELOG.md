@@ -9,6 +9,9 @@
 
 ## [Unreleased]
 
+### Fixed
+- 网络歌曲队列播放中断：某首歌链接过期失败跳过后，下一首不自动播放（需手动点播放恢复）。根因：出错后 ExoPlayer 处于 IDLE 状态，`next()` 的 `seekToNextMediaItem()` 既不触发 `onMediaItemTransition`（索引不同步、空 URL 懒解析检测失效）也不重新 `prepare`，播放器静默停住。修复：新增 `transitionToIndex()` 手动恢复路径（同步索引 + 空 streamUrl 触发 `onNeedResolveStreamUrl` 解析 + seekTo/prepare/play），`next()`/`previous()` 检测到 IDLE 时统一走该路径（随机模式同策略排除已播历史）；`onMediaItemTransition` 空 URL 检测从仅 AUTO 放宽到 AUTO|SEEK；`onIsPlayingChanged(true)` 时重置 `lastErrorRetryIndex`，同一首歌成功起播后若链接再次过期仍可自动重解析一次（原仅切歌时重置）
+
 ## [v2.28.1] - 2026-09-10
 
 ### Changed

@@ -7833,3 +7833,15 @@ onSearchSong = { keyword -> viewModel.searchNetworkSongs(keyword) },
 - MediaKeyHandlerTest 适配 N-1 新调用路径（mock playerVM 子 VM，doReturn 桩法）
 - 验证：每项 assembleDebug 0 错误 + testDebugUnitTest 270/270 全绿
 - 待办：TV 手测回归（重点 N-4 播放全路径 + N-1 各页面导航/遥控按键 + N-3 各页面 D-Pad）
+
+### 10.114 修复网络歌曲队列 IDLE 停播（2026-09-10）
+
+- **症状**：网络歌曲队列中某首歌播放失败被跳过后，下一首不自动播放，需手动点播放才能恢复
+- **根因**：`onPlayerError` 重解析仍失败后调 `next()` 跳歌，但此时 ExoPlayer 处于 STATE_IDLE——`seekToNextMediaItem()` 在 IDLE 下既不触发 `onMediaItemTransition`（`_currentIndex` 不同步、空 streamUrl 懒解析检测失效），也不会重新 `prepare`，播放器静默停住
+- **修复**（player/PlayerManager.kt）：
+  - 新增 `transitionToIndex(index)` 手动恢复路径：同步索引/当前歌/时长 → 空 streamUrl 则 `pause()` + `onNeedResolveStreamUrl` 触发解析，否则 `seekTo + prepare + play`（IDLE 标准恢复序列）
+  - `next()`/`previous()` 入口检测 IDLE 统一走 `transitionToIndex`（随机模式同策略：排除 `shuffleHistory` 后随机选）
+  - `onMediaItemTransition` 空 URL 懒解析检测从仅 `REASON_AUTO` 放宽到 `AUTO | SEEK`（覆盖 playAt 手机遥控直 seek 场景）
+  - `onIsPlayingChanged(true)` 时重置 `lastErrorRetryIndex = -1`：同一首歌成功起播后若链接再次过期，仍允许自动重解析一次（原仅切歌时重置，长音轨二轮过期只能跳歌）
+- **验证**：assembleDebug 编译通过；testDebugUnitTest 270/270 全绿
+- **待办**：TV 手测（网络队列连续播放至链接过期场景 + K 歌页同场景）
