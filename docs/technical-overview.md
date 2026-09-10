@@ -7795,3 +7795,29 @@ onSearchSong = { keyword -> viewModel.searchNetworkSongs(keyword) },
 **R-10 收尾决策**：Subsonic 公共层（SubsonicRestClient）已完成并全量接入；JellyfinAdapter（1218 行）域拆分经**所有者确认保持原状不实施**——其方法间经 baseUrl/apiToken 等实例状态耦合，拆文件需构造 context 传参改写全部私有方法签名，回归风险高于可维护性收益（与「本地 HTTP 服务无鉴权是所有者接受的取舍」同类的所有者决策，勿再作为待办启动）。
 
 **验证**：assembleDebug + testDebugUnitTest 270/270 通过。
+
+### 10.112 v2.28.0 - 重构发布（R-1~R-7、R-9、R-10 部分、F-1~F-7）
+
+**版本**：versionCode 122 / versionName 2.28.0（分支 refactor/r1-viewmodel-split，24 个提交）
+
+**发布内容**（详见 docs/codebase-refactoring-plan-2026-09.md v1.4）：
+1. R-1：MainViewModel 5451 行拆为 13 个领域子 VM + ViewModelEvents 事件契约，主 VM 精简为协调者 + 兼容转发层（3186 行）；BaiduConnectionState 归属迁移至 NetworkMusicViewModel。
+2. R-2/R-3：SettingsScreen 拆 9 Section 至 ui/screens/settings/（2529→924 行）；LibraryScreen 五个 NAS 浏览 Tab 迁至 library/browse/（1695→647 行），详情页复用现役实现。
+3. R-4：AppPreferences 按领域拆 12 子 Prefs 门面，全库调用点迁移至 prefs.<domain>.xxx；旧 API 保留为转发实现（不标 @Deprecated），门面与旧 API 并存。
+4. R-5/R-6：SeparationMode 上提 player 层 + VocalSeparationController（HQ 编排保留 PlayerManager）；BackendRegistry 共享 ConnectionPool(5/5min)/Dispatcher(16/8)，5 适配器 close() 移除 shutdown/evictAll。
+5. R-7 + F-3：主线程 runBlocking 消除——语言键 SharedPreferences 双写镜像、8 provider 键 @Volatile 内存镜像；LyricsManager baseUrl 改 provider。全库仅剩 3 处受控 runBlocking（2 处 @WorkerThread Baidu 系 + 1 处语言一次性迁移）。
+6. R-10（部分）：Subsonic 公共层下沉 SubsonicRestClient，Navidrome 全量委托；Subsonic 因 URL 格式差异保留自有 buildRestUrl。
+7. F 系列：F-1 五适配器 w/e 日志经 UrlSanitizer 脱敏（release logcat 不再泄露 api_key/token）；F-2 AppRoot progress/duration 收集下沉播放页分支；F-4 自建 scope 统一注入 applicationScope；F-5 歌词索引写互斥；F-6 双网卡 IP 改接口优先级排序；F-7 天气 Key AES-GCM 加密 + 旧明文迁移。
+
+**定案不实施**（所有者确认，勿再作为待办启动）：
+- R-8 Hilt 迁移：min SDK 22 + Kotlin 2.2.10 的 kapt/ksp 兼容性风险，手动 DI 运转良好。
+- R-10 JellyfinAdapter 域拆分：实例状态（baseUrl/apiToken 字段）耦合深，拆文件需改写全部私有方法签名，回归风险高于收益。
+- F-8：待所有者决策后再定。
+
+**已知未达项**（非遗漏）：MainViewModel 3186 行未达 DoD ≤600——现形态为计划允许的协调者 + 兼容转发层过渡态，AppRoot 零改动是本轮硬约束。
+
+**验证**：
+- ✅ testDebugUnitTest 270/270 通过（含新增 UrlSanitizerTest 8 项、ProviderMirrorTest 6 项）
+- ✅ assembleRelease BUILD SUCCESSFUL（R8 minify + lintVital + baseline profiles 通过）
+- ✅ 电视 192.168.0.114:5555（armeabi-v7a）安装 v2.28.0 启动验证：进程存活、无 FATAL/ANR、release logcat 无凭据泄露
+- ✅ 所有者手测：基本功能全部有效
