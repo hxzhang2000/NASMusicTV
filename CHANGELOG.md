@@ -10,6 +10,11 @@
 ## [Unreleased]
 
 ### Changed
+- 待记录
+
+## [v2.28.0] - 2026-09-10
+
+### Changed
 - 重构：MainViewModel（5451 行）按 W0 冻结清单拆分为 13 个领域子 ViewModel（WeatherRadio/Backup/Playlist/Download/MvSearch/VocalSeparation/Server/Search/NetworkMusic/Player/Navigation/PlayHistory + 事件契约 ViewModelEvents），MainViewModel 精简为协调者 + 兼容转发层（3186 行），AppRoot 引用保持不变；详见 docs/codebase-refactoring-plan-2026-09.md R-1
 - 重构：BaiduConnectionState 归属从 MainViewModel 迁移至 NetworkMusicViewModel
 - 重构：SettingsScreen 拆分为 9 个 Section（ui/screens/settings/，State/Actions 分组签名），主文件 2529→924 行（R-2）
@@ -26,6 +31,7 @@
 - ANR：消除主线程 runBlocking——语言设置改 SharedPreferences 双写镜像，8 个 provider 键改 @Volatile 内存镜像（设置改动 ≤1s 生效，R-7 + F-3）；新增 ProviderMirrorTest 6 项
 - 性能：AppRoot 顶层 progress/duration 收集下沉至播放页分支，播放期间不再每秒驱动全树重组（F-2）
 - 修复：TV 双网卡（有线+无线）场景扫码 IP 可能取错网段——NetworkUtils 改接口优先级排序，有线/在用接口优先（F-6）
+> 说明：本轮按 docs/codebase-refactoring-plan-2026-09.md v1.4 实施 R-1~R-7、R-9、R-10（Subsonic 公共层）与 F-1~F-7；R-8（Hilt 迁移）与 R-10 的 Jellyfin 域拆分经所有者确认定案不实施（兼容性风险 / 实例状态耦合深）。
 
 ## [v2.27.0] - 2026-09-09
 
