@@ -102,21 +102,13 @@ fun AppRoot(
     // F-2（修复）：progress/duration 不再顶层收集——PlayerManager 的进度由 1000ms
     // Handler 轮询驱动，顶层收集会每秒驱动 AppRoot 全树重组（含 LazyColumn 状态与
     // D-Pad 焦点搜索）；下沉到 NowPlayingScreen 分支内收集（与 H-3 频谱流下沉同向）。
-    val lyrics by viewModel.currentLyrics.collectAsState(initial = null)
-    val lyricsAvailability by viewModel.lyricsAvailability.collectAsState(initial = com.nasmusic.tv.data.model.LyricsAvailability())
-    val lyricsHighlightMode by viewModel.lyricsHighlightMode.collectAsState(initial = com.nasmusic.tv.data.model.LyricsHighlightMode.LINE_BY_LINE)
     val networkCoverUrl by viewModel.networkCoverUrl.collectAsState(initial = null)
     val songDownloadStates by viewModel.songDownloadStates.collectAsState(initial = emptyMap())
-    val albums by viewModel.albums.collectAsState(initial = UiState.Loading as UiState<List<Album>>)
     val songs by viewModel.songs.collectAsState(initial = UiState.Loading as UiState<List<Song>>)
-    val queue by viewModel.playerVM.queue.collectAsState(initial = emptyList())
-    val currentIndex by viewModel.playerVM.currentIndex.collectAsState(initial = 0)
     val isLoading by viewModel.isLoading.collectAsState(initial = false)
     val isLibraryLoading by viewModel.isLibraryLoading.collectAsState(initial = false)
     val isConnected by viewModel.serverVM.isConnected.collectAsState(initial = false)
     val serverDisplayName by viewModel.serverVM.serverDisplayName.collectAsState(initial = "")
-    val backendApiVersion by viewModel.serverVM.backendApiVersion.collectAsState(initial = "Unknown")
-    val apiVersions by viewModel.serverVM.apiVersions.collectAsState(initial = emptyList())
     val serverConfig by viewModel.serverConfig.collectAsState(initial = ServerConfig.Empty)
     val settings by viewModel.appSettings.collectAsState(initial = com.nasmusic.tv.data.model.AppSettings())
     // 封面滤镜状态（跨屏幕共享，用于 NowPlaying + Settings）
@@ -127,17 +119,8 @@ fun AppRoot(
     // 加入歌单弹窗目标歌曲（提升到 AppRoot 顶层，供 Library / 专辑详情 / 艺术家详情 共用）
     var pickerSong by remember { mutableStateOf<Song?>(null) }
     // 天气 API Key
-    val weatherApiKey by viewModel.prefs.weather.weatherApiKey.collectAsState(initial = "")
     // 百度网盘状态（设置页网盘分区）
-    val baiduConnectionState by viewModel.netVM.baiduConnectionState.collectAsState(initial = com.nasmusic.tv.ui.viewmodel.NetworkMusicViewModel.BaiduConnectionState.Off)
-    val baiduDeviceCode by viewModel.baiduDeviceCode.collectAsState(initial = null)
-    val baiduIndexScanned by viewModel.baiduIndexScanned.collectAsState(initial = 0)
-    val baiduIndexScanning by viewModel.baiduIndexScanning.collectAsState(initial = false)
-    val baiduApicExtracting by viewModel.baiduApicExtracting.collectAsState(initial = false)
-    val baiduApicExtracted by viewModel.baiduApicExtracted.collectAsState(initial = 0)
-    val baiduApicTotal by viewModel.baiduApicTotal.collectAsState(initial = 0)
     // K 歌页面显隐（切 Tab 时保持，退出 K 歌页时清除）
-    val showKaraoke by viewModel.vocalVM.showKaraoke.collectAsState(initial = false)
     // MTV 页面显隐（进入 MTV 全屏页时为 true）
     val showMv by viewModel.mvVM.showMv.collectAsState(initial = false)
     // MTV 搜索状态（顶层收集，供 NotFound 自动退出保护与 NowPlaying 分支共用）
@@ -309,6 +292,10 @@ fun AppRoot(
                     )
                 }
                 Screen.NowPlaying -> {
+                    val lyrics by viewModel.currentLyrics.collectAsState(initial = null)
+                    val lyricsAvailability by viewModel.lyricsAvailability.collectAsState(initial = com.nasmusic.tv.data.model.LyricsAvailability())
+                    val lyricsHighlightMode by viewModel.lyricsHighlightMode.collectAsState(initial = com.nasmusic.tv.data.model.LyricsHighlightMode.LINE_BY_LINE)
+                    val showKaraoke by viewModel.vocalVM.showKaraoke.collectAsState(initial = false)
                     // 修复（H-3）：20fps 频谱流只在本页收集，不再驱动 AppRoot 全树重组
                     val spectrumData by viewModel.playerVM.spectrumData.collectAsState(initial = FloatArray(0))
                     val lyricsFontScale by viewModel.prefs.lyrics.lyricsFontScale.collectAsState(initial = 1.0f)
@@ -427,6 +414,7 @@ fun AppRoot(
                     }
                 }
                 Screen.Library -> {
+                    val albums by viewModel.albums.collectAsState(initial = UiState.Loading as UiState<List<Album>>)
                     val genres by viewModel.genres.collectAsState(initial = UiState.Success(emptyList()))
                     val favoriteIds by viewModel.favoriteIds.collectAsState(initial = emptySet())
                     val artistsState by viewModel.artists.collectAsState(initial = UiState.Success(emptyList()))
@@ -672,6 +660,8 @@ fun AppRoot(
                     )
                 }
                 Screen.Queue -> {
+                    val queue by viewModel.playerVM.queue.collectAsState(initial = emptyList())
+                    val currentIndex by viewModel.playerVM.currentIndex.collectAsState(initial = 0)
                     QueueScreen(
                         queue = queue,
                         currentIndex = currentIndex,
@@ -694,6 +684,16 @@ fun AppRoot(
                     )
                 }
                 Screen.Settings -> {
+                    val backendApiVersion by viewModel.serverVM.backendApiVersion.collectAsState(initial = "Unknown")
+                    val apiVersions by viewModel.serverVM.apiVersions.collectAsState(initial = emptyList())
+                    val weatherApiKey by viewModel.prefs.weather.weatherApiKey.collectAsState(initial = "")
+                    val baiduConnectionState by viewModel.netVM.baiduConnectionState.collectAsState(initial = com.nasmusic.tv.ui.viewmodel.NetworkMusicViewModel.BaiduConnectionState.Off)
+                    val baiduDeviceCode by viewModel.baiduDeviceCode.collectAsState(initial = null)
+                    val baiduIndexScanned by viewModel.baiduIndexScanned.collectAsState(initial = 0)
+                    val baiduIndexScanning by viewModel.baiduIndexScanning.collectAsState(initial = false)
+                    val baiduApicExtracting by viewModel.baiduApicExtracting.collectAsState(initial = false)
+                    val baiduApicExtracted by viewModel.baiduApicExtracted.collectAsState(initial = 0)
+                    val baiduApicTotal by viewModel.baiduApicTotal.collectAsState(initial = 0)
                     var showBackupTransferDialog by remember { mutableStateOf(false) }
                     var showModelTransferDialog by remember { mutableStateOf(false) }
                     // 修复（H-3）：组合内 runBlocking 同步读改为 Flow 订阅
