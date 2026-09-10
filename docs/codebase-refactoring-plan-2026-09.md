@@ -1,7 +1,20 @@
 # NASMusicTV 代码库重构修复方案
 
 > 基于全代码库审阅产出的系统性重构方案，覆盖架构拆分、资源管理、安全性、性能优化等维度。
-> 版本：v1.4 | 审阅基线：v2.27.0 (versionCode=121) | 最后更新：2026-09-09
+> 版本：v1.6 | 审阅基线：v2.27.0 (versionCode=121) | 最后更新：2026-09-10
+>
+> **v1.6 修订说明（N 系列人工复核与定案标注）**：对 v1.5 新增的 N 系列 5 项发现做逐条代码级复核（数据全部复核通过），并修正其中的错误关联与定案冲突，主要变更：
+> - **N-1**：修复方案删除 `hiltViewModel()` 提法（与 R-8 定案不实施 Hilt 冲突），改为手动 DI 获取子 VM
+> - **N-4**：关联修正 R-2→R-5（原计划的 R-2 是 SettingsScreen 拆分，PlayerManager 对应 R-5）；补注 R-5「HQ 编排保留 PlayerManager 防接口爆炸」定案，四阶段拆分降级为待所有者决策项
+> - **N-5**：补注 R-10 定案（Jellyfin 保持原状**勿再作为待办启动**）；修正 R-6 关联描述（R-6 仅做 OkHttp 池化，注册机制系既有）；补记 Navidrome 已全量委托 SubsonicRestClient
+> - **N-2**：弱化「违反 Kotlin 惯例」表述（Kotlin 无此硬性惯例），降级为可选规范项
+> - 问题总览表 N 系列状态列同步修订；新增附录 H v1.6 修订记录
+>
+> **v1.5 修订说明（二次深度代码审阅——重构实施验证）**：对 v1.4 方案全部 R/F 项的实施结果做逐项代码级验证，并扫描新发现问题，主要变更：
+> - **R-1~R-10 / F-1~F-7 实施验证**：逐项对照源码确认实施状态与质量，R-4 实际为 13 个子 Prefs（v1.4 记 12，LyricsPrefs/PlayerPrefs/ServerPrefs 独立文件 + DomainPrefs.kt 内 10 个类）；R-1 兼容转发层约 350 行膨胀问题识别
+> - 新增「**二次审阅新发现（N 系列）**」章节：5 项新发现——N-1 MainViewModel 兼容转发层膨胀（P1）、N-2 DomainPrefs 多类单文件（P2）、N-3 AppRoot 123 处 collectAsState 上帝 Composable（P1）、N-4 PlayerManager 62.6KB 未拆分（P1）、N-5 BackendAdapter 巨型文件未拆（P2）
+> - 附录 B 代码质量评分上调（架构设计 4→4.5、代码组织 3→3.5、资源管理 4→4.5、安全性 4→4.5、可维护性 3→3.5），反映重构实施成效
+> - 附录 A 审阅覆盖文件清单更新为二次审阅实测数据
 >
 > **v1.4 修订说明（深度全库代码审阅）**：对 backend/player/ui/data/util/net/lyrics 全模块做了超越 R-1~R-10 覆盖面的深度审阅（并发、生命周期、日志安全、缓存上限、Compose 重组），主要变更：
 > - 新增「**深度代码审阅发现（F 系列）**」章节：8 项新发现，全部带 file:line 证据。最重要两项：F-1 敏感凭证 URL 经 `AppLog.w/e` 泄露到 release logcat（AppLog 的 w/e 级别不剥离）；F-2 AppRoot 顶层 `progress/duration` 收集每秒驱动全树重组
@@ -70,6 +83,7 @@
 - [R-10 后端适配器巨型文件拆分（🟡 P1）](#r-10-后端适配器巨型文件拆分p1)
 - [实施路线图](#实施路线图)
 - [深度代码审阅发现（F 系列）](#深度代码审阅发现f-系列)
+- [二次审阅新发现（N 系列）](#二次审阅新发现n-系列)
 - [W0 接口冻结清单（开发前必读）](#w0-接口冻结清单开发前必读)
 - [开发实施规约](#开发实施规约)
 - [各 R 项 Definition of Done](#各-r-项-definition-of-done)
@@ -83,7 +97,7 @@
 | R-1 | MainViewModel 5451行巨型文件 | 🔴 P0 | 可维护性/可测试性 | 5-8天（+联动改造AppRoot，见架构决策） | 🔶 四步拆分完成（13 子 VM 落位，5451→3186 行），MainViewModel ≤600 行目标未达 |
 | R-2 | SettingsScreen 135.9KB 单文件 | 🔴 P0 | UI可维护性 | 2-3天 | ✅ 2026-09-09 完成（按 9 个实际侧栏分区拆分，主文件 2529→924 行） |
 | R-3 | LibraryScreen 76.4KB 单文件 | 🔴 P0 | UI可维护性 | 2-3天 | ✅ 2026-09-09 完成（library/browse/ 5 文件，主文件 1695→647 行，详情页复用现役实现） |
-| R-4 | AppPreferences 58KB 单类 | 🟡 P1 | 偏好管理可维护性 | 2-3天 | ✅ 2026-09-09 完成（12 领域子 Prefs 门面 + 全库调用点迁移，270 单测全绿；旧 API 保留为转发实现，未标 @Deprecated——门面与旧 API 并存，新代码走子域） |
+| R-4 | AppPreferences 58KB 单类 | 🟡 P1 | 偏好管理可维护性 | 2-3天 | ✅ 2026-09-09 完成（13 领域子 Prefs 门面 + 全库调用点迁移，270 单测全绿；旧 API 保留为转发实现，未标 @Deprecated——门面与旧 API 并存，新代码走子域） |
 | R-5 | PlayerManager 62.6KB 人声分离耦合 | 🟡 P1 | 播放器可维护性 | 1-2天 | 🔶 SeparationMode 上提 + VocalSeparationController 落位（DoD ①②），HQ 编排保留 PlayerManager，手测待设备 |
 | R-6 | OkHttpClient 每适配器独立实例 | 🟡 P1 | 资源管理 | 1天 | ✅ 2026-09-09 完成（共享池注入 + 5 适配器 close() 移除 shutdown/evictAll），连续切后端手测待设备 |
 | R-7 | AppPreferences 11 处 runBlocking 物理调用点 | 🟡 P1 | ANR风险 | 1-2天 | ✅ 2026-09-09 完成（语言双写镜像 + 8 provider 键 @Volatile 镜像 + Baidu 系 @WorkerThread + F-3），ProviderMirrorTest 6/6 绿 |
@@ -91,6 +105,11 @@
 | R-9 | 重复import/颜色硬编码/注释残留 | 🟢 P2 | 代码规范 | 0.5天 | ✅ 2026-09-09 完成（重复 import 已删；颜色硬编码/修复标记按计划保持现状） |
 | R-10 | JellyfinAdapter 1215行 / NavidromeAdapter 932行 | 🟡 P1 | 后端层可维护性 | 3-5天 | ✅ 定案：Subsonic 公共层完成（SubsonicRestClient，Navidrome 全量委托/Subsonic 部分）；Jellyfin 域拆分经所有者确认**保持原状不实施**（实例状态耦合深，拆分回归风险高于收益）——勿再作为待办启动 |
 | F-1 | 敏感凭证 URL 泄露到 release 日志 | 🔴 P0 | 安全 | 0.5天 | ✅ 2026-09-09 完成 |
+| N-1 | MainViewModel 兼容转发层膨胀 | 🟡 P1 | 可维护性 | 1-2天 | 待实施（建议 AppRoot 直接引用子 VM，消除 ~350 行转发层；v1.6 注：须经手动 DI 获取子 VM，不引入 Hilt——R-8 定案） |
+| N-2 | DomainPrefs 多类单文件 | 🟢 P2 | 代码规范 | 0.5天 | 待实施（10 个子 Prefs 类挤在 DomainPrefs.kt 179 行，建议按领域拆独立文件） |
+| N-3 | AppRoot 123 处 collectAsState 上帝 Composable | 🟡 P1 | UI性能/可维护性 | 3-5天 | 待实施（F-2 仅解决 progress/duration 每秒重组，整体架构未变；建议按域分组提取子 Composable） |
+| N-4 | PlayerManager 62.6KB 未拆分 | 🟡 P1 | 播放器可维护性 | 3-5天 | 🔶 v1.6 降级为待所有者决策（70 方法涵盖播放控制/队列/人声分离编排/音高变速；与 R-5「HQ 编排保留 PlayerManager 防接口爆炸」定案同类回归风险，未经确认不得启动） |
+| N-5 | BackendAdapter 巨型文件未拆 | 🟢 P2 | 后端层可维护性 | 3-5天 | ✅ v1.6 归入 R-10 定案关闭（Jellyfin 保持原状勿再启动；Navidrome 已全量委托 SubsonicRestClient，属已定案关闭项非待办） |
 
 ---
 
@@ -1159,6 +1178,211 @@ BaiduOAuthClient 内的调用大多已在 `withContext(IO)` 内（:211 等），
 
 ---
 
+## 二次审阅新发现（N 系列）
+
+> 以下问题在 v1.5 二次深度代码审阅中发现，是对 R/F 系列的补充。R 系列关注架构级拆分，F 系列关注功能级修复，N 系列关注**已实施重构后仍残留的结构性问题**——它们不影响运行时正确性，但会持续增加维护成本。
+
+### N-1 MainViewModel 兼容转发层膨胀
+
+| 属性 | 值 |
+|------|------|
+| **优先级** | 🟡 P1（可维护性） |
+| **预估工期** | 1-2 天 |
+| **状态** | 待实施 |
+| **关联** | R-1（ViewModel 拆分） |
+
+**现状证据**（二次审阅实测）：
+
+- [`MainViewModel.kt`](app/src/main/java/com/nasmusic/tv/ui/viewmodel/MainViewModel.kt) 仍 3186 行（R-1 目标 ≤600 行）
+- 兼容转发层结构：`_weatherRadioVM` / `_serverVM` / `_searchVM` / `_netVM` / `_downloadVM` / `_vocalVM` / `_mvVM` 等私有子 VM 实例
+- 属性委托暴露只读 StateFlow（如 `weatherData get() = _weatherRadioVM.weatherData`）
+- 方法转发（如 `fetchWeather() = _weatherRadioVM.fetchWeather()`）
+- 转发层约占 350 行，且随子 VM 增多持续膨胀
+
+**问题分析**：
+
+R-1 拆分已将业务逻辑下沉至 13 个子 VM，但 MainViewModel 保留了完整的兼容转发层——每个子 VM 的公开 StateFlow 和方法都在 MainViewModel 有一对一的委托转发。这保证了 UI 层零改动兼容，但代价是 MainViewModel 行数无法降至目标值，且每次新增子 VM 都需同步增加转发代码。
+
+**修复方案**：
+
+1. **分阶段移除转发层**（推荐）：
+   - Phase 1：UI 层逐步改为直接引用子 VM（经手动 DI——AppRoot 已持有 NasMusicApp 的容器引用，可将子 VM 经 `viewModel()` 工厂从 MainViewModel 容器获取，**不引入 Hilt**，与 R-8 定案一致）
+   - Phase 2：每完成一个 Screen 的迁移，删除 MainViewModel 中对应转发代码
+   - Phase 3：MainViewModel 最终仅保留跨域事件路由（ViewModelEvents）和真正需要聚合的状态
+
+2. **保留转发层但压缩体积**（保守）：
+   - 使用 `by` 委托 + 泛型工厂方法减少样板代码
+   - 将转发代码移至独立文件 `MainViewModelForwarding.kt`（extension function）
+
+**DoD**：
+- [ ] MainViewModel ≤ 600 行（含事件路由）
+- [ ] 无一对一属性委托转发（`xxx get() = _xxxVM.xxx`）
+- [ ] UI 层直接引用子 VM 的 Screen ≥ 50%
+- [ ] 编译通过 + 全功能回归测试通过
+
+---
+
+### N-2 DomainPrefs 多类单文件
+
+| 属性 | 值 |
+|------|------|
+| **优先级** | 🟢 P2（代码规范） |
+| **预估工期** | 0.5 天 |
+| **状态** | 待实施 |
+| **关联** | R-4（Prefs 门面模式） |
+
+**现状证据**（二次审阅实测）：
+
+- [`DomainPrefs.kt`](app/src/main/java/com/nasmusic/tv/data/prefs/DomainPrefs.kt) 179 行，包含 10 个子 Prefs 类：
+  - `NetworkMusicPrefs`(24行) / `BaiduPrefs`(28行) / `DownloadPrefs`(12行) / `WeatherPrefs`(6行) / `VisualizerPrefs`(20行) / `HistoryPrefs`(19行) / `PlaylistPrefs`(12行) / `QueuePrefs`(6行) / `LanguagePrefs`(7行) / `BackupPrefs`(4行)
+- 所有类签名：`internal class XxxPrefs internal constructor(private val prefs: AppPreferences)`
+- 键不迁移，只搬访问器
+
+**问题分析**：
+
+R-4 已将 13 个子 Prefs 按领域拆分，但其中 10 个仍挤在 `DomainPrefs.kt` 单文件中。Kotlin 并无「一个文件一个类」的硬性惯例（多小类单文件是可接受的口味问题），此项为**可选规范项**，收益主要是降低 Git 合并冲突面与文件定位成本。独立文件的 3 个（LyricsPrefs / PlayerPrefs / ServerPrefs）行数也较少（17-24行），但至少遵循了单文件单类原则。
+
+**修复方案**：
+
+1. 将 DomainPrefs.kt 中 10 个类各拆至独立文件：
+   - `NetworkMusicPrefs.kt` / `BaiduPrefs.kt` / `DownloadPrefs.kt` / `WeatherPrefs.kt` / `VisualizerPrefs.kt` / `HistoryPrefs.kt` / `PlaylistPrefs.kt` / `QueuePrefs.kt` / `LanguagePrefs.kt` / `BackupPrefs.kt`
+2. 保留 `DomainPrefs.kt` 作为包级索引文件（仅含 `// 此文件已拆分，各类见同包下独立文件` 注释），或直接删除
+3. 更新所有 import 语句（Kotlin 类名未变，仅文件位置变化，IDE 自动重构）
+
+**DoD**：
+- [ ] 每个子 Prefs 类独占一个 `.kt` 文件
+- [ ] `DomainPrefs.kt` 已删除或仅保留索引注释
+- [ ] 全量 import 自动重构无遗漏
+- [ ] 编译通过
+
+---
+
+### N-3 AppRoot 123 处 collectAsState 上帝 Composable
+
+| 属性 | 值 |
+|------|------|
+| **优先级** | 🟡 P1（UI 性能 / 可维护性） |
+| **预估工期** | 3-5 天 |
+| **状态** | 待实施 |
+| **关联** | F-2（AppRoot 重组优化） |
+
+**现状证据**（二次审阅实测）：
+
+- [`AppRoot.kt`](app/src/main/java/com/nasmusic/tv/ui/components/AppRoot.kt) 含 123 处 `collectAsState` 调用
+- F-2 已将 `progress` / `duration` 从顶层下沉至播放页分支（避免每秒驱动全树重组）
+- 但 `isPlaying` 等高频变化状态仍在顶层收集
+- 123 处订阅意味着 AppRoot 感知了几乎所有应用状态，任何状态变化都可能触发重组
+
+**问题分析**：
+
+F-2 修复了最严重的性能问题（progress/duration 每秒重组），但 AppRoot 仍然是「上帝 Composable」——它承担了过多状态订阅职责。理想架构中，AppRoot 应只负责顶级导航和主题，各 Screen/Section 应自行订阅所需状态。
+
+**修复方案**：
+
+1. **状态下沉**（核心策略）：
+   - 将各 Screen 专属的 `collectAsState` 移至对应 Screen 内部
+   - AppRoot 仅保留：导航状态、主题状态、全局弹窗状态
+   - 目标：AppRoot 的 `collectAsState` ≤ 20 处
+
+2. **分批迁移**（降低风险）：
+   - Batch 1：播放相关状态 → `PlayerScreen` / `MiniPlayer`
+   - Batch 2：搜索相关状态 → `SearchScreen`
+   - Batch 3：设置相关状态 → `SettingsScreen`
+   - Batch 4：库相关状态 → `LibraryScreen`
+
+3. **验证手段**：
+   - 每批迁移后使用 Compose Compiler Metrics 检查重组范围
+   - 确认无「顶层状态变化 → 全树重组」的情况
+
+**DoD**：
+- [ ] AppRoot 的 `collectAsState` ≤ 20 处
+- [ ] 各 Screen 自行订阅其专属状态
+- [ ] Compose Compiler Metrics 确认无全树重组
+- [ ] 编译通过 + TV 焦点导航回归通过
+
+---
+
+### N-4 PlayerManager 62.6KB 未拆分
+
+| 属性 | 值 |
+|------|------|
+| **优先级** | 🟡 P1（播放器可维护性） |
+| **预估工期** | 3-5 天 |
+| **状态** | 待实施 |
+| **关联** | R-5（人声分离提取）——v1.6 修正：v1.5 原文误标 R-2，原计划的 R-2 是 SettingsScreen 拆分 |
+
+**现状证据**（二次审阅实测，v1.6 复核通过）：
+
+- [`PlayerManager.kt`](app/src/main/java/com/nasmusic/tv/player/PlayerManager.kt) 62.6KB（64117 字节，v1.6 实测一致），仍为单体文件，70 个 fun 声明（v1.6 实测一致）
+- PlayerManager 承担了播放核心、队列管理、媒体会话、音频焦点、耳机断连处理等多重职责
+
+> ⚠️ **v1.6 定案标注**：R-5 实施时已定案「HQ 编排保留 PlayerManager **防接口爆炸**」——PlayerCore/PlayerQueue/PlayerMediaSession/PlayerAudioFocus 四阶段拆分（v1.5 原文称出自"R-2 原方案"，该说法有误，原计划并无此方案）与该定案的回归风险逻辑相同。**本项降级为待所有者决策项**，未经所有者重新确认不得启动；启动前须评估播放核心回归成本（播放/队列/媒体会话/音频焦点全路径手测）。
+
+**问题分析**：
+
+PlayerManager 是仅次于 MainViewModel 的第二大单体文件。R-1 优先处理了 ViewModel 拆分，R-2 的 PlayerManager 拆分尚未排期。62.6KB 的文件在 Code Review 和合并冲突中都是痛点，且其多职责耦合增加了播放器相关 bug 的定位难度。
+
+**修复方案**（待所有者决策后方可启动）：
+
+四阶段拆分（v1.5 原文误称"R-2 原方案"，实为 v1.5 新提）：
+
+1. **Phase 1 — PlayerCore**：播放核心（ExoPlayer 实例管理、prepare/play/pause/seek/release）
+2. **Phase 2 — PlayerQueue**：队列管理（播放列表、上下曲、模式切换、shuffle/repeat）
+3. **Phase 3 — PlayerMediaSession**：媒体会话（MediaSession 连接、通知、蓝牙/耳机事件）
+4. **Phase 4 — PlayerAudioFocus**：音频焦点管理
+
+每个 Phase 独立 PR，确保播放功能回归通过后再进入下一 Phase。
+
+**DoD**：
+- [ ] PlayerManager.kt ≤ 15KB（仅保留协调逻辑）
+- [ ] PlayerCore / PlayerQueue / PlayerMediaSession / PlayerAudioFocus 各自独立文件
+- [ ] 各子组件通过接口解耦（参考 VocalSeparationController 的 PlayerAdapter 窄接口模式）
+- [ ] 编译通过 + 播放全功能回归通过
+
+---
+
+### N-5 BackendAdapter 巨型文件未拆
+
+| 属性 | 值 |
+|------|------|
+| **优先级** | 🟢 P2（后端层可维护性） |
+| **预估工期** | 3-5 天 |
+| **状态** | 待实施 |
+| **关联** | R-10（后端适配器拆分）——v1.6 修正：v1.5 原文误标 R-6；R-6 仅做 OkHttp 资源池化，适配器注册机制（BackendRegistry）系重构前既有 |
+
+**现状证据**（二次审阅实测，v1.6 复核通过）：
+
+- BackendAdapter 实现类仍为巨型文件（JellyfinAdapter 55.7KB/1218 行、NavidromeAdapter 41.6KB/902 行、SubsonicAdapter 37.6KB/833 行、FeiniuAdapter 28.3KB/663 行、DaoliyuAdapter 24.0KB/559 行——v1.6 实测一致）
+- 每个适配器包含：认证、曲库浏览、搜索、封面、流媒体 URL 等全部接口实现
+
+> ⚠️ **v1.6 定案标注**：R-10 已定案——Subsonic 公共层（SubsonicRestClient）已完成，**JellyfinAdapter 经所有者确认保持原状不实施域拆分，勿再作为待办启动**。且 NavidromeAdapter 的 902 行中大部分是对 SubsonicRestClient 的委托代码（v1.5 原文忽略此点）。本项仅剩理论上的拆分空间，**属已定案的关闭项，非待办**。
+
+**问题分析**：
+
+R-6 解决了适配器间的资源共享和注册机制问题，但单个适配器仍然是「上帝类」——一个文件实现 BackendAdapter 的全部接口方法。当新增后端类型时，需要在单个文件中实现所有接口方法，增加了出错概率和 Code Review 难度。
+
+**修复方案**：
+
+1. **按接口能力拆分**（推荐）：
+   - `AuthCapability` — 认证相关方法
+   - `BrowseCapability` — 曲库浏览方法
+   - `SearchCapability` — 搜索方法
+   - `CoverCapability` — 封面获取方法
+   - `StreamCapability` — 流媒体 URL 方法
+   - 每个适配器通过组合（composition）而非继承实现各 Capability
+
+2. **保持 BackendAdapter 接口不变**：
+   - 外部调用方无感知
+   - 适配器内部实现从单文件拆为多文件组合
+
+**DoD**：
+- [ ] 每个适配器单文件 ≤ 500 行
+- [ ] Capability 接口定义清晰，各适配器按能力组合
+- [ ] BackendAdapter 顶层接口不变，外部调用方零改动
+- [ ] 编译通过 + 五种后端核心路径回归通过
+
+---
+
 ## W0 接口冻结清单（开发前必读）
 
 > 本章节是 v1.3 新增的**开工前置交付物**。按 R-1「v1.2 实施注意」要求，Player 与 Search 的交互契约在此冻结；所有子 ViewModel 的包路径、文件名、构造签名在动工前逐项勾选确认，拆分期间任何接口变更必须回写本章节并注明日期，否则视为未冻结。
@@ -1375,7 +1599,7 @@ $env:JAVA_HOME = "C:\Program Files\Android\Android Studio\jbr"
 | net | RemoteControlServer.kt | - |
 | ui | MainActivity.kt | 403行 |
 | ui/components | AppRoot.kt | 1079行（123处collectAsState） |
-| ui/viewmodel | MainViewModel.kt | 5451行 |
+| ui/viewmodel | MainViewModel.kt | 3186行（v1.5 实测，含兼容转发层约350行） |
 | ui/screens | NowPlayingScreen.kt | - |
 | ui/screens | HomeScreen.kt | - |
 | ui/screens | LibraryScreen.kt | 76.4KB（1695行） |
@@ -1393,15 +1617,17 @@ $env:JAVA_HOME = "C:\Program Files\Android\Android Studio\jbr"
 
 ### B. 代码质量评分
 
-| 维度 | 评分 | 说明 |
-|------|------|------|
-| 架构设计 | ⭐⭐⭐⭐ | 分层清晰，适配器模式优秀 |
-| 代码组织 | ⭐⭐⭐ | 巨型文件需拆分重构（含 backend/impl 层） |
-| 错误处理 | ⭐⭐⭐⭐ | 各适配器异常捕获完善 |
-| 资源管理 | ⭐⭐⭐⭐ | OkHttp释放机制到位（池化前存在短暂共存窗口） |
-| 安全性 | ⭐⭐⭐⭐ | 证书校验/加密存储/OAuth设计良好 |
-| 可测试性 | ⭐⭐ | 手动DI+巨型ViewModel导致测试困难 |
-| 可维护性 | ⭐⭐⭐ | 核心模块需拆分，注释质量好 |
+> v1.5 更新：基于二次深度审阅对 R-1~R-10 / F-1~F-7 实施结果的逐项验证，上调部分维度评分。
+
+| 维度 | v1.4 评分 | v1.5 评分 | 变化 | 说明 |
+|------|----------|----------|------|------|
+| 架构设计 | ⭐⭐⭐⭐ | ⭐⭐⭐⭐☆ | ↑ | ViewModel 拆分 13 子 VM + ViewModelEvents 事件契约 + ProviderMirror 内存镜像 + BackendRegistry 共享资源池，架构清晰度提升 |
+| 代码组织 | ⭐⭐⭐ | ⭐⭐⭐☆ | ↑ | 子 VM / 子 Prefs 已拆分，但 MainViewModel 转发层膨胀(N-1)、DomainPrefs 多类单文件(N-2)、PlayerManager 未拆(N-4) 仍拖累 |
+| 错误处理 | ⭐⭐⭐⭐ | ⭐⭐⭐⭐ | → | 各适配器异常捕获完善，无变化 |
+| 资源管理 | ⭐⭐⭐⭐ | ⭐⭐⭐⭐☆ | ↑ | F-4 scope 统一注入 + F-5 缓存写互斥 + R-6 OkHttp 共享资源池，资源安全度提升 |
+| 安全性 | ⭐⭐⭐⭐ | ⭐⭐⭐⭐☆ | ↑ | F-1 日志凭证脱敏 + F-7 天气 Key 加密存储，安全基线提升 |
+| 可测试性 | ⭐⭐ | ⭐⭐ | → | 手动 DI 仍为主因，子 VM 拆分对可测试性改善有限（需 DI 框架迁移） |
+| 可维护性 | ⭐⭐⭐ | ⭐⭐⭐☆ | ↑ | F 系列修复 + R 系列拆分改善可维护性，但 N 系列残留问题（AppRoot 上帝 Composable / PlayerManager 未拆）仍需跟进 |
 
 ### C. v1.1 审阅修订记录
 
@@ -1454,3 +1680,28 @@ $env:JAVA_HOME = "C:\Program Files\Android\Android Studio\jbr"
 | 24 | R-7 表格修正 | Kugou/Netease baseUrl Sync 调用点更正为「主线程急切求值」（NasMusicApp:123-124 + MainViewModel:138-142 双处），原表述低估 | R-7 §7.1 |
 | 25 | R-9 标记表补全 | 补录 B15/H-4/H-5/M-1/M-2/M-5/M-7/M-9/M-14a-d/M-15/M-16 共 11 个已存在但未登记的修复标记 | R-9 §9.4 |
 | 26 | 路线图 + DoD 增补 | F-1/F-2 入阶段二排期（W4.5），F 系列全部入 DoD 表 | 实施路线图 / DoD |
+
+### G. v1.5 修订记录（二次深度代码审阅——重构实施验证）
+
+> v1.5 是基于对 R-1~R-10 / F-1~F-7 全部实施结果的逐项代码级验证，确认实施状态、发现残留问题、更新评分。
+
+| # | 修订项 | 内容 | 位置 |
+|--|--------|------|------|
+| 27 | R-1~R-10 逐项验证 | 10 项 R 系列全部逐项代码级验证，确认实施状态与质量；R-1 验证 13 子 VM 落位但 MainViewModel 仍 3186 行（兼容转发层约 350 行膨胀）；R-4 验证实际 13 个子 Prefs（非文档记载的 12 个）；R-7 验证 runBlocking 物理调用点从 11 处降至 4 处 | 各 R 项章节 |
+| 28 | F-1~F-7 逐项验证 | 7 项 F 系列全部验证实施完成，代码注释清晰标注 R/F 编号 | F 系列章节 |
+| 29 | N 系列新发现 | 新增 5 项二次审阅发现：N-1 MainViewModel 兼容转发层膨胀(P1) / N-2 DomainPrefs 多类单文件(P2) / N-3 AppRoot 123处collectAsState 上帝Composable(P1) / N-4 PlayerManager 62.6KB 未拆分(P1) / N-5 BackendAdapter 巨型文件未拆(P2) | 新增 N 系列章节 |
+| 30 | R-4 计数修正 | 子 Prefs 门面计数从 12 修正为 13（3 独立文件 + DomainPrefs.kt 内 10 个类） | R-4 §4.1 / 问题总览 |
+| 31 | 附录 B 评分上调 | 架构设计 4→4.5、代码组织 3→3.5、资源管理 4→4.5、安全性 4→4.5、可维护性 3→3.5；错误处理与可测试性不变 | 附录 B |
+| 32 | 附录 A 更新 | AppRoot.kt 补录 123 处 collectAsState 实测数据；MainViewModel.kt 行数更正为 3186 行（二次审阅实测） | 附录 A |
+
+### H. v1.6 修订记录（N 系列人工复核与定案标注）
+
+> v1.6 是对 v1.5 新增 N 系列 5 项发现的逐条代码级人工复核：**数据断言全部复核通过**（行数/字节数/collectAsState 计数/fun 计数均与实测一致），但修正其中的错误关联与定案冲突，防止后续会话误启动已定案关闭项。
+
+| # | 修订项 | 内容 | 位置 |
+|--|--------|------|------|
+| 33 | N-1 方案修正 | 修复方案删除 `hiltViewModel()` 提法（与 R-8 定案不实施 Hilt 冲突），改为手动 DI 获取子 VM；总览表状态列补注 | N-1 / 问题总览 |
+| 34 | N-2 定性弱化 | 「违反 Kotlin 一个文件一个公开类的惯例」表述不准确（Kotlin 无此硬性惯例），改为可选规范项 | N-2 |
+| 35 | N-4 关联修正 + 降级 | 关联 R-2→R-5（原计划 R-2 是 SettingsScreen 拆分；PlayerCore/PlayerQueue 四阶段方案系 v1.5 新提而非"R-2 原方案"）；补注 R-5「HQ 编排保留 PlayerManager 防接口爆炸」定案，降级为待所有者决策项，未经确认不得启动 | N-4 / 问题总览 |
+| 36 | N-5 关联修正 + 归案关闭 | 关联 R-6→R-10（R-6 仅做 OkHttp 池化，注册机制系既有）；补注 R-10 定案（Jellyfin 保持原状勿再启动）；补记 Navidrome 902 行大部分为 SubsonicRestClient 委托代码；归入 R-10 定案关闭，非待办 | N-5 / 问题总览 |
+| 37 | 数据复核确认 | N 系列 5 项数据断言逐条实测复核：MainViewModel 3186 行、DomainPrefs 179 行 10 类、AppRoot 123 处 collectAsState、PlayerManager 64117 字节/70 fun、5 适配器字节数——全部一致 | 附录 H 本表 |
