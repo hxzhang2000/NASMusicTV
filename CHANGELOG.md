@@ -9,8 +9,8 @@
 
 ## [Unreleased]
 
-### Changed
-- 待记录
+### Fixed
+- CI：`keystore.properties` 缺失时不再阻塞单测任务——`signingConfigs` 仅在配置存在时创建 release 签名，`signingConfig` 改用 `findByName`（返回 null）替代 `getByName`（配置期抛 `NoSuchElementException`）；此前 `file("")` 在配置期抛 `IllegalArgumentException`，导致 CI 的 `testDebugUnitTest` 整体失败。test job 同步补显式 Android SDK 安装步骤，不再依赖 runner 预装的隐含状态。
 
 ## [v2.28.0] - 2026-09-10
 
