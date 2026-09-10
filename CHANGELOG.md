@@ -9,9 +9,6 @@
 
 ## [Unreleased]
 
-### Fixed
-- 网络歌曲队列播放中断：某首歌链接过期失败跳过后，下一首不自动播放（需手动点播放恢复）。根因：出错后 ExoPlayer 处于 IDLE 状态，`next()` 的 `seekToNextMediaItem()` 既不触发 `onMediaItemTransition`（索引不同步、空 URL 懒解析检测失效）也不重新 `prepare`，播放器静默停住。修复：新增 `transitionToIndex()` 手动恢复路径（同步索引 + 空 streamUrl 触发 `onNeedResolveStreamUrl` 解析 + seekTo/prepare/play），`next()`/`previous()` 检测到 IDLE 时统一走该路径（随机模式同策略排除已播历史）；`onMediaItemTransition` 空 URL 检测从仅 AUTO 放宽到 AUTO|SEEK；`onIsPlayingChanged(true)` 时重置 `lastErrorRetryIndex`，同一首歌成功起播后若链接再次过期仍可自动重解析一次（原仅切歌时重置）
-
 ## [v2.28.1] - 2026-09-10
 
 ### Changed
@@ -23,6 +20,7 @@
 ### Fixed
 - 封面缓存清除不生效：`clearCoverCache()` 用 `coil.ImageLoader(context)` 工厂函数创建全新无配置实例，其 `memoryCache`/`diskCache` 与 UI 实际使用的全局 ImageLoader（`NasMusicApp.newImageLoader()`，已注入百度 dlink UA 拦截器）不是同一个，清除操作打在了无人使用的实例上、磁盘 100MB 缓存目录也未被清理。改为 `Coil.imageLoader(context)` 取全局单例，与 `PlaybackService`/`CoilBitmapLoader` 同一实例。顺带消除该处 `ExperimentalCoilApi` 未 opt-in 告警
 - CI：`keystore.properties` 缺失时不再阻塞单测任务——`signingConfigs` 仅在配置存在时创建 release 签名，`signingConfig` 改用 `findByName`（返回 null）替代 `getByName`（配置期抛 `NoSuchElementException`）；此前 `file("")` 在配置期抛 `IllegalArgumentException`，导致 CI 的 `testDebugUnitTest` 整体失败。test job 同步补显式 Android SDK 安装步骤，不再依赖 runner 预装的隐含状态。
+- 网络歌曲队列播放中断：某首歌链接过期失败跳过后，下一首不自动播放（需手动点播放恢复）。根因：出错后 ExoPlayer 处于 IDLE 状态，`next()` 的 `seekToNextMediaItem()` 既不触发 `onMediaItemTransition`（索引不同步、空 URL 懒解析检测失效）也不重新 `prepare`，播放器静默停住。修复：新增 `transitionToIndex()` 手动恢复路径（同步索引 + 空 streamUrl 触发 `onNeedResolveStreamUrl` 解析 + seekTo/prepare/play），`next()`/`previous()` 检测到 IDLE 时统一走该路径（随机模式同策略排除已播历史）；`onMediaItemTransition` 空 URL 检测从仅 AUTO 放宽到 AUTO|SEEK；`onIsPlayingChanged(true)` 时重置 `lastErrorRetryIndex`，同一首歌成功起播后若链接再次过期仍可自动重解析一次（原仅切歌时重置）
 
 ## [v2.28.0] - 2026-09-10
 
