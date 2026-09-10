@@ -121,6 +121,7 @@ fun SettingsScreen(
     onClearMvCache: (() -> Unit)? = null,
     onClearAccompanimentCache: (() -> Unit)? = null,
     onOpenEqualizer: (() -> Unit)? = null,
+    onOpenPlayStats: (() -> Unit)? = null,
     onChangeMetingApiBaseUrl: ((String) -> Unit)? = null,
     // MTV 视频搜索端点配置
     mvApiBaseUrl: String = "",
@@ -579,6 +580,7 @@ fun SettingsScreen(
                             onExportBackup = onExportBackup,
                             onImportBackup = onImportBackup,
                             onScanTransferBackup = onScanTransferBackup,
+                            onOpenPlayStats = onOpenPlayStats,
                         ),
                         onDeleteRequested = { file -> backupToDelete = file }
                     )

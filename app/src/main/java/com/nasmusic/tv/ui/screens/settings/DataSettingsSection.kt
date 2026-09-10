@@ -26,6 +26,8 @@ data class DataSettingsActions(
     val onExportBackup: (() -> Unit)?,
     val onImportBackup: ((android.net.Uri) -> Unit)?,
     val onScanTransferBackup: (() -> Unit)?,
+    /** F2-1：打开播放统计面板 */
+    val onOpenPlayStats: (() -> Unit)? = null,
 )
 
 /** 数据管理分区（原 SettingsScreen DATA 分支，逻辑逐行搬迁） */
@@ -58,6 +60,14 @@ internal fun DataSettingsSection(
                 label = stringResource(R.string.settings_scan_transfer),
                 description = stringResource(R.string.settings_scan_transfer_desc),
                 onClick = { actions.onScanTransferBackup?.invoke() }
+            )
+        }
+        // F2-1：播放统计面板入口
+        if (actions.onOpenPlayStats != null) {
+            SettingActionButton(
+                label = stringResource(R.string.pstats_title),
+                description = stringResource(R.string.pstats_entry_desc),
+                onClick = { actions.onOpenPlayStats?.invoke() }
             )
         }
         // 备份文件列表

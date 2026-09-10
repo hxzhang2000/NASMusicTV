@@ -43,6 +43,18 @@ class PlayerManager(private val applicationContext: Context) {
     /** 均衡器/频谱管理（N-4 提取） */
     private val playerEqualizer = PlayerEqualizer(Handler(Looper.getMainLooper()))
 
+    /** 睡眠定时器（F2-2）：到期暂停主播放器并刷新通知 */
+    val sleepTimer = SleepTimerController(
+        onExpired = {
+            pause()
+            // 通知宿主刷新（PlaybackService 轮询刷新机制兜底）
+            onSleepTimerExpired?.invoke()
+        }
+    )
+
+    /** F2-2：睡眠定时到期回调（PlaybackService 注册以刷新通知） */
+    var onSleepTimerExpired: (() -> Unit)? = null
+
     /** 高质量人声分离编排（N-4 提取），经 PlayerHost 窄接口回调本类播放操作 */
     private val hqOrchestrator = HqSeparationOrchestrator(applicationContext, object : HqSeparationOrchestrator.PlayerHost {
         override fun player(): ExoPlayer? = this@PlayerManager.player

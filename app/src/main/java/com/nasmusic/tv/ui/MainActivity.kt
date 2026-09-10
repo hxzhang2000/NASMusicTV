@@ -333,6 +333,10 @@ class MainActivity : ComponentActivity() {
         // 启动播放服务
         startService(Intent(this, PlaybackService::class.java))
 
+        // F2-2：通知栏"播放模式"按钮接线——service 广播回调转发到 PlayerViewModel
+        // 经 app 容器中转（service 与 Activity 生命周期独立，直接持有 VM 会泄漏）
+        (application as NasMusicApp).playModeToggleHandler = { viewModel.playerVM.togglePlayMode() }
+
         // D-2: 网络状态监听
         networkMonitor = NetworkMonitor(
             context = this,

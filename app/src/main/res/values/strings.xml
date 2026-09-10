@@ -933,4 +933,24 @@
 
     <!-- HTML 通用字符串 -->
     <string name="html_common_network_badge">NET</string>
+
+    <!-- F2-1 播放统计面板（pstats_ 前缀避免与 Mine 页 stats_* 冲突） -->
+    <string name="pstats_title">播放统计</string>
+    <string name="pstats_tab_monthly">本月</string>
+    <string name="pstats_tab_alltime">累计</string>
+    <string name="pstats_total_plays">播放次数</string>
+    <string name="pstats_distinct_songs">播放歌曲数</string>
+    <string name="pstats_top_artists">最爱歌手</string>
+    <string name="pstats_genre_distribution">流派分布</string>
+    <string name="pstats_empty">暂无播放记录，播放几首歌再来看看吧</string>
+    <string name="pstats_plays_format">%1$d 次</string>
+    <string name="pstats_songs_format">%1$d 首</string>
+    <string name="pstats_loading">统计中…</string>
+    <string name="pstats_entry_desc">查看本月最爱歌手与流派分布</string>
+
+    <!-- F2-2 通知栏增强 -->
+    <string name="notif_play_mode">播放模式</string>
+    <string name="notif_sleep_timer_start">定时关闭</string>
+    <string name="notif_sleep_timer_remaining">剩余 %1$d 分钟</string>
+    <string name="notif_next_up">下一首：%1$s</string>
 </resources>

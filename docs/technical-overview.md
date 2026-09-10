@@ -7845,3 +7845,21 @@ onSearchSong = { keyword -> viewModel.searchNetworkSongs(keyword) },
   - `onIsPlayingChanged(true)` 时重置 `lastErrorRetryIndex = -1`：同一首歌成功起播后若链接再次过期，仍允许自动重解析一次（原仅切歌时重置，长音轨二轮过期只能跳歌）
 - **验证**：assembleDebug 编译通过；testDebugUnitTest 270/270 全绿
 - **待办**：TV 手测（网络队列连续播放至链接过期场景 + K 歌页同场景）
+
+### 10.115 F2 系列播放功能增强 M1（2026-09-10，F2-1 + F2-2）
+
+计划文档：docs/feature-dev-plan-2026-09.md（v1.0）
+
+- **F2-1 播放统计面板**：
+  - data/stats/PlayStatsRepository：月度统计键 play_stats_monthly（JSON：month → songId → count），经 AppPreferences.recordPlayWithSong 第 4 步同次 DataStore edit 原子写入；滚动保留 12 个月；不做历史回填（设计取舍）
+  - data/stats/PlayStatsAggregator（纯函数）：artist 小写归并（GBK mojibake 不强并）、genre null/blank 归"未分类"、播放量降序 Top10
+  - ui/screens/stats/PlayStatsScreen + PlayStatsViewModel：本月/累计双 Tab、KPI 卡、最爱歌手横向列表（首字母头像，无图片加载依赖）、流派分布原生 Canvas 条形图；Screen.PlayStats 枚举 + AppRoot 接入；入口：设置 → 数据管理 → 播放统计（DataSettingsSection）
+  - 字符串 pstats_ 前缀（避免与 Mine 页 stats_* 冲突——实施中发现既有键）
+- **F2-2 通知栏增强 + 睡眠定时器**：
+  - player/SleepTimerController：State（Off/Running/Finished）状态机；不持久化（重启重置，设计取舍）；时间源可注入，tickExpired 公开供单测
+  - PlayerManager.sleepTimer 持有 + onSleepTimerExpired 回调挂点
+  - PlaybackService：通知按钮 3→5（prev/playPause/next/playMode/sleepTimer）；playMode/sleepTimer 走自定义 action 广播（ACTION_TOGGLE_PLAY_MODE/ACTION_SLEEP_TIMER_CYCLE，ContextCompat.registerReceiver + RECEIVER_NOT_EXPORTED）；播放模式切换经 NasMusicApp.playModeToggleHandler 中转（MainActivity 注册 → PlayerViewModel.togglePlayMode，避免 service 持有 VM 泄漏）；下一首 subText（队尾/空队列不显示）；睡眠定时运行中每分钟刷新通知剩余分钟
+  - NowPlayingScreen：sleepTimerRemainingMin 顶栏状态条（Warning 色 + 剩余分钟，点击 30 分钟快捷档）；PlayerViewModel 桥接 sleepTimerState/startSleepTimer/cancelSleepTimer
+  - 计划偏差说明：通知栏"歌词开关"按计划 §2.3 决策不做（TV 端歌词即主界面，通知栏 6 按钮溢出）；睡眠定时档位选择对话框未做（通知按钮循环切换 15min↔取消 + NowPlaying 快捷 30min 覆盖核心场景，档位对话框留待用户反馈）
+- **验证**：assembleDebug 通过；testDebugUnitTest 285/285 全绿（新增 PlayStatsAggregatorTest 8 + SleepTimerControllerTest 7）
+- **待办**：TV 手测（统计页 D-Pad、通知按钮 AVRCP/蓝牙遥控、睡眠定时到期暂停）

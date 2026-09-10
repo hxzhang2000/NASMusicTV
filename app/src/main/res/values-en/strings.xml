@@ -924,4 +924,24 @@
 
     <!-- Common HTML strings -->
     <string name="html_common_network_badge">NET</string>
+
+    <!-- F2-1 Play stats (pstats_ prefix avoids clash with Mine page stats_*) -->
+    <string name="pstats_title">Play Stats</string>
+    <string name="pstats_tab_monthly">This Month</string>
+    <string name="pstats_tab_alltime">All Time</string>
+    <string name="pstats_total_plays">Plays</string>
+    <string name="pstats_distinct_songs">Songs</string>
+    <string name="pstats_top_artists">Top Artists</string>
+    <string name="pstats_genre_distribution">Genre Distribution</string>
+    <string name="pstats_empty">No play records yet. Play some songs first!</string>
+    <string name="pstats_plays_format">%1$d plays</string>
+    <string name="pstats_songs_format">%1$d songs</string>
+    <string name="pstats_loading">Loading stats…</string>
+    <string name="pstats_entry_desc">View top artists and genre distribution</string>
+
+    <!-- F2-2 Notification enhancements -->
+    <string name="notif_play_mode">Play Mode</string>
+    <string name="notif_sleep_timer_start">Sleep Timer</string>
+    <string name="notif_sleep_timer_remaining">%1$d min left</string>
+    <string name="notif_next_up">Next: %1$s</string>
 </resources>

@@ -409,7 +409,14 @@ fun AppRoot(
                             hqSuccess = hqSuccess,
                             onClearHqSuccess = { viewModel.vocalVM.clearHqSuccess() },
                             // 高质量分离模型是否已下载（未下载时 K 歌页禁用高质量切换）
-                            modelDownloaded = modelDownloaded
+                            modelDownloaded = modelDownloaded,
+                            // === F2-2 睡眠定时器 ===
+                            sleepTimerRemainingMin = when (val st = viewModel.playerVM.sleepTimerState.collectAsState().value) {
+                                is com.nasmusic.tv.player.SleepTimerController.State.Running ->
+                                    ((st.endsAtMs - System.currentTimeMillis() + 59_999) / 60_000).toInt().coerceAtLeast(1)
+                                else -> null
+                            },
+                            onSleepTimerClick = { viewModel.playerVM.startSleepTimer(30) }
                         )
                     }
                 }
@@ -729,6 +736,7 @@ fun AppRoot(
                         onClearMvCache = { viewModel.clearMvPersistentCache() },
                         onClearAccompanimentCache = { viewModel.clearAccompanimentCache() },
                         onOpenEqualizer = { viewModel.navVM.navigateTo(Screen.Equalizer) },
+                        onOpenPlayStats = { viewModel.navVM.navigateTo(Screen.PlayStats) },
                         onChangeMetingApiBaseUrl = { viewModel.updateMetingApiBaseUrl(it) },
                         mvApiBaseUrl = settings.mvApiBaseUrl,
                         onChangeMvApiBaseUrl = { viewModel.updateMvApiBaseUrl(it) },
@@ -1019,6 +1027,11 @@ fun AppRoot(
                         onBack = { viewModel.navVM.navigateTo(Screen.Home) },
                         downloadStates = songDownloadStates,
                         onDownloadSong = { song -> viewModel.downloadVM.downloadSong(song) }
+                    )
+                }
+                Screen.PlayStats -> {
+                    com.nasmusic.tv.ui.screens.stats.PlayStatsScreen(
+                        onBack = { viewModel.navVM.navigateTo(Screen.Settings) }
                     )
                 }
             }

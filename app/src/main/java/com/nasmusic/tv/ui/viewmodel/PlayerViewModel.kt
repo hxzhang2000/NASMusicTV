@@ -51,6 +51,14 @@ class PlayerViewModel(
     private val _playMode = MutableStateFlow(PlayMode.SEQUENTIAL)
     val playMode: StateFlow<PlayMode> = _playMode.asStateFlow()
 
+    // F2-2：睡眠定时器状态桥接（PlayerManager.sleepTimer → UI）
+    val sleepTimerState: StateFlow<com.nasmusic.tv.player.SleepTimerController.State> =
+        playerManager.sleepTimer.state
+
+    /** F2-2：启动/取消睡眠定时 */
+    fun startSleepTimer(minutes: Int) = playerManager.sleepTimer.start(minutes)
+    fun cancelSleepTimer() = playerManager.sleepTimer.cancel()
+
     /** 播放模式变更监听（MainViewModel 用来同步 MvSearchViewModel 等），由 MainViewModel 注入 */
     var onPlayModeChanged: ((PlayMode) -> Unit)? = null
 

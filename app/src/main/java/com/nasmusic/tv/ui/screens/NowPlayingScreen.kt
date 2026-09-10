@@ -144,6 +144,11 @@ fun NowPlayingScreen(
     onClearHqSuccess: () -> Unit = {},
     /** 高质量分离模型是否已下载（未下载时禁用高质量切换） */
     modelDownloaded: Boolean = false,
+    // === F2-2 睡眠定时器 ===
+    /** 睡眠定时剩余分钟（null = 未启用） */
+    sleepTimerRemainingMin: Int? = null,
+    /** 点击睡眠定时图标弹出档位选择 */
+    onSleepTimerClick: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     var showInfoPanel by remember { mutableStateOf(false) }
@@ -255,6 +260,26 @@ fun NowPlayingScreen(
         Column(
             modifier = Modifier.fillMaxSize().padding(start = 24.dp, end = 24.dp, top = 40.dp, bottom = 24.dp)
         ) {
+            // F2-2：睡眠定时器状态条（运行中显示，可点击调整）
+            if (sleepTimerRemainingMin != null) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    com.nasmusic.tv.ui.components.FocusableSurface(
+                        onClick = onSleepTimerClick,
+                        shape = androidx.compose.foundation.shape.RoundedCornerShape(8.dp)
+                    ) {
+                        Text(
+                            text = stringResource(R.string.notif_sleep_timer_remaining, sleepTimerRemainingMin),
+                            color = NasMusicColors.Warning,
+                            fontSize = FontSize.caption(),
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+            }
             // 中部：专辑封面(1/3) + 歌词(2/3)
             Row(
                 modifier = Modifier

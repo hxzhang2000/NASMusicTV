@@ -78,6 +78,10 @@ class NasMusicApp : Application(), ImageLoaderFactory {
         private set
     lateinit var networkMusicManager: NetworkMusicManager
         private set
+
+    /** F2-2：播放模式切换回调宿主（MainActivity 注册，PlaybackService 通知按钮调用） */
+    @Volatile
+    var playModeToggleHandler: (() -> Unit)? = null
     lateinit var mvSearchManager: MvSearchManager
         private set
 

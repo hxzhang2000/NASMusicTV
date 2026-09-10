@@ -57,6 +57,36 @@ class PlaybackService : MediaLibraryService() {
     private var artworkLoadJob: Job? = null
     /** 服务级协程作用域 */
     private val serviceScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
+    /** F2-2：睡眠定时器运行中，通知剩余分钟刷新（分钟粒度 key 并入去重状态） */
+    private var sleepMinuteTickJob: Job? = null
+
+    private val controlReceiver = object : android.content.BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            when (intent.action) {
+                ACTION_TOGGLE_PLAY_MODE -> {
+                    AppLog.d("PlaybackService", "control: toggle play mode")
+                    (application as NasMusicApp).playModeToggleHandler?.invoke()
+                    // 强制刷新（模式图标变化）
+                    lastNotificationState = null
+                    updateNotification()
+                }
+                ACTION_SLEEP_TIMER_CYCLE -> {
+                    val pm = (application as NasMusicApp).playerManager
+                    if (pm.sleepTimer.isRunning()) {
+                        pm.sleepTimer.cancel()
+                        AppLog.d("PlaybackService", "control: sleep timer cancelled")
+                    } else {
+                        val minutes = SLEEP_TIMER_PRESETS.first()
+                        pm.sleepTimer.start(minutes)
+                        AppLog.d("PlaybackService", "control: sleep timer started ${minutes}min")
+                    }
+                    lastNotificationState = null
+                    updateNotification()
+                    restartSleepMinuteTick()
+                }
+            }
+        }
+    }
 
     private val playerListener = object : Player.Listener {
         override fun onIsPlayingChanged(isPlaying: Boolean) {
@@ -82,6 +112,22 @@ class PlaybackService : MediaLibraryService() {
     override fun onCreate() {
         super.onCreate()
         AppLog.d("PlaybackService", "onCreate: starting")
+
+        // F2-2：注册控制广播接收器（playMode/sleepTimer 自定义动作）
+        androidx.core.content.ContextCompat.registerReceiver(
+            this, controlReceiver,
+            android.content.IntentFilter().apply {
+                addAction(ACTION_TOGGLE_PLAY_MODE)
+                addAction(ACTION_SLEEP_TIMER_CYCLE)
+            },
+            androidx.core.content.ContextCompat.RECEIVER_NOT_EXPORTED
+        )
+        // F2-2：睡眠定时到期 → 刷新通知（显示"已到时"状态）
+        (application as NasMusicApp).playerManager.onSleepTimerExpired = {
+            lastNotificationState = null
+            stopSleepMinuteTick()
+            updateNotification()
+        }
 
         // Create notification channel for Android 8+
         createNotificationChannel()
@@ -234,6 +280,8 @@ class PlaybackService : MediaLibraryService() {
 
     override fun onDestroy() {
         AppLog.d("PlaybackService", "onDestroy: cleaning up")
+        try { unregisterReceiver(controlReceiver) } catch (_: Exception) {}
+        stopSleepMinuteTick()
         serviceScope.cancel()
         // 释放 PlayerManager 资源（Handler、listener），防止内存泄漏
         try {
@@ -374,28 +422,94 @@ class PlaybackService : MediaLibraryService() {
             buildMediaButtonPendingIntent(KeyEvent.KEYCODE_MEDIA_NEXT)
         ).build()
 
+        // F2-2：播放模式循环切换（自定义 action 广播，无系统键码语义）
+        val pm = (application as NasMusicApp).playerManager
+        val playModeAction = NotificationCompat.Action.Builder(
+            android.R.drawable.ic_menu_rotate,
+            getString(R.string.notif_play_mode),
+            buildControlPendingIntent(ACTION_TOGGLE_PLAY_MODE, RC_PLAY_MODE)
+        ).build()
+
+        // F2-2：睡眠定时（运行中显示剩余分钟，点击循环 开启→取消）
+        val sleepRunning = pm.sleepTimer.isRunning()
+        val sleepLabel = if (sleepRunning) {
+            getString(R.string.notif_sleep_timer_remaining, pm.sleepTimer.remainingMinutes())
+        } else {
+            getString(R.string.notif_sleep_timer_start)
+        }
+        val sleepAction = NotificationCompat.Action.Builder(
+            android.R.drawable.ic_lock_idle_alarm,
+            sleepLabel,
+            buildControlPendingIntent(ACTION_SLEEP_TIMER_CYCLE, RC_SLEEP_TIMER)
+        ).build()
+
         // contentText 显示歌手名（播放状态由 MediaStyle 图标隐含）
         val artist = mediaLibrarySession?.player?.currentMediaItem?.mediaMetadata?.artist?.toString()
+
+        // F2-2：下一首 subText（队尾/无队列不显示）
+        val nextUpText = nextSongTitle()
 
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle(title ?: "NAS Music TV")
             .setContentText(artist)
+            .setSubText(nextUpText)
             .setSmallIcon(android.R.drawable.ic_media_play)
             .also { builder -> cachedArtworkBitmap?.let { builder.setLargeIcon(it) } }
             .setContentIntent(pendingIntent)
             .addAction(prevAction)
             .addAction(playPauseAction)
             .addAction(nextAction)
+            .addAction(playModeAction)
+            .addAction(sleepAction)
             .setStyle(
                 androidx.media.app.NotificationCompat.MediaStyle()
                     .setMediaSession(mediaLibrarySession?.sessionCompatToken)
-                    .setShowActionsInCompactView(0, 1, 2)  // prev, play/pause, next
+                    // compact view 仍只显示核心 3 键：prev, play/pause, next
+                    .setShowActionsInCompactView(1, 2, 3)
             )
             .setOngoing(isPlaying)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setSilent(true)
             .build()
+    }
+
+    /** F2-2：下一首标题（队尾或无队列返回 null） */
+    private fun nextSongTitle(): String? {
+        val pm = (application as NasMusicApp).playerManager
+        val queue = pm.getQueueSnapshot()
+        if (queue.isEmpty()) return null
+        val nextIndex = pm.currentIndex.value + 1
+        val next = queue.getOrNull(nextIndex) ?: return null
+        return getString(R.string.notif_next_up, next.title)
+    }
+
+    /** F2-2：自定义控制动作 PendingIntent（定向本服务内 receiver） */
+    private fun buildControlPendingIntent(action: String, requestCode: Int): PendingIntent {
+        val intent = Intent(action).setClass(this, PlaybackService::class.java)
+        return PendingIntent.getBroadcast(
+            this, requestCode, intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+    }
+
+    /** F2-2：睡眠定时运行期间每分钟刷新通知剩余分钟 */
+    private fun restartSleepMinuteTick() {
+        stopSleepMinuteTick()
+        val pm = (application as NasMusicApp).playerManager
+        if (!pm.sleepTimer.isRunning()) return
+        sleepMinuteTickJob = serviceScope.launch {
+            while (pm.sleepTimer.isRunning()) {
+                kotlinx.coroutines.delay(60_000)
+                lastNotificationState = null
+                updateNotification()
+            }
+        }
+    }
+
+    private fun stopSleepMinuteTick() {
+        sleepMinuteTickJob?.cancel()
+        sleepMinuteTickJob = null
     }
 
     /**
@@ -419,5 +533,11 @@ class PlaybackService : MediaLibraryService() {
     companion object {
         private const val CHANNEL_ID = "nas_music_playback"
         private const val NOTIFICATION_ID = 1
-    }
-}
+        private const val ACTION_TOGGLE_PLAY_MODE = "com.nasmusic.tv.action.TOGGLE_PLAY_MODE"
+        private const val ACTION_SLEEP_TIMER_CYCLE = "com.nasmusic.tv.action.SLEEP_TIMER_CYCLE"
+        /** 睡眠定时器预设档位（分钟） */
+        private val SLEEP_TIMER_PRESETS = intArrayOf(15, 30, 60, 90)
+        /** 睡眠定时周期切换请求码 */
+        private const val RC_SLEEP_TIMER = 9001
+        private const val RC_PLAY_MODE = 9002
+    }}

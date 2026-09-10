@@ -85,6 +85,15 @@ class AppPreferences internal constructor(private val context: Context) {
         }
     }
 
+    // F2-1：月度播放统计仓库（依赖本类 dataStore/gson，recordPlayWithSong 原子联动写入）
+    internal val playStatsRepo by lazy { com.nasmusic.tv.data.stats.PlayStatsRepository(this) }
+
+    /** F2-1：供 PlayStatsRepository 读取的 DataStore 数据流（包内可见） */
+    internal fun dataStoreData() = dataStore.data
+
+    /** F2-1：供 PlayStatsRepository 复用的 Gson 实例（包内可见） */
+    internal fun gson(): Gson = gson
+
     // =====================================================================
     // R-7（方案 2026-09）：
     // 1. 语言键双写（SharedPreferences 镜像 + DataStore 事实源）——
@@ -539,6 +548,9 @@ class AppPreferences internal constructor(private val context: Context) {
                 }
                 prefs[keyRecentSongObjects] = gson.toJson(RecentSongObjectsData(objList))
             }
+
+            // 4. 月度统计（F2-1）：与上述键同一次 edit 原子写入
+            playStatsRepo.appendMonthlyPlayInEdit(prefs, songId, System.currentTimeMillis())
         }
     }
 
