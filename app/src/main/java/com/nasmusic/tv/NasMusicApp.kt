@@ -121,8 +121,8 @@ class NasMusicApp : Application(), ImageLoaderFactory {
             backendRegistry,
             networkMusicManager,
             // F-3：改 provider（读 @Volatile 镜像）——设置页改歌词源即时生效，且构造期零 IO
-            kugouBaseUrlProvider = { appPreferences.getLyricsKugouBaseUrlSync() },
-            neteaseBaseUrlProvider = { appPreferences.getLyricsNeteaseBaseUrlSync() }
+            kugouBaseUrlProvider = { appPreferences.lyrics.getLyricsKugouBaseUrlSync() },
+            neteaseBaseUrlProvider = { appPreferences.lyrics.getLyricsNeteaseBaseUrlSync() }
         )
     }
 

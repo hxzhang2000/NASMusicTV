@@ -48,6 +48,24 @@ import kotlinx.coroutines.runBlocking
  */
 class AppPreferences internal constructor(private val context: Context) {
 
+    // =====================================================================
+    // R-4 门面子域（键不迁移只搬访问器，DataStore 单例不变；调用方渐进迁移，
+    // 旧 API 保留至全部调用点迁移后再 @Deprecated）
+    // =====================================================================
+    val server: ServerPrefs by lazy { ServerPrefs(this) }
+    val player: PlayerPrefs by lazy { PlayerPrefs(this) }
+    val lyrics: LyricsPrefs by lazy { LyricsPrefs(this) }
+    val network: NetworkMusicPrefs by lazy { NetworkMusicPrefs(this) }
+    val baidu: BaiduPrefs by lazy { BaiduPrefs(this) }
+    val download: DownloadPrefs by lazy { DownloadPrefs(this) }
+    val weather: WeatherPrefs by lazy { WeatherPrefs(this) }
+    val visualizer: VisualizerPrefs by lazy { VisualizerPrefs(this) }
+    val history: HistoryPrefs by lazy { HistoryPrefs(this) }
+    val playlist: PlaylistPrefs by lazy { PlaylistPrefs(this) }
+    val queue: QueuePrefs by lazy { QueuePrefs(this) }
+    val languagePrefs: LanguagePrefs by lazy { LanguagePrefs(this) }
+    val backup: BackupPrefs by lazy { BackupPrefs(this) }
+
     companion object {
         private const val TAG = "AppPreferences"
 
