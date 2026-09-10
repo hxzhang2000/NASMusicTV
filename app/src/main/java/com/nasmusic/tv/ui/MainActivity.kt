@@ -177,7 +177,7 @@ class MainActivity : ComponentActivity() {
                     LocalNavigateBackHandler provides navigateBackHandler,
                     LocalShowExitConfirm provides showExitConfirm
                 ) {
-                    val showConnectPrompt by viewModel.showConnectPrompt.collectAsState(initial = false)
+                    val showConnectPrompt by viewModel.serverVM.showConnectPrompt.collectAsState(initial = false)
                     val connectMessage by viewModel.connectMessage.collectAsState(initial = null)
                     val errorMessage by viewModel.errorMessage.collectAsState(initial = null)
 
@@ -230,9 +230,9 @@ class MainActivity : ComponentActivity() {
                         // 启动连接提示对话框
                         if (showConnectPrompt) {
                             ConnectPromptDialog(
-                                serverDisplayName = viewModel.serverDisplayName.value,
+                                serverDisplayName = viewModel.serverVM.serverDisplayName.value,
                                 onConfirm = { viewModel.connectToSavedServer() },
-                                onDismiss = { viewModel.dismissConnectPrompt() }
+                                onDismiss = { viewModel.serverVM.dismissConnectPrompt() }
                             )
                         }
 
@@ -385,7 +385,7 @@ class MainActivity : ComponentActivity() {
             event = event,
             viewModel = viewModel,
             isImmersiveMode = isImmersiveMode.value,
-            currentScreen = viewModel.currentScreen.value
+            currentScreen = viewModel.navVM.currentScreen.value
         )
         if (handled) return true
 

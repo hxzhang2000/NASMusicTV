@@ -155,83 +155,73 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
     }
 
     // --- 天气电台（R-1：已拆分至 WeatherRadioViewModel，此处为兼容转发）---
-    private val _weatherRadioVM = WeatherRadioViewModel(app, playerManager, nasMusicApp.networkMusicManager)
-    val weatherData: StateFlow<WeatherData?> get() = _weatherRadioVM.weatherData
-    val weatherRadioQueue: StateFlow<WeatherRadioQueue?> get() = _weatherRadioVM.weatherRadioQueue
-    val currentWeatherMood: StateFlow<WeatherMood> get() = _weatherRadioVM.currentWeatherMood
-    val weatherLoading: StateFlow<Boolean> get() = _weatherRadioVM.weatherLoading
-    val weatherError: StateFlow<String?> get() = _weatherRadioVM.weatherError
-    val weatherForecast: StateFlow<List<WeatherForecast>> get() = _weatherRadioVM.weatherForecast
-    val weatherIconCode: StateFlow<String?> get() = _weatherRadioVM.weatherIconCode
+    val weatherRadioVM = WeatherRadioViewModel(app, playerManager, nasMusicApp.networkMusicManager)
 
-    fun fetchWeather() = _weatherRadioVM.fetchWeather()
-    fun switchWeatherMood(mood: WeatherMood) = _weatherRadioVM.switchWeatherMood(mood)
     fun playWeatherRadioAll() {
-        val songs = _weatherRadioVM.weatherRadioQueue.value?.songs ?: return
+        val songs = weatherRadioVM.weatherRadioQueue.value?.songs ?: return
         if (songs.isEmpty()) return
         // 网络歌曲需要解析 streamUrl，但这里统一走 playQueue 的逻辑
         playQueue(songs, 0)
         // 导航到播放页
-        _navVM.navigateTo(Screen.NowPlaying)
+        navVM.navigateTo(Screen.NowPlaying)
     }
 
     // =====================================================================
     // R-1 第三步拆分：Server / Search / NetworkMusic 已迁至子 ViewModel。
     // =====================================================================
-    private val _serverVM = ServerViewModel(app, backendRegistry)
-    private val _searchVM = SearchViewModel(app, backendRegistry, nasMusicApp.searchAggregator)
-    private val _netVM = NetworkMusicViewModel(app)
+    val serverVM = ServerViewModel(app, backendRegistry)
+    val searchVM = SearchViewModel(app, backendRegistry, nasMusicApp.searchAggregator)
+    val netVM = NetworkMusicViewModel(app)
 
     init {
         // ---- ServerViewModel 接线 ----
-        _serverVM.onConnected = {
+        serverVM.onConnected = {
             loadLibrary()
             // 更新恢复队列中 NAS 歌曲的 streamUrl
             updateRestoredQueueStreamUrls()
             // 导航到首页
-            _navVM.navigateTo(Screen.Home)
+            navVM.navigateTo(Screen.Home)
             loadHomeDashboard()
         }
-        _serverVM.onDisconnected = {
+        serverVM.onDisconnected = {
             _albums.value = UiState.Loading
             _songs.value = UiState.Loading
             _songsPaging.value = SongsPagingState()
             _artists.value = UiState.Success(emptyList())
             _years.value = UiState.Success(emptyList())
             _recentSongs.value = UiState.Success(emptyList())
-            _searchVM.clearSearch()
+            searchVM.clearSearch()
             _genres.value = UiState.Success(emptyList())
             _favoriteSongs.value = UiState.Success(emptyList())
             _playlists.value = UiState.Success(emptyList())
         }
-        _serverVM.checkSavedConfigOnStart()
-        _serverVM.refreshApiVersionsAsync()
+        serverVM.checkSavedConfigOnStart()
+        serverVM.refreshApiVersionsAsync()
 
         // ---- SearchViewModel 接线 ----
-        _searchVM.libraryActiveTabProvider = { _libraryActiveTab.value }
-        _searchVM.librarySearchKeywordProvider = { _librarySearchKeyword.value }
-        _searchVM.nasLocalSongsProvider = { _songsPaging.value.songs }
-        _searchVM.localDeviceSongsProvider = { _localSongs.value }
-        _searchVM.onAddToQueue = { playerManager.addToQueue(it) }
-        _searchVM.onPlayBatch = { songs, startIndex -> playNetworkBatch(songs, startIndex) }
-        _searchVM.showMessage = { showError(it) }
-        _searchVM.showMessageFor = { added, skipped, _ ->
-            _serverVM.postConnectMessage(
+        searchVM.libraryActiveTabProvider = { _libraryActiveTab.value }
+        searchVM.librarySearchKeywordProvider = { _librarySearchKeyword.value }
+        searchVM.nasLocalSongsProvider = { _songsPaging.value.songs }
+        searchVM.localDeviceSongsProvider = { _localSongs.value }
+        searchVM.onAddToQueue = { playerManager.addToQueue(it) }
+        searchVM.onPlayBatch = { songs, startIndex -> playNetworkBatch(songs, startIndex) }
+        searchVM.showMessage = { showError(it) }
+        searchVM.showMessageFor = { added, skipped, _ ->
+            serverVM.postConnectMessage(
                 getApplication<Application>().getString(R.string.added_to_queue_with_skipped, added, skipped)
             )
         }
 
         // ---- NetworkMusicViewModel 接线 ----
-        _netVM.onPlayQueue = { songs, startIndex -> playQueue(songs, startIndex) }
-        _netVM.showMessage = { showError(it) }
-        _netVM.onMergedDataInvalidated = { updateMergedData() }
+        netVM.onPlayQueue = { songs, startIndex -> playQueue(songs, startIndex) }
+        netVM.showMessage = { showError(it) }
+        netVM.onMergedDataInvalidated = { updateMergedData() }
         // 启动期恢复百度索引状态 + 触发合并
-        _netVM.restoreBaiduIndexOnStart { _ -> updateMergedData() }
+        netVM.restoreBaiduIndexOnStart { _ -> updateMergedData() }
     }
 
     // --- 导航状态（R-1 第四步：已迁至 NavigationViewModel，此处转发）---
-    private val _navVM = NavigationViewModel(app)
-    val currentScreen: StateFlow<Screen> get() = _navVM.currentScreen
+    val navVM = NavigationViewModel(app)
 
     // --- 首页仪表盘数据 ---
     private val _homeDashboardData = MutableStateFlow(HomeDashboardData())
@@ -329,10 +319,6 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
     val recentSongs: StateFlow<UiState<List<Song>>> = _recentSongs.asStateFlow()
 
     // --- 搜索域（R-1：已迁至 SearchViewModel，仅保留跨导航暂存的状态镜像）---
-    val searchResults: StateFlow<UiState<List<Song>>> get() = _searchVM.searchResults
-    val networkSearchResults: StateFlow<UiState<List<Song>>> get() = _searchVM.networkSearchResults
-    val networkSearchKeyword: StateFlow<String> get() = _searchVM.networkSearchKeyword
-    val enabledSearchSources: StateFlow<Set<MusicSourceType>> get() = _searchVM.enabledSearchSources
 
     /** 浏览换一批已展示过的歌曲（歌手, 歌名）集合：跨批次去重，筛选条件变化时重置 */
     private val browseSeenKeys = mutableSetOf<Pair<String, String>>()
@@ -393,7 +379,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
 
     // --- 统一收藏（R-1：收藏数据迁至 NetworkMusicViewModel，此处派生只读视图）---
     // 供 UI 使用：转换为 Song 对象列表（根据 source 标记 isLocalSong / isNetworkSong 字段）
-    val networkFavoriteSongs: StateFlow<List<Song>> = _netVM.networkFavorites.map { favorites ->
+    val networkFavoriteSongs: StateFlow<List<Song>> = netVM.networkFavorites.map { favorites ->
         favorites.map { item ->
             val isLocal = item.networkSource == "local"
             Song(
@@ -410,7 +396,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
         }
     }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
     // 网络收藏 ID 集合（用于快速判断是否已收藏）
-    val networkFavoriteIds: StateFlow<Set<String>> = _netVM.networkFavorites.map { favorites ->
+    val networkFavoriteIds: StateFlow<Set<String>> = netVM.networkFavorites.map { favorites ->
         favorites.map { it.songId }.toSet()
     }.stateIn(viewModelScope, SharingStarted.Eagerly, emptySet())
 
@@ -503,9 +489,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
         viewModelScope.launch {
             prefs.network.setMusicSource(source.apiKey)
             // 有搜索关键词时自动重新搜索（R-1：经 SearchViewModel）
-            val kw = _searchVM.networkSearchKeyword.value
+            val kw = searchVM.networkSearchKeyword.value
             if (kw.isNotBlank()) {
-                searchNetworkSongs(kw)
+                searchVM.searchNetworkSongs(kw)
             }
         }
     }
@@ -560,7 +546,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
     init {
         // 合并 ServerViewModel 的加载态到本地通道
         viewModelScope.launch {
-            _serverVM.isLoading.collect { _isLoading.value = it }
+            serverVM.isLoading.collect { _isLoading.value = it }
         }
     }
 
@@ -584,22 +570,18 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
     val songTechnicalInfo: StateFlow<com.nasmusic.tv.data.model.SongTechnicalInfo?> = _songTechnicalInfo.asStateFlow()
 
     // --- 播放统计（R-1 第四步：已迁至 PlayHistoryViewModel，此处转发）---
-    private val _playHistoryVM = PlayHistoryViewModel(app)
-    val playStatistics: StateFlow<PlayStatistics> get() = _playHistoryVM.playStatistics
-    val playRecords: StateFlow<List<PlayRecord>> get() = _playHistoryVM.playRecords
+    val playHistoryVM = PlayHistoryViewModel(app)
 
     fun recordPlayEvent(song: Song, durationPlayedMs: Long) =
-        _playHistoryVM.recordPlayEvent(song, durationPlayedMs)
+        playHistoryVM.recordPlayEvent(song, durationPlayedMs)
 
-    fun refreshPlayStatistics() = _playHistoryVM.refreshPlayStatistics()
-    fun clearPlayRecords() = _playHistoryVM.clearPlayRecords()
 
     /**
      * 异步获取当前歌曲的技术信息
      */
     fun loadSongTechnicalInfo() {
         viewModelScope.launch {
-            val song = currentSong.value ?: return@launch
+            val song = playerVM.currentSong.value ?: return@launch
             if (song.isNetworkSong) {
                 _songTechnicalInfo.value = null
                 return@launch
@@ -616,18 +598,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
     }
 
     // --- B-13: 播放器状态（R-1 第四步：已迁至 PlayerViewModel，此处转发）---
-    private val _playerVM = PlayerViewModel(app, playerManager)
-    val currentSong: StateFlow<Song?> get() = _playerVM.currentSong
-    val isPlaying: StateFlow<Boolean> get() = _playerVM.isPlaying
-    val progress: StateFlow<Long> get() = _playerVM.progress
-    val duration: StateFlow<Long> get() = _playerVM.duration
-    val queue: StateFlow<List<Song>> get() = _playerVM.queue
-    val currentIndex: StateFlow<Int> get() = _playerVM.currentIndex
+    val playerVM = PlayerViewModel(app, playerManager)
     /** 实时频谱数据（96 柱幅值），来自 SpectrumAnalyzer / Visualizer FFT */
-    val spectrumData: StateFlow<FloatArray> get() = _playerVM.spectrumData
 
     // B-13: playMode 由 PlayerViewModel 拥有（UI/设置状态，不归 PlayerManager）
-    val playMode: StateFlow<PlayMode> get() = _playerVM.playMode
 
     // --- 连接状态（R-1：已迁至 ServerViewModel，保留本地 connectMessage 通道供多域共用）---
     private val _isLibraryLoading = MutableStateFlow(false)
@@ -640,7 +614,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
     init {
         // 合并 ServerViewModel 的连接消息到本地通道（AppRoot 只订阅一处）
         viewModelScope.launch {
-            _serverVM.connectMessage.collect { _connectMessage.value = it }
+            serverVM.connectMessage.collect { _connectMessage.value = it }
         }
     }
 
@@ -682,7 +656,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
         viewModelScope.launch {
             // 初始化播放模式（B-13: 从预设置恢复）——R-1 后由 PlayerViewModel 持有
             val settings = prefs.appSettings.first()
-            _playerVM.initPlayModeFromSettings(settings.defaultPlayMode)
+            playerVM.initPlayModeFromSettings(settings.defaultPlayMode)
 
             // 初始化升降调/变速（从 AppPreferences 恢复）——R-1 后委托 VocalSeparationViewModel
             val savedPitch = prefs.player.pitchSemitones.first()
@@ -712,7 +686,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
         nasMusicApp.baiduPanApi.onApiError = { errno, desc ->
             if (errno == -6) {
                 AppLog.w("BaiduAuth", "onApiError: errno=-6 (auth failed), setting state=Failed")
-                _netVM.onBaiduAuthFailed(desc)
+                netVM.onBaiduAuthFailed(desc)
             } else {
                 AppLog.d("BaiduAuth", "onApiError: errno=$errno ($desc), not auth-related, ignored")
             }
@@ -720,7 +694,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
 
         // 监听 currentSong 变化，自动切歌时重新加载歌词，并记录播放历史
         viewModelScope.launch {
-            currentSong.collect { song ->
+            playerVM.currentSong.collect { song ->
                 // 记录上一首歌的播放
                 val previousSong = lastRecordedSong
                 val previousPosition = lastRecordedPositionMs
@@ -735,13 +709,13 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
 
                 if (song != null) {
                     // 自动下载判定链（总开关/可下载源/已下载/配额/空间）——切歌即触发，不等播放进度
-                    _downloadVM.onSongChanged(song)
+                    downloadVM.onSongChanged(song)
                     // 记录当前歌词来源（在 loadLyricsForCurrentSong 清除 _currentLyrics 之前）
                     lastRecordedLyricsSource = _currentLyrics.value?.source
                     loadLyricsForCurrentSong()
                     // MTV 连播静默推进索引时跳过搜索（预搜结果已直接设为 Ready）
-                    if (!_mvVM.shouldSkipNextSearch()) {
-                        triggerMvSearch(song)
+                    if (!mvVM.shouldSkipNextSearch()) {
+                        mvVM.triggerMvSearch(song)
                     }
                     // 记录当前歌的开始
                     lastRecordedSong = song
@@ -750,7 +724,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
                     recordPlay(song)
                 } else {
                     // 无当前歌曲（清空队列等）→ 重置 MV 状态
-                    _mvVM.resetIdle()
+                    mvVM.resetIdle()
                 }
             }
         }
@@ -759,7 +733,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
         viewModelScope.launch {
             while (true) {
                 delay(30000)
-                lastRecordedPositionMs = progress.value
+                lastRecordedPositionMs = playerVM.progress.value
             }
         }
 
@@ -768,7 +742,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
         // P1-19: distinctUntilChanged 避免相同 count 值触发无谓的 reload（Downloading 高频进度更新时）
         viewModelScope.launch {
             var lastCompletedCount = 0
-            _downloadVM.songDownloadStates
+            downloadVM.songDownloadStates
                 .map { states -> states.values.count { it is DownloadState.Completed } }
                 .distinctUntilChanged()
                 .collect { completedCount ->
@@ -777,7 +751,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
                         _localSongs.value = nasMusicApp.localMusicRepository.loadFromCache()
                         updateMergedData()
                         // 刷新下载统计
-                        _downloadVM.refreshDownloadStats()
+                        downloadVM.refreshDownloadStats()
                     }
                 }
         }
@@ -793,7 +767,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
 
         // 监听队列变化，自动持久化到 DataStore
         viewModelScope.launch {
-            combine(queue, currentIndex) { songs, index ->
+            combine(playerVM.queue, playerVM.currentIndex) { songs, index ->
                 songs to index
             }.collect { (songs, index) ->
                 if (songs.isNotEmpty()) {
@@ -805,12 +779,12 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
         // ExoPlayer 自动过渡到 streamUrl 为空的歌曲时（如恢复队列中的网络歌曲），
         // 解析 streamUrl 后重新播放
         playerManager.onNeedResolveStreamUrl = { index ->
-            _playerVM.resolveAndPlayByIndex(index)
+            playerVM.resolveAndPlayByIndex(index)
         }
 
         // 播放模式变化同步给 MvSearchViewModel（playMode 是方法参数语义）
         viewModelScope.launch {
-            _playerVM.playMode.collect { _mvVM.currentPlayMode = it }
+            playerVM.playMode.collect { mvVM.currentPlayMode = it }
         }
 
         // 初始化网络音乐平台来源（从持久化存储读取）
@@ -821,14 +795,14 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
             combine(_albums, _songs) { a, s ->
                 a.isSuccess && s.isSuccess
             }.collect { loaded ->
-                if (loaded && _navVM.currentScreen.value == Screen.Home) {
+                if (loaded && navVM.currentScreen.value == Screen.Home) {
                     loadHomeDashboard()
                 }
             }
         }
 
         // 加载播放记录
-        _playHistoryVM.loadPlayRecords()
+        playHistoryVM.loadPlayRecords()
 
         // 本地音乐初始化：先加载缓存，再后台增量扫描，监听 USB 插拔
         viewModelScope.launch {
@@ -884,29 +858,20 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
     }
 
     // --- 导航 ---
-    fun navigateTo(screen: Screen) = _navVM.navigateTo(screen)
 
     /**
      * 恢复队列与 streamUrl 更新已迁至 PlayerViewModel（restoreLastQueue / updateRestoredQueueStreamUrls）。
      */
-    private suspend fun restoreLastQueue() = _playerVM.restoreLastQueue()
-    private fun updateRestoredQueueStreamUrls() = _playerVM.updateRestoredQueueStreamUrls()
+    private suspend fun restoreLastQueue() = playerVM.restoreLastQueue()
+    private fun updateRestoredQueueStreamUrls() = playerVM.updateRestoredQueueStreamUrls()
 
     // --- 连接 ---
     /**
      * 连接域已迁至 ServerViewModel（R-1 第三步）。以下为兼容转发。
      */
-    val isConnected: StateFlow<Boolean> get() = _serverVM.isConnected
-    val serverDisplayName: StateFlow<String> get() = _serverVM.serverDisplayName
-    val backendApiVersion: StateFlow<String> get() = _serverVM.backendApiVersion
-    val apiVersions: StateFlow<List<VersionInfo>> get() = _serverVM.apiVersions
-    val showConnectPrompt: StateFlow<Boolean> get() = _serverVM.showConnectPrompt
 
-    suspend fun connectToServer(config: ServerConfig): Boolean = _serverVM.connectToServer(config)
-    fun disconnect() = _serverVM.disconnect()
-    suspend fun refreshApiVersions() = _serverVM.refreshApiVersions()
-    fun connectToSavedServer(silent: Boolean = false) = _serverVM.connectToSavedServer(silent)
-    fun dismissConnectPrompt() = _serverVM.dismissConnectPrompt()
+    suspend fun connectToServer(config: ServerConfig): Boolean = serverVM.connectToServer(config)
+    suspend fun refreshApiVersions() = serverVM.refreshApiVersions()
 
     /**
      * 增量构建艺术家映射（避免每次分页都全量重建）
@@ -1157,7 +1122,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
     fun playRandomSongs(songs: List<Song>, startIndex: Int) {
         _isShufflePlaying = true
         playQueue(songs, startIndex)
-        _navVM.navigateTo(Screen.NowPlaying)
+        navVM.navigateTo(Screen.NowPlaying)
         startShuffleRefill()
     }
 
@@ -1403,7 +1368,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
 
                 // 构造一次聚合器（produce 内多次调用复用同一实例）
                 val aggregator = nasMusicApp.searchAggregator
-                val enabledSources = _searchVM.enabledSearchSources.value
+                val enabledSources = searchVM.enabledSearchSources.value
                 val baiduLabelCombo = buildLabelCombo()
 
                 val (_, shown) = pickBestFreshBatch(
@@ -1454,7 +1419,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
      * 不足 30 首时有多少加多少。不触发导航，由调用方（AppRoot）处理 navigateTo(NowPlaying)。
      */
     fun playAllSearchResults() {
-        val results = _searchVM.networkSearchResults.value.dataOrNull() ?: return
+        val results = searchVM.networkSearchResults.value.dataOrNull() ?: return
         if (results.isEmpty()) return
         val deduped = results
             .distinctBy { it.artist.trim() to it.title.trim() }
@@ -1495,23 +1460,27 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
         }
     }
 
-    /**
-     * 播放网络歌曲（R-1：已迁至 NetworkMusicViewModel，此处转发；NAS 收藏分支回本类处理）
-     */
-    fun playNetworkSong(song: Song) = _netVM.playNetworkSong(song, onPlaySong = { playable -> playSong(playable) })
-
-    /**
-     * 切换歌曲收藏状态（统一模型，R-1：网络/本地分支已迁至 NetworkMusicViewModel）
-     *
-     * 所有歌曲共用一套收藏：网络/本地歌曲持久化到 DataStore（NetworkFavoriteItem，
-     * 本地歌曲 networkSource="local"），NAS 歌曲仍走后端 adapter.toggleFavorite。
-     * 收藏列表通过 SourceBadge 标明来源。
-     */
-    fun toggleNetworkFavorite(song: Song) = _netVM.toggleNetworkFavorite(
+    // ================= N-1 保留的胶水转发（非纯透传，含跨域参数拼接） =================
+    fun connectToSavedServer(silent: Boolean = false) = serverVM.connectToSavedServer(silent)
+    fun playNetworkSong(song: Song) = netVM.playNetworkSong(song, onPlaySong = { playable -> playerVM.playSong(playable) })
+    fun toggleNetworkFavorite(song: Song) = netVM.toggleNetworkFavorite(
         song,
         isNasFavorite = song.id in _favoriteIds.value,
         onNasToggle = { nasSong, isFav -> toggleNasFavorite(nasSong, isFav) }
     )
+    fun searchSongsOnServer(query: String, force: Boolean = false) = searchVM.searchSongsOnServer(query, force)
+    fun addAllSearchResultsToQueue() = searchVM.addAllSearchResultsToQueue(
+        existingQueueKeysProvider = {
+            playerManager.queue.value.map { it.artist.trim() to it.title.trim() }.toSet()
+        }
+    )
+    fun deleteModel() = downloadVM.deleteModel(onModeFallback = { vocalVM.onModelDeleted() })
+    fun onMvPlaybackError() = mvVM.onMvPlaybackError(playerVM.currentSong.value)
+    fun onMvPlaybackEnded() = mvVM.onMvPlaybackEnded(playerVM.currentSong.value, playerVM.playMode.value)
+    fun onMvPrevious() = mvVM.onMvPrevious(playerVM.playMode.value)
+    fun onMvNext() = mvVM.onMvNext(playerVM.playMode.value)
+    fun onSwitchOrResearch() = mvVM.onSwitchOrResearch(playerVM.currentSong.value)
+    fun onSearchBilibili() = mvVM.onSearchBilibili(playerVM.currentSong.value)
 
     /** NAS 收藏分支（留在 MainViewModel：依赖本类 _favoriteIds/_favoriteSongs 状态） */
     private fun toggleNasFavorite(song: Song, isCurrentlyFavorite: Boolean) {
@@ -1542,7 +1511,6 @@ showError(getApplication<Application>().getString(R.string.toggle_favorite_error
     /**
      * 判断网络歌曲是否已收藏（同步，用于 UI 快速判断）
      */
-    fun isNetworkFavorite(songId: String): Boolean = _netVM.isNetworkFavorite(songId)
 
     private val preconfiguredPlaylists = listOf(
         Triple("3778678", "热歌榜", "netease"),
@@ -1568,7 +1536,7 @@ showError(getApplication<Application>().getString(R.string.toggle_favorite_error
         _artists.value = UiState.Success(emptyList())
         _years.value = UiState.Success(emptyList())
         _recentSongs.value = UiState.Success(emptyList())
-        _searchVM.clearSearch()
+        searchVM.clearSearch()
         loadLibrary()
     }
 
@@ -1577,54 +1545,26 @@ showError(getApplication<Application>().getString(R.string.toggle_favorite_error
     // =====================================================================
 
     // ---- SearchViewModel 转发 ----
-    fun searchSongsOnServer(query: String, force: Boolean = false) = _searchVM.searchSongsOnServer(query, force)
-    fun clearSearch() = _searchVM.clearSearch()
-    fun searchNetworkSongs(keyword: String) = _searchVM.searchNetworkSongs(keyword)
-    fun shuffleNetworkSearch() = _searchVM.shuffleNetworkSearch()
-    fun clearNetworkSearch() = _searchVM.clearNetworkSearch()
-    fun toggleSearchSource(source: MusicSourceType) = _searchVM.toggleSearchSource(source)
-    fun enableAllSearchSources() = _searchVM.enableAllSearchSources()
-    fun addAllSearchResultsToQueue() = _searchVM.addAllSearchResultsToQueue(
-        existingQueueKeysProvider = {
-            playerManager.queue.value.map { it.artist.trim() to it.title.trim() }.toSet()
-        }
-    )
 
     // ---- NetworkMusicViewModel（百度网盘）转发 ----
     /** 百度索引缓存（曲库合并/详情取数仍由 MainViewModel 使用） */
     private val baiduIndexCache: BaiduFileIndexCache get() = nasMusicApp.baiduFileIndexCache
 
-    val baiduConnectionState: StateFlow<NetworkMusicViewModel.BaiduConnectionState> get() = _netVM.baiduConnectionState
-    val baiduDeviceCode get() = _netVM.baiduDeviceCode
-    val netdiskCurrentDir get() = _netVM.netdiskCurrentDir
-    val netdiskDirFiles get() = _netVM.netdiskDirFiles
-    val netdiskIsLoading get() = _netVM.netdiskIsLoading
-    val netdiskSearchResults get() = _netVM.netdiskSearchResults
-    val netdiskSearchKeyword get() = _netVM.netdiskSearchKeyword
-    val baiduIndexScanned get() = _netVM.baiduIndexScanned
-    val baiduIndexScanning get() = _netVM.baiduIndexScanning
-    val baiduIndexLastSync get() = _netVM.baiduIndexLastSync
-    val baiduApicExtracting get() = _netVM.baiduApicExtracting
-    val baiduApicExtracted get() = _netVM.baiduApicExtracted
-    val baiduApicTotal get() = _netVM.baiduApicTotal
+    val baiduDeviceCode get() = netVM.baiduDeviceCode
+    val netdiskCurrentDir get() = netVM.netdiskCurrentDir
+    val netdiskDirFiles get() = netVM.netdiskDirFiles
+    val netdiskIsLoading get() = netVM.netdiskIsLoading
+    val netdiskSearchResults get() = netVM.netdiskSearchResults
+    val netdiskSearchKeyword get() = netVM.netdiskSearchKeyword
+    val baiduIndexScanned get() = netVM.baiduIndexScanned
+    val baiduIndexScanning get() = netVM.baiduIndexScanning
+    val baiduIndexLastSync get() = netVM.baiduIndexLastSync
+    val baiduApicExtracting get() = netVM.baiduApicExtracting
+    val baiduApicExtracted get() = netVM.baiduApicExtracted
+    val baiduApicTotal get() = netVM.baiduApicTotal
 
-    fun refreshBaiduConnectionState() = _netVM.refreshBaiduConnectionState()
-    fun setBaiduEnabled(enabled: Boolean) = _netVM.setBaiduEnabled(enabled)
-    fun startBaiduDeviceCodeFlow() = _netVM.startBaiduDeviceCodeFlow()
-    fun cancelBaiduDeviceCode() = _netVM.cancelBaiduDeviceCode()
-    fun logoutBaidu() = _netVM.logoutBaidu()
-    fun listBaiduDir(dir: String) = _netVM.listBaiduDir(dir)
-    suspend fun listBaiduDirs(path: String) = _netVM.listBaiduDirs(path)
-    fun navigateBaiduDirUp() = _netVM.navigateBaiduDirUp()
-    fun enterBaiduDir(name: String) = _netVM.enterBaiduDir(name)
-    fun searchBaidu(keyword: String) = _netVM.searchBaidu(keyword)
-    fun clearNetdiskSearch() = _netVM.clearNetdiskSearch()
-    fun playAllNetdiskSearch() = _netVM.playAllNetdiskSearch()
-    fun playAllNetdiskDir(dir: String, onPlayAll: (List<Song>) -> Unit) = _netVM.playAllNetdiskDir(dir, onPlayAll)
-    fun rebuildBaiduIndex() = _netVM.rebuildBaiduIndex()
-    fun setBaiduMusicRootDir(dir: String) = _netVM.setBaiduMusicRootDir(dir)
-    fun setBaiduMvDir(dir: String?) = _netVM.setBaiduMvDir(dir)
-    fun loadBaiduIndexedSongs(): List<Song> = _netVM.loadBaiduIndexedSongs()
+    suspend fun listBaiduDirs(path: String) = netVM.listBaiduDirs(path)
+    fun playAllNetdiskDir(dir: String, onPlayAll: (List<Song>) -> Unit) = netVM.playAllNetdiskDir(dir, onPlayAll)
 
     /**
      * 刷新合并后的专辑 / 艺术家列表
@@ -2010,7 +1950,7 @@ showError(getApplication<Application>().getString(R.string.toggle_favorite_error
             }
             if (result.isNotEmpty()) {
                 playQueue(result)
-                navigateTo(Screen.NowPlaying)
+                navVM.navigateTo(Screen.NowPlaying)
             }
         }
     }
@@ -2019,13 +1959,13 @@ showError(getApplication<Application>().getString(R.string.toggle_favorite_error
     fun openAlbumDetail(album: Album) {
         _selectedAlbum.value = album
         loadAlbumSongs(album.id)
-        _navVM.navigateTo(Screen.AlbumDetail)
+        navVM.navigateTo(Screen.AlbumDetail)
     }
 
     fun openArtistDetail(artistName: String) {
         _selectedArtistName.value = artistName
         loadArtistSongs(artistName)
-        _navVM.navigateTo(Screen.ArtistDetail)
+        navVM.navigateTo(Screen.ArtistDetail)
     }
 
     private val _artistDetailSongsCache = MutableStateFlow<Map<String, List<Song>>>(emptyMap())
@@ -2148,14 +2088,8 @@ showError(getApplication<Application>().getString(R.string.toggle_favorite_error
         songId in _favoriteIds.value || songId in networkFavoriteIds.value
 
     // --- 本地歌单操作（R-1：已拆分至 PlaylistViewModel，此处为兼容转发）---
-    private val _playlistVM = PlaylistViewModel(app)
-    val localPlaylists: StateFlow<List<LocalPlaylist>> get() = _playlistVM.localPlaylists
+    val playlistVM = PlaylistViewModel(app)
 
-    fun createLocalPlaylist(name: String) = _playlistVM.createLocalPlaylist(name)
-    fun renameLocalPlaylist(id: String, newName: String) = _playlistVM.renameLocalPlaylist(id, newName)
-    fun deleteLocalPlaylist(id: String) = _playlistVM.deleteLocalPlaylist(id)
-    fun addSongToPlaylist(playlistId: String, song: Song) = _playlistVM.addSongToPlaylist(playlistId, song)
-    fun removeSongFromPlaylist(playlistId: String, songId: String) = _playlistVM.removeSongFromPlaylist(playlistId, songId)
 
     /**
      * 播放整个本地歌单（含网络歌曲时自动解析 streamUrl）
@@ -2163,21 +2097,13 @@ showError(getApplication<Application>().getString(R.string.toggle_favorite_error
     fun playLocalPlaylist(playlist: LocalPlaylist) {
         if (playlist.songs.isEmpty()) return
         playQueue(playlist.songs, 0)
-        navigateTo(Screen.NowPlaying)
+        navVM.navigateTo(Screen.NowPlaying)
     }
 
     // --- 数据备份（R-1：已拆分至 BackupViewModel，此处为兼容转发）---
-    private val _backupVM = BackupViewModel(app)
-    val backupFiles: StateFlow<List<BackupFileUtils.BackupFile>> get() = _backupVM.backupFiles
-    val backupMessage: StateFlow<BackupMessage?> get() = _backupVM.backupMessage
+    val backupVM = BackupViewModel(app)
 
-    fun refreshBackupFiles() = _backupVM.refreshBackupFiles()
-    fun exportBackup() = _backupVM.exportBackup()
-    fun importBackup(uri: Uri) = _backupVM.importBackup(uri)
-    suspend fun restoreBackupFromJson(json: String): Boolean = _backupVM.restoreBackupFromJson(json)
-    fun restoreBackupFromJsonBlocking(json: String): Boolean = _backupVM.restoreBackupFromJsonBlocking(json)
-    fun deleteBackup(uri: Uri) = _backupVM.deleteBackup(uri)
-    fun consumeBackupMessage() = _backupVM.consumeBackupMessage()
+    suspend fun restoreBackupFromJson(json: String): Boolean = backupVM.restoreBackupFromJson(json)
 
     // --- B-2 最近播放 & 播放次数 ---
     fun recordPlay(song: Song) {
@@ -2244,7 +2170,7 @@ showError(getApplication<Application>().getString(R.string.toggle_favorite_error
         if (_isNetworkAvailable.value) return // 已是可用状态，跳过（防止 NetworkMonitor 重复回调）
         _isNetworkAvailable.value = true
         // MTV 模式下不弹提示（MV 视频流请求可能导致网络抖动，频繁弹"网络已恢复"打扰观看）
-        if (!_mvVM.showMv.value) {
+        if (!mvVM.showMv.value) {
             _connectMessage.value = getApplication<Application>().getString(R.string.status_network_restored)
             viewModelScope.launch {
                 delay(2000)
@@ -2252,17 +2178,17 @@ showError(getApplication<Application>().getString(R.string.toggle_favorite_error
             }
         }
         // 自动重连
-        if (!_serverVM.isConnected.value && reconnectAttempts < maxReconnectAttempts) {
+        if (!serverVM.isConnected.value && reconnectAttempts < maxReconnectAttempts) {
             reconnectAttempts++
             AppLog.d("NASMusic", "onNetworkAvailable: reconnecting (attempt $reconnectAttempts/$maxReconnectAttempts)")
-            connectToSavedServer(silent = true)
+            serverVM.connectToSavedServer(silent = true)
         }
     }
 
     fun onNetworkLost() {
         _isNetworkAvailable.value = false
         reconnectAttempts = 0
-        if (!_mvVM.showMv.value) {
+        if (!mvVM.showMv.value) {
             _connectMessage.value = getApplication<Application>().getString(R.string.status_network_disconnected)
             viewModelScope.launch {
                 delay(5000)
@@ -2272,41 +2198,32 @@ showError(getApplication<Application>().getString(R.string.toggle_favorite_error
     }
 
     // --- 播放控制（R-1 第四步：已迁至 PlayerViewModel，此处转发）---
-    fun playSong(song: Song) = _playerVM.playSong(song)
     fun playQueue(songs: List<Song>, startIndex: Int = 0) {
         // 非随心听播放时停止自动续播（随心听状态仍由 MainViewModel 的浏览/发现域持有）
         _isShufflePlaying = false
         shuffleRefillJob?.cancel()
-        _playerVM.playQueue(songs, startIndex)
+        playerVM.playQueue(songs, startIndex)
     }
 
-    fun playPause() = _playerVM.playPause()
-    fun next() = _playerVM.next()
-    fun previous() = _playerVM.previous()
-    fun seekTo(positionMs: Long) = _playerVM.seekTo(positionMs)
-    fun togglePlayMode() = _playerVM.togglePlayMode()
-    fun setPlayMode(mode: PlayMode) = _playerVM.setPlayMode(mode)
     fun addSongToQueue(song: Song) = playerManager.addToQueue(song)
-    fun addSongsToQueue(songs: List<Song>) = _playerVM.addSongsToQueue(songs)
-    fun toggleQueueSong(song: Song) = _playerVM.toggleQueueSong(song)
 
     // =====================================================================
     // R-1 第二步拆分：Download / MvSearch / VocalSeparation 已迁至子 ViewModel，
     // 以下为兼容转发层（AppRoot 的既有引用不变）。
     // =====================================================================
 
-    private val _downloadVM = DownloadViewModel(
+    val downloadVM = DownloadViewModel(
         app,
         nasMusicApp.songDownloadManager,
         nasMusicApp.modelDownloadManager,
         nasMusicApp.autoDownloadController
     )
-    private val _vocalVM = VocalSeparationViewModel(app, playerManager)
-    private val _mvVM = MvSearchViewModel(app, mvSearchManager, playerManager)
+    val vocalVM = VocalSeparationViewModel(app, playerManager)
+    val mvVM = MvSearchViewModel(app, mvSearchManager, playerManager)
 
     init {
         // 下载域刷新本地歌曲时联动合并数据
-        _downloadVM.onLocalSongsChanged = {
+        downloadVM.onLocalSongsChanged = {
             viewModelScope.launch {
                 _localSongs.value = nasMusicApp.localMusicRepository.loadFromCache()
                 updateMergedData()
@@ -2314,63 +2231,26 @@ showError(getApplication<Application>().getString(R.string.toggle_favorite_error
         }
         // 模型下载状态同步给人声分离域（模式切换门槛判断）
         viewModelScope.launch {
-            _downloadVM.modelDownloaded.collect { downloaded -> _vocalVM.setModelDownloaded(downloaded) }
+            downloadVM.modelDownloaded.collect { downloaded -> vocalVM.setModelDownloaded(downloaded) }
         }
         // K 歌进入时启动遥控服务器
-        _vocalVM.onEnsureRemoteControlStarted = { ensureRemoteControlStarted() }
+        vocalVM.onEnsureRemoteControlStarted = { ensureRemoteControlStarted() }
         // MV 播放模式同步（playMode 由 MainViewModel 拥有，作为方法参数下发）
         viewModelScope.launch {
-            _playerVM.playMode.collect { _mvVM.currentPlayMode = it }
+            playerVM.playMode.collect { mvVM.currentPlayMode = it }
         }
     }
 
     // ---- DownloadViewModel 转发 ----
     val songDownloadStates: StateFlow<Map<String, com.nasmusic.tv.backend.download.model.DownloadState>>
-        get() = _downloadVM.songDownloadStates
-    val downloadStats: StateFlow<com.nasmusic.tv.backend.download.DownloadStats> get() = _downloadVM.downloadStats
-    val modelDownloaded: StateFlow<Boolean> get() = _downloadVM.modelDownloaded
-    val modelDownloading: StateFlow<Boolean> get() = _downloadVM.modelDownloading
-    val modelDownloadProgress: StateFlow<Float> get() = _downloadVM.modelDownloadProgress
-    val modelDownloadedMB: StateFlow<Long> get() = _downloadVM.modelDownloadedMB
-    val modelTotalMB: StateFlow<Long> get() = _downloadVM.modelTotalMB
-    val modelDownloadError: StateFlow<String?> get() = _downloadVM.modelDownloadError
-    val modelSizeMB: StateFlow<Double> get() = _downloadVM.modelSizeMB
-    val modelPath: StateFlow<String> get() = _downloadVM.modelPath
+        get() = downloadVM.songDownloadStates
 
-    fun refreshDownloadStats() = _downloadVM.refreshDownloadStats()
-    fun refreshModelStatus() = _downloadVM.refreshModelStatus()
-    fun downloadModel() = _downloadVM.downloadModel()
-    fun deleteModel() = _downloadVM.deleteModel(onModeFallback = { _vocalVM.onModelDeleted() })
-    fun downloadSong(song: Song) = _downloadVM.downloadSong(song)
-    fun clearAllDownloads() = _downloadVM.clearAllDownloads()
-    fun deleteDownload(song: Song) = _downloadVM.deleteDownload(song)
 
     // ---- VocalSeparationViewModel 转发 ----
-    val vocalRemovalEnabled: StateFlow<Boolean> get() = _vocalVM.vocalRemovalEnabled
-    val separationMode: StateFlow<AppPreferences.SeparationMode> get() = _vocalVM.separationMode
-    val separating: StateFlow<Boolean> get() = _vocalVM.separating
-    val separationProgress: StateFlow<Pair<Float, String>> get() = _vocalVM.separationProgress
-    val hqError: StateFlow<String?> get() = _vocalVM.hqError
-    val hqSuccess: StateFlow<String?> get() = _vocalVM.hqSuccess
-    val pitchSemitones: StateFlow<Int> get() = _vocalVM.pitchSemitones
-    val playbackSpeed: StateFlow<Double> get() = _vocalVM.playbackSpeed
-    val showKaraoke: StateFlow<Boolean> get() = _vocalVM.showKaraoke
 
-    fun toggleVocalRemoval() = _vocalVM.toggleVocalRemoval()
-    fun setSeparationMode(mode: AppPreferences.SeparationMode) = _vocalVM.setSeparationMode(mode)
-    fun toggleSeparationMode() = _vocalVM.toggleSeparationMode()
-    fun clearHqError() = _vocalVM.clearHqError()
-    fun clearHqSuccess() = _vocalVM.clearHqSuccess()
-    fun loadPitchSpeedFromPrefs() = _vocalVM.loadPitchSpeedFromPrefs()
-    fun setPitchSemitones(semitones: Int) = _vocalVM.setPitchSemitones(semitones)
-    fun setPlaybackSpeed(speed: Double) = _vocalVM.setPlaybackSpeed(speed)
-    fun resetPitch() = _vocalVM.resetPitch()
-    fun resetSpeed() = _vocalVM.resetSpeed()
-    fun enterKaraoke() = _vocalVM.enterKaraoke()
-    fun exitKaraoke() = _vocalVM.exitKaraoke()
     fun clearAccompanimentCache() {
         viewModelScope.launch {
-            val count = _vocalVM.clearAccompanimentCache()
+            val count = vocalVM.clearAccompanimentCache()
             _connectMessage.value = getApplication<Application>().getString(R.string.status_accompaniment_cache_cleared, count)
             delay(2000)
             _connectMessage.value = null
@@ -2378,24 +2258,13 @@ showError(getApplication<Application>().getString(R.string.toggle_favorite_error
     }
 
     // ---- MvSearchViewModel 转发 ----
-    val mvState: StateFlow<MvAvailability> get() = _mvVM.mvState
-    val showMv: StateFlow<Boolean> get() = _mvVM.showMv
-    val mvMessage: StateFlow<String?> get() = _mvVM.mvMessage
 
-    fun triggerMvSearch(song: Song) = _mvVM.triggerMvSearch(song)
     fun enterMvMode() {
         ensureRemoteControlStarted()
-        _mvVM.enterMvMode()
+        mvVM.enterMvMode()
     }
-    fun exitMvMode() = _mvVM.exitMvMode()
-    fun onMvPlaybackError() = _mvVM.onMvPlaybackError(currentSong.value)
-    fun onMvPlaybackEnded() = _mvVM.onMvPlaybackEnded(currentSong.value, _playerVM.playMode.value)
-    fun onMvPrevious() = _mvVM.onMvPrevious(_playerVM.playMode.value)
-    fun onMvNext() = _mvVM.onMvNext(_playerVM.playMode.value)
-    fun onSwitchOrResearch() = _mvVM.onSwitchOrResearch(currentSong.value)
-    fun onSearchBilibili() = _mvVM.onSearchBilibili(currentSong.value)
     fun clearMvPersistentCache() {
-        _mvVM.clearPersistentCache {
+        mvVM.clearPersistentCache {
             viewModelScope.launch {
                 _connectMessage.value = getApplication<Application>().getString(R.string.status_mv_cache_cleared)
                 delay(2000)
@@ -2448,7 +2317,7 @@ showError(getApplication<Application>().getString(R.string.toggle_favorite_error
     /**
      * 队列中所有歌曲 id 的集合（供 UI 快速判断某首歌是否在队列中）
      */
-    val queueSongIds: StateFlow<Set<String>> = queue
+    val queueSongIds: StateFlow<Set<String>> = playerVM.queue
         .map { songs -> songs.map { it.id }.toSet() }
         .stateIn(viewModelScope, SharingStarted.Eagerly, emptySet())
 
@@ -2459,7 +2328,7 @@ showError(getApplication<Application>().getString(R.string.toggle_favorite_error
      * 不包含当前正在播放的歌曲，最多保留 5 首，
      * 按队列顺序排列（最近即将播放的在前）。
      */
-    val recentNetworkSongs: StateFlow<List<Song>> = combine(queue, currentIndex) { songs, index ->
+    val recentNetworkSongs: StateFlow<List<Song>> = combine(playerVM.queue, playerVM.currentIndex) { songs, index ->
         songs.filterIndexed { i, s -> s.isNetworkSong && i != index }
             .take(5)
     }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
@@ -2467,7 +2336,7 @@ showError(getApplication<Application>().getString(R.string.toggle_favorite_error
     /**
      * 当前播放的网络歌曲（用于「继续听」区域的"正在播放"）
      */
-    val currentNetworkSong: StateFlow<Song?> = combine(currentSong, queue) { song, _ ->
+    val currentNetworkSong: StateFlow<Song?> = combine(playerVM.currentSong, playerVM.queue) { song, _ ->
         song?.takeIf { it.isNetworkSong }
     }.stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
@@ -2487,7 +2356,7 @@ showError(getApplication<Application>().getString(R.string.toggle_favorite_error
         _lyricsAvailability.value = LyricsAvailability()
         // 重置网络封面（切歌时清除上一首的网络封面）
         _networkCoverUrl.value = null
-        val song = currentSong.value ?: return
+        val song = playerVM.currentSong.value ?: return
         AppLog.d("NASMusic", "loadLyrics: loading for ${song.title} by ${song.artist}")
         lyricsLoadJob = viewModelScope.launch {
             try {
@@ -2653,7 +2522,7 @@ showError(getApplication<Application>().getString(R.string.toggle_favorite_error
      * 如果当前已显示网络歌词，再次按下"在线歌词"按钮 → 取下一个候选歌词
      */
     fun switchLyricsSource(source: LyricsSource) {
-        val song = currentSong.value ?: return
+        val song = playerVM.currentSong.value ?: return
         val currentSource = _currentLyrics.value?.source
         AppLog.d("NASMusic", "switchLyricsSource: $source, currentSource=$currentSource")
 
@@ -2708,7 +2577,7 @@ showError(getApplication<Application>().getString(R.string.toggle_favorite_error
 
     fun updateDefaultPlayMode(mode: PlayMode) = viewModelScope.launch {
         prefs.player.setDefaultPlayMode(mode)
-        setPlayMode(mode)
+        playerVM.setPlayMode(mode)
     }
 
     fun updateCacheLyrics(enabled: Boolean) = viewModelScope.launch {
@@ -3023,7 +2892,7 @@ showError(getApplication<Application>().getString(R.string.toggle_favorite_error
                 val songs = adapter.getPlaylistSongs(playlist.id)
                 if (songs.isNotEmpty()) {
                     playQueue(songs)
-                    _navVM.navigateTo(Screen.NowPlaying)
+                    navVM.navigateTo(Screen.NowPlaying)
                 }
             } catch (e: Exception) {
                 AppLog.e("NASMusic", "playPlaylist failed", e)
@@ -3109,7 +2978,7 @@ showError(getApplication<Application>().getString(R.string.toggle_favorite_error
                 // 上报失败不影响播放
             }
             playQueue(listOf(station.toSong()))
-            navigateTo(Screen.NowPlaying)
+            navVM.navigateTo(Screen.NowPlaying)
         }
     }
 

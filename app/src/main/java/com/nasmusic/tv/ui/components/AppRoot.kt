@@ -95,10 +95,10 @@ fun AppRoot(
     val isTV = remember {
         context.packageManager.hasSystemFeature("android.software.leanback")
     }
-    val currentScreen by viewModel.currentScreen.collectAsState(initial = Screen.Home)
-    val currentSong by viewModel.currentSong.collectAsState(initial = null)
-    val isPlaying by viewModel.isPlaying.collectAsState(initial = false)
-    val playMode by viewModel.playMode.collectAsState(initial = com.nasmusic.tv.data.model.PlayMode.SEQUENTIAL)
+    val currentScreen by viewModel.navVM.currentScreen.collectAsState(initial = Screen.Home)
+    val currentSong by viewModel.playerVM.currentSong.collectAsState(initial = null)
+    val isPlaying by viewModel.playerVM.isPlaying.collectAsState(initial = false)
+    val playMode by viewModel.playerVM.playMode.collectAsState(initial = com.nasmusic.tv.data.model.PlayMode.SEQUENTIAL)
     // F-2（修复）：progress/duration 不再顶层收集——PlayerManager 的进度由 1000ms
     // Handler 轮询驱动，顶层收集会每秒驱动 AppRoot 全树重组（含 LazyColumn 状态与
     // D-Pad 焦点搜索）；下沉到 NowPlayingScreen 分支内收集（与 H-3 频谱流下沉同向）。
@@ -109,14 +109,14 @@ fun AppRoot(
     val songDownloadStates by viewModel.songDownloadStates.collectAsState(initial = emptyMap())
     val albums by viewModel.albums.collectAsState(initial = UiState.Loading as UiState<List<Album>>)
     val songs by viewModel.songs.collectAsState(initial = UiState.Loading as UiState<List<Song>>)
-    val queue by viewModel.queue.collectAsState(initial = emptyList())
-    val currentIndex by viewModel.currentIndex.collectAsState(initial = 0)
+    val queue by viewModel.playerVM.queue.collectAsState(initial = emptyList())
+    val currentIndex by viewModel.playerVM.currentIndex.collectAsState(initial = 0)
     val isLoading by viewModel.isLoading.collectAsState(initial = false)
     val isLibraryLoading by viewModel.isLibraryLoading.collectAsState(initial = false)
-    val isConnected by viewModel.isConnected.collectAsState(initial = false)
-    val serverDisplayName by viewModel.serverDisplayName.collectAsState(initial = "")
-    val backendApiVersion by viewModel.backendApiVersion.collectAsState(initial = "Unknown")
-    val apiVersions by viewModel.apiVersions.collectAsState(initial = emptyList())
+    val isConnected by viewModel.serverVM.isConnected.collectAsState(initial = false)
+    val serverDisplayName by viewModel.serverVM.serverDisplayName.collectAsState(initial = "")
+    val backendApiVersion by viewModel.serverVM.backendApiVersion.collectAsState(initial = "Unknown")
+    val apiVersions by viewModel.serverVM.apiVersions.collectAsState(initial = emptyList())
     val serverConfig by viewModel.serverConfig.collectAsState(initial = ServerConfig.Empty)
     val settings by viewModel.appSettings.collectAsState(initial = com.nasmusic.tv.data.model.AppSettings())
     // 封面滤镜状态（跨屏幕共享，用于 NowPlaying + Settings）
@@ -129,7 +129,7 @@ fun AppRoot(
     // 天气 API Key
     val weatherApiKey by viewModel.prefs.weather.weatherApiKey.collectAsState(initial = "")
     // 百度网盘状态（设置页网盘分区）
-    val baiduConnectionState by viewModel.baiduConnectionState.collectAsState(initial = com.nasmusic.tv.ui.viewmodel.NetworkMusicViewModel.BaiduConnectionState.Off)
+    val baiduConnectionState by viewModel.netVM.baiduConnectionState.collectAsState(initial = com.nasmusic.tv.ui.viewmodel.NetworkMusicViewModel.BaiduConnectionState.Off)
     val baiduDeviceCode by viewModel.baiduDeviceCode.collectAsState(initial = null)
     val baiduIndexScanned by viewModel.baiduIndexScanned.collectAsState(initial = 0)
     val baiduIndexScanning by viewModel.baiduIndexScanning.collectAsState(initial = false)
@@ -137,15 +137,15 @@ fun AppRoot(
     val baiduApicExtracted by viewModel.baiduApicExtracted.collectAsState(initial = 0)
     val baiduApicTotal by viewModel.baiduApicTotal.collectAsState(initial = 0)
     // K 歌页面显隐（切 Tab 时保持，退出 K 歌页时清除）
-    val showKaraoke by viewModel.showKaraoke.collectAsState(initial = false)
+    val showKaraoke by viewModel.vocalVM.showKaraoke.collectAsState(initial = false)
     // MTV 页面显隐（进入 MTV 全屏页时为 true）
-    val showMv by viewModel.showMv.collectAsState(initial = false)
+    val showMv by viewModel.mvVM.showMv.collectAsState(initial = false)
     // MTV 搜索状态（顶层收集，供 NotFound 自动退出保护与 NowPlaying 分支共用）
-    val mvState by viewModel.mvState.collectAsState()
+    val mvState by viewModel.mvVM.mvState.collectAsState()
     // 安全兜底：切歌后新歌无 MV（NotFound）时自动退出 MTV 全屏，避免卡在无导航栏的播放页
     LaunchedEffect(mvState, showMv) {
         if (showMv && mvState is com.nasmusic.tv.ui.viewmodel.MvAvailability.NotFound) {
-            viewModel.exitMvMode()
+            viewModel.mvVM.exitMvMode()
         }
     }
     // Level 2: 根据当前屏幕和沉浸模式动态设置导航 BACK 键处理函数
@@ -154,10 +154,10 @@ fun AppRoot(
         // C-2 修正说明：初版审查把 when/if-else 分支里的 {{ ... }} 误判为 no-op（lambda 内 lambda）。
         // 实测编译行为：when/if 分支的 { } 按“块”解析，{{ X }} = 块 + 尾部 lambda 表达式，
         // 分支值就是可用的 lambda——原实现功能正常，并非 bug。此处改用具名 lambda 仅作可读性清理。
-        val navigateHome: () -> Unit = { viewModel.navigateTo(Screen.Home) }
+        val navigateHome: () -> Unit = { viewModel.navVM.navigateTo(Screen.Home) }
         val exitImmersive: () -> Unit = { isImmersiveMode.value = false }
-        val exitMv: () -> Unit = { viewModel.exitMvMode() }
-        val navSettings: () -> Unit = { viewModel.navigateTo(Screen.Settings) }
+        val exitMv: () -> Unit = { viewModel.mvVM.exitMvMode() }
+        val navSettings: () -> Unit = { viewModel.navVM.navigateTo(Screen.Settings) }
         val handler: (() -> Unit)? = when {
             isImmersiveMode.value -> exitImmersive
             showMv -> exitMv
@@ -211,32 +211,32 @@ fun AppRoot(
                 NavItem(
                     label = stringResource(R.string.nav_home),
                     selected = currentScreen == Screen.Home,
-                    onClick = { viewModel.navigateTo(Screen.Home) }
+                    onClick = { viewModel.navVM.navigateTo(Screen.Home) }
                 )
                 NavItem(
                     label = stringResource(R.string.nav_now_playing),
                     selected = currentScreen == Screen.NowPlaying,
-                    onClick = { viewModel.navigateTo(Screen.NowPlaying) }
+                    onClick = { viewModel.navVM.navigateTo(Screen.NowPlaying) }
                 )
                 NavItem(
                     label = stringResource(R.string.nav_library),
                     selected = currentScreen == Screen.Library,
-                    onClick = { viewModel.navigateTo(Screen.Library) }
+                    onClick = { viewModel.navVM.navigateTo(Screen.Library) }
                 )
                 NavItem(
                     label = stringResource(R.string.nav_mine),
                     selected = currentScreen == Screen.Mine,
-                    onClick = { viewModel.navigateTo(Screen.Mine) }
+                    onClick = { viewModel.navVM.navigateTo(Screen.Mine) }
                 )
                 NavItem(
                     label = stringResource(R.string.nav_queue),
                     selected = currentScreen == Screen.Queue,
-                    onClick = { viewModel.navigateTo(Screen.Queue) }
+                    onClick = { viewModel.navVM.navigateTo(Screen.Queue) }
                 )
                 NavItem(
                     label = stringResource(R.string.nav_settings),
                     selected = currentScreen == Screen.Settings,
-                    onClick = { viewModel.navigateTo(Screen.Settings) }
+                    onClick = { viewModel.navVM.navigateTo(Screen.Settings) }
                 )
                 }
             }
@@ -253,9 +253,9 @@ fun AppRoot(
             when (currentScreen) {
                 Screen.Home -> {
                     val homeDashboardData by viewModel.homeDashboardData.collectAsState(initial = HomeDashboardData())
-                    val weatherData by viewModel.weatherData.collectAsState(initial = null)
-                    val weatherLoading by viewModel.weatherLoading.collectAsState(initial = false)
-                    val weatherError by viewModel.weatherError.collectAsState(initial = null)
+                    val weatherData by viewModel.weatherRadioVM.weatherData.collectAsState(initial = null)
+                    val weatherLoading by viewModel.weatherRadioVM.weatherLoading.collectAsState(initial = false)
+                    val weatherError by viewModel.weatherRadioVM.weatherError.collectAsState(initial = null)
                     val recentSongsState by viewModel.recentSongs.collectAsState(initial = UiState.Success(emptyList()))
                     val recentSongsList = recentSongsState.dataOrNull() ?: emptyList()
                     val randomSongs by viewModel.randomSongs.collectAsState(initial = emptyList())
@@ -264,7 +264,7 @@ fun AppRoot(
                     LaunchedEffect(Unit) {
                         viewModel.loadHomeDashboard()
                         viewModel.loadRecentSongs()
-                        viewModel.fetchWeather()
+                        viewModel.weatherRadioVM.fetchWeather()
                         viewModel.loadRandomSongs()
                     }
 
@@ -282,24 +282,24 @@ fun AppRoot(
                         onPlaySong = { song ->
                             if (song.isNetworkSong) viewModel.playNetworkSong(song)
                             else viewModel.playQueue(listOf(song))
-                            viewModel.navigateTo(Screen.NowPlaying)
+                            viewModel.navVM.navigateTo(Screen.NowPlaying)
                         },
                         onPlayAlbum = { album ->
                             viewModel.playAlbumMultiSource(album)
                         },
                         onOpenAlbumDetail = { album -> viewModel.openAlbumDetail(album) },
-                        onNavigateToLibrary = { viewModel.navigateTo(Screen.Library) },
+                        onNavigateToLibrary = { viewModel.navVM.navigateTo(Screen.Library) },
                         onNavigateToSearch = {
                             viewModel.selectLibraryTab(LibraryTab.SEARCH)
-                            viewModel.navigateTo(Screen.Library)
+                            viewModel.navVM.navigateTo(Screen.Library)
                         },
-                        onNavigateToQueue = { viewModel.navigateTo(Screen.Queue) },
-                        onNavigateToNowPlaying = { viewModel.navigateTo(Screen.NowPlaying) },
-                        onNavigateToWeatherRadio = { viewModel.navigateTo(Screen.WeatherRadio) },
+                        onNavigateToQueue = { viewModel.navVM.navigateTo(Screen.Queue) },
+                        onNavigateToNowPlaying = { viewModel.navVM.navigateTo(Screen.NowPlaying) },
+                        onNavigateToWeatherRadio = { viewModel.navVM.navigateTo(Screen.WeatherRadio) },
                         onPlayAllRecent = {
                             if (recentSongsList.isNotEmpty()) {
                                 viewModel.playQueue(recentSongsList)
-                                viewModel.navigateTo(Screen.NowPlaying)
+                                viewModel.navVM.navigateTo(Screen.NowPlaying)
                             }
                         },
                         randomSongs = randomSongs,
@@ -310,17 +310,17 @@ fun AppRoot(
                 }
                 Screen.NowPlaying -> {
                     // 修复（H-3）：20fps 频谱流只在本页收集，不再驱动 AppRoot 全树重组
-                    val spectrumData by viewModel.spectrumData.collectAsState(initial = FloatArray(0))
+                    val spectrumData by viewModel.playerVM.spectrumData.collectAsState(initial = FloatArray(0))
                     val lyricsFontScale by viewModel.prefs.lyrics.lyricsFontScale.collectAsState(initial = 1.0f)
-                    val vocalRemovalEnabled by viewModel.vocalRemovalEnabled.collectAsState()
-                    val pitchSemitones by viewModel.pitchSemitones.collectAsState()
-                    val playbackSpeed by viewModel.playbackSpeed.collectAsState()
-                    val separationMode by viewModel.separationMode.collectAsState()
-                    val separating by viewModel.separating.collectAsState()
-                    val separationProgress by viewModel.separationProgress.collectAsState()
-                    val hqError by viewModel.hqError.collectAsState()
-                    val hqSuccess by viewModel.hqSuccess.collectAsState()
-                    val modelDownloaded by viewModel.modelDownloaded.collectAsState()
+                    val vocalRemovalEnabled by viewModel.vocalVM.vocalRemovalEnabled.collectAsState()
+                    val pitchSemitones by viewModel.vocalVM.pitchSemitones.collectAsState()
+                    val playbackSpeed by viewModel.vocalVM.playbackSpeed.collectAsState()
+                    val separationMode by viewModel.vocalVM.separationMode.collectAsState()
+                    val separating by viewModel.vocalVM.separating.collectAsState()
+                    val separationProgress by viewModel.vocalVM.separationProgress.collectAsState()
+                    val hqError by viewModel.vocalVM.hqError.collectAsState()
+                    val hqSuccess by viewModel.vocalVM.hqSuccess.collectAsState()
+                    val modelDownloaded by viewModel.downloadVM.modelDownloaded.collectAsState()
                     // C7 修复：收藏状态建立订阅，点收藏后星标即时刷新。
                     // 原实现直读 isFavorite(song.id) 不订阅，点收藏后需切歌才刷新。
                     val favoriteIds by viewModel.favoriteIds.collectAsState(initial = emptySet())
@@ -331,22 +331,22 @@ fun AppRoot(
                             mv = mvReady.mv,
                             lyrics = lyrics,
                             alternatives = mvReady.alternatives,
-                            onExit = { viewModel.exitMvMode() },
+                            onExit = { viewModel.mvVM.exitMvMode() },
                             onPlaybackError = { viewModel.onMvPlaybackError() },
                             onPlaybackEnded = { viewModel.onMvPlaybackEnded() },
                             onSwitchOrResearch = { viewModel.onSwitchOrResearch() },
                             onSearchBilibili = { viewModel.onSearchBilibili() },
                             onPreviousMv = { viewModel.onMvPrevious() },
                             onNextMv = { viewModel.onMvNext() },
-                            mvMessage = viewModel.mvMessage.collectAsState().value,
+                            mvMessage = viewModel.mvVM.mvMessage.collectAsState().value,
                             // 手机端无需"手机遥控"二维码（自身即控制端）
                             remoteControlUrl = if (isTV) viewModel.remoteControlUrl.collectAsState().value else null
                         )
                     } else {
                         // F-2：progress/duration 在本分支内收集，播放期间的每秒重组
                         // 只影响 NowPlayingScreen，不再驱动 AppRoot 全树
-                        val progress by viewModel.progress.collectAsState(initial = 0L)
-                        val duration by viewModel.duration.collectAsState(initial = 0L)
+                        val progress by viewModel.playerVM.progress.collectAsState(initial = 0L)
+                        val duration by viewModel.playerVM.duration.collectAsState(initial = 0L)
                         NowPlayingScreen(
                             currentSong = currentSong,
                             isPlaying = isPlaying,
@@ -366,23 +366,23 @@ fun AppRoot(
                             isFavorite = currentSong?.let { song -> song.id in favoriteIds } ?: false,
                             isImmersiveMode = isImmersiveMode.value,
                             onToggleImmersive = { isImmersiveMode.value = !isImmersiveMode.value },
-                            onPlayPause = { viewModel.playPause() },
-                            onNext = { viewModel.next() },
-                            onPrevious = { viewModel.previous() },
-                            onTogglePlayMode = { viewModel.togglePlayMode() },
+                            onPlayPause = { viewModel.playerVM.playPause() },
+                            onNext = { viewModel.playerVM.next() },
+                            onPrevious = { viewModel.playerVM.previous() },
+                            onTogglePlayMode = { viewModel.playerVM.togglePlayMode() },
                             // === KARAOKE 人声消除 ===
                             vocalRemovalEnabled = vocalRemovalEnabled,
-                            onToggleVocalRemoval = { viewModel.toggleVocalRemoval() },
+                            onToggleVocalRemoval = { viewModel.vocalVM.toggleVocalRemoval() },
                             // === K 歌页面状态 ===
                             showKaraoke = showKaraoke,
-                            onEnterKaraoke = { viewModel.enterKaraoke() },
-                            onExitKaraoke = { viewModel.exitKaraoke() },
+                            onEnterKaraoke = { viewModel.vocalVM.enterKaraoke() },
+                            onExitKaraoke = { viewModel.vocalVM.exitKaraoke() },
                             // === MTV 音乐视频 ===
                             mvAvailable = mvState is com.nasmusic.tv.ui.viewmodel.MvAvailability.Ready,
                             onEnterMv = { viewModel.enterMvMode() },
                             // 手机端不启动 HTTP 遥控服务（自身即控制端）
                             remoteControlUrl = if (isTV) viewModel.remoteControlUrl.collectAsState().value else null,
-                            onSeek = { viewModel.seekTo(it) },
+                            onSeek = { viewModel.playerVM.seekTo(it) },
                             onSwitchLyricsSource = { viewModel.switchLyricsSource(it) },
                             onChangeHighlightMode = { viewModel.setLyricsHighlightMode(it) },
                             // 统一走 toggleNetworkFavorite：内部按歌曲类型分流（NAS→adapter，其他→DataStore）
@@ -398,29 +398,29 @@ fun AppRoot(
                                 // 跳转到曲库 SEARCH Tab 并触发跨源搜索（NAS+网络+百度+Jamendo+本地）
                                 viewModel.selectLibraryTab(LibraryTab.SEARCH)
                                 viewModel.setLibrarySearchKeyword(keyword)
-                                viewModel.navigateTo(Screen.Library)
+                                viewModel.navVM.navigateTo(Screen.Library)
                             },
                             onSearchSong = { keyword ->
                                 viewModel.selectLibraryTab(LibraryTab.SEARCH)
                                 viewModel.setLibrarySearchKeyword(keyword)
-                                viewModel.navigateTo(Screen.Library)
+                                viewModel.navVM.navigateTo(Screen.Library)
                             },
                             // === K 歌页面：升降调 / 变速 ===
                             pitchSemitones = pitchSemitones,
                             playbackSpeed = playbackSpeed,
-                            onSetPitch = { viewModel.setPitchSemitones(it) },
-                            onSetSpeed = { viewModel.setPlaybackSpeed(it) },
-                            onResetPitch = { viewModel.resetPitch() },
-                            onResetSpeed = { viewModel.resetSpeed() },
+                            onSetPitch = { viewModel.vocalVM.setPitchSemitones(it) },
+                            onSetSpeed = { viewModel.vocalVM.setPlaybackSpeed(it) },
+                            onResetPitch = { viewModel.vocalVM.resetPitch() },
+                            onResetSpeed = { viewModel.vocalVM.resetSpeed() },
                             // === 分离模式（快速/高质量） ===
                             isHighQualityMode = separationMode == com.nasmusic.tv.data.prefs.AppPreferences.SeparationMode.HIGH_QUALITY,
                             isSeparating = separating,
                             separationProgress = separationProgress,
                             hqError = hqError,
-                            onToggleSeparationMode = { viewModel.toggleSeparationMode() },
-                            onClearHqError = { viewModel.clearHqError() },
+                            onToggleSeparationMode = { viewModel.vocalVM.toggleSeparationMode() },
+                            onClearHqError = { viewModel.vocalVM.clearHqError() },
                             hqSuccess = hqSuccess,
-                            onClearHqSuccess = { viewModel.clearHqSuccess() },
+                            onClearHqSuccess = { viewModel.vocalVM.clearHqSuccess() },
                             // 高质量分离模型是否已下载（未下载时 K 歌页禁用高质量切换）
                             modelDownloaded = modelDownloaded
                         )
@@ -435,7 +435,7 @@ fun AppRoot(
                     val yearsState by viewModel.years.collectAsState(initial = UiState.Success(emptyList()))
                     val songsPaging by viewModel.songsPaging.collectAsState(initial = com.nasmusic.tv.data.model.SongsPagingState())
                     val localSongsList by viewModel.localSongs.collectAsState(initial = emptyList())
-                    val searchResultsState by viewModel.searchResults.collectAsState(initial = UiState.Success(emptyList()))
+                    val searchResultsState by viewModel.searchVM.searchResults.collectAsState(initial = UiState.Success(emptyList()))
                     val albumList = albums.dataOrNull() ?: emptyList()
                     val songList = songs.dataOrNull() ?: emptyList()
                     val genreList = genres.dataOrNull() ?: emptyList()
@@ -467,7 +467,7 @@ fun AppRoot(
                     val isSearching = searchResultsState is UiState.Loading
                     val libraryActiveTab by viewModel.libraryActiveTab.collectAsState()
                     val librarySearchKeyword by viewModel.librarySearchKeyword.collectAsState()
-                    val enabledSearchSources by viewModel.enabledSearchSources.collectAsState()
+                    val enabledSearchSources by viewModel.searchVM.enabledSearchSources.collectAsState()
                     val searchHistory by viewModel.searchHistory.collectAsState(initial = emptyList())
 
                     // ── RADIO Tab state ──
@@ -522,20 +522,20 @@ fun AppRoot(
                             } else {
                                 viewModel.playQueue(listOf(song))
                             }
-                            viewModel.navigateTo(Screen.NowPlaying)
+                            viewModel.navVM.navigateTo(Screen.NowPlaying)
                         },
                         onPlaySongs = { songListParam ->
                             viewModel.playQueue(songListParam)
-                            viewModel.navigateTo(Screen.NowPlaying)
+                            viewModel.navVM.navigateTo(Screen.NowPlaying)
                         },
                         onPlayAllSongs = { songs ->
                             if (songs.isNotEmpty()) {
                                 viewModel.playQueue(songs)
-                                viewModel.navigateTo(Screen.NowPlaying)
+                                viewModel.navVM.navigateTo(Screen.NowPlaying)
                             }
                         },
                         queueSongIds = viewModel.queueSongIds.collectAsState(initial = emptySet()).value,
-                        onToggleQueue = { song -> viewModel.toggleQueueSong(song) },
+                        onToggleQueue = { song -> viewModel.playerVM.toggleQueueSong(song) },
                         onToggleFavorite = { song -> viewModel.toggleNetworkFavorite(song) },
                         onAddToPlaylist = { song -> pickerSong = song },
                         onOpenAlbumDetail = { album -> viewModel.openAlbumDetail(album) },
@@ -547,27 +547,27 @@ fun AppRoot(
                         onLoadArtists = { viewModel.loadArtists() },
                         onLoadYears = { viewModel.loadYears() },
                         onSearch = { query -> viewModel.searchSongsOnServer(query) },
-                        onClearSearch = { viewModel.clearSearch() },
+                        onClearSearch = { viewModel.searchVM.clearSearch() },
                         historyItems = searchHistory,
                         activeTab = libraryActiveTab,
                         onTabSelected = { tab -> viewModel.selectLibraryTab(tab) },
                         filterQuery = librarySearchKeyword,
                         onFilterQueryChange = { keyword -> viewModel.setLibrarySearchKeyword(keyword) },
                         enabledSearchSources = enabledSearchSources,
-                        onToggleSearchSource = { source -> viewModel.toggleSearchSource(source) },
-                        onEnableAllSearchSources = { viewModel.enableAllSearchSources() },
+                        onToggleSearchSource = { source -> viewModel.searchVM.toggleSearchSource(source) },
+                        onEnableAllSearchSources = { viewModel.searchVM.enableAllSearchSources() },
                         // ── SEARCH Tab ──
                         onSearchTabPlayAll = {
                             val allSongs = searchResultsList
                             if (allSongs.isNotEmpty()) {
                                 viewModel.playQueue(allSongs)
-                                viewModel.navigateTo(Screen.NowPlaying)
+                                viewModel.navVM.navigateTo(Screen.NowPlaying)
                             }
                         },
                         onSearchTabAddAllToQueue = {
                             // 只加入队列，不播放（修复 M-8：改用只增不删的批量加入，
                             // 原 toggle 语义会把已在队列中的歌曲反向移除）
-                            viewModel.addSongsToQueue(searchResultsList)
+                            viewModel.playerVM.addSongsToQueue(searchResultsList)
                         },
                         // ── DISCOVER Tab ──
                         discoverDimensions = discoverDimensions,
@@ -587,12 +587,12 @@ fun AppRoot(
                         onDiscoverPlayAll = {
                             if (browseResultsList.isNotEmpty()) {
                                 viewModel.playQueue(browseResultsList)
-                                viewModel.navigateTo(Screen.NowPlaying)
+                                viewModel.navVM.navigateTo(Screen.NowPlaying)
                             }
                         },
                         onDiscoverAddAllToQueue = {
                             // 只加入队列，不播放（修复 M-8，同上）
-                            viewModel.addSongsToQueue(browseResultsList)
+                            viewModel.playerVM.addSongsToQueue(browseResultsList)
                         },
                         onDiscoverShuffle = {
                             viewModel.refreshBrowseSongs()
@@ -617,8 +617,8 @@ fun AppRoot(
                         onArtistScrollPositionChange = { index, offset -> viewModel.saveArtistScrollPosition(index, offset) },
                         // ── 歌曲下载状态 ──
                         downloadStates = songDownloadStates,
-                        onDownloadSong = { song -> viewModel.downloadSong(song) },
-                        onDeleteDownloadSong = { song -> viewModel.deleteDownload(song) }
+                        onDownloadSong = { song -> viewModel.downloadVM.downloadSong(song) },
+                        onDeleteDownloadSong = { song -> viewModel.downloadVM.deleteDownload(song) }
                     )
                 }
                 Screen.Mine -> {
@@ -626,7 +626,7 @@ fun AppRoot(
                     val networkFavoriteSongs by viewModel.networkFavoriteSongs.collectAsState(initial = emptyList())
                     val recentSongsState by viewModel.recentSongs.collectAsState(initial = UiState.Success(emptyList()))
                     val recentSongsList = recentSongsState.dataOrNull() ?: emptyList()
-                    val localPlaylists by viewModel.localPlaylists.collectAsState(initial = emptyList())
+                    val localPlaylists by viewModel.playlistVM.localPlaylists.collectAsState(initial = emptyList())
                     // 进入"我的"页时刷新最近播放（首次进入/从播放页返回时更新）
                     LaunchedEffect(Unit) {
                         viewModel.loadRecentSongs()
@@ -645,30 +645,30 @@ fun AppRoot(
                             } else {
                                 viewModel.playQueue(listOf(song))
                             }
-                            viewModel.navigateTo(Screen.NowPlaying)
+                            viewModel.navVM.navigateTo(Screen.NowPlaying)
                         },
                         onPlayAll = { songs ->
                             if (songs.isNotEmpty()) {
                                 viewModel.playQueue(songs)
-                                viewModel.navigateTo(Screen.NowPlaying)
+                                viewModel.navVM.navigateTo(Screen.NowPlaying)
                             }
                         },
                         onToggleFavorite = { song -> viewModel.toggleNetworkFavorite(song) },
-                        onToggleQueue = { song -> viewModel.toggleQueueSong(song) },
-                        onCreatePlaylist = { name -> viewModel.createLocalPlaylist(name) },
-                        onRenamePlaylist = { id, newName -> viewModel.renameLocalPlaylist(id, newName) },
-                        onDeletePlaylist = { id -> viewModel.deleteLocalPlaylist(id) },
+                        onToggleQueue = { song -> viewModel.playerVM.toggleQueueSong(song) },
+                        onCreatePlaylist = { name -> viewModel.playlistVM.createLocalPlaylist(name) },
+                        onRenamePlaylist = { id, newName -> viewModel.playlistVM.renameLocalPlaylist(id, newName) },
+                        onDeletePlaylist = { id -> viewModel.playlistVM.deleteLocalPlaylist(id) },
                         onPlayPlaylist = { playlist -> viewModel.playLocalPlaylist(playlist) },
-                        onRemoveSongFromPlaylist = { playlistId, songId -> viewModel.removeSongFromPlaylist(playlistId, songId) },
-                        onAddSongToPlaylist = { playlistId, song -> viewModel.addSongToPlaylist(playlistId, song) },
+                        onRemoveSongFromPlaylist = { playlistId, songId -> viewModel.playlistVM.removeSongFromPlaylist(playlistId, songId) },
+                        onAddSongToPlaylist = { playlistId, song -> viewModel.playlistVM.addSongToPlaylist(playlistId, song) },
                         // 功能入口（手机端底部导航未覆盖：队列 / 网盘 / 设置）
-                        onOpenQueue = { viewModel.navigateTo(Screen.Queue) },
-                        onOpenNetdisk = { viewModel.navigateTo(Screen.Netdisk) },
-                        onOpenSettings = { viewModel.navigateTo(Screen.Settings) },
+                        onOpenQueue = { viewModel.navVM.navigateTo(Screen.Queue) },
+                        onOpenNetdisk = { viewModel.navVM.navigateTo(Screen.Netdisk) },
+                        onOpenSettings = { viewModel.navVM.navigateTo(Screen.Settings) },
                         // 歌曲下载状态
                         downloadStates = songDownloadStates,
-                        onDownloadSong = { song -> viewModel.downloadSong(song) },
-                        onDeleteDownloadSong = { song -> viewModel.deleteDownload(song) }
+                        onDownloadSong = { song -> viewModel.downloadVM.downloadSong(song) },
+                        onDeleteDownloadSong = { song -> viewModel.downloadVM.deleteDownload(song) }
                     )
                 }
                 Screen.Queue -> {
@@ -682,14 +682,14 @@ fun AppRoot(
                         onPlaySong = { index ->
                             if (index in queue.indices) {
                                 viewModel.playQueue(queue, index)
-                                viewModel.navigateTo(Screen.NowPlaying)
+                                viewModel.navVM.navigateTo(Screen.NowPlaying)
                             }
                         },
                         onRemoveSong = { index -> viewModel.removeFromQueue(index) },
                         onClearQueue = { viewModel.clearQueue() },
-                        onPlayPause = { viewModel.playPause() },
-                        onNext = { viewModel.next() },
-                        onPrevious = { viewModel.previous() },
+                        onPlayPause = { viewModel.playerVM.playPause() },
+                        onNext = { viewModel.playerVM.next() },
+                        onPrevious = { viewModel.playerVM.previous() },
                         onMoveItem = { from, to -> viewModel.moveQueueItem(from, to) }
                     )
                 }
@@ -701,19 +701,19 @@ fun AppRoot(
                         initial = com.nasmusic.tv.data.model.CloudDriveConfig(com.nasmusic.tv.data.model.CloudDriveType.BAIDU)
                     )
                     val jamendoClientId by viewModel.prefs.network.jamendoClientIdFlow.collectAsState(initial = "")
-                    val separationMode by viewModel.separationMode.collectAsState()
-                    val modelDownloaded by viewModel.modelDownloaded.collectAsState()
-                    val modelDownloading by viewModel.modelDownloading.collectAsState()
-                    val modelDownloadProgress by viewModel.modelDownloadProgress.collectAsState()
-                    val modelDownloadedMB by viewModel.modelDownloadedMB.collectAsState()
-                    val modelTotalMB by viewModel.modelTotalMB.collectAsState()
-                    val modelSizeMB by viewModel.modelSizeMB.collectAsState()
-                    val modelDownloadError by viewModel.modelDownloadError.collectAsState()
-                    val modelPath by viewModel.modelPath.collectAsState()
+                    val separationMode by viewModel.vocalVM.separationMode.collectAsState()
+                    val modelDownloaded by viewModel.downloadVM.modelDownloaded.collectAsState()
+                    val modelDownloading by viewModel.downloadVM.modelDownloading.collectAsState()
+                    val modelDownloadProgress by viewModel.downloadVM.modelDownloadProgress.collectAsState()
+                    val modelDownloadedMB by viewModel.downloadVM.modelDownloadedMB.collectAsState()
+                    val modelTotalMB by viewModel.downloadVM.modelTotalMB.collectAsState()
+                    val modelSizeMB by viewModel.downloadVM.modelSizeMB.collectAsState()
+                    val modelDownloadError by viewModel.downloadVM.modelDownloadError.collectAsState()
+                    val modelPath by viewModel.downloadVM.modelPath.collectAsState()
                     // 进入设置页时刷新模型状态（检查文件是否已下载）和下载统计
                     LaunchedEffect(Unit) {
-                        viewModel.refreshModelStatus()
-                        viewModel.refreshDownloadStats()
+                        viewModel.downloadVM.refreshModelStatus()
+                        viewModel.downloadVM.refreshDownloadStats()
                     }
                     SettingsScreen(
                         settings = settings,
@@ -728,7 +728,7 @@ fun AppRoot(
                         onClearCoverCache = { viewModel.clearCoverCache() },
                         onClearMvCache = { viewModel.clearMvPersistentCache() },
                         onClearAccompanimentCache = { viewModel.clearAccompanimentCache() },
-                        onOpenEqualizer = { viewModel.navigateTo(Screen.Equalizer) },
+                        onOpenEqualizer = { viewModel.navVM.navigateTo(Screen.Equalizer) },
                         onChangeMetingApiBaseUrl = { viewModel.updateMetingApiBaseUrl(it) },
                         mvApiBaseUrl = settings.mvApiBaseUrl,
                         onChangeMvApiBaseUrl = { viewModel.updateMvApiBaseUrl(it) },
@@ -766,13 +766,13 @@ fun AppRoot(
                             }
                         },
                         // 数据管理（备份/恢复）
-                        backupFiles = viewModel.backupFiles.collectAsState(initial = emptyList()).value,
-                        backupMessage = viewModel.backupMessage.collectAsState(initial = null).value,
-                        onRefreshBackupFiles = { viewModel.refreshBackupFiles() },
-                        onExportBackup = { viewModel.exportBackup() },
-                        onImportBackup = { uri -> viewModel.importBackup(uri) },
-                        onDeleteBackup = { uri -> viewModel.deleteBackup(uri) },
-                        onConsumeBackupMessage = { viewModel.consumeBackupMessage() },
+                        backupFiles = viewModel.backupVM.backupFiles.collectAsState(initial = emptyList()).value,
+                        backupMessage = viewModel.backupVM.backupMessage.collectAsState(initial = null).value,
+                        onRefreshBackupFiles = { viewModel.backupVM.refreshBackupFiles() },
+                        onExportBackup = { viewModel.backupVM.exportBackup() },
+                        onImportBackup = { uri -> viewModel.backupVM.importBackup(uri) },
+                        onDeleteBackup = { uri -> viewModel.backupVM.deleteBackup(uri) },
+                        onConsumeBackupMessage = { viewModel.backupVM.consumeBackupMessage() },
                         onScanTransferBackup = { showBackupTransferDialog = true },
                         // 百度网盘设置
                         baiduEnabled = baiduConfig.enabled,
@@ -788,15 +788,15 @@ fun AppRoot(
                         baiduApicExtracting = baiduApicExtracting,
                         baiduApicExtracted = baiduApicExtracted,
                         baiduApicTotal = baiduApicTotal,
-                        onToggleBaiduEnabled = { viewModel.setBaiduEnabled(it) },
-                        onStartBaiduDeviceCode = { viewModel.startBaiduDeviceCodeFlow() },
-                        onCancelBaiduDeviceCode = { viewModel.cancelBaiduDeviceCode() },
-                        onLogoutBaidu = { viewModel.logoutBaidu() },
-                        onChangeBaiduMusicRootDir = { viewModel.setBaiduMusicRootDir(it) },
-                        onChangeBaiduMvDir = { viewModel.setBaiduMvDir(it) },
+                        onToggleBaiduEnabled = { viewModel.netVM.setBaiduEnabled(it) },
+                        onStartBaiduDeviceCode = { viewModel.netVM.startBaiduDeviceCodeFlow() },
+                        onCancelBaiduDeviceCode = { viewModel.netVM.cancelBaiduDeviceCode() },
+                        onLogoutBaidu = { viewModel.netVM.logoutBaidu() },
+                        onChangeBaiduMusicRootDir = { viewModel.netVM.setBaiduMusicRootDir(it) },
+                        onChangeBaiduMvDir = { viewModel.netVM.setBaiduMvDir(it) },
                         onListBaiduDirs = { viewModel.listBaiduDirs(it) },
-                        onRebuildBaiduIndex = { viewModel.rebuildBaiduIndex() },
-                        onNavigateToServerConnect = { viewModel.navigateTo(Screen.ServerConnect) },
+                        onRebuildBaiduIndex = { viewModel.netVM.rebuildBaiduIndex() },
+                        onNavigateToServerConnect = { viewModel.navVM.navigateTo(Screen.ServerConnect) },
                         // 服务器连接设置
                         serverConfig = serverConfig,
                         isConnected = isConnected,
@@ -805,7 +805,7 @@ fun AppRoot(
                         apiVersions = apiVersions,
                         isConnecting = isLoading,
                         onConnect = onConnect,
-                        onDisconnect = { viewModel.disconnect() },
+                        onDisconnect = { viewModel.serverVM.disconnect() },
                         // 封面滤镜设置
                     coverFilterEnabled = coverFilterEnabled,
                     coverFilterBlurRadius = coverFilterBlurRadius,
@@ -815,7 +815,7 @@ fun AppRoot(
                     onChangeCoverDarkOverlay = { viewModel.updateCoverFilterDarkOverlay(it) },
                     // 分离模式设置
                     separationMode = separationMode,
-                    onChangeSeparationMode = { viewModel.setSeparationMode(it) },
+                    onChangeSeparationMode = { viewModel.vocalVM.setSeparationMode(it) },
                     // 高质量分离模型下载状态
                     modelDownloaded = modelDownloaded,
                     modelDownloading = modelDownloading,
@@ -825,9 +825,9 @@ fun AppRoot(
                     modelSizeMB = modelSizeMB,
                     modelDownloadError = modelDownloadError,
                     modelPath = modelPath,
-                    onDownloadModel = { viewModel.downloadModel() },
+                    onDownloadModel = { viewModel.downloadVM.downloadModel() },
                     onDeleteModel = { viewModel.deleteModel() },
-                    onRefreshModelStatus = { viewModel.refreshModelStatus() },
+                    onRefreshModelStatus = { viewModel.downloadVM.refreshModelStatus() },
                     onScanTransferModel = { showModelTransferDialog = true },
                     // 歌曲离线下载设置
                     downloadEnabled = settings.downloadEnabled,
@@ -838,8 +838,8 @@ fun AppRoot(
                     onToggleAutoDownloadOnPlay = { viewModel.updateAutoDownloadOnPlay(it) },
                     onChangeAutoDownloadLimit = { viewModel.updateAutoDownloadLimit(it) },
                     onChangeDownloadLocation = { viewModel.updateDownloadLocation(it) },
-                    onClearAllDownloads = { viewModel.clearAllDownloads() },
-                    downloadStats = viewModel.downloadStats.collectAsState().value,
+                    onClearAllDownloads = { viewModel.downloadVM.clearAllDownloads() },
+                    downloadStats = viewModel.downloadVM.downloadStats.collectAsState().value,
                     // 导出到外接设备
                     exportState = viewModel.exportState.collectAsState().value,
                     onExportToDevice = { viewModel.showExportDeviceDialog() },
@@ -849,8 +849,8 @@ fun AppRoot(
                     // 扫码传输备份弹窗
                     if (showBackupTransferDialog) {
                         BackupTransferDialog(
-                            onRestore = { json -> viewModel.restoreBackupFromJsonBlocking(json) },
-                            onBackupChanged = { viewModel.refreshBackupFiles() },
+                            onRestore = { json -> viewModel.backupVM.restoreBackupFromJsonBlocking(json) },
+                            onBackupChanged = { viewModel.backupVM.refreshBackupFiles() },
                             onDismiss = { showBackupTransferDialog = false }
                         )
                     }
@@ -859,7 +859,7 @@ fun AppRoot(
                         ModelTransferDialog(
                             modelPath = modelPath,
                             modelSizeMB = modelSizeMB,
-                            onModelUploaded = { viewModel.refreshModelStatus() },
+                            onModelUploaded = { viewModel.downloadVM.refreshModelStatus() },
                             onDismiss = { showModelTransferDialog = false }
                         )
                     }
@@ -871,7 +871,7 @@ fun AppRoot(
                         serverDisplayName = serverDisplayName,
                         isConnecting = isLoading,
                         onConnect = onConnect,
-                        onDisconnect = { viewModel.disconnect() }
+                        onDisconnect = { viewModel.serverVM.disconnect() }
                     )
                 }
                 Screen.AlbumDetail -> {
@@ -889,21 +889,21 @@ fun AppRoot(
                             onPlaySong = { song ->
                                 val albumSongs = selectedAlbum?.let { viewModel.getAlbumSongsCache(it.id) } ?: listOf(song)
                                 viewModel.playQueue(albumSongs, albumSongs.indexOf(song).coerceAtLeast(0))
-                                viewModel.navigateTo(Screen.NowPlaying)
+                                viewModel.navVM.navigateTo(Screen.NowPlaying)
                             },
                             onPlayAll = { songList ->
                                 viewModel.playQueue(songList)
-                                viewModel.navigateTo(Screen.NowPlaying)
+                                viewModel.navVM.navigateTo(Screen.NowPlaying)
                             },
-                            onBack = { viewModel.navigateTo(Screen.Library) },
+                            onBack = { viewModel.navVM.navigateTo(Screen.Library) },
                             queueSongIds = viewModel.queueSongIds.collectAsState(initial = emptySet()).value,
-                            onToggleQueue = { song -> viewModel.toggleQueueSong(song) },
+                            onToggleQueue = { song -> viewModel.playerVM.toggleQueueSong(song) },
                             favoriteIds = favoriteIds,
                             onToggleFavorite = { song -> viewModel.toggleNetworkFavorite(song) },
                             onAddToPlaylist = { song -> pickerSong = song },
                             downloadStates = songDownloadStates,
-                            onDownloadSong = { song -> viewModel.downloadSong(song) },
-                            onDeleteDownloadSong = { song -> viewModel.deleteDownload(song) }
+                            onDownloadSong = { song -> viewModel.downloadVM.downloadSong(song) },
+                            onDeleteDownloadSong = { song -> viewModel.downloadVM.deleteDownload(song) }
                         )
                     }
                 }
@@ -929,21 +929,21 @@ fun AppRoot(
                             songs = artistSongs,
                             onPlaySong = { song ->
                                 viewModel.playQueue(artistSongs, artistSongs.indexOf(song).coerceAtLeast(0))
-                                viewModel.navigateTo(Screen.NowPlaying)
+                                viewModel.navVM.navigateTo(Screen.NowPlaying)
                             },
                             onPlayAll = { songList ->
                                 viewModel.playQueue(songList)
-                                viewModel.navigateTo(Screen.NowPlaying)
+                                viewModel.navVM.navigateTo(Screen.NowPlaying)
                             },
-                            onBack = { viewModel.navigateTo(Screen.Library) },
+                            onBack = { viewModel.navVM.navigateTo(Screen.Library) },
                             queueSongIds = viewModel.queueSongIds.collectAsState(initial = emptySet()).value,
-                            onToggleQueue = { song -> viewModel.toggleQueueSong(song) },
+                            onToggleQueue = { song -> viewModel.playerVM.toggleQueueSong(song) },
                             favoriteIds = favoriteIds,
                             onToggleFavorite = { song -> viewModel.toggleNetworkFavorite(song) },
                             onAddToPlaylist = { song -> pickerSong = song },
                             downloadStates = songDownloadStates,
-                            onDownloadSong = { song -> viewModel.downloadSong(song) },
-                            onDeleteDownloadSong = { song -> viewModel.deleteDownload(song) }
+                            onDownloadSong = { song -> viewModel.downloadVM.downloadSong(song) },
+                            onDeleteDownloadSong = { song -> viewModel.downloadVM.deleteDownload(song) }
                         )
                     }
                 }
@@ -956,7 +956,7 @@ fun AppRoot(
                         currentBands = equalizerBands,
                         onSelectPreset = { viewModel.setEqualizerPreset(it) },
                         onAdjustBand = { index, value -> viewModel.setEqualizerBand(index, value) },
-                        onBack = { viewModel.navigateTo(Screen.Settings) },
+                        onBack = { viewModel.navVM.navigateTo(Screen.Settings) },
                         visualizerTheme = settings.visualizerTheme
                     )
                 }
@@ -972,10 +972,10 @@ fun AppRoot(
                         onDeletePlaylist = { viewModel.deletePlaylist(it) },
                         onPlayPlaylist = { playlist ->
                             viewModel.playPlaylist(playlist)
-                            viewModel.navigateTo(Screen.NowPlaying)
+                            viewModel.navVM.navigateTo(Screen.NowPlaying)
                         },
                         onRemoveSong = { songId -> viewModel.removeFromPlaylist(songId) },
-                        onBack = { viewModel.navigateTo(Screen.Library) }
+                        onBack = { viewModel.navVM.navigateTo(Screen.Library) }
                     )
                 }
                 Screen.Netdisk -> {
@@ -983,20 +983,20 @@ fun AppRoot(
                         viewModel = viewModel,
                         onPlaySong = { song ->
                             viewModel.playNetworkSong(song)
-                            viewModel.navigateTo(Screen.NowPlaying)
+                            viewModel.navVM.navigateTo(Screen.NowPlaying)
                         },
                         onPlayAllSongs = { songs ->
                             viewModel.playQueue(songs, 0)
-                            viewModel.navigateTo(Screen.NowPlaying)
+                            viewModel.navVM.navigateTo(Screen.NowPlaying)
                         },
-                        onBack = { viewModel.navigateTo(Screen.Home) }
+                        onBack = { viewModel.navVM.navigateTo(Screen.Home) }
                     )
                 }
                 Screen.WeatherRadio -> {
-                    val weatherRadioQueue by viewModel.weatherRadioQueue.collectAsState(initial = null)
-                    val weatherData by viewModel.weatherData.collectAsState(initial = null)
-                    val currentWeatherMood by viewModel.currentWeatherMood.collectAsState()
-                    val weatherLoading by viewModel.weatherLoading.collectAsState(initial = false)
+                    val weatherRadioQueue by viewModel.weatherRadioVM.weatherRadioQueue.collectAsState(initial = null)
+                    val weatherData by viewModel.weatherRadioVM.weatherData.collectAsState(initial = null)
+                    val currentWeatherMood by viewModel.weatherRadioVM.currentWeatherMood.collectAsState()
+                    val weatherLoading by viewModel.weatherRadioVM.weatherLoading.collectAsState(initial = false)
 
                     com.nasmusic.tv.ui.screens.WeatherRadioScreen(
                         weatherRadioQueue = weatherRadioQueue,
@@ -1007,18 +1007,18 @@ fun AppRoot(
                             val songs = weatherRadioQueue?.songs ?: emptyList()
                             if (songs.isNotEmpty()) {
                                 viewModel.playQueue(songs, index)
-                                viewModel.navigateTo(Screen.NowPlaying)
+                                viewModel.navVM.navigateTo(Screen.NowPlaying)
                             }
                         },
                         onPlayAll = {
                             viewModel.playWeatherRadioAll()
                         },
                         onSwitchMood = { mood ->
-                            viewModel.switchWeatherMood(mood)
+                            viewModel.weatherRadioVM.switchWeatherMood(mood)
                         },
-                        onBack = { viewModel.navigateTo(Screen.Home) },
+                        onBack = { viewModel.navVM.navigateTo(Screen.Home) },
                         downloadStates = songDownloadStates,
-                        onDownloadSong = { song -> viewModel.downloadSong(song) }
+                        onDownloadSong = { song -> viewModel.downloadVM.downloadSong(song) }
                     )
                 }
             }
@@ -1026,16 +1026,16 @@ fun AppRoot(
 
     // 加入歌单弹窗（Library / 专辑详情 / 艺术家详情 共用，提升到 AppRoot 顶层跨页面生效）
     pickerSong?.let { song ->
-        val dlgPlaylists by viewModel.localPlaylists.collectAsState(initial = emptyList())
+        val dlgPlaylists by viewModel.playlistVM.localPlaylists.collectAsState(initial = emptyList())
         PlaylistPickerDialog(
             playlists = dlgPlaylists,
             onPick = { playlist ->
-                viewModel.addSongToPlaylist(playlist.id, song)
+                viewModel.playlistVM.addSongToPlaylist(playlist.id, song)
                 pickerSong = null
             },
             onCreate = { name ->
                 if (name.isNotBlank()) {
-                    viewModel.createLocalPlaylist(name)
+                    viewModel.playlistVM.createLocalPlaylist(name)
                 }
             },
             onDismiss = { pickerSong = null }

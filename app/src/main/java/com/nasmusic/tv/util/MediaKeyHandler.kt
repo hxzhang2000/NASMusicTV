@@ -25,19 +25,19 @@ object MediaKeyHandler {
             KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE,
             KeyEvent.KEYCODE_MEDIA_PLAY,
             KeyEvent.KEYCODE_MEDIA_PAUSE -> {
-                viewModel.playPause()
+                viewModel.playerVM.playPause()
                 true
             }
             KeyEvent.KEYCODE_MEDIA_NEXT -> {
-                viewModel.next()
+                viewModel.playerVM.next()
                 true
             }
             KeyEvent.KEYCODE_MEDIA_PREVIOUS -> {
-                viewModel.previous()
+                viewModel.playerVM.previous()
                 true
             }
             KeyEvent.KEYCODE_MEDIA_STOP -> {
-                viewModel.playPause()
+                viewModel.playerVM.playPause()
                 true
             }
             KeyEvent.KEYCODE_DPAD_CENTER,
@@ -47,7 +47,7 @@ object MediaKeyHandler {
                     false // Let the caller handle immersive mode exit
                 } else if (currentScreen == Screen.NowPlaying) {
                     // 仅在播放页面时处理
-                    viewModel.playPause()
+                    viewModel.playerVM.playPause()
                     true
                 } else {
                     false // Let default handling proceed

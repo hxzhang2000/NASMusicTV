@@ -68,13 +68,13 @@ fun NetdiskScreen(
     onPlayAllSongs: (List<Song>) -> Unit,
     onBack: () -> Unit
 ) {
-    val connectionState by viewModel.baiduConnectionState.collectAsState()
+    val connectionState by viewModel.netVM.baiduConnectionState.collectAsState()
     val currentDir by viewModel.netdiskCurrentDir.collectAsState()
     val dirFiles by viewModel.netdiskDirFiles.collectAsState()
     val isLoading by viewModel.netdiskIsLoading.collectAsState()
     val searchKeyword by viewModel.netdiskSearchKeyword.collectAsState()
     val searchResults by viewModel.netdiskSearchResults.collectAsState()
-    val localPlaylists by viewModel.localPlaylists.collectAsState(initial = emptyList())
+    val localPlaylists by viewModel.playlistVM.localPlaylists.collectAsState(initial = emptyList())
 val favoriteIds by viewModel.networkFavoriteIds.collectAsState(initial = emptySet())
 val queueSongIds by viewModel.queueSongIds.collectAsState(initial = emptySet())
 val downloadStates by viewModel.songDownloadStates.collectAsState(initial = emptyMap())
@@ -84,8 +84,8 @@ val downloadStates by viewModel.songDownloadStates.collectAsState(initial = empt
 
     // 首次进入：刷新连接状态并加载当前目录（不依赖时序上的首次连接状态，避免空列表）
     LaunchedEffect(Unit) {
-        viewModel.refreshBaiduConnectionState()
-        viewModel.listBaiduDir(viewModel.netdiskCurrentDir.value)
+        viewModel.netVM.refreshBaiduConnectionState()
+        viewModel.netVM.listBaiduDir(viewModel.netdiskCurrentDir.value)
     }
 
     Column(
@@ -114,7 +114,7 @@ val downloadStates by viewModel.songDownloadStates.collectAsState(initial = empt
                 query = searchKeyword,
                 placeholder = stringResource(R.string.netdisk_search_placeholder),
                 onOpenSearch = { showSearchDialog = true },
-                onClear = { viewModel.clearNetdiskSearch() },
+                onClear = { viewModel.netVM.clearNetdiskSearch() },
                 modifier = Modifier.width(420.dp)
             )
         }
@@ -165,7 +165,7 @@ val downloadStates by viewModel.songDownloadStates.collectAsState(initial = empt
                             ActionBar(
                                 songCount = searchResults.size,
                                 onPlayAll = { onPlayAllSongs(searchResults) },
-                                onAddAllToQueue = { searchResults.forEach { song -> viewModel.toggleQueueSong(song) } }
+                                onAddAllToQueue = { searchResults.forEach { song -> viewModel.playerVM.toggleQueueSong(song) } }
                             )
                         }
                         itemsIndexed(searchResults, key = { _, s -> "${s.networkId}_${s.title}" }) { index, song ->
@@ -177,10 +177,10 @@ val downloadStates by viewModel.songDownloadStates.collectAsState(initial = empt
                                 isFavorited = song.id in favoriteIds,
                                 onToggleFavorite = { viewModel.toggleNetworkFavorite(song) },
                                 isInQueue = song.id in queueSongIds,
-                                onToggleQueue = { viewModel.toggleQueueSong(song) },
+                                onToggleQueue = { viewModel.playerVM.toggleQueueSong(song) },
                                 onAddToPlaylist = { actionSong = song },
                                 downloadState = downloadStates[song.downloadKey] ?: DownloadState.None,
-                                onDownload = { viewModel.downloadSong(song) }
+                                onDownload = { viewModel.downloadVM.downloadSong(song) }
                             )
                         }
                     }
@@ -211,7 +211,7 @@ val downloadStates by viewModel.songDownloadStates.collectAsState(initial = empt
                     if (currentDir != "/" && currentDir.isNotBlank()) {
                         Spacer(modifier = Modifier.width(8.dp))
                         FocusableSurface(
-                            onClick = { viewModel.navigateBaiduDirUp() },
+                            onClick = { viewModel.netVM.navigateBaiduDirUp() },
                             modifier = Modifier.padding(end = 8.dp),
                             shape = RoundedCornerShape(8.dp)
                         ) {
@@ -242,7 +242,7 @@ val downloadStates by viewModel.songDownloadStates.collectAsState(initial = empt
                             if (file.isDir) {
                                 FileRow(
                                     file = file,
-                                    onClick = { viewModel.enterBaiduDir(file.serverFilename) },
+                                    onClick = { viewModel.netVM.enterBaiduDir(file.serverFilename) },
                                     onMore = {}
                                 )
                             } else if (BaiduPanApi.isAudioFile(file.serverFilename, file.category)) {
@@ -255,10 +255,10 @@ val downloadStates by viewModel.songDownloadStates.collectAsState(initial = empt
                                     isFavorited = song.id in favoriteIds,
                                     onToggleFavorite = { viewModel.toggleNetworkFavorite(song) },
                                     isInQueue = song.id in queueSongIds,
-                                    onToggleQueue = { viewModel.toggleQueueSong(song) },
+                                    onToggleQueue = { viewModel.playerVM.toggleQueueSong(song) },
                                     onAddToPlaylist = { actionSong = song },
                                     downloadState = downloadStates[song.downloadKey] ?: DownloadState.None,
-                                    onDownload = { viewModel.downloadSong(song) }
+                                    onDownload = { viewModel.downloadVM.downloadSong(song) }
                                 )
                             }
                         }
@@ -277,7 +277,7 @@ val downloadStates by viewModel.songDownloadStates.collectAsState(initial = empt
             onConfirm = { input ->
                 val kw = input.trim()
                 if (kw.isNotBlank()) {
-                    viewModel.searchBaidu(kw)
+                    viewModel.netVM.searchBaidu(kw)
                     showSearchDialog = false
                 }
             },
@@ -290,10 +290,10 @@ val downloadStates by viewModel.songDownloadStates.collectAsState(initial = empt
         PlaylistPickerDialog(
             playlists = localPlaylists,
             onPick = { playlist ->
-                viewModel.addSongToPlaylist(playlist.id, song)
+                viewModel.playlistVM.addSongToPlaylist(playlist.id, song)
                 actionSong = null
             },
-            onCreate = { name -> if (name.isNotBlank()) viewModel.createLocalPlaylist(name) },
+            onCreate = { name -> if (name.isNotBlank()) viewModel.playlistVM.createLocalPlaylist(name) },
             onDismiss = { actionSong = null }
         )
     }
