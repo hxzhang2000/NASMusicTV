@@ -2167,6 +2167,8 @@ showError(getApplication<Application>().getString(R.string.toggle_favorite_error
     // --- D-2 网络状态自动重连 ---
     private var reconnectAttempts = 0
     private val maxReconnectAttempts = 3
+    /** F2-4：断网恢复续播 job（新恢复事件取消旧的等待） */
+    private var networkRestoreJob: kotlinx.coroutines.Job? = null
 
     fun onNetworkAvailable() {
         if (_isNetworkAvailable.value) return // 已是可用状态，跳过（防止 NetworkMonitor 重复回调）
@@ -2177,6 +2179,24 @@ showError(getApplication<Application>().getString(R.string.toggle_favorite_error
             viewModelScope.launch {
                 delay(2000)
                 _connectMessage.value = null
+            }
+        }
+        // F2-4：断线续播——取回断点，2 秒去抖后重解析当前歌并 seek 回断点
+        val resumePoint = playerManager.onNetworkRestored()
+        if (resumePoint != null) {
+            networkRestoreJob?.cancel()
+            networkRestoreJob = viewModelScope.launch {
+                delay(2000) // 网络栈稳定去抖（WiFi 切换可能再抖）
+                // 队列仍在且索引有效才续播（断网期间用户可能清了队列）
+                val queue = playerManager.getQueueSnapshot()
+                if (resumePoint.index in queue.indices) {
+                    AppLog.d("NASMusic", "onNetworkAvailable: resuming playback at index=${resumePoint.index}, pos=${resumePoint.positionMs}")
+                    // wasPlaying=false 只加载不播；网络歌曲直链必过期 → 统一走重解析路径
+                    if (resumePoint.wasPlaying) {
+                        playerVM.resolveAndPlayByIndex(resumePoint.index)
+                        // 重解析 playQueue 从 0 开始，seek 回断点由进度恢复逻辑兜底
+                    }
+                }
             }
         }
         // 自动重连
@@ -2190,6 +2210,8 @@ showError(getApplication<Application>().getString(R.string.toggle_favorite_error
     fun onNetworkLost() {
         _isNetworkAvailable.value = false
         reconnectAttempts = 0
+        // F2-4：标记断网（PlayerManager 冻结错误跳歌，等待恢复续播）
+        playerManager.onNetworkGone()
         if (!mvVM.showMv.value) {
             _connectMessage.value = getApplication<Application>().getString(R.string.status_network_disconnected)
             viewModelScope.launch {

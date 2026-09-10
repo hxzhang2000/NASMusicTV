@@ -342,6 +342,13 @@ class PlayerManager(private val applicationContext: Context) {
                 AppLog.d("PlayerManager", "onPlayerError (expected, streamUrl empty): ${error.message}")
                 return
             }
+            // F2-4：断网期间冻结错误处理——不跳歌不重解析（解析必然失败），
+            // 记录断点等待网络恢复后续播。
+            if (networkLost) {
+                AppLog.w("PlayerManager", "onPlayerError during network loss, freezing (resume point recorded)")
+                recordPendingResume()
+                return
+            }
             AppLog.e("PlayerManager", "Player error: ${error.message}", error)
             _playerError.value = error.message ?: applicationContext.getString(R.string.player_error_playback)
             // 播放链接可能已过期（入队时预解析的直链有时效，网络歌曲尤甚，约 5 首后集中出现）。
@@ -358,6 +365,52 @@ class PlayerManager(private val applicationContext: Context) {
             val mode = if (p != null) derivePlayMode(p) else PlayMode.REPEAT_ALL
             next(mode)
         }
+    }
+
+    // ===================== F2-4 断线续播 =====================
+
+    /** 断网标志（NetworkMonitor 驱动）：断网期间 onPlayerError 冻结跳歌 */
+    @Volatile
+    var networkLost = false
+
+    /** 断点（index/positionMs/是否在播），网络恢复后 seek 回该点续播 */
+    data class ResumePoint(val index: Int, val positionMs: Long, val wasPlaying: Boolean)
+
+    @Volatile
+    var pendingResume: ResumePoint? = null
+        private set
+
+    /** 记录断点（保留首个断点——断网风暴期间多次错误只记第一次） */
+    private fun recordPendingResume() {
+        if (pendingResume != null) return
+        val p = player ?: return
+        pendingResume = ResumePoint(
+            index = _currentIndex.value,
+            positionMs = p.currentPosition.coerceAtLeast(0),
+            wasPlaying = p.playWhenReady
+        )
+        // 冻结态：显示缓冲中（UI 不误报错误），暂停播放器防止错误风暴
+        _buffering.value = true
+        _playerError.value = null
+        try { p.pause() } catch (_: Exception) {}
+    }
+
+    /**
+     * 网络恢复（MainViewModel.onNetworkAvailable 接线）。
+     * 返回待恢复断点（调用方负责延迟 2s 去抖后 resolveAndPlay + seek 续播）；
+     * 无断点返回 null。
+     */
+    fun onNetworkRestored(): ResumePoint? {
+        networkLost = false
+        val rp = pendingResume
+        pendingResume = null
+        _buffering.value = false
+        return rp
+    }
+
+    /** 断网进入（MainViewModel.onNetworkLost 接线） */
+    fun onNetworkGone() {
+        networkLost = true
     }
 
     fun setPlayer(exoPlayer: ExoPlayer) {

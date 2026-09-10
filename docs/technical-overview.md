@@ -7863,3 +7863,18 @@ onSearchSong = { keyword -> viewModel.searchNetworkSongs(keyword) },
   - 计划偏差说明：通知栏"歌词开关"按计划 §2.3 决策不做（TV 端歌词即主界面，通知栏 6 按钮溢出）；睡眠定时档位选择对话框未做（通知按钮循环切换 15min↔取消 + NowPlaying 快捷 30min 覆盖核心场景，档位对话框留待用户反馈）
 - **验证**：assembleDebug 通过；testDebugUnitTest 285/285 全绿（新增 PlayStatsAggregatorTest 8 + SleepTimerControllerTest 7）
 - **待办**：TV 手测（统计页 D-Pad、通知按钮 AVRCP/蓝牙遥控、睡眠定时到期暂停）
+
+### 10.116 F2 系列播放功能增强 M2（2026-09-10，F2-3 + F2-4）
+
+- **F2-3 智能电台**：
+  - backend/radio/RadioSongScorer（纯函数）：同 artist +50 / 同 genre +30 / 同 album +10 / 同年代差≤3 +5 / play_counts 偏好 +min(count,20) / 种子与已播 -100 强排除；分数+1 做权重随机采样（负分权重 0）
+  - backend/radio/SmartRadioManager：Idle/Generating/Playing/Exhausted 状态机；两级曲库加载（seed 有 genre 且流派池 ≥50 → getSongsByGenre 先筛，否则全量分页 500 首页/5000 硬上限）；曲库耗尽清 playedIds 换批再生成；会话内曲库缓存
+  - NasMusicApp 容器注册（applicationScope + playCountsProvider 偏好信号）；NowPlaying 控制按钮行新增"智能电台"入口（AppRoot 传入：isConnected && 非网络歌曲时显示）；MainViewModel.startSmartRadioFromCurrent 胶水（生成中/已开启/需 NAS 三态提示）
+  - 计划偏差：天气电台页 Tab 入口未做（NowPlaying 单入口已覆盖核心场景；天气电台页结构改动牵连大，留待用户反馈）
+- **F2-4 断线续播**：
+  - PlayerManager：@Volatile networkLost + ResumePoint(index, positionMs, wasPlaying) + recordPendingResume（保留首个断点、置 buffering、清错误、pause 防错误风暴）+ onNetworkRestored/onNetworkGone
+  - onPlayerError 冻结分支：networkLost=true 时不跳歌不重解析（断网中解析必然失败），记录断点等待恢复
+  - MainViewModel.onNetworkAvailable：取回断点 → 2 秒去抖（networkRestoreJob 新事件取消旧等待）→ 队列索引有效且 wasPlaying 时 resolveAndPlayByIndex 续播；onNetworkLost 置 networkLost 标志
+  - MTV 独立播放器路径不动（计划 §4.3 边界）；断点不持久化（会话内续播，重启走既有 keyLastQueue 队列恢复）
+- **验证**：compileDebugKotlin + testDebugUnitTest 298/298 全绿（M1 285 + RadioSongScorerTest 10 + NetworkResumeTest 3）
+- **待办**：TV 手测（智能电台批次相似度 + 断网/恢复断点续播场景）
