@@ -1,7 +1,6 @@
 package com.nasmusic.tv.player
 
 import android.content.Context
-import android.media.audiofx.Equalizer
 import android.os.Handler
 import android.os.Looper
 import androidx.media3.common.MediaItem
@@ -18,18 +17,18 @@ import android.net.Uri
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
-import okhttp3.OkHttpClient
-import okhttp3.Request
-import java.io.File
-import kotlin.random.Random
 
 /**
- * 播放管理器
- * 单例模式，管理播放状态、队列和播放模式
+ * 播放管理器（N-4 拆分后的播放核心 + 协调层）
+ *
+ * 保留：播放核心状态机（ExoPlayer 生命周期、进度轮询、seek 状态）、队列管理、播放模式。
+ * 迁出：高质量人声分离编排 → [HqSeparationOrchestrator]（经 PlayerHost 窄接口回调，
+ * 延续 R-5 VocalSeparationController 模式）；均衡器/频谱 → [PlayerEqualizer]。
+ * 本类对现有调用面（ViewModel/PlaybackService/RemoteControlServer）保持 API 零改动。
  */
 class PlayerManager(private val applicationContext: Context) {
 
@@ -38,40 +37,23 @@ class PlayerManager(private val applicationContext: Context) {
     }
 
     private var player: ExoPlayer? = null
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
 
-    /** 网络下载用的 HTTP 客户端（HQ 模式下载 streamUrl 到本地文件） */
-    private val httpClient = OkHttpClient.Builder()
-        .connectTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
-        .readTimeout(60, java.util.concurrent.TimeUnit.SECONDS)
-        .callTimeout(5, java.util.concurrent.TimeUnit.MINUTES)  // 整体超时，防止卡死
-        .build()
+    // ── N-4 拆分组件 ──
 
-    // ── 高质量人声分离（HT-Demucs FT ONNX 模式）──
-    private var demucsSeparator: DemucsSeparator? = null
-    private var accompanimentCache: AccompanimentCache? = null
-    private var modelDownloadManager: ModelDownloadManager? = null
+    /** 均衡器/频谱管理（N-4 提取） */
+    private val playerEqualizer = PlayerEqualizer(Handler(Looper.getMainLooper()))
 
-    /** 当前分离模式（快速/高质量），由 MainViewModel 从 AppPreferences 初始化 */
-    private val _separationMode = MutableStateFlow(AppPreferences.SeparationMode.FAST)
-    val separationMode: StateFlow<AppPreferences.SeparationMode> = _separationMode
-
-    /** 高质量分离是否正在进行（用于 UI loading 状态） */
-    private val _separating = MutableStateFlow(false)
-    val separating: StateFlow<Boolean> = _separating
-
-    /** 高质量分离进度（0f~1f）与阶段描述 */
-    private val _separationProgress = MutableStateFlow(0f to "")
-    val separationProgress: StateFlow<Pair<Float, String>> = _separationProgress
-
-    /** 高质量分离错误信息（非空表示最近一次失败，UI 应提示用户） */
-    private val _hqError = MutableStateFlow<String?>(null)
-    val hqError: StateFlow<String?> = _hqError
-    private val _hqSuccess = MutableStateFlow<String?>(null)
-    val hqSuccess: StateFlow<String?> = _hqSuccess
-
-    /** 原始 MediaItem 的 URI，用于切换回原始音频 */
-    private var originalMediaItemUri: String? = null
+    /** 高质量人声分离编排（N-4 提取），经 PlayerHost 窄接口回调本类播放操作 */
+    private val hqOrchestrator = HqSeparationOrchestrator(applicationContext, object : HqSeparationOrchestrator.PlayerHost {
+        override fun player(): ExoPlayer? = this@PlayerManager.player
+        override fun currentSong(): Song? = _currentSong.value
+        override fun isPlaying(): Boolean = player?.isPlaying == true
+        override fun pause() { player?.pause() }
+        override fun play() { player?.play() }
+        override fun setFastVocalRemoval(enabled: Boolean) {
+            vocalRemovalProcessor?.setEnabled(enabled)
+        }
+    })
 
     /**
      * 当 ExoPlayer 自动过渡到 streamUrl 为空的歌曲时触发（如恢复队列中的网络歌曲）。
@@ -142,6 +124,14 @@ class PlayerManager(private val applicationContext: Context) {
     // 人声消除处理器引用（由 PlaybackService 注入）
     private var vocalRemovalProcessor: SpectralMaskProcessor? = null
 
+    // ── 分离模式 / HQ 编排转发（N-4：实现迁至 HqSeparationOrchestrator）──
+
+    val separationMode: StateFlow<SeparationMode> get() = hqOrchestrator.separationMode
+    val separating: StateFlow<Boolean> get() = hqOrchestrator.separating
+    val separationProgress: StateFlow<Pair<Float, String>> get() = hqOrchestrator.separationProgress
+    val hqError: StateFlow<String?> get() = hqOrchestrator.hqError
+    val hqSuccess: StateFlow<String?> get() = hqOrchestrator.hqSuccess
+
     /** 由 PlaybackService 注入处理器实例 */
     fun setVocalRemovalProcessor(processor: SpectralMaskProcessor) {
         vocalRemovalProcessor = processor
@@ -163,396 +153,43 @@ class PlayerManager(private val applicationContext: Context) {
         return vocalRemovalProcessor?.isEnabled() ?: false
     }
 
-    // ── 高质量人声分离（HT-Demucs FT ONNX 模式）──
-
     /** 注入 DemucsSeparator 实例（由 PlaybackService 初始化后调用） */
     fun setDemucsSeparator(separator: DemucsSeparator) {
-        demucsSeparator = separator
+        hqOrchestrator.setDemucsSeparator(separator)
     }
 
     /** 注入 AccompanimentCache 实例（由 PlaybackService 初始化后调用） */
     fun setAccompanimentCache(cache: AccompanimentCache) {
-        accompanimentCache = cache
+        hqOrchestrator.setAccompanimentCache(cache)
     }
 
     /** 注入 ModelDownloadManager 实例（由 NasMusicApp 初始化后调用） */
     fun setModelDownloadManager(manager: ModelDownloadManager) {
-        modelDownloadManager = manager
+        hqOrchestrator.setModelDownloadManager(manager)
     }
 
     /** 切换分离模式（快速/高质量） */
     fun setSeparationMode(mode: AppPreferences.SeparationMode) {
-        _separationMode.value = mode
-        AppLog.d(TAG, "setSeparationMode: $mode")
+        hqOrchestrator.setSeparationMode(mode)
     }
 
     /** 查询当前是否为高质量模式 */
-    fun isHighQualityMode(): Boolean {
-        return _separationMode.value == AppPreferences.SeparationMode.HIGH_QUALITY
-    }
+    fun isHighQualityMode(): Boolean = hqOrchestrator.isHighQualityMode()
 
-    /** 上次下载失败的具体原因（resolveInputPath 失败时设置） */
-    private var lastDownloadError: String? = null
+    /** 高质量模式下开启人声消除（编排迁至 HqSeparationOrchestrator，N-4） */
+    fun enableHighQualityRemoval(): Boolean = hqOrchestrator.enableHighQualityRemoval()
 
-    /** HQ 分离开始时间（用于计算耗时） */
-    private var separationStartTimeMs: Long = 0
-
-    /**
-     * 解析歌曲的本地输入路径，供 DemucsSeparator 使用。
-     *
-     * - 如果 song.path 非空（百度网盘本地文件），直接返回
-     * - 否则如果 song.streamUrl 非空，下载到临时文件后返回路径
-     * - 都为空则返回 null
-     *
-     * 调用方应在分离完成后调用 [cleanupTempFile] 清理下载的临时文件。
-     *
-     * @param song 歌曲
-     * @param progressStage 下载进度阶段的标签（如 "下载音频"）
-     * @return 本地文件路径，或 null（无法获取）
-     */
-    private suspend fun resolveInputPath(
-        song: Song,
-        progressStage: String = applicationContext.getString(R.string.hq_progress_downloading)
-    ): String? {
-        // 1. 本地文件优先（百度网盘歌曲）
-        val localPath = song.path
-        if (!localPath.isNullOrBlank()) {
-            val file = File(localPath)
-            if (file.exists() && file.length() > 0) {
-                AppLog.d(TAG, "resolveInputPath: using local file for '${song.title}'")
-                return localPath
-            }
-        }
-
-        // 2. 从 streamUrl 下载到临时文件
-        val streamUrl = song.streamUrl
-        if (streamUrl.isNullOrBlank()) {
-            AppLog.w(TAG, "resolveInputPath: no path and no streamUrl for '${song.title}'")
-            lastDownloadError = applicationContext.getString(R.string.player_error_no_file)
-            return null
-        }
-
-        return try {
-            _separationProgress.value = 0.05f to progressStage
-            val tempFile = withContext(Dispatchers.IO) {
-                // 修复（H-2）：java.io.tmpdir 在 Android 上通常未定义，回退 /data/local/tmp
-                // 对普通应用不可写，导致 HQ 分离下载输入文件失败；改用应用私有 cacheDir。
-                val tempDir = File(applicationContext.cacheDir, "nasmusic_hq")
-                tempDir.mkdirs()
-                val outFile = File(tempDir, "${song.id}_input.tmp")
-
-                val request = Request.Builder().url(streamUrl).build()
-                val response = httpClient.newCall(request).execute()
-                if (!response.isSuccessful) {
-                    AppLog.w(TAG, "resolveInputPath: download failed, HTTP ${response.code}")
-                    lastDownloadError = applicationContext.getString(R.string.player_download_http_error, response.code)
-                    return@withContext null
-                }
-
-                val body = response.body ?: return@withContext null
-                val contentLength = body.contentLength()
-                var downloaded = 0L
-                // 节流：只在百分比整数变化 ≥1% 时才更新 StateFlow，避免淹没 Main 线程
-                var lastReportedPercent = -1
-
-                body.byteStream().use { input ->
-                    outFile.outputStream().use { output ->
-                        val buffer = ByteArray(8192)
-                        var bytesRead: Int
-                        while (input.read(buffer).also { bytesRead = it } != -1) {
-                            output.write(buffer, 0, bytesRead)
-                            downloaded += bytesRead
-                            if (contentLength > 0) {
-                                val pct = downloaded.toFloat() / contentLength.toFloat()
-                                val intPercent = (pct * 100).toInt()
-                                // 只在整百分比变化 ≥1 时才更新，大幅减少 StateFlow 发射次数
-                                if (intPercent != lastReportedPercent) {
-                                    lastReportedPercent = intPercent
-                                    _separationProgress.value = (0.05f + pct * 0.15f) to progressStage
-                                }
-                            }
-                        }
-                    }
-                }
-
-                AppLog.d(TAG, "resolveInputPath: downloaded ${outFile.length()} bytes for '${song.title}'")
-                outFile.absolutePath
-            }
-            if (tempFile == null) {
-                // lastDownloadError 已在内部设置
-                null
-            } else {
-                lastDownloadError = null
-                tempFile
-            }
-        } catch (e: java.net.SocketTimeoutException) {
-            AppLog.e(TAG, "resolveInputPath: download timeout", e)
-            lastDownloadError = applicationContext.getString(R.string.player_download_timeout)
-            null
-        } catch (e: java.net.SocketException) {
-            AppLog.e(TAG, "resolveInputPath: network error", e)
-            lastDownloadError = applicationContext.getString(R.string.player_download_network_error, e.message?.take(30))
-            null
-        } catch (e: Exception) {
-            AppLog.e(TAG, "resolveInputPath: download exception", e)
-            lastDownloadError = applicationContext.getString(R.string.player_download_exception, e.message?.take(30))
-            null
-        }
-    }
-
-    /**
-     * 清理 resolveInputPath 下载的临时文件。
-     * 仅删除以 _input.tmp 结尾的文件，避免误删。
-     */
-    private fun cleanupTempFile(path: String?) {
-        if (path == null) return
-        try {
-            val file = File(path)
-            if (file.exists() && file.name.endsWith("_input.tmp")) {
-                file.delete()
-                AppLog.d(TAG, "cleanupTempFile: deleted $path")
-            }
-        } catch (e: Exception) {
-            AppLog.w(TAG, "cleanupTempFile: failed", e)
-        }
-    }
-
-    /**
-     * 高质量模式下开启人声消除：
-     * 1. 检查模型是否已下载
-     * 2. 检查伴奏文件是否已缓存
-     * 3. 若已缓存：直接切换 MediaItem 为伴奏文件
-     * 4. 若未缓存：保持原始音频播放 + 后台分离 → 完成后切换到伴奏
-     */
-    fun enableHighQualityRemoval(): Boolean {
-        val separator = demucsSeparator
-        val cache = accompanimentCache
-        val songId = _currentSong.value?.id
-
-        if (separator == null || cache == null || songId == null) {
-            AppLog.w(TAG, "enableHighQualityRemoval: missing separator/cache/songId, fallback to fast mode")
-            _hqError.value = applicationContext.getString(R.string.hq_error_component_not_ready)
-            _separationMode.value = AppPreferences.SeparationMode.FAST
-            vocalRemovalProcessor?.setEnabled(true)
-            return false
-        }
-
-        // 检查模型是否已下载
-        val modelManager = modelDownloadManager
-        if (modelManager != null && !modelManager.isModelDownloaded()) {
-            AppLog.w(TAG, "enableHighQualityRemoval: model not downloaded, fallback to fast mode")
-            _hqError.value = applicationContext.getString(R.string.hq_error_model_not_downloaded)
-            _separationMode.value = AppPreferences.SeparationMode.FAST
-            vocalRemovalProcessor?.setEnabled(true)
-            return false
-        }
-
-        val accompanimentFile = cache.getAccompanimentFile(songId)
-        if (accompanimentFile.exists() && accompanimentFile.length() > 0) {
-            // 已缓存：直接切换到伴奏文件（同时关闭快速模式 DSP，伴奏文件本身已无主唱）
-            vocalRemovalProcessor?.setEnabled(false)
-            switchToAccompaniment(accompanimentFile.absolutePath)
-        } else {
-            // 未缓存：暂停播放 → 后台分离 → 完成后切换到伴奏并恢复播放
-            val song = _currentSong.value ?: return false
-            _hqError.value = null  // 清除上次错误
-            // 保存播放状态并暂停，避免分离期间继续播放原唱
-            val wasPlayingBeforeSeparation = player?.isPlaying == true
-            player?.pause()
-            _separating.value = true
-            separationStartTimeMs = System.currentTimeMillis()
-            var tempInputPath: String? = null
-            scope.launch {
-                try {
-                    // 解析输入路径（本地文件 或 下载 streamUrl）
-                    val inputPath = withContext(Dispatchers.IO) {
-                        resolveInputPath(song, applicationContext.getString(R.string.hq_progress_downloading))
-                    }
-                    if (inputPath == null) {
-                        AppLog.w(TAG, "enableHighQualityRemoval: cannot resolve input path, fallback to fast mode")
-                        _hqError.value = applicationContext.getString(R.string.hq_error_with_fallback, lastDownloadError ?: applicationContext.getString(R.string.hq_error_no_audio_file))
-                        _separationMode.value = AppPreferences.SeparationMode.FAST
-                        vocalRemovalProcessor?.setEnabled(true)
-                        if (wasPlayingBeforeSeparation) player?.play()
-                        return@launch
-                    }
-                    // 记录是否为临时下载文件（分离后需清理）
-                    tempInputPath = if (song.path.isNullOrBlank()) inputPath else null
-
-                    // 确保分离器已初始化（在 IO 线程加载 166MB 模型，避免主线程 ANR）
-                    if (!separator.isReady()) {
-                        val modelPath = modelManager?.getModelPath()
-                        if (modelPath == null) {
-                            AppLog.w(TAG, "enableHighQualityRemoval: model path unavailable, fallback to fast mode")
-                            _hqError.value = applicationContext.getString(R.string.hq_error_model_path_unavailable)
-                            _separationMode.value = AppPreferences.SeparationMode.FAST
-                            vocalRemovalProcessor?.setEnabled(true)
-                            if (wasPlayingBeforeSeparation) player?.play()
-                            return@launch
-                        }
-                        _separationProgress.value = 0.2f to applicationContext.getString(R.string.hq_progress_loading_model)
-                        val initOk = withContext(Dispatchers.IO) { separator.initialize(modelPath) }
-                        if (!initOk) {
-                            AppLog.w(TAG, "enableHighQualityRemoval: separator init failed, fallback to fast mode")
-                            _hqError.value = applicationContext.getString(R.string.hq_error_with_fallback, separator.lastError ?: applicationContext.getString(R.string.hq_error_separator_init_failed))
-                            _separationMode.value = AppPreferences.SeparationMode.FAST
-                            vocalRemovalProcessor?.setEnabled(true)
-                            if (wasPlayingBeforeSeparation) player?.play()
-                            return@launch
-                        }
-                    }
-
-                    val outputDir = cache.getAccompanimentFile(songId).parentFile
-                        ?: java.io.File(cache.getAccompanimentFile(songId).parent)
-                    val result = withContext(kotlinx.coroutines.Dispatchers.IO) {
-                        separator.separate(
-                            inputPath = inputPath,
-                            outputDir = outputDir,
-                            songId = songId,
-                            progress = DemucsSeparator.ProgressCallback { p, stage ->
-                                val elapsedSec = (System.currentTimeMillis() - separationStartTimeMs) / 1000.0
-                                _separationProgress.value = p to applicationContext.getString(R.string.hq_progress_stage_elapsed, stage, elapsedSec)
-                            }
-                        )
-                    }
-                    if (result != null) {
-                        // 分离完成，关闭快速模式 DSP + 切换到伴奏文件 + 恢复播放
-                        val totalSec = (System.currentTimeMillis() - separationStartTimeMs) / 1000.0
-                        AppLog.d(TAG, "enableHighQualityRemoval: completed in ${String.format("%.1f", totalSec)}s")
-                        _separationProgress.value = 1f to applicationContext.getString(R.string.hq_progress_done, totalSec)
-                        _hqSuccess.value = applicationContext.getString(R.string.hq_success_separation_done, totalSec)
-                        vocalRemovalProcessor?.setEnabled(false)
-                        switchToAccompaniment(result.accompanimentFile.absolutePath)
-                        if (wasPlayingBeforeSeparation) player?.play()
-                    } else {
-                        val totalSec = (System.currentTimeMillis() - separationStartTimeMs) / 1000.0
-                        AppLog.w(TAG, "enableHighQualityRemoval: separation failed in ${String.format("%.1f", totalSec)}s, fallback to fast mode")
-                        _hqError.value = applicationContext.getString(R.string.hq_error_with_time_and_suffix, separator.lastError ?: applicationContext.getString(R.string.hq_error_separation_failed), totalSec)
-                        _separationMode.value = AppPreferences.SeparationMode.FAST
-                        vocalRemovalProcessor?.setEnabled(true)
-                        if (wasPlayingBeforeSeparation) player?.play()
-                    }
-                } catch (e: OutOfMemoryError) {
-                    AppLog.e(TAG, "enableHighQualityRemoval: OOM", e)
-                    _hqError.value = applicationContext.getString(R.string.hq_error_oom)
-                    _separationMode.value = AppPreferences.SeparationMode.FAST
-                    vocalRemovalProcessor?.setEnabled(true)
-                    if (wasPlayingBeforeSeparation) player?.play()
-                } catch (e: Exception) {
-                    AppLog.e(TAG, "enableHighQualityRemoval: exception", e)
-                    _hqError.value = applicationContext.getString(R.string.hq_error_exception_with_suffix, e.message?.take(30))
-                    _separationMode.value = AppPreferences.SeparationMode.FAST
-                    vocalRemovalProcessor?.setEnabled(true)
-                    if (wasPlayingBeforeSeparation) player?.play()
-                } finally {
-                    _separating.value = false
-                    _separationProgress.value = 0f to ""
-                    // 保存原唱文件到缓存（分离时下载的输入文件），用于切回原唱时直接使用
-                    val inputPath = tempInputPath
-                    if (inputPath != null && songId != null) {
-                        accompanimentCache?.saveOriginalFile(songId, inputPath)
-                    }
-                    // 清理临时下载文件
-                    cleanupTempFile(tempInputPath)
-                }
-            }
-        }
-        return true
-    }
-
-    /** 切换到伴奏文件播放 */
-    private fun switchToAccompaniment(accompanimentPath: String) {
-        val p = player ?: return
-        val currentPos = p.currentPosition
-        val wasPlaying = p.isPlaying
-
-        // 保存原始 URI
-        val currentItem = p.currentMediaItem
-        if (originalMediaItemUri == null && currentItem != null) {
-            originalMediaItemUri = currentItem.localConfiguration?.uri.toString()
-        }
-
-        // 构建新 MediaItem 指向伴奏文件
-        // 用 Uri.fromFile 正确编码中文/空格路径（原 Uri.parse("file://$path") 遇中文/空格
-        // 产生非法 URI，导致 ExoPlayer 无法播放伴奏）。
-        val accompanimentUri = android.net.Uri.fromFile(java.io.File(accompanimentPath))
-        val newItem = currentItem?.buildUpon()?.setUri(accompanimentUri)?.build() ?: return
-
-        // P6 修复：用 replaceMediaItem 替换当前索引的 item，而非 setMediaItem（后者会
-        // 把整个播放队列替换成单曲，导致 seekToNextMediaItem 无目标、K 歌后无法切歌）。
-        val index = p.currentMediaItemIndex
-        p.replaceMediaItem(index, newItem)
-        p.prepare()
-        p.seekTo(currentPos)
-        if (wasPlaying) p.play()
-
-        AppLog.d(TAG, "switchToAccompaniment: $accompanimentPath")
-    }
-
-    /** 切换回原始音频文件（关闭人声消除时） */
-    private fun switchToOriginal() {
-        val p = player ?: return
-        val currentPos = p.currentPosition
-        val wasPlaying = p.isPlaying
-        val index = p.currentMediaItemIndex
-
-        // 优先使用本地缓存的原唱文件（分离时下载的）
-        val songId = _currentSong.value?.id
-        val cache = accompanimentCache
-        if (songId != null && cache != null) {
-            val originalFile = cache.getOriginalFile(songId)
-            if (originalFile.exists() && originalFile.length() > 0) {
-                val originalItem = p.currentMediaItem?.buildUpon()
-                    ?.setUri(android.net.Uri.fromFile(originalFile))
-                    ?.build() ?: return
-                p.replaceMediaItem(index, originalItem)
-                p.prepare()
-                p.seekTo(currentPos)
-                if (wasPlaying) p.play()
-                originalMediaItemUri = null
-                AppLog.d(TAG, "switchToOriginal: using local cache ${originalFile.name}")
-                return
-            }
-        }
-
-        // 回退：使用原始 URI（可能是网络 URL）
-        val uri = originalMediaItemUri ?: return
-        val originalUri = android.net.Uri.parse(uri)
-        val originalItem = p.currentMediaItem?.buildUpon()?.setUri(originalUri)?.build() ?: return
-
-        p.replaceMediaItem(index, originalItem)
-        p.prepare()
-        p.seekTo(currentPos)
-        if (wasPlaying) p.play()
-
-        originalMediaItemUri = null
-        AppLog.d(TAG, "switchToOriginal: restored from original URI")
-    }
-
-    /**
-     * 高质量模式下关闭人声消除：切换回原始文件 + 恢复 DSP 状态
-     */
-    fun disableHighQualityRemoval() {
-        _hqError.value = null
-        switchToOriginal()
-        // 如果快速模式 DSP 也处于开启状态（vocalRemovalEnabled=true），恢复它
-        // （高质量模式切换伴奏文件时关闭了 DSP，切回原唱时需要恢复）
-    }
+    /** 高质量模式下关闭人声消除：切换回原始文件 + 恢复 DSP 状态 */
+    fun disableHighQualityRemoval() = hqOrchestrator.disableHighQualityRemoval()
 
     /** 清除高质量分离错误信息 */
-    fun clearHqError() {
-        _hqError.value = null
-    }
+    fun clearHqError() = hqOrchestrator.clearHqError()
 
     /** 清除高质量分离成功信息 */
-    fun clearHqSuccess() {
-        _hqSuccess.value = null
-    }
+    fun clearHqSuccess() = hqOrchestrator.clearHqSuccess()
 
     /** 清除伴奏缓存（返回删除的文件数） */
-    fun clearAccompanimentCache(): Int {
-        return accompanimentCache?.clearAccompaniments() ?: 0
-    }
+    fun clearAccompanimentCache(): Int = hqOrchestrator.clearAccompanimentCache()
 
     // ── 升降调 & 变速（仅 K 歌页面使用，由 MainViewModel 调用）──
 
@@ -626,13 +263,8 @@ class PlayerManager(private val applicationContext: Context) {
             }
             if (isPlaying) {
                 progressHandler.post(progressUpdateRunnable)
-                // 播放开始时自动清除分离成功提示（延迟 3 秒让用户看到）
-                if (_hqSuccess.value != null) {
-                    scope.launch {
-                        kotlinx.coroutines.delay(3000)
-                        _hqSuccess.value = null
-                    }
-                }
+                // 播放开始时自动清除分离成功提示（延迟 3 秒让用户看到）（N-4：迁至 HqSeparationOrchestrator）
+                hqOrchestrator.scheduleHqSuccessClearOnPlay()
             } else {
                 progressHandler.removeCallbacks(progressUpdateRunnable)
                 // 暂停时仍更新一次进度
@@ -646,7 +278,7 @@ class PlayerManager(private val applicationContext: Context) {
             if (dur > 0) _duration.value = dur
             // 播放器就绪后尝试初始化频谱分析器
             if (playbackState == Player.STATE_READY) {
-                initSpectrumAnalyzer()
+                playerEqualizer.initSpectrumAnalyzer(player)
             }
         }
 
@@ -723,7 +355,7 @@ class PlayerManager(private val applicationContext: Context) {
             progressHandler.post(progressUpdateRunnable)
         }
         // 尝试初始化频谱分析器（如果音频会话已就绪）
-        initSpectrumAnalyzer()
+        playerEqualizer.initSpectrumAnalyzer(exoPlayer)
         AppLog.d("PlayerManager", "setPlayer: player initialized")
     }
 
@@ -1334,177 +966,55 @@ class PlayerManager(private val applicationContext: Context) {
     fun release() {
         progressHandler.removeCallbacks(progressUpdateRunnable)
         progressHandler.removeCallbacks(seekTimeoutRunnable)
-        // 停止频谱重试（将所有回调从消息队列中移除）
-        spectrumAnalyzerRetryCount = 5
         player?.removeListener(playerListener)
         player = null
-        equalizer?.release()
-        equalizer = null
-        spectrumAnalyzer.release()
-        // P10 修复：释放 Demucs 的 ONNX 会话（166MB 模型 + OrtSession）。
-        // 原实现 release() 从未调用 demucsSeparator.release()，导致播放服务销毁后
-        // modelSession/ortEnv 进程级泄漏，多次启停后内存持续增长。
-        demucsSeparator?.release()
+        playerEqualizer.release()
+        // P10 修复（迁至 HqSeparationOrchestrator.release，N-4）：释放 Demucs 的 ONNX 会话
+        // （166MB 模型 + OrtSession），防止播放服务销毁后进程级泄漏。
+        hqOrchestrator.release()
     }
 
-    // --- B-4 均衡器支持 ---
-    private var equalizer: Equalizer? = null
-    private var audioSessionId: Int = 0
+    // ── 均衡器/频谱转发（N-4：实现迁至 PlayerEqualizer）──
 
-    // --- 频谱分析（真实 FFT 可视化） ---
-    private val spectrumAnalyzer = SpectrumAnalyzer()
-    val spectrumData: StateFlow<FloatArray> = spectrumAnalyzer.spectrumData
+    val spectrumData: StateFlow<FloatArray> get() = playerEqualizer.spectrumData
 
     /**
      * 初始化均衡器（在 setPlayer 之后调用）
      */
-    fun initEqualizer(): Boolean {
-        return try {
-            val p = player ?: return false
-            audioSessionId = p.audioSessionId
-            if (audioSessionId == 0) return false
-
-            // Release old equalizer if exists
-            equalizer?.release()
-            equalizer = Equalizer(0, audioSessionId)
-            equalizer?.enabled = true
-            AppLog.d("PlayerManager", "initEqualizer: initialised for session $audioSessionId")
-
-            // 初始化频谱分析器
-            initSpectrumAnalyzer()
-            true
-        } catch (e: Exception) {
-            AppLog.e("PlayerManager", "initEqualizer failed", e)
-            false
-        }
-    }
-
-    /**
-     * 初始化频谱分析器（使用当前音频会话 ID）
-     *
-     * 如果音频会话尚未就绪（audioSessionId == 0），
-     * 在后续 5 秒内每秒重试一次。
-     */
-    private var spectrumAnalyzerRetryCount = 0
-
-    private fun initSpectrumAnalyzer() {
-        val sessionId = player?.audioSessionId ?: 0
-        if (sessionId > 0) {
-            audioSessionId = sessionId
-            spectrumAnalyzerRetryCount = 0
-            AppLog.d("PlayerManager", "initSpectrumAnalyzer: attaching to session $sessionId")
-            spectrumAnalyzer.attach(sessionId)
-        } else if (spectrumAnalyzerRetryCount < 5) {
-            spectrumAnalyzerRetryCount++
-            AppLog.w("PlayerManager",
-                "initSpectrumAnalyzer: no valid audio session yet, " +
-                "retry ${spectrumAnalyzerRetryCount}/5 in 1s")
-            progressHandler.postDelayed({
-                initSpectrumAnalyzer()
-            }, 1000)
-        } else {
-            AppLog.w("PlayerManager", "initSpectrumAnalyzer: gave up after ${spectrumAnalyzerRetryCount} retries")
-        }
-    }
+    fun initEqualizer(): Boolean = playerEqualizer.initEqualizer(player)
 
     /**
      * 设置指定频段的增益值
      * @param bandIndex 频段索引 (0-based)
      * @param gainDb 增益值 (dB, 通常 -15 到 +15)
      */
-    fun setEqualizerBand(bandIndex: Int, gainDb: Float): Boolean {
-        return try {
-            val eq = equalizer
-            if (eq == null) {
-                if (!initEqualizer()) return false
-            }
-            val bands = equalizer?.numberOfBands ?: return false
-            if (bandIndex < 0 || bandIndex >= bands) return false
-            val gainMillibels = (gainDb * 100).toInt().toShort()
-            equalizer?.setBandLevel(bandIndex.toShort(), gainMillibels)
-            AppLog.d("PlayerManager", "setEqualizerBand: band=$bandIndex gain=${gainDb}dB")
-            true
-        } catch (e: Exception) {
-            AppLog.e("PlayerManager", "setEqualizerBand failed", e)
-            false
-        }
-    }
+    fun setEqualizerBand(bandIndex: Int, gainDb: Float): Boolean =
+        playerEqualizer.setEqualizerBand(player, bandIndex, gainDb)
 
     /**
      * 批量设置所有频段增益值（用于应用预设）
      * @param gains 各频段增益值数组 (dB)，数组长度需与设备频段数匹配
      */
-    fun setEqualizerBands(gains: List<Float>): Boolean {
-        return try {
-            val eq = equalizer
-            if (eq == null) {
-                if (!initEqualizer()) return false
-            }
-            val eqInstance = equalizer ?: return false
-            val bandCount = eqInstance.numberOfBands.toInt()
-            val range = eqInstance.bandLevelRange
-            val minLevel = range[0]
-            val maxLevel = range[1]
-
-            for (i in 0 until minOf(bandCount, gains.size)) {
-                val gainMb = (gains[i] * 100).toInt().toShort()
-                val clamped = gainMb.coerceIn(minLevel, maxLevel)
-                eqInstance.setBandLevel(i.toShort(), clamped)
-            }
-            AppLog.d("PlayerManager", "setEqualizerBands: applied ${minOf(bandCount, gains.size)} bands")
-            true
-        } catch (e: Exception) {
-            AppLog.e("PlayerManager", "setEqualizerBands failed", e)
-            false
-        }
-    }
+    fun setEqualizerBands(gains: List<Float>): Boolean =
+        playerEqualizer.setEqualizerBands(player, gains)
 
     /**
      * 获取当前频段增益值
      */
-    fun getEqualizerBandLevel(bandIndex: Int): Float {
-        return try {
-            val eq = equalizer ?: return 0f
-            val level = eq.getBandLevel(bandIndex.toShort())
-            level / 100f
-        } catch (e: Exception) {
-            0f
-        }
-    }
+    fun getEqualizerBandLevel(bandIndex: Int): Float = playerEqualizer.getEqualizerBandLevel(bandIndex)
 
     /**
      * 获取均衡器频段数量
      */
-    fun getEqualizerBandCount(): Int {
-        return try {
-            equalizer?.numberOfBands?.toInt() ?: 0
-        } catch (e: Exception) {
-            0
-        }
-    }
+    fun getEqualizerBandCount(): Int = playerEqualizer.getEqualizerBandCount()
 
     /**
      * 获取频段中心频率（Hz）
      */
-    fun getEqualizerCenterFreq(bandIndex: Int): Int {
-        return try {
-            equalizer?.getCenterFreq(bandIndex.toShort())?.toInt() ?: 0
-        } catch (e: Exception) {
-            0
-        }
-    }
+    fun getEqualizerCenterFreq(bandIndex: Int): Int = playerEqualizer.getEqualizerCenterFreq(bandIndex)
 
     /**
      * 禁用均衡器
      */
-    fun disableEqualizer() {
-        try {
-            equalizer?.enabled = false
-            equalizer?.release()
-            equalizer = null
-            AppLog.d("PlayerManager", "disableEqualizer: disabled")
-        } catch (e: Exception) {
-            AppLog.e("PlayerManager", "disableEqualizer failed", e)
-        }
-    }
+    fun disableEqualizer() = playerEqualizer.disableEqualizer()
 }
