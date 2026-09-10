@@ -133,5 +133,11 @@ jobs:
         with:
           java-version: '17'
           distribution: 'temurin'
+      # testDebugUnitTest 需 Android SDK（android.jar）；runner 上的 SDK 不保证持续可用，
+      # 与 build job 显式安装保持一致，避免依赖 runner 预装的隐含状态。
+      - name: Set up Android SDK
+        run: |
+          yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses 2>&1 || true
+          $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --install "platforms;android-34" "build-tools;34.0.0" 2>&1 || true
       - name: Run unit tests
         run: ./gradlew testDebugUnitTest --stacktrace

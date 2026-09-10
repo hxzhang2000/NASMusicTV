@@ -44,12 +44,16 @@ android {
         buildConfigField("String", "BAIDU_APP_SECRET", "\"$baiduAppSecret\"")
     }
 
+    // CI 的 Unit tests job 不生成 keystore.properties：无 release 签名配置时跳过创建，
+    // 否则 file("") 在配置期抛 IllegalArgumentException，导致所有 Gradle 任务失败（含 testDebugUnitTest）。
     signingConfigs {
-        create("release") {
-            storeFile = file(keystoreStoreFile)
-            storePassword = keystoreStorePassword
-            keyAlias = keystoreKeyAlias
-            keyPassword = keystoreKeyPassword
+        if (keystoreStoreFile.isNotBlank()) {
+            create("release") {
+                storeFile = file(keystoreStoreFile)
+                storePassword = keystoreStorePassword
+                keyAlias = keystoreKeyAlias
+                keyPassword = keystoreKeyPassword
+            }
         }
     }
 
@@ -61,7 +65,9 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
-            signingConfig = signingConfigs.getByName("release")
+            // findByName：无 keystore.properties 时返回 null（AGP 跳过签名，打包阶段才失败），
+            // 而非 getByName 的配置期 NoSuchElementException。
+            signingConfig = signingConfigs.findByName("release")
         }
         debug {
             isDebuggable = true
