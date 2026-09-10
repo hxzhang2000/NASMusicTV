@@ -17,7 +17,7 @@
 > - R-7 + F-3 完成：语言键 SharedPreferences 双写镜像、8 provider 键 @Volatile 内存镜像（ProviderMirrorTest 6/6）、Baidu 系 @WorkerThread、LyricsManager baseUrl 改 provider
 > - R-6 完成：BackendRegistry 共享 ConnectionPool/Dispatcher，5 适配器 close() 移除 shutdown/evictAll
 > - R-5 部分：SeparationMode 上提 player 层（typealias 兼容）+ VocalSeparationController 落位；HQ 编排保留 PlayerManager
-> - R-9/F-2/F-4/F-5/F-6/F-7 完成；R-4 完成（12 子 Prefs 门面 + 全库调用点迁移，270 单测全绿）；R-10 Subsonic 公共层完成、Jellyfin 域拆分评估后暂缓（状态列注明理由）
+> - R-9/F-2/F-4/F-5/F-6/F-7 完成；R-4 完成（12 子 Prefs 门面 + 全库调用点迁移，270 单测全绿）；R-10 定案：Subsonic 公共层完成，Jellyfin 域拆分经所有者确认保持原状不实施
 >
 > **v1.3 修订说明（开发前最终完善）**：本版目标是让方案**达到可直接开发的层次**，主要变更：
 > - 新增「**W0 接口冻结清单**」章节：12 个子 ViewModel 的包路径/构造签名骨架、跨 VM 事件契约（sealed class 全量定义）、State/Actions 分组样板——动工前逐项勾选冻结，拆分期间以此仲裁
@@ -89,7 +89,7 @@
 | R-7 | AppPreferences 11 处 runBlocking 物理调用点 | 🟡 P1 | ANR风险 | 1-2天 | ✅ 2026-09-09 完成（语言双写镜像 + 8 provider 键 @Volatile 镜像 + Baidu 系 @WorkerThread + F-3），ProviderMirrorTest 6/6 绿 |
 | R-8 | 手动DI vs Hilt/Dagger | 🟢 P2 | 依赖管理 | 3-5天 | ⬜ 可选项，暂缓 |
 | R-9 | 重复import/颜色硬编码/注释残留 | 🟢 P2 | 代码规范 | 0.5天 | ✅ 2026-09-09 完成（重复 import 已删；颜色硬编码/修复标记按计划保持现状） |
-| R-10 | JellyfinAdapter 1215行 / NavidromeAdapter 932行 | 🟡 P1 | 后端层可维护性 | 3-5天 | 🔶 Subsonic 公共层完成（SubsonicRestClient，Navidrome 全量委托/Subsonic 部分）；Jellyfin 域拆分评估后暂缓（方法间经实例状态耦合，拆文件需构造 context 传参，回归风险高于收益，待手测回归保障后再专项细化） |
+| R-10 | JellyfinAdapter 1215行 / NavidromeAdapter 932行 | 🟡 P1 | 后端层可维护性 | 3-5天 | ✅ 定案：Subsonic 公共层完成（SubsonicRestClient，Navidrome 全量委托/Subsonic 部分）；Jellyfin 域拆分经所有者确认**保持原状不实施**（实例状态耦合深，拆分回归风险高于收益）——勿再作为待办启动 |
 | F-1 | 敏感凭证 URL 泄露到 release 日志 | 🔴 P0 | 安全 | 0.5天 | ✅ 2026-09-09 完成 |
 
 ---

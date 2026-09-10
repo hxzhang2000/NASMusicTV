@@ -7792,6 +7792,6 @@ onSearchSong = { keyword -> viewModel.searchNetworkSongs(keyword) },
 3. 旧 API 保留为转发实现（不标 @Deprecated）：门面与旧 API 并存，新代码一律走子域；与计划 DoD 的差异已在状态列注明。
 4. BaiduMvFileServiceTest 适配：mock 的 AppPreferences 需 `doReturn(BaiduPrefs(prefs)).when(prefs).baidu` 打桩（when() 内嵌 mock 调用会触发 UnfinishedStubbing）。**270 单测全绿**。
 
-**R-10 收尾决策**：Subsonic 公共层（SubsonicRestClient）已完成并全量接入；JellyfinAdapter（1218 行）域拆分评估后**暂缓**——其方法间经 baseUrl/apiToken 等实例状态耦合，拆文件需构造 context 传参改写全部私有方法签名，在无 TV 手测回归保障下回归风险高于可维护性收益。待本轮重构手测回归通过后再专项细化（计划原文即标注「方向性，实施前需专项细化」）。
+**R-10 收尾决策**：Subsonic 公共层（SubsonicRestClient）已完成并全量接入；JellyfinAdapter（1218 行）域拆分经**所有者确认保持原状不实施**——其方法间经 baseUrl/apiToken 等实例状态耦合，拆文件需构造 context 传参改写全部私有方法签名，回归风险高于可维护性收益（与「本地 HTTP 服务无鉴权是所有者接受的取舍」同类的所有者决策，勿再作为待办启动）。
 
 **验证**：assembleDebug + testDebugUnitTest 270/270 通过。
