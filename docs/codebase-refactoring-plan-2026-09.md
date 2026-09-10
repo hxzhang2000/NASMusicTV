@@ -105,10 +105,10 @@
 | R-9 | 重复import/颜色硬编码/注释残留 | 🟢 P2 | 代码规范 | 0.5天 | ✅ 2026-09-09 完成（重复 import 已删；颜色硬编码/修复标记按计划保持现状） |
 | R-10 | JellyfinAdapter 1215行 / NavidromeAdapter 932行 | 🟡 P1 | 后端层可维护性 | 3-5天 | ✅ 定案：Subsonic 公共层完成（SubsonicRestClient，Navidrome 全量委托/Subsonic 部分）；Jellyfin 域拆分经所有者确认**保持原状不实施**（实例状态耦合深，拆分回归风险高于收益）——勿再作为待办启动 |
 | F-1 | 敏感凭证 URL 泄露到 release 日志 | 🔴 P0 | 安全 | 0.5天 | ✅ 2026-09-09 完成 |
-| N-1 | MainViewModel 兼容转发层膨胀 | 🟡 P1 | 可维护性 | 1-2天 | 待实施（建议 AppRoot 直接引用子 VM，消除 ~350 行转发层；v1.6 注：须经手动 DI 获取子 VM，不引入 Hilt——R-8 定案） |
-| N-2 | DomainPrefs 多类单文件 | 🟢 P2 | 代码规范 | 0.5天 | 待实施（10 个子 Prefs 类挤在 DomainPrefs.kt 179 行，建议按领域拆独立文件） |
-| N-3 | AppRoot 123 处 collectAsState 上帝 Composable | 🟡 P1 | UI性能/可维护性 | 3-5天 | 待实施（F-2 仅解决 progress/duration 每秒重组，整体架构未变；建议按域分组提取子 Composable） |
-| N-4 | PlayerManager 62.6KB 未拆分 | 🟡 P1 | 播放器可维护性 | 3-5天 | 🔶 v1.6 降级为待所有者决策（70 方法涵盖播放控制/队列/人声分离编排/音高变速；与 R-5「HQ 编排保留 PlayerManager 防接口爆炸」定案同类回归风险，未经确认不得启动） |
+| N-1 | MainViewModel 兼容转发层膨胀 | 🟡 P1 | 可维护性 | 1-2天 | ✅ 2026-09-10 完成（12 子 VM 公开 + 消费方直调：删除 121 个纯透传转发、保留 12 个胶水转发，MainViewModel 3186→3055 行；提交 402110e） |
+| N-2 | DomainPrefs 多类单文件 | 🟢 P2 | 代码规范 | 0.5天 | ✅ 2026-09-10 完成（10 个子 Prefs 拆独立文件，data/prefs/ 14 文件单类单文件；提交 e6e43bf） |
+| N-3 | AppRoot 123 处 collectAsState 上帝 Composable | 🟡 P1 | UI性能/可维护性 | 3-5天 | ✅ 2026-09-10 完成（17 个单分支独占订阅下沉至 when 分支内，顶层 35→18 处 ≤20 达标；提交 e9a49a8） |
+| N-4 | PlayerManager 62.6KB 未拆分 | 🟡 P1 | 播放器可维护性 | 3-5天 | ✅ 2026-09-10 完成（所有者确认实施。HQ 编排提取 HqSeparationOrchestrator（PlayerHost 窄接口）+ 均衡器提取 PlayerEqualizer，PlayerManager 64.1KB→41.5KB 播放核心；实施偏差：MediaSession/音频焦点实为 PlaybackService 职责，播放核心+队列共享状态机保持一体（R-5 同因）；提交 c954a5f） |
 | N-5 | BackendAdapter 巨型文件未拆 | 🟢 P2 | 后端层可维护性 | 3-5天 | ✅ v1.6 归入 R-10 定案关闭（Jellyfin 保持原状勿再启动；Navidrome 已全量委托 SubsonicRestClient，属已定案关闭项非待办） |
 
 ---

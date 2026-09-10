@@ -7821,3 +7821,15 @@ onSearchSong = { keyword -> viewModel.searchNetworkSongs(keyword) },
 - ✅ assembleRelease BUILD SUCCESSFUL（R8 minify + lintVital + baseline profiles 通过）
 - ✅ 电视 192.168.0.114:5555（armeabi-v7a）安装 v2.28.0 启动验证：进程存活、无 FATAL/ANR、release logcat 无凭据泄露
 - ✅ 所有者手测：基本功能全部有效
+
+### 10.113 N 系列实施（N-1/N-2/N-3/N-4，2026-09-10）
+
+> v1.5 二次审阅发现、v1.6 人工复核修订后的 N 系列，经所有者确认实施 4 项；N-5 归入 R-10 定案关闭。
+
+- **N-1 MainViewModel 转发层消除**（提交 402110e）：12 个子 VM 公开为只读属性（手动 DI，不引入 Hilt——R-8 定案），删除 121 个纯透传转发、保留 12 个胶水转发（connectToSavedServer/playNetworkSong/toggleNetworkFavorite/onMv* 系列等含跨域参数拼接），消费方（AppRoot 165 处/NetdiskScreen 15 处/MainActivity 4 处/MediaKeyHandler 5 处）改经 `viewModel.<subVM>.<member>` 直调；MainViewModel 3186→3055 行
+- **N-2 DomainPrefs 拆文件**（提交 e6e43bf）：10 个子 Prefs 类拆独立 .kt（同包 import 零改动），data/prefs/ 14 文件单类单文件
+- **N-3 AppRoot 状态下沉**（提交 e9a49a8）：17 个单分支独占 collectAsState 订阅移入 when 分支内（lyrics 系→NowPlaying、albums→Library、queue 系→Queue、baidu*/apiVersions/weatherApiKey→Settings），顶层订阅 35→18 处（≤20 达标）；collectAsState 总数 122 不变（仅位置迁移）
+- **N-4 PlayerManager 拆分**（提交 c954a5f）：HQ 人声分离编排提取 HqSeparationOrchestrator（23.6KB，PlayerHost 窄接口回调播放操作，延续 R-5 VocalSeparationController 模式）、均衡器/频谱提取 PlayerEqualizer（6.4KB）；PlayerManager 64.1KB/1510 行→41.5KB 播放核心+队列状态机，外部调用面零改动。实施偏差（v1.5 方案修正）：MediaSession/音频焦点实为 PlaybackService 职责（且已延迟创建），不属 PlayerManager；播放核心与队列共享 StateFlow 状态机保持一体（与 R-5 定案同因，强行拆分会接口爆炸）
+- MediaKeyHandlerTest 适配 N-1 新调用路径（mock playerVM 子 VM，doReturn 桩法）
+- 验证：每项 assembleDebug 0 错误 + testDebugUnitTest 270/270 全绿
+- 待办：TV 手测回归（重点 N-4 播放全路径 + N-1 各页面导航/遥控按键 + N-3 各页面 D-Pad）

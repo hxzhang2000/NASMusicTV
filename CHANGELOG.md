@@ -9,6 +9,12 @@
 
 ## [Unreleased]
 
+### Changed
+- 重构（N 系列，2026-09-10，经所有者确认实施）：MainViewModel 兼容转发层消除——12 个子 VM 公开为只读属性（手动 DI，不引入 Hilt），删除 121 个纯透传转发、保留 12 个胶水转发，AppRoot/NetdiskScreen/MainActivity/MediaKeyHandler 改经子 VM 直调，MainViewModel 3186→3055 行（N-1）
+- 重构：DomainPrefs.kt（179 行 10 类）拆为 10 个独立子 Prefs 文件，data/prefs/ 达 14 文件单类单文件（N-2）
+- 重构：AppRoot 17 个单分支独占 collectAsState 订阅下沉至 when 分支内，顶层订阅 35→18 处（≤20 达标），未组合的 Screen 不再收集不重组（N-3）
+- 重构：PlayerManager（64.1KB）拆分——HQ 人声分离编排提取 HqSeparationOrchestrator（PlayerHost 窄接口，延续 R-5 模式）、均衡器/频谱提取 PlayerEqualizer，PlayerManager 精简为播放核心+队列状态机（41.5KB），外部调用面零改动（N-4；MediaSession/音频焦点实为 PlaybackService 职责，不涉及）
+
 ### Fixed
 - CI：`keystore.properties` 缺失时不再阻塞单测任务——`signingConfigs` 仅在配置存在时创建 release 签名，`signingConfig` 改用 `findByName`（返回 null）替代 `getByName`（配置期抛 `NoSuchElementException`）；此前 `file("")` 在配置期抛 `IllegalArgumentException`，导致 CI 的 `testDebugUnitTest` 整体失败。test job 同步补显式 Android SDK 安装步骤，不再依赖 runner 预装的隐含状态。
 
