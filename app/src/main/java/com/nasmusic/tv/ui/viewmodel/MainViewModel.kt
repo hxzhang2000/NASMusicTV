@@ -2681,6 +2681,20 @@ showError(getApplication<Application>().getString(R.string.toggle_favorite_error
         }
     }
 
+    // F2-5：crossfade 设置（PlayerManager 的 volatile 字段由 PlayerViewModel init 收集注入）
+    fun setCrossfadeEnabled(enabled: Boolean) = viewModelScope.launch {
+        prefs.player.setCrossfadeEnabled(enabled)
+    }
+
+    fun setCrossfadeDurationSec(sec: Int) = viewModelScope.launch {
+        prefs.player.setCrossfadeDurationSec(sec)
+    }
+
+    // F2-6：音质档位（Meting br 参数；AUTO 由端点默认/带宽决策）
+    fun setQualityTier(tier: Int) = viewModelScope.launch {
+        prefs.player.setQualityTier(tier)
+    }
+
     /**
      * 更新 MTV 视频搜索端点 URL（网络搜索配置）
      * 传入空串则恢复默认端点

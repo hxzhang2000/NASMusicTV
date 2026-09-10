@@ -122,6 +122,14 @@ fun SettingsScreen(
     onClearAccompanimentCache: (() -> Unit)? = null,
     onOpenEqualizer: (() -> Unit)? = null,
     onOpenPlayStats: (() -> Unit)? = null,
+    // F2-5：跨曲交叉淡入淡出
+    crossfadeEnabled: Boolean = false,
+    crossfadeDurationSec: Int = 4,
+    onToggleCrossfade: (Boolean) -> Unit = {},
+    onChangeCrossfadeDuration: (Int) -> Unit = {},
+    // F2-6：音质档位
+    qualityTier: Int = 0,
+    onChangeQualityTier: (Int) -> Unit = {},
     onChangeMetingApiBaseUrl: ((String) -> Unit)? = null,
     // MTV 视频搜索端点配置
     mvApiBaseUrl: String = "",
@@ -406,6 +414,11 @@ fun SettingsScreen(
                             coverFilterEnabled = coverFilterEnabled,
                             coverFilterBlurRadius = coverFilterBlurRadius,
                             coverFilterDarkOverlay = coverFilterDarkOverlay,
+                            // F2-5：crossfade
+                            crossfadeEnabled = crossfadeEnabled,
+                            crossfadeDurationSec = crossfadeDurationSec,
+                            // F2-6：音质档位
+                            qualityTier = qualityTier,
                         ),
                         actions = PlayerSettingsActions(
                             onToggleAutoPlayNext = onToggleAutoPlayNext,
@@ -420,6 +433,9 @@ fun SettingsScreen(
                             onToggleCoverFilter = onToggleCoverFilter,
                             onChangeCoverBlurRadius = onChangeCoverBlurRadius,
                             onChangeCoverDarkOverlay = onChangeCoverDarkOverlay,
+                            onToggleCrossfade = onToggleCrossfade,
+                            onChangeCrossfadeDuration = onChangeCrossfadeDuration,
+                            onChangeQualityTier = onChangeQualityTier,
                         )
                     )
                 }

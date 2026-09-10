@@ -7878,3 +7878,18 @@ onSearchSong = { keyword -> viewModel.searchNetworkSongs(keyword) },
   - MTV 独立播放器路径不动（计划 §4.3 边界）；断点不持久化（会话内续播，重启走既有 keyLastQueue 队列恢复）
 - **验证**：compileDebugKotlin + testDebugUnitTest 298/298 全绿（M1 285 + RadioSongScorerTest 10 + NetworkResumeTest 3）
 - **待办**：TV 手测（智能电台批次相似度 + 断网/恢复断点续播场景）
+
+### 10.117 F2 系列播放功能增强 M3（2026-09-10，F2-5 + F2-6）
+
+- **F2-5 跨曲交叉淡入淡出**：
+  - player/CrossfadeController：双实例方案——crossfadePlayer（setAudioAttributes USAGE_MEDIA, handleAudioFocus=false，焦点由主 player 独占）淡入 + 主 player 淡出（50ms 步进线性斜坡），窗口结束回调 onCrossfadeComplete → PlayerManager.transitionToIndex（复用 v2.28.1 IDLE 安全路径）
+  - 边界条件矩阵：enabled=false / durationSec≤0 / suppressPlayback（K歌MTV）/ REPEAT_ONE / 队列≤1 首 / 队尾顺序模式 / 下一首 streamUrl 空（网络歌懒加载未解析）→ 均不触发走普通切歌；手动切歌（next/previous）立即 abort（资源彻底释放：stop+release+Handler 清理+主 player 音量恢复）
+  - PlayerManager 集成：progressUpdateRunnable 1 秒粒度检查 remaining ≤ durationSec 窗口触发；crossfadeEnabled/DurationSec 为 @Volatile 字段（PlayerViewModel init 收集 AppSettings Flow 注入，PlayerManager 不依赖 prefs）
+  - 设置：PlayerSettingsSection 开关 + 2/4/6/8/12s 离散档位（D-Pad 友好，替代滑条）；键 settings_crossfade_enabled/duration_sec（PlayerPrefs 门面）
+- **F2-6 音质分级**：
+  - util/BandwidthEstimator：滑动窗口（30s/32 样本）字节数/耗时→bps；tierForBandwidth 映射（>10Mbps→999 无损 / 2-10Mbps→320 / <2Mbps→128 / 无数据保守 320）；reset 供断网清零
+  - MetingApiService：构造注入 qualityTierProvider（AppPreferences.getQualityTierSync R-7 镜像同步读）；resolvePlayUrl br 参数 + 降级链（显式档 [tier,320,128] 逐级重试，AUTO 不传 br 走端点默认）
+  - 设置：PlayerSettingsSection 4 档单选（自动/无损/320k/128k，当前档 ▶ 标记）；键 settings_quality_tier
+  - 计划偏差：AUTO 档未接 BandwidthEstimator 自动决策（estimator 需 OkHttp 拦截器全链路埋点，牵连 NAS/百度共链路；首期 AUTO=端点默认，带宽自动决策留二期）；Jellyfin 显式档 bitrate 参数未做（NAS 用户以原品质为主，计划已标注可选二期）；百度网盘/Jamendo 无码率可选（计划边界，UI 已明示"仅 Meting 源"）
+- **验证**：compileDebugKotlin + testDebugUnitTest 316/316 全绿（M2 298 + CrossfadeControllerTest 10 + BandwidthEstimatorTest 8）+ assembleDebug 通过
+- **待办**：TV 手测（crossfade 听感/内存 + 音质档位切换对比 + 弱网 AUTO 场景）

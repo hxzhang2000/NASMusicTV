@@ -15,6 +15,8 @@
 - 通知栏增强（F2-2）：按钮 3→5（新增播放模式循环切换、定时关闭，自定义 action 广播经 RECEIVER_NOT_EXPORTED 注册，API 22/33+ 双兼容）；下一首 subText（队尾不显示）；compact view 仍为核心 3 键
 - 智能电台（F2-3）：基于当前歌曲流派+歌手生成相似随机流——RadioSongScorer 打分纯函数（同歌手+50/同流派+30/同专辑+10/同年代+5/播放偏好加权/已播强排除，加权随机采样）+ SmartRadioManager 状态机（两级曲库加载：流派先筛≥50 否则全量分页 5000 硬上限，曲库耗尽自动换批）；入口在 NowPlaying 控制按钮行（NAS 已连接且非网络歌曲时显示）；首期仅 NAS 曲库（网络歌曲无 genre）
 - 断线续播（F2-4）：断网时冻结错误跳歌（networkLost 标志，onPlayerError 不跳歌不重解析，记录断点 ResumePoint），网络恢复后 2 秒去抖重解析当前歌续播（wasPlaying=false 只加载不播）；MainViewModel.onNetworkAvailable/Last 接线，既有 3 次重连逻辑不变
+- 跨曲交叉淡入淡出（F2-5）：CrossfadeController 双实例方案——切歌窗口主 player 旧歌淡出、crossfadePlayer 新歌淡入（50ms 步进线性斜坡），窗口结束 transitionToIndex 完成切歌；设置开关+时长档位（2/4/6/8/12s，默认关闭）；K歌/MTV 模式（suppressPlayback）、单曲循环、队列仅 1 首、下一首 streamUrl 为空均不触发；手动切歌立即中断；crossfadePlayer 不持音频焦点
+- 音质分级（F2-6）：Meting 源 br 参数 + 降级链（无损999→320→128，AUTO 不传 br）；BandwidthEstimator 滑动窗口带宽估计（30s/32样本，>10Mbps→999 / 2-10Mbps→320 / <2Mbps→128）；设置页 4 档选择（自动/无损/320k/128k）；NAS 原品质直传不受影响
 
 ## [v2.28.1] - 2026-09-10
 

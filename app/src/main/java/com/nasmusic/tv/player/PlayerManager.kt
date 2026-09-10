@@ -52,6 +52,23 @@ class PlayerManager(private val applicationContext: Context) {
         }
     )
 
+    /** F2-5：跨曲交叉淡入淡出（双实例方案，进度轮询驱动） */
+    val crossfadeController = CrossfadeController(
+        context = applicationContext,
+        mainPlayerProvider = { player },
+        onCrossfadeComplete = { nextIndex ->
+            // 窗口结束：主播放器切到新歌（v2.28.1 的 IDLE 安全恢复路径复用）
+            transitionToIndex(nextIndex)
+        }
+    )
+
+    /** F2-5：crossfade 设置（PlayerViewModel/AppPreferences 收集后注入，避免 PlayerManager 依赖 prefs） */
+    @Volatile
+    var crossfadeEnabled: Boolean = false
+
+    @Volatile
+    var crossfadeDurationSec: Int = 4
+
     /** F2-2：睡眠定时到期回调（PlaybackService 注册以刷新通知） */
     var onSleepTimerExpired: (() -> Unit)? = null
 
@@ -94,8 +111,33 @@ class PlayerManager(private val applicationContext: Context) {
             }
             val dur = p.duration
             if (dur > 0) _duration.value = dur
+            // F2-5：临近曲尾触发 crossfade（1 秒粒度检查，controller 内部有防重）
+            maybeTriggerCrossfade(p, dur)
             progressHandler.postDelayed(this, 1000)
         }
+    }
+
+    /** F2-5：进度钩子——剩余时长进入 crossfade 窗口时启动淡入淡出 */
+    private fun maybeTriggerCrossfade(p: ExoPlayer, dur: Long) {
+        if (!crossfadeEnabled || crossfadeDurationSec <= 0) return
+        if (crossfadeController.isFading()) return
+        if (dur <= 0 || !p.isPlaying) return
+        val remaining = dur - p.currentPosition
+        if (remaining > crossfadeDurationSec * 1000L) return
+        val mode = derivePlayMode(p)
+        crossfadeController.maybeStartCrossfade(
+            enabled = crossfadeEnabled,
+            durationSec = crossfadeDurationSec,
+            suppressPlayback = suppressPlayback,
+            repeatOne = mode == PlayMode.REPEAT_ONE,
+            queueSize = _queue.value.size,
+            currentIndex = _currentIndex.value,
+            nextMediaItemFactory = { nextIdx ->
+                val next = _queue.value.getOrNull(nextIdx)
+                if (next == null || next.streamUrl.isNullOrBlank()) null
+                else buildMediaItem(next, next.streamUrl)
+            }
+        )
     }
 
     /**
@@ -749,6 +791,8 @@ class PlayerManager(private val applicationContext: Context) {
 
     fun next(playMode: PlayMode) {
         val p = player ?: return
+        // F2-5：手动切歌立即中断进行中的 crossfade（不做优雅等待）
+        crossfadeController.abort()
         // 出错恢复路径：IDLE 下 seekToNextMediaItem 不触发过渡回调也不 prepare，
         // 统一走手动恢复（含空 URL 网络歌曲的解析触发）
         if (isIdle()) {
@@ -794,6 +838,8 @@ class PlayerManager(private val applicationContext: Context) {
     }
 
     fun previous(playMode: PlayMode) {
+        // F2-5：手动切歌立即中断 crossfade
+        crossfadeController.abort()
         // 出错恢复路径：IDLE 下 seekToPreviousMediaItem 不触发过渡回调也不 prepare
         if (isIdle()) {
             val queueSize = _queue.value.size

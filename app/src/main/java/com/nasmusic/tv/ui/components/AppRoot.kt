@@ -697,6 +697,11 @@ fun AppRoot(
                 Screen.Settings -> {
                     val backendApiVersion by viewModel.serverVM.backendApiVersion.collectAsState(initial = "Unknown")
                     val apiVersions by viewModel.serverVM.apiVersions.collectAsState(initial = emptyList())
+                    // F2-5：crossfade 设置状态
+                    val crossfadeEnabled by viewModel.prefs.player.crossfadeEnabled.collectAsState(initial = false)
+                    val crossfadeDurationSec by viewModel.prefs.player.crossfadeDurationSec.collectAsState(initial = 4)
+                    // F2-6：音质档位
+                    val qualityTier by viewModel.prefs.player.qualityTier.collectAsState(initial = 0)
                     val weatherApiKey by viewModel.prefs.weather.weatherApiKey.collectAsState(initial = "")
                     val baiduConnectionState by viewModel.netVM.baiduConnectionState.collectAsState(initial = com.nasmusic.tv.ui.viewmodel.NetworkMusicViewModel.BaiduConnectionState.Off)
                     val baiduDeviceCode by viewModel.baiduDeviceCode.collectAsState(initial = null)
@@ -741,6 +746,14 @@ fun AppRoot(
                         onClearAccompanimentCache = { viewModel.clearAccompanimentCache() },
                         onOpenEqualizer = { viewModel.navVM.navigateTo(Screen.Equalizer) },
                         onOpenPlayStats = { viewModel.navVM.navigateTo(Screen.PlayStats) },
+                        // F2-5：crossfade 设置接线
+                        crossfadeEnabled = crossfadeEnabled,
+                        crossfadeDurationSec = crossfadeDurationSec,
+                        onToggleCrossfade = { viewModel.setCrossfadeEnabled(it) },
+                        onChangeCrossfadeDuration = { viewModel.setCrossfadeDurationSec(it) },
+                        // F2-6：音质档位接线
+                        qualityTier = qualityTier,
+                        onChangeQualityTier = { viewModel.setQualityTier(it) },
                         onChangeMetingApiBaseUrl = { viewModel.updateMetingApiBaseUrl(it) },
                         mvApiBaseUrl = settings.mvApiBaseUrl,
                         onChangeMvApiBaseUrl = { viewModel.updateMvApiBaseUrl(it) },

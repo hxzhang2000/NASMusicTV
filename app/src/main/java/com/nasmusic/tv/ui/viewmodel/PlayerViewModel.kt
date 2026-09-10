@@ -59,6 +59,16 @@ class PlayerViewModel(
     fun startSleepTimer(minutes: Int) = playerManager.sleepTimer.start(minutes)
     fun cancelSleepTimer() = playerManager.sleepTimer.cancel()
 
+    init {
+        // F2-5：crossfade 设置注入 PlayerManager（volatile 字段，进度轮询读取）
+        viewModelScope.launch {
+            prefs.player.crossfadeEnabled.collect { playerManager.crossfadeEnabled = it }
+        }
+        viewModelScope.launch {
+            prefs.player.crossfadeDurationSec.collect { playerManager.crossfadeDurationSec = it }
+        }
+    }
+
     /** 播放模式变更监听（MainViewModel 用来同步 MvSearchViewModel 等），由 MainViewModel 注入 */
     var onPlayModeChanged: ((PlayMode) -> Unit)? = null
 

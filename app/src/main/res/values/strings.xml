@@ -960,4 +960,15 @@
     <string name="smart_radio_started">智能电台已开启：%1$s</string>
     <string name="smart_radio_exhausted">曲库已播完，换个种子试试</string>
     <string name="smart_radio_need_nas">智能电台需要连接 NAS 曲库</string>
+
+    <!-- F2-5 跨曲交叉淡入淡出 -->
+    <string name="settings_crossfade">跨曲交叉淡入淡出</string>
+    <string name="settings_crossfade_desc">切歌时旧曲淡出新曲淡入（默认关闭；K歌/MTV 模式自动禁用）</string>
+
+    <!-- F2-6 音质分级 -->
+    <string name="settings_quality_tier">网络源音质（仅 Meting 源）</string>
+    <string name="quality_tier_auto">自动</string>
+    <string name="quality_tier_lossless">无损</string>
+    <string name="quality_tier_high">320k</string>
+    <string name="quality_tier_standard">128k</string>
 </resources>

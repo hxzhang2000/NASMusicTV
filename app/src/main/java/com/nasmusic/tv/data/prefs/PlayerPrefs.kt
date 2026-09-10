@@ -10,6 +10,16 @@ import kotlinx.coroutines.flow.Flow
  */
 class PlayerPrefs internal constructor(private val prefs: AppPreferences) {
 
+    // F2-5：跨曲交叉淡入淡出（跨域键放 AppPreferences，此处门面暴露）
+    val crossfadeEnabled = prefs.crossfadeEnabled
+    val crossfadeDurationSec = prefs.crossfadeDurationSec
+    suspend fun setCrossfadeEnabled(enabled: Boolean) = prefs.setCrossfadeEnabled(enabled)
+    suspend fun setCrossfadeDurationSec(sec: Int) = prefs.setCrossfadeDurationSec(sec)
+
+    // F2-6：音质档位（AUTO=0/无损999/高音质320/标准128）
+    val qualityTier = prefs.qualityTier
+    suspend fun setQualityTier(tier: Int) = prefs.setQualityTier(tier)
+
     val pitchSemitones: Flow<Int> = prefs.pitchSemitones
     val playbackSpeed: Flow<Double> = prefs.playbackSpeed
     val separationMode: Flow<SeparationMode> = prefs.separationMode

@@ -44,6 +44,11 @@ data class PlayerSettingsState(
     val coverFilterEnabled: Boolean,
     val coverFilterBlurRadius: Float,
     val coverFilterDarkOverlay: Float,
+    // F2-5：跨曲交叉淡入淡出
+    val crossfadeEnabled: Boolean = false,
+    val crossfadeDurationSec: Int = 4,
+    // F2-6：音质档位
+    val qualityTier: Int = 0,
 )
 
 /** 播放设置分区动作 */
@@ -60,6 +65,11 @@ data class PlayerSettingsActions(
     val onToggleCoverFilter: (Boolean) -> Unit,
     val onChangeCoverBlurRadius: (Float) -> Unit,
     val onChangeCoverDarkOverlay: (Float) -> Unit,
+    /** F2-5：crossfade 开关/时长 */
+    val onToggleCrossfade: (Boolean) -> Unit = {},
+    val onChangeCrossfadeDuration: (Int) -> Unit = {},
+    /** F2-6：音质档位（AUTO=0/999/320/128） */
+    val onChangeQualityTier: (Int) -> Unit = {},
 )
 
 /** 播放设置分区（原 SettingsScreen PLAYBACK 分支，逻辑逐行搬迁） */
@@ -77,6 +87,55 @@ internal fun PlayerSettingsSection(
             VisualizerThemeSelector(current = state.visualizerTheme, onSelect = { actions.onChangeVisualizerTheme(it) })
         }
         PlayModeSelector(current = state.settings.defaultPlayMode, onSelect = { actions.onChangePlayMode(it) })
+        // F2-5：跨曲交叉淡入淡出
+        Spacer(modifier = Modifier.height(12.dp))
+        SettingSwitch(
+            label = stringResource(R.string.settings_crossfade),
+            description = stringResource(R.string.settings_crossfade_desc),
+            checked = state.crossfadeEnabled,
+            onClick = { actions.onToggleCrossfade(!state.crossfadeEnabled) }
+        )
+        if (state.crossfadeEnabled) {
+            // 时长档位 2/4/6/8/12 秒（TV 遥控适配的离散选择，比滑条更易 D-Pad 操作）
+            val durations = listOf(2, 4, 6, 8, 12)
+            androidx.compose.foundation.layout.Row(
+                modifier = Modifier.padding(start = 16.dp, top = 4.dp),
+                horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp)
+            ) {
+                durations.forEach { sec ->
+                    SettingActionButton(
+                        label = "${sec}s",
+                        description = "",
+                        onClick = { actions.onChangeCrossfadeDuration(sec) }
+                    )
+                }
+            }
+        }
+        // F2-6：音质分级（仅 Meting 网络源生效；NAS 原品质直传）
+        Spacer(modifier = Modifier.height(12.dp))
+        Text(
+            text = stringResource(R.string.settings_quality_tier),
+            color = NasMusicColors.TextSecondary,
+            fontSize = FontSize.button(),
+            modifier = Modifier.padding(start = 4.dp)
+        )
+        androidx.compose.foundation.layout.Row(
+            modifier = Modifier.padding(start = 16.dp, top = 4.dp),
+            horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp)
+        ) {
+            listOf(
+                0 to stringResource(R.string.quality_tier_auto),
+                999 to stringResource(R.string.quality_tier_lossless),
+                320 to stringResource(R.string.quality_tier_high),
+                128 to stringResource(R.string.quality_tier_standard),
+            ).forEach { (tier, label) ->
+                SettingActionButton(
+                    label = if (state.qualityTier == tier) "▶ $label" else label,
+                    description = "",
+                    onClick = { actions.onChangeQualityTier(tier) }
+                )
+            }
+        }
         Spacer(modifier = Modifier.height(12.dp))
         SettingActionButton(
             label = stringResource(R.string.settings_equalizer),

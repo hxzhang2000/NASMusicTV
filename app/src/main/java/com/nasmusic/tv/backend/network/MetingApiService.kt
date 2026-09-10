@@ -43,7 +43,12 @@ class MetingApiService(
      * 运行时获取当前音乐平台来源（server 参数）。
      * 默认返回 "netease"，由用户在网络音乐 Tab 中切换。
      */
-    private val serverProvider: () -> String = { DEFAULT_SERVER }
+    private val serverProvider: () -> String = { DEFAULT_SERVER },
+    /**
+     * F2-6：音质档位提供者（Meting br 参数）。
+     * 返回 0 = AUTO（不传 br，由带宽估计决策或端点默认）。
+     */
+    private val qualityTierProvider: () -> Int = { 0 }
 ) : NetworkMusicService {
 
     override val sourceId = "meting"
@@ -222,25 +227,31 @@ class MetingApiService(
         val netId = song.networkId ?: return@withContext song.streamUrl
         val server = serverProvider()
         val endpoints = buildEndpointFallbackOrder(baseUrl)
+        // F2-6：br 档位与降级链（999 → 320 → 128；AUTO 直接不传 br 走端点默认）
+        val tier = qualityTierProvider()
+        val brChain = if (tier <= 0) listOf(null) else listOf(tier, 320, 128).distinct()
         for (endpoint in endpoints) {
-            try {
-                val url = "$endpoint?server=$server&type=url&id=${URLEncoder.encode(netId, "UTF-8")}"
-                val request = Request.Builder().url(url).build()
-                var playUrl: String? = null
-                noRedirectClient.newCall(request).execute().use { response ->
-                    playUrl = when (response.code) {
-                        302 -> response.header("Location")
-                        200 -> response.body?.string()?.let { extractUrlFromJson(it) }
-                        else -> null
+            for (br in brChain) {
+                try {
+                    val brParam = if (br != null) "&br=$br" else ""
+                    val url = "$endpoint?server=$server&type=url&id=${URLEncoder.encode(netId, "UTF-8")}$brParam"
+                    val request = Request.Builder().url(url).build()
+                    var playUrl: String? = null
+                    noRedirectClient.newCall(request).execute().use { response ->
+                        playUrl = when (response.code) {
+                            302 -> response.header("Location")
+                            200 -> response.body?.string()?.let { extractUrlFromJson(it) }
+                            else -> null
+                        }
                     }
+                    if (!playUrl.isNullOrBlank()) {
+                        AppLog.d(TAG, "resolvePlayUrl: resolved via '$endpoint' br=$br for netId=$netId")
+                        return@withContext playUrl
+                    }
+                    AppLog.w(TAG, "resolvePlayUrl: empty from '$endpoint' br=$br for netId=$netId")
+                } catch (e: Exception) {
+                    AppLog.w(TAG, "resolvePlayUrl: endpoint '$endpoint' br=$br failed: ${e.message}")
                 }
-                if (!playUrl.isNullOrBlank()) {
-                    AppLog.d(TAG, "resolvePlayUrl: resolved via '$endpoint' for netId=$netId")
-                    return@withContext playUrl
-                }
-                AppLog.w(TAG, "resolvePlayUrl: empty from '$endpoint' for netId=$netId")
-            } catch (e: Exception) {
-                AppLog.w(TAG, "resolvePlayUrl: endpoint '$endpoint' failed: ${e.message}")
             }
         }
         AppLog.w(TAG, "resolvePlayUrl: all endpoints failed for netId=$netId")

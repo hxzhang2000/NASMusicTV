@@ -219,7 +219,9 @@ class NasMusicApp : Application(), ImageLoaderFactory {
         val services = mapOf(
             "meting" to MetingApiService(
                 baseUrlProvider = { appPreferences.network.getMetingApiBaseUrlSync() },
-                serverProvider = { appPreferences.network.getMusicSourceSync() }
+                serverProvider = { appPreferences.network.getMusicSourceSync() },
+                // F2-6：音质档位（AUTO=0 不传 br；显式档位走降级链）
+                qualityTierProvider = { appPreferences.getQualityTierSync() }
             )
         )
         networkMusicManager = NetworkMusicManager(

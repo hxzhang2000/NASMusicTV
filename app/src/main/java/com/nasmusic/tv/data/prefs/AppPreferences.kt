@@ -69,6 +69,12 @@ class AppPreferences internal constructor(private val context: Context) {
     companion object {
         private const val TAG = "AppPreferences"
 
+        /** F2-6：音质档位常量（Meting br 值；AUTO 由 BandwidthEstimator 决策） */
+        const val QUALITY_TIER_AUTO = 0
+        const val QUALITY_TIER_LOSSLESS = 999
+        const val QUALITY_TIER_HIGH = 320
+        const val QUALITY_TIER_STANDARD = 128
+
         @Volatile
         private var INSTANCE: AppPreferences? = null
 
@@ -108,6 +114,8 @@ class AppPreferences internal constructor(private val context: Context) {
     // ---- provider 键内存镜像（Application scope 常驻收集更新）----
     @Volatile private var cachedMusicSource: String = com.nasmusic.tv.data.model.MusicSource.DEFAULT_API_KEY
     @Volatile private var cachedDefaultNetworkSource: String = NetworkSource.DEFAULT.key
+    /** F2-6：音质档位镜像（默认 AUTO） */
+    @Volatile private var cachedQualityTier: Int = QUALITY_TIER_AUTO
     @Volatile private var cachedJamendoClientId: String = ""
     @Volatile private var cachedMetingApiBaseUrl: String = MetingApiService.DEFAULT_BASE_URL
     @Volatile private var cachedMvApiBaseUrl: String = BilibiliMvService.DEFAULT_BASE_URL
@@ -145,6 +153,11 @@ class AppPreferences internal constructor(private val context: Context) {
         scope.launch {
             dataStore.data.map { it[keyDefaultNetworkSource] ?: NetworkSource.DEFAULT.key }
                 .distinctUntilChanged().collect { cachedDefaultNetworkSource = NetworkSource.fromKey(it)?.key ?: it }
+        }
+        // F2-6：音质档位镜像（qualityTierProvider 同步读，注册进 MetingApiService）
+        scope.launch {
+            dataStore.data.map { it[keyQualityTier] ?: QUALITY_TIER_AUTO }
+                .distinctUntilChanged().collect { cachedQualityTier = it }
         }
         scope.launch {
             dataStore.data.map { it[keyJamendoClientId] ?: "" }
@@ -817,11 +830,40 @@ class AppPreferences internal constructor(private val context: Context) {
         dataStore.edit { it[keySpectrumEnabled] = enabled }
     }
 
+    // --- F2-5 跨曲交叉淡入淡出 ---
+    private val keyCrossfadeEnabled = booleanPreferencesKey("settings_crossfade_enabled")
+    private val keyCrossfadeDurationSec = intPreferencesKey("settings_crossfade_duration_sec")
+
+    // --- F2-6 音质分级 ---
+    /** 音质档位：AUTO(0，按带宽) / LOSSLESS(999) / HIGH(320) / STANDARD(128) */
+    private val keyQualityTier = intPreferencesKey("settings_quality_tier")
+
+    val crossfadeEnabled: Flow<Boolean> = dataStore.data.map { it[keyCrossfadeEnabled] ?: false }
+    val crossfadeDurationSec: Flow<Int> = dataStore.data.map { it[keyCrossfadeDurationSec] ?: 4 }
+
+    suspend fun setCrossfadeEnabled(enabled: Boolean) {
+        dataStore.edit { it[keyCrossfadeEnabled] = enabled }
+    }
+
+    suspend fun setCrossfadeDurationSec(sec: Int) {
+        dataStore.edit { it[keyCrossfadeDurationSec] = sec.coerceIn(1, 12) }
+    }
+
+    /** F2-6：音质档位（Meting br 参数；AUTO 时不传由 BandwidthEstimator 决策） */
+    val qualityTier: Flow<Int> = dataStore.data.map { it[keyQualityTier] ?: QUALITY_TIER_AUTO }
+
+    suspend fun setQualityTier(tier: Int) {
+        dataStore.edit { it[keyQualityTier] = tier }
+    }
+
     /**
      * 同步获取当前默认网络源（用于 NetworkMusicManager 的 defaultSourceProvider）。
      * R-7 第三类修复（路 A）：读 @Volatile 内存镜像。
      */
     fun getDefaultNetworkSourceSync(): String = cachedDefaultNetworkSource
+
+    /** F2-6：同步读取音质档位（MetingApiService qualityTierProvider 用） */
+    fun getQualityTierSync(): Int = cachedQualityTier
 
     /**
      * 同步获取 Meting-API 端点 URL（用于 MetingApiService 的 baseUrlProvider）。

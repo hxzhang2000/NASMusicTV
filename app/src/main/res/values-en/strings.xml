@@ -951,4 +951,15 @@
     <string name="smart_radio_started">Smart Radio started: %1$s</string>
     <string name="smart_radio_exhausted">Library exhausted. Try another seed.</string>
     <string name="smart_radio_need_nas">Smart Radio requires a NAS library</string>
+
+    <!-- F2-5 Crossfade -->
+    <string name="settings_crossfade">Crossfade</string>
+    <string name="settings_crossfade_desc">Fade out old track while fading in the next (off by default; disabled in Karaoke/MTV mode)</string>
+
+    <!-- F2-6 Quality tier -->
+    <string name="settings_quality_tier">Network Source Quality (Meting only)</string>
+    <string name="quality_tier_auto">Auto</string>
+    <string name="quality_tier_lossless">Lossless</string>
+    <string name="quality_tier_high">320k</string>
+    <string name="quality_tier_standard">128k</string>
 </resources>
