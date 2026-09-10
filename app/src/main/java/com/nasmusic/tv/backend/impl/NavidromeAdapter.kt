@@ -48,6 +48,7 @@ class NavidromeAdapter : BackendAdapter {
     private var salt: String = ""
 
     private val gson = Gson()
+
     private val client: OkHttpClient by lazy {
         // R-6：注入共享连接池/Dispatcher（BackendRegistry 持有，切后端不再累积线程池）
         OkHttpClient.Builder()
@@ -66,6 +67,9 @@ class NavidromeAdapter : BackendAdapter {
             .build()
     }
 
+    /** R-10：Subsonic 公共层（认证/URL 构造/请求执行），初始化时同步认证态 */
+    private val restClient = SubsonicRestClient("NavidromeAdapter", client)
+
     override suspend fun initialize(
         baseUrl: String,
         apiToken: String,
@@ -79,6 +83,11 @@ class NavidromeAdapter : BackendAdapter {
         // B11：初始化时固定 salt，与 Subsonic 一致，保证封面/流 URL 稳定可缓存
         // （token = md5(password + salt) 在 buildRestUrl 内现场计算，无需预存）
         this@NavidromeAdapter.salt = System.currentTimeMillis().toString()
+        // R-10：公共层同步认证态
+        restClient.baseUrl = this@NavidromeAdapter.baseUrl
+        restClient.username = username
+        restClient.password = password
+        restClient.salt = this@NavidromeAdapter.salt
 
         testConnection()
     }
@@ -872,53 +881,11 @@ class NavidromeAdapter : BackendAdapter {
 
     // --- 内部辅助方法 ---
 
-    private fun buildRestUrl(method: String): String {
-        // Subsonic API 认证规范：token = md5(password + salt) 的 hex 表示
-        // 这是协议规定的认证方式（非"过时"），Navidrome 完全兼容 Subsonic API。
-        // salt 在 initialize 时固定一次，保证封面/流 URL 稳定、可被 HTTP 缓存复用。
-        val token = md5(password + salt)
-        return "$baseUrl/rest/$method.view?" +
-                "u=$username&" +
-                "t=$token&" +
-                "s=$salt&" +
-                "v=$API_VERSION&" +
-                "c=$CLIENT_NAME&" +
-                "f=json"
-    }
+    private fun buildRestUrl(method: String): String = restClient.buildRestUrl(method)
 
-    private fun buildCoverUrl(coverArtId: String): String =
-        buildRestUrl("getCoverArt") + "&id=$coverArtId&size=512"
+    private fun buildCoverUrl(coverArtId: String): String = restClient.buildCoverUrl(coverArtId)
 
-    private suspend fun executeRequest(url: String): JsonObject? = withContext(Dispatchers.IO) {
-        try {
-            withRetry(
-                config = RetryConfig(maxAttempts = 3, baseDelayMs = 500L),
-                onError = { attempt, e ->
-                    AppLog.w("NavidromeAdapter", "executeRequest retry attempt=$attempt for ${UrlSanitizer.sanitize(url)}", e)
-                }
-            ) {
-                val request = Request.Builder().url(url).build()
-                client.newCall(request).execute().use { response ->
-                    val rawBytes = response.body?.bytes() ?: return@use null
-                    val utf8Body = String(rawBytes, Charsets.UTF_8)
-                    if (response.isSuccessful) {
-                        gson.fromJson(utf8Body, JsonObject::class.java)
-                    } else {
-                        null
-                    }
-                }
-            }
-        } catch (e: Exception) {
-            AppLog.e("NavidromeAdapter", "executeRequest failed for ${UrlSanitizer.sanitize(url)}", e)
-            null
-        }
-    }
-
-    private fun md5(input: String): String {
-        val md = MessageDigest.getInstance("MD5")
-        return BigInteger(1, md.digest(input.toByteArray()))
-            .toString(16).padStart(32, '0')
-    }
+    private suspend fun executeRequest(url: String): JsonObject? = restClient.executeRequest(url)
 
     companion object {
         /**

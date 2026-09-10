@@ -71,6 +71,9 @@ class SubsonicAdapter : BackendAdapter {
             .build()
     }
 
+    /** R-10：Subsonic 公共层（请求执行/md5；URL 构造因行为差异保留自有实现） */
+    private val restClient = SubsonicRestClient("SubsonicAdapter", client)
+
     override suspend fun initialize(
         baseUrl: String,
         apiToken: String,
@@ -796,6 +799,9 @@ class SubsonicAdapter : BackendAdapter {
 
     // --- 内部辅助方法 ---
 
+    // R-10：buildRestUrl 与 Navidrome 存在真实差异（无 .view 后缀、t=apiToken 而非现场
+    // md5 计算——Subsonic 部分服务端用 token 直传），保留自有实现；公共的
+    // executeRequest/md5 经 restClient 委托。
     private fun buildRestUrl(method: String): String {
         return "$baseUrl/rest/$method?" +
                 "u=$username&" +
@@ -809,36 +815,9 @@ class SubsonicAdapter : BackendAdapter {
     private fun buildCoverUrl(coverArtId: String): String =
         buildRestUrl("getCoverArt") + "&id=$coverArtId&size=512"
 
-    private suspend fun executeRequest(url: String): JsonObject? = withContext(Dispatchers.IO) {
-        try {
-            withRetry(
-                config = RetryConfig(maxAttempts = 3, baseDelayMs = 500L),
-                onError = { attempt, e ->
-                    AppLog.w("SubsonicAdapter", "executeRequest retry attempt=$attempt for ${UrlSanitizer.sanitize(url)}", e)
-                }
-            ) {
-                val request = Request.Builder().url(url).build()
-                client.newCall(request).execute().use { response ->
-                    val rawBytes = response.body?.bytes() ?: return@use null
-                    val utf8Body = String(rawBytes, Charsets.UTF_8)
-                    if (response.isSuccessful) {
-                        gson.fromJson(utf8Body, JsonObject::class.java)
-                    } else {
-                        null
-                    }
-                }
-            }
-        } catch (e: Exception) {
-            AppLog.e("SubsonicAdapter", "executeRequest failed for ${UrlSanitizer.sanitize(url)}", e)
-            null
-        }
-    }
+    private suspend fun executeRequest(url: String): JsonObject? = restClient.executeRequest(url)
 
-    private fun md5(input: String): String {
-        val md = MessageDigest.getInstance("MD5")
-        return BigInteger(1, md.digest(input.toByteArray()))
-            .toString(16).padStart(32, '0')
-    }
+    private fun md5(input: String): String = restClient.md5(input)
 
     companion object {
         /**
