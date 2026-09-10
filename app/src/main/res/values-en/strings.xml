@@ -944,4 +944,11 @@
     <string name="notif_sleep_timer_start">Sleep Timer</string>
     <string name="notif_sleep_timer_remaining">%1$d min left</string>
     <string name="notif_next_up">Next: %1$s</string>
+
+    <!-- F2-3 Smart Radio -->
+    <string name="smart_radio_button">Smart Radio</string>
+    <string name="smart_radio_generating">Generating similar playlist…</string>
+    <string name="smart_radio_started">Smart Radio started: %1$s</string>
+    <string name="smart_radio_exhausted">Library exhausted. Try another seed.</string>
+    <string name="smart_radio_need_nas">Smart Radio requires a NAS library</string>
 </resources>

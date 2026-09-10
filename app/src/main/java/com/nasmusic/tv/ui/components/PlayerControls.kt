@@ -292,6 +292,8 @@ fun ControlButtonsRow(
     showMvButton: Boolean = false,
     mvAvailable: Boolean = false,
     onEnterMv: () -> Unit = {},
+    /** F2-3：智能电台入口（null = 隐藏，如 NAS 未连接/网络歌曲） */
+    onEnterSmartRadio: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
     compact: Boolean = false,
     playPauseFocusRequester: FocusRequester? = null
@@ -333,6 +335,15 @@ fun ControlButtonsRow(
             VocalToggleButton(
                 label = stringResource(R.string.player_karaoke),
                 onClick = onEnterKaraoke,
+                compact = compact
+            )
+        }
+        // F2-3：智能电台入口（当前歌为种子生成相似随机流）
+        if (onEnterSmartRadio != null) {
+            Spacer(modifier = Modifier.width(if (compact) 12.dp else 20.dp))
+            VocalToggleButton(
+                label = stringResource(R.string.smart_radio_button),
+                onClick = onEnterSmartRadio,
                 compact = compact
             )
         }

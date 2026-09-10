@@ -953,4 +953,11 @@
     <string name="notif_sleep_timer_start">定时关闭</string>
     <string name="notif_sleep_timer_remaining">剩余 %1$d 分钟</string>
     <string name="notif_next_up">下一首：%1$s</string>
+
+    <!-- F2-3 智能电台 -->
+    <string name="smart_radio_button">智能电台</string>
+    <string name="smart_radio_generating">正在生成相似歌单…</string>
+    <string name="smart_radio_started">智能电台已开启：%1$s</string>
+    <string name="smart_radio_exhausted">曲库已播完，换个种子试试</string>
+    <string name="smart_radio_need_nas">智能电台需要连接 NAS 曲库</string>
 </resources>

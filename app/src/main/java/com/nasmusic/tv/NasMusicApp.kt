@@ -41,6 +41,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.launch
 import okhttp3.OkHttpClient
 import java.io.File
@@ -82,6 +83,10 @@ class NasMusicApp : Application(), ImageLoaderFactory {
     /** F2-2：播放模式切换回调宿主（MainActivity 注册，PlaybackService 通知按钮调用） */
     @Volatile
     var playModeToggleHandler: (() -> Unit)? = null
+
+    /** 智能电台 Manager（F2-3）：基于当前歌曲流派+歌手生成相似随机流 */
+    lateinit var smartRadioManager: com.nasmusic.tv.backend.radio.SmartRadioManager
+        private set
     lateinit var mvSearchManager: MvSearchManager
         private set
 
@@ -201,6 +206,12 @@ class NasMusicApp : Application(), ImageLoaderFactory {
         applyLocale(appPreferences.getLanguageSync())
         backendRegistry = BackendRegistry()
         playerManager = PlayerManager(this)
+        // F2-3：智能电台（打分纯函数在 RadioSongScorer，播放次数作偏好信号）
+        smartRadioManager = com.nasmusic.tv.backend.radio.SmartRadioManager(
+            backendRegistry = backendRegistry,
+            scope = applicationScope,
+            playCountsProvider = { appPreferences.history.playCounts.firstOrNull() ?: emptyMap() }
+        )
         // 模型下载管理器（HT-Demucs FT ONNX，与 APK 分离，设置页下载）
         modelDownloadManager = ModelDownloadManager(this)
         playerManager.setModelDownloadManager(modelDownloadManager)

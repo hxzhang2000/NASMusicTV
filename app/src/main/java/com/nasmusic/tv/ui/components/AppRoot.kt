@@ -416,7 +416,11 @@ fun AppRoot(
                                     ((st.endsAtMs - System.currentTimeMillis() + 59_999) / 60_000).toInt().coerceAtLeast(1)
                                 else -> null
                             },
-                            onSleepTimerClick = { viewModel.playerVM.startSleepTimer(30) }
+                            onSleepTimerClick = { viewModel.playerVM.startSleepTimer(30) },
+                            // === F2-3 智能电台（NAS 已连接且当前歌非网络歌曲时显示） ===
+                            onEnterSmartRadio = currentSong?.takeIf { isConnected && !it.isNetworkSong }?.let {
+                                { viewModel.startSmartRadioFromCurrent() }
+                            }
                         )
                     }
                 }

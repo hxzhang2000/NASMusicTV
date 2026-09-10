@@ -2207,6 +2207,36 @@ showError(getApplication<Application>().getString(R.string.toggle_favorite_error
         playerVM.playQueue(songs, startIndex)
     }
 
+    // --- F2-3 智能电台 ---
+    /** 智能电台状态（生成中/播放中/耗尽），UI 提示用 */
+    val smartRadioState = nasMusicApp.smartRadioManager.state
+
+    /**
+     * 从当前歌曲启动智能电台（NowPlaying"智能电台"按钮）。
+     * 批次生成后入队播放；NAS 未连接或曲库空给出提示。
+     */
+    fun startSmartRadioFromCurrent() {
+        val seed = playerVM.currentSong.value ?: return
+        if (backendRegistry.getAdapter() == null) {
+            _connectMessage.value = getApplication<Application>().getString(R.string.smart_radio_need_nas)
+            viewModelScope.launch {
+                delay(3000)
+                _connectMessage.value = null
+            }
+            return
+        }
+        _connectMessage.value = getApplication<Application>().getString(R.string.smart_radio_generating)
+        nasMusicApp.smartRadioManager.startFromCurrentSong(seed) { batch, ctx ->
+            _connectMessage.value = getApplication<Application>().getString(R.string.smart_radio_started, ctx.seed.title)
+            viewModelScope.launch {
+                delay(2000)
+                _connectMessage.value = null
+            }
+            // 批次入队（从批次第一首播起）
+            playQueue(batch, 0)
+        }
+    }
+
     fun addSongToQueue(song: Song) = playerManager.addToQueue(song)
 
     // =====================================================================

@@ -149,6 +149,8 @@ fun NowPlayingScreen(
     sleepTimerRemainingMin: Int? = null,
     /** 点击睡眠定时图标弹出档位选择 */
     onSleepTimerClick: () -> Unit = {},
+    // === F2-3 智能电台（null = 隐藏按钮） ===
+    onEnterSmartRadio: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     var showInfoPanel by remember { mutableStateOf(false) }
@@ -331,6 +333,8 @@ fun NowPlayingScreen(
                             showMvButton = true,
                             mvAvailable = mvAvailable,
                             onEnterMv = onEnterMv,
+                            // F2-3：智能电台入口（显示条件由调用方 AppRoot 决定）
+                            onEnterSmartRadio = onEnterSmartRadio,
                             compact = true,
                             playPauseFocusRequester = playPauseFocusRequester
                         )
