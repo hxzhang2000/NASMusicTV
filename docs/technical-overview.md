@@ -7893,3 +7893,17 @@ onSearchSong = { keyword -> viewModel.searchNetworkSongs(keyword) },
   - 计划偏差：AUTO 档未接 BandwidthEstimator 自动决策（estimator 需 OkHttp 拦截器全链路埋点，牵连 NAS/百度共链路；首期 AUTO=端点默认，带宽自动决策留二期）；Jellyfin 显式档 bitrate 参数未做（NAS 用户以原品质为主，计划已标注可选二期）；百度网盘/Jamendo 无码率可选（计划边界，UI 已明示"仅 Meting 源"）
 - **验证**：compileDebugKotlin + testDebugUnitTest 316/316 全绿（M2 298 + CrossfadeControllerTest 10 + BandwidthEstimatorTest 8）+ assembleDebug 通过
 - **待办**：TV 手测（crossfade 听感/内存 + 音质档位切换对比 + 弱网 AUTO 场景）
+### 10.118 F2-2b 通知 Provider 接管 + 睡眠定时常驻入口 + AppRoot 分支下沉（2026-09-11）
+
+- **通知 Provider 接管（F2-2 缺陷修复）**：
+  - 根因一：media3 `MediaLibraryService` 自带默认 MediaNotification Provider，与自建通知共用 ID=1 互相覆盖，下拉通知样式漂移、按钮状态不同步
+  - 根因二：Android 13+ 锁屏/超级岛系统媒体卡片不读通知 addAction、由 MediaSession custom layout 渲染，此前从未设置 → 锁屏永远只有系统默认键
+  - 修复：`setMediaNotificationProvider` 接管（createNotification 统一走本服务 buildNotification，handleCustomCommand 放行 playMode/sleepTimer 两个 action）；`setCustomLayout`（CommandButton×2）+ `onConnect` 注册 SessionCommand + `onCustomCommand` 分发；updateNotification/分钟 tick 同步 refreshSessionCustomLayout；compact view 索引 (1,2,3)→(0,1,2)（原索引实际显示 播放/暂停、下一首、播放模式，漏掉上一首）
+- **睡眠定时常驻入口（F2-2b）**：NowPlaying 顶栏右侧常驻小按钮（未启动"定时 -"、运行中橙色"定时 N 分钟"），点击弹 SleepTimerPickerDialog（15/30/60/90 分钟档 + 运行中取消项）；NowPlayingScreen 参数 sleepTimerRemainingMin/onSleepTimerClick 改为 sleepTimerState + onSleepTimerStart/onSleepTimerCancel；中英 strings 补 np_sleep_timer_* 三条
+- **AppRoot 分支下沉（MethodTooLargeException 根治）**：
+  - 触发：F2-2b 为 NowPlaying 分支新增 3 个参数即触顶 JVM 单方法 64KB 上限（Compose when 分支全部内联宿主函数，AppRoot 1155 行累积 14 屏）
+  - 方案：14 个 Screen 分支机械提取至 `ui/components/branches/`（HomeBranch…PlayStatsBranch），AppRoot 1155→391 行路由壳；外层共享状态参数化（每 Branch 声明实际所需签名），pickerSong 共用弹窗保留宿主、Branch 经 onPickSongForPlaylist 回调上抛
+  - 实测：AppRoot 方法 8303 条字节码指令、最大 SettingsBranch 10437 条（上限 65535，余量 6 倍+）；各 Branch 独立类文件，后续新增屏幕只加 Branch 文件、宿主零增长（工程规则：禁止把分支体写回 AppRoot）
+  - 搬迁修正：DownloadState 类型笔误（DownloadViewModel.DownloadState → backend.download.model.DownloadState，原写法靠 AppRoot 通配 import 掩盖）；SettingsBranch 注入 context + coroutineScope（语言切换重启逻辑）
+- **验证**：assembleDebug + testDebugUnitTest 316/316 全绿 + assembleRelease 通过；修复版 APK 已装手机 91846823（v2.29.0/124）
+- **待办**：手机/TV 手测（通知 5 按钮刷新、锁屏/超级岛自定义键、睡眠定时到期暂停、档位弹窗 D-Pad）

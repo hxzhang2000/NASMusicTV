@@ -9,6 +9,13 @@
 
 ## [Unreleased]
 
+### Fixed
+- 通知栏按钮不刷新/锁屏无自定义按钮（F2-2 遗留缺陷）：media3 `MediaLibraryService` 自带默认通知 Provider，与自建多按钮通知共用 ID=1 互相覆盖，导致下拉通知栏样式漂移、状态不同步。改为 `setMediaNotificationProvider` 接管，通知统一由本服务 `buildNotification` 渲染 5 按钮；Android 13+ 锁屏/超级岛系统媒体卡片不读通知 action、由 MediaSession custom layout 渲染，新增 `setCustomLayout` + `SessionCommand`（onConnect/onCustomCommand）注入播放模式/睡眠定时两个自定义键；compact view 索引修复为 (0,1,2)（原 (1,2,3) 实际显示 播放/暂停、下一首、播放模式，漏掉上一首）
+- 睡眠定时器入口隐蔽（F2-2b）：NowPlaying 顶栏右侧新增常驻小按钮（未启动显示"定时 -"、运行中橙色显示"定时 N 分钟"），点击弹出档位选择窗（15/30/60/90 分钟 + 运行中可取消），手机触摸/TV D-Pad 通用；原"仅运行中显示"状态条移除
+
+### Changed
+- 重构：AppRoot（1155 行）`when(currentScreen)` 14 个 Screen 分支全部提取至 `ui/components/branches/` 包（Home/NowPlaying/Library/Mine/Queue/Settings/ServerConnect/AlbumDetail/ArtistDetail/Equalizer/PlaylistManagement/Netdisk/WeatherRadio/PlayStats Branch），AppRoot 精简为路由壳（391 行），外层共享状态参数化注入、`pickerSong` 弹窗状态保留在宿主经回调上抛。根除 JVM 单方法 64KB 上限（MethodTooLargeException）——此前 F2-2b 仅新增 3 个参数即触顶；实测 AppRoot 方法字节码 8303 条指令、最大分支 SettingsBranch 10437 条（上限 65535）。后续新增屏幕必须新建独立 Branch 文件
+
 ## [v2.29.0] - 2026-09-10
 
 ### Added
