@@ -7,7 +7,7 @@
 >
 > 类型：`Added`（新增） | `Changed`（变更） | `Fixed`（修复） | `Removed`（移除）
 
-## [Unreleased]
+## [v2.29.2] - 2026-09-11
 
 ### Changed
 - 智能电台多源化（F2-3 演进）：推荐池从 NAS 单源扩展为 NAS + 本地（含下载）+ Meting 网络歌单采样（随机抽 3 个歌单、每单 30 首，tagged isNetworkSong），distinctBy 去重后统一打分——网络歌曲无 genre/albumId 时相应加分项自然失效，仍可入池推荐；SmartRadioManager 新增 startFromScratch 无种子启动（以 play_counts 最高歌曲为偏好种子，纯加权随机）
