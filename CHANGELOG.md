@@ -12,6 +12,7 @@
 ## [v2.29.1] - 2026-09-11
 
 ### Fixed
+- 播放统计"本月"Tab 恒为空（F2-1 缺陷，release 专属）：ProGuard/R8 缺少 `data.stats` 包 keep 规则——`PlayStatsRepository` 的 Gson `TypeToken` 匿名类泛型签名被擦除后，`fromJson` 返回原始 `LinkedTreeMap`，`+1` 触发 `ClassCastException` 被 catch 静默吞掉，月度键（play_stats_monthly）从未写入；读取端同理解析失败降级空表。单测全绿是因为 Robolectric 不跑 R8。修复：proguard-rules.pro 补 `-keep class com.nasmusic.tv.data.stats.** { *; }`（与 v2.5.1 Gson 类型擦除崩溃同类坑，AGENTS.md 已有警示"新增序列化模型时勿删 keep 规则"）。mapping.txt 验证：data.stats 类恢复 identity 映射
 - 睡眠定时弹窗布局优化（F2-2b 手测反馈）：定时按钮从 NowPlaying 顶栏独占行移至歌词来源标签行（A+ 字号按钮右侧）；弹窗改紧凑布局——标题"定时关闭"、中间 -/[N 分钟]/+ 步进（5 分钟步长，5-300）、下方两行（15/30 快捷档 + OK/取消定时），去掉按钮内重复的"定时"字样（新增 np_sleep_timer_min 短格式字符串）
 - 通知栏按钮不刷新/锁屏无自定义按钮（F2-2 遗留缺陷）：media3 `MediaLibraryService` 自带默认通知 Provider，与自建多按钮通知共用 ID=1 互相覆盖，导致下拉通知栏样式漂移、状态不同步。改为 `setMediaNotificationProvider` 接管，通知统一由本服务 `buildNotification` 渲染 5 按钮；Android 13+ 锁屏/超级岛系统媒体卡片不读通知 action、由 MediaSession custom layout 渲染，新增 `setCustomLayout` + `SessionCommand`（onConnect/onCustomCommand）注入播放模式/睡眠定时两个自定义键；compact view 索引修复为 (0,1,2)（原 (1,2,3) 实际显示 播放/暂停、下一首、播放模式，漏掉上一首）
 - 睡眠定时器入口隐蔽（F2-2b）：NowPlaying 顶栏右侧新增常驻小按钮（未启动显示"定时 -"、运行中橙色显示"定时 N 分钟"），点击弹出档位选择窗（15/30/60/90 分钟 + 运行中可取消），手机触摸/TV D-Pad 通用；原"仅运行中显示"状态条移除

@@ -3,6 +3,7 @@
 # Keep data classes
 -keep class com.nasmusic.tv.data.model.** { *; }
 -keep class com.nasmusic.tv.data.prefs.** { *; }
+-keep class com.nasmusic.tv.data.stats.** { *; }
 -keep class com.nasmusic.tv.backend.** { *; }
 
 # 百度网盘 DTO 类（显式 keep，防御 Gson 类型擦除/R8 收缩——v2.5.1 曾因此崩溃；
