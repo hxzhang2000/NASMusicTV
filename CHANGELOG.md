@@ -9,6 +9,8 @@
 
 ## [Unreleased]
 
+## [v2.29.0] - 2026-09-10
+
 ### Added
 - 播放统计面板（F2-1）：新增月度播放统计（play_stats_monthly 键，recordPlayWithSong 同次 DataStore edit 原子写入，滚动保留 12 个月）+ 统计页（本月/累计 Tab、播放次数/歌曲数 KPI、最爱歌手 Top10、流派分布原生 Canvas 条形图）；入口在设置 → 数据管理 → 播放统计；聚合器纯函数可单测（PlayStatsAggregatorTest 8 用例）
 - 睡眠定时器（F2-2）：SleepTimerController（不持久化，档位 15/30/60/90 分钟，时间源可注入）+ 到期自动暂停；通知栏按钮显示剩余分钟（每分钟刷新）+ NowPlaying 顶栏状态条（点击快速设置 30 分钟）
