@@ -2230,48 +2230,36 @@ showError(getApplication<Application>().getString(R.string.toggle_favorite_error
     }
 
     // --- F2-3 智能电台 ---
-    /** 智能电台状态（生成中/播放中/耗尽），UI 提示用 */
+    /** 智能电台状态（生成中/播放中/耗尽），内部逻辑用 */
     val smartRadioState = nasMusicApp.smartRadioManager.state
 
+    /** F2-3 首页列表化：当前浏览批次（随心听式，空 = 未生成/隐藏区块） */
+    private val _smartRadioBatch = kotlinx.coroutines.flow.MutableStateFlow<List<Song>>(emptyList())
+    val smartRadioBatch: kotlinx.coroutines.flow.StateFlow<List<Song>> = _smartRadioBatch
+
+    private var smartRadioBatchLoading = false
+
     /**
-     * 从当前歌曲启动智能电台（NowPlaying"智能电台"按钮）。
-     * 批次生成后入队播放；NAS 未连接或曲库空给出提示。
+     * F2-3 首页列表化：生成/换一批（只生成不播放），结果写入 [smartRadioBatch]。
+     * 防重入：生成中忽略重复请求。
      */
-    /**
-     * F2-3 多源化：首页智能电台入口——无种子启动，多源池（NAS+本地+Meting）偏好加权随机。
-     */
-    fun startSmartRadio() {
-        _connectMessage.value = getApplication<Application>().getString(R.string.smart_radio_generating)
-        nasMusicApp.smartRadioManager.startFromScratch { batch, ctx ->
-            _connectMessage.value = getApplication<Application>().getString(R.string.smart_radio_started, ctx.seed.title)
-            viewModelScope.launch {
-                delay(2000)
-                _connectMessage.value = null
-            }
-            playQueue(batch, 0)
+    fun loadSmartRadioBatch() {
+        if (smartRadioBatchLoading) return
+        smartRadioBatchLoading = true
+        nasMusicApp.smartRadioManager.generateOnly { batch, _ ->
+            smartRadioBatchLoading = false
+            _smartRadioBatch.value = batch
         }
     }
 
-    fun startSmartRadioFromCurrent() {
-        val seed = playerVM.currentSong.value ?: return
-        if (backendRegistry.getAdapter() == null) {
-            _connectMessage.value = getApplication<Application>().getString(R.string.smart_radio_need_nas)
-            viewModelScope.launch {
-                delay(3000)
-                _connectMessage.value = null
-            }
-            return
-        }
-        _connectMessage.value = getApplication<Application>().getString(R.string.smart_radio_generating)
-        nasMusicApp.smartRadioManager.startFromCurrentSong(seed) { batch, ctx ->
-            _connectMessage.value = getApplication<Application>().getString(R.string.smart_radio_started, ctx.seed.title)
-            viewModelScope.launch {
-                delay(2000)
-                _connectMessage.value = null
-            }
-            // 批次入队（从批次第一首播起）
-            playQueue(batch, 0)
-        }
+    /**
+     * 播放浏览批次中第 [index] 首（点卡片播歌）：
+     * 整批入队并从该首播起，批次播完即止（与旧入口行为一致）。
+     */
+    fun playSmartRadioBatchAt(index: Int) {
+        val batch = _smartRadioBatch.value
+        if (index !in batch.indices) return
+        playQueue(batch, index)
     }
 
     fun addSongToQueue(song: Song) = playerManager.addToQueue(song)

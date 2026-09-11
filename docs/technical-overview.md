@@ -7913,3 +7913,10 @@ onSearchSong = { keyword -> viewModel.searchNetworkSongs(keyword) },
 - **入口迁移**：HomeScreen 新增 SmartRadioCard（天气卡上方、随心听下方，FocusableSurface 卡片，状态驱动文案 Idle/Exhausted→开始收听、Generating→生成中、Playing→换一批）；HomeBranch 接线 onStartSmartRadio = viewModel.startSmartRadio()；NowPlaying 入口移除（PlayerControls 按钮分支、NowPlayingScreen 参数、NowPlayingBranch 传参三处清理），startSmartRadioFromCurrent 保留在 MainViewModel 供后续复用
 - **验证**：assembleDebug + testDebugUnitTest 316/316（RadioSongScorerTest 无回归）+ assembleRelease 通过
 - **待办**：手机/TV 手测（无 NAS 连接时网络源兜底推荐、多源混合批次、换一批）
+
+### 10.120 智能电台交互列表化（2026-09-11，F2-3 手测反馈）
+
+- **问题**：首页智能电台卡片点击即生成并直接播放（天气电台式），用户期望与随心听一致的浏览模式——先看推荐列表再点播
+- **改动**：SmartRadioManager 新增 `generateOnly(onBatchReady)`——只生成批次不播放（有 currentSeed 走 startFromCurrentSong 即"换一批"语义、无则 startFromScratch 偏好种子）；MainViewModel 新增 `_smartRadioBatch: StateFlow<List<Song>>` + `loadSmartRadioBatch()`（smartRadioBatchLoading 防重入）+ `playSmartRadioBatchAt(index)`（整批入队从该首播起）；HomeScreen 区块改随心听式——`LaunchedEffect(Unit)` 首次进入自动生成，批次非空时展示 SectionHeader（右上"换一批"按钮，SectionHeader 新增 actionLabel/onAction 可选参数）+ LazyRow HomeSongCard 卡片行，点卡片播放；删除 SmartRadioCard 及 startSmartRadio/startSmartRadioFromCurrent 死代码
+- **验证**：compileDebugKotlin + testDebugUnitTest 316/316 通过
+- **待办**：手机手测（首次进入自动出批次、点卡片播歌、换一批不重复、区块位置随心听下方天气卡上方）

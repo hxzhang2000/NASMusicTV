@@ -139,6 +139,17 @@ class SmartRadioManager(
         startFromCurrentSong(seed, onBatchReady)
     }
 
+    /**
+     * F2-3 首页列表化：仅生成批次供首页浏览（不自动播放，用户点卡片后播）。
+     * 已有电台上下文（currentSeed）则视为"换一批"（排除已推荐歌曲），
+     * 否则无种子启动（偏好加权随机）。回调内不播歌，只更新首页批次列表。
+     */
+    fun generateOnly(onBatchReady: (List<Song>, SeedContext) -> Unit) {
+        val seed = currentSeed
+        if (seed != null) startFromCurrentSong(seed, onBatchReady)
+        else startFromScratch(onBatchReady)
+    }
+
     /** 停止电台（清缓存与状态） */
     fun stop() = stopInternal(resetState = true)
 

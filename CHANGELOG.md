@@ -11,7 +11,8 @@
 
 ### Changed
 - 智能电台多源化（F2-3 演进）：推荐池从 NAS 单源扩展为 NAS + 本地（含下载）+ Meting 网络歌单采样（随机抽 3 个歌单、每单 30 首，tagged isNetworkSong），distinctBy 去重后统一打分——网络歌曲无 genre/albumId 时相应加分项自然失效，仍可入池推荐；SmartRadioManager 新增 startFromScratch 无种子启动（以 play_counts 最高歌曲为偏好种子，纯加权随机）
-- 智能电台入口迁移（F2-3 演进）：NowPlaying 控制按钮行入口移除，改为首页独立区块（天气电台卡片上方，随心听下方），状态驱动文案（开始收听/生成中/换一批）；与当前播放歌曲解耦，不依赖 NAS 连接（多源池至少有本地+网络兜底）
+- 智能电台入口迁移（F2-3 演进）：NowPlaying 控制按钮行入口移除，改为首页独立区块（天气电台卡片上方，随心听下方）；与当前播放歌曲解耦，不依赖 NAS 连接（多源池至少有本地+网络兜底）
+- 智能电台交互列表化（F2-3 手测反馈）：首页区块从"点卡片直接播放"（天气电台式）改为随心听式浏览列表——进入首页自动生成 20 首推荐批次（SmartRadioManager 新增 generateOnly：只生成不播放），区块展示 SectionHeader + 歌曲卡片横滑行，点任意卡片整批入队从该首播起，header 右侧"换一批"重新生成（保留电台种子，排除已推荐歌曲）；移除 SmartRadioCard 与 startSmartRadio/startSmartRadioFromCurrent 死代码
 
 ## [v2.29.1] - 2026-09-11
 
