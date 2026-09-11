@@ -7907,3 +7907,9 @@ onSearchSong = { keyword -> viewModel.searchNetworkSongs(keyword) },
   - 搬迁修正：DownloadState 类型笔误（DownloadViewModel.DownloadState → backend.download.model.DownloadState，原写法靠 AppRoot 通配 import 掩盖）；SettingsBranch 注入 context + coroutineScope（语言切换重启逻辑）
 - **验证**：assembleDebug + testDebugUnitTest 316/316 全绿 + assembleRelease 通过；修复版 APK 已装手机 91846823（v2.29.0/124）
 - **待办**：手机/TV 手测（通知 5 按钮刷新、锁屏/超级岛自定义键、睡眠定时到期暂停、档位弹窗 D-Pad）
+### 10.119 智能电台多源化 + 首页入口迁移（2026-09-11，F2-3 演进）
+
+- **SmartRadioManager 多源化**：构造注入 networkPlaylistProvider/networkPlaylistIds/localSongsProvider（NasMusicApp 组装，networkMusicManager 与 localMusicRepository 初始化晚于 smartRadioManager，用延迟 lambda）；loadLibrary(seed: Song?) 聚合 NAS（有 genre 走流派筛选，否则全量分页，adapter 可空）+ 本地 loadFromCache + Meting 歌单采样（NETWORK_PLAYLIST_SAMPLE_COUNT=3 / NETWORK_PLAYLIST_SONG_CAP=30，失败降级），distinctBy { id } 合池；新增 startFromScratch——play_counts 最高歌曲为偏好种子，播放中换批复用既有 RadioSongScorer.generateBatch
+- **入口迁移**：HomeScreen 新增 SmartRadioCard（天气卡上方、随心听下方，FocusableSurface 卡片，状态驱动文案 Idle/Exhausted→开始收听、Generating→生成中、Playing→换一批）；HomeBranch 接线 onStartSmartRadio = viewModel.startSmartRadio()；NowPlaying 入口移除（PlayerControls 按钮分支、NowPlayingScreen 参数、NowPlayingBranch 传参三处清理），startSmartRadioFromCurrent 保留在 MainViewModel 供后续复用
+- **验证**：assembleDebug + testDebugUnitTest 316/316（RadioSongScorerTest 无回归）+ assembleRelease 通过
+- **待办**：手机/TV 手测（无 NAS 连接时网络源兜底推荐、多源混合批次、换一批）

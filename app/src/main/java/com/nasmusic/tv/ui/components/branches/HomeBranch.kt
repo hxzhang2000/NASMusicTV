@@ -87,6 +87,9 @@ internal fun HomeBranch(
                         randomSongs = randomSongs,
                         onPlayRandomSongs = { songs, index ->
                             viewModel.playRandomSongs(songs, index)
-                        }
+                        },
+                        // F2-3 多源化：智能电台首页入口（与播放页解耦）
+                        onStartSmartRadio = { viewModel.startSmartRadio() },
+                        smartRadioState = viewModel.smartRadioState.collectAsState().value
                     )
 }

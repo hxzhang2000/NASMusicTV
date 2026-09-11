@@ -210,7 +210,15 @@ class NasMusicApp : Application(), ImageLoaderFactory {
         smartRadioManager = com.nasmusic.tv.backend.radio.SmartRadioManager(
             backendRegistry = backendRegistry,
             scope = applicationScope,
-            playCountsProvider = { appPreferences.history.playCounts.firstOrNull() ?: emptyMap() }
+            playCountsProvider = { appPreferences.history.playCounts.firstOrNull() ?: emptyMap() },
+            // F2-3 多源化：Meting 歌单采样（networkMusicManager 227 行才初始化，用延迟 lambda）
+            networkPlaylistProvider = { pid -> networkMusicManager.getPlaylist(pid) },
+            networkPlaylistIds = listOf(
+                "3778678", "3779629", "19723756", "3136952023",
+                "60198", "377165088", "2211745987", "2884035"
+            ),
+            // F2-3 多源化：本地歌曲（localMusicRepository 254 行才初始化，延迟 lambda）
+            localSongsProvider = { localMusicRepository.loadFromCache() }
         )
         // 模型下载管理器（HT-Demucs FT ONNX，与 APK 分离，设置页下载）
         modelDownloadManager = ModelDownloadManager(this)

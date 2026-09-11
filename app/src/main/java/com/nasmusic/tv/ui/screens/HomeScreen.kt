@@ -85,6 +85,10 @@ fun HomeScreen(
     onNavigateToWeatherRadio: () -> Unit = {},
     randomSongs: List<Song> = emptyList(),
     onPlayRandomSongs: (List<Song>, Int) -> Unit = { _, _ -> },
+    /** F2-3 多源化：智能电台启动（首页入口，null = 隐藏区块） */
+    onStartSmartRadio: (() -> Unit)? = null,
+    /** 智能电台状态（Idle/Generating/Playing/Exhausted） */
+    smartRadioState: com.nasmusic.tv.backend.radio.SmartRadioManager.State = com.nasmusic.tv.backend.radio.SmartRadioManager.State.Idle,
     modifier: Modifier = Modifier
 ) {
     val listState = rememberLazyListState()
@@ -226,6 +230,16 @@ fun HomeScreen(
                         )
                     }
                 }
+            }
+        }
+
+        // 5.5 智能电台（F2-3 多源化：天气电台上方独立区块，类似随心听）
+        if (onStartSmartRadio != null) {
+            item(key = "smart_radio") {
+                SmartRadioCard(
+                    state = smartRadioState,
+                    onStart = onStartSmartRadio
+                )
             }
         }
 
@@ -761,6 +775,77 @@ private fun HomeWeatherCard(
                     fontSize = FontSize.button()
                 )
             }
+        }
+    }
+}
+
+/**
+ * F2-3 多源化：智能电台卡片（首页独立区块，天气电台上方）。
+ * 状态驱动文案：Idle/Exhausted → "开始收听"；Generating → 生成中；Playing → "换一批"。
+ */
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+private fun SmartRadioCard(
+    state: com.nasmusic.tv.backend.radio.SmartRadioManager.State,
+    onStart: () -> Unit
+) {
+    val bgColor = if (state is com.nasmusic.tv.backend.radio.SmartRadioManager.State.Playing) {
+        NasMusicColors.Primary.copy(alpha = 0.18f)
+    } else {
+        NasMusicColors.Surface.copy(alpha = 0.3f)
+    }
+
+    com.nasmusic.tv.ui.components.FocusableSurface(
+        onClick = onStart,
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(14.dp),
+        focusedScale = 1.01f,
+        animationDurationMs = 200,
+        containerColor = NasMusicColors.Surface.copy(alpha = 0.3f),
+        focusedContainerColor = NasMusicColors.Primary.copy(alpha = 0.1f),
+        contentColor = NasMusicColors.TextPrimary,
+        focusedContentColor = NasMusicColors.Primary
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(bgColor, RoundedCornerShape(14.dp))
+                .padding(horizontal = 20.dp, vertical = 14.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(text = "📻", fontSize = FontSize.displayLarge(), color = com.nasmusic.tv.ui.components.LocalFocusableContentColor.current)
+            Spacer(modifier = Modifier.width(14.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = stringResource(R.string.home_smart_radio),
+                    color = com.nasmusic.tv.ui.components.LocalFocusableContentColor.current,
+                    fontSize = FontSize.subtitle(),
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = stringResource(R.string.home_smart_radio_desc),
+                    color = NasMusicColors.TextSecondary,
+                    fontSize = FontSize.caption(),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+            Spacer(modifier = Modifier.width(14.dp))
+            // 状态驱动按钮文案
+            val actionText = when (state) {
+                is com.nasmusic.tv.backend.radio.SmartRadioManager.State.Generating ->
+                    stringResource(R.string.smart_radio_generating)
+                is com.nasmusic.tv.backend.radio.SmartRadioManager.State.Playing ->
+                    stringResource(R.string.home_smart_radio_next)
+                else -> stringResource(R.string.home_smart_radio_start)
+            }
+            Text(
+                text = actionText,
+                color = com.nasmusic.tv.ui.components.LocalFocusableContentColor.current,
+                fontSize = FontSize.button(),
+                fontWeight = FontWeight.Bold
+            )
         }
     }
 }

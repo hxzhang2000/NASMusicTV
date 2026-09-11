@@ -965,6 +965,10 @@
     <string name="smart_radio_started">智能电台已开启：%1$s</string>
     <string name="smart_radio_exhausted">曲库已播完，换个种子试试</string>
     <string name="smart_radio_need_nas">智能电台需要连接 NAS 曲库</string>
+    <string name="home_smart_radio">智能电台</string>
+    <string name="home_smart_radio_desc">根据你的喜好，从 NAS、本地与网络多源生成随机歌单</string>
+    <string name="home_smart_radio_start">开始收听</string>
+    <string name="home_smart_radio_next">换一批</string>
 
     <!-- F2-5 跨曲交叉淡入淡出 -->
     <string name="settings_crossfade">跨曲交叉淡入淡出</string>

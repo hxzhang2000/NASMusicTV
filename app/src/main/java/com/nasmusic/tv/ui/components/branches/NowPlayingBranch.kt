@@ -160,10 +160,6 @@ internal fun NowPlayingBranch(
                             sleepTimerState = sleepTimerSt,
                             onSleepTimerStart = { viewModel.playerVM.startSleepTimer(it) },
                             onSleepTimerCancel = { viewModel.playerVM.cancelSleepTimer() },
-                            // === F2-3 智能电台（NAS 已连接且当前歌非网络歌曲时显示） ===
-                            onEnterSmartRadio = currentSong?.takeIf { isConnected && !it.isNetworkSong }?.let {
-                                { viewModel.startSmartRadioFromCurrent() }
-                            }
                         )
                     }
 }

@@ -2237,6 +2237,21 @@ showError(getApplication<Application>().getString(R.string.toggle_favorite_error
      * 从当前歌曲启动智能电台（NowPlaying"智能电台"按钮）。
      * 批次生成后入队播放；NAS 未连接或曲库空给出提示。
      */
+    /**
+     * F2-3 多源化：首页智能电台入口——无种子启动，多源池（NAS+本地+Meting）偏好加权随机。
+     */
+    fun startSmartRadio() {
+        _connectMessage.value = getApplication<Application>().getString(R.string.smart_radio_generating)
+        nasMusicApp.smartRadioManager.startFromScratch { batch, ctx ->
+            _connectMessage.value = getApplication<Application>().getString(R.string.smart_radio_started, ctx.seed.title)
+            viewModelScope.launch {
+                delay(2000)
+                _connectMessage.value = null
+            }
+            playQueue(batch, 0)
+        }
+    }
+
     fun startSmartRadioFromCurrent() {
         val seed = playerVM.currentSong.value ?: return
         if (backendRegistry.getAdapter() == null) {

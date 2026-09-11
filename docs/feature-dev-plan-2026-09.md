@@ -462,7 +462,7 @@ F2-6 ──┼┘→ M3 ─→ v2.31.0
 |---|---|---|---|---|
 | F2-1 播放统计面板 | ✅ 完成（M1） | 0.5 天 | | 档位对话框未做，见偏差说明 |
 | F2-2 通知栏增强 | ✅ 完成（M1） | 1 天 | | 含睡眠定时器；歌词开关按计划不做。2026-09-11 缺陷修复（F2-2b）：接管 MediaNotification Provider 消除与 media3 默认通知同 ID 覆盖、setCustomLayout 注入 Android 13+ 锁屏/超级岛自定义键、compact view 索引修正；睡眠定时增加 NowPlaying 常驻按钮+档位弹窗（详见 technical-overview §10.118） |
-| F2-3 智能电台 | ✅ 完成（M2） | 1.5 天 | | 首期仅 NAS 曲库；天气电台 Tab 入口降级为 NowPlaying 单入口 |
+| F2-3 智能电台 | ✅ 完成（M2）+ 多源化演进（2026-09-11） | 1.5 天 | | 首期仅 NAS 曲库；天气电台 Tab 入口降级为 NowPlaying 单入口。演进：推荐池扩展为 NAS+本地+Meting 多源，入口迁至首页独立区块（天气卡上方），NowPlaying 入口移除，与播放状态解耦（详见 technical-overview §10.119） |
 | F2-4 断线续播 | ✅ 完成（M2） | 1.5 天 | | 会话内续播（断点不持久化）；MTV 路径不动 |
 | F2-5 crossfade | ✅ 完成（M3） | 2-3 天 | | 默认关闭；AUTO 未接带宽决策（estimator 已备，二期接线） |
 | F2-6 音质分级 | ✅ 完成（M3） | 2 天 | | AUTO=端点默认（带宽自动决策二期）；Jellyfin bitrate 二期；仅 Meting 源 |

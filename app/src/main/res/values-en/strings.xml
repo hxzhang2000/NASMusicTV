@@ -955,6 +955,10 @@
     <string name="smart_radio_started">Smart Radio started: %1$s</string>
     <string name="smart_radio_exhausted">Library exhausted. Try another seed.</string>
     <string name="smart_radio_need_nas">Smart Radio requires a NAS library</string>
+    <string name="home_smart_radio">Smart Radio</string>
+    <string name="home_smart_radio_desc">Generate a random playlist from NAS, local and network sources based on your taste</string>
+    <string name="home_smart_radio_start">Start Listening</string>
+    <string name="home_smart_radio_next">Next Batch</string>
 
     <!-- F2-5 Crossfade -->
     <string name="settings_crossfade">Crossfade</string>

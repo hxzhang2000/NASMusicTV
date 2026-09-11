@@ -24,7 +24,13 @@ import kotlin.random.Random
 class SmartRadioManager(
     private val backendRegistry: BackendRegistry,
     private val scope: CoroutineScope,
-    private val playCountsProvider: suspend () -> Map<String, Int> = { emptyMap() }
+    private val playCountsProvider: suspend () -> Map<String, Int> = { emptyMap() },
+    /** F2-3 多源化：Meting 歌单采样 provider（null = 无网络源） */
+    private val networkPlaylistProvider: (suspend (playlistId: String) -> List<Song>)? = null,
+    /** F2-3 多源化：网络歌单 id 列表（与 provider 配套） */
+    private val networkPlaylistIds: List<String> = emptyList(),
+    /** F2-3 多源化：本地歌曲 provider（含下载歌曲） */
+    private val localSongsProvider: (suspend () -> List<Song>)? = null
 ) {
     sealed interface State {
         data object Idle : State
@@ -42,6 +48,45 @@ class SmartRadioManager(
     private var generateJob: Job? = null
     /** 曲库缓存（一次会话内复用；stop() 时清空） */
     private var cachedLibrary: List<Song>? = null
+
+    /**
+     * F2-3 多源化：无种子启动（首页入口）——偏好加权随机（play_counts），不依赖当前播放。
+     */
+    fun startFromScratch(
+        onBatchReady: (List<Song>, SeedContext) -> Unit
+    ) {
+        // 用播放次数最多的歌做种子（无历史时用池内第一首）——保证打分有方向
+        generateJob?.cancel()
+        _state.value = State.Generating
+        generateJob = scope.launch {
+            try {
+                val library = loadLibrary(null)
+                if (library.isEmpty()) {
+                    _state.value = State.Exhausted
+                    return@launch
+                }
+                val counts = playCountsProvider()
+                val seed = library.maxByOrNull { counts[it.id] ?: 0 } ?: library.first()
+                currentSeed = seed
+                playedIds.clear()
+                val batch = RadioSongScorer.generateBatch(library, seed, counts, playedIds, BATCH_SIZE)
+                if (batch.isEmpty()) {
+                    playedIds.clear()
+                    val retry = RadioSongScorer.generateBatch(library, seed, counts, playedIds, BATCH_SIZE)
+                    if (retry.isEmpty()) {
+                        _state.value = State.Exhausted
+                        return@launch
+                    }
+                    emitBatch(retry, seed, onBatchReady)
+                } else {
+                    emitBatch(batch, seed, onBatchReady)
+                }
+            } catch (e: Exception) {
+                AppLog.e(TAG, "startFromScratch failed", e)
+                _state.value = State.Exhausted
+            }
+        }
+    }
 
     /**
      * 从种子歌曲启动电台。生成第一批并回调 [onBatchReady] 入队播放。
@@ -118,18 +163,20 @@ class SmartRadioManager(
      * - seed 有 genre 且曲库大：getSongsByGenre 先筛（流派内打分）
      * - 否则全量分页拉取（上限 [LIBRARY_HARD_CAP] 防大库拖垮）
      */
-    private suspend fun loadLibrary(seed: Song): List<Song> {
+    private suspend fun loadLibrary(seed: Song?): List<Song> {
         cachedLibrary?.let { return it }
-        val adapter = backendRegistry.getAdapter() ?: return emptyList()
+        val adapter = backendRegistry.getAdapter()
 
-        val genreFiltered = seed.genre?.takeIf { it.isNotBlank() }?.let { g ->
-            try { adapter.getSongsByGenre(g) } catch (e: Exception) {
-                AppLog.w(TAG, "getSongsByGenre failed: ${e.message}"); emptyList()
+        val genreFiltered = if (adapter != null && seed != null) {
+            seed.genre?.takeIf { it.isNotBlank() }?.let { g ->
+                try { adapter.getSongsByGenre(g) } catch (e: Exception) {
+                    AppLog.w(TAG, "getSongsByGenre failed: ${e.message}"); emptyList()
+                }
             }
-        }
-        val library = if (genreFiltered != null && genreFiltered.size >= MIN_GENRE_POOL) {
+        } else null
+        val nasLibrary: List<Song> = if (genreFiltered != null && genreFiltered.size >= MIN_GENRE_POOL) {
             genreFiltered
-        } else {
+        } else if (adapter != null) {
             // 全量拉取（分页，硬上限）
             val all = mutableListOf<Song>()
             var offset = 0
@@ -142,9 +189,37 @@ class SmartRadioManager(
                 offset += page.size
             }
             all.toList()
+        } else emptyList()
+
+        // F2-3 多源化：聚合 NAS + 本地歌曲 + Meting 网络歌单采样
+        val localSongs = try { localSongsProvider?.invoke() ?: emptyList() } catch (e: Exception) {
+            AppLog.w(TAG, "localSongs failed: ${e.message}"); emptyList()
         }
-        cachedLibrary = library
-        return library
+        val networkSongs = loadNetworkSamples()
+        val combined = (nasLibrary + localSongs + networkSongs).distinctBy { it.id }
+        AppLog.d(TAG, "loadLibrary multi-source: nas=${nasLibrary.size} local=${localSongs.size} net=${networkSongs.size} combined=${combined.size}")
+        cachedLibrary = combined
+        return combined
+    }
+
+    /** F2-3 多源化：Meting 歌单采样（随机抽几个歌单、每单抽 N 首） */
+    private suspend fun loadNetworkSamples(): List<Song> {
+        val provider = networkPlaylistProvider ?: return emptyList()
+        if (networkPlaylistIds.isEmpty()) return emptyList()
+        val result = mutableListOf<Song>()
+        for (pid in networkPlaylistIds.shuffled().take(NETWORK_PLAYLIST_SAMPLE_COUNT)) {
+            try {
+                val songs = provider(pid)
+                if (songs.isNotEmpty()) {
+                    result.addAll(songs.shuffled().take(NETWORK_PLAYLIST_SONG_CAP).map {
+                        it.copy(isNetworkSong = true, networkSource = it.networkSource ?: "meting")
+                    })
+                }
+            } catch (e: Exception) {
+                AppLog.w(TAG, "network playlist " + pid + " failed: ${e.message}")
+            }
+        }
+        return result
     }
 
     /** 种子上下文（回调方播放批次时定位种子信息） */
@@ -157,5 +232,9 @@ class SmartRadioManager(
         const val LIBRARY_HARD_CAP = 5000
         /** 流派池最小规模（低于此规模回退全量，流派池太窄电台会单调） */
         const val MIN_GENRE_POOL = 50
+        /** F2-3 多源化：网络歌单采样数 */
+        const val NETWORK_PLAYLIST_SAMPLE_COUNT = 3
+        /** F2-3 多源化：每个网络歌单抽取歌曲上限 */
+        const val NETWORK_PLAYLIST_SONG_CAP = 30
     }
 }
