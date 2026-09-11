@@ -1,0 +1,239 @@
+package com.nasmusic.tv.ui.components.branches
+
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.tv.material3.ExperimentalTvMaterial3Api
+import com.nasmusic.tv.data.model.Screen
+import com.nasmusic.tv.data.model.Song
+import com.nasmusic.tv.data.model.ServerConfig
+import com.nasmusic.tv.ui.viewmodel.MainViewModel
+import com.nasmusic.tv.data.model.*
+import com.nasmusic.tv.ui.screens.*
+import com.nasmusic.tv.ui.screens.library.*
+import com.nasmusic.tv.ui.screens.settings.*
+import com.nasmusic.tv.ui.screens.netdisk.*
+import com.nasmusic.tv.ui.screens.stats.*
+import com.nasmusic.tv.ui.viewmodel.*
+import kotlinx.coroutines.launch
+
+/**
+ * Settings 分支提取自 AppRoot（Method too large 根治：分支下沉 branches/）。
+ * 分支体逐行搬迁，外层共享状态经参数注入。
+ */
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+internal fun SettingsBranch(
+    viewModel: MainViewModel,
+    settings: com.nasmusic.tv.data.model.AppSettings,
+    isLoading: Boolean,
+    isConnected: Boolean,
+    serverDisplayName: String,
+    serverConfig: ServerConfig,
+    coverFilterEnabled: Boolean,
+    coverFilterBlurRadius: Float,
+    coverFilterDarkOverlay: Float,
+    context: android.content.Context,
+    coroutineScope: kotlinx.coroutines.CoroutineScope,
+    onConnect: (ServerConfig) -> Unit
+) {
+                    val backendApiVersion by viewModel.serverVM.backendApiVersion.collectAsState(initial = "Unknown")
+                    val apiVersions by viewModel.serverVM.apiVersions.collectAsState(initial = emptyList())
+                    // F2-5：crossfade 设置状态
+                    val crossfadeEnabled by viewModel.prefs.player.crossfadeEnabled.collectAsState(initial = false)
+                    val crossfadeDurationSec by viewModel.prefs.player.crossfadeDurationSec.collectAsState(initial = 4)
+                    // F2-6：音质档位
+                    val qualityTier by viewModel.prefs.player.qualityTier.collectAsState(initial = 0)
+                    val weatherApiKey by viewModel.prefs.weather.weatherApiKey.collectAsState(initial = "")
+                    val baiduConnectionState by viewModel.netVM.baiduConnectionState.collectAsState(initial = com.nasmusic.tv.ui.viewmodel.NetworkMusicViewModel.BaiduConnectionState.Off)
+                    val baiduDeviceCode by viewModel.baiduDeviceCode.collectAsState(initial = null)
+                    val baiduIndexScanned by viewModel.baiduIndexScanned.collectAsState(initial = 0)
+                    val baiduIndexScanning by viewModel.baiduIndexScanning.collectAsState(initial = false)
+                    val baiduApicExtracting by viewModel.baiduApicExtracting.collectAsState(initial = false)
+                    val baiduApicExtracted by viewModel.baiduApicExtracted.collectAsState(initial = 0)
+                    val baiduApicTotal by viewModel.baiduApicTotal.collectAsState(initial = 0)
+                    var showBackupTransferDialog by remember { mutableStateOf(false) }
+                    var showModelTransferDialog by remember { mutableStateOf(false) }
+                    // 修复（H-3）：组合内 runBlocking 同步读改为 Flow 订阅
+                    val baiduConfig by viewModel.prefs.baidu.baiduConfigFlow.collectAsState(
+                        initial = com.nasmusic.tv.data.model.CloudDriveConfig(com.nasmusic.tv.data.model.CloudDriveType.BAIDU)
+                    )
+                    val jamendoClientId by viewModel.prefs.network.jamendoClientIdFlow.collectAsState(initial = "")
+                    val separationMode by viewModel.vocalVM.separationMode.collectAsState()
+                    val modelDownloaded by viewModel.downloadVM.modelDownloaded.collectAsState()
+                    // === F2-2b 睡眠定时器（常驻按钮状态，本页内收集） ===
+                    val sleepTimerSt by viewModel.playerVM.sleepTimerState.collectAsState()
+                    val modelDownloading by viewModel.downloadVM.modelDownloading.collectAsState()
+                    val modelDownloadProgress by viewModel.downloadVM.modelDownloadProgress.collectAsState()
+                    val modelDownloadedMB by viewModel.downloadVM.modelDownloadedMB.collectAsState()
+                    val modelTotalMB by viewModel.downloadVM.modelTotalMB.collectAsState()
+                    val modelSizeMB by viewModel.downloadVM.modelSizeMB.collectAsState()
+                    val modelDownloadError by viewModel.downloadVM.modelDownloadError.collectAsState()
+                    val modelPath by viewModel.downloadVM.modelPath.collectAsState()
+                    // 进入设置页时刷新模型状态（检查文件是否已下载）和下载统计
+                    LaunchedEffect(Unit) {
+                        viewModel.downloadVM.refreshModelStatus()
+                        viewModel.downloadVM.refreshDownloadStats()
+                    }
+                    SettingsScreen(
+                        settings = settings,
+                        onToggleDarkTheme = { viewModel.updateDarkTheme(it) },
+                        onToggleAnimations = { viewModel.updateAnimationsEnabled(it) },
+                        onToggleAutoPlayNext = { viewModel.updateAutoPlayNext(it) },
+                        onChangePlayMode = { viewModel.updateDefaultPlayMode(it) },
+                        onToggleCacheLyrics = { viewModel.updateCacheLyrics(it) },
+                        onToggleCacheCover = { viewModel.updateCacheCover(it) },
+                        onChangeLyricsOffset = { viewModel.updateLyricsOffset(it) },
+                        onClearLyricsCache = { viewModel.clearLyricsCache() },
+                        onClearCoverCache = { viewModel.clearCoverCache() },
+                        onClearMvCache = { viewModel.clearMvPersistentCache() },
+                        onClearAccompanimentCache = { viewModel.clearAccompanimentCache() },
+                        onOpenEqualizer = { viewModel.navVM.navigateTo(Screen.Equalizer) },
+                        onOpenPlayStats = { viewModel.navVM.navigateTo(Screen.PlayStats) },
+                        // F2-5：crossfade 设置接线
+                        crossfadeEnabled = crossfadeEnabled,
+                        crossfadeDurationSec = crossfadeDurationSec,
+                        onToggleCrossfade = { viewModel.setCrossfadeEnabled(it) },
+                        onChangeCrossfadeDuration = { viewModel.setCrossfadeDurationSec(it) },
+                        // F2-6：音质档位接线
+                        qualityTier = qualityTier,
+                        onChangeQualityTier = { viewModel.setQualityTier(it) },
+                        onChangeMetingApiBaseUrl = { viewModel.updateMetingApiBaseUrl(it) },
+                        mvApiBaseUrl = settings.mvApiBaseUrl,
+                        onChangeMvApiBaseUrl = { viewModel.updateMvApiBaseUrl(it) },
+                        lyricsKugouBaseUrl = settings.lyricsKugouBaseUrl,
+                        onChangeLyricsKugouBaseUrl = { viewModel.updateLyricsKugouBaseUrl(it) },
+                        lyricsNeteaseBaseUrl = settings.lyricsNeteaseBaseUrl,
+                        onChangeLyricsNeteaseBaseUrl = { viewModel.updateLyricsNeteaseBaseUrl(it) },
+                        // Jamendo（CC 独立音乐）
+                        jamendoClientId = jamendoClientId,
+                        onChangeJamendoClientId = { viewModel.updateJamendoClientId(it) },
+                        weatherApiKey = weatherApiKey,
+                        onChangeWeatherApiKey = { viewModel.updateWeatherApiKey(it) },
+                        spectrumEnabled = settings.spectrumEnabled,
+                        onToggleSpectrum = { viewModel.updateSpectrumEnabled(it) },
+                        visualizerTheme = settings.visualizerTheme,
+                        onChangeVisualizerTheme = { viewModel.updateVisualizerTheme(it) },
+                        fontAdjustment = settings.fontAdjustment,
+                        onChangeFontAdjustment = { viewModel.updateFontAdjustment(it) },
+                        // 语言设置
+                        language = settings.language,
+                        onChangeLanguage = { lang ->
+                            coroutineScope.launch {
+                                viewModel.updateLanguage(lang)
+                                // 用 finish + 新 Intent 重启，避免 recreate() 导致双 DataStore 冲突。
+                                // 不调用 Runtime.exit(0) —— 进程自然回收，避免中断 PlaybackService 播放。
+                                val activity = context as? android.app.Activity
+                                if (activity != null) {
+                                    val pkg = activity.packageName
+                                    val mgr = activity.packageManager
+                                    val intent = mgr.getLaunchIntentForPackage(pkg)
+                                    intent?.addFlags(android.content.Intent.FLAG_ACTIVITY_CLEAR_TASK or android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                                    if (intent != null) activity.startActivity(intent)
+                                    activity.finish()
+                                }
+                            }
+                        },
+                        // 数据管理（备份/恢复）
+                        backupFiles = viewModel.backupVM.backupFiles.collectAsState(initial = emptyList()).value,
+                        backupMessage = viewModel.backupVM.backupMessage.collectAsState(initial = null).value,
+                        onRefreshBackupFiles = { viewModel.backupVM.refreshBackupFiles() },
+                        onExportBackup = { viewModel.backupVM.exportBackup() },
+                        onImportBackup = { uri -> viewModel.backupVM.importBackup(uri) },
+                        onDeleteBackup = { uri -> viewModel.backupVM.deleteBackup(uri) },
+                        onConsumeBackupMessage = { viewModel.backupVM.consumeBackupMessage() },
+                        onScanTransferBackup = { showBackupTransferDialog = true },
+                        // 百度网盘设置
+                        baiduEnabled = baiduConfig.enabled,
+                        baiduLoggedIn = baiduConnectionState is com.nasmusic.tv.ui.viewmodel.NetworkMusicViewModel.BaiduConnectionState.LoggedIn
+                            || baiduConnectionState is com.nasmusic.tv.ui.viewmodel.NetworkMusicViewModel.BaiduConnectionState.DirMissing,
+                        baiduConnecting = baiduConnectionState is com.nasmusic.tv.ui.viewmodel.NetworkMusicViewModel.BaiduConnectionState.Connecting,
+                        baiduConnectionState = baiduConnectionState,
+                        baiduDeviceCode = baiduDeviceCode,
+                        baiduMusicRootDir = baiduConfig.musicRootDir,
+                        baiduMvDir = baiduConfig.mvDir,
+                        baiduIndexScanned = baiduIndexScanned,
+                        baiduIndexScanning = baiduIndexScanning,
+                        baiduApicExtracting = baiduApicExtracting,
+                        baiduApicExtracted = baiduApicExtracted,
+                        baiduApicTotal = baiduApicTotal,
+                        onToggleBaiduEnabled = { viewModel.netVM.setBaiduEnabled(it) },
+                        onStartBaiduDeviceCode = { viewModel.netVM.startBaiduDeviceCodeFlow() },
+                        onCancelBaiduDeviceCode = { viewModel.netVM.cancelBaiduDeviceCode() },
+                        onLogoutBaidu = { viewModel.netVM.logoutBaidu() },
+                        onChangeBaiduMusicRootDir = { viewModel.netVM.setBaiduMusicRootDir(it) },
+                        onChangeBaiduMvDir = { viewModel.netVM.setBaiduMvDir(it) },
+                        onListBaiduDirs = { viewModel.listBaiduDirs(it) },
+                        onRebuildBaiduIndex = { viewModel.netVM.rebuildBaiduIndex() },
+                        onNavigateToServerConnect = { viewModel.navVM.navigateTo(Screen.ServerConnect) },
+                        // 服务器连接设置
+                        serverConfig = serverConfig,
+                        isConnected = isConnected,
+                        serverDisplayName = serverDisplayName,
+                        backendApiVersion = backendApiVersion,
+                        apiVersions = apiVersions,
+                        isConnecting = isLoading,
+                        onConnect = onConnect,
+                        onDisconnect = { viewModel.serverVM.disconnect() },
+                        // 封面滤镜设置
+                    coverFilterEnabled = coverFilterEnabled,
+                    coverFilterBlurRadius = coverFilterBlurRadius,
+                    coverFilterDarkOverlay = coverFilterDarkOverlay,
+                    onToggleCoverFilter = { viewModel.updateCoverFilterEnabled(it) },
+                    onChangeCoverBlurRadius = { viewModel.updateCoverFilterBlurRadius(it) },
+                    onChangeCoverDarkOverlay = { viewModel.updateCoverFilterDarkOverlay(it) },
+                    // 分离模式设置
+                    separationMode = separationMode,
+                    onChangeSeparationMode = { viewModel.vocalVM.setSeparationMode(it) },
+                    // 高质量分离模型下载状态
+                    modelDownloaded = modelDownloaded,
+                    modelDownloading = modelDownloading,
+                    modelDownloadProgress = modelDownloadProgress,
+                    modelDownloadedMB = modelDownloadedMB,
+                    modelTotalMB = modelTotalMB,
+                    modelSizeMB = modelSizeMB,
+                    modelDownloadError = modelDownloadError,
+                    modelPath = modelPath,
+                    onDownloadModel = { viewModel.downloadVM.downloadModel() },
+                    onDeleteModel = { viewModel.deleteModel() },
+                    onRefreshModelStatus = { viewModel.downloadVM.refreshModelStatus() },
+                    onScanTransferModel = { showModelTransferDialog = true },
+                    // 歌曲离线下载设置
+                    downloadEnabled = settings.downloadEnabled,
+                    autoDownloadOnPlay = settings.autoDownloadOnPlay,
+                    autoDownloadLimit = settings.autoDownloadLimit,
+                    downloadLocation = settings.downloadLocation,
+                    onToggleDownloadEnabled = { viewModel.updateDownloadEnabled(it) },
+                    onToggleAutoDownloadOnPlay = { viewModel.updateAutoDownloadOnPlay(it) },
+                    onChangeAutoDownloadLimit = { viewModel.updateAutoDownloadLimit(it) },
+                    onChangeDownloadLocation = { viewModel.updateDownloadLocation(it) },
+                    onClearAllDownloads = { viewModel.downloadVM.clearAllDownloads() },
+                    downloadStats = viewModel.downloadVM.downloadStats.collectAsState().value,
+                    // 导出到外接设备
+                    exportState = viewModel.exportState.collectAsState().value,
+                    onExportToDevice = { viewModel.showExportDeviceDialog() },
+                    onCancelExport = { viewModel.cancelExport() },
+                    onResetExportState = { viewModel.resetExportState() }
+                    )
+                    // 扫码传输备份弹窗
+                    if (showBackupTransferDialog) {
+                        BackupTransferDialog(
+                            onRestore = { json -> viewModel.backupVM.restoreBackupFromJsonBlocking(json) },
+                            onBackupChanged = { viewModel.backupVM.refreshBackupFiles() },
+                            onDismiss = { showBackupTransferDialog = false }
+                        )
+                    }
+                    // 扫码传输模型弹窗
+                    if (showModelTransferDialog) {
+                        ModelTransferDialog(
+                            modelPath = modelPath,
+                            modelSizeMB = modelSizeMB,
+                            onModelUploaded = { viewModel.downloadVM.refreshModelStatus() },
+                            onDismiss = { showModelTransferDialog = false }
+                        )
+                    }
+}
