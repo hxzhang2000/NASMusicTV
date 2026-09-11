@@ -156,6 +156,8 @@ fun NowPlayingScreen(
     modifier: Modifier = Modifier
 ) {
     var showInfoPanel by remember { mutableStateOf(false) }
+    // F2-2b：睡眠定时弹窗显隐（按钮在歌词来源行 A+ 右侧）
+    var showSleepTimerDialog by remember { mutableStateOf(false) }
     val playPauseFocusRequester = remember { FocusRequester() }
 
     // ── 全屏 KARAOKE 页面 ──
@@ -264,44 +266,6 @@ fun NowPlayingScreen(
         Column(
             modifier = Modifier.fillMaxSize().padding(start = 24.dp, end = 24.dp, top = 40.dp, bottom = 24.dp)
         ) {
-            // F2-2b：睡眠定时器常驻按钮（未启动显示"-"，运行中显示剩余分钟，点击弹档位）
-            var showSleepTimerDialog by remember { mutableStateOf(false) }
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.End
-            ) {
-                com.nasmusic.tv.ui.components.FocusableSurface(
-                    onClick = { showSleepTimerDialog = true },
-                    shape = androidx.compose.foundation.shape.RoundedCornerShape(8.dp)
-                ) {
-                    Text(
-                        text = when (val st = sleepTimerState) {
-                            is com.nasmusic.tv.player.SleepTimerController.State.Running ->
-                                stringResource(
-                                    R.string.np_sleep_timer_on,
-                                    ((st.endsAtMs - System.currentTimeMillis() + 59_999) / 60_000)
-                                        .toInt().coerceAtLeast(1)
-                                )
-                            else -> stringResource(R.string.np_sleep_timer_off)
-                        },
-                        color = if (sleepTimerState is com.nasmusic.tv.player.SleepTimerController.State.Running)
-                            NasMusicColors.Warning else NasMusicColors.TextSecondary,
-                        fontSize = FontSize.caption(),
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
-                    )
-                }
-            }
-            if (showSleepTimerDialog) {
-                SleepTimerPickerDialog(
-                    isRunning = sleepTimerState is com.nasmusic.tv.player.SleepTimerController.State.Running,
-                    onPick = { min ->
-                        showSleepTimerDialog = false
-                        if (min > 0) onSleepTimerStart(min) else onSleepTimerCancel()
-                    },
-                    onDismiss = { showSleepTimerDialog = false }
-                )
-            }
-            Spacer(modifier = Modifier.height(8.dp))
             // 中部：专辑封面(1/3) + 歌词(2/3)
             Row(
                 modifier = Modifier
@@ -430,6 +394,37 @@ fun NowPlayingScreen(
                                 val next = (fontScaleIdx + 1) % scales.size
                                 onLyricsFontScaleChange(scales[next])
                             }
+                        )
+                        Spacer(modifier = Modifier.width(12.dp))
+                        // F2-2b：睡眠定时按钮（A+ 右侧同排；未启动"定时 -"、运行中橙色剩余分钟）
+                        SourceTag(
+                            label = when (val st = sleepTimerState) {
+                                is com.nasmusic.tv.player.SleepTimerController.State.Running ->
+                                    stringResource(
+                                        R.string.np_sleep_timer_on,
+                                        ((st.endsAtMs - System.currentTimeMillis() + 59_999) / 60_000)
+                                            .toInt().coerceAtLeast(1)
+                                    )
+                                else -> stringResource(R.string.np_sleep_timer_off)
+                            },
+                            available = true,
+                            selected = sleepTimerState is com.nasmusic.tv.player.SleepTimerController.State.Running,
+                            onClick = { showSleepTimerDialog = true }
+                        )
+                    }
+
+                    // F2-2b：睡眠定时弹窗（输入框 -/+ 步进 + 15/30 快捷档 + 取消）
+                    if (showSleepTimerDialog) {
+                        SleepTimerPickerDialog(
+                            onStart = { min ->
+                                showSleepTimerDialog = false
+                                onSleepTimerStart(min)
+                            },
+                            onCancel = {
+                                showSleepTimerDialog = false
+                                onSleepTimerCancel()
+                            },
+                            onDismiss = { showSleepTimerDialog = false }
                         )
                     }
 
@@ -789,21 +784,22 @@ private fun SourceTag(
 }
 
 /**
- * F2-2b：睡眠定时档位选择弹窗（TV D-Pad / 手机点选通用）。
- * 档位与通知栏 SLEEP_TIMER_PRESETS 一致：15/30/60/90 分钟 + 取消。
+ * F2-2b：睡眠定时设置弹窗（紧凑布局，TV D-Pad / 手机点选通用）。
+ * 标题"定时关闭"；中间 - [N 分钟] + 步进；下方 15 / 30 / OK / 取消 一行四个紧凑按钮。
  */
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 private fun SleepTimerPickerDialog(
-    isRunning: Boolean,
-    onPick: (Int) -> Unit,
+    onStart: (Int) -> Unit,
+    onCancel: () -> Unit,
     onDismiss: () -> Unit
 ) {
+    var minutes by remember { mutableStateOf(30) }
     androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss) {
         Column(
             modifier = Modifier
                 .background(NasMusicColors.Surface, androidx.compose.foundation.shape.RoundedCornerShape(12.dp))
-                .padding(24.dp),
+                .padding(horizontal = 20.dp, vertical = 16.dp),
             horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally
         ) {
             Text(
@@ -812,33 +808,87 @@ private fun SleepTimerPickerDialog(
                 fontSize = FontSize.subtitle(),
                 fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
             )
-            Spacer(modifier = Modifier.height(16.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                listOf(15, 30, 60, 90).forEach { min ->
+            Spacer(modifier = Modifier.height(12.dp))
+            // - / N 分钟 / +
+            Row(
+                verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                com.nasmusic.tv.ui.components.FocusableSurface(
+                    onClick = { if (minutes > 5) minutes -= 5 },
+                    shape = androidx.compose.foundation.shape.RoundedCornerShape(8.dp)
+                ) {
+                    Text(
+                        text = "-",
+                        color = NasMusicColors.TextPrimary,
+                        fontSize = FontSize.title(),
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 4.dp)
+                    )
+                }
+                Text(
+                    text = stringResource(R.string.np_sleep_timer_min, minutes),
+                    color = NasMusicColors.Primary,
+                    fontSize = FontSize.subtitle(),
+                    fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                    modifier = Modifier.padding(horizontal = 4.dp)
+                )
+                com.nasmusic.tv.ui.components.FocusableSurface(
+                    onClick = { if (minutes < 300) minutes += 5 },
+                    shape = androidx.compose.foundation.shape.RoundedCornerShape(8.dp)
+                ) {
+                    Text(
+                        text = "+",
+                        color = NasMusicColors.TextPrimary,
+                        fontSize = FontSize.title(),
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 4.dp)
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.height(12.dp))
+            // 快捷档：15 / 30
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                listOf(15, 30).forEach { min ->
                     com.nasmusic.tv.ui.components.FocusableSurface(
-                        onClick = { onPick(min) },
+                        onClick = {
+                            minutes = min
+                            onStart(min)
+                        },
                         shape = androidx.compose.foundation.shape.RoundedCornerShape(8.dp)
                     ) {
                         Text(
-                            text = stringResource(R.string.np_sleep_timer_on, min),
+                            text = stringResource(R.string.np_sleep_timer_min, min),
                             color = NasMusicColors.TextPrimary,
                             fontSize = FontSize.body(),
-                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)
                         )
                     }
                 }
             }
-            if (isRunning) {
-                Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(10.dp))
+            // 确认 / 取消定时
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 com.nasmusic.tv.ui.components.FocusableSurface(
-                    onClick = { onPick(0) },
+                    onClick = { onStart(minutes) },
+                    shape = androidx.compose.foundation.shape.RoundedCornerShape(8.dp)
+                ) {
+                    Text(
+                        text = "OK",
+                        color = NasMusicColors.Primary,
+                        fontSize = FontSize.body(),
+                        fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
+                    )
+                }
+                // 关闭定时（常驻，未运行时点击为 no-op 安全）
+                com.nasmusic.tv.ui.components.FocusableSurface(
+                    onClick = onCancel,
                     shape = androidx.compose.foundation.shape.RoundedCornerShape(8.dp)
                 ) {
                     Text(
                         text = stringResource(R.string.np_sleep_timer_cancel),
                         color = NasMusicColors.Warning,
                         fontSize = FontSize.body(),
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)
                     )
                 }
             }

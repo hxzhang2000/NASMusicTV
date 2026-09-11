@@ -947,6 +947,7 @@
     <string name="np_sleep_timer_off">Timer -</string>
     <string name="np_sleep_timer_on">Timer %1$d min</string>
     <string name="np_sleep_timer_cancel">Cancel timer</string>
+    <string name="np_sleep_timer_min">%1$d min</string>
 
     <!-- F2-3 Smart Radio -->
     <string name="smart_radio_button">Smart Radio</string>
