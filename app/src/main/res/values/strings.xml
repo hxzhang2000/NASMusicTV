@@ -953,6 +953,10 @@
     <string name="notif_sleep_timer_start">定时关闭</string>
     <string name="notif_sleep_timer_remaining">剩余 %1$d 分钟</string>
     <string name="notif_next_up">下一首：%1$s</string>
+    <!-- F2-2b：播放页常驻睡眠定时按钮 -->
+    <string name="np_sleep_timer_off">定时 -</string>
+    <string name="np_sleep_timer_on">定时 %1$d 分钟</string>
+    <string name="np_sleep_timer_cancel">取消定时</string>
 
     <!-- F2-3 智能电台 -->
     <string name="smart_radio_button">智能电台</string>

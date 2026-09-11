@@ -944,6 +944,9 @@
     <string name="notif_sleep_timer_start">Sleep Timer</string>
     <string name="notif_sleep_timer_remaining">%1$d min left</string>
     <string name="notif_next_up">Next: %1$s</string>
+    <string name="np_sleep_timer_off">Timer -</string>
+    <string name="np_sleep_timer_on">Timer %1$d min</string>
+    <string name="np_sleep_timer_cancel">Cancel timer</string>
 
     <!-- F2-3 Smart Radio -->
     <string name="smart_radio_button">Smart Radio</string>

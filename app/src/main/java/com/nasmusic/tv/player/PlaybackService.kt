@@ -7,6 +7,7 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
+import android.os.Bundle
 import android.view.KeyEvent
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
@@ -21,9 +22,15 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.audio.AudioSink
 import androidx.media3.exoplayer.audio.DefaultAudioSink
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import androidx.media3.session.CommandButton
 import androidx.media3.session.LibraryResult
 import androidx.media3.session.MediaLibraryService
+import androidx.media3.session.MediaNotification
 import androidx.media3.session.MediaSession
+import androidx.media3.session.SessionCommand
+import androidx.media3.session.SessionCommands
+import androidx.media3.session.SessionResult
+import com.google.common.util.concurrent.ListenableFuture
 import coil.Coil
 import coil.request.ImageRequest
 import com.google.common.collect.ImmutableList
@@ -63,28 +70,69 @@ class PlaybackService : MediaLibraryService() {
     private val controlReceiver = object : android.content.BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
             when (intent.action) {
-                ACTION_TOGGLE_PLAY_MODE -> {
-                    AppLog.d("PlaybackService", "control: toggle play mode")
-                    (application as NasMusicApp).playModeToggleHandler?.invoke()
-                    // 强制刷新（模式图标变化）
-                    lastNotificationState = null
-                    updateNotification()
-                }
-                ACTION_SLEEP_TIMER_CYCLE -> {
-                    val pm = (application as NasMusicApp).playerManager
-                    if (pm.sleepTimer.isRunning()) {
-                        pm.sleepTimer.cancel()
-                        AppLog.d("PlaybackService", "control: sleep timer cancelled")
-                    } else {
-                        val minutes = SLEEP_TIMER_PRESETS.first()
-                        pm.sleepTimer.start(minutes)
-                        AppLog.d("PlaybackService", "control: sleep timer started ${minutes}min")
-                    }
-                    lastNotificationState = null
-                    updateNotification()
-                    restartSleepMinuteTick()
-                }
+                ACTION_TOGGLE_PLAY_MODE -> handleTogglePlayMode()
+                ACTION_SLEEP_TIMER_CYCLE -> handleSleepTimerCycle()
             }
+        }
+    }
+
+    /** F2-2b：切换播放模式（通知按钮 / 系统媒体卡片自定义按钮共用） */
+    private fun handleTogglePlayMode() {
+        AppLog.d("PlaybackService", "control: toggle play mode")
+        (application as NasMusicApp).playModeToggleHandler?.invoke()
+        // 强制刷新（模式图标变化）
+        lastNotificationState = null
+        updateNotification()
+    }
+
+    /** F2-2b：睡眠定时循环切换（未启动→首档位，运行中→取消） */
+    private fun handleSleepTimerCycle() {
+        val pm = (application as NasMusicApp).playerManager
+        if (pm.sleepTimer.isRunning()) {
+            pm.sleepTimer.cancel()
+            AppLog.d("PlaybackService", "control: sleep timer cancelled")
+        } else {
+            val minutes = SLEEP_TIMER_PRESETS.first()
+            pm.sleepTimer.start(minutes)
+            AppLog.d("PlaybackService", "control: sleep timer started ${minutes}min")
+        }
+        lastNotificationState = null
+        updateNotification()
+        restartSleepMinuteTick()
+    }
+
+    /**
+     * F2-2b：系统媒体卡片（Android 13+ 锁屏/超级岛/下拉媒体控制）自定义按钮布局。
+     * 系统媒体控制按钮来自 MediaSession custom layout，而非通知 addAction——
+     * 必须通过 SessionCommand + onCustomCommand 供系统 UI 调用。
+     */
+    private fun buildCustomLayout(): ImmutableList<CommandButton> {
+        val pm = (application as NasMusicApp).playerManager
+        val sleepLabel = if (pm.sleepTimer.isRunning()) {
+            getString(R.string.notif_sleep_timer_remaining, pm.sleepTimer.remainingMinutes())
+        } else {
+            getString(R.string.notif_sleep_timer_start)
+        }
+        return ImmutableList.of(
+            CommandButton.Builder()
+                .setDisplayName(getString(R.string.notif_play_mode))
+                .setSessionCommand(SessionCommand(ACTION_TOGGLE_PLAY_MODE, Bundle.EMPTY))
+                .setIconResId(android.R.drawable.ic_menu_rotate)
+                .build(),
+            CommandButton.Builder()
+                .setDisplayName(sleepLabel)
+                .setSessionCommand(SessionCommand(ACTION_SLEEP_TIMER_CYCLE, Bundle.EMPTY))
+                .setIconResId(android.R.drawable.ic_lock_idle_alarm)
+                .build()
+        )
+    }
+
+    /** F2-2b：刷新通知时同步刷新系统媒体卡片的睡眠定时按钮文案 */
+    private fun refreshSessionCustomLayout() {
+        try {
+            mediaLibrarySession?.setCustomLayout(buildCustomLayout())
+        } catch (e: Exception) {
+            AppLog.w("PlaybackService", "setCustomLayout failed", e)
         }
     }
 
@@ -219,6 +267,33 @@ class PlaybackService : MediaLibraryService() {
         mediaLibrarySession = MediaLibrarySession.Builder(
             this, player,
             object : MediaLibrarySession.Callback {
+                /** F2-2b：自定义按钮（播放模式/睡眠定时）经 SessionCommand 下发 */
+                override fun onConnect(
+                    session: MediaSession,
+                    controller: MediaSession.ControllerInfo
+                ): MediaSession.ConnectionResult {
+                    val sessionCommands = SessionCommands.Builder()
+                        .add(SessionCommand(ACTION_TOGGLE_PLAY_MODE, Bundle.EMPTY))
+                        .add(SessionCommand(ACTION_SLEEP_TIMER_CYCLE, Bundle.EMPTY))
+                        .build()
+                    return MediaSession.ConnectionResult.AcceptedResultBuilder(session)
+                        .setAvailableSessionCommands(sessionCommands)
+                        .build()
+                }
+
+                override fun onCustomCommand(
+                    session: MediaSession,
+                    controller: MediaSession.ControllerInfo,
+                    customCommand: SessionCommand,
+                    args: Bundle
+                ): ListenableFuture<SessionResult> {
+                    when (customCommand.customAction) {
+                        ACTION_TOGGLE_PLAY_MODE -> handleTogglePlayMode()
+                        ACTION_SLEEP_TIMER_CYCLE -> handleSleepTimerCycle()
+                    }
+                    return Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))
+                }
+
                 override fun onGetLibraryRoot(
                     session: MediaLibrarySession,
                     controller: MediaSession.ControllerInfo,
@@ -268,6 +343,40 @@ class PlaybackService : MediaLibraryService() {
             .setSessionActivity(pendingIntent)
             .setBitmapLoader(CoilBitmapLoader(Coil.imageLoader(this), this))
             .build()
+
+        // F2-2b：系统媒体卡片（锁屏/超级岛/下拉媒体控制）自定义按钮布局
+        mediaLibrarySession?.setCustomLayout(buildCustomLayout())
+
+        // F2-2b：接管 MediaNotification Provider——消除 media3 默认通知与自建通知（同为 ID=1）
+        // 互相覆盖导致的"按钮不刷新"问题；统一由本服务 buildNotification 渲染 5 按钮。
+        setMediaNotificationProvider(object : MediaNotification.Provider {
+            override fun createNotification(
+                session: MediaSession,
+                customLayout: ImmutableList<CommandButton>,
+                actionFactory: MediaNotification.ActionFactory,
+                onNotificationChangedCallback: MediaNotification.Provider.Callback
+            ): MediaNotification {
+                val isPlaying = session.player.isPlaying
+                return MediaNotification(
+                    NOTIFICATION_ID,
+                    buildNotification(
+                        session.player.currentMediaItem?.mediaMetadata?.title?.toString(),
+                        isPlaying
+                    )
+                )
+            }
+
+            override fun handleCustomCommand(
+                session: MediaSession,
+                action: String,
+                extras: Bundle
+            ): Boolean {
+                return when (action) {
+                    ACTION_TOGGLE_PLAY_MODE, ACTION_SLEEP_TIMER_CYCLE -> true
+                    else -> false
+                }
+            }
+        })
 
         // 进入前台模式 + 显示通知
         startForeground(NOTIFICATION_ID, buildNotification(null, false))
@@ -390,6 +499,8 @@ class PlaybackService : MediaLibraryService() {
         val notification = buildNotification(title, isPlaying)
         val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         notificationManager.notify(NOTIFICATION_ID, notification)
+        // F2-2b：同步刷新系统媒体卡片的睡眠定时按钮剩余分钟
+        refreshSessionCustomLayout()
     }
 
     private fun buildNotification(title: String?, isPlaying: Boolean): Notification {
@@ -464,8 +575,9 @@ class PlaybackService : MediaLibraryService() {
             .setStyle(
                 androidx.media.app.NotificationCompat.MediaStyle()
                     .setMediaSession(mediaLibrarySession?.sessionCompatToken)
-                    // compact view 仍只显示核心 3 键：prev, play/pause, next
-                    .setShowActionsInCompactView(1, 2, 3)
+                    // compact view 只显示核心 3 键：prev(0), play/pause(1), next(2)
+                    // （修复：原 (1,2,3) 实际显示 play/pause、next、playMode，漏掉 prev）
+                    .setShowActionsInCompactView(0, 1, 2)
             )
             .setOngoing(isPlaying)
             .setPriority(NotificationCompat.PRIORITY_LOW)
@@ -503,6 +615,7 @@ class PlaybackService : MediaLibraryService() {
                 kotlinx.coroutines.delay(60_000)
                 lastNotificationState = null
                 updateNotification()
+                refreshSessionCustomLayout()
             }
         }
     }
