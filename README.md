@@ -157,6 +157,16 @@ export JAVA_HOME="C:\Program Files\Android\Android Studio\jbr"
 adb -s 192.168.0.116:5555 install -r app/build/outputs/apk/debug/app-debug.apk
 ```
 
+## Star History
+
+<a href="https://www.star-history.com/?repos=hxzhang2000%2Fnasmusictv&type=date&legend=top-left">
+ <picture>
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=hxzhang2000/nasmusictv&type=date&theme=dark&legend=top-left" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=hxzhang2000/nasmusictv&type=date&legend=top-left" />
+   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=hxzhang2000/nasmusictv&type=date&legend=top-left" />
+ </picture>
+</a>
+
 ## 开源协议
 
 GPL v3
