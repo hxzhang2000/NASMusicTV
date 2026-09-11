@@ -94,7 +94,7 @@ class LocalMusicRepository(
         )
     }
 
-    /** 合并 MediaStore 通道 + 下载目录文件通道，并按 contentUri 去重（防 MediaStore 重复收录下载目录） */
+    /** 合并 MediaStore 通道 + 下载目录文件通道，并按真实文件路径去重（防 MediaStore 重复收录下载目录） */
     private suspend fun buildScannedList(): List<ScannedSong> {
         val scanned = mutableListOf<ScannedSong>()
         scanned += scanner.scanAllMusic()
@@ -109,15 +109,33 @@ class LocalMusicRepository(
             )
         }
         // 关键：防 MediaStore 重复收录下载目录（Android 11+ 通常不索引，但部分 ROM 会）。
-        // 优先保留 DOWNLOAD 通道（元数据来自 downloads.db，比 MediaStore 更准）。
-        return scanned
-            .distinctBy { it.contentUri.toString() }
-            .let { distinct ->
-                // 若 DOWNLOAD 与 MediaStore 同 path 冲突，保留 DOWNLOAD 通道
-                val downloadKeys = distinct.filter { it.storageType == StorageType.DOWNLOAD }
-                    .map { it.contentUri.toString() }.toSet()
-                distinct.filter { it.storageType != StorageType.INTERNAL || it.contentUri.toString() !in downloadKeys }
+        // 修复：原先按 contentUri 字符串去重——MediaStore 通道是
+        // content://media/external/audio/media/<id>，下载通道是 file://（同一文件两种 URI），
+        // 字符串永不相等 → 同一首歌在曲库出现两次。
+        // 现改为按真实文件路径去重（DOWNLOAD 优先），路径缺失时回退 contentUri。
+        val indexByKey = HashMap<String, Int>(scanned.size)
+        val deduped = ArrayList<ScannedSong>(scanned.size)
+        for (item in scanned) {
+            val key = dedupeKeyOf(item)
+            val existing = indexByKey[key]
+            if (existing == null) {
+                indexByKey[key] = deduped.size
+                deduped.add(item)
+            } else if (item.storageType == StorageType.DOWNLOAD &&
+                deduped[existing].storageType != StorageType.DOWNLOAD
+            ) {
+                // 同文件两条通道冲突：优先保留 DOWNLOAD（元数据来自 downloads.db，更准）
+                deduped[existing] = item
             }
+        }
+        return deduped
+    }
+
+    /** 去重键：优先规范化真实路径（统一分隔符），缺失时回退 contentUri */
+    private fun dedupeKeyOf(item: ScannedSong): String {
+        val raw = item.dataPath?.takeIf { it.isNotBlank() }
+            ?: return "uri:" + item.contentUri
+        return "path:" + raw.replace('\\', '/')
     }
 
     /** 从 downloads.db 读取下载歌曲元数据，构造 ScannedSong（短路 MMR） */
@@ -141,8 +159,17 @@ class LocalMusicRepository(
     /** 搜索：只查询索引，不扫描文件 */
     suspend fun search(query: String): List<Song> = withContext(Dispatchers.IO) {
         if (query.isBlank()) return@withContext emptyList()
-        dao.search(query.trim()).map { it.toSong() }
+        dao.search(escapeLike(query.trim())).map { it.toSong() }
     }
+
+    /**
+     * 转义 SQL LIKE 通配符：用户输入的 % / _ / \ 应作为字面量匹配
+     * （配合 LocalMusicDao.search 的 `ESCAPE '\'`），否则会被当通配符导致误匹配。
+     */
+    private fun escapeLike(raw: String): String = raw
+        .replace("\\", "\\\\")
+        .replace("%", "\\%")
+        .replace("_", "\\_")
 
     /** 全量扫描（手动刷新时） */
     suspend fun fullScan(): List<Song> = withContext(Dispatchers.IO) {

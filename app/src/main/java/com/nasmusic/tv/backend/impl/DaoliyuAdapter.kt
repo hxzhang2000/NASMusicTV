@@ -118,15 +118,17 @@ class DaoliyuAdapter : BackendAdapter {
                 .post(body)
                 .build()
             val response = client.newCall(request).execute()
-            if (!response.isSuccessful) {
-                AppLog.w(TAG, "login failed: ${response.code}")
-                return null
+            response.use { resp ->
+                if (!resp.isSuccessful) {
+                    AppLog.w(TAG, "login failed: ${resp.code}")
+                    return null
+                }
+                val responseBody = resp.body?.string() ?: return null
+                val json = JsonParser.parseString(responseBody).asJsonObject
+                val token = json.get("token")?.asString ?: return null
+                val userId = json.getAsJsonObject("user")?.get("id")?.asString ?: ""
+                Pair(token, userId)
             }
-            val responseBody = response.body?.string() ?: return null
-            val json = JsonParser.parseString(responseBody).asJsonObject
-            val token = json.get("token")?.asString ?: return null
-            val userId = json.getAsJsonObject("user")?.get("id")?.asString ?: ""
-            Pair(token, userId)
         } catch (e: Exception) {
             AppLog.e(TAG, "login failed", e)
             null
@@ -179,7 +181,7 @@ class DaoliyuAdapter : BackendAdapter {
             val request = Request.Builder()
                 .url("$baseUrl/health")
                 .build()
-            client.newCall(request).execute().isSuccessful
+            client.newCall(request).execute().use { it.isSuccessful }
         } catch (e: Exception) {
             AppLog.w(TAG, "testConnection failed", e)
             false
@@ -350,15 +352,17 @@ class DaoliyuAdapter : BackendAdapter {
                 .header("Authorization", "Bearer $token")
                 .build()
             val response = client.newCall(request).execute()
-            if (!response.isSuccessful) return@withContext null
-            val body = response.body?.string()
-            if (body.isNullOrBlank()) return@withContext null
-            // 如果返回 JSON，提取 lyrics 字段
-            if (body.trimStart().startsWith("{")) {
-                val json = JsonParser.parseString(body).asJsonObject
-                json.get("lyrics")?.asString ?: json.get("data")?.asString ?: body
-            } else {
-                body  // 直接是 LRC 文本
+            response.use { resp ->
+                if (!resp.isSuccessful) return@withContext null
+                val body = resp.body?.string()
+                if (body.isNullOrBlank()) return@withContext null
+                // 如果返回 JSON，提取 lyrics 字段
+                if (body.trimStart().startsWith("{")) {
+                    val json = JsonParser.parseString(body).asJsonObject
+                    json.get("lyrics")?.asString ?: json.get("data")?.asString ?: body
+                } else {
+                    body  // 直接是 LRC 文本
+                }
             }
         } catch (e: Exception) {
             AppLog.e(TAG, "getLyrics failed", e)
@@ -464,12 +468,14 @@ class DaoliyuAdapter : BackendAdapter {
                 .header("Authorization", "Bearer $token")
                 .build()
             val response = client.newCall(request).execute()
-            if (!response.isSuccessful) {
-                AppLog.w(TAG, "GET failed: ${response.code} url=${sanitizeUrl(url)}")
-                return null
+            response.use { resp ->
+                if (!resp.isSuccessful) {
+                    AppLog.w(TAG, "GET failed: ${resp.code} url=${sanitizeUrl(url)}")
+                    return null
+                }
+                val body = resp.body?.string() ?: return null
+                JsonParser.parseString(body).asJsonObject
             }
-            val body = response.body?.string() ?: return null
-            JsonParser.parseString(body).asJsonObject
         } catch (e: Exception) {
             AppLog.e(TAG, "GET error url=${sanitizeUrl(url)}", e)
             null
@@ -489,12 +495,14 @@ class DaoliyuAdapter : BackendAdapter {
                 .post(body)
                 .build()
             val response = client.newCall(request).execute()
-            if (!response.isSuccessful) {
-                AppLog.w(TAG, "POST failed: ${response.code} url=${sanitizeUrl(url)}")
-                return null
+            response.use { resp ->
+                if (!resp.isSuccessful) {
+                    AppLog.w(TAG, "POST failed: ${resp.code} url=${sanitizeUrl(url)}")
+                    return null
+                }
+                val responseBody = resp.body?.string() ?: return null
+                if (responseBody.isBlank()) JsonObject() else JsonParser.parseString(responseBody).asJsonObject
             }
-            val responseBody = response.body?.string() ?: return null
-            if (responseBody.isBlank()) JsonObject() else JsonParser.parseString(responseBody).asJsonObject
         } catch (e: Exception) {
             AppLog.e(TAG, "POST error url=${sanitizeUrl(url)}", e)
             null

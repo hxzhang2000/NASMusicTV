@@ -26,8 +26,8 @@ import kotlinx.coroutines.launch
  * 播放管理器（N-4 拆分后的播放核心 + 协调层）
  *
  * 保留：播放核心状态机（ExoPlayer 生命周期、进度轮询、seek 状态）、队列管理、播放模式。
- * 迁出：高质量人声分离编排 → [HqSeparationOrchestrator]（经 PlayerHost 窄接口回调，
- * 延续 R-5 VocalSeparationController 模式）；均衡器/频谱 → [PlayerEqualizer]。
+ * 迁出：高质量人声分离编排 → [HqSeparationOrchestrator]（经 PlayerHost 窄接口回调）；
+ * 均衡器/频谱 → [PlayerEqualizer]。
  * 本类对现有调用面（ViewModel/PlaybackService/RemoteControlServer）保持 API 零改动。
  */
 class PlayerManager(private val applicationContext: Context) {
@@ -316,6 +316,8 @@ class PlayerManager(private val applicationContext: Context) {
                 return
             }
             if (isPlaying) {
+                // 先移除已有回调，避免与 setPlayer 中的 post 形成两条进度链导致回调频率翻倍
+                progressHandler.removeCallbacks(progressUpdateRunnable)
                 progressHandler.post(progressUpdateRunnable)
                 // 成功起播说明当前歌曲链接有效，重置重试标记——
                 // 同一首歌在播放中再次链接过期时，允许 onPlayerError 再自动重解析一次
@@ -337,6 +339,9 @@ class PlayerManager(private val applicationContext: Context) {
             // 播放器就绪后尝试初始化频谱分析器
             if (playbackState == Player.STATE_READY) {
                 playerEqualizer.initSpectrumAnalyzer(player)
+                // 会话变更兜底：ExoPlayer 重建/切轨更换 audioSession 时重建均衡器，
+                // 避免 EQ 静默失效（此前仅用户下次拖动频段才重建）。
+                playerEqualizer.ensureEqualizerForSession(player)
             }
         }
 
@@ -1148,6 +1153,9 @@ class PlayerManager(private val applicationContext: Context) {
     fun release() {
         progressHandler.removeCallbacks(progressUpdateRunnable)
         progressHandler.removeCallbacks(seekTimeoutRunnable)
+        // 中止进行中的 crossfade：释放子播放器与 50ms 淡化轮询，避免服务销毁后
+        // fadeRunnable 继续向已释放的 player 写 volume（原实现漏调 abort）。
+        crossfadeController.abort()
         player?.removeListener(playerListener)
         player = null
         playerEqualizer.release()

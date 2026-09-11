@@ -3,6 +3,7 @@ package com.nasmusic.tv.lyrics
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
 import com.nasmusic.tv.util.AppLog
+import com.nasmusic.tv.util.EncodingUtils
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.Dispatcher
@@ -47,6 +48,44 @@ class LyricsNetworkProvider(
         }
     }
 
+    /** 搜索命中的候选：保留歌名/歌手，用于相关性校验（原实现只取 hash/id，无法校验） */
+    private data class SearchHit(val id: String, val name: String?, val artist: String?)
+
+    /** 归一化：小写 + 去除空白与常见中英标点，便于「相互包含」判定 */
+    private fun norm(s: String): String = s.lowercase()
+        .replace(Regex("[\\s\\p{Punct}·、，。！？；：“”‘’（）《》【】「」…—～]"), "")
+
+    /**
+     * 相关性打分：0 = 不相关（拒绝）。
+     * 标题必须相互包含（容忍 “歌名 (Live)” / “歌名 - 现场版” 等后缀）；
+     * 歌手在提供时命中加分、不命中仅扣分不拒绝（文件 tag 常有 “A/B”“A feat. B” 等噪声）。
+     */
+    private fun relevanceScore(hit: SearchHit, title: String, artist: String): Int {
+        val cn = norm(hit.name ?: "")
+        val ct = norm(title)
+        if (cn.isEmpty() || ct.isEmpty()) return 0
+        if (!cn.contains(ct) && !ct.contains(cn)) return 0
+        var score = 2
+        if (artist.isNotBlank()) {
+            val ca = norm(hit.artist ?: "")
+            val at = norm(artist)
+            if (ca.isNotEmpty() && at.isNotEmpty() && (ca.contains(at) || at.contains(ca))) score += 2 else score -= 1
+        }
+        return score
+    }
+
+    /**
+     * 解码歌词字节：优先 UTF-8；出现替换字符（U+FFFD）说明实为 GBK，改用 GBK 解码。
+     * 最后统一走 [EncodingUtils.fixEncoding] 兜底（与原项目 GBK 修复策略一致）。
+     */
+    private fun decodeLyricsBytes(bytes: ByteArray): String {
+        val utf8 = String(bytes, Charsets.UTF_8)
+        val text = if ('\uFFFD' in utf8) {
+            try { String(bytes, java.nio.charset.Charset.forName("GBK")) } catch (e: Exception) { utf8 }
+        } else utf8
+        return EncodingUtils.fixEncoding(text) ?: text
+    }
+
     private val client: OkHttpClient by lazy {
         OkHttpClient.Builder()
             .dispatcher(Dispatcher(daemonExecutor))
@@ -68,7 +107,7 @@ class LyricsNetworkProvider(
      */
     suspend fun fetchLyrics(title: String, artist: String): String? = withContext(Dispatchers.IO) {
         AppLog.d(TAG, "fetchLyrics: title=$title, artist=$artist")
-        val candidates = fetchLyricsCandidates(title, artist, maxResults = 1)
+        val candidates = fetchLyricsCandidates(title, artist, maxResults = 3)
         val result = candidates.firstOrNull()
         if (result != null) {
             AppLog.d(TAG, "fetchLyrics: success, length=${result.length}")
@@ -99,8 +138,8 @@ class LyricsNetworkProvider(
             if (results.size >= maxResults) break
             AppLog.d(TAG, "fetchLyricsCandidates: trying keyword='$keyword'")
 
-            // 尝试酷狗
-            for (lyrics in fetchFromKugou(keyword, maxResults)) {
+            // 尝试酷狗（title/artist 用于相关性校验）
+            for (lyrics in fetchFromKugou(keyword, title, artist, maxResults)) {
                 if (results.size >= maxResults) break
                 if (seen.add(lyrics)) {
                     results.add(lyrics)
@@ -108,8 +147,8 @@ class LyricsNetworkProvider(
                 }
             }
 
-            // 尝试网易云
-            for (lyrics in fetchFromNetease(keyword, maxResults)) {
+            // 尝试网易云（title/artist 用于相关性校验）
+            for (lyrics in fetchFromNetease(keyword, title, artist, maxResults)) {
                 if (results.size >= maxResults) break
                 if (seen.add(lyrics)) {
                     results.add(lyrics)
@@ -126,7 +165,7 @@ class LyricsNetworkProvider(
      * 从酷狗音乐获取歌词（多条候选）
      * @param maxResults 搜索时取前 N 个结果
      */
-    private suspend fun fetchFromKugou(keyword: String, maxResults: Int = 1): List<String> {
+    private suspend fun fetchFromKugou(keyword: String, title: String, artist: String, maxResults: Int = 1): List<String> {
         return try {
             val searchUrl = "${kugouBaseUrl.trimEnd('/')}/api/v3/search/song?keyword=" +
                     URLEncoder.encode(keyword, "UTF-8") +
@@ -149,19 +188,28 @@ class LyricsNetworkProvider(
                 body
             } ?: return emptyList()
 
-            val hashes = parseKugouHashes(searchBody, maxResults)
-            if (hashes.isEmpty()) {
-                AppLog.w(TAG, "Kugou search: no hashes found")
+            val hits = parseKugouHits(searchBody, maxResults)
+            if (hits.isEmpty()) {
+                AppLog.w(TAG, "Kugou search: no hits found")
                 return emptyList()
             }
-            AppLog.d(TAG, "Kugou search: hashes=${hashes.joinToString()}")
 
-            val results = hashes.mapNotNull { hash ->
-                val lyrics = getLyricsByHash(hash)
+            // 相关性校验：标题必须相互包含（否则丢弃），歌手命中优先
+            val ranked = hits.map { it to relevanceScore(it, title, artist) }
+                .filter { it.second > 0 }
+                .sortedByDescending { it.second }
+            if (ranked.isEmpty()) {
+                AppLog.w(TAG, "Kugou search: no relevant hit for '$title' / '$artist' (dropped ${hits.size})")
+                return emptyList()
+            }
+            AppLog.d(TAG, "Kugou search: ${ranked.size}/${hits.size} relevant, best=${ranked.first().second}")
+
+            val results = ranked.mapNotNull { (hit, _) ->
+                val lyrics = getLyricsByHash(hit.id)
                 if (lyrics != null) {
-                    AppLog.d(TAG, "Kugou: hash=$hash success, len=${lyrics.length}")
+                    AppLog.d(TAG, "Kugou: hash=${hit.id} success, len=${lyrics.length}")
                 } else {
-                    AppLog.w(TAG, "Kugou: hash=$hash returned null")
+                    AppLog.w(TAG, "Kugou: hash=${hit.id} returned null")
                 }
                 lyrics
             }
@@ -206,7 +254,7 @@ class LyricsNetworkProvider(
      * 从网易云音乐获取歌词（多条候选）
      * @param maxResults 搜索时取前 N 个结果
      */
-    private suspend fun fetchFromNetease(keyword: String, maxResults: Int = 1): List<String> {
+    private suspend fun fetchFromNetease(keyword: String, title: String, artist: String, maxResults: Int = 1): List<String> {
         return try {
             // 网易云 /api/search/get/web (GET) 已废弃，返回 405；
             // 改用 POST /api/search/get
@@ -239,19 +287,28 @@ class LyricsNetworkProvider(
                 body
             } ?: return emptyList()
 
-            val songIds = parseNeteaseSongIds(searchBody, maxResults)
-            if (songIds.isEmpty()) {
-                AppLog.w(TAG, "Netease search: no songIds found")
+            val hits = parseNeteaseHits(searchBody, maxResults)
+            if (hits.isEmpty()) {
+                AppLog.w(TAG, "Netease search: no hits found")
                 return emptyList()
             }
-            AppLog.d(TAG, "Netease search: songIds=${songIds.joinToString()}")
 
-            val results = songIds.mapNotNull { songId ->
-                val lyrics = getLyricsBySongId(songId)
+            // 相关性校验：标题必须相互包含（否则丢弃），歌手命中优先
+            val ranked = hits.map { it to relevanceScore(it, title, artist) }
+                .filter { it.second > 0 }
+                .sortedByDescending { it.second }
+            if (ranked.isEmpty()) {
+                AppLog.w(TAG, "Netease search: no relevant hit for '$title' / '$artist' (dropped ${hits.size})")
+                return emptyList()
+            }
+            AppLog.d(TAG, "Netease search: ${ranked.size}/${hits.size} relevant, best=${ranked.first().second}")
+
+            val results = ranked.mapNotNull { (hit, _) ->
+                val lyrics = getLyricsBySongId(hit.id)
                 if (lyrics != null) {
-                    AppLog.d(TAG, "Netease: songId=$songId success, len=${lyrics.length}")
+                    AppLog.d(TAG, "Netease: songId=${hit.id} success, len=${lyrics.length}")
                 } else {
-                    AppLog.w(TAG, "Netease: songId=$songId returned null")
+                    AppLog.w(TAG, "Netease: songId=${hit.id} returned null")
                 }
                 lyrics
             }
@@ -297,12 +354,21 @@ class LyricsNetworkProvider(
      * 解析酷狗搜索响应，提取前 N 个歌曲 hash
      * 使用 Gson 解析（与 MetingApiService 一致）
      */
-    private fun parseKugouHashes(response: String, maxResults: Int): List<String> {
+    private fun parseKugouHits(response: String, maxResults: Int): List<SearchHit> {
         return try {
             val json = JsonParser.parseString(response).asJsonObject
             val data = json.getAsJsonObject("data")
             val info = data?.getAsJsonArray("info") ?: return emptyList()
-            info.take(maxResults).mapNotNull { (it as? JsonObject)?.get("hash")?.asString }
+            info.take(maxResults).mapNotNull { el ->
+                val obj = el as? JsonObject ?: return@mapNotNull null
+                val hash = obj.get("hash")?.asString ?: return@mapNotNull null
+                SearchHit(
+                    id = hash,
+                    // 酷狗 v3 搜索：songname/singername；部分接口返回 filename（"歌手 - 歌名"）
+                    name = obj.get("songname")?.asString ?: obj.get("filename")?.asString,
+                    artist = obj.get("singername")?.asString ?: obj.get("author_name")?.asString
+                )
+            }
         } catch (e: Exception) {
             emptyList()
         }
@@ -334,12 +400,13 @@ class LyricsNetworkProvider(
                 val lrcJson = JsonParser.parseString(lrcBody).asJsonObject
                 val lrcContent = lrcJson.get("content")?.asString
                 if (!lrcContent.isNullOrBlank()) {
-                    // 酷狗歌词是 Base64 编码的
+                    // 酷狗歌词是 Base64 编码的；原始 charset 可能为 UTF-8 或 GBK，
+                    // 不能一律按 UTF-8 解析（否则 GBK 歌词整段乱码）
                     try {
                         val decoded = android.util.Base64.decode(lrcContent, android.util.Base64.DEFAULT)
-                        String(decoded, Charsets.UTF_8)
+                        decodeLyricsBytes(decoded)
                     } catch (e: Exception) {
-                        lrcContent
+                        EncodingUtils.fixEncoding(lrcContent) ?: lrcContent
                     }
                 } else {
                     null
@@ -356,12 +423,23 @@ class LyricsNetworkProvider(
      * 解析网易云搜索响应，提取前 N 个歌曲 ID
      * 使用 Gson 解析（与 MetingApiService 一致）
      */
-    private fun parseNeteaseSongIds(response: String, maxResults: Int): List<String> {
+    private fun parseNeteaseHits(response: String, maxResults: Int): List<SearchHit> {
         return try {
             val json = JsonParser.parseString(response).asJsonObject
             val result = json.getAsJsonObject("result")
             val songs = result?.getAsJsonArray("songs") ?: return emptyList()
-            songs.take(maxResults).mapNotNull { (it as? JsonObject)?.get("id")?.asString }
+            songs.take(maxResults).mapNotNull { el ->
+                val obj = el as? JsonObject ?: return@mapNotNull null
+                val id = obj.get("id")?.asString ?: return@mapNotNull null
+                val name = obj.get("name")?.asString
+                // 返回字段随接口版本变化：artists[]（v1）或 ar[]（旧版）
+                val artists = obj.getAsJsonArray("artists") ?: obj.getAsJsonArray("ar")
+                val artist = artists
+                    ?.mapNotNull { (it as? JsonObject)?.get("name")?.asString }
+                    ?.takeIf { it.isNotEmpty() }
+                    ?.joinToString("/")
+                SearchHit(id = id, name = name, artist = artist)
+            }
         } catch (e: Exception) {
             emptyList()
         }
@@ -375,7 +453,7 @@ class LyricsNetworkProvider(
         return try {
             val json = JsonParser.parseString(response).asJsonObject
             val lrc = json.getAsJsonObject("lrc")
-            lrc?.get("lyric")?.asString
+            EncodingUtils.fixEncoding(lrc?.get("lyric")?.asString)
         } catch (e: Exception) {
             null
         }

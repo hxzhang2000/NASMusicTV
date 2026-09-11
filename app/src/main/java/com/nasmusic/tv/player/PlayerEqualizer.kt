@@ -51,6 +51,22 @@ class PlayerEqualizer(private val retryHandler: Handler) {
     }
 
     /**
+     * 会话变更兜底：ExoPlayer 重建 / 切轨可能更换 audioSessionId，
+     * 若均衡器仍绑定旧会话则静默失效。此方法在会话变化时重建均衡器。
+     *
+     * @return 均衡器当前是否可用
+     */
+    fun ensureEqualizerForSession(player: ExoPlayer?): Boolean {
+        val sid = player?.audioSessionId ?: 0
+        if (sid <= 0) return equalizer != null
+        if (equalizer == null || sid != audioSessionId) {
+            AppLog.d(TAG, "ensureEqualizerForSession: session changed ($audioSessionId -> $sid), re-init")
+            return initEqualizer(player)
+        }
+        return true
+    }
+
+    /**
      * 初始化频谱分析器（使用当前音频会话 ID）
      *
      * 如果音频会话尚未就绪（audioSessionId == 0），

@@ -883,6 +883,9 @@ class NavidromeAdapter : BackendAdapter {
 
     private fun buildRestUrl(method: String): String = restClient.buildRestUrl(method)
 
+    // 修复：此前未覆盖该方法，沿用接口默认实现恒返回 0（UI“共 M 首”永远显示 0）。
+    override suspend fun getSongsTotalCount(): Int = restClient.songsTotalCount()
+
     private fun buildCoverUrl(coverArtId: String): String = restClient.buildCoverUrl(coverArtId)
 
     private suspend fun executeRequest(url: String): JsonObject? = restClient.executeRequest(url)

@@ -1,0 +1,610 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-page-node-id="8gDe1V8pbHiOE3njHUMSGq">
+<head data-page-node-id="HiPOeJUB0AbWs2heZzg8l0">
+<meta charset="UTF-8" data-page-node-id="gVklx1rWv1KCRwqdR6wiYK">
+<meta name="viewport" content="width=device-width, initial-scale=1.0" data-page-node-id="CqvJENLU2UkmIVMJAVwDAW">
+<title>NASMusicTV 完整代码审查报告 · 2026-09-11</title>
+<style>
+  :root{
+    --bg:#f5f6f8; --panel:#ffffff; --ink:#1f2329; --sub:#5b6470; --line:#e3e6eb;
+    --crit:#c0392b; --high:#e8533f; --med:#e0922f; --low:#3a7bd5; --ok:#2e9e6b;
+    --accent:#2f6df0;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+    background:var(--bg);color:var(--ink);line-height:1.65;font-size:14px}
+  a{color:var(--accent);text-decoration:none}
+  .wrap{max-width:1180px;margin:0 auto;padding:32px 28px 80px}
+  header.hero{background:linear-gradient(135deg,#1f2a44,#2f6df0);color:#fff;border-radius:16px;
+    padding:30px 34px;margin-bottom:26px;box-shadow:0 8px 26px rgba(31,42,68,.18)}
+  header.hero h1{margin:0 0 6px;font-size:26px;letter-spacing:.5px}
+  header.hero .meta{opacity:.9;font-size:13px;display:flex;gap:18px;flex-wrap:wrap}
+  .summary{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin:22px 0 8px}
+  .stat{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px 18px;text-align:center}
+  .stat .n{font-size:30px;font-weight:700;line-height:1}
+  .stat .l{font-size:12px;color:var(--sub);margin-top:6px}
+  .stat.crit .n{color:var(--crit)} .stat.high .n{color:var(--high)}
+  .stat.med .n{color:var(--med)} .stat.low .n{color:var(--low)}
+  .bar{display:flex;height:14px;border-radius:7px;overflow:hidden;margin:14px 0 4px;border:1px solid var(--line)}
+  .bar i{display:block;height:100%}
+  .bar .b-crit{background:var(--crit)} .bar .b-high{background:var(--high)}
+  .bar .b-med{background:var(--med)} .bar .b-low{background:var(--low)}
+  .legend{font-size:12px;color:var(--sub);display:flex;gap:16px;flex-wrap:wrap;margin-top:4px}
+  .legend span b{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px;vertical-align:middle}
+  h2{font-size:20px;margin:34px 0 12px;padding-bottom:8px;border-bottom:2px solid var(--line)}
+  h3{font-size:16px;margin:22px 0 8px;color:#27313f}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:18px 20px;margin:14px 0;
+    box-shadow:0 1px 3px rgba(0,0,0,.04)}
+  .card h3{margin-top:0}
+  table{width:100%;border-collapse:collapse;font-size:13px;margin-top:8px}
+  th,td{border:1px solid var(--line);padding:8px 10px;text-align:left;vertical-align:top}
+  th{background:#f0f3f8;font-weight:600;color:#27313f}
+  td.issue{font-weight:600}
+  .sev{display:inline-block;padding:2px 9px;border-radius:20px;color:#fff;font-size:11px;font-weight:700;white-space:nowrap}
+  .sev.Critical{background:var(--crit)} .sev.High{background:var(--high)}
+  .sev.Medium{background:var(--med)} .sev.Low{background:var(--low)}
+  .loc{font-family:"SFMono-Regular",Consolas,monospace;font-size:12px;color:#34404f;background:#f4f6f9;
+    padding:1px 5px;border-radius:4px;white-space:nowrap}
+  .toc{position:sticky;top:0;background:rgba(255,255,255,.96);backdrop-filter:blur(6px);border:1px solid var(--line);
+    border-radius:10px;padding:10px 14px;margin-bottom:18px;z-index:5;font-size:13px;display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+  .toc a{padding:3px 9px;border-radius:6px;background:#eef2f8}
+  .toc .filters{margin-left:auto;display:flex;gap:6px}
+  .toc button{border:1px solid var(--line);background:#fff;border-radius:6px;padding:3px 10px;cursor:pointer;font-size:12px}
+  .toc button.on{background:var(--accent);color:#fff;border-color:var(--accent)}
+  .pill{display:inline-block;font-size:11px;padding:1px 7px;border-radius:10px;background:#eef2f8;color:#465061;margin-left:6px}
+  .note{background:#fff8ec;border:1px solid #f0d9a8;border-radius:10px;padding:12px 16px;font-size:13px;color:#6b531e}
+  .ok{color:var(--ok);font-weight:600}
+  .muted{color:var(--sub);font-size:12.5px}
+  ul.tight{margin:6px 0;padding-left:20px} ul.tight li{margin:3px 0}
+  footer{margin-top:40px;font-size:12px;color:var(--sub);border-top:1px solid var(--line);padding-top:14px}
+  .hidden{display:none!important}
+  .fix{border-left:3px solid var(--accent);padding-left:10px;color:#33404f}
+</style>
+</head>
+<body data-page-node-id="iFLuisjWWAkmGDxn0NzRCg">
+<div class="wrap" data-page-node-id="BqDezZGz5QH1HklLDbFWfD">
+
+<header class="hero" data-page-node-id="YTPkNBe7i9eN7ItPYDekXm">
+  <h1 data-page-node-id="keUgYA9rxYQAutrDyfSlog">NASMusicTV 完整代码审查报告</h1>
+  <div class="meta" data-page-node-id="JTX2E9mxC1YJLrZUG4Kuq0">
+    <span data-page-node-id="ubpDyNHbAmCN0Rjo2a8YMd">项目：NASMusicTV（Android TV 音乐播放器 · Kotlin + TV Compose）</span>
+    <span data-page-node-id="u2KVD7c9PPqmNxKxY9wwac">日期：2026-09-11</span>
+    <span data-page-node-id="9waHtCD4BABOzucnp0CUur">规模：275 个 Kotlin 文件 / 约 56,000 行</span>
+    <span data-page-node-id="C1Xv8ZgJj4mLzO0Uonayx2">审查方式：8 子系统并行深度审查 + 两轮独立复核（全部 High + 关键 Medium）</span>
+  </div>
+</header>
+
+<div class="toc" data-page-node-id="JTsH6EAOYu4LSdjlyDcVzo">
+  <strong data-page-node-id="IsVZGiv6JsnHcc09X2ZlFq">目录：</strong>
+  <a href="#sum" data-page-node-id="K3Z6iDjBC3Wk97PVBbvabR">执行摘要</a>
+  <a href="#verify">复核结论</a>
+  <a href="#top" data-page-node-id="nGPGdm0sqZfpR5sqgyAkCo">最高优先级修复</a>
+  <a href="#core" data-page-node-id="o90gZwHYf5xi6H6eAhIM2X">核心/数据</a>
+  <a href="#adapter" data-page-node-id="b5reqkodctVlfW0kMA89EX">后端适配器</a>
+  <a href="#net" data-page-node-id="AS9cSON7zO32lVNOGLYFqa">网络/天气/电台</a>
+  <a href="#dl" data-page-node-id="RImFeucAJQnRitsFChZn3r">下载/导出/本地</a>
+  <a href="#baidu" data-page-node-id="HFxj74lxyQkYO5qIdfOlCb">百度网盘/MV</a>
+  <a href="#player" data-page-node-id="kbPxDOh4gb5gWEmOiLI5r8">播放引擎</a>
+  <a href="#lyrics" data-page-node-id="JYDx7zbZ0FYQwygfhVPAXg">歌词</a>
+  <a href="#ui" data-page-node-id="Tt9bAHOUHWwjXpuvEYJioE">UI/本地服务</a>
+  <a href="#strength" data-page-node-id="VEUEDZtxuWMo1vWqAvHguX">整体优势</a>
+  <a href="#road" data-page-node-id="TEtYNwDwzgsj3yU2sFTJoI">修复路线图</a>
+  <span class="filters" data-page-node-id="AjFB1qhmhI1QprSSh4VNoK">
+    <button data-f="all" class="on" data-page-node-id="A8JUDvvOdDMeLssqzPVEHH">全部</button>
+    <button data-f="High" data-page-node-id="8SgkfShgAA3e7hkwC5IN3M">High</button>
+    <button data-f="Medium" data-page-node-id="VepEIGHlBxTKqL1e1SYJmx">Medium</button>
+    <button data-f="Low" data-page-node-id="5XONzJtCemZXVrdsuC0TnO">Low</button>
+  </span>
+</div>
+
+<section id="sum" data-page-node-id="vsE6mqeIxin1Ef4QWedzBf">
+  <h2 data-page-node-id="kE7TdZbGUP2qAtyd1l1eSO">执行摘要</h2>
+  <div class="summary" data-page-node-id="s8GCxQBgSVrvJp0KFfPW9Z">
+    <div class="stat crit" data-page-node-id="HIHDB7EBA8lXNzuRpydzbv"><div class="n" data-page-node-id="f9vTwsVTgEPstKGqNRvHAF">0</div><div class="l" data-page-node-id="6DE2oRMniuTS48xCFBNAHh">Critical</div></div>
+    <div class="stat high" data-page-node-id="ssKWtjcpyS2loZQ1dgCoPk"><div class="n" data-page-node-id="uzeW2oxXS4GtawBv7CO3Hk">10</div><div class="l" data-page-node-id="kceQq8dIVJ2gYNHN2UzEqK">High</div></div>
+    <div class="stat med" data-page-node-id="Cw5yF46KxfugQaeM7AC2Fo"><div class="n" data-page-node-id="GdcxBxoJHEl9WJtlPLc4Lq">41</div><div class="l" data-page-node-id="Z9YLp2aAM1piAXPJSkHXmc">Medium</div></div>
+    <div class="stat low" data-page-node-id="a7Ni0venaiogOMao0UaLBt"><div class="n" data-page-node-id="rDLyQNOsmBz2lGzKm7wgZ2">59</div><div class="l" data-page-node-id="zlMOWyi9Djx9VHvRmTn9p7">Low</div></div>
+  </div>
+  <div class="bar" data-page-node-id="A45NzfAMPbOv08P9GlDjPg">
+    <i class="b-crit" style="width:0%" data-page-node-id="Tfw5fNEg3zCWrcwC3l6vWe"></i>
+    <i class="b-high" style="width:9%" data-page-node-id="UxwwDZ7ELsyebI06sKA2Hx"></i>
+    <i class="b-med" style="width:37%" data-page-node-id="qpFHrFtXGQAstxrE25pKOj"></i>
+    <i class="b-low" style="width:54%" data-page-node-id="Sf3GZ3D4lvNVaKVzPN7eto"></i>
+  </div>
+  <div class="legend" data-page-node-id="vgpxG3Xy0pmqcQ2J1xxBnj">
+    <span data-page-node-id="pNxuQuePFYoUE5yqXY1rnD"><b class="b-crit" style="background:var(--crit)" data-page-node-id="8SA1NoKSomlhUKbo5krk7u"></b>Critical 0</span>
+    <span data-page-node-id="U2HQYCBZub60b4Mv2rqLAz"><b class="b-high" style="background:var(--high)" data-page-node-id="bUyWkOCBPHN7pFFoHOKIcB"></b>High 10</span>
+    <span data-page-node-id="eU4fLz4igx3B6LtqIzw2My"><b class="b-med" style="background:var(--med)" data-page-node-id="zdkZd70EDFZjhohNu9BiW6"></b>Medium 41</span>
+    <span data-page-node-id="H5BpPqjV54XpQYAEeC3GuZ"><b class="b-low" style="background:var(--low)" data-page-node-id="iujV79p2Vopd1cchRoDgAL"></b>Low 59</span>
+    <span data-page-node-id="oEENN5Zyng226mFWVRGAYX">合计 110 项发现（复核后 High 10 · Medium 41 · Low 59）</span>
+  </div>
+
+  <div class="card" data-page-node-id="D2Ee0hXKEylkYFr6A2Pkzt">
+    <h3 data-page-node-id="FahIzNR61oY7johA1OccEM">方法论与覆盖</h3>
+    <ul class="tight" data-page-node-id="wt0geCkuCASmfSup3K0L7q">
+      <li data-page-node-id="qkFH0DhRAKxJhqnEcXdY0g">将 275 个源文件按 8 个内聚子系统拆分，每个子系统由独立审查代理完整通读并逐项核查（非抽样）。</li>
+      <li data-page-node-id="OFbpHyF03f2ED6VQK1xwmh">审查重点：崩溃/NPE、并发与线程安全、资源泄漏（OkHttp Response / Bitmap / 流 / 连接池）、安全（凭据加密、token 落日志、XSS、DoS）、Android TV 专项（D-Pad 焦点、BACK 键、生命周期、主线程 I/O）、序列化与模型正确性。</li>
+      <li data-page-node-id="8PqmcUBcE6tIEatFFMZmOO">已确认未复发的既有修复：<span class="ok" data-page-node-id="UBGelF6TzGxh0lLX3jlHb0">trust-all 证书绕过未回归</span>（全源码 grep 无 X509TrustManager/hostnameVerifier 放宽）、凭据 AES-GCM 加密落盘、testConnection 不污染全局状态、Jellyfin 适配器 OkHttp 用法规范。</li>
+      <li data-page-node-id="dlvOFSRSDxE4V61gsIw0G3">人工复核：初轮对 4 项最高危发现逐行确认属实；随后对<b>全部 High 项与关键 Medium 项</b>做了第二轮独立复核（见「复核结论」章节），确认绝大多数成立并修正 6 处表述。</li>
+    </ul>
+    <p class="muted" data-page-node-id="TS2lxkhJ8NQVPUl2NlKPLp">注：行号取自本次审查快照，重构后可能偏移；修复前请按文件名+符号二次定位。</p>
+  </div>
+
+  <div class="note" data-page-node-id="EDqZIeV0qTZkKEBjQc9Ier">
+    <b data-page-node-id="ZUGEUOw6Ars1Gf5YUUnk3m">一句话结论：</b>无 Critical 级崩溃，但存在 <b data-page-node-id="Bd3dDE2aRINq2iNxYjmrNW">11 项 High</b> 缺陷，主要集中在三处：
+    ① <b data-page-node-id="tJcuBDJmFVpaQwowlrlEQs">播放引擎</b>的人声分离并发与 crossfade 子播放器泄漏；
+    ② <b data-page-node-id="bBtk6HLG2T84Wg0uqWam6k">下载/本地音乐</b>的 MediaStore 扫描崩溃、下载完整性缺失、本地封面失效；
+    ③ <b data-page-node-id="ugYROSUw59H8eUhNCxQAnt">网络/后端</b>的 OkHttp Response 系统性未关闭（连接泄漏）。
+    建议先清除 High，再处理“用户可见”的 Medium（歌词乱码/误匹配、天气电台退化、导出目标错乱）。
+  </div>
+</section>
+
+<section id="verify">
+  <h2>复核结论（第二轮独立验证）</h2>
+  <div class="note">
+    <b>总体结论：报告成立，可以采信。</b>
+    对全部 High 项与关键 Medium 项逐条重读源码复核（4 组独立验证代理 + 人工抽查）：
+    未发现任何“凭空捧造”的发现，绝大多数判定为 CONFIRMED；
+    共修正 <b>6 处</b>表述——其中 <b>2 处为事实性错误</b>（文件归属、机制描述），4 处为程度夸大；
+    据此下调 3 项严重度。<b>核心结论与修复优先级不变。</b>
+  </div>
+
+  <div class="card">
+    <h3>修正清单（初版 → 复核后）</h3>
+    <table>
+      <tr><th style="width:130px">条目</th><th style="width:270px">初版表述</th><th>复核结论与修正</th></tr>
+      <tr><td><b>#5 本地封面失效</b><br>（原 High）</td>
+        <td>点名 <span class="loc">LocalCoverExtractor.kt</span> 处理 content:// 有误导致封面失效</td>
+        <td><span class="sev" style="background:var(--high)">事实错误</span> 该类<b>零调用点（死代码）</b>；同一 bug 的真实调用点在 <span class="loc">EmbeddedCoverExtractor.kt:38</span>（被 UnifiedSongRow/MainViewModel 调用）。<b>已改归属，影响仍属实（High）。</b></td></tr>
+      <tr><td><b>#7 Crossfade 泄漏</b><br>（原 High）</td>
+        <td>CrossfadeController “没有 release 方法”，永久泄漏多个 AudioTrack</td>
+        <td><span class="sev" style="background:var(--med)">程度夸大</span> <span class="loc">abort()</span> 其实存在且在淡出完成/异常时会被调用；真缺陷是 <span class="loc">PlayerManager.release():1148</span> 漏调它，泄漏多在淡出窗口内自愈。<b>严重度下调为 Medium。</b></td></tr>
+      <tr><td><b>适配器 #1 泄漏计数</b><br>（High）</td><td>Daoliyu/Feiniu 共约 8 处</td>
+        <td>实为 <b>Daoliyu 5 处 + Feiniu 4 处</b>（含漏记的 <span class="loc">getLyrics:352</span>）；成功路径 body.string() 会关闭连接。<b>结论成立。</b></td></tr>
+      <tr><td><b>WeatherApi 泄漏</b><br>（原 Medium）</td><td>空 body / 解析异常分支均泄漏</td>
+        <td><span class="sev" style="background:var(--med)">程度夸大</span> 解析异常分支 body 已被 string() 消费关闭，不泄漏；仅 <span class="loc">body==null</span> 极窄路径泄漏。<b>下调为 Low。</b></td></tr>
+      <tr><td><b>Player 进度双链</b><br>（原 Medium）</td><td>onIsPlayingChanged 与 setPlayer 均未 removeCallbacks</td>
+        <td><span class="sev" style="background:var(--med)">范围修正</span> <span class="loc">setPlayer:461</span> 已正确 removeCallbacks；仅 <span class="loc">onIsPlayingChanged(true)</span> 一处成立。</td></tr>
+      <tr><td><b>EmbeddedCoverExtractor 缓存并发</b><br>（原 Medium）</td><td>被 Coil 多线程并发读写 → CME</td>
+        <td><span class="sev" style="background:var(--med)">程度夸大</span> 缓存确无同步，但现有调用点均在主线程，多线程竞争未证实。<b>下调为 Low（潜在）。</b></td></tr>
+      <tr><td><b>Baidu 内嵌封面</b><br>（原 Medium）</td><td>&gt;256KB 封面被截断 → 破损图片</td>
+        <td><span class="sev" style="background:var(--med)">机制修正</span> 超出下载范围的 APIC 帧会被<b>整帧丢弃</b>，结果是“无内嵌封面→回退网络封面”，而非破损图片；256KB 上限属实。</td></tr>
+    </table>
+  </div>
+
+  <div class="card">
+    <h3>逐项验证结果（均为 CONFIRMED）</h3>
+    <table>
+      <tr><th style="width:250px">发现</th><th>验证依据</th></tr>
+      <tr><td>CryptoUtils 明文降级</td><td><span class="ok">CONFIRMED</span> — encrypt() catch 返回 plainText（:79）</td></tr>
+      <tr><td>MusicScanner VOLUME_NAME 崩溃</td><td><span class="ok">CONFIRMED</span> — :76 getColumnIndexOrThrow，catch 吞异常返回空</td></tr>
+      <tr><td>下载无完整性校验</td><td><span class="ok">CONFIRMED</span> — written 未与 total 比较</td></tr>
+      <tr><td>Daoliyu/Feiniu Response 未关闭</td><td><span class="ok">CONFIRMED</span>（计数修正，见上）</td></tr>
+      <tr><td>HQ 分离缺 overlap-add + 缓冲污染</td><td><span class="ok">CONFIRMED</span> — 常量零引用；陈旧区确被送入 ONNX</td></tr>
+      <tr><td>分离并发无守卫 / 单实例并发 init</td><td><span class="ok">CONFIRMED</span> — :278 无入口守卫；无锁共享状态</td></tr>
+      <tr><td>release() 关闭进程级 OrtEnvironment</td><td><span class="ok">CONFIRMED</span> — :130 ortEnv?.close()</td></tr>
+      <tr><td>K 歌页 BACK 误触退出</td><td><span class="ok">CONFIRMED</span> — when 无 showKaraoke 分支（TV=退出确认；手机=回首页）</td></tr>
+      <tr><td>在线歌词轮询越界</td><td><span class="ok">CONFIRMED</span> — :269 all[candidateIndex] 无边界（异常被上层捕获→提示，不崩进程）</td></tr>
+      <tr><td>Bilibili 缺 WBI 签名</td><td><span class="ok">CONFIRMED</span> — 无 w_rid/wts/nav；运行时失败不可静态断言</td></tr>
+      <tr><td>Subsonic 用户名未编码 / 总数恒 0</td><td><span class="ok">CONFIRMED</span> — u=$username 未 encode；无 totalSongs 字段</td></tr>
+      <tr><td>services 非线程安全 / playUrlCache 无上限</td><td><span class="ok">CONFIRMED</span> — toMutableMap()；仅 TTL 清理</td></tr>
+      <tr><td>SmartRadio skip 清空全部历史</td><td><span class="ok">CONFIRMED</span> — skip→stopInternal(true)→playedIds.clear()</td></tr>
+      <tr><td>天气电台随机补齐计入 nas</td><td><span class="ok">CONFIRMED</span> — :177 统一加 nas_ 前缀</td></tr>
+      <tr><td>BackupTransferServer OOM DoS</td><td><span class="ok">CONFIRMED</span> — :345 ByteArray(contentLength.toInt())</td></tr>
+      <tr><td>遥控页 XSS</td><td><span class="ok">CONFIRMED</span> — :186/:255 直插 innerHTML</td></tr>
+      <tr><td>BaiduPanApi 日志泄漏 token</td><td><span class="ok">CONFIRMED</span> — :316 用原始 url（:288 已 sanitize）</td></tr>
+      <tr><td>导出目标错误 / 导出无并发守卫 / Bitmap 未回收</td><td><span class="ok">CONFIRMED</span> — firstOrNull()；字段 @Volatile 但无入口守卫；无 recycle()</td></tr>
+    </table>
+  </div>
+
+  <div class="note">
+    复核后（重定严重度）：<b>High 10 · Medium 41 · Low 59（合计 110）</b>。
+    另注：顶部「最高优先级修复」表列 13 项，其中 2 项（CryptoUtils 明文降级、Bilibili MV 失效）在各子系统中按 Medium 记录、但影响显著故提至优先处理——口径差异，非重复计数。
+  </div>
+</section>
+
+<section id="top" data-page-node-id="9bgeyfTxQmF2vKiasFZO95">
+  <h2 data-page-node-id="cXIAwDTWPO7e9FWqVSWNK9">最高优先级修复清单（High）</h2>
+  <table data-page-node-id="zJGoE2y7TYue1hDgFVhvvU">
+    <tr data-page-node-id="H7HuPmPq7anGqD6gyQGJez"><th style="width:34px" data-page-node-id="z44E9WgdsWAzk2zzrYG6Ti">#</th><th style="width:120px" data-page-node-id="USfpsxLXLTMFvWMpjCGsHj">子系统</th><th data-page-node-id="yPbDc1LKS14fUCmBcbJpcO">问题</th><th style="width:130px" data-page-node-id="hziDWvjMcN7QFIpK2oinHE">位置</th></tr>
+    <tr data-sev="High" data-page-node-id="UB5fGvLnPx2ViYSwQlQawK"><td data-page-node-id="NjdddHvLsTDDmcJkpG2v6d">1</td><td data-page-node-id="4YXY28I3TYhQ9eMmSjGc1F">核心/数据</td><td class="issue" data-page-node-id="EqZptyBnPKBIkBRz4M4U5p">CryptoUtils.encrypt 加密失败时代码降级返回<b data-page-node-id="EsFIMHsMdRz45Izz17UCtD">明文</b>，导致密码/token 以明文落盘，违背“凭据加密存储”硬约束</td><td data-page-node-id="H3cjNWRTE5ped43CzoKoDF"><span class="loc" data-page-node-id="36iwpC53jMGOuutXvHRjBW">util/CryptoUtils.kt:79</span></td></tr>
+    <tr data-sev="High" data-page-node-id="A5vNLcWfpOXAjyQ6KRB7By"><td data-page-node-id="ZvuVnMIGyE8YB0lLNaCBzq">2</td><td data-page-node-id="EQz1NWV4qFW8gsTnKVEFDi">后端适配器</td><td class="issue" data-page-node-id="kOzpvg7e3sq5WuntrLvwpc">Daoliyu/Feiniu 原始 OkHttp 调用几乎从不关闭 Response（含 testConnection 每次泄漏一条 socket），连接池被逐步耗尽</td><td data-page-node-id="7rdH6M00v8mf1VA1NlCEyP"><span class="loc" data-page-node-id="oKpyUgmd82ALS5MDrTKXnG">impl/DaoliyuAdapter.kt:182 等 8 处</span></td></tr>
+    <tr data-sev="High" data-page-node-id="aGuOvjzom2BY6rvPPtpSSS"><td data-page-node-id="h4EP3MVmz4x008hqCEfd6P">3</td><td data-page-node-id="ypW8Hp1LS4BUXjvBxnRcqB">下载/本地</td><td class="issue" data-page-node-id="rrQKeyA70Io9eBeIzzNAYi">MusicScanner 用 getColumnIndexOrThrow 访问 VOLUME_NAME（API29+）/YEAR，在 API&lt;29 真机抛异常被吞，整库扫描静默返回空</td><td data-page-node-id="dEsqLZdafC5OYxoBArYaiR"><span class="loc" data-page-node-id="EijOv25NUQ7CHeD4XqGmG2">backend/local/MusicScanner.kt:76</span></td></tr>
+    <tr data-sev="High" data-page-node-id="sLjZAwjYMZFnmuvjlwIycl"><td data-page-node-id="rogu7w5JPEteC5IBOHyvU5">4</td><td data-page-node-id="HcjiePVxIkoGRIcVy1DnTe">下载/本地</td><td class="issue" data-page-node-id="icaa47AH4prtCb8nU58DpA">下载完成未校验 Content-Length，截断/损坏音频被标记为 COMPLETED，用户拿到坏文件且无重试</td><td data-page-node-id="ENuV9HxZsyMKTvTNDL5m7V"><span class="loc" data-page-node-id="NqX7Gxwk10Ityr9x2LaP1R">backend/download/SongDownloadManager.kt:276</span></td></tr>
+    <tr data-sev="High" data-page-node-id="CxXkYwMr6KfueRkJkdEyyh"><td data-page-node-id="A9enzknl6dQIfbXV9a96Oi">5</td><td data-page-node-id="gRgTQ0HHwPzmiDWATd1w0c">下载/本地</td><td class="issue" data-page-node-id="xrqbH0h2EExldCmbHXce4G"><b>EmbeddedCoverExtractor.extractCoverUri 对 content:// URI 误用 removePrefix 当文件路径</b>（被 UnifiedSongRow / MainViewModel 调用），MediaStore 歌曲解码路径不存在 → 内嵌封面提取失败。<span class="muted">复核修正：报告原点的 LocalCoverExtractor 实为死代码（零调用点）；同一 bug 的真实调用点在 EmbeddedCoverExtractor。</span></td><td data-page-node-id="W5EdPMEWtgzhfMl9dO03b4"><span class="loc" data-page-node-id="Tia2y6h39TY427Whh3AzKh">backend/local/EmbeddedCoverExtractor.kt:38</span></td></tr>
+    <tr data-sev="High" data-page-node-id="VpxoAE5qner8hxdqsPvl2Z"><td data-page-node-id="hvQToCKNXEoCDwmpCLiLCP">6</td><td data-page-node-id="EjxGqoFF5SeGz2LR2TZBXv">播放引擎</td><td class="issue" data-page-node-id="MeWkWpsg9fBEM5lD1Tq0re">HQ 人声分离缺少 overlap-add 且段输入缓冲区污染（陈旧采样送入 ONNX），段边界爆音、末尾损坏</td><td data-page-node-id="frAzB2VhcZwaV5UbwZiRmd"><span class="loc" data-page-node-id="EHoOrobCGfE6q8TD6wqqPj">player/DemucsSeparator.kt:50-52,224-265</span></td></tr>
+    <tr data-sev="High" data-page-node-id="AzX8z0fCafqxt7xNlACkIT"><td data-page-node-id="T726YCqwPgGfZcvB9DKMLB">7</td><td data-page-node-id="gY0vQEc6rjL017WNjZlrzI">播放引擎</td><td class="issue" data-page-node-id="UHpwjfBAnWkECFuQgr0LsF">服务销毁时未清理 Crossfade：PlayerManager.release() 从不调用<b>已存在的</b> CrossfadeController.abort()，子播放器与 50ms Handler 轮询在淡出窗口（默认约 4s）内残留，并可能对已 release 的 player 触发切歌。<span class="muted">复核修正：abort() 存在且可正确清理（CrossfadeController.kt:139-143），缺陷是漏调；泄漏多为瞬态——原 High 下调为 Medium。</span></td><td data-page-node-id="f0DdX1d7tY7mZNI3Xbm3Tg"><span class="loc" data-page-node-id="RtWDQ50I0DpyGmL3PhbDMv">player/PlayerManager.kt:1148 / CrossfadeController.kt</span></td></tr>
+    <tr data-sev="High" data-page-node-id="iaAMgND8s6qv8HrxD4XkEQ"><td data-page-node-id="L7eQrvBKmwncxJZeg0zTgr">8</td><td data-page-node-id="oQEHCmyJYiUQeHus9mavOn">播放引擎</td><td class="issue" data-page-node-id="xkDfgUx2KUMAlnoFghLbnM">enableHighQualityRemoval 无“正在分离”守卫，可并发双分离，共享 DemucsSeparator 向同一路径并发写 WAV</td><td data-page-node-id="MsKwk17OdlNRHifijA3Klw"><span class="loc" data-page-node-id="oBFCYH4Z8ASsojUrmUH2mp">player/HqSeparationOrchestrator.kt:278</span></td></tr>
+    <tr data-sev="High" data-page-node-id="WcKbwyK6SEiTrjYcrzaAnn"><td data-page-node-id="OkiBC1CU5ucHvlx0xLCNFJ">9</td><td data-page-node-id="Uw9nXrBuBqFLx9orLiBr4k">播放引擎</td><td class="issue" data-page-node-id="7kBDqwKj7DUi4bEa0a1vaF">DemucsSeparator 单实例并发 init/推理共享状态风险（双线程各建 session，前者泄漏；release 时 NPE）</td><td data-page-node-id="EjBN84I1kMzEXihjEHCpcc"><span class="loc" data-page-node-id="pTHVJP8Q8qzJSkQLFvGWnd">player/DemucsSeparator.kt:94-179</span></td></tr>
+    <tr data-sev="High" data-page-node-id="jgP85oFcWC0AeHrpyDDEbm"><td data-page-node-id="fDyZlZRbI7w8T2j70xN4po">10</td><td data-page-node-id="sRbRIYvDZJ8jfCFoMZnijg">播放引擎</td><td class="issue" data-page-node-id="KlenR49hkkRth0rHyKB1Mb">release() 关闭进程级 OrtEnvironment 单例，TV 服务启停不重启进程，导致“首次分离正常、服务重启后无法再分离”</td><td data-page-node-id="MJZHSKibOLDCKeDaCgDIs2"><span class="loc" data-page-node-id="JXqjq65RSIEhQWnoAm5fCj">player/DemucsSeparator.kt:130</span></td></tr>
+    <tr data-sev="High" data-page-node-id="DYQpxvFD71Py7DgqdrAUVR"><td data-page-node-id="1BsCno4erOkKGTaRmByuYK">11</td><td data-page-node-id="2etdRIqm58xdObYkfGNwWE">UI/本地服务</td><td class="issue" data-page-node-id="W9VXVgHS9VnnrGU92UDUAh">K 歌页/步进弹窗的 BACK 键未处理 showKaraoke，按 BACK 直接命中退出应用确认框，破坏三级 BACK 逻辑</td><td data-page-node-id="qI86P78eyX985u4WbxXmGh"><span class="loc" data-page-node-id="jhhytEHonABexBtjvp7oZH">ui/components/AppRoot.kt:145-152</span></td></tr>
+    <tr data-sev="High" data-page-node-id="eEn5LrKaGsJG9lglDOhTwJ"><td data-page-node-id="1j1uqhR5x0gUyot95bVmlb">12</td><td data-page-node-id="0HRGbwCoPrnjmCVpJ7ODBL">歌词</td><td class="issue" data-page-node-id="tDaTxTo6lGz5R8S8vyXtEN">getLyricsFromSource 在线歌词变体轮询可能抛 IndexOutOfBoundsException（候选耗尽后越界访问 all[candidateIndex]）</td><td data-page-node-id="bilQZxtrNOP7VUuPU4eQvR"><span class="loc" data-page-node-id="DcZqVTO56n6pRc6qMTT0o3">lyrics/LyricsManager.kt:269</span></td></tr>
+    <tr data-sev="High" data-page-node-id="LNAqaxuxXahNn9GlILGm3V"><td data-page-node-id="9wSetYGAbsHOugBsFL7Wmy">13</td><td data-page-node-id="8CN7v93pV7V6dh3XryzuoN">百度网盘/MV</td><td class="issue" data-page-node-id="CaS62NPLFZIzAyPE5v3F8M">（同属 High 关注）Bilibili MV 搜索/播放未实现 WBI 签名，当前 B 站接口会返回 -412，在线 MV 功能基本失效</td><td data-page-node-id="Bjn7NF0hBrSweaI2fKTDxW"><span class="loc" data-page-node-id="lvtA3pkYlZ6s2ChmsWF8SN">backend/network/mv/BilibiliMvService.kt:143,219</span></td></tr>
+  </table>
+  <p class="muted" data-page-node-id="Iv79CDTwgtfqhS0n3RPwYI">说明：百度网盘/MV 代理另将 M1（token 入日志）、M4（服务端令牌失效未重试）、M5（内嵌封面截断）列为 Medium 但影响显著，建议与 High 同期处理。</p>
+</section>
+
+<!-- ============ 核心/数据 ============ -->
+<section id="core" data-page-node-id="i5pjBFQWrkxJfxErMn1aBc">
+  <h2 data-page-node-id="IEorDrL2ZL10QuhwPi7qCj">① 核心架构与数据层 <span class="pill" data-page-node-id="GeFpgPOoURyMqvtn401BjB">2 Medium · 7 Low</span></h2>
+  <div class="card" data-page-node-id="HHKG4INKgD0k3ZsgTKUX5J">
+    <table data-page-node-id="ZVmAWozuhH2zbyJ6Irvfgx">
+      <tr data-page-node-id="3mXx77lS5uQoNeMDi50Ya8"><th style="width:90px" data-page-node-id="InCCaUJhTZEEBwvx8RfgQH">严重度</th><th style="width:170px" data-page-node-id="KwzvZffXtFDEgSSmLEb5JF">位置</th><th data-page-node-id="0K42EUa1hGDHDjQ1di6AhO">问题 / 影响 / 修复</th></tr>
+      <tr data-sev="Medium" data-page-node-id="eEVXg7ieCfqyb6oqPFaLKS"><td data-page-node-id="asAvILUQZf7JJowNPweVUD"><span class="sev Medium" data-page-node-id="O6esHXyF5SOOWE2LlgQfvm">Medium</span></td><td data-page-node-id="emrWH1jKcy5eRVWCfh6HRT"><span class="loc" data-page-node-id="k5Xebi8Na9Z3aPghTNW68n">util/CryptoUtils.kt:79</span></td>
+        <td data-page-node-id="KFbECfgZJCFHfTBcz8QdAd"><b data-page-node-id="bV4B1Z13MF6iy9tQ2yPTli">encrypt 失败降级返回明文</b> —— 与凭据加密存储承诺直接冲突，触发后密码/Token 明文落盘。<div class="fix" data-page-node-id="0uxRcomxT3X5u8DQtxB6Ho">修复：catch 中向上抛异常或返回空串，绝不以明文落盘。</div></td></tr>
+      <tr data-sev="Medium" data-page-node-id="kR3MjCdqsRYB6G546GhQVC"><td data-page-node-id="W1SmtsE7ooiENTdbDmVD3z"><span class="sev Medium" data-page-node-id="bqhyjHGUanQeiU2SSlH3fG">Medium</span></td><td data-page-node-id="qkMHTLu3AlPMsrjTcF20Bm"><span class="loc" data-page-node-id="BiUBH9eTa0mshIwofpyn80">data/model/AppSettings.kt:31</span></td>
+        <td data-page-node-id="BWnMXFhqcxpR4ltidM2AtD"><b data-page-node-id="ogsD26aUz3lSbBmlhfhW5f">modelDownloadUrl 死字段</b> —— 用户设置的自定义模型下载 URL 从未被 AppPreferences 读写，重启即丢失（2026-09-03 C12 已记录未修）。<div class="fix" data-page-node-id="bdkYrn1ngQ1RFk8omCcgZn">修复：补齐 key + Flow + import/export，或删除该字段。</div></td></tr>
+      <tr data-sev="Low" data-page-node-id="2S6cFFzopCEubtekBu5r3N"><td data-page-node-id="bS2MRButJeaxGEIkaTnHLG"><span class="sev Low" data-page-node-id="yh7i5HX0sXs4l3lkfQ1YA0">Low</span></td><td data-page-node-id="XHGCjmfGHyF7TnyG7F3MMw"><span class="loc" data-page-node-id="D7fsT7oRl3atL44TnrVDHS">data/prefs/AppPreferences.kt:1342</span></td>
+        <td data-page-node-id="EWFaAXgSo7aRVp6LqVhfNG">getBaiduTokensSync 向日志输出 access_token 前 10 字符，属密钥部分泄露。</td></tr>
+      <tr data-sev="Low" data-page-node-id="qJDPZbh0uHsI0XWChpX53m"><td data-page-node-id="70vsj3XcSFKIlrMkjpoV5y"><span class="sev Low" data-page-node-id="ailPaBFWF2k9r01fgXDe0g">Low</span></td><td data-page-node-id="IqV4AruZEgQeQrm5t6izfW"><span class="loc" data-page-node-id="G6ZGwUl53Vn5G7oX5LAbcI">NasMusicApp.kt:139</span></td>
+        <td data-page-node-id="iII21inqapAWPgEjIfPdZd">注释写“信任所有证书”与实现不符（已实现系统默认校验），误导性注释可能诱使后续维护者“复原” hack。</td></tr>
+      <tr data-sev="Low" data-page-node-id="8toQs0fCYF8w3YQ5Ca3cUg"><td data-page-node-id="lOB0ni6qyFAo4WEQwg74zl"><span class="sev Low" data-page-node-id="LUxfqt7gDMSoFrjLrwvptK">Low</span></td><td data-page-node-id="w0YqeICntDk4GUksZfRI4c"><span class="loc" data-page-node-id="H1ZPNrnIK78FesL5lda9YJ">ui/MainActivity.kt:338,349</span></td>
+        <td data-page-node-id="X9cyUY1T6ldTf0atfBLCn4">playModeToggleHandler 存入 Application 单例但在 onDestroy 未置 null，持有已销毁 ViewModel 的闭包（悬挂回调）。</td></tr>
+      <tr data-sev="Low" data-page-node-id="UtY2coX2JEZs2x3I3gbZQP"><td data-page-node-id="Alo1nj6mD04vBfsvbDWtf6"><span class="sev Low" data-page-node-id="Ij5jYMNcCBdW8v743rqNkH">Low</span></td><td data-page-node-id="GeQ1PtpAhX6MWowTESnVEl"><span class="loc" data-page-node-id="z8ADMdqqjXgOrkkZzX9myJ">data/prefs/AppPreferences.kt</span></td>
+        <td data-page-node-id="cQKUzTr6oEGdBZx4wVsm7D">Gson 持久化的 data class 新增“非空无默认”字段会导致旧 JSON 反序列化失败/置 null（前向兼容隐患）。</td></tr>
+      <tr data-sev="Low" data-page-node-id="oYqeLlRmJWFFgZlzc3QjAo"><td data-page-node-id="k6E2tmYhNhOdKjA6HPHQ6L"><span class="sev Low" data-page-node-id="bUCgAn1j26u5id8BTMUgXM">Low</span></td><td data-page-node-id="KQcoPIMWbY5hxAIQYmluaa"><span class="loc" data-page-node-id="bQLDG6BnM4qcL28GXC1KmI">data/prefs/AppPreferences.kt:81</span></td>
+        <td data-page-node-id="2nf9XD8gQHMtXfNDlDx8TM">AppPreferences 自带 getInstance 单例与手动 DI（NasMusicApp 持有）并存，存在未来不一致风险。</td></tr>
+      <tr data-sev="Low" data-page-node-id="97wsGbQsqFjnkggx6KlvuN"><td data-page-node-id="clGH8s4b9EuZb6L3cltZg0"><span class="sev Low" data-page-node-id="3ftyuGYgSFe7QwwaHW8QAk">Low</span></td><td data-page-node-id="0fduGdupzjA3oIorJsA6S0"><span class="loc" data-page-node-id="FXFFfipGcGgAGaHOy7aKHy">NasMusicApp.kt:307,356</span></td>
+        <td data-page-node-id="Vmu5ChmeXoyf6HtDD913Ua">下载设置 lambda 每次调用重复 4 次 appSettings.first()，且四次快照可能不一致。</td></tr>
+      <tr data-sev="Low" data-page-node-id="GBzEl17FTfnZ3IYZ7rGucy"><td data-page-node-id="W4E2xWDFqAV2uXrg9I9tcp"><span class="sev Low" data-page-node-id="FdfiWEGsqZCmUBPMpRvVI3">Low</span></td><td data-page-node-id="IOpidYlhXarPcr2GahHxYC"><span class="loc" data-page-node-id="s5UjQvMXvIG07ihFwUQOMj">util/CryptoUtils.kt:29</span></td>
+        <td data-page-node-id="kWWcNu7gTooLoHnmCU4Ffo">AES 密钥由 APK 内置口令 SHA-256 派生，可被逆向还原（混淆级而非保密级）；建议在安全文档如实描述强度。</td></tr>
+    </table>
+    <p class="ok" data-page-node-id="LiKMwQXMWuOgHENbxWDzsF">亮点：DataStore 替代 SharedPreferences 规避 ANR；safeParseJson 解析失败跳过回写避免清空收藏/记录；备份导出显式剔除敏感字段；应用级 applicationScope 设计合理无 GlobalScope 误用。</p>
+  </div>
+</section>
+
+<!-- ============ 后端适配器 ============ -->
+<section id="adapter" data-page-node-id="BlofmfzweVr2jby5yqIQ7f">
+  <h2 data-page-node-id="4kaywlu1PFqWIlUV4Eejs5">② 后端适配器与注册中心 <span class="pill" data-page-node-id="aXxQOs3FseE1p4gAWjG1nz">1 High · 3 Medium · 5 Low</span></h2>
+  <div class="card" data-page-node-id="CdupQRASl61fvhEbYEBpzS">
+    <table data-page-node-id="Eb67HXPvTB1ZTx1IKVMKjR">
+      <tr data-page-node-id="D1hIR8n9y6oFIiVNho5sXv"><th style="width:90px" data-page-node-id="YjwgDcHr59EM913E6WwZR7">严重度</th><th style="width:175px" data-page-node-id="OsDnKivJBWPV4JCHCD8Qrz">位置</th><th data-page-node-id="Kz0OSldHn4WldtW5F8NsxC">问题 / 影响 / 修复</th></tr>
+      <tr data-sev="High" data-page-node-id="sNU9pCJYMJiZgxEmrAUVSJ"><td data-page-node-id="Db7DqF9iLTbKiAESaQRzYY"><span class="sev High" data-page-node-id="VfOpcyzubdQDzkrXttwEFC">High</span></td><td data-page-node-id="mKidv0RXsmt5JCfx7Km4JB"><span class="loc" data-page-node-id="wvsMFeeFyZZ0cOnv8QAHQR">impl/DaoliyuAdapter.kt:120-182</span><br data-page-node-id="pKd4AgwBH99DOJx81lcwVD"><span class="loc" data-page-node-id="n3kndqmhaT1qKLdJdFeM3n">impl/FeiniuAdapter.kt:153-562</span></td>
+        <td data-page-node-id="byhv4hqsZ2IyrBxxKVGCwv"><b data-page-node-id="DtbhZSSr9mdRdBV8MJZjbX">Response 几乎从不关闭</b> —— 非成功分支直接 return 未读取 body 也未 .use{}；testConnection 直接 .execute().isSuccessful 任何情况都不关闭。共享连接池（maxIdle=5）被逐步耗尽导致后续请求排队/超时。对照 Jellyfin 适配器全部用 response.use{} 为回归。<span class="muted">复核：Daoliyu 实为 5 处泄漏站点（含漏记的 getLyrics:352），Feiniu 4 处；成功路径 body.string() 会释放连接，持续泄漏主要在 testConnection 与非 2xx 提前返回分支。</span><div class="fix" data-page-node-id="6tiu7MXIFXkGLnDjz0c8Ti">修复：统一 client.newCall(req).execute().use { resp -> ... }，testConnection 改为 execute().use{ it.isSuccessful }。</div></td></tr>
+      <tr data-sev="Medium" data-page-node-id="ZFA7CaGbgtEEf0Qsf4mLhY"><td data-page-node-id="uDp5GsgcOuPNJ6bs4ulQKH"><span class="sev Medium" data-page-node-id="FVhJArt6vKGGChT36JAMJG">Medium</span></td><td data-page-node-id="cskkHrpWDANpS5EHCYtCWt"><span class="loc" data-page-node-id="GqBSSp0zuofCBhkFFo7XID">impl/SubsonicAdapter.kt:805</span></td>
+        <td data-page-node-id="s3lsm5AwhzJCdlnHB8AV8r">REST URL 中 u=$username 未 URLEncoder 编码，含空格/&/=/+ 的用户名会破坏查询串导致 401。</td></tr>
+      <tr data-sev="Medium" data-page-node-id="YmErlfF7yoEZEpX9HYKg0K"><td data-page-node-id="b4zwFByROLkC9HfdvGjke7"><span class="sev Medium" data-page-node-id="JhalbgGWHbev8DB5BDWrBo">Medium</span></td><td data-page-node-id="gZh6Wz6wW6szRFiQF2lPhS"><span class="loc" data-page-node-id="zvF6LC6ejP90FgLXtKQCux">impl/SubsonicAdapter.kt:745 / NavidromeAdapter</span></td>
+        <td data-page-node-id="u2FykkTIAr2Apsrw9NdksJ">getSongsTotalCount() 恒返回 0（Subsonic 读不存在的 totalSongs 字段；Navidrome 用接口默认=0），UI“共 M 首”永远显示 0。</td></tr>
+      <tr data-sev="Medium" data-page-node-id="kuAUQ4cDJCanyAAR31To7W"><td data-page-node-id="TDdZ0uISD0H8FtAf2FWo6l"><span class="sev Medium" data-page-node-id="xr0YGZMiKTnos4La1sP1j7">Medium</span></td><td data-page-node-id="XAgs0GTPGIHpNlNvPhLU5W"><span class="loc" data-page-node-id="q79CtD9nLZ9OucDF6uETC1">impl/DaoliyuAdapter.kt:273 / FeiniuAdapter.kt:311</span></td>
+        <td data-page-node-id="WUUAusMKxu78C15nANn6uO">getSongs(offset,limit) 把 offset 直接换算成 page，offset 非 limit 整数倍时丢弃页内余数，与其他适配器 offset 透传语义不一致。</td></tr>
+      <tr data-sev="Low" data-page-node-id="UTRGwiZgu9ohQIAJaaLe7V"><td data-page-node-id="Qq9jjDFDIRuAotHVTlmySW"><span class="sev Low" data-page-node-id="cvjyWIqjuvjRqO51tjYHFf">Low</span></td><td data-page-node-id="jZgY7tVtqOdt9VrEO3XfKJ"><span class="loc" data-page-node-id="xbbVJDkNOUPNtLqlbVI8Kj">impl/Daoliyu/Feiniu 多处 catch</span></td>
+        <td data-page-node-id="gKfNojM3XB4CLpGPxc5KYt">多处 catch (e:Exception){ emptyList() } 完全吞异常无日志，降低可诊断性（应 AppLog.e）。</td></tr>
+      <tr data-sev="Low" data-page-node-id="yVNy5HA9RAP1c6J7HDU5tm"><td data-page-node-id="R3IOcDLotDIRkG41BDIBYg"><span class="sev Low" data-page-node-id="Yfive8CB5MWN7a9MHx5qiU">Low</span></td><td data-page-node-id="luBRg2PAlV5UWy6MrDwKYu"><span class="loc" data-page-node-id="bd11inyFHB2C8OPnCzqqFE">impl/FeiniuAdapter.kt:86,531,555</span></td>
+        <td data-page-node-id="5gKDBkU8yaM5tnlEWAcAOA">同时由 CookieJar 与手动 header 注入 Cookie，可能产生重复 Cookie 头导致鉴权异常。</td></tr>
+      <tr data-sev="Low" data-page-node-id="aH0jICYjYDUCGsR4uY4nlu"><td data-page-node-id="GtkAaKasDW3yptFJlOlksV"><span class="sev Low" data-page-node-id="U223hfAkj3HfslP0ZjPTVa">Low</span></td><td data-page-node-id="uwi0aOZAxbw2NesuO82wTK"><span class="loc" data-page-node-id="ueAA9wD2GDUbiIZYpVEuF9">BackendRegistry.kt:190</span></td>
+        <td data-page-node-id="5eM7Hzko0PIE7CyjOMgcTG">testConnection 对所有失败返回统一文案，无法区分不可达/TLS/凭据错误。</td></tr>
+      <tr data-sev="Low" data-page-node-id="JIDmDqXRPMz2gXKx00j2Qo"><td data-page-node-id="fvBzsRdjoGPuCogGDFlpUE"><span class="sev Low" data-page-node-id="Xg7nHfgqNtioFI3HnOl0mF">Low</span></td><td data-page-node-id="UCy52x7YFhPCC3ln3XjEQy"><span class="loc" data-page-node-id="gHeVfidotGgbDgw3woRnrc">BackendRegistry.kt:48</span></td>
+        <td data-page-node-id="V6lq2YE3iQ3eOMNZOGeJc4">sharedConnectionPool 改为全局 5 条（非 per-host），多 host 下复用率下降（不泄漏但偏保守）。</td></tr>
+      <tr data-sev="Low" data-page-node-id="DOvdthWmR6FLraboweVYcr"><td data-page-node-id="earAnGzI82Z04RIfmlNgjq"><span class="sev Low" data-page-node-id="88OsDQBCpfFMQdwChadkG2">Low</span></td><td data-page-node-id="XUSv96HjZ3qrW5AqzauFMg"><span class="loc" data-page-node-id="5lYkEVbzbYoj8qxSPbKnQq">impl/NavidromeAdapter.kt:665</span></td>
+        <td data-page-node-id="M4FmwXdx4K9a7Wd3QF8WPR">toggleFavorite 懒加载收藏列表无同步保护（_favoritesLoaded 普通 Boolean、loadFavorites 无锁），可能重复加载或死循环重试。</td></tr>
+    </table>
+    <p class="ok" data-page-node-id="K2cGIG2RSBAqohGxfVS4ec">亮点：无任何 trust-all 回归；BackendRegistry 状态访问均 synchronized；testConnection 用 throwaway 实例不污染全局；可空 BackendAdapter 判空正确；Jellyfin 适配器为 OkHttp 用法标杆；Subsonic 鉴权算法、salt 固定正确；分页循环均有 maxPages 上限。</p>
+  </div>
+</section>
+
+<!-- ============ 网络/天气/电台 ============ -->
+<section id="net" data-page-node-id="H2CKc52bTwkziB4RPlG5TM">
+  <h2 data-page-node-id="Vh6SHHqqw0xkIpRtb2XiWP">③ 网络音乐 / 天气 / 电台 <span class="pill" data-page-node-id="wLvmZ6Iiyd5iilnewapPYM">6 Medium · 10 Low</span></h2>
+  <div class="card" data-page-node-id="gSibAvFv1my2zAYwWUyycg">
+    <table data-page-node-id="m39JWkU7hagyYWlToJlfRQ">
+      <tr data-page-node-id="W3pTev5GiGf2wwKDmVPwht"><th style="width:90px" data-page-node-id="m4VlHSUSHRQtjUIduIBXaZ">严重度</th><th style="width:175px" data-page-node-id="gBZVEG2lhXF9j0n9wim2Yz">位置</th><th data-page-node-id="K8mFXgJBsLeHEcBad11cpQ">问题 / 影响 / 修复</th></tr>
+      <tr data-sev="Medium" data-page-node-id="yEWznBBpMqeOvWE4IsA4CH"><td data-page-node-id="m2407M5EH1XZKNM1lYjSVz"><span class="sev Medium" data-page-node-id="Iogn7T3DN4OjAgHhDyYgTY">Medium</span></td><td data-page-node-id="30CnRZ2pHpRdnRSCJxcmQu"><span class="loc" data-page-node-id="PZ48l3u634RIOdu8NBXzYD">network/NetworkMusicManager.kt:36</span></td>
+        <td data-page-node-id="V9aZW2HoMijI4LxuiHyBQ0">services 可变 Map 为普通 HashMap，主线程 register/unregister 与 IO 线程 resolvePlayUrl/search 并发读写，可能 CME 崩溃。</td></tr>
+      <tr data-sev="Medium" data-page-node-id="oJAn3Jn2cWnP4ZyzJjPqtY"><td data-page-node-id="bEFx2QsuStTmKeLu4zDtTF"><span class="sev Medium" data-page-node-id="y1mxkmz5JlSRtitelRNl0k">Medium</span></td><td data-page-node-id="aepgAJMzG9uKfUPXstrbId"><span class="loc" data-page-node-id="f9gb0zSxO3mYqPAex6LGhW">network/NetworkMusicManager.kt:49</span></td>
+        <td data-page-node-id="1DJqLOhvAgeEFCRbAeatKE">playUrlCache 仅按 5 分钟 TTL 清理，无容量上限（与“LRU 500”描述不符），超长会话内存只增不减。</td></tr>
+      <tr data-sev="Medium" data-page-node-id="vbvmT4azDg87LiG3qTyRqM"><td data-page-node-id="ZoCYivt65Jam3wqvz8CmCX"><span class="sev Medium" data-page-node-id="kL5i6sm0AU8zJdilsJegAA">Medium</span></td><td data-page-node-id="bleHzxSJkcMUp7NCalUrlo"><span class="loc" data-page-node-id="7nGriYpiDWOMDmTwtpa7c2">weather/WeatherApi.kt:57,100,139,184</span></td>
+        <td data-page-node-id="9tQZBsd9AqnelZPQJHgz6u">4 处 OkHttp Response 未用 use{} 关闭。<span class="muted">复核修正：解析异常分支不泄漏（body 已被 string() 消费并关闭），实际泄漏面仅 body==null 的极窄路径——原 Medium 下调为 Low。</span></td></tr>
+      <tr data-sev="Medium" data-page-node-id="6TcZMNjaJdo5FUjhUKLgSk"><td data-page-node-id="s6ayo6HXy8XU7q9eoMgC4O"><span class="sev Medium" data-page-node-id="93ACMn8E6Od5aJmmNnVPHn">Medium</span></td><td data-page-node-id="gJBUEOcM0fRfF7NeAVbraT"><span class="loc" data-page-node-id="ClZvFlWj38lNTDVccUMV8k">weather/WeatherRadioManager.kt:169-177</span></td>
+        <td data-page-node-id="ZJ3v5KOQhvPp26cxk0PT26">心情命中不足时用随机歌曲补位却计入 nasCount（与注释“不计入”矛盾），电台退化为随机播放，功能名不副实。</td></tr>
+      <tr data-sev="Medium" data-page-node-id="Fqbqtuaf9sYQgsekKD0pMD"><td data-page-node-id="nlEw6cviAhsYxMo5H2CM5y"><span class="sev Medium" data-page-node-id="JfsqvEhDtXvc0lEbvplcxl">Medium</span></td><td data-page-node-id="rRSGwtKniBzPuZtdDISu3V"><span class="loc" data-page-node-id="TEx1i7TOJokq4gTaEN87Sv">radio/SmartRadioManager.kt:137-163</span></td>
+        <td data-page-node-id="UDv6QOKQZl8SIPhW5KCXQg">skip() 调用 stopInternal(resetState=true) 实际执行 playedIds.clear()，清空全部已播历史，跨批次去重形同虚设（注释称“清当前批次”）。</td></tr>
+      <tr data-sev="Medium" data-page-node-id="VRfhtvc1VB0ceuYrOr2Ety"><td data-page-node-id="MtVEBUO3RvHuGgb12oGWtf"><span class="sev Medium" data-page-node-id="Y0MX2Je3L17YLI0FDKvhhs">Medium</span></td><td data-page-node-id="9HuBBf8DUpibNG6d1xYuVp"><span class="loc" data-page-node-id="OEoaK0a4xtUlQOUmETpOts">radio/SmartRadioManager.kt:46-50</span></td>
+        <td data-page-node-id="gEMedH2WPCLsyRHOyEDrmZ">共享可变状态（playedIds/cachedLibrary/currentSeed）无同步，generateJob 异步取消存在竞态窗口。</td></tr>
+      <tr data-sev="Low" data-page-node-id="4K22AE5aemA2tMvTNhKx8q"><td data-page-node-id="wEljf9THAUCpnWLfl2PMED"><span class="sev Low" data-page-node-id="hFdfUc05pBZOhGgaK3LvSA">Low</span></td><td data-page-node-id="DO7fhho6GDgcb92pM6lwFA"><span class="loc" data-page-node-id="y61kkUV2UtoCXl8HBYtShb">weather/WeatherRadioManager.kt:158</span></td>
+        <td data-page-node-id="4tGgxDJ28U70IsXrp1y3Cu">空 mood 查询 query="" → contains("") 恒真，NAS 分支匹配整库，心情电台失效。</td></tr>
+      <tr data-sev="Low" data-page-node-id="J8oQOooiR1BfJdaBgcrbYC"><td data-page-node-id="e2vnAa6h7ZkhnUUIeRmxGO"><span class="sev Low" data-page-node-id="u1vOthZuCO8irXDClRMWsD">Low</span></td><td data-page-node-id="fekPbIjaDw4K7290mItFMx"><span class="loc" data-page-node-id="bTbJlvXZcVPYYpoRINpnuS">network/MetingApiService.kt:240</span></td>
+        <td data-page-node-id="YDn4KrL4RGh95psLURmuTL">302 重定向仅认 302，未处理 301/303/307/308；相对 Location 未解析为绝对 URL。</td></tr>
+      <tr data-sev="Low" data-page-node-id="PxfrtHsE2EQDcELkCYyP1Z"><td data-page-node-id="07hxpHrgxFDt9B8jKSwcC2"><span class="sev Low" data-page-node-id="Qv6bpASIVTwx1yC8ZHgX8a">Low</span></td><td data-page-node-id="FuzFqSHDsXN45gGAoX5YxH"><span class="loc" data-page-node-id="rmoWE5yjg2BdN8l0ahxtrB">network/MetingApiService.kt:387</span></td>
+        <td data-page-node-id="9QLOxbN1fzVJTDZVMbrCXV">parseSongs 未对 JSON null 值做 isJsonNull 防护，title 为 null 时整条被静默丢弃。</td></tr>
+      <tr data-sev="Low" data-page-node-id="lz2Yf30n9zdoL3Fy66mp3A"><td data-page-node-id="L7eKpZ9G3VHAnbQGLh7UgY"><span class="sev Low" data-page-node-id="DErzeSGOASyFdFWQtnJX6V">Low</span></td><td data-page-node-id="heydyjrs1xwjOWMURizTu1"><span class="loc" data-page-node-id="mUmfunsnOYt6abXjUhEiuz">network/NetworkMusicManager.kt:97</span></td>
+        <td data-page-node-id="6eREVDfqEy4kSuBYyvGNOi">resolvePlayUrl 返回 null 契约正确，但调用方（播放器）必须判空，否则传 null 给 ExoPlayer 崩溃。</td></tr>
+      <tr data-sev="Low" data-page-node-id="v7nGjpESBVqhMf96XeuCmN"><td data-page-node-id="euLDJ2kDanMMBK0ZdaIZIs"><span class="sev Low" data-page-node-id="XIhzan0OEW3CeMflk6SFZE">Low</span></td><td data-page-node-id="0pEnjXTtw0SFRIwnazpEcT"><span class="loc" data-page-node-id="1EFChIQHn8OPED9mBgP3r8">radio/RadioBrowserClient.kt:121</span></td>
+        <td data-page-node-id="UAAQbJdIFyxP2shuTSNe7M">reportClick 首个服务器 HTTP 失败即 return，不重试其余 seed 服务器。</td></tr>
+      <tr data-sev="Low" data-page-node-id="7jzoWNN8KQZZTzItBx4tHN"><td data-page-node-id="A0rFap9wGacLbtxmUe91KB"><span class="sev Low" data-page-node-id="Luuf0QvCpnuXHyWnFLwe0R">Low</span></td><td data-page-node-id="hEMPe4uwTqox89KedO8ypa"><span class="loc" data-page-node-id="VgPy86jKuwB6v02DCMAk49">weather/WeatherApi.kt:271-294</span></td>
+        <td data-page-node-id="OXOvJvWWmS3Nh7OEEdLVch">describeWeatherCode 遗漏 WMO 85/86（雪阵），大量非真实码段冗余易误导。</td></tr>
+      <tr data-sev="Low" data-page-node-id="EblFEi8i90Mynm7DiRHbL8"><td data-page-node-id="63PhuYkCfijBFMUFFCKv9F"><span class="sev Low" data-page-node-id="VdBnu4UA1MZUv6w4SyCdIo">Low</span></td><td data-page-node-id="vajomxpcT0m5bPiO5htT5A"><span class="loc" data-page-node-id="rK8uut90tVw6OKWzis78jy">weather/WeatherApi.kt:179</span></td>
+        <td data-page-node-id="Hw8lpN0ZQVGfGEygPpzocT">getForecast 用 cnt=5（3 小时步长约 15h），往往凑不满“未来 5 天”。</td></tr>
+      <tr data-sev="Low" data-page-node-id="F3e7kMqltXmDuQx8y8Ny9y"><td data-page-node-id="soRQRRTYQvI5XdIAhYd2aT"><span class="sev Low" data-page-node-id="3nqBVtVDgo9WSR3aWBkWBz">Low</span></td><td data-page-node-id="3AEh5iepkCQLWMuceJmhF7"><span class="loc" data-page-node-id="3AfISgZMMtp7GlANijbE7s">network/NetworkMusicManager.kt:107</span></td>
+        <td data-page-node-id="TEoEQ8h9cCkP3OLBRwTUT2">正常路由成功路径误用 AppLog.e（应 d/i），干扰真实故障定位。</td></tr>
+      <tr data-sev="Low" data-page-node-id="h7R45smeQOFHHlD8O8Bibj"><td data-page-node-id="mvwPStzSDX7NKGFkelV1Ck"><span class="sev Low" data-page-node-id="CEATuOkWnOuarS2BuU8rvo">Low</span></td><td data-page-node-id="pK82mia4BdieSlv6Nqc6xS"><span class="loc" data-page-node-id="AMjF93QxFXFLDSs6FzUR5T">radio/RadioSongScorer.kt:12,34</span></td>
+        <td data-page-node-id="yMrE1iUiDO9GW2GW6xBqaX">注释“非当前专辑 +10”与实现不符（未排除当前专辑）。</td></tr>
+      <tr data-sev="Low" data-page-node-id="Wphw0iFVRsDFESLxpQxj6p"><td data-page-node-id="H4CPSaBUtdWY3W6yrFsKwu"><span class="sev Low" data-page-node-id="kR3BAwGwfLTAHE6JSyDME7">Low</span></td><td data-page-node-id="PuxaZjjDQXjWRS6IHBt0bw"><span class="loc" data-page-node-id="J1xTeTvI7HBq2oZQJ0twpz">network/MetingApiService.kt:60</span></td>
+        <td data-page-node-id="RevsZD8pEpraMZBkmd0mJd">守护线程池从不 shutdown（影响极小，仅资源清理完整性提示）。</td></tr>
+    </table>
+    <p class="ok" data-page-node-id="h7Jija9x6IP1iD6Uf4Qusg">亮点：MetingApiService / RadioBrowserClient.get 正确使用 use{}；JamendoService 用 LinkedHashMap+sync 实现 LRU；协程均切 Dispatchers.IO 无主线程网络；多端点/多源 fallback 优雅降级；空/可空路由安全。</p>
+  </div>
+</section>
+
+<!-- ============ 下载/导出/本地 ============ -->
+<section id="dl" data-page-node-id="O0z27PBZVra7cUinXLdddD">
+  <h2 data-page-node-id="hmd1CBPWsOFdQZXMVAQNBB">④ 下载 / 导出 / 本地音乐 <span class="pill" data-page-node-id="NT05hvZA1OB8Ra2Av8gTCu">3 High · 9 Medium · 5 Low</span></h2>
+  <div class="card" data-page-node-id="4oV8WkiOhgyGGjK5eLk8zf">
+    <table data-page-node-id="JJZAi20kYsfNHwXwaUSmDn">
+      <tr data-page-node-id="REG3eet3AqIkdNtAsF2g1j"><th style="width:90px" data-page-node-id="VswBFvywju1ARBM4nNu6Iw">严重度</th><th style="width:180px" data-page-node-id="NPU15ZohQdXatOHS4rUuIm">位置</th><th data-page-node-id="iaOCfaDxHXeRZx8wD2USmz">问题 / 影响 / 修复</th></tr>
+      <tr data-sev="High" data-page-node-id="mwAIJSCHCjQplwIovTtuqW"><td data-page-node-id="CVTEUfYDyvulBRavKmOAZG"><span class="sev High" data-page-node-id="mZA7BC8NCGPEwEl1HRTO0Y">High</span></td><td data-page-node-id="1VGNPiB55H0jdAVsGetM87"><span class="loc" data-page-node-id="meIFMFcHeiea8hHDQ2F1xC">backend/local/MusicScanner.kt:76</span></td>
+        <td data-page-node-id="iYOqArpvR0PGu2tvOdU36t"><b data-page-node-id="rcQlbdEWhJfsN85whlSuQ2">MediaStore 扫描在 API&lt;29 整库返回空</b>：getColumnIndexOrThrow(VOLUME_NAME) 在旧设备抛 IllegalArgumentException，被宽泛 catch 吞掉 → scanAllMusic() 返回 emptyList()，本地音乐完全扫不到且极难排查。</td></tr>
+      <tr data-sev="High" data-page-node-id="dRqWPU4ei94Oov5CxCp7Gl"><td data-page-node-id="CnEHvhpGP3Mg1m4dn9JZUm"><span class="sev High" data-page-node-id="nIcA1BGINHESuf63MmkcvS">High</span></td><td data-page-node-id="W6mBPpPtrYZbN12063Iaxk"><span class="loc" data-page-node-id="a9tGPJEmWYsEJVWr0oJ4Lj">backend/download/SongDownloadManager.kt:276-305</span></td>
+        <td data-page-node-id="EHqqT6Ofc7LrU60FEsrJSH"><b data-page-node-id="FQiLaOmpIsSoRMjBi9SOHn">下载无完整性校验</b>：从不比较 written 与 Content-Length，服务器中途断流/代理截断产生的半截文件仍被 rename+embed+标记 COMPLETED。</td></tr>
+      <tr data-sev="High" data-page-node-id="CjwqmsDWzKCPOx6idXAxvC"><td data-page-node-id="hsqNumXrtLpq3QMgspqvJB"><span class="sev High" data-page-node-id="nu758JRcXim1BqfDJIkez9">High</span></td><td data-page-node-id="HB9coKdavZRqjJLgrEavcq"><span class="loc" data-page-node-id="q8PLRD9BNFeaWs4RoHq2XL">backend/local/EmbeddedCoverExtractor.kt:38</span></td>
+        <td data-page-node-id="9JpXEjx7spGgXkkU9UOFI3"><b data-page-node-id="SnTLn0aGMZHOrwVKBmhIFe">本地歌内嵌封面失效</b>：真实缺陷在<b>EmbeddedCoverExtractor.extractCoverUri</b>（对 content:// URI 做 removePrefix 当文件路径，File 指向不存在的路径），被 UnifiedSongRow/MainViewModel 调用；MediaStore 歌曲内嵌封面提取失败。<span class="muted">复核修正：报告原点名的 LocalCoverExtractor 实为死代码（零调用点）。</span></td></tr>
+      <tr data-sev="Medium" data-page-node-id="2htftoTY8C5Sm4wkjybL5v"><td data-page-node-id="Hr9SQavSbjDXmRWqy2QzUk"><span class="sev Medium" data-page-node-id="RU7G5pFLFDXxiXBTpNvmEz">Medium</span></td><td data-page-node-id="zz5CyZMcTeGK3wQGtd9tYF"><span class="loc" data-page-node-id="nlOJftkg0AtKh1RgdOdKvF">backend/local/EmbeddedCoverExtractor.kt:24-28</span></td>
+        <td data-page-node-id="JwE2xEZ5wBJ4Ay6DUqtkRI">LRU 缓存为普通 LinkedHashMap，无同步。<span class="muted">复核修正：现有调用点均在主线程，多线程竞争未证实，属潜在风险——原 Medium 下调为 Low。</span></td></tr>
+      <tr data-sev="Medium" data-page-node-id="C5X0RRyaalO6Zy4DshH51B"><td data-page-node-id="lEhAFS5U3fyXjnBcFwhKBn"><span class="sev Medium" data-page-node-id="IHzawafk6tdoiUbD3Ipkir">Medium</span></td><td data-page-node-id="GyA8nxX8TCzyIAyd393nud"><span class="loc" data-page-node-id="LcsBx9L5dP9eXOAEPtynAu">backend/download/MediaTagWriter.kt:97-117</span></td>
+        <td data-page-node-id="VqE2WbFuqT2VTed3Fn4rZ7">compressCover 中 Bitmap 从不 recycle（短路返回 src、缩放后旧 src 泄漏），大批量下载 native 内存泄漏易 OOM。</td></tr>
+      <tr data-sev="Medium" data-page-node-id="np7sJsma28nxNmbWg3vN0O"><td data-page-node-id="BwttJSDYoXhL7Aw7EUtN5X"><span class="sev Medium" data-page-node-id="ifjv0Ny3oIHg2BUFNSELdr">Medium</span></td><td data-page-node-id="3qolofCm9Wn87Al5wJfIZ2"><span class="loc" data-page-node-id="ppPukUF1lJ3xHaQLQRCuYA">backend/local/LocalCoverExtractor.kt:69-95</span></td>
+        <td data-page-node-id="YQCFEme1m9roMO1vetDQP3">saveCoverToCache 仅 compress 不回收入参 bitmap。<span class="muted">复核修正：该文件为死代码（零调用点），此条无实际影响。</span></td></tr>
+      <tr data-sev="Medium" data-page-node-id="JBc1xNDRVtvohAx74xxwvi"><td data-page-node-id="C572ZlqveaeYAcQ03G3Cs8"><span class="sev Medium" data-page-node-id="LMyK6ALli92rbk3EDoTLoH">Medium</span></td><td data-page-node-id="jQLM6wSdBX5LCBCk1zIuVp"><span class="loc" data-page-node-id="CKNt2pLXO4oeeEr4sKIlCn">backend/download/SongDownloadManager.kt:209-256</span></td>
+        <td data-page-node-id="DjAFGMeB51pk4ZgCF8AFPA">rename 之后、DB 提交之前若抛异常，最终音频文件已成孤儿（recoverAfterCrash 只删 tmpPath），磁盘残留且计数不一致。</td></tr>
+      <tr data-sev="Medium" data-page-node-id="MfpcE1ZJjDhR6F5tJlAe6S"><td data-page-node-id="pVMb0UtxkeOkTfIR5gfwuY"><span class="sev Medium" data-page-node-id="AqBFojTIXSHTNqCqOAA4eL">Medium</span></td><td data-page-node-id="Pdvjd0BcMFyOBTMBkxq20A"><span class="loc" data-page-node-id="ZjzHtJEj3N113SeAEnKoCH">backend/local/LocalMusicRepository.kt:97-121</span></td>
+        <td data-page-node-id="4hez87P5i0FQOFKOcIDRyU">下载目录被 MediaStore 同时收录时 contentUri 字符串不同，distinctBy 无法合并 → 同一首歌出现两次。</td></tr>
+      <tr data-sev="Medium" data-page-node-id="FvF0kTpXHxqPHxtOThcped"><td data-page-node-id="GcOgHUyjCq8GrBWc5BGKKM"><span class="sev Medium" data-page-node-id="DwJBOg09SnAFMrcjQTmCiX">Medium</span></td><td data-page-node-id="MBDCDuuwxqO3BQ1Kxbb0km"><span class="loc" data-page-node-id="i0hMxAr4aXRnPofEzCRvQq">backend/export/ExportCoordinator.kt:88</span></td>
+        <td data-page-node-id="hlTGPlDhdxHijNxam25nEb">SAF 授权回调硬编码导出到 _exportDevices.firstOrNull() 而非用户所选设备，多外接设备时导出到错误设备。</td></tr>
+      <tr data-sev="Medium" data-page-node-id="smLrOcmpFLXDGuKNbRdO5s"><td data-page-node-id="1r4B6jKJbjIREsqSRBph26"><span class="sev Medium" data-page-node-id="z5dm0mVDXBFERBJRG4Dfi7">Medium</span></td><td data-page-node-id="a5j6eDUEfHqzCkp3dhiXMU"><span class="loc" data-page-node-id="vY21TDzFhteYSZLgMzW7eh">backend/export/SongExporter.kt:45</span></td>
+        <td data-page-node-id="hWeRvJzdYeQu1a4qESTdkt">单例无并发保护，重复触发导出会并发写同一目标、cancelRequested 互相干扰。</td></tr>
+      <tr data-sev="Medium" data-page-node-id="lovRMKoBpPxz06PSwJvoxT"><td data-page-node-id="OwdPefvmEYUCfK0KEe6WJN"><span class="sev Medium" data-page-node-id="VucJqRTciPs3LgcQLV6QL8">Medium</span></td><td data-page-node-id="0rZo04tgKfujVyJmxSG5XQ"><span class="loc" data-page-node-id="Ox3FM8BGTKt1bhXIE10AGS">backend/download/CoverFileWriter.kt:46</span></td>
+        <td data-page-node-id="Dphb41R5oWchg0lYvanVO2">已存在的 cover.jpg 被原样回读内嵌（强制 mime=jpeg），PNG/数 MB 大图会被按 jpeg 嵌入每首歌，体积膨胀且渲染异常。</td></tr>
+      <tr data-sev="Low" data-page-node-id="t4Or9jMKHuNSIu2ty6b3Iz"><td data-page-node-id="rGBWR3bGCJvKYfPJLWRU0J"><span class="sev Low" data-page-node-id="UBRgW6JpiFEpv4nNx5t2EW">Low</span></td><td data-page-node-id="MDyrAd7NRiRYthWyJWnS4z"><span class="loc" data-page-node-id="LoIn8rKmoBdzYV9pprDP0E">backend/local/StorageGuard.kt:82</span></td>
+        <td data-page-node-id="XSyGvTsxfQPGAtnKpbCebl">start() 无重入保护，重复调用泄漏轮询 Job 与广播接收器。</td></tr>
+      <tr data-sev="Low" data-page-node-id="rsMZLT3tqChx9UQDGFItlF"><td data-page-node-id="yzfjPpV6cPhDWhbPqBfHBV"><span class="sev Low" data-page-node-id="NdLprydlRplHKZQX8IASq9">Low</span></td><td data-page-node-id="GwnlCizXaIDCfz2NCKVBWR"><span class="loc" data-page-node-id="jL8Se7jO5eCCJD3dUtbsir">backend/local/StorageMonitor.kt:43</span></td>
+        <td data-page-node-id="reK7oqyfKxxg5uF0x3PQNX">startListening() 可重复注册广播接收器。</td></tr>
+      <tr data-sev="Low" data-page-node-id="hg4tyKPjHCx8N9etuKVGed"><td data-page-node-id="56jN2qdePOod2dZfMYNqd6"><span class="sev Low" data-page-node-id="REtEItZmChV9gawHwd7O0C">Low</span></td><td data-page-node-id="rVIfbHdDWOq8hF26dSPeRG"><span class="loc" data-page-node-id="EfEqgF3FgCRY1yU0cF9gdR">backend/download/SongDownloadManager.kt:341</span></td>
+        <td data-page-node-id="I2AZP0XUCSlFRIFmRD8Mj8">cancelAll() 用阻塞式 .execute()+input.read，无法中断进行中的 IO，存在旧下载续跑覆盖窗口。</td></tr>
+      <tr data-sev="Low" data-page-node-id="gddDUozy6uejQH3xFkgFEx"><td data-page-node-id="qkPHiKWlDuPzaIIRAiSivK"><span class="sev Low" data-page-node-id="IdTxEUEKTPsglJQAImAbcE">Low</span></td><td data-page-node-id="EkEo4vy98TS4bBvnGwpCvE"><span class="loc" data-page-node-id="gemHnsAToPCZ0ssikO3NzY">backend/local/LocalMusicDao.kt:39</span></td>
+        <td data-page-node-id="0sMlDByhGYIGRJOlRkEXzt">LIKE 查询未转义用户输入的 %/_,会被当通配符。</td></tr>
+      <tr data-sev="Low" data-page-node-id="A5hlp9PnACP4lTOUrapv8E"><td data-page-node-id="Jmyr5n8vl3qb7lKtVWCpwV"><span class="sev Low" data-page-node-id="pfuWnphzxz61k4REzHd7ti">Low</span></td><td data-page-node-id="rCA31FBwhSQSILbDCwLSFx"><span class="loc" data-page-node-id="PG8W2ngBL35ViKDhtfid9A">backend/export/SongExporter.kt:268</span></td>
+        <td data-page-node-id="LhHVUQkcohYLyo4Td8tlQR">relAudioPath/relSidecarPath 的 volumeId 参数未被使用（死参数，易误导卷隔离）。</td></tr>
+    </table>
+    <p class="ok" data-page-node-id="jihX3EYzPIMJSTgp5rNiyt">亮点：DownloadPathBuilder.sanitize 充分清洗文件名避免路径穿越；.part 同分区 + .nomedia + 原子 rename；Room 访问全部切 IO；独立建库且不开 fallbackToDestructiveMigration；流均用 use{}；MediaMetadataRetriever 在 finally release；稳定 64-bit FNV 哈希做主键；增量扫描有空扫描/卸载保护；CoverUrlPersistentCache 线程安全 + 原子落盘。</p>
+  </div>
+</section>
+
+<!-- ============ 百度网盘/MV ============ -->
+<section id="baidu" data-page-node-id="yMGxH0WFzIAJRPMBzc4ZYe">
+  <h2 data-page-node-id="6yruiUw6a8F8GPjFyCW05H">⑤ 百度网盘与 MV <span class="pill" data-page-node-id="NDoObHQWHj5CH30opUCQt3">5 Medium · 8 Low</span></h2>
+  <div class="card" data-page-node-id="43Rm9lz1SF2zdiQY8apLRE">
+    <table data-page-node-id="J4WCGmBQxGu24nXceylP1z">
+      <tr data-page-node-id="pvMIZHQzSoOfCAZoK5n3gh"><th style="width:90px" data-page-node-id="mPu2SCiuIm6PHox2Grn1zs">严重度</th><th style="width:180px" data-page-node-id="c0Iu0RE1NmlrqptHZXnkzk">位置</th><th data-page-node-id="D1KjL9UKYDVBS2LdFceEe2">问题 / 影响 / 修复</th></tr>
+      <tr data-sev="Medium" data-page-node-id="G6LNxa1NPzDLd3iBp6U5Hd"><td data-page-node-id="hGCD1K8Kfb7l229z8ZRdj0"><span class="sev Medium" data-page-node-id="A57MmzvNKC04DGMBW0Zgew">Medium</span></td><td data-page-node-id="Nf1Rs3iF1EHVKi35FgxnXU"><span class="loc" data-page-node-id="EncwuR9haYem26aowD1AFo">network/baidu/BaiduPanApi.kt:316</span></td>
+        <td data-page-node-id="8l6m2X5tbmCVKAJcxYUzHB">executeWithErrno 异常分支记录含 access_token 的原始 URL（该路径未走 sanitizeUrl），账号级 token 泄露到日志。</td></tr>
+      <tr data-sev="Medium" data-page-node-id="hC8BazuxfEJCM0OBi032RN"><td data-page-node-id="GElgKxA9K0sBBKmyEjuXOM"><span class="sev Medium" data-page-node-id="0jJxYmYHWM6X3RVOaSkHUn">Medium</span></td><td data-page-node-id="bYIIAqAOYbuP3QZ35naiD3"><span class="loc" data-page-node-id="cEZdtYoFqs74hKEsGI8NCf">network/mv/BilibiliMvService.kt:143,219</span></td>
+        <td data-page-node-id="r5RDXNBs22D8hY6pZQiekN">Bilibili 搜索/播放未实现 WBI 签名（/wbi/ 路径必需），当前 B 站返回 -412，在线 MV 几乎必然失败（死代码/失效）。</td></tr>
+      <tr data-sev="Medium" data-page-node-id="xmUyhct6xowYncww7kjkYf"><td data-page-node-id="kNTEc0zLSOFLmM9EXisjtY"><span class="sev Medium" data-page-node-id="8z5GuYflXE5slyDBMFvoqs">Medium</span></td><td data-page-node-id="6HFd3cZzoxPSWlozE8XJNh"><span class="loc" data-page-node-id="NdiMxQNwp7p0E0dz8kje9Z">network/baidu/BaiduPanApi.kt:51-248</span></td>
+        <td data-page-node-id="K1vq5G0tHHLIT8bA8KYzA9">服务端令牌失效（errno -6/31045）仅在 stream 路径 forceRefresh，list/search/filemetas 不重试，浏览/索引静默中断直至本地过期。</td></tr>
+      <tr data-sev="Medium" data-page-node-id="L6pA672ya2N0bZl9jjB29Y"><td data-page-node-id="cM5F7ft520WfI3ISll4I7M"><span class="sev Medium" data-page-node-id="xAJmH4t653KjWzwxJhC6Cd">Medium</span></td><td data-page-node-id="lmInU3ihGBXFqRbqDtK4hb"><span class="loc" data-page-node-id="2CAV7zj3GQCnoe5BPxIWMt">network/baidu/BaiduCoverProvider.kt:66 / Id3v2Parser.kt:116</span></td>
+        <td data-page-node-id="RnWyDLi4H0gxAyeGYevcFH">内嵌 APIC 封面只读取文件前 256KB（BaiduCoverProvider.kt:69）。<span class="muted">复核修正：超出下载范围的 APIC 帧会被整帧丢弃（Id3v2Parser.kt:86），结果是“无内嵌封面→回退网络封面”，而非“截断/破损图片”；256KB 上限属实。</span></td></tr>
+      <tr data-sev="Medium" data-page-node-id="MVx3Nigfa4esMFFv0bBvLi"><td data-page-node-id="nzB76Yrt6ASxA0a18fm0i3"><span class="sev Medium" data-page-node-id="onPnIy7OLPRZ9uMoMISzwN">Medium</span></td><td data-page-node-id="afpNcZTw582TYHlMpF8ynR"><span class="loc" data-page-node-id="A5xTDrgnG1KTmCymza1HPy">network/baidu/BaiduPanApi.kt</span></td>
+        <td data-page-node-id="I8kvH0BO2JS4psoVXPxaW3">（汇总）list/search 令牌失效未重试与 M4 同述，建议统一在 execute 中按 errno 集合强制刷新一次后重试。</td></tr>
+      <tr data-sev="Low" data-page-node-id="s51RiOomkXwXBlUTIGqAGv"><td data-page-node-id="AaxZVFJCDGz03GQcTLQ9qt"><span class="sev Low" data-page-node-id="v2tP7C0GHK8tSfg5CcLBQX">Low</span></td><td data-page-node-id="njfKlgUuPmLcVdRNZ8zaTE"><span class="loc" data-page-node-id="nx6auXkHcGYKFF3WdFn0uG">data/prefs/AppPreferences.kt:1342</span></td>
+        <td data-page-node-id="F8BDgu5Sp0dNOA2dYbgIJO">解密后 token 前 10 字符写入日志（部分泄露）。</td></tr>
+      <tr data-sev="Low" data-page-node-id="2VHthr1iyPlkjox9ovajEM"><td data-page-node-id="mFPY65HhJo04kEJCtDQAHt"><span class="sev Low" data-page-node-id="iIpGJhHz7tlkXciGf3Eb9g">Low</span></td><td data-page-node-id="GfISXVolALSIFtwP4s4NI8"><span class="loc" data-page-node-id="95wBw6zFPsfBdohWsIPCfm">network/mv/BilibiliMvService.kt:196,220</span></td>
+        <td data-page-node-id="aDowoAoUyBovOy5Dsm6sEE">bvid/cid 未 URLEncoder 编码（bvid 源自 B 站自身，风险低但建议统一）。</td></tr>
+      <tr data-sev="Low" data-page-node-id="2jOrczH5g8ilWLvUWUR5z5"><td data-page-node-id="t7ekeW0NxfBPGfkjDiBfBm"><span class="sev Low" data-page-node-id="TlBmbxUf3QMxs8KABVErsD">Low</span></td><td data-page-node-id="EPeHv7xZM2FGXKCBFGyfj5"><span class="loc" data-page-node-id="HSxDmQlWggcXIAER8vO0jo">network/mv/MvPersistentCache.kt:119</span></td>
+        <td data-page-node-id="s3Qn4gO5GX7uNSIeCuqJhP">save() 直接 writeText 非原子，崩溃中途写坏 → load 抛异常返回空（缓存静默丢失）；应复用 BaiduFileIndexCache 的 tmp+renameTo。</td></tr>
+      <tr data-sev="Low" data-page-node-id="HaQUQBoHuPqrzKPKmSzqvL"><td data-page-node-id="hNlBDSwhnlCOVBaqC1jhja"><span class="sev Low" data-page-node-id="S7emMs6EyosUDW53walkBp">Low</span></td><td data-page-node-id="aPFFG1HlgQQLXhqxNuCUwQ"><span class="loc" data-page-node-id="GYRC3A3wwjG3z7BL3D89T8">network/baidu/BaiduFileIndexCache.kt:107</span></td>
+        <td data-page-node-id="MBw7xAEyHm9wnyT6hc9EJ6">setCoverUrl（iTunes 单写路径）在 cacheLock 外执行，并发写可能互相覆盖。</td></tr>
+      <tr data-sev="Low" data-page-node-id="TBvlq8egwu1NSsgIn3Jwmw"><td data-page-node-id="CE13EM0wTElEe2cVUesIrU"><span class="sev Low" data-page-node-id="MbYBZHYxV9jg8TyZSwPW8t">Low</span></td><td data-page-node-id="VrULquygj3u2HtfqrF2t2K"><span class="loc" data-page-node-id="jIDtWdQq50N7K9bQq1QutF">network/mv/MvPersistentCache.kt:34</span></td>
+        <td data-page-node-id="X5c9td0AirWacFPs1x4E8e">init 中做磁盘 I/O（readText），若主线程构造即 ANR 风险。</td></tr>
+      <tr data-sev="Low" data-page-node-id="DRFdYKRxheSvZIg7sXSByE"><td data-page-node-id="J4MpmFvwRHMANV40roKmtB"><span class="sev Low" data-page-node-id="W60OW5C4iBIFaOkuaY5tKH">Low</span></td><td data-page-node-id="A181arhxcJKdFBA9XrNBxX"><span class="loc" data-page-node-id="8I49kZfT2jDWKMZ0SyDUMv">network/baidu/BaiduHttpDataSourceFactory.kt:64</span></td>
+        <td data-page-node-id="kOwDAUCNm437954bJG5kD6">CDN host 用 substring 匹配 bilivideo，且 host.contains("bilivideo") 重复；个别 CDN 不含该子串会缺 Referer→403。</td></tr>
+      <tr data-sev="Low" data-page-node-id="gFgm3XSB42ywvUT9zInR46"><td data-page-node-id="lAinhw136oDMWBbeJXfOCd"><span class="sev Low" data-page-node-id="ttCt2CoztjOMkzBCT892Rl">Low</span></td><td data-page-node-id="rwPBib2JKSF0vNkPRQwixc"><span class="loc" data-page-node-id="Cu8br8vTynWidKuCHf4tfZ">network/baidu/BaiduOAuthClient.kt:137</span></td>
+        <td data-page-node-id="pOCncjFmFLProdLPDYQTNc">pollDeviceToken 忽略注入的 tokenUrl，设备码轮询无法完全 mock 测试。</td></tr>
+      <tr data-sev="Low" data-page-node-id="kK7jD1feA3gACwF3D1IXzm"><td data-page-node-id="PtqGTfAffa4lDcmxrBR79S"><span class="sev Low" data-page-node-id="goHARCA3f2TbUx6tkfE4SB">Low</span></td><td data-page-node-id="949ycrsstsLJQLBIr7zh0g"><span class="loc" data-page-node-id="IVcZuXhzElFF1uU32oDwzC">network/baidu/BaiduOAuthClient.kt:81</span></td>
+        <td data-page-node-id="Xc3BOVOXEb82T2UeBsKlr8">部分 client_id 写入日志（client_id 为公开标识，影响极小）。</td></tr>
+    </table>
+    <p class="ok" data-page-node-id="nfrc7WzH4sDB32EWa8kObP">亮点：token AES-GCM 加密落盘；无 TLS/trust 绕过；大部分日志已 sanitizeUrl 遮蔽 token；BaiduFileIndexCache 用 tmp+renameTo 原子持久化；downloadRange 仅接受 206 防 OOM；refreshAccessToken 用 Mutex+重检防双刷；分页游标停滞检测防死循环；ID3v2 解析有边界校验。</p>
+  </div>
+</section>
+
+<!-- ============ 播放引擎 ============ -->
+<section id="player" data-page-node-id="gngA27bkN76ZznZ6JAZdnZ">
+  <h2 data-page-node-id="5oc62gJILl8ogDTixkQNXI">⑥ 播放引擎 <span class="pill" data-page-node-id="1r5WKBZnJsDRpzpubvEZqB">5 High · 4 Medium · 9 Low</span></h2>
+  <div class="card" data-page-node-id="2me99iOz1xZB2PibGNc3kG">
+    <table data-page-node-id="2kqpo0JDIlYQTCI6hETQMR">
+      <tr data-page-node-id="LXeiRxuXqcj1MpMh5uYhdm"><th style="width:90px" data-page-node-id="55S6sQdznCsyTLlLMI9Tpw">严重度</th><th style="width:185px" data-page-node-id="6bMuuvE1LMtTmn0sTB3jKA">位置</th><th data-page-node-id="vjn6LW6ivaoqQferbDH1cp">问题 / 影响 / 修复</th></tr>
+      <tr data-sev="High" data-page-node-id="QzP83CXSYHFJNizpw7GmTC"><td data-page-node-id="t5JjIBSzeCRDoQXSecAdrG"><span class="sev High" data-page-node-id="NDIRkmjvEWZuNcS1Jg4BPu">High</span></td><td data-page-node-id="IElsvH56iOQV9gqvkbLiwf"><span class="loc" data-page-node-id="fbAPfBnVnOKizhPjidUnRm">player/DemucsSeparator.kt:50-265</span></td>
+        <td data-page-node-id="RXgViPv5C31Edkoh859EKS"><b data-page-node-id="K2ugL9HKksHbT0W5qfStM2">HQ 分离缺少 overlap-add 且段缓冲污染</b>：OVERLAP_SAMPLES 定义却从未使用，段输入仅填充 [0..segLen-1]，末段剩余区保留上一段陈旧采样送入 ONNX；整段结果直接 write 拼接无窗叠加 → 段边界爆音、末尾损坏。</td></tr>
+      <tr data-sev="High" data-page-node-id="pmXYX1gZqzeu3TQpkkRuOi"><td data-page-node-id="UMcQAxSmelqosI0ufili23"><span class="sev High" data-page-node-id="CORELn5FmjSUu3PGsYnqtW">High</span></td><td data-page-node-id="IqZEV8F1GwLmlLqANLdpTG"><span class="loc" data-page-node-id="Jl81GcCv72gOE1YN6Lx9lT">player/PlayerManager.kt:1148 / CrossfadeController.kt</span></td>
+        <td data-page-node-id="6Xiq3bVqY8sdjsjYNlqKOH"><b data-page-node-id="83hAggDFPoLYB2RWbfCphy">Crossfade 子播放器与 Handler 泄漏</b>：<b>PlayerManager.release() 漏调 CrossfadeController.abort()</b>（abort 已存在，:139-143），fadeRunnable 每 50ms 向已 release 主播放器写 volume。<span class="muted">复核修正：abort 并非不存在；泄漏多在淡出窗口内自愈。原 High 下调为 Medium。</span></td></tr>
+      <tr data-sev="High" data-page-node-id="BInSXNRL7HA1UGwt6JsrcN"><td data-page-node-id="C7wHYoM8W9BoE7weOWSF2b"><span class="sev High" data-page-node-id="u6kfoVz5ZUae5djjO12PLN">High</span></td><td data-page-node-id="UcIB3ETHZwGkEuGI1Tl5Zz"><span class="loc" data-page-node-id="00qzWEsVyZB6hZzDLONoUp">player/HqSeparationOrchestrator.kt:278</span></td>
+        <td data-page-node-id="mkydLBTYHVhAjGkIyDGwSW"><b data-page-node-id="HUZzELZVeSViAls9Rh7Hsj">enableHighQualityRemoval 无并发守卫</b>：连点/重试启动两个分离协程，共享 DemucsSeparator 向同一 WAV 并发写、并各自 replaceMediaItem。</td></tr>
+      <tr data-sev="High" data-page-node-id="TLZQLWMTD4hkOsc8BmM2Fs"><td data-page-node-id="hrNQu1NCKC0wj2CdCRqrGp"><span class="sev High" data-page-node-id="WrIw7aE3hn2b1vO7vFlGgH">High</span></td><td data-page-node-id="OQRyFJqpLv9VTu0JBnvmCw"><span class="loc" data-page-node-id="NpKfBspEBFyrWjFF7Lm1fz">player/DemucsSeparator.kt:94-179</span></td>
+        <td data-page-node-id="elYG9onJZ5tjTKyJbFNELD"><b data-page-node-id="FcTnLpYc3uSHK0RibBaq7i">单实例并发 init/推理</b>：isReady() 检查与 initialize() 间无锁，双线程各 createSession 前者泄漏；运行时 release 关闭 modelSession 致后续 !! 抛 NPE。</td></tr>
+      <tr data-sev="High" data-page-node-id="qbtbzC5ARqCIS26XnsDLma"><td data-page-node-id="ByD6ZA58t1NyXmBuweZoBO"><span class="sev High" data-page-node-id="gc6pSpF0rlSJebD3KrZyFg">High</span></td><td data-page-node-id="LubjwAk0cib61OkveJHekS"><span class="loc" data-page-node-id="0VcBkraDl5nBmPXxOrHd0X">player/DemucsSeparator.kt:130</span></td>
+        <td data-page-node-id="i2F4ked04gQdsDKsCovZy2"><b data-page-node-id="rxuNsT2Z9hgyFKfxqfLTj2">release() 关闭进程级 OrtEnvironment</b>：TV 服务启停不重启进程，导致“首次分离正常、服务重启后无法再分离”。</td></tr>
+      <tr data-sev="Medium" data-page-node-id="xLbOAHVBJYJmRUBoX7yyCF"><td data-page-node-id="GzeQEhkvaoaE7vpzCtKNkj"><span class="sev Medium" data-page-node-id="86HyoHVGXvWAHGMENaZfvO">Medium</span></td><td data-page-node-id="vF9sWK7GL23YxUgG1cq3LG"><span class="loc" data-page-node-id="YaHFyf1DJ9yMXG44HWhouc">player/HqSeparationOrchestrator.kt:67</span></td>
+        <td data-page-node-id="GuNJck47ESWOWP878MPrpI">scope = CoroutineScope(SupervisorJob()+Main) 永不 cancel，分离协程在已 release 的 player 上继续跑 ONNX。</td></tr>
+      <tr data-sev="Medium" data-page-node-id="3IrY1rat3z8hLVVYx5kztF"><td data-page-node-id="HRErSDUijLL2iOFHVuQ3A2"><span class="sev Medium" data-page-node-id="AWmEMsE1Rnfdjr8g3CN9kW">Medium</span></td><td data-page-node-id="6pQtFVNjfvY0WWE0Hgeerf"><span class="loc" data-page-node-id="PaJ6zSn5WgWRCFfL4DNEi0">player/PlayerEqualizer.kt:32 / PlayerManager.kt:333</span></td>
+        <td data-page-node-id="852wkEPMsdTFx0dR9PgyHk">Equalizer 绑定单一 audioSessionId，会话变更后静默失效（仅用户拖动才重建）。</td></tr>
+      <tr data-sev="Medium" data-page-node-id="uzJGzwq7liQ5GqrNhz6I78"><td data-page-node-id="hmHUjK9y9wGCkf0gFYe6Z3"><span class="sev Medium" data-page-node-id="IrQPcUsYe33Wasu4jAteGz">Medium</span></td><td data-page-node-id="fGymAjsjA9uXhuCj1e2DCa"><span class="loc" data-page-node-id="cMN5QHKizzfK1FZ5gWCuQW">player/PlayerManager.kt:318,466</span></td>
+        <td data-page-node-id="KOaKkkSynueAYTgigjAwSR">进度轮询 onIsPlayingChanged(true) 只 post 不先 removeCallbacks，可能形成双链导致回调频率翻倍。<span class="muted">复核修正：setPlayer（:461）已正确 removeCallbacks，仅 onIsPlayingChanged(true) 一处成立。</span></td></tr>
+      <tr data-sev="Medium" data-page-node-id="qy61suARsZCtlH8mH2vBAU"><td data-page-node-id="ZwKtiw3I3dRKBhtoeJcgxB"><span class="sev Medium" data-page-node-id="jWSGo6jdoE9aBxZN9cx7Bz">Medium</span></td><td data-page-node-id="hJQeBAUUdZS5AHsSD9AIno"><span class="loc" data-page-node-id="MFCMLLOy6SnRhSeKapxyYc">player/CoilBitmapLoader.kt:27-59</span></td>
+        <td data-page-node-id="DVJJX4lZwcdSGI4lNaar7u">future 已完成/取消后再次 set/setException 抛 IllegalStateException；未保存 ImageRequest 句柄无法取消底层加载。</td></tr>
+      <tr data-sev="Low" data-page-node-id="Jl7FsBdebTDw9gj42WXZDT"><td data-page-node-id="f5IUi86epICYPsqOEI0tJO"><span class="sev Low" data-page-node-id="8Bkq2UjEpMCGOW6aeFCZh0">Low</span></td><td data-page-node-id="hC18o9RrsHS31Dk0BAUWeh"><span class="loc" data-page-node-id="EhpKngAOAW9gAiu0O8VNgD">player/CrossfadeController.kt:126,78</span></td>
+        <td data-page-node-id="HxEJVAFy8vHJ3aYpOFqsjK">完成瞬时主播放器音量≈0 再跳 1（一帧静音）；空 URI 守卫用 uri.toString().isNullOrBlank()（null→"null"误判）。</td></tr>
+      <tr data-sev="Low" data-page-node-id="qPxMw2d0h8txywG3Euumjd"><td data-page-node-id="FQvMqt1XQYGNte3n0HEJtW"><span class="sev Low" data-page-node-id="VD6kA7UyHsi9dDWFXcXFK5">Low</span></td><td data-page-node-id="sdPegA5S44aGQF4KFZEXAB"><span class="loc" data-page-node-id="dj7jskeVX6NoGqZeVfkLzr">player/AccompanimentCache.kt:96</span></td>
+        <td data-page-node-id="fKmrTRaDIqGwUVou8dW3ob">startPreSeparation 为死代码，若启用将与 H3/H4 冲突（共享 DemucsSeparator）。</td></tr>
+      <tr data-sev="Low" data-page-node-id="7eX26Fy4ydCAyVKIE30bUP"><td data-page-node-id="Rhl43QYS5HuJeWBDhQqcjT"><span class="sev Low" data-page-node-id="OZi7eD7V0gVTvzHzdYcGYb">Low</span></td><td data-page-node-id="AAS4glZVC7uGSKH5v6C9NC"><span class="loc" data-page-node-id="drsseyMLDMIzbYjGX7wzYd">player/VocalSeparationController.kt</span></td>
+        <td data-page-node-id="NmgiKXHt34EKAGgwPaiGgq">与 HqSeparationOrchestrator 功能重叠的重复/死代码，易改错文件。</td></tr>
+      <tr data-sev="Low" data-page-node-id="3W48erOvsIHMnn2AbTGcGS"><td data-page-node-id="6cJo4t5Z0Rypw8g16B9Sib"><span class="sev Low" data-page-node-id="nTmEHJCgfPviF8IcSRRXLP">Low</span></td><td data-page-node-id="EkJXh5EPHrPpeLhEQjXiEu"><span class="loc" data-page-node-id="lr1JJe7B8Z7Bqvau1vm1Rp">player/BatteryOptimizationHelper.kt:24</span></td>
+        <td data-page-node-id="Acslw2Li1g3hiSqcs8CVrj">PowerManager 为 null 时返回 true 掩盖真实需求；非 Activity context 调隐式 Intent 可能抛异常且调用方误判成功。</td></tr>
+      <tr data-sev="Low" data-page-node-id="JRHkFOxOOFTmMiXvPwJdoi"><td data-page-node-id="fzk7G856WGQ6xy829p7AXV"><span class="sev Low" data-page-node-id="ikHIqfRRHHLbYZJCVN4rR9">Low</span></td><td data-page-node-id="3tdynoJgwMaYct1rQkAUZH"><span class="loc" data-page-node-id="NYf0hhrFrdESLblv1HbiBi">player/ModelDownloadManager.kt:65</span></td>
+        <td data-page-node-id="objJEFiL6r8jnhiMNLbyP0">模型完整性仅靠大小 >0.8*EXPECTED 判断，无校验和/签名，截断“够大”文件会被判已下载。</td></tr>
+      <tr data-sev="Low" data-page-node-id="QzWJO9aMzcWBe7FlWe4GMy"><td data-page-node-id="Ru8zrPuNMdOZyPv98avjS7"><span class="sev Low" data-page-node-id="YpFeJdyV9uI4RYypQvUUEx">Low</span></td><td data-page-node-id="2i1YTIPDYOSDgcqR1tikyq"><span class="loc" data-page-node-id="NTe0Wndga65lGD2ekOzeuP">ui/PlayerViewModel.kt:176</span></td>
+        <td data-page-node-id="8WNK8RglTMdwbflnugJkkG">resolveAndPlayCurrentSong 缺少代数守卫，频繁连点可能用旧快照覆盖最新队列。</td></tr>
+      <tr data-sev="Low" data-page-node-id="X49U1Ar3bCScdmkN16vtLc"><td data-page-node-id="XBl68k3C7k5ziATIWHUWEc"><span class="sev Low" data-page-node-id="fWAjXl34iF7JsJTwiCZjI8">Low</span></td><td data-page-node-id="srnxpGoZmHeo1UmeWObiuZ"><span class="loc" data-page-node-id="iZlYcASWVlfOJa8jYEB9TF">player/MediaLibraryTree.kt:42</span></td>
+        <td data-page-node-id="E8wJyEDK3BrbImi15tc0Xd">每次 getChildren/getItem 全量重建 MediaItem（O(n)），大队列下开销大。</td></tr>
+      <tr data-sev="Low" data-page-node-id="pMTzsTYRgsheWAZgVDfOPW"><td data-page-node-id="McYkeeOHWz5HSXUzjHGito"><span class="sev Low" data-page-node-id="kd5NsUHR5BYgqAIzcC2bbH">Low</span></td><td data-page-node-id="REhyZ3yARxAqpj8rBXnnJl"><span class="loc" data-page-node-id="40XOcD1ECuHk5mtDHSOfE5">player/PlaybackService.kt:386</span></td>
+        <td data-page-node-id="DkFxc0rtvD9cni209xzK0y">mediaLibrarySession 延迟到首次播放才创建，Android Auto/车机首次连接前无法浏览。</td></tr>
+    </table>
+    <p class="ok" data-page-node-id="Z827GPmNZL8XIXqtEAkMPP">亮点：onPlayerError 用 lastErrorRetryIndex 防重解析死循环；resolve-then-replay 的代数守卫（resolveGeneration）正确丢弃过期结果；seek 防护 + discontinuity 只处理 SEEK 合理；断网冻结/恢复路径清晰；DSP reset() 保留 enabled 意图修复切歌伴唱静默；频谱分析器用真实采样率计算 freqPerBin 质量高；PlaybackService.onDestroy 释放较完整。</p>
+  </div>
+</section>
+
+<!-- ============ 歌词 ============ -->
+<section id="lyrics" data-page-node-id="m7QP1Wvsp1F450pRD1suoG">
+  <h2 data-page-node-id="fTlqJAoncV8UsnK0OVQ3eV">⑦ 歌词系统 <span class="pill" data-page-node-id="rHGcPHyGIbqDupqvilw0dP">1 High · 9 Medium · 6 Low</span></h2>
+  <div class="card" data-page-node-id="dw4v7GcjYc2IO5AE2pnDUc">
+    <table data-page-node-id="ifgQv2HzUfQtaEGlL5owiW">
+      <tr data-page-node-id="7WIciGHipGvwtzgCq6fOkM"><th style="width:90px" data-page-node-id="R3BjfA4QsZkG2xJDDqOrnF">严重度</th><th style="width:185px" data-page-node-id="mmokTTWYVTY0hot3gun2kI">位置</th><th data-page-node-id="Q0IyMwfNGBS71Q3VyNOzaQ">问题 / 影响 / 修复</th></tr>
+      <tr data-sev="High" data-page-node-id="C6DsI7QIiyvUIGcX2qP2Ac"><td data-page-node-id="Ta5wv9Bjty7abg3cNtynZO"><span class="sev High" data-page-node-id="iNYmRVz1HkJLJsckTpZS9N">High</span></td><td data-page-node-id="g4UgFi9puCSqrAAiL4sKIf"><span class="loc" data-page-node-id="I4hT5kE29o9H5a2hq7SfWV">lyrics/LyricsManager.kt:269</span></td>
+        <td data-page-node-id="RJIM20zZUyOFgnNmNHkfJR"><b data-page-node-id="dYPnXtwMwZRHuEwpsaIkAv">在线歌词变体轮询 IndexOutOfBoundsException</b>：候选耗尽进入“换一批”分支，仅校验 newResults.isNotEmpty() 未校验 candidateIndex&lt;all.size 即 all[candidateIndex] 越界。用户连按“在线歌词”可稳定复现崩溃（外层 try/catch 仅弹 toast，功能失效）。</td></tr>
+      <tr data-sev="Medium" data-page-node-id="2ih1BGN2PKDHDFFc5gbhcN"><td data-page-node-id="dMWycMIjGHwCKKBZPnVR9O"><span class="sev Medium" data-page-node-id="YtFBSeq8E7tnyde2AyiJRd">Medium</span></td><td data-page-node-id="zzVlySMC9L6cBjYQwT8Jex"><span class="loc" data-page-node-id="NXXb7Y4SbYmRy0OWH8n9GN">lyrics/LyricsPersistentCache.kt:69</span></td>
+        <td data-page-node-id="S8jLjlgCSkeNAWlknq7X0f">commitPendingNetworkLyrics 在主线程（Main.immediate）同步写 lrc 文件 + 全量 JSON 序列化（最多 2000 条），长歌词/大缓存掉帧甚至 ANR。</td></tr>
+      <tr data-sev="Medium" data-page-node-id="3CHeiA4q8HoqztwJfrVeNo"><td data-page-node-id="YWuaXgAffsBZ3HU2bPQJwB"><span class="sev Medium" data-page-node-id="eF2DJBOBwDe0LgEa9Kh4dH">Medium</span></td><td data-page-node-id="cLo9L7eZldufdYh5k84Ci2"><span class="loc" data-page-node-id="Yy5kzQWv3K4E9SrOkAGVbU">lyrics/LyricsNetworkProvider.kt:334</span></td>
+        <td data-page-node-id="dADNVJXceIz1Mp4llov65a">编码修复（GBK/Latin-1）未套用到歌词路径，未复用成熟的 EncodingUtils；酷狗 Base64 一律 UTF-8 解析，GBK 歌词直接乱码。</td></tr>
+      <tr data-sev="Medium" data-page-node-id="rLGwqG6FdUQBjGRTZduYMd"><td data-page-node-id="wVNXuzPHvZZg3mNHnEb8ma"><span class="sev Medium" data-page-node-id="tztENLQuVYdxFqtvyB6e3C">Medium</span></td><td data-page-node-id="PjcGda4kXJEjUonujNpySB"><span class="loc" data-page-node-id="mCudcIe4gSwiOEWc3v5MVG">lyrics/LyricsManager.kt:97</span></td>
+        <td data-page-node-id="NR4gBqyPzBSmzq8VNdyHSJ">内嵌歌词分支对非 LRC 格式返回空 Lyrics（lines 为空）却仍 return 非 null，阻断后续网络回退，用户看到空白歌词。</td></tr>
+      <tr data-sev="Medium" data-page-node-id="yuEn1KbrHrHnxAC1UjR9d4"><td data-page-node-id="u3ZjrOfCrKoOZCzxewMV18"><span class="sev Medium" data-page-node-id="XBQUfeMuRTu7n7M33cQVGU">Medium</span></td><td data-page-node-id="XyTp9iUUULNtvFObAej8TO"><span class="loc" data-page-node-id="VZz2HJb3Y8dV4BgoUE0KYn">lyrics/LyricsPersistentCache.kt:142</span></td>
+        <td data-page-node-id="eFsXzt2SmtiMw6PVeBLXFE">“LRU”实为按写入时间淘汰（get 不更新 lastPlayedAt），高频读取的旧条目反而先被淘汰，非真正 LRU。</td></tr>
+      <tr data-sev="Medium" data-page-node-id="CDsstABJQuC3a8ctgG2qub"><td data-page-node-id="H81aAk1vByCHG1FVGfoJ41"><span class="sev Medium" data-page-node-id="92PWdjjEARsvRtt9grLfRQ">Medium</span></td><td data-page-node-id="HcrwOMmycc21xAexOVgs8g"><span class="loc" data-page-node-id="fUwGFFrtsYvq71JwWkerDe">lyrics/LyricsNetworkProvider.kt:69</span></td>
+        <td data-page-node-id="L96elATYQ2aYZhm7GE9kXN">“模糊匹配”实为关键词搜索取首条，无任何标题/歌手相关性校验，误匹配率高、首屏体验差。</td></tr>
+      <tr data-sev="Medium" data-page-node-id="jyTPpWskkyCuotaTx9T7Ls"><td data-page-node-id="awhyCGp7QZI5heVoBvxSz7"><span class="sev Medium" data-page-node-id="A0PikDinhhs6MCXBSX7IEt">Medium</span></td><td data-page-node-id="cPm4pjTjqEH7yHDGsyRVX3"><span class="loc" data-page-node-id="ZZCWPDWTGimCLPqFXopZPv">lyrics/LrcParser.kt:121 / LyricsView.kt:146</span></td>
+        <td data-page-node-id="iRzKg2rYBDNRKfsK1nwFgV">对齐逻辑两份实现：被测二分搜索是死代码，生产用未测试的线性扫描；二者前奏语义不同（单元测试覆盖不会上线的逻辑）。</td></tr>
+      <tr data-sev="Medium" data-page-node-id="jPfXmopCQoXjyTKjLtZxHJ"><td data-page-node-id="FspG5lj9NupnYep9Dkf71l"><span class="sev Medium" data-page-node-id="XxZsVWeG1l9NTSFDPuV06P">Medium</span></td><td data-page-node-id="uDc0bGi673uKp08oCunRNi"><span class="loc" data-page-node-id="jaqwT4MEWBQQsSy2hnoPyq">lyrics/LyricsManager.kt:105</span></td>
+        <td data-page-node-id="6rEf1qaXzLQrhR5bjx3tqL">持久化缓存优先级高于后端歌词，用户一旦切到（可能误匹配）网络歌词，后端更准确歌词再也不出现（优先级倒置）。</td></tr>
+      <tr data-sev="Medium" data-page-node-id="IpOKJiD0nbB9mAK16DoZcL"><td data-page-node-id="jY8zGKwfB37sPNnbBhywTB"><span class="sev Medium" data-page-node-id="ePbkLcOPbSlXxeVggIoGC3">Medium</span></td><td data-page-node-id="LlIALIOAhuB1dtlDbVzlU9"><span class="loc" data-page-node-id="paabDLGn7e1j471Y0zufTz">lyrics/LyricsManager.kt:180</span></td>
+        <td data-page-node-id="u5AcgJFgk9l7Un0mzBnEVw">NAS 歌曲每次 checkAvailability 即便后端已命中仍无条件发起网络歌词请求，浪费流量与延迟。</td></tr>
+      <tr data-sev="Medium" data-page-node-id="EiFVCnL3WsDE8jiCpw6AFO"><td data-page-node-id="Cskwy9nWBbrHE7DTglLvgt"><span class="sev Medium" data-page-node-id="AM9HBaJ9htv8gF3Gb09og0">Medium</span></td><td data-page-node-id="jlOdLADZhVrcaBEt2jG4F1"><span class="loc" data-page-node-id="oWLFCZV6WsnBMBqWWSlgMd">lyrics/LyricsManager.kt:242</span></td>
+        <td data-page-node-id="HWyi2iLHUZX0xkZmSdu2YR">cachedCandidates 的 containsKey→put 非原子，并发调用重复发起 fetchLyricsCandidates（缓存惊群）。</td></tr>
+      <tr data-sev="Low" data-page-node-id="yB394RjAVRmTrJwW0rvQEW"><td data-page-node-id="sOrkmCw92Rjt6MrPhtczFf"><span class="sev Low" data-page-node-id="EgeWS96LOpBKjAWsupkhCp">Low</span></td><td data-page-node-id="Q1z9BLua3IcuGSCEVWeHgr"><span class="loc" data-page-node-id="8lHXLs8fHdxo8IEgBJ1GNo">lyrics/LyricsPersistentCache.kt:153</span></td>
+        <td data-page-node-id="nZB950FhBVA3hH6qbnkBPv">索引文件损坏整体丢弃缓存且遗留孤儿 .lrc 文件。</td></tr>
+      <tr data-sev="Low" data-page-node-id="dpL4GHi72aJ892qucRFoP9"><td data-page-node-id="dXxUg1YbhSxzLBsFU3tSCe"><span class="sev Low" data-page-node-id="OxwhANCdOozCdEHMs0Gqo3">Low</span></td><td data-page-node-id="xaNtj2OHr2ZN35MF5ZpZsC"><span class="loc" data-page-node-id="gOQ2a6FbD0iX7YurGPxtZW">lyrics/Mp3MetadataExtractor.kt:29</span></td>
+        <td data-page-node-id="UjBLHeBFJ1iI7IupCGGgVc">基本是死代码，且异常用 e.printStackTrace() 而非 AppLog（Release 不可控）。</td></tr>
+      <tr data-sev="Low" data-page-node-id="EWIxFCTTKMHqCZdoIiIqHO"><td data-page-node-id="X6D3Z9DkYndK5kNj64B6su"><span class="sev Low" data-page-node-id="sxXNKkGXG5Y5SKXhOggN4y">Low</span></td><td data-page-node-id="zsO4NxgZwArzxge8FisdrP"><span class="loc" data-page-node-id="ww1CKvv3j0KpNkbn3eENsM">lyrics/LrcParser.kt:99</span></td>
+        <td data-page-node-id="vKGOGykIuFPXvjujO9H3HT">toLrcText 丢失毫秒精度（仅厘秒），负 offset 时单词时间戳格式化异常。</td></tr>
+      <tr data-sev="Low" data-page-node-id="EDpb70yWkH058dNfuRQFbN"><td data-page-node-id="pUEFtpes1JzFCqlAVRo8lS"><span class="sev Low" data-page-node-id="oruh3VGrfAfAK0Fgj1ncGE">Low</span></td><td data-page-node-id="prPsIDDMXBhZ1P61R4qSKr"><span class="loc" data-page-node-id="xkToBVNM9tLuzXQStmXGWl">lyrics/LocalLyricsProvider.kt:23</span></td>
+        <td data-page-node-id="tl97J4HoKX4zbGlmXZobnQ">仅扫描文件头部 256KB，超大 APIC/长 USLT 位于其后的内嵌歌词被漏检。</td></tr>
+      <tr data-sev="Low" data-page-node-id="KDL4YnIXmzPUQ2sqYcEZ6V"><td data-page-node-id="N04RSp8clHAFXL9ZVxbWoP"><span class="sev Low" data-page-node-id="2kc9AMoHZRRz1xTToI77sY">Low</span></td><td data-page-node-id="cs4a9K1sEBUfwpVhGGdlkx"><span class="loc" data-page-node-id="XTiGMazw7RCs4m0kqNI8UR">lyrics/LrcParser.kt:146</span></td>
+        <td data-page-node-id="utdqJ96O9Edt7AKX39IQlB">isValidLrc 拒绝纯单词时间戳（增强 LRC），罕见格式被拒。</td></tr>
+      <tr data-sev="Low" data-page-node-id="WRNqvuyJaCkrhEA6V99wc1"><td data-page-node-id="P0FL4eCAIe70GR4pk1YDFv"><span class="sev Low" data-page-node-id="r0uCGf6AC8MgtMLGtQ3a1z">Low</span></td><td data-page-node-id="Ss6oYBOBQWD0eEt3VovT0E"><span class="loc" data-page-node-id="qhpMLM275yfFbpjg7PTVjg">LyricsView.kt:139</span></td>
+        <td data-page-node-id="kYdfHzv0XaWoMMmFFRAt1c">逐行高亮受 1000ms 轮询限制，短句（&lt;1s）可能漏显。</td></tr>
+    </table>
+    <p class="ok" data-page-node-id="m3g9PnAPqxF1180zNCrQ2A">亮点：网络请求均 use{} 关闭 Response；守护线程池防进程无法退出；所有外部源解析均有 try/catch 容错；索引文件+独立 .lrc 分离存储 + saveLock 保护；可空性处理到位无 NPE 路径；LrcParser 时间解析较完整且有单测覆盖排序/偏移/重复时间戳。</p>
+  </div>
+</section>
+
+<!-- ============ UI/本地服务 ============ -->
+<section id="ui" data-page-node-id="lGcggjmEy6zLcsTDGERrix">
+  <h2 data-page-node-id="9ZGij6suVk0Is15MTb8PCp">⑧ UI 层与本地服务（net/） <span class="pill" data-page-node-id="qPjL0bhXxmw8ikyV6qICdp">1 High · 4 Medium · 7 Low</span></h2>
+  <div class="card" data-page-node-id="yhLEvX10ObeoZmTpHaR5Lm">
+    <table data-page-node-id="Lo9XL6yVas9BotZLvCD9G3">
+      <tr data-page-node-id="4iml8duMd1ZHOiTiZ5PlGB"><th style="width:90px" data-page-node-id="gWVxrBvh8hOroqux40XWPV">严重度</th><th style="width:185px" data-page-node-id="BudWeAprzm80gBYVegAPqB">位置</th><th data-page-node-id="fmrAozUjfQs2GpWHXl5MDf">问题 / 影响 / 修复</th></tr>
+      <tr data-sev="High" data-page-node-id="bADSVfTQPoDOzqqNxfSc06"><td data-page-node-id="XEBAEzbGeHBlIHuqqBkmvU"><span class="sev High" data-page-node-id="FR1PT5YaUvWAHOrSK5WpNC">High</span></td><td data-page-node-id="qCUCdmUCPkgkL4r292xpsD"><span class="loc" data-page-node-id="6kZFTC0UIBuUzJgmchXDc5">ui/components/AppRoot.kt:145-152</span></td>
+        <td data-page-node-id="r4RXu6HLDxcBXMJb8RkC1k"><b data-page-node-id="Rlb8YY4Rj0aH2XW86FoJoD">K 歌页/步进弹窗 BACK 误触退出确认</b>：navBackHandler 的 when 完全未处理 showKaraoke，且 KaraokeStepPickerDialog 未注册 BackHandler → 在 K 歌页按 BACK 直接命中 Level 3 退出应用确认框，破坏三级 BACK。（已人工确认路径）</td></tr>
+      <tr data-sev="Medium" data-page-node-id="jnWH9wyiOz1PLxNHarFAHi"><td data-page-node-id="nTXSGP6hLNhnmQ3vof3AQs"><span class="sev Medium" data-page-node-id="0kg1iZQrAifOKe06ZjQDyx">Medium</span></td><td data-page-node-id="JysM5qXy61EbakOFNC6gy8"><span class="loc" data-page-node-id="3UrUbIL0LTz4XubJ6nDBVB">net/BackupTransferServer.kt:340</span></td>
+        <td data-page-node-id="tG0m9VTkwGfVIopVYDy5xU">按客户端 Content-Length 无上限 ByteArray(contentLength.toInt())，同 LAN 攻击者可发 1.5GB 触发 OOM（Error 不被 catch(Exception) 捕获）→ 进程崩溃（DoS）。</td></tr>
+      <tr data-sev="Medium" data-page-node-id="DAGgHly29HeuiOXwC3BDgV"><td data-page-node-id="lZc9uqKKWubIjAzU0bOYm6"><span class="sev Medium" data-page-node-id="KPGQLzwG9Ef6sxIAGz24pp">Medium</span></td><td data-page-node-id="M0F4wBE5aSZD8Xe8XWMNNl"><span class="loc" data-page-node-id="4oVmysZGBm7CCtuoyt1L8J">net/RemoteControlHtml.kt:186,255</span></td>
+        <td data-page-node-id="xtcjrbIRusUxZtg7wC3Bde">歌曲标题/歌手名（来自不可信网络搜索结果）直插 innerHTML，反射型 XSS；可注入脚本调用 TV 遥控 API。</td></tr>
+      <tr data-sev="Medium" data-page-node-id="1lHSoXOOTuB29gmm2zAzRg"><td data-page-node-id="HuDyB86PgUUhbpOS32EKTD"><span class="sev Medium" data-page-node-id="pAff1iTDUx1cjgsaAxeHBK">Medium</span></td><td data-page-node-id="AiwslHKwYuNhGIbwfJ8CSj"><span class="loc" data-page-node-id="Q6F5D0yhgYNoYkPE1zZFiR">ui/screens/ExitConfirmDialog.kt:41 等</span></td>
+        <td data-page-node-id="k2gvIDy8zCxgrbqPF100gs">Dialog 的 DisposableEffect(onDismiss) 以 lambda 为 key，父重组重建瞬间注销 BACK 处理器，竞态下 BACK 语义偶发失效。</td></tr>
+      <tr data-sev="Medium" data-page-node-id="tjYyF63Jh2hmd2v4hNJEXK"><td data-page-node-id="MBkLjAY0iXl0BIwcwCSYxu"><span class="sev Medium" data-page-node-id="AsdaRBvtXZjnD6hYTIb0UI">Medium</span></td><td data-page-node-id="bo1IGtxjiJlSYMN8Gctvm4"><span class="loc" data-page-node-id="avBunhvh6iZrApLFKlcMTm">ui/components/MvPlaybackScreen.kt:341 / KaraokePlaybackScreen.kt:369</span></td>
+        <td data-page-node-id="p0Bq6EMVmL3vAEEV64whem">控制条虚化（alpha 0.15）后内部按钮仍 focusable，D-Pad 在不可见按钮间移动焦点，焦点迷失。</td></tr>
+      <tr data-sev="Low" data-page-node-id="rkceWg0dehbOO6C5KMv2PG"><td data-page-node-id="rOIcvAQzGqCUR8cqpM78PL"><span class="sev Low" data-page-node-id="OLQQI62ZwaoE8TgffUGxKv">Low</span></td><td data-page-node-id="hDVO9g6g9oIHSSCPUQzntq"><span class="loc" data-page-node-id="3t65W1eSuXF0HCCgboRe3Q">net/RemoteControlServer.kt:121</span></td>
+        <td data-page-node-id="3qnxuLLhcHdQnRR8LLcX3I">队列索引（playAt/moveQueueItem/removeFromQueue）未做 0≤idx&lt;size 校验。</td></tr>
+      <tr data-sev="Low" data-page-node-id="EdwTBufE0ESrXPkRUOOHFE"><td data-page-node-id="Q0JNGRbMR9sqL12XE6n4l0"><span class="sev Low" data-page-node-id="DsEjv9F1mP43cufqB0uPxP">Low</span></td><td data-page-node-id="BhWgZPWvIduDPybxQ0ws1B"><span class="loc" data-page-node-id="LTP39sBbo0cfpd7ROFRwaN">net/ModelTransferServer.kt:54</span></td>
+        <td data-page-node-id="aIgyobdfKpOEJhTjGChfYK">日志端口写错（实际 18083 却打印 18082），排障误导。</td></tr>
+      <tr data-sev="Low" data-page-node-id="GOFmvLAGalEJ96GNF6wcJz"><td data-page-node-id="cWoAtpeEmBKLcFG8SpHCg0"><span class="sev Low" data-page-node-id="ca8ZAGg90FQpBrHmFTnooO">Low</span></td><td data-page-node-id="HDdeHABLALEKYSJ7asWni1"><span class="loc" data-page-node-id="dFuCbg32zdFbJPmurJCcfI">net/ModelTransferServer.kt:95</span></td>
+        <td data-page-node-id="SayBwJWMFIQb3abClmCJYz">/api/status 泄露内部绝对路径（信息泄露）。</td></tr>
+      <tr data-sev="Low" data-page-node-id="2x072o3TaGhmL0g2UAjnaS"><td data-page-node-id="jo2olCA3reGGjYMrzfCmKf"><span class="sev Low" data-page-node-id="4yMutsiSQFRsjjHMV64Pw8">Low</span></td><td data-page-node-id="BDQ13Mrf5D6BLTbE280fQD"><span class="loc" data-page-node-id="zsbkRNs87XK6uKDyRugkRu">net/ModelTransferServer.kt:227</span></td>
+        <td data-page-node-id="I7DM4CyXzTA1JCfAJyEFwm">手写 multipart 边界匹配在自重叠边界时可能漏判一次起点，建议改用标准解析器。</td></tr>
+      <tr data-sev="Low" data-page-node-id="1OvHAxPegPW6Ss6Ay7hz5G"><td data-page-node-id="KHe8miWZeGK12aW9LCtPxP"><span class="sev Low" data-page-node-id="wFhOHVDb7N8YM6G60Qq2AJ">Low</span></td><td data-page-node-id="nEb3BkOASgrNS4MOJeIn7v"><span class="loc" data-page-node-id="55cXuaSovCX9EuKUwF2KtA">ui/screens/TextInputDialog.kt:157 等</span></td>
+        <td data-page-node-id="5cCAUKoM3ZrjpoB36tl9TN">二维码位图在主线程（组合期）同步生成，弹窗打开瞬间可能掉帧。</td></tr>
+      <tr data-sev="Low" data-page-node-id="ydkVHVu9FVnjccpyFKxggT"><td data-page-node-id="AZIpgexFEyN7oS3afXWNN7"><span class="sev Low" data-page-node-id="joOJw9ClGW18H0jXKUrUp5">Low</span></td><td data-page-node-id="hEncCKxvaeeqgdM4ZYODPE"><span class="loc" data-page-node-id="JjCwjUj51prJ3wwwEeTVBG">ui/MainActivity.kt:211</span></td>
+        <td data-page-node-id="71ubxhAgU8ins2MPQLUJ8m">退出流程在主线程 runBlocking 至多 1.5s 等待网络 disconnect，最坏冻结 1.5s。</td></tr>
+      <tr data-sev="Low" data-page-node-id="lx4CRl2gfEkWjX5vuIQDxE"><td data-page-node-id="1ylqXkevxExHtcmsaFnpfq"><span class="sev Low" data-page-node-id="kyRU2CXAD3S1hiOyVx54yq">Low</span></td><td data-page-node-id="PygHae5lPL9XzFvP8KRpQp"><span class="loc" data-page-node-id="lwG3s3SUTxF6JRkXxVgcl2">Dialog BackHandler 双机制</span></td>
+        <td data-page-node-id="kEGKoaxlzU5Iw9mK6e7arS">LocalDialogBackHandler 与 androidx BackHandler 两套并存，风格不统一易遗漏（正是第 1 项根因）。</td></tr>
+    </table>
+    <p class="ok" data-page-node-id="1osHktBjQXioKZBg4GWTOm">亮点：重组下沉良好（进度/频谱限定在 NowPlaying 子树，避免全树每秒重组）；导航状态基本外置 VM；服务器线程大多有 try/catch(Exception)；路径穿越已缓解（反查而非拼路径）；焦点环仅 TV 显示；审查范围内无硬编码密钥。</p>
+  </div>
+</section>
+
+<!-- ============ 整体优势 ============ -->
+<section id="strength" data-page-node-id="D1r2BCmJOvZBXnrmsUHhgo">
+  <h2 data-page-node-id="4CrzISPqCU5cp0Yt9Ncz8r">整体优势（跨子系统）</h2>
+  <div class="card" data-page-node-id="BWEQUWUw8n2zOHRB4M1yfl">
+    <ul class="tight" data-page-node-id="XSYADvFx7eKavhVmcabUTG">
+      <li data-page-node-id="k6fmcmYZg4Fg7FbxdmvLVj"><b data-page-node-id="rctO8OEP8nsb4PBSfc4Wh7">安全基线稳固</b>：trust-all 证书绕过未回归；凭据 AES-GCM 加密落盘（除个别降级分支）；token 大部分日志已脱敏。</li>
+      <li data-page-node-id="PKLjfGOAUqcyHKIIgk49Th"><b data-page-node-id="oKqJ6AI0GBQOoNWz0uIObv">手动 DI 模式清晰</b>：NasMusicApp 持有全局单例、按需在消费处 cast，无 getInstance 框架污染主路径（仅 AppPreferences 并存第二入口）。</li>
+      <li data-page-node-id="RTJhoVaHHczFz6rx2sbwei"><b data-page-node-id="JEuGuU2PESaxaAdeA6KD1t">协程作用域总体规范</b>：应用级 SupervisorJob+IO 合理；网络调用普遍切 Dispatchers.IO；无 GlobalScope 误用。</li>
+      <li data-page-node-id="tuF3UgDjlCDoHIlVyIV8kS"><b data-page-node-id="oRjCRSrLKJlIRR0VDYT4Vi">资源关闭普遍到位</b>：Jellyfin 适配器、Meting/Jamendo、歌词网络层、下载流均正确使用 use{}；Room 全量切 IO。</li>
+      <li data-page-node-id="8InRYl6wTollYcgspTPTZ5"><b data-page-node-id="fNfbbFNfjJ9gauhVNiH1eE">容错与降级链完善</b>：多端点/多源 fallback、解析失败不破坏存量数据（safeParseJson 跳过回写）、下载 .part 原子 rename + .nomedia。</li>
+      <li data-page-node-id="9KqINglALJ1D4okSmw23tB"><b data-page-node-id="TXxTwqBhjGkc7GItHpEkJK">TV 适配细节扎实</b>：重组下沉、焦点环仅 TV、三级 BACK 主体逻辑、断网冻结/恢复、进度 seek 防护。</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ============ 修复路线图 ============ -->
+<section id="road" data-page-node-id="JSqZYJhzlygxvzLiqd2zeP">
+  <h2 data-page-node-id="CVbNSyROxWUTCn2kh5C8c2">修复路线图（按优先级分阶段）</h2>
+  <div class="card" data-page-node-id="nph4ijMeXBEyvZyAFBClln">
+    <h3 data-page-node-id="rx7fU6HOX3v6boa42xp06W">阶段 P0 — 阻断性缺陷（立即修复，约 13 项 High）</h3>
+    <ul class="tight" data-page-node-id="HVEbXlo9vsY5pGjFnzmblr">
+      <li data-page-node-id="qT5tIEi5LMUb5XYczLDxOW">CryptoUtils.encrypt 明文降级 → 抛异常/空串（核心/数据 #1）。</li>
+      <li data-page-node-id="HatFI635vayKbJNuVPxQjg">Daoliyu/Feiniu 全部 OkHttp 调用补 .use{}（含 testConnection）（适配器 #1）。</li>
+      <li data-page-node-id="gstFqV9QXRCVD4XiuHriQe">MusicScanner 改用 getColumnIndex + SDK 版本守卫（下载 #H-1）。</li>
+      <li data-page-node-id="QUGpe29GEC0zM4CwVdooht">下载增加 Content-Length 完整性校验（下载 #H-2）。</li>
+      <li data-page-node-id="9pD2PZTu8PVyxyVCkRBWuE">EmbeddedCoverExtractor 对 content:// 用 MediaMetadataRetriever.setDataSource(Context, Uri)（下载 #H-3；原点名的 LocalCoverExtractor 为死代码）。</li>
+      <li data-page-node-id="FKoQFbk65W0Q03REy6u4qQ">播放引擎 H1–H5：overlap-add + 段缓冲清零、crossfade release()、分离单飞锁、不关闭进程级 OrtEnvironment。</li>
+      <li data-page-node-id="zMIALtXLcPCwxUDNyROFOF">AppRoot 补 showKaraoke BACK 分支 + KaraokeStepPickerDialog BackHandler（UI #1）。</li>
+      <li data-page-node-id="10ZusaXIIfyakIYDz15G1F">LyricsManager 在线歌词变体轮询加边界守卫（歌词 #1）。</li>
+      <li data-page-node-id="ko5yWgRsz7So1Azm4rYB2C">Bilibili MV 实现 WBI 签名或确认接口可用性（百度/MV #M2/M3）。</li>
+    </ul>
+    <h3 data-page-node-id="IARgxazzViq0JTjJA0z0o7">阶段 P1 — 用户可见正确性（优先 Medium）</h3>
+    <ul class="tight" data-page-node-id="ZRIrBXgfmkOQE4VVaSMjbI">
+      <li data-page-node-id="Y04oaUnH97qeSxdVWpXwZS">天气电台随机补位不计入 nasCount；SmartRadio skip 仅清当前批次（网络 #4/#6）。</li>
+      <li data-page-node-id="bs7HTsFtI765LRcKpIjUeb">歌词：编码修复用 EncodingUtils、网络匹配加相关性校验、缓存不遮蔽后端、主线程 I/O 移 IO（歌词 #2/#3/#6/#8）。</li>
+      <li data-page-node-id="v8eekZmvkRPBM12G8xcukG">导出目标设备选择修正、导出单例并发锁（下载 #M-6/#M-7）。</li>
+      <li data-page-node-id="qtf1jgwqMlxkgpHnohcJet">百度：token 入日志修复（M1）、服务端令牌失效统一重试（M4）、内嵌封面按 ID3 总长读取（M5）。</li>
+      <li data-page-node-id="2RWQTjbUVf6dDFkRQLKSJD">Subsonic 用户名编码、歌曲总数修复（适配器 #2/#3）。</li>
+      <li data-page-node-id="dNRzDKMCyZYQOH4kZZJKrr">BackupTransferServer 流式写盘/上限防 OOM；RemoteControlHtml 转义防 XSS（UI #2/#3）。</li>
+    </ul>
+    <h3 data-page-node-id="qQFKLJKu9bnz7EjkbnQTK3">阶段 P2 — 健壮性与可观测性（其余 Medium / 高价值 Low）</h3>
+    <ul class="tight" data-page-node-id="Rilzn0u9hVPEVSGszLrW9H">
+      <li data-page-node-id="mP2tJtFB5EP0HlrlGpvKAP">并发缓存加锁/换 ConcurrentHashMap（EmbeddedCoverExtractor、NetworkMusicManager services、BaixuFileIndexCache）。</li>
+      <li data-page-node-id="FEW6zz38cZGwnj722QoRLS">Bitmap native 内存回收（MediaTagWriter；LocalCoverExtractor 为死代码可忽略）。</li>
+      <li data-page-node-id="IHf2S8uJK4WgnERDQ3T3dD">下载孤儿文件清理、MediaStore 重复收录去重、LIKE 转义。</li>
+      <li data-page-node-id="IRBpRGV9scAXpibLpO1DeF">Equalizer 会话变更重建、进度轮询双链修复、CoilBitmapLoader future 守卫。</li>
+      <li data-page-node-id="0JMFlp4TyhztV0jpe05TQc">WeatherApi Response 关闭、WMO 85/86、forecast cnt 修正。</li>
+    </ul>
+    <h3 data-page-node-id="zaLBQNY1pDzXPmYUq8prby">阶段 P3 — 清理与一致性（Low）</h3>
+    <ul class="tight" data-page-node-id="6LA3yktw11MMT90JcDTkEu">
+      <li data-page-node-id="EA8cF4xzF1Z838jlcBGaof">误导性注释修正（NasMusicApp:139）、playModeToggleHandler 置空、死代码删除（Mp3MetadataExtractor/VocalSeparationController/startPreSeparation）。</li>
+      <li data-page-node-id="gCaVZCXIlT6ZynKBxASvuj">统一 Dialog BACK 机制；QR 位图异步生成；退出 runBlocking 改 IO；端口日志修正；路径泄露收敛。</li>
+      <li data-page-node-id="4XO1mA8Kfc4OD1Zb5FFj35">Gson 前向兼容约束文档化；modelDownloadUrl 死字段补齐或删除。</li>
+    </ul>
+    <p class="muted" data-page-node-id="h9PqA1MOKBWZDoIvrtSaY3">建议每修复一项在 CHANGELOG.md 与 docs/technical-overview.md §10 记录，并补充对应单元测试（尤其 HQ 分离音频质量、歌词越界、MusicScanner 版本分支、crossfade 释放）。</p>
+  </div>
+</section>
+
+<footer data-page-node-id="DFCtgxzDxg1S7hLcaGs0s6">
+  本报告由 8 个并行子系统审查代理产出，覆盖 NASMusicTV 全部 275 个 Kotlin 源文件（约 56,000 行）；其中 4 项最高危发现已人工逐行复核确认。
+  行号基于 2026-09-11 代码快照，修复前请按“文件名 + 符号名”二次定位。生成时间：2026-09-11。
+</footer>
+
+</div>
+
+<script>
+  // 严重度筛选
+  const btns = document.querySelectorAll('.toc button[data-f]');
+  btns.forEach(b=>b.addEventListener('click',()=>{
+    btns.forEach(x=>x.classList.remove('on'));
+    b.classList.add('on');
+    const f=b.dataset.f;
+    document.querySelectorAll('tr[data-sev]').forEach(tr=>{
+      tr.classList.toggle('hidden', !(f==='all'||tr.dataset.sev===f));
+    });
+    // 同步统计卡影响的可视性（仅表格行）
+  }));
+</script>
+</body>
+</html>

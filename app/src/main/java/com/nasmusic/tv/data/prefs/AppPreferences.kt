@@ -119,6 +119,8 @@ class AppPreferences internal constructor(private val context: Context) {
     @Volatile private var cachedJamendoClientId: String = ""
     @Volatile private var cachedMetingApiBaseUrl: String = MetingApiService.DEFAULT_BASE_URL
     @Volatile private var cachedMvApiBaseUrl: String = BilibiliMvService.DEFAULT_BASE_URL
+    /** 高质量分离模型自定义下载 URL 镜像（空=用内置默认候选列表） */
+    @Volatile private var cachedModelDownloadUrl: String = ""
     @Volatile private var cachedLyricsKugouBaseUrl: String = com.nasmusic.tv.lyrics.LyricsNetworkProvider.DEFAULT_KUGOU_BASE_URL
     @Volatile private var cachedLyricsNeteaseBaseUrl: String = com.nasmusic.tv.lyrics.LyricsNetworkProvider.DEFAULT_NETEASE_BASE_URL
     @Volatile private var cachedWeatherApiKey: String = ""
@@ -179,6 +181,10 @@ class AppPreferences internal constructor(private val context: Context) {
             dataStore.data.map { it[keyLyricsNeteaseBaseUrl] ?: com.nasmusic.tv.lyrics.LyricsNetworkProvider.DEFAULT_NETEASE_BASE_URL }
                 .distinctUntilChanged().collect { cachedLyricsNeteaseBaseUrl = it }
         }
+        scope.launch {
+            dataStore.data.map { it[keyModelDownloadUrl] ?: "" }
+                .distinctUntilChanged().collect { cachedModelDownloadUrl = it }
+        }
         // （F-7：weather 镜像改读加密键，见上方 migrateWeatherApiKeyIfNeeded 后的收集块）
     }
 
@@ -203,6 +209,7 @@ class AppPreferences internal constructor(private val context: Context) {
     private val keyDefaultNetworkSource = stringPreferencesKey("settings_default_network_source")
     private val keyMetingApiBaseUrl = stringPreferencesKey("settings_meting_api_base_url")
     private val keyMvApiBaseUrl = stringPreferencesKey("settings_mv_api_base_url")
+    private val keyModelDownloadUrl = stringPreferencesKey("settings_model_download_url")
     private val keyLyricsKugouBaseUrl = stringPreferencesKey("settings_lyrics_kugou_base_url")
     private val keyLyricsNeteaseBaseUrl = stringPreferencesKey("settings_lyrics_netease_base_url")
     private val keyJamendoClientId = stringPreferencesKey("settings_jamendo_client_id")
@@ -635,6 +642,7 @@ class AppPreferences internal constructor(private val context: Context) {
             spectrumEnabled = prefs[keySpectrumEnabled] ?: false,
             visualizerTheme = prefs[keyVisualizerTheme]?.let { VisualizerTheme.fromKey(it) } ?: VisualizerTheme.COLOR_FLOW,
             fontAdjustment = prefs[keyFontAdjustment] ?: 0,
+            modelDownloadUrl = prefs[keyModelDownloadUrl] ?: "",
             language = prefs[keyLanguage] ?: "system",
             downloadEnabled = prefs[keyDownloadEnabled] ?: true,
             autoDownloadOnPlay = prefs[keyAutoDownloadOnPlay] ?: false,
@@ -876,6 +884,18 @@ class AppPreferences internal constructor(private val context: Context) {
      * R-7 第三类修复（路 A）：读 @Volatile 内存镜像。
      */
     fun getMvApiBaseUrlSync(): String = cachedMvApiBaseUrl
+
+    /**
+     * 同步获取高质量分离模型自定义下载 URL（用于 ModelDownloadManager 的 customUrlProvider）。
+     * 空串表示使用内置默认候选列表（hf-mirror → huggingface）。
+     */
+    fun getModelDownloadUrlSync(): String = cachedModelDownloadUrl
+
+    /** 设置模型自定义下载 URL（空串=恢复默认候选列表） */
+    suspend fun setModelDownloadUrl(url: String) =
+        dataStore.edit {
+            it[keyModelDownloadUrl] = url.trim().trim('`', '\'', '"').trim()
+        }
 
     // --- 网络歌词端点（Kugou / Netease）---
     /** R-7 第三类修复（路 A）：读 @Volatile 内存镜像（原主线程急切求值 runBlocking） */
@@ -1339,7 +1359,7 @@ class AppPreferences internal constructor(private val context: Context) {
         return try {
             val decAt = CryptoUtils.decrypt(t.accessToken).ifBlank { return null }
             val decRt = CryptoUtils.decrypt(t.refreshToken).ifBlank { return null }
-            AppLog.d(TAG, "getBaiduTokensSync: accessToken prefix=${decAt.take(10)}... (len=${decAt.length}), expiresAt=${t.expiresAt}")
+            AppLog.d(TAG, "getBaiduTokensSync: token decrypted (len=${decAt.length}), expiresAt=${t.expiresAt}")
             t.copy(accessToken = decAt, refreshToken = decRt)
         } catch (e: Exception) {
             AppLog.w(TAG, "getBaiduTokensSync decrypt error", e)
@@ -1504,6 +1524,7 @@ class AppPreferences internal constructor(private val context: Context) {
                 prefs[keyDefaultNetworkSource] = settings.defaultNetworkSource.key
                 prefs[keyMetingApiBaseUrl] = settings.metingApiBaseUrl
                 prefs[keyMvApiBaseUrl] = settings.mvApiBaseUrl
+                prefs[keyModelDownloadUrl] = settings.modelDownloadUrl
                 prefs[keySpectrumEnabled] = settings.spectrumEnabled
                 prefs[keyVisualizerTheme] = settings.visualizerTheme.name
             }

@@ -104,18 +104,20 @@ class BaiduFileIndexCache(context: Context) {
      * 仅写 HTTP 网络封面；动态 dlink（8h 过期）与 APIC data URI（过大）不落盘。
      * @return 是否写入成功
      */
-    fun setCoverUrl(fsId: Long, coverUrl: String): Boolean {
-        val index = load() ?: return false
+    fun setCoverUrl(fsId: Long, coverUrl: String): Boolean = synchronized(cacheLock) {
+        // 读-改-写必须整体持锁：原实现 load()/save() 各自持锁，并发调用（iTunes 单写路径）
+        // 会交错覆盖彼此的更新（lost update）
+        val index = load() ?: return@synchronized false
         val idx = index.entries.indexOfFirst { it.fsId == fsId }
-        if (idx < 0) return false
+        if (idx < 0) return@synchronized false
         val old = index.entries[idx].coverUrl
-        if (old == coverUrl) return false // 无变化不落盘，避免频繁写文件
+        if (old == coverUrl) return@synchronized false // 无变化不落盘，避免频繁写文件
         val newEntries = index.entries.toMutableList().apply {
             this[idx] = index.entries[idx].copy(coverUrl = coverUrl)
         }
         save(index.copy(entries = newEntries))
         AppLog.d(TAG, "setCoverUrl fsId=$fsId -> ${coverUrl.take(60)}")
-        return true
+        true
     }
 
     /**

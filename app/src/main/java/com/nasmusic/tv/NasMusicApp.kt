@@ -136,7 +136,7 @@ class NasMusicApp : Application(), ImageLoaderFactory {
     }
 
     // ---- 百度网盘组件（懒构造，仅在用户开启百度源时实例化）----
-    /** 百度专用 OkHttpClient（守护线程池 + 信任所有证书 + 百度 UA 拦截器复用） */
+    /** 百度专用 OkHttpClient（守护线程池 + 系统默认 TLS 校验；独立实例避免与全局播放 client 争抢连接池） */
     val baiduOkHttpClient: OkHttpClient by lazy { BaiduOAuthClient.buildClient() }
     val baiduOAuthClient: BaiduOAuthClient by lazy { BaiduOAuthClient(baiduOkHttpClient, appPreferences) }
     val baiduPanApi: BaiduPanApi by lazy { BaiduPanApi(baiduOkHttpClient, baiduOAuthClient) }
@@ -221,7 +221,7 @@ class NasMusicApp : Application(), ImageLoaderFactory {
             localSongsProvider = { localMusicRepository.loadFromCache() }
         )
         // 模型下载管理器（HT-Demucs FT ONNX，与 APK 分离，设置页下载）
-        modelDownloadManager = ModelDownloadManager(this)
+        modelDownloadManager = ModelDownloadManager(this) { appPreferences.getModelDownloadUrlSync() }
         playerManager.setModelDownloadManager(modelDownloadManager)
         // 网络音乐管理器：注册所有网络源，默认源与 Meting 端点均由 AppSettings 动态提供
         val services = mapOf(
@@ -303,11 +303,13 @@ class NasMusicApp : Application(), ImageLoaderFactory {
                 if (lyr != null) com.nasmusic.tv.lyrics.LrcParser.toLrcText(lyr) else null
             },
             settings = {
+                // P3：单次快照，避免 4 次 first() 读到不一致的设置状态
+                val snap = appPreferences.appSettings.first()
                 com.nasmusic.tv.backend.download.model.DownloadSettings(
-                    downloadEnabled = appPreferences.appSettings.first().downloadEnabled,
-                    autoDownloadOnPlay = appPreferences.appSettings.first().autoDownloadOnPlay,
-                    autoDownloadLimit = appPreferences.appSettings.first().autoDownloadLimit,
-                    downloadLocation = appPreferences.appSettings.first().downloadLocation
+                    downloadEnabled = snap.downloadEnabled,
+                    autoDownloadOnPlay = snap.autoDownloadOnPlay,
+                    autoDownloadLimit = snap.autoDownloadLimit,
+                    downloadLocation = snap.downloadLocation
                 )
             },
             onNotify = { msg ->
@@ -352,11 +354,13 @@ class NasMusicApp : Application(), ImageLoaderFactory {
         )
         autoDownloadController = com.nasmusic.tv.backend.download.AutoDownloadController(
             settings = {
+                // P3：单次快照，避免 4 次 first() 读到不一致的设置状态
+                val snap = appPreferences.appSettings.first()
                 com.nasmusic.tv.backend.download.model.DownloadSettings(
-                    downloadEnabled = appPreferences.appSettings.first().downloadEnabled,
-                    autoDownloadOnPlay = appPreferences.appSettings.first().autoDownloadOnPlay,
-                    autoDownloadLimit = appPreferences.appSettings.first().autoDownloadLimit,
-                    downloadLocation = appPreferences.appSettings.first().downloadLocation
+                    downloadEnabled = snap.downloadEnabled,
+                    autoDownloadOnPlay = snap.autoDownloadOnPlay,
+                    autoDownloadLimit = snap.autoDownloadLimit,
+                    downloadLocation = snap.downloadLocation
                 )
             },
             repo = downloadRepository,

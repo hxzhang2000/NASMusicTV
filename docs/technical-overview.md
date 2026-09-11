@@ -7920,3 +7920,62 @@ onSearchSong = { keyword -> viewModel.searchNetworkSongs(keyword) },
 - **改动**：SmartRadioManager 新增 `generateOnly(onBatchReady)`——只生成批次不播放（有 currentSeed 走 startFromCurrentSong 即"换一批"语义、无则 startFromScratch 偏好种子）；MainViewModel 新增 `_smartRadioBatch: StateFlow<List<Song>>` + `loadSmartRadioBatch()`（smartRadioBatchLoading 防重入）+ `playSmartRadioBatchAt(index)`（整批入队从该首播起）；HomeScreen 区块改随心听式——`LaunchedEffect(Unit)` 首次进入自动生成，批次非空时展示 SectionHeader（右上"换一批"按钮，SectionHeader 新增 actionLabel/onAction 可选参数）+ LazyRow HomeSongCard 卡片行，点卡片播放；删除 SmartRadioCard 及 startSmartRadio/startSmartRadioFromCurrent 死代码
 - **验证**：compileDebugKotlin + testDebugUnitTest 316/316 通过
 - **待办**：手机手测（首次进入自动出批次、点卡片播歌、换一批不重复、区块位置随心听下方天气卡上方）
+
+### 10.121 v2.29.3 — 代码审查报告全量修复（P0–P3，2026-09-11）
+
+依据《NASMusicTV-代码审查报告-2026-09-11.html》（8 个并行子系统审查代理产出，覆盖全部 275 个 Kotlin 源文件约 56,000 行，重定严重度后 High 10 / Medium 41 / Low 59），按报告"修复路线图"分四阶段实施并全部落地。
+
+#### P0 阻断性缺陷（13 项 High）
+
+- `util/CryptoUtils.kt`：`encrypt` 失败不再返回明文（抛异常），消除凭据明文落盘降级路径
+- `impl/DaoliyuAdapter` / `impl/FeiniuAdapter`：全部 `OkHttp` 调用（含 `testConnection` 的临时实例）补 `.use {}`，不再泄漏 Response
+- `backend/local/MusicScanner.kt`：`getColumnIndex` 替代下标写死 + `Build.VERSION` 分支配 `_DATA` 列；`ScannedSong` 增 `dataPath`
+- `backend/download/SongDownloadManager.kt`：下载完成校验 `Content-Length`（不匹配即删 `.part`）
+- `backend/download/EmbeddedCoverExtractor.kt`：`content://` 改 `MediaMetadataRetriever.setDataSource(context, uri)`
+- 播放引擎 H1–H5：Demucs overlap-add 段缓冲清零、`CrossfadeController.release()`、人声分离单飞锁、进程级 `OrtEnvironment` 不再被释放
+- `ui/components/AppRoot.kt` / `KaraokeStepPickerDialog`：补 `showKaraoke` BACK 分支与 BackHandler（K 歌页 BACK 不再穿透到退出确认）
+- `lyrics/LyricsManager.kt`：在线歌词变体轮询补索引边界守卫
+- `backend/network/mv/BilibiliMvService.kt`：实现 WBI 签名（`w_rid` / `wts`）
+
+#### P1 用户可见正确性
+
+- **歌词系统四修**（`LyricsManager` / `LyricsPersistentCache` / `LyricsNetworkProvider` / `MainViewModel`）：
+  - 编码：新增 `decodeLyricsBytes()`（U+FFFD → GBK 回退）+ `EncodingUtils.fixEncoding`
+  - 相关性：新增 `SearchHit` + `norm()` / `relevanceScore()`（标题互含校验 + 歌手加分），候选 `filter { score > 0 }.sortedByDescending { }`
+  - 优先级：后端歌词优先于持久化缓存；`userNetworkLyricsOverride`（ConcurrentHashMap.newKeySet）记录用户显式切换，避免被缓存覆盖
+  - 线程/并发：候选拉取移入 `backgroundScope`（`SupervisorJob + Dispatchers.IO`）+ `candidateFetchMutex`（双检防惊群）；0 行空歌词加 `isNotEmpty()` 守卫（不再阻断回退）
+  - `LyricsPersistentCache` 补真 LRU：`touchCounter` + `TOUCH_SAVE_INTERVAL=16` 节流落盘
+- **导出**：`ExportCoordinator.onTreeGranted` 回到发起授权的设备（`volumeIdOf(it) == pendingVolume`）；`SongExporter` 加 `exportMutex.tryLock()` 并发守卫
+- **百度网盘**：`executeWithErrno` 日志 URL 走 `sanitizeUrl`（原截 200 字符仍可能带 token）；token 失效（-6/31045）`execute`/`executeWithErrno`/`createDir` 统一强制刷新重试一次；`BaiduCoverProvider` 两阶段按 ID3 总长补读（`ID3_PROBE_BYTES=256KB` → `MAX_ID3_TAG_BYTES=16MB`）
+- **Subsonic**：用户名 URL 编码 + 歌曲总数读取修复
+- **本地服务**：`BackupTransferServer.MAX_UPLOAD_BYTES=32MB` + `ByteArrayOutputStream` 分块累积（不再按 Content-Length 预分配，防 OOM DoS）；`RemoteControlHtml` 新增 `esc()` / `escAttr()` 并应用于队列/搜索项标题歌手与 onclick 属性（修反射型 XSS）
+- 天气电台随机补位不计入 `nasCount`；SmartRadio skip 仅清当前批次
+
+#### P2 健壮性与可观测性
+
+- `SongDownloadManager`：新增 `currentCall` 字段并在 `cancelAll()` 中真正 `cancel()`；下载第 8~9 步整段 try/catch，失败清理 `finalFile` 与 `.lrc`/`.jpg` 孤儿
+- `backend/local/`：`LocalMusicRepository.buildScannedList` 去重键改**真实文件路径**（统一分隔符，缺失回退 contentUri，DOWNLOAD 通道优先）+ `escapeLike()`；`LocalMusicDao.search` 三处 `LIKE ... ESCAPE '\'`
+- `player/CoilBitmapLoader.kt`：`loadBitmap`/`decodeBitmap` 补 `if (!future.isDone) runCatching { future.set(...) }`，新增 `enqueue()` 取消转发到 `disposable.dispose()`
+- `backend/weather/WeatherApi.kt`：4 处 Response 补 `use {}`；WMO 描述 `85, 86 -> "阵雪"`（83/84 非标准码移除）；forecast `cnt` 5→40
+- `backend/network/baidu/BaiduFileIndexCache.kt`：`setCoverUrl` 整体 `synchronized(cacheLock)`（消除读-改-写丢失更新）
+- `backend/download/MediaTagWriter.kt`：`compressCover` 补 `Bitmap.recycle()`（含 scaled 与 src，防 native 内存泄漏）；`CoverFileWriter` 补 `isNormalizedJpeg()`（JPEG 且 ≤512KB 才跳过压缩）
+
+#### P3 清理与一致性
+
+- **统一 Dialog BACK 机制**：`ui/DialogBackHandler.kt` 新增 `RegisterDialogBackHandler(onBack)`（`rememberUpdatedState` + `DisposableEffect(Unit)`，只注册/注销一次）。原实现以 `onDismiss` lambda 为 key，父重组瞬间先注销后注册，存在 handler 为 null 的竞态窗口（BACK 穿透到 Level 3 退出确认）。改造 `ExitConfirmDialog` / `ConfirmDialog` / `ExportDeviceDialog` / `ConnectPromptDialog` / `KaraokeStepPickerDialog`；KDoc 明确"Box 覆盖层弹窗走 `LocalDialogBackHandler`、真正 `Dialog{}` 必须用 `BackHandler`"
+- `ui/screens/TextInputDialog.kt`：QR 位图生成移出组合期（`rememberCoroutineScope` + `Dispatchers.Default`，回主线程赋值）
+- `ui/MainActivity.kt`：退出流程 `runBlocking` 改 `lifecycleScope.launch(Dispatchers.IO)`（完成/超时后回主线程 `finishAffinity`），原主线程最长冻结 1.5s
+- `net/ModelTransferServer.kt`：日志端口硬编码 18082 改 `MODEL_TRANSFER_PORT`(18083)；`/api/status` 不再返回内部绝对路径
+- `net/RemoteControlServer.kt`：`playAt` / `moveQueueItem` / `removeFromQueue` 补 `isValidQueueIndex`（`0 ≤ idx < size`）
+- **multipart 边界匹配重写**：新增 `net/MultipartBoundaryStreamer.kt`——KMP 前缀函数替代朴素匹配，修「自重叠 boundary 在失配回退时漏判起点、把边界字节写进模型文件」；配 `MultipartBoundaryStreamerTest` 8 用例（含 `aab` in `aaab`、300KB 跨缓冲、EOF 残留前缀）
+- `NasMusicApp.kt`：`:139` 百度 OkHttpClient 注释修正（原写"信任所有证书"，实现已是系统默认校验，误导注释可能诱使后续「复原」hack）；下载设置 lambda 合并为单次 `appSettings.first()` 快照（原 4 次调用可能不一致）
+- **Gson 前向兼容约束文档化**：`data/model/AppSettings.kt` KDoc 明确"Gson 持久化 data class 新增字段必须带默认值"，否则新旧数据互反序列化失败
+- **`modelDownloadUrl` 补齐**：DataStore key `settings_model_download_url` + `appSettings` Flow 映射 + `@Volatile cachedModelDownloadUrl` + `setModelDownloadUrl` / `getModelDownloadUrlSync` + 备份导入回填；`ModelDownloadManager(context, customUrlProvider)` 自定义 URL 优先于内置候选（hf-mirror → huggingface）
+- **死代码删除**：`lyrics/Mp3MetadataExtractor.kt`、`player/VocalSeparationController.kt`（均零调用点）；`AccompanimentCache` 删除未接线的 `startPreSeparation`/`cancelPreSeparation`/`PreSeparationState` 通路及构造参数 `externalScope`（`PlaybackService` 调用同步收紧）；`HqSeparationOrchestrator`/`PlayerManager` KDoc 中的失效类引用修正
+
+#### 验证
+
+- `compileDebugKotlin` + `compileDebugUnitTestKotlin` 通过
+- `testDebugUnitTest --tests "*MultipartBoundaryStreamerTest"`：8/8 通过
+- 版本：v2.29.2 → **v2.29.3**（versionCode 126 → 127）
+- **待办（手测项）**：K 歌页 BACK 三级语义、歌词来源手动切换后不被缓存覆盖、导出到指定外接设备、电视端扫码弹窗不丢帧、手机上传 166MB 模型（KMP 边界路径）；release 构建（R8）需再跑一次 `assembleRelease` 确认 `data.stats` 之外的 keep 规则无回归

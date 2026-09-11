@@ -2,6 +2,13 @@ package com.nasmusic.tv.data.model
 
 /**
  * 应用通用设置
+ *
+ * ⚠️ Gson 前向兼容约束（适用于本类及 data.model 包内所有 Gson 持久化 data class）：
+ * 这些实例会经 Gson 序列化进 DataStore / 备份 JSON。新增字段**必须带默认值**，
+ * 且不要使用「非空类型 + 无默认值」——Gson 基于反射构造，不会为 Kotlin 非空参数
+ * 自动补默认值：用旧数据反序列化新代码会抛异常/置 null，用新数据反序列化旧代码
+ * 同样失败。若确需新增无默认字段，必须同时提供 @JsonAdapter 或自定义
+ * InstanceCreator / 迁移逻辑。
  */
 data class AppSettings(
     val darkTheme: Boolean = true,

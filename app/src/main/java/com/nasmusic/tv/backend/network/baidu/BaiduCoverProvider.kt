@@ -65,9 +65,26 @@ class BaiduCoverProvider(
     /** 内嵌 APIC：Range 请求文件头部，解析 APIC 帧，返回 data: URI */
     private suspend fun extractEmbeddedCover(fsId: Long): String? {
         val metas = api.fileMetas(listOf(fsId))
-        val dlink = metas.firstOrNull()?.dlink ?: return null
-        val headerBytes = downloadRange(dlink, 0L, (ID3_HEADER_BYTES - 1).toLong()) ?: return null
-        val (mime, picBytes) = Id3v2Parser.findApic(headerBytes) ?: return null
+        val meta = metas.firstOrNull()
+        val dlink = meta?.dlink ?: return null
+        val fileSize = meta.size
+
+        // 1. 先读探测窗口（覆盖绝大多数 < 256KB 的 ID3 标签，常规情况只发 1 次请求）
+        val probe = downloadRange(dlink, 0L, (ID3_PROBE_BYTES - 1).toLong()) ?: return null
+        val tagTotal = Id3v2Parser.tagTotalSize(probe) ?: return null
+
+        // 2. 标签超出探测窗口（大 APIC 封面）→ 按 ID3 标签总长补读，
+        //    否则整帧会被解析器丢弃，导致「有内嵌封面却回退网络封面」
+        val tagBytes = if (tagTotal <= ID3_PROBE_BYTES) {
+            probe
+        } else {
+            val wantEnd = (tagTotal.toLong() - 1).coerceAtMost(MAX_ID3_TAG_BYTES)
+            val safeEnd = if (fileSize > 0) wantEnd.coerceAtMost(fileSize - 1) else wantEnd
+            AppLog.d(TAG, "extractEmbeddedCover: tagTotal=$tagTotal > probe, re-read bytes 0-$safeEnd")
+            downloadRange(dlink, 0L, safeEnd) ?: return null
+        }
+
+        val (mime, picBytes) = Id3v2Parser.findApic(tagBytes) ?: return null
         val b64 = Base64.encodeToString(picBytes, Base64.NO_WRAP)
         val dataMime = if (mime.isBlank()) "image/jpeg" else mime
         return "data:$dataMime;base64,$b64"
@@ -114,7 +131,10 @@ class BaiduCoverProvider(
 
     companion object {
         private const val TAG = "BaiduCover"
-        private const val ID3_HEADER_BYTES = 256 * 1024
+        /** 探测窗口：先读这么多字节；标签超过则按 tagTotalSize 补读 */
+        private const val ID3_PROBE_BYTES = 256 * 1024
+        /** 单次补读上限（避免异常/恶意超长 ID3 标签把内存打爆） */
+        private const val MAX_ID3_TAG_BYTES = 16L * 1024 * 1024
         private val SIDE_CAR_NAMES = setOf("cover", "folder", "album", "front", "cover.jpg")
     }
 }

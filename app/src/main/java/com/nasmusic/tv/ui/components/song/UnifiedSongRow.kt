@@ -226,7 +226,7 @@ private fun SongRowModeRow(
                         val ctx = androidx.compose.ui.platform.LocalContext.current
                         // 优先提取内嵌 APIC 封面
                         val embedded = com.nasmusic.tv.backend.local.EmbeddedCoverExtractor.extractCoverUri(
-                            downloadState.path, ctx.cacheDir
+                            downloadState.path, ctx.cacheDir, ctx
                         )
                         val result = when {
                             embedded != null -> embedded
@@ -244,7 +244,7 @@ private fun SongRowModeRow(
                     song.isLocalSong && !song.path.isNullOrBlank() -> {
                         val ctx = androidx.compose.ui.platform.LocalContext.current
                         val embedded = com.nasmusic.tv.backend.local.EmbeddedCoverExtractor.extractCoverUri(
-                            song.path!!, ctx.cacheDir
+                            song.path!!, ctx.cacheDir, ctx
                         )
                         val result = embedded ?: song.coverUrl
                         com.nasmusic.tv.util.AppLog.d("UnifiedSongRow",
@@ -511,7 +511,7 @@ private fun SongRowModeCard(
                 is DownloadState.Completed -> {
                     val ctx = androidx.compose.ui.platform.LocalContext.current
                     val embedded = com.nasmusic.tv.backend.local.EmbeddedCoverExtractor.extractCoverUri(
-                        downloadState.path, ctx.cacheDir
+                        downloadState.path, ctx.cacheDir, ctx
                     )
                     when {
                         embedded != null -> embedded

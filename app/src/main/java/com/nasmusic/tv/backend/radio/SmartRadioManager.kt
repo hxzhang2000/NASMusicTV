@@ -44,10 +44,14 @@ class SmartRadioManager(
 
     /** 已播批次 songId 集（跨批次去重） */
     private val playedIds = mutableSetOf<String>()
-    private var currentSeed: Song? = null
-    private var generateJob: Job? = null
+    /** 当前批次的 songId 集（skip 时只清这一批，保留跨批次去重历史） */
+    private val currentBatchIds = mutableSetOf<String>()
+    /** 保护 playedIds/currentBatchIds/cachedLibrary 等共享状态（scope 内与外部调用方可能跨线程） */
+    private val stateLock = Any()
+    @Volatile private var currentSeed: Song? = null
+    @Volatile private var generateJob: Job? = null
     /** 曲库缓存（一次会话内复用；stop() 时清空） */
-    private var cachedLibrary: List<Song>? = null
+    @Volatile private var cachedLibrary: List<Song>? = null
 
     /**
      * F2-3 多源化：无种子启动（首页入口）——偏好加权随机（play_counts），不依赖当前播放。
@@ -68,7 +72,10 @@ class SmartRadioManager(
                 val counts = playCountsProvider()
                 val seed = library.maxByOrNull { counts[it.id] ?: 0 } ?: library.first()
                 currentSeed = seed
-                playedIds.clear()
+                synchronized(stateLock) {
+                    playedIds.clear()
+                    currentBatchIds.clear()
+                }
                 val batch = RadioSongScorer.generateBatch(library, seed, counts, playedIds, BATCH_SIZE)
                 if (batch.isEmpty()) {
                     playedIds.clear()
@@ -133,10 +140,48 @@ class SmartRadioManager(
         }
     }
 
-    /** 手动"换一批"：保留种子，重新生成（清当前批次历史） */
+    /**
+     * 手动"换一批"：保留种子与跨批次已播历史，仅移除当前批次后重新生成。
+     *
+     * 修复：原实现走 [startFromCurrentSong] → stopInternal(resetState=true) →
+     * playedIds.clear()，把全部历史清空，导致跨批次去重形同虚设（与注释"清当前批次"矛盾）。
+     * 同时不再清 cachedLibrary，避免每次换一批都重新分页拉曲库。
+     */
     fun skip(onBatchReady: (List<Song>, SeedContext) -> Unit) {
         val seed = currentSeed ?: return
-        startFromCurrentSong(seed, onBatchReady)
+        synchronized(stateLock) {
+            playedIds.removeAll(currentBatchIds)
+            currentBatchIds.clear()
+        }
+        generateJob?.cancel()
+        _state.value = State.Generating
+        generateJob = scope.launch {
+            try {
+                val library = loadLibrary(seed)
+                if (library.isEmpty()) {
+                    AppLog.w(TAG, "skip: empty library, exhausted")
+                    _state.value = State.Exhausted
+                    return@launch
+                }
+                val counts = playCountsProvider()
+                val batch = RadioSongScorer.generateBatch(library, seed, counts, playedIds, BATCH_SIZE)
+                if (batch.isEmpty()) {
+                    // 曲库真正耗尽（全部历史已播）→ 清历史重来
+                    synchronized(stateLock) { playedIds.clear() }
+                    val retry = RadioSongScorer.generateBatch(library, seed, counts, playedIds, BATCH_SIZE)
+                    if (retry.isEmpty()) {
+                        _state.value = State.Exhausted
+                        return@launch
+                    }
+                    emitBatch(retry, seed, onBatchReady)
+                } else {
+                    emitBatch(batch, seed, onBatchReady)
+                }
+            } catch (e: Exception) {
+                AppLog.e(TAG, "skip failed", e)
+                _state.value = State.Exhausted
+            }
+        }
     }
 
     /**
@@ -156,15 +201,24 @@ class SmartRadioManager(
     private fun stopInternal(resetState: Boolean) {
         generateJob?.cancel()
         generateJob = null
-        playedIds.clear()
+        synchronized(stateLock) {
+            playedIds.clear()
+            currentBatchIds.clear()
+        }
         cachedLibrary = null
         currentSeed = null
         if (resetState) _state.value = State.Idle
     }
 
     private suspend fun emitBatch(batch: List<Song>, seed: Song, onBatchReady: (List<Song>, SeedContext) -> Unit) {
-        playedIds.addAll(batch.map { it.id })
-        _state.value = State.Playing(seed.title, playedIds.size / BATCH_SIZE)
+        val batchIds = batch.map { it.id }
+        val totalPlayed = synchronized(stateLock) {
+            currentBatchIds.clear()
+            currentBatchIds.addAll(batchIds)
+            playedIds.addAll(batchIds)
+            playedIds.size
+        }
+        _state.value = State.Playing(seed.title, totalPlayed / BATCH_SIZE)
         onBatchReady(batch, SeedContext(seed))
     }
 
@@ -209,7 +263,7 @@ class SmartRadioManager(
         val networkSongs = loadNetworkSamples()
         val combined = (nasLibrary + localSongs + networkSongs).distinctBy { it.id }
         AppLog.d(TAG, "loadLibrary multi-source: nas=${nasLibrary.size} local=${localSongs.size} net=${networkSongs.size} combined=${combined.size}")
-        cachedLibrary = combined
+        synchronized(stateLock) { cachedLibrary = combined }
         return combined
     }
 

@@ -559,6 +559,12 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
     private val _lyricsAvailability = MutableStateFlow(LyricsAvailability())
     val lyricsAvailability: StateFlow<LyricsAvailability> = _lyricsAvailability.asStateFlow()
 
+    /**
+     * 用户手动为这些歌曲选择了「在线歌词」。
+     * 加载歌词时后端歌词优先于持久化缓存，但不得覆盖用户的显式选择。仅内存态。
+     */
+    private val userNetworkLyricsOverride = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
+
     // 歌词高亮模式 — 提升到 ViewModel，跨页面切换保留用户选择
     private val _lyricsHighlightMode = MutableStateFlow(LyricsHighlightMode.LINE_BY_LINE)
     val lyricsHighlightMode: StateFlow<LyricsHighlightMode> = _lyricsHighlightMode.asStateFlow()
@@ -2475,18 +2481,29 @@ showError(getApplication<Application>().getString(R.string.toggle_favorite_error
                 _lyricsAvailability.value = availability.copy(cached = _lyricsAvailability.value.cached)
                 AppLog.d("NASMusic", "loadLyrics: cached=${cachedLyrics != null}, backend=${availability.hasBackend}, network=${availability.hasNetwork}")
 
-                // 3. 无缓存时使用后端或网络歌词
-                if (cachedLyrics == null) {
-                    val lyrics = availability.backend ?: availability.network
+                // 3. 显示歌词
+                //    后端歌词优先于持久化缓存——缓存中的网络歌词可能是误匹配结果，不应遮蔽权威后端歌词；
+                //    但用户手动为这首歌选过「在线歌词」时，尊重用户选择（不覆盖）。
+                val userForcedNetwork = song.id in userNetworkLyricsOverride
+                val backendLyrics = availability.backend
+                if (backendLyrics != null && !userForcedNetwork) {
+                    _currentLyrics.value = backendLyrics
+                    if (backendLyrics.lines.any { it.wordTimestamps.isNotEmpty() }) {
+                        _lyricsHighlightMode.value = LyricsHighlightMode.WORD_BY_WORD
+                    }
+                    AppLog.d(
+                        "NASMusic",
+                        "loadLyrics: backend preferred over cache(cached=${cachedLyrics != null}), lines=${backendLyrics.lines.size}"
+                    )
+                } else if (cachedLyrics == null) {
+                    val lyrics = availability.network
                     if (lyrics != null) {
                         _currentLyrics.value = lyrics
                         if (lyrics.lines.any { it.wordTimestamps.isNotEmpty() }) {
                             _lyricsHighlightMode.value = LyricsHighlightMode.WORD_BY_WORD
                         }
-                        // 如果歌词来自网络（非用户手动切换），暂存以便播放完成后持久化
+                        // 自动匹配到的网络歌词：暂存以便播放完成后持久化
                         if (lyrics.source == LyricsSource.NETWORK) {
-                            // checkAvailability 内部已通过 fetchLyrics 获取文本，
-                            // 这里用解析后的行文本重建 LRC 暂存
                             val lrcText = LrcParser.toLrcText(lyrics)
                             if (lrcText.isNotBlank()) {
                                 lyricsManager.savePendingNetworkLyrics(song, lrcText)
@@ -2535,7 +2552,8 @@ showError(getApplication<Application>().getString(R.string.toggle_favorite_error
             // 1a. 内嵌封面（APIC 帧）→ 提取到缓存文件供 Coil 加载
             val embeddedUri = EmbeddedCoverExtractor.extractCoverUri(
                 localAudioPath,
-                getApplication<Application>().cacheDir
+                getApplication<Application>().cacheDir,
+                getApplication<Application>()
             )
             if (embeddedUri != null) {
                 candidates.add(embeddedUri)
@@ -2582,6 +2600,13 @@ showError(getApplication<Application>().getString(R.string.toggle_favorite_error
         val song = playerVM.currentSong.value ?: return
         val currentSource = _currentLyrics.value?.source
         AppLog.d("NASMusic", "switchLyricsSource: $source, currentSource=$currentSource")
+
+        // 记录用户显式来源选择：选过网络歌词后，后续加载不被后端歌词覆盖；选回内嵌/本地则撤销
+        when (source) {
+            LyricsSource.NETWORK -> userNetworkLyricsOverride.add(song.id)
+            LyricsSource.EMBEDDED, LyricsSource.LOCAL_FILE -> userNetworkLyricsOverride.remove(song.id)
+            else -> { }
+        }
 
         // 切歌时重置候选索引
         if (song.id != networkLyricsSongId) {

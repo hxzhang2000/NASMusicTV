@@ -7,6 +7,23 @@
 >
 > 类型：`Added`（新增） | `Changed`（变更） | `Fixed`（修复） | `Removed`（移除）
 
+## [v2.29.3] - 2026-09-11
+
+> 依据《NASMusicTV 代码审查报告（2026-09-11）》（110 项发现，覆盖全部 275 个 Kotlin 源文件）分阶段实施的全量修复，P0/P1/P2/P3 四阶段全部落地。
+
+### Fixed
+- **P0 阻断性（13 项 High）**：`CryptoUtils.encrypt` 加密失败不再静默返回明文（改为抛异常，消除凭据明文落盘）；Daoliyu/Feiniu 适配器全部 OkHttp 调用（含 `testConnection`）补 `use{}` 关闭 Response；`MusicScanner` 改 `getColumnIndex` + SDK 版本守卫（消除列序假设崩溃）；下载增加 `Content-Length` 完整性校验（截断文件不再被当作成品）；`EmbeddedCoverExtractor` 对 `content://` 改 `MediaMetadataRetriever.setDataSource(Context, Uri)`；播放引擎 H1–H5（overlap-add 段缓冲清零、crossfade `release()`、人声分离单飞锁、不再关闭进程级 `OrtEnvironment`）；`AppRoot` 补 `showKaraoke` BACK 分支 + `KaraokeStepPickerDialog` BackHandler（K 歌页 BACK 不再误触退出确认）；`LyricsManager` 在线歌词变体轮询补边界守卫；Bilibili MV 实现 WBI 签名
+- **P1 用户可见正确性**：歌词系统四修——网络歌词编码统一走 `EncodingUtils`（GBK 兜底）、网络候选加相关性校验（标题互含 + 歌手加分，杜绝搜到同名异曲）、后端歌词优先于持久化缓存（尊重用户显式选择，`userNetworkLyricsOverride` 记录手动切换）、候选拉取主线程 I/O 移入 IO 作用域并加 `Mutex` 防惊群；`LyricsPersistentCache` 补真 LRU（命中刷新 `lastPlayedAt` + 节流落盘）；导出修复目标设备错配（`onTreeGranted` 回到发起授权的设备）并加并发锁（`exportMutex.tryLock`）；百度网盘 token 日志脱敏（去掉前 10 字符）、服务端令牌失效（errno -6/31045）统一强制刷新重试一次、内嵌封面按 ID3 标签总长两阶段读取；Subsonic 用户名 URL 编码 + 歌曲总数修复；`BackupTransferServer` 上传改分块累积 + 32MB 上限（防 Content-Length 预分配 OOM DoS）；`RemoteControlHtml` 补 `esc`/`escAttr` 转义（修反射型 XSS）
+- **P2 健壮性与可观测性**：下载失败清理孤儿文件（成品 + `.lrc`/`.jpg` 旁路）并在 `cancelAll()` 真正取消 OkHttp `Call`；本地库跨通道去重改按**真实文件路径**（原 contentUri 去重漏掉同文件多通道收录）+ `LIKE ... ESCAPE '\'` 转义；`MediaTagWriter.compressCover` 补 `Bitmap.recycle()`（native 内存泄漏）；`CoilBitmapLoader` future 写入 + 取消转发守卫；`WeatherApi` 四处 Response 补 `use{}`、WMO 码表修正（85/86 阵雪）、forecast `cnt` 5→40；`BaiduFileIndexCache.setCoverUrl` 整体加锁（消除读-改-写丢失更新）
+- **P3 清理与一致性**：统一 Dialog BACK 注册入口 `RegisterDialogBackHandler`（`rememberUpdatedState` + `DisposableEffect(Unit)`，消除父重组瞬间注销导致的 BACK 穿透到退出确认的竞态），5 处弹窗改造；QR 位图移出组合期改后台线程生成；退出流程 `runBlocking` 改 IO 协程（原主线程最长冻结 1.5s）；`ModelTransferServer` 日志端口修正（18082→18083，硬编码改常量）+ `/api/status` 不再返回内部绝对路径；`RemoteControlServer` 队列索引补 `0 ≤ idx < size` 校验；手写 multipart 边界匹配重写为 KMP（`MultipartBoundaryStreamer`，修自重叠 boundary 漏判 + 8 项单元测试）；`NasMusicApp` 下载设置 lambda 合并为单次快照（原 4 次 `appSettings.first()` 可能不一致）；`NasMusicApp:139` 百度 OkHttpClient 误导性注释修正（描述"信任所有证书"与实现不符）
+
+### Changed
+- `modelDownloadUrl` 死字段补齐：新增 DataStore key `settings_model_download_url` + `appSettings` Flow 映射 + `@Volatile` 内存镜像 + `setModelDownloadUrl`/`getModelDownloadUrlSync` + 备份导入回填；`ModelDownloadManager` 支持自定义 URL 优先于内置候选列表（可用于自建镜像/NAS 绕过 CDN 限制）
+- `AppSettings` 补充 **Gson 前向兼容约束**文档（新增字段必须带默认值，否则新旧版本互反序列化会失败）
+
+### Removed
+- 死代码清理：`lyrics/Mp3MetadataExtractor.kt`、`player/VocalSeparationController.kt`（均零调用点，功能已由 `HqSeparationOrchestrator` 承接）、`AccompanimentCache` 的 `startPreSeparation`/`cancelPreSeparation`/`PreSeparationState` 整条未接线通路（含构造参数 `externalScope`）；相关文档注释中的失效类引用同步修正
+
 ## [v2.29.2] - 2026-09-11
 
 ### Changed

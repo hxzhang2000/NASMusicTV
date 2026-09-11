@@ -142,6 +142,22 @@ function fmtDuration(ms) {
   return m + ':' + (s < 10 ? '0' : '') + s;
 }
 
+// HTML 文本上下文转义——歌曲标题/歌手名可能来自不可信的网络搜索结果，
+// 直接拼进 innerHTML 会造成反射型 XSS（可注入脚本调用 TV 遥控 API）
+function esc(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+// HTML 属性上下文转义——用于把 JSON 放进单引号 onclick='...' 属性。
+// 原实现只把 ' 换成 \' ，但 HTML 属性的结束符就是 '，\' 仍会截断属性并注入代码
+function escAttr(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/'/g, '&#39;').replace(/"/g, '&quot;')
+    .replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
 // 获取队列
 function fetchQueue() {
   // 触摸/拖拽期间跳过渲染：5s 轮询若重建队列 DOM，被拖拽元素会变成游离节点，
@@ -183,8 +199,8 @@ function renderQueue(data) {
     var dur = fmtDuration(song.durationMs);
     html += '<div class="queue-item' + (isCurrent ? ' current' : '') + '" ontouchstart="onTouchStart(event,' + i + ')">';
     html += isCurrent ? '<span class="current-icon">▶</span>' : '';
-    html += '<div class="info" onclick="if(!dragMoved)playAt(' + i + ')"><div class="title">' + song.title + netBadge + '</div>';
-    html += '<div class="artist">' + song.artist + (dur ? ' · ' + dur : '') + '</div></div>';
+    html += '<div class="info" onclick="if(!dragMoved)playAt(' + i + ')"><div class="title">' + esc(song.title) + netBadge + '</div>';
+    html += '<div class="artist">' + esc(song.artist) + (dur ? ' · ' + dur : '') + '</div></div>';
     html += '<div class="actions">';
     if (i > 0) html += '<button onclick="moveItem(' + i + ',' + (i-1) + ')" title="${context.getString(R.string.html_remote_move_up)}">↑</button>';
     if (i < data.songs.length - 1) html += '<button onclick="moveItem(' + i + ',' + (i+1) + ')" title="${context.getString(R.string.html_remote_move_down)}">↓</button>';
@@ -248,12 +264,12 @@ function doSearch() {
 
 function renderSearchItem(song) {
   var netBadge = song.isNetworkSong ? '<span class="net-badge">NET</span>' : '';
-  var album = song.album ? '<div class="album">' + song.album + '</div>' : '';
+  var album = song.album ? '<div class="album">' + esc(song.album) + '</div>' : '';
   var dur = fmtDuration(song.durationMs);
-  var songJson = JSON.stringify(song).replace(/'/g, "\\'");
+  var songJson = escAttr(JSON.stringify(song));
   return '<div class="search-item">' +
-    '<div class="info"><div class="title">' + song.title + netBadge + '</div>' +
-    '<div class="artist">' + song.artist + (dur ? ' · ' + dur : '') + '</div>' +
+    '<div class="info"><div class="title">' + esc(song.title) + netBadge + '</div>' +
+    '<div class="artist">' + esc(song.artist) + (dur ? ' · ' + dur : '') + '</div>' +
     album + '</div>' +
     '<button onclick=\'addToQueue(' + songJson + ')\'>' + STR.addToQueue + '</button>' +
     '</div>';

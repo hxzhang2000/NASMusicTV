@@ -54,8 +54,10 @@ class WeatherApi {
                 .url(IP_API_BASE)
                 .header("User-Agent", "NASMusicTV/2.6")
                 .build()
-            val response = client.newCall(request).execute()
-            val body = response.body?.string() ?: return@withContext IpLocation()
+            // 必须 use{} 关闭 Response，否则连接/连接池资源泄漏
+            val body = client.newCall(request).execute().use { response ->
+                response.body?.string()
+            } ?: return@withContext IpLocation()
             val json = gson.fromJson(body, JsonObject::class.java)
             if (json.get("status")?.asString == "success") {
                 IpLocation(
@@ -97,8 +99,9 @@ class WeatherApi {
                 .url(url)
                 .header("User-Agent", "NASMusicTV/2.6")
                 .build()
-            val response = client.newCall(request).execute()
-            val body = response.body?.string() ?: return@withContext null
+            val body = client.newCall(request).execute().use { response ->
+                response.body?.string()
+            } ?: return@withContext null
             val json = gson.fromJson(body, JsonObject::class.java)
             val current = json.getAsJsonObject("current") ?: return@withContext null
 
@@ -136,8 +139,9 @@ class WeatherApi {
                 .url(url)
                 .header("User-Agent", "NASMusicTV/2.6")
                 .build()
-            val response = client.newCall(request).execute()
-            val body = response.body?.string() ?: return null
+            val body = client.newCall(request).execute().use { response ->
+                response.body?.string()
+            } ?: return null
             val json = gson.fromJson(body, JsonObject::class.java)
             val main = json.getAsJsonObject("main") ?: return null
             val wind = json.getAsJsonObject("wind")
@@ -176,13 +180,16 @@ class WeatherApi {
      */
     suspend fun getForecast(lat: Double, lon: Double, apiKey: String): List<WeatherForecast> = withContext(Dispatchers.IO) {
         try {
-            val url = "$OPEN_WEATHER_MAP_FORECAST_BASE?lat=$lat&lon=$lon&appid=$apiKey&units=metric&lang=zh_cn&cnt=5"
+            // cnt 修正：5 天/3 小时接口按 3 小时一条返回；cnt=5 只覆盖约 15 小时
+            // （最多 2 个不同日期），拿不到 5 天预报。取满 40 条（5 天 × 8 条）再按天去重。
+            val url = "$OPEN_WEATHER_MAP_FORECAST_BASE?lat=$lat&lon=$lon&appid=$apiKey&units=metric&lang=zh_cn&cnt=40"
             val request = Request.Builder()
                 .url(url)
                 .header("User-Agent", "NASMusicTV/2.6")
                 .build()
-            val response = client.newCall(request).execute()
-            val body = response.body?.string() ?: return@withContext emptyList()
+            val body = client.newCall(request).execute().use { response ->
+                response.body?.string()
+            } ?: return@withContext emptyList()
             val json = gson.fromJson(body, JsonObject::class.java)
             val list = json.getAsJsonArray("list") ?: return@withContext emptyList()
 
@@ -288,7 +295,7 @@ class WeatherApi {
         60, 61, 62, 63, 64, 65, 66, 67, 68, 69 -> "雨"
         70, 71, 72, 73, 74, 75, 76, 77 -> "雪"
         78, 79, 80, 81, 82 -> "阵雨"
-        83, 84, 85, 86 -> "阵雪"
+        85, 86 -> "阵雪"
         90, 91, 92, 93, 94, 95, 96, 97, 98, 99 -> "雷暴"
         else -> "未知"
     }

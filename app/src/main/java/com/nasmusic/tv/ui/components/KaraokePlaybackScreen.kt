@@ -63,6 +63,7 @@ import androidx.tv.material3.Text
 import coil.compose.rememberAsyncImagePainter
 import com.nasmusic.tv.data.model.Lyrics
 import com.nasmusic.tv.data.model.Song
+import com.nasmusic.tv.ui.RegisterDialogBackHandler
 import com.nasmusic.tv.ui.theme.FontSize
 import com.nasmusic.tv.ui.theme.NasMusicBrushes
 import com.nasmusic.tv.ui.theme.NasMusicColors
@@ -624,6 +625,9 @@ private fun <T> KaraokeStepPickerDialog(
     }
     var tempIndex by remember { mutableStateOf(selectedIndex) }
     val focusRequester = remember { FocusRequester() }
+
+    // 修复：注册 BACK 键回调，使 BACK 关闭本弹窗而非穿透到应用退出确认。
+    RegisterDialogBackHandler(onDismiss)
 
     // 弹窗打开时自动聚焦到选项区域
     LaunchedEffect(Unit) {

@@ -26,6 +26,7 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.io.File
 import java.io.FileOutputStream
+import java.io.IOException
 
 /**
  * 下载编排器（见方案 §5）
@@ -75,6 +76,14 @@ class SongDownloadManager(
     /** 当前下载协程（loop 所在 coroutine），cancelAll 可取消以中断进行中的下载 */
     @Volatile
     private var currentDownloadJob: Job? = null
+
+    /**
+     * 当前进行中的下载 Call。
+     * 仅 cancel 协程不会中断 OkHttp 的阻塞 socket 读，必须显式 call.cancel()，
+     * 否则 cancelAll() 后旧下载仍会继续写盘（覆盖窗口）。
+     */
+    @Volatile
+    private var currentCall: okhttp3.Call? = null
 
     /** 启动串行下载循环，返回的 Job 保存到 [currentDownloadJob] 供 cancelAll 中断 */
     private fun startLoop() {
@@ -196,8 +205,8 @@ class SongDownloadManager(
         val entity = repo.newDownloadingEntity(song, resolver.sourceTypeOf(song), p.tmpFile.absolutePath, auto)
         repo.upsert(entity)
 
-        // 5. 下载到临时文件
-        val fileSize = downloadFile(url, p.tmpFile, estimated) { progress, written ->
+        // 5. 下载到临时文件（内部做 Content-Length 完整性校验，失败即抛异常触发重试）
+        downloadFile(url, p.tmpFile, estimated) { progress, written ->
             _downloadStates.value = _downloadStates.value + (key to DownloadState.Downloading(progress))
             repo.updateProgress(key, progress)
             if (written % PROGRESS_STEP < 8192 && !storage.hasRoomFor(0)) {
@@ -222,38 +231,55 @@ class SongDownloadManager(
             p.tmpFile.delete()
         }
 
-        // 8. 元数据内嵌（失败走旁路）
-        val fileExt = p.finalFile.extension.lowercase()
-        AppLog.d(TAG, "embed: file=${p.finalFile.name}, ext=$fileExt, supportsEmbed=${MediaTagWriter.supportsEmbedding(p.finalFile)}, coverBytes=${coverBytes?.size}, lrc=${lrc?.take(50)}")
-        val embedded = tagWriter.embed(p.finalFile, song, coverBytes, lrc)
-        AppLog.d(TAG, "embed: result=$embedded, coverPath will be=${if (!embedded) "sidecar" else "null"}")
+        // 8~9. 内嵌 + 落库
+        //   ⚠️ rename 之后、DB 提交之前的任何异常都会把 finalFile 变成「孤儿」
+        //   （recoverAfterCrash 只清 .part/.tmp），故在此统一 try/catch 主动清理。
+        var completed: DownloadSongEntity? = null
         var coverPath: String? = null
         var lyricPath: String? = null
-        if (!embedded) {
-            // 内嵌失败才写 sidecar
-            lrc?.let {
-                val lrcFile = File(p.albumDir, "${p.baseName}.lrc")
-                runCatching { lrcFile.writeText(it, Charsets.UTF_8) }.onSuccess { lyricPath = lrcFile.absolutePath }
+        var embedded = false
+        try {
+            // 8. 元数据内嵌（失败走旁路）
+            val fileExt = p.finalFile.extension.lowercase()
+            AppLog.d(TAG, "embed: file=${p.finalFile.name}, ext=$fileExt, supportsEmbed=${MediaTagWriter.supportsEmbedding(p.finalFile)}, coverBytes=${coverBytes?.size}, lrc=${lrc?.take(50)}")
+            embedded = tagWriter.embed(p.finalFile, song, coverBytes, lrc)
+            AppLog.d(TAG, "embed: result=$embedded, coverPath will be=${if (!embedded) "sidecar" else "null"}")
+            if (!embedded) {
+                // 内嵌失败才写 sidecar
+                lrc?.let {
+                    val lrcFile = File(p.albumDir, "${p.baseName}.lrc")
+                    runCatching { lrcFile.writeText(it, Charsets.UTF_8) }.onSuccess { lyricPath = lrcFile.absolutePath }
+                }
+                coverBytes?.let {
+                    val jpgFile = File(p.albumDir, "${p.baseName}.jpg")
+                    runCatching { jpgFile.writeBytes(it) }.onSuccess { coverPath = jpgFile.absolutePath }
+                }
             }
-            coverBytes?.let {
-                val jpgFile = File(p.albumDir, "${p.baseName}.jpg")
-                runCatching { jpgFile.writeBytes(it) }.onSuccess { coverPath = jpgFile.absolutePath }
-            }
-        }
-        AppLog.d(TAG, "embed: final coverPath=$coverPath, lyricPath=$lyricPath, embedded=$embedded")
+            AppLog.d(TAG, "embed: final coverPath=$coverPath, lyricPath=$lyricPath, embedded=$embedded")
 
-        // 9. 更新 COMPLETED 记录
-        val completed = entity.copy(
-            status = DownloadStatus.COMPLETED.name,
-            progress = 100,
-            audioPath = p.finalFile.absolutePath,
-            coverPath = coverPath,
-            lyricPath = lyricPath,
-            embedded = embedded,
-            fileSize = p.finalFile.length(),
-            completedAt = System.currentTimeMillis()
-        )
-        repo.upsert(completed)
+            // 9. 更新 COMPLETED 记录
+            val record = entity.copy(
+                status = DownloadStatus.COMPLETED.name,
+                progress = 100,
+                audioPath = p.finalFile.absolutePath,
+                coverPath = coverPath,
+                lyricPath = lyricPath,
+                embedded = embedded,
+                fileSize = p.finalFile.length(),
+                completedAt = System.currentTimeMillis()
+            )
+            repo.upsert(record)
+            completed = record
+        } catch (e: Exception) {
+            // 孤儿清理：删除已 rename 的最终音频 + 可能已写出的旁路文件，
+            // 避免磁盘残留与 DB 计数不一致
+            AppLog.w(TAG, "post-rename failure, cleaning orphan: ${p.finalFile.absolutePath}", e)
+            runCatching { p.finalFile.delete() }
+            runCatching { File(p.albumDir, "${p.baseName}.lrc").delete() }
+            runCatching { File(p.albumDir, "${p.baseName}.jpg").delete() }
+            throw e
+        }
+        val done = completed ?: return DownloadResult.Failure("文件保存失败")
         _downloadStates.value = _downloadStates.value +
             (key to DownloadState.Completed(
                 p.finalFile.absolutePath,
@@ -267,12 +293,18 @@ class SongDownloadManager(
         onNotify("已下载：${song.title}")
         AppLog.i(TAG, "downloaded: ${p.finalFile.absolutePath}")
         // 11. 即时入库 local_songs（§7.5.5）：由 NasMusicApp 接管，构建 ScannedSong + upsertDownloaded + 刷新 _localSongs
-        runCatching { onCompleted?.invoke(completed) }
+        runCatching { onCompleted?.invoke(done) }
             .onFailure { AppLog.w(TAG, "onCompleted hook failed: ${it.message}", it) }
         return DownloadResult.Success(p.finalFile)
     }
 
-    /** 下载流式写入临时文件，返回总字节数 */
+    /**
+     * 下载流式写入临时文件，返回总字节数。
+     *
+     * 完整性校验：服务器声明的 Content-Length 是权威长度。若读到的字节数与声明不符
+     * （服务器中途断流、代理截断），抛出 [IOException] 触发上层重试，避免半截文件
+     * 被 rename + 内嵌 + 标记 COMPLETED。任何失败都会清理半成品，防止磁盘残留。
+     */
     private suspend fun downloadFile(
         url: String,
         target: File,
@@ -280,27 +312,42 @@ class SongDownloadManager(
         onProgress: suspend (Int, Long) -> Unit
     ): Long {
         val req = Request.Builder().url(url).build()
-        client.newCall(req).execute().use { resp ->
-            if (!resp.isSuccessful) {
-                throw IllegalStateException("HTTP ${resp.code}")
-            }
-            val body = resp.body ?: throw IllegalStateException("empty body")
-            val total = if (expected > 0) expected else body.contentLength().takeIf { it > 0 } ?: 0L
-            var written = 0L
-            val buf = ByteArray(8192)
-            body.byteStream().use { input ->
-                FileOutputStream(target).use { output ->
-                    while (true) {
-                        val n = input.read(buf)
-                        if (n < 0) break
-                        output.write(buf, 0, n)
-                        written += n
-                        val progress = if (total > 0) ((written * 100) / total).toInt().coerceIn(0, 99) else 0
-                        onProgress(progress, written)
+        val call = client.newCall(req)
+        currentCall = call
+        try {
+            call.execute().use { resp ->
+                if (!resp.isSuccessful) {
+                    throw IllegalStateException("HTTP ${resp.code}")
+                }
+                val body = resp.body ?: throw IllegalStateException("empty body")
+                val declaredLength = body.contentLength() // -1 表示服务器未声明
+                val total = if (expected > 0) expected else declaredLength.takeIf { it > 0 } ?: 0L
+                var written = 0L
+                val buf = ByteArray(8192)
+                body.byteStream().use { input ->
+                    FileOutputStream(target).use { output ->
+                        while (true) {
+                            val n = input.read(buf)
+                            if (n < 0) break
+                            output.write(buf, 0, n)
+                            written += n
+                            val progress = if (total > 0) ((written * 100) / total).toInt().coerceIn(0, 99) else 0
+                            onProgress(progress, written)
+                        }
                     }
                 }
+                // 完整性校验：声明长度已知但实际写入不足/不符 → 视为失败以触发重试
+                if (declaredLength > 0 && written != declaredLength) {
+                    throw IOException("incomplete download: $written/$declaredLength bytes")
+                }
+                return written
             }
-            return written
+        } catch (e: Exception) {
+            // 失败/取消时清理半成品：避免截断文件残留，也避免被后续逻辑误判为完整文件
+            runCatching { if (target.exists()) target.delete() }
+            throw e
+        } finally {
+            if (currentCall === call) currentCall = null
         }
     }
 
@@ -339,7 +386,9 @@ class SongDownloadManager(
 
     /** 取消所有进行中任务 + 删除 .part 临时文件 */
     suspend fun cancelAll() {
-        // 中断进行中的下载协程（loop → executeDownload → singleAttempt）
+        // 中断进行中的下载：先 cancel Call（中断阻塞读），再 cancel 协程
+        runCatching { currentCall?.cancel() }
+        currentCall = null
         currentDownloadJob?.cancel()
         currentDownloadJob = null
         repo.getUnfinished().forEach { entity ->

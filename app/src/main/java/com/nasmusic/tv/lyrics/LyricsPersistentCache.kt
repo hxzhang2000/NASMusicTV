@@ -29,6 +29,9 @@ class LyricsPersistentCache(context: Context) {
     )
 
     private val index = ConcurrentHashMap<String, IndexEntry>()
+
+    /** 命中计数：每 [TOUCH_SAVE_INTERVAL] 次命中落盘一次索引，避免每次 get 都写文件 */
+    private val touchCounter = java.util.concurrent.atomic.AtomicInteger()
     private val gson = Gson()
     private val indexFile by lazy { File(context.filesDir, "lyrics_cache.json") }
     private val lrcDir by lazy { File(context.filesDir, "lyrics_cache").apply { mkdirs() } }
@@ -36,6 +39,8 @@ class LyricsPersistentCache(context: Context) {
     companion object {
         private const val TAG = "LyricsPersistentCache"
         private const val MAX_ENTRIES = 2000
+        /** get 命中后累积多少次再落盘一次索引（真 LRU 访问时间刷新） */
+        private const val TOUCH_SAVE_INTERVAL = 16
     }
 
     init {
@@ -53,13 +58,26 @@ class LyricsPersistentCache(context: Context) {
             return null
         }
         val lrcText = lrcFile.readText()
+        // 真 LRU：命中即刷新访问时间。原实现只在 put 时写 lastPlayedAt，
+        // 导致「高频读取但从未重写」的旧条目反而先被淘汰，退化为 FIFO。
+        val touched = idx.copy(lastPlayedAt = System.currentTimeMillis())
+        index[songId] = touched
+        maybePersistTouch()
         return LyricsCacheEntry(
-            songId = idx.songId,
-            songTitle = idx.songTitle,
-            songArtist = idx.songArtist,
+            songId = touched.songId,
+            songTitle = touched.songTitle,
+            songArtist = touched.songArtist,
             lrcText = lrcText,
-            lastPlayedAt = idx.lastPlayedAt
+            lastPlayedAt = touched.lastPlayedAt
         )
+    }
+
+    /** 命中若干次后落盘一次索引（内存中的 lastPlayedAt 已即时更新，此处只做持久化节流） */
+    private fun maybePersistTouch() {
+        if (touchCounter.incrementAndGet() >= TOUCH_SAVE_INTERVAL) {
+            touchCounter.set(0)
+            saveIndex()
+        }
     }
 
     /**

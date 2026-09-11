@@ -11,6 +11,7 @@ import androidx.media3.common.util.UnstableApi
 import coil.ImageLoader
 import coil.request.ImageRequest
 import com.google.common.util.concurrent.ListenableFuture
+import com.google.common.util.concurrent.MoreExecutors
 
 /**
  * [BitmapLoader] 实现，使用 Coil 加载歌曲封面。
@@ -31,14 +32,15 @@ class CoilBitmapLoader(
             .size(512, 512)
             .allowHardware(false)
             .target { drawable ->
-                future.set(drawable.toBitmap())
+                // 守卫：future 可能已被调用方取消/已由错误回调完成，
+                // 此时再 set() 会抛 IllegalStateException
+                if (!future.isDone) runCatching { future.set(drawable.toBitmap()) }
             }
             .listener(onError = { _, error ->
-                future.setException(error.throwable)
+                if (!future.isDone) runCatching { future.setException(error.throwable) }
             })
             .build()
-        imageLoader.enqueue(request)
-        return future
+        return enqueue(request, future)
     }
 
     override fun decodeBitmap(data: ByteArray): ListenableFuture<Bitmap> {
@@ -48,13 +50,27 @@ class CoilBitmapLoader(
             .size(512, 512)
             .allowHardware(false)
             .target { drawable ->
-                future.set(drawable.toBitmap())
+                if (!future.isDone) runCatching { future.set(drawable.toBitmap()) }
             }
             .listener(onError = { _, error ->
-                future.setException(error.throwable)
+                if (!future.isDone) runCatching { future.setException(error.throwable) }
             })
             .build()
-        imageLoader.enqueue(request)
+        return enqueue(request, future)
+    }
+
+    /**
+     * 入队并把 future 的取消转发到底层请求。
+     * 原实现丢弃了 enqueue 返回的 Disposable，future 被取消后底层加载仍继续跑（浪费带宽/解码）。
+     */
+    private fun enqueue(request: ImageRequest, future: ResolvableFuture<Bitmap>): ListenableFuture<Bitmap> {
+        val disposable = imageLoader.enqueue(request)
+        runCatching {
+            future.addListener(
+                { if (future.isCancelled) runCatching { disposable.dispose() } },
+                MoreExecutors.directExecutor()
+            )
+        }
         return future
     }
 

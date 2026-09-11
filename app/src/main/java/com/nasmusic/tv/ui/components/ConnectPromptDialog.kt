@@ -13,7 +13,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -27,7 +26,7 @@ import androidx.tv.material3.Text
 import com.nasmusic.tv.R
 import com.nasmusic.tv.ui.theme.FontSize
 import com.nasmusic.tv.ui.theme.NasMusicColors
-import com.nasmusic.tv.ui.LocalDialogBackHandler
+import com.nasmusic.tv.ui.RegisterDialogBackHandler
 
 /**
  * 启动连接提示对话框
@@ -41,13 +40,7 @@ fun ConnectPromptDialog(
     modifier: Modifier = Modifier
 ) {
     // Level 1: BACK 键关闭对话框
-    val backHandler = LocalDialogBackHandler.current
-    DisposableEffect(onDismiss) {
-        backHandler.value = { onDismiss() }
-        onDispose {
-            backHandler.value = null
-        }
-    }
+    RegisterDialogBackHandler(onDismiss)
 
     // 焦点默认到"确定"按钮
     val confirmFocusRequester = remember { FocusRequester() }

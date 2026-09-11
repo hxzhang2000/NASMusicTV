@@ -57,6 +57,12 @@ class BilibiliMvService(
 
     private val gson = Gson()
 
+    // ── WBI 签名（B 站 2023 起对 /wbi/ 路径强校验，缺失签名会返回 -412）──
+    /** 缓存的 (imgKey, subKey) */
+    @Volatile private var wbiKeys: Pair<String, String>? = null
+    @Volatile private var wbiKeysFetchedAt: Long = 0L
+    private val wbiLock = Any()
+
     /** 当前基础端点（每次请求动态读取，清理非法字符，与 MetingApiService 一致） */
     private val baseUrl: String
         get() = baseUrlProvider()
@@ -139,11 +145,15 @@ class BilibiliMvService(
      * 返回按相似度排序的候选列表（含 bvid / 标题 / 封面）。
      */
     private fun searchCandidates(keyword: String, excludeBvids: Set<String>, minSimilarity: Float): List<MvCandidate> {
-        val query = "search_type=video&keyword=${URLEncoder.encode(keyword, "UTF-8")}"
-        val wbiBody = execGet("$baseUrl/x/web-interface/wbi/search/type?$query")
-        wbiBody?.let { parseCandidatesFromSearch(it, keyword, excludeBvids, minSimilarity)?.let { return it } }
-        // 回退：非 wbi 变体
-        val legacyBody = execGet("$baseUrl/x/web-interface/search/type?$query")
+        // 1. wbi 路径（必需 WBI 签名，否则 -412）
+        val signed = signWbi(mapOf("search_type" to "video", "keyword" to keyword))
+        if (signed != null) {
+            val wbiBody = execGet("$baseUrl/x/web-interface/wbi/search/type?$signed")
+            wbiBody?.let { parseCandidatesFromSearch(it, keyword, excludeBvids, minSimilarity)?.let { r -> return r } }
+        }
+        // 2. 回退：非 wbi 变体（部分镜像/代理不校验签名；官方端点通常已不可用）
+        val legacyQuery = "search_type=video&keyword=${URLEncoder.encode(keyword, "UTF-8")}"
+        val legacyBody = execGet("$baseUrl/x/web-interface/search/type?$legacyQuery")
         return legacyBody?.let { parseCandidatesFromSearch(it, keyword, excludeBvids, minSimilarity) } ?: emptyList()
     }
 
@@ -193,7 +203,7 @@ class BilibiliMvService(
      * 对应 `GET /x/web-interface/view?bvid=` 响应 data 字段。
      */
     private fun getVideoInfo(bvid: String): VideoInfo? {
-        val body = execGet("$baseUrl/x/web-interface/view?bvid=$bvid") ?: return null
+        val body = execGet("$baseUrl/x/web-interface/view?bvid=${URLEncoder.encode(bvid, "UTF-8")}") ?: return null
         return try {
             val json = gson.fromJson(body, JsonObject::class.java) ?: return null
             if (json.get("code")?.asInt != 0) return null
@@ -217,8 +227,9 @@ class BilibiliMvService(
      * 优先取 durl[0].url（含防盗链 Referer 校验，需请求头）。若 durl 缺失回退 DASH baseUrl。
      */
     private fun getPlayUrl(info: VideoInfo): String? {
-        val body = execGet("$baseUrl/x/player/playurl?bvid=${info.bvid}&cid=${info.cid}&fnval=1")
-            ?: return null
+        val body = execGet(
+            "$baseUrl/x/player/playurl?bvid=${URLEncoder.encode(info.bvid, "UTF-8")}&cid=${info.cid}&fnval=1"
+        ) ?: return null
         return try {
             extractPlayUrl(body)
         } catch (e: Exception) {
@@ -254,6 +265,76 @@ class BilibiliMvService(
             AppLog.w(TAG, "extractPlayUrl parse failed: ${e.message}", e)
             return null
         }
+    }
+
+    // ── WBI 签名实现 ──
+
+    /**
+     * 获取 mixinKey：从 /x/web-interface/nav 读取 img_url/sub_url 的文件名，
+     * 拼接后按固定置换表重排取前 32 位。带 12 小时缓存。
+     * 注意：未登录时 nav 返回 code=-101，但 data.wbi_img 仍然可用，不能按 code 判失败。
+     */
+    private fun getMixinKey(): String? {
+        val now = System.currentTimeMillis()
+        synchronized(wbiLock) {
+            val cached = wbiKeys
+            if (cached != null && now - wbiKeysFetchedAt < WBI_KEY_TTL_MS) {
+                return mixinKeyOf(cached.first, cached.second)
+            }
+        }
+        val body = execGet("$baseUrl/x/web-interface/nav") ?: return null
+        return try {
+            val json = gson.fromJson(body, JsonObject::class.java) ?: return null
+            val wbi = json.getAsJsonObject("data")?.getAsJsonObject("wbi_img") ?: return null
+            val imgUrl = wbi.get("img_url")?.asString ?: return null
+            val subUrl = wbi.get("sub_url")?.asString ?: return null
+            val imgKey = imgUrl.substringAfterLast('/').substringBeforeLast('.')
+            val subKey = subUrl.substringAfterLast('/').substringBeforeLast('.')
+            if (imgKey.isBlank() || subKey.isBlank()) return null
+            synchronized(wbiLock) {
+                wbiKeys = imgKey to subKey
+                wbiKeysFetchedAt = now
+            }
+            AppLog.d(TAG, "getMixinKey: refreshed (img=${imgKey.take(8)}… sub=${subKey.take(8)}…)")
+            mixinKeyOf(imgKey, subKey)
+        } catch (e: Exception) {
+            AppLog.w(TAG, "getMixinKey failed: ${e.message}", e)
+            null
+        }
+    }
+
+    private fun mixinKeyOf(imgKey: String, subKey: String): String {
+        val orig = imgKey + subKey
+        val sb = StringBuilder(32)
+        for (i in WBI_MIXIN_TAB) if (i < orig.length) sb.append(orig[i])
+        return sb.toString().take(32)
+    }
+
+    /**
+     * 对查询参数做 WBI 签名，返回附加 wts/w_rid 的完整查询串（已按 key 升序）。
+     * 值需先剔除 !'()* 再百分号编码（空格用 %20，与 B 站服务端一致）。
+     */
+    private fun signWbi(params: Map<String, String>): String? {
+        val mixinKey = getMixinKey() ?: run {
+            AppLog.w(TAG, "signWbi: mixinKey unavailable, skip wbi signing")
+            return null
+        }
+        val withTs = params.toMutableMap()
+        withTs["wts"] = (System.currentTimeMillis() / 1000).toString()
+        val query = withTs.entries
+            .sortedBy { it.key }
+            .joinToString("&") { (k, v) -> "$k=${wbiEncode(v)}" }
+        val wRid = md5Hex(query + mixinKey)
+        return "$query&w_rid=$wRid"
+    }
+
+    /** B 站口径的百分号编码：剔除 !'()*、空格转 %20、其余按 UTF-8 */
+    private fun wbiEncode(value: String): String =
+        URLEncoder.encode(value.filterNot { it in "!'()*" }, "UTF-8").replace("+", "%20")
+
+    private fun md5Hex(input: String): String {
+        val digest = java.security.MessageDigest.getInstance("MD5").digest(input.toByteArray(Charsets.UTF_8))
+        return digest.joinToString("") { "%02x".format(it) }
     }
 
     /** 执行 GET，带 B 站防盗链必需的 Referer + 浏览器 UA；出错返回 null */
@@ -335,6 +416,17 @@ class BilibiliMvService(
 
         /** 标题相似度最低阈值（低于则视为无匹配） */
         private const val MIN_SIMILARITY = 0.5f
+
+        /** WBI 密钥缓存有效期（12 小时；B 站按日轮换） */
+        private const val WBI_KEY_TTL_MS = 12 * 60 * 60 * 1000L
+
+        /** WBI mixinKey 固定置换表（官方顺序） */
+        private val WBI_MIXIN_TAB = intArrayOf(
+            46, 47, 18, 2, 53, 8, 23, 32, 15, 50, 10, 31, 58, 3, 45, 35, 27, 43, 5, 49,
+            33, 9, 42, 19, 29, 28, 14, 39, 12, 38, 41, 13, 37, 48, 7, 16, 24, 55, 40, 61,
+            26, 17, 0, 1, 60, 51, 30, 4, 22, 25, 54, 21, 56, 59, 6, 63, 57, 62, 11, 36,
+            20, 34, 44, 52
+        )
 
         /** 候选列表上限（按相似度取前 N 条，避免切换轮次过长） */
         private const val MAX_CANDIDATES = 5

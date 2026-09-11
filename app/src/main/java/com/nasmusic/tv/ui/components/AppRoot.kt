@@ -124,6 +124,8 @@ fun AppRoot(
     // K 歌页面显隐（切 Tab 时保持，退出 K 歌页时清除）
     // MTV 页面显隐（进入 MTV 全屏页时为 true）
     val showMv by viewModel.mvVM.showMv.collectAsState(initial = false)
+    // K 歌全屏页显隐（修复：BACK 键需在 K 歌页优先退出 K 歌，而非触发应用退出确认）
+    val showKaraoke by viewModel.vocalVM.showKaraoke.collectAsState(initial = false)
     // MTV 搜索状态（顶层收集，供 NotFound 自动退出保护与 NowPlaying 分支共用）
     val mvState by viewModel.mvVM.mvState.collectAsState()
     // 安全兜底：切歌后新歌无 MV（NotFound）时自动退出 MTV 全屏，避免卡在无导航栏的播放页
@@ -134,16 +136,19 @@ fun AppRoot(
     }
     // Level 2: 根据当前屏幕和沉浸模式动态设置导航 BACK 键处理函数
     val navBackHandler = LocalNavigateBackHandler.current
-    LaunchedEffect(currentScreen, isImmersiveMode.value, showMv) {
+    LaunchedEffect(currentScreen, isImmersiveMode.value, showMv, showKaraoke) {
         // C-2 修正说明：初版审查把 when/if-else 分支里的 {{ ... }} 误判为 no-op（lambda 内 lambda）。
         // 实测编译行为：when/if 分支的 { } 按“块”解析，{{ X }} = 块 + 尾部 lambda 表达式，
         // 分支值就是可用的 lambda——原实现功能正常，并非 bug。此处改用具名 lambda 仅作可读性清理。
         val navigateHome: () -> Unit = { viewModel.navVM.navigateTo(Screen.Home) }
         val exitImmersive: () -> Unit = { isImmersiveMode.value = false }
         val exitMv: () -> Unit = { viewModel.mvVM.exitMvMode() }
+        val exitKaraoke: () -> Unit = { viewModel.vocalVM.exitKaraoke() }
         val navSettings: () -> Unit = { viewModel.navVM.navigateTo(Screen.Settings) }
         val handler: (() -> Unit)? = when {
             isImmersiveMode.value -> exitImmersive
+            // K 歌页：BACK 退出 K 歌（切回普通 NOW PLAYING），而非应用退出确认
+            showKaraoke -> exitKaraoke
             showMv -> exitMv
             currentScreen == Screen.NowPlaying -> if (isTV) null else navigateHome
             currentScreen == Screen.Home -> null

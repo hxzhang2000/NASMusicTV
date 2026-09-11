@@ -38,9 +38,9 @@ interface LocalMusicDao {
      */
     @Query("""
         SELECT * FROM local_songs
-        WHERE title LIKE '%' || :query || '%'
-           OR artist LIKE '%' || :query || '%'
-           OR album LIKE '%' || :query || '%'
+        WHERE title LIKE '%' || :query || '%' ESCAPE '\'
+           OR artist LIKE '%' || :query || '%' ESCAPE '\'
+           OR album LIKE '%' || :query || '%' ESCAPE '\'
         ORDER BY title ASC
     """)
     suspend fun search(query: String): List<LocalSongEntity>

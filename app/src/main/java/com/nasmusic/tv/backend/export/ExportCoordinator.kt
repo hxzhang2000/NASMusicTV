@@ -87,11 +87,20 @@ class ExportCoordinator(
         }
         scope.launch {
             appPreferences.setExportTreeUri(uri.toString())
-            // 记录当前卷（由 UI 传入，这里先用已选设备）
-            appPreferences.setExportVolumeId(_pendingVolumeId)
+            // 记录当前卷（发起授权时由 UI 选定并暂存）
+            val pendingVolume = _pendingVolumeId
+            appPreferences.setExportVolumeId(pendingVolume)
             _pendingVolumeId = null
-            // 授权后继续导出
-            _exportDevices.firstOrNull()?.let { exportTo(it) }
+            // 授权后继续导出：必须回到「发起授权时的那个设备」，
+            // 原实现硬编码 _exportDevices.firstOrNull()，多外接设备时会导出到错误设备
+            val target = pendingVolume?.let { vid -> _exportDevices.firstOrNull { volumeIdOf(it) == vid } }
+                ?: _exportDevices.firstOrNull()
+            if (target == null) {
+                AppLog.w(TAG, "onTreeGranted: no export device matched volumeId=$pendingVolume")
+                _state.value = ExportState.Failed(ExportError.NO_DEVICE)
+                return@launch
+            }
+            exportTo(target)
         }
     }
 

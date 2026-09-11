@@ -13,7 +13,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -24,14 +23,14 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.Text
 import com.nasmusic.tv.R
-import com.nasmusic.tv.ui.LocalDialogBackHandler
+import com.nasmusic.tv.ui.RegisterDialogBackHandler
 import com.nasmusic.tv.ui.theme.FontSize
 import com.nasmusic.tv.ui.theme.NasMusicColors
 
 /**
  * 导出设备选择对话框（§8.8.9）
  *
- * 结构照抄 [ConfirmDialog]：注册 LocalDialogBackHandler 让 BACK 键关弹窗、
+ * 结构照抄 [ConfirmDialog]：注册 RegisterDialogBackHandler 让 BACK 键关弹窗、
  * 焦点默认落在「取消」按钮（安全边界）。
  */
 @Composable
@@ -41,11 +40,7 @@ fun ExportDeviceDialog(
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val backHandler = LocalDialogBackHandler.current
-    DisposableEffect(onDismiss) {
-        backHandler.value = { onDismiss() }
-        onDispose { backHandler.value = null }
-    }
+    RegisterDialogBackHandler(onDismiss)
 
     val cancelFocusRequester = remember { FocusRequester() }
     androidx.compose.runtime.LaunchedEffect(cancelFocusRequester) {

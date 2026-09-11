@@ -93,15 +93,22 @@ object MediaTagWriter {
      */
     fun compressCover(rawBytes: ByteArray?): ByteArray? {
         if (rawBytes == null || rawBytes.isEmpty()) return null
+        var src: Bitmap? = null
+        var scaled: Bitmap? = null
         return try {
-            val src = BitmapFactory.decodeByteArray(rawBytes, 0, rawBytes.size) ?: return null
-            val scaled = scaleToMaxEdge(src, MAX_COVER_EDGE)
+            src = BitmapFactory.decodeByteArray(rawBytes, 0, rawBytes.size) ?: return null
+            scaled = scaleToMaxEdge(src, MAX_COVER_EDGE)
             val out = ByteArrayOutputStream()
             scaled.compress(Bitmap.CompressFormat.JPEG, JPEG_QUALITY, out)
             out.toByteArray()
         } catch (e: Exception) {
             AppLog.w(TAG, "compressCover failed: ${e.message}")
             null
+        } finally {
+            // 回收 native 位图：批量下载时若不回收，native 内存持续增长易 OOM。
+            // scaleToMaxEdge 在「无需缩放」时返回同一实例，故需判重避免 double recycle。
+            if (scaled != null && scaled !== src) runCatching { scaled.recycle() }
+            runCatching { src?.recycle() }
         }
     }
 

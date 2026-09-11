@@ -55,6 +55,22 @@ object Id3v2Parser {
         return parseApicFrame(apic.data)
     }
 
+    /**
+     * 解析 ID3v2 标签总长度（含 10 字节头），用于按需读取整个标签。
+     *
+     * 背景（M5）：调用方原先固定只读文件前 256KB，若 APIC 封面帧起点位于其
+     * 之后，[parseFrames] 会因 `pos + 10 + frameSize > tagEnd` 直接 break，
+     * 整帧被丢弃 → 有内嵌封面却判为「无」。
+     * @return 标签总字节数；无 ID3v2 标签 / v2.2 返回 null
+     */
+    fun tagTotalSize(data: ByteArray): Int? {
+        if (data.size < 10) return null
+        if (data[0] != 'I'.code.toByte() || data[1] != 'D'.code.toByte() || data[2] != '3'.code.toByte()) return null
+        val versionMajor = data[3].toInt() and 0xFF
+        if (versionMajor < 3) return null
+        return 10 + synchsafeToInt(data, 6)
+    }
+
     private data class RawFrame(val id: String, val data: ByteArray)
 
     private fun parseFrames(data: ByteArray): List<RawFrame>? {

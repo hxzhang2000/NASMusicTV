@@ -27,13 +27,18 @@ class NetworkMusicManager(
         private const val TAG = "NetworkMusicManager"
         /** 播放链接缓存过期时间（毫秒），5 分钟 */
         private const val PLAY_URL_CACHE_TTL_MS = 5 * 60 * 1000L
+        /** 播放链接缓存容量上限（超出按时间淘汰最旧，防止超长会话内存只增不减） */
+        private const val PLAY_URL_CACHE_MAX = 500
     }
 
     /**
      * 内部可变 services Map（支持运行时注册/注销，例如百度网盘开关切换）。
      * 构造时拷贝传入的不可变 Map。
      */
-    private val services: MutableMap<String, NetworkMusicService> = services.toMutableMap()
+    // 修复：原为普通 HashMap，主线程 register/unregister 与 IO 线程 resolvePlayUrl/search
+    // 并发读写可能抛 ConcurrentModificationException。改用 ConcurrentHashMap。
+    private val services: MutableMap<String, NetworkMusicService> =
+        java.util.concurrent.ConcurrentHashMap(services)
 
     /**
      * 播放链接缓存条目
@@ -101,14 +106,21 @@ class NetworkMusicManager(
             return null
         }
         val svc = services[src] ?: run {
-            AppLog.e(TAG, "resolvePlayUrl: 未注册源 source=$src（song id=${song.id}）；已注册源=${services.keys}")
+            AppLog.w(TAG, "resolvePlayUrl: 未注册源 source=$src（song id=${song.id}）；已注册源=${services.keys}")
             return null
         }
-        AppLog.e(TAG, "resolvePlayUrl: 路由到 source=$src (song id=${song.id} networkId=${song.networkId})")
+        AppLog.d(TAG, "resolvePlayUrl: 路由到 source=$src (song id=${song.id} networkId=${song.networkId})")
 
         // 清理过期缓存条目
         val now = System.currentTimeMillis()
         playUrlCache.entries.removeAll { (_, v) -> now - v.timestamp >= PLAY_URL_CACHE_TTL_MS }
+        // 容量上限：超出后按时间淘汰最旧条目（近似 LRU，避免缓存无界增长）
+        if (playUrlCache.size > PLAY_URL_CACHE_MAX) {
+            playUrlCache.entries
+                .sortedBy { it.value.timestamp }
+                .take(playUrlCache.size - PLAY_URL_CACHE_MAX)
+                .forEach { playUrlCache.remove(it.key) }
+        }
 
         // 检查缓存
         val cached = playUrlCache[song.id]

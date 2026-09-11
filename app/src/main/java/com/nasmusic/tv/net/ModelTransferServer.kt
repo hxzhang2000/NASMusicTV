@@ -13,7 +13,7 @@ import java.io.IOException
  * 模型文件传输服务器
  *
  * 提供 HTTP 接口，允许手机扫码后通过浏览器上传模型文件到 TV。
- * 架构与 [BackupTransferServer] 一致：NanoHTTPD 单线程，端口 18082。
+ * 架构与 [BackupTransferServer] 一致：NanoHTTPD 单线程，端口 18083（18082 被遥控服务器占用）。
  *
  * 端点：
  * - GET  /         → 上传页面 HTML
@@ -51,10 +51,10 @@ class ModelTransferServer(
     fun startServer(): Boolean {
         return try {
             start(SOCKET_READ_TIMEOUT, false)
-            AppLog.i(TAG, "Started on port 18082")
+            AppLog.i(TAG, "Started on port $MODEL_TRANSFER_PORT")
             true
         } catch (e: IOException) {
-            AppLog.e(TAG, "Failed to start on port 18082", e)
+            AppLog.e(TAG, "Failed to start on port $MODEL_TRANSFER_PORT", e)
             false
         }
     }
@@ -92,7 +92,8 @@ class ModelTransferServer(
 
     private fun handleStatus(): Response {
         val exists = modelFile.exists()
-        val json = """{"exists":$exists,"size":${modelFile.length()},"path":"${modelFile.absolutePath}"}"""
+        // P3：不再返回内部绝对路径（信息泄露）。页面上的路径是给用户看的，接口不需要。
+        val json = """{"exists":$exists,"size":${modelFile.length()}}"""
         return newFixedLengthResponse(Response.Status.OK, "application/json; charset=UTF-8", json)
     }
 
@@ -214,72 +215,22 @@ class ModelTransferServer(
     }
 
     /**
-     * 流式将数据写入文件，直到遇到 boundary 标记。
+     * 流式将数据写入文件，直到遇到结束 boundary。
      *
-     * 算法：KMP 思路 + 批量写入。
-     * 维护 matched（已匹配字节数）和 pending 缓冲（可能匹配 boundary 的字节）。
-     * - 匹配中：字节存到 pending，不写文件
-     * - 匹配失败：pending 批量 flush 到文件
-     * - 完全匹配：返回（pending 即 boundary，不写入）
-     *
-     * 时间复杂度 O(n)，每字节只 1 次比较；写入用批量 write(buf, off, len) 减少系统调用。
+     * 边界匹配委托给 [MultipartBoundaryStreamer]（KMP 前缀函数），
+     * 正确处理自重叠 boundary（朴素匹配在失配回退时会漏判一次起点）；
+     * 写入按 64KB 批量 flush，减少系统调用。
      */
     private fun streamToFile(input: BufferedInputStream, target: File, boundary: ByteArray): Long {
         FileOutputStream(target).use { output ->
-            val bLen = boundary.size
-            var totalWritten = 0L
-            var totalRead = 0L
-            var matched = 0
-            val pending = ByteArray(bLen)
-            var pendingLen = 0
-            // 批量写入缓冲，减少 FileOutputStream.write(int) 系统调用
-            val writeBuf = java.io.ByteArrayOutputStream(128 * 1024)
-            val buf = ByteArray(128 * 1024)
-
-            while (true) {
-                val n = input.read(buf)
-                if (n == -1) {
-                    AppLog.w(TAG, "streamToFile: EOF, totalRead=$totalRead, written=$totalWritten, matched=$matched, no boundary")
-                    break
-                }
-                totalRead += n
-
-                for (i in 0 until n) {
-                    val b = buf[i]
-                    if (b == boundary[matched]) {
-                        // 继续匹配，存到 pending
-                        pending[pendingLen++] = b
-                        matched++
-                        if (matched == bLen) {
-                            // 完全匹配 boundary！pending 全是 boundary，不写入
-                            writeBuf.writeTo(output)
-                            totalWritten += writeBuf.size()
-                            AppLog.i(TAG, "streamToFile: boundary found, totalRead=$totalRead, written=$totalWritten")
-                            return totalWritten
-                        }
-                    } else {
-                        // 匹配失败，flush pending + 当前字节
-                        if (pendingLen > 0) {
-                            writeBuf.write(pending, 0, pendingLen)
-                            pendingLen = 0
-                        }
-                        writeBuf.write(b.toInt())
-                        matched = 0
-                        // 定期 flush，避免 writeBuf 过大
-                        if (writeBuf.size() >= 64 * 1024) {
-                            writeBuf.writeTo(output)
-                            totalWritten += writeBuf.size()
-                            writeBuf.reset()
-                        }
-                    }
-                }
+            val streamer = MultipartBoundaryStreamer(boundary)
+            val written = streamer.stream(input, output)
+            if (!streamer.boundaryFound) {
+                AppLog.w(TAG, "streamToFile: EOF before boundary, written=$written")
+            } else {
+                AppLog.i(TAG, "streamToFile: boundary found, written=$written")
             }
-            // EOF，flush 剩余
-            writeBuf.writeTo(output)
-            totalWritten += writeBuf.size()
-            output.write(pending, 0, pendingLen)
-            totalWritten += pendingLen
-            return totalWritten
+            return written
         }
     }
 }

@@ -81,42 +81,56 @@ class BaiduPanApi(
             AppLog.w(TAG, "createDir: no valid token, returning LOCAL_ERRNO_NO_TOKEN")
             return@withContext BaiduNetdiskConfig.LOCAL_ERRNO_NO_TOKEN
         }
-        val url = buildUrl(BaiduNetdiskConfig.FILE_BASE, token) {
-            addQueryParameter("method", BaiduNetdiskConfig.METHOD_CREATE)
-        }
         val formBody = FormBody.Builder()
             .add("path", dir)
             .add("isdir", "1")
             .add("rtype", "0")   // 不允许重命名重名目录，重名时返回 -8
             .build()
-        try {
-            val req = Request.Builder().url(url)
-                .header("User-Agent", BaiduNetdiskConfig.BAIDU_UA)
-                .post(formBody)
-                .build()
-            client.newCall(req).execute().use { resp ->
-                val body = resp.body?.string() ?: return@withContext -1
-                if (!resp.isSuccessful) {
-                    AppLog.w(TAG, "createDir failed code=${resp.code} body=${body.take(200)}")
-                    return@withContext -1
-                }
-                val json = gson.fromJson(body, JsonObject::class.java)
-                val errno = json?.get("errno")?.asInt ?: 0
-                if (errno == 0) {
-                    AppLog.i(TAG, "createDir: created dir=$dir")
-                } else if (errno == -8) {
-                    AppLog.i(TAG, "createDir: dir already exists dir=$dir")
-                } else {
-                    val desc = BaiduNetdiskConfig.describeErrno(errno)
-                    AppLog.w(TAG, "createDir: errno=$errno $desc dir=$dir")
-                    onApiError?.invoke(errno, desc)
-                }
-                errno
+        var currentToken = token
+        suspend fun createOnce(): Int {
+            val url = buildUrl(BaiduNetdiskConfig.FILE_BASE, currentToken) {
+                addQueryParameter("method", BaiduNetdiskConfig.METHOD_CREATE)
             }
-        } catch (e: Exception) {
-            AppLog.e(TAG, "createDir error dir=$dir", e)
-            -1
+            return try {
+                val req = Request.Builder().url(url)
+                    .header("User-Agent", BaiduNetdiskConfig.BAIDU_UA)
+                    .post(formBody)
+                    .build()
+                client.newCall(req).execute().use { resp ->
+                    val body = resp.body?.string() ?: return -1
+                    if (!resp.isSuccessful) {
+                        AppLog.w(TAG, "createDir failed code=${resp.code} body=${body.take(200)}")
+                        return -1
+                    }
+                    val json = gson.fromJson(body, JsonObject::class.java)
+                    val errno = json?.get("errno")?.asInt ?: 0
+                    if (errno == 0) {
+                        AppLog.i(TAG, "createDir: created dir=$dir")
+                    } else if (errno == -8) {
+                        AppLog.i(TAG, "createDir: dir already exists dir=$dir")
+                    } else {
+                        val desc = BaiduNetdiskConfig.describeErrno(errno)
+                        AppLog.w(TAG, "createDir: errno=$errno $desc dir=$dir")
+                        onApiError?.invoke(errno, desc)
+                    }
+                    errno
+                }
+            } catch (e: Exception) {
+                AppLog.e(TAG, "createDir error dir=$dir", e)
+                -1
+            }
         }
+        var errno = createOnce()
+        // M4：token 被服务端判定失效时强制刷新并重试一次
+        if (errno in tokenExpiredErrnos) {
+            val newToken = oauth.forceRefreshAccessToken()
+            if (!newToken.isNullOrBlank()) {
+                AppLog.w(TAG, "createDir: token expired (errno=$errno), force refresh + retry once")
+                currentToken = newToken
+                errno = createOnce()
+            }
+        }
+        errno
     }
 
     /**
@@ -264,34 +278,66 @@ class BaiduPanApi(
         return builder.build().toString()
     }
 
-    private inline fun <T> execute(url: String, parser: (JsonObject) -> T): T? {
+    /**
+     * 服务端判定 access_token 失效的 errno 集合。
+     * -6 = token 无效/过期；31045 = access_token 验证未通过（详见 BaiduNetdiskConfig.ERRNO_MESSAGES）。
+     */
+    private val tokenExpiredErrnos = setOf(-6, 31045)
+
+    /** 替换 URL 中的 access_token 查询参数（token 失效重试时用新 token 重建请求） */
+    private fun withToken(url: String, token: String): String =
+        url.replace(Regex("access_token=[^&]+"), "access_token=$token")
+
+    /**
+     * 单次执行（同步）。返回 (解析结果, errno)：
+     * errno 供上层判断是否需要强制刷新 token 后重试（[execute]）。
+     */
+    private fun <T> executeOnce(url: String, parser: (JsonObject) -> T): Pair<T?, Int> {
         return try {
             val req = Request.Builder().url(url)
                 .header("User-Agent", BaiduNetdiskConfig.BAIDU_UA)
                 .build()
             client.newCall(req).execute().use { resp ->
-                val body = resp.body?.string() ?: return null
+                val body = resp.body?.string() ?: return null to -1
                 if (!resp.isSuccessful) {
                     AppLog.w(TAG, "request failed url=${sanitizeUrl(url)} code=${resp.code} body=${body.take(200)}")
-                    return null
+                    return null to -1
                 }
-                val json = gson.fromJson(body, JsonObject::class.java) ?: return null
+                val json = gson.fromJson(body, JsonObject::class.java) ?: return null to -1
                 val errno = json.get("errno")?.asInt ?: 0
                 if (errno != 0) {
                     val desc = BaiduNetdiskConfig.describeErrno(errno)
                     AppLog.w(TAG, "errno=$errno $desc url=${sanitizeUrl(url)}")
                     onApiError?.invoke(errno, desc)
                 }
-                parser(json)
+                parser(json) to errno
             }
         } catch (e: Exception) {
             AppLog.e(TAG, "execute error url=${sanitizeUrl(url)}", e)
-            null
+            null to -1
         }
     }
 
-    /** 专供 listDir 使用的执行方法，返回包含 errno 的 BaiduListResult */
-    private inline fun executeWithErrno(url: String, parser: (JsonObject) -> BaiduListResult): BaiduListResult {
+    /**
+     * 执行 + token 失效自动刷新重试一次（M4 修复）。
+     * 原实现仅在 stream 路径 forceRefresh，list/search/filemetas/listall 遇服务端令牌失效
+     * 直接返回空结果，浏览与索引会静默中断直到本地过期。
+     */
+    private suspend fun <T> execute(url: String, parser: (JsonObject) -> T): T? {
+        val (result, errno) = executeOnce(url, parser)
+        if (errno in tokenExpiredErrnos) {
+            val newToken = oauth.forceRefreshAccessToken()
+            if (!newToken.isNullOrBlank()) {
+                AppLog.w(TAG, "execute: token expired (errno=$errno), force refresh + retry once")
+                return executeOnce(withToken(url, newToken), parser).first
+            }
+            AppLog.w(TAG, "execute: token expired (errno=$errno) but refresh returned null")
+        }
+        return result
+    }
+
+    /** listDir 专用单次执行（返回含 errno 的结果） */
+    private fun executeWithErrnoOnce(url: String, parser: (JsonObject) -> BaiduListResult): BaiduListResult {
         return try {
             val req = Request.Builder().url(url)
                 .header("User-Agent", BaiduNetdiskConfig.BAIDU_UA)
@@ -313,9 +359,23 @@ class BaiduPanApi(
                 parser(json).copy(errno = errno)
             }
         } catch (e: Exception) {
-            AppLog.e(TAG, "executeWithErrno error url=${url.take(200)}", e)
+            AppLog.e(TAG, "executeWithErrno error url=${sanitizeUrl(url)}", e)
             BaiduListResult(emptyList(), false, errno = -1)
         }
+    }
+
+    /** listDir 专用：token 失效自动刷新重试一次（M4 修复） */
+    private suspend fun executeWithErrno(url: String, parser: (JsonObject) -> BaiduListResult): BaiduListResult {
+        val res = executeWithErrnoOnce(url, parser)
+        if (res.errno in tokenExpiredErrnos) {
+            val newToken = oauth.forceRefreshAccessToken()
+            if (!newToken.isNullOrBlank()) {
+                AppLog.w(TAG, "executeWithErrno: token expired (errno=${res.errno}), force refresh + retry once")
+                return executeWithErrnoOnce(withToken(url, newToken), parser)
+            }
+            AppLog.w(TAG, "executeWithErrno: token expired (errno=${res.errno}) but refresh returned null")
+        }
+        return res
     }
 
     /** 响应容器兼容：data.list || data.info || 顶层 list || 顶层 info */

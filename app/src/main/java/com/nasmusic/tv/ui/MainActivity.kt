@@ -205,10 +205,12 @@ class MainActivity : ComponentActivity() {
                                     // 释放播放器资源
                                     app.playerManager.release()
                                     stopService(Intent(this@MainActivity, PlaybackService::class.java))
-                                    // 同步注销 Jellyfin session，确保 HTTP 请求完成后再杀进程
+                                    // 注销 Jellyfin session，确保 HTTP 请求完成后再杀进程。
                                     // 修复（M-1）：logout 网络请求限时 1.5s——OkHttp 超时最长 15s，
                                     // 无限等待会在网络异常时造成主线程 ANR；超时仍照常退出。
-                                    kotlinx.coroutines.runBlocking {
+                                    // P3：整段移出主线程（原 runBlocking 会让 UI 冻结至多 1.5s），
+                                    // 改为 IO 协程等待完成，再回主线程做收尾。
+                                    lifecycleScope.launch(kotlinx.coroutines.Dispatchers.IO) {
                                         try {
                                             kotlinx.coroutines.withTimeout(1500) {
                                                 app.backendRegistry.disconnect()
@@ -218,10 +220,13 @@ class MainActivity : ComponentActivity() {
                                             AppLog.w("MainActivity", "exit: disconnect timeout (1.5s), exiting anyway")
                                         } catch (e: Exception) {
                                             AppLog.w("MainActivity", "exit: disconnect failed", e)
+                                        } finally {
+                                            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                                                finishAffinity()
+                                                android.os.Process.killProcess(android.os.Process.myPid())
+                                            }
                                         }
                                     }
-                                    finishAffinity()
-                                    android.os.Process.killProcess(android.os.Process.myPid())
                                 },
                                 onDismiss = { showExitConfirm.value = false }
                             )
@@ -356,6 +361,8 @@ class MainActivity : ComponentActivity() {
         // 从最近任务划掉应用同样保留播放（通知栏可控），符合媒体类应用预期
         if (!isFinishing) return
         val app = (application as NasMusicApp)
+        // P3：解除通知栏"播放模式"回调，避免 Application 单例长期持有已销毁 ViewModel 的闭包
+        app.playModeToggleHandler = null
         // 停止播放服务（如果仍在运行）
         try {
             stopService(Intent(this, PlaybackService::class.java))

@@ -18,7 +18,14 @@ import java.net.URL
  * 3. 管理模型文件（删除、获取大小）
  * 4. 模型存储位置：context.getExternalFilesDir(null)/models/
  */
-class ModelDownloadManager(private val context: Context) {
+class ModelDownloadManager(
+    private val context: Context,
+    /**
+     * 自定义下载 URL 提供方（每次下载时读取，空串表示用内置候选列表）。
+     * 由 AppPreferences.getModelDownloadUrlSync() 提供——用户可指向自建镜像 / NAS。
+     */
+    private val customUrlProvider: () -> String = { "" }
+) {
 
     companion object {
         private const val TAG = "ModelDownloadManager"
@@ -102,9 +109,13 @@ class ModelDownloadManager(private val context: Context) {
         val tempFile = File(modelsDir, "$MODEL_FILENAME.download")
         val finalFile = getModelFile()
 
+        // 自定义 URL 优先（用户可在设置中指向自建镜像/NAS）；随后回退内置候选列表
+        val custom = customUrlProvider().trim()
+        val urls = if (custom.isNotEmpty()) listOf(custom) + MODEL_URLS else MODEL_URLS
+
         // 依次尝试每个候选 URL（先镜像后官方），全部失败返回最后的错误信息
         var lastError: String? = null
-        for (urlStr in MODEL_URLS) {
+        for (urlStr in urls) {
             tempFile.delete()
             val err = tryDownloadUrl(urlStr, tempFile, onProgress)
             if (err == null) {
@@ -210,7 +221,10 @@ class ModelDownloadManager(private val context: Context) {
     /**
      * 获取模型下载 URL（供 UI 显示）
      */
-    fun getModelDownloadUrl(): String = MODEL_URLS.first()
+    fun getModelDownloadUrl(): String = customUrlProvider().trim().ifEmpty { MODEL_URLS.first() }
+
+    /** 获取内置默认候选 URL 列表（供 UI 展示"默认源"提示） */
+    fun getDefaultModelUrls(): List<String> = MODEL_URLS
 
     /**
      * 获取模型文件名（供 UI 显示）

@@ -118,9 +118,15 @@ class RemoteControlServer(
             return jsonResponse(json.toString())
         }
 
+        /** P3：队列索引越界校验（0 ≤ idx < size），防越界访问导致播放器异常 */
+        private fun isValidQueueIndex(index: Int): Boolean {
+            return index in 0 until callbacks.getQueue().size
+        }
+
         private fun handlePlay(session: IHTTPSession): Response {
             val body = parseJsonBody(session) ?: return jsonError(Response.Status.BAD_REQUEST, "bad body")
             val index = body.get("index")?.asInt ?: return jsonError(Response.Status.BAD_REQUEST, "missing index")
+            if (!isValidQueueIndex(index)) return jsonError(Response.Status.BAD_REQUEST, "index out of range")
             callbacks.playAt(index)
             return jsonOk()
         }
@@ -129,6 +135,9 @@ class RemoteControlServer(
             val body = parseJsonBody(session) ?: return jsonError(Response.Status.BAD_REQUEST, "bad body")
             val from = body.get("from")?.asInt ?: return jsonError(Response.Status.BAD_REQUEST, "missing from")
             val to = body.get("to")?.asInt ?: return jsonError(Response.Status.BAD_REQUEST, "missing to")
+            if (!isValidQueueIndex(from) || !isValidQueueIndex(to)) {
+                return jsonError(Response.Status.BAD_REQUEST, "index out of range")
+            }
             callbacks.moveQueueItem(from, to)
             return jsonOk()
         }
@@ -136,6 +145,7 @@ class RemoteControlServer(
         private fun handleRemove(session: IHTTPSession): Response {
             val body = parseJsonBody(session) ?: return jsonError(Response.Status.BAD_REQUEST, "bad body")
             val index = body.get("index")?.asInt ?: return jsonError(Response.Status.BAD_REQUEST, "missing index")
+            if (!isValidQueueIndex(index)) return jsonError(Response.Status.BAD_REQUEST, "index out of range")
             callbacks.removeFromQueue(index)
             return jsonOk()
         }

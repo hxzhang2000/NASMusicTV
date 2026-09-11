@@ -7,6 +7,7 @@ import com.nasmusic.tv.backend.download.DownloadRepository
 import com.nasmusic.tv.backend.download.db.DownloadSongEntity
 import com.nasmusic.tv.backend.download.db.ExportRecordEntity
 import com.nasmusic.tv.backend.download.db.DownloadDatabase
+import com.nasmusic.tv.util.AppLog
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -46,6 +47,13 @@ class SongExporter(
     @Volatile private var cancelRequested = false
     private var currentRoot: ExportRoot = ExportRoot.Unavailable
 
+    /**
+     * 导出互斥锁（下载 #M-7 修复）：单例无并发保护时重复触发会并发写同一目标、
+     * 且两个任务互相踩 cancelRequested。后者直接忽略（返回 false）而不是排队。
+     */
+    private val exportMutex = kotlinx.coroutines.sync.Mutex()
+    private val exportActive = java.util.concurrent.atomic.AtomicBoolean(false)
+
     fun cancel() {
         cancelRequested = true
         _state.value = ExportState.Cancelled
@@ -60,6 +68,24 @@ class SongExporter(
      * @param onCompleted 完成回调（更新本地曲库让新导出的歌出现在 USB 列表）
      */
     suspend fun export(root: ExportRoot, volumeId: String, devicePath: String, onCompleted: (Int, Int, Int) -> Unit) {
+        // 并发守卫：重复触发直接忽略（避免并发写同一目标 + cancelRequested 互相干扰）
+        if (!exportMutex.tryLock()) {
+            AppLog.w(TAG, "export: another export is running, ignore duplicate trigger")
+            return
+        }
+        try {
+            exportLocked(root, volumeId, devicePath, onCompleted)
+        } finally {
+            exportMutex.unlock()
+        }
+    }
+
+    private suspend fun exportLocked(
+        root: ExportRoot,
+        volumeId: String,
+        devicePath: String,
+        onCompleted: (Int, Int, Int) -> Unit
+    ) {
         if (root is ExportRoot.Unavailable) {
             _state.value = ExportState.Failed(ExportError.NO_PERMISSION)
             return
@@ -76,7 +102,7 @@ class SongExporter(
         completedSongs.forEach { song ->
             val audio = song.audioPath?.let { File(it) }
             if (audio == null || !audio.exists()) return@forEach   // 源文件缺失，跳过
-            tasks.add(FileTask(audio, relAudioPath(volumeId, song, audio)))
+            tasks.add(FileTask(audio, relAudioPath(audio)))
             // 封面（同专辑去重）
             audio.parentFile?.let { albumDir ->
                 val key = albumDir.absolutePath
@@ -95,10 +121,10 @@ class SongExporter(
             }
             // 旁路 .lrc / .jpg
             song.lyricPath?.let { File(it).takeIf { f -> f.exists() }?.let { f ->
-                tasks.add(FileTask(f, relSidecarPath(volumeId, song, f, "lrc")))
+                tasks.add(FileTask(f, relSidecarPath(f)))
             } }
             song.coverPath?.let { File(it).takeIf { f -> f.exists() }?.let { f ->
-                tasks.add(FileTask(f, relSidecarPath(volumeId, song, f, "jpg")))
+                tasks.add(FileTask(f, relSidecarPath(f)))
             } }
         }
         if (tasks.isEmpty()) {
@@ -264,16 +290,16 @@ class SongExporter(
         return current.findFile(fileName) ?: current.createFile("audio/*", fileName)
     }
 
-    /** 音频相对路径（歌手/专辑/文件名） */
-    private fun relAudioPath(volumeId: String, song: com.nasmusic.tv.backend.download.db.DownloadSongEntity, audio: File): String {
+    /** 音频相对路径（歌手/专辑/文件名）。原 volumeId/song 为未使用的死参数，易误导「按卷隔离」 */
+    private fun relAudioPath(audio: File): String {
         val parent = audio.parentFile
         val album = parent?.name ?: "单曲"
         val artist = parent?.parentFile?.name ?: "未知歌手"
         return "$artist/$album/${audio.name}"
     }
 
-    /** 旁路文件相对路径（歌手/专辑/文件名） */
-    private fun relSidecarPath(volumeId: String, song: com.nasmusic.tv.backend.download.db.DownloadSongEntity, f: File, ext: String): String {
+    /** 旁路文件相对路径（歌手/专辑/文件名）。原 volumeId/song/ext 为未使用的死参数 */
+    private fun relSidecarPath(f: File): String {
         val parent = f.parentFile
         val album = parent?.name ?: "单曲"
         val artist = parent?.parentFile?.name ?: "未知歌手"

@@ -37,6 +37,14 @@ class BackupTransferServer(
     companion object {
         const val DEFAULT_PORT = 18081
         private const val TAG = "BackupTransferServer"
+
+        /**
+         * 上传体量上限（32MB）。
+         * 原实现按客户端 Content-Length 直接 `ByteArray(contentLength.toInt())`，
+         * 同 LAN 攻击者谎报 1.5GB 即触发 OutOfMemoryError——该 Error 不被 catch(Exception) 捕获，
+         * 直接崩进程（DoS）。
+         */
+        const val MAX_UPLOAD_BYTES = 32L * 1024 * 1024
     }
 
     private var server: Impl? = null
@@ -339,17 +347,32 @@ loadBackups();
                 // 不用 parseBody()：某些 ROM 上 Charset.defaultCharset() 非 UTF-8，导致中文乱码
                 val contentLength = session.headers["content-length"]?.toLongOrNull() ?: -1L
                 AppLog.i(TAG, "handleUpload: contentLength=$contentLength")
-                if (contentLength <= 0) {
+                if (contentLength == 0L) {
                     return jsonResponse(false, "上传内容为空")
                 }
-                val bytes = ByteArray(contentLength.toInt())
+                if (contentLength > MAX_UPLOAD_BYTES) {
+                    AppLog.w(TAG, "handleUpload: rejected, contentLength=$contentLength > $MAX_UPLOAD_BYTES")
+                    return jsonResponse(false, "上传内容过大（上限 ${MAX_UPLOAD_BYTES / 1024 / 1024}MB）")
+                }
+                // 安全：不按 Content-Length 预分配数组（客户端可谎报 → 巨型 ByteArray 直接 OOM），
+                // 改为有硬上限的分块累积读取；超出上限立即中止
+                val buffer = java.io.ByteArrayOutputStream()
+                val chunk = ByteArray(16 * 1024)
                 var totalRead = 0
-                while (totalRead < contentLength) {
-                    val read = session.inputStream.read(bytes, totalRead, (contentLength - totalRead).toInt())
+                while (true) {
+                    val read = session.inputStream.read(chunk)
                     if (read < 0) break
                     totalRead += read
+                    if (totalRead > MAX_UPLOAD_BYTES) {
+                        AppLog.w(TAG, "handleUpload: aborted, body exceeded $MAX_UPLOAD_BYTES bytes")
+                        return jsonResponse(false, "上传内容过大（上限 ${MAX_UPLOAD_BYTES / 1024 / 1024}MB）")
+                    }
+                    buffer.write(chunk, 0, read)
                 }
-                var json = String(bytes, 0, totalRead, Charsets.UTF_8)
+                if (totalRead == 0) {
+                    return jsonResponse(false, "上传内容为空")
+                }
+                var json = String(buffer.toByteArray(), Charsets.UTF_8)
                 // 去掉 UTF-8 BOM（如果有）
                 if (json.startsWith("\uFEFF")) {
                     json = json.substring(1)

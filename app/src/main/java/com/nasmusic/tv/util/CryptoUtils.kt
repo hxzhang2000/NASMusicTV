@@ -25,7 +25,10 @@ import java.security.SecureRandom
 object CryptoUtils {
     private const val GCM_IV_LENGTH = 12
     private const val GCM_TAG_LENGTH = 128
-    // 派生密钥的口令（编译期常量）。本地媒体播放器的令牌加密，混淆强度与既往 AndroidKeyStore 方案相当。
+    // 派生密钥的口令（编译期常量）。注意：此为「混淆级」而非「保密级」——
+    // 口令内置于 APK，可被逆向还原，无法抵御有针对性的逆向攻击；
+    // 其价值在于避免凭据以明文形式直接暴露在 prefs/备份文件中。
+    // 如需更强保护，应改用设备安全硬件（AndroidKeyStore/StrongBox）。
     private const val PASSPHRASE = "NasMusicTV-LocalCrypto-2b7e1f9c-2024"
     private const val KEY_ALIAS = "nasmusic_secret_key"
 
@@ -75,8 +78,10 @@ object CryptoUtils {
             val combined = iv + encrypted
             Base64.encodeToString(combined, Base64.NO_WRAP)
         } catch (e: Exception) {
-            AppLog.e("CryptoUtils", "encrypt failed", e)
-            plainText // 失败时返回明文（降级处理）
+            // 安全约束：加密失败绝不能把明文落盘（凭据必须加密存储）。
+            // 返回空串，调用方写入空值后由 decrypt 得到 ""，最终表现为鉴权失败而非明文泄露。
+            AppLog.e("CryptoUtils", "encrypt failed, returning empty string (plaintext NOT persisted)", e)
+            ""
         }
     }
 

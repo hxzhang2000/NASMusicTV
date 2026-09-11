@@ -34,6 +34,15 @@ class CoverFileWriter(
         private const val TAG = "CoverFileWriter"
         const val ARTIST_COVER = "artist.jpg"
         const val ALBUM_COVER = "cover.jpg"
+        /** 内嵌封面的体积上限：超过则重新编码压缩 */
+        private const val MAX_EMBED_COVER_BYTES = 512 * 1024
+    }
+
+    /** 是否已是可直接内嵌的「体积受控 JPEG」（避免每次重复解码重编码） */
+    private fun isNormalizedJpeg(bytes: ByteArray): Boolean {
+        if (bytes.size < 3) return false
+        val isJpeg = bytes[0] == 0xFF.toByte() && bytes[1] == 0xD8.toByte() && bytes[2] == 0xFF.toByte()
+        return isJpeg && bytes.size <= MAX_EMBED_COVER_BYTES
     }
 
     /**
@@ -44,8 +53,16 @@ class CoverFileWriter(
         withContext(Dispatchers.IO) {
             val target = File(albumDir, ALBUM_COVER)
             if (target.exists()) {
-                // 已有 cover.jpg：读出来供内嵌（如果可读）
-                return@withContext runCatching { target.readBytes() }.getOrNull()
+                // 已有 cover.jpg：读出来供内嵌。注意——文件名固定为 .jpg 但内容可能是
+                // PNG/超大图，若原样按 image/jpeg 内嵌每首歌会导致体积膨胀 + 渲染异常，
+                // 故先判定是否已是「体积受控的 JPEG」，否则重新编码归一化。
+                val existing = runCatching { target.readBytes() }.getOrNull()
+                    ?: return@withContext null
+                return@withContext if (isNormalizedJpeg(existing)) {
+                    existing
+                } else {
+                    MediaTagWriter.compressCover(existing) ?: existing
+                }
             }
             albumDir.mkdirs()
             val url = resolveAlbumCoverUrl(song) ?: return@withContext null

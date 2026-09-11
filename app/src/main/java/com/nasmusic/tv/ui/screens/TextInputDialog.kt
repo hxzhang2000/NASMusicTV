@@ -29,6 +29,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -57,6 +58,9 @@ import com.nasmusic.tv.ui.theme.FontSize
 import com.nasmusic.tv.ui.theme.NasMusicColors
 import com.nasmusic.tv.util.NetworkUtils
 import com.nasmusic.tv.util.QrCodeGenerator
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 // 键盘行定义 -- 26个字母按ABC顺序排列，大小写通过Shift键切换
 // 小写：a-j, k-t, u-z + 符号
@@ -138,6 +142,7 @@ fun TextInputDialog(
     var serverUrl by remember { mutableStateOf<String?>(null) }
     var qrText by remember { mutableStateOf<String?>(null) }
     val server = remember { LocalInputServer() }
+    val qrScope = rememberCoroutineScope()
 
     val keyboardController = LocalSoftwareKeyboardController.current
     val textFieldFocusRequester = remember { FocusRequester() }
@@ -154,7 +159,11 @@ fun TextInputDialog(
             if (ip != null) {
                 val url = "http://$ip:${LocalInputServer.DEFAULT_PORT}/"
                 serverUrl = url
-                qrBitmap = QrCodeGenerator.generateQrBitmap(url, 360)
+                // P3：QR 位图改到后台线程生成——ZXing 编码 + 位图分配在组合期同步跑会掉帧
+                qrScope.launch(Dispatchers.Default) {
+                    val bmp = QrCodeGenerator.generateQrBitmap(url, 360)
+                    withContext(Dispatchers.Main) { qrBitmap = bmp }
+                }
                 server.start { received ->
                     // NanoHTTPD 后台线程回调，mutableStateOf 支持跨线程写入
                     qrText = received

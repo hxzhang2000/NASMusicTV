@@ -34,11 +34,15 @@ data class IpLocation(
  * @param songs 电台歌曲列表（混合 NAS 收藏 + 网络歌曲）
  * @param mood 当前匹配的 mood
  * @param queries 用于构建此队列的搜索关键词
+ * @param nasCount 队列中 NAS 来源歌曲数（含心情命中的与随机补齐的）
+ * @param networkCount 队列中网络来源歌曲数
+ * @param moodMatchedCount 真正由心情关键词命中的歌曲数（不含随机补齐），用于如实反映电台质量
  */
 data class WeatherRadioQueue(
     val songs: List<Song> = emptyList(),
     val mood: WeatherMood = WeatherMood.SUNNY,
     val queries: List<String> = emptyList(),
     val nasCount: Int = 0,
-    val networkCount: Int = 0
+    val networkCount: Int = 0,
+    val moodMatchedCount: Int = 0
 )

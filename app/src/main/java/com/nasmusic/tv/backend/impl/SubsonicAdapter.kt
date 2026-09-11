@@ -742,20 +742,9 @@ class SubsonicAdapter : BackendAdapter {
     }
 
     // --- 获取歌曲总数 ---
-    override suspend fun getSongsTotalCount(): Int = withContext(Dispatchers.IO) {
-        try {
-            // 使用 getSongs 获取第一页，检查是否有更多
-            val url = buildRestUrl("getSongs") + "&type=alphabeticalByName&size=1&offset=0"
-            val json = executeRequest(url) ?: return@withContext 0
-            val subsonic = json.getAsJsonObject("subsonic-response") ?: return@withContext 0
-            // 尝试从 songs 对象获取总数
-            val songs = subsonic.getAsJsonObject("songs")
-            songs?.get("totalSongs")?.asInt ?: 0
-        } catch (e: Exception) {
-            AppLog.e("SubsonicAdapter", "getSongsTotalCount failed", e)
-            0
-        }
-    }
+    // 修复：Subsonic 的 getSongs 响应没有 totalSongs 字段（旧实现恒返回 0）。
+    // 改为分页累加统计（带 10 分钟缓存），逻辑下沉到 SubsonicRestClient 复用。
+    override suspend fun getSongsTotalCount(): Int = restClient.songsTotalCount()
 
     // --- 获取所有年份 ---
     override suspend fun getYears(): List<Int> = withContext(Dispatchers.IO) {
@@ -803,10 +792,11 @@ class SubsonicAdapter : BackendAdapter {
     // md5 计算——Subsonic 部分服务端用 token 直传），保留自有实现；公共的
     // executeRequest/md5 经 restClient 委托。
     private fun buildRestUrl(method: String): String {
+        // 修复：用户名/令牌可能含需转义字符，未编码会破坏查询串导致鉴权失败。
         return "$baseUrl/rest/$method?" +
-                "u=$username&" +
-                "t=$apiToken&" +
-                "s=$salt&" +
+                "u=${java.net.URLEncoder.encode(username, "UTF-8")}&" +
+                "t=${java.net.URLEncoder.encode(apiToken, "UTF-8")}&" +
+                "s=${java.net.URLEncoder.encode(salt, "UTF-8")}&" +
                 "v=$API_VERSION&" +
                 "c=$CLIENT_NAME&" +
                 "f=json"

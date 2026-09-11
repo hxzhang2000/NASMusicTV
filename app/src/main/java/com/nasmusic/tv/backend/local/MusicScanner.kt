@@ -4,6 +4,7 @@ import android.content.ContentUris
 import android.content.Context
 import android.media.MediaMetadataRetriever
 import android.net.Uri
+import android.os.Build
 import android.provider.MediaStore
 import com.nasmusic.tv.data.model.StorageType
 import com.nasmusic.tv.util.AppLog
@@ -43,19 +44,27 @@ class MusicScanner(private val context: Context) {
         val songs = mutableListOf<ScannedSong>()
         val collection = MediaStore.Audio.Media.getContentUri(MediaStore.VOLUME_EXTERNAL)
 
-        val projection = arrayOf(
-            MediaStore.Audio.Media._ID,
-            MediaStore.Audio.Media.TITLE,
-            MediaStore.Audio.Media.ARTIST,
-            MediaStore.Audio.Media.ALBUM,
-            MediaStore.Audio.Media.ALBUM_ID,
-            MediaStore.Audio.Media.DURATION,
-            MediaStore.Audio.Media.SIZE,
-            MediaStore.Audio.Media.DATE_ADDED,
-            MediaStore.Audio.Media.MIME_TYPE,
-            MediaStore.Audio.Media.VOLUME_NAME,
-            MediaStore.Audio.Media.YEAR
-        )
+        // androidx 修复：VOLUME_NAME 为 API 29+ 才有。旧设备（API<29，本应用 minSdk 22）
+        // 若把它放进 projection 并用 getColumnIndexOrThrow 取值，会抛 IllegalArgumentException
+        // 被下方宽泛 catch 吞掉 → scanAllMusic() 整库静默返回空，本地音乐完全扫不到。
+        // 按 SDK 版本条件性加入 projection，并用 getColumnIndex（缺失返回 -1）兜底。
+        val projection = buildList {
+            add(MediaStore.Audio.Media._ID)
+            add(MediaStore.Audio.Media.TITLE)
+            add(MediaStore.Audio.Media.ARTIST)
+            add(MediaStore.Audio.Media.ALBUM)
+            add(MediaStore.Audio.Media.ALBUM_ID)
+            add(MediaStore.Audio.Media.DURATION)
+            add(MediaStore.Audio.Media.SIZE)
+            add(MediaStore.Audio.Media.DATE_ADDED)
+            add(MediaStore.Audio.Media.MIME_TYPE)
+            add(MediaStore.Audio.Media.YEAR)
+            // _data（真实文件路径）：API 1 起存在且始终可查，用于跨通道（MediaStore vs 下载目录）去重
+            add(MediaStore.Audio.Media.DATA)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                add(MediaStore.Audio.Media.VOLUME_NAME)
+            }
+        }.toTypedArray()
 
         val selection = "${MediaStore.Audio.Media.IS_MUSIC} != 0"
         val sortOrder = "${MediaStore.Audio.Media.TITLE} ASC"
@@ -73,12 +82,13 @@ class MusicScanner(private val context: Context) {
                 val sizeCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.SIZE)
                 val dateAddedCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DATE_ADDED)
                 val mimeCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.MIME_TYPE)
-                val volumeCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.VOLUME_NAME)
-                val yearCol = cursor.getColumnIndex(MediaStore.Audio.Media.YEAR)
+                val volumeCol = cursor.getColumnIndex(MediaStore.Audio.Media.VOLUME_NAME) // API<29 返回 -1
+                val dataCol = cursor.getColumnIndex(MediaStore.Audio.Media.DATA)
+                val yearCol = cursor.getColumnIndex(MediaStore.Audio.Media.YEAR)             // 缺失返回 -1
 
                 while (cursor.moveToNext()) {
                     val id = cursor.getLong(idCol)
-                    val volumeName = cursor.getString(volumeCol) ?: ""
+                    val volumeName = if (volumeCol >= 0) cursor.getString(volumeCol) ?: "" else ""
                     val storageType = resolveStorageType(volumeName)
 
                     val uri = ContentUris.withAppendedId(
@@ -99,7 +109,8 @@ class MusicScanner(private val context: Context) {
                             contentUri = uri,
                             volumeName = volumeName,
                             storageType = storageType,
-                            year = if (yearCol >= 0) cursor.getInt(yearCol).takeIf { it > 0 } else null
+                            year = if (yearCol >= 0) cursor.getInt(yearCol).takeIf { it > 0 } else null,
+                            dataPath = if (dataCol >= 0) cursor.getString(dataCol) else null
                         )
                     )
                 }
@@ -182,7 +193,8 @@ class MusicScanner(private val context: Context) {
             volumeName = "",
             storageType = StorageType.DOWNLOAD,
             year = year,
-            genre = genre
+            genre = genre,
+            dataPath = path
         )
     }
 
@@ -218,7 +230,8 @@ class MusicScanner(private val context: Context) {
                 volumeName = "",
                 storageType = storageType,
                 year = year,
-                genre = genre
+                genre = genre,
+                dataPath = file.absolutePath
             )
         } catch (e: Exception) {
             AppLog.e(TAG, "Failed to scan ${file.absolutePath}: ${e.message}", e)
@@ -267,5 +280,7 @@ data class ScannedSong(
     val volumeName: String,
     val storageType: StorageType,
     val year: Int? = null,
-    val genre: String? = null
+    val genre: String? = null,
+    /** 真实文件路径（MediaStore 取 _data 列；文件通道为绝对路径）；用于跨通道去重 */
+    val dataPath: String? = null
 )

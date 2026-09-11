@@ -2,24 +2,14 @@ package com.nasmusic.tv.player
 
 import android.content.Context
 import com.nasmusic.tv.util.AppLog
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import java.io.File
 
 /**
- * 伴奏文件缓存管理 + 预分离队列
+ * 伴奏文件缓存管理
  *
  * 功能：
- * 1. 缓存人声分离结果（伴奏 WAV 文件），避免重复分离
- * 2. LRU 淘汰：总缓存上限 500MB
- * 3. 预分离队列：当前歌曲播放进度 > 50% 时触发下一首预分离
+ * 1. 缓存人声分离结果（伴奏/人声/原唱 WAV 文件），避免重复分离
+ * 2. LRU 淘汰：总缓存上限 500MB / 最多 10 个文件
  *
  * 缓存策略：
  * - 文件路径：context.cacheDir/accompaniment/{songId}_accompaniment.wav
@@ -27,9 +17,7 @@ import java.io.File
  * - LRU 淘汰：按最后访问时间排序，超过 500MB 时删除最旧的文件
  */
 class AccompanimentCache(
-    private val context: Context,
-    /** F-4：注入应用级 scope；未注入时回退私有 scope（PlaybackService 创建处保持兼容） */
-    externalScope: CoroutineScope? = null
+    private val context: Context
 ) {
 
     companion object {
@@ -42,22 +30,6 @@ class AccompanimentCache(
     private val cacheDir: File by lazy {
         File(context.cacheDir, CACHE_DIR_NAME).also { it.mkdirs() }
     }
-
-    private val scope: CoroutineScope = externalScope ?: CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    private var preSeparationJob: Job? = null
-
-    /**
-     * 预分离状态
-     */
-    data class PreSeparationState(
-        val isRunning: Boolean = false,
-        val currentSongId: String? = null,
-        val progress: Float = 0f,
-        val stage: String = ""
-    )
-
-    private val _preSeparationState = MutableStateFlow(PreSeparationState())
-    val preSeparationState: StateFlow<PreSeparationState> = _preSeparationState
 
     /**
      * 检查伴奏文件是否已缓存
@@ -84,78 +56,6 @@ class AccompanimentCache(
      */
     fun getVocalsFile(songId: String): File {
         return File(cacheDir, "${songId}_vocals.wav")
-    }
-
-    /**
-     * 启动预分离（后台协程）
-     *
-     * @param songId 当前歌曲 ID
-     * @param inputPath 输入音频文件路径
-     * @param separator DemucsSeparator 实例
-     */
-    fun startPreSeparation(
-        songId: String,
-        inputPath: String,
-        separator: DemucsSeparator
-    ) {
-        // 如果已经缓存，跳过
-        if (hasAccompaniment(songId)) {
-            AppLog.d(TAG, "startPreSeparation: already cached for $songId")
-            return
-        }
-
-        // 如果正在预分离同一首歌，跳过
-        if (_preSeparationState.value.currentSongId == songId && _preSeparationState.value.isRunning) {
-            return
-        }
-
-        // 取消之前的预分离
-        preSeparationJob?.cancel()
-
-        preSeparationJob = scope.launch {
-            _preSeparationState.value = PreSeparationState(
-                isRunning = true,
-                currentSongId = songId,
-                progress = 0f,
-                stage = "准备中"
-            )
-
-            try {
-                val result = withContext(Dispatchers.IO) {
-                    separator.separate(
-                        inputPath = inputPath,
-                        outputDir = cacheDir,
-                        songId = songId,
-                        progress = { progress, stage ->
-                            _preSeparationState.value = _preSeparationState.value.copy(
-                                progress = progress,
-                                stage = stage
-                            )
-                        }
-                    )
-                }
-
-                if (result != null) {
-                    AppLog.d(TAG, "startPreSeparation: OK for $songId")
-                    cleanupCache()
-                } else {
-                    AppLog.w(TAG, "startPreSeparation: failed for $songId")
-                }
-            } catch (e: Exception) {
-                AppLog.e(TAG, "startPreSeparation: exception for $songId", e)
-            } finally {
-                _preSeparationState.value = PreSeparationState()
-            }
-        }
-    }
-
-    /**
-     * 取消预分离
-     */
-    fun cancelPreSeparation() {
-        preSeparationJob?.cancel()
-        preSeparationJob = null
-        _preSeparationState.value = PreSeparationState()
     }
 
     /**
@@ -214,7 +114,6 @@ class AccompanimentCache(
      * 清空缓存
      */
     fun clearCache() {
-        cancelPreSeparation()
         cacheDir.listFiles()?.forEach { it.delete() }
         AppLog.d(TAG, "clearCache: all files deleted")
     }
@@ -224,7 +123,6 @@ class AccompanimentCache(
      * 用户不需要保留人声文件，所有分离文件都可以删除
      */
     fun clearAccompaniments(): Int {
-        cancelPreSeparation()
         var count = 0
         cacheDir.listFiles()?.forEach { file ->
             if (file.name.endsWith("_accompaniment.wav") || file.name.endsWith("_vocals.wav") || file.name.endsWith("_original.wav")) {

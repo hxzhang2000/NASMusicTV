@@ -6,8 +6,10 @@ import androidx.media3.exoplayer.ExoPlayer
 import com.nasmusic.tv.R
 import com.nasmusic.tv.data.model.Song
 import com.nasmusic.tv.util.AppLog
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -23,7 +25,7 @@ import java.io.File
  * 负责 HT-Demucs ONNX 模式的完整编排——输入解析（本地文件/下载 streamUrl）、
  * 模型加载、后台分离、伴奏/原唱切换、错误回退。
  *
- * 播放器操作经 [PlayerHost] 窄接口回调（R-5 VocalSeparationController 的模式），
+ * 播放器操作经 [PlayerHost] 窄接口回调（窄接口模式），
  * 避免与 PlayerManager 播放状态机形成强环引用。
  */
 class HqSeparationOrchestrator(
@@ -97,6 +99,9 @@ class HqSeparationOrchestrator(
 
     /** HQ 分离开始时间（用于计算耗时） */
     private var separationStartTimeMs: Long = 0
+
+    /** 进行中的分离协程（release 时取消，避免在已 release 的播放器上继续跑 ONNX） */
+    private var separationJob: Job? = null
 
     // ── 组件注入（PlayerManager 转发）──
 
@@ -276,6 +281,13 @@ class HqSeparationOrchestrator(
      * 4. 若未缓存：保持原始音频播放 + 后台分离 → 完成后切换到伴奏
      */
     fun enableHighQualityRemoval(): Boolean {
+        // 单飞守卫：已有分离在进行时忽略重复请求。否则连点/重试会启动两个分离协程，
+        // 共享同一 DemucsSeparator 向同一 WAV 并发写、并各自 replaceMediaItem（H3）。
+        if (_separating.value) {
+            AppLog.w(TAG, "enableHighQualityRemoval: separation already in progress, ignoring duplicate request")
+            return true
+        }
+
         val separator = demucsSeparator
         val cache = accompanimentCache
         val songId = host.currentSong()?.id
@@ -313,7 +325,7 @@ class HqSeparationOrchestrator(
             _separating.value = true
             separationStartTimeMs = System.currentTimeMillis()
             var tempInputPath: String? = null
-            scope.launch {
+            separationJob = scope.launch {
                 try {
                     // 解析输入路径（本地文件 或 下载 streamUrl）
                     val inputPath = withContext(Dispatchers.IO) {
@@ -383,6 +395,10 @@ class HqSeparationOrchestrator(
                         host.setFastVocalRemoval(true)
                         if (wasPlayingBeforeSeparation) host.play()
                     }
+                } catch (e: CancellationException) {
+                    // release()/取消导致的中断：不当作失败，交由 finally 收尾
+                    AppLog.d(TAG, "enableHighQualityRemoval: cancelled")
+                    throw e
                 } catch (e: OutOfMemoryError) {
                     AppLog.e(TAG, "enableHighQualityRemoval: OOM", e)
                     _hqError.value = appContext.getString(R.string.hq_error_oom)
@@ -496,6 +512,12 @@ class HqSeparationOrchestrator(
      * modelSession/ortEnv 进程级泄漏，多次启停后内存持续增长（P10 修复）。
      */
     fun release() {
+        // 取消进行中的分离，避免其继续在已释放的播放器上跑 ONNX；
+        // DemucsSeparator.release() 内部用 tryLock：若分离仍持有推理锁，
+        // 会置 pendingRelease，待分离结束后自行释放，避免关掉正在推理的 session。
+        separationJob?.cancel()
+        separationJob = null
+        _separating.value = false
         demucsSeparator?.release()
     }
 }

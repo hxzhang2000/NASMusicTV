@@ -151,26 +151,28 @@ class FeiniuAdapter : BackendAdapter {
                 .post(body)
                 .build()
             val response = client.newCall(request).execute()
-            if (!response.isSuccessful) {
-                AppLog.w(TAG, "login failed: ${response.code}")
-                return false
+            response.use { resp ->
+                if (!resp.isSuccessful) {
+                    AppLog.w(TAG, "login failed: ${resp.code}")
+                    return false
+                }
+                val responseBody = resp.body?.string() ?: return false
+                val json = JsonParser.parseString(responseBody).asJsonObject
+                val token = json.get("token")?.asString
+                    ?: json.getAsJsonObject("data")?.get("token")?.asString
+                    ?: return false
+                musicToken = token
+                // 手动注入 Cookie（CookieJar 也会自动管理，但确保一致性）
+                val cookieUrl = baseUrl.toHttpUrl() ?: return false
+                val cookie = Cookie.Builder()
+                    .name("music-token")
+                    .value(token)
+                    .domain(cookieUrl.host)
+                    .build()
+                cookieStore[cookieUrl.host] = listOf(cookie)
+                AppLog.d(TAG, "login success, token=${token.take(8)}...")
+                true
             }
-            val responseBody = response.body?.string() ?: return false
-            val json = JsonParser.parseString(responseBody).asJsonObject
-            val token = json.get("token")?.asString
-                ?: json.getAsJsonObject("data")?.get("token")?.asString
-                ?: return false
-            musicToken = token
-            // 手动注入 Cookie（CookieJar 也会自动管理，但确保一致性）
-            val cookieUrl = baseUrl.toHttpUrl() ?: return false
-            val cookie = Cookie.Builder()
-                .name("music-token")
-                .value(token)
-                .domain(cookieUrl.host)
-                .build()
-            cookieStore[cookieUrl.host] = listOf(cookie)
-            AppLog.d(TAG, "login success, token=${token.take(20)}...")
-            true
         } catch (e: Exception) {
             AppLog.e(TAG, "login failed", e)
             false
@@ -211,7 +213,7 @@ class FeiniuAdapter : BackendAdapter {
             val request = Request.Builder()
                 .url("$baseUrl$API_PREFIX/track/list?limit=1")
                 .build()
-            client.newCall(request).execute().isSuccessful
+            client.newCall(request).execute().use { it.isSuccessful }
         } catch (e: Exception) {
             AppLog.w(TAG, "testConnection failed", e)
             false
@@ -531,12 +533,14 @@ class FeiniuAdapter : BackendAdapter {
                 .header("Cookie", "music-token=$musicToken")
                 .build()
             val response = client.newCall(request).execute()
-            if (!response.isSuccessful) {
-                AppLog.w(TAG, "GET failed: ${response.code} url=${UrlSanitizer.sanitize(url)}")
-                return null
+            response.use { resp ->
+                if (!resp.isSuccessful) {
+                    AppLog.w(TAG, "GET failed: ${resp.code} url=${UrlSanitizer.sanitize(url)}")
+                    return null
+                }
+                val body = resp.body?.string() ?: return null
+                JsonParser.parseString(body).asJsonObject
             }
-            val body = response.body?.string() ?: return null
-            JsonParser.parseString(body).asJsonObject
         } catch (e: Exception) {
             AppLog.e(TAG, "GET error url=${UrlSanitizer.sanitize(url)}", e)
             null
@@ -556,12 +560,14 @@ class FeiniuAdapter : BackendAdapter {
                 .post(body)
                 .build()
             val response = client.newCall(request).execute()
-            if (!response.isSuccessful) {
-                AppLog.w(TAG, "POST failed: ${response.code} url=${UrlSanitizer.sanitize(url)}")
-                return null
+            response.use { resp ->
+                if (!resp.isSuccessful) {
+                    AppLog.w(TAG, "POST failed: ${resp.code} url=${UrlSanitizer.sanitize(url)}")
+                    return null
+                }
+                val responseBody = resp.body?.string() ?: return null
+                if (responseBody.isBlank()) JsonObject() else JsonParser.parseString(responseBody).asJsonObject
             }
-            val responseBody = response.body?.string() ?: return null
-            if (responseBody.isBlank()) JsonObject() else JsonParser.parseString(responseBody).asJsonObject
         } catch (e: Exception) {
             AppLog.e(TAG, "POST error url=${UrlSanitizer.sanitize(url)}", e)
             null

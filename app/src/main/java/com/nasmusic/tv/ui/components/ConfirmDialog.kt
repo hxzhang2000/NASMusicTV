@@ -13,7 +13,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -24,14 +23,14 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.Text
 import com.nasmusic.tv.R
-import com.nasmusic.tv.ui.LocalDialogBackHandler
+import com.nasmusic.tv.ui.RegisterDialogBackHandler
 import com.nasmusic.tv.ui.theme.FontSize
 import com.nasmusic.tv.ui.theme.NasMusicColors
 
 /**
  * 通用确认对话框（§8.7.2）
  *
- * 结构照抄 [com.nasmusic.tv.ui.screens.ExitConfirmDialog]：注册 LocalDialogBackHandler
+ * 结构照抄 [com.nasmusic.tv.ui.screens.ExitConfirmDialog]：注册 RegisterDialogBackHandler
  * 让 BACK 键关弹窗、焦点默认落在按钮、FocusableSurface 提供放大反馈。
  * [destructive] = true 时焦点默认落在「取消」按钮（安全边界）。
  */
@@ -47,13 +46,7 @@ fun ConfirmDialog(
     modifier: Modifier = Modifier
 ) {
     // Level 1: 注册 BACK 键回调 —— 打开对话框时，BACK 键关闭对话框
-    val backHandler = LocalDialogBackHandler.current
-    DisposableEffect(onDismiss) {
-        backHandler.value = { onDismiss() }
-        onDispose {
-            backHandler.value = null
-        }
-    }
+    RegisterDialogBackHandler(onDismiss)
 
     // 焦点管理：破坏性操作默认聚焦「取消」，非破坏性默认聚焦「确定」
     val confirmFocusRequester = remember { FocusRequester() }
