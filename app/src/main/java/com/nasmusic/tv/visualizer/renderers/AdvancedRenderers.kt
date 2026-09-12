@@ -434,7 +434,7 @@ class MatrixRainRenderer : VisualizerRenderer {
             colY[i] = VisualizerMath.nextRandom() * 1000f
             colSpeed[i] = 5f + VisualizerMath.nextRandom() * 7f
         }
-        glyphs = null
+        releaseGlyphs()
     }
 
     override fun DrawScope.draw(frame: AudioFrame, ctx: RenderContext) {
@@ -516,7 +516,11 @@ class MatrixRainRenderer : VisualizerRenderer {
     }
 
     override fun onExit() {
-        // API < 26 上 Bitmap 像素在 native 堆，主动 recycle 更稳（否则靠 GC 回收）
+        releaseGlyphs()
+    }
+
+    /** 释放字形缓存：API < 26 上 Bitmap 像素在 native 堆，主动 recycle 更稳 */
+    private fun releaseGlyphs() {
         glyphs?.forEach { it.recycle() }
         glyphs = null
     }

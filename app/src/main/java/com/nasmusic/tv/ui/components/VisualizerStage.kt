@@ -86,7 +86,6 @@ fun VisualizerStage(
     progressMs: Long,
     theme: VisualizerTheme,
     quality: VisualQuality,
-    /** 自动导演档：主题变化时走 600ms 交叉淡入；手动切换传 false（硬切） */
     isTV: Boolean,
     onExit: () -> Unit,
     onNextTheme: () -> Unit,

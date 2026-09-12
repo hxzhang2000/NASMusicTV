@@ -70,6 +70,8 @@ class LyricsDotMatrixRenderer : VisualizerRenderer {
     private var displayedLineIndex = -1
     /** 已绑定的歌曲 id：renderer 实例跨歌曲复用，需靠它判断切歌 */
     private var boundSongId: String? = null
+    /** 上一首歌的标题：songId 为 null 时作为兜底判据依据 */
+    private var boundCaption: String? = null
 
     // 行偏移（用于行移动动画，0=正常位置，-1=上移一行）
     private var rowOffsetY = 0f  // 像素偏移量
@@ -147,6 +149,7 @@ class LyricsDotMatrixRenderer : VisualizerRenderer {
         displayedLineIndex = -1
         rowOffsetY = 0f
         boundSongId = null
+        boundCaption = null
     }
 
     override fun onExit() {
@@ -397,8 +400,11 @@ class LyricsDotMatrixRenderer : VisualizerRenderer {
         // 切歌重置：renderer 实例由 swapper 跨歌曲复用（不会重新 onEnter），
         // 若不在歌曲变化时回到初始态，displayedLineIndex 会停在上首歌的行号，
         // 新歌 idx 从 0 开始 -> diff 为负 -> 永不触发行切换，画面卡在旧歌词。
-        if (ctx.songId != boundSongId) {
+        // songId 为 null 时（本地扫描歌曲可能没有 id）用标题兜底，
+        // 否则两首歌 id 均为 null 时不会触发重置。
+        if (ctx.songId != boundSongId || ctx.caption != boundCaption) {
             boundSongId = ctx.songId
+            boundCaption = ctx.caption
             displayedLineIndex = -1
             phase = Phase.INIT_COALESCE
             phaseStartMs = frame.timeMs

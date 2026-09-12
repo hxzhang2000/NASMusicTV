@@ -32,6 +32,13 @@
 - `AppSettings` 类注释由“18 套 + 1 自动档”更正为“21 套，无自动档”；`LEGACY_MAP` 显式收录 `AUTO_DIRECTOR`（与既有 fallback 行为一致，用于固化迁移意图）
 - 删除 `LyricsDotMatrixRenderer` 采样函数中遗留的诊断 `println`（在每帧热路径上）
 
+### Fixed（二次审阅补充）
+- **数字雨字形缓存仅在 `onExit` 释放**：画质变化触发 `onEnter` 重建缓存时会丢弃旧 Bitmap 而不回收。统一收敛到 `releaseGlyphs()`，`onEnter` / `onExit` 走同一释放路径
+- **歌词点阵切歌判定在无 id 歌曲上失效**：`songId` 为 null 时（本地扫描歌曲可能没有 id）两首歌 id 都是 null，不会触发重置。现 `songId` 与歌曲标题任一变化即重置
+
+### Changed（二次审阅补充）
+- `VisualizerStage` 删除随 `crossfade` 参数一起失效的 KDoc；数字雨的释放注释合并进 `releaseGlyphs()`
+
 ### Tests
 - `SpectrumAnalyzerTest`：把 v2.30.2 放宽的 `actual in 0.2f..0.31f` 收窄为 `0.235f..0.275f`（±0.02），恢复对“bass 落在线性分支而非 gamma 分支”的回归探测力
 
