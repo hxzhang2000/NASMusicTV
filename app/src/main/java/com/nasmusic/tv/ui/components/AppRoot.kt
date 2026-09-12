@@ -18,7 +18,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -432,18 +431,8 @@ private fun VisualizerOverlay(
     val lyrics by viewModel.currentLyrics.collectAsState(initial = null)
     val progress by viewModel.playerVM.progress.collectAsState(initial = 0L)
 
-    // 自动导演档：低频（500ms）重新评估场景，避免每帧重组
-    var autoTick by remember { mutableLongStateOf(0L) }
-    LaunchedEffect(theme) {
-        while (theme.isAutoDirector) {
-            kotlinx.coroutines.delay(500)
-            autoTick++
-        }
-    }
-    val effectiveTheme = if (theme.isAutoDirector) {
-        autoTick                    // 参与重组
-        vm.resolveTheme()
-    } else theme
+    // 无自动导演档：用户选中的主题恒定显示，无需低频重估
+    val effectiveTheme = theme
 
     // 封面加载 + 取色（切歌时一次，异步不阻塞）
     LaunchedEffect(currentSong?.id) {
@@ -460,8 +449,7 @@ private fun VisualizerOverlay(
         progressMs = progress,
         theme = effectiveTheme,
         quality = quality,
-        // 自动导演档的场景切换走 600ms 交叉淡入；其余硬切
-        crossfade = theme.isAutoDirector,
+        crossfade = false,
         isTV = isTV,
         onExit = { vm.exitVisualizer() },
         onNextTheme = { vm.nextTheme() },

@@ -54,8 +54,6 @@ VisualizerTheme.IMMERSIVE_BLOOM -> BloomRenderer()
         VisualizerTheme.PRISM_HOLO -> PrismHoloRenderer()
         VisualizerTheme.AURORA -> AuroraRenderer()
         VisualizerTheme.LYRICS_DOT_MATRIX -> LyricsDotMatrixRenderer()
-        // 自动导演：回落到默认效果，由 AutoDirector 决定实际主题
-        VisualizerTheme.AUTO_DIRECTOR -> CircularRingRenderer()
     }
 
     /**

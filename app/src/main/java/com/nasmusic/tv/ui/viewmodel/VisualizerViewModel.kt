@@ -9,7 +9,6 @@ import com.nasmusic.tv.data.model.VisualizerTheme
 import com.nasmusic.tv.data.prefs.AppPreferences
 import com.nasmusic.tv.player.PlayerManager
 import com.nasmusic.tv.visualizer.AudioFrame
-import com.nasmusic.tv.visualizer.AutoDirector
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -48,8 +47,6 @@ class VisualizerViewModel(
     val palette: StateFlow<com.nasmusic.tv.visualizer.CoverPalette> = _palette.asStateFlow()
 
     private val paletteProvider = com.nasmusic.tv.visualizer.CoverPaletteProvider()
-
-    private val director = AutoDirector()
 
     /** 当前已加载封面对应的 key，避免重复加载 */
     private var loadedCoverKey: String? = null
@@ -96,7 +93,6 @@ class VisualizerViewModel(
     }
 
     fun enterVisualizer() {
-        director.reset()
         _showVisualizer.value = true
     }
 
@@ -104,18 +100,8 @@ class VisualizerViewModel(
         _showVisualizer.value = false
     }
 
-    /**
-     * 自动导演解析：AUTO 档时按能量返回实际主题。
-     * 非 AUTO 档原样返回。
-     */
-    fun resolveTheme(): VisualizerTheme {
-        val t = _theme.value
-        if (!t.isAutoDirector) return t
-        return director.evaluate(frame, _quality.value, frame.timeMs)
-    }
-
-    /** 当前实际生效的主题名（供 Toast 显示） */
-    fun activeThemeName(): String = resolveTheme().displayName
+    /** 当前实际生效的主题名（供 Toast 显示）——用户选中哪个就恒定显示哪个 */
+    fun activeThemeName(): String = _theme.value.displayName
 
 fun nextTheme() = step(+1)
     fun prevTheme() = step(-1)
@@ -149,7 +135,6 @@ fun nextTheme() = step(+1)
 
     fun setTheme(theme: VisualizerTheme) {
         _theme.value = theme
-        director.reset()
         persist()
     }
 

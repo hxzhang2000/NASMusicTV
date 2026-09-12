@@ -8109,3 +8109,35 @@ onSearchSong = { keyword -> viewModel.searchNetworkSongs(keyword) },
 - `compileReleaseKotlin` / `assembleRelease`（R8 + `shrinkResources` + 签名）通过；真机安装于电视（192.168.0.114）
 - 版本：v2.30.1 → **v2.30.2**（versionCode 129 → 130）
 - **待办（真机手测）**：棱镜彩虹的色带重叠辉光在中低端盒子的帧率；极光星空版星尘/星芒数量对帧率影响；歌词点阵各歌曲最长句的字号观感与粒子密度；"棱镜彩虹/极光/歌词点阵"三效果连续 30min 的稳定性
+
+---
+
+### 10.125 v2.30.3 — 控制行收敛 + 数字雨预渲染 + 移除自动导演 + Path 批处理（2026-09-12）
+
+#### 播放页 MTV 按钮完整显示（fix）
+- **根因**：紧凑控制行总宽 ≈438dp（prev 48 + play 60 + next 48 + mode 48 + 幻 48 + K歌 48 + MTV 90 + 8dp×6 间距），超出固定 380dp 左栏 → 最右 MTV 被歌词栏盖住，此前"只看到 MT"。上一版只单独把 MTV 加宽到 90/100dp，反而把它进一步推出屏外，观感无变化
+- **修复**：整体收紧紧凑行——`IconButton` 普通 48→40 / 主 60→52dp；`VocalToggleButton` 文字按钮显式宽度「幻」40 /「K歌」52 /「MTV」64dp；间距 8→6dp。合计 ≈364dp，MTV 完整落进 380dp 内单行
+
+#### 数字雨（E16）性能优化
+- 原逐字符 `nativeCanvas.drawText`（文本排布度量开销大，TV 弱 GPU 上卡顿）
+- 改为进入时一次性预渲染 **2 数字 × 4 档绿 = 8 张字形 Bitmap**（`buildGlyphs`，尺寸/列数变化时经 `glyphKey` 重建缓存），每帧用 `drawBitmap` 快速 blit；`blitPaint.alpha` 按 fade 逐格缩透明度保留头/亮/中/暗梯度
+- perCol 20→14，列数随画质档位（HIGH 48 / MID 30 / LOW 24）收窄
+
+#### 移除「自动导演」随机选特效（`AUTO_DIRECTOR`）
+- 用户诉求：遥控器选哪个效果就恒定显示哪个。删除 `AutoDirector.kt`，枚举移除 `AUTO_DIRECTOR` 及 `Tier.MODE` / `isAutoDirector`，`selectable = entries`（21 套手动效果）
+- `AppRoot` 去掉 500ms `while (isAutoDirector)` 低频重估与 `crossfade = true` 分支（恒 `false`）；`VisualizerViewModel` 移除 `director` / `resolveTheme`，`activeThemeName` 直取 `_theme.value`
+- 旧数据存过 `AUTO_DIRECTOR` → `fromKey` 未命中 → 回落默认（频谱环）；`VisualizerRendererFactory` 删 `AUTO_DIRECTOR` 分支；`VisualizerThemeTest` 改为 21 套断言
+- 遗留（仅文档）：§10.123/§10.124 及开发方案中关于 `AUTO_DIRECTOR` 的既有描述为当时实现记录，本版起该功能下线
+
+#### 高频小图元 Path 批处理（降 draw 次数，逼近 Android 5.1 单帧 ≈200 独立指令预算）
+- 「频谱环」（E05）：约 64 次峰值帽 `drawCircle` → 按 `t` 分 4 hue 桶的 4 条 `Path`（`peakPaths`），颜色按桶内中间 hue 重算
+- 「万花筒」（E10）：160 线段 + 160 端点光点 → `linePath` + `dotPath` 2 条 Path；扇区镜像/旋转改为手算世界坐标，段宽统一随 `frame.bass`，长度/端点半径仍逐条随频谱
+- 「径向星芒」（E06）：约 128 次 `drawCircle` → 1 条 `tipPath`
+- 「隧道穿越」（E03）：约 192 次环内 `drawCircle` → 1 条 `dotPath`
+- 「烟花」（E14)：约 128 次背景频谱 `drawRect` → 1 条 `bgPath`
+- 「Bloom」（E01）：约 768 次 `drawRoundRect` → 6 条 `Path`
+- 零行为变化：`drawPath` + `BlendMode.Plus` 保持原有叠加辉光观感（E05 峰值帽由按桶颜色近似，肉眼不可辨）
+
+#### 验证
+- `assembleRelease`（R8 + `shrinkResources` + 签名）通过；真机手测：MTV 按钮文字完整、数字雨流畅、遥控器选特效所见即所得、效果切换流畅
+- 版本：v2.30.2 → **v2.30.3**（versionCode 130 → 131）

@@ -76,14 +76,10 @@ IMMERSIVE_BLOOM("沉浸辉光", Tier.BASIC, "01"),
     PRISM_HOLO("棱镜彩虹", Tier.ADV, "21"),
     AURORA("极光", Tier.ADV, "22"),
     LYRICS_DOT_MATRIX("歌词点阵", Tier.ADV, "23"),
-    AUTO_DIRECTOR("自动导演", Tier.MODE, "AUTO"),
     ;
 
     /** 效果分级：决定画质档位可用性 */
-    enum class Tier { BASIC, ADV, ULTRA, MODE }
-
-    /** 是否为"自动导演"模式（而非具体效果） */
-    val isAutoDirector: Boolean get() = tier == Tier.MODE
+    enum class Tier { BASIC, ADV, ULTRA }
 
     companion object {
         val Default: VisualizerTheme = CIRCULAR_RING
@@ -102,9 +98,8 @@ private val LEGACY_MAP = mapOf(
                 ?: LEGACY_MAP[key?.uppercase()]
                 ?: Default
 
-        /** 可手动选择的效果（自动导演档排在最末） */
-        val selectable: List<VisualizerTheme> =
-            entries.filter { it.tier != Tier.MODE } + AUTO_DIRECTOR
+        /** 可手动选择的效果（无自动档；用户选了哪个就恒定显示哪个） */
+        val selectable: List<VisualizerTheme> = entries
     }
 }
 
@@ -134,7 +129,6 @@ enum class VisualQuality(
 
     fun supports(theme: VisualizerTheme): Boolean = when (theme.tier) {
         VisualizerTheme.Tier.BASIC -> true
-        VisualizerTheme.Tier.MODE -> true
         VisualizerTheme.Tier.ADV -> maxParticles > 0
         VisualizerTheme.Tier.ULTRA -> allowFramebuffer
     }

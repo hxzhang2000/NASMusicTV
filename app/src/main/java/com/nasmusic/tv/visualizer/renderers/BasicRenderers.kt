@@ -1,6 +1,9 @@
 package com.nasmusic.tv.visualizer.renderers
 
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.RoundRect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
@@ -63,6 +66,17 @@ class BloomRenderer : BarSpectrumRenderer() {
 
     override val theme = VisualizerTheme.IMMERSIVE_BLOOM
 
+    // 复用 Path：辉光最多 3 层 × 1 + 主体 + 倒影 + 峰值帽 → 每帧 6 次 drawPath
+    // 替代原 ~768 次 drawRoundRect/drawRect（同样的"大批量合并"范式见 E13 液态网格）
+    private val glowPaths = Array(3) { Path() }
+    private val barPath = Path()
+    private val reflPath = Path()
+    private val capPath = Path()
+
+    override fun onEnter(ctx: RenderContext) {
+        super.onEnter(ctx)
+    }
+
     override fun DrawScope.draw(frame: AudioFrame, ctx: RenderContext) {
         val n = ctx.quality.barCount
         updateEnv(frame, n)
@@ -72,12 +86,22 @@ class BloomRenderer : BarSpectrumRenderer() {
         val half = n / 2
         val total = half * 2
         val slot = w / total
-val barW = slot * 0.74f
+        val barW = slot * 0.74f
         val radius = barW * 0.4f
         val maxH = h * 0.70f * (1f + frame.pulse * 0.18f)
         val baseline = h * 0.76f
         val accent = ctx.palette.accent
+        val glowLayers = ctx.quality.glowLayers
+        val capColor = VisualizerMath.towardWhite(accent, 0.65f)
 
+        // 每帧无条件重置 Path（复用实例、零分配，见 E13 液态网格范式）
+        for (p in glowPaths) p.reset()
+        barPath.reset()
+        reflPath.reset()
+        capPath.reset()
+
+        var iMin = Int.MAX_VALUE
+        var iMax = -1
         for (i in 0 until total) {
             val v = mirrored(i, half)
             val minH = maxH * 0.04f * (0.2f + frame.energy * 0.8f)
@@ -85,43 +109,37 @@ val barW = slot * 0.74f
             val bh = VisualizerMath.barHeight(v, maxH, minH) + wave
             val x = i * slot + (slot - barW) / 2
 
-// 三层辉光：宽淡 → 窄亮（不用 BlurMaskFilter，太贵）
-            for (layer in 0 until ctx.quality.glowLayers) {
-                val spread = (ctx.quality.glowLayers - layer) * slot * 0.22f
-                val alpha = (0.16f + frame.pulse * 0.40f) / (layer + 1)
-                drawRoundRect(
-                    color = accent,
-                    topLeft = Offset(x - spread / 2, baseline - bh),
-                    size = androidx.compose.ui.geometry.Size(barW + spread, bh),
-                    cornerRadius = androidx.compose.ui.geometry.CornerRadius(radius, radius),
-                    alpha = alpha
+            // 3 层辉光：宽淡 → 窄亮（每层同色同 alpha，并入对应 Path）
+            for (layer in 0 until glowLayers) {
+                val spread = (glowLayers - layer) * slot * 0.22f
+                val gx = x - spread / 2
+                glowPaths[layer].addRoundRect(
+                    RoundRect(gx, baseline - bh, gx + barW + spread, baseline, CornerRadius(radius, radius))
                 )
             }
-// 主体
-            drawRoundRect(
-                color = accent,
-                topLeft = Offset(x, baseline - bh),
-                size = androidx.compose.ui.geometry.Size(barW, bh),
-                cornerRadius = androidx.compose.ui.geometry.CornerRadius(radius, radius),
-                alpha = 1f
-            )
+            // 主体
+            barPath.addRoundRect(RoundRect(x, baseline - bh, x + barW, baseline, CornerRadius(radius, radius)))
             // 倒影
-            drawRoundRect(
-                color = accent,
-                topLeft = Offset(x, baseline + 4f),
-                size = androidx.compose.ui.geometry.Size(barW, bh * 0.35f),
-                cornerRadius = androidx.compose.ui.geometry.CornerRadius(radius, radius),
-                alpha = 0.30f
+            reflPath.addRoundRect(
+                RoundRect(x, baseline + 4f, x + barW, baseline + 4f + bh * 0.35f, CornerRadius(radius, radius))
             )
             // 峰值帽（快升慢降的残影包络顶点）
             if (v > 0.02f) {
-                drawRect(
-                    color = VisualizerMath.towardWhite(accent, 0.65f),
-                    topLeft = Offset(x, baseline - bh - 6f),
-                    size = androidx.compose.ui.geometry.Size(barW, 3f),
-                    alpha = 0.9f
-                )
+                capPath.addRect(Rect(x, baseline - bh - 6f, x + barW, baseline - bh - 3f))
+                if (i < iMin) iMin = i
+                if (i > iMax) iMax = i
             }
+        }
+
+        // 一次性绘制全部（比原 ~768 次独立绘制合并为 6 次）
+        for (layer in 0 until glowLayers) {
+            val alpha = (0.16f + frame.pulse * 0.40f) / (layer + 1)
+            drawPath(glowPaths[layer], accent, alpha = alpha)
+        }
+        drawPath(barPath, accent, alpha = 1f)
+        drawPath(reflPath, accent, alpha = 0.30f)
+        if (iMin <= iMax) {
+            drawPath(capPath, capColor, alpha = 0.9f)
         }
     }
 }
@@ -140,6 +158,8 @@ class TunnelRenderer : VisualizerRenderer {
     override val theme = VisualizerTheme.TUNNEL_FLY
 
     private var offset = 0f
+    // 频谱驱动的小圆点合并为单 Path（addOval），替代最多 ~192 次独立 drawCircle
+    private val dotPath = Path()
 
     override fun onEnter(ctx: RenderContext) { offset = 0f }
 
@@ -153,6 +173,9 @@ class TunnelRenderer : VisualizerRenderer {
         val maxZ = RINGS * 60f
         val accent = ctx.palette.accent
 
+        // 频谱驱动的小圆点：合并成单 Path 绘制（同色 towardWhite + Plus 叠加）
+        dotPath.reset()
+        val dotColor = VisualizerMath.towardWhite(accent, 0.4f + frame.pulse * 0.4f)
         for (i in 0 until RINGS) {
             var z = (i * 60f + offset) % maxZ
             if (z < 1f) z = 1f
@@ -175,15 +198,14 @@ class TunnelRenderer : VisualizerRenderer {
                     val a = k * 6.2831853f / n
                     val v = frame.spectrum.getOrElse((k * 2) % frame.spectrum.size) { 0f }
                     val rr = r * (1f + v * 0.18f)
-                    drawCircle(
-                        color = VisualizerMath.towardWhite(accent, 0.4f + frame.pulse * 0.4f),
-                        radius = 3f * s + v * 3f,
-                        center = Offset(cx + cos(a) * rr, cy + sin(a) * rr),
-                        alpha = fade * 0.7f
-                    )
+                    val px = cx + cos(a) * rr
+                    val py = cy + sin(a) * rr
+                    val rDot = 3f * s + v * 3f
+                    dotPath.addOval(Rect(px - rDot, py - rDot, px + rDot, py + rDot))
                 }
             }
         }
+        drawPath(dotPath, dotColor, alpha = 0.7f, blendMode = androidx.compose.ui.graphics.BlendMode.Plus)
     }
 
     private companion object { const val RINGS = 24 }
@@ -205,6 +227,8 @@ class CircularRingRenderer : VisualizerRenderer {
 
     private var rotation = 0f
     private var peaks = FloatArray(64)
+    // 峰值帽按 hue 分 4 桶合并为 Path，替代 ~64 次 drawCircle
+    private val peakPaths = Array(4) { Path() }
 
     override fun onEnter(ctx: RenderContext) {
         rotation = 0f
@@ -227,6 +251,7 @@ class CircularRingRenderer : VisualizerRenderer {
         val scale = 1f + frame.pulse * 0.08f
 
         val n = ctx.quality.barCount
+        for (p in peakPaths) p.reset()
 
         // 用户指定色系：hue 随角度流动：黄(60°)→绿(90°)→蓝(195°)，加白色高光
         val baseHue0 = 60f
@@ -273,11 +298,21 @@ class CircularRingRenderer : VisualizerRenderer {
                 drawLine(barColor, inner, outer, wdt, StrokeCap.Round, alpha = 0.95f)
             }
 
-            // 峰值帽（极坐标版）——与所在条同色更亮
+            // 峰值帽（极坐标版）——与所在条同色更亮，按 hue 分桶合并为 Path
             peaks[i] = if (v >= peaks[i]) v else maxOf(v, peaks[i] * 0.985f - 0.004f)
             val pr = rStart + VisualizerMath.barHeight(peaks[i], maxLen, 3f) * scale
-            drawCircle(highlight, 2.5f,
-                VisualizerMath.polar(cx, cy, pr, a), alpha = 0.75f)
+            val bucket = ((t * 4).toInt()).coerceIn(0, 3)
+            peakPaths[bucket].addOval(Rect(
+                cx + cosA * pr - 2.5f, cy + sinA * pr - 2.5f,
+                cx + cosA * pr + 2.5f, cy + sinA * pr + 2.5f
+            ))
+        }
+
+        // ①.5 峰值帽 → 4 条 Path 一次绘制（颜色按桶内中间 hue）
+        for (s in 0 until 4) {
+            val hue = baseHue0 + (s + 0.5f) * (baseHue1 - baseHue0) / 4f
+            drawPath(peakPaths[s],
+                VisualizerMath.hsl(hue, sat, minOf(lit + 0.25f, 1f)), alpha = 0.75f)
         }
 
         // ② 外圈细线环 —— 渐变环（用四个扇区补角度渐变，比单色更炫）
@@ -344,14 +379,18 @@ class RadialBurstRenderer : VisualizerRenderer {
 
     override val theme = VisualizerTheme.RADIAL_BURST
 
+    // 端点圆点合并为单 Path（同色，addOval 保留半径随频谱），替代 ~128 次 drawCircle
+    private val tipPath = Path()
+
     override fun DrawScope.draw(frame: AudioFrame, ctx: RenderContext) {
         val cx = size.width / 2
         val cy = size.height / 2
-val r0 = ctx.minDim * 0.13f
+        val r0 = ctx.minDim * 0.13f
         val maxLen = ctx.minDim * 0.40f * (1f + frame.pulse * 0.05f)
         val accent = ctx.palette.accent
         val n = ctx.quality.barCount
 
+        tipPath.reset()
         for (i in 0 until n) {
             val a = VisualizerMath.rad(i * 360f / n)
             val v = frame.spectrum.getOrElse(i) { 0f }
@@ -359,9 +398,11 @@ val r0 = ctx.minDim * 0.13f
             val p0 = VisualizerMath.polar(cx, cy, r0, a)
             val p1 = VisualizerMath.polar(cx, cy, r0 + len, a)
             drawLine(accent, p0, p1, 2.5f + v * 3.5f, StrokeCap.Round, alpha = 0.95f)
-            drawCircle(VisualizerMath.towardWhite(accent, 0.6f),
-                4f + frame.bass * 6f, p1, alpha = 0.6f + v * 0.4f)
+            // 端点圆 → 合并
+            val r = 4f + frame.bass * 6f
+            tipPath.addOval(Rect(p1.x - r, p1.y - r, p1.x + r, p1.y + r))
         }
+        drawPath(tipPath, VisualizerMath.towardWhite(accent, 0.6f), alpha = 0.8f, blendMode = androidx.compose.ui.graphics.BlendMode.Plus)
         drawCircle(accent, ctx.minDim * 0.055f * (1f + frame.pulse * 0.25f),
             Offset(cx, cy), alpha = 0.6f + frame.energy * 0.4f)
     }

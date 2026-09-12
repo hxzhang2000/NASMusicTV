@@ -4,7 +4,9 @@ import android.graphics.Bitmap
 import android.graphics.Canvas as AndroidCanvas
 import android.graphics.Paint as AndroidPaint
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import com.nasmusic.tv.data.model.VisualizerTheme
 import com.nasmusic.tv.visualizer.AudioFrame
@@ -169,6 +171,9 @@ class BeatFireworkRenderer : VisualizerRenderer {
     private var lastBeatMs = 0L
     private var idlePhase = 0f
 
+    // 常态底部频谱底纹：同 accent 同 alpha，合并为单 Path（替代 ~128 次独立 drawRect）
+    private val bgPath = Path()
+
     override fun onEnter(ctx: RenderContext) {
         val cap = ctx.quality.maxParticles
         pool = if (cap > 0) ParticlePool(cap) else null
@@ -182,18 +187,18 @@ class BeatFireworkRenderer : VisualizerRenderer {
         val h = size.height
         val accent = ctx.palette.accent
 
-        // 常态：极暗频谱底纹（留白）
+        // 常态：极暗频谱底纹（留白）—— 合并为单 Path 一次绘制
         val n = ctx.quality.barCount
         val slot = w / n
+        bgPath.reset()
         for (i in 0 until n) {
             val v = frame.spectrum.getOrElse(i) { 0f }
-            drawRect(
-                color = accent,
-                topLeft = Offset(i * slot, h - v * h * 0.14f),
-                size = androidx.compose.ui.geometry.Size(slot * 0.6f, v * h * 0.14f),
-                alpha = 0.12f
-            )
+            val bh = v * h * 0.14f
+            val x0 = i * slot
+            val x1 = x0 + slot * 0.6f
+            bgPath.addRect(Rect(x0, h - bh, x1, h))
         }
+        drawPath(bgPath, accent, alpha = 0.12f)
 
         // 爆发：方向由低频最强柱决定
         if (frame.beat) {

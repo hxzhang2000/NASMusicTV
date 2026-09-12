@@ -303,23 +303,25 @@ fun ControlButtonsRow(
         horizontalArrangement = Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically
     ) {
+        // 按钮间距：紧凑模式 6dp / 常规 14dp —— 收紧以使 MTV 按钮完整落进 380dp 左栏
+        val btnGap = if (compact) 6.dp else 14.dp
         IconButton(onClick = onPrevious, compact = compact, icon = {
             Icon(imageVector = Icons.Filled.SkipPrevious, contentDescription = "Previous",
                 modifier = Modifier.size(if (compact) 22.dp else 32.dp))
         })
-        Spacer(modifier = Modifier.width(if (compact) 12.dp else 20.dp))
+        Spacer(modifier = Modifier.width(btnGap))
         IconButton(onClick = onPlayPause, primary = true, compact = compact,
             focusRequester = playPauseFocusRequester, icon = {
             Icon(imageVector = if (isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
                 contentDescription = "Play/Pause",
                 modifier = Modifier.size(if (compact) 28.dp else 40.dp))
         })
-        Spacer(modifier = Modifier.width(if (compact) 12.dp else 20.dp))
+        Spacer(modifier = Modifier.width(btnGap))
         IconButton(onClick = onNext, compact = compact, icon = {
             Icon(imageVector = Icons.Filled.SkipNext, contentDescription = "Next",
                 modifier = Modifier.size(if (compact) 22.dp else 32.dp))
         })
-        Spacer(modifier = Modifier.width(if (compact) 12.dp else 20.dp))
+        Spacer(modifier = Modifier.width(btnGap))
         IconButton(onClick = onTogglePlayMode, compact = compact, icon = {
             val icon = when (playMode) {
                 PlayMode.SHUFFLE -> Icons.Filled.Shuffle
@@ -331,30 +333,34 @@ fun ControlButtonsRow(
         })
         // 频谱（全屏可视化舞台）入口按钮 —— 位于播放模式与 K 歌之间
         if (showVisualizerButton) {
-            Spacer(modifier = Modifier.width(if (compact) 12.dp else 20.dp))
+            Spacer(modifier = Modifier.width(btnGap))
             VocalToggleButton(
-                label = stringResource(R.string.player_visualizer),
+                label = "幻",
                 onClick = onEnterVisualizer,
-                compact = compact
+                compact = compact,
+                width = if (compact) 40.dp else null
             )
         }
         // K 歌入口按钮
         if (showVocalButton) {
-            Spacer(modifier = Modifier.width(if (compact) 12.dp else 20.dp))
+            Spacer(modifier = Modifier.width(btnGap))
             VocalToggleButton(
                 label = stringResource(R.string.player_karaoke),
                 onClick = onEnterKaraoke,
-                compact = compact
+                compact = compact,
+                width = if (compact) 52.dp else null
             )
         }
         // MTV 入口按钮（有 MV 时可点击，无 MV 时半透明禁用）
         if (showMvButton) {
-            Spacer(modifier = Modifier.width(if (compact) 12.dp else 20.dp))
+            Spacer(modifier = Modifier.width(btnGap))
             VocalToggleButton(
                 label = "MTV",
                 onClick = { if (mvAvailable) onEnterMv() },
                 compact = compact,
-                dimmed = !mvAvailable
+                dimmed = !mvAvailable,
+                // MTV 三个字母需更宽才能单行显示；同时收紧保证整行落进 380dp
+                width = if (compact) 64.dp else 100.dp
             )
         }
     }
@@ -372,9 +378,9 @@ private fun IconButton(
 ) {
     val buttonSize = when {
         primary && !compact -> 88.dp
-        primary && compact -> 60.dp
+        primary && compact -> 52.dp
         !primary && !compact -> 72.dp
-        else -> 48.dp
+        else -> 40.dp
     }
     // 主按钮（播放/暂停）添加青色发光边框效果（border 替代 shadow 以减少渲染开销）
     val glowModifier: Modifier = if (primary) {

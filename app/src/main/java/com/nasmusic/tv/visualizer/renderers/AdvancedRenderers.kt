@@ -33,6 +33,9 @@ class KaleidoRenderer : VisualizerRenderer {
     override val theme = VisualizerTheme.MIRROR_KALEIDO
 
     private var rotation = 0f
+    // 8 扇区线段与端点光点合并为 2 条 Path，替代 ~320 次独立 drawLine/drawCircle
+    private val linePath = Path()
+    private val dotPath = Path()
 
     override fun onEnter(ctx: RenderContext) { rotation = 0f }
 
@@ -41,30 +44,49 @@ class KaleidoRenderer : VisualizerRenderer {
 
         val cx = size.width / 2
         val cy = size.height / 2
-val accent = ctx.palette.accent
-val n = ctx.quality.barCount
+        val accent = ctx.palette.accent
+        val n = ctx.quality.barCount
         val r0 = ctx.minDim * 0.13f
         val maxLen = ctx.minDim * 1.2f * (1f + frame.bass * 0.25f)   // 弧长加长
         val sectorBars = 20
 
+        linePath.reset()
+        dotPath.reset()
+        // Batching 后端宽统一，但长度、端点半径仍随频谱逐条变化；整体粗细随低频波动
+        val lineWidth = 3.5f + frame.bass * 5f
+        val rot = VisualizerMath.rad(rotation)
+        val rotCos = cos(rot)
+        val rotSin = sin(rot)
+
         for (k in 0 until 8) {
-            withTransform({
-                translate(cx, cy)
-                rotate(k * 45f + rotation)
-                if (k % 2 == 1) scale(-1f, 1f)
-            }) {
-                for (i in 0 until sectorBars) {
-                    // 扇区内 0..45°
-                    val a = VisualizerMath.rad(i * 45f / sectorBars)
-                    val v = frame.spectrum.getOrElse((i * n / sectorBars).coerceAtMost(n - 1)) { 0f }
-                    val len = VisualizerMath.barHeight(v, maxLen, 4f)
-                    val p0 = Offset(cos(a) * r0, sin(a) * r0)
-                    val p1 = Offset(cos(a) * (r0 + len), sin(a) * (r0 + len))
-                    drawLine(accent, p0, p1, 3.5f + v * 5f, StrokeCap.Round, alpha = 1f)
-                    drawCircle(VisualizerMath.towardWhite(accent, 0.5f), 4.5f + v * 6f, p1, alpha = 0.8f)
-                }
+            val flip = if (k % 2 == 1) -1f else 1f
+            val base = VisualizerMath.rad(k * 45f + rotation)
+            val baseCos = cos(base)
+            val baseSin = sin(base)
+            for (i in 0 until sectorBars) {
+                // 扇区内 0..45°
+                val a = VisualizerMath.rad(i * 45f / sectorBars)
+                val v = frame.spectrum.getOrElse((i * n / sectorBars).coerceAtMost(n - 1)) { 0f }
+                val len = VisualizerMath.barHeight(v, maxLen, 4f)
+                // 扇区本地坐标（含镜像）→ 绕中心旋转到世界坐标
+                var lx0 = cos(a) * r0
+                var ly0 = sin(a) * r0
+                var lx1 = cos(a) * (r0 + len)
+                var ly1 = sin(a) * (r0 + len)
+                if (flip < 0) { lx0 = -lx0; lx1 = -lx1 }
+                val px0 = cx + lx0 * rotCos - ly0 * rotSin
+                val py0 = cy + lx0 * rotSin + ly0 * rotCos
+                val px1 = cx + lx1 * baseCos - ly1 * baseSin
+                val py1 = cy + lx1 * baseSin + ly1 * baseCos
+                linePath.moveTo(px0, py0)
+                linePath.lineTo(px1, py1)
+                val rdot = 4.5f + v * 6f
+                dotPath.addOval(Rect(px1 - rdot, py1 - rdot, px1 + rdot, py1 + rdot))
             }
         }
+        // 合并后的单次绘制：160 条线段 → 1 条 Path，160 个端点光点 → 1 条 Path
+        drawPath(linePath, accent, alpha = 1f, style = Stroke(width = lineWidth, cap = StrokeCap.Round))
+        drawPath(dotPath, VisualizerMath.towardWhite(accent, 0.5f), alpha = 0.8f)
         drawCircle(accent, ctx.minDim * 0.05f * (1f + frame.pulse * 0.3f),
             Offset(cx, cy), alpha = 0.55f + frame.energy * 0.4f)
     }
@@ -377,11 +399,13 @@ val accent = ctx.palette.accent
 /**
  * E16 `MATRIX_RAIN` — 数字雨
  *
- * 0-9 数字列下落，绿色系（亮白绿头部 → 亮绿 → 暗绿），
+ * 0-9 数字列下落，绿色系（亮白绿头部 → 亮绿 → 中绿 → 暗绿），
  * 速度/亮度由该列绑定频段能量驱动。
  *
- * **性能说明**：逐字符 nativeCanvas.drawText，64×20=1280 次最大调用，
- * 但大部分单元格在屏幕外被跳过，实测 600 次左右/帧，无性能问题。
+ * **性能优化**：数字字形（2 数字 × 4 档绿）在尺寸首次确定时预渲染成 Bitmap，
+ * 每帧改用 nativeCanvas.drawBitmap 快速 blit —— 纹理 blit 远快于逐字符 drawText
+ * 的文本排布度量，显著降低 TV 弱 GPU 上的每帧开销。每列高度由 perCol 控制，
+ * 列数随画质档位调整，整体保持在小幅 draw 预算内。
  */
 class MatrixRainRenderer : VisualizerRenderer {
 
@@ -389,20 +413,29 @@ class MatrixRainRenderer : VisualizerRenderer {
 
     private var colY = FloatArray(0)
     private var colSpeed = FloatArray(0)
-    private val paint = AndroidPaint().apply {
-        isAntiAlias = true
-        typeface = android.graphics.Typeface.MONOSPACE
-        textAlign = android.graphics.Paint.Align.CENTER
-    }
+    private var cols = 32
+    private val perCol = 14
+
+    // 预渲染字形缓存：[0..7] = shade*2 + digit（4 档绿 × 数字 0/1）
+    private var glyphs: Array<android.graphics.Bitmap>? = null
+    private var glyphKey = ""
+    private var gW = 0
+    private var gH = 0
+    private val blitPaint = AndroidPaint()
 
     override fun onEnter(ctx: RenderContext) {
-        val cols = if (ctx.quality == com.nasmusic.tv.data.model.VisualQuality.HIGH) 64 else 32
+        cols = when (ctx.quality) {
+            com.nasmusic.tv.data.model.VisualQuality.HIGH -> 48
+            com.nasmusic.tv.data.model.VisualQuality.LOW -> 24
+            else -> 32
+        }
         colY = FloatArray(cols)
         colSpeed = FloatArray(cols)
         for (i in 0 until cols) {
             colY[i] = VisualizerMath.nextRandom() * 1000f
             colSpeed[i] = 5f + VisualizerMath.nextRandom() * 7f
         }
+        glyphs = null
     }
 
     override fun DrawScope.draw(frame: AudioFrame, ctx: RenderContext) {
@@ -411,16 +444,16 @@ class MatrixRainRenderer : VisualizerRenderer {
         val h = size.height
         val n = colY.size
         val slot = w / n
-        val perCol = 20
         val cellH = h / perCol
         val textSize = minOf(slot * 0.8f, cellH * 0.9f).coerceIn(10f, 48f)
-        paint.textSize = textSize
 
-        // 绿色系：亮白绿头部 → 亮绿 → 中绿 → 暗绿
-        val headColor = android.graphics.Color.rgb(200, 255, 200)
-        val brightGreen = android.graphics.Color.rgb(0, 255, 100)
-        val midGreen = android.graphics.Color.rgb(0, 200, 50)
-        val dimGreen = android.graphics.Color.rgb(0, 130, 30)
+        // 尺寸/列数变化 → 重建字形缓存（首次进入或画质变化）
+        val key = "${(slot * 10).toInt()}:${(cellH * 10).toInt()}:$n"
+        if (glyphs == null || glyphKey != key) {
+            buildGlyphs(textSize)
+            glyphKey = key
+        }
+        val g = glyphs ?: return
 
         val nc = drawContext.canvas.nativeCanvas
         val tick = (frame.timeMs / 300L).toInt()
@@ -435,29 +468,55 @@ class MatrixRainRenderer : VisualizerRenderer {
                 val y = headY + k * cellH
                 if (y < -cellH || y > h) continue
                 val fade = 1f - k.toFloat() / perCol
-                val digit = ((i * 31 + k * 17 + tick) % 10).toString()
-                when {
-                    k == perCol - 1 -> {
-                        paint.color = headColor
-                        paint.alpha = 255
-                    }
-                    fade > 0.6f -> {
-                        paint.color = brightGreen
-                        paint.alpha = (fade * 255).toInt()
-                    }
-                    fade > 0.3f -> {
-                        paint.color = midGreen
-                        paint.alpha = (fade * 255).toInt()
-                    }
-                    else -> {
-                        paint.color = dimGreen
-                        paint.alpha = (fade * 255).toInt()
-                    }
+                val digitIdx = (i * 31 + k * 17 + tick) % 2
+                val bmp = when {
+                    k == perCol - 1 -> g[digitIdx]        // 亮白绿头部
+                    fade > 0.6f -> g[2 + digitIdx]        // 亮绿
+                    fade > 0.3f -> g[4 + digitIdx]        // 中绿
+                    else -> g[6 + digitIdx]               // 暗绿
                 }
-                nc.drawText(digit, i * slot + slot * 0.5f, y + cellH * 0.8f, paint)
+                blitPaint.alpha = if (k == perCol - 1) 255 else (fade * 255).toInt().coerceIn(0, 255)
+                nc.drawBitmap(bmp, i * slot + (slot - gW) / 2f, y + (cellH - gH) / 2f, blitPaint)
             }
         }
     }
+
+    /** 一次性预渲染 2 数字 × 4 档绿 = 8 张字形 Bitmap */
+    private fun buildGlyphs(textSize: Float) {
+        val digits = charArrayOf('0', '1')
+        val colors = intArrayOf(
+            android.graphics.Color.rgb(200, 255, 200),
+            android.graphics.Color.rgb(0, 255, 100),
+            android.graphics.Color.rgb(0, 200, 50),
+            android.graphics.Color.rgb(0, 130, 30)
+        )
+        val measure = AndroidPaint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+            typeface = android.graphics.Typeface.MONOSPACE
+            this.textSize = textSize
+        }
+        val bw = kotlin.math.ceil(measure.measureText("0")).toInt() + 4
+        val bh = kotlin.math.ceil(textSize * 1.15f).toInt() + 4
+        gW = bw
+        gH = bh
+        val arr = arrayOfNulls<android.graphics.Bitmap>(8)
+        for (shade in 0 until 4) {
+            for (d in 0 until 2) {
+                val bmp = android.graphics.Bitmap.createBitmap(bw, bh, android.graphics.Bitmap.Config.ARGB_8888)
+                val c = android.graphics.Canvas(bmp)
+                val p = AndroidPaint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+                    typeface = android.graphics.Typeface.MONOSPACE
+                    textAlign = android.graphics.Paint.Align.CENTER
+                    this.textSize = textSize
+                    color = colors[shade]
+                }
+                c.drawText(digits[d].toString(), bw / 2f, (bh - (p.descent() - p.ascent())) / 2f - p.ascent(), p)
+                arr[shade * 2 + d] = bmp
+            }
+        }
+        glyphs = arr.filterNotNull().toTypedArray()
+    }
+
+    override fun onExit() { glyphs = null }
 }
 
 // ═══════════════════════════════════════════════════════════════════

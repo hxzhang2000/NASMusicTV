@@ -45,31 +45,28 @@ class VisualizerThemeTest {
     }
 
     @Test
-    fun `theme library is 18 effects plus one auto mode`() {
-        assertEquals(19, VisualizerTheme.entries.size)
-        assertEquals(18, VisualizerTheme.entries.count { !it.isAutoDirector })
-        assertEquals(1, VisualizerTheme.entries.count { it.isAutoDirector })
+    fun `theme library is all concrete effects, no auto mode`() {
+        assertEquals(21, VisualizerTheme.entries.size)
     }
 
     @Test
-    fun `selectable list keeps all 19 with auto director last`() {
+    fun `selectable list equals all themes, no auto mode`() {
         val selectable = VisualizerTheme.selectable
-        assertEquals(19, selectable.size)
-        assertEquals(VisualizerTheme.AUTO_DIRECTOR, selectable.last())
-        assertEquals(19, selectable.distinct().size)
+        assertEquals(21, selectable.size)
+        assertEquals(21, selectable.distinct().size)
     }
 
     @Test
     fun `ordinal labels are unique`() {
         val labels = VisualizerTheme.entries.map { it.ordinalLabel }
-        assertEquals(19, labels.distinct().size)
+        assertEquals(21, labels.distinct().size)
     }
 
     @Test
     fun `display names are non blank and unique`() {
         val names = VisualizerTheme.entries.map { it.displayName }
         assertTrue(names.none { it.isBlank() })
-        assertEquals(19, names.distinct().size)
+        assertEquals(21, names.distinct().size)
     }
 
     @Test
@@ -77,8 +74,6 @@ class VisualizerThemeTest {
         // BASIC 三档全支持
         VisualQuality.entries.forEach { q ->
             assertTrue("$q should support BASIC", q.supports(VisualizerTheme.IMMERSIVE_BLOOM))
-            // AUTO 是模式，三档都支持（低档只在 BASIC 内调度）
-            assertTrue("$q should support AUTO_DIRECTOR", q.supports(VisualizerTheme.AUTO_DIRECTOR))
         }
 
         // ADV 需要粒子预算：LOW 的 maxParticles = 0 → 禁用
