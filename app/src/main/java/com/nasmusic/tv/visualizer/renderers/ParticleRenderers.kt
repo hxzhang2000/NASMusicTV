@@ -38,23 +38,23 @@ class ParticleStormRenderer : VisualizerRenderer {
         val p = pool ?: return
         val w = size.width
         val h = size.height
-        val accent = ctx.palette.accent
-        val hueBase = 150f
+val accent = ctx.palette.accent
+        val hueBase = 195f
 
-        // 发射：低频超阈值 + 节拍爆发
+// 发射：低频超阈值 + 节拍爆发
         val emitCount = (frame.energy * 6f + frame.bass * 8f).toInt()
         repeat(emitCount.coerceAtMost(20)) {
             p.spawn(
                 x = VisualizerMath.nextRandom() * w,
                 y = h * 0.92f,
-                vx = VisualizerMath.nextRandomSigned() * 2.2f,
-                vy = -(3f + frame.bass * 12f) * (0.5f + VisualizerMath.nextRandom()),
+                vx = VisualizerMath.nextRandomSigned() * 3.2f,
+                vy = -(4.5f + frame.bass * 16f) * (0.5f + VisualizerMath.nextRandom()),
                 life = 1f,
                 hue = hueBase + VisualizerMath.nextRandomSigned() * 40f
             )
         }
         if (frame.beat) {
-            p.spawnBurst(w / 2, h * 0.85f, 60, 10f + frame.bass * 14f, hueBase, 60f)
+            p.spawnBurst(w / 2, h * 0.85f, 60, 14f + frame.bass * 18f, hueBase, 60f)
         }
 
         p.update(
@@ -69,11 +69,11 @@ class ParticleStormRenderer : VisualizerRenderer {
         for (i in 0 until p.count) {
             val o = i * ParticlePool.STRIDE
             val life = d[o + ParticlePool.LIFE]
-            drawCircle(
+drawCircle(
                 color = accent,
-                radius = 1.5f + life * 3.5f,
+                radius = 3f + life * 5.5f,
                 center = Offset(d[o + ParticlePool.X], d[o + ParticlePool.Y]),
-                alpha = life * 0.75f,
+                alpha = life * 0.85f,
                 blendMode = BlendMode.Plus
             )
         }
@@ -112,15 +112,15 @@ class ParticleGalaxyRenderer : VisualizerRenderer {
         val accent = ctx.palette.accent
         phase += 0.02f + frame.bpm / 6000f
 
-        // 发射：数量由总能量决定
+// 发射：数量由总能量决定
         val count = (frame.energy * 20f).toInt().coerceAtMost(12)
         repeat(count) {
             val a = VisualizerMath.nextRandom() * 6.2831853f + phase
-            val sp = 1.2f + VisualizerMath.nextRandom() * 3f
-            p.spawnRadial(cx, cy, a, sp, 1f, 200f + VisualizerMath.nextRandomSigned() * 80f, swirl = sp * 0.5f)
+            val sp = 1.8f + VisualizerMath.nextRandom() * 4f
+            p.spawnRadial(cx, cy, a, sp, 1f, 195f + VisualizerMath.nextRandomSigned() * 80f, swirl = sp * 0.5f)
         }
         if (frame.beat) {
-            p.spawnBurst(cx, cy, (200 * 0.6f).toInt(), 9f + frame.bass * 12f, 220f, 120f)
+            p.spawnBurst(cx, cy, (200 * 0.7f).toInt(), 13f + frame.bass * 16f, 195f, 60f)
         }
 
         p.update(
@@ -136,16 +136,16 @@ class ParticleGalaxyRenderer : VisualizerRenderer {
             val life = d[o + ParticlePool.LIFE]
             val hue = d[o + ParticlePool.HUE]
             drawCircle(
-                color = VisualizerMath.hsl(hue, 0.9f, 0.6f),
-                radius = 1f + life * 3f + frame.bass * 2f,
+                color = VisualizerMath.hsl(hue, 1.0f, 0.68f),
+                radius = 2.5f + life * 4.5f + frame.bass * 3f,
                 center = Offset(d[o + ParticlePool.X], d[o + ParticlePool.Y]),
-                alpha = life * 0.8f,
+                alpha = life * 0.9f,
                 blendMode = BlendMode.Plus
             )
         }
         // 星系核心
-        drawCircle(accent, ctx.minDim * 0.035f * (1f + frame.energy * 0.5f),
-            Offset(cx, cy), alpha = 0.35f + frame.pulse * 0.4f, blendMode = BlendMode.Plus)
+        drawCircle(accent, ctx.minDim * 0.05f * (1f + frame.energy * 0.5f),
+            Offset(cx, cy), alpha = 0.45f + frame.pulse * 0.4f, blendMode = BlendMode.Plus)
     }
 
     override fun onExit() { pool?.clear(); pool = null }
@@ -206,15 +206,17 @@ class BeatFireworkRenderer : VisualizerRenderer {
             val a = maxIdx * 6.2831853f / n
             val ex = w / 2 + kotlin.math.cos(a) * w * 0.25f
             val ey = h / 2 + kotlin.math.sin(a) * h * 0.22f
-            val cnt = (120 + frame.bass * 80).toInt().coerceAtMost(180)
-            p.spawnBurst(ex, ey, cnt, 5f + frame.bass * 15f, (maxIdx * 360f / n), 90f)
+            val cnt = (220 + frame.bass * 180).toInt().coerceAtMost(420)
+            // 色相映射到用户指定色系：黄(60°)→蓝(195°)
+            val hueBase = 60f + (maxIdx.toFloat() / minOf(40, n)) * 135f
+            p.spawnBurst(ex, ey, cnt, 9f + frame.bass * 22f, hueBase, 60f)
             lastBeatMs = frame.timeMs
         } else if (frame.timeMs - lastBeatMs > 6000L && lastBeatMs > 0L) {
             // 无鼓点曲目兜底：避免长时间完全空屏
             idlePhase += 1f
             if (idlePhase >= 60f) {
                 idlePhase = 0f
-                p.spawnBurst(w * 0.5f, h * 0.5f, 40, 6f, 200f, 120f)
+                p.spawnBurst(w * 0.5f, h * 0.5f, 80, 10f, 120f, 60f)
             }
         }
 
@@ -231,10 +233,10 @@ class BeatFireworkRenderer : VisualizerRenderer {
             val life = d[o + ParticlePool.LIFE]
             val hue = d[o + ParticlePool.HUE]
             drawCircle(
-                color = VisualizerMath.hsl(hue, 0.95f, 0.62f),
-                radius = 1.5f + life * 3f,
+                color = VisualizerMath.hsl(hue, 1.0f, 0.68f),
+                radius = 3.5f + life * 6.0f,
                 center = Offset(d[o + ParticlePool.X], d[o + ParticlePool.Y]),
-                alpha = life * 0.85f,
+                alpha = life * 0.95f,
                 blendMode = BlendMode.Plus
             )
         }
@@ -327,13 +329,13 @@ class ParticleTextRenderer : VisualizerRenderer {
         if (caption != lastCaption) {
             lastCaption = caption
             sample(caption, cap)
-            // 补齐粒子
+// 补齐粒子
             p.clear()
             for (i in 0 until cap) {
                 p.spawn(
                     x = VisualizerMath.nextRandom() * size.width,
                     y = VisualizerMath.nextRandom() * size.height,
-                    vx = 0f, vy = 0f, life = 1f, hue = 200f
+                    vx = 0f, vy = 0f, life = 1f, hue = 190f
                 )
             }
         }
@@ -364,13 +366,13 @@ class ParticleTextRenderer : VisualizerRenderer {
             p.update(1f, 0f, 0.01f)
         }
 
-        val accent = ctx.palette.accent
+val accent = ctx.palette.accent
         val d = p.data
         for (i in 0 until p.count) {
             val o = i * ParticlePool.STRIDE
             drawCircle(
                 color = accent,
-                radius = 1.2f + frame.pulse * 1.6f,
+                radius = 2.4f + frame.pulse * 2.6f,
                 center = Offset(d[o + ParticlePool.X], d[o + ParticlePool.Y]),
                 alpha = 0.35f + frame.energy * 0.5f,
                 blendMode = BlendMode.Plus

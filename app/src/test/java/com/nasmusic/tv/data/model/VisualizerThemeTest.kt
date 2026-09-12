@@ -9,8 +9,8 @@ import org.junit.Test
  * VisualizerTheme / VisualQuality 枚举契约测试。
  *
  * 重点覆盖 BUG ⑮：老用户 DataStore 里存的是 `COLOR_FLOW` / `NEON_PULSE` /
- * `CLASSICAL_WAVE` 三个旧枚举名，新 21 值枚举必须平滑迁移而不是回落默认值，
- * 否则升级后主题静默变样。
+ * `CLASSICAL_WAVE` / `SONIC_TERRAIN` / `CIRCULAR_NEBULA` 五个旧枚举名，
+ * 新 19 值枚举必须平滑迁移而不是回落默认值，否则升级后主题静默变样。
  */
 class VisualizerThemeTest {
 
@@ -18,7 +18,9 @@ class VisualizerThemeTest {
     fun `legacy enum names migrate to the new themes`() {
         assertEquals(VisualizerTheme.CIRCULAR_RING, VisualizerTheme.fromKey("COLOR_FLOW"))
         assertEquals(VisualizerTheme.IMMERSIVE_BLOOM, VisualizerTheme.fromKey("NEON_PULSE"))
-        assertEquals(VisualizerTheme.SONIC_TERRAIN, VisualizerTheme.fromKey("CLASSICAL_WAVE"))
+        assertEquals(VisualizerTheme.CIRCULAR_RING, VisualizerTheme.fromKey("CLASSICAL_WAVE"))
+        assertEquals(VisualizerTheme.CIRCULAR_RING, VisualizerTheme.fromKey("SONIC_TERRAIN"))
+        assertEquals(VisualizerTheme.CIRCULAR_RING, VisualizerTheme.fromKey("CIRCULAR_NEBULA"))
     }
 
     @Test
@@ -43,31 +45,31 @@ class VisualizerThemeTest {
     }
 
     @Test
-    fun `theme library is 20 effects plus one auto mode`() {
-        assertEquals(21, VisualizerTheme.entries.size)
-        assertEquals(20, VisualizerTheme.entries.count { !it.isAutoDirector })
+    fun `theme library is 18 effects plus one auto mode`() {
+        assertEquals(19, VisualizerTheme.entries.size)
+        assertEquals(18, VisualizerTheme.entries.count { !it.isAutoDirector })
         assertEquals(1, VisualizerTheme.entries.count { it.isAutoDirector })
     }
 
     @Test
-    fun `selectable list keeps all 21 with auto director last`() {
+    fun `selectable list keeps all 19 with auto director last`() {
         val selectable = VisualizerTheme.selectable
-        assertEquals(21, selectable.size)
+        assertEquals(19, selectable.size)
         assertEquals(VisualizerTheme.AUTO_DIRECTOR, selectable.last())
-        assertEquals(21, selectable.distinct().size)
+        assertEquals(19, selectable.distinct().size)
     }
 
     @Test
     fun `ordinal labels are unique`() {
         val labels = VisualizerTheme.entries.map { it.ordinalLabel }
-        assertEquals(21, labels.distinct().size)
+        assertEquals(19, labels.distinct().size)
     }
 
     @Test
     fun `display names are non blank and unique`() {
         val names = VisualizerTheme.entries.map { it.displayName }
         assertTrue(names.none { it.isBlank() })
-        assertEquals(21, names.distinct().size)
+        assertEquals(19, names.distinct().size)
     }
 
     @Test

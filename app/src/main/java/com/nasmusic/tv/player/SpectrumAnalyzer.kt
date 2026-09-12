@@ -1,6 +1,8 @@
 package com.nasmusic.tv.player
 
 import android.media.audiofx.Visualizer
+import android.os.Handler
+import android.os.Looper
 import android.os.SystemClock
 import com.nasmusic.tv.util.AppLog
 import com.nasmusic.tv.visualizer.SpectrumContract
@@ -51,6 +53,11 @@ class SpectrumAnalyzer {
      * 低频柱会被永久钉死在满格，轻鼓点与重鼓点长得一模一样（历史 BUG ⑨）。
      */
     private var lowRunningPeak = SpectrumContract.AGC_FLOOR
+    /** 中频段（40-55 人声/主旋律核心区）运行峰值 —— 显示通道独立 AGC 分母。
+     *  修复"低频主导时中高频柱被全局低频峰值压到不可见"（沉浸辉光只剩约 7 根动）。 */
+    private var midRunningPeak = SpectrumContract.AGC_FLOOR
+    /** 高频段（56-63 点缀区）运行峰值 */
+    private var trebleRunningPeak = SpectrumContract.AGC_FLOOR
 
     // ── P6 降级通道与仲裁 ───────────────────────────────
     /** PCM 降级通道；由 PlayerEqualizer 注入。null = 该设备不支持降级 */
@@ -76,12 +83,52 @@ class SpectrumAnalyzer {
     /** PCM 激活后是否出现过有效信号 */
     private var pcmSignalSeen = false
 
+    // ── 无回调 watchdog（P6 修复）─────────────────────────
+    // 部分设备 Visualizer 绑定成功却“从不回调”（假支持）。此时 onVisualizerSilence
+    // 永远不会触发（静音判定依赖回调），frame 恒为 0，所有效果静止。
+    // watchdog 只负责“从未收到过任何回调”的情形：attach 后 N 秒窗口内、
+    // 有播放且未收到任何帧 → 直接降级 PCM。
+    private val watchdogHandler = Handler(Looper.getMainLooper())
+    private val noCallbackWatchdog = object : Runnable {
+        override fun run() {
+            if (pcmFallback == null || usingPcm || visualizer == null) return // 无兜底/已降级
+            if (isPlaying &&
+                SystemClock.uptimeMillis() > expectFirstCaptureUntilMs &&
+                !captureReceived
+            ) {
+                android.util.Log.w(TAG_LOG, "no Visualizer callbacks within ${NO_CALLBACK_MS / 1000}s -> PCM fallback")
+                degradeToPcm("watchdog: no callbacks in ${NO_CALLBACK_MS / 1000}s")
+                return
+            }
+            watchdogHandler.postDelayed(this, WATCHDOG_CHECK_MS)
+        }
+    }
+    /** “attach 后必须收到第一帧”的截止时刻 */
+    private var expectFirstCaptureUntilMs = 0L
+    /** attach 后是否收到过任意回调 */
+    private var captureReceived = false
+
     // ── 预分配缓冲（零分配）─────────────────────────────────────
     private var magnitudeBuf = FloatArray(0)
     private var barBuf = FloatArray(SpectrumContract.BAR_COUNT)
     private var displayBuf = FloatArray(SpectrumContract.BAR_COUNT)
     private var linearBuf = FloatArray(SpectrumContract.BAR_COUNT)
     private var waveBuf = FloatArray(SpectrumContract.WAVE_POINTS)
+
+    // ── 假信号防御与诊断（真机实测：部分国产 TV 的 Visualizer 绑定成功，
+    //    却持续返回"仅 1~2 个边频 bin 有值"的垃圾 FFT，且能通过静音门限，
+    //    导致仲裁不降级、PCM 通道空闲、全部效果静止）────────────────
+    /** 连续可疑（频谱单点峰值）帧数 —— 达到阈值判定垃圾信号并降级 PCM */
+    private var suspiciousFrames = 0
+    // 诊断计数器（release 也可见，Log.i 直调不被 R8 折叠）
+    private var diagLastMs = 0L
+    private var diagFrames = 0
+    private var diagSilentFrames = 0
+    private var diagNonZeroBins = 0
+    private var diagMaxBin = -1
+    private var diagMaxMag = 0f
+    private var diagWavePeak = 0f
+    private var diagRate = 0
 
     companion object {
         private const val TAG_LOG = "SpectrumAnalyzer"
@@ -107,6 +154,24 @@ class SpectrumAnalyzer {
         private const val PCM_PROBE_MS = 3_000L
         /** 回滚后的抑制时长：两条通道都拿不到信号时，别每几秒折腾一次 */
         private const val DEGRADE_BLOCK_MS = 300_000L
+        /** 无回调 watchdog：attach 后该窗口内若无任何回调且正在播放 → 降级 PCM */
+        private const val NO_CALLBACK_MS = 3_000L
+        /** 无回调 watchdog 轮询周期 */
+        private const val WATCHDOG_CHECK_MS = 1_000L
+        /** 假信号最小 bin 幅值（统计非零 bin 用） */
+        private const val MIN_SIGNAL_EPS = 1e-3f
+        /** 噪声基底保底值：rms=0 连续衰减会下溢到 0，使静音门限 frameMax<noiseFloor*3 永久失效
+         *  （全 0 帧不再被判静音 → 仲裁不降级 → 效果静止）。保底后全 0 帧必然落入静音分支。 */
+        private const val NOISE_FLOOR_MIN = 1e-3f
+        /** 合理采样率范围内才信任回调值（创维 TV 实测回调采样率为 44100000 = 44100*1000，必须回退） */
+        private const val SAMPLE_RATE_MIN = 8_000
+        private const val SAMPLE_RATE_MAX = 192_000
+        /** 单点峰值占比阈值：maxMag^2 >= sumSq * 该值 → 本帧可疑 */
+        private const val SUSPECT_ENERGY_RATIO = 0.95f
+        /** 连续可疑帧数：达到后判定垃圾信号并降级 PCM（45 帧 ≈ 1s@50Hz / 2.2s@20Hz） */
+        private const val SUSPECT_FRAMES = 45
+        /** 诊断心跳周期 */
+        private const val DIAG_MS = 5_000L
     }
 
     /**
@@ -138,6 +203,8 @@ class SpectrumAnalyzer {
             // 重置跟踪器（新音频会话从头开始）
             runningPeak = 1f
             lowRunningPeak = SpectrumContract.AGC_FLOOR
+            midRunningPeak = SpectrumContract.AGC_FLOOR
+            trebleRunningPeak = SpectrumContract.AGC_FLOOR
 
             vis.setDataCaptureListener(
                 object : Visualizer.OnDataCaptureListener {
@@ -147,6 +214,7 @@ class SpectrumAnalyzer {
                         samplingRate: Int
                     ) {
                         if (waveform == null) return
+                        captureReceived = true
                         fillWaveform(waveform)
                     }
 
@@ -156,6 +224,7 @@ class SpectrumAnalyzer {
                         samplingRate: Int
                     ) {
                         if (fft == null || fft.size < 2) return
+                        captureReceived = true
                         processFft(fft, numFftBins, samplingRate)
                     }
                 },
@@ -166,14 +235,28 @@ class SpectrumAnalyzer {
 
             vis.enabled = true
             visualizer = vis
-            AppLog.d("SpectrumAnalyzer", "Attached: captureSize=$targetSize, fftBins=$numFftBins, bars=$BAR_COUNT")
+            // 启动无回调 watchdog：部分设备 Visualizer 绑定成功但从不回调，
+            // 此时必须靠 watchdog 在窗口耗尽后主动降级 PCM（否则 frame 恒 0、效果全静止）
+            captureReceived = false
+            expectFirstCaptureUntilMs = SystemClock.uptimeMillis() + NO_CALLBACK_MS
+            watchdogHandler.removeCallbacks(noCallbackWatchdog)
+            watchdogHandler.postDelayed(noCallbackWatchdog, WATCHDOG_CHECK_MS)
+            android.util.Log.i(
+                "SpectrumAnalyzer",
+                "Attached: session=$audioSessionId captureSize=$targetSize fftBins=$numFftBins bars=$BAR_COUNT"
+            )
 
         } catch (e: SecurityException) {
-            AppLog.w("SpectrumAnalyzer", "RECORD_AUDIO permission denied, spectrum unavailable", e)
+            android.util.Log.w("SpectrumAnalyzer", "RECORD_AUDIO permission denied, spectrum unavailable", e)
+            // 修复：attach 失败不能静默返回——立刻走 PCM 降级通道，
+            // 否则 frame 恒 0、全部效果静止（此前只打日志，降级仲裁永远等不到回调）
+            degradeToPcm("attach failed (permission)")
         } catch (e: UnsupportedOperationException) {
-            AppLog.w("SpectrumAnalyzer", "Audio session $audioSessionId invalid or Visualizer unsupported", e)
+            android.util.Log.w("SpectrumAnalyzer", "Audio session $audioSessionId invalid or Visualizer unsupported", e)
+            degradeToPcm("attach failed (unsupported)")
         } catch (e: Exception) {
             AppLog.e("SpectrumAnalyzer", "Failed to attach Visualizer", e)
+            degradeToPcm("attach failed (exception)")
         }
     }
 
@@ -183,17 +266,24 @@ class SpectrumAnalyzer {
         val step = (n / SpectrumContract.WAVE_POINTS).coerceAtLeast(1)
         var w = 0
         var i = 0
+        var peak = 0f
         while (w < SpectrumContract.WAVE_POINTS && i < n) {
-            waveBuf[w] = (waveform[i] - 128) / 128f
+            val v = (waveform[i] - 128) / 128f
+            val a = if (v < 0) -v else v
+            if (a > peak) peak = a
+            waveBuf[w] = v
             w++
             i += step
         }
+        // 诊断：波形通道峰值（可判断 session 上到底有没有真实信号）
+        diagWavePeak = peak
     }
 
     /**
      * 释放 Visualizer 资源
      */
     fun release() {
+        watchdogHandler.removeCallbacks(noCallbackWatchdog)
         try {
             visualizer?.apply {
                 enabled = false
@@ -257,12 +347,22 @@ class SpectrumAnalyzer {
         // 1) 帧统计（跳过直流分量）
         var frameMax = 0f
         var sumSq = 0f
+        var nonZero = 0
+        var maxBin = 1
         for (i in 1 until numBins) {
             val m = magnitudes[i]
-            if (m > frameMax) frameMax = m
+            if (m > MIN_SIGNAL_EPS) nonZero++
+            if (m > frameMax) {
+                frameMax = m
+                maxBin = i
+            }
             sumSq += m * m
         }
         val rms = sqrt(sumSq / (numBins - 1))
+        diagNonZeroBins = nonZero
+        diagMaxBin = maxBin
+        diagMaxMag = frameMax
+        diagRate = samplingRate
 
         if (fromPcm) {
             onPcmFrame(frameMax)
@@ -276,23 +376,43 @@ class SpectrumAnalyzer {
             if (usingPcm) return
             // 2) 自适应静音门限（跟踪噪声基底）
             if (rms < noiseFloor) {
-                noiseFloor = rms * 0.9f + noiseFloor * 0.1f          // 快速下降
+                noiseFloor = maxOf(rms * 0.9f + noiseFloor * 0.1f, NOISE_FLOOR_MIN)   // 快速下降（保底）
             } else {
-                noiseFloor = noiseFloor * 0.999f + rms * 0.001f      // 极慢上升
+                noiseFloor = maxOf(noiseFloor * 0.999f + rms * 0.001f, NOISE_FLOOR_MIN) // 极慢上升（保底）
             }
             if (frameMax < noiseFloor * 3.0f) {
                 onVisualizerSilence()
+                diagSilentFrames++
                 emitSilence()
                 return
             }
             silentFrames = 0
+
+            // 2b) 假信号防御：频谱退化为"单点峰值"（能量几乎全集中在一个 bin，
+            //     且能通过静音门限）→ 判定电视 Visualizer 返回垃圾数据 → 降级 PCM。
+            //     真实音乐帧多 bin 分布，连续 45 帧占比 ≥95% 是垃圾信号的铁证。
+            //     sumSq<=0（全 0 帧）同样可疑：noiseFloor 保底后本应落入静音分支，
+            //     若还能走到这里说明门限已失守，直接计数等降级。
+            if (sumSq <= 0f || frameMax * frameMax >= sumSq * SUSPECT_ENERGY_RATIO) {
+                suspiciousFrames++
+                if (suspiciousFrames >= SUSPECT_FRAMES) {
+                    degradeToPcm(
+                        "spectrum garbage: empty/single-bin peak ${suspiciousFrames}f " +
+                            "(maxBin=$maxBin nonZero=$nonZero max=${"%.2f".format(frameMax)})"
+                    )
+                }
+            } else {
+                suspiciousFrames = 0
+            }
         }
 
         // 3) 全局运行峰值（保留原逻辑）
         runningPeak = maxOf(runningPeak * 0.94f, frameMax, 0.001f)
 
         // 4) 分段密集映射 + 战区增益：FFT bins → 64 根感知加权柱子
-        val effectiveRate = if (samplingRate > 0) samplingRate else SAMPLING_RATE
+        // 采样率防御：部分国产 TV 的 Visualizer 回调采样率失真（创维实测 44100000），
+        // 会让 freqPerBin 放大 1000 倍、所有 bin 频率超出 20kHz 上限、频谱整体挤进最末 8 根。
+        val effectiveRate = if (samplingRate in SAMPLE_RATE_MIN..SAMPLE_RATE_MAX) samplingRate else SAMPLING_RATE
         val freqPerBin = effectiveRate.toFloat() / (numBins * 2)
         val result = barBuf
         result.fill(0f)
@@ -307,25 +427,61 @@ class SpectrumAnalyzer {
             }
         }
 
-        // 5) AGC 归一化 —— 分母为**低频区运行峰值**（修 ⑨）
+        // 5) AGC 归一化 —— 三段独立运行峰值（修 ⑨ + 辉光 7 柱）
+        // 每段取段内峰值 → 慢衰减运行峰值。中高频段（40-55 人声、56-63 超高频）
+        // 物理幅值天然比低频低一个数量级（getFrequencyWeight 高频只 ×0.3），
+        // 若共用低频全局分母，中高频柱会被压到 <0.05 不可见 ——
+        // 沉浸辉光因此"只有低频那几根在动"。三段独立分母让各段都能满幅摆动。
         var lowBandPeak = 0f
+        var midBandPeak = 0f
+        var trebleBandPeak = 0f
         for (b in LOW_BAND_FROM..LOW_BAND_TO) {
             if (result[b] > lowBandPeak) lowBandPeak = result[b]
+        }
+        for (b in (LOW_BAND_TO + 1)..SpectrumContract.MID_END) {
+            if (result[b] > midBandPeak) midBandPeak = result[b]
+        }
+        for (b in (SpectrumContract.MID_END + 1) until BAR_COUNT) {
+            if (result[b] > trebleBandPeak) trebleBandPeak = result[b]
         }
         lowRunningPeak = maxOf(
             lowRunningPeak * SpectrumContract.AGC_DECAY,
             lowBandPeak,
             SpectrumContract.AGC_FLOOR
         )
-        val safeDenominator = lowRunningPeak
+        midRunningPeak = maxOf(
+            midRunningPeak * SpectrumContract.AGC_DECAY,
+            midBandPeak,
+            SpectrumContract.AGC_FLOOR
+        )
+        trebleRunningPeak = maxOf(
+            trebleRunningPeak * SpectrumContract.AGC_DECAY,
+            trebleBandPeak,
+            SpectrumContract.AGC_FLOOR
+        )
+        val globalDenominator = lowRunningPeak
 
         // 6) 双通道输出
+        //   - 律动通道 [linearBuf]：全局低频分母（历史语义——鼓点相对强弱，勿回退）
+        //   - 显示通道 [displayBuf]：分段分母。段峰值若低于全局 5% 视为该段
+        //     本帧接近静音，回落全局分母，避免把底噪抬成满格假动。
         for (bar in 0 until BAR_COUNT) {
-            val normalized = (result[bar] / safeDenominator).coerceIn(0f, 1f)
-            linearBuf[bar] = normalized                                     // 律动：线性
-            displayBuf[bar] = normalized.pow(SpectrumContract.DISPLAY_GAMMA)
-                .coerceIn(MIN_AMPLITUDE, 1f)                                // 显示：gamma
+            val normalized = (result[bar] / globalDenominator).coerceIn(0f, 1f)
+            linearBuf[bar] = normalized                                     // 律动：线性（全局分母）
+            val segDenom = when (bar) {
+                in LOW_BAND_FROM..LOW_BAND_TO -> lowRunningPeak
+                in (LOW_BAND_TO + 1)..SpectrumContract.MID_END ->
+                    maxOf(midRunningPeak, globalDenominator * 0.05f, SpectrumContract.AGC_FLOOR)
+                else ->
+                    maxOf(trebleRunningPeak, globalDenominator * 0.05f, SpectrumContract.AGC_FLOOR)
+            }
+            val disp = (result[bar] / segDenom).coerceIn(0f, 1f)
+            displayBuf[bar] = disp.pow(SpectrumContract.DISPLAY_GAMMA)
+                .coerceIn(MIN_AMPLITUDE, 1f)                                // 显示：分段 AGC + gamma
         }
+
+        diagFrames++
+        diagHeartbeat()
 
         emit()
     }
@@ -341,7 +497,22 @@ class SpectrumAnalyzer {
         linearBuf.fill(0f)
         // 波形一并归零：否则静音期间波形类效果（E12/E16）显示上一帧残影
         waveBuf.fill(0f)
+        diagFrames++
+        diagHeartbeat()
         emit()
+    }
+
+    // ── 诊断心跳（release 可见）：每 DIAG_MS 打一条原始数据形态 ──
+    private fun diagHeartbeat() {
+        val now = SystemClock.uptimeMillis()
+        if (now - diagLastMs < DIAG_MS) return
+        diagLastMs = now
+        android.util.Log.i(
+            "SpectrumAnalyzer",
+            "diag frames=${diagFrames} silent=${diagSilentFrames} nonZero=${diagNonZeroBins} " +
+                "maxBin=${diagMaxBin} maxMag=${"%.2f".format(diagMaxMag)} " +
+                "wavePeak=${"%.3f".format(diagWavePeak)} rate=${diagRate} usePcm=$usingPcm"
+        )
     }
 
     // -----------------------------------------------------------------
@@ -366,7 +537,7 @@ class SpectrumAnalyzer {
         if (silentFrames < DEGRADE_FRAMES) return
         if (now - silentSinceMs < DEGRADE_MIN_SPAN_MS) return
         if (now < degradeBlockedUntilMs) return
-        degradeToPcm()
+        degradeToPcm("visualizer silent ${silentFrames}f/${DEGRADE_MIN_SPAN_MS}ms")
     }
 
     /** PCM 通道帧判定：探测窗口内始终无信号 → 回滚（别让画面比降级前更差） */
@@ -382,12 +553,9 @@ class SpectrumAnalyzer {
     }
 
     /** 降级：停用系统 Visualizer，启用 PCM 采集 + 后台 FFT */
-    private fun degradeToPcm() {
+    private fun degradeToPcm(reason: String) {
         val channel = pcmFallback ?: return
-        AppLog.w(
-            TAG_LOG,
-            "Visualizer silent ${silentFrames}f/${DEGRADE_MIN_SPAN_MS}ms -> enabling PCM fallback"
-        )
+        android.util.Log.w(TAG_LOG, "$reason -> enabling PCM fallback")
         usingPcm = true
         silentFrames = 0
         pcmSignalSeen = false
@@ -396,7 +564,7 @@ class SpectrumAnalyzer {
         try {
             visualizer?.enabled = false
         } catch (e: Exception) {
-            AppLog.w(TAG_LOG, "failed to disable Visualizer during degrade", e)
+            android.util.Log.w(TAG_LOG, "failed to disable Visualizer during degrade", e)
         }
         resetTracking()
         channel.setOnMagnitudes { mag, bins, rate -> analyze(mag, bins, rate, fromPcm = true) }
@@ -405,8 +573,9 @@ class SpectrumAnalyzer {
 
     /** 回滚：PCM 也拿不到信号 → 恢复 Visualizer，并在一段时间内不再尝试降级 */
     private fun rollbackToVisualizer() {
-        AppLog.w(TAG_LOG, "PCM silent ${PCM_PROBE_MS}ms -> rolling back to Visualizer")
+        android.util.Log.w(TAG_LOG, "PCM silent ${PCM_PROBE_MS}ms -> rolling back to Visualizer")
         usingPcm = false
+        suspiciousFrames = 0
         pcmFallback?.deactivate()
         degradeBlockedUntilMs = SystemClock.uptimeMillis() + DEGRADE_BLOCK_MS
         silentFrames = 0
@@ -414,7 +583,14 @@ class SpectrumAnalyzer {
         try {
             visualizer?.enabled = true
         } catch (e: Exception) {
-            AppLog.w(TAG_LOG, "failed to re-enable Visualizer on rollback", e)
+            android.util.Log.w(TAG_LOG, "failed to re-enable Visualizer on rollback", e)
+        }
+        // 回滚后重新武装 watchdog，防止回滚回来的 Visualizer 依旧不回调
+        if (visualizer != null) {
+            captureReceived = false
+            expectFirstCaptureUntilMs = SystemClock.uptimeMillis() + NO_CALLBACK_MS
+            watchdogHandler.removeCallbacks(noCallbackWatchdog)
+            watchdogHandler.postDelayed(noCallbackWatchdog, WATCHDOG_CHECK_MS)
         }
     }
 
@@ -422,6 +598,8 @@ class SpectrumAnalyzer {
     private fun resetTracking() {
         runningPeak = 1f
         lowRunningPeak = SpectrumContract.AGC_FLOOR
+        midRunningPeak = SpectrumContract.AGC_FLOOR
+        trebleRunningPeak = SpectrumContract.AGC_FLOOR
         noiseFloor = 10f
         barBuf.fill(0f)
         displayBuf.fill(0f)

@@ -28,7 +28,7 @@ data class AppSettings(
     val lyricsKugouBaseUrl: String = "",
     // 网络歌词网易云端点 URL（由 AppPreferences.getLyricsNeteaseBaseUrlSync() 提供默认值）
     val lyricsNeteaseBaseUrl: String = "",
-    // 可视化频谱主题（20 套效果 + 自动导演模式）
+    // 可视化频谱主题（18 套效果 + 自动导演模式）
     val visualizerTheme: VisualizerTheme = VisualizerTheme.Default,
     // 可视化画质档位（HIGH / MEDIUM / LOW）
     val visualizerQuality: VisualQuality = VisualQuality.Default,
@@ -46,7 +46,7 @@ data class AppSettings(
 )
 
 /**
- * 可视化效果主题（20 套效果 + 1 个自动导演模式）。
+ * 可视化效果主题（18 套效果 + 1 个自动导演模式）。
  *
  * [tier] 决定该效果在各画质档位下的可用性，见 [VisualQuality.supports]。
  */
@@ -55,10 +55,8 @@ enum class VisualizerTheme(
     val tier: Tier,
     val ordinalLabel: String
 ) {
-    IMMERSIVE_BLOOM("沉浸辉光", Tier.BASIC, "01"),
-    SONIC_TERRAIN("声景山脉", Tier.BASIC, "02"),
+IMMERSIVE_BLOOM("沉浸辉光", Tier.BASIC, "01"),
     TUNNEL_FLY("隧道穿越", Tier.BASIC, "03"),
-    CIRCULAR_NEBULA("环形星云", Tier.BASIC, "04"),
     CIRCULAR_RING("圆形频谱环", Tier.BASIC, "05"),
     RADIAL_BURST("径向星芒", Tier.BASIC, "06"),
     FREQUENCY_MOUNTAIN("频率山峦", Tier.BASIC, "07"),
@@ -75,6 +73,9 @@ enum class VisualizerTheme(
     MILKDROP_FEEDBACK("反馈残像", Tier.ULTRA, "18"),
     PARTICLE_TEXT("粒子文字", Tier.ULTRA, "19"),
     PLASMA_FLOW("等离子流场", Tier.ULTRA, "20"),
+    PRISM_HOLO("棱镜彩虹", Tier.ADV, "21"),
+    AURORA("极光", Tier.ADV, "22"),
+    LYRICS_DOT_MATRIX("歌词点阵", Tier.ADV, "23"),
     AUTO_DIRECTOR("自动导演", Tier.MODE, "AUTO"),
     ;
 
@@ -88,11 +89,13 @@ enum class VisualizerTheme(
         val Default: VisualizerTheme = CIRCULAR_RING
 
         /** 历史枚举名 → 新主题。老用户 DataStore 存的是旧名，需平滑迁移 */
-        private val LEGACY_MAP = mapOf(
-            "COLOR_FLOW" to CIRCULAR_RING,
-            "NEON_PULSE" to IMMERSIVE_BLOOM,
-            "CLASSICAL_WAVE" to SONIC_TERRAIN,
-        )
+private val LEGACY_MAP = mapOf(
+        "COLOR_FLOW" to CIRCULAR_RING,
+        "NEON_PULSE" to IMMERSIVE_BLOOM,
+        "SONIC_TERRAIN" to CIRCULAR_RING,
+        "CIRCULAR_NEBULA" to CIRCULAR_RING,
+        "CLASSICAL_WAVE" to CIRCULAR_RING,
+    )
 
         fun fromKey(key: String?): VisualizerTheme =
             entries.find { it.name == key }
@@ -124,8 +127,8 @@ enum class VisualQuality(
     val gridRows: Int,
     val allowFramebuffer: Boolean
 ) {
-    HIGH(64, 3, true, 200, 32, 18, true),
-    MEDIUM(64, 2, true, 80, 24, 14, false),
+    HIGH(64, 3, true, 350, 32, 18, true),
+    MEDIUM(64, 2, true, 150, 24, 14, false),
     LOW(32, 1, false, 0, 16, 10, false),
     ;
 

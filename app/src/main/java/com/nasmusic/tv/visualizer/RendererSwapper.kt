@@ -95,6 +95,9 @@ class RendererSwapper(
             startMs = nowMs
             isCrossfading = true
         } else {
+            // 硬切：当前渲染器与新层外的所有旧层都必须走完 onExit 生命周期，
+            // 否则淡出中的渲染器处于半释放态（未清状态 / 未还资源）被直接丢弃
+            previous?.onExit()
             old?.onExit()
             previous = null
             isCrossfading = false

@@ -32,9 +32,9 @@ class MilkdropRenderer : VisualizerRenderer {
 
     private var prev: ImageBitmap? = null
     private var curr: ImageBitmap? = null
-    private val paint = androidx.compose.ui.graphics.Paint()
+private val paint = androidx.compose.ui.graphics.Paint()
     private var rotation = 0f
-    private var hue = 200f
+    private var hue = 120f   // 绿系起点（黄60° → 蓝195°区间流动）
 
     override fun onEnter(ctx: RenderContext) {
         // 降采样到 720p 离屏
@@ -49,10 +49,11 @@ class MilkdropRenderer : VisualizerRenderer {
         val p = prev ?: return
         val c = curr ?: return
 
-        // 参数安全区间：缩放 1.015–1.03 / 旋转 0.3–0.8°/帧 / alpha 0.88–0.94
+// 参数安全区间：缩放 1.015–1.03 / 旋转 0.3–0.8°/帧 / alpha 0.88–0.94
         val scale = 1.015f + frame.bass * 0.015f
         rotation += 0.3f + frame.mid * 0.5f
-        hue = (hue + 0.35f + frame.treble * 2f) % 360f
+        // hue 在黄(60°)→蓝(195°)区间流动
+        hue = 60f + (hue + 0.35f + frame.treble * 2f - 60f) % 135f
         val alpha = (0.88f + frame.energy * 0.06f).coerceIn(0.88f, 0.94f)
         val shift = if (frame.beat) 6f else 1f
 
@@ -76,15 +77,15 @@ class MilkdropRenderer : VisualizerRenderer {
         paint.alpha = 1f
         val cx = c.width / 2f
         val cy = c.height / 2f
-        val n = ctx.quality.barCount
-        val r0 = kotlin.math.min(c.width, c.height) * 0.16f
-        val maxLen = kotlin.math.min(c.width, c.height) * 0.26f
+val n = ctx.quality.barCount
+        val r0 = kotlin.math.min(c.width, c.height) * 0.20f
+        val maxLen = kotlin.math.min(c.width, c.height) * 0.34f
         for (i in 0 until n) {
             val a = VisualizerMath.rad(i * 360f / n + rotation * 0.5f)
             val v = frame.spectrum.getOrElse(i) { 0f }
             val len = VisualizerMath.barHeight(v, maxLen, 4f)
-            paint.color = VisualizerMath.hsl(hue + i * 360f / n, 0.9f, 0.55f + v * 0.2f)
-            paint.strokeWidth = 2f + v * 4f
+            paint.color = VisualizerMath.hsl(hue + i * 30f / n, 1.0f, 0.60f + v * 0.25f)
+            paint.strokeWidth = 3f + v * 5f
             cb.drawLine(
                 VisualizerMath.polar(cx, cy, r0, a),
                 VisualizerMath.polar(cx, cy, r0 + len, a),
@@ -192,17 +193,17 @@ class PlasmaFlowRenderer : VisualizerRenderer {
                 life[i] = 1f
             }
 
-            drawCircle(
-                color = VisualizerMath.hsl((flow * 180f + 200f) % 360f, 0.9f, 0.6f),
-                radius = 1.2f + life[i] * 2.5f,
+drawCircle(
+                color = VisualizerMath.hsl(60f + (flow * 135f + 75f) % 135f, 1.0f, 0.68f),
+                radius = 3f + life[i] * 5f,
                 center = Offset(xs[i] * w, ys[i] * h),
-                alpha = life[i] * 0.75f,
+                alpha = life[i] * 0.8f,
                 blendMode = androidx.compose.ui.graphics.BlendMode.Plus
             )
         }
 
         // 等离子底纹
-        drawCircle(accent, ctx.minDim * 0.12f * (1f + frame.energy * 0.4f),
+        drawCircle(accent, ctx.minDim * 0.15f * (1f + frame.energy * 0.4f),
             Offset(w / 2, h / 2), alpha = 0.06f + frame.pulse * 0.10f)
     }
 

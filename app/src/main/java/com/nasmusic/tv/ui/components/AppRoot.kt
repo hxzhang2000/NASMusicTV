@@ -453,10 +453,8 @@ private fun VisualizerOverlay(
 
     VisualizerStage(
         song = currentSong,
-        isPlaying = isPlaying,
         frame = vm.frame,
         cover = cover,
-        coverUrl = currentSong?.let { viewModel.getCoverCandidates(it).firstOrNull()?.toString() },
         palette = palette,
         lyrics = lyrics?.lines,
         progressMs = progress,
@@ -467,9 +465,6 @@ private fun VisualizerOverlay(
         isTV = isTV,
         onExit = { vm.exitVisualizer() },
         onNextTheme = { vm.nextTheme() },
-        onPrevTheme = { vm.prevTheme() },
-        onPlayPause = { viewModel.playerVM.playPause() },
-        onNext = { viewModel.playerVM.next() },
-        onPrev = { viewModel.playerVM.previous() }
+        onPrevTheme = { vm.prevTheme() }
     )
 }

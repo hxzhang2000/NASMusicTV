@@ -117,11 +117,22 @@ class VisualizerViewModel(
     /** 当前实际生效的主题名（供 Toast 显示） */
     fun activeThemeName(): String = resolveTheme().displayName
 
-    fun nextTheme() = step(+1)
+fun nextTheme() = step(+1)
     fun prevTheme() = step(-1)
+
+    /**
+     * 长按遥控器方向键时系统会连续注入 KeyEvent repeat（约 3-5/s），
+     * 每个 repeat 都触发渲染器重建 → 高频 离屏 surface 创建/销毁，
+     * 弱 GPU（电视）上实测可导致 native 崩溃。此处节流到 180ms：
+     * 只响应「新按键」，忽略 repeat 风暴。
+     */
+    private var lastStepMs = 0L
 
     /** 步进切换，自动跳过当前画质不支持的效果 */
     private fun step(dir: Int) {
+        val now = System.currentTimeMillis()
+        if (now - lastStepMs < SWITCH_DEBOUNCE_MS) return
+        lastStepMs = now
         val list = VisualizerTheme.selectable
         if (list.isEmpty()) return
         val from = list.indexOf(_theme.value).let { if (it < 0) 0 else it }
@@ -155,8 +166,13 @@ class VisualizerViewModel(
         viewModelScope.launch { prefs.setVisualizerTheme(_theme.value) }
     }
 
-    override fun onCleared() {
+override fun onCleared() {
         super.onCleared()
         _showVisualizer.value = false
+    }
+
+    private companion object {
+        /** 连续按键节流：低于此间隔的（重复/连发）切换直接忽略 */
+        const val SWITCH_DEBOUNCE_MS = 180L
     }
 }

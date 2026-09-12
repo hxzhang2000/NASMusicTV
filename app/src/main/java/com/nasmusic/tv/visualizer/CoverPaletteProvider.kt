@@ -34,21 +34,23 @@ class CoverPaletteProvider {
             runCatching {
                 val bmp: Bitmap = bitmap.asAndroidBitmap()
                 val palette = Palette.from(bmp).maximumColorCount(16).generate()
-                val accent = palette.vibrantSwatch?.rgb
+                val rawAccent = palette.vibrantSwatch?.rgb
                     ?: palette.lightVibrantSwatch?.rgb
                     ?: palette.dominantSwatch?.rgb
-                val secondary = palette.mutedSwatch?.rgb
-                    ?: palette.darkMutedSwatch?.rgb
-                    ?: accent
-                val background = palette.darkMutedSwatch?.rgb
+                val rawBackground = palette.darkMutedSwatch?.rgb
                     ?: palette.dominantSwatch?.rgb
-                    ?: 0xFF0A0F14.toInt()
+                    ?: 0xFF04190B.toInt()
 
-                CoverPalette(
-                    accent = Color(accent ?: 0xFF34D399.toInt()),
-                    secondary = Color(secondary ?: 0xFF60A5FA.toInt()),
-                    background = Color(background)
-                )
+                // 用户指定色系：亮蓝(195°) / 亮绿(90°) / 亮黄(60°) / 白色
+                // 仅亮度随封面微调，保证任何封面下整体效果都保持明亮色系
+                val rawL = VisualizerMath.rgbToHsl(Color(rawAccent ?: 0xFF00BFFF.toInt())).third
+                val litMain = (0.55f + rawL * 0.15f).coerceIn(0.50f, 0.72f)
+                val litSub = (0.65f + rawL * 0.15f).coerceIn(0.60f, 0.80f)
+                val accent = VisualizerMath.hsl(195f, 1.0f, litMain)      // 亮蓝
+                val secondary = VisualizerMath.hsl(60f, 1.0f, litSub)     // 亮黄
+                val background = VisualizerMath.darken(Color(rawBackground), 0.36f)
+
+                CoverPalette(accent = accent, secondary = secondary, background = background)
             }.getOrDefault(CoverPalette.Fallback).also { cache.put(key, it) }
         }
     }

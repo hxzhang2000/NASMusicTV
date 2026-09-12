@@ -137,6 +137,23 @@ class MainActivity : ComponentActivity() {
             }
         }
 
+        // 修复：频谱可视化依赖 RECORD_AUDIO——Android 10+ 构建 Visualizer 需要该权限，
+        // 缺失时 attach() 抛 SecurityException，此前只记日志、不降级，导致所有效果静止。
+        // 这里主动请求（拒绝也不阻塞：SpectrumAnalyzer 会自动降级到 PCM 通道）。
+        if (android.os.Build.VERSION.SDK_INT >= 23 &&
+            androidx.core.content.ContextCompat.checkSelfPermission(
+                this, android.Manifest.permission.RECORD_AUDIO
+            ) != android.content.pm.PackageManager.PERMISSION_GRANTED
+        ) {
+            try {
+                androidx.core.app.ActivityCompat.requestPermissions(
+                    this, arrayOf(android.Manifest.permission.RECORD_AUDIO), 2002
+                )
+            } catch (e: Exception) {
+                AppLog.w("MainActivity", "request RECORD_AUDIO failed", e)
+            }
+        }
+
         // SAF 树选择器（§8.8.4）：注入到 ExportCoordinator，导出时启动系统文件夹选择器
         (application as NasMusicApp).exportCoordinator.treePickLauncher = {
             exportTreeLauncher.launch(null)

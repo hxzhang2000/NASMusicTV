@@ -33,16 +33,19 @@ class BeatDetector {
 
     fun onFrame(bass: Float, nowMs: Long): BeatInfo {
         // ① 历史均值 + 方差 → 动态阈值系数
+        // 预热期（filled < HISTORY）必须以实际填充数做分母，
+        // 否则恒定的微小能量会被稀释的均值误判为"跃升"而假触发节拍。
+        val n = filled.coerceAtLeast(1)
         var sum = 0f
         for (x in bassHistory) sum += x
-        val avg = sum / HISTORY
+        val avg = sum / n
 
         var v = 0f
         for (x in bassHistory) {
             val d = x - avg
             v += d * d
         }
-        v /= HISTORY
+        v /= n
 
         // 方差越大阈值越低（适应强节奏曲）；越小阈值越高（抑制噪声误触）
         val c = (-0.0025714f * v * 15f + 1.5142857f).coerceIn(1.15f, 1.9f)
@@ -105,7 +108,9 @@ class BeatDetector {
         private const val MIN_BEAT_MS = 240L
         /** 每帧衰减 10% ≈ 250ms 回落 */
         private const val PULSE_DECAY = 0.90f
-        /** 静音门限，低于此值不触发节拍 */
-        private const val MIN_BASS = 0.12f
+        /** 静音门限：仅防绝对静音假拍。主判定靠历史均值自适应阈值（avg*c），
+         *  门限本身必须低于真实曲目的低频频段均值（实测 0.02~0.06），
+         *  否则节拍被永久屏蔽，pulse 退化为正弦兜底 → 全部效果律动弱。 */
+        private const val MIN_BASS = 0.005f
     }
 }

@@ -237,8 +237,12 @@ class PlaybackService : MediaLibraryService() {
         mediaLibraryTree = MediaLibraryTree(this)
 
         // Store player reference in manager + inject vocal removal processor
-        (application as NasMusicApp).playerManager.setPlayer(player)
+        // 顺序关键：PCM 降级通道必须先于 setPlayer 注入 —— setPlayer 内部会触发
+        // initSpectrumAnalyzer→attach；若 TV 的 Visualizer 不可用而 attach 抛异常，
+        // SpectrumAnalyzer.degradeToPcm 在 pcmFallback==null 时会直接放弃降级，
+        // 导致 frame 恒 0、全部效果静止（P6 实测坑）。
         (application as NasMusicApp).playerManager.setPcmFallbackChannel(pcmFallback)
+        (application as NasMusicApp).playerManager.setPlayer(player)
         (application as NasMusicApp).playerManager.setVocalRemovalProcessor(vocalRemovalProcessor)
         (application as NasMusicApp).playerManager.setDemucsSeparator(demucsSeparator)
         (application as NasMusicApp).playerManager.setAccompanimentCache(accompanimentCache)

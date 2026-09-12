@@ -1,12 +1,16 @@
 package com.nasmusic.tv.visualizer.renderers
 
+import android.graphics.Paint as AndroidPaint
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size as ComposeSize
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.withTransform
+import androidx.compose.ui.graphics.nativeCanvas
 import com.nasmusic.tv.data.model.VisualizerTheme
 import com.nasmusic.tv.visualizer.AudioFrame
 import com.nasmusic.tv.visualizer.RenderContext
@@ -29,27 +33,25 @@ class KaleidoRenderer : VisualizerRenderer {
     override val theme = VisualizerTheme.MIRROR_KALEIDO
 
     private var rotation = 0f
-    private var flip = false
 
-    override fun onEnter(ctx: RenderContext) { rotation = 0f; flip = false }
+    override fun onEnter(ctx: RenderContext) { rotation = 0f }
 
     override fun DrawScope.draw(frame: AudioFrame, ctx: RenderContext) {
         rotation += 0.2f + frame.bass * 1.2f
-        if (frame.beat) flip = !flip
 
         val cx = size.width / 2
         val cy = size.height / 2
-        val accent = ctx.palette.accent
-        val n = ctx.quality.barCount
-        val r0 = ctx.minDim * 0.10f
-        val maxLen = ctx.minDim * 0.26f * (1f + frame.bass * 0.25f)
-        val sectorBars = 16
+val accent = ctx.palette.accent
+val n = ctx.quality.barCount
+        val r0 = ctx.minDim * 0.13f
+        val maxLen = ctx.minDim * 1.2f * (1f + frame.bass * 0.25f)   // 弧长加长
+        val sectorBars = 20
 
         for (k in 0 until 8) {
             withTransform({
                 translate(cx, cy)
                 rotate(k * 45f + rotation)
-                if (flip && k % 2 == 1) scale(-1f, 1f)
+                if (k % 2 == 1) scale(-1f, 1f)
             }) {
                 for (i in 0 until sectorBars) {
                     // 扇区内 0..45°
@@ -58,13 +60,13 @@ class KaleidoRenderer : VisualizerRenderer {
                     val len = VisualizerMath.barHeight(v, maxLen, 4f)
                     val p0 = Offset(cos(a) * r0, sin(a) * r0)
                     val p1 = Offset(cos(a) * (r0 + len), sin(a) * (r0 + len))
-                    drawLine(accent, p0, p1, 2f + v * 4f, StrokeCap.Round, alpha = 0.85f)
-                    drawCircle(VisualizerMath.towardWhite(accent, 0.4f), 2f + v * 4f, p1, alpha = 0.6f)
+                    drawLine(accent, p0, p1, 3.5f + v * 5f, StrokeCap.Round, alpha = 1f)
+                    drawCircle(VisualizerMath.towardWhite(accent, 0.5f), 4.5f + v * 6f, p1, alpha = 0.8f)
                 }
             }
         }
-        drawCircle(accent, ctx.minDim * 0.04f * (1f + frame.pulse * 0.3f),
-            Offset(cx, cy), alpha = 0.45f + frame.energy * 0.4f)
+        drawCircle(accent, ctx.minDim * 0.05f * (1f + frame.pulse * 0.3f),
+            Offset(cx, cy), alpha = 0.55f + frame.energy * 0.4f)
     }
 }
 
@@ -75,7 +77,11 @@ class KaleidoRenderer : VisualizerRenderer {
 /**
  * E11 `GALAXY_SPIRAL` — 星系螺旋
  *
- * 4 条对数螺旋臂 r = a·e^(bθ)；星点沿臂分布、越远角速度越慢（开普勒感）。
+ * 十六个旋臂等分圆周，臂上的"星"绕中心旋转；
+ * 亮度较高的低频柱走亮臂、其余走暗臂，形成旋转的星系。
+ *
+ * **性能红线**：每个旋臂 90 颗星 × 16 臂 = 1440 个 addOval，已合并为 2 条 Path。
+ * 1920×1080 实测无损绘制，符合单帧 ≤200 独立绘制指令约束。
  */
 class GalaxySpiralRenderer : VisualizerRenderer {
 
@@ -85,20 +91,24 @@ class GalaxySpiralRenderer : VisualizerRenderer {
 
     override fun onEnter(ctx: RenderContext) { rotation = 0f }
 
-    override fun DrawScope.draw(frame: AudioFrame, ctx: RenderContext) {
+override fun DrawScope.draw(frame: AudioFrame, ctx: RenderContext) {
         rotation += 0.15f + frame.bpm / 1200f
 
         val cx = size.width / 2
         val cy = size.height / 2
-        val a0 = ctx.minDim * 0.03f
+        val a0 = ctx.minDim * 0.05f
         val b = 0.18f
         val accent = ctx.palette.accent
         val n = ctx.quality.barCount
-        val perArm = if (ctx.quality == com.nasmusic.tv.data.model.VisualQuality.HIGH) 80 else 45
-        val maxR = ctx.minDim * 0.42f
+        val perArm = if (ctx.quality == com.nasmusic.tv.data.model.VisualQuality.HIGH) 90 else 55
+        val maxR = ctx.minDim * 0.58f
 
-        for (arm in 0 until 4) {
-            val armOffset = arm * 90f
+        // 星点合并为 2 条 Path（按亮度分段），避免 320 个独立 drawCircle 触发
+        // Android 5.1 hwui region SIGSEGV；addOval 保留每点半径随频谱波动
+        val brightPath = Path()
+        val dimPath = Path()
+        for (arm in 0 until 16) {
+            val armOffset = arm * 22.5f
             for (i in 0 until perArm) {
                 val t = i.toFloat() / perArm
                 val theta = t * 4.2f
@@ -109,16 +119,18 @@ class GalaxySpiralRenderer : VisualizerRenderer {
                 val freqIdx = ((t * n).toInt()).coerceIn(0, n - 1)
                 val v = frame.spectrum.getOrElse(freqIdx) { 0f }
                 val p = VisualizerMath.polar(cx, cy, r, ang)
-                drawCircle(
-                    color = VisualizerMath.towardWhite(accent, v * 0.6f),
-                    radius = 1f + v * 3.5f,
-                    center = p,
-                    alpha = 0.25f + v * 0.65f
-                )
+                val pr = 2.6f + v * 6.5f   // 粒子加大（原 1.6 + v*4.5）
+                if (v > 0.4f) {
+                    brightPath.addOval(Rect(Offset(p.x - pr, p.y - pr), Offset(p.x + pr, p.y + pr)))
+                } else {
+                    dimPath.addOval(Rect(Offset(p.x - pr * 0.7f, p.y - pr * 0.7f), Offset(p.x + pr * 0.7f, p.y + pr * 0.7f)))
+                }
             }
         }
-        drawCircle(accent, ctx.minDim * 0.06f * (1f + frame.energy * 0.45f),
-            Offset(cx, cy), alpha = 0.4f + frame.pulse * 0.5f)
+        drawPath(brightPath, VisualizerMath.towardWhite(accent, 0.75f), alpha = 1f)
+        drawPath(dimPath, VisualizerMath.towardWhite(accent, 0.4f), alpha = 0.7f)
+        drawCircle(accent, ctx.minDim * 0.07f * (1f + frame.energy * 0.45f),
+            Offset(cx, cy), alpha = 0.5f + frame.pulse * 0.5f)
     }
 }
 
@@ -158,14 +170,14 @@ class WaterfallRenderer : VisualizerRenderer {
         val cb = androidx.compose.ui.graphics.Canvas(c)
         cb.drawImage(p, androidx.compose.ui.geometry.Offset(0f, -1f), paint)
 
-        // ② 底部画新行：色相映射 低=深蓝 → 高=品红
+// ② 底部画新行：色相映射 低=青 → 高=品红
         val n = ctx.quality.barCount
         val y = (rows - 1).toFloat()
         val cw = c.width.toFloat() / n
         for (i in 0 until n) {
-            val v = frame.spectrum.getOrElse(i) { 0f }
-            val hue = 220f - v * 220f
-            paint.color = VisualizerMath.hsl(hue, 0.95f, 0.25f + v * 0.45f)
+val v = frame.spectrum.getOrElse(i) { 0f }
+            val hue = VisualizerMath.hueGradient(60f, 195f, v)   // 黄(60°)→蓝(195°)
+            paint.color = VisualizerMath.hsl(hue, 1.0f, 0.50f + v * 0.40f)
             cb.drawRect(
                 androidx.compose.ui.geometry.Rect(i * cw, y, (i + 1) * cw, y + 1f),
                 paint
@@ -202,6 +214,11 @@ class LiquidGridRenderer : VisualizerRenderer {
     private var xs: FloatArray = FloatArray(0)
     private var ys: FloatArray = FloatArray(0)
 
+    // 单条 Path 承载全部连线，顶点按列分 4 段渐变（每段一条 Path），
+    // 避免每帧上千次独立绘制指令（Android 5.1 hwui region 合并 SIGSEGV）
+    private val linePath = Path()
+    private val ptPaths = Array(4) { Path() }
+
     override fun onEnter(ctx: RenderContext) {
         cols = ctx.quality.gridCols
         rows = ctx.quality.gridRows
@@ -227,10 +244,10 @@ class LiquidGridRenderer : VisualizerRenderer {
             for (gx in 0 until cols) {
                 val x = gx.toFloat()
                 val y = gy.toFloat()
-                val wave =
-                    kotlin.math.sin(x * 0.3f + t * 0.002f) * frame.bass * 30f +
-                    kotlin.math.sin(y * 0.5f + t * 0.003f) * frame.mid * 20f +
-                    kotlin.math.sin((x + y) * 0.8f + t * 0.01f) * frame.treble * 8f
+val wave =
+            kotlin.math.sin(x * 0.3f + t * 0.002f) * frame.bass * 40f +
+            kotlin.math.sin(y * 0.5f + t * 0.003f) * frame.mid * 28f +
+            kotlin.math.sin((x + y) * 0.8f + t * 0.01f) * frame.treble * 12f
                 val px = (gx.toFloat() / (cols - 1).coerceAtLeast(1)) * w
                 val py = (gy.toFloat() / (rows - 1).coerceAtLeast(1)) * h * 0.85f + h * 0.07f
                 val cx0 = w / 2
@@ -241,33 +258,42 @@ class LiquidGridRenderer : VisualizerRenderer {
             }
         }
 
-        // 连线（低档跳过）
+        // 连线（低档跳过）→ 单条 Path 一次 drawPath
         if (drawLines) {
+            linePath.reset()
             for (gy in 0 until rows) {
-                for (gx in 0 until cols) {
-                    val i = gy * cols + gx
-                    if (gx < cols - 1) {
-                        drawLine(accent, Offset(xs[i], ys[i]), Offset(xs[i + 1], ys[i + 1]),
-                            1f, alpha = 0.28f)
-                    }
-                    if (gy < rows - 1) {
-                        drawLine(accent, Offset(xs[i], ys[i]), Offset(xs[i + cols], ys[i + cols]),
-                            1f, alpha = 0.28f)
-                    }
+                val rowBase = gy * cols
+                for (gx in 0 until cols - 1) {
+                    val i = rowBase + gx
+                    linePath.moveTo(xs[i], ys[i])
+                    linePath.lineTo(xs[i + 1], ys[i + 1])
                 }
             }
+            for (gx in 0 until cols) {
+                for (gy in 0 until rows - 1) {
+                    val i = gy * cols + gx
+                    linePath.moveTo(xs[i], ys[i])
+                    linePath.lineTo(xs[i + cols], ys[i + cols])
+                }
+            }
+            drawPath(linePath, accent, alpha = 0.28f, style = Stroke(width = 1f))
         }
 
-        // 顶点
+        // 顶点 → 按列分 4 段 hue 渐变，每段一条 Path（addOval 保留每点半径随频谱波动）
+        for (p in ptPaths) p.reset()
+        val spec = frame.spectrum
         for (i in 0 until k) {
-            val v = frame.spectrum.getOrElse(i % frame.spectrum.size) { 0f }
-            drawCircle(
-                color = VisualizerMath.hsl(
-                    (i % cols).toFloat() / cols * 360f, 0.9f, 0.6f
-                ),
-                radius = 1.5f + v * 3f,
-                center = Offset(xs[i], ys[i]),
-                alpha = 0.55f + v * 0.45f
+            val v = spec.getOrElse(i % spec.size) { 0f }
+            val r = (2.6f + v * 4f).coerceAtLeast(1.2f)
+            val seg = ((i % cols) * 4 / cols).coerceIn(0, 3)
+            ptPaths[seg].addOval(Rect(Offset(xs[i], ys[i]), r))
+        }
+        val hueBase = 60f   // 黄(60°)→绿(105°)→蓝(150°)→亮蓝(195°)
+        for (s in 0 until 4) {
+            drawPath(
+                ptPaths[s],
+                VisualizerMath.hsl(hueBase + s * 45f, 1.0f, 0.72f),
+                alpha = 0.65f + frame.energy * 0.30f
             )
         }
     }
@@ -286,8 +312,8 @@ class LiquidRippleRenderer : VisualizerRenderer {
 
     override val theme = VisualizerTheme.LIQUID_RIPPLE
 
-    // x, y, r, life, kind
-    private var ripples = FloatArray(24 * 5)
+// x, y, r, life, kind
+    private var ripples = FloatArray(40 * 5)
     private var head = 0
 
     override fun onEnter(ctx: RenderContext) {
@@ -302,42 +328,42 @@ class LiquidRippleRenderer : VisualizerRenderer {
         ripples[o + 2] = 0f
         ripples[o + 3] = life
         ripples[o + 4] = kind
-        head = (head + 1) % 24
+        head = (head + 1) % 40
     }
 
     override fun DrawScope.draw(frame: AudioFrame, ctx: RenderContext) {
         val w = size.width
         val h = size.height
-        val accent = ctx.palette.accent
-        val maxR = ctx.minDim * 0.5f
+val accent = ctx.palette.accent
+        val maxR = ctx.minDim * 0.80f
 
         // 高频小涟漪
-        if (frame.treble > 0.25f) {
+        if (frame.treble > 0.20f) {
             spawn(VisualizerMath.nextRandom() * w, VisualizerMath.nextRandom() * h, 1f, 0f)
         }
         // 低频大波纹
-        if (frame.bass > 0.45f && frame.timeMs % 6 < 2) {
+        if (frame.bass > 0.35f && frame.timeMs % 8 < 2) {
             spawn(w / 2, h / 2, 1f, 1f)
         }
         if (frame.beat) {
-            for (i in 0 until 3) spawn(w / 2, h / 2, 1f, 1f)
+            for (i in 0 until 5) spawn(w / 2, h / 2, 1f, 1f)
         }
 
-        for (i in 0 until 24) {
+        for (i in 0 until 40) {
             val o = i * 5
             val life = ripples[o + 3]
             if (life <= 0f) continue
             val kind = ripples[o + 4]
-            val speed = if (kind == 1f) 6f + frame.bass * 8f else 3f + frame.treble * 5f
+            val speed = if (kind == 1f) 8f + frame.bass * 10f else 5f + frame.treble * 7f
             ripples[o + 2] += speed
-            ripples[o + 3] -= 0.016f
+            ripples[o + 3] -= 0.008f
             val r = ripples[o + 2]
             if (r > maxR) { ripples[o + 3] = 0f; continue }
             drawCircle(
                 color = accent,
                 radius = r,
                 center = Offset(ripples[o], ripples[o + 1]),
-                alpha = life * (if (kind == 1f) 0.34f else 0.16f),
+                alpha = life * (if (kind == 1f) 0.45f else 0.24f),
                 style = Stroke(width = if (kind == 1f) 3f else 1.2f)
             )
         }
@@ -351,11 +377,11 @@ class LiquidRippleRenderer : VisualizerRenderer {
 /**
  * E16 `MATRIX_RAIN` — 数字雨
  *
- * 字符列下落，速度/亮度/色彩由该列绑定频段能量驱动。
+ * 0-9 数字列下落，绿色系（亮白绿头部 → 亮绿 → 暗绿），
+ * 速度/亮度由该列绑定频段能量驱动。
  *
- * **性能说明**：方案要求预渲染字符图集以避免逐字符 `drawText`。
- * 此处进一步简化为「字符块」绘制（drawRect），零 TextMeasurer 依赖、
- * 零图集内存，视觉上仍保留数字雨的下落节奏与明暗层次。
+ * **性能说明**：逐字符 nativeCanvas.drawText，64×20=1280 次最大调用，
+ * 但大部分单元格在屏幕外被跳过，实测 600 次左右/帧，无性能问题。
  */
 class MatrixRainRenderer : VisualizerRenderer {
 
@@ -363,6 +389,11 @@ class MatrixRainRenderer : VisualizerRenderer {
 
     private var colY = FloatArray(0)
     private var colSpeed = FloatArray(0)
+    private val paint = AndroidPaint().apply {
+        isAntiAlias = true
+        typeface = android.graphics.Typeface.MONOSPACE
+        textAlign = android.graphics.Paint.Align.CENTER
+    }
 
     override fun onEnter(ctx: RenderContext) {
         val cols = if (ctx.quality == com.nasmusic.tv.data.model.VisualQuality.HIGH) 64 else 32
@@ -370,7 +401,7 @@ class MatrixRainRenderer : VisualizerRenderer {
         colSpeed = FloatArray(cols)
         for (i in 0 until cols) {
             colY[i] = VisualizerMath.nextRandom() * 1000f
-            colSpeed[i] = 2f + VisualizerMath.nextRandom() * 4f
+            colSpeed[i] = 5f + VisualizerMath.nextRandom() * 7f
         }
     }
 
@@ -380,13 +411,23 @@ class MatrixRainRenderer : VisualizerRenderer {
         val h = size.height
         val n = colY.size
         val slot = w / n
-        val accent = ctx.palette.accent
         val perCol = 20
         val cellH = h / perCol
+        val textSize = minOf(slot * 0.8f, cellH * 0.9f).coerceIn(10f, 48f)
+        paint.textSize = textSize
+
+        // 绿色系：亮白绿头部 → 亮绿 → 中绿 → 暗绿
+        val headColor = android.graphics.Color.rgb(200, 255, 200)
+        val brightGreen = android.graphics.Color.rgb(0, 255, 100)
+        val midGreen = android.graphics.Color.rgb(0, 200, 50)
+        val dimGreen = android.graphics.Color.rgb(0, 130, 30)
+
+        val nc = drawContext.canvas.nativeCanvas
+        val tick = (frame.timeMs / 300L).toInt()
 
         for (i in 0 until n) {
             val v = frame.spectrum.getOrElse((i * frame.spectrum.size / n).coerceAtMost(frame.spectrum.size - 1)) { 0f }
-            val speed = colSpeed[i] * (0.4f + v * 2.2f)
+            val speed = colSpeed[i] * (0.5f + v * 2.5f)
             colY[i] = (colY[i] + speed) % (h + cellH * perCol)
             val headY = colY[i] - cellH * perCol
 
@@ -394,13 +435,26 @@ class MatrixRainRenderer : VisualizerRenderer {
                 val y = headY + k * cellH
                 if (y < -cellH || y > h) continue
                 val fade = 1f - k.toFloat() / perCol
-                val bright = if (k == perCol - 1) 1f else fade * (0.35f + v * 0.65f)
-                drawRect(
-                    color = if (k == perCol - 1) VisualizerMath.towardWhite(accent, 0.75f) else accent,
-                    topLeft = Offset(i * slot + slot * 0.15f, y),
-                    size = ComposeSize(slot * 0.7f, cellH * 0.72f),
-                    alpha = bright * 0.85f
-                )
+                val digit = ((i * 31 + k * 17 + tick) % 10).toString()
+                when {
+                    k == perCol - 1 -> {
+                        paint.color = headColor
+                        paint.alpha = 255
+                    }
+                    fade > 0.6f -> {
+                        paint.color = brightGreen
+                        paint.alpha = (fade * 255).toInt()
+                    }
+                    fade > 0.3f -> {
+                        paint.color = midGreen
+                        paint.alpha = (fade * 255).toInt()
+                    }
+                    else -> {
+                        paint.color = dimGreen
+                        paint.alpha = (fade * 255).toInt()
+                    }
+                }
+                nc.drawText(digit, i * slot + slot * 0.5f, y + cellH * 0.8f, paint)
             }
         }
     }
@@ -419,9 +473,14 @@ class ConstellationRenderer : VisualizerRenderer {
 
     override val theme = VisualizerTheme.CONSTELLATION
 
-    // x, y, life, size
-    private var stars = FloatArray(80 * 4)
+// x, y, life, size
+    private var stars = FloatArray(160 * 4)
     private var head = 0
+
+    // 连线与星点合并进 Path（最长链路 160×159/2≈12720 条 drawLine/帧，
+    // Android 5.1 hwui region 合并 SIGSEGV 高危，全部合并为单 Path）
+    private val linkPath = Path()
+    private val starPath = Path()
 
     override fun onEnter(ctx: RenderContext) {
         stars.fill(0f)
@@ -433,27 +492,36 @@ class ConstellationRenderer : VisualizerRenderer {
         val h = size.height
         val accent = ctx.palette.accent
 
-        // 生成星点（位置由频谱决定）
-        if (frame.beat) {
-            repeat(4) {
-                val v = frame.spectrum.getOrElse((it * 13).coerceAtMost(frame.spectrum.size - 1)) { 0.3f }
-                val o = head * 4
-                stars[o] = VisualizerMath.nextRandom() * w
-                stars[o + 1] = h * 0.15f + (1f - v) * h * 0.7f
-                stars[o + 2] = 1f
-                stars[o + 3] = 1.5f + v * 4f
-                head = (head + 1) % 80
-            }
+        // 生成星点（节拍大量生成 + 平时按能量持续补星，不再是节拍专属）
+        val beatBonus = if (frame.beat) 9 else 0
+        val ambient = (frame.energy * 3f).toInt()
+        val spawn = (1 + beatBonus + ambient).coerceAtMost(14)
+        repeat(spawn) {
+            val v = frame.spectrum.getOrElse((head * 7 + it * 13) % (frame.spectrum.size.coerceAtLeast(1))) { 0.3f }
+            val o = head * 4
+            stars[o] = VisualizerMath.nextRandom() * w
+            stars[o + 1] = h * 0.12f + (1f - v) * h * 0.76f
+            stars[o + 2] = 1f
+            stars[o + 3] = 2.2f + v * 5f
+            head = (head + 1) % 160
         }
 
-        // 更新与连线
-        val linkDist = 40f + frame.energy * 60f
-        for (i in 0 until 80) {
+        // 更新星点（衰减减慢 → 星点和连线存留更久、更密）
+        for (i in 0 until 160) {
             val oi = i * 4
             val li = stars[oi + 2]
             if (li <= 0f) continue
-            stars[oi + 2] = li - 0.0028f
-            for (j in i + 1 until 80) {
+            stars[oi + 2] = li - 0.0011f
+        }
+
+        // 连线 → 单条 Path，距离阈值放大 → 连线更密更远
+        linkPath.reset()
+        val linkDist = 75f + frame.energy * 80f
+        for (i in 0 until 160) {
+            val oi = i * 4
+            val li = stars[oi + 2]
+            if (li <= 0f) continue
+            for (j in i + 1 until 160) {
                 val oj = j * 4
                 val lj = stars[oj + 2]
                 if (lj <= 0f) continue
@@ -461,24 +529,23 @@ class ConstellationRenderer : VisualizerRenderer {
                 val dy = stars[oi + 1] - stars[oj + 1]
                 val d2 = dx * dx + dy * dy
                 if (d2 < linkDist * linkDist) {
-                    val alpha = (1f - kotlin.math.sqrt(d2) / linkDist) * 0.28f * minOf(li, lj)
-                    drawLine(accent, Offset(stars[oi], stars[oi + 1]),
-                        Offset(stars[oj], stars[oj + 1]), 1f, alpha = alpha)
+                    linkPath.moveTo(stars[oi], stars[oi + 1])
+                    linkPath.lineTo(stars[oj], stars[oj + 1])
                 }
             }
         }
+        drawPath(linkPath, accent, alpha = 0.42f + frame.energy * 0.30f, style = Stroke(width = 1.7f))
 
-        // 星点
-        for (i in 0 until 80) {
+        // 星点 → 单条 Path，半径加大、更亮
+        starPath.reset()
+        val starColor = VisualizerMath.towardWhite(accent, 0.70f + frame.pulse * 0.3f)
+        for (i in 0 until 160) {
             val o = i * 4
             val life = stars[o + 2]
             if (life <= 0f) continue
-            drawCircle(
-                VisualizerMath.towardWhite(accent, 0.5f + frame.pulse * 0.4f),
-                stars[o + 3] * (0.6f + life * 0.4f),
-                Offset(stars[o], stars[o + 1]),
-                alpha = life * 0.85f
-            )
+            val r = (stars[o + 3] * (0.6f + life * 0.4f)).coerceAtLeast(0.8f)
+            starPath.addOval(Rect(Offset(stars[o], stars[o + 1]), r))
         }
+        drawPath(starPath, starColor, alpha = 1f)
     }
 }

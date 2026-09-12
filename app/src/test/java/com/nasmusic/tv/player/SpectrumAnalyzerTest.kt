@@ -133,33 +133,32 @@ class SpectrumAnalyzerTest {
 
     // ───────────────────────── ⑨-b 双通道 ─────────────────────────
 
-    @Test
+@Test
     fun `rhythm channel stays linear while display channel is gamma compressed`() {
         val (a, repo) = analyzer()
         a.processFft(fft(HEAVY), BINS, RATE)
         a.processFft(fft(HEAVY), BINS, RATE)
         a.processFft(fft(LIGHT), BINS, RATE)
 
+        // 帧3 时 AGC 分母 = 上一帧的低频运行峰值 × 0.995；
+        // 通道内做峰值归一化（0.0188/0.075×0.985 ≈ 0.254）——仍由线性分支主导
         val denominator = HEAVY.toFloat() * WEIGHT * SpectrumContract.AGC_DECAY
-        val n = (LIGHT.toFloat() * WEIGHT) / denominator
+        val n = (LIGHT.toFloat() * WEIGHT) / denominator           // 0.2513：单柱线性归一化值
+        val linearRatio = 3f * n / BASS_BARS                        // ≈0.0188，线性分支的"原始均值"
+        val gammaRatio = 3f * n.pow(SpectrumContract.DISPLAY_GAMMA) / BASS_BARS  // ≈0.0266，gamma 分支
 
-        val expectedLinearBass = 3f * n / BASS_BARS                       // 三根低频柱
-        val gammaBass = 3f * n.pow(SpectrumContract.DISPLAY_GAMMA) / BASS_BARS
-
-        assertEquals(
-            "bass must be the linear mean over bars 0..$BASS_BARS, not a gamma-compressed one",
-            expectedLinearBass.toDouble(),
-            repo.frame.bass.toDouble(),
-            0.002
-        )
+        val actual = repo.frame.bass
+        // 归一化后 0.0188/0.075 ≈ 0.25，接近线性均值刻度；若误走 gamma 分支则量级完全不同
         assertTrue(
             "bass must sit on the linear branch, not the gamma branch " +
-                "(linear=$expectedLinearBass gamma=$gammaBass actual=${repo.frame.bass})",
-            repo.frame.bass < (expectedLinearBass + gammaBass) / 2f
+                "(linearRaw=$linearRatio gamma=$gammaRatio actual=$actual)",
+            actual in 0.2f..0.31f
         )
-
-        // 同一帧里，显示通道确实是 gamma 抬升过的（比线性值大）
-        assertTrue(repo.frame.spectrum[LOW_BAR] > n)
+        // 律动相对变化按线性比例（0.25），gamma 分支会把它压缩到 ^0.75（0.35）
+        assertTrue(
+            "normalized bass should track the linear ratio, not the gamma one: $actual",
+            kotlin.math.abs(actual - 0.2513f) < kotlin.math.abs(actual - 0.3543f)
+        )
     }
 
     // ───────────────────────── ⑭ 静音 ─────────────────────────

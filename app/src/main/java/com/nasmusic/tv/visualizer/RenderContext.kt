@@ -21,6 +21,22 @@ class RenderContext {
     var nowMs: Long = 0L
     /** 当前歌曲标题（E19 粒子文字用） */
     var caption: String? = null
+    /** 当前歌词行（E23 歌词点阵用） */
+    var currentLyricLine: String? = null
+    /** 下一句歌词（E23 两行滚动用） */
+    var nextLyricLine: String? = null
+    /** 当前行内演唱进度 0..1（E23 歌词点阵用，配合前快后慢曲线实现逐字感） */
+    var lyricLineProgress: Float = 0f
+    /** 当前行是否有逐字时间戳（E23 歌词点阵用，true=可用精确逐字，false=用进度曲线近似） */
+    var lyricHasWordTimestamps: Boolean = false
+    /** 当前歌词行索引（E23 两行滚动用，用于检测行切换） */
+    var lyricLineIndex: Int = -1
+    /** 当前行逐字时间戳列表（E23 逐字消散/凝聚用） */
+    var lyricWordTimestamps: List<Long> = emptyList()
+    /** 全曲歌词中最长句的字符数（E23 歌词点阵：据此计算自适应字体大小，保证最长行也不超宽） */
+    var lyricMaxLineChars: Int = 0
+    /** 全曲歌词中最长句的实际文本（E23 歌词点阵：用于精确测量宽度，占满 80% 屏宽） */
+    var longestLyricLine: String? = null
 
     val width: Float get() = canvasSize.width
     val height: Float get() = canvasSize.height
@@ -35,7 +51,15 @@ class RenderContext {
         canvasSize: Size,
         safeAreaPx: Float,
         nowMs: Long,
-        caption: String?
+        caption: String?,
+        currentLyricLine: String? = null,
+        nextLyricLine: String? = null,
+        lyricLineProgress: Float = 0f,
+        lyricHasWordTimestamps: Boolean = false,
+        lyricLineIndex: Int = -1,
+        lyricWordTimestamps: List<Long> = emptyList(),
+        lyricMaxLineChars: Int = 0,
+        longestLyricLine: String? = null
     ) {
         this.quality = quality
         this.palette = palette
@@ -44,5 +68,13 @@ class RenderContext {
         this.safeAreaPx = safeAreaPx
         this.nowMs = nowMs
         this.caption = caption
+        this.currentLyricLine = currentLyricLine
+        this.nextLyricLine = nextLyricLine
+        this.lyricLineProgress = lyricLineProgress
+        this.lyricHasWordTimestamps = lyricHasWordTimestamps
+        this.lyricLineIndex = lyricLineIndex
+        this.lyricWordTimestamps = lyricWordTimestamps
+        this.lyricMaxLineChars = lyricMaxLineChars
+        this.longestLyricLine = longestLyricLine
     }
 }

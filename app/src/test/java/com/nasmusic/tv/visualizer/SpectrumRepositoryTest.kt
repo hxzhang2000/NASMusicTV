@@ -23,20 +23,29 @@ class SpectrumRepositoryTest {
     @Test
     fun `band split matches the 64-bar boundaries`() {
         val repo = SpectrumRepository()
-        for (i in 0 until 64) {
-            bars[i] = when {
-                i <= SpectrumContract.BASS_END -> 0.4f      // 0..39
-                i <= SpectrumContract.MID_END -> 0.6f       // 40..55
-                else -> 0.8f                                // 56..63
+        fun setBand(bass: Float, mid: Float, treble: Float) {
+            for (i in 0 until 64) {
+                bars[i] = when {
+                    i <= SpectrumContract.BASS_END -> bass      // 0..39
+                    i <= SpectrumContract.MID_END -> mid        // 40..55
+                    else -> treble                              // 56..63
+                }
             }
         }
-        repo.onFrame(bars, bars, wave, 1_000L)
 
-        assertEquals(0.4f, repo.frame.bass, 1e-4f)
-        assertEquals(0.6f, repo.frame.mid, 1e-4f)
-        assertEquals(0.8f, repo.frame.treble, 1e-4f)
-        // energy = 全柱均值 = (40*0.4 + 16*0.6 + 8*0.8)/64 = 0.5
-        assertEquals(0.5f, repo.frame.energy, 1e-4f)
+        // 帧1：各段建立峰值（动态范围增强后首帧即触峰值 → 全 1.0）
+        setBand(0.4f, 0.6f, 0.8f)
+        repo.onFrame(bars, bars, wave, 1_000L)
+        assertEquals(1f, repo.frame.bass, 1e-3f)
+        assertEquals(1f, repo.frame.mid, 1e-3f)
+        assertEquals(1f, repo.frame.treble, 1e-3f)
+
+        // 帧2：仅 bass 段降到 0.2 → 只有 bass 通道下降，验证频段边界
+        setBand(0.2f, 0.6f, 0.8f)
+        repo.onFrame(bars, bars, wave, 1_020L)
+        assertEquals(0.508f, repo.frame.bass, 5e-3f)   // 0.2 / (0.4×0.985)
+        assertEquals(1f, repo.frame.mid, 5e-3f)        // 0.6 仍触峰值
+        assertEquals(1f, repo.frame.treble, 5e-3f)
     }
 
     @Test
@@ -65,9 +74,16 @@ class SpectrumRepositoryTest {
         val linear = FloatArray(SpectrumContract.BAR_COUNT) { 0.2f }
         repo.onFrame(display, linear, wave, 1_000L)
 
-        // spectrum 走显示通道，bass/mid/treble 走线性通道（不可混用，BUG ⑨-b）
+        // spectrum 走显示通道（原值 0.9）
         assertEquals(0.9f, repo.frame.spectrum[10], 1e-4f)
-        assertEquals(0.2f, repo.frame.bass, 1e-4f)
+        // 律动通道走线性输入：首帧 0.2 即峰值 → 1.0
+        assertEquals(1f, repo.frame.bass, 1e-4f)
+
+        // 帧2：线性降到 0.1 → bass 按线性比例回落（若误用 display 通道则仍触峰值 1.0）
+        val linearLow = FloatArray(SpectrumContract.BAR_COUNT) { 0.1f }
+        repo.onFrame(display, linearLow, wave, 1_020L)
+        assertEquals(0.508f, repo.frame.bass, 5e-3f)   // 0.1 / (0.2×0.985)
+        assertEquals(0.9f, repo.frame.spectrum[10], 1e-4f)  // display 通道原样保留
     }
 
     @Test
@@ -75,10 +91,14 @@ class SpectrumRepositoryTest {
         val repo = SpectrumRepository()
         for (i in 0 until 64) bars[i] = 0.3f
         repo.onFrame(bars, null, wave, 1_000L)
+        assertEquals(1f, repo.frame.bass, 1e-4f)
 
-        assertEquals(0.3f, repo.frame.bass, 1e-4f)
-        assertEquals(0.3f, repo.frame.mid, 1e-4f)
-        assertEquals(0.3f, repo.frame.treble, 1e-4f)
+        // 帧2：bars 降到 0.15 → 律动随显示通道回落（证明 fallback 生效）
+        for (i in 0 until 64) bars[i] = 0.15f
+        repo.onFrame(bars, null, wave, 1_020L)
+        assertEquals(0.508f, repo.frame.bass, 5e-3f)
+        assertEquals(0.508f, repo.frame.mid, 5e-3f)
+        assertEquals(0.508f, repo.frame.treble, 5e-3f)
     }
 
     @Test

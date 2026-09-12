@@ -64,13 +64,11 @@ class AutoDirector {
             VisualizerTheme.PARTICLE_STORM
         )
         val TUNNEL = arrayOf(
-            VisualizerTheme.SONIC_TERRAIN,
             VisualizerTheme.TUNNEL_FLY,
             VisualizerTheme.GALAXY_SPIRAL
         )
         val RING = arrayOf(
             VisualizerTheme.CIRCULAR_RING,
-            VisualizerTheme.CIRCULAR_NEBULA,
             VisualizerTheme.IMMERSIVE_BLOOM
         )
     }

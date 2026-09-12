@@ -64,9 +64,10 @@ class PcmTapProcessor(
         blockAlign = bytesPerSample * channelCount
         tap.sampleRate = inputAudioFormat.sampleRate
         configured = true
-        AppLog.d(
+        // release 可见（直调 Log.i，避免 R8 折叠）：确认处理器链真的在跑、降级通道可用
+        android.util.Log.i(
             TAG,
-            "configure: ${inputAudioFormat.sampleRate}Hz ch=$channelCount enc=$encoding"
+            "configure: ${inputAudioFormat.sampleRate}Hz ch=$channelCount enc=$encoding capturing=$capturing"
         )
         // 不改变音频格式：返回入参即"透传"
         return inputAudioFormat
@@ -146,7 +147,14 @@ class PcmTapProcessor(
         buffer = EMPTY_BUFFER
         ended = false
         ring.clear()
-        tap.stop()
+        // 修复：flush() 由 Media3 在 seek/切歌/重新配置时调用。
+        // 若降级通道已激活（capturing=true），必须保持 FFT 线程存活——
+        // 旧实现无条件 tap.stop() 会永久杀死分析线程（且没有任何重启点），
+        // 导致切歌/seek 后 PCM 频谱静默、效果再次全 0 静止。
+        // 只需清空环形缓冲（版本号归零），pump 会跳过无数据帧，开销为零。
+        if (!capturing) {
+            tap.stop()
+        }
     }
 
     override fun reset() {

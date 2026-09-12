@@ -108,7 +108,7 @@ class BeatDetectorTest {
     fun `spike below MIN_BASS is gated out`() {
         val f = Feed()
         repeat(300) { f.step(0f) }
-        repeat(300) { f.step(0.10f) }     // 0.10 < MIN_BASS(0.12)：相对跃升但绝对量不足
+        repeat(300) { f.step(0.004f) }    // 0.004 < MIN_BASS(0.005)：数字底噪级的相对变化，不构成鼓点
         assertEquals("sub-threshold energy must not trigger", 0, f.beats)
     }
 

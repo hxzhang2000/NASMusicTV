@@ -3,31 +3,23 @@ package com.nasmusic.tv.ui.components
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.GraphicEq
-import androidx.compose.material.icons.filled.Pause
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.SkipNext
-import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableLongStateOf
@@ -37,7 +29,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.CompositingStrategy
@@ -49,7 +45,6 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -57,7 +52,6 @@ import androidx.compose.ui.unit.sp
 import androidx.tv.material3.Icon
 import androidx.tv.material3.IconButton
 import androidx.tv.material3.Text
-import coil.compose.AsyncImage
 import com.nasmusic.tv.data.model.LyricsLine
 import com.nasmusic.tv.data.model.Song
 import com.nasmusic.tv.data.model.VisualQuality
@@ -76,7 +70,7 @@ import com.nasmusic.tv.visualizer.VisualizerRendererFactory
  * ```
  * ③ 前景层：顶部歌词 / 左下歌曲信息 / 底部指示器+控制栏
  * ② 效果层：Canvas —— VisualizerRenderer.draw(frame)
- * ① 背景层：封面 + 暗化遮罩
+ * ① 背景层：纯暗色底（不叠加封面图，突出频谱本身）
  * ```
  *
  * 绘制循环用 `withFrameNanos` 驱动，**不走 Compose 重组**——
@@ -85,10 +79,8 @@ import com.nasmusic.tv.visualizer.VisualizerRendererFactory
 @Composable
 fun VisualizerStage(
     song: Song?,
-    isPlaying: Boolean,
     frame: AudioFrame,
     cover: ImageBitmap?,
-    coverUrl: String?,
     palette: CoverPalette,
     lyrics: List<LyricsLine>?,
     progressMs: Long,
@@ -100,13 +92,15 @@ fun VisualizerStage(
     onExit: () -> Unit,
     onNextTheme: () -> Unit,
     onPrevTheme: () -> Unit,
-    onPlayPause: () -> Unit,
-    onNext: () -> Unit,
-    onPrev: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val density = LocalDensity.current
     val safeArea = 0.05f
+
+    // TV 焦点：进入舞台立即夺焦。VisualizerOverlay 直接覆盖在 UI 树上，
+    // 若不夺焦，D-Pad 事件仍路由到下方被遮挡界面的焦点节点，onPreviewKeyEvent 收不到，
+    // 表现为"遥控器左右键无法切换效果"（真机实测）。
+    val focusRequester = remember { FocusRequester() }
 
     // ── 渲染器生命周期（自动导演档 600ms 交叉淡入）────────────
     val renderCtx = remember { RenderContext() }
@@ -116,13 +110,19 @@ fun VisualizerStage(
     // 淡入透明度：由绘制循环逐帧写入，在绘制阶段读取 → 只重绘不重组
     val fadeAlpha = remember { mutableFloatStateOf(1f) }
     val prevAlpha = remember { mutableFloatStateOf(0f) }
+    // 渲染器 draw 异常一次性告警标记（避免逐帧刷日志）
+    val rendererFailed = remember { mutableStateOf(false) }
     // 正在淡出的旧渲染器（null = 无旧层）；用 State 以便出现/消失时重组
     val prevRenderer = remember { mutableStateOf<VisualizerRenderer?>(null) }
 
     // 主题 / 画质变化 → 同步渲染器（自动导演走淡入，手动切换硬切）
     LaunchedEffect(theme, quality, crossfade) {
+        val lyricInfo = computeLyricInfo(lyrics, progressMs)
         renderCtx.update(quality, palette, cover, Size.Zero, 0f,
-            System.currentTimeMillis(), song?.title)
+            System.currentTimeMillis(), song?.title,
+            lyricInfo.line, lyricInfo.nextLine, lyricInfo.progress,
+            lyricInfo.hasWords, lyricInfo.lineIndex, lyricInfo.wordStartTimes,
+            lyricInfo.maxLineChars, lyricInfo.longestLine)
         if (swapper.sync(theme, quality, crossfade, renderCtx, System.currentTimeMillis())) {
             prevRenderer.value = swapper.previous
             if (swapper.isCrossfading) {
@@ -156,15 +156,6 @@ fun VisualizerStage(
         }
     }
 
-    // ── 控制栏自动隐藏（3s）────────────────────────────────────
-    var controlsVisible by remember { mutableStateOf(true) }
-    LaunchedEffect(controlsVisible) {
-        if (controlsVisible) {
-            kotlinx.coroutines.delay(3000)
-            controlsVisible = false
-        }
-    }
-
     // ── 效果名 Toast ───────────────────────────────────────────
     var toastVisible by remember { mutableStateOf(true) }
     LaunchedEffect(theme) {
@@ -173,17 +164,24 @@ fun VisualizerStage(
         toastVisible = false
     }
 
+    // 进入舞台立即把焦点交给舞台 Box（TV 遥控器 D-Pad 依赖焦点路由）
+    LaunchedEffect(Unit) {
+        focusRequester.requestFocus()
+    }
+
     Box(
         modifier = modifier
             .fillMaxSize()
             .background(Color.Black)
+            .focusRequester(focusRequester)
             .focusable()
             .onPreviewKeyEvent { e ->
                 if (e.type == KeyEventType.KeyDown) {
                     when (e.key) {
                         Key.DirectionLeft -> { onPrevTheme(); true }
                         Key.DirectionRight -> { onNextTheme(); true }
-                        Key.DirectionUp -> { controlsVisible = true; true }
+                        // 上键：无动作（控制栏已移除）
+                        Key.DirectionUp -> true
                         else -> false
                     }
                 } else false
@@ -199,25 +197,16 @@ fun VisualizerStage(
                         when {
                             totalDrag > threshold -> onPrevTheme()
                             totalDrag < -threshold -> onNextTheme()
-                            else -> controlsVisible = true
                         }
                     }
                 )
             }
     ) {
-        // ① 背景层：封面 + 暗化遮罩（≥0.85，因 blur 在 API<31 为 no-op）
-        if (coverUrl != null) {
-            AsyncImage(
-                model = coverUrl,
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize().graphicsLayer { alpha = 0.42f }
-            )
-        }
+        // ① 背景层：纯暗色底（不再叠加封面图，突出频谱效果本身；暗底衬托霓虹荧光）
         Box(
             Modifier
                 .fillMaxSize()
-                .background(palette.background.copy(alpha = 0.88f))
+                .background(palette.background.copy(alpha = 0.72f))
         )
 
         // ② 效果层（新效果；交叉淡入时从透明渐显）
@@ -232,13 +221,28 @@ fun VisualizerStage(
                 }
         ) {
             canvasSize = Size(size.width, size.height)
+            // 计算当前歌词行 & 行内进度（给 E23 歌词点阵用）
+            val lyricInfo = computeLyricInfo(lyrics, progressMs)
             // 复用实例，零分配
             renderCtx.update(quality, palette, cover, canvasSize,
-                minOf(size.width, size.height) * safeArea, frame.timeMs, song?.title)
+                minOf(size.width, size.height) * safeArea, frame.timeMs, song?.title,
+                lyricInfo.line, lyricInfo.nextLine, lyricInfo.progress,
+                lyricInfo.hasWords, lyricInfo.lineIndex, lyricInfo.wordStartTimes,
+                lyricInfo.maxLineChars, lyricInfo.longestLine)
             val cur = swapper.current
             // tick 参与读取以确保每帧重绘
             if (tick >= 0L && cur != null && fadeAlpha.floatValue > ALPHA_EPS) {
-                with(cur) { draw(frame, renderCtx) }
+                // 渲染器绘制异常若直接抛出会中断整个绘制线程 → 电视上可能表现为
+                // native 崩溃（Skia 收到非法几何/状态）。捕获后跳过该帧并告警。
+                try {
+                    with(cur) { draw(frame, renderCtx) }
+                } catch (t: Throwable) {
+                    if (!rendererFailed.value) {
+                        rendererFailed.value = true
+                        android.util.Log.w("VisualizerStage",
+                            "renderer draw failed, skipped frame: ${cur::class.simpleName}", t)
+                    }
+                }
             }
         }
 
@@ -253,10 +257,22 @@ fun VisualizerStage(
                         alpha = prevAlpha.floatValue
                     }
             ) {
+                val lyricInfo = computeLyricInfo(lyrics, progressMs)
                 renderCtx.update(quality, palette, cover, Size(size.width, size.height),
-                    minOf(size.width, size.height) * safeArea, frame.timeMs, song?.title)
+                    minOf(size.width, size.height) * safeArea, frame.timeMs, song?.title,
+                    lyricInfo.line, lyricInfo.nextLine, lyricInfo.progress,
+                    lyricInfo.hasWords, lyricInfo.lineIndex, lyricInfo.wordStartTimes,
+                    lyricInfo.maxLineChars, lyricInfo.longestLine)
                 if (tick >= 0L && prevAlpha.floatValue > ALPHA_EPS) {
-                    with(old) { draw(frame, renderCtx) }
+                    try {
+                        with(old) { draw(frame, renderCtx) }
+                    } catch (t: Throwable) {
+                        if (!rendererFailed.value) {
+                            rendererFailed.value = true
+                            android.util.Log.w("VisualizerStage",
+                                "prev renderer draw failed, skipped frame: ${old::class.simpleName}", t)
+                        }
+                    }
                 }
             }
         }
@@ -287,7 +303,14 @@ fun VisualizerStage(
                     color = Color.White.copy(alpha = 0.85f),
                     fontSize = 20.sp,
                     modifier = Modifier
-                        .background(Color.Black.copy(alpha = 0.35f), RoundedCornerShape(12.dp))
+                        // drawBehind 画圆角矩形：避免 RoundedCornerShape clip 触发
+                        // Android 5.1 hwui Region 段错误（见 ThemeIndicator 注释）
+                        .drawBehind {
+                            drawRoundRect(
+                                color = Color.Black.copy(alpha = 0.35f),
+                                cornerRadius = CornerRadius(12.dp.toPx())
+                            )
+                        }
                         .padding(horizontal = 20.dp, vertical = 8.dp)
                 )
             }
@@ -314,7 +337,7 @@ fun VisualizerStage(
                 )
             }
 
-            // 底部：指示器 + 控制栏
+            // 底部：指示器（控制栏已移除）
             ThemeIndicator(
                 themes = VisualizerTheme.selectable,
                 current = theme,
@@ -322,20 +345,6 @@ fun VisualizerStage(
                 modifier = Modifier.align(Alignment.CenterHorizontally)
             )
 
-            AnimatedVisibility(
-                visible = controlsVisible,
-                enter = fadeIn(),
-                exit = fadeOut()
-            ) {
-                StageControls(
-                    isPlaying = isPlaying,
-                    isTV = isTV,
-                    onPlayPause = onPlayPause,
-                    onNext = onNext,
-                    onPrev = onPrev,
-                    onExit = onExit
-                )
-            }
             Spacer(Modifier.size(24.dp))
         }
 
@@ -383,7 +392,14 @@ private fun LyricTopBar(
             textAlign = TextAlign.Center,
             maxLines = 1,
             modifier = Modifier
-                .background(Color.Black.copy(alpha = 0.35f), RoundedCornerShape(8.dp))
+                // drawBehind 画圆角矩形：避免 RoundedCornerShape clip 触发
+                // Android 5.1 hwui Region 段错误（见 ThemeIndicator 注释）
+                .drawBehind {
+                    drawRoundRect(
+                        color = Color.Black.copy(alpha = 0.35f),
+                        cornerRadius = CornerRadius(8.dp.toPx())
+                    )
+                }
                 .padding(horizontal = 24.dp, vertical = 6.dp)
         )
     }
@@ -408,6 +424,46 @@ internal fun findCurrentLyricLine(lines: List<LyricsLine>?, progressMs: Long): I
     return result
 }
 
+/** 当前歌词行信息（给 E23 歌词点阵用） */
+internal data class LyricInfo(
+    val line: String?,
+    val nextLine: String?,
+    val progress: Float,
+    val hasWords: Boolean,
+    val lineIndex: Int,
+    val wordStartTimes: List<Long>,
+    val maxLineChars: Int = 0,
+    val longestLine: String? = null
+)
+
+/**
+ * 计算当前歌词行、行内进度、是否有逐字时间戳。
+ * 用于 E23 歌词点阵效果的逐字点亮动画。
+ */
+internal fun computeLyricInfo(lines: List<LyricsLine>?, progressMs: Long): LyricInfo {
+    if (lines.isNullOrEmpty()) return LyricInfo(null, null, 0f, false, -1, emptyList())
+    val idx = findCurrentLyricLine(lines, progressMs)
+    if (idx < 0) return LyricInfo(null, null, 0f, false, -1, emptyList())
+    val current = lines[idx]
+    val next = lines.getOrNull(idx + 1)
+    val duration = (next?.time ?: current.time + 3000L) - current.time
+    val elapsed = progressMs - current.time
+    val progress = if (duration > 0) (elapsed.toFloat() / duration).coerceIn(0f, 1f) else 1f
+    val hasWords = !current.wordTimestamps.isNullOrEmpty()
+    val wordStarts = current.wordTimestamps.map { it.startMs - current.time }
+    // 整曲歌词最长的一句（用于 E23 自适应字号：占满屏宽 80%）
+    var maxChars = 0
+    var longest = current.text
+    for (l in lines) {
+        val len = l.text?.length ?: 0
+        if (len > maxChars) {
+            maxChars = len
+            longest = l.text
+        }
+    }
+    return LyricInfo(current.text, next?.text, progress, hasWords, idx, wordStarts, maxChars, longest)
+}
+
 /** 底部圆点指示器（含 AUTO 档） */
 @Composable
 private fun ThemeIndicator(
@@ -416,62 +472,34 @@ private fun ThemeIndicator(
     quality: VisualQuality,
     modifier: Modifier = Modifier
 ) {
-    Row(
-        modifier = modifier.padding(vertical = 10.dp),
-        horizontalArrangement = Arrangement.spacedBy(7.dp)
+    // 圆点用 Canvas drawCircle 绘制，而非 21 个 CircleShape clip：
+    // Android 5.1 (创维 rtd299o) 的 hwui Region::createTJunctionFreeRegion 对
+    // 大量圆形 clip 的拓扑合并存在段错误（RenderThread SIGSEGV，真机三次复现）。
+    // drawCircle 是普通绘制指令，不产生 RenderNode clip region。
+    val density = LocalDensity.current
+    val spacingDp = 17.dp
+    val radiusDp = 5.dp
+    val smallRadiusDp = 3.5.dp
+    val totalWidthDp = (themes.size - 1).coerceAtLeast(0) * spacingDp.value + 2 * radiusDp.value
+    Canvas(
+        modifier = modifier
+            .padding(vertical = 10.dp)
+            .size(totalWidthDp.dp, 10.dp)
     ) {
-        themes.forEach { t ->
+        val cx0 = radiusDp.toPx()
+        val cy = size.height / 2
+        themes.forEachIndexed { i, t ->
             val supported = quality.supports(t)
             val active = t == current
-            Box(
-                Modifier
-                    .size(if (active) 10.dp else 7.dp)
-                    .clip(CircleShape)
-                    .background(
-                        when {
-                            !supported -> Color.White.copy(alpha = 0.18f)
-                            active -> NasMusicColors.Primary
-                            else -> Color.White.copy(alpha = 0.42f)
-                        }
-                    )
+            drawCircle(
+                color = when {
+                    !supported -> Color.White.copy(alpha = 0.18f)
+                    active -> NasMusicColors.Primary
+                    else -> Color.White.copy(alpha = 0.42f)
+                },
+                radius = if (active) radiusDp.toPx() else smallRadiusDp.toPx(),
+                center = Offset(cx0 + i * spacingDp.toPx(), cy)
             )
-        }
-    }
-}
-
-/** 舞台控制栏（3s 自动隐藏） */
-@Composable
-private fun StageControls(
-    isPlaying: Boolean,
-    isTV: Boolean,
-    onPlayPause: () -> Unit,
-    onNext: () -> Unit,
-    onPrev: () -> Unit,
-    onExit: () -> Unit
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 48.dp),
-        horizontalArrangement = Arrangement.Center,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        IconButton(onClick = onPrev) {
-            Icon(Icons.Filled.SkipPrevious, "上一首", tint = Color.White)
-        }
-        IconButton(onClick = onPlayPause) {
-            Icon(
-                if (isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
-                "播放/暂停", tint = Color.White
-            )
-        }
-        IconButton(onClick = onNext) {
-            Icon(Icons.Filled.SkipNext, "下一首", tint = Color.White)
-        }
-        if (isTV) {
-            IconButton(onClick = onExit) {
-                Icon(Icons.Filled.GraphicEq, "退出频谱", tint = Color.White)
-            }
         }
     }
 }

@@ -63,6 +63,55 @@ object VisualizerMath {
     fun hsl(hue: Float, saturation: Float, lightness: Float, alpha: Float = 1f): Color =
         Color.hsl(hue % 360f, saturation.coerceIn(0f, 1f), lightness.coerceIn(0f, 1f), alpha)
 
+    /**
+     * 霓虹化：把可能灰扑扑的封面色增强为高饱和、明快的霓虹色。
+     * 从封面取色后调用（每首歌一次），保证可视化整体鲜艳、不闷。
+     *
+     * @param minSat   饱和度下限（目标 < 下限时拉高）
+     * @param targetL  目标亮度（过暗过亮都向它收敛）
+     */
+    fun neonize(color: Color, minSat: Float = 0.85f, targetL: Float = 0.72f): Color {
+        val (h, s, l) = rgbToHsl(color)
+        val sat = maxOf(s, minSat)
+        val lit = (l * 0.4f + targetL * 0.6f).coerceIn(0.50f, 0.85f)
+        return Color.hsl(h, sat, lit, color.alpha)
+    }
+
+    /** 压暗（背景用）：[e] 越小越暗 */
+    fun darken(color: Color, e: Float = 0.35f): Color {
+        val (h, s, l) = rgbToHsl(color)
+        val dark = (l * e).coerceIn(0.06f, 0.24f)
+        // 背景压暗时降饱和但仍带一点色相，避免纯黑死板（略提亮 → 荧光更映衬）
+        return Color.hsl(h, (s * 0.6f).coerceIn(0.35f, 0.65f), dark, color.alpha)
+    }
+
+    /** RGB → HSL。返回 [hue(0-360), sat(0-1), light(0-1)] */
+    fun rgbToHsl(color: Color): Triple<Float, Float, Float> {
+        val r = color.red
+        val g = color.green
+        val b = color.blue
+        val maxC = maxOf(r, g, b)
+        val minC = minOf(r, g, b)
+        val l = (maxC + minC) / 2f
+        val d = maxC - minC
+        if (d <= 0.0001f) return Triple(0f, 0f, l)
+        val s = d / (1f - kotlin.math.abs(2f * l - 1f))
+        val h = when (maxC) {
+            r -> 60f * (((g - b) / d) % 6f)
+            g -> 60f * ((b - r) / d + 2f)
+            else -> 60f * ((r - g) / d + 4f)
+        }
+        return Triple(if (h < 0f) h + 360f else h, s, l)
+    }
+
+    /** 连续色相渐变（青→蓝→粉紫 等）。[t] 0→1 对应 hue0→hue1，走最短色相弧线 */
+    fun hueGradient(hue0: Float, hue1: Float, t: Float): Float {
+        var d = (hue1 - hue0) % 360f
+        if (d > 180f) d -= 360f
+        if (d < -180f) d += 360f
+        return (hue0 + d * t.coerceIn(0f, 1f) + 360f) % 360f
+    }
+
     /** 颜色向白色插值（用于"刺破"高亮段） */
     fun towardWhite(color: Color, amount: Float): Color =
         Color(

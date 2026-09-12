@@ -4,7 +4,6 @@ import com.nasmusic.tv.data.model.VisualQuality
 import com.nasmusic.tv.data.model.VisualizerTheme
 import com.nasmusic.tv.visualizer.renderers.BloomRenderer
 import com.nasmusic.tv.visualizer.renderers.BeatFireworkRenderer
-import com.nasmusic.tv.visualizer.renderers.CircularNebulaRenderer
 import com.nasmusic.tv.visualizer.renderers.CircularRingRenderer
 import com.nasmusic.tv.visualizer.renderers.ConstellationRenderer
 import com.nasmusic.tv.visualizer.renderers.FrequencyMountainRenderer
@@ -18,9 +17,11 @@ import com.nasmusic.tv.visualizer.renderers.ParticleGalaxyRenderer
 import com.nasmusic.tv.visualizer.renderers.ParticleStormRenderer
 import com.nasmusic.tv.visualizer.renderers.ParticleTextRenderer
 import com.nasmusic.tv.visualizer.renderers.PlasmaFlowRenderer
+import com.nasmusic.tv.visualizer.renderers.PrismHoloRenderer
+import com.nasmusic.tv.visualizer.renderers.AuroraRenderer
+import com.nasmusic.tv.visualizer.renderers.LyricsDotMatrixRenderer
 import com.nasmusic.tv.visualizer.renderers.RadialBurstRenderer
 import com.nasmusic.tv.visualizer.renderers.WaterfallRenderer
-import com.nasmusic.tv.visualizer.renderers.TerrainRenderer
 import com.nasmusic.tv.visualizer.renderers.TunnelRenderer
 
 /**
@@ -32,10 +33,8 @@ import com.nasmusic.tv.visualizer.renderers.TunnelRenderer
 object VisualizerRendererFactory {
 
     fun create(theme: VisualizerTheme): VisualizerRenderer = when (theme) {
-        VisualizerTheme.IMMERSIVE_BLOOM -> BloomRenderer()
-        VisualizerTheme.SONIC_TERRAIN -> TerrainRenderer()
+VisualizerTheme.IMMERSIVE_BLOOM -> BloomRenderer()
         VisualizerTheme.TUNNEL_FLY -> TunnelRenderer()
-        VisualizerTheme.CIRCULAR_NEBULA -> CircularNebulaRenderer()
         VisualizerTheme.CIRCULAR_RING -> CircularRingRenderer()
         VisualizerTheme.RADIAL_BURST -> RadialBurstRenderer()
         VisualizerTheme.FREQUENCY_MOUNTAIN -> FrequencyMountainRenderer()
@@ -52,6 +51,9 @@ object VisualizerRendererFactory {
         VisualizerTheme.MILKDROP_FEEDBACK -> MilkdropRenderer()
         VisualizerTheme.PARTICLE_TEXT -> ParticleTextRenderer()
         VisualizerTheme.PLASMA_FLOW -> PlasmaFlowRenderer()
+        VisualizerTheme.PRISM_HOLO -> PrismHoloRenderer()
+        VisualizerTheme.AURORA -> AuroraRenderer()
+        VisualizerTheme.LYRICS_DOT_MATRIX -> LyricsDotMatrixRenderer()
         // 自动导演：回落到默认效果，由 AutoDirector 决定实际主题
         VisualizerTheme.AUTO_DIRECTOR -> CircularRingRenderer()
     }
