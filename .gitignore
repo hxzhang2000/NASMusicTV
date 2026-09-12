@@ -70,3 +70,7 @@ screenshot.png
 
 # Dev tools
 .workbuddy/
+
+# Local build/dev output dirs
+logs_temp/
+output/
