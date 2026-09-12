@@ -18,6 +18,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -126,6 +127,8 @@ fun AppRoot(
     val showMv by viewModel.mvVM.showMv.collectAsState(initial = false)
     // K 歌全屏页显隐（修复：BACK 键需在 K 歌页优先退出 K 歌，而非触发应用退出确认）
     val showKaraoke by viewModel.vocalVM.showKaraoke.collectAsState(initial = false)
+    // 全屏可视化舞台显隐（BACK 需在舞台页优先退出，而非触发应用退出确认）
+    val showVisualizer by viewModel.visualizerVM.showVisualizer.collectAsState(initial = false)
     // MTV 搜索状态（顶层收集，供 NotFound 自动退出保护与 NowPlaying 分支共用）
     val mvState by viewModel.mvVM.mvState.collectAsState()
     // 安全兜底：切歌后新歌无 MV（NotFound）时自动退出 MTV 全屏，避免卡在无导航栏的播放页
@@ -136,7 +139,7 @@ fun AppRoot(
     }
     // Level 2: 根据当前屏幕和沉浸模式动态设置导航 BACK 键处理函数
     val navBackHandler = LocalNavigateBackHandler.current
-    LaunchedEffect(currentScreen, isImmersiveMode.value, showMv, showKaraoke) {
+    LaunchedEffect(currentScreen, isImmersiveMode.value, showMv, showKaraoke, showVisualizer) {
         // C-2 修正说明：初版审查把 when/if-else 分支里的 {{ ... }} 误判为 no-op（lambda 内 lambda）。
         // 实测编译行为：when/if 分支的 { } 按“块”解析，{{ X }} = 块 + 尾部 lambda 表达式，
         // 分支值就是可用的 lambda——原实现功能正常，并非 bug。此处改用具名 lambda 仅作可读性清理。
@@ -144,9 +147,12 @@ fun AppRoot(
         val exitImmersive: () -> Unit = { isImmersiveMode.value = false }
         val exitMv: () -> Unit = { viewModel.mvVM.exitMvMode() }
         val exitKaraoke: () -> Unit = { viewModel.vocalVM.exitKaraoke() }
+        val exitVisualizer: () -> Unit = { viewModel.visualizerVM.exitVisualizer() }
         val navSettings: () -> Unit = { viewModel.navVM.navigateTo(Screen.Settings) }
         val handler: (() -> Unit)? = when {
             isImmersiveMode.value -> exitImmersive
+            // 全屏可视化舞台：BACK 退出舞台，而非应用退出确认
+            showVisualizer -> exitVisualizer
             // K 歌页：BACK 退出 K 歌（切回普通 NOW PLAYING），而非应用退出确认
             showKaraoke -> exitKaraoke
             showMv -> exitMv
@@ -160,7 +166,7 @@ fun AppRoot(
 
     Column(modifier = Modifier.fillMaxSize()) {
         // 顶部导航栏（沉浸模式 / MTV 全屏页时隐藏；TV 与手机一致）
-        if (!isImmersiveMode.value && !showMv) {
+        if (!isImmersiveMode.value && !showMv && !showVisualizer) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -334,7 +340,17 @@ fun AppRoot(
                     viewModel = viewModel
                 )
             }
-}
+        }
+
+        // 全屏可视化舞台（20 套效果）—— 覆盖层，不新增 Screen 枚举
+        if (showVisualizer) {
+            VisualizerOverlay(
+                viewModel = viewModel,
+                isTV = isTV,
+                currentSong = currentSong,
+                isPlaying = isPlaying
+            )
+        }
 
     // 加入歌单弹窗（Library / 专辑详情 / 艺术家详情 共用，提升到 AppRoot 顶层跨页面生效）
     pickerSong?.let { song ->
@@ -393,4 +409,67 @@ private fun NavItem(
             )
         }
     }
+}
+
+/**
+ * 全屏可视化舞台覆盖层（20 套效果）。
+ *
+ * 歌词 / 进度在**此处**收集而非 AppRoot 顶层——播放期间进度每秒变化，
+ * 若在顶层订阅会驱动整棵 UI 树重组（同 H-3 修复的教训）。
+ */
+@Composable
+private fun VisualizerOverlay(
+    viewModel: com.nasmusic.tv.ui.viewmodel.MainViewModel,
+    isTV: Boolean,
+    currentSong: com.nasmusic.tv.data.model.Song?,
+    isPlaying: Boolean
+) {
+    val vm = viewModel.visualizerVM
+    val theme by vm.theme.collectAsState()
+    val quality by vm.quality.collectAsState()
+    val cover by vm.cover.collectAsState()
+    val palette by vm.palette.collectAsState()
+    val lyrics by viewModel.currentLyrics.collectAsState(initial = null)
+    val progress by viewModel.playerVM.progress.collectAsState(initial = 0L)
+
+    // 自动导演档：低频（500ms）重新评估场景，避免每帧重组
+    var autoTick by remember { mutableLongStateOf(0L) }
+    LaunchedEffect(theme) {
+        while (theme.isAutoDirector) {
+            kotlinx.coroutines.delay(500)
+            autoTick++
+        }
+    }
+    val effectiveTheme = if (theme.isAutoDirector) {
+        autoTick                    // 参与重组
+        vm.resolveTheme()
+    } else theme
+
+    // 封面加载 + 取色（切歌时一次，异步不阻塞）
+    LaunchedEffect(currentSong?.id) {
+        val url = currentSong?.let { viewModel.getCoverCandidates(it).firstOrNull() }
+        vm.loadCover(url, currentSong?.id)
+    }
+
+    VisualizerStage(
+        song = currentSong,
+        isPlaying = isPlaying,
+        frame = vm.frame,
+        cover = cover,
+        coverUrl = currentSong?.let { viewModel.getCoverCandidates(it).firstOrNull()?.toString() },
+        palette = palette,
+        lyrics = lyrics?.lines,
+        progressMs = progress,
+        theme = effectiveTheme,
+        quality = quality,
+        // 自动导演档的场景切换走 600ms 交叉淡入；其余硬切
+        crossfade = theme.isAutoDirector,
+        isTV = isTV,
+        onExit = { vm.exitVisualizer() },
+        onNextTheme = { vm.nextTheme() },
+        onPrevTheme = { vm.prevTheme() },
+        onPlayPause = { viewModel.playerVM.playPause() },
+        onNext = { viewModel.playerVM.next() },
+        onPrev = { viewModel.playerVM.previous() }
+    )
 }

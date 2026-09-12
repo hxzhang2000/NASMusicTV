@@ -334,8 +334,6 @@
     <string name="settings_lyrics_offset_desc">Adjust lyrics display timing (milliseconds)</string>
     <string name="settings_equalizer">Equalizer</string>
     <string name="settings_equalizer_desc">Adjust frequency band gains</string>
-    <string name="settings_spectrum">Spectrum Display</string>
-    <string name="settings_spectrum_desc">Show real-time spectrum animation on player screen</string>
     <string name="settings_clear_lyrics_cache">Clear Lyrics Cache</string>
     <string name="settings_clear_lyrics_cache_desc">Delete all cached lyrics files</string>
     <string name="settings_clear_cover_cache">Clear Cover Cache</string>
@@ -538,7 +536,6 @@
     <string name="about_credits">Credits</string>
 
     <!-- Settings Screen -->
-    <string name="settings_spectrum_theme">Spectrum Theme</string>
 
     <!-- Library Screen -->
     <string name="library_search_placeholder">Search songs, albums, artists…</string>

@@ -44,9 +44,6 @@ class PlayerViewModel(
     val duration: StateFlow<Long> = playerManager.duration
     val queue: StateFlow<List<Song>> = playerManager.queue
     val currentIndex: StateFlow<Int> = playerManager.currentIndex
-    /** 实时频谱数据（96 柱幅值），来自 SpectrumAnalyzer / Visualizer FFT */
-    val spectrumData: StateFlow<FloatArray> = playerManager.spectrumData
-
     // B-13: playMode 由本类拥有（UI/设置状态，不归 PlayerManager）
     private val _playMode = MutableStateFlow(PlayMode.SEQUENTIAL)
     val playMode: StateFlow<PlayMode> = _playMode.asStateFlow()

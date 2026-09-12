@@ -289,6 +289,8 @@ fun ControlButtonsRow(
     onTogglePlayMode: () -> Unit,
     showVocalButton: Boolean = false,
     onEnterKaraoke: () -> Unit = {},
+    showVisualizerButton: Boolean = false,
+    onEnterVisualizer: () -> Unit = {},
     showMvButton: Boolean = false,
     mvAvailable: Boolean = false,
     onEnterMv: () -> Unit = {},
@@ -327,6 +329,15 @@ fun ControlButtonsRow(
             Icon(imageVector = icon, contentDescription = playMode.displayName,
                 modifier = Modifier.size(if (compact) 20.dp else 28.dp))
         })
+        // 频谱（全屏可视化舞台）入口按钮 —— 位于播放模式与 K 歌之间
+        if (showVisualizerButton) {
+            Spacer(modifier = Modifier.width(if (compact) 12.dp else 20.dp))
+            VocalToggleButton(
+                label = stringResource(R.string.player_visualizer),
+                onClick = onEnterVisualizer,
+                compact = compact
+            )
+        }
         // K 歌入口按钮
         if (showVocalButton) {
             Spacer(modifier = Modifier.width(if (compact) 12.dp else 20.dp))

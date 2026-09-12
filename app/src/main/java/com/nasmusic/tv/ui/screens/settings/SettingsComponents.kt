@@ -156,37 +156,6 @@ internal fun PlayModeSelector(current: PlayMode, onSelect: (PlayMode) -> Unit) {
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
-internal fun VisualizerThemeSelector(current: VisualizerTheme, onSelect: (VisualizerTheme) -> Unit) {
-    Column {
-        Text(
-            text = stringResource(R.string.settings_spectrum_theme),
-            color = NasMusicColors.TextPrimary,
-            fontSize = FontSize.button(),
-            modifier = Modifier.padding(vertical = 8.dp)
-        )
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            VisualizerTheme.entries.forEach { theme ->
-                val selected = current == theme
-                FocusableSurface(
-                    onClick = { onSelect(theme) },
-                    shape = RoundedCornerShape(12.dp),
-                    focusedScale = 1.08f,
-                    animationDurationMs = 250,
-                    containerColor = if (selected) NasMusicColors.Primary else NasMusicColors.Surface,
-                    contentColor = if (selected) androidx.compose.ui.graphics.Color.Black else NasMusicColors.TextPrimary,
-                    focusedContainerColor = if (selected) NasMusicColors.Primary else NasMusicColors.Primary.copy(alpha = 0.2f),
-                    focusedContentColor = if (selected) androidx.compose.ui.graphics.Color.Black else NasMusicColors.TextPrimary,
-                    pressedScale = 0.95f
-                ) {
-                    Text(text = theme.displayName, color = if (selected) androidx.compose.ui.graphics.Color.Black else NasMusicColors.TextPrimary, fontSize = FontSize.button(), modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp))
-                }
-            }
-        }
-    }
-}
-
-@OptIn(ExperimentalTvMaterial3Api::class)
-@Composable
 internal fun SettingActionButton(
     label: String,
     description: String,

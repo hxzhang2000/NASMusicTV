@@ -7979,3 +7979,91 @@ onSearchSong = { keyword -> viewModel.searchNetworkSongs(keyword) },
 - `testDebugUnitTest --tests "*MultipartBoundaryStreamerTest"`：8/8 通过
 - 版本：v2.29.2 → **v2.29.3**（versionCode 126 → 127）
 - **待办（手测项）**：K 歌页 BACK 三级语义、歌词来源手动切换后不被缓存覆盖、导出到指定外接设备、电视端扫码弹窗不丢帧、手机上传 166MB 模型（KMP 边界路径）；release 构建（R8）需再跑一次 `assembleRelease` 确认 `data.stats` 之外的 keep 规则无回归
+
+### 10.122 v2.30.0 — 音乐可视化升级：全屏舞台 + 20 套效果 + 数据链收敛（2026-09-12）
+
+依据 `docs/music-visualizer-dev-plan.md` v6.0（可开发规格，72 章节 / 52 表格）实施。方案演进链：v1.0 否决 WebView 渲染 → v2.0 根因与技法 → v3.0 效果库与交互 → v4.0 呼吸感引擎 → v5.0 `AudioFrame` 契约 → v6.0 20 套全量可开发规格。
+
+#### 数据层根因修复（"不好看 / 不呼吸"的真因）
+
+- **⑨ 归一化分母错误**：`SpectrumAnalyzer` 原用**当前帧**低频峰值作分母（`:216-217`），分子分母同步缩放 → 低频柱**恒为 1.0**，轻/重鼓点无差别。改为低频区**运行峰值** `lowRunningPeak`（`maxOf(lowRunningPeak * AGC_DECAY, lowBandPeak, AGC_FLOOR)`，`AGC_DECAY = 0.995` ≈ 3s 时间常数）。效果：重鼓点 1.0 / 轻鼓点 ≈0.45 / 弱间奏 ≈0.2
+- **⑨-b gamma 二次压缩**：原 `sqrt(x).pow(1.5)` = `x^0.75`，gamma<1 抬升小值，把轻:重比从 5:1 压到 3.3:1。改为**双通道输出**——`spectrum[]` 走 `^0.75`（`DISPLAY_GAMMA`，保证小信号可见），`bass`/`mid`/`treble`/`energy` 走线性（保证动态范围）。二者不可混用
+- **⑩ 时间采样率不足**：回调 50000µs（20Hz）而 captureSize 1024 仅覆盖 23ms → 每周期漏掉 54% 音频，鼓点 attack（5–10ms）整拍漏掉。改 `CAPTURE_INTERVAL_US = 20_000`（50Hz），波形与 FFT 双开；`captureSize` 取 `getCaptureSizeRange()[1]`（原写死 1024，浪费支持 2048 的设备）
+- **⑫ 每帧数组分配**：`FloatArray(512)` + `sliceArray(5..19)` + `FloatArray(32)` ≈ 2.2KB/帧 × 50fps ≈ 110KB/s。改为 `magnitudeBuf` / `barBuf` / `displayBuf` / `linearBuf` / `waveBuf` 全部预分配复用，低频区改循环取 max 不切片
+- **⑬ 每帧强制重组**：`_spectrumData: StateFlow<FloatArray>` 在节流点 `emit(displayBuf.copyOf())`，`FloatArray` 按引用比较 → 订阅方每 33ms 必重组。**整条兼容通道删除**：数据通路收敛为 `SpectrumAnalyzer → SpectrumRepository.onFrame → AudioFrame 单例`，仓库只发布 `frameSeq`（帧序号）。连带删除 `PlayerEqualizer.spectrumData` / `PlayerManager.spectrumData` / `PlayerViewModel.spectrumData` / `NowPlayingBranch` 的 `collectAsState` / `NowPlayingScreen` 的 `spectrumData`+`visualizerTheme` 死参数（`VisualEqualizer` 的唯一调用方 `EqualizerScreen` 从未传入该参数）
+- **⑭ 静音返回空数组**：原 `return FloatArray(0)` 且 `runningPeak = 1f` → 渲染层柱数变 0、频谱整体消失，恢复播放后前 1~2s 被压制。改为写入**长度正确的全 0 数组**；波形一并归零（避免静音期波形类效果显示残影）；不再重置 `runningPeak`
+- **① 柱数错位**：`BAR_COUNT` 32 → **64**（`SpectrumContract`），频段边界 Bass `0–39` / Mid `40–55` / Treble `56–63`；渲染侧**不再有 `barCount` 参数**，统一取 `frame.spectrum.size`——从结构上杜绝复发
+- **⑮ 枚举不兼容**：`VisualizerTheme.fromKey` 增加 `LEGACY_MAP`（`COLOR_FLOW`→`CIRCULAR_RING`、`NEON_PULSE`→`IMMERSIVE_BLOOM`、`CLASSICAL_WAVE`→`SONIC_TERRAIN`）+ 大小写容错 + 默认兜底
+- 防御：`processFft` 增加 FFT bins 越界补分配（回调 bins 多于 `attach` 预分配时不再 AIOOBE）
+
+#### 新增文件
+
+- `visualizer/`：`AudioFrame`（契约单例）、`SpectrumContract`、`SpectrumRepository`（唯一写入方）、`BeatDetector`、`SectionEnergyTracker`、`PeakHoldTracker`、`ParticlePool`、`CoverPalette` + `CoverPaletteProvider`、`RenderContext`、`VisualizerRenderer` + `VisualizerRendererFactory`、`VisualizerMath`、`AutoDirector`
+- `visualizer/renderers/`：`BasicRenderers`(E01–E07) / `AdvancedRenderers`(E08–E17) / `ParticleRenderers` / `UltraRenderers`(E18–E20)
+- `ui/components/VisualizerStage.kt`（三层舞台 + 绘制循环 + TV/手机交互）、`ui/viewmodel/VisualizerViewModel.kt`（显隐/主题/画质/封面取色）
+- 测试：`BeatDetectorTest` / `AudioFrameTest` / `SpectrumRepositoryTest` / `SpectrumAnalyzerTest` / `VisualizerThemeTest` / `FindCurrentLyricLineTest`
+
+#### 渲染与交互设计要点
+
+- **`AudioFrame` 三条铁律**：单例复用（运行期零分配）、只有 `SpectrumRepository` 可写、渲染层不得跨帧持有引用
+- **绘制循环不走重组**：`Canvas` + `LaunchedEffect { while(true) withFrameNanos { tick = it } }`；`RenderContext` 复用实例，每帧只更新字段
+- **三层结构**：背景层（封面 + `palette.background` alpha 0.88 暗化；不依赖 `Modifier.blur`——API<31 为 no-op）→ 效果层（Canvas + `CompositingStrategy.Offscreen` 支撑 `BlendMode.Plus` 叠加发光 T9）→ 前景层（顶部歌词行 / 效果名 Toast / 左下歌曲信息 / 底部 21 档指示器 + 控制栏）
+- **`AUTO_DIRECTOR` 是模式不是效果**：`AutoDirector.evaluate` 在 `VisualizerOverlay` 内以 **500ms** 周期求值（低频重评估，避免每帧重组）；滞回 = 8s 最小驻留 + 升档 0.80 / 降档 0.65 + 场景候选表（EXPLOSION/TUNNEL/RING）
+- **TV 左右键与焦点导航**：`onPreviewKeyEvent` 拦截；控制栏 3s 自动隐藏（隐藏态方向键 = 切效果，唤出后恢复焦点移动）；页面保留可获焦元素避免"焦点黑洞"
+- **设置页清理**：移除频谱开关（`spectrumEnabled` 系列）与主题选择器；NowPlaying 48dp 小频谱条移除；补齐 `values-en/strings.xml` 中残留的 `settings_spectrum*` 三条译文（默认语言已删而译文未删会触发 release 构建 `removing resource ... without required default value` 告警）
+- **构建**：新增依赖 `androidx.palette:palette-ktx:1.0.0`（唯一新增依赖，不引入 WebView / JTransforms / 3D 库）；ProGuard 增 `visualizer.**` 与 `VisualizerTheme` / `VisualQuality` / `Tier` 枚举 keep
+
+#### 验证
+
+- `assembleDebug` 通过（含全部主源码改动）
+- `testDebugUnitTest`：全量 **38 个测试类 / 357 例 / 0 失败**，其中新增 6 类 47 例——`SpectrumAnalyzerTest`(10) 直接驱动 `processFft` 校验 ⑨ 的 AGC 解析解（重鼓点 1.0 / 轻鼓点 ≈0.355）与 ⑨-b 的线性/显示双通道（断言 `bass` 落在解析线性解上、明显低于 gamma 分支）、⑭ 的定长全 0 数组与"静音后立即恢复"；`SpectrumRepositoryTest`(6) 钉死"发布帧序号而非数组副本"（含 33ms 节流窗口内 `frameSeq` 不前进的断言）；`BeatDetectorTest`(7) 覆盖 120/180 BPM、静音、恒定能量、MIN_BASS 门限、pulse 快起慢落、reset 冷启动；`VisualizerThemeTest`(11) 覆盖 ⑮ 旧枚举迁移 + 画质门控；`AudioFrameTest`(5)；`FindCurrentLyricLineTest`(8)
+- `assembleRelease`（R8 + `shrinkResources` + 签名）通过——新增 `visualizer.**` / 枚举 keep 规则无回归；debug APK 42.4MB、release APK **21.8MB**（`NASMusicTV-release-v2-30-0.apk`）
+- 版本：v2.29.3 → **v2.30.0**（versionCode 127 → 128）
+- **待办（各机型手测项）**：TV 真机 20 套效果逐套观感与帧率（老盒子 ≥30fps / 单帧 ≤16ms）；`←/→` 与控制栏焦点交互；手机滑动阈值手感；封面取色随切歌生效；连续 30min 无爆音 / ANR / 内存单调增长；Allocation Tracker 确认绘制循环零分配；`AUTO_DIRECTOR` 8s 驻留不抖动；部分国产 TV `Visualizer` 持续返回全 0 时的 PCM 降级通道（P6，已在 v2.30.1 实施，待真机校准）
+### 10.123 v2.30.1 — 可视化 P6：自动导演交叉淡入 + PCM 降级通道（2026-09-12）
+
+补齐 `docs/music-visualizer-dev-plan.md` 中 P6 的两个未完项。
+
+#### AUTO_DIRECTOR 场景切换：600ms 交叉淡入
+
+方案 §4.21 的红线是"交叉淡入 600ms，**禁止硬切**"，原实现（`remember(theme) { create(theme) }`）是硬切。新增 `visualizer/RendererSwapper.kt` 承担过渡：
+
+- **双层叠绘**：切换时保留旧渲染器为 `previous`，UI 同时绘制两层 Canvas —— 新层 `alpha = t`、旧层 `alpha = 1-t`，`t = (now - startMs) / 600ms`。600ms 后 `previous.onExit()` 释放，避免粒子类效果长期双份绘制
+- **只重绘不重组**：透明度由绘制循环（`withFrameNanos`）写入 `MutableFloatState`，Canvas 经 `graphicsLayer { alpha = ... }` 延迟读取 → 只失效图层绘制、不触发重组；旧层的**存在性**（结构变化）才用 State，每次过渡最多重组两次
+- **手动切换仍硬切**：`crossfade = theme.isAutoDirector`（`AppRoot` 传入）。`←/→`、设置页选效果、切画质档都走硬切 —— 用户按键后需要即时反馈，600ms 淡入会显得迟钝
+- **画质变化改为重新 `onEnter`**：`Terrain` / `LiquidGrid` / `MatrixRain` / 粒子类均在 `onEnter` 里按 `VisualQuality` 预分配缓冲；原实现靠 `DisposableEffect(theme, quality)` 重复调用 `onEnter`，新实现由 `sync()` 检测 `quality` 变化后对同一实例重进，保持缓冲尺寸与绘制参数一致
+
+#### PCM 降级通道（P6）
+
+部分国产 TV 的 `Visualizer` **绑定成功却持续返回全 0**（可用性"假真"），方案 §3.5 要求补一条自算通道。新增 5 个类：
+
+| 文件 | 职责 |
+|---|---|
+| `player/PcmTapProcessor.kt` | `AudioProcessor`：`queueInput()` 只做「降混 mono + memcpy 到环形缓冲」，**严禁 FFT**（阻塞播放线程 → 爆音）；音频原样透传，不改动任何采样值 |
+| `player/PcmRingBuffer.kt` | 单写（播放线程）/ 单读（FFT 线程）环形缓冲，容量取 2 的幂（8192 样本 ≈ 186ms），带写计数 `version` 供读方跳过无新数据的帧 |
+| `player/Radix2Fft.kt` | 迭代式 radix-2 复数 FFT（N=1024，位反转表 + 旋转因子预计算，零分配）。**不引入 JTransforms** |
+| `player/PcmSpectrumTap.kt` | 专用 `HandlerThread`（`THREAD_PRIORITY_BACKGROUND`）每 40ms 取窗（Hann）+ FFT |
+| `player/PcmFallbackChannel.kt` | 把采集侧与分析侧打包为可启停单元，由 `PlaybackService` 创建 |
+
+接线：`PlaybackService` 把 `pcmFallback.processor` 挂到 `setAudioProcessors(arrayOf(pcmFallback.processor, vocalRemovalProcessor))` 的**最前**（取人声消除之前的原始信号），并注入 `PlayerManager.setPcmFallbackChannel()` → `PlayerEqualizer` → `SpectrumAnalyzer`。
+
+**仲裁状态机**（`SpectrumAnalyzer`）：
+
+| 状态 | 进入条件 | 动作 |
+|---|---|---|
+| Visualizer（默认） | `attach()` / 回滚后 | 正常采集 |
+| → PCM | 连续静音 ≥20 帧 **且** 持续 ≥2s **且** `isPlaying` **且** 未被抑制 | `visualizer.enabled = false`、重置跟踪状态、`activate()` PCM |
+| → 回滚 | PCM 激活后 3s 内始终无有效信号 | `deactivate()` PCM、恢复 `visualizer.enabled = true`、**抑制 5 分钟**（两条通道都失败就别反复折腾） |
+
+- **为什么不能只看"连续 20 帧"**：采集周期 20ms，20 帧仅 400ms —— 歌曲间奏、淡出段落都会被误判，故额外要求静音**持续时长 ≥ 2s**
+- **暂停不参与判定**：`isPlaying` 由 `PlayerManager.playerListener.onIsPlayingChanged` 注入，否则暂停时的静音会被当作 Visualizer 失效
+- **共用分析链**：两条通道都汇入 `analyze(magnitudes, bins, rate, fromPcm)` —— AGC / 感知加权柱映射 / 双通道输出只有一份实现（否则两条通道观感不一致）。PCM 的静音用绝对值 `PCM_SILENCE_EPS = 1e-3` 判定（数字静音即真静音），**不走自适应噪声门限**（那是为系统 Visualizer 的底噪准备的，会把小信号整段吞掉）
+- **并发**：`analyze()` 加 `@Synchronized`；`usingPcm` 时直接丢弃 Visualizer 通道的残留帧（`enabled = false` 可能失败或回调在途），避免全 0 帧覆盖 PCM 结果导致画面闪烁
+- **常态开销**：`capturing` 默认 false → PCM 采集与 FFT 线程均不启动；处理器仍在链上（`isActive()` 恒 true），每 block 多一次 memcpy，与既有 `SpectralMaskProcessor` 同级
+
+#### 验证
+
+- `compileDebugKotlin` / `assembleDebug` 通过；`assembleRelease`（R8 + `shrinkResources` + 签名）通过
+- `testDebugUnitTest`：**42 个测试类 / 383 例 / 0 失败**，新增 4 类 26 例 —— `Radix2FftTest`(7) 用单频 / 直流 / 零输入 / 短缓冲校验 FFT 数值正确性；`PcmRingBufferTest`(7) 钉死"取最新窗口 / 未填满不返回脏数据 / version 前进"；`SpectrumAnalyzerPcmTest`(5) 断言 PCM 与 Visualizer **同一套 AGC**，且 PCM 不被自适应噪声门限吞掉（同一小信号在 Visualizer 通道为全 0、在 PCM 通道可见）；`RendererSwapperTest`(7) 断言 600ms 淡入进度、淡入中不释放旧层、手动切换硬切、画质变化只重进不重建
+- 版本：v2.30.0 → **v2.30.1**（versionCode 128 → 129）
+- **待办（各机型手测项）**：在真实「Visualizer 恒返回全 0」机型上验证降级触发与观感；PCM 的 `PCM_SILENCE_EPS` 与探测窗口时长需真机校准；交叉淡入期间的双层绘制在中低端盒子上的帧率

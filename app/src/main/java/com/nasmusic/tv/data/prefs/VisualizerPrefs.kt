@@ -13,6 +13,8 @@ class VisualizerPrefs internal constructor(private val prefs: AppPreferences) {
     suspend fun setEqualizerBand(index: Int, value: Float) = prefs.setEqualizerBand(index, value)
     suspend fun setSpectrumEnabled(enabled: Boolean) = prefs.setSpectrumEnabled(enabled)
     suspend fun setVisualizerTheme(theme: com.nasmusic.tv.data.model.VisualizerTheme) = prefs.setVisualizerTheme(theme)
+
+    suspend fun setVisualizerQuality(quality: com.nasmusic.tv.data.model.VisualQuality) = prefs.setVisualizerQuality(quality)
     suspend fun setFontAdjustment(adjustment: Int) = prefs.setFontAdjustment(adjustment)
 
     // 封面滤镜（Phase 5）

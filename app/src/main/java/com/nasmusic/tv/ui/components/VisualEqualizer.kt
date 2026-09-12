@@ -37,15 +37,18 @@ import kotlin.random.Random
 /**
  * 可视化均衡器柱状频谱图
  *
- * NowPlaying 页面底部的频谱动画组件。
- * 支持三种视觉主题：[VisualizerTheme.COLOR_FLOW]、[VisualizerTheme.NEON_PULSE]、[VisualizerTheme.CLASSICAL_WAVE]。
+ * 均衡器页顶部的频谱预览小条（64dp）。
+ *
+ * 全屏可视化舞台（20 套效果）走 `visualizer` 包的 VisualizerRenderer，与本组件无关。
  *
  * 支持两种数据源：
- * 1) 真实频谱：传入 [spectrumData] 来自 SpectrumAnalyzer（32 柱感知频率翘曲映射）
- * 2) 模拟回退：当 [spectrumData] 为 null 时，使用随机生成（预览/测试场景）
+ * 1) 真实频谱：传入 [spectrumData]（幅值 0~1）。注意**当前无调用方传入**——数据源已统一为
+ *    `SpectrumRepository` / `AudioFrame`（BUG ⑬ 修复时删除了 SpectrumAnalyzer 的
+ *    `StateFlow<FloatArray>` 兼容通道），故实际走第 2 条路径。
+ * 2) 模拟回退：当 [spectrumData] 为 null 时，使用随机生成（预览场景）
  *
  * @param isPlaying 是否在播放
- * @param spectrumData 真实频谱数据（32 柱幅值，0~1），null 时使用随机模拟
+ * @param spectrumData 真实频谱数据（幅值 0~1），null 时使用随机模拟
  * @param theme 视觉主题
  * @param barCount 柱状条数量
  * @param maxBarHeight 最大柱子高度（百分比 of container height）
@@ -55,15 +58,11 @@ import kotlin.random.Random
 fun VisualEqualizer(
     isPlaying: Boolean,
     spectrumData: FloatArray? = null,
-    theme: VisualizerTheme = VisualizerTheme.COLOR_FLOW,
+    theme: VisualizerTheme = VisualizerTheme.Default,
     barCount: Int = 32,
     maxBarHeight: Float = 0.85f,
     modifier: Modifier = Modifier
 ) {
-    val srcBarCount = spectrumData?.size ?: barCount
-    Log.d("VisualEqualizer", "Composed: isPlaying=$isPlaying, barCount=$barCount, theme=$theme, " +
-            "realData=${spectrumData != null}, srcSize=${spectrumData?.size}")
-
     val barHeights = remember { Array(barCount) { 0f } }
     val targetHeights = remember { Array(barCount) { 0f } }
     var tick by remember { mutableIntStateOf(0) }
@@ -114,7 +113,7 @@ fun VisualEqualizer(
             }
 
             // ColorFlow 色相偏移
-            if (theme == VisualizerTheme.COLOR_FLOW) {
+            if (theme.ordinal % 3 == 0) {
                 hueOffset = (hueOffset + 0.005f) % 1f
             }
 
@@ -129,14 +128,14 @@ fun VisualEqualizer(
             .clip(RoundedCornerShape(6.dp))
             .background(NasMusicColors.SurfaceVariant.copy(alpha = 0.5f))
     ) {
-        Log.d("VisualEqualizer", "Box rendered, isPlaying=$isPlaying, theme=$theme")
         Canvas(modifier = Modifier.fillMaxWidth().height(48.dp)) {
             if (tick >= 0) { /* no-op, just read tick */ }
 
-            when (theme) {
-                VisualizerTheme.COLOR_FLOW -> drawColorFlow(barHeights, barCount, maxBarHeight, hueOffset, size)
-                VisualizerTheme.NEON_PULSE -> drawNeonPulse(barHeights, barCount, maxBarHeight, size)
-                VisualizerTheme.CLASSICAL_WAVE -> drawClassicalWave(barHeights, barCount, maxBarHeight, size)
+            // 新版主题共 21 个，按风格归入三种绘制样式（本组件仅用于均衡器页小条）
+            when (theme.ordinal % 3) {
+                0 -> drawColorFlow(barHeights, barCount, maxBarHeight, hueOffset, size)
+                1 -> drawNeonPulse(barHeights, barCount, maxBarHeight, size)
+                else -> drawClassicalWave(barHeights, barCount, maxBarHeight, size)
             }
         }
     }

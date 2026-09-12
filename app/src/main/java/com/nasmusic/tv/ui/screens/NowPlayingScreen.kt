@@ -49,7 +49,6 @@ import com.nasmusic.tv.data.model.Lyrics
 import com.nasmusic.tv.data.model.LyricsHighlightMode
 import com.nasmusic.tv.data.model.PlayMode
 import com.nasmusic.tv.data.model.Song
-import com.nasmusic.tv.data.model.VisualizerTheme
 import com.nasmusic.tv.data.model.isRadioSong
 import com.nasmusic.tv.ui.components.LyricsView
 import com.nasmusic.tv.ui.components.CoverCarousel
@@ -59,7 +58,6 @@ import com.nasmusic.tv.ui.components.LocalFocusableContentColor
 import com.nasmusic.tv.ui.components.KaraokePlaybackScreen
 import com.nasmusic.tv.ui.components.ProgressSection
 import com.nasmusic.tv.ui.components.SongInfoPanel
-import com.nasmusic.tv.ui.components.VisualEqualizer
 import com.nasmusic.tv.ui.theme.NasMusicColors
 import com.nasmusic.tv.util.AppLog
 
@@ -101,15 +99,10 @@ fun NowPlayingScreen(
     // 歌曲详情信息
     technicalInfo: com.nasmusic.tv.data.model.SongTechnicalInfo? = null,
     onLoadTechnicalInfo: () -> Unit = {},
-    /** 实时频谱柱状条数据（来自 Visualizer FFT），null = 随机回退 */
-    spectrumData: FloatArray? = null,
-    /** 是否启用频谱显示 */
-    spectrumEnabled: Boolean = false,
-    /** 可视化频谱主题 */
-    visualizerTheme: VisualizerTheme = VisualizerTheme.COLOR_FLOW,
     // === K 歌页面状态（由 ViewModel 管理，切 Tab 时保持） ===
     showKaraoke: Boolean = false,
     onEnterKaraoke: () -> Unit = {},
+    onEnterVisualizer: () -> Unit = {},
     onExitKaraoke: () -> Unit = {},
     // === KARAOKE 人声消除 ===
     vocalRemovalEnabled: Boolean = false,
@@ -310,6 +303,8 @@ fun NowPlayingScreen(
                             onNext = onNext,
                             onPrevious = onPrevious,
                             onTogglePlayMode = onTogglePlayMode,
+                            showVisualizerButton = currentSong != null,
+                            onEnterVisualizer = onEnterVisualizer,
                             showVocalButton = currentSong != null,
                             onEnterKaraoke = onEnterKaraoke,
                             showMvButton = true,
@@ -466,19 +461,8 @@ fun NowPlayingScreen(
 
             Spacer(modifier = Modifier.height(4.dp))
 
-            // 可视化均衡器（仅在非沉浸模式 + 有歌曲 + 开启频谱显示时显示）
-            AppLog.d("NowPlayingScreen", "VisualEqualizer check: isImmersiveMode=$isImmersiveMode, isPlaying=$isPlaying, currentSong=${currentSong?.title}, spectrumEnabled=$spectrumEnabled")
-            if (!isImmersiveMode && currentSong != null && spectrumEnabled) {
-                AppLog.d("NowPlayingScreen", "VisualEqualizer about to render")
-                VisualEqualizer(
-                    isPlaying = isPlaying,
-                    spectrumData = spectrumData,
-                    theme = visualizerTheme,
-                    barCount = 96,
-                    modifier = Modifier.padding(horizontal = 4.dp)
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-            }
+            // 注：原 48dp 小频谱条已移除——入口改为播放控件上的「频谱」按钮，
+            // 进入独立全屏舞台（VisualizerStage），20 套效果更震撼。
 
             // 进度条（全宽，底部对齐）— Task 2；直播态（电台）禁用 seek
             ProgressSection(

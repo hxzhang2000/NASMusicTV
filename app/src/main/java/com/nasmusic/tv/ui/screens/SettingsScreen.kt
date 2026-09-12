@@ -153,8 +153,6 @@ fun SettingsScreen(
     weatherApiKey: String = "",
     onChangeWeatherApiKey: ((String) -> Unit)? = null,
     // 频谱显示设置
-    spectrumEnabled: Boolean = false,
-    onToggleSpectrum: (Boolean) -> Unit = {},
     // 全局字体字号调整
     fontAdjustment: Int = 0,
     onChangeFontAdjustment: (Int) -> Unit = {},
@@ -195,7 +193,7 @@ fun SettingsScreen(
     onRefreshModelStatus: (() -> Unit)? = null,
     onScanTransferModel: (() -> Unit)? = null,
     // 可视化频谱主题
-    visualizerTheme: VisualizerTheme = VisualizerTheme.COLOR_FLOW,
+    visualizerTheme: VisualizerTheme = VisualizerTheme.Default,
     onChangeVisualizerTheme: (VisualizerTheme) -> Unit = {},
     // 数据管理（备份/恢复）
     backupFiles: List<com.nasmusic.tv.util.BackupFileUtils.BackupFile> = emptyList(),
@@ -400,7 +398,6 @@ fun SettingsScreen(
                     PlayerSettingsSection(
                         state = PlayerSettingsState(
                             settings = settings,
-                            spectrumEnabled = spectrumEnabled,
                             visualizerTheme = visualizerTheme,
                             separationMode = separationMode,
                             modelDownloaded = modelDownloaded,
@@ -422,7 +419,6 @@ fun SettingsScreen(
                         ),
                         actions = PlayerSettingsActions(
                             onToggleAutoPlayNext = onToggleAutoPlayNext,
-                            onToggleSpectrum = onToggleSpectrum,
                             onChangeVisualizerTheme = onChangeVisualizerTheme,
                             onChangePlayMode = onChangePlayMode,
                             onOpenEqualizer = onOpenEqualizer,

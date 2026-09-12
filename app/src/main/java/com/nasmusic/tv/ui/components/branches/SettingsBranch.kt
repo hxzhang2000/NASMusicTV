@@ -114,8 +114,6 @@ internal fun SettingsBranch(
                         onChangeJamendoClientId = { viewModel.updateJamendoClientId(it) },
                         weatherApiKey = weatherApiKey,
                         onChangeWeatherApiKey = { viewModel.updateWeatherApiKey(it) },
-                        spectrumEnabled = settings.spectrumEnabled,
-                        onToggleSpectrum = { viewModel.updateSpectrumEnabled(it) },
                         visualizerTheme = settings.visualizerTheme,
                         onChangeVisualizerTheme = { viewModel.updateVisualizerTheme(it) },
                         fontAdjustment = settings.fontAdjustment,

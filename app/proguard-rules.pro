@@ -43,6 +43,15 @@
 # jaudiotagger — R8 下反射访问字段需要保留
 -keep class org.jaudiotagger.** { *; }
 -dontwarn org.jaudiotagger.**
+
+# 音乐可视化（visualizer 包）——20 套渲染器经 VisualizerRendererFactory 按枚举名创建，
+# 且 AudioFrame/CoverPalette 参与跨层引用；枚举名会持久化到 DataStore（visualizer_theme /
+# visualizer_quality）。R8 收缩枚举常量或重命名后会导致主题解析失败 / 渲染器创建失败。
+# 与 v2.5.1 的 Gson 类型擦除崩溃同类，新增效果时勿删。
+-keep class com.nasmusic.tv.visualizer.** { *; }
+-keepclassmembers enum com.nasmusic.tv.data.model.VisualizerTheme { *; }
+-keepclassmembers enum com.nasmusic.tv.data.model.VisualQuality { *; }
+-keepclassmembers enum com.nasmusic.tv.data.model.VisualizerTheme$Tier { *; }
 # Android 上不存在 java.awt / javax.imageio，忽略引用
 -dontwarn java.awt.**
 -dontwarn javax.imageio.ImageIO

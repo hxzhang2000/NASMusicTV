@@ -40,8 +40,6 @@ internal fun NowPlayingBranch(
                     val lyricsAvailability by viewModel.lyricsAvailability.collectAsState(initial = com.nasmusic.tv.data.model.LyricsAvailability())
                     val lyricsHighlightMode by viewModel.lyricsHighlightMode.collectAsState(initial = com.nasmusic.tv.data.model.LyricsHighlightMode.LINE_BY_LINE)
                     val showKaraoke by viewModel.vocalVM.showKaraoke.collectAsState(initial = false)
-                    // 修复（H-3）：20fps 频谱流只在本页收集，不再驱动 AppRoot 全树重组
-                    val spectrumData by viewModel.playerVM.spectrumData.collectAsState(initial = FloatArray(0))
                     val lyricsFontScale by viewModel.prefs.lyrics.lyricsFontScale.collectAsState(initial = 1.0f)
                     val vocalRemovalEnabled by viewModel.vocalVM.vocalRemovalEnabled.collectAsState()
                     val pitchSemitones by viewModel.vocalVM.pitchSemitones.collectAsState()
@@ -108,6 +106,7 @@ internal fun NowPlayingBranch(
                             onToggleVocalRemoval = { viewModel.vocalVM.toggleVocalRemoval() },
                             // === K 歌页面状态 ===
                             showKaraoke = showKaraoke,
+                            onEnterVisualizer = { viewModel.visualizerVM.enterVisualizer() },
                             onEnterKaraoke = { viewModel.vocalVM.enterKaraoke() },
                             onExitKaraoke = { viewModel.vocalVM.exitKaraoke() },
                             // === MTV 音乐视频 ===
@@ -124,9 +123,6 @@ internal fun NowPlayingBranch(
                             },
                             technicalInfo = viewModel.songTechnicalInfo.collectAsState(initial = null).value,
                             onLoadTechnicalInfo = { viewModel.loadSongTechnicalInfo() },
-                            spectrumData = spectrumData,
-                            spectrumEnabled = settings.spectrumEnabled,
-                            visualizerTheme = settings.visualizerTheme,
                             onSearchArtist = { keyword ->
                                 // 跳转到曲库 SEARCH Tab 并触发跨源搜索（NAS+网络+百度+Jamendo+本地）
                                 viewModel.selectLibraryTab(LibraryTab.SEARCH)

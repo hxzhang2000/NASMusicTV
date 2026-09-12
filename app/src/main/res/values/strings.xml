@@ -334,8 +334,6 @@
     <string name="settings_lyrics_offset_desc">调整歌词显示时间（毫秒）</string>
     <string name="settings_equalizer">均衡器</string>
     <string name="settings_equalizer_desc">调节各频段增益</string>
-    <string name="settings_spectrum">频谱显示</string>
-    <string name="settings_spectrum_desc">在播放页面显示实时频谱动画</string>
     <string name="settings_clear_lyrics_cache">清除歌词缓存</string>
     <string name="settings_clear_lyrics_cache_desc">删除所有已缓存的歌词文件</string>
     <string name="settings_clear_cover_cache">清除封面缓存</string>
@@ -545,7 +543,6 @@
     <string name="about_credits">致谢</string>
 
     <!-- Settings Screen -->
-    <string name="settings_spectrum_theme">频谱主题</string>
 
     <!-- Library Screen -->
     <string name="library_search_placeholder">搜索歌曲、专辑、歌手…</string>
@@ -731,6 +728,7 @@
 
     <!-- Player Controls -->
     <string name="player_karaoke">K歌</string>
+    <string name="player_visualizer">频谱</string>
 
     <!-- ActionBar -->
     <string name="action_play_all">全部播放</string>

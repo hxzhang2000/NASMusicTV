@@ -7,6 +7,58 @@
 >
 > 类型：`Added`（新增） | `Changed`（变更） | `Fixed`（修复） | `Removed`（移除）
 
+## [v2.30.1] - 2026-09-12
+
+> 可视化 P6 收尾：自动导演的场景切换由硬切改为 600ms 交叉淡入；新增 PCM 降级通道，解决部分国产 TV `Visualizer` 绑定成功却恒返回全 0 导致频谱全平的问题。
+
+### Added
+- **PCM 降级通道（P6）**：新增 `player/` 下 `PcmFallbackChannel` / `PcmTapProcessor` / `PcmRingBuffer` / `Radix2Fft` / `PcmSpectrumTap`。系统 `Visualizer` 连续静音 ≥2s 且正在播放时自动切到 AudioSink 的 PCM 自算频谱：`PcmTapProcessor` 挂在处理器链**最前**（取人声消除之前的原始信号），`queueInput()` 只做降混 + memcpy（< 20µs，**严禁在此 FFT**）；FFT 由专用 `HandlerThread`（`THREAD_PRIORITY_BACKGROUND`）每 40ms 执行，自实现 radix-2（N=1024，**不引入 JTransforms**）
+- **降级仲裁**：`SpectrumAnalyzer` 三态仲裁（Visualizer → PCM 探测 → 回滚）；两条通道**共用同一条分析链** `analyze()`，AGC / 感知加权柱映射 / 双通道输出只有一份实现，保证观感一致；PCM 激活后 3s 内无有效信号则回滚并抑制 5 分钟
+- 测试：`Radix2FftTest`(7) / `PcmRingBufferTest`(7) / `SpectrumAnalyzerPcmTest`(5) / `RendererSwapperTest`(7)
+
+### Changed
+- **`AUTO_DIRECTOR` 场景切换改为 600ms 交叉淡入**（开发方案 §4.21 的"禁止硬切"红线）：新增 `visualizer/RendererSwapper.kt` —— 切换时同时持有新旧两个渲染器，分别以 `t` / `1-t` 透明度叠绘两层 Canvas，600ms 后释放旧层。**手动切换（`←/→`、设置页选效果、切画质档）仍是硬切**，用户按键后需要即时反馈
+- `VisualizerStage` 渲染器生命周期改由 `RendererSwapper` 驱动：透明度经 `graphicsLayer { alpha = ... }` 延迟读取 → 淡入过程**只重绘不重组**；旧层存在性用 State，每次过渡最多重组两次
+- 画质档位变化改为**对现有渲染器重新 `onEnter`**（`Terrain` / `LiquidGrid` / `MatrixRain` / 粒子类均在 `onEnter` 里按 `VisualQuality` 预分配缓冲），不再重建实例
+
+### Fixed
+- 降级切换瞬间两条通道可能并发写入共享缓冲 → `SpectrumAnalyzer.analyze()` 加 `@Synchronized`，并在 `usingPcm` 时丢弃 Visualizer 通道的残留帧（`enabled = false` 可能失败或回调在途），避免全 0 帧覆盖 PCM 结果造成画面闪烁
+
+## [v2.30.0] - 2026-09-12
+
+> 音乐可视化升级：修复「频谱不好看、画面不呼吸」的数据层根因，新增独立全屏可视化舞台（20 套效果 + 自动导演模式），并把频谱数据链路收敛为单一 `AudioFrame` 契约。
+
+### Added
+- **全屏可视化舞台**（`ui/components/VisualizerStage.kt` + `ui/viewmodel/VisualizerViewModel.kt`）：三层结构（封面背景 / 效果 Canvas / 歌词 + 指示器 + 控制栏），复用 K 歌页 `showKaraoke` 覆盖层模式，**不新增 Screen 枚举**。TV `←/→`、手机左右滑动（阈值 80dp）切换效果；顶部歌词行（二分查找 + `derivedStateOf` 隔离）；效果名 2.5s 淡出 Toast；底部 21 档指示器（不支持档位置灰）；控制栏 3s 自动隐藏（隐藏态才拦截方向键，避免与焦点导航冲突）；手机左上返回按钮；BACK 走 AppRoot 仲裁（优先级仅次于沉浸模式）
+- **入口按钮**：`PlayerControls` 新增「频谱」，位于播放模式与 K 歌之间（`player_visualizer`，非电台且有当前歌曲时显示）
+- **20 套效果 + 自动导演模式**：`visualizer/renderers/` 下 `BasicRenderers`(E01–E07) / `AdvancedRenderers`(E08–E17) / `ParticleRenderers` / `UltraRenderers`(E18–E20)；`AutoDirector` 按能量调度场景（8s 最小驻留 + 升档 0.80 / 降档 0.65 回差 + 500ms 评估周期）
+- **`AudioFrame` 统一契约**（`visualizer/AudioFrame.kt`）：单例复用、渲染层只读、**渲染侧不再自行指定柱数**（结构上根治 96 vs 32 错位复发）；`SpectrumRepository` 为唯一写入方，只发布 `frameSeq` 帧序号
+- **`BeatDetector`**：43 帧低频历史 + 方差自适应阈值（系数 c ∈ [1.15, 1.9]）+ 240ms 冷却（上限 250 BPM）+ 快起慢落 `pulse`（decay 0.90）；`SectionEnergyTracker`（8s 滑动均值）、`PeakHoldTracker`、`ParticlePool`
+- 新增依赖 `androidx.palette:palette-ktx:1.0.0`（封面取色 T5）
+- ProGuard：`-keep class com.nasmusic.tv.visualizer.**` + `VisualizerTheme` / `VisualQuality` / `VisualizerTheme$Tier` 枚举 keep（枚举名持久化到 DataStore，R8 重命名会导致主题解析失败）
+
+### Changed
+- **`VisualizerTheme` 重写为 21 值**（20 效果 + `AUTO_DIRECTOR`，带 `Tier` 分级 BASIC/ADV/ULTRA/MODE）；新增 `VisualQuality` 画质档位（HIGH 64 柱/3 层辉光/200 粒子/32×18 网格/允许帧缓冲、MEDIUM 默认、LOW 32 柱禁用粒子）与 `supports(theme)` 门控
+- **`SpectrumAnalyzer` 数据层重构**：
+  - 归一化分母由「当前帧低频峰值」改为「低频区运行峰值」`lowRunningPeak`（每帧 ×0.995 ≈ 3s 时间常数）——原实现分子分母同步缩放使低频柱**恒为 1.0**，轻/重鼓点长得一样，画面永不呼吸（BUG ⑨）
+  - **双通道输出**：`spectrum[]` 走 gamma `^0.75` 保证小信号可见；`bass`/`mid`/`treble`/`energy` 走**线性**值保留动态范围（前者会把 5:1 的轻重比压到 3.3:1，BUG ⑨-b）
+  - `captureSize` 取设备最大值（原写死 1024，浪费支持 2048 的设备，bass 区 bin 数 5→11）；回调周期 50000µs → 20000µs（20Hz → 50Hz，原每周期漏掉 54% 音频，鼓点 attack 5–10ms 极易整拍漏掉）
+  - 零分配：预分配 `magnitudeBuf` / `barBuf` / `displayBuf` / `linearBuf` / `waveBuf`，删除每帧 `FloatArray(n)` 与 `sliceArray(5..19)` 分配（原 ≈110KB/s）
+  - 渲染节流（33ms）下沉到 `SpectrumRepository`（节拍检测仍用全部 50Hz 帧）
+- 柱数 32 → **64**（`SpectrumContract.BAR_COUNT`），频段边界 Bass `0–39` / Mid `40–55` / Treble `56–63`
+- 设置页移除频谱开关与主题选择器（入口按钮 + 舞台内切换已覆盖）；NowPlaying 48dp 小频谱条一并移除
+- 补齐多语言清理：`values-en/strings.xml` 中残留的 `settings_spectrum` / `settings_spectrum_desc` / `settings_spectrum_theme` 一并删除（默认 `values/` 已删而译文未删，release 构建报 `removing resource ... without required default value` 且译文静默失效）
+- `AppRoot`：BACK 仲裁链、导航栏隐藏条件、`LaunchedEffect` 依赖数组三处接入 `showVisualizer`
+- `AudioFrame.reset()` 明确契约：归零全部分析字段，但 `timeMs` / `seq` 刻意保留（`AutoDirector` 的最小驻留依赖 `timeMs` 单调性，归零会让切歌后调度器冻结约 8s）；换歌时的干净起点由 `SpectrumRepository.reset()` 显式清零
+
+### Fixed
+- **⑬ 每帧强制重组**：删除 `SpectrumAnalyzer` 的 `StateFlow<FloatArray>` 兼容通道——它在 33ms 节流点 `emit(displayBuf.copyOf())`，`FloatArray` 按引用比较，订阅方每 33ms 必然重组一次。该数据的唯一潜在消费方（NowPlaying 48dp 小条）已随舞台上线移除，均衡器页从未传入 `spectrumData`，故整条链路（`SpectrumAnalyzer` → `PlayerEqualizer` → `PlayerManager` → `PlayerViewModel` → `NowPlayingBranch` → `NowPlayingScreen`）连同死参数一并删除
+- **⑭ 静音时频谱整体消失**：静音不再返回 `FloatArray(0)`（会让渲染层柱数归零），改为写入**长度正确的全 0 数组**；波形一并归零（避免静音期波形类效果显示上一帧残影）；不再把 `runningPeak` 压到 1f，恢复播放后前 1~2s 不再被压制
+- **⑮ 老用户主题失效**：`VisualizerTheme.fromKey` 增加 `LEGACY_MAP`（`COLOR_FLOW`→`CIRCULAR_RING`、`NEON_PULSE`→`IMMERSIVE_BLOOM`、`CLASSICAL_WAVE`→`SONIC_TERRAIN`）+ 大小写容错 + 默认兜底，DataStore 旧值平滑迁移（无需显式 migration）
+- `SpectrumAnalyzer.processFft` 增加 FFT bins 越界防御（回调携带的 bins 多于 `attach` 预分配时补分配，不再 ArrayIndexOutOfBounds）
+- **单元测试**：新增 6 个测试类共 47 例——`BeatDetectorTest`(7) / `AudioFrameTest`(5) / `SpectrumRepositoryTest`(6) / `SpectrumAnalyzerTest`(10，覆盖 ⑨ ⑨-b ⑭ 与柱数契约) / `VisualizerThemeTest`(11，覆盖 ⑮) / `FindCurrentLyricLineTest`(8)；全量 38 类 357 例通过
+- **构建验证**：`assembleRelease`（R8 + `shrinkResources` + 签名）通过，新增 visualizer keep 规则无回归；APK 42.4MB → **21.8MB**（`NASMusicTV-release-v2-30-0.apk`）
+
 ## [v2.29.3] - 2026-09-11
 
 > 依据《NASMusicTV 代码审查报告（2026-09-11）》（110 项发现，覆盖全部 275 个 Kotlin 源文件）分阶段实施的全量修复，P0/P1/P2/P3 四阶段全部落地。

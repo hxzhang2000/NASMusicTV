@@ -28,10 +28,10 @@ data class AppSettings(
     val lyricsKugouBaseUrl: String = "",
     // 网络歌词网易云端点 URL（由 AppPreferences.getLyricsNeteaseBaseUrlSync() 提供默认值）
     val lyricsNeteaseBaseUrl: String = "",
-    // 频谱显示开关（默认关闭）
-    val spectrumEnabled: Boolean = false,
-    // 可视化频谱主题
-    val visualizerTheme: VisualizerTheme = VisualizerTheme.COLOR_FLOW,
+    // 可视化频谱主题（20 套效果 + 自动导演模式）
+    val visualizerTheme: VisualizerTheme = VisualizerTheme.Default,
+    // 可视化画质档位（HIGH / MEDIUM / LOW）
+    val visualizerQuality: VisualQuality = VisualQuality.Default,
     // 全局字体字号调整（sp，在当前Theme档位基础上增减，默认0）
     val fontAdjustment: Int = 0,
     // 高质量分离模型自定义下载 URL（空=用默认镜像；国内网络AWS CDN被墙时，可指向自建镜像/NAS）
@@ -45,13 +45,101 @@ data class AppSettings(
     val downloadLocation: String = "INTERNAL"  // 下载位置（当前仅 INTERNAL，CUSTOM 为 P1 预留）
 )
 
-enum class VisualizerTheme(val displayName: String) {
-    COLOR_FLOW("ColorFlow"),
-    NEON_PULSE("NeonPulse"),
-    CLASSICAL_WAVE("ClassicalWave");
+/**
+ * 可视化效果主题（20 套效果 + 1 个自动导演模式）。
+ *
+ * [tier] 决定该效果在各画质档位下的可用性，见 [VisualQuality.supports]。
+ */
+enum class VisualizerTheme(
+    val displayName: String,
+    val tier: Tier,
+    val ordinalLabel: String
+) {
+    IMMERSIVE_BLOOM("沉浸辉光", Tier.BASIC, "01"),
+    SONIC_TERRAIN("声景山脉", Tier.BASIC, "02"),
+    TUNNEL_FLY("隧道穿越", Tier.BASIC, "03"),
+    CIRCULAR_NEBULA("环形星云", Tier.BASIC, "04"),
+    CIRCULAR_RING("圆形频谱环", Tier.BASIC, "05"),
+    RADIAL_BURST("径向星芒", Tier.BASIC, "06"),
+    FREQUENCY_MOUNTAIN("频率山峦", Tier.BASIC, "07"),
+    PARTICLE_STORM("粒子风暴", Tier.ADV, "08"),
+    PARTICLE_GALAXY("粒子银河", Tier.ADV, "09"),
+    MIRROR_KALEIDO("万花筒", Tier.ADV, "10"),
+    GALAXY_SPIRAL("星系螺旋", Tier.ADV, "11"),
+    SPECTRO_WATERFALL("频谱瀑布", Tier.ADV, "12"),
+    LIQUID_GRID("液态网格", Tier.ADV, "13"),
+    BEAT_FIREWORK("节拍烟花", Tier.ADV, "14"),
+    LIQUID_RIPPLE("液态涟漪", Tier.ADV, "15"),
+    MATRIX_RAIN("数字雨", Tier.ADV, "16"),
+    CONSTELLATION("星座", Tier.ADV, "17"),
+    MILKDROP_FEEDBACK("反馈残像", Tier.ULTRA, "18"),
+    PARTICLE_TEXT("粒子文字", Tier.ULTRA, "19"),
+    PLASMA_FLOW("等离子流场", Tier.ULTRA, "20"),
+    AUTO_DIRECTOR("自动导演", Tier.MODE, "AUTO"),
+    ;
+
+    /** 效果分级：决定画质档位可用性 */
+    enum class Tier { BASIC, ADV, ULTRA, MODE }
+
+    /** 是否为"自动导演"模式（而非具体效果） */
+    val isAutoDirector: Boolean get() = tier == Tier.MODE
 
     companion object {
-        fun fromKey(key: String): VisualizerTheme? =
-            entries.find { it.name == key || it.displayName.equals(key, ignoreCase = true) }
+        val Default: VisualizerTheme = CIRCULAR_RING
+
+        /** 历史枚举名 → 新主题。老用户 DataStore 存的是旧名，需平滑迁移 */
+        private val LEGACY_MAP = mapOf(
+            "COLOR_FLOW" to CIRCULAR_RING,
+            "NEON_PULSE" to IMMERSIVE_BLOOM,
+            "CLASSICAL_WAVE" to SONIC_TERRAIN,
+        )
+
+        fun fromKey(key: String?): VisualizerTheme =
+            entries.find { it.name == key }
+                ?: LEGACY_MAP[key?.uppercase()]
+                ?: Default
+
+        /** 可手动选择的效果（自动导演档排在最末） */
+        val selectable: List<VisualizerTheme> =
+            entries.filter { it.tier != Tier.MODE } + AUTO_DIRECTOR
+    }
+}
+
+/**
+ * 可视化画质档位。
+ *
+ * @param barCount         渲染柱数
+ * @param glowLayers       辉光层数
+ * @param trail            是否启用拖尾残影
+ * @param maxParticles     粒子上限（0 = 禁用粒子效果）
+ * @param gridCols/gridRows 液态网格密度
+ * @param allowFramebuffer 是否允许帧缓冲回绘（MilkDrop 类效果需要）
+ */
+enum class VisualQuality(
+    val barCount: Int,
+    val glowLayers: Int,
+    val trail: Boolean,
+    val maxParticles: Int,
+    val gridCols: Int,
+    val gridRows: Int,
+    val allowFramebuffer: Boolean
+) {
+    HIGH(64, 3, true, 200, 32, 18, true),
+    MEDIUM(64, 2, true, 80, 24, 14, false),
+    LOW(32, 1, false, 0, 16, 10, false),
+    ;
+
+    fun supports(theme: VisualizerTheme): Boolean = when (theme.tier) {
+        VisualizerTheme.Tier.BASIC -> true
+        VisualizerTheme.Tier.MODE -> true
+        VisualizerTheme.Tier.ADV -> maxParticles > 0
+        VisualizerTheme.Tier.ULTRA -> allowFramebuffer
+    }
+
+    companion object {
+        val Default: VisualQuality = MEDIUM
+
+        fun fromKey(key: String?): VisualQuality =
+            entries.find { it.name.equals(key, ignoreCase = true) } ?: Default
     }
 }

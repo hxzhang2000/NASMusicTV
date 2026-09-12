@@ -43,6 +43,16 @@ class PlayerManager(private val applicationContext: Context) {
     /** 均衡器/频谱管理（N-4 提取） */
     private val playerEqualizer = PlayerEqualizer(Handler(Looper.getMainLooper()))
 
+    /**
+     * 频谱数据仓库 —— 全屏可视化舞台的数据源。
+     *
+     * [AudioFrame] 的唯一写入方，UI 层只读。
+     * 在 PlayerEqualizer 之前初始化并注入，保证 attach 时仓库已就绪。
+     */
+    val spectrumRepository = com.nasmusic.tv.visualizer.SpectrumRepository().also {
+        playerEqualizer.spectrumRepository = it
+    }
+
     /** 睡眠定时器（F2-2）：到期暂停主播放器并刷新通知 */
     val sleepTimer = SleepTimerController(
         onExpired = {
@@ -309,6 +319,8 @@ class PlayerManager(private val applicationContext: Context) {
             // P5 修复：seek 期间仍需同步 _isPlaying（纯状态记录），否则 seek 窗口内暂停/播放
             // 会导致播放按钮卡在错误状态（原实现直接 return，_isPlaying 永久失真直到下次回调）。
             _isPlaying.value = isPlaying
+            _isPlaying.value = isPlaying
+            playerEqualizer.setPlaying(isPlaying)
             // seek 期间跳过进度轮询的启停（有副作用），防止播放按钮闪烁与 ExoPlayer 内部位置重置干扰；
             // 轮询至多多跑 1 秒，由 seekTimeout 兜底恢复。
             if (seekPending) {
@@ -1166,11 +1178,17 @@ class PlayerManager(private val applicationContext: Context) {
 
     // ── 均衡器/频谱转发（N-4：实现迁至 PlayerEqualizer）──
 
-    val spectrumData: StateFlow<FloatArray> get() = playerEqualizer.spectrumData
-
     /**
      * 初始化均衡器（在 setPlayer 之后调用）
      */
+    /**
+     * P6：注入 PCM 降级通道（由 PlaybackService 创建，
+     * 其 processor 已挂在 AudioSink 处理器链最前）。
+     */
+    fun setPcmFallbackChannel(channel: com.nasmusic.tv.player.PcmFallbackChannel) {
+        playerEqualizer.pcmFallback = channel
+    }
+
     fun initEqualizer(): Boolean = playerEqualizer.initEqualizer(player)
 
     /**

@@ -63,7 +63,7 @@ fun EqualizerScreen(
     onSelectPreset: (EqualizerPreset) -> Unit,
     onAdjustBand: (Int, Float) -> Unit,
     onBack: () -> Unit,
-    visualizerTheme: VisualizerTheme = VisualizerTheme.COLOR_FLOW,
+    visualizerTheme: VisualizerTheme = VisualizerTheme.Default,
     modifier: Modifier = Modifier
 ) {
     Column(

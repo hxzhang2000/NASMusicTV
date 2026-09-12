@@ -30,7 +30,6 @@ import com.nasmusic.tv.ui.theme.NasMusicColors
 /** 播放设置分区状态（自动播放/频谱/模式/分离/模型/封面滤镜） */
 data class PlayerSettingsState(
     val settings: AppSettings,
-    val spectrumEnabled: Boolean,
     val visualizerTheme: VisualizerTheme,
     val separationMode: AppPreferences.SeparationMode,
     val modelDownloaded: Boolean,
@@ -54,7 +53,6 @@ data class PlayerSettingsState(
 /** 播放设置分区动作 */
 data class PlayerSettingsActions(
     val onToggleAutoPlayNext: (Boolean) -> Unit,
-    val onToggleSpectrum: (Boolean) -> Unit,
     val onChangeVisualizerTheme: (VisualizerTheme) -> Unit,
     val onChangePlayMode: (PlayMode) -> Unit,
     val onOpenEqualizer: (() -> Unit)?,
@@ -82,10 +80,6 @@ internal fun PlayerSettingsSection(
     Column {
         SectionTitle(stringResource(R.string.settings_playback))
         SettingSwitch(label = stringResource(R.string.settings_auto_play), description = stringResource(R.string.settings_auto_play_desc), checked = state.settings.autoPlayNext, onClick = { actions.onToggleAutoPlayNext(!state.settings.autoPlayNext) })
-        SettingSwitch(label = stringResource(R.string.settings_spectrum), description = stringResource(R.string.settings_spectrum_desc), checked = state.spectrumEnabled, onClick = { actions.onToggleSpectrum(!state.spectrumEnabled) })
-        if (state.spectrumEnabled) {
-            VisualizerThemeSelector(current = state.visualizerTheme, onSelect = { actions.onChangeVisualizerTheme(it) })
-        }
         PlayModeSelector(current = state.settings.defaultPlayMode, onSelect = { actions.onChangePlayMode(it) })
         // F2-5：跨曲交叉淡入淡出
         Spacer(modifier = Modifier.height(12.dp))

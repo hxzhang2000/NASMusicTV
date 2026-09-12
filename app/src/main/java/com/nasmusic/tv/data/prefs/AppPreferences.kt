@@ -26,6 +26,7 @@ import com.nasmusic.tv.data.model.PlayMode
 import com.nasmusic.tv.data.model.SearchHistoryItem
 import com.nasmusic.tv.data.model.ServerConfig
 import com.nasmusic.tv.data.model.VisualizerTheme
+import com.nasmusic.tv.data.model.VisualQuality
 import com.nasmusic.tv.data.model.Song
 import com.nasmusic.tv.util.AppLog
 import com.nasmusic.tv.util.CryptoUtils
@@ -247,6 +248,7 @@ class AppPreferences internal constructor(private val context: Context) {
     // --- 频谱显示设置 ---
     private val keySpectrumEnabled = booleanPreferencesKey("settings_spectrum_enabled")
     private val keyVisualizerTheme = stringPreferencesKey("settings_visualizer_theme")
+    private val keyVisualizerQuality = stringPreferencesKey("visualizer_quality")
 
     // --- 全局字体字号调整 ---
     private val keyFontAdjustment = intPreferencesKey("settings_font_adjustment")
@@ -639,8 +641,8 @@ class AppPreferences internal constructor(private val context: Context) {
             mvApiBaseUrl = prefs[keyMvApiBaseUrl] ?: BilibiliMvService.DEFAULT_BASE_URL,
             lyricsKugouBaseUrl = prefs[keyLyricsKugouBaseUrl] ?: com.nasmusic.tv.lyrics.LyricsNetworkProvider.DEFAULT_KUGOU_BASE_URL,
             lyricsNeteaseBaseUrl = prefs[keyLyricsNeteaseBaseUrl] ?: com.nasmusic.tv.lyrics.LyricsNetworkProvider.DEFAULT_NETEASE_BASE_URL,
-            spectrumEnabled = prefs[keySpectrumEnabled] ?: false,
-            visualizerTheme = prefs[keyVisualizerTheme]?.let { VisualizerTheme.fromKey(it) } ?: VisualizerTheme.COLOR_FLOW,
+            visualizerTheme = VisualizerTheme.fromKey(prefs[keyVisualizerTheme]),
+            visualizerQuality = VisualQuality.fromKey(prefs[keyVisualizerQuality]),
             fontAdjustment = prefs[keyFontAdjustment] ?: 0,
             modelDownloadUrl = prefs[keyModelDownloadUrl] ?: "",
             language = prefs[keyLanguage] ?: "system",
@@ -696,6 +698,9 @@ class AppPreferences internal constructor(private val context: Context) {
 
     suspend fun setVisualizerTheme(theme: VisualizerTheme) =
         dataStore.edit { it[keyVisualizerTheme] = theme.name }
+
+    suspend fun setVisualizerQuality(quality: VisualQuality) =
+        dataStore.edit { it[keyVisualizerQuality] = quality.name }
 
     suspend fun setMetingApiBaseUrl(url: String) =
         dataStore.edit {
@@ -1525,8 +1530,8 @@ class AppPreferences internal constructor(private val context: Context) {
                 prefs[keyMetingApiBaseUrl] = settings.metingApiBaseUrl
                 prefs[keyMvApiBaseUrl] = settings.mvApiBaseUrl
                 prefs[keyModelDownloadUrl] = settings.modelDownloadUrl
-                prefs[keySpectrumEnabled] = settings.spectrumEnabled
                 prefs[keyVisualizerTheme] = settings.visualizerTheme.name
+                prefs[keyVisualizerQuality] = settings.visualizerQuality.name
             }
         }
         dataStore.edit { prefs ->

@@ -201,6 +201,10 @@ class PlaybackService : MediaLibraryService() {
         // 人声消除处理器（卡拉OK模式）— 频谱遮罩版本
         val vocalRemovalProcessor = SpectralMaskProcessor()
 
+        // P6：PCM 降级通道 —— 部分国产 TV 的 Visualizer 绑定成功却恒返回全 0，
+        // 此时改用 AudioSink 里的 PCM 自算频谱。挂在链最前，取人声消除之前的原始信号。
+        val pcmFallback = com.nasmusic.tv.player.PcmFallbackChannel()
+
         // 自定义 RenderersFactory，注入 VocalRemovalProcessor 到 AudioSink
         val renderersFactory = object : DefaultRenderersFactory(this) {
             override fun buildAudioSink(
@@ -209,7 +213,7 @@ class PlaybackService : MediaLibraryService() {
                 enableAudioTrackPlaybackParams: Boolean
             ): AudioSink {
                 return DefaultAudioSink.Builder(context)
-                    .setAudioProcessors(arrayOf(vocalRemovalProcessor))
+                    .setAudioProcessors(arrayOf(pcmFallback.processor, vocalRemovalProcessor))
                     .setEnableFloatOutput(enableFloatOutput)
                     .setEnableAudioTrackPlaybackParams(enableAudioTrackPlaybackParams)
                     .build()
@@ -234,6 +238,7 @@ class PlaybackService : MediaLibraryService() {
 
         // Store player reference in manager + inject vocal removal processor
         (application as NasMusicApp).playerManager.setPlayer(player)
+        (application as NasMusicApp).playerManager.setPcmFallbackChannel(pcmFallback)
         (application as NasMusicApp).playerManager.setVocalRemovalProcessor(vocalRemovalProcessor)
         (application as NasMusicApp).playerManager.setDemucsSeparator(demucsSeparator)
         (application as NasMusicApp).playerManager.setAccompanimentCache(accompanimentCache)

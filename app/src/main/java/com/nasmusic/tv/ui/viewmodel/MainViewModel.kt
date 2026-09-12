@@ -607,7 +607,6 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
 
     // --- B-13: 播放器状态（R-1 第四步：已迁至 PlayerViewModel，此处转发）---
     val playerVM = PlayerViewModel(app, playerManager)
-    /** 实时频谱数据（96 柱幅值），来自 SpectrumAnalyzer / Visualizer FFT */
 
     // B-13: playMode 由 PlayerViewModel 拥有（UI/设置状态，不归 PlayerManager）
 
@@ -2283,6 +2282,8 @@ showError(getApplication<Application>().getString(R.string.toggle_favorite_error
     )
     val vocalVM = VocalSeparationViewModel(app, playerManager)
     val mvVM = MvSearchViewModel(app, mvSearchManager, playerManager)
+    /** 全屏可视化舞台（20 套效果） */
+    val visualizerVM = VisualizerViewModel(app, playerManager, prefs)
 
     init {
         // 下载域刷新本地歌曲时联动合并数据
@@ -2761,8 +2762,8 @@ showError(getApplication<Application>().getString(R.string.toggle_favorite_error
         prefs.weather.setWeatherApiKey(key.trim())
     }
 
-    fun updateSpectrumEnabled(enabled: Boolean) = viewModelScope.launch {
-        prefs.visualizer.setSpectrumEnabled(enabled)
+    fun updateVisualizerQuality(quality: com.nasmusic.tv.data.model.VisualQuality) = viewModelScope.launch {
+        prefs.setVisualizerQuality(quality)
     }
 
     fun updateVisualizerTheme(theme: com.nasmusic.tv.data.model.VisualizerTheme) = viewModelScope.launch {

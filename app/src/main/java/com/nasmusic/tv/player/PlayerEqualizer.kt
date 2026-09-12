@@ -4,7 +4,6 @@ import android.media.audiofx.Equalizer
 import android.os.Handler
 import androidx.media3.exoplayer.ExoPlayer
 import com.nasmusic.tv.util.AppLog
-import kotlinx.coroutines.flow.StateFlow
 
 /**
  * 均衡器与频谱管理（N-4 提取自 PlayerManager）：
@@ -24,7 +23,35 @@ class PlayerEqualizer(private val retryHandler: Handler) {
     private var audioSessionId: Int = 0
 
     private val spectrumAnalyzer = SpectrumAnalyzer()
-    val spectrumData: StateFlow<FloatArray> = spectrumAnalyzer.spectrumData
+
+    /**
+     * 频谱数据仓库——全屏可视化舞台的数据源（[AudioFrame] 唯一写入方）。
+     * 由外部（NasMusicApp）注入，保证与 UI 层共用同一实例。
+     */
+    var spectrumRepository: com.nasmusic.tv.visualizer.SpectrumRepository? = null
+        set(value) {
+            field = value
+            spectrumAnalyzer.repository = value
+        }
+
+    /**
+     * P6 降级通道（PCM自算频谱）—— 由 PlayerManager 注入，
+     * 透传给 SpectrumAnalyzer 做仲裁（Visualizer 持续全 0 时才启用）。
+     */
+    var pcmFallback: com.nasmusic.tv.player.PcmFallbackChannel? = null
+        set(value) {
+            field = value
+            spectrumAnalyzer.pcmFallback = value
+        }
+
+    /** 播放状态：降级仲裁需要区分“暂停”与“音频真静音” */
+    fun setPlaying(playing: Boolean) {
+        spectrumAnalyzer.isPlaying = playing
+    }
+
+    /** 供 UI 读取的实时帧（可能为 null，表示尚未注入仓库） */
+    val visualizerFrame: com.nasmusic.tv.visualizer.AudioFrame?
+        get() = spectrumRepository?.frame
 
     /**
      * 初始化均衡器（在 setPlayer 之后调用）
@@ -204,6 +231,8 @@ class PlayerEqualizer(private val retryHandler: Handler) {
         spectrumAnalyzerRetryCount = 5
         equalizer?.release()
         equalizer = null
+        // 终止降级通道的后台 FFT 线程，避免服务销毁后残留
+        pcmFallback?.deactivate()
         spectrumAnalyzer.release()
     }
 }
