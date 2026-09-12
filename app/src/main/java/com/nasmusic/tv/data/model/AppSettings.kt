@@ -46,7 +46,7 @@ data class AppSettings(
 )
 
 /**
- * 可视化效果主题（18 套效果 + 1 个自动导演模式）。
+ * 可视化效果主题（21 套手动效果，无自动导演档）。
  *
  * [tier] 决定该效果在各画质档位下的可用性，见 [VisualQuality.supports]。
  */
@@ -91,6 +91,9 @@ private val LEGACY_MAP = mapOf(
         "SONIC_TERRAIN" to CIRCULAR_RING,
         "CIRCULAR_NEBULA" to CIRCULAR_RING,
         "CLASSICAL_WAVE" to CIRCULAR_RING,
+        // AUTO_DIRECTOR 档已删除：老用户存过该值时回落到默认效果。
+        // 与 fromKey 末尾 fallback 行为一致，显式写出是为了固化该迁移意图。
+        "AUTO_DIRECTOR" to CIRCULAR_RING,
     )
 
         fun fromKey(key: String?): VisualizerTheme =

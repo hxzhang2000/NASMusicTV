@@ -54,9 +54,6 @@ class KaleidoRenderer : VisualizerRenderer {
         dotPath.reset()
         // Batching 后端宽统一，但长度、端点半径仍随频谱逐条变化；整体粗细随低频波动
         val lineWidth = 3.5f + frame.bass * 5f
-        val rot = VisualizerMath.rad(rotation)
-        val rotCos = cos(rot)
-        val rotSin = sin(rot)
 
         for (k in 0 until 8) {
             val flip = if (k % 2 == 1) -1f else 1f
@@ -74,8 +71,10 @@ class KaleidoRenderer : VisualizerRenderer {
                 var lx1 = cos(a) * (r0 + len)
                 var ly1 = sin(a) * (r0 + len)
                 if (flip < 0) { lx0 = -lx0; lx1 = -lx1 }
-                val px0 = cx + lx0 * rotCos - ly0 * rotSin
-                val py0 = cy + lx0 * rotSin + ly0 * rotCos
+                // 内外端点必须用同一个扇区角（k*45°+rotation）：
+                // 此前内端误用只含 rotation 的角，8 个扇区内端全塌到同一方向
+                val px0 = cx + lx0 * baseCos - ly0 * baseSin
+                val py0 = cy + lx0 * baseSin + ly0 * baseCos
                 val px1 = cx + lx1 * baseCos - ly1 * baseSin
                 val py1 = cy + lx1 * baseSin + ly1 * baseCos
                 linePath.moveTo(px0, py0)
@@ -402,7 +401,7 @@ val accent = ctx.palette.accent
  * 0-9 数字列下落，绿色系（亮白绿头部 → 亮绿 → 中绿 → 暗绿），
  * 速度/亮度由该列绑定频段能量驱动。
  *
- * **性能优化**：数字字形（2 数字 × 4 档绿）在尺寸首次确定时预渲染成 Bitmap，
+ * **性能优化**：数字字形（10 数字 × 4 档绿）在尺寸首次确定时预渲染成 Bitmap，
  * 每帧改用 nativeCanvas.drawBitmap 快速 blit —— 纹理 blit 远快于逐字符 drawText
  * 的文本排布度量，显著降低 TV 弱 GPU 上的每帧开销。每列高度由 perCol 控制，
  * 列数随画质档位调整，整体保持在小幅 draw 预算内。
@@ -416,7 +415,7 @@ class MatrixRainRenderer : VisualizerRenderer {
     private var cols = 32
     private val perCol = 14
 
-    // 预渲染字形缓存：[0..7] = shade*2 + digit（4 档绿 × 数字 0/1）
+    // 预渲染字形缓存：[0..39] = shade*10 + digit（4 档绿 × 数字 0-9）
     private var glyphs: Array<android.graphics.Bitmap>? = null
     private var glyphKey = ""
     private var gW = 0
@@ -468,12 +467,12 @@ class MatrixRainRenderer : VisualizerRenderer {
                 val y = headY + k * cellH
                 if (y < -cellH || y > h) continue
                 val fade = 1f - k.toFloat() / perCol
-                val digitIdx = (i * 31 + k * 17 + tick) % 2
+                val digitIdx = (i * 31 + k * 17 + tick) % 10
                 val bmp = when {
-                    k == perCol - 1 -> g[digitIdx]        // 亮白绿头部
-                    fade > 0.6f -> g[2 + digitIdx]        // 亮绿
-                    fade > 0.3f -> g[4 + digitIdx]        // 中绿
-                    else -> g[6 + digitIdx]               // 暗绿
+                    k == perCol - 1 -> g[digitIdx]         // 亮白绿头部
+                    fade > 0.6f -> g[10 + digitIdx]        // 亮绿
+                    fade > 0.3f -> g[20 + digitIdx]        // 中绿
+                    else -> g[30 + digitIdx]               // 暗绿
                 }
                 blitPaint.alpha = if (k == perCol - 1) 255 else (fade * 255).toInt().coerceIn(0, 255)
                 nc.drawBitmap(bmp, i * slot + (slot - gW) / 2f, y + (cellH - gH) / 2f, blitPaint)
@@ -481,9 +480,9 @@ class MatrixRainRenderer : VisualizerRenderer {
         }
     }
 
-    /** 一次性预渲染 2 数字 × 4 档绿 = 8 张字形 Bitmap */
+    /** 一次性预渲染 10 数字 × 4 档绿 = 40 张字形 Bitmap */
     private fun buildGlyphs(textSize: Float) {
-        val digits = charArrayOf('0', '1')
+        val digits = CharArray(10) { ('0'.code + it).toChar() }
         val colors = intArrayOf(
             android.graphics.Color.rgb(200, 255, 200),
             android.graphics.Color.rgb(0, 255, 100),
@@ -498,9 +497,9 @@ class MatrixRainRenderer : VisualizerRenderer {
         val bh = kotlin.math.ceil(textSize * 1.15f).toInt() + 4
         gW = bw
         gH = bh
-        val arr = arrayOfNulls<android.graphics.Bitmap>(8)
+        val arr = arrayOfNulls<android.graphics.Bitmap>(40)
         for (shade in 0 until 4) {
-            for (d in 0 until 2) {
+            for (d in 0 until 10) {
                 val bmp = android.graphics.Bitmap.createBitmap(bw, bh, android.graphics.Bitmap.Config.ARGB_8888)
                 val c = android.graphics.Canvas(bmp)
                 val p = AndroidPaint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
@@ -510,13 +509,17 @@ class MatrixRainRenderer : VisualizerRenderer {
                     color = colors[shade]
                 }
                 c.drawText(digits[d].toString(), bw / 2f, (bh - (p.descent() - p.ascent())) / 2f - p.ascent(), p)
-                arr[shade * 2 + d] = bmp
+                arr[shade * 10 + d] = bmp
             }
         }
         glyphs = arr.filterNotNull().toTypedArray()
     }
 
-    override fun onExit() { glyphs = null }
+    override fun onExit() {
+        // API < 26 上 Bitmap 像素在 native 堆，主动 recycle 更稳（否则靠 GC 回收）
+        glyphs?.forEach { it.recycle() }
+        glyphs = null
+    }
 }
 
 // ═══════════════════════════════════════════════════════════════════

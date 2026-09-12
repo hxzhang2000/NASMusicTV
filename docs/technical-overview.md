@@ -8141,3 +8141,22 @@ onSearchSong = { keyword -> viewModel.searchNetworkSongs(keyword) },
 #### 验证
 - `assembleRelease`（R8 + `shrinkResources` + 签名）通过；真机手测：MTV 按钮文字完整、数字雨流畅、遥控器选特效所见即所得、效果切换流畅
 - 版本：v2.30.2 → **v2.30.3**（versionCode 130 → 131）
+
+### 10.126 v2.30.4 — 代码审查问题集中修复（2026-09-12）
+
+来源：`NASMusicTV-提交审查报告-2026-09-12.html`（审查范围 `737ae0c` / `1cda585` / `ddaef2d`）。修复 3 项 P1、6 项 P2、5 项 P3，明细见 `CHANGELOG.md` v2.30.4 条目。
+
+#### P1
+- **万花筒 E10 旋转矩阵**：手写旋转展开时内端点用 `rot`（仅 `rotation`）、外端点用 `base`（`k*45°+rotation`）。统一为扇区角
+- **歌词点阵 E23 切歌不更新**：根因是 `VisualizerStage` 的 `swapper = remember { RendererSwapper() }` 无 key → 切歌不重建渲染器。修复方式是给 `RenderContext` 加 `songId`，由渲染器自行检测（**不改 swapper 的 key**：切歌重建渲染器会导致粒子池/字形缓存等全部重分配）
+- **可视化封面取色 403**：`coil.ImageLoader(app)` 绕过 `NasMusicApp.newImageLoader()` 的百度 UA 拦截器。改用 `coil.Coil.imageLoader(app)`
+
+#### P2 要点
+- Path 批处理必须满足“同色同 alpha”。E03/E06 原实现把逐元素 alpha 抹平成常量，改为按深度/频谱值分 3 桶，并去掉误加的 `BlendMode.Plus`
+- `computeLyricInfo` 每帧被两个 Canvas 各调一次且内含 O(N) 扫描 → 提到外层算一次 + `LyricMetrics` 由 `remember(lyrics)` 缓存
+- `remember(lyrics, progressMs) { derivedStateOf { … } }` 是无效缓存（key 每帧变），已简化为直接调用
+
+#### 验证
+- `./gradlew clean compileDebugKotlin` 通过（0 error）；`./gradlew test` 全绿
+- `SpectrumAnalyzerTest` 断言由 `0.2f..0.31f` 收窄为 `0.235f..0.275f` 后仍通过
+- 版本：v2.30.3 → **v2.30.4**（versionCode 131 → 132）

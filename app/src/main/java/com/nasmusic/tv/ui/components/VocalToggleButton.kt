@@ -38,7 +38,9 @@ fun VocalToggleButton(
     dimmed: Boolean = false,
     width: Dp? = null
 ) {
-    val buttonSize = if (compact) 48.dp else 72.dp
+    // 紧凑模式高度必须与 IconButton 一致（IconButton compact = 40dp），
+    // 否则同一行图标按钮 40dp 、文字按钮 48dp 会明显不齐
+    val buttonSize = if (compact) 40.dp else 72.dp
     val effectiveWidth = width ?: buttonSize
     FocusableSurface(
         onClick = onClick,

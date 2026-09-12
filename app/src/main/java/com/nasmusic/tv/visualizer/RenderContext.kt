@@ -19,6 +19,8 @@ class RenderContext {
     /** overscan 安全边距，≥ 5% */
     var safeAreaPx: Float = 0f
     var nowMs: Long = 0L
+    /** 当前歌曲 id（E23 歌词点阵：用于检测切歌并重置行状态） */
+    var songId: String? = null
     /** 当前歌曲标题（E19 粒子文字用） */
     var caption: String? = null
     /** 当前歌词行（E23 歌词点阵用） */
@@ -59,7 +61,8 @@ class RenderContext {
         lyricLineIndex: Int = -1,
         lyricWordTimestamps: List<Long> = emptyList(),
         lyricMaxLineChars: Int = 0,
-        longestLyricLine: String? = null
+        longestLyricLine: String? = null,
+        songId: String? = null
     ) {
         this.quality = quality
         this.palette = palette
@@ -76,5 +79,6 @@ class RenderContext {
         this.lyricWordTimestamps = lyricWordTimestamps
         this.lyricMaxLineChars = lyricMaxLineChars
         this.longestLyricLine = longestLyricLine
+        this.songId = songId
     }
 }

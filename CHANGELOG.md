@@ -7,6 +7,34 @@
 >
 > 类型：`Added`（新增） | `Changed`（变更） | `Fixed`（修复） | `Removed`（移除）
 
+## [v2.30.4] - 2026-09-12
+
+> 针对最近三次提交（737ae0c / 1cda585 / ddaef2d）的代码审查结果集中修复：万花筒几何错误、歌词点阵切歌不更新、可视化封面取色 403、Path 批处理丢失的逐元素 alpha、控制行按钮高度不齐、歌词信息每帧重复计算。
+
+### Fixed
+- **万花筒（E10）8 扇区塌陷**：把 `withTransform` 手写成显式旋转时，线段**内端点**误用只含 `rotation` 的角（`rotCos/rotSin`），外端点用 `k*45°+rotation`（`baseCos/baseSin`），两端角度不一致 → 8 个扇区的内端全塌到同一方向，只剩 k=0 一瓣正确，画面呈“章鱼”状。现内外端统一用扇区角
+- **歌词点阵（E23）切歌后永远停在上一首**：`swapper = remember { RendererSwapper() }` 无 key，切歌不会重建渲染器、不走 `onEnter`；`displayedLineIndex` 仅在 `< 0` 时初始化，且行切换只认 `diff >= 1`，新歌 idx 从 0 开始使 `diff` 为负 → 永不触发。现 `RenderContext` 新增 `songId`，渲染器比对到歌曲变化即回到初始态（顺带解决 seek 回退时 `diff < 0` 无分支的问题）
+- **可视化封面取色在百度网盘源失败（403）**：`coil.ImageLoader(app)` 新建的是**无配置**实例，绕过 `NasMusicApp.newImageLoader()` 注入的百度 dlink UA 拦截器 → 封面加载失败、配色长期停在 `CoverPalette.Fallback`；且该实例从不 `shutdown()`，泄漏线程池与缓存。改用 `coil.Coil.imageLoader(app)` 全局单例（与 `MainViewModel` 已修过的同一处教训一致）
+- **封面加载快慢请求竞态**：快速切歌时先发出的任务可能后返回，用上一首的封面/配色覆盖当前歌曲。协程内增加 `requestedKey == loadedCoverKey` 校验后再写回
+- **Path 批处理抹平了逐元素 alpha**：合并 Path 的前提是“同色同 alpha”，上一版有两处违反该前提
+  - 「隧道穿越」（E03）：原 `alpha = fade * 0.7f`（逐环深度衰减）被统一为 0.7f → 远处环不再淡出，纵深感丢失；新增的 `BlendMode.Plus` 还会让重叠处过曝。改为按 z 深度分 3 桶，并恢复原来的 SrcOver
+  - 「径向星芒」（E06）：原 `alpha = 0.6f + v * 0.4f`（随频谱明暗）被统一为 0.8f → 端点不再随音乐呼吸。改为按 v 分 3 桶
+- **频谱环（E05）峰值帽色阶断层**：按 hue 分 4 桶时与所在条最大色差约 16.9°，肉眼可见 4 段色阶。桶数 4 → 8，最大色差降到约 8°
+- **数字雨（E16）只剩 0/1 两个字符**：字形缓存由 8 张扩到 40 张（10 数字 × 4 档绿），字符集恢复 0-9；仍是一次性预渲染 + 每帧 blit，draw 次数不变。`onExit` 补 `recycle()`
+- **播放控制行按钮高度不齐**：v2.30.3 把 `IconButton` 紧凑尺寸 48→40dp 时未同步 `VocalToggleButton`（仍 48dp），同一行图标按钮 40dp、文字按钮 48dp。现统一为 40dp
+
+### Changed
+- **歌词信息每帧计算量减半以上**：`computeLyricInfo` 原先在两个 Canvas 内各调一次（新层 + 交叉淡出的旧层），且内含 O(N) 全量扫描求最长行。现提到外层每帧只算一次，并新增 `LyricMetrics` / `computeLyricMetrics`，由 `remember(lyrics)` 缓存歌曲级常量
+- `LyricTopBar` 去掉 `remember(lyrics, progressMs) { derivedStateOf { ... } }`：key 含 `progressMs` 会导致每帧重建 State 对象，等于没缓存；二分查找本身 O(log n)，直接调用即可
+- **恢复可视化入口按钮的 i18n**：v2.30.3 为解决截断临时硬编码中文「幻」，使 `values-en` 失效。新增 `player_visualizer_short`（中「频谱」/ 英「Viz」），宽度与「K歌」同为 52dp
+- 删除死参数：自动导演移除后 `VisualizerStage` 的 `crossfade` 恒为 false，UI 层参数一并移除（`RendererSwapper` 能力及其单测保留）
+- 删除 `BloomRenderer` 中只有 `super.onEnter(ctx)` 的空覆写
+- `AppSettings` 类注释由“18 套 + 1 自动档”更正为“21 套，无自动档”；`LEGACY_MAP` 显式收录 `AUTO_DIRECTOR`（与既有 fallback 行为一致，用于固化迁移意图）
+- 删除 `LyricsDotMatrixRenderer` 采样函数中遗留的诊断 `println`（在每帧热路径上）
+
+### Tests
+- `SpectrumAnalyzerTest`：把 v2.30.2 放宽的 `actual in 0.2f..0.31f` 收窄为 `0.235f..0.275f`（±0.02），恢复对“bass 落在线性分支而非 gamma 分支”的回归探测力
+
 ## [v2.30.3] - 2026-09-12
 
 > 播放页 MTV 按钮文字不再被裁切；数字雨改为字形预渲染 Bitmap 大幅降低每帧开销；移除「自动导演」随机选特效功能（遥控器选哪个就恒定显示哪个）；批量将高频小图元（频谱环峰值、万花筒线段、径向星芒、隧道环点、烟花频谱、Bloom 光斑）合并为 Path 单次绘制以提升弱 GPU 流畅度。

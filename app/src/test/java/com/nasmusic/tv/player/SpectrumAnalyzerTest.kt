@@ -152,7 +152,7 @@ class SpectrumAnalyzerTest {
         assertTrue(
             "bass must sit on the linear branch, not the gamma branch " +
                 "(linearRaw=$linearRatio gamma=$gammaRatio actual=$actual)",
-            actual in 0.2f..0.31f
+            actual in 0.235f..0.275f
         )
         // 律动相对变化按线性比例（0.25），gamma 分支会把它压缩到 ^0.75（0.35）
         assertTrue(

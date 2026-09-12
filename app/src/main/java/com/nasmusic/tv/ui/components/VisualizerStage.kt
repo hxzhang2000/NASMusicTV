@@ -87,7 +87,6 @@ fun VisualizerStage(
     theme: VisualizerTheme,
     quality: VisualQuality,
     /** 自动导演档：主题变化时走 600ms 交叉淡入；手动切换传 false（硬切） */
-    crossfade: Boolean = false,
     isTV: Boolean,
     onExit: () -> Unit,
     onNextTheme: () -> Unit,
@@ -115,15 +114,21 @@ fun VisualizerStage(
     // 正在淡出的旧渲染器（null = 无旧层）；用 State 以便出现/消失时重组
     val prevRenderer = remember { mutableStateOf<VisualizerRenderer?>(null) }
 
+    // 歌词级常量（最长行字数 / 最长行文本）：只随 lyrics 变化。
+    // 每帧重算是 O(N) 全量扫描，必须缓存。
+    val lyricMetrics = remember(lyrics) { computeLyricMetrics(lyrics) }
+
     // 主题 / 画质变化 → 同步渲染器（自动导演走淡入，手动切换硬切）
-    LaunchedEffect(theme, quality, crossfade) {
-        val lyricInfo = computeLyricInfo(lyrics, progressMs)
+    LaunchedEffect(theme, quality) {
+        val lyricInfo = computeLyricInfo(lyrics, progressMs, lyricMetrics)
         renderCtx.update(quality, palette, cover, Size.Zero, 0f,
             System.currentTimeMillis(), song?.title,
             lyricInfo.line, lyricInfo.nextLine, lyricInfo.progress,
             lyricInfo.hasWords, lyricInfo.lineIndex, lyricInfo.wordStartTimes,
-            lyricInfo.maxLineChars, lyricInfo.longestLine)
-        if (swapper.sync(theme, quality, crossfade, renderCtx, System.currentTimeMillis())) {
+            lyricInfo.maxLineChars, lyricInfo.longestLine, song?.id)
+        // crossfade 能力保留在 RendererSwapper（有单测覆盖）；自动导演档删除后
+        // UI 层已无使用场景，因此恒为 false（原为死参数，现收敛到调用处）
+        if (swapper.sync(theme, quality, false, renderCtx, System.currentTimeMillis())) {
             prevRenderer.value = swapper.previous
             if (swapper.isCrossfading) {
                 fadeAlpha.floatValue = 0f
@@ -203,6 +208,10 @@ fun VisualizerStage(
             }
     ) {
         // ① 背景层：纯暗色底（不再叠加封面图，突出频谱效果本身；暗底衬托霓虹荧光）
+        // 每帧只算一次：新层与渐出旧层共用。
+        // 此前两个 Canvas 各算一次（且内部含全量扫描），直接翻倍开销。
+        val lyricInfo = computeLyricInfo(lyrics, progressMs, lyricMetrics)
+
         Box(
             Modifier
                 .fillMaxSize()
@@ -222,13 +231,12 @@ fun VisualizerStage(
         ) {
             canvasSize = Size(size.width, size.height)
             // 计算当前歌词行 & 行内进度（给 E23 歌词点阵用）
-            val lyricInfo = computeLyricInfo(lyrics, progressMs)
             // 复用实例，零分配
             renderCtx.update(quality, palette, cover, canvasSize,
                 minOf(size.width, size.height) * safeArea, frame.timeMs, song?.title,
                 lyricInfo.line, lyricInfo.nextLine, lyricInfo.progress,
                 lyricInfo.hasWords, lyricInfo.lineIndex, lyricInfo.wordStartTimes,
-                lyricInfo.maxLineChars, lyricInfo.longestLine)
+                lyricInfo.maxLineChars, lyricInfo.longestLine, song?.id)
             val cur = swapper.current
             // tick 参与读取以确保每帧重绘
             if (tick >= 0L && cur != null && fadeAlpha.floatValue > ALPHA_EPS) {
@@ -257,12 +265,11 @@ fun VisualizerStage(
                         alpha = prevAlpha.floatValue
                     }
             ) {
-                val lyricInfo = computeLyricInfo(lyrics, progressMs)
                 renderCtx.update(quality, palette, cover, Size(size.width, size.height),
                     minOf(size.width, size.height) * safeArea, frame.timeMs, song?.title,
                     lyricInfo.line, lyricInfo.nextLine, lyricInfo.progress,
                     lyricInfo.hasWords, lyricInfo.lineIndex, lyricInfo.wordStartTimes,
-                    lyricInfo.maxLineChars, lyricInfo.longestLine)
+                    lyricInfo.maxLineChars, lyricInfo.longestLine, song?.id)
                 if (tick >= 0L && prevAlpha.floatValue > ALPHA_EPS) {
                     try {
                         with(old) { draw(frame, renderCtx) }
@@ -373,9 +380,9 @@ private fun LyricTopBar(
     fallback: String?,
     modifier: Modifier = Modifier
 ) {
-    val index = remember(lyrics, progressMs) {
-        derivedStateOf { findCurrentLyricLine(lyrics, progressMs) }
-    }.value
+    // 二分查找本身 O(log n)，无需 derivedStateOf：
+    // 原写法把 progressMs 放进 remember key，每帧重建 State 对象，等于没缓存。
+    val index = findCurrentLyricLine(lyrics, progressMs)
 
     val text = when {
         lyrics.isNullOrEmpty() -> fallback ?: ""
@@ -440,7 +447,38 @@ internal data class LyricInfo(
  * 计算当前歌词行、行内进度、是否有逐字时间戳。
  * 用于 E23 歌词点阵效果的逐字点亮动画。
  */
-internal fun computeLyricInfo(lines: List<LyricsLine>?, progressMs: Long): LyricInfo {
+/** 整曲歌词级常量：只随歌词内容变化，与播放进度无关 */
+internal data class LyricMetrics(val maxChars: Int, val longest: String?)
+
+/**
+ * 汇总整曲歌词的最长句（E23 自适应字号用）。
+ * 为 O(N) 全量扫描，必须由调用方缓存，不能每帧调用。
+ */
+internal fun computeLyricMetrics(lines: List<LyricsLine>?): LyricMetrics {
+    if (lines.isNullOrEmpty()) return LyricMetrics(0, null)
+    var maxChars = 0
+    var longest: String? = null
+    for (l in lines) {
+        val len = l.text?.length ?: 0
+        if (len > maxChars) {
+            maxChars = len
+            longest = l.text
+        }
+    }
+    return LyricMetrics(maxChars, longest)
+}
+
+/**
+ * 计算当前歌词行、行内进度、是否有逐字时间戳。
+ * 用于 E23 歌词点阵效果的逐字点亮动画。
+ *
+ * @param metrics 整曲常量（由 computeLyricMetrics 缓存），避免每帧重算
+ */
+internal fun computeLyricInfo(
+    lines: List<LyricsLine>?,
+    progressMs: Long,
+    metrics: LyricMetrics = LyricMetrics(0, null)
+): LyricInfo {
     if (lines.isNullOrEmpty()) return LyricInfo(null, null, 0f, false, -1, emptyList())
     val idx = findCurrentLyricLine(lines, progressMs)
     if (idx < 0) return LyricInfo(null, null, 0f, false, -1, emptyList())
@@ -451,17 +489,10 @@ internal fun computeLyricInfo(lines: List<LyricsLine>?, progressMs: Long): Lyric
     val progress = if (duration > 0) (elapsed.toFloat() / duration).coerceIn(0f, 1f) else 1f
     val hasWords = !current.wordTimestamps.isNullOrEmpty()
     val wordStarts = current.wordTimestamps.map { it.startMs - current.time }
-    // 整曲歌词最长的一句（用于 E23 自适应字号：占满屏宽 80%）
-    var maxChars = 0
-    var longest = current.text
-    for (l in lines) {
-        val len = l.text?.length ?: 0
-        if (len > maxChars) {
-            maxChars = len
-            longest = l.text
-        }
-    }
-    return LyricInfo(current.text, next?.text, progress, hasWords, idx, wordStarts, maxChars, longest)
+    return LyricInfo(
+        current.text, next?.text, progress, hasWords, idx, wordStarts,
+        metrics.maxChars, metrics.longest ?: current.text
+    )
 }
 
 /** 底部圆点指示器（含 AUTO 档） */

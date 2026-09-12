@@ -449,7 +449,6 @@ private fun VisualizerOverlay(
         progressMs = progress,
         theme = effectiveTheme,
         quality = quality,
-        crossfade = false,
         isTV = isTV,
         onExit = { vm.exitVisualizer() },
         onNextTheme = { vm.nextTheme() },

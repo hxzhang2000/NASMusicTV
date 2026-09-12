@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NASMusicTV 最近提交代码审查报告 · 2026-09-12</title>
+<style>
+  :root{
+    --bg:#f6f7f9; --card:#ffffff; --ink:#1c2024; --ink2:#4a5157; --ink3:#767e86;
+    --line:#e3e6ea; --brand:#2f6feb;
+    --p1:#d92d20; --p1bg:#fef3f2; --p2:#b54708; --p2bg:#fffaeb; --p3:#475467; --p3bg:#f2f4f7;
+    --ok:#067647; --okbg:#ecfdf3;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font-family:-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+    line-height:1.7;font-size:15px}
+  .wrap{max-width:1080px;margin:0 auto;padding:40px 24px 80px}
+  header{margin-bottom:28px}
+  h1{font-size:26px;margin:0 0 8px;letter-spacing:-.3px}
+  .sub{color:var(--ink3);font-size:14px}
+  .banner{display:flex;gap:12px;flex-wrap:wrap;margin:20px 0 8px}
+  .chip{background:var(--okbg);color:var(--ok);border:1px solid #abefc6;
+    border-radius:8px;padding:8px 14px;font-size:13px;font-weight:600}
+  .chip.warn{background:var(--p2bg);color:var(--p2);border-color:#fedf89}
+  h2{font-size:18px;margin:36px 0 14px;padding-bottom:8px;border-bottom:2px solid var(--line)}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;
+    padding:18px 20px;margin-bottom:14px}
+  .card.p1{border-left:4px solid var(--p1);background:var(--p1bg)}
+  .card.p2{border-left:4px solid var(--p2);background:var(--p2bg)}
+  .card.p3{border-left:4px solid var(--p3);background:var(--p3bg)}
+  .card.ok{border-left:4px solid var(--ok);background:var(--okbg)}
+  .ttl{font-weight:700;font-size:16px;margin-bottom:6px}
+  .badge{display:inline-block;font-size:11px;font-weight:700;padding:2px 8px;
+    border-radius:5px;margin-right:8px;vertical-align:2px;color:#fff}
+  .b1{background:var(--p1)} .b2{background:var(--p2)} .b3{background:var(--p3)}
+  code{background:#eef1f4;padding:1px 5px;border-radius:4px;font-size:13px;
+    font-family:"SFMono-Regular",Consolas,monospace}
+  pre{background:#1e2430;color:#e6edf3;padding:14px 16px;border-radius:8px;
+    overflow-x:auto;font-size:12.5px;line-height:1.6;margin:10px 0}
+  pre .c{color:#8b949e} pre .g{color:#7ee787} pre .r{color:#ffa198} pre .y{color:#d2a8ff}
+  .loc{font-size:12.5px;color:var(--ink3);margin-bottom:8px;
+    font-family:"SFMono-Regular",Consolas,monospace}
+  .kv{margin:8px 0}
+  .kv b{display:inline-block;min-width:62px;color:var(--ink2)}
+  table{width:100%;border-collapse:collapse;background:#fff;
+    border:1px solid var(--line);border-radius:10px;overflow:hidden;font-size:14px}
+  th,td{padding:10px 14px;text-align:left;border-bottom:1px solid var(--line)}
+  th{background:#f0f2f5;font-weight:600;font-size:13px}
+  tr:last-child td{border-bottom:none}
+  ul{margin:8px 0 8px 20px;padding:0}
+  li{margin:4px 0}
+  .foot{margin-top:40px;color:var(--ink3);font-size:13px;
+    border-top:1px solid var(--line);padding-top:16px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <h1>NASMusicTV · 最近提交代码审查报告</h1>
+  <div class="sub">
+    审查范围：<code>737ae0c</code>（可视化首次落地）· <code>1cda585</code>（效果库补全）· <code>ddaef2d</code>（MTV/性能修复，v2.30.3）· 抽查 <code>4625656</code><br>
+    基线 <code>main @ ddaef2d</code> · 2026-09-12
+  </div>
+</header>
+
+<div class="banner">
+  <span class="chip">✓ clean 后编译通过 · 0 error</span>
+  <span class="chip">✓ ./gradlew test 全绿 · BUILD SUCCESSFUL</span>
+  <span class="chip warn">⚠ 增量编译缓存曾损坏（44 条假 Unresolved）</span>
+</div>
+
+<h2>结论速览</h2>
+<table>
+  <tr><th style="width:90px">级别</th><th>数量</th><th>必须处理</th></tr>
+  <tr><td><b style="color:var(--p1)">P1</b> 明显功能异常</td><td>3</td><td>万花筒几何错误、歌词点阵切歌不更新、封面加载 403</td></tr>
+  <tr><td><b style="color:var(--p2)">P2</b> 体验/性能退化</td><td>6</td><td>批处理丢 alpha、按钮高度不齐、每帧重复计算、测试断言放宽</td></tr>
+  <tr><td><b style="color:var(--p3)">P3</b> 整洁/一致性</td><td>5</td><td>i18n 倒退、注释过时、冗余覆写、调试 println</td></tr>
+</table>
+
+<div class="card ok" style="margin-top:18px">
+  <div class="ttl">构建环境提醒（非代码缺陷，但很坑人）</div>
+  首次 <code>./gradlew test</code> 报 <b>44 条 Unresolved reference</b>，集中在 <code>AppRoot.kt</code> / <code>PlayerControls.kt</code> / <code>VocalToggleButton.kt</code>，
+  连<b>同包</b>的 <code>FocusableSurface</code>、<code>NASMusicTVTheme</code> 都解析不到。源码文件都在磁盘上——是 Kotlin 增量编译 lookups 缓存损坏。
+  <code>./gradlew clean</code> 后重编 <b>0 错误</b>，测试也全绿。<br>
+  <b>约定</b>：以后遇到成片的 <code>Unresolved reference</code> 先 <code>clean</code> 再判断，别急着改 import。
+</div>
+
+<h2>P1 · 明显功能异常</h2>
+
+<div class="card p1">
+  <div class="ttl"><span class="badge b1">P1</span>万花筒（E10）旋转矩阵写错，8 扇区全部塌陷</div>
+  <div class="loc">ddaef2d · visualizer/renderers/AdvancedRenderers.kt:57-80</div>
+  <div class="kv"><b>现象</b>：选中「万花筒」后画面不再是 8 瓣对称图形，而是从一个点朝各方向散射的"章鱼"状。100% 复现。</div>
+  <div class="kv"><b>根因</b>：把 <code>withTransform{translate;rotate;scale}</code> 手写成显式旋转时，<b>线段两端用了两个不同的旋转角</b>——内端用 <code>rot</code>（只有 <code>rotation</code>），外端用 <code>base</code>（<code>k*45°+rotation</code>）：</div>
+<pre><span class="c">// 内端点：只转了 rotation，没有 k*45°</span>
+val px0 = cx + lx0 * <span class="r">rotCos</span> - ly0 * <span class="r">rotSin</span>
+val py0 = cy + lx0 * <span class="r">rotSin</span> + ly0 * <span class="r">rotCos</span>
+<span class="c">// 外端点：转了 k*45°+rotation</span>
+val px1 = cx + lx1 * baseCos - ly1 * baseSin
+val py1 = cy + lx1 * baseSin + ly1 * baseCos</pre>
+  <div class="kv"><b>后果</b>：8 个扇区的内端点全部落在同一个方向上，只有 k=0 那一瓣是对的。</div>
+  <div class="kv"><b>修法</b>：删掉 <code>rot/rotCos/rotSin</code> 三个变量，内外端统一用 <code>baseCos/baseSin</code>。</div>
+</div>
+
+<div class="card p1">
+  <div class="ttl"><span class="badge b1">P1</span>歌词点阵（E23）切歌后永远停在上一首的某句</div>
+  <div class="loc">1cda585 · renderers/LyricsDotMatrixRenderer.kt:70/145/400-433　+　ui/components/VisualizerStage.kt:107</div>
+  <div class="kv"><b>现象</b>：用「歌词点阵」时切歌，画面上的粒子文字不再变化，一直显示上一首停在的那一句；再次进入可视化才恢复。</div>
+  <div class="kv"><b>根因</b>：三重条件叠加——</div>
+  <ul>
+    <li><code>VisualizerStage.kt:107</code> <code>swapper = remember { RendererSwapper() }</code> <b>无 key</b>，切歌不会重建 renderer，也就不会走到 <code>onEnter()</code>（只有换主题才会）；</li>
+    <li><code>displayedLineIndex</code> 只在 <code>&lt; 0</code> 时初始化一次（:400），切歌后仍是上一首的行号（比如 12）；</li>
+    <li>行切换只认 <code>diff &gt;= 1</code> 且 <code>phase == STEADY</code>（:426）。新歌从 idx=0 开始 → <code>diff = 0 - 12 = -12</code> → 永不触发。</li>
+  </ul>
+  <div class="kv"><b>附带</b>：<code>diff &lt; 0</code>（用户 seek 回上一句）同样没有处理分支。</div>
+  <div class="kv"><b>修法</b>：给 <code>RenderContext</code> 增加 <code>songId</code> / <code>lyricsVersion</code>，渲染器在 draw 里比对，变化即 <code>displayedLineIndex = -1</code> 并重采样（复用 <code>onEnter</code> 的重置块）；顺带补 <code>diff &lt; 0</code> 的回退分支。</div>
+</div>
+
+<div class="card p1">
+  <div class="ttl"><span class="badge b1">P1</span>可视化封面取色用了无配置 ImageLoader —— 百度网盘源会 403</div>
+  <div class="loc">737ae0c · ui/viewmodel/VisualizerViewModel.kt:66</div>
+  <div class="kv"><b>现象</b>：百度网盘来源的歌曲，全屏可视化舞台的封面取色拿不到图，配色长期停留在 <code>CoverPalette.Fallback</code>。</div>
+  <div class="kv"><b>根因</b>：<code>coil.ImageLoader(app)</code> 每次新建一个<b>全新无配置</b>实例，绕过了 <code>NasMusicApp.newImageLoader()</code> 里注入的百度 dlink UA 拦截器（没有它直接 403）。</div>
+  <div class="kv"><b>这是重复踩坑</b>：<code>MainViewModel.kt:2852-2855</code> 已经因为同一个问题修过一次，注释写得清清楚楚——</div>
+<pre><span class="c">// 取 Coil 全局 ImageLoader（与 PlaybackService/CoilBitmapLoader 同一实例）。</span>
+<span class="c">// 此前用 coil.ImageLoader(context) 工厂函数会创建全新无配置实例，</span>
+<span class="c">// 其 memoryCache/diskCache 与 UI 实际使用的缓存不是同一个，清除不生效。</span>
+val imageLoader = Coil.imageLoader(context)</pre>
+  <div class="kv"><b>附带</b>：每次调用 new 一个 ImageLoader 且从不 <code>shutdown()</code>，泄漏线程池与缓存。</div>
+  <div class="kv"><b>修法</b>：改成 <code>app.imageLoader</code>（Coil 单例），与项目其余部分一致。</div>
+</div>
+
+<h2>P2 · 体验与性能退化</h2>
+
+<div class="card p2">
+  <div class="ttl"><span class="badge b2">P2</span>Path 批处理把"逐元素 alpha"抹平了 —— 隧道/星芒丢了纵深感</div>
+  <div class="loc">ddaef2d · BasicRenderers.kt（TunnelRenderer / RadialBurstRenderer）</div>
+  <div class="kv"><b>说明</b>：合并成单条 Path 的前提是<b>同色同 alpha</b>。这两处不满足前提，属于"为降 draw 次数牺牲了视觉"：</div>
+  <ul>
+    <li><b>隧道穿越（E03）</b>：原 <code>alpha = fade * 0.7f</code>，<code>fade</code> 是逐环的深度衰减 → 现在统一 <code>0.7f</code>，<b>远处环不再淡出，纵深感消失</b>；且新增了 <code>BlendMode.Plus</code>，重叠处会过曝。</li>
+    <li><b>径向星芒（E06）</b>：原 <code>alpha = 0.6f + v * 0.4f</code>（随频谱明暗）→ 统一 <code>0.8f</code> + <code>BlendMode.Plus</code>，端点不再随音乐呼吸。</li>
+  </ul>
+  <div class="kv"><b>对照</b>：同批次的「烟花」背景频谱（alpha 恒 0.12）、「Bloom」辉光（逐层同 alpha）合并是安全的。</div>
+  <div class="kv"><b>修法</b>：按 alpha 分 2–3 档再分桶合并（同 E05 峰值帽按 hue 分桶的思路），或明确接受该取舍并更新效果预期文档。</div>
+</div>
+
+<div class="card p2">
+  <div class="ttl"><span class="badge b2">P2</span>频谱环峰值帽按 hue 分 4 桶 → 出现色阶断层</div>
+  <div class="loc">ddaef2d · BasicRenderers.kt:304-316</div>
+  原本每根峰值帽用<b>所在条自身</b>的 hue（<code>highlight</code>），现在按 <code>(t*4).toInt()</code> 分 4 桶、用桶中心 hue 绘制，与所在条颜色最多差约 <b>16.9°</b>，能看到 4 段色阶。
+  代码注释仍写着"与所在条同色更亮"，与实现不符。
+</div>
+
+<div class="card p2">
+  <div class="ttl"><span class="badge b2">P2</span>数字雨只剩 0 和 1 两个字符</div>
+  <div class="loc">ddaef2d · AdvancedRenderers.kt:499-501 / 586</div>
+  <code>digits = charArrayOf('0','1')</code> + <code>digitIdx = (…) % 2</code>。原来是 0–9 随机，现在只有 <code>0</code>/<code>1</code>，"数字雨"变成"01 雨"。
+  CHANGELOG 只写了"2 数字 × 4 档绿"，没把这个视觉取舍讲清楚——<b>如果是有意为之建议在 CHANGELOG 里明说</b>，否则会被当成 bug 报回来。
+  <br>另外 <code>onExit()</code> 只把 <code>glyphs</code> 置 null 未 <code>recycle()</code>（8 张小图，量小，低风险）。
+</div>
+
+<div class="card p2">
+  <div class="ttl"><span class="badge b2">P2</span>播放控制行按钮高度不一致 + 宽度余量只剩 16dp</div>
+  <div class="loc">ddaef2d · PlayerControls.kt:378-383　vs　VocalToggleButton.kt:41</div>
+  <ul>
+    <li><code>IconButton</code> 紧凑尺寸 48dp → <b>40dp</b>，但 <code>VocalToggleButton</code> 的 <code>buttonSize</code> 仍是 48dp 没同步 → 同一行里图标按钮 40dp 高、文字按钮 48dp 高，视觉不齐。</li>
+    <li>按钮宽度全是硬编码魔数（幻 40 / K歌 52 / MTV 64），合计约 <b>364dp</b>，距 380dp 左栏只剩 <b>16dp</b>——再加一个入口就会溢出，正是这次 MTV 被截断的同一类问题。</li>
+  </ul>
+  <b>建议</b>：改用 <code>weight</code> 或按内容自适应，别继续堆魔数。
+</div>
+
+<div class="card p2">
+  <div class="ttl"><span class="badge b2">P2</span>VisualizerStage 每帧重复计算歌词信息</div>
+  <div class="loc">ui/components/VisualizerStage.kt:225 / 260 / 376</div>
+  <ul>
+    <li><code>computeLyricInfo()</code> 每帧被调 <b>2 次</b>（当前层 + 交叉淡入的旧层），内部每帧 <code>for (l in lines)</code> 全量扫歌词求最长行（O(N)），并 new 一个 <code>List</code>。最长行/字数<b>是歌曲级常量</b>，不该每帧算。</li>
+    <li><code>:376 remember(lyrics, progressMs) { derivedStateOf { … } }</code> —— key 里带了 <code>progressMs</code>，每帧变化导致 <code>derivedStateOf</code> 每帧重建，<b>等于完全没缓存</b>。</li>
+  </ul>
+  <b>修法</b>：歌词级常量提到 <code>LaunchedEffect(lyrics)</code> 算一次；<code>remember</code> 的 key 去掉 <code>progressMs</code>。
+</div>
+
+<div class="card p2">
+  <div class="ttl"><span class="badge b2">P2</span>调试 println 遗留在采样热路径上</div>
+  <div class="loc">1cda585 · renderers/LyricsDotMatrixRenderer.kt:307-309</div>
+  <code>sampleLine()</code> 里保留了诊断用的 <code>println(...)</code>，采样时逐次打印长字符串。既是日志噪音也是真实开销，删掉或改用 <code>AppLog.d</code>。
+</div>
+
+<div class="card p2">
+  <div class="ttl"><span class="badge b2">P2</span>单测断言被明显放宽（1cda585）</div>
+  <div class="loc">app/src/test/.../player/SpectrumAnalyzerTest.kt:150-161</div>
+  原本精确校验 <code>assertEquals(expectedLinearBass, bass, 0.002)</code>，现改为：
+<pre>assertTrue(actual in <span class="y">0.2f..0.31f</span>)
+assertTrue(abs(actual - 0.2513f) &lt; abs(actual - 0.3543f))</pre>
+  区间宽 0.11（注释仍称"≈0.25"），只判断"更接近线性分支而非 gamma 分支"，<b>回归探测力大幅下降</b>。
+  boost 语义改了确实要改断言，但建议收窄到 ±0.02，并保留对显示通道 gamma 契约的直接校验。
+  <br>同批 <code>BeatDetectorTest</code> 把 <code>MIN_BASS</code> 由 0.12 降到 0.005（敏感度约 24 倍），建议确认安静段不会误触发鼓点。
+</div>
+
+<h2>P3 · 整洁与一致性</h2>
+
+<div class="card p3">
+  <div class="ttl"><span class="badge b3">P3</span>硬编码「幻」破坏国际化</div>
+  <div class="loc">ddaef2d · PlayerControls.kt:141</div>
+  <code>stringResource(R.string.player_visualizer)</code> → 硬编码 <code>"幻"</code>，<code>values-en/strings.xml</code> 的英文翻译从此失效；且单字语义不明。
+</div>
+
+<div class="card p3">
+  <div class="ttl"><span class="badge b3">P3</span>枚举注释与迁移表未随删除同步</div>
+  <div class="loc">data/model/AppSettings.kt:49 / 88-94</div>
+  <ul>
+    <li>类注释仍写"18 套效果 + 1 个自动导演模式"，实为 <b>21 套、无自动档</b>。</li>
+    <li><code>LEGACY_MAP</code> 未收录 <code>AUTO_DIRECTOR</code>。老用户存的值会 fallback 到 Default（<b>行为正确</b>），但 CHANGELOG 明确承诺了"自动回落到默认频谱环"，建议显式加一条 <code>"AUTO_DIRECTOR" to CIRCULAR_RING</code> 把意图固化，并补一条迁移测试。</li>
+  </ul>
+</div>
+
+<div class="card p3">
+  <div class="ttl"><span class="badge b3">P3</span>冗余空覆写与死参数</div>
+  <ul>
+    <li><code>BloomRenderer.onEnter()</code> 只有一句 <code>super.onEnter(ctx)</code>，纯冗余，删掉。</li>
+    <li>自动导演移除后 <code>AppRoot</code> 恒传 <code>crossfade = false</code>，<code>VisualizerStage</code> 的 <code>crossfade</code> 参数已成死参数，要么删要么恢复能力。</li>
+  </ul>
+</div>
+
+<div class="card p3">
+  <div class="ttl"><span class="badge b3">P3</span>CHANGELOG 与实现对不上</div>
+  v2.30.3 写"间距 8→6dp"，实际 diff 是 <code>12dp → 6dp</code>；且未提及图标按钮降为 40dp 后与文字按钮的 48dp 高度不一致。建议关键 UI 改动后补一句实测尺寸账。
+</div>
+
+<div class="card p3">
+  <div class="ttl"><span class="badge b3">P3</span>封面加载存在快慢请求竞态</div>
+  <div class="loc">ui/viewmodel/VisualizerViewModel.kt:58-84</div>
+  协程内没有校验 <code>key</code> 仍是当前值。快速切歌 A→B 时，若先发的 jobA 后完成，会用 A 的封面覆盖当前 B 的配色。
+  <b>修法</b>：在 launch 里捕获 <code>key</code>，写回前判断 <code>loadedCoverKey == key</code>。
+</div>
+
+<h2>抽查 4625656（P0–P3 批量修复）</h2>
+<div class="card">
+  整体质量不错：<b>Daoliyu/Feiniu/Subsonic</b> 都补了 <code>response.use{}</code> 修连接泄漏；<b>DemucsSeparator</b> 的延迟释放 + <code>opMutex</code> 防并发正确；
+  <b>ModelTransferServer</b> 用 KMP 边界匹配修掉了 boundary 自重叠漏匹配的 bug；<b>SongDownloadManager</b> 的 Call 取消/完整性校验/孤儿清理到位。
+  <br><br>
+  两点值得回看：
+  <ul>
+    <li><b>AccompanimentCache</b>（-106 行）整段删除了预分离（后台预取下一首伴奏）能力。<code>clearCache()</code> 也不再取消在途分离，可能删到正在写入的 WAV（目前只靠 Demucs 的 finally 兜底）。是主动回退还是误删，建议确认。</li>
+    <li><b>LyricsManager</b> 的 <code>backgroundScope</code> 用 <code>SupervisorJob() + IO</code> 且从不取消（实例级泄漏）；<code>commitPendingNetworkLyrics</code> 改成 fire-and-forget，调用方若同步回读缓存存在时序竞态。</li>
+  </ul>
+</div>
+
+<h2>建议修复顺序</h2>
+<table>
+  <tr><th style="width:50px">#</th><th>动作</th><th style="width:170px">位置</th></tr>
+  <tr><td>1</td><td>修万花筒旋转矩阵（3 行改动，收益最大）</td><td>AdvancedRenderers.kt:57-80</td></tr>
+  <tr><td>2</td><td>歌词点阵加 songId/lyricsVersion 重置</td><td>LyricsDotMatrixRenderer + RenderContext</td></tr>
+  <tr><td>3</td><td>改用全局 Coil 单例（顺带修 403 与泄漏）</td><td>VisualizerViewModel.kt:66</td></tr>
+  <tr><td>4</td><td>删 println；按钮高度统一；隧道/星芒 alpha 分桶</td><td>3 个文件</td></tr>
+  <tr><td>5</td><td>i18n 回退、注释/迁移表/CHANGELOG 同步、删冗余覆写</td><td>AppSettings / PlayerControls</td></tr>
+  <tr><td>6</td><td>收窄放宽的测试断言</td><td>SpectrumAnalyzerTest.kt</td></tr>
+</table>
+
+<div class="foot">
+  审查方式：git 历史比对 + 关键文件源码精读 + 并行子代理分块审查 + 实际构建验证。
+  子代理给出的行号存在幻觉（例如把 diff 文件行号当作源码行号、报告已修复的问题），<b>本报告中每一条结论均已回到源码逐条核实</b>。
+  <br>构建验证：<code>./gradlew clean compileDebugKotlin</code> → RC=0（0 error）；<code>./gradlew test</code> → RC=0，BUILD SUCCESSFUL。
+</div>
+
+</div>
+</body>
+</html>

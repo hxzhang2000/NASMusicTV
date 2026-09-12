@@ -729,6 +729,7 @@
     <!-- Player Controls -->
     <string name="player_karaoke">K歌</string>
     <string name="player_visualizer">频谱</string>
+    <string name="player_visualizer_short">频谱</string>
 
     <!-- ActionBar -->
     <string name="action_play_all">全部播放</string>

@@ -73,10 +73,6 @@ class BloomRenderer : BarSpectrumRenderer() {
     private val reflPath = Path()
     private val capPath = Path()
 
-    override fun onEnter(ctx: RenderContext) {
-        super.onEnter(ctx)
-    }
-
     override fun DrawScope.draw(frame: AudioFrame, ctx: RenderContext) {
         val n = ctx.quality.barCount
         updateEnv(frame, n)
@@ -158,8 +154,9 @@ class TunnelRenderer : VisualizerRenderer {
     override val theme = VisualizerTheme.TUNNEL_FLY
 
     private var offset = 0f
-    // 频谱驱动的小圆点合并为单 Path（addOval），替代最多 ~192 次独立 drawCircle
-    private val dotPath = Path()
+    // 频谱驱动的小圆点按 z 深度分 3 桶合并（保留逐环 fade，否则丢纵深），
+    // 替代最多 ~192 次独立 drawCircle；3 次 drawPath 换取原视觉层次
+    private val dotPaths = Array(3) { Path() }
 
     override fun onEnter(ctx: RenderContext) { offset = 0f }
 
@@ -173,8 +170,8 @@ class TunnelRenderer : VisualizerRenderer {
         val maxZ = RINGS * 60f
         val accent = ctx.palette.accent
 
-        // 频谱驱动的小圆点：合并成单 Path 绘制（同色 towardWhite + Plus 叠加）
-        dotPath.reset()
+        // 频谱驱动的小圆点：按 z 深度分 3 桶合并（桶中心 alpha 近似原 fade*0.7f）
+        for (p in dotPaths) p.reset()
         val dotColor = VisualizerMath.towardWhite(accent, 0.4f + frame.pulse * 0.4f)
         for (i in 0 until RINGS) {
             var z = (i * 60f + offset) % maxZ
@@ -201,11 +198,15 @@ class TunnelRenderer : VisualizerRenderer {
                     val px = cx + cos(a) * rr
                     val py = cy + sin(a) * rr
                     val rDot = 3f * s + v * 3f
-                    dotPath.addOval(Rect(px - rDot, py - rDot, px + rDot, py + rDot))
+                    dotPaths[(fade * 3f).toInt().coerceIn(0, 2)].addOval(
+                        Rect(px - rDot, py - rDot, px + rDot, py + rDot))
                 }
             }
         }
-        drawPath(dotPath, dotColor, alpha = 0.7f, blendMode = androidx.compose.ui.graphics.BlendMode.Plus)
+        // 恢复原始的 SrcOver：合并前是逐点 drawCircle，没有 Plus 叠加（Plus 会让重叠处过曝）
+        for (b in 0 until 3) {
+            drawPath(dotPaths[b], dotColor, alpha = (b + 0.5f) / 3f * 0.7f)
+        }
     }
 
     private companion object { const val RINGS = 24 }
@@ -227,8 +228,9 @@ class CircularRingRenderer : VisualizerRenderer {
 
     private var rotation = 0f
     private var peaks = FloatArray(64)
-    // 峰值帽按 hue 分 4 桶合并为 Path，替代 ~64 次 drawCircle
-    private val peakPaths = Array(4) { Path() }
+    // 峰值帽按 hue 分 8 桶合并为 Path，替代 ~64 次 drawCircle。
+    // 桶数越多色差越小：8 桶时与所在条的 hue 最多差约 8°，肉眼基本无色阶断层
+    private val peakPaths = Array(8) { Path() }
 
     override fun onEnter(ctx: RenderContext) {
         rotation = 0f
@@ -298,19 +300,19 @@ class CircularRingRenderer : VisualizerRenderer {
                 drawLine(barColor, inner, outer, wdt, StrokeCap.Round, alpha = 0.95f)
             }
 
-            // 峰值帽（极坐标版）——与所在条同色更亮，按 hue 分桶合并为 Path
+            // 峰值帽（极坐标版）——近似所在条的颜色，按 hue 分 8 桶合并为 Path
             peaks[i] = if (v >= peaks[i]) v else maxOf(v, peaks[i] * 0.985f - 0.004f)
             val pr = rStart + VisualizerMath.barHeight(peaks[i], maxLen, 3f) * scale
-            val bucket = ((t * 4).toInt()).coerceIn(0, 3)
+            val bucket = ((t * 8).toInt()).coerceIn(0, 7)
             peakPaths[bucket].addOval(Rect(
                 cx + cosA * pr - 2.5f, cy + sinA * pr - 2.5f,
                 cx + cosA * pr + 2.5f, cy + sinA * pr + 2.5f
             ))
         }
 
-        // ①.5 峰值帽 → 4 条 Path 一次绘制（颜色按桶内中间 hue）
-        for (s in 0 until 4) {
-            val hue = baseHue0 + (s + 0.5f) * (baseHue1 - baseHue0) / 4f
+        // ①.5 峰值帽 → 8 条 Path 一次绘制（颜色按桶内中间 hue）
+        for (s in 0 until 8) {
+            val hue = baseHue0 + (s + 0.5f) * (baseHue1 - baseHue0) / 8f
             drawPath(peakPaths[s],
                 VisualizerMath.hsl(hue, sat, minOf(lit + 0.25f, 1f)), alpha = 0.75f)
         }
@@ -379,8 +381,8 @@ class RadialBurstRenderer : VisualizerRenderer {
 
     override val theme = VisualizerTheme.RADIAL_BURST
 
-    // 端点圆点合并为单 Path（同色，addOval 保留半径随频谱），替代 ~128 次 drawCircle
-    private val tipPath = Path()
+    // 端点圆点按频谱值分 3 桶合并（保留 alpha 随 v 变化），替代 ~128 次 drawCircle
+    private val tipPaths = Array(3) { Path() }
 
     override fun DrawScope.draw(frame: AudioFrame, ctx: RenderContext) {
         val cx = size.width / 2
@@ -390,7 +392,7 @@ class RadialBurstRenderer : VisualizerRenderer {
         val accent = ctx.palette.accent
         val n = ctx.quality.barCount
 
-        tipPath.reset()
+        for (p in tipPaths) p.reset()
         for (i in 0 until n) {
             val a = VisualizerMath.rad(i * 360f / n)
             val v = frame.spectrum.getOrElse(i) { 0f }
@@ -398,11 +400,15 @@ class RadialBurstRenderer : VisualizerRenderer {
             val p0 = VisualizerMath.polar(cx, cy, r0, a)
             val p1 = VisualizerMath.polar(cx, cy, r0 + len, a)
             drawLine(accent, p0, p1, 2.5f + v * 3.5f, StrokeCap.Round, alpha = 0.95f)
-            // 端点圆 → 合并
+            // 端点圆 → 按 v 分桶合并（原 alpha = 0.6f + v * 0.4f）
             val r = 4f + frame.bass * 6f
-            tipPath.addOval(Rect(p1.x - r, p1.y - r, p1.x + r, p1.y + r))
+            tipPaths[(v.coerceIn(0f, 0.999f) * 3f).toInt()].addOval(
+                Rect(p1.x - r, p1.y - r, p1.x + r, p1.y + r))
         }
-        drawPath(tipPath, VisualizerMath.towardWhite(accent, 0.6f), alpha = 0.8f, blendMode = androidx.compose.ui.graphics.BlendMode.Plus)
+        for (b in 0 until 3) {
+            drawPath(tipPaths[b], VisualizerMath.towardWhite(accent, 0.6f),
+                alpha = 0.6f + (b + 0.5f) / 3f * 0.4f)
+        }
         drawCircle(accent, ctx.minDim * 0.055f * (1f + frame.pulse * 0.25f),
             Offset(cx, cy), alpha = 0.6f + frame.energy * 0.4f)
     }

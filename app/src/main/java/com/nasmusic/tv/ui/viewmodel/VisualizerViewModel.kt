@@ -61,9 +61,13 @@ class VisualizerViewModel(
             return
         }
         loadedCoverKey = key
+        val requestedKey = key
         viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
             val ib: androidx.compose.ui.graphics.ImageBitmap? = runCatching {
-                val loader = coil.ImageLoader(app)
+                // 必须用 Coil 全局单例：NasMusicApp.newImageLoader() 注入了百度 dlink
+                // UA 拦截器，coil.ImageLoader(app) 会新建无配置实例 → 百度网盘封面 403，
+                // 且该实例从不 shutdown，泄漏线程池与缓存（同 MainViewModel 的教训）。
+                val loader = coil.Coil.imageLoader(app)
                 val req = coil.request.ImageRequest.Builder(app)
                     .data(url)
                     .allowHardware(false)          // 关闭硬件位图，否则无法取色
@@ -73,13 +77,17 @@ class VisualizerViewModel(
                 bmp?.asImageBitmap()
             }.getOrNull()
 
+            // 快速切歌时先发的任务可能后返回：只认“仍是当前 key”的结果，
+            // 否则会用上一首的封面/配色覆盖当前歌曲。
+            if (requestedKey != loadedCoverKey) return@launch
+
             if (ib == null) {
                 _cover.value = null
                 _palette.value = com.nasmusic.tv.visualizer.CoverPalette.Fallback
                 return@launch
             }
             _cover.value = ib
-            _palette.value = paletteProvider.obtain(key, ib)
+            _palette.value = paletteProvider.obtain(requestedKey, ib)
         }
     }
 

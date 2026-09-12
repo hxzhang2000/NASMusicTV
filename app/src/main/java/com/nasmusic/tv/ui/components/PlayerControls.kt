@@ -335,10 +335,11 @@ fun ControlButtonsRow(
         if (showVisualizerButton) {
             Spacer(modifier = Modifier.width(btnGap))
             VocalToggleButton(
-                label = "幻",
+                label = stringResource(R.string.player_visualizer_short),
                 onClick = onEnterVisualizer,
                 compact = compact,
-                width = if (compact) 40.dp else null
+                // 两字标签需与「K歌」同宽（52dp），否则 compact 下被截断
+                width = if (compact) 52.dp else null
             )
         }
         // K 歌入口按钮

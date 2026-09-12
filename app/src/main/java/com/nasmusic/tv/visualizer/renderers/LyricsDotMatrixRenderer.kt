@@ -68,6 +68,8 @@ class LyricsDotMatrixRenderer : VisualizerRenderer {
 
     // 显示的行索引（第一行对应第几句歌词）
     private var displayedLineIndex = -1
+    /** 已绑定的歌曲 id：renderer 实例跨歌曲复用，需靠它判断切歌 */
+    private var boundSongId: String? = null
 
     // 行偏移（用于行移动动画，0=正常位置，-1=上移一行）
     private var rowOffsetY = 0f  // 像素偏移量
@@ -144,6 +146,7 @@ class LyricsDotMatrixRenderer : VisualizerRenderer {
         phaseStartMs = 0L
         displayedLineIndex = -1
         rowOffsetY = 0f
+        boundSongId = null
     }
 
     override fun onExit() {
@@ -302,12 +305,6 @@ class LyricsDotMatrixRenderer : VisualizerRenderer {
             if (curRowFill >= cap) break
         }
 
-        // 记录实际采样边界，用于诊断"只显示一半"问题
-        if (n > 0) {
-            println("LyricDotMatrix-sample text='$displayText' n=$n bmpW=$bmpW bmpH=$bmpH " +
-                "fontSize=$fontSize fm.top=${fm.top} fm.bottom=${fm.bottom} " +
-                "minY=$minY maxY=$maxY minX=$minX maxX=$maxX step=$step canvasW=$canvasW targetY=$targetY")
-        }
         bmp.recycle()
 
         if (n == 0) return 0
@@ -397,6 +394,19 @@ class LyricsDotMatrixRenderer : VisualizerRenderer {
         bottomY = h * 0.60f
 
         // ── 状态切换逻辑 ────────────────────────────────────
+        // 切歌重置：renderer 实例由 swapper 跨歌曲复用（不会重新 onEnter），
+        // 若不在歌曲变化时回到初始态，displayedLineIndex 会停在上首歌的行号，
+        // 新歌 idx 从 0 开始 -> diff 为负 -> 永不触发行切换，画面卡在旧歌词。
+        if (ctx.songId != boundSongId) {
+            boundSongId = ctx.songId
+            displayedLineIndex = -1
+            phase = Phase.INIT_COALESCE
+            phaseStartMs = frame.timeMs
+            rowOffsetY = 0f
+            line0Text = ""
+            line1Text = ""
+        }
+
         if (displayedLineIndex < 0 && phase == Phase.INIT_COALESCE) {
             // 首次初始化
             if (lyricLine != null && currentIdx >= 0) {
