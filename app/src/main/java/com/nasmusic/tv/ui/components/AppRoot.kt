@@ -94,7 +94,12 @@ fun AppRoot(
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
     val isTV = remember {
-        context.packageManager.hasSystemFeature("android.software.leanback")
+        // 与 MainActivity/NasMusicApp/TextInputDialog 一致：很多非认证 TV 盒子
+        // 只上报 android.hardware.type.television 而无 leanback 特性，
+        // 单查 leanback 会把 TV 误判为手机（v2.20.0 手机端支持引入的回归，
+        // 曾导致 K 歌/MTV 页手机遥控二维码因 remoteControlUrl 被置 null 而消失）
+        context.packageManager.hasSystemFeature("android.software.leanback") ||
+            context.packageManager.hasSystemFeature("android.hardware.type.television")
     }
     val currentScreen by viewModel.navVM.currentScreen.collectAsState(initial = Screen.Home)
     val currentSong by viewModel.playerVM.currentSong.collectAsState(initial = null)

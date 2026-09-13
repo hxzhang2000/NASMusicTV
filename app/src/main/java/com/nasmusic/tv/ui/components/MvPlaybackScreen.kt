@@ -5,6 +5,7 @@ import com.nasmusic.tv.R
 
 import android.view.ViewGroup
 import androidx.compose.foundation.background
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -39,8 +40,12 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.foundation.Image
 import androidx.compose.ui.unit.dp
@@ -112,6 +117,7 @@ fun MvPlaybackScreen(
     // ── 控制条自动虚化：5 秒无操作 -> 半透明（0.15），遥控器操作/焦点切换 -> 完全显化（1.0）──
     var controlsVisible by remember { mutableStateOf(true) }
     var lastInteraction by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    val screenFocusRequester = remember { FocusRequester() }
     fun activateControls() { lastInteraction = System.currentTimeMillis() }
     LaunchedEffect(lastInteraction) {
         controlsVisible = true
@@ -141,6 +147,14 @@ fun MvPlaybackScreen(
         onDispose {
             AppLog.d(TAG, "release video ExoPlayer")
             exoPlayer.release()
+        }
+    }
+
+    // 进入 MTV 页面时夺取页面焦点，确保 AndroidView 视频层不会截断遥控按键的预览链路。
+    LaunchedEffect(Unit) {
+        try {
+            screenFocusRequester.requestFocus()
+        } catch (_: Exception) {
         }
     }
 
@@ -236,7 +250,12 @@ fun MvPlaybackScreen(
         modifier = modifier
             .fillMaxSize()
             .background(Color.Black)
-            .onPreviewKeyEvent { activateControls(); false }
+            .focusRequester(screenFocusRequester)
+            .focusable()
+            .onPreviewKeyEvent { event ->
+                if (event.type == KeyEventType.KeyDown) activateControls()
+                false
+            }
     ) {
         // ── 全屏视频 ──
         AndroidView(

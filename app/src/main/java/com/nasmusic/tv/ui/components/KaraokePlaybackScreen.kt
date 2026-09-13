@@ -2,6 +2,7 @@ package com.nasmusic.tv.ui.components
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.asImageBitmap
@@ -131,15 +132,18 @@ fun KaraokePlaybackScreen(
     playPauseFocusRequester: FocusRequester? = null,
     remoteControlUrl: String? = null
 ) {
-    // ── 二维码自动显隐：5 秒无操作 -> 完全隐藏，操作时显化 ──
+    // ── 二维码自动显隐：5 秒无操作 -> 完全隐藏，任意遥控器按键重新显示 ──
     var controlsVisible by remember { mutableStateOf(true) }
     var lastInteraction by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    val screenFocusRequester = remember { FocusRequester() }
     fun activateControls() { lastInteraction = System.currentTimeMillis() }
     LaunchedEffect(lastInteraction) {
         controlsVisible = true
         delay(5000)
         if (System.currentTimeMillis() - lastInteraction >= 5000) controlsVisible = false
     }
+    // 控制按钮对齐 MTV 页：5 秒无操作虚化到 0.15，操作/焦点时显化（二维码仍完全隐藏）
+    val controlsAlpha = if (controlsVisible) 1f else 0.15f
 
     // ── 升降调 / 变速选择弹窗状态 ──
     var showPitchPicker by remember { mutableStateOf(false) }
@@ -149,8 +153,13 @@ fun KaraokePlaybackScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(Color(0xFF1A1A2E))
+            .focusRequester(screenFocusRequester)
+            .focusable()
             .onFocusChanged { if (it.hasFocus) activateControls() }
-            .onPreviewKeyEvent { activateControls(); false }
+            .onPreviewKeyEvent { event ->
+                if (event.type == KeyEventType.KeyDown) activateControls()
+                false
+            }
     ) {
         // ── 手机遥控二维码（右上角，5 秒无操作完全隐藏）──
         val qrBitmap = remember(remoteControlUrl) {
@@ -366,12 +375,14 @@ fun KaraokePlaybackScreen(
             Spacer(Modifier.height(48.dp))
         }
 
-        // ── 底部栏：左下角返回 + 右下角控制 ──
+        // ── 底部栏：左下角返回 + 右下角控制（对齐 MTV：5 秒无操作虚化，操作/焦点时显化）──
         Row(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .fillMaxWidth()
-                .padding(start = 32.dp, end = 32.dp, bottom = 20.dp),
+                .padding(start = 32.dp, end = 32.dp, bottom = 20.dp)
+                .onFocusChanged { if (it.hasFocus) activateControls() }
+                .alpha(controlsAlpha),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -464,9 +475,11 @@ fun KaraokePlaybackScreen(
         }
     }
 
-    // 进入 KARAOKE 页面时自动聚焦播放/暂停按钮
+    // 进入 KARAOKE 页面时先建立页面焦点域，再把焦点交给播放/暂停按钮。
+    // 页面级预览监听因此能收到内部按钮上的所有遥控器按键。
     LaunchedEffect(Unit) {
         try {
+            screenFocusRequester.requestFocus()
             playPauseFocusRequester?.requestFocus()
         } catch (_: Exception) {
         }

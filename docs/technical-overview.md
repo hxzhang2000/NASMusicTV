@@ -8299,6 +8299,28 @@ onSearchSong = { keyword -> viewModel.searchNetworkSongs(keyword) },
 
 **版本**：v2.31.2 → **v2.31.3**（versionCode 136 → 137）
 
+### 10.134 v2.32.1 — K 歌/MTV 手机遥控二维码不显示/按键唤醒修复（2026-09-13）
+
+**问题描述**：TV 端进入 K 歌或 MTV 全屏页面后，手机遥控二维码完全不显示；即便显示，也会在约 5 秒无操作后隐藏且按遥控器无法稳定重新唤醒。
+
+**根因分析**（两个独立问题）：
+
+1. **二维码完全不显示（主因，实机确证）**：`AppRoot` 的 `isTV` 仅检查 `android.software.leanback` 特性；实测电视 `adb shell pm list features` 只上报 `android.hardware.type.television` 而无 leanback（常见于非 Google 认证的国产 TV 盒子）。TV 被误判为手机后，`NowPlayingBranch` 中 `remoteControlUrl = if (isTV) … else null` 把 URL 强制置 null，二维码根本无法生成。此为 v2.20.0 手机端支持（d8a09a0）引入的回归——当时 `MainActivity` setContent 内、`NasMusicApp`、`TextInputDialog` 三处 TV 判断均采用 `leanback || television` 双特性检测，唯 `AppRoot` 漏检。
+2. **按键后二维码无法稳定重新显示**：两页虽在最外层 `Box` 注册了 `onPreviewKeyEvent`，但外层没有建立稳定的页面焦点域。实际焦点落在内部 TV `FocusableSurface` 按钮时，按键路由不保证经过页面监听；MTV 页面还包含 `AndroidView(PlayerView)`，进一步可能截断 Compose 焦点链路。
+
+**修改**：
+
+- `AppRoot` 的 `isTV` 补上 `android.hardware.type.television` 检测，与全库其余三处 TV 判断对齐；`MainActivity.onCreate` 的系统栏隐藏判断（原同样单查 leanback）同步对齐
+- `KaraokePlaybackScreen` 与 `MvPlaybackScreen` 外层增加 `FocusRequester + focusable()`，页面进入时主动请求页面焦点，保证页面级预览监听稳定收到遥控器按键
+- K 歌建立页面焦点域后仍将焦点交给原播放/暂停按钮；MTV 默认聚焦页面，方向键仍可进入原控制栏
+- 仅在 `KeyEventType.KeyDown` 时调用 `activateControls()`，避免 KeyUp 对同一次操作重复重启 5 秒计时
+- 二维码保持“进入页面及按键后立即显示、约 5 秒无操作后完全隐藏”；K 歌原有 `.zIndex(10f)` 遮罩层级修复保留
+- **K 歌页底部控制栏对齐 MTV 定时虚化**：新增 `controlsAlpha`（无操作 5 秒 → 0.15，操作/焦点 → 1.0）应用到含返回按钮与全部控制按钮的底部 Row，并注册 `onFocusChanged` 刷新计时；歌词区域与歌曲信息保持常显，按钮虚化期间仍可聚焦（与 MTV 行为一致）
+
+**验证**：`:app:compileDebugKotlin` 与全量 `:app:testDebugUnitTest` 均 **BUILD SUCCESSFUL**。电视实机 `pm list features` 确认设备只上报 `television` 特性（根因一实锤）；v2.32.1 release APK 部署实机验证通过——进入 K 歌页二维码正常显示，约 5 秒无操作后二维码完全隐藏、底部控制按钮虚化至 0.15，任意遥控器按键后两者立即恢复。
+
+**版本**：v2.32.0 → **v2.32.1**（versionCode 139 → 140）
+
 ### 10.133 v2.32.0 — 可视化效果库补齐 11 套极简几何效果 E26–E36（2026-09-13）
 
 **背景**：一次性补齐 11 套极简几何/机械风格可视化效果（声弦/几何环/构成/轨道/雷达/折纸/阶梯/齿轮/分形/光轴/螺旋），全部走既有 `VisualizerRenderer` 插件式接口，音频分析层零改动。

@@ -106,7 +106,10 @@ class MainActivity : ComponentActivity() {
 
         // 手机端：隐藏系统栏（状态栏 + 导航栏）实现真正全屏——主题 windowFullscreen 只隐藏状态栏，
         // Android 12+ 强制 edge-to-edge 后下方会露出白色导航栏。TV 无系统栏，无需处理。
-        val isTVDevice = packageManager.hasSystemFeature(PackageManager.FEATURE_LEANBACK)
+        // 与下方 setContent 内判断一致：leanback 或 television 特性任一即视为 TV
+        // （很多非认证 TV 盒子只上报 android.hardware.type.television）
+        val isTVDevice = packageManager.hasSystemFeature(PackageManager.FEATURE_LEANBACK) ||
+                packageManager.hasSystemFeature("android.hardware.type.television")
         if (!isTVDevice) {
             try {
                 WindowCompat.setDecorFitsSystemWindows(window, false)

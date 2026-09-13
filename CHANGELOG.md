@@ -7,6 +7,19 @@
 >
 > 类型：`Added`（新增） | `Changed`（变更） | `Fixed`（修复） | `Removed`（移除）
 
+## [v2.32.1] - 2026-09-13
+
+> 修复 TV 端 K 歌与 MTV 全屏页面手机遥控二维码不显示/无法通过遥控器按键重新唤醒的问题。**根因一（主因）**：AppRoot 的 `isTV` 仅检查 `android.software.leanback` 特性，而实测电视（`pm list features`）只上报 `android.hardware.type.television` 无 leanback——TV 被误判为手机，`remoteControlUrl` 被 `if (isTV)` 守卫强制置 null，二维码完全无法生成（v2.20.0 手机端支持引入的回归，当时 MainActivity/NasMusicApp/TextInputDialog 均用双特性判断、唯 AppRoot 漏检）。**根因二**：页面级按键预览未建立稳定焦点域，内部 TV 按钮或 MTV 的 AndroidView 视频层获得焦点后，按键不保证经过外层监听。现 isTV 对齐全库统一的双特性判断，并为两页建立可聚焦的页面焦点域主动请求焦点、仅在 KeyDown 刷新显隐计时；二维码在进入页面及任意遥控器按键后立即显示，约 5 秒无操作后完全隐藏，同时保留原有 D-Pad、播放控制、焦点导航和 BACK 行为。
+
+### Fixed
+- **K 歌/MTV 手机遥控二维码不显示（根因修复）**：`AppRoot` 的 `isTV` 补上 `android.hardware.type.television` 检测（与 MainActivity setContent 内、NasMusicApp、TextInputDialog 的既有判断对齐），TV 不再被误判为手机；`MainActivity.onCreate` 的系统栏隐藏判断同步对齐
+- **K 歌/MTV 手机遥控二维码按键后不显示**：两页外层增加 `FocusRequester + focusable()` 页面焦点域，页面进入时主动请求焦点，确保内部按钮与 MTV 视频层场景下仍能收到按键预览
+- **二维码显隐计时重复刷新**：仅在 `KeyEventType.KeyDown` 时刷新 5 秒计时，避免同一次按键的 KeyUp 再次延长显示时间
+
+### Changed
+- **K 歌页控制按钮对齐 MTV 定时隐藏**：底部栏（返回/上一首/播放暂停/下一首/升降调/变速/原唱伴唱/质量切换）5 秒无操作虚化至 0.15 透明度，任意遥控器按键或焦点变化恢复；歌词与歌曲信息保持常显
+- 版本 v2.32.0 → **v2.32.1**（versionCode 139 → 140）
+
 ## [v2.32.0] - 2026-09-13
 
 > 可视化效果库一次补齐 11 套极简几何风格效果（E26–E36）：E26「声弦」线性声波（平行细线阵随波形起伏，高频叠加细密锯齿）、E27「几何环」动态几何环（pulse 心跳缩放 + treble 积分旋转 + 顶点频谱断点闪烁）、E28「构成」包豪斯拼贴（莫兰迪色系扁平几何体，低音放大/高频翻面/中频漂移）、E29「轨道」环绕轨道（倾斜椭圆轨道 + 光球拖尾环形缓冲，倾角低通晃动防筛子）、E30「雷达」极坐标（雷达绿单色，低音向心收缩 + 扫掠角余弦亮起 + 频谱余辉弧）、E31「折纸」低多边形（三角形 cos 投影翻折，过零交换明暗面；treble 驱动冷暖色相插值）、E32「阶梯」方波（刻意不做缓动的量化方块立面，高频 2×2 碎裂）、E33「齿轮」同心齿轮（齿轮 Path 预生成，beat 棘轮一个齿距 120ms 缓动，小齿轮 treble 疯转）、E34「分形」分形树（拓扑 onEnter 拍平存数组不递归，bass 驱动展开深度，末梢确定性电弧）、E35「光轴」旋转光轴（宽淡辉光+细亮芯线双层，高频手动分段虚线避开 dashPathEffect 每帧分配）、E36「螺旋」费马螺旋（黄金角预计算点位，内圈组整体旋转规避逐点变换）。全部 Tier.BASIC（三档画质全开，内部按画质分档细节量），draw 内零分配（E30 SweepGradient 预分配、E26 单 Path 双描边、E29 环形历史缓冲零 arraycopy）。音频分析层零改动，舞台/指示器/切换零改动（自动遍历 selectable）；均衡器页小预览按 ordinal%3 归类样式天然兼容。
