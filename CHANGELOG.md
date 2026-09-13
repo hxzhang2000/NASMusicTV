@@ -38,6 +38,7 @@
 
 ### Changed（二次审阅补充）
 - `VisualizerStage` 删除随 `crossfade` 参数一起失效的 KDoc；数字雨的释放注释合并进 `releaseGlyphs()`
+- **歌词点阵（E23）字号逐帧重算**：`LyricsDotMatrixRenderer.computeFontSize` 每帧 `new Paint` + `measureText` 推导字号，但结果只依赖最长行（整曲常量）与画布尺寸，整首歌恒定。现加 `cachedFontW`/`cachedFontH`/`cachedLongest` 变化检测，仅尺寸或歌词变化时算一次，消除每帧对象分配（最长行本身已由 `remember(lyrics)` 缓存，每首歌只扫描一次）
 
 ### Tests
 - `SpectrumAnalyzerTest`：把 v2.30.2 放宽的 `actual in 0.2f..0.31f` 收窄为 `0.235f..0.275f`（±0.02），恢复对“bass 落在线性分支而非 gamma 分支”的回归探测力

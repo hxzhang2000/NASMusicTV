@@ -79,6 +79,10 @@ class LyricsDotMatrixRenderer : VisualizerRenderer {
     // 行高（像素）
     private var lineHeightPx = 0f
     private var fontSizePx = 0f
+    // 字号缓存键：字体大小只依赖最长行(整曲常量)与画布尺寸，尺寸/歌词不变时整首歌只算一次
+    private var cachedFontW = 0f
+    private var cachedFontH = 0f
+    private var cachedLongest: String? = null
     private var topY = 0f    // 上行 Y 中心
     private var bottomY = 0f // 下行 Y 中心
 
@@ -150,6 +154,10 @@ class LyricsDotMatrixRenderer : VisualizerRenderer {
         rowOffsetY = 0f
         boundSongId = null
         boundCaption = null
+        // 切歌/重进：重置字号缓存，下一帧用新歌最长行重算一次
+        cachedFontW = 0f
+        cachedFontH = 0f
+        cachedLongest = null
     }
 
     override fun onExit() {
@@ -377,13 +385,19 @@ class LyricsDotMatrixRenderer : VisualizerRenderer {
         val h = size.height
         val cap = line0.size / STRIDE
 
-        // ── 自适应字体大小 ─────────────────────────────────────
-        // 规则：
-        //   1. 取全曲歌词最长的一句，测量其真实宽度
-        //   2. 字号 = 让它占满屏幕宽度 80% 时的字号
-        //   3. 同时约束：字体高度不得超过屏幕高度的 40%（两行都要显示）
-        fontSizePx = computeFontSize(ctx, w, h)
-        lineHeightPx = fontSizePx * 1.4f
+        // ── 自适应字体大小（缓存）─────────────────────────────
+        // 字号只依赖最长行(整曲常量)与画布尺寸，尺寸/歌词不变时整首歌只算一次，
+        // 不再每帧 new Paint + measureText（用户需求：字体大小整首歌不变，无需重复计算）
+        val longestKey = ctx.longestLyricLine?.takeIf { it.isNotBlank() }
+            ?: ctx.currentLyricLine?.takeIf { it.isNotBlank() }
+            ?: ctx.caption?.takeIf { it.isNotBlank() }
+        if (w != cachedFontW || h != cachedFontH || longestKey != cachedLongest) {
+            fontSizePx = computeFontSize(ctx, w, h)
+            lineHeightPx = fontSizePx * 1.4f
+            cachedFontW = w
+            cachedFontH = h
+            cachedLongest = longestKey
+        }
 
         val lyricLine = ctx.currentLyricLine?.takeIf { it.isNotBlank() }
         val nextLine = ctx.nextLyricLine?.takeIf { it.isNotBlank() }
