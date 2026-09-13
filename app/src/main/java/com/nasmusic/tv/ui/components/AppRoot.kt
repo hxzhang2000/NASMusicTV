@@ -148,6 +148,7 @@ fun AppRoot(
         val exitKaraoke: () -> Unit = { viewModel.vocalVM.exitKaraoke() }
         val exitVisualizer: () -> Unit = { viewModel.visualizerVM.exitVisualizer() }
         val navSettings: () -> Unit = { viewModel.navVM.navigateTo(Screen.Settings) }
+        val navigateMine: () -> Unit = { viewModel.navVM.navigateTo(Screen.Mine) }
         val handler: (() -> Unit)? = when {
             isImmersiveMode.value -> exitImmersive
             // 全屏可视化舞台：BACK 退出舞台，而非应用退出确认
@@ -157,7 +158,14 @@ fun AppRoot(
             showMv -> exitMv
             currentScreen == Screen.NowPlaying -> if (isTV) null else navigateHome
             currentScreen == Screen.Home -> null
+            // ── 设置域子页面：BACK 返回设置主菜单（入口唯一：SettingsBranch）──
+            // 修复：均衡器/播放统计此前落入 else 回首页，遥控器返回键无法回到设置
             currentScreen == Screen.ServerConnect -> navSettings
+            currentScreen == Screen.Equalizer -> navSettings
+            currentScreen == Screen.PlayStats -> navSettings
+            // ── "我的"域子页面：BACK 返回我的页（网盘入口唯一：MineBranch）──
+            // WeatherRadio 入口在首页，由 else 回首页覆盖，无需专门分支
+            currentScreen == Screen.Netdisk -> navigateMine
             else -> navigateHome
         }
         navBackHandler.value = handler

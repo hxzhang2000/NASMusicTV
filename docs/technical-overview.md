@@ -8284,3 +8284,17 @@ onSearchSong = { keyword -> viewModel.searchNetworkSongs(keyword) },
 **验证**：`:app:assembleDebug` **BUILD SUCCESSFUL**；`:app:testDebugUnitTest` 全量 **BUILD SUCCESSFUL**（29s，无回归）。实机待 TV 验证播放页标签显示。
 
 **版本**：v2.31.1 → **v2.31.2**（versionCode 135 → 136）
+
+### 10.131 v2.31.3 — 修复设置域子页面遥控器返回键分发（2026-09-13）
+
+**问题描述**：从设置进入的多个子页面无法用遥控器返回键回到设置主菜单。均衡器、播放统计按返回键直接回首页；页面左上角返回按钮（点击可回设置）与按键行为不一致。
+
+**根因分析**：BACK 键 Level 2 导航分发表（`AppRoot` LaunchedEffect，按 `currentScreen` 分发）为「白名单 + `else -> navigateHome` 兜底」模式，仅 `Screen.ServerConnect` 配了 `navSettings` 分支；`Screen.Equalizer` / `Screen.PlayStats`（入口唯一在 SettingsBranch）静默落入兜底回首页。同源隐患：`Screen.Netdisk`（入口唯一在 MineBranch）也落兜底回首页。入口核查：`Equalizer`/`PlayStats` 仅设置进入；`Netdisk` 仅"我的"进入；`WeatherRadio` 仅首页进入（兜底回首页已正确）；`PlaylistManagement` 无任何 navigateTo 调用（死分支）；`AlbumDetail`/`ArtistDetail` 多来源进入（曲库/首页/我的/搜索），无来源栈不归位，维持兜底。
+
+**修改**：`ui/components/AppRoot.kt` — Level 2 分发表补 `Screen.Equalizer` / `Screen.PlayStats` → `navSettings`；新增 `navigateMine`，`Screen.Netdisk` → `navigateMine`；分支注释标注各页面入口唯一性。
+
+**验证**：`:app:assembleDebug` **BUILD SUCCESSFUL**。实机验证路径：设置→播放设置→均衡器，按遥控器返回键应回设置主菜单（此前回首页）；设置→数据设置→播放统计同理；我的→网盘音乐，按返回键回"我的"。
+
+**说明**：方向键"左键返回"交互应用内不存在（返回仅认 BACK 键）；若需该交互属新增功能，未包含在本版。
+
+**版本**：v2.31.2 → **v2.31.3**（versionCode 136 → 137）

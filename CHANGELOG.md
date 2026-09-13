@@ -7,6 +7,17 @@
 >
 > 类型：`Added`（新增） | `Changed`（变更） | `Fixed`（修复） | `Removed`（移除）
 
+## [v2.31.3] - 2026-09-13
+
+> 修复设置域子页面遥控器返回键无法回到设置主菜单的问题。BACK 键 Level 2 导航分发表（`AppRoot`）为「白名单 + `else -> navigateHome` 兜底」模式：从设置进入的均衡器（`Screen.Equalizer`）与播放统计（`Screen.PlayStats`）没有专门分支，静默落入兜底直接回首页——页面左上角返回按钮点击可回设置，但遥控器返回键行为与之不一致，用户只能移动焦点"点"按钮返回。现按入口来源补齐分发：均衡器/播放统计/服务器连接 → 回设置，网盘（入口唯一在"我的"）→ 回我的页；天气电台入口在首页，由兜底回首页保持正确。设置页内部弹窗（备份/模型传输/文本输入/目录选择/导出设备）的返回键关闭均正常，无需改动。
+
+### Fixed
+- **均衡器/播放统计按返回键回不到设置**：Level 2 分发表补 `Screen.Equalizer` / `Screen.PlayStats` → `navSettings` 分支，与页面返回按钮行为一致
+- **网盘页按返回键回不到"我的"**：补 `Screen.Netdisk` → `navigateMine` 分支（入口唯一：MineBranch）
+
+### Changed
+- 版本 v2.31.2 → **v2.31.3**（versionCode 136 → 137）
+
 ## [v2.31.2] - 2026-09-13
 
 > 统一歌曲/歌词来源标签体系。修复播放页来源标识硬编码 `"NET"`：无论百度网盘、Meting 网络曲、Jamendo 还是电台，只要 `isNetworkSong=true` 一律显示写死的 "NET"（`NowPlayingScreen` 从未接入 `MusicSourceType` 体系）。现改用统一 `SourceBadge`（百度→"百度"☁ 橙 / Meting→"网络"🌐 绿 / Jamendo→"Jamendo"♪ 粉 / 电台→"电台"📻 紫，NAS→"NAS"🎵 蓝也补齐显示）。歌曲信息面板「网络来源」行原显示原始标识大写（BAIDU/METING），改为统一 `sourceType.displayName` 且全来源显示；`LyricsSource`（歌词来源）补齐 `icon`/`color` 字段与歌曲来源定义结构对齐，播放页歌词来源切换标签文案由 strings.xml 独立维护改为统一取枚举 `displayName`（内嵌/本地/在线/缓存），两套文案不再漂移；发现页专辑角标沿用 `MusicSourceType` 文案与颜色（样式为封面角标紧凑版，维持现状）。
