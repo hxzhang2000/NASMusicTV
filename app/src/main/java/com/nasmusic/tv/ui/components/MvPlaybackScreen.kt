@@ -481,6 +481,7 @@ private fun MiniIconButton(
             Icon(
                 imageVector = icon,
                 contentDescription = contentDescription,
+                tint = NasMusicColors.TextPrimary,
                 modifier = Modifier.size(28.dp)
             )
         }

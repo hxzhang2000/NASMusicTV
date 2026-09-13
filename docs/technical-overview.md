@@ -8299,6 +8299,29 @@ onSearchSong = { keyword -> viewModel.searchNetworkSongs(keyword) },
 
 **版本**：v2.31.2 → **v2.31.3**（versionCode 136 → 137）
 
+### 10.135 v2.32.2 — 播放控制按钮图标色与聚焦反馈全局统一（2026-09-13）
+
+**问题描述**：用户要求统一所有界面的播放控制类按钮（返回/上一曲/下一曲/播放顺序/播放暂停）视觉规范：①未聚焦时按钮背景不变、图标须为白色/亮色；②聚焦时整体按钮背景有变化、图标色不变。核查发现两处结构性问题：
+
+**根因分析**：
+
+1. **图标 tint 未显式设置**：`FocusableSurface` 下发内容色用的是自定义 `LocalFocusableContentColor`（`CompositionLocalProvider`），而各按钮内 `androidx.tv.material3.Icon` 不传 `tint` 时消费的是主题 `LocalContentColor`——两者不是同一通道，`contentColor`/`focusedContentColor` 参数对 Icon 完全无效。当前图标恰好显示亮白纯属主题 onBackground 恰为亮白的巧合，未显式保证。
+2. **聚焦反馈不一致**：`QueueScreen` 播放/暂停按钮聚焦反而变暗（`Primary.copy(alpha=0.7f)`），与其他页"聚焦变亮"逻辑相反；NowPlaying/K 歌主按钮聚焦背景完全不变（Primary→Primary），无整体变化反馈。
+
+**修改**：
+
+- `Theme.kt`：`NasMusicColors` 新增 `PrimaryBright = Color(0xFF5EEAD4)`（主按钮聚焦高亮色，与 K 歌歌词高亮同色系）；`HighContrastColors.PrimaryBright` 改为引用该值消除重复定义
+- `PlayerControls.kt`（NowPlaying/MTV 共用 `ControlButtonsRow`）：上一曲/播放暂停/下一曲/播放顺序 4 个 Icon 显式 `tint = NasMusicColors.TextPrimary`；私有 `IconButton` 主按钮 `focusedContainerColor` 由 `Primary` 改为 `PrimaryBright`
+- `KaraokePlaybackScreen.kt`：`MiniIconButton`（返回/上一曲/播放/下一曲）Icon 显式 tint；主按钮聚焦背景改 `PrimaryBright`
+- `MvPlaybackScreen.kt`：`MiniIconButton`（返回/上一曲/播放/下一曲）Icon 显式 tint；非主按钮聚焦已是 Primary 30% 变化，保持
+- `QueueScreen.kt`：公开 `MiniIconButton` Icon 显式 tint；播放/暂停按钮聚焦背景由 `Primary.copy(0.7f)`（变暗）改为 `PrimaryBright`（变亮）
+- 统一后的规范：**图标恒亮白 TextPrimary 不随焦点变；聚焦只变背景——非主按钮 Surface → Primary 30%，主按钮 Primary → PrimaryBright**
+- 核查无需改动：网盘页返回按钮（已白色 tint + 聚焦变色）、`VocalToggleButton`（文字按钮，已合规）、`FavoriteButton`（Warning 橙为"已收藏"状态语义色，保留）
+
+**验证**：`:app:assembleDebug` 与 `:app:assembleRelease` 均 **BUILD SUCCESSFUL**；v2.32.2 release APK 部署电视实机验证通过（用户确认：各页返回/上一曲/下一曲/播放顺序按钮未聚焦图标亮白，聚焦整体变色且图标色不变，问题解决）。
+
+**版本**：v2.32.1 → **v2.32.2**（versionCode 140 → 141）
+
 ### 10.134 v2.32.1 — K 歌/MTV 手机遥控二维码不显示/按键唤醒修复（2026-09-13）
 
 **问题描述**：TV 端进入 K 歌或 MTV 全屏页面后，手机遥控二维码完全不显示；即便显示，也会在约 5 秒无操作后隐藏且按遥控器无法稳定重新唤醒。

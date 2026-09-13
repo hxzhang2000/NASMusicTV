@@ -175,7 +175,8 @@ fun QueueScreen(
                         .scale(ppAnimScale.value)
                         .clip(CircleShape)
                         .background(
-                            if (isPlayPauseFocused) NasMusicColors.Primary.copy(alpha = 0.7f)
+                            // 聚焦时整体变亮（Primary → PrimaryBright），与其他页主按钮一致
+                            if (isPlayPauseFocused) NasMusicColors.PrimaryBright
                             else NasMusicColors.Primary,
                             shape = CircleShape
                         )
@@ -393,7 +394,7 @@ fun MiniIconButton(onClick: () -> Unit, icon: androidx.compose.ui.graphics.vecto
         pressedScale = 0.90f
     ) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Icon(imageVector = icon, contentDescription = null, modifier = Modifier.size(20.dp))
+            Icon(imageVector = icon, contentDescription = null, tint = NasMusicColors.TextPrimary, modifier = Modifier.size(20.dp))
         }
     }
 }

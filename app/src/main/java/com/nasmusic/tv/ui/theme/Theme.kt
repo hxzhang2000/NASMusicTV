@@ -52,6 +52,8 @@ object NasMusicColors {
     // glow / accent
     val AccentGlow = Color(0x262DD4BF)          // rgba(45, 212, 191, 0.15)
     val AccentGlowStrong = Color(0x4D2DD4BF)    // rgba(45, 212, 191, 0.30)
+    // 主按钮（播放/暂停）聚焦高亮色 — 比 Primary 更亮，用于"聚焦时整体变色"反馈
+    val PrimaryBright = Color(0xFF5EEAD4)
     // Karaoke word highlight (B-3)
     val TextBrightHighlight = Color(0xFF5EEAD4)  // brighter teal for active karaoke words
 }
@@ -361,7 +363,7 @@ val LocalHighContrast = androidx.compose.runtime.staticCompositionLocalOf { fals
  */
 object HighContrastColors {
     /** 加强的主色 — 比 Primary 更亮 */
-    val PrimaryBright = Color(0xFF5EEAD4)
+    val PrimaryBright = NasMusicColors.PrimaryBright
     /** 加强的文字色 — 纯白 */
     val TextPrimary = Color(0xFFFFFFFF)
     /** 加强的分割线色 */

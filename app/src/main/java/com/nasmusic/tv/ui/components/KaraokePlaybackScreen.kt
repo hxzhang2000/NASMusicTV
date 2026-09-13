@@ -549,7 +549,8 @@ private fun MiniIconButton(
         focusedScale = 1.12f,
         animationDurationMs = 200,
         containerColor = if (primary) NasMusicColors.Primary else NasMusicColors.Surface,
-        focusedContainerColor = if (primary) NasMusicColors.Primary else NasMusicColors.Primary.copy(alpha = 0.3f),
+        // 主按钮聚焦时整体变亮；普通按钮 Surface → 青色 0.3f
+        focusedContainerColor = if (primary) NasMusicColors.PrimaryBright else NasMusicColors.Primary.copy(alpha = 0.3f),
         contentColor = if (primary) NasMusicColors.TextPrimary else NasMusicColors.TextPrimary,
         focusedContentColor = NasMusicColors.TextPrimary,
         pressedScale = 0.92f,
@@ -562,6 +563,7 @@ private fun MiniIconButton(
             Icon(
                 imageVector = icon,
                 contentDescription = contentDescription,
+                tint = NasMusicColors.TextPrimary,
                 modifier = Modifier.size(iconSize)
             )
         }

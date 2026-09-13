@@ -7,6 +7,17 @@
 >
 > 类型：`Added`（新增） | `Changed`（变更） | `Fixed`（修复） | `Removed`（移除）
 
+## [v2.32.2] - 2026-09-13
+
+> 全局统一播放控制按钮（返回/上一曲/下一曲/播放顺序/播放暂停）的图标色与聚焦反馈规范：**未聚焦时图标恒为亮白（TextPrimary）不依赖主题默认色兜底；聚焦时整体按钮背景变化、图标色保持不变**。此前各页 Icon 均不传 `tint`，实际取 tv-material3 主题 `LocalContentColor`（恰好为亮白但未显式保证），且 `FocusableSurface` 下发的自定义 `LocalFocusableContentColor` 并非 Icon 消费的通道——聚焦色参数形同虚设。另有两处不一致：QueueScreen 播放/暂停按钮聚焦反而**变暗**（Primary 70%），NowPlaying/K 歌主按钮聚焦背景完全**不变**（与"聚焦有整体变化"的交互预期不符）。
+
+### Changed
+- **播放控制按钮图标显式亮白**：`PlayerControls`（NowPlaying/MTV 控制行的上一曲/播放暂停/下一曲/播放顺序）、K 歌/MTV/队列页 `MiniIconButton` 内 Icon 全部显式 `tint = TextPrimary`，不再依赖主题 `LocalContentColor` 兜底
+- **主按钮（播放/暂停）聚焦变亮**：NowPlaying/K 歌聚焦背景由不变（Primary→Primary）改为 `NasMusicColors.PrimaryBright`（新增强调色 #5EEAD4）；队列页由变暗（Primary 70%）统一改为变亮
+- 非主按钮（返回/上一曲/下一曲/播放顺序）聚焦背景维持 Surface → Primary 30% 变化；图标色任何状态均不变
+- `Theme.kt` 新增 `NasMusicColors.PrimaryBright`（#5EEAD4），`HighContrastColors.PrimaryBright` 改为引用同一值
+- 版本 v2.32.1 → **v2.32.2**（versionCode 140 → 141）
+
 ## [v2.32.1] - 2026-09-13
 
 > 修复 TV 端 K 歌与 MTV 全屏页面手机遥控二维码不显示/无法通过遥控器按键重新唤醒的问题。**根因一（主因）**：AppRoot 的 `isTV` 仅检查 `android.software.leanback` 特性，而实测电视（`pm list features`）只上报 `android.hardware.type.television` 无 leanback——TV 被误判为手机，`remoteControlUrl` 被 `if (isTV)` 守卫强制置 null，二维码完全无法生成（v2.20.0 手机端支持引入的回归，当时 MainActivity/NasMusicApp/TextInputDialog 均用双特性判断、唯 AppRoot 漏检）。**根因二**：页面级按键预览未建立稳定焦点域，内部 TV 按钮或 MTV 的 AndroidView 视频层获得焦点后，按键不保证经过外层监听。现 isTV 对齐全库统一的双特性判断，并为两页建立可聚焦的页面焦点域主动请求焦点、仅在 KeyDown 刷新显隐计时；二维码在进入页面及任意遥控器按键后立即显示，约 5 秒无操作后完全隐藏，同时保留原有 D-Pad、播放控制、焦点导航和 BACK 行为。

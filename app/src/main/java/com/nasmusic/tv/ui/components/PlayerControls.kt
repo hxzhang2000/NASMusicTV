@@ -307,6 +307,7 @@ fun ControlButtonsRow(
         val btnGap = if (compact) 6.dp else 14.dp
         IconButton(onClick = onPrevious, compact = compact, icon = {
             Icon(imageVector = Icons.Filled.SkipPrevious, contentDescription = "Previous",
+                tint = NasMusicColors.TextPrimary,
                 modifier = Modifier.size(if (compact) 22.dp else 32.dp))
         })
         Spacer(modifier = Modifier.width(btnGap))
@@ -314,11 +315,13 @@ fun ControlButtonsRow(
             focusRequester = playPauseFocusRequester, icon = {
             Icon(imageVector = if (isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
                 contentDescription = "Play/Pause",
+                tint = NasMusicColors.TextPrimary,
                 modifier = Modifier.size(if (compact) 28.dp else 40.dp))
         })
         Spacer(modifier = Modifier.width(btnGap))
         IconButton(onClick = onNext, compact = compact, icon = {
             Icon(imageVector = Icons.Filled.SkipNext, contentDescription = "Next",
+                tint = NasMusicColors.TextPrimary,
                 modifier = Modifier.size(if (compact) 22.dp else 32.dp))
         })
         Spacer(modifier = Modifier.width(btnGap))
@@ -329,6 +332,7 @@ fun ControlButtonsRow(
                 else -> Icons.Filled.Repeat
             }
             Icon(imageVector = icon, contentDescription = playMode.displayName,
+                tint = NasMusicColors.TextPrimary,
                 modifier = Modifier.size(if (compact) 20.dp else 28.dp))
         })
         // 频谱（全屏可视化舞台）入口按钮 —— 位于播放模式与 K 歌之间
@@ -404,7 +408,8 @@ private fun IconButton(
         focusedScale = 1.12f,
         animationDurationMs = 250,
         containerColor = if (primary) NasMusicColors.Primary else NasMusicColors.Surface,
-        focusedContainerColor = if (primary) NasMusicColors.Primary else NasMusicColors.Primary.copy(alpha = 0.3f),
+        // 主按钮聚焦时整体变亮（Primary → PrimaryBright）；普通按钮 Surface → 青色 0.3f
+        focusedContainerColor = if (primary) NasMusicColors.PrimaryBright else NasMusicColors.Primary.copy(alpha = 0.3f),
         contentColor = NasMusicColors.TextPrimary,
         focusedContentColor = NasMusicColors.TextPrimary,
         pressedContainerColor = NasMusicColors.SurfaceVariant,
