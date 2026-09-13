@@ -415,7 +415,7 @@ class MatrixRainRenderer : VisualizerRenderer {
     private var cols = 32
     private val perCol = 14
 
-    // 预渲染字形缓存：[0..39] = shade*10 + digit（4 档绿 × 数字 0-9）
+    // 预渲染字形缓存：[0..7] = shade*2 + digit（4 档绿 × 字符 0/1，二进制雨）
     private var glyphs: Array<android.graphics.Bitmap>? = null
     private var glyphKey = ""
     private var gW = 0
@@ -467,12 +467,12 @@ class MatrixRainRenderer : VisualizerRenderer {
                 val y = headY + k * cellH
                 if (y < -cellH || y > h) continue
                 val fade = 1f - k.toFloat() / perCol
-                val digitIdx = (i * 31 + k * 17 + tick) % 10
+                val digitIdx = (i * 31 + k * 17 + tick) and 1
                 val bmp = when {
                     k == perCol - 1 -> g[digitIdx]         // 亮白绿头部
-                    fade > 0.6f -> g[10 + digitIdx]        // 亮绿
-                    fade > 0.3f -> g[20 + digitIdx]        // 中绿
-                    else -> g[30 + digitIdx]               // 暗绿
+                    fade > 0.6f -> g[2 + digitIdx]         // 亮绿
+                    fade > 0.3f -> g[4 + digitIdx]         // 中绿
+                    else -> g[6 + digitIdx]                // 暗绿
                 }
                 blitPaint.alpha = if (k == perCol - 1) 255 else (fade * 255).toInt().coerceIn(0, 255)
                 nc.drawBitmap(bmp, i * slot + (slot - gW) / 2f, y + (cellH - gH) / 2f, blitPaint)
@@ -480,9 +480,9 @@ class MatrixRainRenderer : VisualizerRenderer {
         }
     }
 
-    /** 一次性预渲染 10 数字 × 4 档绿 = 40 张字形 Bitmap */
+    /** 一次性预渲染 0/1 两字符 × 4 档绿 = 8 张字形 Bitmap（二进制雨） */
     private fun buildGlyphs(textSize: Float) {
-        val digits = CharArray(10) { ('0'.code + it).toChar() }
+        val digits = charArrayOf('0', '1')
         val colors = intArrayOf(
             android.graphics.Color.rgb(200, 255, 200),
             android.graphics.Color.rgb(0, 255, 100),
@@ -497,9 +497,9 @@ class MatrixRainRenderer : VisualizerRenderer {
         val bh = kotlin.math.ceil(textSize * 1.15f).toInt() + 4
         gW = bw
         gH = bh
-        val arr = arrayOfNulls<android.graphics.Bitmap>(40)
+        val arr = arrayOfNulls<android.graphics.Bitmap>(8)
         for (shade in 0 until 4) {
-            for (d in 0 until 10) {
+            for (d in 0 until 2) {
                 val bmp = android.graphics.Bitmap.createBitmap(bw, bh, android.graphics.Bitmap.Config.ARGB_8888)
                 val c = android.graphics.Canvas(bmp)
                 val p = AndroidPaint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
@@ -509,7 +509,7 @@ class MatrixRainRenderer : VisualizerRenderer {
                     color = colors[shade]
                 }
                 c.drawText(digits[d].toString(), bw / 2f, (bh - (p.descent() - p.ascent())) / 2f - p.ascent(), p)
-                arr[shade * 10 + d] = bmp
+                arr[shade * 2 + d] = bmp
             }
         }
         glyphs = arr.filterNotNull().toTypedArray()
