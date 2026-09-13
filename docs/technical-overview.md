@@ -8160,3 +8160,38 @@ onSearchSong = { keyword -> viewModel.searchNetworkSongs(keyword) },
 - `./gradlew clean compileDebugKotlin` 通过（0 error）；`./gradlew test` 全绿
 - `SpectrumAnalyzerTest` 断言由 `0.2f..0.31f` 收窄为 `0.235f..0.275f` 后仍通过
 - 版本：v2.30.3 → **v2.30.4**（versionCode 131 → 132）
+
+### 10.127 v2.30.5 — 可视化新增 E24「心跳」心电图式滚动频谱（2026-09-13）
+
+规格文档：`docs/music-visualizer-dev-plan.md` §4.22.5（E24）
+
+#### 新增文件与改动点
+- `data/model/AppSettings.kt` — `VisualizerTheme` 枚举新增 `ECG_WAVE("心跳", Tier.BASIC, "24")`
+- `visualizer/renderers/EcgWaveRenderer.kt` — 新增渲染器（环形 `FloatArray(cols)` 历史缓冲，零 `arraycopy`、`draw` 内零分配）
+- `visualizer/VisualizerRendererFactory.kt` — `create()` 注册分支 + import
+- `visualizer/AudioFrame.kt` — 新增 `bassRaw: Float`（未归一化的 20–250Hz 原始低频能量）
+- `visualizer/SpectrumRepository.kt` — 写入 `f.bassRaw = rawBass`
+- **舞台/交互/入口零改动**：`VisualizerStage` 自动遍历 `VisualizerTheme.selectable`
+
+#### 渲染行为
+- 一条连续折线自屏幕**最右端**生成扫描点，已绘制波形**冻结**并整体向**左**匀速平移，最左端超出屏幕被裁剪
+- 滚动以**列虚拟时间** `colMs`（每列 +`1000/speed`）为基准，与真实帧率解耦
+- 基线固定在屏幕**垂直中线**，无鼓点的时间段贴基线走平
+- 仅低频节拍命中时注入完整 **P-QRS-T 心搏复合波**（跨度 0.50s），相对基线上下均有振幅（R 主峰向上、S 波下探）
+- 复古 CRT 绿 `0xFF33FF7A` + 暗绿栅格；峰顶不绘制任何圆点
+
+#### 手测反馈迭代（8 轮）
+1. **只取鼓点**：弃用宽频时域波形 `AudioFrame.waveform`（混入人声/背景乐器导致折线过密、不像心电图），改为**仅 `frame.beat` 命中时**注入 QRS 波
+2. **中心线上下跳**：基线固定垂直中线，而非从底部单向上跳
+3. **峰顶无帽**：删除 `beatMask` / `beatPts` 节拍白点与右侧扫描头圆点
+4. **显示名**：「示波器」→「心跳」
+5. **幅度雷同 + 整体过高**：根因是 `SpectrumRepository` 的 `f.bass = boost(rawBass, bassPeak)` 走峰值跟随器，**鼓点瞬间恒等于 1.0**，渲染器拿不到强弱差异 → 新增 `AudioFrame.bassRaw`（未归一化原始能量），渲染器改用 `bassRaw / 0.8s EMA` 映射到 `0.45–1`；同时主峰高度 `0.40×半屏` → `0.26×半屏`
+6. **拉长心搏波**：单根尖刺 → 完整 P-QRS-T（P +0.13 → Q −0.12 → R +1.0 → S −0.30 → T +0.24 → 回基线），跨度 `0.27s → 0.50s`，屏上宽度约 `48px → 90px`
+7. **漏拍 + 控密度**：节拍检测跑 50Hz 而渲染数据仅 30fps（`SpectrumContract.EMIT_INTERVAL_MS=33`），单帧为 true 的 `beat` 在 30Hz 设备上被整拍跳过 → 改**双通道判定** `frame.beat || frame.pulse` 上升沿（`pulse` 为约 250ms 回落包络，跨帧存活）；同时设 **800ms 最短渲染间隔**（≈75 BPM 上限）丢弃窗口内连续鼓点，保证每个心搏完整、彼此留白
+8. **隐患修复**：滚动位移原用 `roundToInt` 产生系统性漂移 → 改为小数累积 `colAccum`；`colMs` 超 1e6 自动回绕，避免长播后 Float 精度失真导致心搏计时走样
+
+#### 验证
+- `assembleRelease`（R8 + `shrinkResources` + 签名）**BUILD SUCCESSFUL**；`kspReleaseKotlin` / `compileReleaseKotlin` / `minifyReleaseWithR8` / `packageRelease` 均**实际执行**（非 UP-TO-DATE）
+- 产物 `NASMusicTV-release-v2-30-5.apk`（21.81 MB）
+- 真机手测通过（用户确认「可以了」）
+- 版本：v2.30.4 → **v2.30.5**（versionCode 132 → 133）

@@ -79,6 +79,7 @@ class SpectrumRepository {
         val rawBass = meanOf(src, 0, SpectrumContract.BASS_END)
         val rawMid = meanOf(src, SpectrumContract.BASS_END + 1, SpectrumContract.MID_END)
         val rawTreble = meanOf(src, SpectrumContract.MID_END + 1, SpectrumContract.TREBLE_END)
+        f.bassRaw = rawBass
         f.bass = boost(rawBass, bassPeak)
         f.mid = boost(rawMid, midPeak)
         f.treble = boost(rawTreble, treblePeak)

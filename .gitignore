@@ -60,6 +60,11 @@ build_log.txt
 build_rel.log
 build_rel2.log
 release_build.log
+build_*.log
+build_*_result.txt
+build_*_tail.txt
+build_*_detail.txt
+diag.txt
 ci_logs.zip
 logs.zip
 jobs.json

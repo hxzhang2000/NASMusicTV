@@ -33,6 +33,16 @@ class AudioFrame(barCount: Int, wavePoints: Int) {
     /** 8s 滑动均值，段落呼吸用 */
     var sectionEnergy: Float = 0f
 
+    /**
+     * 20–250 Hz **原始**线性能量（未经峰值跟随归一化）。
+     *
+     * 为什么必须单独暴露：[bass] 走的是 `boost()`，即 `v / 峰值跟随`，
+     * 而峰值跟随在鼓点瞬间就等于当帧原值 → **鼓点时刻 [bass] 恒为 1.0**，
+     * 渲染器拿它当幅度会让每一次鼓点长得一模一样。
+     * 需要「鼓点强弱差异」的效果（如 E24 心跳）必须用本字段自行归一化。
+     */
+    var bassRaw: Float = 0f
+
     // ── 节拍 ───────────────────────────────────────────────────
     /** 本帧命中节拍（仅一帧为 true） */
     var beat: Boolean = false
@@ -58,6 +68,7 @@ class AudioFrame(barCount: Int, wavePoints: Int) {
         spectrum.fill(0f)
         waveform.fill(0f)
         bass = 0f
+        bassRaw = 0f
         mid = 0f
         treble = 0f
         energy = 0f

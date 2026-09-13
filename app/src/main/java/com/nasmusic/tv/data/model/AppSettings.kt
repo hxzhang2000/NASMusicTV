@@ -75,7 +75,8 @@ IMMERSIVE_BLOOM("沉浸辉光", Tier.BASIC, "01"),
     PLASMA_FLOW("等离子流场", Tier.ULTRA, "20"),
     PRISM_HOLO("棱镜彩虹", Tier.ADV, "21"),
     AURORA("极光", Tier.ADV, "22"),
-    LYRICS_DOT_MATRIX("歌词点阵", Tier.ADV, "23"),
+        LYRICS_DOT_MATRIX("歌词点阵", Tier.ADV, "23"),
+    ECG_WAVE("心跳", Tier.BASIC, "24"),
     ;
 
     /** 效果分级：决定画质档位可用性 */
