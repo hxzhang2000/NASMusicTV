@@ -766,7 +766,11 @@ class HypnoticFunctionRenderer(
             drawAccumulator = DRAW_MS   // 超时补满：保证完整图像再进 HOLD（§5.2）
         }
         if (next == Phase.DISSOLVE) initDissolve()
-        if (next == Phase.DRAW) pickNext()
+        if (next == Phase.DRAW) {
+            pickNext()
+            // 新周期描线累加器必须归零：残留值会让下一张图第一帧就"描线完成"直接出全图
+            drawAccumulator = 0f
+        }
         enter(next, now)
     }
 
