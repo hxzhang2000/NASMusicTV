@@ -32,8 +32,8 @@ android {
         applicationId = "com.nasmusic.tv"
         minSdk = 22
         targetSdk = 34
-        versionCode = 133
-        versionName = "2.30.5"
+        versionCode = 134
+        versionName = "2.31.0"
 
         ndk {
             abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64")
@@ -72,6 +72,11 @@ android {
         debug {
             isDebuggable = true
         }
+    }
+
+    testOptions {
+        // 纯 JVM 单测允许 android.* API 返回默认值（E25 催眠渲染器构造含 Paint）
+        unitTests.isReturnDefaultValues = true
     }
 
     compileOptions {

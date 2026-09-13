@@ -24,6 +24,7 @@ import com.nasmusic.tv.visualizer.renderers.RadialBurstRenderer
 import com.nasmusic.tv.visualizer.renderers.WaterfallRenderer
 import com.nasmusic.tv.visualizer.renderers.TunnelRenderer
 import com.nasmusic.tv.visualizer.renderers.EcgWaveRenderer
+import com.nasmusic.tv.visualizer.renderers.HypnoticFunctionRenderer
 
 /**
  * 渲染器工厂 —— 主题枚举 → 渲染器实现。
@@ -56,6 +57,7 @@ VisualizerTheme.IMMERSIVE_BLOOM -> BloomRenderer()
         VisualizerTheme.AURORA -> AuroraRenderer()
         VisualizerTheme.LYRICS_DOT_MATRIX -> LyricsDotMatrixRenderer()
         VisualizerTheme.ECG_WAVE -> EcgWaveRenderer()
+        VisualizerTheme.HYPNOTIC_FUNCTION -> HypnoticFunctionRenderer()
     }
 
     /**

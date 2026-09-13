@@ -77,6 +77,7 @@ IMMERSIVE_BLOOM("沉浸辉光", Tier.BASIC, "01"),
     AURORA("极光", Tier.ADV, "22"),
         LYRICS_DOT_MATRIX("歌词点阵", Tier.ADV, "23"),
     ECG_WAVE("心跳", Tier.BASIC, "24"),
+    HYPNOTIC_FUNCTION("催眠", Tier.BASIC, "25"),
     ;
 
     /** 效果分级：决定画质档位可用性 */

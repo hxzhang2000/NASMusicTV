@@ -8195,3 +8195,37 @@ onSearchSong = { keyword -> viewModel.searchNetworkSongs(keyword) },
 - 产物 `NASMusicTV-release-v2-30-5.apk`（21.81 MB）
 - 真机手测通过（用户确认「可以了」）
 - 版本：v2.30.4 → **v2.30.5**（versionCode 132 → 133）
+
+### 10.128 v2.31.0 — 可视化新增 E25「催眠」数学函数图像动画（2026-09-13）
+
+规格文档：`docs/催眠频谱效果开发方案.md`（v2.1）
+
+#### 新增文件与改动点
+- `data/model/AppSettings.kt` — `VisualizerTheme` 枚举新增 `HYPNOTIC_FUNCTION("催眠", Tier.BASIC, "25")`
+- `visualizer/renderers/HypnoticFunctionRenderer.kt` — 新增渲染器（四态状态机 DRAW 8s / HOLD 3s / DISSOLVE 2.4s / GAP 0.5s）
+- `visualizer/renderers/FunctionLibrary.kt` — 新增：53 条函数定义（`FunctionDef`，含 `uGap` 断点双段域）+ 三类采样器 + 三步加权洗牌（纯 JVM）
+- `visualizer/renderers/FormulaLayout.kt` — 新增：数学公式源标记 → 排版 run 的自绘排版引擎（纯 JVM）
+- `visualizer/VisualizerRendererFactory.kt` — `create()` 注册分支 + import
+- `app/build.gradle.kts` — `testOptions.unitTests.isReturnDefaultValues = true`
+- **舞台/交互/入口零改动**：`VisualizerStage` 自动遍历 `VisualizerTheme.selectable`
+
+#### 渲染行为
+- **描线 8s**：归一化采样点（HIGH 240 / MED 180 / LOW 120）按累加器推进（`speed = 1 + pulse*0.15`，最短 ≈6.96s），末端插值消除步进感，描线头带辉光
+- **HOLD 3s**：整体呼吸缩放 1.000→1.006 + 辉光正弦；公式 run 同相位呼吸 alpha 0.82↔0.95
+- **溃散 2.4s**：曲线点与公式 run 共用同一 `dissolveProgress`（平方缓动）。LOW/MED 逐点抖动蒸发（LOW 点数减半）；HIGH 粒子化坍缩（切线初速 + p≥0.45 重力 + `beat` 脉冲 ×1.35）。公式 alpha 衰减快 15%，run 蒸发阈值 0.30–0.85（>0.87 无效）
+- **右侧公式带**：绘图区中心左移至 0.40w（宽 0.66w），公式带右 18%、垂直居中、右对齐；`FormulaLayout` 渲染真数学样式（嵌套上标/真分式/根号横线），上标绘制普通字形（不依赖 U+2070 区字体）；描线期 run 按 `k/R` 分批书写
+- **坐标轴**：主轴画在数学 x=0 / y=0 真实位置（归一化 ±1.05 内可见），π 域 π 刻度 / 其余整数刻度 / 参数与极坐标无数字标签
+- **与歌曲解耦**：渲染器不读 `songId`；`rng` 构造期 seed 一次（测试可注入固定值），`onEnter` 不触碰；超时保护推进 DRAW 前补满描线累加器（后台长驻返回不会"画 1% 就静止"）
+
+#### 关键实现决策（与方案的偏差已回写方案文档）
+- **加权洗牌必须全局排序**：先 Fisher-Yates 再全局按 `soft + rng*0.25` 降序——只在"前 60%"内部排序无法把尾部高 soft 换到头部，加权完全失效（实测 head/tail 密度无差异）
+- **断笔跳变阈值 1.2**：0.6 会误伤 `ln` 前段真实陡峭（Δty≈0.65 之外首跳 1.55）与 tan 渐近线边界（Δty 恰≈1.50 踩线）；1.5 又拦不住 tan。Python 数值模拟全 53 条后定 1.2
+- **segs 容量 32**：D9（cos t² 高频调制）240 点下自然撕裂 19 段，16 不够
+- **公式断词**：level-0 文本按空格 + `+`/`-` 前边界拆词（运算符粘后块），否则 D4 这类无空格长式无法断行会侵入绘图区
+- **枚举计数修正**：`VisualizerThemeTest` 的 21 断言在 E23/E24 加入时就已滞后（实际 22），本次新增后为 **23**，5 处断言 + 头部注释一并修正
+- **`uGap` 语义定为"断点"**（跨 gap 切段，A10 gap=0），而非方案原稿的"第二段起点"
+
+#### 验证
+- `:app:testDebugUnitTest` 全量 **BUILD SUCCESSFUL**（含 6 个新测试文件 34 用例：53 条采样有限性/间断分段/闭合曲线、洗牌覆盖/防重/确定性/songId 无关、排版几何/预算、状态机时长、溃散阈值带）
+- `:app:assembleDebug` **BUILD SUCCESSFUL**
+- 版本：v2.30.5 → **v2.31.0**（versionCode 133 → 134）
