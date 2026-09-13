@@ -10,7 +10,7 @@ import org.junit.Test
  *
  * 重点覆盖 BUG ⑮：老用户 DataStore 里存的是 `COLOR_FLOW` / `NEON_PULSE` /
  * `CLASSICAL_WAVE` / `SONIC_TERRAIN` / `CIRCULAR_NEBULA` 五个旧枚举名，
- * 新 23 值枚举必须平滑迁移而不是回落默认值，否则升级后主题静默变样。
+ * 新 34 值枚举必须平滑迁移而不是回落默认值，否则升级后主题静默变样。
  */
 class VisualizerThemeTest {
 
@@ -46,27 +46,27 @@ class VisualizerThemeTest {
 
     @Test
     fun `theme library is all concrete effects, no auto mode`() {
-        assertEquals(23, VisualizerTheme.entries.size)
+        assertEquals(34, VisualizerTheme.entries.size)
     }
 
     @Test
     fun `selectable list equals all themes, no auto mode`() {
         val selectable = VisualizerTheme.selectable
-        assertEquals(23, selectable.size)
-        assertEquals(23, selectable.distinct().size)
+        assertEquals(34, selectable.size)
+        assertEquals(34, selectable.distinct().size)
     }
 
     @Test
     fun `ordinal labels are unique`() {
         val labels = VisualizerTheme.entries.map { it.ordinalLabel }
-        assertEquals(23, labels.distinct().size)
+        assertEquals(34, labels.distinct().size)
     }
 
     @Test
     fun `display names are non blank and unique`() {
         val names = VisualizerTheme.entries.map { it.displayName }
         assertTrue(names.none { it.isBlank() })
-        assertEquals(23, names.distinct().size)
+        assertEquals(34, names.distinct().size)
     }
 
     @Test

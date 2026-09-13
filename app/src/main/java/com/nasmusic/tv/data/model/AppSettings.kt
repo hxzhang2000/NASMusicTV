@@ -46,7 +46,7 @@ data class AppSettings(
 )
 
 /**
- * 可视化效果主题（21 套手动效果，无自动导演档）。
+ * 可视化效果主题（34 套手动效果，无自动导演档）。
  *
  * [tier] 决定该效果在各画质档位下的可用性，见 [VisualQuality.supports]。
  */
@@ -78,6 +78,17 @@ IMMERSIVE_BLOOM("沉浸辉光", Tier.BASIC, "01"),
         LYRICS_DOT_MATRIX("歌词点阵", Tier.ADV, "23"),
     ECG_WAVE("心跳", Tier.BASIC, "24"),
     HYPNOTIC_FUNCTION("催眠", Tier.BASIC, "25"),
+    VECTOR_WAVES("声弦", Tier.BASIC, "26"),
+    PULSING_POLYGONS("几何环", Tier.BASIC, "27"),
+    BAUHAUS_SHAPES("构成", Tier.ADV, "28"),
+    ORBITAL_RINGS("轨道", Tier.ADV, "29"),
+    RADAR_GRID("雷达", Tier.BASIC, "30"),
+    ORIGAMI_POLY("折纸", Tier.ADV, "31"),
+    STAIRCASE_WAVE("阶梯", Tier.BASIC, "32"),
+    CONCENTRIC_GEARS("齿轮", Tier.BASIC, "33"),
+    FRACTAL_TREE("分形", Tier.BASIC, "34"),
+    LIGHT_BEAMS("光轴", Tier.BASIC, "35"),
+    FERMAT_SPIRAL("螺旋", Tier.BASIC, "36"),
     ;
 
     /** 效果分级：决定画质档位可用性 */

@@ -25,6 +25,17 @@ import com.nasmusic.tv.visualizer.renderers.WaterfallRenderer
 import com.nasmusic.tv.visualizer.renderers.TunnelRenderer
 import com.nasmusic.tv.visualizer.renderers.EcgWaveRenderer
 import com.nasmusic.tv.visualizer.renderers.HypnoticFunctionRenderer
+import com.nasmusic.tv.visualizer.renderers.VectorWavesRenderer
+import com.nasmusic.tv.visualizer.renderers.PulsingPolygonsRenderer
+import com.nasmusic.tv.visualizer.renderers.BauhausShapesRenderer
+import com.nasmusic.tv.visualizer.renderers.OrbitalRingsRenderer
+import com.nasmusic.tv.visualizer.renderers.RadarGridRenderer
+import com.nasmusic.tv.visualizer.renderers.OrigamiPolyRenderer
+import com.nasmusic.tv.visualizer.renderers.StaircaseWaveRenderer
+import com.nasmusic.tv.visualizer.renderers.ConcentricGearsRenderer
+import com.nasmusic.tv.visualizer.renderers.FractalTreeRenderer
+import com.nasmusic.tv.visualizer.renderers.LightBeamsRenderer
+import com.nasmusic.tv.visualizer.renderers.FermatSpiralRenderer
 
 /**
  * 渲染器工厂 —— 主题枚举 → 渲染器实现。
@@ -58,6 +69,17 @@ VisualizerTheme.IMMERSIVE_BLOOM -> BloomRenderer()
         VisualizerTheme.LYRICS_DOT_MATRIX -> LyricsDotMatrixRenderer()
         VisualizerTheme.ECG_WAVE -> EcgWaveRenderer()
         VisualizerTheme.HYPNOTIC_FUNCTION -> HypnoticFunctionRenderer()
+        VisualizerTheme.VECTOR_WAVES -> VectorWavesRenderer()
+        VisualizerTheme.PULSING_POLYGONS -> PulsingPolygonsRenderer()
+        VisualizerTheme.BAUHAUS_SHAPES -> BauhausShapesRenderer()
+        VisualizerTheme.ORBITAL_RINGS -> OrbitalRingsRenderer()
+        VisualizerTheme.RADAR_GRID -> RadarGridRenderer()
+        VisualizerTheme.ORIGAMI_POLY -> OrigamiPolyRenderer()
+        VisualizerTheme.STAIRCASE_WAVE -> StaircaseWaveRenderer()
+        VisualizerTheme.CONCENTRIC_GEARS -> ConcentricGearsRenderer()
+        VisualizerTheme.FRACTAL_TREE -> FractalTreeRenderer()
+        VisualizerTheme.LIGHT_BEAMS -> LightBeamsRenderer()
+        VisualizerTheme.FERMAT_SPIRAL -> FermatSpiralRenderer()
     }
 
     /**

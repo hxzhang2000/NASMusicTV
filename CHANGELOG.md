@@ -7,6 +7,17 @@
 >
 > 类型：`Added`（新增） | `Changed`（变更） | `Fixed`（修复） | `Removed`（移除）
 
+## [v2.32.0] - 2026-09-13
+
+> 可视化效果库一次补齐 11 套极简几何风格效果（E26–E36）：E26「声弦」线性声波（平行细线阵随波形起伏，高频叠加细密锯齿）、E27「几何环」动态几何环（pulse 心跳缩放 + treble 积分旋转 + 顶点频谱断点闪烁）、E28「构成」包豪斯拼贴（莫兰迪色系扁平几何体，低音放大/高频翻面/中频漂移）、E29「轨道」环绕轨道（倾斜椭圆轨道 + 光球拖尾环形缓冲，倾角低通晃动防筛子）、E30「雷达」极坐标（雷达绿单色，低音向心收缩 + 扫掠角余弦亮起 + 频谱余辉弧）、E31「折纸」低多边形（三角形 cos 投影翻折，过零交换明暗面；treble 驱动冷暖色相插值）、E32「阶梯」方波（刻意不做缓动的量化方块立面，高频 2×2 碎裂）、E33「齿轮」同心齿轮（齿轮 Path 预生成，beat 棘轮一个齿距 120ms 缓动，小齿轮 treble 疯转）、E34「分形」分形树（拓扑 onEnter 拍平存数组不递归，bass 驱动展开深度，末梢确定性电弧）、E35「光轴」旋转光轴（宽淡辉光+细亮芯线双层，高频手动分段虚线避开 dashPathEffect 每帧分配）、E36「螺旋」费马螺旋（黄金角预计算点位，内圈组整体旋转规避逐点变换）。全部 Tier.BASIC（三档画质全开，内部按画质分档细节量），draw 内零分配（E30 SweepGradient 预分配、E26 单 Path 双描边、E29 环形历史缓冲零 arraycopy）。音频分析层零改动，舞台/指示器/切换零改动（自动遍历 selectable）；均衡器页小预览按 ordinal%3 归类样式天然兼容。
+
+### Added
+- **11 套极简几何可视化效果（E26–E36）**：`VectorWavesRenderer` / `PulsingPolygonsRenderer` / `BauhausShapesRenderer` / `OrbitalRingsRenderer` / `RadarGridRenderer` / `OrigamiPolyRenderer` / `StaircaseWaveRenderer` / `ConcentricGearsRenderer` / `FractalTreeRenderer` / `LightBeamsRenderer` / `FermatSpiralRenderer`（4 个新文件），枚举 `VisualizerTheme` 编号 26–36 全 Tier.BASIC；`VisualizerRendererFactory` 注册 11 分支
+- **画质内部分档**：全部效果按 LOW/MEDIUM/HIGH 缩放元素量（线数/形状数/轨道数/网格密度/分形深度/光束数/点数），LOW 档亦可流畅
+
+### Changed
+- `VisualizerThemeTest` 数量断言 23 → 34；版本 v2.31.4 → **v2.32.0**（versionCode 138 → 139）
+
 ## [v2.31.4] - 2026-09-13
 
 > 修复设置页内容区无法用遥控器**左键**把焦点移回左侧导航栏的问题（用户报告：仅播放设置分区复现，其他分区偶发/正常）。根因：设置页为「左栏分区导航（verticalScroll Column）+ 右栏内容（LazyColumn）」双滚动容器布局，焦点跨容器移动依赖系统几何查找；播放设置内容最长（整段为单个 LazyColumn item，含多组横排按钮/开关/路径文本），焦点在内容区内部左右移动时几何查找无法"走出"到左栏，表现为按左键焦点卡住。修复采用 Compose TV 标准的焦点越界重定向：右栏声明 `focusGroup` 并挂 `focusProperties { exit }`，向左越界（`FocusDirection.Left`）时强制聚焦左栏**当前分区项**（每个分区项持有独立 `FocusRequester`，`activeSection` 驱动）。对全部分区生效，且不影响内容区内部（横排按钮组之间）的正常左右移动；其他方向（上/下/右）越界维持系统默认行为。用户确认的交互预期：导航栏选中分区 → 右键进入内容修改查看 → 左键逐步移回导航栏 → 继续选其他分区。

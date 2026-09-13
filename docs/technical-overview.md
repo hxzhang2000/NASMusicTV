@@ -8299,6 +8299,34 @@ onSearchSong = { keyword -> viewModel.searchNetworkSongs(keyword) },
 
 **版本**：v2.31.2 → **v2.31.3**（versionCode 136 → 137）
 
+### 10.133 v2.32.0 — 可视化效果库补齐 11 套极简几何效果 E26–E36（2026-09-13）
+
+**背景**：一次性补齐 11 套极简几何/机械风格可视化效果（声弦/几何环/构成/轨道/雷达/折纸/阶梯/齿轮/分形/光轴/螺旋），全部走既有 `VisualizerRenderer` 插件式接口，音频分析层零改动。
+
+**新增文件**（`visualizer/renderers/`）：
+
+- `BatchOneRenderers.kt`：E26 `VectorWavesRenderer`（声弦）+ E27 `PulsingPolygonsRenderer`（几何环）
+- `BatchTwoRenderers.kt`：E28 `BauhausShapesRenderer`（构成）+ E29 `OrbitalRingsRenderer`（轨道）
+- `BatchThreeRenderers.kt`：E30 `RadarGridRenderer`（雷达）+ E31 `OrigamiPolyRenderer`（折纸）+ E32 `StaircaseWaveRenderer`（阶梯）
+- `BatchFourRenderers.kt`：E33 `ConcentricGearsRenderer`（齿轮）+ E34 `FractalTreeRenderer`（分形）+ E35 `LightBeamsRenderer`（光轴）+ E36 `FermatSpiralRenderer`（螺旋）
+
+**关键实现决策**：
+
+- 通道纪律：律动一律用 `bass/pulse/treble` 线性通道，显示长度/亮度用 `spectrum` gamma 通道；旋转类效果（E27/E30/E35/E36）把平滑后的 `treble` **积分**为角速度而非直接映射角度，防高频抖动
+- 零分配：E30 的 `SweepGradient` 在画布尺寸确定时预分配一次；E26 全部线段合成单 Path 两次描边；E29 拖尾用环形历史缓冲（零 arraycopy）；E31 三角形翻折用 cos 投影 + 折线近似弧（Compose `Rect` 不可变，规避 `arcTo` 临时对象）；E35 虚线手动分段（`dashPathEffect` 无相位 API，每帧重建违反零分配红线）
+- E32「阶梯」**刻意不做缓动**——量化瞬跳正是方波美学（与既有频谱效果的平滑形成反差）；碎裂用 `seq` 做确定性闪烁
+- E33 齿轮 Path（齿根/齿顶梯形轮廓）onEnter 预生成，每帧仅 rotate/scale；beat 上升沿推进一个齿距（30°），120ms 快速缓动成棘轮手感
+- E34 分形**不递归**：拓扑 onEnter 拍平（深度/父段/角度系数数组，前序保证父先于子），每帧 O(N) 端点计算 + 深度门控；bass 驱动展开深度推进
+- E36 费马螺旋点位 onEnter 预计算（`r=c√n, θ=n·137.507°`），「内圈自转」用内圈点组整体旋转规避逐点变换
+
+**注册接线**：`VisualizerTheme` 枚举新增 11 值（编号 26–36，全 Tier.BASIC 三档画质全开，内部按画质分档元素量）；`VisualizerRendererFactory` 新增 11 分支；舞台指示器/遥控切换/设置页零改动（自动遍历 `selectable`）；均衡器页 `VisualEqualizer` 小预览按 `ordinal % 3` 归类绘制样式，天然兼容。
+
+**测试**：`VisualizerThemeTest` 数量断言 23 → 34。
+
+**验证**：`:app:compileDebugKotlin` / `:app:testDebugUnitTest`（全量）/ `:app:assembleDebug` 全部 **BUILD SUCCESSFUL**。
+
+**版本**：v2.31.4 → **v2.32.0**（versionCode 138 → 139）
+
 ### 10.132 v2.31.4 — 设置页内容区左键焦点回到导航栏（D-Pad 焦点越界重定向，2026-09-13）
 
 **问题描述**：设置页选中左栏分区后按右键进入内容区修改查看，之后按左键无法把焦点移回左侧导航栏——用户报告仅「播放设置」分区稳定复现，其他分区可正常左移。
