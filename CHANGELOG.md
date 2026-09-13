@@ -7,6 +7,19 @@
 >
 > 类型：`Added`（新增） | `Changed`（变更） | `Fixed`（修复） | `Removed`（移除）
 
+## [v2.31.2] - 2026-09-13
+
+> 统一歌曲/歌词来源标签体系。修复播放页来源标识硬编码 `"NET"`：无论百度网盘、Meting 网络曲、Jamendo 还是电台，只要 `isNetworkSong=true` 一律显示写死的 "NET"（`NowPlayingScreen` 从未接入 `MusicSourceType` 体系）。现改用统一 `SourceBadge`（百度→"百度"☁ 橙 / Meting→"网络"🌐 绿 / Jamendo→"Jamendo"♪ 粉 / 电台→"电台"📻 紫，NAS→"NAS"🎵 蓝也补齐显示）。歌曲信息面板「网络来源」行原显示原始标识大写（BAIDU/METING），改为统一 `sourceType.displayName` 且全来源显示；`LyricsSource`（歌词来源）补齐 `icon`/`color` 字段与歌曲来源定义结构对齐，播放页歌词来源切换标签文案由 strings.xml 独立维护改为统一取枚举 `displayName`（内嵌/本地/在线/缓存），两套文案不再漂移；发现页专辑角标沿用 `MusicSourceType` 文案与颜色（样式为封面角标紧凑版，维持现状）。
+
+### Fixed
+- **播放页来源标签硬编码 "NET"**：`NowPlayingScreen` 来源标识改用统一 `SourceBadge(song)`，按 `MusicSourceType` 正确显示「百度 / 网络 / Jamendo / 电台 / 天气电台 / NAS / 本地 / 已下载」及对应主题色
+- **歌曲信息面板来源文案不统一**：`SongInfoPanel` 「网络来源」行由 `networkSource?.uppercase()`（BAIDU/METING 原始标识）改为 `sourceType.displayName`，行名改「歌曲来源」，全部来源均显示
+- **歌词来源两套文案漂移**：删除 strings.xml 的 `player_highlight_backend/local/network/cached`（中英双语），播放页歌词来源切换标签统一取 `LyricsSource.displayName`
+
+### Changed
+- **`LyricsSource` 与 `MusicSourceType` 结构对齐**：新增 `icon` / `color` 字段（颜色语义对齐：内嵌→蓝 / 本地→橙 / 在线→绿 / 缓存→青），`displayName` 统一为短版文案
+- 清理无引用资源 `song_info_unknown_source`（中英）；版本 v2.31.1 → **v2.31.2**（versionCode 135 → 136）
+
 ## [v2.31.1] - 2026-09-13
 
 > 修复「下载到本地的歌曲无法播放」。本地/已下载歌曲的 `file://` URI 永久有效，但持久化层（上次队列/最近播放/本地歌单/备份恢复）此前对所有歌曲统一置空 `streamUrl`，恢复后播放地址丢失；而播放解析链（`resolveStreamUrl` / `resolveAndPlayCurrentSong`）只认「网络歌曲 / NAS 歌曲」两种来源，本地歌曲（id 为 `local_*`）被误当 NAS 歌曲去后端查询必然失败，部分入口还会因空 URI 被 `onPlayerError` 静默吞掉——表现为点播无反应或自动跳歌。现改为仅网络歌曲置空 `streamUrl`（本地歌曲保留）、解析链补全本地分支（`streamUrl` 缺失时回退 `path`），并新增「已下载优先」：网络歌曲播放/切歌/批量播放前先查下载记录，已下载且文件存在直接播本地文件（支持离线播放）。

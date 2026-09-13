@@ -135,10 +135,6 @@
     <string name="player_no_song_selected">未选择歌曲</string>
     <string name="player_highlight_word">逐字</string>
     <string name="player_highlight_line">逐行</string>
-    <string name="player_highlight_backend">内嵌</string>
-    <string name="player_highlight_local">本地</string>
-    <string name="player_highlight_network">网络</string>
-    <string name="player_highlight_cached">缓存</string>
     <string name="player_radio_live">● 电台直播</string>
     <string name="player_cover">封面</string>
     <string name="player_info">信息</string>
@@ -182,8 +178,7 @@
     <string name="song_info_channels_format">%d 声道</string>
     <string name="song_info_file_size_label">文件大小</string>
     <string name="song_info_container_label">容器格式</string>
-    <string name="song_info_network_source_label">网络来源</string>
-    <string name="song_info_unknown_source">未知</string>
+    <string name="song_info_network_source_label">歌曲来源</string>
 
     <!-- Settings Screen -->
     <string name="settings_default_music_dir">/音乐</string>

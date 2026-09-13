@@ -8260,3 +8260,27 @@ onSearchSong = { keyword -> viewModel.searchNetworkSongs(keyword) },
 **验证**：`:app:compileDebugKotlin` **BUILD SUCCESSFUL**；`:app:testDebugUnitTest`（backend.download / backend.local / data.prefs 聚焦）**BUILD SUCCESSFUL**。既有单测未覆盖持久化置空与解析分支，未新增用例；实机播放链路（恢复队列/最近播放/离线播已下载）待用户 TV 验证。
 
 **版本**：v2.31.0 → **v2.31.1**（versionCode 134 → 135）
+
+### 10.130 v2.31.2 — 统一歌曲/歌词来源标签体系（修复播放页硬编码 "NET"，2026-09-13）
+
+**问题描述**：播放页正在播放百度网盘歌曲时，来源标识显示 "NET"——且 "NET" 并非任何标签体系的正式文案。来源标签在列表页（SourceBadge）、播放页（硬编码）、信息面板（原始标识大写）三处各说各话；歌词来源（LyricsSource）与歌曲来源（MusicSourceType）定义结构、文案体系互不统一。
+
+**根因分析**：
+
+1. `NowPlayingScreen` 来源标识为硬编码：`if (currentSong?.isNetworkSong == true)` → `Text("NET")`，从未接入 `MusicSourceType` / `SourceBadge` 体系——百度（"百度"☁ 橙）、Meting（"网络"🌐 绿）、Jamendo（"Jamendo"♪ 粉）、电台（"电台"📻 紫）全部显示 "NET"。
+2. `SongInfoPanel` 信息面板「网络来源」行直接 `song.networkSource?.uppercase()`（BAIDU/METING/JAMENDO），且仅 `isNetworkSong` 显示。
+3. `LyricsSource` 枚举仅有 `displayName`（内嵌歌词/本地歌词/在线歌词/缓存），与 `MusicSourceType`（displayName+icon+color）结构不一致；播放页歌词来源切换标签（SourceTag）文案另由 strings.xml 的 `player_highlight_backend/local/network/cached`（内嵌/本地/网络/缓存）独立维护——同一含义两套文案，且"网络/在线"措辞漂移。
+
+**修改**：
+
+- `ui/screens/NowPlayingScreen.kt` — 来源标识改用 `SourceBadge(song = currentSong)`（全来源显示，NAS/本地/已下载也补齐）；歌词来源切换标签 4 处 label 改为 `LyricsSource.XXX.displayName`
+- `ui/components/SongInfoPanel.kt` — 「网络来源」行改名「歌曲来源」（`song_info_network_source_label` 值更新，中英双语），值统一 `song.sourceType.displayName`，全部来源显示
+- `data/model/LyricsSource.kt` — 补齐 `icon`/`color` 字段与 `MusicSourceType` 结构对齐，`displayName` 统一短版（内嵌/本地/在线/缓存），颜色语义对齐歌曲来源
+- `res/values/strings.xml` + `values-en/strings.xml` — 删除 `player_highlight_backend/local/network/cached` 与无引用的 `song_info_unknown_source`；`song_info_network_source_label` → 「歌曲来源」/ "Song Source"
+- **保留现状**：发现页专辑角标（`BrowseComponents`）文案/颜色已走 `MusicSourceType`，样式为封面右上角紧凑版（9sp），不改；`SourceTag` 交互样式（selected/available）不变，仅文案统一
+
+**修改后来源标签全景**（统一取 `MusicSourceType.displayName`，SourceBadge 统一样式）：NAS→"NAS"🎵蓝 / Meting 等网络曲→"网络"🌐绿 / 百度网盘→"百度"☁橙 / 电台→"电台"📻紫 / Jamendo→"Jamendo"♪粉 / 天气电台→"天气电台"🌤天蓝 / 本地音乐→"本地"📱橙 / 已下载→"已下载"⬇青。
+
+**验证**：`:app:assembleDebug` **BUILD SUCCESSFUL**；`:app:testDebugUnitTest` 全量 **BUILD SUCCESSFUL**（29s，无回归）。实机待 TV 验证播放页标签显示。
+
+**版本**：v2.31.1 → **v2.31.2**（versionCode 135 → 136）

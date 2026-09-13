@@ -23,6 +23,7 @@ import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Text
 import com.nasmusic.tv.R
 import com.nasmusic.tv.data.model.Song
+import com.nasmusic.tv.data.model.sourceType
 import com.nasmusic.tv.ui.components.FocusableSurface
 import com.nasmusic.tv.data.model.SongTechnicalInfo
 import com.nasmusic.tv.ui.theme.FontSize
@@ -133,11 +134,10 @@ fun SongInfoPanel(
                 InfoRow(stringResource(R.string.song_info_container_label), technicalInfo.format.ifBlank { "—" })
             }
 
-            // 网络歌曲来源
-            if (song.isNetworkSong) {
-                Spacer(modifier = Modifier.height(8.dp))
-                InfoRow(stringResource(R.string.song_info_network_source_label), song.networkSource?.uppercase() ?: stringResource(R.string.song_info_unknown_source))
-            }
+            // 歌曲来源（统一走 MusicSourceType 体系，与列表 SourceBadge 文案一致；
+            // 原实现显示 networkSource 原始大写标识（BAIDU/METING 等），文案不统一）
+            Spacer(modifier = Modifier.height(8.dp))
+            InfoRow(stringResource(R.string.song_info_network_source_label), song.sourceType.displayName)
         }
     }
 }

@@ -135,10 +135,6 @@
     <string name="player_no_song_selected">No song selected</string>
     <string name="player_highlight_word">Word</string>
     <string name="player_highlight_line">Line</string>
-    <string name="player_highlight_backend">Embedded</string>
-    <string name="player_highlight_local">Local</string>
-    <string name="player_highlight_network">Network</string>
-    <string name="player_highlight_cached">Cached</string>
     <string name="player_radio_live">● Live Radio</string>
     <string name="player_cover">Cover</string>
     <string name="player_info">Info</string>
@@ -182,8 +178,7 @@
     <string name="song_info_channels_format">%d Channels</string>
     <string name="song_info_file_size_label">File Size</string>
     <string name="song_info_container_label">Container</string>
-    <string name="song_info_network_source_label">Network Source</string>
-    <string name="song_info_unknown_source">Unknown</string>
+    <string name="song_info_network_source_label">Song Source</string>
 
     <!-- Settings Screen -->
     <string name="settings_default_music_dir">/Music</string>

@@ -1,6 +1,7 @@
 package com.nasmusic.tv.ui.screens
 
 import com.nasmusic.tv.ui.theme.FontSize
+import com.nasmusic.tv.ui.components.common.SourceBadge
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.rememberScrollState
@@ -325,28 +326,28 @@ fun NowPlayingScreen(
                     ) {
                         val currentSource = lyrics?.source
                         SourceTag(
-                            label = stringResource(R.string.player_highlight_backend),
+                            label = com.nasmusic.tv.data.model.LyricsSource.EMBEDDED.displayName,
                             available = lyricsAvailability.hasBackend,
                             selected = currentSource == com.nasmusic.tv.data.model.LyricsSource.EMBEDDED,
                             onClick = { onSwitchLyricsSource(com.nasmusic.tv.data.model.LyricsSource.EMBEDDED) }
                         )
                         Spacer(modifier = Modifier.width(6.dp))
                         SourceTag(
-                            label = stringResource(R.string.player_highlight_local),
+                            label = com.nasmusic.tv.data.model.LyricsSource.LOCAL_FILE.displayName,
                             available = currentSource == com.nasmusic.tv.data.model.LyricsSource.LOCAL_FILE,
                             selected = currentSource == com.nasmusic.tv.data.model.LyricsSource.LOCAL_FILE,
                             onClick = { }
                         )
                         Spacer(modifier = Modifier.width(6.dp))
                         SourceTag(
-                            label = stringResource(R.string.player_highlight_network),
+                            label = com.nasmusic.tv.data.model.LyricsSource.NETWORK.displayName,
                             available = true,
                             selected = currentSource == com.nasmusic.tv.data.model.LyricsSource.NETWORK,
                             onClick = { onSwitchLyricsSource(com.nasmusic.tv.data.model.LyricsSource.NETWORK) }
                         )
                         Spacer(modifier = Modifier.width(6.dp))
                         SourceTag(
-                            label = stringResource(R.string.player_highlight_cached),
+                            label = com.nasmusic.tv.data.model.LyricsSource.CACHED.displayName,
                             available = lyricsAvailability.hasCached,
                             selected = currentSource == com.nasmusic.tv.data.model.LyricsSource.CACHED,
                             onClick = { onSwitchLyricsSource(com.nasmusic.tv.data.model.LyricsSource.CACHED) }
@@ -675,24 +676,11 @@ Text(
                     modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
                 )
             }
-            // 网络歌曲来源标识
-            if (currentSong?.isNetworkSong == true) {
+            // 歌曲来源标识：统一走 MusicSourceType / SourceBadge 体系
+            // （修复：原为硬编码 "NET"，百度网盘 / Jamendo / 电台等一律显示 NET）
+            if (currentSong != null) {
                 Spacer(modifier = Modifier.width(8.dp))
-                Box(
-                    modifier = Modifier
-                        .background(
-                            NasMusicColors.Primary.copy(alpha = 0.2f),
-                            RoundedCornerShape(4.dp)
-                        )
-                        .padding(horizontal = 8.dp, vertical = 2.dp)
-                ) {
-                    Text(
-                        text = "NET",
-                        color = NasMusicColors.Primary,
-                        fontSize = FontSize.small(),
-                        textAlign = TextAlign.Center
-                    )
-                }
+                SourceBadge(song = currentSong)
             }
         }
     }
