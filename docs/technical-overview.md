@@ -8225,6 +8225,13 @@ onSearchSong = { keyword -> viewModel.searchNetworkSongs(keyword) },
 - **枚举计数修正**：`VisualizerThemeTest` 的 21 断言在 E23/E24 加入时就已滞后（实际 22），本次新增后为 **23**，5 处断言 + 头部注释一并修正
 - **`uGap` 语义定为"断点"**（跨 gap 切段，A10 gap=0），而非方案原稿的"第二段起点"
 
+#### Release 验证与实机反馈（2026-09-13，同日）
+- `:app:assembleRelease`（R8 + `shrinkResources` + 签名）**BUILD SUCCESSFUL**（`compileReleaseKotlin` / `minifyReleaseWithR8` / `packageRelease` 均实际执行）；产物 `NASMusicTV-release-v2-31-0.apk`（21.82 MB）
+- **R8 静态验证**：解包 release dex 逐项检查——53 个 `def.tag` 字符串常量（A1–A27 / B1–B8 / C1–C8 / D1–D10）**全部保留**，`evalCartesian` / `evalParametric` / `evalPolar` 方法体与 `FunctionLibrary$WhenMappings` 分派表完整，公式 label 源标记（`frac{sin(x)}{x}` / `e^{-x^2}` / `16sin^3t` 等）保留——`when(tag)` 被 R8 折叠的风险排除（若分支不可达，对应字符串常量会被 R8 删除）
+- 真机安装：192.168.0.114 `install -r` 直装 release 签名成功，启动无 FATAL / AndroidRuntime 异常
+- **实机反馈修复**：只有第一张图有 8 秒描线，后续函数直接出全图——`GAP → DRAW` 迁移未清零 `drawAccumulator`：首图靠 `onEnter` 归零正常，之后每周期累加器残留 `8000ms`，新图第一帧即满足"描线完成"直接进 HOLD。修复为迁移时归零（commit `f34f7bf`），Hypnotic 聚焦测试回归通过后重新 `assembleRelease` 安装
+- **用户确认验证通过**：电视上每张图均有完整 8 秒描线，周期节奏（8s/3s/2.4s/0.5s）、右侧公式带真数学样式、随机换图均正常
+
 #### 验证
 - `:app:testDebugUnitTest` 全量 **BUILD SUCCESSFUL**（含 6 个新测试文件 34 用例：53 条采样有限性/间断分段/闭合曲线、洗牌覆盖/防重/确定性/songId 无关、排版几何/预算、状态机时长、溃散阈值带）
 - `:app:assembleDebug` **BUILD SUCCESSFUL**
