@@ -3,6 +3,7 @@ package com.nasmusic.tv.ui.screens
 import android.net.Uri
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
+import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -35,6 +36,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusDirection
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -105,7 +110,10 @@ private enum class SettingsSection(val titleRes: Int) {
     ABOUT(R.string.settings_about)
 }
 
-@OptIn(ExperimentalTvMaterial3Api::class)
+@OptIn(
+    ExperimentalTvMaterial3Api::class,
+    androidx.compose.ui.ExperimentalComposeUiApi::class
+)
 @Composable
 fun SettingsScreen(
     settings: AppSettings,
@@ -240,6 +248,17 @@ fun SettingsScreen(
 ) {
     var activeSection by remember { mutableStateOf(SettingsSection.GENERAL) }
 
+    // D-Pad 焦点修复：内容区按左键移回左侧导航栏
+    // 根因：右侧内容区（LazyColumn）与左侧导航栏（verticalScroll Column）是两个独立滚动容器，
+    // 播放设置等内容超长（整段为单个 LazyColumn item，含多组横排按钮）时，
+    // 系统几何查找无法从内容区内部"走出"到左栏——表现为按左键焦点卡住或原地不动。
+    // 方案：内容区声明为 focusGroup，向左越界（exit）时强制聚焦左侧导航栏当前分区项。
+    // 每个分区项持有自己的 FocusRequester；activeSection 变化时重新解析目标项。
+    val navFocusRequesters = remember { mutableMapOf<SettingsSection, FocusRequester>() }
+    SettingsSection.entries.forEach { section ->
+        navFocusRequesters.getOrPut(section) { remember { FocusRequester() } }
+    }
+
     // 网络测试状态
     var isNetworkTesting by remember { mutableStateOf(false) }
     var networkTestStatus by remember { mutableStateOf("") }
@@ -343,7 +362,8 @@ fun SettingsScreen(
                     onClick = { activeSection = section },
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(vertical = 4.dp),
+                        .padding(vertical = 4.dp)
+                        .focusRequester(navFocusRequesters.getValue(section)),
                     shape = RoundedCornerShape(12.dp),
                     focusedScale = 1.08f,
                     animationDurationMs = 250,
@@ -377,7 +397,24 @@ fun SettingsScreen(
         }
 
         // --- 右侧：具体设置项（R-2：各分区已迁至 settings/ 子包，按域组装 State/Actions）---
-        LazyColumn(modifier = Modifier.fillMaxWidth().weight(1f).padding(start = 24.dp)) {
+        // focusGroup + 左向 exit 重定向：任何分区内容按左键无法继续左移时，焦点回到导航栏当前分区项
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f)
+                .padding(start = 24.dp)
+                .focusGroup()
+                .focusProperties {
+                    exit = {
+                        if (it == FocusDirection.Left) {
+                            navFocusRequesters.getValue(activeSection).requestFocus()
+                            FocusRequester.Default
+                        } else {
+                            FocusRequester.Default
+                        }
+                    }
+                }
+        ) {
             when (activeSection) {
                 SettingsSection.GENERAL -> item {
                     GeneralSettingsSection(

@@ -8298,3 +8298,19 @@ onSearchSong = { keyword -> viewModel.searchNetworkSongs(keyword) },
 **说明**：方向键"左键返回"交互应用内不存在（返回仅认 BACK 键）；若需该交互属新增功能，未包含在本版。
 
 **版本**：v2.31.2 → **v2.31.3**（versionCode 136 → 137）
+
+### 10.132 v2.31.4 — 设置页内容区左键焦点回到导航栏（D-Pad 焦点越界重定向，2026-09-13）
+
+**问题描述**：设置页选中左栏分区后按右键进入内容区修改查看，之后按左键无法把焦点移回左侧导航栏——用户报告仅「播放设置」分区稳定复现，其他分区可正常左移。
+
+**根因分析**：设置页是「左栏分区导航（verticalScroll Column）+ 右栏内容（LazyColumn）」双滚动容器布局。D-Pad 焦点跨容器移动依赖 Compose 系统几何查找（在可视区域内找目标方向上最近的可聚焦节点）。播放设置分区内容最长：整段为**单个 LazyColumn item**（含播放模式横排、crossfade 时长横排、音质档位横排、模型操作横排、封面滤镜 ± 按钮组等多组横向焦点链），焦点在横排内部左右移动时，系统在该 item 的几何范围内找不到左栏目标，无法自然"走出"；其他分区内容短、多为全宽单列行，几何查找能命中左栏导航项。
+
+**修改**（`ui/screens/SettingsScreen.kt`，Compose TV 标准焦点越界重定向）：
+
+- 左栏每个分区项 modifier 挂独立 `FocusRequester`（`remember` 缓存在 `navFocusRequesters` Map，不随重组重建）
+- 右栏 LazyColumn 挂 `focusGroup()` + `focusProperties { exit }`：`FocusDirection.Left` 越界时 `navFocusRequesters.getValue(activeSection).requestFocus()` 强制聚焦当前分区项，其余方向返回 `FocusRequester.Default` 维持系统默认
+- 内容区内部（横排按钮组之间）的左右焦点移动不受影响——`exit` 仅在焦点请求越出 focusGroup 边界时触发
+
+**验证**：`:app:compileDebugKotlin` / `:app:assembleDebug` / `:app:testDebugUnitTest` 全量 **BUILD SUCCESSFUL**。实机验证路径：设置→播放设置，右键进入内容区任意横排按钮组，连续按左键——应能穿过横排、逐行左移，最终落到左栏「播放设置」导航项；其他 8 个分区同路径抽测。
+
+**版本**：v2.31.3 → **v2.31.4**（versionCode 137 → 138）
