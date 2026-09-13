@@ -7,6 +7,22 @@
 >
 > 类型：`Added`（新增） | `Changed`（变更） | `Fixed`（修复） | `Removed`（移除）
 
+## [v2.31.1] - 2026-09-13
+
+> 修复「下载到本地的歌曲无法播放」。本地/已下载歌曲的 `file://` URI 永久有效，但持久化层（上次队列/最近播放/本地歌单/备份恢复）此前对所有歌曲统一置空 `streamUrl`，恢复后播放地址丢失；而播放解析链（`resolveStreamUrl` / `resolveAndPlayCurrentSong`）只认「网络歌曲 / NAS 歌曲」两种来源，本地歌曲（id 为 `local_*`）被误当 NAS 歌曲去后端查询必然失败，部分入口还会因空 URI 被 `onPlayerError` 静默吞掉——表现为点播无反应或自动跳歌。现改为仅网络歌曲置空 `streamUrl`（本地歌曲保留）、解析链补全本地分支（`streamUrl` 缺失时回退 `path`），并新增「已下载优先」：网络歌曲播放/切歌/批量播放前先查下载记录，已下载且文件存在直接播本地文件（支持离线播放）。
+
+### Fixed
+- **恢复队列/最近播放/本地歌单中的本地歌曲无法播放**：`AppPreferences` 6 处持久化（`saveLastQueue` / `recordRecentSongObject` / `recordPlay` / `addSongToPlaylist` / 备份恢复×2）改为经 `stripVolatileStreamUrl()` 仅对 `isNetworkSong` 置空 `streamUrl`，本地歌曲保留 `file://` URI
+- **播放解析链误把本地歌曲当 NAS 歌曲解析**：`PlayerViewModel.resolveStreamUrl` / `resolveAndPlayCurrentSong` 由二分支（网络 / NAS）扩为三分支，`isLocalSong` 直接用本地 URI（`streamUrl` 缺失回退 `path`），不再拿 `local_*` id 去 `adapter.getSongsByIds()` 查询失败
+- **`updateRestoredQueueStreamUrls` 排除本地歌曲**：`nasSongIds` 筛选与合并条件增加 `!it.isLocalSong`，不再向 NAS 后端发起无意义的 `local_*` 查询
+- **`playQueue` 空 URL 静默失败**：`needsResolve` 与首曲回填覆盖 `isLocalSong`（历史持久化数据 `streamUrl` 已被置空，用 `path` 回填），避免空 URI 触发 `onPlayerError` 被静默吞掉
+
+### Added
+- **已下载优先（离线播放）**：`DownloadRepository.playableLocalUri(song)`（仅 COMPLETED 且本地文件存在非空才返回 `file://` URI）；`NetworkMusicViewModel.playNetworkSong` / `PlayerViewModel.resolveStreamUrl`（网络分支）/ `MainViewModel.playNetworkBatch`（首曲）在解析直链前先查下载记录，已下载直接播本地文件——断网也能播已下载歌曲
+
+### Changed
+- 版本：v2.31.0 → **v2.31.1**（versionCode 134 → 135）
+
 ## [v2.31.0] - 2026-09-13
 
 > 新增「催眠」（E25）可视化效果：数学函数图像动画。缓慢描线（8s）画出带坐标轴/刻度/标签的数学函数图像，静止凝视 3s 后图像溃散蒸发（2.4s）、空场 0.5s 再随机换下一张——53 条函数（笛卡尔 27 + 参数曲线 8 + 极坐标 8 + 彩蛋 10）一次性全部实现，Fisher-Yates + soft 加权洗牌保证单周期不重复、柔和曲线偏早出现、跨周期交界不重图。屏幕右侧独立"公式带"（18% 屏宽、垂直居中）经自研 `FormulaLayout` 渲染**真数学样式**（嵌套上标 `e^{-x^2}`、真分式、根号横线；上标转普通字形绘制，完全绕开 U+2070 区字体覆盖问题），并随曲线共用同一溃散时间轴按 run 碎散——上标飞离宿主、分式线跟着分子断开。**与歌曲完全解耦**：渲染器结构上不读 `songId`，切歌/暂停/静音/后台返回均不打断当前图像的"描线→静止→溃散"（超时保护推进 DRAW 前先补满描线进度，杜绝后台返回后"只画 1% 就静止"）。溃散双档：LOW/MED 逐点抖动蒸发（点数按画质减半），HIGH 粒子化坍缩（切线初速 + 重力 + 节拍脉冲 ×1.35）。音频联动克制（描线变速 ≤1.15×、辉光/线宽微调），静音时效果完整可看。`FormulaLayout` / `FunctionLibrary` 纯 JVM 可单测，6 个新测试文件 34 个用例；`app/build.gradle.kts` 新增 `testOptions.unitTests.isReturnDefaultValues` 支持渲染器构造的纯 JVM 测试。

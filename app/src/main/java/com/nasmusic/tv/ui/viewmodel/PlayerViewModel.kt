@@ -105,8 +105,9 @@ class PlayerViewModel(
         val firstSong = songs[startIndex.coerceIn(0, songs.lastIndex)]
         AppLog.d("PlayerViewModel", "playQueue: ${songs.size} songs, start=$startIndex, first=${firstSong.title}, coverUrl=${firstSong.coverUrl ?: "null"}")
 
-        // 网络歌曲的 streamUrl 需要异步解析，否则 ExoPlayer 收到空 URI 不会开始播放
-        val needsResolve = songs.any { it.isNetworkSong && it.streamUrl.isNullOrBlank() }
+        // 网络/本地歌曲的 streamUrl 为空时需要先回填（历史持久化数据曾统一置空 streamUrl），
+        // 否则 ExoPlayer 收到空 URI 不会开始播放
+        val needsResolve = songs.any { (it.isNetworkSong || it.isLocalSong) && it.streamUrl.isNullOrBlank() }
         if (needsResolve) {
             // 只解析第一首歌曲的 URL，立即播放；后续歌曲在播放器自动过渡时懒加载。
             // 原实现逐首解析所有歌曲（songs.map），30 首可能耗时 30-90s 才开始播放。
@@ -115,16 +116,21 @@ class PlayerViewModel(
             playerManager.restoreQueue(songs, startIndex)
 
             viewModelScope.launch {
-                val resolvedFirst = if (firstSong.isNetworkSong && firstSong.streamUrl.isNullOrBlank()) {
-                    try {
-                        val url = nasMusicApp.networkMusicManager.resolvePlayUrl(firstSong)
-                        if (!url.isNullOrBlank()) firstSong.copy(streamUrl = url) else firstSong
-                    } catch (e: Exception) {
-                        AppLog.e("PlayerViewModel", "playQueue: resolveUrl failed for ${firstSong.title}", e)
-                        firstSong
+                val resolvedFirst = when {
+                    firstSong.isNetworkSong && firstSong.streamUrl.isNullOrBlank() -> {
+                        try {
+                            val url = nasMusicApp.networkMusicManager.resolvePlayUrl(firstSong)
+                            if (!url.isNullOrBlank()) firstSong.copy(streamUrl = url) else firstSong
+                        } catch (e: Exception) {
+                            AppLog.e("PlayerViewModel", "playQueue: resolveUrl failed for ${firstSong.title}", e)
+                            firstSong
+                        }
                     }
-                } else {
-                    firstSong
+                    // 本地歌曲（含已下载）：path 即本地 file:// URI，直接回填，无需网络
+                    firstSong.isLocalSong && firstSong.streamUrl.isNullOrBlank() ->
+                        firstSong.path?.takeIf { it.isNotBlank() }
+                            ?.let { firstSong.copy(streamUrl = it) } ?: firstSong
+                    else -> firstSong
                 }
                 // 检查第一首歌是否仍然无法解析
                 if (resolvedFirst.isNetworkSong && resolvedFirst.streamUrl.isNullOrBlank()) {
@@ -167,21 +173,30 @@ class PlayerViewModel(
      * 解析当前歌曲的播放链接并播放
      *
      * 用于恢复队列后首次播放：
-     * - 网络歌曲：通过 NetworkMusicManager.resolvePlayUrl() 解析
+     * - 本地歌曲（含已下载入库）：本地 file:// URI 永久有效，streamUrl 置空时回退 path
+     * - 网络歌曲：已下载优先播本地文件，否则通过 NetworkMusicManager.resolvePlayUrl() 解析
      * - NAS 歌曲：通过 adapter.getSongsByIds() 获取 streamUrl
      */
     private fun resolveAndPlayCurrentSong(song: Song) {
         viewModelScope.launch {
             try {
-                val playUrl = if (song.isNetworkSong) {
-                    nasMusicApp.networkMusicManager.resolvePlayUrl(song)
-                } else {
+                val playUrl = when {
+                    // 本地歌曲：path 与 streamUrl 存的都是本地 URI，直接回填即可，
+                    // 不能落入下方 NAS 分支（local_xxx id 在 NAS 后端必然查不到）
+                    song.isLocalSong -> song.streamUrl ?: song.path
+                    song.isNetworkSong -> {
+                        // 已下载的网络歌曲优先播本地文件（离线可播），未下载才实时解析直链
+                        nasMusicApp.downloadRepository.playableLocalUri(song)
+                            ?: nasMusicApp.networkMusicManager.resolvePlayUrl(song)
+                    }
                     // NAS 歌曲：通过后端获取 streamUrl
-                    val adapter = backendRegistry.getAdapter()
-                    if (adapter != null) {
-                        val songs = adapter.getSongsByIds(listOf(song.id))
-                        songs.firstOrNull()?.streamUrl
-                    } else null
+                    else -> {
+                        val adapter = backendRegistry.getAdapter()
+                        if (adapter != null) {
+                            val songs = adapter.getSongsByIds(listOf(song.id))
+                            songs.firstOrNull()?.streamUrl
+                        } else null
+                    }
                 }
 
                 if (playUrl.isNullOrBlank()) {
@@ -236,17 +251,23 @@ class PlayerViewModel(
     /**
      * 解析单首歌曲的播放链接
      *
-     * - 网络歌曲：通过 NetworkMusicManager.resolvePlayUrl() 实时解析
+     * - 本地歌曲（含已下载入库）：streamUrl 置空时回退 path（本地 file:// URI 永久有效）
+     * - 网络歌曲：已下载优先播本地文件，否则通过 NetworkMusicManager.resolvePlayUrl() 实时解析
      * - NAS 歌曲：通过 adapter.getSongsByIds() 获取 streamUrl
      */
     private suspend fun resolveStreamUrl(song: Song): String? {
-        return if (song.isNetworkSong) {
-            nasMusicApp.networkMusicManager.resolvePlayUrl(song)
-        } else {
-            val adapter = backendRegistry.getAdapter()
-            if (adapter != null) {
-                adapter.getSongsByIds(listOf(song.id)).firstOrNull()?.streamUrl
-            } else null
+        return when {
+            song.isLocalSong -> song.streamUrl ?: song.path
+            song.isNetworkSong -> {
+                nasMusicApp.downloadRepository.playableLocalUri(song)
+                    ?: nasMusicApp.networkMusicManager.resolvePlayUrl(song)
+            }
+            else -> {
+                val adapter = backendRegistry.getAdapter()
+                if (adapter != null) {
+                    adapter.getSongsByIds(listOf(song.id)).firstOrNull()?.streamUrl
+                } else null
+            }
         }
     }
 
@@ -320,17 +341,17 @@ class PlayerViewModel(
         if (currentQueue.isEmpty()) return
         val adapter = backendRegistry.getAdapter() ?: return
 
-        // 筛选需要更新 streamUrl 的 NAS 歌曲
-        val nasSongIds = currentQueue.filter { !it.isNetworkSong }.map { it.id }
+        // 筛选需要更新 streamUrl 的 NAS 歌曲（本地歌曲/已下载不依赖 NAS，排除）
+        val nasSongIds = currentQueue.filter { !it.isNetworkSong && !it.isLocalSong }.map { it.id }
         if (nasSongIds.isEmpty()) return
 
         viewModelScope.launch {
             try {
                 val updatedSongs = adapter.getSongsByIds(nasSongIds)
                 val songMap = updatedSongs.associateBy { it.id }
-                // 合并：NAS 歌曲用更新后的版本（含 streamUrl），网络歌曲保留原样
+                // 合并：NAS 歌曲用更新后的版本（含 streamUrl），网络/本地歌曲保留原样
                 val mergedQueue = currentQueue.map { song ->
-                    if (!song.isNetworkSong) {
+                    if (!song.isNetworkSong && !song.isLocalSong) {
                         songMap[song.id] ?: song
                     } else {
                         song

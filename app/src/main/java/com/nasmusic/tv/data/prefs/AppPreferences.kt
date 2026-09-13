@@ -504,7 +504,16 @@ class AppPreferences internal constructor(private val context: Context) {
     private val recentSongsObjectsMaxSize = 50
 
     /**
-     * 记录一次最近播放的完整歌曲对象（含网络歌曲，streamUrl 置空）。
+     * 持久化前的 streamUrl 清理（修复：已下载/本地歌曲恢复后无法播放）：
+     * 仅网络歌曲置空（直链有时效，播放时需重新解析）；
+     * 本地歌曲（含已下载入库，isLocalSong=true）的 file:// URI 永久有效，必须保留，
+     * 否则重启恢复队列 / 最近播放 / 本地歌单场景下无法回放。
+     */
+    private fun Song.stripVolatileStreamUrl(): Song =
+        if (isNetworkSong) copy(streamUrl = null) else this
+
+    /**
+     * 记录一次最近播放的完整歌曲对象（网络歌曲 streamUrl 置空）。
      * 与 recordPlay 的 id 列表互补：这里存完整元数据，支持网络歌曲/未连 NAS 时展示。
      */
     suspend fun recordRecentSongObject(song: Song) {
@@ -515,8 +524,8 @@ class AppPreferences internal constructor(private val context: Context) {
             } ?: return@edit
             val list = data.songs.toMutableList()
             list.removeAll { it.id == song.id } // 去重（保留最新一条）
-            // streamUrl 置空，避免持久化过期链接
-            list.add(0, song.copy(streamUrl = null))
+            // 网络歌曲 streamUrl 置空（直链有时效）；本地歌曲保留 file:// URI
+            list.add(0, song.stripVolatileStreamUrl())
             if (list.size > recentSongsObjectsMaxSize) {
                 list.removeAt(list.lastIndex)
             }
@@ -564,7 +573,7 @@ class AppPreferences internal constructor(private val context: Context) {
             if (objData != null) {
                 val objList = objData.songs.toMutableList()
                 objList.removeAll { it.id == songId }
-                objList.add(0, song.copy(streamUrl = null))
+                objList.add(0, song.stripVolatileStreamUrl())
                 if (objList.size > recentSongsObjectsMaxSize) {
                     objList.removeAt(objList.lastIndex)
                 }
@@ -1063,7 +1072,7 @@ class AppPreferences internal constructor(private val context: Context) {
     }
 
     /**
-     * 添加歌曲到本地歌单（按 song.id 去重，streamUrl 置空不持久化）
+     * 添加歌曲到本地歌单（按 song.id 去重；仅网络歌曲 streamUrl 置空不持久化）
      * @return true 添加成功；false 歌单不存在或歌曲已在歌单中
      */
     suspend fun addSongToPlaylist(playlistId: String, song: Song): Boolean {
@@ -1083,7 +1092,7 @@ class AppPreferences internal constructor(private val context: Context) {
                 if (current.songs.any { it.id == song.id }) {
                     added = false
                 } else {
-                    mutable[idx] = current.copy(songs = current.songs + song.copy(streamUrl = null))
+                    mutable[idx] = current.copy(songs = current.songs + song.stripVolatileStreamUrl())
                     prefs[keyLocalPlaylists] = gson.toJson(mutable)
                     added = true
                 }
@@ -1126,12 +1135,11 @@ class AppPreferences internal constructor(private val context: Context) {
 
     /**
      * 保存上次播放队列
-     * streamUrl 置空后序列化，避免持久化过期的播放链接
+     * 仅网络歌曲 streamUrl 置空后序列化（直链有时效）；本地歌曲保留 file:// URI
      */
     suspend fun saveLastQueue(songs: List<Song>, currentIndex: Int) {
         dataStore.edit { prefs ->
-            // streamUrl 置空，避免持久化过期链接
-            val songsToSave = songs.map { it.copy(streamUrl = null) }
+            val songsToSave = songs.map { it.stripVolatileStreamUrl() }
             val data = LastQueueData(songsToSave, currentIndex)
             prefs[keyLastQueue] = gson.toJson(data)
         }
@@ -1539,12 +1547,12 @@ class AppPreferences internal constructor(private val context: Context) {
             prefs[keyLocalPlaylists] = gson.toJson(data.localPlaylists)
             prefs[keyRecentSongs] = gson.toJson(data.recentSongIds)
             prefs[keyRecentSongObjects] = gson.toJson(
-                RecentSongObjectsData(data.recentSongObjects.map { it.copy(streamUrl = null) })
+                RecentSongObjectsData(data.recentSongObjects.map { it.stripVolatileStreamUrl() })
             )
             prefs[keyPlayCounts] = gson.toJson(data.playCounts)
             if (data.lastQueue != null) {
                 prefs[keyLastQueue] = gson.toJson(
-                    data.lastQueue.copy(songs = data.lastQueue.songs.map { it.copy(streamUrl = null) })
+                    data.lastQueue.copy(songs = data.lastQueue.songs.map { it.stripVolatileStreamUrl() })
                 )
             }
             data.equalizerPreset?.let { prefs[keyEqualizerPreset] = it.ordinal }

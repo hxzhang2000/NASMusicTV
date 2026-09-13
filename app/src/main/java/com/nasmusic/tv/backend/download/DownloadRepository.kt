@@ -45,6 +45,22 @@ class DownloadRepository(
     suspend fun getCompleted(): List<DownloadSongEntity> =
         withContext(Dispatchers.IO) { dao.getCompleted() }
 
+    /**
+     * 已下载优先播放：若歌曲已下载（COMPLETED）且本地音频文件存在且非空，
+     * 返回可直接交给 ExoPlayer 的 file:// URI；否则返回 null。
+     *
+     * 供播放链路做离线优先判断（NetworkMusicViewModel.playNetworkSong /
+     * PlayerViewModel.resolveStreamUrl / MainViewModel.playNetworkBatch）。
+     * 本地歌曲（isLocalSong）无下载记录，天然返回 null。
+     */
+    suspend fun playableLocalUri(song: Song): String? = withContext(Dispatchers.IO) {
+        val entity = runCatching { dao.get(song.downloadKey) }.getOrNull() ?: return@withContext null
+        if (entity.status != DownloadStatus.COMPLETED.name) return@withContext null
+        val f = entity.audioPath?.let { File(it) } ?: return@withContext null
+        if (!f.exists() || f.length() <= 0) return@withContext null
+        android.net.Uri.fromFile(f).toString()
+    }
+
     fun observeCompleted(): Flow<List<DownloadSongEntity>> = dao.observeCompleted()
 
     suspend fun countAutoCompleted(): Int = withContext(Dispatchers.IO) { dao.countAutoCompleted() }

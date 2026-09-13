@@ -8236,3 +8236,27 @@ onSearchSong = { keyword -> viewModel.searchNetworkSongs(keyword) },
 - `:app:testDebugUnitTest` 全量 **BUILD SUCCESSFUL**（含 6 个新测试文件 34 用例：53 条采样有限性/间断分段/闭合曲线、洗牌覆盖/防重/确定性/songId 无关、排版几何/预算、状态机时长、溃散阈值带）
 - `:app:assembleDebug` **BUILD SUCCESSFUL**
 - 版本：v2.30.5 → **v2.31.0**（versionCode 133 → 134）
+
+### 10.129 v2.31.1 — 修复已下载/本地歌曲播放链路（持久化置空 + 解析二分支缺陷，2026-09-13）
+
+**问题描述**：下载到本地的歌曲在恢复队列（重启 App）、最近播放、本地歌单、队列懒加载切换场景下无法播放；部分入口点播完全无反应，部分提示"解析播放链接失败"后自动跳歌。下载完成后当场从本地曲库点播正常（内存对象仍带 `file://` 地址）。
+
+**根因分析**：
+
+1. **持久化层无差别置空 streamUrl**：`AppPreferences` 的 `saveLastQueue` / `recordRecentSongObject` / `recordPlay` / `addSongToPlaylist` / 备份恢复共 6 处对所有歌曲 `copy(streamUrl = null)`（设计意图是防网络直链过期），但本地歌曲（含已下载入库，`storageType="DOWNLOAD"`）的 `streamUrl` 是永久有效的 `file://` URI（`LocalMusicRepository` 转换函数以 `contentUri` 填充），置空后恢复即丢播放地址。
+2. **播放解析链只认两种来源**：`PlayerViewModel.resolveStreamUrl` / `resolveAndPlayCurrentSong` 为二分支——`isNetworkSong` 走 `NetworkMusicManager.resolvePlayUrl`，**其余全部当 NAS 歌曲**走 `adapter.getSongsByIds(id)`。本地歌曲 id 为 `local_<pathHash>`，在 NAS 后端必然查不到 → 返回 null → 提示"解析失败"或自动跳下一首。`updateRestoredQueueStreamUrls` 同样以 `!isNetworkSong` 筛 NAS 歌曲批量回填，`local_*` 混入产生无效查询且永不回填。
+3. **空 URI 静默失败**：从最近播放/本地歌单点播时 `PlayerViewModel.playQueue` 的 `needsResolve` 只检测网络歌曲，本地歌曲空 URI 直达 `PlayerManager.playQueue` → ExoPlayer 报错 → `onPlayerError` 把"streamUrl 为空"视为预期网络懒加载场景直接 return——不提示、不跳歌、无播放。
+
+**修改**：
+
+- `data/prefs/AppPreferences.kt` — 新增私有扩展 `Song.stripVolatileStreamUrl()`（仅 `isNetworkSong` 置空 streamUrl），6 处持久化统一走该清理，注释同步
+- `ui/viewmodel/PlayerViewModel.kt` — `resolveStreamUrl` / `resolveAndPlayCurrentSong` 扩为三分支（本地：`streamUrl ?: path`；网络：已下载优先 → 实时解析；NAS：adapter 查询）；`playQueue` 的 `needsResolve` 与首曲回填覆盖 `isLocalSong`（历史已置空数据用 `path` 回填）；`updateRestoredQueueStreamUrls` 筛选/合并排除 `isLocalSong`
+- `backend/download/DownloadRepository.kt` — 新增 `playableLocalUri(song)`：下载记录 COMPLETED 且本地音频文件存在非空时返回 `file://` URI，否则 null
+- `ui/viewmodel/NetworkMusicViewModel.kt` — `playNetworkSong` 解析直链前先查 `playableLocalUri`，已下载直接播本地文件
+- `ui/viewmodel/MainViewModel.kt` — `playNetworkBatch` 首曲同样已下载优先（后续歌曲经 `resolveAndPlayByIndex` → `resolveStreamUrl` 懒加载自然覆盖）
+
+**设计取舍**：NAS 歌曲下载后仍走 NAS 后端流播，不切本地副本（避免"NAS 上已替换文件但客户端仍播旧缓存"的语义歧义）；已下载优先仅应用于网络歌曲（Meting/百度网盘等直链有时效的源）。
+
+**验证**：`:app:compileDebugKotlin` **BUILD SUCCESSFUL**；`:app:testDebugUnitTest`（backend.download / backend.local / data.prefs 聚焦）**BUILD SUCCESSFUL**。既有单测未覆盖持久化置空与解析分支，未新增用例；实机播放链路（恢复队列/最近播放/离线播已下载）待用户 TV 验证。
+
+**版本**：v2.31.0 → **v2.31.1**（versionCode 134 → 135）

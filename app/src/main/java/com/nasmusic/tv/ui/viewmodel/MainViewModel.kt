@@ -1451,16 +1451,23 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
         val safeStart = startIndex.coerceIn(0, songs.lastIndex)
         viewModelScope.launch {
             val first = songs[safeStart]
-            val resolvedFirst = if (first.streamUrl.isNullOrBlank()) {
-                try {
-                    val url = nasMusicApp.networkMusicManager.resolvePlayUrl(first)
-                    if (!url.isNullOrBlank()) first.copy(streamUrl = url) else first
-                } catch (e: Exception) {
-                    AppLog.e("NASMusic", "playNetworkBatch: resolve first failed for ${first.title}", e)
-                    first
+            // 已下载优先：首曲存在本地文件则直接播本地（离线可播）；
+            // 后续歌曲仍走 resolveAndPlayByIndex 懒加载（PlayerViewModel 内含同样的已下载优先逻辑）
+            val localFirstUrl = runCatching {
+                nasMusicApp.downloadRepository.playableLocalUri(first)
+            }.getOrNull()
+            val resolvedFirst = when {
+                localFirstUrl != null -> first.copy(streamUrl = localFirstUrl)
+                first.streamUrl.isNullOrBlank() -> {
+                    try {
+                        val url = nasMusicApp.networkMusicManager.resolvePlayUrl(first)
+                        if (!url.isNullOrBlank()) first.copy(streamUrl = url) else first
+                    } catch (e: Exception) {
+                        AppLog.e("NASMusic", "playNetworkBatch: resolve first failed for ${first.title}", e)
+                        first
+                    }
                 }
-            } else {
-                first
+                else -> first
             }
             val queue = songs.toMutableList().apply { this[safeStart] = resolvedFirst }
             playQueue(queue, safeStart)

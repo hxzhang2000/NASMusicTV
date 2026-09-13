@@ -118,6 +118,16 @@ class NetworkMusicViewModel(app: Application) : AndroidViewModel(app) {
         }
         viewModelScope.launch {
             try {
+                // 已下载优先：本地文件存在则直接播本地（离线可播、省去直链解析），
+                // 避免"已下载歌曲在直链过期/断网时仍走网络解析失败"
+                val localUri = runCatching {
+                    nasMusicApp.downloadRepository.playableLocalUri(song)
+                }.getOrNull()
+                if (!localUri.isNullOrBlank()) {
+                    AppLog.d("NetworkMusicViewModel", "playNetworkSong: '${song.title}' 已下载，直接播本地文件")
+                    onPlaySong(song.copy(streamUrl = localUri))
+                    return@launch
+                }
                 val playUrl = nasMusicApp.networkMusicManager.resolvePlayUrl(song)
                 if (playUrl.isNullOrBlank()) {
                     if (song.networkSource == "baidu") {
