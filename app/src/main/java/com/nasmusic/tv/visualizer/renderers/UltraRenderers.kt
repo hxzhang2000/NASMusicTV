@@ -11,6 +11,7 @@ import com.nasmusic.tv.data.model.VisualizerTheme
 import com.nasmusic.tv.visualizer.AudioFrame
 import com.nasmusic.tv.visualizer.RenderContext
 import com.nasmusic.tv.visualizer.VisualizerMath
+import com.nasmusic.tv.visualizer.VisualizerRandom
 import com.nasmusic.tv.visualizer.VisualizerRenderer
 
 // ═══════════════════════════════════════════════════════════════════
@@ -141,6 +142,9 @@ class PlasmaFlowRenderer : VisualizerRenderer {
 
     override val theme = VisualizerTheme.PLASMA_FLOW
 
+    /** P1#5：本渲染器独立的随机源 */
+    private val rng = VisualizerRandom()
+
     private val gw = 16
     private val gh = 9
     private val noise = FloatArray(gw * gh)
@@ -156,9 +160,9 @@ class PlasmaFlowRenderer : VisualizerRenderer {
         ys = FloatArray(cap)
         life = FloatArray(cap)
         for (i in 0 until cap) {
-            xs[i] = VisualizerMath.nextRandom()
-            ys[i] = VisualizerMath.nextRandom()
-            life[i] = VisualizerMath.nextRandom()
+            xs[i] = rng.next()
+            ys[i] = rng.next()
+            life[i] = rng.next()
         }
         noise.fill(0f)
         evolve = 0f
@@ -212,8 +216,8 @@ class PlasmaFlowRenderer : VisualizerRenderer {
 
             // 越界或寿命耗尽 → 重生
             if (life[i] <= 0f || xs[i] < 0f || xs[i] > 1f || ys[i] < 0f || ys[i] > 1f) {
-                xs[i] = VisualizerMath.nextRandom()
-                ys[i] = VisualizerMath.nextRandom()
+                xs[i] = rng.next()
+                ys[i] = rng.next()
                 life[i] = 1f
             }
 

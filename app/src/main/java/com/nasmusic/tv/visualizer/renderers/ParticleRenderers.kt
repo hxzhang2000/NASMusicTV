@@ -13,6 +13,7 @@ import com.nasmusic.tv.visualizer.AudioFrame
 import com.nasmusic.tv.visualizer.ParticlePool
 import com.nasmusic.tv.visualizer.RenderContext
 import com.nasmusic.tv.visualizer.VisualizerMath
+import com.nasmusic.tv.visualizer.VisualizerRandom
 import com.nasmusic.tv.visualizer.VisualizerRenderer
 
 // ═══════════════════════════════════════════════════════════════════
@@ -29,11 +30,14 @@ class ParticleStormRenderer : VisualizerRenderer {
 
     override val theme = VisualizerTheme.PARTICLE_STORM
 
+    /** P1#5：本渲染器独立的随机源（不再与其它渲染器共享进程级 seed） */
+    private val rng = VisualizerRandom()
+
     private var pool: ParticlePool? = null
 
     override fun onEnter(ctx: RenderContext) {
         val cap = ctx.quality.maxParticles
-        pool = if (cap > 0) ParticlePool(cap) else null
+        pool = if (cap > 0) ParticlePool(cap, rng) else null
     }
 
     override fun DrawScope.draw(frame: AudioFrame, ctx: RenderContext) {
@@ -47,12 +51,12 @@ val accent = ctx.palette.accent
         val emitCount = (frame.energy * 6f + frame.bass * 8f).toInt()
         repeat(emitCount.coerceAtMost(20)) {
             p.spawn(
-                x = VisualizerMath.nextRandom() * w,
+                x = rng.next() * w,
                 y = h * 0.92f,
-                vx = VisualizerMath.nextRandomSigned() * 3.2f,
-                vy = -(4.5f + frame.bass * 16f) * (0.5f + VisualizerMath.nextRandom()),
+                vx = rng.nextSigned() * 3.2f,
+                vy = -(4.5f + frame.bass * 16f) * (0.5f + rng.next()),
                 life = 1f,
-                hue = hueBase + VisualizerMath.nextRandomSigned() * 40f
+                hue = hueBase + rng.nextSigned() * 40f
             )
         }
         if (frame.beat) {
@@ -98,12 +102,15 @@ class ParticleGalaxyRenderer : VisualizerRenderer {
 
     override val theme = VisualizerTheme.PARTICLE_GALAXY
 
+    /** P1#5：本渲染器独立的随机源 */
+    private val rng = VisualizerRandom()
+
     private var pool: ParticlePool? = null
     private var phase = 0f
 
     override fun onEnter(ctx: RenderContext) {
         val cap = ctx.quality.maxParticles
-        pool = if (cap > 0) ParticlePool(cap) else null
+        pool = if (cap > 0) ParticlePool(cap, rng) else null
         phase = 0f
     }
 
@@ -117,9 +124,9 @@ class ParticleGalaxyRenderer : VisualizerRenderer {
 // 发射：数量由总能量决定
         val count = (frame.energy * 20f).toInt().coerceAtMost(12)
         repeat(count) {
-            val a = VisualizerMath.nextRandom() * 6.2831853f + phase
-            val sp = 1.8f + VisualizerMath.nextRandom() * 4f
-            p.spawnRadial(cx, cy, a, sp, 1f, 195f + VisualizerMath.nextRandomSigned() * 80f, swirl = sp * 0.5f)
+            val a = rng.next() * 6.2831853f + phase
+            val sp = 1.8f + rng.next() * 4f
+            p.spawnRadial(cx, cy, a, sp, 1f, 195f + rng.nextSigned() * 80f, swirl = sp * 0.5f)
         }
         if (frame.beat) {
             p.spawnBurst(cx, cy, (200 * 0.7f).toInt(), 13f + frame.bass * 16f, 195f, 60f)
@@ -167,6 +174,9 @@ class BeatFireworkRenderer : VisualizerRenderer {
 
     override val theme = VisualizerTheme.BEAT_FIREWORK
 
+    /** P1#5：本渲染器独立的随机源（供 ParticlePool 的 spawnBurst 使用） */
+    private val rng = VisualizerRandom()
+
     private var pool: ParticlePool? = null
     private var lastBeatMs = 0L
     private var idlePhase = 0f
@@ -176,7 +186,7 @@ class BeatFireworkRenderer : VisualizerRenderer {
 
     override fun onEnter(ctx: RenderContext) {
         val cap = ctx.quality.maxParticles
-        pool = if (cap > 0) ParticlePool(cap) else null
+        pool = if (cap > 0) ParticlePool(cap, rng) else null
         lastBeatMs = 0L
         idlePhase = 0f
     }
@@ -269,6 +279,9 @@ class ParticleTextRenderer : VisualizerRenderer {
 
     override val theme = VisualizerTheme.PARTICLE_TEXT
 
+    /** P1#5：本渲染器独立的随机源 */
+    private val rng = VisualizerRandom()
+
     private var pool: ParticlePool? = null
     private var targets: FloatArray? = null
     /** 缩放到画布后的目标点（预分配，避免每帧分配） */
@@ -280,7 +293,7 @@ class ParticleTextRenderer : VisualizerRenderer {
 
     override fun onEnter(ctx: RenderContext) {
         val cap = ctx.quality.maxParticles
-        pool = if (cap > 0) ParticlePool(cap) else null
+        pool = if (cap > 0) ParticlePool(cap, rng) else null
         targets = FloatArray(cap * 2)
         scaled = FloatArray(cap * 2)
         sampled = false
@@ -343,8 +356,8 @@ class ParticleTextRenderer : VisualizerRenderer {
             p.clear()
             for (i in 0 until cap) {
                 p.spawn(
-                    x = VisualizerMath.nextRandom() * size.width,
-                    y = VisualizerMath.nextRandom() * size.height,
+                    x = rng.next() * size.width,
+                    y = rng.next() * size.height,
                     vx = 0f, vy = 0f, life = 1f, hue = 190f
                 )
             }
@@ -368,8 +381,8 @@ class ParticleTextRenderer : VisualizerRenderer {
                 val d = p.data
                 for (i in 0 until p.count) {
                     val o = i * ParticlePool.STRIDE
-                    d[o + ParticlePool.VX] += VisualizerMath.nextRandomSigned() * 22f
-                    d[o + ParticlePool.VY] += VisualizerMath.nextRandomSigned() * 22f
+                    d[o + ParticlePool.VX] += rng.nextSigned() * 22f
+                    d[o + ParticlePool.VY] += rng.nextSigned() * 22f
                 }
             }
         } else {

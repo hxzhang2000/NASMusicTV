@@ -15,6 +15,7 @@ import com.nasmusic.tv.data.model.VisualizerTheme
 import com.nasmusic.tv.visualizer.AudioFrame
 import com.nasmusic.tv.visualizer.RenderContext
 import com.nasmusic.tv.visualizer.VisualizerMath
+import com.nasmusic.tv.visualizer.VisualizerRandom
 import com.nasmusic.tv.visualizer.VisualizerRenderer
 import kotlin.math.cos
 import kotlin.math.sin
@@ -333,6 +334,9 @@ class LiquidRippleRenderer : VisualizerRenderer {
 
     override val theme = VisualizerTheme.LIQUID_RIPPLE
 
+    /** P1#5：本渲染器独立的随机源 */
+    private val rng = VisualizerRandom()
+
 // x, y, r, life, kind
     private var ripples = FloatArray(40 * 5)
     private var head = 0
@@ -360,7 +364,7 @@ val accent = ctx.palette.accent
 
         // 高频小涟漪
         if (frame.treble > 0.20f) {
-            spawn(VisualizerMath.nextRandom() * w, VisualizerMath.nextRandom() * h, 1f, 0f)
+            spawn(rng.next() * w, rng.next() * h, 1f, 0f)
         }
         // 低频大波纹
         if (frame.bass > 0.35f && frame.timeMs % 8 < 2) {
@@ -410,6 +414,9 @@ class MatrixRainRenderer : VisualizerRenderer {
 
     override val theme = VisualizerTheme.MATRIX_RAIN
 
+    /** P1#5：本渲染器独立的随机源 */
+    private val rng = VisualizerRandom()
+
     private var colY = FloatArray(0)
     private var colSpeed = FloatArray(0)
     private var cols = 32
@@ -431,8 +438,8 @@ class MatrixRainRenderer : VisualizerRenderer {
         colY = FloatArray(cols)
         colSpeed = FloatArray(cols)
         for (i in 0 until cols) {
-            colY[i] = VisualizerMath.nextRandom() * 1000f
-            colSpeed[i] = 5f + VisualizerMath.nextRandom() * 7f
+            colY[i] = rng.next() * 1000f
+            colSpeed[i] = 5f + rng.next() * 7f
         }
         releaseGlyphs()
     }
@@ -539,6 +546,9 @@ class ConstellationRenderer : VisualizerRenderer {
 
     override val theme = VisualizerTheme.CONSTELLATION
 
+    /** P1#5：本渲染器独立的随机源 */
+    private val rng = VisualizerRandom()
+
 // x, y, life, size
     private var stars = FloatArray(160 * 4)
     private var head = 0
@@ -565,7 +575,7 @@ class ConstellationRenderer : VisualizerRenderer {
         repeat(spawn) {
             val v = frame.spectrum.getOrElse((head * 7 + it * 13) % (frame.spectrum.size.coerceAtLeast(1))) { 0.3f }
             val o = head * 4
-            stars[o] = VisualizerMath.nextRandom() * w
+            stars[o] = rng.next() * w
             stars[o + 1] = h * 0.12f + (1f - v) * h * 0.76f
             stars[o + 2] = 1f
             stars[o + 3] = 2.2f + v * 5f

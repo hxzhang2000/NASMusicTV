@@ -13,6 +13,7 @@ import com.nasmusic.tv.data.model.VisualizerTheme
 import com.nasmusic.tv.visualizer.AudioFrame
 import com.nasmusic.tv.visualizer.RenderContext
 import com.nasmusic.tv.visualizer.VisualizerMath
+import com.nasmusic.tv.visualizer.VisualizerRandom
 import com.nasmusic.tv.visualizer.VisualizerRenderer
 import kotlin.math.cos
 import kotlin.math.sin
@@ -34,6 +35,9 @@ import kotlin.math.sin
 class LyricsDotMatrixRenderer : VisualizerRenderer {
 
     override val theme = VisualizerTheme.LYRICS_DOT_MATRIX
+
+    /** P1#5：本渲染器独立的随机源 */
+    private val rng = VisualizerRandom()
 
     // ── 单行粒子数据（两行各一份） ──────────────────────────
     // 每粒子 8 float：x, y, vx, vy, tx, ty, size, phase
@@ -301,7 +305,7 @@ class LyricsDotMatrixRenderer : VisualizerRenderer {
                         target[o + TX] = x.toFloat()
                         target[o + TY] = y.toFloat()
                         target[o + SIZE] = 1.0f
-                        target[o + PHASE] = VisualizerMath.nextRandom() * 6.2831853f
+                        target[o + PHASE] = rng.next() * 6.2831853f
 
                         var ci = 0
                         while (ci < displayText.length && x >= charXBounds[ci + 1]) ci++
@@ -360,12 +364,12 @@ class LyricsDotMatrixRenderer : VisualizerRenderer {
             val dist: Float
             if (fromBelow) {
                 // 从下方飞入
-                angle = -3.14159f / 2f + VisualizerMath.nextRandomSigned() * 0.8f
-                dist = h * 0.4f + VisualizerMath.nextRandom() * h * 0.2f
+                angle = -3.14159f / 2f + rng.nextSigned() * 0.8f
+                dist = h * 0.4f + rng.next() * h * 0.2f
             } else {
                 // 从四周飞入
-                angle = VisualizerMath.nextRandom() * 6.2831853f
-                dist = (w * 0.35f + h * 0.2f) * (0.5f + VisualizerMath.nextRandom() * 0.5f)
+                angle = rng.next() * 6.2831853f
+                dist = (w * 0.35f + h * 0.2f) * (0.5f + rng.next() * 0.5f)
             }
 
             val startX = tx + cos(angle) * dist
@@ -377,7 +381,7 @@ class LyricsDotMatrixRenderer : VisualizerRenderer {
             val dx = tx - startX
             val dy = ty - startY
             val len = kotlin.math.hypot(dx, dy).coerceAtLeast(1f)
-            val sp = 4f + VisualizerMath.nextRandom() * 4f
+            val sp = 4f + rng.next() * 4f
             val perpX = -dy / len * 2f
             val perpY = dx / len * 2f
             arr[o + VX] = dx / len * sp + perpX
@@ -731,8 +735,8 @@ class LyricsDotMatrixRenderer : VisualizerRenderer {
                     } else {
                         // 开始飞散
                         val p = (charElapsed.toFloat() / scatterFlyMs).coerceIn(0f, 1f)
-                        d[o + VX] += VisualizerMath.nextRandomSigned() * 0.5f
-                        d[o + VY] += -0.15f + VisualizerMath.nextRandomSigned() * 0.3f
+                        d[o + VX] += rng.nextSigned() * 0.5f
+                        d[o + VY] += -0.15f + rng.nextSigned() * 0.3f
                         d[o + VX] *= 0.98f
                         d[o + VY] *= 0.985f
                         d[o + X] += d[o + VX] * (1f + p * 0.6f)
@@ -771,8 +775,8 @@ class LyricsDotMatrixRenderer : VisualizerRenderer {
                         val p = (charElapsed.toFloat() / coalesceArriveMs).coerceIn(0f, 1f)
                         val accel = 0.01f + p * 0.05f
                         val drag = 0.82f + p * 0.08f
-                        d[o + VX] += (d[o + TX] - d[o + X]) * accel + VisualizerMath.nextRandomSigned() * 0.3f
-                        d[o + VY] += (d[o + TY] - d[o + Y]) * accel + VisualizerMath.nextRandomSigned() * 0.3f
+                        d[o + VX] += (d[o + TX] - d[o + X]) * accel + rng.nextSigned() * 0.3f
+                        d[o + VY] += (d[o + TY] - d[o + Y]) * accel + rng.nextSigned() * 0.3f
                         d[o + VX] *= drag
                         d[o + VY] *= drag
                         d[o + X] += d[o + VX]
@@ -788,8 +792,8 @@ class LyricsDotMatrixRenderer : VisualizerRenderer {
         val drag = 0.80f + progress * 0.10f
         for (i in 0 until n) {
             val o = i * STRIDE
-            d[o + VX] += (d[o + TX] - d[o + X]) * accel + VisualizerMath.nextRandomSigned() * 0.4f
-            d[o + VY] += (d[o + TY] - d[o + Y]) * accel + VisualizerMath.nextRandomSigned() * 0.4f
+            d[o + VX] += (d[o + TX] - d[o + X]) * accel + rng.nextSigned() * 0.4f
+            d[o + VY] += (d[o + TY] - d[o + Y]) * accel + rng.nextSigned() * 0.4f
             d[o + VX] *= drag
             d[o + VY] *= drag
             d[o + X] += d[o + VX]

@@ -9,7 +9,11 @@ import kotlin.math.sin
 /**
  * 可视化公共数学工具。
  *
- * 所有函数均为无副作用的纯计算，运行期零分配。
+ * 本类中的函数均为无副作用的纯计算，运行期零分配。
+ *
+ * 注：伪随机数**不在本类**（P1#5，2026-09-14）——原 `private var seed` 是进程级单例
+ * 状态，与「纯计算」的定位矛盾且被所有渲染器共享，已迁出为每渲染器独立的
+ * [VisualizerRandom] 实例。
  */
 object VisualizerMath {
 
@@ -25,7 +29,6 @@ object VisualizerMath {
 
     /** 投影缩放系数 */
     fun scaleAt(z: Float, f: Float): Float = f / (f + z)
-
     /**
      * 快起慢落包络：target 突变时瞬时到达，随后按 decay 缓慢回落。
      * 这是"呼吸感"的核心——反过来（慢起快落）会变成廉价的抽动。
@@ -146,17 +149,4 @@ object VisualizerMath {
             blue = lerp(color.blue, 1f, amount),
             alpha = color.alpha
         )
-
-    /** 极简确定性伪随机（避免每帧 Random 对象分配） */
-    private var seed = 0x2F6E2B1u
-
-    fun nextRandom(): Float {
-        seed = seed * 1664525u + 1013904223u
-        return (seed shr 8).toFloat() / 16777216f
-    }
-
-    fun nextRandomSigned(): Float = nextRandom() * 2f - 1f
-
-    /** 重置伪随机序列（进入效果时调用，保证可复现） */
-    fun resetRandom(newSeed: UInt = 0x2F6E2B1u) { seed = newSeed }
 }
