@@ -18,6 +18,8 @@ import com.nasmusic.tv.util.UrlSanitizer
 import com.nasmusic.tv.util.withRetry
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -25,6 +27,7 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.Response
 import okhttp3.logging.HttpLoggingInterceptor
+import java.net.HttpURLConnection
 import java.nio.charset.Charset
 import java.util.concurrent.TimeUnit
 
@@ -38,10 +41,47 @@ class JellyfinAdapter : BackendAdapter {
     override var apiVersion: String = "Jellyfin (版本未知)"
 
     private var baseUrl: String = ""
+
+    /**
+     * S4（2026-09-14）：加 `@Volatile`。
+     * 写点：`initialize()` / [reauthenticateIfNeeded]（均在 IO 线程）。
+     * 读点：`buildAuthHeader()`（IO 线程）**以及** [getStreamUrl] / [getCoverUrl]
+     * 这两个非 suspend 方法（可能被主线程调用）——跨线程可见性需要 volatile 保证。
+     */
+    @Volatile
     private var apiToken: String = ""
     private var userId: String = ""
     override var serverName: String = "Jellyfin"
         private set
+
+    // ── S4：会话内 401 重认证所需状态 ──────────────────────────────────
+    /**
+     * 登录凭据，由 [initialize] 注入（该方法的调用方 `BackendRegistry` 始终传入
+     * `ServerConfig.username/password`，两条初始化路径——复用已有 token 与用户名密码
+     * 登录——都会走到）。仅驻留内存，[logout] / [close] 时清空。
+     *
+     * 取舍说明：内存中保留明文口令是重认证的必要代价（本 adapter 无 `Context`，
+     * 无法按需从 `AppPreferences` 解密读取）。风险有界——口令本就以明文经 `ServerConfig`
+     * 传入本类，且仅存活于单次会话；持久化副本仍是 `CryptoUtils` 加密的。
+     */
+    @Volatile
+    private var username: String = ""
+    @Volatile
+    private var password: String = ""
+
+    /** 同一时刻只允许一次重认证在途：401 风暴下避免并发重复登录 */
+    private val reauthMutex = Mutex()
+
+    /**
+     * token 世代号，重认证成功即自增。
+     * 并发的多个请求同时撞 401 时，只有第一个真正发起登录，其余在拿到锁后发现
+     * 世代已变，直接复用新 token 重试——即「N 个 401 只触发 1 次登录」。
+     */
+    @Volatile
+    private var tokenGeneration: Int = 0
+
+    /** S4：单次请求的「状态码 + body」，供 401 判定与重试复用 */
+    private data class HttpResult(val code: Int, val body: JsonObject?)
 
     private val gson = Gson()
     private val jsonMediaType = "application/json; charset=utf-8".toMediaType()
@@ -71,6 +111,10 @@ class JellyfinAdapter : BackendAdapter {
         password: String
     ): Boolean = withContext(Dispatchers.IO) {
         this@JellyfinAdapter.baseUrl = baseUrl.removeSuffix("/")
+
+        // S4：留存凭据供会话内 401 重认证使用（不落日志，F-1 约定）
+        this@JellyfinAdapter.username = username
+        this@JellyfinAdapter.password = password
 
         // 优先使用已有 token
         if (apiToken.isNotBlank()) {
@@ -1010,9 +1054,11 @@ class JellyfinAdapter : BackendAdapter {
         } catch (e: Exception) {
             AppLog.w("JellyfinAdapter", "logout failed", e)
         } finally {
-            // 清空凭据防止后续误用
+            // 清空凭据防止后续误用（S4：登录凭据一并清空）
             apiToken = ""
             userId = ""
+            username = ""
+            password = ""
         }
     }
 
@@ -1027,6 +1073,9 @@ class JellyfinAdapter : BackendAdapter {
             baseUrl = ""
             apiToken = ""
             userId = ""
+            // S4：登录凭据随认证态一并清空，避免 adapter 被替换后仍驻留口令
+            username = ""
+            password = ""
             AppLog.d("JellyfinAdapter", "close: auth state cleared (shared OkHttp pool retained)")
         } catch (e: Exception) {
             AppLog.w("JellyfinAdapter", "close failed", e)
@@ -1071,7 +1120,41 @@ class JellyfinAdapter : BackendAdapter {
         return utf8
     }
 
+    /**
+     * 集中式 GET-JSON 请求（全部读路径的唯一出口）。
+     *
+     * **S4（2026-09-14）**：会话内 401 自愈。原先 401 与「任何其他失败」一样被折叠成
+     * `null`，调用方只看到空列表——服务器强制过期 token / 用户改密后，必须手动断开重连
+     * 才能恢复。现在改为：401 → 重认证一次 → 重试原请求一次。
+     *
+     * 防循环设计（报告 §S4 明确要求「重试只做一次、避免循环」）：
+     * 1. 重试是**同一调用内的第二次尝试**（`rawJsonRequest` 调两次），不是递归调用；
+     * 2. 第二次请求无论返回什么（含再次 401）都直接返回，不再触发第三次；
+     * 3. [authenticateByName] 走 `client.newCall` 直连，**不经过本方法** → 不存在
+     *    「重认证本身 401 → 又触发重认证」的自激路径；
+     * 4. 无凭据（token-only 会话）时直接放弃，不做无意义的登录尝试。
+     */
     private suspend fun executeJsonRequest(url: String): JsonObject? = withContext(Dispatchers.IO) {
+        val genAtStart = tokenGeneration
+        val first = rawJsonRequest(url)
+        if (first.code != HttpURLConnection.HTTP_UNAUTHORIZED) {
+            return@withContext first.body
+        }
+
+        if (reauthenticateIfNeeded(genAtStart) == null) {
+            AppLog.w("JellyfinAdapter", "executeJsonRequest: 401 且重认证不可用/失败，放弃 ${UrlSanitizer.sanitize(url)}")
+            return@withContext null
+        }
+        AppLog.i("JellyfinAdapter", "executeJsonRequest: 401 → 重认证成功，重试一次 ${UrlSanitizer.sanitize(url)}")
+        // 第二次尝试：结果照单全收，不再判定 401（防循环，见上方设计说明）
+        rawJsonRequest(url).body
+    }
+
+    /**
+     * 单次 GET-JSON（内含 [withRetry] 的**网络层**重试：超时/IO 异常 3 次退避）。
+     * 与 [executeJsonRequest] 的区别：不处理 401，只如实回传状态码与 body。
+     */
+    private suspend fun rawJsonRequest(url: String): HttpResult = withContext(Dispatchers.IO) {
         try {
             withRetry(
                 config = RetryConfig(maxAttempts = 3, baseDelayMs = 500L),
@@ -1087,18 +1170,49 @@ class JellyfinAdapter : BackendAdapter {
                 client.newCall(request).execute().use { response ->
                     if (response.isSuccessful) {
                         val body = response.utf8Body()
-                        if (!body.isNullOrBlank()) {
-                            gson.fromJson(body, JsonObject::class.java)
-                        } else null
+                        HttpResult(
+                            response.code,
+                            if (!body.isNullOrBlank()) gson.fromJson(body, JsonObject::class.java) else null
+                        )
                     } else {
                         AppLog.w("JellyfinAdapter", "executeJsonRequest: ${response.code} for ${UrlSanitizer.sanitize(url)}")
-                        null
+                        HttpResult(response.code, null)
                     }
                 }
             }
         } catch (e: Exception) {
             AppLog.e("JellyfinAdapter", "executeJsonRequest failed for ${UrlSanitizer.sanitize(url)}", e)
-            null
+            HttpResult(-1, null)
+        }
+    }
+
+    /**
+     * S4：按需重认证并更新内存 token。
+     *
+     * @param genAtStart 调用方发起请求时观察到的 [tokenGeneration]
+     * @return 可用的 token；无法重认证时返回 `null`
+     *
+     * 并发语义：多个请求同时撞 401 时，只有一个真正执行登录（持 [reauthMutex]），
+     * 其余在拿到锁后发现世代已变，直接复用新 token —— 即「N 个 401 只触发 1 次登录」。
+     */
+    private suspend fun reauthenticateIfNeeded(genAtStart: Int): String? {
+        if (username.isBlank()) {
+            // token-only 会话（用户只填了 token、没存用户名密码）无法重认证
+            return null
+        }
+        return reauthMutex.withLock {
+            if (tokenGeneration != genAtStart) {
+                // 并发的其他请求已完成重认证，直接复用其新 token，不再打一次登录请求
+                return@withLock apiToken
+            }
+            val result = authenticateByName(username, password) ?: return@withLock null
+            apiToken = result.first
+            userId = result.second
+            serverName = result.third
+            tokenGeneration++
+            // F-1：token 属敏感值，只记世代号不记内容
+            AppLog.i("JellyfinAdapter", "401 重认证成功（token 世代 → $tokenGeneration）")
+            apiToken
         }
     }
 
