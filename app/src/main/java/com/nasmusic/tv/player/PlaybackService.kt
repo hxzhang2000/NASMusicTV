@@ -204,13 +204,15 @@ class PlaybackService : MediaLibraryService() {
         val mediaSourceFactory = androidx.media3.exoplayer.source.DefaultMediaSourceFactory(dataSourceFactory, extractorsFactory)
 
         // 人声消除处理器（卡拉OK模式）— 频谱遮罩版本
-        val vocalRemovalProcessor = SpectralMaskProcessor()
+        // 变量名曾用 vocalRemovalProcessor（历史实现名），2026-09-14 随死代码
+        // VocalRemovalProcessor 一并正名
+        val spectralMaskProcessor = SpectralMaskProcessor()
 
         // P6：PCM 降级通道 —— 部分国产 TV 的 Visualizer 绑定成功却恒返回全 0，
         // 此时改用 AudioSink 里的 PCM 自算频谱。挂在链最前，取人声消除之前的原始信号。
         val pcmFallback = com.nasmusic.tv.player.PcmFallbackChannel()
 
-        // 自定义 RenderersFactory，注入 VocalRemovalProcessor 到 AudioSink
+        // 自定义 RenderersFactory，注入人声消除处理器 SpectralMaskProcessor 到 AudioSink
         val renderersFactory = object : DefaultRenderersFactory(this) {
             override fun buildAudioSink(
                 context: android.content.Context,
@@ -218,7 +220,7 @@ class PlaybackService : MediaLibraryService() {
                 enableAudioTrackPlaybackParams: Boolean
             ): AudioSink {
                 return DefaultAudioSink.Builder(context)
-                    .setAudioProcessors(arrayOf(pcmFallback.processor, vocalRemovalProcessor))
+                    .setAudioProcessors(arrayOf(pcmFallback.processor, spectralMaskProcessor))
                     .setEnableFloatOutput(enableFloatOutput)
                     .setEnableAudioTrackPlaybackParams(enableAudioTrackPlaybackParams)
                     .build()
@@ -248,7 +250,7 @@ class PlaybackService : MediaLibraryService() {
         // 导致 frame 恒 0、全部效果静止（P6 实测坑）。
         (application as NasMusicApp).playerManager.setPcmFallbackChannel(pcmFallback)
         (application as NasMusicApp).playerManager.setPlayer(player)
-        (application as NasMusicApp).playerManager.setVocalRemovalProcessor(vocalRemovalProcessor)
+        (application as NasMusicApp).playerManager.setVocalRemovalProcessor(spectralMaskProcessor)
         (application as NasMusicApp).playerManager.setDemucsSeparator(demucsSeparator)
         (application as NasMusicApp).playerManager.setAccompanimentCache(accompanimentCache)
 

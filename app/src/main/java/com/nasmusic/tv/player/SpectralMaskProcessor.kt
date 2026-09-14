@@ -33,9 +33,11 @@ import java.nio.ByteOrder
  *   ② HQ 模型路径（HqSeparationOrchestrator + HT-Demucs ONNX,按需启用）
  *      异步推理,输出伴奏 stem,需本地有模型文件
  *
- * 历史备忘：VocalRemovalProcessor 是更精细的 4 阶 Linkwitz-Riley DSP 实现,
- * 因"激进"的人声消除取舍（人声同频段居中乐器一并消除问题更少）已被本类取代。
- * 保留为高保真/离线批处理备选,不要尝试复活注入（CPU 8× 代价且已无引用方）。
+ * 历史备忘：曾有一个更精细的 4 阶 Linkwitz-Riley DSP 实现
+ * （VocalRemovalProcessor,CPU 约 8×、取向"温和"）。因 K 歌用户对残人声零容忍、
+ * 对低频损失几乎无感,已被本类的"激进"取向取代。该类 2026-09-14 作为死代码删除,
+ * 算法与参数归档于 docs/technical-overview.md §10.152 与
+ * docs/vocal-removal-approach-b-dsp.md，供高保真/离线批处理场景复原。
  * ─────────────────────────────────────────────────────────────────────
  */
 // UnstableApi 属 androidx @RequiresOptIn 机制，须用 androidx.annotation.OptIn。
