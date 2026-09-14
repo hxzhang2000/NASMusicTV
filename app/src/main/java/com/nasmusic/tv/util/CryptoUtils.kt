@@ -1,6 +1,7 @@
 package com.nasmusic.tv.util
 
 import android.util.Base64
+import com.nasmusic.tv.BuildConfig
 import com.nasmusic.tv.util.AppLog
 import javax.crypto.Cipher
 import javax.crypto.SecretKey
@@ -29,7 +30,13 @@ object CryptoUtils {
     // 口令内置于 APK，可被逆向还原，无法抵御有针对性的逆向攻击；
     // 其价值在于避免凭据以明文形式直接暴露在 prefs/备份文件中。
     // 如需更强保护，应改用设备安全硬件（AndroidKeyStore/StrongBox）。
-    private const val PASSPHRASE = "NasMusicTV-LocalCrypto-2b7e1f9c-2024"
+    // S1 修复（2026-09-13）：口令从 BuildConfig 注入,默认值与历史硬编码保持一致,
+    // 用户可在 keystore.properties 中设置 cryptoPassphrase 覆盖(不入仓)。
+    // 注意:此为「混淆级」而非「保密级」——口令最终仍内置于 APK 的 BuildConfig 字段,
+    // 可被逆向还原,无法抵御有针对性的逆向攻击;其价值在于避免凭据以明文形式
+    // 直接暴露在源码仓库/prefs/备份文件中。如需更强保护,应改用设备安全硬件
+    // (AndroidKeyStore/StrongBox)。
+    private val PASSPHRASE: String = BuildConfig.CRYPTO_PASSPHRASE
     private const val KEY_ALIAS = "nasmusic_secret_key"
 
     private val softwareKey: SecretKey by lazy { deriveSoftwareKey() }

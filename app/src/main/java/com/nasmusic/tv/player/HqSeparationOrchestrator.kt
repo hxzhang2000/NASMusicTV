@@ -27,6 +27,33 @@ import java.io.File
  *
  * 播放器操作经 [PlayerHost] 窄接口回调（窄接口模式），
  * 避免与 PlayerManager 播放状态机形成强环引用。
+
+ *
+ * ─────────────────────────────────────────────────────────────────────
+ * 🎤 K 歌双路径总览（2026-09-13 标注）
+ * ─────────────────────────────────────────────────────────────────────
+ * 本类是 K 歌「高质量」路径的编排器，负责：
+ *   - HT-Demucs ONNX 模型加载/卸载
+ *   - 异步人声分离（协程 + 文件 IO）
+ *   - 切换原曲/错误时取消未完成任务（PlayerManager.release() 调用本类 release()）
+ *
+ * K 歌模块共有两条路径（叠加运行，非互斥）：
+ *   ① 实时 DSP 路径（默认/兜底）—— SpectralMaskProcessor
+ *      1 阶 RC 低通 250Hz 截止，零延迟，TV 设备 CPU 友好
+ *      由 VocalSeparationViewModel.toggleVocalRemoval() 始终启用
+ *   ② 高质量模型路径（本类）—— HT-Demucs ONNX 推理
+ *      仅在用户开启"高质量模式"且本地有模型文件时启用
+ *      异步分离，输出伴奏/和声/低音 stem
+ *
+ * 调度入口：VocalSeparationViewModel.toggleVocalRemoval()
+ *   ├─ setVocalRemovalEnabled(true)  启用 DSP 路径（永远执行）
+ *   └─ isHighQualityMode() ? enableHighQualityRemoval() : —
+ *                            条件启用本类
+ *
+ * 历史备忘：VocalRemovalProcessor 是更精细的 4 阶 Linkwitz-Riley DSP
+ * 实现，已被 SpectralMaskProcessor 取代（保留为高保真/离线批处理备选），
+ * 与本类无关，不要混淆。
+ * ─────────────────────────────────────────────────────────────────────
  */
 class HqSeparationOrchestrator(
     private val appContext: Context,
@@ -519,5 +546,9 @@ class HqSeparationOrchestrator(
         separationJob = null
         _separating.value = false
         demucsSeparator?.release()
+        // L7 修复（2026-09-13）：release 末尾补 scope.cancel()，清理本编排器 scope 内的协程。
+        // release() 由 PlayerManager.release() 调用,而 PlayerManager 为 app 级单例,
+        // 实际影响有限,但补齐后保证 release 路径不留悬挂 scope。
+        scope.cancel()
     }
 }

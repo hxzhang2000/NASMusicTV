@@ -437,12 +437,10 @@ class SubsonicAdapter : BackendAdapter {
     // --- 收藏 ---
     override suspend fun toggleFavorite(songId: String, isCurrentlyFavorite: Boolean): Boolean = withContext(Dispatchers.IO) {
         try {
-            // 先获取当前收藏状态
-            val starredSongs = getFavorites()
-            val isFavorited = starredSongs.any { it.id == songId }
-
+            // S3 修复（2026-09-13）：直接使用调用方传入的本地收藏状态，
+            // 消除 TOCTOU 竞态窗口，且避免全量拉取收藏列表的网络开销。
             // 切换收藏状态
-            val method = if (isFavorited) "unstar" else "star"
+            val method = if (isCurrentlyFavorite) "unstar" else "star"
             val url = buildRestUrl(method) + "&id=$songId"
             val json = executeRequest(url) ?: return@withContext false
             val subsonic = json.getAsJsonObject("subsonic-response")

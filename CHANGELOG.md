@@ -7,6 +7,38 @@
 >
 > 类型：`Added`（新增） | `Changed`（变更） | `Fixed`（修复） | `Removed`（移除）
 
+## [v2.32.3] - 2026-09-14
+
+> 代码质量修复批次（基于 code-review-full-report-2026-09-13.md 五次审阅落地）。本版本不引入新功能，仅修复 6 项 P0 线程安全问题 + 1 项 P0 安全问题 + 2 项 P1 状态一致性问题 + 1 项 P2 文档补充。未跑全量编译验证（仅字节级 UTF-8 + 大括号匹配 + 锚点关键字校验），合并前由用户跑 ./gradlew.bat compileDebugKotlin。
+
+### Fixed
+- **T8 修复（visualizer）**: `ParticleRenderers.kt` `val t = targets ?: return` 提前到 createBitmap 之前，消除 Bitmap 必然泄漏路径（targets 为 null 时每帧泄漏 220x660x4B=580KB 内存）
+- **T7 修复（visualizer）**: `LyricsDotMatrixRenderer.kt` try-finally 包裹 createBitmap/recycle，异常路径不再泄漏 Bitmap
+- **S3 修复（backend）**: `SubsonicAdapter.kt` `toggleFavorite` 删除冗余的 `getFavorites()` 二次查询，直接使用入参 `isCurrentlyFavorite`，消除 TOCTOU 竞态窗口与多余网络请求
+- **T4 修复（backend）**: `SmartRadioManager.kt` 3 处 `playedIds.clear()` 移入 synchronized 块，所有 `generateBatch(playedIds)` 改为 `playedIds.toSet()` 快照，消除 UI 线程 stop/skip 与 IO 协程读取之间的可见性竞争
+- **P1#12 修复（viewmodel）**: `NetworkMusicViewModel.kt:675` `restoreBaiduIndexOnStart` 中 `getBaiduConfigSync()` 改为 `baiduConfigFlow.first()`，消除 runBlocking+IO 在 `Dispatchers.Default` 线程池上的阻塞
+- **S1 修复（security）**: `CryptoUtils.kt` AES-256 派生口令从 `BuildConfig.CRYPTO_PASSPHRASE` 注入，值由 `app/build.gradle.kts` 从 `keystore.properties.cryptoPassphrase` 读取（默认与历史硬编码一致），口令不再明文写死在源码仓库
+- **L7 尾巴修复（player）**: `HqSeparationOrchestrator.kt` `release()` 末尾补 `scope.cancel()`，清理本编排器 scope 内协程
+- **P1#10 修复（viewmodel）**: `VisualizerViewModel.kt` `loadedCoverKey` 加 `@Volatile`，主线程写(63行)/IO 读(82行)跨线程可见性
+- **P1#2 修复（baidu）**: `BaiduNetdiskConfig.kt` ERRNO_MAP 补 31079 到"文件不存在或已被删除"
+
+### Docs
+- **L4 补充（db）**: `LocalMusicDatabase.kt` 注释强化：`fallbackToDestructiveMigration` 仅适用可由其他数据源重建的本地索引，**未来承载用户数据（下载/收藏/播放列表）的数据库绝不可启用**，必须维护 Migration 类
+- **审阅文档**: `logs_temp/code-review-full-report-2026-09-13.md` 追加"实施记录"段，标注 10 项已修复 + 6 项暂缓（理由）+ 综合评分 74 → 78
+
+### Changed
+- 版本 v2.32.2 → **v2.32.3**（versionCode 141 → 142）
+
+### 暂缓（6 项，需独立 PR）
+- T6 AudioFrame 双缓冲（30+ Renderer 改动面过大）
+- S4 Jellyfin 会话内 401 重认证（需真实环境测试重试逻辑）
+- T2 runBlocking 26 处全量 Flow 化（涉及 AppPreferences 15 处内部方法 + 11 处外部调用，函数签名变化需全套回归）
+- T3 PlayerManager 三元组 StateFlow 原子化（涉及 UI 集中订阅点重构）
+- P1#1 OkHttp 连接池统一（涉及 DI 重构）
+- P1#5 VisualizerMath seed 隔离（30+ Renderer 全部修改）
+- L3 playModeToggleHandler 改 Flow（跨文件改造）
+- `customAppKey/secretKey` 加密（与 T2 一起做）
+
 ## [v2.32.2] - 2026-09-13
 
 > 全局统一播放控制按钮（返回/上一曲/下一曲/播放顺序/播放暂停）的图标色与聚焦反馈规范：**未聚焦时图标恒为亮白（TextPrimary）不依赖主题默认色兜底；聚焦时整体按钮背景变化、图标色保持不变**。此前各页 Icon 均不传 `tint`，实际取 tv-material3 主题 `LocalContentColor`（恰好为亮白但未显式保证），且 `FocusableSurface` 下发的自定义 `LocalFocusableContentColor` 并非 Icon 消费的通道——聚焦色参数形同虚设。另有两处不一致：QueueScreen 播放/暂停按钮聚焦反而**变暗**（Primary 70%），NowPlaying/K 歌主按钮聚焦背景完全**不变**（与"聚焦有整体变化"的交互预期不符）。

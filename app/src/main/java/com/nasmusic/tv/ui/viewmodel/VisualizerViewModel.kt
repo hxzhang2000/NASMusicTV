@@ -48,8 +48,9 @@ class VisualizerViewModel(
 
     private val paletteProvider = com.nasmusic.tv.visualizer.CoverPaletteProvider()
 
-    /** 当前已加载封面对应的 key，避免重复加载 */
-    private var loadedCoverKey: String? = null
+    /** 当前已加载封面对应的 key，避免重复加载。
+     *  P1#10 修复（2026-09-13）：主线程写(63行)/IO 读(82行) 跨线程,加 @Volatile 保证可见性。 */
+    @Volatile private var loadedCoverKey: String? = null
 
     /**
      * 异步加载封面并取色（技法 T5）。

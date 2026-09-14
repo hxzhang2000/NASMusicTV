@@ -28,6 +28,47 @@ import kotlin.math.sin
  *   过渡带比二阶陡一倍，人声频段边缘的残留更少，分频点相加平坦。
  *
  * 仅支持 16-bit PCM 立体声。其他格式自动 bypass。
+ *
+ * ─────────────────────────────────────────────────────────────────────
+ * ⚠️ 死代码 / 历史实现（2026-09-13 标注）
+ * ─────────────────────────────────────────────────────────────────────
+ * 状态：全项目无任何调用方（PlaybackService 实际注入的是 SpectralMaskProcessor,
+ *       PlayerManager 字段类型也是 SpectralMaskProcessor）。
+ *       PcmTapProcessor.kt:21 注释里仍把本类称作 "vocalRemovalProcessor",
+ *       系重构后未同步的 stale comment,见该处说明。
+ *
+ * 设计取向（"精细/温和"）：
+ *   - Mid vocal 频段保留 15%,Side vocal 频段保留 50% —— 避免人声同频段
+ *     居中乐器（主旋律/吉他/底鼓）一并被消除（"伴奏变薄"问题）
+ *   - 4 阶 Linkwitz-Riley biquad 级联,过渡带陡,残人声少
+ *   - 滤波器计算量约 8 倍于一阶 RC,TV 设备上对 CPU 不友好
+ *
+ * 取代实现 SpectralMaskProcessor 的取向（"激进"）：
+ *   - 一阶低通 250Hz 直接把 Mid 频段全滤掉,人声消除更彻底
+ *   - Side 1.2x 增益放大,补偿立体声宽度
+ *   - 低频居中乐器（贝斯/底鼓）会有损失
+ *   - 滤波计算量约为本实现的 1/8
+ *
+ * 选"激进"的产品理由：K 歌用户对"残人声"零容忍,对"低频损失"几乎无感。
+ *
+ * 保留本文件的价值：
+ *   - 算法本身是教科书级实现,文档详尽,适合作为高保真场景 / 离线批处理
+ *     / 未来"精细模式"切换的备选实现
+ *   - 删除前请确认：grep -r VocalRemovalProcessor app/src 仅 PcmTapProcessor
+ *     注释一处引用,需同步修改
+ *
+ * 复活步骤（备忘）：修改 PlaybackService.kt:197 为 `VocalRemovalProcessor()`,
+ * PlayerManager.kt:189 字段类型同步改为 `VocalRemovalProcessor?`,
+ * PcmTapProcessor.kt:21 注释同步更新。
+ *
+ * ─────────────────────────────────────────────────────────────────────
+ * 🎤 在 K 歌模块中的位置（2026-09-13 标注）
+ * ─────────────────────────────────────────────────────────────────────
+ * 本类是历史/精细版 DSP 实现,已被取代,**不要尝试复活注入**。当前 K 歌模块
+ * 双路径为（详见 HqSeparationOrchestrator.kt 头部 KDoc）:
+ *   ① DSP 路径: SpectralMaskProcessor（1 阶低通 250Hz,在用,实时兜底）
+ *   ② HQ 模型路径: HqSeparationOrchestrator + HT-Demucs ONNX（按需启用）
+ * ─────────────────────────────────────────────────────────────────────
  */
 class VocalRemovalProcessor : AudioProcessor {
 

@@ -290,40 +290,45 @@ class ParticleTextRenderer : VisualizerRenderer {
 
     /** 采样文字轮廓 → 目标点。仅在文本变化时执行 */
     private fun sample(text: String, poolCap: Int) {
+        // T8 修复（2026-09-13）：提前 null check，避免 targets 为 null 时仍分配 Bitmap
+        // （原 `val t = targets ?: return` 在 createBitmap 之后，形成必然泄漏路径）
+        val t = targets ?: return
         val size = 220
         val bmp = Bitmap.createBitmap(size * 3, size, Bitmap.Config.ARGB_8888)
-        val canvas = AndroidCanvas(bmp)
-        val paint = AndroidPaint().apply {
-            isAntiAlias = true
-            textSize = 150f
-            color = android.graphics.Color.WHITE
-        }
-        canvas.drawText(text, 20f, size * 0.78f, paint)
+        try {
+            val canvas = AndroidCanvas(bmp)
+            val paint = AndroidPaint().apply {
+                isAntiAlias = true
+                textSize = 150f
+                color = android.graphics.Color.WHITE
+            }
+            canvas.drawText(text, 20f, size * 0.78f, paint)
 
-        val t = targets ?: return
-        var n = 0
-        val step = 3
-        for (y in 0 until size step step) {
-            for (x in 0 until bmp.width step step) {
+            var n = 0
+            val step = 3
+            for (y in 0 until size step step) {
+                for (x in 0 until bmp.width step step) {
+                    if (n >= poolCap) break
+                    if (bmp.getPixel(x, y) and 0xFF000000.toInt() != 0) {
+                        t[n * 2] = x.toFloat()
+                        t[n * 2 + 1] = y.toFloat()
+                        n++
+                    }
+                }
                 if (n >= poolCap) break
-                if (bmp.getPixel(x, y) and 0xFF000000.toInt() != 0) {
-                    t[n * 2] = x.toFloat()
-                    t[n * 2 + 1] = y.toFloat()
-                    n++
+            }
+            // 未填满时循环复用已有点位,避免粒子数量减半
+            if (n > 0) {
+                for (i in n until poolCap) {
+                    t[i * 2] = t[(i % n) * 2]
+                    t[i * 2 + 1] = t[(i % n) * 2 + 1]
                 }
             }
-            if (n >= poolCap) break
+            sampledCount = n
+            sampled = n > 0
+        } finally {
+            bmp.recycle()
         }
-        bmp.recycle()
-        // 未采满时循环复用已有点位，避免粒子数骤减
-        if (n > 0) {
-            for (i in n until poolCap) {
-                t[i * 2] = t[(i % n) * 2]
-                t[i * 2 + 1] = t[(i % n) * 2 + 1]
-            }
-        }
-        sampledCount = n
-        sampled = n > 0
     }
 
     override fun DrawScope.draw(frame: AudioFrame, ctx: RenderContext) {

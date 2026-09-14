@@ -672,7 +672,9 @@ class NetworkMusicViewModel(app: Application) : AndroidViewModel(app) {
     fun restoreBaiduIndexOnStart(onIndexLoaded: (com.nasmusic.tv.data.model.BaiduFileIndex) -> Unit) {
         viewModelScope.launch {
             kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
-                val baiduCfg = prefs.baidu.getBaiduConfigSync()
+                // P1#12 修复（2026-09-13）：用 baiduConfigFlow.first() 替代 getBaiduConfigSync()
+                // 避免 runBlocking+Dispatchers.IO 在 Default 线程池上阻塞其他解析/计算协程。
+                val baiduCfg = prefs.baidu.baiduConfigFlow.first()
                 AppLog.d("BaiduAuth", "init: cfg.isActive=${baiduCfg.isActive}, tokens=${baiduCfg.tokens != null}")
                 if (baiduCfg.isActive) {
                     val savedIndex = baiduIndexCache.load()

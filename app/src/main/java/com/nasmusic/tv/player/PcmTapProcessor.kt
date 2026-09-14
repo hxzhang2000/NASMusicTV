@@ -18,8 +18,11 @@ import java.nio.ByteOrder
  *  ② 音频**原样透传**，本处理器绝不改动任何采样值（与 `SpectralMaskProcessor` 串联时尤其重要）；
  *  ③ 默认 `capturing = false`，只在判定降级后才置 true —— 正常设备零开销。
  *
- * 挂在处理器链**最前**（`arrayOf(pcmTapProcessor, vocalRemovalProcessor)`），
+ * 挂在处理器链**最前**（`arrayOf(pcmTapProcessor, spectralMaskProcessor)`），
  * 取 EQ / 人声消除之前的原始信号，保证频谱不受这些后处理影响。
+ *
+ * 注：原注释此处写作 "vocalRemovalProcessor" 系 VocalRemovalProcessor 重构
+ * 为 SpectralMaskProcessor 后未同步的 stale comment,2026-09-13 校正。
  */
 class PcmTapProcessor(
     private val ring: PcmRingBuffer,

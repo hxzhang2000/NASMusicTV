@@ -220,6 +220,8 @@ class LyricsDotMatrixRenderer : VisualizerRenderer {
         val bmpH = (fontHeight + fontSize * 0.4f).toInt().coerceAtLeast(40)
         // 宽度留白
         val bmpW = (textWidth * 1.15f).toInt().coerceAtLeast(100)
+        // T7 修复（2026-09-13）：try-finally 包裹 Bitmap 创建与回收，避免异常路径泄漏
+        try {
         val bmp = Bitmap.createBitmap(bmpW, bmpH, Bitmap.Config.ARGB_8888)
         val canvas = AndroidCanvas(bmp)
 
@@ -316,7 +318,9 @@ class LyricsDotMatrixRenderer : VisualizerRenderer {
             if (curRowFill >= cap) break
         }
 
-        bmp.recycle()
+        } finally {
+            bmp.recycle()
+        }
 
         if (n == 0) return 0
 

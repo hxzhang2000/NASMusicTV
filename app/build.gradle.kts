@@ -24,6 +24,12 @@ val keystoreKeyPassword = readKeystoreProperty("keyPassword")
 val baiduAppId = readKeystoreProperty("baiduAppId")
 val baiduAppSecret = readKeystoreProperty("baiduAppSecret")
 
+// S1 修复（2026-09-13）：CryptoUtils AES-256 派生口令从 keystore.properties 读取,
+// 避免硬编码在源码中。keystore.properties 已在 .gitignore 中,不入仓。
+// CI 默认值与历史硬编码值保持一致,确保兼容已有加密数据。
+val cryptoPassphrase = readKeystoreProperty("cryptoPassphrase")
+    .ifBlank { "NasMusicTV-LocalCrypto-2b7e1f9c-2024" }
+
 android {
     namespace = "com.nasmusic.tv"
     compileSdk = 34
@@ -32,8 +38,8 @@ android {
         applicationId = "com.nasmusic.tv"
         minSdk = 22
         targetSdk = 34
-        versionCode = 141
-        versionName = "2.32.2"
+        versionCode = 142
+        versionName = "2.32.3"
 
         ndk {
             abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64")
@@ -42,6 +48,9 @@ android {
         // 百度网盘 AppKey/SecretKey（运行时由 BaiduOAuthClient 经 BuildConfig 读取）
         buildConfigField("String", "BAIDU_APP_ID", "\"$baiduAppId\"")
         buildConfigField("String", "BAIDU_APP_SECRET", "\"$baiduAppSecret\"")
+        
+        // S1 修复（2026-09-13）：CryptoUtils AES-256 派生口令（运行时由 CryptoUtils 经 BuildConfig 读取）
+        buildConfigField("String", "CRYPTO_PASSPHRASE", "\"$cryptoPassphrase\"")
     }
 
     // CI 的 Unit tests job 不生成 keystore.properties：无 release 签名配置时跳过创建，

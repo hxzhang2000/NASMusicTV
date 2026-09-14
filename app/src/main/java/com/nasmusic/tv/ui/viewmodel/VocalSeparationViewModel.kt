@@ -22,6 +22,28 @@ import kotlinx.coroutines.launch
  *
  * 依赖：PlayerManager（人声分离控制）、AppPreferences（模式持久化）。
  */
+/**
+ * 人声分离 / K 歌域 ViewModel（R-1 拆分自 MainViewModel）：
+ * 人声消除开关、分离模式（快速/高质量）、升降调与变调、±K 歌页进出。
+ *
+ * 依赖：PlayerManager（人声分离控制）、AppPreferences（模式持久化）。
+ *
+ * ─────────────────────────────────────────────────────────────────────
+ * 🎤 K 歌双路径调度（2026-09-13 标注）
+ * ─────────────────────────────────────────────────────────────────────
+ * 本 ViewModel 是 K 歌两条路径的总控点：
+ *   ① 实时 DSP 路径（默认/兜底，永远启用）
+ *      setVocalRemovalEnabled(true) → PlayerManager 注入的 SpectralMaskProcessor
+ *   ② 高质量模型路径（按需启用）
+ *      isHighQualityMode() 为真时 → enableHighQualityRemoval()
+ *      → HqSeparationOrchestrator → HT-Demucs ONNX 推理
+ *
+ * 关闭时对称处理：setVocalRemovalEnabled(false) + disableHighQualityRemoval()
+ *
+ * UI 入口：KaraokePlaybackScreen / KaraokeLyricsView
+ * 模型管理：ModelDownloadManager / ModelTransferDialog
+ * ─────────────────────────────────────────────────────────────────────
+ */
 class VocalSeparationViewModel(
     app: Application,
     private val playerManager: PlayerManager

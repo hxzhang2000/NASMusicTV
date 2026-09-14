@@ -76,10 +76,13 @@ class SmartRadioManager(
                     playedIds.clear()
                     currentBatchIds.clear()
                 }
-                val batch = RadioSongScorer.generateBatch(library, seed, counts, playedIds, BATCH_SIZE)
+                val batch = RadioSongScorer.generateBatch(library, seed, counts, playedIds.toSet(), BATCH_SIZE)
                 if (batch.isEmpty()) {
-                    playedIds.clear()
-                    val retry = RadioSongScorer.generateBatch(library, seed, counts, playedIds, BATCH_SIZE)
+                    // T4 修复：clear + toSet() 快照均在锁内
+                    val retry = synchronized(stateLock) {
+                        playedIds.clear()
+                        RadioSongScorer.generateBatch(library, seed, counts, playedIds.toSet(), BATCH_SIZE)
+                    }
                     if (retry.isEmpty()) {
                         _state.value = State.Exhausted
                         return@launch
@@ -118,13 +121,16 @@ class SmartRadioManager(
                     candidates = library,
                     seed = seed,
                     playCounts = counts,
-                    excludedIds = playedIds,
+                    excludedIds = playedIds.toSet(),
                     batchSize = BATCH_SIZE
                 )
                 if (batch.isEmpty()) {
                     // 曲库耗尽（全部已播）→ 清历史再来一批（换一批语义）
-                    playedIds.clear()
-                    val retry = RadioSongScorer.generateBatch(library, seed, counts, playedIds, BATCH_SIZE)
+                    // T4 修复：clear + toSet() 快照均在锁内
+                    val retry = synchronized(stateLock) {
+                        playedIds.clear()
+                        RadioSongScorer.generateBatch(library, seed, counts, playedIds.toSet(), BATCH_SIZE)
+                    }
                     if (retry.isEmpty()) {
                         _state.value = State.Exhausted
                         return@launch
@@ -164,11 +170,14 @@ class SmartRadioManager(
                     return@launch
                 }
                 val counts = playCountsProvider()
-                val batch = RadioSongScorer.generateBatch(library, seed, counts, playedIds, BATCH_SIZE)
+                val batch = RadioSongScorer.generateBatch(library, seed, counts, playedIds.toSet(), BATCH_SIZE)
                 if (batch.isEmpty()) {
                     // 曲库真正耗尽（全部历史已播）→ 清历史重来
-                    synchronized(stateLock) { playedIds.clear() }
-                    val retry = RadioSongScorer.generateBatch(library, seed, counts, playedIds, BATCH_SIZE)
+                    // T4 修复：clear + toSet() 快照均在锁内
+                    val retry = synchronized(stateLock) {
+                        playedIds.clear()
+                        RadioSongScorer.generateBatch(library, seed, counts, playedIds.toSet(), BATCH_SIZE)
+                    }
                     if (retry.isEmpty()) {
                         _state.value = State.Exhausted
                         return@launch
