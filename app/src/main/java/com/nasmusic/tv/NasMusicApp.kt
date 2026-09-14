@@ -43,6 +43,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import okhttp3.OkHttpClient
 import java.io.File
 
@@ -237,7 +238,9 @@ class NasMusicApp : Application(), ImageLoaderFactory {
             defaultSourceProvider = { appPreferences.network.getDefaultNetworkSourceSync() }
         )
         // 百度网盘：仅在总开关开启且已登录时注册（运行时切换开关时动态注册/注销）
-        if (appPreferences.baidu.getBaiduConfigSync().isActive) {
+        // T2 第一批（2026-09-14）：onCreate 需同步拿配置，用 runBlocking{first()}（不带 IO 调度器，
+        // 不占 Default/IO 线程池；阻塞主线程仅限启动初始化阶段，可接受）
+        if (runBlocking { appPreferences.baidu.baiduConfigFlow.first() }.isActive) {
             networkMusicManager.registerService(baiduNetdiskService)
         }
         // Jamendo：仅当已配置 client_id 时注册（未配置时 Jamendo Tab 显示引导）
@@ -426,9 +429,11 @@ class NasMusicApp : Application(), ImageLoaderFactory {
      * 百度网盘开关切换：运行时注册/注销百度 NetworkMusicService。
      * - 开启且已登录：注册
      * - 关闭或登出：注销
+     * T2 第一批（2026-09-14）：getBaiduConfigSync()（runBlocking+IO）→ baiduConfigFlow.first()，
+     * 消除主线程/线程池阻塞；调用方需处于协程上下文。
      */
-    fun refreshBaiduServiceRegistration() {
-        val cfg = appPreferences.baidu.getBaiduConfigSync()
+    suspend fun refreshBaiduServiceRegistration() {
+        val cfg = appPreferences.baidu.baiduConfigFlow.first()
         if (cfg.isActive) {
             networkMusicManager.registerService(baiduNetdiskService)
         } else {

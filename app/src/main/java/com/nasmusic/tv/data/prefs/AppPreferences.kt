@@ -1316,8 +1316,10 @@ class AppPreferences internal constructor(private val context: Context) {
      * 同步读取某网盘配置。
      *
      * R-7 第四类：保留 runBlocking（现有调用点均在 IO 协程上下文：
-     * BaiduOAuthClient/BaiduMvFileService/BaiduNetdiskService 的 withContext(IO)、
-     * NasMusicApp.onCreate 主线程一次性初始化），禁止主线程协程内调用。
+     * BaiduOAuthClient/BaiduMvFileService/BaiduNetdiskService 的 withContext(IO)），
+     * 禁止主线程协程内调用。
+     * T2 第一批（2026-09-14）：外部 UI/App 调用点已迁移到 baiduConfigFlow.first()（suspend），
+     * 本同步入口仅剩 IO 协程上下文调用方与内部 getter 链（后续批次继续收敛）。
      */
     @androidx.annotation.WorkerThread
     fun getCloudDriveConfigSync(type: CloudDriveType): CloudDriveConfig? {

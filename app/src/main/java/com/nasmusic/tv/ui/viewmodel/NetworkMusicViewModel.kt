@@ -113,11 +113,12 @@ class NetworkMusicViewModel(app: Application) : AndroidViewModel(app) {
         }
         // 防御：百度源若因登录时序未注册（浏览用 baiduApi 直连不需要注册，但播放需 services["baidu"]），
         // 播放时自愈注册，避免"能浏览不能播"
-        if (song.networkSource == "baidu" && !nasMusicApp.networkMusicManager.isServiceRegistered("baidu")) {
-            AppLog.e("NetworkMusicViewModel", "playNetworkSong: 检测到 baidu 服务未注册，尝试自愈注册后播放")
-            nasMusicApp.refreshBaiduServiceRegistration()
-        }
         viewModelScope.launch {
+            // T2 第一批：注册改 suspend，移入协程内保证"先注册、后解析播放"
+            if (song.networkSource == "baidu" && !nasMusicApp.networkMusicManager.isServiceRegistered("baidu")) {
+                AppLog.e("NetworkMusicViewModel", "playNetworkSong: 检测到 baidu 服务未注册，尝试自愈注册后播放")
+                nasMusicApp.refreshBaiduServiceRegistration()
+            }
             try {
                 // 已下载优先：本地文件存在则直接播本地（离线可播、省去直链解析），
                 // 避免"已下载歌曲在直链过期/断网时仍走网络解析失败"
@@ -207,9 +208,9 @@ class NetworkMusicViewModel(app: Application) : AndroidViewModel(app) {
 
     private var deviceCodePollJob: kotlinx.coroutines.Job? = null
 
-    /** 同步刷新连接状态（初始化与开关切换后调用） */
-    fun refreshBaiduConnectionState() {
-        val cfg = prefs.baidu.getBaiduConfigSync()
+    /** 异步刷新连接状态（初始化与开关切换后调用；T2 第一批：getBaiduConfigSync → baiduConfigFlow.first()） */
+    suspend fun refreshBaiduConnectionState() {
+        val cfg = prefs.baidu.baiduConfigFlow.first()
         val prevState = _baiduConnectionState.value
         _baiduConnectionState.value = when {
             !cfg.isActive -> BaiduConnectionState.Off
@@ -334,7 +335,9 @@ class NetworkMusicViewModel(app: Application) : AndroidViewModel(app) {
     /** 设置百度源总开关 */
     fun setBaiduEnabled(enabled: Boolean) {
         prefs.baidu.setBaiduEnabledSync(enabled)
-        refreshBaiduConnectionState()
+        viewModelScope.launch {
+            refreshBaiduConnectionState()
+        }
     }
 
     /** 启动设备码授权流程：请求设备码并开始轮询 */
