@@ -20,6 +20,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 /**
@@ -85,7 +86,7 @@ class PlayerManager(private val applicationContext: Context) {
     /** 高质量人声分离编排（N-4 提取），经 PlayerHost 窄接口回调本类播放操作 */
     private val hqOrchestrator = HqSeparationOrchestrator(applicationContext, object : HqSeparationOrchestrator.PlayerHost {
         override fun player(): ExoPlayer? = this@PlayerManager.player
-        override fun currentSong(): Song? = _currentSong.value
+        override fun currentSong(): Song? = _playerState.value.currentSong
         override fun isPlaying(): Boolean = player?.isPlaying == true
         override fun pause() { player?.pause() }
         override fun play() { player?.play() }
@@ -140,10 +141,10 @@ class PlayerManager(private val applicationContext: Context) {
             durationSec = crossfadeDurationSec,
             suppressPlayback = suppressPlayback,
             repeatOne = mode == PlayMode.REPEAT_ONE,
-            queueSize = _queue.value.size,
-            currentIndex = _currentIndex.value,
+            queueSize = _playerState.value.queue.size,
+            currentIndex = _playerState.value.currentIndex,
             nextMediaItemFactory = { nextIdx ->
-                val next = _queue.value.getOrNull(nextIdx)
+                val next = _playerState.value.queue.getOrNull(nextIdx)
                 if (next == null || next.streamUrl.isNullOrBlank()) null
                 else buildMediaItem(next, next.streamUrl)
             }
@@ -161,8 +162,11 @@ class PlayerManager(private val applicationContext: Context) {
         }
     }
 
-    private val _currentSong = MutableStateFlow<Song?>(null)
-    val currentSong: StateFlow<Song?> = _currentSong
+    // ── T3：三元组原子状态 ──────────────────────────────
+    // queue/currentIndex/currentSong 由 _playerState 单流承载，所有切歌/换队列
+    // 操作以 update{copy(...)} 同帧发布，UI 集中订阅点不再读到错帧状态。
+    private val _playerState = MutableStateFlow(PlayerState())
+    val playerState: StateFlow<PlayerState> = _playerState
 
     private val _isPlaying = MutableStateFlow(false)
     val isPlaying: StateFlow<Boolean> = _isPlaying
@@ -172,12 +176,6 @@ class PlayerManager(private val applicationContext: Context) {
 
     private val _duration = MutableStateFlow(0L)
     val duration: StateFlow<Long> = _duration
-
-    private val _queue = MutableStateFlow<List<Song>>(emptyList())
-    val queue: StateFlow<List<Song>> = _queue
-
-    private val _currentIndex = MutableStateFlow(0)
-    val currentIndex: StateFlow<Int> = _currentIndex
 
     private val _buffering = MutableStateFlow(false)
     val buffering: StateFlow<Boolean> = _buffering
@@ -205,7 +203,7 @@ class PlayerManager(private val applicationContext: Context) {
     fun getPlayer(): ExoPlayer? = player
 
     /** 获取当前播放队列的只读副本（供 MediaLibraryTree 构建媒体树） */
-    fun getQueueSnapshot(): List<Song> = _queue.value.toList()
+    fun getQueueSnapshot(): List<Song> = _playerState.value.queue.toList()
 
     /** 开关人声消除（实时生效） */
     fun setVocalRemovalEnabled(enabled: Boolean) {
@@ -319,7 +317,6 @@ class PlayerManager(private val applicationContext: Context) {
             // P5 修复：seek 期间仍需同步 _isPlaying（纯状态记录），否则 seek 窗口内暂停/播放
             // 会导致播放按钮卡在错误状态（原实现直接 return，_isPlaying 永久失真直到下次回调）。
             _isPlaying.value = isPlaying
-            _isPlaying.value = isPlaying
             playerEqualizer.setPlaying(isPlaying)
             // seek 期间跳过进度轮询的启停（有副作用），防止播放按钮闪烁与 ExoPlayer 内部位置重置干扰；
             // 轮询至多多跑 1 秒，由 seekTimeout 兜底恢复。
@@ -367,11 +364,11 @@ class PlayerManager(private val applicationContext: Context) {
             // ExoPlayer 会因空 URI 出错。此时暂停并通知外部解析 streamUrl 后再播放。
             // SEEK 原因（playAt 手机遥控直 seek 等）同样需要检测——不依赖 AUTO 才触发解析。
             if (reason == Player.MEDIA_ITEM_TRANSITION_REASON_AUTO || reason == Player.MEDIA_ITEM_TRANSITION_REASON_SEEK) {
-                val currentSong = _queue.value.getOrNull(_currentIndex.value)
+                val currentSong = _playerState.value.queue.getOrNull(_playerState.value.currentIndex)
                 if (currentSong != null && currentSong.streamUrl.isNullOrBlank()) {
-                    AppLog.d("PlayerManager", "onMediaItemTransition: auto-transition to empty streamUrl, index=${_currentIndex.value}, resolving")
+                    AppLog.d("PlayerManager", "onMediaItemTransition: auto-transition to empty streamUrl, index=${_playerState.value.currentIndex}, resolving")
                     player?.pause()
-                    onNeedResolveStreamUrl?.invoke(_currentIndex.value)
+                    onNeedResolveStreamUrl?.invoke(_playerState.value.currentIndex)
                 }
             }
         }
@@ -393,7 +390,7 @@ class PlayerManager(private val applicationContext: Context) {
         }
 
         override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
-            val currentSong = _queue.value.getOrNull(_currentIndex.value)
+            val currentSong = _playerState.value.queue.getOrNull(_playerState.value.currentIndex)
             // 空 URI（streamUrl 为空的待解析网络歌曲）触发的错误是预期行为：
             // onMediaItemTransition(AUTO) 已触发 onNeedResolveStreamUrl 异步解析，
             // 此处不应污染错误 UI、不应 ERROR 级别日志、不应自动跳下一首。
@@ -413,10 +410,10 @@ class PlayerManager(private val applicationContext: Context) {
             // 播放链接可能已过期（入队时预解析的直链有时效，网络歌曲尤甚，约 5 首后集中出现）。
             // 出错时复用 onNeedResolveStreamUrl（→ ViewModel.resolveAndPlayByIndex）重新解析一次再播放；
             // 同一首歌只重试一次，若重解析后仍失败则继续自动跳下一首，避免死循环。
-            if (currentSong != null && lastErrorRetryIndex != _currentIndex.value) {
-                AppLog.d("PlayerManager", "onPlayerError: streamUrl likely expired, re-resolving index=${_currentIndex.value}")
-                lastErrorRetryIndex = _currentIndex.value
-                onNeedResolveStreamUrl?.invoke(_currentIndex.value)
+            if (currentSong != null && lastErrorRetryIndex != _playerState.value.currentIndex) {
+                AppLog.d("PlayerManager", "onPlayerError: streamUrl likely expired, re-resolving index=${_playerState.value.currentIndex}")
+                lastErrorRetryIndex = _playerState.value.currentIndex
+                onNeedResolveStreamUrl?.invoke(_playerState.value.currentIndex)
                 return
             }
             // 自动跳下一首
@@ -444,7 +441,7 @@ class PlayerManager(private val applicationContext: Context) {
         if (pendingResume != null) return
         val p = player ?: return
         pendingResume = ResumePoint(
-            index = _currentIndex.value,
+            index = _playerState.value.currentIndex,
             positionMs = p.currentPosition.coerceAtLeast(0),
             wasPlaying = p.playWhenReady
         )
@@ -523,9 +520,10 @@ class PlayerManager(private val applicationContext: Context) {
         AppLog.d("PlayerManager", "playSong: ${song.title}, currentPlaying=${p.isPlaying}")
 
         // Check if song is already in current queue — if so, seek to it (gapless path)
-        val existingIndex = _queue.value.indexOf(song)
+        val existingIndex = _playerState.value.queue.indexOf(song)
         if (existingIndex >= 0) {
-            _currentIndex.value = existingIndex
+            // T3：三元组同帧发布（索引 + 当前歌曲）
+            _playerState.update { it.copy(currentIndex = existingIndex, currentSong = song) }
             try {
                 p.seekTo(existingIndex, 0)
                 p.play()
@@ -535,8 +533,7 @@ class PlayerManager(private val applicationContext: Context) {
             }
         } else {
             // New song — replace queue with single item and preload next if available
-            _queue.value = listOf(song)
-            _currentIndex.value = 0
+            _playerState.update { it.copy(queue = listOf(song), currentIndex = 0, currentSong = song) }
             val mediaItem = buildMediaItem(song, streamUrl)
             try {
                 p.setMediaItem(mediaItem)
@@ -548,7 +545,6 @@ class PlayerManager(private val applicationContext: Context) {
                 AppLog.e("PlayerManager", "playSong failed", e)
             }
         }
-        _currentSong.value = song
         // Initialize duration from API data; player.duration may return
         // C.TIME_UNSET if the stream format lacks duration metadata.
         if (song.durationMs > 0) _duration.value = song.durationMs
@@ -562,8 +558,11 @@ class PlayerManager(private val applicationContext: Context) {
             return
         }
 
-        _queue.value = songs
-        _currentIndex.value = startIndex
+        // T3：三元组同帧发布（队列 + 索引 + 当前歌曲）——setMediaItems 后
+        // ExoPlayer currentMediaItemIndex 同步等于 startIndex，直接取队列元素。
+        _playerState.update {
+            it.copy(queue = songs, currentIndex = startIndex, currentSong = songs.getOrNull(startIndex))
+        }
 
         val mediaItems = songs.map { song ->
             buildMediaItem(song, song.streamUrl ?: "")
@@ -583,8 +582,6 @@ class PlayerManager(private val applicationContext: Context) {
         if (currentSong != null && currentSong.durationMs > 0) {
             _duration.value = currentSong.durationMs
         }
-
-        updateCurrentSongFromPlayer()
     }
 
     /**
@@ -593,9 +590,9 @@ class PlayerManager(private val applicationContext: Context) {
     fun addToQueue(songs: List<Song>) {
         if (songs.isEmpty()) return
         val p = player ?: return
-        val currentQueue = _queue.value.toMutableList()
+        val currentQueue = _playerState.value.queue.toMutableList()
         currentQueue.addAll(songs)
-        _queue.value = currentQueue
+        _playerState.update { it.copy(queue = currentQueue) }
         val mediaItems = songs.map { buildMediaItem(it, it.streamUrl ?: "") }
         try {
             p.addMediaItems(mediaItems)
@@ -655,9 +652,9 @@ class PlayerManager(private val applicationContext: Context) {
      * 供 MTV 连播模式预搜下一首 MV 使用。
      */
     fun peekNextSong(playMode: PlayMode): Song? {
-        val queue = _queue.value
+        val queue = _playerState.value.queue
         if (queue.isEmpty()) return null
-        val currentIdx = _currentIndex.value
+        val currentIdx = _playerState.value.currentIndex
         return when (playMode) {
             PlayMode.SHUFFLE -> {
                 if (queue.size == 1) null
@@ -684,9 +681,9 @@ class PlayerManager(private val applicationContext: Context) {
      * @return 推进后的歌曲；null 表示队列末尾（SEQUENTIAL 模式）无法推进
      */
     fun advanceIndexSilently(playMode: PlayMode): Song? {
-        val queue = _queue.value
+        val queue = _playerState.value.queue
         if (queue.isEmpty()) return null
-        val currentIdx = _currentIndex.value
+        val currentIdx = _playerState.value.currentIndex
         val nextIdx = when (playMode) {
             PlayMode.SHUFFLE -> {
                 if (queue.size == 1) return null
@@ -705,9 +702,8 @@ class PlayerManager(private val applicationContext: Context) {
                 }
             }
         }
-        _currentIndex.value = nextIdx
+        _playerState.update { it.copy(currentIndex = nextIdx, currentSong = queue[nextIdx]) }
         val song = queue[nextIdx]
-        _currentSong.value = song
         AppLog.d("PlayerManager", "advanceIndexSilently: $currentIdx -> $nextIdx '${song.title}'")
         return song
     }
@@ -717,17 +713,16 @@ class PlayerManager(private val applicationContext: Context) {
      * @return 回退后的歌曲；null 表示已在队列首位（非 REPEAT_ALL 模式）无法回退
      */
     fun advanceIndexBackward(playMode: PlayMode): Song? {
-        val queue = _queue.value
+        val queue = _playerState.value.queue
         if (queue.isEmpty()) return null
-        val currentIdx = _currentIndex.value
+        val currentIdx = _playerState.value.currentIndex
         val prevIdx = when {
             currentIdx > 0 -> currentIdx - 1
             playMode == PlayMode.REPEAT_ALL -> queue.size - 1
             else -> return null
         }
-        _currentIndex.value = prevIdx
+        _playerState.update { it.copy(currentIndex = prevIdx, currentSong = queue[prevIdx]) }
         val song = queue[prevIdx]
-        _currentSong.value = song
         AppLog.d("PlayerManager", "advanceIndexBackward: $currentIdx -> $prevIdx '${song.title}'")
         return song
     }
@@ -737,12 +732,12 @@ class PlayerManager(private val applicationContext: Context) {
      * 网络歌曲（streamUrl 为空）触发 onNeedResolveStreamUrl 由 ViewModel 异步解析。
      */
     fun syncAndPlayCurrent() {
-        val queue = _queue.value
-        val index = _currentIndex.value
+        val queue = _playerState.value.queue
+        val index = _playerState.value.currentIndex
         val song = queue.getOrNull(index) ?: return
         val p = player ?: return
 
-        _currentSong.value = song
+        _playerState.update { it.copy(currentSong = song) }
         if (song.durationMs > 0) _duration.value = song.durationMs
 
         val streamUrl = song.streamUrl
@@ -777,11 +772,10 @@ class PlayerManager(private val applicationContext: Context) {
      */
     fun transitionToIndex(index: Int) {
         val p = player ?: return
-        val queue = _queue.value
+        val queue = _playerState.value.queue
         if (index !in queue.indices) return
         val song = queue[index]
-        _currentIndex.value = index
-        _currentSong.value = song
+        _playerState.update { it.copy(currentIndex = index, currentSong = song) }
         if (song.durationMs > 0) _duration.value = song.durationMs
         if (song.streamUrl.isNullOrBlank()) {
             AppLog.d("PlayerManager", "transitionToIndex: empty streamUrl at $index '${song.title}', resolving")
@@ -816,12 +810,12 @@ class PlayerManager(private val applicationContext: Context) {
             val target = when (playMode) {
                 PlayMode.SHUFFLE -> {
                     // 随机模式：排除已播历史后随机选（与 playRandom 同策略，但走手动恢复路径）
-                    val available = (0 until _queue.value.size).filter { it !in shuffleHistory }
+                    val available = (0 until _playerState.value.queue.size).filter { it !in shuffleHistory }
                     if (available.isEmpty()) shuffleHistory.clear()
-                    ((0 until _queue.value.size).filter { it !in shuffleHistory }).randomOrNull()
-                        ?: ((_currentIndex.value + 1) % _queue.value.size.coerceAtLeast(1))
+                    ((0 until _playerState.value.queue.size).filter { it !in shuffleHistory }).randomOrNull()
+                        ?: ((_playerState.value.currentIndex + 1) % _playerState.value.queue.size.coerceAtLeast(1))
                 }
-                else -> if (_currentIndex.value + 1 < _queue.value.size) _currentIndex.value + 1 else 0
+                else -> if (_playerState.value.currentIndex + 1 < _playerState.value.queue.size) _playerState.value.currentIndex + 1 else 0
             }
             if (playMode == PlayMode.SHUFFLE) shuffleHistory.add(target)
             transitionToIndex(target)
@@ -831,21 +825,21 @@ class PlayerManager(private val applicationContext: Context) {
             PlayMode.SHUFFLE -> playRandom()
             PlayMode.REPEAT_ONE -> {
                 // 用户主动按"下一首"时，跳到下一首（而非重播当前）
-                val nextIndex = _currentIndex.value + 1
-                if (nextIndex < _queue.value.size) {
-                    _currentIndex.value = nextIndex
+                val nextIndex = _playerState.value.currentIndex + 1
+                if (nextIndex < _playerState.value.queue.size) {
+                    _playerState.update { it.copy(currentIndex = nextIndex) }
                     p.seekTo(nextIndex, 0)
                     if (!suppressPlayback) p.play()
                 } else {
                     // 队列末尾，回到第一首
-                    _currentIndex.value = 0
+                    _playerState.update { it.copy(currentIndex = 0) }
                     p.seekTo(0, 0)
                     if (!suppressPlayback) p.play()
                 }
             }
             else -> {
-                val nextIndex = _currentIndex.value + 1
-                if (nextIndex < _queue.value.size) {
+                val nextIndex = _playerState.value.currentIndex + 1
+                if (nextIndex < _playerState.value.queue.size) {
                     p.seekToNextMediaItem()
                 } else if (playMode == PlayMode.REPEAT_ALL) {
                     p.seekTo(0, 0)
@@ -859,20 +853,20 @@ class PlayerManager(private val applicationContext: Context) {
         crossfadeController.abort()
         // 出错恢复路径：IDLE 下 seekToPreviousMediaItem 不触发过渡回调也不 prepare
         if (isIdle()) {
-            val queueSize = _queue.value.size
+            val queueSize = _playerState.value.queue.size
             if (queueSize == 0) return
-            val prevIndex = if (_currentIndex.value - 1 >= 0) _currentIndex.value - 1 else queueSize - 1
+            val prevIndex = if (_playerState.value.currentIndex - 1 >= 0) _playerState.value.currentIndex - 1 else queueSize - 1
             transitionToIndex(prevIndex)
             return
         }
         when (playMode) {
             PlayMode.SHUFFLE -> playRandom()
             else -> {
-                val prevIndex = _currentIndex.value - 1
+                val prevIndex = _playerState.value.currentIndex - 1
                 if (prevIndex >= 0) {
                     player?.seekToPreviousMediaItem()
                 } else if (playMode == PlayMode.REPEAT_ALL) {
-                    player?.seekTo(_queue.value.size - 1, 0)
+                    player?.seekTo(_playerState.value.queue.size - 1, 0)
                 }
             }
         }
@@ -904,9 +898,9 @@ class PlayerManager(private val applicationContext: Context) {
     }
 
     fun addToQueue(song: Song) {
-        val currentQueue = _queue.value.toMutableList()
+        val currentQueue = _playerState.value.queue.toMutableList()
         currentQueue.add(song)
-        _queue.value = currentQueue
+        _playerState.update { it.copy(queue = currentQueue) }
 
         // Add to player queue if already playing
         if (player?.currentMediaItem != null) {
@@ -918,10 +912,9 @@ class PlayerManager(private val applicationContext: Context) {
     /** 跳转到队列指定索引并播放（手机遥控用） */
     fun playAt(index: Int) {
         val p = player ?: return
-        val queue = _queue.value
+        val queue = _playerState.value.queue
         if (index !in queue.indices) return
-        _currentIndex.value = index
-        _currentSong.value = queue[index]
+        _playerState.update { it.copy(currentIndex = index, currentSong = queue[index]) }
         if (queue[index].durationMs > 0) _duration.value = queue[index].durationMs
         try {
             p.seekTo(index, 0)
@@ -934,17 +927,22 @@ class PlayerManager(private val applicationContext: Context) {
 
     /** 移动队列顺序（手机遥控用） */
     fun moveQueueItem(from: Int, to: Int) {
-        val queue = _queue.value.toMutableList()
+        val queue = _playerState.value.queue.toMutableList()
         if (from !in queue.indices || to !in queue.indices || from == to) return
         val item = queue.removeAt(from)
         queue.add(to, item)
-        _queue.value = queue
-        val currentIdx = _currentIndex.value
-        _currentIndex.value = when {
-            from == currentIdx -> to
-            from < currentIdx && to >= currentIdx -> currentIdx - 1
-            from > currentIdx && to <= currentIdx -> currentIdx + 1
-            else -> currentIdx
+        val currentIdx = _playerState.value.currentIndex
+        // T3：队列与索引同帧发布
+        _playerState.update {
+            it.copy(
+                queue = queue,
+                currentIndex = when {
+                    from == currentIdx -> to
+                    from < currentIdx && to >= currentIdx -> currentIdx - 1
+                    from > currentIdx && to <= currentIdx -> currentIdx + 1
+                    else -> currentIdx
+                }
+            )
         }
         try { player?.moveMediaItem(from, to) } catch (e: Exception) {
             AppLog.e("PlayerManager", "moveQueueItem failed", e)
@@ -953,29 +951,30 @@ class PlayerManager(private val applicationContext: Context) {
 
     fun removeFromQueue(index: Int) {
         val p = player ?: return
-        val currentQueue = _queue.value.toMutableList()
+        val currentQueue = _playerState.value.queue.toMutableList()
         if (index < 0 || index >= currentQueue.size) return
 
         currentQueue.removeAt(index)
-        _queue.value = currentQueue
 
+        // T3：队列与索引/当前歌曲同帧发布
         // 调整 currentIndex
-        val currentIdx = _currentIndex.value
+        val currentIdx = _playerState.value.currentIndex
         when {
-            index < currentIdx -> _currentIndex.value = currentIdx - 1
+            index < currentIdx ->
+                _playerState.update { it.copy(queue = currentQueue, currentIndex = currentIdx - 1) }
             index == currentIdx -> {
                 // 移除的是当前播放的歌曲，跳到下一首（或停止）
                 if (currentQueue.isEmpty()) {
-                    _currentIndex.value = 0
-                    _currentSong.value = null
+                    _playerState.update { it.copy(queue = currentQueue, currentIndex = 0, currentSong = null) }
                 } else {
                     val newIndex = index.coerceAtMost(currentQueue.size - 1)
-                    _currentIndex.value = newIndex
+                    _playerState.update { it.copy(queue = currentQueue, currentIndex = newIndex) }
                     // 播放新的当前歌曲
                     p.removeMediaItem(index)
                     return
                 }
             }
+            else -> _playerState.update { it.copy(queue = currentQueue) }
         }
         p.removeMediaItem(index)
     }
@@ -987,11 +986,11 @@ class PlayerManager(private val applicationContext: Context) {
      * 不移除当前正在播放的歌曲（避免误中断播放），若匹配的是当前歌曲则跳过并返回 false。
      */
     fun removeSongFromQueue(song: Song): Boolean {
-        val currentQueue = _queue.value.toMutableList()
+        val currentQueue = _playerState.value.queue.toMutableList()
         val targetIndex = currentQueue.indexOfFirst { it.id == song.id }
         if (targetIndex < 0) return false
         // 不移除当前正在播放的歌曲
-        if (targetIndex == _currentIndex.value) return false
+        if (targetIndex == _playerState.value.currentIndex) return false
         removeFromQueue(targetIndex)
         return true
     }
@@ -1003,11 +1002,10 @@ class PlayerManager(private val applicationContext: Context) {
      * @return 移动是否成功
      */
     fun moveItem(fromIndex: Int, toIndex: Int): Boolean {
-        val currentQueue = _queue.value.toMutableList()
+        val currentQueue = _playerState.value.queue.toMutableList()
         if (fromIndex !in currentQueue.indices || toIndex !in currentQueue.indices) return false
         val item = currentQueue.removeAt(fromIndex)
         currentQueue.add(toIndex, item)
-        _queue.value = currentQueue
 
         // 同步更新 ExoPlayer 内部队列
         try {
@@ -1016,24 +1014,28 @@ class PlayerManager(private val applicationContext: Context) {
             AppLog.e("PlayerManager", "moveMediaItem failed", e)
         }
 
+        // T3：队列与索引同帧发布
         // 调整 currentIndex 以跟随当前播放曲目
-        val ci = _currentIndex.value
-        _currentIndex.value = when {
-            fromIndex == ci -> toIndex
-            fromIndex < ci && toIndex >= ci -> ci - 1
-            fromIndex > ci && toIndex <= ci -> ci + 1
-            else -> ci
+        val ci = _playerState.value.currentIndex
+        _playerState.update {
+            it.copy(
+                queue = currentQueue,
+                currentIndex = when {
+                    fromIndex == ci -> toIndex
+                    fromIndex < ci && toIndex >= ci -> ci - 1
+                    fromIndex > ci && toIndex <= ci -> ci + 1
+                    else -> ci
+                }
+            )
         }
 
-        AppLog.d("PlayerManager", "moveItem: $fromIndex → $toIndex, currentIndex=${_currentIndex.value}")
+        AppLog.d("PlayerManager", "moveItem: $fromIndex → $toIndex, currentIndex=${_playerState.value.currentIndex}")
         return true
     }
 
     fun clearQueue() {
         val p = player
-        _queue.value = emptyList()
-        _currentIndex.value = 0
-        _currentSong.value = null
+        _playerState.update { it.copy(queue = emptyList(), currentIndex = 0, currentSong = null) }
         _progress.value = 0
         _duration.value = 0
         p?.clearMediaItems()
@@ -1058,9 +1060,8 @@ class PlayerManager(private val applicationContext: Context) {
     fun restoreQueue(songs: List<Song>, currentIndex: Int) {
         if (songs.isEmpty()) return
         val safeIndex = currentIndex.coerceIn(0, songs.lastIndex)
-        _queue.value = songs
-        _currentIndex.value = safeIndex
-        _currentSong.value = songs[safeIndex]
+        // T3：三元组同帧发布
+        _playerState.update { it.copy(queue = songs, currentIndex = safeIndex, currentSong = songs[safeIndex]) }
 
         // 仅当当前歌曲有有效的 streamUrl 时，才加载 MediaItems 并 prepare
         // 网络歌曲的 streamUrl 为空（持久化时置空），此时不应调用 prepare，
@@ -1097,8 +1098,8 @@ class PlayerManager(private val applicationContext: Context) {
                 p.play()
             }
             PlayMode.REPEAT_ALL -> {
-                if (_queue.value.isNotEmpty() && _currentIndex.value >= _queue.value.size - 1) {
-                    playQueue(_queue.value, 0)
+                if (_playerState.value.queue.isNotEmpty() && _playerState.value.currentIndex >= _playerState.value.queue.size - 1) {
+                    playQueue(_playerState.value.queue, 0)
                 }
             }
             PlayMode.SHUFFLE -> playRandom()
@@ -1119,7 +1120,7 @@ class PlayerManager(private val applicationContext: Context) {
 
     private fun playRandom() {
         val p = player ?: return
-        val queueSize = _queue.value.size
+        val queueSize = _playerState.value.queue.size
         if (queueSize == 0) return
 
         // 如果所有歌曲都已播放过，清空历史
@@ -1134,24 +1135,24 @@ class PlayerManager(private val applicationContext: Context) {
             val available2 = (0 until queueSize).toList()
             val randomIndex = available2.random()
             shuffleHistory.add(randomIndex)
-            _currentIndex.value = randomIndex
+            _playerState.update { it.copy(currentIndex = randomIndex) }
             p.seekTo(randomIndex, 0)
             p.play()
             return
         }
         val randomIndex = available.random()
         shuffleHistory.add(randomIndex)
-        _currentIndex.value = randomIndex
+        _playerState.update { it.copy(currentIndex = randomIndex) }
         p.seekTo(randomIndex, 0)
         p.play()
     }
 
     private fun updateCurrentSongFromPlayer() {
         val currentIndex = player?.currentMediaItemIndex ?: 0
-        _currentIndex.value = currentIndex
-        if (currentIndex in _queue.value.indices) {
-            _currentSong.value = _queue.value[currentIndex]
-        }
+        val st = _playerState.value
+        val song = if (currentIndex in st.queue.indices) st.queue[currentIndex] else st.currentSong
+        // T3：索引与当前歌曲同帧发布（索引越界时保留原 currentSong）
+        _playerState.update { it.copy(currentIndex = currentIndex, currentSong = song) }
     }
 
     /**

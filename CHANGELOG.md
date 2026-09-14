@@ -12,6 +12,7 @@
 > 代码质量修复批次（基于 code-review-full-report-2026-09-13.md 五次审阅落地）。本版本不引入新功能，仅修复 7 项 P0 线程安全问题 + 1 项 P0 安全问题 + 2 项 P1 状态一致性问题 + 1 项 P2 文档补充。落地后经编译验证补丁修复 3 处编译错误（T7 变量作用域 + P1#12/L7 缺失导入），`:app:assembleDebug` 与 `:app:assembleRelease` 均构建通过，详见 §10.136。
 > 另含 T2（分批 Flow 化）：百度配置读取路径全部由 `runBlocking(IO)` 迁移到 `baiduConfigFlow.first()`（suspend），分两批落地（第一批外部 UI/App 调用点；第二批 AppPreferences 15 个便捷方法 + BaiduPrefs 透传 + BaiduOAuthClient/Netdisk/MvFileService/ViewModel 调用方），详见 §10.137。
 > 另含 T6（AudioFrame 双缓冲）：频谱数据仓库由单实例改为双缓冲 + `@Volatile writeIndex` 发布，消除音频回调线程写/渲染线程读的无同步撕裂；VisualizerStage 绘制循环改为每帧捕获 front 引用，详见 §10.138。
+> 另含 T3（PlayerManager 三元组原子化）：queue/currentIndex/currentSong 由三个独立 MutableStateFlow 合并为单一 `playerState` 原子流（`update{copy}` 同帧发布），消除快速切歌时 UI 读到"新队列+旧索引+旧歌名"的错帧状态；PlayerViewModel/AppRoot/QueueBranch/MainViewModel/DownloadViewModel/PlaybackService 订阅点全部适配，详见 §10.139。
 
 ### Fixed
 - **T6 修复（visualizer）**: `SpectrumRepository.kt` AudioFrame 双缓冲——2 个预分配实例 + `@Volatile writeIndex`，写端（仅 onFrame/reset）写完翻转发布、读端读 front，volatile 写→读建立 happens-before，消除音频回调线程写/渲染线程读的无同步撕裂；帧序号改仓库级全局计数器；`reset()` 双实例同时清零避免波形跨歌残留。`VisualizerStage.kt` 绘制循环改每帧捕获 front 引用（原持有重组期快照引用会被写端轮询覆盖，双缓冲形同虚设）
@@ -30,11 +31,11 @@
 - **审阅文档**: `logs_temp/code-review-full-report-2026-09-13.md` 追加"实施记录"段，标注 10 项已修复 + 6 项暂缓（理由）+ 综合评分 74 → 78
 
 ### Changed
+- **T3 改造（player）**: `PlayerManager.kt` 的 queue/currentIndex/currentSong 三个独立 `MutableStateFlow` 合并为单一 `PlayerState`（新文件 `player/PlayerState.kt`）原子流，全部状态更新点改 `_playerState.update { it.copy(...) }` 同帧发布；`PlayerViewModel` 移除原 3 个转发流改透传 `playerState`；订阅点适配（AppRoot/QueueBranch 收集 `playerState` 派生、MainViewModel 5 处流派生 + 8 处取值、DownloadViewModel 删除下载暂停判定、PlaybackService 通知"下一首"标题），详见 §10.139
 - 版本 v2.32.2 → **v2.32.3**（versionCode 141 → 142）
 
-### 暂缓（5 项，需独立 PR）
+### 暂缓（4 项，需独立 PR）
 - S4 Jellyfin 会话内 401 重认证（需真实环境测试重试逻辑）
-- T3 PlayerManager 三元组 StateFlow 原子化（涉及 UI 集中订阅点重构）
 - P1#1 OkHttp 连接池统一（涉及 DI 重构）
 - P1#5 VisualizerMath seed 隔离（30+ Renderer 全部修改）
 - L3 playModeToggleHandler 改 Flow（跨文件改造）

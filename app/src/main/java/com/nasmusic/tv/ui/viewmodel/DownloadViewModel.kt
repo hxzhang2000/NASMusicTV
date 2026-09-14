@@ -152,7 +152,7 @@ class DownloadViewModel(
             val entity = repo.get(key) ?: return@launch
 
             // 1. 如果当前正在播放此歌 → 暂停
-            val current = playerManager.currentSong.value
+            val current = playerManager.playerState.value.currentSong
             if (current?.id == song.id) {
                 playerManager.pause()
             }

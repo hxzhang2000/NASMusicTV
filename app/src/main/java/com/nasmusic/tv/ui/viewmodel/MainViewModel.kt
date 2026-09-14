@@ -589,7 +589,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
      */
     fun loadSongTechnicalInfo() {
         viewModelScope.launch {
-            val song = playerVM.currentSong.value ?: return@launch
+            val song = playerVM.playerState.value.currentSong ?: return@launch
             if (song.isNetworkSong) {
                 _songTechnicalInfo.value = null
                 return@launch
@@ -701,7 +701,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
 
         // 监听 currentSong 变化，自动切歌时重新加载歌词，并记录播放历史
         viewModelScope.launch {
-            playerVM.currentSong.collect { song ->
+            playerVM.playerState.map { it.currentSong }.collect { song ->
                 // 记录上一首歌的播放
                 val previousSong = lastRecordedSong
                 val previousPosition = lastRecordedPositionMs
@@ -774,9 +774,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
 
         // 监听队列变化，自动持久化到 DataStore
         viewModelScope.launch {
-            combine(playerVM.queue, playerVM.currentIndex) { songs, index ->
-                songs to index
-            }.collect { (songs, index) ->
+            playerVM.playerState.map { it.queue to it.currentIndex }.collect { (songs, index) ->
                 if (songs.isNotEmpty()) {
                     prefs.queue.saveLastQueue(songs, index)
                 }
@@ -1139,8 +1137,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
         shuffleRefillJob?.cancel()
         shuffleRefillJob = viewModelScope.launch {
             while (_isShufflePlaying) {
-                val queue = playerManager.queue.value
-                val currentIdx = playerManager.currentIndex.value
+                val queue = playerManager.playerState.value.queue
+                val currentIdx = playerManager.playerState.value.currentIndex
                 val remaining = queue.size - currentIdx
                 if (remaining <= 5) {
                     val adapter = backendRegistry.getAdapter() ?: break
@@ -1485,16 +1483,16 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
     fun searchSongsOnServer(query: String, force: Boolean = false) = searchVM.searchSongsOnServer(query, force)
     fun addAllSearchResultsToQueue() = searchVM.addAllSearchResultsToQueue(
         existingQueueKeysProvider = {
-            playerManager.queue.value.map { it.artist.trim() to it.title.trim() }.toSet()
+            playerManager.playerState.value.queue.map { it.artist.trim() to it.title.trim() }.toSet()
         }
     )
     fun deleteModel() = downloadVM.deleteModel(onModeFallback = { vocalVM.onModelDeleted() })
-    fun onMvPlaybackError() = mvVM.onMvPlaybackError(playerVM.currentSong.value)
-    fun onMvPlaybackEnded() = mvVM.onMvPlaybackEnded(playerVM.currentSong.value, playerVM.playMode.value)
+    fun onMvPlaybackError() = mvVM.onMvPlaybackError(playerVM.playerState.value.currentSong)
+    fun onMvPlaybackEnded() = mvVM.onMvPlaybackEnded(playerVM.playerState.value.currentSong, playerVM.playMode.value)
     fun onMvPrevious() = mvVM.onMvPrevious(playerVM.playMode.value)
     fun onMvNext() = mvVM.onMvNext(playerVM.playMode.value)
-    fun onSwitchOrResearch() = mvVM.onSwitchOrResearch(playerVM.currentSong.value)
-    fun onSearchBilibili() = mvVM.onSearchBilibili(playerVM.currentSong.value)
+    fun onSwitchOrResearch() = mvVM.onSwitchOrResearch(playerVM.playerState.value.currentSong)
+    fun onSearchBilibili() = mvVM.onSearchBilibili(playerVM.playerState.value.currentSong)
 
     /** NAS 收藏分支（留在 MainViewModel：依赖本类 _favoriteIds/_favoriteSongs 状态） */
     private fun toggleNasFavorite(song: Song, isCurrentlyFavorite: Boolean) {
@@ -2351,8 +2349,8 @@ showError(getApplication<Application>().getString(R.string.toggle_favorite_error
         super.onCleared()
     }
 
-    override fun getQueue(): List<Song> = playerManager.queue.value
-    override fun getCurrentIndex(): Int = playerManager.currentIndex.value
+    override fun getQueue(): List<Song> = playerManager.playerState.value.queue
+    override fun getCurrentIndex(): Int = playerManager.playerState.value.currentIndex
     override fun isPlaying(): Boolean = playerManager.isPlaying.value
     override fun getProgressMs(): Long = playerManager.progress.value
     override fun getDurationMs(): Long = playerManager.duration.value
@@ -2388,8 +2386,8 @@ showError(getApplication<Application>().getString(R.string.toggle_favorite_error
     /**
      * 队列中所有歌曲 id 的集合（供 UI 快速判断某首歌是否在队列中）
      */
-    val queueSongIds: StateFlow<Set<String>> = playerVM.queue
-        .map { songs -> songs.map { it.id }.toSet() }
+    val queueSongIds: StateFlow<Set<String>> = playerVM.playerState
+        .map { st -> st.queue.map { it.id }.toSet() }
         .stateIn(viewModelScope, SharingStarted.Eagerly, emptySet())
 
     /**
@@ -2399,16 +2397,16 @@ showError(getApplication<Application>().getString(R.string.toggle_favorite_error
      * 不包含当前正在播放的歌曲，最多保留 5 首，
      * 按队列顺序排列（最近即将播放的在前）。
      */
-    val recentNetworkSongs: StateFlow<List<Song>> = combine(playerVM.queue, playerVM.currentIndex) { songs, index ->
-        songs.filterIndexed { i, s -> s.isNetworkSong && i != index }
+    val recentNetworkSongs: StateFlow<List<Song>> = playerVM.playerState.map { st ->
+        st.queue.filterIndexed { i, s -> s.isNetworkSong && i != st.currentIndex }
             .take(5)
     }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
     /**
      * 当前播放的网络歌曲（用于「继续听」区域的"正在播放"）
      */
-    val currentNetworkSong: StateFlow<Song?> = combine(playerVM.currentSong, playerVM.queue) { song, _ ->
-        song?.takeIf { it.isNetworkSong }
+    val currentNetworkSong: StateFlow<Song?> = playerVM.playerState.map { st ->
+        st.currentSong?.takeIf { it.isNetworkSong }
     }.stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
     fun clearQueue() {
@@ -2427,7 +2425,7 @@ showError(getApplication<Application>().getString(R.string.toggle_favorite_error
         _lyricsAvailability.value = LyricsAvailability()
         // 重置网络封面（切歌时清除上一首的网络封面）
         _networkCoverUrl.value = null
-        val song = playerVM.currentSong.value ?: return
+        val song = playerVM.playerState.value.currentSong ?: return
         AppLog.d("NASMusic", "loadLyrics: loading for ${song.title} by ${song.artist}")
         lyricsLoadJob = viewModelScope.launch {
             try {
@@ -2605,7 +2603,7 @@ showError(getApplication<Application>().getString(R.string.toggle_favorite_error
      * 如果当前已显示网络歌词，再次按下"在线歌词"按钮 → 取下一个候选歌词
      */
     fun switchLyricsSource(source: LyricsSource) {
-        val song = playerVM.currentSong.value ?: return
+        val song = playerVM.playerState.value.currentSong ?: return
         val currentSource = _currentLyrics.value?.source
         AppLog.d("NASMusic", "switchLyricsSource: $source, currentSource=$currentSource")
 

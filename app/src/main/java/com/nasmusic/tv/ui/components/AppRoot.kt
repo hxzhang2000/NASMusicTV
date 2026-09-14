@@ -102,7 +102,8 @@ fun AppRoot(
             context.packageManager.hasSystemFeature("android.hardware.type.television")
     }
     val currentScreen by viewModel.navVM.currentScreen.collectAsState(initial = Screen.Home)
-    val currentSong by viewModel.playerVM.currentSong.collectAsState(initial = null)
+    val playerState by viewModel.playerVM.playerState.collectAsState()
+    val currentSong = playerState.currentSong
     val isPlaying by viewModel.playerVM.isPlaying.collectAsState(initial = false)
     val playMode by viewModel.playerVM.playMode.collectAsState(initial = com.nasmusic.tv.data.model.PlayMode.SEQUENTIAL)
     // F-2（修复）：progress/duration 不再顶层收集——PlayerManager 的进度由 1000ms

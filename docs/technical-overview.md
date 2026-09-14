@@ -8299,6 +8299,26 @@ onSearchSong = { keyword -> viewModel.searchNetworkSongs(keyword) },
 
 **版本**：v2.31.2 → **v2.31.3**（versionCode 136 → 137）
 
+### 10.139 v2.32.3 — T3 PlayerManager 三元组原子化（2026-09-14）
+
+**问题描述**：`PlayerManager` 的 `queue`/`currentIndex`/`currentSong` 是三个独立 `MutableStateFlow`，切歌/换队列时连续赋值非原子——UI 集中订阅点（AppRoot/QueueBranch/MainViewModel 派生流）在不同帧分别读三个流，快速切歌时可能读到"新队列 + 旧索引 + 旧歌名"的错帧状态（审阅报告 T3，v2.32.3 首批暂缓项，本次落地）。
+
+**修改**：
+
+- 新增 `player/PlayerState.kt`：`data class PlayerState(queue = emptyList(), currentIndex = 0, currentSong = null)`，三元组不可变快照
+- `player/PlayerManager.kt`：私有 `_playerState: MutableStateFlow<PlayerState>` 取代原 `_queue`/`_currentIndex`/`_currentSong`，对外暴露 `val playerState: StateFlow<PlayerState>`；全部 23 处状态更新点（playSong/playQueue/restoreQueue/addToQueue/removeFromQueue/removeSongFromQueue/moveQueueItem/moveItem/clearQueue/advanceIndexSilently/advanceIndexBackward/transitionToIndex/playAt/syncAndPlayCurrent/playRandom/next/updateCurrentSongFromPlayer 等）统一改 `_playerState.update { it.copy(...) }` 原子发布；补 `import kotlinx.coroutines.flow.update`（扩展函数非成员方法）；顺带删除 `onIsPlayingChanged` 中重复的 `_isPlaying.value = isPlaying` 赋值（T3 前遗留的复制粘贴错误）
+- `ui/viewmodel/PlayerViewModel.kt`：移除 `currentSong`/`queue`/`currentIndex` 三个转发流，改为透传 `playerState`；内部 8 处取值改 `playerState.value.xxx`
+- 订阅点适配：
+  - `ui/components/AppRoot.kt`：`currentSong` 由独立收集改为收集 `playerState` 后派生（`val currentSong = playerState.currentSong`）
+  - `ui/components/branches/QueueBranch.kt`：queue/currentIndex 改为收集 `playerState` 派生
+  - `ui/viewmodel/MainViewModel.kt`：歌词/播放历史联动 `currentSong.collect`、队列自动持久化 collect、`queueSongIds`/`recentNetworkSongs`/`currentNetworkSong` 三个派生流（`combine` 两流合并改为单流 `map`）、MV 回调/技术信息/歌词加载等 8 处取值全部改 `playerState`
+  - `ui/viewmodel/DownloadViewModel.kt`：删除单曲前暂停判定改 `playerState.value.currentSong`
+  - `player/PlaybackService.kt`：通知"下一首"标题改 `playerState.value.currentIndex`（局部别名 `pm` 引用，初查 `playerManager.*` 直引时漏检，编译期暴露）
+
+**验证**：`:app:assembleDebug`（in-process，2m19s）**BUILD SUCCESSFUL**。错帧现象消除需 TV 实机快速切歌验证。
+
+**版本**：v2.32.3 批次内，versionCode 保持 142。
+
 ### 10.138 v2.32.3 — T6 AudioFrame 双缓冲（2026-09-14）
 
 **问题描述**：`SpectrumRepository` 的 `AudioFrame` 由音频回调线程（Visualizer/PCM 回调）写入、渲染线程（Canvas draw）读取，全字段无同步保护，高频切歌/高负载下可能出现半新半旧的撕裂帧（审阅报告 T6）。

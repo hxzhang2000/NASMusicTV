@@ -599,7 +599,7 @@ class PlaybackService : MediaLibraryService() {
         val pm = (application as NasMusicApp).playerManager
         val queue = pm.getQueueSnapshot()
         if (queue.isEmpty()) return null
-        val nextIndex = pm.currentIndex.value + 1
+        val nextIndex = pm.playerState.value.currentIndex + 1
         val next = queue.getOrNull(nextIndex) ?: return null
         return getString(R.string.notif_next_up, next.title)
     }
