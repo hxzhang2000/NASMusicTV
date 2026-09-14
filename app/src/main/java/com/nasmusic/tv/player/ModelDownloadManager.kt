@@ -88,16 +88,24 @@ class ModelDownloadManager(
     }
 
     /**
-     * 检查模型是否已下载（快速判定：文件存在且大小量级合理）
+     * 检查模型是否已下载（快速判定：文件存在且大小落在期望值 ±1% 内）
      *
      * 2026-09-14（P1-4）说明：本方法可能被 UI/主线程调用，因此**不做** 166MB 的哈希
      * 计算（那会 ANR）。真正的完整性由两处把关：
      * - [downloadModel] 下载完成后立即校验 SHA-256，不匹配则删除并尝试下一个源
      * - [verifyModelIntegrity] 在加载模型前于 IO 线程做一次全文件校验
+     *
+     * 2026-09-14（报告 §四-2）：阈值由原来的 `> EXPECTED_SIZE_BYTES * 0.8`（−20%，
+     * 约 132.5MB）收紧到 ±1%（163,956,509 ~ 167,268,762 字节）。原阈值过宽，
+     * 截断到 133MB 的残缺文件、或镜像返回的 HTML 错误页都能通过这道快速判定。
+     * 而且它只有下界没有上界，超大垃圾文件同样能过。FP16 权重的字节数是确定的
+     * （[EXPECTED_SHA256] 已锁定具体文件），不需要 20% 余量。
      */
     fun isModelDownloaded(): Boolean {
         val file = getModelFile()
-        return file.exists() && file.length() > EXPECTED_SIZE_BYTES * 0.8  // 允许 20% 误差（FP16 精确大小可能有差异）
+        if (!file.exists()) return false
+        val length = file.length()
+        return length in (EXPECTED_SIZE_BYTES * 99 / 100)..(EXPECTED_SIZE_BYTES * 101 / 100)
     }
 
     /**

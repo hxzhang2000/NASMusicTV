@@ -75,7 +75,16 @@ class DemucsSeparator(private val context: Context) {
     /** 分离进行中收到 release 请求 → 延迟到分离结束后释放，避免关掉正在推理的 session */
     @Volatile private var pendingRelease = false
 
-    /** 上次失败的具体原因（separate/initialize/decodeAudio 失败时设置） */
+    /**
+     * 上次失败的具体原因（separate/initialize/decodeAudio 失败时设置）
+     *
+     * 2026-09-14（报告 §七-6）：加 `@Volatile` 消除隐患。当前所有读取点都紧跟
+     * `withContext`（协程调度天然建立 happens-before），**实际是安全的**；但那是
+     * 隐性契约 —— 将来只要出现一个非协程的读取点（如 UI 直接读），立刻变成可见性
+     * bug，且这种 bug 在 x86 上几乎无法复现、在 ARM 电视盒上才偶发。一行修饰符
+     * 换掉这类不确定性是划算的。
+     */
+    @Volatile
     var lastError: String? = null
         private set
 

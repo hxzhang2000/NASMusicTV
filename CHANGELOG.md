@@ -15,7 +15,7 @@
 > 另含 T3（PlayerManager 三元组原子化）：queue/currentIndex/currentSong 由三个独立 MutableStateFlow 合并为单一 `playerState` 原子流（`update{copy}` 同帧发布），消除快速切歌时 UI 读到"新队列+旧索引+旧歌名"的错帧状态；PlayerViewModel/AppRoot/QueueBranch/MainViewModel/DownloadViewModel/PlaybackService 订阅点全部适配，详见 §10.139。
 
 ### Fixed
-- **K 歌 / ONNX 专项修复（player）**: 落地 `logs_temp/code-review-karaoke-onnx-2026-09-14.md` 的 2 项 P0 + 3 项 P1 + 3 项 P2，详见 §10.146。**均为静态修复，本机单测无法运行，验证手段只有「编译 + lint」**：
+- **K 歌 / ONNX 专项修复（player）**: 落地 `logs_temp/code-review-karaoke-onnx-2026-09-14.md` 的 2 项 P0 + 3 项 P1 + 5 项 P2（P2-d / P2-e 为 2026-09-14 二次审计后追加），详见 §10.146。**本机 `./gradlew testDebugUnitTest` 始终无法运行（测试 worker 启动即死，exit 268435466）**，故另用 `kotlin-compiler-embeddable` 绕过 Gradle 做独立 JVM 数值验证：39 条断言全部通过，且对已提交的 `LinearResamplerTest.kt` 本体跑出 `OK (10 tests)`。**真机听感仍未验证**：
   - **P0-1 采样率归一化（`DemucsSeparator.kt`）**: MediaCodec 不重采样、`codec.configure` 也改不了 `KEY_SAMPLE_RATE`，48kHz 源此前原样进入按 44100Hz 设计的模型，而 WAV 头硬编码 44100 → 伴奏时长缩短 8.8%、音高升高约 1.5 个半音。新增流式线性插值重采样器 `LinearResampler`（`inRate == outRate` 时整体旁路），解码阶段统一归一化到 44100Hz，下游分段/overlap-add/WAV 头/时长计算只有一处真相
   - **P0-2 单声道源错乱（`DemucsSeparator.kt`）**: `channelCount` 此前读出但从未使用，无条件按 L/R 成对读 → 单声道源被当成「两倍帧数的立体声」，输出时长减半、播放翻倍速且升八度。改为按真实声道数拆帧（单声道复制为 L/R；>2 声道取前两路并跳过其余），并新增 `INFO_OUTPUT_FORMAT_CHANGED` 处理以 `codec.outputFormat` 为准
   - **P1-3 张量泄漏（`DemucsSeparator.kt`）**: `processSegmentFromBuffer` 原为「先取值、再 close」，`session.run()` 抛异常或强转失败时输入张量（~2.75MB）与 `OrtSession.Result`（~11MB）native 内存双双泄漏，被 `separate()` 的 `catch (e: Exception)` 吞掉后静默累积。改为嵌套 try/finally；同时补输出 shape 校验（错误信息携带实际 shape）
@@ -24,8 +24,11 @@
   - **P2 批量写出（`DemucsSeparator.kt`）**: `emit()` 每帧 4 次 `shortToByteArray`（各分配 2 字节数组）+ 4 次 `write`，4 分钟曲目约 4200 万次短命分配 → 改为 8KB 攒批 + `putShortLE` 复用缓冲
   - **P2 模型输入 shape 校验（`DemucsSeparator.kt`）**: `initialize()` 新增输入 shape 校验（期望 `[1, 2, 343980]`，动态维视为兼容），加载到非 HT-Demucs 的 ONNX 时在加载阶段就报明确错误，而非推理阶段抛难定位的异常
   - **P2 删除死常量（`DemucsSeparator.kt`）**: 移除从未使用的 `OUTPUT_SHAPE`
+  - **P2-d 收紧模型大小阈值（`ModelDownloadManager.kt`）**: `isModelDownloaded()` 的快速判定原为 `> EXPECTED_SIZE_BYTES * 0.8`（−20%，约 132.5MB），过宽——截断到 133MB 的残缺文件、镜像站返回的 HTML 错误页都能通过，且只有下界没有上界。收紧到 **±1%**（`163,956,509 ~ 167,268,762` 字节，区间宽 3.16MB）。FP16 权重字节数由 `EXPECTED_SHA256` 锁定、是确定的，不需要 20% 余量
+  - **P2-e `lastError` 加 `@Volatile`（`DemucsSeparator.kt`）**: 该字段原非 `@Volatile`。当前所有读取点都紧跟 `withContext`（协程调度天然建立 happens-before），**实际安全**，但属隐性契约——将来出现非协程读取点即变可见性 bug，且这类 bug 在 x86 上几乎不复现、只在 ARM 电视盒上偶发
   - 新增字符串：`demucs_error_bad_model_shape`、`hq_error_model_corrupted`（中英双语）
   - **验证**：新增 `app/src/test/java/com/nasmusic/tv/player/LinearResamplerTest.kt`（纯 JVM，10 用例）作为长期回归网，`LinearResampler` 可见性由 `private` 放宽到 `internal` 以便测试覆盖；因本机测试 worker 无法启动，另用独立 JVM harness（`logs_temp/verify_resampler/`，含可重跑的 `extract.py`，按标记从源码抽取而非手抄）跑出 **39 PASS / 0 FAIL**，并对提交的测试文件本体跑出 **OK (10 tests)**。关键结论：同速率逐样本 bit-exact、48000→44100 与理想插值 `k*ratio` 逐点 bit-exact、392 组速率/长度属性测试全一致、200 万帧无浮点漂移、`putShortLE` 与 `shortToByteArray` 全 65536 取值字节一致（小端）、PCM 限幅不回绕。**踩坑**：期望帧数不能用 `floor((n-1)/ratio)+1`，double 除法在整除边界给出 `3968.999…`（实测 `in=48000 out=44100 n=4321` 真值 3970、浮点算法给 3969），必须用精确整数运算
+  - **二次审计与遗留（重要）**: 2026-09-14 对照该报告逐条核验当前源码，报告拆出 **14 条**可判定项，现**已修 10 条、未修 4 条**。4 条未修项已全部记入 §10.146 的「遗留」节：§四-3（UI 标注自定义源的信任提示，可选建议）、§七-3（`totalSegments` 为估算，仅影响进度百分比）、§七-4（`onnxruntime-android:1.17.1` 原生库非 16KB 页对齐 × 3，**升 `targetSdk 35` 或上架前必须换版本**；注意 lint ID 是 `Aligned16KB`，报告里写的 `NativeLibraryAlignment` 有误）、§七-5（`deleteModel` 与下载并发，UX 问题非数据损坏）。同时回归确认报告 §八「已核对为正确、不建议改动」的 8 项设计**全部完好**，未被本轮修复破坏
 - **T6 修复（visualizer）**: `SpectrumRepository.kt` AudioFrame 双缓冲——2 个预分配实例 + `@Volatile writeIndex`，写端（仅 onFrame/reset）写完翻转发布、读端读 front，volatile 写→读建立 happens-before，消除音频回调线程写/渲染线程读的无同步撕裂；帧序号改仓库级全局计数器；`reset()` 双实例同时清零避免波形跨歌残留。`VisualizerStage.kt` 绘制循环改每帧捕获 front 引用（原持有重组期快照引用会被写端轮询覆盖，双缓冲形同虚设）
 - **T8 修复（visualizer）**: `ParticleRenderers.kt` `val t = targets ?: return` 提前到 createBitmap 之前，消除 Bitmap 必然泄漏路径（targets 为 null 时每帧泄漏 220x660x4B=580KB 内存）
 - **T7 修复（visualizer）**: `LyricsDotMatrixRenderer.kt` try-finally 包裹 createBitmap/recycle，异常路径不再泄漏 Bitmap
@@ -46,6 +49,8 @@
 ### Docs
 - **L4 补充（db）**: `LocalMusicDatabase.kt` 注释强化：`fallbackToDestructiveMigration` 仅适用可由其他数据源重建的本地索引，**未来承载用户数据（下载/收藏/播放列表）的数据库绝不可启用**，必须维护 Migration 类
 - **审阅文档**: `logs_temp/code-review-full-report-2026-09-13.md` 追加"实施记录"段并随 T2/T6/T3 落地持续同步，标注 13 项已修复 + 3 项暂缓（理由）+ 综合评分 74 → 78 → 81
+- **全量报告遗留项持久化（docs）**: 独立审计发现——该报告位于 gitignored 的 `logs_temp/`，其未完成项的唯一记录不进版本控制，一旦目录被清理，后人只会看到 CHANGELOG 的"13 项已修复"而**误判为已全修完**。新增 `docs/technical-overview.md` §10.147，把报告 36 项条目拆解为「已修 13 · 未完成 16 · 判定无需修复 5 · 已 review 关闭 1 · 剔除 1」，并逐条列出未完成的 16 项（含 L1/L2 架构债、L6 待触发、T5 死代码、P1#3/#4/#6/#7/#8/#9/#11 性能项、S4 安全项、P1#5/L3 暂缓、P1#1 决定不做、customAppKey 未做）及其实测证据。此前 L1/L2/L6/T5 与 P1 性能项在 `CHANGELOG.md`/`technical-overview.md` 中均为 0 命中，仅存在于该 gitignored 文件
+- **文档修正（docs）**: §10.145 遗留行原写 lint ID `NativeLibraryAlignment`，与 lint 报告实际 ID 不符，更正为 `Aligned16KB`（实测 `lint-results-debug.txt`：前者 0 命中、后者 4 行命中）；§10.146 表格此前已用正确 ID，本次同步
 
 ### CI
 - **CI 修复（workflow）**: `.github/workflows/build.yml` 的 `build` job 生成 `keystore.properties` 时补 `cryptoPassphrase`（优先取仓库 secret `CRYPTO_PASSPHRASE`，未配置时回退占位值），修复 S1 阶段 A+ 的 release guard 会导致 CI `assembleRelease` 失败的问题

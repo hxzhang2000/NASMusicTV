@@ -8299,11 +8299,54 @@ onSearchSong = { keyword -> viewModel.searchNetworkSongs(keyword) },
 
 **版本**：v2.31.2 → **v2.31.3**（versionCode 136 → 137）
 
-### 10.146 v2.32.3 — K 歌 / ONNX 专项修复：2 P0 + 3 P1 + 3 P2（2026-09-14）
+### 10.147 v2.32.3 — 全量审阅报告遗留项清单（持久化记录，2026-09-14）
 
-**来源**：`logs_temp/code-review-karaoke-onnx-2026-09-14.md`（K 歌 / Demucs 人声分离专项审查，覆盖 `DemucsSeparator.kt` 671 行 / `ModelDownloadManager.kt` 238 行 / `HqSeparationOrchestrator.kt` 555 行）。本条目只记录**已落地**的修复；报告末尾的处置顺序即本次实施顺序。
+**背景（为什么要单开一节）**：`logs_temp/code-review-full-report-2026-09-13.md` 位于 `logs_temp/`，该目录**已被 gitignore**（`.gitignore:87`），报告本身不进版本控制。其「实施记录」只记录了**已修 13 项**与 **4 项暂缓**，而其余未完成项的唯一记录仅存在于该 gitignored 文件中。独立审计（2026-09-14）逐条核对源码后发现：一旦 `logs_temp/` 被清理或换机器，后人只会看到 CHANGELOG 里「13 项已修复」的正面记录，**会误判为已全修完**。故本节把这些项固化进版本控制。
 
-**⚠️ 验证边界（必须如实声明）**：本机 Gradle 测试 worker 一启动即死（exit `268435466` = `0x1000000A`，低 16 位为 Windows `ERROR_BAD_ENVIRONMENT`，`test-results/` 下 0 个 XML；用纯 JVM 的 `--tests "*TimeUtilsTest"` 隔离验证同样失败）。因此本次全部改动**只经过「编译 + lint」验证，没有跑过任何单测**，更未在真机上听过分离结果。下表「验证」列的含义仅限此范围。
+**完成度（独立审计结论）**：报告共 **36 项**条目（21 P0 + 15 P1），拆解为
+**已修 13 · 未完成 16 · 判定无需修复 5 · 已 review 关闭 1 · 原报告剔除 1**。
+
+- **已修 13 项**：S1 / S3 / T2 / T3 / T4 / T6 / T7 / T8 / L4 / L7 尾巴 / P1#2 / P1#10 / P1#12 —— 逐条源码复核全部属实，详见 `CHANGELOG.md` v2.32.3 条目及 §10.136–§10.141
+- **判定无需修复 5 项**：S2（token 已加密）/ S5（无硬编码密钥）/ T1（Application scope 合理）/ L5（定位错误文件）/ L8（既定设计）—— 报告自身已剔除或降级
+- **已 review 关闭 1 项**：P1#13 K 歌 ONNX 专项 —— 已由 `logs_temp/code-review-karaoke-onnx-2026-09-14.md` 完成，其发现另已修复，见 §10.146
+- **原报告剔除 1 项**：L7 本体（清理链路本就存在）
+
+#### 未完成 16 项（按性质分组）
+
+| 项 | 性质 | 现状证据（2026-09-14 快照） |
+|---|---|---|
+| **S4** Jellyfin 会话内 401 重认证 | 安全（暂缓，需真实环境） | `JellyfinAdapter.kt` 全文件无 401 检测 / 无重认证 / 无重试一次；仅 `executeJsonRequest`(1079) 网络层重试与 `initialize()`(89) `fetchCurrentUserInfo` 自愈 |
+| **L1** NasMusicApp God Object 拆分 | 架构债（长期，16h+） | `NasMusicApp.kt` 实测 **467 行 / 15 个 `lateinit var`**，未拆子容器 |
+| **L2** MainViewModel 拆分 | 架构债（长期，15h+） | `MainViewModel.kt` 实测 **3164 行**，未按域剥离 |
+| **L3** `playModeToggleHandler` 改 Flow | 时序安全（暂缓，需独立 PR） | `NasMusicApp.kt:86` 仍为 `var (() -> Unit)?`；`MainActivity.kt:366` 赋值 / `:388` 清空 |
+| **L6** FocusableSurface 焦点释放 | 待触发（需 TV 实机复现） | `FocusableSurface.kt` 仍 `LaunchedEffect(Unit) { requestFocus() }` 无释放逻辑；报告要求"实机复现再修"，勿实施原空操作方案 |
+| **P1#1** OkHttp 连接池统一 | **已决定不做** | 实测仍有 **16 处**独立 `OkHttpClient.Builder`（比报告"10+"更多）。报告 §F 决策：收益/风险比不划算，未来出现 socket 耗尽类故障再以 `OkHttpClientHolder` 单例重估 |
+| **P1#3** Crossfade 线性斜坡 | 性能（低优先） | `CrossfadeController.kt:17` 注释仍写"50ms 步进线性斜坡" |
+| **P1#4** 睡眠定时用 Handler | 性能（低优先） | `SleepTimerController.kt:22` 仍 `Handler(Looper.getMainLooper())` + `postDelayed` |
+| **P1#5** VisualizerMath seed 隔离 | 性能（暂缓，需独立 PR） | `VisualizerMath.kt:14` 仍为 `object`，`private var seed`(125) 全局共享 |
+| **P1#6** `rgbToHsl` 每帧 Triple 分配 | 性能（低优先） | `VisualizerMath.kt:89` 仍返回 `Triple<Float, Float, Float>` |
+| **P1#7** Milkdrop 每帧建 Canvas | 性能 | `UltraRenderers.kt:61` 仍 `Canvas(c)` |
+| **P1#8** Constellation O(n²) 连线 | 性能（已部分优化） | `AdvancedRenderers.kt:586-601` 仍 160×160 双层循环（≈12720 次/帧），已合并单 Path 绘制 |
+| **P1#9** PlasmaFlow 逐粒子 drawCircle | 性能 | `UltraRenderers.kt:196/206` 仍逐个 `drawCircle` |
+| **P1#11** Milkdrop 硬编码 1280×720 | 性能（注释称有意为之） | `UltraRenderers.kt:41-42` 仍 `val w = 1280; val h = 720` |
+| **T5** 删除死代码 `VocalRemovalProcessor.kt` | P2 清理 | 文件仍在；确认无生产实例化（`PlaybackService.kt:208` 注释与 `PlayerManager.kt:198` 类型均已是 `SpectralMaskProcessor`） |
+| **P2** `customAppKey`/`secretKey` 加密 | P2 清理（暂缓） | `AppPreferences.kt:1429-1434` 仍直接读写明文 |
+
+> 说明：S4 / P1#5 / L3 三项与 `customAppKey` 加密已在 `CHANGELOG.md` §暂缓 / §P2 顺手项 记录；P1#1 已在同节记录"决定不做"。**本表的价值是把 L1 / L2 / L6 / T5 / P1#3 / #4 / #6 / #7 / #8 / #9 / #11 这 11 项也纳入版本控制** —— 此前它们只在 gitignored 报告里。
+
+#### 验证边界（勿混淆静态结论与真机结论）
+
+- **已静态取证**：上表全部行号与代码形态；`assembleDebug`(1m8s) / `compileDebugUnitTestKotlin`(14s) / `assembleRelease`(9m31s) 均 BUILD SUCCESSFUL；lint `0 errors / 256 warnings`
+- **仍需真机**：T6 双缓冲的"写者套圈"边界（见 §10.138 边界说明）、T2 启动期 `NasMusicApp.kt:243` 主线程 `runBlocking` 的启动耗时、S1 老凭据解密、K 歌重采样/单声道修复的实际听感
+- **本机无法执行单测**：`testDebugUnitTest` 受 Gradle 守护进程环境问题阻塞（worker JVM 启动即死，exit `268435466`），只能验证"测试源码可编译"，不能声称"测试通过"
+
+**版本**：v2.32.3 批次内（该版本尚未打 tag），versionCode 保持 142。
+
+### 10.146 v2.32.3 — K 歌 / ONNX 专项修复：2 P0 + 3 P1 + 5 P2（2026-09-14）
+
+**来源**：`logs_temp/code-review-karaoke-onnx-2026-09-14.md`（K 歌 / Demucs 人声分离专项审查，覆盖 `DemucsSeparator.kt` 671 行 / `ModelDownloadManager.kt` 238 行 / `HqSeparationOrchestrator.kt` 555 行）。本条目只记录**已落地**的修复；报告末尾的处置顺序即本次实施顺序。P2-d / P2-e 为 2026-09-14 二次审计（对照报告逐条核验）后追加的两项低风险加固。
+
+**⚠️ 验证边界（必须如实声明）**：本机 Gradle 测试 worker 一启动即死（exit `268435466` = `0x1000000A`，低 16 位为 Windows `ERROR_BAD_ENVIRONMENT`，`test-results/` 下 0 个 XML；用纯 JVM 的 `--tests "*TimeUtilsTest"` 隔离验证同样失败），因此 **`./gradlew testDebugUnitTest` 始终未能运行**。为补上证据缺口，另用 `kotlin-compiler-embeddable` 绕过 Gradle 做了独立 JVM 数值验证（详见「验证」节的「独立 JVM 数值验证」小节）：39 条断言全部通过，并对已提交的 `LinearResamplerTest.kt` 本体跑出 `OK (10 tests)`。但**仍未在真机上听过分离结果** —— 凡涉及 `MediaCodec` 实际输出格式、模型加载耗时、听感的结论，都不在已验证范围内。
 
 #### 修复清单
 
@@ -8312,11 +8355,13 @@ onSearchSong = { keyword -> viewModel.searchNetworkSongs(keyword) },
 | P0-1 | `DemucsSeparator.decodeAudioToTempFile` | 非 44100Hz 源（如 48kHz）未做采样率归一化：MediaCodec 不重采样，`codec.configure` 也改不了 `KEY_SAMPLE_RATE`，而 `writeWavHeader` 硬编码 44100 → ① 模型收到的内容被时间压缩，分离质量劣化；② 输出以 48/44.1 倍率播放，**时长缩短 8.8%、音高升高约 1.5 个半音** | 新增私有类 `LinearResampler`（流式线性插值），解码阶段统一归一化到 44100Hz；`inRate == outRate` 时整体旁路（不做无谓插值） |
 | P0-2 | `DemucsSeparator.decodeAudioToTempFile` | `channelCount` 读出后**从未使用**，无条件按 L/R 成对读 short → 单声道源被解释成「两倍帧数的立体声」，输出帧数减半 → **播放翻倍速、升八度** | 按真实声道数拆帧：单声道同一采样复制到 L/R；立体声正常成对读；>2 声道取前两路并 `position()` 跳过其余。同时补 `INFO_OUTPUT_FORMAT_CHANGED` 分支，以 `codec.outputFormat` 覆盖声道数/采样率 |
 | P1-3 | `DemucsSeparator.processSegmentFromBuffer` | 原为「先取值、再 close」。`session.run()` 抛异常或强转 `ClassCastException` 时，输入张量（~2.75MB）与 `OrtSession.Result`（~11MB）的 native 内存**都不会释放**，而 `separate()` 的 `catch (e: Exception)` 会吞掉异常继续下一段 ⇒ 每段泄漏约 14MB，长曲目必然 OOM | 改为嵌套 try/finally（`output` 与 `inputTensor` 各一层）；顺带把裸强转改成逐层 `as?` + shape 校验，错误信息携带实际 shape |
-| P1-4 | `ModelDownloadManager` / `HqSeparationOrchestrator` | 完整性只校验「> 0.8 × 166MB」：截断的响应、镜像站返回的错误页、串流错位都能通过；`customUrlProvider` 又允许任意 URL | 新增 `EXPECTED_SHA256` 与 `verifyModelIntegrity()`：① 下载完成后必须通过 SHA-256 才 `renameTo` 落盘；② 加载模型前在 IO 线程再校验一次（约 0.3~1s，仅模型未加载时执行）。`isModelDownloaded()` 保持快速判定不变（可能被主线程调用，166MB 哈希会 ANR） |
+| P1-4 | `ModelDownloadManager` / `HqSeparationOrchestrator` | 完整性只校验「> 0.8 × 166MB」：截断的响应、镜像站返回的错误页、串流错位都能通过；`customUrlProvider` 又允许任意 URL | 新增 `EXPECTED_SHA256` 与 `verifyModelIntegrity()`：① 下载完成后必须通过 SHA-256 才 `renameTo` 落盘；② 加载模型前在 IO 线程再校验一次（约 0.3~1s，仅模型未加载时执行）。`isModelDownloaded()` 保持「快速判定」定位不变（可能被主线程调用，166MB 哈希会 ANR），但其大小阈值另见 P2-d |
 | P1-5 | `DemucsSeparator.release/separate` | 竞态双缺陷：① 原实现「先 tryLock、失败才置 `pendingRelease`」，而消费点在**解锁之前** → 请求落在窗口内即丢失（session 不释放，166MB 驻留）；② 若消费点改成「先清标记再拿锁」，另一个 separate 抢到锁时标记已清而释放无人做，请求同样丢失 | 统一为「先置位、再消费」，且**只有真正拿到锁并完成释放才清标记**；消费点从 `separateLocked` 的 finally 移到 `separate()` 解锁后的 finally |
 | P2-a | `DemucsSeparator.separate`（`emit`） | 每帧 4 次 `shortToByteArray`（各分配一个 2 字节数组）+ 4 次 `write`，4 分钟曲目约 4200 万次短命分配 | 改为 8KB 攒批缓冲 + `putShortLE` 就地写，分配降为 0 |
 | P2-b | `DemucsSeparator.initialize` | 未校验模型输入 shape，加载到非 HT-Demucs 的 ONNX 时到推理阶段才失败（此时已解码+分段跑了一段，报错不指向根因） | 新增输入 shape 校验（期望 `[1, 2, 343980]`，动态维 `-1/0` 视为兼容），失败即关闭 session 并返回带实际 shape 的错误 |
 | P2-c | `DemucsSeparator` | `OUTPUT_SHAPE` 死常量（Kotlin 私有常量 lint 抓不到） | 删除 |
+| P2-d | `ModelDownloadManager.isModelDownloaded` | 报告 §四-2：快速判定的阈值 `> EXPECTED_SIZE_BYTES * 0.8`（−20%，约 132.5MB）过宽 —— 截断到 133MB 的残缺文件、镜像站返回的 HTML 错误页都能通过；且只有下界没有上界，超大垃圾文件同样能过 | 收紧到 **±1%**（`163,956,509 ~ 167,268,762` 字节）。FP16 权重字节数由 `EXPECTED_SHA256` 锁定、是确定的，不需要 20% 余量；补上界后区间宽仅 3.16MB |
+| P2-e | `DemucsSeparator.lastError` | 报告 §七-6：字段非 `@Volatile`。当前所有读取点都紧跟 `withContext`（协程调度天然建立 happens-before），**实际安全**，但属隐性契约 —— 将来出现非协程读取点即变可见性 bug，且这类 bug 在 x86 上几乎不复现、只在 ARM 电视盒上偶发 | 加 `@Volatile`，一行修饰符换掉该类不确定性 |
 
 新增字符串资源（中英双语）：`demucs_error_bad_model_shape`、`hq_error_model_corrupted`。
 
@@ -8379,15 +8424,17 @@ https://huggingface.co/api/models/StemSplitio/htdemucs-ft-vocals-onnx/tree/main
 
 | 项 | 结果 |
 |---|---|
-| `:app:assembleDebug` | **BUILD SUCCESSFUL** |
+| `:app:assembleDebug` | **BUILD SUCCESSFUL**（二次审计含 P2-d/P2-e 后重跑：7m37s，49 tasks，12 executed） |
 | `:app:compileDebugUnitTestKotlin` | **BUILD SUCCESSFUL**，产出 `debugUnitTest/com/nasmusic/tv/player/LinearResamplerTest.class` |
-| `:app:lintDebug` | **BUILD SUCCESSFUL**，报告页头 `Lint Report: 256 warnings`（**0 errors**），与改动前一致（`lintAnalyzeDebug` 17:16 确实重跑，报告因结果内容一致而 UP-TO-DATE） |
+| `:app:lintDebug` | **BUILD SUCCESSFUL**，报告 `0 errors / 256 warnings`，与改动前完全一致（`lintAnalyzeDebug` 每次均实际重跑；`lintReportDebug` 因报告内容未变而 UP-TO-DATE） |
 | `DemucsSeparator.kt` / `ModelDownloadManager.kt` 在 lint 报告中的条目数 | **0 / 0**（无新增问题） |
 | `HqSeparationOrchestrator.kt` | 3 条，均为改动前既有（`DefaultLocale` × 2、`UseKtx` × 1） |
 | **`LinearResampler` 独立数值验证** | **39 PASS / 0 FAIL** |
 | **`LinearResamplerTest`（已提交，CI 跑）** | **OK (10 tests)** |
 | 单测（`./gradlew testDebugUnitTest`） | **本机仍无法运行**（测试 worker 启动即死）；新增的 `LinearResamplerTest` 只在 CI 上执行 |
 | 真机试听 | **未做** |
+
+> P2-d / P2-e 两项改动只涉及 `isModelDownloaded()` 的大小判定与一个字段修饰符，未新增任何 lint 条目，warning 总数保持 256。
 
 ##### 独立 JVM 数值验证（绕开 Gradle 测试 worker）
 
@@ -8438,11 +8485,29 @@ JAVA_HOME="C:/Program Files/Android/Android Studio/jbr" \
 
 构建输出中会有一段 lint 内部异常栈（`LintCliClient.analyzeOnly` → UAST visitor），**非本次引入**：`logs_temp/verify4.log` 等历史日志中同样存在，且不影响报告生成与构建结果（0 errors）。
 
+⚠️ **若构建在 26 秒左右秒失败并报 `Could not create service of type FileHasher` → `fileHashes.lock (拒绝访问)`**：
+
+- **成因**：`--no-daemon` 并不保证不起守护进程 —— `gradle.properties` 的 `org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8` 会强制 fork 一个**单次守护进程**（构建日志首行会写明 `a single-use Daemon process will be forked`）。该守护进程若卡在退出序列（`PersistentDaemonRegistry.remove` 的锁竞争），会持续持有 `.gradle/9.5.0/fileHashes/fileHashes.lock`。
+- **解法**：`./gradlew.bat --stop`，再重跑即可（本次实测：停掉后锁立即释放）。
+- **不要 `rm` 这个锁文件**。在带 safe-delete 包装的环境里，`rm` 失败会把文件留在 Windows「删除挂起」状态，之后任何 open 都返回 `Permission denied`（权限位显示 666 可写也没用），**反而让后续构建全部失败** —— 比原本的问题更糟。`rm` 报 `Device or resource busy` 就说明确有进程持有，去 `--stop` 而不是硬删。
+
 #### 遗留
 
-- **未修（保持现状）**：`NativeLibraryAlignment` × 3（`targetSdk 35` 前处理）、`DefaultLocale` 等 256 条 warning（不影响门禁）。
-- **需要真机才能确认**：48kHz 曲目的分离质量与播放时长/音高是否恢复正常；单声道曲目（部分播客/老录音）是否不再翻倍速；`verifyModelIntegrity()` 增加的一次 166MB 哈希是否让首次分离的可感知延迟超过预期。**重采样器本身的数学正确性已由上述独立验证覆盖，但「MediaCodec 实际给出的 `outSampleRate`/`outChannels` 是否与预期一致」只能在设备上确认。**
-- **`isModelDownloaded()` 仍是快速判定**：模型在下载后被外部损坏（如存储故障）不会被该方法发现，只会在 `verifyModelIntegrity()` 时暴露。这是刻意的取舍（避免主线程哈希 ANR）。
+**完成度（2026-09-14 二次审计：对照报告逐条核验当前源码）**：报告拆出 **14 条**可判定项，**已修 10 条、未修 4 条**。P2-d / P2-e 就是本次审计后追加的两条。下面把**全部 4 条未修项**逐条列出，避免后人误以为已全修完：
+
+| 报告条目 | 状态 | 说明 |
+|---|---|---|
+| §四-3 UI 标注「仅使用你信任的源」 | ❌ 未做 | `customUrlProvider()` 仍允许指向任意 URL，UI 无对应提示。属报告中的可选建议（"考虑在 UI 上标注"） |
+| §七-3 `totalSegments` 为估算 | ❌ 未改 | `ceil(totalSamples / hop)` 与实际迭代轮数可能不一致（末段 `segLen > hop` 会多跑一轮），**仅影响进度百分比，非正确性问题**（报告自述） |
+| §七-4 原生库非 16KB 页对齐 × 3 | ❌ 未做 | `onnxruntime-android:1.17.1` 三个 ABI 均未对齐。**注意 lint ID 是 `Aligned16KB`**，报告里写的 `NativeLibraryAlignment` 有误（`lint-results-debug.txt` 搜前者 0 命中、后者 3 命中）。当前 `targetSdk 34` + 侧装不阻塞；**升 `targetSdk 35` 或上架前必须换版本**（已可用 1.29.0） |
+| §七-5 `deleteModel` 与下载并发 | ❌ 未改 | 下载中删除模型 → 最终文件被删后又被 `renameTo` 重建，用户看到「删了又回来」。**UX 问题，非数据损坏**（报告自述） |
+
+**其余说明**：
+
+- **256 条 lint warning 保持现状**：`DefaultLocale` 等，不影响门禁（0 errors）。
+- **需要真机才能确认**：48kHz 曲目的分离质量与播放时长/音高是否恢复正常；单声道曲目（部分播客/老录音）是否不再翻倍速；`verifyModelIntegrity()` 增加的一次 166MB 哈希是否让首次分离的可感知延迟超过预期。**重采样器本身的数学正确性已由独立验证覆盖，但「MediaCodec 实际给出的 `outSampleRate`/`outChannels` 是否与预期一致」只能在设备上确认。**
+- **`isModelDownloaded()` 仍是快速判定**：P2-d 只把阈值收紧到 ±1%，它依然**只判大小、不做哈希**。模型在下载后被外部损坏（如存储故障）不会被它发现，只会在 `verifyModelIntegrity()` 时暴露。这是刻意的取舍（避免主线程哈希 ANR）。
+- **报告 §八「已核对为正确、不建议改动」的 8 项**：本次审计已逐项回归确认，**全部完好，未被本轮修复破坏**（`OrtEnvironment` 不 close、`opMutex` 单飞、末段缓冲区清零、overlap-add、失败删残缺 WAV、MediaCodec/Extractor 释放、取消 rethrow、内存预检）。
 
 ### 10.145 v2.32.3 — lint 错误清零（105 → 0）+ lint 转阻塞门禁（2026-09-14）
 
@@ -8480,7 +8545,9 @@ JAVA_HOME="C:/Program Files/Android/Android Studio/jbr" \
 
 **CI**：`.github/workflows/build.yml` 的 `lint` job 移除 `continue-on-error: true`、更名 `Lint`，转为**阻塞门禁**（lint 只在有 error 时失败，256 条 warning 不影响）。今后新增 error 应修复，不得退回非阻塞。
 
-**遗留（不在本次范围）**：`NativeLibraryAlignment` 3 条 warning —— `com.microsoft.onnxruntime:onnxruntime-android:1.17.1` 的三个 ABI 原生库非 16 KB 页对齐。当前 targetSdk 34 且侧装，不阻塞；若升 targetSdk 35 或上架需处理（换 onnxruntime 版本或加 `useLegacyPackaging` 之外的对齐方案）。
+**遗留（不在本次范围）**：`Aligned16KB` 3 条 warning —— `com.microsoft.onnxruntime:onnxruntime-android:1.17.1` 的三个 ABI 原生库非 16 KB 页对齐。当前 targetSdk 34 且侧装，不阻塞；若升 targetSdk 35 或上架需处理（换 onnxruntime 版本或加 `useLegacyPackaging` 之外的对齐方案）。
+
+> 更正（2026-09-14 审计）：本行原写作 `NativeLibraryAlignment`，与 lint 报告实际 ID 不符。实测 `app/build/reports/lint-results-debug.txt`：`Aligned16KB` 4 行命中（3 条 issue + 1 行汇总引用），`NativeLibraryAlignment` 0 命中。§10.146 表格已用正确 ID，此处同步更正。
 
 **版本**：v2.32.3 批次内（该版本尚未打 tag），versionCode 保持 142。
 
