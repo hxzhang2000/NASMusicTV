@@ -8299,6 +8299,60 @@ onSearchSong = { keyword -> viewModel.searchNetworkSongs(keyword) },
 
 **版本**：v2.31.2 → **v2.31.3**（versionCode 136 → 137）
 
+### 10.149 v2.32.3 — S4 落地：Jellyfin 会话内 401 重认证（2026-09-14）
+
+**来源**：`logs_temp/code-review-full-report-2026-09-13.md` §S4（安全类，定性由 P0 降级为 P1）。这是全量报告里**最后一项未完成的安全类问题**（此前列为「暂缓：需真实环境测试」，见 §10.147 未完成清单）。
+
+**原状**：`JellyfinAdapter` 无任何 401 检测。`executeJsonRequest()` 把非 2xx 一律折叠成 `null`，调用方只看到「空列表」——服务器强制过期 token、用户改密之后，**必须手动断开重连才能恢复**。仅 `initialize()` 有自愈路径（第 78 行 `fetchCurrentUserInfo()` 验证 token，失败则回退 `authenticateByName`），即**重连/重启能恢复，会话中途不能**。
+
+**改法**：把请求拆成两层，401 只在外层处理一次。
+
+| 层 | 职责 |
+|---|---|
+| `executeJsonRequest(url)`（唯一出口，签名不变） | 发第一次请求 → 若状态码为 401 则重认证 → **重试一次** → 返回 |
+| `rawJsonRequest(url)`（新，private） | 单次 GET-JSON，内含原有 `withRetry` 网络层重试（3 次退避），**不处理 401**，如实回传 `HttpResult(code, body)` |
+
+**防循环设计（报告 §S4 明确要求「重试只做一次、避免循环」，逐条对应）**：
+
+1. 重试是**同一调用内的第二次尝试**（`rawJsonRequest` 被调两次），**不是递归**；
+2. 第二次请求无论返回什么（含再次 401）都直接返回，**不触发第三次**；
+3. `authenticateByName()` 走 `client.newCall` 直连，**不经过 `executeJsonRequest`** → 不存在「重认证自身 401 → 又触发重认证」的自激路径；
+4. 无凭据（token-only 会话）时**直接放弃**，不做无意义的登录尝试。
+
+**并发语义**：`reauthMutex` + `tokenGeneration` 世代号 —— 多个请求同时撞 401 时，只有第一个真正发起登录，其余在拿到锁后发现世代已变，直接复用新 token。即 **N 个 401 只触发 1 次登录**，避免过期瞬间的登录风暴。
+
+**顺带加固**：
+
+- `apiToken` 加 `@Volatile`：其读点除 IO 线程的 `buildAuthHeader()` 外，还有 `getStreamUrl()` / `getCoverUrl()` 两个**非 suspend** 方法（可能被主线程调用），跨线程可见性此前无保证。
+- `initialize()` 留存 `username` / `password`（两条初始化路径——复用已有 token 与用户名密码登录——`BackendRegistry` 均传入 `ServerConfig` 的凭据），供重认证使用；`logout()` / `close()` 一并清空。
+  - **取舍说明**：内存中保留明文口令是重认证的必要代价（本 adapter 无 `Context`，无法按需从 `AppPreferences` 解密）。风险有界——口令本就以明文经 `ServerConfig` 传入本类，仅存活于单次会话；**持久化副本仍是 `CryptoUtils` 加密的**。
+  - **不持久化刷新后的 token**：`BackendAdapter` 接口未暴露 token，刷新结果只驻留内存。这是安全的——下次启动 `initialize()` 会用旧 token 试探，失败即回退用户名密码登录，**自愈**。
+
+**新增测试**：`app/src/test/java/com/nasmusic/tv/backend/impl/JellyfinAdapterAuthTest.kt`（Robolectric + MockWebServer，5 用例）。探针选 `getSongsTotalCount()`——它是 `executeJsonRequest` 最薄的调用方（单次 GET `/Items` → 一个 Int），不会把 JSON 解析失败混进断言。**核心断言是请求次数上界**（「能不能恢复」之外更要证「不会打转」）：
+
+| 用例 | 断言要点 |
+|---|---|
+| 401 → 重认证 → 重试成功 | `/Items` 恰好 2 次、登录恰好 +1 次、返回 42 |
+| **持续 401** | `/Items` **恰好 2 次**（防循环核心断言）、登录恰好 +1 次、返回 0 |
+| 401 且无凭据 | `/Items` 1 次、登录端点 **0 次** |
+| 正常 200 | `/Items` 1 次、无额外登录 |
+| `logout()` 后 401 | 凭据已清空 → 不再重认证 |
+
+> 注：`mockwebserver:4.12.0` 此前已在 `app/build.gradle.kts:263` 声明但**全项目无人使用**，本测试是首例。
+
+**验证**：
+
+| 命令 | 结果 |
+|---|---|
+| `:app:compileDebugKotlin :app:compileDebugUnitTestKotlin --no-daemon` | ✅ BUILD SUCCESSFUL（5m33s），新增文件 0 warning |
+| `:app:lintDebug --no-daemon` | ✅ 见 §10.147 门禁记录（0 errors） |
+
+**⚠️ 残留风险（诚实标注）**：
+
+- **单测未实际运行**——本机 `testDebugUnitTest` 受 Gradle 测试 worker 环境问题阻塞（启动即死，exit `268435466`），5 条用例**只验证了源码可编译**，通过与否须由 CI 判定。报告 §S4 原本要求的「单测覆盖 + 集成测试」中，**集成测试（在 Jellyfin 后台手动使 token 过期，确认客户端自动刷新）本机无法执行**。
+- **并发不变式（N 个 401 只登录 1 次）未写测试**：需 MockWebServer 侧用 latch 保证所有首轮请求都到达后再放行，才能确定性复现；在**本机无法跑测试**的前提下，宁可不写也不引入可能阻塞 CI 的脆弱用例。该不变式目前仅由代码结构与 KDoc 保证。
+- 仅 Jellyfin 适配器做了处理。Navidrome / Subsonic / Daoliyu / Feiniu 是否有同类「会话内凭据失效」问题**未核查**（报告也只点了 Jellyfin）。
+
 ### 10.148 v2.32.3 — P1 性能清单落地 4 项（2026-09-14）
 
 **来源**：`logs_temp/code-review-full-report-2026-09-13.md` 第四章 P1 清单（遗留项总表见 §10.147）。本轮修复其中**判定为"低风险且收益明确"的 4 项**；另外 4 项经复核判定**不宜按报告原建议直接实施**，理由见下。
@@ -8346,19 +8400,19 @@ onSearchSong = { keyword -> viewModel.searchNetworkSongs(keyword) },
 **背景（为什么要单开一节）**：`logs_temp/code-review-full-report-2026-09-13.md` 位于 `logs_temp/`，该目录**已被 gitignore**（`.gitignore:87`），报告本身不进版本控制。其「实施记录」只记录了**已修 13 项**与 **4 项暂缓**，而其余未完成项的唯一记录仅存在于该 gitignored 文件中。独立审计（2026-09-14）逐条核对源码后发现：一旦 `logs_temp/` 被清理或换机器，后人只会看到 CHANGELOG 里「13 项已修复」的正面记录，**会误判为已全修完**。故本节把这些项固化进版本控制。
 
 **完成度（独立审计结论，2026-09-14 复核）**：报告共 **36 项**条目（21 P0 + 15 P1），拆解为
-**已修 17 · 未完成 12 · 判定无需修复 5 · 已 review 关闭 1 · 原报告剔除 1**。
+**已修 18 · 未完成 11 · 判定无需修复 5 · 已 review 关闭 1 · 原报告剔除 1**。
 
 - **已修 13 项（原实施记录）**：S1 / S3 / T2 / T3 / T4 / T6 / T7 / T8 / L4 / L7 尾巴 / P1#2 / P1#10 / P1#12 —— 逐条源码复核全部属实，详见 `CHANGELOG.md` v2.32.3 条目及 §10.136–§10.141
-- **已修 4 项（本次新增，见 §10.148）**：P1#3 Crossfade 等功率曲线 / P1#4 SleepTimer 协程化 / P1#6 `hueOf` 零分配 / P1#7 Milkdrop 预分配 Canvas
+- **已修 4 项（性能批次，见 §10.148）**：P1#3 Crossfade 等功率曲线 / P1#4 SleepTimer 协程化 / P1#6 `hueOf` 零分配 / P1#7 Milkdrop 预分配 Canvas
+- **已修 1 项（安全批次，见 §10.149）**：**S4** Jellyfin 会话内 401 重认证 —— 全量报告里最后一项未完成的安全类问题，原列「暂缓：需真实环境测试」，本轮落地（含 5 条 MockWebServer 回归测试）
 - **判定无需修复 5 项**：S2（token 已加密）/ S5（无硬编码密钥）/ T1（Application scope 合理）/ L5（定位错误文件）/ L8（既定设计）—— 报告自身已剔除或降级
 - **已 review 关闭 1 项**：P1#13 K 歌 ONNX 专项 —— 已由 `logs_temp/code-review-karaoke-onnx-2026-09-14.md` 完成，其发现另已修复，见 §10.146
 - **原报告剔除 1 项**：L7 本体（清理链路本就存在）
 
-#### 未完成 12 项（按性质分组）
+#### 未完成 11 项（按性质分组）
 
 | 项 | 性质 | 现状证据（2026-09-14 快照） |
 |---|---|---|
-| **S4** Jellyfin 会话内 401 重认证 | 安全（暂缓，需真实环境） | `JellyfinAdapter.kt` 全文件无 401 检测 / 无重认证 / 无重试一次；仅 `executeJsonRequest`(1079) 网络层重试与 `initialize()`(89) `fetchCurrentUserInfo` 自愈 |
 | **L1** NasMusicApp God Object 拆分 | 架构债（长期，16h+） | `NasMusicApp.kt` 实测 **467 行 / 15 个 `lateinit var`**，未拆子容器 |
 | **L2** MainViewModel 拆分 | 架构债（长期，15h+） | `MainViewModel.kt` 实测 **3164 行**，未按域剥离 |
 | **L3** `playModeToggleHandler` 改 Flow | 时序安全（暂缓，需独立 PR） | `NasMusicApp.kt:86` 仍为 `var (() -> Unit)?`；`MainActivity.kt:366` 赋值 / `:388` 清空 |
@@ -8371,9 +8425,11 @@ onSearchSong = { keyword -> viewModel.searchNetworkSongs(keyword) },
 | **T5** 删除死代码 `VocalRemovalProcessor.kt` | P2 清理 | 文件仍在；确认无生产实例化（`PlaybackService.kt:208` 注释与 `PlayerManager.kt:198` 类型均已是 `SpectralMaskProcessor`） |
 | **P2** `customAppKey`/`secretKey` 加密 | P2 清理（暂缓） | `AppPreferences.kt:1429-1434` 仍直接读写明文 |
 
-> 说明：S4 / P1#5 / L3 三项与 `customAppKey` 加密已在 `CHANGELOG.md` §暂缓 / §P2 顺手项 记录；P1#1 已在同节记录"决定不做"。**本表的价值是把 L1 / L2 / L6 / T5 / P1#8 / P1#9 / P1#11 这些项也纳入版本控制** —— 此前它们只在 gitignored 报告里。
+> 说明：P1#5 / L3 两项与 `customAppKey` 加密已在 `CHANGELOG.md` §暂缓 / §P2 顺手项 记录；P1#1 已在同节记录"决定不做"。**本表的价值是把 L1 / L2 / L6 / T5 / P1#8 / P1#9 / P1#11 这些项也纳入版本控制** —— 此前它们只在 gitignored 报告里。
 >
-> **2026-09-14 复核更新**：P1#3 / P1#4 / P1#6 / P1#7 四项已修复，移出本表，详见 §10.148。其中 **P1#11 经复核判定为"设计取舍"而非缺陷**，**P1#9 的"改 Path 批量"非等价优化**（需量化分桶、会改观感），**P1#8 需算法改写**——这三项不建议按报告原建议直接实施。
+> **2026-09-14 复核更新（性能批次）**：P1#3 / P1#4 / P1#6 / P1#7 四项已修复，移出本表，详见 §10.148。其中 **P1#11 经复核判定为"设计取舍"而非缺陷**，**P1#9 的"改 Path 批量"非等价优化**（需量化分桶、会改观感），**P1#8 需算法改写**——这三项不建议按报告原建议直接实施。
+>
+> **2026-09-14 复核更新（安全批次）**：**S4 已修复**，移出本表，详见 §10.149。至此全量报告中**已无未完成的安全类问题**（S1/S3/S4 均已落地，S2/S5 判定无需修复）。
 
 #### 验证边界（勿混淆静态结论与真机结论）
 
