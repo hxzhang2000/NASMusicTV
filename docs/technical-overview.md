@@ -8381,6 +8381,19 @@ onSearchSong = { keyword -> viewModel.searchNetworkSongs(keyword) },
 - **仍需真机**：T6 双缓冲的"写者套圈"边界（见 §10.138 边界说明）、T2 启动期 `NasMusicApp.kt:243` 主线程 `runBlocking` 的启动耗时、S1 老凭据解密、K 歌重采样/单声道修复的实际听感
 - **本机无法执行单测**：`testDebugUnitTest` 受 Gradle 守护进程环境问题阻塞（worker JVM 启动即死，exit `268435466`），只能验证"测试源码可编译"，不能声称"测试通过"
 
+#### 其他报告的未完成项（跨报告汇总）
+
+本表只覆盖 `code-review-full-report-2026-09-13.md` 的 36 项。另一份专项报告 `logs_temp/code-review-karaoke-onnx-2026-09-14.md`（K 歌 / ONNX）拆出 **14 条**可判定项，**已修 10 条、未修 4 条**，明细在 §10.146 的「遗留」节。为便于「一处看全」全部未完成项，此处汇总这 4 条：
+
+| 项 | 性质 | 现状证据（2026-09-14 快照） |
+|---|---|---|
+| **§七-4** 原生库非 16KB 页对齐 | **有硬期限**（升 `targetSdk 35` 或上架前必须处理） | `onnxruntime-android:1.17.1` 的 8 个 native 库（4 ABI × 2 库）`p_align = 4096`。**实测只有 1.29.0 能消除该警告，而它要求 `minSdk 24`（本项目 22）**——升级被硬阻塞，当前有意保持 1.17.1。完整矩阵与决策记录见 §10.146 的「§七-4 专项调研」小节 |
+| **§七-5** `deleteModel` 与下载并发 | UX（非数据损坏） | `ModelDownloadManager.deleteModel()` 无防护：下载中删除 → 最终文件被删后又被 `renameTo` 重建，用户看到「删了又回来」 |
+| **§七-3** `totalSegments` 为估算 | 仅影响进度百分比 | `ceil(totalSamples / hop)` 与实际迭代轮数可能不一致（末段 `segLen > hop` 会多跑一轮），非正确性问题 |
+| **§四-3** UI 标注「仅使用你信任的源」 | 可选建议 | `customUrlProvider()` 仍允许指向任意 URL，UI 无对应提示 |
+
+> **§七-4 是本汇总里唯一有硬期限的项**：其余三项都是「可选建议 / 仅影响体验」，而 §七-4 在升 `targetSdk 35` 时会变成上架阻塞项。届时只有两条路——升 `minSdk 24` + 换 `onnxruntime-android:1.29.0`（代价：丢 Android 5.0/5.1/6.0，含创维 5.1.1 开发机），或自编 ONNX Runtime（加 `-Wl,-z,max-page-size=16384`）。
+
 **版本**：v2.32.3 批次内（该版本尚未打 tag），versionCode 保持 142。
 
 ### 10.146 v2.32.3 — K 歌 / ONNX 专项修复：2 P0 + 3 P1 + 5 P2（2026-09-14）
