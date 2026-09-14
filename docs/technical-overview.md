@@ -8299,6 +8299,35 @@ onSearchSong = { keyword -> viewModel.searchNetworkSongs(keyword) },
 
 **版本**：v2.31.2 → **v2.31.3**（versionCode 136 → 137）
 
+### 10.142 v2.32.3 — CI 加固：修复 release guard 回归 + 引入 lint（2026-09-14）
+
+**问题描述**：
+
+1. §10.141 新增的 `packageRelease` guard 要求 `cryptoPassphrase` 非空，但 CI `build` job 生成的 `keystore.properties` 不含该键 → CI `assembleRelease` 会直接失败（本次改造引入的回归）
+2. 项目从未跑过 lint；`AGENTS.md` 关于 CI 的描述亦过时（称"只跑 `assembleDebug`、不跑测试/lint"，实际已含 `testDebugUnitTest`）
+
+**修改**：
+
+- `.github/workflows/build.yml`：
+  - `build` job 的 "Create keystore for CI" 步骤补 `cryptoPassphrase`（取 `secrets.CRYPTO_PASSPHRASE`，未配置时回退占位值），修复上述回归
+  - 新增 `lint` job：跑 `lintDebug` 并上传 `app/build/reports/lint-results-debug.html`；以非阻塞（`continue-on-error: true`）方式引入
+- `AGENTS.md`：修正 CI 描述（三 job：build/test/lint，lint 非阻塞）
+
+**验证**：
+
+- workflow YAML 经 pyyaml 解析通过（3 个 job：`build`/`test`/`lint`；keystore 步骤 env 正确注入 secret）
+- 本地实跑 `:app:lintDebug`：命令可用，报告确实生成于 `app/build/reports/lint-results-debug.html`；结果为 **133 errors / 255 warnings**（BUILD FAILED），印证非阻塞设计的必要性
+- `:app:assembleDebug`（in-process）仍 **BUILD SUCCESSFUL**
+
+**lint 首跑发现的待办（审阅报告未覆盖，属新发现）**：
+
+- `NewApi` 9 处 —— minSdk 22 下未做版本守卫，潜在真机崩溃：`BatteryOptimizationHelper.kt:27`（API 23）、`ExportCoordinator.kt:62`（API 24/30）、`MainViewModel.kt:566`（API 24）、`MainViewModel.kt:2493`（API 24）
+- `RestrictedApi` 20 处 —— 集中在 `CoilBitmapLoader.kt` 调用 `androidx.concurrent` 内部 API（`ResolvableFuture`/`AbstractResolvableFuture`），库升级易碎
+- `ExportedService` 1 处（警告）—— `AndroidManifest.xml:66` 导出的 service 未要求权限
+- `StaticFieldLeak` 1 处（警告）—— `AppPreferences.kt:79` 静态持有 Context（当前单例设计，风险低）
+
+**版本**：v2.32.3 批次内，versionCode 保持 142。
+
 ### 10.141 v2.32.3 — S1 阶段 A+：移除仓库内默认加密口令 + release guard（2026-09-14）
 
 **问题描述**：v2.32.3 批次的 S1 修复虽把口令改为 `BuildConfig` 注入，但 `app/build.gradle.kts` 仍以 `.ifBlank { "…" }` 保留了与历史一致的默认口令——口令字面量仍在公开仓库（`github.com/hxzhang2000/NASMusicTV`）中，安全收益为零。

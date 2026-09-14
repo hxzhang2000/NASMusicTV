@@ -31,7 +31,7 @@ $env:JAVA_HOME = "C:\Program Files\Android\Android Studio\jbr"
 
 > 电视上若已装 debug 版（签名不同），`install -r` 会报 `INSTALL_FAILED_UPDATE_INCOMPATIBLE`，需先 `uninstall com.nasmusic.tv` 再安装。
 
-CI (`.github/workflows/build.yml`) runs **only `assembleDebug`** on push/PR to `main`/`develop` — it does **not** run tests or lint. No lint is configured. Treat a green CI as "compiles", not "verified".
+CI (`.github/workflows/build.yml`) has three jobs: **`build`** runs `assembleRelease` (push to `main`/`develop`, tags `v*`; PR to `main`), **`test`** runs `testDebugUnitTest`, and **`lint`** runs `lintDebug` — but lint is **non-blocking** (`continue-on-error: true`) and just uploads a report, because the project has no lint baseline yet. So a green CI now means "compiles + unit tests pass", not "lint-clean". Note the CI `build` job generates a throwaway `keystore.properties` (CI signing key) — it must include a `cryptoPassphrase` line, otherwise the `packageRelease` guard in `app/build.gradle.kts` fails the build.
 
 ## Architecture (verified against source)
 

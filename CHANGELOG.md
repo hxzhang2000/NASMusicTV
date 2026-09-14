@@ -30,6 +30,11 @@
 - **L4 补充（db）**: `LocalMusicDatabase.kt` 注释强化：`fallbackToDestructiveMigration` 仅适用可由其他数据源重建的本地索引，**未来承载用户数据（下载/收藏/播放列表）的数据库绝不可启用**，必须维护 Migration 类
 - **审阅文档**: `logs_temp/code-review-full-report-2026-09-13.md` 追加"实施记录"段并随 T2/T6/T3 落地持续同步，标注 13 项已修复 + 3 项暂缓（理由）+ 综合评分 74 → 78 → 81
 
+### CI
+- **CI 修复（workflow）**: `.github/workflows/build.yml` 的 `build` job 生成 `keystore.properties` 时补 `cryptoPassphrase`（优先取仓库 secret `CRYPTO_PASSPHRASE`，未配置时回退占位值），修复 S1 阶段 A+ 的 release guard 会导致 CI `assembleRelease` 失败的问题
+- **CI 新增 lint（workflow）**: 新增 `lint` job 跑 `lintDebug` 并上传 HTML 报告。项目此前从未跑过 lint；首跑结果为 **133 errors / 255 warnings**，故该 job 以非阻塞（`continue-on-error`）方式引入，待清理后转阻塞。主要类别：`UnusedResources` 152、`TypographyEllipsis` 26、`UseKtx` 21、`RestrictedApi` 20（集中在 `CoilBitmapLoader.kt` 使用 androidx 内部 API）、`NewApi` 9（minSdk 22 下未做版本守卫，潜在崩溃：`BatteryOptimizationHelper.kt:27`、`ExportCoordinator.kt:62`、`MainViewModel.kt:566/2493`）
+- **文档修正（AGENTS.md）**: 原述"CI 只跑 `assembleDebug`、不跑测试/lint"已过时——实际为 `assembleRelease` + `testDebugUnitTest`，本次再补 `lintDebug`
+
 ### Changed
 - **T3 改造（player）**: `PlayerManager.kt` 的 queue/currentIndex/currentSong 三个独立 `MutableStateFlow` 合并为单一 `PlayerState`（新文件 `player/PlayerState.kt`）原子流，全部状态更新点改 `_playerState.update { it.copy(...) }` 同帧发布；`PlayerViewModel` 移除原 3 个转发流改透传 `playerState`；订阅点适配（AppRoot/QueueBranch 收集 `playerState` 派生、MainViewModel 5 处流派生 + 8 处取值、DownloadViewModel 删除下载暂停判定、PlaybackService 通知"下一首"标题），详见 §10.139
 - 版本 v2.32.2 → **v2.32.3**（versionCode 141 → 142）
