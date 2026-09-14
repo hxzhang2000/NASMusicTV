@@ -72,6 +72,18 @@ class FeiniuAdapter(private val appContext: Context? = null) : BackendAdapter {
         /** 封面请求尺寸 */
         private const val COVER_SIZE = 512
 
+        /**
+         * ⚠️ `audioSpec.bitrate` 的单位（bps 还是 kbps）**未确认，一律填 0**。
+         *
+         * 依据：参考项目只在 `AudioSpecDto` 里声明了该字段、**全项目从未使用**，
+         * 契约文档亦未说明单位 —— 没有任何证据支持某一种解读。
+         * 而 `SongInfoPanel` 会把 `SongTechnicalInfo.bitrate` 直接渲染成 "N kbps"，
+         * 猜错就会显示 "320000 kbps" 这种一眼假的值。
+         * **宁缺勿错**：填 0 时 UI 显示 "—"。待真机抓一条已知码率的曲目确认单位后，
+         * 再改为原值（kbps）或 /1000（bps）。见开发计划 §12 待确认项。
+         */
+        private const val BITRATE_UNVERIFIED = 0
+
         /** 搜索用的全量曲目缓存有效期 */
         private const val TRACK_CACHE_TTL_MS = 5 * 60 * 1000L
 
@@ -532,9 +544,13 @@ class FeiniuAdapter(private val appContext: Context? = null) : BackendAdapter {
             val spec = data.getAsJsonObject("audioSpec") ?: return@runCatchingSuspend null
             val container = str(spec, "container").orEmpty()
             val codec = str(spec, "codec").orEmpty()
+            val rawBitrate = spec.get("bitrate")?.asLong ?: 0L
+            if (rawBitrate != 0L) {
+                AppLog.d(TAG, "track/metadata: raw bitrate=$rawBitrate (单位未确认，暂不展示)")
+            }
             SongTechnicalInfo(
                 codec = codec.uppercase(),
-                bitrate = spec.get("bitrate")?.asLong?.toInt() ?: 0,
+                bitrate = BITRATE_UNVERIFIED,
                 // ⚠️ 飞牛 audioSpec 不含采样率与声道数，未知字段填 0，不要臆造
                 sampleRate = 0,
                 channels = 0,
@@ -853,7 +869,6 @@ class FeiniuAdapter(private val appContext: Context? = null) : BackendAdapter {
         // duration 单位已是毫秒（参考项目 Dto: durationMs = duration），不要 ×1000
         val spec = audioSpec ?: obj.getAsJsonObject("audioSpec")
         val durationMs = obj.get("duration")?.asLong ?: spec?.get("duration")?.asLong ?: 0L
-        val bitrate = spec?.get("bitrate")?.asLong ?: 0L
 
         return Song(
             id = ID_PREFIX + guid,
@@ -866,7 +881,8 @@ class FeiniuAdapter(private val appContext: Context? = null) : BackendAdapter {
             streamUrl = null,
             durationMs = durationMs,
             trackNumber = fallbackTrackNumber,
-            bitrate = bitrate.toInt()
+            // 同 [BITRATE_UNVERIFIED]：单位未确认，不填
+            bitrate = BITRATE_UNVERIFIED
         )
     }
 

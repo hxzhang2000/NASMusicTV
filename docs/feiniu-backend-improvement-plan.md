@@ -278,7 +278,7 @@ album     = album?.name ?: ""
 albumId   = album?.guid?.let { "feiniu_" + it }
 coverUrl  = coverId → FeiniuUrl.coverUrl(coverId, 512)
 durationMs= duration（原样，已是毫秒）
-bitrate   = audioSpec.bitrate（kbps，按现有字段语义）
+bitrate   = 0（⚠️ 单位未确认，见 §12）——**不要**直接透传
 trackNumber = 由 sort=trackNo,asc 顺序保证，服务端不返回则填序号
 ```
 
@@ -315,7 +315,9 @@ trackNumber = 由 sort=trackNo,asc 顺序保证，服务端不返回则填序号
   - 因此**主路径是两条**：① `parseSong()` 时把 `coverId` 直接解析成完整 URL 写入 `Song.coverUrl`；② `getCoverUrlCandidates(song)` 返回候选列表。
   - `getCoverUrlCandidates(song)` 必须**以 `song.coverUrl` 开头**（对齐 `JellyfinAdapter.getCoverUrlCandidates` 的写法），否则主路径封面全丢。顺序：`song.coverUrl → 专辑封面 → 歌手封面`，去重、去空。
   - `getCoverUrl(songId)` 仍实现（保持接口契约），走 `songId → coverId` 的 LRU 缓存；缓存未命中时回退 `track/metadata?guid=` 取 `coverId`；仍无则返回空串（UI 降级占位图）。它不在热路径上，实现可从简。
-- `getSongTechnicalInfo(songId)`：`track/metadata?guid=` → `audioSpec` 映射为 `SongTechnicalInfo(codec, bitrate, durationMs, format=container, channels=0/未知, sampleRate=0/未知)`（D17）。注意：`audioSpec` 不含采样率与声道数，未知字段填 0，不要臆造。
+- `getSongTechnicalInfo(songId)`：`track/metadata?guid=` → `audioSpec` 映射为 `SongTechnicalInfo(codec, durationMs, format=container, bitrate=0, channels=0, sampleRate=0)`（D17）。注意：
+  - `audioSpec` **不含采样率与声道数**，填 0，不要臆造；
+  - **`bitrate` 也填 0**：其单位（bps / kbps）无证据支持，而 `SongInfoPanel` 会直接渲染成 "N kbps"，猜错会显示 "320000 kbps"。详见 §12。
 - `getApiVersion()`：`sys/config` → `VersionInfo.Runtime("飞牛音乐", serverVersion, "sys/config", now)`；`mediasrvVersion` 记入日志/描述（D16）。
 - `serverName`：`sys/config.serverName`。
 
@@ -556,7 +558,19 @@ AGENTS.md 记载 v2.5.1 曾因「Gson 类型擦除 + R8」崩溃，本次改动�
 
 ---
 
-## 12. 附：参考项目关键文件索引
+## 12. 待确认项（需真机确认，勿猜）
+
+这几项在参考项目与契约文档中**都找不到依据**，实现一律采取「宁缺勿错」策略（不展示），
+而不是猜测后展示一个可能错误的值。真机验收时顺带确认即可一次性修好。
+
+| # | 项 | 现状 | 为什么不能猜 | 如何确认 |
+| --- | --- | --- | --- | --- |
+| Q1 | `audioSpec.bitrate` 的单位 | 填 0（`BITRATE_UNVERIFIED`），UI 显示 "—" | 参考项目只在 `AudioSpecDto` 声明该字段、**全项目零使用**；契约文档未提。`SongInfoPanel` 会渲染成 "N kbps"，猜错即 "320000 kbps"；也不能用「>10000 当作 bps」这类启发式——24bit/192kHz 立体声 FLAC 约 9216 kbps，启发式会误判 | 找一首已知码率的曲目（如 320kbps MP3），看服务端返回是 `320` 还是 `320000`，据此改为原值或 `/1000` |
+| Q2 | `AudioSpecDto` 是否含采样率 / 声道数 | 填 0，UI 显示 "—" | DTO 只有 `codec / container / duration / bitrate` 四个字段，确实没有 | 无需确认，除非 fnOS 后续版本扩充了字段 |
+| Q3 | `sort` 参数各字段名的可用集合 | 沿用参考项目实际用到的 4 组 | 超出参考项目使用范围的排序字段（如按标题排序）未验证 | 需要时抓包确认 |
+| Q4 | 中文元数据是否需要 `EncodingUtils.fixEncoding` | 已应用（与 Jellyfin 一致） | 参考项目是纯 UTF-8 解析，未做 GBK 兜底；本仓库对 NAS 后端统一应用 | 若发现中文名被误改（正常 UTF-8 被当 GBK 重解），去掉该调用 |
+
+## 13. 附：参考项目关键文件索引
 
 | 文件 | 作用 |
 | --- | --- |

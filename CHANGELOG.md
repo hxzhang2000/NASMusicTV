@@ -43,7 +43,7 @@
 - `FeiniuUrl`：地址归一化（补 scheme / 默认端口 5666·5667 / 推导 `/music/api/v1/`）+ 端点拼装。**有意偏离**参考项目的「显式 http 无端口补 80」规则，统一补 5666/5667——本适配器是飞牛专用，填 `http://192.168.1.100` 指的一定是音乐服务
 - `BackendAuthHeaders`：跨进程单例的后端认证头，供播放与封面链路消费。**只在 host 精确匹配时注入**，令牌不会随 302 泄漏到 CDN / 第三方域名；`BackendRegistry` 在连接成功/断开时同步更新与清空
 - 版本信息 `sys/config` → `VersionInfo.Runtime`（关于页显示飞牛真实版本号与 mediasrv 版本）
-- 技术信息 `track/metadata` → `SongTechnicalInfo`（codec / container / bitrate）。⚠️ 飞牛 `audioSpec` 不含采样率与声道数，**未知字段填 0，不臆造**
+- 技术信息 `track/metadata` → `SongTechnicalInfo`（codec / container / duration）。⚠️ 飞牛 `audioSpec` 不含采样率与声道数，填 0；**`bitrate` 同样填 0** —— 其单位（bps / kbps）在参考项目里只有 DTO 声明、**全项目零使用**，契约文档亦未说明，而 `SongInfoPanel` 会直接渲染成 "N kbps"，猜错即显示 "320000 kbps"。宁缺勿错，UI 显示 "—"，真机确认单位后一行即可改回（见文档 §12 Q1）
 - deviceId 持久化到 SharedPreferences（旧实现每次连接都生成新 UUID，导致服务端设备列表膨胀）
 - 令牌失效（401 / code 99999·120001）时静默重登一次再重试
 - `FeiniuUrlTest.kt`（纯 JVM，25 用例）：地址归一化 / 端点拼装的回归网，覆盖默认端口 5666·5667、显式端口保留、路径幂等（不拼出 `/music/api/v1/music/api/v1/`）、凭据与非 http 协议拒绝、IPv6、`guid` 查询参数形态等。覆盖旧实现真实踩过的坑：默认端口 80、流地址用路径段而非查询参数、封面按曲目 ID 而非 `coverId`
