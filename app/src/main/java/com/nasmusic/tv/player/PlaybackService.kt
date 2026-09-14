@@ -79,7 +79,12 @@ class PlaybackService : MediaLibraryService() {
     /** F2-2b：切换播放模式（通知按钮 / 系统媒体卡片自定义按钮共用） */
     private fun handleTogglePlayMode() {
         AppLog.d("PlaybackService", "control: toggle play mode")
-        (application as NasMusicApp).playModeToggleHandler?.invoke()
+        // L3：经 app 容器的事件流投递，由 UI 侧执行切换（playMode 真相在 PlayerViewModel）。
+        // 返回 false = 当前无 UI 订阅（Activity 已销毁 / 应用已退出），事件按设计丢弃——
+        // 与旧实现 handler == null 时静默无反应同义，不是故障。
+        if (!(application as NasMusicApp).requestPlayModeToggle()) {
+            AppLog.w("PlaybackService", "control: toggle play mode dropped (no UI subscriber)")
+        }
         // 强制刷新（模式图标变化）
         lastNotificationState = null
         updateNotification()

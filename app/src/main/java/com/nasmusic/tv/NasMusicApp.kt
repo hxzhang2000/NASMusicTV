@@ -40,6 +40,9 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.launch
@@ -81,9 +84,31 @@ class NasMusicApp : Application(), ImageLoaderFactory {
     lateinit var networkMusicManager: NetworkMusicManager
         private set
 
-    /** F2-2：播放模式切换回调宿主（MainActivity 注册，PlaybackService 通知按钮调用） */
-    @Volatile
-    var playModeToggleHandler: (() -> Unit)? = null
+    // ---- F2-2 / L3：播放模式切换事件（通知栏按钮 / 系统媒体卡片 → UI 侧）----
+    //
+    // 取代原先的 `var playModeToggleHandler: (() -> Unit)?` 可变闭包字段。原实现的问题
+    // **不在 GC**：闭包捕获的是 ViewModel 而非 Activity，不会形成 Activity 泄漏；问题在于
+    // **订阅生命周期无法自动收敛**——onDestroy 里的清空被 `if (!isFinishing) return` 前置
+    // 拦截，配置重建与「不保留活动」等场景下，Application 会长期持有上一个 Activity 的
+    // ViewModel 闭包。改为 SharedFlow 后由订阅方的 CoroutineScope 决定生命周期，作用域
+    // 取消即退订，无需手动解绑。
+    //
+    // ⚠️ 刻意**不设缓冲**（replay = 0、无 extraBufferCapacity）：事件只在存在活跃订阅者时
+    // 投递，否则丢弃。若允许缓冲，用户在无 UI 时（后台播放 / Activity 已销毁）点通知按钮，
+    // 事件会滞留到下次打开 App 才被消费，表现为「一进应用播放模式自己跳了一档」。丢弃与
+    // 旧实现 `handler == null` 时静默无反应完全同义，不退化。
+    private val _playModeToggleEvents = MutableSharedFlow<Unit>()
+    val playModeToggleEvents: SharedFlow<Unit> = _playModeToggleEvents.asSharedFlow()
+
+    /**
+     * 请求切换播放模式（通知栏 / 媒体卡片按钮 → UI 侧执行）。
+     *
+     * 真正的切换动作必须由 UI 侧完成：playMode 的真相在 `PlayerViewModel`（B-13：UI/设置
+     * 状态，不归 PlayerManager），服务侧独立完成会与界面显示脱节。
+     *
+     * @return true 已投递给至少一个订阅者；false 当前无 UI 订阅（事件按设计丢弃）
+     */
+    fun requestPlayModeToggle(): Boolean = _playModeToggleEvents.tryEmit(Unit)
 
     /** 智能电台 Manager（F2-3）：基于当前歌曲流派+歌手生成相似随机流 */
     lateinit var smartRadioManager: com.nasmusic.tv.backend.radio.SmartRadioManager

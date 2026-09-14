@@ -361,9 +361,19 @@ class MainActivity : ComponentActivity() {
         // 启动播放服务
         startService(Intent(this, PlaybackService::class.java))
 
-        // F2-2：通知栏"播放模式"按钮接线——service 广播回调转发到 PlayerViewModel
-        // 经 app 容器中转（service 与 Activity 生命周期独立，直接持有 VM 会泄漏）
-        (application as NasMusicApp).playModeToggleHandler = { viewModel.playerVM.togglePlayMode() }
+        // F2-2 / L3：通知栏"播放模式"按钮接线——service 发出的事件转交 PlayerViewModel。
+        // 切换动作必须由 UI 侧执行：playMode 的真相在 PlayerViewModel（B-13：不归
+        // PlayerManager），服务侧独立完成会与界面显示脱节。
+        // 用 lifecycleScope 而**不是** repeatOnLifecycle(STARTED)：本事件在 Activity 退到
+        // 后台（按 Home）后仍需可用——那种场景下用户正是通过通知栏控制播放，若按 STARTED
+        // 退订会让按钮静默失效（相比旧实现反而是退化）。lifecycleScope 随 Activity 销毁
+        // 自动取消 → 自动退订，无需在 onDestroy 手动解绑，也不会像旧闭包那样被 Application
+        // 长期持有上一个 Activity 的 ViewModel。
+        lifecycleScope.launch {
+            (application as NasMusicApp).playModeToggleEvents.collect {
+                viewModel.playerVM.togglePlayMode()
+            }
+        }
 
         // D-2: 网络状态监听
         networkMonitor = NetworkMonitor(
@@ -384,8 +394,8 @@ class MainActivity : ComponentActivity() {
         // 从最近任务划掉应用同样保留播放（通知栏可控），符合媒体类应用预期
         if (!isFinishing) return
         val app = (application as NasMusicApp)
-        // P3：解除通知栏"播放模式"回调，避免 Application 单例长期持有已销毁 ViewModel 的闭包
-        app.playModeToggleHandler = null
+        // L3：此处**不再**需要手动解绑播放模式回调——订阅跑在 lifecycleScope 中，
+        // onDestroy 时作用域自动取消、SharedFlow 自动退订，时序窗口与残留引用一并消失
         // 停止播放服务（如果仍在运行）
         try {
             stopService(Intent(this, PlaybackService::class.java))
