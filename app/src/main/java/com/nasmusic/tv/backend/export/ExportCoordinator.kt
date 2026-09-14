@@ -58,8 +58,16 @@ class ExportCoordinator(
     /** 设备 UUID（StorageVolume.getUuid() 为 null 时回退 stableHash(path)） */
     fun volumeIdOf(device: com.nasmusic.tv.data.model.StorageDevice): String {
         val uuid = try {
-            val sm = context.getSystemService(Context.STORAGE_SERVICE) as android.os.storage.StorageManager
-            sm.storageVolumes.firstOrNull { it.directory?.absolutePath == device.path }?.uuid
+            // NewApi 修复（2026-09-14）：StorageManager.getStorageVolumes 与 StorageVolume.getUuid
+            // 需 API 24，StorageVolume.getDirectory 需 API 30（minSdk 22）。低版本无公开 API 可按
+            // 路径匹配卷，直接跳过并走下方哈希回退（此前会抛 NoSuchMethodError，且 catch(Exception)
+            // 捕获不到 Error，属于真实崩溃路径）。
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
+                val sm = context.getSystemService(Context.STORAGE_SERVICE) as android.os.storage.StorageManager
+                sm.storageVolumes.firstOrNull { it.directory?.absolutePath == device.path }?.uuid
+            } else {
+                null
+            }
         } catch (e: Exception) { null }
         return uuid ?: com.nasmusic.tv.util.HashUtils.stablePathHash64(device.path).toString()
     }

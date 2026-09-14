@@ -563,7 +563,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
      * 用户手动为这些歌曲选择了「在线歌词」。
      * 加载歌词时后端歌词优先于持久化缓存，但不得覆盖用户的显式选择。仅内存态。
      */
-    private val userNetworkLyricsOverride = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
+    // NewApi 修复（2026-09-14）：ConcurrentHashMap.newKeySet 需 API 24（minSdk 22）。
+    // 改用 Collections.newSetFromMap（API 9+），语义等价：并发安全的可变 Set，
+    // 同时消除由此产生的 KeySetView#contains/add/remove 三处 NewApi。
+    private val userNetworkLyricsOverride: MutableSet<String> =
+        java.util.Collections.newSetFromMap(java.util.concurrent.ConcurrentHashMap<String, Boolean>())
 
     // 歌词高亮模式 — 提升到 ViewModel，跨页面切换保留用户选择
     private val _lyricsHighlightMode = MutableStateFlow(LyricsHighlightMode.LINE_BY_LINE)

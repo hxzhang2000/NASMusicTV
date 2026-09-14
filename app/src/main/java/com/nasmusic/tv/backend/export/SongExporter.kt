@@ -280,7 +280,9 @@ class SongExporter(
     /** SAF 嵌套目录解析：逐级 findFile/createDirectory 定位到叶子目录，再 createFile 文件名 */
     private fun resolveChildDoc(root: DocumentFile, relPath: String): DocumentFile? {
         val segments = relPath.split("/").toMutableList()
-        val fileName = segments.removeLast() // 最后一段是文件名
+        // NewApi 修复（2026-09-14）：removeLast() 在 API 35 会被 java.util.SequencedCollection
+        // 的同名方法遮蔽，重新编译后会在低版本上 NoSuchMethodError；改用 removeAt(lastIndex)。
+        val fileName = segments.removeAt(segments.lastIndex) // 最后一段是文件名
         var current = root
         for (dir in segments) {
             current = current.findFile(dir)

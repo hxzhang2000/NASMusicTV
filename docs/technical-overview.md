@@ -8299,6 +8299,26 @@ onSearchSong = { keyword -> viewModel.searchNetworkSongs(keyword) },
 
 **版本**：v2.31.2 → **v2.31.3**（versionCode 136 → 137）
 
+### 10.143 v2.32.3 — 修复 9 处 NewApi 潜在崩溃（2026-09-14）
+
+**问题描述**：lint 首跑（§10.142）报出 9 处 `NewApi` —— minSdk 22 却调用了 API 23/24/30/35 的方法且无版本守卫。审阅报告未覆盖此类问题。其中 `ExportCoordinator.volumeIdOf` 最危险：低版本抛 `NoSuchMethodError`，而外层 `catch (e: Exception)` 捕获不到 `Error`，属真实崩溃路径（影响导出功能）。
+
+**修改**：
+
+- `player/BatteryOptimizationHelper.kt`：`isIgnoringBatteryOptimizations` 增加 `SDK_INT < M` 守卫（低版本尚无电池优化概念，返回 `true`）
+- `backend/export/ExportCoordinator.kt`：`volumeIdOf` 仅在 `SDK_INT >= R` 时按路径匹配卷（`getStorageVolumes`/`getUuid` 需 API 24、`getDirectory` 需 API 30），低版本走既有 `stablePathHash64` 回退
+- `ui/viewmodel/MainViewModel.kt`：`userNetworkLyricsOverride` 由 `ConcurrentHashMap.newKeySet()`（API 24）改为 `Collections.newSetFromMap(ConcurrentHashMap())`（API 9+），类型显式声明 `MutableSet<String>`
+- `backend/export/SongExporter.kt`：`segments.removeLast()` → `segments.removeAt(segments.lastIndex)`（避免 API 35 `SequencedCollection` 遮蔽导致低版本 `NoSuchMethodError`）
+
+**验证**：
+
+- `:app:assembleDebug`（in-process，4m20s）**BUILD SUCCESSFUL**
+- `:app:lintDebug` 复跑：`NewApi` **9 → 0**；lint 总数 133 errors / 255 warnings → **125 errors / 254 warnings**
+
+**行为变化说明**：`volumeIdOf` 在 API 24–29 上不再按路径匹配卷（Android 公开 API 到 30 才提供 `StorageVolume.getDirectory`），改为回退路径哈希；该分支此前必然崩溃，故无需兼容的历史数据。API 30+ 行为不变。
+
+**版本**：v2.32.3 批次内（该版本尚未打 tag），versionCode 保持 142。
+
 ### 10.142 v2.32.3 — CI 加固：修复 release guard 回归 + 引入 lint（2026-09-14）
 
 **问题描述**：

@@ -22,6 +22,9 @@ object BatteryOptimizationHelper {
      * 检查当前应用是否被忽略电池优化
      */
     fun isIgnoringBatteryOptimizations(context: Context): Boolean {
+        // NewApi 修复（2026-09-14）：PowerManager.isIgnoringBatteryOptimizations 需要 API 23，
+        // 而 minSdk 为 22。低版本系统尚无电池优化概念，直接视为「已忽略」。
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return true
         val pm = context.getSystemService(Context.POWER_SERVICE) as? PowerManager
             ?: return true // 无法获取则视为已优化
         return pm.isIgnoringBatteryOptimizations(context.packageName)
