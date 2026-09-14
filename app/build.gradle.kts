@@ -24,11 +24,17 @@ val keystoreKeyPassword = readKeystoreProperty("keyPassword")
 val baiduAppId = readKeystoreProperty("baiduAppId")
 val baiduAppSecret = readKeystoreProperty("baiduAppSecret")
 
-// S1 修复（2026-09-13）：CryptoUtils AES-256 派生口令从 keystore.properties 读取,
-// 避免硬编码在源码中。keystore.properties 已在 .gitignore 中,不入仓。
-// CI 默认值与历史硬编码值保持一致,确保兼容已有加密数据。
+// S1 阶段 A+（2026-09-14）：CryptoUtils AES-256 派生口令不再在仓库内提供默认值。
+// 取值顺序：keystore.properties.cryptoPassphrase → 环境变量 CRYPTO_PASSPHRASE。
+// keystore.properties 已在 .gitignore 中（不入仓），仓库 HEAD 不再包含该口令。
+//
+// ⚠️ 兼容性：既有安装的加密凭据（百度 refresh_token 等）由历史口令加密，本地必须提供
+// 与之相同的 cryptoPassphrase，否则已保存凭据将无法解密。为防止静默发布"换过密钥"的包，
+// release 打包在口令缺失时会直接失败（见文件末尾 guard），debug/CI 不受影响。
+// 注意：口令仍会被编译进 APK 的 BuildConfig（"混淆级"而非"保密级"）；彻底方案见
+// CryptoUtils.kt 注释（AndroidKeyStore/StrongBox + 既有数据迁移）。
 val cryptoPassphrase = readKeystoreProperty("cryptoPassphrase")
-    .ifBlank { "NasMusicTV-LocalCrypto-2b7e1f9c-2024" }
+    .ifBlank { System.getenv("CRYPTO_PASSPHRASE").orEmpty() }
 
 android {
     namespace = "com.nasmusic.tv"
@@ -114,6 +120,22 @@ android {
             val output = this as com.android.build.gradle.internal.api.ApkVariantOutputImpl
             val vName = variant.versionName.replace(".", "-")
             output.outputFileName = "NASMusicTV-${variant.name}-v${vName}.apk"
+        }
+    }
+}
+
+// S1 阶段 A+ guard：release 打包前校验口令已配置，避免静默发布一个换了密钥的包
+// （既有用户凭据将无法解密）。仅作用于 release 打包任务，debug / CI 不受影响。
+tasks.configureEach {
+    if (name == "packageRelease") {
+        doFirst {
+            if (cryptoPassphrase.isBlank()) {
+                throw GradleException(
+                    "CRYPTO_PASSPHRASE 未配置：请在 keystore.properties 添加 " +
+                        "cryptoPassphrase=<历史口令>，或设置环境变量 CRYPTO_PASSPHRASE。" +
+                        "缺失会改变加密密钥，导致既有已保存凭据无法解密。"
+                )
+            }
         }
     }
 }

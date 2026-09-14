@@ -8299,6 +8299,22 @@ onSearchSong = { keyword -> viewModel.searchNetworkSongs(keyword) },
 
 **版本**：v2.31.2 → **v2.31.3**（versionCode 136 → 137）
 
+### 10.141 v2.32.3 — S1 阶段 A+：移除仓库内默认加密口令 + release guard（2026-09-14）
+
+**问题描述**：v2.32.3 批次的 S1 修复虽把口令改为 `BuildConfig` 注入，但 `app/build.gradle.kts` 仍以 `.ifBlank { "…" }` 保留了与历史一致的默认口令——口令字面量仍在公开仓库（`github.com/hxzhang2000/NASMusicTV`）中，安全收益为零。
+
+**修改**：
+
+- `app/build.gradle.kts`：删除 `.ifBlank { 默认口令 }`；取值改为 `readKeystoreProperty("cryptoPassphrase")` → `System.getenv("CRYPTO_PASSPHRASE")`
+- 新增 release guard：`tasks.configureEach` 在 `packageRelease` 的 `doFirst` 校验口令非空，缺失即抛 `GradleException`（仅作用于 release 打包，debug/CI 不受影响），避免静默发布一个换了密钥的包
+- 本地 `keystore.properties`（gitignored）补 `cryptoPassphrase=<历史口令>`，保证既有加密凭据（百度 refresh_token 等）仍可解密
+
+**验证**：`:app:assembleDebug`（in-process）**BUILD SUCCESSFUL**；生成的 `BuildConfig.CRYPTO_PASSPHRASE` 非空，且 `generateDebugBuildConfig` 保持 UP-TO-DATE（说明口令值与改造前完全一致，兼容性达成）；`:app:tasks --all` 确认 `packageRelease` 任务存在（guard 挂载点正确）。⚠️ guard 的"口令缺失即失败"未做实机触发测试（需一次约 10 分钟的 release 全量构建）。
+
+**遗留（需专项）**：口令仍存在于公开仓库的历史提交中（删除工作区文件无法消除），且仍编译进 APK。彻底方案为 AndroidKeyStore/StrongBox 随机密钥 + 既有数据一次性重加密迁移。
+
+**版本**：v2.32.3 批次内，versionCode 保持 142。
+
 ### 10.140 v2.32.3 — 审阅实施记录表述纠偏（2026-09-14）
 
 **问题描述**：对 `logs_temp/code-review-full-report-2026-09-13.md` 的「实施记录」做逐项源码复核后，确认 13 项声称已修复的改动均在代码中真实存在（提交号/版本号/CHANGELOG/§10 亦属实），但发现 3 处表述与实际不符：

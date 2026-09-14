@@ -21,7 +21,7 @@
 - **S3 修复（backend）**: `SubsonicAdapter.kt` `toggleFavorite` 删除冗余的 `getFavorites()` 二次查询，直接使用入参 `isCurrentlyFavorite`，消除 TOCTOU 竞态窗口与多余网络请求
 - **T4 修复（backend）**: `SmartRadioManager.kt` 3 处 `playedIds.clear()` 移入 synchronized 块，所有 `generateBatch(playedIds)` 改为 `playedIds.toSet()` 快照，消除 UI 线程 stop/skip 与 IO 协程读取之间的可见性竞争
 - **P1#12 修复（viewmodel）**: `NetworkMusicViewModel.kt:675` `restoreBaiduIndexOnStart` 中 `getBaiduConfigSync()` 改为 `baiduConfigFlow.first()`，消除 runBlocking+IO 在 `Dispatchers.Default` 线程池上的阻塞
-- **S1 修复（security，收益有限）**: `CryptoUtils.kt` AES-256 派生口令改从 `BuildConfig.CRYPTO_PASSPHRASE` 注入，值由 `app/build.gradle.kts` 从 `keystore.properties.cryptoPassphrase` 读取。**注意**：为兼容既有加密数据，`app/build.gradle.kts` 保留了与历史硬编码一致的默认值，口令字面量仍存在于受版本控制的仓库中（只是从 `CryptoUtils.kt` 移到构建脚本）；仅当用户在 `keystore.properties` 中覆盖后，运行期口令才不再取自仓库默认值。此项仍属「混淆级」而非「保密级」
+- **S1 阶段 A+（security）**: `app/build.gradle.kts` **移除仓库内的默认口令**，取值改为 `keystore.properties.cryptoPassphrase` → 环境变量 `CRYPTO_PASSPHRASE`，仓库 HEAD 不再包含该口令。新增 release guard：口令缺失时 `packageRelease` 直接失败，避免静默发布一个换了密钥的包。⚠️ **兼容性**：本地 `keystore.properties` 必须提供与历史一致的口令，否则既有加密凭据（百度 refresh_token 等）无法解密（`keystore.properties` 已 gitignore）。注：口令仍编译进 APK 的 BuildConfig（「混淆级」非「保密级」），且仍存在于历史提交中；彻底方案为 AndroidKeyStore/StrongBox + 既有数据迁移，详见 §10.141
 - **L7 尾巴修复（player）**: `HqSeparationOrchestrator.kt` `release()` 末尾补 `scope.cancel()`，清理本编排器 scope 内协程
 - **P1#10 修复（viewmodel）**: `VisualizerViewModel.kt` `loadedCoverKey` 加 `@Volatile`，主线程写(63行)/IO 读(82行)跨线程可见性
 - **P1#2 修复（baidu）**: `BaiduNetdiskConfig.kt` ERRNO_MAP 补 31079 到"文件不存在或已被删除"
