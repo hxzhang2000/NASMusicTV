@@ -5,7 +5,8 @@ import kotlinx.coroutines.flow.Flow
 /**
  * R-4 百度网盘域子 Prefs（CloudDriveConfig 按类型存取；键不迁移）。
  * T2 第二批（2026-09-14）：全部便捷方法改为 suspend + baiduConfigFlow.first()，
- * 移除 runBlocking 同步透传（getBaiduConfigSync/getCloudDriveConfigSync/saveCloudDriveConfigSync 已无调用方）。
+ * 移除 runBlocking 同步透传。getBaiduConfigSync 已删除；getCloudDriveConfigSync /
+ * saveCloudDriveConfigSync 生产代码已无调用方，仅保留供单测 CloudDriveConfigTest 同步读写。
  */
 class BaiduPrefs internal constructor(private val prefs: AppPreferences) {
 

@@ -9,7 +9,7 @@
 
 ## [v2.32.3] - 2026-09-14
 
-> 代码质量修复批次（基于 code-review-full-report-2026-09-13.md 五次审阅落地）。本版本不引入新功能，仅修复 7 项 P0 线程安全问题 + 1 项 P0 安全问题 + 2 项 P1 状态一致性问题 + 1 项 P2 文档补充。落地后经编译验证补丁修复 3 处编译错误（T7 变量作用域 + P1#12/L7 缺失导入），`:app:assembleDebug` 与 `:app:assembleRelease` 均构建通过，详见 §10.136。
+> 代码质量修复批次（基于 code-review-full-report-2026-09-13.md 审阅落地，实施记录综合评分 74 → 78 → 81）。本版本不引入新功能，仅修复 7 项 P0 线程安全问题 + 1 项 P0 安全问题 + 2 项 P1 状态一致性问题 + 1 项 P2 文档补充。落地后经编译验证补丁修复 3 处编译错误（T7 变量作用域 + P1#12/L7 缺失导入），`:app:assembleDebug` 与 `:app:assembleRelease` 均构建通过，详见 §10.136。
 > 另含 T2（分批 Flow 化）：百度配置读取路径全部由 `runBlocking(IO)` 迁移到 `baiduConfigFlow.first()`（suspend），分两批落地（第一批外部 UI/App 调用点；第二批 AppPreferences 15 个便捷方法 + BaiduPrefs 透传 + BaiduOAuthClient/Netdisk/MvFileService/ViewModel 调用方），详见 §10.137。
 > 另含 T6（AudioFrame 双缓冲）：频谱数据仓库由单实例改为双缓冲 + `@Volatile writeIndex` 发布，消除音频回调线程写/渲染线程读的无同步撕裂；VisualizerStage 绘制循环改为每帧捕获 front 引用，详见 §10.138。
 > 另含 T3（PlayerManager 三元组原子化）：queue/currentIndex/currentSong 由三个独立 MutableStateFlow 合并为单一 `playerState` 原子流（`update{copy}` 同帧发布），消除快速切歌时 UI 读到"新队列+旧索引+旧歌名"的错帧状态；PlayerViewModel/AppRoot/QueueBranch/MainViewModel/DownloadViewModel/PlaybackService 订阅点全部适配，详见 §10.139。
@@ -21,24 +21,25 @@
 - **S3 修复（backend）**: `SubsonicAdapter.kt` `toggleFavorite` 删除冗余的 `getFavorites()` 二次查询，直接使用入参 `isCurrentlyFavorite`，消除 TOCTOU 竞态窗口与多余网络请求
 - **T4 修复（backend）**: `SmartRadioManager.kt` 3 处 `playedIds.clear()` 移入 synchronized 块，所有 `generateBatch(playedIds)` 改为 `playedIds.toSet()` 快照，消除 UI 线程 stop/skip 与 IO 协程读取之间的可见性竞争
 - **P1#12 修复（viewmodel）**: `NetworkMusicViewModel.kt:675` `restoreBaiduIndexOnStart` 中 `getBaiduConfigSync()` 改为 `baiduConfigFlow.first()`，消除 runBlocking+IO 在 `Dispatchers.Default` 线程池上的阻塞
-- **S1 修复（security）**: `CryptoUtils.kt` AES-256 派生口令从 `BuildConfig.CRYPTO_PASSPHRASE` 注入，值由 `app/build.gradle.kts` 从 `keystore.properties.cryptoPassphrase` 读取（默认与历史硬编码一致），口令不再明文写死在源码仓库
+- **S1 修复（security，收益有限）**: `CryptoUtils.kt` AES-256 派生口令改从 `BuildConfig.CRYPTO_PASSPHRASE` 注入，值由 `app/build.gradle.kts` 从 `keystore.properties.cryptoPassphrase` 读取。**注意**：为兼容既有加密数据，`app/build.gradle.kts` 保留了与历史硬编码一致的默认值，口令字面量仍存在于受版本控制的仓库中（只是从 `CryptoUtils.kt` 移到构建脚本）；仅当用户在 `keystore.properties` 中覆盖后，运行期口令才不再取自仓库默认值。此项仍属「混淆级」而非「保密级」
 - **L7 尾巴修复（player）**: `HqSeparationOrchestrator.kt` `release()` 末尾补 `scope.cancel()`，清理本编排器 scope 内协程
 - **P1#10 修复（viewmodel）**: `VisualizerViewModel.kt` `loadedCoverKey` 加 `@Volatile`，主线程写(63行)/IO 读(82行)跨线程可见性
 - **P1#2 修复（baidu）**: `BaiduNetdiskConfig.kt` ERRNO_MAP 补 31079 到"文件不存在或已被删除"
 
 ### Docs
 - **L4 补充（db）**: `LocalMusicDatabase.kt` 注释强化：`fallbackToDestructiveMigration` 仅适用可由其他数据源重建的本地索引，**未来承载用户数据（下载/收藏/播放列表）的数据库绝不可启用**，必须维护 Migration 类
-- **审阅文档**: `logs_temp/code-review-full-report-2026-09-13.md` 追加"实施记录"段，标注 10 项已修复 + 6 项暂缓（理由）+ 综合评分 74 → 78
+- **审阅文档**: `logs_temp/code-review-full-report-2026-09-13.md` 追加"实施记录"段并随 T2/T6/T3 落地持续同步，标注 13 项已修复 + 3 项暂缓（理由）+ 综合评分 74 → 78 → 81
 
 ### Changed
 - **T3 改造（player）**: `PlayerManager.kt` 的 queue/currentIndex/currentSong 三个独立 `MutableStateFlow` 合并为单一 `PlayerState`（新文件 `player/PlayerState.kt`）原子流，全部状态更新点改 `_playerState.update { it.copy(...) }` 同帧发布；`PlayerViewModel` 移除原 3 个转发流改透传 `playerState`；订阅点适配（AppRoot/QueueBranch 收集 `playerState` 派生、MainViewModel 5 处流派生 + 8 处取值、DownloadViewModel 删除下载暂停判定、PlaybackService 通知"下一首"标题），详见 §10.139
 - 版本 v2.32.2 → **v2.32.3**（versionCode 141 → 142）
 
-### 暂缓（4 项，需独立 PR）
+### 暂缓（3 项，需独立 PR）
 - S4 Jellyfin 会话内 401 重认证（需真实环境测试重试逻辑）
-- P1#1 OkHttp 连接池统一（涉及 DI 重构）
 - P1#5 VisualizerMath seed 隔离（30+ Renderer 全部修改）
 - L3 playModeToggleHandler 改 Flow（跨文件改造）
+
+> P1#1 OkHttp 连接池统一：已决定**不做**（见审阅报告实施记录 F 决策记录）
 
 ### P2 顺手项（未做）
 - `customAppKey/secretKey` 加密（原计划与 T2 一起做，T2 已完成但此项未动）

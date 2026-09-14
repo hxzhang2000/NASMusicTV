@@ -8299,6 +8299,26 @@ onSearchSong = { keyword -> viewModel.searchNetworkSongs(keyword) },
 
 **版本**：v2.31.2 → **v2.31.3**（versionCode 136 → 137）
 
+### 10.140 v2.32.3 — 审阅实施记录表述纠偏（2026-09-14）
+
+**问题描述**：对 `logs_temp/code-review-full-report-2026-09-13.md` 的「实施记录」做逐项源码复核后，确认 13 项声称已修复的改动均在代码中真实存在（提交号/版本号/CHANGELOG/§10 亦属实），但发现 3 处表述与实际不符：
+
+1. **S1 表述不实**：CHANGELOG 称"口令不再明文写死在源码仓库"，但口令字面量 `NasMusicTV-LocalCrypto-2b7e1f9c-2024` 仍作为默认值硬编码在 `app/build.gradle.kts`（受版本控制），安全收益基本为零——口令只是从 `CryptoUtils.kt` 移到构建脚本
+2. **T2 注释不实**：`BaiduPrefs.kt` 头部注释称 `getCloudDriveConfigSync`/`saveCloudDriveConfigSync` "已无调用方"，实际单测 `CloudDriveConfigTest` 仍在调用
+3. **报告自身计数不自洽**：正文称"P0 有效项 17 项"，与各章标题相加（安全 3 + 线程 6 + 架构 4 = 13）矛盾
+
+**修改**：
+
+- `CHANGELOG.md`：S1 条目改为准确表述——注明默认口令仍存在于仓库，仅在 `keystore.properties` 覆盖后运行期才不取自仓库默认值；标注此项属"混淆级非保密级"
+- `app/src/main/java/com/nasmusic/tv/data/prefs/BaiduPrefs.kt`：注释修正为"`getBaiduConfigSync` 已删除；`getCloudDriveConfigSync`/`saveCloudDriveConfigSync` 生产调用点已清零，仅保留供单测 `CloudDriveConfigTest` 同步读写"
+- `logs_temp/code-review-full-report-2026-09-13.md`（未跟踪文件）：两处"P0 有效项 17 项"改为 13 项并注明构成
+
+**澄清（避免误删）**：`getCloudDriveConfigSync`/`saveCloudDriveConfigSync` **不是死代码**——生产调用点确已清零，但 `app/src/test/.../CloudDriveConfigTest.kt` 仍在调用，故保留；T2 迁移的准确表述是"IO 调度器切换版 runBlocking 清零"，`NasMusicApp.kt:243` 仍保留一处启动期主线程 `runBlocking { baiduConfigFlow.first() }`（不带调度器切换，为 onCreate 同步取配置的既定取舍）。
+
+**验证**：`:app:assembleDebug`（in-process，2m19s）**BUILD SUCCESSFUL**。注：本机普通 Kotlin 守护进程模式会因 `AccessDeniedException`（`AppData\Local\kotlin\daemon`）失败，需带 `-Pkotlin.compiler.execution.strategy=in-process`。
+
+**版本**：v2.32.3 批次内，versionCode 保持 142。
+
 ### 10.139 v2.32.3 — T3 PlayerManager 三元组原子化（2026-09-14）
 
 **问题描述**：`PlayerManager` 的 `queue`/`currentIndex`/`currentSong` 是三个独立 `MutableStateFlow`，切歌/换队列时连续赋值非原子——UI 集中订阅点（AppRoot/QueueBranch/MainViewModel 派生流）在不同帧分别读三个流，快速切歌时可能读到"新队列 + 旧索引 + 旧歌名"的错帧状态（审阅报告 T3，v2.32.3 首批暂缓项，本次落地）。
