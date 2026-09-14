@@ -493,7 +493,8 @@ JAVA_HOME="C:/Program Files/Android/Android Studio/jbr" \
 | T9 | 搜索改本地过滤 | ✅ 完成 | `searchSongs` + `loadAllTracks`（5 分钟缓存） |
 | T10 | 认证头接线（播放 + 封面） | ✅ 完成 | 新增 `backend/BackendAuthHeaders.kt`；改 `BaiduHttpDataSourceFactory.kt`、`BackendRegistry.kt`、`NasMusicApp.kt` |
 | T11 | UI 默认端口 80→5666 | ✅ 完成 | `ServerConnectScreen.kt`、`strings.xml` |
-| T12 | 编译 + lint 验证 | ✅ 完成 | `assembleDebug` BUILD SUCCESSFUL；`lintDebug` **0 Error**（257 Warning） |
+| T12 | 编译 + lint 验证 | ✅ 完成 | `assembleDebug` BUILD SUCCESSFUL；`lintDebug` **0 Error**（257 Warning，改动文件自身 0 警告） |
+| T14 | `FeiniuUrl` 回归测试 | ✅ 完成 | 新增 `app/src/test/.../FeiniuUrlTest.kt`（纯 JVM，25 用例） |
 | T13 | 版本号 v2.32.4 + CHANGELOG + 提交 | ✅ 完成 | `build.gradle.kts`（143 / 2.32.4）、`CHANGELOG.md` |
 
 ### 实施过程中的修正（相对原计划）
@@ -505,10 +506,34 @@ JAVA_HOME="C:/Program Files/Android/Android Studio/jbr" \
 | E3 | 标准库 `runCatching` 无法包裹 suspend 调用 | 其 block 非 suspend；自定义 `runCatchingSuspend`（suspend block）替代 |
 | E4 | `getRandomSongs` 用「随机取页」而非 roam 端点 | roam 需维护漫游会话状态，收益不抵复杂度（已在 §1.3 列为非目标） |
 
+### T14 补充说明：测试是怎么验证的
+
+本机 `testDebugUnitTest` 无法运行（AGENTS.md 已记录：测试 worker 启动即死，exit 268435466），
+因此沿用本仓库 Demucs 那次的既有做法——**绕过 Gradle，用独立 JVM 编译真实源码并跑真实测试类**：
+
+```bash
+cd logs_temp/verify_feiniu_url && python run.py        # --clean 可强制重编
+```
+
+> ⚠️ `logs_temp/` 在 `.gitignore` 中，该 harness **不入库**（与仓库里 `verify_resampler` 的先例一致）。
+> 机器清理后需重建；脚本只依赖 Gradle 缓存里的 `kotlin-compiler-embeddable` / okhttp / junit，
+> 路径写在 `run.py` 顶部的常量里，版本升级时改常量即可。
+
+- `FeiniuUrl.kt` **零 Android 依赖**（只用 okhttp3 的 `HttpUrl` + JDK），无需抽取、无需打桩，
+  直接编源文件 + 测试文件。`run.py` 里的 `SOURCES` 指向 `app/src/...` 的**真实路径**，不做副本
+  （副本会与源码漂移）。
+- 结果：**`OK (25 tests)`**。
+- **反向对照**：把「旧实现的错误认知」（默认端口 80）写进断言重跑，得到 **9/25 失败、exit 1** —
+  证明 harness 确实能检出错误，25 条全绿不是空跑。
+- 另跑 `./gradlew compileDebugUnitTestKotlin` **BUILD SUCCESSFUL**，确认该测试在项目配置下能编译
+  （CI 的 `testDebugUnitTest` 会真正执行它）。
+
 ### 未验证项
 
-`testDebugUnitTest` 本机无法运行（AGENTS.md 已记录），**无任何单元测试**。
-动态行为需按 §5.2 的 A1–A14 在飞牛真机验收，其中最关键的是 **A5（播放出声）与 A6（封面显示）** —— 这两项直接验证 T10 的认证头注入是否真正打通。
+- **Gradle 侧未跑过测试**（本机跑不了），25 用例是独立 JVM 跑出来的；CI 是最终裁判。
+- 适配器主体（`FeiniuAdapter`）依赖 Android `Context` 与网络，**未纳入单测**。
+- 动态行为需按 §5.2 的 A1–A14 在飞牛真机验收，其中最关键的是 **A5（播放出声）与 A6（封面显示）** ——
+  这两项直接验证 T10 的认证头注入是否真正打通。
 
 ---
 

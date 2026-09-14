@@ -13,7 +13,7 @@
 >
 > ⚠️ 旧实现与真实协议在**认证方式、分页参数、端点路径、ID 语义**四个层面均不一致，按旧代码几乎必然连不上或全量 401/404。本次共修正 22 项缺陷，其中 5 项为阻断级（D1 认证头 / D2 令牌字段 / D9 流地址 / D21 播放链路注入 / D22 封面链路注入）。
 >
-> ⚠️ 本机 `testDebugUnitTest` 无法运行（测试 worker 启动即死），**未经任何单元测试**；验证手段为 `assembleDebug` + `lintDebug`。动态行为需在飞牛真机按文档 §5.2 的 A1–A14 用例验收。
+> ⚠️ 本机 `testDebugUnitTest` 无法运行（测试 worker 启动即死），**Gradle 侧未跑过任何测试**。验证手段：`assembleDebug` + `lintDebug` + `compileDebugUnitTestKotlin` 编译通过，另用独立 JVM harness（`logs_temp/verify_feiniu_url/run.py`，绕过 Gradle）把新增的 `FeiniuUrlTest` 跑出 **OK (25 tests)**，并做反向对照确认 harness 能检出错误（注入旧错误认知后 9/25 失败）。动态行为仍需飞牛真机按文档 §5.2 的 A1–A14 验收。
 
 ### Fixed
 - **D1 认证头（阻断）**: 旧实现发 `Cookie: music-token=$token`，真实协议是 **`Authorization: <userToken>`（原始值，无 `Bearer` 前缀）**。旧写法导致所有已认证请求 401
@@ -42,6 +42,7 @@
 - 技术信息 `track/metadata` → `SongTechnicalInfo`（codec / container / bitrate）。⚠️ 飞牛 `audioSpec` 不含采样率与声道数，**未知字段填 0，不臆造**
 - deviceId 持久化到 SharedPreferences（旧实现每次连接都生成新 UUID，导致服务端设备列表膨胀）
 - 令牌失效（401 / code 99999·120001）时静默重登一次再重试
+- `FeiniuUrlTest.kt`（纯 JVM，25 用例）：地址归一化 / 端点拼装的回归网，覆盖默认端口 5666·5667、显式端口保留、路径幂等（不拼出 `/music/api/v1/music/api/v1/`）、凭据与非 http 协议拒绝、IPv6、`guid` 查询参数形态等。覆盖旧实现真实踩过的坑：默认端口 80、流地址用路径段而非查询参数、封面按曲目 ID 而非 `coverId`
 
 ### Changed
 - 封面主路径明确为 `Song.coverUrl` + `getCoverUrlCandidates`（经核查 `getCoverUrl(songId)` 在 UI 层**零调用**，其实现降级为只查内存缓存、不发起网络请求，避免非 suspend 方法在未知线程上做 IO）
