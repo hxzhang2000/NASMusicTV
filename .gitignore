@@ -73,8 +73,15 @@ defex.txt
 screen.png
 screenshot.png
 
-# Dev tools
+# Dev tools / agent internal state
 .workbuddy/
+.workbuddy-ai/
+.joycode/
+.box-agent/
+
+# WorkBuddy 设计文件（*.miora）与其导出素材
+docs/*.miora
+docs/*_assets/
 
 # Local build/dev output dirs
 logs_temp/
