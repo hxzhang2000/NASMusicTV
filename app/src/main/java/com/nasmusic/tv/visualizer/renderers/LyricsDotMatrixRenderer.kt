@@ -221,9 +221,18 @@ class LyricsDotMatrixRenderer : VisualizerRenderer {
         // 宽度留白
         val bmpW = (textWidth * 1.15f).toInt().coerceAtLeast(100)
         // T7 修复（2026-09-13）：try-finally 包裹 Bitmap 创建与回收，避免异常路径泄漏
+        // 采样结果（n/minX/maxX/minY/maxY）与 bmp 声明在 try 外，
+        // 供 finally 回收与 try 之后的坐标映射段访问
+        var n = 0
+        var minY = Float.MAX_VALUE
+        var maxY = Float.MIN_VALUE
+        var minX = Float.MAX_VALUE
+        var maxX = Float.MIN_VALUE
+        var bmp: Bitmap? = null
         try {
-        val bmp = Bitmap.createBitmap(bmpW, bmpH, Bitmap.Config.ARGB_8888)
-        val canvas = AndroidCanvas(bmp)
+        val b = Bitmap.createBitmap(bmpW, bmpH, Bitmap.Config.ARGB_8888)
+        bmp = b
+        val canvas = AndroidCanvas(b)
 
         val xOff = (bmpW - textWidth) / 2
         canvas.drawText(displayText, xOff, -fm.top, paint)
@@ -255,19 +264,13 @@ class LyricsDotMatrixRenderer : VisualizerRenderer {
         // 为节省内存，先快速数总数并用均匀行距抽样。
 
         // 收集所有有效像素的行（y）坐标分布，用于按行配额
-        var n = 0
-        var minY = Float.MAX_VALUE
-        var maxY = Float.MIN_VALUE
-        var minX = Float.MAX_VALUE
-        var maxX = Float.MIN_VALUE
-
         // 记录每一行（按 step 步进）的有效像素计数
         val maxRows = (bmpH + step - 1) / step
         val rowPixelCount = IntArray(maxRows)
         for (y in 0 until bmpH step step) {
             var cnt = 0
             for (x in 0 until bmpW step step) {
-                if (bmp.getPixel(x, y) and 0xFF000000.toInt() != 0) cnt++
+                if (b.getPixel(x, y) and 0xFF000000.toInt() != 0) cnt++
             }
             rowPixelCount[y / step] = cnt
             totalPixels += cnt
@@ -290,7 +293,7 @@ class LyricsDotMatrixRenderer : VisualizerRenderer {
             val takeEvery = (rowPixelCount[ri].toFloat() / targetCount).coerceAtLeast(1f)
             for (x in 0 until bmpW step step) {
                 if (curRowFill >= cap) break
-                if (bmp.getPixel(x, y) and 0xFF000000.toInt() != 0) {
+                if (b.getPixel(x, y) and 0xFF000000.toInt() != 0) {
                     taken++
                     // 该行内等距抽取 targetCount 个
                     if (((taken - 1).toFloat() % takeEvery) < 0.5f) {
@@ -319,7 +322,7 @@ class LyricsDotMatrixRenderer : VisualizerRenderer {
         }
 
         } finally {
-            bmp.recycle()
+            bmp?.recycle()
         }
 
         if (n == 0) return 0

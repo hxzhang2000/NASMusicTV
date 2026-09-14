@@ -8299,6 +8299,20 @@ onSearchSong = { keyword -> viewModel.searchNetworkSongs(keyword) },
 
 **版本**：v2.31.2 → **v2.31.3**（versionCode 136 → 137）
 
+### 10.136 v2.32.3 — 修复代码质量批次编译错误并跑通构建验证（2026-09-14）
+
+**问题描述**：v2.32.3 代码质量修复批次（1507b59）落地时引入 3 处编译错误，`compileDebugKotlin` 失败：`LyricsDotMatrixRenderer.kt` 的 T7 try-finally 修复把 `bmp`/`n`/`minX`/`maxX`/`minY`/`maxY` 声明写进 try 块内，finally 与坐标映射段无法访问；`NetworkMusicViewModel.kt` 的 P1#12 修复与 `HqSeparationOrchestrator.kt` 的 L7 修复各缺一个 `kotlinx.coroutines` 导入（`flow.first` / `cancel` 扩展函数）。
+
+**修改**：
+
+- `LyricsDotMatrixRenderer.kt`：`n`/`minX`/`maxX`/`minY`/`maxY` 与 `bmp` 声明移至 try 外；`bmp` 改可空类型，try 内用局部非空 `b` 采样，finally 改 `bmp?.recycle()`
+- `NetworkMusicViewModel.kt`：补 `import kotlinx.coroutines.flow.first`
+- `HqSeparationOrchestrator.kt`：补 `import kotlinx.coroutines.cancel`
+
+**验证**：`:app:assembleDebug`（2m28s）与 `:app:assembleRelease`（9m58s）均 **BUILD SUCCESSFUL**；产出 `NASMusicTV-release-v2-32-3.apk`（约 21.8MB）。
+
+**版本**：v2.32.3 批次内修复，versionCode 保持 142。
+
 ### 10.135 v2.32.2 — 播放控制按钮图标色与聚焦反馈全局统一（2026-09-13）
 
 **问题描述**：用户要求统一所有界面的播放控制类按钮（返回/上一曲/下一曲/播放顺序/播放暂停）视觉规范：①未聚焦时按钮背景不变、图标须为白色/亮色；②聚焦时整体按钮背景有变化、图标色不变。核查发现两处结构性问题：

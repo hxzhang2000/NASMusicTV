@@ -9,7 +9,7 @@
 
 ## [v2.32.3] - 2026-09-14
 
-> 代码质量修复批次（基于 code-review-full-report-2026-09-13.md 五次审阅落地）。本版本不引入新功能，仅修复 6 项 P0 线程安全问题 + 1 项 P0 安全问题 + 2 项 P1 状态一致性问题 + 1 项 P2 文档补充。未跑全量编译验证（仅字节级 UTF-8 + 大括号匹配 + 锚点关键字校验），合并前由用户跑 ./gradlew.bat compileDebugKotlin。
+> 代码质量修复批次（基于 code-review-full-report-2026-09-13.md 五次审阅落地）。本版本不引入新功能，仅修复 6 项 P0 线程安全问题 + 1 项 P0 安全问题 + 2 项 P1 状态一致性问题 + 1 项 P2 文档补充。落地后经编译验证补丁修复 3 处编译错误（T7 变量作用域 + P1#12/L7 缺失导入），`:app:assembleDebug` 与 `:app:assembleRelease` 均构建通过，详见 §10.136。
 
 ### Fixed
 - **T8 修复（visualizer）**: `ParticleRenderers.kt` `val t = targets ?: return` 提前到 createBitmap 之前，消除 Bitmap 必然泄漏路径（targets 为 null 时每帧泄漏 220x660x4B=580KB 内存）
