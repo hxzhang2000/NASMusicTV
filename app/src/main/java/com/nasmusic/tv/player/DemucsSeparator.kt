@@ -899,8 +899,11 @@ class DemucsSeparator(private val context: Context) {
      * 说明：线性插值在降采样（如 48k→44.1k）时不做抗混叠滤波，22kHz 以上的镜像分量
      * 会被折叠进来。音乐内容在该频段能量极低（有损编码通常 20kHz 就截止），实际影响
      * 可忽略；换来的是零依赖、可预测的实现，且比「喂错采样率给模型」好得多。
+     *
+     * 可见性为 `internal`（而非 `private`）的唯一原因：让 `LinearResamplerTest` 能直接
+     * 覆盖它。本机 Gradle 测试 worker 无法启动，该测试只在 CI 上跑。
      */
-    private class LinearResampler(
+    internal class LinearResampler(
         inRate: Int,
         outRate: Int,
         private val sink: (Float, Float) -> Unit

@@ -25,6 +25,7 @@
   - **P2 模型输入 shape 校验（`DemucsSeparator.kt`）**: `initialize()` 新增输入 shape 校验（期望 `[1, 2, 343980]`，动态维视为兼容），加载到非 HT-Demucs 的 ONNX 时在加载阶段就报明确错误，而非推理阶段抛难定位的异常
   - **P2 删除死常量（`DemucsSeparator.kt`）**: 移除从未使用的 `OUTPUT_SHAPE`
   - 新增字符串：`demucs_error_bad_model_shape`、`hq_error_model_corrupted`（中英双语）
+  - **验证**：新增 `app/src/test/java/com/nasmusic/tv/player/LinearResamplerTest.kt`（纯 JVM，10 用例）作为长期回归网，`LinearResampler` 可见性由 `private` 放宽到 `internal` 以便测试覆盖；因本机测试 worker 无法启动，另用独立 JVM harness（`logs_temp/verify_resampler/`，含可重跑的 `extract.py`，按标记从源码抽取而非手抄）跑出 **39 PASS / 0 FAIL**，并对提交的测试文件本体跑出 **OK (10 tests)**。关键结论：同速率逐样本 bit-exact、48000→44100 与理想插值 `k*ratio` 逐点 bit-exact、392 组速率/长度属性测试全一致、200 万帧无浮点漂移、`putShortLE` 与 `shortToByteArray` 全 65536 取值字节一致（小端）、PCM 限幅不回绕。**踩坑**：期望帧数不能用 `floor((n-1)/ratio)+1`，double 除法在整除边界给出 `3968.999…`（实测 `in=48000 out=44100 n=4321` 真值 3970、浮点算法给 3969），必须用精确整数运算
 - **T6 修复（visualizer）**: `SpectrumRepository.kt` AudioFrame 双缓冲——2 个预分配实例 + `@Volatile writeIndex`，写端（仅 onFrame/reset）写完翻转发布、读端读 front，volatile 写→读建立 happens-before，消除音频回调线程写/渲染线程读的无同步撕裂；帧序号改仓库级全局计数器；`reset()` 双实例同时清零避免波形跨歌残留。`VisualizerStage.kt` 绘制循环改每帧捕获 front 引用（原持有重组期快照引用会被写端轮询覆盖，双缓冲形同虚设）
 - **T8 修复（visualizer）**: `ParticleRenderers.kt` `val t = targets ?: return` 提前到 createBitmap 之前，消除 Bitmap 必然泄漏路径（targets 为 null 时每帧泄漏 220x660x4B=580KB 内存）
 - **T7 修复（visualizer）**: `LyricsDotMatrixRenderer.kt` try-finally 包裹 createBitmap/recycle，异常路径不再泄漏 Bitmap

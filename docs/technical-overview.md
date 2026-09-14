@@ -8379,12 +8379,54 @@ https://huggingface.co/api/models/StemSplitio/htdemucs-ft-vocals-onnx/tree/main
 
 | 项 | 结果 |
 |---|---|
-| `:app:assembleDebug` | **BUILD SUCCESSFUL**（27m 5s，49 tasks；APK 45,787,569 字节，`NASMusicTV-debug-v2-32-3.apk`） |
-| `:app:lintDebug` | **BUILD SUCCESSFUL**，报告页头 `Lint Report: 256 warnings`（**0 errors**），与改动前一致 |
+| `:app:assembleDebug` | **BUILD SUCCESSFUL** |
+| `:app:compileDebugUnitTestKotlin` | **BUILD SUCCESSFUL**，产出 `debugUnitTest/com/nasmusic/tv/player/LinearResamplerTest.class` |
+| `:app:lintDebug` | **BUILD SUCCESSFUL**，报告页头 `Lint Report: 256 warnings`（**0 errors**），与改动前一致（`lintAnalyzeDebug` 17:16 确实重跑，报告因结果内容一致而 UP-TO-DATE） |
 | `DemucsSeparator.kt` / `ModelDownloadManager.kt` 在 lint 报告中的条目数 | **0 / 0**（无新增问题） |
-| `HqSeparationOrchestrator.kt` | 3 条，均为改动前既有（`:428`/`:436` `DefaultLocale`、`:531` `UseKtx`） |
-| 单元测试 | **未运行**（本机测试 worker 无法启动，见开头「验证边界」） |
+| `HqSeparationOrchestrator.kt` | 3 条，均为改动前既有（`DefaultLocale` × 2、`UseKtx` × 1） |
+| **`LinearResampler` 独立数值验证** | **39 PASS / 0 FAIL** |
+| **`LinearResamplerTest`（已提交，CI 跑）** | **OK (10 tests)** |
+| 单测（`./gradlew testDebugUnitTest`） | **本机仍无法运行**（测试 worker 启动即死）；新增的 `LinearResamplerTest` 只在 CI 上执行 |
 | 真机试听 | **未做** |
+
+##### 独立 JVM 数值验证（绕开 Gradle 测试 worker）
+
+本机测试 worker 不可用，因此把**真实源码**抽出来编成独立 JVM 程序跑（harness 在
+`logs_temp/verify_resampler/`，含 `README.md` 与可重跑的 `extract.py`）：
+
+- `extract.py` 按标记（而非硬编码行号）从 `DemucsSeparator.kt` 抽取 `LinearResampler`
+  与 `putShortLE`/`shortToByteArray`，**避免「测试与源码分叉」**；源码一改重跑即可
+- `Main.kt` 39 条断言 → **39 PASS / 0 FAIL**（`result.txt`）
+- `StubDemucs.kt` 把抽取出的类包进 `DemucsSeparator` 桩，从而能直接用 `JUnitCore` 运行
+  **提交到仓库的那份** `LinearResamplerTest.kt` → **OK (10 tests)**
+
+关键断言实测值：
+
+| 断言 | 实测 |
+|---|---|
+| 同速率（ratio=1.0）逐样本透传 | **bit-exact**（maxDiff=0.0），帧数相等 |
+| 48000→44100 与理想插值 `k*ratio` 逐点比对 | **bit-exact**（48000 点全一致） |
+| 1000Hz 正弦经 48k→44.1k 后频率 | 1000.02 Hz |
+| 时长保持 | 1.00000 s |
+| 相邻样本最大步进（无跳变） | 0.14207 < 理论 0.14248 |
+| 属性测试 392 组 (inRate, outRate, n) | 帧数与理想插值**全部一致** |
+| 200 万帧长输入 | 帧数精确，无累积漂移 |
+| 尾部截断 | < `outRate/inRate` 个样本（48k→44.1k < 1 个；8k→44.1k ≤ 5 个 = 0.125ms） |
+| `putShortLE` vs `shortToByteArray` 全 65536 取值 | 字节**完全一致**（小端 `0x1234`→`3412`） |
+| PCM 限幅（伴奏 = 原 − 人声，可达 ±2.0） | 不回绕，钳制到 ±满量程 |
+
+**这次验证暴露的一个真实陷阱**：期望帧数不能用 `floor((n-1)/ratio)+1` —— double 除法在
+整除边界会给出 `3968.999…`。实测 `in=48000 out=44100 n=4321` 时真值是 3970 而浮点算法
+给 3969，**实现反而是对的**。期望值必须用精确整数运算 `(n-1)*outRate/inRate + 1`。
+（另有两个 FAIL 是测试自身的公式错误，非实现缺陷。）
+
+##### 新增回归测试
+
+`app/src/test/java/com/nasmusic/tv/player/LinearResamplerTest.kt`（纯 JVM，无 Robolectric，
+形态同 `Radix2FftTest`）10 个用例覆盖：同速率 bit-exact、48k→44.1k 与理想插值 bit-exact、
+上采样帧数、频率与时长保持、无相邻跳变、不外推上界、尾部截断界、退化输入、392 组属性测试、
+200 万帧无漂移。为此把 `LinearResampler` 的可见性从 `private` 放宽到 `internal`（唯一原因
+就是让测试能直接覆盖它，已在 KDoc 注明）。
 
 **构建环境备注**：本机 Gradle 守护进程 fork 出的子进程全部起不来（AAPT2 守护进程、测试 worker、Kotlin 编译守护进程均失败），必须
 
@@ -8399,7 +8441,7 @@ JAVA_HOME="C:/Program Files/Android/Android Studio/jbr" \
 #### 遗留
 
 - **未修（保持现状）**：`NativeLibraryAlignment` × 3（`targetSdk 35` 前处理）、`DefaultLocale` 等 256 条 warning（不影响门禁）。
-- **需要真机才能确认**：48kHz 曲目的分离质量与播放时长/音高是否恢复正常；单声道曲目（部分播客/老录音）是否不再翻倍速；`verifyModelIntegrity()` 增加的一次 166MB 哈希是否让首次分离的可感知延迟超过预期。
+- **需要真机才能确认**：48kHz 曲目的分离质量与播放时长/音高是否恢复正常；单声道曲目（部分播客/老录音）是否不再翻倍速；`verifyModelIntegrity()` 增加的一次 166MB 哈希是否让首次分离的可感知延迟超过预期。**重采样器本身的数学正确性已由上述独立验证覆盖，但「MediaCodec 实际给出的 `outSampleRate`/`outChannels` 是否与预期一致」只能在设备上确认。**
 - **`isModelDownloaded()` 仍是快速判定**：模型在下载后被外部损坏（如存储故障）不会被该方法发现，只会在 `verifyModelIntegrity()` 时暴露。这是刻意的取舍（避免主线程哈希 ANR）。
 
 ### 10.145 v2.32.3 — lint 错误清零（105 → 0）+ lint 转阻塞门禁（2026-09-14）
