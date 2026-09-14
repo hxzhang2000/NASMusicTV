@@ -75,11 +75,16 @@ import com.nasmusic.tv.visualizer.VisualizerRendererFactory
  *
  * 绘制循环用 `withFrameNanos` 驱动，**不走 Compose 重组**——
  * 频谱以 30fps 变化，若每帧重组会白白消耗性能。
+ *
+ * **T6 双缓冲配合**：绘制循环不重组，若直接传 `AudioFrame` 引用，
+ * 整个动画期间将固定读同一实例——写端下一轮翻转后即开始写该实例，
+ * 撕裂依旧。故 [frame] 为**每帧求值**的 provider：draw 开头捕获一次
+ * 当前 front（1-writeIndex），绘制期间引用不变。
  */
 @Composable
 fun VisualizerStage(
     song: Song?,
-    frame: AudioFrame,
+    frame: () -> AudioFrame,
     cover: ImageBitmap?,
     palette: CoverPalette,
     lyrics: List<LyricsLine>?,
@@ -229,10 +234,12 @@ fun VisualizerStage(
                 }
         ) {
             canvasSize = Size(size.width, size.height)
+            // T6：每帧捕获一次 front 引用，绘制期间引用不变
+            val f = frame()
             // 计算当前歌词行 & 行内进度（给 E23 歌词点阵用）
             // 复用实例，零分配
             renderCtx.update(quality, palette, cover, canvasSize,
-                minOf(size.width, size.height) * safeArea, frame.timeMs, song?.title,
+                minOf(size.width, size.height) * safeArea, f.timeMs, song?.title,
                 lyricInfo.line, lyricInfo.nextLine, lyricInfo.progress,
                 lyricInfo.hasWords, lyricInfo.lineIndex, lyricInfo.wordStartTimes,
                 lyricInfo.maxLineChars, lyricInfo.longestLine, song?.id)
@@ -242,7 +249,7 @@ fun VisualizerStage(
                 // 渲染器绘制异常若直接抛出会中断整个绘制线程 → 电视上可能表现为
                 // native 崩溃（Skia 收到非法几何/状态）。捕获后跳过该帧并告警。
                 try {
-                    with(cur) { draw(frame, renderCtx) }
+                    with(cur) { draw(f, renderCtx) }
                 } catch (t: Throwable) {
                     if (!rendererFailed.value) {
                         rendererFailed.value = true
@@ -264,14 +271,16 @@ fun VisualizerStage(
                         alpha = prevAlpha.floatValue
                     }
             ) {
+                // T6：旧层独立捕获一次 front，与新层可能差一帧——两帧皆为完整帧
+                val f = frame()
                 renderCtx.update(quality, palette, cover, Size(size.width, size.height),
-                    minOf(size.width, size.height) * safeArea, frame.timeMs, song?.title,
+                    minOf(size.width, size.height) * safeArea, f.timeMs, song?.title,
                     lyricInfo.line, lyricInfo.nextLine, lyricInfo.progress,
                     lyricInfo.hasWords, lyricInfo.lineIndex, lyricInfo.wordStartTimes,
                     lyricInfo.maxLineChars, lyricInfo.longestLine, song?.id)
                 if (tick >= 0L && prevAlpha.floatValue > ALPHA_EPS) {
                     try {
-                        with(old) { draw(frame, renderCtx) }
+                        with(old) { draw(f, renderCtx) }
                     } catch (t: Throwable) {
                         if (!rendererFailed.value) {
                             rendererFailed.value = true

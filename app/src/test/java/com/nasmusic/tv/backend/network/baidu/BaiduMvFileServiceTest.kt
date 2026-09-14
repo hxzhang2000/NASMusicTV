@@ -79,14 +79,14 @@ class BaiduMvFileServiceTest {
 
     @Test
     fun `searchMv 百度歌曲但未设 MV 目录返回 null`() = runTest {
-        `when`(prefs.getBaiduMvDirSync()).thenReturn(null)
-        `when`(prefs.getBaiduMusicRootDirSync()).thenReturn("")
+        `when`(prefs.getBaiduMvDir()).thenReturn(null)
+        `when`(prefs.getBaiduMusicRootDir()).thenReturn("")
         assertNull(service.searchMv("晴天", "周杰伦", emptySet(), 0.5f, baiduSong()))
     }
 
     @Test
     fun `searchMv 同目录同名命中返回 baidu MV`() = runTest {
-        `when`(prefs.getBaiduMvDirSync()).thenReturn("/音乐")
+        `when`(prefs.getBaiduMvDir()).thenReturn("/音乐")
         // 索引包含歌曲音频 + 同目录同名视频
         `when`(indexCache.load()).thenReturn(indexOf(
             audioEntry(123L, "/音乐/周杰伦/晴天.flac", "晴天.flac"),
@@ -103,7 +103,7 @@ class BaiduMvFileServiceTest {
 
     @Test
     fun `searchMv 同目录无同名视频时走歌手+歌名搜索`() = runTest {
-        `when`(prefs.getBaiduMvDirSync()).thenReturn("/音乐")
+        `when`(prefs.getBaiduMvDir()).thenReturn("/音乐")
         // 索引有歌曲音频，但无同目录同名视频
         `when`(indexCache.load()).thenReturn(indexOf(
             audioEntry(123L, "/音乐/周杰伦/晴天.flac", "晴天.flac")
@@ -119,7 +119,7 @@ class BaiduMvFileServiceTest {
 
     @Test
     fun `searchMv 索引中无歌曲路径直接走歌手+歌名搜索`() = runTest {
-        `when`(prefs.getBaiduMvDirSync()).thenReturn("/音乐")
+        `when`(prefs.getBaiduMvDir()).thenReturn("/音乐")
         // 索引中无此歌曲（fsId=123 不存在）
         `when`(indexCache.load()).thenReturn(indexOf(
             audioEntry(456L, "/音乐/其他/歌.flac", "歌.flac")
@@ -134,14 +134,14 @@ class BaiduMvFileServiceTest {
 
     @Test
     fun `searchMv 索引为空返回 null`() = runTest {
-        `when`(prefs.getBaiduMvDirSync()).thenReturn("/音乐")
+        `when`(prefs.getBaiduMvDir()).thenReturn("/音乐")
         `when`(indexCache.load()).thenReturn(null)  // 索引未加载
         assertNull(service.searchMv("晴天", "周杰伦", emptySet(), 0.5f, baiduSong()))
     }
 
     @Test
     fun `searchMv 索引搜索无结果返回 null`() = runTest {
-        `when`(prefs.getBaiduMvDirSync()).thenReturn("/音乐")
+        `when`(prefs.getBaiduMvDir()).thenReturn("/音乐")
         `when`(indexCache.load()).thenReturn(indexOf(
             audioEntry(123L, "/音乐/周杰伦/晴天.flac", "晴天.flac")
         ))
@@ -152,7 +152,7 @@ class BaiduMvFileServiceTest {
 
     @Test
     fun `searchMv excludeBvids 过滤已排除的 fsId`() = runTest {
-        `when`(prefs.getBaiduMvDirSync()).thenReturn("/音乐")
+        `when`(prefs.getBaiduMvDir()).thenReturn("/音乐")
         `when`(indexCache.load()).thenReturn(indexOf(
             audioEntry(123L, "/音乐/周杰伦/晴天.flac", "晴天.flac"),
             videoEntry(888L, "/音乐/MV/晴天 周杰伦.mp4", "晴天 周杰伦.mp4")  // 同目录无名

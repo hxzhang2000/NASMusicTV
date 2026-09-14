@@ -455,7 +455,8 @@ private fun VisualizerOverlay(
 
     VisualizerStage(
         song = currentSong,
-        frame = vm.frame,
+        // T6 双缓冲：传 provider 而非快照引用——绘制循环每帧求值，拿到当前 front
+        frame = { vm.frame },
         cover = cover,
         palette = palette,
         lyrics = lyrics?.lines,

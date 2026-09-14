@@ -14,8 +14,30 @@ import kotlin.math.pow
  */
 class SpectrumRepository {
 
-    /** 全局唯一的帧数据（渲染层只读） */
-    val frame = AudioFrame(SpectrumContract.BAR_COUNT, SpectrumContract.WAVE_POINTS)
+    /**
+     * T6 双缓冲（2026-09-14）：音频回调线程写 [frames][writeIndex]，所有字段写完后
+     * 翻转 [writeIndex]（@Volatile 发布）；渲染线程经 [frame] 读 front（1-writeIndex）。
+     * volatile 写→读建立 happens-before，单写者场景下读端永远看到完整新帧或完整旧帧。
+     * 铁律①零分配保持：两个实例均在构造期预分配；读端每帧捕获一次引用，绘制期间不变。
+     */
+    private val frames = arrayOf(
+        AudioFrame(SpectrumContract.BAR_COUNT, SpectrumContract.WAVE_POINTS),
+        AudioFrame(SpectrumContract.BAR_COUNT, SpectrumContract.WAVE_POINTS)
+    )
+
+    /** 写端索引；仅 onFrame / reset（音频生命周期）翻转 */
+    @Volatile
+    private var writeIndex = 0
+
+    /**
+     * 仓库级帧序号——跨双缓冲实例**全局递增**。
+     * 若在 AudioFrame 实例上自增，读端看到的序号会是 1,1,2,2,3,3（两个实例各自计数），
+     * 渲染层用它判新帧会漏掉一半；故归仓库统一分配。
+     */
+    private var seqCounter = 0L
+
+    /** 全局唯一的帧数据（渲染层只读；仅 onFrame / reset 可翻转 writeIndex） */
+    val frame: AudioFrame get() = frames[1 - writeIndex]
 
     /** 峰值保持帽 */
     val peakHold = PeakHoldTracker(SpectrumContract.BAR_COUNT)
@@ -61,7 +83,7 @@ class SpectrumRepository {
         waveform: FloatArray?,
         nowMs: Long
     ) {
-        val f = frame
+        val f = frames[writeIndex]
         val n = minOf(displayBars.size, f.spectrum.size)
         System.arraycopy(displayBars, 0, f.spectrum, 0, n)
         for (i in n until f.spectrum.size) f.spectrum[i] = 0f
@@ -105,7 +127,7 @@ class SpectrumRepository {
         }
 
         f.timeMs = nowMs
-        f.seq++
+        f.seq = ++seqCounter
 
         // 数据链路心跳（release 也可见）：证明 onFrame 在被调用、frame 在更新。
         // 周期长避免刷屏；seq/bass/energy 可判断数据是否有真实波动。
@@ -120,6 +142,11 @@ class SpectrumRepository {
 
         peakHold.update(f.spectrum)
 
+        // T6 发布：所有字段写入完成后先翻转（仅本线程允许），再发布帧序号。
+        // 顺序不可颠倒——读端见新 frameSeq 时必先于其读到 writeIndex 翻转
+        // （volatile 程序顺序 + happens-before 传递），从而保证"新序号必见新帧"。
+        writeIndex = 1 - writeIndex
+
         if (nowMs - lastEmitMs >= SpectrumContract.EMIT_INTERVAL_MS) {
             lastEmitMs = nowMs
             frameSeq = f.seq
@@ -131,10 +158,16 @@ class SpectrumRepository {
         beatDetector.reset()
         section.reset()
         peakHold.reset()
-        frame.reset()
-        // frame.reset() 刻意不动 seq（AutoDirector 依赖 timeMs 单调），
-        // 但换歌需要干净的帧序号起点，故由仓库（seq 的所有者）显式同步归零。
-        frame.seq = 0L
+        // T6 双缓冲下两个实例必须同时清零：只清写端实例的话，读端（front）
+        // 会残留上一首的 waveform 等数据（onFrame 在 waveform=null 时不写该字段），
+        // 且 seq 残留会让全局序号错乱。reset 后读端无论读到哪个都是干净帧。
+        for (i in frames.indices) {
+            frames[i].reset()
+            frames[i].seq = 0L
+        }
+        seqCounter = 0L
+        // 翻转发布：读端立即看到已清零帧（front 不再残留旧歌数据）
+        writeIndex = 1 - writeIndex
         lastEmitMs = 0L
         lastBeatMsForFallback = 0L
         fallbackPhase = 0f

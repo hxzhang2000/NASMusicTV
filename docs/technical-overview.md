@@ -8299,6 +8299,22 @@ onSearchSong = { keyword -> viewModel.searchNetworkSongs(keyword) },
 
 **版本**：v2.31.2 → **v2.31.3**（versionCode 136 → 137）
 
+### 10.138 v2.32.3 — T6 AudioFrame 双缓冲（2026-09-14）
+
+**问题描述**：`SpectrumRepository` 的 `AudioFrame` 由音频回调线程（Visualizer/PCM 回调）写入、渲染线程（Canvas draw）读取，全字段无同步保护，高频切歌/高负载下可能出现半新半旧的撕裂帧（审阅报告 T6）。
+
+**修改**：
+
+- `visualizer/SpectrumRepository.kt`：引入双缓冲 `frames`（2 个预分配 `AudioFrame`）+ `@Volatile writeIndex`；写端（仅 `onFrame`/`reset`）写完 back 后翻转索引发布，读端 `frame` getter 读 front（1-writeIndex），volatile 写→读建立 happens-before。发布顺序固定为**先翻转 writeIndex 再发布 frameSeq**，保证"读端见新序号必见新帧"。帧序号改为仓库级全局计数器 `seqCounter`（双缓冲下若在实例上自增，读端会看到 1,1,2,2 的重复序列，漏判新帧）；`reset()` 改为两个实例同时清零 + `seqCounter` 归零，避免波形等字段跨歌残留
+- `ui/components/VisualizerStage.kt`：`frame` 参数由 `AudioFrame` 快照引用改为 `() -> AudioFrame` provider——绘制循环走 `withFrameNanos` 不触发重组，若持有重组期快照引用，写端下一轮翻转后会写回该实例，双缓冲形同虚设；现每帧 draw 开头捕获一次 front，绘制期间引用不变
+- `ui/components/AppRoot.kt`：调用点同步改传 `frame = { vm.frame }`
+
+**边界说明**：双缓冲要求渲染单帧耗时 < 写周期（50Hz ≈ 20ms）；极端低端设备若绘制超时，写端会翻转到渲染层正在使用的缓冲，需三缓冲兜底（暂未实施，属已知边界）。
+
+**验证**：`:app:testDebugUnitTest --tests "*SpectrumRepositoryTest"` 与全量单测 **BUILD SUCCESSFUL**（含 T2 改造遗留的 3 个测试文件适配：`BaiduMvFileServiceTest`/`ApiDriftNotifyTest`/`CloudDriveConfigTest` 由 `*Sync` 改为 suspend 调用）；`:app:assembleDebug` **BUILD SUCCESSFUL**。可视化无撕裂/跳变待 TV 实机高频切歌验证。
+
+**版本**：v2.32.3 批次内，versionCode 保持 142。
+
 ### 10.137 v2.32.3 — T2 百度配置读取全量 Flow 化（分批，2026-09-14）
 
 **问题描述**：AppPreferences 百度配置同步读取走 `runBlocking(Dispatchers.IO)`，主线程/普通成员函数调用点存在 ANR 与线程池占用风险（审阅报告 T2，26 处调用方）。复用既有 `baiduConfigFlow` 全量替换。

@@ -6,6 +6,8 @@ import com.nasmusic.tv.data.model.BaiduTokens
 import com.nasmusic.tv.data.model.CloudDriveConfig
 import com.nasmusic.tv.data.model.CloudDriveType
 import com.nasmusic.tv.data.prefs.AppPreferences
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -113,10 +115,11 @@ class CloudDriveConfigTest {
     }
 
     @Test
-    fun `getBaiduConfigSync 兜底默认配置永不返回 null`() {
+    fun `getBaiduConfig 兜底默认配置永不返回 null`() {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val prefs = AppPreferences(context)
-        val cfg = prefs.getBaiduConfigSync()
+        // T2 后同步 getBaiduConfigSync 已删，兜底语义由 baiduConfigFlow.first() 承接
+        val cfg = runBlocking { prefs.baiduConfigFlow.first() }
         assertTrue(cfg != null)
         assertEquals(CloudDriveType.BAIDU, cfg.type)
         assertFalse(cfg.enabled)  // 默认关闭

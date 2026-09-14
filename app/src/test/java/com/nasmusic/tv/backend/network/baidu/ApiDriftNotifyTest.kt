@@ -5,6 +5,7 @@ import androidx.test.core.app.ApplicationProvider
 import com.nasmusic.tv.data.model.CloudDriveConfig
 import com.nasmusic.tv.data.model.CloudDriveType
 import com.nasmusic.tv.data.prefs.AppPreferences
+import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -41,38 +42,38 @@ class ApiDriftNotifyTest {
 
     @Test
     fun `初始未提示过`() {
-        assertFalse(newPrefs().getBaiduApiDriftNotifiedSync())
+        assertFalse(runBlocking { newPrefs().getBaiduApiDriftNotified() })
     }
 
     @Test
     fun `漂移且未提示过应弹一次提示`() {
         val prefs = newPrefs()
-        assertTrue(ApiProbe.shouldNotifyDrift(driftedConfig().apiDrifted, prefs.getBaiduApiDriftNotifiedSync()))
+        assertTrue(ApiProbe.shouldNotifyDrift(driftedConfig().apiDrifted, runBlocking { prefs.getBaiduApiDriftNotified() }))
     }
 
     @Test
     fun `提示后写标记再次启动不再弹`() {
         val prefs = newPrefs()
         // 首次：漂移 + 未提示 → 应提示
-        assertTrue(ApiProbe.shouldNotifyDrift(driftedConfig().apiDrifted, prefs.getBaiduApiDriftNotifiedSync()))
+        assertTrue(ApiProbe.shouldNotifyDrift(driftedConfig().apiDrifted, runBlocking { prefs.getBaiduApiDriftNotified() }))
         // 提示后写入标记（模拟 MainViewModel 提示完成）
-        prefs.setBaiduApiDriftNotifiedSync(true)
+        runBlocking { prefs.setBaiduApiDriftNotified(true) }
         // 再次启动：漂移 + 已提示 → 不再弹
-        assertFalse(ApiProbe.shouldNotifyDrift(driftedConfig().apiDrifted, prefs.getBaiduApiDriftNotifiedSync()))
+        assertFalse(ApiProbe.shouldNotifyDrift(driftedConfig().apiDrifted, runBlocking { prefs.getBaiduApiDriftNotified() }))
     }
 
     @Test
     fun `未漂移即使未提示也不弹`() {
         val prefs = newPrefs()
-        assertFalse(ApiProbe.shouldNotifyDrift(stableConfig().apiDrifted, prefs.getBaiduApiDriftNotifiedSync()))
+        assertFalse(ApiProbe.shouldNotifyDrift(stableConfig().apiDrifted, runBlocking { prefs.getBaiduApiDriftNotified() }))
     }
 
     @Test
     fun `baiduApiDriftNotified 标记持久化回环`() {
         val prefs = newPrefs()
-        prefs.setBaiduApiDriftNotifiedSync(true)
-        assertTrue(prefs.getBaiduApiDriftNotifiedSync())
+        runBlocking { prefs.setBaiduApiDriftNotified(true) }
+        assertTrue(runBlocking { prefs.getBaiduApiDriftNotified() })
         // 漂移但已提示 → 不弹
-        assertFalse(ApiProbe.shouldNotifyDrift(driftedConfig().apiDrifted, prefs.getBaiduApiDriftNotifiedSync()))
+        assertFalse(ApiProbe.shouldNotifyDrift(driftedConfig().apiDrifted, runBlocking { prefs.getBaiduApiDriftNotified() }))
     }
 }

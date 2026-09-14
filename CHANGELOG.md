@@ -9,10 +9,12 @@
 
 ## [v2.32.3] - 2026-09-14
 
-> 代码质量修复批次（基于 code-review-full-report-2026-09-13.md 五次审阅落地）。本版本不引入新功能，仅修复 6 项 P0 线程安全问题 + 1 项 P0 安全问题 + 2 项 P1 状态一致性问题 + 1 项 P2 文档补充。落地后经编译验证补丁修复 3 处编译错误（T7 变量作用域 + P1#12/L7 缺失导入），`:app:assembleDebug` 与 `:app:assembleRelease` 均构建通过，详见 §10.136。
+> 代码质量修复批次（基于 code-review-full-report-2026-09-13.md 五次审阅落地）。本版本不引入新功能，仅修复 7 项 P0 线程安全问题 + 1 项 P0 安全问题 + 2 项 P1 状态一致性问题 + 1 项 P2 文档补充。落地后经编译验证补丁修复 3 处编译错误（T7 变量作用域 + P1#12/L7 缺失导入），`:app:assembleDebug` 与 `:app:assembleRelease` 均构建通过，详见 §10.136。
 > 另含 T2（分批 Flow 化）：百度配置读取路径全部由 `runBlocking(IO)` 迁移到 `baiduConfigFlow.first()`（suspend），分两批落地（第一批外部 UI/App 调用点；第二批 AppPreferences 15 个便捷方法 + BaiduPrefs 透传 + BaiduOAuthClient/Netdisk/MvFileService/ViewModel 调用方），详见 §10.137。
+> 另含 T6（AudioFrame 双缓冲）：频谱数据仓库由单实例改为双缓冲 + `@Volatile writeIndex` 发布，消除音频回调线程写/渲染线程读的无同步撕裂；VisualizerStage 绘制循环改为每帧捕获 front 引用，详见 §10.138。
 
 ### Fixed
+- **T6 修复（visualizer）**: `SpectrumRepository.kt` AudioFrame 双缓冲——2 个预分配实例 + `@Volatile writeIndex`，写端（仅 onFrame/reset）写完翻转发布、读端读 front，volatile 写→读建立 happens-before，消除音频回调线程写/渲染线程读的无同步撕裂；帧序号改仓库级全局计数器；`reset()` 双实例同时清零避免波形跨歌残留。`VisualizerStage.kt` 绘制循环改每帧捕获 front 引用（原持有重组期快照引用会被写端轮询覆盖，双缓冲形同虚设）
 - **T8 修复（visualizer）**: `ParticleRenderers.kt` `val t = targets ?: return` 提前到 createBitmap 之前，消除 Bitmap 必然泄漏路径（targets 为 null 时每帧泄漏 220x660x4B=580KB 内存）
 - **T7 修复（visualizer）**: `LyricsDotMatrixRenderer.kt` try-finally 包裹 createBitmap/recycle，异常路径不再泄漏 Bitmap
 - **S3 修复（backend）**: `SubsonicAdapter.kt` `toggleFavorite` 删除冗余的 `getFavorites()` 二次查询，直接使用入参 `isCurrentlyFavorite`，消除 TOCTOU 竞态窗口与多余网络请求
@@ -30,15 +32,15 @@
 ### Changed
 - 版本 v2.32.2 → **v2.32.3**（versionCode 141 → 142）
 
-### 暂缓（6 项，需独立 PR）
-- T6 AudioFrame 双缓冲（30+ Renderer 改动面过大）
+### 暂缓（5 项，需独立 PR）
 - S4 Jellyfin 会话内 401 重认证（需真实环境测试重试逻辑）
-- T2 runBlocking 26 处全量 Flow 化（涉及 AppPreferences 15 处内部方法 + 11 处外部调用，函数签名变化需全套回归）
 - T3 PlayerManager 三元组 StateFlow 原子化（涉及 UI 集中订阅点重构）
 - P1#1 OkHttp 连接池统一（涉及 DI 重构）
 - P1#5 VisualizerMath seed 隔离（30+ Renderer 全部修改）
 - L3 playModeToggleHandler 改 Flow（跨文件改造）
-- `customAppKey/secretKey` 加密（与 T2 一起做）
+
+### P2 顺手项（未做）
+- `customAppKey/secretKey` 加密（原计划与 T2 一起做，T2 已完成但此项未动）
 
 ## [v2.32.2] - 2026-09-13
 
