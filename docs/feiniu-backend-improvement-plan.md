@@ -493,7 +493,8 @@ JAVA_HOME="C:/Program Files/Android/Android Studio/jbr" \
 | T9 | 搜索改本地过滤 | ✅ 完成 | `searchSongs` + `loadAllTracks`（5 分钟缓存） |
 | T10 | 认证头接线（播放 + 封面） | ✅ 完成 | 新增 `backend/BackendAuthHeaders.kt`；改 `BaiduHttpDataSourceFactory.kt`、`BackendRegistry.kt`、`NasMusicApp.kt` |
 | T11 | UI 默认端口 80→5666 | ✅ 完成 | `ServerConnectScreen.kt`、`strings.xml` |
-| T12 | 编译 + lint 验证 | ✅ 完成 | `assembleDebug` BUILD SUCCESSFUL；`lintDebug` **0 Error**（257 Warning，改动文件自身 0 警告） |
+| T12 | 编译 + lint 验证 | ✅ 完成 | `assembleDebug` / `assembleRelease`（含 R8）BUILD SUCCESSFUL；`lintDebug` **0 Error**（257 Warning，改动文件自身 0 警告） |
+| T15 | R8 收缩冒烟检查 | ✅ 完成 | release APK 的 `classes.dex` 中三个类与全部协议常量均存在（见 §11） |
 | T14 | `FeiniuUrl` 回归测试 | ✅ 完成 | 新增 `app/src/test/.../FeiniuUrlTest.kt`（纯 JVM，25 用例） |
 | T13 | 版本号 v2.32.4 + CHANGELOG + 提交 | ✅ 完成 | `build.gradle.kts`（143 / 2.32.4）、`CHANGELOG.md` |
 
@@ -527,6 +528,24 @@ cd logs_temp/verify_feiniu_url && python run.py        # --clean 可强制重编
   证明 harness 确实能检出错误，25 条全绿不是空跑。
 - 另跑 `./gradlew compileDebugUnitTestKotlin` **BUILD SUCCESSFUL**，确认该测试在项目配置下能编译
   （CI 的 `testDebugUnitTest` 会真正执行它）。
+
+### T15 补充说明：R8 收缩冒烟检查
+
+AGENTS.md 记载 v2.5.1 曾因「Gson 类型擦除 + R8」崩溃，本次改动又集中在 Gson 解析密集的
+适配器上，因此额外做一次 release 侧验证：
+
+- **策略上先规避**：本次**未新增任何 Gson 模型类**，解析一律用手写 `JsonObject` 取值，
+  不引入新的反射反序列化面（详见 §6 的 R7）。两个新增类都在
+  `-keep class com.nasmusic.tv.backend.** { *; }` 覆盖范围内。
+- **再实证**：`assembleRelease` BUILD SUCCESSFUL 后，解压
+  `NASMusicTV-release-v2-32-4.apk` 的 `classes.dex`（9.35 MB，单 dex）做字符串检查，
+  确认以下**均未被 R8 收缩**：
+  - 类：`BackendAuthHeaders` / `FeiniuUrl` / `FeiniuAdapter`
+  - 协议常量：`music/api/v1`、`Authorization`、`track/stream`、`static/cover`、
+    `lyric/list`、`favorite-track/create`、`user/password-login`
+
+> 该检查只能证明「类和常量还在」，**不能**证明混淆后行为正确（例如 Kotlin `object` 的
+> 单例语义、反射调用点）。真正的 R8 行为验证仍靠真机。
 
 ### 未验证项
 

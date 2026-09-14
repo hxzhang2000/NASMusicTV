@@ -13,7 +13,11 @@
 >
 > ⚠️ 旧实现与真实协议在**认证方式、分页参数、端点路径、ID 语义**四个层面均不一致，按旧代码几乎必然连不上或全量 401/404。本次共修正 22 项缺陷，其中 5 项为阻断级（D1 认证头 / D2 令牌字段 / D9 流地址 / D21 播放链路注入 / D22 封面链路注入）。
 >
-> ⚠️ 本机 `testDebugUnitTest` 无法运行（测试 worker 启动即死），**Gradle 侧未跑过任何测试**。验证手段：`assembleDebug` + `lintDebug` + `compileDebugUnitTestKotlin` 编译通过，另用独立 JVM harness（`logs_temp/verify_feiniu_url/run.py`，绕过 Gradle）把新增的 `FeiniuUrlTest` 跑出 **OK (25 tests)**，并做反向对照确认 harness 能检出错误（注入旧错误认知后 9/25 失败）。动态行为仍需飞牛真机按文档 §5.2 的 A1–A14 验收。
+> ⚠️ 本机 `testDebugUnitTest` 无法运行（测试 worker 启动即死），**Gradle 侧未跑过任何测试**。验证手段：`assembleDebug` + `assembleRelease` + `lintDebug` + `compileDebugUnitTestKotlin` 均通过；另用独立 JVM harness（`logs_temp/verify_feiniu_url/run.py`，绕过 Gradle）把新增的 `FeiniuUrlTest` 跑出 **OK (25 tests)**，并做反向对照确认 harness 能检出错误（注入旧错误认知后 9/25 失败）。
+>
+> **R8 专项**（AGENTS.md 记载 v2.5.1 曾因 Gson 类型擦除 + R8 崩溃）：本次**未新增任何 Gson 模型类**，解析一律用手写 `JsonObject` 取值，不引入新的反射反序列化面；新增的两个类都在 `-keep class com.nasmusic.tv.backend.**` 覆盖范围内。已对 `NASMusicTV-release-v2-32-4.apk` 的 `classes.dex` 做冒烟检查，确认 `BackendAuthHeaders` / `FeiniuUrl` / `FeiniuAdapter` 三个类与 `music/api/v1`、`Authorization`、`track/stream`、`static/cover`、`lyric/list`、`favorite-track/create`、`user/password-login` 等协议常量**均未被 R8 收缩**。
+>
+> 动态行为仍需飞牛真机按文档 §5.2 的 A1–A14 验收。
 
 ### Fixed
 - **D1 认证头（阻断）**: 旧实现发 `Cookie: music-token=$token`，真实协议是 **`Authorization: <userToken>`（原始值，无 `Bearer` 前缀）**。旧写法导致所有已认证请求 401
