@@ -214,6 +214,35 @@ dependencies {
     implementation("androidx.leanback:leanback:1.0.0")
 
     // ONNX Runtime (Spleeter 高质量人声分离)
+    //
+    // ⚠️ 版本被「minSdk 22」与「16KB 页对齐」双重锁定，**不要随手升级**（2026-09-14 实测结论）
+    //
+    // lint 的 `Aligned16KB` 会报这个依赖：1.17.1 的 native 库 PT_LOAD 段 `p_align = 4096`，
+    // 未满足 Android 16KB 页要求。但升级不是「改个版本号」的事：
+    //
+    //   版本     libonnxruntime.so   libonnxruntime4j_jni.so    minSdk 要求
+    //   1.17.1   4096  (未对齐)      4096  (未对齐)             21
+    //   1.20.0   16384 (已对齐)      4096  (未对齐)             21   ← 陷阱，见下
+    //   1.21.1   16384 (已对齐)      arm64 已对齐 / v7a 未对齐   24
+    //   1.29.0   16384 (已对齐)      16384 (已对齐)             24
+    //
+    // 两个关键事实（均实测，非推测）：
+    //
+    // 1) **只有 1.29.0 能让警告消失**。lint 的检查器（AGP 的
+    //    `PageAlignmentDetector.getIncidentsFromAndroidLibrary`）遍历 AAR 解包目录下
+    //    **全部 4 个 ABI × 全部 native 库**（不受 `abiFilters` 影响），命中第一个未对齐的库
+    //    就 `return` —— 所以每个依赖**只报 1 条**（报告里的 "3" 是聚合重复）。
+    //    1.20.0 的 `libonnxruntime.so` 虽已对齐，但 `libonnxruntime4j_jni.so` 仍是 4096，
+    //    lint 只会改报那个文件，**警告并不会消失**；且 16KB 真机上该库 `dlopen` 仍会失败。
+    // 2) **1.29.0 的 AAR manifest 要求 `minSdkVersion 24`**，而本项目是 22。直接改会让
+    //    manifest merger 失败；改 minSdk 则等于砍掉 Android 5.0/5.1/6.0 设备
+    //    （含开发用的创维 Android 5.1.1 电视 —— 真机回归的基准设备）。
+    //
+    // 因此当前**有意保持 1.17.1**：`targetSdk 34` 下 Google Play 的 16KB 强制要求尚未触发
+    // （那是 `targetSdk 35+` 的事），且这条是 Warning 而非 Error（lint 当前 0 errors）。
+    // **触发条件**：升 `targetSdk 35` 或上架前必须处理 —— 届时只有两条路：升 minSdk 24 并换
+    // 1.29.0，或自编 ONNX Runtime（加 `-Wl,-z,max-page-size=16384`）。
+    // 完整实测矩阵见 `docs/technical-overview.md` §10.146 的 §七-4 遗留项。
     implementation("com.microsoft.onnxruntime:onnxruntime-android:1.17.1")
 
     // Room (本地音乐索引持久化)

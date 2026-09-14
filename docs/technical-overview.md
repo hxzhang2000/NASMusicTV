@@ -8299,19 +8299,62 @@ onSearchSong = { keyword -> viewModel.searchNetworkSongs(keyword) },
 
 **版本**：v2.31.2 → **v2.31.3**（versionCode 136 → 137）
 
+### 10.148 v2.32.3 — P1 性能清单落地 4 项（2026-09-14）
+
+**来源**：`logs_temp/code-review-full-report-2026-09-13.md` 第四章 P1 清单（遗留项总表见 §10.147）。本轮修复其中**判定为"低风险且收益明确"的 4 项**；另外 4 项经复核判定**不宜按报告原建议直接实施**，理由见下。
+
+**修改**：
+
+1. **P1#3 Crossfade 音量曲线：线性 → 等功率**（`player/CrossfadeController.kt`）
+   - 原实现两路幅度为 `out = 1-frac`、`in = frac`（幅度和为 1）。人耳感知的是功率（幅度²），中段 `frac≈0.5` 时总功率仅 `0.5² + 0.5² = 0.5`，听感上表现为 crossfade **中途音量下陷**。
+   - 改为 `out = cos(frac·π/2)`、`in = sin(frac·π/2)`，两者平方和恒为 1（功率全程恒定）；端点仍精确为 `(1,0) → (0,1)`，不改变淡入淡出的起止语义。新增伴生常量 `HALF_PI`。
+   - 测试影响：`CrossfadeControllerTest` 只覆盖 `maybeStartCrossfade` 的前置条件判断（不驱动真实音量斜坡），**不受影响**。
+
+2. **P1#4 SleepTimer 到期调度：Handler → 协程 `delay`**（`player/SleepTimerController.kt`）
+   - 构造参数 `handler: Handler` → `scope: CoroutineScope`（默认 `Dispatchers.Main.immediate + SupervisorJob()`，与原 `Handler(Looper.getMainLooper())` 等价，生命周期同 `PlayerManager` 这个 app 级单例）。
+   - 取消语义改由 `Job` 直接承载（`cancel()` 即取消在途 delay），**原 `AtomicLong` 令牌守卫不再必要**，已删除；同时移除 `Handler`/`Looper`/`AtomicLong` 三个 import。
+   - **附带收益**：单测新增 3 条用 `runTest` 虚拟时间**真正驱动调度**的用例（`start schedules expiry via coroutine delay` / `cancel prevents pending expiry` / `restart supersedes previous schedule`）。原 `Handler` 版本在 Robolectric 下不驱动 Looper，只能靠公开的 `tickExpired()` 手工驱动，**测不到调度本身**；现可验证"差 1ms 不触发、越界触发一次""cancel 后不触发""重启覆盖旧调度"。既有 7 条用例改为注入不推进虚拟时间的 `StandardTestDispatcher`（等价于原 `noopHandler` 桩），语义不变。
+
+3. **P1#6 消除每帧 `Triple` 分配**（`visualizer/VisualizerMath.kt` + `renderers/LyricsDotMatrixRenderer.kt`）
+   - 新增 `hueOf(color): Float`——只算色相、返回基本类型、**零分配**，数值与 `rgbToHsl` 的色相分量逐位一致（含无彩色返回 `0f` 的分支）。
+   - `LyricsDotMatrixRenderer` 的 `draw` 内（**每帧路径**）原为 `rgbToHsl(accent).first`，每帧分配一个 `Triple`，违反本项目"绘制循环零分配"铁律；改用 `hueOf(accent)`。
+   - `rgbToHsl` 保留：其调用方（`neonize`/`darken`/`CoverPaletteProvider`）均为**每首歌一次**，非每帧，无需改动。
+
+4. **P1#7 Milkdrop 预分配 Canvas**（`visualizer/renderers/UltraRenderers.kt`）
+   - `MilkdropRenderer.draw` 原每帧 `Canvas(c)` 新建包装对象（违反零分配铁律）。因 `prev`/`curr` 两个 `ImageBitmap` 每帧互换（末尾 `prev = c; curr = p`），Canvas 必须**跟随其包装的缓冲一起互换**，否则会画到错误缓冲——故在 `onEnter` 为两个缓冲各建一个 Canvas（`prevCanvas`/`currCanvas`），绘制末尾与缓冲同步交换，维持「`currCanvas` 恒包装 `curr`」不变式；`onExit` 一并置空。
+   - 新增 `import androidx.compose.ui.graphics.Canvas`，移除原来的全限定名写法。
+
+**复核后未实施的 4 项（不建议按报告原建议直接做）**：
+
+| 项 | 报告建议 | 复核结论 |
+|---|---|---|
+| **P1#11** Milkdrop 硬编码 1280×720 | "改 canvas 尺寸自适应" | **设计取舍，非缺陷**。原注释已说明"降采样到 720p 省约 55% 填充、视觉几乎无损"；改自适应在 1080p/4K 画布上会**增加**填充成本，属反向优化。维持现状 |
+| **P1#9** PlasmaFlow 逐粒子 drawCircle | "改 Path 批量合并" | **非等价优化**。每粒子有独立的色相（随 `flow` 连续变化）、透明度与半径（随 `life`），单条 Path 只能有一个颜色/透明度，批量需按色相×透明度**分桶量化**，会引入可见色带。HIGH 档 350 粒子确有收益（350 次绘制调用/帧），但属"观感换性能"的取舍，需所有者决策 + 真机对比后再定 |
+| **P1#8** Constellation O(n²) 连线 | "改空间网格" | **需算法改写**。160×160/2 ≈ 12720 次距离判断/帧，均为纯浮点、无分配、无绘制调用；报告自身也标注"n=160 量级可控，低优先"。降阶须引入空间网格，属独立优化议题 |
+| **P1#5** VisualizerMath seed 隔离 | "每 Renderer 持自己的 seed" | **已由报告标为暂缓**（需改动 30+ 个 Renderer），且"共享 seed 导致视觉不一致"是否可感知尚未验证，先评估再动 |
+
+**验证**：
+- `:app:compileDebugKotlin` + `:app:compileDebugUnitTestKotlin`（`--no-daemon` + `-Pkotlin.compiler.execution.strategy=in-process`）**BUILD SUCCESSFUL**（55s），无新增警告
+- `:app:assembleDebug` **BUILD SUCCESSFUL**（6m28s）
+- ⚠️ **单测未执行**：本机 `testDebugUnitTest` 受 Gradle 测试 worker 环境问题阻塞（worker JVM 启动即死，exit `268435466`），本轮**只验证了测试源码可编译**，新增的 3 条虚拟时间用例**未经实际运行**，须由 CI 验证
+- ⚠️ **听感未验证**：P1#3 等功率曲线的实际听感需真机确认（预期：crossfade 中途不再音量下陷）
+
+**版本**：v2.32.3 批次内（该版本尚未打 tag），versionCode 保持 142。
+
 ### 10.147 v2.32.3 — 全量审阅报告遗留项清单（持久化记录，2026-09-14）
 
 **背景（为什么要单开一节）**：`logs_temp/code-review-full-report-2026-09-13.md` 位于 `logs_temp/`，该目录**已被 gitignore**（`.gitignore:87`），报告本身不进版本控制。其「实施记录」只记录了**已修 13 项**与 **4 项暂缓**，而其余未完成项的唯一记录仅存在于该 gitignored 文件中。独立审计（2026-09-14）逐条核对源码后发现：一旦 `logs_temp/` 被清理或换机器，后人只会看到 CHANGELOG 里「13 项已修复」的正面记录，**会误判为已全修完**。故本节把这些项固化进版本控制。
 
-**完成度（独立审计结论）**：报告共 **36 项**条目（21 P0 + 15 P1），拆解为
-**已修 13 · 未完成 16 · 判定无需修复 5 · 已 review 关闭 1 · 原报告剔除 1**。
+**完成度（独立审计结论，2026-09-14 复核）**：报告共 **36 项**条目（21 P0 + 15 P1），拆解为
+**已修 17 · 未完成 12 · 判定无需修复 5 · 已 review 关闭 1 · 原报告剔除 1**。
 
-- **已修 13 项**：S1 / S3 / T2 / T3 / T4 / T6 / T7 / T8 / L4 / L7 尾巴 / P1#2 / P1#10 / P1#12 —— 逐条源码复核全部属实，详见 `CHANGELOG.md` v2.32.3 条目及 §10.136–§10.141
+- **已修 13 项（原实施记录）**：S1 / S3 / T2 / T3 / T4 / T6 / T7 / T8 / L4 / L7 尾巴 / P1#2 / P1#10 / P1#12 —— 逐条源码复核全部属实，详见 `CHANGELOG.md` v2.32.3 条目及 §10.136–§10.141
+- **已修 4 项（本次新增，见 §10.148）**：P1#3 Crossfade 等功率曲线 / P1#4 SleepTimer 协程化 / P1#6 `hueOf` 零分配 / P1#7 Milkdrop 预分配 Canvas
 - **判定无需修复 5 项**：S2（token 已加密）/ S5（无硬编码密钥）/ T1（Application scope 合理）/ L5（定位错误文件）/ L8（既定设计）—— 报告自身已剔除或降级
 - **已 review 关闭 1 项**：P1#13 K 歌 ONNX 专项 —— 已由 `logs_temp/code-review-karaoke-onnx-2026-09-14.md` 完成，其发现另已修复，见 §10.146
 - **原报告剔除 1 项**：L7 本体（清理链路本就存在）
 
-#### 未完成 16 项（按性质分组）
+#### 未完成 12 项（按性质分组）
 
 | 项 | 性质 | 现状证据（2026-09-14 快照） |
 |---|---|---|
@@ -8321,18 +8364,16 @@ onSearchSong = { keyword -> viewModel.searchNetworkSongs(keyword) },
 | **L3** `playModeToggleHandler` 改 Flow | 时序安全（暂缓，需独立 PR） | `NasMusicApp.kt:86` 仍为 `var (() -> Unit)?`；`MainActivity.kt:366` 赋值 / `:388` 清空 |
 | **L6** FocusableSurface 焦点释放 | 待触发（需 TV 实机复现） | `FocusableSurface.kt` 仍 `LaunchedEffect(Unit) { requestFocus() }` 无释放逻辑；报告要求"实机复现再修"，勿实施原空操作方案 |
 | **P1#1** OkHttp 连接池统一 | **已决定不做** | 实测仍有 **16 处**独立 `OkHttpClient.Builder`（比报告"10+"更多）。报告 §F 决策：收益/风险比不划算，未来出现 socket 耗尽类故障再以 `OkHttpClientHolder` 单例重估 |
-| **P1#3** Crossfade 线性斜坡 | 性能（低优先） | `CrossfadeController.kt:17` 注释仍写"50ms 步进线性斜坡" |
-| **P1#4** 睡眠定时用 Handler | 性能（低优先） | `SleepTimerController.kt:22` 仍 `Handler(Looper.getMainLooper())` + `postDelayed` |
 | **P1#5** VisualizerMath seed 隔离 | 性能（暂缓，需独立 PR） | `VisualizerMath.kt:14` 仍为 `object`，`private var seed`(125) 全局共享 |
-| **P1#6** `rgbToHsl` 每帧 Triple 分配 | 性能（低优先） | `VisualizerMath.kt:89` 仍返回 `Triple<Float, Float, Float>` |
-| **P1#7** Milkdrop 每帧建 Canvas | 性能 | `UltraRenderers.kt:61` 仍 `Canvas(c)` |
-| **P1#8** Constellation O(n²) 连线 | 性能（已部分优化） | `AdvancedRenderers.kt:586-601` 仍 160×160 双层循环（≈12720 次/帧），已合并单 Path 绘制 |
-| **P1#9** PlasmaFlow 逐粒子 drawCircle | 性能 | `UltraRenderers.kt:196/206` 仍逐个 `drawCircle` |
-| **P1#11** Milkdrop 硬编码 1280×720 | 性能（注释称有意为之） | `UltraRenderers.kt:41-42` 仍 `val w = 1280; val h = 720` |
+| **P1#8** Constellation O(n²) 连线 | 性能（已部分优化） | `AdvancedRenderers.kt:586-601` 仍 160×160 双层循环（≈12720 次/帧），已合并单 Path 绘制。**需空间网格才可降阶，属算法改写** |
+| **P1#9** PlasmaFlow 逐粒子 drawCircle | 性能 | `UltraRenderers.kt` 仍逐个 `drawCircle`。HIGH 档 `maxParticles=350` → 350 次绘制调用/帧。**改 Path 批量需按色相/透明度分桶量化，会改变观感**，非等价优化 |
+| **P1#11** Milkdrop 硬编码 1280×720 | 性能（**设计取舍，非缺陷**） | `UltraRenderers.kt:41-42` 仍 `val w = 1280; val h = 720`。原注释已说明"降采样省约 55% 填充、视觉几乎无损"；改成"自适应画布"在 1080p/4K 上会**增加**填充成本，属反向优化 |
 | **T5** 删除死代码 `VocalRemovalProcessor.kt` | P2 清理 | 文件仍在；确认无生产实例化（`PlaybackService.kt:208` 注释与 `PlayerManager.kt:198` 类型均已是 `SpectralMaskProcessor`） |
 | **P2** `customAppKey`/`secretKey` 加密 | P2 清理（暂缓） | `AppPreferences.kt:1429-1434` 仍直接读写明文 |
 
-> 说明：S4 / P1#5 / L3 三项与 `customAppKey` 加密已在 `CHANGELOG.md` §暂缓 / §P2 顺手项 记录；P1#1 已在同节记录"决定不做"。**本表的价值是把 L1 / L2 / L6 / T5 / P1#3 / #4 / #6 / #7 / #8 / #9 / #11 这 11 项也纳入版本控制** —— 此前它们只在 gitignored 报告里。
+> 说明：S4 / P1#5 / L3 三项与 `customAppKey` 加密已在 `CHANGELOG.md` §暂缓 / §P2 顺手项 记录；P1#1 已在同节记录"决定不做"。**本表的价值是把 L1 / L2 / L6 / T5 / P1#8 / P1#9 / P1#11 这些项也纳入版本控制** —— 此前它们只在 gitignored 报告里。
+>
+> **2026-09-14 复核更新**：P1#3 / P1#4 / P1#6 / P1#7 四项已修复，移出本表，详见 §10.148。其中 **P1#11 经复核判定为"设计取舍"而非缺陷**，**P1#9 的"改 Path 批量"非等价优化**（需量化分桶、会改观感），**P1#8 需算法改写**——这三项不建议按报告原建议直接实施。
 
 #### 验证边界（勿混淆静态结论与真机结论）
 
@@ -8499,7 +8540,7 @@ JAVA_HOME="C:/Program Files/Android/Android Studio/jbr" \
 |---|---|---|
 | §四-3 UI 标注「仅使用你信任的源」 | ❌ 未做 | `customUrlProvider()` 仍允许指向任意 URL，UI 无对应提示。属报告中的可选建议（"考虑在 UI 上标注"） |
 | §七-3 `totalSegments` 为估算 | ❌ 未改 | `ceil(totalSamples / hop)` 与实际迭代轮数可能不一致（末段 `segLen > hop` 会多跑一轮），**仅影响进度百分比，非正确性问题**（报告自述） |
-| §七-4 原生库非 16KB 页对齐 × 3 | ❌ 未做 | `onnxruntime-android:1.17.1` 三个 ABI 均未对齐。**注意 lint ID 是 `Aligned16KB`**，报告里写的 `NativeLibraryAlignment` 有误（`lint-results-debug.txt` 搜前者 0 命中、后者 3 命中）。当前 `targetSdk 34` + 侧装不阻塞；**升 `targetSdk 35` 或上架前必须换版本**（已可用 1.29.0） |
+| §七-4 原生库非 16KB 页对齐 × 3 | ❌ 未做（**有意保持**，见下方专项调研） | `onnxruntime-android:1.17.1` 的 native 库 `p_align = 4096`，未满足 Android 16KB 页要求。**注意 lint ID 是 `Aligned16KB`**，报告里写的 `NativeLibraryAlignment` 有误（`lint-results-debug.txt` 搜前者 4 行命中、后者 0 命中）。**不能简单升级**：实测只有 1.29.0 能让警告消失，而它要求 `minSdk 24`（本项目 22）。当前 `targetSdk 34` + 侧装不阻塞；**升 `targetSdk 35` 或上架前必须处理** |
 | §七-5 `deleteModel` 与下载并发 | ❌ 未改 | 下载中删除模型 → 最终文件被删后又被 `renameTo` 重建，用户看到「删了又回来」。**UX 问题，非数据损坏**（报告自述） |
 
 **其余说明**：
@@ -8508,6 +8549,63 @@ JAVA_HOME="C:/Program Files/Android/Android Studio/jbr" \
 - **需要真机才能确认**：48kHz 曲目的分离质量与播放时长/音高是否恢复正常；单声道曲目（部分播客/老录音）是否不再翻倍速；`verifyModelIntegrity()` 增加的一次 166MB 哈希是否让首次分离的可感知延迟超过预期。**重采样器本身的数学正确性已由独立验证覆盖，但「MediaCodec 实际给出的 `outSampleRate`/`outChannels` 是否与预期一致」只能在设备上确认。**
 - **`isModelDownloaded()` 仍是快速判定**：P2-d 只把阈值收紧到 ±1%，它依然**只判大小、不做哈希**。模型在下载后被外部损坏（如存储故障）不会被它发现，只会在 `verifyModelIntegrity()` 时暴露。这是刻意的取舍（避免主线程哈希 ANR）。
 - **报告 §八「已核对为正确、不建议改动」的 8 项**：本次审计已逐项回归确认，**全部完好，未被本轮修复破坏**（`OrtEnvironment` 不 close、`opMutex` 单飞、末段缓冲区清零、overlap-add、失败删残缺 WAV、MediaCodec/Extractor 释放、取消 rethrow、内存预检）。
+
+##### §七-4 专项调研：16KB 对齐的完整实测矩阵与「为什么不升级」（2026-09-14）
+
+在「顺手把 onnxruntime 升到 1.29.0 一起解决掉」的提议后先做了可行性取证。**结论：升级不是「改个版本号」，被 `minSdk 22` 硬阻塞；当前有意保持 1.17.1。**
+
+**一、lint 检查器的判定机制**（反汇编 AGP 8.2.1 的 `lint-checks-32.2.1.jar` → `com.android.tools.lint.checks.PageAlignmentDetector.getIncidentsFromAndroidLibrary`）
+
+```kotlin
+File(library.folder, "jni").listFiles().sorted().forEach { abiDir ->
+  abiDir.listFiles().sorted().forEach { file ->
+    if (hasElfMagicNumber(stream) &&
+        readElfAlignmentProblems(stream).any { it is AlignmentProblem.LoadSectionNotAligned })
+      return listOf(PageAlignmentIssue(...))       // 命中即 return
+```
+
+两条推论，都是理解这个问题的关键：
+
+- **每个依赖只报 1 条**。报告里 `Aligned16KB` 显示 3 条实为聚合重复 —— `app/build/reports/lint-results-debug.xml` 中唯一出现的 message 是 ``The native library `arm64-v8a/libonnxruntime.so` …``。
+- **遍历 AAR 解包目录下全部 4 个 ABI**（`arm64-v8a` / `armeabi-v7a` / `x86` / `x86_64`），**不受 `abiFilters` 影响**；顺序即 `listFiles().sorted()` 的字母序（`arm64-v8a` < `armeabi-v7a` < `x86` < `x86_64`；`libonnxruntime.so` < `libonnxruntime4j_jni.so`）。
+
+所以「消除警告」的门槛是：**AAR 内 8 个 native 库（4 ABI × 2 库）全部 `p_align ≥ 16384`，缺一不可。**
+
+**二、实测矩阵**（`p_align`，直接从 Maven Central 的 AAR 解析 ELF PT_LOAD 段）
+
+| 版本 | `libonnxruntime.so`（4 ABI） | `libonnxruntime4j_jni.so`（4 ABI） | AAR manifest `minSdkVersion` | 能消除 `Aligned16KB` |
+|---|---|---|---|---|
+| **1.17.1（当前）** | 4096 ❌ | 4096 ❌ | 21 | — |
+| 1.20.0 | **16384 ✅** | 4096 ❌ | **21** | ❌ 警告不消失 |
+| 1.21.1 | 16384 ✅ | arm64 16384 ✅ / v7a 4096 ❌ | 24 | ❌ 警告不消失 |
+| **1.29.0** | 16384 ✅ | **16384 ✅** | **24** | ✅ **唯一** |
+
+**1.20.0 是个陷阱**：它 `minSdk 21`、主库也确实对齐了，看起来正是「既兼容 minSdk 22 又消除警告」的答案 —— 但 JNI 桥接库 `libonnxruntime4j_jni.so` 仍是 4096，lint 只会改报那个文件，**警告并不会消失**；且 16KB 真机上该库 `dlopen` 仍会失败，没有实质收益。
+
+**三、没有绕过路径**
+
+lint 内有一份硬编码的「已知安全依赖」白名单 `PageAlignmentDetector.isDependencyKnownSafe(group, artifact, version)`，命中即跳过检查。其 group 列表为：`com.google.mlkit` / `com.google.mediapipe` / `androidx.appsearch` / `androidx.datastore` / `androidx.tracing` / `com.google.android.gms` / `com.google.ar.sceneform` / `org.chromium.net` / `androidx.graphics` / `com.google.ai.edge.litert` / `com.google.android.libraries.navigation` / `com.google.firebase` / `com.google.android.games` / `com.google.ar` / `com.crashlytics.sdk.android`。**不含 `com.microsoft.onnxruntime`。** 另外 `onnxruntime-mobile` 最新只到 1.18.0（更旧，无益）。
+
+**四、升 `minSdk 24` 的代价（已评估，判定不划算）**
+
+- **安装层面（不可绕过）**：Play 商店对 API < 24 的设备不再展示该应用；侧载报 `INSTALL_FAILED_OLDER_SDK`。被挡掉的是 **Android 5.0(21) / 5.1(22) / 6.0(23)** —— 含开发用的创维 Android 5.1.1 电视，即真机回归的基准设备。
+- **代码层面**：§10.144 刚补的 9 处 `NewApi` 版本守卫中，`BatteryOptimizationHelper.kt:27/39`（`SDK_INT < M`）、`NasMusicApp.kt:66`、`StorageMonitor.kt:94/120`（`< N`）会变成恒不成立的分支，lint 反而**新增** `ObsoleteSdkInt` 告警（增加而非减少）。
+- **API 24 自身行为约束**：`file://` 经 Intent 传出进程会触发 `FileUriExposedException`（StrictMode 强制）。已核查项目全部 `Intent.ACTION_*` 用法（`ACTION_OPEN_DOCUMENT_TREE` SAF / `ACTION_MEDIA_BUTTON` 进程内 / `ACTION_VIEW` 带 https），**无任何跨进程传 `file://` 的路径**，实测零影响。
+- **文档/约定**：`AGENTS.md` 的 TinyPinyin 选型理由（为 API 22 而弃 `android.icu`）、`docs/regression-test.md` 的「测试环境 API 22+」、可视化方案中 `Path.getSegment`（API 24）不可用的降级论证等，均需同步修订。
+- **收益**：仅消除 **1 条 Warning**（非 Error）。该检查只影响 16KB 页设备（Android 15+ 且 OEM 启用 16KB 页的 arm64 设备，当前市占率极低），且 Play 的 16KB 强制要求针对 `targetSdk 35+`。
+
+**五、决策口径**
+
+**有意保持 `onnxruntime-android:1.17.1` + `minSdk 22`** —— 用「丢三代 Android 用户（含自有测试机）」换「消一条 warning」性价比为负。
+
+**触发条件**：升 `targetSdk 35` 或上架前必须处理。届时只有两条路：
+
+1. 升 `minSdk 24` + 换 `1.29.0`（代价见上）；
+2. 自编 ONNX Runtime（NDK + cmake，加 `-DCMAKE_SHARED_LINKER_FLAGS="-Wl,-z,max-page-size=16384"`）。
+
+**代码内已同步落注释**：`app/build.gradle.kts` 依赖声明处（含同样的矩阵）、`AGENTS.md` 的 Non-obvious constraints。
+
+**取证方法备注（可复用）**：本次未下载整包（1.29.0 的 AAR 有 51.9MB）。用 `logs_temp/verify_ort/fetch_zip_entry.py` 的 HTTP Range + **deflate 增量解压**，只取压缩流头 64KB 即拿到 ELF 头与程序头表，几百 KB 流量就能判 `p_align`。该脚本首版有个值得记的 bug：中央目录的格式串多写了一个 `H`（14 个字段塞进 13 个变量）→ `ValueError`，而调用方带了 `2>/dev/null` 把错误吞掉，表现为「5 个版本全部无输出」。**调试期绝不屏蔽 stderr。**
 
 ### 10.145 v2.32.3 — lint 错误清零（105 → 0）+ lint 转阻塞门禁（2026-09-14）
 
