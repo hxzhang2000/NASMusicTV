@@ -1,6 +1,7 @@
 package com.nasmusic.tv.visualizer.renderers
 
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Canvas
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.withTransform
@@ -32,6 +33,16 @@ class MilkdropRenderer : VisualizerRenderer {
 
     private var prev: ImageBitmap? = null
     private var curr: ImageBitmap? = null
+    /**
+     * P1#7（2026-09-14）：与 [prev]/[curr] 一一对应的预分配 Canvas。
+     *
+     * 原实现每帧 `Canvas(c)` 新建包装对象，违反本项目"绘制循环零分配"铁律。
+     * 由于 [prev]/[curr] 每帧互换（末尾 `prev = c; curr = p`），Canvas 必须**跟随
+     * 它包装的那个 ImageBitmap 一起互换**，否则会画到错误的缓冲上。
+     * 不变式：`currCanvas` 恒包装 `curr`，`prevCanvas` 恒包装 `prev`。
+     */
+    private var prevCanvas: Canvas? = null
+    private var currCanvas: Canvas? = null
 private val paint = androidx.compose.ui.graphics.Paint()
     private var rotation = 0f
     private var hue = 120f   // 绿系起点（黄60° → 蓝195°区间流动）
@@ -40,14 +51,21 @@ private val paint = androidx.compose.ui.graphics.Paint()
         // 降采样到 720p 离屏
         val w = 1280
         val h = 720
-        prev = ImageBitmap(w, h)
-        curr = ImageBitmap(w, h)
+        val a = ImageBitmap(w, h)
+        val b = ImageBitmap(w, h)
+        prev = a
+        curr = b
+        // P1#7：两个缓冲各建一个 Canvas，此后不再分配
+        prevCanvas = Canvas(a)
+        currCanvas = Canvas(b)
         rotation = 0f
     }
 
     override fun DrawScope.draw(frame: AudioFrame, ctx: RenderContext) {
         val p = prev ?: return
         val c = curr ?: return
+        // P1#7：复用与 curr 绑定的预分配 Canvas（原为每帧 Canvas(c)）
+        val cb = currCanvas ?: return
 
 // 参数安全区间：缩放 1.015–1.03 / 旋转 0.3–0.8°/帧 / alpha 0.88–0.94
         val scale = 1.015f + frame.bass * 0.015f
@@ -57,8 +75,7 @@ private val paint = androidx.compose.ui.graphics.Paint()
         val alpha = (0.88f + frame.energy * 0.06f).coerceIn(0.88f, 0.94f)
         val shift = if (frame.beat) 6f else 1f
 
-        // ① 上一帧缩放+旋转+位移回绘到当前缓冲
-        val cb = androidx.compose.ui.graphics.Canvas(c)
+        // ① 上一帧缩放+旋转+位移回绘到当前缓冲（cb 为 onEnter 预分配，见 P1#7）
         paint.alpha = alpha
         cb.save()
         cb.translate(c.width / 2f, c.height / 2f)
@@ -98,9 +115,16 @@ val n = ctx.quality.barCount
             size.width.toInt().coerceAtLeast(1), size.height.toInt().coerceAtLeast(1)))
         prev = c
         curr = p
+        // P1#7：Canvas 与其包装的缓冲同步互换，维持「currCanvas 恒包装 curr」不变式
+        val tmpCanvas = prevCanvas
+        prevCanvas = currCanvas
+        currCanvas = tmpCanvas
     }
 
-    override fun onExit() { prev = null; curr = null }
+    override fun onExit() {
+        prev = null; curr = null
+        prevCanvas = null; currCanvas = null
+    }
 }
 
 // ═══════════════════════════════════════════════════════════════════

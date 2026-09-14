@@ -104,6 +104,32 @@ object VisualizerMath {
         return Triple(if (h < 0f) h + 360f else h, s, l)
     }
 
+    /**
+     * RGB → 色相（0-360），**无堆分配**（P1#6，2026-09-14）。
+     *
+     * [rgbToHsl] 返回 `Triple`，而 [com.nasmusic.tv.visualizer.renderers.LyricsDotMatrixRenderer]
+     * 在**每帧绘制路径**上只需要色相，却为此每帧分配一个 `Triple`（违反本项目
+     * "绘制循环零分配"铁律）。本函数只算色相并返回基本类型 `Float`，零分配。
+     *
+     * 数值与 [rgbToHsl] 的色相分量**逐位一致**，含无彩色（`d <= 0.0001f`）返回 `0f`
+     * 的分支。需要饱和/亮度时仍请用 [rgbToHsl]（其调用方均为每首歌一次，非每帧）。
+     */
+    fun hueOf(color: Color): Float {
+        val r = color.red
+        val g = color.green
+        val b = color.blue
+        val maxC = maxOf(r, g, b)
+        val minC = minOf(r, g, b)
+        val d = maxC - minC
+        if (d <= 0.0001f) return 0f
+        val h = when (maxC) {
+            r -> 60f * (((g - b) / d) % 6f)
+            g -> 60f * ((b - r) / d + 2f)
+            else -> 60f * ((r - g) / d + 4f)
+        }
+        return if (h < 0f) h + 360f else h
+    }
+
     /** 连续色相渐变（青→蓝→粉紫 等）。[t] 0→1 对应 hue0→hue1，走最短色相弧线 */
     fun hueGradient(hue0: Float, hue1: Float, t: Float): Float {
         var d = (hue1 - hue0) % 360f

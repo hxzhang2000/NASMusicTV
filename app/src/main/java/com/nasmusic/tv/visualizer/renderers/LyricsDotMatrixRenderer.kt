@@ -529,7 +529,8 @@ class LyricsDotMatrixRenderer : VisualizerRenderer {
         val kProgress = karaokePacing(lineProgress)
 
         val accent = ctx.palette.accent
-        val baseHue = VisualizerMath.rgbToHsl(accent).first
+        // P1#6：本处在每帧绘制路径上，改用零分配的 hueOf（原来 rgbToHsl 每帧分配一个 Triple）
+        val baseHue = VisualizerMath.hueOf(accent)
         val activeHue = if (baseHue in 0f..60f || baseHue in 300f..360f) 300f else 195f
 
         val bassPulse = 1f + frame.bass * 0.05f

@@ -1,10 +1,13 @@
 package com.nasmusic.tv.player
 
-import android.os.Handler
-import android.os.Looper
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import java.util.concurrent.atomic.AtomicLong
+import kotlinx.coroutines.launch
 
 /**
  * 睡眠定时器（F2-2）：到点自动暂停播放。
@@ -15,11 +18,20 @@ import java.util.concurrent.atomic.AtomicLong
  * - 到期回调 [onExpired]，由 PlayerManager 触发 pause() + 通知刷新
  * - remaining() 供通知栏显示剩余分钟
  *
- * 时间源可注入（nowMsProvider），单测无需真实等待。
+ * P1#4（2026-09-14）：到期调度由 `Handler.postDelayed` 改为**协程 `delay`**。
+ * 原实现自持一个 `Handler`，并用 `AtomicLong` 令牌防御 cancel 与到期的竞争；
+ * 协程化后取消语义由 [Job] 直接承载（`cancel()` 即取消在途 delay），令牌守卫不再必要，
+ * 与本项目"协程优先"的调度风格统一，且**单测可用虚拟时间验证真实到期路径**
+ * （原 `Handler` 版本在 Robolectric 下不驱动 Looper，只能靠公开的 [tickExpired]
+ * 手工驱动，测不到调度本身）。
+ *
+ * 时间源与调度器均可注入（[scope] / [nowMsProvider]），单测无需真实等待。
+ * [scope] 默认主线程 immediate 调度器，与原先 `Handler(Looper.getMainLooper())` 等价；
+ * 其生命周期与 [PlayerManager]（app 级单例）一致。
  */
 class SleepTimerController(
     private val onExpired: () -> Unit,
-    private val handler: Handler = Handler(Looper.getMainLooper()),
+    private val scope: CoroutineScope = CoroutineScope(Dispatchers.Main.immediate + SupervisorJob()),
     private val nowMsProvider: () -> Long = System::currentTimeMillis
 ) {
     sealed interface State {
@@ -30,6 +42,9 @@ class SleepTimerController(
 
     private val _state = MutableStateFlow<State>(State.Off)
     val state: StateFlow<State> = _state
+
+    /** 在途的到期调度（P1#4：以 Job 承载取消语义，替代原 Handler + AtomicLong 令牌） */
+    private var expiryJob: Job? = null
 
     /** 剩余毫秒（未运行返回 0） */
     fun remaining(): Long = when (val s = _state.value) {
@@ -46,13 +61,10 @@ class SleepTimerController(
         if (minutes <= 0) return
         val endsAt = nowMsProvider() + minutes * 60_000L
         _state.value = State.Running(endsAt, minutes)
-        val token = AtomicLong(endsAt)
-        handler.postDelayed({
-            // 到期校验：cancel 会移除本 runnable，这里防御状态被并发改动
-            if (token.get() == endsAt) {
-                tickExpired()
-            }
-        }, minutes * 60_000L)
+        expiryJob = scope.launch {
+            delay(minutes * 60_000L)
+            tickExpired()
+        }
     }
 
     /**
@@ -68,7 +80,8 @@ class SleepTimerController(
 
     /** 取消定时（含 Finished 状态复位） */
     fun cancel() {
-        handler.removeCallbacksAndMessages(null)
+        expiryJob?.cancel()
+        expiryJob = null
         _state.value = State.Off
     }
 
