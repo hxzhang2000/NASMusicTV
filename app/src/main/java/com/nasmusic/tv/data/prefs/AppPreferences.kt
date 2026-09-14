@@ -1315,11 +1315,10 @@ class AppPreferences internal constructor(private val context: Context) {
     /**
      * 同步读取某网盘配置。
      *
-     * R-7 第四类：保留 runBlocking（现有调用点均在 IO 协程上下文：
-     * BaiduOAuthClient/BaiduMvFileService/BaiduNetdiskService 的 withContext(IO)），
-     * 禁止主线程协程内调用。
-     * T2 第一批（2026-09-14）：外部 UI/App 调用点已迁移到 baiduConfigFlow.first()（suspend），
-     * 本同步入口仅剩 IO 协程上下文调用方与内部 getter 链（后续批次继续收敛）。
+     * R-7 第四类：保留 runBlocking（通用同步入口，供非协程上下文兜底；禁止主线程协程内调用）。
+     * T2（2026-09-14）第一批：外部 UI/App 调用点迁移到 baiduConfigFlow.first()；
+     * 第二批：百度 token/配置便捷方法全部改为 suspend + baiduConfigFlow.first()，
+     * BaiduOAuthClient/BaiduNetdiskService/BaiduMvFileService 调用方已同步迁移，本入口仅作通用兜底。
      */
     @androidx.annotation.WorkerThread
     fun getCloudDriveConfigSync(type: CloudDriveType): CloudDriveConfig? {
@@ -1333,10 +1332,6 @@ class AppPreferences internal constructor(private val context: Context) {
             null
         }
     }
-
-    /** 百度专用：便捷同步读取（兜底默认配置，永不返回 null） */
-    fun getBaiduConfigSync(): CloudDriveConfig =
-        getCloudDriveConfigSync(CloudDriveType.BAIDU) ?: CloudDriveConfig(CloudDriveType.BAIDU)
 
     /** 百度配置 Flow（修复 H-3：UI 订阅用，替代组合内 runBlocking 同步读） */
     val baiduConfigFlow: Flow<CloudDriveConfig> = dataStore.data.map { prefs ->
@@ -1365,81 +1360,81 @@ class AppPreferences internal constructor(private val context: Context) {
         runBlocking(Dispatchers.IO) { saveCloudDriveConfig(config) }
     }
 
-    // ---- 百度 token 便捷读写（加解密 accessToken/refreshToken）----
+    // ---- 百度 token 便捷读写（加解密 accessToken/refreshToken；T2 第二批：suspend + baiduConfigFlow.first()）----
 
-    /** 同步读取百度 token（解密） */
-    fun getBaiduTokensSync(): BaiduTokens? {
-        val cfg = getBaiduConfigSync() ?: return null
+    /** 异步读取百度 token（解密） */
+    suspend fun getBaiduTokens(): BaiduTokens? {
+        val cfg = baiduConfigFlow.first()
         val t = cfg.tokens ?: return null
         return try {
             val decAt = CryptoUtils.decrypt(t.accessToken).ifBlank { return null }
             val decRt = CryptoUtils.decrypt(t.refreshToken).ifBlank { return null }
-            AppLog.d(TAG, "getBaiduTokensSync: token decrypted (len=${decAt.length}), expiresAt=${t.expiresAt}")
+            AppLog.d(TAG, "getBaiduTokens: token decrypted (len=${decAt.length}), expiresAt=${t.expiresAt}")
             t.copy(accessToken = decAt, refreshToken = decRt)
         } catch (e: Exception) {
-            AppLog.w(TAG, "getBaiduTokensSync decrypt error", e)
+            AppLog.w(TAG, "getBaiduTokens decrypt error", e)
             null
         }
     }
 
-    /** 同步保存百度 token（加密） */
-    fun saveBaiduTokensSync(tokens: BaiduTokens) {
-        val cfg = getBaiduConfigSync().copy(
+    /** 异步保存百度 token（加密） */
+    suspend fun saveBaiduTokens(tokens: BaiduTokens) {
+        val cfg = baiduConfigFlow.first().copy(
             tokens = tokens.copy(
                 accessToken = CryptoUtils.encrypt(tokens.accessToken),
                 refreshToken = CryptoUtils.encrypt(tokens.refreshToken)
             )
         )
-        saveCloudDriveConfigSync(cfg)
+        saveCloudDriveConfig(cfg)
     }
 
     /** 清除百度 token（登出/刷新失败降级用） */
-    fun clearBaiduTokensSync() {
-        val cfg = getBaiduConfigSync().copy(tokens = null)
-        saveCloudDriveConfigSync(cfg)
+    suspend fun clearBaiduTokens() {
+        val cfg = baiduConfigFlow.first().copy(tokens = null)
+        saveCloudDriveConfig(cfg)
     }
 
     // ---- 百度配置项便捷存取 ----
 
-    fun getBaiduEnabledSync(): Boolean = getBaiduConfigSync().enabled
-    fun setBaiduEnabledSync(enabled: Boolean) =
-        saveCloudDriveConfigSync(getBaiduConfigSync().copy(enabled = enabled))
-    fun getBaiduMusicRootDirSync(): String {
-        val saved = getBaiduConfigSync().musicRootDir
+    suspend fun getBaiduEnabled(): Boolean = baiduConfigFlow.first().enabled
+    suspend fun setBaiduEnabled(enabled: Boolean) =
+        saveCloudDriveConfig(baiduConfigFlow.first().copy(enabled = enabled))
+    suspend fun getBaiduMusicRootDir(): String {
+        val saved = baiduConfigFlow.first().musicRootDir
         val appDir = com.nasmusic.tv.backend.network.baidu.BaiduNetdiskConfig.APP_DIR
         // 空白或不在沙盒 /apps/NASMusicTV 下的旧路径，自动纠正为沙盒目录
         val corrected = saved.ifBlank { appDir }
         if (corrected != appDir && !corrected.startsWith(appDir)) {
             com.nasmusic.tv.util.AppLog.w("AppPreferences", "musicRootDir='$corrected' outside sandbox, resetting to $appDir")
-            setBaiduMusicRootDirSync(appDir)
+            setBaiduMusicRootDir(appDir)
             return appDir
         }
         return corrected
     }
-    fun setBaiduMusicRootDirSync(dir: String) =
-        saveCloudDriveConfigSync(getBaiduConfigSync().copy(musicRootDir = dir))
-    fun getBaiduMvDirSync(): String? {
-        val saved = getBaiduConfigSync().mvDir
+    suspend fun setBaiduMusicRootDir(dir: String) =
+        saveCloudDriveConfig(baiduConfigFlow.first().copy(musicRootDir = dir))
+    suspend fun getBaiduMvDir(): String? {
+        val saved = baiduConfigFlow.first().mvDir
         val appDir = com.nasmusic.tv.backend.network.baidu.BaiduNetdiskConfig.APP_DIR
         // MV 目录不在沙盒下则视为无效，返回 null（调用方会 fallback 到 musicRootDir）
         if (saved != null && saved.isNotBlank() && !saved.startsWith(appDir)) {
             com.nasmusic.tv.util.AppLog.w("AppPreferences", "mvDir='$saved' outside sandbox, clearing")
-            setBaiduMvDirSync(null)
+            setBaiduMvDir(null)
             return null
         }
         return saved
     }
-    fun setBaiduMvDirSync(dir: String?) =
-        saveCloudDriveConfigSync(getBaiduConfigSync().copy(mvDir = dir))
-    fun getBaiduCustomAppKeySync(): String? = getBaiduConfigSync().customAppKey
-    fun setBaiduCustomAppKeySync(key: String?) =
-        saveCloudDriveConfigSync(getBaiduConfigSync().copy(customAppKey = key))
-    fun getBaiduCustomSecretKeySync(): String? = getBaiduConfigSync().customSecretKey
-    fun setBaiduCustomSecretKeySync(secret: String?) =
-        saveCloudDriveConfigSync(getBaiduConfigSync().copy(customSecretKey = secret))
-    fun getBaiduApiDriftNotifiedSync(): Boolean = getBaiduConfigSync().apiDriftNotified
-    fun setBaiduApiDriftNotifiedSync(v: Boolean) =
-        saveCloudDriveConfigSync(getBaiduConfigSync().copy(apiDriftNotified = v))
+    suspend fun setBaiduMvDir(dir: String?) =
+        saveCloudDriveConfig(baiduConfigFlow.first().copy(mvDir = dir))
+    suspend fun getBaiduCustomAppKey(): String? = baiduConfigFlow.first().customAppKey
+    suspend fun setBaiduCustomAppKey(key: String?) =
+        saveCloudDriveConfig(baiduConfigFlow.first().copy(customAppKey = key))
+    suspend fun getBaiduCustomSecretKey(): String? = baiduConfigFlow.first().customSecretKey
+    suspend fun setBaiduCustomSecretKey(secret: String?) =
+        saveCloudDriveConfig(baiduConfigFlow.first().copy(customSecretKey = secret))
+    suspend fun getBaiduApiDriftNotified(): Boolean = baiduConfigFlow.first().apiDriftNotified
+    suspend fun setBaiduApiDriftNotified(v: Boolean) =
+        saveCloudDriveConfig(baiduConfigFlow.first().copy(apiDriftNotified = v))
 
     // ---- 内部：CloudDriveConfig Map <-> JSON（tokens 加密）----
 

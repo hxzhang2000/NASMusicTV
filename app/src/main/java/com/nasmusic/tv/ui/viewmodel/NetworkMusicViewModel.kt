@@ -290,9 +290,9 @@ class NetworkMusicViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    /** 验证 token 有效后，检查用户配置的音乐根目录是否存在 */
-    private fun checkMusicRootDirAfterVerify() {
-        val musicRoot = prefs.baidu.getBaiduMusicRootDirSync()
+    /** 验证 token 有效后，检查用户配置的音乐根目录是否存在（T2 第二批：suspend，读取不再阻塞） */
+    private suspend fun checkMusicRootDirAfterVerify() {
+        val musicRoot = prefs.baidu.getBaiduMusicRootDir()
         // 如果音乐根目录就是 APP_DIR 本身，不需要额外检查
         if (musicRoot == BaiduNetdiskConfig.APP_DIR) {
             onVerifyBaiduSuccess()
@@ -318,15 +318,15 @@ class NetworkMusicViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    /** 百度验证成功后：设 LoggedIn + 修正旧根目录 + 触发索引扫描 */
-    private fun onVerifyBaiduSuccess() {
+    /** 百度验证成功后：设 LoggedIn + 修正旧根目录 + 触发索引扫描（T2 第二批：suspend） */
+    private suspend fun onVerifyBaiduSuccess() {
         _baiduConnectionState.value = BaiduConnectionState.LoggedIn
         AppLog.d("BaiduAuth", "onVerifyBaiduSuccess: set state=LoggedIn")
         // 沙箱策略修正：如果用户保存的根目录不在 /apps/NASMusicTV 下，自动修正
-        val savedRoot = prefs.baidu.getBaiduMusicRootDirSync()
+        val savedRoot = prefs.baidu.getBaiduMusicRootDir()
         if (!savedRoot.startsWith(BaiduNetdiskConfig.APP_DIR)) {
             AppLog.i("BaiduAuth", "onVerifyBaiduSuccess: musicRootDir='$savedRoot' outside sandbox, resetting to ${BaiduNetdiskConfig.APP_DIR}")
-            prefs.baidu.setBaiduMusicRootDirSync(BaiduNetdiskConfig.APP_DIR)
+            prefs.baidu.setBaiduMusicRootDir(BaiduNetdiskConfig.APP_DIR)
             _netdiskCurrentDir.value = BaiduNetdiskConfig.APP_DIR
         }
         triggerBaiduIndexScanIfNeeded()
@@ -334,8 +334,8 @@ class NetworkMusicViewModel(app: Application) : AndroidViewModel(app) {
 
     /** 设置百度源总开关 */
     fun setBaiduEnabled(enabled: Boolean) {
-        prefs.baidu.setBaiduEnabledSync(enabled)
         viewModelScope.launch {
+            prefs.baidu.setBaiduEnabled(enabled)
             refreshBaiduConnectionState()
         }
     }
@@ -486,7 +486,7 @@ class NetworkMusicViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             _netdiskIsLoading.value = true
             try {
-                val rootDir = prefs.baidu.getBaiduMusicRootDirSync().ifBlank { BaiduNetdiskConfig.APP_DIR }
+                val rootDir = prefs.baidu.getBaiduMusicRootDir().ifBlank { BaiduNetdiskConfig.APP_DIR }
                 val files = baiduApi.searchAudio(keyword, dir = rootDir)
                 _netdiskSearchResults.value = files.map { it.toSong() }
             } catch (e: Exception) {
@@ -566,9 +566,9 @@ class NetworkMusicViewModel(app: Application) : AndroidViewModel(app) {
 
     // ---- 索引管理 ----
 
-    fun triggerBaiduIndexScanIfNeeded() {
+    suspend fun triggerBaiduIndexScanIfNeeded() {
         val index = baiduIndexCache.load()
-        val root = prefs.baidu.getBaiduMusicRootDirSync().ifBlank { BaiduNetdiskConfig.APP_DIR }
+        val root = prefs.baidu.getBaiduMusicRootDir().ifBlank { BaiduNetdiskConfig.APP_DIR }
         if (index == null || index.rootPath != root) {
             rebuildBaiduIndex()
         } else {
@@ -582,7 +582,7 @@ class NetworkMusicViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             _baiduIndexScanning.value = true
             _baiduIndexScanned.value = 0
-            val root = prefs.baidu.getBaiduMusicRootDirSync().ifBlank { BaiduNetdiskConfig.APP_DIR }
+            val root = prefs.baidu.getBaiduMusicRootDir().ifBlank { BaiduNetdiskConfig.APP_DIR }
             val callback = object : BaiduFileIndexCache.ProgressCallback {
                 override fun onProgress(scanned: Int) { _baiduIndexScanned.value = scanned }
                 override fun onComplete(total: Int) {
@@ -595,7 +595,7 @@ class NetworkMusicViewModel(app: Application) : AndroidViewModel(app) {
                 }
             }
             try {
-                val mvDir = prefs.baidu.getBaiduMvDirSync()
+                val mvDir = prefs.baidu.getBaiduMvDir()
                 baiduIndexCache.fullScan(root, baiduApi, mvDir, callback)
                 // 扫描成功后，对 coverUrl 为空的音频条目启动 APIC 后台提取。
                 // listall+web=1 返回的 thumbs 仅对图片/视频有效，音频文件几乎都为 null。
@@ -654,18 +654,22 @@ class NetworkMusicViewModel(app: Application) : AndroidViewModel(app) {
     // ---- 配置项 ----
 
     fun setBaiduMusicRootDir(dir: String) {
-        prefs.baidu.setBaiduMusicRootDirSync(dir)
         _netdiskCurrentDir.value = dir
-        // 根目录变更后旧索引失效，触发重建
-        rebuildBaiduIndex()
-        // 如果之前是 DirMissing，重新验证新目录
-        if (_baiduConnectionState.value is BaiduConnectionState.DirMissing) {
-            checkMusicRootDirAfterVerify()
+        viewModelScope.launch {
+            prefs.baidu.setBaiduMusicRootDir(dir)
+            // 根目录变更后旧索引失效，触发重建
+            rebuildBaiduIndex()
+            // 如果之前是 DirMissing，重新验证新目录
+            if (_baiduConnectionState.value is BaiduConnectionState.DirMissing) {
+                checkMusicRootDirAfterVerify()
+            }
         }
     }
 
     fun setBaiduMvDir(dir: String?) {
-        prefs.baidu.setBaiduMvDirSync(dir)
+        viewModelScope.launch {
+            prefs.baidu.setBaiduMvDir(dir)
+        }
     }
 
     /** 加载索引中的歌曲（供 NetdiskScreen 首页展示已扫描曲库） */

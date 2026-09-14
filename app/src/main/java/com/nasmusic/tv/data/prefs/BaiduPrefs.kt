@@ -4,33 +4,25 @@ import kotlinx.coroutines.flow.Flow
 
 /**
  * R-4 百度网盘域子 Prefs（CloudDriveConfig 按类型存取；键不迁移）。
+ * T2 第二批（2026-09-14）：全部便捷方法改为 suspend + baiduConfigFlow.first()，
+ * 移除 runBlocking 同步透传（getBaiduConfigSync/getCloudDriveConfigSync/saveCloudDriveConfigSync 已无调用方）。
  */
 class BaiduPrefs internal constructor(private val prefs: AppPreferences) {
 
     val baiduConfigFlow: Flow<com.nasmusic.tv.data.model.CloudDriveConfig> = prefs.baiduConfigFlow
 
-    fun getBaiduConfigSync(): com.nasmusic.tv.data.model.CloudDriveConfig = prefs.getBaiduConfigSync()
-    fun getCloudDriveConfigSync(type: com.nasmusic.tv.data.model.CloudDriveType): com.nasmusic.tv.data.model.CloudDriveConfig? =
-        prefs.getCloudDriveConfigSync(type)
+    suspend fun getBaiduTokens(): com.nasmusic.tv.data.model.BaiduTokens? = prefs.getBaiduTokens()
+    suspend fun saveBaiduTokens(tokens: com.nasmusic.tv.data.model.BaiduTokens) = prefs.saveBaiduTokens(tokens)
+    suspend fun clearBaiduTokens() = prefs.clearBaiduTokens()
 
-    fun saveCloudDriveConfigSync(config: com.nasmusic.tv.data.model.CloudDriveConfig) =
-        prefs.saveCloudDriveConfigSync(config)
-
-    suspend fun saveCloudDriveConfig(config: com.nasmusic.tv.data.model.CloudDriveConfig) =
-        prefs.saveCloudDriveConfig(config)
-
-    fun getBaiduTokensSync(): com.nasmusic.tv.data.model.BaiduTokens? = prefs.getBaiduTokensSync()
-    fun saveBaiduTokensSync(tokens: com.nasmusic.tv.data.model.BaiduTokens) = prefs.saveBaiduTokensSync(tokens)
-    fun clearBaiduTokensSync() = prefs.clearBaiduTokensSync()
-
-    fun getBaiduEnabledSync(): Boolean = prefs.getBaiduEnabledSync()
-    fun setBaiduEnabledSync(enabled: Boolean) = prefs.setBaiduEnabledSync(enabled)
-    fun getBaiduMusicRootDirSync(): String = prefs.getBaiduMusicRootDirSync()
-    fun setBaiduMusicRootDirSync(dir: String) = prefs.setBaiduMusicRootDirSync(dir)
-    fun getBaiduMvDirSync(): String? = prefs.getBaiduMvDirSync()
-    fun setBaiduMvDirSync(dir: String?) = prefs.setBaiduMvDirSync(dir)
-    fun getBaiduCustomAppKeySync(): String? = prefs.getBaiduCustomAppKeySync()
-    fun setBaiduCustomAppKeySync(key: String?) = prefs.setBaiduCustomAppKeySync(key)
-    fun getBaiduCustomSecretKeySync(): String? = prefs.getBaiduCustomSecretKeySync()
-    fun setBaiduCustomSecretKeySync(secret: String?) = prefs.setBaiduCustomSecretKeySync(secret)
+    suspend fun getBaiduEnabled(): Boolean = prefs.getBaiduEnabled()
+    suspend fun setBaiduEnabled(enabled: Boolean) = prefs.setBaiduEnabled(enabled)
+    suspend fun getBaiduMusicRootDir(): String = prefs.getBaiduMusicRootDir()
+    suspend fun setBaiduMusicRootDir(dir: String) = prefs.setBaiduMusicRootDir(dir)
+    suspend fun getBaiduMvDir(): String? = prefs.getBaiduMvDir()
+    suspend fun setBaiduMvDir(dir: String?) = prefs.setBaiduMvDir(dir)
+    suspend fun getBaiduCustomAppKey(): String? = prefs.getBaiduCustomAppKey()
+    suspend fun setBaiduCustomAppKey(key: String?) = prefs.setBaiduCustomAppKey(key)
+    suspend fun getBaiduCustomSecretKey(): String? = prefs.getBaiduCustomSecretKey()
+    suspend fun setBaiduCustomSecretKey(secret: String?) = prefs.setBaiduCustomSecretKey(secret)
 }

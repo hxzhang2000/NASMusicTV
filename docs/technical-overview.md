@@ -8299,6 +8299,27 @@ onSearchSong = { keyword -> viewModel.searchNetworkSongs(keyword) },
 
 **版本**：v2.31.2 → **v2.31.3**（versionCode 136 → 137）
 
+### 10.137 v2.32.3 — T2 百度配置读取全量 Flow 化（分批，2026-09-14）
+
+**问题描述**：AppPreferences 百度配置同步读取走 `runBlocking(Dispatchers.IO)`，主线程/普通成员函数调用点存在 ANR 与线程池占用风险（审阅报告 T2，26 处调用方）。复用既有 `baiduConfigFlow` 全量替换。
+
+**修改（第一批：外部调用点）**：
+
+- `NasMusicApp`：onCreate 百度注册改 `runBlocking { baiduConfigFlow.first() }`（不带 IO 调度器）；`refreshBaiduServiceRegistration` 改 suspend + `first()`
+- `NetworkMusicViewModel`：`refreshBaiduConnectionState` 改 suspend + `first()`；`setBaiduEnabled` 包 `viewModelScope.launch`；`playNetworkSong` 自愈注册移入协程
+
+**修改（第二批：内部 getter 链与调用方）**：
+
+- `AppPreferences`：15 个百度便捷方法（tokens 3 个 + enabled/musicRootDir/mvDir/customAppKey/customSecretKey/apiDriftNotified 各 get/set）改 `suspend` + `baiduConfigFlow.first()`；删除 `getBaiduConfigSync` 与 15 个 `*Sync` 变体；R-7 注释更新为"通用兜底入口"
+- `BaiduPrefs`：透传层改为 13 个 suspend 方法，移除全部同步透传
+- `BaiduOAuthClient`：`resolveAppKey`/`resolveSecretKey` 改 suspend；8 处调用更新（均在 withContext(IO) 内）
+- `BaiduNetdiskService`/`BaiduMvFileService`：各 1 处调用更新（withContext(IO) 内直接调 suspend）
+- `NetworkMusicViewModel`：`setBaiduEnabled`/`setBaiduMusicRootDir`/`setBaiduMvDir` 包 `viewModelScope.launch`；`triggerBaiduIndexScanIfNeeded`/`checkMusicRootDirAfterVerify`/`onVerifyBaiduSuccess` 改 suspend
+
+**验证**：`:app:compileDebugKotlin --rerun`（in-process，沙箱拦截 Kotlin daemon 时使用）**BUILD SUCCESSFUL**。
+
+**版本**：v2.32.3 批次内，versionCode 保持 142。
+
 ### 10.136 v2.32.3 — 修复代码质量批次编译错误并跑通构建验证（2026-09-14）
 
 **问题描述**：v2.32.3 代码质量修复批次（1507b59）落地时引入 3 处编译错误，`compileDebugKotlin` 失败：`LyricsDotMatrixRenderer.kt` 的 T7 try-finally 修复把 `bmp`/`n`/`minX`/`maxX`/`minY`/`maxY` 声明写进 try 块内，finally 与坐标映射段无法访问；`NetworkMusicViewModel.kt` 的 P1#12 修复与 `HqSeparationOrchestrator.kt` 的 L7 修复各缺一个 `kotlinx.coroutines` 导入（`flow.first` / `cancel` 扩展函数）。
