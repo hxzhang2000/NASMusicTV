@@ -26,6 +26,7 @@
 - **P1#10 修复（viewmodel）**: `VisualizerViewModel.kt` `loadedCoverKey` 加 `@Volatile`，主线程写(63行)/IO 读(82行)跨线程可见性
 - **P1#2 修复（baidu）**: `BaiduNetdiskConfig.kt` ERRNO_MAP 补 31079 到"文件不存在或已被删除"
 - **NewApi 崩溃修复（player/export/viewmodel）**: 修复 9 处 minSdk 22 下未做版本守卫的 API 调用（lint 首跑发现，审阅报告未覆盖）——`BatteryOptimizationHelper.isIgnoringBatteryOptimizations`（API 23）；`ExportCoordinator.volumeIdOf`（`getStorageVolumes`/`getUuid` API 24、`getDirectory` API 30，此前低版本抛 `NoSuchMethodError` 且 `catch (e: Exception)` 捕获不到 Error，属真实崩溃路径）；`MainViewModel.userNetworkLyricsOverride`（`ConcurrentHashMap.newKeySet` API 24 → 改 `Collections.newSetFromMap`，同时消除 `KeySetView#contains/add/remove` 三处）；`SongExporter.resolveChildDoc`（`removeLast` 在 API 35 被 `SequencedCollection` 遮蔽 → 改 `removeAt(lastIndex)`）。lint 复跑 NewApi 9 → **0**
+- **RestrictedApi 修复（player）**: `CoilBitmapLoader.kt` 弃用 `androidx.concurrent.futures.ResolvableFuture`（`@RestrictedApi`，仅允许 androidx 同组使用，库升级易碎）改用 Guava 公开的 `SettableFuture`（项目已依赖 Guava：`ListenableFuture`/`MoreExecutors`），语义一致，消除全部 20 处 `RestrictedApi`；lint 复跑 125 → **105 errors**
 
 ### Docs
 - **L4 补充（db）**: `LocalMusicDatabase.kt` 注释强化：`fallbackToDestructiveMigration` 仅适用可由其他数据源重建的本地索引，**未来承载用户数据（下载/收藏/播放列表）的数据库绝不可启用**，必须维护 Migration 类

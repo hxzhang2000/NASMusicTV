@@ -8299,6 +8299,23 @@ onSearchSong = { keyword -> viewModel.searchNetworkSongs(keyword) },
 
 **版本**：v2.31.2 → **v2.31.3**（versionCode 136 → 137）
 
+### 10.144 v2.32.3 — CoilBitmapLoader 脱离 androidx 内部 API（2026-09-14）
+
+**问题描述**：lint 报 20 处 `RestrictedApi`，全部集中在 `player/CoilBitmapLoader.kt` —— 该文件使用 `androidx.concurrent.futures.ResolvableFuture` / `AbstractResolvableFuture`，属 `@RestrictedApi`（仅允许 `androidx` 同组前缀调用）。不保证跨版本兼容，Coil / androidx 升级后可能编译失败或运行异常。
+
+**修改**：
+
+- `player/CoilBitmapLoader.kt`：`ResolvableFuture.create<Bitmap>()` → Guava `SettableFuture.create<Bitmap>()`；`enqueue()` 形参类型同步改为 `SettableFuture<Bitmap>`；import 调整（移除 `androidx.concurrent.futures.ResolvableFuture`，新增 `com.google.common.util.concurrent.SettableFuture`）
+
+**为何可行**：项目已依赖 Guava（同文件原已 import `ListenableFuture` / `MoreExecutors`），`SettableFuture` 为公开 API，`set` / `setException` / `isDone` / `isCancelled` / `addListener` 语义与原实现一致，无新增依赖。
+
+**验证**：
+
+- `:app:assembleDebug`（in-process，3m58s）**BUILD SUCCESSFUL**
+- `:app:lintDebug` 复跑：`RestrictedApi` **20 → 0**；lint 总数 125 errors / 254 warnings → **105 errors / 254 warnings**
+
+**版本**：v2.32.3 批次内（该版本尚未打 tag），versionCode 保持 142。
+
 ### 10.143 v2.32.3 — 修复 9 处 NewApi 潜在崩溃（2026-09-14）
 
 **问题描述**：lint 首跑（§10.142）报出 9 处 `NewApi` —— minSdk 22 却调用了 API 23/24/30/35 的方法且无版本守卫。审阅报告未覆盖此类问题。其中 `ExportCoordinator.volumeIdOf` 最危险：低版本抛 `NoSuchMethodError`，而外层 `catch (e: Exception)` 捕获不到 `Error`，属真实崩溃路径（影响导出功能）。

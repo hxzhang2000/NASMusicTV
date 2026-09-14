@@ -3,7 +3,6 @@ package com.nasmusic.tv.player
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
-import androidx.concurrent.futures.ResolvableFuture
 import androidx.core.graphics.drawable.toBitmap
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.util.BitmapLoader
@@ -12,6 +11,7 @@ import coil.ImageLoader
 import coil.request.ImageRequest
 import com.google.common.util.concurrent.ListenableFuture
 import com.google.common.util.concurrent.MoreExecutors
+import com.google.common.util.concurrent.SettableFuture
 
 /**
  * [BitmapLoader] 实现，使用 Coil 加载歌曲封面。
@@ -25,8 +25,11 @@ class CoilBitmapLoader(
     private val appContext: android.content.Context
 ) : BitmapLoader {
 
+    // RestrictedApi 修复（2026-09-14）：原用 androidx.concurrent.futures.ResolvableFuture
+    // （@RestrictedApi，仅允许 androidx 同组使用，库升级易碎）。项目已依赖 Guava
+    // （ListenableFuture/MoreExecutors），改用其公开的 SettableFuture，语义一致。
     override fun loadBitmap(uri: Uri, options: BitmapFactory.Options?): ListenableFuture<Bitmap> {
-        val future = ResolvableFuture.create<Bitmap>()
+        val future = SettableFuture.create<Bitmap>()
         val request = ImageRequest.Builder(appContext)
             .data(uri)
             .size(512, 512)
@@ -44,7 +47,7 @@ class CoilBitmapLoader(
     }
 
     override fun decodeBitmap(data: ByteArray): ListenableFuture<Bitmap> {
-        val future = ResolvableFuture.create<Bitmap>()
+        val future = SettableFuture.create<Bitmap>()
         val request = ImageRequest.Builder(appContext)
             .data(data)
             .size(512, 512)
@@ -63,7 +66,7 @@ class CoilBitmapLoader(
      * 入队并把 future 的取消转发到底层请求。
      * 原实现丢弃了 enqueue 返回的 Disposable，future 被取消后底层加载仍继续跑（浪费带宽/解码）。
      */
-    private fun enqueue(request: ImageRequest, future: ResolvableFuture<Bitmap>): ListenableFuture<Bitmap> {
+    private fun enqueue(request: ImageRequest, future: SettableFuture<Bitmap>): ListenableFuture<Bitmap> {
         val disposable = imageLoader.enqueue(request)
         runCatching {
             future.addListener(
