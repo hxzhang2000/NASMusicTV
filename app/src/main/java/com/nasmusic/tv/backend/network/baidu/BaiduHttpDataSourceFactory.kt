@@ -80,7 +80,19 @@ object BaiduHttpDataSourceFactory {
             if (isBaiduHost || isBilibiliHost) {
                 AppLog.d(TAG, "inject headers host=$host baidu=$isBaiduHost bili=$isBilibiliHost")
             }
-            chain.proceed(newReq)
+            // 后端认证头（飞牛音乐等需要 Authorization 的后端）。
+            // BackendAuthHeaders 内部做 host 精确匹配，非当前后端域名返回空 Map，
+            // 因此令牌不会随重定向泄漏到 CDN / 第三方域名。
+            // Jellyfin / Navidrome 等把凭据放在 URL 上的后端返回空 Map，行为不变。
+            val backendHeaders = com.nasmusic.tv.backend.BackendAuthHeaders.forHost(host)
+            val finalReq = if (backendHeaders.isEmpty()) {
+                newReq
+            } else {
+                newReq.newBuilder().apply {
+                    backendHeaders.forEach { (name, value) -> header(name, value) }
+                }.build()
+            }
+            chain.proceed(finalReq)
         }
         // 安全修复（C-1）：移除 trust-all，恢复系统默认证书校验。
         // 百度/B 站等端点均为正规 CA 证书；老设备若遇 Let's Encrypt 端点握手失败，

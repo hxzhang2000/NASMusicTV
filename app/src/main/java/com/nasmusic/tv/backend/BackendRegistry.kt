@@ -1,5 +1,6 @@
 package com.nasmusic.tv.backend
 
+import android.content.Context
 import com.nasmusic.tv.backend.impl.DaoliyuAdapter
 import com.nasmusic.tv.backend.impl.FeiniuAdapter
 import com.nasmusic.tv.backend.impl.JellyfinAdapter
@@ -17,7 +18,14 @@ import java.util.concurrent.TimeUnit
  * 后端注册中心
  * 管理并创建不同类型的后端适配器
  */
-class BackendRegistry {
+/**
+ * 后端注册中心
+ *
+ * @param appContext 应用上下文（Application，不会泄漏）。仅用于极少数需要持久化
+ *                   设备标识的适配器（如飞牛的 deviceId）；可为 null，此时适配器退化为
+ *                   进程内稳定值。
+ */
+class BackendRegistry(private val appContext: Context? = null) {
 
     private val TYPE_JELLYFIN = ServerConfig.TYPE_JELLYFIN
     private val TYPE_NAVIDROME = ServerConfig.TYPE_NAVIDROME
@@ -76,7 +84,7 @@ class BackendRegistry {
             TYPE_NAVIDROME -> NavidromeAdapter()
             TYPE_SUBSONIC -> SubsonicAdapter()
             TYPE_DAOLIYU -> DaoliyuAdapter()
-            TYPE_FEINIU -> FeiniuAdapter()
+            TYPE_FEINIU -> FeiniuAdapter(appContext)
             else -> return@withContext false
         }
 
@@ -114,11 +122,31 @@ class BackendRegistry {
                 AppLog.d("BackendRegistry", "initialize: replacing existing adapter, releasing old one")
                 releaseAdapter(oldAdapter)
             }
+            // 同步播放 / 封面链路的认证头（飞牛音乐等需要 Authorization 的后端）。
+            // 其他后端 streamHeaders 为空 Map，注入后行为不变。
+            BackendAuthHeaders.update(adapter.streamHeaders, hostOf(config.baseUrl))
         } else {
             try { adapter.close() } catch (_: Exception) {}
         }
 
         success
+    }
+
+    /**
+     * 取 URL 的 host，用于认证头的 host 白名单匹配。
+     *
+     * 采用 URI 解析并按需补 scheme（`toHttpUrl` 对无 scheme 的输入会失败，
+     * 而用户配置里 `192.168.1.100` 这种写法是合法的）。
+     */
+    private fun hostOf(url: String): String {
+        if (url.isBlank()) return ""
+        val withScheme = if (url.contains("://")) url else "http://$url"
+        return try {
+            java.net.URI(withScheme).host ?: ""
+        } catch (e: Exception) {
+            AppLog.d("BackendRegistry", "hostOf: cannot parse host, url omitted")
+            ""
+        }
     }
 
     /**
@@ -152,6 +180,8 @@ class BackendRegistry {
             serverDisplayName = ""
             a
         }
+        // 断开后必须清空认证头，否则旧令牌会继续注入到播放 / 封面请求
+        BackendAuthHeaders.clear()
         adapter?.let { releaseAdapter(it) }
     }
 
@@ -165,7 +195,7 @@ class BackendRegistry {
             TYPE_NAVIDROME -> NavidromeAdapter()
             TYPE_SUBSONIC -> SubsonicAdapter()
             TYPE_DAOLIYU -> DaoliyuAdapter()
-            TYPE_FEINIU -> FeiniuAdapter()
+            TYPE_FEINIU -> FeiniuAdapter(appContext)
             else -> return@withContext Pair(false, "不支持的后端类型")
         }
 

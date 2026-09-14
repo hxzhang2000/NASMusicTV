@@ -230,7 +230,9 @@ class NasMusicApp : Application(), ImageLoaderFactory {
         appPreferences.migrateLanguageMirrorIfNeeded()
         // 启动时应用语言设置（读 SharedPreferences 镜像，零 IO）
         applyLocale(appPreferences.getLanguageSync())
-        backendRegistry = BackendRegistry()
+        // 传入 applicationContext（Application 级，不泄漏）：供需要持久化设备标识的
+        // 后端适配器使用（如飞牛音乐的 deviceId）。
+        backendRegistry = BackendRegistry(applicationContext)
         playerManager = PlayerManager(this)
         // F2-3：智能电台（打分纯函数在 RadioSongScorer，播放次数作偏好信号）
         smartRadioManager = com.nasmusic.tv.backend.radio.SmartRadioManager(

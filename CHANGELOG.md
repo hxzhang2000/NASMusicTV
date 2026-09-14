@@ -7,6 +7,51 @@
 >
 > 类型：`Added`（新增） | `Changed`（变更） | `Fixed`（修复） | `Removed`（移除）
 
+## [v2.32.4] - 2026-09-14
+
+> 飞牛音乐（fnOS）后端对接**重写**。以可运行的飞牛 TV 客户端 `fn-music-tv`（github.com/QiaoKes/fn-music-tv）为权威依据，替换原先基于第三方逆向文章猜测的实现。开发计划与评审记录见 `docs/feiniu-backend-improvement-plan.md`（含 §3 缺陷对照表 D1–D22、§10 评审记录）。
+>
+> ⚠️ 旧实现与真实协议在**认证方式、分页参数、端点路径、ID 语义**四个层面均不一致，按旧代码几乎必然连不上或全量 401/404。本次共修正 22 项缺陷，其中 5 项为阻断级（D1 认证头 / D2 令牌字段 / D9 流地址 / D21 播放链路注入 / D22 封面链路注入）。
+>
+> ⚠️ 本机 `testDebugUnitTest` 无法运行（测试 worker 启动即死），**未经任何单元测试**；验证手段为 `assembleDebug` + `lintDebug`。动态行为需在飞牛真机按文档 §5.2 的 A1–A14 用例验收。
+
+### Fixed
+- **D1 认证头（阻断）**: 旧实现发 `Cookie: music-token=$token`，真实协议是 **`Authorization: <userToken>`（原始值，无 `Bearer` 前缀）**。旧写法导致所有已认证请求 401
+- **D2 登录令牌字段（阻断）**: 登录响应取 `token`，真实字段是 **`data.userToken`**，旧写法永远取不到令牌
+- **D9 播放流地址（阻断）**: `track/{id}/stream` → **`track/stream?guid=<guid>`**（guid 是查询参数，不是路径段）
+- **D21 播放链路认证注入（阻断，架构缺口）**: `BackendAdapter.streamHeaders` 此前**定义了但全仓库无消费方**——Jellyfin/Navidrome 把凭据拼在 URL 上，所以历史上没暴露。新增 `BackendAuthHeaders` 单例 + `BaiduHttpDataSourceFactory` 拦截器注入，飞牛播放不再 401
+- **D22 封面链路认证注入（阻断，架构缺口）**: Coil 的 ImageLoader 共用同一 OkHttp 客户端，同样无后端认证头，封面全部加载失败。复用同一拦截器，一次改动覆盖播放 + 封面两条链路
+- **D3 分页参数**: `limit` → **`size`**（服务端忽略 `limit`，旧写法永远只拿默认 50 条）
+- **D4/D5 专辑/歌手列表**: 旧实现用 `track/album-detail/list`、`track/artist-detail/list` 顶替（后者还靠曲目反推去重）→ 改用真实的 `album/list`、`artist/list`
+- **D6 歌单曲目**: `playlist/{id}/songs` → `track/playlist-detail/list?playlistGUID=`
+- **D7 收藏**: 端点 `favorite/*` → `favorite-track/create|delete|list`；且切换语义由「先 add 失败再 remove」（无法真正取消收藏）改为**按入参 `isCurrentlyFavorite` 决定方向**
+- **D8 歌词**: `track/{id}/lyrics` → `lyric/list?trackGUID=`，支持 `preferred` / `isLRC` / `offset`
+- **D10 封面**: `track/{id}/cover` → `static/cover?coverId=<id>&size=`（飞牛按 **coverId** 取图，不是按曲目 ID）
+- **D11 参数名**: `albumId` / `artistId` → `albumGUID` / `artistGUID`
+- **D13 时长单位**: 移除 `duration > 100000 ? ms : sec*1000` 的猜测放大，服务端 `duration` **已是毫秒**
+- **D14 响应解析**: 统一按信封 `{code, msg, data}` 解析（旧实现假设 `data.list` 或 `data` 数组）；`data == null` 视为成功空响应（收藏增删场景）；错误码 `99999/120001` 未认证、`120002` 账号禁用、`100005` 不存在
+- **D15 连接测试**: 未登录时改为探测免认证的 `sys/config`，不再误报「连接失败」
+- **D18 搜索**: 飞牛**没有搜索端点**（参考项目全文无 search），改为客户端本地过滤（全量曲目快照 + 5 分钟缓存，按标题/艺术家/专辑匹配）
+- **D19 批量查询**: `track/list?ids=` → `track/metadata?guid=`（并发 4；ID 超过 40 个时改为全量拉取后过滤，避免请求风暴）
+- **D20 默认端口**: 连接页飞牛默认端口 **80 → 5666**（fnOS 音乐服务端口），同步更新 `strings.xml` 提示文案
+
+### Added
+- `FeiniuUrl`：地址归一化（补 scheme / 默认端口 5666·5667 / 推导 `/music/api/v1/`）+ 端点拼装。**有意偏离**参考项目的「显式 http 无端口补 80」规则，统一补 5666/5667——本适配器是飞牛专用，填 `http://192.168.1.100` 指的一定是音乐服务
+- `BackendAuthHeaders`：跨进程单例的后端认证头，供播放与封面链路消费。**只在 host 精确匹配时注入**，令牌不会随 302 泄漏到 CDN / 第三方域名；`BackendRegistry` 在连接成功/断开时同步更新与清空
+- 版本信息 `sys/config` → `VersionInfo.Runtime`（关于页显示飞牛真实版本号与 mediasrv 版本）
+- 技术信息 `track/metadata` → `SongTechnicalInfo`（codec / container / bitrate）。⚠️ 飞牛 `audioSpec` 不含采样率与声道数，**未知字段填 0，不臆造**
+- deviceId 持久化到 SharedPreferences（旧实现每次连接都生成新 UUID，导致服务端设备列表膨胀）
+- 令牌失效（401 / code 99999·120001）时静默重登一次再重试
+
+### Changed
+- 封面主路径明确为 `Song.coverUrl` + `getCoverUrlCandidates`（经核查 `getCoverUrl(songId)` 在 UI 层**零调用**，其实现降级为只查内存缓存、不发起网络请求，避免非 suspend 方法在未知线程上做 IO）
+- `BackendRegistry` 构造新增可选 `appContext`（Application 级，不泄漏），由 `NasMusicApp` 传入
+
+### 遗留 / 未做（有意）
+- FNID 远程连接与中继模式（relay）：依赖 Release 构建期注入的签名密钥与外网 FNID 解析，本仓库无此配置，风险面过大
+- 安全码（access code）：`x-access-code` / `x-access-source` 为可选能力，飞牛未开启时无影响，已预留协议位置但未做 UI
+- 漫游（`track/roam-*`）：需维护漫游会话状态，`getRandomSongs` 改为按总数随机取页实现
+
 ## [v2.32.3] - 2026-09-14
 
 > 代码质量修复批次（基于 code-review-full-report-2026-09-13.md 审阅落地，实施记录综合评分 74 → 78 → 81）。本版本不引入新功能，仅修复 7 项 P0 线程安全问题 + 1 项 P0 安全问题 + 2 项 P1 状态一致性问题 + 1 项 P2 文档补充。落地后经编译验证补丁修复 3 处编译错误（T7 变量作用域 + P1#12/L7 缺失导入），`:app:assembleDebug` 与 `:app:assembleRelease` 均构建通过，详见 §10.136。

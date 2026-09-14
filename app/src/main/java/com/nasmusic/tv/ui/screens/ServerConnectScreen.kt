@@ -83,7 +83,9 @@ fun ServerConnectScreen(
         ServerConfig.TYPE_NAVIDROME -> "4533"
         ServerConfig.TYPE_SUBSONIC -> "4533"
         ServerConfig.TYPE_DAOLIYU -> "4000"
-        ServerConfig.TYPE_FEINIU -> "80"
+        // 飞牛音乐（fnOS）音乐服务默认端口 5666（HTTP）/ 5667（HTTPS），不是 Web 的 80。
+        // 依据：参考项目 fn-music-tv `ServerUrlNormalizer`（DEFAULT_HTTP_PORT = 5666）。
+        ServerConfig.TYPE_FEINIU -> "5666"
         else -> "8096"
     }
     fun defaultUrl(type: String): String = "http://192.168.0.190:${defaultPort(type)}"

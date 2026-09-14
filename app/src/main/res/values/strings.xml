@@ -627,7 +627,7 @@
     <string name="server_connect_hint_jellyfin">https://jellyfin.example.com 或 http://192.168.1.100:8096</string>
     <string name="server_connect_hint_subsonic">http://192.168.1.100:9527 或 https://music.example.com</string>
     <string name="server_connect_hint_daoliyu">http://192.168.1.100:4000</string>
-    <string name="server_connect_hint_feiniu">http://192.168.1.100</string>
+    <string name="server_connect_hint_feiniu">http://192.168.1.100:5666</string>
     <string name="server_connect_hint_default">https://jellyfin.example.com 或 http://192.168.1.100:8096</string>
     <string name="server_connect_success">✓ 连接成功：%s</string>
     <string name="server_connect_failed">✗ %s</string>
