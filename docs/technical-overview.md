@@ -8299,6 +8299,52 @@ onSearchSong = { keyword -> viewModel.searchNetworkSongs(keyword) },
 
 **版本**：v2.31.2 → **v2.31.3**（versionCode 136 → 137）
 
+### 10.152 v2.32.3 — T5：删除死代码 `VocalRemovalProcessor.kt`（算法先归档，2026-09-14）
+
+**来源**：`logs_temp/code-review-full-report-2026-09-13.md` §T5 / `docs/code-review-2026-09-03.md` §P2。文件 348 行，全项目**零调用方**（`PlaybackService.kt:207` 实际 `val vocalRemovalProcessor = SpectralMaskProcessor()`——变量名是历史遗留，类型早就换过了；`PlayerManager.setVocalRemovalProcessor()` 的形参类型同样是 `SpectralMaskProcessor`）。
+
+**完整流程与调参过程**见 `docs/vocal-removal-approach-b-dsp.md`（含 Mid/Side 流程图、最终参数 0.15 / 0.5 / 8kHz / 1.25x 及其理由、`queueInput` 伪代码）。本小节只归档**那份文档里没有、只存在于源码 KDoc 中的内容**，确保删掉文件后算法仍可完整复原。
+
+#### 滤波器：**四阶** Linkwitz-Riley（不是文档写的二阶）
+
+`docs/vocal-removal-approach-b-dsp.md:422` 写的是「二阶 IIR 滤波器（BiquadFilter 内部类）」，与最终实现不符。实际是 `BiquadCascade`：**两个参数完全相同（同 `sampleRate` / 同 `cutoff` / 同 `q = 0.707` / 同类型）的 biquad 串联**，斜率 −24 dB/oct，即 LR4。
+
+系数（RBJ Audio EQ Cookbook，源码 `BiquadFilter.init`）：
+
+```
+w0 = 2π·f0/fs ;  alpha = sin(w0)/(2q) ;  a0 = 1 + alpha
+低通: b0r = (1−cos w0)/2 , b1r = 1−cos w0 , b2r = (1−cos w0)/2
+高通: b0r = (1+cos w0)/2 , b1r = −(1+cos w0) , b2r = (1+cos w0)/2
+归一化: b0..b2 = b*r/a0 ;  a1 = −2·cos w0/a0 ;  a2 = (1−alpha)/a0
+差分:   y = b0·x + b1·x1 + b2·x2 − a1·y1 − a2·y2
+```
+
+> **为什么必须是 LR（偶数阶）**：处理里用 `midVocal = midF − midLow − midHigh` 做带提取，这要求 LP + HP 在**幅度上互补相加平坦**——Linkwitz-Riley 满足，Butterworth（Q=0.707 单级）在分频点会有约 3dB 鼓包，带提取即失真。这也是该类注释「分频点相加平坦」的实际含义。
+
+#### 与在用的 `SpectralMaskProcessor` 的取向对比
+
+| | `VocalRemovalProcessor`（已删） | `SpectralMaskProcessor`（在用） |
+|---|---|---|
+| 取向 | 「精细 / 温和」 | 「激进」 |
+| Mid | 低通 120Hz + 高通 8kHz，vocal 段**保留 15%** | 一阶 RC 低通 **250Hz**，vocal 段滤掉 |
+| Side | 同分频，vocal 段**保留 50%** | **1.2×** 增益，放大立体声宽度 |
+| 代价 | 4 阶 × 4 组滤波器，CPU 约 **8×** 于一阶；TV 设备不友好 | 一阶，极低 |
+| 副作用 | 残人声相对多 | 低频居中乐器（贝斯/底鼓）有损失 |
+
+**选「激进」的产品理由**（源码 KDoc）：K 歌用户对「残人声」零容忍，对「低频损失」几乎无感。
+
+#### 其它实现要点（复原时不可省）
+
+- 仅支持 **16-bit PCM 立体声**，其余 `configure` 直接返回 `NOT_SET` 走 bypass
+- `isActive()` 固定返回 `configured`，使运行时开关**不必重建 AudioSink**
+- `enabled = false` 时 `queueInput` 直接 `buffer.put(inputBuffer)` 拷贝，零开销
+- `clamp` 到 `Short` 范围，防止 1.25× 补偿增益后削波
+- ⚠️ `reset()` 会把 `enabled` 置回 `false` —— Media3 切歌/重建 AudioSink 时会调用，历史上曾导致「伴唱静默失效但 UI 仍显示开启」（`docs/code-review-2026-09-03.md` §P7，`SpectralMaskProcessor` 同写法）。**复原时必须让外部状态成为唯一真相。**
+
+#### 若日后要复活
+
+按 `docs/vocal-removal-approach-b-dsp.md` 的流程 + 本小节的参数与系数重建即可（约 2–3h）。适合场景：高保真模式 / 离线批处理 / 可切换的「精细模式」。**注意** CPU 8× 代价，TV 端实时链路需先实测。
+
 ### 10.151 v2.32.3 — L3 落地：playModeToggleHandler 改 SharedFlow（2026-09-14）
 
 **来源**：`logs_temp/code-review-full-report-2026-09-13.md` §L3（P0 架构降级为 P1，遗留项总表见 §10.147）。报告原建议「改 `MutableSharedFlow<Unit>(extraBufferCapacity = 1)` + `tryEmit`」。
@@ -8495,18 +8541,19 @@ onSearchSong = { keyword -> viewModel.searchNetworkSongs(keyword) },
 **背景（为什么要单开一节）**：`logs_temp/code-review-full-report-2026-09-13.md` 位于 `logs_temp/`，该目录**已被 gitignore**（`.gitignore:87`），报告本身不进版本控制。其「实施记录」只记录了**已修 13 项**与 **4 项暂缓**，而其余未完成项的唯一记录仅存在于该 gitignored 文件中。独立审计（2026-09-14）逐条核对源码后发现：一旦 `logs_temp/` 被清理或换机器，后人只会看到 CHANGELOG 里「13 项已修复」的正面记录，**会误判为已全修完**。故本节把这些项固化进版本控制。
 
 **完成度（独立审计结论，2026-09-14 复核）**：报告共 **36 项**条目（21 P0 + 15 P1），拆解为
-**已修 20 · 未完成 9 · 判定无需修复 5 · 已 review 关闭 1 · 原报告剔除 1**。
+**已修 21 · 未完成 8 · 判定无需修复 5 · 已 review 关闭 1 · 原报告剔除 1**。
 
 - **已修 13 项（原实施记录）**：S1 / S3 / T2 / T3 / T4 / T6 / T7 / T8 / L4 / L7 尾巴 / P1#2 / P1#10 / P1#12 —— 逐条源码复核全部属实，详见 `CHANGELOG.md` v2.32.3 条目及 §10.136–§10.141
 - **已修 4 项（性能批次，见 §10.148）**：P1#3 Crossfade 等功率曲线 / P1#4 SleepTimer 协程化 / P1#6 `hueOf` 零分配 / P1#7 Milkdrop 预分配 Canvas
 - **已修 1 项（安全批次，见 §10.149）**：**S4** Jellyfin 会话内 401 重认证 —— 全量报告里最后一项未完成的安全类问题，原列「暂缓：需真实环境测试」，本轮落地（含 5 条 MockWebServer 回归测试）
 - **已修 1 项（代码卫生，见 §10.150）**：**P1#5** 可视化随机源隔离 —— ⚠️ **本项不是缺陷修复**（原共享 seed 无任何可见症状），修的是「`VisualizerMath` KDoc 声称纯函数、实则持有可变单例状态」这一矛盾 + 零调用方的死代码 `resetRandom()`；附带收益是随机行为首次可单测
+- **已修 1 项（P2 清理，见 §10.152）**：**T5** 删除死代码 `VocalRemovalProcessor.kt`（348 行，零调用方）—— **先把算法归档再删**：该类 KDoc 里独有而 `docs/vocal-removal-approach-b-dsp.md` 没有的内容（四阶 Linkwitz-Riley 级联与 RBJ 系数、与 `SpectralMaskProcessor` 的取向对比、CPU 8× 代价、`reset()` 置 `enabled=false` 的历史坑）已写入 §10.152；另同步 4 处 stale 注释，`PlaybackService` 的局部变量 `vocalRemovalProcessor` 正名为 `spectralMaskProcessor`
 - **已修 1 项（时序安全，见 §10.151）**：**L3** `playModeToggleHandler` 改 SharedFlow —— `@Volatile` 可变闭包字段 → `MutableSharedFlow<Unit>` + `lifecycleScope` 订阅，Activity 销毁自动退订，消除「Application 长期持有已 `onCleared` ViewModel 闭包」。⚠️ 报告描述的「配置重建窗口期 NPE」经核实**不成立**（ViewModelStore 保留 + destroy/create 不返回 Looper）；真问题是 `onDestroy` 清空被 `if (!isFinishing) return` 拦截导致订阅无法收敛
 - **判定无需修复 5 项**：S2（token 已加密）/ S5（无硬编码密钥）/ T1（Application scope 合理）/ L5（定位错误文件）/ L8（既定设计）—— 报告自身已剔除或降级
 - **已 review 关闭 1 项**：P1#13 K 歌 ONNX 专项 —— 已由 `logs_temp/code-review-karaoke-onnx-2026-09-14.md` 完成，其发现另已修复，见 §10.146
 - **原报告剔除 1 项**：L7 本体（清理链路本就存在）
 
-#### 未完成 9 项（按性质分组）
+#### 未完成 8 项（按性质分组）
 
 | 项 | 性质 | 现状证据（2026-09-14 快照） |
 |---|---|---|
@@ -8517,10 +8564,9 @@ onSearchSong = { keyword -> viewModel.searchNetworkSongs(keyword) },
 | **P1#8** Constellation O(n²) 连线 | 性能（**复核判定：无需修改**） | `AdvancedRenderers.kt` 仍 160×160 双层循环（≈12720 次/帧），已合并单 Path 绘制。**量化复核（§10.148）：这 12720 次是配对检查而非绘制量，纯浮点无分配，约 30–60µs ≈ 帧预算 0.2–0.4%；真正的大头是 160 次 `addOval` 的 Path 细分，空间网格帮不上。按原建议改收益≈0** |
 | **P1#9** PlasmaFlow 逐粒子 drawCircle | 性能（**可达性极窄**） | `UltraRenderers.kt` 仍逐个 `drawCircle`。但 `PLASMA_FLOW` 属 `Tier.ULTRA`，`VisualQuality.supports()` 要求 ULTRA 必须 `allowFramebuffer`，**仅 HIGH 档满足** → 只有「画质=HIGH + 主动选中该效果」才有 350 次绘制调用/帧（估 2–6% 帧预算）。**改 Path 批量需按色相/透明度分桶量化，会改变观感**，非等价优化；需真机实测后再定 |
 | **P1#11** Milkdrop 硬编码 1280×720 | 性能（**设计取舍，非缺陷**） | `UltraRenderers.kt:41-42` 仍 `val w = 1280; val h = 720`。原注释已说明"降采样省约 55% 填充、视觉几乎无损"；改成"自适应画布"在 1080p/4K 上会**增加**填充成本，属反向优化 |
-| **T5** 删除死代码 `VocalRemovalProcessor.kt` | P2 清理 | 文件仍在；确认无生产实例化（`PlaybackService.kt:208` 注释与 `PlayerManager.kt:198` 类型均已是 `SpectralMaskProcessor`） |
 | **P2** `customAppKey`/`secretKey` 加密 | P2 清理（暂缓） | `AppPreferences.kt:1429-1434` 仍直接读写明文 |
 
-> 说明：`customAppKey` 加密已在 `CHANGELOG.md` §P2 顺手项 记录；P1#1 已在同节记录"决定不做"。**本表的价值是把 L1 / L2 / L6 / T5 / P1#8 / P1#9 / P1#11 这些项也纳入版本控制** —— 此前它们只在 gitignored 报告里。
+> 说明：`customAppKey` 加密已在 `CHANGELOG.md` §P2 顺手项 记录；P1#1 已在同节记录"决定不做"。**本表的价值是把 L1 / L2 / L6 / P1#8 / P1#9 / P1#11 这些项也纳入版本控制** —— 此前它们只在 gitignored 报告里。
 >
 > **2026-09-14 复核更新（性能批次）**：P1#3 / P1#4 / P1#6 / P1#7 四项已修复，移出本表，详见 §10.148。其中 **P1#11 经复核判定为"设计取舍"而非缺陷**，**P1#9 的"改 Path 批量"非等价优化**（需量化分桶、会改观感；且只有 HIGH 档能跑到），**P1#8 经量化复核判定「无需修改」**（O(n²) 只占帧预算 0.2–0.4%，报告优化方向打错靶，详见 §10.148）——这三项不建议按报告原建议直接实施。
 >
