@@ -8299,6 +8299,44 @@ onSearchSong = { keyword -> viewModel.searchNetworkSongs(keyword) },
 
 **版本**：v2.31.2 → **v2.31.3**（versionCode 136 → 137）
 
+### 10.151 v2.32.3 — L3 落地：playModeToggleHandler 改 SharedFlow（2026-09-14）
+
+**来源**：`logs_temp/code-review-full-report-2026-09-13.md` §L3（P0 架构降级为 P1，遗留项总表见 §10.147）。报告原建议「改 `MutableSharedFlow<Unit>(extraBufferCapacity = 1)` + `tryEmit`」。
+
+#### 复核：报告改对了风险类型，但没说中触发机制
+
+- 报告初版称「闭包持有 Activity 导致无法 GC」——报告自己二次核查时已更正为**不属实**（闭包捕获的是 ViewModel）。
+- 报告二次核把风险改判为「回调时序安全」——**这个定性方向是对的**，但它描述的具体场景站不住：配置重建时 `MainActivity` 的 `by viewModels()` 的 ViewModelStore **被框架保留**，新旧 Activity 拿到的是**同一个 MainViewModel 实例**，旧闭包依旧有效；且 destroy → create 在 `ActivityThread.handleRelaunchActivity` 内连续完成、中间不返回 Looper，广播 `onReceive` 插不进来 → **窗口期实际为 0**。
+- **真正成立的问题是「订阅生命周期无法自动收敛」**：`onDestroy` 里的清空被 `if (!isFinishing) return` 前置拦截，凡是非 finishing 的销毁（配置重建、开发者选项「不保留活动」、内存回收）都**不会解绑**；而 Application 是进程级单例，会一直持有上一个 Activity 的 ViewModel 闭包。在「不保留活动」这类场景下 `isChangingConfigurations=false`，`ViewModelStore.clear()` 已执行 → 回调会打在一个**已 `onCleared`** 的对象上。这是本次真正消除的东西。
+
+#### 改法
+
+| 位置 | 改动 |
+|---|---|
+| `NasMusicApp.kt` | `@Volatile var playModeToggleHandler: (() -> Unit)?` → `private val _playModeToggleEvents = MutableSharedFlow<Unit>()`；对外暴露 `playModeToggleEvents: SharedFlow<Unit>` 与 `requestPlayModeToggle(): Boolean` |
+| `PlaybackService.kt` | `playModeToggleHandler?.invoke()` → `requestPlayModeToggle()`；返回 false（无订阅者）时打 `w` 级日志，便于现场区分「没生效」与「没调用」 |
+| `MainActivity.kt` | `onCreate` 改为 `lifecycleScope.launch { playModeToggleEvents.collect { viewModel.playerVM.togglePlayMode() } }`；`onDestroy` 删除手动置 null（作用域取消即退订） |
+
+#### 两处与报告建议不同的决定
+
+1. **刻意不用 `extraBufferCapacity = 1`**（报告原建议）。允许缓冲会让事件在无订阅者时滞留，等下次打开 App 才被消费 → 表现为「一进应用播放模式自己跳了一档」。改为**零缓冲**：`tryEmit` 仅在存在活跃订阅者时成功，否则丢弃 —— 与旧实现 `handler == null` 时静默无反应**完全同义，不退化**。
+2. **不用 `repeatOnLifecycle(STARTED)`**。它会在 Activity 退到后台（按 Home）时退订，而那正是用户通过通知栏控制播放的场景 → 相比旧实现**反而是退化**。改用 `lifecycleScope`（随 Activity 销毁取消）：退到后台仍可用，销毁即自动退订。
+
+#### 为什么不能让 service 自己完成切换
+
+`togglePlayMode()` 依赖 `PlayerViewModel._playMode` —— B-13 明确规定 playMode 是 UI/设置状态、**不归 PlayerManager**（`playerManager.applyPlayMode(mode)` 只是应用，不持有状态）。服务侧独立完成会让界面显示与实际模式脱节。因此**无 UI 时该按钮注定无效**，这是 B-13 的设计结果而非本项引入的缺陷；要彻底解决需把 playMode 状态上移到 domain 层，超出 L3 范围。
+
+#### 验证
+
+| 手段 | 结果 |
+|---|---|
+| `grep -rn "playModeToggleHandler" app/src` | 0 命中（三处引用全部迁移） |
+| `:app:compileDebugKotlin` + `:app:compileDebugUnitTestKotlin` | 见本轮提交 |
+| 新增 `app/src/test/java/com/nasmusic/tv/PlayModeToggleEventTest.kt` | Robolectric 3 用例：① 无订阅者时丢弃且**不滞留给迟到订阅者** ② 有订阅者时恰好收到 1 次 ③ 订阅作用域取消后**自动退订**（L3 核心不变式） |
+
+⚠️ **单测未实际运行**（本机 `testDebugUnitTest` worker 环境阻塞），只验证了源码可编译。
+⚠️ 报告要求的真机验证**均未执行**：`adb shell am restart` 后触发切换确认无 NPE、`dumpsys meminfo` 跑 30 分钟看 Activity 实例数、LeakCanary 检测。
+
 ### 10.150 v2.32.3 — P1#5 落地：可视化随机源隔离（2026-09-14）
 
 **来源**：`logs_temp/code-review-full-report-2026-09-13.md` P1#5（遗留项总表见 §10.147）。报告原建议「改实例化 Random 每 Renderer 独立，1h」。
@@ -8457,23 +8495,23 @@ onSearchSong = { keyword -> viewModel.searchNetworkSongs(keyword) },
 **背景（为什么要单开一节）**：`logs_temp/code-review-full-report-2026-09-13.md` 位于 `logs_temp/`，该目录**已被 gitignore**（`.gitignore:87`），报告本身不进版本控制。其「实施记录」只记录了**已修 13 项**与 **4 项暂缓**，而其余未完成项的唯一记录仅存在于该 gitignored 文件中。独立审计（2026-09-14）逐条核对源码后发现：一旦 `logs_temp/` 被清理或换机器，后人只会看到 CHANGELOG 里「13 项已修复」的正面记录，**会误判为已全修完**。故本节把这些项固化进版本控制。
 
 **完成度（独立审计结论，2026-09-14 复核）**：报告共 **36 项**条目（21 P0 + 15 P1），拆解为
-**已修 19 · 未完成 10 · 判定无需修复 5 · 已 review 关闭 1 · 原报告剔除 1**。
+**已修 20 · 未完成 9 · 判定无需修复 5 · 已 review 关闭 1 · 原报告剔除 1**。
 
 - **已修 13 项（原实施记录）**：S1 / S3 / T2 / T3 / T4 / T6 / T7 / T8 / L4 / L7 尾巴 / P1#2 / P1#10 / P1#12 —— 逐条源码复核全部属实，详见 `CHANGELOG.md` v2.32.3 条目及 §10.136–§10.141
 - **已修 4 项（性能批次，见 §10.148）**：P1#3 Crossfade 等功率曲线 / P1#4 SleepTimer 协程化 / P1#6 `hueOf` 零分配 / P1#7 Milkdrop 预分配 Canvas
 - **已修 1 项（安全批次，见 §10.149）**：**S4** Jellyfin 会话内 401 重认证 —— 全量报告里最后一项未完成的安全类问题，原列「暂缓：需真实环境测试」，本轮落地（含 5 条 MockWebServer 回归测试）
 - **已修 1 项（代码卫生，见 §10.150）**：**P1#5** 可视化随机源隔离 —— ⚠️ **本项不是缺陷修复**（原共享 seed 无任何可见症状），修的是「`VisualizerMath` KDoc 声称纯函数、实则持有可变单例状态」这一矛盾 + 零调用方的死代码 `resetRandom()`；附带收益是随机行为首次可单测
+- **已修 1 项（时序安全，见 §10.151）**：**L3** `playModeToggleHandler` 改 SharedFlow —— `@Volatile` 可变闭包字段 → `MutableSharedFlow<Unit>` + `lifecycleScope` 订阅，Activity 销毁自动退订，消除「Application 长期持有已 `onCleared` ViewModel 闭包」。⚠️ 报告描述的「配置重建窗口期 NPE」经核实**不成立**（ViewModelStore 保留 + destroy/create 不返回 Looper）；真问题是 `onDestroy` 清空被 `if (!isFinishing) return` 拦截导致订阅无法收敛
 - **判定无需修复 5 项**：S2（token 已加密）/ S5（无硬编码密钥）/ T1（Application scope 合理）/ L5（定位错误文件）/ L8（既定设计）—— 报告自身已剔除或降级
 - **已 review 关闭 1 项**：P1#13 K 歌 ONNX 专项 —— 已由 `logs_temp/code-review-karaoke-onnx-2026-09-14.md` 完成，其发现另已修复，见 §10.146
 - **原报告剔除 1 项**：L7 本体（清理链路本就存在）
 
-#### 未完成 10 项（按性质分组）
+#### 未完成 9 项（按性质分组）
 
 | 项 | 性质 | 现状证据（2026-09-14 快照） |
 |---|---|---|
 | **L1** NasMusicApp God Object 拆分 | 架构债（长期，16h+） | `NasMusicApp.kt` 实测 **467 行 / 15 个 `lateinit var`**，未拆子容器 |
 | **L2** MainViewModel 拆分 | 架构债（长期，15h+） | `MainViewModel.kt` 实测 **3164 行**，未按域剥离 |
-| **L3** `playModeToggleHandler` 改 Flow | 时序安全（暂缓，需独立 PR） | `NasMusicApp.kt:86` 仍为 `var (() -> Unit)?`；`MainActivity.kt:366` 赋值 / `:388` 清空 |
 | **L6** FocusableSurface 焦点释放 | 待触发（需 TV 实机复现） | `FocusableSurface.kt` 仍 `LaunchedEffect(Unit) { requestFocus() }` 无释放逻辑；报告要求"实机复现再修"，勿实施原空操作方案 |
 | **P1#1** OkHttp 连接池统一 | **已决定不做** | 实测仍有 **16 处**独立 `OkHttpClient.Builder`（比报告"10+"更多）。报告 §F 决策：收益/风险比不划算，未来出现 socket 耗尽类故障再以 `OkHttpClientHolder` 单例重估 |
 | **P1#8** Constellation O(n²) 连线 | 性能（**复核判定：无需修改**） | `AdvancedRenderers.kt` 仍 160×160 双层循环（≈12720 次/帧），已合并单 Path 绘制。**量化复核（§10.148）：这 12720 次是配对检查而非绘制量，纯浮点无分配，约 30–60µs ≈ 帧预算 0.2–0.4%；真正的大头是 160 次 `addOval` 的 Path 细分，空间网格帮不上。按原建议改收益≈0** |
@@ -8482,11 +8520,13 @@ onSearchSong = { keyword -> viewModel.searchNetworkSongs(keyword) },
 | **T5** 删除死代码 `VocalRemovalProcessor.kt` | P2 清理 | 文件仍在；确认无生产实例化（`PlaybackService.kt:208` 注释与 `PlayerManager.kt:198` 类型均已是 `SpectralMaskProcessor`） |
 | **P2** `customAppKey`/`secretKey` 加密 | P2 清理（暂缓） | `AppPreferences.kt:1429-1434` 仍直接读写明文 |
 
-> 说明：L3 一项与 `customAppKey` 加密已在 `CHANGELOG.md` §暂缓 / §P2 顺手项 记录；P1#1 已在同节记录"决定不做"。**本表的价值是把 L1 / L2 / L6 / T5 / P1#8 / P1#9 / P1#11 这些项也纳入版本控制** —— 此前它们只在 gitignored 报告里。
+> 说明：`customAppKey` 加密已在 `CHANGELOG.md` §P2 顺手项 记录；P1#1 已在同节记录"决定不做"。**本表的价值是把 L1 / L2 / L6 / T5 / P1#8 / P1#9 / P1#11 这些项也纳入版本控制** —— 此前它们只在 gitignored 报告里。
 >
 > **2026-09-14 复核更新（性能批次）**：P1#3 / P1#4 / P1#6 / P1#7 四项已修复，移出本表，详见 §10.148。其中 **P1#11 经复核判定为"设计取舍"而非缺陷**，**P1#9 的"改 Path 批量"非等价优化**（需量化分桶、会改观感；且只有 HIGH 档能跑到），**P1#8 经量化复核判定「无需修改」**（O(n²) 只占帧预算 0.2–0.4%，报告优化方向打错靶，详见 §10.148）——这三项不建议按报告原建议直接实施。
 >
 > **2026-09-14 复核更新（安全批次）**：**S4 已修复**，移出本表，详见 §10.149。至此全量报告中**已无未完成的安全类问题**（S1/S3/S4 均已落地，S2/S5 判定无需修复）。
+>
+> **2026-09-14 复核更新（时序批次）**：**L3 已修复**，移出本表，详见 §10.151。报告原描述的「配置重建窗口期回调 NPE」经核实**不成立**；实际修掉的是「`onDestroy` 清空被 `if (!isFinishing) return` 拦截 → Application 长期持有已 `onCleared` 的 ViewModel 闭包」。
 
 #### 验证边界（勿混淆静态结论与真机结论）
 
