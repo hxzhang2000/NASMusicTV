@@ -8299,6 +8299,109 @@ onSearchSong = { keyword -> viewModel.searchNetworkSongs(keyword) },
 
 **版本**：v2.31.2 → **v2.31.3**（versionCode 136 → 137）
 
+### 10.146 v2.32.3 — K 歌 / ONNX 专项修复：2 P0 + 3 P1 + 3 P2（2026-09-14）
+
+**来源**：`logs_temp/code-review-karaoke-onnx-2026-09-14.md`（K 歌 / Demucs 人声分离专项审查，覆盖 `DemucsSeparator.kt` 671 行 / `ModelDownloadManager.kt` 238 行 / `HqSeparationOrchestrator.kt` 555 行）。本条目只记录**已落地**的修复；报告末尾的处置顺序即本次实施顺序。
+
+**⚠️ 验证边界（必须如实声明）**：本机 Gradle 测试 worker 一启动即死（exit `268435466` = `0x1000000A`，低 16 位为 Windows `ERROR_BAD_ENVIRONMENT`，`test-results/` 下 0 个 XML；用纯 JVM 的 `--tests "*TimeUtilsTest"` 隔离验证同样失败）。因此本次全部改动**只经过「编译 + lint」验证，没有跑过任何单测**，更未在真机上听过分离结果。下表「验证」列的含义仅限此范围。
+
+#### 修复清单
+
+| # | 位置 | 问题 | 修法 |
+|---|---|---|---|
+| P0-1 | `DemucsSeparator.decodeAudioToTempFile` | 非 44100Hz 源（如 48kHz）未做采样率归一化：MediaCodec 不重采样，`codec.configure` 也改不了 `KEY_SAMPLE_RATE`，而 `writeWavHeader` 硬编码 44100 → ① 模型收到的内容被时间压缩，分离质量劣化；② 输出以 48/44.1 倍率播放，**时长缩短 8.8%、音高升高约 1.5 个半音** | 新增私有类 `LinearResampler`（流式线性插值），解码阶段统一归一化到 44100Hz；`inRate == outRate` 时整体旁路（不做无谓插值） |
+| P0-2 | `DemucsSeparator.decodeAudioToTempFile` | `channelCount` 读出后**从未使用**，无条件按 L/R 成对读 short → 单声道源被解释成「两倍帧数的立体声」，输出帧数减半 → **播放翻倍速、升八度** | 按真实声道数拆帧：单声道同一采样复制到 L/R；立体声正常成对读；>2 声道取前两路并 `position()` 跳过其余。同时补 `INFO_OUTPUT_FORMAT_CHANGED` 分支，以 `codec.outputFormat` 覆盖声道数/采样率 |
+| P1-3 | `DemucsSeparator.processSegmentFromBuffer` | 原为「先取值、再 close」。`session.run()` 抛异常或强转 `ClassCastException` 时，输入张量（~2.75MB）与 `OrtSession.Result`（~11MB）的 native 内存**都不会释放**，而 `separate()` 的 `catch (e: Exception)` 会吞掉异常继续下一段 ⇒ 每段泄漏约 14MB，长曲目必然 OOM | 改为嵌套 try/finally（`output` 与 `inputTensor` 各一层）；顺带把裸强转改成逐层 `as?` + shape 校验，错误信息携带实际 shape |
+| P1-4 | `ModelDownloadManager` / `HqSeparationOrchestrator` | 完整性只校验「> 0.8 × 166MB」：截断的响应、镜像站返回的错误页、串流错位都能通过；`customUrlProvider` 又允许任意 URL | 新增 `EXPECTED_SHA256` 与 `verifyModelIntegrity()`：① 下载完成后必须通过 SHA-256 才 `renameTo` 落盘；② 加载模型前在 IO 线程再校验一次（约 0.3~1s，仅模型未加载时执行）。`isModelDownloaded()` 保持快速判定不变（可能被主线程调用，166MB 哈希会 ANR） |
+| P1-5 | `DemucsSeparator.release/separate` | 竞态双缺陷：① 原实现「先 tryLock、失败才置 `pendingRelease`」，而消费点在**解锁之前** → 请求落在窗口内即丢失（session 不释放，166MB 驻留）；② 若消费点改成「先清标记再拿锁」，另一个 separate 抢到锁时标记已清而释放无人做，请求同样丢失 | 统一为「先置位、再消费」，且**只有真正拿到锁并完成释放才清标记**；消费点从 `separateLocked` 的 finally 移到 `separate()` 解锁后的 finally |
+| P2-a | `DemucsSeparator.separate`（`emit`） | 每帧 4 次 `shortToByteArray`（各分配一个 2 字节数组）+ 4 次 `write`，4 分钟曲目约 4200 万次短命分配 | 改为 8KB 攒批缓冲 + `putShortLE` 就地写，分配降为 0 |
+| P2-b | `DemucsSeparator.initialize` | 未校验模型输入 shape，加载到非 HT-Demucs 的 ONNX 时到推理阶段才失败（此时已解码+分段跑了一段，报错不指向根因） | 新增输入 shape 校验（期望 `[1, 2, 343980]`，动态维 `-1/0` 视为兼容），失败即关闭 session 并返回带实际 shape 的错误 |
+| P2-c | `DemucsSeparator` | `OUTPUT_SHAPE` 死常量（Kotlin 私有常量 lint 抓不到） | 删除 |
+
+新增字符串资源（中英双语）：`demucs_error_bad_model_shape`、`hq_error_model_corrupted`。
+
+#### 关键实现细节
+
+**1. `separateLocked()` 抽取（P1-5 的配套重构）**
+
+`separate()` 的主体里有多处 `return null`，而 `opMutex.withLock { }` 是 **inline** 函数 —— 这些 `return` 属于**非局部返回**，会直接返回 `separate()`，跳过任何 `.also { }` 式的收尾。因此「解锁后消费释放请求」只能靠 try/finally：
+
+```kotlin
+suspend fun separate(...): SeparationResult? {
+    try {
+        return opMutex.withLock { separateLocked(...) }   // 锁在此释放
+    } finally {
+        consumePendingReleaseRequest()                    // 解锁之后才消费
+    }
+}
+```
+
+把主体抽成 `separateLocked()` 的好处是主体内的 `return null` 变成普通返回，语义不变（仍返回 null），且缩进零改动。
+
+**为什么消费点不能留在锁内**：`consumePendingReleaseRequest()` 用 `opMutex.tryLock()` 判断「是否有分离在跑」。若在 `separateLocked` 的 finally（仍持锁）里调用，tryLock 必然失败 → 提前返回 → 请求被静默丢弃。
+
+**2. `LinearResampler` 的正确性论证**
+
+输出帧 k 对应输入坐标 `k * ratio`（`ratio = inRate / outRate`），在相邻两输入帧间线性插值。
+
+- **不累加**：坐标用「输出序号 × ratio」现算，而非 `pos += ratio`。48000Hz 的 5 分钟曲目约 1440 万帧，累加会引入不可控漂移；乘法形式只有单次浮点误差。
+- **只留两个样本**：不变式是「push 第 i 帧时，所有坐标 < i-1 的输出都已发出」，故本次只需 `prev = v[i-1]` 与 `cur = v[i]` 即可覆盖坐标区间 `[i-1, i)`。`i0` 恒等于 `i-1`，不需要环形缓冲。
+- **`flush()`**：末帧之后的输出只能钳制到最后一个输入样本，`frac.coerceIn(0f, 1f)`。
+- **逐例验算**（`ratio = 48000/44100 = 1.0884`）：push 第 1 帧发出坐标 0（frac=0，取 `v[0]`）；第 2 帧发出 1.0884（frac=0.0884，插值 `v[1]`→`v[2]`）；……共约 `n / ratio = n × 44100/48000` 帧，符合预期。`ratio = 1.0` 时逐帧一一对应且 `flush` 补出末帧，共 n 帧（不过该情形已被整体旁路）。
+- **已知取舍**：线性插值在降采样时不做抗混叠滤波，22kHz 以上的镜像分量会折叠进来。音乐内容在该频段能量极低（有损编码通常 20kHz 截止），实际影响可忽略；换来的是零依赖、可预测的实现，且明显优于「喂错采样率给模型」。
+
+**3. 输出契约（新增，下游依赖它）**
+
+`decodeAudioToTempFile` 现在保证**输出恒为 44100Hz 立体声**（单声道复制、非 44100 重采样）。因此：
+
+- `writeWavHeader` / `patchWavDataSize` 无条件用 `SAMPLE_RATE` / `CHANNEL_COUNT` 是**安全的**，已在 KDoc 中注明「若日后放开该保证，此处必须改为接收实际参数」。
+- `durationMs` 用重采样后的帧数计算，即真实时长。
+- `totalSamples` 改为取 `writeFrame()` 的调用次数，不再用「float 数 / 声道数」反推（重采样会改变帧数，且单声道已被复制成双声道写入）。
+
+**4. 关于 `TensorInfo`（写代码时踩到）**
+
+ONNX Runtime Java 的 `OnnxValue.getInfo()` 返回 `ValueInfo`，而 **`ValueInfo` 是空接口**（`javap` 实测：`public interface ai.onnxruntime.ValueInfo { }`）——shape 只在具体实现 `TensorInfo` 上。所以 `value.info.shape` 编译不过，必须 `(value.info as? TensorInfo)?.shape`。已封装为 `shapeOf(value)` 并注明原因。
+
+**5. 模型 SHA-256 的来源**
+
+`EXPECTED_SHA256 = 0cbe651f535415c9d26a7bb614f7d322dd5a080fa0298f2e50f478030a994dce`，取自 HuggingFace LFS 元数据的 `oid` —— 对 LFS 对象而言 `oid` 就是 SHA-256：
+
+```
+https://huggingface.co/api/models/StemSplitio/htdemucs-ft-vocals-onnx/tree/main
+  path=htdemucs_ft_vocals_fp16weights.onnx   size=165612636   oid=0cbe651f…
+```
+
+注意代码下载的是 **fp16** 权重（165,612,636 字节）；上游另有 `htdemucs_ft_vocals.onnx`（316,446,953 字节，`oid=8c5d5e2d…`），二者不可混用。`EXPECTED_SIZE_BYTES` 同步改为精确值。
+
+⚠️ 该校验对自定义 URL 同样生效。自定义源的定位是「自建镜像 / NAS」，应提供字节完全一致的文件；若确实要换不同权重，必须同步更新 `EXPECTED_SHA256`，否则下载会被拒绝。
+
+#### 验证
+
+| 项 | 结果 |
+|---|---|
+| `:app:assembleDebug` | **BUILD SUCCESSFUL**（27m 5s，49 tasks；APK 45,787,569 字节，`NASMusicTV-debug-v2-32-3.apk`） |
+| `:app:lintDebug` | **BUILD SUCCESSFUL**，报告页头 `Lint Report: 256 warnings`（**0 errors**），与改动前一致 |
+| `DemucsSeparator.kt` / `ModelDownloadManager.kt` 在 lint 报告中的条目数 | **0 / 0**（无新增问题） |
+| `HqSeparationOrchestrator.kt` | 3 条，均为改动前既有（`:428`/`:436` `DefaultLocale`、`:531` `UseKtx`） |
+| 单元测试 | **未运行**（本机测试 worker 无法启动，见开头「验证边界」） |
+| 真机试听 | **未做** |
+
+**构建环境备注**：本机 Gradle 守护进程 fork 出的子进程全部起不来（AAPT2 守护进程、测试 worker、Kotlin 编译守护进程均失败），必须
+
+```bash
+JAVA_HOME="C:/Program Files/Android/Android Studio/jbr" \
+  ./gradlew.bat assembleDebug lintDebug --no-daemon \
+  -Pkotlin.compiler.execution.strategy=in-process
+```
+
+构建输出中会有一段 lint 内部异常栈（`LintCliClient.analyzeOnly` → UAST visitor），**非本次引入**：`logs_temp/verify4.log` 等历史日志中同样存在，且不影响报告生成与构建结果（0 errors）。
+
+#### 遗留
+
+- **未修（保持现状）**：`NativeLibraryAlignment` × 3（`targetSdk 35` 前处理）、`DefaultLocale` 等 256 条 warning（不影响门禁）。
+- **需要真机才能确认**：48kHz 曲目的分离质量与播放时长/音高是否恢复正常；单声道曲目（部分播客/老录音）是否不再翻倍速；`verifyModelIntegrity()` 增加的一次 166MB 哈希是否让首次分离的可感知延迟超过预期。
+- **`isModelDownloaded()` 仍是快速判定**：模型在下载后被外部损坏（如存储故障）不会被该方法发现，只会在 `verifyModelIntegrity()` 时暴露。这是刻意的取舍（避免主线程哈希 ANR）。
+
 ### 10.145 v2.32.3 — lint 错误清零（105 → 0）+ lint 转阻塞门禁（2026-09-14）
 
 **问题描述**：§10.142 引入 lint job 后累计到 105 errors / 254 warnings。逐项拆解后发现 105 个 error 只有 3 类，其中 90 个是同一根因。

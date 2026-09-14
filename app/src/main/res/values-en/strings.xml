@@ -689,6 +689,7 @@
     <string name="hq_error_no_audio_file">Unable to get audio file</string>
     <string name="hq_error_with_fallback">%s, switched to fast mode</string>
     <string name="hq_error_model_path_unavailable">Model path unavailable, switched to fast mode</string>
+    <string name="hq_error_model_corrupted">Model integrity check failed (file may be corrupted), please download it again</string>
     <string name="hq_error_separator_init_failed">Model initialization failed</string>
     <string name="hq_error_separation_failed">HQ separation failed</string>
     <string name="hq_error_oom">Out of memory, switched to fast mode</string>
@@ -715,6 +716,7 @@
     <string name="demucs_error_no_audio_track">Audio file has no audio track (unsupported format?)</string>
     <string name="demucs_error_decode_oom">Decode out of memory (audio too long?)</string>
     <string name="demucs_error_decode_failed">Audio decode failed: %s</string>
+    <string name="demucs_error_bad_model_shape">Unexpected model input shape (%s). Please make sure the downloaded file is the HT-Demucs FT model.</string>
 
     <!-- Player Controls -->
     <string name="player_karaoke">Karaoke</string>

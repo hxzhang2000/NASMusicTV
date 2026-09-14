@@ -381,6 +381,22 @@ class HqSeparationOrchestrator(
                             if (wasPlayingBeforeSeparation) host.play()
                             return@launch
                         }
+                        // 2026-09-14（P1-4）：加载前做一次 SHA-256 完整性校验（IO 线程，
+                        // 约 0.3~1s，仅在模型未加载时执行一次）。文件被截断/替换时在此拦下，
+                        // 而不是把坏模型交给 ONNX 后抛难以定位的错误。
+                        // modelManager 为 null 时跳过（无法校验，保持原行为）。
+                        val integrityOk = withContext(Dispatchers.IO) {
+                            modelManager?.verifyModelIntegrity() ?: true
+                        }
+                        if (!integrityOk) {
+                            AppLog.w(TAG, "enableHighQualityRemoval: model integrity check failed, fallback to fast mode")
+                            _hqError.value = appContext.getString(R.string.hq_error_with_fallback, appContext.getString(R.string.hq_error_model_corrupted))
+                            _separationMode.value = SeparationMode.FAST
+                            host.setFastVocalRemoval(true)
+                            if (wasPlayingBeforeSeparation) host.play()
+                            return@launch
+                        }
+
                         _separationProgress.value = 0.2f to appContext.getString(R.string.hq_progress_loading_model)
                         val initOk = withContext(Dispatchers.IO) { separator.initialize(modelPath) }
                         if (!initOk) {

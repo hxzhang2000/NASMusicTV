@@ -15,6 +15,16 @@
 > 另含 T3（PlayerManager 三元组原子化）：queue/currentIndex/currentSong 由三个独立 MutableStateFlow 合并为单一 `playerState` 原子流（`update{copy}` 同帧发布），消除快速切歌时 UI 读到"新队列+旧索引+旧歌名"的错帧状态；PlayerViewModel/AppRoot/QueueBranch/MainViewModel/DownloadViewModel/PlaybackService 订阅点全部适配，详见 §10.139。
 
 ### Fixed
+- **K 歌 / ONNX 专项修复（player）**: 落地 `logs_temp/code-review-karaoke-onnx-2026-09-14.md` 的 2 项 P0 + 3 项 P1 + 3 项 P2，详见 §10.146。**均为静态修复，本机单测无法运行，验证手段只有「编译 + lint」**：
+  - **P0-1 采样率归一化（`DemucsSeparator.kt`）**: MediaCodec 不重采样、`codec.configure` 也改不了 `KEY_SAMPLE_RATE`，48kHz 源此前原样进入按 44100Hz 设计的模型，而 WAV 头硬编码 44100 → 伴奏时长缩短 8.8%、音高升高约 1.5 个半音。新增流式线性插值重采样器 `LinearResampler`（`inRate == outRate` 时整体旁路），解码阶段统一归一化到 44100Hz，下游分段/overlap-add/WAV 头/时长计算只有一处真相
+  - **P0-2 单声道源错乱（`DemucsSeparator.kt`）**: `channelCount` 此前读出但从未使用，无条件按 L/R 成对读 → 单声道源被当成「两倍帧数的立体声」，输出时长减半、播放翻倍速且升八度。改为按真实声道数拆帧（单声道复制为 L/R；>2 声道取前两路并跳过其余），并新增 `INFO_OUTPUT_FORMAT_CHANGED` 处理以 `codec.outputFormat` 为准
+  - **P1-3 张量泄漏（`DemucsSeparator.kt`）**: `processSegmentFromBuffer` 原为「先取值、再 close」，`session.run()` 抛异常或强转失败时输入张量（~2.75MB）与 `OrtSession.Result`（~11MB）native 内存双双泄漏，被 `separate()` 的 `catch (e: Exception)` 吞掉后静默累积。改为嵌套 try/finally；同时补输出 shape 校验（错误信息携带实际 shape）
+  - **P1-4 模型完整性（`ModelDownloadManager.kt` / `HqSeparationOrchestrator.kt`）**: 原判定只有「> 0.8 × 166MB」，截断/镜像站错误页/串流错位都能通过。新增 `EXPECTED_SHA256`（取自 HuggingFace LFS 的 `oid`，即 SHA-256）与 `verifyModelIntegrity()`；下载完成后必须通过 SHA-256 才改名落盘，加载模型前再于 IO 线程校验一次。⚠️ 该校验对自定义 URL 同样生效（自定义源定位是「自建镜像/NAS」，应提供字节一致的文件）
+  - **P1-5 `pendingRelease` 竞态（`DemucsSeparator.kt`）**: 原实现「先 tryLock、失败才置位」而消费点在**解锁之前**，落在窗口内则 ① session 不释放（166MB 驻留）② 标志残留致下次误释放。改为「先置位、再消费」，且**只有真正拿到锁并完成释放才清标记**；消费点从 `separateLocked` 的 finally 移到 `separate()` 解锁后的 finally（为此把持锁主体抽成 `separateLocked()`——主体内多处 `return null` 是非局部返回，会跳过任何 `.also{}` 式收尾）
+  - **P2 批量写出（`DemucsSeparator.kt`）**: `emit()` 每帧 4 次 `shortToByteArray`（各分配 2 字节数组）+ 4 次 `write`，4 分钟曲目约 4200 万次短命分配 → 改为 8KB 攒批 + `putShortLE` 复用缓冲
+  - **P2 模型输入 shape 校验（`DemucsSeparator.kt`）**: `initialize()` 新增输入 shape 校验（期望 `[1, 2, 343980]`，动态维视为兼容），加载到非 HT-Demucs 的 ONNX 时在加载阶段就报明确错误，而非推理阶段抛难定位的异常
+  - **P2 删除死常量（`DemucsSeparator.kt`）**: 移除从未使用的 `OUTPUT_SHAPE`
+  - 新增字符串：`demucs_error_bad_model_shape`、`hq_error_model_corrupted`（中英双语）
 - **T6 修复（visualizer）**: `SpectrumRepository.kt` AudioFrame 双缓冲——2 个预分配实例 + `@Volatile writeIndex`，写端（仅 onFrame/reset）写完翻转发布、读端读 front，volatile 写→读建立 happens-before，消除音频回调线程写/渲染线程读的无同步撕裂；帧序号改仓库级全局计数器；`reset()` 双实例同时清零避免波形跨歌残留。`VisualizerStage.kt` 绘制循环改每帧捕获 front 引用（原持有重组期快照引用会被写端轮询覆盖，双缓冲形同虚设）
 - **T8 修复（visualizer）**: `ParticleRenderers.kt` `val t = targets ?: return` 提前到 createBitmap 之前，消除 Bitmap 必然泄漏路径（targets 为 null 时每帧泄漏 220x660x4B=580KB 内存）
 - **T7 修复（visualizer）**: `LyricsDotMatrixRenderer.kt` try-finally 包裹 createBitmap/recycle，异常路径不再泄漏 Bitmap

@@ -39,8 +39,29 @@ class ModelDownloadManager(
         )
         private const val MODEL_FILENAME = "htdemucs_ft_vocals.onnx"
 
-        // 期望文件大小（~166MB），允许 10% 误差
-        private const val EXPECTED_SIZE_BYTES = 166_000_000L
+        // 期望文件大小（fp16 权重文件的精确字节数），允许 10% 误差仅用于 UI 展示/粗判
+        private const val EXPECTED_SIZE_BYTES = 165_612_636L
+
+        /**
+         * 模型 SHA-256（2026-09-14，P1-4）。
+         *
+         * 取自 HuggingFace LFS 元数据的 `oid`——对 LFS 对象而言 oid **就是** SHA-256：
+         * https://huggingface.co/api/models/StemSplitio/htdemucs-ft-vocals-onnx/tree/main
+         *   path=htdemucs_ft_vocals_fp16weights.onnx
+         *   size=165612636
+         *   oid =0cbe651f535415c9d26a7bb614f7d322dd5a080fa0298f2e50f478030a994dce
+         *
+         * 旧实现只校验「> 0.8 × 166MB」，截断、镜像站返回错误页面、串流错位都能通过，
+         * 之后表现为 createSession 失败或推理结果异常，用户只看到含糊报错。
+         *
+         * ⚠️ 该校验对自定义 URL（customUrlProvider）同样生效——自定义源的用途是
+         * 「自建镜像 / NAS」，应当提供字节完全一致的文件。若确实要换成不同的模型
+         * 权重，必须同步更新此常量，否则下载会被拒绝（报「SHA-256 不匹配」）。
+         */
+        private const val EXPECTED_SHA256 =
+            "0cbe651f535415c9d26a7bb614f7d322dd5a080fa0298f2e50f478030a994dce"
+
+        private val HEX_CHARS = "0123456789abcdef".toCharArray()
 
         // 连接超时
         private const val CONNECT_TIMEOUT_MS = 15_000
@@ -67,11 +88,69 @@ class ModelDownloadManager(
     }
 
     /**
-     * 检查模型是否已下载（文件存在且大小合理）
+     * 检查模型是否已下载（快速判定：文件存在且大小量级合理）
+     *
+     * 2026-09-14（P1-4）说明：本方法可能被 UI/主线程调用，因此**不做** 166MB 的哈希
+     * 计算（那会 ANR）。真正的完整性由两处把关：
+     * - [downloadModel] 下载完成后立即校验 SHA-256，不匹配则删除并尝试下一个源
+     * - [verifyModelIntegrity] 在加载模型前于 IO 线程做一次全文件校验
      */
     fun isModelDownloaded(): Boolean {
         val file = getModelFile()
         return file.exists() && file.length() > EXPECTED_SIZE_BYTES * 0.8  // 允许 20% 误差（FP16 精确大小可能有差异）
+    }
+
+    /**
+     * 校验已安装模型的 SHA-256 是否与 [EXPECTED_SHA256] 一致。
+     *
+     * 完整读一遍 166MB 文件，耗时约 0.3~1s，**必须在 IO 线程调用**，且不要放进
+     * UI 判定路径（如按钮可用性）。用于加载模型前的最后一道完整性闸门。
+     *
+     * @return true 表示文件存在且哈希匹配
+     */
+    suspend fun verifyModelIntegrity(): Boolean = withContext(Dispatchers.IO) {
+        val file = getModelFile()
+        if (!file.exists()) {
+            AppLog.w(TAG, "verifyModelIntegrity: model file not found")
+            return@withContext false
+        }
+        val actual = try {
+            sha256Of(file)
+        } catch (e: Exception) {
+            AppLog.e(TAG, "verifyModelIntegrity: hashing failed", e)
+            return@withContext false
+        }
+        val ok = actual.equals(EXPECTED_SHA256, ignoreCase = true)
+        if (ok) {
+            AppLog.d(TAG, "verifyModelIntegrity: OK (${file.length()} bytes)")
+        } else {
+            AppLog.e(TAG, "verifyModelIntegrity: SHA-256 mismatch, size=${file.length()}, expected=$EXPECTED_SHA256, actual=$actual")
+        }
+        ok
+    }
+
+    /**
+     * 计算文件 SHA-256（小写十六进制）。
+     * 手工拼 hex 而不用 `"%02x".format()`：后者依赖 Formatter 对 Byte 的无符号处理，
+     * 且受默认 Locale 影响，这里用确定性实现。
+     */
+    private fun sha256Of(file: File): String {
+        val digest = java.security.MessageDigest.getInstance("SHA-256")
+        java.io.FileInputStream(file).use { input ->
+            val buf = ByteArray(256 * 1024)
+            var n = input.read(buf)
+            while (n != -1) {
+                digest.update(buf, 0, n)
+                n = input.read(buf)
+            }
+        }
+        val bytes = digest.digest()
+        val hex = StringBuilder(bytes.size * 2)
+        for (b in bytes) {
+            val v = b.toInt() and 0xFF
+            hex.append(HEX_CHARS[v ushr 4]).append(HEX_CHARS[v and 0x0F])
+        }
+        return hex.toString()
     }
 
     /**
@@ -119,11 +198,24 @@ class ModelDownloadManager(
             tempFile.delete()
             val err = tryDownloadUrl(urlStr, tempFile, onProgress)
             if (err == null) {
-                // 下载完成，检查文件大小
-                if (tempFile.length() < EXPECTED_SIZE_BYTES * 0.8) {
+                // 2026-09-14（P1-4）：下载完成后校验 SHA-256。
+                // 旧实现只判「> 0.8 × 166MB」，截断的响应、镜像站返回的错误页、
+                // 串流错位都能通过，之后 createSession 失败或推理结果异常，
+                // 用户只看到含糊的错误提示。SHA-256 是唯一的权威判据。
+                val actualSha = try {
+                    sha256Of(tempFile)
+                } catch (e: Exception) {
+                    AppLog.e(TAG, "downloadModel: hashing failed", e)
+                    null
+                }
+                if (actualSha == null || !actualSha.equals(EXPECTED_SHA256, ignoreCase = true)) {
                     val got = tempFile.length() / (1024 * 1024)
-                    lastError = "下载文件大小异常（${got}MB，预期约${EXPECTED_SIZE_BYTES / (1024 * 1024)}MB）"
-                    AppLog.e(TAG, "downloadModel: file too small (${tempFile.length()} bytes), expected ~${EXPECTED_SIZE_BYTES}")
+                    lastError = if (actualSha == null) {
+                        "模型校验失败（无法读取下载文件）"
+                    } else {
+                        "模型校验失败（SHA-256 不匹配，已下载 ${got}MB）"
+                    }
+                    AppLog.e(TAG, "downloadModel: integrity check failed from $urlStr, size=${tempFile.length()}, expected=$EXPECTED_SHA256, actual=$actualSha")
                     tempFile.delete()
                     continue
                 }
@@ -139,7 +231,7 @@ class ModelDownloadManager(
                     continue
                 }
 
-                AppLog.d(TAG, "downloadModel: success from $urlStr, size = ${getModelSizeMB()}MB")
+                AppLog.d(TAG, "downloadModel: success from $urlStr, size = ${getModelSizeMB()}MB, sha256 verified")
                 return@withContext null
             } else {
                 lastError = err

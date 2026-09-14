@@ -694,6 +694,7 @@
     <string name="hq_error_no_audio_file">无法获取音频文件</string>
     <string name="hq_error_with_fallback">%s，已切换快速模式</string>
     <string name="hq_error_model_path_unavailable">模型路径不可用，已切换快速模式</string>
+    <string name="hq_error_model_corrupted">模型文件校验失败（可能损坏），请重新下载</string>
     <string name="hq_error_separator_init_failed">模型初始化失败</string>
     <string name="hq_error_separation_failed">高质量分离失败</string>
     <string name="hq_error_oom">内存不足，已切换快速模式</string>
@@ -720,6 +721,7 @@
     <string name="demucs_error_no_audio_track">音频文件无音轨（格式不支持?）</string>
     <string name="demucs_error_decode_oom">解码内存不足（音频过长?）</string>
     <string name="demucs_error_decode_failed">音频解码失败：%s</string>
+    <string name="demucs_error_bad_model_shape">模型输入规格不符（%s），请确认下载的是 HT-Demucs FT 模型</string>
 
     <!-- Player Controls -->
     <string name="player_karaoke">K歌</string>
