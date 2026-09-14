@@ -14,8 +14,14 @@ import kotlinx.coroutines.flow.StateFlow
 /**
  * 跨曲交叉淡入淡出控制器（F2-5）——双实例方案。
  *
- * 切歌窗口：主 player 旧歌淡出、crossfadePlayer 新歌淡入（50ms 步进线性斜坡），
+ * 切歌窗口：主 player 旧歌淡出、crossfadePlayer 新歌淡入（50ms 步进**等功率**斜坡），
  * 窗口结束回调 onCrossfadeComplete → PlayerManager.transitionToIndex 完成切歌。
+ *
+ * 音量曲线（P1#3 修复，2026-09-14）：由线性斜坡改为**等功率（constant-power）**——
+ * 线性斜坡下两路幅度和为 1（`out=1-frac`、`in=frac`），但人耳感知的是功率（幅度²），
+ * 中段（frac≈0.5）总功率仅 `0.5²+0.5²=0.5`，听感上表现为 crossfade 中途**音量下陷**。
+ * 现改为 `out=cos(frac·π/2)`、`in=sin(frac·π/2)`，两者平方和恒为 1，功率全程恒定；
+ * 端点仍精确为 (1,0) → (0,1)，不改变淡入淡出的起止语义。
  *
  * 边界条件（计划 §5.3）：
  * - enabled=false / K歌 MTV 模式（suppressPlayback）/ REPEAT_ONE / 队列仅 1 首 → 不触发
@@ -96,8 +102,9 @@ class CrossfadeController(
                     step++
                     val frac = (step * volumeStep).coerceAtMost(1f)
                     try {
-                        main.volume = 1f - frac
-                        cfPlayer.volume = frac
+                        // P1#3：等功率曲线（sin²+cos²=1），端点仍为 (1,0)→(0,1)
+                        main.volume = kotlin.math.cos(frac * HALF_PI)
+                        cfPlayer.volume = kotlin.math.sin(frac * HALF_PI)
                     } catch (e: Exception) {
                         AppLog.w(TAG, "fade step failed: ${e.message}")
                         abort()
@@ -173,5 +180,8 @@ class CrossfadeController(
     companion object {
         private const val TAG = "Crossfade"
         const val STEP_MS = 50L
+
+        /** P1#3：等功率曲线的半周期（π/2），供 sin/cos 增益计算复用 */
+        private val HALF_PI = (Math.PI / 2.0).toFloat()
     }
 }
