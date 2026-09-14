@@ -104,6 +104,10 @@ android {
             jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
             freeCompilerArgs.addAll(
                 "-opt-in=androidx.tv.material3.ExperimentalTvMaterial3Api"
+                // 注：Media3 的 androidx.media3.common.util.UnstableApi 不能在这里 -opt-in。
+                // 它走的是 androidx 的 @RequiresOptIn 机制，Kotlin 编译器不认（加进来会报
+                // "not an opt-in requirement marker"），lint 也不认。正确做法是在使用处标
+                // @androidx.annotation.OptIn(UnstableApi::class)，见 PcmTapProcessor 等 7 个文件。
             )
         }
     }

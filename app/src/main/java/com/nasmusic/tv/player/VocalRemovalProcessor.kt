@@ -2,6 +2,7 @@ package com.nasmusic.tv.player
 
 import androidx.media3.common.C
 import androidx.media3.common.audio.AudioProcessor
+import androidx.media3.common.util.UnstableApi
 import com.nasmusic.tv.util.AppLog
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
@@ -70,6 +71,8 @@ import kotlin.math.sin
  *   ② HQ 模型路径: HqSeparationOrchestrator + HT-Demucs ONNX（按需启用）
  * ─────────────────────────────────────────────────────────────────────
  */
+// UnstableApi 属 androidx @RequiresOptIn 机制，须用 androidx.annotation.OptIn。
+@androidx.annotation.OptIn(UnstableApi::class)
 class VocalRemovalProcessor : AudioProcessor {
 
     companion object {

@@ -31,7 +31,19 @@ $env:JAVA_HOME = "C:\Program Files\Android\Android Studio\jbr"
 
 > 电视上若已装 debug 版（签名不同），`install -r` 会报 `INSTALL_FAILED_UPDATE_INCOMPATIBLE`，需先 `uninstall com.nasmusic.tv` 再安装。
 
-CI (`.github/workflows/build.yml`) has three jobs: **`build`** runs `assembleRelease` (push to `main`/`develop`, tags `v*`; PR to `main`), **`test`** runs `testDebugUnitTest`, and **`lint`** runs `lintDebug` — but lint is **non-blocking** (`continue-on-error: true`) and just uploads a report, because the project has no lint baseline yet. So a green CI now means "compiles + unit tests pass", not "lint-clean". Note the CI `build` job generates a throwaway `keystore.properties` (CI signing key) — it must include a `cryptoPassphrase` line, otherwise the `packageRelease` guard in `app/build.gradle.kts` fails the build.
+CI (`.github/workflows/build.yml`) has three jobs: **`build`** runs `assembleRelease` (push to `main`/`develop`, tags `v*`; PR to `main`), **`test`** runs `testDebugUnitTest`, and **`lint`** runs `lintDebug` — lint is now **blocking** (the `continue-on-error` was removed on 2026-09-14 after errors were driven to 0; 256 warnings remain and do not fail it). So a green CI means "compiles + unit tests pass + no new lint errors". Note the CI `build` job generates a throwaway `keystore.properties` (CI signing key) — it must include a `cryptoPassphrase` line, otherwise the `packageRelease` guard in `app/build.gradle.kts` fails the build.
+
+**本地构建必须加 `--no-daemon`**（本机实测，2026-09-14）：Gradle 守护进程 fork 出的子进程会全部失败——AAPT2 报 `Daemon startup failed / Please check if you installed the Windows Universal C Runtime`（即使资源只改一个字符串也会触发）、测试 worker 立刻退出（exit `268435466` = `0x1000000A`，低 16 位是 Windows `ERROR_BAD_ENVIRONMENT`）、Kotlin 编译守护进程报 `AccessDeniedException`。用 `--no-daemon`（Kotlin 侧再叠 `-Pkotlin.compiler.execution.strategy=in-process`）即可全部绕过：
+
+```bash
+JAVA_HOME="C:/Program Files/Android/Android Studio/jbr" \
+  ./gradlew.bat assembleDebug lintDebug --no-daemon \
+  -Pkotlin.compiler.execution.strategy=in-process
+```
+
+`--no-daemon` 只影响当前进程，不需要改 `gradle.properties`。注意 `aapt2.exe` 本身能独立运行（`aapt2 version` 正常），问题只出在守护进程模式，所以别被 "Windows Universal C Runtime" 的提示误导。
+
+**单测在本机跑不起来**：即使加了 `--no-daemon`，`testDebugUnitTest` 仍失败（worker JVM 一启动即死，`test-results/` 下 0 个 XML；用 `--tests "*TimeUtilsTest"` 这类纯 JVM 单类隔离验证同样失败）。属环境问题非代码问题。**因此本机对代码改动的验证手段只有「编译 + lint」，不能声称"测试通过"**；单测只能靠 CI。
 
 ## Architecture (verified against source)
 

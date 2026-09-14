@@ -2,6 +2,7 @@ package com.nasmusic.tv.player
 
 import android.media.audiofx.Equalizer
 import android.os.Handler
+import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
 import com.nasmusic.tv.util.AppLog
 
@@ -12,6 +13,8 @@ import com.nasmusic.tv.util.AppLog
  * 播放器实例由调用方（PlayerManager）按需传入，本类不持有引用；
  * 频谱重试复用 PlayerManager 的主线程 Handler（与原实现一致）。
  */
+// UnstableApi 属 androidx @RequiresOptIn 机制，须用 androidx.annotation.OptIn。
+@androidx.annotation.OptIn(UnstableApi::class)
 class PlayerEqualizer(private val retryHandler: Handler) {
 
     companion object {

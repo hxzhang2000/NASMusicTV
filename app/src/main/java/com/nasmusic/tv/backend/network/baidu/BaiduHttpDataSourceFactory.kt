@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.media3.datasource.DataSource
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.okhttp.OkHttpDataSource
+import androidx.media3.common.util.UnstableApi
 import com.nasmusic.tv.util.AppLog
 import okhttp3.Interceptor
 import okhttp3.OkHttpClient
@@ -27,6 +28,8 @@ import java.util.concurrent.TimeUnit
  * - >20MB 文件不带 `User-Agent: pan.baidu.com` 会 403
  * - 加 `Referer: https://pan.baidu.com/` 双保险
  */
+// UnstableApi 属 androidx @RequiresOptIn 机制，须用 androidx.annotation.OptIn。
+@androidx.annotation.OptIn(UnstableApi::class)
 object BaiduHttpDataSourceFactory {
 
     private const val TAG = "BaiduDataSource"

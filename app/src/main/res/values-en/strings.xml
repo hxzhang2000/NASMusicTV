@@ -412,6 +412,7 @@
     <string name="settings_netdisk_index">Index</string>
     <string name="settings_netdisk_index_desc">%1$d songs scanned</string>
     <string name="settings_netdisk_index_scanning">Indexing…</string>
+    <string name="settings_netdisk_index_scanning_progress">Indexing… %1$d songs found</string>
     <string name="settings_netdisk_index_rebuild">Rebuild Index</string>
     <string name="settings_netdisk_index_rebuild_desc">Rescan music root directory to rebuild song index</string>
     <string name="settings_netdisk_hint_dir">Enter netdisk directory path (starting with /)</string>
@@ -425,6 +426,7 @@
     <string name="netdisk_auth_qr_alt">Or scan QR code below (if scan fails, use the URL in step ①)</string>
     <string name="netdisk_auth_waiting">Waiting for phone authorization…</string>
     <string name="netdisk_auth_fetch_failed">Failed to get device code, please try again later</string>
+    <string name="netdisk_auth_failed">Authorization failed</string>
     <string name="netdisk_dir_picker_title">Select Netdisk Directory</string>
     <string name="netdisk_dir_picker_loading">Loading…</string>
     <string name="netdisk_dir_picker_error">Failed to load directory</string>
@@ -538,6 +540,14 @@
     <string name="library_connect_server_hint">Please configure NAS music service on the Server page first</string>
     <string name="library_empty_title">Library is empty</string>
     <string name="library_empty_hint">Add music files to your NAS music service</string>
+    <string name="library_connect_or_local_hint">Connect a NAS server, scan local music, or index Baidu Netdisk</string>
+    <string name="library_empty_albums">No albums yet</string>
+    <string name="library_empty_albums_hint">Albums will appear here after you connect a NAS or scan local music</string>
+    <string name="library_empty_artists">No artists yet</string>
+    <string name="library_empty_artists_hint">Artist info will be aggregated automatically after you play music</string>
+    <string name="library_empty_songs">No songs yet</string>
+    <string name="library_empty_songs_hint">Connect a server or index local files to browse songs</string>
+    <string name="library_album_count_short">%d albums</string>
     <string name="library_albums_count">Albums (%d)</string>
     <string name="library_artists_count">Artists (%d)</string>
     <string name="library_searching">Searching…</string>
@@ -792,6 +802,8 @@
     <string name="baidu_get_device_code_failed">Failed to get device code</string>
     <string name="baidu_user_declined">User declined authorization</string>
     <string name="baidu_auth_timeout">Authorization timed out</string>
+    <string name="baidu_token_expired">Login expired, please authorize again</string>
+    <string name="baidu_auth_scope_missing">Insufficient authorization scope</string>
 
     <!-- Radio (MainViewModel) -->
     <string name="radio_load_failed">Radio failed to load</string>
@@ -962,5 +974,6 @@
     <string name="quality_tier_lossless">Lossless</string>
     <string name="quality_tier_high">320k</string>
     <string name="quality_tier_standard">128k</string>
+    <string name="player_visualizer">Visualizer</string>
     <string name="player_visualizer_short">Viz</string>
 </resources>

@@ -151,9 +151,8 @@ jobs:
   # 静态检查（新增）：项目此前未配置 lint，先以"非阻塞 + 上传报告"方式引入，
   # 积累一段时间的告警清单、清理后再改为阻塞（去掉 continue-on-error）。
   lint:
-    name: Lint (non-blocking)
+    name: Lint
     runs-on: ubuntu-latest
-    continue-on-error: true
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -170,6 +169,9 @@ jobs:
           yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses 2>&1 || true
           $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --install "platforms;android-34" "build-tools;34.0.0" 2>&1 || true
       - name: Run lint
+        # 2026-09-14：lint 错误已清零（105 → 0），此 job 转为阻塞门禁。
+        # 警告（约 256 条，UnusedResources/TypographyEllipsis/UseKtx 等）不影响结果。
+        # 若新增 error 导致此处失败，请修复而非加 continue-on-error。
         run: ./gradlew lintDebug --stacktrace
       - name: Upload lint report
         if: always()

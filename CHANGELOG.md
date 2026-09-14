@@ -27,6 +27,10 @@
 - **P1#2 修复（baidu）**: `BaiduNetdiskConfig.kt` ERRNO_MAP 补 31079 到"文件不存在或已被删除"
 - **NewApi 崩溃修复（player/export/viewmodel）**: 修复 9 处 minSdk 22 下未做版本守卫的 API 调用（lint 首跑发现，审阅报告未覆盖）——`BatteryOptimizationHelper.isIgnoringBatteryOptimizations`（API 23）；`ExportCoordinator.volumeIdOf`（`getStorageVolumes`/`getUuid` API 24、`getDirectory` API 30，此前低版本抛 `NoSuchMethodError` 且 `catch (e: Exception)` 捕获不到 Error，属真实崩溃路径）；`MainViewModel.userNetworkLyricsOverride`（`ConcurrentHashMap.newKeySet` API 24 → 改 `Collections.newSetFromMap`，同时消除 `KeySetView#contains/add/remove` 三处）；`SongExporter.resolveChildDoc`（`removeLast` 在 API 35 被 `SequencedCollection` 遮蔽 → 改 `removeAt(lastIndex)`）。lint 复跑 NewApi 9 → **0**
 - **RestrictedApi 修复（player）**: `CoilBitmapLoader.kt` 弃用 `androidx.concurrent.futures.ResolvableFuture`（`@RestrictedApi`，仅允许 androidx 同组使用，库升级易碎）改用 Guava 公开的 `SettableFuture`（项目已依赖 Guava：`ListenableFuture`/`MoreExecutors`），语义一致，消除全部 20 处 `RestrictedApi`；lint 复跑 125 → **105 errors**
+- **lint 错误清零（build/player/ui/res）**: lint 错误 **105 → 0**（警告 254 → 256），三类分别处理：
+  - **`UnsafeOptInUsageError` 90 处** —— 全部是 Media3 `@UnstableApi` 未 opt-in，集中在 7 个文件（`PcmTapProcessor` 28、`SpectralMaskProcessor` 25、`VocalRemovalProcessor` 25、`MvPlaybackScreen` 4、`PlayerEqualizer` 4、`MainActivity` 3、`BaiduHttpDataSourceFactory` 1）。**踩坑记录**：Media3 的 `UnstableApi` 走 androidx 的 `@RequiresOptIn` 机制，`kotlin.OptIn` 对它无效（加了反而让注解自身被 lint 标记，90 → 97）；`build.gradle.kts` 里加 `-opt-in=androidx.media3.common.util.UnstableApi` 也无效（Kotlin 编译器直接报 `not an opt-in requirement marker`，且实测该参数对产物零影响）。**唯一有效写法是 `@androidx.annotation.OptIn(UnstableApi::class)`**，它不传播——若改用 `@UnstableApi` 本身则会把引用方一并拖入（`PlaybackService` 已 `@UnstableApi`，正是 `MainActivity` 那 3 处报错的来源）。已在 7 处加类级注解并附注释说明
+  - **`MissingTranslation` 13 处** —— 补 `values-en/strings.xml` 缺失的 13 条英文翻译：网盘索引进度、网盘授权失败、百度 token 过期、授权范围不足、库空态 6 条（专辑/艺术家/歌曲及其提示）、`library_album_count_short`、`player_visualizer`
+  - **`StringFormatMatches` 2 处** —— `DownloadViewModel.kt:136` 把 `deletedBytes`（`Long` 裸字节数）直接传给 `%1$s` 字符串，用户实际看到「已清空全部下载（1234567890）」而非「1.18 GB」；改用现成的 `util/StorageUtils.formatSize()` 输出人类可读体积
 
 ### Docs
 - **L4 补充（db）**: `LocalMusicDatabase.kt` 注释强化：`fallbackToDestructiveMigration` 仅适用可由其他数据源重建的本地索引，**未来承载用户数据（下载/收藏/播放列表）的数据库绝不可启用**，必须维护 Migration 类
@@ -35,6 +39,7 @@
 ### CI
 - **CI 修复（workflow）**: `.github/workflows/build.yml` 的 `build` job 生成 `keystore.properties` 时补 `cryptoPassphrase`（优先取仓库 secret `CRYPTO_PASSPHRASE`，未配置时回退占位值），修复 S1 阶段 A+ 的 release guard 会导致 CI `assembleRelease` 失败的问题
 - **CI 新增 lint（workflow）**: 新增 `lint` job 跑 `lintDebug` 并上传 HTML 报告。项目此前从未跑过 lint；首跑结果为 **133 errors / 255 warnings**，故该 job 以非阻塞（`continue-on-error`）方式引入，待清理后转阻塞。主要类别：`UnusedResources` 152、`TypographyEllipsis` 26、`UseKtx` 21、`RestrictedApi` 20（集中在 `CoilBitmapLoader.kt` 使用 androidx 内部 API）、`NewApi` 9（minSdk 22 下未做版本守卫，潜在崩溃：`BatteryOptimizationHelper.kt:27`、`ExportCoordinator.kt:62`、`MainViewModel.kt:566/2493`）
+- **CI lint 转阻塞（workflow）**: lint 错误清零后（105 → 0），移除 `lint` job 的 `continue-on-error: true`，job 更名 `Lint`，转为真正的阻塞门禁——今后任何新引入的 lint **error** 都会让 CI 失败；256 条 warning 不影响结果。若因新增 error 失败，应修复而非退回非阻塞
 - **文档修正（AGENTS.md）**: 原述"CI 只跑 `assembleDebug`、不跑测试/lint"已过时——实际为 `assembleRelease` + `testDebugUnitTest`，本次再补 `lintDebug`
 
 ### Changed

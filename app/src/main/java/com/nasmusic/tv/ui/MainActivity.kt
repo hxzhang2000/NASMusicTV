@@ -16,6 +16,7 @@ import androidx.activity.OnBackPressedCallback
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import androidx.media3.common.util.UnstableApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -56,6 +57,8 @@ import kotlinx.coroutines.launch
 /**
  * 主 TV Activity —— NAS Music TV
  */
+// UnstableApi 属 androidx @RequiresOptIn 机制，须用 androidx.annotation.OptIn。
+@androidx.annotation.OptIn(UnstableApi::class)
 class MainActivity : ComponentActivity() {
 
     private val viewModel: MainViewModel by viewModels()

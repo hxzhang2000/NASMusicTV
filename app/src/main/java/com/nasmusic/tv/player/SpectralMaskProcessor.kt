@@ -2,6 +2,7 @@
 
 import androidx.media3.common.C
 import androidx.media3.common.audio.AudioProcessor
+import androidx.media3.common.util.UnstableApi
 import com.nasmusic.tv.util.AppLog
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
@@ -37,6 +38,8 @@ import java.nio.ByteOrder
  * 保留为高保真/离线批处理备选,不要尝试复活注入（CPU 8× 代价且已无引用方）。
  * ─────────────────────────────────────────────────────────────────────
  */
+// UnstableApi 属 androidx @RequiresOptIn 机制，须用 androidx.annotation.OptIn。
+@androidx.annotation.OptIn(UnstableApi::class)
 class SpectralMaskProcessor : AudioProcessor {
 
     companion object {

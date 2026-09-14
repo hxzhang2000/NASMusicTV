@@ -16,6 +16,7 @@ import com.nasmusic.tv.data.model.StorageType
 import com.nasmusic.tv.player.ModelDownloadManager
 import com.nasmusic.tv.player.PlayerManager
 import com.nasmusic.tv.util.AppLog
+import com.nasmusic.tv.util.StorageUtils
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -133,7 +134,13 @@ class DownloadViewModel(
             onLocalSongsChanged?.invoke()
 
             // 5. 提示
-            val msg = getApplication<Application>().getString(R.string.download_cleared, deletedBytes)
+            // 2026-09-14：原先把 deletedBytes(Long 裸字节数) 直接塞进 %1$s，
+            // UI 会显示"已清空全部下载（1234567890）"。改用 StorageUtils.formatSize
+            // 输出人类可读体积（"1.18 GB"），同时消除 StringFormatMatches 告警。
+            val msg = getApplication<Application>().getString(
+                R.string.download_cleared,
+                StorageUtils.formatSize(deletedBytes)
+            )
             showMessage(msg)
 
             // 刷新下载统计

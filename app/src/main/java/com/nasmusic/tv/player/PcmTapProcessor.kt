@@ -2,6 +2,7 @@ package com.nasmusic.tv.player
 
 import androidx.media3.common.C
 import androidx.media3.common.audio.AudioProcessor
+import androidx.media3.common.util.UnstableApi
 import com.nasmusic.tv.util.AppLog
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
@@ -24,6 +25,9 @@ import java.nio.ByteOrder
  * 注：原注释此处写作 "vocalRemovalProcessor" 系 VocalRemovalProcessor 重构
  * 为 SpectralMaskProcessor 后未同步的 stale comment,2026-09-13 校正。
  */
+// 注意：Media3 的 UnstableApi 走 androidx 的 @RequiresOptIn 机制，必须用
+// androidx.annotation.OptIn；kotlin.OptIn 对它无效（且自身会被 lint 标记）。
+@androidx.annotation.OptIn(UnstableApi::class)
 class PcmTapProcessor(
     private val ring: PcmRingBuffer,
     private val tap: PcmSpectrumTap

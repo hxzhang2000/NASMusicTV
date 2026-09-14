@@ -54,6 +54,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
+import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
@@ -88,6 +89,8 @@ import kotlinx.coroutines.delay
  * 对应 docs/mv-karaoke-feature-proposal.md §3.1 / Step 4
  */
 @OptIn(ExperimentalTvMaterial3Api::class)
+// UnstableApi 属 androidx @RequiresOptIn 机制，须用 androidx.annotation.OptIn。
+@androidx.annotation.OptIn(UnstableApi::class)
 @Composable
 fun MvPlaybackScreen(
     mv: MvInfo,

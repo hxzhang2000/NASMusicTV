@@ -8299,6 +8299,46 @@ onSearchSong = { keyword -> viewModel.searchNetworkSongs(keyword) },
 
 **版本**：v2.31.2 → **v2.31.3**（versionCode 136 → 137）
 
+### 10.145 v2.32.3 — lint 错误清零（105 → 0）+ lint 转阻塞门禁（2026-09-14）
+
+**问题描述**：§10.142 引入 lint job 后累计到 105 errors / 254 warnings。逐项拆解后发现 105 个 error 只有 3 类，其中 90 个是同一根因。
+
+**105 个 error 的构成**（解析 `app/build/reports/lint-results-debug.html` 页头 `Lint Report: 105 errors and 254 warnings`）：
+
+| 类型 | 数量 | 性质 |
+|---|---|---|
+| `UnsafeOptInUsageError` | 90 | Media3 `@UnstableApi` 未 opt-in |
+| `MissingTranslation` | 13 | 中文字符串缺 `values-en` 英文翻译 |
+| `StringFormatMatches` | 2 | `download_cleared` 格式参数类型不匹配（真 bug） |
+
+**修改**：
+
+1. **`UnsafeOptInUsageError` 90 处** —— 分布在 7 个文件：`player/PcmTapProcessor.kt`(28)、`player/SpectralMaskProcessor.kt`(25)、`player/VocalRemovalProcessor.kt`(25)、`ui/components/MvPlaybackScreen.kt`(4)、`player/PlayerEqualizer.kt`(4)、`ui/MainActivity.kt`(3)、`backend/network/baidu/BaiduHttpDataSourceFactory.kt`(1)。在这 7 处声明上加类级注解 `@androidx.annotation.OptIn(UnstableApi::class)`（`MvPlaybackScreen` 是 `@Composable` 函数，与既有的 `@OptIn(ExperimentalTvMaterial3Api::class)` 并列）。
+2. **`MissingTranslation` 13 处** —— `res/values-en/strings.xml` 补 13 条：`settings_netdisk_index_scanning_progress`、`netdisk_auth_failed`、`baidu_token_expired`、`baidu_auth_scope_missing`、`library_connect_or_local_hint`、`library_empty_albums(_hint)`、`library_empty_artists(_hint)`、`library_empty_songs(_hint)`、`library_album_count_short`、`player_visualizer`。
+3. **`StringFormatMatches` 2 处** —— `ui/viewmodel/DownloadViewModel.kt:136` 原为 `getString(R.string.download_cleared, deletedBytes)`，`deletedBytes` 是 `Long` 裸字节数（同函数 110 行 `var deletedBytes = 0L`），而字符串是 `已清空全部下载（%1$s）` → 用户看到「已清空全部下载（1234567890）」。改为 `StorageUtils.formatSize(deletedBytes)`（`util/StorageUtils.kt:43`，返回 "1.18 GB"）。
+
+**关键坑（务必记住，否则会重复踩）**：
+
+- Media3 的 `androidx.media3.common.util.UnstableApi` 走的是 **androidx 的 `@RequiresOptIn` 机制**，不是 Kotlin 的。因此：
+  - ❌ `kotlin.OptIn(UnstableApi::class)` **无效**——实测 lint 不认，且该注解自身会被标记为新 error（90 → **97**，正好 +7，每个注解一行）。
+  - ❌ `build.gradle.kts` 加 `-opt-in=androidx.media3.common.util.UnstableApi` **无效**——Kotlin 编译器直接报 `w: Class ... is not an opt-in requirement marker`；实测移除该参数后 `packageDebug` 仍 UP-TO-DATE，证明它对产物零影响（纯噪音）。已从 `build.gradle.kts` 撤除，并在原处留注释说明。
+  - ✅ 唯一有效写法：`@androidx.annotation.OptIn(UnstableApi::class)`（来自 `androidx.annotation:annotation-experimental`，Media3 传递依赖）。
+- **不要**用 `@UnstableApi` 本身去 opt-in：androidx 机制下标记即传播，会把所有引用方一并拖入。`PlaybackService` / `CoilBitmapLoader` 已标 `@UnstableApi`，`MainActivity` 那 3 处报错（`PlaybackService::class.java`）正源于此。`androidx.annotation.OptIn` 的语义是「只 opt-in、不传播」，故 7 处注解没有产生级联。
+
+**验证**：
+
+- `:app:assembleDebug` + `:app:lintDebug`（`--no-daemon` + in-process，6m43s）**BUILD SUCCESSFUL**（EXIT=0）
+- lint 复跑：**105 errors → 0 errors**；警告 254 → 256（新增的 2 条来自 `formatSize` 引入的 `DefaultLocale` 类提示）
+- 报告中残留的 3 处 `UnsafeOptInUsageError` 字样属 HTML 的 issue 说明文字，非实际条目
+- 资源侧另用 aapt2 独立校验：`aapt2 compile --dir app/src/main/res` 退出码 0，新键进入 `values-en_strings.arsc.flat`
+- 编译警告中已无 `not an opt-in requirement marker`
+
+**CI**：`.github/workflows/build.yml` 的 `lint` job 移除 `continue-on-error: true`、更名 `Lint`，转为**阻塞门禁**（lint 只在有 error 时失败，256 条 warning 不影响）。今后新增 error 应修复，不得退回非阻塞。
+
+**遗留（不在本次范围）**：`NativeLibraryAlignment` 3 条 warning —— `com.microsoft.onnxruntime:onnxruntime-android:1.17.1` 的三个 ABI 原生库非 16 KB 页对齐。当前 targetSdk 34 且侧装，不阻塞；若升 targetSdk 35 或上架需处理（换 onnxruntime 版本或加 `useLegacyPackaging` 之外的对齐方案）。
+
+**版本**：v2.32.3 批次内（该版本尚未打 tag），versionCode 保持 142。
+
 ### 10.144 v2.32.3 — CoilBitmapLoader 脱离 androidx 内部 API（2026-09-14）
 
 **问题描述**：lint 报 20 处 `RestrictedApi`，全部集中在 `player/CoilBitmapLoader.kt` —— 该文件使用 `androidx.concurrent.futures.ResolvableFuture` / `AbstractResolvableFuture`，属 `@RestrictedApi`（仅允许 `androidx` 同组前缀调用）。不保证跨版本兼容，Coil / androidx 升级后可能编译失败或运行异常。
