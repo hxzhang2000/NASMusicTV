@@ -8299,6 +8299,61 @@ onSearchSong = { keyword -> viewModel.searchNetworkSongs(keyword) },
 
 **版本**：v2.31.2 → **v2.31.3**（versionCode 136 → 137）
 
+### 10.150 v2.32.3 — P1#5 落地：可视化随机源隔离（2026-09-14）
+
+**来源**：`logs_temp/code-review-full-report-2026-09-13.md` P1#5（遗留项总表见 §10.147）。报告原建议「改实例化 Random 每 Renderer 独立，1h」。
+
+#### 复核结论：这不是缺陷，是代码卫生问题
+
+先说清楚判断依据，避免后人以为修了一个 bug：
+
+- **原状**：随机状态是 `VisualizerMath`（`object`）里的 `private var seed = 0x2F6E2B1u`，一个进程级 LCG，被全部渲染器共享。
+- **没有可见症状**：实证——全部 **39 处**调用点（`LyricsDotMatrixRenderer` 12、`ParticleRenderers` 11、`ParticlePool` 7、`UltraRenderers` 5、`AdvancedRenderers` 4）**都是「取一次值立即使用」**，没有任何一处依赖随机序列的位置（无状态机、无配对消费）。交叉淡入时两层渲染器会互相消耗对方的序列，但各自拿到的仍是有效随机值，**观感上无差异**。
+- **绘制是单线程的**：`VisualizerStage` 的循环是 `LaunchedEffect` + `withFrameNanos`，走主线程；`RendererSwapper` 同时绘制新旧两层也在同一帧同一线程 → **不存在 data race**。
+
+所以本次改动**不修任何功能问题**。真正该修的是两处**文档与实现不符**：
+
+1. `VisualizerMath` 的 KDoc 写着「所有函数均为无副作用的纯计算」，但 `nextRandom()` 会改写单例状态 —— **这句话是错的**；
+2. `resetRandom()` 的注释写着「进入效果时调用，保证可复现」，但它**零调用方**（全仓库仅定义处一处），而「可复现」的承诺从没生效过。
+
+#### 改法
+
+新增 `visualizer/VisualizerRandom.kt` —— 独立实例化的 LCG（沿用原常数 `1664525u` / `1013904223u`，零分配，不用 `kotlin.random.Random` 以免装箱开销）。
+
+| 位置 | 改动 |
+|---|---|
+| `VisualizerMath.kt` | 删除 `seed` / `nextRandom()` / `nextRandomSigned()` / `resetRandom()`（后者是死代码）；修正 KDoc，说明伪随机数已迁出 |
+| `ParticlePool.kt` | 构造函数改为 `(capacity, rng)`，`ParticlePool` 自身不再依赖进程级状态 |
+| `ParticleRenderers.kt` | 4 个类（`ParticleStorm` / `ParticleGalaxy` / `BeatFirework` / `ParticleText`）各持一个 `rng`，并注入 `ParticlePool` |
+| `UltraRenderers.kt` | `PlasmaFlowRenderer` 持一个 `rng` |
+| `AdvancedRenderers.kt` | `LiquidRipple` / `MatrixRain` / `Constellation` 各持一个 `rng` |
+| `LyricsDotMatrixRenderer.kt` | 持一个 `rng` |
+
+共计 **8 个渲染器类 + 1 个粒子池**，39 处调用点机械替换 `VisualizerMath.nextRandom()` → `rng.next()`。
+
+#### 种子策略（本项唯一有风险的设计点）
+
+**不能用同一个常量种子给所有渲染器** —— 那样：① 每个渲染器的首帧图案完全一致，交叉淡入时会看到两层图案**重合**；② 每次进入同一效果都重复同一套图案。而原共享实现下，每次进入都从流的不同位置续跑，反而是有变化的。
+
+故默认取**时间派生种子**：`VisualizerRandom.defaultSeed() = (System.nanoTime() ushr 8).toUInt()`，保证不同渲染器实例、不同进入次数都不同；构造时若种子为 0 则兜底为 1（LCG 状态为 0 会退化成恒 0 序列，已有单测覆盖）。种子可由构造器注入 → **渲染器的随机行为首次可单测**。
+
+生命周期上，`RendererSwapper` 在**主题变化时创建新实例**（因此每次换效果都是新种子），**仅画质变化时复用实例重调 `onEnter`**（种子不变，序列续跑）。两种情形都符合预期。
+
+#### 验证
+
+| 命令/手段 | 结果 |
+|---|---|
+| `grep -rn "VisualizerMath.nextRandom" app/src/main` | 0 命中（全部迁移完成） |
+| `:app:compileDebugKotlin :app:compileDebugUnitTestKotlin --no-daemon` | ✅ BUILD SUCCESSFUL（6m3s），改动文件 0 warning |
+| 新增 `app/src/test/java/com/nasmusic/tv/visualizer/VisualizerRandomTest.kt` | 6 条纯 JVM 用例：值域 `[0,1)` / `[-1,1)`、同种子可复现、异种子不同序列、种子 0 不退化、10 万次取值的粗粒度分布（各桶占比 0.85–1.15） |
+
+⚠️ **单测未实际运行**（本机 `testDebugUnitTest` worker 环境阻塞），只验证了源码可编译，须由 CI 判定。
+⚠️ **观感未验证**：本次改动后各渲染器的随机序列与原先不同（图案会变），属预期内变化；但"看起来是否一样好看"只能真机确认。
+
+#### 为什么仍然做了
+
+报告说「1h，涉及 30+ Renderer 全部修改」——实测只需 **8 个类**（其余 28 个效果根本不用随机数），报告高估了改动面。在改动面可控的前提下，消除「单例持有可变状态 + 文档声称纯函数」这对矛盾是值得的，且附带把随机行为变得可测。
+
 ### 10.149 v2.32.3 — S4 落地：Jellyfin 会话内 401 重认证（2026-09-14）
 
 **来源**：`logs_temp/code-review-full-report-2026-09-13.md` §S4（安全类，定性由 P0 降级为 P1）。这是全量报告里**最后一项未完成的安全类问题**（此前列为「暂缓：需真实环境测试」，见 §10.147 未完成清单）。
@@ -8383,9 +8438,11 @@ onSearchSong = { keyword -> viewModel.searchNetworkSongs(keyword) },
 | 项 | 报告建议 | 复核结论 |
 |---|---|---|
 | **P1#11** Milkdrop 硬编码 1280×720 | "改 canvas 尺寸自适应" | **设计取舍，非缺陷**。原注释已说明"降采样到 720p 省约 55% 填充、视觉几乎无损"；改自适应在 1080p/4K 画布上会**增加**填充成本，属反向优化。维持现状 |
-| **P1#9** PlasmaFlow 逐粒子 drawCircle | "改 Path 批量合并" | **非等价优化**。每粒子有独立的色相（随 `flow` 连续变化）、透明度与半径（随 `life`），单条 Path 只能有一个颜色/透明度，批量需按色相×透明度**分桶量化**，会引入可见色带。HIGH 档 350 粒子确有收益（350 次绘制调用/帧），但属"观感换性能"的取舍，需所有者决策 + 真机对比后再定 |
-| **P1#8** Constellation O(n²) 连线 | "改空间网格" | **需算法改写**。160×160/2 ≈ 12720 次距离判断/帧，均为纯浮点、无分配、无绘制调用；报告自身也标注"n=160 量级可控，低优先"。降阶须引入空间网格，属独立优化议题 |
+| **P1#9** PlasmaFlow 逐粒子 drawCircle | "改 Path 批量合并" | **非等价优化，且收益路径很窄**。① 每粒子有独立的色相（随 `flow` 连续变化）、透明度与半径（随 `life`），单条 Path 只能有一个颜色/透明度，批量需按色相×透明度**分桶量化**，会引入可见色带；② **可达性极窄**——`PLASMA_FLOW` 是 `Tier.ULTRA`，而 `VisualQuality.supports()` 要求 ULTRA 必须 `allowFramebuffer == true`，**只有 HIGH 档满足**（MEDIUM/LOW 均为 false）；即「画质=HIGH 且用户主动选中该效果」才会跑到 350 粒子。③ 每帧 350 × (双线性 `sampleFlow` + 2 次 `cos/sin` + `hsl` + `drawCircle`)，其中 `hsl` 返回 `Color`（value class）、`Offset` 亦然 → **无堆分配**，成本集中在 350 次绘制调用（估 ~0.3–1ms/帧，占 16.7ms 预算的 2–6%）。④ 对比：默认档位是 `MEDIUM` + 主题 `CIRCULAR_RING`，**两者都跑不到 PlasmaFlow**。结论：需真机实测掉帧后再定，不建议按原建议直接改 |
+| **P1#8** Constellation O(n²) 连线 | "改空间网格" | ⚠️ **报告的靶子打错了，按原建议改收益≈0**。① 12720 次是**配对检查**，不是绘制量——`linkDist = 75 + energy·80`(px)，160 星点分布在约 1920×820 的带内，密度 ≈ 1.0e-4 个/px²；期望邻居数 = λ·πr²：energy=0 时 ≈1.8（实际连线 ≈144 条），energy=1 时 ≈7.7（≈614 条）；4K 画布上因 linkDist 仍是像素值、密度更低，连线数反而更少。② 12720 次纯浮点运算（**无 sqrt、无分配、无绘制调用**）在弱 ARM CPU 上约 30–60µs，占帧预算 **0.2–0.4%**。③ 该渲染器真正的大头是 `starPath.addOval` × 160（≈640 条三次曲线待细分）+ 最多数百段描边 Path——**这两块空间网格一点都帮不上**。④ 报告自身也标注"已合并单 Path 绘制，n=160 量级可控，**低优先**"。结论：**建议判定为「无需修改」**；若日后真机 profile 显示该效果掉帧，应优先优化 Path 构建（如星点改 `drawPoints`、或下调 160 上限），而非改 O(n²) |
 | **P1#5** VisualizerMath seed 隔离 | "每 Renderer 持自己的 seed" | **已由报告标为暂缓**（需改动 30+ 个 Renderer），且"共享 seed 导致视觉不一致"是否可感知尚未验证，先评估再动 |
+
+> **关于 P1#8 / P1#9 的量级说明（2026-09-14 补充量化）**：两条都是「用户主动进入全屏可视化覆盖层（`AppRoot.kt:360` 的 `if (showVisualizer)`）+ 主动选中该效果」的路径，**不是常驻开销**——可视化本身是 overlay，不进 `Screen` 枚举，退出即卸载。所以即便有开销，也不影响日常听歌/浏览。上述数字为**静态推算**（操作计数 + 典型 ARM TV 的单次开销量级），**未经真机 profile 验证**；确认手段：真机选到该效果后跑 `adb shell dumpsys gfxinfo com.nasmusic.tv framestats` 看 P90/丢帧率。
 
 **验证**：
 - `:app:compileDebugKotlin` + `:app:compileDebugUnitTestKotlin`（`--no-daemon` + `-Pkotlin.compiler.execution.strategy=in-process`）**BUILD SUCCESSFUL**（55s），无新增警告
@@ -8400,16 +8457,17 @@ onSearchSong = { keyword -> viewModel.searchNetworkSongs(keyword) },
 **背景（为什么要单开一节）**：`logs_temp/code-review-full-report-2026-09-13.md` 位于 `logs_temp/`，该目录**已被 gitignore**（`.gitignore:87`），报告本身不进版本控制。其「实施记录」只记录了**已修 13 项**与 **4 项暂缓**，而其余未完成项的唯一记录仅存在于该 gitignored 文件中。独立审计（2026-09-14）逐条核对源码后发现：一旦 `logs_temp/` 被清理或换机器，后人只会看到 CHANGELOG 里「13 项已修复」的正面记录，**会误判为已全修完**。故本节把这些项固化进版本控制。
 
 **完成度（独立审计结论，2026-09-14 复核）**：报告共 **36 项**条目（21 P0 + 15 P1），拆解为
-**已修 18 · 未完成 11 · 判定无需修复 5 · 已 review 关闭 1 · 原报告剔除 1**。
+**已修 19 · 未完成 10 · 判定无需修复 5 · 已 review 关闭 1 · 原报告剔除 1**。
 
 - **已修 13 项（原实施记录）**：S1 / S3 / T2 / T3 / T4 / T6 / T7 / T8 / L4 / L7 尾巴 / P1#2 / P1#10 / P1#12 —— 逐条源码复核全部属实，详见 `CHANGELOG.md` v2.32.3 条目及 §10.136–§10.141
 - **已修 4 项（性能批次，见 §10.148）**：P1#3 Crossfade 等功率曲线 / P1#4 SleepTimer 协程化 / P1#6 `hueOf` 零分配 / P1#7 Milkdrop 预分配 Canvas
 - **已修 1 项（安全批次，见 §10.149）**：**S4** Jellyfin 会话内 401 重认证 —— 全量报告里最后一项未完成的安全类问题，原列「暂缓：需真实环境测试」，本轮落地（含 5 条 MockWebServer 回归测试）
+- **已修 1 项（代码卫生，见 §10.150）**：**P1#5** 可视化随机源隔离 —— ⚠️ **本项不是缺陷修复**（原共享 seed 无任何可见症状），修的是「`VisualizerMath` KDoc 声称纯函数、实则持有可变单例状态」这一矛盾 + 零调用方的死代码 `resetRandom()`；附带收益是随机行为首次可单测
 - **判定无需修复 5 项**：S2（token 已加密）/ S5（无硬编码密钥）/ T1（Application scope 合理）/ L5（定位错误文件）/ L8（既定设计）—— 报告自身已剔除或降级
 - **已 review 关闭 1 项**：P1#13 K 歌 ONNX 专项 —— 已由 `logs_temp/code-review-karaoke-onnx-2026-09-14.md` 完成，其发现另已修复，见 §10.146
 - **原报告剔除 1 项**：L7 本体（清理链路本就存在）
 
-#### 未完成 11 项（按性质分组）
+#### 未完成 10 项（按性质分组）
 
 | 项 | 性质 | 现状证据（2026-09-14 快照） |
 |---|---|---|
@@ -8418,16 +8476,15 @@ onSearchSong = { keyword -> viewModel.searchNetworkSongs(keyword) },
 | **L3** `playModeToggleHandler` 改 Flow | 时序安全（暂缓，需独立 PR） | `NasMusicApp.kt:86` 仍为 `var (() -> Unit)?`；`MainActivity.kt:366` 赋值 / `:388` 清空 |
 | **L6** FocusableSurface 焦点释放 | 待触发（需 TV 实机复现） | `FocusableSurface.kt` 仍 `LaunchedEffect(Unit) { requestFocus() }` 无释放逻辑；报告要求"实机复现再修"，勿实施原空操作方案 |
 | **P1#1** OkHttp 连接池统一 | **已决定不做** | 实测仍有 **16 处**独立 `OkHttpClient.Builder`（比报告"10+"更多）。报告 §F 决策：收益/风险比不划算，未来出现 socket 耗尽类故障再以 `OkHttpClientHolder` 单例重估 |
-| **P1#5** VisualizerMath seed 隔离 | 性能（暂缓，需独立 PR） | `VisualizerMath.kt:14` 仍为 `object`，`private var seed`(125) 全局共享 |
-| **P1#8** Constellation O(n²) 连线 | 性能（已部分优化） | `AdvancedRenderers.kt:586-601` 仍 160×160 双层循环（≈12720 次/帧），已合并单 Path 绘制。**需空间网格才可降阶，属算法改写** |
-| **P1#9** PlasmaFlow 逐粒子 drawCircle | 性能 | `UltraRenderers.kt` 仍逐个 `drawCircle`。HIGH 档 `maxParticles=350` → 350 次绘制调用/帧。**改 Path 批量需按色相/透明度分桶量化，会改变观感**，非等价优化 |
+| **P1#8** Constellation O(n²) 连线 | 性能（**复核判定：无需修改**） | `AdvancedRenderers.kt` 仍 160×160 双层循环（≈12720 次/帧），已合并单 Path 绘制。**量化复核（§10.148）：这 12720 次是配对检查而非绘制量，纯浮点无分配，约 30–60µs ≈ 帧预算 0.2–0.4%；真正的大头是 160 次 `addOval` 的 Path 细分，空间网格帮不上。按原建议改收益≈0** |
+| **P1#9** PlasmaFlow 逐粒子 drawCircle | 性能（**可达性极窄**） | `UltraRenderers.kt` 仍逐个 `drawCircle`。但 `PLASMA_FLOW` 属 `Tier.ULTRA`，`VisualQuality.supports()` 要求 ULTRA 必须 `allowFramebuffer`，**仅 HIGH 档满足** → 只有「画质=HIGH + 主动选中该效果」才有 350 次绘制调用/帧（估 2–6% 帧预算）。**改 Path 批量需按色相/透明度分桶量化，会改变观感**，非等价优化；需真机实测后再定 |
 | **P1#11** Milkdrop 硬编码 1280×720 | 性能（**设计取舍，非缺陷**） | `UltraRenderers.kt:41-42` 仍 `val w = 1280; val h = 720`。原注释已说明"降采样省约 55% 填充、视觉几乎无损"；改成"自适应画布"在 1080p/4K 上会**增加**填充成本，属反向优化 |
 | **T5** 删除死代码 `VocalRemovalProcessor.kt` | P2 清理 | 文件仍在；确认无生产实例化（`PlaybackService.kt:208` 注释与 `PlayerManager.kt:198` 类型均已是 `SpectralMaskProcessor`） |
 | **P2** `customAppKey`/`secretKey` 加密 | P2 清理（暂缓） | `AppPreferences.kt:1429-1434` 仍直接读写明文 |
 
-> 说明：P1#5 / L3 两项与 `customAppKey` 加密已在 `CHANGELOG.md` §暂缓 / §P2 顺手项 记录；P1#1 已在同节记录"决定不做"。**本表的价值是把 L1 / L2 / L6 / T5 / P1#8 / P1#9 / P1#11 这些项也纳入版本控制** —— 此前它们只在 gitignored 报告里。
+> 说明：L3 一项与 `customAppKey` 加密已在 `CHANGELOG.md` §暂缓 / §P2 顺手项 记录；P1#1 已在同节记录"决定不做"。**本表的价值是把 L1 / L2 / L6 / T5 / P1#8 / P1#9 / P1#11 这些项也纳入版本控制** —— 此前它们只在 gitignored 报告里。
 >
-> **2026-09-14 复核更新（性能批次）**：P1#3 / P1#4 / P1#6 / P1#7 四项已修复，移出本表，详见 §10.148。其中 **P1#11 经复核判定为"设计取舍"而非缺陷**，**P1#9 的"改 Path 批量"非等价优化**（需量化分桶、会改观感），**P1#8 需算法改写**——这三项不建议按报告原建议直接实施。
+> **2026-09-14 复核更新（性能批次）**：P1#3 / P1#4 / P1#6 / P1#7 四项已修复，移出本表，详见 §10.148。其中 **P1#11 经复核判定为"设计取舍"而非缺陷**，**P1#9 的"改 Path 批量"非等价优化**（需量化分桶、会改观感；且只有 HIGH 档能跑到），**P1#8 经量化复核判定「无需修改」**（O(n²) 只占帧预算 0.2–0.4%，报告优化方向打错靶，详见 §10.148）——这三项不建议按报告原建议直接实施。
 >
 > **2026-09-14 复核更新（安全批次）**：**S4 已修复**，移出本表，详见 §10.149。至此全量报告中**已无未完成的安全类问题**（S1/S3/S4 均已落地，S2/S5 判定无需修复）。
 
