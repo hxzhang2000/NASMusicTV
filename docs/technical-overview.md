@@ -8299,6 +8299,23 @@ onSearchSong = { keyword -> viewModel.searchNetworkSongs(keyword) },
 
 **版本**：v2.31.2 → **v2.31.3**（versionCode 136 → 137）
 
+### 10.153 v2.32.5 — 飞牛批次审查后修复（F-1~F-4，2026-09-15）
+
+**来源**：v2.32.4 飞牛批次的完整代码审查（发现 P0×1 / P1×1 / P2×2 / P3 若干）。
+
+**修复内容**：
+- **F-1（阻断）**：`FeiniuAdapter.parseTrack` 解析期填充 `streamUrl`（`FeiniuUrl.streamUrl(apiBase, guid)`）—— 全 app 的 NAS 播放解析唯一出口是 `PlayerViewModel.resolveStreamUrl` → `getSongsByIds(...).streamUrl`，原实现恒 null 导致点播 / 切歌 / 恢复队列全部「解析失败」
+- **F-2**：`BackendAuthHeaders` 快照 → provider（每请求实时读取 `adapter.streamHeaders`）；`FeiniuAdapter.userToken` 加 `@Volatile` —— 静默重登换新令牌后播放 / 封面不再持续 401
+- **F-3**：`BackendRegistry.hostOf` 提取顶层 `hostOfUrl` 并**剥离 IPv6 方括号**（`java.net.URI` 返回 `[2001:db8::1]`、OkHttp `url.host` 为 `2001:db8::1`）
+- **F-4**：`withAuthRetry` 覆盖补全（元数据 / 歌词 / 技术信息 / 收藏 / 歌单曲目数）+ 互斥 & 令牌代数去重
+- 小项：`normalize` 折叠重复斜杠；`logout` POST 空 body；`clearSessionState` 清 `loginUsername`；`deviceId()` `@Synchronized`；`allTracksCache*` `@Volatile`
+
+**测试**：`FeiniuUrlTest` 29 例、`BackendAuthHeadersTest` 6 例（均独立 JVM harness OK）；`BackendHostOfUrlTest` 6 例（随 CI）。
+
+**验证**：`assembleDebug` / `assembleRelease`（含 R8）/ `compileDebugUnitTestKotlin` BUILD SUCCESSFUL；`lintDebug` 0 Error（257 Warning）。真机 A1–A14 仍待验收。
+
+**版本**：v2.32.4 → **v2.32.5**（versionCode 143 → 144）
+
 ### 10.152 v2.32.3 — T5：删除死代码 `VocalRemovalProcessor.kt`（算法先归档，2026-09-14）
 
 **来源**：`logs_temp/code-review-full-report-2026-09-13.md` §T5 / `docs/code-review-2026-09-03.md` §P2。文件 348 行，全项目**零调用方**（`PlaybackService.kt:207` 实际 `val vocalRemovalProcessor = SpectralMaskProcessor()`——变量名是历史遗留，类型早就换过了；`PlayerManager.setVocalRemovalProcessor()` 的形参类型同样是 `SpectralMaskProcessor`）。

@@ -7,6 +7,30 @@
 >
 > 类型：`Added`（新增） | `Changed`（变更） | `Fixed`（修复） | `Removed`（移除）
 
+## [v2.32.5] - 2026-09-15
+
+> 飞牛批次（v2.32.4）**审查后修复**：1 项阻断（播放解析链） + 1 项一致性（令牌刷新） + 2 项健壮性；测试总量 25 → 41 例（`FeiniuUrlTest` +4，新增 `BackendAuthHeadersTest` 6 例、`BackendHostOfUrlTest` 6 例）。
+>
+> 修复清单详见 `docs/feiniu-backend-improvement-plan.md` §14；独立复核记录（harness 复跑 / 编译 / 边界实测）见对应提交说明。
+
+### Fixed
+- **F-1（阻断）飞牛歌曲播放解析失败**：适配器全链路未填充 `Song.streamUrl`，而全 app 的 NAS 播放解析唯一出口是 `PlayerViewModel.resolveStreamUrl` → `adapter.getSongsByIds(...).streamUrl`（对照：Jellyfin / Navidrome / Subsonic 均在解析期填充）。修复：`parseTrack` 按 `FeiniuUrl.streamUrl(apiBase, guid)` 填充。此前点播 / 自动切歌 / 恢复队列全部在解析环节失败（A5 无法通过）
+- **F-2 静默重登后播放 / 封面持续 401**：`BackendAuthHeaders` 由快照改 **provider**（每次请求实时读取 `adapter.streamHeaders`），重登换新令牌即时生效；`FeiniuAdapter.userToken` 加 `@Volatile`
+- **F-3 IPv6 地址 host 匹配错位**：`BackendRegistry.hostOf` 提取为顶层 `hostOfUrl` 并对 IPv6 字面量**剥离方括号**（`java.net.URI.getHost()` 返回 `[2001:db8::1]`、OkHttp `url.host` 为 `2001:db8::1`，不剥离则认证头永不注入）
+- **F-4 静默重登覆盖不对称**：`getSongsByIds`（元数据）/ `getLyrics` / `getSongTechnicalInfo` / `toggleFavorite` / 歌单曲目数补齐均纳入 `withAuthRetry`；新增互斥 + 令牌代数去重（并发场景只真正重登一次）
+- `FeiniuUrl.normalize` 折叠重复斜杠（`http://host//music`）；`logout` 对齐参考项目改为 POST 空 body（无 Content-Type）；`clearSessionState` 清 `loginUsername`；`deviceId()` 加 `@Synchronized`；`allTracksCache*` 加 `@Volatile`
+
+### Tests
+- `FeiniuUrlTest` 25 → **29 例**（补：无 scheme 带端口、大写 scheme、重复斜杠、`hostOf` IPv6 剥括号）
+- 新增 `BackendAuthHeadersTest`（provider 实时性 / 大小写匹配 / 空 host / 清空 / 异常降级，6 例）
+- 新增 `BackendHostOfUrlTest`（含 IPv6 剥括号，6 例）
+
+### 验证
+- 独立 JVM harness 复跑：`FeiniuUrlTest` **OK (29 tests)**、`BackendAuthHeadersTest` **OK (6 tests)**（新增 `logs_temp/verify_auth_headers/` harness，与 verify_feiniu_url 同构）
+- `assembleDebug` / `assembleRelease`（含 R8）/ `compileDebugUnitTestKotlin` BUILD SUCCESSFUL；`lintDebug` **0 Error**（257 Warning）；release dex 冒烟确认三个类与新方法（`hostOfUrl` / `fetchLyricsRaw` / `doToggleFavorite` 等）均未被 R8 收缩
+- `BackendHostOfUrlTest`（6 例，含 IPv6 剥括号）随 CI 的 `testDebugUnitTest` 执行（源码位于 BackendRegistry.kt，无法独立抽取运行；本机已通过编译验证）
+- 真机动态项（A5 / A6 / A14）仍需飞牛真机验收
+
 ## [v2.32.4] - 2026-09-14
 
 > 飞牛音乐（fnOS）后端对接**重写**。以可运行的飞牛 TV 客户端 `fn-music-tv`（github.com/QiaoKes/fn-music-tv）为权威依据，替换原先基于第三方逆向文章猜测的实现。开发计划与评审记录见 `docs/feiniu-backend-improvement-plan.md`（含 §3 缺陷对照表 D1–D22、§10 评审记录）。

@@ -582,3 +582,22 @@ AGENTS.md 记载 v2.5.1 曾因「Gson 类型擦除 + R8」崩溃，本次改动�
 | `core/data/src/main/kotlin/com/fnmusic/tv/core/data/repository/SessionRepository.kt` | 登录/恢复/重登/登出流程 |
 | `core/playback/src/main/kotlin/com/fnmusic/tv/core/playback/PlaybackService.kt` | 播放请求头构造（`playbackRequestHeaders`） |
 | `.trellis/spec/backend/android-client-contracts.md` | **权威契约文档**（L145-L215 为认证与服务端收藏章节） |
+
+## 14. 审查后修复（2026-09-15，v2.32.5）
+
+对 v2.32.4 批次做了完整代码审查（全量 diff 精读 + 播放 / 认证链路逐层追踪 + 独立 JVM 复核），修复以下发现：
+
+| # | 级别 | 问题 | 修复 |
+| --- | --- | --- | --- |
+| F-1 | **P0 阻断** | `parseTrack` 未填充 `Song.streamUrl`；全 app 的 NAS 播放解析唯一出口是 `PlayerViewModel.resolveStreamUrl` → `getSongsByIds(...).streamUrl`，导致点播 / 切歌 / 恢复队列全部「解析失败」（与认证头无关） | `parseTrack` 填 `FeiniuUrl.streamUrl(apiBase, guid)` |
+| F-2 | P1 | 静默重登换新令牌后 `BackendAuthHeaders` 快照不刷新 → 播放 / 封面持续 401（A14 场景不完整） | 单例改 **provider**（每请求实时读取）+ `userToken` `@Volatile` |
+| F-3 | P2 | IPv6 字面量地址 host 匹配错位（`URI.getHost()` 带方括号、OkHttp 不带）→ 认证头永不注入 | 提取 `hostOfUrl` 并剥离方括号 + 单测 |
+| F-4 | P2 | `withAuthRetry` 覆盖不对称（歌词 / 收藏 / 元数据路径过期时静默失败） | 5 处补上 + 互斥 & 令牌代数去重 |
+| F-6 | P3 | `normalize` 对 `http://host//music` 保留双斜杠 | 折叠重复斜杠 + 用例 |
+
+**测试与验证**：
+- `FeiniuUrlTest` 25 → 29 例（独立 JVM harness 复跑 **OK (29 tests)**）
+- 新增 `BackendAuthHeadersTest`（6 例，独立 JVM harness 复跑 **OK**）与 `BackendHostOfUrlTest`（6 例，随 CI `testDebugUnitTest` 执行）
+- `assembleDebug` / `assembleRelease`（含 R8）/ `compileDebugUnitTestKotlin` BUILD SUCCESSFUL；`lintDebug` 0 Error（257 Warning）；release dex 冒烟确认新类 / 方法未被 R8 收缩
+- 真机动态项 A1–A14 仍待验收（重点 A5 / A6 / A14）
+
