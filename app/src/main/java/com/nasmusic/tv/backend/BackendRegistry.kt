@@ -124,7 +124,7 @@ class BackendRegistry(private val appContext: Context? = null) {
             }
             // 同步播放 / 封面链路的认证头（飞牛音乐等需要 Authorization 的后端）。
             // 其他后端 streamHeaders 为空 Map，注入后行为不变。
-            BackendAuthHeaders.update(adapter.streamHeaders, hostOf(config.baseUrl))
+            BackendAuthHeaders.update({ adapter.streamHeaders }, hostOf(config.baseUrl))
         } else {
             try { adapter.close() } catch (_: Exception) {}
         }
@@ -139,14 +139,11 @@ class BackendRegistry(private val appContext: Context? = null) {
      * 而用户配置里 `192.168.1.100` 这种写法是合法的）。
      */
     private fun hostOf(url: String): String {
-        if (url.isBlank()) return ""
-        val withScheme = if (url.contains("://")) url else "http://$url"
-        return try {
-            java.net.URI(withScheme).host ?: ""
-        } catch (e: Exception) {
+        val host = hostOfUrl(url)
+        if (host.isEmpty() && url.isNotBlank()) {
             AppLog.d("BackendRegistry", "hostOf: cannot parse host, url omitted")
-            ""
         }
+        return host
     }
 
     /**
@@ -250,5 +247,23 @@ class BackendRegistry(private val appContext: Context? = null) {
         TYPE_DAOLIYU -> "道理鱼音乐"
         TYPE_FEINIU -> "飞牛音乐"
         else -> type
+    }
+}
+
+/**
+ * 从用户输入的服务器地址解析 host（lenient：无 scheme 时补 `http://`）。
+ *
+ * 关键差异：IPv6 字面量需**剥掉方括号** —— `java.net.URI.getHost()` 返回
+ * `[2001:db8::1]`，而 OkHttp 请求的 `url.host` 是 `2001:db8::1`；不剥离会
+ * 导致认证头 host 匹配永不命中（播放 / 封面 401，2026-09-15 修复 F-3）。
+ * 解析失败返回空串。
+ */
+internal fun hostOfUrl(url: String): String {
+    if (url.isBlank()) return ""
+    val withScheme = if (url.contains("://")) url else "http://$url"
+    return try {
+        java.net.URI(withScheme).host?.removeSurrounding("[", "]") ?: ""
+    } catch (e: Exception) {
+        ""
     }
 }

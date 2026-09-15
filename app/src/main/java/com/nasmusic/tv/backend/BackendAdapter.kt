@@ -46,10 +46,11 @@ interface BackendAdapter {
     suspend fun getApiVersion(): VersionInfo
 
     /**
-     * 播放流时需要注入的 HTTP 请求头（如 Cookie / Authorization）
+     * 播放流时需要注入的 HTTP 请求头（如 Authorization）
      *
-     * 默认空 Map。飞牛音乐等 Cookie 认证的后端覆盖此属性，
-     * PlayerManager 播放时读取并注入到 ExoPlayer 的 HttpDataSource。
+     * 默认空 Map。飞牛音乐等需要请求头认证的后端覆盖此属性；
+     * 由 `BackendAuthHeaders`（provider 实时读取）经 `BaiduHttpDataSourceFactory`
+     * 的拦截器注入 ExoPlayer 播放与 Coil 封面两条链路。
      */
     val streamHeaders: Map<String, String>
         get() = emptyMap()
