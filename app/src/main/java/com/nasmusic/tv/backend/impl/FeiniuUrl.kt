@@ -76,7 +76,8 @@ object FeiniuUrl {
             else -> DEFAULT_HTTP_PORT
         }
 
-        val path = parsed.encodedPath.trimEnd('/')
+        // 折叠重复斜杠（如 `http://host//music` 这类输入）
+        val path = parsed.encodedPath.replace(Regex("/{2,}"), "/").trimEnd('/')
         val prefix = when {
             path.endsWith("/music/api/v1") -> path
             path.endsWith("/music") -> "$path/api/v1"

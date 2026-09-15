@@ -18,6 +18,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -106,11 +108,21 @@ class FeiniuAdapter(private val appContext: Context? = null) : BackendAdapter {
     private var apiBase: String = ""
 
     /** 登录令牌（对应服务端 `userToken`） */
+    @Volatile
     private var userToken: String = ""
 
     /** 登录用户名与密码摘要，仅用于令牌失效时静默重登 */
+    @Volatile
     private var loginUsername: String = ""
+    @Volatile
     private var loginPasswordSha: String = ""
+
+    /** 令牌代数：登录成功递增；并发重登去重用（见 [withAuthRetry]） */
+    @Volatile
+    private var tokenGeneration: Int = 0
+
+    /** 静默重登互斥：批量并发同时 401 时只真正重登一次 */
+    private val reloginMutex = Mutex()
 
     private var serverVersion: String = ""
     private var mediasrvVersion: String = ""
@@ -125,8 +137,11 @@ class FeiniuAdapter(private val appContext: Context? = null) : BackendAdapter {
     private val artistCoverIds = LruCache<String, String>(512)
 
     /** 搜索用的全量曲目快照 */
+    @Volatile
     private var allTracksCache: List<Song> = emptyList()
+    @Volatile
     private var allTracksCacheAt: Long = 0L
+    @Volatile
     private var allTracksCacheKey: String = ""
 
     // 安全修复（C-1）：不使用 trust-all，采用系统默认证书校验。
@@ -144,7 +159,8 @@ class FeiniuAdapter(private val appContext: Context? = null) : BackendAdapter {
     /**
      * 播放流 / 封面请求需要注入的认证头。
      *
-     * 由 `BackendRegistry` 在连接成功后同步给 `BackendAuthHeaders`，
+     * 由 `BackendRegistry` 在连接成功时将本属性绑定为 provider 给 `BackendAuthHeaders`
+     * （每次请求实时读取，静默重登换新令牌后即时生效），
      * 再经 `BaiduHttpDataSourceFactory` 的拦截器注入 ExoPlayer 与 Coil 两条链路。
      */
     override val streamHeaders: Map<String, String>
@@ -210,6 +226,7 @@ class FeiniuAdapter(private val appContext: Context? = null) : BackendAdapter {
                 return false
             }
             userToken = token
+            tokenGeneration++
             AppLog.d(TAG, "login success, token=${token.take(8)}...")
             true
         } catch (e: Exception) {
@@ -277,7 +294,9 @@ class FeiniuAdapter(private val appContext: Context? = null) : BackendAdapter {
         if (apiBase.isNotBlank() && userToken.isNotBlank()) {
             try {
                 val url = FeiniuUrl.endpoint(apiBase, "user/logout")
-                post(url, "", authenticated = true)
+                // 与参考项目一致：POST 空 body（无 Content-Type），而非空 JSON 串
+                val request = Request.Builder().url(url).post(ByteArray(0).toRequestBody(null)).build()
+                execute(request, url, authenticated = true)
             } catch (e: Exception) {
                 AppLog.w(TAG, "logout request failed", e)
             }
@@ -292,6 +311,7 @@ class FeiniuAdapter(private val appContext: Context? = null) : BackendAdapter {
 
     private fun clearSessionState() {
         userToken = ""
+        loginUsername = ""
         loginPasswordSha = ""
         apiBase = ""
         serverVersion = ""
@@ -386,8 +406,13 @@ class FeiniuAdapter(private val appContext: Context? = null) : BackendAdapter {
         }.onFailure { AppLog.e(TAG, "getSongsByIds failed", it) }.getOrDefault(emptyList())
     }
 
-    private fun fetchTrackMetadataSong(id: String): Song? {
+    private suspend fun fetchTrackMetadataSong(id: String): Song? {
         val raw = stripPrefix(id)
+        // 静默重登覆盖：播放解析链依赖本调用，401 时先重登再重试
+        return withAuthRetry { fetchTrackMetadataSongRaw(raw) }
+    }
+
+    private fun fetchTrackMetadataSongRaw(raw: String): Song? {
         val url = FeiniuUrl.endpoint(apiBase, "track/metadata", "guid" to raw)
         val data = dataOf(get(url), url) ?: return null
         val track = data.getAsJsonObject("track") ?: data
@@ -516,53 +541,63 @@ class FeiniuAdapter(private val appContext: Context? = null) : BackendAdapter {
      */
     override suspend fun getLyrics(songId: String): String? = withContext(Dispatchers.IO) {
         runCatchingSuspend {
-            val url = FeiniuUrl.endpoint(apiBase, "lyric/list", "trackGUID" to stripPrefix(songId))
-            val data = dataOf(get(url), url) ?: return@runCatchingSuspend null
-            val list = data.getAsJsonArray("list") ?: return@runCatchingSuspend null
-            if (list.isEmpty) return@runCatchingSuspend null
-            val preferred = str(data, "preferred")
-
-            var chosen: JsonObject? = null
-            var fallback: JsonObject? = null
-            for (element in list) {
-                val obj = element as? JsonObject ?: continue
-                if (fallback == null) fallback = obj
-                if (preferred != null && str(obj, "guid") == preferred) {
-                    chosen = obj
-                    break
-                }
-                if (chosen == null && obj.get("isLRC")?.asBoolean == true) chosen = obj
-            }
-            val target = chosen ?: fallback ?: return@runCatchingSuspend null
-            val content = str(target, "content")?.takeIf { it.isNotBlank() } ?: return@runCatchingSuspend null
-            val offset = target.get("offset")?.asLong ?: 0L
-            if (offset != 0L) "[offset:$offset]\n$content" else content
+            // 静默重登覆盖：歌词加载不再因令牌过期静默失败
+            withAuthRetry { fetchLyricsRaw(stripPrefix(songId)) }
         }.onFailure { AppLog.e(TAG, "getLyrics failed", it) }.getOrNull()
+    }
+
+    private fun fetchLyricsRaw(trackGuid: String): String? {
+        val url = FeiniuUrl.endpoint(apiBase, "lyric/list", "trackGUID" to trackGuid)
+        val data = dataOf(get(url), url) ?: return null
+        val list = data.getAsJsonArray("list") ?: return null
+        if (list.isEmpty) return null
+        val preferred = str(data, "preferred")
+
+        var chosen: JsonObject? = null
+        var fallback: JsonObject? = null
+        for (element in list) {
+            val obj = element as? JsonObject ?: continue
+            if (fallback == null) fallback = obj
+            if (preferred != null && str(obj, "guid") == preferred) {
+                chosen = obj
+                break
+            }
+            if (chosen == null && obj.get("isLRC")?.asBoolean == true) chosen = obj
+        }
+        val target = chosen ?: fallback ?: return null
+        val content = str(target, "content")?.takeIf { it.isNotBlank() } ?: return null
+        val offset = target.get("offset")?.asLong ?: 0L
+        return if (offset != 0L) "[offset:$offset]\n$content" else content
     }
 
     /** `GET track/metadata?guid=` → `audioSpec`（codec / container / bitrate / duration） */
     override suspend fun getSongTechnicalInfo(songId: String): SongTechnicalInfo? = withContext(Dispatchers.IO) {
         runCatchingSuspend {
-            val url = FeiniuUrl.endpoint(apiBase, "track/metadata", "guid" to stripPrefix(songId))
-            val data = dataOf(get(url), url) ?: return@runCatchingSuspend null
-            val spec = data.getAsJsonObject("audioSpec") ?: return@runCatchingSuspend null
-            val container = str(spec, "container").orEmpty()
-            val codec = str(spec, "codec").orEmpty()
-            val rawBitrate = spec.get("bitrate")?.asLong ?: 0L
-            if (rawBitrate != 0L) {
-                AppLog.d(TAG, "track/metadata: raw bitrate=$rawBitrate (单位未确认，暂不展示)")
-            }
-            SongTechnicalInfo(
-                codec = codec.uppercase(),
-                bitrate = BITRATE_UNVERIFIED,
-                // ⚠️ 飞牛 audioSpec 不含采样率与声道数，未知字段填 0，不要臆造
-                sampleRate = 0,
-                channels = 0,
-                fileSize = 0L,
-                durationMs = spec.get("duration")?.asLong ?: 0L,
-                format = container.ifBlank { codec }.uppercase()
-            )
+            // 静默重登覆盖：技术信息面板不再因令牌过期静默空白
+            withAuthRetry { fetchTechInfoRaw(stripPrefix(songId)) }
         }.onFailure { AppLog.e(TAG, "getSongTechnicalInfo failed", it) }.getOrNull()
+    }
+
+    private fun fetchTechInfoRaw(guid: String): SongTechnicalInfo? {
+        val url = FeiniuUrl.endpoint(apiBase, "track/metadata", "guid" to guid)
+        val data = dataOf(get(url), url) ?: return null
+        val spec = data.getAsJsonObject("audioSpec") ?: return null
+        val container = str(spec, "container").orEmpty()
+        val codec = str(spec, "codec").orEmpty()
+        val rawBitrate = spec.get("bitrate")?.asLong ?: 0L
+        if (rawBitrate != 0L) {
+            AppLog.d(TAG, "track/metadata: raw bitrate=$rawBitrate (单位未确认，暂不展示)")
+        }
+        return SongTechnicalInfo(
+            codec = codec.uppercase(),
+            bitrate = BITRATE_UNVERIFIED,
+            // ⚠️ 飞牛 audioSpec 不含采样率与声道数，未知字段填 0，不要臆造
+            sampleRate = 0,
+            channels = 0,
+            fileSize = 0L,
+            durationMs = spec.get("duration")?.asLong ?: 0L,
+            format = container.ifBlank { codec }.uppercase()
+        )
     }
 
     // ==================== 歌单 ====================
@@ -601,10 +636,10 @@ class FeiniuAdapter(private val appContext: Context? = null) : BackendAdapter {
         }.onFailure { AppLog.e(TAG, "getPlaylists failed", it) }.getOrDefault(emptyList())
     }
 
-    private fun fetchPlaylistTrackCount(guid: String): Int {
+    private suspend fun fetchPlaylistTrackCount(guid: String): Int {
+        val url = FeiniuUrl.endpoint(apiBase, "playlist/detail", "guid" to guid)
         return try {
-            val url = FeiniuUrl.endpoint(apiBase, "playlist/detail", "guid" to guid)
-            dataOf(get(url), url)?.get("trackCount")?.asInt ?: 0
+            withAuthRetry { dataOf(get(url), url)?.get("trackCount")?.asInt ?: 0 }
         } catch (e: Exception) {
             AppLog.d(TAG, "playlist/detail failed for guid=$guid: ${e.message}")
             0
@@ -633,17 +668,22 @@ class FeiniuAdapter(private val appContext: Context? = null) : BackendAdapter {
      */
     override suspend fun toggleFavorite(songId: String, isCurrentlyFavorite: Boolean): Boolean = withContext(Dispatchers.IO) {
         runCatchingSuspend {
-            val path = if (isCurrentlyFavorite) "favorite-track/delete" else "favorite-track/create"
-            val body = JsonObject().apply { addProperty("trackGUID", stripPrefix(songId)) }.toString()
-            val url = FeiniuUrl.endpoint(apiBase, path)
-            val envelope = post(url, body, authenticated = true) ?: return@runCatchingSuspend false
-            val code = envelope.get("code")?.asInt ?: 0
-            if (code != 0) {
-                AppLog.w(TAG, "toggleFavorite failed: code=$code msg=${str(envelope, "msg")}")
-                return@runCatchingSuspend false
-            }
-            true
+            // 静默重登覆盖：收藏切换不再因令牌过期静默失败
+            withAuthRetry { doToggleFavorite(stripPrefix(songId), isCurrentlyFavorite) }
         }.onFailure { AppLog.e(TAG, "toggleFavorite failed", it) }.getOrDefault(false)
+    }
+
+    private fun doToggleFavorite(trackGuid: String, isCurrentlyFavorite: Boolean): Boolean {
+        val path = if (isCurrentlyFavorite) "favorite-track/delete" else "favorite-track/create"
+        val body = JsonObject().apply { addProperty("trackGUID", trackGuid) }.toString()
+        val url = FeiniuUrl.endpoint(apiBase, path)
+        val envelope = post(url, body, authenticated = true) ?: return false
+        val code = envelope.get("code")?.asInt ?: 0
+        if (code != 0) {
+            AppLog.w(TAG, "toggleFavorite failed: code=$code msg=${str(envelope, "msg")}")
+            return false
+        }
+        return true
     }
 
     /** `GET favorite-track/list?page&size&sort=favoriteAt,desc` */
@@ -785,6 +825,7 @@ class FeiniuAdapter(private val appContext: Context? = null) : BackendAdapter {
     /**
      * 令牌失效时静默重登一次再重试。
      * 重登凭据来自 `initialize` 时保存的密码摘要。
+     * 并发场景（如 getSongsByIds 并发 4）：互斥 + 令牌代数去重，只真正重登一次。
      */
     private suspend fun <T> withAuthRetry(block: suspend () -> T): T {
         return try {
@@ -792,7 +833,12 @@ class FeiniuAdapter(private val appContext: Context? = null) : BackendAdapter {
         } catch (e: AuthExpiredException) {
             if (loginUsername.isBlank() || loginPasswordSha.isBlank()) throw e
             AppLog.w(TAG, "token expired, attempting silent re-login")
-            if (!login(loginUsername, loginPasswordSha)) throw e
+            val seenGeneration = tokenGeneration
+            reloginMutex.withLock {
+                if (tokenGeneration == seenGeneration) {
+                    if (!login(loginUsername, loginPasswordSha)) throw e
+                }
+            }
             block()
         }
     }
@@ -882,7 +928,8 @@ class FeiniuAdapter(private val appContext: Context? = null) : BackendAdapter {
             album = albumName ?: "",
             albumId = albumGuid?.let { ID_PREFIX + it },
             coverUrl = FeiniuUrl.coverUrl(apiBase, coverId ?: albumCoverId ?: firstArtistCoverId, COVER_SIZE),
-            streamUrl = null,
+            // 播放解析链（PlayerViewModel.resolveStreamUrl → getSongsByIds）依赖本字段，解析期即填充
+            streamUrl = FeiniuUrl.streamUrl(apiBase, guid),
             durationMs = durationMs,
             trackNumber = fallbackTrackNumber,
             // 同 [BITRATE_UNVERIFIED]：单位未确认，不填
@@ -905,6 +952,7 @@ class FeiniuAdapter(private val appContext: Context? = null) : BackendAdapter {
     @Volatile
     private var memoryDeviceId: String = PREFS_UNSET
 
+    @Synchronized
     private fun deviceId(): String {
         val cached = memoryDeviceId
         if (cached.isNotEmpty()) return cached
