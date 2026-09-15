@@ -1,11 +1,13 @@
 package com.nasmusic.tv
 
 import androidx.test.core.app.ApplicationProvider
-import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.test.runCurrent
-import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -32,50 +34,75 @@ import java.util.concurrent.atomic.AtomicInteger
  * ⚠️ 本机 `testDebugUnitTest` 因 Gradle 测试 worker 环境问题无法运行（exit 268435466），
  * 这些用例**只验证了源码可编译**，实际通过与否须由 CI 判定。
  */
-@OptIn(ExperimentalCoroutinesApi::class)
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [34])
+// application 必须显式指定：AGP 9 下 Robolectric 4.11 的 manifest 接线不生效，
+// getApplicationContext() 回退默认 android.app.Application（CI 与本机均实测
+// 抛 ClassCastException: Application cannot be cast to NasMusicApp），
+// 显式指定后 Robolectric 才实例化真实 NasMusicApp。
+@Config(sdk = [34], application = NasMusicApp::class)
 class PlayModeToggleEventTest {
 
     private val app: NasMusicApp get() = ApplicationProvider.getApplicationContext()
 
-    @Test
-    fun `emit without subscriber is dropped and never replayed to a late subscriber`() = runTest {
-        assertFalse("无 UI 订阅时应返回 false（事件按设计丢弃）", app.requestPlayModeToggle())
+    /** 等待订阅注册完成（真实调度器跨线程，需轮询） */
+    private suspend fun awaitSubscribed(count: Int = 1) {
+        withTimeout(2_000) {
+            while (app.playModeToggleSubscriberCount.value < count) delay(5)
+        }
+    }
 
-        val received = AtomicInteger(0)
-        val job = launch { app.playModeToggleEvents.collect { received.incrementAndGet() } }
-        runCurrent()
-
-        assertEquals("迟到的订阅者不应收到滞留事件", 0, received.get())
-        job.cancelAndJoin()
+    /** 等待订阅全部解除 */
+    private suspend fun awaitUnsubscribed() {
+        withTimeout(2_000) {
+            while (app.playModeToggleSubscriberCount.value > 0) delay(5)
+        }
     }
 
     @Test
-    fun `emit with active subscriber delivers exactly once`() = runTest {
+    fun `emit without subscriber is dropped and never replayed to a late subscriber`() = runBlocking {
+        assertFalse("无 UI 订阅时应返回 false（事件按设计丢弃）", app.requestPlayModeToggle())
+
         val received = AtomicInteger(0)
-        val job = launch { app.playModeToggleEvents.collect { received.incrementAndGet() } }
-        runCurrent()
+        val job = launch(Dispatchers.Default) { app.playModeToggleEvents.collect { received.incrementAndGet() } }
+        awaitSubscribed()
+
+        // 迟到的订阅者不应收到滞留事件（replay = 0）
+        assertEquals("迟到的订阅者不应收到滞留事件", 0, received.get())
+        job.cancelAndJoin()
+        awaitUnsubscribed()
+    }
+
+    @Test
+    fun `emit with active subscriber delivers exactly once`() = runBlocking {
+        val received = AtomicInteger(0)
+        val job = launch(Dispatchers.Default) { app.playModeToggleEvents.collect { received.incrementAndGet() } }
+        awaitSubscribed()
 
         assertTrue("有订阅者时应返回 true", app.requestPlayModeToggle())
+        withTimeout(2_000) {
+            while (received.get() < 1) delay(5)
+        }
         assertEquals(1, received.get())
 
         job.cancelAndJoin()
     }
 
     @Test
-    fun `cancelled subscriber unsubscribes without manual cleanup`() = runTest {
+    fun `cancelled subscriber unsubscribes without manual cleanup`() = runBlocking {
         val received = AtomicInteger(0)
-        val job = launch { app.playModeToggleEvents.collect { received.incrementAndGet() } }
-        runCurrent()
+        val job = launch(Dispatchers.Default) { app.playModeToggleEvents.collect { received.incrementAndGet() } }
+        awaitSubscribed()
 
         assertTrue(app.requestPlayModeToggle())
+        withTimeout(2_000) {
+            while (received.get() < 1) delay(5)
+        }
         assertEquals(1, received.get())
 
         // L3 核心：订阅方作用域取消（等价于 Activity 销毁 → lifecycleScope 取消）后自动退订，
         // Application 侧不再残留任何指向已销毁 Activity 的 ViewModel 的引用。
         job.cancelAndJoin()
-        runCurrent()
+        awaitUnsubscribed()
 
         assertFalse("退订后投递应返回 false", app.requestPlayModeToggle())
         assertEquals("退订后不应再收到事件", 1, received.get())

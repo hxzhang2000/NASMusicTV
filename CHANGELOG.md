@@ -19,6 +19,7 @@
 - **F-3 IPv6 地址 host 匹配错位**：`BackendRegistry.hostOf` 提取为顶层 `hostOfUrl` 并对 IPv6 字面量**剥离方括号**（`java.net.URI.getHost()` 返回 `[2001:db8::1]`、OkHttp `url.host` 为 `2001:db8::1`，不剥离则认证头永不注入）
 - **F-4 静默重登覆盖不对称**：`getSongsByIds`（元数据）/ `getLyrics` / `getSongTechnicalInfo` / `toggleFavorite` / 歌单曲目数补齐均纳入 `withAuthRetry`；新增互斥 + 令牌代数去重（并发场景只真正重登一次）
 - `FeiniuUrl.normalize` 折叠重复斜杠（`http://host//music`）；`logout` 对齐参考项目改为 POST 空 body（无 Content-Type）；`clearSessionState` 清 `loginUsername`；`deviceId()` 加 `@Synchronized`；`allTracksCache*` 加 `@Volatile`
+- **CI 首跑暴露的 L3 遗留语义 bug（通知栏「切换播放模式」从未生效）**：`MutableSharedFlow(replay=0, extraBufferCapacity=0)` 在**有订阅者**时 `tryEmit` 必失败（投递需挂起）、无订阅者时反而返回 true——`requestPlayModeToggle` 用它判断「有无 UI 订阅」完全颠倒。修复：加 `extraBufferCapacity = 1`（replay 仍 0，不滞留）+ `subscriptionCount` 门控恢复返回值语义；`PlayModeToggleEventTest` 改用真实调度器重写（原 `runTest` 虚拟调度器下该语义不可测）
 
 ### Tests
 - `FeiniuUrlTest` 25 → **29 例**（补：无 scheme 带端口、大写 scheme、重复斜杠、`hostOf` IPv6 剥括号）

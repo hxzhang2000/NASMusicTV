@@ -594,10 +594,11 @@ AGENTS.md 记载 v2.5.1 曾因「Gson 类型擦除 + R8」崩溃，本次改动�
 | F-3 | P2 | IPv6 字面量地址 host 匹配错位（`URI.getHost()` 带方括号、OkHttp 不带）→ 认证头永不注入 | 提取 `hostOfUrl` 并剥离方括号 + 单测 |
 | F-4 | P2 | `withAuthRetry` 覆盖不对称（歌词 / 收藏 / 元数据路径过期时静默失败） | 5 处补上 + 互斥 & 令牌代数去重 |
 | F-6 | P3 | `normalize` 对 `http://host//music` 保留双斜杠 | 折叠重复斜杠 + 用例 |
+| CI-1 | **P1** | CI 首跑暴露：`tryEmit` 返回值不可表达「有无订阅者」（有订阅者必 false / 无订阅者必 true），通知栏「切换播放模式」自 v2.32.3 起从未生效 | `extraBufferCapacity = 1`（replay 仍 0）+ `subscriptionCount` 门控；测试改真实调度器重写 |
 
 **测试与验证**：
-- `FeiniuUrlTest` 25 → 29 例（独立 JVM harness 复跑 **OK (29 tests)**）
-- 新增 `BackendAuthHeadersTest`（6 例，独立 JVM harness 复跑 **OK**）与 `BackendHostOfUrlTest`（6 例，随 CI `testDebugUnitTest` 执行）
+- `FeiniuUrlTest` 25 → 29 例 + `BackendAuthHeadersTest` 6 例（独立 JVM harness 复跑 **OK**）与 `BackendHostOfUrlTest` 6 例（随 CI `testDebugUnitTest` 执行）
+- **全量单测 512 例 0 失败**（本机首次完整跑通 testDebugUnitTest，含 CI 首跑暴露并修复的 PlayModeToggle 3 例）
 - `assembleDebug` / `assembleRelease`（含 R8）/ `compileDebugUnitTestKotlin` BUILD SUCCESSFUL；`lintDebug` 0 Error（257 Warning）；release dex 冒烟确认新类 / 方法未被 R8 收缩
 - 真机动态项 A1–A14 仍待验收（重点 A5 / A6 / A14）
 

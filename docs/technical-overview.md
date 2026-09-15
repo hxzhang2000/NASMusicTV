@@ -8310,9 +8310,19 @@ onSearchSong = { keyword -> viewModel.searchNetworkSongs(keyword) },
 - **F-4**：`withAuthRetry` 覆盖补全（元数据 / 歌词 / 技术信息 / 收藏 / 歌单曲目数）+ 互斥 & 令牌代数去重
 - 小项：`normalize` 折叠重复斜杠；`logout` POST 空 body；`clearSessionState` 清 `loginUsername`；`deviceId()` `@Synchronized`；`allTracksCache*` `@Volatile`
 
-**测试**：`FeiniuUrlTest` 29 例、`BackendAuthHeadersTest` 6 例（均独立 JVM harness OK）；`BackendHostOfUrlTest` 6 例（随 CI）。
+**测试**：`FeiniuUrlTest` 29 例、`BackendAuthHeadersTest` 6 例（均独立 JVM harness OK）；`BackendHostOfUrlTest` 6 例（随 CI）。**全量单测 512 例 0 失败**（testDebugUnitTest 本机首次完整跑通）。
 
-**验证**：`assembleDebug` / `assembleRelease`（含 R8）/ `compileDebugUnitTestKotlin` BUILD SUCCESSFUL；`lintDebug` 0 Error（257 Warning）。真机 A1–A14 仍待验收。
+**验证**：`assembleDebug` / `assembleRelease`（含 R8）/ `compileDebugUnitTestKotlin` BUILD SUCCESSFUL；`lintDebug` 0 Error（257 Warning）。CI 首跑暴露并修复 L3 遗留 bug：通知栏「切换播放模式」因 `tryEmit` 语义（有订阅者必 false / 无订阅者必 true）从未生效——加 `extraBufferCapacity=1` + `subscriptionCount` 门控（详见 §10.154）。
+
+### 10.154 v2.32.5 — CI 首跑暴露：播放模式切换 tryEmit 语义颠倒（2026-09-16）
+
+**来源**：v2.32.5 推送后 CI `testDebugUnitTest` 首次在真实环境运行，`PlayModeToggleEventTest` 3 例失败（`ClassCastException` → 修 `@Config(application)` 后转为本真失败）。
+
+**根因（独立 JVM 实验证实）**：`MutableSharedFlow(replay=0, extraBufferCapacity=0)` 的 `tryEmit` 在**有订阅者**时必 false（投递需挂起）、**无订阅者**时必 true（值直接丢弃也算「成功」）。L3 用它返回值判断「有无 UI 订阅」恰好颠倒——通知栏「切换播放模式」自 v2.32.3 起从未生效。
+
+**修复**：flow 加 `extraBufferCapacity = 1`（replay 仍 0，不滞留给迟到订阅者）+ `requestPlayModeToggle` 用 `subscriptionCount` 门控返回值；新增只读 `playModeToggleSubscriberCount`。测试改 `runBlocking` + 真实调度器（`runTest` 虚拟调度器下该语义不可测）。
+
+**验证**：全量单测 512 例 0 失败。真机验收：通知栏「切换播放模式」按钮在 UI 打开时生效、关闭时无副作用。
 
 **版本**：v2.32.4 → **v2.32.5**（versionCode 143 → 144）
 

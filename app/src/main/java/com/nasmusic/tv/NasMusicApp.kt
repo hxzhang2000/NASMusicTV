@@ -97,8 +97,13 @@ class NasMusicApp : Application(), ImageLoaderFactory {
     // 投递，否则丢弃。若允许缓冲，用户在无 UI 时（后台播放 / Activity 已销毁）点通知按钮，
     // 事件会滞留到下次打开 App 才被消费，表现为「一进应用播放模式自己跳了一档」。丢弃与
     // 旧实现 `handler == null` 时静默无反应完全同义，不退化。
-    private val _playModeToggleEvents = MutableSharedFlow<Unit>()
+    // extraBufferCapacity = 1：0 缓冲时有订阅者时 tryEmit 必失败（投递需挂起），
+    // 通知栏切换永远无效（CI 实测 + 独立 JVM 实验证实）。加 1 格缓冲后 tryEmit
+    // 在有订阅者时必成功；replay 仍为 0，事件不会滞留给迟到的订阅者。
+    private val _playModeToggleEvents = MutableSharedFlow<Unit>(replay = 0, extraBufferCapacity = 1)
     val playModeToggleEvents: SharedFlow<Unit> = _playModeToggleEvents.asSharedFlow()
+    /** 活跃订阅者数（供测试与诊断；SubscriptionCount 是 SharedFlow 的内建保证） */
+    val playModeToggleSubscriberCount = _playModeToggleEvents.subscriptionCount
 
     /**
      * 请求切换播放模式（通知栏 / 媒体卡片按钮 → UI 侧执行）。
@@ -107,8 +112,14 @@ class NasMusicApp : Application(), ImageLoaderFactory {
      * 状态，不归 PlayerManager），服务侧独立完成会与界面显示脱节。
      *
      * @return true 已投递给至少一个订阅者；false 当前无 UI 订阅（事件按设计丢弃）
+     *
+     * ⚠️ 不能直接用 tryEmit 返回值判断「有无订阅者」：无订阅者时 emit 立即完成
+     * （值被丢弃）tryEmit 也返回 true。必须先查 subscriptionCount。
      */
-    fun requestPlayModeToggle(): Boolean = _playModeToggleEvents.tryEmit(Unit)
+    fun requestPlayModeToggle(): Boolean {
+        if (_playModeToggleEvents.subscriptionCount.value == 0) return false
+        return _playModeToggleEvents.tryEmit(Unit)
+    }
 
     /** 智能电台 Manager（F2-3）：基于当前歌曲流派+歌手生成相似随机流 */
     lateinit var smartRadioManager: com.nasmusic.tv.backend.radio.SmartRadioManager
