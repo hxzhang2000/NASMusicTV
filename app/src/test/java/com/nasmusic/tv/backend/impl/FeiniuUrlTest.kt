@@ -255,4 +255,34 @@ class FeiniuUrlTest {
             )
         }
     }
+
+    @Test
+    fun `scheme-less host with port is accepted`() {
+        assertEquals(
+            "http://192.168.1.100:5666/music/api/v1/",
+            FeiniuUrl.normalize("192.168.1.100:5666")
+        )
+    }
+
+    @Test
+    fun `uppercase scheme is normalized`() {
+        assertEquals(
+            "http://192.168.1.100:5666/music/api/v1/",
+            FeiniuUrl.normalize("HTTP://192.168.1.100")
+        )
+    }
+
+    @Test
+    fun `duplicate slashes are collapsed`() {
+        assertEquals(
+            "http://192.168.1.100:5666/music/api/v1/",
+            FeiniuUrl.normalize("http://192.168.1.100//music")
+        )
+    }
+
+    @Test
+    fun `hostOf strips ipv6 brackets`() {
+        // 认证头 host 匹配用：OkHttp 的 request.url.host 不带方括号
+        assertEquals("2001:db8::1", FeiniuUrl.hostOf("http://[2001:db8::1]:5666/music/api/v1/"))
+    }
 }
