@@ -13,7 +13,6 @@ import com.nasmusic.tv.data.model.Song
 import com.nasmusic.tv.data.model.SongTechnicalInfo
 import com.nasmusic.tv.data.model.VersionInfo
 import com.nasmusic.tv.util.AppLog
-import com.nasmusic.tv.util.EncodingUtils
 import com.nasmusic.tv.util.UrlSanitizer
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
@@ -46,6 +45,11 @@ import java.util.concurrent.TimeUnit
  * - ID：全部为 **GUID 字符串**；`duration` 单位**已是毫秒**
  * - 封面按 `static/cover?coverId=<id>&size=<px>` 取（**不是**按曲目 ID）
  * - 播放流 `track/stream?guid=<guid>`（guid 是**查询参数**）
+ *
+ * **本适配器刻意不调用 `EncodingUtils.fixEncoding()`**，元数据字符串原样使用。
+ * 依据与理由见 [parseTrack] 上方的注释——简言之：该函数是为 Jellyfin 的
+ * 「GBK 字节被当 UTF-8 存」问题设计的，而它会**无条件剥掉结尾的 `?`**，
+ * 用在返回正常 UTF-8 的飞牛上是纯损失（"Why?" → "Why"）。
  *
  * Song ID 格式：`feiniu_<GUID>`，跨会话稳定。
  */
@@ -574,7 +578,7 @@ class FeiniuAdapter(private val appContext: Context? = null) : BackendAdapter {
                 val guid = str(obj, "guid") ?: return@mapNotNull null
                 Triple(
                     guid,
-                    EncodingUtils.fixEncoding(str(obj, "name")) ?: "未命名歌单",
+                    str(obj, "name") ?: "未命名歌单",
                     str(obj, "coverId")
                 )
             }
@@ -797,7 +801,7 @@ class FeiniuAdapter(private val appContext: Context? = null) : BackendAdapter {
 
     private fun parseAlbum(obj: JsonObject): Album? {
         val guid = str(obj, "guid") ?: return null
-        val name = EncodingUtils.fixEncoding(str(obj, "name"))?.takeIf { it.isNotBlank() } ?: return null
+        val name = str(obj, "name")?.takeIf { it.isNotBlank() } ?: return null
         val coverId = str(obj, "coverId")
         if (coverId != null) synchronized(albumCoverIds) { albumCoverIds[guid] = coverId }
         // AlbumDto.artists 是数组（可能为空），展示时取首位
@@ -805,7 +809,7 @@ class FeiniuAdapter(private val appContext: Context? = null) : BackendAdapter {
             ?.firstOrNull()
             ?.takeIf { it.isJsonObject }
             ?.asJsonObject
-            ?.let { EncodingUtils.fixEncoding(str(it, "name")) }
+            ?.let { str(it, "name") }
         // releaseDate 形如 "2019-05-01"，取前 4 位作年份
         val year = str(obj, "releaseDate")?.take(4)?.toIntOrNull()
         return Album(
@@ -820,7 +824,7 @@ class FeiniuAdapter(private val appContext: Context? = null) : BackendAdapter {
 
     private fun parseArtist(obj: JsonObject): Artist? {
         val guid = str(obj, "guid") ?: return null
-        val name = EncodingUtils.fixEncoding(str(obj, "name"))?.takeIf { it.isNotBlank() } ?: return null
+        val name = str(obj, "name")?.takeIf { it.isNotBlank() } ?: return null
         val coverId = str(obj, "coverId")
         if (coverId != null) synchronized(artistCoverIds) { artistCoverIds[guid] = coverId }
         return Artist(
@@ -840,14 +844,14 @@ class FeiniuAdapter(private val appContext: Context? = null) : BackendAdapter {
      */
     private fun parseTrack(obj: JsonObject, fallbackTrackNumber: Int = 0, audioSpec: JsonObject? = null): Song? {
         val guid = str(obj, "guid") ?: return null
-        val title = EncodingUtils.fixEncoding(str(obj, "title"))?.takeIf { it.isNotBlank() } ?: return null
+        val title = str(obj, "title")?.takeIf { it.isNotBlank() } ?: return null
 
         val coverId = str(obj, "coverId")
         if (coverId != null) synchronized(trackCoverIds) { trackCoverIds[guid] = coverId }
 
         val albumObj = obj.getAsJsonObject("album")
         val albumGuid = str(albumObj, "guid")
-        val albumName = EncodingUtils.fixEncoding(str(albumObj, "name"))
+        val albumName = str(albumObj, "name")
         val albumCoverId = str(albumObj, "coverId")
         if (albumGuid != null && albumCoverId != null) {
             synchronized(albumCoverIds) { albumCoverIds[albumGuid] = albumCoverId }
@@ -858,7 +862,7 @@ class FeiniuAdapter(private val appContext: Context? = null) : BackendAdapter {
         var firstArtistCoverId: String? = null
         obj.getAsJsonArray("artists")?.forEach { el ->
             val artistObj = el as? JsonObject ?: return@forEach
-            EncodingUtils.fixEncoding(str(artistObj, "name"))?.takeIf { it.isNotBlank() }?.let { artistNames.add(it) }
+            str(artistObj, "name")?.takeIf { it.isNotBlank() }?.let { artistNames.add(it) }
             val ag = str(artistObj, "guid")
             val ac = str(artistObj, "coverId")
             if (firstArtistGuid == null && ag != null) firstArtistGuid = ag

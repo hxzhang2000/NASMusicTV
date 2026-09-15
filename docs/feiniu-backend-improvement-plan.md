@@ -568,7 +568,7 @@ AGENTS.md 记载 v2.5.1 曾因「Gson 类型擦除 + R8」崩溃，本次改动�
 | Q1 | `audioSpec.bitrate` 的单位 | 填 0（`BITRATE_UNVERIFIED`），UI 显示 "—" | 参考项目只在 `AudioSpecDto` 声明该字段、**全项目零使用**；契约文档未提。`SongInfoPanel` 会渲染成 "N kbps"，猜错即 "320000 kbps"；也不能用「>10000 当作 bps」这类启发式——24bit/192kHz 立体声 FLAC 约 9216 kbps，启发式会误判 | 找一首已知码率的曲目（如 320kbps MP3），看服务端返回是 `320` 还是 `320000`，据此改为原值或 `/1000` |
 | Q2 | `AudioSpecDto` 是否含采样率 / 声道数 | 填 0，UI 显示 "—" | DTO 只有 `codec / container / duration / bitrate` 四个字段，确实没有 | 无需确认，除非 fnOS 后续版本扩充了字段 |
 | Q3 | `sort` 参数各字段名的可用集合 | 沿用参考项目实际用到的 4 组 | 超出参考项目使用范围的排序字段（如按标题排序）未验证 | 需要时抓包确认 |
-| Q4 | 中文元数据是否需要 `EncodingUtils.fixEncoding` | 已应用（与 Jellyfin 一致） | 参考项目是纯 UTF-8 解析，未做 GBK 兜底；本仓库对 NAS 后端统一应用 | 若发现中文名被误改（正常 UTF-8 被当 GBK 重解），去掉该调用 |
+| Q4 | ~~中文元数据是否需要 `EncodingUtils.fixEncoding`~~ | **已决定：不应用**（2026-09-15 移除了原先的 7 处调用） | 该函数是为 **Jellyfin 特有**的「GBK 字节被当 UTF-8 存」问题设计的（AGENTS.md 明确这么写），而 fnOS 返回正常 UTF-8、参考项目完全不做这层处理。更关键的是它会**无条件剥掉结尾的 `?`**（`EncodingUtils.kt:44-50`，不看有没有乱码都执行）——用在飞牛上收益为零、损失确定（"Why?" → "Why"） | 无需确认。若将来发现飞牛确实有 GBK 脏数据，应另写一个**只修复不删字符**的分支，而不是复用本函数 |
 
 ## 13. 附：参考项目关键文件索引
 

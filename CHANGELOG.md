@@ -51,6 +51,7 @@
 ### Changed
 - 封面主路径明确为 `Song.coverUrl` + `getCoverUrlCandidates`（经核查 `getCoverUrl(songId)` 在 UI 层**零调用**，其实现降级为只查内存缓存、不发起网络请求，避免非 suspend 方法在未知线程上做 IO）
 - `BackendRegistry` 构造新增可选 `appContext`（Application 级，不泄漏），由 `NasMusicApp` 传入
+- 飞牛适配器**不再调用** `EncodingUtils.fixEncoding()`：该函数会无条件剥掉结尾的 `?`（"Why?" → "Why"），而 fnOS 返回正常 UTF-8、参考项目 `fn-music-tv` 不做这层处理，用在飞牛上是纯损失。已移除原先的 7 处调用并改为直接 `str(...)`（见文档 §12 Q4）
 
 ### 遗留 / 未做（有意）
 - FNID 远程连接与中继模式（relay）：依赖 Release 构建期注入的签名密钥与外网 FNID 解析，本仓库无此配置，风险面过大
