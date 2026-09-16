@@ -7,6 +7,59 @@
 >
 > 类型：`Added`（新增） | `Changed`（变更） | `Fixed`（修复） | `Removed`（移除）
 
+## [Unreleased]
+
+> 2026-09-16 审查报告（`docs/code-review-2026-09-16.md`）修复落地：共 **25 项**（P0×2 / P1×7 / P2×11 / P3×5）。
+> **P1-3** 经产品裁定为有意设计、不修；**P1-9** 经核验为误报、撤回——两条保留编号留档，防止后续轮次重复上报。
+> 技术细节见 `docs/technical-overview.md` §10.155。
+>
+> 本批主线是**跨链路一致性**：「主链路修好了、旁路链路漏了」（认证头、空扫描保护、SAF 增量、去重语义都只在主链路上修过）。
+
+### Fixed
+
+**跨链路一致性**
+- **P0-1（阻断）下载链路未注入认证头**：`SongDownloadManager` 的下载 client 未走 `BackendAuthHeaders`，静默重登后下载持续 401。修复：补 `forHost(host)` 拦截器，host **精确匹配**使令牌不随 302 泄漏到第三方域
+- **P0-2 孤儿恢复分支永不命中**：下载中断后 `entity.audioPath` 为 null 时无法定位已落盘文件。修复：新增 `recoverFinalPathOrNull()`，按 artist/album/title 反推最终路径（含 ` (2..10)` 去重序号）
+- **P1-2 下载完成/失败通知不可见**：`DownloadViewModel.message` 存在但**全仓库无 UI 消费方**（唯一被消费的是 `MainActivity` 的 `viewModel.errorMessage`）。修复：改走 `NasMusicApp.downloadNotifyMessage` → `MainViewModel.showError`
+- **P1-6 SAF 增量判定失效**：`shouldOverwrite` 走 File 路径，SAF 下恒判为需覆盖。修复：按 `currentRoot` 分支，SAF 用 `resolveChildDoc` 取长度比对；失效的 `targetFile()` 删除
+- **P2-2 USB 扫描前缀不匹配**：`devicePath` 与 `file://$devicePath` 两种形态只匹配其一，过滤恒为 no-op。修复：同时匹配两种形态
+- **P2-4 USB 广播被 scheme 过滤**：单个 `IntentFilter` 的 `file` scheme 约束误伤了 `MEDIA_*` 之外的广播。修复：拆成 media/usb 两个 filter
+
+**并发与队列正确性**
+- **P1-5 `cancelAll` 重启 loop 致新旧 loop 并存**：`cancelAll` 末尾 `startLoop()` 在旧 loop 仍阻塞于 OkHttp socket 读时立即重启，**两个 loop 并存破坏串行队列保证**。修复：`call.cancel() + cancelRequested 标志 + drain 队列`，loop 常驻不重启
+- **P1-7 T3 三元组不同帧发布**：`queue` / `currentIndex` / `currentSong` 未在同一次 `_playerState.update` 写入。修复：REPEAT_ONE 回卷/末首与 `onPlaybackEnded` 的 REPEAT_ALL 均同帧发布
+- **P2-6 SmartRadio 陈旧任务回写**：上一轮生成任务未取消时会覆盖新结果。修复：以 `currentCoroutineContext()[Job].isActive` 为唯一准入判据（锁内二次确认）
+- **P2-8 飞牛全量拉取无单飞**：并发调用各自全量拉取。修复：新增 `allTracksRefreshMutex`，加锁后**锁内重查缓存**（否则单飞退化为串行 N 次全量拉取）
+- **P2-9 `/api/search` 阻塞 worker**：NanoHTTPD 每请求一线程，慢搜索会占满 worker。修复：`Semaphore(2)` + `tryAcquire` 失败直接 **503 快速失败不排队** + 慢查询耗时日志
+
+**静默截断与数据完整性**
+- **P2-7（数据丢失）飞牛分页静默截断**：末页判据为 `items.size() < size`，服务端某页因限流/过滤少发几条即被误判为末页，**后续页静默丢失且无任何日志**（收藏/全量搜索少歌）。修复：优先按 `data.total` 判定（`pagesFetched * size >= total`），`total` 缺失才回退旧判据；新增 `fetchPageEnvelope()` 取整个 `data` 信封
+- **P2-11 模型上传缺完整性校验**：`ModelTransferServer.handleUpload` 落盘后不校验。修复：补 SHA-256 比对 `EXPECTED_SHA256`（private → internal）；multipart header 解析加 **8KB 总量 + 2KB 单行**上限防内存放大
+- **P3-4 Room schema 未留档**：`exportSchema = true` 但**从未配 `room.schemaLocation`**——Room 只打警告且**一个 schema 都不导出**。修复：补 `ksp { arg("room.schemaLocation", …) }`，落盘 `app/schemas/…LocalMusicDatabase/3.json`（version 3 / 17 字段 + 1 索引），**需随代码入库**
+
+**边界与语义修正**
+- **P2-10 移除队列末尾正在播放项会跳歌**：移除末尾项使 ExoPlayer 进 `STATE_ENDED`，被 `onPlaybackEnded` 的 REPEAT_ALL 误判成「到队尾」而 `seekTo(0)`，**跳到不相干的歌**。修复：抽纯函数 `computeQueueRemoval()` + 显式 `seekTo` 对齐
+- **P3-5 天气电台 OWM→WMO 映射错乱**：`mapOpenWeatherMapCode` 返回的 20/50/60/70 **落不进任何 `WeatherMood` 区间**，导致 OpenWeatherMap 路径的天气电台**一律回退 CLOUDY**。修复：改回真 WMO 码 45/51/61/71；`describeWeatherCode` 对照 WMO 表重写
+- **P3-2 Demucs 逐帧边界检查恒不命中**：三个循环上界已保证（约 4200 万次/4min 死分支）。修复：删除，注释写明调用方须自行保证 `gi < totalSamples`
+- **P3-3 封面缓存实为随机淘汰**：`ConcurrentHashMap.keys.take(n)` 迭代序与插入序无关。修复：新增 `writtenAt` 时间表，按写入时间排序淘汰
+- **P3-1** 就地锁死 `saveOriginalFile` 必须保持 copy 语义的约定注释
+- **P2-1** 进度回调按 `PROGRESS_STEP` 节流；**P2-5** `_downloadStates` 统一 `.update{}`；**P1-1** `fullScan` 空扫描保留旧索引并 `loadFromCache()`；**P1-4** 空间预估 `* 1024L`（`SongDownloadManager` / `AutoDownloadController` 两处）；**P1-8** `/api/queue/add` 加 try/catch + title 非空 + URI scheme 白名单
+
+### Added
+- `app/schemas/com.nasmusic.tv.backend.local.db.LocalMusicDatabase/3.json` — Room schema 留档产物（P3-4 的副产物），**需随代码入库**
+- `QueueRemovalTest`（6 例）— 覆盖 `computeQueueRemoval` 全部边界，含「移除末尾当前项」这一原缺陷场景
+
+### Docs
+- `AGENTS.md`：更正「单测在本机跑不起来」的过时结论（实测 `testDebugUnitTest` 可正常运行）；补充「`assembleDebug` 不编译 test 源码」
+- `docs/technical-overview.md` §10.155 新增本节记录；§10.146 / §10.147 内三处「本机无法跑单测」加日期化更正标注（保留历史原貌，不改写）
+- `review-report-audit` 技能同步更正同一处过时结论
+
+### 说明
+- **过程中发现**：第一批修复（P0/P1/P2-1..6）里藏着一处**编译错误**——`SongDownloadManager.kt:530` 把缺 `else` 的 `if` 当表达式用。这说明该批修复当时**未经任何编译验证**。教训：**`file:line` 存在 ≠ 代码能编译**，「已修」的充分性必须由编译兜底。
+- **环境结论勘误**：开工时依据的「本机单测不可用（worker JVM 一启动即死）」**已过时并被实测推翻**——全量 518 例 0 失败。根因推断为**卡死的 Gradle 守护进程持锁**；再遇 worker 秒死应先 `./gradlew.bat --stop` 释放锁。
+- **验证**：`assembleDebug lintDebug` BUILD SUCCESSFUL，`lintDebug` 0 Error / 257 Warning（基线 256，差值为依赖版本类网络告警波动）；`testDebugUnitTest` **518 例 / 0 失败 / 0 错误**（512 基线 + 新增 6 例）。
+- **未 bump versionCode**：本次为审查后修复，未做版本发布。
+
 ## [v2.32.5] - 2026-09-15
 
 > 飞牛批次（v2.32.4）**审查后修复**：1 项阻断（播放解析链） + 1 项一致性（令牌刷新） + 2 项健壮性；测试总量 25 → 41 例（`FeiniuUrlTest` +4，新增 `BackendAuthHeadersTest` 6 例、`BackendHostOfUrlTest` 6 例）。

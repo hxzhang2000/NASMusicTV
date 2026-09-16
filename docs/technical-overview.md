@@ -8326,6 +8326,48 @@ onSearchSong = { keyword -> viewModel.searchNetworkSongs(keyword) },
 
 **版本**：v2.32.4 → **v2.32.5**（versionCode 143 → 144）
 
+### 10.155 v2.32.5 — 2026-09-16 审查报告 25 项修复落地（P0×2 / P1×7 / P2×11 / P3×5）
+
+**来源**：`docs/code-review-2026-09-16.md` 的发现项。其中 **P1-3**（手动下载绕过 `dedupeKey`）经产品裁定为**有意设计、不修**（手动点击是明确意图，dedupe 只应作用于自动下载路径），**P1-9**（`BackupTransferServer.handleUpload` 内存安全）经核验为**误报、撤回**（已有 content-length 预检 + 16KB 分块累积硬上限，未走 `parseBody`）。两条均**保留编号留档**，防止后续审查轮次重复上报。
+
+**主线：跨链路一致性**——本批问题呈「主链路修好了、旁路链路漏了」的统一模式，建议把「新增全局机制时列出全部消费链路」纳入 review checklist。
+- **P0-1** 下载链路未注入认证头：`SongDownloadManager` 的下载 client 补 `BackendAuthHeaders.forHost(host)` 拦截器，host **精确匹配**使令牌不随 302 泄漏到第三方域
+- **P0-2** 孤儿恢复分支永不命中：新增 `recoverFinalPathOrNull()`，按 artist/album/title 反推最终路径（含 ` (2..10)` 去重序号）
+- **P1-2** 下载通知不可见：`DownloadViewModel.message` 存在但**全仓库无 UI 消费方**；改走 `NasMusicApp.downloadNotifyMessage` → `MainViewModel.showError`（`errorMessage` 有 UI 消费）
+- **P1-6** SAF 增量判定失效：`shouldOverwrite` 按 `currentRoot` 分支，SAF 走 `resolveChildDoc` 取长度比对；失效的 `targetFile()` 删除
+- **P2-2** USB 扫描前缀不匹配：同时匹配 `devicePath` 与 `file://$devicePath` 两种形态
+- **P2-4** USB 广播被 scheme 过滤：拆成 media/usb 两个 `IntentFilter`（`file` scheme 只约束 `MEDIA_*`）
+
+**并发与队列正确性**
+- **P1-5** `cancelAll` 重启 loop 致新旧 loop 并存（破坏串行队列保证）：改为 `call.cancel() + cancelRequested 标志 + drain 队列`，loop 常驻不重启
+- **P1-7** T3 三元组不同帧发布：REPEAT_ONE 回卷/末首与 `onPlaybackEnded` 的 REPEAT_ALL 均改为**同帧写** `currentSong`
+- **P2-6** SmartRadio 陈旧任务回写：以 `currentCoroutineContext()[Job].isActive` 为唯一准入判据
+- **P2-8** 飞牛全量拉取无单飞：新增 `allTracksRefreshMutex`，加锁后**锁内重查缓存**（否则单飞退化为串行 N 次全量拉取）
+- **P2-9** `/api/search` 阻塞 worker：NanoHTTPD 每请求一线程，加 `Semaphore(2)` 且 `tryAcquire` 失败直接 **503 快速失败不排队** + 慢查询耗时日志
+
+**静默截断与数据完整性**
+- **P2-7** 飞牛分页静默截断：末页判据由 `items.size() < size` 改为**优先 `data.total`**（`pagesFetched * size >= total`）——服务端某页因限流/过滤少发几条会被误判为末页，后续页**静默丢失**；新增 `fetchPageEnvelope()` 取整个 `data` 信封，删掉只回 list 的 `fetchPageRaw()`。注意 `data.total` 是**记录条数**而非页数
+- **P2-11** 模型上传缺完整性校验：上传落盘后补 SHA-256 比对 `EXPECTED_SHA256`（由 private 放宽为 internal）；multipart header 解析加 **8KB 总量 + 2KB 单行**上限
+- **P3-4** Room schema 未留档：`exportSchema = true` 但**从未配 `room.schemaLocation`**，Room 只打警告且**一个 schema 都不导出**。补 `ksp { arg("room.schemaLocation", …) }` 后落盘 `app/schemas/com.nasmusic.tv.backend.local.db.LocalMusicDatabase/3.json`（version 3 / `local_songs` 17 字段 + 1 索引），**需随代码入库**
+
+**边界与语义修正**
+- **P2-10** `removeFromQueue` 移除末尾当前项会跳歌：移除末尾正在播放项使 ExoPlayer 进 `STATE_ENDED`，被 `onPlaybackEnded` 的 REPEAT_ALL 误判成「到队尾」而 `seekTo(0)`。修复：抽纯函数 `computeQueueRemoval()`（不依赖 ExoPlayer/Context，可单测）+ 显式 `seekTo` 对齐
+- **P3-5** OWM→WMO 映射错乱：`mapOpenWeatherMapCode` 原返回值 20/50/60/70 **落不进任何 `WeatherMood` 区间**（`RAINY`=45..48,51..57,61..67,80..82；`SNOWY`=71..77,85..86），导致 OpenWeatherMap 路径的天气电台**一律回退 CLOUDY**；`describeWeatherCode` 对照 WMO 表重写
+- **P3-2** 删除 Demucs `emit` 内恒不命中的逐帧边界检查（三个循环上界已保证，约 4200 万次/4min 死分支）；**代价**：调用方今后须自行保证 `gi < totalSamples`，已在注释写明
+- **P3-3** 封面缓存「随机淘汰」：`ConcurrentHashMap.keys.take(n)` 迭代序与插入序无关＝随机淘汰；新增 `writtenAt` 时间表，`evictOldest()` 改按写入时间排序
+- **P3-1** 就地锁死 `saveOriginalFile` 必须保持 copy 语义的约定注释
+- 小项：**P2-1** 进度回调按 `PROGRESS_STEP` 节流；**P2-5** `_downloadStates` 统一 `.update{}`；**P1-1** `fullScan` 空扫描保留旧索引；**P1-4** 空间预估 `* 1024L`（×2 处）；**P1-8** `/api/queue/add` 加 try/catch + title 非空 + URI scheme 白名单
+
+**过程中发现（重要）**：第一批修复（P0/P1/P2-1..6）里藏着一处**编译错误**——`SongDownloadManager.kt:530` 写作 `val baseName = if (entity.title.isBlank()) return null`，把缺 `else` 的 `if` 当表达式用。这说明该批修复当时**未经任何编译验证**。教训：**`file:line` 存在 ≠ 代码能编译**，「已修」的充分性必须由编译兜底。
+
+**测试**：新增 `QueueRemovalTest`（6 例，覆盖 `computeQueueRemoval` 全部边界，含「移除末尾当前项」这一原缺陷场景）。**全量单测 518 例 0 失败**（512 → 518）。
+
+**验证**：`assembleDebug lintDebug` **BUILD SUCCESSFUL**；`lintDebug` **0 Error** / 257 Warning（基线 256，差值来自 `NewerVersionAvailable`/`GradleDependency` 这类**网络相关**的依赖版本告警波动；改动文件上 0 命中）。注意 `assembleDebug` **不编译 test 源码**，新增测试文件必须跑 `testDebugUnitTest` 才能覆盖到。
+
+**⚠️ 环境结论勘误**：本节开工时依据的「本机单测不可用（worker JVM 一启动即死）」**已过时并被实测推翻**——`testDebugUnitTest` 本机可正常运行（全量 518 例约 50s，单类隔离约 30s）。根因推断为**卡死的 Gradle 守护进程持锁**而非永久性环境限制；再遇 worker 秒死应先 `./gradlew.bat --stop` 释放锁。**本机验证强度 = 「编译 + lint + 单测」**。已同步更正 `AGENTS.md` 及本文档 §10.146 / §10.147 内的三处旧表述。
+
+**版本**：v2.32.5（**未 bump versionCode**，本次为审查后修复，未做版本发布）
+
 ### 10.152 v2.32.3 — T5：删除死代码 `VocalRemovalProcessor.kt`（算法先归档，2026-09-14）
 
 **来源**：`logs_temp/code-review-full-report-2026-09-13.md` §T5 / `docs/code-review-2026-09-03.md` §P2。文件 348 行，全项目**零调用方**（`PlaybackService.kt:207` 实际 `val vocalRemovalProcessor = SpectralMaskProcessor()`——变量名是历史遗留，类型早就换过了；`PlayerManager.setVocalRemovalProcessor()` 的形参类型同样是 `SpectralMaskProcessor`）。
@@ -8559,6 +8601,7 @@ w0 = 2π·f0/fs ;  alpha = sin(w0)/(2q) ;  a0 = 1 + alpha
 - `:app:compileDebugKotlin` + `:app:compileDebugUnitTestKotlin`（`--no-daemon` + `-Pkotlin.compiler.execution.strategy=in-process`）**BUILD SUCCESSFUL**（55s），无新增警告
 - `:app:assembleDebug` **BUILD SUCCESSFUL**（6m28s）
 - ⚠️ **单测未执行**：本机 `testDebugUnitTest` 受 Gradle 测试 worker 环境问题阻塞（worker JVM 启动即死，exit `268435466`），本轮**只验证了测试源码可编译**，新增的 3 条虚拟时间用例**未经实际运行**，须由 CI 验证
+  - **〔2026-09-16 更正〕该环境问题已不复现**：`testDebugUnitTest` 本机可正常运行（同日实测全量 518 例 0 失败）。根因推断是**卡死的 Gradle 守护进程持锁**，`./gradlew.bat --stop` 可解。上述「本机无法跑单测」的表述**仅对当时成立**，不要再据此降级验证强度（详见 §10.155）
 - ⚠️ **听感未验证**：P1#3 等功率曲线的实际听感需真机确认（预期：crossfade 中途不再音量下陷）
 
 **版本**：v2.32.3 批次内（该版本尚未打 tag），versionCode 保持 142。
@@ -8606,6 +8649,7 @@ w0 = 2π·f0/fs ;  alpha = sin(w0)/(2q) ;  a0 = 1 + alpha
 - **已静态取证**：上表全部行号与代码形态；`assembleDebug`(1m8s) / `compileDebugUnitTestKotlin`(14s) / `assembleRelease`(9m31s) 均 BUILD SUCCESSFUL；lint `0 errors / 256 warnings`
 - **仍需真机**：T6 双缓冲的"写者套圈"边界（见 §10.138 边界说明）、T2 启动期 `NasMusicApp.kt:243` 主线程 `runBlocking` 的启动耗时、S1 老凭据解密、K 歌重采样/单声道修复的实际听感
 - **本机无法执行单测**：`testDebugUnitTest` 受 Gradle 守护进程环境问题阻塞（worker JVM 启动即死，exit `268435466`），只能验证"测试源码可编译"，不能声称"测试通过"
+  - **〔2026-09-16 更正〕已可执行**，该结论作废；本机验证手段为「编译 + lint + 单测」（详见 §10.155）
 
 #### 其他报告的未完成项（跨报告汇总）
 
@@ -8711,7 +8755,7 @@ https://huggingface.co/api/models/StemSplitio/htdemucs-ft-vocals-onnx/tree/main
 | `HqSeparationOrchestrator.kt` | 3 条，均为改动前既有（`DefaultLocale` × 2、`UseKtx` × 1） |
 | **`LinearResampler` 独立数值验证** | **39 PASS / 0 FAIL** |
 | **`LinearResamplerTest`（已提交，CI 跑）** | **OK (10 tests)** |
-| 单测（`./gradlew testDebugUnitTest`） | **本机仍无法运行**（测试 worker 启动即死）；新增的 `LinearResamplerTest` 只在 CI 上执行 |
+| 单测（`./gradlew testDebugUnitTest`） | **本机仍无法运行**（测试 worker 启动即死）；新增的 `LinearResamplerTest` 只在 CI 上执行 〔2026-09-16 更正：本机已可运行，该行作废〕 |
 | 真机试听 | **未做** |
 
 > P2-d / P2-e 两项改动只涉及 `isModelDownloaded()` 的大小判定与一个字段修饰符，未新增任何 lint 条目，warning 总数保持 256。
