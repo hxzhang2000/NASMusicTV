@@ -8326,7 +8326,7 @@ onSearchSong = { keyword -> viewModel.searchNetworkSongs(keyword) },
 
 **版本**：v2.32.4 → **v2.32.5**（versionCode 143 → 144）
 
-### 10.155 v2.32.5 — 2026-09-16 审查报告 25 项修复落地（P0×2 / P1×7 / P2×11 / P3×5）
+### 10.155 v2.32.6 — 2026-09-16 审查报告 25 项修复落地（P0×2 / P1×7 / P2×11 / P3×5）
 
 **来源**：`docs/code-review-2026-09-16.md` 的发现项。其中 **P1-3**（手动下载绕过 `dedupeKey`）经产品裁定为**有意设计、不修**（手动点击是明确意图，dedupe 只应作用于自动下载路径），**P1-9**（`BackupTransferServer.handleUpload` 内存安全）经核验为**误报、撤回**（已有 content-length 预检 + 16KB 分块累积硬上限，未走 `parseBody`）。两条均**保留编号留档**，防止后续审查轮次重复上报。
 
@@ -8366,7 +8366,7 @@ onSearchSong = { keyword -> viewModel.searchNetworkSongs(keyword) },
 
 **⚠️ 环境结论勘误**：本节开工时依据的「本机单测不可用（worker JVM 一启动即死）」**已过时并被实测推翻**——`testDebugUnitTest` 本机可正常运行（全量 518 例约 50s，单类隔离约 30s）。根因推断为**卡死的 Gradle 守护进程持锁**而非永久性环境限制；再遇 worker 秒死应先 `./gradlew.bat --stop` 释放锁。**本机验证强度 = 「编译 + lint + 单测」**。已同步更正 `AGENTS.md` 及本文档 §10.146 / §10.147 内的三处旧表述。
 
-**版本**：v2.32.5（**未 bump versionCode**，本次为审查后修复，未做版本发布）
+**版本**：v2.32.5 → **v2.32.6**（versionCode 144 → 145）
 
 ### 10.152 v2.32.3 — T5：删除死代码 `VocalRemovalProcessor.kt`（算法先归档，2026-09-14）
 

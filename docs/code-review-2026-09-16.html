@@ -112,7 +112,7 @@ val finalPath = entity.audioPath   // 恒为 null → 分支永不命中</pre>
     <p>SongDownloadManager 与 AutoDownloadController 的 onNotify 回调在装配时只做了 AppLog.d，注释写着"由 MainViewModel 在 init 时注册"，但<b>实际从未注册</b>。下载失败、存储不足、配额已满的提示用户全部看不到，表现为"点下载没反应"。</p>
     <p style="margin-top:8px"><b>接线点确认（2026-09-16）</b>：<code>DownloadViewModel.message</code> 虽存在，但<b>全仓库无 UI 消费方</b>——MainActivity 只订阅 <code>viewModel.errorMessage</code>（<code>MainActivity.kt:205,268</code>）。可靠通道是 <code>MainViewModel.showError()</code> → <code>errorMessage</code>。</p>
     <div class="fix">装配层把 onNotify 广播到进程级 SharedFlow，由 MainViewModel 收集后转 showError。</div>
-    <p style="margin-top:8px;color:var(--green);font-size:13.5px"><b style="color:var(--green)">本轮处置</b>：已按此实现（工作区已改、未提交）——<code>NasMusicApp.kt:112-113,365-370,424-428</code> → <code>MainViewModel.kt:2299-2307</code>。</p>
+    <p style="margin-top:8px;color:var(--green);font-size:13.5px"><b style="color:var(--green)">本轮处置</b>：已按此实现（工作区已改、已提交 <code>ac7bcdb</code>）——<code>NasMusicApp.kt:112-113,365-370,424-428</code> → <code>MainViewModel.kt:2299-2307</code>。</p>
   </div>
 
   <div class="issue" style="opacity:.75">
@@ -134,7 +134,7 @@ val finalPath = entity.audioPath   // 恒为 null → 分支永不命中</pre>
     <div class="file">backend/download/SongDownloadManager.kt:432-450（cancelAll） · :111-114（loop 启动）</div>
     <p><b>定性修正（2026-09-16 复核）</b>：原描述"与新入队存在竞态窗口"不够精确。真正的缺陷在 cancelAll 末尾的 <code>startLoop()</code>——先 <code>currentDownloadJob?.cancel()</code> 再<b>立即重启</b>，而旧 loop 此刻通常阻塞在 OkHttp 的 socket 读上（协程 cancel 是协作式的、不中断阻塞 IO），旧 loop 未退出、新 loop 已开始消费 → <b>两个 executeDownload 短暂并存</b>，破坏"串行队列只有一个消费者"的保证（两个 .part 并发写、currentCall 互相覆盖）。原先担心的"enqueue 落在标记 FAILED 与 startLoop 之间被误杀"只是同一处代码的次要表现。</p>
     <div class="fix">改为 call.cancel()（中断阻塞读）+ cancelRequested 标志（进行中任务直接落 FAILED、不再重试）+ drain 两条排队队列；loop 常驻唯一实例、不再重启。</div>
-    <p style="margin-top:8px;color:var(--green);font-size:13.5px"><b style="color:var(--green)">本轮处置</b>：已按此实现（工作区已改、未提交）——<code>SongDownloadManager.kt:100-101,111-114,188-193,432-450</code>。</p>
+    <p style="margin-top:8px;color:var(--green);font-size:13.5px"><b style="color:var(--green)">本轮处置</b>：已按此实现（工作区已改、已提交 <code>ac7bcdb</code>）——<code>SongDownloadManager.kt:100-101,111-114,188-193,432-450</code>。</p>
   </div>
 
   <div class="issue">
@@ -220,7 +220,7 @@ val finalPath = entity.audioPath   // 恒为 null → 分支永不命中</pre>
 
 <section>
   <h2 class="ok">本轮修复核对（2026-09-16）</h2>
-  <p style="font-size:13px;color:var(--muted);margin-bottom:8px">本报告定稿后同一轮落地的修复。状态均经逐条对照源码核验（非仅凭提交信息），改动目前都在<b>工作区、未提交</b>。<br>
+  <p style="font-size:13px;color:var(--muted);margin-bottom:8px">本报告定稿后同一轮落地的修复。状态均经逐条对照源码核验（非仅凭提交信息）。改动已提交为 <code>ac7bcdb</code>，随 <b>v2.32.6</b>（versionCode 145）发布。<br>
   <b>第二批（同日续做）</b>：原未修复的 10 项（<code>P2-7 / P2-8 / P2-9 / P2-10 / P2-11</code>、<code>P3-1 ~ P3-5</code>）已全部补齐，见下方表格下半部分。至此除 <code>P1-3</code>（产品裁定不修）与 <code>P1-9</code>（误报撤回）外，本报告全部发现项均已处置。</p>
   <div class="conclusion" style="margin-bottom:10px;border-left:3px solid #d9822b">
     <p style="font-size:13px"><b>⚠️ 附注（第二批开工时发现）</b>：首次执行 <code>assembleDebug</code> 时，暴露出<b>上一批（第一批）修复里的一处编译错误</b>——<code>SongDownloadManager.kt:530</code> 写作 <code>val baseName = if (entity.title.isBlank()) return null</code>，把缺 <code>else</code> 的 <code>if</code> 当表达式用（Kotlin 编译错误）。已改为 <code>if (entity.title.isBlank()) return null</code> + <code>val baseName = entity.title</code>。这说明第一批修复当时<b>没有经过编译验证</b>，其"已修"状态应以本轮编译结果为准。</p>
@@ -268,7 +268,7 @@ val finalPath = entity.audioPath   // 恒为 null → 分支永不命中</pre>
       <div class="pchip"><b>③ P1-1</b> 曲库清空风险</div>
       <div class="pchip"><b>④ P1-2</b> 通知不可见</div>
     </div>
-    <p style="margin-top:12px;font-size:13px;color:var(--muted)">P1-3 经产品裁定为有意设计、不修；P1-9 经核验为误报、撤回——两条均已移出修复清单。本轮 <b>P0（2 项）、P1（7 项）、P2（11 项）、P3（5 项）</b>的修复已在工作区落地（见上文「本轮修复核对」），尚未提交。<br>
+    <p style="margin-top:12px;font-size:13px;color:var(--muted)">P1-3 经产品裁定为有意设计、不修；P1-9 经核验为误报、撤回——两条均已移出修复清单。本轮 <b>P0（2 项）、P1（7 项）、P2（11 项）、P3（5 项）</b>的修复已落地（见上文「本轮修复核对」），提交 <code>ac7bcdb</code>，随 <b>v2.32.6</b>（versionCode 145）发布。<br>
     <b>验证口径（已勘误）</b>：<code>testDebugUnitTest</code> 在本机<b>可运行</b>——全量 <b>518 例 / 0 失败 / 0 错误</b>（512 基线 + 本轮新增 6 例），故验证强度为「编译 + lint + 全量单测」。<code>assembleDebug lintDebug</code> = <b>BUILD SUCCESSFUL</b> / lint <b>0 error</b> / 257 warning（基线 256，差值来自依赖版本类网络告警波动）。<code>app/schemas/</code> 为本次新生成产物，需随代码入库。</p>
   </div>
 </section>

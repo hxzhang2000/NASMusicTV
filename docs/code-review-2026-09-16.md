@@ -68,7 +68,7 @@
 - **影响**：下载失败、存储空间不足、配额已满等提示用户全部看不到，表现为"点下载没反应"。
 - **接线点确认（2026-09-16）**：`DownloadViewModel.message`（`DownloadViewModel.kt:197-207`）虽然存在，但**全仓库无 UI 消费方**——`message` 的消费方在 `MainActivity` 侧只订阅了 `viewModel.errorMessage`（`MainActivity.kt:205,268`）。因此可靠通道是 `MainViewModel.showError()` → `errorMessage`，`DownloadViewModel.message` 不可用。
 - **修复建议**：装配层把 `onNotify` 广播到进程级 `SharedFlow`，由 `MainViewModel` 收集后转 `showError`。
-- **本轮处置**：已按上述通道实现（工作区已改、未提交）——`NasMusicApp.kt:112-113` 新增 `downloadNotifyMessage`（replay=1）、`:365-370` 与 `:424-428` 两处 notify 均转发 → `MainViewModel.kt:2299-2307` 收集后调 `showError`。
+- **本轮处置**：已按上述通道实现（工作区已改、已提交 `ac7bcdb`）——`NasMusicApp.kt:112-113` 新增 `downloadNotifyMessage`（replay=1）、`:365-370` 与 `:424-428` 两处 notify 均转发 → `MainViewModel.kt:2299-2307` 收集后调 `showError`。
 
 ### ~~P1-3~~ 手动下载绕过 dedupeKey 去重 —— 已裁定为有意设计，不修
 - **文件**：`ui/viewmodel/DownloadViewModel.kt:56-75`（downloadSong）
@@ -85,7 +85,7 @@
 - **文件**：`backend/download/SongDownloadManager.kt:432-450`（cancelAll）、`:111-114`（loop 启动）
 - **问题（2026-09-16 复核，定性修正）**：原描述"与新入队存在竞态窗口"不够精确。真正的缺陷在 `cancelAll` 末尾的 `startLoop()`：它先 `currentDownloadJob?.cancel()` 再**立即重启**，而旧 loop 协程此刻通常正**阻塞在 OkHttp 的 socket 读上**——协程 cancel 是协作式的、不会中断阻塞 IO，于是旧 loop 尚未退出、新 loop 已开始消费，**两个 `executeDownload` 短暂并存**，直接破坏"串行队列只有一个消费者"的保证（两个 .part 并发写、`currentCall` 互相覆盖）。原先担心的"enqueue 落在标记 FAILED 与 startLoop 之间被误杀"只是同一处代码的次要表现。
 - **修复建议（已定稿）**：改为 `call.cancel()`（中断阻塞 socket 读）+ `cancelRequested` 标志（进行中任务在重试判定处直接落 FAILED、不再重试）+ drain 两条排队队列；**loop 常驻唯一实例、不再重启**。
-- **本轮处置**：已按此实现（工作区已改、未提交）——`cancelRequested` @Volatile（`:100-101`）、loop 在 `init` 常驻启动且 `startLoop()` 已删除（`:111-114`）、重试前判 `cancelRequested`（`:188-193`）、`cancelAll` 四步改造（`:432-450`）。
+- **本轮处置**：已按此实现（工作区已改、已提交 `ac7bcdb`）——`cancelRequested` @Volatile（`:100-101`）、loop 在 `init` 常驻启动且 `startLoop()` 已删除（`:111-114`）、重试前判 `cancelRequested`（`:188-193`）、`cancelAll` 四步改造（`:432-450`）。
 
 ### P1-6 SAF 增量导出判定失效
 - **文件**：`backend/export/SongExporter.kt:222-227` + `targetFile():313-319`
@@ -165,7 +165,7 @@
 
 ## 本轮修复核对（2026-09-16）
 
-> 本节记录本报告定稿后**同一轮落地的修复**。状态均经逐条对照源码核验（非仅凭提交信息），改动目前都在**工作区、未提交**。
+> 本节记录本报告定稿后**同一轮落地的修复**。状态均经逐条对照源码核验（非仅凭提交信息）。改动已提交为 `ac7bcdb`，随 **v2.32.6**（versionCode 145）发布。
 > 未列入者即未修复：`P2-7 / P2-8 / P2-9 / P2-10 / P2-11`、`P3-1 ~ P3-5`。
 >
 > **第二批（同日续做）**：上列 10 项已全部补齐，见下方表格下半部分。至此除 `P1-3`（产品裁定不修）
@@ -239,4 +239,4 @@ v2.26.32 → v2.32.5 这批变更（飞牛重写、认证头 provider 化、Demu
 
 优先修复顺序：**P0-1（下载 401）→ P0-2（孤儿恢复）→ P1-1（曲库清空风险）→ P1-2（通知不可见）**。（P1-3 经产品裁定为有意设计、不修；P1-9 经核验为误报、撤回——两条均已移出修复清单）
 
-本轮 **P0（2 项）、P1（7 项）、P2（11 项）、P3（5 项）** 的修复已在工作区落地（见上文「本轮修复核对」），尚未提交。
+本轮 **P0（2 项）、P1（7 项）、P2（11 项）、P3（5 项）** 的修复已落地（见上文「本轮修复核对」），提交 `ac7bcdb`，随 **v2.32.6**（versionCode 145）发布。
