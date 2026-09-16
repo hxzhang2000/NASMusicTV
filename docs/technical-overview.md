@@ -8398,6 +8398,9 @@ onSearchSong = { keyword -> viewModel.searchNetworkSongs(keyword) },
 **验证**：`compileDebugKotlin` BUILD SUCCESSFUL（无新增警告）；`assembleDebug` BUILD SUCCESSFUL；`assembleRelease` **BUILD SUCCESSFUL**（12m18s，含 `minifyReleaseWithR8` + `lintVitalRelease` + `optimizeReleaseResources`）；`testDebugUnitTest` **518 例 / 0 失败 / 0 错误**（与基线一致）；`lintDebug` **0 Error / 257 Warning**（与基线一致，`lint-results-debug.txt` 中 `NowPlayingScreen` / `LyricsView` / `CoverCarousel` **0 命中**）。产物 `NASMusicTV-release-v2-32-7.apk`（22,930,934 B ≈ 22.9MB），`output-metadata.json` 与 `BuildConfig` 双向核对 versionCode **146** / versionName **2.32.7**；`apksigner verify --print-certs` = `CN=Android Debug`（SHA-256 `43a9dec4…d59b`），与电视已装版同签名故 `adb install -r` 可原地升级。
 ⚠️ 首次 `assembleDebug` 曾在 `:app:dexBuilderDebug` 失败：`app/build/intermediates/desugar_graph/.../graph.bin (拒绝访问)`——**与本次改动无关**，属 Windows 文件占用；`./gradlew.bat --stop` + 删除 `app/build/intermediates/desugar_graph` 后重跑即通过。再遇同类报错不要怀疑代码。
 
+**真机验收（2026-09-16）**：用户在电视 `9R54_G8S`（SDK 22 / Android 5.1.1）上实测沉浸播放页**通过**——左半封面右缘虚化渐黑、右半黑底歌词、点封面退出沉浸均正常。
+→ **顺带证实一条渲染边界**：`CompositingStrategy.Offscreen` + `BlendMode.DstIn` 渐变遮罩在 **API 22 上确实生效**。此前担心「API 22 无离屏层时 `DstIn` 会把已绘制的整屏内容一起裁掉」，实测**不成立**，该遮罩配方可放心用于渐变 mask。另注意 `Modifier.blur` 在 API < 31 是 no-op，电视上无模糊、只剩渐变——**这是预期行为，不是 bug**。
+
 **版本**：v2.32.6 → **v2.32.7**（versionCode 145 → 146）
 
 ### 10.152 v2.32.3 — T5：删除死代码 `VocalRemovalProcessor.kt`（算法先归档，2026-09-14）

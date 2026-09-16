@@ -27,6 +27,7 @@
 - `lintDebug` **0 Error / 257 Warning**（与基线一致；`NowPlayingScreen` / `LyricsView` / `CoverCarousel` 在报告里 **0 命中**）
 - 产物 `NASMusicTV-release-v2-32-7.apk`（22.9MB），`output-metadata.json` 核对 versionCode **146** / versionName **2.32.7**，与 `BuildConfig.VERSION_CODE` / `VERSION_NAME` 一致
 - 签名 `CN=Android Debug`（SHA-256 `43a9dec4…d59b`），与电视已装版同签名 → `adb install -r` 可原地升级
+- **真机验收**：用户在电视（`9R54_G8S` / SDK 22 / Android 5.1.1）上实测沉浸播放页**通过**（2026-09-16）。这也顺带证实 `CompositingStrategy.Offscreen` + `BlendMode.DstIn` 渐变遮罩在 API 22 上确实生效（曾担心无离屏层会误裁已绘制内容，实测不成立）
 - **版本**：v2.32.6 → **v2.32.7**（versionCode 145 → 146）
 
 ## [v2.32.6] - 2026-09-16
