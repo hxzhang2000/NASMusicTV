@@ -362,9 +362,19 @@ class DemucsSeparator(private val context: Context) {
             var vocBufPos = 0
             var accBufPos = 0
 
-            // 写出一帧（人声 + 伴奏）；全局位置越界（末段零填充区）则跳过
-            fun emit(gi: Int, l: Float, r: Float, origL: Float, origR: Float) {
-                if (gi >= totalSamples) return
+            /**
+             * 写出一帧（人声 + 伴奏）。
+             *
+             * P3-2（2026-09-16）：删掉了原先每帧的 `if (gi >= totalSamples) return` 边界检查。
+             * 三个循环调用点的上界都保证 `gi = startSample + i < startSample + segLen <= totalSamples`
+             * （`segLen = min(SEGMENT_SAMPLES, totalSamples - startSample)`，
+             *  `directEnd = minOf(hop, segLen)`、`blendLen = minOf(prevL.size, segLen)`），
+             * 该分支恒为 false——4 分钟曲目约 4200 万次无谓判断，且 `gi` 参数随之成为死参数。
+             * ⚠️ 因此**调用方必须自行保证 gi < totalSamples**：末尾 pending 冲刷循环已用
+             * `if (gi >= totalSamples) break` 保证；新增调用点务必同样守住。
+             * 因为原分支从不命中，本次删除不改变输出字节（writtenFrames 计数亦不变）。
+             */
+            fun emit(l: Float, r: Float, origL: Float, origR: Float) {
                 if (vocBufPos + 4 > vocBuf.size) {
                     vocalsFos!!.write(vocBuf, 0, vocBufPos)
                     vocBufPos = 0
@@ -411,7 +421,7 @@ class DemucsSeparator(private val context: Context) {
                         // 第一段：直接写 [0, hop)
                         val directEnd = minOf(hop, segLen)
                         for (i in 0 until directEnd) {
-                            emit(startSample + i, vocL[i], vocR[i],
+                            emit(vocL[i], vocR[i],
                                 segmentInputBuf[i], segmentInputBuf[i + SEGMENT_SAMPLES])
                         }
                     } else {
@@ -421,14 +431,14 @@ class DemucsSeparator(private val context: Context) {
                             val w = if (prevL.size > 1) j.toFloat() / (prevL.size - 1) else 1f
                             val l = prevL[j] * (1f - w) + vocL[j] * w
                             val r = prevR[j] * (1f - w) + vocR[j] * w
-                            emit(startSample + j, l, r,
+                            emit(l, r,
                                 segmentInputBuf[j], segmentInputBuf[j + SEGMENT_SAMPLES])
                         }
                         // 交叠区之后的直接区 [OVERLAP, hop)
                         val directStart = prevL.size
                         val directEnd = minOf(hop, segLen)
                         for (i in directStart until directEnd) {
-                            emit(startSample + i, vocL[i], vocR[i],
+                            emit(vocL[i], vocR[i],
                                 segmentInputBuf[i], segmentInputBuf[i + SEGMENT_SAMPLES])
                         }
                     }
@@ -459,7 +469,7 @@ class DemucsSeparator(private val context: Context) {
                     val origIdx = hop + j
                     val origL = if (origIdx < SEGMENT_SAMPLES) segmentInputBuf[origIdx] else 0f
                     val origR = if (origIdx < SEGMENT_SAMPLES) segmentInputBuf[origIdx + SEGMENT_SAMPLES] else 0f
-                    emit(gi, pl[j], pr[j], origL, origR)
+                    emit(pl[j], pr[j], origL, origR)
                 }
             }
 

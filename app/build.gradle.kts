@@ -264,3 +264,22 @@ dependencies {
     androidTestImplementation("androidx.test.ext:junit:1.1.5")
     androidTestImplementation("androidx.test.espresso:espresso-core:3.5.1")
 }
+
+/**
+ * P3-4（2026-09-16）：Room schema 导出目录。
+ *
+ * `LocalMusicDatabase` 声明了 `exportSchema = true`，但此前**没有**配置 `room.schemaLocation`，
+ * Room 只能打印 "Schema export directory was not provided…" 警告并且**一个 schema 都不导出**——
+ * 于是「v3 破坏性迁移」这件事在仓库里没有任何可追溯的记录（P3-4 发现的问题）。
+ *
+ * 现在 schema JSON 会写到 `app/schemas/<DB 全限定名>/<version>.json`，需随代码一并提交入库。
+ * 用途不是支撑 Migration（本地索引仍走 `fallbackToDestructiveMigration`，可由重扫重建），
+ * 而是**留档**：将来若要改回 Migration、或需要核对某个版本的表结构/索引定义，有权威快照可比对。
+ *
+ * ⚠️ 每次 bump version 都会新增一个 JSON，**不要删除旧文件**——删掉就丢了版本历史。
+ * ⚠️ `DownloadDatabase` 为 `exportSchema = false`（承载用户数据、禁止破坏性迁移），
+ *    不在此目录产出 schema；若将来要给它写 Migration，应先改为 true 并把基线 schema 入库。
+ */
+ksp {
+    arg("room.schemaLocation", "$projectDir/schemas")
+}

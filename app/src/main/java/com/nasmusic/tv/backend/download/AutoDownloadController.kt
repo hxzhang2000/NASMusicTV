@@ -87,7 +87,9 @@ class AutoDownloadController(
 
     private fun estimateFromSong(song: Song): Long {
         if (song.durationMs > 0 && song.bitrate > 0) {
-            return song.durationMs / 1000 * song.bitrate / 8
+            // P1-4 修复（2026-09-16）：bitrate 单位为 kbps，结果为 KB，×1024 对齐到字节
+            // （与 SongDownloadManager.estimateFromSong 同步修正）
+            return song.durationMs / 1000 * song.bitrate / 8 * 1024L
         }
         return MAX_FILE_SIZE_FALLBACK
     }

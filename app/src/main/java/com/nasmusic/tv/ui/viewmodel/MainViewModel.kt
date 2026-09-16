@@ -2296,6 +2296,15 @@ showError(getApplication<Application>().getString(R.string.toggle_favorite_error
 
     init {
         // 下载域刷新本地歌曲时联动合并数据
+        // P1-2 修复（2026-09-16）：收集下载/自动下载提示 → errorMessage（UI 有消费方）。
+        // NasMusicApp.downloadNotifyMessage 是进程级单例通道（replay=1），
+        // MainViewModel 每次创建都会重新订阅，需要防重复弹同一条：replay 的那条只在
+        // 订阅建立时出现一次，用时间戳去重不必要——errorMessage 本身就是最后一条覆盖语义。
+        viewModelScope.launch {
+            nasMusicApp.downloadNotifyMessage.collect { msg ->
+                showError(msg)
+            }
+        }
         downloadVM.onLocalSongsChanged = {
             viewModelScope.launch {
                 _localSongs.value = nasMusicApp.localMusicRepository.loadFromCache()

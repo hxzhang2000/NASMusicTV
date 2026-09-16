@@ -220,8 +220,19 @@ class SmartRadioManager(
     }
 
     private suspend fun emitBatch(batch: List<Song>, seed: Song, onBatchReady: (List<Song>, SeedContext) -> Unit) {
+        // P2-6 修复（2026-09-16）：陈旧任务守卫。
+        // stop()/新 generate 会 cancel 旧 generateJob，但取消是协作式的——旧协程可能
+        // 恰好越过挂起点执行到此，把已清空的集合重新填充（回写脏数据）。
+        // 以「自己仍是当前 generateJob」为唯一准入条件；不满足则直接放弃本批。
+        // P2-6（2026-09-16）：用 isActive 判断自身协程是否已被 stop()/新 generate cancel。
+        // 不用「selfJob === generateJob」身份比较：generateJob = scope.launch{} 的赋值
+        // 与协程体启动存在时序竞态（多线程 dispatcher 下 body 可能先于赋值执行）。
+        // isActive 判据无此竞态；锁内二次确认为防「检查通过后才发生 cancel」的窗口。
+        val selfJob = kotlinx.coroutines.currentCoroutineContext()[kotlinx.coroutines.Job] ?: return
+        if (!selfJob.isActive) return
         val batchIds = batch.map { it.id }
         val totalPlayed = synchronized(stateLock) {
+            if (!selfJob.isActive) return
             currentBatchIds.clear()
             currentBatchIds.addAll(batchIds)
             playedIds.addAll(batchIds)

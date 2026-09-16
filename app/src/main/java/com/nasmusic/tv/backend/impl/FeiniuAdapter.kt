@@ -1,7 +1,6 @@
 package com.nasmusic.tv.backend.impl
 
 import android.content.Context
-import com.google.gson.JsonArray
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
 import com.nasmusic.tv.backend.BackendAdapter
@@ -143,6 +142,14 @@ class FeiniuAdapter(private val appContext: Context? = null) : BackendAdapter {
     private var allTracksCacheAt: Long = 0L
     @Volatile
     private var allTracksCacheKey: String = ""
+
+    /**
+     * P2-8 修复（2026-09-16）：全量曲目拉取单飞锁。
+     * 缓存 miss 时并发调用（搜索 + 收藏 + getSongsByIds 各自触发）会各自跑一次
+     * `fetchAllPages` 全量翻页（最多 MAX_PAGES 页），造成重复网络风暴。
+     * 加锁后排队者拿到锁会重查缓存，只有第一个真正拉取。
+     */
+    private val allTracksRefreshMutex = Mutex()
 
     // 安全修复（C-1）：不使用 trust-all，采用系统默认证书校验。
 
@@ -479,19 +486,31 @@ class FeiniuAdapter(private val appContext: Context? = null) : BackendAdapter {
 
     /** 全量曲目快照（带 TTL 缓存，仅用于搜索 / 批量查询） */
     private suspend fun loadAllTracks(): List<Song> {
-        val now = System.currentTimeMillis()
         val key = apiBase
+        val now = System.currentTimeMillis()
         if (allTracksCache.isNotEmpty() &&
             allTracksCacheKey == key &&
             now - allTracksCacheAt < TRACK_CACHE_TTL_MS
         ) {
             return allTracksCache
         }
-        val fresh = fetchAllPages("track/list", "sort" to "createdAt,desc") { parseTrack(it) }
-        allTracksCache = fresh
-        allTracksCacheAt = now
-        allTracksCacheKey = key
-        return fresh
+        // P2-8 修复（2026-09-16）：单飞——并发 miss 时只有一个真正全量拉取。
+        // 拿到锁后必须**重查缓存**：排队期间前一个调用可能已填充缓存（含 TTL 判定），
+        // 否则单飞退化为串行 N 次全量拉取。
+        return allTracksRefreshMutex.withLock {
+            val lockedAt = System.currentTimeMillis()
+            if (allTracksCache.isNotEmpty() &&
+                allTracksCacheKey == key &&
+                lockedAt - allTracksCacheAt < TRACK_CACHE_TTL_MS
+            ) {
+                return@withLock allTracksCache
+            }
+            val fresh = fetchAllPages("track/list", "sort" to "createdAt,desc") { parseTrack(it) }
+            allTracksCache = fresh
+            allTracksCacheAt = lockedAt
+            allTracksCacheKey = key
+            fresh
+        }
     }
 
     // ==================== 流 / 封面 / 歌词 / 技术信息 ====================
@@ -780,13 +799,27 @@ class FeiniuAdapter(private val appContext: Context? = null) : BackendAdapter {
         var currentPage = page.coerceAtLeast(1)
         var pagesFetched = 0
         while (pagesFetched < MAX_PAGES) {
-            val items = fetchPageRaw(path, currentPage, size, *extra) ?: break
+            // P2-7 修复（2026-09-16）：取整个 `data` 信封（同时含 list 与 total）。
+            // 原实现只用 `items.size() < size` 判末页——服务端某页因限流/过滤少发几条时
+            // 会被误判为末页，后续页被静默截断（收藏/全量搜索少歌且无任何日志）。
+            // 现在优先以 `data.total` 判定。
+            val data = fetchPageEnvelope(path, currentPage, size, *extra) ?: break
+            val items = data.getAsJsonArray("list") ?: break
             items.forEach { el ->
                 val obj = el as? JsonObject ?: return@forEach
                 parse(obj)?.let { result.add(it) }
             }
             pagesFetched++
-            if (singlePage || items.size() < size) break
+            if (singlePage || items.size() == 0) break
+            val total = data.get("total")?.asInt ?: -1
+            val reachedEnd = if (total >= 0) {
+                // 已请求 pagesFetched 页、每页 size 条，覆盖 total 即到末页
+                pagesFetched.toLong() * size >= total
+            } else {
+                // 服务端未回 total 时退回旧判据，保持向后兼容
+                items.size() < size
+            }
+            if (reachedEnd) break
             currentPage++
         }
         return result
@@ -798,21 +831,20 @@ class FeiniuAdapter(private val appContext: Context? = null) : BackendAdapter {
         vararg extra: Pair<String, Any?>
     ): List<JsonObject> = fetchAllPages(path, *extra) { it }
 
-    /** 取单页的 `data.list` 数组；失败或不存在时返回 null */
-    private suspend fun fetchPageRaw(
+    /** 取单页的 `data` 信封（同时含 `list` 与 `total`）；失败或不存在时返回 null */
+    private suspend fun fetchPageEnvelope(
         path: String,
         page: Int,
         size: Int,
         vararg extra: Pair<String, Any?>
-    ): JsonArray? = withAuthRetry {
+    ): JsonObject? = withAuthRetry {
         val url = FeiniuUrl.endpoint(
             apiBase, path,
             *extra,
             "page" to page,
             "size" to size
         )
-        val data = dataOf(get(url), url)
-        data?.getAsJsonArray("list")
+        dataOf(get(url), url)
     }
 
     /** 取 `data.total` 用于分页显示与随机取页 */

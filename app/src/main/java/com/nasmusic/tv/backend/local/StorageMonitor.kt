@@ -41,13 +41,20 @@ class StorageMonitor(private val context: Context) {
 
     /** 开始监听（Application.onCreate 中调用一次） */
     fun startListening() {
-        val filter = IntentFilter().apply {
+        // P2-4 修复（2026-09-16）：原实现把 MEDIA_* 与 USB_* 广播放进同一个 IntentFilter
+        // 并 addDataScheme("file")。USB ATTACHED/DETACHED 是 extras-only（无 data URI），
+        // 带 scheme 约束的 filter 收不到 → USB 插拔事件漏判（依赖 MEDIA_MOUNTED 兜底）。
+        // 拆成两个过滤：file scheme 只约束 MEDIA_*（其 intent.data 为 file:// 挂载点）；
+        // USB_* 用独立 filter，无 data 约束。
+        val mediaFilter = IntentFilter().apply {
             addAction(Intent.ACTION_MEDIA_MOUNTED)
             addAction(Intent.ACTION_MEDIA_UNMOUNTED)
             addAction(Intent.ACTION_MEDIA_REMOVED)
+            addDataScheme("file")
+        }
+        val usbFilter = IntentFilter().apply {
             addAction(UsbManager.ACTION_USB_DEVICE_ATTACHED)
             addAction(UsbManager.ACTION_USB_DEVICE_DETACHED)
-            addDataScheme("file")
         }
         receiver = object : BroadcastReceiver() {
             override fun onReceive(ctx: Context, intent: Intent) {
@@ -73,9 +80,11 @@ class StorageMonitor(private val context: Context) {
             }
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            context.registerReceiver(receiver, filter, Context.RECEIVER_NOT_EXPORTED)
+            context.registerReceiver(receiver, mediaFilter, Context.RECEIVER_NOT_EXPORTED)
+            context.registerReceiver(receiver, usbFilter, Context.RECEIVER_NOT_EXPORTED)
         } else {
-            context.registerReceiver(receiver, filter)
+            context.registerReceiver(receiver, mediaFilter)
+            context.registerReceiver(receiver, usbFilter)
         }
         refreshStorageDevices()
     }
@@ -83,7 +92,9 @@ class StorageMonitor(private val context: Context) {
     /** 停止监听（Application.onTerminate 中调用） */
     fun stopListening() {
         receiver?.let {
-            context.unregisterReceiver(it)
+            // P2-4：同一 receiver 注册了两个 filter（media/usb），各需 unregister 一次
+            runCatching { context.unregisterReceiver(it) }
+            runCatching { context.unregisterReceiver(it) }
             receiver = null
         }
     }

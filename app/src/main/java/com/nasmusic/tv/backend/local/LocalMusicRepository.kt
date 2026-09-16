@@ -179,6 +179,15 @@ class LocalMusicRepository(
         // P0-2 修复：使用 buildScannedList() 替代 scanner.scanAllMusic()，
         // 确保下载目录也被扫描（buildScannedList 合并 MediaStore + 下载目录）。
         val scanned = buildScannedList()
+        // P1-1 修复（2026-09-16）：空扫描保护。buildScannedList 在 MediaStore 查询异常时
+        // 会吞异常返回空列表（MusicScanner.scanAllMusic 的宽泛 catch），此时 deleteAll()
+        // 会把整个本地曲库清空——B3 修复的保护在 fullScan 重构中丢失了。
+        // 扫描结果为空 ≠ 用户删光了所有文件，更可能是权限/查询异常，
+        // 保守起见保留旧索引并返回旧缓存数据。
+        if (scanned.isEmpty()) {
+            AppLog.w(TAG, "fullScan: scanned list is empty, keep existing index (destructive-rebuild guard)")
+            return@withContext loadFromCache()
+        }
         dao.deleteAll()
         dao.insertAll(scanned.map { it.toEntity() })
         scanned.map { it.toSong() }
@@ -198,8 +207,16 @@ class LocalMusicRepository(
     /** USB 设备变更时的定向扫描 */
     suspend fun scanUsbDevice(devicePath: String): ScanResult = withContext(Dispatchers.IO) {
         val scanned = scanner.scanPath(devicePath, StorageType.USB)
+        // P2-2 修复（2026-09-16）：LocalSongEntity.path 存的是「file://<绝对路径>」URI，
+        // 而传入的 devicePath 是挂载点裸路径 → 原前缀匹配永不命中，删除集恒为空，
+        // 已移除文件的陈旧索引条目永远残留（上次审查 P0-7 修复因前缀不匹配实际是 no-op）。
+        // 两种形态都匹配，兼容历史数据与未来 path 语义调整。
         val deletedPaths = dao.getAllSongs()
-            .filter { it.storageType == StorageType.USB.name && it.path.startsWith(devicePath) }
+            .filter { it.storageType == StorageType.USB.name }
+            .filter { entity ->
+                entity.path.startsWith(devicePath) ||
+                    entity.path.startsWith("file://$devicePath")
+            }
             .map { it.path }
 
         // 重建该 USB 设备的索引（先删旧再插新，避免残留已移除文件）

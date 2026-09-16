@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NASMusicTV 代码审查报告 · 2026-09-16</title>
+<style>
+:root{
+  --bg:#0f1115;--panel:#171a21;--card:#1c2029;--line:#2a2f3a;
+  --text:#e8eaf0;--muted:#9aa1ad;
+  --red:#ff5d5d;--orange:#ffb454;--blue:#6ca8ff;--green:#4ecf8d;--purple:#b48cff;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:"Segoe UI","Microsoft YaHei",system-ui,sans-serif;background:var(--bg);color:var(--text);line-height:1.65;padding:32px 16px}
+.wrap{max-width:1080px;margin:0 auto}
+header{border-bottom:1px solid var(--line);padding-bottom:20px;margin-bottom:28px}
+h1{font-size:26px;font-weight:700;letter-spacing:.5px}
+.meta{color:var(--muted);font-size:13px;margin-top:8px;line-height:1.8}
+.meta code{background:#222733;padding:1px 6px;border-radius:4px;font-size:12px;color:var(--blue)}
+.metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin:24px 0}
+.metric{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px 18px}
+.metric .num{font-size:30px;font-weight:700}
+.metric .lbl{font-size:13px;color:var(--muted);margin-top:2px}
+.metric.p0 .num{color:var(--red)}.metric.p1 .num{color:var(--orange)}
+.metric.p2 .num{color:var(--blue)}.metric.p3 .num{color:var(--purple)}
+section{margin-bottom:34px}
+h2{font-size:20px;margin-bottom:14px;padding-left:12px;border-left:4px solid var(--blue)}
+h2.p0{border-color:var(--red)}h2.p1{border-color:var(--orange)}h2.p2{border-color:var(--blue)}h2.p3{border-color:var(--purple)}h2.ok{border-color:var(--green)}h2.sum{border-color:var(--text)}
+.issue{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px 18px;margin-bottom:14px}
+.issue .ttl{font-weight:700;font-size:15.5px;margin-bottom:6px}
+.issue .ttl .tag{display:inline-block;font-size:11px;font-weight:700;padding:1px 8px;border-radius:20px;margin-right:8px;vertical-align:2px}
+.tag.p0{background:rgba(255,93,93,.15);color:var(--red)}
+.tag.p1{background:rgba(255,180,84,.15);color:var(--orange)}
+.issue .file{font-size:12.5px;color:var(--blue);font-family:Consolas,monospace;margin-bottom:8px}
+.issue p{font-size:14px;color:var(--text)}
+.issue p b{color:var(--orange)}
+.issue .fix{font-size:13.5px;color:var(--green);margin-top:8px}
+.issue .fix::before{content:"修复建议 · ";font-weight:700;color:var(--green)}
+pre{background:#10131a;border:1px solid var(--line);border-radius:8px;padding:12px 14px;font-size:12.5px;overflow-x:auto;margin-top:8px;font-family:Consolas,"Courier New",monospace;color:#c9d4e3;line-height:1.55}
+table{width:100%;border-collapse:collapse;font-size:13.5px;margin:10px 0 4px}
+th,td{border:1px solid var(--line);padding:8px 12px;text-align:left;vertical-align:top}
+th{background:#222733;font-weight:600;color:var(--text)}
+td code{background:#222733;padding:1px 5px;border-radius:4px;font-size:12px;color:var(--blue);font-family:Consolas,monospace}
+tr:nth-child(even) td{background:rgba(255,255,255,.015)}
+.okbadge{color:var(--green);font-weight:700}
+.warnbadge{color:var(--orange);font-weight:700}
+.conclusion{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:18px 20px;font-size:14px}
+.conclusion li{margin:6px 0 6px 18px}
+.priority{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px}
+.pchip{background:#222733;border:1px solid var(--line);border-radius:8px;padding:8px 14px;font-size:13px}
+.pchip b{color:var(--red)}
+footer{margin-top:40px;color:var(--muted);font-size:12px;text-align:center;border-top:1px solid var(--line);padding-top:16px}
+@media(max-width:720px){.metrics{grid-template-columns:repeat(2,1fr)}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <h1>NASMusicTV 代码审查报告</h1>
+  <div class="meta">
+    审查基线 <code>693d43c</code>（v2.32.5, code 144） · 对比基线 <code>97cd181</code>（2026-09-07）<br>
+    其间 78 个提交 · 257 文件变更（+32,677 / −9,859 行） · 全量精读主源码约 60k 行 Kotlin
+  </div>
+</header>
+
+<div class="metrics">
+  <div class="metric p0"><div class="num">2</div><div class="lbl">P0 阻断</div></div>
+  <div class="metric p1"><div class="num">7</div><div class="lbl">P1 严重</div></div>
+  <div class="metric p2"><div class="num">11</div><div class="lbl">P2 建议</div></div>
+  <div class="metric p3"><div class="num">5</div><div class="lbl">P3 微调</div></div>
+</div>
+
+<section>
+  <h2 class="p0">P0 — 阻断问题</h2>
+
+  <div class="issue">
+    <div class="ttl"><span class="tag p0">P0-1</span>下载链路未注入后端认证头，飞牛后端的下载必失败</div>
+    <div class="file">backend/download/SongDownloadManager.kt（构造参数 client） · StreamUrlResolver.kt</div>
+    <p>飞牛是第一个需要 <b>Authorization: &lt;userToken&gt;</b> 请求头的后端。播放链路（ExoPlayer / Coil）通过 BaiduHttpDataSourceFactory 拦截器 + BackendAuthHeaders.forHost(host) 注入了认证头（F-2 修复），但<b>下载链路使用独立自建的 OkHttpClient，没有任何拦截器</b>——downloadFile() 与 headContentLength() 的请求对飞牛 track/stream 端点必然 401，重试 3 次后失败。同链路的 HQ 人声分离下载（HqSeparationOrchestrator.resolveInputPath）也是独立裸 client，同样 401。</p>
+    <pre>private val client: OkHttpClient = OkHttpClient.Builder()
+    .connectTimeout(15, TimeUnit.SECONDS)
+    .readTimeout(30, TimeUnit.SECONDS)
+    .build()   // ← 无拦截器，飞牛流地址 401</pre>
+    <div class="fix">给下载 client 添加与播放链路相同的 host 精确匹配拦截器（复用 BackendAuthHeaders.forHost），或在 NasMusicApp 构造共享的"下载用 OkHttpClient"注入。</div>
+  </div>
+
+  <div class="issue">
+    <div class="ttl"><span class="tag p0">P0-2</span>recoverAfterCrash 孤儿恢复分支永不命中，上次修复无效</div>
+    <div class="file">backend/download/SongDownloadManager.kt（recoverAfterCrash 分支 2） · DownloadRepository.newDownloadingEntity</div>
+    <p>上次 P1-5 修复"崩溃在 rename 后、DB 提交前 → 检查最终文件是否已存在"，但恢复代码读的是 <b>entity.audioPath</b>，而 DOWNLOADING 记录创建时 <b>audioPath 恒为 null</b>（只填 tmpPath）——孤儿恢复分支永远不进。真正下载完成但 DB 未提交的文件永远留在磁盘成为不可见孤儿，重新下载还会生成 " (2)" 重复文件。</p>
+    <pre>// newDownloadingEntity: audioPath = null, tmpPath = tmpPath, status = DOWNLOADING
+// recoverAfterCrash:
+val finalPath = entity.audioPath   // 恒为 null → 分支永不命中</pre>
+    <div class="fix">DOWNLOADING 记录增加 finalPath 字段（构建路径时已知），或恢复时用 paths.buildFinalPath(song) 反推。</div>
+  </div>
+</section>
+
+<section>
+  <h2 class="p1">P1 — 严重问题（7 项有效 · 另 2 项移出）</h2>
+
+  <div class="issue">
+    <div class="ttl"><span class="tag p1">P1-1</span>fullScan() 空扫描保护失效，注释与实现矛盾</div>
+    <div class="file">backend/local/LocalMusicRepository.kt:159-175 · MusicScanner.kt:88-91</div>
+    <p>注释声称"扫描失败旧索引保持不变"（B3 修复），但 MusicScanner 吞异常返回空列表后，fullScan 仍执行 <b>deleteAll() → 插入空</b>——MediaStore 查询异常时整个本地曲库被清空。上次审查的 P0 修复在 fullScan 重构时丢失。</p>
+    <div class="fix">scanned.isEmpty() 时直接返回旧缓存，不执行 deleteAll。</div>
+  </div>
+
+  <div class="issue">
+    <div class="ttl"><span class="tag p1">P1-2</span>下载失败/空间不足的用户通知被降级为纯日志</div>
+    <div class="file">NasMusicApp.kt:355-359（onNotify lambda）</div>
+    <p>SongDownloadManager 与 AutoDownloadController 的 onNotify 回调在装配时只做了 AppLog.d，注释写着"由 MainViewModel 在 init 时注册"，但<b>实际从未注册</b>。下载失败、存储不足、配额已满的提示用户全部看不到，表现为"点下载没反应"。</p>
+    <p style="margin-top:8px"><b>接线点确认（2026-09-16）</b>：<code>DownloadViewModel.message</code> 虽存在，但<b>全仓库无 UI 消费方</b>——MainActivity 只订阅 <code>viewModel.errorMessage</code>（<code>MainActivity.kt:205,268</code>）。可靠通道是 <code>MainViewModel.showError()</code> → <code>errorMessage</code>。</p>
+    <div class="fix">装配层把 onNotify 广播到进程级 SharedFlow，由 MainViewModel 收集后转 showError。</div>
+    <p style="margin-top:8px;color:var(--green);font-size:13.5px"><b style="color:var(--green)">本轮处置</b>：已按此实现（工作区已改、未提交）——<code>NasMusicApp.kt:112-113,365-370,424-428</code> → <code>MainViewModel.kt:2299-2307</code>。</p>
+  </div>
+
+  <div class="issue" style="opacity:.75">
+    <div class="ttl"><span class="tag p1">P1-3</span>手动下载绕过 dedupeKey 去重 —— ✅ 已裁定为有意设计，不修</div>
+    <div class="file">ui/viewmodel/DownloadViewModel.kt:56-75</div>
+    <p>原发现：手动下载只查内存状态不查 findCompletedByDedupe，同一首歌跨平台可重复下载。</p>
+    <p style="margin-top:6px"><b style="color:var(--green)">产品裁定（2026-09-16）：有意设计，无需修改。</b>用户手动点击下载是明确意图，跨平台重复下载是用户自己的选择；dedupe 拦截只应作用于自动下载路径（AutoDownloadController 已有检查），不应拦截手动操作。此条目留档防止后续审查重复上报。</p>
+  </div>
+
+  <div class="issue">
+    <div class="ttl"><span class="tag p1">P1-4</span>空间预估公式单位错 1000 倍</div>
+    <div class="file">SongDownloadManager.estimateFromSong · AutoDownloadController.estimateFromSong</div>
+    <p><code>durationMs / 1000 * bitrate / 8</code> 中 bitrate 是 kbps，结果单位是 KB 却按字节比较——160kbps×240s÷8=4800 被当 4.8KB，预检形同虚设。缓解：下载中有 hasRoomFor(0) 复查与 Content-Length 校验兜底不会写爆磁盘，但前置提示与 AutoDownload 空间判断失效。</p>
+    <div class="fix">结果 ×1024 补单位。</div>
+  </div>
+
+  <div class="issue">
+    <div class="ttl"><span class="tag p1">P1-5</span>cancelAll 重启 loop 造成新旧 loop 并存，破坏串行队列保证</div>
+    <div class="file">backend/download/SongDownloadManager.kt:432-450（cancelAll） · :111-114（loop 启动）</div>
+    <p><b>定性修正（2026-09-16 复核）</b>：原描述"与新入队存在竞态窗口"不够精确。真正的缺陷在 cancelAll 末尾的 <code>startLoop()</code>——先 <code>currentDownloadJob?.cancel()</code> 再<b>立即重启</b>，而旧 loop 此刻通常阻塞在 OkHttp 的 socket 读上（协程 cancel 是协作式的、不中断阻塞 IO），旧 loop 未退出、新 loop 已开始消费 → <b>两个 executeDownload 短暂并存</b>，破坏"串行队列只有一个消费者"的保证（两个 .part 并发写、currentCall 互相覆盖）。原先担心的"enqueue 落在标记 FAILED 与 startLoop 之间被误杀"只是同一处代码的次要表现。</p>
+    <div class="fix">改为 call.cancel()（中断阻塞读）+ cancelRequested 标志（进行中任务直接落 FAILED、不再重试）+ drain 两条排队队列；loop 常驻唯一实例、不再重启。</div>
+    <p style="margin-top:8px;color:var(--green);font-size:13.5px"><b style="color:var(--green)">本轮处置</b>：已按此实现（工作区已改、未提交）——<code>SongDownloadManager.kt:100-101,111-114,188-193,432-450</code>。</p>
+  </div>
+
+  <div class="issue">
+    <div class="ttl"><span class="tag p1">P1-6</span>SAF 增量导出判定失效，shouldOverwrite 对 SAF 恒真</div>
+    <div class="file">backend/export/SongExporter.kt:222-227, 313-319</div>
+    <p>shouldOverwrite 里 targetFile 仅在 ExportRoot.File 分支返回非 null，SAF 分支恒 null → shouldOverwrite 恒 true，SAF 路径只剩 export_records 过滤。清掉导出记录后重导，SAF 目标上同名不同长文件被无条件覆盖。</p>
+    <div class="fix">SAF 分支用 resolveChildDoc 反查目标 DocumentFile 长度对比。</div>
+  </div>
+
+  <div class="issue">
+    <div class="ttl"><span class="tag p1">P1-7</span>next() REPEAT_ONE / 队尾 REPEAT_ALL 分支绕过 T3 三元组同帧发布</div>
+    <div class="file">player/PlayerManager.kt:774-796 · onPlaybackEnded</div>
+    <p>REPEAT_ONE 分支只 update currentIndex 不更新 currentSong，依赖 onMediaItemTransition 补齐——队列快照与 ExoPlayer 内部队列短暂不一致时 UI 读到"新索引 + 旧歌名"中间态。onPlaybackEnded 的 REPEAT_ALL 用 playQueue(queue, 0) 整队重放，queue 已被改动时会回滚用户操作。</p>
+    <div class="fix">update 中同时写 currentSong；REPEAT_ALL 重放改 seekTo(0)。</div>
+  </div>
+
+  <div class="issue">
+    <div class="ttl"><span class="tag p1">P1-8</span>RemoteControlServer /api/queue/add 反序列化不可信 JSON 直接入队</div>
+    <div class="file">net/RemoteControlServer.kt:170-176</div>
+    <p>手机提交的任意 JSON 直接 gson.fromJson 成 Song 后入队，无字段校验。Song 含 streamUrl/path——LAN 内任何设备可注入任意 URI。服务器绑定 0.0.0.0，其余端点都做了 index 边界校验，唯独此端点无。</p>
+    <div class="fix">校验必填字段与 URI scheme 白名单（http/https/content/file）。</div>
+  </div>
+
+  <div class="issue" style="opacity:.75">
+    <div class="ttl"><span class="tag p1">P1-9</span><s>BackupTransferServer 上传路径的内存安全待确认</s> —— 已核验为误报，撤回</div>
+    <div class="file">net/BackupTransferServer.kt:343-397（handleUpload）</div>
+    <p><b style="color:var(--green)">核验结论（2026-09-16）：误报，撤回。</b>handleUpload 并未使用 parseBody（注释明确说明为规避部分 ROM 的 <code>Charset.defaultCharset()</code> 非 UTF-8 才改为直读 inputStream）。它先按 content-length 预检（:348-356，&gt;MAX_UPLOAD_BYTES 直接拒绝），再以 16KB 分块累积读取、totalRead &gt; MAX_UPLOAD_BYTES 时<b>立即中止</b>（:359-371）——上限判定发生在读入过程中而非之后；且刻意不按 Content-Length 预分配数组（防客户端谎报导致巨型 ByteArray OOM）。内存安全已达标，无需修复。</p>
+    <p style="margin-top:6px">此条目留档防止后续审查重复上报。</p>
+  </div>
+</section>
+
+<section>
+  <h2 class="p2">P2 — 建议修复</h2>
+  <table>
+    <tr><th style="width:64px">#</th><th style="width:280px">位置</th><th>问题 → 建议</th></tr>
+    <tr><td>P2-1</td><td><code>SongDownloadManager:214-219</code></td><td>onProgress 每 8KB 块全 Map 拷贝 + StateFlow 发布，与"每 512KB"注释不符 → 按 PROGRESS_STEP 节流</td></tr>
+    <tr><td>P2-2</td><td><code>LocalMusicRepository:199-217</code></td><td>scanUsbDevice 删除判定 path.startsWith(devicePath)，但 path 存 file:// URI → 恒不匹配，陈旧条目残留 → 前缀补 file://</td></tr>
+    <tr><td>P2-3</td><td><code>NasMusicApp:404-407</code></td><td>下载入库 albumId=mediaStoreId（路径哈希当专辑 ID）→ albumart 封面必 404 → albumId 置 0 走内嵌封面</td></tr>
+    <tr><td>P2-4</td><td><code>StorageMonitor:52-70</code></td><td>IntentFilter 对 USB ATTACHED 广播也加 addDataScheme("file")，extras-only 广播可能被过滤 → scheme 只加给 MEDIA_* 动作</td></tr>
+    <tr><td>P2-5</td><td><code>SongDownloadManager</code></td><td>_downloadStates read-modify-write 非原子，与 cancelAll 并发可能丢状态 → 改 .update { }</td></tr>
+    <tr><td>P2-6</td><td><code>SmartRadioManager</code></td><td>stopInternal 清空集合后，在跑的 generateJob 以旧引用继续回写 → 协程内校验自身是否仍是 currentJob</td></tr>
+    <tr><td>P2-7</td><td><code>FeiniuAdapter.fetchAllPages</code></td><td>以 items.size()&lt;size 判末页，服务端单页少发则静默截断 → 按 data.total 计算页数</td></tr>
+    <tr><td>P2-8</td><td><code>FeiniuAdapter.loadAllTracks</code></td><td>缓存 miss 并发调用重复全量拉取（无单飞）→ 加 refresh Mutex</td></tr>
+    <tr><td>P2-9</td><td><code>RemoteControlServer.handleSearch</code></td><td>runBlocking + 10s 超时阻塞 NanoHTTPD worker 线程 → 记录慢查询指标</td></tr>
+    <tr><td>P2-10</td><td><code>PlayerManager.removeFromQueue</code></td><td>移除末尾当前项时 ENDED → next(mode) 可能跳到不该跳的歌 → 边界补测试</td></tr>
+    <tr><td>P2-11</td><td><code>ModelTransferServer</code></td><td>上传无 SHA-256 校验（下载路径有）；part headers 无大小上限 → 补校验 + 限制</td></tr>
+  </table>
+</section>
+
+<section>
+  <h2 class="p3">P3 — 微调</h2>
+  <table>
+    <tr><th style="width:64px">#</th><th style="width:280px">位置</th><th>问题</th></tr>
+    <tr><td>P3-1</td><td><code>HqSeparationOrchestrator.finally</code></td><td>saveOriginalFile(copy) 后立即 cleanupTempFile——当前安全，改 rename 语义会破坏，建议注释锁死约定</td></tr>
+    <tr><td>P3-2</td><td><code>DemucsSeparator.emit</code></td><td>每帧闭包 + 边界检查约 4200 万次/4min 曲目，gi&gt;=totalSamples 判断可前置</td></tr>
+    <tr><td>P3-3</td><td><code>CoverUrlPersistentCache.evictOldest</code></td><td>ConcurrentHashMap 无序迭代"近似 LRU"实为随机淘汰</td></tr>
+    <tr><td>P3-4</td><td><code>LocalMusicDatabase v3</code></td><td>破坏性迁移 + exportSchema 并存，建议 bump 时 schema JSON 入库留档</td></tr>
+    <tr><td>P3-5</td><td><code>WeatherApi</code> WMO 映射</td><td>51-77 段映射重叠，极端 code 落错分支，对照 WMO 表修正</td></tr>
+  </table>
+</section>
+
+<section>
+  <h2 class="ok">上次报告（2026-09-07）修复核对</h2>
+  <table>
+    <tr><th>上次编号</th><th>状态</th></tr>
+    <tr><td>P0-1 downloadNow 并发</td><td class="okbadge">✅ 已移除，统一走 enqueue</td></tr>
+    <tr><td>P0-2 fullScan 漏下载目录</td><td class="okbadge">✅ 已改 buildScannedList()（引入本次 P1-1 退化）</td></tr>
+    <tr><td>P0-3 SAF 权限持久化</td><td class="okbadge">✅ takePersistableUriPermission 已加</td></tr>
+    <tr><td>P0-4 targetFile 恒 null</td><td class="warnbadge">⚠️ File 路径已修；SAF 缺口仍在（本次 P1-6）</td></tr>
+    <tr><td>P0-5 SAF 嵌套 relPath</td><td class="okbadge">✅ resolveChildDoc 逐级定位</td></tr>
+    <tr><td>P0-6 封面扁平 relPath</td><td class="okbadge">✅ 已带 artist/album 前缀</td></tr>
+    <tr><td>P0-7 scanUsbDevice 误删</td><td class="warnbadge">⚠️ 已加过滤但前缀不匹配（本次 P2-2，仍 no-op）</td></tr>
+    <tr><td>P0-8 电池优化权限</td><td class="okbadge">✅ Manifest 已声明</td></tr>
+    <tr><td>P0-9 MediaLibraryTree 缺 setUri</td><td class="okbadge">✅ 已设（null 守卫）</td></tr>
+    <tr><td>P0-10 PlaybackService exported</td><td class="okbadge">✅ true + intent-filter</td></tr>
+    <tr><td>P0-11 RECEIVER_NOT_EXPORTED</td><td class="okbadge">✅ 三处均已适配</td></tr>
+    <tr><td>P0-12 下载按钮不显示</td><td class="okbadge">✅ fallback 已实现</td></tr>
+    <tr><td>P1-6 jaudiotagger keep</td><td class="okbadge">✅ proguard 已加</td></tr>
+    <tr><td>P1-7 AutoDownload 5s 确认</td><td class="okbadge">✅ delay + currentSong 比对</td></tr>
+    <tr><td>P1-8 cancelRequested @Volatile</td><td class="okbadge">✅ 已加</td></tr>
+  </table>
+</section>
+
+<section>
+  <h2 class="ok">本轮修复核对（2026-09-16）</h2>
+  <p style="font-size:13px;color:var(--muted);margin-bottom:8px">本报告定稿后同一轮落地的修复。状态均经逐条对照源码核验（非仅凭提交信息），改动目前都在<b>工作区、未提交</b>。<br>
+  <b>第二批（同日续做）</b>：原未修复的 10 项（<code>P2-7 / P2-8 / P2-9 / P2-10 / P2-11</code>、<code>P3-1 ~ P3-5</code>）已全部补齐，见下方表格下半部分。至此除 <code>P1-3</code>（产品裁定不修）与 <code>P1-9</code>（误报撤回）外，本报告全部发现项均已处置。</p>
+  <div class="conclusion" style="margin-bottom:10px;border-left:3px solid #d9822b">
+    <p style="font-size:13px"><b>⚠️ 附注（第二批开工时发现）</b>：首次执行 <code>assembleDebug</code> 时，暴露出<b>上一批（第一批）修复里的一处编译错误</b>——<code>SongDownloadManager.kt:530</code> 写作 <code>val baseName = if (entity.title.isBlank()) return null</code>，把缺 <code>else</code> 的 <code>if</code> 当表达式用（Kotlin 编译错误）。已改为 <code>if (entity.title.isBlank()) return null</code> + <code>val baseName = entity.title</code>。这说明第一批修复当时<b>没有经过编译验证</b>，其"已修"状态应以本轮编译结果为准。</p>
+    <p style="font-size:13px;margin-top:6px"><b>⚠️ 勘误（提交前实测）</b>：本卡片初稿写「本机单测不可用、验证手段只有编译 + lint」，<b>该结论已过时且被实测推翻</b>。<code>testDebugUnitTest</code> 在本机<b>可以正常运行</b>：<code>--tests "*QueueRemovalTest"</code> → 6 例全绿；全量 → <b>518 例 / 0 失败 / 0 错误</b>（512 基线 + 本轮新增 6 例）。根因推断：此前的「test worker JVM 一启动即死（exit <code>268435466</code>）」更可能是<b>卡死的 Gradle 守护进程持锁</b>所致，而非本机永久性限制。因此本轮验证强度为<b>「编译 + lint + 全量单测」</b>。</p>
+    <p style="font-size:13px;margin-top:6px"><b>验证证据</b>：<code>assembleDebug lintDebug</code> = <b>BUILD SUCCESSFUL</b>，lint <b>0 error</b> / 257 warning（基线 256，差值来自网络相关的依赖版本告警波动），改动文件上无新增告警。<code>compileDebugUnitTestKotlin</code> 通过——<code>assembleDebug</code> <b>不编译 test 源码</b>，新增的 <code>QueueRemovalTest.kt</code> 必须靠这一步（或直接跑 <code>testDebugUnitTest</code>）才能覆盖到。</p>
+  </div>
+  <table>
+    <tr><th style="width:64px">编号</th><th style="width:78px">状态</th><th>核验证据（file:line）</th></tr>
+    <tr><td>P0-1</td><td class="okbadge">✅ 已修</td><td><code>SongDownloadManager.kt:62-75</code> 下载 client 加 <code>BackendAuthHeaders.forHost(host)</code> 拦截器（host 精确匹配，令牌不随 302 泄漏到第三方域）</td></tr>
+    <tr><td>P0-2</td><td class="okbadge">✅ 已修</td><td><code>SongDownloadManager.kt:525-548</code> 新增 <code>recoverFinalPathOrNull()</code>，按 artist/album/title 反推最终路径（含 " (2..10)" 去重序号）；<code>:562</code> 改为 <code>entity.audioPath ?: recoverFinalPathOrNull(entity)</code></td></tr>
+    <tr><td>P1-1</td><td class="okbadge">✅ 已修</td><td><code>LocalMusicRepository.kt:187-192</code> <code>scanned.isEmpty()</code> 时保留旧索引并 <code>loadFromCache()</code></td></tr>
+    <tr><td>P1-2</td><td class="okbadge">✅ 已修</td><td><code>NasMusicApp.kt:112-113,365-370,424-428</code> → <code>MainViewModel.kt:2299-2307</code></td></tr>
+    <tr><td>P1-4</td><td class="okbadge">✅ 已修</td><td><code>SongDownloadManager.kt:408-411</code>、<code>AutoDownloadController.kt:88-92</code> 两处均 <code>* 1024L</code></td></tr>
+    <tr><td>P1-5</td><td class="okbadge">✅ 已修</td><td><code>SongDownloadManager.kt:100-101,111-114,188-193,432-450</code></td></tr>
+    <tr><td>P1-6</td><td class="okbadge">✅ 已修</td><td><code>SongExporter.kt:222-232</code> <code>shouldOverwrite</code> 改为按 <code>currentRoot</code> 分支，SAF 用 <code>resolveChildDoc</code> 取长度比对；失效的 <code>targetFile()</code> 已删除</td></tr>
+    <tr><td>P1-7</td><td class="okbadge">✅ 已修</td><td><code>PlayerManager.kt:826-856</code>（REPEAT_ONE 回卷/末首）、<code>:1107-1118</code>（<code>onPlaybackEnded</code> 的 REPEAT_ALL 改 <code>seekTo(0)</code>）均同帧写 <code>currentSong</code></td></tr>
+    <tr><td>P1-8</td><td class="okbadge">✅ 已修</td><td><code>RemoteControlServer.kt:153-172</code> 反序列化加 try/catch + title 非空 + URI scheme 白名单（http/https/content/file）</td></tr>
+    <tr><td>P2-1</td><td class="okbadge">✅ 已修</td><td><code>SongDownloadManager.kt:241-250</code> 按 <code>PROGRESS_STEP</code> 节流，空间复查保持原节奏</td></tr>
+    <tr><td>P2-2</td><td class="okbadge">✅ 已修</td><td><code>LocalMusicRepository.kt:210-220</code> 同时匹配 <code>devicePath</code> 与 <code>file://$devicePath</code> 两种形态</td></tr>
+    <tr><td>P2-3</td><td class="okbadge">✅ 已修</td><td><code>NasMusicApp.kt:382-385</code> <code>albumId = 0L</code> → <code>coverUrl</code> 返回 null → 走本地内嵌封面</td></tr>
+    <tr><td>P2-4</td><td class="okbadge">✅ 已修</td><td><code>StorageMonitor.kt:44-58,80-90</code> 拆成 media/usb 两个 <code>IntentFilter</code>（<code>file</code> scheme 只约束 MEDIA_*）；<code>stopListening</code> 相应 unregister 两次</td></tr>
+    <tr><td>P2-5</td><td class="okbadge">✅ 已修</td><td>全文件 <code>_downloadStates.value = ...</code> 统一改为 <code>_downloadStates.update { }</code>（含 <code>clearAllStates</code>）</td></tr>
+    <tr><td>P2-6</td><td class="okbadge">✅ 已修</td><td><code>SmartRadioManager.kt:222-236</code> 以 <code>currentCoroutineContext()[Job].isActive</code> 为唯一准入判据（锁内二次确认；未用身份比较以避开 <code>generateJob</code> 赋值的时序竞态）</td></tr>
+    <tr><td>P2-7</td><td class="okbadge">✅ 已修</td><td><code>FeiniuAdapter.kt:790</code>（<code>fetchAllPages</code>）改取整个 <code>data</code> 信封，末页按 <code>data.total</code> 判定（<code>total</code> 缺失才回退旧判据）；新增 <code>fetchPageEnvelope()</code>（<code>:835</code>），删掉只回 list 的 <code>fetchPageRaw()</code></td></tr>
+    <tr><td>P2-8</td><td class="okbadge">✅ 已修</td><td><code>FeiniuAdapter.kt:152</code> 新增 <code>allTracksRefreshMutex</code>；<code>:488</code> <code>loadAllTracks()</code> 加锁 + <b>锁内重查缓存</b>（否则单飞退化为串行 N 次全量拉取）</td></tr>
+    <tr><td>P2-9</td><td class="okbadge">✅ 已修</td><td><code>RemoteControlServer.kt:36,39</code> 新增 <code>MAX_CONCURRENT_SEARCHES=2</code> / <code>SLOW_SEARCH_MS=3000</code>；<code>:92</code> Semaphore；<code>:190</code> <code>handleSearch</code> 拿不到槽位直接 <b>503</b>（快速失败不排队）+ 慢查询耗时日志</td></tr>
+    <tr><td>P2-10</td><td class="okbadge">✅ 已修</td><td><code>PlayerManager.kt:961</code> <code>removeFromQueue</code> 抽纯函数 <code>computeQueueRemoval()</code>（<code>:1271</code>，结果类型 <code>QueueRemovalResult</code> <code>:1252</code>）+ 移除当前项时<b>显式 <code>seekTo</code> 对齐 ExoPlayer</b>（否则末尾项被移除会进 <code>STATE_ENDED</code>，被 <code>onPlaybackEnded</code> 的 REPEAT_ALL 误判成"到队尾"而 <code>seekTo(0)</code> 跳歌）；新增单测 <code>QueueRemovalTest.kt</code>（6 例边界，<b>实测全绿</b>）</td></tr>
+    <tr><td>P2-11</td><td class="okbadge">✅ 已修</td><td><code>ModelTransferServer.kt:165-180</code> 上传后补 SHA-256 校验，复用 <code>ModelDownloadManager.EXPECTED_SHA256</code>（由 private 放宽为 internal）与同一份 <code>sha256Of()</code>（<code>:75</code>，从实例方法移到 companion）；<code>readPartHeaders</code>/<code>readLine</code> 加 8KB 总量 + 2KB 单行上限（常量 <code>:42,45</code>，实现 <code>:223,237</code>）</td></tr>
+    <tr><td>P3-1</td><td class="okbadge">✅ 已修</td><td><code>HqSeparationOrchestrator.kt:460-475</code> 就地锁死约定注释：<code>saveOriginalFile</code> 必须保持 copy 语义（否则紧随的 <code>cleanupTempFile</code> 会删掉已缓存的原唱）</td></tr>
+    <tr><td>P3-2</td><td class="okbadge">✅ 已修</td><td><code>DemucsSeparator.kt:365-377</code> 删掉 <code>emit</code> 内 <code>if (gi &gt;= totalSamples) return</code>——三个循环上界已保证恒不命中（死分支，约 4200 万次/4min），<code>gi</code> 参数随之移除；末尾 pending 冲刷循环保留 <code>break</code> 守卫</td></tr>
+    <tr><td>P3-3</td><td class="okbadge">✅ 已修</td><td><code>CoverUrlPersistentCache.kt:42</code> 新增 <code>writtenAt</code> 写入时间表；<code>:147</code> <code>evictOldest()</code> 改为按写入时间排序淘汰（原 <code>ConcurrentHashMap.keys.take(n)</code> 迭代序与插入序无关＝随机淘汰）；<code>load</code>（<code>:161</code>）/ <code>importAll</code> / <code>clear</code> 同步维护</td></tr>
+    <tr><td>P3-4</td><td class="okbadge">✅ 已修</td><td><code>app/build.gradle.kts</code> 末尾新增 <code>ksp { arg("room.schemaLocation", "$projectDir/schemas") }</code>——此前 <code>exportSchema = true</code> 但未配目录，Room 只打警告且<b>一个 schema 都不导出</b>；现落盘 <code>app/schemas/…LocalMusicDatabase/3.json</code>，需随代码入库</td></tr>
+    <tr><td>P3-5</td><td class="okbadge">✅ 已修</td><td><code>WeatherApi.kt:240</code> OWM→WMO 改回真 WMO 代码（雾霾 <code>20→45</code>、毛毛雨 <code>50→51</code>、雨 <code>60→61</code>、雪 <code>70→71</code>）——原先这四个值<b>落不进任何 <code>WeatherMood</code> 区间</b>，OpenWeatherMap 路径的天气电台一律回退 CLOUDY；<code>:298</code> <code>describeWeatherCode</code> 对照 WMO 表重写</td></tr>
+  </table>
+</section>
+
+<section>
+  <h2 class="sum">总体评价与修复顺序</h2>
+  <div class="conclusion">
+    <p>v2.26.32 → v2.32.5 这批变更（飞牛重写、认证头 provider 化、Demucs P0/P1 修复、T2/T3/L3 重构、lint 清零）整体质量明显高于上一批：<b>上次 12 个 P0 中 11 个已正确修复</b>，并发修复（Demucs 释放竞态、重采样与声道拆分）推理严谨，测试补充方向正确。</p>
+    <p style="margin-top:10px">本轮新引入的风险集中在<b>跨链路一致性</b>：认证头、空扫描保护、SAF 增量、dedupe 语义都存在"主链路修好了、旁路链路漏了"的模式（下载链路、导出链路、手动下载路径）。建议把"新增全局机制时列出全部消费链路"作为 review checklist。</p>
+    <div class="priority">
+      <div class="pchip"><b>① P0-1</b> 下载 401</div>
+      <div class="pchip"><b>② P0-2</b> 孤儿恢复</div>
+      <div class="pchip"><b>③ P1-1</b> 曲库清空风险</div>
+      <div class="pchip"><b>④ P1-2</b> 通知不可见</div>
+    </div>
+    <p style="margin-top:12px;font-size:13px;color:var(--muted)">P1-3 经产品裁定为有意设计、不修；P1-9 经核验为误报、撤回——两条均已移出修复清单。本轮 <b>P0（2 项）、P1（7 项）、P2（11 项）、P3（5 项）</b>的修复已在工作区落地（见上文「本轮修复核对」），尚未提交。<br>
+    <b>验证口径（已勘误）</b>：<code>testDebugUnitTest</code> 在本机<b>可运行</b>——全量 <b>518 例 / 0 失败 / 0 错误</b>（512 基线 + 本轮新增 6 例），故验证强度为「编译 + lint + 全量单测」。<code>assembleDebug lintDebug</code> = <b>BUILD SUCCESSFUL</b> / lint <b>0 error</b> / 257 warning（基线 256，差值来自依赖版本类网络告警波动）。<code>app/schemas/</code> 为本次新生成产物，需随代码入库。</p>
+  </div>
+</section>
+
+<footer>NASMusicTV 代码审查 · 2026-09-16 · 审阅人：AutoClaw（全量精读 + 对照 09-07 基线）</footer>
+</div>
+</body>
+</html>

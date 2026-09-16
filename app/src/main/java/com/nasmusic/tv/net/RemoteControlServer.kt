@@ -27,6 +27,16 @@ class RemoteControlServer(
     companion object {
         const val DEFAULT_PORT = 18082
         private const val TAG = "RemoteControlServer"
+
+        /**
+         * P2-9（2026-09-16）：并发搜索上限。
+         * 每次搜索都会 `runBlocking` 独占一个 NanoHTTPD worker 线程（最长 10s），
+         * 手机端连发搜索可把 worker 全部占满，连队列操作等轻量请求都要排队。
+         */
+        private const val MAX_CONCURRENT_SEARCHES = 2
+
+        /** P2-9：超过该耗时即记为慢查询（用于后续按实测调整上限/超时） */
+        private const val SLOW_SEARCH_MS = 3000L
     }
 
     private var server: Impl? = null
@@ -77,6 +87,9 @@ class RemoteControlServer(
     ) : NanoHTTPD(port) {
 
         private val gson = Gson()
+
+        /** P2-9：搜索并发闸门，超出直接 503 快速失败（不排队占住 worker） */
+        private val searchSlots = java.util.concurrent.Semaphore(MAX_CONCURRENT_SEARCHES)
 
         override fun serve(session: IHTTPSession): Response {
             val uri = session.uri
@@ -153,17 +166,47 @@ class RemoteControlServer(
         private fun handleAdd(session: IHTTPSession): Response {
             val body = parseJsonBody(session) ?: return jsonError(Response.Status.BAD_REQUEST, "bad body")
             val songObj = body.getAsJsonObject("song") ?: return jsonError(Response.Status.BAD_REQUEST, "missing song")
-            val song = gson.fromJson(songObj, Song::class.java)
+            val song = try {
+                gson.fromJson(songObj, Song::class.java)
+            } catch (e: Exception) {
+                null
+            } ?: return jsonError(Response.Status.BAD_REQUEST, "invalid song")
+            // P1-8 修复（2026-09-16）：反序列化外部 JSON 后做最小校验，阻断任意 URI 注入。
+            // 背景：服务器绑定 0.0.0.0，此前任意设备可提交任意 JSON 直接入队；
+            // 合法的手机端流程只会带 title + 可选 http(s) 音频链（搜索结果为纯元数据）。
+            if (song.title.isBlank()) return jsonError(Response.Status.BAD_REQUEST, "invalid title")
+            val uri = song.streamUrl?.takeIf { it.isNotBlank() }
+            if (uri != null && !(
+                    uri.startsWith("http://") || uri.startsWith("https://") ||
+                        uri.startsWith("content://") || uri.startsWith("file://")
+                    )
+            ) {
+                return jsonError(Response.Status.BAD_REQUEST, "unsupported uri scheme")
+            }
             callbacks.addToQueue(song)
             return jsonOk()
         }
 
         private fun handleSearch(params: Map<String, List<String>>): Response {
             val query = params["q"]?.firstOrNull() ?: return jsonError(Response.Status.BAD_REQUEST, "missing q")
+            // P2-9 修复（2026-09-16）：见 MAX_CONCURRENT_SEARCHES 注释。
+            // ① 并发上限：拿不到槽位立刻 503（快速失败，避免请求在 worker 上排队堆积）；
+            // ② 慢查询记录：把实测耗时打出来，作为后续调参依据。
+            if (!searchSlots.tryAcquire()) {
+                AppLog.w(TAG, "search rejected: concurrent limit($MAX_CONCURRENT_SEARCHES) reached, q=${query.take(50)}")
+                return jsonError(Response.Status.SERVICE_UNAVAILABLE, "search busy, retry later")
+            }
+            val startedAt = System.currentTimeMillis()
             return try {
                 // 修复（M-7）：跨源搜索限时 10s——原 runBlocking 无超时，
                 // 各搜索端点同时慢响应时会长时间占用 NanoHTTPD worker 线程
                 val result = runBlocking { kotlinx.coroutines.withTimeout(10_000) { callbacks.search(query) } }
+                val elapsed = System.currentTimeMillis() - startedAt
+                if (elapsed >= SLOW_SEARCH_MS) {
+                    AppLog.w(TAG, "slow search: ${elapsed}ms, q=${query.take(50)}")
+                } else {
+                    AppLog.d(TAG, "search: ${elapsed}ms, q=${query.take(50)}")
+                }
                 val json = JsonObject().apply {
                     add("nasResults", gson.toJsonTree(result.nasResults.map { it.toLightMap() }))
                     add("networkResults", gson.toJsonTree(result.networkResults.map { it.toLightMap() }))
@@ -172,6 +215,8 @@ class RemoteControlServer(
             } catch (e: Exception) {
                 AppLog.e(TAG, "Search failed", e)
                 jsonError(Response.Status.INTERNAL_ERROR, "search failed")
+            } finally {
+                searchSlots.release()
             }
         }
 

@@ -12,12 +12,12 @@ import com.nasmusic.tv.util.AppLog
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.selects.select
@@ -53,7 +53,23 @@ class SongDownloadManager(
     private val onNotify: (String) -> Unit,
     /** 下载完成即时入库回调（§7.5.5）：NasMusicApp 接管 → localMusicRepository.upsertDownloaded + 刷新 */
     private val onCompleted: (suspend (entity: DownloadSongEntity) -> Unit)? = null,
+    /**
+     * P0-1 修复（2026-09-16）：下载链路与播放链路共用同一套后端认证头注入。
+     * 飞牛（fnOS）的 track/stream 端点要求 `Authorization: <userToken>` 请求头，
+     * 播放链路经 BaiduHttpDataSourceFactory 拦截器注入，而下载此前用独立裸 client → 401。
+     * 此处复用 BackendAuthHeaders.forHost（host 精确匹配，令牌不随 302 泄漏到第三方域）。
+     */
     private val client: OkHttpClient = OkHttpClient.Builder()
+        .addInterceptor { chain ->
+            val req = chain.request()
+            val headers = com.nasmusic.tv.backend.BackendAuthHeaders.forHost(req.url.host)
+            if (headers.isEmpty()) chain.proceed(req)
+            else {
+                val b = req.newBuilder()
+                headers.forEach { (k, v) -> b.header(k, v) }
+                chain.proceed(b.build())
+            }
+        }
         .connectTimeout(15, java.util.concurrent.TimeUnit.SECONDS)
         .readTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
         .build()
@@ -73,9 +89,16 @@ class SongDownloadManager(
     private val manualQueue = Channel<Pair<Song, Boolean>>(Channel.UNLIMITED)
     private val autoQueue = Channel<Pair<Song, Boolean>>(Channel.UNLIMITED)
 
-    /** 当前下载协程（loop 所在 coroutine），cancelAll 可取消以中断进行中的下载 */
+    /**
+     * P1-5 修复（2026-09-16）：cancelAll 改为「cancel 当前 Call + 置位 cancelRequested +
+     * drain 排队任务」，不再 cancel/restart loop 协程。
+     * 原实现 cancel loop 后立即 startLoop()，旧 loop 协程（阻塞在 socket 读上）尚未退出，
+     * 新 loop 已开始消费 → 两个 executeDownload 并发，破坏「串行队列 1 个消费者」保证。
+     * 现在 loop 常驻唯一实例；进行中的下载由 call.cancel() 触发 IO 异常，
+     * executeDownload 的重试判定看到 cancelRequested=true 后不再重试、直接落 FAILED。
+     */
     @Volatile
-    private var currentDownloadJob: Job? = null
+    private var cancelRequested = false
 
     /**
      * 当前进行中的下载 Call。
@@ -85,13 +108,9 @@ class SongDownloadManager(
     @Volatile
     private var currentCall: okhttp3.Call? = null
 
-    /** 启动串行下载循环，返回的 Job 保存到 [currentDownloadJob] 供 cancelAll 中断 */
-    private fun startLoop() {
-        currentDownloadJob = scope.launch(Dispatchers.IO) { loop() }
-    }
-
     init {
-        startLoop()
+        // loop 常驻唯一消费者（P1-5 修复后 cancelAll 不再重启 loop）
+        scope.launch(Dispatchers.IO) { loop() }
     }
 
     /** 手动 / 自动入队（手动优先：手动队列非空时自动任务不抢占） */
@@ -126,17 +145,20 @@ class SongDownloadManager(
      */
     private suspend fun executeDownload(song: Song, auto: Boolean): DownloadResult {
         val key = song.downloadKey
+        // P1-5：新任务开始执行 → 上一次 cancelAll 的取消窗口结束
+        cancelRequested = false
 
         // 幂等检查：已在下载队列中或已完成 → 不重复下载
         val current = repo.get(key)
         if (current?.status == DownloadStatus.COMPLETED.name) {
-            _downloadStates.value = _downloadStates.value +
-                (key to DownloadState.Completed(
+            _downloadStates.update {
+                it + (key to DownloadState.Completed(
                     current.audioPath ?: "",
                     coverPath = current.coverPath,
                     lyricPath = current.lyricPath,
                     embedded = current.embedded
                 ))
+            }
             return DownloadResult.Already
         }
         if (current?.status == DownloadStatus.DOWNLOADING.name) {
@@ -146,7 +168,7 @@ class SongDownloadManager(
         var attempt = 0
         while (true) {
             attempt++
-            _downloadStates.value = _downloadStates.value + (key to DownloadState.Downloading(0))
+            _downloadStates.update { it + (key to DownloadState.Downloading(0)) }
             val result = try {
                 singleAttempt(song, auto, attempt)
             } catch (e: StorageFullException) {
@@ -163,20 +185,27 @@ class SongDownloadManager(
             if (result is DownloadResult.QuotaExceeded || result is DownloadResult.Disabled) return result
             if (result is DownloadResult.StorageFull || result is DownloadResult.NotDownloadable) return result
 
+            // P1-5：cancelAll 已置位 → 不再重试，直接落 FAILED
+            if (cancelRequested) {
+                repo.updateStatus(key, DownloadStatus.FAILED, 0, "已取消")
+                _downloadStates.update { it - key }
+                return result
+            }
+
             // 可重试失败：从 reason 中提取 HTTP 状态码，404/403 等不重试
             val reason = (result as? DownloadResult.Failure)?.reason
             val httpCode = reason?.removePrefix("HTTP ")?.toIntOrNull()
             val shouldNotRetry = httpCode != null && httpCode in NO_RETRY_CODES
-            if (attempt <= MAX_RETRY && !shouldNotRetry) {
+            if (attempt <= MAX_RETRY && !shouldNotRetry && !cancelRequested) {
                 val delayMs = RETRY_DELAYS.getOrElse(attempt - 1) { RETRY_DELAYS.last() }
                 AppLog.d(TAG, "retry $attempt/$MAX_RETRY for ${song.title} in ${delayMs}ms")
-                _downloadStates.value = _downloadStates.value + (key to DownloadState.Queued)
+                _downloadStates.update { it + (key to DownloadState.Queued) }
                 delay(delayMs)
                 continue
             }
             // 重试耗尽 → FAILED
             repo.updateStatus(key, DownloadStatus.FAILED, 0, reason ?: "下载失败")
-            _downloadStates.value = _downloadStates.value + (key to DownloadState.Failed(reason))
+            _downloadStates.update { it + (key to DownloadState.Failed(reason)) }
             onNotify("下载失败：${song.title}")
             return result
         }
@@ -206,9 +235,18 @@ class SongDownloadManager(
         repo.upsert(entity)
 
         // 5. 下载到临时文件（内部做 Content-Length 完整性校验，失败即抛异常触发重试）
+        // P2-1 修复（2026-09-16）：进度回调按 PROGRESS_STEP(512KB) 节流。
+        // 原实现每个 8KB 块都做一次全 Map 拷贝 + StateFlow 发布 + DB 写，
+        // 与「每 512KB 更新」注释不符，大 Map 时 UI 列表每 8KB 重组一次。
+        var lastProgressStep = -1L
         downloadFile(url, p.tmpFile, estimated) { progress, written ->
-            _downloadStates.value = _downloadStates.value + (key to DownloadState.Downloading(progress))
-            repo.updateProgress(key, progress)
+            val step = written / PROGRESS_STEP
+            if (step != lastProgressStep) {
+                lastProgressStep = step
+                _downloadStates.update { it + (key to DownloadState.Downloading(progress)) }
+                repo.updateProgress(key, progress)
+            }
+            // 空间复查保持原有近似节奏（每 512KB 边界附近查一次）
             if (written % PROGRESS_STEP < 8192 && !storage.hasRoomFor(0)) {
                 throw StorageFullException()
             }
@@ -280,13 +318,14 @@ class SongDownloadManager(
             throw e
         }
         val done = completed ?: return DownloadResult.Failure("文件保存失败")
-        _downloadStates.value = _downloadStates.value +
-            (key to DownloadState.Completed(
+        _downloadStates.update {
+            it + (key to DownloadState.Completed(
                 p.finalFile.absolutePath,
                 coverPath = coverPath,
                 lyricPath = lyricPath,
                 embedded = embedded
             ))
+        }
 
         // 10. 触发媒体扫描（best-effort）
         triggerMediaScan(p.finalFile)
@@ -360,10 +399,15 @@ class SongDownloadManager(
         }
     }.getOrNull()
 
-    /** 按时长+码率预估大小；再回退 8MB */
+    /**
+     * 按时长+码率预估大小；再回退 8MB。
+     * P1-4 修复（2026-09-16）：Song.bitrate 单位是 kbps（Jellyfin 已 ÷1000、Navidrome/Subsonic 直接 kbps），
+     * `durationMs/1000 * bitrate / 8` 结果单位是 **KB**，原实现直接按字节比较 → 差 1000 倍，
+     * 预检形同虚设。现乘 1024L 对齐到字节。
+     */
     private fun estimateFromSong(song: Song): Long {
         if (song.durationMs > 0 && song.bitrate > 0) {
-            return song.durationMs / 1000 * song.bitrate / 8
+            return song.durationMs / 1000 * song.bitrate / 8 * 1024L
         }
         return MAX_FILE_SIZE_FALLBACK
     }
@@ -386,20 +430,23 @@ class SongDownloadManager(
 
     /** 取消所有进行中任务 + 删除 .part 临时文件 */
     suspend fun cancelAll() {
-        // 中断进行中的下载：先 cancel Call（中断阻塞读），再 cancel 协程
+        // P1-5 修复（2026-09-16）：不再 cancel/restart loop（消除双 loop 并发窗口）。
+        // ① 置位取消标志 → 进行中任务在异常/重试判定处直接落 FAILED，不再重试
+        cancelRequested = true
+        // ② drain 排队未开始的任务（含手动与自动两条队列）
+        while (manualQueue.tryReceive().getOrNull() != null) { /* drain */ }
+        while (autoQueue.tryReceive().getOrNull() != null) { /* drain */ }
+        // ③ cancel 进行中的 Call（中断阻塞 socket 读）
         runCatching { currentCall?.cancel() }
         currentCall = null
-        currentDownloadJob?.cancel()
-        currentDownloadJob = null
+        // ④ 落库清理：未完成任务标记 FAILED + 删 .part 临时文件
         repo.getUnfinished().forEach { entity ->
             entity.tmpPath?.let {
                 runCatching { File(it).delete() }
             }
             repo.updateStatus(entity.songKey, DownloadStatus.FAILED, 0, "已取消")
-            _downloadStates.value = _downloadStates.value - entity.songKey
+            _downloadStates.update { it - entity.songKey }
         }
-        // 重启下载循环，使后续 enqueue 仍可处理
-        startLoop()
     }
 
     /**
@@ -421,7 +468,7 @@ class SongDownloadManager(
             entity.coverPath?.let { File(it).delete() }
             entity.lyricPath?.let { File(it).delete() }
             repo.delete(entity.songKey)
-            _downloadStates.value = _downloadStates.value - entity.songKey
+            _downloadStates.update { it - entity.songKey }
         }
         // 回收空目录（从下载根目录向上遍历删除空目录，保留根）
         runCatching {
@@ -444,7 +491,7 @@ class SongDownloadManager(
         entity.coverPath?.let { File(it).delete() }
         entity.lyricPath?.let { File(it).delete() }
         repo.delete(key)
-        _downloadStates.value = _downloadStates.value - key
+        _downloadStates.update { it - key }
         // 回收空目录
         audio?.parentFile?.let { dir ->
             runCatching {
@@ -466,6 +513,39 @@ class SongDownloadManager(
      * 2. 重置 PENDING/DOWNLOADING → 检查最终文件是否已存在：存在 → COMPLETED，否则 → FAILED
      * 3. 校验 COMPLETED 记录文件是否存在，缺失 → FAILED
      */
+    /**
+     * P0-2 修复（2026-09-16）：为 DOWNLOADING/PENDING 记录反推最终文件路径。
+     *
+     * DOWNLOADING 记录创建时 audioPath 恒为 null（只有 tmpPath），崩溃发生在
+     * 「rename 之后、COMPLETED 提交之前」时磁盘上已有最终文件但 DB 无从知晓。
+     * 按 DownloadPathBuilder 的命名规则（artist/album/「NN - 」title.ext）在下载根目录
+     * 反推；同时检查「title.ext」「title (2..10).ext」命中任一即视为孤儿完成文件。
+     * 反推失败（如手动改过目录结构）则维持原 FAILED 行为，无害。
+     */
+    private fun recoverFinalPathOrNull(entity: com.nasmusic.tv.backend.download.db.DownloadSongEntity): String? {
+        return runCatching {
+            val root = context.getExternalFilesDir(android.os.Environment.DIRECTORY_MUSIC) ?: return null
+            val artist = DownloadPathBuilder.sanitize(entity.artist.ifBlank { "未知歌手" }).ifBlank { "未知歌手" }
+            val album = DownloadPathBuilder.sanitize(entity.album.ifBlank { DownloadPathBuilder.DEFAULT_ALBUM }).ifBlank { DownloadPathBuilder.DEFAULT_ALBUM }
+            if (entity.title.isBlank()) return null
+            val baseName = entity.title
+            val albumDir = File(root, "$artist/$album")
+            if (!albumDir.exists()) return null
+            // ext 优先用 DB 记录的 containerExt；缺失时遍历常见音频扩展名
+            val exts = if (entity.containerExt.isNotBlank()) listOf(entity.containerExt.lowercase())
+                       else DownloadPathBuilder.AUDIO_EXTS.toList()
+            for (ext in exts) {
+                val candidate0 = File(albumDir, "$baseName.$ext")
+                if (candidate0.exists()) return candidate0.absolutePath
+                for (i in 2..10) {
+                    val candidateI = File(albumDir, "$baseName ($i).$ext")
+                    if (candidateI.exists()) return candidateI.absolutePath
+                }
+            }
+            null
+        }.getOrNull()
+    }
+
     suspend fun recoverAfterCrash() {
         withContext(Dispatchers.IO) {
             // 1. 清理 .tmp 下所有 .part
@@ -475,23 +555,28 @@ class SongDownloadManager(
                 tmpDir.listFiles()?.filter { it.extension == "part" }?.forEach { it.delete() }
             }
             // 2. 逐条恢复未完成任务：最终文件已存在 → COMPLETED，否则清理残留 + FAILED
+            // P0-2 修复（2026-09-16）：原实现读 entity.audioPath，但 DOWNLOADING 记录创建时
+            // audioPath 恒为 null（只有 tmpPath），孤儿恢复分支永不命中（上次审查 P1-5 修复无效）。
+            // 现在：优先用 DB 里已提交的 audioPath；没有则按 downloadRoot/artist/album/title
+            // 反推最终路径（与 DownloadPathBuilder.build 的命名规则一致，含 " (2)" 去重序号排除）。
             repo.getUnfinished().forEach { entity ->
-                val finalPath = entity.audioPath
+                val finalPath = entity.audioPath ?: recoverFinalPathOrNull(entity)
                 if (finalPath != null && File(finalPath).exists()) {
                     // 下载已完成但 DB 未更新（崩溃在 rename 后、upsert 前）
                     repo.updateStatus(entity.songKey, DownloadStatus.COMPLETED, 100, null)
-                    _downloadStates.value = _downloadStates.value +
-                        (entity.songKey to DownloadState.Completed(
+                    _downloadStates.update {
+                        it + (entity.songKey to DownloadState.Completed(
                             finalPath,
                             coverPath = entity.coverPath,
                             lyricPath = entity.lyricPath,
                             embedded = entity.embedded
                         ))
+                    }
                 } else {
                     // 清理残留 .part 临时文件
                     entity.tmpPath?.let { runCatching { File(it).delete() } }
                     repo.updateStatus(entity.songKey, DownloadStatus.FAILED, 0, "已中断")
-                    _downloadStates.value = _downloadStates.value - entity.songKey
+                    _downloadStates.update { it - entity.songKey }
                 }
             }
             // 3. 校验 COMPLETED 文件
@@ -500,15 +585,16 @@ class SongDownloadManager(
                 val f = entity.audioPath?.let { File(it) }
                 if (f != null && !f.exists()) {
                     repo.updateStatus(entity.songKey, DownloadStatus.FAILED, 0, "文件缺失")
-                    _downloadStates.value = _downloadStates.value - entity.songKey
+                    _downloadStates.update { it - entity.songKey }
                 } else if (f != null) {
-                    _downloadStates.value = _downloadStates.value +
-                        (entity.songKey to DownloadState.Completed(
+                    _downloadStates.update {
+                        it + (entity.songKey to DownloadState.Completed(
                             f.absolutePath,
                             coverPath = entity.coverPath,
                             lyricPath = entity.lyricPath,
                             embedded = entity.embedded
                         ))
+                    }
                 }
             }
         }
@@ -519,7 +605,7 @@ class SongDownloadManager(
 
     /** 清空所有下载状态（供 MainViewModel.clearAllDownloads() 调用，同步内存 Map） */
     fun clearAllStates() {
-        _downloadStates.value = emptyMap()
+        _downloadStates.update { emptyMap() }
     }
 }
 

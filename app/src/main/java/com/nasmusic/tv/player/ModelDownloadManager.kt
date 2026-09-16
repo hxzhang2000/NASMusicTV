@@ -58,10 +58,38 @@ class ModelDownloadManager(
          * 「自建镜像 / NAS」，应当提供字节完全一致的文件。若确实要换成不同的模型
          * 权重，必须同步更新此常量，否则下载会被拒绝（报「SHA-256 不匹配」）。
          */
-        private const val EXPECTED_SHA256 =
+        internal const val EXPECTED_SHA256 =
             "0cbe651f535415c9d26a7bb614f7d322dd5a080fa0298f2e50f478030a994dce"
 
         private val HEX_CHARS = "0123456789abcdef".toCharArray()
+
+        /**
+         * 计算文件 SHA-256（小写十六进制）。
+         * 手工拼 hex 而不用 `"%02x".format()`：后者依赖 Formatter 对 Byte 的无符号处理，
+         * 且受默认 Locale 影响，这里用确定性实现。
+         *
+         * P2-11（2026-09-16）：从实例方法移到 companion 并放宽为 internal，
+         * 供 `ModelTransferServer`（上传路径）复用同一实现与同一期望哈希——
+         * 否则「下载有校验、上传没校验」会给模型完整性留一个后门。
+         */
+        internal fun sha256Of(file: File): String {
+            val digest = java.security.MessageDigest.getInstance("SHA-256")
+            java.io.FileInputStream(file).use { input ->
+                val buf = ByteArray(256 * 1024)
+                var n = input.read(buf)
+                while (n != -1) {
+                    digest.update(buf, 0, n)
+                    n = input.read(buf)
+                }
+            }
+            val bytes = digest.digest()
+            val hex = StringBuilder(bytes.size * 2)
+            for (b in bytes) {
+                val v = b.toInt() and 0xFF
+                hex.append(HEX_CHARS[v ushr 4]).append(HEX_CHARS[v and 0x0F])
+            }
+            return hex.toString()
+        }
 
         // 连接超时
         private const val CONNECT_TIMEOUT_MS = 15_000
@@ -135,30 +163,6 @@ class ModelDownloadManager(
             AppLog.e(TAG, "verifyModelIntegrity: SHA-256 mismatch, size=${file.length()}, expected=$EXPECTED_SHA256, actual=$actual")
         }
         ok
-    }
-
-    /**
-     * 计算文件 SHA-256（小写十六进制）。
-     * 手工拼 hex 而不用 `"%02x".format()`：后者依赖 Formatter 对 Byte 的无符号处理，
-     * 且受默认 Locale 影响，这里用确定性实现。
-     */
-    private fun sha256Of(file: File): String {
-        val digest = java.security.MessageDigest.getInstance("SHA-256")
-        java.io.FileInputStream(file).use { input ->
-            val buf = ByteArray(256 * 1024)
-            var n = input.read(buf)
-            while (n != -1) {
-                digest.update(buf, 0, n)
-                n = input.read(buf)
-            }
-        }
-        val bytes = digest.digest()
-        val hex = StringBuilder(bytes.size * 2)
-        for (b in bytes) {
-            val v = b.toInt() and 0xFF
-            hex.append(HEX_CHARS[v ushr 4]).append(HEX_CHARS[v and 0x0F])
-        }
-        return hex.toString()
     }
 
     /**

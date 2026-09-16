@@ -212,11 +212,25 @@ class SongExporter(
         onCompleted(done, skipped, failed)
     }
 
-    /** 是否覆盖目标已有文件：无记录但文件存在且大小一致 → 跳过；不一致 → 覆盖 */
+    /**
+     * 是否覆盖目标已有文件：目标存在且长度一致 → false（跳过）；否则 true（覆盖）。
+     * P1-6 修复（2026-09-16）：原实现 targetFile 只支持 File 根，SAF 分支恒返回 null
+     * → shouldOverwrite 对 SAF 恒 true，增量判定只剩 export_records，
+     * 清掉导出记录后重导会无条件覆盖 USB 上同名不同长的文件。
+     * 现在 SAF 分支用 resolveChildDoc 反查目标 DocumentFile 的长度对比。
+     */
     private fun shouldOverwrite(task: FileTask): Boolean {
-        val target = targetFile(task)
-        if (target == null || !target.exists()) return true
-        return target.length() != task.src.length()
+        return when (val root = currentRoot) {
+            is ExportRoot.File -> {
+                val target = File(root.dir, task.relPath)
+                !target.exists() || target.length() != task.src.length()
+            }
+            is ExportRoot.Saf -> {
+                val doc = resolveChildDoc(root.dir, task.relPath) ?: return true
+                doc.length() != task.src.length()
+            }
+            ExportRoot.Unavailable -> true
+        }
     }
 
     private suspend fun copyToRoot(root: ExportRoot, task: FileTask): Boolean = withContext(Dispatchers.IO) {
@@ -237,8 +251,7 @@ class SongExporter(
                 }
             }
             is ExportRoot.File -> {
-                val target = targetFile(task)
-                if (target == null) return@withContext false
+                val target = File(root.dir, task.relPath)
                 target.parentFile?.mkdirs()
                 val tmp = File(target.parentFile, "${target.name}.part")
                 try {
@@ -269,15 +282,7 @@ class SongExporter(
         }
     }
 
-    /** 目标文件路径（相对导出根） */
-    private fun targetFile(task: FileTask): File? {
-        return when (val root = currentRoot) {
-            is ExportRoot.File -> File(root.dir, task.relPath)
-            else -> null
-        }
-    }
-
-    /** SAF 嵌套目录解析：逐级 findFile/createDirectory 定位到叶子目录，再 createFile 文件名 */
+/** SAF 嵌套目录解析：逐级 findFile/createDirectory 定位到叶子目录，再 createFile 文件名 */
     private fun resolveChildDoc(root: DocumentFile, relPath: String): DocumentFile? {
         val segments = relPath.split("/").toMutableList()
         // NewApi 修复（2026-09-14）：removeLast() 在 API 35 会被 java.util.SequencedCollection

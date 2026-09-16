@@ -102,6 +102,15 @@ class NasMusicApp : Application(), ImageLoaderFactory {
     // 在有订阅者时必成功；replay 仍为 0，事件不会滞留给迟到的订阅者。
     private val _playModeToggleEvents = MutableSharedFlow<Unit>(replay = 0, extraBufferCapacity = 1)
     val playModeToggleEvents: SharedFlow<Unit> = _playModeToggleEvents.asSharedFlow()
+
+    // ---- P1-2 修复（2026-09-16）：下载/自动下载的用户提示通道 ----
+    //
+    // 原 onNotify 回调只做了 AppLog.d（注释声称「由 MainViewModel 在 init 时注册」但从未注册），
+    // 下载失败 / 存储不足 / 配额已满等提示用户完全看不到。
+    // 现通过此 SharedFlow 广播，MainViewModel 收集后转发到 errorMessage（有 UI 消费方）。
+    // replay = 1：下载失败常发生在 Activity 未就绪时（启动早期崩溃恢复触发），晚订阅也能收到。
+    private val _downloadNotifyMessage = MutableSharedFlow<String>(replay = 1, extraBufferCapacity = 8)
+    val downloadNotifyMessage: SharedFlow<String> = _downloadNotifyMessage.asSharedFlow()
     /** 活跃订阅者数（供测试与诊断；SubscriptionCount 是 SharedFlow 的内建保证） */
     val playModeToggleSubscriberCount = _playModeToggleEvents.subscriptionCount
 
@@ -354,9 +363,10 @@ class NasMusicApp : Application(), ImageLoaderFactory {
                 )
             },
             onNotify = { msg ->
-                // 通过 MainViewModel 的 errorMessage 通道提示（无耦合：只发一个 Application 级回调由 UI 层接）
-                // 这里直接回调给 MainViewModel.showError，由 MainViewModel 在 init 时注册
+                // P1-2 修复（2026-09-16）：接入 downloadNotifyMessage → MainViewModel.showError → UI。
+                // 原实现只有 AppLog.d（宣称的 MainViewModel 注册从未发生），提示不可见。
                 com.nasmusic.tv.util.AppLog.d("NasMusicApp", "download notify: $msg")
+                _downloadNotifyMessage.tryEmit(msg)
             },
             onCompleted = { entity ->
                 // §7.5.5 即时入库：把下载完成的实体构建为 ScannedSong 插入 local_songs，
@@ -369,7 +379,10 @@ class NasMusicApp : Application(), ImageLoaderFactory {
                         title = entity.title,
                         artist = entity.artist,
                         album = entity.album,
-                        albumId = mediaStoreId,
+                        // P2-3 修复（2026-09-16）：原为 albumId = mediaStoreId（路径哈希），
+                        // 会让 toSong 生成 content://media/.../albumart/<哈希> 这种必 404 的封面 URI；
+                        // 置 0 → coverUrl 返回 null → 走本地内嵌封面提取链路（下载时已内嵌）。
+                        albumId = 0L,
                         duration = entity.durationMs,
                         size = entity.fileSize,
                         dateAdded = entity.completedAt ?: System.currentTimeMillis(),
@@ -408,7 +421,11 @@ class NasMusicApp : Application(), ImageLoaderFactory {
             storage = storageGuard,
             resolver = downloadResolver,
             manager = songDownloadManager,
-            notify = { msg -> com.nasmusic.tv.util.AppLog.d("NasMusicApp", "auto-dl: $msg") },
+            notify = { msg ->
+                // P1-2 修复：同 SongDownloadManager.onNotify，转发到 downloadNotifyMessage
+                com.nasmusic.tv.util.AppLog.d("NasMusicApp", "auto-dl: $msg")
+                _downloadNotifyMessage.tryEmit(msg)
+            },
             scope = applicationScope
         )
         exportCoordinator = com.nasmusic.tv.backend.export.ExportCoordinator(

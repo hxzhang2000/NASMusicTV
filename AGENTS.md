@@ -43,7 +43,7 @@ JAVA_HOME="C:/Program Files/Android/Android Studio/jbr" \
 
 `--no-daemon` 只影响当前进程，不需要改 `gradle.properties`。注意 `aapt2.exe` 本身能独立运行（`aapt2 version` 正常），问题只出在守护进程模式，所以别被 "Windows Universal C Runtime" 的提示误导。
 
-**单测在本机跑不起来**：即使加了 `--no-daemon`，`testDebugUnitTest` 仍失败（worker JVM 一启动即死，`test-results/` 下 0 个 XML；用 `--tests "*TimeUtilsTest"` 这类纯 JVM 单类隔离验证同样失败）。属环境问题非代码问题。**因此本机对代码改动的验证手段只有「编译 + lint」，不能声称"测试通过"**；单测只能靠 CI。
+**单测在本机可以跑**（2026-09-16 更正）：`./gradlew.bat testDebugUnitTest --no-daemon -Pkotlin.compiler.execution.strategy=in-process` 实测 **518 例 / 0 失败 / 0 错误**（约 50s），`--tests "*XxxTest"` 单类隔离也正常（6 例约 30s）。此前记录的「worker JVM 一启动即死（exit `268435466` = `0x1000000A` = Windows `ERROR_BAD_ENVIRONMENT`）」**已不再复现**——根因更可能是**卡死的 Gradle 守护进程持锁**而非本机永久性限制（同日另一提交亦记录「本机首次完整跑通 testDebugUnitTest」）。若再次遇到 worker 秒死，**先跑 `./gradlew.bat --stop` 释放锁再重试**，不要直接判定为环境不可用。**因此本机验证手段是「编译 + lint + 单测」，不要再沿用「不能声称测试通过」的旧口径。**
 
 ## Architecture (verified against source)
 
@@ -70,7 +70,7 @@ JAVA_HOME="C:/Program Files/Android/Android Studio/jbr" \
 - **构建前若报 `fileHashes.lock (拒绝访问)`**：`--no-daemon` 并不保证不起守护进程 —— `gradle.properties` 里的 `org.gradle.jvmargs=-Xmx2048m` 会强制 fork 一个**单次守护进程**。该守护进程若卡在退出序列（`PersistentDaemonRegistry.remove` 的锁竞争），会一直持有 `.gradle/<版本>/fileHashes/fileHashes.lock`，后续所有构建都在 `Could not create service of type FileHasher` 处秒失败（约 26s）。**解法：`./gradlew.bat --stop`**（会打印 `1 Daemon stopped`），再重跑。**不要 `rm` 锁文件** —— 在带 safe-delete 包装的环境里 `rm` 失败会把文件留在 Windows「删除挂起」状态，之后任何 open 都返回 `Permission denied`（权限位显示 666 可写也没用），**反而让后续构建全部失败**；`rm` 报 `Device or resource busy` 就已说明有进程持有，去 `--stop` 而不是硬删。
 - **飞牛音乐（fnOS）后端协议**（`backend/impl/FeiniuAdapter.kt` + `FeiniuUrl.kt`，2026-09-14 重写）：唯一权威依据是参考项目 `fn-music-tv`（本地副本 `D:\hxzhang\MyGithubSoftware\NasAudio\fn-music-tv-v1-1-2`），完整提取结果与缺陷对照表见 `docs/feiniu-backend-improvement-plan.md`。**不要再回到第三方逆向文章的猜测端点**。易错点：① 认证头是 **`Authorization: <userToken>`（原始值，无 Bearer）**，不是 `Cookie: music-token=`（后者只在 relay 模式用）；② 登录响应字段是 **`data.userToken`**；③ 分页是 **`page` + `size`**，不是 `limit`；④ ID 全是 **GUID**，参数名是 `albumGUID`/`artistGUID`/`trackGUID`/`playlistGUID`；⑤ 流地址 `track/stream?guid=`（查询参数）、封面 `static/cover?coverId=`（按 **coverId** 而非曲目 ID）；⑥ `duration` **已是毫秒**；⑦ 信封 `{code,msg,data}`，`data` 可为 null；⑧ 默认端口 **5666**（HTTPS 5667），不是 80；⑨ **服务端没有搜索端点**，`searchSongs` 是客户端本地过滤；⑩ 适配器必须在**解析期填充 `Song.streamUrl`**（`FeiniuUrl.streamUrl`）—— 全 app 的 NAS 播放解析只认 `getSongsByIds()` 返回的 streamUrl，置空会让点播「解析失败」（2026-09-15 修复）。
 - **`BackendAdapter.streamHeaders` 的注入链路**（2026-09-14 补齐）：此前该属性**定义了但全仓库无消费方**——Jellyfin/Navidrome 把凭据拼在 URL query 上，所以历史上没暴露；飞牛是第一个必须走请求头的后端。现在由 `BackendRegistry` 在连接成功时向 `BackendAuthHeaders` 绑定 **provider**（每次请求实时读取 `adapter.streamHeaders`；快照形态会漏掉静默重登换新令牌 —— 2026-09-15 改为 provider），再由 `BaiduHttpDataSourceFactory` 的拦截器按 **host 精确匹配**注入（同一客户端同时服务 ExoPlayer 播放与 Coil 封面）。**新增后端若要走请求头，只需覆写 `streamHeaders`，不要另起炉灶**；也不要放宽 host 匹配，否则令牌会随 302 泄漏到 CDN。
-- **构建环境**：本机 Gradle fork 出的子进程普遍起不来（AAPT2 守护进程、测试 worker、Kotlin 编译守护进程），因此构建必须加 `--no-daemon -Pkotlin.compiler.execution.strategy=in-process`；测试 worker 仍不可用（exit `268435466` = `0x1000000A` = Windows `ERROR_BAD_ENVIRONMENT`），**`testDebugUnitTest` 在本机跑不了**，纯逻辑类请用 `kotlin-standalone-verify` 技能绕过 Gradle 做独立 JVM 验证。
+- **构建环境**：本机 Gradle fork 出的子进程普遍起不来（AAPT2 守护进程、Kotlin 编译守护进程），因此构建必须加 `--no-daemon -Pkotlin.compiler.execution.strategy=in-process`；**但测试 worker 例外——它已可用**（见上文「单测在本机可以跑」）。遇到 worker 秒死时先 `./gradlew.bat --stop` 释放卡死的守护进程再重试，而不是直接绕道。`kotlin-standalone-verify` 技能仍适用于「只想验证一个纯逻辑类、不想付整轮 Gradle 代价」的场景，但不再是**必需**的绕行手段。
 
 ## Conventions
 

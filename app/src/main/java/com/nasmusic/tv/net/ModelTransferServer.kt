@@ -2,6 +2,7 @@ package com.nasmusic.tv.net
 
 import android.content.Context
 import com.nasmusic.tv.R
+import com.nasmusic.tv.player.ModelDownloadManager
 import com.nasmusic.tv.util.AppLog
 import fi.iki.elonen.NanoHTTPD
 import java.io.BufferedInputStream
@@ -32,6 +33,16 @@ class ModelTransferServer(
         const val MODEL_TRANSFER_PORT = 18083
         private const val MIN_SIZE_BYTES = 50L * 1024 * 1024 // 50MB 最低阈值
         private const val MODEL_FILENAME = "htdemucs_ft_vocals.onnx"
+
+        /**
+         * P2-11（2026-09-16）：part headers 总量上限。
+         * 正常上传只有一行 `Content-Disposition: form-data; name="file"; filename="..."`（<1KB）；
+         * 畸形/恶意请求可用超长 header 让 [readPartHeaders] 无限读并撑爆内存。
+         */
+        private const val MAX_PART_HEADER_BYTES = 8 * 1024
+
+        /** P2-11：part header 单行上限（防止单行超长绕过总量检查前的累积） */
+        private const val MAX_PART_HEADER_LINE_BYTES = 2 * 1024
 
         /**
          * 获取模型文件路径，与 ModelDownloadManager 保持一致。
@@ -150,6 +161,24 @@ class ModelTransferServer(
             }
 
             AppLog.i(TAG, "Upload saved: ${target.absolutePath} (${fileSize / (1024 * 1024)}MB)")
+
+            // P2-11 修复（2026-09-16）：上传路径补 SHA-256 校验（下载路径一直有）。
+            // 原实现只判「文件够大」，截断文件、传错模型都能落盘并调用 onModelUploaded
+            // 变成「已安装模型」，直到 Demucs 推理失败才暴露，报错还含糊。
+            // 这里复用 ModelDownloadManager 的期望哈希与同一份 sha256Of 实现，
+            // 使「下载」「上传」两条入口的完整性标准完全一致。
+            val actualSha = ModelDownloadManager.sha256Of(target)
+            if (!actualSha.equals(ModelDownloadManager.EXPECTED_SHA256, ignoreCase = true)) {
+                target.delete()
+                AppLog.e(TAG, "handleUpload: SHA-256 mismatch, size=$fileSize, actual=$actualSha")
+                return newFixedLengthResponse(
+                    Response.Status.BAD_REQUEST,
+                    "application/json; charset=UTF-8",
+                    """{"ok":false,"message":"文件校验失败（SHA-256 不匹配）：期望 ${ModelDownloadManager.EXPECTED_SHA256.take(16)}…，实际 ${actualSha.take(16)}…。请确认上传的是官方 htdemucs_ft_vocals_fp16weights.onnx（约 158MB）"}"""
+                )
+            }
+            AppLog.i(TAG, "handleUpload: SHA-256 verified ($actualSha)")
+
             onModelUploaded.invoke()
             return newFixedLengthResponse(
                 Response.Status.OK,
@@ -185,21 +214,28 @@ class ModelTransferServer(
         }
     }
 
-    /** 读取 part headers 直到空行（CRLF CRLF 中的最后一个空行），返回 header 内容 */
+    /**
+     * 读取 part headers 直到空行（CRLF CRLF 中的最后一个空行），返回 header 内容。
+     *
+     * P2-11（2026-09-16）：加累计大小上限——超限抛 [IOException] 由 handleUpload 统一兜底，
+     * 避免畸形请求用超长/无限 header 让本函数一直读下去。
+     */
     private fun readPartHeaders(input: BufferedInputStream): String {
         val sb = StringBuilder()
         while (true) {
             val line = readLine(input) ?: break
             if (line.isEmpty()) break
             sb.appendLine(line)
+            if (sb.length > MAX_PART_HEADER_BYTES) {
+                throw IOException("part headers too large (> $MAX_PART_HEADER_BYTES bytes)")
+            }
         }
         return sb.toString()
     }
 
-    /** 读一行（\r\n 分隔） */
+    /** 读一行（\r\n 分隔）；单行超 [MAX_PART_HEADER_LINE_BYTES] 抛错（P2-11） */
     private fun readLine(input: BufferedInputStream): String? {
         val sb = StringBuilder()
-        var prev = -1
         while (true) {
             val b = input.read()
             if (b == -1) return if (sb.isNotEmpty()) sb.toString() else null
@@ -210,6 +246,9 @@ class ModelTransferServer(
                 if (next != -1) sb.append(next.toChar())
             } else {
                 sb.append(b.toChar())
+            }
+            if (sb.length > MAX_PART_HEADER_LINE_BYTES) {
+                throw IOException("part header line too long (> $MAX_PART_HEADER_LINE_BYTES bytes)")
             }
         }
     }

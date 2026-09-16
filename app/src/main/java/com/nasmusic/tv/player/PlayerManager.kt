@@ -826,13 +826,17 @@ class PlayerManager(private val applicationContext: Context) {
             PlayMode.REPEAT_ONE -> {
                 // 用户主动按"下一首"时，跳到下一首（而非重播当前）
                 val nextIndex = _playerState.value.currentIndex + 1
-                if (nextIndex < _playerState.value.queue.size) {
-                    _playerState.update { it.copy(currentIndex = nextIndex) }
+                // P1-7 修复（2026-09-16）：T3 三元组要求同帧发布——只改 currentIndex 会让
+                // UI 集中订阅点短暂读到「新索引 + 旧歌名」中间态（依赖后续
+                // onMediaItemTransition 补齐）。改为与队列元素同帧 copy。
+                val queue = _playerState.value.queue
+                if (nextIndex < queue.size) {
+                    _playerState.update { it.copy(currentIndex = nextIndex, currentSong = queue[nextIndex]) }
                     p.seekTo(nextIndex, 0)
                     if (!suppressPlayback) p.play()
                 } else {
                     // 队列末尾，回到第一首
-                    _playerState.update { it.copy(currentIndex = 0) }
+                    _playerState.update { it.copy(currentIndex = 0, currentSong = queue.firstOrNull()) }
                     p.seekTo(0, 0)
                     if (!suppressPlayback) p.play()
                 }
@@ -842,6 +846,11 @@ class PlayerManager(private val applicationContext: Context) {
                 if (nextIndex < _playerState.value.queue.size) {
                     p.seekToNextMediaItem()
                 } else if (playMode == PlayMode.REPEAT_ALL) {
+                    // P1-7 修复（2026-09-16）：回卷第一首同帧发布三元组
+                    // （原先只 seekTo，依赖 transition 回调补齐 currentSong）
+                    _playerState.update {
+                        it.copy(currentIndex = 0, currentSong = it.queue.firstOrNull())
+                    }
                     p.seekTo(0, 0)
                 }
             }
@@ -951,32 +960,30 @@ class PlayerManager(private val applicationContext: Context) {
 
     fun removeFromQueue(index: Int) {
         val p = player ?: return
-        val currentQueue = _playerState.value.queue.toMutableList()
-        if (index < 0 || index >= currentQueue.size) return
+        val state = _playerState.value
+        if (index < 0 || index >= state.queue.size) return
 
-        currentQueue.removeAt(index)
-
-        // T3：队列与索引/当前歌曲同帧发布
-        // 调整 currentIndex
-        val currentIdx = _playerState.value.currentIndex
-        when {
-            index < currentIdx ->
-                _playerState.update { it.copy(queue = currentQueue, currentIndex = currentIdx - 1) }
-            index == currentIdx -> {
-                // 移除的是当前播放的歌曲，跳到下一首（或停止）
-                if (currentQueue.isEmpty()) {
-                    _playerState.update { it.copy(queue = currentQueue, currentIndex = 0, currentSong = null) }
-                } else {
-                    val newIndex = index.coerceAtMost(currentQueue.size - 1)
-                    _playerState.update { it.copy(queue = currentQueue, currentIndex = newIndex) }
-                    // 播放新的当前歌曲
-                    p.removeMediaItem(index)
-                    return
-                }
-            }
-            else -> _playerState.update { it.copy(queue = currentQueue) }
+        val wasPlaying = p.isPlaying
+        // P2-10 修复（2026-09-16）：索引/当前曲目调整抽成纯函数 [computeQueueRemoval]
+        // （便于对边界做单测），并对「移除正在播放的项」显式 seekTo 对齐 ExoPlayer。
+        // 原实现只改 currentIndex、依赖 onMediaItemTransition 补齐 currentSong；
+        // 移除**末尾**正在播放项时 ExoPlayer 会直接进入 STATE_ENDED，随后
+        // onPlaybackEnded 的 REPEAT_ALL 分支看到 currentIndex == size-1 便 seekTo(0)，
+        // 跳到不该跳的歌（用户预期是继续播新队尾/停止）。
+        val r = computeQueueRemoval(state.queue, state.currentIndex, index)
+        _playerState.update {
+            it.copy(
+                queue = r.queue,
+                currentIndex = r.currentIndex,
+                currentSong = r.queue.getOrNull(r.currentIndex)
+            )
         }
         p.removeMediaItem(index)
+        // r.seekTo 非 null ⇔ 移除的是当前播放项且队列仍非空 → 必须显式对齐
+        r.seekTo?.let { target ->
+            p.seekTo(target, 0)
+            if (wasPlaying) p.play()
+        }
     }
 
     /**
@@ -1098,8 +1105,14 @@ class PlayerManager(private val applicationContext: Context) {
                 p.play()
             }
             PlayMode.REPEAT_ALL -> {
-                if (_playerState.value.queue.isNotEmpty() && _playerState.value.currentIndex >= _playerState.value.queue.size - 1) {
-                    playQueue(_playerState.value.queue, 0)
+                // P1-7 修复（2026-09-16）：原实现 playQueue(queue, 0) 整队重放，
+                // 若此刻队列已被用户增删（快照过期）会把用户操作回滚；
+                // 队列本身未变，直接 seekTo(0) 回卷即可，三元组同帧发布。
+                val st = _playerState.value
+                if (st.queue.isNotEmpty() && st.currentIndex >= st.queue.size - 1) {
+                    _playerState.update { it.copy(currentIndex = 0, currentSong = it.queue.firstOrNull()) }
+                    p.seekTo(0, 0)
+                    p.play()
                 }
             }
             PlayMode.SHUFFLE -> playRandom()
@@ -1226,4 +1239,52 @@ class PlayerManager(private val applicationContext: Context) {
      * 禁用均衡器
      */
     fun disableEqualizer() = playerEqualizer.disableEqualizer()
+}
+
+/**
+ * [PlayerManager.removeFromQueue] 的队列移除结果。
+ *
+ * @property queue 移除后的新队列
+ * @property currentIndex 移除后的当前下标（队列空时为 0）
+ * @property seekTo 需要显式 `seekTo` 的目标下标；**null 表示无需对齐 ExoPlayer**
+ *   （仅「移除的是当前播放项且队列仍非空」时非 null）
+ */
+internal data class QueueRemovalResult(
+    val queue: List<Song>,
+    val currentIndex: Int,
+    val seekTo: Int?
+)
+
+/**
+ * 计算从队列移除某一项后的（新队列, 新当前下标, 是否需 seekTo）。
+ *
+ * P2-10（2026-09-16）：抽成不依赖 ExoPlayer / Context 的纯函数，使边界可单测。
+ * 三条分支与原实现语义一致：
+ * - 移除项在当前项之前 → 当前下标前移 1
+ * - 移除项就是当前项 → 落到「原下标夹到新队尾」；队列因此变空则归 0；
+ *   非空时返回 [QueueRemovalResult.seekTo]，调用方必须显式对齐（否则 ExoPlayer
+ *   在移除末尾项后会停在 STATE_ENDED，被 onPlaybackEnded 的 REPEAT_ALL 误判）
+ * - 移除项在当前项之后 → 当前下标不变
+ *
+ * @param removeIndex 必须落在 `queue.indices` 内（调用方保证）
+ */
+internal fun computeQueueRemoval(
+    queue: List<Song>,
+    currentIndex: Int,
+    removeIndex: Int
+): QueueRemovalResult {
+    val newQueue = queue.toMutableList().apply { removeAt(removeIndex) }
+    return when {
+        removeIndex < currentIndex ->
+            QueueRemovalResult(newQueue, currentIndex - 1, null)
+        removeIndex == currentIndex -> {
+            if (newQueue.isEmpty()) {
+                QueueRemovalResult(newQueue, 0, null)
+            } else {
+                val newIndex = removeIndex.coerceAtMost(newQueue.size - 1)
+                QueueRemovalResult(newQueue, newIndex, newIndex)
+            }
+        }
+        else -> QueueRemovalResult(newQueue, currentIndex, null)
+    }
 }

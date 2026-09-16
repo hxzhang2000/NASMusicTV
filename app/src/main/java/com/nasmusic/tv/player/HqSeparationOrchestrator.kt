@@ -461,6 +461,13 @@ class HqSeparationOrchestrator(
                     _separating.value = false
                     _separationProgress.value = 0f to ""
                     // 保存原唱文件到缓存（分离时下载的输入文件），用于切回原唱时直接使用
+                    //
+                    // ⚠️ 约定锁死（P3-1，2026-09-16）：[AccompanimentCache.saveOriginalFile]
+                    // 必须保持 **copy** 语义（现为 `source.copyTo(dest, overwrite = true)`），
+                    // 不能改成 rename/move。原因：紧随其后的 cleanupTempFile(tempInputPath)
+                    // 会删除 tempInputPath；若 saveOriginalFile 改为 rename，缓存下来的原唱
+                    // 文件会被这一步一并删掉，之后切回原唱时文件已不存在。
+                    // 两行顺序不可调换，cleanupTempFile 也不可省略（否则临时文件残留）。
                     val inputPath = tempInputPath
                     if (inputPath != null && songId != null) {
                         accompanimentCache?.saveOriginalFile(songId, inputPath)
