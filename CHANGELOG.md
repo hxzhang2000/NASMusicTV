@@ -57,7 +57,8 @@
 ### 说明
 - **过程中发现**：第一批修复（P0/P1/P2-1..6）里藏着一处**编译错误**——`SongDownloadManager.kt:530` 把缺 `else` 的 `if` 当表达式用。这说明该批修复当时**未经任何编译验证**。教训：**`file:line` 存在 ≠ 代码能编译**，「已修」的充分性必须由编译兜底。
 - **环境结论勘误**：开工时依据的「本机单测不可用（worker JVM 一启动即死）」**已过时并被实测推翻**——全量 518 例 0 失败。根因推断为**卡死的 Gradle 守护进程持锁**；再遇 worker 秒死应先 `./gradlew.bat --stop` 释放锁。
-- **验证**：`assembleDebug lintDebug` BUILD SUCCESSFUL，`lintDebug` 0 Error / 257 Warning（基线 256，差值为依赖版本类网络告警波动）；`testDebugUnitTest` **518 例 / 0 失败 / 0 错误**（512 基线 + 新增 6 例）。
+- **验证**：`assembleDebug` / `assembleRelease` 均 BUILD SUCCESSFUL（5m31s / 9m30s，后者含 R8 + `lintVitalRelease`）；`lintDebug` 0 Error / 257 Warning（基线 256，差值为依赖版本类网络告警波动）；`testDebugUnitTest` **518 例 / 0 失败 / 0 错误**（512 基线 + 新增 6 例）。产物 `NASMusicTV-release-v2-32-6.apk`（22.9MB），`output-metadata.json` 核对 versionCode 145 / versionName 2.32.6。
+  - 注：本地 `keystore.properties` 的 `storeFile` 刻意指向 `debug.keystore`（`androiddebugkey`），使**本地 release 与 debug 同签名**、`install -r` 可覆盖已装 debug 版；根目录 `release-key.jks` 未被本地构建使用。此为**有意设计**，非缺陷。
 - **版本**：v2.32.5 → **v2.32.6**（versionCode 144 → 145）
 
 ## [v2.32.5] - 2026-09-15

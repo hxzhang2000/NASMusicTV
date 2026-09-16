@@ -8362,7 +8362,9 @@ onSearchSong = { keyword -> viewModel.searchNetworkSongs(keyword) },
 
 **测试**：新增 `QueueRemovalTest`（6 例，覆盖 `computeQueueRemoval` 全部边界，含「移除末尾当前项」这一原缺陷场景）。**全量单测 518 例 0 失败**（512 → 518）。
 
-**验证**：`assembleDebug lintDebug` **BUILD SUCCESSFUL**；`lintDebug` **0 Error** / 257 Warning（基线 256，差值来自 `NewerVersionAvailable`/`GradleDependency` 这类**网络相关**的依赖版本告警波动；改动文件上 0 命中）。注意 `assembleDebug` **不编译 test 源码**，新增测试文件必须跑 `testDebugUnitTest` 才能覆盖到。
+**验证**：`assembleDebug` / `assembleRelease` 均 **BUILD SUCCESSFUL**（5m31s / 9m30s；release 含 `minifyReleaseWithR8` + `lintVitalRelease`）；`lintDebug` **0 Error** / 257 Warning（基线 256，差值来自 `NewerVersionAvailable`/`GradleDependency` 这类**网络相关**的依赖版本告警波动；改动文件上 0 命中）。`testDebugUnitTest` **518 例 / 0 失败 / 0 错误**（512 基线 + 新增 6 例）。产物 `NASMusicTV-release-v2-32-6.apk`（22.9MB），`output-metadata.json` 核对 versionCode 145 / versionName 2.32.6。注意 `assembleDebug` **不编译 test 源码**，新增测试文件必须跑 `testDebugUnitTest` 才能覆盖到。
+
+**签名说明（有意设计，勿改）**：本地 `keystore.properties` 的 `storeFile` 指向 `C:\Users\hxzha\.android\debug.keystore`（alias `androiddebugkey`），使**本地 release 与 debug 同签名**——这样 `adb install -r` 可直接覆盖已装 debug 版，不会报 `INSTALL_FAILED_UPDATE_INCOMPATIBLE`。根目录 `release-key.jks` 未被本地构建使用（疑为发布商店用的真密钥）。`./gradlew :app:signingReport` 可复现：`Variant: release` → `Store: …\.android\debug.keystore`。
 
 **⚠️ 环境结论勘误**：本节开工时依据的「本机单测不可用（worker JVM 一启动即死）」**已过时并被实测推翻**——`testDebugUnitTest` 本机可正常运行（全量 518 例约 50s，单类隔离约 30s）。根因推断为**卡死的 Gradle 守护进程持锁**而非永久性环境限制；再遇 worker 秒死应先 `./gradlew.bat --stop` 释放锁。**本机验证强度 = 「编译 + lint + 单测」**。已同步更正 `AGENTS.md` 及本文档 §10.146 / §10.147 内的三处旧表述。
 
