@@ -7,7 +7,7 @@
 >
 > 类型：`Added`（新增） | `Changed`（变更） | `Fixed`（修复） | `Removed`（移除）
 
-## [Unreleased]
+## [v2.32.7] - 2026-09-16
 
 ### Changed
 
@@ -19,6 +19,15 @@
 - 虚化半径沿用「封面滤镜」设置，未开启时用默认 24dp
 - 涉及文件：`ui/screens/NowPlayingScreen.kt`（新增 `ImmersiveCoverHalf`）、`ui/components/CoverCarousel.kt`（新增 `contentScale` 参数，默认 `Fit`）、`ui/components/LyricsView.kt`（新增可选 `fadeMaskColor` 参数，默认 null 行为不变）
 - 技术细节见 `docs/technical-overview.md` §10.156
+
+### 验证
+
+- `compileDebugKotlin` / `assembleDebug` / `assembleRelease`（含 `minifyReleaseWithR8` + `lintVitalRelease`）均 BUILD SUCCESSFUL
+- `testDebugUnitTest` **518 例 / 0 失败 / 0 错误**（与基线一致）
+- `lintDebug` **0 Error / 257 Warning**（与基线一致；`NowPlayingScreen` / `LyricsView` / `CoverCarousel` 在报告里 **0 命中**）
+- 产物 `NASMusicTV-release-v2-32-7.apk`（22.9MB），`output-metadata.json` 核对 versionCode **146** / versionName **2.32.7**，与 `BuildConfig.VERSION_CODE` / `VERSION_NAME` 一致
+- 签名 `CN=Android Debug`（SHA-256 `43a9dec4…d59b`），与电视已装版同签名 → `adb install -r` 可原地升级
+- **版本**：v2.32.6 → **v2.32.7**（versionCode 145 → 146）
 
 ## [v2.32.6] - 2026-09-16
 

@@ -8370,7 +8370,7 @@ onSearchSong = { keyword -> viewModel.searchNetworkSongs(keyword) },
 
 **版本**：v2.32.5 → **v2.32.6**（versionCode 144 → 145）
 
-### 10.156 未发版 — 沉浸播放页重做：左半封面（右缘虚化渐黑）+ 右半黑底歌词（2026-09-16）
+### 10.156 v2.32.7 — 沉浸播放页重做：左半封面（右缘虚化渐黑）+ 右半黑底歌词（2026-09-16）
 
 **来源**：产品需求（4 条）——① 从正在播放页点击封面图进入沉浸播放页；② 只改封面图与歌词两部分；③ 封面占左侧一半空间，图片右边虚化渐变到黑色；④ 歌词占右侧一半空间，在黑色背景上显示。
 
@@ -8395,10 +8395,10 @@ onSearchSong = { keyword -> viewModel.searchNetworkSongs(keyword) },
 
 **测试**：无新增单测——纯 Compose 布局改动，无纯逻辑可抽取，且项目无 Compose UI 测试基础设施。
 
-**验证**：`compileDebugKotlin` BUILD SUCCESSFUL（无新增警告）；`assembleDebug` BUILD SUCCESSFUL；`testDebugUnitTest` **518 例 / 0 失败 / 0 错误**（与基线一致）；`lintDebug` **0 Error / 257 Warning**（与基线一致，`lint-results-debug.txt` 中 `NowPlayingScreen` / `LyricsView` / `CoverCarousel` **0 命中**）。
+**验证**：`compileDebugKotlin` BUILD SUCCESSFUL（无新增警告）；`assembleDebug` BUILD SUCCESSFUL；`assembleRelease` **BUILD SUCCESSFUL**（12m18s，含 `minifyReleaseWithR8` + `lintVitalRelease` + `optimizeReleaseResources`）；`testDebugUnitTest` **518 例 / 0 失败 / 0 错误**（与基线一致）；`lintDebug` **0 Error / 257 Warning**（与基线一致，`lint-results-debug.txt` 中 `NowPlayingScreen` / `LyricsView` / `CoverCarousel` **0 命中**）。产物 `NASMusicTV-release-v2-32-7.apk`（22,930,934 B ≈ 22.9MB），`output-metadata.json` 与 `BuildConfig` 双向核对 versionCode **146** / versionName **2.32.7**；`apksigner verify --print-certs` = `CN=Android Debug`（SHA-256 `43a9dec4…d59b`），与电视已装版同签名故 `adb install -r` 可原地升级。
 ⚠️ 首次 `assembleDebug` 曾在 `:app:dexBuilderDebug` 失败：`app/build/intermediates/desugar_graph/.../graph.bin (拒绝访问)`——**与本次改动无关**，属 Windows 文件占用；`./gradlew.bat --stop` + 删除 `app/build/intermediates/desugar_graph` 后重跑即通过。再遇同类报错不要怀疑代码。
 
-**版本**：未升版本——v2.32.6 已发布并打 tag，本项计入 `[Unreleased]`（见 `CHANGELOG.md`）
+**版本**：v2.32.6 → **v2.32.7**（versionCode 145 → 146）
 
 ### 10.152 v2.32.3 — T5：删除死代码 `VocalRemovalProcessor.kt`（算法先归档，2026-09-14）
 
