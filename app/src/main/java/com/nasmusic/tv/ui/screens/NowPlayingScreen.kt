@@ -32,8 +32,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.CompositingStrategy
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -42,9 +47,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Text
-import coil.compose.AsyncImage
-import coil.compose.rememberAsyncImagePainter
-import androidx.compose.foundation.Image
 import com.nasmusic.tv.R
 import com.nasmusic.tv.data.model.Lyrics
 import com.nasmusic.tv.data.model.LyricsHighlightMode
@@ -60,7 +62,6 @@ import com.nasmusic.tv.ui.components.KaraokePlaybackScreen
 import com.nasmusic.tv.ui.components.ProgressSection
 import com.nasmusic.tv.ui.components.SongInfoPanel
 import com.nasmusic.tv.ui.theme.NasMusicColors
-import com.nasmusic.tv.util.AppLog
 
 /**
  * 正在播放屏幕（主界面）
@@ -204,57 +205,20 @@ fun NowPlayingScreen(
         modifier = modifier
             .fillMaxSize()
             .background(
-                Brush.verticalGradient(
-                    listOf(
-                        NasMusicColors.Background,
-                        Color(0xFF0A1020)
-                    )
-                )
-            )
-    ) {
-        // --- 沉浸模式：全屏封面背景（应用封面滤镜设置）---
-        if (isImmersiveMode) {
-            val bgUrl = coverCandidates.firstOrNull() ?: currentSong?.coverUrl
-            AppLog.d("NowPlayingScreen", "immersiveBg: bgUrl=$bgUrl, coverCandidates=$coverCandidates, coverUrl=${currentSong?.coverUrl}")
-            Box(modifier = Modifier.fillMaxSize().background(Color(0xFF1A1A2E))) {
-                if (bgUrl != null) {
-                    val painter = rememberAsyncImagePainter(
-                        model = bgUrl,
-                        onState = { state ->
-                            AppLog.d("NowPlayingScreen", "immersiveBg state: ${state.javaClass.simpleName} bgUrl=${bgUrl.take(60)}")
-                        }
-                    )
-                    Image(
-                        painter = painter,
-                        contentDescription = "Fullscreen Cover Background",
-                        contentScale = androidx.compose.ui.layout.ContentScale.Crop,
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .then(
-                                if (coverFilterEnabled && coverFilterBlurRadius > 0f)
-                                    Modifier.blur(coverFilterBlurRadius.dp)
-                                else
-                                    Modifier
-                            )
+                // 沉浸模式：整屏纯黑（左半封面右缘渐黑 + 右半歌词区均落在黑底上，无缝衔接）
+                // 普通模式：保持原有纵向渐变背景
+                if (isImmersiveMode) {
+                    Brush.verticalGradient(listOf(Color.Black, Color.Black))
+                } else {
+                    Brush.verticalGradient(
+                        listOf(
+                            NasMusicColors.Background,
+                            Color(0xFF0A1020)
+                        )
                     )
                 }
-                // 半透明渐变遮罩覆盖整个背景，确保歌词可读
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(
-                            Brush.verticalGradient(
-                                colors = listOf(
-                                    Color(0xCC0C1222),
-                                    Color(0x990C1222),
-                                    Color(0xCC0C1222)
-                                )
-                            )
-                        )
-                )
-            }
-        }
-
+            )
+    ) {
         Column(
             modifier = Modifier.fillMaxSize().padding(start = 24.dp, end = 24.dp, top = 40.dp, bottom = 24.dp)
         ) {
@@ -263,11 +227,25 @@ fun NowPlayingScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f),
-                horizontalArrangement = Arrangement.spacedBy(48.dp),
+                horizontalArrangement = Arrangement.spacedBy(if (isImmersiveMode) 24.dp else 48.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // 左侧：封面 + 歌曲信息（沉浸模式隐藏）
-                if (!isImmersiveMode) {
+                // 左侧：
+                // - 沉浸模式 = 占满左半屏的大封面，图片右缘虚化并渐变到黑
+                // - 普通模式 = 封面 + 歌曲信息（原布局）
+                if (isImmersiveMode) {
+                    ImmersiveCoverHalf(
+                        currentSong = currentSong,
+                        coverCandidates = coverCandidates,
+                        isPlaying = isPlaying,
+                        coverFilterEnabled = coverFilterEnabled,
+                        coverFilterBlurRadius = coverFilterBlurRadius,
+                        onExitImmersive = onToggleImmersive,
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxHeight()
+                    )
+                } else {
                     Column(
                         modifier = Modifier
                             .width(380.dp)
@@ -317,8 +295,15 @@ fun NowPlayingScreen(
                     }
                 }
 
-                // 右侧：歌词（沉浸模式下全宽）
-                Column(modifier = Modifier.weight(1f)) {
+                // 右侧：歌词（沉浸模式下占右半屏，纯黑背景上显示歌词）
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .then(
+                            if (isImmersiveMode) Modifier.background(Color.Black)
+                            else Modifier
+                        )
+                ) {
                     // 歌词来源标签和高亮模式切换（可聚焦 — 保留 Surface）
                     Row(
                         modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
@@ -451,6 +436,8 @@ fun NowPlayingScreen(
                                 highlightMode = highlightMode,
                                 isPlaying = isPlaying,
                                 fontSizeMultiplier = lyricsFontScale,
+                                // 沉浸模式歌词区为纯黑底 → 渐隐遮罩同色，避免出现深蓝渐变边
+                                fadeMaskColor = if (isImmersiveMode) Color(0xCC000000) else null,
                                 modifier = Modifier
                                     .fillMaxSize()
                                     .padding(horizontal = 4.dp, vertical = 4.dp)
@@ -472,6 +459,119 @@ fun NowPlayingScreen(
                 onSeek = onSeek,
                 compact = true,
                 isLive = currentSong?.networkSource?.isRadioSong() == true
+            )
+        }
+    }
+}
+
+/** 沉浸模式左半屏封面：右缘虚化的默认模糊半径（dp）——未开启「封面滤镜」时使用。 */
+private const val IMMERSIVE_EDGE_BLUR_DP = 24f
+
+/**
+ * 沉浸模式左半屏封面（占左侧一半空间）。
+ *
+ * 视觉构成（自下而上三层）：
+ * 1. 封面原图，[ContentScale.Crop] 铺满左半区（保持清晰，作为主体）
+ * 2. 同一封面的模糊副本，用水平渐变 alpha 遮罩只在右侧显现 —— 形成「右缘虚化」。
+ *    `Modifier.blur` 在 API < 31 上是 no-op（电视 SDK 22 即如此），此时该层自动
+ *    退化为纯渐变、不会报错，效果等同单层渐变遮罩。
+ * 3. 水平渐变黑幕：左侧全透明 → 右缘纯黑，与右半屏歌词区的纯黑背景无缝衔接。
+ *
+ * 点击（TV OK 键 / 手机触摸）退出沉浸模式，回到普通播放页。
+ */
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+private fun ImmersiveCoverHalf(
+    currentSong: Song?,
+    coverCandidates: List<String>,
+    isPlaying: Boolean,
+    coverFilterEnabled: Boolean,
+    coverFilterBlurRadius: Float,
+    onExitImmersive: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    // 虚化半径沿用用户的「封面滤镜」设置；未开启时给一个温和的默认值
+    val edgeBlurDp = if (coverFilterEnabled && coverFilterBlurRadius > 0f) {
+        coverFilterBlurRadius
+    } else {
+        IMMERSIVE_EDGE_BLUR_DP
+    }
+    // ③ 右缘渐黑：0.55 处仍全透明，1.0 处纯黑 —— 保证与右侧黑底歌词区无缝
+    val edgeFadeBrush = remember {
+        Brush.horizontalGradient(
+            0.55f to Color.Transparent,
+            0.80f to Color.Black.copy(alpha = 0.72f),
+            1f to Color.Black
+        )
+    }
+    // ② 模糊副本的显现遮罩：0.45 处不可见 → 1.0 处完全显现
+    // （DstIn 只保留渐变不透明的区域，从而让虚化"渐进"出现）
+    val blurMaskBrush = remember {
+        Brush.horizontalGradient(
+            0.45f to Color.Transparent,
+            0.72f to Color.Black.copy(alpha = 0.85f),
+            1f to Color.Black
+        )
+    }
+
+    FocusableSurface(
+        onClick = onExitImmersive,
+        modifier = modifier,
+        shape = RoundedCornerShape(12.dp),
+        // 已占满左半屏，焦点缩放会溢出裁切，故不做缩放反馈
+        focusedScale = 1f,
+        pressedScale = 1f,
+        animationDurationMs = 150,
+        containerColor = Color.Black,
+        focusedContainerColor = Color.Black,
+        contentColor = Color.Transparent,
+        focusedContentColor = Color.Transparent,
+        showFocusBorder = false
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .clip(RoundedCornerShape(12.dp))
+                .background(Color.Black)
+        ) {
+            // ① 封面原图（清晰主体）
+            key(currentSong?.id) {
+                CoverCarousel(
+                    coverCandidates = coverCandidates,
+                    isPlaying = isPlaying,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
+
+            // ② 右缘虚化层（模糊副本 + 水平渐变遮罩）
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    // 遮罩需要离屏层，否则 DstIn 会作用到已绘制的整屏内容
+                    .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
+                    .drawWithContent {
+                        drawContent()
+                        drawRect(brush = blurMaskBrush, blendMode = BlendMode.DstIn)
+                    }
+            ) {
+                key(currentSong?.id) {
+                    CoverCarousel(
+                        coverCandidates = coverCandidates,
+                        isPlaying = isPlaying,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .blur(edgeBlurDp.dp)
+                    )
+                }
+            }
+
+            // ③ 右缘渐变到黑
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(edgeFadeBrush)
             )
         }
     }

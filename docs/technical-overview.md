@@ -8370,6 +8370,36 @@ onSearchSong = { keyword -> viewModel.searchNetworkSongs(keyword) },
 
 **版本**：v2.32.5 → **v2.32.6**（versionCode 144 → 145）
 
+### 10.156 未发版 — 沉浸播放页重做：左半封面（右缘虚化渐黑）+ 右半黑底歌词（2026-09-16）
+
+**来源**：产品需求（4 条）——① 从正在播放页点击封面图进入沉浸播放页；② 只改封面图与歌词两部分；③ 封面占左侧一半空间，图片右边虚化渐变到黑色；④ 歌词占右侧一半空间，在黑色背景上显示。
+
+**改前**（`ui/screens/NowPlayingScreen.kt`）：沉浸模式 = 全屏封面模糊背景 + 半透明纵向遮罩（`0xCC0C1222`），左侧 `CoverColumn` 被 `if (!isImmersiveMode)` **整列隐藏**，歌词列 `weight(1f)` 占满整宽。即「封面被藏起来、歌词压在模糊封面上」。
+
+**改后**：
+- 外层 `Box` 背景：沉浸模式改纯黑（`Brush.verticalGradient(Black, Black)`）；非沉浸模式保持原 `Background → 0xFF0A1020` 渐变不变
+- `Row` 左半（`weight(1f)`）：新增 `ImmersiveCoverHalf`，三层结构自下而上——
+  1. `CoverCarousel(contentScale = ContentScale.Crop)` 原图铺满，保持清晰
+  2. 同一封面的**模糊副本** + 水平渐变 alpha 遮罩（`graphicsLayer { compositingStrategy = Offscreen }` + `drawWithContent { drawRect(brush, blendMode = BlendMode.DstIn) }`），0.45 处不可见 → 1.0 处完全显现，形成「右缘渐进虚化」
+  3. 水平渐变黑幕（0.55 透明 → 0.80 半透明 → 1.0 纯黑），与右半屏黑底无缝衔接
+- `Row` 右半（`weight(1f)`）：歌词列加 `background(Color.Black)`；内层歌词容器在沉浸模式下仍为 `Transparent`（避免与父层黑底叠色）
+- 左半封面为 `FocusableSurface`（`focusedScale = pressedScale = 1f`，占满半屏时焦点缩放会溢出裁切），`onClick` 即 `onToggleImmersive` **退出沉浸模式**
+- 间距：沉浸模式 `spacedBy(24.dp)`（原 48dp 不变于非沉浸模式）
+
+**关键约束与坑（务必先读）**：
+- **`Modifier.blur` 在 API < 31 上是 no-op**（目标电视 `9R54_G8S` 为 SDK 22）。因此虚化层在电视上自动退化为纯渐变遮罩，**既不报错也无异常**，效果等同单层渐变。这是**有意的优雅降级**——不要为此改用 `RenderEffect`（同样需要 API 31）或加版本判断分支
+- **`DstIn` 遮罩必须配离屏层**：不套 `CompositingStrategy.Offscreen` 会把已绘制的整屏内容一起裁掉（同类用法见 `VisualizerStage.kt:232/270`）
+- 虚化层用的是**第二个 `CoverCarousel` 实例**，不是复用 painter。`getCoverCandidates()` 返回的是同一张专辑图的多个来源（内嵌 APIC 帧 / 旁路 jpg / 后端 URL / 网络 URL），两张图内容一致，两个 10s 轮播定时器即使有几毫秒漂移也看不出来；这样做的好处是**保留 `CoverCarousel` 内建的「URL 加载失败自动降级到下一候选」逻辑**
+- `LyricsView` 的上下渐隐遮罩原本**硬编码** `NasMusicBrushes.topFadeMask` / `bottomFadeMask`（底色 `0xCC0C1222` 深蓝）。黑底上会出现可见的深蓝渐变带 → 新增可选参数 `fadeMaskColor: Color? = null`，沉浸页传 `0xCC000000`；**默认 null 时行为与改前完全一致**，其余调用方零影响（全仓库仅 `NowPlayingScreen` 一处调用）
+- `CoverCarousel` 新增 `contentScale: ContentScale = ContentScale.Fit`（默认值 = 原硬编码值），`QueueScreen` / `UnifiedPlaylistCard` 等既有调用方无需改动
+
+**测试**：无新增单测——纯 Compose 布局改动，无纯逻辑可抽取，且项目无 Compose UI 测试基础设施。
+
+**验证**：`compileDebugKotlin` BUILD SUCCESSFUL（无新增警告）；`assembleDebug` BUILD SUCCESSFUL；`testDebugUnitTest` **518 例 / 0 失败 / 0 错误**（与基线一致）；`lintDebug` **0 Error / 257 Warning**（与基线一致，`lint-results-debug.txt` 中 `NowPlayingScreen` / `LyricsView` / `CoverCarousel` **0 命中**）。
+⚠️ 首次 `assembleDebug` 曾在 `:app:dexBuilderDebug` 失败：`app/build/intermediates/desugar_graph/.../graph.bin (拒绝访问)`——**与本次改动无关**，属 Windows 文件占用；`./gradlew.bat --stop` + 删除 `app/build/intermediates/desugar_graph` 后重跑即通过。再遇同类报错不要怀疑代码。
+
+**版本**：未升版本——v2.32.6 已发布并打 tag，本项计入 `[Unreleased]`（见 `CHANGELOG.md`）
+
 ### 10.152 v2.32.3 — T5：删除死代码 `VocalRemovalProcessor.kt`（算法先归档，2026-09-14）
 
 **来源**：`logs_temp/code-review-full-report-2026-09-13.md` §T5 / `docs/code-review-2026-09-03.md` §P2。文件 348 行，全项目**零调用方**（`PlaybackService.kt:207` 实际 `val vocalRemovalProcessor = SpectralMaskProcessor()`——变量名是历史遗留，类型早就换过了；`PlayerManager.setVocalRemovalProcessor()` 的形参类型同样是 `SpectralMaskProcessor`）。

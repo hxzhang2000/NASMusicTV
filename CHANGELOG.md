@@ -7,6 +7,19 @@
 >
 > 类型：`Added`（新增） | `Changed`（变更） | `Fixed`（修复） | `Removed`（移除）
 
+## [Unreleased]
+
+### Changed
+
+**沉浸播放页重做：左半封面（右缘虚化渐黑）+ 右半黑底歌词**
+- 改前沉浸模式是「全屏模糊封面背景 + 歌词全宽」，左侧封面列被整列隐藏——封面看不到，歌词压在模糊封面上
+- 改后：**左半屏 = 封面大图**（`ContentScale.Crop` 铺满，右缘渐进虚化并渐变到纯黑），**右半屏 = 纯黑背景 + 歌词**，两侧各占一半
+- 沉浸模式整屏底色改纯黑；歌词上下渐隐遮罩同色（新增 `LyricsView.fadeMaskColor`），避免黑底上出现深蓝渐变带
+- 左半封面可点击（TV OK / 手机触摸）**退出沉浸模式**——此前只能靠 BACK 键返回
+- 虚化半径沿用「封面滤镜」设置，未开启时用默认 24dp
+- 涉及文件：`ui/screens/NowPlayingScreen.kt`（新增 `ImmersiveCoverHalf`）、`ui/components/CoverCarousel.kt`（新增 `contentScale` 参数，默认 `Fit`）、`ui/components/LyricsView.kt`（新增可选 `fadeMaskColor` 参数，默认 null 行为不变）
+- 技术细节见 `docs/technical-overview.md` §10.156
+
 ## [v2.32.6] - 2026-09-16
 
 > 2026-09-16 审查报告（`docs/code-review-2026-09-16.md`）修复落地：共 **25 项**（P0×2 / P1×7 / P2×11 / P3×5）。

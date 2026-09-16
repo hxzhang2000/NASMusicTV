@@ -30,12 +30,16 @@ import kotlinx.coroutines.delay
  * - 单张封面时静态显示
  * - 当前 URL 加载失败自动尝试候选列表下一项（内层 fallback）
  * - 全部失败时显示音符占位符
+ *
+ * @param contentScale 封面缩放方式。默认 [ContentScale.Fit]（完整显示，留黑边）；
+ *   沉浸播放页左半屏铺满时传 [ContentScale.Crop]。
  */
 @Composable
 fun CoverCarousel(
     coverCandidates: List<String>,
     isPlaying: Boolean,
     autoCycle: Boolean = false,
+    contentScale: ContentScale = ContentScale.Fit,
     modifier: Modifier = Modifier,
     onAllFailed: () -> Unit = {}
 ) {
@@ -53,7 +57,7 @@ fun CoverCarousel(
             AsyncImage(
                 model = coverCandidates[0],
                 contentDescription = "Album Cover",
-                contentScale = ContentScale.Fit,
+                contentScale = contentScale,
                 modifier = modifier.fillMaxSize(),
                 onError = { singleFailed = 1 }
             )
@@ -89,7 +93,7 @@ fun CoverCarousel(
                 AsyncImage(
                     model = effectiveUrl,
                     contentDescription = "Album Cover",
-                    contentScale = ContentScale.Fit,
+                    contentScale = contentScale,
                     modifier = modifier.fillMaxSize(),
                     onError = {
                         // 当前 URL 失败，尝试候选列表下一项

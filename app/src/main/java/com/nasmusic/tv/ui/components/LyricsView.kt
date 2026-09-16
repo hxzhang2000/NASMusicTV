@@ -27,6 +27,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
@@ -50,6 +51,10 @@ import kotlinx.coroutines.delay
  * 支持按当前播放时间滚动显示歌词行
  * 支持逐行/逐字高亮模式切换
  * 使用 TV 标准 Surface 焦点管理，避免与焦点系统冲突
+ *
+ * @param fadeMaskColor 上下渐隐遮罩的底色。传 null（默认）沿用主题的深蓝底色
+ *   [NasMusicBrushes.topFadeMask] / [NasMusicBrushes.bottomFadeMask]；
+ *   沉浸播放页为纯黑底，传黑色可让渐隐与背景无缝融合。
  */
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
@@ -59,7 +64,8 @@ fun LyricsView(
     modifier: Modifier = Modifier,
     highlightMode: LyricsHighlightMode = LyricsHighlightMode.LINE_BY_LINE,
     isPlaying: Boolean = true,
-    fontSizeMultiplier: Float = 1.0f
+    fontSizeMultiplier: Float = 1.0f,
+    fadeMaskColor: Color? = null
 ) {
     // 手机紧凑模式：恢复原始密度，保持歌词字号不被全局缩放（用户独立调节）
     if (com.nasmusic.tv.ui.theme.LocalPhoneCompact.current) {
@@ -70,10 +76,10 @@ fun LyricsView(
                 fontScale = baseDensity.fontScale
             )
         ) {
-            LyricsViewInner(lyrics, currentTimeMs, modifier, highlightMode, isPlaying, fontSizeMultiplier)
+            LyricsViewInner(lyrics, currentTimeMs, modifier, highlightMode, isPlaying, fontSizeMultiplier, fadeMaskColor)
         }
     } else {
-        LyricsViewInner(lyrics, currentTimeMs, modifier, highlightMode, isPlaying, fontSizeMultiplier)
+        LyricsViewInner(lyrics, currentTimeMs, modifier, highlightMode, isPlaying, fontSizeMultiplier, fadeMaskColor)
     }
 }
 
@@ -85,7 +91,8 @@ private fun LyricsViewInner(
     modifier: Modifier = Modifier,
     highlightMode: LyricsHighlightMode = LyricsHighlightMode.LINE_BY_LINE,
     isPlaying: Boolean = true,
-    fontSizeMultiplier: Float = 1.0f
+    fontSizeMultiplier: Float = 1.0f,
+    fadeMaskColor: Color? = null
 ) {
     if (lyrics == null || lyrics.isEmpty) {
         Box(
@@ -155,6 +162,21 @@ private fun LyricsViewInner(
     }
 
     // Box 叠加：下方是滚动歌词，上下各一层 fade mask
+    // 沉浸播放页为纯黑底 → 用同色遮罩，渐隐边缘与背景无缝
+    val topFadeMask = remember(fadeMaskColor) {
+        if (fadeMaskColor != null) {
+            Brush.verticalGradient(colors = listOf(fadeMaskColor, Color.Transparent))
+        } else {
+            NasMusicBrushes.topFadeMask
+        }
+    }
+    val bottomFadeMask = remember(fadeMaskColor) {
+        if (fadeMaskColor != null) {
+            Brush.verticalGradient(colors = listOf(Color.Transparent, fadeMaskColor))
+        } else {
+            NasMusicBrushes.bottomFadeMask
+        }
+    }
     Box(modifier = modifier.fillMaxSize()) {
         // --- 滚动歌词列表（使用 TV 焦点管理，移除了与焦点冲突的 pointerInput）---
         LazyColumn(
@@ -230,7 +252,7 @@ private fun LyricsViewInner(
                 .fillMaxWidth()
                 .height(80.dp)
                 .align(Alignment.TopCenter)
-                .background(NasMusicBrushes.topFadeMask)
+                .background(topFadeMask)
         )
 
         // --- 底部渐隐 mask ---
@@ -239,7 +261,7 @@ private fun LyricsViewInner(
                 .fillMaxWidth()
                 .height(80.dp)
                 .align(Alignment.BottomCenter)
-                .background(NasMusicBrushes.bottomFadeMask)
+                .background(bottomFadeMask)
         )
     }
 }
