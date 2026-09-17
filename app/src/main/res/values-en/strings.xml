@@ -992,4 +992,6 @@
     <string name="quality_tier_standard">128k</string>
     <string name="player_visualizer">Visualizer</string>
     <string name="player_visualizer_short">Viz</string>
+    <!-- Network music failover -->
+    <string name="cross_source_replace_playing">"%1$s" link expired, playing replacement from %2$s source</string>
 </resources>

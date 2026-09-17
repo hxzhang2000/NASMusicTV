@@ -95,11 +95,15 @@ class NetworkMusicManager(
      *
      * 缓存策略：同一歌曲 5 分钟内复用缓存的播放链接，避免重复网络请求。
      * 播放链接有时效性，缓存过期后重新解析。
+     *
+     * @param forceRefresh 为 true 时强制绕过缓存、走完整降级链重新解析。
+     *        播放失败重试路径必须传 true——否则会命中「已过期但仍未到 5 分钟 TTL」
+     *        的旧缓存，导致重试永远拿到失效链接、连锁跳过后续歌曲。
      */
     /** 运行时查询某源是否已注册（供播放前自愈判断） */
     fun isServiceRegistered(sourceId: String): Boolean = services.containsKey(sourceId)
 
-    suspend fun resolvePlayUrl(song: Song): String? {
+    suspend fun resolvePlayUrl(song: Song, forceRefresh: Boolean = false): String? {
         if (!song.isNetworkSong) return song.streamUrl
         val src = song.networkSource ?: run {
             AppLog.e(TAG, "resolvePlayUrl: networkSource 为 null（song id=${song.id} title=${song.title}），无法路由")
@@ -109,7 +113,7 @@ class NetworkMusicManager(
             AppLog.w(TAG, "resolvePlayUrl: 未注册源 source=$src（song id=${song.id}）；已注册源=${services.keys}")
             return null
         }
-        AppLog.d(TAG, "resolvePlayUrl: 路由到 source=$src (song id=${song.id} networkId=${song.networkId})")
+        AppLog.d(TAG, "resolvePlayUrl: 路由到 source=$src (song id=${song.id} networkId=${song.networkId}) forceRefresh=$forceRefresh")
 
         // 清理过期缓存条目
         val now = System.currentTimeMillis()
@@ -122,11 +126,16 @@ class NetworkMusicManager(
                 .forEach { playUrlCache.remove(it.key) }
         }
 
-        // 检查缓存
-        val cached = playUrlCache[song.id]
-        if (cached != null) {
-            AppLog.d(TAG, "resolvePlayUrl: cache hit for songId=${song.id}")
-            return cached.url
+        // 检查缓存（forceRefresh 时跳过——重试路径绝不命中旧缓存）
+        if (!forceRefresh) {
+            val cached = playUrlCache[song.id]
+            if (cached != null) {
+                AppLog.d(TAG, "resolvePlayUrl: cache hit for songId=${song.id}")
+                return cached.url
+            }
+        } else {
+            // 强制刷新：清除旧缓存条目，确保下面走完整降级链
+            playUrlCache.remove(song.id)
         }
 
         return try {
@@ -135,10 +144,14 @@ class NetworkMusicManager(
                 // 写入缓存
                 playUrlCache[song.id] = CachedPlayUrl(url, now)
                 AppLog.d(TAG, "resolvePlayUrl: cached new url for songId=${song.id}")
+            } else {
+                // 解析失败：移除缓存条目，避免下次又命中过期项
+                playUrlCache.remove(song.id)
             }
             url
         } catch (e: Exception) {
             AppLog.w(TAG, "resolvePlayUrl error: ${e.message}", e)
+            playUrlCache.remove(song.id)
             null
         }
     }
@@ -262,5 +275,94 @@ class NetworkMusicManager(
         val defSvc = services[def]
         val others = services.filterKeys { it != def }.values
         return if (defSvc != null) listOf(defSvc) + others else others.toList()
+    }
+
+    /**
+     * 跨源降级解析结果。
+     *
+     * @param replacement 替代歌曲（来自其他网络源，带已解析的 playUrl）
+     * @param playUrl 可直接播放的链接
+     * @param sourceId 命中源 ID（用于日志/提示）
+     */
+    data class CrossSourceResult(
+        val replacement: Song,
+        val playUrl: String,
+        val sourceId: String
+    )
+
+    /**
+     * 带跨源降级的播放链接解析。
+     *
+     * 策略（从轻到重）：
+     * 1. 先按原源精确路由解析（含 forceRefresh 语义）。
+     * 2. 原源解析失败时，按 [orderedServices] 顺序遍历**排除原源之外**的其他已注册源，
+     *    用 `title + artist` 重新搜索，并对候选结果逐个做可播校验
+     *    （`resolvePlayUrl` 非空才算可播，避免「搜到但依然播不了」），
+     *    取第一个可播的替代曲返回。
+     * 3. 全部源失败返回 null（由调用方决定跳下一首）。
+     *
+     * @param song 原歌曲（networkSource 即其来源）
+     * @param forceRefresh 原源解析时是否强制绕过缓存
+     * @return 跨源替代结果；无需降级或降级失败返回 null
+     */
+    suspend fun resolvePlayUrlWithCrossSourceFallback(
+        song: Song,
+        forceRefresh: Boolean = false
+    ): CrossSourceResult? {
+        if (!song.isNetworkSong) return null
+        val src = song.networkSource ?: return null
+
+        // 原源解析
+        val originalUrl = resolvePlayUrl(song, forceRefresh)
+        if (!originalUrl.isNullOrBlank()) return null  // 原源可播，无需降级
+
+        AppLog.w(TAG, "cross-source: 原源 source=$src 解析失败，尝试其他源重搜 title='${song.title}' artist='${song.artist}'")
+
+        // 用 title+artist 构造搜索关键词（artist 为空时仅用 title）
+        val keywords = listOf(song.title, song.artist).filter { it.isNotBlank() }
+        if (keywords.isEmpty()) {
+            AppLog.w(TAG, "cross-source: title 与 artist 均为空，无法重搜")
+            return null
+        }
+        val query = keywords.joinToString(" ").trim()
+
+        // 按优先级顺序尝试其他源（排除原源）
+        for (svc in orderedServices()) {
+            if (svc.sourceId == src) continue  // 跳过原源
+            if (!services.containsKey(svc.sourceId)) continue
+            AppLog.w(TAG, "cross-source: 尝试候选源 ${svc.sourceId} 搜索 '$query'")
+            val candidates = try {
+                svc.search(query)
+            } catch (e: Exception) {
+                AppLog.w(TAG, "cross-source: ${svc.sourceId} 搜索失败: ${e.message}")
+                emptyList()
+            }
+            if (candidates.isEmpty()) {
+                AppLog.w(TAG, "cross-source: ${svc.sourceId} 无搜索结果")
+                continue
+            }
+
+            // 对候选逐个做可播校验，取第一个可播的
+            for (candidate in candidates) {
+                // 排除原曲本身（同 id 同源）与空标题结果
+                if (candidate.id == song.id) continue
+                val candidateUrl = try {
+                    svc.resolvePlayUrl(candidate)
+                } catch (e: Exception) {
+                    AppLog.w(TAG, "cross-source: ${svc.sourceId} 候选 ${candidate.title} 解析异常: ${e.message}")
+                    null
+                }
+                if (!candidateUrl.isNullOrBlank()) {
+                    // 把解析好的 URL 写回替代曲，保证替换即可播
+                    val replacement = candidate.copy(streamUrl = candidateUrl)
+                    AppLog.w(TAG, "cross-source: 命中源 ${svc.sourceId} 替代 '${candidate.title}' -> $candidateUrl")
+                    return CrossSourceResult(replacement, candidateUrl, svc.sourceId)
+                }
+            }
+            AppLog.w(TAG, "cross-source: ${svc.sourceId} 候选均不可播")
+        }
+
+        AppLog.w(TAG, "cross-source: 所有源均无可播替代曲")
+        return null
     }
 }

@@ -830,6 +830,7 @@
     <string name="resolve_url_failed_retry">无法解析播放链接，请稍后重试</string>
     <string name="resolve_url_endpoint_failed">无法解析播放链接，网络音乐端点连接失败</string>
     <string name="resolve_url_auto_skip_with_title">无法解析播放链接，自动跳过《%s》</string>
+    <string name="cross_source_replace_playing">《%1$s》链接失效，已用 %2$s 源版本替换播放</string>
 
     <!-- Play (MainViewModel) -->
     <string name="play_failed_with_msg">播放失败: %s</string>

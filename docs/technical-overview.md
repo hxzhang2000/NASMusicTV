@@ -8834,6 +8834,40 @@ translateY = 19 − 34×1.75 = −40.5
 
 **版本**：v2.34.0 → **v2.34.1**（versionCode 148 → 149）
 
+### 10.160 v2.34.2 — 网络音乐播放失败多级降级（链接失效不再连锁跳歌，2026-09-17）
+
+**来源**：用户发现网络歌曲播放数首后，后续连续多首解析失败 → 全部静默跳歌。
+
+**根因**：`NetworkMusicManager.resolvePlayUrl()` 内部 `playUrlCache`（5 分钟 TTL）在过期前返回
+旧 URL；播放失败重试时命中该缓存，走完所有 endpoint fallback 仍然拿到同一个失效 URL → 每首
+都失败 → 逐首跳过。此外 endpoint fallback 只在单源内尝试，源本身故障时所有 endpoint 都不可用。
+
+**修复内容**（三级降级链路 + 防死循环）：
+
+| 层级 | 机制 | 入口 | 行为 |
+|------|------|------|------|
+| 0 | `forceRefresh` | `resolvePlayUrl(song, forceRefresh=true)` | 跳过缓存读 + 解析失败时清除缓存条目 |
+| 1 | 同源重搜 | `tryReplaceByReSearch()` | `title+artist` 关键词重搜当前源，逐条可播校验 |
+| 2 | 跨源替换 | `tryCrossSourceReplace()` → `resolvePlayUrlWithCrossSourceFallback()` | 遍历其他已注册源搜索 + 可播校验，替代曲替换队列中对应位置 |
+| 3 | 全部失败 | 现有 skip-next | 自动跳下一首 |
+
+**防死循环**：`PlayerViewModel.lastCrossSourceReplacedId` 记录最近跨源替代曲 id；若该替代曲
+再次解析失败，不再触发跨源，直接跳曲（1 次豁免）。
+
+**改动文件**：
+
+- `NetworkMusicManager.kt`：`resolvePlayUrl()` 新增 `forceRefresh` 参数；新增 `resolvePlayUrlWithCrossSourceFallback()` + `CrossSourceResult` 数据类
+- `PlayerViewModel.kt`：`resolveStreamUrl()` 透传 `forceRefresh`；`resolveAndPlayByIndex()` 统一传 `forceRefresh=true`；新增 `tryReplaceByReSearch()` / `tryCrossSourceReplace()` / `lastCrossSourceReplacedId`
+- `strings.xml`：新增 `cross_source_replace_playing`
+
+**测试**（`app/src/test/.../NetworkMusicManagerTest.kt`，新增 **11 例 / 0 失败**）：
+forceRefresh 跳过缓存、失败清缓存、同源搜索重试、跨源降级顺序（原源 → sourceB → sourceC）、
+候选可播校验（未播过不计数）、同源排除、全部失败返回 null、空标题/艺术家、同 id 候选跳过。
+
+**验证**：`:app:assembleDebug` + `:app:testDebugUnitTest` **BUILD SUCCESSFUL**。
+
+**版本**：v2.34.1 → **v2.34.2**（versionCode 149 → 150）
+
 ### 10.152 v2.32.3 — T5：删除死代码 `VocalRemovalProcessor.kt`（算法先归档，2026-09-14）
 
 **来源**：`logs_temp/code-review-full-report-2026-09-13.md` §T5 / `docs/code-review-2026-09-03.md` §P2。文件 348 行，全项目**零调用方**（`PlaybackService.kt:207` 实际 `val vocalRemovalProcessor = SpectralMaskProcessor()`——变量名是历史遗留，类型早就换过了；`PlayerManager.setVocalRemovalProcessor()` 的形参类型同样是 `SpectralMaskProcessor`）。

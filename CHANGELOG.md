@@ -7,6 +7,42 @@
 >
 > 类型：`Added`（新增） | `Changed`（变更） | `Fixed`（修复） | `Removed`（移除）
 
+## [v2.34.2] - 2026-09-17
+
+> **网络音乐播放失败多级降级：链接失效不再连锁跳歌**
+>
+> 此前网络歌曲播放失败重试时命中「已过期未到 5 分钟 TTL」的旧缓存，导致连续多首歌曲
+> 解析失败 → 全部静默跳过。现在重试路径强制绕过缓存走完整降级链，并新增同源重搜 + 跨源
+> 替换两级降级，大幅降低连续跳歌概率。
+>
+> **降级链路（从轻到重）**：
+> - 层级 0：`resolvePlayUrl(forceRefresh=true)` — 强制绕过缓存重新解析 + 失败清缓存
+> - 层级 1：同源重搜 — `title+artist` 关键词重搜，逐条可播校验取替代曲
+> - 层级 2：跨源替换 — 遍历其他已注册源搜索 + 可播校验，替代曲替换队列中对应位置
+> - 层级 3：全部失败 → 自动跳下一首
+>
+> **防死循环**：跨源替换产物的歌曲 id 被记录，若替代曲再次解析失败不再触发跨源，直接跳曲。
+
+### Changed
+
+- `NetworkMusicManager.resolvePlayUrl()` 新增 `forceRefresh: Boolean = false` 参数：
+  forceRefresh=true 时跳过缓存读 + 解析失败清除缓存条目，修复重试路径命中过期缓存的核心问题
+- `PlayerViewModel.resolveStreamUrl()` 新增 `forceRefresh` 参数并透传
+- `PlayerViewModel.resolveAndPlayByIndex()` 解析路径统一传 `forceRefresh=true`
+
+### Added
+
+- `NetworkMusicManager.resolvePlayUrlWithCrossSourceFallback()`：原源解析失败时按 `orderedServices` 顺序遍历其他已注册源，用 `title+artist` 重搜并逐条可播校验，返回 `CrossSourceResult(replacement, playUrl, sourceId)`
+- `NetworkMusicManager.CrossSourceResult` 数据类：跨源降级结果载体
+- `PlayerViewModel.tryReplaceByReSearch()`：层级 1+2 降级入口，包含跨源替换防死循环逻辑
+- `PlayerViewModel.tryCrossSourceReplace()`：封装跨源降级调用 + 代数校验
+- `PlayerViewModel.lastCrossSourceReplacedId`：防死循环字段，记录最近跨源替换产物 id
+- 字符串资源 `cross_source_replace_playing`：跨源替换提示「《%1$s》链接失效，已用 %2$s 源版本替换播放」
+- 新增 `NetworkMusicManagerTest`（**11 例 / 0 失败**）：forceRefresh 跳过缓存、失败清缓存、跨源降级顺序、候选可播校验、同源排除、防死循环
+
+### Test
+- 全量 `testDebugUnitTest` 通过（11 例新增 NetworkMusicManagerTest）
+
 ## [v2.34.1] - 2026-09-17
 
 > **沉浸播放页：封面右侧竖排显示歌曲名 / 艺术家**

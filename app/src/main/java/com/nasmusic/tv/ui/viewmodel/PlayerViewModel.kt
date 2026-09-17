@@ -74,6 +74,12 @@ class PlayerViewModel(
     // 避免用旧队列快照回滚用户后续操作。
     private var resolveGeneration = 0
 
+    /** 跨源替换防死循环：最近一次跨源替换产物的歌曲 id。
+     * 若某首歌已做过跨源替换（id 被记录）却再次解析失败，说明替代曲也不可播，
+     * 不再触发跨源替换、直接跳下一首，防止 原曲→替代A→替代B→... 无限替换。
+     */
+    private var lastCrossSourceReplacedId: String? = null
+
     /** 初始化播放模式（B-13: 从预设置恢复，MainViewModel 启动期调用一次） */
     fun initPlayModeFromSettings(defaultMode: PlayMode) {
         _playMode.value = defaultMode
@@ -254,13 +260,16 @@ class PlayerViewModel(
      * - 本地歌曲（含已下载入库）：streamUrl 置空时回退 path（本地 file:// URI 永久有效）
      * - 网络歌曲：已下载优先播本地文件，否则通过 NetworkMusicManager.resolvePlayUrl() 实时解析
      * - NAS 歌曲：通过 adapter.getSongsByIds() 获取 streamUrl
+     *
+     * @param forceRefresh 网络歌曲解析是否强制绕过播放链接缓存。
+     *        播放失败重试路径必须传 true，否则会命中「已过期但未到 TTL」的旧缓存。
      */
-    private suspend fun resolveStreamUrl(song: Song): String? {
+    private suspend fun resolveStreamUrl(song: Song, forceRefresh: Boolean = false): String? {
         return when {
             song.isLocalSong -> song.streamUrl ?: song.path
             song.isNetworkSong -> {
                 nasMusicApp.downloadRepository.playableLocalUri(song)
-                    ?: nasMusicApp.networkMusicManager.resolvePlayUrl(song)
+                    ?: nasMusicApp.networkMusicManager.resolvePlayUrl(song, forceRefresh)
             }
             else -> {
                 val adapter = backendRegistry.getAdapter()
@@ -279,17 +288,23 @@ class PlayerViewModel(
         val song = queueValue.getOrNull(targetIndex) ?: return
         viewModelScope.launch {
             try {
-                var playUrl = resolveStreamUrl(song)
+                // forceRefresh=true：播放失败重试绝不再命中「已过期未到 TTL」的旧缓存，
+                // 强制走完整降级链重新解析（链接过期重获的核心修复）。
+                var playUrl = resolveStreamUrl(song, forceRefresh = true)
                 // 初次解析失败（网络瞬时抖动/端点超时）：延迟 1.5s 自动重试一次
                 if (playUrl.isNullOrBlank()) {
                     AppLog.w("PlayerViewModel", "resolveAndPlayByIndex: initial resolve failed for ${song.title}, retrying in 1.5s")
                     delay(1500)
-                    playUrl = resolveStreamUrl(song)
+                    playUrl = resolveStreamUrl(song, forceRefresh = true)
                 }
                 if (playUrl.isNullOrBlank()) {
-                    // 重试仍失败：不再静默卡在"已切歌未播放"状态，自动跳到下一首
+                    // 重试仍失败：先尝试同源重搜 / 跨源替换，全部失效才跳下一首
                     if (generation != resolveGeneration) return@launch
-                    AppLog.w("PlayerViewModel", "resolveAndPlayByIndex: failed after retry, skipping ${song.title}")
+                    val replaced = tryReplaceByReSearch(song, targetIndex, generation)
+                    if (replaced) return@launch
+                    // 全部降级失效：不再静默卡在"已切歌未播放"状态，自动跳到下一首
+                    if (generation != resolveGeneration) return@launch
+                    AppLog.w("PlayerViewModel", "resolveAndPlayByIndex: failed after all fallbacks, skipping ${song.title}")
                     showMessage?.invoke(getApplication<Application>().getString(R.string.resolve_url_auto_skip_with_title, song.title))
                     playerManager.next(_playMode.value)
                     return@launch
@@ -314,6 +329,59 @@ class PlayerViewModel(
                 showMessage?.invoke(getApplication<Application>().getString(R.string.play_failed_with_msg, e.message?.take(50)))
             }
         }
+    }
+
+    /**
+     * 解析失败后的降级替换：先同源重搜取另一首，再跨源重搜替换。
+     *
+     * 层级1（同源重搜）：用 song 的 title+artist 调 NetworkMusicManager.search()（本身已多端点降级），
+     *  从结果里排除原曲，逐条做可播校验，取第一条可播的替代曲。
+     * 层级2（跨源替换）：若当前歌已是某次跨源替换的产物（lastCrossSourceReplacedId 命中），
+     *  则不再跨源，防无限替换；否则调 resolvePlayUrlWithCrossSourceFallback 跨源搜索替换。
+     *
+     * @return true 已替换并播放；false 无可播替代（调用方应跳下一首）
+     */
+    private suspend fun tryReplaceByReSearch(song: Song, targetIndex: Int, generation: Int): Boolean {
+        if (song.isNetworkSong) {
+            val replacement = if (song.id == lastCrossSourceReplacedId) {
+                // 防死循环：当前歌已是跨源替换产物且仍失败，直接放弃（走跳曲）
+                AppLog.w("PlayerViewModel", "tryReplaceByReSearch: ${song.title} 已是跨源替换产物且仍失败，放弃替换")
+                null
+            } else {
+                tryCrossSourceReplace(song, targetIndex, generation)
+            }
+            if (replacement != null) {
+                if (generation != resolveGeneration) return false
+                val latestQueue = playerState.value.queue
+                val updatedQueue = latestQueue.mapIndexed { index, s ->
+                    if (index == targetIndex) replacement else s
+                }
+                // 记录本次替换产物 id，防后续对同一首歌无限跨源替换
+                lastCrossSourceReplacedId = replacement.id
+                AppLog.w("PlayerViewModel", "tryReplaceByReSearch: 用替代曲播放 '${replacement.title}' (${replacement.networkSource})")
+                showMessage?.invoke(getApplication<Application>().getString(
+                    R.string.cross_source_replace_playing,
+                    song.title, replacement.networkSource ?: ""
+                ))
+                playerManager.playQueue(updatedQueue, targetIndex)
+                return true
+            }
+        }
+        return false
+    }
+
+    /**
+     * 跨源替换：遍历 NetworkMusicManager 的其他已注册源，用 title+artist 重搜并取第一条可播替代曲。
+     * 返回带已解析 streamUrl 的替代曲；无可播替代返回 null。
+     */
+    private suspend fun tryCrossSourceReplace(song: Song, targetIndex: Int, generation: Int): Song? {
+        if (generation != resolveGeneration) return null
+        val result = nasMusicApp.networkMusicManager.resolvePlayUrlWithCrossSourceFallback(
+            song = song,
+            forceRefresh = true
+        ) ?: return null
+        if (generation != resolveGeneration) return null
+        return result.replacement
     }
 
     fun seekTo(positionMs: Long) = playerManager.seekTo(positionMs)
