@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>22 天发了 85 个版本之后，我的开源电视盒子学会画心电图了</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Noto+Sans+SC:wght@300;400;500;600&family=Noto+Serif+SC:wght@500;700;900&display=swap" rel="stylesheet">
+<style>
+  :root { --ink:#1a1a1a; --paper:#fafaf7; --line:#e7e5e0; --mute:#6b6760; --accent:#b8553a; --twitter:#1d9bf0; }
+  body { font-family:'Inter','Noto Sans SC',sans-serif; background:var(--paper); color:var(--ink); -webkit-font-smoothing:antialiased; }
+  .serif { font-family:'Noto Serif SC',Georgia,serif; }
+  .ornament { display:flex; align-items:center; justify-content:center; gap:14px; margin:48px 0; color:var(--mute); }
+  .ornament::before, .ornament::after { content:""; flex:1; max-width:60px; height:1px; background:var(--line); }
+  .article p { font-size:1.0625rem; line-height:1.8; color:#262421; margin:1.1em 0; max-width:65ch; }
+  .article h2 { font-family:'Noto Serif SC',serif; font-size:1.875rem; font-weight:700; margin:2.4em 0 0.8em; letter-spacing:-0.01em; }
+  .article blockquote { border-left:3px solid var(--accent); padding:0 0 0 20px; margin:1.6em 0; font-style:italic; color:var(--mute); font-family:'Noto Serif SC',serif; font-size:1.0625rem; line-height:1.7; }
+  .article a { color:var(--accent); text-decoration:underline; text-underline-offset:3px; text-decoration-thickness:1px; }
+  .grain::before { content:""; position:fixed; inset:0; pointer-events:none; opacity:0.4; background-image:radial-gradient(circle at 12% 18%, rgba(106,92,56,0.05), transparent 45%), radial-gradient(circle at 88% 72%, rgba(106,92,56,0.04), transparent 50%); }
+  .article table { width:100%; max-width:65ch; border-collapse:collapse; margin:1.6em 0; font-size:0.9rem; }
+  .article th { text-align:left; font-weight:600; color:var(--ink); padding:8px 10px; border-bottom:2px solid var(--ink); }
+  .article td { padding:8px 10px; border-bottom:1px solid var(--line); color:#262421; vertical-align:top; line-height:1.6; }
+  .article ul { max-width:65ch; padding-left:1.2em; margin:1.1em 0; }
+  .article li { font-size:1.0625rem; line-height:1.8; color:#262421; margin:0.5em 0; }
+  .article li::marker { color:var(--accent); }
+  .stat-strip { display:flex; gap:0; border-top:1px solid var(--line); border-bottom:1px solid var(--line); margin:36px 0; max-width:65ch; }
+  .stat-strip .cell { flex:1; padding:18px 6px; text-align:center; }
+  .stat-strip .cell + .cell { border-left:1px solid var(--line); }
+  .stat-strip .num { font-family:'Noto Serif SC',serif; font-weight:900; font-size:1.75rem; color:var(--ink); letter-spacing:-0.01em; }
+  .stat-strip .lbl { font-size:11px; letter-spacing:0.14em; text-transform:uppercase; color:var(--mute); margin-top:4px; }
+</style>
+</head>
+<body class="grain">
+<article class="article max-w-[720px] mx-auto px-6 pt-20 pb-32">
+
+  <!-- kicker -->
+  <div class="text-[11px] font-medium tracking-[0.22em] uppercase text-[var(--accent)] mb-5">开源手记 · 2026 年 9 月 · 更新日志里的三周</div>
+
+  <!-- hero -->
+  <h1 class="serif text-[3rem] leading-[1.08] font-black tracking-tight mb-5">
+    22 天发了 85 个版本之后，我的开源电视盒子学会<span class="italic font-bold" style="color:var(--accent)">画心电图</span>了
+  </h1>
+
+  <p class="text-[1.125rem] leading-relaxed text-[var(--mute)] font-light max-w-[60ch] mb-8">
+    NASMusicTV —— 一个跑在电视盒子上的开源音乐播放器。从 v2.22.0 到 v2.32.5，三周时间，它长出了 34 套可视化效果、一个 166MB 的人声分离模型、一个搜遍五个音乐源的搜索框，还经历了一次把逆向博客当协议文档的惨痛教训。
+  </p>
+
+  <!-- byline -->
+  <div class="flex items-center gap-3 text-[12px] text-[var(--mute)] pb-6 border-b border-[var(--line)]">
+    <div class="w-8 h-8 rounded-full" style="background:var(--accent)"></div>
+    <span class="font-medium text-[var(--ink)]">NASMusicTV 项目手记</span>
+    <span>·</span><span>2026 年 9 月 16 日</span>
+    <span>·</span><span>约 9 分钟阅读</span>
+  </div>
+
+  <!-- stat strip -->
+  <div class="stat-strip">
+    <div class="cell"><div class="num">85</div><div class="lbl">个版本</div></div>
+    <div class="cell"><div class="num">257</div><div class="lbl">次提交</div></div>
+    <div class="cell"><div class="num">34</div><div class="lbl">套可视化</div></div>
+    <div class="cell"><div class="num">5</div><div class="lbl">种 NAS 后端</div></div>
+    <div class="cell"><div class="num">0</div><div class="lbl">个 lint 错误</div></div>
+  </div>
+
+  <p>开源地址：<a href="https://github.com/hxzhang2000/NASMusicTV">github.com/hxzhang2000/NASMusicTV</a>。以下五件事，都发生在这 22 天里。</p>
+
+  <h2>先交代背景</h2>
+  <p><span class="serif font-bold text-[1.5rem] float-left mr-2 leading-none mt-1.5" style="color:var(--accent)">这</span>是个给电视盒子用的音乐播放器。场景大概是这样：你家里有一台安卓电视，歌散落在 Jellyfin / Navidrome / Subsonic / 道理鱼 / 飞牛这几种 NAS 上，或者躺在百度网盘里，遥控器没有键盘，电视芯片比手机弱十岁——所有功能都得围绕"遥控器 + 弱芯片 + 大屏幕"来设计。</p>
+  <p>8 月 24 日发了 v2.22.0，然后就开始收不住了。到 9 月 15 日的 v2.32.5，22 天发了 85 个版本——其中 v2.26 这一个版本号就活了六天，发了 41 个小版本。大部分是修 bug，但夹在里面的新功能，值得挑几件出来说说。</p>
+
+  <div class="ornament"><span class="serif italic">·  ·  ·</span></div>
+
+  <h2>一、可视化：从频谱柱到心电图、数学课和费马螺旋</h2>
+  <p>v2.30.0 上线了全屏可视化舞台，起步就带 20 套效果和一个"自动导演"模式——AI 根据音乐能量自动切换场景。两周后自动导演被删了，原因很朴素：遥控器选哪个就显示哪个，AI 选的没人买账。</p>
+  <p>但真正值得讲的是后来加的三个。</p>
+  <p><strong class="font-semibold text-[var(--ink)]">「心跳」（E24）</strong>——心电图式滚动频谱。它不看人声不看高频，只认鼓点：每命中一个鼓点，就在波形上画一个完整的 P-QRS-T 心搏复合波，然后整条波形匀速左移。为了不让心搏粘连，设了 75 BPM 的上限——鼓点再密也宁可丢掉，不画半截心脏。现在放歌的时候，我的电视看上去在监护一台危重病人。</p>
+  <p><strong class="font-semibold text-[var(--ink)]">「催眠」（E25）</strong>——数学函数图像动画。8 秒缓缓描线画出一条带坐标轴的函数曲线，凝视 3 秒，然后曲线溃散蒸发，换下一条。内置 53 条函数：笛卡尔 27 条、参数曲线 8 条、极坐标 8 条，外加 10 条彩蛋。屏幕右侧有一个"公式带"，渲染的是真数学排版——嵌套上标、真分式、根号横线，不是 Unicode 凑数的 <code class="px-1.5 py-0.5 rounded bg-[#f0ece5] text-[0.92em] font-mono text-[#7a3d27]">e^-x²</code>。洗牌逻辑保证单个周期内不重图、跨周期交界不重图。最有意思的设计是它和歌曲完全解耦：切歌、暂停、静音，都不打断当前这条曲线的生死循环。</p>
+  <p><strong class="font-semibold text-[var(--ink)]">11 套极简几何（v2.32.0）</strong>——包豪斯拼贴、折纸翻面、分形树、同心齿轮、费马螺旋、雷达、光轴……一次补齐后效果总数来到 34 套。</p>
+  <p>还有一个只有国产电视用户才懂的坑：不少盒子的系统 <code class="px-1.5 py-0.5 rounded bg-[#f0ece5] text-[0.92em] font-mono text-[#7a3d27]">Visualizer</code> API 会"绑定成功但永远返回全零"，频谱整条躺平。于是做了一条 PCM 降级通道——检测到连续 2 秒静音就自动切到音频链路上直接抓 PCM 自算频谱，FFT 库都不引，自己写了个 radix-2（N=1024），40ms 算一次。</p>
+  <blockquote>顺带一个彩蛋：如果你去翻我们的 CHANGELOG，会发现同一句修复记录——"只有第一张图有描线过程，后续函数直接出全图"——出现在二十多个版本的 Fixed 里。要么这个 bug 顽强到令人发指，要么是写 CHANGELOG 时复制粘贴忘了删。你觉得呢？</blockquote>
+
+  <div class="ornament"><span class="serif italic">·  ·  ·</span></div>
+
+  <h2>二、K 歌：一个 166MB 的模型，和两次"八度飞升"</h2>
+  <p>v2.22.2 给 K 歌页加了升降调（±12 半音）和变速（0.5x–1.5x），人声消除升级成 STFT 频谱遮罩，实时 DSP，CPU 友好。但这只是"快速模式"。</p>
+  <p>v2.23.0 接入了真正的重武器：<strong class="font-semibold text-[var(--ink)]">HT-Demucs FT</strong>，开源人声分离模型里 SDR 9.19dB 的天花板（前一代 Spleeter 是 6.9dB）。代价是模型 166MB，只能从 APK 里拆出来按需下载——APK 顺势从 ~186MB 瘦身到 ~20MB。国内下不动 HuggingFace 就走 hf-mirror 镜像，还不行就扫码用手机浏览器给电视传模型（v2.24.0）。</p>
+  <p>然后是两个教科书级的 bug，都在 v2.32.3 修掉。</p>
+  <p><strong class="font-semibold text-[var(--ink)]">第一次八度飞升</strong>：MediaCodec 解码不会帮你重采样，48kHz 的歌被原样喂给按 44100Hz 设计的模型，而 WAV 头硬编码 44100——结果伴奏时长缩短 8.8%，<strong class="font-semibold text-[var(--ink)]">音高整体升高约 1.5 个半音</strong>。修复是写了个流式线性插值重采样器，要求逐样本 bit-exact，顺手踩了 <code class="px-1.5 py-0.5 rounded bg-[#f0ece5] text-[0.92em] font-mono text-[#7a3d27]">floor((n-1)/ratio)+1</code> 的浮点坑：整数边界上 double 除法给出 3968.999…，期望帧数差 1，必须用纯整数运算。</p>
+  <p><strong class="font-semibold text-[var(--ink)]">第二次八度飞升</strong>：<code class="px-1.5 py-0.5 rounded bg-[#f0ece5] text-[0.92em] font-mono text-[#7a3d27]">channelCount</code> 字段读出来后从没用过，单声道的歌被无条件按左右声道成对读取——<strong class="font-semibold text-[var(--ink)]">播放翻倍速，同时升八度</strong>，效果堪比花栗鼠合唱团。修复后按真实声道数拆帧，超过两声道取前两路。</p>
+  <p>还顺手把模型完整性从"大小 &gt; 132MB 就算过"升级成 SHA-256 校验 + ±1% 大小区间——之前的判定连镜像站返回的 HTML 错误页都能通过。</p>
+  <p>另外一个小而美的修复：crossfade 交叉淡入淡出原来是线性斜坡，中间点两路各 −6dB，总功率反而变小，听感是"中间塌一下"。改成 cos/sin 等功率曲线，<code class="px-1.5 py-0.5 rounded bg-[#f0ece5] text-[0.92em] font-mono text-[#7a3d27]">sin²+cos²=1</code>，端点逐位不变。数字音频的又一根鸡毛：响度是人耳感知功率，不是振幅。</p>
+
+  <div class="ornament"><span class="serif italic">·  ·  ·</span></div>
+
+  <h2>三、多源融合：一个搜索框，搜遍 NAS、网盘、网络和本地</h2>
+  <p>这是 v2.22.1 就定下的架构方向，之后一路演进：</p>
+  <ul>
+    <li><strong class="font-semibold text-[var(--ink)]">跨源并行搜索</strong>：SearchAggregator 同时搜 NAS + 网络 + 百度网盘 + Jamendo + 本地，搜索页有"来源点亮"开关，想搜哪几个源自己点。</li>
+    <li><strong class="font-semibold text-[var(--ink)]">本地音乐</strong>（v2.25.0）：USB / SD 卡 / 内部存储自动扫描，Room 索引持久化，启动毫秒级加载，和 NAS 曲库合并去重后无感混排。</li>
+    <li><strong class="font-semibold text-[var(--ink)]">拼音搜索</strong>（v2.25.7）：电视遥控器打字是酷刑，于是 TV 端支持输入 <code class="px-1.5 py-0.5 rounded bg-[#f0ece5] text-[0.92em] font-mono text-[#7a3d27]">zjl</code> 搜出周杰伦，<code class="px-1.5 py-0.5 rounded bg-[#f0ece5] text-[0.92em] font-mono text-[#7a3d27]">zhoujielun</code> 全拼也行，混合输入"zjl 周杰"照样命中。</li>
+    <li><strong class="font-semibold text-[var(--ink)]">离线下载</strong>（v2.26.32）：搜到就能下载，MP3/FLAC 自动内嵌封面和歌词（ID3 / VORBIS_COMMENT），播放超过 5 秒可自动下载（配额 50 首），还能整库导出到 U 盘。</li>
+    <li><strong class="font-semibold text-[var(--ink)]">性能</strong>：3 万首歌的艺术家详情页从 53 秒优化到 9 秒；百度网盘 4 万+ 文件的全量索引在 entry 级预过滤，38000 个对象降到 ~20 个再建 Song。</li>
+  </ul>
+  <p>一句话：不管歌在哪，进来一个框，全都能搜到。</p>
+
+  <div class="ornament"><span class="serif italic">·  ·  ·</span></div>
+
+  <h2>四、飞牛对接：22 个缺陷，或者说——把逆向博客当协议文档的下场</h2>
+  <p>v2.32.4 我们把飞牛（fnOS）音乐后端整个推翻重写了。旧实现是基于一篇第三方逆向文章猜的，上线后"几乎必然连不上或者全量 401"。对照可运行的飞牛 TV 客户端逐项核对，数出 <strong class="font-semibold text-[var(--ink)]">22 个缺陷，其中 5 个阻断级</strong>：</p>
+  <table>
+    <thead><tr><th>缺陷</th><th>旧实现（猜的）</th><th>真实协议</th></tr></thead>
+    <tbody>
+      <tr><td>认证头</td><td><code>Cookie: music-token=xxx</code></td><td><code>Authorization: &lt;userToken&gt;</code>（无 Bearer 前缀）</td></tr>
+      <tr><td>令牌字段</td><td>响应里的 <code>token</code></td><td><code>data.userToken</code></td></tr>
+      <tr><td>播放流地址</td><td><code>track/{id}/stream</code></td><td><code>track/stream?guid=xxx</code>（查询参数，不是路径段）</td></tr>
+      <tr><td>封面</td><td>按曲目 ID 取图</td><td>按 <code>coverId</code> 取图</td></tr>
+      <tr><td>默认端口</td><td>80</td><td>5666（fnOS 音乐服务）</td></tr>
+    </tbody>
+  </table>
+  <p>还有个哭笑不得的：飞牛<strong class="font-semibold text-[var(--ink)]">根本没有搜索端点</strong>——参考项目全文无 search。最后是客户端拉全量曲目快照 + 5 分钟缓存，本地过滤。</p>
+  <blockquote>教训写在墙上：逆向文章可以当参考，协议必须以能跑的代码为准。</blockquote>
+  <p>重写之后又过了一轮审查修复（v2.32.5），认证头改成 provider 模式实时读取令牌、IPv6 字面量剥方括号、静默重登覆盖所有接口，测试从 25 例涨到 41 例。</p>
+
+  <div class="ornament"><span class="serif italic">·  ·  ·</span></div>
+
+  <h2>五、工程侧：110 项审查、R8 的暗箭、lint 从 133 到 0</h2>
+  <p>功能之外，这 22 天也干了不少脏活。</p>
+  <p><strong class="font-semibold text-[var(--ink)]">110 项代码审查</strong>（v2.29.3）：报告覆盖全部 275 个 Kotlin 源文件，P0 到 P3 四个阶段全部落地。v2.27.0 做了安全专项：移除全部 6 处 trust-all TLS 配置、清除硬编码的开发者 NAS 账号密码、日志统一脱敏。</p>
+  <p><strong class="font-semibold text-[var(--ink)]">"单测全绿，但用户的月度统计是空的"</strong>：R8 把 Gson <code class="px-1.5 py-0.5 rounded bg-[#f0ece5] text-[0.92em] font-mono text-[#7a3d27]">TypeToken</code> 匿名类的泛型签名擦掉了，<code class="px-1.5 py-0.5 rounded bg-[#f0ece5] text-[0.92em] font-mono text-[#7a3d27]">fromJson</code> 返回原始 <code class="px-1.5 py-0.5 rounded bg-[#f0ece5] text-[0.92em] font-mono text-[#7a3d27]">LinkedTreeMap</code>，一次 <code class="px-1.5 py-0.5 rounded bg-[#f0ece5] text-[0.92em] font-mono text-[#7a3d27]">+1</code> 就抛 <code class="px-1.5 py-0.5 rounded bg-[#f0ece5] text-[0.92em] font-mono text-[#7a3d27]">ClassCastException</code>，还被 catch 静默吞掉。单测全绿是因为 Robolectric 不跑 R8。修复就是补一行 keep 规则——但这是本项目第二次踩同一个坑（v2.5.1 第一次），AGENTS.md 里的警示挡得住第三次，挡不住第二次。</p>
+  <p><strong class="font-semibold text-[var(--ink)]">lint 从 133 个 error 到 0</strong>：CI 首跑 lint 报 133 errors / 255 warnings（项目此前从没跑过 lint），清零后转成阻塞门禁。中间学到一手：Media3 的 <code class="px-1.5 py-0.5 rounded bg-[#f0ece5] text-[0.92em] font-mono text-[#7a3d27]">@UnstableApi</code> 不吃 Kotlin 的 <code class="px-1.5 py-0.5 rounded bg-[#f0ece5] text-[0.92em] font-mono text-[#7a3d27]">@OptIn</code>，唯一有效写法是 <code class="px-1.5 py-0.5 rounded bg-[#f0ece5] text-[0.92em] font-mono text-[#7a3d27]">@androidx.annotation.OptIn(UnstableApi::class)</code>——90 处，文档没写，一个一个试出来的。</p>
+  <p><strong class="font-semibold text-[var(--ink)]">拆文件拆到 JVM 上限</strong>：MainViewModel 涨到 5451 行后拆成 13 个子 ViewModel；AppRoot 1155 行是在"只新增 3 个参数就触发 JVM 单方法 64KB 上限"之后被迫拆的。Android 开发的浪漫之一：你的 bug 修复和字节码限制之间只隔着一个参数。</p>
+
+  <div class="ornament"><span class="serif italic">·  ·  ·</span></div>
+
+  <h2>还有一堆没细讲的</h2>
+  <p>手机端媒体会话（蓝牙车机显示歌曲信息、锁屏控制、切后台不停歌）、中英双语切换（870 行翻译）、月度播放统计、睡眠定时器、断网续播、按带宽自动选 128k / 320k / 无损、设置页"遥控器左键移不出内容区"这种只有电视用户才懂的痛……都在这两个版本区间里修完或上线。</p>
+
+  <h2>最后</h2>
+  <p>22 天，85 个版本，257 次提交，34 套可视化效果，5 种 NAS 后端，110 项审查，lint 0 error。项目的免责声明还是那句话：本应用仅为技术聚合工具，不存储、不分发任何音乐文件。</p>
+  <p>如果你也有一台吃灰的电视盒子、一个 NAS、或者一个百度网盘音乐文件夹——</p>
+  <p>开源地址：<a href="https://github.com/hxzhang2000/NASMusicTV">github.com/hxzhang2000/NASMusicTV</a>。下一站，见 CHANGELOG。</p>
+
+  <!-- closing card -->
+  <div class="rounded-2xl border border-[var(--line)] bg-white/60 p-6 mt-12 flex items-start gap-4">
+    <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.6" class="shrink-0 mt-0.5" style="color:var(--accent)"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
+    <div>
+      <div class="font-semibold text-[var(--ink)] mb-1">本文基于 NASMusicTV 的公开 CHANGELOG 整理</div>
+      <div class="text-[13px] text-[var(--mute)]">完整更新记录见仓库 <span style="font-family:Georgia,serif">CHANGELOG.md</span> · 发布包见 GitHub Releases · 项目开箱即用，电视 / 手机同一个 APK</div>
+    </div>
+  </div>
+</article>
+</body>
+</html>
