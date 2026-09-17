@@ -19,9 +19,11 @@
 >
 > **未实施部分**（详见方案 §七 与 §十一）：① **DHU / 真车端到端验收**（阶段 1 的验收动作，
 > 也是 2026-09-07 那次审查的遗留建议）；② 艺人/专辑节点 + NAS 短期缓存
-> （阶段 2.3 的剩余部分；**歌单已接入**）；③ 搜索与语音、`onPlaybackResumption`（阶段 3，
-> 其中**语音搜索的正确实现机制已在本轮探明**，见 `Notes`）；④ attribution icon（阶段 4）。
-> 阶段 2.1 / 2.2 / 2.4 / 2.5 已随本轮一并完成。
+> （阶段 2.3 的剩余部分；**歌单已接入**。⚠️ 存在**待决策的设计缺口**：mediaId 结构已定义，
+> 但根菜单固定 4 项，这两个节点**从根菜单不可达**，需先决定入口方式）；③ 搜索与语音、
+> `onPlaybackResumption`（阶段 3，其中**语音搜索的正确实现机制已在本轮探明**，见 `Notes`）；
+> ④ 强调色定制（阶段 4.2，**已核实确实需要**：主题未设 `colorAccent`）、包验证收紧为签名级（4.3）。
+> 阶段 2.1 / 2.2 / 2.4 / 2.5 / 4.1 已随本轮一并完成。
 
 ### Added
 
@@ -41,6 +43,13 @@
 - 官方规范原文要求：*"Monochrome (preferably white) icons for each tab item"*，此前 4 项根菜单**完全没有图标**，车机上是占位样式
 - **⚠️ 只设 `artworkUri` 指向矢量 XML 是不可靠的**：`BitmapFactory` **无法解码 VectorDrawable**，而 Media3 到 Android Auto 的 `iconUri` 通路要求消费方能解码该 URI。故采用**「矢量图源 + 运行时光栅化」**：`MediaLibraryTree.rasterizeIcon()` 把矢量渲染成 256×256 PNG，经 `setArtworkData()` 走**确定性最高的 `iconBitmap` 通路**（`LegacyConversions.java:329`）；同时仍设 `artworkUri`（`android.resource://`）作次选（`LegacyConversions.java:357`）
 - 结果按 resId 缓存（4 个图标只渲染一次）；渲染失败降级为「无图标」，**不影响内容树加载**
+
+**提供方图标 attribution icon（阶段 4.1）**
+- 新增 `res/drawable/ic_car_attribution.xml`（24dp 单色纯白），并在 `<application>` 下声明 `androidx.car.app.TintableAttributionIcon` meta-data
+- 官方原文（`training/cars/media/configure-manifest`「定义提供方图标」）：用于媒体卡片等「媒体内容优先」的位置，**必须是单色**、推荐矢量
+- 图形**复用品牌标记**（与 `mipmap-*/ic_launcher` 的 adaptive icon foreground 同源：播放三角 + 左右两道声波），但**没有重画路径** —— 用 `<group>` 等比放大（`scale 1.75` / `translate(-40.5, -40.5)`，推导见 `docs/android-auto-plan.md` §七 4.1），避免手写坐标偏差。放大是必需的：adaptive icon 前景只占 44% 宽度是**为了启动器安全区裁剪**，本图标是独立图标、不经裁剪，直接沿用会明显偏小
+- **⚠️ 推导时踩到一个坑**：包围盒上界是 **34（三角顶点）**，不是 Q 控制点的 y=32 —— 控制点**不在曲线上**。按后者推导会算出 `translateY = −38.75`，使图标整体**偏低 1.75 单位**；靠离线渲染脚本打印变换后包围盒（`y∈[20.75,90.75]`，中心 55.75 ≠ 54）才发现，修正为 −40.5 后实测 `x∈[12,96] y∈[19,89]` 两轴精确居中。**矢量路径的包围盒不能靠读控制点手推。**
+- **⚠️ 两个易误判点**：① meta-data 名带 `androidx.car.app` 前缀，但**不需要引入 Car App Library 依赖**（它只是平台读取的字符串键；那个库是给导航/POI 类 AAOS 模板应用用的，与 Media3 媒体应用是两条路）——「不新增依赖」的路线前提依然成立；② 名字里的 `Tintable` 表示**平台会着色**，故填纯白而非品牌青绿 `#2DD4BF`
 
 **播放入口（`PlaybackService`）**
 - 新增 `onAddMediaItems` 覆写（默认实现在 item 缺 `LocalConfiguration` 时会抛 `UnsupportedOperationException`）
@@ -75,17 +84,24 @@
 
 ### 验证
 
-- 四任务合并一次运行（`assembleDebug assembleRelease testDebugUnitTest lintDebug`）**BUILD SUCCESSFUL**，总耗时 **16m15s**（107 tasks：27 executed / 80 up-to-date）；`assembleRelease` 内含 `minifyReleaseWithR8` + `lintVitalRelease` + `optimizeReleaseResources` + `packageRelease`
+- 四任务合并一次运行（`assembleDebug assembleRelease testDebugUnitTest lintDebug`）**BUILD SUCCESSFUL**；`assembleRelease` 内含 `minifyReleaseWithR8` + `lintVitalRelease` + `optimizeReleaseResources` + `packageRelease`
 - `testDebugUnitTest` **518 例 / 0 失败 / 0 错误**（56 个结果 XML，与基线一致）
-- `lintDebug` **0 Error / 254 Warning**（基线 0/257；**净减 3 条**，来源见下）
+- `lintDebug` **0 Error / 254 Warning**（基线 0/257；**净减 3 条**，来源见下）。**阶段 4.1 新增的 1 个 drawable + 1 个 meta-data 未带来任何新告警**
+- ⚠️ **构建环境提示（新发现）**：本沙箱会**拦截 Gradle 删除自身构建中间产物**，表现为
+  `Could not delete 'app\build\tmp\kotlin-classes\...'` 或 `.../desugar_graph/.../graph.bin (拒绝访问)`。
+  **这不是代码问题** —— 需**关闭沙箱（提权）**后运行构建即可通过。
+  （此前把 `graph.bin (拒绝访问)` 归因为「Windows 文件占用」，现更正为**更可能是沙箱拦截**：
+  两者表现一致，而提权后同一命令立即成功。详见 `docs/technical-overview.md` §10.157）
 - 改动文件在 lint 报告中的命中：`PlaybackService` / `BrowseCache` / **`MediaLibraryTree` 均 0 命中**；`PlayerManager` 2 条 `UseKtx`（`PlayerManager.kt:520` / `:532`），**为存量、本次未触碰**
 - **警告 257 → 254 是净减少，不是新增**：`MediaLibraryTree` 的 `Uri.parse` 从基线 3 处降到 **0 处**（全部改为 `String.toUri()`），`UseKtx` 告警相应净减 3 条（全项目 `UseKtx` 22 → 19）
 - 4 个新图标**未被 `UnusedResources` 误报**（152 条 `UnusedResources` 里 `ic_auto_*` / `banner` **0 命中**）—— 说明 Kotlin 侧 `R.drawable.*` 引用被 lint 正确识别为「已使用」
-- 产物 `NASMusicTV-release-v2-33-0.apk`（22,940,152 B ≈ 22.9MB），`output-metadata.json` 与 `BuildConfig` **双向核对** versionCode **147** / versionName **2.33.0**；`apksigner verify --print-certs` = SHA-256 `43a9dec4…d59b`（`CN=Android Debug`），**与电视已装版同签名** → `adb install -r` 可原地升级、不丢数据
+- 产物 `NASMusicTV-release-v2-33-0.apk`（22,940,970 B ≈ 22.9MB），`output-metadata.json` 与 `BuildConfig` **双向核对** versionCode **147** / versionName **2.33.0**；`apksigner verify --print-certs` = SHA-256 `43a9dec4…d59b`（`CN=Android Debug`），**与电视已装版同签名** → `adb install -r` 可原地升级、不丢数据
 - `aapt2 dump badging` 复核 **`minSdkVersion 22` / `targetSdkVersion 34` 未变**（"不改 minSdk"这一路线前提成立）
 - **release 包内的车机声明逐项复核**（`aapt2 dump resources` / `dump xmltree`）：`xml/automotive_app_desc` 资源存在 ✓；`com.google.android.gms.car.application` meta-data 存在 ✓；`PlaybackService` 的两个 action（`androidx.media3.session.MediaLibraryService` + `android.media.browse.MediaBrowserService`）**同时存在** ✓
 - **release 包内 4 个图标资源复核**（`aapt2 dump resources`；release 下**文件名已混淆**，故按资源名查表而非按路径找）：`drawable/ic_auto_download` = `0x7f0800a7` → `res/nM.xml` ✓、`drawable/ic_auto_favorite` = `0x7f0800a8` → `res/fl.xml` ✓、`drawable/ic_auto_playlist` = `0x7f0800a9` → `res/AR.xml` ✓、`drawable/ic_auto_queue` = `0x7f0800aa` → `res/_z.xml` ✓；`xml/automotive_app_desc` = `0x7f160000` → `res/oc.xml` ✓
 - **R8 存活复核**（解包 `classes.dex` 做字节匹配）：媒体树业务字符串 `当前播放` / `离线下载` / `收藏` / `歌单` / `NAS Music TV` **全部命中** ✓；图标通路业务字符串 `"android.resource://"` 与 `"drawable/"` **均命中** ✓；对照项 `AppLog.w` 的 `"onConnect rejected"` **未命中**（符合预期——`AppLog.w` 带 `if (BuildConfig.DEBUG)` 守卫，release 下连字符串常量一起被折掉，**不能据此判"代码丢了"**）。`rasterizeIcon` / `ic_auto_` 查不到属**正常**：前者方法名随 `player` 包被混淆，后者 `R.drawable.*` 在编译期已内联为 int 常量、运行时资源名取自资源表而非 dex 字符串
+- **阶段 4.1 提供方图标复核**：`aapt2 dump resources` 确认 `drawable/ic_car_attribution` = `0x7f0800b1` → `res/PD.xml` ✓；`aapt2 dump xmltree --file AndroidManifest.xml` 确认 `androidx.car.app.TintableAttributionIcon` meta-data 存在且 `android:resource=@0x7f0800b1` **正好指向它** ✓
+- **图形形状离线核对**（`logs_temp/render_car_icon.py`，比 2.5 的脚本多支持 **Q 曲线展平**与 **`<group>` 变换**）：渲染后包围盒实测 `x∈[12,96] y∈[19,89]`，两轴精确居中（中心 54 = 108/2）✓。**该脚本顺带抓出一个真实错误** —— 见上文「推导时踩到的坑」
 - **未做真机/车机验收**：DHU 需 `adb forward tcp:5277 tcp:5277` + `desktop-head-unit.exe`；真车默认只显示 Play 商店应用、侧载需在 Android Auto 开发者模式打开 "Unknown sources"。按项目约定，上机验证由用户执行
 - **版本**：v2.32.7 → **v2.33.0**（versionCode 146 → 147）
 

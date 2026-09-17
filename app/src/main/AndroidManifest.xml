@@ -73,6 +73,16 @@
             android:name="com.google.android.gms.car.application"
             android:resource="@xml/automotive_app_desc" />
 
+        <!-- Android Auto / AAOS：提供方图标（attribution icon）。
+             用于「媒体内容优先」的位置（如媒体卡片），官方要求**必须单色**、推荐矢量。
+             未声明时车机侧只能退化成默认/启动器图标，与品牌不一致。
+             注意这里的 meta-data 名属于 androidx.car.app 命名空间，但**不需要引入
+             Car App Library 依赖** —— 它只是平台约定读取的一个字符串键，
+             与 AAOS 模板应用（navigation/POI）用的 androidx.car.app 是两回事。 -->
+        <meta-data
+            android:name="androidx.car.app.TintableAttributionIcon"
+            android:resource="@drawable/ic_car_attribution" />
+
         <!-- Main Activity (supports both TV and phone) -->
         <activity
             android:name=".ui.MainActivity"

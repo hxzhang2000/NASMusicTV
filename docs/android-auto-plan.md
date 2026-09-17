@@ -80,21 +80,30 @@ v1.0 遗留的 4 个未决项 + 2 个"待 DHU 实测"项，本版全部关闭：
 
 ### 2.2 缺口清单
 
-| 编号 | 优先级 | 缺口 | 位置 | 后果 |
-|---|---|---|---|---|
-| **A-1** | **P0** | 无 `res/xml/automotive_app_desc.xml` | 文件不存在 | Android Auto **无法识别为媒体应用** |
-| **A-2** | **P0** | Manifest 无 `com.google.android.gms.car.application` meta-data | `AndroidManifest.xml:36-48` | Android Auto **完全发现不了本应用** |
-| **A-3** | **P0** | service intent-filter 缺 `android.media.browse.MediaBrowserService` | `AndroidManifest.xml:70-72` | 平台侧 MediaBrowser 客户端找不到服务 |
-| **A-4** | **P1** | 未实现 `onSetMediaItems` / `onAddMediaItems` | `PlaybackService.kt` | **车机上点歌无法播放**（§4.2） |
-| **A-5** | **P1** | 内容树仅「当前队列」一层 | `MediaLibraryTree.kt:42-48` | 车机体验空洞 |
-| **A-6** | **P1** | `onGetChildren` 为**同步阻塞**实现 | `PlaybackService.kt:335-355` | 接入 NAS 后 **ANR**（§5.4） |
-| **A-7** | **P1** | 伪分页逻辑 | `PlaybackService.kt:344-351` | Auto **不支持分页**，列表被静默截断（§3.4） |
-| **A-8** | **P2** | 未读 root hints | `PlaybackService.kt:312-320` | 根菜单超限项被**静默丢弃**（§3.3） |
-| **A-9** | **P2** | 未实现 `onSearch` / `onGetSearchResult` | `PlaybackService.kt` | 语音"播放 XXX"不可用 |
-| **A-10** | **P2** | 未实现 `onPlaybackResumption` | `PlaybackService.kt` | 车机连接后无法续播 |
-| **A-11** | **P3** | 无 attribution icon | `AndroidManifest.xml` | 媒体卡片显示默认图标 |
-| **A-13** | **P1** | **`onNeedResolveStreamUrl` 实现在 ViewModel** | `MainViewModel.kt:790` → `PlayerViewModel.resolveAndPlayByIndex` | **无 UI 时网络歌曲播不了**（§5.8） |
-| **A-14** | **P1** | **`findInQueue()` 缺 `setUri()`** | `MediaLibraryTree.kt:96-108` | 配合 `onAddMediaItems` 默认实现会抛 `UnsupportedOperationException`（§4.3） |
+| 编号 | 优先级 | 缺口 | 位置 | 后果 | 状态 |
+|---|---|---|---|---|---|
+| **A-1** | **P0** | 无 `res/xml/automotive_app_desc.xml` | 文件不存在 | Android Auto **无法识别为媒体应用** | ✅ 阶段 1 |
+| **A-2** | **P0** | Manifest 无 `com.google.android.gms.car.application` meta-data | `AndroidManifest.xml:36-48` | Android Auto **完全发现不了本应用** | ✅ 阶段 1 |
+| **A-3** | **P0** | service intent-filter 缺 `android.media.browse.MediaBrowserService` | `AndroidManifest.xml:70-72` | 平台侧 MediaBrowser 客户端找不到服务 | ✅ 阶段 1 |
+| **A-4** | **P1** | 未实现 `onSetMediaItems` / `onAddMediaItems` | `PlaybackService.kt` | **车机上点歌无法播放**（§4.2） | ✅ 阶段 1 |
+| **A-5** | **P1** | 内容树仅「当前队列」一层 | `MediaLibraryTree.kt:42-48` | 车机体验空洞 | ✅ 阶段 1（根菜单 4 项） |
+| **A-6** | **P1** | `onGetChildren` 为**同步阻塞**实现 | `PlaybackService.kt:335-355` | 接入 NAS 后 **ANR**（§5.4） | ✅ 阶段 1（异步 + 超时） |
+| **A-7** | **P1** | 伪分页逻辑 | `PlaybackService.kt:344-351` | Auto **不支持分页**，列表被静默截断（§3.4） | ✅ 阶段 1（已移除） |
+| **A-8** | **P2** | 未读 root hints | `PlaybackService.kt:312-320` | 根菜单超限项被**静默丢弃**（§3.3） | ✅ 阶段 1 |
+| **A-9** | **P2** | 未实现 `onSearch` / `onGetSearchResult` | `PlaybackService.kt` | 语音"播放 XXX"不可用 | ❌ 阶段 3 |
+| **A-10** | **P2** | 未实现 `onPlaybackResumption` | `PlaybackService.kt` | 车机连接后无法续播 | ❌ 阶段 3 |
+| **A-11** | **P3** | 无 attribution icon | `AndroidManifest.xml` | 媒体卡片显示默认图标 | ✅ 阶段 4.1 |
+| **A-12** | **P3** | 未做包验证（`onConnect` 未收口） | `PlaybackService.kt` | 任意应用都能连上媒体会话（§5.7） | ⚠️ 阶段 1 已实现包验证；**收紧为签名级**待做（阶段 4.3） |
+| **A-13** | **P1** | **`onNeedResolveStreamUrl` 实现在 ViewModel** | `MainViewModel.kt:790` → `PlayerViewModel.resolveAndPlayByIndex` | **无 UI 时网络歌曲播不了**（§5.8） | ✅ 阶段 1（解析下沉，UI 层零改动） |
+| **A-14** | **P1** | **`findInQueue()` 缺 `setUri()`** | `MediaLibraryTree.kt:96-108` | 配合 `onAddMediaItems` 默认实现会抛 `UnsupportedOperationException`（§4.3） | ✅ 阶段 1（树里统一不设 URI） |
+
+> **⚠️ 编号更正（2026-09-17）**：原文档把**包验证**标为 A-11，与同一张表里「无 attribution icon」
+> 的 A-11 **撞号**，且 **A-12 在整个仓库从未出现过**。现已把包验证更正为 **A-12** 并补入本表
+> （§5.7 标题与 §5.7 代码示例里的注释已同步更正）。
+>
+> **状态列说明**：✅ = 已实施且有代码级验证；⚠️ = 部分完成；❌ = 未做。
+> **「已实施」≠「已验收」** —— 目前全部改动只做过**代码级验证**（编译 + 单测 + lint + 产物核对），
+> DHU / 真车端到端验收**仍未做**（见 §十一）。
 
 #### A-13 详解：streamUrl 解析被绑在 UI 生命周期上
 
@@ -171,6 +180,12 @@ Media3 官方文档明确要求**两个 action 同时注册**：前者供 Media3
 ```
 
 用于媒体卡片等"内容优先"场景。**必须是单色（推荐白色）矢量图**。可复用通知小图标。
+
+> **〔2026-09-17 已实施（阶段 4.1）〕** `res/drawable/ic_car_attribution.xml` 已创建并声明。
+> 两点更正上面的表述：①「可复用通知小图标」在本项目**不成立**——通知用的是系统资源
+> `android.R.drawable.ic_media_play`，既非品牌也非单色矢量；② 该 meta-data 名虽带
+> `androidx.car.app` 前缀，但**不需要引入 Car App Library 依赖**（只是平台读取的字符串键）。
+> 实施细节与放大推导见 §七 阶段 4.1。
 
 ### 3.2 `res/xml/automotive_app_desc.xml`
 
@@ -552,7 +567,7 @@ private fun resolveItems(items: List<MediaItem>): ListenableFuture<MutableList<M
     return future
 }
 
-// ============ 包验证（A-11，方案见 §5.7） ============
+// ============ 包验证（A-12，方案见 §5.7） ============
 override fun onConnect(
     session: MediaSession,
     controller: MediaSession.ControllerInfo
@@ -695,7 +710,7 @@ song/{songId}                      → 可播放叶子
 | 歌曲分页 | `BackendAdapter.getSongs(limit, offset)` — `BackendAdapter.kt:110` |
 | 流派 / 年代 | `getSongsByGenre()` / `getSongsByYearRange()` — `BackendAdapter.kt:191-192` |
 
-### 5.7 包验证（A-11）
+### 5.7 包验证（A-12）
 
 **关键发现**：Media3 **已内置**车机控制器判断，无需自己维护包名白名单。
 
@@ -1019,10 +1034,61 @@ Media3 到 legacy（Android Auto）客户端有**两条**图标通路（`LegacyC
 
 | 步骤 | 内容 |
 |---|---|
-| 4.1 | attribution icon（单色矢量） |
-| 4.2 | 强调色定制（可选） |
+| 4.1 | attribution icon（单色矢量） | ✅ **已完成（2026-09-17）** —— 见下方说明 |
+| 4.2 | 强调色定制（可选） | ⚠️ **已核实「确实需要」**：`Theme.NASMusicTV`（`values/themes.xml:3`）继承 `android:Theme.Material.NoActionBar`，**未设 `android:colorAccent`** → 车机侧会取 Material 默认深青 `#009688`，而非品牌色 `#2DD4BF`。修法即官方给的 `com.google.android.gms.car.application.theme` meta-data 指向一个含 `colorAccent` 的样式 |
 | 4.3 | 包验证收紧（依据真实 `controller.packageName` 日志，§5.7） |
-| 4.4 | 更正 `phone-media-display-plan.md` §5.1（§2.3） |
+| 4.4 | 更正 `phone-media-display-plan.md` §5.1（§2.3） | ✅ **已完成（2026-09-17）** |
+
+#### 4.1 实施记录：提供方图标（attribution icon）
+
+**官方原文**（`training/cars/media/configure-manifest`，「定义提供方图标」）：
+
+> 提供方图标用于媒体内容优先的位置，例如媒体卡片上。您可以考虑重复使用用于表示通知的小图标。
+> 此图标**必须是单色的**。我们强烈建议使用矢量资源，以免图标模糊不清。
+
+**落地**：新增 `res/drawable/ic_car_attribution.xml`，在 `<application>` 下声明：
+
+```xml
+<meta-data
+    android:name="androidx.car.app.TintableAttributionIcon"
+    android:resource="@drawable/ic_car_attribution" />
+```
+
+**⚠️ 两个易误判点**：
+
+1. **meta-data 名带 `androidx.car.app` 前缀，但不需要引入 Car App Library 依赖。**
+   它只是平台约定读取的一个**字符串键**。`androidx.car.app`（模板应用库，用于导航/POI 类
+   AAOS 应用）与本项目的 Media3 媒体应用是**两条完全不同的路**——引入那个依赖反而会跑偏。
+   （本项目「不新增依赖」的路线前提因此依然成立。）
+2. **名称里的 `Tintable` 表示平台会对其着色**，所以图标填**纯白**（`#FFFFFFFF`），
+   由系统按上下文染色——不要填品牌青绿。
+
+**图形复用品牌标记**：与 `mipmap-*/ic_launcher` 的 adaptive icon foreground 同源
+（播放三角 + 左右两道声波），仅把填充色改为纯白。**但没有重画路径**——而是用 `<group>`
+做等比放大，避免手写坐标产生偏差：
+
+```
+原始包围盒 x∈[30,78] y∈[34,74]（宽 48 / 高 40），视口 108
+目标：左右各留 12 单位 → 目标宽 84 → scale = 84/48 = 1.75
+缩放后高 = 40×1.75 = 70 → 垂直居中留白 = (108−70)/2 = 19
+translateX = 12 − 30×1.75 = −40.5
+translateY = 19 − 34×1.75 = −40.5
+实测（离线渲染脚本输出的变换后包围盒）：x∈[12,96] y∈[19,89] ✓ 两轴均居中
+```
+
+> **⚠️ 踩到的坑（值得记下）**：包围盒上界是 **34（三角顶点）**，**不是 Q 控制点的 y=32** ——
+> 控制点**不在曲线上**（该二次贝塞尔的实际极值在 `t=0.5` 处、`y=37`）。
+> 最初按 `y∈[32,74]`（高 42）推导，算出 `translateY = −38.75`，会导致图标整体**偏低 1.75 单位**。
+> 是靠**渲染脚本打印变换后包围盒**（发现 `y∈[20.75,90.75]`，中心 55.75 ≠ 54）才发现的。
+> **教训：矢量路径的包围盒不能靠读控制点坐标手推，要么用工具实测，要么渲染出来看。**
+
+**为什么必须放大**：adaptive icon 的 foreground 只占 44% 宽度是**刻意的**（启动器会裁剪到
+安全区），但本图标是**独立图标、不经裁剪**，直接沿用会让图形明显偏小。
+
+**顺带记录一个观察（未改）**：通知栏小图标当前用的是系统资源
+`android.R.drawable.ic_media_play`（`PlaybackService.kt:839`）。官方建议 attribution icon
+「可复用通知小图标」，但那个系统图标既非品牌也不是单色矢量，无法复用。若日后想统一品牌形象，
+可把 `ic_car_attribution` 同时用作通知小图标——**但这超出 Android Auto 范围，未擅自改动**。
 
 ---
 
@@ -1233,7 +1299,7 @@ MediaItemsWithStartPosition(List<MediaItem> mediaItems, int startIndex, long sta
 
 ## 十一、一页速览
 
-> **当前状态（2026-09-17，v2.33.0）：阶段 1 + 阶段 2.5 已实施并完成代码级验证；DHU/真车验收未做。**
+> **当前状态（2026-09-17，v2.33.0）：阶段 1 + 2.5 + 4.1 已实施并完成代码级验证；DHU/真车验收未做。**
 >
 > 代码级验证实测：四任务合并构建 **BUILD SUCCESSFUL**（16m15s）；`testDebugUnitTest` **518 例 / 0 失败 / 0 错误**；
 > `lintDebug` **0 Error / 254 Warning**（基线 257，净减 3 条 `UseKtx`）；release 产物
@@ -1251,13 +1317,19 @@ MediaItemsWithStartPosition(List<MediaItem> mediaItems, int startIndex, long sta
 7. ✅ 修 A-13（解析下沉，**零改动 `MainViewModel.kt`**）/ A-14（树里统一不设 URI，由解析入口覆盖）
 8. ✅ `MediaLibraryTree` 重写（结构化 ID + 4 项根菜单）+ 新增 `BrowseCache`
 9. ✅ 根菜单 4 项配**单色白矢量图标**（阶段 2.5；矢量源 + 运行时光栅化走 `iconBitmap` 通路）
+10. ✅ 提供方图标 attribution icon（阶段 4.1；`ic_car_attribution.xml` + `androidx.car.app.TintableAttributionIcon` meta-data）
 
 **仍未做**：
 
 - ❌ **DHU / 真车端到端验收**（阶段 1 的验收动作，也是 2026-09-07 审查的遗留建议）
-- ❌ 艺人 / 专辑节点 + NAS 短期缓存（阶段 2.3 的剩余部分；**歌单已接入**）
+- ❌ **艺人 / 专辑节点 + NAS 短期缓存**（阶段 2.3 剩余部分；**歌单已接入**）
+  - ⚠️ **有一个待决策的设计缺口**：§5.6 已定义 `artist` / `album` 的 mediaId 结构，
+    但根菜单是**固定 4 项**（root hints 默认上限 4）→ 这两个节点**从根菜单不可达**。
+    要么改根菜单语义（如把第 4 项「歌单」提升为「音乐库」，下钻出 歌单/艺人/专辑），
+    要么等阶段 3 的搜索作为入口。**不宜直接追加为第 5/6 项**——默认车机只显示 4 个 tab，会被静默丢弃
 - ❌ 搜索与语音（阶段 3，**语音搜索机制已探明**，见阶段 3 说明块）、`onPlaybackResumption`
-- ❌ attribution icon（阶段 4）
+- ❌ 强调色定制（阶段 4.2；**已核实确实需要**：主题未设 `colorAccent`，车机侧会取 Material 默认深青而非品牌色）
+- ❌ 包验证收紧为签名级（阶段 4.3）
 
 **三条铁律**（源码确认）：① 返回值不能为 null（会 NPE）② 返回值会被 Media3 用于设置 player，故不得重复设置 ③ 覆写后成为所有点歌路径的统一入口
 

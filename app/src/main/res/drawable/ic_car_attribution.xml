@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Android Auto / AAOS「提供方图标」(attribution icon)
+
+    官方原文（training/cars/media/configure-manifest）：
+      「提供方图标用于媒体内容优先的位置，例如媒体卡片上。您可以考虑重复使用用于表示
+        通知的小图标。此图标**必须是单色的**。我们强烈建议使用矢量资源，以免图标模糊不清。」
+    声明方式（同一页给出）：
+      <meta-data android:name="androidx.car.app.TintableAttributionIcon"
+                 android:resource="@drawable/ic_status_icon" />
+    名字里的 "Tintable" 即「平台会对其着色」，所以这里填纯白，由系统按上下文染色。
+
+    图形沿用应用品牌标记（与 mipmap-*/ic_launcher 的 adaptive icon foreground 同源）：
+    播放三角 + 左右两道声波，只把填充色从品牌青绿 #2DD4BF 改为纯白。
+
+    ⚠️ 这里没有重画路径，而是用 <group> 做等比放大 —— 直接复用品牌矢量，
+    避免手写坐标产生偏差：
+      原始包围盒 x∈[30,78] y∈[34,74]（宽 48 / 高 40），视口 108。
+      目标：左右各留 12 单位留白 → 目标宽 84 → scale = 84/48 = 1.75。
+      缩放后高 = 40×1.75 = 70，垂直居中留白 = (108−70)/2 = 19。
+      于是 translateX = 12 − 30×1.75 = −40.5
+           translateY = 19 − 34×1.75 = −40.5
+      （VectorDrawable 的 group 变换在 pivot 为 0,0 时等价于 (x,y) → (s·x+tx, s·y+ty)）
+      校验（已用离线渲染脚本实测包围盒）：角点 (30,34) → (12, 19)；
+      (78,74) → (96, 89) —— 水平、垂直均居中（中心 54 = 108/2）。
+
+    ⚠️ 包围盒上界是 **34（三角顶点）**，不是 Q 控制点的 y=32 ——
+    控制点不在曲线上（该曲线实际极值在 t=0.5 处 y=37）。曾按 32 推导导致图标
+    整体偏低 1.75 单位，用渲染脚本核对包围盒时才发现。
+
+    为什么需要放大：adaptive icon 的 foreground 只占 44% 宽度是**刻意的**（启动器会裁剪
+    到安全区），但本图标是独立图标、不经裁剪，直接沿用会让图形显得过小。
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <group
+        android:scaleX="1.75"
+        android:scaleY="1.75"
+        android:translateX="-40.5"
+        android:translateY="-40.5">
+        <!-- 播放三角 -->
+        <path
+            android:fillColor="#FFFFFFFF"
+            android:pathData="M44,34 L44,74 L64,54 Z" />
+        <!-- 左声波 -->
+        <path
+            android:fillColor="#FFFFFFFF"
+            android:pathData="M30,42 Q36,32 42,42 Q36,52 30,42 Z" />
+        <!-- 右声波 -->
+        <path
+            android:fillColor="#FFFFFFFF"
+            android:pathData="M66,42 Q72,32 78,42 Q72,52 66,42 Z" />
+    </group>
+</vector>
