@@ -51,6 +51,14 @@
 - **⚠️ 推导时踩到一个坑**：包围盒上界是 **34（三角顶点）**，不是 Q 控制点的 y=32 —— 控制点**不在曲线上**。按后者推导会算出 `translateY = −38.75`，使图标整体**偏低 1.75 单位**；靠离线渲染脚本打印变换后包围盒（`y∈[20.75,90.75]`，中心 55.75 ≠ 54）才发现，修正为 −40.5 后实测 `x∈[12,96] y∈[19,89]` 两轴精确居中。**矢量路径的包围盒不能靠读控制点手推。**
 - **⚠️ 两个易误判点**：① meta-data 名带 `androidx.car.app` 前缀，但**不需要引入 Car App Library 依赖**（它只是平台读取的字符串键；那个库是给导航/POI 类 AAOS 模板应用用的，与 Media3 媒体应用是两条路）——「不新增依赖」的路线前提依然成立；② 名字里的 `Tintable` 表示**平台会着色**，故填纯白而非品牌青绿 `#2DD4BF`
 
+**搜索与语音（阶段 3）**
+- `MediaLibraryTree` 新增 `suspend fun search(query)` —— **双源合并**：网络音乐（Meting，公网，始终尝试）+ NAS 后端（内网，`searchSongs`，尽力而为）。按 `song.id` 去重（`LinkedHashMap` 保序，网络结果排前面），上限 `MAX_SEARCH_RESULTS = 50`；复用既有的 `songToItem()`，故结果天然满足 `LibraryResult.ofItemList` 对 item 的三项硬要求（`mediaId` 非空 + `isBrowsable` / `isPlayable` 显式设置）
+- `PlaybackService` 新增 `onSearch` —— 按 Media3 的**两步流程**，本方法只回**结果码**，并通过 `notifySearchResultChanged(browser, query, itemCount, params)` 通知**结果数量**。⚠️ 只回结果码而不通知数量，车机端**不会**来取结果（表现为「搜了但列表空」）
+- `PlaybackService` 新增 `onGetSearchResult` —— 返回真正的结果列表。⚠️ **不假设 `onSearch` 已先被调用**：javadoc 明确 query「may not」先经 `onSearch`（走 `MediaBrowserCompat#search` 时不会），故本方法**能独立搜索**，60s TTL 的 `searchCache` 只是省一次重复搜索的优化、不是正确性依赖
+- `PlaybackService.onSetMediaItems` 新增**语音搜索分支**（最先拦截）—— Google 助理「播放 XXX」**不走** `onPlayFromSearch`（Media3 根本没这个回调），而是经 `MediaSessionLegacyStub` 转成 `onSetMediaItems(mediaId="", searchQuery=XXX)`。判定条件 =「`mediaId.isBlank()` 且 `searchQuery` 非空」；`startIndex`/`startPositionMs` 由 `C.INDEX_UNSET`/`C.TIME_UNSET` **归一为 `0`/`0L`**
+- `AndroidManifest.xml`：`PlaybackService` 的 intent-filter 补注册 `android.media.action.MEDIA_PLAY_FROM_SEARCH`；**同时移除** `<application>` 上的 `tools:ignore="MissingIntentFilterForMediaSearch"` 与该文件已无使用方的 `xmlns:tools` 声明
+- 新增 `SEARCH_TIMEOUT_MS = 10_000L`（比浏览的 `BROWSE_TIMEOUT_MS` 宽 —— 要跨公网 + 内网两源）；NAS 侧失败用 `AppLog.d` **静默跳过**（内网不可达在车机场景下是**常态**，不是异常）
+
 **播放入口（`PlaybackService`）**
 - 新增 `onAddMediaItems` 覆写（默认实现在 item 缺 `LocalConfiguration` 时会抛 `UnsupportedOperationException`）
 - 新增 `onSetMediaItems` 覆写 —— 覆写后它成为**所有点歌路径的统一入口**（legacy 的 `playFromMediaId` / `playFromUri` 等都会汇聚过来）
@@ -66,6 +74,7 @@
 
 ### Fixed
 
+- **⚠️ 搜索去重用了 API 24+ 的方法，会在目标电视（Android 5.1.1）上崩溃**：首版 `MediaLibraryTree.search()` 写成 `merged.putIfAbsent(...)`，编译通过、单测也过，但 `lintDebug` 报 **2 条 error** —— `Call requires API level 24 (current min is 22): java.util.HashMap#putIfAbsent [NewApi]`。`LinkedHashMap` 的 `putIfAbsent` 解析到 `HashMap#putIfAbsent`（API 24 才加入）→ API 22 上运行到搜索即 `NoSuchMethodError` **崩溃**。改用 Kotlin stdlib 的 `MutableMap.getOrPut`（纯 Kotlin，无 API 版本限制，语义一致）。**该问题只有 lint 能抓** —— `assembleDebug/Release` 与单测都发现不了。已顺带全项目排查 `putIfAbsent` / `computeIfAbsent` / `removeIf` / `Map.merge`，**仅此一处**
 - **A-13（静默播不出）网络歌曲在无 UI 场景下播不出来**：`onNeedResolveStreamUrl` 的实现注册在 `MainViewModel`（`MainViewModel.kt:790`），绑在 UI 生命周期上。而 Android Auto / Wear OS / 蓝牙唤起等场景下 `MainActivity` **可能从未启动** → 回调为 null → 队列里的网络歌曲**静默失败**。修复：新增 `builtinStreamUrlResolver` 优先接管（`PlaybackService` 侧解析成功后回写队列并续播），解析失败才回落 UI 侧回调。4 处触发点（自动过渡 / `onPlayerError` 重试 / `syncAndPlayCurrent` / `transitionToIndex`）统一收口到 `requestStreamUrlResolution()`
 - **A-14 浏览树叶子节点缺 URI**：旧 `MediaLibraryTree.findInQueue()` 未调用 `setUri()` —— 2026-09-07 的 P0-9 只修了 `getQueueItems()`。此前未暴露是因为 `onAddMediaItems` 还没被覆写（默认实现只在「全部 item 都带 URI」时原样返回）。修复：树里统一不设 URI，改由播放入口解析
 
@@ -78,28 +87,30 @@
 
 ### Notes
 
-- **新增 lint 抑制（已说明理由）**：`automotive_app_desc` 一落地就触发 `MissingIntentFilterForMediaSearch`（要求注册 `android.media.action.MEDIA_PLAY_FROM_SEARCH`）。本轮**有意暂不声明**该 intent-filter，加 `tools:ignore` 抑制。理由是「声明了也无法响应 = 静默失效的语音搜索」，而语音搜索属方案**阶段 3**。**正确机制已探明**：Media3 的 `MediaSession.Callback` **没有** `onPlayFromSearch`（`javap` 实测 11 个 default 方法中无搜索相关），该 intent 经 `MediaSessionLegacyStub.onPlayFromSearch` → `handleMediaRequest` → **`onSetMediaItems(controller, [MediaItem(mediaId="", requestMetadata.searchQuery=query)], INDEX_UNSET, TIME_UNSET)`**。所以阶段 3 要改的是 `onSetMediaItems` 里的 `requestMetadata.searchQuery` 分支（且需把 `INDEX_UNSET`/`TIME_UNSET` 归一成 `0`/`0L`），改完再补 intent-filter 并移除该 `tools:ignore`
+- ~~新增 lint 抑制~~ → **抑制已移除**：`automotive_app_desc` 一落地就触发 `MissingIntentFilterForMediaSearch`（要求注册 `android.media.action.MEDIA_PLAY_FROM_SEARCH`）。阶段 1 时**有意暂不声明**该 intent-filter、加 `tools:ignore` 抑制，理由是「声明了也无法响应 = 静默失效的语音搜索」。**阶段 3 落地后，intent-filter 与抑制同步处理完毕**（补声明 + 移除抑制）。**正确机制**（`media3-session-1.2.1` 源码级）：Media3 的 `MediaSession.Callback` **没有** `onPlayFromSearch`（`javap` 实测 11 个 default 方法中无搜索相关），该 intent 经 `MediaSessionLegacyStub.onPlayFromSearch`（`:395`）→ `handleMediaRequest`（`:811-817`）→ **`onSetMediaItems(controller, [MediaItem(mediaId="", requestMetadata.searchQuery=query)], INDEX_UNSET, TIME_UNSET)`**（构造见 `:947-961`；`MediaItem.DEFAULT_MEDIA_ID` 的字面值 `""` 见 `MediaItem.java:2196`）
+- **实施期新发现（方案文档未预见）**：① **搜不到时必须让 future 失败，不能返回空列表** —— 返回空列表会被 Media3 拿去调 `player.setMediaItems(emptyList())`，**清空播放队列、打断正在听的歌**；而让 future 失败时 legacy 路径的 `onFailure` 明确写着 *"Do nothing, the session is free to ignore these requests"*（`:843-846`），当前播放完全不受影响。② `LibraryResult.ofItemList` 内部 `verifyMediaItem`（`LibraryResult.java:257-261`）要求 item 的 `isBrowsable`/`isPlayable` **显式设置**，缺了直接抛异常 —— 复用的 `songToItem` 本就三项齐备，故未另写构造逻辑
 - 实施期三处编译/构建问题（均已修复）：① `androidx.media.utils.MediaConstants` compile 期不可见（见上）；② `ExoPlayer.setMediaItem(MediaItem, long)` 第二个参数是**起始播放位置(ms)不是索引**，`replayAt` 原写法传 Int 直接编译失败 → 改 `replaceMediaItem` + `seekTo`；③ 上述 lint error
 - 技术细节见 `docs/technical-overview.md` §10.157
 
 ### 验证
 
-- 四任务合并一次运行（`assembleDebug assembleRelease testDebugUnitTest lintDebug`）**BUILD SUCCESSFUL**；`assembleRelease` 内含 `minifyReleaseWithR8` + `lintVitalRelease` + `optimizeReleaseResources` + `packageRelease`
-- `testDebugUnitTest` **518 例 / 0 失败 / 0 错误**（56 个结果 XML，与基线一致）
-- `lintDebug` **0 Error / 254 Warning**（基线 0/257；**净减 3 条**，来源见下）。**阶段 4.1 新增的 1 个 drawable + 1 个 meta-data 未带来任何新告警**
-- ⚠️ **构建环境提示（新发现）**：本沙箱会**拦截 Gradle 删除自身构建中间产物**，表现为
-  `Could not delete 'app\build\tmp\kotlin-classes\...'` 或 `.../desugar_graph/.../graph.bin (拒绝访问)`。
-  **这不是代码问题** —— 需**关闭沙箱（提权）**后运行构建即可通过。
-  （此前把 `graph.bin (拒绝访问)` 归因为「Windows 文件占用」，现更正为**更可能是沙箱拦截**：
-  两者表现一致，而提权后同一命令立即成功。详见 `docs/technical-overview.md` §10.157）
+- 四任务合并一次运行（`assembleDebug assembleRelease testDebugUnitTest lintDebug`）**BUILD SUCCESSFUL in 15m 48s**（107 个任务：27 executed / 80 up-to-date）；`assembleRelease` 内含 `minifyReleaseWithR8` + `lintVitalRelease` + `optimizeReleaseResources` + `packageRelease`
+- `testDebugUnitTest` **529 例 / 0 失败 / 0 错误**（57 个结果 XML；基线 518/56，**净增 11 例 = `SearchMergeTest`**）
+- `lintDebug` **0 Error / 254 Warning**（基线 0/257；**净减 3 条**，来源见下）。**阶段 3 新增代码与阶段 4.1 的 1 个 drawable + 1 个 meta-data 均未带来新告警**；且 lint 在阶段 3 实施期**抓出 2 条真实 error**（`putIfAbsent` 的 API 24+ 问题，见 `Fixed`），修完后归零
+- ⚠️ **构建环境提示（重要）**：`拒绝访问` / `AccessDeniedException` 类报错有**两种成因**，靠 stderr 区分 ——
+  | 现象 | 判定依据 | 处置 |
+  |---|---|---|
+  | **沙箱拦截** Gradle 删除/写入自身产物 | stderr 有 `[sandbox] 命令被沙箱拦截` | 关闭沙箱（提权）重跑 |
+  | **真·文件锁** | stderr **无**任何 sandbox 字样 | `./gradlew.bat --stop` → 删掉出问题的中间产物目录 → 重跑 |
+  本轮两种都实际遇到（一次有 sandbox 字样；另一次提权后 `sandbox` 命中数为 0，却仍在 `project_dex_archive\...\*.dex` 上报 `AccessDeniedException`，实测该目录可写、文件非只读 → 属构建期瞬时锁）。详见 `docs/technical-overview.md` §10.157
 - 改动文件在 lint 报告中的命中：`PlaybackService` / `BrowseCache` / **`MediaLibraryTree` 均 0 命中**；`PlayerManager` 2 条 `UseKtx`（`PlayerManager.kt:520` / `:532`），**为存量、本次未触碰**
 - **警告 257 → 254 是净减少，不是新增**：`MediaLibraryTree` 的 `Uri.parse` 从基线 3 处降到 **0 处**（全部改为 `String.toUri()`），`UseKtx` 告警相应净减 3 条（全项目 `UseKtx` 22 → 19）
 - 4 个新图标**未被 `UnusedResources` 误报**（152 条 `UnusedResources` 里 `ic_auto_*` / `banner` **0 命中**）—— 说明 Kotlin 侧 `R.drawable.*` 引用被 lint 正确识别为「已使用」
-- 产物 `NASMusicTV-release-v2-33-0.apk`（22,940,970 B ≈ 22.9MB），`output-metadata.json` 与 `BuildConfig` **双向核对** versionCode **147** / versionName **2.33.0**；`apksigner verify --print-certs` = SHA-256 `43a9dec4…d59b`（`CN=Android Debug`），**与电视已装版同签名** → `adb install -r` 可原地升级、不丢数据
+- 产物 `NASMusicTV-release-v2-33-0.apk`（**22,942,866 B** ≈ 22.9MB），`output-metadata.json` 与 `BuildConfig` **双向核对** versionCode **147** / versionName **2.33.0**；`apksigner verify --print-certs` = SHA-256 `43a9dec4…d59b`（`CN=Android Debug`），**与电视已装版同签名** → `adb install -r` 可原地升级、不丢数据
 - `aapt2 dump badging` 复核 **`minSdkVersion 22` / `targetSdkVersion 34` 未变**（"不改 minSdk"这一路线前提成立）
-- **release 包内的车机声明逐项复核**（`aapt2 dump resources` / `dump xmltree`）：`xml/automotive_app_desc` 资源存在 ✓；`com.google.android.gms.car.application` meta-data 存在 ✓；`PlaybackService` 的两个 action（`androidx.media3.session.MediaLibraryService` + `android.media.browse.MediaBrowserService`）**同时存在** ✓
+- **release 包内的车机声明逐项复核**（`aapt2 dump resources` / `dump xmltree`）：`xml/automotive_app_desc` 资源存在 ✓；`com.google.android.gms.car.application` meta-data 存在 ✓；`PlaybackService` 的**三个** action **同时存在** ✓ —— `androidx.media3.session.MediaLibraryService` + `android.media.browse.MediaBrowserService` + **`android.media.action.MEDIA_PLAY_FROM_SEARCH`**（阶段 3 新增，即语音搜索的入口声明）
 - **release 包内 4 个图标资源复核**（`aapt2 dump resources`；release 下**文件名已混淆**，故按资源名查表而非按路径找）：`drawable/ic_auto_download` = `0x7f0800a7` → `res/nM.xml` ✓、`drawable/ic_auto_favorite` = `0x7f0800a8` → `res/fl.xml` ✓、`drawable/ic_auto_playlist` = `0x7f0800a9` → `res/AR.xml` ✓、`drawable/ic_auto_queue` = `0x7f0800aa` → `res/_z.xml` ✓；`xml/automotive_app_desc` = `0x7f160000` → `res/oc.xml` ✓
-- **R8 存活复核**（解包 `classes.dex` 做字节匹配）：媒体树业务字符串 `当前播放` / `离线下载` / `收藏` / `歌单` / `NAS Music TV` **全部命中** ✓；图标通路业务字符串 `"android.resource://"` 与 `"drawable/"` **均命中** ✓；对照项 `AppLog.w` 的 `"onConnect rejected"` **未命中**（符合预期——`AppLog.w` 带 `if (BuildConfig.DEBUG)` 守卫，release 下连字符串常量一起被折掉，**不能据此判"代码丢了"**）。`rasterizeIcon` / `ic_auto_` 查不到属**正常**：前者方法名随 `player` 包被混淆，后者 `R.drawable.*` 在编译期已内联为 int 常量、运行时资源名取自资源表而非 dex 字符串
+- **R8 存活复核**（解包 `classes.dex` 做字节匹配）：媒体树业务字符串 `当前播放` / `离线下载` / `收藏` / `歌单` / `NAS Music TV` **全部命中** ✓；图标通路业务字符串 `"android.resource://"` 与 `"drawable/"` **均命中** ✓；**阶段 3 新增的 `"no result for query: "`（`resolveVoiceSearch` 的业务异常文案）命中** ✓（证明该路径进了 release dex）；对照项 `AppLog.w` 的 `"onConnect rejected"` 与 `AppLog.d` 的 `"search(nas) skipped"` **均未命中**（符合预期——`AppLog.d/w` 带 `if (BuildConfig.DEBUG)` 守卫，release 下连字符串常量一起被折掉，**不能据此判"代码丢了"**）。`rasterizeIcon` / `ic_auto_` 查不到属**正常**：前者方法名随 `player` 包被混淆，后者 `R.drawable.*` 在编译期已内联为 int 常量、运行时资源名取自资源表而非 dex 字符串。**`android.media.action.MEDIA_PLAY_FROM_SEARCH` 在 dex 里查不到也属正常** —— 它是**清单**字符串，只存在于 APK 的二进制 `AndroidManifest.xml`，用 `aapt2 dump xmltree` 验（已命中）
 - **阶段 4.1 提供方图标复核**：`aapt2 dump resources` 确认 `drawable/ic_car_attribution` = `0x7f0800b1` → `res/PD.xml` ✓；`aapt2 dump xmltree --file AndroidManifest.xml` 确认 `androidx.car.app.TintableAttributionIcon` meta-data 存在且 `android:resource=@0x7f0800b1` **正好指向它** ✓
 - **图形形状离线核对**（`logs_temp/render_car_icon.py`，比 2.5 的脚本多支持 **Q 曲线展平**与 **`<group>` 变换**）：渲染后包围盒实测 `x∈[12,96] y∈[19,89]`，两轴精确居中（中心 54 = 108/2）✓。**该脚本顺带抓出一个真实错误** —— 见上文「推导时踩到的坑」
 - **未做真机/车机验收**：DHU 需 `adb forward tcp:5277 tcp:5277` + `desktop-head-unit.exe`；真车默认只显示 Play 商店应用、侧载需在 Android Auto 开发者模式打开 "Unknown sources"。按项目约定，上机验证由用户执行

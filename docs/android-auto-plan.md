@@ -90,8 +90,8 @@ v1.0 遗留的 4 个未决项 + 2 个"待 DHU 实测"项，本版全部关闭：
 | **A-6** | **P1** | `onGetChildren` 为**同步阻塞**实现 | `PlaybackService.kt:335-355` | 接入 NAS 后 **ANR**（§5.4） | ✅ 阶段 1（异步 + 超时） |
 | **A-7** | **P1** | 伪分页逻辑 | `PlaybackService.kt:344-351` | Auto **不支持分页**，列表被静默截断（§3.4） | ✅ 阶段 1（已移除） |
 | **A-8** | **P2** | 未读 root hints | `PlaybackService.kt:312-320` | 根菜单超限项被**静默丢弃**（§3.3） | ✅ 阶段 1 |
-| **A-9** | **P2** | 未实现 `onSearch` / `onGetSearchResult` | `PlaybackService.kt` | 语音"播放 XXX"不可用 | ❌ 阶段 3 |
-| **A-10** | **P2** | 未实现 `onPlaybackResumption` | `PlaybackService.kt` | 车机连接后无法续播 | ❌ 阶段 3 |
+| **A-9** | **P2** | 未实现 `onSearch` / `onGetSearchResult` | `PlaybackService.kt` | 语音"播放 XXX"不可用 | ✅ 阶段 3（另含 `onSetMediaItems` 的 `searchQuery` 分支 + `MEDIA_PLAY_FROM_SEARCH` intent-filter） |
+| **A-10** | **P2** | 未实现 `onPlaybackResumption` | `PlaybackService.kt` | 车机连接后无法续播 | ❌ 未做（原列在阶段 3，本轮未纳入 —— 见 §七 阶段 3 末注） |
 | **A-11** | **P3** | 无 attribution icon | `AndroidManifest.xml` | 媒体卡片显示默认图标 | ✅ 阶段 4.1 |
 | **A-12** | **P3** | 未做包验证（`onConnect` 未收口） | `PlaybackService.kt` | 任意应用都能连上媒体会话（§5.7） | ⚠️ 阶段 1 已实现包验证；**收紧为签名级**待做（阶段 4.3） |
 | **A-13** | **P1** | **`onNeedResolveStreamUrl` 实现在 ViewModel** | `MainViewModel.kt:790` → `PlayerViewModel.resolveAndPlayByIndex` | **无 UI 时网络歌曲播不了**（§5.8） | ✅ 阶段 1（解析下沉，UI 层零改动） |
@@ -406,11 +406,17 @@ private val progressUpdateRunnable = object : Runnable {
 | 8 | `docs/phone-media-display-plan.md` | 修改 | 更正 §5.1（§2.3） |
 
 > **〔2026-09-17 实施期实际改动清单（以 git 为准）〕**
-> 实际落地 **6 改 + 2 新**（外加文档）：`automotive_app_desc.xml`（新）、`BrowseCache.kt`（新）、
+> 阶段 1 实际落地 **6 改 + 2 新**（外加文档）：`automotive_app_desc.xml`（新）、`BrowseCache.kt`（新）、
 > `AndroidManifest.xml`、`PlaybackService.kt`、`PlayerManager.kt`、`MediaLibraryTree.kt`，
 > 以及 `app/build.gradle.kts`（版本号）。
 > **与上表的唯一差异：第 7 项 `MainViewModel.kt` 未改动**（原因见 §5.8）；
 > 另**多出** `PlayerManager.replayAt()` —— 方案初稿漏了「URL 解析完成后如何续播」这一步。
+>
+> **〔阶段 3 追加改动（同日）〕**：`AndroidManifest.xml`（补 `MEDIA_PLAY_FROM_SEARCH` action、
+> 移除 `tools:ignore` 与 `xmlns:tools`）、`PlaybackService.kt`（`onSearch` / `onGetSearchResult` /
+> `searchQuery` 分支 / `searchItemsCached` / `resolveVoiceSearch` / `searchCache`）、
+> `MediaLibraryTree.kt`（`search()`），以及新增 `res/drawable/ic_auto_*.xml` ×4、
+> `res/drawable/ic_car_attribution.xml`（阶段 2.5 / 4.1，见 §七）。
 
 ### 5.2 Manifest 改动（精确）
 
@@ -990,14 +996,15 @@ Media3 到 legacy（Android Auto）客户端有**两条**图标通路（`LegacyC
 > —— `Bitmap.compress` 被 shadow，不产出真实 PNG，写成单测只会得到假阳性/假阴性。
 > 形状正确性用「离线渲染 + 目视」验证反而更硬。
 
-### 阶段 3：搜索与语音（P2）
+### 阶段 3：搜索与语音（P2）——〔2026-09-17 已实施〕
 
 > **〔2026-09-17 实施期补充：语音搜索的完整机制已探明〕**
 >
 > 阶段 1 落地时新增了 `automotive_app_desc`，**立刻触发了一条新的 lint error**：
 > `MissingIntentFilterForMediaSearch`（`AndroidManifest.xml` 的 `<application>` 上，
-> 要求注册 `android.media.action.MEDIA_PLAY_FROM_SEARCH`）。本轮**有意暂不声明**该 intent-filter
-> 并加 `tools:ignore` 抑制，理由与后续正确做法如下（均经 `media3-session-1.2.1` 源码核实）：
+> 要求注册 `android.media.action.MEDIA_PLAY_FROM_SEARCH`）。当时**有意暂不声明**该 intent-filter
+> 并加 `tools:ignore` 抑制，理由是「声明了也无法响应 = 静默失效的语音搜索」。
+> 以下机制均经 `media3-session-1.2.1` 源码核实；**现已按此实现，抑制与 intent-filter 同步补齐**。
 >
 > **① Media3 没有 `MediaSession.Callback.onPlayFromSearch`。**
 > `javap` 实测 `MediaSession$Callback` 共 11 个 `default` 方法，与搜索相关的**一个都没有**
@@ -1010,33 +1017,92 @@ Media3 到 legacy（Android Auto）客户端有**两条**图标通路（`LegacyC
 > → `MediaSessionLegacyStub.java:811-817` 调 `sessionImpl.onSetMediaItemsOnHandler(
 > controller, ImmutableList.of(mediaItem), C.INDEX_UNSET, C.TIME_UNSET)`。
 > 而 `createMediaItemForMediaRequest`（同文件 947-961）构造出的 `MediaItem` 是：
-> **`mediaId = ""`（`MediaItem.DEFAULT_MEDIA_ID`）、`requestMetadata.searchQuery = query`、无 URI**。
+> **`mediaId = ""`（`MediaItem.DEFAULT_MEDIA_ID`，源码 `MediaItem.java:2196` 确认其值为 `""`）、
+> `requestMetadata.searchQuery = query`、无 URI**。
+> → 因此**判定条件 =「`mediaId.isBlank()` 且 `searchQuery` 非空」**（只看 searchQuery
+> 会把普通播放请求误判成搜索；只看空 mediaId 又太宽）。
 >
-> **③ 因此 3.x 的正确实现位置是 `PlaybackService.onSetMediaItems` 的入口分支**：
+> **③ 实现位置 = `PlaybackService.onSetMediaItems` 的入口分支（已落地）**：
 > ```kotlin
-> val q = mediaItems.firstOrNull()?.requestMetadata?.searchQuery?.toString()
-> if (!q.isNullOrBlank()) { /* 搜索 → 构造 items → 返回 MediaItemsWithStartPosition(items, 0, 0L) */ }
+> val voiceQuery = mediaItems.firstOrNull()
+>     ?.takeIf { it.mediaId.isBlank() }
+>     ?.requestMetadata?.searchQuery?.toString()
+>     ?.takeIf { it.isNotBlank() }
+> if (voiceQuery != null) return resolveVoiceSearch(voiceQuery)
 > ```
-> 搜索可复用 `NetworkMusicManager.search(keyword)` 与 `BackendAdapter.searchSongs(query)`。
-> ⚠️ 两个坑：**(a)** 此路径的 `startIndex` / `startPositionMs` 是 `C.INDEX_UNSET`(-1) /
-> `C.TIME_UNSET`，**不能**原样透传给 `MediaItemsWithStartPosition`，要归一成 `0` / `0L`；
-> **(b)** 只有在这一分支真正实现后，才应把 `MEDIA_PLAY_FROM_SEARCH` 的 intent-filter 加到
-> `PlaybackService` 上并移除 `tools:ignore`——**顺序反了会得到「声明了却搜不动」的静默失效**。
+> 搜索复用 `NetworkMusicManager.search(keyword)` + `BackendAdapter.searchSongs(query)`。
+> ⚠️ 两个坑都已处理：**(a)** 此路径的 `startIndex` / `startPositionMs` 是 `C.INDEX_UNSET`(-1) /
+> `C.TIME_UNSET`，**不能**原样透传给 `MediaItemsWithStartPosition`，已归一成 `0` / `0L`；
+> **(b)** 顺序不能反 —— 先实现分支，再补 intent-filter 与移除 `tools:ignore`，否则得到
+> 「声明了却搜不动」的静默失效。
+>
+> **〔实施期新发现，两处方案未预见〕**
+>
+> **④ 空搜索结果必须让 future 失败，不能返回空列表。**
+> 返回空列表会被 Media3 拿去调 `player.setMediaItems(emptyList(), 0, 0L)` ——
+> **清空播放队列、打断用户正在听的那首歌**。而让 future 失败时：
+> legacy 路径 `MediaSessionLegacyStub.handleMediaRequest` 的 `onFailure` 明确写着
+> *"Do nothing, the session is free to ignore these requests"*（源码 `:843-846`）→
+> 当前播放完全不受影响；现代路径 `MediaSessionStub.sendSessionResultWhenReady`
+> （`:192-198`）把异常转成错误结果，不会崩。故 `resolveVoiceSearch` 搜不到时
+> **`future.setException(...)`**，语义是「搜不到就什么都不做」。
+>
+> **⑤ 搜索是两步，且 `onGetSearchResult` 可能先于 `onSearch` 被调用。**
+> `onSearch` 只回**结果码** + 通过 `notifySearchResultChanged` 通知**数量**；
+> 真正的列表由 `onGetSearchResult` 返回。**只回结果码而不通知数量 → 车机端不会来取结果**
+> （表现为「搜了但列表空」）。反过来，`onGetSearchResult` 的 javadoc 写明 query
+> 「**may not**」先经 `onSearch`（走 `MediaBrowserCompat#search` 时不会）→
+> **不能假设 `onSearch` 已预热缓存**，必须能独立搜索。实现上用 60s TTL 的
+> `searchCache` 做「省一次重复搜索」的优化，而非正确性依赖。
+>
+> **⑥ `LibraryResult.ofItemList` 有隐藏前提。** 源码 `LibraryResult.java:257-261` 的
+> `verifyMediaItem` 要求每个 item：① `mediaId` 非空；② `isBrowsable` **显式设置**（不能为 null）；
+> ③ `isPlayable` **显式设置**。否则**直接抛异常**。`MediaLibraryTree.songToItem` 本来就
+> 三项齐备，故搜索结果直接复用它，未另写构造逻辑。
+>
+> **⑦ 搜索超时给 10s**（比浏览的 `BROWSE_TIMEOUT_MS` 宽）—— 要跨公网（Meting）+ 内网（NAS）
+> 两源，内网不可达在车机场景下是常态，NAS 侧失败用 `AppLog.d` 静默跳过（不是异常）。
+> 结果上限 `MAX_SEARCH_RESULTS = 50`（与 `MAX_CHILDREN` 同源理由：车机列表很短）。
+>
+> **⑧ ⚠️ 去重别用 `Map.putIfAbsent` —— 它是 API 24+，在目标电视（Android 5.1.1）上会崩。**
+> 首版写成 `merged.putIfAbsent(...)`，**编译通过、单测也过**，但 `lintDebug` 直接报 2 条 error：
+> `Call requires API level 24 (current min is 22): java.util.HashMap#putIfAbsent [NewApi]`。
+> `LinkedHashMap` 的 `putIfAbsent` 解析到 `HashMap#putIfAbsent`（API 24 才加入）→ API 22 上
+> 运行到搜索即 `NoSuchMethodError` **崩溃**。改用 Kotlin stdlib 的 `MutableMap.getOrPut`
+> （纯 Kotlin，无 API 版本限制，语义一致）。**这一条只有 lint 能抓** —— 这正是 `lintDebug`
+> 作为阻塞门禁的价值所在，不是走过场。全项目已排查 `putIfAbsent` / `computeIfAbsent` /
+> `removeIf` / `Map.merge`，**仅此一处**。
+>
+> **⑨ 合并规则抽成纯函数并单测。** 去重优先级 + 保序 + 截断抽成顶层
+> `internal fun mergeSearchResults(networkSongs, nasSongs, limit)`，与 `PlayerManager.kt` 的
+> `computeQueueRemoval`（见 `QueueRemovalTest`）**同一既有做法**。新增 `SearchMergeTest`
+> **11 例**。⚠️ 但 Media3 回调（`onSearch` / `onGetSearchResult` / `searchQuery` 分支）
+> **仍无单测** —— 需真实 `MediaSession` + 控制器，项目无此基础设施，其正确性本质是**集成行为**，
+> 只能靠 DHU / 真车验。**能测的纯逻辑要测，测不了的要说清楚为什么。**
 
-| 步骤 | 内容 |
-|---|---|
-| 3.0 | **（新增）** 在 `onSetMediaItems` 中处理 `requestMetadata.searchQuery`；随后补 `MEDIA_PLAY_FROM_SEARCH` intent-filter 并移除 `tools:ignore="MissingIntentFilterForMediaSearch"` |
-| 3.1 | 实现 `onSearch` / `onGetSearchResult`，复用现有搜索（含 TinyPinyin 拼音搜索） |
-| 3.2 | 实现 `onPlaybackResumption`，支持车机连接后一键续播 |
-| 3.3 | 验证 Google 助理「播放 XXX」链路 |
+| 步骤 | 内容 | 状态 |
+|---|---|---|
+| 3.0 | 在 `onSetMediaItems` 中处理 `requestMetadata.searchQuery`；随后补 `MEDIA_PLAY_FROM_SEARCH` intent-filter 并移除 `tools:ignore="MissingIntentFilterForMediaSearch"` | ✅ 已实施 |
+| 3.1 | 实现 `onSearch` / `onGetSearchResult`，复用现有搜索（含 TinyPinyin 拼音搜索） | ✅ 已实施（`MediaLibraryTree.search` 复用 `NetworkMusicManager.search` / `BackendAdapter.searchSongs`，拼音由适配器内部处理） |
+| 3.2 | 实现 `onPlaybackResumption`，支持车机连接后一键续播 | ❌ **本轮未做**（见下注） |
+| 3.3 | 验证 Google 助理「播放 XXX」链路 | ⚠️ 代码路径就绪，**待 DHU/真车实测** |
+| 3.4 | **（实施期新增）** 合并规则抽纯函数 + 单测（见 ⑨） | ✅ 已实施（`SearchMergeTest`，11 例） |
+
+> **末注：为什么本轮只做 3.0 / 3.1，没做 3.2 `onPlaybackResumption`。**
+> 3.2 虽同列在阶段 3，但与搜索/语音**没有耦合**：它是「车机连接时返回一个可恢复的
+> `MediaItemsWithStartPosition`」的独立入口，属**另一个** `MediaSession.Callback` 覆写点，
+> 且它有自己的前置条件（需要持久化上次播放位置，而当前 `PlayerManager` 只在内存里维护
+> `queue`/`currentIndex`/`currentSong`，无落盘）。
+> 把它塞进本轮会让改动面从「纯增量」变成「引入新的持久化状态」—— 风险与验证成本都上一个台阶。
+> 因此本轮**只做 A-9（搜索/语音）**，3.2 保持未做，已在 §十一「仍未做」如实登记。
 
 ### 阶段 4：打磨（P3）
 
-| 步骤 | 内容 |
-|---|---|
+| 步骤 | 内容 | 状态 |
+|---|---|---|
 | 4.1 | attribution icon（单色矢量） | ✅ **已完成（2026-09-17）** —— 见下方说明 |
 | 4.2 | 强调色定制（可选） | ⚠️ **已核实「确实需要」**：`Theme.NASMusicTV`（`values/themes.xml:3`）继承 `android:Theme.Material.NoActionBar`，**未设 `android:colorAccent`** → 车机侧会取 Material 默认深青 `#009688`，而非品牌色 `#2DD4BF`。修法即官方给的 `com.google.android.gms.car.application.theme` meta-data 指向一个含 `colorAccent` 的样式 |
-| 4.3 | 包验证收紧（依据真实 `controller.packageName` 日志，§5.7） |
+| 4.3 | 包验证收紧（依据真实 `controller.packageName` 日志，§5.7） | ❌ 未做 |
 | 4.4 | 更正 `phone-media-display-plan.md` §5.1（§2.3） | ✅ **已完成（2026-09-17）** |
 
 #### 4.1 实施记录：提供方图标（attribution icon）
@@ -1299,12 +1365,12 @@ MediaItemsWithStartPosition(List<MediaItem> mediaItems, int startIndex, long sta
 
 ## 十一、一页速览
 
-> **当前状态（2026-09-17，v2.33.0）：阶段 1 + 2.5 + 4.1 已实施并完成代码级验证；DHU/真车验收未做。**
+> **当前状态（2026-09-17，v2.33.0）：阶段 1 + 2.5 + 3 + 4.1 已实施并完成代码级验证；DHU/真车验收未做。**
 >
-> 代码级验证实测：四任务合并构建 **BUILD SUCCESSFUL**（16m15s）；`testDebugUnitTest` **518 例 / 0 失败 / 0 错误**；
-> `lintDebug` **0 Error / 254 Warning**（基线 257，净减 3 条 `UseKtx`）；release 产物
-> `NASMusicTV-release-v2-33-0.apk`（22,940,152 B），签名与电视已装版同源（`43a9dec4…d59b`）；
-> 4 个图标资源与车机声明均已核对进包。
+> 代码级验证实测：四任务合并构建 **BUILD SUCCESSFUL in 15m 48s**；`testDebugUnitTest` **529 例 / 0 失败 / 0 错误**
+> （基线 518，净增 11 例 = 阶段 3 的 `SearchMergeTest`）；`lintDebug` **0 Error / 254 Warning**；
+> release 产物 `NASMusicTV-release-v2-33-0.apk`（**22,942,866 B**），签名与电视已装版同源（`43a9dec4…d59b`）；
+> 4 个图标资源与车机**三项**声明（含阶段 3 的 `MEDIA_PLAY_FROM_SEARCH`）均已核对进包。
 
 **阶段 1 已落地（6 改 + 2 新）**：
 
@@ -1318,6 +1384,10 @@ MediaItemsWithStartPosition(List<MediaItem> mediaItems, int startIndex, long sta
 8. ✅ `MediaLibraryTree` 重写（结构化 ID + 4 项根菜单）+ 新增 `BrowseCache`
 9. ✅ 根菜单 4 项配**单色白矢量图标**（阶段 2.5；矢量源 + 运行时光栅化走 `iconBitmap` 通路）
 10. ✅ 提供方图标 attribution icon（阶段 4.1；`ic_car_attribution.xml` + `androidx.car.app.TintableAttributionIcon` meta-data）
+11. ✅ **搜索与语音（阶段 3）**：`MediaLibraryTree.search()`（网络音乐 + NAS 双源合并去重，上限 50）；
+    `PlaybackService` 新增 `onSearch` / `onGetSearchResult`（两步流程，含 `notifySearchResultChanged`）、
+    `onSetMediaItems` 的 `searchQuery` 语音分支 + `resolveVoiceSearch`、60s TTL `searchCache`；
+    intent-filter 补 `android.media.action.MEDIA_PLAY_FROM_SEARCH` 并**移除** `tools:ignore="MissingIntentFilterForMediaSearch"`
 
 **仍未做**：
 
@@ -1326,8 +1396,9 @@ MediaItemsWithStartPosition(List<MediaItem> mediaItems, int startIndex, long sta
   - ⚠️ **有一个待决策的设计缺口**：§5.6 已定义 `artist` / `album` 的 mediaId 结构，
     但根菜单是**固定 4 项**（root hints 默认上限 4）→ 这两个节点**从根菜单不可达**。
     要么改根菜单语义（如把第 4 项「歌单」提升为「音乐库」，下钻出 歌单/艺人/专辑），
-    要么等阶段 3 的搜索作为入口。**不宜直接追加为第 5/6 项**——默认车机只显示 4 个 tab，会被静默丢弃
-- ❌ 搜索与语音（阶段 3，**语音搜索机制已探明**，见阶段 3 说明块）、`onPlaybackResumption`
+    要么把阶段 3 已落地的**搜索**当作入口。**不宜直接追加为第 5/6 项**——默认车机只显示 4 个 tab，会被静默丢弃
+- ❌ `onPlaybackResumption`（A-10；原列在阶段 3 但本轮未纳入 —— 它是独立特性，
+  与搜索/语音无耦合，见阶段 3 末注）
 - ❌ 强调色定制（阶段 4.2；**已核实确实需要**：主题未设 `colorAccent`，车机侧会取 Material 默认深青而非品牌色）
 - ❌ 包验证收紧为签名级（阶段 4.3）
 

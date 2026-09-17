@@ -8398,20 +8398,29 @@ onSearchSong = { keyword -> viewModel.searchNetworkSongs(keyword) },
 **验证**：`compileDebugKotlin` BUILD SUCCESSFUL（无新增警告）；`assembleDebug` BUILD SUCCESSFUL；`assembleRelease` **BUILD SUCCESSFUL**（12m18s，含 `minifyReleaseWithR8` + `lintVitalRelease` + `optimizeReleaseResources`）；`testDebugUnitTest` **518 例 / 0 失败 / 0 错误**（与基线一致）；`lintDebug` **0 Error / 257 Warning**（与基线一致，`lint-results-debug.txt` 中 `NowPlayingScreen` / `LyricsView` / `CoverCarousel` **0 命中**）。产物 `NASMusicTV-release-v2-32-7.apk`（22,930,934 B ≈ 22.9MB），`output-metadata.json` 与 `BuildConfig` 双向核对 versionCode **146** / versionName **2.32.7**；`apksigner verify --print-certs` = `CN=Android Debug`（SHA-256 `43a9dec4…d59b`），与电视已装版同签名故 `adb install -r` 可原地升级。
 ⚠️ 首次 `assembleDebug` 曾在 `:app:dexBuilderDebug` 失败：`app/build/intermediates/desugar_graph/.../graph.bin (拒绝访问)`——**与本次改动无关**，属 Windows 文件占用；`./gradlew.bat --stop` + 删除 `app/build/intermediates/desugar_graph` 后重跑即通过。再遇同类报错不要怀疑代码。
 
-> **〔2026-09-17 更正〕** 上面这条「属 Windows 文件占用」的归因**不完整**。同类报错（含
-> `Could not delete '...\app\build\tmp\kotlin-classes\...'`）**更可能是沙箱拦截 Gradle 删除自身构建产物** ——
-> stderr 会打印 `[sandbox] 命令被沙箱拦截，以下操作被拒绝：... (删 · 拒绝)`。
-> **关闭沙箱（提权）后运行构建即通过**。判定方法、以及「别把 `rm` 和构建串在一条命令里」的注意事项，见 §10.157。
+> **〔2026-09-17 更正〕** 上面这条「属 Windows 文件占用」的归因**不完整**。同类报错
+> （含 `Could not delete '...\app\build\tmp\kotlin-classes\...'`）**有两种成因，必须靠 stderr 区分**：
+>
+> | 现象 | 判定依据 | 处置 |
+> |---|---|---|
+> | **沙箱拦截** Gradle 删除/写入自身产物 | stderr 有 `[sandbox] 命令被沙箱拦截` | 关闭沙箱（提权）重跑 |
+> | **真·文件锁** | **stderr 无任何 sandbox 字样** | `./gradlew.bat --stop` → 删掉出问题的中间产物目录 → 重跑 |
+>
+> 2026-09-17 当天两种都实际遇到：一次 stderr 有 sandbox 字样（沙箱）；另一次清理提权后重跑、
+> **sandbox 命中数为 0**，却仍在 `project_dex_archive\...\*.dex` 上报 `AccessDeniedException`
+> （该目录实测可写、文件非只读、可 `r+b` 打开 → 属**构建期瞬时锁**）。
+> 另注意本沙箱 `rm -rf` 走**安全删除**，批量删除超阈值会中止整条命令 ——
+> **别把删除与构建串在一条命令里**。完整说明见 §10.157。
 
 **真机验收（2026-09-16）**：用户在电视 `9R54_G8S`（SDK 22 / Android 5.1.1）上实测沉浸播放页**通过**——左半封面右缘虚化渐黑、右半黑底歌词、点封面退出沉浸均正常。
 → **顺带证实一条渲染边界**：`CompositingStrategy.Offscreen` + `BlendMode.DstIn` 渐变遮罩在 **API 22 上确实生效**。此前担心「API 22 无离屏层时 `DstIn` 会把已绘制的整屏内容一起裁掉」，实测**不成立**，该遮罩配方可放心用于渐变 mask。另注意 `Modifier.blur` 在 API < 31 是 no-op，电视上无模糊、只剩渐变——**这是预期行为，不是 bug**。
 
 **版本**：v2.32.6 → **v2.32.7**（versionCode 145 → 146）
 
-### 10.157 v2.33.0 — Android Auto 车机支持（阶段 1：可发现 + 可浏览 + 可播放；含 2.5 根菜单图标与 4.1 提供方图标，2026-09-17）
+### 10.157 v2.33.0 — Android Auto 车机支持（阶段 1：可发现 + 可浏览 + 可播放；含 2.5 根菜单图标、3 搜索与语音、4.1 提供方图标，2026-09-17）
 
-**来源**：产品需求 —— 为应用增加 Android Auto（手机映射投屏）支持。方案文档 `docs/android-auto-plan.md`（v2.0，11 章），本轮落地**阶段 1 的全部必要代码**，以及阶段 2.1/2.2/2.4/2.5 与阶段 4.1（见第九节）。
-**仍未实施**：阶段 2.3 剩余（艺人 / 专辑节点、NAS 短期缓存）、阶段 3（搜索与语音、`onPlaybackResumption`）、DHU / 真车端到端验收。
+**来源**：产品需求 —— 为应用增加 Android Auto（手机映射投屏）支持。方案文档 `docs/android-auto-plan.md`（v2.1，11 章），本轮落地**阶段 1 的全部必要代码**，以及阶段 2.1/2.2/2.4/2.5、**阶段 3（搜索与语音）**与阶段 4.1（见第七、九节）。
+**仍未实施**：阶段 2.3 剩余（艺人 / 专辑节点、NAS 短期缓存）、`onPlaybackResumption`（A-10）、阶段 4.2（强调色）/ 4.3（包验证收紧）、DHU / 真车端到端验收。
 
 **路线判定**：Android Auto 的「投屏」模式 = 手机跑应用与运算、车机只做显示与交互，**复用现有 APK** —— 不加 flavor、不改 `minSdk`（仍 22）、**不新增任何依赖**。与 AAOS（车机内嵌 Android）是两条独立路线。
 
@@ -8484,15 +8493,67 @@ p.seekTo(index, 0L); p.prepare(); p.play()
 `PlaybackService` 是 `exported="true"`（跨进程绑定必需），故 `onConnect` 加来源校验：放行系统进程（`Process.SYSTEM_UID`）/ AAOS 控制器 / Android Auto 控制器（用 Media3 内置 `session.isAutomotiveController()` / `isAutoCompanionController()`）/ 本应用 / Google 助理（手机 `com.google.android.googlequicksearchbox` 与 AAOS `com.google.android.carassistant` 包名不同，需分别放行），不通过则 `MediaSession.ConnectionResult.reject()`。**DEBUG 构建全放行**，避免白名单不全导致 DHU / 真机调试时"莫名连不上"。
 ⚠️ Media3 的这两个判定官方标注 **"not a security validation"**（只比包名、不校验签名）。对个人音乐应用强度足够；若日后需签名级校验，可对照官方 assistant 文档的证书指纹实现。
 
-#### 七、语音搜索：lint 触发的意外发现（阶段 3 的正确做法已探明）
+#### 七、搜索与语音（阶段 3，2026-09-17 实施）
 
-`automotive_app_desc` 一落地就**新增一条 lint error**：`MissingIntentFilterForMediaSearch`（要求注册 `android.media.action.MEDIA_PLAY_FROM_SEARCH`）。本轮**有意暂不声明**该 intent-filter，加 `tools:ignore` 抑制并写明理由。
+##### 7.1 起点：`automotive_app_desc` 带来的一条新 lint error
 
-**理由是「声明了也无法响应」**，且正确机制已查清（`media3-session-1.2.1` 源码）：
+`automotive_app_desc` 一落地就**新增一条 lint error**：`MissingIntentFilterForMediaSearch`（要求注册 `android.media.action.MEDIA_PLAY_FROM_SEARCH`）。阶段 1 时**有意暂不声明**该 intent-filter，加 `tools:ignore` 抑制并写明理由 —— 「声明了也无法响应」会得到**静默失效的语音搜索**。
+
+**抑制已于本轮移除**（intent-filter 补齐后不再需要），`xmlns:tools` 也一并删掉（已无使用方）。
+
+##### 7.2 语音搜索的真实机制（`media3-session-1.2.1` 源码级）
 
 1. **Media3 没有 `MediaSession.Callback.onPlayFromSearch`** —— `javap` 实测该接口共 11 个 `default` 方法，**与搜索相关的一个都没有**（只有 `onSetMediaItems` / `onAddMediaItems` / `onPlaybackResumption` / `onPlayerCommandRequest` 等）。老文档建议的「实现 `onPlayFromSearch`」对 Media3 **不成立**。
-2. **该 intent 最终走 `onSetMediaItems`** —— `MediaSessionLegacyStub.java:395` 的 `onPlayFromSearch(query, extras)` → `handleMediaRequest(createMediaItemForMediaRequest(null, null, query, extras), play=true)` → 同文件 `811-817` 调 `sessionImpl.onSetMediaItemsOnHandler(controller, ImmutableList.of(mediaItem), C.INDEX_UNSET, C.TIME_UNSET)`；而 `createMediaItemForMediaRequest`（同文件 `947-961`）构造的 `MediaItem` 是 **`mediaId=""`（`DEFAULT_MEDIA_ID`）+ `requestMetadata.searchQuery=query` + 无 URI**。
-3. **所以阶段 3 要改的是 `onSetMediaItems` 入口的 `requestMetadata.searchQuery` 分支**。两个坑：**(a)** 该路径的 `startIndex`/`startPositionMs` 是 `C.INDEX_UNSET`(-1) / `C.TIME_UNSET`，**不能原样透传给 `MediaItemsWithStartPosition`**，要归一成 `0` / `0L`；**(b)** 必须**先**实现该分支、**再**补 intent-filter 并移除 `tools:ignore` —— 顺序反了就是「声明了却搜不动」的静默失效。
+2. **该 intent 最终走 `onSetMediaItems`** —— `MediaSessionLegacyStub.java:395` 的 `onPlayFromSearch(query, extras)` → `handleMediaRequest(createMediaItemForMediaRequest(null, null, query, extras), play=true)` → 同文件 `811-817` 调 `sessionImpl.onSetMediaItemsOnHandler(controller, ImmutableList.of(mediaItem), C.INDEX_UNSET, C.TIME_UNSET)`；而 `createMediaItemForMediaRequest`（同文件 `947-961`）构造的 `MediaItem` 是 **`mediaId=""`（`DEFAULT_MEDIA_ID`）+ `requestMetadata.searchQuery=query` + 无 URI**。`MediaItem.DEFAULT_MEDIA_ID` 的字面值在 `MediaItem.java:2196` 确认为 `""`。
+3. **判定条件 =「`mediaId.isBlank()` 且 `searchQuery` 非空」**。只看 `searchQuery` 会把普通播放请求误判成搜索；只看空 `mediaId` 又太宽。
+4. **两个坑**：**(a)** 该路径的 `startIndex`/`startPositionMs` 是 `C.INDEX_UNSET`(-1) / `C.TIME_UNSET`，**不能原样透传给 `MediaItemsWithStartPosition`**，要归一成 `0` / `0L`；**(b)** 必须**先**实现该分支、**再**补 intent-filter 并移除 `tools:ignore` —— 顺序反了就是「声明了却搜不动」的静默失效。
+
+##### 7.3 实施期新发现：方案文档未预见的四点
+
+**(1) 空搜索结果必须让 future 失败，不能返回空列表。**
+返回空列表会被 Media3 拿去调 `player.setMediaItems(emptyList(), 0, 0L)` —— **清空播放队列、打断用户正在听的那首歌**。而让 future 失败时：legacy 路径 `MediaSessionLegacyStub.handleMediaRequest` 的 `onFailure` 明确写着 *"Do nothing, the session is free to ignore these requests"*（`:843-846`）→ 当前播放完全不受影响；现代路径 `MediaSessionStub.sendSessionResultWhenReady`（`:192-198`）把异常转成错误结果，不会崩。故 `resolveVoiceSearch` 搜不到时 **`future.setException(...)`**，语义是「搜不到就什么都不做」。
+
+**(2) 搜索是两步流程，且 `onGetSearchResult` 可能先于 `onSearch` 被调用。**
+`onSearch` 只回**结果码**，通过 `notifySearchResultChanged(browser, query, itemCount, params)` 通知**数量**；真正的列表由 `onGetSearchResult` 返回。**只回结果码而不通知数量 → 车机端不会来取结果**（表现为「搜了但列表空」）。反过来，`onGetSearchResult` 的 javadoc 写明 query「**may not**」先经 `onSearch`（走 `MediaBrowserCompat#search` 时不会）→ **不能假设 `onSearch` 已预热缓存**。实现上用 60s TTL 的 `searchCache` 做「省一次重复搜索」的优化，而非正确性依赖。
+
+**(3) `LibraryResult.ofItemList` 有隐藏前提。**
+源码 `LibraryResult.java:257-261` 的 `verifyMediaItem` 要求每个 item：① `mediaId` 非空；② `isBrowsable` **显式设置**（不能为 null）；③ `isPlayable` **显式设置**。否则**直接抛异常**。`MediaLibraryTree.songToItem` 本来就三项齐备，故搜索结果直接复用它，未另写构造逻辑。
+
+**(4) 双源合并与超时。**
+搜索要跨公网（Meting）+ 内网（NAS）两源。**内网不可达在车机场景下是常态**，故 NAS 侧失败用 `AppLog.d` 静默跳过（不是 `w`）——避免把常态当异常刷日志。超时给 `SEARCH_TIMEOUT_MS = 10_000L`（比浏览的 `BROWSE_TIMEOUT_MS` 宽）；结果上限 `MAX_SEARCH_RESULTS = 50`（与 `MAX_CHILDREN` 同源理由：车机列表很短）。去重按 `song.id`，网络音乐结果排在前面（公网可达性更高）。
+
+**(5) ⚠️ `Map.putIfAbsent` 是 API 24+，在目标电视（Android 5.1.1）上会崩 —— 由 lint 抓出。**
+首版 `search()` 的去重写成 `merged.putIfAbsent(it.id, it)`，编译**完全通过**、单测也过，但 `lintDebug` 直接报 **2 条 error**：
+
+```
+MediaLibraryTree.kt:355: Error: Call requires API level 24 (current min is 22):
+  java.util.HashMap#putIfAbsent [NewApi]
+```
+
+`merged` 是 `LinkedHashMap`，`putIfAbsent` 解析到 `HashMap#putIfAbsent`（**API 24 才加入**）→ 在 API 22 上运行到搜索就会 `NoSuchMethodError` **崩溃**。这正是本项目 `minSdk 22` 的核心约束（与选 `TinyPinyin` 而非 `android.icu.Transliterator` 同源）。
+**修法**：改用 Kotlin stdlib 的 `MutableMap.getOrPut`（纯 Kotlin 实现，无 API 版本限制，语义一致 —— 已存在则保留先出现的那条）。
+**教训**：① 这一条**只有 lint 能抓**，`assembleDebug/Release` 与单测都发现不了 —— 说明 `lintDebug` 作为阻塞门禁是有实际价值的，不是走过场；② 全项目已排查 `putIfAbsent` / `computeIfAbsent` / `removeIf` / `Map.merge`，**仅此一处**，已修。
+
+##### 7.5 搜索合并抽成纯函数 + 单测（本阶段**有**新增单测）
+
+合并规则（去重优先级 + 保序 + 截断）抽成顶层 `internal fun mergeSearchResults(networkSongs, nasSongs, limit)`，与 `PlayerManager.kt` 的 `computeQueueRemoval`（见 `QueueRemovalTest`）**同一既有做法**：不依赖 Context / 网络 / Media3，因此可在 JVM 单测里穷举边界。
+
+新增 `app/src/test/java/com/nasmusic/tv/player/SearchMergeTest.kt`，**11 例**，覆盖：两源皆空 / 仅网络 / 仅 NAS / 网络排在 NAS 前 / 重复 id 保留网络侧 / 单源内重复 / **先合并去重再截断**（顺序反了会把重复项算进配额）/ 截断保留高优先级 / `limit=0` / `limit` 超总数 / 空 id 不特殊处理。
+
+> **⚠️ 与本节「测试」段的分工**：Media3 回调（`onSearch` / `onGetSearchResult` / `onSetMediaItems` 的 searchQuery 分支）**仍然没有单测** —— 它们需要真实 `MediaSession` + 控制器，项目无此基础设施，且其正确性本质上是**集成行为**，只能靠 DHU / 真车验。但**合并规则是纯逻辑**，能测就该测 —— 它写错了不会崩、只会「搜索结果里混进不该出现的条目」，靠 DHU 极难发现。
+
+##### 7.6 代码落点
+
+| 文件 | 新增 |
+|---|---|
+| `player/MediaLibraryTree.kt` | `import kotlinx.coroutines.CancellationException`；`MAX_SEARCH_RESULTS = 50`；`suspend fun search(query): List<MediaItem>`（网络音乐优先 + NAS 尽力而为，复用 `songToItem`）；**顶层 `internal fun mergeSearchResults(networkSongs, nasSongs, limit)`**（纯函数，供单测） |
+| `player/PlaybackService.kt` | `import android.os.SystemClock`；`searchCache` + `SearchCacheEntry`；`SEARCH_TIMEOUT_MS` / `SEARCH_CACHE_TTL_MS`；`searchItemsCached()`；`onSearch()`；`onGetSearchResult()`；`onSetMediaItems` 开头的 `searchQuery` 分支；`resolveVoiceSearch()` |
+| `AndroidManifest.xml` | `PlaybackService` intent-filter 补 `android.media.action.MEDIA_PLAY_FROM_SEARCH`；移除 `<application>` 的 `tools:ignore="MissingIntentFilterForMediaSearch"` 与 `xmlns:tools` |
+| `test/.../player/SearchMergeTest.kt` | **新增**，11 例覆盖 `mergeSearchResults` |
+
+⚠️ `searchItemsCached()` 对两个调用点给出**不同且都有意为之**的空结果语义：`onSearch`/`onGetSearchResult` → 返回空列表（车机端显示"无结果"）；`onSetMediaItems`（语音点歌）→ **让 future 失败**（见 (1)）。
+
+**为什么本轮不做 `onPlaybackResumption`（原列在阶段 3）**：它与搜索/语音**无耦合**，是另一个 `MediaSession.Callback` 覆写点，且有独立前置条件（需持久化上次播放位置，而 `PlayerManager` 当前只在内存维护 `queue`/`currentIndex`/`currentSong`，无落盘）。纳入本轮会把改动面从「纯增量」变成「引入新的持久化状态」，故保持未做。
 
 #### 八、根菜单 tab 图标（阶段 2.5，2026-09-17 补做）
 
@@ -8611,41 +8672,56 @@ translateY = 19 − 34×1.75 = −40.5
 所以方案原文「可复用通知小图标」在本项目不成立，已就地更正。
 若日后想统一品牌形象，可把 `ic_car_attribution` 同时用作通知小图标，但**这超出 Android Auto 范围，未擅自改动**。
 
-**测试**：**无新增单测**。理由分两块——
+**测试**：**本阶段有新增单测**（阶段 3 起，共 **11 例**，见第七节 7.5），覆盖 `mergeSearchResults` 的去重优先级 / 保序 / 截断。其余两块仍**无新增单测**——
 - 主链路（`onSetMediaItems` / `onAddMediaItems` / `onGetChildren`）改动全是 Media3 回调接线，项目无 Media3 会话的测试基础设施（需真实 `MediaSession` + 控制器）；纯逻辑部分（`BrowseCache` 的 LRU 与 mediaId 前缀剥离）体量小且无独立可测入口。
 - 图标管线（`rasterizeIcon`）的正确性改由两道**外部**验证兜底：① `aapt2` 编译保证矢量 XML **语法**合法；② Python 高倍渲染后目视核对保证**形状**正确。运行时路径（`toBitmap` + `compress`）在 Robolectric LEGACY 图形模式下不可靠（`Bitmap.compress` 被 shadow，不产出真实 PNG），写成单测会得到假阳性/假阴性，故不写。
 
-**验证**：四任务合并一次运行（`assembleDebug assembleRelease testDebugUnitTest lintDebug`）**BUILD SUCCESSFUL**；`assembleRelease` 内含 `minifyReleaseWithR8` + `lintVitalRelease` + `optimizeReleaseResources` + `packageRelease`；`testDebugUnitTest` **518 例 / 0 失败 / 0 错误**（56 个结果 XML，与基线一致）；`lintDebug` **0 Error / 254 Warning**。
+**验证**：四任务合并一次运行（`assembleDebug assembleRelease testDebugUnitTest lintDebug`）**BUILD SUCCESSFUL in 15m 48s**（107 个任务：27 executed / 80 up-to-date）；`assembleRelease` 内含 `minifyReleaseWithR8` + `lintVitalRelease` + `optimizeReleaseResources` + `packageRelease`；`testDebugUnitTest` **529 例 / 0 失败 / 0 错误**（57 个结果 XML；基线 518/56，**净增 11 例 = `SearchMergeTest`**）；`lintDebug` **0 Error / 254 Warning**。
 
-> ⚠️ **构建环境坑（本轮新发现，值得单独记）**：本沙箱会**拦截 Gradle 删除自身构建中间产物**，
+> ⚠️ **构建环境坑（本轮新发现，值得单独记）**：本沙箱会**拦截 Gradle 删除/写入自身构建中间产物**，
 > 报错形态是 `Could not delete '...\app\build\tmp\kotlin-classes\debugUnitTest\com'`
-> 或 `.../desugar_graph/.../graph.bin (拒绝访问)`，stderr 里能看到
-> `[sandbox] 命令被沙箱拦截，以下操作被拒绝：... (删 · 拒绝)`。
-> **这不是代码问题** —— 需**关闭沙箱（提权）**后运行构建，同一命令立即成功。
+> 或 `.../desugar_graph/.../graph.bin (拒绝访问)` 或
+> `D8: java.nio.file.AccessDeniedException: ...\project_dex_archive\...\xxx.dex`，
+> stderr 里能看到 `[sandbox] 命令被沙箱拦截，以下操作被拒绝：... (删 · 拒绝)`。
+> **这不是代码问题** —— 需**关闭沙箱（提权）**后运行构建。
 >
-> 这也**推翻了此前的归因**：`graph.bin (拒绝访问)` 曾被记为「Windows 文件占用」（§10.156），
-> 但两者报错形态一致、且提权后即通过，**更可能是沙箱拦截**。
-> **判定方法**：看 stderr 有没有 `[sandbox] 命令被沙箱拦截` —— 有就是沙箱，没有才去查文件占用/守护进程持锁。
+> **⚠️ 但 `AccessDeniedException` 有两种成因，必须靠 stderr 区分（本轮补正）**：
+>
+> | 现象 | 判定依据 | 处置 |
+> |---|---|---|
+> | **沙箱拦截** | stderr 有 `[sandbox] 命令被沙箱拦截` | 关闭沙箱（提权）重跑 |
+> | **真·文件锁** | **stderr 无任何 sandbox 字样** | `./gradlew.bat --stop` 释放锁 → 删掉出问题的中间产物目录 → 重跑 |
+>
+> 本轮两种都遇到了：`L8Xxt7` 那次有 sandbox 字样（沙箱）；而清理提权后重跑的 `IEniGf` 那次
+> **sandbox 命中数为 0**，却仍在 `project_dex_archive\debug\dexBuilderDebug\out\*.dex` 上
+> 报 `AccessDeniedException` —— 实测该目录**可写、文件非只读、可 `r+b` 打开**，说明是
+> **构建期瞬时锁**（刚写出的 2089 个 dex 被实时扫描/索引类程序短暂持有）。
+> 处置：`--stop`（当时已无守护进程与 java 残留）→ 删除 `project_dex_archive` → 重跑。
+> **所以别再无条件把 `拒绝访问` 归因为「Windows 文件占用」或「沙箱」—— 先看 stderr。**
+>
 > 另注意本沙箱的 `rm -rf` 走**安全删除**：批量删除超过阈值会要求确认并**中止整条命令**
-> （连 `&&` 后面的构建也不会跑），所以**别把删除和构建串在一条命令里**。
+> （连 `&&` 后面的构建也不会跑），所以**别把删除和构建串在一条命令里**；
+> 大批量清理改用 `shutil.rmtree`（需提权）。
 - **警告总数 257 → 254 是净减少，不是新增**：`MediaLibraryTree` 的 `Uri.parse` 从基线 3 处降到 **0 处**（全部改为 `String.toUri()`），`UseKtx` 告警净减 3 条（全项目 `UseKtx` 22 → 19）。
 - 改动文件在 lint 报告中的命中：`PlaybackService` / `BrowseCache` / **`MediaLibraryTree` 均 0 命中**；`PlayerManager` 2 条 `UseKtx`（`PlayerManager.kt:520` / `:532`）**为存量、本次未触碰**。
 - 4 个新图标**未被 `UnusedResources` 误报**（152 条 `UnusedResources` 里 `ic_auto_*` / `banner` **0 命中**）—— Kotlin 侧 `R.drawable.*` 引用被 lint 正确识别为「已使用」。
-- 实施期共修 3 个构建问题：① `androidx.media.utils.MediaConstants` compile 期不可见（见第三节）；② `setMediaItem(item, index)` 重载语义错（见第五节）；③ 上述 lint error。
-- 产物 `NASMusicTV-release-v2-33-0.apk`（22,940,970 B ≈ 22.9MB），`output-metadata.json` 与 `BuildConfig` 双向核对 versionCode **147** / versionName **2.33.0**；签名 `CN=Android Debug`（SHA-256 `43a9dec4…d59b`，与电视已装版同签名 → `adb install -r` 可原地升级）。
+- 实施期共修 **4** 个构建问题：① `androidx.media.utils.MediaConstants` compile 期不可见（见第三节）；② `setMediaItem(item, index)` 重载语义错（见第五节）；③ lint error（阶段 1，见第七节 7.1）；④ **`putIfAbsent` 的 API 24+ 问题（阶段 3，见第七节 7.3(5)）—— 这条只有 lint 能抓，编译与单测都发现不了**。
+- 产物 `NASMusicTV-release-v2-33-0.apk`（**22,942,866 B** ≈ 22.9MB），`output-metadata.json` 与 `BuildConfig` 双向核对 versionCode **147** / versionName **2.33.0**；签名 `CN=Android Debug`（SHA-256 `43a9dec4…d59b`，与电视已装版同签名 → `adb install -r` 可原地升级）。
 - `aapt2 dump badging` 复核 **`minSdkVersion 22` / `targetSdkVersion 34` 未变**（"不改 minSdk"这一路线前提成立）。
 - **release 包内车机声明逐项复核**（`aapt2 dump resources` / `dump xmltree`）：`xml/automotive_app_desc`（`0x7f160000` → `res/oc.xml`）资源存在 ✓；`com.google.android.gms.car.application` meta-data 存在 ✓；`PlaybackService` 的两个 action **同时存在** ✓。
 - **release 包内 4 个图标资源复核**（`aapt2 dump resources`）——**注意 release 下资源文件名已混淆**（`res/nM.xml` 这种），必须**按资源名查表**，按路径找会误判为"没进包"：`drawable/ic_auto_download` = `0x7f0800a7` ✓、`ic_auto_favorite` = `0x7f0800a8` ✓、`ic_auto_playlist` = `0x7f0800a9` ✓、`ic_auto_queue` = `0x7f0800aa` ✓。
 - **attribution icon（阶段 4.1）复核**：`drawable/ic_car_attribution` 进包 ✓；`aapt2 dump xmltree --file AndroidManifest.xml` 中 `androidx.car.app.TintableAttributionIcon` meta-data 存在且指向该资源 ✓。
-- **R8 存活复核**（解包 `classes.dex` 字节匹配）：媒体树业务字符串 `当前播放` / `离线下载` / `收藏` / `歌单` / `NAS Music TV` **全部命中** ✓；图标通路业务字符串 `"android.resource://"` 与 `"drawable/"` **均命中** ✓；对照项 `AppLog.w` 的 `"onConnect rejected"` **未命中**（符合预期——`AppLog.w` 带 `if (BuildConfig.DEBUG)` 守卫，release 下连字符串常量一起被折掉，**不能据此判"代码丢了"**）。`rasterizeIcon` / `ic_auto_` 查不到属**正常**：前者方法名随 `player` 包被混淆，后者 `R.drawable.*` 编译期已内联为 int 常量、运行时资源名取自资源表而非 dex 字符串。
+- **R8 存活复核**（解包 `classes.dex` 字节匹配）：媒体树业务字符串 `当前播放` / `离线下载` / `收藏` / `歌单` / `NAS Music TV` **全部命中** ✓；图标通路业务字符串 `"android.resource://"` 与 `"drawable/"` **均命中** ✓；**阶段 3 新增的 `"no result for query: "`（`resolveVoiceSearch` 的业务异常文案）命中** ✓ —— 证明该路径确实进了 release dex（方法名随 `player` 包被混淆，故只能靠字符串验）。对照项 `AppLog.w` 的 `"onConnect rejected"` 与 `AppLog.d` 的 `"search(nas) skipped"` **均未命中**（符合预期——`AppLog.d/w` 带 `if (BuildConfig.DEBUG)` 守卫，release 下连字符串常量一起被折掉，**不能据此判"代码丢了"**）。`rasterizeIcon` / `ic_auto_` 查不到属**正常**：前者方法名随 `player` 包被混淆，后者 `R.drawable.*` 编译期已内联为 int 常量、运行时资源名取自资源表而非 dex 字符串。
+- ⚠️ **`android.media.action.MEDIA_PLAY_FROM_SEARCH` 在 dex 里查不到，属正常** —— 它是**清单**字符串，只存在于 APK 的二进制 `AndroidManifest.xml`，必须用 `aapt2 dump xmltree` 验（已命中）。**别用 dex 字符串匹配去验清单声明**，会得到假阴性。
 - **真机/车机验收：未做**。DHU（Desktop Head Unit）需 `adb forward tcp:5277 tcp:5277` + `desktop-head-unit.exe`，真车默认只显示 Play 商店应用、侧载需在 Android Auto 开发者模式里打开 "Unknown sources"。按项目约定，上机验证由用户执行。
 
-**遗留（阶段 2/3/4，见 `docs/android-auto-plan.md` §七 / §十一）**：
+**遗留（阶段 2 / 4 及阶段 3 的 `onPlaybackResumption`，见 `docs/android-auto-plan.md` §七 / §十一）**：
 - **DHU / 真车端到端验收未做** —— 这是阶段 1 的**验收动作**，也是 2026-09-07 那次审查的遗留建议。已完成的只是**代码级验证**（编译 + 单测 + lint + 产物核对 + R8 存活）。内容树加载、点歌链路、状态镜像一致性、包验证白名单是否漏包，**这四件事只有 DHU / 真车能验**
 - ~~根菜单 4 项没有图标（阶段 2.5）~~ —— **已实施**，见本节第八小节。原先 `res/drawable/` 下只有 `banner.xml`，现已补 4 个单色白矢量图标 + 运行时光栅化
 - ~~attribution icon（阶段 4.1）~~ —— **已实施**，见本节第九小节
 - **艺人 / 专辑节点 + NAS 短期缓存**（阶段 2.3 剩余部分；**歌单已接入**）。⚠️ **有一个待决策的设计缺口**：方案 §5.6 已定义 `artist` / `album` 的 mediaId 结构，但根菜单**固定 4 项**（root hints 默认上限 4）→ 这两个节点**从根菜单不可达**。要么改根菜单语义（如把第 4 项「歌单」提升为「音乐库」，下钻出 歌单 / 艺人 / 专辑），要么等阶段 3 的搜索作为入口。**不宜直接追加为第 5/6 项** —— 默认车机只显示 4 个 tab，超限会被**静默丢弃**
-- 搜索与语音（阶段 3，见上述第七节）、`onPlaybackResumption`
+- ~~搜索与语音（阶段 3）~~ —— **已实施**，见本节第七节（含 `onSearch` / `onGetSearchResult` / `searchQuery` 语音分支 / `MEDIA_PLAY_FROM_SEARCH` intent-filter）
+- **`onPlaybackResumption`（A-10）** —— 原列在阶段 3 但**本轮未纳入**：与搜索/语音无耦合，是另一个 `MediaSession.Callback` 覆写点，且有独立前置条件（需持久化上次播放位置，而 `PlayerManager` 当前只在内存维护 `queue`/`currentIndex`/`currentSong`，**无落盘**）。纳入本轮会把改动面从「纯增量」变成「引入新的持久化状态」，故保持未做
 - 强调色定制（阶段 4.2）。**已核实确实需要**：`Theme.NASMusicTV`（`values/themes.xml:3`）继承 `android:Theme.Material.NoActionBar`、**未设 `android:colorAccent`** → 车机侧会取 Material 默认深青 `#009688`，而非品牌色 `#2DD4BF`。修法即官方给的 `com.google.android.gms.car.application.theme` meta-data 指向一个含 `colorAccent` 的样式
 - 包验证收紧为**签名级**校验（阶段 4.3；Media3 的 `isAutomotiveController` 官方标注 "not a security validation"）
 

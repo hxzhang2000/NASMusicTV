@@ -222,7 +222,7 @@ fun buildLiveViewNotification(base: Notification, song: Song, bitmap: Bitmap?): 
 ### 5.1 Android Auto（车机）
 
 - **机制**：Android Auto 通过 `MediaBrowserServiceCompat` 或 Media3 `MediaLibraryService` 读取媒体树
-- **现状（2026-09-17 更新）**：**已适配（阶段 1 + 2.5 + 4.1，v2.33.0）**。`PlaybackService` 的 `MediaLibrarySession.Callback` 已实现 `onGetLibraryRoot` / `onGetItem` / `onGetChildren`，并额外覆写 `onAddMediaItems` / `onSetMediaItems` 解析 URI；媒体树由 `player/MediaLibraryTree.kt` 提供（根菜单 4 项：当前播放 / 离线下载 / 收藏 / 歌单，各配单色白矢量图标）。Manifest 已补 `automotive_app_desc`、`MediaBrowserService` action 与 `androidx.car.app.TintableAttributionIcon` 提供方图标。**未做**：搜索/语音（阶段 3）、艺人专辑节点 + NAS 短期缓存（阶段 2.3 剩余）、DHU/真车验收。详见 [`android-auto-plan.md`](./android-auto-plan.md) 与 `technical-overview.md` §10.157
+- **现状（2026-09-17 更新）**：**已适配（阶段 1 + 2.5 + 3 + 4.1，v2.33.0）**。`PlaybackService` 的 `MediaLibrarySession.Callback` 已实现 `onGetLibraryRoot` / `onGetItem` / `onGetChildren`，并额外覆写 `onAddMediaItems` / `onSetMediaItems` 解析 URI；媒体树由 `player/MediaLibraryTree.kt` 提供（根菜单 4 项：当前播放 / 离线下载 / 收藏 / 歌单，各配单色白矢量图标）。**搜索与语音已可用**：`onSearch` / `onGetSearchResult` + `onSetMediaItems` 的 `searchQuery` 分支，Manifest 已补 `MEDIA_PLAY_FROM_SEARCH` action。Manifest 另补 `automotive_app_desc`、`MediaBrowserService` action 与 `androidx.car.app.TintableAttributionIcon` 提供方图标。**未做**：`onPlaybackResumption`（A-10）、艺人专辑节点 + NAS 短期缓存（阶段 2.3 剩余）、强调色定制（4.2）、包验证收紧（4.3）、DHU/真车验收。详见 [`android-auto-plan.md`](./android-auto-plan.md) 与 `technical-overview.md` §10.157
 - ~~**适配**：实现 `MediaLibrarySession.Callback` 的 `onGetLibraryRoot` / `onGetChildren`，暴露"最近播放"、"收藏"、"歌单"等节点~~（已完成，见上）
 - **优先级**：P1（车机用户需求明确，且 L1 做完后只需补 Callback）
 

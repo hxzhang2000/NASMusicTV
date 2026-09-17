@@ -1,6 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:tools="http://schemas.android.com/tools">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
@@ -35,25 +34,20 @@
         android:required="false" />
 
     <!--
-        tools:ignore="MissingIntentFilterForMediaSearch"
-        ────────────────────────────────────────────────────────────────────────
-        该 lint 检查在「应用声明了车机媒体支持」（即上面的 automotive_app_desc）
-        之后触发，要求注册 `android.media.action.MEDIA_PLAY_FROM_SEARCH` 以支持车机语音搜索。
+        〔2026-09-17 更新〕此前这里挂着 tools:ignore="MissingIntentFilterForMediaSearch"
+        抑制 —— 因为 lint 要求「声明了车机媒体支持就必须注册 MEDIA_PLAY_FROM_SEARCH」，
+        而当时 `onSetMediaItems` 只按 mediaId 查 BrowseCache，遇到空 mediaId 会原样返回，
+        声明了只会得到「搜了但没反应」的静默失效，所以有意暂缓。
 
-        此处**有意暂不声明**，理由是「声明了也无法响应，只会得到静默失效的语音搜索」——
-        经 media3-session-1.2.1 源码核实（MediaSessionLegacyStub.java:395 / 947-961）：
-        该 intent 最终会走 `onPlayFromSearch` → `handleMediaRequest` →
-        `onSetMediaItems(controller, [MediaItem(mediaId="", requestMetadata.searchQuery=query)], INDEX_UNSET, TIME_UNSET)`。
-        也就是说，真正要处理的是 **onSetMediaItems 里的 `requestMetadata.searchQuery`**，
-        而当前 `PlaybackService.onSetMediaItems` 只按 mediaId 查 BrowseCache，
-        遇到空 mediaId 会原样返回 → 车机侧表现为「搜了但没反应」。
-
-        语音搜索属开发方案 `docs/android-auto-plan.md` §七 **阶段 3**（搜索）范围，
-        与 `onSearch` / `onGetSearchResult` 一并实施；届时本 ignore 与 intent-filter 同时补上。
-        在 阶段 3 落地前保持抑制，避免「能力已声明但不可用」的误导性清单声明。
+        现在 阶段 3 已落地，两个条件同时满足，抑制随之移除：
+          ① `PlaybackService.onSetMediaItems` 开头新增 searchQuery 分支（判定
+             `mediaId.isBlank() && requestMetadata.searchQuery.isNotBlank()`），
+             经 `resolveVoiceSearch()` 搜索并起播；
+          ② 服务 intent-filter 注册了 `android.media.action.MEDIA_PLAY_FROM_SEARCH`。
+        机制细节见 `PlaybackService.onSetMediaItems` 内的注释与
+        `docs/technical-overview.md` §10.157「七、搜索与语音（阶段 3）」。
     -->
     <application
-        tools:ignore="MissingIntentFilterForMediaSearch"
         android:name=".NasMusicApp"
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"
@@ -110,6 +104,11 @@
                      找到服务。两个 action 需同时注册（Media3 官方要求），缺前者 Media3 客户端
                      找不到，缺后者平台 MediaBrowser / Android Auto 找不到。 -->
                 <action android:name="android.media.browse.MediaBrowserService" />
+                <!-- 车机语音搜索（阶段 3）：Google 助理「播放 XXX」发出的 action。
+                     声明后由 MediaSessionLegacyStub 转成 onSetMediaItems(mediaId="",
+                     searchQuery=XXX)，由 PlaybackService 的 searchQuery 分支处理。
+                     此前有意缺省并抑制 lint，原因见上方 application 前的注释。 -->
+                <action android:name="android.media.action.MEDIA_PLAY_FROM_SEARCH" />
             </intent-filter>
         </service>
 

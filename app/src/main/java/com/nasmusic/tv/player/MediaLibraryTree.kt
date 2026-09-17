@@ -16,6 +16,7 @@ import com.nasmusic.tv.data.model.Playlist
 import com.nasmusic.tv.data.model.Song
 import com.nasmusic.tv.data.model.StorageType
 import com.nasmusic.tv.util.AppLog
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
@@ -93,6 +94,14 @@ class MediaLibraryTree(
          * 同时纯色平面图形的 PNG 仍只有几 KB（4 个图标合计 < 20KB，可安全内联进 Binder）。
          */
         private const val ICON_RASTER_PX = 256
+
+        /**
+         * 搜索结果上限（阶段 3）。
+         *
+         * 车机端搜索列表很短，且搜索要跨两个源合并，给个上限防止超长列表拖垮车机 UI
+         * （与 [MAX_CHILDREN] 同源理由）。
+         */
+        private const val MAX_SEARCH_RESULTS = 50
     }
 
     private val app: NasMusicApp?
@@ -299,6 +308,72 @@ class MediaLibraryTree(
     }
 
     // ────────────────────────────────────────────────────────────
+    // 搜索（阶段 3）
+    // ────────────────────────────────────────────────────────────
+
+    /**
+     * 搜索歌曲。
+     *
+     * ## 搜索源策略：优先公网可用，NAS 尽力而为
+     *
+     * 与根菜单「前 3 项不依赖内网」同源理由 —— 开车时手机多在移动数据上、家庭内网不可达，因此：
+     * 1. **网络音乐**（Meting，走公网）—— 始终尝试
+     * 2. **NAS 后端**（`BackendAdapter.searchSongs`，需内网）—— 仅在后端已连接时尝试，
+     *    失败 / 不可达**静默跳过**，不影响网络音乐的结果
+     *
+     * 两源结果按 `song.id` 去重后合并（同一首歌在两个源里 id 不同，属预期 ——
+     * 让用户看到两个来源、各自都能播）。
+     *
+     * ## 返回值
+     *
+     * 可播放的**叶子**节点（`song/{id}`）。构造统一走 [songToItem]，因此：
+     * - `mediaId` 非空，且 `isBrowsable` / `isPlayable` **显式设置** ——
+     *   `LibraryResult.ofItemList` 内部的 `verifyMediaItem` 强制要求这两项非 null，
+     *   缺失会**直接抛异常**（源码 `LibraryResult.java:257-261`）
+     * - **不设 URI**，但会写入 [BrowseCache]，由播放入口统一解析
+     *   （网络歌曲需实时解析；NAS 歌曲的 `streamUrl` 由适配器填好，见 `jsonObjectToSong`）
+     *
+     * @return 搜索结果；查询为空或两源都失败时返回**空列表**（不抛异常）。
+     *   ⚠️ 调用方**不要**把空列表直接交给 Media3 —— 见 `PlaybackService.onSetMediaItems` 的处理说明
+     */
+    suspend fun search(query: String): List<MediaItem> = withContext(Dispatchers.IO) {
+        val q = query.trim()
+        if (q.isEmpty()) return@withContext emptyList()
+
+        // 1) 网络音乐（公网，始终尝试）
+        val networkSongs = try {
+            app?.networkMusicManager?.search(q).orEmpty()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            AppLog.w(TAG, "search(network) failed: ${e.message}", e)
+            emptyList()
+        }
+
+        // 2) NAS 后端（内网，尽力而为；未连接或不可达时静默跳过）
+        val adapter = app?.backendRegistry?.getAdapter()
+        val nasSongs = if (adapter == null) {
+            emptyList()
+        } else {
+            try {
+                adapter.searchSongs(q)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // 用 d 级：内网不可达在车机场景下是**常态**，不是异常
+                AppLog.d(TAG, "search(nas) skipped: ${e.message}")
+                emptyList()
+            }
+        }
+
+        // 合并规则见 [mergeSearchResults]（纯函数，有单测覆盖）
+        val result = mergeSearchResults(networkSongs, nasSongs, MAX_SEARCH_RESULTS)
+            .map { songToItem(it) }
+        AppLog.d(TAG, "search('$q'): ${result.size} results")
+        result
+    }
+
+    // ────────────────────────────────────────────────────────────
     // MediaItem 构造
     // ────────────────────────────────────────────────────────────
 
@@ -429,4 +504,40 @@ class MediaLibraryTree(
             storageType = StorageType.DOWNLOAD.name
         )
     }
+}
+
+/**
+ * 搜索结果合并（阶段 3，Android Auto 车机搜索）—— **纯函数**，有 JVM 单测覆盖
+ * （`SearchMergeTest`）。
+ *
+ * ## 为什么抽成顶层函数
+ * 与 `PlayerManager.kt` 的 `computeQueueRemoval`（见 `QueueRemovalTest`）同一做法：
+ * 合并规则不依赖 Context / 网络 / Media3，抽出来就能在单测里穷举边界。
+ * 留在 [MediaLibraryTree.search] 里则只能靠 DHU / 真车验证，成本高得多。
+ *
+ * ## 规则
+ * - **去重按 `song.id`，先出现的赢** —— 调用方按「网络音乐 → NAS」顺序传入，
+ *   故网络结果优先级更高（车机场景下公网可达性优于家庭内网，见 `docs/android-auto-plan.md` §6）
+ * - **保序**：`LinkedHashMap` 保持插入顺序，**不排序**（顺序即优先级）
+ * - **先合并去重、再截断到 [limit]** —— 顺序反了会把重复项算进配额、白占名额
+ *
+ * ## ⚠️ 不要用 `Map.putIfAbsent` 实现去重
+ * 它是 `HashMap#putIfAbsent`，**API 24+ 才有**；本项目 `minSdk 22`、目标电视为
+ * Android 5.1.1，调用会直接 `NoSuchMethodError` **崩溃**。
+ * 故改用 Kotlin stdlib 的 `MutableMap.getOrPut`（纯 Kotlin 实现，无 API 版本限制）。
+ * 该问题由 lint 的 `NewApi` 检查抓出（构建时 `lintDebug` 曾因此报 2 条 error）。
+ *
+ * @param networkSongs 网络音乐（Meting 等）结果，优先级高
+ * @param nasSongs NAS 后端结果，优先级低
+ * @param limit 结果上限（生产路径传 `MediaLibraryTree.MAX_SEARCH_RESULTS`）
+ */
+internal fun mergeSearchResults(
+    networkSongs: List<Song>,
+    nasSongs: List<Song>,
+    limit: Int
+): List<Song> {
+    val merged = LinkedHashMap<String, Song>(networkSongs.size + nasSongs.size)
+    networkSongs.forEach { song -> merged.getOrPut(song.id) { song } }
+    nasSongs.forEach { song -> merged.getOrPut(song.id) { song } }
+    return merged.values.take(limit)
 }

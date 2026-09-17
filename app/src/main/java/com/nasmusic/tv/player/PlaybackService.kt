@@ -10,6 +10,7 @@ import android.graphics.Bitmap
 import android.net.Uri
 import android.os.Bundle
 import android.os.Process
+import android.os.SystemClock
 import android.view.KeyEvent
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
@@ -71,6 +72,28 @@ class PlaybackService : MediaLibraryService() {
      * 那两个回调运行在 Media3 会话线程上，不能在其中做网络 IO。
      */
     private val browseCache = BrowseCache()
+
+    /**
+     * 搜索结果短期缓存（阶段 3）。
+     *
+     * ## 为什么需要
+     *
+     * 车机端搜索是**两步**：`onSearch`（只回结果码 + 数量）→ 车机再调
+     * `onGetSearchResult` 取真正的列表。两次都要同一个 query 的结果，
+     * 没有缓存就会**搜两遍**（每次都要打公网 + 可能打内网）。
+     *
+     * ## 为什么不能只靠缓存
+     *
+     * `onGetSearchResult` 的 javadoc 明确写着：query 通常先经 `onSearch`，
+     * **但「may not」** —— 使用 `MediaBrowserCompat#search` 时不会先调 `onSearch`。
+     * 所以缓存未命中时必须**自己搜**，不能假设 `onSearch` 已预热。
+     *
+     * 并发安全：`ConcurrentHashMap`（两个回调都跑在会话的 application looper 上，
+     * 但 `serviceScope.launch` 之后仍在主线程 —— 用并发容器以免依赖该假设）。
+     */
+    private val searchCache = java.util.concurrent.ConcurrentHashMap<String, SearchCacheEntry>()
+
+    private data class SearchCacheEntry(val atMs: Long, val items: List<MediaItem>)
     /** A-13：无 UI 的 streamUrl 解析任务（防竞态：新解析取消旧解析） */
     private var uiResolveJob: Job? = null
     private var isForeground = false
@@ -418,6 +441,71 @@ class PlaybackService : MediaLibraryService() {
                 }
 
                 /**
+                 * 车机端搜索（阶段 3）：本方法只回**结果码**，列表由 [onGetSearchResult] 提供。
+                 *
+                 * 源码依据 `MediaLibraryService.java:342-348` 的 javadoc —— 两步流程：
+                 * 本方法返回一个结果码，并通过 `notifySearchResultChanged` 通知**结果数量**；
+                 * 随后 `MediaBrowser` 才会来调 `onGetSearchResult` 取真正的列表。
+                 *
+                 * ⚠️ **只返回结果码而不通知数量，车机端不会来取结果** —— 表现为「搜了但列表空」。
+                 */
+                override fun onSearch(
+                    session: MediaLibrarySession,
+                    browser: MediaSession.ControllerInfo,
+                    query: String,
+                    params: MediaLibraryService.LibraryParams?
+                ): ListenableFuture<LibraryResult<Void>> {
+                    val future = SettableFuture.create<LibraryResult<Void>>()
+                    serviceScope.launch {
+                        try {
+                            val items = searchItemsCached(query)
+                            session.notifySearchResultChanged(browser, query, items.size, params)
+                            future.set(LibraryResult.ofVoid(params))
+                        } catch (e: Exception) {
+                            AppLog.w("PlaybackService", "onSearch('$query') failed", e)
+                            future.set(
+                                LibraryResult.ofError(LibraryResult.RESULT_ERROR_UNKNOWN, params)
+                            )
+                        }
+                    }
+                    return future
+                }
+
+                /**
+                 * 车机端搜索：返回结果列表。
+                 *
+                 * ⚠️ 两个关键点（均有源码依据）：
+                 * 1. **不能假设 `onSearch` 已先被调用** —— javadoc（`MediaLibraryService.java:365-367`）
+                 *    写明 query「may not」先经 `onSearch`（走 `MediaBrowserCompat#search` 时不会）。
+                 *    所以本方法**必须能独立搜索**，[searchCache] 只是省一次重复搜索的优化。
+                 * 2. **忽略 page / pageSize** —— 与 [onGetChildren] 同源理由：Android Auto / AAOS
+                 *    官方不支持分页，该参数不可靠。
+                 *
+                 * 异常时返回**空列表**而非错误码 —— javadoc 明确要求
+                 * 「Return an empty list for no children rather than using error codes」。
+                 */
+                override fun onGetSearchResult(
+                    session: MediaLibrarySession,
+                    browser: MediaSession.ControllerInfo,
+                    query: String,
+                    page: Int,
+                    pageSize: Int,
+                    params: MediaLibraryService.LibraryParams?
+                ): ListenableFuture<LibraryResult<ImmutableList<MediaItem>>> {
+                    val future = SettableFuture.create<LibraryResult<ImmutableList<MediaItem>>>()
+                    serviceScope.launch {
+                        try {
+                            val items = searchItemsCached(query)
+                            future.set(LibraryResult.ofItemList(ImmutableList.copyOf(items), params))
+                        } catch (e: Exception) {
+                            AppLog.w("PlaybackService", "onGetSearchResult('$query') failed", e)
+                            future.set(LibraryResult.ofItemList(ImmutableList.of(), params))
+                        }
+                    }
+                    return future
+                }
+
+                /**
                  * 播放入口之一：URI 解析器。
                  *
                  * 浏览树里的叶子节点只带 mediaId、**不带 URI**（见 MediaLibraryTree），
@@ -456,6 +544,30 @@ class PlaybackService : MediaLibraryService() {
                     startIndex: Int,
                     startPositionMs: Long
                 ): ListenableFuture<MediaSession.MediaItemsWithStartPosition> {
+                    // ── 0) 语音搜索入口（阶段 3）：必须最先拦截 ──────────────────
+                    //
+                    // Google 助理「播放 XXX」**不走** onPlayFromSearch —— Media3 根本没有这个回调
+                    // （javap 实测 MediaSession$Callback 的 11 个 default 方法里无搜索相关）。
+                    // 它实际经 MediaSessionLegacyStub.onPlayFromSearch → handleMediaRequest → 本方法，
+                    // 参数为：
+                    //   items            = [MediaItem(mediaId = "", requestMetadata.searchQuery = query)]
+                    //   startIndex       = C.INDEX_UNSET(-1)
+                    //   startPositionMs  = C.TIME_UNSET
+                    // 源码（media3-session-1.2.1）：
+                    //   MediaSessionLegacyStub.java:395（onPlayFromSearch）
+                    //   MediaSessionLegacyStub.java:811-817（handleMediaRequest）
+                    //   MediaSessionLegacyStub.java:947-961（createMediaItemForMediaRequest）
+                    // 其中 mediaId 用的是 MediaItem.DEFAULT_MEDIA_ID，源码确认其值为 ""（MediaItem.java:2196）。
+                    //
+                    // 因此判定条件 =「mediaId 为空 且 searchQuery 非空」。
+                    val voiceQuery = mediaItems.firstOrNull()
+                        ?.takeIf { it.mediaId.isBlank() }
+                        ?.requestMetadata?.searchQuery?.toString()
+                        ?.takeIf { it.isNotBlank() }
+                    if (voiceQuery != null) {
+                        return resolveVoiceSearch(voiceQuery)
+                    }
+
                     // 1) 状态镜像回流（不碰 player）—— 修复「队列与当前歌不一致」的根因。
                     //    必须完整还原才同步：否则 queue 会比 playlist 短，导致索引错位。
                     val songs = browseCache.songsOf(mediaItems.map { it.mediaId })
@@ -589,6 +701,81 @@ class PlaybackService : MediaLibraryService() {
             future.set(resolved.toMutableList())
         }
         return future
+    }
+
+    /**
+     * 语音搜索 → 可播放列表（阶段 3）。
+     *
+     * ## 三条硬约束（前两条有源码依据）
+     *
+     * 1. **返回值不能为 null** —— `MediaSessionImpl.java:687-696` 有
+     *    `checkNotNull(..., "Callback.onSetMediaItems must return a non-null future")`。
+     * 2. **`startIndex` / `startPositionMs` 归一成 `0` / `0L`** —— 传进来的是
+     *    `C.INDEX_UNSET` / `C.TIME_UNSET`，而这两个值指的是**被替换掉的旧 item 列表**；
+     *    我们返回的是**全新的搜索结果列表**，沿用旧索引没有意义。
+     *    （`MediaUtils.setMediaItemsWithStartIndexAndPosition`（`MediaUtils.java:194-213`）
+     *    对 `INDEX_UNSET` 恰好会走 `setMediaItems(items, resetPosition=true)`，行为等价 ——
+     *    但显式写 `0` / `0L` 才是**无歧义**的表达，也避免日后若有调用方传入真实索引时
+     *    索引到错误的列表。**注意：这不是在修 bug，是在消除歧义。**）
+     * 3. **item 必须带 URI**，否则 ExoPlayer 播不出来 → 复用 [resolveItemsSuspend]。
+     *
+     * ## 搜不到时为什么让 future **失败**，而不是返回空列表
+     *
+     * 返回空列表会被 Media3 拿去调 `player.setMediaItems(emptyList(), 0, 0L)` ——
+     * **清空播放队列、打断用户正在听的歌**。而让 future 失败时：
+     * - **legacy（语音）路径**：`MediaSessionLegacyStub.handleMediaRequest` 的 `onFailure`
+     *   明确写着 *"Do nothing, the session is free to ignore these requests"*
+     *   （源码 `:843-846`）→ **当前播放完全不受影响**；
+     * - **现代路径**：`MediaSessionStub.sendSessionResultWhenReady` 把异常转成错误结果回给
+     *   控制器（源码 `:192-198`），不会崩。
+     *
+     * 即「搜不到就什么都不做」，比「搜不到就把用户正在听的歌停掉」合理得多。
+     */
+    private fun resolveVoiceSearch(
+        query: String
+    ): ListenableFuture<MediaSession.MediaItemsWithStartPosition> {
+        val future = SettableFuture.create<MediaSession.MediaItemsWithStartPosition>()
+        serviceScope.launch {
+            val resolved = try {
+                resolveItemsSuspend(searchItemsCached(query))
+            } catch (e: Exception) {
+                AppLog.w("PlaybackService", "resolveVoiceSearch('$query') failed", e)
+                emptyList()
+            }
+
+            if (resolved.isEmpty()) {
+                // 搜不到 → 失败而非空列表，保住当前播放（见方法注释）
+                AppLog.i("PlaybackService", "resolveVoiceSearch('$query'): no playable result")
+                future.setException(IllegalStateException("no result for query: $query"))
+            } else {
+                AppLog.i("PlaybackService", "resolveVoiceSearch('$query'): ${resolved.size} items")
+                future.set(MediaSession.MediaItemsWithStartPosition(resolved, 0, 0L))
+            }
+        }
+        return future
+    }
+
+    /**
+     * 搜索（阶段 3）：带短期缓存 + 超时。
+     *
+     * 超时 / 异常一律返回**空列表**（不抛异常），由调用方决定「空结果」的语义 ——
+     * 两个调用点的处理**不同且都有意为之**：
+     * - `onSearch` / `onGetSearchResult` → 返回空列表（车机端显示"无结果"）
+     * - `onSetMediaItems`（语音点歌）→ **让 future 失败**，避免清空播放队列（见该方法注释）
+     */
+    private suspend fun searchItemsCached(query: String): List<MediaItem> {
+        val q = query.trim()
+        if (q.isEmpty()) return emptyList()
+
+        val now = SystemClock.elapsedRealtime()
+        searchCache[q]?.let { if (now - it.atMs < SEARCH_CACHE_TTL_MS) return it.items }
+
+        val items = withTimeoutOrNull(SEARCH_TIMEOUT_MS) { mediaLibraryTree.search(q) }.orEmpty()
+
+        // 顺手清理过期条目，避免缓存无界增长（与 NetworkMusicManager.playUrlCache 同做法）
+        searchCache.entries.removeAll { now - it.value.atMs >= SEARCH_CACHE_TTL_MS }
+        searchCache[q] = SearchCacheEntry(now, items)
+        return items
     }
 
     /**
@@ -926,6 +1113,10 @@ class PlaybackService : MediaLibraryService() {
         private const val BROWSE_TIMEOUT_MS = 8_000L
         /** 单曲 URI 解析超时 */
         private const val RESOLVE_TIMEOUT_MS = 5_000L
+        /** 搜索超时（阶段 3）：跨公网 + 内网两源，比单次浏览给得宽一些 */
+        private const val SEARCH_TIMEOUT_MS = 10_000L
+        /** 搜索结果缓存有效期（阶段 3）：覆盖 onSearch → onGetSearchResult 的两次调用间隔 */
+        private const val SEARCH_CACHE_TTL_MS = 60_000L
         /** Google 助理（手机端）包名 */
         private const val PKG_GOOGLE_ASSISTANT = "com.google.android.googlequicksearchbox"
         /** Gemini / Google 助理（AAOS 端）包名 */
