@@ -8,6 +8,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -39,10 +40,12 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.tv.material3.ExperimentalTvMaterial3Api
@@ -476,6 +479,9 @@ private const val IMMERSIVE_EDGE_BLUR_DP = 24f
  *    `Modifier.blur` 在 API < 31 上是 no-op（电视 SDK 22 即如此），此时该层自动
  *    退化为纯渐变、不会报错，效果等同单层渐变遮罩。
  * 3. 水平渐变黑幕：左侧全透明 → 右缘纯黑，与右半屏歌词区的纯黑背景无缝衔接。
+ * 4. 右侧虚化区**竖排**歌曲信息：最右一列 = 歌曲名（白色加粗），其左侧一列 = 艺术家
+ *    （主题青色），两列均**上对齐**。放这里是刻意的——第 3 层已把该区域压到 ≥83% 黑，
+ *    底色确定为暗色，文字就能固定用亮色，不必担心与任意封面撞色。
  *
  * 点击（TV OK 键 / 手机触摸）退出沉浸模式，回到普通播放页。
  */
@@ -573,8 +579,116 @@ private fun ImmersiveCoverHalf(
                     .fillMaxSize()
                     .background(edgeFadeBrush)
             )
+
+            // ④ 右侧虚化区竖排歌曲信息：最右一列 = 歌曲名，其左侧一列 = 艺术家，均上对齐。
+            //    选这里的理由：③ 已把该区域压到 ≥83% 黑（0.80 处 0.72 → 1.0 处纯黑），
+            //    底色**确定是暗的** → 文字可以固定用亮色（白 / Primary），
+            //    不必像压在封面上那样担心任意底色撞色。
+            val songTitle = currentSong?.title?.takeIf { it.isNotBlank() }
+            val songArtist = currentSong?.artist?.takeIf { it.isNotBlank() }
+            if (songTitle != null || songArtist != null) {
+                BoxWithConstraints(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .fillMaxHeight()
+                        .padding(top = 36.dp, end = 26.dp, bottom = 36.dp)
+                ) {
+                    val titleSize = FontSize.title()
+                    val artistSize = FontSize.body()
+                    val density = LocalDensity.current
+                    // 单字行高 = 字号 × 1.15（Compose 1.6 起 includeFontPadding 默认 false，
+                    // 无需 PlatformTextStyle）；按可用高度反推最多能放几个字，超出补「…」
+                    val titleCharH = with(density) { titleSize.toDp() } * VERTICAL_LINE_HEIGHT_RATIO
+                    val artistCharH = with(density) { artistSize.toDp() } * VERTICAL_LINE_HEIGHT_RATIO
+                    val maxTitleChars = (maxHeight / titleCharH).toInt().coerceIn(2, 18)
+                    val maxArtistChars = (maxHeight / artistCharH).toInt().coerceIn(2, 18)
+                    Row(
+                        verticalAlignment = Alignment.Top,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        // 左列：艺术家
+                        if (songArtist != null) {
+                            VerticalText(
+                                text = songArtist,
+                                color = NasMusicColors.Primary,
+                                fontSize = artistSize,
+                                maxChars = maxArtistChars
+                            )
+                        }
+                        // 右列（最右）：歌曲名
+                        if (songTitle != null) {
+                            VerticalText(
+                                text = songTitle,
+                                color = Color.White,
+                                fontSize = titleSize,
+                                fontWeight = FontWeight.Bold,
+                                maxChars = maxTitleChars
+                            )
+                        }
+                    }
+                }
+            }
         }
     }
+}
+
+/** 竖排文字的单字行高倍数（见 [VerticalText]：把行高固定下来，竖列才不松散）。 */
+private const val VERTICAL_LINE_HEIGHT_RATIO = 1.15f
+
+/**
+ * 竖排文字（CJK 习惯：单字自上而下成列，列自右向左排）。
+ *
+ * Compose **没有原生竖排能力**（`TextStyle` 没有 writing-mode），这里按 **码点** 拆字后逐字
+ * 堆一列 `Text`。两个实现要点：
+ * - 按码点而不是按 `Char` 拆：`String.toList()` 会把 emoji / 生僻字的**代理对拆成两个乱码**。
+ *   用 `Character.codePointAt` + `charCount` 步进（`java.lang.Character` 是 API 1 就有，
+ *   minSdk 22 无压力；**不能用 `String.codePoints()`**——它返回 `IntStream`，
+ *   `java.util.stream` 是 API 24+）。
+ * - 显式设 `lineHeight = 字号 × [VERTICAL_LINE_HEIGHT_RATIO]`：Compose 1.6 起
+ *   `includeFontPadding` 默认已是 false（见 ui-text 1.6.1 的 `DefaultIncludeFontPadding`），
+ *   所以**不需要** `PlatformTextStyle` 那套实验性 API 就能得到紧凑的竖列。
+ *
+ * [maxChars] 由调用方按可用高度算出，超出时末字替换为「…」，保证永不溢出封面。
+ */
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+private fun VerticalText(
+    text: String,
+    color: Color,
+    fontSize: TextUnit,
+    maxChars: Int,
+    fontWeight: FontWeight? = null,
+    modifier: Modifier = Modifier
+) {
+    val chars = remember(text, maxChars) { splitToCodePoints(text, maxChars) }
+    val lineHeight = fontSize * VERTICAL_LINE_HEIGHT_RATIO
+    Column(modifier = modifier, horizontalAlignment = Alignment.CenterHorizontally) {
+        chars.forEach { ch ->
+            Text(
+                text = ch,
+                color = color,
+                fontSize = fontSize,
+                fontWeight = fontWeight,
+                lineHeight = lineHeight,
+                maxLines = 1
+            )
+        }
+    }
+}
+
+/** 按 Unicode 码点切分 [text]，最多 [maxChars] 个；被截断时最后一个替换为「…」。 */
+internal fun splitToCodePoints(text: String, maxChars: Int): List<String> {
+    val out = ArrayList<String>(maxChars)
+    var i = 0
+    while (i < text.length && out.size < maxChars) {
+        val cp = Character.codePointAt(text, i)
+        out.add(StringBuilder().append(Character.toChars(cp)).toString())
+        i += Character.charCount(cp)
+    }
+    if (i < text.length && out.isNotEmpty()) {
+        out[out.size - 1] = "…"
+    }
+    return out
 }
 
 @OptIn(ExperimentalTvMaterial3Api::class)

@@ -8775,6 +8775,65 @@ translateY = 19 − 34×1.75 = −40.5
 
 **版本**：v2.33.0 → **v2.34.0**（versionCode 147 → 148）
 
+### 10.159 v2.34.1 — 沉浸播放页：封面右侧竖排歌曲名 / 艺术家（2026-09-17）
+
+**来源**：用户提出——沉浸播放页左侧封面图上要显示歌曲名和艺术家；且因为**封面色调不可控，
+任何颜色的文字都可能撞色**，要求放在**虚化区**、**竖排**、**上对齐**，最右显示歌曲名、
+歌曲名左侧显示艺术家。
+
+**根因**：沉浸模式（§10.156 引入）的布局是「左半屏大封面 + 右半屏黑底歌词」，而歌曲名 /
+艺术家只在**普通模式**的 `CoverColumn` 里渲染（`NowPlayingScreen.kt`）。进入沉浸模式后这两项
+整屏都看不到 → 切歌、或从歌词页切回来时无法确认"现在放的是哪首"。
+
+**为什么放右侧虚化区（关键取舍）**：③ `edgeFadeBrush` 从 0.55 起变暗、0.80 处 0.72 黑、**1.0
+处纯黑** → 文字列所在的 x ∈ [0.88, 0.98] 区间底色**已被压到 ≥83% 黑**。底色确定为暗色，
+文字就能**固定用亮色**（歌曲名 `Color.White` 加粗、艺术家 `NasMusicColors.Primary`），
+彻底绕开"封面撞色"问题。这也是用户要竖排的原因：两列竖排只占约 60dp 宽，刚好落在暗区内。
+
+**实现内容**（`ui/screens/NowPlayingScreen.kt` 的 `ImmersiveCoverHalf`，新增第 ④ 层）：
+
+- 自下而上四层：① 封面原图 → ② 右缘模糊副本 → ③ 右缘渐黑 → **④ 右侧竖排歌曲信息**。
+- ④ = `BoxWithConstraints`（`align(TopEnd)`、`fillMaxHeight()`、`padding(top 36 / end 26 / bottom 36)`）
+  内一行 `Row`（`verticalAlignment = Top`，列间距 12dp）：**左列艺术家**（`FontSize.body()`、
+  `Primary` 青）+ **右列歌曲名**（`FontSize.title()`、`FontWeight.Bold`、白色）。
+- `VerticalText`（新增私有 Composable）：Compose **没有原生竖排**（`TextStyle` 无 writing-mode），
+  按码点拆字后逐字堆一列 `Text`，`lineHeight` 固定为字号 × 1.15。
+- 字数上限 = `maxHeight / (字号 → dp × 1.15)` 反推，夹在 2…18，超出末字替换为「…」→ 任何屏幕
+  高度下都不溢出封面。两者皆空（电台条目）则整块不渲染。
+
+⚠️ **三个坑**：
+
+1. **竖排必须按 Unicode 码点拆，不能按 `Char`**。`String.toList()` 会把 emoji / 生僻字（如 U+20BB7）
+   的**代理对切成两个孤立 surrogate** → 显示成豆腐块。且**不能用 `String.codePoints()`**——
+   它返回 `IntStream`，`java.util.stream` 是 **API 24+**，minSdk 22 上 `NoClassDefFoundError`；
+   只能 `Character.codePointAt` + `Character.charCount` 步进（`java.lang.Character` 是 API 1）。
+   已抽成 `internal fun splitToCodePoints()` 并单测。
+2. **`LocalDensity` 在 `androidx.compose.ui.platform` 包**，不是 `androidx.compose.ui.unit`
+   （后者只有 `Density` / `Dp` / `TextUnit`）；写错报 `Unresolved reference`。
+   `TextUnit.toDp()` 是 `FontScaling` 的成员扩展，必须 `with(LocalDensity.current) { … }`。
+3. **不需要 `PlatformTextStyle` 那套实验性 API**：ui-text 1.6.1 里 `DefaultIncludeFontPadding`
+   **已经是 false**（`AndroidTextStyle.android.kt`），默认行高就够紧，显式设 `lineHeight` 即可。
+
+> 另：`LocalTextStyle` 在本工程是 **`androidx.tv.material3.LocalTextStyle`**（tv-material3 自己
+> `compositionLocalOf` 声明的），`androidx.compose.ui.text.LocalTextStyle` 不存在。
+> 本版最终没用它，但改 TV 文字样式时会踩到。
+
+**未做**：文字不做可聚焦项——沉浸模式下**整个左半封面**是一个"点击退出沉浸"的 `FocusableSurface`，
+文字若也参与焦点会和它抢 D-Pad 焦点；普通模式"点歌名/艺术家跳网络搜索"不受影响。
+
+**测试**（`app/src/test/.../ui/screens/ImmersiveVerticalTextTest.kt`，新增 **9 例 / 0 失败**）：
+中文逐字、短文本不补省略号、长度正好等于上限不补、超长截断并补「…」、截断后总长不超上限、
+**emoji 代理对不拆**、**生僻字代理对不拆**、上限 1、空串。
+
+**遗留 / 验证**：
+
+- ⚠️ **电视实机视觉验收未做**：竖排字距、两列与右缘渐黑区的相对位置、长歌名截断表现都要上机看，
+  按项目约定由用户执行（未自动安装 / 启动）。
+- **验证**：`:app:testDebugUnitTest`（含编译 main + test，全量）**BUILD SUCCESSFUL**。改的是纯
+  Compose UI，可单测的部分只有拆字逻辑，已抽 `internal fun` 覆盖。
+
+**版本**：v2.34.0 → **v2.34.1**（versionCode 148 → 149）
+
 ### 10.152 v2.32.3 — T5：删除死代码 `VocalRemovalProcessor.kt`（算法先归档，2026-09-14）
 
 **来源**：`logs_temp/code-review-full-report-2026-09-13.md` §T5 / `docs/code-review-2026-09-03.md` §P2。文件 348 行，全项目**零调用方**（`PlaybackService.kt:207` 实际 `val vocalRemovalProcessor = SpectralMaskProcessor()`——变量名是历史遗留，类型早就换过了；`PlayerManager.setVocalRemovalProcessor()` 的形参类型同样是 `SpectralMaskProcessor`）。
