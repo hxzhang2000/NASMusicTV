@@ -7,6 +7,73 @@
 >
 > 类型：`Added`（新增） | `Changed`（变更） | `Fixed`（修复） | `Removed`（移除）
 
+## [v2.33.0] - 2026-09-17
+
+> **Android Auto 车机支持（阶段 1：可发现 + 可浏览 + 可播放）**
+>
+> 开发方案见 `docs/android-auto-plan.md`。本轮落地**阶段 1 的全部必要代码**，
+> 使本应用能在 Android Auto 车机（手机映射投屏模式）中被发现、浏览并播放。
+>
+> **不改 minSdk、不加 flavor、不新增依赖** —— Android Auto 复用现有 APK，
+> 与 AAOS（车机内嵌 Android）是两条独立路线。
+> 阶段 2（艺人/专辑节点）、阶段 3（搜索/语音）、阶段 4（attribution icon、包验证收紧）未实施，
+> 其中**语音搜索的正确实现机制已在本轮探明**，见下方 `Changed` 与方案 §七 阶段 3。
+
+### Added
+
+**Android Auto 可发现性（缺任一项车机完全看不到本应用）**
+- 新增 `app/src/main/res/xml/automotive_app_desc.xml`，内容为 `<automotiveApp><uses name="media"/></automotiveApp>`
+- `AndroidManifest.xml` 的 `<application>` 新增 `com.google.android.gms.car.application` meta-data 指向该文件
+- `PlaybackService` 的 `intent-filter` 补注册 `android.media.browse.MediaBrowserService`（原先只有 `androidx.media3.session.MediaLibraryService`）。两个 action **必须同时存在**：缺前者 Media3 客户端找不到，缺后者平台 `MediaBrowser` / Android Auto 找不到
+
+**媒体浏览树（`player/MediaLibraryTree.kt` 重写）**
+- 根菜单固定 **4 项可浏览节点**：当前播放 / 离线下载 / 收藏 / 歌单，**按 root hints 动态裁剪**
+- 前 3 项**不依赖家庭内网** —— 开车时手机在移动数据上、NAS 内网地址不可达，必须保证车机端始终有内容可播
+- 歌单下钻：`pl` → `pl/{id}` → 歌曲
+- 叶子节点只带 `mediaId`、**不设 URI**（网络歌曲 `streamUrl` 按设计不持久化；NAS 流地址带 token 会过期），URI 由播放入口统一解析
+
+**播放入口（`PlaybackService`）**
+- 新增 `onAddMediaItems` 覆写（默认实现在 item 缺 `LocalConfiguration` 时会抛 `UnsupportedOperationException`）
+- 新增 `onSetMediaItems` 覆写 —— 覆写后它成为**所有点歌路径的统一入口**（legacy 的 `playFromMediaId` / `playFromUri` 等都会汇聚过来）
+- URI 三级解析：已有 URI → `Song.streamUrl` → `NetworkMusicManager.resolvePlayUrl()`（走公网，车机场景可用）
+- 新增 `player/BrowseCache.kt`：`mediaId → Song` 的 **LRU 缓存（2000 条）**，供播放入口在 Media3 会话线程上同步读取，避免回调里做网络 IO
+- 新增 `onConnect` **包验证**：放行系统进程 / AAOS 控制器 / Android Auto 控制器 / 本应用 / Google 助理（手机 `com.google.android.googlequicksearchbox` 与 AAOS `com.google.android.carassistant` 包名不同，分别放行）；DEBUG 构建全放行以免调试期"莫名连不上"
+
+**`PlayerManager` 新增 API**
+- `syncQueueFromExternal(songs, startIndex)` —— **只同步 T3 状态镜像、不触碰 player**。因为 Media3 会用 `onSetMediaItems` 的返回值自行调 `player.setMediaItems()`，此处再调 `playQueue()` 会重复设置
+- `updateStreamUrl(index, url)` —— 回写队列中某条的 `streamUrl`，不动 `currentIndex` / `currentSong`
+- `replayAt(index)` —— URL 异步解析完成后原地续播
+- `builtinStreamUrlResolver` —— **无 UI 依赖**的 streamUrl 解析器，由 `PlaybackService` 注册；未注册时行为与改动前完全一致
+
+### Fixed
+
+- **A-13（静默播不出）网络歌曲在无 UI 场景下播不出来**：`onNeedResolveStreamUrl` 的实现注册在 `MainViewModel`（`MainViewModel.kt:790`），绑在 UI 生命周期上。而 Android Auto / Wear OS / 蓝牙唤起等场景下 `MainActivity` **可能从未启动** → 回调为 null → 队列里的网络歌曲**静默失败**。修复：新增 `builtinStreamUrlResolver` 优先接管（`PlaybackService` 侧解析成功后回写队列并续播），解析失败才回落 UI 侧回调。4 处触发点（自动过渡 / `onPlayerError` 重试 / `syncAndPlayCurrent` / `transitionToIndex`）统一收口到 `requestStreamUrlResolution()`
+- **A-14 浏览树叶子节点缺 URI**：旧 `MediaLibraryTree.findInQueue()` 未调用 `setUri()` —— 2026-09-07 的 P0-9 只修了 `getQueueItems()`。此前未暴露是因为 `onAddMediaItems` 还没被覆写（默认实现只在「全部 item 都带 URI」时原样返回）。修复：树里统一不设 URI，改由播放入口解析
+
+### Changed
+
+- **移除 `onGetChildren` 的伪分页逻辑**：Android Auto / AAOS 官方明确**不支持分页**，并建议不要依赖 `page` / `pageSize`。旧实现据此切片会导致列表被**静默截断**。改为一次性返回（上限 500 条）+ 异步（`SettableFuture` + `withTimeoutOrNull`），超时/异常返回空列表而非让车机端一直转圈
+- `PlayerManager.buildMediaItem` 由 `private` 改 `internal`，供 `PlaybackService` 构造可播放 item
+- **root hints 常量改用 Media3 的别名**：官方文档给的是 `androidx.media.utils.MediaConstants.BROWSER_ROOT_HINTS_KEY_ROOT_CHILDREN_LIMIT`，但 `androidx.media:media:1.6.0` 在本项目只是 `media3-session` 的 **runtime scope 传递依赖**，**compile classpath 上不可见**（实测编译报 `Unresolved reference 'utils'`）。改用 `androidx.media3.session.MediaConstants.EXTRAS_KEY_ROOT_CHILDREN_LIMIT` —— 源码级确认两者**字面量完全相同**（`media3-session-1.2.1` 的 `MediaConstants.java:397-398` 就是直接赋值自前者），**故不新增依赖**
+- `..._SUPPORTED_FLAGS` **有意不设置**：其默认值即 `FLAG_BROWSABLE`，而本应用根菜单 4 项全部可浏览，显式设置是 no-op
+
+### Notes
+
+- **新增 lint 抑制（已说明理由）**：`automotive_app_desc` 一落地就触发 `MissingIntentFilterForMediaSearch`（要求注册 `android.media.action.MEDIA_PLAY_FROM_SEARCH`）。本轮**有意暂不声明**该 intent-filter，加 `tools:ignore` 抑制。理由是「声明了也无法响应 = 静默失效的语音搜索」，而语音搜索属方案**阶段 3**。**正确机制已探明**：Media3 的 `MediaSession.Callback` **没有** `onPlayFromSearch`（`javap` 实测 11 个 default 方法中无搜索相关），该 intent 经 `MediaSessionLegacyStub.onPlayFromSearch` → `handleMediaRequest` → **`onSetMediaItems(controller, [MediaItem(mediaId="", requestMetadata.searchQuery=query)], INDEX_UNSET, TIME_UNSET)`**。所以阶段 3 要改的是 `onSetMediaItems` 里的 `requestMetadata.searchQuery` 分支（且需把 `INDEX_UNSET`/`TIME_UNSET` 归一成 `0`/`0L`），改完再补 intent-filter 并移除该 `tools:ignore`
+- 实施期三处编译/构建问题（均已修复）：① `androidx.media.utils.MediaConstants` compile 期不可见（见上）；② `ExoPlayer.setMediaItem(MediaItem, long)` 第二个参数是**起始播放位置(ms)不是索引**，`replayAt` 原写法传 Int 直接编译失败 → 改 `replaceMediaItem` + `seekTo`；③ 上述 lint error
+- 技术细节见 `docs/technical-overview.md` §10.157
+
+### 验证
+
+- `assembleDebug` BUILD SUCCESSFUL；`assembleRelease` **BUILD SUCCESSFUL**（14m13s，含 `minifyReleaseWithR8` + `lintVitalRelease` + `optimizeReleaseResources` + `packageRelease`）；`testDebugUnitTest` **518 例 / 0 失败 / 0 错误**（与基线一致）；`lintDebug` **0 Error / 256 Warning**（基线 0/257；**警告总数少 1 条**是因为重写后的 `MediaLibraryTree` 把 `Uri.parse` 从 3 处降到 2 处，`UseKtx` 告警相应减少——**非新增，是净减少**）
+- 改动文件在 lint 报告中的命中：`PlaybackService` / `BrowseCache` **0 命中**；`MediaLibraryTree` / `PlayerManager` 各 2 条 `UseKtx`，**均为存量**（旧版 `MediaLibraryTree` 同类告警 3 条、`PlayerManager` 2 条）
+- 产物 `NASMusicTV-release-v2-33-0.apk`（22,937,133 B ≈ 22.9MB），`output-metadata.json` 与 `BuildConfig` **双向核对** versionCode **147** / versionName **2.33.0**；`apksigner verify --print-certs` = SHA-256 `43a9dec4…d59b`（`CN=Android Debug`），**与电视已装版同签名** → `adb install -r` 可原地升级、不丢数据
+- `aapt2 dump badging` 复核 **`minSdkVersion 22` / `targetSdkVersion 34` 未变**（"不改 minSdk"这一路线前提成立）
+- **release 包内的车机声明逐项复核**（`aapt2 dump resources` / `dump xmltree`）：`xml/automotive_app_desc` 资源存在 ✓；`com.google.android.gms.car.application` meta-data 存在 ✓；`PlaybackService` 的两个 action（`androidx.media3.session.MediaLibraryService` + `android.media.browse.MediaBrowserService`）**同时存在** ✓
+- **R8 存活复核**（解包 `classes.dex` 做字节匹配）：媒体树业务字符串 `当前播放` / `离线下载` / `歌单` / `NAS Music TV` **全部命中** ✓；对照项 `AppLog.w` 的 `"onConnect rejected"` **未命中**（符合预期——`AppLog.w` 带 `if (BuildConfig.DEBUG)` 守卫，release 下连字符串常量一起被折掉，**不能据此判"代码丢了"**）
+- **未做真机/车机验收**：DHU 需 `adb forward tcp:5277 tcp:5277` + `desktop-head-unit.exe`；真车默认只显示 Play 商店应用、侧载需在 Android Auto 开发者模式打开 "Unknown sources"。按项目约定，上机验证由用户执行
+- **版本**：v2.32.7 → **v2.33.0**（versionCode 146 → 147）
+
 ## [v2.32.7] - 2026-09-16
 
 ### Changed

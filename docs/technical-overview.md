@@ -8403,6 +8403,107 @@ onSearchSong = { keyword -> viewModel.searchNetworkSongs(keyword) },
 
 **版本**：v2.32.6 → **v2.32.7**（versionCode 145 → 146）
 
+### 10.157 v2.33.0 — Android Auto 车机支持（阶段 1：可发现 + 可浏览 + 可播放，2026-09-17）
+
+**来源**：产品需求 —— 为应用增加 Android Auto（手机映射投屏）支持。方案文档 `docs/android-auto-plan.md`（v2.0，11 章），本轮落地**阶段 1 的全部必要代码**。阶段 2/3/4（艺人专辑节点、搜索与语音、attribution icon）未实施。
+
+**路线判定**：Android Auto 的「投屏」模式 = 手机跑应用与运算、车机只做显示与交互，**复用现有 APK** —— 不加 flavor、不改 `minSdk`（仍 22）、**不新增任何依赖**。与 AAOS（车机内嵌 Android）是两条独立路线。
+
+#### 一、可发现性：三处声明缺一不可
+
+| # | 位置 | 内容 | 缺失后果 |
+|---|---|---|---|
+| 1 | `res/xml/automotive_app_desc.xml`（**新建**） | `<automotiveApp><uses name="media"/></automotiveApp>` | Android Auto 完全看不到本应用 |
+| 2 | `AndroidManifest.xml` `<application>` | `com.google.android.gms.car.application` meta-data → `@xml/automotive_app_desc` | 同上 |
+| 3 | `PlaybackService` 的 `intent-filter` | 同时注册 `androidx.media3.session.MediaLibraryService` **与** `android.media.browse.MediaBrowserService` | 缺前者 Media3 客户端找不到；缺后者平台 `MediaBrowser` / Android Auto 找不到 |
+
+#### 二、Media3 播放链路：三条铁律（源码级确认）
+
+均读 `media3-session-1.2.1-sources.jar` 核实，**不是猜的**：
+
+1. **`onSetMediaItems` / `onAddMediaItems` 的返回值不能为 null** —— `MediaSessionImpl.java:689-696` 有 `checkNotNull`，返回 null 直接 NPE。
+2. **返回值会被 Media3 用于 `player.setMediaItems()`** —— `MediaSessionStub.java:992` → `MediaUtils.setMediaItemsWithStartIndexAndPosition`（`MediaUtils.java:194-213`）。**故不得在回调内重复设置 player** —— 这是本项目 `syncQueueFromExternal()` 只同步状态镜像、不碰 player 的原因（若照旧调 `playQueue()` 会重复设置，引发双真相源冲突）。
+3. **覆写 `onSetMediaItems` 后它成为所有点歌路径的统一入口** —— legacy 的 `playFromMediaId` / `playFromUri` 等都汇聚过来。
+
+**`onAddMediaItems` 的默认实现陷阱**：官方 javadoc 说明——**只有当所有 item 都带 `LocalConfiguration`（URI）时才原样返回，否则抛 `UnsupportedOperationException`**。因此必须覆写。这正好解释了 A-14 为何此前未暴露（见下）。
+
+**双真相源冲突**：`PlayerManager._playerState` 的 T3 三元组（`queue`/`currentIndex`/`currentSong`）vs ExoPlayer playlist。`PlayerManager.kt:112-129` 的 1000ms 进度轮询**只更新 `_progress`/`_duration`，不修正 queue** → 外部（Media3）改动 playlist 后状态不会自愈，会出现「队列与当前歌不一致」。解法即 `syncQueueFromExternal()`。
+
+#### 三、根菜单 4 项与 root hints（含一处编译期踩坑）
+
+系统把根内容渲染为**导航标签页**，上限由 root hints 动态下发（默认 4），**超限项被静默丢弃**（不报错、只是"不见了"）。本应用根菜单固定 4 项：**当前播放 / 离线下载 / 收藏 / 歌单**。
+
+**⚠️ 踩坑（本方案初稿写错、实施期纠正）**：官方文档给的常量是 `androidx.media.utils.MediaConstants.BROWSER_ROOT_HINTS_KEY_ROOT_CHILDREN_LIMIT`，但 `androidx.media:media:1.6.0` 在本项目**只是 `media3-session` 的 runtime scope 传递依赖** —— 它确实进了 APK，但**不在 compile classpath 上**，写 `import androidx.media.utils.MediaConstants` 直接编译失败：
+
+```
+e: PlaybackService.kt:27:23 Unresolved reference 'utils'.
+```
+
+**正确写法**：用 Media3 自己导出的同名别名 `androidx.media3.session.MediaConstants.EXTRAS_KEY_ROOT_CHILDREN_LIMIT`。源码级确认两者**字面量完全相同** —— `media3-session-1.2.1` 的 `MediaConstants.java:397-398` 就是 `= androidx.media.utils.MediaConstants.BROWSER_ROOT_HINTS_KEY_ROOT_CHILDREN_LIMIT`，`javap -constants` 实测值 `"androidx.media.MediaBrowserCompat.Extras.KEY_ROOT_CHILDREN_LIMIT"`。**故不新增依赖**。
+
+`..._SUPPORTED_FLAGS` **有意不设置**：其默认值即 `FLAG_BROWSABLE`，而本应用 4 项全部可浏览，显式设置是 no-op；Media3 也没为它导出别名。
+
+**分页**：Android Auto / AAOS 官方明确**不支持分页**，并建议不要依赖 `onGetChildren` 的 `page`/`pageSize`。旧实现的切片逻辑会导致列表被**静默截断**，本轮移除。
+
+#### 四、两个真实缺陷（方案初稿未覆盖，本轮一并修复）
+
+**A-13 网络歌曲在无 UI 场景静默播不出**
+- 根因：`onNeedResolveStreamUrl` 的实现注册在 `MainViewModel.kt:790`（→ `PlayerViewModel.resolveAndPlayByIndex`），**绑在 UI 生命周期上**。Android Auto / Wear OS / 蓝牙唤起等场景下 `MainActivity` **可能从未启动** → 回调为 null → 队列里的网络歌曲**静默失败，无任何提示**。
+- 修复：`PlayerManager` 新增 `builtinStreamUrlResolver: ((Int) -> Boolean)?`（**无 UI 依赖**，由 `PlaybackService` 注册），私有 `requestStreamUrlResolution(index)` 先试内建解析器、失败才回落 `onNeedResolveStreamUrl`。4 处触发点（自动过渡 / `onPlayerError` 重试 / `syncAndPlayCurrent` / `transitionToIndex`）统一收口。
+- **向后兼容**：解析器未注册时（如纯 TV 使用）行为与改动前完全一致。
+
+**A-14 浏览树叶子节点缺 URI**
+- 根因：旧 `MediaLibraryTree.findInQueue()` 未调 `setUri()` —— 2026-09-07 的 P0-9 **只修了 `getQueueItems()`**。此前未暴露是因为 `onAddMediaItems` 还没被覆写（默认实现只在全部 item 都带 URI 时原样返回）。
+- 修复：树里**统一不设 URI**（网络歌曲 `streamUrl` 按设计不持久化；NAS 流地址带 token 会过期），改由播放入口三级解析：已有 URI → `Song.streamUrl` → `NetworkMusicManager.resolvePlayUrl()`（走公网，车机场景可用）。
+
+#### 五、`ExoPlayer.setMediaItem` 的重载陷阱（编译期暴露）
+
+`replayAt(index)` 初稿写作 `p.setMediaItem(buildMediaItem(song, url), index)` —— **编译失败**：
+
+```
+PlayerManager.kt:676:15 None of the following candidates is applicable:
+  fun setMediaItem(p0: MediaItem, p1: Long)  /  fun setMediaItem(p0: MediaItem, p1: Boolean)
+```
+
+原因：`setMediaItem(MediaItem, long)` 的第二个参数是**起始播放位置(ms)**，**不是索引**。即便强转成 `Long` 也只是「从第 N 毫秒开始播」，语义完全错。正确写法（`javap` 已核对 media3 1.2.1 的 `Player`）：
+
+```kotlin
+if (index < p.mediaItemCount) p.replaceMediaItem(index, buildMediaItem(song, url))
+else p.setMediaItems(queue.map { buildMediaItem(it, it.streamUrl ?: "") })  // 兜底：播放器未装载队列时
+p.seekTo(index, 0L); p.prepare(); p.play()
+```
+
+#### 六、包验证
+
+`PlaybackService` 是 `exported="true"`（跨进程绑定必需），故 `onConnect` 加来源校验：放行系统进程（`Process.SYSTEM_UID`）/ AAOS 控制器 / Android Auto 控制器（用 Media3 内置 `session.isAutomotiveController()` / `isAutoCompanionController()`）/ 本应用 / Google 助理（手机 `com.google.android.googlequicksearchbox` 与 AAOS `com.google.android.carassistant` 包名不同，需分别放行），不通过则 `MediaSession.ConnectionResult.reject()`。**DEBUG 构建全放行**，避免白名单不全导致 DHU / 真机调试时"莫名连不上"。
+⚠️ Media3 的这两个判定官方标注 **"not a security validation"**（只比包名、不校验签名）。对个人音乐应用强度足够；若日后需签名级校验，可对照官方 assistant 文档的证书指纹实现。
+
+#### 七、语音搜索：lint 触发的意外发现（阶段 3 的正确做法已探明）
+
+`automotive_app_desc` 一落地就**新增一条 lint error**：`MissingIntentFilterForMediaSearch`（要求注册 `android.media.action.MEDIA_PLAY_FROM_SEARCH`）。本轮**有意暂不声明**该 intent-filter，加 `tools:ignore` 抑制并写明理由。
+
+**理由是「声明了也无法响应」**，且正确机制已查清（`media3-session-1.2.1` 源码）：
+
+1. **Media3 没有 `MediaSession.Callback.onPlayFromSearch`** —— `javap` 实测该接口共 11 个 `default` 方法，**与搜索相关的一个都没有**（只有 `onSetMediaItems` / `onAddMediaItems` / `onPlaybackResumption` / `onPlayerCommandRequest` 等）。老文档建议的「实现 `onPlayFromSearch`」对 Media3 **不成立**。
+2. **该 intent 最终走 `onSetMediaItems`** —— `MediaSessionLegacyStub.java:395` 的 `onPlayFromSearch(query, extras)` → `handleMediaRequest(createMediaItemForMediaRequest(null, null, query, extras), play=true)` → 同文件 `811-817` 调 `sessionImpl.onSetMediaItemsOnHandler(controller, ImmutableList.of(mediaItem), C.INDEX_UNSET, C.TIME_UNSET)`；而 `createMediaItemForMediaRequest`（同文件 `947-961`）构造的 `MediaItem` 是 **`mediaId=""`（`DEFAULT_MEDIA_ID`）+ `requestMetadata.searchQuery=query` + 无 URI**。
+3. **所以阶段 3 要改的是 `onSetMediaItems` 入口的 `requestMetadata.searchQuery` 分支**。两个坑：**(a)** 该路径的 `startIndex`/`startPositionMs` 是 `C.INDEX_UNSET`(-1) / `C.TIME_UNSET`，**不能原样透传给 `MediaItemsWithStartPosition`**，要归一成 `0` / `0L`；**(b)** 必须**先**实现该分支、**再**补 intent-filter 并移除 `tools:ignore` —— 顺序反了就是「声明了却搜不动」的静默失效。
+
+**测试**：无新增单测 —— 改动全部是 Media3 回调接线 + Manifest/资源声明，纯逻辑部分（`BrowseCache` 的 LRU 与 mediaId 前缀剥离）体量小且无独立可测入口；项目亦无 Media3 会话的测试基础设施（需真实 `MediaSession` + 控制器）。
+
+**验证**：`assembleDebug` BUILD SUCCESSFUL；`assembleRelease` **BUILD SUCCESSFUL**（14m13s，含 `minifyReleaseWithR8` + `lintVitalRelease` + `optimizeReleaseResources` + `packageRelease`）；`testDebugUnitTest` **518 例 / 0 失败 / 0 错误**（与基线一致）；`lintDebug` **0 Error / 256 Warning**。
+- **警告总数 257 → 256 是净减少，不是新增**：重写后的 `MediaLibraryTree` 把 `Uri.parse` 从 3 处降到 2 处，`UseKtx` 告警相应少 1 条。
+- 改动文件在 lint 报告中的命中：`PlaybackService` / `BrowseCache` **0 命中**；`MediaLibraryTree`（2 条 `UseKtx`）与 `PlayerManager`（2 条 `UseKtx`）**均为存量**（旧版同类告警分别是 3 条与 2 条）。
+- 实施期共修 3 个构建问题：① `androidx.media.utils.MediaConstants` compile 期不可见（见第三节）；② `setMediaItem(item, index)` 重载语义错（见第五节）；③ 上述 lint error。
+- 产物 `NASMusicTV-release-v2-33-0.apk`（22,937,133 B ≈ 22.9MB），`output-metadata.json` 与 `BuildConfig` 双向核对 versionCode **147** / versionName **2.33.0**；签名 `CN=Android Debug`（SHA-256 `43a9dec4…d59b`，与电视已装版同签名 → `adb install -r` 可原地升级）。
+- `aapt2 dump badging` 复核 **`minSdkVersion 22` / `targetSdkVersion 34` 未变**（"不改 minSdk"这一路线前提成立）。
+- **release 包内车机声明逐项复核**（`aapt2 dump resources` / `dump xmltree`）：`xml/automotive_app_desc` 资源存在 ✓；`com.google.android.gms.car.application` meta-data 存在 ✓；`PlaybackService` 的两个 action **同时存在** ✓。
+- **R8 存活复核**（解包 `classes.dex` 字节匹配）：媒体树业务字符串 `当前播放` / `离线下载` / `歌单` / `NAS Music TV` **全部命中** ✓；对照项 `AppLog.w` 的 `"onConnect rejected"` **未命中**（符合预期——`AppLog.w` 带 `if (BuildConfig.DEBUG)` 守卫，release 下连字符串常量一起被折掉，**不能据此判"代码丢了"**）。
+- **真机/车机验收：未做**。DHU（Desktop Head Unit）需 `adb forward tcp:5277 tcp:5277` + `desktop-head-unit.exe`，真车默认只显示 Play 商店应用、侧载需在 Android Auto 开发者模式里打开 "Unknown sources"。按项目约定，上机验证由用户执行。
+
+**遗留（阶段 2/3/4，见 `docs/android-auto-plan.md` §七）**：艺人/专辑节点与搜索（`onSearch`/`onGetSearchResult`）、语音搜索（上述第七节，含移除 `tools:ignore`）、`onPlaybackResumption`、attribution icon（`androidx.car.app.TintableAttributionIcon`）。
+
+**版本**：v2.32.7 → **v2.33.0**（versionCode 146 → 147）
+
 ### 10.152 v2.32.3 — T5：删除死代码 `VocalRemovalProcessor.kt`（算法先归档，2026-09-14）
 
 **来源**：`logs_temp/code-review-full-report-2026-09-13.md` §T5 / `docs/code-review-2026-09-03.md` §P2。文件 348 行，全项目**零调用方**（`PlaybackService.kt:207` 实际 `val vocalRemovalProcessor = SpectralMaskProcessor()`——变量名是历史遗留，类型早就换过了；`PlayerManager.setVocalRemovalProcessor()` 的形参类型同样是 `SpectralMaskProcessor`）。

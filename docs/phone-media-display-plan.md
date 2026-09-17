@@ -222,8 +222,8 @@ fun buildLiveViewNotification(base: Notification, song: Song, bitmap: Bitmap?): 
 ### 5.1 Android Auto（车机）
 
 - **机制**：Android Auto 通过 `MediaBrowserServiceCompat` 或 Media3 `MediaLibraryService` 读取媒体树
-- **现状**：`PlaybackService` 已继承 `MediaLibraryService`，但 `MediaLibrarySession.Callback` 为空实现，未暴露媒体树（`onGetLibraryRoot` / `onGetChildren`）
-- **适配**：实现 `MediaLibrarySession.Callback` 的 `onGetLibraryRoot` / `onGetChildren`，暴露"最近播放"、"收藏"、"歌单"等节点
+- **现状（2026-09-17 更新）**：**已适配（阶段 1，v2.33.0）**。`PlaybackService` 的 `MediaLibrarySession.Callback` 已实现 `onGetLibraryRoot` / `onGetItem` / `onGetChildren`，并额外覆写 `onAddMediaItems` / `onSetMediaItems` 解析 URI；媒体树由 `player/MediaLibraryTree.kt` 提供（根菜单 4 项：当前播放 / 离线下载 / 收藏 / 歌单）。Manifest 已补 `automotive_app_desc` 与 `MediaBrowserService` action。**未做**：搜索/语音（阶段 3）、艺人专辑节点（阶段 2）、attribution icon（阶段 4）。详见 [`android-auto-plan.md`](./android-auto-plan.md) 与 `technical-overview.md` §10.157
+- ~~**适配**：实现 `MediaLibrarySession.Callback` 的 `onGetLibraryRoot` / `onGetChildren`，暴露"最近播放"、"收藏"、"歌单"等节点~~（已完成，见上）
 - **优先级**：P1（车机用户需求明确，且 L1 做完后只需补 Callback）
 
 ### 5.2 Wear OS（手表）
@@ -548,7 +548,7 @@ implementation "io.coil-kt:coil:2.5.0"
 
 ### 12.1 当前代码缺口
 
-- [PlaybackService](app/src/main/java/com/nasmusic/tv/player/PlaybackService.kt) 已用 `MediaLibraryService`，但 `MediaLibrarySession.Callback` 为空实现
+- ~~[PlaybackService](app/src/main/java/com/nasmusic/tv/player/PlaybackService.kt) 已用 `MediaLibraryService`，但 `MediaLibrarySession.Callback` 为空实现~~ → **2026-09-17 已修复**：Callback 已实现 `onGetLibraryRoot` / `onGetItem` / `onGetChildren` + 覆写 `onAddMediaItems` / `onSetMediaItems`（见 §5.1 与 `technical-overview.md` §10.157）
 - `PlayerManager.playSong` 未填充 `MediaItem.mediaMetadata`
 - `onTaskRemoved` 直接 `stopSelf` 导致切后台停歌
 - 通知用 `NotificationCompat` 手写，应改用 Media3 `MediaStyleNotificationHelper`
