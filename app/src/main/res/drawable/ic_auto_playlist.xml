@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Android Auto 根菜单 tab 图标：歌单
+    单色白（官方规范：Monochrome (preferably white) icons for each tab item）。
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- 三横线列表（末行略短，形成列表观感） -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M3,6 L21,6 L21,8 L3,8 Z M3,11 L21,11 L21,13 L3,13 Z M3,16 L15,16 L15,18 L3,18 Z" />
+</vector>

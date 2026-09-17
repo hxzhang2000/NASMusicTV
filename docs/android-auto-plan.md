@@ -652,12 +652,12 @@ class BrowseCache(private val maxSize: Int = 2000) {
 
 **不做动态增减**（原因见 §6.2），固定为：
 
-| # | 标签 | 图标建议 | 数据来源 | 依赖内网 |
+| # | 标签 | 图标（实际资源，见 §七 2.5） | 数据来源 | 依赖内网 |
 |---|---|---|---|---|
-| 1 | **当前播放** | 播放列表 | `PlayerManager.getQueueSnapshot()` | 否 |
-| 2 | **离线下载** | 下载 | 本地已下载歌曲 | 否 |
-| 3 | **收藏** | 星标 | 网络音乐收藏缓存（LRU 500） | 否 |
-| 4 | **歌单** | 列表 | `BackendAdapter.getPlaylists()` | **是**（不可达时返回空列表） |
+| 1 | **当前播放** | `ic_auto_queue`（播放三角） | `PlayerManager.getQueueSnapshot()` | 否 |
+| 2 | **离线下载** | `ic_auto_download`（下箭头） | 本地已下载歌曲 | 否 |
+| 3 | **收藏** | `ic_auto_favorite`（五角星） | 网络音乐收藏缓存（LRU 500） | 否 |
+| 4 | **歌单** | `ic_auto_playlist`（三横线） | `BackendAdapter.getPlaylists()` | **是**（不可达时返回空列表） |
 
 > 前 3 项**完全不依赖家庭内网**，保证车机场景下永远有内容可播（§6.1）。
 
@@ -919,7 +919,61 @@ Android Auto 场景下应用运行在**手机上**。开车时：
 | 2.2 | 接入离线下载 / 收藏 / 网络音乐源 | ✅ **已随阶段 1 完成**（`loadDownloadChildren` / `loadFavoriteChildren`；网络音乐经 `resolvePlayUrl`） |
 | 2.3 | 接入 NAS 源（歌单 / 艺人 / 专辑），带短期缓存 + 超时 | ⚠️ **部分**：歌单已接入（`loadPlaylistChildren` / `loadPlaylistSongs`）+ 有超时（`BROWSE_TIMEOUT_MS`）；**艺人 / 专辑节点未做**，**短期缓存未做** |
 | 2.4 | 读取 root hints 并按 limit 裁剪（§3.3） | ✅ **已随阶段 1 完成**（`rootChildrenLimit` + `loadRootChildren` 裁剪） |
-| 2.5 | 各标签项配单色矢量图标 | ❌ **未做** —— 当前根菜单 4 项**没有图标**（`browseItem()` 未设 `artworkUri`），车机上会是占位样式 |
+| 2.5 | 各标签项配单色矢量图标 | ✅ **已完成（2026-09-17）** —— 4 个单色白矢量图标 + 运行时光栅化，见下方说明 |
+
+#### 2.5 实施记录：tab 图标的正确给法（含一个容易踩的坑）
+
+**官方规范**（`training/cars/media/create-media-browser/content-hierarchy`，原文）：
+
+> Apart from root hints, use these guidelines to optimally render tabs:
+> - **Monochrome (preferably white) icons for each tab item**
+> - Short and meaningful labels for each tab item
+
+**新增 4 个单色白矢量图标**（`res/drawable/`，24dp / viewport 24）：
+
+| 文件 | 图形 | 对应 tab |
+|---|---|---|
+| `ic_auto_queue.xml` | 播放三角 | 当前播放 |
+| `ic_auto_download.xml` | 下箭头 + 底座横线 | 离线下载 |
+| `ic_auto_favorite.xml` | 五角星 | 收藏 |
+| `ic_auto_playlist.xml` | 三横线（末行略短） | 歌单 |
+
+**⚠️ 坑：只给 `artworkUri` 指向矢量 XML 是不可靠的。**
+Media3 到 legacy（Android Auto）客户端有**两条**图标通路（`LegacyConversions.java`）：
+
+- `artworkData` → `MediaDescriptionCompat.setIconBitmap()`（源码 `:329`）
+- `artworkUri`  → `MediaDescriptionCompat.setIconUri()`（源码 `:357`）
+
+走 `artworkUri` 要求消费方能解码该 URI 的内容，而 **`BitmapFactory` 无法解码 VectorDrawable**
+（`decodeStream` / `decodeResource` 对矢量 XML 返回 null —— 必须经 `Resources.getDrawable()` 渲染）。
+无法确认车机侧用哪种加载方式，**只给 URI 有静默失效的风险**。
+
+**因此实际做法是「矢量图源 + 运行时光栅化」**：在 `MediaLibraryTree.rasterizeIcon()` 里
+把矢量渲染成 256×256 PNG，经 `setArtworkData()` 走**确定性最高的 `iconBitmap` 通路**；
+同时仍设 `artworkUri`（`android.resource://<pkg>/drawable/<name>`）作为次选 —— 两条路都给，成本为零。
+结果按 resId 缓存，4 个图标只渲染一次；渲染失败降级为「无图标」，**不影响内容树加载**。
+
+> 尺寸取 256px 的原因：`CoilBitmapLoader.decodeBitmap()` 固定用 `.size(512, 512)` 请求
+> （`CoilBitmapLoader.kt:53`），Coil 默认会把小图**放大**到目标尺寸 → 源图过小会变模糊。
+> 256px 把放大倍数压到 2x，而纯色平面图形的 PNG 仍只有几 KB。
+
+**2.5 的验证手段（两段外部验证，未写单测）**：
+
+1. **矢量 XML 语法** —— 由 `aapt2` 在构建期保证（编译通过即合法）。
+2. **图形形状** —— 用一个 Python 小脚本解析 `pathData`（只需支持 `M`/`L`/`Z`）高倍渲染后
+   LANCZOS 缩小，输出 4 联预览图目视核对：播放三角 / 下箭头+底座 / 五角星 / 三横线，
+   **四个形状均正确**。
+   > 脚本与预览图都在 **gitignore 的临时目录**里（`logs_temp/render_auto_icons.py`、
+   > `output/auto-tab-icons-preview.png`），不入库。**形状可随时复核** —— 唯一输入是
+   > `res/drawable/ic_auto_*.xml` 里那 4 段 `pathData`，而它们是**已入库**的。
+3. **进包与存活** —— release 包用 `aapt2 dump resources` 按资源名查表确认 4 个
+   `drawable/ic_auto_*` 存在（⚠️ release 下**资源文件名已混淆**成 `res/nM.xml` 这种，
+   按路径找会误判为"没进包"）；dex 字节匹配确认 `"android.resource://"` 与 `"drawable/"`
+   两个业务字符串未被 R8 折掉。
+
+> **为什么不写单测**：运行时路径（`toBitmap` + `compress`）在 Robolectric LEGACY 图形模式下不可靠
+> —— `Bitmap.compress` 被 shadow，不产出真实 PNG，写成单测只会得到假阳性/假阴性。
+> 形状正确性用「离线渲染 + 目视」验证反而更硬。
 
 ### 阶段 3：搜索与语音（P2）
 
@@ -1179,7 +1233,12 @@ MediaItemsWithStartPosition(List<MediaItem> mediaItems, int startIndex, long sta
 
 ## 十一、一页速览
 
-> **当前状态（2026-09-17，v2.33.0）：阶段 1 已实施并完成代码级验证；DHU/真车验收未做。**
+> **当前状态（2026-09-17，v2.33.0）：阶段 1 + 阶段 2.5 已实施并完成代码级验证；DHU/真车验收未做。**
+>
+> 代码级验证实测：四任务合并构建 **BUILD SUCCESSFUL**（16m15s）；`testDebugUnitTest` **518 例 / 0 失败 / 0 错误**；
+> `lintDebug` **0 Error / 254 Warning**（基线 257，净减 3 条 `UseKtx`）；release 产物
+> `NASMusicTV-release-v2-33-0.apk`（22,940,152 B），签名与电视已装版同源（`43a9dec4…d59b`）；
+> 4 个图标资源与车机声明均已核对进包。
 
 **阶段 1 已落地（6 改 + 2 新）**：
 
@@ -1191,12 +1250,12 @@ MediaItemsWithStartPosition(List<MediaItem> mediaItems, int startIndex, long sta
 6. ✅ 移除伪分页 + `onGetChildren` 异步化
 7. ✅ 修 A-13（解析下沉，**零改动 `MainViewModel.kt`**）/ A-14（树里统一不设 URI，由解析入口覆盖）
 8. ✅ `MediaLibraryTree` 重写（结构化 ID + 4 项根菜单）+ 新增 `BrowseCache`
+9. ✅ 根菜单 4 项配**单色白矢量图标**（阶段 2.5；矢量源 + 运行时光栅化走 `iconBitmap` 通路）
 
 **仍未做**：
 
 - ❌ **DHU / 真车端到端验收**（阶段 1 的验收动作，也是 2026-09-07 审查的遗留建议）
-- ❌ 根菜单 4 项的**单色矢量图标**（阶段 2.5；当前 `drawable/` 下只有 `banner.xml`，无任何图标可复用）
-- ❌ 艺人 / 专辑节点 + NAS 短期缓存（阶段 2.3 的剩余部分）
+- ❌ 艺人 / 专辑节点 + NAS 短期缓存（阶段 2.3 的剩余部分；**歌单已接入**）
 - ❌ 搜索与语音（阶段 3，**语音搜索机制已探明**，见阶段 3 说明块）、`onPlaybackResumption`
 - ❌ attribution icon（阶段 4）
 

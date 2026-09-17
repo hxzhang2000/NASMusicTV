@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Android Auto 根菜单 tab 图标：收藏
+    单色白（官方规范：Monochrome (preferably white) icons for each tab item）。
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- 五角星（10 顶点：5 外点 + 5 内点） -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M12,17.27 L18.18,21 L16.54,13.97 L22,9.24 L14.81,8.62 L12,2 L9.19,8.62 L2,9.24 L7.46,13.97 L5.82,21 Z" />
+</vector>

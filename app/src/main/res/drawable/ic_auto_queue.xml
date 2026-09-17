@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Android Auto 根菜单 tab 图标：当前播放
+    单色白（官方规范：Monochrome (preferably white) icons for each tab item）。
+    几何图形刻意保持简单——车机 tab 图标尺寸很小，简单形状更易辨认。
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- 播放三角 -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M8,5 L19,12 L8,19 Z" />
+</vector>

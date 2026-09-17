@@ -18,11 +18,10 @@
 > 与 AAOS（车机内嵌 Android）是两条独立路线。
 >
 > **未实施部分**（详见方案 §七 与 §十一）：① **DHU / 真车端到端验收**（阶段 1 的验收动作，
-> 也是 2026-09-07 那次审查的遗留建议）；② 根菜单 4 项的**单色矢量图标**（阶段 2.5 ——
-> `drawable/` 下只有 `banner.xml`，无任何图标可复用）；③ 艺人/专辑节点 + NAS 短期缓存
-> （阶段 2.3 的剩余部分；**歌单已接入**）；④ 搜索与语音、`onPlaybackResumption`（阶段 3，
-> 其中**语音搜索的正确实现机制已在本轮探明**，见 `Notes`）；⑤ attribution icon（阶段 4）。
-> 阶段 2.1 / 2.2 / 2.4 已随本轮的树重写一并完成。
+> 也是 2026-09-07 那次审查的遗留建议）；② 艺人/专辑节点 + NAS 短期缓存
+> （阶段 2.3 的剩余部分；**歌单已接入**）；③ 搜索与语音、`onPlaybackResumption`（阶段 3，
+> 其中**语音搜索的正确实现机制已在本轮探明**，见 `Notes`）；④ attribution icon（阶段 4）。
+> 阶段 2.1 / 2.2 / 2.4 / 2.5 已随本轮一并完成。
 
 ### Added
 
@@ -36,6 +35,12 @@
 - 前 3 项**不依赖家庭内网** —— 开车时手机在移动数据上、NAS 内网地址不可达，必须保证车机端始终有内容可播
 - 歌单下钻：`pl` → `pl/{id}` → 歌曲
 - 叶子节点只带 `mediaId`、**不设 URI**（网络歌曲 `streamUrl` 按设计不持久化；NAS 流地址带 token 会过期），URI 由播放入口统一解析
+
+**根菜单 tab 图标（阶段 2.5）**
+- 新增 4 个**单色白矢量图标**（`res/drawable/`，24dp）：`ic_auto_queue`（播放三角）/ `ic_auto_download`（下箭头）/ `ic_auto_favorite`（五角星）/ `ic_auto_playlist`（三横线）
+- 官方规范原文要求：*"Monochrome (preferably white) icons for each tab item"*，此前 4 项根菜单**完全没有图标**，车机上是占位样式
+- **⚠️ 只设 `artworkUri` 指向矢量 XML 是不可靠的**：`BitmapFactory` **无法解码 VectorDrawable**，而 Media3 到 Android Auto 的 `iconUri` 通路要求消费方能解码该 URI。故采用**「矢量图源 + 运行时光栅化」**：`MediaLibraryTree.rasterizeIcon()` 把矢量渲染成 256×256 PNG，经 `setArtworkData()` 走**确定性最高的 `iconBitmap` 通路**（`LegacyConversions.java:329`）；同时仍设 `artworkUri`（`android.resource://`）作次选（`LegacyConversions.java:357`）
+- 结果按 resId 缓存（4 个图标只渲染一次）；渲染失败降级为「无图标」，**不影响内容树加载**
 
 **播放入口（`PlaybackService`）**
 - 新增 `onAddMediaItems` 覆写（默认实现在 item 缺 `LocalConfiguration` 时会抛 `UnsupportedOperationException`）
@@ -70,12 +75,17 @@
 
 ### 验证
 
-- `assembleDebug` BUILD SUCCESSFUL；`assembleRelease` **BUILD SUCCESSFUL**（14m13s，含 `minifyReleaseWithR8` + `lintVitalRelease` + `optimizeReleaseResources` + `packageRelease`）；`testDebugUnitTest` **518 例 / 0 失败 / 0 错误**（与基线一致）；`lintDebug` **0 Error / 256 Warning**（基线 0/257；**警告总数少 1 条**是因为重写后的 `MediaLibraryTree` 把 `Uri.parse` 从 3 处降到 2 处，`UseKtx` 告警相应减少——**非新增，是净减少**）
-- 改动文件在 lint 报告中的命中：`PlaybackService` / `BrowseCache` **0 命中**；`MediaLibraryTree` / `PlayerManager` 各 2 条 `UseKtx`，**均为存量**（旧版 `MediaLibraryTree` 同类告警 3 条、`PlayerManager` 2 条）
-- 产物 `NASMusicTV-release-v2-33-0.apk`（22,937,133 B ≈ 22.9MB），`output-metadata.json` 与 `BuildConfig` **双向核对** versionCode **147** / versionName **2.33.0**；`apksigner verify --print-certs` = SHA-256 `43a9dec4…d59b`（`CN=Android Debug`），**与电视已装版同签名** → `adb install -r` 可原地升级、不丢数据
+- 四任务合并一次运行（`assembleDebug assembleRelease testDebugUnitTest lintDebug`）**BUILD SUCCESSFUL**，总耗时 **16m15s**（107 tasks：27 executed / 80 up-to-date）；`assembleRelease` 内含 `minifyReleaseWithR8` + `lintVitalRelease` + `optimizeReleaseResources` + `packageRelease`
+- `testDebugUnitTest` **518 例 / 0 失败 / 0 错误**（56 个结果 XML，与基线一致）
+- `lintDebug` **0 Error / 254 Warning**（基线 0/257；**净减 3 条**，来源见下）
+- 改动文件在 lint 报告中的命中：`PlaybackService` / `BrowseCache` / **`MediaLibraryTree` 均 0 命中**；`PlayerManager` 2 条 `UseKtx`（`PlayerManager.kt:520` / `:532`），**为存量、本次未触碰**
+- **警告 257 → 254 是净减少，不是新增**：`MediaLibraryTree` 的 `Uri.parse` 从基线 3 处降到 **0 处**（全部改为 `String.toUri()`），`UseKtx` 告警相应净减 3 条（全项目 `UseKtx` 22 → 19）
+- 4 个新图标**未被 `UnusedResources` 误报**（152 条 `UnusedResources` 里 `ic_auto_*` / `banner` **0 命中**）—— 说明 Kotlin 侧 `R.drawable.*` 引用被 lint 正确识别为「已使用」
+- 产物 `NASMusicTV-release-v2-33-0.apk`（22,940,152 B ≈ 22.9MB），`output-metadata.json` 与 `BuildConfig` **双向核对** versionCode **147** / versionName **2.33.0**；`apksigner verify --print-certs` = SHA-256 `43a9dec4…d59b`（`CN=Android Debug`），**与电视已装版同签名** → `adb install -r` 可原地升级、不丢数据
 - `aapt2 dump badging` 复核 **`minSdkVersion 22` / `targetSdkVersion 34` 未变**（"不改 minSdk"这一路线前提成立）
 - **release 包内的车机声明逐项复核**（`aapt2 dump resources` / `dump xmltree`）：`xml/automotive_app_desc` 资源存在 ✓；`com.google.android.gms.car.application` meta-data 存在 ✓；`PlaybackService` 的两个 action（`androidx.media3.session.MediaLibraryService` + `android.media.browse.MediaBrowserService`）**同时存在** ✓
-- **R8 存活复核**（解包 `classes.dex` 做字节匹配）：媒体树业务字符串 `当前播放` / `离线下载` / `歌单` / `NAS Music TV` **全部命中** ✓；对照项 `AppLog.w` 的 `"onConnect rejected"` **未命中**（符合预期——`AppLog.w` 带 `if (BuildConfig.DEBUG)` 守卫，release 下连字符串常量一起被折掉，**不能据此判"代码丢了"**）
+- **release 包内 4 个图标资源复核**（`aapt2 dump resources`；release 下**文件名已混淆**，故按资源名查表而非按路径找）：`drawable/ic_auto_download` = `0x7f0800a7` → `res/nM.xml` ✓、`drawable/ic_auto_favorite` = `0x7f0800a8` → `res/fl.xml` ✓、`drawable/ic_auto_playlist` = `0x7f0800a9` → `res/AR.xml` ✓、`drawable/ic_auto_queue` = `0x7f0800aa` → `res/_z.xml` ✓；`xml/automotive_app_desc` = `0x7f160000` → `res/oc.xml` ✓
+- **R8 存活复核**（解包 `classes.dex` 做字节匹配）：媒体树业务字符串 `当前播放` / `离线下载` / `收藏` / `歌单` / `NAS Music TV` **全部命中** ✓；图标通路业务字符串 `"android.resource://"` 与 `"drawable/"` **均命中** ✓；对照项 `AppLog.w` 的 `"onConnect rejected"` **未命中**（符合预期——`AppLog.w` 带 `if (BuildConfig.DEBUG)` 守卫，release 下连字符串常量一起被折掉，**不能据此判"代码丢了"**）。`rasterizeIcon` / `ic_auto_` 查不到属**正常**：前者方法名随 `player` 包被混淆，后者 `R.drawable.*` 在编译期已内联为 int 常量、运行时资源名取自资源表而非 dex 字符串
 - **未做真机/车机验收**：DHU 需 `adb forward tcp:5277 tcp:5277` + `desktop-head-unit.exe`；真车默认只显示 Play 商店应用、侧载需在 Android Auto 开发者模式打开 "Unknown sources"。按项目约定，上机验证由用户执行
 - **版本**：v2.32.7 → **v2.33.0**（versionCode 146 → 147）
 
