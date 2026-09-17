@@ -14,11 +14,11 @@ import java.util.Date
 import java.util.Locale
 
 /**
- * 播放统计仓库（F2-1 / F2-2）：月度 + 按天播放次数 + 聚合查询。
+ * 播放统计仓库（F2-1 / F2-5）：月度 + 按天播放次数 + 聚合查询。
  *
  * 数据模型（均为 DataStore JSON）：
  * - 月度：`{ "2026-09": { songId: count } }`
- * - 按天：`{ "2026-09-17": count }`（F2-2 热力图数据源）
+ * - 按天：`{ "2026-09-17": count }`（F2-5 热力图数据源）
  *
  * 写入路径：与 [AppPreferences.recordPlayWithSong] 同一次 DataStore edit
  * （经 [appendMonthlyPlayInEdit] / [appendDailyPlayInEdit] 注入，保持原子性，
@@ -108,7 +108,7 @@ class PlayStatsRepository(private val prefs: AppPreferences) {
     suspend fun getMonthCounts(month: String = currentMonth()): Map<String, Int> =
         monthlyStats.first()[month] ?: emptyMap()
 
-    // ==================== 按天统计（F2-2 热力图） ====================
+    // ==================== 按天统计（F2-5 热力图） ====================
 
     /** 按天统计 Flow：yyyy-MM-dd -> count，解析失败降级空表 */
     val dailyStats: Flow<Map<String, Int>> = prefs.dataStoreData().map { p ->
@@ -149,7 +149,7 @@ class PlayStatsRepository(private val prefs: AppPreferences) {
     }
 
     /**
-     * 一次性历史回填（F2-2）：把 [PlayRecord] 列表按 timestamp 聚合进按天统计。
+     * 一次性历史回填（F2-5）：把 [PlayRecord] 列表按 timestamp 聚合进按天统计。
      *
      * 幂等：① 迁移标记已置位则跳过；② 按天统计已有数据（说明增量计数早已生效）则只置位不回填，
      * 避免与增量重复计数。回填上限由 play_records 的 500 条上限决定，属"尽力而为"。

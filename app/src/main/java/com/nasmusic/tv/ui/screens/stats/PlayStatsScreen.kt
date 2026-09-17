@@ -47,7 +47,7 @@ import com.nasmusic.tv.ui.theme.FontSize
 import com.nasmusic.tv.ui.theme.NasMusicColors
 
 /**
- * 播放统计页面（F2-1 / F2-2）
+ * 播放统计页面（F2-1 / F2-5）
  *
  * 结构：返回+标题+Tab（本月 / 累计 / 热力图）→ KPI 行（播放次数/歌曲数）→ 最爱歌手 Top10 横向列表
  * → 流派分布条形图；热力图 Tab 则展示按日期聚合的听歌热力图 + 活跃度摘要。

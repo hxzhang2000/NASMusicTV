@@ -583,13 +583,13 @@ class AppPreferences internal constructor(private val context: Context) {
             // 4. 月度统计（F2-1）：与上述键同一次 edit 原子写入
             val now = System.currentTimeMillis()
             playStatsRepo.appendMonthlyPlayInEdit(prefs, songId, now)
-            // 5. 按天统计（F2-2 热力图）：同一次 edit，保证与月度口径一致
+            // 5. 按天统计（F2-5 热力图）：同一次 edit，保证与月度口径一致
             playStatsRepo.appendDailyPlayInEdit(prefs, now)
         }
     }
 
     /**
-     * 一次性把 play_records 回填进按天统计（F2-2 热力图）。
+     * 一次性把 play_records 回填进按天统计（F2-5 热力图）。
      *
      * 幂等且零日常开销：标记已置位时**直接返回，不进入 edit**。
      * 由统计页首次加载时触发（见 PlayStatsViewModel.loadStats）。

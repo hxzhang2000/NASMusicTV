@@ -4,7 +4,7 @@ import java.util.Calendar
 import java.util.TimeZone
 
 /**
- * 热力图单日格子（F2-2）
+ * 热力图单日格子（F2-5）
  *
  * @param dateKey yyyy-MM-dd（设备本地时区，与 [PlayStatsRepository.currentDay] 同口径）
  * @param count   当天播放次数
@@ -20,7 +20,7 @@ data class HeatmapDay(
 data class HeatmapMonthLabel(val text: String, val weekIndex: Int)
 
 /**
- * 听歌热力图模型（F2-2）
+ * 听歌热力图模型（F2-5）
  *
  * [weeks]：列 = 周（由旧到新），每列固定 7 项，**行 0 = 周日 … 行 6 = 周六**；
  * 元素为 null 表示该格落在统计窗口之外（未来日期），UI 应留空不绘制。
@@ -40,7 +40,7 @@ data class PlayHeatmap(
 }
 
 /**
- * 听歌热力图聚合器（F2-2）——纯函数，可单测。
+ * 听歌热力图聚合器（F2-5）——纯函数，可单测。
  *
  * ⚠️ 刻意**只用 [Calendar]**，不用 `java.time`：minSdk 22 且项目未启用
  * core library desugaring，`LocalDate` 在 API < 26 上会 `NoSuchMethodError`

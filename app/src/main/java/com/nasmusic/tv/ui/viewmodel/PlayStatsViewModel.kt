@@ -18,12 +18,12 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
- * 播放统计 ViewModel（F2-1 / F2-2）
+ * 播放统计 ViewModel（F2-1 / F2-5）
  *
  * 数据来源：
  * - 月度：PlayStatsRepository.monthlyStats（当月 songId 次数）
  * - 累计：AppPreferences.playCounts（历史累计，无时间维度）
- * - 按天：PlayStatsRepository.dailyStats（F2-2 热力图，dateKey -> 次数）
+ * - 按天：PlayStatsRepository.dailyStats（F2-5 热力图，dateKey -> 次数）
  * - 元数据：recentSongObjects（最近 50 首完整 Song 对象，含网络歌曲）
  */
 class PlayStatsViewModel(app: Application) : AndroidViewModel(app) {
@@ -37,7 +37,7 @@ class PlayStatsViewModel(app: Application) : AndroidViewModel(app) {
     private val _allTimeBundle = MutableStateFlow<StatsBundle?>(null)
     val allTimeBundle: StateFlow<StatsBundle?> = _allTimeBundle
 
-    /** 听歌热力图（F2-2）；null = 尚未加载 */
+    /** 听歌热力图（F2-5）；null = 尚未加载 */
     private val _heatmap = MutableStateFlow<PlayHeatmap?>(null)
     val heatmap: StateFlow<PlayHeatmap?> = _heatmap
 

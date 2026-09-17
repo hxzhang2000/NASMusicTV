@@ -9,7 +9,7 @@ import java.util.Calendar
 import java.util.TimeZone
 
 /**
- * PlayHeatmapBuilder 聚合逻辑单测（F2-2）
+ * PlayHeatmapBuilder 聚合逻辑单测（F2-5）
  *
  * 覆盖：网格维度与星期对齐 / 未来日期留空 / 窗口外数据剔除 / 总量与活跃天数 /
  * 最长连续 / 峰值日 / 四分位分级 / 月份标签 / 与写入端 dateKey 口径一致。

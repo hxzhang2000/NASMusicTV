@@ -32,7 +32,7 @@ import com.nasmusic.tv.ui.theme.FontSize
 import com.nasmusic.tv.ui.theme.NasMusicColors
 
 /**
- * 听歌热力图（F2-2）——GitHub 贡献图样式的「按日期看播放」。
+ * 听歌热力图（F2-5）——GitHub 贡献图样式的「按日期看播放」。
  *
  * 结构：左侧星期标签列 + 顶部月份标签行 + 7×N 周网格（Canvas 一次性绘制）+ 底部色阶图例。
  *
