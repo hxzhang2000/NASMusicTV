@@ -7,6 +7,42 @@
 >
 > 类型：`Added`（新增） | `Changed`（变更） | `Fixed`（修复） | `Removed`（移除）
 
+## [v2.34.1] - 2026-09-17
+
+> **沉浸播放页：封面右侧竖排显示歌曲名 / 艺术家**
+>
+> 沉浸模式（左半屏大封面 + 右半屏黑底歌词）此前**整屏看不到歌曲名和艺术家**，切歌后无法确认
+> "现在放的是哪首"。现在在封面**右侧的虚化渐黑区**用竖排两列显示：**最右一列 = 歌曲名**（白色
+> 加粗），**其左侧一列 = 艺术家**（主题青），两列**上对齐**。
+>
+> ⚠️ 放这里而不是压在封面上的原因：封面色调不可控，任何颜色的文字都可能撞色；而虚化渐黑区
+> 的底色已被压到 ≥83% 黑，是**确定的暗色** → 文字可以固定用亮色。竖排两列只占约 60dp 宽，
+> 刚好落在该暗区内。
+>
+> **未实施部分**：① **电视实机视觉验收**（竖排字距、两列与渐黑区的相对位置、长歌名截断表现
+> 需上机看，按项目约定由用户执行）；② 文字**不可聚焦**（沉浸模式下整个左半封面是"点击退出
+> 沉浸"的 Surface，文字入焦点链会和它抢 D-Pad 焦点）。
+
+### Added
+
+- `ImmersiveCoverHalf` 新增第 ④ 层：`BoxWithConstraints`（`TopEnd` + `fillMaxHeight`）内一行
+  `Row`（`verticalAlignment = Top`，列间距 12dp）：艺术家（`FontSize.body()` + `Primary` 青）在左、
+  **歌曲名（`FontSize.title()` + Bold + 白）在右**
+- 新增 `VerticalText`：Compose **没有原生竖排**（`TextStyle` 无 writing-mode），按码点拆字后
+  逐字堆一列 `Text`，`lineHeight` 固定为字号 × 1.15
+- 字数上限 = `maxHeight / (字号 → dp × 1.15)` 反推并夹在 2…18，超出末字替换为「…」→ 任何
+  屏幕高度下都不溢出封面；歌曲名 / 艺术家皆空（电台条目）则整块不渲染
+- ⚠️ **竖排必须按 Unicode 码点拆，不能按 `Char`**：按 `Char` 拆会把 emoji / 生僻字的**代理对
+  切成两个乱码**；且**不能用 `String.codePoints()`**（返回 `IntStream`，`java.util.stream`
+  是 **API 24+**，minSdk 22 会 `NoClassDefFoundError`），只能 `Character.codePointAt` + `charCount`
+- ⚠️ **不需要 `PlatformTextStyle` 实验性 API**：ui-text 1.6.1 的 `DefaultIncludeFontPadding`
+  **已经是 false**，默认行高足够紧凑
+
+### Test
+- 新增 `ImmersiveVerticalTextTest`（**9 例 / 0 失败**）：竖排拆字按码点（emoji / 生僻字的
+  **代理对不被拆开**）、超长截断补「…」且总长不超上限、长度正好等于上限时不补、上限 1、空串
+- 全量 `testDebugUnitTest` **556 例 / 0 失败**
+
 ## [v2.34.0] - 2026-09-17
 
 > **播放统计新增「听歌热力图」——按日期看播放**
@@ -56,42 +92,6 @@
   月份标签（13 个且列间距 ≥ 3）
 - ⚠️ 其中「**写入端 `PlayStatsRepository.currentDay` 与读取端 dateKey 同口径**」这条最关键：
   口径不一致会导致"统计写得进去、热力图读不出来、整张图全空"，而症状与"没有数据"一模一样
-
-## [v2.34.1] - 2026-09-17
-
-> **沉浸播放页：封面右侧竖排显示歌曲名 / 艺术家**
->
-> 沉浸模式（左半屏大封面 + 右半屏黑底歌词）此前**整屏看不到歌曲名和艺术家**，切歌后无法确认
-> "现在放的是哪首"。现在在封面**右侧的虚化渐黑区**用竖排两列显示：**最右一列 = 歌曲名**（白色
-> 加粗），**其左侧一列 = 艺术家**（主题青），两列**上对齐**。
->
-> ⚠️ 放这里而不是压在封面上的原因：封面色调不可控，任何颜色的文字都可能撞色；而虚化渐黑区
-> 的底色已被压到 ≥83% 黑，是**确定的暗色** → 文字可以固定用亮色。竖排两列只占约 60dp 宽，
-> 刚好落在该暗区内。
->
-> **未实施部分**：① **电视实机视觉验收**（竖排字距、两列与渐黑区的相对位置、长歌名截断表现
-> 需上机看，按项目约定由用户执行）；② 文字**不可聚焦**（沉浸模式下整个左半封面是"点击退出
-> 沉浸"的 Surface，文字入焦点链会和它抢 D-Pad 焦点）。
-
-### Added
-
-- `ImmersiveCoverHalf` 新增第 ④ 层：`BoxWithConstraints`（`TopEnd` + `fillMaxHeight`）内一行
-  `Row`（`verticalAlignment = Top`，列间距 12dp）：艺术家（`FontSize.body()` + `Primary` 青）在左、
-  **歌曲名（`FontSize.title()` + Bold + 白）在右**
-- 新增 `VerticalText`：Compose **没有原生竖排**（`TextStyle` 无 writing-mode），按码点拆字后
-  逐字堆一列 `Text`，`lineHeight` 固定为字号 × 1.15
-- 字数上限 = `maxHeight / (字号 → dp × 1.15)` 反推并夹在 2…18，超出末字替换为「…」→ 任何
-  屏幕高度下都不溢出封面；歌曲名 / 艺术家皆空（电台条目）则整块不渲染
-- ⚠️ **竖排必须按 Unicode 码点拆，不能按 `Char`**：按 `Char` 拆会把 emoji / 生僻字的**代理对
-  切成两个乱码**；且**不能用 `String.codePoints()`**（返回 `IntStream`，`java.util.stream`
-  是 **API 24+**，minSdk 22 会 `NoClassDefFoundError`），只能 `Character.codePointAt` + `charCount`
-- ⚠️ **不需要 `PlatformTextStyle` 实验性 API**：ui-text 1.6.1 的 `DefaultIncludeFontPadding`
-  **已经是 false**，默认行高足够紧凑
-
-### Test
-- 新增 `ImmersiveVerticalTextTest`（**9 例 / 0 失败**）：竖排拆字按码点（emoji / 生僻字的
-  **代理对不被拆开**）、超长截断补「…」且总长不超上限、长度正好等于上限时不补、上限 1、空串
-- 全量 `testDebugUnitTest` **556 例 / 0 失败**
 
 ## [v2.33.0] - 2026-09-17
 
