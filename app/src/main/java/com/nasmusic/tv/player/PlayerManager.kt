@@ -98,8 +98,33 @@ class PlayerManager(private val applicationContext: Context) {
     /**
      * 当 ExoPlayer 自动过渡到 streamUrl 为空的歌曲时触发（如恢复队列中的网络歌曲）。
      * 外部（MainViewModel）应解析 streamUrl 后重新播放该索引的歌曲。
+     *
+     * ⚠️ 本回调由 **UI 侧**（MainViewModel）注册。Android Auto / Wear OS / 蓝牙唤起等
+     * 「MainActivity 从未启动」的场景下它为 null，网络歌曲会静默播不出来。
+     * 因此新增 [builtinStreamUrlResolver] 作为不依赖 UI 的优先实现，本回调退居回落位置。
      */
     var onNeedResolveStreamUrl: ((index: Int) -> Unit)? = null
+
+    /**
+     * 内建 streamUrl 解析器（**无 UI 依赖**），由 `PlaybackService` 注册。
+     *
+     * @return true 表示已接管本次解析；false 表示无法处理（未注册 / 无网络管理器 /
+     *         该曲已有 URL），此时回落到 [onNeedResolveStreamUrl]。
+     */
+    var builtinStreamUrlResolver: ((index: Int) -> Boolean)? = null
+
+    /**
+     * 触发 streamUrl 解析：**优先内建（无 UI 依赖）**，无法处理时回落到 UI 侧回调。
+     *
+     * 抽出此方法的原因：解析触发点有 4 处（自动过渡 / 播放错误重试 / syncAndPlayCurrent /
+     * transitionToIndex），统一走这里可保证行为一致、不遗漏。
+     *
+     * 向后兼容：`builtinStreamUrlResolver` 未注册（返回 null）时，行为与改动前完全一致。
+     */
+    private fun requestStreamUrlResolution(index: Int) {
+        if (builtinStreamUrlResolver?.invoke(index) == true) return
+        onNeedResolveStreamUrl?.invoke(index)
+    }
 
     /**
      * MTV 模式下置 true：阻止 resume()/playQueue()/next() 中的 play() 调用，
@@ -368,7 +393,7 @@ class PlayerManager(private val applicationContext: Context) {
                 if (currentSong != null && currentSong.streamUrl.isNullOrBlank()) {
                     AppLog.d("PlayerManager", "onMediaItemTransition: auto-transition to empty streamUrl, index=${_playerState.value.currentIndex}, resolving")
                     player?.pause()
-                    onNeedResolveStreamUrl?.invoke(_playerState.value.currentIndex)
+                    requestStreamUrlResolution(_playerState.value.currentIndex)
                 }
             }
         }
@@ -413,7 +438,7 @@ class PlayerManager(private val applicationContext: Context) {
             if (currentSong != null && lastErrorRetryIndex != _playerState.value.currentIndex) {
                 AppLog.d("PlayerManager", "onPlayerError: streamUrl likely expired, re-resolving index=${_playerState.value.currentIndex}")
                 lastErrorRetryIndex = _playerState.value.currentIndex
-                onNeedResolveStreamUrl?.invoke(_playerState.value.currentIndex)
+                requestStreamUrlResolution(_playerState.value.currentIndex)
                 return
             }
             // 自动跳下一首
@@ -491,7 +516,7 @@ class PlayerManager(private val applicationContext: Context) {
      * MediaMetadata 包含 title、artist、album、artworkUri 等字段，
      * 蓝牙 AVRCP 和 MediaStyle 通知会读取这些字段显示歌曲信息和封面。
      */
-    private fun buildMediaItem(song: Song, streamUrl: String): MediaItem {
+    internal fun buildMediaItem(song: Song, streamUrl: String): MediaItem {
         val artworkUri = song.coverUrl?.takeIf { it.isNotBlank() }?.let { Uri.parse(it) }
         val metadata = MediaMetadata.Builder()
             .setTitle(song.title)
@@ -582,6 +607,90 @@ class PlayerManager(private val applicationContext: Context) {
         if (currentSong != null && currentSong.durationMs > 0) {
             _duration.value = currentSong.durationMs
         }
+    }
+
+    /**
+     * Android Auto / 车机场景：外部控制器（Media3 MediaSession）设置了播放列表后，
+     * **仅同步 PlayerManager 的状态镜像，不触碰 player**。
+     *
+     * ## 为什么不能直接调 playQueue()
+     *
+     * Media3 会用 `MediaLibrarySession.Callback.onSetMediaItems` 的**返回值**去设置 player
+     * （内部经 MediaUtils.setMediaItemsWithStartIndexAndPosition → player.setMediaItems()）。
+     * 若本方法内再调 playQueue()（其内部同样 setMediaItems），会造成重复设置。
+     * 因此这里只同步 _playerState，player 交给 Media3 处理。
+     *
+     * ## 为什么必须同步
+     *
+     * _playerState 的 T3 三元组（queue/currentIndex/currentSong）是项目内的队列真相源；
+     * 而 1000ms 进度轮询只更新 _progress/_duration，**不会**修正 queue —— 若此处不同步，
+     * 车机点歌后会出现「UI 显示的歌与实际播放的歌不一致」。
+     *
+     * T3 三元组按项目约定在**同一次** update{} 中发布。
+     *
+     * @param songs 已按 mediaId 还原的歌曲列表（与 Media3 将要设置的列表一致）
+     * @param startIndex 起始索引，越界时收敛到合法范围
+     */
+    fun syncQueueFromExternal(songs: List<Song>, startIndex: Int) {
+        if (songs.isEmpty()) {
+            AppLog.w("PlayerManager", "syncQueueFromExternal: empty songs, ignored")
+            return
+        }
+        val safeIndex = startIndex.coerceIn(0, songs.lastIndex)
+        _playerState.update {
+            it.copy(queue = songs, currentIndex = safeIndex, currentSong = songs.getOrNull(safeIndex))
+        }
+        songs.getOrNull(safeIndex)?.let { if (it.durationMs > 0) _duration.value = it.durationMs }
+        AppLog.d("PlayerManager", "syncQueueFromExternal: ${songs.size} songs, start=$safeIndex")
+    }
+
+    /**
+     * 回写队列中指定位置歌曲的 streamUrl（Android Auto 兜底解析用）。
+     *
+     * 场景：车机播放队列中的网络歌曲时，若 onAddMediaItems 的批量解析因超时未拿到 URL，
+     * 由 PlaybackService 侧的无 UI 兜底逻辑解析成功后回写本方法。
+     *
+     * 只改队列中该条目的 streamUrl，不动 currentIndex/currentSong（保持 T3 一致性）。
+     */
+    fun updateStreamUrl(index: Int, url: String) {
+        if (url.isBlank()) return
+        val q = _playerState.value.queue.toMutableList()
+        val song = q.getOrNull(index) ?: return
+        if (song.streamUrl == url) return
+        q[index] = song.copy(streamUrl = url)
+        _playerState.update { it.copy(queue = q) }
+        AppLog.d("PlayerManager", "updateStreamUrl[$index]: ${song.title}")
+    }
+
+    /**
+     * 用队列中该位置（已带 streamUrl）的歌曲替换对应 MediaItem 并续播。
+     *
+     * 供 streamUrl 异步解析完成后的续播使用（`PlaybackService` 的无 UI 解析路径，A-13）。
+     * 调用前应先用 [updateStreamUrl] 回写 URL，否则本方法直接返回。
+     *
+     * ⚠️ 这里**不能**用 `setMediaItem(item, index)` —— ExoPlayer 的
+     * `setMediaItem(MediaItem, long)` 第二个参数是**起始播放位置（ms）**，不是索引；
+     * 传 Int 索引会编译失败（重载只有 `(MediaItem, long)` 与 `(MediaItem, boolean)`），
+     * 即便强转成 Long 也只是「从第 N 毫秒开始播当前这一首」，语义完全不同。
+     * 正确做法是 [replaceMediaItem] 原地换掉该位置 + [seekTo] 定位。
+     */
+    fun replayAt(index: Int) {
+        val p = player ?: return
+        val song = _playerState.value.queue.getOrNull(index) ?: return
+        val url = song.streamUrl?.takeIf { it.isNotBlank() } ?: return
+        runCatching {
+            if (index < p.mediaItemCount) {
+                p.replaceMediaItem(index, buildMediaItem(song, url))
+            } else {
+                // 播放器尚未装载队列（例如 Media3 侧 setMediaItems 失败）→ 用整个队列兜底重建
+                p.setMediaItems(
+                    _playerState.value.queue.map { buildMediaItem(it, it.streamUrl ?: "") }
+                )
+            }
+            p.seekTo(index, 0L)
+            p.prepare()
+            p.play()
+        }.onFailure { AppLog.w(TAG, "replayAt($index) failed", it) }
     }
 
     /**
@@ -743,7 +852,7 @@ class PlayerManager(private val applicationContext: Context) {
         val streamUrl = song.streamUrl
         if (streamUrl.isNullOrBlank()) {
             AppLog.d("PlayerManager", "syncAndPlayCurrent: network song, trigger resolve for '${song.title}'")
-            onNeedResolveStreamUrl?.invoke(index)
+            requestStreamUrlResolution(index)
         } else {
             try {
                 // 恢复完整队列并 seek 到当前索引（不能用 setMediaItem 替换为单曲，
@@ -780,7 +889,7 @@ class PlayerManager(private val applicationContext: Context) {
         if (song.streamUrl.isNullOrBlank()) {
             AppLog.d("PlayerManager", "transitionToIndex: empty streamUrl at $index '${song.title}', resolving")
             p.pause()
-            onNeedResolveStreamUrl?.invoke(index)
+            requestStreamUrlResolution(index)
             return
         }
         try {

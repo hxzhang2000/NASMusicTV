@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Android Auto 能力声明
+
+    声明本应用为「媒体应用」，供 Android Auto / AAOS 发现。
+    由 AndroidManifest.xml 的 meta-data 引用：
+        <meta-data android:name="com.google.android.gms.car.application"
+                   android:resource="@xml/automotive_app_desc" />
+
+    缺少本文件（或内容不符）时，Android Auto 不会加载本应用。
+    参见：https://developer.android.com/training/cars/media/auto
+-->
+<automotiveApp>
+    <uses name="media"/>
+</automotiveApp>

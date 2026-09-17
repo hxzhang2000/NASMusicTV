@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
@@ -33,7 +34,26 @@
         android:name="android.hardware.usb.host"
         android:required="false" />
 
+    <!--
+        tools:ignore="MissingIntentFilterForMediaSearch"
+        ────────────────────────────────────────────────────────────────────────
+        该 lint 检查在「应用声明了车机媒体支持」（即上面的 automotive_app_desc）
+        之后触发，要求注册 `android.media.action.MEDIA_PLAY_FROM_SEARCH` 以支持车机语音搜索。
+
+        此处**有意暂不声明**，理由是「声明了也无法响应，只会得到静默失效的语音搜索」——
+        经 media3-session-1.2.1 源码核实（MediaSessionLegacyStub.java:395 / 947-961）：
+        该 intent 最终会走 `onPlayFromSearch` → `handleMediaRequest` →
+        `onSetMediaItems(controller, [MediaItem(mediaId="", requestMetadata.searchQuery=query)], INDEX_UNSET, TIME_UNSET)`。
+        也就是说，真正要处理的是 **onSetMediaItems 里的 `requestMetadata.searchQuery`**，
+        而当前 `PlaybackService.onSetMediaItems` 只按 mediaId 查 BrowseCache，
+        遇到空 mediaId 会原样返回 → 车机侧表现为「搜了但没反应」。
+
+        语音搜索属开发方案 `docs/android-auto-plan.md` §七 **阶段 3**（搜索）范围，
+        与 `onSearch` / `onGetSearchResult` 一并实施；届时本 ignore 与 intent-filter 同时补上。
+        在 阶段 3 落地前保持抑制，避免「能力已声明但不可用」的误导性清单声明。
+    -->
     <application
+        tools:ignore="MissingIntentFilterForMediaSearch"
         android:name=".NasMusicApp"
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"
@@ -46,6 +66,12 @@
         android:largeHeap="true"
         android:fullBackupContent="@xml/backup_rules"
         android:dataExtractionRules="@xml/data_extraction_rules">
+
+        <!-- Android Auto：声明本应用为媒体应用，使 Android Auto 能发现并加载。
+             缺少此项时 Android Auto 完全看不到本应用（即使 PlaybackService 已实现媒体树）。 -->
+        <meta-data
+            android:name="com.google.android.gms.car.application"
+            android:resource="@xml/automotive_app_desc" />
 
         <!-- Main Activity (supports both TV and phone) -->
         <activity
@@ -68,7 +94,12 @@
             android:exported="true"
             android:foregroundServiceType="mediaPlayback">
             <intent-filter>
+                <!-- Media3 客户端发现入口 -->
                 <action android:name="androidx.media3.session.MediaLibraryService" />
+                <!-- 平台 MediaBrowser 兼容层：Android Auto 通过此 action 经 PackageManager
+                     找到服务。两个 action 需同时注册（Media3 官方要求），缺前者 Media3 客户端
+                     找不到，缺后者平台 MediaBrowser / Android Auto 找不到。 -->
+                <action android:name="android.media.browse.MediaBrowserService" />
             </intent-filter>
         </service>
 
