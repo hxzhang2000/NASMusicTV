@@ -8727,6 +8727,47 @@ translateY = 19 − 34×1.75 = −40.5
 
 **版本**：v2.32.7 → **v2.33.0**（versionCode 146 → 147）
 
+### 10.158 v2.34.0 — 播放统计新增「听歌热力图」（按日期看播放，2026-09-17）
+
+**来源**：用户提出——设置 → 数据管理 → 播放统计页需要一个「按日期显示播放」的热力图（GitHub 贡献图样式）。原 F2-1 统计只有「本月 / 累计」两个维度，最小粒度是**月**（`play_stats_monthly`），无法回答"哪天听了、听多少、连续听了几天"。
+
+**根因（数据缺口）**：按天信息只存在于 `play_records`（最多 500 条 `PlayRecord`，带 timestamp），但它是**播放历史流水**（服务于历史列表），不是聚合值，且 500 条上限会滚动丢弃 → 直接拿它做热力图会随时间"左侧变空"。故需要独立的**按天聚合存储**。
+
+**设计取舍**：
+
+- **新增 `play_stats_daily` 键 `{ "yyyy-MM-dd": count }`**，而非复用 `play_records`：聚合值 O(天数) 增长（一年 ≈ 6KB），不会被滚动丢弃；保留 **400 天**（> 53 周窗口的 371 天），保证热力图最左一列不会因清理而消失。
+- ⚠️ **写入点只挂 `recordPlayWithSong`，不挂 `addPlayRecord`**：两者是两条独立路径（前者播放开始、后者播放结束/切换），都加会让每天次数**翻倍**。挂前者才能与 `play_stats_monthly` 同口径（同一处 `dataStore.edit` 内）。
+- **一次性历史回填**：`play_records` 有 timestamp，首次打开统计页时聚合进 daily；幂等靠 `play_stats_daily_backfilled_v1` 布尔标记，且**仅在 daily 为空时才回填**（daily 已有值说明增量计数早已生效，回填会重复计数）。上限仍是 `play_records` 的 500 条，属"尽力而为"。
+- ⚠️ **只用 `java.util.Calendar`，不用 `java.time`**：minSdk 22 且项目**未启用 core library desugaring**，`LocalDate` 在 API < 26 上会 `NoSuchMethodError`——编译期和单测**都发现不了**，只有低版本设备会崩。本节与 §10.157 的 `putIfAbsent`（API 24+）是同一类坑，**lint 是唯一门禁**。
+- **分级用"非零播放量的四分位"而非"相对峰值"**：峰值远高于日常时（如某天 100 次、其余 1–3 次），相对峰值分级会把绝大多数格子压成同一档，热力图失去信息量。
+- **热力图独立成 Tab 而非追加在页面下方**：`PlayStatsScreen` 的 Column **不可滚动**，而 TV 上无焦点的滚动容器**无法用遥控器驱动**（参见 §10.132 的焦点几何查找机制）→ 堆在下方的内容会被直接裁掉。
+
+**实现内容**：
+
+- 新增 `data/stats/PlayHeatmap.kt`：`HeatmapDay` / `HeatmapMonthLabel` / `PlayHeatmap` 模型 + `PlayHeatmapBuilder`（纯函数）。窗口 = 最近 53 周，**列 = 周、行 = 星期（行 0 = 周日）**，未来日期为 `null`（留空不绘制）。月份标签对齐"该月第一列"，与上一个标签不足 3 列时**顺延而非丢弃**。
+- `data/stats/PlayStatsRepository.kt`：新增 `keyPlayStatsDaily` / `dailyStats` Flow / `appendDailyPlayInEdit()` / `backfillDailyInEdit()` / `getDailyCounts()` / `currentDay()`；`parseDaily()` 作为解析降级单点。
+- `data/prefs/AppPreferences.kt`：`recordPlayWithSong` 在同一次 DataStore edit 内追加当天计数（原子）；新增 `backfillDailyStatsOnce()`——标记已置位时**直接 return，不进 edit**，零日常开销。
+- `ui/screens/stats/PlayHeatmapChart.kt`（新增）：`BoxWithConstraints` 按可用宽度反推格子边长并夹在 3…16dp；网格用**单个 Canvas 一次性绘制**（371 格，不用 371 个 Compose Box，低端 TV 更稳）；左侧星期标签只标一/三/五（与 GitHub 同策略），格子 < 9dp 时隐藏（手机窄屏挤不下）；底部色阶图例。**纯展示、不入 D-Pad 焦点链**。
+- `ui/screens/stats/PlayStatsScreen.kt`：Tab 由 2 个变 3 个（本月 / 累计 / **热力图**），`showAllTime: Boolean` 改为 `StatsTab` 枚举（携带 `labelRes`，顺序即显示顺序）；抽 `StatsPlaceholder` 复用 loading/empty 分支；热力图 Tab 显示 日期范围 + 网格 + 三个 `MiniStat`（有听歌的日子 / 最长连续 / 最活跃一天）。
+- `ui/viewmodel/PlayStatsViewModel.kt`：新增 `heatmap: StateFlow<PlayHeatmap?>`；`loadStats()` 先触发回填（失败只记 `AppLog.w`，不影响统计）再读 daily 后在 `Dispatchers.Default` 聚合。
+- 文案：`values/strings.xml` + `values-en/strings.xml` 共 12 条 `pstats_heatmap_*` / `pstats_weekday_*`；`pstats_entry_desc` 补"听歌热力图"。
+
+**测试**（`app/src/test/.../data/stats/PlayHeatmapBuilderTest.kt`，新增 **18 例 / 0 失败 / 0 错误**）：
+
+覆盖网格维度 53×7、行号 == 星期（2026-09-17 周四 → 行 4）、未来日期为 `null`、窗口边界（2025-09-14 ~ 2026-09-17）、窗口外数据剔除、单日定位、跨月跨年连续、最长连续、峰值日、**并列峰值取最早**（`count > bestCount` 严格大于，遍历按时间升序）、四分位分级、同值全归最浅档、`levelOf` 零/负值、月份标签 13 个且列间距 ≥ 3、标签落在该月第一列、单周窗口。
+
+⚠️ 其中「**写入端 `PlayStatsRepository.currentDay` 与读取端 dateKey 同口径**」最关键：口径不一致会导致"统计写得进去、热力图读不出来、整张图全空"，而症状与"没有数据"一模一样，排查成本很高。测试里 `TimeZone.setDefault(tz)` 固定时区后双向对比，并额外校验当天 23:59 不会漂到第二天。
+
+**遗留**：
+
+- **电视实机视觉验收未做**：格子尺寸、色阶对比度、月份标签是否重叠，都要上机看。按项目约定上机由用户执行。
+- **热力图格子暂不可聚焦** → 无法用遥控器查看某一天的具体次数。若要支持，需给 371 个格子做焦点管理，会与歌手横排抢焦点，属独立议题。
+- **历史回填不完整**：上限受 `play_records` 500 条约束，且 `addPlayRecord` 只在播放结束/切换时写。回填后左侧可能仍是空白，属预期行为。
+
+**验证**：`:app:compileDebugKotlin` / `:app:testDebugUnitTest`（全量）/ `:app:lintDebug` **BUILD SUCCESSFUL**。
+
+**版本**：v2.33.0 → **v2.34.0**（versionCode 147 → 148）
+
 ### 10.152 v2.32.3 — T5：删除死代码 `VocalRemovalProcessor.kt`（算法先归档，2026-09-14）
 
 **来源**：`logs_temp/code-review-full-report-2026-09-13.md` §T5 / `docs/code-review-2026-09-03.md` §P2。文件 348 行，全项目**零调用方**（`PlaybackService.kt:207` 实际 `val vocalRemovalProcessor = SpectralMaskProcessor()`——变量名是历史遗留，类型早就换过了；`PlayerManager.setVocalRemovalProcessor()` 的形参类型同样是 `SpectralMaskProcessor`）。

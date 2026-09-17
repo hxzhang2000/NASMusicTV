@@ -943,7 +943,21 @@
     <string name="pstats_plays_format">%1$d plays</string>
     <string name="pstats_songs_format">%1$d songs</string>
     <string name="pstats_loading">Loading stats…</string>
-    <string name="pstats_entry_desc">View top artists and genre distribution</string>
+    <string name="pstats_entry_desc">View top artists, genre distribution and listening heatmap</string>
+    <!-- F2-2 Listening heatmap (plays by date) -->
+    <string name="pstats_tab_heatmap">Heatmap</string>
+    <string name="pstats_heatmap_title">Listening Heatmap</string>
+    <string name="pstats_heatmap_range">%1$s ~ %2$s</string>
+    <string name="pstats_heatmap_less">Less</string>
+    <string name="pstats_heatmap_more">More</string>
+    <string name="pstats_heatmap_active_days">Active days</string>
+    <string name="pstats_heatmap_longest_streak">Longest streak</string>
+    <string name="pstats_heatmap_best_day">Busiest day</string>
+    <string name="pstats_heatmap_days_format">%1$d days</string>
+    <string name="pstats_heatmap_empty">No play records yet. The heatmap needs at least one play.</string>
+    <string name="pstats_weekday_mon">Mon</string>
+    <string name="pstats_weekday_wed">Wed</string>
+    <string name="pstats_weekday_fri">Fri</string>
 
     <!-- F2-2 Notification enhancements -->
     <string name="notif_play_mode">Play Mode</string>

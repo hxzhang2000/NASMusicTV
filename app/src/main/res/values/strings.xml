@@ -942,7 +942,21 @@
     <string name="pstats_plays_format">%1$d 次</string>
     <string name="pstats_songs_format">%1$d 首</string>
     <string name="pstats_loading">统计中…</string>
-    <string name="pstats_entry_desc">查看本月最爱歌手与流派分布</string>
+    <string name="pstats_entry_desc">查看本月最爱歌手、流派分布与听歌热力图</string>
+    <!-- F2-2 听歌热力图（按日期显示播放） -->
+    <string name="pstats_tab_heatmap">热力图</string>
+    <string name="pstats_heatmap_title">听歌热力图</string>
+    <string name="pstats_heatmap_range">%1$s ~ %2$s</string>
+    <string name="pstats_heatmap_less">更少</string>
+    <string name="pstats_heatmap_more">更多</string>
+    <string name="pstats_heatmap_active_days">有听歌的日子</string>
+    <string name="pstats_heatmap_longest_streak">最长连续</string>
+    <string name="pstats_heatmap_best_day">最活跃一天</string>
+    <string name="pstats_heatmap_days_format">%1$d 天</string>
+    <string name="pstats_heatmap_empty">暂无播放记录，热力图需要至少一次播放</string>
+    <string name="pstats_weekday_mon">一</string>
+    <string name="pstats_weekday_wed">三</string>
+    <string name="pstats_weekday_fri">五</string>
 
     <!-- F2-2 通知栏增强 -->
     <string name="notif_play_mode">播放模式</string>

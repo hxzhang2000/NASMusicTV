@@ -40,16 +40,22 @@ import com.nasmusic.tv.NasMusicApp
 import com.nasmusic.tv.R
 import com.nasmusic.tv.data.stats.ArtistStat
 import com.nasmusic.tv.data.stats.GenreStat
+import com.nasmusic.tv.data.stats.PlayHeatmap
 import com.nasmusic.tv.data.stats.StatsBundle
 import com.nasmusic.tv.ui.components.BackButton
 import com.nasmusic.tv.ui.theme.FontSize
 import com.nasmusic.tv.ui.theme.NasMusicColors
 
 /**
- * 播放统计页面（F2-1）
+ * 播放统计页面（F2-1 / F2-2）
  *
- * 结构：返回+标题+Tab → KPI 行（播放次数/歌曲数）→ 最爱歌手 Top10 横向列表 → 流派分布条形图。
- * D-Pad 焦点：返回 → Tab → 歌手行（横向可滚动）。
+ * 结构：返回+标题+Tab（本月 / 累计 / 热力图）→ KPI 行（播放次数/歌曲数）→ 最爱歌手 Top10 横向列表
+ * → 流派分布条形图；热力图 Tab 则展示按日期聚合的听歌热力图 + 活跃度摘要。
+ *
+ * 热力图**独立成 Tab 而非追加在下方**：本页 Column 不可滚动，而 TV 上无焦点的滚动容器
+ * 无法用遥控器驱动，堆在下方的内容会直接被裁掉。
+ *
+ * D-Pad 焦点：返回 → Tab → 歌手行（横向可滚动）。热力图为纯展示，不入焦点链。
  */
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
@@ -60,12 +66,11 @@ fun PlayStatsScreen(
 ) {
     val monthly by viewModel.monthlyBundle.collectAsState()
     val allTime by viewModel.allTimeBundle.collectAsState()
+    val heatmap by viewModel.heatmap.collectAsState()
     val loading by viewModel.loading.collectAsState()
-    var showAllTime by remember { mutableStateOf(false) }
+    var tab by remember { mutableStateOf(StatsTab.MONTHLY) }
 
     LaunchedEffect(Unit) { viewModel.loadStats() }
-
-    val bundle = if (showAllTime) allTime else monthly
 
     Column(
         modifier = Modifier
@@ -82,43 +87,138 @@ fun PlayStatsScreen(
                 fontSize = FontSize.title()
             )
             Spacer(modifier = Modifier.weight(1f))
-            // Tab 切换：本月 / 累计
-            StatsTabButton(
-                text = stringResource(R.string.pstats_tab_monthly),
-                selected = !showAllTime,
-                onClick = { showAllTime = false }
-            )
-            Spacer(modifier = Modifier.width(8.dp))
-            StatsTabButton(
-                text = stringResource(R.string.pstats_tab_alltime),
-                selected = showAllTime,
-                onClick = { showAllTime = true }
-            )
+            // Tab 切换：本月 / 累计 / 热力图
+            StatsTab.entries.forEachIndexed { index, item ->
+                if (index > 0) Spacer(modifier = Modifier.width(8.dp))
+                StatsTabButton(
+                    text = stringResource(item.labelRes),
+                    selected = tab == item,
+                    onClick = { tab = item }
+                )
+            }
         }
 
         Spacer(modifier = Modifier.height(20.dp))
 
-        when {
-            loading && bundle == null -> {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text(
-                        stringResource(R.string.pstats_loading),
-                        color = NasMusicColors.TextSecondary,
-                        fontSize = FontSize.body()
-                    )
-                }
+        if (tab == StatsTab.HEATMAP) {
+            HeatmapContent(heatmap = heatmap, loading = loading)
+        } else {
+            val bundle = if (tab == StatsTab.ALL_TIME) allTime else monthly
+            when {
+                loading && bundle == null -> StatsPlaceholder(R.string.pstats_loading)
+                bundle == null || (bundle.totalPlays == 0 && bundle.topArtists.isEmpty()) ->
+                    StatsPlaceholder(R.string.pstats_empty)
+                else -> StatsContent(bundle)
             }
-            bundle == null || (bundle.totalPlays == 0 && bundle.topArtists.isEmpty()) -> {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text(
-                        stringResource(R.string.pstats_empty),
-                        color = NasMusicColors.TextSecondary,
-                        fontSize = FontSize.body()
-                    )
-                }
-            }
-            else -> StatsContent(bundle)
         }
+    }
+}
+
+/** 统计页 Tab；[labelRes] 为文案资源，顺序即显示顺序 */
+private enum class StatsTab(val labelRes: Int) {
+    MONTHLY(R.string.pstats_tab_monthly),
+    ALL_TIME(R.string.pstats_tab_alltime),
+    HEATMAP(R.string.pstats_tab_heatmap)
+}
+
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+private fun StatsPlaceholder(textRes: Int) {
+    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        Text(
+            stringResource(textRes),
+            color = NasMusicColors.TextSecondary,
+            fontSize = FontSize.body()
+        )
+    }
+}
+
+/**
+ * 热力图 Tab 内容：标题 + 日期范围 + 网格 + 活跃度摘要。
+ */
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+private fun HeatmapContent(heatmap: PlayHeatmap?, loading: Boolean) {
+    if (heatmap == null) {
+        StatsPlaceholder(if (loading) R.string.pstats_loading else R.string.pstats_empty)
+        return
+    }
+    if (heatmap.isEmpty) {
+        StatsPlaceholder(R.string.pstats_heatmap_empty)
+        return
+    }
+
+    Column(modifier = Modifier.fillMaxSize()) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = stringResource(R.string.pstats_heatmap_title),
+                color = NasMusicColors.TextPrimary,
+                fontSize = FontSize.subtitle(),
+                fontWeight = FontWeight.Bold
+            )
+            Spacer(modifier = Modifier.weight(1f))
+            Text(
+                text = stringResource(
+                    R.string.pstats_heatmap_range,
+                    heatmap.startDateKey,
+                    heatmap.endDateKey
+                ),
+                color = NasMusicColors.TextSecondary,
+                fontSize = FontSize.caption()
+            )
+        }
+
+        Spacer(modifier = Modifier.height(14.dp))
+
+        PlayHeatmapChart(heatmap = heatmap)
+
+        Spacer(modifier = Modifier.height(20.dp))
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            MiniStat(
+                value = stringResource(R.string.pstats_heatmap_days_format, heatmap.activeDays),
+                label = stringResource(R.string.pstats_heatmap_active_days),
+                modifier = Modifier.weight(1f)
+            )
+            MiniStat(
+                value = stringResource(R.string.pstats_heatmap_days_format, heatmap.longestStreak),
+                label = stringResource(R.string.pstats_heatmap_longest_streak),
+                modifier = Modifier.weight(1f)
+            )
+            MiniStat(
+                value = heatmap.bestDay?.dateKey ?: "-",
+                label = stringResource(R.string.pstats_heatmap_best_day),
+                modifier = Modifier.weight(1f)
+            )
+        }
+    }
+}
+
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+private fun MiniStat(value: String, label: String, modifier: Modifier = Modifier) {
+    Column(
+        modifier = modifier
+            .background(NasMusicColors.Surface, RoundedCornerShape(10.dp))
+            .padding(horizontal = 16.dp, vertical = 12.dp)
+    ) {
+        Text(
+            text = value,
+            color = NasMusicColors.Primary,
+            fontSize = FontSize.subtitle(),
+            fontWeight = FontWeight.Bold,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(
+            text = label,
+            color = NasMusicColors.TextSecondary,
+            fontSize = FontSize.caption()
+        )
     }
 }
 
