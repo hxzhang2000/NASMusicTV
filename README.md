@@ -4,6 +4,8 @@
 
 [![Release](https://img.shields.io/github/v/release/hxzhang2000/NASMusicTV?color=blue&label=Release)](https://github.com/hxzhang2000/NasMusicTV/releases)
 
+产品主页：https://hxzhang2000-nasmusic-sxhl.bolt.host/
+
 > ⚠️ **百度网盘目录限制**：根据百度开放平台 2026 年沙盒策略，第三方应用只能访问 `/apps/NASMusicTV` 目录及其子目录，**无法读取该目录之外的任何文件**。请将音乐文件放入百度网盘的 `/apps/NASMusicTV/` 目录下（例如 `/apps/NASMusicTV/音乐/`），应用内首次使用时会自动创建该目录。放在 `/apps/NASMusicTV/` 之外的文件将无法被本应用访问。
 
 ## 功能特性
