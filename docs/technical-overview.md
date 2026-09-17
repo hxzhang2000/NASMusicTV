@@ -8500,7 +8500,13 @@ p.seekTo(index, 0L); p.prepare(); p.play()
 - **R8 存活复核**（解包 `classes.dex` 字节匹配）：媒体树业务字符串 `当前播放` / `离线下载` / `歌单` / `NAS Music TV` **全部命中** ✓；对照项 `AppLog.w` 的 `"onConnect rejected"` **未命中**（符合预期——`AppLog.w` 带 `if (BuildConfig.DEBUG)` 守卫，release 下连字符串常量一起被折掉，**不能据此判"代码丢了"**）。
 - **真机/车机验收：未做**。DHU（Desktop Head Unit）需 `adb forward tcp:5277 tcp:5277` + `desktop-head-unit.exe`，真车默认只显示 Play 商店应用、侧载需在 Android Auto 开发者模式里打开 "Unknown sources"。按项目约定，上机验证由用户执行。
 
-**遗留（阶段 2/3/4，见 `docs/android-auto-plan.md` §七）**：艺人/专辑节点与搜索（`onSearch`/`onGetSearchResult`）、语音搜索（上述第七节，含移除 `tools:ignore`）、`onPlaybackResumption`、attribution icon（`androidx.car.app.TintableAttributionIcon`）。
+**遗留（阶段 2/3/4，见 `docs/android-auto-plan.md` §七 / §十一）**：
+- **DHU / 真车端到端验收未做** —— 这是阶段 1 的**验收动作**，也是 2026-09-07 那次审查的遗留建议。已完成的只是**代码级验证**（编译 + 单测 + lint + 产物核对 + R8 存活）。内容树加载、点歌链路、状态镜像一致性、包验证白名单是否漏包，**这四件事只有 DHU / 真车能验**
+- **根菜单 4 项没有图标**（阶段 2.5）—— `browseItem()` 未设 `artworkUri`，车机上标签为占位样式。**机制已核实**：Media3 把 `MediaMetadata.artworkUri` 映射为 `MediaDescriptionCompat.iconUri`（`media3-session-1.2.1` 的 `LegacyConversions.java:357`），而 Auto 的 tab 图标取自 `iconUri`。**但项目 `res/drawable/` 下只有 `banner.xml`**，需新造 4 个单色矢量图标（当前播放 / 下载 / 星标 / 列表），属视觉设计决定，未擅自添加
+- 艺人 / 专辑节点 + NAS 短期缓存（阶段 2.3 剩余部分；**歌单已接入**）
+- 搜索与语音（阶段 3，见上述第七节）、`onPlaybackResumption`
+- attribution icon（阶段 4，`androidx.car.app.TintableAttributionIcon`）
+- 包验证收紧为**签名级**校验（Media3 的 `isAutomotiveController` 官方标注 "not a security validation"）
 
 **版本**：v2.32.7 → **v2.33.0**（versionCode 146 → 147）
 

@@ -387,8 +387,15 @@ private val progressUpdateRunnable = object : Runnable {
 | 4 | `app/src/main/java/.../player/PlayerManager.kt` | 修改 | 新增 `syncQueueFromExternal()`；`buildMediaItem` 改 `internal` |
 | 5 | `app/src/main/java/.../player/MediaLibraryTree.kt` | **重写** | 结构化 ID + 多级节点；修 A-14 |
 | 6 | `app/src/main/java/.../player/BrowseCache.kt` | **新增** | `mediaId → Song` 映射缓存（供 URI 解析与状态同步用） |
-| 7 | `app/src/main/java/.../ui/viewmodel/MainViewModel.kt` | 修改 | A-13：`onNeedResolveStreamUrl` 降级为 UI 提示（§5.8） |
+| 7 | `app/src/main/java/.../ui/viewmodel/MainViewModel.kt` | **无需修改** | A-13 最终**未改本文件**，改用零侵入方案，见 §5.8「实施期更正」 |
 | 8 | `docs/phone-media-display-plan.md` | 修改 | 更正 §5.1（§2.3） |
+
+> **〔2026-09-17 实施期实际改动清单（以 git 为准）〕**
+> 实际落地 **6 改 + 2 新**（外加文档）：`automotive_app_desc.xml`（新）、`BrowseCache.kt`（新）、
+> `AndroidManifest.xml`、`PlaybackService.kt`、`PlayerManager.kt`、`MediaLibraryTree.kt`，
+> 以及 `app/build.gradle.kts`（版本号）。
+> **与上表的唯一差异：第 7 项 `MainViewModel.kt` 未改动**（原因见 §5.8）；
+> 另**多出** `PlayerManager.replayAt()` —— 方案初稿漏了「URL 解析完成后如何续播」这一步。
 
 ### 5.2 Manifest 改动（精确）
 
@@ -781,6 +788,40 @@ playerManager.onStreamUrlResolveFailed = { song ->
 
 > `PlayerViewModel.resolveAndPlayByIndex`（`PlayerViewModel.kt:274`）中现有的**防竞态代数（generation）+ 重试 + 失败跳曲**逻辑是有效的，建议**下沉到 `PlayerManager`** 后由 UI 与服务共用，避免两套实现漂移。若本次不做下沉，则至少保证 `PlaybackService` 的兜底实现不与它冲突（先判 `streamUrl` 是否已存在）。
 
+> **〔2026-09-17 实施期更正：上面这个"第二层"写法会砸掉现有逻辑，不要照抄〕**
+>
+> 方案初稿写的是 `playerManager.onNeedResolveStreamUrl = { ... }` —— **直接赋值 = 覆盖**。
+> 但 `onNeedResolveStreamUrl` 的实现里带着 `PlayerViewModel.resolveAndPlayByIndex` 的
+> **防竞态代数（generation）+ 重试 + 失败自动跳曲**，覆盖它就等于把这些能力全丢了，
+> 而且会让「有 UI」和「无 UI」两条路径变成互斥的二选一。
+>
+> **实际落地的方案：新增一个独立字段，而不是覆盖。**
+>
+> ```kotlin
+> // PlayerManager.kt —— 新增（默认 null，未注册时行为与改动前完全一致）
+> var builtinStreamUrlResolver: ((index: Int) -> Boolean)? = null
+>
+> private fun requestStreamUrlResolution(index: Int) {
+>     // 先试无 UI 的内建解析器；它返回 false 表示"我处理不了"，才回落 UI 侧
+>     if (builtinStreamUrlResolver?.invoke(index) == true) return
+>     onNeedResolveStreamUrl?.invoke(index)
+> }
+> ```
+>
+> 原 4 处 `onNeedResolveStreamUrl?.invoke(...)`（自动过渡 / `onPlayerError` 重试 /
+> `syncAndPlayCurrent` / `transitionToIndex`）统一收口到 `requestStreamUrlResolution()`。
+> `PlaybackService.onCreate()` 里注册 `builtinStreamUrlResolver`，
+> 解析成功 → `updateStreamUrl(index, url)` + `replayAt(index)`；解析失败 → **返回 false 回落 UI 侧**。
+>
+> **收益**：① `MainViewModel.kt` / `PlayerViewModel.kt` **零改动**；
+> ② UI 侧的代数 + 重试 + 跳曲能力**完整保留**，不再是二选一；
+> ③ 纯 TV 使用（不注册 resolver）时行为与改动前**逐字节一致**；
+> ④ 未采用 `onStreamUrlResolveFailed` + `R.string.resolve_url_auto_skip_with_title`，
+> 因为失败路径已由既有 UI 侧逻辑覆盖，无需新增字符串资源。
+>
+> **另一处方案漏项**：初稿只写了「回写 `streamUrl`」，**没写回写之后怎么让它播出来**。
+> 实际需要 `PlayerManager.replayAt(index)` —— 且它的实现有个 ExoPlayer API 陷阱，见 §5.4 实施期补充。
+
 ---
 
 ## 六、现实约束：车机上 NAS 可达吗？
@@ -840,33 +881,45 @@ Android Auto 场景下应用运行在**手机上**。开车时：
 
 ### 阶段 1：最小可用闭环（P0 + P1 关键项）
 
+> **状态：✅ 全部完成（2026-09-17，v2.33.0）**。验收动作（DHU 端到端）**尚未执行**，见下方验收说明。
+
 **目标**：Android Auto 能发现应用、能浏览「当前播放」、能点歌播放、状态一致。
 
-| 步骤 | 内容 | 文件 |
-|---|---|---|
-| 1.1 | 新建 `automotive_app_desc.xml` | 新增 |
-| 1.2 | 补 application meta-data | `AndroidManifest.xml` |
-| 1.3 | 补 `android.media.browse.MediaBrowserService` action | `AndroidManifest.xml` |
-| 1.4 | 新增 `syncQueueFromExternal()` / `updateStreamUrl()`；`buildMediaItem` 改 `internal` | `PlayerManager.kt` |
-| 1.5 | 实现 `onSetMediaItems` / `onAddMediaItems` / `resolveItems` | `PlaybackService.kt` |
-| 1.6 | 新增 `BrowseCache` | 新增 |
-| 1.7 | 修 A-14（`findInQueue` 补 `setUri`，或统一由 `resolveItems` 覆盖） | `MediaLibraryTree.kt` |
-| 1.8 | 去分页 + `onGetChildren` 异步化 | `PlaybackService.kt` |
-| 1.9 | A-13 兜底解析 | `PlaybackService.kt` + `MainViewModel.kt` |
+| 步骤 | 内容 | 文件 | 状态 |
+|---|---|---|---|
+| 1.1 | 新建 `automotive_app_desc.xml` | 新增 | ✅ |
+| 1.2 | 补 application meta-data | `AndroidManifest.xml` | ✅ |
+| 1.3 | 补 `android.media.browse.MediaBrowserService` action | `AndroidManifest.xml` | ✅ |
+| 1.4 | 新增 `syncQueueFromExternal()` / `updateStreamUrl()`；`buildMediaItem` 改 `internal` | `PlayerManager.kt` | ✅（另加 `replayAt()` / `builtinStreamUrlResolver`） |
+| 1.5 | 实现 `onSetMediaItems` / `onAddMediaItems` / `resolveItems` | `PlaybackService.kt` | ✅ |
+| 1.6 | 新增 `BrowseCache` | 新增 | ✅ |
+| 1.7 | 修 A-14（`findInQueue` 补 `setUri`，或统一由 `resolveItems` 覆盖） | `MediaLibraryTree.kt` | ✅（选后者：树里统一不设 URI） |
+| 1.8 | 去分页 + `onGetChildren` 异步化 | `PlaybackService.kt` | ✅ |
+| 1.9 | A-13 兜底解析 | `PlaybackService.kt` + ~~`MainViewModel.kt`~~ | ✅（**`MainViewModel.kt` 未改**，见 §5.8 更正） |
 
 **验收**：DHU 里能看到应用 → 进入 → 看到「当前播放」→ 点歌出声 → 方向盘按键可控 → **手机端队列视图与车机一致**。
 
 > **强烈建议在此处停下来做一次完整的 DHU 端到端验证**，再进入阶段 2——避免在未验证的地基上继续堆功能（这正是 2026-09-07 那次审查的教训）。
+>
+> **⚠️ 该验收至今未做（2026-09-17）**。已完成的只是**代码级验证**：
+> `assembleDebug` / `assembleRelease` BUILD SUCCESSFUL、`testDebugUnitTest` 518 例 0 失败、
+> `lintDebug` 0 Error；并在 release 包内逐项复核了车机声明与 R8 存活。
+> **但"代码正确"不等于"车机上能用"** —— 内容树加载、点歌链路、状态镜像一致性、
+> 包验证白名单是否漏包，这四件事**只有 DHU / 真车能验**。
+> DHU 步骤：`adb forward tcp:5277 tcp:5277` → 手机开 Android Auto 开发者模式 →
+> 运行 `desktop-head-unit.exe`。真车则需在 Android Auto 开发者模式里打开 "Unknown sources"（侧载应用默认不显示）。
 
 ### 阶段 2：内容树扩展（P1）
 
-| 步骤 | 内容 |
-|---|---|
-| 2.1 | `MediaLibraryTree` 重写为结构化 ID + 多级节点（§5.6） |
-| 2.2 | 接入离线下载 / 收藏 / 网络音乐源 |
-| 2.3 | 接入 NAS 源（歌单 / 艺人 / 专辑），带短期缓存 + 超时 |
-| 2.4 | 读取 root hints 并按 limit 裁剪（§3.3） |
-| 2.5 | 各标签项配单色矢量图标 |
+> **状态：部分提前完成** —— 阶段 1 的树重写顺带把 2.1 / 2.2 / 2.4 做掉了（否则内容树无从谈起）。
+
+| 步骤 | 内容 | 状态 |
+|---|---|---|
+| 2.1 | `MediaLibraryTree` 重写为结构化 ID + 多级节点（§5.6） | ✅ **已随阶段 1 完成**（`root`/`queue`/`download`/`fav`/`pl`/`pl/{id}`/`song/{id}`） |
+| 2.2 | 接入离线下载 / 收藏 / 网络音乐源 | ✅ **已随阶段 1 完成**（`loadDownloadChildren` / `loadFavoriteChildren`；网络音乐经 `resolvePlayUrl`） |
+| 2.3 | 接入 NAS 源（歌单 / 艺人 / 专辑），带短期缓存 + 超时 | ⚠️ **部分**：歌单已接入（`loadPlaylistChildren` / `loadPlaylistSongs`）+ 有超时（`BROWSE_TIMEOUT_MS`）；**艺人 / 专辑节点未做**，**短期缓存未做** |
+| 2.4 | 读取 root hints 并按 limit 裁剪（§3.3） | ✅ **已随阶段 1 完成**（`rootChildrenLimit` + `loadRootChildren` 裁剪） |
+| 2.5 | 各标签项配单色矢量图标 | ❌ **未做** —— 当前根菜单 4 项**没有图标**（`browseItem()` 未设 `artworkUri`），车机上会是占位样式 |
 
 ### 阶段 3：搜索与语音（P2）
 
@@ -1126,22 +1179,37 @@ MediaItemsWithStartPosition(List<MediaItem> mediaItems, int startIndex, long sta
 
 ## 十一、一页速览
 
-**已完成**：`MediaLibraryService` 基类、浏览回调、媒体树骨架、封面加载、服务导出、`playQueue()` 队列入口、依赖齐备（**无需新增任何依赖**）
+> **当前状态（2026-09-17，v2.33.0）：阶段 1 已实施并完成代码级验证；DHU/真车验收未做。**
 
-**必须做（阶段 1）**：
+**阶段 1 已落地（6 改 + 2 新）**：
 
-1. 新建 `res/xml/automotive_app_desc.xml` ← **缺此则应用不可见**
-2. Manifest 加 `com.google.android.gms.car.application` meta-data ← **缺此则应用不可见**
-3. service intent-filter 加 `android.media.browse.MediaBrowserService` ← **缺此则找不到服务**
-4. 实现 `onSetMediaItems`（**返回非 null + 只同步状态不碰 player**）+ `onAddMediaItems`
-5. `PlayerManager` 新增 `syncQueueFromExternal()`
-6. 移除伪分页 + `onGetChildren` 异步化
-7. 修 A-13（解析下沉）/ A-14（`findInQueue` 缺 URI）
+1. ✅ 新建 `res/xml/automotive_app_desc.xml` ← **缺此则应用不可见**
+2. ✅ Manifest 加 `com.google.android.gms.car.application` meta-data ← **缺此则应用不可见**
+3. ✅ service intent-filter 加 `android.media.browse.MediaBrowserService` ← **缺此则找不到服务**
+4. ✅ 实现 `onSetMediaItems`（**返回非 null + 只同步状态不碰 player**）+ `onAddMediaItems`
+5. ✅ `PlayerManager` 新增 `syncQueueFromExternal()` / `updateStreamUrl()` / `replayAt()` / `builtinStreamUrlResolver`
+6. ✅ 移除伪分页 + `onGetChildren` 异步化
+7. ✅ 修 A-13（解析下沉，**零改动 `MainViewModel.kt`**）/ A-14（树里统一不设 URI，由解析入口覆盖）
+8. ✅ `MediaLibraryTree` 重写（结构化 ID + 4 项根菜单）+ 新增 `BrowseCache`
+
+**仍未做**：
+
+- ❌ **DHU / 真车端到端验收**（阶段 1 的验收动作，也是 2026-09-07 审查的遗留建议）
+- ❌ 根菜单 4 项的**单色矢量图标**（阶段 2.5；当前 `drawable/` 下只有 `banner.xml`，无任何图标可复用）
+- ❌ 艺人 / 专辑节点 + NAS 短期缓存（阶段 2.3 的剩余部分）
+- ❌ 搜索与语音（阶段 3，**语音搜索机制已探明**，见阶段 3 说明块）、`onPlaybackResumption`
+- ❌ attribution icon（阶段 4）
 
 **三条铁律**（源码确认）：① 返回值不能为 null（会 NPE）② 返回值会被 Media3 用于设置 player，故不得重复设置 ③ 覆写后成为所有点歌路径的统一入口
+
+**两个 ExoPlayer/Media3 API 陷阱**（实施期踩到，编译期暴露）：
+- `setMediaItem(MediaItem, long)` 第二参数是**起始位置(ms)不是索引** → 换 item 用 `replaceMediaItem` + `seekTo`
+- `androidx.media.utils.MediaConstants` **compile 期不可见**（只 runtime 传递）→ 用 `androidx.media3.session.MediaConstants.EXTRAS_KEY_ROOT_CHILDREN_LIMIT`
 
 **最大技术风险**：双真相源冲突（`PlayerManager._playerState` vs ExoPlayer playlist），静默不一致，靠 `syncQueueFromExternal` 解决
 
 **最大现实风险**：开车时手机不在家庭局域网，NAS 内容在车机上不可用；靠根菜单前 3 项不依赖内网来兜底
 
 **验证手段**：DHU（`adb forward tcp:5277 tcp:5277` + `desktop-head-unit.exe`），无需真车、无需上架
+
+**实施细节与完整验证记录**：`docs/technical-overview.md` §10.157
