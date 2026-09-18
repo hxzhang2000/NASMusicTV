@@ -107,8 +107,11 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // 手机端：隐藏系统栏（状态栏 + 导航栏）实现真正全屏——主题 windowFullscreen 只隐藏状态栏，
-        // Android 12+ 强制 edge-to-edge 后下方会露出白色导航栏。TV 无系统栏，无需处理。
+        // 手机端系统栏策略（v2.36.0 D9）：
+        // - 竖屏（PhonePortrait）：**显示**状态栏/导航栏 —— 否则 statusBarsPadding()/navigationBarsPadding()
+        //   返回 0，刘海会压住顶部栏、上滑唤出系统栏时内容跳动（方案 §5.5(9)）
+        // - 横屏（PhoneLandscape）：维持现状 hide()，保持改前行为（§3.1 B1 硬规则）
+        // TV 无系统栏，无需处理。
         // 与下方 setContent 内判断一致：leanback 或 television 特性任一即视为 TV
         // （很多非认证 TV 盒子只上报 android.hardware.type.television）
         val isTVDevice = packageManager.hasSystemFeature(PackageManager.FEATURE_LEANBACK) ||
@@ -116,12 +119,29 @@ class MainActivity : ComponentActivity() {
         if (!isTVDevice) {
             try {
                 WindowCompat.setDecorFitsSystemWindows(window, false)
+                val portrait = resources.configuration.orientation == Configuration.ORIENTATION_PORTRAIT
                 WindowInsetsControllerCompat(window, window.decorView).apply {
-                    hide(WindowInsetsCompat.Type.systemBars())
                     systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+                    if (portrait) show(WindowInsetsCompat.Type.systemBars())
+                    else hide(WindowInsetsCompat.Type.systemBars())
                 }
             } catch (e: Exception) {
-                AppLog.e("MainActivity", "system bars hide failed", e)
+                AppLog.e("MainActivity", "system bars setup failed", e)
+            }
+        }
+
+        // v2.36.0（方案 §5.5(1)(8) / D5）：首帧方向初值 —— 必须在 setContent 之前同步设置，
+        // 否则组合前会有一帧处于 manifest 声明值（`unspecified`）→ 视觉方向闪动。
+        // 同步读走 @Volatile 镜像（零 IO、零 runBlocking，见 DisplayPrefs.getScreenOrientationSync）。
+        // 首帧 Screen 固定按 Home 计算（冷启动默认路径）。
+        if (!isTVDevice) {
+            try {
+                requestedOrientation = com.nasmusic.tv.ui.theme.resolveOrientation(
+                    pref = (application as NasMusicApp).appPreferences.display.getScreenOrientationSync(),
+                    isFullScreenPage = false
+                )
+            } catch (e: Exception) {
+                AppLog.w("MainActivity", "init requestedOrientation failed", e)
             }
         }
 
@@ -167,16 +187,49 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             val settings by viewModel.appSettings.collectAsState(initial = com.nasmusic.tv.data.model.AppSettings())
-            // 手机端：默认横屏使用（TV 不干预）
             val isTVDevice = remember {
                 packageManager.hasSystemFeature("android.software.leanback") ||
                 packageManager.hasSystemFeature("android.hardware.type.television")
             }
-            LaunchedEffect(isTVDevice) {
-                if (!isTVDevice) {
-                    requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+            // v2.36.0（方案 §3.2 / C4）：形态因子 —— 直接读 LocalConfiguration.current。
+            // ⚠️ 不能用 `remember { derivedStateOf { configuration.orientation } }`：
+            // `configuration` 不是 State，remember 会永久读到初值，方向变化永不生效。
+            val configuration = androidx.compose.ui.platform.LocalConfiguration.current
+            val uiMode = com.nasmusic.tv.ui.theme.deriveUiMode(isTVDevice, configuration.orientation)
+
+            // 屏幕方向（L1 全局策略）：设置项是唯一真相之源；L2 顶部栏按钮只是快捷改它（D1）
+            val orientationPref by (application as NasMusicApp).appPreferences.display.screenOrientation
+                .collectAsState(initial = (application as NasMusicApp).appPreferences.display.getScreenOrientationSync())
+
+            // 全屏页状态：方向是**窗口级**属性，归 Activity 管（StateFlow 支持多订阅者，无副作用）
+            val showMv by viewModel.mvVM.showMv.collectAsState(initial = false)
+            val showKaraoke by viewModel.vocalVM.showKaraoke.collectAsState(initial = false)
+            val showVisualizer by viewModel.visualizerVM.showVisualizer.collectAsState(initial = false)
+
+            // 方案 §5.4：全局策略 + 全屏页覆盖 → requestedOrientation。
+            // 全屏页退出后自动恢复（key 含 showMv/showKaraoke/showVisualizer），无需手动记状态。
+            LaunchedEffect(orientationPref, showMv, showKaraoke, showVisualizer, isTVDevice) {
+                if (isTVDevice) return@LaunchedEffect
+                requestedOrientation = com.nasmusic.tv.ui.theme.resolveOrientation(
+                    pref = orientationPref,
+                    isFullScreenPage = showMv || showKaraoke || showVisualizer
+                )
+            }
+
+            // v2.36.0 D9：竖屏显示系统栏（沉浸模式 / 全屏页仍隐藏），横屏手机保持现状
+            LaunchedEffect(uiMode, isImmersiveMode.value, showMv, showKaraoke, showVisualizer, isTVDevice) {
+                if (isTVDevice) return@LaunchedEffect
+                try {
+                    val controller = WindowInsetsControllerCompat(window, window.decorView)
+                    val showBars = uiMode == com.nasmusic.tv.ui.theme.UiMode.PhonePortrait &&
+                        !isImmersiveMode.value && !showMv && !showKaraoke && !showVisualizer
+                    if (showBars) controller.show(WindowInsetsCompat.Type.systemBars())
+                    else controller.hide(WindowInsetsCompat.Type.systemBars())
+                } catch (e: Exception) {
+                    AppLog.w("MainActivity", "system bars toggle failed", e)
                 }
             }
+
             // 密度缩放：手机端紧凑 UI 缩小（density * 0.82），TV 端字号由 FontSize.xx() 函数返回 +6sp 的 TV 值
             val baseDensity = androidx.compose.ui.platform.LocalDensity.current
             val uiDensity = if (isTVDevice) androidx.compose.ui.unit.Density(
@@ -190,6 +243,7 @@ class MainActivity : ComponentActivity() {
             androidx.compose.runtime.CompositionLocalProvider(
                 androidx.compose.ui.platform.LocalDensity provides uiDensity,
                 com.nasmusic.tv.ui.theme.LocalPhoneCompact provides !isTVDevice,
+                com.nasmusic.tv.ui.theme.LocalUiMode provides uiMode,
                 com.nasmusic.tv.ui.theme.LocalFontAdjustment provides settings.fontAdjustment
             ) {
             NASMusicTVTheme(darkTheme = settings.darkTheme) {

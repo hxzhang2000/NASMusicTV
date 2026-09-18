@@ -44,7 +44,9 @@ import com.nasmusic.tv.data.stats.PlayHeatmap
 import com.nasmusic.tv.data.stats.StatsBundle
 import com.nasmusic.tv.ui.components.BackButton
 import com.nasmusic.tv.ui.theme.FontSize
+import com.nasmusic.tv.ui.theme.LocalUiMode
 import com.nasmusic.tv.ui.theme.NasMusicColors
+import com.nasmusic.tv.ui.theme.UiMode
 
 /**
  * 播放统计页面（F2-1 / F2-5）
@@ -72,10 +74,15 @@ fun PlayStatsScreen(
 
     LaunchedEffect(Unit) { viewModel.loadStats() }
 
+    // v2.36.0 竖屏：页 padding 32→16
+    val isPhonePortrait = LocalUiMode.current == UiMode.PhonePortrait
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(horizontal = 32.dp, vertical = 20.dp)
+            .padding(
+                horizontal = if (isPhonePortrait) 16.dp else 32.dp,
+                vertical = if (isPhonePortrait) 12.dp else 20.dp
+            )
     ) {
         // 标题行
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -170,7 +177,12 @@ private fun HeatmapContent(heatmap: PlayHeatmap?, loading: Boolean) {
 
         Spacer(modifier = Modifier.height(14.dp))
 
-        PlayHeatmapChart(heatmap = heatmap)
+        PlayHeatmapChart(
+            heatmap = heatmap,
+            // v2.36.0（方案 §9 P2-35）：仅手机竖屏开启放大（53 列塞进 360dp 时格子仅 3~6dp）；
+            // TV / 横屏保持原有「自动缩到刚好铺满、不滚动」行为。
+            enableZoom = LocalUiMode.current == UiMode.PhonePortrait,
+        )
 
         Spacer(modifier = Modifier.height(20.dp))
 

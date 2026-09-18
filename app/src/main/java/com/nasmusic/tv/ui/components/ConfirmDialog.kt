@@ -63,7 +63,7 @@ fun ConfirmDialog(
     ) {
         Column(
             modifier = Modifier
-                .width(480.dp)
+                .then(responsiveDialogSize(480.dp, scrollable = true))
                 .background(NasMusicColors.Surface, RoundedCornerShape(16.dp))
                 .padding(32.dp),
             horizontalAlignment = Alignment.CenterHorizontally

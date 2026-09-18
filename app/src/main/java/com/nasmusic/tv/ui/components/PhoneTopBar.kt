@@ -1,0 +1,145 @@
+package com.nasmusic.tv.ui.components
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.displayCutoutPadding
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.tv.material3.ExperimentalTvMaterial3Api
+import androidx.tv.material3.Icon
+import androidx.tv.material3.Text
+import com.nasmusic.tv.R
+import com.nasmusic.tv.ui.theme.FontSize
+import com.nasmusic.tv.ui.theme.NasMusicColors
+import com.nasmusic.tv.ui.theme.ScreenOrientationPref
+
+/**
+ * 竖屏顶部栏（v2.36.0，方案 §4.0 / §8.6）。
+ *
+ * 左：Logo + 应用名；右：搜索、**L2 方向切换图标**（单击在竖/横间循环 + 立即写 pref，D1，**无长按**，D8）。
+ *
+ * inset：`statusBarsPadding()` + `displayCutoutPadding()` ——
+ * ⚠️ 两者生效的**前提是 D9（竖屏不隐藏系统栏）**，否则 inset 恒为 0（方案 §5.5(9) / B2）。
+ */
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+fun PhoneTopBar(
+    orientationPref: String,
+    onToggleOrientation: () -> Unit,
+    onNavigateToSearch: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .background(NasMusicColors.Surface)
+            .statusBarsPadding()
+            .displayCutoutPadding()
+            .height(56.dp)
+            .padding(horizontal = 16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            modifier = Modifier
+                .size(32.dp)
+                .background(NasMusicColors.Primary, RoundedCornerShape(8.dp)),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(text = "\u266A", color = NasMusicColors.TextPrimary, fontSize = FontSize.button())
+        }
+        Spacer(modifier = Modifier.width(10.dp))
+        Text(
+            text = "NAS Music",
+            color = NasMusicColors.TextPrimary,
+            fontSize = FontSize.button(),
+            fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.weight(1f),
+        )
+
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            // 搜索：与现状 HomeBranch / NowPlayingBranch 的「搜索」按钮行为一致
+            PhoneTopBarIconButton(
+                contentDescription = stringResource(R.string.common_search),
+                onClick = onNavigateToSearch,
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Search,
+                    contentDescription = null,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+            // L2 方向切换：单击 = 竖屏 ⟷ 横屏 二态循环 + 立即写 pref（"自动" 只能从设置项进入）
+            PhoneTopBarIconButton(
+                contentDescription = stringResource(R.string.nav_phone_orientation_cd),
+                onClick = onToggleOrientation,
+            ) {
+                Text(
+                    text = orientationIcon(orientationPref),
+                    fontSize = FontSize.button(),
+                    fontWeight = FontWeight.Medium,
+                )
+            }
+        }
+    }
+}
+
+/** L2 图标：显示 L1 真值（自动 / 竖 / 横），让用户一眼看出当前策略 */
+private fun orientationIcon(pref: String): String = when (pref) {
+    ScreenOrientationPref.PORTRAIT -> "\u25AF"      // ▯ 竖屏
+    ScreenOrientationPref.LANDSCAPE -> "\u25AD"     // ▭ 横屏
+    else -> "\u21BB"                                 // ↻ 自动
+}
+
+/**
+ * 顶部栏图标按钮：48 Compose dp 触摸目标（≈ 39 物理 dp，配外层 56dp 容器后视觉热区充足）。
+ *
+ * ⚠️ 项目无 `androidx.compose.material3`（方案 C1），不用 `IconButton`；
+ * 用 [FocusableSurface] + `semantics` 提供无障碍描述。
+ */
+@Composable
+private fun PhoneTopBarIconButton(
+    contentDescription: String,
+    onClick: () -> Unit,
+    content: @Composable () -> Unit,
+) {
+    FocusableSurface(
+        onClick = onClick,
+        modifier = Modifier
+            .size(48.dp)
+            .semantics { this.contentDescription = contentDescription },
+        shape = RoundedCornerShape(8.dp),
+        containerColor = Color.Transparent,
+        focusedContainerColor = NasMusicColors.Primary.copy(alpha = 0.2f),
+        contentColor = NasMusicColors.TextPrimary,
+        focusedContentColor = NasMusicColors.Primary,
+        focusedScale = 1.08f,
+        animationDurationMs = 150,
+        pressedScale = 0.94f,
+    ) {
+        Box(modifier = Modifier.size(48.dp), contentAlignment = Alignment.Center) {
+            content()
+        }
+    }
+}

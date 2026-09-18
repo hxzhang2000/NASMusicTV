@@ -3,26 +3,35 @@ package com.nasmusic.tv.ui.components
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.tv.material3.Icon
 import androidx.tv.material3.Text
 import com.nasmusic.tv.R
 import com.nasmusic.tv.ui.theme.FontSize
+import com.nasmusic.tv.ui.theme.LocalUiMode
 import com.nasmusic.tv.ui.theme.NasMusicColors
+import com.nasmusic.tv.ui.theme.UiMode
 
 /**
  * 公共返回按钮组件
@@ -112,3 +121,85 @@ fun SearchField(
  */
 @Composable
 fun songGridColumns(): GridCells = GridCells.Fixed(1)
+
+/**
+ * 响应式网格列数 —— **纯函数**（可 JVM 单测，不依赖 Compose 运行时）。
+ *
+ * 阈值口径沿用项目既有约定：
+ * - `>= 1000dp`：TV / 大屏 → [tv]
+ * - `600..999dp`：手机横屏 / 小平板（`medium`）→ [medium]
+ * - `< 600dp`：手机竖屏 → [phonePortrait]
+ *
+ * ⚠️ 参数语义：第三参原名为 `phoneLandscape`，但它由 `widthDp >= 600` 触发，
+ * **平板竖屏（sw >= 600）也会落进这一支**，故改名为 `medium`（方案 §3.4）。
+ */
+fun adaptiveColumnsOf(widthDp: Int, tv: Int, phonePortrait: Int, medium: Int): Int = when {
+    widthDp >= 1000 -> tv
+    widthDp >= 600 -> medium
+    else -> phonePortrait
+}
+
+/**
+ * 响应式网格列数（v2.36.0 由 `ui/screens/library/browse/BrowseComponents.kt` 上移，
+ * 供全项目复用；与 [songGridColumns] 并列）。
+ *
+ * ⚠️ 双输入（方案 §2.7 第 3 条）：`LocalConfiguration.screenWidthDp` 是**未缩放**的
+ * Android dp（竖屏手机 ≈ 360），而竖屏布局宽度是 **Compose dp**（`PHONE_UI_SCALE = 0.82`
+ * 缩放后 ≈ 439）—— 只用宽度会在 600/1000 阈值附近出现"列数按横屏算、宽度按竖屏算"的错配。
+ * 因此这里先看 [LocalUiMode]：竖屏手机**直接**取 [phonePortrait]，不再心算宽度。
+ */
+@Composable
+fun adaptiveColumns(tv: Int, phonePortrait: Int, medium: Int = phonePortrait): Int {
+    if (LocalUiMode.current == UiMode.PhonePortrait) return phonePortrait
+    val widthDp = LocalConfiguration.current.screenWidthDp
+    return adaptiveColumnsOf(widthDp, tv, phonePortrait, medium)
+}
+
+/**
+ * 自适应布局包装器（v2.36.0 竖屏，方案 §3.4 / P1-32）。
+ *
+ * ```kotlin
+ * AdaptiveLayout(
+ *     phonePortrait = { PortraitThing() },
+ *     tv = { ExistingThing() },   // ← TV 与「手机横屏」共用这一支
+ * )
+ * ```
+ *
+ * ⚠️ **B1 硬规则**：`tv` 分支同时承载 **TV 与手机横屏** —— 两者当前共用同一套布局，
+ * 所以**不要**写成三分支（`PhoneLandscape` 单独一支），否则会与改动前的横屏行为不一致。
+ * 若某个页面确实需要横屏独立分支，请显式读 [LocalUiMode] 并写明理由。
+ */
+@Composable
+fun AdaptiveLayout(
+    phonePortrait: @Composable () -> Unit,
+    tv: @Composable () -> Unit,
+) {
+    if (LocalUiMode.current == UiMode.PhonePortrait) phonePortrait() else tv()
+}
+
+/**
+ * 对话框 / 弹层的响应式尺寸（v2.36.0 竖屏，方案 §2.4 对话框族 / P1-27）。
+ *
+ * - **竖屏**：撑满 92% 宽 + 上限 420dp + 高度上限 80% 屏高（可选垂直滚动）
+ * - **非竖屏（TV / 手机横屏）**：原样返回 `width(landscapeWidth)` —— 与改动前**逐字等价**（B1）
+ *
+ * 方案原文要求"13 处统一"，但直接写死 `fillMaxWidth(0.92f)` 会把 TV 上的 480~720dp
+ * 对话框压到 420dp，属回归；故这里按 [LocalUiMode] 分叉。
+ *
+ * ⚠️ `scrollable = true` **只能用于内部没有 LazyColumn / LazyVerticalGrid 的普通 Column**，
+ * 否则会触发 `Vertically scrollable component was measured with an infinity maximum height
+ * constraints` 崩溃（嵌套同向滚动容器）。
+ */
+@Composable
+fun responsiveDialogSize(
+    landscapeWidth: Dp,
+    scrollable: Boolean = false,
+): Modifier {
+    if (LocalUiMode.current != UiMode.PhonePortrait) return Modifier.width(landscapeWidth)
+    val maxHeight = (LocalConfiguration.current.screenHeightDp * 0.8f).dp
+    return Modifier
+        .fillMaxWidth(0.92f)
+        .widthIn(max = 420.dp)
+        .heightIn(max = maxHeight)
+        .then(if (scrollable) Modifier.verticalScroll(rememberScrollState()) else Modifier)
+}

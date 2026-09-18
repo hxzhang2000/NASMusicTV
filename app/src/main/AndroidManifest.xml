@@ -78,12 +78,19 @@
             android:resource="@drawable/ic_car_attribution" />
 
         <!-- Main Activity (supports both TV and phone) -->
+        <!-- v2.36.0 竖屏支持：
+             · screenOrientation 由 fullSensor 改为 unspecified —— fullSensor 会**忽略用户的系统旋转锁**，
+               与「自动」的预期不符；运行时方向一律由 MainActivity 的 requestedOrientation 决定
+               （见 resolveOrientation：auto→UNSPECIFIED / portrait→USER_PORTRAIT / landscape→USER_LANDSCAPE）。
+             · 声明 configChanges 以避免旋转重建 Activity（否则权限弹窗重弹、Compose 焦点/动画状态丢失）。
+               ⚠️ 刻意**不含** uiMode / density / layoutDirection —— 那会影响深色模式、字体缩放、RTL 的重建时机。 -->
         <activity
             android:name=".ui.MainActivity"
             android:exported="true"
             android:icon="@drawable/banner"
             android:logo="@drawable/banner"
-            android:screenOrientation="fullSensor"
+            android:screenOrientation="unspecified"
+            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden"
             android:theme="@style/Theme.NASMusicTV.NoActionBar">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />

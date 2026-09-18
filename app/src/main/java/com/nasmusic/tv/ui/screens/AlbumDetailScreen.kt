@@ -1,5 +1,6 @@
 package com.nasmusic.tv.ui.screens
 
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -12,6 +13,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.remember
@@ -35,7 +37,9 @@ import com.nasmusic.tv.data.model.Album
 import com.nasmusic.tv.data.model.Song
 import com.nasmusic.tv.ui.LocalListBackHandler
 import com.nasmusic.tv.ui.theme.FontSize
+import com.nasmusic.tv.ui.theme.LocalUiMode
 import com.nasmusic.tv.ui.theme.NasMusicColors
+import com.nasmusic.tv.ui.theme.UiMode
 import com.nasmusic.tv.ui.components.BackButton
 import com.nasmusic.tv.ui.components.FocusableSurface
 import com.nasmusic.tv.ui.components.song.UnifiedSongRow
@@ -91,26 +95,18 @@ fun AlbumDetailScreen(
         onDispose { listBackHandler.value = null }
     }
 
+    // v2.36.0 竖屏（方案 §4.7 / P0-16、P0-24）：头部拆两行（标题行 / 操作行）+ 封面置顶 + 曲目单列
+    val isPhonePortrait = LocalUiMode.current == UiMode.PhonePortrait
+
     Column(
-        modifier = modifier.fillMaxSize().padding(horizontal = 32.dp, vertical = 20.dp)
+        modifier = modifier.fillMaxSize().padding(
+            horizontal = if (isPhonePortrait) 16.dp else 32.dp,
+            vertical = if (isPhonePortrait) 12.dp else 20.dp
+        )
     ) {
         // 返回 + 标题行 + 操作按钮 + 歌曲数
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            BackButton(onClick = onBack)
-            Spacer(modifier = Modifier.width(16.dp))
-            Text(
-                text = album.name,
-                color = NasMusicColors.TextPrimary,
-                fontSize = FontSize.title(),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f)
-            )
-            Spacer(modifier = Modifier.width(12.dp))
-            // 播放全部
+        // ⚠️ 竖屏下「返回+标题+播放全部+加入队列+歌曲数」同一行必被裁切（方案 §2.4）→ 拆两行
+        val playAllButton: @Composable () -> Unit = {
             FocusableSurface(
                 onClick = { if (songs.isNotEmpty()) onPlayAll(songs) },
                 shape = RoundedCornerShape(8.dp),
@@ -128,8 +124,8 @@ fun AlbumDetailScreen(
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
                 )
             }
-            Spacer(modifier = Modifier.width(12.dp))
-            // 加入队列
+        }
+        val addQueueButton: @Composable () -> Unit = {
             FocusableSurface(
                 onClick = { songs.forEach { song -> onToggleQueue(song) } },
                 shape = RoundedCornerShape(8.dp),
@@ -147,30 +143,69 @@ fun AlbumDetailScreen(
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
                 )
             }
-            Spacer(modifier = Modifier.width(12.dp))
-            // 歌曲数
-            Text(
-                text = stringResource(R.string.action_song_count, songs.size),
-                color = NasMusicColors.TextSecondary,
-                fontSize = FontSize.body()
-            )
         }
 
-        Spacer(modifier = Modifier.height(20.dp))
+        if (isPhonePortrait) {
+            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                BackButton(onClick = onBack)
+                Spacer(modifier = Modifier.width(12.dp))
+                Text(
+                    text = album.name,
+                    color = NasMusicColors.TextPrimary,
+                    fontSize = FontSize.title(),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                playAllButton()
+                Spacer(modifier = Modifier.width(10.dp))
+                addQueueButton()
+                Spacer(modifier = Modifier.width(10.dp))
+                Text(
+                    text = stringResource(R.string.action_song_count, songs.size),
+                    color = NasMusicColors.TextSecondary,
+                    fontSize = FontSize.body()
+                )
+            }
+        } else {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                BackButton(onClick = onBack)
+                Spacer(modifier = Modifier.width(16.dp))
+                Text(
+                    text = album.name,
+                    color = NasMusicColors.TextPrimary,
+                    fontSize = FontSize.title(),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f)
+                )
+                Spacer(modifier = Modifier.width(12.dp))
+                playAllButton()
+                Spacer(modifier = Modifier.width(12.dp))
+                addQueueButton()
+                Spacer(modifier = Modifier.width(12.dp))
+                Text(
+                    text = stringResource(R.string.action_song_count, songs.size),
+                    color = NasMusicColors.TextSecondary,
+                    fontSize = FontSize.body()
+                )
+            }
+        }
 
-        Row(modifier = Modifier.fillMaxWidth().weight(1f)) {
-            // 左侧：专辑封面
-            CoverImage(
-                coverUrl = album.coverUrl,
-                contentDescription = album.name,
-                size = 280.dp,
-                cornerRadius = 16.dp
-            )
+        Spacer(modifier = Modifier.height(if (isPhonePortrait) 12.dp else 20.dp))
 
-            Spacer(modifier = Modifier.width(24.dp))
-
-            // 右侧：专辑信息 + 曲目列表
-            Column(modifier = Modifier.weight(1f)) {
+        // 专辑元数据 + 曲目列表（两种形态共用同一份实现）
+        val metaAndTracks: @Composable (Modifier) -> Unit = { m ->
+            Column(modifier = m) {
                 // 专辑元数据
                 Text(
                     text = album.artist.ifBlank { "—" },
@@ -201,7 +236,7 @@ fun AlbumDetailScreen(
                         )
                     }
                 }
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(if (isPhonePortrait) 10.dp else 16.dp))
 
                 // 曲目列表
                 LazyColumn(
@@ -226,6 +261,35 @@ fun AlbumDetailScreen(
                         )
                     }
                 }
+            }
+        }
+
+        if (isPhonePortrait) {
+            // 竖屏：封面置顶（比例式，不再固定 280dp 与曲目列表抢横向空间）
+            Column(modifier = Modifier.fillMaxWidth().weight(1f)) {
+                CoverImage(
+                    coverUrl = album.coverUrl,
+                    contentDescription = album.name,
+                    size = 160.dp,
+                    cornerRadius = 16.dp
+                )
+                Spacer(modifier = Modifier.height(10.dp))
+                metaAndTracks(Modifier.fillMaxWidth().weight(1f))
+            }
+        } else {
+            Row(modifier = Modifier.fillMaxWidth().weight(1f)) {
+                // 左侧：专辑封面
+                CoverImage(
+                    coverUrl = album.coverUrl,
+                    contentDescription = album.name,
+                    size = 280.dp,
+                    cornerRadius = 16.dp
+                )
+
+                Spacer(modifier = Modifier.width(24.dp))
+
+                // 右侧：专辑信息 + 曲目列表
+                metaAndTracks(Modifier.weight(1f))
             }
         }
     }

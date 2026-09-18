@@ -2,6 +2,7 @@ package com.nasmusic.tv.ui.screens.stats
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -13,6 +14,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
@@ -44,7 +46,18 @@ import com.nasmusic.tv.ui.theme.NasMusicColors
  */
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
-fun PlayHeatmapChart(heatmap: PlayHeatmap, modifier: Modifier = Modifier) {
+fun PlayHeatmapChart(
+    heatmap: PlayHeatmap,
+    modifier: Modifier = Modifier,
+    /**
+     * v2.36.0（方案 §9 P2-35）：可选放大 —— 开启后格子保底 10dp 并允许**横向滚动**，
+     * 供手机竖屏（360dp 宽塞 53 列，格子仅 3~6dp）放大查看。
+     *
+     * 默认 `false` ⇒ 与改动前逐字等价（自动缩到刚好铺满，不滚动）。
+     * ⚠️ 只在手机竖屏开启：TV 上无焦点的滚动容器无法用遥控器滚动（项目既有约束）。
+     */
+    enableZoom: Boolean = false,
+) {
     val cols = heatmap.weeks.size
     if (cols == 0) return
 
@@ -78,7 +91,8 @@ fun PlayHeatmapChart(heatmap: PlayHeatmap, modifier: Modifier = Modifier) {
         val gridAvailable = (maxWidth - labelColumnWidth).coerceAtLeast(120.dp)
         // 间距取格子的 1/4（而非固定值）——固定间距在窄屏上会让 53 列的总宽超出可用宽度，
         // 被 cell 的下限截断后反而溢出屏幕。总宽 = cols*cell + (cols-1)*cell/4。
-        val cell: Dp = (gridAvailable / (cols + (cols - 1) * 0.25f)).coerceIn(3.dp, 16.dp)
+        val cell: Dp = (gridAvailable / (cols + (cols - 1) * 0.25f))
+            .coerceIn(if (enableZoom) 10.dp else 3.dp, 16.dp)
         val gap: Dp = (cell * 0.25f).coerceAtLeast(0.5.dp)
         val gridWidth: Dp = cell * cols + gap * (cols - 1)
         val gridHeight: Dp = cell * 7 + gap * 6
@@ -86,6 +100,8 @@ fun PlayHeatmapChart(heatmap: PlayHeatmap, modifier: Modifier = Modifier) {
         val showWeekdayLabels = cell >= 9.dp
 
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            // v2.36.0 P2-35：网格整块抽成 lambda，enableZoom 时套一层横向滚动
+            val heatmapGridRow: @Composable () -> Unit = {
             Row {
                 // ---- 星期标签列（行 0 = 周日）----
                 Column(modifier = Modifier.width(labelColumnWidth)) {
@@ -141,6 +157,15 @@ fun PlayHeatmapChart(heatmap: PlayHeatmap, modifier: Modifier = Modifier) {
                         }
                     }
                 }
+            }
+            }   // end heatmapGridRow
+
+            if (enableZoom) {
+                Box(modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())) {
+                    heatmapGridRow()
+                }
+            } else {
+                heatmapGridRow()
             }
 
             Spacer(modifier = Modifier.height(14.dp))

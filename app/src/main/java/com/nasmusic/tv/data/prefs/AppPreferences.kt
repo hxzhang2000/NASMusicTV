@@ -66,6 +66,8 @@ class AppPreferences internal constructor(private val context: Context) {
     val queue: QueuePrefs by lazy { QueuePrefs(this) }
     val languagePrefs: LanguagePrefs by lazy { LanguagePrefs(this) }
     val backup: BackupPrefs by lazy { BackupPrefs(this) }
+    /** 显示域（屏幕方向等**设备本地**偏好；不进 AppSettings 备份 JSON，见 §5.3） */
+    val display: DisplayPrefs by lazy { DisplayPrefs(this) }
 
     companion object {
         private const val TAG = "AppPreferences"
@@ -83,6 +85,9 @@ class AppPreferences internal constructor(private val context: Context) {
 
         /** URL 可达性持久化判定窗口（24h）：窗口内的「不可达」标记重启后不重测 */
         const val songReachabilityWindowMs = 24 * 60 * 60 * 1000L
+
+        /** 屏幕方向 SharedPreferences 镜像键（v2.36.0） */
+        internal const val KEY_ORIENTATION_MIRROR = "screen_orientation"
 
         @Volatile
         private var INSTANCE: AppPreferences? = null
@@ -120,6 +125,14 @@ class AppPreferences internal constructor(private val context: Context) {
     /** 语言镜像（只服务冷启动 attachBaseContext，其余设置项不搞双写） */
     private val mirrorPrefs = context.getSharedPreferences("language_mirror", Context.MODE_PRIVATE)
 
+    /**
+     * 显示域镜像（只服务冷启动 `MainActivity.onCreate` 同步读屏幕方向）。
+     *
+     * 与 [mirrorPrefs] 同构：`@Volatile` 内存镜像 + SharedPreferences 落盘，
+     * 冷启动（进程重启、Flow 尚未发射）也能拿到上次的方向，零 IO、零 `runBlocking`。
+     */
+    private val displayMirrorPrefs = context.getSharedPreferences("display_mirror", Context.MODE_PRIVATE)
+
     // ---- provider 键内存镜像（Application scope 常驻收集更新）----
     @Volatile private var cachedMusicSource: String = com.nasmusic.tv.data.model.MusicSource.DEFAULT_API_KEY
     @Volatile private var cachedDefaultNetworkSource: String = NetworkSource.DEFAULT.key
@@ -133,6 +146,10 @@ class AppPreferences internal constructor(private val context: Context) {
     @Volatile private var cachedLyricsKugouBaseUrl: String = com.nasmusic.tv.lyrics.LyricsNetworkProvider.DEFAULT_KUGOU_BASE_URL
     @Volatile private var cachedLyricsNeteaseBaseUrl: String = com.nasmusic.tv.lyrics.LyricsNetworkProvider.DEFAULT_NETEASE_BASE_URL
     @Volatile private var cachedWeatherApiKey: String = ""
+
+    /** 屏幕方向镜像（v2.36.0：冷启动首帧方向，默认 auto） */
+    @Volatile private var cachedScreenOrientation: String =
+        displayMirrorPrefs.getString(KEY_ORIENTATION_MIRROR, null) ?: "auto"
 
     /** 镜像已启动收集标志（ensureMirrorScopeLoaded 只执行一次） */
     @Volatile private var mirrorStarted = false
@@ -193,6 +210,14 @@ class AppPreferences internal constructor(private val context: Context) {
         scope.launch {
             dataStore.data.map { it[keyModelDownloadUrl] ?: "" }
                 .distinctUntilChanged().collect { cachedModelDownloadUrl = it }
+        }
+        // v2.36.0：屏幕方向镜像（MainActivity.onCreate 同步读，注册进 requestedOrientation 首帧）
+        scope.launch {
+            dataStore.data.map { it[keyScreenOrientation] ?: "auto" }
+                .distinctUntilChanged().collect {
+                    cachedScreenOrientation = it
+                    displayMirrorPrefs.edit().putString(KEY_ORIENTATION_MIRROR, it).apply()
+                }
         }
         // （F-7：weather 镜像改读加密键，见上方 migrateWeatherApiKeyIfNeeded 后的收集块）
     }
@@ -291,6 +316,32 @@ class AppPreferences internal constructor(private val context: Context) {
 
     // --- 语言设置 Flow ---
     val language: Flow<String> = dataStore.data.map { it[keyLanguage] ?: "system" }
+
+    // =====================================================================
+    // v2.36.0 显示域：屏幕方向（设备本地偏好，**不进 AppSettings 备份 JSON**）
+    //
+    // ⚠️ 为什么不放进 AppSettings：`AppSettings` 会被 Gson 序列化进备份 JSON，
+    // 屏幕方向属设备本地偏好 —— 从手机备份恢复到电视上会把电视锁成竖屏。
+    // =====================================================================
+
+    private val keyScreenOrientation = stringPreferencesKey("display_screen_orientation")
+
+    /** 屏幕方向："auto"（跟随传感器 + 尊重系统旋转锁）/ "portrait" / "landscape" */
+    val screenOrientation: Flow<String> = dataStore.data.map { it[keyScreenOrientation] ?: "auto" }
+
+    suspend fun setScreenOrientation(value: String) {
+        dataStore.edit { it[keyScreenOrientation] = value }
+        displayMirrorPrefs.edit().putString(KEY_ORIENTATION_MIRROR, value).apply()
+    }
+
+    /**
+     * 冷启动同步读屏幕方向（零 IO、零 `runBlocking`）。
+     *
+     * R-7 第三类修复（路 A）范式：读 `@Volatile` 内存镜像，镜像由
+     * [startProviderMirrors] 里的常驻收集刷新。仅供 `MainActivity.onCreate`
+     * 首帧设置 `requestedOrientation` 使用（避免闪一帧 manifest 默认值）。
+     */
+    fun getScreenOrientationSync(): String = cachedScreenOrientation
 
     // --- 首次曲库快捷键提示 Flow ---
     val showLibraryShortcutHint: Flow<Boolean> = dataStore.data.map { it[keyShowLibraryShortcutHint] ?: true }

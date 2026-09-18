@@ -40,6 +40,7 @@ import androidx.tv.material3.Text
 import com.nasmusic.tv.R
 import com.nasmusic.tv.net.BackupTransferServer
 import com.nasmusic.tv.ui.components.FocusableSurface
+import com.nasmusic.tv.ui.components.responsiveDialogSize
 import com.nasmusic.tv.ui.components.LocalFocusableContentColor
 import com.nasmusic.tv.ui.theme.FontSize
 import com.nasmusic.tv.ui.theme.NasMusicColors
@@ -116,7 +117,7 @@ fun BackupTransferDialog(
         ) {
             Column(
                 modifier = Modifier
-                    .width(560.dp)
+                    .then(responsiveDialogSize(560.dp))
                     .heightIn(max = maxHeight - 32.dp)
                     .verticalScroll(rememberScrollState())
                     .background(NasMusicColors.Surface, RoundedCornerShape(16.dp))

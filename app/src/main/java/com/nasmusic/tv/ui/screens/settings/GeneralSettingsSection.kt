@@ -25,11 +25,13 @@ import com.nasmusic.tv.ui.components.LocalFocusableContentColor
 import com.nasmusic.tv.ui.theme.FontSize
 import com.nasmusic.tv.ui.theme.NasMusicColors
 
-/** 通用设置分区状态（语言/主题/动画/字号） */
+/** 通用设置分区状态（语言/主题/动画/字号/屏幕方向） */
 data class GeneralSettingsState(
     val settings: AppSettings,
     val language: String,
     val fontAdjustment: Int,
+    /** v2.36.0：屏幕方向策略 "auto" / "portrait" / "landscape" */
+    val screenOrientation: String = "auto",
 )
 
 /** 通用设置分区动作 */
@@ -38,6 +40,8 @@ data class GeneralSettingsActions(
     val onToggleDarkTheme: (Boolean) -> Unit,
     val onToggleAnimations: (Boolean) -> Unit,
     val onChangeFontAdjustment: (Int) -> Unit,
+    /** v2.36.0：改屏幕方向（L1 全局策略，唯一真相之源） */
+    val onChangeScreenOrientation: ((String) -> Unit)? = null,
 )
 
 /** 通用设置分区（原 SettingsScreen GENERAL 分支，逻辑逐行搬迁；由 SettingsScreen 以 LazyColumn item 包装） */
@@ -106,6 +110,46 @@ internal fun GeneralSettingsSection(
                 textAlign = TextAlign.Center
             )
             AdjustButton("+", onClick = { actions.onChangeFontAdjustment((state.fontAdjustment + 1).coerceAtMost(8)) })
+        }
+        Spacer(modifier = Modifier.height(12.dp))
+        // v2.36.0：屏幕方向（L1 全局策略）—— 「自动」只能从这里进入（L2 顶部栏按钮只在竖/横间循环）
+        SubSectionTitle(stringResource(R.string.settings_display_orientation))
+        Text(
+            text = stringResource(R.string.settings_orientation_hint),
+            color = NasMusicColors.TextSecondary,
+            fontSize = FontSize.small(),
+            modifier = Modifier.padding(start = 4.dp, bottom = 8.dp)
+        )
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            listOf(
+                "auto" to stringResource(R.string.settings_orientation_auto),
+                "portrait" to stringResource(R.string.settings_orientation_portrait),
+                "landscape" to stringResource(R.string.settings_orientation_landscape)
+            ).forEach { (value, label) ->
+                val selected = state.screenOrientation == value
+                FocusableSurface(
+                    onClick = { actions.onChangeScreenOrientation?.invoke(value) },
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(10.dp),
+                    containerColor = if (selected) NasMusicColors.Primary.copy(alpha = 0.18f) else androidx.compose.ui.graphics.Color.Transparent,
+                    contentColor = if (selected) NasMusicColors.Primary else NasMusicColors.TextPrimary,
+                    focusedContainerColor = if (selected) NasMusicColors.Primary.copy(alpha = 0.3f) else NasMusicColors.SurfaceVariant,
+                    focusedContentColor = if (selected) NasMusicColors.Primary else NasMusicColors.TextPrimary,
+                    focusedScale = 1.05f
+                ) {
+                    Text(
+                        text = label,
+                        color = LocalFocusableContentColor.current,
+                        fontSize = FontSize.body(),
+                        fontWeight = if (selected) FontWeight.Medium else FontWeight.Normal,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)
+                    )
+                }
+            }
         }
         Spacer(modifier = Modifier.height(12.dp))
     }

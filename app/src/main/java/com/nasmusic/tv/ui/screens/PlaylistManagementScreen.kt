@@ -37,6 +37,8 @@ import com.nasmusic.tv.data.model.Playlist
 import com.nasmusic.tv.data.model.Song
 import com.nasmusic.tv.ui.theme.FontSize
 import com.nasmusic.tv.ui.theme.NasMusicColors
+import com.nasmusic.tv.ui.theme.LocalUiMode
+import com.nasmusic.tv.ui.theme.UiMode
 import com.nasmusic.tv.ui.components.BackButton
 import com.nasmusic.tv.ui.components.FocusableSurface
 import com.nasmusic.tv.ui.components.LocalFocusableContentColor
@@ -73,31 +75,42 @@ fun PlaylistManagementScreen(
     val scope = rememberCoroutineScope()
     val listBackHandler = LocalListBackHandler.current
 
+    // v2.36.0 竖屏（方案 §4.6 / P0-20）：320dp 侧栏在 360dp 屏上必溢出
+    //   → 竖屏改「播放列表（一级）⇄ 歌曲明细（二级）」；横屏/TV 保持左右分栏
+    val isPhonePortrait = LocalUiMode.current == UiMode.PhonePortrait
+    var portraitPlaylistName by remember { mutableStateOf<String?>(null) }
+
     // Level 1.5: 任意列表已滚动时按 BACK 先回顶并聚焦第一个
     DisposableEffect(Unit) {
         val handler: () -> Boolean = {
-            val leftScrolled = !(playlistListState.firstVisibleItemIndex == 0 &&
-                    playlistListState.firstVisibleItemScrollOffset == 0)
-            val rightScrolled = !(songsListState.firstVisibleItemIndex == 0 &&
-                    songsListState.firstVisibleItemScrollOffset == 0)
-            if (leftScrolled || rightScrolled) {
-                scope.launch {
-                    if (leftScrolled) {
-                        playlistListState.scrollToItem(0)
-                    }
-                    if (rightScrolled) {
-                        songsListState.scrollToItem(0)
-                    }
-                    // 优先聚焦右侧歌曲列表，其次左侧播放列表
-                    if (rightScrolled) {
-                        runCatching { songsFirstFocusRequester.requestFocus() }
-                    } else {
-                        runCatching { playlistFirstFocusRequester.requestFocus() }
-                    }
-                }
+            // 竖屏二级页（歌曲明细）先回一级（播放列表）
+            if (isPhonePortrait && portraitPlaylistName != null) {
+                portraitPlaylistName = null
                 true
             } else {
-                false
+                val leftScrolled = !(playlistListState.firstVisibleItemIndex == 0 &&
+                        playlistListState.firstVisibleItemScrollOffset == 0)
+                val rightScrolled = !(songsListState.firstVisibleItemIndex == 0 &&
+                        songsListState.firstVisibleItemScrollOffset == 0)
+                if (leftScrolled || rightScrolled) {
+                    scope.launch {
+                        if (leftScrolled) {
+                            playlistListState.scrollToItem(0)
+                        }
+                        if (rightScrolled) {
+                            songsListState.scrollToItem(0)
+                        }
+                        // 优先聚焦右侧歌曲列表，其次左侧播放列表
+                        if (rightScrolled) {
+                            runCatching { songsFirstFocusRequester.requestFocus() }
+                        } else {
+                            runCatching { playlistFirstFocusRequester.requestFocus() }
+                        }
+                    }
+                    true
+                } else {
+                    false
+                }
             }
         }
         listBackHandler.value = handler
@@ -124,11 +137,9 @@ fun PlaylistManagementScreen(
 
             Spacer(modifier = Modifier.height(20.dp))
 
-            Row(modifier = Modifier.fillMaxWidth().weight(1f)) {
-                // 左侧：播放列表示
-                Column(
-                    modifier = Modifier.width(320.dp).fillMaxHeight()
-                ) {
+            // 左侧：播放列表（竖屏 = 一级页，撑满）
+            val playlistListPane: @Composable (Modifier) -> Unit = { m ->
+                Column(modifier = m) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -145,69 +156,80 @@ fun PlaylistManagementScreen(
                         )
                     }
 
-                Spacer(modifier = Modifier.height(12.dp))
+                    Spacer(modifier = Modifier.height(12.dp))
 
-                if (isLoading) {
-                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Text(text = stringResource(R.string.common_loading), color = NasMusicColors.TextSecondary, fontSize = FontSize.button())
-                    }
-                } else if (playlists.isEmpty()) {
-                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Text(text = stringResource(R.string.playlist_empty), color = NasMusicColors.TextSecondary, fontSize = FontSize.button())
-                    }
-                } else {
-                    LazyColumn(
-                        state = playlistListState,
-                        verticalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        itemsIndexed(playlists, key = { _, it -> it.id }) { index, playlist ->
-                            FocusableSurface(
-                                onClick = { onSelectPlaylist(playlist) },
-                                modifier = Modifier.fillMaxWidth(),
-                                shape = RoundedCornerShape(10.dp),
-                                focusedScale = 1.06f,
-                                animationDurationMs = 200,
-                                containerColor = NasMusicColors.Surface,
-                                contentColor = NasMusicColors.TextPrimary,
-                                focusedContainerColor = NasMusicColors.Primary.copy(alpha = 0.2f),
-                                focusedContentColor = NasMusicColors.Primary,
-                                pressedScale = 0.98f,
-                                focusRequester = if (index == 0) playlistFirstFocusRequester else null
-                            ) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 10.dp),
-                                    verticalAlignment = Alignment.CenterVertically
+                    if (isLoading) {
+                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            Text(text = stringResource(R.string.common_loading), color = NasMusicColors.TextSecondary, fontSize = FontSize.button())
+                        }
+                    } else if (playlists.isEmpty()) {
+                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            Text(text = stringResource(R.string.playlist_empty), color = NasMusicColors.TextSecondary, fontSize = FontSize.button())
+                        }
+                    } else {
+                        LazyColumn(
+                            state = playlistListState,
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            itemsIndexed(playlists, key = { _, it -> it.id }) { index, playlist ->
+                                FocusableSurface(
+                                    onClick = {
+                                        // 竖屏：进入二级页（歌曲明细）
+                                        portraitPlaylistName = playlist.name
+                                        onSelectPlaylist(playlist)
+                                    },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    shape = RoundedCornerShape(10.dp),
+                                    focusedScale = 1.06f,
+                                    animationDurationMs = 200,
+                                    containerColor = NasMusicColors.Surface,
+                                    contentColor = NasMusicColors.TextPrimary,
+                                    focusedContainerColor = NasMusicColors.Primary.copy(alpha = 0.2f),
+                                    focusedContentColor = NasMusicColors.Primary,
+                                    pressedScale = 0.98f,
+                                    focusRequester = if (index == 0) playlistFirstFocusRequester else null
                                 ) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 10.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
                                         Text(
-                                        text = "♪",
-                                        color = NasMusicColors.Primary,
-                                        fontSize = FontSize.subtitle(),
-                                        modifier = Modifier.padding(end = 12.dp)
-                                    )
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        Text(
-                                        text = playlist.name,
-                                        color = NasMusicColors.TextPrimary,
-                                        fontSize = FontSize.button(),
-                                            maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis
+                                            text = "♪",
+                                            color = NasMusicColors.Primary,
+                                            fontSize = FontSize.subtitle(),
+                                            modifier = Modifier.padding(end = 12.dp)
                                         )
-                                        Text(
-                                        text = stringResource(R.string.playlist_song_count, playlist.songCount),
-                                        color = LocalFocusableContentColor.current,
-                                        fontSize = FontSize.small()
-                                        )
-                                    }
-                                    Row {
-                                        ButtonChipSmall(
-                                            text = stringResource(R.string.player_play),
-                                            onClick = { onPlayPlaylist(playlist) }
-                                        )
-                                        Spacer(modifier = Modifier.width(6.dp))
-                                        ButtonChipSmall(
-                                            text = stringResource(R.string.common_delete),
-                                            onClick = { onDeletePlaylist(playlist) }
-                                        )
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(
+                                                text = playlist.name,
+                                                color = NasMusicColors.TextPrimary,
+                                                fontSize = FontSize.button(),
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis
+                                            )
+                                            Text(
+                                                text = stringResource(R.string.playlist_song_count, playlist.songCount),
+                                                color = LocalFocusableContentColor.current,
+                                                fontSize = FontSize.small()
+                                            )
+                                        }
+                                        Row {
+                                            ButtonChipSmall(
+                                                text = stringResource(R.string.player_play),
+                                                onClick = { onPlayPlaylist(playlist) }
+                                            )
+                                            Spacer(modifier = Modifier.width(6.dp))
+                                            ButtonChipSmall(
+                                                text = stringResource(R.string.common_delete),
+                                                onClick = {
+                                                    // 竖屏：删掉的正是当前二级页 → 退回一级
+                                                    if (portraitPlaylistName == playlist.name) {
+                                                        portraitPlaylistName = null
+                                                    }
+                                                    onDeletePlaylist(playlist)
+                                                }
+                                            )
+                                        }
                                     }
                                 }
                             }
@@ -216,47 +238,73 @@ fun PlaylistManagementScreen(
                 }
             }
 
-            Spacer(modifier = Modifier.width(24.dp))
+            // 右侧：选中播放列表的歌曲明细（竖屏 = 二级页）
+            val playlistSongsPane: @Composable (Modifier) -> Unit = { m ->
+                Column(modifier = m) {
+                    Text(
+                        text = stringResource(R.string.playlist_track_list, selectedPlaylistSongs.size),
+                        color = NasMusicColors.TextPrimary,
+                        fontSize = FontSize.button()
+                    )
 
-            // 右侧：选中播放列表的歌曲明细
-            Column(
-                modifier = Modifier.weight(1f).fillMaxHeight()
-            ) {
-                Text(
-                    text = stringResource(R.string.playlist_track_list, selectedPlaylistSongs.size),
-                    color = NasMusicColors.TextPrimary,
-                    fontSize = FontSize.button()
-                )
+                    Spacer(modifier = Modifier.height(12.dp))
 
-                Spacer(modifier = Modifier.height(12.dp))
-
-                if (selectedPlaylistSongs.isEmpty()) {
-                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Text(
-                            text = stringResource(R.string.playlist_select_hint),
-                            color = NasMusicColors.TextSecondary,
-                            fontSize = FontSize.button()
-                        )
-                    }
-                } else {
-                    LazyColumn(
-                        state = songsListState,
-                        verticalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        itemsIndexed(selectedPlaylistSongs, key = { _, it -> it.id }) { index, song ->
-                            UnifiedSongRow(
-                                song = song,
-                                onClick = { onRemoveSong(song.id) },
-                                mode = SongRowMode.MODE_COMPACT,
-                                index = index,
-                                focusRequester = if (index == 0) songsFirstFocusRequester else null
+                    if (selectedPlaylistSongs.isEmpty()) {
+                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            Text(
+                                text = stringResource(R.string.playlist_select_hint),
+                                color = NasMusicColors.TextSecondary,
+                                fontSize = FontSize.button()
                             )
+                        }
+                    } else {
+                        LazyColumn(
+                            state = songsListState,
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            itemsIndexed(selectedPlaylistSongs, key = { _, it -> it.id }) { index, song ->
+                                UnifiedSongRow(
+                                    song = song,
+                                    onClick = { onRemoveSong(song.id) },
+                                    mode = SongRowMode.MODE_COMPACT,
+                                    index = index,
+                                    focusRequester = if (index == 0) songsFirstFocusRequester else null
+                                )
+                            }
                         }
                     }
                 }
-            }   // right Column
-        }   // split Row
-    }   // outer Column
+            }
+
+            if (isPhonePortrait) {
+                if (portraitPlaylistName == null) {
+                    // 一级：播放列表
+                    playlistListPane(Modifier.fillMaxWidth().weight(1f))
+                } else {
+                    // 二级：歌曲明细（带返回头）
+                    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        BackButton(onClick = { portraitPlaylistName = null })
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Text(
+                            text = portraitPlaylistName.orEmpty(),
+                            color = NasMusicColors.TextPrimary,
+                            fontSize = FontSize.title(),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(10.dp))
+                    playlistSongsPane(Modifier.fillMaxWidth().weight(1f))
+                }
+            } else {
+                Row(modifier = Modifier.fillMaxWidth().weight(1f)) {
+                    playlistListPane(Modifier.width(320.dp).fillMaxHeight())
+                    Spacer(modifier = Modifier.width(24.dp))
+                    playlistSongsPane(Modifier.weight(1f).fillMaxHeight())
+                }
+            }
+        }   // outer Column
 
     // 创建播放列表对话框
         if (showCreateDialog) {

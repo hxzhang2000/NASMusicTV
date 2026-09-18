@@ -78,7 +78,10 @@ import com.nasmusic.tv.ui.screens.BackupTransferDialog
 import com.nasmusic.tv.ui.screens.ModelTransferDialog
 import com.nasmusic.tv.ui.theme.NASMusicTVTheme
 import com.nasmusic.tv.ui.theme.FontSize
+import com.nasmusic.tv.ui.theme.LocalUiMode
 import com.nasmusic.tv.ui.theme.NasMusicColors
+import com.nasmusic.tv.ui.theme.ScreenOrientationPref
+import com.nasmusic.tv.ui.theme.UiMode
 import com.nasmusic.tv.ui.components.branches.*
 import com.nasmusic.tv.ui.viewmodel.MainViewModel
 import com.nasmusic.tv.data.model.Screen
@@ -103,6 +106,15 @@ fun AppRoot(
             context.packageManager.hasSystemFeature("android.hardware.type.television")
     }
     val currentScreen by viewModel.navVM.currentScreen.collectAsState(initial = Screen.Home)
+    // v2.36.0 形态因子：**只有 PhonePortrait** 走竖屏新界面；TV 与手机横屏一律走现状代码路径
+    // （方案 §3.1 B1 硬规则 —— 分支谓词不能写成 `== / != UiMode.TV`）
+    val uiMode = LocalUiMode.current
+    val isPhonePortrait = uiMode == UiMode.PhonePortrait
+    // L1 全局屏幕方向策略（顶部栏 L2 按钮显示其真值 + 单击写回，方案 D1）
+    val orientationPref by viewModel.prefs.display.screenOrientation.collectAsState(initial = "auto")
+    val orientationScope = rememberCoroutineScope()
+    // 竖屏设置二级页状态（归 navVM，BACK handler 需要读它，方案 §6.2 / K2）
+    val settingsSection by viewModel.navVM.settingsSection.collectAsState(initial = null)
     val playerState by viewModel.playerVM.playerState.collectAsState()
     val currentSong = playerState.currentSong
     // v2.35.0 多码率：当前生效档位 = 单曲覆盖 ?: 全局默认（方案 §2.3 两级模型）
@@ -150,7 +162,7 @@ fun AppRoot(
     }
     // Level 2: 根据当前屏幕和沉浸模式动态设置导航 BACK 键处理函数
     val navBackHandler = LocalNavigateBackHandler.current
-    LaunchedEffect(currentScreen, isImmersiveMode.value, showMv, showKaraoke, showVisualizer) {
+    LaunchedEffect(currentScreen, isImmersiveMode.value, showMv, showKaraoke, showVisualizer, settingsSection) {
         // C-2 修正说明：初版审查把 when/if-else 分支里的 {{ ... }} 误判为 no-op（lambda 内 lambda）。
         // 实测编译行为：when/if 分支的 { } 按“块”解析，{{ X }} = 块 + 尾部 lambda 表达式，
         // 分支值就是可用的 lambda——原实现功能正常，并非 bug。此处改用具名 lambda 仅作可读性清理。
@@ -161,6 +173,7 @@ fun AppRoot(
         val exitVisualizer: () -> Unit = { viewModel.visualizerVM.exitVisualizer() }
         val navSettings: () -> Unit = { viewModel.navVM.navigateTo(Screen.Settings) }
         val navigateMine: () -> Unit = { viewModel.navVM.navigateTo(Screen.Mine) }
+        val closeSettingsSection: () -> Unit = { viewModel.navVM.closeSettingsSection() }
         val handler: (() -> Unit)? = when {
             isImmersiveMode.value -> exitImmersive
             // 全屏可视化舞台：BACK 退出舞台，而非应用退出确认
@@ -168,6 +181,8 @@ fun AppRoot(
             // K 歌页：BACK 退出 K 歌（切回普通 NOW PLAYING），而非应用退出确认
             showKaraoke -> exitKaraoke
             showMv -> exitMv
+            // v2.36.0 竖屏设置二级页：BACK 回设置列表（**必须放在 Screen.Settings 之前**，方案 §6.2）
+            currentScreen == Screen.Settings && settingsSection != null -> closeSettingsSection
             currentScreen == Screen.NowPlaying -> if (isTV) null else navigateHome
             currentScreen == Screen.Home -> null
             // ── 设置域子页面：BACK 返回设置主菜单（入口唯一：SettingsBranch）──
@@ -183,78 +198,33 @@ fun AppRoot(
         navBackHandler.value = handler
     }
 
+    // v2.36.0 D10：**不加任何过渡**（裸 Column，硬切）—— 引入 AnimatedContent/Crossfade
+    // 会在过渡期同时组合新旧子树，带回 B3 的三个副作用（handler 置空 / 重复拉数据 / 滚动位丢失）。
     Column(modifier = Modifier.fillMaxSize()) {
-        // 顶部导航栏（沉浸模式 / MTV 全屏页时隐藏；TV 与手机一致）
+        // 顶部导航栏（沉浸模式 / MTV 全屏页时隐藏）
+        // ⚠️ v1.4 B1 硬规则：只有 PhonePortrait 用新栏；TV 与手机横屏都走现状（TvTopNavBar）
         if (!isImmersiveMode.value && !showMv && !showVisualizer) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 24.dp, vertical = 16.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Row(
-                    modifier = Modifier.padding(end = 16.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .width(36.dp)
-                            .height(36.dp)
-                            .background(
-                                NasMusicColors.Primary,
-                                RoundedCornerShape(8.dp)
-                            ),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(text = "\u266A", color = NasMusicColors.TextPrimary, fontSize = FontSize.subtitle())
+            if (isPhonePortrait) {
+                // D9：竖屏显示系统栏 → statusBarsPadding()/displayCutoutPadding() 生效
+                PhoneTopBar(
+                    orientationPref = orientationPref,
+                    onToggleOrientation = {
+                        // D1：单击在「竖屏 ⟷ 横屏」二态间循环 + 立即写 pref（无长按，D8）
+                        val next = ScreenOrientationPref.nextOnToggle(orientationPref)
+                        orientationScope.launch { viewModel.prefs.display.setScreenOrientation(next) }
+                    },
+                    onNavigateToSearch = {
+                        // 与 HomeBranch / NowPlayingBranch 的「搜索」按钮行为一致
+                        viewModel.selectLibraryTab(LibraryTab.SEARCH)
+                        viewModel.navVM.navigateTo(Screen.Library)
                     }
-                    Spacer(modifier = Modifier.width(12.dp))
-                    Text(text = "NAS Music", color = NasMusicColors.TextPrimary, fontSize = FontSize.subtitle())
-                }
-
-                // 导航项（外层固定宽度右对齐；内层可横向滑动——手机窄屏滚动浏览全部 tab）
-                Row(
-                    modifier = Modifier.weight(1f),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.End
-                ) {
-                Row(
-                    modifier = Modifier.horizontalScroll(rememberScrollState()),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                NavItem(
-                    label = stringResource(R.string.nav_home),
-                    selected = currentScreen == Screen.Home,
-                    onClick = { viewModel.navVM.navigateTo(Screen.Home) }
                 )
-                NavItem(
-                    label = stringResource(R.string.nav_now_playing),
-                    selected = currentScreen == Screen.NowPlaying,
-                    onClick = { viewModel.navVM.navigateTo(Screen.NowPlaying) }
+            } else {
+                TvTopNavBar(
+                    currentScreen = currentScreen,
+                    onNavigate = { viewModel.navVM.navigateTo(it) }
                 )
-                NavItem(
-                    label = stringResource(R.string.nav_library),
-                    selected = currentScreen == Screen.Library,
-                    onClick = { viewModel.navVM.navigateTo(Screen.Library) }
-                )
-                NavItem(
-                    label = stringResource(R.string.nav_mine),
-                    selected = currentScreen == Screen.Mine,
-                    onClick = { viewModel.navVM.navigateTo(Screen.Mine) }
-                )
-                NavItem(
-                    label = stringResource(R.string.nav_queue),
-                    selected = currentScreen == Screen.Queue,
-                    onClick = { viewModel.navVM.navigateTo(Screen.Queue) }
-                )
-                NavItem(
-                    label = stringResource(R.string.nav_settings),
-                    selected = currentScreen == Screen.Settings,
-                    onClick = { viewModel.navVM.navigateTo(Screen.Settings) }
-                )
-                }
             }
-        }
         }
 
         // 内容区域
@@ -363,6 +333,32 @@ fun AppRoot(
             }
         }
 
+        // 手机竖屏底部：MiniPlayer + 底部导航（方案 §4.0 / §8.6）
+        // ⚠️ 位置必须在 Box(weight(1f)) 之后、VisualizerOverlay 之前 —— 这样可视化舞台仍能盖住底部栏
+        // ⚠️ K 歌页不是 AppRoot 覆盖层（是 NowPlayingScreen 内部分支），故条件里必须含 showKaraoke
+        if (isPhonePortrait &&
+            !isImmersiveMode.value && !showMv && !showKaraoke && !showVisualizer
+        ) {
+            if (currentScreen != Screen.NowPlaying && currentSong != null) {
+                // 播放页自身即播放器，不重复显示 MiniPlayer
+                MiniPlayer(
+                    song = currentSong,
+                    coverCandidates = coverCandidates,
+                    progressFlow = viewModel.playerVM.progress,
+                    durationFlow = viewModel.playerVM.duration,
+                    isPlaying = isPlaying,
+                    onExpand = { viewModel.navVM.navigateTo(Screen.NowPlaying) },
+                    onPlayPause = { viewModel.playerVM.playPause() },
+                    onNext = { viewModel.playerVM.next() },
+                )
+            }
+            // PhoneNavBar 内部已用 navigationBarsPadding()
+            PhoneNavBar(
+                currentScreen = currentScreen,
+                onNavigate = { viewModel.navVM.navigateTo(it) }
+            )
+        }
+
         // 全屏可视化舞台（20 套效果）—— 覆盖层，不新增 Screen 枚举
         if (showVisualizer) {
             VisualizerOverlay(
@@ -419,6 +415,90 @@ fun AppRoot(
     }
 
 }
+/**
+ * 现状顶部导航栏（TV + 手机横屏共用）。
+ *
+ * v2.36.0 由 `AppRoot` 内联代码原样抽为具名 composable（方案 §8.6 骨架要求），
+ * **零行为变化** —— 6 项导航（首页/播放/曲库/我的/队列/设置）+ 窄屏横向滚动。
+ */
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+private fun TvTopNavBar(
+    currentScreen: Screen,
+    onNavigate: (Screen) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 24.dp, vertical = 16.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Row(
+            modifier = Modifier.padding(end = 16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .width(36.dp)
+                    .height(36.dp)
+                    .background(
+                        NasMusicColors.Primary,
+                        RoundedCornerShape(8.dp)
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(text = "\u266A", color = NasMusicColors.TextPrimary, fontSize = FontSize.subtitle())
+            }
+            Spacer(modifier = Modifier.width(12.dp))
+            Text(text = "NAS Music", color = NasMusicColors.TextPrimary, fontSize = FontSize.subtitle())
+        }
+
+        // 导航项（外层固定宽度右对齐；内层可横向滑动——手机窄屏滚动浏览全部 tab）
+        Row(
+            modifier = Modifier.weight(1f),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.End
+        ) {
+            Row(
+                modifier = Modifier.horizontalScroll(rememberScrollState()),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                NavItem(
+                    label = stringResource(R.string.nav_home),
+                    selected = currentScreen == Screen.Home,
+                    onClick = { onNavigate(Screen.Home) }
+                )
+                NavItem(
+                    label = stringResource(R.string.nav_now_playing),
+                    selected = currentScreen == Screen.NowPlaying,
+                    onClick = { onNavigate(Screen.NowPlaying) }
+                )
+                NavItem(
+                    label = stringResource(R.string.nav_library),
+                    selected = currentScreen == Screen.Library,
+                    onClick = { onNavigate(Screen.Library) }
+                )
+                NavItem(
+                    label = stringResource(R.string.nav_mine),
+                    selected = currentScreen == Screen.Mine,
+                    onClick = { onNavigate(Screen.Mine) }
+                )
+                NavItem(
+                    label = stringResource(R.string.nav_queue),
+                    selected = currentScreen == Screen.Queue,
+                    onClick = { onNavigate(Screen.Queue) }
+                )
+                NavItem(
+                    label = stringResource(R.string.nav_settings),
+                    selected = currentScreen == Screen.Settings,
+                    onClick = { onNavigate(Screen.Settings) }
+                )
+            }
+        }
+    }
+}
+
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 private fun NavItem(

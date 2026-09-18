@@ -83,7 +83,19 @@ internal fun SettingsBranch(
                     // 歌单导入：最近导入记录 + 导入结果消息
                     val playlistImportHistory by viewModel.playlistImportVM.importHistory.collectAsState(initial = emptyList())
                     val playlistImportMessage by viewModel.playlistImportVM.importMessage.collectAsState(initial = null)
+                    // v2.36.0 竖屏设置两级页：当前进入的分区（null = 一级列表）。
+                    // 状态归 NavigationViewModel —— AppRoot 的 BACK handler 需要读它（方案 §6.2 / K2）
+                    val settingsSection by viewModel.navVM.settingsSection.collectAsState(initial = null)
+                    // v2.36.0 屏幕方向（L1 全局策略）
+                    val screenOrientation by viewModel.prefs.display.screenOrientation.collectAsState(initial = "auto")
                     SettingsScreen(
+                        selectedSection = settingsSection,
+                        onOpenSection = { viewModel.navVM.openSettingsSection(it) },
+                        onCloseSection = { viewModel.navVM.closeSettingsSection() },
+                        screenOrientation = screenOrientation,
+                        onChangeScreenOrientation = { value ->
+                            coroutineScope.launch { viewModel.prefs.display.setScreenOrientation(value) }
+                        },
                         settings = settings,
                         onToggleDarkTheme = { viewModel.updateDarkTheme(it) },
                         onToggleAnimations = { viewModel.updateAnimationsEnabled(it) },

@@ -128,12 +128,13 @@ fun ArtistCardSkeleton() {
 }
 
 /**
- * 专辑骨架屏 — 12 张占位卡片，6 列网格。
+ * 专辑骨架屏 — 12 张占位卡片。列数走 `adaptiveColumns`，与真数据一致
+ * （v2.36.0 竖屏：原固定 6 列在 360dp 屏上每卡仅 ~50dp）。
  */
 @Composable
 fun AlbumSkeletonGrid() {
     LazyVerticalGrid(
-        columns = GridCells.Fixed(6),
+        columns = GridCells.Fixed(adaptiveColumns(tv = 6, phonePortrait = 3, medium = 6)),
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -146,12 +147,12 @@ fun AlbumSkeletonGrid() {
 }
 
 /**
- * 艺术家骨架屏 — 12 张占位卡片，6 列网格。
+ * 艺术家骨架屏 — 12 张占位卡片。列数走 `adaptiveColumns`，与真数据一致。
  */
 @Composable
 fun ArtistSkeletonGrid() {
     LazyVerticalGrid(
-        columns = GridCells.Fixed(6),
+        columns = GridCells.Fixed(adaptiveColumns(tv = 6, phonePortrait = 3, medium = 6)),
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(10.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),

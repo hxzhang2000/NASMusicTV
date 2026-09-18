@@ -4,6 +4,8 @@ import com.nasmusic.tv.ui.theme.FontSize
 import com.nasmusic.tv.ui.components.common.SourceBadge
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -13,13 +15,16 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -40,9 +45,12 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -57,6 +65,7 @@ import com.nasmusic.tv.data.model.LyricsHighlightMode
 import com.nasmusic.tv.data.model.PlayMode
 import com.nasmusic.tv.data.model.Song
 import com.nasmusic.tv.data.model.isRadioSong
+import com.nasmusic.tv.ui.RegisterDialogBackHandler
 import com.nasmusic.tv.ui.components.LyricsView
 import com.nasmusic.tv.ui.components.CoverCarousel
 import com.nasmusic.tv.ui.components.ControlButtonsRow
@@ -155,6 +164,11 @@ fun NowPlayingScreen(
     onSleepTimerStart: (Int) -> Unit = {},
     /** 取消定时 */
     onSleepTimerCancel: () -> Unit = {},
+    // === v2.36.0 竖屏（方案 §4.2）===
+    /** 竖屏顶栏「收起」：回到首页（播放继续，由 MiniPlayer 承载） */
+    onCollapse: () -> Unit = {},
+    /** 竖屏「队列」入口 */
+    onOpenQueue: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     var showInfoPanel by remember { mutableStateOf(false) }
@@ -201,6 +215,56 @@ fun NowPlayingScreen(
             modelDownloaded = modelDownloaded,
             playPauseFocusRequester = playPauseFocusRequester,
             remoteControlUrl = remoteControlUrl
+        )
+        return
+    }
+
+    // ── 手机竖屏：双模式（封面 / 歌词）+ 左右滑切换（v2.36.0，方案 §4.2） ──
+    // ⚠️ 只在 PhonePortrait 生效；TV 与手机横屏走下方现状布局（B1 硬规则）
+    if (com.nasmusic.tv.ui.theme.LocalUiMode.current == com.nasmusic.tv.ui.theme.UiMode.PhonePortrait) {
+        NowPlayingPortrait(
+            currentSong = currentSong,
+            isPlaying = isPlaying,
+            playMode = playMode,
+            progressMs = progressMs,
+            durationMs = durationMs,
+            lyrics = lyrics,
+            lyricsAvailability = lyricsAvailability,
+            coverCandidates = coverCandidates,
+            highlightMode = highlightMode,
+            isFavorite = isFavorite,
+            onPlayPause = onPlayPause,
+            onNext = onNext,
+            onPrevious = onPrevious,
+            onTogglePlayMode = onTogglePlayMode,
+            onSeek = onSeek,
+            onSwitchLyricsSource = onSwitchLyricsSource,
+            onChangeHighlightMode = onChangeHighlightMode,
+            onToggleFavorite = onToggleFavorite,
+            lyricsFontScale = lyricsFontScale,
+            onLyricsFontScaleChange = onLyricsFontScaleChange,
+            technicalInfo = technicalInfo,
+            onLoadTechnicalInfo = onLoadTechnicalInfo,
+            onEnterKaraoke = onEnterKaraoke,
+            onEnterVisualizer = onEnterVisualizer,
+            mvAvailable = mvAvailable,
+            onEnterMv = onEnterMv,
+            qualityTier = qualityTier,
+            qualityLabel = qualityLabel,
+            onChangeQuality = onChangeQuality,
+            sleepTimerState = sleepTimerState,
+            onSleepTimerStart = onSleepTimerStart,
+            onSleepTimerCancel = onSleepTimerCancel,
+            onSearchSong = onSearchSong,
+            onSearchArtist = onSearchArtist,
+            coverFilterEnabled = coverFilterEnabled,
+            coverFilterBlurRadius = coverFilterBlurRadius,
+            coverFilterDarkOverlay = coverFilterDarkOverlay,
+            isImmersiveMode = isImmersiveMode,
+            onToggleImmersive = onToggleImmersive,
+            onCollapse = onCollapse,
+            onOpenQueue = onOpenQueue,
+            playPauseFocusRequester = playPauseFocusRequester,
         )
         return
     }
@@ -1157,5 +1221,735 @@ private fun SleepTimerPickerDialog(
                 }
             }
         }
+    }
+}
+
+// =====================================================================================
+// v2.36.0 手机竖屏播放页（方案 §4.2）
+//
+// 竖屏下 380dp 封面列 + 歌词列的横排结构不成立 → 改为「双模式 + 左右滑切换」：
+//   模式 A 封面（默认）：顶栏 / 封面 1:1 / 歌名信息 / 进度条 / 控制行 / 次级操作 Chip / 模式指示
+//   模式 B 歌词：顶栏 / 歌词区 weight(1f) / 工具条 3 Chip / 细进度条 2dp / 精简控制行 / 模式指示
+//
+// D2 决策：7 个歌词 Chip 收敛为 —— 来源循环 Chip + 字号循环 Chip + 睡眠定时（保留独立）
+//          + 高亮模式移入「次级操作 Chip 横排」（高频切换，保留一键入口，不进"更多"菜单）。
+// =====================================================================================
+
+/** 竖屏播放页的两种模式（方案 §4.2） */
+internal enum class PortraitNowPlayingMode { COVER, LYRICS }
+
+/** 歌词字号档位（与现状 A/A+/A++/A+++ 一致） */
+private val LYRICS_FONT_SCALES = listOf(0.7f, 1.0f, 1.3f, 1.6f)
+
+private fun lyricsFontIndex(scale: Float): Int = when (scale) {
+    0.7f -> 0
+    1.0f -> 1
+    1.3f -> 2
+    1.6f -> 3
+    else -> 1
+}
+
+/** 歌词来源循环顺序（D2：4 个来源标签合并为 1 个循环 Chip） */
+private val LYRICS_SOURCE_CYCLE = listOf(
+    com.nasmusic.tv.data.model.LyricsSource.EMBEDDED,
+    com.nasmusic.tv.data.model.LyricsSource.NETWORK,
+    com.nasmusic.tv.data.model.LyricsSource.CACHED,
+    com.nasmusic.tv.data.model.LyricsSource.LOCAL_FILE,
+)
+
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+private fun NowPlayingPortrait(
+    currentSong: Song?,
+    isPlaying: Boolean,
+    playMode: PlayMode,
+    progressMs: Long,
+    durationMs: Long,
+    lyrics: Lyrics?,
+    lyricsAvailability: com.nasmusic.tv.data.model.LyricsAvailability,
+    coverCandidates: List<String>,
+    highlightMode: LyricsHighlightMode,
+    isFavorite: Boolean,
+    onPlayPause: () -> Unit,
+    onNext: () -> Unit,
+    onPrevious: () -> Unit,
+    onTogglePlayMode: () -> Unit,
+    onSeek: (Long) -> Unit,
+    onSwitchLyricsSource: (com.nasmusic.tv.data.model.LyricsSource) -> Unit,
+    onChangeHighlightMode: (LyricsHighlightMode) -> Unit,
+    onToggleFavorite: (() -> Unit)?,
+    lyricsFontScale: Float,
+    onLyricsFontScaleChange: (Float) -> Unit,
+    technicalInfo: com.nasmusic.tv.data.model.SongTechnicalInfo?,
+    onLoadTechnicalInfo: () -> Unit,
+    onEnterKaraoke: () -> Unit,
+    onEnterVisualizer: () -> Unit,
+    mvAvailable: Boolean,
+    onEnterMv: () -> Unit,
+    qualityTier: Int,
+    qualityLabel: String,
+    onChangeQuality: (Int, com.nasmusic.tv.backend.network.QualityScope) -> Unit,
+    sleepTimerState: com.nasmusic.tv.player.SleepTimerController.State?,
+    onSleepTimerStart: (Int) -> Unit,
+    onSleepTimerCancel: () -> Unit,
+    onSearchSong: (String) -> Unit,
+    onSearchArtist: (String) -> Unit,
+    coverFilterEnabled: Boolean,
+    coverFilterBlurRadius: Float,
+    coverFilterDarkOverlay: Float,
+    isImmersiveMode: Boolean,
+    onToggleImmersive: () -> Unit,
+    onCollapse: () -> Unit,
+    onOpenQueue: () -> Unit,
+    playPauseFocusRequester: FocusRequester,
+) {
+    var mode by remember { mutableStateOf(PortraitNowPlayingMode.COVER) }
+    var showMoreMenu by remember { mutableStateOf(false) }
+    var showQualityDialog by remember { mutableStateOf(false) }
+    var showSleepTimerDialog by remember { mutableStateOf(false) }
+    var showInfoPanel by remember { mutableStateOf(false) }
+
+    val isRadio = currentSong?.networkSource?.isRadioSong() == true
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(
+                if (isImmersiveMode) Brush.verticalGradient(listOf(Color.Black, Color.Black))
+                else Brush.verticalGradient(listOf(NasMusicColors.Background, Color(0xFF0A1020)))
+            )
+    ) {
+        Column(modifier = Modifier.fillMaxSize()) {
+            // ── ① 顶栏 56dp：收起 / 标题 / 更多 ──
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(56.dp)
+                    .padding(horizontal = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                PortraitTopBarButton(
+                    label = "\u2304",
+                    contentDescription = stringResource(R.string.common_back),
+                    onClick = onCollapse,
+                )
+                Text(
+                    text = currentSong?.title ?: stringResource(R.string.player_no_song_selected),
+                    color = NasMusicColors.TextPrimary,
+                    fontSize = FontSize.button(),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.weight(1f),
+                )
+                PortraitTopBarButton(
+                    label = "\u22EF",
+                    contentDescription = stringResource(R.string.np_more),
+                    onClick = { showMoreMenu = true },
+                )
+            }
+
+            if (mode == PortraitNowPlayingMode.COVER) {
+                // ── 模式 A：封面 ──
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f)
+                        .verticalScroll(rememberScrollState())
+                        .padding(horizontal = 16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    // ② 封面：比例式宽度（原 380dp 固定列竖屏不可用）
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .widthIn(max = 320.dp)
+                            .aspectRatio(1f)
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(NasMusicColors.SurfaceVariant),
+                    ) {
+                        key(currentSong?.id) {
+                            CoverCarousel(
+                                coverCandidates = coverCandidates,
+                                isPlaying = isPlaying,
+                                modifier = Modifier.fillMaxSize(),
+                            )
+                        }
+                        // D8：封面右上角 ⓘ 图标按钮 → 歌曲信息（不用长按）
+                        Box(modifier = Modifier.align(Alignment.TopEnd).padding(6.dp)) {
+                            PortraitTopBarButton(
+                                label = "\u24D8",
+                                contentDescription = stringResource(R.string.np_song_info_cd),
+                                onClick = { showInfoPanel = !showInfoPanel },
+                            )
+                        }
+                        // 点击封面 → 沉浸模式
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .clickable(onClick = onToggleImmersive)
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    // ③ 歌名 / 艺术家 / 专辑 + 收藏
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = currentSong?.title ?: stringResource(R.string.player_no_song_selected),
+                                color = NasMusicColors.TextPrimary,
+                                fontSize = FontSize.title(),
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.clickable {
+                                    currentSong?.title?.takeIf { it.isNotBlank() }?.let(onSearchSong)
+                                },
+                            )
+                            val artist = currentSong?.artist.orEmpty()
+                            Text(
+                                text = buildString {
+                                    append(artist.ifBlank { "—" })
+                                    val album = currentSong?.album.orEmpty()
+                                    if (album.isNotBlank()) append(" · ").append(album)
+                                },
+                                color = NasMusicColors.TextSecondary,
+                                fontSize = FontSize.small(),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.clickable {
+                                    if (artist.isNotBlank()) onSearchArtist(artist)
+                                },
+                            )
+                        }
+                        if (onToggleFavorite != null && currentSong != null) {
+                            Spacer(modifier = Modifier.width(8.dp))
+                            FavoriteButton(isFavorite = isFavorite, onClick = onToggleFavorite)
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    // ④ 进度条（触摸 tap/drag seek 已支持）
+                    ProgressSection(
+                        progressMs = progressMs,
+                        durationMs = durationMs,
+                        onSeek = onSeek,
+                        compact = true,
+                        isLive = isRadio,
+                    )
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    // ⑤ 控制行（播放键 64dp）
+                    ControlButtonsRow(
+                        isPlaying = isPlaying,
+                        playMode = playMode,
+                        onPlayPause = onPlayPause,
+                        onNext = onNext,
+                        onPrevious = onPrevious,
+                        onTogglePlayMode = onTogglePlayMode,
+                        showVisualizerButton = false,
+                        onEnterVisualizer = onEnterVisualizer,
+                        showVocalButton = false,
+                        onEnterKaraoke = onEnterKaraoke,
+                        showMvButton = false,
+                        mvAvailable = mvAvailable,
+                        onEnterMv = onEnterMv,
+                        compact = true,
+                        playPauseFocusRequester = playPauseFocusRequester,
+                    )
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    // ⑥ 次级操作 Chip 横排可滚动（D2：高亮模式保留一键入口）
+                    PortraitSecondaryChips(
+                        highlightMode = highlightMode,
+                        onChangeHighlightMode = onChangeHighlightMode,
+                        isFavorite = isFavorite,
+                        onToggleFavorite = onToggleFavorite,
+                        qualityLabel = qualityLabel,
+                        onOpenQuality = { showQualityDialog = true },
+                        onOpenQueue = onOpenQueue,
+                        sleepTimerState = sleepTimerState,
+                        onOpenSleepTimer = { showSleepTimerDialog = true },
+                        onEnterVisualizer = onEnterVisualizer,
+                        onEnterKaraoke = onEnterKaraoke,
+                        mvAvailable = mvAvailable,
+                        onEnterMv = onEnterMv,
+                    )
+
+                    Spacer(modifier = Modifier.height(12.dp))
+                }
+            } else {
+                // ── 模式 B：歌词 ──
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f)
+                        .padding(horizontal = 16.dp),
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f)
+                            .background(NasMusicColors.Surface.copy(alpha = 0.3f), RoundedCornerShape(8.dp)),
+                    ) {
+                        if (isRadio) {
+                            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                Text(
+                                    text = stringResource(R.string.player_radio_live),
+                                    fontSize = FontSize.title(),
+                                    fontWeight = FontWeight.Bold,
+                                    color = NasMusicColors.Primary,
+                                    textAlign = TextAlign.Center,
+                                )
+                            }
+                        } else {
+                            LyricsView(
+                                lyrics = lyrics,
+                                currentTimeMs = progressMs,
+                                highlightMode = highlightMode,
+                                isPlaying = isPlaying,
+                                fontSizeMultiplier = lyricsFontScale,
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(horizontal = 4.dp, vertical = 4.dp),
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    // ③ 歌词工具条：3 个 Chip（来源循环 + 字号循环 + 睡眠定时，D2）
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState()),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        // 来源循环 Chip
+                        val currentSource = lyrics?.source
+                        val sourceIdx = LYRICS_SOURCE_CYCLE.indexOf(currentSource).let { if (it < 0) 1 else it }
+                        SourceTag(
+                            label = currentSource?.displayName
+                                ?: com.nasmusic.tv.data.model.LyricsSource.NETWORK.displayName,
+                            available = true,
+                            selected = true,
+                            onClick = {
+                                // 循环到下一个可用来源
+                                for (step in 1..LYRICS_SOURCE_CYCLE.size) {
+                                    val next = LYRICS_SOURCE_CYCLE[(sourceIdx + step) % LYRICS_SOURCE_CYCLE.size]
+                                    val usable = when (next) {
+                                        com.nasmusic.tv.data.model.LyricsSource.EMBEDDED -> lyricsAvailability.hasBackend
+                                        com.nasmusic.tv.data.model.LyricsSource.CACHED -> lyricsAvailability.hasCached
+                                        com.nasmusic.tv.data.model.LyricsSource.LOCAL_FILE -> false
+                                        else -> true
+                                    }
+                                    if (usable) {
+                                        onSwitchLyricsSource(next)
+                                        break
+                                    }
+                                }
+                            },
+                        )
+                        // 字号循环 Chip（4 档循环）
+                        val fontIdx = lyricsFontIndex(lyricsFontScale)
+                        SourceTag(
+                            label = listOf("A", "A+", "A++", "A+++")[fontIdx],
+                            available = true,
+                            selected = false,
+                            onClick = {
+                                onLyricsFontScaleChange(LYRICS_FONT_SCALES[(fontIdx + 1) % LYRICS_FONT_SCALES.size])
+                            },
+                        )
+                        // 睡眠定时（保留独立状态指示）
+                        SourceTag(
+                            label = when (val st = sleepTimerState) {
+                                is com.nasmusic.tv.player.SleepTimerController.State.Running ->
+                                    stringResource(
+                                        R.string.np_sleep_timer_on,
+                                        ((st.endsAtMs - System.currentTimeMillis() + 59_999) / 60_000)
+                                            .toInt().coerceAtLeast(1)
+                                    )
+                                else -> stringResource(R.string.np_sleep_timer_off)
+                            },
+                            available = true,
+                            selected = sleepTimerState is com.nasmusic.tv.player.SleepTimerController.State.Running,
+                            onClick = { showSleepTimerDialog = true },
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(6.dp))
+
+                    // ④ 细进度条 2dp
+                    PortraitThinProgress(progressMs = progressMs, durationMs = durationMs)
+
+                    Spacer(modifier = Modifier.height(6.dp))
+
+                    // ⑤ 精简控制行
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        ControlButtonsRow(
+                            isPlaying = isPlaying,
+                            playMode = playMode,
+                            onPlayPause = onPlayPause,
+                            onNext = onNext,
+                            onPrevious = onPrevious,
+                            onTogglePlayMode = onTogglePlayMode,
+                            showVisualizerButton = false,
+                            onEnterVisualizer = onEnterVisualizer,
+                            showVocalButton = false,
+                            onEnterKaraoke = onEnterKaraoke,
+                            showMvButton = false,
+                            mvAvailable = mvAvailable,
+                            onEnterMv = onEnterMv,
+                            compact = true,
+                            playPauseFocusRequester = playPauseFocusRequester,
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(6.dp))
+                }
+            }
+
+            // ⑦ 模式指示器 + 左右滑切换
+            PortraitModeIndicator(
+                mode = mode,
+                onSwitch = { mode = it },
+                onSwipeLeft = {
+                    mode = if (mode == PortraitNowPlayingMode.COVER) PortraitNowPlayingMode.LYRICS
+                    else PortraitNowPlayingMode.COVER
+                },
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+        }
+
+        // 歌曲信息底部弹层（D8：由封面右上角 ⓘ 触发）
+        if (showInfoPanel) {
+            PortraitInfoOverlay(
+                currentSong = currentSong,
+                technicalInfo = technicalInfo,
+                onLoadTechnicalInfo = onLoadTechnicalInfo,
+                onDismiss = { showInfoPanel = false },
+            )
+        }
+
+        // ⋯ 更多菜单
+        if (showMoreMenu) {
+            PortraitMoreMenu(
+                qualityLabel = qualityLabel,
+                mvAvailable = mvAvailable,
+                onOpenQuality = { showMoreMenu = false; showQualityDialog = true },
+                onOpenQueue = { showMoreMenu = false; onOpenQueue() },
+                onOpenSleepTimer = { showMoreMenu = false; showSleepTimerDialog = true },
+                onEnterVisualizer = { showMoreMenu = false; onEnterVisualizer() },
+                onEnterKaraoke = { showMoreMenu = false; onEnterKaraoke() },
+                onEnterMv = { showMoreMenu = false; onEnterMv() },
+                onDismiss = { showMoreMenu = false },
+            )
+        }
+
+        if (showSleepTimerDialog) {
+            SleepTimerPickerDialog(
+                onStart = { min ->
+                    showSleepTimerDialog = false
+                    onSleepTimerStart(min)
+                },
+                onCancel = {
+                    showSleepTimerDialog = false
+                    onSleepTimerCancel()
+                },
+                onDismiss = { showSleepTimerDialog = false },
+            )
+        }
+
+        if (showQualityDialog) {
+            com.nasmusic.tv.ui.components.QualityPickerDialog(
+                currentTier = qualityTier,
+                onConfirm = { tier, scope ->
+                    showQualityDialog = false
+                    onChangeQuality(tier, scope)
+                },
+                onDismiss = { showQualityDialog = false },
+            )
+        }
+    }
+}
+
+/** 竖屏顶栏图标按钮（44dp+ 触摸目标；⚠️ Compose dp 口径见方案 §2.7） */
+@Composable
+private fun PortraitTopBarButton(
+    label: String,
+    contentDescription: String,
+    onClick: () -> Unit,
+) {
+    FocusableSurface(
+        onClick = onClick,
+        modifier = Modifier
+            .size(48.dp)
+            .semantics { this.contentDescription = contentDescription },
+        shape = RoundedCornerShape(8.dp),
+        containerColor = Color.Transparent,
+        focusedContainerColor = NasMusicColors.Primary.copy(alpha = 0.2f),
+        contentColor = NasMusicColors.TextPrimary,
+        focusedContentColor = NasMusicColors.Primary,
+        focusedScale = 1.06f,
+        animationDurationMs = 150,
+        pressedScale = 0.94f,
+    ) {
+        Box(modifier = Modifier.size(48.dp), contentAlignment = Alignment.Center) {
+            Text(text = label, color = LocalFocusableContentColor.current, fontSize = FontSize.subtitle())
+        }
+    }
+}
+
+/** 次级操作 Chip 横排（可滚动）—— D2：高亮模式在此保留一键入口 */
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+private fun PortraitSecondaryChips(
+    highlightMode: LyricsHighlightMode,
+    onChangeHighlightMode: (LyricsHighlightMode) -> Unit,
+    isFavorite: Boolean,
+    onToggleFavorite: (() -> Unit)?,
+    qualityLabel: String,
+    onOpenQuality: () -> Unit,
+    onOpenQueue: () -> Unit,
+    sleepTimerState: com.nasmusic.tv.player.SleepTimerController.State?,
+    onOpenSleepTimer: () -> Unit,
+    onEnterVisualizer: () -> Unit,
+    onEnterKaraoke: () -> Unit,
+    mvAvailable: Boolean,
+    onEnterMv: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState()),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        // 高亮模式（逐行 / 逐字）—— 高频切换，必须保留独立入口
+        SourceTag(
+            label = if (highlightMode == LyricsHighlightMode.WORD_BY_WORD) {
+                stringResource(R.string.player_highlight_word)
+            } else {
+                stringResource(R.string.player_highlight_line)
+            },
+            available = true,
+            selected = highlightMode == LyricsHighlightMode.WORD_BY_WORD,
+            onClick = {
+                onChangeHighlightMode(
+                    if (highlightMode == LyricsHighlightMode.WORD_BY_WORD) LyricsHighlightMode.LINE_BY_LINE
+                    else LyricsHighlightMode.WORD_BY_WORD
+                )
+            },
+        )
+        if (onToggleFavorite != null) {
+            SourceTag(
+                label = if (isFavorite) stringResource(R.string.action_unfavorite)
+                else stringResource(R.string.mine_favorites),
+                available = true,
+                selected = isFavorite,
+                onClick = onToggleFavorite,
+            )
+        }
+        if (qualityLabel.isNotBlank()) {
+            SourceTag(label = qualityLabel, available = true, selected = false, onClick = onOpenQuality)
+        }
+        SourceTag(
+            label = stringResource(R.string.nav_queue),
+            available = true,
+            selected = false,
+            onClick = onOpenQueue,
+        )
+        SourceTag(
+            label = when (val st = sleepTimerState) {
+                is com.nasmusic.tv.player.SleepTimerController.State.Running ->
+                    stringResource(
+                        R.string.np_sleep_timer_on,
+                        ((st.endsAtMs - System.currentTimeMillis() + 59_999) / 60_000).toInt().coerceAtLeast(1)
+                    )
+                else -> stringResource(R.string.np_sleep_timer_off)
+            },
+            available = true,
+            selected = sleepTimerState is com.nasmusic.tv.player.SleepTimerController.State.Running,
+            onClick = onOpenSleepTimer,
+        )
+        SourceTag(
+            label = stringResource(R.string.np_mode_cover),
+            available = true,
+            selected = false,
+            onClick = onEnterVisualizer,
+        )
+        SourceTag(
+            label = stringResource(R.string.player_karaoke),
+            available = true,
+            selected = false,
+            onClick = onEnterKaraoke,
+        )
+        if (mvAvailable) {
+            SourceTag(label = "MTV", available = true, selected = false, onClick = onEnterMv)
+        }
+    }
+}
+
+/** 歌词模式的 2dp 细进度条（不可 seek；seek 在封面模式的完整进度条上做） */
+@Composable
+private fun PortraitThinProgress(progressMs: Long, durationMs: Long) {
+    val fraction = if (durationMs > 0L) (progressMs.toFloat() / durationMs.toFloat()).coerceIn(0f, 1f) else 0f
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(2.dp)
+            .background(NasMusicColors.SurfaceVariant, RoundedCornerShape(1.dp))
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth(fraction)
+                .height(2.dp)
+                .background(NasMusicColors.Primary, RoundedCornerShape(1.dp))
+        )
+    }
+}
+
+/** ⑦ 模式指示器（两圆点）+ 左右滑切换整页 */
+@Composable
+private fun PortraitModeIndicator(
+    mode: PortraitNowPlayingMode,
+    onSwitch: (PortraitNowPlayingMode) -> Unit,
+    onSwipeLeft: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(28.dp)
+            .pointerInput(Unit) {
+                detectHorizontalDragGestures { _, dragAmount ->
+                    if (dragAmount < -20f || dragAmount > 20f) onSwipeLeft()
+                }
+            },
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        listOf(PortraitNowPlayingMode.COVER, PortraitNowPlayingMode.LYRICS).forEach { m ->
+            val active = m == mode
+            Box(
+                modifier = Modifier
+                    .padding(horizontal = 4.dp)
+                    .size(if (active) 8.dp else 6.dp)
+                    .clip(androidx.compose.foundation.shape.CircleShape)
+                    .background(if (active) NasMusicColors.Primary else NasMusicColors.TextSecondary.copy(alpha = 0.5f))
+                    .clickable { onSwitch(m) }
+            )
+        }
+    }
+}
+
+/** 歌曲信息底部弹层（自建，走 `RegisterDialogBackHandler` 语义的 Box 覆盖层） */
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+private fun PortraitInfoOverlay(
+    currentSong: Song?,
+    technicalInfo: com.nasmusic.tv.data.model.SongTechnicalInfo?,
+    onLoadTechnicalInfo: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black.copy(alpha = 0.6f))
+            .clickable(onClick = onDismiss),
+        contentAlignment = Alignment.BottomCenter,
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(max = 420.dp)
+                .clip(RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp))
+                .background(NasMusicColors.Surface)
+                .verticalScroll(rememberScrollState())
+                .padding(16.dp),
+        ) {
+            SongInfoPanel(
+                song = currentSong,
+                technicalInfo = technicalInfo,
+                onDismiss = onDismiss,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            LaunchedEffect(currentSong?.id) { onLoadTechnicalInfo() }
+        }
+    }
+}
+
+/** ⋯ 更多菜单（底部弹层；只放低频入口，高频项仍在次级 Chip 行） */
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+private fun PortraitMoreMenu(
+    qualityLabel: String,
+    mvAvailable: Boolean,
+    onOpenQuality: () -> Unit,
+    onOpenQueue: () -> Unit,
+    onOpenSleepTimer: () -> Unit,
+    onEnterVisualizer: () -> Unit,
+    onEnterKaraoke: () -> Unit,
+    onEnterMv: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    // 方案 §6.3：自建 Box 覆盖层必须走 RegisterDialogBackHandler
+    RegisterDialogBackHandler(onDismiss)
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black.copy(alpha = 0.6f))
+            .clickable(onClick = onDismiss),
+        contentAlignment = Alignment.BottomCenter,
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp))
+                .background(NasMusicColors.Surface)
+                .padding(vertical = 12.dp),
+        ) {
+            PortraitMenuItem(stringResource(R.string.nav_queue), onOpenQueue)
+            if (qualityLabel.isNotBlank()) {
+                PortraitMenuItem(qualityLabel, onOpenQuality)
+            }
+            PortraitMenuItem(stringResource(R.string.notif_sleep_timer_start), onOpenSleepTimer)
+            PortraitMenuItem(stringResource(R.string.np_mode_cover), onEnterVisualizer)
+            PortraitMenuItem(stringResource(R.string.player_karaoke), onEnterKaraoke)
+            if (mvAvailable) PortraitMenuItem("MTV", onEnterMv)
+        }
+    }
+}
+
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+private fun PortraitMenuItem(label: String, onClick: () -> Unit) {
+    FocusableSurface(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(0.dp),
+        focusedScale = 1.0f,
+        animationDurationMs = 120,
+        containerColor = Color.Transparent,
+        focusedContainerColor = NasMusicColors.Primary.copy(alpha = 0.18f),
+        contentColor = NasMusicColors.TextPrimary,
+        focusedContentColor = NasMusicColors.Primary,
+    ) {
+        Text(
+            text = label,
+            color = LocalFocusableContentColor.current,
+            fontSize = FontSize.body(),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 16.dp),
+        )
     }
 }

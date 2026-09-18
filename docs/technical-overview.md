@@ -8906,6 +8906,109 @@ VM `notifyImportUnsupported` 及相关字符串）。
 **遗留**：上传导入未写自动化测试（NanoHTTPD 原生 socket 不易在 Robolectric 起服务）；
 tv wifi 断线重连时 18084 连接窗口期会失败，重试即恢复，未做特殊处理。
 
+### 10.162 v2.36.0 — 手机竖屏 UI 适配与横竖屏切换（形态因子 `UiMode`，2026-09-19）
+
+**来源**：`docs/phone-portrait-ui-plan.md`（v1.5 审阅定稿）。**维护约定见
+`docs/conventions-adaptive-ui.md`**（新增页面必读）。
+
+**背景**：`MainActivity.kt` 写死 `SENSOR_LANDSCAPE`，手机只能横着用；Manifest 无
+`configChanges` → 旋转会重建 Activity（播放中断、列表滚动位置丢失）。同时大量**硬编码大宽度**
+在 360dp 竖屏上必被裁切：`ServerConnectScreen` 760dp 卡片、`PlaylistManagementScreen` 320dp 侧栏、
+`NetdiskScreen` 420dp 搜索框、`LibraryScreen` 240dp 搜索框、`RadioTab` 340dp 搜索框 + N 个 tag
+同一 `Row`（**tag 被推出屏幕且滑不到**）、`SearchTab.SearchSourceBar` 来源 Chip 行同款问题、
+13 处对话框 480~720dp 固定宽。
+
+**架构**：
+
+- **形态因子抽象**（`ui/theme/UiMode.kt`）：`enum UiMode { TV, PhonePortrait, PhoneLandscape }`
+  \+ `LocalUiMode` CompositionLocal，在 `MainActivity.setContent` 内由 `LocalConfiguration`
+  推导后 `CompositionLocalProvider` 下发。
+  ⚠️ **判定不能写成 `remember { derivedStateOf { configuration.orientation } }`** ——
+  `configuration` 不是 `State`，会永久读到初值；必须直接读 `LocalConfiguration.current`。
+- **纯函数决策**（JVM 可单测，`ActivityInfo`/`Configuration` 常量在编译期内联，无需 Robolectric）：
+  `deriveUiMode(isTV, orientation)` / `resolveOrientation(pref, isFullScreenPage)` /
+  `ScreenOrientationPref.nextOnToggle(current)`。
+- ⛔ **B1 硬规则**：分支谓词只写 `== / != UiMode.PhonePortrait`，`else` 分支必须与改动前**逐字等价**
+  —— 因为**手机横屏与 TV 共用同一套布局**。这样"TV 端零变化 + 手机横屏与改前一致"才是可证的。
+  落地手法：把原顶部导航**原样抽成** `TvTopNavBar(...)`，`if (isPhonePortrait) PhoneTopBar(...) else TvTopNavBar(...)`
+  —— 行为零变化，diff 可审。
+
+**方向偏好与冷启动（方案 B4）**：`data/prefs/DisplayPrefs.kt` 暴露 `screenOrientation` Flow。
+`AppPreferences` 内新增 `@Volatile private var cachedScreenOrientation` + 独立 SharedPreferences
+（`display_mirror`）双向镜像 —— 首帧 `getScreenOrientationSync()` **零 IO** 拿到正确方向，
+避免 `runBlocking` 阻塞主线程。（同款范式此前已用于主题 / 语言。）
+
+**旋转不重建**：Manifest `screenOrientation` `fullSensor` → `unspecified`，并新增
+`configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden"`。
+刻意**不含** `uiMode` / `density` / `layoutDirection`（这三项仍需重建才生效）。
+
+**系统栏（D9）**：竖屏 `show(systemBars())` —— 否则 `statusBarsPadding()` /
+`navigationBarsPadding()` / `displayCutoutPadding()` 全是 no-op（刘海遮挡内容）；
+TV / 横屏 / 沉浸 / 全屏页仍 `hide()`。**旋转为硬切（D10）**，不做 `AnimatedContent` /
+`Crossfade` —— 避免单槽 handler 被置空、重复数据加载、滚动位置丢失三个副作用。
+
+**K1 护栏（勿破坏）**：`progress` / `duration` 由 `PlayerManager` 的 **1000ms `Handler` 轮询**驱动，
+**禁止在 `AppRoot` 顶层订阅**（会驱动全树每秒重组，含 LazyColumn 状态与 D-Pad 焦点搜索）。
+`MiniPlayer` 接收 `StateFlow` 并在**组件内部** `collectAsState`。
+
+**K2**：页面级 BACK 状态提升到 `NavigationViewModel`（本版新增 `settingsSection`），
+AppRoot 的 BACK 链在 `Screen.Settings` **之前**先消费它。
+
+**列数口径（双输入）**：`adaptiveColumns(tv, phonePortrait, medium)` 上移至
+`ui/components/CommonComponents.kt`（原 `BrowseComponents.kt` 内 `internal`）。⚠️ 竖屏**先看
+`LocalUiMode` 直接取 `phonePortrait`**，不再只按 `screenWidthDp` 算 —— 因为 `screenWidthDp` 是
+**未缩放** Android dp（≈360），而竖屏布局宽度是 **Compose dp**（`PHONE_UI_SCALE = 0.82` 缩放后 ≈439），
+只用宽度会在 600/1000 阈值附近错配。第三参由 `phoneLandscape` 改名 `medium`
+（它由 `widthDp >= 600` 触发，**平板竖屏也会落进这一支**）。
+
+**新增通用组件**：`PhoneTopBar`（顶栏 + 方向单击切换）、`PhoneNavBar`（5 项底栏）、`MiniPlayer`
+（64dp + 2dp 进度线 + 上滑展开）、`SettingsSectionList` / `SettingsSectionBackHeader`、
+`responsiveDialogSize(landscapeWidth, scrollable)`、`AdaptiveLayout(phonePortrait, tv)`、
+`NowPlayingPortrait`（封面/歌词双模式 + 3 Chip 工具条 + 「⋯」菜单 + 歌曲信息底部弹层）。
+
+**关键坑**：
+
+- ⛔ **`androidx.compose.material3` 不在编译类路径**（`tv-material` 对它的依赖是 runtime 语义）
+  → `NavigationBar` / `Scaffold` / `Slider` / `ModalBottomSheet` 全部 import 不过。
+  手机端 UI 只能用 `compose.foundation` + `androidx.tv.material3` + 项目自建 `FocusableSurface`。
+- ⚠️ **自建 `Box` 覆盖层必须走 `RegisterDialogBackHandler`**，否则 BACK 穿透到 Level 3 应用退出确认
+  （方案 §6.3；`DialogBackHandler.kt` 的 KDoc 有明确警告）。
+- ⚠️ **`responsiveDialogSize(scrollable = true)` 不能用于内部有 `LazyColumn` 的对话框** ——
+  嵌套同向滚动容器会触发 `Vertically scrollable component was measured with an infinity maximum
+  height constraints` 崩溃。
+- ⚠️ **直接写死 `fillMaxWidth(0.92f)` 会把 TV 上的 480~720dp 对话框压到 420dp**（回归）
+  → 必须走 `responsiveDialogSize`（内部按 `LocalUiMode` 分叉）。
+- ⚠️ **`LazyColumn { item { ... } }` 的 content lambda 不是 `@Composable` 上下文** ——
+  在 `HomeScreen` 里直接读 `LocalUiMode.current` 会报
+  `@Composable invocations can only happen from the context of a @Composable function`；
+  必须把 `isPhonePortrait` **提到 `LazyColumn` 之前**再在 lambda 内使用布尔值。
+- ⚠️ **`pointerInput(Unit)` 不随重组重启** → 直接捕获回调会拿到旧 lambda，
+  需 `rememberUpdatedState` 持有最新回调（`MiniPlayer` 上滑展开即此写法）。
+- ⚠️ 只有 `modifier` 参数为 `internal` 的 enum 会连带报错：`SettingsSection` 由 `private` 上移时
+  **必须同时改为 `public`**，否则 `public` 成员暴露 `internal` 类型编译失败（方案原文写 `internal` 不可行）。
+
+**顺带修复**：`PlayerControls.kt` 进度条焦点变化时的无条件 `AppLog.e`（`AppLog.e` 无
+`BuildConfig.DEBUG` 守卫，release 也会执行）已移除；`FocusableSurface` 的 TV 判定补上
+`android.hardware.type.television`（部分盒子只声明这一项，此前被误判为手机、不显示焦点边框）。
+
+**测试**（`app/src/test/.../ui/theme/UiModeTest.kt`，纯 JVM）：`deriveUiMode` 三态 + 未知方向兜底 +
+**B1 回归用例**（手机横屏不得被判定为 TV）、`resolveOrientation` 四分支 + "永不返回 SENSOR 系列"、
+`nextOnToggle` "永不回到 auto"、`adaptiveColumnsOf` 阈值边界（599/600/999/1000）+ 电台网格 3/1/2、
+§2.7 dp 口径护栏（`56 × 0.82 ≈ 45.92 ≥ 44`、`44 / 0.82 ≈ 53.66`）。
+
+**验证**：`:app:assembleDebug` + `:app:lintDebug` + `:app:testDebugUnitTest` 全绿；
+`assembleRelease` BUILD SUCCESSFUL。
+
+**遗留（诚实记录）**：① **电视 / 手机实机视觉验收**（竖屏布局、旋转表现、手势手感需上机看，
+按项目约定由用户执行）；② **详情页下滑返回手势**（P2-33 后半）—— 方案已标注与 D9 底部系统手势
+冲突、需实测，在无法上机验证的前提下不引入不可验证的交互；③ **缩放系数 0.82 → 0.88**（P2-37，
+方案标为"可选"，改动需同时处理 `LYRICS_RECOVER_SCALE` 与 §2.7 全部口径）；④ **平板 `TabletPortrait`
+独立分档**（P2-36，方案标为"可选"，当前 `medium` 档已覆盖 sw≥600）；⑤ **自定义 lint 规则**
+（P1-32 后半）—— 约定已落到 `docs/conventions-adaptive-ui.md` 并附静态自查命令，但新增 Gradle
+lint 模块会引入构建复杂度，未纳入本版。
+
+**版本**：v2.35.0 → **v2.36.0**（versionCode 153 → 154）
+
 ### 10.152 v2.32.3 — T5：删除死代码 `VocalRemovalProcessor.kt`（算法先归档，2026-09-14）
 
 **来源**：`logs_temp/code-review-full-report-2026-09-13.md` §T5 / `docs/code-review-2026-09-03.md` §P2。文件 348 行，全项目**零调用方**（`PlaybackService.kt:207` 实际 `val vocalRemovalProcessor = SpectralMaskProcessor()`——变量名是历史遗留，类型早就换过了；`PlayerManager.setVocalRemovalProcessor()` 的形参类型同样是 `SpectralMaskProcessor`）。

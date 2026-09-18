@@ -101,7 +101,7 @@ fun BaiduDirPickerDialog(
         ) {
             Column(
                 modifier = Modifier
-                    .width(640.dp)
+                    .then(responsiveDialogSize(640.dp))
                     .height(660.dp)
                     .background(NasMusicColors.Surface, RoundedCornerShape(16.dp))
                     .padding(28.dp)

@@ -63,8 +63,11 @@ import com.nasmusic.tv.data.model.Song
 import com.nasmusic.tv.ui.LocalListBackHandler
 import com.nasmusic.tv.ui.components.CoverCarousel
 import com.nasmusic.tv.ui.components.FocusableSurface
+import com.nasmusic.tv.ui.components.LocalFocusableContentColor
+import com.nasmusic.tv.ui.theme.LocalUiMode
 import com.nasmusic.tv.ui.theme.NasMusicBrushes
 import com.nasmusic.tv.ui.theme.NasMusicColors
+import com.nasmusic.tv.ui.theme.UiMode
 import com.nasmusic.tv.util.TimeUtils
 import com.nasmusic.tv.ui.components.common.SourceBadge
 import kotlinx.coroutines.launch
@@ -113,6 +116,33 @@ fun QueueScreen(
         }
         listBackHandler.value = handler
         onDispose { listBackHandler.value = null }
+    }
+
+    // v2.36.0 竖屏（方案 §4.5）：340dp 侧卡折为顶部 56dp 横条，队列单列；上/下移/移出进 ⋮ 菜单
+    if (LocalUiMode.current == UiMode.PhonePortrait) {
+        Column(modifier = modifier.fillMaxSize().padding(16.dp)) {
+            PortraitQueueHeader(
+                currentSong = currentSong,
+                coverCandidates = coverCandidates,
+                isPlaying = isPlaying,
+                onPlayPause = onPlayPause,
+                onNext = onNext,
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+            QueueListPane(
+                queue = queue,
+                currentIndex = currentIndex,
+                isPhonePortrait = true,
+                listState = listState,
+                firstItemFocusRequester = firstItemFocusRequester,
+                onPlaySong = onPlaySong,
+                onRemoveSong = onRemoveSong,
+                onClearQueue = onClearQueue,
+                onMoveItem = onMoveItem,
+                modifier = Modifier.fillMaxWidth().weight(1f),
+            )
+        }
+        return
     }
 
     Row(modifier = modifier.fillMaxSize().padding(32.dp)) {
@@ -211,96 +241,139 @@ fun QueueScreen(
             Text(text = playMode.displayName, color = NasMusicColors.TextSecondary, fontSize = FontSize.body())
         }
 
-        // --- 右侧：队列列表 ---
-        Column(modifier = Modifier.fillMaxWidth().weight(1f).padding(start = 8.dp)) {
-            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Text(text = stringResource(R.string.queue_title), color = NasMusicColors.TextPrimary, fontSize = FontSize.displayLarge())
-                Spacer(modifier = Modifier.weight(1f))
-                Text(text = stringResource(R.string.queue_song_count, queue.size), color = NasMusicColors.TextSecondary, fontSize = FontSize.button())
-                if (queue.isNotEmpty()) {
-                    Spacer(modifier = Modifier.width(24.dp))
-                    QueueActionButton(text = stringResource(R.string.queue_clear), onClick = onClearQueue, icon = null)
+        // --- 右侧：队列列表（v2.36.0 抽为 QueueListPane，竖屏复用同一实现）---
+        QueueListPane(
+            queue = queue,
+            currentIndex = currentIndex,
+            isPhonePortrait = false,
+            listState = listState,
+            firstItemFocusRequester = firstItemFocusRequester,
+            onPlaySong = onPlaySong,
+            onRemoveSong = onRemoveSong,
+            onClearQueue = onClearQueue,
+            onMoveItem = onMoveItem,
+            modifier = Modifier.fillMaxWidth().weight(1f).padding(start = 8.dp),
+        )
+    }
+}
+
+/**
+ * 队列列表面板（v2.36.0 由 `QueueScreen` 抽出，TV/横屏与竖屏共用）。
+ *
+ * 竖屏（[isPhonePortrait]）：行尾 3 个操作按钮（↑ / ↓ / ✕）收敛为 1 个 **⋮ 菜单**
+ * （方案 §4.5 / D8：不用长按，用显式按钮）。
+ */
+@Composable
+private fun QueueListPane(
+    queue: List<Song>,
+    currentIndex: Int,
+    isPhonePortrait: Boolean,
+    listState: androidx.compose.foundation.lazy.LazyListState,
+    firstItemFocusRequester: FocusRequester,
+    onPlaySong: (Int) -> Unit,
+    onRemoveSong: (Int) -> Unit,
+    onClearQueue: () -> Unit,
+    onMoveItem: (Int, Int) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    // 竖屏 ⋮ 菜单：记录当前打开菜单的行下标（null = 关闭）
+    var menuIndex by remember { mutableStateOf<Int?>(null) }
+
+    Column(modifier = modifier) {
+        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text(text = stringResource(R.string.queue_title), color = NasMusicColors.TextPrimary, fontSize = if (isPhonePortrait) FontSize.title() else FontSize.displayLarge())
+            Spacer(modifier = Modifier.weight(1f))
+            Text(text = stringResource(R.string.queue_song_count, queue.size), color = NasMusicColors.TextSecondary, fontSize = FontSize.button())
+            if (queue.isNotEmpty()) {
+                Spacer(modifier = Modifier.width(if (isPhonePortrait) 12.dp else 24.dp))
+                QueueActionButton(text = stringResource(R.string.queue_clear), onClick = onClearQueue, icon = null)
+            }
+        }
+
+        Spacer(modifier = Modifier.height(if (isPhonePortrait) 12.dp else 24.dp))
+
+        if (queue.isEmpty()) {
+            Box(modifier = Modifier.fillMaxSize().weight(1f), contentAlignment = Alignment.Center) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(text = stringResource(R.string.queue_empty), color = NasMusicColors.TextSecondary, fontSize = FontSize.title())
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(text = stringResource(R.string.queue_go_to_library), color = NasMusicColors.TextSecondary, fontSize = FontSize.button())
                 }
             }
+        } else {
+            LazyColumn(
+                state = listState,
+                modifier = Modifier.fillMaxWidth().weight(1f)
+            ) {
+                itemsIndexed(queue, key = { _, song -> song.id }) { index, song ->
+                    val isCurrent = index == currentIndex
+                    // 与 SongRow 相同的实现方式：
+                    // 外层 Box(focusGroup) 承载背景/边框/缩放，onFocusChanged 用 hasFocus 追踪子树焦点
+                    // 内部 Row 用兄弟级排列：左侧歌曲内容(clickable) + 右侧操作按钮
+                    var isRowFocused by remember { mutableStateOf(false) }
+                    val animScale = remember { Animatable(1f) }
+                    val scope = rememberCoroutineScope()
 
-            Spacer(modifier = Modifier.height(24.dp))
-
-            if (queue.isEmpty()) {
-                Box(modifier = Modifier.fillMaxSize().weight(1f), contentAlignment = Alignment.Center) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text(text = stringResource(R.string.queue_empty), color = NasMusicColors.TextSecondary, fontSize = FontSize.title())
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(text = stringResource(R.string.queue_go_to_library), color = NasMusicColors.TextSecondary, fontSize = FontSize.button())
-                    }
-                }
-            } else {
-                LazyColumn(
-                    state = listState,
-                    modifier = Modifier.fillMaxWidth().weight(1f)
-                ) {
-                    itemsIndexed(queue, key = { _, song -> song.id }) { index, song ->
-                        val isCurrent = index == currentIndex
-                        // 与 SongRow 相同的实现方式：
-                        // 外层 Box(focusGroup) 承载背景/边框/缩放，onFocusChanged 用 hasFocus 追踪子树焦点
-                        // 内部 Row 用兄弟级排列：左侧歌曲内容(clickable) + 右侧操作按钮
-                        var isRowFocused by remember { mutableStateOf(false) }
-                        val animScale = remember { Animatable(1f) }
-                        val scope = rememberCoroutineScope()
-
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .focusGroup()
-                                .scale(animScale.value)
-                                .clip(RoundedCornerShape(6.dp))
-                                .background(
-                                    color = if (isRowFocused || isCurrent) NasMusicColors.Primary.copy(alpha = 0.2f) else NasMusicColors.Surface.copy(alpha = 0.5f)
-                                )
-                                .border(
-                                    width = if (isRowFocused) 2.dp else 0.dp,
-                                    color = if (isRowFocused) NasMusicColors.FocusRing.copy(alpha = 0.6f) else Color.Transparent,
-                                    shape = RoundedCornerShape(6.dp)
-                                )
-                                .onFocusChanged { state ->
-                                    isRowFocused = state.hasFocus
-                                    scope.launch {
-                                        animScale.animateTo(
-                                            if (isRowFocused) 1.02f else 1f,
-                                            tween(200)
-                                        )
-                                    }
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .focusGroup()
+                            .scale(animScale.value)
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(
+                                color = if (isRowFocused || isCurrent) NasMusicColors.Primary.copy(alpha = 0.2f) else NasMusicColors.Surface.copy(alpha = 0.5f)
+                            )
+                            .border(
+                                width = if (isRowFocused) 2.dp else 0.dp,
+                                color = if (isRowFocused) NasMusicColors.FocusRing.copy(alpha = 0.6f) else Color.Transparent,
+                                shape = RoundedCornerShape(6.dp)
+                            )
+                            .onFocusChanged { state ->
+                                isRowFocused = state.hasFocus
+                                scope.launch {
+                                    animScale.animateTo(
+                                        if (isRowFocused) 1.02f else 1f,
+                                        tween(200)
+                                    )
                                 }
+                            }
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth().height(if (isPhonePortrait) 72.dp else 100.dp).padding(horizontal = 12.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
+                            // 左侧可聚焦+可点击区域（点击播放歌曲）
                             Row(
-                                modifier = Modifier.fillMaxWidth().height(100.dp).padding(horizontal = 16.dp, vertical = 12.dp),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .then(if (index == 0) Modifier.focusRequester(firstItemFocusRequester) else Modifier)
+                                    .clickable { onPlaySong(index) },
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                // 左侧可聚焦+可点击区域（点击播放歌曲）
-                                Row(
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .then(if (index == 0) Modifier.focusRequester(firstItemFocusRequester) else Modifier)
-                                        .clickable { onPlaySong(index) },
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Text(
-                                        text = String.format("%02d", index + 1),
-                                        color = if (isCurrent) NasMusicColors.Primary else NasMusicColors.TextSecondary,
-                                        fontSize = FontSize.button(),
-                                        modifier = Modifier.width(36.dp),
-                                        textAlign = TextAlign.Center
-                                    )
-                                    Spacer(modifier = Modifier.width(12.dp))
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        Text(text = song.title, color = if (isCurrent) NasMusicColors.Primary else NasMusicColors.TextPrimary, fontSize = FontSize.subtitle(), maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                        Text(text = song.artist.ifBlank { "-" }, color = NasMusicColors.TextSecondary, fontSize = FontSize.button(), maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                    }
+                                Text(
+                                    text = String.format("%02d", index + 1),
+                                    color = if (isCurrent) NasMusicColors.Primary else NasMusicColors.TextSecondary,
+                                    fontSize = FontSize.button(),
+                                    modifier = Modifier.width(32.dp),
+                                    textAlign = TextAlign.Center
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(text = song.title, color = if (isCurrent) NasMusicColors.Primary else NasMusicColors.TextPrimary, fontSize = if (isPhonePortrait) FontSize.body() else FontSize.subtitle(), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                    Text(text = song.artist.ifBlank { "-" }, color = NasMusicColors.TextSecondary, fontSize = FontSize.button(), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                }
+                                if (!isPhonePortrait) {
                                     Spacer(modifier = Modifier.width(8.dp))
                                     SourceBadge(song = song)
                                     Spacer(modifier = Modifier.width(12.dp))
                                     Text(text = TimeUtils.formatDuration(song.durationMs), color = NasMusicColors.TextSecondary, fontSize = FontSize.button())
                                 }
-                                // 右侧操作按钮（独立可聚焦）
+                            }
+                            // 右侧操作：竖屏收敛为 1 个 ⋮ 按钮（方案 §4.5）；TV/横屏保持 3 个独立按钮
+                            if (isPhonePortrait) {
+                                Spacer(modifier = Modifier.width(4.dp))
+                                PortraitRowMenuButton(onClick = { menuIndex = index })
+                            } else {
                                 if (index > 0) {
                                     Spacer(modifier = Modifier.width(4.dp))
                                     MoveButton(text = "↑", onClick = { onMoveItem(index, index - 1) })
@@ -317,6 +390,152 @@ fun QueueScreen(
                 }
             }
         }
+    }
+
+    // 竖屏 ⋮ 菜单（上移 / 下移 / 移出队列 / 立即播放）
+    val idx = menuIndex
+    if (isPhonePortrait && idx != null) {
+        QueueItemActionMenu(
+            canMoveUp = idx > 0,
+            canMoveDown = idx < queue.lastIndex,
+            onMoveUp = { onMoveItem(idx, idx - 1); menuIndex = null },
+            onMoveDown = { onMoveItem(idx, idx + 1); menuIndex = null },
+            onRemove = { onRemoveSong(idx); menuIndex = null },
+            onPlayNow = { onPlaySong(idx); menuIndex = null },
+            onDismiss = { menuIndex = null },
+        )
+    }
+}
+
+/** 竖屏队列行 ⋮ 按钮（44dp+ 触摸目标） */
+@Composable
+private fun PortraitRowMenuButton(onClick: () -> Unit) {
+    FocusableSurface(
+        onClick = onClick,
+        modifier = Modifier.size(48.dp),
+        shape = RoundedCornerShape(8.dp),
+        containerColor = Color.Transparent,
+        focusedContainerColor = NasMusicColors.Primary.copy(alpha = 0.2f),
+        contentColor = NasMusicColors.TextPrimary,
+        focusedContentColor = NasMusicColors.Primary,
+        focusedScale = 1.06f,
+        animationDurationMs = 150,
+        pressedScale = 0.94f,
+    ) {
+        Box(modifier = Modifier.size(48.dp), contentAlignment = Alignment.Center) {
+            Text(text = "\u22EF", color = NasMusicColors.TextPrimary, fontSize = FontSize.subtitle())
+        }
+    }
+}
+
+/** 队列行上下文菜单（底部弹层；D8：显式按钮触发，不用长按） */
+@Composable
+private fun QueueItemActionMenu(
+    canMoveUp: Boolean,
+    canMoveDown: Boolean,
+    onMoveUp: () -> Unit,
+    onMoveDown: () -> Unit,
+    onRemove: () -> Unit,
+    onPlayNow: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black.copy(alpha = 0.6f))
+            .clickable(onClick = onDismiss),
+        contentAlignment = Alignment.BottomCenter,
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp))
+                .background(NasMusicColors.Surface)
+                .padding(vertical = 12.dp),
+        ) {
+            QueueMenuItem(stringResource(R.string.queue_action_play_now), onPlayNow)
+            if (canMoveUp) QueueMenuItem(stringResource(R.string.queue_action_move_up), onMoveUp)
+            if (canMoveDown) QueueMenuItem(stringResource(R.string.queue_action_move_down), onMoveDown)
+            QueueMenuItem(stringResource(R.string.queue_action_remove), onRemove)
+        }
+    }
+}
+
+@Composable
+private fun QueueMenuItem(label: String, onClick: () -> Unit) {
+    FocusableSurface(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(0.dp),
+        focusedScale = 1.0f,
+        animationDurationMs = 120,
+        containerColor = Color.Transparent,
+        focusedContainerColor = NasMusicColors.Primary.copy(alpha = 0.18f),
+        contentColor = NasMusicColors.TextPrimary,
+        focusedContentColor = NasMusicColors.Primary,
+    ) {
+        Text(
+            text = label,
+            color = LocalFocusableContentColor.current,
+            fontSize = FontSize.body(),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 16.dp),
+        )
+    }
+}
+
+/** 竖屏队列页顶部 56dp 当前播放横条（原 340dp 侧卡折叠，方案 §4.5） */
+@Composable
+private fun PortraitQueueHeader(
+    currentSong: Song?,
+    coverCandidates: List<String>,
+    isPlaying: Boolean,
+    onPlayPause: () -> Unit,
+    onNext: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(56.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(NasMusicColors.Surface)
+            .padding(horizontal = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            modifier = Modifier
+                .size(40.dp)
+                .clip(RoundedCornerShape(6.dp))
+                .background(NasMusicColors.SurfaceVariant)
+        ) {
+            CoverCarousel(
+                coverCandidates = coverCandidates,
+                isPlaying = isPlaying,
+                modifier = Modifier.fillMaxSize()
+            )
+        }
+        Spacer(modifier = Modifier.width(10.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = currentSong?.title ?: stringResource(R.string.player_no_song_selected),
+                color = NasMusicColors.Primary,
+                fontSize = FontSize.button(),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                text = currentSong?.artist?.ifBlank { "—" } ?: "—",
+                color = NasMusicColors.TextSecondary,
+                fontSize = FontSize.caption(),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+        MiniIconButton(
+            onClick = onPlayPause,
+            icon = if (isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow
+        )
+        Spacer(modifier = Modifier.width(6.dp))
+        MiniIconButton(onClick = onNext, icon = Icons.Filled.SkipNext)
     }
 }
 

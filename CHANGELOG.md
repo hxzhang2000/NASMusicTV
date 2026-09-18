@@ -7,6 +7,126 @@
 >
 > 类型：`Added`（新增） | `Changed`（变更） | `Fixed`（修复） | `Removed`（移除）
 
+## [v2.36.0] - 2026-09-19
+
+> **手机竖屏 UI 适配与横竖屏切换：引入形态因子抽象，TV / 手机竖屏 / 手机横屏三态并存**
+>
+> 此前应用**强制横屏**（`MainActivity` 写死 `SENSOR_LANDSCAPE`），手机上只能横着用：竖屏拿起来
+> 整个界面被压扁、大量固定宽度组件（760dp 服务器卡片、320dp 侧栏、420/240dp 搜索框）被推出屏幕。
+> 本版引入 `UiMode` 形态因子抽象，把"TV / 手机竖屏 / 手机横屏"变成一等公民，逐页做竖屏适配，
+> 并提供两层方向控制（设置项三选一 + 顶栏单击循环）。
+>
+> 设计见 `docs/phone-portrait-ui-plan.md`（v1.5 审阅定稿）；
+> **维护约定见 `docs/conventions-adaptive-ui.md`**（新增页面必读）。
+>
+> ⚠️ **硬规则 B1**：分支谓词只写 `== / != UiMode.PhonePortrait`，`else` 分支必须与改动前**逐字等价**
+> ——因为**手机横屏与 TV 共用同一套布局**。这样"TV 端零变化 + 手机横屏与改前一致"才是可证的。
+>
+> **未实施部分**：① **电视 / 手机实机视觉验收**（竖屏布局、旋转表现、手势手感需上机看，按项目约定
+> 由用户执行）；② **详情页下滑返回手势**（P2-33 后半）——方案已标注与 D9 底部系统手势冲突、需实测，
+> 在无法上机验证的前提下不引入不可验证的交互；③ **缩放系数 0.82 → 0.88**（P2-37）——方案标为
+> "可选"，且改动需同时处理 `LYRICS_RECOVER_SCALE` 与 §2.7 全部尺寸口径，风险大于收益，留待上机后定；
+> ④ **平板 `TabletPortrait` 独立分档**（P2-36，方案标为"可选"，当前 `medium` 档已覆盖 sw≥600）；
+> ⑤ **自定义 lint 规则**（P1-32 后半）——约定已落到 `docs/conventions-adaptive-ui.md` 并附静态自查
+> 命令，但新增 Gradle lint 模块会引入构建复杂度，未纳入本版。
+
+### Added
+
+- **形态因子抽象 `ui/theme/UiMode.kt`**：`enum class UiMode { TV, PhonePortrait, PhoneLandscape }`
+  \+ `LocalUiMode` CompositionLocal，在 `MainActivity.setContent` 由 `LocalConfiguration` 推导后下发
+- **纯函数方向决策**（可 JVM 单测，不依赖 Compose 运行时）：
+  - `deriveUiMode(isTV, orientation)` —— 形态推导
+  - `resolveOrientation(pref, isFullScreenPage)` —— 偏好 + 全屏页 → `requestedOrientation`
+  - `ScreenOrientationPref.nextOnToggle(current)` —— L2 单击循环（竖 ⟷ 横，**永不回到 auto**）
+- **屏幕方向偏好 `data/prefs/DisplayPrefs.kt`**：`screenOrientation` Flow + `setScreenOrientation` +
+  `getScreenOrientationSync()`。沿用项目既有 `@Volatile` 内存镜像 + 独立 SharedPreferences
+  （`display_mirror`）范式实现**零 IO 冷启动同步读** —— 首帧就能拿到正确方向，避免
+  `runBlocking` 阻塞主线程（方案 B4）
+- **竖屏全局骨架**：
+  - `ui/components/PhoneTopBar.kt` —— 顶栏（Logo + 搜索 + 方向切换图标），
+    `statusBarsPadding()` + `displayCutoutPadding()`，48dp 图标按钮带 `contentDescription`
+  - `ui/components/PhoneNavBar.kt` —— 5 项底部导航（首页/曲库/播放/我的/设置），
+    56dp + `navigationBarsPadding()`
+  - `ui/components/MiniPlayer.kt` —— 迷你播放条（64dp + 2dp 进度线）。⚠️ **进度/时长在组件内部
+    订阅**，不提到 `AppRoot` 顶层（否则 1000ms 轮询会驱动全树每秒重组，方案 K1）
+- **设置页两级化**：`SettingsSection` 从 `SettingsScreen` 私有 enum 上移为 `public`
+  （`ui/screens/settings/SettingsSection.kt`，带图标），新增 `SettingsSectionList`（一级列表）与
+  `SettingsSectionBackHeader`（二级返回头）。竖屏不再渲染 240dp 侧栏
+- **播放页竖屏版 `NowPlayingPortrait`**（方案 §4.2，本版核心改造）：
+  - 双模式（封面 / 歌词），左右滑切换 + 顶部模式指示器
+  - 封面 `fillMaxWidth().widthIn(max = 320.dp).aspectRatio(1f)`，右上角「ⓘ」→ 歌曲信息底部弹层
+  - 7 个歌词 Chip 精简为 **3 个**（来源循环 / 字号循环 / 睡眠定时），高亮模式移入次级 Chip 行
+  - 「⋯」更多菜单承载低频入口（队列 / 音质 / 定时关闭 / 可视化 / KTV / MTV）
+- **队列页竖屏版**：72dp 行高 + 单「⋮」按钮（原 TV 版是 ↑/↓/✕ 三按钮）→ 底部操作菜单
+  （立即播放 / 上移 / 下移 / 移除）
+- **详情页竖屏版**（专辑 / 艺术家）：封面 160dp 置顶（艺术家保持圆形），
+  「返回 + 标题」与「播放全部 + 加入队列 + 歌曲数」**拆两行**，操作行可横滑
+- **歌单管理竖屏两级化**：320dp 侧栏在 360dp 屏上必溢出 → 改「播放列表（一级）⇄ 歌曲明细（二级）」
+- **通用自适应工具**（`ui/components/CommonComponents.kt`）：
+  - `adaptiveColumnsOf(widthDp, tv, phonePortrait, medium)` —— **纯函数**，阈值 `>=1000` / `>=600` / else
+  - `adaptiveColumns(tv, phonePortrait, medium)` —— `@Composable` 版；竖屏**直接取 `phonePortrait`**
+    档，不再心算宽度（**双输入原则**：`screenWidthDp` 是未缩放 Android dp ≈ 360，而竖屏布局宽度是
+    Compose dp ≈ 439，只用宽度会在 600/1000 阈值附近错配）
+  - `AdaptiveLayout(phonePortrait, tv)` —— 二分支包装器
+  - `responsiveDialogSize(landscapeWidth, scrollable)` —— 对话框/弹层响应式尺寸
+- **`docs/conventions-adaptive-ui.md`**：自适应 UI 维护约定（B1 硬规则、列数口径、dp/触摸目标换算、
+  新增 Screen 检查清单、可复现验证命令）
+- **新增 UI 文案 26 条**（中英双语同步）：方向设置项与提示、顶栏/迷你播放条无障碍描述、
+  歌曲信息、封面/歌词模式名、歌单/队列操作项等
+
+### Changed
+
+- **不再强制横屏**：删除 `MainActivity` 中写死的 `SENSOR_LANDSCAPE`，改为按偏好 + 是否全屏页动态
+  决策（全屏页恒为横屏；其余按 `auto / portrait / landscape` 三态）
+- **`AndroidManifest.xml`**：`screenOrientation` 由 `fullSensor` 改为 `unspecified`，并新增
+  `configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden"`
+  ——旋转时**不再重建 Activity**（播放不中断、列表滚动位置不丢）。
+  刻意**不含** `uiMode` / `density` / `layoutDirection`（这三项仍需重建才能生效）
+- **系统栏策略（D9）**：竖屏 `show(systemBars())` —— 否则 `statusBarsPadding()` /
+  `navigationBarsPadding()` / `displayCutoutPadding()` 全是 no-op（刘海会遮挡内容）；
+  TV / 手机横屏 / 沉浸模式 / 全屏页仍 `hide()`
+- **旋转为硬切（D10）**：不做 `AnimatedContent` / `Crossfade` —— 避免单槽 handler 被置空、
+  重复数据加载、滚动位置丢失三个副作用
+- **BACK 优先级**：竖屏设置页二级分区提到 `NavigationViewModel`（`settingsSection`），
+  AppRoot 的 BACK 链在 `Screen.Settings` **之前**先消费它；歌单管理二级页同理由页面内 handler 消费
+- **各页竖屏 padding 32 → 16dp**：首页 / 曲库 / 我的 / 队列 / 设置 / 专辑详情 / 艺术家详情 /
+  网盘 / 歌单管理 / 均衡器 / 天气电台 / 播放统计
+- **曲库页顶部由一行改三行**（竖屏）：标题行（+ 播放全部）→ 搜索框整行 → TAB 横滑行。
+  原「标题 + 可滚动 TAB + 240dp 搜索框 + 播放全部」在 360dp 上必被裁切
+- **电台页顶部行修复**：340dp 搜索框与 N 个 preset tag 拆两行，tag 行可横滑
+- **搜索页来源 Chip 行修复**：label 固定 + Chip 区 `horizontalScroll`
+  —— 此前窄屏下后面的来源**被推出屏幕且滑不到**（P0-23）
+- **列数统一走 `adaptiveColumns`**：`RadioTab` 电台网格由硬编码 `GridCells.Fixed(2)` 改为
+  `adaptiveColumns(3, 1, 2)`；`Shimmer` 骨架网格由固定 6 列改为 `adaptiveColumns(6, 3, 6)`
+  （与真数据列数一致，加载完成不再跳变）
+- **对话框族统一响应式宽度**（13 处）：竖屏 `fillMaxWidth(0.92f) + widthIn(max = 420.dp) +
+  heightIn(max = 80% 屏高)`，非竖屏保持原固定宽度。⚠️ 直接写死会**把 TV 上的 480~720dp 对话框
+  压到 420dp**，故必须走 `responsiveDialogSize`（内部按 `LocalUiMode` 分叉）
+- **网盘页搜索框 420dp → 整行**，服务器连接卡片 760dp → `fillMaxWidth().widthIn(max = 420.dp)`
+- **首页**：竖屏隐藏「当前播放」卡片（与底部 MiniPlayer 重复）；统计卡改 2×2 网格；
+  横向卡片宽度 160dp → 140dp
+- **热力图新增可选放大**（`enableZoom`）：仅手机竖屏开启，格子保底 10dp 并允许横向滚动；
+  默认 `false` 时与改动前逐字等价
+
+### Fixed
+
+- **`PlayerControls.kt` 遗留调试日志**：进度条焦点变化时无条件打 `AppLog.e` ——
+  `AppLog.e` 无 `BuildConfig.DEBUG` 守卫，release 包里也会执行，已移除
+- **`FocusableSurface` 的 TV 判定不完整**：此前只查 `android.software.leanback`，
+  部分电视盒子只声明 `android.hardware.type.television` → 被误判为手机、不显示焦点边框。
+  现在两个 feature **任一命中**即视为 TV
+- **自建底部弹层补齐 BACK 注册**：播放页的歌曲信息弹层与「⋯」菜单改用
+  `RegisterDialogBackHandler` —— 否则 BACK 会穿透到 Level 3 应用退出确认（方案 §6.3）
+
+### Test
+
+- 新增 `UiModeTest`（纯 JVM，无 Robolectric）：`deriveUiMode` 三态 + 未知方向兜底 +
+  **B1 回归用例**（手机横屏**不得**被判定为 TV）、`resolveOrientation` 四分支 +
+  **"永不返回 SENSOR 系列"**护栏、`nextOnToggle` **"永不回到 auto"**、
+  `adaptiveColumnsOf` 三档阈值边界（599/600/999/1000）+ 电台网格 3/1/2、
+  §2.7 dp 口径护栏（`56 × 0.82 ≈ 45.92 ≥ 44`、`44 / 0.82 ≈ 53.66`）
+- 全量 `testDebugUnitTest` 通过；`lintDebug` 0 Error
+
 ## [v2.35.0] - 2026-09-18
 
 > **网络音乐多码率：补齐 192 档，播放与下载支持按档位静默降级；同曲多档可共存**

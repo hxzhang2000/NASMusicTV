@@ -39,6 +39,7 @@ import androidx.tv.material3.Text
 import com.nasmusic.tv.R
 import com.nasmusic.tv.backend.network.baidu.BaiduOAuthClient
 import com.nasmusic.tv.ui.components.FocusableSurface
+import com.nasmusic.tv.ui.components.responsiveDialogSize
 import com.nasmusic.tv.ui.theme.FontSize
 import com.nasmusic.tv.ui.theme.NasMusicColors
 import com.nasmusic.tv.ui.viewmodel.MainViewModel
@@ -107,7 +108,7 @@ fun BaiduAuthDialog(
         ) {
             Column(
                 modifier = Modifier
-                    .width(600.dp)
+                    .then(responsiveDialogSize(600.dp))
                     .heightIn(max = 760.dp)
                     .verticalScroll(rememberScrollState())
                     .background(NasMusicColors.Surface, RoundedCornerShape(16.dp))

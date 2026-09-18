@@ -42,7 +42,9 @@ import androidx.tv.material3.Text
 import com.nasmusic.tv.R
 import com.nasmusic.tv.data.model.EqualizerPreset
 import com.nasmusic.tv.ui.theme.Accent
+import com.nasmusic.tv.ui.theme.LocalUiMode
 import com.nasmusic.tv.ui.theme.NasMusicColors
+import com.nasmusic.tv.ui.theme.UiMode
 import com.nasmusic.tv.ui.components.BackButton
 import com.nasmusic.tv.data.model.VisualizerTheme
 import com.nasmusic.tv.ui.components.FocusableSurface
@@ -66,8 +68,13 @@ fun EqualizerScreen(
     visualizerTheme: VisualizerTheme = VisualizerTheme.Default,
     modifier: Modifier = Modifier
 ) {
+    // v2.36.0 竖屏：页 padding 32→16
+    val isPhonePortrait = LocalUiMode.current == UiMode.PhonePortrait
     Column(
-        modifier = modifier.fillMaxSize().padding(horizontal = 32.dp, vertical = 20.dp)
+        modifier = modifier.fillMaxSize().padding(
+            horizontal = if (isPhonePortrait) 16.dp else 32.dp,
+            vertical = if (isPhonePortrait) 12.dp else 20.dp
+        )
     ) {
         // 返回 + 标题
         Row(

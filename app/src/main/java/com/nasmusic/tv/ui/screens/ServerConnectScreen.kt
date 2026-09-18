@@ -55,6 +55,8 @@ import com.nasmusic.tv.data.model.ServerConfig
 import com.nasmusic.tv.ui.components.FocusableSurface
 import com.nasmusic.tv.ui.components.LocalFocusableContentColor
 import com.nasmusic.tv.ui.theme.NasMusicColors
+import com.nasmusic.tv.ui.theme.LocalUiMode
+import com.nasmusic.tv.ui.theme.UiMode
 import kotlinx.coroutines.launch
 
 private enum class InputField {
@@ -141,13 +143,21 @@ fun ServerConnectScreen(
     val backendRegistry = remember { (appContext.applicationContext as NasMusicApp).backendRegistry }
     val context = LocalContext.current
 
+    // v2.36.0 竖屏（方案 §4.8 / P0-18）：固定 760dp 卡片在 360dp 宽屏上溢出 → 改「撑满留边 + 上限 420dp」
+    val isPhonePortrait = LocalUiMode.current == UiMode.PhonePortrait
     Box(
         modifier = modifier.fillMaxSize(),
         contentAlignment = Alignment.Center
     ) {
         Column(
             modifier = Modifier
-                .width(760.dp)
+                .then(
+                    if (isPhonePortrait) {
+                        Modifier.fillMaxWidth().widthIn(max = 420.dp)
+                    } else {
+                        Modifier.width(760.dp)
+                    }
+                )
                 .heightIn(max = 900.dp)
                 .clip(RoundedCornerShape(24.dp))
                 .background(NasMusicColors.Surface)

@@ -39,6 +39,7 @@ import com.nasmusic.tv.R
 import com.nasmusic.tv.data.model.Artist
 import com.nasmusic.tv.data.model.Song
 import com.nasmusic.tv.ui.LocalListBackHandler
+import com.nasmusic.tv.ui.components.adaptiveColumns
 import com.nasmusic.tv.ui.theme.FontSize
 import com.nasmusic.tv.ui.theme.HighContrastColors
 import com.nasmusic.tv.ui.theme.LocalHighContrast

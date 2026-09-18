@@ -40,7 +40,6 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.type
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.res.stringResource
@@ -65,23 +64,11 @@ import com.nasmusic.tv.util.PinyinUtils
 
 /**
  * R-3 拆分：NAS 曲库浏览子包共享组件（原 LibraryScreen.kt 私有组件迁出并放开可见性）。
+ *
+ * v2.36.0：`adaptiveColumns()` 已上移至 `ui/components/CommonComponents.kt`（与
+ * `songGridColumns()` 并列，改为 `UiMode + widthDp` 双输入），本文件及同包调用点
+ * 一律 `import com.nasmusic.tv.ui.components.adaptiveColumns`。
  */
-
-/**
- * 响应式网格列数：
- * - 宽度 >= 1000dp：TV / 大屏（保留原有列数）
- * - 600..1000dp：手机横屏 / 小平板（phoneLandscape）
- * - < 600dp：手机竖屏（phone）
- */
-@Composable
-internal fun adaptiveColumns(tv: Int, phone: Int, phoneLandscape: Int = phone): Int {
-    val widthDp = LocalConfiguration.current.screenWidthDp
-    return when {
-        widthDp >= 1000 -> tv
-        widthDp >= 600 -> phoneLandscape
-        else -> phone
-    }
-}
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable

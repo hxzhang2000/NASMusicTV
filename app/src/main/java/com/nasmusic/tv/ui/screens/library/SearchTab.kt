@@ -1,5 +1,6 @@
 package com.nasmusic.tv.ui.screens.library
 
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -10,6 +11,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
@@ -193,6 +195,9 @@ private fun SearchSourceBar(
     // 可点亮的搜索源（与 MusicSourceType.DEFAULT_SEARCH_SOURCES 一致）
     val searchableSources = MusicSourceType.DEFAULT_SEARCH_SOURCES.toList()
 
+    // v2.36.0 竖屏（方案 §2.4 / P0-23）：label + N 个来源 Chip + 「全部」同行且无横向滚动
+    //   → 窄屏下后面的来源被推出屏幕且**滑不到**。改为「label 固定 + Chip 区可横滑」
+    //   （Compose 的 scrollable 容器会把获得焦点的子项自动滚入视野，遥控器/触摸均可用）
     Row(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically
@@ -203,6 +208,12 @@ private fun SearchSourceBar(
             fontSize = FontSize.body(),
             modifier = Modifier.padding(end = 10.dp)
         )
+        Row(
+            modifier = Modifier
+                .weight(1f)
+                .horizontalScroll(rememberScrollState()),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
         searchableSources.forEach { source ->
             val isEnabled = source in enabledSources
             Spacer(modifier = Modifier.width(8.dp))
@@ -243,6 +254,7 @@ private fun SearchSourceBar(
                 fontSize = FontSize.small(),
                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
             )
+        }
         }
     }
 }

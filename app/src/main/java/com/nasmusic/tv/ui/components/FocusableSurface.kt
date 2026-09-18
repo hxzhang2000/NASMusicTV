@@ -100,8 +100,12 @@ fun FocusableSurface(
     val interactionSource = remember { MutableInteractionSource() }
     val isPressed by interactionSource.collectIsPressedAsState()
     // 设备类型：仅 TV 显示焦点边框（手机触摸无焦点概念）
-    val isTVDevice = LocalContext.current.packageManager
-        .hasSystemFeature("android.software.leanback")
+    // v2.36.0（方案 §0.3 / P2-39）：仅判 leanback 会漏掉部分电视盒子（它们只声明
+    // android.hardware.type.television）→ 两个 feature 任一命中即视为 TV。
+    val isTVDevice = LocalContext.current.packageManager.run {
+        hasSystemFeature("android.software.leanback") ||
+            hasSystemFeature("android.hardware.type.television")
+    }
 
     if (requestFocusOnLaunch && focusRequester != null) {
         LaunchedEffect(Unit) {

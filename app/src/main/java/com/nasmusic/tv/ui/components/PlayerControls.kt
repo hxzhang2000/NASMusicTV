@@ -130,7 +130,6 @@ fun ProgressSection(
                 .focusable()
                 .onFocusChanged {
                     isProgressFocused = it.isFocused
-                    AppLog.e("ProgressSection", "focused=${it.isFocused}")
                     onProgressFocusChanged(it.isFocused)
                 }
                 .onPreviewKeyEvent { event ->

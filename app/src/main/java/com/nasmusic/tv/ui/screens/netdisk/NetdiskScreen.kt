@@ -52,6 +52,8 @@ import com.nasmusic.tv.ui.screens.PlaylistPickerDialog
 import com.nasmusic.tv.ui.screens.TextInputDialog
 import com.nasmusic.tv.ui.theme.FontSize
 import com.nasmusic.tv.ui.theme.NasMusicColors
+import com.nasmusic.tv.ui.theme.LocalUiMode
+import com.nasmusic.tv.ui.theme.UiMode
 import com.nasmusic.tv.ui.viewmodel.MainViewModel
 import com.nasmusic.tv.ui.viewmodel.NetworkMusicViewModel
 import com.nasmusic.tv.backend.download.model.stateOfSong
@@ -89,35 +91,53 @@ val downloadStates by viewModel.songDownloadStates.collectAsState(initial = empt
         viewModel.netVM.listBaiduDir(viewModel.netdiskCurrentDir.value)
     }
 
+    // v2.36.0 竖屏（方案 §4.5 / P0-19）：页 padding 32→16；搜索框 420dp → 整行（原头部三件套一行必溢出）
+    val isPhonePortrait = LocalUiMode.current == UiMode.PhonePortrait
     Column(
-        modifier = Modifier.fillMaxSize().padding(32.dp)
+        modifier = Modifier.fillMaxSize().padding(if (isPhonePortrait) 16.dp else 32.dp)
     ) {
-        // 顶部：返回 + 标题 + 搜索框
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.fillMaxWidth().padding(bottom = 20.dp)
-        ) {
-            FocusableSurface(
-                onClick = onBack,
-                modifier = Modifier.size(48.dp),
-                shape = RoundedCornerShape(12.dp)
-            ) {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.netdisk_back), tint = NasMusicColors.TextPrimary)
+        val backAndTitle: @Composable (Modifier) -> Unit = { m ->
+            Row(modifier = m, verticalAlignment = Alignment.CenterVertically) {
+                FocusableSurface(
+                    onClick = onBack,
+                    modifier = Modifier.size(48.dp),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.netdisk_back), tint = NasMusicColors.TextPrimary)
+                    }
                 }
+                Spacer(modifier = Modifier.width(16.dp))
+                Text(stringResource(R.string.netdisk_title), color = NasMusicColors.TextPrimary, fontSize = FontSize.title())
             }
-            Spacer(modifier = Modifier.width(16.dp))
-            Text(stringResource(R.string.netdisk_title), color = NasMusicColors.TextPrimary, fontSize = FontSize.title())
-            Spacer(modifier = Modifier.width(32.dp))
-
-            // 搜索框（统一样式：点击弹出输入对话框，无独立搜索按钮）
+        }
+        val searchBox: @Composable (Modifier) -> Unit = { m ->
             SearchField(
                 query = searchKeyword,
                 placeholder = stringResource(R.string.netdisk_search_placeholder),
                 onOpenSearch = { showSearchDialog = true },
                 onClear = { viewModel.netVM.clearNetdiskSearch() },
-                modifier = Modifier.width(420.dp)
+                modifier = m
             )
+        }
+
+        if (isPhonePortrait) {
+            // 竖屏：返回+标题 一行，搜索框另起一行撑满
+            backAndTitle(Modifier.fillMaxWidth())
+            Spacer(modifier = Modifier.height(10.dp))
+            searchBox(Modifier.fillMaxWidth())
+            Spacer(modifier = Modifier.height(12.dp))
+        } else {
+            // 顶部：返回 + 标题 + 搜索框
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth().padding(bottom = 20.dp)
+            ) {
+                backAndTitle(Modifier)
+                Spacer(modifier = Modifier.width(32.dp))
+                // 搜索框（统一样式：点击弹出输入对话框，无独立搜索按钮）
+                searchBox(Modifier.width(420.dp))
+            }
         }
 
         when {

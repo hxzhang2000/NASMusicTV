@@ -57,6 +57,8 @@ import com.nasmusic.tv.ui.components.song.SongRowMode
 import com.nasmusic.tv.ui.components.song.UnifiedSongRow
 import com.nasmusic.tv.ui.components.song.UrlStatus
 import com.nasmusic.tv.ui.theme.LocalPhoneCompact
+import com.nasmusic.tv.ui.theme.LocalUiMode
+import com.nasmusic.tv.ui.theme.UiMode
 import com.nasmusic.tv.ui.theme.NasMusicColors
 import com.nasmusic.tv.ui.viewmodel.EnrichProgress
 import kotlinx.coroutines.launch
@@ -126,7 +128,11 @@ fun MineScreen(
     var renameTarget by remember { mutableStateOf<LocalPlaylist?>(null) }
 
     // 外层容器：手机上下排布（单列）、TV 左右排布（双列）
-    Column(modifier = Modifier.fillMaxSize().padding(32.dp)) {
+    // v2.36.0 竖屏（方案 §4.4 / P0-15）：页 padding 32→16
+    val isPhonePortrait = LocalUiMode.current == UiMode.PhonePortrait
+    Column(
+        modifier = Modifier.fillMaxSize().padding(if (isPhonePortrait) 16.dp else 32.dp)
+    ) {
     val isPhone = LocalPhoneCompact.current
     if (isPhone) {
         // 手机端：整个页面单个 LazyColumn —— 收藏标题+歌曲 → 歌单标题+卡片+展开歌曲，统一滚动

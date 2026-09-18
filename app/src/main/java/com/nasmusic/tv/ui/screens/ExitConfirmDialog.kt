@@ -25,6 +25,7 @@ import androidx.compose.ui.unit.sp
 import androidx.tv.material3.Text
 import com.nasmusic.tv.R
 import com.nasmusic.tv.ui.components.FocusableSurface
+import com.nasmusic.tv.ui.components.responsiveDialogSize
 import com.nasmusic.tv.ui.theme.FontSize
 import com.nasmusic.tv.ui.theme.NasMusicColors
 import com.nasmusic.tv.ui.RegisterDialogBackHandler
@@ -49,7 +50,7 @@ fun ExitConfirmDialog(
     ) {
         Column(
             modifier = Modifier
-                .width(480.dp)
+                .then(responsiveDialogSize(480.dp, scrollable = true))
                 .background(NasMusicColors.Surface, RoundedCornerShape(16.dp))
                 .padding(32.dp),
             horizontalAlignment = Alignment.CenterHorizontally

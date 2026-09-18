@@ -21,11 +21,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Audiotrack
-import androidx.compose.material.icons.filled.Download
-import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.Storage
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -85,8 +81,13 @@ import com.nasmusic.tv.ui.screens.settings.PlayerSettingsState
 import com.nasmusic.tv.ui.screens.settings.ServerSettingsActions
 import com.nasmusic.tv.ui.screens.settings.ServerSettingsSection
 import com.nasmusic.tv.ui.screens.settings.ServerSettingsState
+import com.nasmusic.tv.ui.screens.settings.SettingsSection
+import com.nasmusic.tv.ui.screens.settings.SettingsSectionBackHeader
+import com.nasmusic.tv.ui.screens.settings.SettingsSectionList
 import com.nasmusic.tv.ui.theme.FontSize
+import com.nasmusic.tv.ui.theme.LocalUiMode
 import com.nasmusic.tv.ui.theme.NasMusicColors
+import com.nasmusic.tv.ui.theme.UiMode
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -97,18 +98,12 @@ import kotlinx.coroutines.withContext
  * R-2 拆分：各分区内容已迁至 ui/screens/settings/ 下的 Section Composable
  * （State/Actions data class 分组签名，W0 冻结版）；本文件仅保留侧栏导航、
  * 分区路由、对话框宿主与对外参数签名（AppRoot 引用不变）。
+ *
+ * v2.36.0：竖屏（`UiMode.PhonePortrait`）改为**两级页** —— 一级为分区列表、
+ * 二级为分区内容全屏 + 返回头；`selectedSection` 状态由 `NavigationViewModel` 持有
+ * （`AppRoot` 的 BACK handler 需要读它，方案 §6.2 / §8.7 / K2）。
+ * TV 与手机横屏**保持现状左右分栏，零改动**（方案 §3.1 B1 硬规则）。
  */
-private enum class SettingsSection(val titleRes: Int) {
-    GENERAL(R.string.settings_general),
-    PLAYBACK(R.string.settings_playback),
-    DOWNLOAD(R.string.settings_download),
-    SERVER(R.string.nav_server),
-    CACHE(R.string.settings_cache),
-    NETWORK(R.string.settings_network),
-    NETDISK(R.string.settings_netdisk),
-    DATA(R.string.settings_data),
-    ABOUT(R.string.settings_about)
-}
 
 @OptIn(
     ExperimentalTvMaterial3Api::class,
@@ -252,9 +247,24 @@ fun SettingsScreen(
     onListBaiduDirs: (suspend (String) -> List<BaiduFile>)? = null,
     onRebuildBaiduIndex: (() -> Unit)? = null,
     onNavigateToServerConnect: (() -> Unit)? = null,
+    // v2.36.0 竖屏两级页（方案 §4.6 / §8.7）：当前进入的分区（null = 一级列表）
+    selectedSection: SettingsSection? = null,
+    onOpenSection: (SettingsSection) -> Unit = {},
+    onCloseSection: () -> Unit = {},
+    // v2.36.0 屏幕方向（L1 全局策略；L2 顶部栏按钮只是快捷改它）
+    screenOrientation: String = "auto",
+    onChangeScreenOrientation: ((String) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     var activeSection by remember { mutableStateOf(SettingsSection.GENERAL) }
+    // 竖屏只认 PhonePortrait；TV 与手机横屏走现状两栏（B1 硬规则）
+    val isPortraitPhone = LocalUiMode.current == UiMode.PhonePortrait
+    // 分区路由主体：竖屏用 navVM 的 selectedSection（非空时才会渲染内容），否则用两栏的 activeSection
+    val displaySection: SettingsSection = if (isPortraitPhone) {
+        selectedSection ?: SettingsSection.GENERAL
+    } else {
+        activeSection
+    }
 
     // D-Pad 焦点修复：内容区按左键移回左侧导航栏
     // 根因：右侧内容区（LazyColumn）与左侧导航栏（verticalScroll Column）是两个独立滚动容器，
@@ -344,8 +354,10 @@ fun SettingsScreen(
     val mvUrlHint = stringResource(R.string.settings_mv_api_url_hint)
     val mvUrlTitle = stringResource(R.string.settings_mv_api_url)
 
-    Row(modifier = modifier.fillMaxSize().padding(32.dp)) {
+    Row(modifier = modifier.fillMaxSize().padding(if (isPortraitPhone) 16.dp else 32.dp)) {
         // --- 左侧：侧边导航栏（bg2 Surface 背景）---
+        // v2.36.0：竖屏两级页不显示侧栏（改为分区列表 → 二级全屏内容）
+        if (!isPortraitPhone) {
         Column(
             modifier = Modifier
                 .width(240.dp)
@@ -393,37 +405,37 @@ fun SettingsScreen(
                         modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 14.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        val icon = when (section) {
-                            SettingsSection.GENERAL -> Icons.Default.Settings
-                            SettingsSection.PLAYBACK -> Icons.Default.Audiotrack
-                            SettingsSection.DOWNLOAD -> Icons.Default.Download
-                            SettingsSection.SERVER -> Icons.Default.Storage
-                            SettingsSection.CACHE -> Icons.Default.Settings
-                            SettingsSection.NETWORK -> Icons.Default.Settings
-                            SettingsSection.NETDISK -> Icons.Default.Settings
-                            SettingsSection.DATA -> Icons.Default.Info
-                            SettingsSection.ABOUT -> Icons.Default.Info
-                        }
-                        Icon(imageVector = icon, contentDescription = null, tint = if (selected) NasMusicColors.Primary else NasMusicColors.TextPrimary, modifier = Modifier.size(18.dp))
+                        Icon(imageVector = section.icon, contentDescription = null, tint = if (selected) NasMusicColors.Primary else NasMusicColors.TextPrimary, modifier = Modifier.size(18.dp))
                         Spacer(modifier = Modifier.width(12.dp))
                         Text(text = stringResource(section.titleRes), color = if (selected) NasMusicColors.Primary else NasMusicColors.TextPrimary, fontSize = FontSize.button())
                     }
                 }
             }
         }
+        } // if (!isPortraitPhone) 侧栏结束
 
         // --- 右侧：具体设置项（R-2：各分区已迁至 settings/ 子包，按域组装 State/Actions）---
+        // v2.36.0 竖屏两级页（方案 §4.6）：
+        //   一级（selectedSection == null）→ 分区列表
+        //   二级（非 null）→ 返回头 + 单列分区内容（复用下方同一份 when 实现）
+        if (isPortraitPhone && selectedSection == null) {
+            SettingsSectionList(onPick = onOpenSection)
+        } else {
+        Column(modifier = Modifier.fillMaxWidth().weight(1f)) {
+        if (isPortraitPhone) {
+            SettingsSectionBackHeader(section = displaySection, onBack = onCloseSection)
+        }
         // focusGroup + 左向 exit 重定向：任何分区内容按左键无法继续左移时，焦点回到导航栏当前分区项
         LazyColumn(
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(1f)
-                .padding(start = 24.dp)
+                .padding(start = if (isPortraitPhone) 0.dp else 24.dp)
                 .focusGroup()
                 .focusProperties {
                     exit = {
                         if (it == FocusDirection.Left) {
-                            navFocusRequesters.getValue(activeSection).requestFocus()
+                            if (!isPortraitPhone) navFocusRequesters.getValue(activeSection).requestFocus()
                             FocusRequester.Default
                         } else {
                             FocusRequester.Default
@@ -431,19 +443,21 @@ fun SettingsScreen(
                     }
                 }
         ) {
-            when (activeSection) {
+            when (displaySection) {
                 SettingsSection.GENERAL -> item {
                     GeneralSettingsSection(
                         state = GeneralSettingsState(
                             settings = settings,
                             language = language,
                             fontAdjustment = fontAdjustment,
+                            screenOrientation = screenOrientation,
                         ),
                         actions = GeneralSettingsActions(
                             onChangeLanguage = onChangeLanguage,
                             onToggleDarkTheme = onToggleDarkTheme,
                             onToggleAnimations = onToggleAnimations,
                             onChangeFontAdjustment = onChangeFontAdjustment,
+                            onChangeScreenOrientation = onChangeScreenOrientation,
                         )
                     )
                 }
@@ -658,6 +672,8 @@ fun SettingsScreen(
                 }
             }
         }
+        } // Column（竖屏二级 / 横屏右栏）
+        } // else（非竖屏一级列表）
     }
 
     // ===================== 对话框宿主（R-2：保持在主文件，状态与分区共享） =====================

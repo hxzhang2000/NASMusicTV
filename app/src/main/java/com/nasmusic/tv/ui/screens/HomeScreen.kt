@@ -1,6 +1,8 @@
 package com.nasmusic.tv.ui.screens
 
 import com.nasmusic.tv.ui.theme.FontSize
+import com.nasmusic.tv.ui.theme.LocalUiMode
+import com.nasmusic.tv.ui.theme.UiMode
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -98,6 +100,8 @@ fun HomeScreen(
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
     val listBackHandler = LocalListBackHandler.current
+    // v2.36.0：LazyColumn 内容 lambda 不是 @Composable 上下文，形态必须在组合内先读出来
+    val isPhonePortrait = LocalUiMode.current == UiMode.PhonePortrait
 
     // F2-3 首页列表化：首次进入自动生成智能电台批次（只生成不播放；防重入在 MainViewModel）
     LaunchedEffect(Unit) { onLoadSmartRadio?.invoke() }
@@ -122,7 +126,8 @@ fun HomeScreen(
         state = listState,
         modifier = modifier
             .fillMaxSize()
-            .padding(horizontal = 32.dp),
+            // v2.36.0 竖屏（方案 §4.1）：页 padding 32→16，窄屏可用宽度 328dp
+            .padding(horizontal = if (isPhonePortrait) 16.dp else 32.dp),
         verticalArrangement = Arrangement.spacedBy(20.dp)
     ) {
         // 1. 欢迎 + 统计卡片
@@ -137,7 +142,8 @@ fun HomeScreen(
         }
 
         // 1.5 当前播放卡片（有歌曲正在播放时显示）
-        if (currentSong != null) {
+        // v2.36.0 竖屏：与底部 MiniPlayer 重复 → 隐藏（方案 §4.1）
+        if (currentSong != null && !isPhonePortrait) {
             item(key = "now_playing") {
                 NowPlayingCard(
                     song = currentSong,
@@ -323,23 +329,43 @@ private fun WelcomeSection(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // 统计卡片行
+        // 统计卡片：v2.36.0 竖屏改 2×2 网格（4 张横排竖屏必溢出，方案 §4.1）
         if (isConnected) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Box(modifier = Modifier.weight(1f)) {
-                    StatCard(label = stringResource(R.string.home_album_count), value = "${dashboardData.totalAlbums}")
+            val stats = listOf(
+                stringResource(R.string.home_album_count) to "${dashboardData.totalAlbums}",
+                stringResource(R.string.home_song_count) to "${dashboardData.totalSongs}",
+                stringResource(R.string.home_artist_count) to "${dashboardData.totalArtists}",
+                stringResource(R.string.home_playlist_count) to "${dashboardData.totalPlaylists}",
+            )
+            if (LocalUiMode.current == UiMode.PhonePortrait) {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    stats.chunked(2).forEach { rowItems ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            rowItems.forEach { (label, value) ->
+                                Box(modifier = Modifier.weight(1f)) {
+                                    StatCard(label = label, value = value)
+                                }
+                            }
+                            // 奇数个时补一个占位，保持等宽
+                            if (rowItems.size == 1) {
+                                Box(modifier = Modifier.weight(1f))
+                            }
+                        }
+                    }
                 }
-                Box(modifier = Modifier.weight(1f)) {
-                    StatCard(label = stringResource(R.string.home_song_count), value = "${dashboardData.totalSongs}")
-                }
-                Box(modifier = Modifier.weight(1f)) {
-                    StatCard(label = stringResource(R.string.home_artist_count), value = "${dashboardData.totalArtists}")
-                }
-                Box(modifier = Modifier.weight(1f)) {
-                    StatCard(label = stringResource(R.string.home_playlist_count), value = "${dashboardData.totalPlaylists}")
+            } else {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    stats.forEach { (label, value) ->
+                        Box(modifier = Modifier.weight(1f)) {
+                            StatCard(label = label, value = value)
+                        }
+                    }
                 }
             }
         }
@@ -545,7 +571,8 @@ private fun HomeAlbumCard(
 ) {
     FocusableSurface(
         onClick = onClick,
-        modifier = Modifier.width(160.dp),
+        // v2.36.0 竖屏收窄到 140dp（方案 §3.4：横向 LazyRow 内一屏能露出更多张）
+        modifier = Modifier.width(if (LocalUiMode.current == UiMode.PhonePortrait) 140.dp else 160.dp),
         shape = RoundedCornerShape(12.dp),
         focusedScale = 1.06f,
         animationDurationMs = 200,
@@ -606,7 +633,8 @@ private fun HomeSongCard(
 ) {
     FocusableSurface(
         onClick = onClick,
-        modifier = Modifier.width(160.dp),
+        // v2.36.0 竖屏收窄到 140dp（方案 §3.4）
+        modifier = Modifier.width(if (LocalUiMode.current == UiMode.PhonePortrait) 140.dp else 160.dp),
         shape = RoundedCornerShape(12.dp),
         focusedScale = 1.06f,
         animationDurationMs = 200,

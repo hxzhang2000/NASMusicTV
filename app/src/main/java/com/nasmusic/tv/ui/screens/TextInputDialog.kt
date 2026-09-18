@@ -54,8 +54,11 @@ import com.nasmusic.tv.R
 import com.nasmusic.tv.data.model.SearchHistoryItem
 import com.nasmusic.tv.net.LocalInputServer
 import com.nasmusic.tv.ui.components.FocusableSurface
+import com.nasmusic.tv.ui.components.responsiveDialogSize
 import com.nasmusic.tv.ui.theme.FontSize
+import com.nasmusic.tv.ui.theme.LocalUiMode
 import com.nasmusic.tv.ui.theme.NasMusicColors
+import com.nasmusic.tv.ui.theme.UiMode
 import com.nasmusic.tv.util.NetworkUtils
 import com.nasmusic.tv.util.QrCodeGenerator
 import kotlinx.coroutines.Dispatchers
@@ -222,19 +225,21 @@ fun TextInputDialog(
             contentAlignment = Alignment.Center
         ) {
             val showQrPanel = effectiveShowQrCode && qrBitmap != null && serverUrl != null
+            // v2.36.0 竖屏（方案 §2.4 / P1-27）：940/720dp 双栏在 360dp 屏上必溢出 → 竖屏改单栏纵排
+            val isPhonePortrait = LocalUiMode.current == UiMode.PhonePortrait
             Column(
                 modifier = Modifier
-                    .width(if (showQrPanel) 940.dp else 720.dp)
+                    .then(responsiveDialogSize(if (showQrPanel) 940.dp else 720.dp))
                     .heightIn(max = maxHeight - 32.dp)
                     .verticalScroll(rememberScrollState())
                     .background(NasMusicColors.Surface, RoundedCornerShape(16.dp))
                     .padding(20.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Row {
+                val textInputMainColumn: @Composable (Modifier) -> Unit = { m ->
                     // ===== 左侧：标题 + 输入框 + 历史 + 键盘 =====
                     Column(
-                        modifier = Modifier.width(720.dp),
+                        modifier = m,
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         // 标题
@@ -464,35 +469,53 @@ fun TextInputDialog(
                             }
                         }
                     } // end 左侧 Column
+                } // end textInputMainColumn
 
-                    // ===== 右侧：QR 扫码面板 =====
-                    if (showQrPanel) {
-                        Spacer(modifier = Modifier.width(20.dp))
-                        Column(
-                            modifier = Modifier.width(180.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.Center
-                        ) {
-                            Image(
-                                bitmap = qrBitmap?.asImageBitmap() ?: return@Column,
-                                contentDescription = stringResource(R.string.text_input_scan_code),
-                                modifier = Modifier.size(180.dp)
-                            )
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Text(
-                                text = stringResource(R.string.text_input_scan_phone_hint),
-                                color = NasMusicColors.TextPrimary,
-                                fontSize = FontSize.body()
-                            )
-                            Spacer(modifier = Modifier.height(2.dp))
-                            Text(
-                                text = stringResource(R.string.text_input_phone_search),
-                                color = NasMusicColors.TextSecondary,
-                                fontSize = FontSize.small()
-                            )
+                // ===== 右侧：QR 扫码面板 =====
+                val textInputQrPanel: @Composable (Modifier) -> Unit = { m ->
+                    Column(
+                        modifier = m,
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        Image(
+                            bitmap = qrBitmap?.asImageBitmap() ?: return@Column,
+                            contentDescription = stringResource(R.string.text_input_scan_code),
+                            modifier = Modifier.size(180.dp)
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = stringResource(R.string.text_input_scan_phone_hint),
+                            color = NasMusicColors.TextPrimary,
+                            fontSize = FontSize.body()
+                        )
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = stringResource(R.string.text_input_phone_search),
+                            color = NasMusicColors.TextSecondary,
+                            fontSize = FontSize.small()
+                        )
+                    }
+                }
+
+                if (isPhonePortrait) {
+                    // 竖屏：单栏纵排，QR 面板下移
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        textInputMainColumn(Modifier.fillMaxWidth())
+                        if (showQrPanel) {
+                            Spacer(modifier = Modifier.height(16.dp))
+                            textInputQrPanel(Modifier.fillMaxWidth())
                         }
                     }
-                } // end Row
+                } else {
+                    Row {
+                        textInputMainColumn(Modifier.width(720.dp))
+                        if (showQrPanel) {
+                            Spacer(modifier = Modifier.width(20.dp))
+                            textInputQrPanel(Modifier.width(180.dp))
+                        }
+                    }
+                }
             }
         }
     }

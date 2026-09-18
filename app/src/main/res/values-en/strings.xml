@@ -1060,4 +1060,30 @@
     <string name="html_playlist_too_large">File too large (5MB limit)</string>
     <string name="html_playlist_empty">Upload content is empty</string>
     <string name="html_playlist_import_failed">Import failed</string>
+
+    <!-- ================= v2.36.0 Phone portrait UI (docs/phone-portrait-ui-plan.md) ================= -->
+    <string name="settings_display">Display</string>
+    <string name="settings_display_orientation">Screen orientation</string>
+    <string name="settings_orientation_auto">Auto</string>
+    <string name="settings_orientation_portrait">Portrait</string>
+    <string name="settings_orientation_landscape">Landscape</string>
+    <string name="settings_orientation_hint">"Auto" follows the system rotation lock; Portrait / Landscape force the direction</string>
+    <string name="nav_phone_orientation_cd">Toggle orientation (tap)</string>
+    <string name="settings_section_back">Back to settings</string>
+    <string name="miniplayer_cd_play">Play</string>
+    <string name="miniplayer_cd_pause">Pause</string>
+    <string name="miniplayer_cd_next">Next</string>
+    <string name="np_more">More</string>
+    <string name="np_mode_cover">Cover</string>
+    <string name="np_mode_lyrics">Lyrics</string>
+    <string name="np_lyrics_source_cycle_cd">Switch lyrics source</string>
+    <string name="np_song_info_cd">Song info</string>
+    <string name="common_more_actions_cd">More actions</string>
+    <string name="action_add_to_playlist">Add to playlist</string>
+    <string name="action_unfavorite">Remove from favorites</string>
+    <string name="song_menu_title">Song actions</string>
+    <string name="queue_action_move_up">Move up</string>
+    <string name="queue_action_move_down">Move down</string>
+    <string name="queue_action_remove">Remove from queue</string>
+    <string name="queue_action_play_now">Play now</string>
 </resources>

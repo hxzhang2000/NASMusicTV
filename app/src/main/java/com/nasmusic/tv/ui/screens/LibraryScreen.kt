@@ -61,6 +61,8 @@ import com.nasmusic.tv.ui.screens.library.browse.GenresTab
 import com.nasmusic.tv.ui.screens.library.browse.SongsTab
 import com.nasmusic.tv.ui.screens.library.browse.YearsTab
 import com.nasmusic.tv.ui.theme.NasMusicColors
+import com.nasmusic.tv.ui.theme.LocalUiMode
+import com.nasmusic.tv.ui.theme.UiMode
 import com.nasmusic.tv.util.ArtistSplitter
 import com.nasmusic.tv.util.PinyinUtils
 import com.nasmusic.tv.backend.local.MusicMerger
@@ -337,24 +339,46 @@ fun LibraryScreen(
     val showPlayAll = activeTab != LibraryTab.SEARCH && activeTab != LibraryTab.DISCOVER && activeTab != LibraryTab.RADIO && playAllSongs.isNotEmpty()
 
     Box(modifier = modifier.fillMaxSize()) {
-        Column(modifier = Modifier.fillMaxSize().padding(horizontal = 32.dp, vertical = 20.dp)) {
+        // v2.36.0 竖屏（方案 §4.3 / P0-14）：页 padding 32→16；标题/搜索框/TAB 由「一行」改「三行」
+        val isPhonePortrait = LocalUiMode.current == UiMode.PhonePortrait
+        Column(
+            modifier = Modifier.fillMaxSize().padding(
+                horizontal = if (isPhonePortrait) 16.dp else 32.dp,
+                vertical = if (isPhonePortrait) 12.dp else 20.dp
+            )
+        ) {
             // 顶部标题 + TAB + 播放全部
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
+            val libraryTitle: @Composable (Modifier) -> Unit = { m ->
                 Text(
                     text = stringResource(R.string.nav_library),
                     color = NasMusicColors.TextPrimary,
                     fontSize = FontSize.display(),
-                    modifier = Modifier.padding(end = 24.dp)
+                    modifier = m
                 )
-
-                // TAB 切换（可横向滑动——手机窄屏滑动浏览全部 tab）
+            }
+            val playAllChip: @Composable () -> Unit = {
+                if (showPlayAll) {
+                    Box(modifier = Modifier.widthIn(min = 80.dp)) {
+                        ButtonChip(
+                            text = stringResource(R.string.common_play_all),
+                            onClick = { onPlayAllSongs(playAllSongs) }
+                        )
+                    }
+                }
+            }
+            val searchField: @Composable (Modifier) -> Unit = { m ->
+                SearchField(
+                    query = filterQuery,
+                    placeholder = stringResource(R.string.library_search_placeholder),
+                    onOpenSearch = { showSearchDialog = true },
+                    onClear = { onFilterQueryChange("") },
+                    modifier = m
+                )
+            }
+            // TAB 切换（可横向滑动——手机窄屏滑动浏览全部 tab）
+            val tabsRow: @Composable (Modifier) -> Unit = { m ->
                 Row(
-                    modifier = Modifier
-                        .weight(1f)
-                        .horizontalScroll(rememberScrollState()),
+                    modifier = m,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     LibraryTab.entries.forEach { tab ->
@@ -379,29 +403,40 @@ fun LibraryScreen(
                         }
                     }
                 }
+            }
 
-                // 搜索栏 + 播放全部（固定宽度区，避免挤压可滚动 TAB）
+            if (isPhonePortrait) {
+                // 竖屏：标题行（标题 + 播放全部）→ 搜索框整行 → TAB 横滑行
                 Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.End
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    SearchField(
-                        query = filterQuery,
-                        placeholder = stringResource(R.string.library_search_placeholder),
-                        onOpenSearch = { showSearchDialog = true },
-                        onClear = { onFilterQueryChange("") },
-                        modifier = Modifier.width(240.dp)
-                    )
+                    libraryTitle(Modifier.weight(1f))
+                    playAllChip()
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                searchField(Modifier.fillMaxWidth())
+                Spacer(modifier = Modifier.height(8.dp))
+                tabsRow(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()))
+            } else {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    libraryTitle(Modifier.padding(end = 24.dp))
 
-                    Spacer(modifier = Modifier.width(12.dp))
+                    tabsRow(Modifier.weight(1f).horizontalScroll(rememberScrollState()))
 
-                    if (showPlayAll) {
-                        Box(modifier = Modifier.widthIn(min = 80.dp)) {
-                            ButtonChip(
-                                text = stringResource(R.string.common_play_all),
-                                onClick = { onPlayAllSongs(playAllSongs) }
-                            )
-                        }
+                    // 搜索栏 + 播放全部（固定宽度区，避免挤压可滚动 TAB）
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.End
+                    ) {
+                        searchField(Modifier.width(240.dp))
+
+                        Spacer(modifier = Modifier.width(12.dp))
+
+                        playAllChip()
                     }
                 }
             }

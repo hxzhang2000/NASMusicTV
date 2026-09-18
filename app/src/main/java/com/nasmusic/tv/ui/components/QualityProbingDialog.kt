@@ -61,7 +61,7 @@ fun QualityProbingDialog(songTitle: String) {
         ) {
             Column(
                 modifier = Modifier
-                    .width(420.dp)
+                    .then(responsiveDialogSize(420.dp, scrollable = true))
                     .background(NasMusicColors.Surface, RoundedCornerShape(16.dp))
                     .padding(28.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,

@@ -1059,4 +1059,36 @@
     <!-- §5.3 设置页说明文案（降低用户困惑） -->
     <string name="quality_tier_hint_lossless">无损仅限支持 FLAC 的曲库；不可用时自动降级并提示</string>
     <string name="quality_tier_hint_scope">本档位仅影响网络音乐；NAS / 本地 / 网盘歌曲按其原始码率播放</string>
+
+    <!-- ================= v2.36.0 手机竖屏 UI（docs/phone-portrait-ui-plan.md）================= -->
+    <!-- 设置 → 通用：屏幕方向（L1 全局策略，唯一真相之源） -->
+    <string name="settings_display">显示</string>
+    <string name="settings_display_orientation">屏幕方向</string>
+    <string name="settings_orientation_auto">自动</string>
+    <string name="settings_orientation_portrait">竖屏</string>
+    <string name="settings_orientation_landscape">横屏</string>
+    <string name="settings_orientation_hint">「自动」跟随系统旋转开关（系统锁定时不旋转）；竖屏 / 横屏为强制方向</string>
+    <!-- 竖屏顶部栏 / 底部导航 -->
+    <string name="nav_phone_orientation_cd">切换方向（单击）</string>
+    <string name="settings_section_back">返回设置</string>
+    <!-- MiniPlayer -->
+    <string name="miniplayer_cd_play">播放</string>
+    <string name="miniplayer_cd_pause">暂停</string>
+    <string name="miniplayer_cd_next">下一首</string>
+    <!-- 竖屏播放页 -->
+    <string name="np_more">更多</string>
+    <string name="np_mode_cover">封面</string>
+    <string name="np_mode_lyrics">歌词</string>
+    <string name="np_lyrics_source_cycle_cd">切换歌词来源</string>
+    <string name="np_song_info_cd">歌曲信息</string>
+    <!-- 通用 -->
+    <string name="common_more_actions_cd">更多操作</string>
+    <string name="action_add_to_playlist">加入歌单</string>
+    <string name="action_unfavorite">取消收藏</string>
+    <string name="song_menu_title">歌曲操作</string>
+    <!-- 队列页 ⋮ 菜单（竖屏） -->
+    <string name="queue_action_move_up">上移</string>
+    <string name="queue_action_move_down">下移</string>
+    <string name="queue_action_remove">移出队列</string>
+    <string name="queue_action_play_now">立即播放</string>
 </resources>

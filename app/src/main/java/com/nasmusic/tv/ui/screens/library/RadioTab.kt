@@ -1,6 +1,7 @@
 package com.nasmusic.tv.ui.screens.library
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -16,6 +17,7 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.itemsIndexed
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -38,6 +40,9 @@ import androidx.tv.material3.Text
 import coil.compose.AsyncImage
 import com.nasmusic.tv.R
 import com.nasmusic.tv.backend.radio.RadioBrowserClient
+import com.nasmusic.tv.ui.components.adaptiveColumns
+import com.nasmusic.tv.ui.theme.LocalUiMode
+import com.nasmusic.tv.ui.theme.UiMode
 import com.nasmusic.tv.data.model.RadioStation
 import com.nasmusic.tv.data.model.UiState
 import com.nasmusic.tv.ui.components.FocusableSurface
@@ -72,42 +77,60 @@ fun RadioTab(
         onLoadDefault()
     }
 
+    // v2.36.0 竖屏（方案 §2.4 / P0-23）：340dp 搜索框与 N 个 preset tag 同行 → tag 被推出屏幕且滑不到
+    val isPhonePortrait = LocalUiMode.current == UiMode.PhonePortrait
+
     Column(modifier = Modifier.fillMaxSize()) {
         // ── 顶部筛选行 ──
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
+        val radioTagRow: @Composable (Modifier) -> Unit = { m ->
+            Row(modifier = m, verticalAlignment = Alignment.CenterVertically) {
+                RadioBrowserClient.PRESET_TAGS.forEach { tag ->
+                    val isSelected = radioActiveTag == tag && radioActiveQuery.isBlank()
+                    FocusableSurface(
+                        onClick = { onLoadTag(tag) },
+                        shape = RoundedCornerShape(8.dp),
+                        focusedScale = 1.05f,
+                        animationDurationMs = 150,
+                        containerColor = if (isSelected) NasMusicColors.Primary
+                                        else NasMusicColors.Surface.copy(alpha = 0.6f),
+                        focusedContainerColor = NasMusicColors.Primary,
+                        contentColor = if (isSelected) Color.Black else NasMusicColors.TextPrimary,
+                        focusedContentColor = NasMusicColors.TextPrimary
+                    ) {
+                        Text(
+                            text = tag,
+                            color = if (isSelected) Color.Black else NasMusicColors.TextPrimary,
+                            fontSize = FontSize.small(),
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(4.dp))
+                }
+            }
+        }
+        val radioSearchField: @Composable (Modifier) -> Unit = { m ->
             SearchField(
                 query = radioActiveQuery,
                 placeholder = stringResource(R.string.network_search_hint),
                 onOpenSearch = { showSearchDialog = true },
                 onClear = { onLoadDefault() },
-                modifier = Modifier.width(340.dp)
+                modifier = m
             )
-            Spacer(modifier = Modifier.width(8.dp))
+        }
 
-            RadioBrowserClient.PRESET_TAGS.forEach { tag ->
-                val isSelected = radioActiveTag == tag && radioActiveQuery.isBlank()
-                FocusableSurface(
-                    onClick = { onLoadTag(tag) },
-                    shape = RoundedCornerShape(8.dp),
-                    focusedScale = 1.05f,
-                    animationDurationMs = 150,
-                    containerColor = if (isSelected) NasMusicColors.Primary
-                                    else NasMusicColors.Surface.copy(alpha = 0.6f),
-                    focusedContainerColor = NasMusicColors.Primary,
-                    contentColor = if (isSelected) Color.Black else NasMusicColors.TextPrimary,
-                    focusedContentColor = NasMusicColors.TextPrimary
-                ) {
-                        Text(
-                        text = tag,
-                        color = if (isSelected) Color.Black else NasMusicColors.TextPrimary,
-                        fontSize = FontSize.small(),
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp)
-                    )
-                }
-                Spacer(modifier = Modifier.width(4.dp))
+        if (isPhonePortrait) {
+            // 竖屏：搜索框整行 + tag 行可横滑
+            radioSearchField(Modifier.fillMaxWidth())
+            Spacer(modifier = Modifier.height(8.dp))
+            radioTagRow(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()))
+        } else {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                radioSearchField(Modifier.width(340.dp))
+                Spacer(modifier = Modifier.width(8.dp))
+                radioTagRow(Modifier)
             }
         }
         Spacer(modifier = Modifier.height(12.dp))
@@ -160,7 +183,7 @@ fun RadioTab(
                     }
                 } else {
                     LazyVerticalGrid(
-                        columns = GridCells.Fixed(2),
+                        columns = GridCells.Fixed(adaptiveColumns(tv = 3, phonePortrait = 1, medium = 2)),
                         state = listState,
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(10.dp),

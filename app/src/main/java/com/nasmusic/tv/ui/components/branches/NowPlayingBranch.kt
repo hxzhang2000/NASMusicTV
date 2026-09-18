@@ -159,6 +159,9 @@ internal fun NowPlayingBranch(
                             sleepTimerState = sleepTimerSt,
                             onSleepTimerStart = { viewModel.playerVM.startSleepTimer(it) },
                             onSleepTimerCancel = { viewModel.playerVM.cancelSleepTimer() },
+                            // === v2.36.0 竖屏：顶栏「收起」回首页（播放继续，由 MiniPlayer 承载）===
+                            onCollapse = { viewModel.navVM.navigateTo(Screen.Home) },
+                            onOpenQueue = { viewModel.navVM.navigateTo(Screen.Queue) },
                         )
                     }
 }
