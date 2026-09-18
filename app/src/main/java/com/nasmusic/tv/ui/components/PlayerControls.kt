@@ -7,6 +7,8 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
@@ -294,19 +296,21 @@ fun ControlButtonsRow(
     showMvButton: Boolean = false,
     mvAvailable: Boolean = false,
     onEnterMv: () -> Unit = {},
-    /**
-     * v2.35.0 多码率：音质按钮（方案 §5.1）。
-     * 仅网络歌曲显示；点击弹出音质选择面板。
-     */
-    showQualityButton: Boolean = false,
-    qualityLabel: String = "",
-    onOpenQuality: () -> Unit = {},
     modifier: Modifier = Modifier,
     compact: Boolean = false,
     playPauseFocusRequester: FocusRequester? = null
 ) {
+    // v2.35.0 手机端修复：按钮行改为**可横向滚动**。
+    //
+    // 背景：本行在 NowPlayingScreen 里被放在固定 `width(380.dp)` 的 Column 内。
+    // compact 模式下已有 上一首/播放/下一首/播放模式/频谱/K歌/MTV 共 7 个控件，
+    // 新增「音质」后总宽超出 380dp —— 且原实现无横向滚动，超出的按钮直接被裁掉，
+    // 用户看不到音质入口（"NowPlaying 没有音质按钮"）。
+    // 滚动后所有按钮均可横向滑动到达；TV 端按钮数少，通常无需滚动，行为不变。
     Row(
-        modifier = modifier.fillMaxWidth(),
+        modifier = modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState()),
         horizontalArrangement = Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -372,16 +376,6 @@ fun ControlButtonsRow(
                 dimmed = !mvAvailable,
                 // MTV 三个字母需更宽才能单行显示；同时收紧保证整行落进 380dp
                 width = if (compact) 64.dp else 100.dp
-            )
-        }
-        // v2.35.0 多码率：音质入口（仅网络歌曲显示，方案 §5.1）
-        if (showQualityButton) {
-            Spacer(modifier = Modifier.width(btnGap))
-            VocalToggleButton(
-                label = qualityLabel.ifBlank { stringResource(R.string.quality_tier_auto) },
-                onClick = onOpenQuality,
-                compact = compact,
-                width = if (compact) 52.dp else null
             )
         }
     }

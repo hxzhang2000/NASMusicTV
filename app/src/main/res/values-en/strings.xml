@@ -997,6 +997,7 @@
     <string name="quality_picker_title">Select quality · %1$s</string>
     <string name="quality_picker_downloaded">Downloaded %1$s</string>
     <string name="quality_picker_all_downloaded">All available qualities already downloaded</string>
+    <string name="quality_picker_all_downloaded_hint">To re-download, delete the existing file in Mine → Downloads first</string>
     <string name="quality_download_started">Downloading %1$s</string>
     <string name="quality_batch_downgraded">%1$d of them downgraded</string>
     <string name="quality_override_clear">Clear all per-song overrides</string>

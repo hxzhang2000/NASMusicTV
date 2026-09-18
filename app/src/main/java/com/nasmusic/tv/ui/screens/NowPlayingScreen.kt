@@ -4,6 +4,7 @@ import com.nasmusic.tv.ui.theme.FontSize
 import com.nasmusic.tv.ui.components.common.SourceBadge
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -282,7 +283,10 @@ fun NowPlayingScreen(
                             showInfoPanel = showInfoPanel,
                             onToggleInfoPanel = { showInfoPanel = !showInfoPanel },
                             onSearchSong = onSearchSong,
-                            onSearchArtist = onSearchArtist
+                            onSearchArtist = onSearchArtist,
+                            // v2.35.0 多码率：音质入口放在「信息 + 来源」行
+                            qualityLabel = qualityLabel,
+                            onOpenQuality = { showQualityDialog = true }
                         )
 
                         Spacer(modifier = Modifier.height(8.dp))
@@ -303,11 +307,7 @@ fun NowPlayingScreen(
                             mvAvailable = mvAvailable,
                             onEnterMv = onEnterMv,
                             compact = true,
-                            playPauseFocusRequester = playPauseFocusRequester,
-                            // v2.35.0 多码率：音质入口（仅网络歌曲显示，方案 §5.1）
-                            showQualityButton = currentSong?.isNetworkSong == true,
-                            qualityLabel = qualityLabel,
-                            onOpenQuality = { showQualityDialog = true }
+                            playPauseFocusRequester = playPauseFocusRequester
                         )
                     }
                 }
@@ -734,7 +734,10 @@ private fun CoverColumn(
     showInfoPanel: Boolean = false,
     onToggleInfoPanel: () -> Unit = {},
     onSearchSong: (String) -> Unit = {},
-    onSearchArtist: (String) -> Unit = {}
+    onSearchArtist: (String) -> Unit = {},
+    // v2.35.0 多码率：音质入口（放在「信息 + 来源」同一行，方案 §5.1）
+    qualityLabel: String = "",
+    onOpenQuality: () -> Unit = {}
 ) {
     Column(
         modifier = Modifier.width(300.dp),
@@ -888,10 +891,14 @@ Text(
             )
         }
 
-        // 信息按钮（封面/信息切换）
+        // 信息按钮（封面/信息切换）+ 歌曲来源 + 音质入口
         Spacer(modifier = Modifier.height(6.dp))
         Row(
-            modifier = Modifier.fillMaxWidth(),
+            // 手机窄屏下三者（信息 / 来源 / 音质）可能超出 380dp，
+            // 加横向滚动保证音质入口始终可达（与 ControlButtonsRow 同样的处理）
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState()),
             horizontalArrangement = Arrangement.Center,
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -921,6 +928,32 @@ Text(
             if (currentSong != null) {
                 Spacer(modifier = Modifier.width(8.dp))
                 SourceBadge(song = currentSong)
+            }
+            // v2.35.0 多码率：音质入口，与「信息 + 来源」同一行（方案 §5.1）。
+            // 仅网络歌曲显示；点击弹出音质选择面板。
+            // 放在这里而不是底部控制按钮行：底部行在 380dp 宽度下已容纳 7 个控件，
+            // 第 8 个会被裁掉（手机端实测看不到入口）。
+            if (currentSong?.isNetworkSong == true) {
+                Spacer(modifier = Modifier.width(8.dp))
+                FocusableSurface(
+                    onClick = onOpenQuality,
+                    shape = RoundedCornerShape(6.dp),
+                    focusedScale = 1.08f,
+                    animationDurationMs = 150,
+                    containerColor = NasMusicColors.Surface.copy(alpha = 0.3f),
+                    focusedContainerColor = NasMusicColors.Primary.copy(alpha = 0.3f),
+                    contentColor = NasMusicColors.Primary,
+                    focusedContentColor = NasMusicColors.Primary
+                ) {
+                    Text(
+                        text = "♪ " + qualityLabel.ifBlank {
+                            stringResource(R.string.quality_tier_auto)
+                        },
+                        color = NasMusicColors.Primary,
+                        fontSize = FontSize.small(),
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                    )
+                }
             }
         }
     }

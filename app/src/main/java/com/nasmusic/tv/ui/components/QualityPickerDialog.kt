@@ -2,6 +2,7 @@ package com.nasmusic.tv.ui.components
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -13,6 +14,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -25,6 +27,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -79,11 +82,14 @@ fun QualityPickerDialog(
                 .background(Color(0xB3000000)),
             contentAlignment = Alignment.Center
         ) {
+            // 同 DownloadQualityPickerDialog：宽度取「520dp 与 视口 92%」的较小值。
+            // 不能组合 widthIn + fillMaxWidth（在全屏 BoxWithConstraints 下宽度解析异常，
+            // 会把底部按钮挤出可视区）。
+            val panelWidth = minOf(520.dp, maxWidth * 0.92f)
             val maxPanelHeight = maxHeight - 32.dp
             Column(
                 modifier = Modifier
-                    .widthIn(max = 520.dp)
-                    .fillMaxWidth(0.92f)
+                    .width(panelWidth)
                     .heightIn(max = maxPanelHeight)
                     .verticalScroll(rememberScrollState())
                     .background(NasMusicColors.Surface, RoundedCornerShape(16.dp))
@@ -142,7 +148,9 @@ fun QualityPickerDialog(
 
                 Spacer(modifier = Modifier.height(20.dp))
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
                     horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.End)
                 ) {
                     QualityDialogButton(
@@ -225,11 +233,17 @@ internal fun QualityOptionRow(
 internal fun QualityDialogButton(
     label: String,
     primary: Boolean,
+    enabled: Boolean = true,
     onClick: () -> Unit
 ) {
+    // 禁用态：降透明度 + 不响应点击。
+    // 用于下载面板"所有档位均已下载"时，仍保留「下载」按钮的可见性
+    // （原实现直接不渲染该按钮，用户只看到「取消」，误以为界面坏了）。
     FocusableSurface(
-        onClick = onClick,
-        modifier = Modifier.widthIn(min = 96.dp),
+        onClick = { if (enabled) onClick() },
+        modifier = Modifier
+            .widthIn(min = 96.dp)
+            .alpha(if (enabled) 1f else 0.35f),
         shape = RoundedCornerShape(10.dp),
         focusedScale = 1.04f,
         animationDurationMs = 200,

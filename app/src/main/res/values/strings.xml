@@ -1041,6 +1041,7 @@
     <string name="quality_picker_title">选择音质 · %1$s</string>
     <string name="quality_picker_downloaded">已下载 %1$s</string>
     <string name="quality_picker_all_downloaded">该曲所有可用音质均已下载</string>
+    <string name="quality_picker_all_downloaded_hint">如需重新下载，请先在「我的 → 下载」中删除对应文件</string>
     <string name="quality_download_started">开始下载 %1$s</string>
     <string name="quality_batch_downgraded">其中 %1$d 首为降级码率</string>
     <string name="quality_override_clear">清除全部单曲覆盖</string>

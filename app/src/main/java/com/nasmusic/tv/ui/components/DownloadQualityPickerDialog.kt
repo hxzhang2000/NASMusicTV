@@ -2,6 +2,7 @@ package com.nasmusic.tv.ui.components
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -86,12 +87,15 @@ fun DownloadQualityPickerDialog(
                 .background(Color(0xB3000000)),
             contentAlignment = Alignment.Center
         ) {
-            // 手机竖屏时视口高度有限，面板高度封顶并允许滚动
+            // 手机竖屏适配：
+            // - 宽度取「560dp 与 视口 92%」的较小值（不能用 widthIn + fillMaxWidth 组合，
+            //   在 BoxWithConstraints 全屏父级下会解析成异常宽度，导致底部按钮不可见）
+            // - 高度封顶并允许纵向滚动，避免多档位把底部按钮挤出屏幕
+            val panelWidth = minOf(560.dp, maxWidth * 0.92f)
             val maxPanelHeight = maxHeight - 32.dp
             Column(
                 modifier = Modifier
-                    .widthIn(max = 560.dp)
-                    .fillMaxWidth(0.92f)
+                    .width(panelWidth)
                     .heightIn(max = maxPanelHeight)
                     .verticalScroll(rememberScrollState())
                     .background(NasMusicColors.Surface, RoundedCornerShape(16.dp))
@@ -105,11 +109,17 @@ fun DownloadQualityPickerDialog(
                 Spacer(modifier = Modifier.height(16.dp))
 
                 if (selectable.isEmpty()) {
-                    // 所有可用档都已下载 → 仅保留取消
+                    // 所有可用档都已下载 → 说明原因（「下载」按钮此时置灰而非消失）
                     Text(
                         text = stringResource(R.string.quality_picker_all_downloaded),
                         color = NasMusicColors.TextSecondary,
                         fontSize = FontSize.body()
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = stringResource(R.string.quality_picker_all_downloaded_hint),
+                        color = NasMusicColors.TextSecondary,
+                        fontSize = FontSize.caption()
                     )
                 } else {
                     selectable.forEach { tier ->
@@ -147,7 +157,9 @@ fun DownloadQualityPickerDialog(
 
                 Spacer(modifier = Modifier.height(20.dp))
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
                     horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.End)
                 ) {
                     QualityDialogButton(
@@ -155,13 +167,17 @@ fun DownloadQualityPickerDialog(
                         primary = false,
                         onClick = onDismiss
                     )
-                    if (selectable.isNotEmpty()) {
-                        QualityDialogButton(
-                            label = stringResource(R.string.settings_download),
-                            primary = true,
-                            onClick = { onConfirm(selected) }
-                        )
-                    }
+                    // v2.35.0 手机端修复：**「下载」按钮始终渲染**。
+                    // 原实现是 `if (selectable.isNotEmpty())` —— 该曲所有可用档都已下载时
+                    // 按钮**整个消失**，用户只看到「取消」，误以为界面坏了
+                    // （实测反馈："底部没有「下载」，只有 取消"）。
+                    // 现在始终显示，无可选档时置灰禁用。
+                    QualityDialogButton(
+                        label = stringResource(R.string.settings_download),
+                        primary = true,
+                        enabled = selectable.isNotEmpty(),
+                        onClick = { if (selectable.isNotEmpty()) onConfirm(selected) }
+                    )
                 }
             }
         }
