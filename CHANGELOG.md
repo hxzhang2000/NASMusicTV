@@ -56,6 +56,10 @@
 - `NetworkMusicService` 新增 `resolvePlayUrl(song, quality)` 与 `resolvePlayUrlDetailed(song, quality)`
   两个**带默认实现**的方法，不支持多码率的源（Jamendo / 百度网盘）无需改动
 - 版本号 `2.34.4 → 2.35.0`（versionCode 152 → 153）
+- **批量下载档位选择不实施**：本项目 UI 无批量下载入口（全仓库仅单曲下载
+  `onDownloadSong`），该需求属"先新建批量下载 UI"的新功能而非本方案补全断点。
+  单曲路径的逐曲静默降级已可用，将来批量入口落地时可直接复用
+  `enqueue(song, auto, quality)`
 
 ### Fixed
 
