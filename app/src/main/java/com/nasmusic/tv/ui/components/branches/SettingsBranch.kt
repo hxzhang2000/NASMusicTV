@@ -106,6 +106,7 @@ internal fun SettingsBranch(
                         // F2-6：音质档位接线
                         qualityTier = qualityTier,
                         onChangeQualityTier = { viewModel.setQualityTier(it) },
+                        onClearQualityOverrides = { viewModel.clearAllQualityOverrides() },
                         onChangeMetingApiBaseUrl = { viewModel.updateMetingApiBaseUrl(it) },
                         mvApiBaseUrl = settings.mvApiBaseUrl,
                         onChangeMvApiBaseUrl = { viewModel.updateMvApiBaseUrl(it) },

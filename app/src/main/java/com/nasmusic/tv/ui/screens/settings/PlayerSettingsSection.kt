@@ -20,6 +20,7 @@ import androidx.compose.ui.unit.dp
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Text
 import com.nasmusic.tv.R
+import com.nasmusic.tv.backend.network.QualityTiers
 import com.nasmusic.tv.data.model.AppSettings
 import com.nasmusic.tv.data.model.PlayMode
 import com.nasmusic.tv.data.model.VisualizerTheme
@@ -66,6 +67,8 @@ data class PlayerSettingsActions(
     /** F2-5：crossfade 开关/时长 */
     val onToggleCrossfade: (Boolean) -> Unit = {},
     val onChangeCrossfadeDuration: (Int) -> Unit = {},
+    /** v2.35.0 多码率：清除全部单曲音质覆盖（方案 §5.3） */
+    val onClearQualityOverrides: (() -> Unit)? = null,
     /** F2-6：音质档位（AUTO=0/999/320/128） */
     val onChangeQualityTier: (Int) -> Unit = {},
 )
@@ -117,12 +120,9 @@ internal fun PlayerSettingsSection(
             modifier = Modifier.padding(start = 16.dp, top = 4.dp),
             horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp)
         ) {
-            listOf(
-                0 to stringResource(R.string.quality_tier_auto),
-                999 to stringResource(R.string.quality_tier_lossless),
-                320 to stringResource(R.string.quality_tier_high),
-                128 to stringResource(R.string.quality_tier_standard),
-            ).forEach { (tier, label) ->
+            // v2.35.0：遍历单一真相源（含新增 192 档），避免"常量加了 UI 忘了加"的漂移
+            QualityTiers.all.forEach { tier ->
+                val label = stringResource(QualityTiers.labelResOf(tier))
                 SettingActionButton(
                     label = if (state.qualityTier == tier) "▶ $label" else label,
                     description = "",
@@ -135,6 +135,13 @@ internal fun PlayerSettingsSection(
             label = stringResource(R.string.settings_equalizer),
             description = stringResource(R.string.settings_equalizer_desc),
             onClick = { actions.onOpenEqualizer?.invoke() }
+        )
+        // v2.35.0 多码率：清除全部单曲音质覆盖（方案 §5.3）
+        Spacer(modifier = Modifier.height(8.dp))
+        SettingActionButton(
+            label = stringResource(R.string.quality_override_clear),
+            description = stringResource(R.string.quality_override_clear_desc),
+            onClick = { actions.onClearQualityOverrides?.invoke() }
         )
         // ── 人声分离模式 ──
         Spacer(modifier = Modifier.height(24.dp))

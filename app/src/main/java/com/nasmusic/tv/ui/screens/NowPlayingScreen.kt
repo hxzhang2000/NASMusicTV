@@ -120,6 +120,11 @@ fun NowPlayingScreen(
     onSearchArtist: (String) -> Unit = {},
     /** 点击歌曲名跳转到网络搜索 */
     onSearchSong: (String) -> Unit = {},
+    // === v2.35.0 多码率：音质档位（方案 §5.1） ===
+    /** 当前生效档位（单曲覆盖 ?: 全局默认） */
+    qualityTier: Int = 0,
+    /** 用户确认档位 + 生效范围 */
+    onChangeQuality: (tier: Int, scope: com.nasmusic.tv.backend.network.QualityScope) -> Unit = { _, _ -> },
     // === K 歌页面：升降调 / 变速（全局记忆） ===
     pitchSemitones: Int = 0,
     playbackSpeed: Double = 1.0,
@@ -152,6 +157,11 @@ fun NowPlayingScreen(
     modifier: Modifier = Modifier
 ) {
     var showInfoPanel by remember { mutableStateOf(false) }
+    // v2.35.0 多码率：音质选择面板显隐
+    var showQualityDialog by remember { mutableStateOf(false) }
+    val qualityLabel = if (currentSong?.isNetworkSong == true) {
+        stringResource(com.nasmusic.tv.backend.network.QualityTiers.labelResOf(qualityTier))
+    } else ""
     // F2-2b：睡眠定时弹窗显隐（按钮在歌词来源行 A+ 右侧）
     var showSleepTimerDialog by remember { mutableStateOf(false) }
     val playPauseFocusRequester = remember { FocusRequester() }
@@ -293,7 +303,11 @@ fun NowPlayingScreen(
                             mvAvailable = mvAvailable,
                             onEnterMv = onEnterMv,
                             compact = true,
-                            playPauseFocusRequester = playPauseFocusRequester
+                            playPauseFocusRequester = playPauseFocusRequester,
+                            // v2.35.0 多码率：音质入口（仅网络歌曲显示，方案 §5.1）
+                            showQualityButton = currentSong?.isNetworkSong == true,
+                            qualityLabel = qualityLabel,
+                            onOpenQuality = { showQualityDialog = true }
                         )
                     }
                 }
@@ -405,6 +419,18 @@ fun NowPlayingScreen(
                                 onSleepTimerCancel()
                             },
                             onDismiss = { showSleepTimerDialog = false }
+                        )
+                    }
+
+                    // v2.35.0 多码率：音质选择面板（方案 §5.1）
+                    if (showQualityDialog) {
+                        com.nasmusic.tv.ui.components.QualityPickerDialog(
+                            currentTier = qualityTier,
+                            onConfirm = { tier, scope ->
+                                showQualityDialog = false
+                                onChangeQuality(tier, scope)
+                            },
+                            onDismiss = { showQualityDialog = false }
                         )
                     }
 

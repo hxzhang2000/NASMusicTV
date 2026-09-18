@@ -138,6 +138,8 @@ fun SettingsScreen(
     // F2-6：音质档位
     qualityTier: Int = 0,
     onChangeQualityTier: (Int) -> Unit = {},
+    /** v2.35.0 多码率：清除全部单曲音质覆盖（方案 §5.3） */
+    onClearQualityOverrides: (() -> Unit)? = null,
     onChangeMetingApiBaseUrl: ((String) -> Unit)? = null,
     // MTV 视频搜索端点配置
     mvApiBaseUrl: String = "",
@@ -483,6 +485,7 @@ fun SettingsScreen(
                             onToggleCrossfade = onToggleCrossfade,
                             onChangeCrossfadeDuration = onChangeCrossfadeDuration,
                             onChangeQualityTier = onChangeQualityTier,
+                            onClearQualityOverrides = onClearQualityOverrides,
                         )
                     )
                 }

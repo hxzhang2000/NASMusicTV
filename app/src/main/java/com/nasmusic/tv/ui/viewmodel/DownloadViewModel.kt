@@ -7,10 +7,14 @@ import com.nasmusic.tv.NasMusicApp
 import com.nasmusic.tv.R
 import com.nasmusic.tv.backend.download.AutoDownloadController
 import com.nasmusic.tv.backend.download.DownloadStats
+import com.nasmusic.tv.backend.download.QualityProbe
 import com.nasmusic.tv.backend.download.SongDownloadManager
+import com.nasmusic.tv.backend.download.db.DownloadStatus
 import com.nasmusic.tv.backend.download.model.DownloadState
 import com.nasmusic.tv.backend.download.model.downloadKey
+import com.nasmusic.tv.backend.download.model.downloadKeyOf
 import com.nasmusic.tv.backend.download.model.isDownloadableSong
+import com.nasmusic.tv.backend.network.QualityTiers
 import com.nasmusic.tv.data.model.Song
 import com.nasmusic.tv.data.model.StorageType
 import com.nasmusic.tv.player.ModelDownloadManager
@@ -39,6 +43,45 @@ class DownloadViewModel(
     private val nasMusicApp = app as NasMusicApp
     private val prefs = nasMusicApp.appPreferences
     private val playerManager: PlayerManager = nasMusicApp.playerManager
+
+    private companion object {
+        /** Meting 源标识：唯一支持多码率的网络源（方案 §2.5） */
+        const val METING_SOURCE = "meting"
+    }
+
+    /** 直链解析器（复用 NasMusicApp 中已注入 detailed lambda 的实例） */
+    private val resolver = nasMusicApp.downloadResolver
+
+    /** 下载库（档位维度去重查询） */
+    private val repo = nasMusicApp.downloadRepository
+
+    // ===== v2.35.0 多码率：单曲下载码率选择（方案 §5.2.1）=====
+
+    /**
+     * 单曲下载的码率选择状态。
+     *
+     * 探测结果决定 UI 形态：多档 → [Pick] 弹面板；单档 → 不进入本状态（直接下载）；
+     * 零档 → [None] 报错。探测中显示 [Probing]。
+     */
+    sealed interface QualityPickerState {
+        val song: Song
+
+        /** 正在探测可用音质（≈1.2s 封顶） */
+        data class Probing(override val song: Song) : QualityPickerState
+
+        /** 多档可用，弹面板选择。@param downloaded 已下载档位（置灰不可选） */
+        data class Pick(
+            override val song: Song,
+            val available: List<Int>,
+            val downloaded: Set<Int>
+        ) : QualityPickerState
+
+        /** 零档可用 → 错误提示，不入队 */
+        data class None(override val song: Song) : QualityPickerState
+    }
+
+    private val _qualityPicker = MutableStateFlow<QualityPickerState?>(null)
+    val qualityPicker: StateFlow<QualityPickerState?> = _qualityPicker.asStateFlow()
 
     /** 需要父级刷新合并数据时的回调（由 MainViewModel 注入，避免子 VM 间直连） */
     var onLocalSongsChanged: (() -> Unit)? = null
@@ -73,17 +116,57 @@ class DownloadViewModel(
             // 2. 可下载性（本地歌曲 / 天气电台不可下载）
             if (!isDownloadableSong(song)) return@launch
 
-            val key = song.downloadKey
-            val state = songDownloadStates.value[key]
-            // 3. 已下载 / 下载中 / 已入队 → 不重复入队
-            if (state is DownloadState.Completed ||
-                state is DownloadState.Downloading ||
-                state is DownloadState.Queued
-            ) {
+            // v2.35.0 多码率（方案 §5.2.1）：非 Meting 源无码率概念 → 直接按 AUTO 入队
+            if (!song.isNetworkSong || song.networkSource != METING_SOURCE) {
+                enqueueManual(song, QualityTiers.AUTO)
                 return@launch
             }
-            songDownloadManager.enqueue(song, auto = false)
+
+            // 3. 探测可用档位（决定弹窗/直下/报错）
+            _qualityPicker.value = QualityPickerState.Probing(song)
+            val available = QualityProbe.probeAvailableQualities(song, resolver)
+            if (available.isEmpty()) {
+                // 零档可用 → 错误提示，不入队
+                _qualityPicker.value = QualityPickerState.None(song)
+                return@launch
+            }
+            if (available.size == 1) {
+                // 仅一档 → 不弹窗，直接下载（用户无感）
+                _qualityPicker.value = null
+                enqueueManual(song, available.first())
+                return@launch
+            }
+            // 多档 → 弹码率选择面板（默认选中最高可用档）
+            val downloaded = repo.downloadedQualitiesOf(song.id)
+                .filter { it.status == DownloadStatus.COMPLETED.name }
+                .map { it.quality }
+                .toSet()
+            _qualityPicker.value = QualityPickerState.Pick(song, available, downloaded)
         }
+    }
+
+    /** 用户在码率面板选定档位后调用 */
+    fun downloadWithQuality(song: Song, quality: Int) {
+        _qualityPicker.value = null
+        viewModelScope.launch { enqueueManual(song, quality) }
+    }
+
+    /** 关闭码率面板 */
+    fun dismissQualityPicker() {
+        _qualityPicker.value = null
+    }
+
+    /** 内部：幂等检查 + 入队 */
+    private suspend fun enqueueManual(song: Song, quality: Int) {
+        val key = song.downloadKeyOf(quality)
+        val state = songDownloadStates.value[key]
+        if (state is DownloadState.Completed ||
+            state is DownloadState.Downloading ||
+            state is DownloadState.Queued
+        ) {
+            return
+        }
+        songDownloadManager.enqueue(song, auto = false, quality = quality)
     }
 
     /**

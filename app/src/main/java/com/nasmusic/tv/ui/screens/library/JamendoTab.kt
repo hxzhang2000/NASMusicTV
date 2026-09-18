@@ -39,6 +39,7 @@ import com.nasmusic.tv.ui.components.song.UnifiedSongRow
 import com.nasmusic.tv.ui.screens.TextInputDialog
 import com.nasmusic.tv.ui.theme.FontSize
 import com.nasmusic.tv.ui.theme.NasMusicColors
+import com.nasmusic.tv.backend.download.model.stateOfSong
 
 private val JAMENDO_PRESET_TAGS = listOf("ambient", "electronic", "jazz", "filmscore", "chillout", "instrumental", "pop", "rock")
 
@@ -197,7 +198,7 @@ fun JamendoTab(
                                 onToggleQueue = { onToggleQueue(song) },
                                 isFavorited = song.id in networkFavoriteIds,
                                 onToggleFavorite = { onToggleFavorite(song) },
-                                downloadState = downloadStates[song.downloadKey] ?: DownloadState.None,
+                                downloadState = downloadStates.stateOfSong(song),
                                 onDownload = { onDownloadSong(song) }
                             )
                         }

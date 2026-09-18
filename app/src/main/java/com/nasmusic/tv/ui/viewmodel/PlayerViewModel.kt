@@ -301,15 +301,12 @@ class PlayerViewModel(
     private suspend fun resolveStreamUrl(song: Song, forceRefresh: Boolean = false): String? {
         return when {
             song.isLocalSong -> song.streamUrl ?: song.path
-            song.isNetworkSong -> {
-                nasMusicApp.downloadRepository.playableLocalUri(song)
-                    ?: nasMusicApp.networkMusicManager.resolvePlayUrl(song, forceRefresh)
-            }
+            song.isNetworkSong -> resolveNetworkStreamUrl(song, forceRefresh)
             // 导入 stub：同步补全 → NAS 命中直接取 streamUrl；网络命中走 resolvePlayUrl
             song.id.startsWith("imported_") -> {
                 val enriched = playlistEnricher.enrichSong(song) ?: return null
                 if (enriched.isNetworkSong) {
-                    nasMusicApp.networkMusicManager.resolvePlayUrl(enriched, forceRefresh)
+                    resolveNetworkStreamUrl(enriched, forceRefresh)
                 } else {
                     enriched.streamUrl
                 }
@@ -321,6 +318,36 @@ class PlayerViewModel(
                 } else null
             }
         }
+    }
+
+    /**
+     * 网络歌曲的档位感知解析（方案 §3.6）。
+     *
+     * 改造前是 `playableLocalUri(song) ?: resolvePlayUrl(...)` —— 只要该曲下载过
+     * （任意档位）就永远播本地文件，导致"切到无损/128"对已下载歌曲完全失效。
+     * 现在按**有效档位**查本地：
+     * 1. 该档已下载 → 播本地（离线优先，不发网络请求）；
+     * 2. 该档未下载 → 走网络解析；
+     * 3. 解析降级且降级后的档恰好已下载 → 回退本地（省流量，内容一致）；
+     * 4. 解析彻底失败 → 任意已下载档兜底（保证"能播就行"）。
+     */
+    private suspend fun resolveNetworkStreamUrl(song: Song, forceRefresh: Boolean): String? {
+        val repo = nasMusicApp.downloadRepository
+        val mgr = nasMusicApp.networkMusicManager
+        // 1. 该档已下载 → 播本地
+        val quality = mgr.effectiveQualityOf(song)
+        repo.playableLocalUri(song, quality)?.let { return it }
+        // 2. 走网络解析（带降级信号）
+        val result = mgr.resolvePlayUrlDetailed(song, quality, forceRefresh)
+        if (result.url == null) {
+            // 4. 解析彻底失败 → 任意已下载档兜底
+            return repo.playableLocalUriAny(song)
+        }
+        // 3. 降级且降级后的档已下载 → 优先本地
+        if (result.isDowngradedFrom(quality)) {
+            repo.playableLocalUri(song, result.actualQuality)?.let { return it }
+        }
+        return result.url
     }
 
     fun resolveAndPlayByIndex(targetIndex: Int) {

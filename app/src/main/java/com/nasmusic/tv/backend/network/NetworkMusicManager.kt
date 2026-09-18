@@ -20,7 +20,18 @@ import java.util.concurrent.ConcurrentHashMap
  */
 class NetworkMusicManager(
     services: Map<String, NetworkMusicService>,
-    private val defaultSourceProvider: () -> String
+    private val defaultSourceProvider: () -> String,
+    /**
+     * 全局默认音质档位（同步读取）。由 NasMusicApp 注入
+     * `{ appPreferences.getQualityTierSync() }`，与既有 provider 注入风格一致。
+     */
+    private val qualityTierProvider: () -> Int = { QualityTiers.AUTO },
+    /**
+     * 单曲音质覆盖查询（多码率方案 §2.3 两级模型）。
+     * 返回 null 表示该曲无覆盖、回退全局默认。由 NasMusicApp 注入，
+     * 避免 backend/network 反向依赖 data/prefs（见方案 §6.3）。
+     */
+    private val songQualityOverrideProvider: ((String, String) -> Int?)? = null
 ) {
 
     companion object {
@@ -47,11 +58,47 @@ class NetworkMusicManager(
      */
     private data class CachedPlayUrl(
         val url: String,
-        val timestamp: Long
+        val timestamp: Long,
+        /** 实际命中档位（降级时 ≠ 请求档位），随缓存一起复用避免重复降级探测 */
+        val actualQuality: Int = QualityTiers.AUTO
     )
 
-    /** 播放链接内存缓存：songId → CachedPlayUrl（线程安全，resolvePlayUrl 在 IO 线程并发访问） */
+    /** 播放链接内存缓存：cacheKey → CachedPlayUrl（线程安全，resolvePlayUrl 在 IO 线程并发访问） */
     private val playUrlCache = ConcurrentHashMap<String, CachedPlayUrl>()
+
+    /**
+     * 播放直链缓存 key：`networkSource:networkId:quality`。
+     *
+     * 音质参与缓存键，切档位不会串用旧直链（修 G1）。
+     * 注意此处用冒号分隔，与下载主键 `ntwk_<source>_<id>:q<quality>`
+     * （下划线 + 后缀）属于两个独立命名空间，不要试图统一。
+     */
+    private fun playUrlKey(song: Song, quality: Int): String =
+        "${song.networkSource}:${song.networkId}:$quality"
+
+    /**
+     * 有效档位解析（两级模型）：单曲覆盖优先，回退全局默认。
+     */
+    /**
+     * 有效档位解析（两级模型）：单曲覆盖优先，回退全局默认。
+     *
+     * 供播放链路（PlayerViewModel §3.6）与下载面板查询"当前该曲用哪个档"。
+     */
+    fun effectiveQualityOf(song: Song): Int = effectiveQuality(song)
+
+    private fun effectiveQuality(song: Song): Int {
+        val src = song.networkSource ?: return qualityTierProvider()
+        val id = song.networkId ?: return qualityTierProvider()
+        val override = songQualityOverrideProvider?.invoke(src, id)
+        return override ?: qualityTierProvider()
+    }
+
+    /** 清空全部播放直链缓存。档位变化时由 AppPreferences.setQualityTier() 调用（修 G5）。 */
+    fun clearPlayUrlCache() {
+        val size = playUrlCache.size
+        playUrlCache.clear()
+        if (size > 0) AppLog.d(TAG, "clearPlayUrlCache: cleared $size entries")
+    }
 
     /** 获取当前默认源 ID */
     val defaultSource: String
@@ -105,15 +152,40 @@ class NetworkMusicManager(
 
     suspend fun resolvePlayUrl(song: Song, forceRefresh: Boolean = false): String? {
         if (!song.isNetworkSong) return song.streamUrl
+        return resolvePlayUrlDetailed(song, effectiveQuality(song), forceRefresh).url
+    }
+
+    /**
+     * 解析播放链接（指定档位 + 降级信号）。
+     *
+     * 按 song.networkSource 精确路由，不 fallback。
+     * 网络歌曲的 streamUrl 不持久化，每次播放实时解析。
+     *
+     * 缓存策略：同一歌曲 × 同一档位 5 分钟内复用缓存，避免重复网络请求。
+     * 切档位时 key 不同，因此不会命中旧档位直链（修 G1）。
+     *
+     * @param quality 音质档位（[QualityTiers] 常量）
+     * @param forceRefresh 为 true 时强制绕过缓存、走完整降级链重新解析。
+     *        播放失败重试路径、档位切换路径必须传 true。
+     * @return [ResolveResult]，url 为 null 表示无源可降；
+     *         actualQuality ≠ quality 表示发生了静默降级
+     */
+    suspend fun resolvePlayUrlDetailed(
+        song: Song,
+        quality: Int,
+        forceRefresh: Boolean = false
+    ): ResolveResult {
+        if (!song.isNetworkSong) return ResolveResult(song.streamUrl, quality)
         val src = song.networkSource ?: run {
             AppLog.e(TAG, "resolvePlayUrl: networkSource 为 null（song id=${song.id} title=${song.title}），无法路由")
-            return null
+            return ResolveResult.failure(quality)
         }
         val svc = services[src] ?: run {
             AppLog.w(TAG, "resolvePlayUrl: 未注册源 source=$src（song id=${song.id}）；已注册源=${services.keys}")
-            return null
+            return ResolveResult.failure(quality)
         }
-        AppLog.d(TAG, "resolvePlayUrl: 路由到 source=$src (song id=${song.id} networkId=${song.networkId}) forceRefresh=$forceRefresh")
+        val cacheKey = playUrlKey(song, quality)
+        AppLog.d(TAG, "resolvePlayUrl: 路由到 source=$src (song id=${song.id} networkId=${song.networkId}) quality=$quality forceRefresh=$forceRefresh")
 
         // 清理过期缓存条目
         val now = System.currentTimeMillis()
@@ -128,31 +200,31 @@ class NetworkMusicManager(
 
         // 检查缓存（forceRefresh 时跳过——重试路径绝不命中旧缓存）
         if (!forceRefresh) {
-            val cached = playUrlCache[song.id]
+            val cached = playUrlCache[cacheKey]
             if (cached != null) {
-                AppLog.d(TAG, "resolvePlayUrl: cache hit for songId=${song.id}")
-                return cached.url
+                AppLog.d(TAG, "resolvePlayUrl: cache hit for key=$cacheKey")
+                return ResolveResult(cached.url, cached.actualQuality)
             }
         } else {
             // 强制刷新：清除旧缓存条目，确保下面走完整降级链
-            playUrlCache.remove(song.id)
+            playUrlCache.remove(cacheKey)
         }
 
         return try {
-            val url = svc.resolvePlayUrl(song)
-            if (url != null) {
-                // 写入缓存
-                playUrlCache[song.id] = CachedPlayUrl(url, now)
-                AppLog.d(TAG, "resolvePlayUrl: cached new url for songId=${song.id}")
+            val result = svc.resolvePlayUrlDetailed(song, quality)
+            if (result.isSuccess) {
+                // 写入缓存（含实际档位，降级结果也缓存，避免重复降级探测）
+                playUrlCache[cacheKey] = CachedPlayUrl(result.url!!, now, result.actualQuality)
+                AppLog.d(TAG, "resolvePlayUrl: cached new url for key=$cacheKey actual=${result.actualQuality}")
             } else {
                 // 解析失败：移除缓存条目，避免下次又命中过期项
-                playUrlCache.remove(song.id)
+                playUrlCache.remove(cacheKey)
             }
-            url
+            result
         } catch (e: Exception) {
             AppLog.w(TAG, "resolvePlayUrl error: ${e.message}", e)
-            playUrlCache.remove(song.id)
-            null
+            playUrlCache.remove(cacheKey)
+            ResolveResult.failure(quality)
         }
     }
 

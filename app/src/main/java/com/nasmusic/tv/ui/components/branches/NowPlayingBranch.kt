@@ -25,6 +25,7 @@ internal fun NowPlayingBranch(
     isTV: Boolean,
     isImmersiveMode: androidx.compose.runtime.MutableState<Boolean>,
     currentSong: Song?,
+    qualityTier: Int,
     isPlaying: Boolean,
     playMode: com.nasmusic.tv.data.model.PlayMode,
     coverCandidates: List<String>,
@@ -134,7 +135,9 @@ internal fun NowPlayingBranch(
                                 viewModel.setLibrarySearchKeyword(keyword)
                                 viewModel.navVM.navigateTo(Screen.Library)
                             },
-                            // === K 歌页面：升降调 / 变速 ===
+                            // === v2.35.0 多码率：音质档位（方案 §5.1） ===
+                            qualityTier = qualityTier,
+                            onChangeQuality = { tier, scope -> viewModel.setQualityTier(tier, scope) },                            // === K 歌页面：升降调 / 变速 ===
                             pitchSemitones = pitchSemitones,
                             playbackSpeed = playbackSpeed,
                             onSetPitch = { viewModel.vocalVM.setPitchSemitones(it) },

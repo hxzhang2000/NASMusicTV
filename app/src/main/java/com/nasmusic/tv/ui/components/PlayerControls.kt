@@ -294,6 +294,13 @@ fun ControlButtonsRow(
     showMvButton: Boolean = false,
     mvAvailable: Boolean = false,
     onEnterMv: () -> Unit = {},
+    /**
+     * v2.35.0 多码率：音质按钮（方案 §5.1）。
+     * 仅网络歌曲显示；点击弹出音质选择面板。
+     */
+    showQualityButton: Boolean = false,
+    qualityLabel: String = "",
+    onOpenQuality: () -> Unit = {},
     modifier: Modifier = Modifier,
     compact: Boolean = false,
     playPauseFocusRequester: FocusRequester? = null
@@ -357,8 +364,7 @@ fun ControlButtonsRow(
             )
         }
         // MTV 入口按钮（有 MV 时可点击，无 MV 时半透明禁用）
-        if (showMvButton) {
-            Spacer(modifier = Modifier.width(btnGap))
+        if (showMvButton) {            Spacer(modifier = Modifier.width(btnGap))
             VocalToggleButton(
                 label = "MTV",
                 onClick = { if (mvAvailable) onEnterMv() },
@@ -366,6 +372,16 @@ fun ControlButtonsRow(
                 dimmed = !mvAvailable,
                 // MTV 三个字母需更宽才能单行显示；同时收紧保证整行落进 380dp
                 width = if (compact) 64.dp else 100.dp
+            )
+        }
+        // v2.35.0 多码率：音质入口（仅网络歌曲显示，方案 §5.1）
+        if (showQualityButton) {
+            Spacer(modifier = Modifier.width(btnGap))
+            VocalToggleButton(
+                label = qualityLabel.ifBlank { stringResource(R.string.quality_tier_auto) },
+                onClick = onOpenQuality,
+                compact = compact,
+                width = if (compact) 52.dp else null
             )
         }
     }

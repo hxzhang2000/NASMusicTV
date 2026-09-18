@@ -54,6 +54,7 @@ import com.nasmusic.tv.ui.theme.FontSize
 import com.nasmusic.tv.ui.theme.NasMusicColors
 import com.nasmusic.tv.ui.viewmodel.MainViewModel
 import com.nasmusic.tv.ui.viewmodel.NetworkMusicViewModel
+import com.nasmusic.tv.backend.download.model.stateOfSong
 
 /**
  * 网盘 Tab：目录浏览 + 关键词搜索 + 文件操作（播放/加队列/加歌单/查看 MV）
@@ -179,7 +180,7 @@ val downloadStates by viewModel.songDownloadStates.collectAsState(initial = empt
                                 isInQueue = song.id in queueSongIds,
                                 onToggleQueue = { viewModel.playerVM.toggleQueueSong(song) },
                                 onAddToPlaylist = { actionSong = song },
-                                downloadState = downloadStates[song.downloadKey] ?: DownloadState.None,
+                                downloadState = downloadStates.stateOfSong(song),
                                 onDownload = { viewModel.downloadVM.downloadSong(song) }
                             )
                         }
@@ -257,7 +258,7 @@ val downloadStates by viewModel.songDownloadStates.collectAsState(initial = empt
                                     isInQueue = song.id in queueSongIds,
                                     onToggleQueue = { viewModel.playerVM.toggleQueueSong(song) },
                                     onAddToPlaylist = { actionSong = song },
-                                    downloadState = downloadStates[song.downloadKey] ?: DownloadState.None,
+                                    downloadState = downloadStates.stateOfSong(song),
                                     onDownload = { viewModel.downloadVM.downloadSong(song) }
                                 )
                             }

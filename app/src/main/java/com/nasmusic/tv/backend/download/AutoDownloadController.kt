@@ -3,6 +3,7 @@ package com.nasmusic.tv.backend.download
 import com.nasmusic.tv.backend.download.model.DownloadSettings
 import com.nasmusic.tv.backend.download.model.dedupeKey
 import com.nasmusic.tv.backend.download.model.downloadKey
+import com.nasmusic.tv.backend.network.QualityTiers
 import com.nasmusic.tv.data.model.Song
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -31,7 +32,12 @@ class AutoDownloadController(
     private val resolver: StreamUrlResolver,
     private val manager: SongDownloadManager,
     private val notify: (String) -> Unit,
-    private val scope: CoroutineScope
+    private val scope: CoroutineScope,
+    /**
+     * v2.35.0 多码率：全局默认音质档位（同步读取）。
+     * 自动下载统一用该档位，**不消费单曲覆盖**（方案 §2.3.2）。
+     */
+    private val qualityTierProvider: () -> Int = { QualityTiers.AUTO }
 ) {
     companion object {
         private const val NOTIFY_THROTTLE_MS = 5 * 60 * 1000L
@@ -61,9 +67,23 @@ class AutoDownloadController(
             if (!s.downloadEnabled || !s.autoDownloadOnPlay) return@launch
             // 2. 可下载源
             if (!resolver.isDownloadable(song)) return@launch
-            // 3. 已下载 / 去重命中
-            if (repo.get(song.downloadKey) != null) return@launch      // 已下载或失败过，不自动重试
-            if (repo.findCompletedByDedupe(song.dedupeKey) != null) return@launch
+
+            // 3. 档位：自动下载统一用**全局默认档位**，不消费单曲覆盖（方案 §2.3.2）
+            val requested = qualityTierProvider()
+
+            // 3.1 前置去重（按请求档）：已下载该档 → 直接跳过，连解析请求都不发
+            if (repo.isDownloaded(song, requested)) return@launch
+
+            // 3.2 解析直链（走完整降级链），拿到**实际命中档位**
+            //     注意：这里不能用 repo.get(song.downloadKey) 做粗判 —— 那会把
+            //     "已下载 128k" 误判为"320k 也已完成"，导致无损自动下载永久跳过。
+            val result = resolver.resolveDetailed(song, requested)
+            if (!result.isSuccess) return@launch      // 无源可降 → 放弃，不落 FAILED
+
+            // 3.3 ⚠️ 二次去重（按**实际**档位）：降级后可能与已下载档重合，
+            //     否则下次运行会再次降级到同档 → 插入同 songKey → 主键冲突（方案 §4.5）
+            val actual = result.actualQuality
+            if (repo.isDownloaded(song, actual)) return@launch
 
             // 4. 配额
             val limit = s.autoDownloadLimit
@@ -80,8 +100,8 @@ class AutoDownloadController(
                 storage.notifyFullOnce(notify)
                 return@launch
             }
-            // 6. 入队自动下载
-            manager.enqueue(song, auto = true)
+            // 6. 入队自动下载（传实际档位，与落库 key 一致）
+            manager.enqueue(song, auto = true, quality = actual)
         }
     }
 

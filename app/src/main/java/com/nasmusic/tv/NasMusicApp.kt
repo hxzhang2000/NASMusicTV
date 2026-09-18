@@ -84,6 +84,12 @@ class NasMusicApp : Application(), ImageLoaderFactory {
         private set
     lateinit var networkMusicManager: NetworkMusicManager
         private set
+    /**
+     * v2.35.0 多码率：单曲音质覆盖（两级模型的"单曲"层）。
+     * 独立 DataStore 文件，500 条 LRU 上限（方案 §2.3.1）。
+     */
+    lateinit var qualityOverrides: com.nasmusic.tv.data.prefs.QualityOverrides
+        private set
     lateinit var playlistEnricher: PlaylistEnricher
         private set
 
@@ -168,6 +174,12 @@ class NasMusicApp : Application(), ImageLoaderFactory {
     /** 播放时自动下载控制器 */
     lateinit var autoDownloadController: com.nasmusic.tv.backend.download.AutoDownloadController
         private set
+    /**
+     * v2.35.0 多码率：下载直链解析器（含 detailed lambda，带降级信号）。
+     * 供 DownloadViewModel 的可用码率探测复用，保证探测与下载走同一实现。
+     */
+    lateinit var downloadResolver: com.nasmusic.tv.backend.download.StreamUrlResolver
+        private set
     /** 导出到外接设备协调器 */
     lateinit var exportCoordinator: com.nasmusic.tv.backend.export.ExportCoordinator
         private set
@@ -247,6 +259,8 @@ class NasMusicApp : Application(), ImageLoaderFactory {
     override fun onCreate() {
         super.onCreate()
         appPreferences = AppPreferences.getInstance(this)
+        // v2.35.0 多码率：单曲覆盖存储（须在 networkMusicManager 构造前初始化，供 provider 闭包使用）
+        qualityOverrides = com.nasmusic.tv.data.prefs.QualityOverrides(this)
         // R-7（第三类）：启动 provider 键内存镜像收集（DataStore Flow → @Volatile）
         appPreferences.startProviderMirrors(applicationScope)
         // R-7（第一类）：语言镜像一次性迁移（老版本 DataStore 已有语言值，镜像为空时补写）
@@ -285,8 +299,13 @@ class NasMusicApp : Application(), ImageLoaderFactory {
         )
         networkMusicManager = NetworkMusicManager(
             services = services,
-            defaultSourceProvider = { appPreferences.network.getDefaultNetworkSourceSync() }
+            defaultSourceProvider = { appPreferences.network.getDefaultNetworkSourceSync() },
+            // v2.35.0 多码率：全局默认档位 + 单曲覆盖（两级模型，方案 §2.3）
+            qualityTierProvider = { appPreferences.getQualityTierSync() },
+            songQualityOverrideProvider = { src, id -> qualityOverrides.tierOf(src, id) }
         )
+        // v2.35.0 多码率（修 G5）：档位变化 → 清空播放直链缓存，避免切档后仍命中旧档直链
+        appPreferences.setOnQualityTierChanged { networkMusicManager.clearPlayUrlCache() }
         // 百度网盘：仅在总开关开启且已登录时注册（运行时切换开关时动态注册/注销）
         // T2 第一批（2026-09-14）：onCreate 需同步拿配置，用 runBlocking{first()}（不带 IO 调度器，
         // 不占 Default/IO 线程池；阻塞主线程仅限启动初始化阶段，可接受）
@@ -339,8 +358,11 @@ class NasMusicApp : Application(), ImageLoaderFactory {
         val downloadResolver = com.nasmusic.tv.backend.download.StreamUrlResolver(
             adapter = { backendRegistry.getAdapter() },
             network = { song -> networkMusicManager.resolvePlayUrl(song) },
-            baidu = { song -> networkMusicManager.resolvePlayUrl(song) }
+            baidu = { song -> networkMusicManager.resolvePlayUrl(song) },
+            // v2.35.0 多码率：带降级信号的解析（下载链路据此决定文件名后缀与落库档位）
+            networkDetailed = { song, q -> networkMusicManager.resolvePlayUrlDetailed(song, q) }
         )
+        this.downloadResolver = downloadResolver
         val pathBuilder = com.nasmusic.tv.backend.download.DownloadPathBuilder {
             getExternalFilesDir(android.os.Environment.DIRECTORY_MUSIC) ?: File(filesDir, "music")
         }
@@ -437,7 +459,9 @@ class NasMusicApp : Application(), ImageLoaderFactory {
                 com.nasmusic.tv.util.AppLog.d("NasMusicApp", "auto-dl: $msg")
                 _downloadNotifyMessage.tryEmit(msg)
             },
-            scope = applicationScope
+            scope = applicationScope,
+            // v2.35.0 多码率：自动下载统一用全局默认档位，不消费单曲覆盖（方案 §2.3.2）
+            qualityTierProvider = { appPreferences.getQualityTierSync() }
         )
         exportCoordinator = com.nasmusic.tv.backend.export.ExportCoordinator(
             context = this,

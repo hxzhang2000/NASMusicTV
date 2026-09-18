@@ -7,6 +7,66 @@
 >
 > 类型：`Added`（新增） | `Changed`（变更） | `Fixed`（修复） | `Removed`（移除）
 
+## [v2.35.0] - 2026-09-18
+
+> **网络音乐多码率：补齐 192 档，播放与下载支持按档位静默降级；同曲多档可共存**
+>
+> 设计见 `docs/multi-bitrate-playback-download-plan.md`（v1.3 可开发性审阅定稿）。
+
+### Added
+
+- **192 kbps「高品」档位**：此前只有 自动/128/320/无损 四档，用户在「极差」与「较贵」间二选一。
+  新增 `QualityTiers.GOOD = 192`，设置页、播放器面板、下载面板全部改为遍历单一真相源
+- **`backend/network/QualityTiers.kt`**：档位单一真相源——常量、标签、扩展名映射、降级链。
+  统一由 `fallbackChainOf(tier)` 产出降级链（无损 = `999 → 320 → 192 → 128`）
+- **`backend/network/ResolveResult.kt`**：解析结果封装 `(url, actualQuality)`，承载**降级信号**。
+  `isDowngradedFrom(requested)` 判定是否发生静默降级（AUTO 档恒为 false）
+- **单曲音质覆盖（两级模型）**：`data/prefs/QualityOverrides.kt` —— 全局默认档位之外，
+  可在播放器中为单首歌指定「仅本次播放」的档位，独立 DataStore 文件、500 条 LRU 上限。
+  设置页新增「清除全部单曲覆盖」入口
+- **单曲下载可用码率探测**：`backend/download/QualityProbe.kt` —— 并发探测 4 档
+  （`async/awaitAll` + 单档 1200ms 超时）。点击下载后：多档可用 → 弹出码率选择面板；
+  仅一档 → 直接下载不弹窗；零档 → 提示错误不入队
+- **`DownloadSongEntity.quality`** 字段 + `songId` 索引：下载索引首次具备档位维度，
+  同曲多档可共存（无损 `.flac` 与 `320.mp3` 并存不冲突）
+- **播放器音质切换器**（NowPlaying 控制行）+ 音质选择面板（5 档单选 + 范围二选）
+- **`QualityBadge`** 档位徽标组件、`DownloadQualityPickerDialog` / `QualityPickerDialog` / `QualityProbingDialog` 三个面板
+
+### Changed
+
+- **下载文件名体现实际码率**：非无损档追加档位后缀（`03 - 南方姑娘 (320).mp3`），
+  无损档靠 `.flac` 扩展名区分。**后缀取实际命中档位**，降级后不会出现「无损的文件名 + 320 的内容」
+- **下载扩展名不再靠 URL 猜**：`extOf(url, song, quality)` 改为档位优先。
+  此前无损直链常无 `.flac` 后缀，会被误存成 `.mp3` 容器
+- **下载链路顺序调整**：解析直链**先于**建立 DOWNLOADING 记录。
+  原顺序在降级时会残留一条永不完成的孤儿行（key 用请求档、文件落实际档）
+- **自动下载去重改走档位**：`isDownloaded(song, quality)` 替代 `dedupeKey` 粗判，
+  并新增**落库前按实际档二次去重**——否则「请求无损→降级 320」在下次运行会重复插入同 key 触发主键冲突
+- **播放缓存键含档位**：`networkSource:networkId:quality`（原为 `song.id`），
+  修复「切档位后 5 分钟内仍命中旧档直链、音质切换静默失效」
+- **已下载歌曲按档位决定播放源**：此前只要下载过（任意档位）就永远播本地文件，
+  导致切档对已下载歌曲完全无效。现在按**有效档位**查本地：该档已下载 → 播本地；
+  未下载 → 走网络解析；解析降级且降级档已下载 → 回退本地；解析失败 → 任意已下载档兜底
+- `NetworkMusicService` 新增 `resolvePlayUrl(song, quality)` 与 `resolvePlayUrlDetailed(song, quality)`
+  两个**带默认实现**的方法，不支持多码率的源（Jamendo / 百度网盘）无需改动
+- 版本号 `2.34.4 → 2.35.0`（versionCode 152 → 153）
+
+### Fixed
+
+- **`AppPreferences.setQualityTier()` 不失效播放缓存**：直链是「音源 × 歌曲 × 码率」绑定的
+  时效性资源，档位一变旧链接语义全失效。现通过回调清空 `NetworkMusicManager.playUrlCache`
+- **`STANDARD` 档降级链产生重复项**：`fallbackChainOf(128)` 返回 `[128, 128]`，
+  白跑一次网络请求。单测 `QualityTiersTest` 捕获并修正
+- **降级链跳过 192 档**：无损降级链原为 `999 → 320 → 128`，与「补齐 192」的决策矛盾
+
+### Database
+
+- `downloads.db` **version 1 → 2**，新增 `MIGRATION_1_2`：
+  一条 `ALTER TABLE download_songs ADD COLUMN quality INTEGER NOT NULL DEFAULT 0` +
+  一条 `CREATE INDEX index_download_songs_songId`。**零重建迁移**，不重建表、不回填、不丢数据
+- 存量行 `quality` 取列默认值 0（AUTO 档），而 AUTO 档的 `songKey` 与旧格式**完全相等**，
+  因此升级后已下载歌曲天然被命中，**不会重复下载**
+
 ## [v2.34.4] - 2026-09-18
 
 > **修复：导入歌单 stub 不再误标「NAS」来源，播放时同步/异步补全后标签即时刷新**

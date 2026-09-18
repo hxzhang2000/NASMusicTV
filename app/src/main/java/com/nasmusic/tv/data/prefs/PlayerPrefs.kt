@@ -20,6 +20,9 @@ class PlayerPrefs internal constructor(private val prefs: AppPreferences) {
     val qualityTier = prefs.qualityTier
     suspend fun setQualityTier(tier: Int) = prefs.setQualityTier(tier)
 
+    /** v2.35.0 多码率：同步读取档位（UI 标签计算用，读 @Volatile 内存镜像不阻塞） */
+    fun getQualityTierSyncSafe(): Int = prefs.getQualityTierSync()
+
     val pitchSemitones: Flow<Int> = prefs.pitchSemitones
     val playbackSpeed: Flow<Double> = prefs.playbackSpeed
     val separationMode: Flow<SeparationMode> = prefs.separationMode

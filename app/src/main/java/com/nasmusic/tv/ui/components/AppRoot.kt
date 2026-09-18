@@ -50,6 +50,7 @@ import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.nasmusic.tv.R
 import com.nasmusic.tv.data.model.Album
+import com.nasmusic.tv.ui.viewmodel.DownloadViewModel
 import com.nasmusic.tv.data.model.EqualizerPreset
 import com.nasmusic.tv.data.model.HomeDashboardData
 import com.nasmusic.tv.data.model.LocalPlaylist
@@ -104,6 +105,11 @@ fun AppRoot(
     val currentScreen by viewModel.navVM.currentScreen.collectAsState(initial = Screen.Home)
     val playerState by viewModel.playerVM.playerState.collectAsState()
     val currentSong = playerState.currentSong
+    // v2.35.0 多码率：当前生效档位 = 单曲覆盖 ?: 全局默认（方案 §2.3 两级模型）
+    val globalQualityTier by viewModel.prefs.player.qualityTier.collectAsState(initial = 0)
+    val qualityTier = remember(currentSong, globalQualityTier) {
+        currentSong?.let { viewModel.effectiveQualityFor(it) } ?: globalQualityTier
+    }
     val isPlaying by viewModel.playerVM.isPlaying.collectAsState(initial = false)
     val playMode by viewModel.playerVM.playMode.collectAsState(initial = com.nasmusic.tv.data.model.PlayMode.SEQUENTIAL)
     // F-2（修复）：progress/duration 不再顶层收集——PlayerManager 的进度由 1000ms
@@ -272,6 +278,8 @@ fun AppRoot(
                     isTV = isTV,
                     isImmersiveMode = isImmersiveMode,
                     currentSong = currentSong,
+                    // v2.35.0 多码率：当前生效档位（单曲覆盖 ?: 全局默认，方案 §5.1）
+                    qualityTier = qualityTier,
                     isPlaying = isPlaying,
                     playMode = playMode,
                     coverCandidates = coverCandidates,
@@ -381,6 +389,31 @@ fun AppRoot(
             },
             onDismiss = { pickerSong = null }
         )
+    }
+
+    // v2.35.0 多码率：单曲下载的码率选择面板（探测到多档可用时由 DownloadViewModel 弹出）
+    val qpState by viewModel.downloadVM.qualityPicker.collectAsState()
+    when (val qp = qpState) {
+        is DownloadViewModel.QualityPickerState.Probing -> {
+            QualityProbingDialog(songTitle = qp.song.title)
+        }
+        is DownloadViewModel.QualityPickerState.Pick -> {
+            DownloadQualityPickerDialog(
+                songTitle = qp.song.title,
+                available = qp.available,
+                downloaded = qp.downloaded,
+                onConfirm = { tier -> viewModel.downloadVM.downloadWithQuality(qp.song, tier) },
+                onDismiss = { viewModel.downloadVM.dismissQualityPicker() }
+            )
+        }
+        is DownloadViewModel.QualityPickerState.None -> {
+            // 零档可用 → 错误提示，不入队（自动关闭）
+            LaunchedEffect(qp.song.id) {
+                viewModel.showMessage(context.getString(R.string.quality_probe_none))
+                viewModel.downloadVM.dismissQualityPicker()
+            }
+        }
+        null -> Unit
     }
 
     }

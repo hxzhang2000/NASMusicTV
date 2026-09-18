@@ -74,6 +74,8 @@ class AppPreferences internal constructor(private val context: Context) {
         const val QUALITY_TIER_AUTO = 0
         const val QUALITY_TIER_LOSSLESS = 999
         const val QUALITY_TIER_HIGH = 320
+        /** v2.35.0 多码率：补齐 192 档 */
+        const val QUALITY_TIER_GOOD = 192
         const val QUALITY_TIER_STANDARD = 128
 
         /** 歌单导入历史最大保留条数（超出按 importedAt 淘汰最旧） */
@@ -905,8 +907,27 @@ class AppPreferences internal constructor(private val context: Context) {
     /** F2-6：音质档位（Meting br 参数；AUTO 时不传由 BandwidthEstimator 决策） */
     val qualityTier: Flow<Int> = dataStore.data.map { it[keyQualityTier] ?: QUALITY_TIER_AUTO }
 
+    /**
+     * v2.35.0 多码率：档位变化后的缓存失效回调（修 G5）。
+     *
+     * 由 NasMusicApp 注册为 `{ networkMusicManager.clearPlayUrlCache() }`。
+     * 用回调而非直接引用 NetworkMusicManager，避免 data/prefs 反向依赖 backend/network
+     * （与项目既有 provider 注入风格一致）。
+     */
+    @Volatile
+    private var onQualityTierChanged: (() -> Unit)? = null
+
+    /** 注册档位变化回调（仅 NasMusicApp 调用一次） */
+    fun setOnQualityTierChanged(cb: () -> Unit) {
+        onQualityTierChanged = cb
+    }
+
     suspend fun setQualityTier(tier: Int) {
         dataStore.edit { it[keyQualityTier] = tier }
+        // 直链是"音源 × 歌曲 × 码率"三元组绑定的时效性资源，档位一变旧链接语义全失效。
+        // 缓存上限仅 500 条，全量清除代价可忽略（方案 §2.4）。
+        runCatching { onQualityTierChanged?.invoke() }
+            .onFailure { AppLog.w(TAG, "onQualityTierChanged failed: ${it.message}") }
     }
 
     /**

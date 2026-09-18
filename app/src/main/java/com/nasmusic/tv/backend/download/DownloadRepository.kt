@@ -8,6 +8,8 @@ import com.nasmusic.tv.backend.download.db.DownloadStatus
 import com.nasmusic.tv.backend.download.model.DownloadState
 import com.nasmusic.tv.backend.download.model.dedupeKey
 import com.nasmusic.tv.backend.download.model.downloadKey
+import com.nasmusic.tv.backend.download.model.downloadKeyOf
+import com.nasmusic.tv.backend.network.QualityTiers
 import com.nasmusic.tv.data.model.Song
 import com.nasmusic.tv.util.AppLog
 import kotlinx.coroutines.Dispatchers
@@ -41,6 +43,60 @@ class DownloadRepository(
 
     suspend fun findCompletedByDedupe(dedupe: String): DownloadSongEntity? =
         withContext(Dispatchers.IO) { dao.findCompletedByDedupe(dedupe) }
+
+    // ─────────────────────────────────────────────────────────────
+    // v2.35.0 多码率：档位维度的查询与去重（方案 §4.2.5）
+    // ─────────────────────────────────────────────────────────────
+
+    /**
+     * 该曲在指定档位是否已下载（COMPLETED）。
+     *
+     * key 一律经 [com.nasmusic.tv.backend.download.model.downloadKeyOf] 推导，
+     * 与落库时用的是同一函数，因此不存在"查询格式与写入格式不一致"的可能。
+     *
+     * 双格式兼容的实质：[QualityTiers.AUTO] 档的 key 与存量行格式**完全相同**，
+     * 因此 AUTO 档天然命中存量行；而具体档位的 key 带 `:q` 后缀，互不干扰。
+     */
+    suspend fun isDownloaded(song: Song, quality: Int): Boolean = withContext(Dispatchers.IO) {
+        dao.getCompletedByKey(song.downloadKeyOf(quality)) != null
+    }
+
+    /**
+     * 该曲所有已下载档位记录（供列表档位徽标 / 下载面板"已下载"状态批量查询）。
+     * 走 songId 索引，不做 songKey 前缀匹配。
+     */
+    suspend fun downloadedQualitiesOf(songId: String): List<DownloadSongEntity> =
+        withContext(Dispatchers.IO) { dao.bySongId(songId) }
+
+    /**
+     * 已下载优先播放（**指定档位**版本，多码率方案 §3.6）。
+     *
+     * 与无参 [playableLocalUri] 的区别：本方法只认**该档位**的下载记录。
+     * 用于"用户切到无损时，若该曲只下载过 320 则应走网络解析"的场景。
+     *
+     * @param quality 档位；AUTO 档退化为按旧格式 key 查询（与现状行为一致）
+     */
+    suspend fun playableLocalUri(song: Song, quality: Int): String? = withContext(Dispatchers.IO) {
+        val entity = runCatching { dao.get(song.downloadKeyOf(quality)) }.getOrNull()
+            ?: return@withContext null
+        if (entity.status != DownloadStatus.COMPLETED.name) return@withContext null
+        val f = entity.audioPath?.let { File(it) } ?: return@withContext null
+        if (!f.exists() || f.length() <= 0) return@withContext null
+        android.net.Uri.fromFile(f).toString()
+    }
+
+    /**
+     * 任意档位的本地文件（网络解析彻底失败时的兜底，保证"能播就行"）。
+     * 优先返回档位最高的已完成记录。
+     */
+    suspend fun playableLocalUriAny(song: Song): String? = withContext(Dispatchers.IO) {
+        val entity = dao.bySongId(song.id)
+            .firstOrNull { it.status == DownloadStatus.COMPLETED.name && it.audioPath != null }
+            ?: return@withContext null
+        val f = entity.audioPath?.let { File(it) } ?: return@withContext null
+        if (!f.exists() || f.length() <= 0) return@withContext null
+        android.net.Uri.fromFile(f).toString()
+    }
 
     suspend fun getCompleted(): List<DownloadSongEntity> =
         withContext(Dispatchers.IO) { dao.getCompleted() }
@@ -177,14 +233,18 @@ class DownloadRepository(
 
     /**
      * 根据 [Song] 构造一条 DOWNLOADING 初始记录（供 SongDownloadManager 在开始下载时调用）
+     *
+     * @param quality v2.35.0：**实际解析命中的档位**（静默降级后为降级到的档位）。
+     *        songKey 与 quality 列均按此值生成，二者必须一致，否则下次去重会查不到。
      */
     fun newDownloadingEntity(
         song: Song,
         sourceType: String,
         tmpPath: String,
-        autoDownloaded: Boolean
+        autoDownloaded: Boolean,
+        quality: Int = QualityTiers.AUTO
     ): DownloadSongEntity = DownloadSongEntity(
-        songKey = song.downloadKey,
+        songKey = song.downloadKeyOf(quality),
         dedupeKey = song.dedupeKey,
         songId = song.id,
         title = song.title,
@@ -196,6 +256,7 @@ class DownloadRepository(
         embedded = false,
         durationMs = song.durationMs,
         bitrate = song.bitrate,
+        quality = quality,
         status = DownloadStatus.DOWNLOADING.name,
         progress = 0,
         autoDownloaded = autoDownloaded,

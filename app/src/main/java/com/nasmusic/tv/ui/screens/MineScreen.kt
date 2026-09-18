@@ -60,6 +60,7 @@ import com.nasmusic.tv.ui.theme.LocalPhoneCompact
 import com.nasmusic.tv.ui.theme.NasMusicColors
 import com.nasmusic.tv.ui.viewmodel.EnrichProgress
 import kotlinx.coroutines.launch
+import com.nasmusic.tv.backend.download.model.stateOfSong
 
 /**
  * 我的页面 — 双栏布局
@@ -172,7 +173,7 @@ fun MineScreen(
                         isInQueue = song.id in queueSongIds,
                         onToggleQueue = { onToggleQueue(song) },
                         onAddToPlaylist = { pickerSong = song },
-                        downloadState = downloadStates[song.downloadKey] ?: DownloadState.None,
+                        downloadState = downloadStates.stateOfSong(song),
                         onDownload = { onDownloadSong(song) },
                         onDeleteDownload = onDeleteDownloadSong?.let { cb -> { cb(song) } }
                     )
@@ -272,7 +273,7 @@ fun MineScreen(
                                     onAddToPlaylist = { pickerSong = song },
                                     // 删除歌曲（行内操作按钮，与其他按钮同行）
                                     onDelete = { onRemoveSongFromPlaylist(playlist.id, song.id) },
-                                    downloadState = downloadStates[song.downloadKey] ?: DownloadState.None,
+                                    downloadState = downloadStates.stateOfSong(song),
                                     onDownload = { onDownloadSong(song) },
                                     onDeleteDownload = onDeleteDownloadSong?.let { cb -> { cb(song) } }
                                 )
@@ -433,7 +434,7 @@ private fun FavoritesPane(
                         isInQueue = song.id in queueSongIds,
                         onToggleQueue = { onToggleQueue(song) },
                         onAddToPlaylist = { onAddToPlaylist(song) },
-                        downloadState = downloadStates[song.downloadKey] ?: DownloadState.None,
+                        downloadState = downloadStates.stateOfSong(song),
                         onDownload = { onDownloadSong(song) },
                         onDeleteDownload = onDeleteDownloadSong?.let { cb -> { cb(song) } }
                     )
@@ -500,7 +501,7 @@ private fun RecentPane(
                         onToggleFavorite = { onToggleFavorite(song) },
                         isInQueue = song.id in queueSongIds,
                         onToggleQueue = { onToggleQueue(song) },
-                        downloadState = downloadStates[song.downloadKey] ?: DownloadState.None,
+                        downloadState = downloadStates.stateOfSong(song),
                         onDownload = { onDownloadSong(song) },
                         onDeleteDownload = onDeleteDownloadSong?.let { cb -> { cb(song) } }
                     )
@@ -626,7 +627,7 @@ private fun PlaylistsPane(
                                     onAddToPlaylist = { onAddSongToPlaylist(song) },
                                     // 删除歌曲（行内操作按钮，与其他按钮同行）
                                     onDelete = { onRemoveSong(playlist.id, song) },
-                                    downloadState = downloadStates[song.downloadKey] ?: DownloadState.None,
+                                    downloadState = downloadStates.stateOfSong(song),
                                     onDownload = { onDownloadSong(song) },
                                     onDeleteDownload = onDeleteDownloadSong?.let { cb -> { cb(song) } }
                                 )

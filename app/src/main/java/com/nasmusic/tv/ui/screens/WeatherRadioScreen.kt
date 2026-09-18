@@ -38,6 +38,7 @@ import com.nasmusic.tv.ui.components.song.UnifiedSongRow
 import com.nasmusic.tv.ui.components.song.SongRowMode
 import com.nasmusic.tv.ui.theme.FontSize
 import com.nasmusic.tv.ui.theme.NasMusicColors
+import com.nasmusic.tv.backend.download.model.stateOfSong
 
 /**
  * 天气电台页面
@@ -203,7 +204,7 @@ fun WeatherRadioScreen(
                         onClick = { onPlaySong(song, index) },
                         mode = SongRowMode.MODE_ROW,
                         index = index,
-                        downloadState = downloadStates[song.downloadKey] ?: DownloadState.None,
+                        downloadState = downloadStates.stateOfSong(song),
                         onDownload = { onDownloadSong(song) }
                     )
                 }

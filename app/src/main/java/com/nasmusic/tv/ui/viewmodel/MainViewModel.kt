@@ -25,6 +25,8 @@ import com.nasmusic.tv.backend.export.ExportState
 import com.nasmusic.tv.backend.local.EmbeddedCoverExtractor
 import com.nasmusic.tv.backend.local.MusicMerger
 import com.nasmusic.tv.backend.local.StorageMonitor
+import com.nasmusic.tv.backend.network.QualityScope
+import com.nasmusic.tv.backend.network.QualityTiers
 import com.nasmusic.tv.backend.network.mv.MvSearchManager
 import com.nasmusic.tv.backend.network.baidu.BaiduFileIndexCache
 import com.nasmusic.tv.backend.network.baidu.BaiduOAuthClient
@@ -649,6 +651,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
     // --- D-3 常规错误消息（数据加载失败、操作失败等）---
     private val _errorMessage = MutableStateFlow<String?>(null)
     val errorMessage: StateFlow<String?> = _errorMessage.asStateFlow()
+
+    /** v2.35.0 多码率：对外暴露的轻量提示入口（UI 层需要主动报错时使用） */
+    fun showMessage(msg: String) = showError(msg)
 
     private fun showError(msg: String) {
         _errorMessage.value = msg
@@ -2827,6 +2832,79 @@ showError(getApplication<Application>().getString(R.string.toggle_favorite_error
     // F2-6：音质档位（Meting br 参数；AUTO 由端点默认/带宽决策）
     fun setQualityTier(tier: Int) = viewModelScope.launch {
         prefs.player.setQualityTier(tier)
+    }
+
+    /**
+     * v2.35.0 多码率：设置音质档位（方案 §5.1「全部歌曲 / 仅本次播放」两级范围）。
+     *
+     * - [scope] = ALL → 写全局默认 + 清直链缓存（由 AppPreferences 回调触发）+ 重播当前曲
+     * - [scope] = THIS_SONG → 写单曲覆盖，仅当前曲生效，不污染全局默认
+     *
+     * 档位切换必须 `forceRefresh=true` 重解析：否则会命中"已过期但仍在 5min TTL 内"
+     * 的旧档位直链（与播放失败重试同源问题，见 NetworkMusicManager 注释）。
+     */
+    fun setQualityTier(tier: Int, scope: QualityScope) = viewModelScope.launch {
+        val song = playerVM.playerState.value.currentSong
+        when (scope) {
+            QualityScope.ALL -> {
+                prefs.player.setQualityTier(tier)
+            }
+            QualityScope.THIS_SONG -> {
+                val src = song?.networkSource
+                val id = song?.networkId
+                if (src != null && id != null) {
+                    nasMusicApp.qualityOverrides.put(src, id, tier)
+                } else {
+                    // 非网络歌曲无单曲覆盖概念 → 退化为全局设置
+                    prefs.player.setQualityTier(tier)
+                }
+            }
+        }
+        // 重播当前网络歌曲（强制绕过缓存，走新档位解析）
+        if (song != null && song.isNetworkSong) {
+            replayCurrentWithQuality(tier)
+        }
+    }
+
+    /**
+     * 以指定档位重播当前曲，并在降级时提示用户（方案 §2.6：播放侧一次性提示）。
+     */
+    private suspend fun replayCurrentWithQuality(tier: Int) {
+        val song = playerVM.playerState.value.currentSong ?: return
+        val mgr = nasMusicApp.networkMusicManager
+        val result = mgr.resolvePlayUrlDetailed(song, tier, forceRefresh = true)
+        if (result.url == null) {
+            showError(getApplication<Application>().getString(R.string.quality_probe_none))
+            return
+        }
+        // 静默降级 → 一次性提示（不阻断播放）
+        if (result.isDowngradedFrom(tier)) {
+            val reqLabel = getApplication<Application>().getString(QualityTiers.labelResOf(tier))
+            val actLabel = getApplication<Application>().getString(QualityTiers.labelResOf(result.actualQuality))
+            showError(getApplication<Application>().getString(R.string.quality_downgrade_notice, reqLabel, actLabel))
+        }
+        playerVM.playSong(song.copy(streamUrl = result.url, resolvedQuality = result.actualQuality))
+    }
+
+    /** v2.35.0 多码率：清除全部单曲音质覆盖（设置页入口） */
+    fun clearAllQualityOverrides() = viewModelScope.launch {
+        nasMusicApp.qualityOverrides.clearAll()
+    }
+
+    /** 单曲音质覆盖条目数（设置页展示用） */
+    fun qualityOverrideCount(): Int = nasMusicApp.qualityOverrides.size()
+
+    /**
+     * 查询某曲当前生效的音质档位（单曲覆盖 ?: 全局默认）。
+     *
+     * 供 UI 展示（NowPlaying 音质按钮标签、下载面板默认选中项）使用。
+     * 同步读内存镜像，可在 Composable 的 remember 中安全调用。
+     */
+    fun effectiveQualityFor(song: Song): Int {
+        val src = song.networkSource
+        val id = song.networkId
+        if (src == null || id == null) return prefs.player.getQualityTierSyncSafe()
+        return nasMusicApp.qualityOverrides.tierOf(src, id) ?: prefs.player.getQualityTierSyncSafe()
     }
 
     /**

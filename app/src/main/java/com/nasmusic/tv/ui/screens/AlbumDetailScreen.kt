@@ -42,6 +42,7 @@ import com.nasmusic.tv.ui.components.song.UnifiedSongRow
 import com.nasmusic.tv.ui.components.song.SongRowMode
 import com.nasmusic.tv.ui.components.common.CoverImage
 import kotlinx.coroutines.launch
+import com.nasmusic.tv.backend.download.model.stateOfSong
 
 /**
  * 专辑详情屏幕
@@ -218,7 +219,7 @@ fun AlbumDetailScreen(
                             isInQueue = song.id in queueSongIds,
                             onToggleQueue = { onToggleQueue(song) },
                             onAddToPlaylist = { onAddToPlaylist(song) },
-                            downloadState = downloadStates[song.downloadKey] ?: DownloadState.None,
+                            downloadState = downloadStates.stateOfSong(song),
                             onDownload = { onDownloadSong(song) },
                             onDeleteDownload = onDeleteDownloadSong?.let { cb -> { cb(song) } },
                             focusRequester = if (index == 0) firstItemFocusRequester else null

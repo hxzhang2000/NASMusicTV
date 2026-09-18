@@ -34,6 +34,7 @@ import com.nasmusic.tv.ui.components.songGridColumns
 import com.nasmusic.tv.ui.theme.FontSize
 import com.nasmusic.tv.ui.theme.NasMusicColors
 import kotlinx.coroutines.launch
+import com.nasmusic.tv.backend.download.model.stateOfSong
 
 /** 歌曲列表 Tab（原 LibraryScreen SongsTab，含分页加载，逻辑逐行搬迁） */
 @Composable
@@ -137,7 +138,7 @@ internal fun SongsTab(
                         isInQueue = song.id in queueSongIds,
                         onToggleQueue = { onToggleQueue(song) },
                         onAddToPlaylist = { onAddToPlaylist(song) },
-                        downloadState = downloadStates[song.downloadKey] ?: DownloadState.None,
+                        downloadState = downloadStates.stateOfSong(song),
                         onDownload = { onDownloadSong(song) },
                         onDeleteDownload = onDeleteDownloadSong?.let { cb -> { cb(song) } },
                         focusRequester = if (index == 0) firstItemFocusRequester else null

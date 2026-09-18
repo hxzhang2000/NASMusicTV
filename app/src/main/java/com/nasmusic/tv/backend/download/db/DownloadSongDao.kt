@@ -20,6 +20,17 @@ interface DownloadSongDao {
     @Query("SELECT * FROM download_songs WHERE status = 'COMPLETED' AND dedupeKey = :d LIMIT 1")
     suspend fun findCompletedByDedupe(d: String): DownloadSongEntity?
 
+    /**
+     * 该曲全部下载记录（v2.35.0 多码率：走 songId 索引，供档位徽标/去重判定）。
+     * 按 quality 降序，最高档在前。
+     */
+    @Query("SELECT * FROM download_songs WHERE songId = :songId ORDER BY quality DESC")
+    suspend fun bySongId(songId: String): List<DownloadSongEntity>
+
+    /** 该曲指定档位的已完成记录（多码率去重判定） */
+    @Query("SELECT * FROM download_songs WHERE songKey = :key AND status = 'COMPLETED' LIMIT 1")
+    suspend fun getCompletedByKey(key: String): DownloadSongEntity?
+
     /** 按音频文件路径查下载记录（供 LocalMusicRepository 元数据短路） */
     @Query("SELECT * FROM download_songs WHERE audioPath = :path LIMIT 1")
     suspend fun metadataByPath(path: String): DownloadSongEntity?

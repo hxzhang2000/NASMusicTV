@@ -27,6 +27,14 @@ data class Song(
     val year: Int? = null,
     val genre: String? = null,
     val bitrate: Int = 0,
+    /**
+     * v2.35.0 多码率：网络歌曲解析后**实际命中**的音质档位
+     * （0/128/192/320/999；0 = 未解析或 AUTO）。
+     *
+     * 仅用于 UI 显示"♫ 320 / FLAC"徽标，**不参与缓存键与下载键**，
+     * 也不落盘（`Song` 不序列化该字段）。与 [bitrate]（真实码率）是不同概念。
+     */
+    val resolvedQuality: Int = 0,
     // 网络歌曲扩展字段（默认值保持向后兼容）
     val isNetworkSong: Boolean = false,
     val networkSource: String? = null,

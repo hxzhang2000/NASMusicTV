@@ -21,7 +21,8 @@ import androidx.room.PrimaryKey
     indices = [
         Index(value = ["songKey"], unique = true),
         Index(value = ["dedupeKey"]),
-        Index(value = ["status"])
+        Index(value = ["status"]),
+        Index(value = ["songId"])          // v2.35.0 多码率：查询"该曲所有已下载档"
     ]
 )
 data class DownloadSongEntity(
@@ -42,8 +43,19 @@ data class DownloadSongEntity(
 
     val fileSize: Long = 0L,
     val durationMs: Long = 0L,
-    val bitrate: Int = 0,
+    val bitrate: Int = 0,                   // 媒体文件**真实**码率（NAS 歌曲会填），勿与 quality 混用
     val containerExt: String = "",          // mp3/flac/...，决定能否内嵌
+    /**
+     * v2.35.0 多码率：音质**档位值**（0/128/192/320/999）。
+     *
+     * ⚠️ 与 [bitrate] 是两个概念：
+     * - [bitrate] 是文件真实比特率（如 320、1411）；
+     * - [quality] 是档位标识，其中 999 是 FLAC 约定标识符、**不是真实码率**。
+     * 两者禁止互相赋值（把 999 写进 bitrate 会让 FLAC 显示成 "999 kbps"）。
+     *
+     * 记录的是**实际落盘档位**（静默降级后 = 降级到的档位，非请求档位）。
+     */
+    val quality: Int = 0,
 
     val status: String = DownloadStatus.PENDING.name,
     val progress: Int = 0,

@@ -4,9 +4,11 @@ import android.content.Context
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 
 /**
- * 下载索引数据库（downloads.db，version = 1）
+ * 下载索引数据库（downloads.db，version = 2）
  *
  * **独立建库，绝不并入 LocalMusicDatabase**：
  * - [com.nasmusic.tv.backend.local.db.LocalMusicDatabase] 当前为 v2 且开启 `fallbackToDestructiveMigration(true)`，
@@ -25,7 +27,7 @@ import androidx.room.RoomDatabase
         DownloadSongEntity::class,
         ExportRecordEntity::class
     ],
-    version = 1,
+    version = 2,
     exportSchema = false
 )
 abstract class DownloadDatabase : RoomDatabase() {
@@ -37,12 +39,33 @@ abstract class DownloadDatabase : RoomDatabase() {
         @Volatile
         private var INSTANCE: DownloadDatabase? = null
 
+        /**
+         * v2.35.0 多码率：新增 `quality` 列 + `songId` 索引。
+         *
+         * **零重建迁移**：只做一条 `ALTER TABLE ADD COLUMN`（SQLite 非破坏性加列，
+         * 不重建表、不回填数据、不重写页）+ 一条 `CREATE INDEX`。
+         *
+         * 存量行 `quality` 取列默认值 0（= AUTO 档），而 [com.nasmusic.tv.backend.download.model.downloadKeyOf]
+         * 对 AUTO 档返回与旧格式完全相同的 key，因此存量行天然被新代码命中，无需回填。
+         */
+        val MIGRATION_1_2 = object : Migration(1, 2) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "ALTER TABLE download_songs ADD COLUMN quality INTEGER NOT NULL DEFAULT 0"
+                )
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS index_download_songs_songId ON download_songs (songId)"
+                )
+            }
+        }
+
         fun get(context: Context): DownloadDatabase = INSTANCE ?: synchronized(this) {
             INSTANCE ?: Room.databaseBuilder(
                 context.applicationContext,
                 DownloadDatabase::class.java,
                 "downloads.db"
             )
+                .addMigrations(MIGRATION_1_2)
                 // 不启用 fallbackToDestructiveMigration：下载记录不可重建（会导致孤儿文件）
                 .build()
                 .also { INSTANCE = it }

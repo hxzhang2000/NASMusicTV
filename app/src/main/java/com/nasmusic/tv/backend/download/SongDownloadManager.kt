@@ -7,6 +7,8 @@ import com.nasmusic.tv.backend.download.model.DownloadState
 import com.nasmusic.tv.backend.download.model.DownloadSettings
 import com.nasmusic.tv.backend.download.model.dedupeKey
 import com.nasmusic.tv.backend.download.model.downloadKey
+import com.nasmusic.tv.backend.download.model.downloadKeyOf
+import com.nasmusic.tv.backend.network.QualityTiers
 import com.nasmusic.tv.data.model.Song
 import com.nasmusic.tv.util.AppLog
 import kotlinx.coroutines.CancellationException
@@ -86,8 +88,19 @@ class SongDownloadManager(
     private val _downloadStates = MutableStateFlow<Map<String, DownloadState>>(emptyMap())
     val downloadStates: StateFlow<Map<String, DownloadState>> = _downloadStates.asStateFlow()
 
-    private val manualQueue = Channel<Pair<Song, Boolean>>(Channel.UNLIMITED)
-    private val autoQueue = Channel<Pair<Song, Boolean>>(Channel.UNLIMITED)
+    /**
+     * 队列元素：歌曲 + 是否自动下载 + 请求档位。
+     *
+     * v2.35.0 多码率：档位随任务一起入队，避免"入队时读全局档位、执行时已变化"的竞态。
+     */
+    private data class DownloadRequest(
+        val song: Song,
+        val auto: Boolean,
+        val quality: Int
+    )
+
+    private val manualQueue = Channel<DownloadRequest>(Channel.UNLIMITED)
+    private val autoQueue = Channel<DownloadRequest>(Channel.UNLIMITED)
 
     /**
      * P1-5 修复（2026-09-16）：cancelAll 改为「cancel 当前 Call + 置位 cancelRequested +
@@ -113,10 +126,18 @@ class SongDownloadManager(
         scope.launch(Dispatchers.IO) { loop() }
     }
 
-    /** 手动 / 自动入队（手动优先：手动队列非空时自动任务不抢占） */
-    fun enqueue(song: Song, auto: Boolean) {
+    /**
+     * 手动 / 自动入队（手动优先：手动队列非空时自动任务不抢占）
+     *
+     * @param quality v2.35.0 多码率：音质档位；仅 Meting 网络歌曲生效。
+     *        默认 [QualityTiers.AUTO]（跟随端点默认，等价于改造前行为）。
+     *        静默降级由执行阶段决定 —— 此处传的是**请求**档位，
+     *        落库时用的是**实际命中**档位（见 [singleAttempt]）。
+     */
+    fun enqueue(song: Song, auto: Boolean, quality: Int = QualityTiers.AUTO) {
+        val req = DownloadRequest(song, auto, quality)
         scope.launch(Dispatchers.IO) {
-            (if (auto) autoQueue else manualQueue).send(song to auto)
+            (if (auto) autoQueue else manualQueue).send(req)
         }
     }
 
@@ -125,15 +146,15 @@ class SongDownloadManager(
             // 手动优先：先非阻塞检查手动队列
             val task = manualQueue.tryReceive().getOrNull()
             if (task != null) {
-                executeDownload(task.first, task.second)
+                executeDownload(task)
                 continue
             }
             // 两队列都空时阻塞等待，select 按 clause 顺序优先（手动优先）
-            val polled = select<Pair<Song, Boolean>> {
+            val polled = select<DownloadRequest> {
                 manualQueue.onReceive { it }
                 autoQueue.onReceive { it }
             }
-            executeDownload(polled.first, polled.second)
+            executeDownload(polled)
         }
     }
 
@@ -143,8 +164,11 @@ class SongDownloadManager(
      *
      * 幂等：入口处检查 DB 状态，已 COMPLETED / DOWNLOADING 直接返回，避免重复下载。
      */
-    private suspend fun executeDownload(song: Song, auto: Boolean): DownloadResult {
-        val key = song.downloadKey
+    private suspend fun executeDownload(req: DownloadRequest): DownloadResult {
+        val song = req.song
+        val auto = req.auto
+        // 占位 key：解析完成前用"请求档位"标记状态，解析后若降级会迁移到实际档位 key
+        var key = song.downloadKeyOf(req.quality)
         // P1-5：新任务开始执行 → 上一次 cancelAll 的取消窗口结束
         cancelRequested = false
 
@@ -170,7 +194,15 @@ class SongDownloadManager(
             attempt++
             _downloadStates.update { it + (key to DownloadState.Downloading(0)) }
             val result = try {
-                singleAttempt(song, auto, attempt)
+                singleAttempt(req, attempt) { actualKey ->
+                    // 解析后发现实际档位与占位 key 不同 → 迁移内存状态条目，避免残留孤儿
+                    if (actualKey != key) {
+                        _downloadStates.update { states ->
+                            states - key + (actualKey to DownloadState.Downloading(0))
+                        }
+                        key = actualKey
+                    }
+                }
             } catch (e: StorageFullException) {
                 onNotify("存储空间不足（已预留 100MB），请清理后重试")
                 DownloadResult.StorageFull
@@ -203,7 +235,7 @@ class SongDownloadManager(
                 delay(delayMs)
                 continue
             }
-            // 重试耗尽 → FAILED
+            // 重试耗尽 → FAILED（key 为最后一次解析命中的档位，无降级信息时即请求档位）
             repo.updateStatus(key, DownloadStatus.FAILED, 0, reason ?: "下载失败")
             _downloadStates.update { it + (key to DownloadState.Failed(reason)) }
             onNotify("下载失败：${song.title}")
@@ -211,12 +243,40 @@ class SongDownloadManager(
         }
     }
 
-    private suspend fun singleAttempt(song: Song, auto: Boolean, attempt: Int): DownloadResult {
-        val key = song.downloadKey
+    /**
+     * 实际执行一次下载（多码率方案 §4.4.2：**解析在前、定 key 在后**）。
+     *
+     * 顺序调整的原因：档位要等解析直链之后才知道（静默降级），
+     * 若沿用改造前"先按请求档建行、再解析"的顺序，降级时会残留一条
+     * 永不完成的孤儿 DOWNLOADING 行（songKey 用请求档、实际文件落实际档）。
+     *
+     * @param onQualityResolved 解析完成后回调实际命中的 key（用于迁移内存状态条目）
+     */
+    private suspend fun singleAttempt(
+        req: DownloadRequest,
+        attempt: Int,
+        onQualityResolved: suspend (String) -> Unit = {}
+    ): DownloadResult {
+        val song = req.song
 
-        // 1. 解析直链
-        val url = resolver.resolve(song)
+        // 1. 解析直链（带降级信号）—— 必须在建行之前
+        val result = resolver.resolveDetailed(song, req.quality)
+        val url = result.url
             ?: return DownloadResult.Failure("无法获取下载链接")
+        // 实际命中档位：降级后为降级到的档位，任务仍视为成功（§2.6 静默降级）
+        val actual = result.actualQuality
+        val key = song.downloadKeyOf(actual)
+        if (result.isDowngradedFrom(req.quality)) {
+            AppLog.i(TAG, "downgrade: requested=${req.quality} actual=$actual song=${song.title}")
+        }
+        // 通知编排层：key 已确定（可能与占位 key 不同）
+        onQualityResolved(key)
+
+        // 1.5 二次去重：降级后可能与"已下载的实际档位"重合（§4.5 必踩坑）
+        if (repo.isDownloaded(song, actual)) {
+            AppLog.i(TAG, "singleAttempt: already downloaded at actual=$actual, skip")
+            return DownloadResult.Already
+        }
 
         // 2. 预估大小 + 空间校验
         val estimated = headContentLength(url) ?: estimateFromSong(song)
@@ -225,13 +285,15 @@ class SongDownloadManager(
             return DownloadResult.StorageFull
         }
 
-        // 3. 构造路径
-        val ext = paths.extOf(url, song)
-        val p = paths.build(song, ext)
+        // 3. 构造路径（扩展名与基名后缀均取**实际档位**）
+        val ext = paths.extOf(url, song, actual)
+        val p = paths.build(song, ext, actual)
         p.artistDir.mkdirs(); p.albumDir.mkdirs(); p.tmpFile.parentFile?.mkdirs()
 
-        // 4. 建 DOWNLOADING 记录
-        val entity = repo.newDownloadingEntity(song, resolver.sourceTypeOf(song), p.tmpFile.absolutePath, auto)
+        // 4. 建 DOWNLOADING 记录（songKey 与 quality 列均用实际档位）
+        val entity = repo.newDownloadingEntity(
+            song, resolver.sourceTypeOf(song), p.tmpFile.absolutePath, req.auto, actual
+        )
         repo.upsert(entity)
 
         // 5. 下载到临时文件（内部做 Content-Length 完整性校验，失败即抛异常触发重试）
@@ -334,7 +396,7 @@ class SongDownloadManager(
         // 11. 即时入库 local_songs（§7.5.5）：由 NasMusicApp 接管，构建 ScannedSong + upsertDownloaded + 刷新 _localSongs
         runCatching { onCompleted?.invoke(done) }
             .onFailure { AppLog.w(TAG, "onCompleted hook failed: ${it.message}", it) }
-        return DownloadResult.Success(p.finalFile)
+        return DownloadResult.Success(p.finalFile, actual)
     }
 
     /**
@@ -611,7 +673,7 @@ class SongDownloadManager(
 
 /** 下载结果枚举 */
 sealed interface DownloadResult {
-    data class Success(val file: java.io.File) : DownloadResult
+    data class Success(val file: java.io.File, val quality: Int = 0) : DownloadResult
     data object Already : DownloadResult
     data object Duplicated : DownloadResult
     data object QuotaExceeded : DownloadResult

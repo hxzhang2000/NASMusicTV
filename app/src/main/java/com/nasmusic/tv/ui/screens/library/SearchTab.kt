@@ -39,6 +39,7 @@ import com.nasmusic.tv.ui.components.songGridColumns
 import com.nasmusic.tv.ui.theme.FontSize
 import com.nasmusic.tv.ui.theme.NasMusicColors
 import kotlinx.coroutines.launch
+import com.nasmusic.tv.backend.download.model.stateOfSong
 
 /**
  * 统一搜索 Tab（曲库搜索）
@@ -151,7 +152,7 @@ fun SearchTab(
                             isInQueue = song.id in queueSongIds,
                             onToggleQueue = { onToggleQueue(song) },
                             onAddToPlaylist = { onAddToPlaylist(song) },
-                            downloadState = downloadStates[song.downloadKey] ?: DownloadState.None,
+                            downloadState = downloadStates.stateOfSong(song),
                             onDownload = { onDownloadSong(song) },
                             index = index,
                             focusRequester = if (index == 0) firstItemFocusRequester else null

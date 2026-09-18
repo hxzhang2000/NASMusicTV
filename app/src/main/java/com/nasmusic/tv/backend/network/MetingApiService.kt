@@ -223,40 +223,67 @@ class MetingApiService(
      *
      * Meting-API 返回 302 重定向，需要获取 Location header
      */
-    override suspend fun resolvePlayUrl(song: Song): String? = withContext(Dispatchers.IO) {
-        val netId = song.networkId ?: return@withContext song.streamUrl
-        val server = serverProvider()
-        val endpoints = buildEndpointFallbackOrder(baseUrl)
-        // F2-6：br 档位与降级链（999 → 320 → 128；AUTO 直接不传 br 走端点默认）
-        val tier = qualityTierProvider()
-        val brChain = if (tier <= 0) listOf(null) else listOf(tier, 320, 128).distinct()
-        for (endpoint in endpoints) {
-            for (br in brChain) {
-                try {
-                    val brParam = if (br != null) "&br=$br" else ""
-                    val url = "$endpoint?server=$server&type=url&id=${URLEncoder.encode(netId, "UTF-8")}$brParam"
-                    val request = Request.Builder().url(url).build()
-                    var playUrl: String? = null
-                    noRedirectClient.newCall(request).execute().use { response ->
-                        playUrl = when (response.code) {
-                            302 -> response.header("Location")
-                            200 -> response.body?.string()?.let { extractUrlFromJson(it) }
-                            else -> null
+    /**
+     * 解析播放链接（默认档位）。
+     *
+     * 委托 [resolvePlayUrlDetailed]，忽略降级信号；档位由 `qualityTierProvider` 决定。
+     */
+    override suspend fun resolvePlayUrl(song: Song): String? =
+        resolvePlayUrlDetailed(song, qualityTierProvider()).url
+
+    /** 指定档位解析，忽略降级信号 */
+    override suspend fun resolvePlayUrl(song: Song, quality: Int): String? =
+        resolvePlayUrlDetailed(song, quality).url
+
+    /**
+     * 解析播放链接（带降级信号）。
+     *
+     * 端点自动 fallback 策略：
+     * 1. 优先使用用户在设置中选中的端点（baseUrl）
+     * 2. 如果当前端点失败（异常或空结果），自动尝试其他预设端点
+     * 3. 任一端点返回非空播放 URL 即返回
+     *
+     * 档位降级链由 [QualityTiers.fallbackChainOf] 提供（AUTO → 不传 br；999 → 320 → 192 → 128）。
+     * 返回的 [ResolveResult.actualQuality] 为**实际命中**的档位，不等于请求档位即表示发生降级。
+     *
+     * Meting-API 返回 302 重定向，需要获取 Location header。
+     */
+    override suspend fun resolvePlayUrlDetailed(song: Song, quality: Int): ResolveResult =
+        withContext(Dispatchers.IO) {
+            val netId = song.networkId ?: return@withContext ResolveResult(song.streamUrl, quality)
+            val server = serverProvider()
+            val endpoints = buildEndpointFallbackOrder(baseUrl)
+            // 档位与降级链（999 → 320 → 192 → 128；AUTO 直接不传 br 走端点默认）
+            val brChain = QualityTiers.fallbackChainOf(quality)
+            for (endpoint in endpoints) {
+                for (br in brChain) {
+                    try {
+                        val brParam = if (br != null) "&br=$br" else ""
+                        val url = "$endpoint?server=$server&type=url&id=${URLEncoder.encode(netId, "UTF-8")}$brParam"
+                        val request = Request.Builder().url(url).build()
+                        var playUrl: String? = null
+                        noRedirectClient.newCall(request).execute().use { response ->
+                            playUrl = when (response.code) {
+                                302 -> response.header("Location")
+                                200 -> response.body?.string()?.let { extractUrlFromJson(it) }
+                                else -> null
+                            }
                         }
+                        if (!playUrl.isNullOrBlank()) {
+                            // br == null（AUTO 档）时 actualQuality 记为请求档位本身，不产生降级提示
+                            val actual = br ?: quality
+                            AppLog.d(TAG, "resolvePlayUrl: resolved via '$endpoint' br=$br (actual=$actual) for netId=$netId")
+                            return@withContext ResolveResult(playUrl, actual)
+                        }
+                        AppLog.w(TAG, "resolvePlayUrl: empty from '$endpoint' br=$br for netId=$netId")
+                    } catch (e: Exception) {
+                        AppLog.w(TAG, "resolvePlayUrl: endpoint '$endpoint' br=$br failed: ${e.message}")
                     }
-                    if (!playUrl.isNullOrBlank()) {
-                        AppLog.d(TAG, "resolvePlayUrl: resolved via '$endpoint' br=$br for netId=$netId")
-                        return@withContext playUrl
-                    }
-                    AppLog.w(TAG, "resolvePlayUrl: empty from '$endpoint' br=$br for netId=$netId")
-                } catch (e: Exception) {
-                    AppLog.w(TAG, "resolvePlayUrl: endpoint '$endpoint' br=$br failed: ${e.message}")
                 }
             }
+            AppLog.w(TAG, "resolvePlayUrl: all endpoints failed for netId=$netId (requested=$quality)")
+            ResolveResult.failure(quality)
         }
-        AppLog.w(TAG, "resolvePlayUrl: all endpoints failed for netId=$netId")
-        null
-    }
 
     /**
      * 获取歌词

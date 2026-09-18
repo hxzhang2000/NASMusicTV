@@ -55,6 +55,28 @@ interface NetworkMusicService {
     suspend fun resolvePlayUrl(song: Song): String?
 
     /**
+     * 解析播放链接（带音质档位）。
+     *
+     * 默认实现**忽略 quality** 并委托 [resolvePlayUrl] —— 不支持多码率的源
+     * （Jamendo / 百度网盘等）无需任何改动，也不会因"不支持 br"而报错。
+     *
+     * @param quality 音质档位（[QualityTiers] 常量）；[QualityTiers.AUTO] 表示走端点默认
+     * @return 可直接播放的 URL；null 表示解析失败
+     */
+    suspend fun resolvePlayUrl(song: Song, quality: Int): String? = resolvePlayUrl(song)
+
+    /**
+     * 解析播放链接（带音质档位 + 降级信号）。
+     *
+     * 默认实现包一层，[ResolveResult.actualQuality] 恒等于请求档位 ——
+     * 对不支持多码率的源，"没有降级"正是正确语义。
+     *
+     * 仅 [com.nasmusic.tv.backend.network.MetingApiService] 覆盖实现。
+     */
+    suspend fun resolvePlayUrlDetailed(song: Song, quality: Int): ResolveResult =
+        ResolveResult(resolvePlayUrl(song, quality), quality)
+
+    /**
      * 获取歌词（LRC 文本）。
      * 可为空，回退到 LyricsNetworkProvider。
      *

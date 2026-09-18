@@ -1033,5 +1033,18 @@
     <string name="quality_tier_auto">自动</string>
     <string name="quality_tier_lossless">无损</string>
     <string name="quality_tier_high">320k</string>
+    <string name="quality_tier_good">192k</string>
     <string name="quality_tier_standard">128k</string>
+    <string name="quality_downgrade_notice">该曲无 %1$s 版本，已降级为 %2$s</string>
+    <string name="quality_probe_loading">正在获取可用音质…</string>
+    <string name="quality_probe_none">无法获取该曲的播放直链</string>
+    <string name="quality_picker_title">选择音质 · %1$s</string>
+    <string name="quality_picker_downloaded">已下载 %1$s</string>
+    <string name="quality_picker_all_downloaded">该曲所有可用音质均已下载</string>
+    <string name="quality_download_started">开始下载 %1$s</string>
+    <string name="quality_batch_downgraded">其中 %1$d 首为降级码率</string>
+    <string name="quality_override_clear">清除全部单曲覆盖</string>
+    <string name="quality_override_clear_desc">移除在播放器中为单首歌曲指定的音质，全部回退到上面的全局档位</string>
+    <string name="quality_scope_this_play">仅本次播放</string>
+    <string name="quality_scope_all_songs">全部歌曲</string>
 </resources>
