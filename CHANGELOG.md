@@ -7,6 +7,44 @@
 >
 > 类型：`Added`（新增） | `Changed`（变更） | `Fixed`（修复） | `Removed`（移除）
 
+## [v2.34.3] - 2026-09-18
+
+> **歌单导入：m3u / txt / json / 网易云歌单一键入库，URL 直链直接使用并校验可达性**
+>
+> 本地歌单导入功能全链路落地（设计见 `docs/playlist-import-feature-plan.md`）：
+> 音乐文件列表（.m3u）、纯文本歌单、JSON 歌单（HHX / 通用）与网易云分享链接四种格式，
+> 支持 GBK 编码兜底与 4 KB 嗅探自动识别。歌单内若带 http(s) URL 直链（m3u path hint
+> 或裸 URL 行），**直接使用、无需逐首搜索**——导入后后台并发 4 路 HEAD 测可达性，
+> 不可达条目打上「URL 失效」标记（24h 判定窗口持久化，重启不重测；局域网 URL 不预判，
+> 交给 ExoPlayer 首次播放判定）。歌曲名（stub）在「播放时 + 手动补全」两种时机向
+> NAS/网络源匹配补全；播放失败自动复测回退。导入源文件只读流式解析、不落盘。
+
+### Added
+
+- **解析器**：`M3uPlaylistParser`（URL path hint 捕获 + 裸 URL 行）、`NeteaseCloudPlaylistParser`、
+  `JsonPlaylistParser`、`TextPlaylistParser`（Tab/分隔符/编号剥离/注释/BOM/4KB 上限/无意义文件名白名单/GBK 兜底）
+- **导入编排**：`PlaylistImporter`（读流不落盘、命名兜底、normalizeKey 去重、25% 步进进度回调、导入历史记录）
+- **可达性检查**：`UrlReachabilityChecker`（HEAD + 5s 超时、并发 4、5 分钟内存缓存、局域网不预判、
+  DNS/超时/重定向环等 7 类结果、`seedCache` 灌入持久化判定）
+- **补全链路**：`PlaylistEnricher`（NAS 精确匹配优先 → 网络源 fallback，替换后保留原 streamUrl / 置空交给再解析；
+  `enrichAndPersist` / `enrichAndPersistEverywhere` 两档写回）；`MainViewModel` 三入口（播放/队列/播放失败）
+  挂 stub 补全 hook + `playbackFailure` 复测回退，`PlayerManager.onPlayerError` 对 `imported_` HTTP stub 跳过 re-resolve 直接跳曲
+- **UI**：设置→数据「导入歌单」入口（SAF）、「最近导入」记录（单「打开」无删除）、
+  「我的」页歌单卡片「导入」标签 + 「补全」按钮 + 补全进度条 + 「URL 失效」计数，
+  歌曲行「待补全 / URL 失效」双徽标（`UnifiedSongRow.urlStatus`）
+- **数据层**：`PlaylistImportHistoryItem` 模型、`AppPreferences` 歌单导入历史 / `songReachability`
+  持久化（24h 窗口 + 备份导出恢复联动）、`PlaylistImportViewModel`（导入/补全编排 + 预热）
+
+### Changed
+
+- 版本号 `2.34.2 → 2.34.3`（versionCode 150 → 151）
+- `UrlReachabilityChecker.CacheEntry` 增加 `ttlMs` 字段，支持持久化判定与运行时判定差异化 TTL
+
+### Test
+
+- `backend.playlist.*` 测试包 **73 例全绿**（Parser 27 + Importer 15 + UrlReachabilityChecker 15 + Enricher 16）
+- 「URL 可达性判断后直接使用」的用户决策（2026-09-18）已落实到导入编排与 UI
+
 ## [v2.34.2] - 2026-09-17
 
 > **网络音乐播放失败多级降级：链接失效不再连锁跳歌**

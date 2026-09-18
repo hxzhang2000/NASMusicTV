@@ -45,16 +45,20 @@ import androidx.tv.material3.Text
 import com.nasmusic.tv.R
 import com.nasmusic.tv.backend.download.model.DownloadState
 import com.nasmusic.tv.backend.download.model.downloadKey
+import com.nasmusic.tv.backend.playlist.PlaylistParsers
 import com.nasmusic.tv.data.model.LocalPlaylist
 import com.nasmusic.tv.data.model.Song
 import com.nasmusic.tv.data.model.UiState
+import com.nasmusic.tv.data.prefs.AppPreferences
 import com.nasmusic.tv.ui.components.FocusableSurface
 import com.nasmusic.tv.ui.components.LocalFocusableContentColor
 import com.nasmusic.tv.ui.components.common.ActionBar
 import com.nasmusic.tv.ui.components.song.SongRowMode
 import com.nasmusic.tv.ui.components.song.UnifiedSongRow
+import com.nasmusic.tv.ui.components.song.UrlStatus
 import com.nasmusic.tv.ui.theme.LocalPhoneCompact
 import com.nasmusic.tv.ui.theme.NasMusicColors
+import com.nasmusic.tv.ui.viewmodel.EnrichProgress
 import kotlinx.coroutines.launch
 
 /**
@@ -96,7 +100,11 @@ fun MineScreen(
     // 歌曲下载状态
     downloadStates: Map<String, DownloadState> = emptyMap(),
     onDownloadSong: (Song) -> Unit = {},
-    onDeleteDownloadSong: ((Song) -> Unit)? = null
+    onDeleteDownloadSong: ((Song) -> Unit)? = null,
+    // 歌单导入（阶段5，docs/playlist-import-feature-plan.md §4.5/§5.3）
+    songReachability: Map<String, AppPreferences.ReachabilityEntry> = emptyMap(),
+    enrichProgress: EnrichProgress? = null,
+    onEnrichPlaylist: (String) -> Unit = {}
 ) {
     // 收藏合并（本地 + 网络，按 id 去重）
     val favoriteSongsList = favoriteSongsState.dataOrNull() ?: emptyList()
@@ -220,6 +228,7 @@ fun MineScreen(
             } else {
                 localPlaylists.forEach { playlist ->
                     item(key = "pl_card_${playlist.id}") {
+                        val stats = importStatsOf(playlist, songReachability)
                         PlaylistCard(
                             playlist = playlist,
                             expanded = expandedPlaylistId == playlist.id,
@@ -228,7 +237,11 @@ fun MineScreen(
                             },
                             onPlay = { onPlayPlaylist(playlist) },
                             onRename = { renameTarget = playlist },
-                            onDelete = { onDeletePlaylist(playlist.id) }
+                            onDelete = { onDeletePlaylist(playlist.id) },
+                            stubCount = stats.stubCount,
+                            unreachableCount = stats.unreachableCount,
+                            enrichProgress = enrichProgress,
+                            onEnrich = { onEnrichPlaylist(playlist.id) }
                         )
                     }
                     // 展开的歌单：歌曲作为独立 item 渲染（随页面统一滚动）
@@ -252,6 +265,8 @@ fun MineScreen(
                                     song = song,
                                     mode = SongRowMode.MODE_ROW,
                                     onClick = { onPlaySong(song) },
+                                    isStub = song.isImportedStub(),
+                                    urlStatus = urlStatusOf(song, songReachability),
                                     isInQueue = song.id in queueSongIds,
                                     onToggleQueue = { onToggleQueue(song) },
                                     onAddToPlaylist = { pickerSong = song },
@@ -301,6 +316,9 @@ fun MineScreen(
                 downloadStates = downloadStates,
                 onDownloadSong = onDownloadSong,
                 onDeleteDownloadSong = onDeleteDownloadSong,
+                songReachability = songReachability,
+                enrichProgress = enrichProgress,
+                onEnrichPlaylist = onEnrichPlaylist,
                 modifier = Modifier.weight(1f).fillMaxHeight()
             )
         }
@@ -513,6 +531,10 @@ private fun PlaylistsPane(
     downloadStates: Map<String, DownloadState> = emptyMap(),
     onDownloadSong: (Song) -> Unit = {},
     onDeleteDownloadSong: ((Song) -> Unit)? = null,
+    // 歌单导入（阶段5）
+    songReachability: Map<String, AppPreferences.ReachabilityEntry> = emptyMap(),
+    enrichProgress: EnrichProgress? = null,
+    onEnrichPlaylist: (String) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     Column(modifier = modifier) {
@@ -562,13 +584,18 @@ private fun PlaylistsPane(
             ) {
                 playlists.forEach { playlist ->
                     item(key = "playlist_${playlist.id}") {
+                        val stats = importStatsOf(playlist, songReachability)
                         PlaylistCard(
                             playlist = playlist,
                             expanded = expandedPlaylistId == playlist.id,
                             onToggleExpand = { onToggleExpand(playlist.id) },
                             onPlay = { onPlayPlaylist(playlist) },
                             onRename = { onRename(playlist) },
-                            onDelete = { onDelete(playlist.id) }
+                            onDelete = { onDelete(playlist.id) },
+                            stubCount = stats.stubCount,
+                            unreachableCount = stats.unreachableCount,
+                            enrichProgress = enrichProgress,
+                            onEnrich = { onEnrichPlaylist(playlist.id) }
                         )
                     }
                     // 展开的歌单：歌曲作为独立 item 渲染（避免塞进单个 item 导致超高无法滚动）
@@ -592,6 +619,8 @@ private fun PlaylistsPane(
                                     song = song,
                                     mode = SongRowMode.MODE_ROW,
                                     onClick = { onPlaySong(song) },
+                                    isStub = song.isImportedStub(),
+                                    urlStatus = urlStatusOf(song, songReachability),
                                     isInQueue = song.id in queueSongIds,
                                     onToggleQueue = { onToggleQueue(song) },
                                     onAddToPlaylist = { onAddSongToPlaylist(song) },
@@ -625,7 +654,12 @@ private fun PlaylistCard(
     onToggleExpand: () -> Unit,
     onPlay: () -> Unit,
     onRename: () -> Unit,
-    onDelete: () -> Unit
+    onDelete: () -> Unit,
+    // 歌单导入（阶段5）：stub 数 / URL 失效数 / 补全进度 / 手动补全
+    stubCount: Int = 0,
+    unreachableCount: Int = 0,
+    enrichProgress: EnrichProgress? = null,
+    onEnrich: () -> Unit = {}
 ) {
     var isRowFocused by remember { mutableStateOf(false) }
     val animScale = remember { Animatable(1f) }
@@ -675,18 +709,44 @@ private fun PlaylistCard(
                     )
                     Spacer(modifier = Modifier.width(12.dp))
                     Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = playlist.name,
-                            color = NasMusicColors.TextPrimary,
-                            fontSize = FontSize.subtitle(),
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                        Text(
-                            text = stringResource(R.string.mine_song_count, playlist.songs.size),
-                            color = NasMusicColors.TextSecondary,
-                            fontSize = FontSize.button()
-                        )
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = playlist.name,
+                                color = NasMusicColors.TextPrimary,
+                                fontSize = FontSize.subtitle(),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            // 「导入」标签（§4.5）：含 stub 歌曲的导入歌单才显示
+                            if (stubCount > 0) {
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = stringResource(R.string.playlist_import_badge),
+                                    color = NasMusicColors.Primary,
+                                    fontSize = FontSize.small(),
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(4.dp))
+                                        .background(NasMusicColors.Primary.copy(alpha = 0.15f))
+                                        .padding(horizontal = 6.dp, vertical = 1.dp)
+                                )
+                            }
+                        }
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = stringResource(R.string.mine_song_count, playlist.songs.size),
+                                color = NasMusicColors.TextSecondary,
+                                fontSize = FontSize.button()
+                            )
+                            // URL 失效计数（§4.5）：不可达直链未补全时的醒目提示
+                            if (unreachableCount > 0) {
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = stringResource(R.string.playlist_url_invalid_count, unreachableCount),
+                                    color = NasMusicColors.Warning,
+                                    fontSize = FontSize.small()
+                                )
+                            }
+                        }
                     }
                 }
                 // 右侧操作按钮
@@ -702,6 +762,15 @@ private fun PlaylistCard(
                         color = NasMusicColors.TextPrimary,
                     onClick = onRename
                 )
+                // 「补全」按钮（§5.3）：stub 歌曲存在时手动触发补全
+                if (stubCount > 0) {
+                    Spacer(modifier = Modifier.width(10.dp))
+                    PlaylistActionButton(
+                        text = stringResource(R.string.playlist_enrich_button),
+                        color = NasMusicColors.Primary,
+                        onClick = onEnrich
+                    )
+                }
                 Spacer(modifier = Modifier.width(10.dp))
                 PlaylistActionButton(
                     text = stringResource(R.string.mine_remove_song),
@@ -713,6 +782,32 @@ private fun PlaylistCard(
         // 展开提示（歌曲列表由外层 LazyColumn 作为独立 item 渲染）
         if (expanded) {
             Spacer(modifier = Modifier.height(4.dp))
+        }
+        // 手动补全进度条（§5.3：进度条 + 计数文本；TV Material3 无 LinearProgressIndicator，自绘）
+        val prog = enrichProgress
+        if (prog != null && prog.playlistId == playlist.id && prog.total > 0) {
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = stringResource(R.string.playlist_enrich_progress, prog.processed, prog.total, prog.enriched),
+                color = NasMusicColors.Primary,
+                fontSize = FontSize.small()
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            val frac = prog.processed.toFloat() / prog.total
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(6.dp)
+                    .clip(RoundedCornerShape(3.dp))
+                    .background(NasMusicColors.TextSecondary.copy(alpha = 0.3f))
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxHeight()
+                        .fillMaxWidth(frac.coerceIn(0f, 1f))
+                        .background(NasMusicColors.Primary)
+                )
+            }
         }
     }
 }
@@ -763,4 +858,36 @@ private fun PlaylistActionButton(
             modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)
         )
     }
+}
+
+// ===== 歌单导入辅助（阶段5，docs/playlist-import-feature-plan.md §4.5）=====
+
+/** 是否为导入产生的 stub 歌曲（id 以 imported_ 前缀标记，见 PlaylistParsers.IMPORTED_ID_PREFIX） */
+private fun Song.isImportedStub(): Boolean = id.startsWith(PlaylistParsers.IMPORTED_ID_PREFIX)
+
+/** 行徽标状态：URL 失效（持久化非 REACHABLE 判定存在）> 待补全（stub）> 无 */
+private fun urlStatusOf(
+    song: Song,
+    reachability: Map<String, AppPreferences.ReachabilityEntry>
+): UrlStatus {
+    if (!song.isImportedStub()) return UrlStatus.NONE
+    return if (reachability.containsKey(song.id)) UrlStatus.UNREACHABLE else UrlStatus.NONE
+}
+
+/** 歌单卡片统计：stub 歌曲数与其中 URL 失效数（驱动「导入」标签/失效计数/补全按钮显隐） */
+private data class PlaylistImportStats(val stubCount: Int, val unreachableCount: Int)
+
+private fun importStatsOf(
+    playlist: LocalPlaylist,
+    reachability: Map<String, AppPreferences.ReachabilityEntry>
+): PlaylistImportStats {
+    var stubs = 0
+    var unreachable = 0
+    playlist.songs.forEach { song ->
+        if (song.isImportedStub()) {
+            stubs++
+            if (reachability.containsKey(song.id)) unreachable++
+        }
+    }
+    return PlaylistImportStats(stubs, unreachable)
 }

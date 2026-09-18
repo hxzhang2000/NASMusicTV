@@ -35,6 +35,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -67,6 +68,19 @@ enum class SongRowMode {
 }
 
 /**
+ * 导入歌单歌曲的 URL 直链状态（docs/playlist-import-feature-plan.md §4.5.2）。
+ * 仅 MODE_ROW 在来源标签位渲染；非导入场景保持 NONE（不渲染）。
+ */
+enum class UrlStatus {
+    /** 非导入歌曲 / 无 URL 直链 */
+    NONE,
+    /** 已捕获 URL 直链，待后台可达性测试（导入完成瞬间的短暂状态） */
+    PENDING,
+    /** 不可达（24h 判定窗口内，见 AppPreferences.songReachability） */
+    UNREACHABLE,
+}
+
+/**
  * 统一歌曲行组件
  *
  * 替代 HomeScreen.HomeSongCard 等重复实现。
@@ -87,6 +101,8 @@ enum class SongRowMode {
  * @param onDownload 下载/删除下载回调（null 时不显示下载按钮）
  * @param onDeleteDownload 删除已下载文件回调（null 时 Completed 状态点击不响应）
  * @param focusRequester 焦点请求器
+ * @param isStub 是否导入歌单的裸条目（id 以 imported_ 开头；true 时来源标签显示「待补全」）
+ * @param urlStatus URL 直链可达性状态（§4.5.2；UNREACHABLE 时优先显示「URL 失效」）
  */
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
@@ -105,6 +121,8 @@ fun UnifiedSongRow(
     onDownload: (() -> Unit)? = null,
     onDeleteDownload: (() -> Unit)? = null,
     focusRequester: FocusRequester? = null,
+    isStub: Boolean = false,
+    urlStatus: UrlStatus = UrlStatus.NONE,
     modifier: Modifier = Modifier
 ) {
     when (mode) {
@@ -122,6 +140,8 @@ fun UnifiedSongRow(
             onDownload = onDownload,
             onDeleteDownload = onDeleteDownload,
             focusRequester = focusRequester,
+            isStub = isStub,
+            urlStatus = urlStatus,
             modifier = modifier
         )
         SongRowMode.MODE_CARD -> SongRowModeCard(
@@ -159,6 +179,8 @@ private fun SongRowModeRow(
     onDownload: (() -> Unit)?,
     onDeleteDownload: (() -> Unit)?,
     focusRequester: FocusRequester?,
+    isStub: Boolean = false,
+    urlStatus: UrlStatus = UrlStatus.NONE,
     modifier: Modifier = Modifier
 ) {
     var isRowFocused by remember { mutableStateOf(false) }
@@ -298,7 +320,20 @@ private fun SongRowModeRow(
                             modifier = Modifier.weight(1f, fill = false)
                         )
                         Spacer(modifier = Modifier.width(8.dp))
-                        SourceBadge(song = song)
+                        // 来源标签：URL 失效（红）> 待补全（橙）> 正常来源。均非导入歌单歌曲时保持原样。
+                        when {
+                            urlStatus == UrlStatus.UNREACHABLE -> Text(
+                                text = stringResource(com.nasmusic.tv.R.string.playlist_url_invalid),
+                                color = NasMusicColors.Warning,
+                                fontSize = FontSize.small()
+                            )
+                            isStub -> Text(
+                                text = stringResource(com.nasmusic.tv.R.string.playlist_stub_badge),
+                                color = NasMusicColors.Primary,
+                                fontSize = FontSize.small()
+                            )
+                            else -> SourceBadge(song = song)
+                        }
                     }
                         Text(
                         text = song.artist.ifBlank { "-" },

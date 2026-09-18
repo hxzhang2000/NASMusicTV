@@ -40,6 +40,9 @@ internal fun MineBranch(
                         viewModel.loadRecentSongs()
                     }
                     val queueSongIds by viewModel.queueSongIds.collectAsState(initial = emptySet())
+                    // 歌单导入（阶段5）：URL 失效标记 / 补全进度（「我的」页徽标与按钮数据源）
+                    val songReachability by viewModel.playlistImportVM.songReachability.collectAsState(initial = emptyMap())
+                    val enrichProgress by viewModel.playlistImportVM.enrichProgress.collectAsState(initial = null)
                     MineScreen(
                         favoriteSongsState = favoriteSongsState,
                         networkFavoriteSongs = networkFavoriteSongs,
@@ -65,7 +68,11 @@ internal fun MineBranch(
                         onToggleQueue = { song -> viewModel.playerVM.toggleQueueSong(song) },
                         onCreatePlaylist = { name -> viewModel.playlistVM.createLocalPlaylist(name) },
                         onRenamePlaylist = { id, newName -> viewModel.playlistVM.renameLocalPlaylist(id, newName) },
-                        onDeletePlaylist = { id -> viewModel.playlistVM.deleteLocalPlaylist(id) },
+                        onDeletePlaylist = { id ->
+                            viewModel.playlistVM.deleteLocalPlaylist(id)
+                            // 歌单删除联动清理导入历史（2026-09-18 决策：历史行无删除入口）
+                            viewModel.playlistImportVM.consumeHistoryIfDeleted(id)
+                        },
                         onPlayPlaylist = { playlist -> viewModel.playLocalPlaylist(playlist) },
                         onRemoveSongFromPlaylist = { playlistId, songId -> viewModel.playlistVM.removeSongFromPlaylist(playlistId, songId) },
                         onAddSongToPlaylist = { playlistId, song -> viewModel.playlistVM.addSongToPlaylist(playlistId, song) },
@@ -76,6 +83,10 @@ internal fun MineBranch(
                         // 歌曲下载状态
                         downloadStates = songDownloadStates,
                         onDownloadSong = { song -> viewModel.downloadVM.downloadSong(song) },
-                        onDeleteDownloadSong = { song -> viewModel.downloadVM.deleteDownload(song) }
+                        onDeleteDownloadSong = { song -> viewModel.downloadVM.deleteDownload(song) },
+                        // 歌单导入（阶段5）
+                        songReachability = songReachability,
+                        enrichProgress = enrichProgress,
+                        onEnrichPlaylist = { playlistId -> viewModel.playlistImportVM.enrichPlaylist(playlistId) }
                     )
 }

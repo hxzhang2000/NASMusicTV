@@ -76,6 +76,12 @@ class AppPreferences internal constructor(private val context: Context) {
         const val QUALITY_TIER_HIGH = 320
         const val QUALITY_TIER_STANDARD = 128
 
+        /** 歌单导入历史最大保留条数（超出按 importedAt 淘汰最旧） */
+        const val playlistImportHistoryMaxSize = 20
+
+        /** URL 可达性持久化判定窗口（24h）：窗口内的「不可达」标记重启后不重测 */
+        const val songReachabilityWindowMs = 24 * 60 * 60 * 1000L
+
         @Volatile
         private var INSTANCE: AppPreferences? = null
 
@@ -225,6 +231,11 @@ class AppPreferences internal constructor(private val context: Context) {
 
     // --- 本地歌单（序列化为 JSON，独立于 NAS 后端歌单）---
     private val keyLocalPlaylists = stringPreferencesKey("local_playlists")
+
+    // --- 歌单导入（R：playlist-import-feature-plan）---
+    private val keyPlaylistImportHistory = stringPreferencesKey("playlist_import_history")
+    /** songId → ReachabilityEntry（Map<String, {result, checkedAt}>，仅记录非 REACHABLE 判定） */
+    private val keySongReachability = stringPreferencesKey("song_reachability")
 
     // --- 上次播放队列（序列化为 JSON，streamUrl 置空不持久化）---
     private val keyLastQueue = stringPreferencesKey("last_queue")
@@ -1141,6 +1152,130 @@ class AppPreferences internal constructor(private val context: Context) {
         }
     }
 
+    /**
+     * 用 newSong 替换歌单中的旧歌曲（补全命中后写回）。
+     * oldSongId 不存在则忽略（并发补全时目标可能已被替换）。
+     */
+    suspend fun replaceSongInPlaylist(playlistId: String, oldSongId: String, newSong: Song) {
+        dataStore.edit { prefs ->
+            val json = prefs[keyLocalPlaylists] ?: "[]"
+            val list = safeParseJson("local_playlists", json) {
+                gson.fromJson<MutableList<LocalPlaylist>>(json, object : TypeToken<MutableList<LocalPlaylist>>() {}.type)
+            } ?: return@edit
+
+            val mutable = list.toMutableList()
+            val idx = mutable.indexOfFirst { it.id == playlistId }
+            if (idx < 0) return@edit
+            val current = mutable[idx]
+            val songIdx = current.songs.indexOfFirst { it.id == oldSongId }
+            if (songIdx < 0) return@edit
+            val updatedSongs = current.songs.toMutableList().apply {
+                this[songIdx] = newSong.stripVolatileStreamUrl()
+            }
+            mutable[idx] = current.copy(songs = updatedSongs)
+            prefs[keyLocalPlaylists] = gson.toJson(mutable)
+        }
+    }
+
+    // --- 歌单导入历史（最近 20 条；删除歌单时联动清理）---
+
+    val playlistImportHistory: Flow<List<com.nasmusic.tv.data.model.PlaylistImportHistoryItem>> =
+        dataStore.data.map { prefs ->
+            val json = prefs[keyPlaylistImportHistory] ?: "[]"
+            try {
+                gson.fromJson<List<com.nasmusic.tv.data.model.PlaylistImportHistoryItem>>(
+                    json,
+                    object : TypeToken<List<com.nasmusic.tv.data.model.PlaylistImportHistoryItem>>() {}.type
+                ) ?: emptyList()
+            } catch (e: Exception) { emptyList() }
+        }
+
+    suspend fun recordPlaylistImport(item: com.nasmusic.tv.data.model.PlaylistImportHistoryItem) {
+        dataStore.edit { prefs ->
+            val json = prefs[keyPlaylistImportHistory] ?: "[]"
+            val list = safeParseJson("playlist_import_history", json) {
+                gson.fromJson<MutableList<com.nasmusic.tv.data.model.PlaylistImportHistoryItem>>(
+                    json,
+                    object : TypeToken<MutableList<com.nasmusic.tv.data.model.PlaylistImportHistoryItem>>() {}.type
+                )
+            } ?: mutableListOf()
+            val mutable = list.toMutableList()
+            mutable.removeAll { it.playlistId == item.playlistId }
+            mutable.add(0, item)
+            while (mutable.size > playlistImportHistoryMaxSize) {
+                mutable.removeAt(mutable.size - 1)
+            }
+            prefs[keyPlaylistImportHistory] = gson.toJson(mutable)
+        }
+    }
+
+    /** 删除歌单时联动清理导入历史（无单独删除入口，UI 侧由 consumeHistoryIfDeleted 调用） */
+    suspend fun deletePlaylistImportHistory(playlistId: String) {
+        dataStore.edit { prefs ->
+            val json = prefs[keyPlaylistImportHistory] ?: "[]"
+            val list = safeParseJson("playlist_import_history", json) {
+                gson.fromJson<MutableList<com.nasmusic.tv.data.model.PlaylistImportHistoryItem>>(
+                    json,
+                    object : TypeToken<MutableList<com.nasmusic.tv.data.model.PlaylistImportHistoryItem>>() {}.type
+                )
+            } ?: return@edit
+            val mutable = list.toMutableList()
+            if (mutable.removeAll { it.playlistId == playlistId }) {
+                prefs[keyPlaylistImportHistory] = gson.toJson(mutable)
+            }
+        }
+    }
+
+    // --- URL 可达性持久化（旁路状态，与 Song 解耦；只记录非 REACHABLE 判定）---
+    // 内存 5 分钟缓存为运行时权威（UrlReachabilityChecker 内部）；本层仅在启动时
+    // 初始化（24h 判定窗口内不重测）与 MARK/CLEAR 两处写时机落库。
+
+    data class ReachabilityEntry(val result: String, val checkedAt: Long)
+
+    /** 当前已知不可达的 URL 直链判定（songId → 判定），供 UI 显示「🔗 URL 已失效」 */
+    val songReachability: Flow<Map<String, ReachabilityEntry>> = dataStore.data.map { prefs ->
+        val json = prefs[keySongReachability] ?: "{}"
+        try {
+            gson.fromJson<Map<String, ReachabilityEntry>>(json, object : TypeToken<Map<String, ReachabilityEntry>>() {}.type)
+                ?: emptyMap()
+        } catch (e: Exception) { emptyMap() }
+    }
+
+    suspend fun getSongReachability(): Map<String, ReachabilityEntry> {
+        return try {
+            dataStore.data.first().let { prefs ->
+                val json = prefs[keySongReachability] ?: "{}"
+                gson.fromJson<Map<String, ReachabilityEntry>>(json, object : TypeToken<Map<String, ReachabilityEntry>>() {}.type)
+                    ?: emptyMap()
+            }
+        } catch (e: Exception) { emptyMap() }
+    }
+
+    /** 标记歌曲 URL 不可达（UI 显示「🔗 URL 已失效」；不修改 songs 列表） */
+    suspend fun markSongUnreachable(songId: String, result: String = "NOT_REACHABLE") {
+        dataStore.edit { prefs ->
+            val json = prefs[keySongReachability] ?: "{}"
+            val map = safeParseJson("song_reachability", json) {
+                gson.fromJson<MutableMap<String, ReachabilityEntry>>(json, object : TypeToken<MutableMap<String, ReachabilityEntry>>() {}.type)
+            } ?: mutableMapOf()
+            map[songId] = ReachabilityEntry(result = result, checkedAt = System.currentTimeMillis())
+            prefs[keySongReachability] = gson.toJson(map)
+        }
+    }
+
+    /** 清除歌曲 URL 不可达标记（补全成功替换后调用，避免旧标记残留） */
+    suspend fun clearSongUnreachable(songId: String) {
+        dataStore.edit { prefs ->
+            val json = prefs[keySongReachability] ?: "{}"
+            val map = safeParseJson("song_reachability", json) {
+                gson.fromJson<MutableMap<String, ReachabilityEntry>>(json, object : TypeToken<MutableMap<String, ReachabilityEntry>>() {}.type)
+            } ?: return@edit
+            if (map.remove(songId) != null) {
+                prefs[keySongReachability] = gson.toJson(map)
+            }
+        }
+    }
+
     // --- 上次播放队列持久化 ---
 
     /**
@@ -1479,6 +1614,9 @@ class AppPreferences internal constructor(private val context: Context) {
         val appSettings: AppSettings? = null,
         val networkFavorites: List<NetworkFavoriteItem> = emptyList(),
         val localPlaylists: List<LocalPlaylist> = emptyList(),
+        // v3: 歌单导入历史与 URL 可达性状态（旧备份文件恢复时用默认值）
+        val playlistImportHistory: List<com.nasmusic.tv.data.model.PlaylistImportHistoryItem> = emptyList(),
+        val songReachability: Map<String, ReachabilityEntry> = emptyMap(),
         val lastQueue: LastQueueData? = null,
         val recentSongIds: List<String> = emptyList(),
         val recentSongObjects: List<Song> = emptyList(),
@@ -1512,6 +1650,17 @@ class AppPreferences internal constructor(private val context: Context) {
             appSettings = appSettings.first(),
             networkFavorites = getNetworkFavorites(),
             localPlaylists = getLocalPlaylists(),
+            playlistImportHistory = runCatching {
+                dataStore.data.first().let { prefs ->
+                    gson.fromJson<List<com.nasmusic.tv.data.model.PlaylistImportHistoryItem>>(
+                        prefs[keyPlaylistImportHistory] ?: "[]",
+                        object : TypeToken<List<com.nasmusic.tv.data.model.PlaylistImportHistoryItem>>() {}.type
+                    ) ?: emptyList()
+                }
+            }.getOrDefault(emptyList()),
+            songReachability = getSongReachability().filterValues { entry ->
+                System.currentTimeMillis() - entry.checkedAt < songReachabilityWindowMs
+            },
             lastQueue = getLastQueue(),
             recentSongIds = getRecentSongIds(),
             recentSongObjects = getRecentSongObjects(),
@@ -1562,6 +1711,18 @@ class AppPreferences internal constructor(private val context: Context) {
         dataStore.edit { prefs ->
             prefs[keyNetworkFavorites] = gson.toJson(data.networkFavorites)
             prefs[keyLocalPlaylists] = gson.toJson(data.localPlaylists)
+            if (data.playlistImportHistory.isNotEmpty()) {
+                prefs[keyPlaylistImportHistory] = gson.toJson(data.playlistImportHistory)
+            }
+            if (data.songReachability.isNotEmpty()) {
+                // 恢复时一并恢复可达性标记：24h 窗口内不重测（避免恢复后全量 HEAD 风暴）
+                val clean = data.songReachability.filterValues { entry ->
+                    System.currentTimeMillis() - entry.checkedAt < songReachabilityWindowMs
+                }
+                if (clean.isNotEmpty()) {
+                    prefs[keySongReachability] = gson.toJson(clean)
+                }
+            }
             prefs[keyRecentSongs] = gson.toJson(data.recentSongIds)
             prefs[keyRecentSongObjects] = gson.toJson(
                 RecentSongObjectsData(data.recentSongObjects.map { it.stripVolatileStreamUrl() })

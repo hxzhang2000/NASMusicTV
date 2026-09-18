@@ -9166,6 +9166,25 @@ w0 = 2π·f0/fs ;  alpha = sin(w0)/(2q) ;  a0 = 1 + alpha
 
 **版本**：v2.32.3 批次内（该版本尚未打 tag），versionCode 保持 142。
 
+### 10.147 v2.34.3 — 歌单导入全链路落地（阶段1–5，2026-09-18）
+
+**来源**：`docs/playlist-import-feature-plan.md`（设计文档，含 §4.1.8 URL 直接使用 + 可达性判断的完整方案）。本批次为一次提交内的 5 个阶段全部落地，设计文档与实现同步修订（2026-09-18 用户决策：源文件不落盘 / 补全仅播放时+手动 / 历史记录无独立删除入口 / 网易云链接按通用 URL 处理）。
+
+**决策要点（勿回退）**：
+- **URL 直链直接使用**：m3u path hint / 裸 URL 行捕获为 `RawSongEntry.directUrl` → 直接落地 `streamUrl`（`isNetworkSong=true`），**不搜索、不阻塞导入**。
+- **可达性两层保证**：导入后后台批量 HEAD（并发 4 / 5s / 5 分钟缓存 / 24h 持久化窗口）+ 首次播放失败 `playbackFailure` 复测回退（REACHABLE 不动 / TIMEOUT 标 Unreachable / NOT_FOUND 触发补全）。
+- **局域网 URL 不预判**（`isPrivateLanUrl`：192.168.x / 10.x / 172.16-31.x），交 ExoPlayer 判定。
+- **补全链**：`PlaylistEnricher` NAS 精确匹配优先 → 网络源 fallback；`enrichAndPersist(playlistId, stub)` 写回，`enrichAndPersistEverywhere` 同步「我的」页/播放队列。stub 歌曲 id 前缀 `imported_`（`PlaylistParsers.IMPORTED_ID_PREFIX`）。
+- **持久化**：`songReachability` **只存非 REACHABLE** 判定（`ReachabilityEntry(result, checkedAt)`），24h 窗口过滤后才灌回 checker 内存缓存（`seedCache`，`PERSISTED_TTL_MS = 24h`）；备份导出/恢复联动（导出时窗口过滤，恢复时同样过滤防 HEAD 风暴）。
+
+**新增文件**：`backend/playlist/`（PlaylistFileFormat / M3uPlaylistParser / NeteaseCloudPlaylistParser / JsonPlaylistParser / TextPlaylistParser / UrlReachabilityChecker / PlaylistImporter / PlaylistEnricher）、`PlaylistImportHistoryItem.kt`、`ImportedPlaylistRow.kt`、`PlaylistImportViewModel.kt`、`AppPreferencesPlaylistTest.kt`。
+
+**修改文件**：`AppPreferences.kt`（导入历史 / songReachability / replaceSongInPlaylist / 备份联动）、`PlaylistPrefs.kt`（转发）、`PlayerManager.kt`（`onPlaybackFailed` + `imported_` HTTP stub 跳过 re-resolve）、`MainActivity` / `AppRoot` / `SettingsScreen` / `SettingsBranch` / `DataSettingsSection`（SAF launcher + 导入入口 + 最近导入记录 + 消息 4s 消费）、`MineScreen` / `MineBranch` / `UnifiedSongRow`（「导入」标签 / 「补全」按钮 / 自绘进度条 / 「URL 失效」「待补全」徽标）、`MainViewModel.kt`（enrich hook + playbackFailure + playlistImportVM）、`app/build.gradle.kts`（datastore 1.0.0 → 1.1.1，修复 Windows rename 竞态）、`strings.xml`（20 条新文案）。
+
+**坑（已在测试中确认，编程避免）**：`.head()` 扩展函数 unresolved → `.method("HEAD", null)`；重定向循环异常匹配 `Too many follow` 消息而非 SimpleName；纯 URL 单行 m3u 的 `canParse` 靠扩展名兜底；`ConcurrentHashMap.newKeySet` 触发 NewApi lint（minSdk 22）→ `Collections.newSetFromMap`；mockwebserver 共享 server 用 `dispatcher` 而非 `enqueue`；main/test 双源集下 `AppLog.w(TAG, ...)` 无 TAG → 字面量 `"MainViewModel"`。
+
+**版本**：v2.34.3，versionCode 151。`backend.playlist.*` 测试 73 例全绿；发布前需真机回归（SAF 导入 / URL 直链播放 / 手动补全 / 删除联动）。
+
 ### 10.146 v2.32.3 — K 歌 / ONNX 专项修复：2 P0 + 3 P1 + 5 P2（2026-09-14）
 
 **来源**：`logs_temp/code-review-karaoke-onnx-2026-09-14.md`（K 歌 / Demucs 人声分离专项审查，覆盖 `DemucsSeparator.kt` 671 行 / `ModelDownloadManager.kt` 238 行 / `HqSeparationOrchestrator.kt` 555 行）。本条目只记录**已落地**的修复；报告末尾的处置顺序即本次实施顺序。P2-d / P2-e 为 2026-09-14 二次审计（对照报告逐条核验）后追加的两项低风险加固。

@@ -74,6 +74,9 @@ import com.nasmusic.tv.data.model.WeatherRadioQueue
 import com.nasmusic.tv.data.prefs.AppPreferences
 import com.nasmusic.tv.backend.weather.WeatherApi
 import com.nasmusic.tv.backend.weather.WeatherRadioManager
+import com.nasmusic.tv.backend.playlist.PlaylistEnricher
+import com.nasmusic.tv.backend.playlist.PlaylistParsers
+import com.nasmusic.tv.backend.playlist.UrlReachabilityChecker
 import com.nasmusic.tv.lyrics.LyricsManager
 import com.nasmusic.tv.lyrics.LrcParser
 import com.nasmusic.tv.player.PlayerManager
@@ -104,6 +107,8 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.Semaphore
 
 /**
  * MTV（音乐视频）可用状态。
@@ -136,6 +141,22 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
     private val _coverFilterDarkOverlay = MutableStateFlow(0.3f)
     val coverFilterDarkOverlay: StateFlow<Float> = _coverFilterDarkOverlay.asStateFlow()
     private val backendRegistry = nasMusicApp.backendRegistry
+
+    // --- 歌单导入补全（阶段4，docs/playlist-import-feature-plan.md §4.3）---
+    /** 播放触发的元数据补全器（stub → NAS/网络真 Song） */
+    private val playlistEnricher = PlaylistEnricher(
+        backendRegistry,
+        nasMusicApp.networkMusicManager,
+        prefs
+    )
+    /** URL 可达性检查（播放失败回退复测） */
+    private val urlReachabilityChecker = UrlReachabilityChecker()
+    /** 补全并发限流（§4.3.4：4 个并发网络查询） */
+    private val enrichSemaphore = Semaphore(4)
+    /** 补全中 stub 去重（同 id 不重复触发；API 22 兼容，见 L588 同款修复） */
+    private val enrichInFlight = java.util.Collections.newSetFromMap(
+        ConcurrentHashMap<String, Boolean>()
+    )
     private val lyricsManager = LyricsManager(
         app, backendRegistry, nasMusicApp.networkMusicManager,
         // F-3：改 provider（读 @Volatile 镜像）——构造期零 IO，设置页改歌词源即时生效
@@ -789,6 +810,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
         // 解析 streamUrl 后重新播放
         playerManager.onNeedResolveStreamUrl = { index ->
             playerVM.resolveAndPlayByIndex(index)
+        }
+
+        // 歌单导入 stub（URL 直链）播放失败 → 复测可达性 → 不可达走补全链（§4.1.8 (5)）
+        playerManager.onPlaybackFailed = { song ->
+            playbackFailure(song)
         }
 
         // 播放模式变化同步给 MvSearchViewModel（playMode 是方法参数语义）
@@ -1478,7 +1504,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
 
     // ================= N-1 保留的胶水转发（非纯透传，含跨域参数拼接） =================
     fun connectToSavedServer(silent: Boolean = false) = serverVM.connectToSavedServer(silent)
-    fun playNetworkSong(song: Song) = netVM.playNetworkSong(song, onPlaySong = { playable -> playerVM.playSong(playable) })
+    fun playNetworkSong(song: Song) {
+        // 导入 stub 单曲播放：播放前触发后台补全（不阻塞，命中后写回歌单）
+        triggerEnrichForStubs(listOf(song))
+        netVM.playNetworkSong(song, onPlaySong = { playable -> playerVM.playSong(playable) })
+    }
     fun toggleNetworkFavorite(song: Song) = netVM.toggleNetworkFavorite(
         song,
         isNasFavorite = song.id in _favoriteIds.value,
@@ -2119,6 +2149,9 @@ showError(getApplication<Application>().getString(R.string.toggle_favorite_error
     // --- 数据备份（R-1：已拆分至 BackupViewModel，此处为兼容转发）---
     val backupVM = BackupViewModel(app)
 
+    // --- 歌单导入（阶段5：PlaylistImportViewModel，复用补全与可达性实例）---
+    val playlistImportVM = PlaylistImportViewModel(app, playlistEnricher, urlReachabilityChecker)
+
     suspend fun restoreBackupFromJson(json: String): Boolean = backupVM.restoreBackupFromJson(json)
 
     // --- B-2 最近播放 & 播放次数 ---
@@ -2241,6 +2274,56 @@ showError(getApplication<Application>().getString(R.string.toggle_favorite_error
         _isShufflePlaying = false
         shuffleRefillJob?.cancel()
         playerVM.playQueue(songs, startIndex)
+        // 导入 stub 补全（§4.3.1 路径 A）：播放时触发，后台补全不阻塞播放
+        triggerEnrichForStubs(songs)
+    }
+
+    /**
+     * 导入 stub 后台补全（§4.3.1 路径 A：仅播放时触发，不排定时任务）。
+     * 只处理 id 以 [PlaylistParsers.IMPORTED_ID_PREFIX] 开头的裸条目；
+     * Semaphore(4) 限流 + enrichInFlight 同 id 去重，命中后写回所有含该 stub 的歌单。
+     */
+    private fun triggerEnrichForStubs(songs: List<Song>) {
+        for (song in songs) {
+            if (!song.id.startsWith(PlaylistParsers.IMPORTED_ID_PREFIX)) continue
+            if (!enrichInFlight.add(song.id)) continue // 已在补全中
+            viewModelScope.launch(Dispatchers.IO) {
+                try {
+                    enrichSemaphore.acquire()
+                    try {
+                        playlistEnricher.enrichAndPersistEverywhere(song)
+                    } finally {
+                        enrichSemaphore.release()
+                    }
+                } catch (e: Exception) {
+                    AppLog.w("MainViewModel", "triggerEnrichForStubs failed '${song.title}': ${e.message}")
+                } finally {
+                    enrichInFlight.remove(song.id)
+                }
+            }
+        }
+    }
+
+    /**
+     * 播放失败回退（§4.1.8 (5) 算法 B）：PlayerManager 在最终失败即将跳下一首前回调。
+     * 复测 URL 可达性 → 真不可达（NOT_FOUND/DNS_FAILED/REDIRECT_LOOP）走补全链写回；
+     * 暂时不可达（TIMEOUT/SERVER_ERROR）只标记 Unreachable，留待 24h 判定窗口自动复测。
+     */
+    fun playbackFailure(song: Song) {
+        if (!song.id.startsWith(PlaylistParsers.IMPORTED_ID_PREFIX)) return
+        if (song.streamUrl?.startsWith("http") != true) return
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                enrichSemaphore.acquire()
+                try {
+                    playlistEnricher.onPlaybackFailure(song, urlReachabilityChecker)
+                } finally {
+                    enrichSemaphore.release()
+                }
+            } catch (e: Exception) {
+                AppLog.w("MainViewModel", "playbackFailure failed '${song.title}': ${e.message}")
+            }
+        }
     }
 
     // --- F2-3 智能电台 ---

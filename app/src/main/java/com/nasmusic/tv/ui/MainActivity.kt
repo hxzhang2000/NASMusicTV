@@ -86,6 +86,17 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    // SAF 歌单文件选择器（阶段5 §4.4.1）：导入 m3u/txt/json 歌单文件
+    // MIME 采用宽口径（audio/* 覆盖 .m3u/.m3u8；text/* 覆盖 .txt/.json/.m3u；
+    // application/json 覆盖 .json；octet-stream 兜底部分提供商不标注 MIME 的 .m3u）
+    private val playlistFileLauncher = registerForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri: Uri? ->
+        if (uri != null) {
+            viewModel.playlistImportVM.importPlaylist(uri)
+        }
+    }
+
     /**
      * 在每次 Activity 创建（含 recreate）时应用存储的语言设置。
      * resources.updateConfiguration() 仅影响 Application 级别资源，
@@ -216,6 +227,16 @@ class MainActivity : ComponentActivity() {
                                 lifecycleScope.launch {
                                     viewModel.connectToServer(config)
                                 }
+                            },
+                            onPickPlaylistFile = {
+                                playlistFileLauncher.launch(
+                                    arrayOf(
+                                        "audio/*",
+                                        "application/json",
+                                        "text/*",
+                                        "application/octet-stream"
+                                    )
+                                )
                             }
                         )
 

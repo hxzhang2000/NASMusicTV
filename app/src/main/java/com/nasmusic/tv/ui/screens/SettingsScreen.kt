@@ -212,6 +212,12 @@ fun SettingsScreen(
     onDeleteBackup: ((Uri) -> Unit)? = null,
     onConsumeBackupMessage: (() -> Unit)? = null,
     onScanTransferBackup: (() -> Unit)? = null,
+    // 歌单导入（2026-09-18：§4.4.2 导入入口 + 最近导入记录 + 消息）
+    playlistImportHistory: List<com.nasmusic.tv.data.model.PlaylistImportHistoryItem> = emptyList(),
+    playlistImportMessage: com.nasmusic.tv.data.model.BackupMessage? = null,
+    onImportPlaylistFile: (() -> Unit)? = null,
+    onOpenImportedPlaylist: ((String) -> Unit)? = null,
+    onConsumePlaylistImportMessage: (() -> Unit)? = null,
     // 服务器连接设置
     serverConfig: com.nasmusic.tv.data.model.ServerConfig = com.nasmusic.tv.data.model.ServerConfig.Empty,
     isConnected: Boolean = false,
@@ -312,6 +318,14 @@ fun SettingsScreen(
         if (backupMessage != null) {
             kotlinx.coroutines.delay(4000)
             onConsumeBackupMessage?.invoke()
+        }
+    }
+
+    // 歌单导入结果消息显示后自动消费（镜像 backupMessage 4s 消费）
+    LaunchedEffect(playlistImportMessage) {
+        if (playlistImportMessage != null) {
+            kotlinx.coroutines.delay(4000)
+            onConsumePlaylistImportMessage?.invoke()
         }
     }
 
@@ -624,12 +638,17 @@ fun SettingsScreen(
                         state = DataSettingsState(
                             backupFiles = backupFiles,
                             backupMessage = backupMessage,
+                            playlistImportHistory = playlistImportHistory,
+                            playlistImportMessage = playlistImportMessage,
                         ),
                         actions = DataSettingsActions(
                             onExportBackup = onExportBackup,
                             onImportBackup = onImportBackup,
                             onScanTransferBackup = onScanTransferBackup,
                             onOpenPlayStats = onOpenPlayStats,
+                            onImportPlaylistFile = onImportPlaylistFile,
+                            onOpenImportedPlaylist = onOpenImportedPlaylist,
+                            onConsumePlaylistImportMessage = onConsumePlaylistImportMessage,
                         ),
                         onDeleteRequested = { file -> backupToDelete = file }
                     )

@@ -44,8 +44,8 @@ android {
         applicationId = "com.nasmusic.tv"
         minSdk = 22
         targetSdk = 34
-        versionCode = 150
-        versionName = "2.34.2"
+versionCode = 151
+        versionName = "2.34.3"
 
         ndk {
             abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64")
@@ -186,8 +186,9 @@ dependencies {
     // 封面取色（可视化效果 T5）
     implementation("androidx.palette:palette-ktx:1.0.0")
 
-    // DataStore (Preferences)
-    implementation("androidx.datastore:datastore-preferences:1.0.0")
+// DataStore (Preferences)
+    // 1.0.0 在 Windows(Robolectric)下连续写同名文件有 rename 竞态（SingleProcessDataStore.kt:433），1.1.1 修复
+    implementation("androidx.datastore:datastore-preferences:1.1.1")
 
     // Coroutines
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")

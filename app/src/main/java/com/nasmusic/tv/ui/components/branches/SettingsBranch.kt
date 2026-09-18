@@ -39,7 +39,9 @@ internal fun SettingsBranch(
     coverFilterDarkOverlay: Float,
     context: android.content.Context,
     coroutineScope: kotlinx.coroutines.CoroutineScope,
-    onConnect: (ServerConfig) -> Unit
+    onConnect: (ServerConfig) -> Unit,
+    /** SAF 歌单文件选择（由 MainActivity 持有 launcher，经 AppRoot 透传） */
+    onPickPlaylistFile: () -> Unit
 ) {
                     val backendApiVersion by viewModel.serverVM.backendApiVersion.collectAsState(initial = "Unknown")
                     val apiVersions by viewModel.serverVM.apiVersions.collectAsState(initial = emptyList())
@@ -79,6 +81,9 @@ internal fun SettingsBranch(
                         viewModel.downloadVM.refreshModelStatus()
                         viewModel.downloadVM.refreshDownloadStats()
                     }
+                    // 歌单导入：最近导入记录 + 导入结果消息
+                    val playlistImportHistory by viewModel.playlistImportVM.importHistory.collectAsState(initial = emptyList())
+                    val playlistImportMessage by viewModel.playlistImportVM.importMessage.collectAsState(initial = null)
                     SettingsScreen(
                         settings = settings,
                         onToggleDarkTheme = { viewModel.updateDarkTheme(it) },
@@ -145,6 +150,12 @@ internal fun SettingsBranch(
                         onDeleteBackup = { uri -> viewModel.backupVM.deleteBackup(uri) },
                         onConsumeBackupMessage = { viewModel.backupVM.consumeBackupMessage() },
                         onScanTransferBackup = { showBackupTransferDialog = true },
+                        // 歌单导入（阶段5）
+                        playlistImportHistory = playlistImportHistory,
+                        playlistImportMessage = playlistImportMessage,
+                        onImportPlaylistFile = onPickPlaylistFile,
+                        onOpenImportedPlaylist = { _ -> viewModel.navVM.navigateTo(Screen.Mine) },
+                        onConsumePlaylistImportMessage = { viewModel.playlistImportVM.consumeImportMessage() },
                         // 百度网盘设置
                         baiduEnabled = baiduConfig.enabled,
                         baiduLoggedIn = baiduConnectionState is com.nasmusic.tv.ui.viewmodel.NetworkMusicViewModel.BaiduConnectionState.LoggedIn

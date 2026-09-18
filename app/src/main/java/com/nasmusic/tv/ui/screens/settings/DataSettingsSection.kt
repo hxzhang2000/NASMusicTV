@@ -19,6 +19,9 @@ import com.nasmusic.tv.ui.theme.NasMusicColors
 data class DataSettingsState(
     val backupFiles: List<BackupFileUtils.BackupFile>,
     val backupMessage: BackupMessage?,
+    /** 歌单导入（§4.4.2）：最近导入记录 + 导入结果消息 */
+    val playlistImportHistory: List<com.nasmusic.tv.data.model.PlaylistImportHistoryItem> = emptyList(),
+    val playlistImportMessage: BackupMessage? = null,
 )
 
 /** 数据管理分区动作（删除确认弹窗由宿主持有，经 onDeleteRequested 上抛） */
@@ -28,6 +31,12 @@ data class DataSettingsActions(
     val onScanTransferBackup: (() -> Unit)?,
     /** F2-1：打开播放统计面板 */
     val onOpenPlayStats: (() -> Unit)? = null,
+    /** 歌单导入入口（SAF OpenDocument，launcher 由 MainActivity 持有） */
+    val onImportPlaylistFile: (() -> Unit)? = null,
+    /** 打开最近导入的歌单（跳「我的」页） */
+    val onOpenImportedPlaylist: ((String) -> Unit)? = null,
+    /** 消费导入结果消息（4s 自动） */
+    val onConsumePlaylistImportMessage: (() -> Unit)? = null,
 )
 
 /** 数据管理分区（原 SettingsScreen DATA 分支，逻辑逐行搬迁） */
@@ -68,6 +77,37 @@ internal fun DataSettingsSection(
                 label = stringResource(R.string.pstats_title),
                 description = stringResource(R.string.pstats_entry_desc),
                 onClick = { actions.onOpenPlayStats?.invoke() }
+            )
+        }
+        // ── 歌单导入（2026-09-18 新增：§4.4.2）──
+        if (actions.onImportPlaylistFile != null) {
+            Spacer(modifier = Modifier.height(8.dp))
+            SettingActionButton(
+                label = stringResource(R.string.settings_import_playlist),
+                description = stringResource(R.string.settings_import_playlist_desc),
+                onClick = { actions.onImportPlaylistFile?.invoke() }
+            )
+        }
+        // 最近导入记录（无删除操作；点击打开 → 「我的」，2026-09-18 用户决策）
+        if (state.playlistImportHistory.isNotEmpty()) {
+            Spacer(modifier = Modifier.height(24.dp))
+            SubSectionTitle(stringResource(R.string.settings_playlist_import_history))
+            state.playlistImportHistory.forEach { item ->
+                ImportedPlaylistRow(
+                    item = item,
+                    onOpen = { actions.onOpenImportedPlaylist?.invoke(item.playlistId) }
+                )
+            }
+        }
+        // 导入结果消息
+        if (state.playlistImportMessage != null) {
+            Spacer(modifier = Modifier.height(16.dp))
+            Text(
+                text = state.playlistImportMessage.text,
+                color = if (state.playlistImportMessage.isError)
+                    NasMusicColors.Warning else NasMusicColors.Primary,
+                fontSize = FontSize.button(),
+                modifier = Modifier.padding(start = 4.dp)
             )
         }
         // 备份文件列表

@@ -106,6 +106,14 @@ class PlayerManager(private val applicationContext: Context) {
     var onNeedResolveStreamUrl: ((index: Int) -> Unit)? = null
 
     /**
+     * 播放失败回调（歌单导入 URL 失效回退链，docs/playlist-import-feature-plan.md §4.1.8 (5)）。
+     * 由 MainViewModel 注册：对 id 以 "imported_" 开头且 streamUrl 为 http 的 stub 歌曲，
+     * ExoPlayer 报错时调用（复测可达性 → 不可达走补全链）。
+     * 非导入歌曲此回调不被触发，行为与改动前完全一致。
+     */
+    var onPlaybackFailed: ((Song) -> Unit)? = null
+
+    /**
      * 内建 streamUrl 解析器（**无 UI 依赖**），由 `PlaybackService` 注册。
      *
      * @return true 表示已接管本次解析；false 表示无法处理（未注册 / 无网络管理器 /
@@ -432,6 +440,21 @@ class PlayerManager(private val applicationContext: Context) {
             }
             AppLog.e("PlayerManager", "Player error: ${error.message}", error)
             _playerError.value = error.message ?: applicationContext.getString(R.string.player_error_playback)
+            // 歌单导入 stub（URL 直链）播放失败（§4.1.8 (5) 回退链）：
+            // stub id 在 NAS 上不存在，re-resolve 链路对它必然空转（getSongsByIds 查不到），
+            // 直接回调 MainViewModel.playbackFailure → 复测可达性 → 不可达走补全链写回歌单。
+            // 补全后用户重播该歌单即为真源；当前播放照常跳下一首，不卡死。
+            if (currentSong != null && currentSong.id.startsWith("imported_") &&
+                !currentSong.streamUrl.isNullOrBlank()
+            ) {
+                AppLog.w("PlayerManager", "onPlayerError: imported stub '${currentSong.title}' failed, invoking onPlaybackFailed")
+                onPlaybackFailed?.invoke(currentSong)
+                // 跳下一首（stub 无源可重解析；补全成功后由歌单替换生效）
+                val p = player
+                val mode = if (p != null) derivePlayMode(p) else PlayMode.REPEAT_ALL
+                next(mode)
+                return
+            }
             // 播放链接可能已过期（入队时预解析的直链有时效，网络歌曲尤甚，约 5 首后集中出现）。
             // 出错时复用 onNeedResolveStreamUrl（→ ViewModel.resolveAndPlayByIndex）重新解析一次再播放；
             // 同一首歌只重试一次，若重解析后仍失败则继续自动跳下一首，避免死循环。

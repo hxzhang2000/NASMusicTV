@@ -471,8 +471,28 @@
     <string name="mine_pick_playlist_empty">暂无歌单，请先新建</string>
     <string name="mine_playlist_name_hint">请输入歌单名称</string>
     <string name="mine_rename_playlist_title">重命名歌单</string>
-    <string name="mine_added_to_playlist">已添加到歌单</string>
+<string name="mine_added_to_playlist">已添加到歌单</string>
     <string name="mine_not_added_to_playlist">添加失败</string>
+
+    <!-- 歌单导入（阶段5，2026-09-18：docs/playlist-import-feature-plan.md） -->
+    <string name="settings_import_playlist">导入歌单</string>
+    <string name="settings_import_playlist_desc">从 m3u / txt / json / 网易云歌单文件导入（含 URL 直链）</string>
+    <string name="settings_playlist_import_history">最近导入</string>
+    <string name="playlist_importing">正在导入歌单…</string>
+    <string name="playlist_import_progress">正在导入歌单… %d%%</string>
+    <string name="playlist_import_failed">导入失败：%1$s</string>
+    <string name="playlist_import_unrecognized">无法识别的歌单文件格式</string>
+    <string name="playlist_imported">已导入「%1$s」，共 %2$d 首</string>
+    <string name="playlist_imported_with_unreachable">已导入「%1$s」，共 %2$d 首（%3$d 条 URL 不可达）</string>
+    <string name="playlist_import_history_sub">%1$d 首</string>
+    <string name="playlist_enrich_done">补全完成：命中 %1$d 首，未命中 %2$d 首</string>
+    <string name="playlist_enrich_button">补全</string>
+    <string name="playlist_enrich_progress">补全中 %1$d/%2$d · 命中 %3$d</string>
+    <string name="playlist_import_badge">导入</string>
+    <string name="playlist_stub_badge">待补全</string>
+    <string name="playlist_url_invalid">URL 失效</string>
+    <string name="playlist_url_invalid_count">%d 条 URL 失效</string>
+    <string name="mine_open">打开</string>
 
     <!-- Queue -->
     <string name="queue_title">播放队列</string>
