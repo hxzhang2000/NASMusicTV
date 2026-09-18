@@ -1,9 +1,9 @@
 # 手机竖屏 UI 适配与横竖屏切换开发方案
 
-> 版本：v1.4（代码复核修订：修 5 处阻断项 + 补 7 处漏页 + 纠正 10 处事实）
+> 版本：v1.5（D9/D10 拍板：竖屏不隐藏系统栏 + 横竖屏直接硬切）
 > 日期：2026-09-19
-> 状态：方案设计（v1.4 已按 §0.8 复核意见修订，含代码骨架，待评审；10 项决策已拍板，可开工）
-> ⚠️ 开工前必须先确认 §0.8 的 5 项阻断修正：横向手机的形态归属、inset 的系统栏前提、过渡的双子树副作用、首帧同步读的口径、0.82 缩放的 dp 换算
+> 状态：方案设计（v1.5 已按 §0.8 复核意见修订并拍板 D9/D10，含代码骨架，待评审；10 项决策全部拍板，可开工）
+> ✅ 5 项阻断已闭环：B1 分支谓词（§3.1）、B2 inset 前提（D9 拍板）、B3 过渡副作用（D10 拍板硬切，直接消除）、B4 首帧同步读（§8.2 镜像）、B5 dp 口径（§2.7）
 > 目标版本：v2.36.0 起分批落地
 > 关联文档：`docs/phone-support-plan.md`（手机端适配总纲）、`docs/phone-media-display-plan.md`（媒体展示与保活）
 
@@ -19,7 +19,7 @@
 >   4. **状态栏/导航栏 inset 升 P0**（§5.5(6) / §9）；
 >   5. **首帧按 Home Screen 设方向**（§5.5(1) 补完）；
 >   6. **`PhoneLandscape = TV 横屏布局复用`** 明文入文档（§3.1）；
->   7. **`AnimatedContent` 切换过渡**（§5.5(7)）；
+>   7. **`AnimatedContent` 切换过渡**（§5.5(7)）——⚠️ **v1.5 已推翻，改硬切**（D10）；
 >   8. **「滚动可见 = 合理」设计原则**（§2.6）——验收标准对应放宽（§10.3）。
 >
 > **v1.4（2026-09-19，源码级复核修订）** —— 新增 §0.8「v1.4 复核修正」，5 项阻断 + 7 处漏页 + 10 处事实：
@@ -30,6 +30,12 @@
 >   5. **B5 dp 口径**：新增 §2.7 —— `PHONE_UI_SCALE = 0.82` 下的物理 dp / Compose-dp 换算（原文 360dp、44dp 口径全部偏小）；
 >   6. §2.4 / §3.4 / §4.7 补齐 7 处漏页（`SearchTab` 来源行、`RadioTab` 顶部行与列数、详情页头部操作行、骨架页、网盘顶部搜索行等）；
 >   7. 纠正 10 处与源码不符的描述（首页卡片 160dp、`WeatherRadioScreen`/`MineScreen` 无网格、`NetdiskScreen:119`/`RadioTab:86` 是搜索框、`JamendoTab` 死代码、`EqualizerScreen` 已竖向等）。
+>
+> **v1.5（2026-09-19，D9/D10 拍板）**：
+>   1. **D9 = 竖屏取消 `hide(systemBars())`**：`PhonePortrait` 下显示状态栏/导航栏；`TV` / `PhoneLandscape` / 沉浸模式 / 全屏页维持隐藏（§5.5(9)、§8.3⑤、P0-20）；
+>   2. **D10 = 横竖屏直接硬切**：不做 `AnimatedContent` / `Crossfade`；B3（双子树导致单槽 handler 被置空 + 重复拉数据）随之**整体消除**，原 P0-21/22 两项配套一并取消；
+>   3. §5.5(7) 由"必须过渡"改为"本版不做过渡"，(10) 降为"将来若要引入过渡必须做的配套"备忘；§8.6 骨架去掉过渡包装；
+>   4. §10.3 用例 7 改为"硬切可用性"（无白帧/异常帧），其余用例不变。
 
 ---
 
@@ -92,10 +98,10 @@ grep -rn "import androidx.compose.material3" --include=*.kt app/src/main/java | 
 | **D4** | 状态栏/导航栏 inset | **P0**（不再是 P2）：`PhoneTopBar` 用 `statusBarsPadding()`、`PhoneNavBar` 用 `navigationBarsPadding()`、MiniPlayer 同样处理 | §4.0 全局骨架、§5.5(6)(9) 实现要点、§9 P0-19（前提是 D9） | 刘海/手势导航/三键导航适配是竖屏可用性的硬门槛，不能等 P2 |
 | **D5** | 首帧按哪个 Screen 设 `requestedOrientation` | **Home**（冷启动到首页）：`onCreate` 同步设一次，方向 = 解析 L1 pref + `Screen.Home` 计算 | §5.5(1) 补完、§8.3 | 冷启动到 Home 是默认路径；若将来支持"记住上次 Screen"则改为读 pref |
 | **D6** | `PhoneLandscape` 形态归属 | **`PhoneLandscape = TV 横屏布局复用`**，仅 `PhonePortrait` 走竖屏新设计 | §3.1、§8.3 | 横屏手机端目前体验 OK（6 项顶部导航 + 380dp 封面 + 歌词列分栏），**不重构**；未来若要"手机端统一体验"则再单独开方案 |
-| **D7** | 横屏↔竖屏切换的视觉过渡 | **`AnimatedContent(targetState = uiMode)`** 包整个 `Column`（或关键子树）——至少 200ms Crossfade 兜底，避免"两套布局互换的硬切" | §5.5(7) 实现要点、§8.6 目标结构注释 | 横竖屏切换瞬间 Compose 重组中间帧可能肉眼可见 1 帧错位，必须用 `AnimatedContent` 兜底 |
+| ~~**D7**~~（v1.5 被 D10 取代） | 横屏↔竖屏切换的视觉过渡 | ❌ **已推翻**：原定 `AnimatedContent` + 200ms Crossfade；v1.5 复核发现会引入 B3 三个副作用（handler 置空 / 重复拉数据 / 滚动位丢失），**改为硬切**（见 D10、§5.5(7)） | §5.5(7) | 保留此行仅作决策沿革记录，实施以 D10 为准 |
 | **D8** | 全应用手势约定 | **不使用长按手势**（PM 2026-09-19 拍板）：L2 方向切换走单击；歌曲行上下文菜单改"右侧 ⋮"按钮触发；**封面信息弹层用"封面右上角 ⓘ"图标按钮触发**（PM 2026-09-19 01:23 拍板，不用"查看详情"文字按钮，不用长按）；其他场景同样原则 | §4.0 手势约定、§4.2 封面交互、§5.3 L2、§11 风险表 | 老年/儿童用户友好；与 Material Design 触控规范（48dp 最小触摸目标，按钮优于手势）一致；降低误触风险；ⓘ 图标是国际通用的"信息"语义，用户认知成本低 |
-| **D9**（v1.4 新增） | 竖屏是否继续隐藏系统栏 | **竖屏不隐藏系统栏**：`PhonePortrait` 下调用 `WindowInsetsControllerCompat.show(systemBars())` 恢复状态栏/导航栏；`TV` 与 `PhoneLandscape` 保持现状（继续隐藏） | §5.5(9)、§8.3、§9 P0-20 | `statusBarsPadding()` / `navigationBarsPadding()` 只在系统栏**可见**时才返回非 0 inset。当前 `MainActivity.kt:117-127` 用 `hide(systemBars())`，竖屏下这两个 padding 基本是 no-op——刘海照样压住 Logo，且用户上滑唤出系统栏时内容会跳动。**D4 成立的前提就是 D9** |
-| **D10**（v1.4 新增） | 横竖屏切换的过渡实现 | 保留 `AnimatedContent(targetState = uiMode, 200ms Crossfade)`，但**必须配套**：① 单槽 handler（`listBackHandler` / `dialogBackHandler`）的 `onDispose` 改为"只清自己"；② 页面级 `LaunchedEffect(Unit)` 数据加载加防重入。若这两项不想做 → **不做过渡（硬切）**，把它降为 P2 | §5.5(10)、§8.6、§11 风险表 | `AnimatedContent`（`Crossfade` 同理）在 200ms 内**同时组合新旧两棵子树**：旧子树 `onDispose { listBackHandler.value = null }` 会把新子树刚注册的 handler 置空（旋转后 Level 1.5 回顶静默失效），两棵子树的 `LaunchedEffect(Unit)` 还会各拉一次首页/曲库/天气数据。宁可不动画，也不能留这个坑 |
+| **D9**（v1.4 新增 / **v1.5 已拍板**） | 竖屏是否继续隐藏系统栏 | ✅ **拍板：竖屏不隐藏系统栏**：`PhonePortrait` 下调用 `WindowInsetsControllerCompat.show(systemBars())` 恢复状态栏/导航栏；`TV` / `PhoneLandscape` / 沉浸模式 / 全屏页维持现状（继续隐藏）。保留 `setDecorFitsSystemWindows(false)`，由 `statusBarsPadding()` / `navigationBarsPadding()` 自行留白 | §5.5(9)、§8.3⑤、§9 P0-20 | `statusBarsPadding()` / `navigationBarsPadding()` 只在系统栏**可见**时才返回非 0 inset。当前 `MainActivity.kt:117-127` 用 `hide(systemBars())`，竖屏下这两个 padding 基本是 no-op——刘海照样压住 Logo，且用户上滑唤出系统栏时内容会跳动。**D4 成立的前提就是 D9** |
+| **D10**（v1.4 新增 / **v1.5 已拍板**） | 横竖屏切换的过渡实现 | ✅ **拍板：不做过渡，直接硬切**。§8.6 去掉 `AnimatedContent` / `Crossfade` 包装（裸 `Column`）；接受切换瞬间的硬切观感 | §5.5(7)、§8.6、§11 风险表 | 过渡会在 200ms 内**同时组合新旧两棵子树**：旧子树 `onDispose { listBackHandler.value = null }` 会把新子树刚注册的 handler 置空（旋转后 Level 1.5 回顶静默失效），两棵子树的 `LaunchedEffect(Unit)` 还会各拉一次首页/曲库/天气数据，且新子树 `rememberLazyListState` 会回到顶部。硬切一次消除全部副作用，代价只是观感（PM 已接受） |
 
 ### 0.7 v1.3 调整的 1 项设计原则（PM 确认）
 
@@ -112,6 +118,7 @@ grep -rn "import androidx.compose.material3" --include=*.kt app/src/main/java | 
 
 > 对 v1.3 全文做一次源码级复核（含 `:app:dependencies --configuration debugCompileClasspath` 实测）。
 > 结论：**骨架成立、可开工**，但下列 5 项为阻断级，必须先按本节口径修掉；另有 7 处漏页、10 处事实错误一并修正。
+> **v1.5 更新**：B3 经 D10 拍板为"硬切"后**直接消除**；其余 4 项已按本节口径改入正文。
 
 **B1 横屏手机的分支自相矛盾（阻断）**
 
@@ -123,9 +130,9 @@ grep -rn "import androidx.compose.material3" --include=*.kt app/src/main/java | 
 
 `MainActivity.kt:117-127` 在手机端 `setDecorFitsSystemWindows(false)` + `hide(systemBars())`。系统栏被隐藏时 `statusBars` / `navigationBars` inset 通常报 0，`statusBarsPadding()` 基本是 no-op——刘海照样压住 Logo，且用户上滑唤出系统栏时内容会突然跳动。**D4 是否有效完全取决于 D9**。详见 §5.5(9)。
 
-**B3 过渡会并行保留两棵子树（阻断）**
+**B3 过渡会并行保留两棵子树（阻断 → **v1.5 由 D10 拍板硬切后整体消除**）**
 
-`AnimatedContent`（`Crossfade` 同理）在 200ms 内同时组合新旧子树，导致两个真实副作用：① 旧子树的 `DisposableEffect.onDispose { listBackHandler.value = null }` 把新子树刚注册的 handler **置空**（`HomeScreen` / `QueueScreen` / `AlbumDetailScreen` / `ArtistDetailScreen` / `PlaylistManagementScreen` 都是这种单槽写法）→ 旋转后 BACK 的 Level 1.5 静默失效；② 两棵子树的 `LaunchedEffect(Unit)` 各跑一次 → 每次旋转重复请求首页/曲库/天气数据。修正见 D10 + §5.5(10)。
+`AnimatedContent`（`Crossfade` 同理）在 200ms 内同时组合新旧子树，导致两个真实副作用：① 旧子树的 `DisposableEffect.onDispose { listBackHandler.value = null }` 把新子树刚注册的 handler **置空**（`HomeScreen` / `QueueScreen` / `AlbumDetailScreen` / `ArtistDetailScreen` / `PlaylistManagementScreen` 都是这种单槽写法）→ 旋转后 BACK 的 Level 1.5 静默失效；② 两棵子树的 `LaunchedEffect(Unit)` 各跑一次 → 每次旋转重复请求首页/曲库/天气数据。修正见 D10 + §5.5(10)。**v1.5 已拍板：本项目不做过渡（硬切），本条整体消除**；下列内容保留为"将来若要引入过渡"的备忘。
 
 **B4 首帧同步读不能用 `runBlocking`（阻断）**
 
@@ -832,37 +839,22 @@ Box(modifier = Modifier
 
 **注意**：
 - `statusBarsPadding()` / `navigationBarsPadding()` 来自 `androidx.compose.foundation.layout`（编译类路径已确认）
-- ⚠️ **两者只在系统栏可见时才返回非 0 inset**（v1.4 B2）——当前手机端已 `hide(systemBars())`，竖屏下它们基本是 no-op。**本节能否成立完全取决于 D9**（见下方 (9)）
+- ✅ **本节已具备生效前提**：D9（v1.5 拍板）——竖屏 `PhonePortrait` 不再隐藏系统栏，`statusBarsPadding()` / `navigationBarsPadding()` 才会返回真实 inset；`TV` / `PhoneLandscape` / 沉浸模式仍隐藏且**不加**这两处 padding（保持现状）
 - 横屏（PhoneLandscape / TV）**不要加**——TV 无系统栏；PhoneLandscape 现版本也未处理，**保持现状**
 - `WindowCompat.setDecorFitsSystemWindows(window, false)` 已在 `MainActivity.kt:118` 设置（手机端全屏模式），与 inset 处理是配套的
 - 建议额外加 `displayCutoutPadding()`：`statusBarsPadding()` 不覆盖挖孔区域，两者叠加才稳
 
-**(7) 横竖屏切换的视觉过渡（v1.3 D7 拍板）**
+**(7) 横竖屏切换的视觉过渡（v1.3 D7 → v1.5 D10 拍板：不做过渡，直接硬切）**
 
-横屏 ↔ 竖屏切换瞬间 Compose 重组中间帧可能肉眼可见 1 帧错位（两套布局的容器尺寸差异大时尤为明显）。**用 `AnimatedContent` 兜底**：
+背景：横屏 ↔ 竖屏切换瞬间，Compose 重组中间帧理论上可能出现 1 帧错位。原 v1.3 用 `AnimatedContent` 兜底，但复核发现它会在 200ms 内**同时组合新旧两棵子树**，代价是三个真实副作用（B3）：
 
-```kotlin
-// AppRoot.kt 外层
-AnimatedContent(
-    targetState = uiMode,
-    transitionSpec = {
-        // 200ms Crossfade，避免硬切
-        fadeIn(animationSpec = tween(200)) togetherWith
-        fadeOut(animationSpec = tween(200))
-    },
-    label = "uiMode-transition"
-) { mode ->
-    // 整个 Column 内容作为 key
-    AppRootContent(uiMode = mode, ...)
-}
-```
+1. 旧子树 `onDispose { listBackHandler.value = null }` 把新子树刚注册的 handler 置空 → 旋转后 BACK 的 Level 1.5（列表回顶）静默失效；
+2. 两棵子树的 `LaunchedEffect(Unit)` 各跑一次 → 每次旋转重复请求首页/曲库/天气数据；
+3. 新子树的 `rememberLazyListState` 从 0 开始 → 列表滚动位置丢失（`Crossfade` 同理）。
 
-**注意**：
-- `AnimatedContent` 用 `uiMode` 作 `targetState`——`uiMode` 变化（PORTRAIT ↔ LANDSCAPE）触发过渡
-- **不要**对 L1 设置项变化（自动 ↔ 竖屏 ↔ 横屏 pref）触发过渡——只有**实际方向变化**才需要视觉过渡，pref 变化可能不立即反映
-- 200ms 时长足够人眼感知过渡，又不会让用户觉得"卡"；小于 150ms 会被感知为"硬切"，大于 300ms 显得迟钝
-- ⚠️ **不要指望它保留 LazyColumn 滚动状态**（v1.4 修正）：两个 targetState 是**两棵独立子树**，新子树的 `rememberLazyListState` 从 0 开始；原文"保留滚动状态"的说法是错的。能保的只有已经提升到 ViewModel 的（`LibraryScreen` 的 `albumScrollIndex` / `artistScrollIndex`）；`Home` / `Queue` / 详情页 的 `rememberLazyListState` 会回到顶部——可接受，但必须写进验收预期（§5.5(11)）
-- ⚠️ 采用过渡就必须同步做 §5.5(10) 的两项配套（单槽 handler 自清 + 页面副作用防重入），否则产生"handler 被置空 + 重复拉数据"两个回归
+**v1.5 拍板（D10）：不做过渡，直接硬切。** `AppRoot` 用裸 `Column`（不加 `AnimatedContent` / `Crossfade`），切换瞬间允许硬切；上述三个副作用一次性全部消失。
+
+> 若将来确实要加缓动，**必须先完成**下方 (10) 列出的两项配套，再单独评估；§9 里原 D7 的过渡条目已删除。
 
 **(8) 首帧 `currentScreen` 与 `requestedOrientation` 必须用同一份 pref**
 
@@ -881,14 +873,22 @@ AnimatedContent(
 - `navigationBarsPadding()` 基本是 no-op → 三键导航手机需要"上滑唤出"才看得到导航条，此时内容**突然被顶起**（跳动）
 - 底部上滑"唤出系统栏"与 MiniPlayer 上滑展开（P2-33）**会抢同一段手势**
 
-两条路（必须二选一，写进本方案）：
+**v1.5 拍板（D9）：竖屏不隐藏系统栏。** 具体规则：
 
-1. **推荐（D9 采纳）**：**竖屏不隐藏系统栏**。进入 `PhonePortrait` 时 `show(systemBars())`，其余形态维持现状。此时 `statusBarsPadding()` / `navigationBarsPadding()` 才真正生效，并在 `PhoneTopBar` 追加 `displayCutoutPadding()` 兜底挖孔。
-2. 保留隐藏：则 `statusBarsPadding()` 方案作废，必须改用 `WindowInsets.displayCutout` + `safeDrawingPadding()` 手工处理，并接受"系统栏临时唤出时内容跳动"。
+| 场景 | `systemBars` | 说明 |
+|------|-------------|------|
+| `PhonePortrait` 且非沉浸/非全屏页 | **`show()`** | `statusBarsPadding()` / `navigationBarsPadding()` 生效；`PhoneTopBar` 追加 `displayCutoutPadding()` 兜底挖孔 |
+| `PhoneLandscape` | `hide()`（现状） | 横屏手机保持改前行为（§3.1 B1） |
+| `TV` | 不处理 | TV 无系统栏 |
+| 沉浸模式 / MTV / K 歌 / 可视化舞台 | `hide()` | 全屏内容需真正铺满，与现状一致；随 `isImmersiveMode` 切换 |
 
-> 无论哪条路，`§10.3` 用例 13/14（刘海屏、三键导航）都必须真机录屏验证，不能只看代码。
+`setDecorFitsSystemWindows(window, false)` **保持不变**（继续 edge-to-edge），由两处 padding 自行留白，否则会与 padding 双重计算。
 
-**(10) 过渡必须处理"新旧子树并存"（v1.4 D10，必读）**
+实现骨架见 §8.3⑤；`§10.3` 用例 13/14/21（刘海屏、三键导航、系统栏唤出无跳动）必须真机录屏验证，不能只看代码。
+
+**(10) 【备忘：本版不实施】将来若要引入过渡，必须处理"新旧子树并存"（v1.4 B3）**
+
+> 本版已拍板硬切（D10），本节**不实施**，仅作为将来引入过渡时的清单。
 
 `AnimatedContent`（`Crossfade` 同理）在过渡期间会**同时组合**新旧两棵子树 200ms。若不处理，会踩两个坑：
 
@@ -906,9 +906,11 @@ AnimatedContent(
 - 附带：过渡期间建议禁用内容区交互（`clickable(enabled = !isAnimating)`）避免双重点击（§8.6 已有此条）。
 - **若不想做这两项配套 → 直接不做过渡（硬切）**，把"1 帧错位"降级为 P2 观感问题。**宁可硬切，也不要有静默失效的 BACK。**
 
-**(11) 旋转会触发一次页面状态重置（已知代价）**
+**(11) 硬切下的页面状态（v1.5 更新）**
 
-即使按 (10) 做了防重入，AppRoot 内容区在 `uiMode` 变化时仍是"整块换 key"，页面的 `remember` 状态（滚动位置、展开项、临时选中态）会重置。**必须提升到 ViewModel 的**：`LibraryScreen` 已有（`albumScrollIndex` / `artistScrollIndex`）；建议补：`MineScreen.expandedPlaylistId`、`QueueScreen` 滚动位置。其余（如 Home 横向卡片滚动位置）接受重置。
+硬切**不会**引入双子树，也不改变 `Box(weight(1f))` 内容区的调用点位置，因此页面的 `remember` 状态（滚动位置、展开项）**通常会被保留**（`LocalConfiguration` 变化只触发重组，不销毁子树）。
+
+但这一点必须**真机核实**：若实现时在内容区套了 `key(uiMode)`、或把内容区挪进条件分支，状态就会丢。加固建议（低成本，仍推荐做）：`LibraryScreen` 已有 `albumScrollIndex` / `artistScrollIndex`；可再补 `MineScreen.expandedPlaylistId` 与 `QueueScreen` 滚动位置。其余（如 Home 横向卡片滚动位置）接受重置。
 
 ---
 
@@ -1128,6 +1130,33 @@ LaunchedEffect(orientationPref, showMv, showKaraoke, showVisualizer, isTVDevice)
 LocalUiMode provides uiMode,
 ```
 
+**⑤ 系统栏显隐（v1.5 D9 拍板）**——`onCreate` 按**初始形态**决定，`setContent` 内按 `uiMode` 跟随：
+
+```kotlin
+// onCreate：把原有"无条件 hide(systemBars())"改成条件调用
+if (!isTVDevice) {
+    WindowCompat.setDecorFitsSystemWindows(window, false)      // 保持 edge-to-edge（不动）
+    val portrait = resources.configuration.orientation == Configuration.ORIENTATION_PORTRAIT
+    with(WindowInsetsControllerCompat(window, window.decorView)) {
+        systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+        if (portrait) show(WindowInsetsCompat.Type.systemBars())
+        else hide(WindowInsetsCompat.Type.systemBars())
+    }
+}
+
+// setContent 内：与方向同一个 LaunchedEffect 或并列一个，key 一致
+LaunchedEffect(uiMode, isImmersiveMode.value, showMv, showKaraoke, showVisualizer) {
+    if (isTVDevice) return@LaunchedEffect
+    val controller = WindowInsetsControllerCompat(window, window.decorView)
+    val showBars = uiMode == UiMode.PhonePortrait && !isImmersiveMode.value &&
+        !showMv && !showKaraoke && !showVisualizer
+    if (showBars) controller.show(WindowInsetsCompat.Type.systemBars())
+    else controller.hide(WindowInsetsCompat.Type.systemBars())
+}
+```
+
+> `window` 就是 `Activity.getWindow()`，在 `MainActivity` 的 composable 作用域内可直接使用；首帧由 `onCreate` 处理，避免"先隐藏后显示"的闪烁。
+
 ### 8.4 `PhoneNavBar`
 
 新增 `ui/components/PhoneNavBar.kt`。**零新增依赖**：`compose.foundation`（`Row`/`Column`/`background`/`navigationBarsPadding`）+ `tv-material3`（`Text`/`Icon`）+ 现成 `FocusableSurface`。
@@ -1265,24 +1294,17 @@ Column(fillMaxSize) {
 目标：
 
 ```kotlin
-// v1.3 D7 / v1.4 D10：外层包 AnimatedContent，200ms Crossfade 兜底横竖屏切换瞬间的中间帧错位
+// v1.5 D10：**不加任何过渡**（裸 Column），硬切由 PM 拍板
 // ⚠️ v1.4 B1：以下分支谓词只能是 `== UiMode.PhonePortrait`，**不能**写 `== / != UiMode.TV`
-AnimatedContent(
-    targetState = uiMode,
-    transitionSpec = {
-        fadeIn(animationSpec = tween(200)) togetherWith
-        fadeOut(animationSpec = tween(200))
-    },
-    label = "uiMode-transition"
-) { mode ->
-    Column(modifier = Modifier.fillMaxSize()) {
+Column(modifier = Modifier.fillMaxSize()) {
         // ① 顶部栏：按形态分支（⚠️ v1.4 B1：只有 PhonePortrait 用新栏；TV 与 PhoneLandscape 都走现状）
         if (!isImmersiveMode.value && !showMv && !showVisualizer) {
-            if (mode != UiMode.PhonePortrait) {
+            if (uiMode != UiMode.PhonePortrait) {
                 // 现状顶部栏（TV + 手机横屏，逻辑原样搬进 TvTopNavBar，零行为变化）
                 TvTopNavBar(currentScreen = currentScreen, onNavigate = viewModel.navVM::navigateTo)
             } else {
-                // v1.3 D4: PhoneTopBar 用 Modifier.statusBarsPadding() 处理刘海/挖孔
+                // v1.5 D9: PhoneTopBar 用 statusBarsPadding() + displayCutoutPadding() 处理刘海/挖孔
+                // （前提：竖屏不隐藏系统栏，见 §5.5(9) / §8.3⑤）
                 PhoneTopBar(
                     onNavigateToSearch = ...,
                     onToggleOrientation = ...,         // 单击循环竖/横 + 写 pref（§5.3 D1，无长按）
@@ -1297,7 +1319,7 @@ AnimatedContent(
         // ③ 手机端底部：MiniPlayer + 底部导航
         //    ⚠️ 必须放在 Box(weight(1f)) 之后、VisualizerOverlay 之前
         //    —— 这样可视化舞台仍能盖住底部栏
-        if (mode == UiMode.PhonePortrait &&
+        if (uiMode == UiMode.PhonePortrait &&
             !isImmersiveMode.value && !showMv && !showKaraoke && !showVisualizer
         ) {
             if (currentScreen != Screen.NowPlaying) {          // 播放页自身即播放器，不重复
@@ -1314,12 +1336,12 @@ AnimatedContent(
 }
 ```
 
-> ⚠️ AnimatedContent 期间用户连续点击的风险（§11 风险表）：200ms Crossfade 期间**禁用 Box(weight=1f) 内容区的 clickable**，避免双重点击导致状态错乱。两种做法：① 用 `clickable(enabled = !isAnimating)`；② 用 `LaunchedEffect(uiMode)` 在切换结束后才把 `enabled` 改 true。骨架默认采用 ②，简洁可靠。
+> ℹ️ 【备忘，本版不适用】若将来引入过渡，需处理过渡期间连续点击：200ms 内禁用内容区 `clickable`（`LaunchedEffect(uiMode)` 结束后恢复）。本版硬切无此问题。
 
-> ⚠️ **v1.4 B1/B2/B3 补充（必读）**：
-> ① 上面骨架的 `mode != UiMode.PhonePortrait` / `mode == UiMode.PhonePortrait` 是**硬规则**——写反成 `== / != UiMode.TV` 会让横屏手机切到新 chrome，直接违反 §10.3 用例 3；
-> ② 采用 `AnimatedContent` 就必须同时做 §5.5(10) 的两项配套（单槽 handler 自清 + 页面副作用防重入）；不做就不加过渡；
-> ③ 首/尾栏的 `statusBarsPadding()` / `navigationBarsPadding()` 需在 D9（竖屏显示系统栏）前提下才有效（§5.5(9)）。
+> ⚠️ **v1.5 补充（必读）**：
+> ① `uiMode == UiMode.PhonePortrait` / `uiMode != UiMode.PhonePortrait` 是**硬规则**——写反成 `== / != UiMode.TV` 会让横屏手机切到新 chrome，直接违反 §10.3 用例 3；
+> ② **不加任何过渡**（D10 拍板硬切）——裸 `Column` 即可，**不要**引入 `AnimatedContent` / `Crossfade`，否则会带回 B3 的三个副作用；
+> ③ 首/尾栏的 `statusBarsPadding()` / `navigationBarsPadding()` 在 D9（竖屏显示系统栏）下生效；`TV` / `PhoneLandscape` 仍不加这两处 padding。
 
 > ⚠️ K 歌页不是 AppRoot 覆盖层——它是 `NowPlayingScreen.kt:171-206` 内部的分支（直接 `return`）。
 > 因此隐藏底部栏必须把 `showKaraoke` 写进条件（`AppRoot.kt:140` 已收集该状态）。
@@ -1384,7 +1406,7 @@ currentScreen == Screen.Settings && settingsSection != null -> closeSettingsSect
 | 6 | `PhoneTopBar`（Logo + 搜索 + **L2 方向切换图标**，单击循环竖/横 + 写 pref，**无长按**，见 §5.3 D1）+ `Modifier.statusBarsPadding()`（D4）+ 抽出 `TvTopNavBar` | `ui/components/AppRoot.kt` → 新增 `PhoneTopBar.kt` | §8.6 |
 | 7 | **`PhoneNavBar`**（`compose.foundation` + `tv-material3` 自建，**禁用 material3**；**Icon 24dp + height 56dp，子项 `fillMaxHeight()`、不加 `padding(vertical)`**；触摸热区 Compose 56dp ≈ 物理 45.9dp，D3 + §2.7） | 新增 `ui/components/PhoneNavBar.kt` | §8.4 |
 | 8 | **`MiniPlayer`**（⚠️ **进度必须在内部订阅**，见 K1；**外层 `navigationBarsPadding()`** 处理三键导航，D4） | 新增 `ui/components/MiniPlayer.kt` | §8.5 |
-| 9 | `AppRoot` 结构调整：**`if (uiMode == UiMode.PhonePortrait)` 正向分支**——`Column { 新顶部栏; Box(weight1f){内容}; MiniPlayer; PhoneNavBar }`，`else` 保持现状；过渡按 D7/D10（必须配套 P0-21/22，否则硬切） | `ui/components/AppRoot.kt:186-374` | §8.6 |
+| 9 | `AppRoot` 结构调整：**`if (uiMode == UiMode.PhonePortrait)` 正向分支**——`Column { 新顶部栏; Box(weight1f){内容}; MiniPlayer; PhoneNavBar }`，`else` 保持现状；**不加任何过渡（D10 硬切）** | `ui/components/AppRoot.kt:186-374` | §8.6 |
 | 10 | `selectedSection` 提升到 `NavigationViewModel`（见 K2） | `ui/viewmodel/NavigationViewModel.kt` | §8.7 |
 | 11 | BACK 新增「设置二级页」分支 | `ui/components/AppRoot.kt:164-182` | §8.7 |
 | 12 | 设置页两级化（`SettingsSection` 放开为 `internal`，并规避 viewmodel→screens 反向依赖） | `screens/SettingsScreen.kt:101-111,257` | §8.7 |
@@ -1396,14 +1418,14 @@ currentScreen == Screen.Settings && settingsSection != null -> closeSettingsSect
 | 18 | i18n：新增约 20 条字符串（**zh + en 同步**） | `res/values/strings.xml`、`res/values-en/strings.xml` | §七 |
 | 19 | **状态栏/导航栏/刘海 inset 处理**（PhoneTopBar/MiniPlayer/PhoneNavBar 三处 `statusBarsPadding` / `navigationBarsPadding`，D4 升 P0；⚠️ 需 D9 前提，见 §5.5(9)） | `ui/components/PhoneTopBar.kt`、`PhoneNavBar.kt`、`MiniPlayer.kt` | §5.5(6) |
 | 20 | **D9：竖屏显示系统栏**（`PhonePortrait` 进入时 `show(systemBars())`，退出恢复现状；`PhoneTopBar` 追加 `displayCutoutPadding()`） | `ui/MainActivity.kt` | §5.5(9) |
-| 21 | **单槽 handler 自清守卫**（`onDispose` 改 `if (value === handler) value = null`），5 处页面 | `HomeScreen` / `QueueScreen` / `AlbumDetailScreen` / `ArtistDetailScreen` / `PlaylistManagementScreen` | §5.5(10) |
-| 22 | **页面级副作用防重入**（`HomeBranch` / `MineBranch` / `LibraryScreen` / `HomeScreen` 的 `LaunchedEffect(Unit)` 加守卫） | 各 branch / screen | §5.5(10) |
+| ~~21~~ | ❌ **已取消**（v1.5 D10 拍板硬切 → 无过渡 → 无双子树，B3 整体消除） | — | §5.5(10) 备忘 |
+| ~~22~~ | ❌ **已取消**（同上：无第二棵子树，页面副作用不会重复触发） | — | §5.5(10) 备忘 |
 | 23 | **顶部行溢出修复（当前根本滑不到）**：`SearchTab.SearchSourceBar` 来源 Chip 行、`RadioTab` 顶部 preset tag 行 | `screens/library/SearchTab.kt:194-240`、`RadioTab.kt:74-110` | §2.4 |
 | 24 | **详情页头部操作行**拆两行 / 横向滚动（返回+标题+播放全部+加入队列+歌单数） | `screens/AlbumDetailScreen.kt:96-155`、`ArtistDetailScreen.kt:95-154` | §2.4 |
 | 25 | **服务器连接页竖屏化**（760dp → `fillMaxWidth() + widthIn(max=420.dp)`） | `screens/ServerConnectScreen.kt:150` | §2.4 / §4.7 |
 | 26 | **按 §2.7 复核全部竖屏 dp 口径**（含 D3 触摸目标：物理 44dp = Compose ≥ 53.7dp） | 全量竖屏组件 | §2.7 |
 
-**P0 验收（v1.4 修订，§10.3 对齐）**：手机竖屏/横屏均可正常浏览全部页面，无崩溃、**无固定组件被推屏外（关键内容可通过滚动可见即合格，§2.6）**；设置项切换方向即时生效；**L2 单击行为符合 §5.3**（无长按）；旋转 10 次播放不中断；**播放中滚动列表不卡顿（验证 K1 未被破坏）**；**TV 端 UI 零变化 + 手机横屏与改前一致（B1 硬规则）**；**横屏↔竖屏切换无肉眼可见错位**（D7 过渡生效；若按 D10 走硬切则此项改为"可接受硬切"）；**旋转后 BACK 的 Level 1.5 仍生效（B3 / §5.5(10)）**；**旋转 10 次不产生重复数据请求（看日志计数，§5.5(10)）**；**刘海屏竖屏 Logo 不被遮挡、系统栏唤出时无跳动（B2 / D9）**；**来源 Chip / preset tag / 详情页操作按钮全部可达（P0-23/24）**。
+**P0 验收（v1.5 修订，§10.3 对齐）**：手机竖屏/横屏均可正常浏览全部页面，无崩溃、**无固定组件被推屏外（关键内容可通过滚动可见即合格，§2.6）**；设置项切换方向即时生效；**L2 单击行为符合 §5.3**（无长按）；旋转 10 次播放不中断；**播放中滚动列表不卡顿（验证 K1 未被破坏）**；**TV 端 UI 零变化 + 手机横屏与改前一致（B1 硬规则）**；**横屏↔竖屏切换为硬切：无白帧 / 无异常帧**（D10，不再要求缓动）；**旋转后 BACK 的 Level 1.5 仍生效（护栏，用例 19）**；**旋转 10 次不产生重复数据请求（护栏，用例 20）**；**竖屏显示状态栏/导航栏、刘海不被遮挡、系统栏唤出无跳动（D9）**；**来源 Chip / preset tag / 详情页操作按钮全部可达（P0-23/24）**。
 
 ### P1 — 二级页面（约 2 天）
 
@@ -1460,7 +1482,7 @@ fun adaptiveColumnsOf(widthDp: Int, tv: Int, phonePortrait: Int, phoneLandscape:
 | `deriveUiMode(false, LANDSCAPE) != UiMode.TV`（B1 回归） | 锁定 §3.1 硬规则：横屏手机不得落入 TV 分支 |
 | `PHONE_UI_SCALE` 口径（§2.7） | 常量断言：`56 × 0.82 ≈ 45.9 ≥ 44`；且 `44 / 0.82 ≈ 53.7`（D3 与 §2.7 的回归护栏） |
 
-> v1.4 补充：D9（系统栏可见性）与 D10（过渡双子树）**没有纯函数可测**，验收靠 `§10.3` 用例 19–22 与日志断言。
+> v1.5 补充：D9（系统栏显隐）没有纯函数可测，验收靠 `§10.3` 用例 13/14/21；D10 已拍板硬切，原用例 19/20 降为**低成本护栏**（预期直接通过）。
 
 ### 10.2 必跑门禁（AGENTS.md 规定的本机三件套）
 
@@ -1500,7 +1522,7 @@ JAVA_HOME="C:/Program Files/Android/Android Studio/jbr" \
 | 4 | 手机竖屏 | 播放中连续旋转 10 次 | 播放不中断、进度连续、通知栏可控 | 10 次旋转期间播放无中断、进度连续 |
 | 5 | 手机 | 设置切「自动/竖屏/横屏」 | 即时生效；锁竖屏后进 MTV 仍横屏、退出后回竖屏 | L1 pref 切换 → 方向立即改变 |
 | 6 | 手机 | 旋转后检查权限弹窗 | **不重弹**（验证 `configChanges` 生效） | 旋转 5 次无任何权限弹窗重现 |
-| 7 | 手机 | **横屏 → 竖屏切换瞬间** | 无肉眼可见 1 帧错位（D7 AnimatedContent） | 用录屏 30fps 抓取切换帧，200ms Crossfade 平滑过渡 |
+| 7 | 手机 | **横屏 → 竖屏切换瞬间（硬切）** | 无白帧 / 无残余布局 / 无崩溃（D10） | 录屏检查切换帧：画面直接切到目标布局即可（**允许硬切观感**） |
 | 8 | 手机 | **「自动」+ 系统旋转锁** | 尊重系统锁、不强行旋转 | 系统锁竖屏时即使摇横屏，App 不转 |
 | 9 | 手机 | **从 MTV / K 歌退出** | 方向恢复到 L1 pref（不是默认横屏） | MTV 强制横屏退出后，L1 是竖屏则立即回竖屏 |
 | 10 | 手机 | **冷启动首帧方向** | 首屏直接进入正确方向，无 1 帧 `UNSPECIFIED` 闪现 | 录屏首 500ms 无方向闪烁 |
@@ -1512,8 +1534,8 @@ JAVA_HOME="C:/Program Files/Android/Android Studio/jbr" \
 | 16 | 手机 | **7 Chip 改造后验证** | 高亮模式、字号循环、来源循环、睡眠 4 项均可在 ≤ 2 次点击内切换（D2） | 不需要进"更多"菜单 |
 | 17 | 手机 | **底部导航触摸** | 5 项导航切换准确、不误触 | 触摸 100 次，误触率 = 0（D3 触摸目标 ≥ 44dp） |
 | 18 | 手机 | **对话框 13 处** | 全部 `fillMaxWidth(0.92f) + widthIn(max=420.dp) + heightIn(max=0.8f) + verticalScroll` | 竖屏无截断、可滚条变流 |
-| 19 | 手机 | **旋转后 BACK 的 Level 1.5**（B3/D10） | 首页/曲库/队列/详情页先滚到底 → 旋转 → 按 BACK | 先回列表顶部，**不得**直接触发页面导航/退出 |
-| 20 | 手机 | **旋转不重复拉数据**（B3/D10） | 开日志统计 `loadHomeDashboard` / `fetchWeather` / `loadSongsFirstPage` 调用次数 | 旋转 10 次，每个接口调用次数 **= 1（不是 10）** |
+| 19 | 手机 | **旋转后 BACK 的 Level 1.5**（护栏，B3 已由 D10 消除） | 首页/曲库/队列/详情页先滚到底 → 旋转 → 按 BACK | 先回列表顶部，**不得**直接触发页面导航/退出 |
+| 20 | 手机 | **旋转不重复拉数据**（护栏，B3 已由 D10 消除） | 开日志统计 `loadHomeDashboard` / `fetchWeather` / `loadSongsFirstPage` 调用次数 | 旋转 10 次，每个接口调用次数 **= 1（不是 10）** |
 | 21 | 手机 | **系统栏与手势（B2/D9）** | 竖屏手动上滑唤出导航栏 | 内容不跳动；PhoneNavBar 仍可点（不被系统栏盖住）；MiniPlayer 上滑不误触 |
 | 22 | 手机竖屏 | **顶部行可滑性**（P0-23/24） | 曲库 → RADIO 的全部 preset tag；曲库 → SEARCH 的全部来源 Chip；专辑/艺术家详情的「播放全部/加入队列」 | 每个按钮都能看见并点击，**无裁切** |
 | 23 | 手机横屏 | **逐页对照改前（B1 硬规则）** | 首页/曲库/我的/播放/队列/设置/详情 | 与改前截图逐页一致（**无新顶部栏、无底部导航、无 MiniPlayer**） |
@@ -1538,9 +1560,10 @@ JAVA_HOME="C:/Program Files/Android/Android Studio/jbr" \
 | 网格列数竖屏落点不合预期 | 卡片过小 | 已核验：`adaptiveColumns` 落 3 列 ≈120dp/卡，可接受；需补的是 `RadioTab.kt:162`（Fixed(2)）与 `Shimmer` 骨架（v1.4 修正，不再包括 `MineScreen`/`WeatherRadio`） |
 | 改缩放系数导致歌词异常 | 歌词字号错乱 | **本版决策：竖屏沿用 0.82，不动**（§2.5），风险出关键路径 |
 | **L2 单击/长按语义混淆**（v1.3 D1，PM 2026-09-19 移除长按） | 用户困惑："我明明切过了怎么又回去了" | **去掉长按**：单击=竖/横循环+写 pref；图标状态显示 L1 真值；UI 文案明示"切换方向"（不再提"长按"） |
-| **`AnimatedContent` 导致列表状态重置**（v1.3 D7，v1.4 修正） | 横屏→竖屏瞬间列表滚动位置回到顶部 | ❌ 原文"用 `key = uiMode` 保留状态"是错的（key 变即状态丢失）。正确做法：把需保留的状态提升到 ViewModel（`LibraryScreen` 已有 `albumScrollIndex`；补 `Mine.expandedPlaylistId` / `Queue` 滚动位），其余接受重置（§5.5(11)） |
-| **`AnimatedContent` 过渡期间新旧子树并存**（v1.4 B3） | ① 旧子树 `onDispose` 置空单槽 `listBackHandler` → 旋转后 BACK Level 1.5 失效；② 两棵子树各跑一次 `LaunchedEffect(Unit)` → 重复请求首页/曲库/天气 | D10 / §5.5(10)：单槽 handler 自清守卫 + 副作用防重入；不想做就不加过渡（硬切） |
-| **`AnimatedContent` 切换期间用户连续点击**（v1.3 D7） | 双重点击导致状态错乱 | 切换动画期间禁用交互（`userScrollEnabled = false`、`clickable(enabled = false)`），200ms 后恢复 |
+| ~~`AnimatedContent` 导致列表状态重置~~（**v1.5 关闭**） | — | 已拍板硬切（D10），不存在新旧子树，本条作废；§5.5(11) 已改为"硬切下状态通常保留 + 加固建议" |
+| ~~`AnimatedContent` 过渡期间新旧子树并存~~（v1.4 B3，**v1.5 关闭**） | — | 已拍板硬切（D10），B3 整体消除；§5.5(10) 保留为"将来引入过渡"的备忘 |
+| ~~`AnimatedContent` 切换期间用户连续点击~~（**v1.5 关闭**） | — | 硬切无动画窗口；若将来引入过渡再看 §8.6 备忘 |
+| **硬切观感**（v1.5 D10 新增） | 横竖屏切换瞬间可能有硬切观感（原 D7 想解决的问题） | **PM 已接受**；若后续收到体验反馈，再按 §5.5(10) 的配套方案评估缓动 |
 | **首帧方向闪烁**（v1.3 D5） | 冷启动首屏可见 1 帧 manifest 默认值 | `onCreate` 同步调 `requestedOrientation = resolveOrientation(...)`，**不走** `Flow.collectAsState(initial)` 路径 |
 | **刘海屏顶部栏被遮挡**（v1.3 D4） | Logo/应用名视觉错位 | `PhoneTopBar` 用 `statusBarsPadding() + displayCutoutPadding()`；**前提是 D9（竖屏显示系统栏）**，否则 padding 恒为 0（§5.5(9)）；P0-19/20 必做 |
 | **触摸热区过小误触**（v1.3 D3） | 5 项底部导航误触率高 | Icon 24dp + height 56dp（**不加** `padding(vertical)`）→ 物理 ≈ 45.9dp ≥ 44dp；其余控件按 §2.7 换算，**不能用 Compose 44dp 当热区下限** |
