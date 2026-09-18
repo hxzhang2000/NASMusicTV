@@ -116,16 +116,31 @@ internal fun PlayerSettingsSection(
             fontSize = FontSize.button(),
             modifier = Modifier.padding(start = 4.dp)
         )
-        androidx.compose.foundation.layout.Row(
-            modifier = Modifier.padding(start = 16.dp, top = 4.dp),
-            horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp)
+        // v2.35.0 修复：改为**纵向列表**。
+        //
+        // 原实现把 5 个档位放在 `Row` 里，但 `SettingActionButton` 内部是
+        // `Modifier.fillMaxWidth()`（设置页纵向列表的既定样式）—— 在 Row 中第一个按钮
+        // 会撑满整行宽度，后续按钮被挤成 0 宽，用户只看到「自动」一个选项
+        // （实测反馈："网络源音质选项中，只有一个自动"）。该缺陷在 v2.35.0 之前就存在。
+        //
+        // 纵向列表同时解决了另外两个问题：
+        // ① 该组件右侧会渲染固定的「确定」文案，横向排列时 5 个「确定」很易误读；
+        // ② 手机竖屏宽度有限，5 个按钮横排必然溢出（与码率面板同类问题）。
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 16.dp, top = 4.dp)
         ) {
-            // v2.35.0：遍历单一真相源（含新增 192 档），避免"常量加了 UI 忘了加"的漂移
+            // 遍历单一真相源（含 192 档），避免"常量加了 UI 忘了加"的漂移
             QualityTiers.all.forEach { tier ->
                 val label = stringResource(QualityTiers.labelResOf(tier))
                 SettingActionButton(
                     label = if (state.qualityTier == tier) "▶ $label" else label,
-                    description = "",
+                    description = if (tier == QualityTiers.AUTO) {
+                        stringResource(R.string.quality_tier_auto_desc)
+                    } else {
+                        QualityTiers.descriptionOf(tier)
+                    },
                     onClick = { actions.onChangeQualityTier(tier) }
                 )
             }

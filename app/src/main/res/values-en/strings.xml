@@ -987,6 +987,7 @@
     <!-- F2-6 Quality tier -->
     <string name="settings_quality_tier">Network Source Quality (Meting only)</string>
     <string name="quality_tier_auto">Auto</string>
+    <string name="quality_tier_auto_desc">Decided by the endpoint, no bitrate specified</string>
     <string name="quality_tier_lossless">Lossless</string>
     <string name="quality_tier_high">320k</string>
     <string name="quality_tier_good">192k</string>

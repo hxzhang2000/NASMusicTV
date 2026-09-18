@@ -159,12 +159,20 @@ internal fun PlayModeSelector(current: PlayMode, onSelect: (PlayMode) -> Unit) {
 internal fun SettingActionButton(
     label: String,
     description: String,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    /**
+     * v2.35.0 修复：允许外部覆盖布局宽度。
+     *
+     * 默认仍为 `fillMaxWidth()`（占满整行，设置页纵向列表的既定样式）。
+     * 但**放在 `Row` 里时必须传入固定宽度** —— 否则第一个按钮会撑满整行，
+     * 后续按钮被挤成 0 宽（表现为"网络源音质只有『自动』一个选项"）。
+     * 该缺陷在 v2.35.0 之前就存在（音质档位行原本就是 Row + 4 个此组件）。
+     */
+    modifier: Modifier = Modifier.fillMaxWidth()
 ) {
     FocusableSurface(
         onClick = onClick,
-        modifier = Modifier
-            .fillMaxWidth()
+        modifier = modifier
             .padding(vertical = 4.dp),
         shape = RoundedCornerShape(12.dp),
         focusedScale = 1.03f,

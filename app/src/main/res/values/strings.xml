@@ -1031,6 +1031,7 @@
     <!-- F2-6 音质分级 -->
     <string name="settings_quality_tier">网络源音质（仅 Meting 源）</string>
     <string name="quality_tier_auto">自动</string>
+    <string name="quality_tier_auto_desc">由端点决定，不指定码率</string>
     <string name="quality_tier_lossless">无损</string>
     <string name="quality_tier_high">320k</string>
     <string name="quality_tier_good">192k</string>
