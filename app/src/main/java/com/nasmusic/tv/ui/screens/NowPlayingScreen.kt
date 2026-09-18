@@ -929,35 +929,58 @@ Text(
                 Spacer(modifier = Modifier.width(8.dp))
                 SourceBadge(song = currentSong)
             }
-            // v2.35.0 多码率：音质入口，与「信息 + 来源」同一行（方案 §5.1）。
-            // 仅网络歌曲显示；点击弹出音质选择面板。
-            // 放在这里而不是底部控制按钮行：底部行在 380dp 宽度下已容纳 7 个控件，
+            // v2.35.0 多码率：音质标识，与「信息 + 来源」同一行（方案 §5.1）。
+            //
+            // 两种形态：
+            // - **网络歌曲**：可点击 → 弹出音质选择面板（显示当前档位标签，如「无损」/「320k」）
+            // - **本地 / NAS / 下载歌曲**：只读展示**真实码率**（如「♪ 320k」/「♪ FLAC」），
+            //   不可点击 —— 这类歌曲的码率由文件本身决定，无法切换，但用户理应看得到。
+            //   数据来自 `Song.bitrate`（NAS 适配器解析时填充；飞牛为 0=未知，不显示）
+            //   与 `Song.resolvedQuality`（已下载歌曲的实际落盘档位）。
+            //
+            // 放在这一行而不是底部控制按钮行：底部行在 380dp 宽度下已容纳 7 个控件，
             // 第 8 个会被裁掉（手机端实测看不到入口）。
-            if (currentSong?.isNetworkSong == true) {
+            val qualityBadgeText = com.nasmusic.tv.ui.components.qualityBadgeLabel(currentSong, qualityLabel)
+            if (qualityBadgeText != null) {
                 Spacer(modifier = Modifier.width(8.dp))
-                FocusableSurface(
-                    onClick = onOpenQuality,
-                    shape = RoundedCornerShape(6.dp),
-                    focusedScale = 1.08f,
-                    animationDurationMs = 150,
-                    containerColor = NasMusicColors.Surface.copy(alpha = 0.3f),
-                    focusedContainerColor = NasMusicColors.Primary.copy(alpha = 0.3f),
-                    contentColor = NasMusicColors.Primary,
-                    focusedContentColor = NasMusicColors.Primary
-                ) {
+                if (currentSong?.isNetworkSong == true) {
+                    // 可点击：网络歌曲支持切换档位
+                    FocusableSurface(
+                        onClick = onOpenQuality,
+                        shape = RoundedCornerShape(6.dp),
+                        focusedScale = 1.08f,
+                        animationDurationMs = 150,
+                        containerColor = NasMusicColors.Surface.copy(alpha = 0.3f),
+                        focusedContainerColor = NasMusicColors.Primary.copy(alpha = 0.3f),
+                        contentColor = NasMusicColors.Primary,
+                        focusedContentColor = NasMusicColors.Primary
+                    ) {
+                        Text(
+                            text = qualityBadgeText,
+                            color = NasMusicColors.Primary,
+                            fontSize = FontSize.small(),
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                        )
+                    }
+                } else {
+                    // 只读：本地/NAS 歌曲码率固定，展示但不可点击
                     Text(
-                        text = "♪ " + qualityLabel.ifBlank {
-                            stringResource(R.string.quality_tier_auto)
-                        },
-                        color = NasMusicColors.Primary,
+                        text = qualityBadgeText,
+                        color = NasMusicColors.TextSecondary,
                         fontSize = FontSize.small(),
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                        modifier = Modifier
+                            .background(
+                                NasMusicColors.Surface.copy(alpha = 0.3f),
+                                RoundedCornerShape(6.dp)
+                            )
+                            .padding(horizontal = 10.dp, vertical = 4.dp)
                     )
                 }
             }
         }
     }
 }
+
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
