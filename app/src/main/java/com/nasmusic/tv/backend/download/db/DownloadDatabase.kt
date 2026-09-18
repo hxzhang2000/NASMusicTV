@@ -10,6 +10,11 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 /**
  * 下载索引数据库（downloads.db，version = 2）
  *
+ * **schema 导出已开启**（v2.35.0）：本库现在有真实迁移 `MIGRATION_1_2`，
+ * 导出的 `app/schemas/.../DownloadDatabase/{1,2}.json` 是 `MigrationTestHelper`
+ * 验证"迁移后表结构与实体定义一致"的唯一依据。改动表结构时必须同步 bump version，
+ * 并让 KSP 重新导出新版本 JSON（**不要手改 JSON**）。
+ *
  * **独立建库，绝不并入 LocalMusicDatabase**：
  * - [com.nasmusic.tv.backend.local.db.LocalMusicDatabase] 当前为 v2 且开启 `fallbackToDestructiveMigration(true)`，
  *   任何 schema 变更都会破坏性重建 —— 把下载索引并入会导致 schema 变更时下载记录全丢、
@@ -28,7 +33,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         ExportRecordEntity::class
     ],
     version = 2,
-    exportSchema = false
+    exportSchema = true
 )
 abstract class DownloadDatabase : RoomDatabase() {
 

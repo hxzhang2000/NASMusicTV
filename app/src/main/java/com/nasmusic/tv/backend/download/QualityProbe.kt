@@ -3,6 +3,7 @@ package com.nasmusic.tv.backend.download
 import com.nasmusic.tv.backend.network.QualityTiers
 import com.nasmusic.tv.data.model.Song
 import com.nasmusic.tv.util.AppLog
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -41,20 +42,24 @@ object QualityProbe {
      *
      * @param resolver 直链解析器（内部复用 `resolveDetailed`，保证与下载路径同一实现）
      * @param tiers 待探测档位，默认全部真实码率档（降序）
+     * @param dispatcher 调度器；默认 IO。**可注入**是为了让单测用虚拟时间断言并发性
+     *        （硬编码 IO 会让 `runTest` 的虚拟时间失效）
      * @return 可用档位列表，按码率从高到低排序；空列表表示无源可降
      */
     suspend fun probeAvailableQualities(
         song: Song,
         resolver: StreamUrlResolver,
-        tiers: List<Int> = QualityTiers.availableTiers
-    ): List<Int> = withContext(Dispatchers.IO) {
+        tiers: List<Int> = QualityTiers.availableTiers,
+        dispatcher: CoroutineDispatcher = Dispatchers.IO
+    ): List<Int> = withContext(dispatcher) {
         // ⚠️ 必须用 async/awaitAll 并发：直接 map 里调 suspend 是**串行**的，
         //    总耗时会变成 4 × 单档（最坏 4.8s），与"总耗时 ≈1.2s"的设计目标不符。
+        //    单测 QualityProbeTest 用虚拟时间锁定该性质（串行实现会失败）。
         tiers.map { tier ->
             async {
                 val ok = runCatching {
                     withTimeout(PROBE_TIMEOUT_MS) {
-                        resolver.resolveDetailed(song, tier).isSuccess
+                        resolver.resolveDetailed(song, tier, dispatcher).isSuccess
                     }
                 }.getOrElse { e ->
                     AppLog.d(TAG, "probe tier=$tier timeout/failed: ${e.message}")

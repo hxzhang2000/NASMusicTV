@@ -1,0 +1,272 @@
+{
+  "formatVersion": 1,
+  "database": {
+    "version": 2,
+    "identityHash": "9cab3ac3652eb47e272463c60c2a1b95",
+    "entities": [
+      {
+        "tableName": "download_songs",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`songKey` TEXT NOT NULL, `dedupeKey` TEXT NOT NULL, `songId` TEXT NOT NULL, `title` TEXT NOT NULL, `artist` TEXT NOT NULL, `album` TEXT NOT NULL, `sourceType` TEXT NOT NULL, `networkSource` TEXT, `audioPath` TEXT, `tmpPath` TEXT, `coverPath` TEXT, `lyricPath` TEXT, `embedded` INTEGER NOT NULL, `fileSize` INTEGER NOT NULL, `durationMs` INTEGER NOT NULL, `bitrate` INTEGER NOT NULL, `containerExt` TEXT NOT NULL, `quality` INTEGER NOT NULL, `status` TEXT NOT NULL, `progress` INTEGER NOT NULL, `errorMsg` TEXT, `retryCount` INTEGER NOT NULL, `autoDownloaded` INTEGER NOT NULL, `createdAt` INTEGER NOT NULL, `completedAt` INTEGER, PRIMARY KEY(`songKey`))",
+        "fields": [
+          {
+            "fieldPath": "songKey",
+            "columnName": "songKey",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "dedupeKey",
+            "columnName": "dedupeKey",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "songId",
+            "columnName": "songId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "title",
+            "columnName": "title",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "artist",
+            "columnName": "artist",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "album",
+            "columnName": "album",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sourceType",
+            "columnName": "sourceType",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "networkSource",
+            "columnName": "networkSource",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "audioPath",
+            "columnName": "audioPath",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "tmpPath",
+            "columnName": "tmpPath",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "coverPath",
+            "columnName": "coverPath",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "lyricPath",
+            "columnName": "lyricPath",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "embedded",
+            "columnName": "embedded",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "fileSize",
+            "columnName": "fileSize",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "durationMs",
+            "columnName": "durationMs",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "bitrate",
+            "columnName": "bitrate",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "containerExt",
+            "columnName": "containerExt",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "quality",
+            "columnName": "quality",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "status",
+            "columnName": "status",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "progress",
+            "columnName": "progress",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "errorMsg",
+            "columnName": "errorMsg",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "retryCount",
+            "columnName": "retryCount",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "autoDownloaded",
+            "columnName": "autoDownloaded",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "createdAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "completedAt",
+            "columnName": "completedAt",
+            "affinity": "INTEGER"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "songKey"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_download_songs_songKey",
+            "unique": true,
+            "columnNames": [
+              "songKey"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_download_songs_songKey` ON `${TABLE_NAME}` (`songKey`)"
+          },
+          {
+            "name": "index_download_songs_dedupeKey",
+            "unique": false,
+            "columnNames": [
+              "dedupeKey"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_download_songs_dedupeKey` ON `${TABLE_NAME}` (`dedupeKey`)"
+          },
+          {
+            "name": "index_download_songs_status",
+            "unique": false,
+            "columnNames": [
+              "status"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_download_songs_status` ON `${TABLE_NAME}` (`status`)"
+          },
+          {
+            "name": "index_download_songs_songId",
+            "unique": false,
+            "columnNames": [
+              "songId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_download_songs_songId` ON `${TABLE_NAME}` (`songId`)"
+          }
+        ]
+      },
+      {
+        "tableName": "export_records",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `volume_id` TEXT NOT NULL, `rel_path` TEXT NOT NULL, `src_path` TEXT NOT NULL, `size` INTEGER NOT NULL, `src_size` INTEGER NOT NULL, `exported_at` INTEGER NOT NULL)",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "volumeId",
+            "columnName": "volume_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "relPath",
+            "columnName": "rel_path",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "srcPath",
+            "columnName": "src_path",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "size",
+            "columnName": "size",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "srcSize",
+            "columnName": "src_size",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "exportedAt",
+            "columnName": "exported_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_export_records_volume_id_rel_path",
+            "unique": true,
+            "columnNames": [
+              "volume_id",
+              "rel_path"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_export_records_volume_id_rel_path` ON `${TABLE_NAME}` (`volume_id`, `rel_path`)"
+          }
+        ]
+      }
+    ],
+    "setupQueries": [
+      "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '9cab3ac3652eb47e272463c60c2a1b95')"
+    ]
+  }
+}

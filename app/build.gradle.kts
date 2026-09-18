@@ -262,6 +262,8 @@ dependencies {
     testImplementation("androidx.test:core:1.5.0")
     testImplementation("org.robolectric:robolectric:4.11.1")
     testImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")
+    // v2.35.0：Room 迁移测试（MigrationTestHelper）
+    testImplementation("androidx.room:room-testing:2.7.1")
     androidTestImplementation("androidx.test.ext:junit:1.1.5")
     androidTestImplementation("androidx.test.espresso:espresso-core:3.5.1")
 }
@@ -278,8 +280,12 @@ dependencies {
  * 而是**留档**：将来若要改回 Migration、或需要核对某个版本的表结构/索引定义，有权威快照可比对。
  *
  * ⚠️ 每次 bump version 都会新增一个 JSON，**不要删除旧文件**——删掉就丢了版本历史。
- * ⚠️ `DownloadDatabase` 为 `exportSchema = false`（承载用户数据、禁止破坏性迁移），
- *    不在此目录产出 schema；若将来要给它写 Migration，应先改为 true 并把基线 schema 入库。
+ *
+ * v2.35.0（多码率）：`DownloadDatabase` 也改为 `exportSchema = true`。
+ * 原因是它现在有了**真实迁移**（`MIGRATION_1_2`），而 `MigrationTestHelper` 必须
+ * 读取基线 schema（`1.json`）才能构造 v1 库、验证迁移后的表结构与实体定义一致。
+ * 没有基线 schema 就只能靠手工建表 + 手工算 identityHash，测试会变得脆弱且不可信。
+ * 产物位于 `app/schemas/com.nasmusic.tv.backend.download.db.DownloadDatabase/{1,2}.json`。
  */
 ksp {
     arg("room.schemaLocation", "$projectDir/schemas")

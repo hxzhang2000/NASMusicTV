@@ -6,6 +6,7 @@ import com.nasmusic.tv.backend.network.ResolveResult
 import com.nasmusic.tv.backend.network.baidu.BaiduStreamFactory
 import com.nasmusic.tv.data.model.Song
 import com.nasmusic.tv.util.AppLog
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -60,11 +61,18 @@ class StreamUrlResolver(
      * 非网络歌曲、或未注入 detailed lambda 时，退化为无降级信息的解析。
      *
      * @param quality 请求档位；返回的 [ResolveResult.actualQuality] 为**实际命中**档位
+     * @param dispatcher 调度器；默认 IO。**可注入**是为了让单测用虚拟时间断言并发性
+     *        —— 硬编码 `Dispatchers.IO` 会让 `runTest` 的虚拟时间与真实延迟错位，
+     *        导致 `withTimeout` 在虚拟 0ms 就判超时（QualityProbeTest 踩过该坑）。
      */
-    suspend fun resolveDetailed(song: Song, quality: Int): ResolveResult = when {
+    suspend fun resolveDetailed(
+        song: Song,
+        quality: Int,
+        dispatcher: CoroutineDispatcher = Dispatchers.IO
+    ): ResolveResult = when {
         !song.isNetworkSong || song.networkSource == RADIO_SOURCE -> ResolveResult(resolve(song), quality)
         networkDetailed == null -> ResolveResult(resolve(song), quality)
-        else -> withContext(Dispatchers.IO) {
+        else -> withContext(dispatcher) {
             runCatching { networkDetailed.invoke(song, quality) }
                 .onFailure { AppLog.w(TAG, "resolveDetailed failed: ${it.message}") }
                 .getOrElse { ResolveResult.failure(quality) }

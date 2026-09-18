@@ -59,6 +59,21 @@
   白跑一次网络请求。单测 `QualityTiersTest` 捕获并修正
 - **降级链跳过 192 档**：无损降级链原为 `999 → 320 → 128`，与「补齐 192」的决策矛盾
 
+### Tests
+
+- 新增 `QualityTiersTest` / `ResolveResultTest` / `DownloadKeyTest` /
+  `DownloadQualityPathTest` / `DownloadStateLookupTest`（全部通过）
+- 新增 **`DownloadDatabaseMigrationTest`**：在真实 v1 库上验证 `MIGRATION_1_2` ——
+  存量行数不变、`songKey` 未被改写、`quality` 全为 0、业务字段原样保留、
+  `songId` 索引存在可用、存量行与带档位后缀的新行可共存、唯一约束仍生效、
+  AUTO 档能命中存量行（**"零重建迁移、不丢数据"的硬证据**）
+- 新增 **`QualityProbeTest`**：用虚拟时间断言探测**并发**执行
+  （总耗时 ≈ 单档而非 4 倍）、单档超时不阻塞其他档、整链超时封顶、
+  仅返回可用档且降序、探测不含 AUTO 档
+- 可测性调整：`QualityProbe.probeAvailableQualities` 与
+  `StreamUrlResolver.resolveDetailed` 新增可注入 `dispatcher` 参数（默认 IO），
+  使 `runTest` 虚拟时间可用；生产行为不变
+
 ### Database
 
 - `downloads.db` **version 1 → 2**，新增 `MIGRATION_1_2`：
@@ -66,6 +81,8 @@
   一条 `CREATE INDEX index_download_songs_songId`。**零重建迁移**，不重建表、不回填、不丢数据
 - 存量行 `quality` 取列默认值 0（AUTO 档），而 AUTO 档的 `songKey` 与旧格式**完全相等**，
   因此升级后已下载歌曲天然被命中，**不会重复下载**
+- `DownloadDatabase` 的 `exportSchema` 由 `false` 改为 `true`，导出
+  `app/schemas/.../DownloadDatabase/{1,2}.json` 作为迁移测试的权威基线（勿手改 JSON）
 
 ## [v2.34.4] - 2026-09-18
 
