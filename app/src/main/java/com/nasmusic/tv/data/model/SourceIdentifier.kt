@@ -23,7 +23,8 @@ enum class MusicSourceType(
     JAMENDO("Jamendo", "♪", Color(0xFFF472B6)),     // 粉色
     WEATHER_RADIO("天气电台", "🌤", Color(0xFF67E8F9)), // 天蓝色
     LOCAL("本地", "📱", Color(0xFFFB923C)),          // 橙色（本地音乐）
-    DOWNLOAD("已下载", "⬇", Color(0xFF22D3EE));      // 青色（应用专属目录下载的歌曲）
+    DOWNLOAD("已下载", "⬇", Color(0xFF22D3EE)),     // 青色（应用专属目录下载的歌曲）
+    IMPORTED("导入", "📥", Color(0xFF9CA3AF));       // 灰色（歌单导入的裸 stub，尚未补全）
 
     companion object {
         /** 默认参与搜索的来源（排除 RADIO / WEATHER_RADIO / DOWNLOAD，它们不是搜索源） */
@@ -49,6 +50,8 @@ val Song.sourceType: MusicSourceType
         storageType == "DOWNLOAD" -> MusicSourceType.DOWNLOAD
         // 本地音乐优先识别
         isLocalSong -> MusicSourceType.LOCAL
+        // 导入的裸 stub（id 以 imported_ 前缀标记）——尚未补全，不归属任何后端
+        id.startsWith("imported_") -> MusicSourceType.IMPORTED
         !isNetworkSong -> MusicSourceType.NAS
         networkSource == RadioStation.SOURCE_ID -> MusicSourceType.RADIO
         networkSource == "baidu" -> MusicSourceType.BAIDU_PAN

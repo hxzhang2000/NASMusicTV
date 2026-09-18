@@ -82,11 +82,11 @@ class PlaylistEnricher(
     /**
      * 补全并写回所有含该 stub 的歌单（无 playlistId 上下文的入口使用，
      * 如 [playQueue] 队列快照 / [playNetworkSong] 单曲 / [onPlaybackFailure]）。
-     * @return true 至少在一个歌单完成替换
+     * @return 补全后的 Song；未命中或非 stub 返回 null
      */
-    suspend fun enrichAndPersistEverywhere(stub: Song): Boolean {
-        if (!stub.id.startsWith(PlaylistParsers.IMPORTED_ID_PREFIX)) return false
-        val enriched = enrichSong(stub) ?: return false
+    suspend fun enrichAndPersistEverywhere(stub: Song): Song? {
+        if (!stub.id.startsWith(PlaylistParsers.IMPORTED_ID_PREFIX)) return null
+        val enriched = enrichSong(stub) ?: return null
         val playlists = prefs.getLocalPlaylists()
         var replaced = false
         for (pl in playlists) {
@@ -96,7 +96,7 @@ class PlaylistEnricher(
             }
         }
         if (replaced) AppLog.d(TAG, "enrichAndPersistEverywhere: replaced '${stub.title}'")
-        return replaced
+        return enriched
     }
 
     /**
@@ -123,7 +123,7 @@ class PlaylistEnricher(
             UrlReachabilityChecker.Result.DNS_FAILED,
             UrlReachabilityChecker.Result.REDIRECT_LOOP -> {
                 // 真不可达 → 补全链（命中替换；未命中保留 stub + UI 双标签）
-                enrichAndPersistEverywhere(stub)
+                enrichAndPersistEverywhere(stub) != null
             }
             UrlReachabilityChecker.Result.TIMEOUT,
             UrlReachabilityChecker.Result.SERVER_ERROR,

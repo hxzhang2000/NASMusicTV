@@ -1050,6 +1050,22 @@ class PlayerManager(private val applicationContext: Context) {
         }
     }
 
+    /**
+     * 替换队列中指定 id 的歌曲（导入 stub 补全后刷新队列，使 UI source badge 立即更新）。
+     * 不触发 ExoPlayer 重新播放——只更新内存中的 StateFlow 队列快照。
+     * 若替换的是当前播放歌曲，也同步更新 currentSong。
+     */
+    fun replaceSongInQueue(oldSongId: String, newSong: Song) {
+        _playerState.update { st ->
+            val idx = st.queue.indexOfFirst { it.id == oldSongId }
+            if (idx < 0) return@update st
+            val newQueue = st.queue.toMutableList()
+            newQueue[idx] = newSong
+            val newCurrent = if (st.currentIndex == idx) newSong else st.currentSong
+            st.copy(queue = newQueue, currentSong = newCurrent)
+        }
+    }
+
     /** 跳转到队列指定索引并播放（手机遥控用） */
     fun playAt(index: Int) {
         val p = player ?: return

@@ -11,6 +11,7 @@ import com.nasmusic.tv.data.model.Song
 import com.nasmusic.tv.player.PlayerManager
 import com.nasmusic.tv.player.PlayerState
 import com.nasmusic.tv.util.AppLog
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -32,6 +33,7 @@ class PlayerViewModel(
     private val nasMusicApp = app as NasMusicApp
     private val backendRegistry = nasMusicApp.backendRegistry
     private val prefs = nasMusicApp.appPreferences
+    private val playlistEnricher = nasMusicApp.playlistEnricher
 
     /** 播放开始（供 PlayHistoryViewModel 记录最近播放），由 MainViewModel 注入 */
     var onRecordPlay: ((Song) -> Unit)? = null
@@ -112,8 +114,13 @@ class PlayerViewModel(
         AppLog.d("PlayerViewModel", "playQueue: ${songs.size} songs, start=$startIndex, first=${firstSong.title}, coverUrl=${firstSong.coverUrl ?: "null"}")
 
         // 网络/本地歌曲的 streamUrl 为空时需要先回填（历史持久化数据曾统一置空 streamUrl），
-        // 否则 ExoPlayer 收到空 URI 不会开始播放
-        val needsResolve = songs.any { (it.isNetworkSong || it.isLocalSong) && it.streamUrl.isNullOrBlank() }
+        // 否则 ExoPlayer 收到空 URI 不会开始播放。
+        // 导入 stub（id 以 imported_ 开头）也需要同步补全：PlaylistEnricher 先搜 NAS（已连时）
+        // 再降级网络，命中后返回带真实 streamUrl + 来源标识的 Song。
+        val needsResolve = songs.any {
+            ((it.isNetworkSong || it.isLocalSong) && it.streamUrl.isNullOrBlank()) ||
+            (it.id.startsWith("imported_") && it.streamUrl.isNullOrBlank())
+        }
         if (needsResolve) {
             // 只解析第一首歌曲的 URL，立即播放；后续歌曲在播放器自动过渡时懒加载。
             // 原实现逐首解析所有歌曲（songs.map），30 首可能耗时 30-90s 才开始播放。
@@ -123,6 +130,27 @@ class PlayerViewModel(
 
             viewModelScope.launch {
                 val resolvedFirst = when {
+                    // 导入 stub：同步补全 → NAS 命中带 streamUrl；网络命中 isNetworkSong=true
+                    // 但 streamUrl 置空（需走 networkMusicManager.resolvePlayUrl 二次解析）
+                    firstSong.id.startsWith("imported_") && firstSong.streamUrl.isNullOrBlank() -> {
+                        try {
+                            val enriched = playlistEnricher.enrichSong(firstSong)
+                            if (enriched == null) {
+                                AppLog.w("PlayerViewModel", "playQueue: enrichment failed for stub '${firstSong.title}'")
+                                firstSong
+                            } else if (enriched.isNetworkSong && enriched.streamUrl.isNullOrBlank()) {
+                                // 网络命中：streamUrl 置空，走 resolvePlayUrl 二次解析
+                                val url = nasMusicApp.networkMusicManager.resolvePlayUrl(enriched)
+                                if (!url.isNullOrBlank()) enriched.copy(streamUrl = url) else enriched
+                            } else {
+                                // NAS 命中：streamUrl 已带；或直链类型：streamUrl 已带
+                                enriched
+                            }
+                        } catch (e: Exception) {
+                            AppLog.e("PlayerViewModel", "playQueue: enrich failed for stub '${firstSong.title}'", e)
+                            firstSong
+                        }
+                    }
                     firstSong.isNetworkSong && firstSong.streamUrl.isNullOrBlank() -> {
                         try {
                             val url = nasMusicApp.networkMusicManager.resolvePlayUrl(firstSong)
@@ -142,6 +170,12 @@ class PlayerViewModel(
                 if (resolvedFirst.isNetworkSong && resolvedFirst.streamUrl.isNullOrBlank()) {
                     AppLog.w("PlayerViewModel", "playQueue: failed to resolve URL for ${resolvedFirst.title}")
                     showMessage?.invoke(getApplication<Application>().getString(R.string.resolve_url_endpoint_failed))
+                }
+                // 补全成功后持久化写回歌单（避免下次播放再补全一遍）
+                if (resolvedFirst.id != firstSong.id && firstSong.id.startsWith("imported_")) {
+                    viewModelScope.launch(Dispatchers.IO) {
+                        runCatching { playlistEnricher.enrichAndPersistEverywhere(firstSong) }
+                    }
                 }
                 // 只更新第一首歌的 streamUrl，其余歌曲保持空 URL，在播放器过渡时按需解析
                 val resolved = songs.toMutableList()
@@ -270,6 +304,15 @@ class PlayerViewModel(
             song.isNetworkSong -> {
                 nasMusicApp.downloadRepository.playableLocalUri(song)
                     ?: nasMusicApp.networkMusicManager.resolvePlayUrl(song, forceRefresh)
+            }
+            // 导入 stub：同步补全 → NAS 命中直接取 streamUrl；网络命中走 resolvePlayUrl
+            song.id.startsWith("imported_") -> {
+                val enriched = playlistEnricher.enrichSong(song) ?: return null
+                if (enriched.isNetworkSong) {
+                    nasMusicApp.networkMusicManager.resolvePlayUrl(enriched, forceRefresh)
+                } else {
+                    enriched.streamUrl
+                }
             }
             else -> {
                 val adapter = backendRegistry.getAdapter()

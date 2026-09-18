@@ -10,6 +10,7 @@ import com.nasmusic.tv.data.prefs.AppPreferences
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -207,7 +208,7 @@ class PlaylistEnricherTest {
 
         val replaced = enricher.enrichAndPersistEverywhere(stub)
 
-        assertTrue(replaced)
+        assertNotNull(replaced)
         val s1 = prefs.getLocalPlaylists().first { it.id == p1.id }.songs.single()
         val s2 = prefs.getLocalPlaylists().first { it.id == p2.id }.songs.single()
         assertEquals("nas-4", s1.id)

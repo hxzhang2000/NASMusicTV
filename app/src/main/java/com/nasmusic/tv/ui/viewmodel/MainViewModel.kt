@@ -143,12 +143,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
     private val backendRegistry = nasMusicApp.backendRegistry
 
     // --- 歌单导入补全（阶段4，docs/playlist-import-feature-plan.md §4.3）---
-    /** 播放触发的元数据补全器（stub → NAS/网络真 Song） */
-    private val playlistEnricher = PlaylistEnricher(
-        backendRegistry,
-        nasMusicApp.networkMusicManager,
-        prefs
-    )
+    /** 播放触发的元数据补全器（stub → NAS/网络真 Song）—— 使用 NasMusicApp 共享实例 */
+    private val playlistEnricher = nasMusicApp.playlistEnricher
     /** URL 可达性检查（播放失败回退复测） */
     private val urlReachabilityChecker = UrlReachabilityChecker()
     /** 补全并发限流（§4.3.4：4 个并发网络查询） */
@@ -2273,9 +2269,13 @@ showError(getApplication<Application>().getString(R.string.toggle_favorite_error
         // 非随心听播放时停止自动续播（随心听状态仍由 MainViewModel 的浏览/发现域持有）
         _isShufflePlaying = false
         shuffleRefillJob?.cancel()
+        // 第一首若为 imported stub，PlayerViewModel.playQueue() 会同步补全（NAS/网络搜索），
+        // 此处只补全剩余 stub，避免与 playQueue 的同步补全竞争。
+        val firstIndex = startIndex.coerceIn(0, songs.lastIndex)
         playerVM.playQueue(songs, startIndex)
         // 导入 stub 补全（§4.3.1 路径 A）：播放时触发，后台补全不阻塞播放
-        triggerEnrichForStubs(songs)
+        // 跳过第一首（已在 playQueue 中同步补全），避免重复搜索
+        triggerEnrichForStubs(songs.filterIndexed { idx, _ -> idx != firstIndex })
     }
 
     /**
@@ -2291,7 +2291,11 @@ showError(getApplication<Application>().getString(R.string.toggle_favorite_error
                 try {
                     enrichSemaphore.acquire()
                     try {
-                        playlistEnricher.enrichAndPersistEverywhere(song)
+                        val enriched = playlistEnricher.enrichAndPersistEverywhere(song)
+                        // 更新 PlayerManager 内存队列，使 UI source badge 立即刷新
+                        if (enriched != null) {
+                            playerManager.replaceSongInQueue(song.id, enriched)
+                        }
                     } finally {
                         enrichSemaphore.release()
                     }

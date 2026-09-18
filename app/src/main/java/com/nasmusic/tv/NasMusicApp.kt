@@ -28,6 +28,7 @@ import com.nasmusic.tv.backend.network.baidu.BaiduNetdiskService
 import com.nasmusic.tv.backend.network.baidu.BaiduOAuthClient
 import com.nasmusic.tv.backend.network.baidu.BaiduPanApi
 import com.nasmusic.tv.backend.network.baidu.BaiduStreamFactory
+import com.nasmusic.tv.backend.playlist.PlaylistEnricher
 import com.nasmusic.tv.backend.network.mv.BilibiliMvService
 import com.nasmusic.tv.backend.network.mv.MvSearchManager
 import com.nasmusic.tv.backend.network.mv.MvPersistentCache
@@ -82,6 +83,8 @@ class NasMusicApp : Application(), ImageLoaderFactory {
     lateinit var playerManager: PlayerManager
         private set
     lateinit var networkMusicManager: NetworkMusicManager
+        private set
+    lateinit var playlistEnricher: PlaylistEnricher
         private set
 
     // ---- F2-2 / L3：播放模式切换事件（通知栏按钮 / 系统媒体卡片 → UI 侧）----
@@ -294,6 +297,14 @@ class NasMusicApp : Application(), ImageLoaderFactory {
         if (appPreferences.network.getJamendoClientIdSync().isNotBlank()) {
             networkMusicManager.registerService(jamendoService)
         }
+
+        // 歌单导入补全器：依赖 backendRegistry + networkMusicManager + appPreferences
+        // 放在各后端注册完成后，供 PlayerViewModel / MainViewModel 播放时同步补全 stub
+        playlistEnricher = PlaylistEnricher(
+            backendRegistry = backendRegistry,
+            networkMusicManager = networkMusicManager,
+            prefs = appPreferences,
+        )
 
         // MV（音乐视频）搜索管理器：Bilibili 在线 + 百度本地 MV（百度优先）
         val mvServices = listOf(

@@ -994,4 +994,45 @@
     <string name="player_visualizer_short">Viz</string>
     <!-- Network music failover -->
     <string name="cross_source_replace_playing">"%1$s" link expired, playing replacement from %2$s source</string>
+    <!-- Playlist import -->
+    <string name="settings_import_playlist">Import Playlist</string>
+    <string name="settings_import_playlist_desc">Import from m3u / txt / json / NetEase Cloud playlist file (URL direct links supported)</string>
+    <string name="settings_playlist_import_history">Recent Imports</string>
+    <string name="playlist_importing">Importing playlist…</string>
+    <string name="playlist_import_progress">Importing playlist… %d%%</string>
+    <string name="playlist_import_failed">Import failed: %1$s</string>
+    <string name="playlist_import_unrecognized">Unrecognized playlist file format</string>
+    <string name="playlist_imported">Imported \"%1$s\", %2$d songs</string>
+    <string name="playlist_imported_with_unreachable">Imported \"%1$s\", %2$d songs (%3$d URLs unreachable)</string>
+    <string name="playlist_import_history_sub">%1$d songs</string>
+    <string name="playlist_enrich_done">Enrichment complete: %1$d matched, %2$d unmatched</string>
+    <string name="playlist_enrich_button">Enrich</string>
+    <string name="playlist_enrich_progress">Enriching %1$d/%2$d · %3$d matched</string>
+    <string name="playlist_import_badge">Imported</string>
+    <string name="playlist_stub_badge">Pending</string>
+    <string name="playlist_url_invalid">URL unreachable</string>
+    <string name="playlist_url_invalid_count">%d URLs unreachable</string>
+    <string name="mine_open">Open</string>
+    <!-- Playlist QR upload import -->
+    <string name="playlist_upload_title">Scan to Upload Playlist</string>
+    <string name="playlist_upload_qr_desc">QR code for playlist upload</string>
+    <string name="playlist_upload_scan_hint">Scan with phone to open upload page</string>
+    <string name="playlist_upload_formats_hint">Supports m3u / m3u8 / txt / json / NetEase Cloud export, auto-import after upload</string>
+    <string name="playlist_upload_starting">Starting…</string>
+    <string name="playlist_upload_waiting">Waiting for phone to upload playlist file</string>
+    <string name="playlist_upload_start_failed">Server start failed (port in use)</string>
+    <string name="playlist_upload_no_ip">Cannot get network IP, please check Wi-Fi</string>
+    <string name="playlist_unrecognized_entries">No importable song entries found</string>
+    <!-- PlaylistUploadServer HTML page -->
+    <string name="html_playlist_title">NAS Music TV Playlist Import</string>
+    <string name="html_playlist_subtitle">Upload playlist file to TV and auto-import</string>
+    <string name="html_playlist_section_upload">Select Playlist File</string>
+    <string name="html_playlist_accept_hint">Supports m3u / m3u8 / txt / json / NetEase Cloud export</string>
+    <string name="html_playlist_upload_btn">Upload &amp; Import</string>
+    <string name="html_playlist_status_uploading">Uploading %s…</string>
+    <string name="html_playlist_status_upload_failed">Upload failed</string>
+    <string name="html_playlist_status_importing">Uploaded, importing on TV…</string>
+    <string name="html_playlist_too_large">File too large (5MB limit)</string>
+    <string name="html_playlist_empty">Upload content is empty</string>
+    <string name="html_playlist_import_failed">Import failed</string>
 </resources>

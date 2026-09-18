@@ -7,6 +7,36 @@
 >
 > 类型：`Added`（新增） | `Changed`（变更） | `Fixed`（修复） | `Removed`（移除）
 
+## [v2.34.4] - 2026-09-18
+
+> **修复：导入歌单 stub 不再误标「NAS」来源，播放时同步/异步补全后标签即时刷新**
+
+### Fixed
+
+- **导入 stub 来源误标 NAS**：`SourceIdentifier.sourceType()` 对 `isNetworkSong=false` 的导入 stub
+  一律返回 `NAS`——实际 NAS 未连接时显示错误且播放必败。新增 `IMPORTED` 枚举（灰色「导入」标签），
+  在 `!isNetworkSong → NAS` 判定前先检查 `id.startsWith("imported_")`，stub 阶段正确标记为「导入」
+- **播放 stub 不补全直接失败**：`PlayerViewModel.playQueue()` 的 `needsResolve` 跳过 imported stub，
+  `triggerEnrichForStubs` 异步补全跑在播放之后。现在 `needsResolve` 加入 stub 判定，
+  `playQueue()` 对首曲 stub **同步调用** `playlistEnricher.enrichSong()`（NAS 精确匹配 → 网络源 fallback），
+  命中后立即持久化到队列/收藏/播放列表并更新 `sourceType` 为实际来源（`NAS` / `NETWORK_MUSIC`）
+- **`resolveStreamUrl` 不处理 stub**：同上，新增 `id.startsWith("imported_")` 分支，
+  先同步补全再走正常解析链路
+- **异步补全后 UI 标签不刷新**：`triggerEnrichForStubs` 只写了 DataStore 持久化，
+  未更新 `PlayerManager` 内存队列——UI 读 `playerState.queue` 仍是旧 stub，导致除首曲外后续歌曲
+  标签停留在「导入」。新增 `PlayerManager.replaceSongInQueue()` 原地替换队列中指定 id 的歌曲
+  （若是当前播放曲也同步更新 `currentSong`），`triggerEnrichForStubs` 补全命中后立即调用刷新 UI
+- **`triggerEnrichForStubs` 跳过正在播放的首曲**：首曲已由 `playQueue()` 同步补全，
+  异步批量补全从第二曲开始
+- **英文字符串缺失**：歌单导入/上传相关 20 条字符串资源未翻译为英文，lint 报错。全部补齐
+
+### Changed
+
+- 版本号 `2.34.3 → 2.34.4`（versionCode 151 → 152）
+- `NasMusicApp` 新增 `playlistEnricher` 字段，`MainViewModel` / `PlayerViewModel` 改为共享实例
+- `PlaylistEnricher.enrichAndPersistEverywhere()` 返回类型从 `Boolean` 改为 `Song?`
+  （返回补全后的 Song，未命中返回 null），避免调用方需二次调用 `enrichSong()`
+
 ## [v2.34.3] - 2026-09-18
 
 > **歌单导入：m3u / txt / json / 网易云歌单一键入库，URL 直链直接使用并校验可达性**
