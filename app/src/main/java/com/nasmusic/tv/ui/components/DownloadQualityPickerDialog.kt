@@ -4,15 +4,20 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -29,7 +34,6 @@ import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Text
 import com.nasmusic.tv.R
 import com.nasmusic.tv.backend.network.QualityTiers
-import com.nasmusic.tv.ui.screens.settings.SettingActionButton
 import com.nasmusic.tv.ui.theme.FontSize
 import com.nasmusic.tv.ui.theme.NasMusicColors
 
@@ -39,9 +43,17 @@ import com.nasmusic.tv.ui.theme.NasMusicColors
  * 仅在**探测到多个可用档位**时弹出；只列出真正可用的档位，
  * 默认选中最高可用档，已下载档位置灰不可选。
  *
- * @param available 探测到的可用档位（降序）
- * @param downloaded 已下载档位集合（置灰）
- * @param onConfirm 用户确认的档位
+ * 交互说明（v2.35.0 手机端修复）：
+ * - 点某一行 = **选中**该档（右侧显示「已选」，不是「确定」）
+ * - 点底部「下载」= **确认并开始下载**
+ *
+ * 原实现直接复用了设置页的 `SettingActionButton`，该组件右侧**硬编码**显示「确定」文案
+ * （它是设置页的行样式），导致对话框里每一行看起来都像确认按钮 ——
+ * 用户点了行内的「确定」以为会开始下载，实际只切换了选中标记，表现为"点了没反应"。
+ * 现改为专用行组件 `QualityOptionRow`，文案与语义一致。
+ *
+ * 手机端适配：面板宽度改为 `widthIn(max = 560.dp)` + 高度 `heightIn(max = 视口-32dp)`
+ * + `verticalScroll`，避免多档位 + 已下载列表把底部按钮挤出屏幕（表现为"界面被截断"）。
  */
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
@@ -68,17 +80,22 @@ fun DownloadQualityPickerDialog(
             usePlatformDefaultWidth = false
         )
     ) {
-        Box(
+        BoxWithConstraints(
             modifier = Modifier
                 .fillMaxSize()
                 .background(Color(0xB3000000)),
             contentAlignment = Alignment.Center
         ) {
+            // 手机竖屏时视口高度有限，面板高度封顶并允许滚动
+            val maxPanelHeight = maxHeight - 32.dp
             Column(
                 modifier = Modifier
-                    .width(560.dp)
+                    .widthIn(max = 560.dp)
+                    .fillMaxWidth(0.92f)
+                    .heightIn(max = maxPanelHeight)
+                    .verticalScroll(rememberScrollState())
                     .background(NasMusicColors.Surface, RoundedCornerShape(16.dp))
-                    .padding(28.dp)
+                    .padding(24.dp)
             ) {
                 Text(
                     text = stringResource(R.string.quality_picker_title, songTitle),
@@ -96,18 +113,17 @@ fun DownloadQualityPickerDialog(
                     )
                 } else {
                     selectable.forEach { tier ->
-                        val label = stringResource(QualityTiers.labelResOf(tier))
-                        val mark = if (selected == tier) "◉ " else "○ "
-                        SettingActionButton(
-                            label = "$mark$label  ${QualityTiers.descriptionOf(tier)}",
-                            description = "",
+                        QualityOptionRow(
+                            label = stringResource(QualityTiers.labelResOf(tier)),
+                            description = QualityTiers.descriptionOf(tier),
+                            selected = selected == tier,
                             onClick = { selected = tier }
                         )
-                        Spacer(modifier = Modifier.height(6.dp))
+                        Spacer(modifier = Modifier.height(8.dp))
                     }
                 }
 
-                // 已下载档位置灰展示（不可选，避免重复下载）
+                // 已下载档位展示（不可选，避免重复下载）
                 val downloadedList = available.filter { it in downloaded }
                 if (downloadedList.isNotEmpty()) {
                     Spacer(modifier = Modifier.height(8.dp))
@@ -134,15 +150,15 @@ fun DownloadQualityPickerDialog(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.End)
                 ) {
-                    SettingActionButton(
+                    QualityDialogButton(
                         label = stringResource(R.string.common_cancel),
-                        description = "",
+                        primary = false,
                         onClick = onDismiss
                     )
                     if (selectable.isNotEmpty()) {
-                        SettingActionButton(
+                        QualityDialogButton(
                             label = stringResource(R.string.settings_download),
-                            description = "",
+                            primary = true,
                             onClick = { onConfirm(selected) }
                         )
                     }

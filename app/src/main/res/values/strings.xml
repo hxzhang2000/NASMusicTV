@@ -1047,6 +1047,13 @@
     <string name="quality_override_clear_desc">移除在播放器中为单首歌曲指定的音质，全部回退到上面的全局档位</string>
     <string name="quality_scope_this_play">仅本次播放</string>
     <string name="quality_scope_all_songs">全部歌曲</string>
+    <!-- 码率面板选项状态（与底部「下载」按钮区分，避免误认为行内即确认） -->
+    <string name="quality_option_selected">已选</string>
+    <string name="quality_option_select">选择</string>
+    <string name="quality_already_downloaded">该档位已下载，无需重复下载</string>
+    <string name="quality_scope_label">生效范围</string>
+    <string name="quality_scope_this_play_desc">仅当前这首歌使用该档位</string>
+    <string name="quality_scope_all_songs_desc">所有网络歌曲都用该档位</string>
     <!-- §5.3 设置页说明文案（降低用户困惑） -->
     <string name="quality_tier_hint_lossless">无损仅限支持 FLAC 的曲库；不可用时自动降级并提示</string>
     <string name="quality_tier_hint_scope">本档位仅影响网络音乐；NAS / 本地 / 网盘歌曲按其原始码率播放</string>

@@ -131,9 +131,19 @@ class DownloadViewModel(
                 return@launch
             }
             if (available.size == 1) {
-                // 仅一档 → 不弹窗，直接下载（用户无感）
+                // 仅一档 → 不弹窗，直接下载；但给一条轻提示（否则用户点完看不到任何变化）
                 _qualityPicker.value = null
-                enqueueManual(song, available.first())
+                val only = available.first()
+                val started = enqueueManual(song, only)
+                val label = getApplication<Application>().getString(
+                    com.nasmusic.tv.backend.network.QualityTiers.labelResOf(only)
+                )
+                showMessage(
+                    getApplication<Application>().getString(
+                        if (started) R.string.quality_download_started else R.string.quality_already_downloaded,
+                        label
+                    )
+                )
                 return@launch
             }
             // 多档 → 弹码率选择面板（默认选中最高可用档）
@@ -148,7 +158,21 @@ class DownloadViewModel(
     /** 用户在码率面板选定档位后调用 */
     fun downloadWithQuality(song: Song, quality: Int) {
         _qualityPicker.value = null
-        viewModelScope.launch { enqueueManual(song, quality) }
+        viewModelScope.launch {
+            val started = enqueueManual(song, quality)
+            // v2.35.0 手机端修复：确认后必须给出反馈。
+            // 原实现静默 return，用户点了「下载」看不到任何变化，误以为按钮无效。
+            // 复用本类既有的 showMessage 通道（与 deleteModel 等操作的反馈一致）。
+            val label = getApplication<Application>().getString(
+                com.nasmusic.tv.backend.network.QualityTiers.labelResOf(quality)
+            )
+            showMessage(
+                getApplication<Application>().getString(
+                    if (started) R.string.quality_download_started else R.string.quality_already_downloaded,
+                    label
+                )
+            )
+        }
     }
 
     /** 关闭码率面板 */
@@ -156,17 +180,23 @@ class DownloadViewModel(
         _qualityPicker.value = null
     }
 
-    /** 内部：幂等检查 + 入队 */
-    private suspend fun enqueueManual(song: Song, quality: Int) {
+    /**
+     * 内部：幂等检查 + 入队。
+     *
+     * @return true 表示已入队；false 表示因"已下载 / 下载中 / 已入队"而跳过
+     *         （调用方据此给用户反馈，而不是静默无响应）
+     */
+    private suspend fun enqueueManual(song: Song, quality: Int): Boolean {
         val key = song.downloadKeyOf(quality)
         val state = songDownloadStates.value[key]
         if (state is DownloadState.Completed ||
             state is DownloadState.Downloading ||
             state is DownloadState.Queued
         ) {
-            return
+            return false
         }
         songDownloadManager.enqueue(song, auto = false, quality = quality)
+        return true
     }
 
     /**

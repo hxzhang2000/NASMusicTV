@@ -2403,6 +2403,16 @@ showError(getApplication<Application>().getString(R.string.toggle_favorite_error
                 updateMergedData()
             }
         }
+        // v2.35.0 手机端修复：把下载域的操作反馈转发到 errorMessage 通道。
+        // 此前 `downloadVM.message` **无人消费** —— 用户在码率面板点「下载」后
+        // 看不到任何反馈（表现为"点击确定没反应"）。
+        // 复用上面 downloadNotifyMessage 的同一条路径（UI 已消费），
+        // 与既有的"已下载：X"/"下载失败：X"提示保持一致的呈现方式。
+        viewModelScope.launch {
+            downloadVM.message.collect { msg ->
+                if (msg != null) showError(msg)
+            }
+        }
         // 模型下载状态同步给人声分离域（模式切换门槛判断）
         viewModelScope.launch {
             downloadVM.modelDownloaded.collect { downloaded -> vocalVM.setModelDownloaded(downloaded) }
