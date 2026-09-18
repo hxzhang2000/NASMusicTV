@@ -347,7 +347,7 @@ loadBackups();
                 // 不用 parseBody()：某些 ROM 上 Charset.defaultCharset() 非 UTF-8，导致中文乱码
                 val contentLength = session.headers["content-length"]?.toLongOrNull() ?: -1L
                 AppLog.i(TAG, "handleUpload: contentLength=$contentLength")
-                if (contentLength == 0L) {
+                if (contentLength <= 0L) {
                     return jsonResponse(false, "上传内容为空")
                 }
                 if (contentLength > MAX_UPLOAD_BYTES) {
@@ -355,18 +355,18 @@ loadBackups();
                     return jsonResponse(false, "上传内容过大（上限 ${MAX_UPLOAD_BYTES / 1024 / 1024}MB）")
                 }
                 // 安全：不按 Content-Length 预分配数组（客户端可谎报 → 巨型 ByteArray 直接 OOM），
-                // 改为有硬上限的分块累积读取；超出上限立即中止
+                // 改为按 Content-Length 定长分块读取（keep-alive 连接上不能 `read 到 -1`，
+                // 否则读完 body 后 read 阻塞至 SO_TIMEOUT 抛 SocketTimeoutException，2026-09-18 实测），
+                // 超上限立即中止
                 val buffer = java.io.ByteArrayOutputStream()
                 val chunk = ByteArray(16 * 1024)
                 var totalRead = 0
-                while (true) {
-                    val read = session.inputStream.read(chunk)
-                    if (read < 0) break
+                var remaining = contentLength
+                while (remaining > 0 && totalRead <= MAX_UPLOAD_BYTES) {
+                    val read = session.inputStream.read(chunk, 0, minOf(chunk.size.toLong(), remaining).toInt())
+                    if (read < 0) break // 对端提前关闭
                     totalRead += read
-                    if (totalRead > MAX_UPLOAD_BYTES) {
-                        AppLog.w(TAG, "handleUpload: aborted, body exceeded $MAX_UPLOAD_BYTES bytes")
-                        return jsonResponse(false, "上传内容过大（上限 ${MAX_UPLOAD_BYTES / 1024 / 1024}MB）")
-                    }
+                    remaining -= read
                     buffer.write(chunk, 0, read)
                 }
                 if (totalRead == 0) {

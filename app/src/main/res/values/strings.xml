@@ -493,6 +493,16 @@
     <string name="playlist_url_invalid">URL 失效</string>
     <string name="playlist_url_invalid_count">%d 条 URL 失效</string>
     <string name="mine_open">打开</string>
+    <!-- 歌单扫码上传导入（阶段5.5，替代 SAF 文件选择器） -->
+    <string name="playlist_upload_title">扫码上传歌单</string>
+    <string name="playlist_upload_qr_desc">扫码上传歌单的二维码</string>
+    <string name="playlist_upload_scan_hint">手机扫码打开上传页</string>
+    <string name="playlist_upload_formats_hint">支持 m3u / m3u8 / txt / json / 网易云导出，上传后自动导入</string>
+    <string name="playlist_upload_starting">启动中…</string>
+    <string name="playlist_upload_waiting">等待手机上传歌单文件</string>
+    <string name="playlist_upload_start_failed">服务器启动失败（端口被占）</string>
+    <string name="playlist_upload_no_ip">无法获取网络 IP，请检查 Wi-Fi 连接</string>
+    <string name="playlist_unrecognized_entries">未识别到可导入的歌曲条目</string>
 
     <!-- Queue -->
     <string name="queue_title">播放队列</string>
@@ -896,6 +906,19 @@
     <string name="html_backup_status_uploading">正在上传 %s...</string>
     <string name="html_backup_status_upload_failed">上传失败</string>
     <string name="html_backup_confirm_restore">确认恢复备份 %s ?\n当前数据将被覆盖（服务器需重新连接）。</string>
+
+    <!-- PlaylistUploadServer HTML 页面 -->
+    <string name="html_playlist_title">NAS Music TV 歌单导入</string>
+    <string name="html_playlist_subtitle">将歌单文件上传到电视并自动导入</string>
+    <string name="html_playlist_section_upload">选择歌单文件</string>
+    <string name="html_playlist_accept_hint">支持 m3u / m3u8 / txt / json / 网易云导出格式</string>
+    <string name="html_playlist_upload_btn">上传并导入</string>
+    <string name="html_playlist_status_uploading">正在上传 %s…</string>
+    <string name="html_playlist_status_upload_failed">上传失败</string>
+    <string name="html_playlist_status_importing">已上传，电视端正在导入…</string>
+    <string name="html_playlist_too_large">文件过大（上限 5MB）</string>
+    <string name="html_playlist_empty">上传内容为空</string>
+    <string name="html_playlist_import_failed">导入失败</string>
 
     <!-- ModelTransferServer HTML 页面 -->
     <string name="html_model_title">NAS Music TV - 模型上传</string>

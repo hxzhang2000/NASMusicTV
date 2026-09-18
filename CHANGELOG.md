@@ -18,6 +18,11 @@
 > 不可达条目打上「URL 失效」标记（24h 判定窗口持久化，重启不重测；局域网 URL 不预判，
 > 交给 ExoPlayer 首次播放判定）。歌曲名（stub）在「播放时 + 手动补全」两种时机向
 > NAS/网络源匹配补全；播放失败自动复测回退。导入源文件只读流式解析、不落盘。
+>
+> 导入入口（2026-09-18 追加）：设置→数据「导入歌单」改为**「二维码 + URL 远程上传」弹窗**
+> （本地 HTTP 服务端口 **18084**，避开 18080–18083 既有端口段）——电视展示二维码/可点击 URL，
+> 手机扫码或电脑浏览器上传歌单文件，上传即导入。Android TV 无 DocumentsUI，原 SAF 文件选择器
+> 在电视上会抛 ActivityNotFoundException，已整体拆除。
 
 ### Added
 
@@ -29,9 +34,19 @@
 - **补全链路**：`PlaylistEnricher`（NAS 精确匹配优先 → 网络源 fallback，替换后保留原 streamUrl / 置空交给再解析；
   `enrichAndPersist` / `enrichAndPersistEverywhere` 两档写回）；`MainViewModel` 三入口（播放/队列/播放失败）
   挂 stub 补全 hook + `playbackFailure` 复测回退，`PlayerManager.onPlayerError` 对 `imported_` HTTP stub 跳过 re-resolve 直接跳曲
-- **UI**：设置→数据「导入歌单」入口（SAF）、「最近导入」记录（单「打开」无删除）、
+- **UI**：设置→数据「导入歌单」→「二维码 + URL 远程上传」弹窗（`PlaylistImportUploadDialog`：
+  URL + ZXing 二维码 + 可点击 URL + 关闭；`PlaylistUploadServer` 端口 18084，分块累积 + 5MB
+  上限防 OOM，`/` 上传页 + `/api/upload` RAW body 上传）、「最近导入」记录（单「打开」无删除）、
   「我的」页歌单卡片「导入」标签 + 「补全」按钮 + 补全进度条 + 「URL 失效」计数，
   歌曲行「待补全 / URL 失效」双徽标（`UnifiedSongRow.urlStatus`）
+
+### Fixed
+
+- **上传 body 读取超时**：`PlaylistUploadServer` / `BackupTransferServer` 原按「`read` 到 -1」
+  循环读 body——HTTP/1.1 keep-alive 连接上读完 Content-Length 字节后继续 `read` 会阻塞至
+  SO_TIMEOUT（10s）抛 `SocketTimeoutException`，电脑上传 txt 报「导入失败: null」。
+  改为**按 Content-Length 定长分块读取**（读完即止，不预分配防谎报 OOM），缺
+  Content-Length 直接拒绝；异常 message 为 null 时兜底显示异常类名，不再显示 "null"。
 - **数据层**：`PlaylistImportHistoryItem` 模型、`AppPreferences` 歌单导入历史 / `songReachability`
   持久化（24h 窗口 + 备份导出恢复联动）、`PlaylistImportViewModel`（导入/补全编排 + 预热）
 

@@ -24,6 +24,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
@@ -191,6 +192,55 @@ class PlaylistImportViewModel(
             }
         }
         return bad
+    }
+
+    /**
+     * 扫码远程上传导入（阶段5.5）：NanoHTTPD 工作线程同步桥接（镜像
+     * BackupViewModel.restoreBackupFromJsonBlocking）——字节直接走 importBytes
+     * （不落盘），完成后返回成功消息给手机端页面；URL 可达性检查异步后台继续，
+     * 结果经 importMessage 在 TV 端消息区汇总显示。
+     *
+     * @return 非空 = 导入成功消息（含歌单名/数量）；null = 导入失败（格式无法识别等）
+     */
+    fun importRemoteFileBlocking(fileName: String, bytes: ByteArray): String? {
+        val appCtx = getApplication<Application>()
+        val summary = try {
+            runBlocking { importer.importBytes(bytes, fileName) }
+        } catch (e: Exception) {
+            AppLog.e("PlaylistImportViewModel", "importRemoteFile failed", e)
+            _importMessage.value = BackupMessage(
+                appCtx.getString(R.string.playlist_import_failed, e.message?.take(60) ?: e.javaClass.simpleName),
+                isError = true
+            )
+            return null
+        }
+        if (summary.playlistId.isEmpty() || summary.unrecognizedFormat) {
+            _importMessage.value = BackupMessage(
+                appCtx.getString(R.string.playlist_import_unrecognized),
+                isError = true
+            )
+            return null
+        }
+        val successMessage = if (summary.imported > 0) {
+            appCtx.getString(R.string.playlist_imported, summary.playlistName, summary.imported)
+        } else {
+            appCtx.getString(R.string.playlist_unrecognized_entries)
+        }
+        // URL 可达性检查异步（可能数十秒，不阻塞 HTTP worker；结果覆盖消息）
+        viewModelScope.launch(Dispatchers.IO) {
+            val unreachable = checkUrlsInPlaylist(summary.playlistId)
+            _importMessage.value = BackupMessage(
+                if (unreachable > 0) {
+                    appCtx.getString(
+                        R.string.playlist_imported_with_unreachable,
+                        summary.playlistName, summary.imported, unreachable
+                    )
+                } else {
+                    successMessage
+                }
+            )
+        }
+        return successMessage
     }
 
     /** 消费导入结果消息（SettingsScreen 4s 后调用，镜像 backupMessage） */

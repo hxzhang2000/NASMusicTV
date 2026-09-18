@@ -8868,6 +8868,44 @@ forceRefresh 跳过缓存、失败清缓存、同源搜索重试、跨源降级�
 
 **版本**：v2.34.1 → **v2.34.2**（versionCode 149 → 150）
 
+### 10.161 v2.34.3 — 歌单导入入口改「二维码 + URL 远程上传」+ 上传 body 读取超时修复（2026-09-18）
+
+**背景**：Android TV 无 DocumentsUI，`ActivityResultContracts.OpenDocument()` launch 即抛
+`ActivityNotFoundException` 崩溃 → 导入入口改为本地 HTTP 弹窗。用户实测电脑上传 txt 提示
+「导入失败: null」。
+
+**根因（上传超时）**：`PlaylistUploadServer` / `BackupTransferServer` 的 `handleUpload` 均按
+「`while (true) read(chunk)` 直到 -1」读 body。HTTP/1.1 keep-alive 连接上，浏览器/curl
+的 `fetch(Blob)` 上传**读完 Content-Length 字节后不会关闭连接**，继续 `read` 会阻塞至
+SO_TIMEOUT（10s）抛 `SocketTimeoutException` —— logcat 定位：`j42.serve(...) → inputStream.read`。
+错误提示「: null」则来自异常 `message` 为 null 时 Kotlin 字符串模板输出字面 `"null"`。
+
+**修复**：
+
+- `PlaylistUploadServer.handleUpload` / `BackupTransferServer.handleUpload`：改为**按
+  Content-Length 定长分块读取**（`remaining` 递减，读满即止）；`contentLength <= 0` 直接拒绝
+  （fetch(Blob) 必有 content-length）；仍分块累积 + `MAX_UPLOAD_BYTES` 硬上限，不按 Content-Length
+  预分配数组（防谎报 OOM）
+- 两处 catch 的 `e.message` 兜底改为 `e.message ?: e.javaClass.simpleName`，不再显示 "null"
+- `PlaylistImportViewModel.importRemoteFileBlocking` catch 同款兜底
+
+**端口段约定（新增硬约束）**：18080 LocalInput / 18081 Backup / 18082 RemoteControl /
+18083 ModelTransfer / **18084 PlaylistUpload**。新增 HTTP 服务不得占用上述端口。
+
+**新增组件**：`net/PlaylistUploadServer.kt`（NanoHTTPD，`/` HTML 上传页 + `/api/upload`
+RAW body + `name` query；`onFileReceived(fileName, bytes)` 回调，5MB 上限）、
+`ui/screens/settings/PlaylistImportUploadDialog.kt`（URL + ZXing 二维码 + 可点击 URL + 关闭，
+仿 BackupTransferDialog）；SAF 链整体拆除（MainActivity launcher / AppRoot / SettingsBranch /
+VM `notifyImportUnsupported` 及相关字符串）。
+
+**端到端验证**：`assembleRelease` BUILD SUCCESSFUL → 推送电视 192.168.0.110:5555 →
+电脑 `curl -X POST --data-binary` 上传 txt 返回
+`{"ok":true,"message":"已导入「upload-test」，共 3 首"}`（含 URL 行/注释行解析正确），
+电视端用户实机复测通过。修复前同请求 10s 超时、返回失败 JSON。
+
+**遗留**：上传导入未写自动化测试（NanoHTTPD 原生 socket 不易在 Robolectric 起服务）；
+tv wifi 断线重连时 18084 连接窗口期会失败，重试即恢复，未做特殊处理。
+
 ### 10.152 v2.32.3 — T5：删除死代码 `VocalRemovalProcessor.kt`（算法先归档，2026-09-14）
 
 **来源**：`logs_temp/code-review-full-report-2026-09-13.md` §T5 / `docs/code-review-2026-09-03.md` §P2。文件 348 行，全项目**零调用方**（`PlaybackService.kt:207` 实际 `val vocalRemovalProcessor = SpectralMaskProcessor()`——变量名是历史遗留，类型早就换过了；`PlayerManager.setVocalRemovalProcessor()` 的形参类型同样是 `SpectralMaskProcessor`）。

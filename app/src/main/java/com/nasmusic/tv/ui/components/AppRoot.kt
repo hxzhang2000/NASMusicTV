@@ -90,8 +90,6 @@ fun AppRoot(
     viewModel: MainViewModel,
     isImmersiveMode: androidx.compose.runtime.MutableState<Boolean>,
     onConnect: (ServerConfig) -> Unit,
-    /** SAF 歌单文件选择（MainActivity 持有 launcher，Settings 数据分区使用） */
-    onPickPlaylistFile: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
@@ -318,7 +316,6 @@ fun AppRoot(
                     context = context,
                     coroutineScope = coroutineScope,
                     onConnect = onConnect,
-                    onPickPlaylistFile = onPickPlaylistFile
                 )
                 Screen.ServerConnect -> ServerConnectBranch(
                     viewModel = viewModel,

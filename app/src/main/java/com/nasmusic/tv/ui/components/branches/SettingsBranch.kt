@@ -40,8 +40,6 @@ internal fun SettingsBranch(
     context: android.content.Context,
     coroutineScope: kotlinx.coroutines.CoroutineScope,
     onConnect: (ServerConfig) -> Unit,
-    /** SAF 歌单文件选择（由 MainActivity 持有 launcher，经 AppRoot 透传） */
-    onPickPlaylistFile: () -> Unit
 ) {
                     val backendApiVersion by viewModel.serverVM.backendApiVersion.collectAsState(initial = "Unknown")
                     val apiVersions by viewModel.serverVM.apiVersions.collectAsState(initial = emptyList())
@@ -60,6 +58,7 @@ internal fun SettingsBranch(
                     val baiduApicTotal by viewModel.baiduApicTotal.collectAsState(initial = 0)
                     var showBackupTransferDialog by remember { mutableStateOf(false) }
                     var showModelTransferDialog by remember { mutableStateOf(false) }
+                    var showPlaylistImportDialog by remember { mutableStateOf(false) }
                     // 修复（H-3）：组合内 runBlocking 同步读改为 Flow 订阅
                     val baiduConfig by viewModel.prefs.baidu.baiduConfigFlow.collectAsState(
                         initial = com.nasmusic.tv.data.model.CloudDriveConfig(com.nasmusic.tv.data.model.CloudDriveType.BAIDU)
@@ -153,7 +152,7 @@ internal fun SettingsBranch(
                         // 歌单导入（阶段5）
                         playlistImportHistory = playlistImportHistory,
                         playlistImportMessage = playlistImportMessage,
-                        onImportPlaylistFile = onPickPlaylistFile,
+                        onImportPlaylistFile = { showPlaylistImportDialog = true },
                         onOpenImportedPlaylist = { _ -> viewModel.navVM.navigateTo(Screen.Mine) },
                         onConsumePlaylistImportMessage = { viewModel.playlistImportVM.consumeImportMessage() },
                         // 百度网盘设置
@@ -243,6 +242,15 @@ internal fun SettingsBranch(
                             modelSizeMB = modelSizeMB,
                             onModelUploaded = { viewModel.downloadVM.refreshModelStatus() },
                             onDismiss = { showModelTransferDialog = false }
+                        )
+                    }
+                    // 歌单扫码上传导入弹窗（阶段5.5，替代 SAF 文件选择器——Android TV 无 DocumentsUI）
+                    if (showPlaylistImportDialog) {
+                        PlaylistImportUploadDialog(
+                            onFileReceived = { name, bytes ->
+                                viewModel.playlistImportVM.importRemoteFileBlocking(name, bytes)
+                            },
+                            onDismiss = { showPlaylistImportDialog = false }
                         )
                     }
 }
