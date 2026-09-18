@@ -37,6 +37,11 @@
 - **设置页两条说明文案**：无损档限制说明（「无损仅限支持 FLAC 的曲库；不可用时自动降级并提示」）
   与作用范围说明（「本档位仅影响网络音乐；NAS / 本地 / 网盘歌曲按其原始码率播放」），中英双语
 - **`QualityBadge`** 档位徽标组件、`DownloadQualityPickerDialog` / `QualityPickerDialog` / `QualityProbingDialog` 三个面板
+- **本地 / NAS 歌曲播放时显示真实码率**（只读，不可点击）：音质标识改为两态 ——
+  网络歌曲显示档位标签（`♪ 无损` / `♪ 320k`，可点击切换），
+  本地 / NAS / 下载歌曲显示真实码率（`♪ 320 kbps` / `♪ 无损 1.4M`，只读）。
+  数据来自 `Song.bitrate`（NAS 适配器解析时填充）与 `Song.resolvedQuality`（下载档位回退）；
+  飞牛后端因 `BITRATE_UNVERIFIED = 0` 不渲染徽标，不会显示错误的「♪ 0 kbps」
 
 ### Changed
 
@@ -68,11 +73,38 @@
 - **`STANDARD` 档降级链产生重复项**：`fallbackChainOf(128)` 返回 `[128, 128]`，
   白跑一次网络请求。单测 `QualityTiersTest` 捕获并修正
 - **降级链跳过 192 档**：无损降级链原为 `999 → 320 → 128`，与「补齐 192」的决策矛盾
+- **`QualityOverrides` 内存镜像被旧快照回退**（测试捕获）：`init` 里的
+  `dataStore.data.collect { cache = decode(it) }` 与 put/remove 的同步写竞争——
+  连续两次 `put` 时第一次 persist 触发的回调可能后到，把更新的内存值回退成旧值。
+  用户选完「仅本次播放 999」立刻播放可能读到上一次的档位。已移除该 collector
+  （单进程下所有写入必经本类方法，collector 无必要），`put()` 返回后即刻可读新值
+
+**手机端实测修复**（用户真机反馈，5 项）：
+
+- **音质档位只显示「自动」**（**既有缺陷**，v2.35.0 之前就存在）：
+  `SettingActionButton` 内部硬编码 `Modifier.fillMaxWidth()`（设置页纵向列表样式），
+  但音质档位行把它放进 `Row` —— 第一个按钮撑满整行，后续 4 个被挤成 0 宽。
+  修复：该组件新增 `modifier` 参数（默认值不变，不影响其余 25 处调用），
+  音质档位行改为**纵向列表**（同时解决"横排 5 个「确定」文案易误读"与"手机窄屏溢出"）
+- **码率面板点「确定」没反应**：三个叠加原因 —— ① 复用的 `SettingActionButton`
+  右侧硬编码「确定」文案（行样式），让每行都像确认按钮；② 点行只切换选中标记、
+  不触发下载；③ `enqueueManual` 在已下载/下载中时静默 return，且
+  `downloadVM.message` **无人消费** → 确认后零反馈。
+  修复：新增专用行组件 `QualityOptionRow`（右侧显示「已选/选择」状态）与
+  `QualityDialogButton`（主/次按钮视觉区分）；`enqueueManual` 返回 Boolean
+  区分两种结果并各给提示；把 `downloadVM.message` 转发到 errorMessage 通道
+- **码率面板「下载」按钮消失**：`if (selectable.isNotEmpty())` 使得该曲所有可用档
+  都已下载时按钮**整个不渲染**，用户只看到「取消」。修复：始终渲染，
+  无可选档时置灰禁用 + 补"如何重新下载"指引
+- **面板被截断 / 底部按钮不可见**：两个对话框的 `Column` 固定宽度、无高度上限、无滚动。
+  修复：`BoxWithConstraints` + 宽度取「560dp 与 视口 92%」较小值 +
+  `heightIn(max = 视口-32dp)` + `verticalScroll`
+- **NowPlaying 看不到音质入口**：原加在底部控制按钮行，但该行在固定 `width(380.dp)`
+  容器内且无横向滚动，第 8 个控件被裁掉。修复：按需求移入「信息 + 来源」同一行
+  （`♪ 320k`），并给该行与按钮行补横向滚动兜底
 
 ### Tests
 
-- 新增 `QualityTiersTest` / `ResolveResultTest` / `DownloadKeyTest` /
-  `DownloadQualityPathTest` / `DownloadStateLookupTest`（全部通过）
 - 新增 **`DownloadDatabaseMigrationTest`**：在真实 v1 库上验证 `MIGRATION_1_2` ——
   存量行数不变、`songKey` 未被改写、`quality` 全为 0、业务字段原样保留、
   `songId` 索引存在可用、存量行与带档位后缀的新行可共存、唯一约束仍生效、
@@ -85,19 +117,17 @@
   `DownloadStateLookupTest` / `DownloadDatabaseMigrationTest` / `QualityProbeTest` /
   `PlayUrlCacheKeyTest` / `QualityOverridesTest` / `MetingResolveTest` /
   `LocalPlaybackPriorityTest` / `AutoDownloadDedupeTest` / `DowngradePersistTest`
+- 新增 **`QualityBadgeLabelTest`**（14 例）：音质徽标三态 —— 网络歌曲显示档位标签、
+  本地/NAS 显示真实码率、无数据不渲染（避免出现「♪ 0 kbps」）；
+  含 `999` 不显示为 `999 kbps`、`bitrate` 优先于 `resolvedQuality` 等边界
+- 新增 **`DownloadConfirmFeedbackTest`**（6 例）：锁定"码率面板确认后必有反馈"契约 ——
+  入队与被幂等拦截两种结果必须各有文案，不能静默
 - 可测性调整：`QualityProbe.probeAvailableQualities` 与
   `StreamUrlResolver.resolveDetailed` 新增可注入 `dispatcher` 参数（默认 IO），
   使 `runTest` 虚拟时间可用；§3.6 的播放源决策从 `PlayerViewModel` 抽到
-  `NetworkPlaybackResolver`（纯 suspend + lambda 注入），使高风险路径可被单测覆盖。
-  两处生产行为不变
-
-### Fixed
-
-- **`QualityOverrides` 内存镜像被旧快照回退**（测试捕获）：`init` 里的
-  `dataStore.data.collect { cache = decode(it) }` 与 put/remove 的同步写竞争——
-  连续两次 `put` 时第一次 persist 触发的回调可能后到，把更新的内存值回退成旧值。
-  用户选完「仅本次播放 999」立刻播放可能读到上一次的档位。已移除该 collector
-  （单进程下所有写入必经本类方法，collector 无必要），`put()` 返回后即刻可读新值
+  `NetworkPlaybackResolver`（纯 suspend + lambda 注入）；音质徽标文案抽到
+  `ui/components/QualityBadgeLabel.kt` 纯函数。三处生产行为不变
+- 最终全量 **814 例 / 0 失败**
 
 ### Database
 
