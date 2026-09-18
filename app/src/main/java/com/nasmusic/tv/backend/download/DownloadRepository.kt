@@ -213,7 +213,8 @@ class DownloadRepository(
             entity.audioPath ?: "",
             coverPath = entity.coverPath,
             lyricPath = entity.lyricPath,
-            embedded = entity.embedded
+            embedded = entity.embedded,
+            quality = entity.quality
         )
         DownloadStatus.FAILED.name -> DownloadState.Failed(entity.errorMsg)
         DownloadStatus.DELETED.name -> DownloadState.Idle
@@ -227,7 +228,8 @@ class DownloadRepository(
                 it.audioPath ?: "",
                 coverPath = it.coverPath,
                 lyricPath = it.lyricPath,
-                embedded = it.embedded
+                embedded = it.embedded,
+                quality = it.quality
             )
         }
 

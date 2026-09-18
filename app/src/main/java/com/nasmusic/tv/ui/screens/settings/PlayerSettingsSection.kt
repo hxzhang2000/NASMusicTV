@@ -130,6 +130,20 @@ internal fun PlayerSettingsSection(
                 )
             }
         }
+        // v2.35.0 多码率（§5.3）：两条说明文案，降低用户困惑
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(
+            text = stringResource(R.string.quality_tier_hint_lossless),
+            color = NasMusicColors.TextSecondary,
+            fontSize = FontSize.small(),
+            modifier = Modifier.padding(start = 4.dp)
+        )
+        Text(
+            text = stringResource(R.string.quality_tier_hint_scope),
+            color = NasMusicColors.TextSecondary,
+            fontSize = FontSize.small(),
+            modifier = Modifier.padding(start = 4.dp, top = 2.dp)
+        )
         Spacer(modifier = Modifier.height(12.dp))
         SettingActionButton(
             label = stringResource(R.string.settings_equalizer),

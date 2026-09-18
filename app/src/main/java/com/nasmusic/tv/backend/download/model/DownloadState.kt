@@ -29,7 +29,18 @@ sealed interface DownloadState {
         val path: String,
         val coverPath: String? = null,
         val lyricPath: String? = null,
-        val embedded: Boolean = false
+        val embedded: Boolean = false,
+        /**
+         * v2.35.0 多码率：**实际落盘档位**（0/128/192/320/999）。
+         *
+         * 由 `SongDownloadManager` 从 `DownloadSongEntity.quality` 带入，
+         * 供歌曲行显示档位徽标（§5.2.3）。同曲多档并存时，
+         * 用户靠它区分"无损 FLAC"与"极高 320"两行，否则会误以为重复下载。
+         *
+         * [com.nasmusic.tv.backend.network.QualityTiers.AUTO] 表示无档位概念
+         * （存量行 / 本地 / NAS / 网盘），此时不渲染徽标。
+         */
+        val quality: Int = 0
     ) : DownloadState
 
     /** 失败（✕），点击重试，[reason] 用于提示 */

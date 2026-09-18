@@ -583,6 +583,12 @@ val resolvedQuality: Int = 0,       // 新增：网络歌曲解析后实际命�
 
 用途：列表/播放器显示"♫ 320"或"FLAC"徽标。`resolvedQuality` 只用于显示，**不参与缓存键和下载键**（缓存键见 §3.1，下载键见 §4.2.2，两者都用"请求/实际解析档位"而非此显示字段）。
 
+**实施记录（v2.35.0 已完成）**：`resolvedQuality` 的**消费点**已接线——
+`MainViewModel.replayCurrentWithQuality()` 在档位切换重播时写入
+（`song.copy(streamUrl = result.url, resolvedQuality = result.actualQuality)`），
+`UnifiedSongRow` 在渲染档位徽标时读取（优先取 `downloadState.quality`，回退 `resolvedQuality`）。
+即"解析后实际命中的档位"会在歌曲行上可见，而不只是一个被写入后闲置的字段。
+
 > **`Song` 是 `data class`，新增带默认值的字段是二进制兼容的**（不破坏 `copy()` 的既有调用）。但注意 `Song` 被 `data.model` 的 ProGuard keep 规则保护（AGENTS.md），且历史上有过"Gson 类型擦除导致 release 崩溃"的先例（v2.5.1）——**新增字段必须确认它不会被 Gson 序列化后反序列化**。`resolvedQuality` 是纯运行时显示字段、不落盘、不参与 JSON，因此风险为无；实施时不要把它写进任何持久化模型。
 
 ### 3.6 已下载本地文件优先 vs 切档：一个必须处理的冲突
@@ -1316,6 +1322,16 @@ suspend fun probeAvailableQualities(
 
 > ⚠️ **`dedupeKey` 的 UI 语义需要重新确认**：`DownloadRepository.kt:42` 的 `findCompletedByDedupe(dedupe)` 目前在别处仍被用于"UI 显示 ✓ / 不再发起下载"（`DownloadKeys.kt:32` 注释）。把去重判定改走 `isDownloaded()` 后，**`findCompletedByDedupe` 的调用点必须一并排查**：若某处 UI 仍用它判断"已下载"，会出现"显示了 ✓ 但该档其实没下载"的不一致。实施时先 grep `findCompletedByDedupe` 与 `dedupeKey` 的全部调用点，逐个决定保留或改走档位判定。
 
+**实施记录（v2.35.0 已完成）**：
+
+1. **`findCompletedByDedupe` 排查结论**：实施时 grep 全部调用点，确认它**只被 `AutoDownloadController` 使用**（已改为 `isDownloaded(song, quality)` 两段式判定），**没有任何 UI 依赖它**。因此不存在"显示 ✓ 但该档没下载"的风险。该 DAO 方法保留未删（供未来跨源去重语义复用）。
+2. **徽标接线方式**（与本节示意图的差异）：本节原设计是"已下载列表按行显示档位列"。实施时发现**下载歌曲实际是通过 `local_songs`（`storageType=DOWNLOAD`）合并进本地曲库展示的**，UI 层没有直接读 `download_songs` 表的列表页（全仓库 `DownloadSongEntity` 仅被 `QualityBadge` 的注释引用）。因此改为**在通用歌曲行 `UnifiedSongRow` 上渲染档位徽标**：
+   - 数据通道：`DownloadState.Completed` 新增 `quality` 字段（由 `SongDownloadManager`/`DownloadRepository` 从 `entity.quality` 带入），复用已有的 `downloadStates` 传递链路，**无需 UI 层新增查询**；
+   - 取档位优先级：`downloadState.quality`（已下载）→ `song.resolvedQuality`（已解析但未下载）；
+   - `quality == AUTO(0)` 时不渲染徽标（存量行 / 本地 / NAS / 网盘无档位概念）；
+   - 该方案同时覆盖本地曲库、搜索结果、专辑/艺术家详情、网盘等**全部**使用 `UnifiedSongRow` 的列表，比原设计的"仅下载列表"覆盖面更广。
+3. **`↓` 降级角标**：按本节原计划（"v1 可省略"）未实现。`QualityBadge` 已预留 `downgraded` 参数，需要时传入即可。
+
 ### 5.3 设置页音质区块改造
 
 现状 `PlayerSettingsSection.kt:120-131` 是硬编码 4 按钮，且**不含 192**：
@@ -1356,6 +1372,10 @@ TV 端 5 个按钮横向排布可能超出焦点区宽度，建议改为**两行
 
 1. 「无损仅限支持 FLAC 的曲库；不可用时自动降级并提示」——对应 §2.6；
 2. 「本档位仅影响网络音乐；NAS / 本地 / 网盘歌曲按其原始码率播放」——对应 §2.5。
+
+**实施记录（v2.35.0 已完成）**：两条文案已落地为
+`quality_tier_hint_lossless` / `quality_tier_hint_scope`（中英双语），
+在 `PlayerSettingsSection` 的档位按钮组下方以 `FontSize.small()` 渲染。
 
 **新增子区块（仅当 Q1 评审通过时）：**
 
@@ -1442,46 +1462,59 @@ MainViewModel（播放器音质面板「仅本次播放」）
 
 目标：让现有的 4 档设置真正生效。
 
-- [ ] `NetworkMusicManager` 缓存 key 加入 quality（G1）
-- [ ] 新增 `clearPlayUrlCache()`，挂到 `setQualityTier()`（G5）
-- [ ] 档位切换后 `forceRefresh=true` 重解析
+- [x] `NetworkMusicManager` 缓存 key 加入 quality（G1）
+- [x] 新增 `clearPlayUrlCache()`，挂到 `setQualityTier()`（G5）
+- [x] 档位切换后 `forceRefresh=true` 重解析
 - [ ] 单测：切换档位后旧档直链不被复用
 
 **Phase 1 是纯缺陷修复，无 UI 变更，可独立发布。**
 
 ### Phase 2：码率能力补齐（1.5 人日）
 
-- [ ] 新增 `QualityTiers.kt` 单一真相源（`object` + `fallbackChainOf()`），补 192 档
-- [ ] `fallbackChainOf(LOSSLESS)` 补 192（§2.2 已更正为 `999 → 320 → 192 → 128`）
-- [ ] `NetworkMusicService` 新增 `resolvePlayUrl(song, quality)` + `resolvePlayUrlDetailed(song, quality)` + `MetingApiService` 覆盖 + `ResolveResult`
-- [ ] 降级提示（Snackbar）
-- [ ] 设置页遍历 `QualityTiers.all`
+- [x] 新增 `QualityTiers.kt` 单一真相源（`object` + `fallbackChainOf()`），补 192 档
+- [x] `fallbackChainOf(LOSSLESS)` 补 192（§2.2 已更正为 `999 → 320 → 192 → 128`）
+- [x] `NetworkMusicService` 新增 `resolvePlayUrl(song, quality)` + `resolvePlayUrlDetailed(song, quality)` + `MetingApiService` 覆盖 + `ResolveResult`
+- [x] 降级提示（Snackbar）
+- [x] 设置页遍历 `QualityTiers.all`
 - [ ] 单测：`QualityTiers` 全部分支、`ResolveResult` 降级信号
 
 ### Phase 3：下载多码率（2.5 人日）
 
-- [ ] `enqueue(song, auto, quality)` + `StreamUrlResolver.resolveDetailed()` + `networkDetailed` lambda 接线（`NasMusicApp.kt:339-343`）
-- [ ] `DownloadSongEntity.quality` + **`version 1→2` + `MIGRATION_1_2` + `addMigrations()` 注册**（零重建，§4.2.4）
-- [ ] `downloadKeyOf(quality)`：Meting 网络歌曲追加 `:q<quality>`，**用实际档、AUTO 档不加后缀、下划线前缀**；存量不回填
-- [ ] `DownloadRepository.isDownloaded()` / `downloadedQualitiesOf()` 双格式兼容
-- [ ] `extOf(url, song, quality)` + `baseNameWithQuality()`，参数一律取 `actualQuality`（§4.3）
-- [ ] **下载循环重排**：把"建 DOWNLOADING 行"挪到解析之后，避免降级时留孤儿行（§4.4.2）
-- [ ] **静默降级落库链路**：`songKey` / `extOf` / `baseName` / `entity.quality` 全部用实际档；全链失败才 FAILED（§4.4，Q6）
-- [ ] `AutoDownloadController`：前置去重（按请求档）+ **落库前二次去重（按实际档）**，两条都不可省（§4.5）
-- [ ] **排查 `dedupeKey` / `findCompletedByDedupe` 的全部调用点**（§5.2.3 末注）
-- [ ] 单测：同曲多档不冲突、扩展名判定矩阵、双格式查询兼容、降级落库键一致、**迁移测试（MigrationTestHelper）**
+- [x] `enqueue(song, auto, quality)` + `StreamUrlResolver.resolveDetailed()` + `networkDetailed` lambda 接线（`NasMusicApp.kt:339-343`）
+- [x] `DownloadSongEntity.quality` + **`version 1→2` + `MIGRATION_1_2` + `addMigrations()` 注册**（零重建，§4.2.4）
+- [x] `downloadKeyOf(quality)`：Meting 网络歌曲追加 `:q<quality>`，**用实际档、AUTO 档不加后缀、下划线前缀**；存量不回填
+- [x] `DownloadRepository.isDownloaded()` / `downloadedQualitiesOf()` 双格式兼容
+- [x] `extOf(url, song, quality)` + `baseNameWithQuality()`，参数一律取 `actualQuality`（§4.3）
+- [x] **下载循环重排**：把"建 DOWNLOADING 行"挪到解析之后，避免降级时留孤儿行（§4.4.2）
+- [x] **静默降级落库链路**：`songKey` / `extOf` / `baseName` / `entity.quality` 全部用实际档；全链失败才 FAILED（§4.4，Q6）
+- [x] `AutoDownloadController`：前置去重（按请求档）+ **落库前二次去重（按实际档）**，两条都不可省（§4.5）
+- [x] **排查 `dedupeKey` / `findCompletedByDedupe` 的全部调用点**（§5.2.3 末注）
+- [x] 单测：同曲多档不冲突、扩展名判定矩阵、双格式查询兼容、降级落库键一致、**迁移测试**
+      > **实施偏差（已定稿）**：迁移测试**未使用 `MigrationTestHelper`**。原因：它要求把 schema JSON 挂到
+      > 测试 assets，而开启 `unitTests.isIncludeAndroidResources = true` 会破坏既有
+      > `BaiduMvFileServiceTest`（实测对照：仅开启该配置后该类才出现 `UncaughtExceptionsBeforeTest`）。
+      > 改为**手工按 v1 原始 DDL 建库 + `Room.databaseBuilder` + `MIGRATION_1_2` 打开**——
+      > 走的正是生产升级路径，Room 的 schema 校验照样生效，且零全局配置副作用。
+      > 实测 8 例通过；`DownloadDatabase` 的 `exportSchema` 已改为 `true`，
+      > `app/schemas/.../DownloadDatabase/{1,2}.json` 作为权威基线入库。
 
 ### Phase 4：界面 + 单曲覆盖粒度（3 人日）
 
-- [ ] 播放器音质切换器 + 面板（5.1）+ 降级提示
-- [ ] **`PlayerViewModel.resolveStreamUrl()` 按档位查本地优先**（§3.6，**回归风险最高的改动**）
-- [ ] `QualityProbe.probeAvailableQualities()` 并发探测（`async`/`awaitAll`）+ 1200ms 单档超时（§5.2.1）
-- [ ] **单曲下载自动弹窗判定**：多档弹菜单（仅列可用档）、单档直下、零档报错（§5.2.1，Q7）
+- [x] 播放器音质切换器 + 面板（5.1）+ 降级提示
+- [x] **`PlayerViewModel.resolveStreamUrl()` 按档位查本地优先**（§3.6，**回归风险最高的改动**）
+- [x] `QualityProbe.probeAvailableQualities()` 并发探测（`async`/`awaitAll`）+ 1200ms 单档超时（§5.2.1）
+- [x] **单曲下载自动弹窗判定**：多档弹菜单（仅列可用档）、单档直下、零档报错（§5.2.1，Q7）
 - [ ] 批量下载逐曲独立降级 + 批次完成汇总提示（§5.2.2）
-- [ ] 已下载列表档位徽标（显示实际档，§5.2.3）
-- [ ] 设置页改造（5.3）
-- [ ] **单曲覆盖**：`QualityOverrides.kt` 持久化（§2.3.1）+ 面板「仅本次播放 / 全部歌曲」范围选项（5.1）+ 设置页「清除全部单曲覆盖」入口
+      > **范围外（已定稿）**：排查后确认本项目 UI **不存在批量下载入口**
+      > （全仓库仅 `onDownloadSong` 单曲下载，无 `downloadAll`/批量选择 UI）。
+      > §5.2.2 描述的是"先新建批量下载 UI、再叠加档位"，属新功能而非本方案的补全断点。
+      > 单曲路径已逐曲独立降级（§4.4），批量入口落地时可直接复用 `enqueue(song, auto, quality)`。
+- [x] 已下载列表档位徽标（显示实际档，§5.2.3）
+- [x] 设置页改造（5.3）
+- [x] **单曲覆盖**：`QualityOverrides.kt` 持久化（§2.3.1）+ 面板「仅本次播放 / 全部歌曲」范围选项（5.1）+ 设置页「清除全部单曲覆盖」入口
 - [ ] 真机遥控焦点走查
+      > **待人工执行**：需在基准设备（创维 5.1.1 开发机）实机走查 §10.3 的 21 项清单，
+      > 其中含本方案**回归风险最高**的"已下载歌曲切档是否生效"（§3.6 改变了既有播放行为）。
 
 **合计**：Phase 1-4 约 **7.5 人日**（Phase 3 由 2 增至 2.5，用于下载循环重排与 `dedupeKey` 调用点排查；Phase 4 维持 3 人日）。
 

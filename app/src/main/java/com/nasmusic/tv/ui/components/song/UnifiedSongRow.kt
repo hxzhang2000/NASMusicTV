@@ -334,6 +334,18 @@ private fun SongRowModeRow(
                             )
                             else -> SourceBadge(song = song)
                         }
+                        // v2.35.0 多码率（§5.2.3）：已下载歌曲显示**实际落盘档位**徽标。
+                        // 同曲多档并存时（无损 FLAC / 极高 320 / 标准 128 各一行），
+                        // 靠它区分，否则用户会误以为重复下载了同一首歌。
+                        // 优先取 downloadState 的档位；网络歌曲未下载但已解析过则回退 resolvedQuality。
+                        val badgeQuality = when (effectiveDownloadState) {
+                            is DownloadState.Completed -> effectiveDownloadState.quality
+                            else -> song.resolvedQuality
+                        }
+                        if (badgeQuality != com.nasmusic.tv.backend.network.QualityTiers.AUTO) {
+                            Spacer(modifier = Modifier.width(8.dp))
+                            com.nasmusic.tv.ui.components.QualityBadge(quality = badgeQuality)
+                        }
                     }
                         Text(
                         text = song.artist.ifBlank { "-" },

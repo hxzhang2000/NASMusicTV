@@ -17,6 +17,10 @@
 
 - **192 kbps「高品」档位**：此前只有 自动/128/320/无损 四档，用户在「极差」与「较贵」间二选一。
   新增 `QualityTiers.GOOD = 192`，设置页、播放器面板、下载面板全部改为遍历单一真相源
+- **歌曲行档位徽标**（§5.2.3）：已下载歌曲在列表行显示**实际落盘档位**
+  （无损 / 320k / 192k / 128k）。同曲多档并存时靠它区分，否则用户会误以为重复下载了同一首歌。
+  数据经 `DownloadState.Completed.quality` 传递，覆盖本地曲库 / 搜索结果 / 专辑详情 / 网盘等
+  全部使用 `UnifiedSongRow` 的列表；`quality == AUTO` 时不渲染徽标
 - **`backend/network/QualityTiers.kt`**：档位单一真相源——常量、标签、扩展名映射、降级链。
   统一由 `fallbackChainOf(tier)` 产出降级链（无损 = `999 → 320 → 192 → 128`）
 - **`backend/network/ResolveResult.kt`**：解析结果封装 `(url, actualQuality)`，承载**降级信号**。
@@ -30,6 +34,8 @@
 - **`DownloadSongEntity.quality`** 字段 + `songId` 索引：下载索引首次具备档位维度，
   同曲多档可共存（无损 `.flac` 与 `320.mp3` 并存不冲突）
 - **播放器音质切换器**（NowPlaying 控制行）+ 音质选择面板（5 档单选 + 范围二选）
+- **设置页两条说明文案**：无损档限制说明（「无损仅限支持 FLAC 的曲库；不可用时自动降级并提示」）
+  与作用范围说明（「本档位仅影响网络音乐；NAS / 本地 / 网盘歌曲按其原始码率播放」），中英双语
 - **`QualityBadge`** 档位徽标组件、`DownloadQualityPickerDialog` / `QualityPickerDialog` / `QualityProbingDialog` 三个面板
 
 ### Changed

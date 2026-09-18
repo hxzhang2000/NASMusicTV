@@ -180,7 +180,8 @@ class SongDownloadManager(
                     current.audioPath ?: "",
                     coverPath = current.coverPath,
                     lyricPath = current.lyricPath,
-                    embedded = current.embedded
+                    embedded = current.embedded,
+                    quality = current.quality
                 ))
             }
             return DownloadResult.Already
@@ -385,7 +386,8 @@ class SongDownloadManager(
                 p.finalFile.absolutePath,
                 coverPath = coverPath,
                 lyricPath = lyricPath,
-                embedded = embedded
+                embedded = embedded,
+                quality = actual
             ))
         }
 
@@ -631,7 +633,8 @@ class SongDownloadManager(
                             finalPath,
                             coverPath = entity.coverPath,
                             lyricPath = entity.lyricPath,
-                            embedded = entity.embedded
+                            embedded = entity.embedded,
+                            quality = entity.quality
                         ))
                     }
                 } else {
@@ -654,7 +657,8 @@ class SongDownloadManager(
                             f.absolutePath,
                             coverPath = entity.coverPath,
                             lyricPath = entity.lyricPath,
-                            embedded = entity.embedded
+                            embedded = entity.embedded,
+                            quality = entity.quality
                         ))
                     }
                 }

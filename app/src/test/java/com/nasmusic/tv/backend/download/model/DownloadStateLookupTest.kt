@@ -90,4 +90,43 @@ class DownloadStateLookupTest {
         val states = mapOf("${s.downloadKey}:q999" to DownloadState.Failed("HTTP 404"))
         assertTrue(states.stateOfSong(s) is DownloadState.Failed)
     }
+
+    // ── v2.35.0 §5.2.3：档位徽标数据源 ──────────────────────
+
+    @Test
+    fun `Completed 状态携带实际落盘档位`() {
+        // 徽标显示的是"实际档位"而非请求档位；降级后应显示降级到的档
+        val s = song()
+        val states = mapOf(
+            "${s.downloadKey}:q320" to DownloadState.Completed("/a.mp3", quality = 320)
+        )
+        val st = states.stateOfSong(s)
+        assertTrue(st is DownloadState.Completed)
+        assertEquals("徽标必须能拿到实际档位 320", 320, (st as DownloadState.Completed).quality)
+    }
+
+    @Test
+    fun `Completed 默认档位为 AUTO 不渲染徽标`() {
+        val s = song()
+        val st = DownloadState.Completed("/a.mp3")
+        assertEquals(0, st.quality)
+        assertEquals(
+            "AUTO 档不应渲染徽标",
+            com.nasmusic.tv.backend.network.QualityTiers.AUTO, st.quality
+        )
+    }
+
+    @Test
+    fun `同曲多档并存时徽标取进行中优先 但已完成档位仍可读`() {
+        val s = song()
+        val states = mapOf(
+            "${s.downloadKey}:q320" to DownloadState.Completed("/a.mp3", quality = 320),
+            "${s.downloadKey}:q999" to DownloadState.Downloading(50)
+        )
+        // stateOfSong 优先返回进行中（UI 反馈优先），此时不显示档位徽标
+        assertTrue(states.stateOfSong(s) is DownloadState.Downloading)
+        // 但已完成的 320 档位信息在表中仍可单独读取
+        val done = states["${s.downloadKey}:q320"]
+        assertEquals(320, (done as DownloadState.Completed).quality)
+    }
 }
