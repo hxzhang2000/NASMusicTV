@@ -80,9 +80,24 @@
 - 新增 **`QualityProbeTest`**：用虚拟时间断言探测**并发**执行
   （总耗时 ≈ 单档而非 4 倍）、单档超时不阻塞其他档、整链超时封顶、
   仅返回可用档且降序、探测不含 AUTO 档
+- 补齐方案 §10.1 列出的**全部 13 个测试类**（新增 77 例，全量 796 例 / 0 失败）：
+  `QualityTiersTest` / `ResolveResultTest` / `DownloadKeyTest` / `DownloadQualityPathTest` /
+  `DownloadStateLookupTest` / `DownloadDatabaseMigrationTest` / `QualityProbeTest` /
+  `PlayUrlCacheKeyTest` / `QualityOverridesTest` / `MetingResolveTest` /
+  `LocalPlaybackPriorityTest` / `AutoDownloadDedupeTest` / `DowngradePersistTest`
 - 可测性调整：`QualityProbe.probeAvailableQualities` 与
   `StreamUrlResolver.resolveDetailed` 新增可注入 `dispatcher` 参数（默认 IO），
-  使 `runTest` 虚拟时间可用；生产行为不变
+  使 `runTest` 虚拟时间可用；§3.6 的播放源决策从 `PlayerViewModel` 抽到
+  `NetworkPlaybackResolver`（纯 suspend + lambda 注入），使高风险路径可被单测覆盖。
+  两处生产行为不变
+
+### Fixed
+
+- **`QualityOverrides` 内存镜像被旧快照回退**（测试捕获）：`init` 里的
+  `dataStore.data.collect { cache = decode(it) }` 与 put/remove 的同步写竞争——
+  连续两次 `put` 时第一次 persist 触发的回调可能后到，把更新的内存值回退成旧值。
+  用户选完「仅本次播放 999」立刻播放可能读到上一次的档位。已移除该 collector
+  （单进程下所有写入必经本类方法，collector 无必要），`put()` 返回后即刻可读新值
 
 ### Database
 

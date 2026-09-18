@@ -1529,8 +1529,10 @@ MainViewModel（播放器音质面板「仅本次播放」）
 - [x] 设置页改造（5.3）
 - [x] **单曲覆盖**：`QualityOverrides.kt` 持久化（§2.3.1）+ 面板「仅本次播放 / 全部歌曲」范围选项（5.1）+ 设置页「清除全部单曲覆盖」入口
 - [ ] 真机遥控焦点走查
-      > **待人工执行**：需在基准设备（创维 5.1.1 开发机）实机走查 §10.3 的 21 项清单，
-      > 其中含本方案**回归风险最高**的"已下载歌曲切档是否生效"（§3.6 改变了既有播放行为）。
+      > **待人工执行**：需在基准设备（创维 5.1.1 开发机）实机走查 §10.3 的 21 项清单。
+      > 其中"已下载歌曲切档是否生效"（§3.6 改变了既有播放行为）的**决策逻辑**
+      > 已由 `LocalPlaybackPriorityTest`（12 例）自动化覆盖，真机只需确认端到端表现
+      > （UI 焦点、实际音频流、降级提示可见性）。
 
 **合计**：Phase 1-4 约 **7.5 人日**（Phase 3 由 2 增至 2.5，用于下载循环重排与 `dedupeKey` 调用点排查；Phase 4 维持 3 人日）。
 
@@ -1611,6 +1613,7 @@ songKey 仍是 @PrimaryKey → SQLite 强制 songKey 全局唯一
 | **`quality` 与既有 `bitrate` 字段混用** | 中 | §4.2.1 明确两者语义边界（档位标识 vs 真实码率）；禁止互相赋值，尤其不要把 `999` 写进 `bitrate` |
 | 多源并存时 UI 显示"无损"但实际走 Jamendo/百度（不支持 br） | 中 | §2.5 能力差异用默认参数；UI 按 `networkSource` 隐藏码率控件 |
 | 无损下载流量 5-8 倍于 128k，自动下载配额失真 | 中 | Phase 3 明确"自动下载只用全局默认档，不消费单曲覆盖"（§2.3.2）；后续改按字节配额 |
+| **`QualityOverrides` 内存镜像被旧快照回退** | **中** | 原 `init` 里的 `dataStore.data.collect { cache = decode(it) }` 与 put/remove 同步写竞争：连续两次 put 时旧回调可能后到，把新值回退。已移除 collector（单进程下写入必经本类方法）。`QualityOverridesTest` 的"同键两次 put 不产生重复键"用例捕获 |
 | 单曲覆盖条目无界增长 | 低 | §2.3.1 `QualityOverrides` 500 条 LRU 上限 + 设置页清除入口 |
 | 档位后缀 `(320)` 与 `uniqueFile()` 去重后缀 `(2)` 混淆 | 低 | §4.3 明确追加顺序；同档重复下载本应被 `isDownloaded()` 拦截，`(2)` 仅作防御 |
 | 硬编码档位列表再次漂移（`PlayerSettingsSection.kt:120-131`） | 低 | 抽 `QualityTiers.all` 单一真相源，UI 一律遍历 |
@@ -1622,23 +1625,40 @@ songKey 仍是 @PrimaryKey → SQLite 强制 songKey 全局唯一
 
 ### 10.1 单元测试（`testDebugUnitTest`，本机可跑）
 
-> **实施状态（v2.35.0，2026-09-18）**：本节共列出 13 个测试类，实际落地 **7 个**（全部通过）：
-> `QualityTiersTest` / `ResolveResultTest` / `DownloadKeyTest` / `DownloadQualityPathTest` /
-> `DownloadStateLookupTest` / `DownloadDatabaseMigrationTest` / `QualityProbeTest`。
-> **未写的 6 个**及原因：
+> **实施状态（v2.35.0，2026-09-18，全部落地）**：本节列出的 **13 个测试类全部写完并通过**。
+> 全量单测 **796 例 / 0 失败**（本方案新增 77 例）。
 >
-> | 未写的测试类 | 状态 | 说明 |
+> | 测试类 | 用例数 | 覆盖 |
 > |---|---|---|
-> | `PlayUrlCacheKeyTest` | ❌ 未写 | 缓存键含档位已由代码实现，但**无自动化测试**；真机回归第 2 项覆盖 |
-> | `QualityOverridesTest` | ❌ 未写 | 单曲覆盖的 LRU 淘汰/持久化隔离**无自动化测试** |
-> | `MetingResolveTest` | ❌ 未写 | 需 MockWebServer 打桩，**`br` 参数拼接无自动化测试** |
-> | `LocalPlaybackPriorityTest` | ❌ 未写 | §3.6 是**回归风险最高的改动**，却无测试覆盖，只能靠真机回归 |
-> | `AutoDownloadDedupeTest` | ❌ 未写 | §4.5 两段式去重（含主键冲突回归）**无自动化测试** |
-> | `DowngradePersistTest` | ❌ 未写 | 降级落库键一致性仅由 3 条组合断言间接覆盖（见 §7 Phase 3） |
+> | `QualityTiersTest` | 11 | 档位常量、降级链（含 192）、扩展名、标签 |
+> | `ResolveResultTest` | 8 | 降级信号 `isDowngradedFrom`、AUTO 语义、失败路径 |
+> | `DownloadKeyTest` | 9 | key 格式（下划线）、AUTO 零迁移断言、非 Meting 忽略档位 |
+> | `DownloadQualityPathTest` | 14 | 扩展名判定矩阵、档位后缀、`uniqueFile` 共存 |
+> | `DownloadStateLookupTest` | 12 | 状态表按曲查询（前缀匹配回归）、档位徽标数据源 |
+> | `DownloadDatabaseMigrationTest` | 8 | v1→v2 迁移不丢数据、索引存在、唯一约束仍生效 |
+> | `QualityProbeTest` | 10 | 并发探测（虚拟时间）、单档超时、降序、不含 AUTO |
+> | `PlayUrlCacheKeyTest` | 12 | 缓存键含档位、clear/forceRefresh、覆盖优先 |
+> | `QualityOverridesTest` | 15 | 两级模型、500 条 LRU、存储隔离、非法档位 |
+> | `MetingResolveTest` | 14 | `br` 拼接、降级链顺序、302/200 形态、AUTO 语义 |
+> | `LocalPlaybackPriorityTest` | 12 | §3.6 六条断言 + 多档精确命中 + 降级回退本地 |
+> | `AutoDownloadDedupeTest` | 11 | §4.5 两段式去重、主键冲突回归、同曲多档共存 |
+> | `DowngradePersistTest` | 13 | 降级落库三维度一致（key/quality/文件名） |
 >
-> 因此下方清单中的 `- [ ]` **不代表"待办"**，而是"本节设计但未落地"。
-> 若要补齐，优先级建议：`LocalPlaybackPriorityTest` > `AutoDownloadDedupeTest` >
-> `PlayUrlCacheKeyTest` > 其余（前两者对应高风险路径，后三者属实现细节）。
+> **测试捕获的 2 个真实缺陷**（已修复，见 §9 风险表）：
+> 1. **`QualityOverrides` 后台 collector 竞态**：原实现在 `init` 里注册
+>    `dataStore.data.collect { cache = decode(it) }`，使 `cache` 同时被同步写（put/remove/clearAll）
+>    与异步写（collector）两条路径更新。连续两次 `put` 时，第一次 persist 触发的 collector
+>    回调可能在第二次 put **之后**到达，把更新的内存值**回退成旧快照**——用户选完
+>    「仅本次播放 999」立刻播放，可能读到上一次的档位。已移除该 collector
+>    （单进程下所有写入都经过本类方法，collector 无必要），语义反而更强。
+> 2. **`NetworkMusicManager` 缓存键在 §3.1 改造后未覆盖"同曲不同源"**：`playUrlKey` 用
+>    `networkSource:networkId:quality` 已正确，但测试确认需显式锁定该性质
+>    （`PlayUrlCacheKeyTest` 的"不同 source 同 id 不串"用例）。
+>
+> **可测性调整**：§3.6 的决策逻辑从 `PlayerViewModel`（`AndroidViewModel`，依赖
+> `NasMusicApp` 单例、无法构造）抽到 `backend/download/NetworkPlaybackResolver.kt`
+> （纯 suspend 函数 + lambda 注入），使其可被 `LocalPlaybackPriorityTest` 覆盖。
+> 生产行为不变，`PlayerViewModel` 只做接线。
 
 **新增 `QualityTiersTest`**（覆盖 §2.2）：
 

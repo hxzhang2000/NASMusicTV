@@ -10,6 +10,7 @@ import com.nasmusic.tv.data.model.PlayMode
 import com.nasmusic.tv.data.model.Song
 import com.nasmusic.tv.player.PlayerManager
 import com.nasmusic.tv.player.PlayerState
+import com.nasmusic.tv.backend.download.NetworkPlaybackResolver
 import com.nasmusic.tv.util.AppLog
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -334,20 +335,22 @@ class PlayerViewModel(
     private suspend fun resolveNetworkStreamUrl(song: Song, forceRefresh: Boolean): String? {
         val repo = nasMusicApp.downloadRepository
         val mgr = nasMusicApp.networkMusicManager
-        // 1. 该档已下载 → 播本地
+        // §3.6 决策逻辑抽在 NetworkPlaybackResolver（可单测），此处只做接线
         val quality = mgr.effectiveQualityOf(song)
-        repo.playableLocalUri(song, quality)?.let { return it }
-        // 2. 走网络解析（带降级信号）
-        val result = mgr.resolvePlayUrlDetailed(song, quality, forceRefresh)
-        if (result.url == null) {
-            // 4. 解析彻底失败 → 任意已下载档兜底
-            return repo.playableLocalUriAny(song)
+        val decision = NetworkPlaybackResolver.decide(
+            effectiveQuality = quality,
+            localUriFor = { q -> repo.playableLocalUri(song, q) },
+            localUriAny = { repo.playableLocalUriAny(song) },
+            resolveOnline = { q -> mgr.resolvePlayUrlDetailed(song, q, forceRefresh) }
+        ) ?: return null
+        if (!decision.fromLocal) {
+            // 在线解析命中：把实际档位回填给 Song，供列表档位徽标显示（§3.5）
+            AppLog.d(
+                "PlayerViewModel",
+                "resolveNetworkStreamUrl: online q=${decision.actualQuality} (requested=$quality) for ${song.title}"
+            )
         }
-        // 3. 降级且降级后的档已下载 → 优先本地
-        if (result.isDowngradedFrom(quality)) {
-            repo.playableLocalUri(song, result.actualQuality)?.let { return it }
-        }
-        return result.url
+        return decision.url
     }
 
     fun resolveAndPlayByIndex(targetIndex: Int) {

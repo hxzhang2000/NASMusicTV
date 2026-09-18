@@ -12,8 +12,6 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import java.io.File
 
@@ -61,16 +59,21 @@ class QualityOverrides(context: Context) {
     init {
         // 启动时同步加载一次，保证 tierOf() 立即可用（首帧不会漏覆盖）
         cache = runBlocking(Dispatchers.IO) { load() }
-        // 之后持续镜像，避免多进程/多次写入后内存与磁盘不一致
-        CoroutineScope(Dispatchers.IO + SupervisorJob()).launch {
-            dataStore.data.map { it[KEY_OVERRIDES] ?: "" }.collect { json ->
-                cache = decode(json)
-            }
-        }
+        // ⚠️ 这里**刻意不注册** dataStore.data 的后台 collect 镜像。
+        //
+        // 原实现注册了 `dataStore.data.collect { cache = decode(it) }`，但那会让
+        // `cache` 同时被两条路径写入：本类的 put/remove/clearAll（同步）与 collector（异步）。
+        // 连续两次 put 时，第一次 persist 触发的 collector 回调可能在第二次 put 之后才到达，
+        // 把更新的内存值**回退成旧快照** —— 用户选完「仅本次播放 999」立刻播放，
+        // 可能读到上一次的档位（QualityOverridesTest 捕获到该竞态）。
+        //
+        // 本应用是**单进程**，且所有写入都必须经过本类的方法（方法内已同步更新 cache），
+        // 因此不存在"外部改盘、内存不知"的场景，collector 没有存在必要。
+        // 去掉后 tierOf() 在 put() 返回后立刻可读到新值，语义更强。
     }
 
     private suspend fun load(): Map<String, Entry> =
-        decode(dataStore.data.map { it[KEY_OVERRIDES] ?: "" }.first())
+        decode(dataStore.data.first()[KEY_OVERRIDES] ?: "")
 
     private fun decode(json: String): Map<String, Entry> {
         if (json.isBlank()) return emptyMap()
