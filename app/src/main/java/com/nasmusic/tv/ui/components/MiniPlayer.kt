@@ -175,7 +175,11 @@ fun MiniPlayer(
     }
 }
 
-/** 48dp 触摸目标（配 64dp 容器高度；见方案 §2.7 dp 口径说明） */
+/**
+ * **[PHONE_TOUCH_TARGET]（56 Compose dp ≈ 45.9 物理 dp ≥ 44）** 触摸目标，配 64dp 容器高度。
+ *
+ * ⚠️ 早期写成 48dp（≈39.4 物理 dp）不达标，见方案 §2.7 第 1 条 / P0-26。
+ */
 @Composable
 private fun MiniPlayerIconButton(
     contentDescription: String,
@@ -185,18 +189,20 @@ private fun MiniPlayerIconButton(
     FocusableSurface(
         onClick = onClick,
         modifier = Modifier
-            .size(48.dp)
+            .size(PHONE_TOUCH_TARGET)
             .semantics { this.contentDescription = contentDescription },
         shape = RoundedCornerShape(8.dp),
         containerColor = Color.Transparent,
         focusedContainerColor = NasMusicColors.Primary.copy(alpha = 0.2f),
+        // P2-34：手机触摸没有焦点边框，按下高亮是唯一的"已响应"视觉反馈
+        pressedContainerColor = NasMusicColors.Primary.copy(alpha = 0.35f),
         contentColor = NasMusicColors.TextPrimary,
         focusedContentColor = NasMusicColors.Primary,
         focusedScale = 1.06f,
         animationDurationMs = 150,
         pressedScale = 0.92f,
     ) {
-        Box(modifier = Modifier.size(48.dp), contentAlignment = Alignment.Center) {
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             content()
         }
     }

@@ -1,3 +1,7 @@
+// NasScreenUiMode-exempt: MV 播放页被 MainActivity 的 `isFullScreenPage`
+// 强制 `SENSOR_LANDSCAPE` —— **永远不在竖屏渲染**，因此不需要 UiMode 分支。
+// 标记由 `ScreenUiModeCoverageTest` 消费，见 docs/conventions-adaptive-ui.md §9。
+
 package com.nasmusic.tv.ui.components
 
 import androidx.compose.ui.res.stringResource

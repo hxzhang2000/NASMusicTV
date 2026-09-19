@@ -64,6 +64,8 @@ import com.nasmusic.tv.ui.LocalListBackHandler
 import com.nasmusic.tv.ui.components.CoverCarousel
 import com.nasmusic.tv.ui.components.FocusableSurface
 import com.nasmusic.tv.ui.components.LocalFocusableContentColor
+import com.nasmusic.tv.ui.components.PHONE_TOUCH_TARGET
+import com.nasmusic.tv.ui.components.portraitTouchTarget
 import com.nasmusic.tv.ui.theme.LocalUiMode
 import com.nasmusic.tv.ui.theme.NasMusicBrushes
 import com.nasmusic.tv.ui.theme.NasMusicColors
@@ -407,22 +409,29 @@ private fun QueueListPane(
     }
 }
 
-/** 竖屏队列行 ⋮ 按钮（44dp+ 触摸目标） */
+/**
+ * 竖屏队列行 ⋮ 按钮：**[PHONE_TOUCH_TARGET]（56 Compose dp ≈ 45.9 物理 dp ≥ 44）**。
+ *
+ * ⚠️ 早期写成 48dp 并注释「44dp+ 触摸目标」属物理/Compose 口径混用（方案 §2.7 / P0-26）。
+ * 队列行 `height(72.dp).padding(vertical = 8.dp)` → 内容高恰好 56dp，按钮填满即达上限。
+ */
 @Composable
 private fun PortraitRowMenuButton(onClick: () -> Unit) {
     FocusableSurface(
         onClick = onClick,
-        modifier = Modifier.size(48.dp),
+        modifier = Modifier.size(PHONE_TOUCH_TARGET),
         shape = RoundedCornerShape(8.dp),
         containerColor = Color.Transparent,
         focusedContainerColor = NasMusicColors.Primary.copy(alpha = 0.2f),
+        // P2-34：手机触摸没有焦点边框，按下高亮是唯一的"已响应"视觉反馈
+        pressedContainerColor = NasMusicColors.Primary.copy(alpha = 0.35f),
         contentColor = NasMusicColors.TextPrimary,
         focusedContentColor = NasMusicColors.Primary,
         focusedScale = 1.06f,
         animationDurationMs = 150,
         pressedScale = 0.94f,
     ) {
-        Box(modifier = Modifier.size(48.dp), contentAlignment = Alignment.Center) {
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Text(text = "\u22EF", color = NasMusicColors.TextPrimary, fontSize = FontSize.subtitle())
         }
     }
@@ -602,7 +611,8 @@ private fun MoveButton(text: String, onClick: () -> Unit) {
 fun MiniIconButton(onClick: () -> Unit, icon: androidx.compose.ui.graphics.vector.ImageVector, contentDescription: String? = null) {
     FocusableSurface(
         onClick = onClick,
-        modifier = Modifier.size(44.dp),
+        // 竖屏下 44dp 只有 36.1 物理 dp ❌ → 走 §2.7 换算抬到 56dp（TV/横屏保持 44dp，B1）
+        modifier = Modifier.size(portraitTouchTarget(44.dp)),
         shape = CircleShape,
         focusedScale = 1.15f,
         animationDurationMs = 250,

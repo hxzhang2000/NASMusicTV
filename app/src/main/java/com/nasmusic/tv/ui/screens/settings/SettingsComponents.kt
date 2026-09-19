@@ -30,6 +30,7 @@ import com.nasmusic.tv.data.model.PlayMode
 import com.nasmusic.tv.data.model.VisualizerTheme
 import com.nasmusic.tv.ui.components.FocusableSurface
 import com.nasmusic.tv.ui.components.LocalFocusableContentColor
+import com.nasmusic.tv.ui.components.portraitTouchTarget
 import com.nasmusic.tv.ui.theme.FontSize
 import com.nasmusic.tv.ui.theme.NasMusicColors
 
@@ -330,7 +331,8 @@ internal fun formatVersionInfo(v: com.nasmusic.tv.data.model.VersionInfo): Pair<
 internal fun AdjustButton(text: String, onClick: () -> Unit) {
     FocusableSurface(
         onClick = onClick,
-        modifier = Modifier.size(48.dp),
+        // 48dp 在竖屏只有 39.4 物理 dp ❌ → §2.7 换算抬到 56dp（TV/横屏保持 48dp，B1）
+        modifier = Modifier.size(portraitTouchTarget(48.dp)),
         shape = RoundedCornerShape(12.dp),
         focusedScale = 1.1f,
         animationDurationMs = 200,

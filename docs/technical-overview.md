@@ -8987,6 +8987,85 @@ AppRoot 的 BACK 链在 `Screen.Settings` **之前**先消费它。
 - ⚠️ 只有 `modifier` 参数为 `internal` 的 enum 会连带报错：`SettingsSection` 由 `private` 上移时
   **必须同时改为 `public`**，否则 `public` 成员暴露 `internal` 类型编译失败（方案原文写 `internal` 不可行）。
 
+#### 10.162.1 触摸目标口径（P0-26，按 §2.7 全量复核）
+
+竖屏下 `LocalDensity` 被 `PHONE_UI_SCALE = 0.82` 缩放，代码里的 `X.dp` 只占 `X × 0.82` 个
+**物理 dp**。此前多处按物理口径写注释（"44dp+ 触摸目标"）却填了 Compose 值 → 实际全部偏小：
+
+| 写死的 Compose dp | 实际物理 dp | 判定 |
+|------------------|------------|------|
+| 44 | 36.08 | ❌ |
+| 48 | 39.36 | ❌ |
+| 52 | 42.64 | ❌ |
+| **56（新基线 `PHONE_TOUCH_TARGET`）** | **45.92** | ✅ |
+
+统一入口（`ui/components/CommonComponents.kt`）：
+
+```kotlin
+const val PHONE_TOUCH_TARGET_DP: Float = 56f
+val PHONE_TOUCH_TARGET: Dp = PHONE_TOUCH_TARGET_DP.dp
+
+@Composable
+fun portraitTouchTarget(landscape: Dp): Dp =
+    if (LocalUiMode.current == UiMode.PhonePortrait) PHONE_TOUCH_TARGET else landscape
+```
+
+保留 `Float` 常量是为了让 `UiModeTest` 能在纯 JVM 下断言该算术。
+
+- ⚠️ **`padding` 会削热区**：`Modifier.height(52.dp).padding(vertical = 4.dp)` 传给
+  `FocusableSurface` 时，`clickable` 加在 padding **之后** → 热区只剩 44dp（物理 36dp）。
+  `ExportDeviceDialog` 设备列表项改为「竖屏抬到 56dp **并取消垂直 padding**」。
+- ⚠️ **容器即热区**：`PhoneNavBar` / `PhoneTopBar` / `MiniPlayer` 的做法是「子项 `fillMaxSize()` /
+  56dp + 容器不加垂直 padding」，不要再套内边距。
+- **刻意豁免**（勿"顺手修"）：MV / K 歌 / 可视化三个全屏页被 `isFullScreenPage` 强制
+  `SENSOR_LANDSCAPE`，**永远不在竖屏渲染**；骨架屏占位、各页封面缩略图、`Spacer` 不是触摸目标。
+
+#### 10.162.2 门禁：新增 Screen 必须有 UiMode 分支（P1-32 后半）
+
+**来源**：方案 §9 P1-32「新增 Screen 必须有 UiMode 分支」。这类"忘了做竖屏"的问题
+**编译过、单测过**，只有真机才看得见 —— 必须由自动门禁兜住。
+
+落点：`app/src/test/java/com/nasmusic/tv/ui/ScreenUiModeCoverageTest.kt`
+（跑在已有的 `testDebugUnitTest` 阻塞门禁里）。
+
+- 判定：文件若有**顶层** `fun XxxScreen(` + `@Composable`，却未出现任一自适应 API marker
+  （`LocalUiMode` / `UiMode.` / `AdaptiveLayout(` / `adaptiveColumns(` / `adaptiveColumnsOf(` /
+  `responsiveDialogSize(` / `portraitTouchTarget(` / `PHONE_TOUCH_TARGET`）→ 测试失败
+- 豁免：文件顶部 `// NasScreenUiMode-exempt: <理由>`。本版豁免 `MvPlaybackScreen.kt`
+  与 `KaraokePlaybackScreen.kt`
+- 护栏**自证有效**：4 组负向用例（无 marker 必判违规、7 个 marker 逐个必被识别、
+  豁免标记必被识别、非 Screen / 嵌套函数 / 非 `@Composable` 不参与判定）；
+  源码目录定位失败时**直接失败**（不静默跳过），`user.dir` 覆盖「模块目录 / 仓库根 / 上一级」
+
+##### ⚠️ 为什么不是自定义 lint 规则（方案原文建议 `tools/lint/`）
+
+**实测在 AGP 9.2.1 + `com.android.tools.lint` 32.2.1 下不可行**，失败链路已完整定位：
+
+1. 按标准模板建 `tools/lint/`（`java-library` + `compileOnly` lint-api/lint-checks +
+   手写 `META-INF/services/...IssueRegistry`），`app/build.gradle.kts` 里接
+   `dependencies { lintChecks(project(":tools:lint")) }`
+2. ⚠️ 注意**不能**写进 `lint { }` 块 —— AGP 9.2.1 的 `com.android.build.api.dsl.LintOptions`
+   **没有** `lintChecks` 成员（`javap` 核实；那是新版 DSL `com.android.build.api.dsl.Lint` 的 API，
+   而本项目 `android.newDsl=false` 走 legacy DSL），写进去报 "receiver type mismatch"
+3. 接对之后 `:app:lintAnalyzeDebug` **失败**：
+   `class com.nasmusic.lint.PortraitScreenUiModeDetector cannot be cast to class
+   com.android.tools.lint.detector.api.SourceCodeScanner` ——
+   detector 类在 `com.intellij.util.lang.UrlClassLoader`，而 `SourceCodeScanner` 在
+   `java.net.URLClassLoader`，**两个类加载器各持一份 `lint-api`**（IntelliJ 的 `UrlClassLoader`
+   是 parent-last，所以 check 侧解析到了自己那份）
+4. **已排除配置错误**：`./gradlew :app:dependencies --configuration lintChecks` 只输出
+   `project :tools:lint`；check jar 内容仅 `PortraitScreenUiModeDetector.class`、
+   `NasMusicIssueRegistry.class`、`META-INF/services/...IssueRegistry`，**没有**打包 lint-api
+5. 同时确认 lint 能读到注册表（日志里有 `NasMusicIssueRegistry ... does not specify a vendor`
+   的提示），说明 `IssueRegistry`/`Issue` 是同一个类加载器 —— 只有 `SourceCodeScanner` 不是，
+   因此**不是**"整体加载失败"，而是 UAST 路由那一步的跨加载器强转失败
+
+**结论**：与其在构建里塞一个在当前工具链下不可靠的模块，改用**同等强度**的单测门禁 ——
+零新增依赖、零类加载风险，判定逻辑与设计中的 lint 规则**逐条一致**（同一套 marker、
+同一个豁免标记），将来工具链修好可原样搬回 `tools/lint/`。
+方案 §9 P1-32 的**验收目标（"新增 Screen 必须有 UiMode 分支"被自动拦住）已达成**，
+只是实现载体从 lint 换成了单测。
+
 **顺带修复**：`PlayerControls.kt` 进度条焦点变化时的无条件 `AppLog.e`（`AppLog.e` 无
 `BuildConfig.DEBUG` 守卫，release 也会执行）已移除；`FocusableSurface` 的 TV 判定补上
 `android.hardware.type.television`（部分盒子只声明这一项，此前被误判为手机、不显示焦点边框）。
@@ -8994,18 +9073,20 @@ AppRoot 的 BACK 链在 `Screen.Settings` **之前**先消费它。
 **测试**（`app/src/test/.../ui/theme/UiModeTest.kt`，纯 JVM）：`deriveUiMode` 三态 + 未知方向兜底 +
 **B1 回归用例**（手机横屏不得被判定为 TV）、`resolveOrientation` 四分支 + "永不返回 SENSOR 系列"、
 `nextOnToggle` "永不回到 auto"、`adaptiveColumnsOf` 阈值边界（599/600/999/1000）+ 电台网格 3/1/2、
-§2.7 dp 口径护栏（`56 × 0.82 ≈ 45.92 ≥ 44`、`44 / 0.82 ≈ 53.66`）。
+§2.7 dp 口径护栏（`56 × 0.82 ≈ 45.92 ≥ 44`、`44 / 0.82 ≈ 53.66`）、
+**P0-26 回归护栏**（断言 `PHONE_TOUCH_TARGET_DP × 0.82 ≥ 44`，同时断言 44 / 48 / 52 三个旧值
+均 `< 44` —— 防止有人把常量改回去）。
 
-**验证**：`:app:assembleDebug` + `:app:lintDebug` + `:app:testDebugUnitTest` 全绿；
+另新增 `ScreenUiModeCoverageTest`（§10.162.2）：真实源码扫描 1 例 + 4 组负向自证用例。
+
+**验证**：`:app:assembleDebug` + `:app:lintDebug`（0 Error）+ `:app:testDebugUnitTest` 全绿；
 `assembleRelease` BUILD SUCCESSFUL。
 
 **遗留（诚实记录）**：① **电视 / 手机实机视觉验收**（竖屏布局、旋转表现、手势手感需上机看，
 按项目约定由用户执行）；② **详情页下滑返回手势**（P2-33 后半）—— 方案已标注与 D9 底部系统手势
 冲突、需实测，在无法上机验证的前提下不引入不可验证的交互；③ **缩放系数 0.82 → 0.88**（P2-37，
 方案标为"可选"，改动需同时处理 `LYRICS_RECOVER_SCALE` 与 §2.7 全部口径）；④ **平板 `TabletPortrait`
-独立分档**（P2-36，方案标为"可选"，当前 `medium` 档已覆盖 sw≥600）；⑤ **自定义 lint 规则**
-（P1-32 后半）—— 约定已落到 `docs/conventions-adaptive-ui.md` 并附静态自查命令，但新增 Gradle
-lint 模块会引入构建复杂度，未纳入本版。
+独立分档**（P2-36，方案标为"可选"，当前 `medium` 档已覆盖 sw≥600）。
 
 **版本**：v2.35.0 → **v2.36.0**（versionCode 153 → 154）
 

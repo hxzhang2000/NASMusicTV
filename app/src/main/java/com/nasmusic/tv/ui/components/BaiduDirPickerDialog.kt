@@ -161,7 +161,8 @@ fun BaiduDirPickerDialog(
                                     onClick = { loadKey++ },
                                     modifier = Modifier
                                         .width(160.dp)
-                                        .height(44.dp),
+                                        // 44dp 在竖屏只有 36.1 物理 dp ❌ → §2.7 换算抬到 56dp
+                                        .height(portraitTouchTarget(44.dp)),
                                     shape = RoundedCornerShape(8.dp),
                                     focusedScale = 1.08f,
                                     animationDurationMs = 120,
@@ -206,7 +207,8 @@ fun BaiduDirPickerDialog(
                         onClick = { onConfirm(currentPath) },
                         modifier = Modifier
                             .width(200.dp)
-                            .height(44.dp),
+                            // 44dp 在竖屏只有 36.1 物理 dp ❌ → §2.7 换算抬到 56dp
+                            .height(portraitTouchTarget(44.dp)),
                         shape = RoundedCornerShape(8.dp),
                         focusedScale = 1.08f,
                         animationDurationMs = 120,
@@ -223,7 +225,8 @@ fun BaiduDirPickerDialog(
                         onClick = onDismiss,
                         modifier = Modifier
                             .width(140.dp)
-                            .height(44.dp),
+                            // 44dp 在竖屏只有 36.1 物理 dp ❌ → §2.7 换算抬到 56dp
+                            .height(portraitTouchTarget(44.dp)),
                         shape = RoundedCornerShape(8.dp),
                         focusedScale = 1.08f,
                         animationDurationMs = 120,

@@ -74,6 +74,7 @@ import com.nasmusic.tv.ui.components.LocalFocusableContentColor
 import com.nasmusic.tv.ui.components.KaraokePlaybackScreen
 import com.nasmusic.tv.ui.components.ProgressSection
 import com.nasmusic.tv.ui.components.SongInfoPanel
+import com.nasmusic.tv.ui.components.PHONE_TOUCH_TARGET
 import com.nasmusic.tv.ui.theme.NasMusicColors
 
 /**
@@ -1684,7 +1685,13 @@ private fun NowPlayingPortrait(
     }
 }
 
-/** 竖屏顶栏图标按钮（44dp+ 触摸目标；⚠️ Compose dp 口径见方案 §2.7） */
+/**
+ * 竖屏顶栏图标按钮：**[PHONE_TOUCH_TARGET]（56 Compose dp ≈ 45.9 物理 dp ≥ 44）**。
+ *
+ * ⚠️ 早期写成 48dp 并注释「44dp+ 触摸目标」——那是**物理 dp 口径的误用**：
+ * 48 Compose dp 在竖屏只有 39.4 物理 dp ❌（方案 §2.7 第 1 条 / P0-26）。
+ * 56dp 恰好填满 56dp 顶栏（容器即热区，不加垂直 padding）。
+ */
 @Composable
 private fun PortraitTopBarButton(
     label: String,
@@ -1694,18 +1701,20 @@ private fun PortraitTopBarButton(
     FocusableSurface(
         onClick = onClick,
         modifier = Modifier
-            .size(48.dp)
+            .size(PHONE_TOUCH_TARGET)
             .semantics { this.contentDescription = contentDescription },
         shape = RoundedCornerShape(8.dp),
         containerColor = Color.Transparent,
         focusedContainerColor = NasMusicColors.Primary.copy(alpha = 0.2f),
+        // P2-34：手机触摸没有焦点边框，按下高亮是唯一的"已响应"视觉反馈
+        pressedContainerColor = NasMusicColors.Primary.copy(alpha = 0.35f),
         contentColor = NasMusicColors.TextPrimary,
         focusedContentColor = NasMusicColors.Primary,
         focusedScale = 1.06f,
         animationDurationMs = 150,
         pressedScale = 0.94f,
     ) {
-        Box(modifier = Modifier.size(48.dp), contentAlignment = Alignment.Center) {
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Text(text = label, color = LocalFocusableContentColor.current, fontSize = FontSize.subtitle())
         }
     }

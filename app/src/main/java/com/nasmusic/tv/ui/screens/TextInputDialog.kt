@@ -55,6 +55,7 @@ import com.nasmusic.tv.data.model.SearchHistoryItem
 import com.nasmusic.tv.net.LocalInputServer
 import com.nasmusic.tv.ui.components.FocusableSurface
 import com.nasmusic.tv.ui.components.responsiveDialogSize
+import com.nasmusic.tv.ui.components.portraitTouchTarget
 import com.nasmusic.tv.ui.theme.FontSize
 import com.nasmusic.tv.ui.theme.LocalUiMode
 import com.nasmusic.tv.ui.theme.NasMusicColors
@@ -258,7 +259,8 @@ fun TextInputDialog(
                                 onValueChange = { text = it },
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .height(52.dp)
+                                    // 52dp 在竖屏只有 42.6 物理 dp ❌ → §2.7 换算抬到 56dp
+                                    .height(portraitTouchTarget(52.dp))
                                     .background(
                                         NasMusicColors.SurfaceVariant,
                                         RoundedCornerShape(10.dp)
@@ -291,7 +293,8 @@ fun TextInputDialog(
                             Box(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .height(52.dp)
+                                    // 52dp 在竖屏只有 42.6 物理 dp ❌ → §2.7 换算抬到 56dp
+                                    .height(portraitTouchTarget(52.dp))
                                     .background(
                                         NasMusicColors.SurfaceVariant,
                                         RoundedCornerShape(10.dp)
@@ -617,7 +620,8 @@ private fun ActionButton(
         onClick = onClick,
         modifier = Modifier
             .width(width)
-            .height(52.dp),
+            // 52dp 在竖屏只有 42.6 物理 dp ❌ → §2.7 换算抬到 56dp（TV/横屏保持 52dp，B1）
+            .height(portraitTouchTarget(52.dp)),
         shape = RoundedCornerShape(8.dp),
         focusedScale = 1.08f,
         animationDurationMs = 120,

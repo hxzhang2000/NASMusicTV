@@ -118,9 +118,15 @@ fun FocusableSurface(
     }
 
     // 动画由 isFocused 状态驱动，避免 onFocusChanged 中 scope.launch 的竞态
-    LaunchedEffect(isFocused) {
+    //
+    // ⚠️ v2.36.0（P2-34）：**非 TV 设备不应用 focusedScale**。
+    // `Modifier.clickable` 的节点本身是可聚焦的，手指点一下就会让它获得焦点；
+    // 若照搬 TV 的聚焦缩放，按钮被点过一次后会**永久放大 8%**（且手机没有焦点边框，
+    // 用户完全看不出原因）。手机的触摸反馈只走下面的 pressedScale（按压缩感）。
+    // TV 侧 `isTVDevice == true`，行为与改动前逐字一致。
+    LaunchedEffect(isFocused, isTVDevice) {
         animScale.animateTo(
-            if (isFocused) focusedScale else 1f,
+            if (isFocused && isTVDevice) focusedScale else 1f,
             tween(animationDurationMs)
         )
     }

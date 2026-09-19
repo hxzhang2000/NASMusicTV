@@ -144,12 +144,59 @@ constraints` 崩溃（嵌套同向滚动容器）。内部已有列表的对话�
 
 `PHONE_UI_SCALE = 0.82` → **Compose dp × 0.82 = 物理 dp**。
 
-- 物理 44dp 的触摸目标 ⇒ **Compose 侧 ≥ 53.7dp**（`44 / 0.82`）
-- 项目常用的 Compose `56.dp` ≈ 物理 `45.9dp` ✅
-- 项目常用的 Compose `48.dp` ≈ 物理 `39.4dp` ⚠️ 偏小，仅用于图标按钮且周围有留白时
+| 口径 | 竖屏 1080×2400 @440dpi |
+|------|----------------------|
+| **物理 dp**（Material 48 / Apple HIG 44 说的都是它） | 宽 ≈360dp |
+| **Compose dp**（`Modifier.size(x.dp)` 用的） | 宽 ≈439dp |
 
-改任何"固定 dp 尺寸"前，先用上面的换算核一遍物理尺寸。相关换算已被
-`UiModeTest` 的 dp 护栏用例守住（`56 × 0.82 ≈ 45.92 ≥ 44`、`44 / 0.82 ≈ 53.66`）。
+### 6.1 ⛔ 触摸目标：必须用 `portraitTouchTarget(...)`，禁止硬编码 44 / 48
+
+物理 44dp 的触摸目标 ⇒ **Compose 侧 ≥ 53.7dp**（`44 / 0.82`）。
+
+```kotlin
+// ✅ 正确
+Modifier.size(portraitTouchTarget(48.dp))     // 竖屏 → 56dp，TV/横屏 → 48dp
+Modifier.height(portraitTouchTarget(44.dp))
+Modifier.size(PHONE_TOUCH_TARGET)             // 竖屏专属组件，直接 56dp
+
+// ❌ 错误（v2.36.0 之前遍布各处）
+Modifier.size(48.dp)   // 竖屏只有 39.4 物理 dp
+Modifier.height(44.dp) // 竖屏只有 36.1 物理 dp —— 注释里写「44dp+ 触摸目标」是口径误用
+```
+
+| Compose dp | 物理 dp | 判定 |
+|-----------|--------|------|
+| 44 | 36.08 | ❌ |
+| 48 | 39.36 | ❌ |
+| 52 | 42.64 | ❌ |
+| **56** | **45.92** | ✅ ← `PHONE_TOUCH_TARGET` |
+
+⚠️ **两个坑**：
+
+1. **`padding` 会削热区**。`Modifier.height(52.dp).padding(vertical = 4.dp)` 传给
+   `FocusableSurface` 时，`clickable` 加在 padding **之后** → 实际热区只有 44dp。
+   竖屏下要么抬到 `portraitTouchTarget(52.dp)`，要么**同时把垂直 padding 归零**
+   （见 `ExportDeviceDialog` 设备项）。
+2. **容器即热区**。`PhoneNavBar` / `PhoneTopBar` / `MiniPlayer` 的做法是「子项
+   `fillMaxSize()` / 56dp + 容器不加垂直 padding」，热区等于整块容器，不要再套内边距。
+
+### 6.2 已被证明不达标的旧值
+
+`UiModeTest` 里有回归护栏用例（`PHONE_TOUCH_TARGET 满足物理 44dp 而 44 与 48 不满足`），
+断言 `44 × 0.82 = 36.08`、`48 × 0.82 = 39.36`、`52 × 0.82 = 42.64` 均 `< 44`。
+**改这些常量会让该用例失败**，这是有意的。
+
+### 6.3 豁免清单（**刻意不改**，不要"顺手修"）
+
+| 位置 | 原因 |
+|------|------|
+| `KaraokePlaybackScreen` / `MvPlaybackScreen` / `VisualEqualizer` 内的 44 / 48dp | 三者都被 `MainActivity` 的 `isFullScreenPage` 强制 `SENSOR_LANDSCAPE` → **永远不在竖屏渲染** |
+| `Shimmer.kt` 骨架屏、各页封面缩略图（40/48dp）、`HomeScreen` 的 40dp logo | **不是触摸目标**（装饰/占位），热区在父行 |
+| `Spacer(Modifier.height(40.dp))` 之类 | 纯间距 |
+
+### 6.4 其他
+
+改任何"固定 dp 尺寸"前，先用上表换算核一遍物理尺寸。
 
 ⚠️ **不能靠改 density 解决竖屏**（方案 §2.5）：会同时放大 TV 端与所有既有固定尺寸。
 
@@ -162,6 +209,7 @@ constraints` 崩溃（嵌套同向滚动容器）。内部已有列表的对话�
 - [ ] 一行放不下的「返回 + 标题 + N 个操作」→ 竖屏**拆两行**，操作行加 `horizontalScroll`
 - [ ] 多列网格走 `adaptiveColumns(...)`，不写 `GridCells.Fixed(常量)`
 - [ ] 对话框走 `responsiveDialogSize(...)`
+- [ ] **触摸目标**走 `portraitTouchTarget(x.dp)` 或 `PHONE_TOUCH_TARGET`，**不写裸 `44.dp` / `48.dp`**（§6.1）
 - [ ] 新弹层（`Box` 覆盖层）→ **必须** `RegisterDialogBackHandler(onDismiss)`（方案 §6.3）
 - [ ] 页面级 BACK 状态提升到 `NavigationViewModel`（方案 K2），不要藏在页面内部
 - [ ] ⚠️ **禁止在 `AppRoot` 顶层订阅 `progress` / `duration`**（方案 K1）：那是 1000ms
@@ -179,7 +227,7 @@ JAVA_HOME="C:/Program Files/Android/Android Studio/jbr" \
   ./gradlew.bat :app:compileDebugKotlin --no-daemon \
   -Pkotlin.compiler.execution.strategy=in-process
 
-# 单测（含 UiModeTest 的列数 / 方向 / dp 护栏）
+# 单测（含 UiModeTest 的列数 / 方向 / dp 护栏 + §9 的 Screen 覆盖门禁）
 JAVA_HOME="C:/Program Files/Android/Android Studio/jbr" \
   ./gradlew.bat testDebugUnitTest --no-daemon \
   -Pkotlin.compiler.execution.strategy=in-process
@@ -194,8 +242,71 @@ grep -rnE "\.width\([4-9][0-9]{2}\.dp\)" app/src/main/java/com/nasmusic/tv/ui
 
 # 静态自查：是否误引 material3（不在编译类路径，方案 C1）
 grep -rn "import androidx.compose.material3" app/src/main/java | wc -l   # 期望 0
+
+# 静态自查：是否还有裸 44/48/52dp 触摸目标（§6.1；豁免项见 §6.3）
+grep -rnE "\.(size|height|width)\((\s*)(4[0-9]|5[0-3])\.dp\)" app/src/main/java/com/nasmusic/tv/ui \
+  | grep -vE "Karaoke|MvPlayback|VisualEqualizer|Shimmer|Cover|cover|favicon|Spacer"
 ```
 
 **B1 回归护栏**：任何"给竖屏加分支"的改动，都要能回答
 「`else` 分支是否与改动前逐字一致」。抽取公共子组件（如把原顶部导航抽成
 `TvTopNavBar`）是推荐做法 —— 行为零变化，且 diff 可审。
+
+---
+
+## 9. 门禁：新增 Screen 必须有 UiMode 分支（P1-32）
+
+**"忘了做竖屏"编译过、单测过，只有真机才看得见** —— 所以由自动门禁兜住。
+
+### 门禁在哪
+
+`app/src/test/java/com/nasmusic/tv/ui/ScreenUiModeCoverageTest.kt`
+（跑在 `testDebugUnitTest` 里，CI 的 `test` job 已阻塞）
+
+```bash
+JAVA_HOME="C:/Program Files/Android/Android Studio/jbr" \
+  ./gradlew.bat testDebugUnitTest --no-daemon \
+  -Pkotlin.compiler.execution.strategy=in-process
+```
+
+### 触发条件
+
+文件同时满足：① 有**顶层** `fun XxxScreen(`；② 含 `@Composable`；
+③ **没有**出现任一 marker（`LocalUiMode` / `UiMode.` / `AdaptiveLayout(` /
+`adaptiveColumns(` / `adaptiveColumnsOf(` / `responsiveDialogSize(` /
+`portraitTouchTarget(` / `PHONE_TOUCH_TARGET`）→ 判失败。
+
+### 豁免
+
+```kotlin
+// NasScreenUiMode-exempt: 全屏页被 isFullScreenPage 强制横屏，永远不在竖屏渲染
+
+package com.nasmusic.tv.ui.components
+```
+
+当前豁免：`MvPlaybackScreen.kt`、`KaraokePlaybackScreen.kt`
+（都被 `isFullScreenPage` 强制横屏，**永远不在竖屏渲染**）。
+
+### ⚠️ 为什么不是自定义 lint 规则（方案原文建议 `tools/lint/`）
+
+实测在**当前工具链（AGP 9.2.1 + `com.android.tools.lint` 32.2.1）** 下不可行：
+
+- 自定义 check jar 的类由 `com.intellij.util.lang.UrlClassLoader` 加载，
+  而 `SourceCodeScanner` 由 `java.net.URLClassLoader` 加载 → 两个类加载器各持一份 `lint-api`
+- 结果：`PortraitScreenUiModeDetector cannot be cast to SourceCodeScanner`，
+  `:app:lintAnalyzeDebug` 直接失败
+- **不是配置错误**：`lintChecks` 依赖树只有 `project :tools:lint`；check jar 里也只有自己的类 +
+  `META-INF/services/...IssueRegistry`，**没有**打包 lint-api
+
+单测门禁的判定逻辑与当初设计的 lint 规则**逐条一致**（同一套 marker、同一个豁免标记），
+且零新增依赖、零类加载风险。将来若工具链修好，可原样搬回 `tools/lint/`。
+
+### ⚠️ 维护注意
+
+- 判定是**启发式**：只要文件里出现过 marker 就放行，不校验是否真被调用。
+  这是有意的取舍 —— 它是"别忘写"的护栏，不是版式正确性证明
+- 护栏自身的有效性由**负向用例**守住（无 marker 必判违规、各 marker 必被识别、
+  豁免标记必被识别、非 Screen / 嵌套函数 / 非 `@Composable` 不参与判定）。
+  改判定逻辑时若把负向用例一起改"绿"了，护栏就废了 —— 请谨慎
+- 源码目录定位失败时测试**直接失败**（不会静默跳过），
+  `user.dir` 已覆盖「模块目录 / 仓库根 / 上一级」三种情形

@@ -68,7 +68,7 @@ fun BackButton(
  *
  * 点击整个搜索框触发 [onOpenSearch]（调用方负责弹出输入对话框）；
  * 已有搜索词时框内显示 ✕ 清除按钮，点击触发 [onClear]。
- * 宽度由调用方通过 modifier 指定，高度统一 48dp。
+ * 宽度由调用方通过 modifier 指定，高度统一 48dp（**竖屏抬到 [PHONE_TOUCH_TARGET]**，见 §2.7）。
  */
 @Composable
 fun SearchField(
@@ -80,7 +80,7 @@ fun SearchField(
 ) {
     FocusableSurface(
         onClick = onOpenSearch,
-        modifier = modifier.height(48.dp),
+        modifier = modifier.height(portraitTouchTarget(48.dp)),
         shape = RoundedCornerShape(24.dp),
         containerColor = NasMusicColors.Surface,
         focusedContainerColor = NasMusicColors.Primary.copy(alpha = 0.25f)
@@ -154,6 +154,36 @@ fun adaptiveColumns(tv: Int, phonePortrait: Int, medium: Int = phonePortrait): I
     val widthDp = LocalConfiguration.current.screenWidthDp
     return adaptiveColumnsOf(widthDp, tv, phonePortrait, medium)
 }
+
+/**
+ * 竖屏触摸目标下限（**Compose dp 口径**，方案 §2.7 第 1 条 / P0-26）。
+ *
+ * 物理 44dp（Android 无障碍下限）÷ `CompactSizes.PHONE_UI_SCALE`(0.82) ≈ **53.66**，
+ * 取整到 **56**：`56 × 0.82 ≈ 45.9 物理 dp ≥ 44` ✅。
+ *
+ * ⚠️ 竖屏下 `LocalDensity` 被 0.82 缩放，**44 / 48 Compose dp 分别只有 36.1 / 39.4 物理 dp**，
+ * 都不达标 —— 代码里不能再拿 44dp 当热区下限。新增竖屏控件请用 [portraitTouchTarget]。
+ *
+ * 保留为 `Float` 常量是为了让 [com.nasmusic.tv.ui.theme.UiModeTest] 能在纯 JVM 下断言该算术。
+ */
+const val PHONE_TOUCH_TARGET_DP: Float = 56f
+
+/** [PHONE_TOUCH_TARGET_DP] 的 `Dp` 形式 */
+val PHONE_TOUCH_TARGET: Dp = PHONE_TOUCH_TARGET_DP.dp
+
+/**
+ * 触摸目标尺寸（v2.36.0 竖屏，方案 §2.7 / P0-26）。
+ *
+ * - **竖屏**：返回 [PHONE_TOUCH_TARGET]（56 Compose dp ≈ 45.9 物理 dp ≥ 44）✅
+ * - **TV / 手机横屏**：原样返回 [landscape] —— 与改动前**逐字等价**（B1）
+ *
+ * 用法：`Modifier.size(portraitTouchTarget(48.dp))` / `Modifier.height(portraitTouchTarget(44.dp))`
+ *
+ * ⚠️ 若 [landscape] 已经 ≥ 56dp（如底部导航的 56dp 容器），无需再套本函数。
+ */
+@Composable
+fun portraitTouchTarget(landscape: Dp): Dp =
+    if (LocalUiMode.current == UiMode.PhonePortrait) PHONE_TOUCH_TARGET else landscape
 
 /**
  * 自适应布局包装器（v2.36.0 竖屏，方案 §3.4 / P1-32）。

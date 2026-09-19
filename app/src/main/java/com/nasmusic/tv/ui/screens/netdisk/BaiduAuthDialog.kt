@@ -40,6 +40,7 @@ import com.nasmusic.tv.R
 import com.nasmusic.tv.backend.network.baidu.BaiduOAuthClient
 import com.nasmusic.tv.ui.components.FocusableSurface
 import com.nasmusic.tv.ui.components.responsiveDialogSize
+import com.nasmusic.tv.ui.components.portraitTouchTarget
 import com.nasmusic.tv.ui.theme.FontSize
 import com.nasmusic.tv.ui.theme.NasMusicColors
 import com.nasmusic.tv.ui.viewmodel.MainViewModel
@@ -277,7 +278,8 @@ fun BaiduAuthDialog(
                         onClick = { onCancel() },
                         modifier = Modifier
                             .width(140.dp)
-                            .height(44.dp),
+                            // 44dp 在竖屏只有 36.1 物理 dp ❌ → §2.7 换算抬到 56dp
+                            .height(portraitTouchTarget(44.dp)),
                         shape = RoundedCornerShape(8.dp),
                         focusedScale = 1.08f,
                         animationDurationMs = 120,

@@ -43,6 +43,7 @@ import com.nasmusic.tv.data.model.BaiduFile
 import com.nasmusic.tv.data.model.Song
 import com.nasmusic.tv.ui.components.FocusableSurface
 import com.nasmusic.tv.ui.components.LocalFocusableContentColor
+import com.nasmusic.tv.ui.components.portraitTouchTarget
 import com.nasmusic.tv.ui.components.SearchField
 import com.nasmusic.tv.ui.components.common.ActionBar
 import com.nasmusic.tv.ui.components.song.SongRowMode
@@ -100,7 +101,8 @@ val downloadStates by viewModel.songDownloadStates.collectAsState(initial = empt
             Row(modifier = m, verticalAlignment = Alignment.CenterVertically) {
                 FocusableSurface(
                     onClick = onBack,
-                    modifier = Modifier.size(48.dp),
+                    // 48dp 在竖屏只有 39.4 物理 dp ❌ → §2.7 换算抬到 56dp（TV/横屏保持 48dp，B1）
+                    modifier = Modifier.size(portraitTouchTarget(48.dp)),
                     shape = RoundedCornerShape(12.dp)
                 ) {
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {

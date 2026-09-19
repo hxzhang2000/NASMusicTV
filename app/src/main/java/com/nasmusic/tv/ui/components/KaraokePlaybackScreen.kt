@@ -1,3 +1,9 @@
+// NasScreenUiMode-exempt: K 歌页被 MainActivity 的
+// `isFullScreenPage = showMv || showKaraoke || showVisualizer` 强制
+// `SCREEN_ORIENTATION_SENSOR_LANDSCAPE` —— **永远不在竖屏渲染**，因此不需要 UiMode 分支。
+// （勿"顺手"加竖屏适配：横屏版式才是它的唯一形态。）
+// 标记由 `ScreenUiModeCoverageTest` 消费，见 docs/conventions-adaptive-ui.md §9。
+
 package com.nasmusic.tv.ui.components
 
 import androidx.compose.foundation.Image

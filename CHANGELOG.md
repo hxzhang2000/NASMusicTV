@@ -26,9 +26,7 @@
 > 由用户执行）；② **详情页下滑返回手势**（P2-33 后半）——方案已标注与 D9 底部系统手势冲突、需实测，
 > 在无法上机验证的前提下不引入不可验证的交互；③ **缩放系数 0.82 → 0.88**（P2-37）——方案标为
 > "可选"，且改动需同时处理 `LYRICS_RECOVER_SCALE` 与 §2.7 全部尺寸口径，风险大于收益，留待上机后定；
-> ④ **平板 `TabletPortrait` 独立分档**（P2-36，方案标为"可选"，当前 `medium` 档已覆盖 sw≥600）；
-> ⑤ **自定义 lint 规则**（P1-32 后半）——约定已落到 `docs/conventions-adaptive-ui.md` 并附静态自查
-> 命令，但新增 Gradle lint 模块会引入构建复杂度，未纳入本版。
+> ④ **平板 `TabletPortrait` 独立分档**（P2-36，方案标为"可选"，当前 `medium` 档已覆盖 sw≥600）。
 
 ### Added
 
@@ -69,6 +67,26 @@
     Compose dp ≈ 439，只用宽度会在 600/1000 阈值附近错配）
   - `AdaptiveLayout(phonePortrait, tv)` —— 二分支包装器
   - `responsiveDialogSize(landscapeWidth, scrollable)` —— 对话框/弹层响应式尺寸
+  - `portraitTouchTarget(landscape)` + `PHONE_TOUCH_TARGET` / `PHONE_TOUCH_TARGET_DP` ——
+    **触摸目标换算**（§2.7：物理 44dp ⇒ Compose ≥ 53.7dp，取 56dp ≈ 45.9 物理 dp）
+- **新增 Screen 覆盖门禁 `ScreenUiModeCoverageTest`**（P1-32 后半）：
+  - 规则：文件若有**顶层** `fun XxxScreen(` + `@Composable`，却**未引用**任何自适应布局 API
+    （`LocalUiMode` / `AdaptiveLayout` / `adaptiveColumns` / `responsiveDialogSize` /
+    `portraitTouchTarget` …）→ **测试失败**。这类"忘了做竖屏"的问题编译过、单测过，
+    只有真机才看得见，故必须自动兜住
+  - 豁免：文件顶部加 `// NasScreenUiMode-exempt: <理由>` 注释；本版豁免 MV 页与 K 歌页
+    （两者被 `isFullScreenPage` 强制横屏，永远不在竖屏渲染）
+  - ⚠️ **不是**自定义 lint 规则（方案原文建议 `tools/lint/`）：实测当前工具链
+    （AGP 9.2.1 + `com.android.tools.lint` 32.2.1）下自定义 check jar 的类由
+    `com.intellij.util.lang.UrlClassLoader` 加载、而 `SourceCodeScanner` 由
+    `java.net.URLClassLoader` 加载，两个加载器各持一份 `lint-api` →
+    `PortraitScreenUiModeDetector cannot be cast to SourceCodeScanner`，
+    `:app:lintAnalyzeDebug` 直接失败（已排除配置问题：`lintChecks` 依赖树干净、
+    check jar 未打包 lint-api）。改用**同等强度**的单测门禁：跑在已有阻塞门禁
+    `testDebugUnitTest` 里，零新增依赖、零类加载风险，判定逻辑与设计中的 lint 规则逐条一致
+  - 护栏**自证有效**：附 4 组负向用例（无 marker 必判违规、7 个 marker 逐个必被识别、
+    豁免标记必被识别、非 Screen / 嵌套函数 / 非 `@Composable` 不参与判定）；
+    源码目录定位失败时**直接失败**而非静默跳过
 - **`docs/conventions-adaptive-ui.md`**：自适应 UI 维护约定（B1 硬规则、列数口径、dp/触摸目标换算、
   新增 Screen 检查清单、可复现验证命令）
 - **新增 UI 文案 26 条**（中英双语同步）：方向设置项与提示、顶栏/迷你播放条无障碍描述、
@@ -110,6 +128,33 @@
 
 ### Fixed
 
+- **竖屏触摸目标全部不达标（P0-26，按 §2.7 全量复核）**：竖屏下 `LocalDensity` 被
+  `PHONE_UI_SCALE = 0.82` 缩放，代码里的 `X.dp` 只占 `X × 0.82` 个**物理 dp**。
+  此前多处按"物理 dp 口径"写注释（如"44dp+ 触摸目标"）却填了 Compose 值，实际全部偏小：
+
+  | 写死的 Compose dp | 实际物理 dp | 判定 |
+  |------------------|------------|------|
+  | 44 | 36.08 | ❌ |
+  | 48 | 39.36 | ❌ |
+  | 52 | 42.64 | ❌ |
+  | **56（新基线）** | **45.92** | ✅ |
+
+  修复范围：竖屏顶栏图标按钮、`MiniPlayer` 播放/下一首、播放页顶栏按钮、队列行「⋮」按钮
+  （以上四处 48 → 56）；`SearchField`、网盘页返回按钮、`AdjustButton`、`MiniIconButton`
+  （48/44 → 竖屏 56，TV/横屏保持原值）；`ConfirmDialog` / `ConnectPromptDialog` /
+  `ExportDeviceDialog` / `ExitConfirmDialog` / `TextInputDialog` 的动作按钮与输入框
+  （52 → 竖屏 56）；`BaiduDirPickerDialog` / `BackupTransferDialog` / `ModelTransferDialog` /
+  `PlaylistImportUploadDialog` / `BaiduAuthDialog` / 设置页删除备份确认
+  （44 → 竖屏 56）
+- **`padding` 削热区的坑**：`Modifier.height(52.dp).padding(vertical = 4.dp)` 传给
+  `FocusableSurface` 时 `clickable` 加在 padding **之后**，热区只剩 44dp（物理 36dp）。
+  `ExportDeviceDialog` 的设备列表项改为「竖屏抬到 56dp **并取消垂直 padding**」
+- **`FocusableSurface` 聚焦缩放未按设备分档（P2-34）**：`Modifier.clickable` 的节点本身可聚焦，
+  手指点一下就会让它获得焦点 —— 此前非 TV 设备也照搬 TV 的聚焦缩放，按钮被点过一次后会
+  **永久放大 8%**（手机又没有焦点边框，用户看不出原因）。现在聚焦缩放只在 `isTVDevice` 时应用，
+  手机触摸反馈只走 `pressedScale`（按压缩感）；TV 侧行为与改动前逐字一致。
+  另为 4 个竖屏专属图标按钮（顶栏 / MiniPlayer / 播放页顶栏 / 队列行）补上按下高亮色 ——
+  手机没有焦点边框，按下高亮是唯一的"已响应"视觉反馈
 - **`PlayerControls.kt` 遗留调试日志**：进度条焦点变化时无条件打 `AppLog.e` ——
   `AppLog.e` 无 `BuildConfig.DEBUG` 守卫，release 包里也会执行，已移除
 - **`FocusableSurface` 的 TV 判定不完整**：此前只查 `android.software.leanback`，
@@ -125,7 +170,11 @@
   **"永不返回 SENSOR 系列"**护栏、`nextOnToggle` **"永不回到 auto"**、
   `adaptiveColumnsOf` 三档阈值边界（599/600/999/1000）+ 电台网格 3/1/2、
   §2.7 dp 口径护栏（`56 × 0.82 ≈ 45.92 ≥ 44`、`44 / 0.82 ≈ 53.66`）
+- **P0-26 回归护栏用例**（`PHONE_TOUCH_TARGET 满足物理 44dp 而 44 与 48 不满足`）：
+  断言 `PHONE_TOUCH_TARGET_DP × 0.82 ≥ 44`，同时断言 `44 × 0.82 = 36.08`、
+  `48 × 0.82 = 39.36`、`52 × 0.82 = 42.64` 均 `< 44` —— **防止有人把常量改回旧值**
 - 全量 `testDebugUnitTest` 通过；`lintDebug` 0 Error
+- **新增 `ScreenUiModeCoverageTest`**（P1-32 门禁 + 4 组负向自证用例，见 Added）
 
 ## [v2.35.0] - 2026-09-18
 

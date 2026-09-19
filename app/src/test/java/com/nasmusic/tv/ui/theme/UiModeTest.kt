@@ -2,9 +2,11 @@ package com.nasmusic.tv.ui.theme
 
 import android.content.pm.ActivityInfo
 import android.content.res.Configuration
+import com.nasmusic.tv.ui.components.PHONE_TOUCH_TARGET_DP
 import com.nasmusic.tv.ui.components.adaptiveColumnsOf
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
@@ -182,15 +184,71 @@ class UiModeTest {
         val scale = CompactSizes.PHONE_UI_SCALE
         val physicalOf56 = 56 * scale
         assertEquals(45.92f, physicalOf56, 0.01f)
-        assert(physicalOf56 >= 44f) { "底部导航 56dp 容器物理高度不足 44dp" }
+        assertTrue("底部导航 56dp 容器物理高度不足 44dp", physicalOf56 >= 44f)
 
         val composeFor44Physical = 44f / scale
         assertEquals(53.66f, composeFor44Physical, 0.01f)
-        assert(composeFor44Physical > 44f) { "44 物理 dp 需要更大的 Compose dp" }
+        assertTrue("44 物理 dp 需要更大的 Compose dp", composeFor44Physical > 44f)
+    }
+
+    /**
+     * P0-26 回归护栏：`PHONE_TOUCH_TARGET` 必须真的满足「物理 ≥ 44dp」，
+     * 且 44 / 48 / 52 这三个**曾被写进代码**的值必须被证明不达标 —— 防止有人再把它们改回去。
+     *
+     * ⚠️ 这里用 `assertTrue` 而**不是** Kotlin 的 `assert(...)`：
+     * 后者在未开 `-ea` 的测试 JVM 里是**空操作**，护栏会静默失效。
+     */
+    @Test
+    fun `PHONE_TOUCH_TARGET 满足物理 44dp 而 44 与 48 不满足`() {
+        val scale = CompactSizes.PHONE_UI_SCALE
+
+        // 常量本身达标
+        val physicalOfTarget = PHONE_TOUCH_TARGET_DP * scale
+        assertTrue(
+            "PHONE_TOUCH_TARGET_DP=$PHONE_TOUCH_TARGET_DP 只有 $physicalOfTarget 物理 dp",
+            physicalOfTarget >= 44f,
+        )
+        assertTrue(
+            "常量小于 44 物理 dp 所需的 Compose dp",
+            PHONE_TOUCH_TARGET_DP >= 44f / scale,
+        )
+        // 且是「够用的最小整数档」：再小一档（52）就不够了，说明不能下调
+        assertTrue("若 52dp 已达标，PHONE_TOUCH_TARGET 应下调", 52f * scale < 44f)
+
+        // 历史上被写进代码的三个值都不达标（§2.7 第 1 条的原始依据）
+        assertTrue("44 Compose dp 竟然达标了？§2.7 口径需重新推导", 44f * scale < 44f)
+        assertTrue("48 Compose dp 竟然达标了？§2.7 口径需重新推导", 48f * scale < 44f)
+        assertEquals(36.08f, 44f * scale, 0.01f)
+        assertEquals(39.36f, 48f * scale, 0.01f)
     }
 
     @Test
     fun `LYRICS_RECOVER_SCALE 是 PHONE_UI_SCALE 的倒数`() {
         assertEquals(1f / CompactSizes.PHONE_UI_SCALE, CompactSizes.LYRICS_RECOVER_SCALE, 0.0001f)
+    }
+
+    /**
+     * **P2-37 决策护栏**（方案 §9 P2-37「是否把 0.82 调到 0.88」）。
+     *
+     * 这不是"禁止改"，而是**强迫改的人先读这一段**：`PHONE_UI_SCALE` 是 §2.7 全部尺寸口径的
+     * 唯一输入 —— 一改就要连带复核：
+     *
+     * 1. `CompactSizes.LYRICS_RECOVER_SCALE`（= 1 / PHONE_UI_SCALE，有独立用例守着）
+     * 2. `PHONE_TOUCH_TARGET_DP` 的取值依据（0.82 下 52dp 不达标才取 56dp；
+     *    若改到 0.88，52dp 恰好达标，取值应重新推导）
+     * 3. 所有竖屏固定尺寸的物理换算（`docs/conventions-adaptive-ui.md` §6）
+     * 4. 上表 §2.7 的"两条硬结论"与方案 §2.5 的决策记录
+     *
+     * 本版（v2.36.0）**有意保持 0.82**：方案标为"可选"，且无法上机验证改后的观感。
+     */
+    @Test
+    fun `PHONE_UI_SCALE 变更需同步复核 2-7 全部口径（P2-37 护栏）`() {
+        assertTrue(
+            "PHONE_UI_SCALE 变了 —— 请同步复核 docs/conventions-adaptive-ui.md §6：" +
+                "PHONE_TOUCH_TARGET 取值依据、LYRICS_RECOVER_SCALE、各竖屏固定尺寸的物理 dp，" +
+                "以及 docs/phone-portrait-ui-plan.md §2.7 / §2.5 的结论。" +
+                "当前实测值 = ${CompactSizes.PHONE_UI_SCALE}",
+            kotlin.math.abs(CompactSizes.PHONE_UI_SCALE - 0.82f) < 0.0001f,
+        )
     }
 }

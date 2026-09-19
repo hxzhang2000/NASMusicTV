@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.displayCutoutPadding
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -113,7 +114,11 @@ private fun orientationIcon(pref: String): String = when (pref) {
 }
 
 /**
- * 顶部栏图标按钮：48 Compose dp 触摸目标（≈ 39 物理 dp，配外层 56dp 容器后视觉热区充足）。
+ * 顶部栏图标按钮：**[PHONE_TOUCH_TARGET]（56 Compose dp ≈ 45.9 物理 dp）** 触摸目标。
+ *
+ * ⚠️ 早期写成 48dp，按方案 §2.7 口径只有 48 × 0.82 ≈ **39.4 物理 dp < 44** ❌ ——
+ * 「配外层 56dp 容器后视觉热区充足」这种豁免**不被 §2.7 承认**（热区按按钮自身算）。
+ * 现取 56dp，恰好填满 56dp 顶栏高度（与 [PhoneNavBar] 同款处理：容器即热区，不加垂直 padding）。
  *
  * ⚠️ 项目无 `androidx.compose.material3`（方案 C1），不用 `IconButton`；
  * 用 [FocusableSurface] + `semantics` 提供无障碍描述。
@@ -127,18 +132,20 @@ private fun PhoneTopBarIconButton(
     FocusableSurface(
         onClick = onClick,
         modifier = Modifier
-            .size(48.dp)
+            .size(PHONE_TOUCH_TARGET)
             .semantics { this.contentDescription = contentDescription },
         shape = RoundedCornerShape(8.dp),
         containerColor = Color.Transparent,
         focusedContainerColor = NasMusicColors.Primary.copy(alpha = 0.2f),
+        // P2-34：手机触摸没有焦点边框，按下高亮是唯一的"已响应"视觉反馈
+        pressedContainerColor = NasMusicColors.Primary.copy(alpha = 0.35f),
         contentColor = NasMusicColors.TextPrimary,
         focusedContentColor = NasMusicColors.Primary,
         focusedScale = 1.08f,
         animationDurationMs = 150,
         pressedScale = 0.94f,
     ) {
-        Box(modifier = Modifier.size(48.dp), contentAlignment = Alignment.Center) {
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             content()
         }
     }

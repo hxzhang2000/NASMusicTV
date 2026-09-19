@@ -52,6 +52,7 @@ import com.nasmusic.tv.data.model.VisualizerTheme
 import com.nasmusic.tv.ui.components.BaiduDirPickerDialog
 import com.nasmusic.tv.ui.components.ConfirmDialog
 import com.nasmusic.tv.ui.components.FocusableSurface
+import com.nasmusic.tv.ui.components.portraitTouchTarget
 import com.nasmusic.tv.ui.screens.netdisk.BaiduAuthDialog
 import com.nasmusic.tv.ui.screens.settings.AboutSettingsSection
 import com.nasmusic.tv.ui.screens.settings.AboutSettingsState
@@ -943,7 +944,8 @@ fun SettingsScreen(
                 ) {
                     FocusableSurface(
                         onClick = { backupToDelete = null },
-                        modifier = Modifier.width(140.dp).height(44.dp),
+                        // 44dp 在竖屏只有 36.1 物理 dp ❌ → §2.7 换算抬到 56dp
+                        modifier = Modifier.width(140.dp).height(portraitTouchTarget(44.dp)),
                         shape = RoundedCornerShape(10.dp),
                         focusedScale = 1.08f,
                         animationDurationMs = 150,
@@ -965,7 +967,8 @@ fun SettingsScreen(
                             onDeleteBackup?.invoke(file.uri)
                             backupToDelete = null
                         },
-                        modifier = Modifier.width(140.dp).height(44.dp),
+                        // 44dp 在竖屏只有 36.1 物理 dp ❌ → §2.7 换算抬到 56dp
+                        modifier = Modifier.width(140.dp).height(portraitTouchTarget(44.dp)),
                         shape = RoundedCornerShape(10.dp),
                         focusedScale = 1.08f,
                         animationDurationMs = 150,

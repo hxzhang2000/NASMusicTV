@@ -24,6 +24,9 @@ import androidx.compose.ui.unit.dp
 import androidx.tv.material3.Text
 import com.nasmusic.tv.R
 import com.nasmusic.tv.ui.RegisterDialogBackHandler
+import com.nasmusic.tv.ui.components.portraitTouchTarget
+import com.nasmusic.tv.ui.theme.LocalUiMode
+import com.nasmusic.tv.ui.theme.UiMode
 import com.nasmusic.tv.ui.theme.FontSize
 import com.nasmusic.tv.ui.theme.NasMusicColors
 
@@ -73,8 +76,10 @@ fun ExportDeviceDialog(
                     onClick = { onSelect(index) },
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(52.dp)
-                        .padding(vertical = 4.dp),
+                        // 52dp 竖屏仅 42.6 物理 dp，且 `padding` 在 `clickable` 之前会把热区再削到 36 ❌
+                        // → 竖屏抬到 56dp **并取消垂直 padding**（TV/横屏逐字不变，B1）
+                        .height(portraitTouchTarget(52.dp))
+                        .padding(vertical = if (LocalUiMode.current == UiMode.PhonePortrait) 0.dp else 4.dp),
                     shape = RoundedCornerShape(10.dp),
                     focusedScale = 1.08f,
                     animationDurationMs = 150,
@@ -109,7 +114,8 @@ fun ExportDeviceDialog(
                     onClick = onDismiss,
                     modifier = Modifier
                         .width(140.dp)
-                        .height(52.dp),
+                        // 52dp 在竖屏只有 42.6 物理 dp ❌ → §2.7 换算抬到 56dp（TV/横屏保持 52dp，B1）
+                        .height(portraitTouchTarget(52.dp)),
                     shape = RoundedCornerShape(10.dp),
                     focusedScale = 1.08f,
                     animationDurationMs = 150,
