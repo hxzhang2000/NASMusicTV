@@ -1641,10 +1641,14 @@ JAVA_HOME="C:/Program Files/Android/Android Studio/jbr" \
 
 **门禁复跑**：`testDebugUnitTest` **848 例 / 0 失败 / 0 错误**，`lintDebug` **0 Error / 267 Warning**。
 
-> 📌 **后续建议**：§6.5 那条自查目前仍靠人工跑脚本
-> （`logs_temp/audit_small_touch_target.py`，自带 `--selftest` 5 用例）。
+> 📌 **后续建议**：
+> ① §6.5 那条自查目前仍靠人工跑脚本
+> （`audit_small_touch_target.py`，已入库项目根，自带 `--selftest` 5 用例）。
 > 它与 `ScreenUiModeCoverageTest` 同属"源码扫描型门禁"，**建议后续做成单测**，
 > 否则下次仍可能漏。
+> ② review 顺带发现 `TextInputDialog.kt:132` 的 `isTVDevice` 也是**每次组合 2 次
+> `hasSystemFeature`**（未加 `remember`），**刻意未改**（不在本轮改动范围，避免扩大改动面）；
+> 全仓库仅此一处与 `FocusableSurface.isTVDevice()` 同类。
 
 ---
 

@@ -9374,6 +9374,12 @@ Box(Modifier.size(portraitTouchTarget(44.dp))      // 外层承担热区（竖�
 3. **§6.5 那条"小尺寸 + `clickable`"自查目前仍靠人工跑脚本** —— 与
    `ScreenUiModeCoverageTest`（源码扫描型门禁）同范式，**建议后续做成单测门禁**，
    否则下次仍可能漏
+4. 🔍 review 顺带发现、但**刻意未改**（不在 v2.36.0 改动范围内，避免扩大改动面）：
+   `TextInputDialog.kt:132` 的 `isTVDevice` 也是**每次组合 2 次 `hasSystemFeature`**
+   （未加 `remember`）。`AppRoot.kt:101` 已有 `remember`，`NasMusicApp` /
+   `MainActivity` / `BatteryOptimizationHelper` 都是一次性调用、无需缓存 ——
+   全仓库仅此一处与 `FocusableSurface.isTVDevice()` 同类。影响小于后者
+   （对话框重组频率远低于 143 处 `FocusableSurface`），故留待下次顺手处理
 
 **版本**：v2.36.0（未变；versionCode 154）
 
