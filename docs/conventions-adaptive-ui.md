@@ -138,6 +138,20 @@ constraints` 崩溃（嵌套同向滚动容器）。内部已有列表的对话�
 ⚠️ 直接写死 `fillMaxWidth(0.92f)` 会把 TV 上的 480~720dp 对话框压到 420dp，属**回归**。
 必须走本 helper（它内部按 `LocalUiMode` 分叉）。
 
+⛔ **新增对话框后必做一次全量自查**（v2.36.0 踩过：设置页「删除备份」确认弹窗漏改，
+仍写死 `.width(520.dp)`，在**所有**手机竖屏上都被窗口裁掉 —— 竖屏 Compose 口径只有
+`物理宽 / 0.82`，360dp 屏 ≈439dp、411dp 屏 ≈501dp，**都小于 520**）：
+
+```bash
+# 凡出现在 `Dialog { }` 内容根节点上的三位数宽度，逐个确认是否已走 responsiveDialogSize
+grep -rnE "\.width\([4-9][0-9]{2}\.dp\)" app/src/main/java/com/nasmusic/tv/ui
+```
+
+判定口径：**该宽度是否会成为对话框/弹层内容的根约束**。若它只是页面内某个普通 `Column`
+且该 `Column` 只在 `else`（非竖屏）分支渲染，则不必改（如
+`NowPlayingScreen` 的 380dp 封面列、`QueueScreen` 的 340dp 侧卡、`TextInputDialog` 的 720dp 主栏
+—— 都在非竖屏分支里）。
+
 ---
 
 ## 6. 尺寸与触摸目标口径（方案 §2.7）

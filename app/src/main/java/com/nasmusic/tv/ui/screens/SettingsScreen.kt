@@ -53,6 +53,7 @@ import com.nasmusic.tv.ui.components.BaiduDirPickerDialog
 import com.nasmusic.tv.ui.components.ConfirmDialog
 import com.nasmusic.tv.ui.components.FocusableSurface
 import com.nasmusic.tv.ui.components.portraitTouchTarget
+import com.nasmusic.tv.ui.components.responsiveDialogSize
 import com.nasmusic.tv.ui.screens.netdisk.BaiduAuthDialog
 import com.nasmusic.tv.ui.screens.settings.AboutSettingsSection
 import com.nasmusic.tv.ui.screens.settings.AboutSettingsState
@@ -920,7 +921,9 @@ fun SettingsScreen(
             BackHandler { backupToDelete = null }
             Column(
                 modifier = Modifier
-                    .width(520.dp)
+                    // 520dp 在竖屏（Compose 口径 ≈439dp）会被对话框窗口裁掉 ❌ → §2.4 对话框族
+                    // 统一响应式尺寸（TV/横屏仍返回 `width(520.dp)`，逐字等价，B1）
+                    .then(responsiveDialogSize(520.dp, scrollable = true))
                     .background(NasMusicColors.Surface, RoundedCornerShape(16.dp))
                     .padding(24.dp),
                 horizontalAlignment = Alignment.CenterHorizontally

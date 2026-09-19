@@ -117,7 +117,7 @@
 - **列数统一走 `adaptiveColumns`**：`RadioTab` 电台网格由硬编码 `GridCells.Fixed(2)` 改为
   `adaptiveColumns(3, 1, 2)`；`Shimmer` 骨架网格由固定 6 列改为 `adaptiveColumns(6, 3, 6)`
   （与真数据列数一致，加载完成不再跳变）
-- **对话框族统一响应式宽度**（13 处）：竖屏 `fillMaxWidth(0.92f) + widthIn(max = 420.dp) +
+- **对话框族统一响应式宽度**（14 处）：竖屏 `fillMaxWidth(0.92f) + widthIn(max = 420.dp) +
   heightIn(max = 80% 屏高)`，非竖屏保持原固定宽度。⚠️ 直接写死会**把 TV 上的 480~720dp 对话框
   压到 420dp**，故必须走 `responsiveDialogSize`（内部按 `LocalUiMode` 分叉）
 - **网盘页搜索框 420dp → 整行**，服务器连接卡片 760dp → `fillMaxWidth().widthIn(max = 420.dp)`
@@ -146,6 +146,12 @@
   （52 → 竖屏 56）；`BaiduDirPickerDialog` / `BackupTransferDialog` / `ModelTransferDialog` /
   `PlaylistImportUploadDialog` / `BaiduAuthDialog` / 设置页删除备份确认
   （44 → 竖屏 56）
+- **设置页「删除备份」确认弹窗漏改（对话框族 P1-27 补漏）**：该弹窗是**唯一**没走
+  `responsiveDialogSize` 的 Compose 对话框，仍写死 `.width(520.dp)`。竖屏可用宽度（Compose 口径）
+  约 439dp（`PHONE_UI_SCALE = 0.82` 下 360dp 物理屏；即便 411dp 的机型也只有 501dp）
+  → **任何手机竖屏都放不下**，弹窗被对话框窗口裁掉两侧。现改为
+  `responsiveDialogSize(520.dp, scrollable = true)`：非竖屏仍返回 `width(520.dp)`
+  （TV / 手机横屏逐字等价），竖屏撑满 92% 宽并限高 80% 屏高
 - **`padding` 削热区的坑**：`Modifier.height(52.dp).padding(vertical = 4.dp)` 传给
   `FocusableSurface` 时 `clickable` 加在 padding **之后**，热区只剩 44dp（物理 36dp）。
   `ExportDeviceDialog` 的设备列表项改为「竖屏抬到 56dp **并取消垂直 padding**」

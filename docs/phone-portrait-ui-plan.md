@@ -8,6 +8,10 @@
 > - ✅ P1-27 ~ P1-32 全部完成（P1-32 后半的「新增 Screen 必须有 UiMode 分支」门禁
 >   **未按原文放 `tools/lint/`**：该工具链下自定义 lint check 因类加载器不一致无法加载，
 >   改用同等强度的单测门禁 `ScreenUiModeCoverageTest`，详见 `docs/conventions-adaptive-ui.md` §9）
+>   - ⚠️ **P1-27 收尾补漏**：§2.4 对话框族表格点名的 `SettingsScreen:906`（删除备份确认弹窗）
+>     首轮实施时漏改，仍写死 `.width(520.dp)` —— 竖屏 Compose 口径 439~501dp **放不下 520dp**，
+>     在任何手机竖屏都会被对话框窗口裁掉。现已改为 `responsiveDialogSize(520.dp, scrollable = true)`；
+>     同时给 `docs/conventions-adaptive-ui.md` §5 补了「新增对话框后必做的全量自查 grep」
 > - ✅ P2-34（触摸反馈与 TV 焦点态并存，顺带修掉「手机点一下按钮永久放大 8%」）、
 >   P2-35、P2-38、P2-39 完成
 > - ⏸️ **P2-33 后半**（详情页下滑返回手势）—— 标注需实测，与 D9 底部系统手势冲突，
@@ -244,6 +248,11 @@ Manifest 侧：`app/src/main/AndroidManifest.xml:85` → `android:screenOrientat
 | `components/KaraokePlaybackScreen.kt:665,723` | 420 / 200 dp | 全屏页强制横屏，**不改** | — |
 
 > `QualityPickerDialog` 已有一次「固定 520dp 无滚动导致溢出」的修复记录（`components/QualityPickerDialog.kt:53` 注释），可直接沿用其做法。
+>
+> ✅ **实施后复核**：本行点名的 `SettingsScreen:906`（设置页「删除备份」确认弹窗）首轮**漏改**，
+> 仍是裸 `.width(520.dp)`；竖屏 Compose 口径只有 439（360dp 屏）~ 501（411dp 屏）dp，**都 < 520**
+> → 任何手机竖屏都会被对话框窗口裁掉。已改为 `responsiveDialogSize(520.dp, scrollable = true)`。
+> ⚠️ 教训：helper 的「唯一入口」性质靠 grep 守，见 `docs/conventions-adaptive-ui.md` §5 的自查命令。
 
 ### 2.5 ⚠️ 关键认知：不能靠 density 缩放解决竖屏
 

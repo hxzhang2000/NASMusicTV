@@ -9070,6 +9070,44 @@ fun portraitTouchTarget(landscape: Dp): Dp =
 `BuildConfig.DEBUG` 守卫，release 也会执行）已移除；`FocusableSurface` 的 TV 判定补上
 `android.hardware.type.television`（部分盒子只声明这一项，此前被误判为手机、不显示焦点边框）。
 
+#### 10.162.3 对话框族补漏：设置页「删除备份」确认弹窗（P1-27 收尾）
+
+**来源**：方案 §2.4「硬编码大尺寸」表的**对话框族**一行，原文点名 `SettingsScreen:906`。
+该行要求 13 处对话框统一走 `responsiveDialogSize`；实施时**漏掉了这一处** ——
+它是全项目**唯一**仍写死宽度的 Compose 对话框（`SettingsScreen.kt:923` 的 `.width(520.dp)`），
+且未设 `usePlatformDefaultWidth = false`（走平台默认对话框窗口宽度）。
+
+**根因**：竖屏下 `PHONE_UI_SCALE = 0.82` 把物理宽度换算成**更大的 Compose 口径**，
+但 360dp 物理屏也只有 `360 / 0.82 ≈ 439` Compose dp，411dp 机型为 `≈ 501` Compose dp
+—— **两种都 < 520**，因此**任何手机竖屏**都放不下，弹窗左右被对话框窗口裁掉。
+
+**修复**：
+
+```kotlin
+Column(
+    modifier = Modifier
+        // 520dp 在竖屏（Compose 口径 ≈439dp）会被对话框窗口裁掉 ❌ → §2.4 对话框族
+        // 统一响应式尺寸（TV/横屏仍返回 `width(520.dp)`，逐字等价，B1）
+        .then(responsiveDialogSize(520.dp, scrollable = true))
+        .background(NasMusicColors.Surface, RoundedCornerShape(16.dp))
+        .padding(24.dp),
+    horizontalAlignment = Alignment.CenterHorizontally
+) { ... }
+```
+
+- **非竖屏（TV / 手机横屏）**：`responsiveDialogSize` 原样返回 `Modifier.width(520.dp)`
+  → 与改动前**逐字等价**（B1 硬规则）
+- **竖屏**：`fillMaxWidth(0.92f) + widthIn(max = 420.dp) + heightIn(max = 80% 屏高) + verticalScroll`
+- `scrollable = true` 在此处安全：弹窗内容是 `Text` + 按钮 `Row` 的普通 `Column`，
+  **没有** `LazyColumn` / `LazyVerticalGrid`，不会触发
+  `Vertically scrollable component was measured with an infinity maximum height constraints`
+- 按钮行尺寸复核：`width(140.dp) × 2 + 16dp spacing = 296dp`，竖屏内容区最窄约 311dp
+  （320dp 物理屏：`320 / 0.82 × 0.92 − 24 × 2`）→ 仍有余量，无需再拆行
+
+**教训**：`responsiveDialogSize` 的**唯一入口**性质要靠 grep 守住 ——
+`grep -rn "\.width([0-9]\{3,\}\.dp)" app/src/main/java --include=*.kt` 里凡是出现在
+`Dialog { }` 内容根节点上的三位数宽度都属漏网，必须逐个确认是否已走 helper。
+
 **测试**（`app/src/test/.../ui/theme/UiModeTest.kt`，纯 JVM）：`deriveUiMode` 三态 + 未知方向兜底 +
 **B1 回归用例**（手机横屏不得被判定为 TV）、`resolveOrientation` 四分支 + "永不返回 SENSOR 系列"、
 `nextOnToggle` "永不回到 auto"、`adaptiveColumnsOf` 阈值边界（599/600/999/1000）+ 电台网格 3/1/2、
