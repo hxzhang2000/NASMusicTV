@@ -29,6 +29,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.tv.material3.LocalContentColor
 import com.nasmusic.tv.ui.theme.ButtonColors
 import com.nasmusic.tv.ui.theme.NasMusicColors
 import com.nasmusic.tv.util.AppLog
@@ -37,6 +38,22 @@ import com.nasmusic.tv.util.AppLog
  * 供 FocusableSurface 子组件读取的当前内容颜色
  */
 val LocalFocusableContentColor = staticCompositionLocalOf { NasMusicColors.TextPrimary }
+
+/**
+ * 当前设备是否按 **TV** 处理。
+ *
+ * v2.36.0（方案 §0.3 / P2-39）：仅判 `android.software.leanback` 会漏掉部分电视盒子
+ * （它们只声明 `android.hardware.type.television`）→ 两个 feature **任一命中**即视为 TV。
+ *
+ * 用途：把「焦点相关视觉」（缩放 / 边框 / 容器色 / 内容色）限制在真的有 D-Pad 的设备上。
+ * 手机触摸会让 `Modifier.clickable` / `focusable()` 的节点获得焦点且**焦点会粘住**，
+ * 若不区分设备，就会出现"点一下按钮永久放大 / 永久高亮"这类没有原因的视觉残留。
+ */
+@Composable
+fun isTVDevice(): Boolean = LocalContext.current.packageManager.run {
+    hasSystemFeature("android.software.leanback") ||
+        hasSystemFeature("android.hardware.type.television")
+}
 
 /**
  * 公共可点击 Surface 组件（TV / 手机双兼容）
@@ -100,12 +117,7 @@ fun FocusableSurface(
     val interactionSource = remember { MutableInteractionSource() }
     val isPressed by interactionSource.collectIsPressedAsState()
     // 设备类型：仅 TV 显示焦点边框（手机触摸无焦点概念）
-    // v2.36.0（方案 §0.3 / P2-39）：仅判 leanback 会漏掉部分电视盒子（它们只声明
-    // android.hardware.type.television）→ 两个 feature 任一命中即视为 TV。
-    val isTVDevice = LocalContext.current.packageManager.run {
-        hasSystemFeature("android.software.leanback") ||
-            hasSystemFeature("android.hardware.type.television")
-    }
+    val tvDevice = isTVDevice()
 
     if (requestFocusOnLaunch && focusRequester != null) {
         LaunchedEffect(Unit) {
@@ -117,16 +129,22 @@ fun FocusableSurface(
         }
     }
 
+    // ⚠️ v2.36.0（P2-34 + 竖屏体验修复）：**焦点态只在 TV 上成立**。
+    // `Modifier.clickable` 的节点本身是可聚焦的，手指点一下就会让它获得焦点，且**焦点会粘住**
+    // （直到点别处才移走）。手机上并没有 D-Pad，用户看不到也不理解"焦点"——
+    // 若照搬 TV 的聚焦视觉，会得到三个莫名其妙的现象：
+    //   ① 按钮被点过一次后**永久放大 8%**（P2-34 已修）；
+    //   ② 点过的那一项**永久保持高亮容器色**（如底栏/顶栏图标）；
+    //   ③ 点过的那一项**永久保持聚焦文字色**。
+    // 因此把"焦点相关视觉"（缩放 / 边框 / 容器色 / 内容色）统一收敛到 [activeFocus]：
+    // 非 TV 设备恒为 false，手机只保留 `pressed*`（按下瞬时反馈）。
+    // TV 侧 `tvDevice == true` → `activeFocus == isFocused`，行为与改动前逐字一致。
+    val activeFocus = isFocused && tvDevice
+
     // 动画由 isFocused 状态驱动，避免 onFocusChanged 中 scope.launch 的竞态
-    //
-    // ⚠️ v2.36.0（P2-34）：**非 TV 设备不应用 focusedScale**。
-    // `Modifier.clickable` 的节点本身是可聚焦的，手指点一下就会让它获得焦点；
-    // 若照搬 TV 的聚焦缩放，按钮被点过一次后会**永久放大 8%**（且手机没有焦点边框，
-    // 用户完全看不出原因）。手机的触摸反馈只走下面的 pressedScale（按压缩感）。
-    // TV 侧 `isTVDevice == true`，行为与改动前逐字一致。
-    LaunchedEffect(isFocused, isTVDevice) {
+    LaunchedEffect(activeFocus) {
         animScale.animateTo(
-            if (isFocused && isTVDevice) focusedScale else 1f,
+            if (activeFocus) focusedScale else 1f,
             tween(animationDurationMs)
         )
     }
@@ -136,13 +154,13 @@ fun FocusableSurface(
     // 容器色状态：按下 > 聚焦 > 默认
     val targetContainerColor = when {
         isPressed && pressedContainerColor != null -> pressedContainerColor
-        isFocused -> focusedContainerColor
+        activeFocus -> focusedContainerColor
         else -> containerColor
     }
     // 内容色状态：按下 > 聚焦 > 默认
     val targetContentColor = when {
         isPressed && pressedContentColor != null -> pressedContentColor
-        isFocused -> focusedContentColor
+        activeFocus -> focusedContentColor
         else -> contentColor
     }
 
@@ -154,10 +172,10 @@ fun FocusableSurface(
                 else Modifier
             )
             .then(
-                if (showFocusBorder && isTVDevice) {
+                if (showFocusBorder && tvDevice) {
                     Modifier.border(
-                        width = if (isFocused) 2.dp else 0.dp,
-                        color = if (isFocused) focusBorderColor else Color.Transparent,
+                        width = if (activeFocus) 2.dp else 0.dp,
+                        color = if (activeFocus) focusBorderColor else Color.Transparent,
                         shape = shape
                     )
                 } else {
@@ -176,7 +194,21 @@ fun FocusableSurface(
                 onLongClick = onLongClick
             )
     ) {
-        CompositionLocalProvider(LocalFocusableContentColor provides targetContentColor) {
+        // ⚠️ v2.36.0（竖屏「按钮看不清」根因修复）：
+        // `androidx.tv.material3.LocalContentColor` 的默认值是 **`Color.Black`**
+        // （`ContentColor.kt`：`compositionLocalOf { Color.Black }`），而
+        // `Icon(tint = LocalContentColor.current)` 与 `Text(color = ... → LocalContentColor.current)`
+        // 都会回退到它。本组件此前**只**提供自定义的 [LocalFocusableContentColor]，
+        // 于是内部凡是没显式写 `tint =` / `color =` 的 `Icon` / `Text` 都画成了**黑色** ——
+        // 在深色底（`Surface #162032`）上就是"看不清"，且这一现象**在 TV 上同样存在**
+        // （黑字压在 `SurfaceVariant #1E2D42` 上几乎不可见）。
+        // 这里按 Material `Surface` 的语义补上 `LocalContentColor`，让子组件能正确继承内容色。
+        // 排查命令（新增组件后建议复跑）：
+        //   grep -rn "Icon(" app/src/main/java | grep -v "tint"
+        CompositionLocalProvider(
+            LocalFocusableContentColor provides targetContentColor,
+            LocalContentColor provides targetContentColor,
+        ) {
             content()
         }
     }

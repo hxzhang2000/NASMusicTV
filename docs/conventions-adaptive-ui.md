@@ -324,3 +324,90 @@ package com.nasmusic.tv.ui.components
   改判定逻辑时若把负向用例一起改"绿"了，护栏就废了 —— 请谨慎
 - 源码目录定位失败时测试**直接失败**（不会静默跳过），
   `user.dir` 已覆盖「模块目录 / 仓库根 / 上一级」三种情形
+
+---
+
+## 10. ⛔ 内容色契约：`FocusableSurface` 必须同时下发两个 CompositionLocal
+
+**这是真机反馈「下方主按钮 / 标题行按钮看不清」的根因，也是本项目最容易复发的 UI 缺陷之一。**
+
+### 根因
+
+`androidx.tv.material3.LocalContentColor` 的**默认值是 `Color.Black`**：
+
+```kotlin
+// androidx/tv/material3/ContentColor.kt
+val LocalContentColor = compositionLocalOf { Color.Black }
+```
+
+而 tv-material3 的 `Icon` / `Text` **都会回退到它**：
+
+```kotlin
+// Icon.kt:67
+tint: Color = LocalContentColor.current
+// Text.kt:110-113
+color.takeOrElse { style.color.takeOrElse { LocalContentColor.current } }
+```
+
+`FocusableSurface` 早期**只**提供自定义的 `LocalFocusableContentColor`，于是它内部凡是
+**没显式写 `tint =` / `color =`** 的 `Icon` / `Text` 全部画成**黑色** ——
+压在深色底（`Surface #162032` / `SurfaceVariant #1E2D42`）上就是"看不见"。
+
+### 约定
+
+```kotlin
+CompositionLocalProvider(
+    LocalFocusableContentColor provides targetContentColor,   // 项目自有：给显式读它的组件
+    LocalContentColor provides targetContentColor,            // tv-material3 官方：给 Icon/Text 兜底
+) { content() }
+```
+
+**任何自建容器组件**（`FocusableSurface` 之外新写的 Surface/Card/Button 封装）只要内部可能放
+裸 `Icon` / `Text`，就**必须**同时下发这两个 —— 少一个就会出现黑字压深底。
+
+### 检查手段
+
+```bash
+# ① 门禁（含 4 组负向自证，防 import 假通过）
+JAVA_HOME="C:/Program Files/Android/Android Studio/jbr" \
+  ./gradlew.bat testDebugUnitTest --no-daemon \
+  -Pkotlin.compiler.execution.strategy=in-process --tests "*FocusableSurfaceColorContractTest"
+
+# ② 人工复核：确认 FocusableSurface 内容体外层两个 provides 都在
+grep -n "LocalContentColor provides\|LocalFocusableContentColor provides" \
+  app/src/main/java/com/nasmusic/tv/ui/components/FocusableSurface.kt
+```
+
+---
+
+## 11. 焦点视觉：TV / 触摸必须分流（粘滞焦点态）
+
+`Modifier.clickable` / `focusable()` 的节点在**手机**上点一下就会获得焦点，而且**焦点会粘住**
+（直到点别处才移走）。若焦点相关的视觉直接用 `isFocused`：
+
+- 缩放：点过一次**永久放大 8%**（P2-34 已修）
+- 容器色 / 内容色 / 边框：点过一次**永久高亮**（本轮修）—— 表现为底栏、顶栏图标被点过就"选不回来"
+
+### 约定
+
+```kotlin
+val tvDevice = isTVDevice()                    // FocusableSurface.kt 的公共函数
+val activeFocus = isFocused && tvDevice        // ⛔ 焦点视觉一律走这个
+```
+
+- 缩放动画、边框、`focusedContainerColor`、`focusedContentColor` **全部**改用 `activeFocus`
+- 手机只保留**按下**（`isPressed`）的瞬时反馈
+- `isTVDevice()` 是公共 `@Composable` 函数，自实现焦点动画的组件（如 `UnifiedSongRow` 的
+  `RowActionButton`）**直接复用**，不要再写一份 `packageManager.hasSystemFeature(...)`
+
+### ⚠️ `onFocusChanged` 里别读外层派生的 `activeFocus`
+
+`onFocusChanged { }` 的 lambda **捕获的是本次组合的值**，焦点刚变化时读到的还是旧值。
+需要立即生效的动画（如 `RowActionButton` 的 1.15 倍缩放）必须用状态本身：
+
+```kotlin
+.onFocusChanged { state ->
+    isFocused = state.hasFocus && tvDevice          // ✅
+    scope.launch { animScale.animateTo(if (state.hasFocus && tvDevice) 1.15f else 1f, tween(150)) }
+}
+```

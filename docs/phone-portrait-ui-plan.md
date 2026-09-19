@@ -20,6 +20,10 @@
 > - ⏸️ **P2-36**（平板 `TabletPortrait` 独立分档）—— 标为"可选"，且 §1 已把「平板专属
 >   两栏布局」列为**非目标**；当前 `medium` 档已覆盖 sw≥600
 > - ⏳ **P2-40** 真机截图验收 —— 按项目约定由用户安装 release 包后人工确认
+> - ✅ **真机反馈轮（2026-09-19）**：用户上机验收 v2.36.0 后报出 **7 条问题**（竖屏 6 + 横屏 1），
+>   已全部修复，**未引入新版本号**（仍在 v2.36.0 内）。逐条映射见 **§10.4**；
+>   其中「按钮看不清」的根因是 `androidx.tv.material3.LocalContentColor` 默认 `Color.Black`
+>   而 `FocusableSurface` 未下发（**TV 上同样存在**），维护约定见 `docs/conventions-adaptive-ui.md` §10
 > ✅ 5 项阻断已闭环：B1 分支谓词（§3.1）、B2 inset 前提（D9 拍板）、B3 过渡副作用（D10 拍板硬切，直接消除）、B4 首帧同步读（§8.2 镜像）、B5 dp 口径（§2.7）
 > 目标版本：v2.36.0 起分批落地
 > 关联文档：`docs/phone-support-plan.md`（手机端适配总纲）、`docs/phone-media-display-plan.md`（媒体展示与保活）
@@ -405,7 +409,7 @@ fun adaptiveColumns(tv: Int, phonePortrait: Int, phoneLandscape: Int = phonePort
 │   [封面48] 歌名/艺术家      [▶] [⏭]    │
 ├──────────────────────────────────────┤
 │ ④ 底部导航栏 56dp                     │
-│   首页    曲库    播放    我的    设置  │
+│  首页  曲库  播放  队列  我的  设置     │
 └──────────────────────────────────────┘
    ↑ 底部安全区 insets（手势导航栏）
 ```
@@ -415,14 +419,14 @@ fun adaptiveColumns(tv: Int, phonePortrait: Int, phoneLandscape: Int = phonePort
 | ① 顶部栏 56dp | 左：Logo+应用名；右：搜索、**L2 方向切换图标**（单击在竖/横间循环 + 写 pref，见 §5.3 D1）；**外层 `Modifier.statusBarsPadding()` + `displayCutoutPadding()`** 适配刘海/挖孔（⚠️ **前提：系统栏可见**，见 D9 / §5.5(9)） | 点击 | 与现状 `AppRoot.kt:188` 条件一致：沉浸模式 / MTV / 可视化舞台时隐藏（**不新增 K 歌条件**——K 歌强制横屏，竖屏顶栏不会与之共存） |
 | ② 内容区 | 各页面主体，**`LazyColumn` 滚动是预期**（§2.6） | 垂直滑动、点击、**「⋮」按钮触发的上下文菜单**（无长按，D8） | — |
 | ③ MiniPlayer 64dp | 封面 48 + 标题/艺术家两行 + 播放/暂停 + 下一首 + 顶部 2dp 进度细线；**外层 `navigationBarsPadding()`** 处理三键导航 | 点击整条 → 播放页；上滑 → 展开播放页（P2，与系统底部手势冲突待实测）；播放/暂停单独热区 | `currentSong != null` **且 `currentScreen != NowPlaying`**（再叠加 `!沉浸 && !showMv && !showKaraoke && !showVisualizer`，见 §8.6） |
-| ④ 底部导航 56dp | 5 项：首页 / 曲库 / 播放 / 我的 / 设置；**Icon 24dp + 文字 12sp + 整体 height 56dp**（子项 `fillMaxHeight()`；⚠️ **不要加** `padding(vertical=8dp)`，否则子项热区不足 56dp——D3 与 §8.4 在此矛盾，**以本行为准**）；触摸热区：Compose 56dp ≈ 物理 45.9dp ≥ 44dp（口径见 §2.7） | 点击切换，选中项 Primary 高亮 | 全屏页隐藏 |
+| ④ 底部导航 56dp | **6 项**：首页 / 曲库 / 播放 / **队列** / 我的 / 设置；**Icon 24dp + 文字 12sp + 整体 height 56dp**（子项 `fillMaxHeight()`；⚠️ **不要加** `padding(vertical=8dp)`，否则子项热区不足 56dp——D3 与 §8.4 在此矛盾，**以本行为准**）；触摸热区：Compose 56dp ≈ 物理 45.9dp ≥ 44dp（口径见 §2.7）。⚠️ **「队列」是 2026-09-19 真机反馈后新增的第 6 项**（§10.4 竖②）：原设计把队列收敛到「播放页 Chip + 我的页入口」，用户反馈"主按钮中缺少队列，应该加一个" | 点击切换，选中项 Primary 高亮；未选中项 `TextPrimary(#E8EDF5)`（原 `TextSecondary(#8899B0)` 压 `Surface(#162032)` 辨识度不足，同批改亮） | 全屏页隐藏 |
 
 > ⚠️ **MiniPlayer 的进度订阅必须在它自己内部**（`AppRoot.kt:115-117` 的 F-2 修复明确禁止在
 > AppRoot 顶层收集 `progress`/`duration`——进度由 `PlayerManager` 的 1000ms Handler 轮询驱动，
 > 顶层收集会**每秒驱动 AppRoot 全树重组**，含 LazyColumn 状态与 D-Pad 焦点搜索）。
 > 把它写在 `MiniPlayer` composable 内 → 每秒只重组 MiniPlayer 自身。骨架见 §8.5。
 
-**导航收敛（6 项 → 5 项）**
+**导航收敛（6 项 → 6 项：原为 5 项，真机反馈后把「队列」加回）**
 
 现有 6 项顶部导航（`AppRoot.kt:225-254`）到 `Screen` 枚举的映射，以及竖屏归属：
 
@@ -431,9 +435,9 @@ fun adaptiveColumns(tv: Int, phonePortrait: Int, phoneLandscape: Int = phonePort
 | 首页 | `Home` | 底部导航 ① |
 | 播放 | `NowPlaying` | 底部导航 ③ |
 | 曲库 | `Library` | 底部导航 ② |
-| 我的 | `Mine` | 底部导航 ④ |
-| 队列 | `Queue` | 播放页「队列」Chip + 我的页入口 |
-| 设置 | `Settings` | 底部导航 ⑤ |
+| 队列 | `Queue` | 底部导航 ④（**2026-09-19 真机反馈后由"播放页 Chip + 我的页入口"升级为直达入口**，§10.4 竖②） |
+| 我的 | `Mine` | 底部导航 ⑤ |
+| 设置 | `Settings` | 底部导航 ⑥ |
 
 `Screen` 枚举其余 8 项（`ServerConnect` / `AlbumDetail` / `ArtistDetail` / `Equalizer` / `PlaylistManagement` / `Netdisk` / `WeatherRadio` / `PlayStats`）均为二级页，不进底部导航。
 
@@ -487,7 +491,7 @@ fun adaptiveColumns(tv: Int, phonePortrait: Int, phoneLandscape: Int = phonePort
 | 组件 | 位置 | 改动 |
 |------|------|------|
 | `WelcomeSection` | `HomeScreen.kt:287` | 统计卡由横排改 **2 列网格** |
-| `NowPlayingCard` | `HomeScreen.kt:664` | 竖屏**隐藏**（与 MiniPlayer 重复） |
+| `NowPlayingCard` | `HomeScreen.kt:664` | 竖屏**隐藏**（与 MiniPlayer 重复）。⚠️ **2026-09-19 真机反馈扩展**：手机**横屏也隐藏**（条件由 `!isPhonePortrait` 改为 `uiMode == UiMode.TV`）—— 它是 72dp 全宽横条，手机横屏可用高度仅 ~439 Compose dp，一条就占 ~16%，而顶栏本就有「正在播放」入口（§10.4 横①） |
 | `HomeAlbumCard` / `HomeSongCard` | `:541` / `:603`（内部均为 `width(160.dp)`，原文误记 180） | 卡片宽 **160dp → 140dp** |
 | `QuickActionRow` | `:395` | 3 按钮 `Modifier.weight(1f)` 等宽 |
 
@@ -551,6 +555,15 @@ fun adaptiveColumns(tv: Int, phonePortrait: Int, phoneLandscape: Int = phonePort
 | ⑤ 控制行 | `ControlButtonsRow`（`PlayerControls.kt:285`，`compact=true`） | 居中，播放键 64dp | 点击 | OK 键 |
 | ⑥ 次级操作 | Chip 横排可滚动 | 控制行下方 | **高亮模式**（v1.3 D2 关键）/ 收藏 / 音质 / 队列 / 睡眠定时 / 可视化 / K 歌 / MTV / 人声消除 | 焦点横移 |
 | ⑦ 模式指示 | 底部 8dp 两圆点 | 居中 | 点圆点切换；**左右滑整页**切换 | 左右键切换 |
+
+> ⚠️ **2026-09-19 真机反馈修正两处（§10.4 竖③ / 竖⑥）**：
+> 1. **左右滑**：首轮实现把手势挂在 ⑦ 的 **28dp 指示器**上，且**不分方向、只做 toggle** ——
+>    用户实际"发现不了"，反馈为"不支持左右滑"。现手势移到**整块内容区**，**带方向语义**
+>    （左滑 → 歌词 / 右滑 → 封面）+ 48dp 位移阈值；⑦ 只保留点击与状态指示。
+> 2. **贴底**：首轮封面模式整列 `verticalScroll`，控制区紧跟封面、**屏幕下方空一大片**。
+>    现拆为「弹性区（封面 + 歌名，居中）+ 固定贴底区（④ 进度条 / ⑤ 控制行 / ⑥ 次级 Chip）」，
+>    封面边长由 `BoxWithConstraints` 的 `maxHeight` **显式扣减预留量**反推
+>    （`aspectRatio` 的高度回退只看自身约束，不知道下方还有歌名）。
 
 **⚠️ 必须处理的现状冲突（v1.3 D2 修订）**：`NowPlayingScreen.kt:325-408` 歌词列顶部有 **7 个横排 Chip**（4 个歌词来源 + 高亮模式 + 字号 + 睡眠定时），360dp 下必溢出。**v1.3 方案**：
 
@@ -1188,11 +1201,15 @@ package com.nasmusic.tv.ui.components
 
 private data class PhoneNavItem(val screen: Screen, val labelRes: Int, val icon: ImageVector)
 
-// 5 项，与 §4.0 映射表一致
+// 6 项，与 §4.0 映射表一致
+// ⚠️ 「队列」是 2026-09-19 真机反馈后新增的（§10.4 竖②）——原设计为 5 项，
+//    队列只从「播放页 Chip / 我的页」进入，用户反馈"主按钮中缺少队列"。
+//    图标用 `Icons.AutoMirrored.Filled.QueueMusic`（`Icons.Filled.QueueMusic` 已 deprecated）。
 private val PHONE_NAV_ITEMS = listOf(
     PhoneNavItem(Screen.Home,       R.string.nav_home,         Icons.Filled.Home),
     PhoneNavItem(Screen.Library,    R.string.nav_library,      Icons.Filled.LibraryMusic),
     PhoneNavItem(Screen.NowPlaying, R.string.nav_now_playing,  Icons.Filled.PlayArrow),
+    PhoneNavItem(Screen.Queue,      R.string.nav_queue,        Icons.AutoMirrored.Filled.QueueMusic),
     PhoneNavItem(Screen.Mine,       R.string.nav_mine,         Icons.Filled.Person),
     PhoneNavItem(Screen.Settings,   R.string.nav_settings,     Icons.Filled.Settings),
 )
@@ -1208,7 +1225,7 @@ fun PhoneNavBar(
             .fillMaxWidth()
             .background(NasMusicColors.Surface)
             .navigationBarsPadding()          // 底部手势导航安全区
-            .height(56.dp),                   // v1.3 D3: 容器 56dp，子项 fillMaxHeight 后每项触摸热区 = 56dp 高 × 72dp 宽（360dp/5），≥ 44dp ✓
+            .height(56.dp),                   // v1.3 D3: 容器 56dp，子项 fillMaxHeight 后每项触摸热区 = 56dp 高 × 60dp 宽（360dp/6），≥ 44dp ✓
         horizontalArrangement = Arrangement.SpaceEvenly,
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -1222,8 +1239,12 @@ fun PhoneNavBar(
                 animationDurationMs = 150,
                 containerColor = Color.Transparent,
                 focusedContainerColor = NasMusicColors.Primary.copy(alpha = 0.2f),
-                contentColor = if (selected) NasMusicColors.Primary else NasMusicColors.TextSecondary,
+                // ⚠️ 未选中项用 TextPrimary(#E8EDF5) 而非 TextSecondary(#8899B0)：
+                //    后者压在 Surface(#162032) 上辨识度不足（2026-09-19 真机反馈「主按钮看不清」，§10.4 竖①）
+                contentColor = if (selected) NasMusicColors.Primary else NasMusicColors.TextPrimary,
                 focusedContentColor = NasMusicColors.Primary,
+                pressedContainerColor = NasMusicColors.Primary.copy(alpha = 0.25f),   // 手机只保留按下反馈
+                pressedScale = 0.96f,
             ) {
                 Column(
                     horizontalAlignment = Alignment.CenterHorizontally,
@@ -1532,7 +1553,7 @@ JAVA_HOME="C:/Program Files/Android/Android Studio/jbr" \
 - ✅ **B1**：手机横屏逐页与改前像素级对照一致（目录栏/详情页/队列页均不得出现新 chrome）
 - ✅ **B2**：刘海屏竖屏 Logo/应用名不被遮挡；手动上滑唤出系统栏时内容**不跳动**
 - ✅ **B3**：旋转 5 次后，在首页/曲库/队列/详情页按 BACK 仍能先回列表顶部（Level 1.5 未失效）
-- ✅ **B5**：竖屏各页无组件被水平裁切；底部导航 5 项触摸热区物理 ≥ 44dp
+- ✅ **B5**：竖屏各页无组件被水平裁切；底部导航 **6 项**触摸热区物理 ≥ 44dp（2026-09-19 真机反馈后由 5 项增至 6 项，§10.4 竖②）
 
 **真机场景矩阵**：
 
@@ -1554,7 +1575,7 @@ JAVA_HOME="C:/Program Files/Android/Android Studio/jbr" \
 | 14 | 三键导航手机（如老款三星） | 竖屏底部 | `navigationBarsPadding()` 生效 | 底部导航不被三键导航条遮挡 |
 | 15 | 低密度手机（sw360dp @ hdpi） | 竖屏首页 | 文字清晰、触摸可用 | 字号下限 ≥ 10sp、触摸热区 ≥ 44dp |
 | 16 | 手机 | **7 Chip 改造后验证** | 高亮模式、字号循环、来源循环、睡眠 4 项均可在 ≤ 2 次点击内切换（D2） | 不需要进"更多"菜单 |
-| 17 | 手机 | **底部导航触摸** | 5 项导航切换准确、不误触 | 触摸 100 次，误触率 = 0（D3 触摸目标 ≥ 44dp） |
+| 17 | 手机 | **底部导航触摸** | **6 项**导航（含队列）切换准确、不误触 | 触摸 100 次，误触率 = 0（D3 触摸目标 ≥ 44dp） |
 | 18 | 手机 | **对话框 13 处** | 全部 `fillMaxWidth(0.92f) + widthIn(max=420.dp) + heightIn(max=0.8f) + verticalScroll` | 竖屏无截断、可滚条变流 |
 | 19 | 手机 | **旋转后 BACK 的 Level 1.5**（护栏，B3 已由 D10 消除） | 首页/曲库/队列/详情页先滚到底 → 旋转 → 按 BACK | 先回列表顶部，**不得**直接触发页面导航/退出 |
 | 20 | 手机 | **旋转不重复拉数据**（护栏，B3 已由 D10 消除） | 开日志统计 `loadHomeDashboard` / `fetchWeather` / `loadSongsFirstPage` 调用次数 | 旋转 10 次，每个接口调用次数 **= 1（不是 10）** |
@@ -1564,6 +1585,33 @@ JAVA_HOME="C:/Program Files/Android/Android Studio/jbr" \
 | 24 | 手机 | **dp 口径抽查（B5）** | 底部导航按钮实测物理尺寸；文字最小字号 | 每项物理 ≥ 44dp；字号物理 ≥ 10sp（Compose ≥ 12.2sp） |
 
 > ⛔ 按项目约定：产物就绪后**告知用户**由用户安装测试；**不自动启动应用**（不 `am start` / `monkey` / `input`）。
+
+### 10.4 真机反馈轮（2026-09-19，v2.36.0 内修复，未升版本号）
+
+用户安装 release 包上机验收后报出 **7 条问题**。逐条落点如下（技术细节见
+`docs/technical-overview.md` §10.163）：
+
+| # | 用户原话 | 落点 | 结论 |
+|---|---------|------|------|
+| 竖① | 下方的几个主按钮，都要改成亮色的，因为深色背景，现在根本看不清 | `FocusableSurface.kt` | **根因级**：`androidx.tv.material3.LocalContentColor` 默认 `Color.Black`，而 `FocusableSurface` 只下发了 `LocalFocusableContentColor` → 内容体里的裸 `Icon`/`Text` 全画成黑色。全仓库受影响 **9 处**（4 Icon + 5 Text），**TV 上同样存在** |
+| 竖⑤ | 标题行的几个按钮也要改成亮色的 | 同上 | 与竖①**同根因**，一处修复同时覆盖 |
+| 竖② | 主按钮中缺少队列，应该加一个，我看有地方 | `PhoneNavBar.kt` | 5 项 → **6 项**，插在「播放」与「我的」之间；`Icons.AutoMirrored.Filled.QueueMusic`。`nav_queue` 字符串**已存在**（`values`/`values-en` 第 23 行） |
+| 竖③ | 播放页面分为封面和歌词，要能够支持左右滑动切换 | `NowPlayingScreen.kt` | 手势从底部 **28dp** 的 `PortraitModeIndicator` 上移到**整块内容区**；原实现**不分方向、只做 toggle**（等于"不支持左右滑"）→ 现加方向语义（左滑→歌词 / 右滑→封面）+ 48dp 阈值 |
+| 竖④ | 歌曲条目在竖屏模式要将几个内嵌按钮和时长单独加一行 | `UnifiedSongRow.kt` | `MODE_ROW` 竖屏拆两行（第一行封面 64dp + 序号 + 歌名/艺术家；第二行时长 + 操作按钮）。顺带补 `RowActionButton` 触摸目标（原 48×42 dp → 竖屏仅 **39.4×34.4 物理 dp**，P0-26 漏网） |
+| 竖⑥ | 封面模式下，控制按钮和进度条应该紧贴屏幕下方 | `NowPlayingScreen.kt` | 原整列 `verticalScroll` → 控制区紧跟封面、下方空一大片。改「弹性区（`BoxWithConstraints` 按剩余高度反推封面边长）+ 固定贴底区」 |
+| 横① | 横屏模式就不要 mini 播放条了，太占空间 | `HomeScreen.kt` | 定位到的是**首页 `NowPlayingCard`**（72dp 全宽横条），**不是 `MiniPlayer`**（后者本就只在竖屏渲染）。条件 `!isPhonePortrait` → `uiMode == UiMode.TV`。⚠️ 此处**显式**读 `LocalUiMode` 做横屏独立分支（B1 允许，理由为用户明确要求），TV 端显示条件不变 |
+
+**附带修掉的第二层根因（竖①⑤ 的另一半）**：**粘滞焦点态** —— 手机触摸后 `clickable`/`focusable()`
+节点获焦且**焦点粘住**，此前 P2-34 只修了"永久放大 8%"，容器色/内容色仍粘 → 底栏/顶栏图标
+**点过一次就永久高亮**。现把焦点相关**全部视觉**收敛到 `activeFocus = isFocused && isTVDevice`。
+维护约定见 `docs/conventions-adaptive-ui.md` §11。
+
+**门禁**：新增 `FocusableSurfaceColorContractTest`（2 + 4 例，含负向自证）→ 单测基线 842 → **848 例**。
+
+**验收状态**：⏳ 待用户重新上机确认这 7 条（按项目约定不代装、不自动启动应用）。
+
+> ⚠️ 本表也修正了 §10.3 矩阵中的两处口径：第 17 行的「底部导航 **5 项**」现为 **6 项**；
+> 第 24 行 dp 抽查同步纳入新增的队列入口。
 
 ---
 

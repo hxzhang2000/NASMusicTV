@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.LibraryMusic
 import androidx.compose.material.icons.filled.Person
@@ -46,11 +47,12 @@ import com.nasmusic.tv.ui.theme.NasMusicColors
  */
 private data class PhoneNavItem(val screen: Screen, val labelRes: Int, val icon: ImageVector)
 
-/** 5 项，与方案 §4.0 导航映射表一致（队列改由播放页 Chip / 我的页进入） */
+/** 6 项（v2.36.0 竖屏体验修复：补上「队列」直达入口，此前只能从播放页 Chip / 我的页进） */
 private val PHONE_NAV_ITEMS = listOf(
     PhoneNavItem(Screen.Home, R.string.nav_home, Icons.Default.Home),
     PhoneNavItem(Screen.Library, R.string.nav_library, Icons.Default.LibraryMusic),
     PhoneNavItem(Screen.NowPlaying, R.string.nav_now_playing, Icons.Default.PlayArrow),
+    PhoneNavItem(Screen.Queue, R.string.nav_queue, Icons.AutoMirrored.Filled.QueueMusic),
     PhoneNavItem(Screen.Mine, R.string.nav_mine, Icons.Default.Person),
     PhoneNavItem(Screen.Settings, R.string.nav_settings, Icons.Default.Settings),
 )
@@ -81,8 +83,15 @@ fun PhoneNavBar(
                 animationDurationMs = 150,
                 containerColor = Color.Transparent,
                 focusedContainerColor = NasMusicColors.Primary.copy(alpha = 0.2f),
-                contentColor = if (selected) NasMusicColors.Primary else NasMusicColors.TextSecondary,
+                // v2.36.0 竖屏体验修复：未选中项此前用 TextSecondary(#8899B0)，
+                // 压在 Surface(#162032) 上偏暗、辨识度差 → 改用 TextPrimary(#E8EDF5)。
+                // ⚠️ 图标与文字都不再显式指定颜色：它们从 `LocalContentColor`（由
+                // FocusableSurface 下发）继承，否则 `Icon` 会回退到 tv-material3 的默认值
+                // **Color.Black**，在深色底上完全看不见。
+                contentColor = if (selected) NasMusicColors.Primary else NasMusicColors.TextPrimary,
                 focusedContentColor = NasMusicColors.Primary,
+                // 手机没有焦点边框，按下高亮是唯一的"已响应"视觉反馈（P2-34 约定）
+                pressedContainerColor = NasMusicColors.Primary.copy(alpha = 0.25f),
                 pressedScale = 0.96f,
             ) {
                 Column(

@@ -1258,6 +1258,47 @@ private val LYRICS_SOURCE_CYCLE = listOf(
     com.nasmusic.tv.data.model.LyricsSource.LOCAL_FILE,
 )
 
+/**
+ * 竖屏封面模式：歌名 / 艺术家区（含间距）的预留高度。
+ *
+ * 用于从弹性区高度反推封面边长 —— 见 [NowPlayingPortrait] 的 `coverSide`。
+ * 取值 = 歌名 2 行（`FontSize.title()`）+ 艺术家 1 行（`FontSize.small()`）+ 12dp 间距 + 余量。
+ */
+private val PORTRAIT_TITLE_RESERVE = 96.dp
+
+/** 竖屏左右滑切换模式的最小水平位移（≈3mm；低于此视为误触或竖直滚动） */
+private val PORTRAIT_SWIPE_THRESHOLD = 48.dp
+
+/**
+ * 竖屏播放页：整块内容区左右滑切换「封面 ⟷ 歌词」（v2.36.0 竖屏体验修复）。
+ *
+ * ⚠️ 此前手势只挂在底部 28dp 的模式指示器上，而且**不分方向、只做 toggle** ——
+ * 用户根本发现不了，实际体验就是"不支持左右滑动切换"。
+ * 现在覆盖整块内容区，并带**方向语义**（左滑 → 歌词，右滑 → 封面）+ 位移阈值。
+ *
+ * ⚠️ `pointerInput(Unit)` 不随重组重启。`mode` 由 `by remember { mutableStateOf }` 委托读写，
+ * 闭包捕获的是同一个 `MutableState` 实例，读到/写入的永远是当前值，故无需 `rememberUpdatedState`。
+ * ⚠️ 只识别水平拖拽：竖直滚动（歌词区）不受影响。
+ */
+private fun Modifier.portraitModeSwipe(
+    onToLyrics: () -> Unit,
+    onToCover: () -> Unit,
+): Modifier = this.pointerInput(Unit) {
+    val thresholdPx = PORTRAIT_SWIPE_THRESHOLD.toPx()
+    var accumulated = 0f
+    detectHorizontalDragGestures(
+        onDragStart = { accumulated = 0f },
+        onDragEnd = {
+            if (accumulated <= -thresholdPx) onToLyrics()
+            else if (accumulated >= thresholdPx) onToCover()
+            accumulated = 0f
+        },
+        onDragCancel = { accumulated = 0f },
+    ) { _, dragAmount ->
+        accumulated += dragAmount
+    }
+}
+
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 private fun NowPlayingPortrait(
@@ -1352,23 +1393,41 @@ private fun NowPlayingPortrait(
 
             if (mode == PortraitNowPlayingMode.COVER) {
                 // ── 模式 A：封面 ──
+                // 竖屏体验修复：进度条 + 控制按钮要「贴屏幕底部」，上方空间全留给封面。
+                // 原实现整列 `verticalScroll` → 控制区紧跟封面，屏幕下方空一大片。
+                // 现拆为「弹性区（封面 + 歌名，居中）+ 固定贴底区（进度 / 控制 / Chip）」。
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
                         .weight(1f)
-                        .verticalScroll(rememberScrollState())
-                        .padding(horizontal = 16.dp),
+                        .padding(horizontal = 16.dp)
+                        // 左滑 → 歌词（右滑已在封面，无动作）
+                        .portraitModeSwipe(
+                            onToLyrics = { mode = PortraitNowPlayingMode.LYRICS },
+                            onToCover = {},
+                        ),
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
-                    // ② 封面：比例式宽度（原 380dp 固定列竖屏不可用）
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .widthIn(max = 320.dp)
-                            .aspectRatio(1f)
-                            .clip(RoundedCornerShape(16.dp))
-                            .background(NasMusicColors.SurfaceVariant),
+                    // ② 弹性区：封面 + 歌名，在剩余高度内居中
+                    BoxWithConstraints(
+                        modifier = Modifier.fillMaxWidth().weight(1f),
+                        contentAlignment = Alignment.Center,
                     ) {
+                        // 封面边长 = min(可用宽, 弹性区高 − 歌名预留, 320dp)。
+                        // 必须显式扣掉歌名高度：`aspectRatio` 的高度回退只看**自身**约束，
+                        // 不知道下面还有一行歌名 —— 否则封面按高度收缩后仍会把歌名挤出弹性区。
+                        val coverSide = minOf(
+                            maxWidth,
+                            (maxHeight - PORTRAIT_TITLE_RESERVE).coerceAtLeast(96.dp),
+                            320.dp,
+                        )
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Box(
+                                modifier = Modifier
+                                    .size(coverSide)
+                                    .clip(RoundedCornerShape(16.dp))
+                                    .background(NasMusicColors.SurfaceVariant),
+                            ) {
                         key(currentSong?.id) {
                             CoverCarousel(
                                 coverCandidates = coverCandidates,
@@ -1431,10 +1490,10 @@ private fun NowPlayingPortrait(
                             FavoriteButton(isFavorite = isFavorite, onClick = onToggleFavorite)
                         }
                     }
+                        }   // 内层 Column（封面 + 歌名）
+                    }       // BoxWithConstraints（弹性区）
 
-                    Spacer(modifier = Modifier.height(10.dp))
-
-                    // ④ 进度条（触摸 tap/drag seek 已支持）
+                    // ④ 进度条（触摸 tap/drag seek 已支持）—— 以下为「固定贴底区」
                     ProgressSection(
                         progressMs = progressMs,
                         durationMs = durationMs,
@@ -1491,7 +1550,12 @@ private fun NowPlayingPortrait(
                     modifier = Modifier
                         .fillMaxWidth()
                         .weight(1f)
-                        .padding(horizontal = 16.dp),
+                        .padding(horizontal = 16.dp)
+                        // 右滑 → 封面（左滑已在歌词，无动作）
+                        .portraitModeSwipe(
+                            onToLyrics = {},
+                            onToCover = { mode = PortraitNowPlayingMode.COVER },
+                        ),
                 ) {
                     Box(
                         modifier = Modifier
@@ -1621,14 +1685,10 @@ private fun NowPlayingPortrait(
                 }
             }
 
-            // ⑦ 模式指示器 + 左右滑切换
+            // ⑦ 模式指示器（点击切换；左右滑由内容区的 portraitModeSwipe 处理）
             PortraitModeIndicator(
                 mode = mode,
                 onSwitch = { mode = it },
-                onSwipeLeft = {
-                    mode = if (mode == PortraitNowPlayingMode.COVER) PortraitNowPlayingMode.LYRICS
-                    else PortraitNowPlayingMode.COVER
-                },
             )
             Spacer(modifier = Modifier.height(8.dp))
         }
@@ -1829,22 +1889,22 @@ private fun PortraitThinProgress(progressMs: Long, durationMs: Long) {
     }
 }
 
-/** ⑦ 模式指示器（两圆点）+ 左右滑切换整页 */
+/**
+ * ⑦ 模式指示器（两圆点，点击切换）。
+ *
+ * ⚠️ v2.36.0 竖屏体验修复：此前把「左右滑」手势挂在这条 28dp 的指示器上，且不分方向只做 toggle
+ * —— 用户发现不了，体验上等于"不支持左右滑"。现手势上移到整块内容区（[portraitModeSwipe]），
+ * 这里只保留点击 + 状态指示。
+ */
 @Composable
 private fun PortraitModeIndicator(
     mode: PortraitNowPlayingMode,
     onSwitch: (PortraitNowPlayingMode) -> Unit,
-    onSwipeLeft: () -> Unit,
 ) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .height(28.dp)
-            .pointerInput(Unit) {
-                detectHorizontalDragGestures { _, dragAmount ->
-                    if (dragAmount < -20f || dragAmount > 20f) onSwipeLeft()
-                }
-            },
+            .height(28.dp),
         horizontalArrangement = Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically,
     ) {

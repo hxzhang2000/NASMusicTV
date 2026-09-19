@@ -101,7 +101,8 @@ fun HomeScreen(
     val scope = rememberCoroutineScope()
     val listBackHandler = LocalListBackHandler.current
     // v2.36.0：LazyColumn 内容 lambda 不是 @Composable 上下文，形态必须在组合内先读出来
-    val isPhonePortrait = LocalUiMode.current == UiMode.PhonePortrait
+    val uiMode = LocalUiMode.current
+    val isPhonePortrait = uiMode == UiMode.PhonePortrait
 
     // F2-3 首页列表化：首次进入自动生成智能电台批次（只生成不播放；防重入在 MainViewModel）
     LaunchedEffect(Unit) { onLoadSmartRadio?.invoke() }
@@ -143,7 +144,13 @@ fun HomeScreen(
 
         // 1.5 当前播放卡片（有歌曲正在播放时显示）
         // v2.36.0 竖屏：与底部 MiniPlayer 重复 → 隐藏（方案 §4.1）
-        if (currentSong != null && !isPhonePortrait) {
+        // v2.36.0 横屏体验修复（用户反馈「横屏不要 mini 播放条，太占空间」）：
+        // 这是一条**全宽 72dp** 的横向播放条（48dp 封面 + 歌名/艺术家 + 「正在播放 ▶」）。
+        // 手机横屏的可用高度只有 ~439 Compose dp，它一条就吃掉 ~16%，而 TV 顶栏本就有
+        // 「正在播放」入口 —— 故手机横屏也一并隐藏。
+        // ⚠️ B1 说明：这里**显式**读 `LocalUiMode` 做"横屏独立分支"，理由是用户明确要求；
+        //    TV 端行为保持不变（仍是原来的显示条件），故不构成 TV 回归。
+        if (currentSong != null && uiMode == UiMode.TV) {
             item(key = "now_playing") {
                 NowPlayingCard(
                     song = currentSong,

@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -50,8 +51,12 @@ import com.nasmusic.tv.data.model.sourceType
 import com.nasmusic.tv.ui.components.ConfirmDialog
 import com.nasmusic.tv.ui.components.common.CoverImage
 import com.nasmusic.tv.ui.components.common.SourceBadge
+import com.nasmusic.tv.ui.components.isTVDevice
+import com.nasmusic.tv.ui.components.portraitTouchTarget
 import com.nasmusic.tv.ui.theme.FontSize
+import com.nasmusic.tv.ui.theme.LocalUiMode
 import com.nasmusic.tv.ui.theme.NasMusicColors
+import com.nasmusic.tv.ui.theme.UiMode
 import com.nasmusic.tv.util.TimeUtils
 import kotlinx.coroutines.launch
 
@@ -71,6 +76,12 @@ enum class SongRowMode {
  * 导入歌单歌曲的 URL 直链状态（docs/playlist-import-feature-plan.md §4.5.2）。
  * 仅 MODE_ROW 在来源标签位渲染；非导入场景保持 NONE（不渲染）。
  */
+/** 竖屏歌曲行：封面尺寸。比 TV 的 92dp 小，把宽度让给歌名 / 艺术家 */
+private val PORTRAIT_SONG_COVER_SIZE = 64.dp
+
+/** 竖屏歌曲行：第一行高度（封面 64dp + 上下各 12dp 内边距） */
+private val PORTRAIT_SONG_ROW_LINE1_HEIGHT = 88.dp
+
 enum class UrlStatus {
     /** 非导入歌曲 / 无 URL 直链 */
     NONE,
@@ -197,18 +208,92 @@ private fun SongRowModeRow(
     // P1-16: Completed 状态点击弹出删除确认而非死按钮
     var showDeleteConfirm by remember { mutableStateOf(false) }
 
+    // v2.36.0 竖屏体验修复：焦点视觉只在 TV 上生效。
+    // 手机触摸会让 `clickable`/`focusable` 节点获得焦点且**焦点粘住** → 行背景永久高亮 +
+    // 永久放大 2%。与 FocusableSurface 的同款处理保持一致（TV 行为逐字不变）。
+    val tvDevice = isTVDevice()
+    val isPortraitPhone = LocalUiMode.current == UiMode.PhonePortrait
+    val activeFocus = isRowFocused && tvDevice
+
+    // v2.36.0 竖屏体验修复：时长与操作按钮要**单独一行**，不能挤占歌名/艺术家的宽度。
+    // 抽成局部 composable 由两个布局分支共用：
+    // - 非竖屏（TV / 手机横屏）：仍作为行内右侧第二列，与改动前逐字等价
+    // - 竖屏：放到第一行下方的独立操作行
+    val actionButtons: @Composable () -> Unit = {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            // 下载按钮（None 不渲染；Idle ⬇ 下载 / Queued ⋯ / Downloading ⇣ / Completed ✓ 删除 / Failed ✕ 重试）
+            if (onDownload != null && effectiveDownloadState !is DownloadState.None) {
+                val button: Triple<String, Color, Boolean>? = when (effectiveDownloadState) {
+                    DownloadState.Idle -> Triple("⬇", NasMusicColors.TextPrimary, true)
+                    DownloadState.Queued -> Triple("⋯", NasMusicColors.TextSecondary, false)
+                    is DownloadState.Downloading -> Triple("⇣", NasMusicColors.Primary, false)
+                    // Completed 可点击 → 弹出「删除已下载文件」二次确认（§8.7.1）
+                    is DownloadState.Completed -> Triple("✓", NasMusicColors.Success, true)
+                    is DownloadState.Failed -> Triple("✕", NasMusicColors.Warning, true)
+                    DownloadState.None -> null
+                }
+                if (button != null) {
+                    RowActionButton(
+                        text = button.first,
+                        color = button.second,
+                        onClick = {
+                            if (effectiveDownloadState is DownloadState.Completed && onDeleteDownload != null) {
+                                showDeleteConfirm = true
+                            } else {
+                                onDownload.invoke()
+                            }
+                        },
+                        enabled = button.third
+                    )
+                    Spacer(modifier = Modifier.width(10.dp))
+                }
+            }
+            if (onToggleFavorite != null) {
+                RowActionButton(
+                    text = if (isFavorited) "♥" else "♡",
+                    color = if (isFavorited) NasMusicColors.Warning else NasMusicColors.TextPrimary,
+                    onClick = onToggleFavorite
+                )
+            }
+            if (onToggleQueue != null) {
+                Spacer(modifier = Modifier.width(10.dp))
+                RowActionButton(
+                    text = if (isInQueue) "✓" else "☰",
+                    color = if (isInQueue) NasMusicColors.Primary else NasMusicColors.TextPrimary,
+                    onClick = onToggleQueue
+                )
+            }
+            if (onAddToPlaylist != null) {
+                Spacer(modifier = Modifier.width(10.dp))
+                RowActionButton(
+                    text = "+",
+                    color = NasMusicColors.TextPrimary,
+                    onClick = onAddToPlaylist
+                )
+            }
+            if (onDelete != null) {
+                Spacer(modifier = Modifier.width(10.dp))
+                RowActionButton(
+                    text = "✕",
+                    color = NasMusicColors.Warning,
+                    onClick = onDelete
+                )
+            }
+        }
+    }
+
     Box(
         modifier = modifier
             .fillMaxWidth()
             .scale(animScale.value)
             .clip(RoundedCornerShape(6.dp))
             .background(
-                color = if (isRowFocused) NasMusicColors.Primary.copy(alpha = 0.2f)
+                color = if (activeFocus) NasMusicColors.Primary.copy(alpha = 0.2f)
                 else NasMusicColors.Surface.copy(alpha = 0.5f)
             )
             .border(
-                width = if (isRowFocused) 2.dp else 0.dp,
-                color = if (isRowFocused) NasMusicColors.FocusRing.copy(alpha = 0.6f)
+                width = if (activeFocus) 2.dp else 0.dp,
+                color = if (activeFocus) NasMusicColors.FocusRing.copy(alpha = 0.6f)
                 else Color.Transparent,
                 shape = RoundedCornerShape(6.dp)
             )
@@ -216,16 +301,22 @@ private fun SongRowModeRow(
                 isRowFocused = state.hasFocus
                 scope.launch {
                     animScale.animateTo(
-                        if (isRowFocused) 1.02f else 1f,
+                        // ⚠️ 用 `state.hasFocus` 而不是外层的 activeFocus：
+                        // onFocusChanged 的 lambda 捕获的是**本次组合**的 activeFocus，
+                        // 焦点刚变化时它还是旧值（与 tvDevice 分档叠加会读错）。
+                        if (state.hasFocus && tvDevice) 1.02f else 1f,
                         tween(200)
                     )
                 }
             }
     ) {
+        // v2.36.0 竖屏体验修复：外层用 Column 承载「第二行（时长 + 操作按钮）」。
+        // 非竖屏下 Column 只有原 Row 一个子项 → 渲染结果与改动前逐字等价（B1）。
+        Column(modifier = Modifier.fillMaxWidth()) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(120.dp)
+                .height(if (isPortraitPhone) PORTRAIT_SONG_ROW_LINE1_HEIGHT else 120.dp)
                 .padding(horizontal = 16.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -283,7 +374,7 @@ private fun SongRowModeRow(
                 CoverImage(
                     coverUrl = effectiveCoverUrl,
                     contentDescription = song.title,
-                    size = 92.dp,
+                    size = if (isPortraitPhone) PORTRAIT_SONG_COVER_SIZE else 92.dp,
                     cornerRadius = 4.dp
                 )
                 Spacer(modifier = Modifier.width(14.dp))
@@ -355,78 +446,41 @@ private fun SongRowModeRow(
                         overflow = TextOverflow.Ellipsis
                     )
                 }
-                Spacer(modifier = Modifier.width(12.dp))
+                // 非竖屏：时长仍在行内右侧；竖屏见下方独立操作行
+                if (!isPortraitPhone) {
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Text(
+                        text = TimeUtils.formatDuration(song.durationMs),
+                        color = NasMusicColors.TextSecondary,
+                        fontSize = FontSize.button()
+                    )
+                }
+            }
 
-                // 时长
+            // 非竖屏（TV / 手机横屏）：操作按钮仍在行内右侧 —— 与改动前逐字等价
+            if (!isPortraitPhone) {
+                actionButtons()
+            }
+        }
+
+        if (isPortraitPhone) {
+            // 第二行：时长 + 操作按钮（独立一行，不再挤占歌名 / 艺术家的宽度）
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 16.dp, end = 16.dp, bottom = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
                 Text(
                     text = TimeUtils.formatDuration(song.durationMs),
                     color = NasMusicColors.TextSecondary,
                     fontSize = FontSize.button()
                 )
-            }
-
-            // 右侧操作按钮（独立可聚焦 + 可点击，触屏可点）
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                // 下载按钮（None 不渲染；Idle ⬇ 下载 / Queued ⋯ / Downloading ⇣ / Completed ✓ 删除 / Failed ✕ 重试）
-                if (onDownload != null && effectiveDownloadState !is DownloadState.None) {
-                    val button: Triple<String, Color, Boolean>? = when (effectiveDownloadState) {
-                        DownloadState.Idle -> Triple("⬇", NasMusicColors.TextPrimary, true)
-                        DownloadState.Queued -> Triple("⋯", NasMusicColors.TextSecondary, false)
-                        is DownloadState.Downloading -> Triple("⇣", NasMusicColors.Primary, false)
-                        // Completed 可点击 → 弹出「删除已下载文件」二次确认（§8.7.1）
-                        is DownloadState.Completed -> Triple("✓", NasMusicColors.Success, true)
-                        is DownloadState.Failed -> Triple("✕", NasMusicColors.Warning, true)
-                        DownloadState.None -> null
-                    }
-                    if (button != null) {
-                        RowActionButton(
-                            text = button.first,
-                            color = button.second,
-                            onClick = {
-                                if (effectiveDownloadState is DownloadState.Completed && onDeleteDownload != null) {
-                                    showDeleteConfirm = true
-                                } else {
-                                    onDownload.invoke()
-                                }
-                            },
-                            enabled = button.third
-                        )
-                        Spacer(modifier = Modifier.width(10.dp))
-                    }
-                }
-                if (onToggleFavorite != null) {
-                    RowActionButton(
-                        text = if (isFavorited) "♥" else "♡",
-                        color = if (isFavorited) NasMusicColors.Warning else NasMusicColors.TextPrimary,
-                        onClick = onToggleFavorite
-                    )
-                }
-                if (onToggleQueue != null) {
-                    Spacer(modifier = Modifier.width(10.dp))
-                    RowActionButton(
-                        text = if (isInQueue) "✓" else "☰",
-                        color = if (isInQueue) NasMusicColors.Primary else NasMusicColors.TextPrimary,
-                        onClick = onToggleQueue
-                    )
-                }
-                if (onAddToPlaylist != null) {
-                    Spacer(modifier = Modifier.width(10.dp))
-                    RowActionButton(
-                        text = "+",
-                        color = NasMusicColors.TextPrimary,
-                        onClick = onAddToPlaylist
-                    )
-                }
-                if (onDelete != null) {
-                    Spacer(modifier = Modifier.width(10.dp))
-                    RowActionButton(
-                        text = "✕",
-                        color = NasMusicColors.Warning,
-                        onClick = onDelete
-                    )
-                }
+                Spacer(modifier = Modifier.weight(1f))
+                actionButtons()
             }
         }
+        }   // Column（竖屏两行布局的外层容器）
     }
 
     // P1-16: Completed 状态点击弹出删除确认
@@ -464,13 +518,19 @@ private fun RowActionButton(
     onClick: () -> Unit,
     enabled: Boolean = true
 ) {
+    // v2.36.0：焦点视觉（高亮底 / 边框 / 1.15 缩放）只在 TV 上生效 ——
+    // 手机触摸会让 `focusable()`/`clickable` 节点获得焦点且焦点粘住，
+    // 否则点过一次的按钮会**永久放大 15% 并永久高亮**（与 FocusableSurface 同款处理）。
+    val tvDevice = isTVDevice()
     var isFocused by remember { mutableStateOf(false) }
     val animScale = remember { Animatable(1f) }
     val scope = rememberCoroutineScope()
 
     Box(
         modifier = Modifier
-            .widthIn(min = 48.dp)
+            // 48 / 42 dp 在竖屏分别只有 39.4 / 34.4 物理 dp ❌ → §2.7 换算抬到 56dp
+            .widthIn(min = portraitTouchTarget(48.dp))
+            .heightIn(min = portraitTouchTarget(42.dp))
             .scale(animScale.value)
             .clip(RoundedCornerShape(8.dp))
             .background(
@@ -483,10 +543,10 @@ private fun RowActionButton(
                 shape = RoundedCornerShape(8.dp)
             )
             .onFocusChanged { state ->
-                isFocused = state.isFocused
+                isFocused = state.hasFocus && tvDevice
                 scope.launch {
                     animScale.animateTo(
-                        if (isFocused) 1.15f else 1f,
+                        if (state.hasFocus && tvDevice) 1.15f else 1f,
                         tween(150)
                     )
                 }

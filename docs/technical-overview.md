@@ -9128,6 +9128,127 @@ Column(
 
 **版本**：v2.35.0 → **v2.36.0**（versionCode 153 → 154）
 
+### 10.163 v2.36.0（真机反馈轮）— 竖屏 6 项 + 横屏 1 项修复；`LocalContentColor` 默认黑色根因（2026-09-19）
+
+**来源**：用户在真机上验收 v2.36.0 竖屏适配后报出 **7 条具体问题**：
+
+> 竖屏：① 下方几个主按钮要改亮色，深色背景下根本看不清；② 主按钮缺「队列」，应该加一个；
+> ③ 播放页封面 / 歌词要支持左右滑切换；④ 歌曲条目要把内嵌按钮和时长单独放一行，不能占用
+> 歌名与艺术家的空间；⑤ 标题行的几个按钮也要改亮色；⑥ 播放页封面模式下，控制按钮和进度条
+> 应紧贴屏幕下方，把上方空间留给封面。
+> 横屏：① 不要 mini 播放条，太占空间。
+
+**本条修复不引入新版本号**（仍在 v2.36.0 内），只补充 v2.36.0 节的 `Changed` / `Fixed` 条目。
+
+---
+
+#### 10.163.1 ⛔ 根因：`androidx.tv.material3.LocalContentColor` 的默认值是 `Color.Black`
+
+问题 ①⑤（"按钮看不清"）**不是配色选错，而是内容色从未下发**。
+
+```kotlin
+// androidx/tv/material3/ContentColor.kt
+val LocalContentColor = compositionLocalOf { Color.Black }
+```
+
+tv-material3 的 `Icon` / `Text` 都回退到它：
+
+```kotlin
+// Icon.kt:67
+tint: Color = LocalContentColor.current
+// Text.kt:110-113
+color.takeOrElse { style.color.takeOrElse { LocalContentColor.current } }
+```
+
+而 `FocusableSurface` 早期**只**提供项目自有的 `LocalFocusableContentColor`，
+**没有**提供 `LocalContentColor`。于是 143 处 `FocusableSurface(...)` 里，
+凡是内容体写了**裸 `Icon` / `Text`（不带 `tint=` / `color=`）**的地方，一律画成黑色。
+
+**受影响面**：全仓库共 **9 处**（4 个 `Icon` + 5 个 `Text`）—— 竖屏底栏图标与文字、顶栏搜索图标、
+迷你播放条播放 / 下一首图标、`QualityPickerDialog` 次级按钮、天气电台「播放全部」、
+百度授权「复制」等。⚠️ **这些位置在 TV 上同样是黑字压深底**，属**既有缺陷**，
+不是竖屏适配引入的 —— 只是竖屏底栏面积更大、更显眼才被用户先发现。
+
+**修复**（`FocusableSurface.kt`，一处修复覆盖全部 9 处）：
+
+```kotlin
+CompositionLocalProvider(
+    LocalFocusableContentColor provides targetContentColor,  // 项目自有
+    LocalContentColor provides targetContentColor,           // tv-material3 官方（新增）
+) { content() }
+```
+
+**门禁**：新增 `FocusableSurfaceColorContractTest`（真实源码扫描 2 例 + 4 组负向自证）——
+断言 `FocusableSurface.kt` 同时含 `LocalFocusableContentColor provides` 与 `LocalContentColor provides`；
+负向用例覆盖「两者都缺」「只缺 `LocalContentColor`」「只 import 未 provides」（防 import 假通过）。
+
+**维护约定**见 `docs/conventions-adaptive-ui.md` §10。
+
+---
+
+#### 10.163.2 ⛔ 粘滞焦点态：焦点视觉必须按 TV / 触摸分流
+
+问题 ①⑤ 的**第二层原因**。`Modifier.clickable` / `focusable()` 的节点在手机上点一下就会获得焦点，
+而且**焦点会粘住**（直到点别处才移走）。此前 P2-34 只修掉了"永久放大 8%"，
+**容器色 / 内容色 / 边框仍是粘的** —— 表现为底栏 / 顶栏图标被点过一次后**永久高亮**，
+用户会以为"选不回去了"。
+
+**修复**：把焦点相关的**全部视觉**（缩放 / 边框 / 容器色 / 内容色）统一收敛到一个派生值：
+
+```kotlin
+val tvDevice = isTVDevice()                 // 公共 @Composable，抽到 FocusableSurface.kt
+val activeFocus = isFocused && tvDevice     // TV 侧 tvDevice == true → 与改动前逐字等价
+```
+
+手机只保留**按下**（`isPressed`）的瞬时反馈。同步修掉 `UnifiedSongRow` 的行高亮
+（永久 0.2 透明 Primary 底）与 `RowActionButton` 的 1.15 倍缩放。
+
+⚠️ **`onFocusChanged` lambda 捕获的是本次组合的值**，焦点刚变化时读到的是旧值 ——
+需要立即生效的动画必须用 `state.hasFocus && tvDevice`，不能读外层派生的 `activeFocus`。
+详见 `docs/conventions-adaptive-ui.md` §11。
+
+---
+
+#### 10.163.3 其余 5 项逐条
+
+| # | 用户反馈 | 落点 | 做法 |
+|---|---|---|---|
+| 竖② | 主按钮缺「队列」 | `PhoneNavBar.kt` | 5 项 → **6 项**，插在「播放」与「我的」之间；图标 `Icons.AutoMirrored.Filled.QueueMusic`（`Icons.Filled.QueueMusic` 已 deprecated）。`nav_queue` 字符串**已存在**（`values`/`values-en` 第 23 行），无需新增 |
+| 竖③ | 封面 ⟷ 歌词左右滑 | `NowPlayingScreen.kt` | 手势从底部 28dp 的 `PortraitModeIndicator` 上移到**整块内容区**，并**加方向语义**（左滑→歌词 / 右滑→封面）+ 48dp 位移阈值。原实现**不分方向、只做 toggle**，且热区只有 28dp，用户根本发现不了。指示器只保留点击与状态指示 |
+| 竖④ | 歌曲条目两行 | `UnifiedSongRow.kt` | `MODE_ROW` 竖屏拆两行：第一行 = 封面（64dp）+ 序号 + 歌名/艺术家；第二行 = 时长 + 操作按钮。非竖屏仍走原 120dp 单行（外层仅多一个单子项 `Column`，渲染逐字等价）。整块按钮抽成局部 `actionButtons` composable，避免 50 行按钮块在两个分支里重复 |
+| 竖⑥ | 控制区贴底 | `NowPlayingScreen.kt` | 原实现整列 `verticalScroll`，控制区紧跟封面、屏幕下方空一大片。现拆为「弹性区（封面 + 歌名，居中）+ 固定贴底区（进度条 / 控制行 / 次级 Chip）」 |
+| 横① | 去掉 mini 播放条 | `HomeScreen.kt` | 定位：那是首页的 `NowPlayingCard`（**72dp 全宽**横条：48dp 封面 + 歌名/艺术家 + 「正在播放 ▶」），**不是** `MiniPlayer`（后者本就只在竖屏渲染）。条件由 `!isPhonePortrait` 改为 `uiMode == UiMode.TV`。手机横屏可用高度仅 ~439 Compose dp，它一条就占 ~16%，而顶栏本就有「正在播放」入口。⚠️ 此处**显式**读 `LocalUiMode` 做"横屏独立分支"（B1 允许，理由为用户明确要求），**TV 端显示条件不变** |
+
+**竖⑥ 的实现要点**：`aspectRatio(1f)` 的高度回退**只看自身约束**，不知道下方还有歌名，
+封面收缩后会把自己挤到看不见 —— 必须用 `BoxWithConstraints` 拿 `maxHeight` **显式扣减**预留量反推：
+
+```kotlin
+val coverSide = minOf(maxWidth, (maxHeight - PORTRAIT_TITLE_RESERVE).coerceAtLeast(96.dp), 320.dp)
+```
+
+**竖④ 的实现要点**：`RowActionButton` 的触摸目标同时补齐 —— 原为 `widthIn(min = 48.dp)` +
+`padding(vertical = 10.dp)`，实际 48×42 dp → 竖屏只有 **39.4×34.4 物理 dp**（P0-26 漏网）。
+现改走 `portraitTouchTarget(48.dp)` / `portraitTouchTarget(42.dp)`。
+
+---
+
+#### 编译期踩坑（记录备查）
+
+- `HomeScreen.kt:152` `@Composable invocations can only happen from the context of a @Composable function`
+  —— `LazyListScope` 的 `item { }` **不是 @Composable 上下文**，`LocalUiMode.current` 必须先
+  在组合层读出再传进去
+- `PhoneNavBar.kt:55` `'val Icons.Filled.QueueMusic' is deprecated` → 改 `Icons.AutoMirrored.Filled.QueueMusic`
+- 公共函数 `isTVDevice()` 与 `FocusableSurface` 内部局部变量同名 → 局部改名 `tvDevice`
+
+**测试**：新增 `FocusableSurfaceColorContractTest`（2 + 4 例）；全量 `testDebugUnitTest` 842 → **848 例**。
+
+**验证**：`:app:compileDebugKotlin` / `:app:lintDebug`（0 Error）/ `:app:testDebugUnitTest` 全绿；
+`assembleRelease` BUILD SUCCESSFUL。
+
+**遗留（诚实记录）**：本轮 7 项修复的**真机视觉验收**仍需用户上机确认（按项目约定不代装、不自动启动应用）。
+
+**版本**：v2.36.0（未变；versionCode 154）
+
 ### 10.152 v2.32.3 — T5：删除死代码 `VocalRemovalProcessor.kt`（算法先归档，2026-09-14）
 
 **来源**：`logs_temp/code-review-full-report-2026-09-13.md` §T5 / `docs/code-review-2026-09-03.md` §P2。文件 348 行，全项目**零调用方**（`PlaybackService.kt:207` 实际 `val vocalRemovalProcessor = SpectralMaskProcessor()`——变量名是历史遗留，类型早就换过了；`PlayerManager.setVocalRemovalProcessor()` 的形参类型同样是 `SpectralMaskProcessor`）。

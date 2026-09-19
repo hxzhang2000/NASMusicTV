@@ -22,8 +22,15 @@
 > ⚠️ **硬规则 B1**：分支谓词只写 `== / != UiMode.PhonePortrait`，`else` 分支必须与改动前**逐字等价**
 > ——因为**手机横屏与 TV 共用同一套布局**。这样"TV 端零变化 + 手机横屏与改前一致"才是可证的。
 >
-> **未实施部分**：① **电视 / 手机实机视觉验收**（竖屏布局、旋转表现、手势手感需上机看，按项目约定
-> 由用户执行）；② **详情页下滑返回手势**（P2-33 后半）——方案已标注与 D9 底部系统手势冲突、需实测，
+> 🔧 **真机反馈轮（2026-09-19）**：用户上机验收后报出 **7 条问题**（竖屏 6 + 横屏 1），已全部修复，
+> **未引入新版本号**。其中"按钮看不清"的根因是 `androidx.tv.material3.LocalContentColor` 默认
+> `Color.Black` 而 `FocusableSurface` 未下发（**TV 上同样存在**，属既有缺陷）；
+> 另修掉手机触摸的"粘滞焦点态"。详见下方 `Changed` / `Fixed` 条目与
+> `docs/technical-overview.md` §10.163、`docs/phone-portrait-ui-plan.md` §10.4。
+>
+> **未实施部分**：① **实机视觉验收的复验** —— 用户已完成首轮上机验收并报出 7 条问题（已修），
+> 但修复后的**复验**仍需上机确认（竖屏布局、旋转表现、手势手感按项目约定由用户执行）；
+> ② **详情页下滑返回手势**（P2-33 后半）——方案已标注与 D9 底部系统手势冲突、需实测，
 > 在无法上机验证的前提下不引入不可验证的交互；③ **缩放系数 0.82 → 0.88**（P2-37）——方案标为
 > "可选"，且改动需同时处理 `LYRICS_RECOVER_SCALE` 与 §2.7 全部尺寸口径，风险大于收益，留待上机后定；
 > ④ **平板 `TabletPortrait` 独立分档**（P2-36，方案标为"可选"，当前 `medium` 档已覆盖 sw≥600）。
@@ -125,9 +132,48 @@
   横向卡片宽度 160dp → 140dp
 - **热力图新增可选放大**（`enableZoom`）：仅手机竖屏开启，格子保底 10dp 并允许横向滚动；
   默认 `false` 时与改动前逐字等价
+- **竖屏底栏新增「队列」直达入口**（5 项 → 6 项，`Icons.AutoMirrored.Filled.QueueMusic`）：
+  此前只能从播放页次级 Chip / 「我的」页进入。同时未选中项颜色由
+  `TextSecondary(#8899B0)` 改为 `TextPrimary(#E8EDF5)` —— 压在 `Surface(#162032)` 上辨识度不足
+- **竖屏播放页封面模式：控制区贴屏幕底部**（真机反馈修复）：原实现整列 `verticalScroll`，
+  控制区紧跟封面、屏幕下方空一大片。现拆为「弹性区（封面 + 歌名，居中；用 `BoxWithConstraints`
+  按剩余高度反推封面边长，避免封面收缩后把歌名挤出可视区）+ 固定贴底区（进度条 / 控制行 / 次级 Chip）」
+- **竖屏播放页左右滑切换封面 ⟷ 歌词**（真机反馈修复）：手势此前只挂在底部 28dp 的模式指示器上，
+  且**不分方向、只做 toggle** —— 用户发现不了，体验上等于"不支持左右滑"。现手势覆盖整块内容区，
+  **带方向语义**（左滑 → 歌词，右滑 → 封面）+ 48dp 位移阈值；指示器只保留点击与状态指示
+- **竖屏歌曲条目改为两行**（真机反馈修复）：`UnifiedSongRow(MODE_ROW)` 原为 TV 版 120dp 单行
+  （92dp 封面 + 36dp 序号 + 文字 + 时长 + 最多 4 个操作按钮）。竖屏可用宽仅约 407dp，
+  扣掉封面/序号/时长/按钮后**文字只剩十几 dp**，歌名与艺术家被挤没。现竖屏改为：
+  第一行 = 封面（64dp）+ 序号 + 歌名/艺术家（占满剩余宽度）；第二行 = 时长 + 操作按钮。
+  非竖屏仍走原单行结构（外层仅多一个单子项 `Column`，渲染逐字等价）
+- **手机横屏首页不再显示「当前播放」全宽播放条**（真机反馈修复）：`HomeScreen` 的 `NowPlayingCard`
+  是一条 72dp 高的全宽横条（48dp 封面 + 歌名/艺术家 + 「正在播放 ▶」）。手机横屏可用高度仅
+  ~439 Compose dp，它一条就占 ~16%，而顶栏本就有「正在播放」入口。
+  ⚠️ 此处**显式**读 `LocalUiMode` 做"横屏独立分支"（B1 允许，理由为用户明确要求），
+  **TV 端显示条件不变**
 
 ### Fixed
 
+- **竖屏按钮「看不清」的根因：`FocusableSurface` 没下发 `LocalContentColor`（真机反馈修复）**：
+  `androidx.tv.material3.LocalContentColor` 的默认值是 **`Color.Black`**（`ContentColor.kt`：
+  `compositionLocalOf { Color.Black }`），而 `Icon(tint = LocalContentColor.current)` 与
+  `Text(color = Color.Unspecified → LocalContentColor.current)` **都会回退到它**。
+  `FocusableSurface` 此前**只**提供自定义的 `LocalFocusableContentColor`，于是内部凡是没显式写
+  `tint =` / `color =` 的 `Icon` / `Text` 全部画成**黑色** —— 压在深色底（`Surface #162032`）上
+  就是用户反馈的「下方主按钮 / 标题行按钮看不清」。全仓库受影响 **9 处**（4 个 `Icon` + 5 个 `Text`）：
+  竖屏底栏图标与文字、顶栏搜索图标、迷你播放条播放/下一首图标、`QualityPickerDialog` 次级按钮、
+  天气电台「播放全部」、百度授权「复制」等。⚠️ **这些位置在 TV 上同样是黑字压深底**，属既有缺陷。
+  现按 Material `Surface` 语义同时下发 `LocalContentColor`；并新增门禁
+  `FocusableSurfaceColorContractTest`（含 4 组负向自证）防止回退
+- **手机触摸的「粘滞焦点态」（真机反馈修复）**：`Modifier.clickable` / `focusable()` 的节点在手机上
+  点一下就会获得焦点，且**焦点会粘住**（直到点别处才移走）。此前 P2-34 只修掉了"永久放大 8%"，
+  容器色/内容色仍是粘的 —— 表现为**底栏/顶栏图标被点过一次后永久高亮**。本轮把**焦点相关的全部视觉**
+  （缩放 / 边框 / 容器色 / 内容色）统一收敛到 `activeFocus = isFocused && isTVDevice`，
+  手机只保留按下的瞬时反馈；并抽出公共 `isTVDevice()` 供其他自实现焦点动画的组件复用。
+  同步修掉 `UnifiedSongRow` 的行高亮（永久 0.2 透明 Primary 底）与 `RowActionButton` 的 1.15 倍缩放
+- **竖屏歌曲行操作按钮触摸目标不达标（P0-26 漏网）**：`RowActionButton` 为
+  `widthIn(min = 48.dp)` + `padding(vertical = 10.dp)`，实际 48×42 dp → 竖屏只有
+  **39.4×34.4 物理 dp**。现改走 `portraitTouchTarget(48.dp)` / `portraitTouchTarget(42.dp)`（竖屏 56dp）
 - **竖屏触摸目标全部不达标（P0-26，按 §2.7 全量复核）**：竖屏下 `LocalDensity` 被
   `PHONE_UI_SCALE = 0.82` 缩放，代码里的 `X.dp` 只占 `X × 0.82` 个**物理 dp**。
   此前多处按"物理 dp 口径"写注释（如"44dp+ 触摸目标"）却填了 Compose 值，实际全部偏小：
