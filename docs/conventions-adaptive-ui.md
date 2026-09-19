@@ -214,6 +214,49 @@ Modifier.height(44.dp) // 竖屏只有 36.1 物理 dp —— 注释里写「44dp
 
 ⚠️ **不能靠改 density 解决竖屏**（方案 §2.5）：会同时放大 TV 端与所有既有固定尺寸。
 
+### 6.5 ⚠️ §8 那条自查 grep 的**盲区**：小尺寸 + `clickable`
+
+§8 的自查 grep 只覆盖 **40~53dp** 区间：
+
+```
+\.(size|height|width)\((\s*)(4[0-9]|5[0-3])\.dp\)
+```
+
+**小于 40dp 的写法完全逃过检查** —— 但 `Modifier.size(8.dp).clickable { }` 同样是
+6.6 物理 dp 的热区，比 44/48 更糟。**真实案例（2026-09-19 review）**：
+竖屏播放页的 `PortraitModeIndicator` 两个模式圆点写成
+`.size(if (active) 8.dp else 6.dp) ... .clickable { onSwitch(m) }`，
+热区仅 6~8 Compose dp（4.9~6.6 物理 dp），而 P0-26 的全量复核没抓到它。
+
+**两个教训**：
+
+1. **自查 grep 的下界必须放到 0**（`([0-3][0-9]|4[0-9]|5[0-3])`），且必须人工确认
+   「这个尺寸是不是触摸目标」。装饰性小尺寸（图标、圆点、进度条）挂 `clickable` 一律可疑。
+2. ⚠️ **尺寸是表达式时正则匹配不到**：`size(if (a) 8.dp else 6.dp)` 里没有
+   `size(<数字>.dp)` 这样的字面形态。写扫描脚本要**取括号配对内容再抽其中的 `.dp` 字面量**，
+   否则会**空转**（报"0 处"，看起来干净，实际什么都没查）。
+
+> 📌 **扫描脚本已入库**：项目根目录 `audit_small_touch_target.py`
+> （与 `check_chinese.py` 同级），**必须先跑 `--selftest` 再实跑** ——
+> 这就是本条的教训：**源码扫描型护栏不自证，就无法区分"真干净"和"空转"**。
+> 判定规则：取 `size(` 括号配对内容 → 抽出全部 `.dp` 字面量 → 全部 < 40dp 才候选
+> （无字面量则跳过；`portraitTouchTarget(44.dp)` 因含 44 而被豁免，属受认可写法）；
+> 再往后看同一 modifier 链是否有 `clickable`，链上有 `fillMaxSize` / `weight(` 撑大的跳过；
+> `Spacer(` / `Divider` 需**向前回看 3 行**排除（它们常写在链的开头）。
+
+**正确写法**：视觉元素与热区分离 —— 外层承担热区，内层只做视觉。
+
+```kotlin
+Box(
+    modifier = Modifier
+        .size(portraitTouchTarget(44.dp))   // 竖屏 56dp ≈ 45.9 物理 dp ✅
+        .clickable { onSwitch(m) },
+    contentAlignment = Alignment.Center,
+) {
+    Box(Modifier.size(if (active) 8.dp else 6.dp).clip(CircleShape).background(color))
+}
+```
+
 ---
 
 ## 7. 新增 Screen / 组件的检查清单
@@ -224,6 +267,9 @@ Modifier.height(44.dp) // 竖屏只有 36.1 物理 dp —— 注释里写「44dp
 - [ ] 多列网格走 `adaptiveColumns(...)`，不写 `GridCells.Fixed(常量)`
 - [ ] 对话框走 `responsiveDialogSize(...)`
 - [ ] **触摸目标**走 `portraitTouchTarget(x.dp)` 或 `PHONE_TOUCH_TARGET`，**不写裸 `44.dp` / `48.dp`**（§6.1）
+- [ ] ⚠️ **小视觉元素（圆点 / 图标 / 进度条）不要直接挂 `clickable`** ——
+      改为「外层承担热区 + 内层只做视觉」（§6.5）。`size(8.dp).clickable{}` 这种写法
+      自查 grep 抓不到，只有人工看
 - [ ] 新弹层（`Box` 覆盖层）→ **必须** `RegisterDialogBackHandler(onDismiss)`（方案 §6.3）
 - [ ] 页面级 BACK 状态提升到 `NavigationViewModel`（方案 K2），不要藏在页面内部
 - [ ] ⚠️ **禁止在 `AppRoot` 顶层订阅 `progress` / `duration`**（方案 K1）：那是 1000ms
@@ -258,8 +304,16 @@ grep -rnE "\.width\([4-9][0-9]{2}\.dp\)" app/src/main/java/com/nasmusic/tv/ui
 grep -rn "import androidx.compose.material3" app/src/main/java | wc -l   # 期望 0
 
 # 静态自查：是否还有裸 44/48/52dp 触摸目标（§6.1；豁免项见 §6.3）
-grep -rnE "\.(size|height|width)\((\s*)(4[0-9]|5[0-3])\.dp\)" app/src/main/java/com/nasmusic/tv/ui \
+# ⚠️ 下界已从 4x 扩到 0x —— 原来的 40~53dp 区间会漏掉 size(8.dp).clickable 这类
+#    更糟的写法（见 §6.5）。命中后逐个确认「是不是触摸目标」。
+grep -rnE "\.(size|height|width)\((\s*)([0-3][0-9]|4[0-9]|5[0-3])\.dp\)" app/src/main/java/com/nasmusic/tv/ui \
   | grep -vE "Karaoke|MvPlayback|VisualEqualizer|Shimmer|Cover|cover|favicon|Spacer"
+# ⚠️ 上面这条对「尺寸是表达式」的写法无能为力（size(if (a) 8.dp else 6.dp)）→
+#    改用下面这个脚本（已入库，与 check_chinese.py 同级；自带负向自证）
+python audit_small_touch_target.py --selftest   # 先自证脚本有效（5 用例）
+python audit_small_touch_target.py              # 再实跑，期望 0 处
+# ⚠️ 手工兜底：任何小尺寸（图标 / 圆点 / 进度条）直接挂 clickable 都属违规，
+#    应改为「外层 size(portraitTouchTarget(...)) 承担热区 + 内层只做视觉」（§6.5）
 ```
 
 **B1 回归护栏**：任何"给竖屏加分支"的改动，都要能回答

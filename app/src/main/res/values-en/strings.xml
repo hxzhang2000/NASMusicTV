@@ -19,6 +19,8 @@
 
     <!-- Navigation -->
     <string name="nav_now_playing">Now Playing</string>
+    <!-- 竖屏底部导航专用短标签（见 values/strings.xml 同名条目注释） -->
+    <string name="nav_now_playing_short">Playing</string>
     <string name="nav_library">Library</string>
     <string name="nav_queue">Queue</string>
     <string name="nav_settings">Settings</string>

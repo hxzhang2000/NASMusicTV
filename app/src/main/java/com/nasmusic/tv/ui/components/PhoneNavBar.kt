@@ -24,6 +24,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.tv.material3.ExperimentalTvMaterial3Api
@@ -51,7 +52,9 @@ private data class PhoneNavItem(val screen: Screen, val labelRes: Int, val icon:
 private val PHONE_NAV_ITEMS = listOf(
     PhoneNavItem(Screen.Home, R.string.nav_home, Icons.Default.Home),
     PhoneNavItem(Screen.Library, R.string.nav_library, Icons.Default.LibraryMusic),
-    PhoneNavItem(Screen.NowPlaying, R.string.nav_now_playing, Icons.Default.PlayArrow),
+    // ⚠️ 用短标签：6 项后每项仅约 65~73 Compose dp 宽（320dp 物理屏 ÷ 0.82 ÷ 6），
+    // 英文 "Now Playing"(11 字符) 会被 `maxLines = 1` 裁掉。TV 顶部导航仍用 nav_now_playing。
+    PhoneNavItem(Screen.NowPlaying, R.string.nav_now_playing_short, Icons.Default.PlayArrow),
     PhoneNavItem(Screen.Queue, R.string.nav_queue, Icons.AutoMirrored.Filled.QueueMusic),
     PhoneNavItem(Screen.Mine, R.string.nav_mine, Icons.Default.Person),
     PhoneNavItem(Screen.Settings, R.string.nav_settings, Icons.Default.Settings),
@@ -108,6 +111,9 @@ fun PhoneNavBar(
                         text = stringResource(item.labelRes),
                         fontSize = 12.sp,
                         maxLines = 1,
+                        // 兜底：6 项下每项宽度固定（weight(1f)），万一某语言标签更长
+                        // （或将来再加一项），省略号比硬裁更像"有意设计"
+                        overflow = TextOverflow.Ellipsis,
                     )
                 }
             }

@@ -1593,7 +1593,7 @@ JAVA_HOME="C:/Program Files/Android/Android Studio/jbr" \
 
 | # | 用户原话 | 落点 | 结论 |
 |---|---------|------|------|
-| 竖① | 下方的几个主按钮，都要改成亮色的，因为深色背景，现在根本看不清 | `FocusableSurface.kt` | **根因级**：`androidx.tv.material3.LocalContentColor` 默认 `Color.Black`，而 `FocusableSurface` 只下发了 `LocalFocusableContentColor` → 内容体里的裸 `Icon`/`Text` 全画成黑色。全仓库受影响 **9 处**（4 Icon + 5 Text），**TV 上同样存在** |
+| 竖① | 下方的几个主按钮，都要改成亮色的，因为深色背景，现在根本看不清 | `FocusableSurface.kt` | **根因级**：`androidx.tv.material3.LocalContentColor` 默认 `Color.Black`，而 `FocusableSurface` 只下发了 `LocalFocusableContentColor` → 内容体里的裸 `Icon`/`Text` 全画成黑色。全仓库受影响 **10 处**（4 Icon + 6 Text），**TV 上同样存在** |
 | 竖⑤ | 标题行的几个按钮也要改成亮色的 | 同上 | 与竖①**同根因**，一处修复同时覆盖 |
 | 竖② | 主按钮中缺少队列，应该加一个，我看有地方 | `PhoneNavBar.kt` | 5 项 → **6 项**，插在「播放」与「我的」之间；`Icons.AutoMirrored.Filled.QueueMusic`。`nav_queue` 字符串**已存在**（`values`/`values-en` 第 23 行） |
 | 竖③ | 播放页面分为封面和歌词，要能够支持左右滑动切换 | `NowPlayingScreen.kt` | 手势从底部 **28dp** 的 `PortraitModeIndicator` 上移到**整块内容区**；原实现**不分方向、只做 toggle**（等于"不支持左右滑"）→ 现加方向语义（左滑→歌词 / 右滑→封面）+ 48dp 阈值 |
@@ -1612,6 +1612,39 @@ JAVA_HOME="C:/Program Files/Android/Android Studio/jbr" \
 
 > ⚠️ 本表也修正了 §10.3 矩阵中的两处口径：第 17 行的「底部导航 **5 项**」现为 **6 项**；
 > 第 24 行 dp 抽查同步纳入新增的队列入口。
+
+---
+
+### 10.5 review 轮（2026-09-19，同日，v2.36.0 内）
+
+对 §10.4 的全部改动做整体复查（4 个改动文件 + 10 项外部事实交叉核实），
+**又发现 4 个缺陷 + 1 项性能问题**，全部已修（技术细节见
+`docs/technical-overview.md` §10.163.4）：
+
+| # | 缺陷 | 文件 | 修法 |
+|---|------|------|------|
+| R1 | 竖屏封面模式歌名区预留**写死 `96.dp`** —— 字号 +8 档下「歌名 2 行 + 艺术家 1 行」≈ 115dp → **溢出压住进度条** | `NowPlayingScreen.kt` | 按 `FontSize.title()/small()` **动态计算**；下界 `96.dp` → `0.dp`（宁可封面缩小） |
+| R2 | 竖屏歌曲行第一行**固定 `height(88.dp)`** —— 同上，两行文字被裁 | `UnifiedSongRow.kt` | 竖屏 `heightIn(min = 88.dp)`（非竖屏仍 120dp，B1 逐字等价） |
+| R3 | 模式指示器圆点触摸目标仅 **6~8 Compose dp**（4.9~6.6 物理 dp）—— ⚠️ **P0-26 自查 grep 的盲区**（正则只覆盖 40~53dp） | `NowPlayingScreen.kt` | 外层 `size(portraitTouchTarget(44.dp))` 承担热区，内层小 `Box` 只做视觉 |
+| R4 | 底栏 6 项后英文 `nav_now_playing`（"Now Playing" ≈ 66dp vs 每项 65dp）**被裁** | `PhoneNavBar.kt` + 两语言 strings | 新增短标签 `nav_now_playing_short`（播放 / Playing）仅供底栏 + `overflow = Ellipsis` 兜底。⚠️ **预防性修复，未经真机确认** |
+| R5 | `isTVDevice()` 每次组合做 **2 次 `hasSystemFeature`**（143 处 `FocusableSurface` + 每个 `RowActionButton` 组合期调用） | `FocusableSurface.kt` | 加 `remember(context)` 缓存 |
+
+**复查确认「无需改动」的项**（避免过度修改）：`FocusableSurface` 的 `onFocusChanged` 透传语义零变化、
+全仓库 0 处 tv-material3 `Surface(`/`Card(` 嵌套、浅色容器调用点均已显式传 `contentColor`、
+沉浸层文字全显式色、`CoverCarousel` 无手势、`UnifiedSongGrid` 是死代码、
+`HomeScreen` 横屏那条确是 `NowPlayingCard`、**B1 等价性全部成立**。
+
+**新沉淀的维护约定**：`docs/conventions-adaptive-ui.md` **§6.5**
+「§8 那条自查 grep 的**盲区**：小尺寸 + `clickable`」——
+① 扫描下界必须放到 0；② 尺寸为表达式时正则会**空转报 0 处**（假阴性），
+必须取 `size(` 括号配对内容再抽 `.dp` 字面量。§8 自查命令已同步扩下界，§7 清单加一条。
+
+**门禁复跑**：`testDebugUnitTest` **848 例 / 0 失败 / 0 错误**，`lintDebug` **0 Error / 267 Warning**。
+
+> 📌 **后续建议**：§6.5 那条自查目前仍靠人工跑脚本
+> （`logs_temp/audit_small_touch_target.py`，自带 `--selftest` 5 用例）。
+> 它与 `ScreenUiModeCoverageTest` 同属"源码扫描型门禁"，**建议后续做成单测**，
+> 否则下次仍可能漏。
 
 ---
 

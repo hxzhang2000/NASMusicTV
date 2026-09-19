@@ -19,6 +19,10 @@
 
     <!-- Navigation -->
     <string name="nav_now_playing">正在播放</string>
+    <!-- 竖屏底部导航专用短标签（v2.36.0 真机反馈轮）：
+         6 项后每项仅约 65~73 Compose dp 宽，英文 "Now Playing"(11 字符) 会被裁掉，
+         故底栏单独用短标签；`nav_now_playing` 仍供 TV 顶部导航 / 首页卡片使用。 -->
+    <string name="nav_now_playing_short">播放</string>
     <string name="nav_library">曲库</string>
     <string name="nav_queue">播放队列</string>
     <string name="nav_settings">设置</string>

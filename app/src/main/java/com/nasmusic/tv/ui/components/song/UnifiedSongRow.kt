@@ -316,7 +316,13 @@ private fun SongRowModeRow(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(if (isPortraitPhone) PORTRAIT_SONG_ROW_LINE1_HEIGHT else 120.dp)
+                .then(
+                    // 竖屏用 `heightIn(min)` 而非固定高度：字号调节（-8 ~ +8 sp）放大后
+                    // 「歌名 + 艺术家」两行可能超过 88dp，固定高度会把文字裁掉。
+                    // 非竖屏仍走固定 120dp —— 与改动前逐字等价（B1）。
+                    if (isPortraitPhone) Modifier.heightIn(min = PORTRAIT_SONG_ROW_LINE1_HEIGHT)
+                    else Modifier.height(120.dp)
+                )
                 .padding(horizontal = 16.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {

@@ -75,6 +75,7 @@ import com.nasmusic.tv.ui.components.KaraokePlaybackScreen
 import com.nasmusic.tv.ui.components.ProgressSection
 import com.nasmusic.tv.ui.components.SongInfoPanel
 import com.nasmusic.tv.ui.components.PHONE_TOUCH_TARGET
+import com.nasmusic.tv.ui.components.portraitTouchTarget
 import com.nasmusic.tv.ui.theme.NasMusicColors
 
 /**
@@ -1259,12 +1260,14 @@ private val LYRICS_SOURCE_CYCLE = listOf(
 )
 
 /**
- * 竖屏封面模式：歌名 / 艺术家区（含间距）的预留高度。
+ * 竖屏封面模式：歌名区行高倍数（字号 → 单行高度）。
  *
- * 用于从弹性区高度反推封面边长 —— 见 [NowPlayingPortrait] 的 `coverSide`。
- * 取值 = 歌名 2 行（`FontSize.title()`）+ 艺术家 1 行（`FontSize.small()`）+ 12dp 间距 + 余量。
+ * Compose 未显式设 `lineHeight` 时行高由字体度量决定，实测约 1.2~1.4× 字号，取 1.3 折中。
  */
-private val PORTRAIT_TITLE_RESERVE = 96.dp
+private const val PORTRAIT_TITLE_LINE_RATIO = 1.3f
+
+/** 竖屏封面模式：歌名区额外余量 = 封面与歌名之间的 12dp 间距 + 8dp 缓冲。 */
+private val PORTRAIT_TITLE_SPACING = 20.dp
 
 /** 竖屏左右滑切换模式的最小水平位移（≈3mm；低于此视为误触或竖直滚动） */
 private val PORTRAIT_SWIPE_THRESHOLD = 48.dp
@@ -1413,12 +1416,24 @@ private fun NowPlayingPortrait(
                         modifier = Modifier.fillMaxWidth().weight(1f),
                         contentAlignment = Alignment.Center,
                     ) {
-                        // 封面边长 = min(可用宽, 弹性区高 − 歌名预留, 320dp)。
+                        // 封面边长 = min(可用宽, 弹性区高 − 歌名区预留, 320dp)。
                         // 必须显式扣掉歌名高度：`aspectRatio` 的高度回退只看**自身**约束，
-                        // 不知道下面还有一行歌名 —— 否则封面按高度收缩后仍会把歌名挤出弹性区。
+                        // 不知道下面还有歌名 —— 否则封面按高度收缩后仍会把歌名挤出弹性区。
+                        //
+                        // ⚠️ 预留量按**实际字号**算，不能写死常量：
+                        // `FontSize.title()` / `small()` 会被用户在设置里的全局字号调节
+                        // （-8 ~ +8 sp，见 `GeneralSettingsSection`）放大 —— 写死 96dp 在 +8 档下
+                        // 歌名两行 + 艺术家一行约需 115dp，会溢出弹性区**压到下方进度条上**。
+                        // 标题 `maxLines = 2`、艺术家/专辑 `maxLines = 1`。
+                        val density = LocalDensity.current
+                        val titleReserve = with(density) {
+                            FontSize.title().toDp() * PORTRAIT_TITLE_LINE_RATIO * 2 +
+                                FontSize.small().toDp() * PORTRAIT_TITLE_LINE_RATIO
+                        } + PORTRAIT_TITLE_SPACING
                         val coverSide = minOf(
                             maxWidth,
-                            (maxHeight - PORTRAIT_TITLE_RESERVE).coerceAtLeast(96.dp),
+                            // 不设下限：宁可封面缩小，也不要歌名溢出压住控制区（极窄屏 + 超大字号时）
+                            (maxHeight - titleReserve).coerceAtLeast(0.dp),
                             320.dp,
                         )
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -1895,6 +1910,12 @@ private fun PortraitThinProgress(progressMs: Long, durationMs: Long) {
  * ⚠️ v2.36.0 竖屏体验修复：此前把「左右滑」手势挂在这条 28dp 的指示器上，且不分方向只做 toggle
  * —— 用户发现不了，体验上等于"不支持左右滑"。现手势上移到整块内容区（[portraitModeSwipe]），
  * 这里只保留点击 + 状态指示。
+ *
+ * ⚠️ P0-26 触摸目标：圆点视觉只有 6~8dp，此前**直接把 `clickable` 挂在圆点上**，
+ * 热区仅 6~8dp（物理 4.9~6.6dp），远低于 44dp 无障碍下限 —— 而且 P0-26 的静态自查 grep
+ * 只覆盖 40~53dp 区间，**漏掉了这种"小尺寸 + clickable"的写法**。
+ * 现改为「外层 `size(portraitTouchTarget(44.dp))` 承担热区（竖屏 56dp ≈ 45.9 物理 dp）
+ * + 内层小圆点只做视觉」，两个热区相邻排布，圆点间距随之变为 56dp。
  */
 @Composable
 private fun PortraitModeIndicator(
@@ -1902,9 +1923,7 @@ private fun PortraitModeIndicator(
     onSwitch: (PortraitNowPlayingMode) -> Unit,
 ) {
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(28.dp),
+        modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -1912,12 +1931,20 @@ private fun PortraitModeIndicator(
             val active = m == mode
             Box(
                 modifier = Modifier
-                    .padding(horizontal = 4.dp)
-                    .size(if (active) 8.dp else 6.dp)
-                    .clip(androidx.compose.foundation.shape.CircleShape)
-                    .background(if (active) NasMusicColors.Primary else NasMusicColors.TextSecondary.copy(alpha = 0.5f))
-                    .clickable { onSwitch(m) }
-            )
+                    .size(portraitTouchTarget(44.dp))
+                    .clickable { onSwitch(m) },
+                contentAlignment = Alignment.Center,
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(if (active) 8.dp else 6.dp)
+                        .clip(androidx.compose.foundation.shape.CircleShape)
+                        .background(
+                            if (active) NasMusicColors.Primary
+                            else NasMusicColors.TextSecondary.copy(alpha = 0.5f)
+                        )
+                )
+            }
         }
     }
 }

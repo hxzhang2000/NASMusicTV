@@ -48,11 +48,22 @@ val LocalFocusableContentColor = staticCompositionLocalOf { NasMusicColors.TextP
  * 用途：把「焦点相关视觉」（缩放 / 边框 / 容器色 / 内容色）限制在真的有 D-Pad 的设备上。
  * 手机触摸会让 `Modifier.clickable` / `focusable()` 的节点获得焦点且**焦点会粘住**，
  * 若不区分设备，就会出现"点一下按钮永久放大 / 永久高亮"这类没有原因的视觉残留。
+ *
+ * ⚠️ 用 `remember` 缓存：`PackageManager.hasSystemFeature` 在低版本（本项目电视是
+ * Android 5.1.1 / API 22）可能是一次 binder 调用，而本函数被 143 处 `FocusableSurface`
+ * 以及 `UnifiedSongRow` / `RowActionButton`（**每个按钮一次**）在组合期调用 ——
+ * 不缓存就是"每次重组每个按钮两次 IPC"。设备类型在进程生命周期内不会变，
+ * 按 `Context` 缓存即可（Activity 重建 → 新 Context → 重新求值）。
  */
 @Composable
-fun isTVDevice(): Boolean = LocalContext.current.packageManager.run {
-    hasSystemFeature("android.software.leanback") ||
-        hasSystemFeature("android.hardware.type.television")
+fun isTVDevice(): Boolean {
+    val context = LocalContext.current
+    return remember(context) {
+        context.packageManager.run {
+            hasSystemFeature("android.software.leanback") ||
+                hasSystemFeature("android.hardware.type.television")
+        }
+    }
 }
 
 /**

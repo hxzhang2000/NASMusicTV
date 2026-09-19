@@ -28,6 +28,13 @@
 > 另修掉手机触摸的"粘滞焦点态"。详见下方 `Changed` / `Fixed` 条目与
 > `docs/technical-overview.md` §10.163、`docs/phone-portrait-ui-plan.md` §10.4。
 >
+> 🔍 **review 轮（同日）**：对上述改动做了整体复查，又发现并修掉 **4 个缺陷**
+> （字号自适应预留 / 竖屏行高弹性 / 模式指示器热区 6dp / 底栏英文标签裁切）
+> \+ 1 项性能优化（`isTVDevice()` 加 `remember` 缓存），并把
+> **「P0-26 自查 grep 的盲区：小尺寸 + `clickable`」**沉淀进
+> `docs/conventions-adaptive-ui.md` §6.5。门禁仍为 **848 例 / 0 失败**、
+> lint **0 Error / 267 Warning**。
+>
 > **未实施部分**：① **实机视觉验收的复验** —— 用户已完成首轮上机验收并报出 7 条问题（已修），
 > 但修复后的**复验**仍需上机确认（竖屏布局、旋转表现、手势手感按项目约定由用户执行）；
 > ② **详情页下滑返回手势**（P2-33 后半）——方案已标注与 D9 底部系统手势冲突、需实测，
@@ -160,11 +167,18 @@
   `Text(color = Color.Unspecified → LocalContentColor.current)` **都会回退到它**。
   `FocusableSurface` 此前**只**提供自定义的 `LocalFocusableContentColor`，于是内部凡是没显式写
   `tint =` / `color =` 的 `Icon` / `Text` 全部画成**黑色** —— 压在深色底（`Surface #162032`）上
-  就是用户反馈的「下方主按钮 / 标题行按钮看不清」。全仓库受影响 **9 处**（4 个 `Icon` + 5 个 `Text`）：
-  竖屏底栏图标与文字、顶栏搜索图标、迷你播放条播放/下一首图标、`QualityPickerDialog` 次级按钮、
-  天气电台「播放全部」、百度授权「复制」等。⚠️ **这些位置在 TV 上同样是黑字压深底**，属既有缺陷。
+  就是用户反馈的「下方主按钮 / 标题行按钮看不清」。全仓库受影响 **10 处**（4 个 `Icon` + 6 个 `Text`）：
+  竖屏底栏图标与文字、顶栏搜索图标与方向切换文字、迷你播放条播放/下一首图标、`QualityPickerDialog`
+  次级按钮、天气电台「播放全部」、电台卡片占位符、百度授权「复制」。
+  ⚠️ **这些位置在 TV 上同样是黑字压深底**，属既有缺陷。
   现按 Material `Surface` 语义同时下发 `LocalContentColor`；并新增门禁
-  `FocusableSurfaceColorContractTest`（含 4 组负向自证）防止回退
+  `FocusableSurfaceColorContractTest`（含 4 组负向自证）防止回退。
+  📋 **完整审计已做**（脚本已沉淀为 skill `compose-content-color-audit`）：先确认 `MaterialTheme`
+  **不提供** `LocalContentColor`（tv-material3 只有 `Surface`/`Card`/`ListItem`/`TabRow`/`Switch`
+  五个提供点），再全仓库扫描「无显式 `tint=`/`color=` 的 `Icon`/`Text`」——
+  含**跟随局部包装组件**（`MiniPlayerIconButton` / `PhoneTopBarIconButton` 等）的传递覆盖判定，
+  结果 **10/10 全部被 `FocusableSurface` 覆盖，无遗漏**；脚本自带负向自证（合成样本中
+  裸 `Box` 内的 `Icon` 必须被判未覆盖）
 - **手机触摸的「粘滞焦点态」（真机反馈修复）**：`Modifier.clickable` / `focusable()` 的节点在手机上
   点一下就会获得焦点，且**焦点会粘住**（直到点别处才移走）。此前 P2-34 只修掉了"永久放大 8%"，
   容器色/内容色仍是粘的 —— 表现为**底栏/顶栏图标被点过一次后永久高亮**。本轮把**焦点相关的全部视觉**
@@ -215,6 +229,33 @@
 - **自建底部弹层补齐 BACK 注册**：播放页的歌曲信息弹层与「⋯」菜单改用
   `RegisterDialogBackHandler` —— 否则 BACK 会穿透到 Level 3 应用退出确认（方案 §6.3）
 
+#### 🔍 review 轮补充修复（同日，对上述改动做整体复查后发现）
+
+- **竖屏封面模式歌名区预留写死 `96.dp` → 超大字号下溢出压住进度条**：
+  `FontSize.title()` / `small()` 会随用户全局字号调节（`LocalFontAdjustment`，**-8 ~ +8 sp**）
+  放大；+8 档下「歌名 2 行 + 艺术家 1 行」约需 115dp，而预留常量仍是 96dp
+  → 文字溢出弹性区、盖住下方控制区。现改为按**实际字号**动态计算
+  （`PORTRAIT_TITLE_LINE_RATIO = 1.3f` 行高倍数 + `PORTRAIT_TITLE_SPACING = 20.dp`），
+  并把 `coerceAtLeast(96.dp)` 改为 `coerceAtLeast(0.dp)` —— 极窄屏 + 超大字号时
+  **宁可封面缩小，也不让文字溢出**
+- **竖屏歌曲行第一行固定 `height(88.dp)` → 字号放大后被裁**：同上，字号 +8 档下
+  「歌名 + 艺术家」两行超过 88dp 会被固定高度裁掉。现竖屏改 `heightIn(min = 88.dp)`
+  （非竖屏仍 `height(120.dp)`，与改动前逐字等价）
+- **播放页模式指示器圆点触摸目标仅 6~8 Compose dp（P0-26 的 grep 盲区）**：
+  `PortraitModeIndicator` 原写法 `.size(if (active) 8.dp else 6.dp) ... .clickable {}`，
+  热区只有 **4.9~6.6 物理 dp**。⚠️ P0-26 那条自查 grep 只覆盖 `40~53dp` 区间，
+  **小于 40dp 的写法完全逃过检查**（且尺寸为表达式时正则也匹配不到 → 会空转报 0 处）。
+  现改为「外层 `size(portraitTouchTarget(44.dp))` 承担热区 + 内层小 `Box` 只做视觉」，
+  并已把该盲区写入 `docs/conventions-adaptive-ui.md` §6.5
+- **竖屏底栏 6 项后英文 `nav_now_playing`（"Now Playing"）被裁**：底栏每项宽约
+  65~73 Compose dp（320dp 物理屏 ÷ 0.82 ÷ 6），11 字符 × 12sp ≈ 66dp 正好压线
+  → 新增短标签 `nav_now_playing_short`（`播放` / `Playing`）仅供底栏，
+  `nav_now_playing` 保留给 TV 顶部导航与首页卡片；同时给底栏标签补
+  `overflow = TextOverflow.Ellipsis` 兜底。**⚠️ 此项属预防性修复，未经真机确认**
+- **`isTVDevice()` 每次组合都做 2 次 `hasSystemFeature`**：该函数被 143 处
+  `FocusableSurface` 及每个 `RowActionButton` 在组合期调用，而 API 22 上
+  `hasSystemFeature` 可能是 binder 调用 → 加 `remember(context)` 缓存
+
 ### Test
 
 - 新增 `UiModeTest`（纯 JVM，无 Robolectric）：`deriveUiMode` 三态 + 未知方向兜底 +
@@ -227,6 +268,14 @@
   `48 × 0.82 = 39.36`、`52 × 0.82 = 42.64` 均 `< 44` —— **防止有人把常量改回旧值**
 - 全量 `testDebugUnitTest` 通过；`lintDebug` 0 Error
 - **新增 `ScreenUiModeCoverageTest`**（P1-32 门禁 + 4 组负向自证用例，见 Added）
+- **review 轮复跑门禁**：`testDebugUnitTest` **848 例 / 0 失败 / 0 错误**，
+  `lintDebug` **0 Error / 267 Warning**（与基线一致）
+- **新增源码审计脚本**（`logs_temp/audit_small_touch_target.py`，不入库）：
+  扫描「小尺寸（< 40dp）+ 同链 `clickable`」的漏网触摸目标，**自带 `--selftest`（5 用例）**——
+  ⚠️ 首版正则 `\.size\((\d+\.\d+)?\.dp\)` 匹配不到 `size(if (active) 8.dp else 6.dp)`
+  这类**表达式尺寸**，负向自证显示"应命中的用例未命中"= **脚本空转**，
+  即"报 0 处"不可信；修正为「取 `size(` 括号配对内容 → 抽出其中全部 `.dp` 字面量」后
+  5/5 自证 PASS，实跑本项目 346 文件 **0 处**
 
 ## [v2.35.0] - 2026-09-18
 

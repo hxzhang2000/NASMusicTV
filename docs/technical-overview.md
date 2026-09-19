@@ -9128,7 +9128,7 @@ Column(
 
 **版本**：v2.35.0 → **v2.36.0**（versionCode 153 → 154）
 
-### 10.163 v2.36.0（真机反馈轮）— 竖屏 6 项 + 横屏 1 项修复；`LocalContentColor` 默认黑色根因（2026-09-19）
+### 10.163 v2.36.0（真机反馈轮 + review 轮）— 竖屏 6 项 + 横屏 1 项修复；`LocalContentColor` 默认黑色根因（2026-09-19）
 
 **来源**：用户在真机上验收 v2.36.0 竖屏适配后报出 **7 条具体问题**：
 
@@ -9164,12 +9164,48 @@ color.takeOrElse { style.color.takeOrElse { LocalContentColor.current } }
 **没有**提供 `LocalContentColor`。于是 143 处 `FocusableSurface(...)` 里，
 凡是内容体写了**裸 `Icon` / `Text`（不带 `tint=` / `color=`）**的地方，一律画成黑色。
 
-**受影响面**：全仓库共 **9 处**（4 个 `Icon` + 5 个 `Text`）—— 竖屏底栏图标与文字、顶栏搜索图标、
-迷你播放条播放 / 下一首图标、`QualityPickerDialog` 次级按钮、天气电台「播放全部」、
-百度授权「复制」等。⚠️ **这些位置在 TV 上同样是黑字压深底**，属**既有缺陷**，
-不是竖屏适配引入的 —— 只是竖屏底栏面积更大、更显眼才被用户先发现。
+**⚠️ 关键前提：`MaterialTheme` 并不提供 `LocalContentColor`。** 已用 tv-material3 的
+sources jar 逐文件核实（`1.0.0-alpha10`），全库只有 **5 个**提供点：
 
-**修复**（`FocusableSurface.kt`，一处修复覆盖全部 9 处）：
+| 提供点 | 位置 |
+|---|---|
+| `Surface` | `Surface.kt:346` |
+| `Card` | `CardLayout.kt:166` |
+| `ListItem` | `ListItem.kt:337/355/374` |
+| `TabRow` | `TabRow.kt:110` |
+| `Switch` | `Switch.kt:218` |
+
+也就是说 `Color.Black` 是**全局默认**，不是"主题没配好"。任何裸 `Icon` / `Text`
+只要不在上述 5 个组件（或自建提供者）内，就是黑字。
+
+**受影响面（完整审计，非抽样）**：全仓库 **10 处**（4 个 `Icon` + 6 个 `Text`）——
+竖屏底栏图标与文字、顶栏搜索图标与方向切换文字、迷你播放条播放 / 下一首图标、
+`QualityPickerDialog` 次级按钮、天气电台「播放全部」、电台卡片占位符、百度授权「复制」。
+⚠️ **这些位置在 TV 上同样是黑字压深底**，属**既有缺陷**，不是竖屏适配引入的 ——
+只是竖屏底栏面积更大、更显眼才被用户先发现。
+
+**审计方法**（可复现；脚本已沉淀为 skill **`compose-content-color-audit`**，
+`scripts/audit_content_color_final.py`，跑法 `python <脚本> app/src/main/java`）：
+
+1. **剥离注释与字符串**后再扫描（第一版没剥注释，把 KDoc 里的
+   `例如 Text(fontSize = FontSize.Body)` 当成了真实调用 → 误报 1 处）
+2. 用**括号配对**取调用实参，判断是否含 `tint=` / `color=`（正则匹配会跨行误判）
+3. **排除同名数据类构造器**：`visualizer/renderers/FormulaLayout.kt` 里
+   `class Text(val text: String, val level: Int)` 的 5 次构造调用被误报为 Compose `Text`
+4. ⚠️ **必须跟随「局部包装组件」**：多处调用点并非直接写在 `FocusableSurface(...) { }` 里，
+   而是经由本项目包装组件间接进入 ——
+   `MiniPlayerIconButton { Icon(...) }`、`PhoneTopBarIconButton { Text(...) }`。
+   只查"同函数体内的 `FocusableSurface` 区间"会把这类**误判为未覆盖**（第一版核验脚本即如此，
+   误报 4 处）。正确做法是**两遍**：先收集"函数体内含 `FocusableSurface(` /
+   `LocalContentColor provides` / 官方 5 组件"的**提供者函数名**，再把这些函数名也当作安全区间
+5. ⚠️ **提供者判定要用词边界**：早先用 `"Card(" in body` 子串匹配，把 `AlbumCard(`
+   也算成了 `Card(` → 提供者集合被撑到 101 个（收紧后 86 个），审计会**过于宽松**
+6. ⚠️ **审计脚本必须自证有效**：用合成样本验证 —— 「`FocusableSurface` 内的 `Icon`」
+   必须判为已覆盖、「裸 `Box` 内的 `Icon`」必须判为未覆盖。否则"10/10 覆盖"可能只是空转
+
+**审计结论**：**10 / 10 全部被 `FocusableSurface` 覆盖，无遗漏** —— 单点修复即完整。
+
+**修复**（`FocusableSurface.kt`，一处修复覆盖全部 10 处）：
 
 ```kotlin
 CompositionLocalProvider(
@@ -9223,12 +9259,97 @@ val activeFocus = isFocused && tvDevice     // TV 侧 tvDevice == true → 与�
 封面收缩后会把自己挤到看不见 —— 必须用 `BoxWithConstraints` 拿 `maxHeight` **显式扣减**预留量反推：
 
 ```kotlin
-val coverSide = minOf(maxWidth, (maxHeight - PORTRAIT_TITLE_RESERVE).coerceAtLeast(96.dp), 320.dp)
+// ⚠️ 预留量必须按「实际字号」动态算，不能写死常量 —— 见 §10.163.4 第 1 条
+val density = LocalDensity.current
+val titleReserve = with(density) {
+    FontSize.title().toDp() * PORTRAIT_TITLE_LINE_RATIO * 2 +   // 歌名 2 行
+        FontSize.small().toDp() * PORTRAIT_TITLE_LINE_RATIO     // 艺术家 1 行
+} + PORTRAIT_TITLE_SPACING
+val coverSide = minOf(maxWidth, (maxHeight - titleReserve).coerceAtLeast(0.dp), 320.dp)
 ```
 
 **竖④ 的实现要点**：`RowActionButton` 的触摸目标同时补齐 —— 原为 `widthIn(min = 48.dp)` +
 `padding(vertical = 10.dp)`，实际 48×42 dp → 竖屏只有 **39.4×34.4 物理 dp**（P0-26 漏网）。
 现改走 `portraitTouchTarget(48.dp)` / `portraitTouchTarget(42.dp)`。
+
+---
+
+#### 10.163.4 🔍 review 轮：对上述改动做整体复查（同日）
+
+用户要求"对本方案新修改的内容，做整体 review，然后根据 review 结果进行代码修改完善"。
+复查覆盖 4 个改动文件 + 交叉核实 10 项外部事实，**又发现 4 个缺陷 + 1 项性能问题**。
+
+##### ① 字号自适应：所有"写死的预留高度 / 固定行高"都是错的
+
+**共同根因**：`FontSize.title()` / `FontSize.small()` 经 `LocalFontAdjustment`（**-8 ~ +8 sp**）
+放大 —— 任何按"默认字号"心算出来的固定高度，都会在 +8 档被撑破。
+
+| 位置 | 原写法 | 问题 | 现写法 |
+|---|---|---|---|
+| `NowPlayingScreen` 封面模式 | `PORTRAIT_TITLE_RESERVE = 96.dp` | +8 档下「歌名 2 行 + 艺术家 1 行」≈ 115dp → 溢出弹性区**压住进度条** | 按 `FontSize.title()/small()` **动态计算**（`PORTRAIT_TITLE_LINE_RATIO = 1.3f` + `PORTRAIT_TITLE_SPACING = 20.dp`），下界由 `96.dp` 改 `0.dp`（宁可封面缩小也不溢出） |
+| `UnifiedSongRow` 竖屏第一行 | `height(88.dp)` | 同上，两行文字被**裁掉** | `heightIn(min = 88.dp)`（非竖屏仍 `height(120.dp)`，B1 逐字等价） |
+
+> 教训：**行高倍数 1.3f 是折中值** —— Compose 未显式设 `lineHeight` 时行高由字体度量决定，
+> 实测约 1.2~1.4× 字号。若日后发现预留偏紧/偏松，调这一个常量即可。
+
+##### ② `PortraitModeIndicator` 圆点热区仅 6~8 Compose dp —— P0-26 的 grep 盲区
+
+原写法：
+
+```kotlin
+Box(Modifier.padding(horizontal = 4.dp)
+        .size(if (active) 8.dp else 6.dp)   // ← 热区就是这个小圆点
+        .clickable { onSwitch(m) })
+```
+
+热区 **4.9~6.6 物理 dp**，比 P0-26 修掉的所有问题都严重，却**完全逃过那条自查 grep** ——
+因为它的正则只覆盖 `(4[0-9]|5[0-3])\.dp`（40~53 区间），**小于 40dp 的写法根本不在扫描范围内**。
+
+现改为「热区与视觉分离」：
+
+```kotlin
+Box(Modifier.size(portraitTouchTarget(44.dp))      // 外层承担热区（竖屏 56dp）
+        .clickable { onSwitch(m) },
+    contentAlignment = Alignment.Center) {
+    Box(Modifier.size(if (active) 8.dp else 6.dp)  // 内层只做视觉，无手势
+            .clip(CircleShape).background(...))
+}
+```
+
+⚠️ **同时发现该 grep 还有第二个盲区**：尺寸是**表达式**时（`size(if (a) 8.dp else 6.dp)`）
+正则 `\.size\((\d+(\.\d+)?)\.dp\)` 匹配不到 → **脚本会静默空转、报 0 处**，
+给出"没问题"的假结论。两个教训已写入 `docs/conventions-adaptive-ui.md` **§6.5**：
+① 扫描下界放到 0；② 取 `size(` 的**括号配对内容**再抽全部 `.dp` 字面量。
+新脚本 `logs_temp/audit_small_touch_target.py` 自带 `--selftest`（5 用例），实跑 346 文件 0 处。
+
+##### ③ 底栏 6 项后英文 `nav_now_playing` 会被裁（预防性修复）
+
+底栏 6 项 → 每项宽约 **65~73 Compose dp**（320dp 物理屏 ÷ 0.82 ÷ 6 ≈ 65）；
+英文 `nav_now_playing` = "Now Playing"（11 字符 × 12sp ≈ 66dp）正好压线，`maxLines = 1` 会硬裁。
+5 项时是 88dp/项所以此前没暴露。修法：新增 `nav_now_playing_short`（`播放` / `Playing`）
+仅供底栏，`nav_now_playing` 保留给 TV 顶部导航（`AppRoot.kt:473`）与首页卡片（`HomeScreen.kt:767`）；
+并补 `overflow = TextOverflow.Ellipsis` 兜底。
+⚠️ **此项未经真机确认**，属按宽度换算的预防性修复。
+
+##### ④ `isTVDevice()` 每次组合做 2 次 `hasSystemFeature`（性能）
+
+该函数被 **143 处 `FocusableSurface`** 及每个 `RowActionButton` 在**组合期**调用；
+`hasSystemFeature` 在 API 22 上可能是 binder 调用 → 加 `remember(context)` 缓存。
+
+##### 复查确认「无需改动」的项（避免过度修改）
+
+- `FocusableSurface`：`isFocused` 仍存**原始焦点值**并透传 `onFocusChanged?.invoke(it.isFocused)`
+  → 调用点行为语义零变化（全仓库 0 处传 `onFocusChanged`）
+- 全仓库 **0 处** tv-material3 `Surface(` / `Card(` 嵌套提供者（`grep -rnE "^\s*(Surface|Card)\("`）
+  → 新下发的 `LocalContentColor` 不会被内层覆盖
+- 用浅色容器（`Warning` / `Danger` / `Color.Black`）的 3 处调用点**都显式传了 `contentColor`**
+- 沉浸层（`NowPlayingScreen.kt:614`）文字全部显式色，`Color.Black` 容器无影响
+- `CoverCarousel` 无手势（无 `Pager` / `horizontalDrag` / `pointerInput`）→ 不冲突整块内容区的上滑手势
+- 竖屏歌曲列表走 `MODE_ROW`；`UnifiedSongGrid`（唯一用 `MODE_CARD` 处）**是死代码**，
+  全仓库无调用点 → 改动覆盖全部适用场景
+- `HomeScreen` 横屏那条确实是 `NowPlayingCard`（`MiniPlayer` 只在竖屏渲染，见 `AppRoot.kt:336-357`）
+- **B1 等价性全部成立**：`FocusableSurface`(TV 路径)、`UnifiedSongRow`(非竖屏)、
+  `RowActionButton`(默认参数) 经 `git diff` 逐行确认与改动前**逐字等价**
 
 ---
 
@@ -9242,10 +9363,17 @@ val coverSide = minOf(maxWidth, (maxHeight - PORTRAIT_TITLE_RESERVE).coerceAtLea
 
 **测试**：新增 `FocusableSurfaceColorContractTest`（2 + 4 例）；全量 `testDebugUnitTest` 842 → **848 例**。
 
-**验证**：`:app:compileDebugKotlin` / `:app:lintDebug`（0 Error）/ `:app:testDebugUnitTest` 全绿；
+**验证**（含 review 轮复跑）：`:app:compileDebugKotlin` / `:app:lintDebug` / `:app:testDebugUnitTest`
+全绿 —— **848 例 / 0 失败 / 0 错误**，lint **0 Error / 267 Warning**（与基线一致）；
 `assembleRelease` BUILD SUCCESSFUL。
 
-**遗留（诚实记录）**：本轮 7 项修复的**真机视觉验收**仍需用户上机确认（按项目约定不代装、不自动启动应用）。
+**遗留（诚实记录）**：
+1. 本轮 7 项修复 + review 轮 4 项修复的**真机视觉验收**仍需用户上机确认
+   （按项目约定不代装、不自动启动应用）
+2. `nav_now_playing_short` 属**按宽度换算的预防性修复**，未经真机确认
+3. **§6.5 那条"小尺寸 + `clickable`"自查目前仍靠人工跑脚本** —— 与
+   `ScreenUiModeCoverageTest`（源码扫描型门禁）同范式，**建议后续做成单测门禁**，
+   否则下次仍可能漏
 
 **版本**：v2.36.0（未变；versionCode 154）
 
