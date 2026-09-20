@@ -158,7 +158,9 @@
 ## 未归档（仍留 `docs/` 根，2 个）—— 全部是活文档
 
 > 计数口径：`docs/` 根只剩 2 篇 Markdown，**已无任何在办方案文档**。
-> `docs/snapshot/`（16 张截图）、`*.miora` 与 `*_assets/`（gitignored 本地设计素材）不是文档，不计入。
+> `docs/snapshot/`（16 张截图）不是文档，不计入。
+> `docs/*.miora` / `docs/*_assets/`（gitignored 的 WorkBuddy 设计画布素材）已于
+> 2026-09-20 经所有者确认删除（对应功能早已上线，素材无引用）。
 
 | 文档 | 为什么是「活」的 |
 |---|---|

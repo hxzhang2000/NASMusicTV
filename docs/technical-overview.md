@@ -9720,9 +9720,12 @@ Box(Modifier.size(portraitTouchTarget(44.dp))      // 外层承担热区（竖�
 > 其余一律视为「已完成 / 已放弃」。需要恢复某个方案（如 R-5、F-8）时从 `docs/archive/`
 > 取出评估即可 —— 归档是**纯移动**，内容一字未删。
 
-**未动的文件**：`docs/snapshot/`（16 张截图）、`docs/music-visualizer-e05-circular-ring.miora`
-+ `_assets/`（E05 环形频谱设计素材）—— 后两者被 `.gitignore:83-84`（`docs/*.miora`、
-`docs/*_assets/`）排除，**未入库**，不构成仓库文档卫生问题，故按最小改动原则未移动。
+**未动的文件**：`docs/snapshot/`（16 张截图，非文档）。
+另有 `docs/music-visualizer-e05-circular-ring.miora` + `_assets/`（E05 圆形频谱环概念图，
+由 WorkBuddy 设计画布于 2026-09-12 生成）—— 被 `.gitignore:83-84`（`docs/*.miora`、
+`docs/*_assets/`）排除、**未入库**，归档时按最小改动原则未移动；
+**其后经所有者确认已删除**（对应功能 `CIRCULAR_RING` 早已上线且是默认主题，
+素材无任何引用，无留档价值）。
 
 **方法论沉淀**（已写入 `AGENTS.md` 与技能 `docs-archive-audit`）：
 判定「是否已落地」的**证据优先级**应为
