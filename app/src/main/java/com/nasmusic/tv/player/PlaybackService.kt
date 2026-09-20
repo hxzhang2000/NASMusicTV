@@ -9,7 +9,6 @@ import android.content.Intent
 import android.graphics.Bitmap
 import android.net.Uri
 import android.os.Bundle
-import android.os.Process
 import android.os.SystemClock
 import android.view.KeyEvent
 import androidx.core.app.NotificationCompat
@@ -32,7 +31,6 @@ import androidx.media3.session.MediaLibraryService
 import androidx.media3.session.MediaNotification
 import androidx.media3.session.MediaSession
 import androidx.media3.session.SessionCommand
-import androidx.media3.session.SessionCommands
 import androidx.media3.session.SessionResult
 import com.google.common.util.concurrent.ListenableFuture
 import com.google.common.util.concurrent.SettableFuture
@@ -328,23 +326,27 @@ class PlaybackService : MediaLibraryService() {
         mediaLibrarySession = MediaLibrarySession.Builder(
             this, player,
             object : MediaLibrarySession.Callback {
-                /** F2-2b：自定义按钮（播放模式/睡眠定时）经 SessionCommand 下发 */
+                /**
+                 * F2-2b：自定义按钮（播放模式/睡眠定时）经 SessionCommand 下发。
+                 *
+                 * ⛔ **本方法绝不能 `reject()`** —— 这是 v2.36.0「车机蓝牙按键全部失效」的根因
+                 * （见 `docs/technical-overview.md` §10.165）。系统侧（蓝牙 AVRCP / SystemUI / 车机）
+                 * 走的是**框架** `android.media.session.MediaController`，该链路在 Media3 里必然
+                 * 经过 `MediaSessionLegacyStub.tryGetController()` → 本回调；一旦拒绝，Media3 会
+                 * 立即 `onDisconnected` 并**丢弃命令**，暂停/上一曲/下一曲全部静默无效。
+                 *
+                 * 安全边界收敛为「专有命令只下发给可信调用方」，判定与命令集合见
+                 * [MediaSessionAccessPolicy]。
+                 */
                 override fun onConnect(
                     session: MediaSession,
                     controller: MediaSession.ControllerInfo
                 ): MediaSession.ConnectionResult {
-                    // 包验证：本服务 exported=true（车机跨进程绑定必需），故校验调用方身份。
-                    // 白名单见 isTrustedCaller()；DEBUG 下全放行，避免白名单不全导致 DHU 连不上。
-                    if (!isTrustedCaller(session, controller)) {
-                        AppLog.w("PlaybackService", "onConnect rejected: ${controller.packageName}")
-                        return MediaSession.ConnectionResult.reject()
-                    }
-                    val sessionCommands = SessionCommands.Builder()
-                        .add(SessionCommand(ACTION_TOGGLE_PLAY_MODE, Bundle.EMPTY))
-                        .add(SessionCommand(ACTION_SLEEP_TIMER_CYCLE, Bundle.EMPTY))
-                        .build()
+                    val trusted = isTrustedCaller(session, controller)
                     return MediaSession.ConnectionResult.AcceptedResultBuilder(session)
-                        .setAvailableSessionCommands(sessionCommands)
+                        .setAvailableSessionCommands(
+                            MediaSessionAccessPolicy.availableSessionCommands(trusted)
+                        )
                         .build()
                 }
 
@@ -779,13 +781,14 @@ class PlaybackService : MediaLibraryService() {
     }
 
     /**
-     * 调用方校验。
+     * 调用方可信判定 —— **只用于决定「要不要下发本应用专有的自定义命令」**。
      *
-     * 本服务 `exported="true"`（车机跨进程绑定必需），故校验来源。放行范围：
-     * - 系统进程 / SystemUI（系统媒体控制、锁屏控件）
-     * - AAOS 与 Android Auto 控制器（Media3 内置包名判断）
-     * - 本应用自身
-     * - Google 助理 / Gemini（手机端与 AAOS 端包名不同，需分别放行）
+     * ⚠️ 它**不再**参与「是否接受连接」的决策（那正是 §10.165 车机按键失效的根因）：
+     * 连接一律接受，见 [MediaSessionAccessPolicy] 的类注释。
+     *
+     * 判定与放行范围全部收敛在 [MediaSessionAccessPolicy.isTrustedCaller]（纯函数、有单测）：
+     * 系统 uid / 本应用自身 / Media3 判定的 AAOS 与 Android Auto 控制器 /
+     * Google 助理与 Gemini 包名；DEBUG 构建全放行（便于 DHU 调试自定义按钮）。
      *
      * ⚠️ Media3 的 `isAutomotiveController` / `isAutoCompanionController` 官方标注
      * "not a security validation"（只比包名、不校验签名）。对个人音乐应用该强度足够；
@@ -794,18 +797,16 @@ class PlaybackService : MediaLibraryService() {
     private fun isTrustedCaller(
         session: MediaSession,
         controller: MediaSession.ControllerInfo
-    ): Boolean {
-        // DEBUG 下全放行：避免白名单不全导致 DHU / 真机调试时"莫名连不上"
-        if (com.nasmusic.tv.BuildConfig.DEBUG) return true
-
-        val pkg = controller.packageName
-        return controller.uid == Process.SYSTEM_UID
-            || session.isAutomotiveController(controller)
-            || session.isAutoCompanionController(controller)
-            || pkg == packageName
-            || pkg == PKG_GOOGLE_ASSISTANT
-            || pkg == PKG_GOOGLE_ASSISTANT_AUTOMOTIVE
-    }
+    ): Boolean = MediaSessionAccessPolicy.isTrustedCaller(
+        MediaSessionAccessPolicy.CallerIdentity(
+            uid = controller.uid,
+            packageName = controller.packageName,
+            isSelfPackage = controller.packageName == packageName,
+            isMedia3Automotive = session.isAutomotiveController(controller),
+            isMedia3AutoCompanion = session.isAutoCompanionController(controller),
+        ),
+        debug = com.nasmusic.tv.BuildConfig.DEBUG,
+    )
 
     /**
      * 无 UI 依赖的 streamUrl 解析（A-13）。
@@ -1105,8 +1106,10 @@ class PlaybackService : MediaLibraryService() {
     companion object {
         private const val CHANNEL_ID = "nas_music_playback"
         private const val NOTIFICATION_ID = 1
-        private const val ACTION_TOGGLE_PLAY_MODE = "com.nasmusic.tv.action.TOGGLE_PLAY_MODE"
-        private const val ACTION_SLEEP_TIMER_CYCLE = "com.nasmusic.tv.action.SLEEP_TIMER_CYCLE"
+        // 动作名唯一来源 = MediaSessionAccessPolicy（同一字符串既做通知按钮的广播 action，
+        // 又做系统媒体卡片的 SessionCommand action）。此处只做别名，避免两处硬编码漂移。
+        private const val ACTION_TOGGLE_PLAY_MODE = MediaSessionAccessPolicy.ACTION_TOGGLE_PLAY_MODE
+        private const val ACTION_SLEEP_TIMER_CYCLE = MediaSessionAccessPolicy.ACTION_SLEEP_TIMER_CYCLE
 
         // ── Android Auto ──
         /** 媒体树加载超时：NAS 不可达时避免车机端一直转圈 */
@@ -1117,10 +1120,6 @@ class PlaybackService : MediaLibraryService() {
         private const val SEARCH_TIMEOUT_MS = 10_000L
         /** 搜索结果缓存有效期（阶段 3）：覆盖 onSearch → onGetSearchResult 的两次调用间隔 */
         private const val SEARCH_CACHE_TTL_MS = 60_000L
-        /** Google 助理（手机端）包名 */
-        private const val PKG_GOOGLE_ASSISTANT = "com.google.android.googlequicksearchbox"
-        /** Gemini / Google 助理（AAOS 端）包名 */
-        private const val PKG_GOOGLE_ASSISTANT_AUTOMOTIVE = "com.google.android.carassistant"
         /** 睡眠定时器预设档位（分钟） */
         private val SLEEP_TIMER_PRESETS = intArrayOf(15, 30, 60, 90)
         /** 睡眠定时周期切换请求码 */
