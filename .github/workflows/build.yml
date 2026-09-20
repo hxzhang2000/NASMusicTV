@@ -34,20 +34,46 @@ jobs:
           yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses 2>&1 || true
           $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --install "platforms;android-34" "build-tools;34.0.0" 2>&1 || true
 
-      # 签名密钥 - 生成临时 keystore 供 CI 签名（仅用于 CI 构建，非正式发布签名密钥）
+      # 签名密钥（v2.36.0 起双模式）：
+      #   - 模式 A（正式签名）：仓库 Secrets 配置了 SIGNING_KEYSTORE_BASE64 等四个值时，
+      #     base64 解码出 release-key.jks，配合 SIGNING_STORE_PASSWORD / SIGNING_KEY_ALIAS /
+      #     SIGNING_KEY_PASSWORD 签名——产出与本地一致的正式发布 APK。
+      #   - 模式 B（fallback）：未配置 secrets 时，临时生成 throwaway ci-keystore.jks，
+      #     只用于 CI 验证「能编译 + 签名通过」，APK 不可覆盖安装到已有数据的设备。
       # S1 阶段 A+：release 打包 guard 要求 cryptoPassphrase 非空。
       # 优先取仓库 secret（与正式发布一致）；未配置时回退占位值，保证 CI 仍可构建。
       # 注：用占位值时产出的 APK 加密密钥与正式包不同，仅供 CI 验证，不可覆盖安装到已有数据的设备。
-      - name: Create keystore for CI
+      - name: Set up signing keystore
         env:
+          SIGNING_KEYSTORE_BASE64: ${{ secrets.SIGNING_KEYSTORE_BASE64 }}
+          SIGNING_STORE_PASSWORD: ${{ secrets.SIGNING_STORE_PASSWORD }}
+          SIGNING_KEY_ALIAS: ${{ secrets.SIGNING_KEY_ALIAS }}
+          SIGNING_KEY_PASSWORD: ${{ secrets.SIGNING_KEY_PASSWORD }}
           CRYPTO_PASSPHRASE: ${{ secrets.CRYPTO_PASSPHRASE }}
         run: |
-          keytool -genkey -v -keystore app/ci-keystore.jks -alias ci -keyalg RSA -keysize 2048 -validity 3650 -storepass ci-pass -keypass ci-pass -dname "CN=CI,OU=CI,O=CI,L=CI,S=CI,C=CI"
-          echo "storeFile=ci-keystore.jks" > keystore.properties
-          echo "storePassword=ci-pass" >> keystore.properties
-          echo "keyAlias=ci" >> keystore.properties
-          echo "keyPassword=ci-pass" >> keystore.properties
-          echo "cryptoPassphrase=${CRYPTO_PASSPHRASE:-ci-build-only-placeholder}" >> keystore.properties
+          if [ -n "$SIGNING_KEYSTORE_BASE64" ]; then
+            echo "Using release keystore from GitHub Secrets"
+            echo "$SIGNING_KEYSTORE_BASE64" | base64 -d > release-key.jks
+            {
+              echo "storeFile=release-key.jks"
+              echo "storePassword=$SIGNING_STORE_PASSWORD"
+              echo "keyAlias=$SIGNING_KEY_ALIAS"
+              echo "keyPassword=$SIGNING_KEY_PASSWORD"
+              echo "cryptoPassphrase=${CRYPTO_PASSPHRASE:-ci-build-only-placeholder}"
+            } > keystore.properties
+          else
+            echo "No signing secrets found, falling back to throwaway CI keystore"
+            keytool -genkey -v -keystore ci-keystore.jks -alias ci -keyalg RSA -keysize 2048 -validity 3650 -storepass ci-pass -keypass ci-pass -dname "CN=CI,OU=CI,O=CI,L=CI,S=CI,C=CI"
+            {
+              echo "storeFile=ci-keystore.jks"
+              echo "storePassword=ci-pass"
+              echo "keyAlias=ci"
+              echo "keyPassword=ci-pass"
+              echo "cryptoPassphrase=${CRYPTO_PASSPHRASE:-ci-build-only-placeholder}"
+            } > keystore.properties
+          fi
+          echo "=== keystore.properties (passwords redacted) ==="
+          sed 's/\(storePassword\|keyPassword\)=.*/\1=<redacted>/' keystore.properties
 
       - name: Build release APK
         run: ./gradlew assembleRelease --stacktrace

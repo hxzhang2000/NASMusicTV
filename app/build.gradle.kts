@@ -61,10 +61,14 @@ android {
 
     // CI 的 Unit tests job 不生成 keystore.properties：无 release 签名配置时跳过创建，
     // 否则 file("") 在配置期抛 IllegalArgumentException，导致所有 Gradle 任务失败（含 testDebugUnitTest）。
+    //
+    // storeFile 用 rootProject.file() 而非 project.file()：前者让相对路径相对**项目根**解析
+    // （`release-key.jks` / `ci-keystore.jks` 都放在项目根），后者会找 `app/<file>` 找不到。
+    // 绝对路径两种都兼容。详见 docs/technical-overview.md §10.164。
     signingConfigs {
         if (keystoreStoreFile.isNotBlank()) {
             create("release") {
-                storeFile = file(keystoreStoreFile)
+                storeFile = rootProject.file(keystoreStoreFile)
                 storePassword = keystoreStorePassword
                 keyAlias = keystoreKeyAlias
                 keyPassword = keystoreKeyPassword
