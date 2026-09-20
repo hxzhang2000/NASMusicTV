@@ -143,6 +143,33 @@ When archiving:
 See `docs/archive/README.md` for all three 2026-09-20 passes (60 files moved out of `docs/` root,
 177 references synced).
 
+### Repo-root hygiene — temp / log files (user-mandated, 2026-09-20)
+
+⛔ **Every log / temp / debug artifact goes in its designated directory — never in the repo root.**
+
+| Kind of file | Belongs in |
+|---|---|
+| Build / test / adb logs, debug dumps, one-off scratch (`*.log`, `diag.txt`, `defex.txt`, …) | **`logs_temp/`** |
+| Agent-produced images / previews (screenshots, icon renders, verify shots) | **`output/`** |
+| Gradle build output | `build/` (Gradle-managed) |
+| Agent runtime internal state (task registry, scratch) | `.box-agent/` |
+
+- The repo root holds **only** tracked project files: build config (`build.gradle.kts`,
+  `settings.gradle.kts`, `gradle.properties`, `gradlew*`), docs (`README.md`, `CHANGELOG.md`,
+  `AGENTS.md`), `.gitignore` / `.gitattributes`, signing files (`keystore.properties*`,
+  `release-key.jks`, `local.properties`), and the three tracked helper scripts
+  (`audit_small_touch_target.py`, `check_chinese.py`, `patch_artists.py`).
+- When redirecting build output, **target `logs_temp/`** — e.g.
+  `./gradlew.bat assembleRelease *> logs_temp/release_build.log` — never the bare root.
+- ⚠️ `.gitignore` has a `# CI / debug leftovers` block (`build_*.log`, `diag.txt`, `defex.txt`,
+  `release_build.log`, …). It exists **because this kept happening** — treat it as a safety net,
+  not a licence. Gitignored ≠ acceptable; put the file in `logs_temp/` in the first place.
+- ⚠️ Agent session dirs named `20??-??-??-????????/` (`<date>-<session-id prefix>`) are created by
+  the agent runtime in the CWD and are gitignored. They are **not source** — clean them out when
+  found (they hold throwaway screenshots).
+- `logs_temp/` is gitignored and should be **emptied periodically**; it is a scratch directory,
+  not a place to accumulate.
+
 ## Key directories
 
 ```

@@ -56,6 +56,8 @@ app/release/
 .codegraph/
 
 # CI / debug leftovers
+# ⛔ 约定（AGENTS.md → Repo-root hygiene）：日志/临时文件一律放 logs_temp/，不要落根目录。
+#    下列条目只是「历史遗留 + 安全网」，不是允许在根目录建这类文件的许可。
 build_log.txt
 build_rel.log
 build_rel2.log
