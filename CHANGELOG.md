@@ -9,279 +9,96 @@
 
 ## [v2.36.0] - 2026-09-19
 
-> **手机竖屏 UI 适配与横竖屏切换：引入形态因子抽象，TV / 手机竖屏 / 手机横屏三态并存**
+> **手机竖屏 UI 适配与横竖屏切换 · Release 独立签名 · 车机蓝牙按键修复**
 >
-> 此前应用**强制横屏**（`MainActivity` 写死 `SENSOR_LANDSCAPE`），手机上只能横着用：竖屏拿起来
-> 整个界面被压扁、大量固定宽度组件（760dp 服务器卡片、320dp 侧栏、420/240dp 搜索框）被推出屏幕。
-> 本版引入 `UiMode` 形态因子抽象，把"TV / 手机竖屏 / 手机横屏"变成一等公民，逐页做竖屏适配，
-> 并提供两层方向控制（设置项三选一 + 顶栏单击循环）。
+> 引入 `UiMode` 形态因子（TV / 手机竖屏 / 手机横屏），逐页适配竖屏，并提供两层方向控制
+> （设置项三选一 + 顶栏单击循环）；Release 改用独立签名、CI 支持正式签名；
+> 修复车机蓝牙媒体按键在 release 包下全部失效的问题。
 >
-> 设计见 `docs/phone-portrait-ui-plan.md`（v1.5 审阅定稿）；
-> **维护约定见 `docs/conventions-adaptive-ui.md`**（新增页面必读）。
+> 设计见 `docs/phone-portrait-ui-plan.md`，维护约定见 `docs/conventions-adaptive-ui.md`，
+> 实现细节见 `docs/technical-overview.md` §10.162–§10.165。
 >
-> ⚠️ **硬规则 B1**：分支谓词只写 `== / != UiMode.PhonePortrait`，`else` 分支必须与改动前**逐字等价**
-> ——因为**手机横屏与 TV 共用同一套布局**。这样"TV 端零变化 + 手机横屏与改前一致"才是可证的。
->
-> 🔧 **真机反馈轮（2026-09-19）**：用户上机验收后报出 **7 条问题**（竖屏 6 + 横屏 1），已全部修复，
-> **未引入新版本号**。其中"按钮看不清"的根因是 `androidx.tv.material3.LocalContentColor` 默认
-> `Color.Black` 而 `FocusableSurface` 未下发（**TV 上同样存在**，属既有缺陷）；
-> 另修掉手机触摸的"粘滞焦点态"。详见下方 `Changed` / `Fixed` 条目与
-> `docs/technical-overview.md` §10.163、`docs/phone-portrait-ui-plan.md` §10.4。
->
-> 🔍 **review 轮（同日）**：对上述改动做了整体复查，又发现并修掉 **4 个缺陷**
-> （字号自适应预留 / 竖屏行高弹性 / 模式指示器热区 6dp / 底栏英文标签裁切）
-> \+ 1 项性能优化（`isTVDevice()` 加 `remember` 缓存），并把
-> **「P0-26 自查 grep 的盲区：小尺寸 + `clickable`」**沉淀进
-> `docs/conventions-adaptive-ui.md` §6.5。门禁仍为 **848 例 / 0 失败**、
-> lint **0 Error / 267 Warning**。
->
-> **未实施部分**：① **实机视觉验收的复验** —— 用户已完成首轮上机验收并报出 7 条问题（已修），
-> 但修复后的**复验**仍需上机确认（竖屏布局、旋转表现、手势手感按项目约定由用户执行）；
-> ② **详情页下滑返回手势**（P2-33 后半）——方案已标注与 D9 底部系统手势冲突、需实测，
-> 在无法上机验证的前提下不引入不可验证的交互；③ **缩放系数 0.82 → 0.88**（P2-37）——方案标为
-> "可选"，且改动需同时处理 `LYRICS_RECOVER_SCALE` 与 §2.7 全部尺寸口径，风险大于收益，留待上机后定；
-> ④ **平板 `TabletPortrait` 独立分档**（P2-36，方案标为"可选"，当前 `medium` 档已覆盖 sw≥600）。
+> **未实施部分**：① 修复后的实机视觉复验；② 详情页下滑返回手势；③ 缩放系数 0.82 → 0.88；
+> ④ 平板 `TabletPortrait` 独立分档；⑤ 车机「未播放时按播放键拉起续播」（需队列持久化 +
+> `onPlaybackResumption`）。
 
 ### Added
 
-- **形态因子抽象 `ui/theme/UiMode.kt`**：`enum class UiMode { TV, PhonePortrait, PhoneLandscape }`
-  \+ `LocalUiMode` CompositionLocal，在 `MainActivity.setContent` 由 `LocalConfiguration` 推导后下发
-- **纯函数方向决策**（可 JVM 单测，不依赖 Compose 运行时）：
-  - `deriveUiMode(isTV, orientation)` —— 形态推导
-  - `resolveOrientation(pref, isFullScreenPage)` —— 偏好 + 全屏页 → `requestedOrientation`
-  - `ScreenOrientationPref.nextOnToggle(current)` —— L2 单击循环（竖 ⟷ 横，**永不回到 auto**）
-- **屏幕方向偏好 `data/prefs/DisplayPrefs.kt`**：`screenOrientation` Flow + `setScreenOrientation` +
-  `getScreenOrientationSync()`。沿用项目既有 `@Volatile` 内存镜像 + 独立 SharedPreferences
-  （`display_mirror`）范式实现**零 IO 冷启动同步读** —— 首帧就能拿到正确方向，避免
-  `runBlocking` 阻塞主线程（方案 B4）
-- **竖屏全局骨架**：
-  - `ui/components/PhoneTopBar.kt` —— 顶栏（Logo + 搜索 + 方向切换图标），
-    `statusBarsPadding()` + `displayCutoutPadding()`，48dp 图标按钮带 `contentDescription`
-  - `ui/components/PhoneNavBar.kt` —— 5 项底部导航（首页/曲库/播放/我的/设置），
-    56dp + `navigationBarsPadding()`
-  - `ui/components/MiniPlayer.kt` —— 迷你播放条（64dp + 2dp 进度线）。⚠️ **进度/时长在组件内部
-    订阅**，不提到 `AppRoot` 顶层（否则 1000ms 轮询会驱动全树每秒重组，方案 K1）
-- **设置页两级化**：`SettingsSection` 从 `SettingsScreen` 私有 enum 上移为 `public`
-  （`ui/screens/settings/SettingsSection.kt`，带图标），新增 `SettingsSectionList`（一级列表）与
-  `SettingsSectionBackHeader`（二级返回头）。竖屏不再渲染 240dp 侧栏
-- **播放页竖屏版 `NowPlayingPortrait`**（方案 §4.2，本版核心改造）：
-  - 双模式（封面 / 歌词），左右滑切换 + 顶部模式指示器
-  - 封面 `fillMaxWidth().widthIn(max = 320.dp).aspectRatio(1f)`，右上角「ⓘ」→ 歌曲信息底部弹层
-  - 7 个歌词 Chip 精简为 **3 个**（来源循环 / 字号循环 / 睡眠定时），高亮模式移入次级 Chip 行
-  - 「⋯」更多菜单承载低频入口（队列 / 音质 / 定时关闭 / 可视化 / KTV / MTV）
-- **队列页竖屏版**：72dp 行高 + 单「⋮」按钮（原 TV 版是 ↑/↓/✕ 三按钮）→ 底部操作菜单
-  （立即播放 / 上移 / 下移 / 移除）
-- **详情页竖屏版**（专辑 / 艺术家）：封面 160dp 置顶（艺术家保持圆形），
-  「返回 + 标题」与「播放全部 + 加入队列 + 歌曲数」**拆两行**，操作行可横滑
-- **歌单管理竖屏两级化**：320dp 侧栏在 360dp 屏上必溢出 → 改「播放列表（一级）⇄ 歌曲明细（二级）」
-- **通用自适应工具**（`ui/components/CommonComponents.kt`）：
-  - `adaptiveColumnsOf(widthDp, tv, phonePortrait, medium)` —— **纯函数**，阈值 `>=1000` / `>=600` / else
-  - `adaptiveColumns(tv, phonePortrait, medium)` —— `@Composable` 版；竖屏**直接取 `phonePortrait`**
-    档，不再心算宽度（**双输入原则**：`screenWidthDp` 是未缩放 Android dp ≈ 360，而竖屏布局宽度是
-    Compose dp ≈ 439，只用宽度会在 600/1000 阈值附近错配）
-  - `AdaptiveLayout(phonePortrait, tv)` —— 二分支包装器
-  - `responsiveDialogSize(landscapeWidth, scrollable)` —— 对话框/弹层响应式尺寸
-  - `portraitTouchTarget(landscape)` + `PHONE_TOUCH_TARGET` / `PHONE_TOUCH_TARGET_DP` ——
-    **触摸目标换算**（§2.7：物理 44dp ⇒ Compose ≥ 53.7dp，取 56dp ≈ 45.9 物理 dp）
-- **新增 Screen 覆盖门禁 `ScreenUiModeCoverageTest`**（P1-32 后半）：
-  - 规则：文件若有**顶层** `fun XxxScreen(` + `@Composable`，却**未引用**任何自适应布局 API
-    （`LocalUiMode` / `AdaptiveLayout` / `adaptiveColumns` / `responsiveDialogSize` /
-    `portraitTouchTarget` …）→ **测试失败**。这类"忘了做竖屏"的问题编译过、单测过，
-    只有真机才看得见，故必须自动兜住
-  - 豁免：文件顶部加 `// NasScreenUiMode-exempt: <理由>` 注释；本版豁免 MV 页与 K 歌页
-    （两者被 `isFullScreenPage` 强制横屏，永远不在竖屏渲染）
-  - ⚠️ **不是**自定义 lint 规则（方案原文建议 `tools/lint/`）：实测当前工具链
-    （AGP 9.2.1 + `com.android.tools.lint` 32.2.1）下自定义 check jar 的类由
-    `com.intellij.util.lang.UrlClassLoader` 加载、而 `SourceCodeScanner` 由
-    `java.net.URLClassLoader` 加载，两个加载器各持一份 `lint-api` →
-    `PortraitScreenUiModeDetector cannot be cast to SourceCodeScanner`，
-    `:app:lintAnalyzeDebug` 直接失败（已排除配置问题：`lintChecks` 依赖树干净、
-    check jar 未打包 lint-api）。改用**同等强度**的单测门禁：跑在已有阻塞门禁
-    `testDebugUnitTest` 里，零新增依赖、零类加载风险，判定逻辑与设计中的 lint 规则逐条一致
-  - 护栏**自证有效**：附 4 组负向用例（无 marker 必判违规、7 个 marker 逐个必被识别、
-    豁免标记必被识别、非 Screen / 嵌套函数 / 非 `@Composable` 不参与判定）；
-    源码目录定位失败时**直接失败**而非静默跳过
-- **`docs/conventions-adaptive-ui.md`**：自适应 UI 维护约定（B1 硬规则、列数口径、dp/触摸目标换算、
-  新增 Screen 检查清单、可复现验证命令）
-- **新增 UI 文案 26 条**（中英双语同步）：方向设置项与提示、顶栏/迷你播放条无障碍描述、
-  歌曲信息、封面/歌词模式名、歌单/队列操作项等
+- **形态因子 `UiMode`**（`ui/theme/UiMode.kt`）：`TV / PhonePortrait / PhoneLandscape` + `LocalUiMode`
+- **纯函数方向决策**：`deriveUiMode` / `resolveOrientation` / `ScreenOrientationPref.nextOnToggle`
+- **屏幕方向偏好**（`data/prefs/DisplayPrefs.kt`）：三态偏好，冷启动零 IO 同步读
+- **竖屏骨架**：顶栏 `PhoneTopBar`、6 项底部导航 `PhoneNavBar`、迷你播放条 `MiniPlayer`
+- **设置页两级化**：一级分区列表 + 二级返回头，竖屏不再渲染侧栏
+- **竖屏播放页 `NowPlayingPortrait`**：封面 / 歌词双模式、左右滑切换、低频入口收进「⋯」菜单
+- **竖屏队列页 / 详情页 / 歌单管理页**：各自改为竖屏版式（两级化、操作行可横滑）
+- **自适应工具**（`ui/components/CommonComponents.kt`）：`adaptiveColumns(Of)` / `AdaptiveLayout` /
+  `responsiveDialogSize` / `portraitTouchTarget`
+- **门禁 `ScreenUiModeCoverageTest`**：新增 Screen 未引用自适应 API 即失败（豁免标记 `NasScreenUiMode-exempt`）
+- **约定文档 `docs/conventions-adaptive-ui.md`**
+- **UI 文案 26 条**（中英双语）
 
 ### Changed
 
-- **不再强制横屏**：删除 `MainActivity` 中写死的 `SENSOR_LANDSCAPE`，改为按偏好 + 是否全屏页动态
-  决策（全屏页恒为横屏；其余按 `auto / portrait / landscape` 三态）
-- **`AndroidManifest.xml`**：`screenOrientation` 由 `fullSensor` 改为 `unspecified`，并新增
-  `configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden"`
-  ——旋转时**不再重建 Activity**（播放不中断、列表滚动位置不丢）。
-  刻意**不含** `uiMode` / `density` / `layoutDirection`（这三项仍需重建才能生效）
-- **系统栏策略（D9）**：竖屏 `show(systemBars())` —— 否则 `statusBarsPadding()` /
-  `navigationBarsPadding()` / `displayCutoutPadding()` 全是 no-op（刘海会遮挡内容）；
-  TV / 手机横屏 / 沉浸模式 / 全屏页仍 `hide()`
-- **旋转为硬切（D10）**：不做 `AnimatedContent` / `Crossfade` —— 避免单槽 handler 被置空、
-  重复数据加载、滚动位置丢失三个副作用
-- **BACK 优先级**：竖屏设置页二级分区提到 `NavigationViewModel`（`settingsSection`），
-  AppRoot 的 BACK 链在 `Screen.Settings` **之前**先消费它；歌单管理二级页同理由页面内 handler 消费
-- **各页竖屏 padding 32 → 16dp**：首页 / 曲库 / 我的 / 队列 / 设置 / 专辑详情 / 艺术家详情 /
-  网盘 / 歌单管理 / 均衡器 / 天气电台 / 播放统计
-- **曲库页顶部由一行改三行**（竖屏）：标题行（+ 播放全部）→ 搜索框整行 → TAB 横滑行。
-  原「标题 + 可滚动 TAB + 240dp 搜索框 + 播放全部」在 360dp 上必被裁切
-- **电台页顶部行修复**：340dp 搜索框与 N 个 preset tag 拆两行，tag 行可横滑
-- **搜索页来源 Chip 行修复**：label 固定 + Chip 区 `horizontalScroll`
-  —— 此前窄屏下后面的来源**被推出屏幕且滑不到**（P0-23）
-- **列数统一走 `adaptiveColumns`**：`RadioTab` 电台网格由硬编码 `GridCells.Fixed(2)` 改为
-  `adaptiveColumns(3, 1, 2)`；`Shimmer` 骨架网格由固定 6 列改为 `adaptiveColumns(6, 3, 6)`
-  （与真数据列数一致，加载完成不再跳变）
-- **对话框族统一响应式宽度**（14 处）：竖屏 `fillMaxWidth(0.92f) + widthIn(max = 420.dp) +
-  heightIn(max = 80% 屏高)`，非竖屏保持原固定宽度。⚠️ 直接写死会**把 TV 上的 480~720dp 对话框
-  压到 420dp**，故必须走 `responsiveDialogSize`（内部按 `LocalUiMode` 分叉）
-- **网盘页搜索框 420dp → 整行**，服务器连接卡片 760dp → `fillMaxWidth().widthIn(max = 420.dp)`
-- **首页**：竖屏隐藏「当前播放」卡片（与底部 MiniPlayer 重复）；统计卡改 2×2 网格；
-  横向卡片宽度 160dp → 140dp
-- **热力图新增可选放大**（`enableZoom`）：仅手机竖屏开启，格子保底 10dp 并允许横向滚动；
-  默认 `false` 时与改动前逐字等价
-- **竖屏底栏新增「队列」直达入口**（5 项 → 6 项，`Icons.AutoMirrored.Filled.QueueMusic`）：
-  此前只能从播放页次级 Chip / 「我的」页进入。同时未选中项颜色由
-  `TextSecondary(#8899B0)` 改为 `TextPrimary(#E8EDF5)` —— 压在 `Surface(#162032)` 上辨识度不足
-- **竖屏播放页封面模式：控制区贴屏幕底部**（真机反馈修复）：原实现整列 `verticalScroll`，
-  控制区紧跟封面、屏幕下方空一大片。现拆为「弹性区（封面 + 歌名，居中；用 `BoxWithConstraints`
-  按剩余高度反推封面边长，避免封面收缩后把歌名挤出可视区）+ 固定贴底区（进度条 / 控制行 / 次级 Chip）」
-- **竖屏播放页左右滑切换封面 ⟷ 歌词**（真机反馈修复）：手势此前只挂在底部 28dp 的模式指示器上，
-  且**不分方向、只做 toggle** —— 用户发现不了，体验上等于"不支持左右滑"。现手势覆盖整块内容区，
-  **带方向语义**（左滑 → 歌词，右滑 → 封面）+ 48dp 位移阈值；指示器只保留点击与状态指示
-- **竖屏歌曲条目改为两行**（真机反馈修复）：`UnifiedSongRow(MODE_ROW)` 原为 TV 版 120dp 单行
-  （92dp 封面 + 36dp 序号 + 文字 + 时长 + 最多 4 个操作按钮）。竖屏可用宽仅约 407dp，
-  扣掉封面/序号/时长/按钮后**文字只剩十几 dp**，歌名与艺术家被挤没。现竖屏改为：
-  第一行 = 封面（64dp）+ 序号 + 歌名/艺术家（占满剩余宽度）；第二行 = 时长 + 操作按钮。
-  非竖屏仍走原单行结构（外层仅多一个单子项 `Column`，渲染逐字等价）
-- **手机横屏首页不再显示「当前播放」全宽播放条**（真机反馈修复）：`HomeScreen` 的 `NowPlayingCard`
-  是一条 72dp 高的全宽横条（48dp 封面 + 歌名/艺术家 + 「正在播放 ▶」）。手机横屏可用高度仅
-  ~439 Compose dp，它一条就占 ~16%，而顶栏本就有「正在播放」入口。
-  ⚠️ 此处**显式**读 `LocalUiMode` 做"横屏独立分支"（B1 允许，理由为用户明确要求），
-  **TV 端显示条件不变**
+- 不再强制横屏：删除写死的 `SENSOR_LANDSCAPE`，改按偏好 + 是否全屏页动态决策
+- `AndroidManifest.xml` 改 `screenOrientation="unspecified"` + 新增 `configChanges`，旋转不再重建 Activity
+- 竖屏显示系统栏，TV / 手机横屏 / 沉浸模式 / 全屏页仍隐藏
+- 旋转为硬切，不做过渡动画
+- BACK 优先级：竖屏设置二级分区与歌单管理二级页由各自 handler 先消费
+- 各页竖屏 padding 32 → 16dp
+- 曲库页顶部改三行；电台页顶部行拆两行；搜索页来源 Chip 行可横滑
+- 列数统一走 `adaptiveColumns`（电台网格、Shimmer 骨架网格）
+- 对话框族统一走 `responsiveDialogSize`（14 处）
+- 网盘页搜索框改整行、服务器连接卡片改限宽
+- 首页竖屏隐藏「当前播放」卡片、统计卡改 2×2 网格、横向卡片 160 → 140dp
+- 热力图新增可选放大（仅手机竖屏开启）
+- 竖屏底栏新增「队列」直达入口（5 → 6 项），未选中项改 `TextPrimary`
+- 竖屏播放页封面模式控制区贴屏幕底部
+- 竖屏播放页左右滑切换覆盖整块内容区，带方向语义
+- 竖屏歌曲条目改为两行
+- 手机横屏首页不再显示全宽「当前播放」播放条
 
 ### Fixed
 
-- **竖屏按钮「看不清」的根因：`FocusableSurface` 没下发 `LocalContentColor`（真机反馈修复）**：
-  `androidx.tv.material3.LocalContentColor` 的默认值是 **`Color.Black`**（`ContentColor.kt`：
-  `compositionLocalOf { Color.Black }`），而 `Icon(tint = LocalContentColor.current)` 与
-  `Text(color = Color.Unspecified → LocalContentColor.current)` **都会回退到它**。
-  `FocusableSurface` 此前**只**提供自定义的 `LocalFocusableContentColor`，于是内部凡是没显式写
-  `tint =` / `color =` 的 `Icon` / `Text` 全部画成**黑色** —— 压在深色底（`Surface #162032`）上
-  就是用户反馈的「下方主按钮 / 标题行按钮看不清」。全仓库受影响 **10 处**（4 个 `Icon` + 6 个 `Text`）：
-  竖屏底栏图标与文字、顶栏搜索图标与方向切换文字、迷你播放条播放/下一首图标、`QualityPickerDialog`
-  次级按钮、天气电台「播放全部」、电台卡片占位符、百度授权「复制」。
-  ⚠️ **这些位置在 TV 上同样是黑字压深底**，属既有缺陷。
-  现按 Material `Surface` 语义同时下发 `LocalContentColor`；并新增门禁
-  `FocusableSurfaceColorContractTest`（含 4 组负向自证）防止回退。
-  📋 **完整审计已做**（脚本已沉淀为 skill `compose-content-color-audit`）：先确认 `MaterialTheme`
-  **不提供** `LocalContentColor`（tv-material3 只有 `Surface`/`Card`/`ListItem`/`TabRow`/`Switch`
-  五个提供点），再全仓库扫描「无显式 `tint=`/`color=` 的 `Icon`/`Text`」——
-  含**跟随局部包装组件**（`MiniPlayerIconButton` / `PhoneTopBarIconButton` 等）的传递覆盖判定，
-  结果 **10/10 全部被 `FocusableSurface` 覆盖，无遗漏**；脚本自带负向自证（合成样本中
-  裸 `Box` 内的 `Icon` 必须被判未覆盖）
-- **手机触摸的「粘滞焦点态」（真机反馈修复）**：`Modifier.clickable` / `focusable()` 的节点在手机上
-  点一下就会获得焦点，且**焦点会粘住**（直到点别处才移走）。此前 P2-34 只修掉了"永久放大 8%"，
-  容器色/内容色仍是粘的 —— 表现为**底栏/顶栏图标被点过一次后永久高亮**。本轮把**焦点相关的全部视觉**
-  （缩放 / 边框 / 容器色 / 内容色）统一收敛到 `activeFocus = isFocused && isTVDevice`，
-  手机只保留按下的瞬时反馈；并抽出公共 `isTVDevice()` 供其他自实现焦点动画的组件复用。
-  同步修掉 `UnifiedSongRow` 的行高亮（永久 0.2 透明 Primary 底）与 `RowActionButton` 的 1.15 倍缩放
-- **竖屏歌曲行操作按钮触摸目标不达标（P0-26 漏网）**：`RowActionButton` 为
-  `widthIn(min = 48.dp)` + `padding(vertical = 10.dp)`，实际 48×42 dp → 竖屏只有
-  **39.4×34.4 物理 dp**。现改走 `portraitTouchTarget(48.dp)` / `portraitTouchTarget(42.dp)`（竖屏 56dp）
-- **竖屏触摸目标全部不达标（P0-26，按 §2.7 全量复核）**：竖屏下 `LocalDensity` 被
-  `PHONE_UI_SCALE = 0.82` 缩放，代码里的 `X.dp` 只占 `X × 0.82` 个**物理 dp**。
-  此前多处按"物理 dp 口径"写注释（如"44dp+ 触摸目标"）却填了 Compose 值，实际全部偏小：
-
-  | 写死的 Compose dp | 实际物理 dp | 判定 |
-  |------------------|------------|------|
-  | 44 | 36.08 | ❌ |
-  | 48 | 39.36 | ❌ |
-  | 52 | 42.64 | ❌ |
-  | **56（新基线）** | **45.92** | ✅ |
-
-  修复范围：竖屏顶栏图标按钮、`MiniPlayer` 播放/下一首、播放页顶栏按钮、队列行「⋮」按钮
-  （以上四处 48 → 56）；`SearchField`、网盘页返回按钮、`AdjustButton`、`MiniIconButton`
-  （48/44 → 竖屏 56，TV/横屏保持原值）；`ConfirmDialog` / `ConnectPromptDialog` /
-  `ExportDeviceDialog` / `ExitConfirmDialog` / `TextInputDialog` 的动作按钮与输入框
-  （52 → 竖屏 56）；`BaiduDirPickerDialog` / `BackupTransferDialog` / `ModelTransferDialog` /
-  `PlaylistImportUploadDialog` / `BaiduAuthDialog` / 设置页删除备份确认
-  （44 → 竖屏 56）
-- **设置页「删除备份」确认弹窗漏改（对话框族 P1-27 补漏）**：该弹窗是**唯一**没走
-  `responsiveDialogSize` 的 Compose 对话框，仍写死 `.width(520.dp)`。竖屏可用宽度（Compose 口径）
-  约 439dp（`PHONE_UI_SCALE = 0.82` 下 360dp 物理屏；即便 411dp 的机型也只有 501dp）
-  → **任何手机竖屏都放不下**，弹窗被对话框窗口裁掉两侧。现改为
-  `responsiveDialogSize(520.dp, scrollable = true)`：非竖屏仍返回 `width(520.dp)`
-  （TV / 手机横屏逐字等价），竖屏撑满 92% 宽并限高 80% 屏高
-- **`padding` 削热区的坑**：`Modifier.height(52.dp).padding(vertical = 4.dp)` 传给
-  `FocusableSurface` 时 `clickable` 加在 padding **之后**，热区只剩 44dp（物理 36dp）。
-  `ExportDeviceDialog` 的设备列表项改为「竖屏抬到 56dp **并取消垂直 padding**」
-- **`FocusableSurface` 聚焦缩放未按设备分档（P2-34）**：`Modifier.clickable` 的节点本身可聚焦，
-  手指点一下就会让它获得焦点 —— 此前非 TV 设备也照搬 TV 的聚焦缩放，按钮被点过一次后会
-  **永久放大 8%**（手机又没有焦点边框，用户看不出原因）。现在聚焦缩放只在 `isTVDevice` 时应用，
-  手机触摸反馈只走 `pressedScale`（按压缩感）；TV 侧行为与改动前逐字一致。
-  另为 4 个竖屏专属图标按钮（顶栏 / MiniPlayer / 播放页顶栏 / 队列行）补上按下高亮色 ——
-  手机没有焦点边框，按下高亮是唯一的"已响应"视觉反馈
-- **`PlayerControls.kt` 遗留调试日志**：进度条焦点变化时无条件打 `AppLog.e` ——
-  `AppLog.e` 无 `BuildConfig.DEBUG` 守卫，release 包里也会执行，已移除
-- **`FocusableSurface` 的 TV 判定不完整**：此前只查 `android.software.leanback`，
-  部分电视盒子只声明 `android.hardware.type.television` → 被误判为手机、不显示焦点边框。
-  现在两个 feature **任一命中**即视为 TV
-- **自建底部弹层补齐 BACK 注册**：播放页的歌曲信息弹层与「⋯」菜单改用
-  `RegisterDialogBackHandler` —— 否则 BACK 会穿透到 Level 3 应用退出确认（方案 §6.3）
-
-#### 🔍 review 轮补充修复（同日，对上述改动做整体复查后发现）
-
-- **竖屏封面模式歌名区预留写死 `96.dp` → 超大字号下溢出压住进度条**：
-  `FontSize.title()` / `small()` 会随用户全局字号调节（`LocalFontAdjustment`，**-8 ~ +8 sp**）
-  放大；+8 档下「歌名 2 行 + 艺术家 1 行」约需 115dp，而预留常量仍是 96dp
-  → 文字溢出弹性区、盖住下方控制区。现改为按**实际字号**动态计算
-  （`PORTRAIT_TITLE_LINE_RATIO = 1.3f` 行高倍数 + `PORTRAIT_TITLE_SPACING = 20.dp`），
-  并把 `coerceAtLeast(96.dp)` 改为 `coerceAtLeast(0.dp)` —— 极窄屏 + 超大字号时
-  **宁可封面缩小，也不让文字溢出**
-- **竖屏歌曲行第一行固定 `height(88.dp)` → 字号放大后被裁**：同上，字号 +8 档下
-  「歌名 + 艺术家」两行超过 88dp 会被固定高度裁掉。现竖屏改 `heightIn(min = 88.dp)`
-  （非竖屏仍 `height(120.dp)`，与改动前逐字等价）
-- **播放页模式指示器圆点触摸目标仅 6~8 Compose dp（P0-26 的 grep 盲区）**：
-  `PortraitModeIndicator` 原写法 `.size(if (active) 8.dp else 6.dp) ... .clickable {}`，
-  热区只有 **4.9~6.6 物理 dp**。⚠️ P0-26 那条自查 grep 只覆盖 `40~53dp` 区间，
-  **小于 40dp 的写法完全逃过检查**（且尺寸为表达式时正则也匹配不到 → 会空转报 0 处）。
-  现改为「外层 `size(portraitTouchTarget(44.dp))` 承担热区 + 内层小 `Box` 只做视觉」，
-  并已把该盲区写入 `docs/conventions-adaptive-ui.md` §6.5
-- **竖屏底栏 6 项后英文 `nav_now_playing`（"Now Playing"）被裁**：底栏每项宽约
-  65~73 Compose dp（320dp 物理屏 ÷ 0.82 ÷ 6），11 字符 × 12sp ≈ 66dp 正好压线
-  → 新增短标签 `nav_now_playing_short`（`播放` / `Playing`）仅供底栏，
-  `nav_now_playing` 保留给 TV 顶部导航与首页卡片；同时给底栏标签补
-  `overflow = TextOverflow.Ellipsis` 兜底。**⚠️ 此项属预防性修复，未经真机确认**
-- **`isTVDevice()` 每次组合都做 2 次 `hasSystemFeature`**：该函数被 143 处
-  `FocusableSurface` 及每个 `RowActionButton` 在组合期调用，而 API 22 上
-  `hasSystemFeature` 可能是 binder 调用 → 加 `remember(context)` 缓存
+- **竖屏按钮 / 文字「看不清」**：`FocusableSurface` 同时下发 `LocalFocusableContentColor`
+  与 `LocalContentColor`（全仓库 10 处，TV 端同样受益）
+- **手机触摸「粘滞焦点态」**：焦点相关视觉统一收敛到 `isFocused && isTVDevice()`
+- **竖屏触摸目标不达标**：统一改走 `portraitTouchTarget`（基线 56dp），覆盖顶栏 / 播放条 /
+  播放页 / 队列行 / 搜索框 / 各对话框
+- 竖屏歌曲行操作按钮触摸目标不达标
+- 设置页「删除备份」确认弹窗未走 `responsiveDialogSize`
+- `ExportDeviceDialog` 设备列表项 `padding` 削热区
+- `FocusableSurface` 聚焦缩放未按设备分档（P2-34）
+- `PlayerControls.kt` 遗留调试日志
+- `FocusableSurface` 的 TV 判定补 `android.hardware.type.television`
+- 自建底部弹层补齐 BACK 注册
+- 竖屏封面模式歌名区预留改按实际字号动态计算
+- 竖屏歌曲行第一行改 `heightIn(min = 88.dp)`
+- 播放页模式指示器圆点触摸目标过小
+- 竖屏底栏英文标签被裁：新增底栏短标签
+- `isTVDevice()` 加 `remember` 缓存
+- **车机蓝牙媒体按键全部失效（release 包）**：`PlaybackService.onConnect` 不再拒绝系统控制器，
+  新增 `player/MediaSessionAccessPolicy.kt` 承载准入策略
 
 ### Test
 
-- 新增 `UiModeTest`（纯 JVM，无 Robolectric）：`deriveUiMode` 三态 + 未知方向兜底 +
-  **B1 回归用例**（手机横屏**不得**被判定为 TV）、`resolveOrientation` 四分支 +
-  **"永不返回 SENSOR 系列"**护栏、`nextOnToggle` **"永不回到 auto"**、
-  `adaptiveColumnsOf` 三档阈值边界（599/600/999/1000）+ 电台网格 3/1/2、
-  §2.7 dp 口径护栏（`56 × 0.82 ≈ 45.92 ≥ 44`、`44 / 0.82 ≈ 53.66`）
-- **P0-26 回归护栏用例**（`PHONE_TOUCH_TARGET 满足物理 44dp 而 44 与 48 不满足`）：
-  断言 `PHONE_TOUCH_TARGET_DP × 0.82 ≥ 44`，同时断言 `44 × 0.82 = 36.08`、
-  `48 × 0.82 = 39.36`、`52 × 0.82 = 42.64` 均 `< 44` —— **防止有人把常量改回旧值**
-- 全量 `testDebugUnitTest` 通过；`lintDebug` 0 Error
-- **新增 `ScreenUiModeCoverageTest`**（P1-32 门禁 + 4 组负向自证用例，见 Added）
-- **review 轮复跑门禁**：`testDebugUnitTest` **848 例 / 0 失败 / 0 错误**，
-  `lintDebug` **0 Error / 267 Warning**（与基线一致）
-- **新增源码审计脚本**（`logs_temp/audit_small_touch_target.py`，不入库）：
-  扫描「小尺寸（< 40dp）+ 同链 `clickable`」的漏网触摸目标，**自带 `--selftest`（5 用例）**——
-  ⚠️ 首版正则 `\.size\((\d+\.\d+)?\.dp\)` 匹配不到 `size(if (active) 8.dp else 6.dp)`
-  这类**表达式尺寸**，负向自证显示"应命中的用例未命中"= **脚本空转**，
-  即"报 0 处"不可信；修正为「取 `size(` 括号配对内容 → 抽出其中全部 `.dp` 字面量」后
-  5/5 自证 PASS，实跑本项目 346 文件 **0 处**
+- 新增门禁：`UiModeTest`、`ScreenUiModeCoverageTest`、`FocusableSurfaceColorContractTest`、
+  `MediaSessionAccessPolicyTest`（均含负向自证）
+- 全量 `testDebugUnitTest` **864 例 / 1 失败**（该 1 例位于未提交的并发文件 `SmallTouchTargetScanTest`，
+  与本节改动无关）；`lintDebug` **0 Error / 267 Warning**
+
+### Changed（构建与签名）
+
+- Release 签名独立化：`keystore.properties` 指向项目根 `release-key.jks`，
+  `signingConfigs.release.storeFile` 改用 `rootProject.file(...)`。
+  已保存的 NAS / 百度凭据不受影响，但**换签名后需先卸载旧包再安装**
+- CI `build` job 签名步骤改双模式：配置 Secrets 时用正式 keystore 签名，未配置时回退
+  throwaway `ci-keystore.jks`
 
 ## [v2.35.0] - 2026-09-18
 
 > **网络音乐多码率：补齐 192 档，播放与下载支持按档位静默降级；同曲多档可共存**
 >
-> 设计见 `docs/multi-bitrate-playback-download-plan.md`（v1.3 可开发性审阅定稿）。
+> 设计见 `docs/archive/multi-bitrate-playback-download-plan.md`（v1.3 可开发性审阅定稿）。
 
 ### Added
 
@@ -748,7 +565,7 @@
 
 ## [v2.32.6] - 2026-09-16
 
-> 2026-09-16 审查报告（`docs/code-review-2026-09-16.md`）修复落地：共 **25 项**（P0×2 / P1×7 / P2×11 / P3×5）。
+> 2026-09-16 审查报告（`docs/archive/code-review-2026-09-16.md`）修复落地：共 **25 项**（P0×2 / P1×7 / P2×11 / P3×5）。
 > **P1-3** 经产品裁定为有意设计、不修；**P1-9** 经核验为误报、撤回——两条保留编号留档，防止后续轮次重复上报。
 > 技术细节见 `docs/technical-overview.md` §10.155。
 >
@@ -921,7 +738,7 @@
 - **S4 修复（backend）**: `JellyfinAdapter.kt` 会话内 401 重认证 —— 原 `executeJsonRequest()` 把非 2xx 一律折叠成 `null`，服务器强制过期 token / 用户改密后**必须手动断开重连**才能恢复（仅 `initialize()` 有「重连时自愈」路径）。现拆为两层：`executeJsonRequest` 判定 401 → 重认证 → **重试一次**；新增 `rawJsonRequest`（private）承担单次 GET 与原有网络层 `withRetry`（3 次退避），自身不处理 401、如实回传 `HttpResult(code, body)`。**防循环四重保证**（报告 §S4 明确要求「重试只做一次、避免循环」）：① 重试是同一调用内的第二次尝试而非递归；② 第二次结果照单全收，不再判 401；③ `authenticateByName` 走 `client.newCall` 直连、**不经过** `executeJsonRequest`（无自激路径）；④ 无凭据（token-only 会话）时直接放弃。并发上 `reauthMutex` + `tokenGeneration` 世代号保证 **N 个 401 只触发 1 次登录**（避免过期瞬间的登录风暴）。顺带加固：`apiToken` 加 `@Volatile`（其读点除 IO 线程的 `buildAuthHeader()` 外，还有 `getStreamUrl()`/`getCoverUrl()` 两个**非 suspend** 方法，可能被主线程调用）；`initialize()` 留存 `username`/`password` 供重认证使用，`logout()`/`close()` 一并清空（内存保留明文口令是重认证的必要代价——本 adapter 无 `Context`，无法按需解密；持久化副本仍是 `CryptoUtils` 加密的）；刷新后的 token 不持久化（接口未暴露），下次启动靠 `initialize()` 回退用户名密码登录自愈。新增 `app/src/test/java/com/nasmusic/tv/backend/impl/JellyfinAdapterAuthTest.kt`（Robolectric + MockWebServer，5 用例，探针选 `getSongsTotalCount()`；**核心断言是请求次数上界**——证「不会打转」而非仅「能恢复」；`mockwebserver` 依赖此前已声明但全项目无人使用，本测试是首例）。⚠️ **单测未实际运行**（本机 test worker 环境阻塞，exit 268435466，仅验证源码可编译）；**集成测试（Jellyfin 后台手动使 token 过期）未执行**；**并发不变式（N 个 401 只登录 1 次）未写测试**——需 MockWebServer 侧用 latch 保证首轮请求全部到达后才放行才能确定性复现，在无法本地运行测试的前提下宁可不写也不引入可能阻塞 CI 的脆弱用例。另：仅 Jellyfin 做了处理，其余 4 个适配器是否有同类「会话内凭据失效」问题**未核查**。详见 §10.149
 - **P1#5 修复（visualizer）**: 可视化随机源隔离 —— 新增 `visualizer/VisualizerRandom.kt`（独立实例化的 LCG，沿用原常数、零分配），把随机状态从 `VisualizerMath` 这个 `object` 中迁出；`ParticlePool` 构造函数改为 `(capacity, rng)`，8 个用到随机数的渲染器类（`ParticleStorm` / `ParticleGalaxy` / `BeatFirework` / `ParticleText` / `PlasmaFlow` / `LiquidRipple` / `MatrixRain` / `Constellation`）各持一个实例，共 39 处调用点机械替换。**⚠️ 本项不是缺陷修复**：实测全部 39 处调用点都是「取一次值立即使用」，无任何依赖序列位置的状态机，交叉淡入时两层互相消耗对方的序列也**无可察觉差异**；绘制走主线程（`LaunchedEffect` + `withFrameNanos`），也不存在 data race。真正修掉的是两处**文档与实现不符**：① `VisualizerMath` KDoc 声称「所有函数均为无副作用的纯计算」，但 `nextRandom()` 会改写单例状态；② `resetRandom()` 注释称「进入效果时调用，保证可复现」，但它**零调用方**（承诺从未生效）——已连同 `seed` / `nextRandom()` / `nextRandomSigned()` 一并删除。**唯一有风险的设计点是种子策略**：不能用同一个常量种子给所有渲染器，否则各渲染器首帧图案完全一致（交叉淡入时会看到两层图案重合）且每次进入同一效果都重复同一套图案；故默认取时间派生种子 `(System.nanoTime() ushr 8).toUInt()`，种子为 0 时兜底为 1（LCG 状态为 0 会退化成恒 0 序列）。种子可注入 → 渲染器的随机行为**首次可单测**，新增 `VisualizerRandomTest.kt`（6 条纯 JVM 用例：值域 `[0,1)` / `[-1,1)`、同种子可复现、异种子不同序列、种子 0 不退化、10 万次取值粗粒度分布 0.85–1.15）。另：报告估「1h，涉及 30+ Renderer 全部修改」，实测只需 **8 个类**（其余 28 个效果根本不用随机数）。⚠️ **单测未实际运行**（本机 worker 环境阻塞）；⚠️ **观感未验证**——改动后各渲染器的随机序列与原先不同（图案会变），属预期内，但「是否一样好看」只能真机确认。详见 §10.150
 - **L3 修复（player/ui）**: 播放模式切换回调整改 —— `NasMusicApp` 的 `@Volatile var playModeToggleHandler: (() -> Unit)?` 改为 `MutableSharedFlow<Unit>`（对外暴露 `playModeToggleEvents: SharedFlow<Unit>` + `requestPlayModeToggle(): Boolean`）；`PlaybackService.handleTogglePlayMode()` 由 `handler?.invoke()` 改为 `requestPlayModeToggle()`，返回 false（无订阅者）时打 `w` 级日志，便于现场区分「没调用」与「没生效」；`MainActivity.onCreate` 改为 `lifecycleScope.launch { playModeToggleEvents.collect { viewModel.playerVM.togglePlayMode() } }`，`onDestroy` **删除**手动置 null（作用域取消即自动退订）。**两处刻意偏离报告建议**：① **不用 `extraBufferCapacity = 1`** —— 缓冲会让事件在无订阅者时滞留到下次打开 App 才被消费，表现为「一进应用播放模式自己跳了一档」；零缓冲下 `tryEmit` 仅在有活跃订阅者时成功，丢弃与旧实现 `handler == null` 静默无反应**同义、不退化**。② **不用 `repeatOnLifecycle(STARTED)`** —— 它会在 Activity 退到后台（按 Home）时退订，而那正是用户通过通知栏控制播放的场景，相比旧实现**反而是退化**；改用 `lifecycleScope`（随 Activity 销毁取消），退到后台仍可用、销毁即退订。**报告原描述的失效场景经核实不成立**：配置重建时 `by viewModels()` 的 ViewModelStore 被框架保留，新旧 Activity 共用同一个 `MainViewModel` 实例，旧闭包依旧有效；且 destroy→create 在 `ActivityThread.handleRelaunchActivity` 内连续完成、中间不返回 Looper，广播 `onReceive` 插不进来 → 窗口期实际为 0。真正修掉的是**订阅生命周期无法收敛**：`onDestroy` 的清空被 `if (!isFinishing) return` 前置拦截，非 finishing 的销毁（开发者选项「不保留活动」、内存回收）都不解绑，而此时 `ViewModelStore.clear()` 已执行 → 回调会打在已 `onCleared` 的 ViewModel 上。**切换动作仍必须由 UI 侧执行**：playMode 的真相在 `PlayerViewModel._playMode`（B-13 明确规定不归 PlayerManager，`applyPlayMode` 只是应用、不持有状态），服务侧独立完成会让界面显示与实际脱节，故「无 UI 时该按钮无效」是 B-13 的设计结果而非本项引入的缺陷。新增 `app/src/test/java/com/nasmusic/tv/PlayModeToggleEventTest.kt`（Robolectric 3 用例：无订阅者时丢弃且**不滞留给迟到的订阅者** / 有订阅者时恰好收到 1 次 / 订阅作用域取消后**自动退订**）。⚠️ **单测未实际运行**（本机 worker 环境阻塞）；⚠️ 报告要求的真机验证**均未执行**（`adb shell am restart` 后触发切换确认无 NPE、`dumpsys meminfo` 跑 30 分钟看 Activity 实例数、LeakCanary 检测）。详见 §10.151
-- **T5 死代码清理（player）**: 删除 `player/VocalRemovalProcessor.kt`（348 行，全项目零调用方——`PlaybackService` 实际注入的是 `SpectralMaskProcessor`）。该类是 Mid/Side + 四阶 Linkwitz-Riley 的「精细/温和」版人声消除实现，早已被「激进」取向的 `SpectralMaskProcessor`（一阶低通 250Hz + Side 1.2×）取代。**按「先归档再删」执行**——该类 KDoc 里有、而 `docs/vocal-removal-approach-b-dsp.md` 里没有的内容已写入 §10.152：① **滤波器实为四阶**（`BiquadCascade`：两个同参数 `Q=0.707` 的 biquad 串联，−24 dB/oct），而那份方案文档写的是「二阶」，属**文档与实现不符**；附完整 RBJ 系数公式与差分式；② `midVocal = midF − midLow − midHigh` 这个带提取之所以成立，依赖 LR（偶数阶）分频 LP+HP **幅度互补相加平坦**，换成 Butterworth 单级会在分频点产生约 3dB 鼓包；③ 与 `SpectralMaskProcessor` 的取向对比（Mid 120Hz/8kHz 保留 15% vs 250Hz 一阶全滤；Side 保留 50% vs 1.2× 增益；CPU 约 8×）与选「激进」的产品理由（K 歌用户对残人声零容忍、对低频损失无感）；④ ⚠️ `reset()` 会把 `enabled` 置回 `false` 的历史坑——Media3 切歌/重建 AudioSink 时会调用，曾导致伴唱静默失效但 UI 仍显示开启（见 `docs/code-review-2026-09-03.md` §P7），复原时必须让外部状态成为唯一真相。另同步 4 处 stale 注释（`HqSeparationOrchestrator` / `PcmTapProcessor` / `SpectralMaskProcessor` / `PlaybackService`）指向归档位置，并把 `PlaybackService` 里 `val vocalRemovalProcessor = SpectralMaskProcessor()` **正名为 `spectralMaskProcessor`**（原类名已不存在，留着会误导 grep）。详见 §10.152
+- **T5 死代码清理（player）**: 删除 `player/VocalRemovalProcessor.kt`（348 行，全项目零调用方——`PlaybackService` 实际注入的是 `SpectralMaskProcessor`）。该类是 Mid/Side + 四阶 Linkwitz-Riley 的「精细/温和」版人声消除实现，早已被「激进」取向的 `SpectralMaskProcessor`（一阶低通 250Hz + Side 1.2×）取代。**按「先归档再删」执行**——该类 KDoc 里有、而 `docs/vocal-removal-approach-b-dsp.md` 里没有的内容已写入 §10.152：① **滤波器实为四阶**（`BiquadCascade`：两个同参数 `Q=0.707` 的 biquad 串联，−24 dB/oct），而那份方案文档写的是「二阶」，属**文档与实现不符**；附完整 RBJ 系数公式与差分式；② `midVocal = midF − midLow − midHigh` 这个带提取之所以成立，依赖 LR（偶数阶）分频 LP+HP **幅度互补相加平坦**，换成 Butterworth 单级会在分频点产生约 3dB 鼓包；③ 与 `SpectralMaskProcessor` 的取向对比（Mid 120Hz/8kHz 保留 15% vs 250Hz 一阶全滤；Side 保留 50% vs 1.2× 增益；CPU 约 8×）与选「激进」的产品理由（K 歌用户对残人声零容忍、对低频损失无感）；④ ⚠️ `reset()` 会把 `enabled` 置回 `false` 的历史坑——Media3 切歌/重建 AudioSink 时会调用，曾导致伴唱静默失效但 UI 仍显示开启（见 `docs/archive/code-review-2026-09-03.md` §P7），复原时必须让外部状态成为唯一真相。另同步 4 处 stale 注释（`HqSeparationOrchestrator` / `PcmTapProcessor` / `SpectralMaskProcessor` / `PlaybackService`）指向归档位置，并把 `PlaybackService` 里 `val vocalRemovalProcessor = SpectralMaskProcessor()` **正名为 `spectralMaskProcessor`**（原类名已不存在，留着会误导 grep）。详见 §10.152
 - **P1 性能清单落地 4 项（player/visualizer）**: 全量报告第四章 P1 清单共 8 项（P1#1 已决定不做），本轮取其中**判定为「低风险且收益明确」的 4 项**落地；另 4 项经复核判定不宜按报告原建议直接实施。详见 §10.148
   - **P1#3 等功率 crossfade（`player/CrossfadeController.kt`）**: 50ms 步进的音量斜坡原为**线性** `(1-frac, frac)`，A/B 等增益下中间点实际响度比端点低约 **3dB**（人耳感知功率而非振幅，线性交叉在 50% 处两路各 −6dB 叠加、总功率反而更小），听感上是「中间塌一下」。改为**等功率曲线** `out=cos(frac·π/2)`、`in=sin(frac·π/2)`，满足 `sin²+cos²=1`；端点仍精确为 (1,0)→(0,1)（`frac=0/1` 时与旧实现逐位相同，不影响起止边界）。新增 `HALF_PI` 常量供两路复用
   - **P1#4 SleepTimer 协程化（`player/SleepTimerController.kt`）**: 原用 `Handler(Looper.getMainLooper())` + `AtomicLong` 令牌守卫防「cancel 后旧 postDelayed 仍触发」。改为构造注入 `CoroutineScope`（默认 `Dispatchers.Main.immediate + SupervisorJob()`），`start` 内 `scope.launch { delay(...); tickExpired() }` 并持有 `expiryJob`，`cancel()` 直接 `expiryJob?.cancel()`——协程取消天然取代令牌比对，**删除 `AtomicLong` 守卫与 `Handler`/`Looper` 依赖**。新增可选 `nowMsProvider` 注入点，便于测试固定「现在」
@@ -941,7 +758,7 @@
   - **机制（反汇编 AGP 8.2.1 的 `lint-checks-32.2.1.jar`）**: `PageAlignmentDetector.getIncidentsFromAndroidLibrary` 遍历 `File(library.folder, "jni")` 下**全部 4 个 ABI × 全部 native 库**（**不受 `abiFilters` 影响**），命中第一个 `LoadSectionNotAligned` 即 `return` → **每个依赖只报 1 条**（报告里显示的 3 条是聚合重复，XML 中唯一 message 为 `arm64-v8a/libonnxruntime.so`）。因此「消除警告」的门槛是 AAR 内 **8 个库全部 `p_align ≥ 16384`**，缺一不可
   - **实测矩阵**（`p_align`，从 Maven Central 的 AAR 直接解析 ELF PT_LOAD 段）: **1.17.1** 8 个库全 4096 / `minSdk 21`；**1.20.0** 主库 16384 ✅ 但 `libonnxruntime4j_jni.so` 仍 4096 / `minSdk 21`（**陷阱**：看起来是「既兼容 minSdk 22 又消除警告」的答案，实际 lint 只会改报那个文件，警告不消失，且 16KB 真机上该库 `dlopen` 仍失败）；**1.21.1** 仅 arm64 全对齐 / `minSdk 24`；**只有 1.29.0 全对齐（16384）/ `minSdk 24`**
   - **无绕过路径**: lint 内硬编码的「已知安全依赖」白名单 `isDependencyKnownSafe`（mlkit / mediapipe / litert / firebase / gms 等 15 个 group）**不含 `com.microsoft.onnxruntime`**；`onnxruntime-mobile` 最新只到 1.18.0（更旧，无益）
-  - **升 `minSdk 24` 的代价（判定不划算）**: ① 安装层面砍掉 Android 5.0/5.1/6.0（Play 不展示、侧载报 `INSTALL_FAILED_OLDER_SDK`），含开发用的创维 Android 5.1.1 电视即真机回归基准设备；② `BatteryOptimizationHelper.kt:27/39`、`NasMusicApp.kt:66`、`StorageMonitor.kt:94/120` 的版本守卫变成恒不成立分支，lint 反而**新增** `ObsoleteSdkInt`；③ `AGENTS.md` 的 TinyPinyin 选型理由、`docs/regression-test.md` 的「测试环境 API 22+」等论证需同步修订。**收益仅为消除 1 条 Warning**（非 Error），且该检查只影响 16KB 页设备，Play 的 16KB 强制要求针对 `targetSdk 35+`。已核查 API 24 的 `FileUriExposedException` 风险——项目全部 `Intent.ACTION_*` 用法（SAF / 进程内 `ACTION_MEDIA_BUTTON` / https `ACTION_VIEW`）**无跨进程传 `file://`**，实测零影响
+  - **升 `minSdk 24` 的代价（判定不划算）**: ① 安装层面砍掉 Android 5.0/5.1/6.0（Play 不展示、侧载报 `INSTALL_FAILED_OLDER_SDK`），含开发用的创维 Android 5.1.1 电视即真机回归基准设备；② `BatteryOptimizationHelper.kt:27/39`、`NasMusicApp.kt:66`、`StorageMonitor.kt:94/120` 的版本守卫变成恒不成立分支，lint 反而**新增** `ObsoleteSdkInt`；③ `AGENTS.md` 的 TinyPinyin 选型理由、`docs/archive/regression-test.md` 的「测试环境 API 22+」等论证需同步修订。**收益仅为消除 1 条 Warning**（非 Error），且该检查只影响 16KB 页设备，Play 的 16KB 强制要求针对 `targetSdk 35+`。已核查 API 24 的 `FileUriExposedException` 风险——项目全部 `Intent.ACTION_*` 用法（SAF / 进程内 `ACTION_MEDIA_BUTTON` / https `ACTION_VIEW`）**无跨进程传 `file://`**，实测零影响
   - **结论落点**: 已写入 `docs/technical-overview.md` §10.146 新增的「§七-4 专项调研」小节（含完整矩阵与决策记录）、`app/build.gradle.kts` 依赖声明处的警告注释、`AGENTS.md` 的 Non-obvious constraints 条目，以免后人误以为「改个版本号就能解决」。另在 §10.147 新增「其他报告的未完成项（跨报告汇总）」小节——该节原先只覆盖全量报告的 36 项，现把本报告未完成的 4 条（§七-4 / §七-5 / §七-3 / §四-3）一并纳入，便于「一处看全」全部遗留项，并明确标注 **§七-4 是其中唯一有硬期限的项**
 
 ### CI
@@ -3274,7 +3091,7 @@
 - 日志统一管理（AppLog）：Debug 构建输出 d/i/w 级别，Release 构建空操作，e 级别始终输出
 - 编码修复工具抽取（EncodingUtils）：从 Adapter 中抽取公共 `fixEncoding()` 逻辑
 - 公共可聚焦 Surface 组件（FocusableSurface）：统一封装焦点动画 + 边框 + FocusRequester，消除 30+ 处样板代码
-- 回归测试文档：`docs/regression-test.md`，19 章节 248 个测试项，覆盖单元/集成/UI/专项验证
+- 回归测试文档：`docs/archive/regression-test.md`，19 章节 248 个测试项，覆盖单元/集成/UI/专项验证
 - `PlayerManager.release()`：释放 Handler、listener、Equalizer 资源
 - `PlayerManager.setEqualizerBands(gains)`：批量设置所有频段增益
 - `PlayerManager.moveItem(from, to)`：队列重排，同步 ExoPlayer 队列与 currentIndex
