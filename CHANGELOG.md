@@ -7,57 +7,6 @@
 >
 > 类型：`Added`（新增） | `Changed`（变更） | `Fixed`（修复） | `Removed`（移除）
 
-## [v2.36.1] - 2026-09-20
-
-> **车机蓝牙媒体按键修复 · 手机横竖屏布局修复**
->
-> ① 修复 release 包下车机蓝牙（AVRCP）暂停 / 上一曲 / 下一曲全部失效的问题：
-> `PlaybackService.onConnect` 不再拒绝系统控制器，安全边界改到可用会话命令。
-> ② 修复手机横屏仍渲染竖屏界面（底部残留 mini 播放条与底部导航栏）的问题。
-> ③ 手机横屏补上方向切换按钮，使横屏可以切回竖屏。
-> ④ 手机竖屏排版调整：底部导航按钮居中；播放页封面 / 歌词两个模式的 Chip 归位。
-> ⑤ 手机竖屏设置入口从底部导航移到顶栏齿轮按钮（底部导航 6 → 5 项）。
-> ⑥ 手机端曲库页面支持在内容区左右滑切换子 TAB（竖屏 + 横屏）。
->
-> 实现细节见 `docs/technical-overview.md` §10.165、§10.168、§10.169、§10.170、§10.171。
->
-> **未实施部分**：① 车机「未播放时按播放键拉起续播」（需播放队列持久化 +
-> `onPlaybackResumption`，故未注册 manifest `MediaButtonReceiver`）；
-> ② 修复后的车机实机复验（需 release 包 + 车机）；
-> ③ 手机横屏的视觉规格是否完全对齐 TV（密度缩放 / 字号档 / 网格列数三处仍按手机规格）。
-
-### Fixed
-
-- **车机蓝牙媒体按键全部失效（release 包）**：`PlaybackService.onConnect` 不再拒绝系统控制器，
-  新增 `player/MediaSessionAccessPolicy.kt` 承载准入策略
-- 可用会话命令改以 `DEFAULT_SESSION_AND_LIBRARY_COMMANDS` 为基线「只增不减」
-- 小尺寸触摸目标护栏的同行写法盲区（`SmallTouchTargetScanTest` + `audit_small_touch_target.py`）
-- **手机横屏仍渲染竖屏界面**：`MainActivity.attachBaseContext()` 不再下发整份 `Configuration`
-- **手机横屏缺方向切换按钮**：新增 `OrientationToggleButton`，`TvTopNavBar` 仅在手机横屏时渲染
-- `SmallTouchTargetScanTest` 的未闭合块注释语法错误
-- **手机竖屏底部导航按钮左对齐**：`PhoneNavBar` 内容容器补 `fillMaxSize()`
-  （`FocusableSurface` 内部 `Box` 未指定 `contentAlignment`，默认 `TopStart`）
-- **手机竖屏播放页 Chip 归位**：封面页「逐行 / 逐字」高亮 Chip 移入歌词页工具条；
-  封面页移除「收藏」「播放队列」Chip（分别与心形图标、底部导航重复）；
-  封面页「封面」文案改为「频谱」（原文案与其 `onEnterVisualizer` 行为不符）；
-  歌词工具条由歌词框下方上移至右上方并右对齐，与横屏 TV 一致
-- 删除因上述改动失去引用的字符串资源 `np_mode_cover`、`action_unfavorite`（中英双语）
-
-### Changed
-
-- **手机竖屏设置入口迁移**：`PhoneNavBar` 移除「设置」项（6 → 5 项，各项 `weight(1f)`
-  自动等分占满整宽）；`PhoneTopBar` 右上角新增齿轮按钮，位于横竖屏切换按钮**左侧**，进入设置页
-- 齿轮按钮进入设置前先 `closeSettingsSection()`：`navigateTo` 不清二级页状态，
-  否则从某个设置子页点齿轮会「看起来没反应」
-- 新增无障碍文案 `nav_settings_cd`（中英双语）
-- `PhoneNavBar` 的类级 KDoc 由 `PhoneNavItem` 上移到 `PhoneNavBar`（原先错挂在 data class 上）
-- **手机端曲库子 TAB 左右滑切换**：内容区新增水平拖拽手势（阈值 48dp），
-  左滑 → 下一 TAB、右滑 → 上一 TAB，到两端不循环；竖屏与横屏均生效，TV 端不加手势
-
-### Test
-
-- 新增门禁 `MediaSessionAccessPolicyTest`（8 例，含源码扫描「不得出现 reject」+ 三层自证）
-
 ## [v2.36.2] - 2026-09-20
 
 > **手机端 4 个真机问题修复 · 老备份导入容错**
@@ -120,6 +69,57 @@
   导出仍写 `enum.name`、整份 `BackupData` 反序列化
 - 门禁结果：`testDebugUnitTest` **874 例 / 0 失败**、`lintDebug` **0 Error / 272 Warning**、
   `assembleRelease` BUILD SUCCESSFUL → `NASMusicTV-release-v2-36-2.apk`
+
+## [v2.36.1] - 2026-09-20
+
+> **车机蓝牙媒体按键修复 · 手机横竖屏布局修复**
+>
+> ① 修复 release 包下车机蓝牙（AVRCP）暂停 / 上一曲 / 下一曲全部失效的问题：
+> `PlaybackService.onConnect` 不再拒绝系统控制器，安全边界改到可用会话命令。
+> ② 修复手机横屏仍渲染竖屏界面（底部残留 mini 播放条与底部导航栏）的问题。
+> ③ 手机横屏补上方向切换按钮，使横屏可以切回竖屏。
+> ④ 手机竖屏排版调整：底部导航按钮居中；播放页封面 / 歌词两个模式的 Chip 归位。
+> ⑤ 手机竖屏设置入口从底部导航移到顶栏齿轮按钮（底部导航 6 → 5 项）。
+> ⑥ 手机端曲库页面支持在内容区左右滑切换子 TAB（竖屏 + 横屏）。
+>
+> 实现细节见 `docs/technical-overview.md` §10.165、§10.168、§10.169、§10.170、§10.171。
+>
+> **未实施部分**：① 车机「未播放时按播放键拉起续播」（需播放队列持久化 +
+> `onPlaybackResumption`，故未注册 manifest `MediaButtonReceiver`）；
+> ② 修复后的车机实机复验（需 release 包 + 车机）；
+> ③ 手机横屏的视觉规格是否完全对齐 TV（密度缩放 / 字号档 / 网格列数三处仍按手机规格）。
+
+### Fixed
+
+- **车机蓝牙媒体按键全部失效（release 包）**：`PlaybackService.onConnect` 不再拒绝系统控制器，
+  新增 `player/MediaSessionAccessPolicy.kt` 承载准入策略
+- 可用会话命令改以 `DEFAULT_SESSION_AND_LIBRARY_COMMANDS` 为基线「只增不减」
+- 小尺寸触摸目标护栏的同行写法盲区（`SmallTouchTargetScanTest` + `audit_small_touch_target.py`）
+- **手机横屏仍渲染竖屏界面**：`MainActivity.attachBaseContext()` 不再下发整份 `Configuration`
+- **手机横屏缺方向切换按钮**：新增 `OrientationToggleButton`，`TvTopNavBar` 仅在手机横屏时渲染
+- `SmallTouchTargetScanTest` 的未闭合块注释语法错误
+- **手机竖屏底部导航按钮左对齐**：`PhoneNavBar` 内容容器补 `fillMaxSize()`
+  （`FocusableSurface` 内部 `Box` 未指定 `contentAlignment`，默认 `TopStart`）
+- **手机竖屏播放页 Chip 归位**：封面页「逐行 / 逐字」高亮 Chip 移入歌词页工具条；
+  封面页移除「收藏」「播放队列」Chip（分别与心形图标、底部导航重复）；
+  封面页「封面」文案改为「频谱」（原文案与其 `onEnterVisualizer` 行为不符）；
+  歌词工具条由歌词框下方上移至右上方并右对齐，与横屏 TV 一致
+- 删除因上述改动失去引用的字符串资源 `np_mode_cover`、`action_unfavorite`（中英双语）
+
+### Changed
+
+- **手机竖屏设置入口迁移**：`PhoneNavBar` 移除「设置」项（6 → 5 项，各项 `weight(1f)`
+  自动等分占满整宽）；`PhoneTopBar` 右上角新增齿轮按钮，位于横竖屏切换按钮**左侧**，进入设置页
+- 齿轮按钮进入设置前先 `closeSettingsSection()`：`navigateTo` 不清二级页状态，
+  否则从某个设置子页点齿轮会「看起来没反应」
+- 新增无障碍文案 `nav_settings_cd`（中英双语）
+- `PhoneNavBar` 的类级 KDoc 由 `PhoneNavItem` 上移到 `PhoneNavBar`（原先错挂在 data class 上）
+- **手机端曲库子 TAB 左右滑切换**：内容区新增水平拖拽手势（阈值 48dp），
+  左滑 → 下一 TAB、右滑 → 上一 TAB，到两端不循环；竖屏与横屏均生效，TV 端不加手势
+
+### Test
+
+- 新增门禁 `MediaSessionAccessPolicyTest`（8 例，含源码扫描「不得出现 reject」+ 三层自证）
 
 ## [v2.36.0] - 2026-09-19
 
