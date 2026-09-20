@@ -86,3 +86,5 @@ docs/*_assets/
 # Local build/dev output dirs
 logs_temp/
 output/
+# 依赖 classpath 转储等临时产物（工具生成，不入仓）
+.cowork-temp/
