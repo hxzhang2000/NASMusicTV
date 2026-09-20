@@ -86,5 +86,8 @@ docs/*_assets/
 # Local build/dev output dirs
 logs_temp/
 output/
+# box-agent 会话产物目录（`<日期>-<会话ID前8位>`，自动生成在项目根，不入仓）
+# 例：2026-09-13-384e30ce/ —— 由 agent 运行时创建，内含 output/tasks/… 截图等
+20??-??-??-????????/
 # 依赖 classpath 转储等临时产物（工具生成，不入仓）
 .cowork-temp/
