@@ -3,7 +3,7 @@ package com.nasmusic.tv.backend.playlist
 /**
  * 文本歌单解析器（用户自编辑文档）。
  *
- * 设计：docs/playlist-import-feature-plan.md §4.1.7
+ * 设计：docs/archive/playlist-import-feature-plan.md §4.1.7
  * 行级格式：`[序号] [title] [分隔符 artist]`
  * - 分隔符按优先级取第一个匹配：Tab > " - " > " — " > " – " > " -- " > " :: " > 冒号(带前后空格) > 逗号(带前后空格, title>8字符)
  * - 单短横 `-`（无空格环绕）不作为分隔符，避免误识别 `U2-1`

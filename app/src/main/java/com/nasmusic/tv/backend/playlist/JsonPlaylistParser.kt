@@ -8,7 +8,7 @@ import com.google.gson.JsonParser
 /**
  * 本应用自导 JSON v2 解析器（`formatVersion` = "nasmusic-playlist-v2"）。
  *
- * 设计：docs/playlist-import-feature-plan.md §4.1.1 / §4.6
+ * 设计：docs/archive/playlist-import-feature-plan.md §4.1.1 / §4.6
  * 写回时按 formatVersion 路由到本解析器，与网易云歌单解析路径隔离，避免误识别。
  */
 class JsonPlaylistParser : PlaylistParser, PlaylistNameProvider {

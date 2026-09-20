@@ -7,7 +7,7 @@ import java.nio.charset.CodingErrorAction
 /**
  * 歌单导入解析层：模型 + 解析器接口 + 通用工具。
  *
- * 设计索引：docs/playlist-import-feature-plan.md §4.1
+ * 设计索引：docs/archive/playlist-import-feature-plan.md §4.1
  * 原则：解析阶段不查网络、不读文件路径、不连 NAS，只把文本抽出来；
  * 后续补全 / 可达性阶段才决定条目归属。
  */

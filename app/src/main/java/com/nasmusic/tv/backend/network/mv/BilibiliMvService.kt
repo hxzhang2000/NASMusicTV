@@ -30,7 +30,7 @@ import java.util.concurrent.TimeUnit
  * 端点可配置：设置页「网络 > 视频端点」选取，baseUrlProvider 每次请求时读取
  * （支持官方端点或自建代理/镜像，路径结构保持一致）。
  *
- * 对应 docs/mv-karaoke-feature-proposal.md §2.2 / Step 1
+ * 对应 docs/archive/mv-karaoke-feature-proposal.md §2.2 / Step 1
  */
 class BilibiliMvService(
     /**

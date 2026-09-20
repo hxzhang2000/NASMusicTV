@@ -8,7 +8,7 @@ import com.google.gson.JsonParser
 /**
  * 网易云公开歌单分享 JSON 解析器。
  *
- * 设计：docs/playlist-import-feature-plan.md §4.1.5 / §4.1.1
+ * 设计：docs/archive/playlist-import-feature-plan.md §4.1.5 / §4.1.1
  * - 接受公开歌单页导出的「完整 JSON」（带 `tracks[]`，每项 `name/artists[]/album/duration`）
  * - `artists[].name` 用 `、` 拼成 artist 字段
  * - 过滤空 title / artist

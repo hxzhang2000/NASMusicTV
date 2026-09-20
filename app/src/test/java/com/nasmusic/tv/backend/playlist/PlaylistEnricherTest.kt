@@ -23,7 +23,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
 /**
- * 播放触发补全链测试（docs/playlist-import-feature-plan.md §6 Enricher 行 / §4.3）。
+ * 播放触发补全链测试（docs/archive/playlist-import-feature-plan.md §6 Enricher 行 / §4.3）。
  * 走真实 AppPreferences（datastore），BackendRegistry / NetworkMusicManager /
  * UrlReachabilityChecker 用 mockito-inline mock（final 类）。
  *

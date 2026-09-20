@@ -106,7 +106,7 @@ class PlayerManager(private val applicationContext: Context) {
     var onNeedResolveStreamUrl: ((index: Int) -> Unit)? = null
 
     /**
-     * 播放失败回调（歌单导入 URL 失效回退链，docs/playlist-import-feature-plan.md §4.1.8 (5)）。
+     * 播放失败回调（歌单导入 URL 失效回退链，docs/archive/playlist-import-feature-plan.md §4.1.8 (5)）。
      * 由 MainViewModel 注册：对 id 以 "imported_" 开头且 streamUrl 为 http 的 stub 歌曲，
      * ExoPlayer 报错时调用（复测可达性 → 不可达走补全链）。
      * 非导入歌曲此回调不被触发，行为与改动前完全一致。

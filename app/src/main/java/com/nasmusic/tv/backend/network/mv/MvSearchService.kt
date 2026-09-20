@@ -20,7 +20,7 @@ import com.nasmusic.tv.data.model.Song
  * v2.18（百度网盘 MV 接入）：[searchMv] 新增带默认值的 `song` 参数，供 [BaiduMvFileService]
  * 判断歌曲来源（仅百度歌曲生效）与反查同目录 path。[BilibiliMvService] 零改动（默认值）。
  *
- * 对应 docs/mv-karaoke-feature-proposal.md Step 1
+ * 对应 docs/archive/mv-karaoke-feature-proposal.md Step 1
  */
 interface MvSearchService {
 

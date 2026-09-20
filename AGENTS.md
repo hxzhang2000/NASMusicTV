@@ -60,7 +60,7 @@ JAVA_HOME="C:/Program Files/Android/Android Studio/jbr" \
 - **GBK encoding gotcha** (`util/EncodingUtils.kt`): Jellyfin may store GBK ID3 bytes as if UTF-8. `utf8Body()`/`fixEncoding()` attempt GBK fallback when U+FFFD / Greek / Cyrillic chars appear. Some cases are unrecoverable client-side (already-encoded Unicode codepoints) — don't assume you can fully fix artist-name mojibake.
 - **Pinyin search** uses TinyPinyin (`com.github.promeg:tinypinyin`), chosen specifically because the min SDK is API 22 and `android.icu.Transliterator` needs API 26+. Do not swap back to ICU-based pinyin.
 - **Cleartext traffic** is enabled (`usesCleartextTraffic=true`) for local NAS HTTP.
-- **设备支持：电视 + 手机都支持**（2026-09-16 更正，此前写作「Leanback required — 只能装电视、锁定横屏」，与 Manifest 不符）。`AndroidManifest.xml:18-27` 三个 feature 全部 `required="false"`：`android.software.leanback`、`android.hardware.touchscreen`、`android.hardware.screen.portrait`（注释即写着 "both TV and phone supported"）；`MainActivity` 是 `screenOrientation="fullSensor"`，**方向不锁定**。核对手段：`aapt2 dump badging <apk> | grep -i "sdkversion\|native-code"`（会打印 `uses-feature-not-required`）。相关设计见 `docs/phone-support-plan.md`、`docs/phone-media-display-plan.md`。
+- **设备支持：电视 + 手机都支持**（2026-09-16 更正，此前写作「Leanback required — 只能装电视、锁定横屏」，与 Manifest 不符）。`AndroidManifest.xml:18-27` 三个 feature 全部 `required="false"`：`android.software.leanback`、`android.hardware.touchscreen`、`android.hardware.screen.portrait`（注释即写着 "both TV and phone supported"）；`MainActivity` 是 `screenOrientation="fullSensor"`，**方向不锁定**。核对手段：`aapt2 dump badging <apk> | grep -i "sdkversion\|native-code"`（会打印 `uses-feature-not-required`）。相关设计见 `docs/archive/phone-support-plan.md`、`docs/phone-media-display-plan.md`。
 - **ProGuard**: release build minifies + shrinks. Rules in `proguard-rules.pro` keep `data.model`, `data.prefs`, `backend`, Gson, ExoPlayer. A prior release crash (v2.5.1) came from Gson type erasure under R8 — keep those `-keep` rules when adding serialized models. `Log.d/v` are stripped in release via `-assumenosideeffects`; **注意 `AppLog.d/i/w` 另有 `if (BuildConfig.DEBUG)` 守卫，release 下 R8 会连字符串常量一起折掉（`AppLog.e` 无守卫、必然保留）**——用 dex 字符串验 R8 存活时别拿 d/i/w 文案当证据。
 - **Multi-ABI**: `arm64-v8a`, `armeabi-v7a`, `x86_64`.
 - **Demucs 人声分离的输出契约**（`player/DemucsSeparator.kt`，2026-09-14 起）：`decodeAudioToTempFile()` 保证**输出恒为 44100Hz 立体声**——单声道源复制成 L/R，非 44100Hz 源由私有类 `LinearResampler` 线性插值归一化。因此 `writeWavHeader()` / `patchWavDataSize()` 无条件用 `SAMPLE_RATE`/`CHANNEL_COUNT` 是安全的；**若日后放开该保证，这两处必须改为接收实际参数**。`totalSamples` 取 `writeFrame()` 的调用次数，不要用「float 数 / 声道数」反推。
@@ -69,7 +69,7 @@ JAVA_HOME="C:/Program Files/Android/Android Studio/jbr" \
 - **`onnxruntime-android` 的版本被「minSdk 22」与「16KB 页对齐」双重锁定，不要随手升级**（2026-09-14 实测）：lint 的 `Aligned16KB` 会报这个依赖（1.17.1 的 native 库 `p_align = 4096`）。实测矩阵（`p_align`，AAR 内 4 个 ABI × 2 个库）：**1.17.1** 全 4096 / minSdk 21；**1.20.0** 主库 16384 但 `libonnxruntime4j_jni.so` 仍 4096 / minSdk 21；**1.21.1** 仅 arm64 全对齐 / minSdk 24；**只有 1.29.0 全对齐（16384）/ minSdk 24**。两个必须知道的机制：① lint 的 `PageAlignmentDetector.getIncidentsFromAndroidLibrary` 遍历 AAR 解包目录下**全部 ABI**（不受 `abiFilters` 影响），命中第一个未对齐的库即 `return`，所以**每个依赖只报 1 条**，报告里的「3」是聚合重复；② 1.29.0 的 AAR manifest 要求 **`minSdkVersion 24`**，而本项目是 22——直接改会让 manifest merger 失败，改 minSdk 则砍掉 Android 5.0/5.1/6.0（含创维 5.1.1 开发机，真机回归的基准设备）。**当前有意保持 1.17.1**（是 Warning 非 Error，`targetSdk 34` 下 Play 的 16KB 强制要求尚未触发）。**触发条件**：升 `targetSdk 35` 或上架前必须处理。另外 lint 里那份硬编码的「已知安全依赖」白名单（`isDependencyKnownSafe`）**不含 `com.microsoft.onnxruntime`**，没有绕过路径。完整矩阵与决策记录见 `docs/technical-overview.md` §10.146 的 §七-4 遗留项，依赖声明处的注释在 `app/build.gradle.kts`。
 - **lint 输出里的内部异常栈是既有的**：构建输出中会出现 `LintCliClient.analyzeOnly` → UAST visitor 的异常栈（`logs_temp/verify*.log` 中同样存在）。它不影响报告生成与构建结果，不要当成新引入的问题去排查。
 - **构建前若报 `fileHashes.lock (拒绝访问)`**：`--no-daemon` 并不保证不起守护进程 —— `gradle.properties` 里的 `org.gradle.jvmargs=-Xmx2048m` 会强制 fork 一个**单次守护进程**。该守护进程若卡在退出序列（`PersistentDaemonRegistry.remove` 的锁竞争），会一直持有 `.gradle/<版本>/fileHashes/fileHashes.lock`，后续所有构建都在 `Could not create service of type FileHasher` 处秒失败（约 26s）。**解法：`./gradlew.bat --stop`**（会打印 `1 Daemon stopped`），再重跑。**不要 `rm` 锁文件** —— 在带 safe-delete 包装的环境里 `rm` 失败会把文件留在 Windows「删除挂起」状态，之后任何 open 都返回 `Permission denied`（权限位显示 666 可写也没用），**反而让后续构建全部失败**；`rm` 报 `Device or resource busy` 就已说明有进程持有，去 `--stop` 而不是硬删。
-- **飞牛音乐（fnOS）后端协议**（`backend/impl/FeiniuAdapter.kt` + `FeiniuUrl.kt`，2026-09-14 重写）：唯一权威依据是参考项目 `fn-music-tv`（本地副本 `D:\hxzhang\MyGithubSoftware\NasAudio\fn-music-tv-v1-1-2`），完整提取结果与缺陷对照表见 `docs/feiniu-backend-improvement-plan.md`。**不要再回到第三方逆向文章的猜测端点**。易错点：① 认证头是 **`Authorization: <userToken>`（原始值，无 Bearer）**，不是 `Cookie: music-token=`（后者只在 relay 模式用）；② 登录响应字段是 **`data.userToken`**；③ 分页是 **`page` + `size`**，不是 `limit`；④ ID 全是 **GUID**，参数名是 `albumGUID`/`artistGUID`/`trackGUID`/`playlistGUID`；⑤ 流地址 `track/stream?guid=`（查询参数）、封面 `static/cover?coverId=`（按 **coverId** 而非曲目 ID）；⑥ `duration` **已是毫秒**；⑦ 信封 `{code,msg,data}`，`data` 可为 null；⑧ 默认端口 **5666**（HTTPS 5667），不是 80；⑨ **服务端没有搜索端点**，`searchSongs` 是客户端本地过滤；⑩ 适配器必须在**解析期填充 `Song.streamUrl`**（`FeiniuUrl.streamUrl`）—— 全 app 的 NAS 播放解析只认 `getSongsByIds()` 返回的 streamUrl，置空会让点播「解析失败」（2026-09-15 修复）。
+- **飞牛音乐（fnOS）后端协议**（`backend/impl/FeiniuAdapter.kt` + `FeiniuUrl.kt`，2026-09-14 重写）：唯一权威依据是参考项目 `fn-music-tv`（本地副本 `D:\hxzhang\MyGithubSoftware\NasAudio\fn-music-tv-v1-1-2`），完整提取结果与缺陷对照表见 `docs/archive/feiniu-backend-improvement-plan.md`。**不要再回到第三方逆向文章的猜测端点**。易错点：① 认证头是 **`Authorization: <userToken>`（原始值，无 Bearer）**，不是 `Cookie: music-token=`（后者只在 relay 模式用）；② 登录响应字段是 **`data.userToken`**；③ 分页是 **`page` + `size`**，不是 `limit`；④ ID 全是 **GUID**，参数名是 `albumGUID`/`artistGUID`/`trackGUID`/`playlistGUID`；⑤ 流地址 `track/stream?guid=`（查询参数）、封面 `static/cover?coverId=`（按 **coverId** 而非曲目 ID）；⑥ `duration` **已是毫秒**；⑦ 信封 `{code,msg,data}`，`data` 可为 null；⑧ 默认端口 **5666**（HTTPS 5667），不是 80；⑨ **服务端没有搜索端点**，`searchSongs` 是客户端本地过滤；⑩ 适配器必须在**解析期填充 `Song.streamUrl`**（`FeiniuUrl.streamUrl`）—— 全 app 的 NAS 播放解析只认 `getSongsByIds()` 返回的 streamUrl，置空会让点播「解析失败」（2026-09-15 修复）。
 - **`BackendAdapter.streamHeaders` 的注入链路**（2026-09-14 补齐）：此前该属性**定义了但全仓库无消费方**——Jellyfin/Navidrome 把凭据拼在 URL query 上，所以历史上没暴露；飞牛是第一个必须走请求头的后端。现在由 `BackendRegistry` 在连接成功时向 `BackendAuthHeaders` 绑定 **provider**（每次请求实时读取 `adapter.streamHeaders`；快照形态会漏掉静默重登换新令牌 —— 2026-09-15 改为 provider），再由 `BaiduHttpDataSourceFactory` 的拦截器按 **host 精确匹配**注入（同一客户端同时服务 ExoPlayer 播放与 Coil 封面）。**新增后端若要走请求头，只需覆写 `streamHeaders`，不要另起炉灶**；也不要放宽 host 匹配，否则令牌会随 302 泄漏到 CDN。
 - **构建环境**：本机 Gradle fork 出的子进程普遍起不来（AAPT2 守护进程、Kotlin 编译守护进程），因此构建必须加 `--no-daemon -Pkotlin.compiler.execution.strategy=in-process`；**但测试 worker 例外——它已可用**（见上文「单测在本机可以跑」）。遇到 worker 秒死时先 `./gradlew.bat --stop` 释放卡死的守护进程再重试，而不是直接绕道。`kotlin-standalone-verify` 技能仍适用于「只想验证一个纯逻辑类、不想付整轮 Gradle 代价」的场景，但不再是**必需**的绕行手段。
 
@@ -86,10 +86,12 @@ JAVA_HOME="C:/Program Files/Android/Android Studio/jbr" \
 `docs/` root holds **only active docs**. Completed ones move to `docs/archive/`;
 external-facing articles (zhihu etc.) live in `docs/articles/`.
 
-A doc is **archivable** when **all** of these hold:
+A doc is **archivable** when **both** hold:
 
-1. **Not referenced** by source (`app/src/**`), `AGENTS.md`, `README.md`, or CI —
-   moving a doc that code cites in KDoc breaks the design reference.
+1. **It is not a living doc.** Only the continuously-maintained index/convention docs stay
+   forever: `technical-overview.md` (§10.N keeps growing), `conventions-adaptive-ui.md`,
+   and any doc that is itself the designated long-term reference for an algorithm or
+   contract (e.g. the vocal-removal DSP doc — §10.152 names it as the recovery source).
 2. **Its feature actually shipped**, judged by **`CHANGELOG.md` / `docs/technical-overview.md`** —
    ⚠️ **never** trust the doc's own status header. Headers go stale: several archived docs
    said "待评审 / 尚未开发 / 待开发" while the feature had already shipped and the doc was
@@ -99,7 +101,15 @@ A doc is **archivable** when **all** of these hold:
    Conversely, a doc whose feature is **absent** from CHANGELOG stays put
    (e.g. the aliyundrive support plan — 阿里云盘 is still a greyed-out "敬请期待" placeholder).
    ⚠️ Write such examples **without** the `docs/…md` path form, otherwise this very section
-   becomes a reference that makes the doc look "cited by AGENTS.md" and blocks its archiving.
+   becomes a reference and pollutes the reference graph.
+
+> ⛔ **Being referenced is NOT a blocker.** Source KDoc and `AGENTS.md` cite plan docs heavily,
+> but archiving does **not** break those citations — the move rewrites every inbound reference
+> in the same pass (`docs/<name>` → `docs/archive/<name>`), including `app/src/**` KDoc,
+> `AGENTS.md`, `CHANGELOG.md` and cross-doc links. Treating "referenced" as a veto is
+> **over-conservative** and leaves finished docs cluttering `docs/` root. The 2026-09-20
+> second pass archived 6 such docs and synced 57 references across 41 files with zero
+> dead links.
 
 When archiving:
 
@@ -110,7 +120,7 @@ When archiving:
 - Add a row to `docs/archive/README.md` (doc / reason / superseding record).
 - Rollback is a single `git checkout -- docs`.
 
-See `docs/archive/README.md` for the 2026-09-20 pass (41 files moved, 52 references synced).
+See `docs/archive/README.md` for both 2026-09-20 passes (47 files moved, 109 references synced).
 
 ## Key directories
 

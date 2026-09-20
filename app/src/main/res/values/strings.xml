@@ -478,7 +478,7 @@
 <string name="mine_added_to_playlist">已添加到歌单</string>
     <string name="mine_not_added_to_playlist">添加失败</string>
 
-    <!-- 歌单导入（阶段5，2026-09-18：docs/playlist-import-feature-plan.md） -->
+    <!-- 歌单导入（阶段5，2026-09-18：docs/archive/playlist-import-feature-plan.md） -->
     <string name="settings_import_playlist">导入歌单</string>
     <string name="settings_import_playlist_desc">从 m3u / txt / json / 网易云歌单文件导入（含 URL 直链）</string>
     <string name="settings_playlist_import_history">最近导入</string>
@@ -1064,7 +1064,7 @@
     <string name="quality_tier_hint_lossless">无损仅限支持 FLAC 的曲库；不可用时自动降级并提示</string>
     <string name="quality_tier_hint_scope">本档位仅影响网络音乐；NAS / 本地 / 网盘歌曲按其原始码率播放</string>
 
-    <!-- ================= v2.36.0 手机竖屏 UI（docs/phone-portrait-ui-plan.md）================= -->
+    <!-- ================= v2.36.0 手机竖屏 UI（docs/archive/phone-portrait-ui-plan.md）================= -->
     <!-- 设置 → 通用：屏幕方向（L1 全局策略，唯一真相之源） -->
     <string name="settings_display">显示</string>
     <string name="settings_display_orientation">屏幕方向</string>

@@ -10,7 +10,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * 竖屏 UI 方案（docs/phone-portrait-ui-plan.md）§8.1 / §10.1 的纯函数单测。
+ * 竖屏 UI 方案（docs/archive/phone-portrait-ui-plan.md）§8.1 / §10.1 的纯函数单测。
  *
  * 覆盖：
  * - [deriveUiMode] 形态判定（TV 优先，B1 硬规则回归）
@@ -246,7 +246,7 @@ class UiModeTest {
         assertTrue(
             "PHONE_UI_SCALE 变了 —— 请同步复核 docs/conventions-adaptive-ui.md §6：" +
                 "PHONE_TOUCH_TARGET 取值依据、LYRICS_RECOVER_SCALE、各竖屏固定尺寸的物理 dp，" +
-                "以及 docs/phone-portrait-ui-plan.md §2.7 / §2.5 的结论。" +
+                "以及 docs/archive/phone-portrait-ui-plan.md §2.7 / §2.5 的结论。" +
                 "当前实测值 = ${CompactSizes.PHONE_UI_SCALE}",
             kotlin.math.abs(CompactSizes.PHONE_UI_SCALE - 0.82f) < 0.0001f,
         )

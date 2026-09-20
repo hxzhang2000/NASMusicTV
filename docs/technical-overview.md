@@ -8200,7 +8200,7 @@ onSearchSong = { keyword -> viewModel.searchNetworkSongs(keyword) },
 
 ### 10.128 v2.31.0 — 可视化新增 E25「催眠」数学函数图像动画（2026-09-13）
 
-规格文档：`docs/催眠频谱效果开发方案.md`（v2.1）
+规格文档：`docs/archive/催眠频谱效果开发方案.md`（v2.1）
 
 #### 新增文件与改动点
 - `data/model/AppSettings.kt` — `VisualizerTheme` 枚举新增 `HYPNOTIC_FUNCTION("催眠", Tier.BASIC, "25")`
@@ -8908,7 +8908,7 @@ tv wifi 断线重连时 18084 连接窗口期会失败，重试即恢复，未�
 
 ### 10.162 v2.36.0 — 手机竖屏 UI 适配与横竖屏切换（形态因子 `UiMode`，2026-09-19）
 
-**来源**：`docs/phone-portrait-ui-plan.md`（v1.5 审阅定稿）。**维护约定见
+**来源**：`docs/archive/phone-portrait-ui-plan.md`（v1.5 审阅定稿）。**维护约定见
 `docs/conventions-adaptive-ui.md`**（新增页面必读）。
 
 **背景**：`MainActivity.kt` 写死 `SENSOR_LANDSCAPE`，手机只能横着用；Manifest 无
@@ -9531,22 +9531,28 @@ Box(Modifier.size(portraitTouchTarget(44.dp))      // 外层承担热区（竖�
 
 **版本**：v2.36.0（未变；versionCode 154）
 
-### 10.166 文档治理 — `docs/` 已完成文档归档（41 个移出根目录，2026-09-20）
+### 10.166 文档治理 — `docs/` 已完成文档归档（47 个移出根目录，2026-09-20）
 
 **来源**：用户要求「docs 下很多文档已经完成，应该自动归档」，并明确判定口径
 ——「文档状态标记可能过期（开发了但未回填），**也用 CHANGELOG 来判断**」。
+随后用户又纠正了初版规则：「被源码或 AGENTS.md 引用的文档，归档后也可以继续引用，
+**不影响归档**」。
 
 **背景**：`docs/` 根目录累积到 **62 个**文档（55 md + 3 html + 4 docx），
 无法一眼看出「哪些还在办」。且不存在 `archive/` 目录，也没有归档约定。
 
-**判定规则**（三层，全部满足才归档；已写入 `AGENTS.md` → Conventions → *Doc lifecycle*）：
+**判定规则**（已写入 `AGENTS.md` → Conventions → *Doc lifecycle*）：
 
-1. **不被**源码（`app/src/**`）、`AGENTS.md`、`README.md`、CI 引用
-   —— 大量 `*-plan.md` 被**源码 KDoc 当设计依据引用**（如 `FeiniuUrl.kt` →
-   `docs/feiniu-backend-improvement-plan.md`），移走会断掉注释里的路径。
+1. **不是活文档** —— 只有持续维护的索引/约定才永远留根：本文档（§10.N 持续追加）、
+   `conventions-adaptive-ui.md`、持续修订的重构方案，以及被指定为**长期参考**的文档
+   （`vocal-removal-approach-b-dsp.md` 是算法复原依据 —— 它是归档的**目的地**，不是对象）。
 2. **功能确已落地**，以 `CHANGELOG.md` / 本文档 §10.N 为裁判
    —— ⚠️ **不以文档头部状态标记为准**。
-3. 内容属一次性产物（审查报告 / 快照 / 测试计划 / 待办清单）或已发布功能的设计稿。
+
+> ⛔ **「被源码 / `AGENTS.md` 引用」不是归档障碍**（初版规则在此出错，经用户纠正）。
+> 归档时会在**同一次操作**里改写全部引用（`docs/<name>` → `docs/archive/<name>`，
+> 含 `app/src/**` 的 KDoc、`AGENTS.md`、`CHANGELOG.md`、跨文档链接），路径依然有效。
+> 把「被引用」当否决的代价是**一堆已完成的文档继续堆在根目录** —— 正是第二轮要纠正的问题。
 
 **关键发现：文档状态标记会过期（用户预判正确）**
 
@@ -9570,14 +9576,14 @@ Box(Modifier.size(portraitTouchTarget(44.dp))      // 外层承担热区（竖�
 > 源码扫描型/文本判定型护栏都要用**独立证据**（CHANGELOG、源码文件是否存在）交叉验证，
 > 否则会把在办工作埋掉，或把已完成工作当成待办。
 
-**执行结果**：
+**第一轮执行结果**：
 
 | 项 | 数量 |
 |---|---|
 | 移入 `docs/archive/` | **36**（10 审查/快照 + 22 已落地方案 + 4 一次性产物） |
 | 移入 `docs/articles/` | **5**（zhihu 对外文章） |
 | **同步改写的引用** | **52 处**，涉及 **20 个文件** |
-| `docs/` 根目录 | 62 → **22** |
+| `docs/` 根目录 | 62 → **21** |
 | 死链 | **0 新增**（仅剩既有旧断链：`technical-overview.md:1111` 与 `CHANGELOG.md` 引用的 `features-plan.md` 从未入库，与本次无关） |
 
 **手法**：全部用 `git mv`（历史保留、零内容删除），随后机械替换
@@ -9585,10 +9591,37 @@ Box(Modifier.size(portraitTouchTarget(44.dp))      // 外层承担热区（竖�
 仅 3 处 markdown 相对链接且均指向**未归档**文档，故替换安全。
 改写波及 `CHANGELOG.md`（5 处）、本文档（13 处）与 9 个 `.md` 方案/记忆文件。
 
+**第二轮（用户纠正规则后补做）**
+
+用户指出：**「被源码或 AGENTS.md 引用的文档，归档后也可以继续引用，不影响归档」**。
+初版把「被引用」当一票否决属**过度保守** —— 第一轮因此白留了 15 个文档在根目录，
+其中 6 个其实**功能早已落地**。
+
+改用「不是活文档 + 功能已落地」两条判据后，补归档 6 个**被引用**的文档：
+
+| 文档 | 判定依据 | 被谁引用（已同步改写） |
+|---|---|---|
+| `phone-portrait-ui-plan.md` | 竖屏适配已实施（v2.36.0） | `strings.xml`、`UiModeTest.kt` |
+| `playlist-import-feature-plan.md` | 歌单导入已落地（§10.161 二维码 + URL 远程上传） | `backend/playlist/*.kt` 等 20+ 处 |
+| `feiniu-backend-improvement-plan.md` | 飞牛后端已落地 | `FeiniuAdapter.kt`、`FeiniuUrl.kt`、`AGENTS.md` |
+| `mv-karaoke-feature-proposal.md` | MV / K 歌已落地 | `backend/network/mv/*.kt`、`MvPlaybackScreen.kt` |
+| `phone-support-plan.md` | 电视 + 手机双端支持已落地 | `AGENTS.md` |
+| `催眠频谱效果开发方案.md` | 催眠可视化已落地（CHANGELOG「新增催眠 E25」） | `FormulaLayout.kt` |
+
+同步改写 **57 处引用 / 41 个文件**（其中 30+ 是**源码文件**）—— 这组数字本身就证明了
+「被引用不构成障碍」：路径全部改写成功，**死链 0 新增**。
+
+**最终结果**：`docs/archive/` **42** + `docs/articles/` **5**；
+`docs/` 根 **62 → 15**（−47）；累计同步改写引用 **109 处**。
+
+**留在根目录的 15 个**：4 个活文档（本文档 / 约定 / 持续修订的重构方案 / 算法复原依据）
++ 10 个未落地（含 `android-auto-plan` 阶段 2/3/4、`百度网盘…` Phase 7、
+`music-visualizer-dev-plan` 可开发状态）+ 1 个 docx 对照件。
+
 **新增文件**：`docs/archive/README.md`（归档索引 + 未归档清单 + 回滚命令）、
 `docs/articles/README.md`。
 
-**回滚**：`git checkout -- docs CHANGELOG.md`（纯移动，无内容丢失）。
+**回滚**：`git checkout -- docs CHANGELOG.md AGENTS.md`（纯移动，无内容丢失）。
 
 **版本**：v2.36.0（未变；versionCode 154）
 
@@ -9892,7 +9925,7 @@ w0 = 2π·f0/fs ;  alpha = sin(w0)/(2q) ;  a0 = 1 + alpha
 
 ### 10.147 v2.34.3 — 歌单导入全链路落地（阶段1–5，2026-09-18）
 
-**来源**：`docs/playlist-import-feature-plan.md`（设计文档，含 §4.1.8 URL 直接使用 + 可达性判断的完整方案）。本批次为一次提交内的 5 个阶段全部落地，设计文档与实现同步修订（2026-09-18 用户决策：源文件不落盘 / 补全仅播放时+手动 / 历史记录无独立删除入口 / 网易云链接按通用 URL 处理）。
+**来源**：`docs/archive/playlist-import-feature-plan.md`（设计文档，含 §4.1.8 URL 直接使用 + 可达性判断的完整方案）。本批次为一次提交内的 5 个阶段全部落地，设计文档与实现同步修订（2026-09-18 用户决策：源文件不落盘 / 补全仅播放时+手动 / 历史记录无独立删除入口 / 网易云链接按通用 URL 处理）。
 
 **决策要点（勿回退）**：
 - **URL 直链直接使用**：m3u path hint / 裸 URL 行捕获为 `RawSongEntry.directUrl` → 直接落地 `streamUrl`（`isNetworkSong=true`），**不搜索、不阻塞导入**。

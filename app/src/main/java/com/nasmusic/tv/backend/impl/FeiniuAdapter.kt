@@ -35,7 +35,7 @@ import java.util.concurrent.TimeUnit
  *
  * 本实现**不再**基于第三方逆向文章的猜测，而是对齐可运行的飞牛 TV 客户端
  * `fn-music-tv`（github.com/QiaoKes/fn-music-tv）的真实协议，详见
- * `docs/feiniu-backend-improvement-plan.md`。
+ * `docs/archive/feiniu-backend-improvement-plan.md`。
  *
  * 要点：
  * - API 基址：`<scheme>://<host>:<port>/music/api/v1/`（默认端口 5666 / HTTPS 5667）

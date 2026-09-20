@@ -1063,7 +1063,7 @@
     <string name="html_playlist_empty">Upload content is empty</string>
     <string name="html_playlist_import_failed">Import failed</string>
 
-    <!-- ================= v2.36.0 Phone portrait UI (docs/phone-portrait-ui-plan.md) ================= -->
+    <!-- ================= v2.36.0 Phone portrait UI (docs/archive/phone-portrait-ui-plan.md) ================= -->
     <string name="settings_display">Display</string>
     <string name="settings_display_orientation">Screen orientation</string>
     <string name="settings_orientation_auto">Auto</string>

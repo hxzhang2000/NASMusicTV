@@ -3,7 +3,7 @@ package com.nasmusic.tv.backend.playlist
 /**
  * M3u / M3u8 解析器。
  *
- * 设计：docs/playlist-import-feature-plan.md §4.1.1 / §4.1.4 / §4.1.8
+ * 设计：docs/archive/playlist-import-feature-plan.md §4.1.1 / §4.1.4 / §4.1.8
  * - `#EXTINF:<sec>,<artist> - <title>`：按 ` - ` 拆第一个分隔（左侧 artist、右侧 title）；
  *   无 ` - ` 时整段当 title（artist 空）
  * - `#EXTINF` 之后的第一个非注释、非空行是该条目的 path hint → `directUrl`

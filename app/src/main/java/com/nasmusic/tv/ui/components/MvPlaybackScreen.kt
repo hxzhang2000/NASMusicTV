@@ -90,7 +90,7 @@ import kotlinx.coroutines.delay
  * - 默认不显示歌词；「歌词」按钮切换，叠加 KaraokeLyricsView 按视频进度粗略对齐
  * - 无「原唱/伴奏」按钮（MV 音频不可分离）
  *
- * 对应 docs/mv-karaoke-feature-proposal.md §3.1 / Step 4
+ * 对应 docs/archive/mv-karaoke-feature-proposal.md §3.1 / Step 4
  */
 @OptIn(ExperimentalTvMaterial3Api::class)
 // UnstableApi 属 androidx @RequiresOptIn 机制，须用 androidx.annotation.OptIn。

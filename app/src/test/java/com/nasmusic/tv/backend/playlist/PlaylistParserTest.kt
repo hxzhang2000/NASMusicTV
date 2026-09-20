@@ -7,7 +7,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * 歌单导入解析器测试（docs/playlist-import-feature-plan.md §4.1.7(7) / §4.1.8(7) / §9.2）。
+ * 歌单导入解析器测试（docs/archive/playlist-import-feature-plan.md §4.1.7(7) / §4.1.8(7) / §9.2）。
  */
 class PlaylistParserTest {
 

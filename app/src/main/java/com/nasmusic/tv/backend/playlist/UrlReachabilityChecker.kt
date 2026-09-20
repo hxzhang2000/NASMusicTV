@@ -18,7 +18,7 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 
 /**
- * HTTP URL 可达性检查器（docs/playlist-import-feature-plan.md §4.1.8 (3)）。
+ * HTTP URL 可达性检查器（docs/archive/playlist-import-feature-plan.md §4.1.8 (3)）。
  *
  * - 导入时后台批量测试（不可达标 Unreachable），不阻塞导入
  * - 5 分钟内存缓存（与 NetworkMusicManager 一致），单 URL 只测一次

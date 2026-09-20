@@ -23,7 +23,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
 /**
- * 歌单导入编排测试（docs/playlist-import-feature-plan.md §6 Importer 行 / §4.2）。
+ * 歌单导入编排测试（docs/archive/playlist-import-feature-plan.md §6 Importer 行 / §4.2）。
  * 走真实 AppPreferences（datastore），验证：取名兜底链、去重、RELATIVE_PATH 计
  * skipped、URL 直链持久化（streamUrl 不被 strip）、进度回调、导入历史记录。
  */

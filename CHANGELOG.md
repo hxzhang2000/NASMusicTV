@@ -15,7 +15,7 @@
 > （设置项三选一 + 顶栏单击循环）；Release 改用独立签名、CI 支持正式签名；
 > 修复车机蓝牙媒体按键在 release 包下全部失效的问题。
 >
-> 设计见 `docs/phone-portrait-ui-plan.md`，维护约定见 `docs/conventions-adaptive-ui.md`，
+> 设计见 `docs/archive/phone-portrait-ui-plan.md`，维护约定见 `docs/conventions-adaptive-ui.md`，
 > 实现细节见 `docs/technical-overview.md` §10.162–§10.165。
 >
 > **未实施部分**：① 修复后的实机视觉复验；② 详情页下滑返回手势；③ 缩放系数 0.82 → 0.88；
@@ -260,7 +260,7 @@
 
 > **歌单导入：m3u / txt / json / 网易云歌单一键入库，URL 直链直接使用并校验可达性**
 >
-> 本地歌单导入功能全链路落地（设计见 `docs/playlist-import-feature-plan.md`）：
+> 本地歌单导入功能全链路落地（设计见 `docs/archive/playlist-import-feature-plan.md`）：
 > 音乐文件列表（.m3u）、纯文本歌单、JSON 歌单（HHX / 通用）与网易云分享链接四种格式，
 > 支持 GBK 编码兜底与 4 KB 嗅探自动识别。歌单内若带 http(s) URL 直链（m3u path hint
 > 或裸 URL 行），**直接使用、无需逐首搜索**——导入后后台并发 4 路 HEAD 测可达性，
@@ -621,7 +621,7 @@
 
 > 飞牛批次（v2.32.4）**审查后修复**：1 项阻断（播放解析链） + 1 项一致性（令牌刷新） + 2 项健壮性；测试总量 25 → 41 例（`FeiniuUrlTest` +4，新增 `BackendAuthHeadersTest` 6 例、`BackendHostOfUrlTest` 6 例）。
 >
-> 修复清单详见 `docs/feiniu-backend-improvement-plan.md` §14；独立复核记录（harness 复跑 / 编译 / 边界实测）见对应提交说明。
+> 修复清单详见 `docs/archive/feiniu-backend-improvement-plan.md` §14；独立复核记录（harness 复跑 / 编译 / 边界实测）见对应提交说明。
 
 ### Fixed
 - **F-1（阻断）飞牛歌曲播放解析失败**：适配器全链路未填充 `Song.streamUrl`，而全 app 的 NAS 播放解析唯一出口是 `PlayerViewModel.resolveStreamUrl` → `adapter.getSongsByIds(...).streamUrl`（对照：Jellyfin / Navidrome / Subsonic 均在解析期填充）。修复：`parseTrack` 按 `FeiniuUrl.streamUrl(apiBase, guid)` 填充。此前点播 / 自动切歌 / 恢复队列全部在解析环节失败（A5 无法通过）
@@ -644,7 +644,7 @@
 
 ## [v2.32.4] - 2026-09-14
 
-> 飞牛音乐（fnOS）后端对接**重写**。以可运行的飞牛 TV 客户端 `fn-music-tv`（github.com/QiaoKes/fn-music-tv）为权威依据，替换原先基于第三方逆向文章猜测的实现。开发计划与评审记录见 `docs/feiniu-backend-improvement-plan.md`（含 §3 缺陷对照表 D1–D22、§10 评审记录）。
+> 飞牛音乐（fnOS）后端对接**重写**。以可运行的飞牛 TV 客户端 `fn-music-tv`（github.com/QiaoKes/fn-music-tv）为权威依据，替换原先基于第三方逆向文章猜测的实现。开发计划与评审记录见 `docs/archive/feiniu-backend-improvement-plan.md`（含 §3 缺陷对照表 D1–D22、§10 评审记录）。
 >
 > ⚠️ 旧实现与真实协议在**认证方式、分页参数、端点路径、ID 语义**四个层面均不一致，按旧代码几乎必然连不上或全量 401/404。本次共修正 22 项缺陷，其中 5 项为阻断级（D1 认证头 / D2 令牌字段 / D9 流地址 / D21 播放链路注入 / D22 封面链路注入）。
 >

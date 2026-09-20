@@ -13,7 +13,7 @@ import java.util.UUID
 import kotlinx.coroutines.CoroutineScope
 
 /**
- * 歌单导入编排器（docs/playlist-import-feature-plan.md §4.2）。
+ * 歌单导入编排器（docs/archive/playlist-import-feature-plan.md §4.2）。
  *
  * 职责：读流（不落盘）→ 嗅探选解析器 → 取名兜底 → 建歌单 → 去重入库 →
  * 返回 [ImportSummary]；成功后记录导入历史（§4.7.2）。

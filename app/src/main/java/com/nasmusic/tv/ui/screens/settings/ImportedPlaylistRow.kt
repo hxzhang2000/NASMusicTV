@@ -26,7 +26,7 @@ import com.nasmusic.tv.ui.theme.FontSize
 import com.nasmusic.tv.ui.theme.NasMusicColors
 
 /**
- * 最近导入记录行（docs/playlist-import-feature-plan.md §4.4.4）。
+ * 最近导入记录行（docs/archive/playlist-import-feature-plan.md §4.4.4）。
  *
  * 2026-09-18 用户决策：历史记录行**无删除操作**，单「打开」→ 跳「我的」（歌单本身
  * 可由歌单卡片删除，删除时 consumeHistoryIfDeleted 联动清理本记录，避免死链）。

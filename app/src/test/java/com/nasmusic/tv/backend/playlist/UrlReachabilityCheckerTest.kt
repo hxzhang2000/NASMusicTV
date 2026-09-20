@@ -18,7 +18,7 @@ import org.junit.Before
 import org.junit.Test
 
 /**
- * URL 可达性检查器测试（docs/playlist-import-feature-plan.md §4.1.8 (7)）。
+ * URL 可达性检查器测试（docs/archive/playlist-import-feature-plan.md §4.1.8 (7)）。
  */
 class UrlReachabilityCheckerTest {
 

@@ -1,6 +1,6 @@
 # 自适应 UI 维护约定（TV / 手机竖屏 / 手机横屏）
 
-> 来源：`docs/phone-portrait-ui-plan.md` §3（架构）、§2.7（尺寸口径）、§9 P1-32。
+> 来源：`docs/archive/phone-portrait-ui-plan.md` §3（架构）、§2.7（尺寸口径）、§9 P1-32。
 > 本文件是**新增页面/组件时必须遵守的清单**，也是 code review 的检查项。
 > 版本基线：v2.36.0。
 

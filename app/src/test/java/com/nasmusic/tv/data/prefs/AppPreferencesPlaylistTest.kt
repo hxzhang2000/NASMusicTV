@@ -21,7 +21,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
 /**
- * 歌单导入数据层测试（docs/playlist-import-feature-plan.md §6 Prefs 行）：
+ * 歌单导入数据层测试（docs/archive/playlist-import-feature-plan.md §6 Prefs 行）：
  * 历史 20 条淘汰；删除歌单联动清历史；备份导出/导入（playlistImportHistory +
  * songReachability）；URL 可达性读写与 24h 判定窗口。
  *

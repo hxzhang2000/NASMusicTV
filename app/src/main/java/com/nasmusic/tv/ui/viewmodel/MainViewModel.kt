@@ -144,7 +144,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
     val coverFilterDarkOverlay: StateFlow<Float> = _coverFilterDarkOverlay.asStateFlow()
     private val backendRegistry = nasMusicApp.backendRegistry
 
-    // --- 歌单导入补全（阶段4，docs/playlist-import-feature-plan.md §4.3）---
+    // --- 歌单导入补全（阶段4，docs/archive/playlist-import-feature-plan.md §4.3）---
     /** 播放触发的元数据补全器（stub → NAS/网络真 Song）—— 使用 NasMusicApp 共享实例 */
     private val playlistEnricher = nasMusicApp.playlistEnricher
     /** URL 可达性检查（播放失败回退复测） */

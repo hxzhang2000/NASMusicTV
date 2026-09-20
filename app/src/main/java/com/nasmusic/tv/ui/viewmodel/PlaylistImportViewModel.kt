@@ -30,7 +30,7 @@ import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 
 /**
- * 歌单导入域 ViewModel（docs/playlist-import-feature-plan.md 阶段5）。
+ * 歌单导入域 ViewModel（docs/archive/playlist-import-feature-plan.md 阶段5）。
  *
  * 镜像 BackupViewModel 模式：导入历史订阅 / 导入编排 / 消息消费 / 删除联动。
  * 职责：

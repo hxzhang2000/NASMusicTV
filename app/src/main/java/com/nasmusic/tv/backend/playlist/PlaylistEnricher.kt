@@ -7,7 +7,7 @@ import com.nasmusic.tv.data.prefs.AppPreferences
 import com.nasmusic.tv.util.AppLog
 
 /**
- * 播放触发的元数据补全（docs/playlist-import-feature-plan.md §4.3）。
+ * 播放触发的元数据补全（docs/archive/playlist-import-feature-plan.md §4.3）。
  *
  * 职责：把导入歌单里的裸 stub（id 以 "imported_" 开头）升级为可播放的真 Song：
  * 1) [enrichSong]：已连 NAS → [com.nasmusic.tv.backend.BackendAdapter.searchSongs]

@@ -8,7 +8,7 @@ import java.net.URLEncoder
  * 飞牛音乐（fnOS）服务地址归一化与端点拼装
  *
  * 协议依据：参考项目 fn-music-tv `core/data/.../server/ServerUrlNormalizer.kt`
- * 与 `.../api/TrimMusicApi.kt`（详见 docs/feiniu-backend-improvement-plan.md）。
+ * 与 `.../api/TrimMusicApi.kt`（详见 docs/archive/feiniu-backend-improvement-plan.md）。
  *
  * 三件事：
  * 1. 把用户手填的任意形态地址归一化为 canonical API 基址

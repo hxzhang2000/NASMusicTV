@@ -7,7 +7,7 @@ package com.nasmusic.tv.data.model
  * videoUrl 为直接可播放的直链 mp4，有有效期（小时级），因此
  * 结果仅做内存缓存（MvSearchManager 内带 TTL），不做持久化。
  *
- * 对应 docs/mv-karaoke-feature-proposal.md §4.1
+ * 对应 docs/archive/mv-karaoke-feature-proposal.md §4.1
  */
 data class MvInfo(
     val bvid: String,

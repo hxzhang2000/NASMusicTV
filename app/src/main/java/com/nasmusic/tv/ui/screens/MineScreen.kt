@@ -104,7 +104,7 @@ fun MineScreen(
     downloadStates: Map<String, DownloadState> = emptyMap(),
     onDownloadSong: (Song) -> Unit = {},
     onDeleteDownloadSong: ((Song) -> Unit)? = null,
-    // 歌单导入（阶段5，docs/playlist-import-feature-plan.md §4.5/§5.3）
+    // 歌单导入（阶段5，docs/archive/playlist-import-feature-plan.md §4.5/§5.3）
     songReachability: Map<String, AppPreferences.ReachabilityEntry> = emptyMap(),
     enrichProgress: EnrichProgress? = null,
     onEnrichPlaylist: (String) -> Unit = {}
@@ -867,7 +867,7 @@ private fun PlaylistActionButton(
     }
 }
 
-// ===== 歌单导入辅助（阶段5，docs/playlist-import-feature-plan.md §4.5）=====
+// ===== 歌单导入辅助（阶段5，docs/archive/playlist-import-feature-plan.md §4.5）=====
 
 /** 是否为导入产生的 stub 歌曲（id 以 imported_ 前缀标记，见 PlaylistParsers.IMPORTED_ID_PREFIX） */
 private fun Song.isImportedStub(): Boolean = id.startsWith(PlaylistParsers.IMPORTED_ID_PREFIX)

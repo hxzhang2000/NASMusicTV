@@ -73,7 +73,7 @@ enum class SongRowMode {
 }
 
 /**
- * 导入歌单歌曲的 URL 直链状态（docs/playlist-import-feature-plan.md §4.5.2）。
+ * 导入歌单歌曲的 URL 直链状态（docs/archive/playlist-import-feature-plan.md §4.5.2）。
  * 仅 MODE_ROW 在来源标签位渲染；非导入场景保持 NONE（不渲染）。
  */
 /** 竖屏歌曲行：封面尺寸。比 TV 的 92dp 小，把宽度让给歌名 / 艺术家 */

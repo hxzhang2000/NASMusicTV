@@ -17,7 +17,7 @@ import java.util.concurrent.ConcurrentHashMap
  * - 内存缓存：`ConcurrentHashMap` + TTL（直链有有效期，默认 45 分钟），命中直接返回
  * - 不缓存空结果（NotFound 不缓存，下次切歌/进入页面时重搜）
  *
- * 对应 docs/mv-karaoke-feature-proposal.md Step 1
+ * 对应 docs/archive/mv-karaoke-feature-proposal.md Step 1
  */
 class MvSearchManager(
     private val services: List<MvSearchService>,
