@@ -2,7 +2,7 @@
 
 > 状态：设计文档，待评审  
 > 日期：2026-08-07  
-> 关联：方案 B（实时 DSP）见 `docs/vocal-removal-approach-b-dsp.md`
+> 关联：方案 B（实时 DSP）见 `docs/archive/vocal-removal-approach-b-dsp.md`
 
 ## 1. 原理
 

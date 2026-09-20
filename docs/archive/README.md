@@ -1,21 +1,30 @@
 # docs/archive — 已完成文档归档
 
-> **归档日期**：2026-09-20（两轮）
+> **归档日期**：2026-09-20（三轮）
 > **归档依据**：见 `AGENTS.md` → Conventions → *Doc lifecycle* 与
-> `docs/technical-overview.md` §10.166。
+> `docs/technical-overview.md` §10.166–§10.167。
 >
-> 本目录存放**已完成使命**的文档：功能已发布、审查已闭环、方案已实施。
+> 本目录存放**已完成使命**的文档：功能已发布、审查已闭环、方案已实施、方案已废弃。
 > 它们**不再维护**，保留在此仅作历史追溯与决策依据。
 
-## ⛔ 两条判定原则（都不是「是否被引用」）
+## ⛔ 三条判定原则（都不是「是否被引用」）
 
-**原则 1 — 文档自身的「状态」标记会过期，以 `CHANGELOG.md` / `technical-overview.md` 为准。**
-标记只说明「文档没回填」，不说明「功能没做」。
+**原则 1 — 文档自身的「状态」标记会过期，以 `CHANGELOG.md` / `technical-overview.md` / 所有者结论为准。**
+标记只说明「文档没回填」，不说明「功能没做」。第三轮的 10 篇**全部**自称
+「待评审 / 可开发状态 / 方案提案 / Phase 7 未开始」，实际都已落地 —— 这是本仓库最密集的一次反例。
 
 **原则 2 — 「被源码 / `AGENTS.md` 引用」不是归档障碍。**
 移动时会在同一次操作里改写**全部**引用（含 `app/src/**` 的 KDoc、`AGENTS.md`、
 `CHANGELOG.md`、跨文档链接），路径依然有效，**不会断链**。把「被引用」当否决
 会白留一堆已完成的文档 —— 这正是第二轮归档（6 个文档、57 处引用）纠正的错误。
+
+**原则 3 — 方案「永久无法实现 / 主动放弃」同样可归档。**
+归档不等于「成功」：目标已失效的方案留着只会持续误导（看着像「还能做」）。
+判据是**所有者已明确结论**，例如：
+- 阿里云盘 —— 官方已关闭第三方应用访问，**永久不可实现**；
+- `network-music-upgrade-plan`（对接 Go Music API）—— 无公开 API 端点、必须自行部署，**主动放弃**。
+
+> 反例边界：只是「暂时没排期」的**在办**方案不适用本条，仍留 `docs/` 根。
 
 ---
 
@@ -91,45 +100,85 @@
 
 ---
 
-## 未归档（仍留 `docs/` 根，15 个）
+## 第三轮（13 个）—— 所有者确认：状态标记全部过期
 
-> 计数口径：下列 14 篇 Markdown + `music-visualizer-dev-plan.docx`（对照件）= 15 个文件。
-> `docs/snapshot/`（16 张截图）与 `*.miora` 素材目录不是文档，不计入。
+这 13 个（12 篇 md + 1 个 docx 对照件）中的前 11 个是我第二轮**判定为「未落地」而保留**的，
+所有者随后逐条确认**全部已完成或已放弃**；后 2 个是我第二轮判为「活文档」而保留的，
+所有者确认**开发工作早已完成**。判定依据从「CHANGELOG 交叉验证」升级为
+**所有者结论**（CHANGELOG 只覆盖一部分，方案变更类确实查不到）。
 
-### ① 活文档 —— 持续维护，永远留根（4）
+| 文档 | 文档自称状态 | 实际结论 | 所有者依据 |
+|---|---|---|---|
+| `aliyundrive-support-plan.md` | 「规划中，遭遇硬阻塞，需决策」 | ❌ **永久无法实现** | 阿里云盘已确认不支持其他应用访问 |
+| `百度网盘音乐播放开发方案.md` | 「开发进行中（Phase 7 未开始）」 | ✅ 已完成 | 已完成 |
+| `android-auto-plan.md` | 「阶段 1 已实施；阶段 2/3/4 未实施」 | ✅ 已开发完成 | 已完成，无实机无法测试 |
+| `music-visualizer-dev-plan.md`（+ `.docx`） | 「v6.0（**可开发状态**）」 | ✅ 已开发完成 | 效果库已开发完成 |
+| `unified-source-architecture.md` | （无状态标记） | ✅ 已开发完成 | 已开发完成 |
+| `audition-lyrics-solution.md` | （无状态标记） | ✅ 已完成（**方案变更**） | 后续方案已完成 |
+| `metadata-search-service-solution.md` | （无状态标记） | ✅ 已完成（**方案变更**） | 后续方案已完成 |
+| `network-music-upgrade-plan.md` | 「方案提案」 | ❌ **主动放弃** | Go Music API 无公开端点，须自部署 |
+| `feature-dev-plan-2026-09.md` | 「待所有者评审」 | ✅ 已开发完成 | 已开发完成 |
+| `phone-media-display-plan.md` | 「方案设计（**待评审**）」 | ✅ 已开发完成 | 已开发完成 |
+| `codebase-refactoring-plan-2026-09.md` | 「v1.6，含**待所有者决策项**」 | ✅ 已重构完成 | 早已重构完成 |
+| `vocal-removal-approach-b-dsp.md` | 「已实施（v3.2 已按实测调优）」 | ✅ 已开发完成 | 已开发完成 |
+
+> ⚠️ **`codebase-refactoring-plan-2026-09.md` 归档时仍含 2 项未闭环的所有者决策项**，
+> 归档表示「不再作为在办方案维护」，**不等于这 2 项已决定不做**：
+> - **R-5**：PlayerManager 四阶段拆分（PlayerCore / PlayerQueue / PlayerMediaSession /
+>   PlayerAudioFocus）—— v1.6 已**降级为待所有者决策项**，「未经所有者重新确认不得启动」；
+>   现有定案是「HQ 编排保留 PlayerManager **防接口爆炸**」。
+> - **F-8**：下载无保活（P2）——「待所有者决策后再定」。
+>
+> 若日后要启动任一项，请从归档件恢复评估（播放/队列/媒体会话/音频焦点全路径手测成本）。
+
+> ⚠️ **`vocal-removal-approach-b-dsp.md` 的特殊性**：§10.152 曾把它列为「算法复原依据」
+> （`VocalRemovalProcessor.kt` 删除时「先把算法归档再删」）。归档**不削弱该角色** ——
+> 它仍是完整算法文档（Mid/Side 流程图、最终参数、`queueInput` 伪代码），
+> 只是位置从 `docs/` 根移到 `docs/archive/`，引用已同步改写，复原路径不变。
+
+> ⭐ **方法论修正（本轮最大收获）**：CHANGELOG 交叉验证对「已上线功能」有效，但对
+> **方案变更**（`audition-lyrics` / `metadata-search`：功能以另一种形态落地，原关键词自然零命中）
+> 与**主动放弃**（`network-music-upgrade-plan`）**必然漏判**。
+> 这两类只能问所有者 —— **不要因为「CHANGELOG 零命中」就断言「未落地」**。
+> 第二轮判「留」的 10 个**全被推翻**，正是这条漏判造成的。
+
+同步改写 **68 处引用 / 29 个文件**（含 `ApiProbe.kt`、`BaiduNetdiskConfig.kt`、
+`PlayStatsAggregator.kt`、`PlayStatsRepository.kt`、`RadioSongScorer.kt`、
+`MediaLibraryTree.kt`、`SleepTimerController.kt`、`BeatDetectorTest.kt`、
+`ViewModelEvents.kt`、`HqSeparationOrchestrator.kt`、`SpectralMaskProcessor.kt`、
+`AGENTS.md`、`CHANGELOG.md`、`technical-overview.md`）。死链 **0 新增**。
+
+> ⚠️ **工具盲区（本轮实测）**：改写只覆盖带 `docs/` 前缀的引用，
+> **裸文件名**（如 `vocal-removal-approach-b-dsp.md`）**不会被匹配**，
+> 必须 `grep <basename>` 手工清扫（本轮手工修了 3 处：`AGENTS.md`、本 README、
+> `technical-overview.md` 的活文档清单，以及 `mv-karaoke-feature-proposal.md` 的关联链接）。
+
+---
+
+## 未归档（仍留 `docs/` 根，2 个）—— 全部是活文档
+
+> 计数口径：`docs/` 根只剩 2 篇 Markdown，**已无任何在办方案文档**。
+> `docs/snapshot/`（16 张截图）、`*.miora` 与 `*_assets/`（gitignored 本地设计素材）不是文档，不计入。
 
 | 文档 | 为什么是「活」的 |
 |---|---|
-| `technical-overview.md` | 全项目主索引，§10.N 持续追加（当前最大 §10.166） |
+| `technical-overview.md` | 全项目主索引，§10.N 持续追加（当前最大 §10.167） |
 | `conventions-adaptive-ui.md` | 自适应 UI 约定，随新组件持续维护 |
-| `codebase-refactoring-plan-2026-09.md` | 重构方案 v1.6 持续修订，含 R/F/N 系列状态跟踪与**待所有者决策项** |
-| `vocal-removal-approach-b-dsp.md` | §10.152 明确指定它为**算法复原依据**（「算法先归档，本文保证可复原」）—— 它是归档的**目的地**，不是被归档对象 |
 
-### ② 功能未落地 —— 归档会把在办工作埋掉（10）
-
-| 文档 | 未落地证据 |
-|---|---|
-| `aliyundrive-support-plan.md` | CHANGELOG 中阿里云盘为**灰显「敬请期待」占位** |
-| `audition-lyrics-solution.md` | 「试听 / 30 秒 / 歌词时间轴拖拽」在 CHANGELOG **零命中** |
-| `metadata-search-service-solution.md` | 「元数据搜索」**零命中** |
-| `network-music-upgrade-plan.md` | 「对接 Go Music API」**零命中**（现役仍是 Meting 层） |
-| `unified-source-architecture.md` | 「统一音乐源」**零命中** |
-| `android-auto-plan.md` | 文档自述「阶段 1 已实施；**阶段 2/3/4 未实施**」 |
-| `music-visualizer-dev-plan.md`（+ `.docx`） | 文档自述「v6.0（**可开发状态**）」= 尚未开发 |
-| `百度网盘音乐播放开发方案.md` | 文档自述「**Phase 7 未开始**」 |
-| `feature-dev-plan-2026-09.md` | 「待所有者评审」，F2 系列 6 项**仅部分落地** |
-| `phone-media-display-plan.md` | 「方案设计（**待评审**）」，实况窗 / 播放保活未实施 |
+> 其余文档一律视为「已完成 / 已放弃」→ `docs/archive/`。
+> 若日后需要恢复某个已归档方案（如 R-5 四阶段拆分、F-8 下载保活），
+> 从 `docs/archive/` 取出评估即可 —— 归档是**纯移动**，内容一字未删。
 
 ---
 
 ## 汇总
 
-| 项 | 第一轮 | 第二轮 | 合计 |
-|---|---|---|---|
-| 移入 `docs/archive/` | 36 | 6 | **42** |
-| 移入 `docs/articles/` | 5 | 0 | **5** |
-| 同步改写引用 | 52 处 / 20 文件 | 57 处 / 41 文件 | **109 处**（涉及 40+ 文件，两轮有重叠） |
-| `docs/` 根目录 | 62 → 21 | 21 → **15** | −47 |
+| 项 | 第一轮 | 第二轮 | 第三轮 | 合计 |
+|---|---|---|---|---|
+| 移入 `docs/archive/` | 36 | 6 | 13 | **55** |
+| 移入 `docs/articles/` | 5 | 0 | 0 | **5** |
+| 同步改写引用 | 52 处 / 20 文件 | 57 处 / 41 文件 | 68 处 / 29 文件 | **177 处**（涉及 65+ 文件，各轮有重叠） |
+| `docs/` 根目录 | 62 → 21 | 21 → 15 | 15 → **2** | **−60**（仅剩 2 篇活文档） |
 
 ## 回滚
 

@@ -7,7 +7,7 @@ import org.junit.Test
 /**
  * BeatDetector 单元测试 —— 呼吸感引擎的核心。
  *
- * 覆盖矩阵（对照 docs/music-visualizer-dev-plan.md §10.1）：
+ * 覆盖矩阵（对照 docs/archive/music-visualizer-dev-plan.md §10.1）：
  *   - 稳定 120 BPM：20 拍检出 >= 18，BPM 估值 115~125
  *   - 静音：0 拍
  *   - 恒定能量（无节奏）：总量 <= 1 拍，且 1s 之后不再触发

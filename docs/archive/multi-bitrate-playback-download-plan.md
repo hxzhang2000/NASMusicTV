@@ -4,7 +4,7 @@
 - **日期**：2026-09-18（同日完成决策确认、v1.2 需求修订、v1.3 可开发性审阅）
 - **参考实现**：`D-Music-main`（GD 音乐台聚合 API 客户端）
 - **目标模块**：`backend/network/`（播放）、`backend/download/`（下载）、`ui/`（界面）
-- **前置阅读**：`docs/network-music-upgrade-plan.md`、`docs/archive/歌曲离线下载与本地存储管理开发方案.md`
+- **前置阅读**：`docs/archive/network-music-upgrade-plan.md`、`docs/archive/歌曲离线下载与本地存储管理开发方案.md`
 
 > **v1.1 定稿修订（2026-09-18）**：三项决策已确认——Q1 做两级音质模型、Q2 走零重建迁移、Q3 非无损档追加档位后缀。同步修订 §2.3、§4.2、§4.3、§6、§7、§8、§9、§10.1。**其中 Q2 有一处实现修正**：「新增 `(songId, quality)` 唯一索引」无法解除主键自身的唯一约束，实际落地为「`songKey` 追加 `:q<quality>` 后缀 + 新增 `songId` 普通索引」，仍满足零重建零回填目标，详见 §4.2.3 与 §8.1。
 
@@ -1910,6 +1910,6 @@ JAVA_HOME="C:/Program Files/Android/Android Studio/jbr" \
 
 ### 11.4 与既有文档的关系
 
-- `docs/network-music-upgrade-plan.md`：F2-6 音质档位的原始需求来源，本方案是其**收尾与扩展**；
+- `docs/archive/network-music-upgrade-plan.md`：F2-6 音质档位的原始需求来源，本方案是其**收尾与扩展**；
 - `docs/archive/歌曲离线下载与本地存储管理开发方案.md`：下载链路（`DownloadPathBuilder`/`StreamUrlResolver`/Room 索引）的既有设计，§4 在其基础上追加 quality 维度；
 - `docs/technical-overview.md`：技术总览，本方案落地后需同步更新"网络音乐"章节的码率说明。

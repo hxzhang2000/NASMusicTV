@@ -403,7 +403,7 @@ private val progressUpdateRunnable = object : Runnable {
 | 5 | `app/src/main/java/.../player/MediaLibraryTree.kt` | **重写** | 结构化 ID + 多级节点；修 A-14 |
 | 6 | `app/src/main/java/.../player/BrowseCache.kt` | **新增** | `mediaId → Song` 映射缓存（供 URI 解析与状态同步用） |
 | 7 | `app/src/main/java/.../ui/viewmodel/MainViewModel.kt` | **无需修改** | A-13 最终**未改本文件**，改用零侵入方案，见 §5.8「实施期更正」 |
-| 8 | `docs/phone-media-display-plan.md` | 修改 | 更正 §5.1（§2.3） |
+| 8 | `docs/archive/phone-media-display-plan.md` | 修改 | 更正 §5.1（§2.3） |
 
 > **〔2026-09-17 实施期实际改动清单（以 git 为准）〕**
 > 阶段 1 实际落地 **6 改 + 2 新**（外加文档）：`automotive_app_desc.xml`（新）、`BrowseCache.kt`（新）、
@@ -1359,7 +1359,7 @@ MediaItemsWithStartPosition(List<MediaItem> mediaItems, int startIndex, long sta
 - [Test with Desktop Head Unit](https://developer.android.com/training/cars/testing/dhu)
 - [Media3: Serve content](https://developer.android.com/media/media3/session/serve-content)
 - [Google 助理连接所需的包名与签名](https://developer.android.com/media/implement/assistant)
-- 项目内：`docs/phone-media-display-plan.md` §5.1、`docs/archive/code-review-2026-09-07.md`（P0-9 / P0-10）
+- 项目内：`docs/archive/phone-media-display-plan.md` §5.1、`docs/archive/code-review-2026-09-07.md`（P0-9 / P0-10）
 
 ---
 

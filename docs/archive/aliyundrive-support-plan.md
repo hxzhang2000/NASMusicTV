@@ -2,7 +2,7 @@
 
 > 创建：2026-09-01
 > 状态：**规划中，遭遇硬阻塞，需决策**
-> 关联：`docs/百度网盘音乐播放开发方案.md`（百度网盘架构蓝本）、`docs/archive/daoliyu-feiniu-backend-plan.md`（多后端并行接入先例）
+> 关联：`docs/archive/百度网盘音乐播放开发方案.md`（百度网盘架构蓝本）、`docs/archive/daoliyu-feiniu-backend-plan.md`（多后端并行接入先例）
 
 ## ⚠️ 关键阻塞：阿里云盘 PDS 个人开发者申请已暂停
 
@@ -432,6 +432,6 @@ PDS 虽有版本号 `2022-03-01`，但阿里云可能在不改版本号的情况
 
 - 阿里云 PDS 官方文档：https://help.aliyun.com/zh/pds/drive-and-photo-service-dev/developer-reference/api-pds-2022-03-01-overview
 - OAuth 2.0 移动端接入：https://help.aliyun.com/zh/pds/drive-and-photo-service-dev/user-guide/oauth-2-0-access-process-for-mobile-applications-and-desktop-applications
-- 百度网盘架构蓝本：[docs/百度网盘音乐播放开发方案.md](docs/百度网盘音乐播放开发方案.md)
+- 百度网盘架构蓝本：[docs/archive/百度网盘音乐播放开发方案.md](docs/archive/百度网盘音乐播放开发方案.md)
 - 多后端并行接入先例：[docs/archive/daoliyu-feiniu-backend-plan.md](docs/archive/daoliyu-feiniu-backend-plan.md)
 - 现有按钮颜色规范：[SettingsScreen.kt:352](app/src/main/java/com/nasmusic/tv/ui/screens/SettingsScreen.kt:352)

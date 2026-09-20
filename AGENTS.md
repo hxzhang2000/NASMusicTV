@@ -60,7 +60,7 @@ JAVA_HOME="C:/Program Files/Android/Android Studio/jbr" \
 - **GBK encoding gotcha** (`util/EncodingUtils.kt`): Jellyfin may store GBK ID3 bytes as if UTF-8. `utf8Body()`/`fixEncoding()` attempt GBK fallback when U+FFFD / Greek / Cyrillic chars appear. Some cases are unrecoverable client-side (already-encoded Unicode codepoints) — don't assume you can fully fix artist-name mojibake.
 - **Pinyin search** uses TinyPinyin (`com.github.promeg:tinypinyin`), chosen specifically because the min SDK is API 22 and `android.icu.Transliterator` needs API 26+. Do not swap back to ICU-based pinyin.
 - **Cleartext traffic** is enabled (`usesCleartextTraffic=true`) for local NAS HTTP.
-- **设备支持：电视 + 手机都支持**（2026-09-16 更正，此前写作「Leanback required — 只能装电视、锁定横屏」，与 Manifest 不符）。`AndroidManifest.xml:18-27` 三个 feature 全部 `required="false"`：`android.software.leanback`、`android.hardware.touchscreen`、`android.hardware.screen.portrait`（注释即写着 "both TV and phone supported"）；`MainActivity` 是 `screenOrientation="fullSensor"`，**方向不锁定**。核对手段：`aapt2 dump badging <apk> | grep -i "sdkversion\|native-code"`（会打印 `uses-feature-not-required`）。相关设计见 `docs/archive/phone-support-plan.md`、`docs/phone-media-display-plan.md`。
+- **设备支持：电视 + 手机都支持**（2026-09-16 更正，此前写作「Leanback required — 只能装电视、锁定横屏」，与 Manifest 不符）。`AndroidManifest.xml:18-27` 三个 feature 全部 `required="false"`：`android.software.leanback`、`android.hardware.touchscreen`、`android.hardware.screen.portrait`（注释即写着 "both TV and phone supported"）；`MainActivity` 是 `screenOrientation="fullSensor"`，**方向不锁定**。核对手段：`aapt2 dump badging <apk> | grep -i "sdkversion\|native-code"`（会打印 `uses-feature-not-required`）。相关设计见 `docs/archive/phone-support-plan.md`、`docs/archive/phone-media-display-plan.md`。
 - **ProGuard**: release build minifies + shrinks. Rules in `proguard-rules.pro` keep `data.model`, `data.prefs`, `backend`, Gson, ExoPlayer. A prior release crash (v2.5.1) came from Gson type erasure under R8 — keep those `-keep` rules when adding serialized models. `Log.d/v` are stripped in release via `-assumenosideeffects`; **注意 `AppLog.d/i/w` 另有 `if (BuildConfig.DEBUG)` 守卫，release 下 R8 会连字符串常量一起折掉（`AppLog.e` 无守卫、必然保留）**——用 dex 字符串验 R8 存活时别拿 d/i/w 文案当证据。
 - **Multi-ABI**: `arm64-v8a`, `armeabi-v7a`, `x86_64`.
 - **Demucs 人声分离的输出契约**（`player/DemucsSeparator.kt`，2026-09-14 起）：`decodeAudioToTempFile()` 保证**输出恒为 44100Hz 立体声**——单声道源复制成 L/R，非 44100Hz 源由私有类 `LinearResampler` 线性插值归一化。因此 `writeWavHeader()` / `patchWavDataSize()` 无条件用 `SAMPLE_RATE`/`CHANNEL_COUNT` 是安全的；**若日后放开该保证，这两处必须改为接收实际参数**。`totalSamples` 取 `writeFrame()` 的调用次数，不要用「float 数 / 声道数」反推。
@@ -83,25 +83,42 @@ JAVA_HOME="C:/Program Files/Android/Android Studio/jbr" \
 
 ### Doc lifecycle (archive rule — user-mandated, 2026-09-20)
 
-`docs/` root holds **only active docs**. Completed ones move to `docs/archive/`;
+`docs/` root holds **only active docs** — after the third pass it is down to **2 living docs**
+(`technical-overview.md`, `conventions-adaptive-ui.md`). Completed ones move to `docs/archive/`;
 external-facing articles (zhihu etc.) live in `docs/articles/`.
 
 A doc is **archivable** when **both** hold:
 
 1. **It is not a living doc.** Only the continuously-maintained index/convention docs stay
-   forever: `technical-overview.md` (§10.N keeps growing), `conventions-adaptive-ui.md`,
-   and any doc that is itself the designated long-term reference for an algorithm or
-   contract (e.g. the vocal-removal DSP doc — §10.152 names it as the recovery source).
-2. **Its feature actually shipped**, judged by **`CHANGELOG.md` / `docs/technical-overview.md`** —
-   ⚠️ **never** trust the doc's own status header. Headers go stale: several archived docs
-   said "待评审 / 尚未开发 / 待开发" while the feature had already shipped and the doc was
-   simply never back-filled (`network-music-failover-plan.md`, `remote-control-design.md`, …).
-   Judge by grepping CHANGELOG for the feature, and by whether the implementation exists
-   in source (`SubsonicAdapter.kt`, `KaraokePlaybackScreen.kt`, …).
-   Conversely, a doc whose feature is **absent** from CHANGELOG stays put
-   (e.g. the aliyundrive support plan — 阿里云盘 is still a greyed-out "敬请期待" placeholder).
-   ⚠️ Write such examples **without** the `docs/…md` path form, otherwise this very section
-   becomes a reference and pollutes the reference graph.
+   forever: `technical-overview.md` (§10.N keeps growing) and `conventions-adaptive-ui.md`.
+   ⚠️ A doc being the designated recovery source for a shipped algorithm (the vocal-removal
+   DSP doc, §10.152) does **not** keep it in root — the role survives the move, since archiving
+   is a pure `git mv` with references rewritten.
+2. **Its fate is settled** — either ✅ shipped, or ❌ permanently abandoned.
+
+   **(a) Shipped** — judged by `CHANGELOG.md` / `docs/technical-overview.md`, and by whether the
+   implementation exists in source (`SubsonicAdapter.kt`, `KaraokePlaybackScreen.kt`, …).
+   ⚠️ **Never** trust the doc's own status header — headers go stale. The third pass archived 13
+   docs whose headers read "待评审 / 可开发状态 / 方案提案 / Phase 7 未开始 / 含待所有者决策项"
+   while the work had already shipped and the doc was simply never back-filled.
+
+   **(b) Abandoned** — the owner has ruled the goal dead (upstream closed third-party access,
+   no public API endpoint exists, …). Archiving is **not** a success badge: a dead plan left in
+   `docs/` root keeps misreading as "still doable". A merely *unscheduled* active plan is **not**
+   this case and stays put.
+
+   ⚠️ **If the doc still lists open owner-decision items at archive time, record them explicitly**
+   in the `docs/archive/README.md` row (the 2026-09-20 refactoring plan carried two: the R-5
+   four-phase split and F-8 download keep-alive). Archiving means "no longer maintained as an
+   active plan" — silently burying open decisions is the failure mode to avoid.
+
+> ⛔ **A `CHANGELOG` grep alone is NOT sufficient** — it necessarily misses two classes:
+> **changed-approach** docs (the feature shipped in a different form, so the original keywords
+> never appear) and **abandoned** docs (nothing ever shipped, so there is nothing to find).
+> For those, **ask the owner** — never conclude "not shipped" from a zero-hit grep. All 13 docs
+> the second pass kept (as either "unshipped" or "living") were overturned by exactly this mistake.
+> ⚠️ Write examples **without** the `docs/…md` path form, otherwise this very section
+> becomes a reference and pollutes the reference graph.
 
 > ⛔ **Being referenced is NOT a blocker.** Source KDoc and `AGENTS.md` cite plan docs heavily,
 > but archiving does **not** break those citations — the move rewrites every inbound reference
@@ -114,13 +131,17 @@ A doc is **archivable** when **both** hold:
 When archiving:
 
 - Use `git mv` (history preserved, no content deletion) — never `rm`.
-- **Rewrite every inbound reference** `docs/<name>` → `docs/archive/<name>`
-  (references use the `docs/` prefix consistently; a bare-filename form may also appear in
-  markdown links). Then re-run the dead-link check — a zero-hit check confirms nothing broke.
-- Add a row to `docs/archive/README.md` (doc / reason / superseding record).
+- **Rewrite every inbound reference** `docs/<name>` → `docs/archive/<name>`.
+  ⚠️ The sweep is **`docs/`-prefixed only** — a **bare filename** reference
+  (e.g. a name listed in this very section) is **not** matched and must be swept by hand.
+  Grep the bare basename after the move. Then re-run the dead-link check — a zero-hit
+  check confirms nothing broke.
+- Add a row to `docs/archive/README.md` (doc / reason / superseding record, **plus any open
+  owner-decision items**).
 - Rollback is a single `git checkout -- docs`.
 
-See `docs/archive/README.md` for both 2026-09-20 passes (47 files moved, 109 references synced).
+See `docs/archive/README.md` for all three 2026-09-20 passes (60 files moved out of `docs/` root,
+177 references synced).
 
 ## Key directories
 

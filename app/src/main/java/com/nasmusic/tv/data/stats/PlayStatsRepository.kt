@@ -24,7 +24,7 @@ import java.util.Locale
  * （经 [appendMonthlyPlayInEdit] / [appendDailyPlayInEdit] 注入，保持原子性，
  * 避免统计键与 play_counts 脱节）。
  *
- * 设计取舍（见 docs/feature-dev-plan-2026-09.md §1.6）：
+ * 设计取舍（见 docs/archive/feature-dev-plan-2026-09.md §1.6）：
  * - 月度不做历史回填：存量 play_counts 无时间维度，回填只能估。
  * - 按天**做一次性回填**（[backfillDailyInEdit]）：play_records 带 timestamp，
  *   虽是"尽力而为"（上限 500 条），但好过新用户之外的人打开热力图全空白。

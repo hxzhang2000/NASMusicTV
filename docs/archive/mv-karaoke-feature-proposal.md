@@ -4,7 +4,7 @@
 >
 > 本文档描述在现有 K 歌（人声消除 + 逐字歌词）功能之上，新增"音乐视频（MTV）"能力的技术方案。覆盖：免费 MV 搜索接口选型、后台自动搜索、MTV 按钮亮/暗、独立 MTV 页面与歌词显隐。
 >
-> 关联文档：`vocal-removal-approach-b-dsp.md`（人声消除方案 B）、`technical-overview.md` §4/§10。
+> 关联文档：`docs/archive/vocal-removal-approach-b-dsp.md`（人声消除方案 B）、`technical-overview.md` §4/§10。
 
 ---
 

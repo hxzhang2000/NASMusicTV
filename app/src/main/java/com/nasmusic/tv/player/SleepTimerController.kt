@@ -12,7 +12,7 @@ import kotlinx.coroutines.launch
 /**
  * 睡眠定时器（F2-2）：到点自动暂停播放。
  *
- * 设计（docs/feature-dev-plan-2026-09.md §2.3）：
+ * 设计（docs/archive/feature-dev-plan-2026-09.md §2.3）：
  * - 不持久化：电视场景"定时 = 今晚"，重启即重置（设计取舍）
  * - 预设档位 15/30/60/90 分钟
  * - 到期回调 [onExpired]，由 PlayerManager 触发 pause() + 通知刷新

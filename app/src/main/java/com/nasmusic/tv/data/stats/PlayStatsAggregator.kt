@@ -30,7 +30,7 @@ data class StatsBundle(
  * 播放统计聚合器（F2-1）——纯函数，可单测。
  *
  * 输入：月度 songId 次数表 + Song 元数据来源（recentSongObjects / PlayRecord 历史等）。
- * 聚合策略（见 docs/feature-dev-plan-2026-09.md §1.6）：
+ * 聚合策略（见 docs/archive/feature-dev-plan-2026-09.md §1.6）：
  * - artist 按精确字符串匹配归并（GBK mojibake 变体不强行归并，设计取舍）
  * - genre 为 null/blank 归入"未分类"
  * - 不区分大小写的歌手名归并（"Jay Chou" == "jay chou"）

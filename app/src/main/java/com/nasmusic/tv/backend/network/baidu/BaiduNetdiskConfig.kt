@@ -7,7 +7,7 @@ import com.nasmusic.tv.data.model.CloudDriveType
  *
  * 百度网盘开放平台 API 无显式版本号（不像 `/v2/xxx` 带版本路径），接口会静默演进。
  * 所有端点、method、参数、category 码集中在此——API 变更时只改这一处。
- * 基线见 `docs/百度网盘音乐播放开发方案.md` §3.0。
+ * 基线见 `docs/archive/百度网盘音乐播放开发方案.md` §3.0。
  */
 object BaiduNetdiskConfig {
 
@@ -65,7 +65,7 @@ object BaiduNetdiskConfig {
      * 上线前实测验证百度 API 探测端点（filemetas 或 uinfo）的响应字段结构后，
      * 调用 [com.nasmusic.tv.backend.network.baidu.ApiProbe.computeFieldFingerprint] 计算
      * 并回填此常量。空字符串 = 基线未固化（漂移检测暂不生效）。
-     * 见 `docs/百度网盘音乐播放开发方案.md` §3.0。
+     * 见 `docs/archive/百度网盘音乐播放开发方案.md` §3.0。
      */
     const val API_PROBE_BASELINE = ""
 

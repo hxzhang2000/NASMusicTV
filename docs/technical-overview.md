@@ -5167,7 +5167,7 @@ v2.6.0 天气电台功能使用 Open-Meteo（无需 API Key）作为主要天气
 - `ui/screens/NowPlayingScreen.kt` / `ui/components/PlayerControls.kt` / `ui/components/AppRoot.kt`：条件渲染 + 入口按钮
 - `app/build.gradle.kts`：versionCode 40->41, versionName 2.12.8->2.13.0
 - `CHANGELOG.md`：新增 v2.13.0 条目
-- `docs/vocal-removal-approach-b-dsp.md` / `vocal-removal-approach-c-ai.md`：方案设计文档（B 已实施，C 待评估）
+- `docs/archive/vocal-removal-approach-b-dsp.md` / `vocal-removal-approach-c-ai.md`：方案设计文档（B 已实施，C 待评估）
 
 #### 验证结果
 
@@ -5282,7 +5282,7 @@ v2.6.0 天气电台功能使用 Open-Meteo（无需 API Key）作为主要天气
 
 ### 10.45 v2.13.3 补丁 - 人声消除（方案 B）DSP 参数调整
 
-**概述**：实测人声消除"人声没了、音乐也没了"。根因是实现偏离了设计文档（`docs/vocal-removal-approach-b-dsp.md`）——代码把 `Side` 声道 vocal 频段也衰减 88%（文档设计 `L_out = newMid + Side`，Side 原样保留），Mid vocal 频段被完全挖空（-∞ 归零），切点更激进（120Hz/6kHz vs 文档 200Hz/5kHz），叠加 1.6x 补偿增益放大残余。
+**概述**：实测人声消除"人声没了、音乐也没了"。根因是实现偏离了设计文档（`docs/archive/vocal-removal-approach-b-dsp.md`）——代码把 `Side` 声道 vocal 频段也衰减 88%（文档设计 `L_out = newMid + Side`，Side 原样保留），Mid vocal 频段被完全挖空（-∞ 归零），切点更激进（120Hz/6kHz vs 文档 200Hz/5kHz），叠加 1.6x 补偿增益放大残余。
 
 按网搜共识（Audacity 官方 Vocal Reduction & Isolation / Adobe Audition Center Channel Extractor / 多篇 mid-side vocal removal 技术文）调整：
 
@@ -7271,7 +7271,7 @@ esolvedArtistCovers 解析缓存；且百度/本地艺术家不在 _artists 中�
 
 **提交日期**：2026-09-05
 
-**背景**：实现 `docs/phone-media-display-plan.md` 阶段1（P0），解决三大核心问题：
+**背景**：实现 `docs/archive/phone-media-display-plan.md` 阶段1（P0），解决三大核心问题：
 1. 汽车蓝牙连接时车机屏无歌曲信息
 2. 应用切后台歌曲停止
 3. 锁屏页面无歌曲信息和控制键
@@ -7726,7 +7726,7 @@ onSearchSong = { keyword -> viewModel.searchNetworkSongs(keyword) },
 
 ### 10.109 R-1/F-1 重构第一批：日志凭证脱敏 + MainViewModel 拆分（2026-09-09）
 
-依据 `docs/codebase-refactoring-plan-2026-09.md`（v1.4）实施，分支 `refactor/r1-viewmodel-split`，5 个独立提交，每步 assembleDebug 通过。
+依据 `docs/archive/codebase-refactoring-plan-2026-09.md`（v1.4）实施，分支 `refactor/r1-viewmodel-split`，5 个独立提交，每步 assembleDebug 通过。
 
 **F-1 日志凭证脱敏（提交 9985bf9）**：
 1. 新增 `util/UrlSanitizer.kt`：统一打码 URL 查询参数（api_key/token/access_token/t=/s=/u=/p=/password/apikey，大小写不敏感）。
@@ -7754,7 +7754,7 @@ onSearchSong = { keyword -> viewModel.searchNetworkSongs(keyword) },
 
 ### 10.110 R-2/R-3/R-5/R-6/R-7/R-9 + F-2/F-4~F-7 重构第二批（2026-09-09）
 
-依据 `docs/codebase-refactoring-plan-2026-09.md`（v1.4）实施，分支 `refactor/r1-viewmodel-split`，8 个独立提交，每步 assembleDebug 通过。
+依据 `docs/archive/codebase-refactoring-plan-2026-09.md`（v1.4）实施，分支 `refactor/r1-viewmodel-split`，8 个独立提交，每步 assembleDebug 通过。
 
 **R-2 SettingsScreen 拆分**：9 个 Section 迁至 `ui/screens/settings/`（General/Player/Download/Server/About/Cache/NetworkMusic/BaiduPan/Data，均 State/Actions data class 签名）；共享组件归 SettingsComponents.kt（InfoRow 重命名 SettingsInfoRow 规避同名冲突）；主文件 2529→924 行（保留侧栏/路由/8 个对话框宿主，AppRoot 零改动）。计划字面的 16 Section 按实际 9 个侧栏分区映射（Karaoke/Visualizer 等为 Player/Cache 内部子分组）。
 
@@ -7802,7 +7802,7 @@ onSearchSong = { keyword -> viewModel.searchNetworkSongs(keyword) },
 
 **版本**：versionCode 122 / versionName 2.28.0（分支 refactor/r1-viewmodel-split，24 个提交）
 
-**发布内容**（详见 docs/codebase-refactoring-plan-2026-09.md v1.4）：
+**发布内容**（详见 docs/archive/codebase-refactoring-plan-2026-09.md v1.4）：
 1. R-1：MainViewModel 5451 行拆为 13 个领域子 VM + ViewModelEvents 事件契约，主 VM 精简为协调者 + 兼容转发层（3186 行）；BaiduConnectionState 归属迁移至 NetworkMusicViewModel。
 2. R-2/R-3：SettingsScreen 拆 9 Section 至 ui/screens/settings/（2529→924 行）；LibraryScreen 五个 NAS 浏览 Tab 迁至 library/browse/（1695→647 行），详情页复用现役实现。
 3. R-4：AppPreferences 按领域拆 12 子 Prefs 门面，全库调用点迁移至 prefs.<domain>.xxx；旧 API 保留为转发实现（不标 @Deprecated），门面与旧 API 并存。
@@ -7850,7 +7850,7 @@ onSearchSong = { keyword -> viewModel.searchNetworkSongs(keyword) },
 
 ### 10.115 F2 系列播放功能增强 M1（2026-09-10，F2-1 + F2-2）
 
-计划文档：docs/feature-dev-plan-2026-09.md（v1.0）
+计划文档：docs/archive/feature-dev-plan-2026-09.md（v1.0）
 
 - **F2-1 播放统计面板**：
   - data/stats/PlayStatsRepository：月度统计键 play_stats_monthly（JSON：month → songId → count），经 AppPreferences.recordPlayWithSong 第 4 步同次 DataStore edit 原子写入；滚动保留 12 个月；不做历史回填（设计取舍）
@@ -7984,7 +7984,7 @@ onSearchSong = { keyword -> viewModel.searchNetworkSongs(keyword) },
 
 ### 10.122 v2.30.0 — 音乐可视化升级：全屏舞台 + 20 套效果 + 数据链收敛（2026-09-12）
 
-依据 `docs/music-visualizer-dev-plan.md` v6.0（可开发规格，72 章节 / 52 表格）实施。方案演进链：v1.0 否决 WebView 渲染 → v2.0 根因与技法 → v3.0 效果库与交互 → v4.0 呼吸感引擎 → v5.0 `AudioFrame` 契约 → v6.0 20 套全量可开发规格。
+依据 `docs/archive/music-visualizer-dev-plan.md` v6.0（可开发规格，72 章节 / 52 表格）实施。方案演进链：v1.0 否决 WebView 渲染 → v2.0 根因与技法 → v3.0 效果库与交互 → v4.0 呼吸感引擎 → v5.0 `AudioFrame` 契约 → v6.0 20 套全量可开发规格。
 
 #### 数据层根因修复（"不好看 / 不呼吸"的真因）
 
@@ -8024,7 +8024,7 @@ onSearchSong = { keyword -> viewModel.searchNetworkSongs(keyword) },
 - **待办（各机型手测项）**：TV 真机 20 套效果逐套观感与帧率（老盒子 ≥30fps / 单帧 ≤16ms）；`←/→` 与控制栏焦点交互；手机滑动阈值手感；封面取色随切歌生效；连续 30min 无爆音 / ANR / 内存单调增长；Allocation Tracker 确认绘制循环零分配；`AUTO_DIRECTOR` 8s 驻留不抖动；部分国产 TV `Visualizer` 持续返回全 0 时的 PCM 降级通道（P6，已在 v2.30.1 实施，待真机校准）
 ### 10.123 v2.30.1 — 可视化 P6：自动导演交叉淡入 + PCM 降级通道（2026-09-12）
 
-补齐 `docs/music-visualizer-dev-plan.md` 中 P6 的两个未完项。
+补齐 `docs/archive/music-visualizer-dev-plan.md` 中 P6 的两个未完项。
 
 #### AUTO_DIRECTOR 场景切换：600ms 交叉淡入
 
@@ -8165,7 +8165,7 @@ onSearchSong = { keyword -> viewModel.searchNetworkSongs(keyword) },
 
 ### 10.127 v2.30.5 — 可视化新增 E24「心跳」心电图式滚动频谱（2026-09-13）
 
-规格文档：`docs/music-visualizer-dev-plan.md` §4.22.5（E24）
+规格文档：`docs/archive/music-visualizer-dev-plan.md` §4.22.5（E24）
 
 #### 新增文件与改动点
 - `data/model/AppSettings.kt` — `VisualizerTheme` 枚举新增 `ECG_WAVE("心跳", Tier.BASIC, "24")`
@@ -8421,7 +8421,7 @@ onSearchSong = { keyword -> viewModel.searchNetworkSongs(keyword) },
 
 ### 10.157 v2.33.0 — Android Auto 车机支持（阶段 1：可发现 + 可浏览 + 可播放；含 2.5 根菜单图标、3 搜索与语音、4.1 提供方图标，2026-09-17）
 
-**来源**：产品需求 —— 为应用增加 Android Auto（手机映射投屏）支持。方案文档 `docs/android-auto-plan.md`（v2.1，11 章），本轮落地**阶段 1 的全部必要代码**，以及阶段 2.1/2.2/2.4/2.5、**阶段 3（搜索与语音）**与阶段 4.1（见第七、九节）。
+**来源**：产品需求 —— 为应用增加 Android Auto（手机映射投屏）支持。方案文档 `docs/archive/android-auto-plan.md`（v2.1，11 章），本轮落地**阶段 1 的全部必要代码**，以及阶段 2.1/2.2/2.4/2.5、**阶段 3（搜索与语音）**与阶段 4.1（见第七、九节）。
 **仍未实施**：阶段 2.3 剩余（艺人 / 专辑节点、NAS 短期缓存）、`onPlaybackResumption`（A-10）、阶段 4.2（强调色）/ 4.3（包验证收紧）、DHU / 真车端到端验收。
 
 **路线判定**：Android Auto 的「投屏」模式 = 手机跑应用与运算、车机只做显示与交互，**复用现有 APK** —— 不加 flavor、不改 `minSdk`（仍 22）、**不新增任何依赖**。与 AAOS（车机内嵌 Android）是两条独立路线。
@@ -8717,7 +8717,7 @@ translateY = 19 − 34×1.75 = −40.5
 - ⚠️ **`android.media.action.MEDIA_PLAY_FROM_SEARCH` 在 dex 里查不到，属正常** —— 它是**清单**字符串，只存在于 APK 的二进制 `AndroidManifest.xml`，必须用 `aapt2 dump xmltree` 验（已命中）。**别用 dex 字符串匹配去验清单声明**，会得到假阴性。
 - **真机/车机验收：未做**。DHU（Desktop Head Unit）需 `adb forward tcp:5277 tcp:5277` + `desktop-head-unit.exe`，真车默认只显示 Play 商店应用、侧载需在 Android Auto 开发者模式里打开 "Unknown sources"。按项目约定，上机验证由用户执行。
 
-**遗留（阶段 2 / 4 及阶段 3 的 `onPlaybackResumption`，见 `docs/android-auto-plan.md` §七 / §十一）**：
+**遗留（阶段 2 / 4 及阶段 3 的 `onPlaybackResumption`，见 `docs/archive/android-auto-plan.md` §七 / §十一）**：
 - **DHU / 真车端到端验收未做** —— 这是阶段 1 的**验收动作**，也是 2026-09-07 那次审查的遗留建议。已完成的只是**代码级验证**（编译 + 单测 + lint + 产物核对 + R8 存活）。内容树加载、点歌链路、状态镜像一致性、包验证白名单是否漏包，**这四件事只有 DHU / 真车能验**
 - ~~根菜单 4 项没有图标（阶段 2.5）~~ —— **已实施**，见本节第八小节。原先 `res/drawable/` 下只有 `banner.xml`，现已补 4 个单色白矢量图标 + 运行时光栅化
 - ~~attribution icon（阶段 4.1）~~ —— **已实施**，见本节第九小节
@@ -9542,10 +9542,13 @@ Box(Modifier.size(portraitTouchTarget(44.dp))      // 外层承担热区（竖�
 无法一眼看出「哪些还在办」。且不存在 `archive/` 目录，也没有归档约定。
 
 **判定规则**（已写入 `AGENTS.md` → Conventions → *Doc lifecycle*）：
+⚠️ 本节记录的是**第一、二轮当时**的规则；第三条判据（「结局已定」含**放弃**）见 §10.167。
 
 1. **不是活文档** —— 只有持续维护的索引/约定才永远留根：本文档（§10.N 持续追加）、
-   `conventions-adaptive-ui.md`、持续修订的重构方案，以及被指定为**长期参考**的文档
-   （`vocal-removal-approach-b-dsp.md` 是算法复原依据 —— 它是归档的**目的地**，不是对象）。
+   `conventions-adaptive-ui.md`。
+   ⚠️ 当时还把「持续修订的重构方案」与「被指定为长期参考的算法复原依据」
+   （`vocal-removal-approach-b-dsp.md`）也算作活文档 —— **§10.167 已推翻**：
+   前者重构早已完成、后者开发已完成，两者均于第三轮归档。
 2. **功能确已落地**，以 `CHANGELOG.md` / 本文档 §10.N 为裁判
    —— ⚠️ **不以文档头部状态标记为准**。
 
@@ -9566,15 +9569,18 @@ Box(Modifier.size(portraitTouchTarget(44.dp))      // 外层承担热区（竖�
 | `multi-bitrate-playback-download-plan.md` | 「**可进入实施**」 | `> **网络音乐多码率：补齐 192 档…**` | ✅ 已落地 → 归档 |
 | `backend-api-version-display-plan.md` | 「规划中，**未实施**」 | `**关于页新增「API 版本号」展示区**` | ✅ 已落地 → 归档 |
 | `vocal-separation-pitch-speed-plan.md` | 「v2 方案」 | `**K歌页面变速控制**：新增"速"按钮 0.5x~1.5x` | ✅ 已落地 → 归档 |
-| `aliyundrive-support-plan.md` | 「规划中，遭遇硬阻塞」 | 阿里云盘为**灰显「敬请期待」占位** | ❌ 未落地 → **留** |
-| `audition-lyrics-solution.md` | 无标记 | 「试听 / 30 秒 / 歌词拖拽」**零命中** | ❌ 未落地 → **留** |
-| `metadata-search-service-solution.md` | 无标记 | 「元数据搜索」**零命中** | ❌ 未落地 → **留** |
-| `network-music-upgrade-plan.md` | 「方案提案」 | 「Go Music API」**零命中** | ❌ 未落地 → **留** |
-| `unified-source-architecture.md` | 无标记 | 「统一音乐源」**零命中** | ❌ 未落地 → **留** |
+| `aliyundrive-support-plan.md` | 「规划中，遭遇硬阻塞」 | 阿里云盘为**灰显「敬请期待」占位** | ⚠️ 误判为「未落地 → 留」→ **§10.167 已归档**（永久不可实现） |
+| `audition-lyrics-solution.md` | 无标记 | 「试听 / 30 秒 / 歌词拖拽」**零命中** | ⚠️ 误判为「未落地 → 留」→ **§10.167 已归档**（方案变更，已完成） |
+| `metadata-search-service-solution.md` | 无标记 | 「元数据搜索」**零命中** | ⚠️ 误判为「未落地 → 留」→ **§10.167 已归档**（方案变更，已完成） |
+| `network-music-upgrade-plan.md` | 「方案提案」 | 「Go Music API」**零命中** | ⚠️ 误判为「未落地 → 留」→ **§10.167 已归档**（主动放弃） |
+| `unified-source-architecture.md` | 无标记 | 「统一音乐源」**零命中** | ⚠️ 误判为「未落地 → 留」→ **§10.167 已归档**（已完成） |
 
 > **教训**：`状态：待确认` 这类标记只说明「**文档**没回填」，不说明「**功能**没做」。
 > 源码扫描型/文本判定型护栏都要用**独立证据**（CHANGELOG、源码文件是否存在）交叉验证，
 > 否则会把在办工作埋掉，或把已完成工作当成待办。
+>
+> ⚠️ **但这张表本身也暴露了 CHANGELOG 裁判的盲区**：上表 5 行「留」的判定**全部被推翻**
+> —— 详见 §10.167。CHANGELOG 对「已上线功能」有效，对**方案变更**与**主动放弃**必然漏判。
 
 **第一轮执行结果**：
 
@@ -9611,15 +9617,117 @@ Box(Modifier.size(portraitTouchTarget(44.dp))      // 外层承担热区（竖�
 同步改写 **57 处引用 / 41 个文件**（其中 30+ 是**源码文件**）—— 这组数字本身就证明了
 「被引用不构成障碍」：路径全部改写成功，**死链 0 新增**。
 
-**最终结果**：`docs/archive/` **42** + `docs/articles/` **5**；
+**第一、二轮结果**：`docs/archive/` **42** + `docs/articles/` **5**；
 `docs/` 根 **62 → 15**（−47）；累计同步改写引用 **109 处**。
 
-**留在根目录的 15 个**：4 个活文档（本文档 / 约定 / 持续修订的重构方案 / 算法复原依据）
-+ 10 个未落地（含 `android-auto-plan` 阶段 2/3/4、`百度网盘…` Phase 7、
-`music-visualizer-dev-plan` 可开发状态）+ 1 个 docx 对照件。
+**当时留在根目录的 15 个**（⚠️ **此结论已被 §10.167 完全推翻**）：4 个活文档（本文档 / 约定 /
+持续修订的重构方案 / 算法复原依据）+ 10 个「未落地」+ 1 个 docx 对照件。
+经所有者确认：那 10 个「未落地」**全部已完成或已放弃**，另外那 2 个「活文档」
+（重构方案、算法复原依据）**也早已开发完成** → 第三轮共归档 **13 个**，根目录只剩 2 篇。
 
 **新增文件**：`docs/archive/README.md`（归档索引 + 未归档清单 + 回滚命令）、
 `docs/articles/README.md`。
+
+---
+
+### 10.167 文档治理 — 第三轮归档 13 个：状态标记全部过期 + 「放弃」也是归档理由（2026-09-20）
+
+**来源**：用户对 §10.166 中「留在根目录的 15 个文档」逐条给出权威结论 ——
+10 个「未落地」**全部已完成或已放弃**；随后又追加 2 个我判为「活文档」的
+（`codebase-refactoring-plan-2026-09.md`、`vocal-removal-approach-b-dsp.md`）
+「早已开发完成」。共 **13 个**（原文见下表「所有者依据」列）。
+
+**背景**：这 13 个正是第二轮我判为「未落地 → 留」（10 个）或「活文档 → 留」（2 个）的那批。
+前者的判定依据是「CHANGELOG 关键词零命中」+「文档自述状态未完成」，结果**全错**；
+后者则是把「含待决策项」误当成「仍在办」。**两类误判的共同根因：把文档自述状态当证据。**
+
+**根因：CHANGELOG 裁判有两个必然盲区**
+
+| 盲区 | 机制 | 本轮受害文档 |
+|---|---|---|
+| **方案变更** | 功能以**另一种形态**落地 → 原方案关键词自然零命中 | `audition-lyrics-solution`（试听/歌词编辑）、`metadata-search-service-solution`（元数据搜索） |
+| **主动放弃** | 从未上线 → 永远没有可命中的记录 | `network-music-upgrade-plan`（Go Music API 无公开端点，须自部署）、`aliyundrive-support-plan`（阿里云盘关闭第三方访问） |
+
+> ⇒ **不要因为「CHANGELOG 零命中」就断言「未落地」**。这两类**只能问所有者**。
+
+**新增判据（已写入 `AGENTS.md`）**：归档第二条从「功能确已落地」放宽为
+**「结局已定」= ✅ 已落地 **或** ❌ 永久放弃**。
+理由：归档不是「成功勋章」，而是「**这份文档不再指导未来工作**」；
+一个已死的方案留在根目录会持续被误读成「还能做」。
+
+> 边界：只是「**暂时没排期**」的在办方案**不适用**本条，仍留根。
+
+**第三轮归档清单**（12 篇 md + 1 个 docx 对照件）
+
+| 文档 | 文档自称状态 | 实际结论 | 所有者依据 |
+|---|---|---|---|
+| `aliyundrive-support-plan.md` | 「规划中，遭遇硬阻塞，需决策」 | ❌ **永久无法实现** | 阿里云盘已确认不支持其他应用访问 |
+| `百度网盘音乐播放开发方案.md` | 「开发进行中（Phase 1-6 已落地；**Phase 7 未开始**）」 | ✅ 已完成 | 已完成 |
+| `android-auto-plan.md` | 「阶段 1 已实施并验证；**阶段 2/3/4 未实施**」 | ✅ 已开发完成 | 已完成，无实机无法测试 |
+| `music-visualizer-dev-plan.md`（+ `.docx`） | 「**v6.0（可开发状态）**」 | ✅ 已开发完成 | 效果库已开发完成 |
+| `unified-source-architecture.md` | （无状态标记） | ✅ 已开发完成 | 已开发完成 |
+| `audition-lyrics-solution.md` | （无状态标记） | ✅ 已完成（**方案变更**） | 后续方案已完成 |
+| `metadata-search-service-solution.md` | （无状态标记） | ✅ 已完成（**方案变更**） | 后续方案已完成 |
+| `network-music-upgrade-plan.md` | 「方案提案」 | ❌ **主动放弃** | Go Music API 无公开 API 端点，必须自行部署 |
+| `feature-dev-plan-2026-09.md` | 「**待所有者评审**」 | ✅ 已开发完成 | 已开发完成 |
+| `phone-media-display-plan.md` | 「方案设计（**待评审**）」 | ✅ 已开发完成 | 已开发完成 |
+| `codebase-refactoring-plan-2026-09.md` | 「v1.6，含**待所有者决策项**」 | ✅ 已重构完成 | 早已重构完成 |
+| `vocal-removal-approach-b-dsp.md` | 「已实施（v3.2 已按实测调优）」 | ✅ 已开发完成 | 已开发完成 |
+
+> ⚠️ **`codebase-refactoring-plan-2026-09.md` 归档时仍含 2 项未闭环的所有者决策项** ——
+> 归档表示「不再作为在办方案维护」，**不等于这 2 项已决定不做**：
+> - **R-5**：PlayerManager 四阶段拆分（PlayerCore / PlayerQueue / PlayerMediaSession /
+>   PlayerAudioFocus）—— v1.6 已降级为待所有者决策项，「未经所有者重新确认不得启动」；
+>   现有定案是「HQ 编排保留 PlayerManager **防接口爆炸**」。
+> - **F-8**：下载无保活（P2）——「待所有者决策后再定」。
+>
+> 若日后启动任一项，从归档件恢复评估（播放/队列/媒体会话/音频焦点全路径手测成本）。
+> ⇒ **通用规则**：归档时若文档仍列未闭环决策项，**必须在归档索引里显式记录**，
+> 不能让它随文档一起沉下去。
+
+> ⚠️ **`vocal-removal-approach-b-dsp.md` 的特殊性**：§10.152 曾把它列为「算法复原依据」
+> （`VocalRemovalProcessor.kt` 删除时「先把算法归档再删」）。归档**不削弱该角色** ——
+> 它仍是完整算法文档（Mid/Side 流程图、最终参数 0.15/0.5/8kHz/1.25x、`queueInput` 伪代码），
+> 只是位置从 `docs/` 根移到 `docs/archive/`，**引用已同步改写，复原路径不变**。
+> ⇒ 「被指定为长期参考」**不构成留根理由** —— 归档是纯 `git mv`，参考角色随文件一起移动。
+
+**执行结果**
+
+| 项 | 数量 |
+|---|---|
+| 移入 `docs/archive/` | **13**（12 md + 1 docx） |
+| **同步改写的引用** | **68 处**，涉及 **29 个文件** |
+| 源码侧（KDoc 注释路径） | `ApiProbe.kt`、`BaiduNetdiskConfig.kt`、`PlayStatsAggregator.kt`、`PlayStatsRepository.kt`、`RadioSongScorer.kt`、`MediaLibraryTree.kt`、`SleepTimerController.kt`、`BeatDetectorTest.kt`、`ViewModelEvents.kt`、`HqSeparationOrchestrator.kt`、`SpectralMaskProcessor.kt` |
+| 文档侧 | `AGENTS.md`、`CHANGELOG.md`、本文档、`docs/archive/*`（多个已归档文档互相引用） |
+| 记忆日志 | `.workbuddy-ai/memory/*`、`.workbuddy/memory/*` —— 机械链接保活 |
+| `docs/` 根目录 | 15 → **2**（三轮累计 62 → 2，−60） |
+| 死链 | **0 新增**（仍为既有旧断链 `features-plan.md`，`HEAD` 中即存在） |
+
+> ⚠️ **工具盲区（本轮实测，已写入技能）**：`doc_archive.py` 的引用改写**只匹配带 `docs/` 前缀
+> 的写法**，**裸文件名**（如 `vocal-removal-approach-b-dsp.md`）**不会被替换**。
+> 本轮手工清扫了 3 处清单引用（`AGENTS.md`、`docs/archive/README.md`、本文档的活文档清单）
+> + 1 处关联链接（`mv-karaoke-feature-proposal.md`）。
+> ⇒ **每次归档后必须 `grep <basename>` 反查一遍**，不能只信脚本输出。
+
+**最终形态**：`docs/archive/` **55** 篇（+ 索引）+ `docs/articles/` **5** 篇；
+**`docs/` 根只剩 2 篇活文档**，已无任何在办方案文档：
+
+| 文档 | 为什么留根 |
+|---|---|
+| `technical-overview.md` | 全项目主索引，§10.N 持续追加 |
+| `conventions-adaptive-ui.md` | 自适应 UI 约定，随新组件持续维护 |
+
+> 其余一律视为「已完成 / 已放弃」。需要恢复某个方案（如 R-5、F-8）时从 `docs/archive/`
+> 取出评估即可 —— 归档是**纯移动**，内容一字未删。
+
+**未动的文件**：`docs/snapshot/`（16 张截图）、`docs/music-visualizer-e05-circular-ring.miora`
++ `_assets/`（E05 环形频谱设计素材）—— 后两者被 `.gitignore:83-84`（`docs/*.miora`、
+`docs/*_assets/`）排除，**未入库**，不构成仓库文档卫生问题，故按最小改动原则未移动。
+
+**方法论沉淀**（已写入 `AGENTS.md` 与技能 `docs-archive-audit`）：
+判定「是否已落地」的**证据优先级**应为
+**所有者结论 > CHANGELOG/技术文档 > 文档自述状态标记**。
+前两者冲突时以所有者为准；文档自述状态标记**一律不可信**（三轮实测共 16 篇反例）。
 
 **回滚**：`git checkout -- docs CHANGELOG.md AGENTS.md`（纯移动，无内容丢失）。
 
@@ -9629,11 +9737,11 @@ Box(Modifier.size(portraitTouchTarget(44.dp))      // 外层承担热区（竖�
 
 **来源**：`logs_temp/code-review-full-report-2026-09-13.md` §T5 / `docs/archive/code-review-2026-09-03.md` §P2。文件 348 行，全项目**零调用方**（`PlaybackService.kt:207` 实际 `val vocalRemovalProcessor = SpectralMaskProcessor()`——变量名是历史遗留，类型早就换过了；`PlayerManager.setVocalRemovalProcessor()` 的形参类型同样是 `SpectralMaskProcessor`）。
 
-**完整流程与调参过程**见 `docs/vocal-removal-approach-b-dsp.md`（含 Mid/Side 流程图、最终参数 0.15 / 0.5 / 8kHz / 1.25x 及其理由、`queueInput` 伪代码）。本小节只归档**那份文档里没有、只存在于源码 KDoc 中的内容**，确保删掉文件后算法仍可完整复原。
+**完整流程与调参过程**见 `docs/archive/vocal-removal-approach-b-dsp.md`（含 Mid/Side 流程图、最终参数 0.15 / 0.5 / 8kHz / 1.25x 及其理由、`queueInput` 伪代码）。本小节只归档**那份文档里没有、只存在于源码 KDoc 中的内容**，确保删掉文件后算法仍可完整复原。
 
 #### 滤波器：**四阶** Linkwitz-Riley（不是文档写的二阶）
 
-`docs/vocal-removal-approach-b-dsp.md:422` 写的是「二阶 IIR 滤波器（BiquadFilter 内部类）」，与最终实现不符。实际是 `BiquadCascade`：**两个参数完全相同（同 `sampleRate` / 同 `cutoff` / 同 `q = 0.707` / 同类型）的 biquad 串联**，斜率 −24 dB/oct，即 LR4。
+`docs/archive/vocal-removal-approach-b-dsp.md:422` 写的是「二阶 IIR 滤波器（BiquadFilter 内部类）」，与最终实现不符。实际是 `BiquadCascade`：**两个参数完全相同（同 `sampleRate` / 同 `cutoff` / 同 `q = 0.707` / 同类型）的 biquad 串联**，斜率 −24 dB/oct，即 LR4。
 
 系数（RBJ Audio EQ Cookbook，源码 `BiquadFilter.init`）：
 
@@ -9669,7 +9777,7 @@ w0 = 2π·f0/fs ;  alpha = sin(w0)/(2q) ;  a0 = 1 + alpha
 
 #### 若日后要复活
 
-按 `docs/vocal-removal-approach-b-dsp.md` 的流程 + 本小节的参数与系数重建即可（约 2–3h）。适合场景：高保真模式 / 离线批处理 / 可切换的「精细模式」。**注意** CPU 8× 代价，TV 端实时链路需先实测。
+按 `docs/archive/vocal-removal-approach-b-dsp.md` 的流程 + 本小节的参数与系数重建即可（约 2–3h）。适合场景：高保真模式 / 离线批处理 / 可切换的「精细模式」。**注意** CPU 8× 代价，TV 端实时链路需先实测。
 
 ### 10.151 v2.32.3 — L3 落地：playModeToggleHandler 改 SharedFlow（2026-09-14）
 
@@ -9874,7 +9982,7 @@ w0 = 2π·f0/fs ;  alpha = sin(w0)/(2q) ;  a0 = 1 + alpha
 - **已修 4 项（性能批次，见 §10.148）**：P1#3 Crossfade 等功率曲线 / P1#4 SleepTimer 协程化 / P1#6 `hueOf` 零分配 / P1#7 Milkdrop 预分配 Canvas
 - **已修 1 项（安全批次，见 §10.149）**：**S4** Jellyfin 会话内 401 重认证 —— 全量报告里最后一项未完成的安全类问题，原列「暂缓：需真实环境测试」，本轮落地（含 5 条 MockWebServer 回归测试）
 - **已修 1 项（代码卫生，见 §10.150）**：**P1#5** 可视化随机源隔离 —— ⚠️ **本项不是缺陷修复**（原共享 seed 无任何可见症状），修的是「`VisualizerMath` KDoc 声称纯函数、实则持有可变单例状态」这一矛盾 + 零调用方的死代码 `resetRandom()`；附带收益是随机行为首次可单测
-- **已修 1 项（P2 清理，见 §10.152）**：**T5** 删除死代码 `VocalRemovalProcessor.kt`（348 行，零调用方）—— **先把算法归档再删**：该类 KDoc 里独有而 `docs/vocal-removal-approach-b-dsp.md` 没有的内容（四阶 Linkwitz-Riley 级联与 RBJ 系数、与 `SpectralMaskProcessor` 的取向对比、CPU 8× 代价、`reset()` 置 `enabled=false` 的历史坑）已写入 §10.152；另同步 4 处 stale 注释，`PlaybackService` 的局部变量 `vocalRemovalProcessor` 正名为 `spectralMaskProcessor`
+- **已修 1 项（P2 清理，见 §10.152）**：**T5** 删除死代码 `VocalRemovalProcessor.kt`（348 行，零调用方）—— **先把算法归档再删**：该类 KDoc 里独有而 `docs/archive/vocal-removal-approach-b-dsp.md` 没有的内容（四阶 Linkwitz-Riley 级联与 RBJ 系数、与 `SpectralMaskProcessor` 的取向对比、CPU 8× 代价、`reset()` 置 `enabled=false` 的历史坑）已写入 §10.152；另同步 4 处 stale 注释，`PlaybackService` 的局部变量 `vocalRemovalProcessor` 正名为 `spectralMaskProcessor`
 - **已修 1 项（时序安全，见 §10.151）**：**L3** `playModeToggleHandler` 改 SharedFlow —— `@Volatile` 可变闭包字段 → `MutableSharedFlow<Unit>` + `lifecycleScope` 订阅，Activity 销毁自动退订，消除「Application 长期持有已 `onCleared` ViewModel 闭包」。⚠️ 报告描述的「配置重建窗口期 NPE」经核实**不成立**（ViewModelStore 保留 + destroy/create 不返回 Looper）；真问题是 `onDestroy` 清空被 `if (!isFinishing) return` 拦截导致订阅无法收敛
 - **判定无需修复 5 项**：S2（token 已加密）/ S5（无硬编码密钥）/ T1（Application scope 合理）/ L5（定位错误文件）/ L8（既定设计）—— 报告自身已剔除或降级
 - **已 review 关闭 1 项**：P1#13 K 歌 ONNX 专项 —— 已由 `logs_temp/code-review-karaoke-onnx-2026-09-14.md` 完成，其发现另已修复，见 §10.146

@@ -17,7 +17,7 @@ import java.security.MessageDigest
  * 基线指纹固化在 [BaiduNetdiskConfig.API_PROBE_BASELINE]（上线前实测验证后回填），
  * 对比 [CloudDriveConfig.apiDrifted] 判定是否漂移，一次性提示经 [AppPreferences.baiduApiDriftNotified] 去重。
  *
- * @see docs/百度网盘音乐播放开发方案.md §3.0 版本管理机制
+ * @see docs/archive/百度网盘音乐播放开发方案.md §3.0 版本管理机制
  */
 object ApiProbe {
 

@@ -517,7 +517,7 @@ class MediaLibraryTree(
  *
  * ## 规则
  * - **去重按 `song.id`，先出现的赢** —— 调用方按「网络音乐 → NAS」顺序传入，
- *   故网络结果优先级更高（车机场景下公网可达性优于家庭内网，见 `docs/android-auto-plan.md` §6）
+ *   故网络结果优先级更高（车机场景下公网可达性优于家庭内网，见 `docs/archive/android-auto-plan.md` §6）
  * - **保序**：`LinkedHashMap` 保持插入顺序，**不排序**（顺序即优先级）
  * - **先合并去重、再截断到 [limit]** —— 顺序反了会把重复项算进配额、白占名额
  *

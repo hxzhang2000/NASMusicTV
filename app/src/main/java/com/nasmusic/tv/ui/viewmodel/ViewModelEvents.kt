@@ -6,7 +6,7 @@ import com.nasmusic.tv.data.model.PlayMode
 import com.nasmusic.tv.data.model.Song
 
 /**
- * 跨域事件契约（W0 冻结版，见 docs/codebase-refactoring-plan-2026-09.md）。
+ * 跨域事件契约（W0 冻结版，见 docs/archive/codebase-refactoring-plan-2026-09.md）。
  * 新增事件必须回写本文件与文档对应章节。
  *
  * MainViewModel 作为唯一事件路由器（init 中 collect 各子 VM 事件并转发给目标子 VM），

@@ -54,7 +54,7 @@ import java.io.File
  * 历史备忘：曾有一个更精细的 4 阶 Linkwitz-Riley DSP 实现
  * （VocalRemovalProcessor），已被 SpectralMaskProcessor 取代，2026-09-14 作为
  * 死代码删除；其算法与参数已归档于 docs/technical-overview.md §10.152 与
- * docs/vocal-removal-approach-b-dsp.md，可供高保真/离线批处理场景复原。
+ * docs/archive/vocal-removal-approach-b-dsp.md，可供高保真/离线批处理场景复原。
  * 与本类无关，不要混淆。
  * ─────────────────────────────────────────────────────────────────────
  */

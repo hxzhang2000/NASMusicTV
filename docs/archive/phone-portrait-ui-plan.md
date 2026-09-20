@@ -26,7 +26,7 @@
 >   而 `FocusableSurface` 未下发（**TV 上同样存在**），维护约定见 `docs/conventions-adaptive-ui.md` §10
 > ✅ 5 项阻断已闭环：B1 分支谓词（§3.1）、B2 inset 前提（D9 拍板）、B3 过渡副作用（D10 拍板硬切，直接消除）、B4 首帧同步读（§8.2 镜像）、B5 dp 口径（§2.7）
 > 目标版本：v2.36.0 起分批落地
-> 关联文档：`docs/archive/phone-support-plan.md`（手机端适配总纲）、`docs/phone-media-display-plan.md`（媒体展示与保活）
+> 关联文档：`docs/archive/phone-support-plan.md`（手机端适配总纲）、`docs/archive/phone-media-display-plan.md`（媒体展示与保活）
 
 > **版本演进**
 > - v1.0 初稿

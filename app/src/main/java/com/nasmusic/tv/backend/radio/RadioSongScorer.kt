@@ -6,7 +6,7 @@ import kotlin.random.Random
 /**
  * 智能电台打分器（F2-3）——纯函数，可单测。
  *
- * 打分规则（docs/feature-dev-plan-2026-09.md §3.3）：
+ * 打分规则（docs/archive/feature-dev-plan-2026-09.md §3.3）：
  * - 同 artist：+50
  * - 同 genre：+30
  * - 同 album（非当前专辑）：+10
