@@ -55,6 +55,21 @@ internal fun DataSettingsSection(
             fontSize = FontSize.button(),
             modifier = Modifier.padding(bottom = 16.dp, start = 4.dp)
         )
+        // 备份结果消息（导出 / 恢复）
+        //
+        // ⚠️ v2.36.2 从「备份文件列表**下方**」移到分区**最上方**（真机反馈「点恢复静默失败无提示」）：
+        // 恢复入口在下方列表的每一行里，消息渲染在列表下方时会被挤到屏幕外
+        // —— 加上 4s 自动消费，用户根本看不到（见 SettingsScreen 的 LaunchedEffect）。
+        // 现在放在分区第一个元素，并配合 SettingsScreen 的「有新消息就滚到分区顶部」。
+        if (state.backupMessage != null) {
+            Text(
+                text = state.backupMessage.text,
+                color = if (state.backupMessage.isError)
+                    NasMusicColors.Warning else NasMusicColors.Primary,
+                fontSize = FontSize.button(),
+                modifier = Modifier.padding(start = 4.dp, bottom = 12.dp)
+            )
+        }
         // 导出备份
         if (actions.onExportBackup != null) {
             SettingActionButton(
@@ -135,16 +150,6 @@ internal fun DataSettingsSection(
             }
         }
         // 从备份列表恢复（电视无系统文件选择器，恢复入口即上方备份文件列表）
-        // 备份结果消息
-        if (state.backupMessage != null) {
-            Spacer(modifier = Modifier.height(16.dp))
-            Text(
-                text = state.backupMessage.text,
-                color = if (state.backupMessage.isError)
-                    NasMusicColors.Warning else NasMusicColors.Primary,
-                fontSize = FontSize.button(),
-                modifier = Modifier.padding(start = 4.dp)
-            )
-        }
+        // ⚠️ 备份结果消息已上移到分区顶部，见上文 —— 不要在这里再加一份。
     }
 }

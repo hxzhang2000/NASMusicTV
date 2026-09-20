@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.runtime.Composable
@@ -46,12 +47,15 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.tv.material3.Icon
-import androidx.tv.material3.IconButton
 import androidx.tv.material3.Text
+import com.nasmusic.tv.R
 import com.nasmusic.tv.data.model.LyricsLine
 import com.nasmusic.tv.data.model.Song
 import com.nasmusic.tv.data.model.VisualQuality
@@ -99,6 +103,8 @@ fun VisualizerStage(
 ) {
     val density = LocalDensity.current
     val safeArea = 0.05f
+    // 手机左上角返回按钮的无障碍描述（原先硬编码 "返回"，按项目约定改用字符串资源）
+    val backDescription = stringResource(R.string.common_back)
 
     // TV 焦点：进入舞台立即夺焦。VisualizerOverlay 直接覆盖在 UI 树上，
     // 若不夺焦，D-Pad 事件仍路由到下方被遮挡界面的焦点节点，onPreviewKeyEvent 收不到，
@@ -364,14 +370,47 @@ fun VisualizerStage(
         }
 
         // 左上（仅手机）：返回按钮
+        //
+        // ⛔ v2.36.2：**不能用 `androidx.tv.material3.IconButton`**（真机反馈「看得见、按不动」）。
+        // 它的 `Surface(onClick=)` 走 `Modifier.tvClickable`，而该实现**故意不挂 `Modifier.clickable`**
+        // —— `Surface.kt` 原注释：「We are not using "clickable" modifier here because if we set
+        // "enabled" to false then the Surface won't be focusable as well. But, in TV use case, a
+        // disabled surface should be focusable」—— 它只提供
+        //   ① `handleDPadEnter`：**D-Pad 按键**事件
+        //   ② `focusable()`：焦点
+        //   ③ `semantics { onClick { } }`：**无障碍服务**专用
+        // ⇒ **触摸点击永远不会触发 `onClick`**。TV 端本分支不渲染（`isTV` 为 true 时整块跳过），
+        //   所以只影响手机；必须改用项目自建的 [FocusableSurface]（内部是 `combinedClickable`，
+        //   触摸 / D-Pad 双通道），这也是全项目唯一一处 tv-material3 `IconButton`。
         if (!isTV) {
-            IconButton(
+            FocusableSurface(
                 onClick = onExit,
                 modifier = Modifier
                     .align(Alignment.TopStart)
                     .padding(16.dp)
+                    // 48dp 在竖屏只有 ≈39.4 物理 dp ❌ → §2.7 换算抬到 56dp
+                    .size(portraitTouchTarget(48.dp))
+                    .semantics { contentDescription = backDescription },
+                shape = RoundedCornerShape(12.dp),
+                // 覆盖在频谱上：半透明黑底 + 白图标，保证任意主题下都看得清
+                containerColor = Color.Black.copy(alpha = 0.35f),
+                focusedContainerColor = Color.Black.copy(alpha = 0.55f),
+                // 手机没有焦点边框，按下高亮是唯一的"已响应"视觉反馈（同 PhoneTopBarIconButton）
+                pressedContainerColor = Color.White.copy(alpha = 0.25f),
+                contentColor = Color.White,
+                focusedContentColor = Color.White,
+                focusedScale = 1.08f,
+                pressedScale = 0.92f,
+                showFocusBorder = false,
             ) {
-                Icon(Icons.Filled.Close, contentDescription = "返回", tint = Color.White)
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Icon(
+                        imageVector = Icons.Filled.Close,
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
             }
         }
     }

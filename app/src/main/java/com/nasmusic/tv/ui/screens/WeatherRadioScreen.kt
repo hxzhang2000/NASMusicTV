@@ -61,6 +61,17 @@ fun WeatherRadioScreen(
     onBack: () -> Unit,
     downloadStates: Map<String, DownloadState> = emptyMap(),
     onDownloadSong: (Song) -> Unit = {},
+    // ── v2.36.2：内嵌操作按钮与曲库 / 专辑详情等页面对齐 ──────────────────────
+    // ⚠️ [UnifiedSongRow] 的按钮是**按回调是否为 null 决定是否渲染**的：
+    // 此前本页只传了 `downloadState` + `onDownload`，于是每行只剩一个「⬇」下载按钮，
+    // 与「曲库 → 歌曲」等页面的「⬇ ♡ ☰ +」完全不一致（真机反馈）。
+    // 组件本来就是同一个，缺的是这几个回调。
+    favoriteIds: Set<String> = emptySet(),
+    queueSongIds: Set<String> = emptySet(),
+    onToggleFavorite: (Song) -> Unit = {},
+    onToggleQueue: (Song) -> Unit = {},
+    onAddToPlaylist: (Song) -> Unit = {},
+    onDeleteDownloadSong: ((Song) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     // v2.36.0 竖屏：页 padding 32→16
@@ -211,8 +222,14 @@ fun WeatherRadioScreen(
                         onClick = { onPlaySong(song, index) },
                         mode = SongRowMode.MODE_ROW,
                         index = index,
+                        isFavorited = song.id in favoriteIds,
+                        onToggleFavorite = { onToggleFavorite(song) },
+                        isInQueue = song.id in queueSongIds,
+                        onToggleQueue = { onToggleQueue(song) },
+                        onAddToPlaylist = { onAddToPlaylist(song) },
                         downloadState = downloadStates.stateOfSong(song),
-                        onDownload = { onDownloadSong(song) }
+                        onDownload = { onDownloadSong(song) },
+                        onDeleteDownload = onDeleteDownloadSong?.let { cb -> { cb(song) } }
                     )
                 }
             }

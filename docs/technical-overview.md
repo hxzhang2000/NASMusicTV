@@ -10212,6 +10212,259 @@ TV 端**不加**手势，保持逐字不变（遥控器本来也没有横向滑�
 
 **版本**：v2.36.1（未变；versionCode 155）
 
+### 10.172 v2.36.2 — 老备份导入失败：Gson 枚举适配器「返回 null 而非抛异常」（2026-09-20）
+
+**用户反馈**：「以前保存的备份数据文件现在导入失败，而且在手机端点击恢复时静默失败无提示」。
+
+**根因（三段式，逐段都有证据）**
+
+1. **备份 JSON 存的是枚举常量名，而常量被删过。**
+   真机样例 `logs_temp/NASMusic_backup_20260920_221903.json`（42134 B，合法 JSON，`version: 1`）：
+
+   ```json
+   "appSettings": { ..., "visualizerTheme": "CLASSICAL_WAVE" }      // ← 已不在当前枚举里
+   "appSettings": { ... }                                            // ← 且整个 visualizerQuality 键都不存在
+   ```
+
+   对照 `data/model/AppSettings.kt`：`VisualizerTheme` 现 32~34 项，`CLASSICAL_WAVE` 已删除；
+   `LEGACY_MAP` 里有 `"CLASSICAL_WAVE" to CIRCULAR_RING`，但它**只被 `fromKey()` 调用**
+   —— `fromKey()` 只服务「读 DataStore」那条路。
+
+2. **Gson 的枚举适配器在名字找不到时返回 `null`，不抛异常。**
+   `gson 2.10.1` 的 `com/google/gson/internal/bind/TypeAdapters.java`：
+
+   ```java
+   @Override public T read(JsonReader in) throws IOException {
+     if (in.peek() == JsonToken.NULL) { in.nextNull(); return null; }
+     String key = in.nextString();
+     T constant = nameToConstant.get(key);
+     return (constant == null) ? stringToConstant.get(key) : constant;   // ← 找不到 → null
+   }
+   ```
+
+   于是 `AppSettings.visualizerTheme`（**声明为非空**）被反射写成 `null`
+   —— Gson 用 `Field.set()`，**绕过 Kotlin 在构造器 / 参数上生成的非空检查**。
+
+3. **一个字段为 null 拖垮整份导入。**
+   `data/prefs/AppPreferences.kt` 的 `importBackupData()`：
+
+   ```kotlin
+   data.serverConfig?.let { saveServerConfig(...) }          // ① 先写，成功
+   data.appSettings?.let { settings ->
+       dataStore.edit { prefs ->                             // ② 事务：任一异常全部回滚
+           ...
+           prefs[keyVisualizerTheme] = settings.visualizerTheme.name   // ← NPE
+   ```
+
+   `settings.visualizerTheme.name` 抛 NPE → `dataStore.edit {}` 事务回滚 → ② 整块作废
+   → 后面的第二个 `dataStore.edit {}` 也不再执行 → **整份备份导入失败**。
+   `BackupViewModel.importBackup` 的 `catch (e: Exception)` 确实设置了失败消息 —— 见 §10.172 后半。
+
+**修复**
+
+| 层 | 改动 | 文件 |
+|---|---|---|
+| 主修 | 新增备份专用**容错 Gson**：三级回落（当前枚举名 → 枚举自带兼容映射 → 首个常量），**永不返回 null** | `data/prefs/BackupGson.kt`（新增） |
+| 接线 | 导出 / 导入 / 扫码恢复三条路径改用它 | `ui/viewmodel/BackupViewModel.kt` |
+| 兜底 | `importBackupData()` 里 4 个枚举字段 `null` → 各自默认值 | `data/prefs/AppPreferences.kt` |
+
+`BackupGson.kt` 的关键实现：
+
+```kotlin
+private object TolerantEnumAdapterFactory : TypeAdapterFactory {
+    override fun <T : Any> create(gson: Gson, type: TypeToken<T>): TypeAdapter<T>? {
+        val raw = type.rawType
+        if (!raw.isEnum) return null          // 非枚举交回默认链路，不改变其它类型的读写
+        @Suppress("UNCHECKED_CAST")
+        return TolerantEnumAdapter(raw) as TypeAdapter<T>
+    }
+}
+
+private fun resolveLegacyEnumName(clazz: Class<*>, raw: String): Enum<*>? = when (clazz) {
+    VisualizerTheme::class.java -> VisualizerTheme.fromKey(raw)   // 未命中返回 Default（非 null）
+    VisualQuality::class.java   -> VisualQuality.fromKey(raw)
+    NetworkSource::class.java   -> NetworkSource.fromKey(raw)     // 未命中返回 null → 落到第 ③ 级
+    else -> null
+}
+```
+
+⚠️ 三个实现坑（都踩过）：
+
+1. **形参不能叫 `in`** —— `in` 是 Kotlin 硬关键字，`override fun read(in: JsonReader)` 直接语法错误
+   （Java 侧名字是 `in`，Kotlin 覆写允许改名）。
+2. **`Class<out Enum<*>>` 不满足 `T : Enum<T>` 的自引用上界** → 适配器内部用 `Class<*>` + `Any?`，
+   工厂处做一次 `@Suppress("UNCHECKED_CAST")`。
+3. **不能只登记已知枚举**。用 `TypeAdapterFactory` 而非逐个 `registerTypeAdapter`，
+   是为了让**将来任何**枚举改名都不会再让备份导入失败（Gson 前插工厂 → 先于内置 `ENUM_FACTORY` 命中）。
+
+**「静默失败无提示」的根因（第二处）**
+
+消息**确实**被设置了（`_backupMessage.value = BackupMessage(backup_restore_failed, isError = true)`），
+但渲染位置在 `ui/screens/settings/DataSettingsSection.kt` 的**备份文件列表下方**：
+
+```
+数据管理
+├─ 描述
+├─ 导出备份 / 扫码传输 / 播放统计 / 歌单导入
+├─ 备份文件列表
+│   ├─ [文件A] 恢复 | 删除      ← 用户在这里点「恢复」
+│   └─ [文件B] 恢复 | 删除
+└─ ★ backupMessage            ← 消息渲染在这里 → 被挤到屏幕外
+```
+
+叠加 `SettingsScreen` 的 `LaunchedEffect { delay(4000); onConsumeBackupMessage() }`
+→ 4s 后连滚下去看的机会都没有。**这是「无提示」的全部原因，不是消息没被设置。**
+
+修复三件套：
+
+- 消息块上移到「数据管理」分区**顶部**（`DataSettingsSection`）
+- 有新消息时把分区列表滚回顶部（`SettingsScreen` 加 `rememberLazyListState` + `animateScrollToItem(0)`；
+  DATA 分区整体是一个 `item`，故下标 0 即分区顶部）
+- **失败消息不再自动消费**（`if (msg != null && !msg.isError)`）—— 成功提示仍 4s 消失
+
+**遗留**：`importBackupData()` 先写 `serverConfig` 再写 `appSettings`，若后者失败，
+前者已落盘（无整体事务）。本次未处理 —— 备份不含密码/Token，影响限于「连接地址被换掉」。
+
+### 10.173 v2.36.2 — 手机频谱页关闭按钮点击无效：tv-material3 `IconButton` 没有 `clickable`（2026-09-20）
+
+**用户反馈**：「在手机上的频谱效果页面的左上角，有个关闭按钮，点击无效」。
+
+**根因**：`ui/components/VisualizerStage.kt` 的手机返回按钮用了
+`androidx.tv.material3.IconButton`。它的实现链是
+`IconButton → Surface(onClick=) → Modifier.tvClickable`，而 `tv-material3 1.0.0-alpha10`
+的 `Surface.kt` 写得非常明确：
+
+```kotlin
+private fun Modifier.tvClickable(...) = handleDPadEnter(...)
+    // We are not using "clickable" modifier here because if we set "enabled" to false
+    // then the Surface won't be focusable as well. But, in TV use case, a disabled surface
+    // should be focusable
+    .focusable(interactionSource = interactionSource)
+    .semantics(mergeDescendants = true) {
+        onClick { ... }      // ← 只给无障碍服务用，不是触摸分发
+        onLongClick { ... }
+    }
+```
+
+即它只提供三条通道：**D-Pad 按键**（`handleDPadEnter`）、**焦点**（`focusable`）、
+**无障碍 `semantics.onClick`** —— **没有 `Modifier.clickable`，触摸点击永远不触发 `onClick`**。
+手机上表现为「按钮看得见、按不动」。
+
+**影响面核查**（全库唯一一处）：
+
+```bash
+grep -rn "androidx\.tv\.material3\.\(Button\|IconButton\|Surface\|...\)" app/src/main/java
+# → VisualizerStage.kt:53  import androidx.tv.material3.IconButton   ← 唯一
+# → PlayerControls.kt:385  private fun IconButton(...)              ← 项目自己的同名私有函数，无关
+```
+
+**修复**：改用项目自建的 `FocusableSurface`（内部 `combinedClickable`，触摸 / D-Pad 双通道），
+并补 `portraitTouchTarget(48.dp)`（竖屏 56 Compose dp）与 `semantics { contentDescription }`
+（文案改用 `R.string.common_back`，原先硬编码 `"返回"`）。
+该分支被 `if (!isTV)` 包着，**TV 端逐字不变**。
+
+**教训**：**tv-material3 里所有 `onClick` 组件在触摸设备上都是死的**（`Surface` / `IconButton` /
+`Button` 家族共用 `tvClickable`）。手机端必须用 `FocusableSurface`。项目此前只有「tv-material3 的
+`LocalContentColor` 默认是 `Color.Black`」这条记录（§10.169），本条是同一批组件的第二个坑。
+
+### 10.174 v2.36.2 — 竖屏文字输入弹窗展示不全：固定宽按钮行 / 历史行超宽被裁（2026-09-20）
+
+**用户反馈**：「各个搜索框打开的文字输入窗口，在竖屏模式下都无法展示完全，
+要根据横竖屏区分进行排版调整」。
+
+**根因**：`ui/screens/TextInputDialog.kt` 里所有横向按钮组都是**固定宽度**的，而竖屏可用宽度只有
+
+```
+responsiveDialogSize(720.dp) → fillMaxWidth(0.92f).widthIn(max = 420.dp)
+外层 padding 20dp × 2
+⇒ 360dp 屏：0.92 × 360 − 40 ≈ 291dp
+```
+
+对照三行的实际宽度：
+
+| 行 | 组成 | 合计 | 溢出 |
+|---|---|---|---|
+| 系统 IME 模式操作行 | `140 + 84 + 84 + 100` + 3×6 | **426dp** | +135dp |
+| 自制键盘底部功能行 | `80+84+44+116+80+80+80+96` + 7×4 | **688dp** | +397dp |
+| 自制键盘字母行 | 10 × `KeyButton(56.dp)` + 9×6 | **614dp** | +323dp |
+| 搜索历史行 | `28 + 5 × 120` + 6×5 | **≈658dp** | +367dp |
+
+`Row` 不会压缩子项，`Arrangement` 只能把整组居中 → 首尾元素被推到屏幕外**直接裁掉**
+（最显眼的是「返回键盘」与「确认」）。`verticalScroll` 只能解决纵向，对横向溢出无能为力。
+
+**修复**：新增 `WrapButtonRow(wrap, spacing, content)` ——
+`wrap = true`（手机竖屏）走 `FlowRow` 自动换行，`wrap = false`（TV / 手机横屏）仍是 `Row`，
+**与改动前逐字等价（B1）**。四处调用全部接入：
+
+- 系统 IME 模式操作行（`spacing = 6.dp`）
+- 自制键盘底部功能行（`spacing = 4.dp`）
+- 自制键盘 4 个字母行（`spacing = 6.dp`；保留「数字 / a-j / k-t / u-z+符号」的逻辑分组）
+- `HistoryRow`（新增 `wrap` 参数，`FlowRow` + `spacedBy(6.dp)`）
+
+另外补两处竖屏适配：
+
+- 外层 `BoxWithConstraints` 在竖屏加 `Modifier.imePadding()`（键盘避让）。
+  ⚠️ `DialogProperties.decorFitsSystemWindows` **默认为 true**，此时系统已按 IME 缩小窗口、
+  `WindowInsets.ime` 恒为 0 → 该行是 no-op；只有窗口未被缩小时才生效，**两者不会叠加**。
+- `HistoryRow` 的历史项触摸目标由 `32.dp` 改为 `portraitTouchTarget(32.dp)`
+  （竖屏 56 Compose dp；32dp 在竖屏只有 ≈26 物理 dp，远低于 44 下限）。
+
+`isPhonePortrait` 的读取位置**上移到 `Dialog` 之前**（原先在 `BoxWithConstraints` 内容里），
+以便用于其 `modifier`。这是纯位置调整，不改变任何分支语义。
+
+### 10.175 v2.36.2 — 天气电台歌曲条目内嵌按钮补齐（2026-09-20）
+
+**用户反馈**：「天气电台页面中，各个歌曲条目的内嵌按钮与正常的歌曲条目不同，只有下载按钮，
+应该与其他的歌曲条目用同一个组件，内嵌按钮也应该一致」。
+
+**根因**：组件**本来就是同一个**（`UnifiedSongRow`），差的是**回调**。
+`UnifiedSongRow` 的每个内嵌按钮都按「对应回调是否为 `null`」决定是否渲染：
+
+```kotlin
+if (onDownload != null && effectiveDownloadState !is DownloadState.None) { ... }   // ⬇
+if (onToggleFavorite != null) { ... }                                             // ♡
+if (onToggleQueue != null) { ... }                                                // ☰
+if (onAddToPlaylist != null) { ... }                                              // +
+if (onDelete != null) { ... }                                                     // ✕
+```
+
+`WeatherRadioScreen` 此前只传了 `downloadState` + `onDownload` → 每行只剩「⬇」。
+
+**修复**：按 `LibraryBranch` 的同源接线补齐（`favoriteIds` 已合并 NAS 收藏与网络收藏，
+天气电台歌曲来自网络音乐，`toggleNetworkFavorite` 适用）：
+
+| 参数 | 来源 |
+|---|---|
+| `favoriteIds` | `viewModel.favoriteIds.collectAsState(...)` |
+| `queueSongIds` | `viewModel.queueSongIds.collectAsState(...).value` |
+| `onToggleFavorite` | `viewModel.toggleNetworkFavorite(song)` |
+| `onToggleQueue` | `viewModel.playerVM.toggleQueueSong(song)` |
+| `onAddToPlaylist` | `onPickSongForPlaylist(song)`（`WeatherRadioBranch` 新增参数，`AppRoot` 传入 `pickerSong = song`） |
+| `onDeleteDownloadSong` | `viewModel.downloadVM.deleteDownload(song)` |
+
+⚠️ 参数名是 `onDeleteDownload`（不是 `onDeleteDownloadSong`）—— 传参时写成后者会报
+`No parameter with name 'onDeleteDownloadSong' found`。
+
+⚠️ **这是全局改动，TV 端同样生效**（天气电台页 TV / 手机共用）。
+用户诉求即「与其它歌曲条目一致」，故不属于 B1 要保护的「模式差异」，属有意为之。
+
+**测试与验证**（`logs_temp/gate-v2362b.log`，源码与产物一致的一次跑）：
+
+- `:app:testDebugUnitTest` → **874 例 / 0 失败 / 0 错误 / 0 跳过**
+  （v2.36.1 基线 865 + 新增 `BackupGsonTest` 9 例）
+- `:app:lintDebug` → **0 errors / 272 warnings**（基线未变）
+- `:app:assembleRelease` → BUILD SUCCESSFUL，产物 `NASMusicTV-release-v2-36-2.apk`
+  （23,117,767 B；versionCode 156 / versionName 2.36.2）
+- ⚠️ `BackupGsonTest` 首轮跑出 **1 例假红**（`expected:<IMMERSIVE_BLOOM> but was:<CIRCULAR_RING>`）：
+  断言写成 `VisualizerTheme.entries.first()`，但 `VisualizerTheme.fromKey()` 未命中时返回
+  `Default`（`CIRCULAR_RING`）而**不是** null，该枚举永远在第 ② 级就返回、**到不了**第 ③ 级
+  「首个常量」→ 断言必须写 `VisualizerTheme.Default`。**实现是对的，测试写错了。**
+  第 ③ 级改用 `NetworkSource`（`fromKey` 未命中返回 null）与 `PlayMode`（`resolveLegacyEnumName`
+  走 `else -> null`，无任何兼容映射）各补一例独立覆盖，三个回落层级现在都有专属用例。
+- ⚠️ 本版**未做真机复验**（4 项修复均由用户上机确认）。
+
+**版本**：v2.36.2（versionCode 156）
+
 ### 10.152 v2.32.3 — T5：删除死代码 `VocalRemovalProcessor.kt`（算法先归档，2026-09-14）
 
 **来源**：`docs/archive/code-review-full-report-2026-09-13.md` §T5 / `docs/archive/code-review-2026-09-03.md` §P2。文件 348 行，全项目**零调用方**（`PlaybackService.kt:207` 实际 `val vocalRemovalProcessor = SpectralMaskProcessor()`——变量名是历史遗留，类型早就换过了；`PlayerManager.setVocalRemovalProcessor()` 的形参类型同样是 `SpectralMaskProcessor`）。

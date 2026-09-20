@@ -10,12 +10,15 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -110,6 +113,7 @@ fun hasAvailableIme(context: Context): Boolean {
  * @param onHistorySelect 历史项被选中时的回调（触发搜索；调用方负责关闭弹窗。
  *   选中后弹窗立即销毁，对话框内 `text` 状态不再可见，故不在此写入）
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun TextInputDialog(
     title: String,
@@ -219,15 +223,21 @@ fun TextInputDialog(
             }
         }
 
+        // v2.36.0 竖屏（方案 §2.4 / P1-27）：940/720dp 双栏在 360dp 屏上必溢出 → 竖屏改单栏纵排
+        // v2.36.2：判定上提到 Dialog 之前，供 BoxWithConstraints 的 imePadding 使用
+        val isPhonePortrait = LocalUiMode.current == UiMode.PhonePortrait
         BoxWithConstraints(
             modifier = Modifier
                 .fillMaxSize()
-                .background(Color(0xB3000000)),
+                .background(Color(0xB3000000))
+                // v2.36.2 竖屏：系统键盘弹出时把内容顶到键盘上方，避免「确认/取消」被键盘压住。
+                // 若系统已按 IME 缩小了本 Dialog 的窗口（`DialogProperties.decorFitsSystemWindows`
+                // 默认为 true 的那条路径），此时 `WindowInsets.ime` 恒为 0 → 本行是 no-op；
+                // 只有窗口未被缩小时才真正生效 —— 两种情况不会叠加，故无条件加在竖屏上是安全的。
+                .then(if (isPhonePortrait) Modifier.imePadding() else Modifier),
             contentAlignment = Alignment.Center
         ) {
             val showQrPanel = effectiveShowQrCode && qrBitmap != null && serverUrl != null
-            // v2.36.0 竖屏（方案 §2.4 / P1-27）：940/720dp 双栏在 360dp 屏上必溢出 → 竖屏改单栏纵排
-            val isPhonePortrait = LocalUiMode.current == UiMode.PhonePortrait
             Column(
                 modifier = Modifier
                     .then(responsiveDialogSize(if (showQrPanel) 940.dp else 720.dp))
@@ -337,12 +347,20 @@ fun TextInputDialog(
                                 verticalArrangement = Arrangement.spacedBy(4.dp)
                             ) {
                                 if (recent.isNotEmpty()) {
-                                    HistoryRow(label = stringResource(R.string.text_input_history_recent), items = recent) { query ->
+                                    HistoryRow(
+                                        label = stringResource(R.string.text_input_history_recent),
+                                        items = recent,
+                                        wrap = isPhonePortrait
+                                    ) { query ->
                                         onHistorySelect?.invoke(query)
                                     }
                                 }
                                 if (top.isNotEmpty()) {
-                                    HistoryRow(label = stringResource(R.string.text_input_history_top), items = top) { query ->
+                                    HistoryRow(
+                                        label = stringResource(R.string.text_input_history_top),
+                                        items = top,
+                                        wrap = isPhonePortrait
+                                    ) { query ->
                                         onHistorySelect?.invoke(query)
                                     }
                                 }
@@ -353,10 +371,9 @@ fun TextInputDialog(
 
                         if (showSystemIme) {
                             // ===== 系统 IME 模式：显示返回键盘 + 操作按钮 =====
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally)
-                            ) {
+                            // v2.36.2：竖屏换行 —— 四个按钮固定宽合计 426dp，竖屏可用宽仅 ~291dp，
+                            // 用 Row 会把「返回键盘」「确认」直接裁到屏幕外（真机反馈）
+                            WrapButtonRow(wrap = isPhonePortrait, spacing = 6.dp) {
                                 ActionButton(
                                     label = stringResource(R.string.text_input_back_keyboard),
                                     onClick = {
@@ -398,10 +415,10 @@ fun TextInputDialog(
                                 verticalArrangement = Arrangement.spacedBy(6.dp)
                             ) {
                                 currentRows.forEach { row ->
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally)
-                                    ) {
+                                    // v2.36.2：竖屏换行 —— 每行 10 个 56dp 键 + 9×6 间距 = 614dp，
+                                    // 竖屏可用宽仅 ~291dp（只放得下 4 个键），用 Row 会裁掉右侧 6 个键。
+                                    // 按逻辑分组保留：数字行 / a-j / k-t / u-z+符号 各自内部换行。
+                                    WrapButtonRow(wrap = isPhonePortrait, spacing = 6.dp) {
                                         row.forEach { ch ->
                                             KeyButton(label = ch, onClick = { text += ch })
                                         }
@@ -411,10 +428,8 @@ fun TextInputDialog(
                                 Spacer(modifier = Modifier.height(6.dp))
 
                                 // 底部功能行：Shift切换 / 中文输入 / @ / 空格 / 删除 / 清除 / 取消 / 确认
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(4.dp, Alignment.CenterHorizontally)
-                                ) {
+                                // v2.36.2：竖屏换行 —— 八个按钮固定宽合计 688dp，竖屏必然溢出（同上）
+                                WrapButtonRow(wrap = isPhonePortrait, spacing = 4.dp) {
                                     ActionButton(
                                         label = if (isUpperCase) "shift↓" else "SHIFT↑",
                                         onClick = { isUpperCase = !isUpperCase },
@@ -529,29 +544,37 @@ fun TextInputDialog(
  *
  * 每行一个标签 + 最多 5 个可聚焦的历史项，D-Pad 选中后触发 [onSelect] 回调
  * （调用方负责执行搜索并关闭弹窗）。
+ *
+ * @param wrap v2.36.2：是否允许换行。竖屏下「标签 28dp + 5 × 120dp 历史项」合计 ≈ 630dp，
+ *   而竖屏对话框可用宽只有 ~291dp —— 用 [Row] 会把右侧 3~4 个历史项直接裁掉
+ *   （真机反馈「文字输入窗口展示不完全」），故竖屏改 [FlowRow]。
+ *   `false` 时仍是 [Row]，与改动前**逐字等价**（B1）。
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun HistoryRow(
     label: String,
     items: List<SearchHistoryItem>,
+    wrap: Boolean,
     onSelect: (String) -> Unit
 ) {
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(6.dp)
-    ) {
+    val labelSlot: @Composable () -> Unit = {
         Text(
             text = label,
             color = NasMusicColors.TextSecondary,
             fontSize = FontSize.body(),
             modifier = Modifier.width(28.dp)
         )
+    }
+    val itemSlots: @Composable () -> Unit = {
         items.forEach { item ->
             FocusableSurface(
                 onClick = { onSelect(item.query) },
                 modifier = Modifier
                     .width(120.dp)
-                    .height(32.dp),
+                    // 32dp 在竖屏只有 ≈26 物理 dp ❌ → §2.7 换算抬到 56dp
+                    // （TV / 手机横屏原样返回 32dp，B1）
+                    .height(portraitTouchTarget(32.dp)),
                 shape = RoundedCornerShape(8.dp),
                 focusedScale = 1.05f,
                 animationDurationMs = 100,
@@ -576,6 +599,58 @@ private fun HistoryRow(
                 }
             }
         }
+    }
+    if (wrap) {
+        FlowRow(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            labelSlot()
+            itemSlots()
+        }
+    } else {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            labelSlot()
+            itemSlots()
+        }
+    }
+}
+
+/**
+ * 按钮组容器：宽度不够时是否自动换行（v2.36.2）。
+ *
+ * ⚠️ **为什么竖屏必须换行**：竖屏对话框可用宽度只有 `0.92 × 屏宽 − 40dp`
+ * （360dp 屏 ≈ 291dp），而本对话框的两行按钮是**固定宽度**的：
+ * - 系统 IME 模式操作行 = `140 + 84 + 84 + 100` + 3×6 = **426dp**
+ * - 自制键盘底部功能行 = `80+84+44+116+80+80+80+96` + 7×4 = **688dp**
+ * 用 [Row] 时 `Arrangement` 只能把整组居中，首尾按钮会被推到屏幕外**直接裁掉**。
+ * [FlowRow] 会在超宽时自动换到下一行。
+ *
+ * - `wrap = false`（TV / 手机横屏）：仍是 [Row]，与改动前**逐字等价**（B1）
+ * - `wrap = true`（手机竖屏）：[FlowRow]
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun WrapButtonRow(
+    wrap: Boolean,
+    spacing: Dp,
+    content: @Composable () -> Unit
+) {
+    if (wrap) {
+        FlowRow(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(spacing, Alignment.CenterHorizontally),
+            verticalArrangement = Arrangement.spacedBy(spacing)
+        ) { content() }
+    } else {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(spacing, Alignment.CenterHorizontally)
+        ) { content() }
     }
 }
 

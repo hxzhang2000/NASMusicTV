@@ -58,6 +58,69 @@
 
 - 新增门禁 `MediaSessionAccessPolicyTest`（8 例，含源码扫描「不得出现 reject」+ 三层自证）
 
+## [v2.36.2] - 2026-09-20
+
+> **手机端 4 个真机问题修复 · 老备份导入容错**
+>
+> ① 竖屏文字输入弹窗排版：按钮行与搜索历史行超宽被裁到屏幕外 → 竖屏改自动换行 + 键盘避让。
+> ② 天气电台歌曲条目的内嵌按钮补齐为「⬇ ♡ ☰ +」，与曲库 / 专辑详情等页面一致。
+> ③ **以前保存的备份文件导入失败**（历史枚举名 `CLASSICAL_WAVE` 经 Gson 反序列化变成 `null`
+> → 后续 `.name` 抛 NPE → 整份导入回滚），并修复手机端点「恢复」后**看不到任何提示**。
+> ④ 手机频谱页左上角关闭按钮点击无效（tv-material3 `IconButton` 在触摸设备上不响应点击）。
+>
+> 实现细节见 `docs/technical-overview.md` §10.172、§10.173、§10.174、§10.175。
+>
+> **未实施部分**：① 4 项修复的真机复验；② 备份文件「部分导入成功」的可回滚性
+> （`importBackupData` 先写 serverConfig 再写 appSettings，后者失败时前者已落盘）。
+
+### Fixed
+
+- **老备份文件导入失败**：备份 JSON 里存的是**枚举常量名**，历史版本删改过枚举常量
+  （`VisualizerTheme` 的 `CLASSICAL_WAVE` 已不存在）。Gson 2.10.1 的枚举适配器在名字找不到时
+  **返回 `null` 而不抛异常**，再经反射写进字段、**绕过 Kotlin 非空检查**
+  → `AppSettings.visualizerTheme`（声明非空）变 `null` → `importBackupData()` 里
+  `settings.visualizerTheme.name` 抛 NPE → `dataStore.edit {}` 事务回滚 → 整份备份导入失败。
+  `VisualizerTheme.LEGACY_MAP` 原本只服务 `fromKey()`（读 DataStore 那条路），
+  **覆盖不到 Gson 反序列化** —— 这是「老备份导入失败」的根因
+- **手机端点「恢复」静默失败无提示**：备份结果消息渲染在「备份文件列表**下方**」，
+  恢复入口却在列表每一行里 → 消息被挤到屏幕外，且 4s 后自动消费，用户完全看不到
+- **手机频谱页左上角关闭按钮点击无效**：`VisualizerStage` 用的是 tv-material3 `IconButton`，
+  其 `Surface(onClick=)` 走 `Modifier.tvClickable`，**故意不挂 `Modifier.clickable`**
+  （为让 `enabled=false` 时仍可聚焦），只提供 D-Pad 按键 + 焦点 + `semantics.onClick`（无障碍）
+  → **触摸点击永远不触发 `onClick`**。改用项目自建的 `FocusableSurface`（内部 `combinedClickable`）
+- **竖屏文字输入弹窗展示不全**：对话框内按钮是**固定宽度**的，竖屏可用宽只有 ≈291dp，
+  而系统 IME 模式操作行合计 **426dp**、自制键盘底部功能行 **688dp**、搜索历史行 ≈630dp
+  → 用 `Row` 时首尾元素被直接裁到屏幕外
+- **天气电台歌曲条目只有下载按钮**：`UnifiedSongRow` 的按钮按「回调是否为 null」决定是否渲染，
+  本页此前只传了 `downloadState` + `onDownload`，缺 `onToggleFavorite` / `onToggleQueue` /
+  `onAddToPlaylist` / `onDeleteDownload`
+
+### Changed
+
+- **新增备份专用容错 Gson** `data/prefs/BackupGson.kt`：三级回落（当前枚举名 → 枚举自带兼容映射
+  → 首个常量），**永不返回 null**；备份导出 / 导入两条路径改用它（`BackupViewModel`）
+- `AppPreferences.importBackupData()` 增加最后一道兜底：`visualizerTheme` / `visualizerQuality` /
+  `defaultPlayMode` / `defaultNetworkSource` 四个枚举字段为 `null` 时回落各自默认值，
+  不再让单个字段拖垮整份导入
+- **竖屏对话框改自动换行**：`TextInputDialog` 新增 `WrapButtonRow`（竖屏 `FlowRow`、其余 `Row`），
+  键盘行 / 功能行 / 历史行均按竖屏换行；竖屏补 `imePadding()` 做键盘避让
+- 竖屏搜索历史项触摸目标由 32dp 抬到 `portraitTouchTarget(32.dp)`（56 Compose dp）
+- 备份结果消息上移到「数据管理」分区**顶部**；出现新消息时分区列表自动滚回顶部；
+  **失败消息不再 4s 自动消费**（成功提示仍自动消失）
+- `WeatherRadioScreen` 新增 `favoriteIds` / `queueSongIds` / `onToggleFavorite` / `onToggleQueue` /
+  `onAddToPlaylist` / `onDeleteDownloadSong` 参数，`WeatherRadioBranch` 与 `LibraryBranch` 同源接线
+- 频谱页返回按钮的无障碍描述由硬编码 `"返回"` 改为 `R.string.common_back`
+- **版本号** 2.36.1 → 2.36.2（versionCode 155 → 156）
+
+### Test
+
+- 新增门禁 `BackupGsonTest`（9 例）：第 1 例是**负向自证**（先证明默认 Gson 确实会把历史枚举名
+  解析成 `null`，否则根因判断有误），其余覆盖历史名迁移、三个回落层级各自的未知名不为 null
+  （枚举自带 `Default` / `fromKey` 返回 null / 无兼容映射）、老备份缺字段保留默认值、
+  导出仍写 `enum.name`、整份 `BackupData` 反序列化
+- 门禁结果：`testDebugUnitTest` **874 例 / 0 失败**、`lintDebug` **0 Error / 272 Warning**、
+  `assembleRelease` BUILD SUCCESSFUL → `NASMusicTV-release-v2-36-2.apk`
+
 ## [v2.36.0] - 2026-09-19
 
 > **手机竖屏 UI 适配与横竖屏切换 · Release 独立签名**

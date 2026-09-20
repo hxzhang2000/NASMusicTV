@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -328,10 +329,25 @@ fun SettingsScreen(
     }
 
     // 备份操作结果消息显示后自动消费
+    //
+    // ⚠️ v2.36.2：**失败消息不自动消费**（真机反馈「点恢复静默失败无提示」）。
+    // 恢复入口在备份文件列表的每一行里，用户点完仍停在列表位置；若消息 4s 就消失，
+    // 等于什么提示都没有。失败信息保留到用户离开该分区 / 下一次操作覆盖它为止，
+    // 配合下方「有新消息就滚到分区顶部」保证一定看得见。成功提示仍 4s 自动消失。
     LaunchedEffect(backupMessage) {
-        if (backupMessage != null) {
+        val msg = backupMessage
+        if (msg != null && !msg.isError) {
             kotlinx.coroutines.delay(4000)
             onConsumeBackupMessage?.invoke()
+        }
+    }
+
+    // 备份结果消息出现在分区**顶部** → 把分区列表滚回顶部，否则用户在列表下方看不到它
+    // （备份文件列表可能很长；DATA 分区整体是一个 item，故下标 0 即分区顶部）
+    val sectionListState = rememberLazyListState()
+    LaunchedEffect(backupMessage) {
+        if (backupMessage != null) {
+            runCatching { sectionListState.animateScrollToItem(0) }
         }
     }
 
@@ -429,6 +445,8 @@ fun SettingsScreen(
         }
         // focusGroup + 左向 exit 重定向：任何分区内容按左键无法继续左移时，焦点回到导航栏当前分区项
         LazyColumn(
+            // v2.36.2：备份结果消息出现在分区顶部时滚回顶部（见上方 LaunchedEffect）
+            state = sectionListState,
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(1f)

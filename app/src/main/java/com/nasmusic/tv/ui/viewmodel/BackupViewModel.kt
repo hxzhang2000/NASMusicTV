@@ -4,12 +4,12 @@ import android.app.Application
 import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import com.google.gson.Gson
 import com.nasmusic.tv.NasMusicApp
 import com.nasmusic.tv.R
 import com.nasmusic.tv.backend.network.mv.MvSearchManager
 import com.nasmusic.tv.data.model.BackupMessage
 import com.nasmusic.tv.data.prefs.AppPreferences
+import com.nasmusic.tv.data.prefs.backupGson
 import com.nasmusic.tv.util.AppLog
 import com.nasmusic.tv.util.BackupFileUtils
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -51,7 +51,7 @@ class BackupViewModel(app: Application) : AndroidViewModel(app) {
                 val data = prefs.backup.exportBackupData().copy(
                     mvCacheEntries = mvSearchManager.exportMvCache()
                 )
-                val json = Gson().toJson(data)
+                val json = backupGson.toJson(data)
                 val result = BackupFileUtils.export(getApplication(), json)
                 result.onSuccess { fileName ->
                     _backupFiles.value = BackupFileUtils.listBackups(getApplication())
@@ -75,7 +75,10 @@ class BackupViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             try {
                 val json = BackupFileUtils.read(getApplication(), uri).getOrThrow()
-                val data = Gson().fromJson(json, AppPreferences.BackupData::class.java)
+                // ⚠️ 必须用 backupGson（容错枚举）：老备份里可能存着已删除的枚举名
+                // （如 visualizerTheme="CLASSICAL_WAVE"），默认 Gson 会把它写成 null
+                // 并绕过 Kotlin 非空检查 → 后续 .name 抛 NPE → 整份导入失败。见 BackupGson。
+                val data = backupGson.fromJson(json, AppPreferences.BackupData::class.java)
                 prefs.backup.importBackupData(data)
                 mvSearchManager.importMvCache(data.mvCacheEntries)
                 // 刷新受备份影响的 UI 状态
@@ -94,7 +97,8 @@ class BackupViewModel(app: Application) : AndroidViewModel(app) {
      */
     suspend fun restoreBackupFromJson(json: String): Boolean {
         return try {
-            val data = Gson().fromJson(json, AppPreferences.BackupData::class.java)
+            // 同上：扫码传输过来的也可能是老备份，必须走容错 Gson
+            val data = backupGson.fromJson(json, AppPreferences.BackupData::class.java)
             prefs.backup.importBackupData(data)
             mvSearchManager.importMvCache(data.mvCacheEntries)
             refreshAfterImport()

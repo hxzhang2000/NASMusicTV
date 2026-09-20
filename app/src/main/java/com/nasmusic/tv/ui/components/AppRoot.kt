@@ -346,7 +346,8 @@ fun AppRoot(
                 )
                 Screen.WeatherRadio -> WeatherRadioBranch(
                     viewModel = viewModel,
-                    songDownloadStates = songDownloadStates
+                    songDownloadStates = songDownloadStates,
+                    onPickSongForPlaylist = { song -> pickerSong = song }
                 )
                 Screen.PlayStats -> PlayStatsBranch(
                     viewModel = viewModel

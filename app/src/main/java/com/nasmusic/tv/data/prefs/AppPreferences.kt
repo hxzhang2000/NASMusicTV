@@ -1768,16 +1768,16 @@ class AppPreferences internal constructor(private val context: Context) {
                 prefs[keyDarkTheme] = settings.darkTheme
                 prefs[keyAnimations] = settings.animationsEnabled
                 prefs[keyAutoPlayNext] = settings.autoPlayNext
-                prefs[keyPlayMode] = settings.defaultPlayMode.ordinal
+                prefs[keyPlayMode] = settings.defaultPlayMode.ordinalOrDefault()
                 prefs[keyCacheLyrics] = settings.cacheLyrics
                 prefs[keyCacheCover] = settings.cacheCover
                 prefs[keyLyricsOffset] = settings.lyricsOffsetMs
-                prefs[keyDefaultNetworkSource] = settings.defaultNetworkSource.key
+                prefs[keyDefaultNetworkSource] = settings.defaultNetworkSource.keyOrDefault()
                 prefs[keyMetingApiBaseUrl] = settings.metingApiBaseUrl
                 prefs[keyMvApiBaseUrl] = settings.mvApiBaseUrl
                 prefs[keyModelDownloadUrl] = settings.modelDownloadUrl
-                prefs[keyVisualizerTheme] = settings.visualizerTheme.name
-                prefs[keyVisualizerQuality] = settings.visualizerQuality.name
+                prefs[keyVisualizerTheme] = settings.visualizerTheme.nameOrDefault()
+                prefs[keyVisualizerQuality] = settings.visualizerQuality.nameOrDefault()
             }
         }
         dataStore.edit { prefs ->
@@ -1827,3 +1827,31 @@ class AppPreferences internal constructor(private val context: Context) {
         }
     }
 }
+
+// =====================================================================
+// 备份导入的**最后一道兜底**（v2.36.2）
+// =====================================================================
+//
+// ⚠️ Gson 用反射写字段，**绕过 Kotlin 的非空检查**：反序列化时若某个枚举名在当前枚举里
+// 不存在，默认适配器会返回 `null` 并被直接写进声明为非空的字段（详见 BackupGson.kt）。
+// 随后 `settings.visualizerTheme.name` 抛 NPE → `dataStore.edit {}` 事务回滚
+// → **整份备份导入失败**（真机故障：老备份里存着已删除的 `CLASSICAL_WAVE`）。
+//
+// 主修复是让备份走 `backupGson`（容错枚举）。这里再兜一层：**单个字段为 null 也只回落默认值**，
+// 绝不因为一个字段让整份备份导入失败。扩展函数接收可空接收者，故对非空类型同样适用、无编译告警。
+
+/** 可视化主题：null → [VisualizerTheme.Default]（`CIRCULAR_RING`） */
+private fun VisualizerTheme?.nameOrDefault(): String =
+    this?.name ?: VisualizerTheme.Default.name
+
+/** 可视化画质：null → [VisualQuality.Default]（`MEDIUM`） */
+private fun VisualQuality?.nameOrDefault(): String =
+    this?.name ?: VisualQuality.Default.name
+
+/** 播放模式：null → [PlayMode.SEQUENTIAL] */
+private fun PlayMode?.ordinalOrDefault(): Int =
+    this?.ordinal ?: PlayMode.SEQUENTIAL.ordinal
+
+/** 网络音乐源：null → [NetworkSource.DEFAULT] */
+private fun NetworkSource?.keyOrDefault(): String =
+    this?.key ?: NetworkSource.DEFAULT.key
