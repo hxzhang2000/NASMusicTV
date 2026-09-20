@@ -20,6 +20,16 @@ r"""
 - 有任一 ≥ 40dp → 跳过（如 `size(portraitTouchTarget(44.dp))` —— 44 是横屏参数，
   竖屏实际 56dp，属受认可的写法）
 
+## ⚠️ 第二处空转：只看「后续行」的 modifier 链
+
+`size(...)` 与 `clickable` 可能写在**同一行**：
+
+    Box(modifier = Modifier.size(8.dp).clickable { x() })
+
+`CLICK` 正则的 `^\s*\.` 锚点只认行首，匹配不到行中的 `.clickable` → 单行写法整类逃检。
+故另设 `CLICK_SAME_LINE`（不锚行首）做**同行 + 后续行双判定**，并补两条自证用例：
+单行写法必须命中、注释里举例必须不命中。
+
 ## 用法
 
     python audit_small_touch_target.py [源码根目录]      # 默认 app/src/main/java
@@ -38,6 +48,15 @@ SMALL_LIMIT = 40.0
 DP_LITERAL = re.compile(r"(\d+(?:\.\d+)?)\.dp")
 WIDENING = ("fillMaxSize", "fillMaxWidth", "fillMaxHeight", "weight(", "widthIn(min", "heightIn(min")
 CLICK = re.compile(r"^\s*\.(clickable|combinedClickable)")
+# 同行写法：`Modifier.size(8.dp).clickable { }` —— `CLICK` 的 `^\s*\.` 锚点只认行首，
+# 匹配不到行中的 `.clickable`，故单列一条（**首版护栏正是漏在这里**）。
+CLICK_SAME_LINE = re.compile(r"\.(clickable|combinedClickable)\b")
+
+
+def _is_comment_line(line):
+    """注释行不参与判定 —— 否则 KDoc 里举例的 `.size(8.dp).clickable` 会被误报。"""
+    t = line.lstrip()
+    return t.startswith("//") or t.startswith("*") or t.startswith("/*")
 
 
 def _paren(text, open_idx):
@@ -81,6 +100,8 @@ def scan_lines(lines):
         idx = line.find(".size(")
         if idx < 0:
             continue
+        if _is_comment_line(line):
+            continue
         if _is_non_interactive(lines, i):
             continue
         open_p = line.index("(", idx)
@@ -101,7 +122,9 @@ def scan_lines(lines):
             continue  # 无法判断（变量 / 表达式无字面量）
         if any(v >= SMALL_LIMIT for v in literals):
             continue
-        # 只往**后**看连续以 `.` 开头的行（同一 modifier 链）
+        # 手势可能在**同一行**（`Modifier.size(8.dp).clickable { }`），也可能在**后续行**
+        # （modifier 链纵向写）。⚠️ 只看后续行会漏掉单行写法 —— 自证用例
+        # 「同行写法的 size(...).clickable」就是为此设的（首版护栏在此空转）。
         chain = []
         j = i + 1
         while j < len(lines) and len(chain) < 12:
@@ -112,7 +135,8 @@ def scan_lines(lines):
             if CLICK.match(nxt):
                 break
             j += 1
-        if not any(CLICK.match(c) for c in chain):
+        same_line = CLICK_SAME_LINE.search(line[idx:].split("//")[0])
+        if same_line is None and not any(CLICK.match(c) for c in chain):
             continue
         window = line + "\n" + "\n".join(chain)
         if any(w in window for w in WIDENING):
@@ -169,6 +193,16 @@ def selftest():
                     .fillMaxSize()
                     .clickable { x() }
             )""",
+            False,
+        ),
+        (
+            "同行写法的 size(...).clickable（首版护栏在此空转）",
+            """Box(modifier = Modifier.size(8.dp).clickable { x() })""",
+            True,
+        ),
+        (
+            "注释里举例的 size(...).clickable 不算违规",
+            """// 反例：Box(Modifier.size(8.dp).clickable { })""",
             False,
         ),
     ]
