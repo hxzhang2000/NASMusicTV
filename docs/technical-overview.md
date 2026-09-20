@@ -791,7 +791,7 @@ App 启动
 - [x] ServiceCompat.stopForeground(STOP_FOREGROUND_REMOVE)（onDestroy 移除前台通知）
 
 ### 回归测试文档（v2.2.0）
-- [x] 完整回归测试文档（docs/regression-test.md — 19 章节 248 个测试项，覆盖单元/集成/UI/专项验证）
+- [x] 完整回归测试文档（docs/archive/regression-test.md — 19 章节 248 个测试项，覆盖单元/集成/UI/专项验证）
 
 ---
 
@@ -1107,7 +1107,7 @@ com.nasmusic.tv/
 | 文件 | 用途 |
 |------|------|
 | `docs/technical-overview.md` | 当前架构、修改记录与回归测试（本文档） |
-| `docs/regression-test.md` | **v2.2.0 新增**：完整回归测试文档（19 章节 248 个测试项） |
+| `docs/archive/regression-test.md` | **v2.2.0 新增**：完整回归测试文档（19 章节 248 个测试项） |
 | `docs/features-plan.md` | 功能优化方案 |
 | `CHANGELOG.md` | 版本变更记录 |
 | `README.md` | 项目简介与功能特性 |
@@ -2878,7 +2878,7 @@ val totalCount = adapter.getSongsTotalCount()
 
 **功能描述**：编制完整的回归测试文档，覆盖单元测试、集成测试、UI 测试和专项验证。
 
-**新增文件**：`docs/regression-test.md`
+**新增文件**：`docs/archive/regression-test.md`
 
 **文档结构**（19 章节 248 个测试项）：
 1. 测试概述
@@ -3951,7 +3951,7 @@ Box(focusGroup)                          ← 外层容器，统一焦点组
 
 **日期**：2026-06-26
 
-**目标**：根据全项目代码审查文档（`docs/code-review-2026-06-26.md`），修复线程安全、DataStore 阻塞、Kotlin API 退化、Jellyfin 分页缺失等问题。用户决定不修改 #5 MainViewModel 上帝类（无 bug、重构风险高），#6/#4/#13 列为 low 优先级暂不修改。
+**目标**：根据全项目代码审查文档（`docs/archive/code-review-2026-06-26.md`），修复线程安全、DataStore 阻塞、Kotlin API 退化、Jellyfin 分页缺失等问题。用户决定不修改 #5 MainViewModel 上帝类（无 bug、重构风险高），#6/#4/#13 列为 low 优先级暂不修改。
 
 #### 10.14.1 修改清单
 
@@ -3984,7 +3984,7 @@ Box(focusGroup)                          ← 外层容器，统一焦点组
 
 **日期**：2026-06-30
 
-**目标**：根据全项目代码审查文档（`docs/code-review-2026-06-30.md`），修复资源泄漏、API 参数错误、线程安全、编码回退过宽等问题。用户决定不修改安全与隐私类问题（Category 3）。
+**目标**：根据全项目代码审查文档（`docs/archive/code-review-2026-06-30.md`），修复资源泄漏、API 参数错误、线程安全、编码回退过宽等问题。用户决定不修改安全与隐私类问题（Category 3）。
 
 #### 10.15.1 修改清单
 
@@ -4017,7 +4017,7 @@ Box(focusGroup)                          ← 外层容器，统一焦点组
 
 **日期**：2026-07-01
 
-**目标**：根据全项目代码审查文档（`docs/code-review-2026-06-30.md`），完成 Groups A–L 的非安全类修复：空安全、类型安全枚举、Compose 动画优化、无用代码清理等。
+**目标**：根据全项目代码审查文档（`docs/archive/code-review-2026-06-30.md`），完成 Groups A–L 的非安全类修复：空安全、类型安全枚举、Compose 动画优化、无用代码清理等。
 
 #### 10.16.1 修改清单
 
@@ -4484,7 +4484,7 @@ v2.6.0 天气电台功能使用 Open-Meteo（无需 API Key）作为主要天气
 
 | 文件 | 用途 |
 |------|------|
-| `docs/regression-test.md` | 完整回归测试文档（19 章节 248 个测试项） |
+| `docs/archive/regression-test.md` | 完整回归测试文档（19 章节 248 个测试项） |
 
 ### 11.2 测试覆盖范围
 
@@ -5815,7 +5815,7 @@ Phase 1-6 代码已全部落地并编译通过。Phase 7（测试与文档）新
 
 **提交时间**：2026-08-23
 
-**背景**：音源扩展（方案见 `docs/radio-and-jamendo-source-plan.md`）。原则：纯公共 API、**不自建后台**——radio-browser（公开广播目录，无 key）与 Jamendo（CC 独立音乐官方 API，仅需注册 client_id）。
+**背景**：音源扩展（方案见 `docs/archive/radio-and-jamendo-source-plan.md`）。原则：纯公共 API、**不自建后台**——radio-browser（公开广播目录，无 key）与 Jamendo（CC 独立音乐官方 API，仅需注册 client_id）。
 
 **主要改动**：
 
@@ -7347,7 +7347,7 @@ esolvedArtistCovers 解析缓存；且百度/本地艺术家不在 _artists 中�
 
 **提交日期**：2026-09-06
 
-**背景**：实现 `docs/歌曲离线下载与本地存储管理开发方案.md` 设计方案，完成歌曲离线下载、本地存储管理和导出到外接设备功能。
+**背景**：实现 `docs/archive/歌曲离线下载与本地存储管理开发方案.md` 设计方案，完成歌曲离线下载、本地存储管理和导出到外接设备功能。
 
 **实现内容**：
 
@@ -8330,7 +8330,7 @@ onSearchSong = { keyword -> viewModel.searchNetworkSongs(keyword) },
 
 ### 10.155 v2.32.6 — 2026-09-16 审查报告 25 项修复落地（P0×2 / P1×7 / P2×11 / P3×5）
 
-**来源**：`docs/code-review-2026-09-16.md` 的发现项。其中 **P1-3**（手动下载绕过 `dedupeKey`）经产品裁定为**有意设计、不修**（手动点击是明确意图，dedupe 只应作用于自动下载路径），**P1-9**（`BackupTransferServer.handleUpload` 内存安全）经核验为**误报、撤回**（已有 content-length 预检 + 16KB 分块累积硬上限，未走 `parseBody`）。两条均**保留编号留档**，防止后续审查轮次重复上报。
+**来源**：`docs/archive/code-review-2026-09-16.md` 的发现项。其中 **P1-3**（手动下载绕过 `dedupeKey`）经产品裁定为**有意设计、不修**（手动点击是明确意图，dedupe 只应作用于自动下载路径），**P1-9**（`BackupTransferServer.handleUpload` 内存安全）经核验为**误报、撤回**（已有 content-length 预检 + 16KB 分块累积硬上限，未走 `parseBody`）。两条均**保留编号留档**，防止后续审查轮次重复上报。
 
 **主线：跨链路一致性**——本批问题呈「主链路修好了、旁路链路漏了」的统一模式，建议把「新增全局机制时列出全部消费链路」纳入 review checklist。
 - **P0-1** 下载链路未注入认证头：`SongDownloadManager` 的下载 client 补 `BackendAuthHeaders.forHost(host)` 拦截器，host **精确匹配**使令牌不随 302 泄漏到第三方域
@@ -9320,7 +9320,10 @@ Box(Modifier.size(portraitTouchTarget(44.dp))      // 外层承担热区（竖�
 正则 `\.size\((\d+(\.\d+)?)\.dp\)` 匹配不到 → **脚本会静默空转、报 0 处**，
 给出"没问题"的假结论。两个教训已写入 `docs/conventions-adaptive-ui.md` **§6.5**：
 ① 扫描下界放到 0；② 取 `size(` 的**括号配对内容**再抽全部 `.dp` 字面量。
-新脚本 `logs_temp/audit_small_touch_target.py` 自带 `--selftest`（5 用例），实跑 346 文件 0 处。
+新脚本 `audit_small_touch_target.py` 自带 `--selftest`，实跑 347 文件 0 处。
+（脚本初版在 `logs_temp/`，随后**入库到项目根**，与 `check_chinese.py` 同级；
+自证用例经后续补充已增至 **7 例** —— 含「同行写法必须命中」「注释里举例必须不命中」，
+详见 §10.165 的顺带修复说明。）
 
 ##### ③ 底栏 6 项后英文 `nav_now_playing` 会被裁（预防性修复）
 
@@ -9371,9 +9374,11 @@ Box(Modifier.size(portraitTouchTarget(44.dp))      // 外层承担热区（竖�
 1. 本轮 7 项修复 + review 轮 4 项修复的**真机视觉验收**仍需用户上机确认
    （按项目约定不代装、不自动启动应用）
 2. `nav_now_playing_short` 属**按宽度换算的预防性修复**，未经真机确认
-3. **§6.5 那条"小尺寸 + `clickable`"自查目前仍靠人工跑脚本** —— 与
-   `ScreenUiModeCoverageTest`（源码扫描型门禁）同范式，**建议后续做成单测门禁**，
-   否则下次仍可能漏
+3. ~~**§6.5 那条"小尺寸 + `clickable`"自查目前仍靠人工跑脚本** —— 建议后续做成单测门禁~~
+   → **已落地（见 §10.165 的顺带修复）**：`SmallTouchTargetScanTest` 已与
+   `ScreenUiModeCoverageTest` 同范式固化进 `testDebugUnitTest`；固化时发现并修掉了
+   **两处空转**（脚本与门禁首版都漏「同行写法」，且补同行判定后必须先排除注释行），
+   脚本 `--selftest` 增至 7 例
 4. 🔍 review 顺带发现、但**刻意未改**（不在 v2.36.0 改动范围内，避免扩大改动面）：
    `TextInputDialog.kt:132` 的 `isTVDevice` 也是**每次组合 2 次 `hasSystemFeature`**
    （未加 `remember`）。`AppRoot.kt:101` 已有 `remember`，`NasMusicApp` /
@@ -9383,9 +9388,213 @@ Box(Modifier.size(portraitTouchTarget(44.dp))      // 外层承担热区（竖�
 
 **版本**：v2.36.0（未变；versionCode 154）
 
+### 10.164 v2.36.0 — Release 签名独立化 + CI 切到正式签名（2026-09-19）
+
+**背景**：本地 `keystore.properties` 的 `storeFile` 此前指向 `~/.android/debug.keystore`（即与 debug 包**同签名**），导致 release APK 与 debug APK 互认、安装时无 `INSTALL_FAILED_UPDATE_INCOMPATIBLE` 警告，从签名角度无法区分「正式发布」与「调试构建」。同时 CI 的 `build` job 一直用 throwaway `ci-keystore.jks`（每次运行临时生成、非正式签名），CI 产物不可作为正式发布包。用户要求 release 改用独立签名 `release-key.jks`，并让 CI 也支持正式签名（通过 GitHub Secrets 注入）。
+
+**修改内容**：
+
+1. **`app/build.gradle.kts`**：`signingConfigs.release.storeFile` 由 `project.file(keystoreStoreFile)` 改为 `rootProject.file(keystoreStoreFile)`。`project.file()` 相对 **app 模块目录**解析（`storeFile=release-key.jks` 会找 `app/release-key.jks` 找不到）；`rootProject.file()` 相对**项目根**解析，找项目根的 `release-key.jks`。绝对路径两种写法都兼容（`File(String)` 内部识别绝对路径）。
+2. **`keystore.properties`**（gitignored，不入仓）：`storeFile` 由 `C:\Users\hxzha\.android\debug.keystore` 改为 `release-key.jks`（相对项目根）。`storePassword` / `keyAlias` / `keyPassword` 改为 `<REPLACE_*>` 占位符，**强制开发者填真实值**——占位符下 `keytool` 会抛 `Keystore was tampered with, or password was incorrect`，避免误用 debug 凭据。`baiduAppId` / `baiduAppSecret` / `cryptoPassphrase` 不变。
+3. **`.github/workflows/build.yml`** 的 `build` job 的签名步骤（原名 `Create keystore for CI`，改名 `Set up signing keystore`）改为**双模式**：
+   - **模式 A（正式签名）**：仓库 Secrets 配置了 `SIGNING_KEYSTORE_BASE64` + `SIGNING_STORE_PASSWORD` + `SIGNING_KEY_ALIAS` + `SIGNING_KEY_PASSWORD` 时，`echo "$SIGNING_KEYSTORE_BASE64" | base64 -d > release-key.jks` 解码出 keystore 并用它签名。产出的 APK 与本地 release 同签名，可作为正式发布包。
+   - **模式 B（fallback）**：未配置 secrets 时，`keytool` 临时生成 throwaway `ci-keystore.jks`（与原逻辑一致，仅 `storeFile` 路径从 `app/ci-keystore.jks` 改到项目根 `ci-keystore.jks`，与 `release-key.jks` 的路径解析一致）。CI 仅验证「能编译 + 签名通过」，APK 不可覆盖安装到已有数据的设备。
+   - 末尾 `sed` 打印脱敏后的 `keystore.properties` 供日志核对（密码字段替换为 `<redacted>`）。
+4. **`AGENTS.md`**：更新 CI 签名段落为 dual-mode 描述，补充「`storeFile` 是项目根相对路径、`rootProject.file()` 解析」说明；在「电视上若已装 debug 版」一段后补充「Release 切到独立签名后，旧的 debug 签名 release 包同理也需先卸载」。
+
+**涉及文件**：
+
+- `app/build.gradle.kts`：`signingConfigs.release.storeFile` 用 `rootProject.file(...)`
+- `keystore.properties`（gitignored）：`storeFile=release-key.jks`，密码字段占位符
+- `.github/workflows/build.yml`：`Set up signing keystore` 步骤双模式
+- `AGENTS.md`：CI signing 段落 + 安装提示更新
+- `CHANGELOG.md`：v2.36.0 追加 `### Changed（构建与签名）` 子段
+
+**验证结果**：
+
+- ✅ 配置改动通过静态审视：`rootProject.file()` 对绝对/相对路径均兼容，CI workflow 双模式 bash 分支语法正确，`sed` 脱敏命令不暴露密码。
+- ⚠️ **本地 `assembleRelease` 验证依赖开发者填入 `release-key.jks` 的真实 `storePassword` / `keyAlias` / `keyPassword`**——占位符状态下构建会在 `packageRelease` 阶段失败（`keytool` 抛 `Keystore was tampered with, or password was incorrect`），这是**有意为之**的护栏。开发者填入真实值后跑：
+  ```bash
+  JAVA_HOME="C:/Program Files/Android/Android Studio/jbr" \
+    ./gradlew.bat assembleRelease --no-daemon \
+    -Pkotlin.compiler.execution.strategy=in-process
+  ```
+- ⚠️ **CI 切到正式签名需要仓库管理员上传 4 个 GitHub Secrets**：`SIGNING_KEYSTORE_BASE64`（`base64 -w0 release-key.jks` 的输出）、`SIGNING_STORE_PASSWORD`、`SIGNING_KEY_ALIAS`、`SIGNING_KEY_PASSWORD`。上传前分支推送不会触发正式签名，CI 仍走 fallback 路径。
+
+**注意事项**：
+
+- **签名切换 ≠ 凭据失效**：`cryptoPassphrase` 不变，AES-256 派生密钥不变，已保存的 NAS / 百度凭据可继续解密。但**已安装的旧签名包必须先卸载**才能安装新签名包（`INSTALL_FAILED_UPDATE_INCOMPATIBLE`）。
+- **`release-key.jks` 永不入仓**：`.gitignore` 的 `*.jks` + `keystore.properties` 两条规则确保 keystore 与密码都不进仓库。CI 模式 A 的 `release-key.jks` 是从 GitHub Secrets 解码出的临时文件，runner 销毁时一并清除。
+- **CI 模式 A 与本地签名一致性**：模式 A 用的就是本地那份 `release-key.jks`（同一份 base64 编码），所以 CI 产物与本地产物**字节级同签名**。`cryptoPassphrase` 也建议作为 secret 上传（`CRYPTO_PASSPHRASE`），未上传时 fallback 到 `ci-build-only-placeholder`——此时 APK 加密密钥与正式包不同，仅供 CI 验证。
+- **不引入新版本号**：v2.36.0 尚未 release（git tag 为空），本改动叠加在 v2.36.0 内，versionCode 仍是 154。
+- **`release-key.jks` 已存在**：项目根的 `release-key.jks` 是开发者之前生成的（gitignored），本次改动只是让 `keystore.properties` 真正指向它。若日后 `release-key.jks` 丢失或密码遗忘，需重新 `keytool -genkey -v -keystore release-key.jks ...` 生成新 keystore——但**换 keystore = 全部已安装用户必须卸载重装**。
+
+**版本**：v2.36.0（未变；versionCode 154）
+
+### 10.165 v2.36.0 — 车机蓝牙媒体按键全部失效：`onConnect` 拒绝系统控制器（2026-09-20）
+
+**来源**：用户上机反馈 ——「用大众车机蓝牙连接手机播放时，无法用暂停/上一曲/下一曲等按钮进行播放控制，点击后无效」。
+
+**现象特征**：车机能显示当前曲目（AVRCP 元数据链路正常），但**所有**传输控制键（暂停 / 上一曲 / 下一曲）按下后无任何反应；同一份代码在电视上用遥控器操作正常，通知栏媒体按钮也正常。
+
+**根因**：`PlaybackService.onConnect` 对白名单外的调用方执行 `return MediaSession.ConnectionResult.reject()`。
+
+#### 证据链（media3-session 1.2.1 源码，`logs_temp/_depsrc/androidx/media3/session/`）
+
+| # | 位置 | 事实 |
+|---|---|---|
+| 1 | `MediaSessionLegacyStub.java:757-780` | `tryGetController()`：控制器首次出现时构造 legacy `ControllerInfo` 并调用 `sessionImpl.onConnectOnHandler(controller)`；若 `!connectionResult.isAccepted` → `controllerCb.onDisconnected(0)` 并 **`return null`** |
+| 2 | `MediaSessionLegacyStub.java:644-651` | `dispatchSessionTaskWithPlayerCommand()`：`controller == null` → 注释原文 *"Failed to get controller since connection was rejected."* → **直接 return，命令被丢弃** |
+| 3 | `MediaSessionLegacyStub.java:379 / 410 / 434 / 449` | `onPlay` / `onPause` / `onSkipToNext` / `onSkipToPrevious` **全部**经 `dispatchSessionTaskWithPlayerCommand` |
+| 4 | `MediaSessionImpl.java:602-620` | `onConnectOnHandler()` → `callback.onConnect(...)`，即应用侧覆写的那个方法 |
+| 5 | `MediaSessionImpl.java:603-608` | **只有 SystemUI 有旁路**（且需 `isMediaNotificationControllerConnected` 为真）；`com.android.bluetooth` **没有** |
+
+系统侧（蓝牙 AVRCP target / 车机）用的是**框架** `android.media.session.MediaController`（由 `MediaSessionManager.getActiveSessions()` 取得），其传输命令落在 `MediaSessionCompat.Callback`（即 `MediaSessionLegacyStub`）→ 必然经过上表第 1 步。
+
+而 `isTrustedCaller` 的放行集合是 `SYSTEM_UID` / Media3 判定的 automotive / auto-companion / 本应用 / Google 助理 —— **`com.android.bluetooth` 不在其中**，release 构建下被拒绝。
+
+#### 为什么一直没被发现（三层掩盖）
+
+1. **`BuildConfig.DEBUG` 全放行** —— 原实现第一行 `if (BuildConfig.DEBUG) return true`，debug 包永远复现不了；
+2. **电视端走的是另一条路** —— `MainActivity.dispatchKeyEvent` → `MediaKeyHandler` 直接调 `playerVM.playPause() / next() / previous()`，**完全不经过 MediaSession**；
+3. **通知栏按钮也走另一条路** —— `buildMediaButtonPendingIntent` 的 `PendingIntent` → `Service.onStartCommand` → `MediaSessionService.onStartCommand` → `sessionImpl.onMediaButtonEvent()`，该路径**不查 `onConnect`**。
+
+即：TV 遥控、通知按钮、debug 包三条路都正常，**只有「release 包 + 系统侧 MediaController」这一条断掉** —— 恰好就是车机蓝牙。
+
+#### 修复
+
+| 文件 | 改动 |
+|---|---|
+| `player/MediaSessionAccessPolicy.kt`（新增） | 抽出纯逻辑策略：`CallerIdentity` 数据类 + `isTrustedCaller(caller, debug)` + `availableSessionCommands(trusted)`。不依赖 `MediaSession` 实例，可直接 JVM 单测 |
+| `player/PlaybackService.kt` | `onConnect` **恒返回接受**；可用会话命令改由策略产出；`isTrustedCaller` 降级为策略的薄封装（只决定「要不要下发专有命令」）；动作名常量改为别名到策略，消除两处硬编码 |
+| `app/src/test/java/com/nasmusic/tv/player/MediaSessionAccessPolicyTest.kt`（新增） | 门禁 + 三层自证，见下 |
+
+**两条不变量**：
+
+1. **连接一律接受**。安全边界从「拒绝连接」移到「专有命令只下发给可信调用方」。
+   原白名单并未提供实质保护（DEBUG 全放行；且 MediaSession 本就是系统可控制的公共控制面），
+   却把系统控制链路整体打断 —— 属「安全措施收益≈0、代价=系统集成全废」的典型。
+2. **可用会话命令「只增不减」**：基线取 `ConnectionResult.DEFAULT_SESSION_AND_LIBRARY_COMMANDS`
+   （`MediaSession.java:1604-1607`，即 `MediaLibrarySession` 的 `AcceptedResultBuilder` 默认值）。
+   旧实现用 `SessionCommands.Builder()` **从空集重建**、只放两条自定义命令 —— 而
+   `ConnectedControllersManager.isSessionCommandAvailable()` 是**严格集合成员判定**（非叠加语义），
+   因此被接受的控制器（含 Android Auto / AAOS）会连 Media3 准备的**媒体库浏览命令**一起丢掉。
+   ⚠️ 本地 `_depsrc` 未抽取 `MediaSessionStub.java` 的库命令校验点，**故此项按「只增不减」处理，
+   不断言线上必现**；但「只增不减」是严格更安全的写法，且不可能引入回归。
+
+> 播放 / 暂停 / 上一曲 / 下一曲属于 **player 命令**，由 `availablePlayerCommands` 控制
+> （本次未收窄，保持 `DEFAULT_PLAYER_COMMANDS`），因此与本次改动无关 ——
+> 这也是「连接被拒」是唯一根因的反证：命令可用性那一层从未受限。
+
+#### 未做的事（诚实记录）
+
+- **未实现播放队列持久化 / `onPlaybackResumption`，故未注册 manifest `MediaButtonReceiver`**。
+  影响：应用**未在播放**时，车机按「播放」键无法拉起续播（API 31+ 上 Media3 不会给平台会话设置
+  media button receiver）。本次修复覆盖的是**播放中控制**这一上报场景。
+  Media3 的 `MediaButtonReceiver` javadoc 明确要求「注册该 receiver 的应用必须实现
+  `onPlaybackResumption`」（源码 `MediaButtonReceiver.java:58-62`），缺了它只会得到
+  「服务被拉起后立刻停掉」的僵尸行为，故不单独加。
+- 未新增签名级校验，沿用 Media3 官方「`isAutomotiveController` / `isAutoCompanionController`
+  不是安全校验」的强度（个人音乐应用足够）。
+
+#### 测试与验证
+
+| 手段 | 结果 |
+|---|---|
+| 新增 `MediaSessionAccessPolicyTest`（Robolectric，8 例） | ✅ **8 / 8 通过**（`tests="8" failures="0" errors="0"`） |
+| 全量 `testDebugUnitTest` | ⚠️ **864 例 / 1 失败** —— 唯一失败位于**并发会话在建文件** `SmallTouchTargetScanTest`（其 `尺寸字面量写法也必须被判违规` 用合成单行样本，不读本项目源码，与本次改动无关）；除它之外 85 个测试类全绿。**该红例已另行定位并修复**（见下方注），需待复跑确认 |
+| 编译 | ✅ `compileDebugKotlin` / `compileDebugUnitTestKotlin` / `compileReleaseKotlin` 均通过 |
+| `lintDebug` | ⚠️ **本轮未能完成** —— 运行中抛 Kotlin FIR 缓存异常（`KotlinIllegalArgumentExceptionWithAttachments: Inconsistency in the cache`）后被外部程序终止，报告未刷新；沿用上一轮基线 **0 Error / 267 Warning**，本次改动未新增 lint 面（无新增 API 调用 / 无新增权限） |
+| `assembleRelease` | ⚠️ **未验证** —— `keystore.properties` 仍是占位符（§10.164 的有意护栏），`packageRelease` 会失败 |
+| **护栏非空转自证**（关键） | ✅ 用门禁同一条正则 `\breject\s*\(`（剥离注释后）对 `git show HEAD:...PlaybackService.kt` 复核：**旧代码命中 1 处（L340 `return MediaSession.ConnectionResult.reject()`），新代码命中 0 处** —— 证明该门禁确实能抓住这个缺陷，而非空转 |
+
+⚠️ **真机复验未执行**：按项目约定，产物就绪后由用户安装 release 包上车实测
+（`adb install -r` 原地升级；车机蓝牙下按暂停 / 上一曲 / 下一曲应生效）。
+**务必用 release 包复验** —— debug 包因 `BuildConfig.DEBUG` 全放行，本缺陷不可复现。
+
+> 📌 **顺带修复：`SmallTouchTargetScanTest` 红例 = 门禁自身空转**（非用例要求过严）
+>
+> `尺寸字面量写法也必须被判违规` 报红的根因：判定链**只扫 `.size(` 之后的行**，而手势正则
+> `^\s*\.(clickable|combinedClickable)` 的 `^\s*\.` **锚行首**，匹配不到
+> `Modifier.size(8.dp).clickable { }` 这种**同行写法** → 单行写法整类漏判（**首版门禁在此空转**，
+> 与 §6.5 记录的「首版脚本空转」是同一类错误）。
+>
+> 修法与 Python 正本 `audit_small_touch_target.py` **逐字一致**：新增不锚行首的
+> `GESTURE_SAME_LINE` / `CLICK_SAME_LINE`，做**同行 + 后续行双判定**；因加了同行规则，
+> **必须先排除整行注释**（`//` / `*` / `/*`），否则 KDoc 里举例的 `size(8.dp).clickable` 会被误报
+> —— 并据此补 1 条**误报防线**用例（`注释里举例的 size 加 clickable 不得被误判`）。
+>
+> 两份正本已同步：`app/src/test/.../SmallTouchTargetScanTest.kt`（门禁）+
+> 项目根 `audit_small_touch_target.py`（脚本）。脚本侧已自证：`--selftest` **7 / 7 PASS**
+> （含新增「同行写法必须命中」「注释里举例必须不命中」两例），真实扫描 **347 文件 / 0 处**。
+> ⚠️ 单测侧**未复跑**（按用户指令本轮不执行编译/测试），故上表仍记 1 失败。
+
+**版本**：v2.36.0（未变；versionCode 154）
+
+### 10.166 文档治理 — `docs/` 已完成文档归档（41 个移出根目录，2026-09-20）
+
+**来源**：用户要求「docs 下很多文档已经完成，应该自动归档」，并明确判定口径
+——「文档状态标记可能过期（开发了但未回填），**也用 CHANGELOG 来判断**」。
+
+**背景**：`docs/` 根目录累积到 **62 个**文档（55 md + 3 html + 4 docx），
+无法一眼看出「哪些还在办」。且不存在 `archive/` 目录，也没有归档约定。
+
+**判定规则**（三层，全部满足才归档；已写入 `AGENTS.md` → Conventions → *Doc lifecycle*）：
+
+1. **不被**源码（`app/src/**`）、`AGENTS.md`、`README.md`、CI 引用
+   —— 大量 `*-plan.md` 被**源码 KDoc 当设计依据引用**（如 `FeiniuUrl.kt` →
+   `docs/feiniu-backend-improvement-plan.md`），移走会断掉注释里的路径。
+2. **功能确已落地**，以 `CHANGELOG.md` / 本文档 §10.N 为裁判
+   —— ⚠️ **不以文档头部状态标记为准**。
+3. 内容属一次性产物（审查报告 / 快照 / 测试计划 / 待办清单）或已发布功能的设计稿。
+
+**关键发现：文档状态标记会过期（用户预判正确）**
+
+初版我用「零引用 → 归档」机械判定，产出 47 个候选，但**逐个核对状态标记后发现
+大量误判**。按用户口径改用 **CHANGELOG 裁判**后，结论多处反转：
+
+| 文档 | 文档自称状态 | CHANGELOG 实证 | 结论 |
+|---|---|---|---|
+| `network-music-failover-plan.md` | 「**待确认**（分析 + 方案，尚未开发）」 | `> **网络音乐播放失败多级降级：链接失效不再连锁跳歌**`（§10.160） | ✅ 已落地 → 归档 |
+| `remote-control-design.md` | 「已定稿，**待开发**」 | `**K歌/MTV 手机遥控二维码不显示（根因修复）**` | ✅ 已落地 → 归档 |
+| `multi-bitrate-playback-download-plan.md` | 「**可进入实施**」 | `> **网络音乐多码率：补齐 192 档…**` | ✅ 已落地 → 归档 |
+| `backend-api-version-display-plan.md` | 「规划中，**未实施**」 | `**关于页新增「API 版本号」展示区**` | ✅ 已落地 → 归档 |
+| `vocal-separation-pitch-speed-plan.md` | 「v2 方案」 | `**K歌页面变速控制**：新增"速"按钮 0.5x~1.5x` | ✅ 已落地 → 归档 |
+| `aliyundrive-support-plan.md` | 「规划中，遭遇硬阻塞」 | 阿里云盘为**灰显「敬请期待」占位** | ❌ 未落地 → **留** |
+| `audition-lyrics-solution.md` | 无标记 | 「试听 / 30 秒 / 歌词拖拽」**零命中** | ❌ 未落地 → **留** |
+| `metadata-search-service-solution.md` | 无标记 | 「元数据搜索」**零命中** | ❌ 未落地 → **留** |
+| `network-music-upgrade-plan.md` | 「方案提案」 | 「Go Music API」**零命中** | ❌ 未落地 → **留** |
+| `unified-source-architecture.md` | 无标记 | 「统一音乐源」**零命中** | ❌ 未落地 → **留** |
+
+> **教训**：`状态：待确认` 这类标记只说明「**文档**没回填」，不说明「**功能**没做」。
+> 源码扫描型/文本判定型护栏都要用**独立证据**（CHANGELOG、源码文件是否存在）交叉验证，
+> 否则会把在办工作埋掉，或把已完成工作当成待办。
+
+**执行结果**：
+
+| 项 | 数量 |
+|---|---|
+| 移入 `docs/archive/` | **36**（10 审查/快照 + 22 已落地方案 + 4 一次性产物） |
+| 移入 `docs/articles/` | **5**（zhihu 对外文章） |
+| **同步改写的引用** | **52 处**，涉及 **20 个文件** |
+| `docs/` 根目录 | 62 → **22** |
+| 死链 | **0 新增**（仅剩既有旧断链：`technical-overview.md:1111` 与 `CHANGELOG.md` 引用的 `features-plan.md` 从未入库，与本次无关） |
+
+**手法**：全部用 `git mv`（历史保留、零内容删除），随后机械替换
+`docs/<name>` → `docs/archive/<name>`。引用**统一带 `docs/` 前缀**（151 处），
+仅 3 处 markdown 相对链接且均指向**未归档**文档，故替换安全。
+改写波及 `CHANGELOG.md`（5 处）、本文档（13 处）与 9 个 `.md` 方案/记忆文件。
+
+**新增文件**：`docs/archive/README.md`（归档索引 + 未归档清单 + 回滚命令）、
+`docs/articles/README.md`。
+
+**回滚**：`git checkout -- docs CHANGELOG.md`（纯移动，无内容丢失）。
+
+**版本**：v2.36.0（未变；versionCode 154）
+
 ### 10.152 v2.32.3 — T5：删除死代码 `VocalRemovalProcessor.kt`（算法先归档，2026-09-14）
 
-**来源**：`logs_temp/code-review-full-report-2026-09-13.md` §T5 / `docs/code-review-2026-09-03.md` §P2。文件 348 行，全项目**零调用方**（`PlaybackService.kt:207` 实际 `val vocalRemovalProcessor = SpectralMaskProcessor()`——变量名是历史遗留，类型早就换过了；`PlayerManager.setVocalRemovalProcessor()` 的形参类型同样是 `SpectralMaskProcessor`）。
+**来源**：`logs_temp/code-review-full-report-2026-09-13.md` §T5 / `docs/archive/code-review-2026-09-03.md` §P2。文件 348 行，全项目**零调用方**（`PlaybackService.kt:207` 实际 `val vocalRemovalProcessor = SpectralMaskProcessor()`——变量名是历史遗留，类型早就换过了；`PlayerManager.setVocalRemovalProcessor()` 的形参类型同样是 `SpectralMaskProcessor`）。
 
 **完整流程与调参过程**见 `docs/vocal-removal-approach-b-dsp.md`（含 Mid/Side 流程图、最终参数 0.15 / 0.5 / 8kHz / 1.25x 及其理由、`queueInput` 伪代码）。本小节只归档**那份文档里没有、只存在于源码 KDoc 中的内容**，确保删掉文件后算法仍可完整复原。
 
@@ -9423,7 +9632,7 @@ w0 = 2π·f0/fs ;  alpha = sin(w0)/(2q) ;  a0 = 1 + alpha
 - `isActive()` 固定返回 `configured`，使运行时开关**不必重建 AudioSink**
 - `enabled = false` 时 `queueInput` 直接 `buffer.put(inputBuffer)` 拷贝，零开销
 - `clamp` 到 `Short` 范围，防止 1.25× 补偿增益后削波
-- ⚠️ `reset()` 会把 `enabled` 置回 `false` —— Media3 切歌/重建 AudioSink 时会调用，历史上曾导致「伴唱静默失效但 UI 仍显示开启」（`docs/code-review-2026-09-03.md` §P7，`SpectralMaskProcessor` 同写法）。**复原时必须让外部状态成为唯一真相。**
+- ⚠️ `reset()` 会把 `enabled` 置回 `false` —— Media3 切歌/重建 AudioSink 时会调用，历史上曾导致「伴唱静默失效但 UI 仍显示开启」（`docs/archive/code-review-2026-09-03.md` §P7，`SpectralMaskProcessor` 同写法）。**复原时必须让外部状态成为唯一真相。**
 
 #### 若日后要复活
 
@@ -9908,7 +10117,7 @@ lint 内有一份硬编码的「已知安全依赖」白名单 `PageAlignmentDet
 - **安装层面（不可绕过）**：Play 商店对 API < 24 的设备不再展示该应用；侧载报 `INSTALL_FAILED_OLDER_SDK`。被挡掉的是 **Android 5.0(21) / 5.1(22) / 6.0(23)** —— 含开发用的创维 Android 5.1.1 电视，即真机回归的基准设备。
 - **代码层面**：§10.144 刚补的 9 处 `NewApi` 版本守卫中，`BatteryOptimizationHelper.kt:27/39`（`SDK_INT < M`）、`NasMusicApp.kt:66`、`StorageMonitor.kt:94/120`（`< N`）会变成恒不成立的分支，lint 反而**新增** `ObsoleteSdkInt` 告警（增加而非减少）。
 - **API 24 自身行为约束**：`file://` 经 Intent 传出进程会触发 `FileUriExposedException`（StrictMode 强制）。已核查项目全部 `Intent.ACTION_*` 用法（`ACTION_OPEN_DOCUMENT_TREE` SAF / `ACTION_MEDIA_BUTTON` 进程内 / `ACTION_VIEW` 带 https），**无任何跨进程传 `file://` 的路径**，实测零影响。
-- **文档/约定**：`AGENTS.md` 的 TinyPinyin 选型理由（为 API 22 而弃 `android.icu`）、`docs/regression-test.md` 的「测试环境 API 22+」、可视化方案中 `Path.getSegment`（API 24）不可用的降级论证等，均需同步修订。
+- **文档/约定**：`AGENTS.md` 的 TinyPinyin 选型理由（为 API 22 而弃 `android.icu`）、`docs/archive/regression-test.md` 的「测试环境 API 22+」、可视化方案中 `Path.getSegment`（API 24）不可用的降级论证等，均需同步修订。
 - **收益**：仅消除 **1 条 Warning**（非 Error）。该检查只影响 16KB 页设备（Android 15+ 且 OEM 启用 16KB 页的 arm64 设备，当前市占率极低），且 Play 的 16KB 强制要求针对 `targetSdk 35+`。
 
 **五、决策口径**

@@ -2,8 +2,8 @@
 
 > 状态：已实施（v3.2 已按实测调优）  
 > 日期：2026-08-07  
-> 关联：方案 C（AI 预分离）见 `docs/vocal-removal-approach-c-ai.md`  
-> 关联：K 歌整体方案见 `docs/K歌开发方案.md`
+> 关联：方案 C（AI 预分离）见 `docs/archive/vocal-removal-approach-c-ai.md`  
+> 关联：K 歌整体方案见 `docs/archive/K歌开发方案.md`
 
 ## 1. 原理
 
@@ -56,7 +56,7 @@
 
 ## 2. 与 K 歌整体方案的关系
 
-`docs/K歌开发方案.md` 定义了三种播放模式：
+`docs/archive/K歌开发方案.md` 定义了三种播放模式：
 
 | 模式 | 触发条件 | 音轨切换方式 |
 |------|---------|-------------|
@@ -89,7 +89,7 @@
 
 ### 3.1 设计思路
 
-参考 `docs/K歌开发方案.md` §2.5 的 maidong-ktv 设计模式，**为伴奏模式设计独立的全屏 KARAOKE 页面**，而非在现有 NowPlayingScreen 上添加按钮。
+参考 `docs/archive/K歌开发方案.md` §2.5 的 maidong-ktv 设计模式，**为伴奏模式设计独立的全屏 KARAOKE 页面**，而非在现有 NowPlayingScreen 上添加按钮。
 
 **核心交互流程**：
 

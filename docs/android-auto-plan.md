@@ -1359,7 +1359,7 @@ MediaItemsWithStartPosition(List<MediaItem> mediaItems, int startIndex, long sta
 - [Test with Desktop Head Unit](https://developer.android.com/training/cars/testing/dhu)
 - [Media3: Serve content](https://developer.android.com/media/media3/session/serve-content)
 - [Google 助理连接所需的包名与签名](https://developer.android.com/media/implement/assistant)
-- 项目内：`docs/phone-media-display-plan.md` §5.1、`docs/code-review-2026-09-07.md`（P0-9 / P0-10）
+- 项目内：`docs/phone-media-display-plan.md` §5.1、`docs/archive/code-review-2026-09-07.md`（P0-9 / P0-10）
 
 ---
 

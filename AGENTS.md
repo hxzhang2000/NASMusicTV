@@ -29,9 +29,9 @@ $env:JAVA_HOME = "C:\Program Files\Android\Android Studio\jbr"
 & "C:\Users\hxzha\AppData\Local\Android\Sdk\platform-tools\adb.exe" -s 192.168.0.114:5555 install -r app\build\outputs\apk\release\app-release.apk
 ```
 
-> 电视上若已装 debug 版（签名不同），`install -r` 会报 `INSTALL_FAILED_UPDATE_INCOMPATIBLE`，需先 `uninstall com.nasmusic.tv` 再安装。
+> 电视上若已装 debug 版（签名不同），`install -r` 会报 `INSTALL_FAILED_UPDATE_INCOMPATIBLE`，需先 `uninstall com.nasmusic.tv` 再安装。Release 切到独立签名（`release-key.jks`）后，旧的 debug 签名 release 包同理也需先卸载。
 
-CI (`.github/workflows/build.yml`) has three jobs: **`build`** runs `assembleRelease` (push to `main`/`develop`, tags `v*`; PR to `main`), **`test`** runs `testDebugUnitTest`, and **`lint`** runs `lintDebug` — lint is now **blocking** (the `continue-on-error` was removed on 2026-09-14 after errors were driven to 0; 256 warnings remain and do not fail it). So a green CI means "compiles + unit tests pass + no new lint errors". Note the CI `build` job generates a throwaway `keystore.properties` (CI signing key) — it must include a `cryptoPassphrase` line, otherwise the `packageRelease` guard in `app/build.gradle.kts` fails the build.
+CI (`.github/workflows/build.yml`) has three jobs: **`build`** runs `assembleRelease` (push to `main`/`develop`, tags `v*`; PR to `main`), **`test`** runs `testDebugUnitTest`, and **`lint`** runs `lintDebug` — lint is now **blocking** (the `continue-on-error` was removed on 2026-09-14 after errors were driven to 0; 256 warnings remain and do not fail it). So a green CI means "compiles + unit tests pass + no new lint errors". The CI `build` job's signing step is **dual-mode** (v2.36.0): if the repo has GitHub Secrets `SIGNING_KEYSTORE_BASE64` + `SIGNING_STORE_PASSWORD` + `SIGNING_KEY_ALIAS` + `SIGNING_KEY_PASSWORD`, it base64-decodes `release-key.jks` and signs with the real key (same APK as local release); otherwise it falls back to a throwaway `ci-keystore.jks` for CI validation only. Either way the `keystore.properties` it writes must include a `cryptoPassphrase` line, otherwise the `packageRelease` guard in `app/build.gradle.kts` fails the build. Local release builds read `keystore.properties` from the project root — `storeFile` is now a project-root-relative path (`release-key.jks`), and `app/build.gradle.kts` resolves it via `rootProject.file(...)` (not `project.file(...)`).
 
 **本地构建必须加 `--no-daemon`**（本机实测，2026-09-14）：Gradle 守护进程 fork 出的子进程会全部失败——AAPT2 报 `Daemon startup failed / Please check if you installed the Windows Universal C Runtime`（即使资源只改一个字符串也会触发）、测试 worker 立刻退出（exit `268435466` = `0x1000000A`，低 16 位是 Windows `ERROR_BAD_ENVIRONMENT`）、Kotlin 编译守护进程报 `AccessDeniedException`。用 `--no-daemon`（Kotlin 侧再叠 `-Pkotlin.compiler.execution.strategy=in-process`）即可全部绕过：
 
@@ -78,6 +78,39 @@ JAVA_HOME="C:/Program Files/Android/Android Studio/jbr" \
 - Git/branch/commit rules live in `.opencode/rules.md` (conventional-commit prefixes, `main`/`dev`/`feat/*`, and the rule to update `CHANGELOG.md` + `docs/technical-overview.md` §10 after verified changes). Follow that file; don't duplicate here.
 - Implementation/change history is recorded in `docs/technical-overview.md` §10 — only verified changes. For change context, `docs/code-review-*.md` and `CHANGELOG.md` are more current than prose elsewhere.
 - Tests: `app/src/test/`, Robolectric JUnit4. Run targeted: `./gradlew.bat test --tests "*PinyinUtilsTest"`.
+- **Doc writing style (user-mandated, 2026-09-20)**: `README.md` lists **features only** — user-facing, concise, drop minor/implementation-level items. `CHANGELOG.md` entries state **what was done only** — one line each, **no root cause, no implementation detail, no source line numbers, no verification narrative**; all of that belongs in `docs/technical-overview.md` §10.N. Touch **only the current version's section** — never rewrite historical sections.
+- ⛔ **Never `reject()` in `MediaSession.Callback.onConnect`** (root cause of "car Bluetooth media buttons dead", §10.165). System-side controllers (Bluetooth AVRCP / SystemUI / car) arrive via the framework `MediaController` and Media3 routes them through `MediaSessionLegacyStub.tryGetController() → onConnect`; rejecting makes Media3 drop the command silently. Put the security boundary in `setAvailableSessionCommands` instead — and since that is **strict set membership** (not additive), only ever **add to** `DEFAULT_SESSION_AND_LIBRARY_COMMANDS`. Gate: `MediaSessionAccessPolicyTest`. ⚠️ Only reproducible in **release** builds.
+
+### Doc lifecycle (archive rule — user-mandated, 2026-09-20)
+
+`docs/` root holds **only active docs**. Completed ones move to `docs/archive/`;
+external-facing articles (zhihu etc.) live in `docs/articles/`.
+
+A doc is **archivable** when **all** of these hold:
+
+1. **Not referenced** by source (`app/src/**`), `AGENTS.md`, `README.md`, or CI —
+   moving a doc that code cites in KDoc breaks the design reference.
+2. **Its feature actually shipped**, judged by **`CHANGELOG.md` / `docs/technical-overview.md`** —
+   ⚠️ **never** trust the doc's own status header. Headers go stale: several archived docs
+   said "待评审 / 尚未开发 / 待开发" while the feature had already shipped and the doc was
+   simply never back-filled (`network-music-failover-plan.md`, `remote-control-design.md`, …).
+   Judge by grepping CHANGELOG for the feature, and by whether the implementation exists
+   in source (`SubsonicAdapter.kt`, `KaraokePlaybackScreen.kt`, …).
+   Conversely, a doc whose feature is **absent** from CHANGELOG stays put
+   (e.g. the aliyundrive support plan — 阿里云盘 is still a greyed-out "敬请期待" placeholder).
+   ⚠️ Write such examples **without** the `docs/…md` path form, otherwise this very section
+   becomes a reference that makes the doc look "cited by AGENTS.md" and blocks its archiving.
+
+When archiving:
+
+- Use `git mv` (history preserved, no content deletion) — never `rm`.
+- **Rewrite every inbound reference** `docs/<name>` → `docs/archive/<name>`
+  (references use the `docs/` prefix consistently; a bare-filename form may also appear in
+  markdown links). Then re-run the dead-link check — a zero-hit check confirms nothing broke.
+- Add a row to `docs/archive/README.md` (doc / reason / superseding record).
+- Rollback is a single `git checkout -- docs`.
+
+See `docs/archive/README.md` for the 2026-09-20 pass (41 files moved, 52 references synced).
 
 ## Key directories
 

@@ -606,7 +606,7 @@ Critical Path: Task 1 → Task 4 → Task 6 → Task 11 → F1-F4 → user okay
 - `CHANGELOG.md`：添加新版本记录（列出所有变更，分类 Fixed / Changed / Added）
 - `README.md`：版本历史添加新版本条目
 - `docs/technical-overview.md`：在 Section 10 添加修改记录（参照 v2.4.4 格式）
-- 将 `.omo/plans/network-music-tab.md` 复制到 `docs/network-music-tab-plan.md`
+- 将 `.omo/plans/network-music-tab.md` 复制到 `docs/archive/network-music-tab-plan.md`
 
 ---
 

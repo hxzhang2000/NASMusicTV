@@ -2,7 +2,7 @@
 
 > 版本：v1.0 · 日期：2026-09-14 · 目标版本：**v2.32.4**
 > 参考实现：`fn-music-tv` v1.1.2（来源 https://github.com/QiaoKes/fn-music-tv，本地副本 `D:\hxzhang\MyGithubSoftware\NasAudio\fn-music-tv-v1-1-2`）
-> 相关旧文档：`docs/daoliyu-feiniu-backend-plan.md`（基于逆向推断，**本文件为其勘误与替代实现方案**）
+> 相关旧文档：`docs/archive/daoliyu-feiniu-backend-plan.md`（基于逆向推断，**本文件为其勘误与替代实现方案**）
 
 ---
 
@@ -16,7 +16,7 @@
 
 ### 1.1 背景
 
-- 本仓库自 `docs/daoliyu-feiniu-backend-plan.md` 阶段引入飞牛音乐后端（`ServerConfig.TYPE_FEINIU = "feiniu"`），实现文件为 `app/src/main/java/com/nasmusic/tv/backend/impl/FeiniuAdapter.kt`（约 669 行）。
+- 本仓库自 `docs/archive/daoliyu-feiniu-backend-plan.md` 阶段引入飞牛音乐后端（`ServerConfig.TYPE_FEINIU = "feiniu"`），实现文件为 `app/src/main/java/com/nasmusic/tv/backend/impl/FeiniuAdapter.kt`（约 669 行）。
 - 该实现的 API 端点大量标注 `[REVERSE_ENGINEERED]` / `[UNCONFIRMED]`，来源为 `FeiNiuMusic` 项目的逆向文章，**未经真机验证**。
 - 用户提供了参考项目 `fn-music-tv`（可运行的飞牛音乐 TV 客户端），其中包含完整、自洽、带契约文档的真实 API 客户端实现，可作为权威依据。
 

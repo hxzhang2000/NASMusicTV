@@ -560,7 +560,7 @@ fun `pinyinMatcher returns false for non-matching keyword on TV`() {
 1. `app/src/main/java/com/nasmusic/tv/backend/SearchAggregator.kt` - 精确过滤逻辑
 
 ### 10.3 文档（1 个）
-1. `docs/pinyin-search-plan.md` - 本方案文档
+1. `docs/archive/pinyin-search-plan.md` - 本方案文档
 
 ---
 

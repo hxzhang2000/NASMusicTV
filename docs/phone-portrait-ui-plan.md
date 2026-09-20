@@ -1642,10 +1642,13 @@ JAVA_HOME="C:/Program Files/Android/Android Studio/jbr" \
 **门禁复跑**：`testDebugUnitTest` **848 例 / 0 失败 / 0 错误**，`lintDebug` **0 Error / 267 Warning**。
 
 > 📌 **后续建议**：
-> ① §6.5 那条自查目前仍靠人工跑脚本
-> （`audit_small_touch_target.py`，已入库项目根，自带 `--selftest` 5 用例）。
-> 它与 `ScreenUiModeCoverageTest` 同属"源码扫描型门禁"，**建议后续做成单测**，
-> 否则下次仍可能漏。
+> ① ~~§6.5 那条自查目前仍靠人工跑脚本~~ → **已完成**：已固化为单测门禁
+> `app/src/test/java/com/nasmusic/tv/ui/SmallTouchTargetScanTest.kt`
+> （与 `ScreenUiModeCoverageTest` 同范式，跑 `testDebugUnitTest` 即生效），
+> 与脚本正本 `audit_small_touch_target.py`（项目根，自带 `--selftest`）**逐字同规则**。
+> 固化过程中发现并修掉了**两处空转**：脚本/门禁首版都只判「`.size(` **之后**的行」，
+> 漏掉 `Modifier.size(8.dp).clickable { }` 这种**同行写法**（手势正则 `^\s*\.` 锚行首）；
+> 补同行判定后**必须先排除整行注释**，否则 KDoc 里举例的写法会误报（已补误报防线用例）。
 > ② review 顺带发现 `TextInputDialog.kt:132` 的 `isTVDevice` 也是**每次组合 2 次
 > `hasSystemFeature`**（未加 `remember`），**刻意未改**（不在本轮改动范围，避免扩大改动面）；
 > 全仓库仅此一处与 `FocusableSurface.isTVDevice()` 同类。
