@@ -222,7 +222,17 @@ fun AppRoot(
             } else {
                 TvTopNavBar(
                     currentScreen = currentScreen,
-                    onNavigate = { viewModel.navVM.navigateTo(it) }
+                    onNavigate = { viewModel.navVM.navigateTo(it) },
+                    // ⚠️ 仅手机横屏下发方向按钮：横屏走 TV 布局后 PhoneTopBar 不再渲染，
+                    // 若不补一个，用户从竖屏切进横屏后就再也切不回竖屏（只能靠系统旋转）。
+                    // ⛔ 显式判 PhoneLandscape 而非 `!= PhonePortrait` —— 后者会让 TV 也长出按钮。
+                    showOrientationToggle = uiMode == UiMode.PhoneLandscape,
+                    orientationPref = orientationPref,
+                    onToggleOrientation = {
+                        // 与 PhoneTopBar 同一套语义：竖/横二态循环 + 立即写 pref（D1 / D8）
+                        val next = ScreenOrientationPref.nextOnToggle(orientationPref)
+                        orientationScope.launch { viewModel.prefs.display.setScreenOrientation(next) }
+                    },
                 )
             }
         }
@@ -420,6 +430,15 @@ fun AppRoot(
  *
  * v2.36.0 由 `AppRoot` 内联代码原样抽为具名 composable（方案 §8.6 骨架要求），
  * **零行为变化** —— 6 项导航（首页/播放/曲库/我的/队列/设置）+ 窄屏横向滚动。
+ *
+ * ⚠️ 补（2026-09-20，真机反馈）：**手机横屏**时最右侧额外挂一个 [OrientationToggleButton]。
+ * 原因：横屏走 TV 布局后 `PhoneTopBar` 不再渲染 → 竖屏那个方向按钮随之消失 →
+ * 用户从竖屏点进横屏后就**再也切不回竖屏**（只能靠系统旋转）。
+ * 位置选最右侧，与竖屏 `PhoneTopBar` 的按钮位置（右上角）**一致**，肌肉记忆无需重建。
+ *
+ * ⛔ 判据必须是 `uiMode == UiMode.PhoneLandscape`，**不能写成 `!= UiMode.PhonePortrait`**
+ * —— 后者会把按钮一并发给 TV，破坏「TV 端零变化」。`showOrientationToggle = false` 时
+ * **不产生任何 Spacer / padding**，TV 布局与改动前逐字一致（B1）。
  */
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
@@ -427,6 +446,9 @@ private fun TvTopNavBar(
     currentScreen: Screen,
     onNavigate: (Screen) -> Unit,
     modifier: Modifier = Modifier,
+    showOrientationToggle: Boolean = false,
+    orientationPref: String = ScreenOrientationPref.AUTO,
+    onToggleOrientation: () -> Unit = {},
 ) {
     Row(
         modifier = modifier
@@ -495,6 +517,15 @@ private fun TvTopNavBar(
                     onClick = { onNavigate(Screen.Settings) }
                 )
             }
+        }
+
+        // 仅手机横屏：右上角方向切换（与竖屏 PhoneTopBar 的按钮位置一致）
+        if (showOrientationToggle) {
+            Spacer(modifier = Modifier.width(8.dp))
+            OrientationToggleButton(
+                orientationPref = orientationPref,
+                onToggle = onToggleOrientation,
+            )
         }
     }
 }

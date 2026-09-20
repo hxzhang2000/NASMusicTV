@@ -9,16 +9,19 @@
 
 ## [v2.36.1] - 2026-09-20
 
-> **车机蓝牙媒体按键修复**
+> **车机蓝牙媒体按键修复 · 手机横屏布局修复**
 >
-> 修复 release 包下车机蓝牙（AVRCP）暂停 / 上一曲 / 下一曲全部失效的问题：
+> ① 修复 release 包下车机蓝牙（AVRCP）暂停 / 上一曲 / 下一曲全部失效的问题：
 > `PlaybackService.onConnect` 不再拒绝系统控制器，安全边界改到可用会话命令。
+> ② 修复手机横屏仍渲染竖屏界面（底部残留 mini 播放条与底部导航栏）的问题。
+> ③ 手机横屏补上方向切换按钮，使横屏可以切回竖屏。
 >
-> 实现细节见 `docs/technical-overview.md` §10.165。
+> 实现细节见 `docs/technical-overview.md` §10.165、§10.168。
 >
 > **未实施部分**：① 车机「未播放时按播放键拉起续播」（需播放队列持久化 +
 > `onPlaybackResumption`，故未注册 manifest `MediaButtonReceiver`）；
-> ② 修复后的车机实机复验（需 release 包 + 车机）。
+> ② 修复后的车机实机复验（需 release 包 + 车机）；
+> ③ 手机横屏的视觉规格是否完全对齐 TV（密度缩放 / 字号档 / 网格列数三处仍按手机规格）。
 
 ### Fixed
 
@@ -26,6 +29,9 @@
   新增 `player/MediaSessionAccessPolicy.kt` 承载准入策略
 - 可用会话命令改以 `DEFAULT_SESSION_AND_LIBRARY_COMMANDS` 为基线「只增不减」
 - 小尺寸触摸目标护栏的同行写法盲区（`SmallTouchTargetScanTest` + `audit_small_touch_target.py`）
+- **手机横屏仍渲染竖屏界面**：`MainActivity.attachBaseContext()` 不再下发整份 `Configuration`
+- **手机横屏缺方向切换按钮**：新增 `OrientationToggleButton`，`TvTopNavBar` 仅在手机横屏时渲染
+- `SmallTouchTargetScanTest` 的未闭合块注释语法错误
 
 ### Test
 

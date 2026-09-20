@@ -9255,6 +9255,15 @@ val activeFocus = isFocused && tvDevice     // TV 侧 tvDevice == true → 与�
 | 竖⑥ | 控制区贴底 | `NowPlayingScreen.kt` | 原实现整列 `verticalScroll`，控制区紧跟封面、屏幕下方空一大片。现拆为「弹性区（封面 + 歌名，居中）+ 固定贴底区（进度条 / 控制行 / 次级 Chip）」 |
 | 横① | 去掉 mini 播放条 | `HomeScreen.kt` | 定位：那是首页的 `NowPlayingCard`（**72dp 全宽**横条：48dp 封面 + 歌名/艺术家 + 「正在播放 ▶」），**不是** `MiniPlayer`（后者本就只在竖屏渲染）。条件由 `!isPhonePortrait` 改为 `uiMode == UiMode.TV`。手机横屏可用高度仅 ~439 Compose dp，它一条就占 ~16%，而顶栏本就有「正在播放」入口。⚠️ 此处**显式**读 `LocalUiMode` 做"横屏独立分支"（B1 允许，理由为用户明确要求），**TV 端显示条件不变** |
 
+> ⚠️ **横① 的「定位」在 2026-09-20 真机复验后被推翻**（详见 §10.168.1）：
+> 用户仍能看见 mini 播放条，真因**不是**首页 `NowPlayingCard`，而是
+> `MainActivity.attachBaseContext()` 把**整份 `Configuration`** 当覆盖配置下发 →
+> `orientation` 被钉死在 Activity 启动值 → `UiMode` 恒为 `PhonePortrait` →
+> 横屏下渲染的其实是**竖屏 UI**（底部**真** `MiniPlayer` + `PhoneNavBar` 都在）。
+>
+> 本条的 `HomeScreen.kt` 改动（`!isPhonePortrait` → `uiMode == UiMode.TV`）**本身仍然正确**
+> —— 横屏确实不该有那条 72dp 横条，且 TV 端显示条件不变 —— 只是它**并非**该现象的根因。
+
 **竖⑥ 的实现要点**：`aspectRatio(1f)` 的高度回退**只看自身约束**，不知道下方还有歌名，
 封面收缩后会把自己挤到看不见 —— 必须用 `BoxWithConstraints` 拿 `maxHeight` **显式扣减**预留量反推：
 
@@ -9735,6 +9744,184 @@ Box(Modifier.size(portraitTouchTarget(44.dp))      // 外层承担热区（竖�
 **回滚**：`git checkout -- docs CHANGELOG.md AGENTS.md`（纯移动，无内容丢失）。
 
 **版本**：v2.36.0（未变；versionCode 154）
+
+### 10.168 v2.36.1 — 手机横屏：`attachBaseContext` 钉死配置 + 横屏补方向切换按钮（2026-09-20）
+
+**来源**：真机验收 v2.36.0 竖屏适配后的后续反馈（「手机横屏问题」系列）：
+
+> 继续维持只改代码不编译的原则：
+> 手机版横屏模式（不要影响其他模式）的问题如下：
+> 1. 横屏下，不要有下方的 mini 播放条
+
+随后：
+
+> 2. 先评估一下，是否可以实现：手机端横屏模式采用 TV 版本一样的排版，
+>    手机端竖屏模式，用现在竖屏的排版模式？
+> 3. 在竖屏时有按钮能够切换到横屏，从横屏无法再切换回竖屏，
+>    手机端横屏没有那个切换按钮了，你看放在哪里合适？
+
+---
+
+#### 10.168.1 ⛔ 问题 1 根因：`attachBaseContext` 把整份 `Configuration` 当覆盖配置下发
+
+**现象**：手机横屏下**底部仍有 mini 播放条**。
+
+**排查**：先把「横屏能渲染出的 mini 播放条」全库翻了一遍（`MiniPlayer(` / `CoverCarousel(` /
+`Alignment.Bottom` / `navigationBarsPadding()` / `LocalUiMode.current` 共 24 个使用点）
+—— **代码里横屏一处都没有**：
+
+```kotlin
+// AppRoot.kt:339 —— MiniPlayer / PhoneNavBar 只在 isPhonePortrait 渲染
+if (isPhonePortrait && !isImmersiveMode.value && !showMv && !showKaraoke && !showVisualizer) {
+    if (currentScreen != Screen.NowPlaying && currentSong != null) MiniPlayer(...)
+    PhoneNavBar(...)
+}
+```
+
+即：**能在横屏看到它 ⇒ `isPhonePortrait` 判定恒为 true** ⇒ 手机横屏根本没进 `PhoneLandscape`。
+
+**根因**（`MainActivity.attachBaseContext()`，v2.36.0 引入）：
+
+```kotlin
+// ❌ 旧实现：传整份 Configuration 拷贝
+val config = Configuration(newBase.resources.configuration)
+config.setLocale(locale)
+super.attachBaseContext(newBase.createConfigurationContext(config))
+```
+
+`createConfigurationContext(x)` 的入参 `x` 会成为该 Context 的 Resources **override 配置**；
+`ResourcesManager.applyConfigurationToResourcesLocked()` 在**每一次**全局配置变更时都执行
+`tmpConfig.setTo(全局配置); tmpConfig.updateFrom(override)` —— 而 `Configuration.updateFrom()`
+是**逐字段**判定「非 undefined 才写入」，于是 override 里凡是非 undefined 的字段都被**重新写回旧值**：
+
+| 字段 | 被钉死在 |
+|---|---|
+| `orientation` | Activity 启动那一刻的方向 |
+| `screenWidthDp` / `screenHeightDp` | 启动时的屏幕尺寸 |
+| `densityDpi` | 启动时的密度 |
+| `screenLayout` / `uiMode` / `windowConfiguration` | 启动时的值 |
+
+又因 Manifest 声明了 `configChanges="orientation|screenSize|…"`（旋转**不重建** Activity），
+这份覆盖配置**永不刷新** → `LocalConfiguration.current.orientation` 永远是启动值 →
+`deriveUiMode()` 恒返回 `UiMode.PhonePortrait` → 横屏下依旧渲染**竖屏 UI**。
+
+**为什么 v2.36.0 才暴露**：此前手机被强制横屏（`SENSOR_LANDSCAPE`），启动即横屏，
+钉住的是横屏值 → 一直正常；v2.36.0 改为 `unspecified` + 运行时 `requestedOrientation`
++ `configChanges` 后，启动方向不再保证是横屏 → 问题首次暴露。
+
+**修复**：覆盖配置里**只放 locale**。
+
+```kotlin
+// ✅ 新实现：只下发 locale
+val localeOverride = Configuration().apply {
+    setLocale(locale)
+    fontScale = 0f            // ⚠️ 唯一非 undefined 的默认值例外
+}
+super.attachBaseContext(newBase.createConfigurationContext(localeOverride))
+```
+
+- `Configuration()` 的默认值已是 `ORIENTATION_UNDEFINED` / `SCREEN_WIDTH_DP_UNDEFINED` /
+  `DENSITY_DPI_UNDEFINED` / `SCREENLAYOUT_UNDEFINED`，`WindowConfiguration` 空边界在
+  `updateFrom()` 里是 no-op → 这些字段一律跟随系统全局配置；
+- ⚠️ **`fontScale` 是唯一例外**：`Configuration()` 默认是 **1**（不是 undefined），
+  必须显式置 **0**（0 即 `Configuration.unset()` 采用的「未设置」语义），否则会把系统字体缩放钉死。
+
+**假怀疑的排除**：曾怀疑「声明 `configChanges` 会让 Compose 不刷新 `LocalConfiguration`」，
+读 AOSP（`ActivityThread` → `ViewRootImpl` → `AndroidComposeView` → `CompositionLocals`）
+与 Compose 1.6.1 sources 后确认刷新链路完整、**不受 `configChanges` 影响**，排除该方向。
+
+---
+
+#### 10.168.2 问题 2（评估，无代码改动）：手机横屏复用 TV 排版
+
+**结论：结构层「已经是」TV 排版，且这是原始设计意图，不需要新做。**
+
+- `UiMode.kt:12` 明写 `PhoneLandscape` = **复用 TV 横屏布局的现状代码路径**（D6 / B1）
+- `AdaptiveLayout` 的 `tv` 分支**同时承载 TV 与手机横屏**
+- `AppRoot.kt:207` 只有 `isPhonePortrait` 才渲染 `PhoneTopBar`，否则 `TvTopNavBar`
+
+⇒ 问题 1 修完，横屏**自动**落到 TV 排版（真机已确认）。
+
+**视觉规格层有 3 处偏差**，根源同一个：判据用了「设备类型」`isTVDevice` 而非「形态」`uiMode`：
+
+| # | 位置 | 手机横屏 | TV |
+|---|---|---|---|
+| 1 | `LocalDensity`（`MainActivity.kt:258-267`） | `density × 0.82` | `× 1.0` |
+| 2 | `LocalPhoneCompact = !isTVDevice`（`:270`） | `true`（字号走 phone 档） | `false`（Tv 档 +6sp） |
+| 3 | `adaptiveColumns`（`CommonComponents.kt:152`） | `medium` 支（600–999dp） | `tv` 支（≥1000dp） |
+
+（`portraitTouchTarget` / `AdaptiveLayout` / `responsiveDialogSize` **已按 `LocalUiMode` 分叉**，
+横屏走 `else` = 与 TV 逐字相同。）
+
+⛔ **`isTVDevice` 有两类语义，不能无脑替换成 `uiMode`**：
+
+- **视觉规格类**（可改）：density 缩放、字号档、网格列数
+- **设备能力 / 交互方式类**（**必须保持**）：`TextInputDialog` 的系统 IME vs 自绘键盘、
+  `FocusableSurface` 的 TV 焦点缩放视觉、`SearchAggregator` + `PinyinMatcher` 的拼音匹配、
+  `MainActivity` 的系统栏与 `requestedOrientation` 策略
+
+**未实施（属设计取舍）**：对齐 TV 会让横屏 UI 整体放大 18%、字号 +6sp，而 TV 布局按大屏设计，
+在 5–7 寸横屏（物理高仅 ~360–400dp）可能拥挤/溢出 → 若要做，建议加**显式开关**而非直改判据。
+
+---
+
+#### 10.168.3 问题 3：手机横屏缺方向切换按钮
+
+**根因**：方向按钮在 `PhoneTopBar` 里，横屏走 `TvTopNavBar` 后**不再渲染** →
+用户从竖屏点进横屏后就**再也切不回竖屏**（只能靠系统旋转）。
+
+**方案**：
+
+1. 把方向按钮抽成 **public** `OrientationToggleButton`（`PhoneTopBar.kt`），竖屏 / 横屏**共用**，
+   保证图标、行为、热区完全一致；
+2. `TvTopNavBar` 新增 `showOrientationToggle` / `orientationPref` / `onToggleOrientation` 三个参数，
+   **末尾条件渲染**；
+3. **位置选最右侧**（导航项之后）—— 与竖屏 `PhoneTopBar` 的按钮位置（右上角）**一致**，
+   肌肉记忆无需重建，且不遮挡内容区（对比：悬浮按钮会遮挡内容、新增底部栏会吃掉横屏高度、
+   只放设置页则路径太深）。
+
+**两个必须守住的点**：
+
+- ⛔ **判据必须是 `uiMode == UiMode.PhoneLandscape`**，**不能写 `!= UiMode.PhonePortrait`** ——
+  `TvTopNavBar` 是 TV 与手机横屏**共用**的，后者会让 **TV 端也长出这个按钮**。
+  `showOrientationToggle = false` 时**不产生任何 Spacer / padding**，TV 布局与改动前逐字一致（B1）。
+- 热区用 `PHONE_TOUCH_TARGET`（**56** Compose dp）：横屏下 `LocalDensity` **同样**被 ×0.82
+  （该处判据是 `isTVDevice`），56 × 0.82 ≈ **45.9 物理 dp ≥ 44** ✅；
+  若写 48dp 则只有 ≈39.4 物理 dp ❌。
+
+---
+
+#### 10.168.4 顺带修复：`SmallTouchTargetScanTest` 的 Kotlin 嵌套注释语法错误
+
+**现象**：跑 `testDebugUnitTest` 直接失败 ——
+
+```
+e: SmallTouchTargetScanTest.kt:394:1 Syntax error: Unclosed comment.
+```
+
+⚠️ 迷惑点：文件**只有 393 行**，报错行号却是 **394（= EOF）** → 说明**前面**有未配对的块注释起始符。
+
+**根因**：**Kotlin 的块注释支持嵌套**（与 Java 不同）。该文件 KDoc 里把块注释起始符当**文本示例**写
+（两处），词法分析器当成「嵌套注释开始」→ 深度 +1 → 一路吞掉其后全部代码 → 报在 EOF。
+计数佐证：起始符 17 个 vs 结束符 14 个（差 3 = 两处裸起始符 + 一处字符串字面量，后者安全）。
+
+**该错误来自已提交的 HEAD**（`189b6e7` / `7277b22`）—— 提交者只跑了 `assembleRelease`，
+而**它不编译 test 源码**，故语法错误完全没暴露。
+
+**修复**：两处裸起始符改成成对形式；并在 `isCommentLine` 的 KDoc 里补了警告
+（特别写明「症状是报在 EOF 行号」），防止后人改回去。
+
+---
+
+**测试与验证**：
+
+- `:app:compileDebugUnitTestKotlin` → BUILD SUCCESSFUL
+- `:app:testDebugUnitTest` → **865 例 / 0 失败 / 0 错误**
+- `:app:lintDebug` → **0 errors / 272 warnings**（改动的 3 个源文件**零 warning**）
+- `:app:assembleRelease` → BUILD SUCCESSFUL，APK 签名 SHA-256 与 `release-key.jks` 指纹一致
+- 真机：横屏已确认采用 TV 布局（问题 1 修复生效）；问题 3 待复验
+
+**版本**：v2.36.1（未变；versionCode 155）
 
 ### 10.152 v2.32.3 — T5：删除死代码 `VocalRemovalProcessor.kt`（算法先归档，2026-09-14）
 

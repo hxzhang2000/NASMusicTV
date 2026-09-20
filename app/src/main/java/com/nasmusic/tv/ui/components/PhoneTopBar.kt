@@ -92,16 +92,10 @@ fun PhoneTopBar(
                 )
             }
             // L2 方向切换：单击 = 竖屏 ⟷ 横屏 二态循环 + 立即写 pref（"自动" 只能从设置项进入）
-            PhoneTopBarIconButton(
-                contentDescription = stringResource(R.string.nav_phone_orientation_cd),
-                onClick = onToggleOrientation,
-            ) {
-                Text(
-                    text = orientationIcon(orientationPref),
-                    fontSize = FontSize.button(),
-                    fontWeight = FontWeight.Medium,
-                )
-            }
+            OrientationToggleButton(
+                orientationPref = orientationPref,
+                onToggle = onToggleOrientation,
+            )
         }
     }
 }
@@ -114,6 +108,40 @@ private fun orientationIcon(pref: String): String = when (pref) {
 }
 
 /**
+ * L2 方向切换按钮（**竖屏顶部栏与手机横屏顶部栏共用**）。
+ *
+ * 单击在「竖屏 ⟷ 横屏」二态间循环 + 立即写 pref（"自动" 只能从设置项进入，D1 / D8）。
+ * 图标显示 L1 真值，让用户一眼看出当前策略。
+ *
+ * ⚠️ **为什么手机横屏也需要它**：横屏走 `TvTopNavBar`（TV 布局），`PhoneTopBar` 不再渲染
+ * → 若不补一个，用户从竖屏点进横屏后就**再也切不回竖屏**（只能靠系统旋转 + 关掉旋转锁）。
+ * 故抽出本组件供 `PhoneTopBar` 与 `TvTopNavBar` 两处复用，保证图标、行为、热区**完全一致**。
+ *
+ * 触摸目标：[PHONE_TOUCH_TARGET]（56 Compose dp）。⚠️ 横屏下 `LocalDensity` **同样**被
+ * ×0.82 缩放（该处判据是 `isTVDevice` 而非 `uiMode`），故 56 × 0.82 ≈ 45.9 物理 dp ≥ 44 ✅；
+ * 若写成 48dp 则只有 ≈39.4 物理 dp，不达标（同 [PhoneTopBarIconButton] 的教训）。
+ */
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+fun OrientationToggleButton(
+    orientationPref: String,
+    onToggle: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    PhoneTopBarIconButton(
+        contentDescription = stringResource(R.string.nav_phone_orientation_cd),
+        onClick = onToggle,
+        modifier = modifier,
+    ) {
+        Text(
+            text = orientationIcon(orientationPref),
+            fontSize = FontSize.button(),
+            fontWeight = FontWeight.Medium,
+        )
+    }
+}
+
+/**
  * 顶部栏图标按钮：**[PHONE_TOUCH_TARGET]（56 Compose dp ≈ 45.9 物理 dp）** 触摸目标。
  *
  * ⚠️ 早期写成 48dp，按方案 §2.7 口径只有 48 × 0.82 ≈ **39.4 物理 dp < 44** ❌ ——
@@ -122,16 +150,20 @@ private fun orientationIcon(pref: String): String = when (pref) {
  *
  * ⚠️ 项目无 `androidx.compose.material3`（方案 C1），不用 `IconButton`；
  * 用 [FocusableSurface] + `semantics` 提供无障碍描述。
+ *
+ * ⚠️ `modifier` 只应用于**布局定位**（如 `padding`）—— 尺寸由本函数内的
+ * `.size(PHONE_TOUCH_TARGET)` 固定，外部传入的尺寸会被覆盖（热区不可协商）。
  */
 @Composable
 private fun PhoneTopBarIconButton(
     contentDescription: String,
     onClick: () -> Unit,
+    modifier: Modifier = Modifier,
     content: @Composable () -> Unit,
 ) {
     FocusableSurface(
         onClick = onClick,
-        modifier = Modifier
+        modifier = modifier
             .size(PHONE_TOUCH_TARGET)
             .semantics { this.contentDescription = contentDescription },
         shape = RoundedCornerShape(8.dp),

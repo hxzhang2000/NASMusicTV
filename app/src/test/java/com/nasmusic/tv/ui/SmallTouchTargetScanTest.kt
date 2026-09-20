@@ -34,7 +34,7 @@ import java.io.File
  * ② **同一行**或同一 modifier 链（其后连续以 `.` 开头的行）里有 `clickable` / `combinedClickable`；
  * ③ 链上**没有**会把尺寸撑大的 modifier（`fillMaxSize` / `weight(` / `widthIn(min` …）；
  * ④ 不是 `Spacer(` / `Divider`（向前回看 3 行判定）；
- * ⑤ 不是整行注释（`//` / KDoc `*` / `/*`）。
+ * ⑤ 不是整行注释（`//` / KDoc `*` / 块注释 `/* … */`）。
  *
  * 合规写法（**不**命中）：外层承担热区、内层只做视觉 ——
  * `Box(Modifier.size(portraitTouchTarget(44.dp)).clickable { }) { Box(Modifier.size(8.dp)) }`
@@ -354,10 +354,15 @@ private fun parenSpan(text: String, openIdx: Int): Int {
 }
 
 /**
- * 是否为**整行注释**（`//` / KDoc 的 `*` / `/*`）。
+ * 是否为**整行注释**（`//` / KDoc 的 `*` / 块注释 `/* … */`）。
  *
  * 与 `isNonInteractive` 并列的必要性：加了同行手势判定后，KDoc 里举例的
  * `Box(Modifier.size(8.dp).clickable { })` 会命中同行规则 → 必须先排除注释行。
+ *
+ * ⚠️ **本文件（含所有 KDoc）里引用块注释必须成对写**（起始符 + 结束符）——
+ * Kotlin 的块注释**支持嵌套**，只写起始符会被词法分析器当成**嵌套注释开始**，
+ * 一路吞掉其后全部代码。症状很有迷惑性：`Syntax error: Unclosed comment`
+ * 报在**文件 EOF 行**（行号比文件实际行数还大），而不是出错的那一行。
  */
 private fun isCommentLine(line: String): Boolean {
     val t = line.trimStart()

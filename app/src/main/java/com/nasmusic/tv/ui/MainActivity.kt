@@ -90,6 +90,29 @@ class MainActivity : ComponentActivity() {
      * 在每次 Activity 创建（含 recreate）时应用存储的语言设置。
      * resources.updateConfiguration() 仅影响 Application 级别资源，
      * 通过 attachBaseContext 创建带正确 locale 的 Context，确保 Compose 使用正确的资源配置。
+     *
+     * ⛔ **覆盖配置里只能放 locale —— 这是「手机横屏仍渲染竖屏 UI」的根因（v2.36.0 回归）**：
+     * `createConfigurationContext(x)` 的入参 x 会成为该 Context 的 Resources **override 配置**，而
+     * `ResourcesManager.applyConfigurationToResourcesLocked()` 在**每一次**全局配置变更时都会执行
+     * `tmpConfig.setTo(全局配置); tmpConfig.updateFrom(override 配置)` ——
+     * 而 `Configuration.updateFrom()` 是**逐字段**判定「非 undefined 才写入」，
+     * 于是 override 里凡是非 undefined 的字段都会被**重新写回旧值**。
+     *
+     * 早期实现传的是整份 `Configuration(newBase.resources.configuration)` 拷贝 →
+     * `orientation` / `screenWidthDp` / `screenHeightDp` / `densityDpi` / `screenLayout` / `uiMode` /
+     * `windowConfiguration` 全部被**钉死在 Activity 启动那一刻**。
+     * 又因为 Manifest 声明了 `configChanges="orientation|screenSize|…"`（旋转**不重建** Activity），
+     * 这份覆盖配置**永不刷新** → `LocalConfiguration.current.orientation` 永远是启动值 →
+     * `deriveUiMode()` 恒返回 `UiMode.PhonePortrait` → 手机横屏下依旧渲染竖屏 UI
+     * （底部 `MiniPlayer` + `PhoneNavBar` 都还在）＝ 真机反馈的「横屏下还有下方的 mini 播放条」。
+     *
+     * 因此这里**只构造「仅含 locale」的覆盖配置**：其余字段一律保持 undefined
+     * （`Configuration()` 的默认值已是 `ORIENTATION_UNDEFINED` / `SCREEN_WIDTH_DP_UNDEFINED` /
+     * `DENSITY_DPI_UNDEFINED` / `SCREENLAYOUT_UNDEFINED`，且其 `WindowConfiguration` 的
+     * 空边界在 `updateFrom()` 中是 no-op），方向与屏幕尺寸一律跟随系统全局配置。
+     * ⚠️ `fontScale` 是唯一的例外：`Configuration()` 的默认值是 **1**（不是 undefined），
+     * 必须显式置 **0**（0 即 `Configuration.unset()` 采用的「未设置」语义），
+     * 否则会把系统字体缩放钉死在启动值。
      */
     override fun attachBaseContext(newBase: Context) {
         val lang = com.nasmusic.tv.data.prefs.AppPreferences.getInstance(newBase).getLanguageSync()
@@ -98,10 +121,12 @@ class MainActivity : ComponentActivity() {
             "en" -> java.util.Locale.US
             else -> com.nasmusic.tv.NasMusicApp.getSystemLocale() // 跟随系统：读取真正的系统 locale
         }
-        val config = Configuration(newBase.resources.configuration)
-        config.setLocale(locale)
-        val updatedContext = newBase.createConfigurationContext(config)
-        super.attachBaseContext(updatedContext)
+        // ⛔ 只下发 locale：其余字段必须保持 undefined，否则会钉死方向/屏幕尺寸/密度（见上方 KDoc）
+        val localeOverride = Configuration().apply {
+            setLocale(locale)
+            fontScale = 0f
+        }
+        super.attachBaseContext(newBase.createConfigurationContext(localeOverride))
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
