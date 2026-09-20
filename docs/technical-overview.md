@@ -9923,6 +9923,295 @@ e: SmallTouchTargetScanTest.kt:394:1 Syntax error: Unclosed comment.
 
 **版本**：v2.36.1（未变；versionCode 155）
 
+### 10.169 v2.36.1 — 手机竖屏：底部导航按钮居中 + 播放页 Chip 归位（2026-09-20）
+
+**背景**：§10.168 的真机复验确认横屏已走 TV 排版后，用户继续报竖屏（`UiMode.PhonePortrait`）问题。
+本节两项改动**均只作用于手机竖屏**，TV / 手机横屏代码路径逐字未动（B1）。
+
+#### 10.169.1 底部导航按钮「左对齐」：`FocusableSurface` 内部 `Box` 没有 `contentAlignment`
+
+**现象**：`PhoneNavBar` 的 6 个按钮，图标 + 文字**全部贴在按钮左上角**，尽管代码里写了
+`horizontalAlignment = Alignment.CenterHorizontally`。
+
+**根因**（排查链）：
+
+1. `PhoneNavBar` 的按钮内容容器是
+   `Column(horizontalAlignment = CenterHorizontally, verticalArrangement = Center)`，
+   本身**没有** `Modifier`。
+2. 它在 `FocusableSurface { ... }` 内。`FocusableSurface` 内部是
+   `Box(...) { content() }`，**未指定 `contentAlignment`** → 默认 `Alignment.TopStart`。
+3. Compose 的 `Box` 给子项的约束：**有** `contentAlignment` 时子项按 wrap-content 测量再摆位；
+   未指定时同样，但**摆放位置是 TopStart**。`Column` 默认 wrap-content（宽 = 最宽子项宽，
+   高 = 内容高），于是整块被贴在左上角 —— `Column` 的 `CenterHorizontally` 只在
+   **Column 自身宽度**内生效，而 Column 宽度就等于内容宽度，**没有多余空间可分配**。
+
+**修复**：给该 `Column` 加 `Modifier.fillMaxSize()` → Column 撑满 `FocusableSurface` 的
+Box，`CenterHorizontally` 才有空间可用。
+
+```kotlin
+Column(
+    modifier = Modifier.fillMaxSize(),   // ⚠️ 不可省，理由见上
+    horizontalAlignment = Alignment.CenterHorizontally,
+    verticalArrangement = Arrangement.Center,
+) { /* 图标 + 文字 */ }
+```
+
+⛔ **不要去改 `FocusableSurface` 内部 `Box` 加 `contentAlignment = Alignment.Center`** ——
+它是全项目共用组件，改了会动到 **TV 端所有按钮**的内部对齐（B1：TV 行为必须逐字不变）。
+修复必须落在**调用方**。
+
+**同类排查**：全项目扫「`FocusableSurface` + 内部内容容器」的用法，只有 `PhoneNavBar` 漏了
+`fillMaxSize()`；`MiniPlayer.kt`、`PhoneTopBar.kt` 的内容容器都已有
+`fillMaxSize + Center`。**新增此类按钮时务必照抄这两处的写法。**
+
+#### 10.169.2 播放页 Chip 归位：高亮 Chip 属于歌词页，不在封面页
+
+**现象（真机反馈 4 项）**：
+
+1. 封面页的「逐行 / 逐字」高亮 Chip 应放到歌词页；
+2. 封面页的「收藏」Chip 冗余 —— 歌名旁已有一颗心形图标（`FavoriteButton`）做同一件事；
+3. 封面页的「播放队列」Chip 冗余 —— 底部主导航 `PhoneNavBar` 已有「播放队列」按钮；
+4. 封面页的「封面」Chip **文案与行为不符** —— 它的 `onClick` 本来就是 `onEnterVisualizer`；
+5. 歌词页的「在线（来源）/ 文字大小 / 定时」三个 Chip 应移到**歌词框右上方**，与横屏 TV 一致。
+
+**改动**：
+
+- `PortraitSecondaryChips` 删掉 `highlightMode` / `onChangeHighlightMode` / `isFavorite` /
+  `onToggleFavorite` / `onOpenQueue` 五个参数与对应 Chip；「封面」文案改用
+  `R.string.player_visualizer_short`（"频谱"，TV / 横屏同款）。
+  保留：音质 / 定时 / **频谱** / K 歌 / MTV。
+- 歌词页新增工具条（位于歌词 `Box` **上方**）：来源循环 / **高亮模式** / 字号循环 / 睡眠定时，
+  与 TV 分支的歌词工具条同序同语义。高亮 Chip 的文案与选中态逐字照抄 TV：
+  `WORD_BY_WORD → player_highlight_word` 且 `selected = true`，否则 `player_highlight_line`。
+- 「⋯」更多菜单里唯一残留的 `np_mode_cover`（"封面"）同样改为 `player_visualizer_short`，
+  并从 `values/strings.xml` + `values-en/strings.xml` 删除该**已无引用**的字符串
+  （否则会新增一条 `UnusedResources` warning，把门禁 272 抬到 273）。
+
+**参数去向核对**（改完必须逐个确认没变死参数）：
+
+| 参数 | 改后仍被谁使用 |
+|---|---|
+| `onOpenQueue` | `PortraitMoreMenu`（"⋯" 菜单） |
+| `highlightMode` | `LyricsView` + 新歌词工具条高亮 Chip |
+| `onChangeHighlightMode` | 新歌词工具条高亮 Chip |
+| `isFavorite` / `onToggleFavorite` | 歌名旁 `FavoriteButton` |
+
+#### 10.169.3 ⚠️ 通用坑：`horizontalScroll` 会让 `Arrangement.End` 失效
+
+歌词工具条要「右对齐 + 内容超宽时可横滑」，**不能**直接写：
+
+```kotlin
+Row(modifier = Modifier.fillMaxWidth().horizontalScroll(state),
+    horizontalArrangement = Arrangement.End) { /* Chip... */ }   // ⛔ End 无效
+```
+
+原因：`horizontalScroll` 是 `Modifier` 链上的**布局修饰符**，它会用
+`Constraints(maxWidth = Infinity)` 测量其内容 —— Row 在无限宽约束下 wrap-content，
+**宽度恒等于内容宽度**，`Arrangement.End` 没有任何「多余空间」可分配
+（同理 `fillMaxWidth` 在无限约束下也失效）。
+
+**正确写法**：外面套一层 `Box` 承接「撑满 + 对齐」，里面保持可滚动：
+
+```kotlin
+Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) {
+    Row(modifier = Modifier.horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(6.dp)) { /* Chip... */ }
+}
+```
+
+这样：内容窄于父宽 → Row 贴右；内容溢出（超大字号 + 4 个 Chip）→ 仍可横滑不截断。
+
+**测试与验证**（见 `CHANGELOG.md` v2.36.1）：
+
+- `:app:testDebugUnitTest` → **865 例 / 0 失败 / 0 错误 / 0 跳过**
+- `:app:lintDebug` → **0 errors / 272 warnings**（**基线未变**）
+  - 改动的 2 个源文件（`NowPlayingScreen.kt` / `PhoneNavBar.kt`）**零 warning**
+  - ⚠️ **中途曾一度变成 273**：删掉「收藏」Chip 后 `R.string.action_unfavorite` 失去唯一调用方
+    → 新增 1 条 `UnusedResources`。已连同 `np_mode_cover` 一起从
+    `values/strings.xml` + `values-en/strings.xml` 删除（两条均**零引用**，
+    已核对 `app/src/main` 与 `app/src/test` 全库），基线回到 272。
+    **教训：删 UI 元素时，顺手核对它用过的字符串资源是否变成死资源**，
+    否则门禁 warning 计数会漂移、下一轮会话要重新定位原因。
+- `:app:assembleRelease` → BUILD SUCCESSFUL
+  （产物 `app/build/outputs/apk/release/NASMusicTV-release-v2-36-1.apk`，23,138,148 B；
+  `versionCode=155` / `versionName=2.36.1` / `minSdk=22` / `targetSdk=34` /
+  `native-code: arm64-v8a armeabi-v7a x86_64`；签名 SHA-256
+  `24ed591a…46dfe` 与 `release-key.jks` 指纹逐位一致）
+- `audit_small_touch_target.py` → 扫描 347 个 `.kt`，「小尺寸 + 同链 clickable」**0 处**
+- ⚠️ **构建内存**：`org.gradle.jvmargs` 的 `-Xmx2048m` 在本次改动量下**不够**
+  （R8 全量重处理卡死），临时提到 `-Xmx4096m` 才通过；**构建后已还原 2048m**。
+  判断「卡死 vs 慢」的方法见 §10.168 相关记录（看 `app/build` 下有无新文件）。
+
+**版本**：v2.36.1（未变；versionCode 155）
+
+### 10.170 v2.36.1 — 手机竖屏设置入口：底部导航 → 顶栏齿轮（2026-09-20）
+
+**需求**（真机反馈，仍限定「只改手机竖屏」）：
+
+1. 底部主导航（`PhoneNavBar`）去掉「设置」按钮，其余按钮**占满宽度**；
+2. 顶栏右上角**横竖屏切换按钮的左边**加一个齿轮按钮，从它进入设置页。
+
+#### 10.170.1 底部导航 6 → 5 项：`weight(1f)` 让"占满宽度"自动成立
+
+`PhoneNavBar` 的每项本来就带 `Modifier.weight(1f).fillMaxHeight()`，**权重会吃掉整行可用宽度**
+→ 直接从 `PHONE_NAV_ITEMS` 删掉 `PhoneNavItem(Screen.Settings, ...)` 一项即可，
+**不需要改任何布局代码**，剩余 5 项自动等分占满整宽。
+
+⚠️ 顺带删掉随之失去引用的 `import androidx.compose.material.icons.filled.Settings`
+（否则是 unused import）。
+
+⚠️ `Arrangement.SpaceEvenly` 在全部子项都带权重时**不起作用**（没有剩余空间可分配）——
+保留它无害，别误以为它在做居中。
+
+⛔ **不要再把设置加回底部导航**：会与顶栏齿轮形成两个入口。
+
+#### 10.170.2 顶栏齿轮：与方向按钮共用 `PhoneTopBarIconButton` 热区规格
+
+`PhoneTopBar` 新增参数 `onNavigateToSettings: () -> Unit`，在「搜索」与
+`OrientationToggleButton` **之间**插入一个齿轮按钮（即方向按钮的左侧）：
+
+```kotlin
+PhoneTopBarIconButton(
+    contentDescription = stringResource(R.string.nav_settings_cd),
+    onClick = onNavigateToSettings,
+) { Icon(Icons.Default.Settings, contentDescription = null, modifier = Modifier.size(20.dp)) }
+```
+
+- 复用 `PhoneTopBarIconButton` → 自动继承 **56 Compose dp ≈ 45.9 物理 dp** 的触摸目标
+  （≥ 44dp，§2.7 口径），与搜索 / 方向按钮**完全一致**；不要另写一个 48dp 的按钮。
+- 新增无障碍文案 **`nav_settings_cd`**（"打开设置" / "Open settings"，中英双语）——
+  图标按钮没有可见文字，`contentDescription` 是唯一的无障碍名称。
+- 接线在 `AppRoot.kt` 的 `PhoneTopBar(...)` 调用处：
+  `viewModel.navVM.navigateTo(Screen.Settings)`，与 TV 顶部导航的「设置」项**同一行为**。
+
+⚠️ **顶栏宽度预算**：竖屏顶栏 `padding(horizontal = 16.dp)`，右侧三个 56dp 按钮
++ 2 × 8dp 间距 = **184 Compose dp**，加上 Logo 32 + 间距 10 → 标题 `weight(1f)` 约剩
+130+ Compose dp（320dp 物理屏 ÷ 0.82 ≈ 390）。"NAS Music" 在 `FontSize.button()` 下可容纳；
+**若再往顶栏加第 4 个按钮就要重新核算**（标题会被压到截断）。
+
+#### 10.170.3 ⚠️ 齿轮必须先 `closeSettingsSection()`，否则"看起来没反应"
+
+`NavigationViewModel.navigateTo(screen)` **只写 `_currentScreen`，不动 `_settingsSection`**：
+
+```kotlin
+fun navigateTo(screen: Screen) { _currentScreen.value = screen }
+```
+
+而竖屏设置是**两级结构**（`SettingsScreen(selectedSection = ...)`，`settingsSection` 为 `null`
+时是一级列表、非 `null` 时是某个二级页）。若用户此前进过「通用设置」等二级页，
+该状态会**一直留着**；此时点齿轮虽然确实"导航到了 Settings"，但渲染出来**仍是那个二级页**
+→ 用户视角是「按钮坏了」。
+
+故齿轮的 `onClick` 必须显式先关掉二级页：
+
+```kotlin
+onNavigateToSettings = {
+    viewModel.navVM.closeSettingsSection()   // ← 不可省
+    viewModel.navVM.navigateTo(Screen.Settings)
+}
+```
+
+✅ **不影响 TV**：`settingsSection` 只在竖屏两级设置里被 `openSettingsSection` 写入，
+TV 端恒为 `null`，清一次是无副作用的空操作。
+
+⚠️ 对比：TV 顶部导航栏的「设置」项（`TvTopNavBar` 内）**没有**这一步 —— 因为它不会遇到
+"停在二级页"的状态，无需处理。两处行为差异是**有意的**，不是漏改。
+
+#### 10.170.4 顺带修正：`PhoneNavBar` 的类级 KDoc 原先挂在 `PhoneNavItem` 上
+
+原文件把「竖屏底部导航栏（v2.36.0，方案 §4.0 / §8.4）」那段 KDoc 写在
+`private data class PhoneNavItem` **之前** —— 但那段内容讲的是 `PhoneNavBar` 函数
+（容器高度、子项 `fillMaxHeight`、Icon/文字尺寸）。已把类级 KDoc 移到
+`fun PhoneNavBar` 上，`PhoneNavItem` 只保留讲项列表本身的新 KDoc。
+
+⚠️ 这不只是排版问题：**Kotlin 不允许一个声明前面挂两段 KDoc**，本次新增项列表 KDoc 时
+就撞上了「两个连续 `/** … */`」的写法，直接改掉比留隐患好。
+
+**测试与验证**：见 `CHANGELOG.md` v2.36.1（`testDebugUnitTest` / `lintDebug` / `assembleRelease` 三门禁）。
+
+**版本**：v2.36.1（未变；versionCode 155）
+
+### 10.171 v2.36.1 — 手机端曲库：内容区左右滑切换子 TAB（2026-09-20）
+
+**需求**（真机反馈）：曲库页有 8 个子 TAB（`SEARCH / DISCOVER / ALBUMS / ARTISTS / SONGS /
+GENRES / YEARS / RADIO`），**手机端（横竖屏都要）**支持在子 TAB 的**内容上**左右滑切换，
+**有数据或无数据都要能滑**。
+
+#### 10.171.1 手势必须挂在「内容容器」上，不能挂在具体列表上
+
+```kotlin
+Box(
+    modifier = Modifier.weight(1f).fillMaxWidth()
+        .libraryTabSwipe(enabled = ..., onSwipeLeft = { /* 下一 TAB */ }, onSwipeRight = { /* 上一 TAB */ })
+) { when (activeTab) { /* 8 个 TAB 的内容 */ } }
+```
+
+两个原因：
+
+1. **空数据也能滑**：该 `Box` 的尺寸由 `weight(1f)` 决定，**与内部有没有列表无关**；
+   且 `pointerInput` 的命中测试看的是**布局边界**（不看有没有绘制出内容）。
+   若把 modifier 挂到 `AlbumsTab` 的网格上，空态时那个网格可能压根不参与布局 → 滑不动。
+2. **不用逐个 TAB 加**：8 个 TAB 只挂一处，新增 TAB 自动获得能力。
+
+#### 10.171.2 与既有滚动的冲突：竖滚不受影响，横滚子节点优先
+
+`detectHorizontalDragGestures` 的语义决定了冲突边界：
+
+- 需先越过**水平** touch slop，且方向判定更偏水平 → 列表**竖直**滚动完全不受影响。
+- 内容区里已有的**横向滚动子节点**（Chip 横排、DISCOVER 的维度选择行）位于**更深**的节点，
+  在 `PointerEventPass.Main` 上**先**消费事件 → 在那类控件上滑动仍由它们自己响应。
+  ✅ 这是**有意**的：用户在那类控件上滑动时想要的是滚动它，不是切 TAB。
+- TAB 行**自身**也是横滑条（窄屏要滑才能看全 8 个 TAB），所以手势**绝不能**挂到 TAB 行上。
+
+#### 10.171.3 ⚠️ 回调必须 `rememberUpdatedState`，否则只能在前两个 TAB 间来回
+
+`pointerInput` 的 key 用了 `enabled`（开关不变则不重启协程）。若直接把
+`onSwipeLeft` / `onSwipeRight` 的 lambda 捕获进去，lambda 里读到的 `activeTab` 是
+**首次组合那一刻**的值 → 表现为「左滑一次到第 2 个 TAB，再滑就回到第 1 个」，来回打转。
+
+```kotlin
+val swipeLeft by rememberUpdatedState(onSwipeLeft)
+val swipeRight by rememberUpdatedState(onSwipeRight)
+return this.pointerInput(enabled) { /* 用 swipeLeft() / swipeRight() */ }
+```
+
+⚠️ 同源陷阱见 `NowPlayingScreen.portraitModeSwipe`（那里之所以没踩，是因为它捕获的是
+`MutableState` 实例本身，读写永远取当前值；本处捕获的是**值**，故必须包一层）。
+
+#### 10.171.4 手机专属：显式读 `UiMode.TV`，并写明理由
+
+按 `docs/conventions-adaptive-ui.md` 的 B1 硬规则，分支谓词本应只写 `== / != PhonePortrait`。
+但本次需求**明确覆盖「竖屏 + 横屏」两个手机形态**，属于「用户明确要求的横屏独立分支」，
+故按约定**显式读 `UiMode.TV`** 并在此写明理由：
+
+```kotlin
+enabled = uiMode == UiMode.PhonePortrait || uiMode == UiMode.PhoneLandscape
+```
+
+TV 端**不加**手势，保持逐字不变（遥控器本来也没有横向滑动手势）。
+
+#### 10.171.5 未做（可选后续）
+
+- **TAB 行不自动滚到当前选中项**：8 个 TAB 在窄屏要横滑才能看全，滑到靠后的 TAB 时
+  TAB 行里可能看不到高亮项。要做需要把 `tabsRow` 从 `Row(horizontalScroll)` 换成
+  `LazyRow` + `LazyListState.animateScrollToItem`（或逐个 `onGloballyPositioned` 记位置），
+  会动到 TV / 横屏共用的那段布局 → 本次未做，留待需要时单独评估。
+- **到两端不循环**：首 TAB 右滑、末 TAB 左滑均无动作（与「封面 ⟷ 歌词」二态滑动的
+  边界语义一致）。若希望首尾相接需另行确认。
+
+**测试与验证**（`logs_temp/gate-v2361e.log`，源码与产物一致的一次跑）：
+
+- `:app:testDebugUnitTest` → **865 例 / 0 失败 / 0 错误 / 0 跳过**
+- `:app:lintDebug` → **0 errors / 272 warnings**（基线未变；改动的 4 个文件零 warning）
+- `:app:assembleRelease` → BUILD SUCCESSFUL，产物 `NASMusicTV-release-v2-36-1.apk`
+  （23,137,132 B；versionCode 155 / minSdk 22 / targetSdk 34；签名 SHA-256
+  `24ed591a…46dfe` 与 `release-key.jks` 一致）
+- ⚠️ 同一条 `testDebugUnitTest lintDebug assembleRelease` 命令**耗时波动很大**：
+  多数任务 up-to-date 时 17m9s，任务需重跑时 41m39s。**不要按固定时长设超时**，
+  长构建一律 `> logs_temp/*.log 2>&1` 后台跑。
+
+**版本**：v2.36.1（未变；versionCode 155）
+
 ### 10.152 v2.32.3 — T5：删除死代码 `VocalRemovalProcessor.kt`（算法先归档，2026-09-14）
 
 **来源**：`docs/archive/code-review-full-report-2026-09-13.md` §T5 / `docs/archive/code-review-2026-09-03.md` §P2。文件 348 行，全项目**零调用方**（`PlaybackService.kt:207` 实际 `val vocalRemovalProcessor = SpectralMaskProcessor()`——变量名是历史遗留，类型早就换过了；`PlayerManager.setVocalRemovalProcessor()` 的形参类型同样是 `SpectralMaskProcessor`）。

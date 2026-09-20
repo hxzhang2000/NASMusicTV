@@ -26,6 +26,8 @@
     <string name="nav_library">曲库</string>
     <string name="nav_queue">播放队列</string>
     <string name="nav_settings">设置</string>
+    <!-- v2.36.1：竖屏顶栏齿轮按钮的无障碍描述（图标按钮，无可见文字） -->
+    <string name="nav_settings_cd">打开设置</string>
     <string name="nav_server">服务器</string>
     <string name="nav_network">网络音乐</string>
     <string name="nav_home">首页</string>
@@ -1081,14 +1083,12 @@
     <string name="miniplayer_cd_next">下一首</string>
     <!-- 竖屏播放页 -->
     <string name="np_more">更多</string>
-    <string name="np_mode_cover">封面</string>
     <string name="np_mode_lyrics">歌词</string>
     <string name="np_lyrics_source_cycle_cd">切换歌词来源</string>
     <string name="np_song_info_cd">歌曲信息</string>
     <!-- 通用 -->
     <string name="common_more_actions_cd">更多操作</string>
     <string name="action_add_to_playlist">加入歌单</string>
-    <string name="action_unfavorite">取消收藏</string>
     <string name="song_menu_title">歌曲操作</string>
     <!-- 队列页 ⋮ 菜单（竖屏） -->
     <string name="queue_action_move_up">上移</string>

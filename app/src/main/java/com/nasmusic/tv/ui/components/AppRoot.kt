@@ -217,6 +217,17 @@ fun AppRoot(
                         // 与 HomeBranch / NowPlayingBranch 的「搜索」按钮行为一致
                         viewModel.selectLibraryTab(LibraryTab.SEARCH)
                         viewModel.navVM.navigateTo(Screen.Library)
+                    },
+                    onNavigateToSettings = {
+                        // v2.36.1：设置入口从底部导航（PhoneNavBar）上移到顶栏齿轮按钮，
+                        // 底部导航只剩 5 个主功能。
+                        // ⚠️ `navigateTo` **只改 Screen，不清 `settingsSection`**（见 NavigationViewModel）：
+                        // 若用户此前进过某个设置二级页（如「通用设置」），状态会一直留着，
+                        // 此时点齿轮会「看起来没反应」（仍停在那个二级页）→ 必须显式先关掉二级页。
+                        // ✅ 不影响 TV：`settingsSection` 只在竖屏两级设置里被写入，TV 端恒为 null，
+                        // 清一次是无副作用的空操作（TV 顶部导航的「设置」项因此无需这一步）。
+                        viewModel.navVM.closeSettingsSection()
+                        viewModel.navVM.navigateTo(Screen.Settings)
                     }
                 )
             } else {

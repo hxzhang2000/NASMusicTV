@@ -5,6 +5,7 @@ import com.nasmusic.tv.ui.components.AlbumSkeletonGrid
 import com.nasmusic.tv.ui.components.ArtistSkeletonGrid
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
@@ -25,6 +26,7 @@ import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
@@ -32,6 +34,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -76,6 +79,59 @@ enum class LibraryTab(val titleRes: Int) {
     GENRES(R.string.library_genres),
     YEARS(R.string.library_years),
     RADIO(R.string.library_radio)
+}
+
+/** 曲库子 TAB 左右滑切换的最小水平位移（≈3mm；低于此视为误触或竖直滚动）。 */
+private val LIBRARY_TAB_SWIPE_THRESHOLD = 48.dp
+
+/**
+ * 曲库子 TAB：在**内容区**左右滑切换 TAB（v2.36.1，用户明确要求「手机端横竖屏都要支持」）。
+ *
+ * 语义与竖屏播放页的「封面 ⟷ 歌词」滑动一致（见 `NowPlayingScreen.portraitModeSwipe`）：
+ * **左滑 → 下一个 TAB，右滑 → 上一个 TAB**；到两端不循环（首 TAB 右滑 / 末 TAB 左滑无动作）。
+ *
+ * ⚠️ 挂在**内容区** `Box(weight(1f))` 上，**不要**挂到 TAB 行上 —— TAB 行自身是横滑条
+ * （窄屏必须滑才能看全 8 个 TAB），两者手势会打架。
+ *
+ * ✅ **空数据也能滑**：内容区 `Box` 的尺寸由 `weight(1f)` 决定，与内部有没有列表无关；
+ * 且 `pointerInput` 的命中测试看的是**布局边界**（不看有没有绘制出内容），
+ * 故「暂无数据」空态照样接收滑动。⛔ 反过来讲，**别**把这个 modifier 挂到某个具体
+ * TAB 的列表上 —— 空态时那个列表可能压根不存在，滑不动。
+ *
+ * ⚠️ 只识别**水平**拖拽：`detectHorizontalDragGestures` 需先越过水平 touch slop，
+ * 且方向判定更偏水平，故列表**竖直**滚动不受影响；内容区里已有的横向滚动子节点
+ * （如 Chip 横排、DISCOVER 的维度选择行）位于更深的节点、会**先**消费事件，
+ * 因此在那类控件上滑动仍是它们自己响应 —— 这是有意为之。
+ *
+ * ⚠️ 回调必须用 `rememberUpdatedState` 包裹：`pointerInput` 的 key 是 `enabled`，
+ * 只要开关不变协程就不重启，若直接捕获 lambda，会读到**首次组合**那一刻的 `activeTab`
+ * （陈旧值）→ 表现为「只能在前两个 TAB 之间来回」。这是 Compose 里
+ * `pointerInput(Unit)` + 状态闭包的经典陷阱，参见 `portraitModeSwipe` 的同款注释。
+ */
+@Composable
+private fun Modifier.libraryTabSwipe(
+    enabled: Boolean,
+    onSwipeLeft: () -> Unit,
+    onSwipeRight: () -> Unit,
+): Modifier {
+    val swipeLeft by rememberUpdatedState(onSwipeLeft)
+    val swipeRight by rememberUpdatedState(onSwipeRight)
+    return this.pointerInput(enabled) {
+        if (!enabled) return@pointerInput
+        val thresholdPx = LIBRARY_TAB_SWIPE_THRESHOLD.toPx()
+        var accumulated = 0f
+        detectHorizontalDragGestures(
+            onDragStart = { accumulated = 0f },
+            onDragEnd = {
+                if (accumulated <= -thresholdPx) swipeLeft()
+                else if (accumulated >= thresholdPx) swipeRight()
+                accumulated = 0f
+            },
+            onDragCancel = { accumulated = 0f },
+        ) { _, dragAmount ->
+            accumulated += dragAmount
+        }
+    }
 }
 
 /**
@@ -340,7 +396,8 @@ fun LibraryScreen(
 
     Box(modifier = modifier.fillMaxSize()) {
         // v2.36.0 竖屏（方案 §4.3 / P0-14）：页 padding 32→16；标题/搜索框/TAB 由「一行」改「三行」
-        val isPhonePortrait = LocalUiMode.current == UiMode.PhonePortrait
+        val uiMode = LocalUiMode.current
+        val isPhonePortrait = uiMode == UiMode.PhonePortrait
         Column(
             modifier = Modifier.fillMaxSize().padding(
                 horizontal = if (isPhonePortrait) 16.dp else 32.dp,
@@ -444,7 +501,34 @@ fun LibraryScreen(
             Spacer(modifier = Modifier.height(16.dp))
 
             // 内容区域（weight(1f) 限制高度，让内部可滚动列表正常工作）
-            Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
+            //
+            // v2.36.1：手机（竖屏 + 横屏）在**内容区**左右滑切换子 TAB —— 用户明确要求
+            // 「手机端横竖屏都要支持」，故此处是**手机专属**能力。
+            // ⚠️ 按 `docs/conventions-adaptive-ui.md` 的 B1 硬规则，这里**显式读 `UiMode.TV`**
+            // 并写明理由（而不是写 `!= UiMode.PhonePortrait`）：需求覆盖的是「竖屏 + 横屏」
+            // 两个手机形态，TV 端**不加**手势，保持逐字不变（遥控器也没有横向滑动手势）。
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+                    .libraryTabSwipe(
+                        enabled = uiMode == UiMode.PhonePortrait || uiMode == UiMode.PhoneLandscape,
+                        onSwipeLeft = {
+                            // 左滑 → 下一个 TAB（到末 TAB 为止，不循环）
+                            val idx = LibraryTab.entries.indexOf(activeTab)
+                            if (idx >= 0 && idx < LibraryTab.entries.size - 1) {
+                                onTabSelected(LibraryTab.entries[idx + 1])
+                            }
+                        },
+                        onSwipeRight = {
+                            // 右滑 → 上一个 TAB（到首 TAB 为止，不循环）
+                            val idx = LibraryTab.entries.indexOf(activeTab)
+                            if (idx > 0) {
+                                onTabSelected(LibraryTab.entries[idx - 1])
+                            }
+                        },
+                    )
+            ) {
             // SEARCH, DISCOVER, RADIO tabs handle their own loading/empty states
             when (activeTab) {
                 LibraryTab.SEARCH -> {

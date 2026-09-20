@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -36,7 +37,12 @@ import com.nasmusic.tv.ui.theme.ScreenOrientationPref
 /**
  * 竖屏顶部栏（v2.36.0，方案 §4.0 / §8.6）。
  *
- * 左：Logo + 应用名；右：搜索、**L2 方向切换图标**（单击在竖/横间循环 + 立即写 pref，D1，**无长按**，D8）。
+ * 左：Logo + 应用名；右：搜索、**齿轮（设置入口）**、**L2 方向切换图标**
+ * （单击在竖/横间循环 + 立即写 pref，D1，**无长按**，D8）。
+ *
+ * ⚠️ **齿轮为什么在这里**（v2.36.1）：底部导航 [PhoneNavBar] 已移除「设置」项
+ * （5 项时每项更宽，且底部 5 个主功能不再被设置挤占），设置入口上移到顶栏右上角、
+ * 紧贴横竖屏切换按钮的**左侧**。⛔ 不要再往底部导航加回设置，否则出现两个入口。
  *
  * inset：`statusBarsPadding()` + `displayCutoutPadding()` ——
  * ⚠️ 两者生效的**前提是 D9（竖屏不隐藏系统栏）**，否则 inset 恒为 0（方案 §5.5(9) / B2）。
@@ -47,6 +53,7 @@ fun PhoneTopBar(
     orientationPref: String,
     onToggleOrientation: () -> Unit,
     onNavigateToSearch: () -> Unit,
+    onNavigateToSettings: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Row(
@@ -87,6 +94,17 @@ fun PhoneTopBar(
             ) {
                 Icon(
                     imageVector = Icons.Default.Search,
+                    contentDescription = null,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+            // 设置（齿轮）：v2.36.1 从底部导航上移到这里，位于方向切换按钮**左侧**
+            PhoneTopBarIconButton(
+                contentDescription = stringResource(R.string.nav_settings_cd),
+                onClick = onNavigateToSettings,
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Settings,
                     contentDescription = null,
                     modifier = Modifier.size(20.dp)
                 )

@@ -1540,15 +1540,10 @@ private fun NowPlayingPortrait(
 
                     Spacer(modifier = Modifier.height(10.dp))
 
-                    // ⑥ 次级操作 Chip 横排可滚动（D2：高亮模式保留一键入口）
+                    // ⑥ 次级操作 Chip 横排可滚动（音质 / 定时 / 频谱 / K 歌 / MTV）
                     PortraitSecondaryChips(
-                        highlightMode = highlightMode,
-                        onChangeHighlightMode = onChangeHighlightMode,
-                        isFavorite = isFavorite,
-                        onToggleFavorite = onToggleFavorite,
                         qualityLabel = qualityLabel,
                         onOpenQuality = { showQualityDialog = true },
-                        onOpenQueue = onOpenQueue,
                         sleepTimerState = sleepTimerState,
                         onOpenSleepTimer = { showSleepTimerDialog = true },
                         onEnterVisualizer = onEnterVisualizer,
@@ -1572,6 +1567,100 @@ private fun NowPlayingPortrait(
                             onToCover = { mode = PortraitNowPlayingMode.COVER },
                         ),
                 ) {
+                    // ③ 歌词工具条：来源循环 / 高亮模式 / 字号循环 / 睡眠定时（右对齐）
+                    //
+                    // 竖屏体验修复（v2.36.1）：本行原先位于歌词框**下方**，现上移到歌词框**右上方**，
+                    // 与横屏 TV 端歌词工具条的位置一致（对照 `NowPlayingScreen.kt` 的 TV 分支：
+                    // `Row(Modifier.fillMaxWidth().padding(bottom = 8.dp), horizontalArrangement = Arrangement.End)`）。
+                    // 同时接收从封面页移来的「逐行/逐字」高亮 Chip —— 该 Chip 属于歌词阅读设置，
+                    // 放在封面页属于错位（封面页已移除）。
+                    //
+                    // ⚠️ 外层必须再套一层 `Box(fillMaxWidth, contentAlignment = CenterEnd)`：
+                    // 直接给带 `horizontalScroll` 的 Row 加 `Arrangement.End` 是**无效**的 ——
+                    // `horizontalScroll` 会用 `Constraints(maxWidth = Infinity)` 测量内容，
+                    // Row 宽度恒等于内容宽度，没有「多余空间」可供 End 分配。
+                    // 套 Box 后：Row 先被约束到父宽并右靠，内容窄于父宽时整体贴右；
+                    // 内容溢出（超大字号 + 4 个 Chip）时仍可横向滚动，不会截断。
+                    Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) {
+                        Row(
+                            modifier = Modifier.horizontalScroll(rememberScrollState()),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
+                            // 来源循环 Chip
+                            val currentSource = lyrics?.source
+                            val sourceIdx = LYRICS_SOURCE_CYCLE.indexOf(currentSource).let { if (it < 0) 1 else it }
+                            SourceTag(
+                                label = currentSource?.displayName
+                                    ?: com.nasmusic.tv.data.model.LyricsSource.NETWORK.displayName,
+                                available = true,
+                                selected = true,
+                                onClick = {
+                                    // 循环到下一个可用来源
+                                    for (step in 1..LYRICS_SOURCE_CYCLE.size) {
+                                        val next = LYRICS_SOURCE_CYCLE[(sourceIdx + step) % LYRICS_SOURCE_CYCLE.size]
+                                        val usable = when (next) {
+                                            com.nasmusic.tv.data.model.LyricsSource.EMBEDDED -> lyricsAvailability.hasBackend
+                                            com.nasmusic.tv.data.model.LyricsSource.CACHED -> lyricsAvailability.hasCached
+                                            com.nasmusic.tv.data.model.LyricsSource.LOCAL_FILE -> false
+                                            else -> true
+                                        }
+                                        if (usable) {
+                                            onSwitchLyricsSource(next)
+                                            break
+                                        }
+                                    }
+                                },
+                            )
+                            // 高亮模式 Chip（逐行 / 逐字，与 TV 端同款：逐字态选中高亮）
+                            SourceTag(
+                                label = if (highlightMode == LyricsHighlightMode.WORD_BY_WORD) {
+                                    stringResource(R.string.player_highlight_word)
+                                } else {
+                                    stringResource(R.string.player_highlight_line)
+                                },
+                                available = true,
+                                selected = highlightMode == LyricsHighlightMode.WORD_BY_WORD,
+                                onClick = {
+                                    onChangeHighlightMode(
+                                        if (highlightMode == LyricsHighlightMode.WORD_BY_WORD) {
+                                            LyricsHighlightMode.LINE_BY_LINE
+                                        } else {
+                                            LyricsHighlightMode.WORD_BY_WORD
+                                        }
+                                    )
+                                },
+                            )
+                            // 字号循环 Chip（4 档循环）
+                            val fontIdx = lyricsFontIndex(lyricsFontScale)
+                            SourceTag(
+                                label = listOf("A", "A+", "A++", "A+++")[fontIdx],
+                                available = true,
+                                selected = false,
+                                onClick = {
+                                    onLyricsFontScaleChange(LYRICS_FONT_SCALES[(fontIdx + 1) % LYRICS_FONT_SCALES.size])
+                                },
+                            )
+                            // 睡眠定时（保留独立状态指示）
+                            SourceTag(
+                                label = when (val st = sleepTimerState) {
+                                    is com.nasmusic.tv.player.SleepTimerController.State.Running ->
+                                        stringResource(
+                                            R.string.np_sleep_timer_on,
+                                            ((st.endsAtMs - System.currentTimeMillis() + 59_999) / 60_000)
+                                                .toInt().coerceAtLeast(1)
+                                        )
+                                    else -> stringResource(R.string.np_sleep_timer_off)
+                                },
+                                available = true,
+                                selected = sleepTimerState is com.nasmusic.tv.player.SleepTimerController.State.Running,
+                                onClick = { showSleepTimerDialog = true },
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -1600,68 +1689,6 @@ private fun NowPlayingPortrait(
                                     .padding(horizontal = 4.dp, vertical = 4.dp),
                             )
                         }
-                    }
-
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    // ③ 歌词工具条：3 个 Chip（来源循环 + 字号循环 + 睡眠定时，D2）
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .horizontalScroll(rememberScrollState()),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    ) {
-                        // 来源循环 Chip
-                        val currentSource = lyrics?.source
-                        val sourceIdx = LYRICS_SOURCE_CYCLE.indexOf(currentSource).let { if (it < 0) 1 else it }
-                        SourceTag(
-                            label = currentSource?.displayName
-                                ?: com.nasmusic.tv.data.model.LyricsSource.NETWORK.displayName,
-                            available = true,
-                            selected = true,
-                            onClick = {
-                                // 循环到下一个可用来源
-                                for (step in 1..LYRICS_SOURCE_CYCLE.size) {
-                                    val next = LYRICS_SOURCE_CYCLE[(sourceIdx + step) % LYRICS_SOURCE_CYCLE.size]
-                                    val usable = when (next) {
-                                        com.nasmusic.tv.data.model.LyricsSource.EMBEDDED -> lyricsAvailability.hasBackend
-                                        com.nasmusic.tv.data.model.LyricsSource.CACHED -> lyricsAvailability.hasCached
-                                        com.nasmusic.tv.data.model.LyricsSource.LOCAL_FILE -> false
-                                        else -> true
-                                    }
-                                    if (usable) {
-                                        onSwitchLyricsSource(next)
-                                        break
-                                    }
-                                }
-                            },
-                        )
-                        // 字号循环 Chip（4 档循环）
-                        val fontIdx = lyricsFontIndex(lyricsFontScale)
-                        SourceTag(
-                            label = listOf("A", "A+", "A++", "A+++")[fontIdx],
-                            available = true,
-                            selected = false,
-                            onClick = {
-                                onLyricsFontScaleChange(LYRICS_FONT_SCALES[(fontIdx + 1) % LYRICS_FONT_SCALES.size])
-                            },
-                        )
-                        // 睡眠定时（保留独立状态指示）
-                        SourceTag(
-                            label = when (val st = sleepTimerState) {
-                                is com.nasmusic.tv.player.SleepTimerController.State.Running ->
-                                    stringResource(
-                                        R.string.np_sleep_timer_on,
-                                        ((st.endsAtMs - System.currentTimeMillis() + 59_999) / 60_000)
-                                            .toInt().coerceAtLeast(1)
-                                    )
-                                else -> stringResource(R.string.np_sleep_timer_off)
-                            },
-                            available = true,
-                            selected = sleepTimerState is com.nasmusic.tv.player.SleepTimerController.State.Running,
-                            onClick = { showSleepTimerDialog = true },
-                        )
                     }
 
                     Spacer(modifier = Modifier.height(6.dp))
@@ -1795,17 +1822,21 @@ private fun PortraitTopBarButton(
     }
 }
 
-/** 次级操作 Chip 横排（可滚动）—— D2：高亮模式在此保留一键入口 */
+/**
+ * 次级操作 Chip 横排（可滚动）—— 封面模式的次级操作。
+ *
+ * 2026-09-20 竖屏真机反馈调整（**只影响竖屏**）：
+ * - **移出**高亮模式（逐行 / 逐字）→ 归入歌词页工具条（它只对歌词有意义）；
+ * - **删除**收藏 → 歌曲名旁已有心形图标，重复；
+ * - **删除**播放队列 → 底部主按钮（`PhoneNavBar`）已有直达入口；
+ * - 「封面」文案 → **「频谱」**：该 Chip 的 `onClick` 本就是 `onEnterVisualizer`，
+ *   文案与行为不符。现复用 [R.string.player_visualizer_short]（TV / 横屏同款文案）。
+ */
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 private fun PortraitSecondaryChips(
-    highlightMode: LyricsHighlightMode,
-    onChangeHighlightMode: (LyricsHighlightMode) -> Unit,
-    isFavorite: Boolean,
-    onToggleFavorite: (() -> Unit)?,
     qualityLabel: String,
     onOpenQuality: () -> Unit,
-    onOpenQueue: () -> Unit,
     sleepTimerState: com.nasmusic.tv.player.SleepTimerController.State?,
     onOpenSleepTimer: () -> Unit,
     onEnterVisualizer: () -> Unit,
@@ -1820,40 +1851,9 @@ private fun PortraitSecondaryChips(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        // 高亮模式（逐行 / 逐字）—— 高频切换，必须保留独立入口
-        SourceTag(
-            label = if (highlightMode == LyricsHighlightMode.WORD_BY_WORD) {
-                stringResource(R.string.player_highlight_word)
-            } else {
-                stringResource(R.string.player_highlight_line)
-            },
-            available = true,
-            selected = highlightMode == LyricsHighlightMode.WORD_BY_WORD,
-            onClick = {
-                onChangeHighlightMode(
-                    if (highlightMode == LyricsHighlightMode.WORD_BY_WORD) LyricsHighlightMode.LINE_BY_LINE
-                    else LyricsHighlightMode.WORD_BY_WORD
-                )
-            },
-        )
-        if (onToggleFavorite != null) {
-            SourceTag(
-                label = if (isFavorite) stringResource(R.string.action_unfavorite)
-                else stringResource(R.string.mine_favorites),
-                available = true,
-                selected = isFavorite,
-                onClick = onToggleFavorite,
-            )
-        }
         if (qualityLabel.isNotBlank()) {
             SourceTag(label = qualityLabel, available = true, selected = false, onClick = onOpenQuality)
         }
-        SourceTag(
-            label = stringResource(R.string.nav_queue),
-            available = true,
-            selected = false,
-            onClick = onOpenQueue,
-        )
         SourceTag(
             label = when (val st = sleepTimerState) {
                 is com.nasmusic.tv.player.SleepTimerController.State.Running ->
@@ -1868,7 +1868,7 @@ private fun PortraitSecondaryChips(
             onClick = onOpenSleepTimer,
         )
         SourceTag(
-            label = stringResource(R.string.np_mode_cover),
+            label = stringResource(R.string.player_visualizer_short),
             available = true,
             selected = false,
             onClick = onEnterVisualizer,
@@ -2020,7 +2020,9 @@ private fun PortraitMoreMenu(
                 PortraitMenuItem(qualityLabel, onOpenQuality)
             }
             PortraitMenuItem(stringResource(R.string.notif_sleep_timer_start), onOpenSleepTimer)
-            PortraitMenuItem(stringResource(R.string.np_mode_cover), onEnterVisualizer)
+            // 文案修正（v2.36.1，仅竖屏）：原用 `np_mode_cover`（"封面"）但 `onClick` 是 `onEnterVisualizer`
+            // → 文案与行为不符。改用 TV / 横屏同款 `player_visualizer_short`（"频谱"）。
+            PortraitMenuItem(stringResource(R.string.player_visualizer_short), onEnterVisualizer)
             PortraitMenuItem(stringResource(R.string.player_karaoke), onEnterKaraoke)
             if (mvAvailable) PortraitMenuItem("MTV", onEnterMv)
         }
