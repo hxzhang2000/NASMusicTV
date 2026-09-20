@@ -173,6 +173,41 @@
 
 ---
 
+## 附：验证证据迁移（2026-09-20，来自 gitignored 的 `logs_temp/`）
+
+`logs_temp/` 是项目约定的临时目录（`.gitignore:87`），但其中有一批文件**被已入库文档引用**
+（`docs/technical-overview.md` §10.14x–§10.16x、`CHANGELOG.md`、`AGENTS.md` 等）。
+一旦清理该目录，这些引用会**悬空**，其中全量审查报告的「未完成项」更是**唯一记录**。
+故把其中的**证据类文件**迁入版本控制（`logs_temp/` 保留为空目录，约定不变）。
+
+### 迁到 `docs/archive/`（与既有 `code-review-*.md` 同级）
+
+| 文件 | 被谁引用 |
+|---|---|
+| `code-review-full-report-2026-09-13.md` | §10.147 / §10.148 / §10.152–§10.156 的「来源」 |
+| `code-review-karaoke-onnx-2026-09-14.md` | §10.146 / §10.158 的「来源」 |
+
+### 迁到 `docs/archive/verification/`
+
+| 内容 | 被谁引用 |
+|---|---|
+| `verify4.log` | `AGENTS.md` / §10.165（lint 内部异常栈为既有现象） |
+| `render_auto_icons.py`、`render_car_icon.py` | `CHANGELOG.md`（Android Auto 图标形状推导） |
+| `parse_lint.py` | 解析 lint HTML 报告（可复用工具） |
+| `_depsrc/`（media3-session 1.2.1 源码，51 文件） | §10.165 的证据链 |
+| `verify_resampler/`、`verify_feiniu_url/`、`verify_auth_headers/`、`verify_ort/` | `CHANGELOG.md` / §10.146 / §10.155 的验证 harness（源码与说明，不含编译产物） |
+
+**未迁入**（可重新生成的构建产物与一次性日志，已移出 `logs_temp/`）：
+`*.class`、`*.kotlin_module`、`aapt2-out/*.zip`、`iconprobe/`（37 M）、`adb_verify/`（22 M）、
+`r8probe/`（9 M）、`_depsrc_common/`（1.8 M）及全部构建/测试日志。
+
+**同步改写引用 30 处 / 5 个文件**（`AGENTS.md`、`CHANGELOG.md`、`technical-overview.md`、
+`android-auto-plan.md`、`feiniu-backend-improvement-plan.md`），
+并修正 7 处「该文件不入库 / 在 gitignore 临时目录」的过时表述。
+另有 2 处测试 KDoc 原误指向 `logs_temp/` 的脚本副本（正本在项目根），一并改正。
+
+---
+
 ## 汇总
 
 | 项 | 第一轮 | 第二轮 | 第三轮 | 合计 |

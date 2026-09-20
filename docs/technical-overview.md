@@ -8578,8 +8578,8 @@ MediaLibraryTree.kt:355: Error: Call requires API level 24 (current min is 22):
 
 > 路径全部用手写绝对坐标多边形（`M`/`L`/`Z`），刻意保持简单——车机 tab 尺寸很小，简单形状更易辨认。
 > **形状已单独验证**：用 Python 解析 `pathData` 高倍渲染后目视核对 —— 因为 aapt2 只保证**语法**合法，
-> 不保证**形状**对。（脚本与预览图在 gitignore 的临时目录 `logs_temp/render_auto_icons.py` /
-> `output/auto-tab-icons-preview.png`，不入库；但**形状可随时复核**——唯一输入是上表 4 段 `pathData`，
+> 不保证**形状**对。（脚本已入库：`docs/archive/verification/render_auto_icons.py`；
+> 预览图仍在 gitignored 的 `output/auto-tab-icons-preview.png`。**形状可随时复核**——唯一输入是上表 4 段 `pathData`，
 > 而它们在 `res/drawable/ic_auto_*.xml` 里、**已入库**。）
 
 **⚠️ 关键坑：只给 `artworkUri` 指向矢量 XML 是不可靠的**
@@ -9321,7 +9321,7 @@ Box(Modifier.size(portraitTouchTarget(44.dp))      // 外层承担热区（竖�
 给出"没问题"的假结论。两个教训已写入 `docs/conventions-adaptive-ui.md` **§6.5**：
 ① 扫描下界放到 0；② 取 `size(` 的**括号配对内容**再抽全部 `.dp` 字面量。
 新脚本 `audit_small_touch_target.py` 自带 `--selftest`，实跑 347 文件 0 处。
-（脚本初版在 `logs_temp/`，随后**入库到项目根**，与 `check_chinese.py` 同级；
+（脚本初版在临时目录 `logs_temp/`，随后**入库到项目根**，与 `check_chinese.py` 同级；
 自证用例经后续补充已增至 **7 例** —— 含「同行写法必须命中」「注释里举例必须不命中」，
 详见 §10.165 的顺带修复说明。）
 
@@ -9439,7 +9439,7 @@ Box(Modifier.size(portraitTouchTarget(44.dp))      // 外层承担热区（竖�
 
 **根因**：`PlaybackService.onConnect` 对白名单外的调用方执行 `return MediaSession.ConnectionResult.reject()`。
 
-#### 证据链（media3-session 1.2.1 源码，`logs_temp/_depsrc/androidx/media3/session/`）
+#### 证据链（media3-session 1.2.1 源码，`docs/archive/verification/_depsrc/androidx/media3/session/`）
 
 | # | 位置 | 事实 |
 |---|---|---|
@@ -9738,7 +9738,7 @@ Box(Modifier.size(portraitTouchTarget(44.dp))      // 外层承担热区（竖�
 
 ### 10.152 v2.32.3 — T5：删除死代码 `VocalRemovalProcessor.kt`（算法先归档，2026-09-14）
 
-**来源**：`logs_temp/code-review-full-report-2026-09-13.md` §T5 / `docs/archive/code-review-2026-09-03.md` §P2。文件 348 行，全项目**零调用方**（`PlaybackService.kt:207` 实际 `val vocalRemovalProcessor = SpectralMaskProcessor()`——变量名是历史遗留，类型早就换过了；`PlayerManager.setVocalRemovalProcessor()` 的形参类型同样是 `SpectralMaskProcessor`）。
+**来源**：`docs/archive/code-review-full-report-2026-09-13.md` §T5 / `docs/archive/code-review-2026-09-03.md` §P2。文件 348 行，全项目**零调用方**（`PlaybackService.kt:207` 实际 `val vocalRemovalProcessor = SpectralMaskProcessor()`——变量名是历史遗留，类型早就换过了；`PlayerManager.setVocalRemovalProcessor()` 的形参类型同样是 `SpectralMaskProcessor`）。
 
 **完整流程与调参过程**见 `docs/archive/vocal-removal-approach-b-dsp.md`（含 Mid/Side 流程图、最终参数 0.15 / 0.5 / 8kHz / 1.25x 及其理由、`queueInput` 伪代码）。本小节只归档**那份文档里没有、只存在于源码 KDoc 中的内容**，确保删掉文件后算法仍可完整复原。
 
@@ -9784,7 +9784,7 @@ w0 = 2π·f0/fs ;  alpha = sin(w0)/(2q) ;  a0 = 1 + alpha
 
 ### 10.151 v2.32.3 — L3 落地：playModeToggleHandler 改 SharedFlow（2026-09-14）
 
-**来源**：`logs_temp/code-review-full-report-2026-09-13.md` §L3（P0 架构降级为 P1，遗留项总表见 §10.147）。报告原建议「改 `MutableSharedFlow<Unit>(extraBufferCapacity = 1)` + `tryEmit`」。
+**来源**：`docs/archive/code-review-full-report-2026-09-13.md` §L3（P0 架构降级为 P1，遗留项总表见 §10.147）。报告原建议「改 `MutableSharedFlow<Unit>(extraBufferCapacity = 1)` + `tryEmit`」。
 
 #### 复核：报告改对了风险类型，但没说中触发机制
 
@@ -9822,7 +9822,7 @@ w0 = 2π·f0/fs ;  alpha = sin(w0)/(2q) ;  a0 = 1 + alpha
 
 ### 10.150 v2.32.3 — P1#5 落地：可视化随机源隔离（2026-09-14）
 
-**来源**：`logs_temp/code-review-full-report-2026-09-13.md` P1#5（遗留项总表见 §10.147）。报告原建议「改实例化 Random 每 Renderer 独立，1h」。
+**来源**：`docs/archive/code-review-full-report-2026-09-13.md` P1#5（遗留项总表见 §10.147）。报告原建议「改实例化 Random 每 Renderer 独立，1h」。
 
 #### 复核结论：这不是缺陷，是代码卫生问题
 
@@ -9877,7 +9877,7 @@ w0 = 2π·f0/fs ;  alpha = sin(w0)/(2q) ;  a0 = 1 + alpha
 
 ### 10.149 v2.32.3 — S4 落地：Jellyfin 会话内 401 重认证（2026-09-14）
 
-**来源**：`logs_temp/code-review-full-report-2026-09-13.md` §S4（安全类，定性由 P0 降级为 P1）。这是全量报告里**最后一项未完成的安全类问题**（此前列为「暂缓：需真实环境测试」，见 §10.147 未完成清单）。
+**来源**：`docs/archive/code-review-full-report-2026-09-13.md` §S4（安全类，定性由 P0 降级为 P1）。这是全量报告里**最后一项未完成的安全类问题**（此前列为「暂缓：需真实环境测试」，见 §10.147 未完成清单）。
 
 **原状**：`JellyfinAdapter` 无任何 401 检测。`executeJsonRequest()` 把非 2xx 一律折叠成 `null`，调用方只看到「空列表」——服务器强制过期 token、用户改密之后，**必须手动断开重连才能恢复**。仅 `initialize()` 有自愈路径（第 78 行 `fetchCurrentUserInfo()` 验证 token，失败则回退 `authenticateByName`），即**重连/重启能恢复，会话中途不能**。
 
@@ -9931,7 +9931,7 @@ w0 = 2π·f0/fs ;  alpha = sin(w0)/(2q) ;  a0 = 1 + alpha
 
 ### 10.148 v2.32.3 — P1 性能清单落地 4 项（2026-09-14）
 
-**来源**：`logs_temp/code-review-full-report-2026-09-13.md` 第四章 P1 清单（遗留项总表见 §10.147）。本轮修复其中**判定为"低风险且收益明确"的 4 项**；另外 4 项经复核判定**不宜按报告原建议直接实施**，理由见下。
+**来源**：`docs/archive/code-review-full-report-2026-09-13.md` 第四章 P1 清单（遗留项总表见 §10.147）。本轮修复其中**判定为"低风险且收益明确"的 4 项**；另外 4 项经复核判定**不宜按报告原建议直接实施**，理由见下。
 
 **修改**：
 
@@ -9976,7 +9976,10 @@ w0 = 2π·f0/fs ;  alpha = sin(w0)/(2q) ;  a0 = 1 + alpha
 
 ### 10.147 v2.32.3 — 全量审阅报告遗留项清单（持久化记录，2026-09-14）
 
-**背景（为什么要单开一节）**：`logs_temp/code-review-full-report-2026-09-13.md` 位于 `logs_temp/`，该目录**已被 gitignore**（`.gitignore:87`），报告本身不进版本控制。其「实施记录」只记录了**已修 13 项**与 **4 项暂缓**，而其余未完成项的唯一记录仅存在于该 gitignored 文件中。独立审计（2026-09-14）逐条核对源码后发现：一旦 `logs_temp/` 被清理或换机器，后人只会看到 CHANGELOG 里「13 项已修复」的正面记录，**会误判为已全修完**。故本节把这些项固化进版本控制。
+**背景（为什么要单开一节）**：`docs/archive/code-review-full-report-2026-09-13.md` **当时**位于 gitignored 的 `logs_temp/`（`.gitignore:87`），报告本身不进版本控制。其「实施记录」只记录了**已修 13 项**与 **4 项暂缓**，而其余未完成项的唯一记录仅存在于该 gitignored 文件中。独立审计（2026-09-14）逐条核对源码后发现：一旦该目录被清理或换机器，后人只会看到 CHANGELOG 里「13 项已修复」的正面记录，**会误判为已全修完**。故本节把这些项固化进版本控制。
+
+> ⚠️ **2026-09-20 更新**：该报告已迁入 `docs/archive/` **并入库**（§10.167）。但本节的固化**仍然必要** ——
+> 报告只是「来源」，条目状态以本节为准，且报告本身不会随每次修复更新。
 
 **完成度（独立审计结论，2026-09-14 复核）**：报告共 **36 项**条目（21 P0 + 15 P1），拆解为
 **已修 21 · 未完成 8 · 判定无需修复 5 · 已 review 关闭 1 · 原报告剔除 1**。
@@ -9988,7 +9991,7 @@ w0 = 2π·f0/fs ;  alpha = sin(w0)/(2q) ;  a0 = 1 + alpha
 - **已修 1 项（P2 清理，见 §10.152）**：**T5** 删除死代码 `VocalRemovalProcessor.kt`（348 行，零调用方）—— **先把算法归档再删**：该类 KDoc 里独有而 `docs/archive/vocal-removal-approach-b-dsp.md` 没有的内容（四阶 Linkwitz-Riley 级联与 RBJ 系数、与 `SpectralMaskProcessor` 的取向对比、CPU 8× 代价、`reset()` 置 `enabled=false` 的历史坑）已写入 §10.152；另同步 4 处 stale 注释，`PlaybackService` 的局部变量 `vocalRemovalProcessor` 正名为 `spectralMaskProcessor`
 - **已修 1 项（时序安全，见 §10.151）**：**L3** `playModeToggleHandler` 改 SharedFlow —— `@Volatile` 可变闭包字段 → `MutableSharedFlow<Unit>` + `lifecycleScope` 订阅，Activity 销毁自动退订，消除「Application 长期持有已 `onCleared` ViewModel 闭包」。⚠️ 报告描述的「配置重建窗口期 NPE」经核实**不成立**（ViewModelStore 保留 + destroy/create 不返回 Looper）；真问题是 `onDestroy` 清空被 `if (!isFinishing) return` 拦截导致订阅无法收敛
 - **判定无需修复 5 项**：S2（token 已加密）/ S5（无硬编码密钥）/ T1（Application scope 合理）/ L5（定位错误文件）/ L8（既定设计）—— 报告自身已剔除或降级
-- **已 review 关闭 1 项**：P1#13 K 歌 ONNX 专项 —— 已由 `logs_temp/code-review-karaoke-onnx-2026-09-14.md` 完成，其发现另已修复，见 §10.146
+- **已 review 关闭 1 项**：P1#13 K 歌 ONNX 专项 —— 已由 `docs/archive/code-review-karaoke-onnx-2026-09-14.md` 完成，其发现另已修复，见 §10.146
 - **原报告剔除 1 项**：L7 本体（清理链路本就存在）
 
 #### 未完成 8 项（按性质分组）
@@ -10021,7 +10024,7 @@ w0 = 2π·f0/fs ;  alpha = sin(w0)/(2q) ;  a0 = 1 + alpha
 
 #### 其他报告的未完成项（跨报告汇总）
 
-本表只覆盖 `code-review-full-report-2026-09-13.md` 的 36 项。另一份专项报告 `logs_temp/code-review-karaoke-onnx-2026-09-14.md`（K 歌 / ONNX）拆出 **14 条**可判定项，**已修 10 条、未修 4 条**，明细在 §10.146 的「遗留」节。为便于「一处看全」全部未完成项，此处汇总这 4 条：
+本表只覆盖 `code-review-full-report-2026-09-13.md` 的 36 项。另一份专项报告 `docs/archive/code-review-karaoke-onnx-2026-09-14.md`（K 歌 / ONNX）拆出 **14 条**可判定项，**已修 10 条、未修 4 条**，明细在 §10.146 的「遗留」节。为便于「一处看全」全部未完成项，此处汇总这 4 条：
 
 | 项 | 性质 | 现状证据（2026-09-14 快照） |
 |---|---|---|
@@ -10055,7 +10058,7 @@ w0 = 2π·f0/fs ;  alpha = sin(w0)/(2q) ;  a0 = 1 + alpha
 
 ### 10.146 v2.32.3 — K 歌 / ONNX 专项修复：2 P0 + 3 P1 + 5 P2（2026-09-14）
 
-**来源**：`logs_temp/code-review-karaoke-onnx-2026-09-14.md`（K 歌 / Demucs 人声分离专项审查，覆盖 `DemucsSeparator.kt` 671 行 / `ModelDownloadManager.kt` 238 行 / `HqSeparationOrchestrator.kt` 555 行）。本条目只记录**已落地**的修复；报告末尾的处置顺序即本次实施顺序。P2-d / P2-e 为 2026-09-14 二次审计（对照报告逐条核验）后追加的两项低风险加固。
+**来源**：`docs/archive/code-review-karaoke-onnx-2026-09-14.md`（K 歌 / Demucs 人声分离专项审查，覆盖 `DemucsSeparator.kt` 671 行 / `ModelDownloadManager.kt` 238 行 / `HqSeparationOrchestrator.kt` 555 行）。本条目只记录**已落地**的修复；报告末尾的处置顺序即本次实施顺序。P2-d / P2-e 为 2026-09-14 二次审计（对照报告逐条核验）后追加的两项低风险加固。
 
 **⚠️ 验证边界（必须如实声明）**：本机 Gradle 测试 worker 一启动即死（exit `268435466` = `0x1000000A`，低 16 位为 Windows `ERROR_BAD_ENVIRONMENT`，`test-results/` 下 0 个 XML；用纯 JVM 的 `--tests "*TimeUtilsTest"` 隔离验证同样失败），因此 **`./gradlew testDebugUnitTest` 始终未能运行**。为补上证据缺口，另用 `kotlin-compiler-embeddable` 绕过 Gradle 做了独立 JVM 数值验证（详见「验证」节的「独立 JVM 数值验证」小节）：39 条断言全部通过，并对已提交的 `LinearResamplerTest.kt` 本体跑出 `OK (10 tests)`。但**仍未在真机上听过分离结果** —— 凡涉及 `MediaCodec` 实际输出格式、模型加载耗时、听感的结论，都不在已验证范围内。
 
@@ -10150,7 +10153,7 @@ https://huggingface.co/api/models/StemSplitio/htdemucs-ft-vocals-onnx/tree/main
 ##### 独立 JVM 数值验证（绕开 Gradle 测试 worker）
 
 本机测试 worker 不可用，因此把**真实源码**抽出来编成独立 JVM 程序跑（harness 在
-`logs_temp/verify_resampler/`，含 `README.md` 与可重跑的 `extract.py`）：
+`docs/archive/verification/verify_resampler/`，含 `README.md` 与可重跑的 `extract.py`）：
 
 - `extract.py` 按标记（而非硬编码行号）从 `DemucsSeparator.kt` 抽取 `LinearResampler`
   与 `putShortLE`/`shortToByteArray`，**避免「测试与源码分叉」**；源码一改重跑即可
@@ -10194,7 +10197,7 @@ JAVA_HOME="C:/Program Files/Android/Android Studio/jbr" \
   -Pkotlin.compiler.execution.strategy=in-process
 ```
 
-构建输出中会有一段 lint 内部异常栈（`LintCliClient.analyzeOnly` → UAST visitor），**非本次引入**：`logs_temp/verify4.log` 等历史日志中同样存在，且不影响报告生成与构建结果（0 errors）。
+构建输出中会有一段 lint 内部异常栈（`LintCliClient.analyzeOnly` → UAST visitor），**非本次引入**：`docs/archive/verification/verify4.log`（历史构建日志）中同样存在，且不影响报告生成与构建结果（0 errors）。
 
 ⚠️ **若构建在 26 秒左右秒失败并报 `Could not create service of type FileHasher` → `fileHashes.lock (拒绝访问)`**：
 
@@ -10275,7 +10278,7 @@ lint 内有一份硬编码的「已知安全依赖」白名单 `PageAlignmentDet
 
 **代码内已同步落注释**：`app/build.gradle.kts` 依赖声明处（含同样的矩阵）、`AGENTS.md` 的 Non-obvious constraints。
 
-**取证方法备注（可复用）**：本次未下载整包（1.29.0 的 AAR 有 51.9MB）。用 `logs_temp/verify_ort/fetch_zip_entry.py` 的 HTTP Range + **deflate 增量解压**，只取压缩流头 64KB 即拿到 ELF 头与程序头表，几百 KB 流量就能判 `p_align`。该脚本首版有个值得记的 bug：中央目录的格式串多写了一个 `H`（14 个字段塞进 13 个变量）→ `ValueError`，而调用方带了 `2>/dev/null` 把错误吞掉，表现为「5 个版本全部无输出」。**调试期绝不屏蔽 stderr。**
+**取证方法备注（可复用）**：本次未下载整包（1.29.0 的 AAR 有 51.9MB）。用 `docs/archive/verification/verify_ort/fetch_zip_entry.py` 的 HTTP Range + **deflate 增量解压**，只取压缩流头 64KB 即拿到 ELF 头与程序头表，几百 KB 流量就能判 `p_align`。该脚本首版有个值得记的 bug：中央目录的格式串多写了一个 `H`（14 个字段塞进 13 个变量）→ `ValueError`，而调用方带了 `2>/dev/null` 把错误吞掉，表现为「5 个版本全部无输出」。**调试期绝不屏蔽 stderr。**
 
 ### 10.145 v2.32.3 — lint 错误清零（105 → 0）+ lint 转阻塞门禁（2026-09-14）
 
@@ -10403,7 +10406,7 @@ lint 内有一份硬编码的「已知安全依赖」白名单 `PageAlignmentDet
 
 ### 10.140 v2.32.3 — 审阅实施记录表述纠偏（2026-09-14）
 
-**问题描述**：对 `logs_temp/code-review-full-report-2026-09-13.md` 的「实施记录」做逐项源码复核后，确认 13 项声称已修复的改动均在代码中真实存在（提交号/版本号/CHANGELOG/§10 亦属实），但发现 3 处表述与实际不符：
+**问题描述**：对 `docs/archive/code-review-full-report-2026-09-13.md` 的「实施记录」做逐项源码复核后，确认 13 项声称已修复的改动均在代码中真实存在（提交号/版本号/CHANGELOG/§10 亦属实），但发现 3 处表述与实际不符：
 
 1. **S1 表述不实**：CHANGELOG 称"口令不再明文写死在源码仓库"，但口令字面量 `NasMusicTV-LocalCrypto-2b7e1f9c-2024` 仍作为默认值硬编码在 `app/build.gradle.kts`（受版本控制），安全收益基本为零——口令只是从 `CryptoUtils.kt` 移到构建脚本
 2. **T2 注释不实**：`BaiduPrefs.kt` 头部注释称 `getCloudDriveConfigSync`/`saveCloudDriveConfigSync` "已无调用方"，实际单测 `CloudDriveConfigTest` 仍在调用
@@ -10413,7 +10416,7 @@ lint 内有一份硬编码的「已知安全依赖」白名单 `PageAlignmentDet
 
 - `CHANGELOG.md`：S1 条目改为准确表述——注明默认口令仍存在于仓库，仅在 `keystore.properties` 覆盖后运行期才不取自仓库默认值；标注此项属"混淆级非保密级"
 - `app/src/main/java/com/nasmusic/tv/data/prefs/BaiduPrefs.kt`：注释修正为"`getBaiduConfigSync` 已删除；`getCloudDriveConfigSync`/`saveCloudDriveConfigSync` 生产调用点已清零，仅保留供单测 `CloudDriveConfigTest` 同步读写"
-- `logs_temp/code-review-full-report-2026-09-13.md`（未跟踪文件）：两处"P0 有效项 17 项"改为 13 项并注明构成
+- `docs/archive/code-review-full-report-2026-09-13.md`（当时未跟踪；2026-09-20 已迁入 `docs/archive/` 入库）：两处"P0 有效项 17 项"改为 13 项并注明构成
 
 **澄清（避免误删）**：`getCloudDriveConfigSync`/`saveCloudDriveConfigSync` **不是死代码**——生产调用点确已清零，但 `app/src/test/.../CloudDriveConfigTest.kt` 仍在调用，故保留；T2 迁移的准确表述是"IO 调度器切换版 runBlocking 清零"，`NasMusicApp.kt:243` 仍保留一处启动期主线程 `runBlocking { baiduConfigFlow.first() }`（不带调度器切换，为 onCreate 同步取配置的既定取舍）。
 

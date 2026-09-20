@@ -1,0 +1,3413 @@
+To honour the JVM settings for this build a single-use Daemon process will be forked. For more on this, please refer to https://docs.gradle.org/9.5.0/userguide/gradle_daemon.html#sec:disabling_the_daemon in the Gradle documentation.
+Daemon will be stopped at the end of the build 
+
+> Configure project :app
+WARNING: The option setting 'android.builtInKotlin=false' is deprecated.
+The current default is 'true'.
+It will be removed in version 10.0 of the Android Gradle plugin.
+WARNING: The option setting 'android.newDsl=false' is deprecated.
+The current default is 'true'.
+It will be removed in version 10.0 of the Android Gradle plugin.
+WARNING: API 'applicationVariants' is obsolete and has been replaced with 'AndroidComponentsExtension'.
+It will be removed in version 10.0 of the Android Gradle plugin.
+The legacy variant API is disabled by default in AGP 9.0, but can be re-enabled by adding 
+    android.newDsl=false
+to this project's gradle.properties file.
+For more information, see http://developer.android.com/build/r/new-dsl.
+
+To determine what is calling applicationVariants, use -Pandroid.debug.obsoleteApi=true on the command line to display more information.
+WARNING: API 'testVariants' is obsolete and has been replaced with 'AndroidComponentsExtension'.
+It will be removed in version 10.0 of the Android Gradle plugin.
+The legacy variant API is disabled by default in AGP 9.0, but can be re-enabled by adding 
+    android.newDsl=false
+to this project's gradle.properties file.
+For more information, see http://developer.android.com/build/r/new-dsl.
+
+To determine what is calling testVariants, use -Pandroid.debug.obsoleteApi=true on the command line to display more information.
+WARNING: API 'unitTestVariants' is obsolete and has been replaced with 'AndroidComponentsExtension'.
+It will be removed in version 10.0 of the Android Gradle plugin.
+The legacy variant API is disabled by default in AGP 9.0, but can be re-enabled by adding 
+    android.newDsl=false
+to this project's gradle.properties file.
+For more information, see http://developer.android.com/build/r/new-dsl.
+
+To determine what is calling unitTestVariants, use -Pandroid.debug.obsoleteApi=true on the command line to display more information.
+w: file:///D:/hxzhang/MyGithubSoftware/NasAudio/NASMusicTV/app/build.gradle.kts:39:1: 'fun Project.android(configure: Action<BaseAppModuleExtension>): Unit' is deprecated. Replaced by com.android.build.api.dsl.ApplicationExtension.
+This class is not used for the public extensions in AGP when android.newDsl=true, which is the default in AGP 9.0, and will be removed in AGP 10.0.
+w: Deprecated 'org.jetbrains.kotlin.android' plugin usage
+The 'org.jetbrains.kotlin.android' plugin in project ':app' is no longer required for Kotlin support since AGP 9.0.
+Solution: Remove both `android.builtInKotlin=true` and `android.newDsl=false` from `gradle.properties`, then migrate to built-in Kotlin.
+See https://kotl.in/gradle/agp-built-in-kotlin for more details.
+
+
+> Task :app:preBuild UP-TO-DATE
+> Task :app:preDebugBuild UP-TO-DATE
+> Task :app:mergeDebugNativeDebugMetadata NO-SOURCE
+> Task :app:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :app:generateDebugBuildConfig UP-TO-DATE
+> Task :app:generateDebugResources UP-TO-DATE
+> Task :app:packageDebugResources UP-TO-DATE
+> Task :app:processDebugNavigationResources UP-TO-DATE
+> Task :app:parseDebugLocalResources UP-TO-DATE
+> Task :app:generateDebugRFile UP-TO-DATE
+> Task :app:kspDebugKotlin UP-TO-DATE
+> Task :app:javaPreCompileDebug UP-TO-DATE
+> Task :app:generateDebugAssets UP-TO-DATE
+> Task :app:mergeDebugAssets UP-TO-DATE
+> Task :app:compressDebugAssets UP-TO-DATE
+> Task :app:generateDebugGlobalSynthetics UP-TO-DATE
+> Task :app:checkDebugDuplicateClasses UP-TO-DATE
+> Task :app:desugarDebugFileDependencies UP-TO-DATE
+> Task :app:mergeExtDexDebug UP-TO-DATE
+> Task :app:mergeLibDexDebug UP-TO-DATE
+> Task :app:checkDebugAarMetadata UP-TO-DATE
+> Task :app:mapDebugSourceSetPaths UP-TO-DATE
+> Task :app:compileDebugNavigationResources UP-TO-DATE
+> Task :app:mergeDebugResources UP-TO-DATE
+> Task :app:createDebugCompatibleScreenManifests UP-TO-DATE
+> Task :app:extractDeepLinksDebug UP-TO-DATE
+> Task :app:processDebugMainManifest UP-TO-DATE
+> Task :app:processDebugManifest UP-TO-DATE
+> Task :app:processDebugManifestForPackage UP-TO-DATE
+> Task :app:processDebugResources UP-TO-DATE
+> Task :app:mergeDebugJniLibFolders UP-TO-DATE
+> Task :app:mergeDebugNativeLibs UP-TO-DATE
+> Task :app:stripDebugDebugSymbols UP-TO-DATE
+> Task :app:validateSigningDebug UP-TO-DATE
+> Task :app:writeDebugAppMetadata UP-TO-DATE
+> Task :app:writeDebugSigningConfigVersions UP-TO-DATE
+> Task :app:preDebugAndroidTestBuild SKIPPED
+> Task :app:extractProguardFiles UP-TO-DATE
+> Task :app:preDebugUnitTestBuild UP-TO-DATE
+> Task :app:compileDebugKotlin
+w: file:///D:/hxzhang/MyGithubSoftware/NasAudio/NASMusicTV/app/src/main/java/com/nasmusic/tv/backend/download/SongDownloadManager.kt:282:30 Elvis operator (?:) always returns the left operand of non-nullable type 'DownloadSongEntity'.
+w: file:///D:/hxzhang/MyGithubSoftware/NasAudio/NASMusicTV/app/src/main/java/com/nasmusic/tv/backend/download/StorageGuard.kt:103:72 'static field ACTION_DEVICE_STORAGE_LOW: String' is deprecated. Deprecated in Java.
+w: file:///D:/hxzhang/MyGithubSoftware/NasAudio/NASMusicTV/app/src/main/java/com/nasmusic/tv/backend/download/StorageGuard.kt:105:72 'static field ACTION_DEVICE_STORAGE_LOW: String' is deprecated. Deprecated in Java.
+w: file:///D:/hxzhang/MyGithubSoftware/NasAudio/NASMusicTV/app/src/main/java/com/nasmusic/tv/backend/impl/DaoliyuAdapter.kt:47:18 This declaration overrides a deprecated member but is not marked as deprecated itself. Add the '@Deprecated' annotation or suppress the diagnostic.
+w: file:///D:/hxzhang/MyGithubSoftware/NasAudio/NASMusicTV/app/src/main/java/com/nasmusic/tv/backend/impl/DaoliyuAdapter.kt:112:44 'fun create(contentType: MediaType?, content: String): RequestBody' is deprecated. Moved to extension function. Put the 'content' argument first to fix Java.
+w: file:///D:/hxzhang/MyGithubSoftware/NasAudio/NASMusicTV/app/src/main/java/com/nasmusic/tv/backend/impl/DaoliyuAdapter.kt:488:44 'fun create(contentType: MediaType?, content: String): RequestBody' is deprecated. Moved to extension function. Put the 'content' argument first to fix Java.
+w: file:///D:/hxzhang/MyGithubSoftware/NasAudio/NASMusicTV/app/src/main/java/com/nasmusic/tv/backend/impl/FeiniuAdapter.kt:56:18 This declaration overrides a deprecated member but is not marked as deprecated itself. Add the '@Deprecated' annotation or suppress the diagnostic.
+w: file:///D:/hxzhang/MyGithubSoftware/NasAudio/NASMusicTV/app/src/main/java/com/nasmusic/tv/backend/impl/FeiniuAdapter.kt:145:44 'fun create(contentType: MediaType?, content: String): RequestBody' is deprecated. Moved to extension function. Put the 'content' argument first to fix Java.
+w: file:///D:/hxzhang/MyGithubSoftware/NasAudio/NASMusicTV/app/src/main/java/com/nasmusic/tv/backend/impl/FeiniuAdapter.kt:166:53 Elvis operator (?:) always returns the left operand of non-nullable type 'HttpUrl'.
+w: file:///D:/hxzhang/MyGithubSoftware/NasAudio/NASMusicTV/app/src/main/java/com/nasmusic/tv/backend/impl/FeiniuAdapter.kt:553:44 'fun create(contentType: MediaType?, content: String): RequestBody' is deprecated. Moved to extension function. Put the 'content' argument first to fix Java.
+w: file:///D:/hxzhang/MyGithubSoftware/NasAudio/NASMusicTV/app/src/main/java/com/nasmusic/tv/backend/impl/JellyfinAdapter.kt:38:18 This declaration overrides a deprecated member but is not marked as deprecated itself. Add the '@Deprecated' annotation or suppress the diagnostic.
+w: file:///D:/hxzhang/MyGithubSoftware/NasAudio/NASMusicTV/app/src/main/java/com/nasmusic/tv/backend/impl/NavidromeAdapter.kt:37:18 This declaration overrides a deprecated member but is not marked as deprecated itself. Add the '@Deprecated' annotation or suppress the diagnostic.
+w: file:///D:/hxzhang/MyGithubSoftware/NasAudio/NASMusicTV/app/src/main/java/com/nasmusic/tv/backend/impl/SubsonicAdapter.kt:42:18 This declaration overrides a deprecated member but is not marked as deprecated itself. Add the '@Deprecated' annotation or suppress the diagnostic.
+w: file:///D:/hxzhang/MyGithubSoftware/NasAudio/NASMusicTV/app/src/main/java/com/nasmusic/tv/backend/local/AlbumCoverResolver.kt:66:41 Unnecessary non-null assertion (!!) on a non-null receiver of type 'String'.
+w: file:///D:/hxzhang/MyGithubSoftware/NasAudio/NASMusicTV/app/src/main/java/com/nasmusic/tv/backend/local/AlbumCoverResolver.kt:195:67 Java type mismatch: inferred type is 'Nothing?', but 'String' was expected.
+w: file:///D:/hxzhang/MyGithubSoftware/NasAudio/NASMusicTV/app/src/main/java/com/nasmusic/tv/backend/local/ArtistCoverResolver.kt:229:67 Java type mismatch: inferred type is 'Nothing?', but 'String' was expected.
+w: file:///D:/hxzhang/MyGithubSoftware/NasAudio/NASMusicTV/app/src/main/java/com/nasmusic/tv/backend/local/ArtistCoverResolver.kt:235:70 Java type mismatch: inferred type is 'Nothing?', but 'String' was expected.
+w: file:///D:/hxzhang/MyGithubSoftware/NasAudio/NASMusicTV/app/src/main/java/com/nasmusic/tv/backend/local/ArtistCoverResolver.kt:269:67 Java type mismatch: inferred type is 'Nothing?', but 'String' was expected.
+w: file:///D:/hxzhang/MyGithubSoftware/NasAudio/NASMusicTV/app/src/main/java/com/nasmusic/tv/backend/local/ArtistCoverResolver.kt:303:59 Java type mismatch: inferred type is 'Nothing?', but 'String' was expected.
+w: file:///D:/hxzhang/MyGithubSoftware/NasAudio/NASMusicTV/app/src/main/java/com/nasmusic/tv/backend/local/ArtistCoverResolver.kt:336:53 Java type mismatch: inferred type is 'Nothing?', but 'String' was expected.
+w: file:///D:/hxzhang/MyGithubSoftware/NasAudio/NASMusicTV/app/src/main/java/com/nasmusic/tv/backend/local/ArtistCoverResolver.kt:336:92 Java type mismatch: inferred type is 'Nothing?', but 'String' was expected.
+w: file:///D:/hxzhang/MyGithubSoftware/NasAudio/NASMusicTV/app/src/main/java/com/nasmusic/tv/backend/local/ItunesCoverSearcher.kt:65:67 Java type mismatch: inferred type is 'Nothing?', but 'String' was expected.
+w: file:///D:/hxzhang/MyGithubSoftware/NasAudio/NASMusicTV/app/src/main/java/com/nasmusic/tv/backend/weather/WeatherRadioManager.kt:162:42 Unnecessary safe call on a non-null receiver of type 'List<Song>'.
+w: file:///D:/hxzhang/MyGithubSoftware/NasAudio/NASMusicTV/app/src/main/java/com/nasmusic/tv/player/DemucsSeparator.kt:254:73 Unnecessary non-null assertion (!!) on a non-null receiver of type 'File'.
+w: file:///D:/hxzhang/MyGithubSoftware/NasAudio/NASMusicTV/app/src/main/java/com/nasmusic/tv/player/DemucsSeparator.kt:255:77 Unnecessary non-null assertion (!!) on a non-null receiver of type 'File'.
+w: file:///D:/hxzhang/MyGithubSoftware/NasAudio/NASMusicTV/app/src/main/java/com/nasmusic/tv/player/DemucsSeparator.kt:256:37 Unnecessary non-null assertion (!!) on a non-null receiver of type 'BufferedOutputStream'.
+w: file:///D:/hxzhang/MyGithubSoftware/NasAudio/NASMusicTV/app/src/main/java/com/nasmusic/tv/player/DemucsSeparator.kt:257:34 Unnecessary non-null assertion (!!) on a non-null receiver of type 'BufferedOutputStream'.
+w: file:///D:/hxzhang/MyGithubSoftware/NasAudio/NASMusicTV/app/src/main/java/com/nasmusic/tv/player/DemucsSeparator.kt:277:26 Unnecessary non-null assertion (!!) on a non-null receiver of type 'BufferedOutputStream'.
+w: file:///D:/hxzhang/MyGithubSoftware/NasAudio/NASMusicTV/app/src/main/java/com/nasmusic/tv/player/DemucsSeparator.kt:278:26 Unnecessary non-null assertion (!!) on a non-null receiver of type 'BufferedOutputStream'.
+w: file:///D:/hxzhang/MyGithubSoftware/NasAudio/NASMusicTV/app/src/main/java/com/nasmusic/tv/player/DemucsSeparator.kt:279:23 Unnecessary non-null assertion (!!) on a non-null receiver of type 'BufferedOutputStream'.
+w: file:///D:/hxzhang/MyGithubSoftware/NasAudio/NASMusicTV/app/src/main/java/com/nasmusic/tv/player/DemucsSeparator.kt:280:23 Unnecessary non-null assertion (!!) on a non-null receiver of type 'BufferedOutputStream'.
+w: file:///D:/hxzhang/MyGithubSoftware/NasAudio/NASMusicTV/app/src/main/java/com/nasmusic/tv/player/DemucsSeparator.kt:365:22 Unnecessary non-null assertion (!!) on a non-null receiver of type 'BufferedOutputStream'.
+w: file:///D:/hxzhang/MyGithubSoftware/NasAudio/NASMusicTV/app/src/main/java/com/nasmusic/tv/player/DemucsSeparator.kt:366:19 Unnecessary non-null assertion (!!) on a non-null receiver of type 'BufferedOutputStream'.
+w: file:///D:/hxzhang/MyGithubSoftware/NasAudio/NASMusicTV/app/src/main/java/com/nasmusic/tv/player/DemucsSeparator.kt:368:54 Unnecessary non-null assertion (!!) on a non-null receiver of type 'File'.
+w: file:///D:/hxzhang/MyGithubSoftware/NasAudio/NASMusicTV/app/src/main/java/com/nasmusic/tv/player/DemucsSeparator.kt:369:61 Unnecessary non-null assertion (!!) on a non-null receiver of type 'File'.
+w: file:///D:/hxzhang/MyGithubSoftware/NasAudio/NASMusicTV/app/src/main/java/com/nasmusic/tv/player/DemucsSeparator.kt:376:61 Unnecessary non-null assertion (!!) on a non-null receiver of type 'File'.
+w: file:///D:/hxzhang/MyGithubSoftware/NasAudio/NASMusicTV/app/src/main/java/com/nasmusic/tv/player/DemucsSeparator.kt:376:112 Unnecessary non-null assertion (!!) on a non-null receiver of type 'File'.
+w: file:///D:/hxzhang/MyGithubSoftware/NasAudio/NASMusicTV/app/src/main/java/com/nasmusic/tv/player/DemucsSeparator.kt:378:47 Unnecessary non-null assertion (!!) on a non-null receiver of type 'File'.
+w: file:///D:/hxzhang/MyGithubSoftware/NasAudio/NASMusicTV/app/src/main/java/com/nasmusic/tv/player/DemucsSeparator.kt:378:68 Unnecessary non-null assertion (!!) on a non-null receiver of type 'File'.
+w: file:///D:/hxzhang/MyGithubSoftware/NasAudio/NASMusicTV/app/src/main/java/com/nasmusic/tv/player/HqSeparationOrchestrator.kt:397:41 Java type mismatch: inferred type is 'String?', but 'String' was expected.
+w: file:///D:/hxzhang/MyGithubSoftware/NasAudio/NASMusicTV/app/src/main/java/com/nasmusic/tv/player/HqSeparationOrchestrator.kt:447:46 Condition is always 'true'.
+w: file:///D:/hxzhang/MyGithubSoftware/NasAudio/NASMusicTV/app/src/main/java/com/nasmusic/tv/ui/components/VisualizerStage.kt:301:67 Elvis operator (?:) always returns the left operand of non-nullable type 'String'.
+w: file:///D:/hxzhang/MyGithubSoftware/NasAudio/NASMusicTV/app/src/main/java/com/nasmusic/tv/ui/components/VisualizerStage.kt:470:25 Unnecessary safe call on a non-null receiver of type 'String'.
+w: file:///D:/hxzhang/MyGithubSoftware/NasAudio/NASMusicTV/app/src/main/java/com/nasmusic/tv/ui/components/song/UnifiedSongRow.kt:234:56 Unnecessary non-null assertion (!!) on a non-null receiver of type 'String'.
+w: file:///D:/hxzhang/MyGithubSoftware/NasAudio/NASMusicTV/app/src/main/java/com/nasmusic/tv/ui/components/song/UnifiedSongRow.kt:235:69 Unnecessary non-null assertion (!!) on a non-null receiver of type 'String'.
+w: file:///D:/hxzhang/MyGithubSoftware/NasAudio/NASMusicTV/app/src/main/java/com/nasmusic/tv/ui/components/song/UnifiedSongRow.kt:247:38 Unnecessary non-null assertion (!!) on a non-null receiver of type 'String'.
+w: file:///D:/hxzhang/MyGithubSoftware/NasAudio/NASMusicTV/app/src/main/java/com/nasmusic/tv/ui/components/song/UnifiedSongRow.kt:519:52 Unnecessary non-null assertion (!!) on a non-null receiver of type 'String'.
+w: file:///D:/hxzhang/MyGithubSoftware/NasAudio/NASMusicTV/app/src/main/java/com/nasmusic/tv/ui/components/song/UnifiedSongRow.kt:520:65 Unnecessary non-null assertion (!!) on a non-null receiver of type 'String'.
+w: file:///D:/hxzhang/MyGithubSoftware/NasAudio/NASMusicTV/app/src/main/java/com/nasmusic/tv/ui/screens/EqualizerScreen.kt:124:47 Unnecessary safe call on a non-null receiver of type 'EqualizerPreset'.
+w: file:///D:/hxzhang/MyGithubSoftware/NasAudio/NASMusicTV/app/src/main/java/com/nasmusic/tv/ui/screens/LibraryScreen.kt:506:29 'when' is exhaustive so 'else' is redundant here.
+w: file:///D:/hxzhang/MyGithubSoftware/NasAudio/NASMusicTV/app/src/main/java/com/nasmusic/tv/ui/screens/LibraryScreen.kt:581:29 'when' is exhaustive so 'else' is redundant here.
+w: file:///D:/hxzhang/MyGithubSoftware/NasAudio/NASMusicTV/app/src/main/java/com/nasmusic/tv/ui/screens/NowPlayingScreen.kt:555:35 Unnecessary safe call on a non-null receiver of type 'Song'.
+w: file:///D:/hxzhang/MyGithubSoftware/NasAudio/NASMusicTV/app/src/main/java/com/nasmusic/tv/ui/screens/library/RadioTab.kt:181:13 'when' is exhaustive so 'else' is redundant here.
+w: file:///D:/hxzhang/MyGithubSoftware/NasAudio/NASMusicTV/app/src/main/java/com/nasmusic/tv/ui/screens/settings/BaiduPanSettingsSection.kt:124:55 Unnecessary safe call on a non-null receiver of type 'Function0<Unit>'.
+w: file:///D:/hxzhang/MyGithubSoftware/NasAudio/NASMusicTV/app/src/main/java/com/nasmusic/tv/ui/screens/settings/BaiduPanSettingsSection.kt:186:87 Unnecessary safe call on a non-null receiver of type 'Function0<Unit>'.
+w: file:///D:/hxzhang/MyGithubSoftware/NasAudio/NASMusicTV/app/src/main/java/com/nasmusic/tv/ui/screens/settings/DataSettingsSection.kt:54:51 Unnecessary safe call on a non-null receiver of type 'Function0<Unit>'.
+w: file:///D:/hxzhang/MyGithubSoftware/NasAudio/NASMusicTV/app/src/main/java/com/nasmusic/tv/ui/screens/settings/DataSettingsSection.kt:62:57 Unnecessary safe call on a non-null receiver of type 'Function0<Unit>'.
+w: file:///D:/hxzhang/MyGithubSoftware/NasAudio/NASMusicTV/app/src/main/java/com/nasmusic/tv/ui/screens/settings/DataSettingsSection.kt:70:52 Unnecessary safe call on a non-null receiver of type 'Function0<Unit>'.
+w: file:///D:/hxzhang/MyGithubSoftware/NasAudio/NASMusicTV/app/src/main/java/com/nasmusic/tv/ui/viewmodel/ServerViewModel.kt:101:74 'val apiVersion: String' is deprecated. Use getApiVersion() instead.
+w: file:///D:/hxzhang/MyGithubSoftware/NasAudio/NASMusicTV/app/src/main/java/com/nasmusic/tv/ui/viewmodel/ServerViewModel.kt:207:78 'val apiVersion: String' is deprecated. Use getApiVersion() instead.
+w: file:///D:/hxzhang/MyGithubSoftware/NasAudio/NASMusicTV/app/src/main/java/com/nasmusic/tv/visualizer/renderers/AuroraRenderer.kt:315:13 Expected performance impact from inlining is insignificant. Inlining works best for functions with parameters of function types.
+w: file:///D:/hxzhang/MyGithubSoftware/NasAudio/NASMusicTV/app/src/main/java/com/nasmusic/tv/visualizer/renderers/AuroraRenderer.kt:316:13 Expected performance impact from inlining is insignificant. Inlining works best for functions with parameters of function types.
+w: file:///D:/hxzhang/MyGithubSoftware/NasAudio/NASMusicTV/app/src/main/java/com/nasmusic/tv/visualizer/renderers/BatchFourRenderers.kt:561:59 Redundant call of conversion method.
+w: file:///D:/hxzhang/MyGithubSoftware/NasAudio/NASMusicTV/app/src/main/java/com/nasmusic/tv/visualizer/renderers/BatchThreeRenderers.kt:36:48 Redundant call of conversion method.
+
+> Task :app:compileDebugJavaWithJavac UP-TO-DATE
+> Task :app:processDebugJavaRes UP-TO-DATE
+> Task :app:mergeDebugJavaResource UP-TO-DATE
+> Task :app:dexBuilderDebug UP-TO-DATE
+> Task :app:mergeProjectDexDebug UP-TO-DATE
+> Task :app:packageDebug UP-TO-DATE
+> Task :app:createDebugApkListingFileRedirect UP-TO-DATE
+> Task :app:assembleDebug UP-TO-DATE
+> Task :app:bundleDebugClassesToCompileJar UP-TO-DATE
+> Task :app:generateDebugAndroidTestLintModel
+> Task :app:generateDebugLintReportModel
+> Task :app:generateDebugUnitTestLintModel
+> Task :app:lintAnalyzeDebugAndroidTest
+> Task :app:lintAnalyzeDebug
+> Task :app:lintAnalyzeDebugUnitTest
+
+> Task :app:lintAnalyzeDebug
+ERROR: Inconsistency in the cache. Someone without context put a null value in the cache
+
+Attachments:
+info.txt
+- key:
+    com/nasmusic/tv/data/prefs/AppPreferences.SeparationMode
+========
+- context:
+    Class: org.jetbrains.kotlin.psi.KtTypeAlias
+Value:
+    <File name: AppPreferences.kt, Physical: true>
+/**
+ * 应用偏好存储
+ * 使用 DataStore 持久化服务器配置与通用设置
+ *
+ * 构造期为 `internal`：生产代码一律走 [getInstance] 单例（DataStore 要求同一文件
+ * 只能有一个实例）；单元测试通过 internal 构造器为每个用例构造独立实例，避免
+ * 单例跨用例串扰（Robolectric 每个用例有独立 dataDir，共享单例会导致 DataStore
+ * 文件锁冲突与标记位污染）。
+ */
+class AppPreferences internal constructor(private val context: Context) {
+
+    // =====================================================================
+    // R-4 门面子域（键不迁移只搬访问器，DataStore 单例不变；调用方渐进迁移，
+    // 旧 API 保留至全部调用点迁移后再 @Deprecated）
+    // =====================================================================
+    val server: ServerPrefs by lazy { ServerPrefs(this) }
+    val player: PlayerPrefs by lazy { PlayerPrefs(this) }
+    val lyrics: LyricsPrefs by lazy { LyricsPrefs(this) }
+    val network: NetworkMusicPrefs by lazy { NetworkMusicPrefs(this) }
+    val baidu: BaiduPrefs by lazy { BaiduPrefs(this) }
+    val download: DownloadPrefs by lazy { DownloadPrefs(this) }
+    val weather: WeatherPrefs by lazy { WeatherPrefs(this) }
+    val visualizer: VisualizerPrefs by lazy { VisualizerPrefs(this) }
+    val history: HistoryPrefs by lazy { HistoryPrefs(this) }
+    val playlist: PlaylistPrefs by lazy { PlaylistPrefs(this) }
+    val queue: QueuePrefs by lazy { QueuePrefs(this) }
+    val languagePrefs: LanguagePrefs by lazy { LanguagePrefs(this) }
+    val backup: BackupPrefs by lazy { BackupPrefs(this) }
+
+    companion object {
+        private const val TAG = "AppPreferences"
+
+        /** F2-6：音质档位常量（Meting br 值；AUTO 由 BandwidthEstimator 决策） */
+        const val QUALITY_TIER_AUTO = 0
+        const val QUALITY_TIER_LOSSLESS = 999
+        const val QUALITY_TIER_HIGH = 320
+        const val QUALITY_TIER_STANDARD = 128
+
+        @Volatile
+        private var INSTANCE: AppPreferences? = null
+
+        fun getInstance(context: Context): AppPreferences {
+            return INSTANCE ?: synchronized(this) {
+                INSTANCE ?: AppPreferences(context.applicationContext).also { INSTANCE = it }
+            }
+        }
+    }
+
+    private val dataStore: androidx.datastore.core.DataStore<androidx.datastore.preferences.core.Preferences> by lazy {
+        PreferenceDataStoreFactory.create {
+            File(context.filesDir, "datastore/nas_music_tv.preferences_pb")
+        }
+    }
+
+    // F2-1：月度播放统计仓库（依赖本类 dataStore/gson，recordPlayWithSong 原子联动写入）
+    internal val playStatsRepo by lazy { com.nasmusic.tv.data.stats.PlayStatsRepository(this) }
+
+    /** F2-1：供 PlayStatsRepository 读取的 DataStore 数据流（包内可见） */
+    internal fun dataStoreData() = dataStore.data
+
+    /** F2-1：供 PlayStatsRepository 复用的 Gson 实例（包内可见） */
+    internal fun gson(): Gson = gson
+
+    // =====================================================================
+    // R-7（方案 2026-09）：
+    // 1. 语言键双写（SharedPreferences 镜像 + DataStore 事实源）——
+    //    attachBaseContext 只读镜像，零 IO、无 runBlocking（第一类修复）。
+    // 2. provider 类键的 @Volatile 内存镜像（DataStore Flow 常驻收集更新）——
+    //    get*Sync 读镜像，调用点零改动（第三类修复，路 A）。
+    // =====================================================================
+
+    /** 语言镜像（只服务冷启动 attachBaseContext，其余设置项不搞双写） */
+    private val mirrorPrefs = context.getSharedPreferences("language_mirror", Context.MODE_PRIVATE)
+
+    // ---- provider 键内存镜像（Application scope 常驻收集更新）----
+    @Volatile private var cachedMusicSource: String = com.nasmusic.tv.data.model.MusicSource.DEFAULT_API_KEY
+    @Volatile private var cachedDefaultNetworkSource: String = NetworkSource.DEFAULT.key
+    /** F2-6：音质档位镜像（默认 AUTO） */
+    @Volatile private var cachedQualityTier: Int = QUALITY_TIER_AUTO
+    @Volatile private var cachedJamendoClientId: String = ""
+    @Volatile private var cachedMetingApiBaseUrl: String = MetingApiService.DEFAULT_BASE_URL
+    @Volatile private var cachedMvApiBaseUrl: String = BilibiliMvService.DEFAULT_BASE_URL
+    /** 高质量分离模型自定义下载 URL 镜像（空=用内置默认候选列表） */
+    @Volatile private var cachedModelDownloadUrl: String = ""
+    @Volatile private var cachedLyricsKugouBaseUrl: String = com.nasmusic.tv.lyrics.LyricsNetworkProvider.DEFAULT_KUGOU_BASE_URL
+    @Volatile private var cachedLyricsNeteaseBaseUrl: String = com.nasmusic.tv.lyrics.LyricsNetworkProvider.DEFAULT_NETEASE_BASE_URL
+    @Volatile private var cachedWeatherApiKey: String = ""
+
+    /** 镜像已启动收集标志（ensureMirrorScopeLoaded 只执行一次） */
+    @Volatile private var mirrorStarted = false
+    private val mirrorLock = Any()
+
+    /**
+     * 启动 provider 键镜像收集（由 NasMusicApp.onCreate 注入 applicationScope 调用，仅一次）。
+     * 设置页改动 → DataStore 写入 → Flow 发射 → @Volatile 镜像更新 → get*Sync 立即生效。
+     */
+    fun startProviderMirrors(scope: kotlinx.coroutines.CoroutineScope) {
+        synchronized(mirrorLock) {
+            if (mirrorStarted) return
+            mirrorStarted = true
+        }
+        // F-7：先做天气 Key 明文→加密一次性迁移（幂等），镜像再从加密键读
+        scope.launch { migrateWeatherApiKeyIfNeeded() }
+        scope.launch {
+            dataStore.data.map { prefs ->
+                val enc = prefs[keyWeatherApiKeyEnc]
+                if (!enc.isNullOrBlank()) {
+                    try { com.nasmusic.tv.util.CryptoUtils.decrypt(enc) } catch (e: Exception) { "" }
+                } else ""
+            }.distinctUntilChanged().collect { cachedWeatherApiKey = it }
+        }
+        scope.launch {
+            dataStore.data.map { it[keyMusicSource] ?: com.nasmusic.tv.data.model.MusicSource.DEFAULT_API_KEY }
+                .distinctUntilChanged().collect { cachedMusicSource = it }
+        }
+        scope.launch {
+            dataStore.data.map { it[keyDefaultNetworkSource] ?: NetworkSource.DEFAULT.key }
+                .distinctUntilChanged().collect { cachedDefaultNetworkSource = NetworkSource.fromKey(it)?.key ?: it }
+        }
+        // F2-6：音质档位镜像（qualityTierProvider 同步读，注册进 MetingApiService）
+        scope.launch {
+            dataStore.data.map { it[keyQualityTier] ?: QUALITY_TIER_AUTO }
+                .distinctUntilChanged().collect { cachedQualityTier = it }
+        }
+        scope.launch {
+            dataStore.data.map { it[keyJamendoClientId] ?: "" }
+                .distinctUntilChanged().collect { cachedJamendoClientId = it }
+        }
+        scope.launch {
+            dataStore.data.map { it[keyMetingApiBaseUrl] ?: MetingApiService.DEFAULT_BASE_URL }
+                .distinctUntilChanged().collect { cachedMetingApiBaseUrl = it }
+        }
+        scope.launch {
+            dataStore.data.map { it[keyMvApiBaseUrl] ?: BilibiliMvService.DEFAULT_BASE_URL }
+                .distinctUntilChanged().collect { cachedMvApiBaseUrl = it }
+        }
+        scope.launch {
+            dataStore.data.map { it[keyLyricsKugouBaseUrl] ?: com.nasmusic.tv.lyrics.LyricsNetworkProvider.DEFAULT_KUGOU_BASE_URL }
+                .distinctUntilChanged().collect { cachedLyricsKugouBaseUrl = it }
+        }
+        scope.launch {
+            dataStore.data.map { it[keyLyricsNeteaseBaseUrl] ?: com.nasmusic.tv.lyrics.LyricsNetworkProvider.DEFAULT_NETEASE_BASE_URL }
+                .distinctUntilChanged().collect { cachedLyricsNeteaseBaseUrl = it }
+        }
+        scope.launch {
+            dataStore.data.map { it[keyModelDownloadUrl] ?: "" }
+                .distinctUntilChanged().collect { cachedModelDownloadUrl = it }
+        }
+        // （F-7：weather 镜像改读加密键，见上方 migrateWeatherApiKeyIfNeeded 后的收集块）
+    }
+
+
+    // --- 服务器配置 ---
+    private val keyBackendType = stringPreferencesKey("server_backend_type")
+    private val keyBaseUrl = stringPreferencesKey("server_base_url")
+    private val keyApiToken = stringPreferencesKey("server_api_token")
+    private val keyUsername = stringPreferencesKey("server_username")
+    private val keyPassword = stringPreferencesKey("server_password")
+    private val keyServerConnected = booleanPreferencesKey("server_connected")
+    private val keyServerDisplayName = stringPreferencesKey("server_display_name")
+
+    // --- 通用设置 ---
+    private val keyDarkTheme = booleanPreferencesKey("settings_dark_theme")
+    private val keyAnimations = booleanPreferencesKey("settings_animations")
+    private val keyAutoPlayNext = booleanPreferencesKey("settings_auto_play_next")
+    private val keyPlayMode = intPreferencesKey("settings_play_mode")
+    private val keyCacheLyrics = booleanPreferencesKey("settings_cache_lyrics")
+    private val keyCacheCover = booleanPreferencesKey("settings_cache_cover")
+    private val keyLyricsOffset = longPreferencesKey("settings_lyrics_offset")
+    private val keyDefaultNetworkSource = stringPreferencesKey("settings_default_network_source")
+    private val keyMetingApiBaseUrl = stringPreferencesKey("settings_meting_api_base_url")
+    private val keyMvApiBaseUrl = stringPreferencesKey("settings_mv_api_base_url")
+    private val keyModelDownloadUrl = stringPreferencesKey("settings_model_download_url")
+    private val keyLyricsKugouBaseUrl = stringPreferencesKey("settings_lyrics_kugou_base_url")
+    private val keyLyricsNeteaseBaseUrl = stringPreferencesKey("settings_lyrics_netease_base_url")
+    private val keyJamendoClientId = stringPreferencesKey("settings_jamendo_client_id")
+
+    // --- B-2 最近播放 & 播放次数（序列化为 JSON）---
+    private val keyRecentSongs = stringPreferencesKey("recent_songs")
+    private val keyRecentSongObjects = stringPreferencesKey("recent_song_objects")
+    private val keyPlayCounts = stringPreferencesKey("play_counts")
+
+    // --- 网络歌曲收藏（序列化为 JSON）---
+    private val keyNetworkFavorites = stringPreferencesKey("network_favorites")
+
+    // --- 本地歌单（序列化为 JSON，独立于 NAS 后端歌单）---
+    private val keyLocalPlaylists = stringPreferencesKey("local_playlists")
+
+    // --- 上次播放队列（序列化为 JSON，streamUrl 置空不持久化）---
+    private val keyLastQueue = stringPreferencesKey("last_queue")
+
+    // --- 天气电台设置 ---
+    private val keyWeatherEnabled = booleanPreferencesKey("weather_enabled")
+    private val keyWeatherManualCity = stringPreferencesKey("weather_manual_city")
+    private val keyWeatherAutoRefresh = booleanPreferencesKey("weather_auto_refresh")
+    private val keyWeatherApiKey = stringPreferencesKey("weather_openweathermap_api_key")
+    /**
+     * F-7：加密存储键（OpenWeatherMap key 属付费资源凭证，泄露可被刷量；
+     * 与服务器密码/百度 token 一致走 CryptoUtils AES-GCM。旧明文键保留做一次性迁移读取）。
+     */
+    private val keyWeatherApiKeyEnc = stringPreferencesKey("weather_openweathermap_api_key_enc")
+
+    // --- 封面滤镜设置（Phase 5） ---
+    private val keyCoverFilterEnabled = booleanPreferencesKey("cover_filter_enabled")
+    private val keyCoverFilterBlurRadius = doublePreferencesKey("cover_filter_blur_radius")
+    private val keyCoverFilterDarkOverlay = doublePreferencesKey("cover_filter_dark_overlay")
+
+    // --- 频谱显示设置 ---
+    private val keySpectrumEnabled = booleanPreferencesKey("settings_spectrum_enabled")
+    private val keyVisualizerTheme = stringPreferencesKey("settings_visualizer_theme")
+    private val keyVisualizerQuality = stringPreferencesKey("visualizer_quality")
+
+    // --- 全局字体字号调整 ---
+    private val keyFontAdjustment = intPreferencesKey("settings_font_adjustment")
+
+    // --- 离线下载（需求 6/7/8/9）---
+    private val keyDownloadEnabled = booleanPreferencesKey("settings_download_enabled")
+    private val keyAutoDownloadOnPlay = booleanPreferencesKey("settings_auto_download_on_play")
+    private val keyAutoDownloadLimit = intPreferencesKey("settings_auto_download_limit")
+    private val keyDownloadLocation = stringPreferencesKey("settings_download_location")
+
+    // --- 导出到外接设备：SAF 授权持久化 ---
+    private val keyExportTreeUri = stringPreferencesKey("export_tree_uri")
+    private val keyExportVolumeId = stringPreferencesKey("export_volume_id")
+
+    // --- 首次曲库快捷键提示 ---
+    private val keyShowLibraryShortcutHint = booleanPreferencesKey("show_library_shortcut_hint")
+
+    // --- 网络音乐平台来源 ---
+    private val keyMusicSource = stringPreferencesKey("music_source")
+
+    // --- B-4 均衡器 ---
+    private val keyEqualizerPreset = intPreferencesKey("equalizer_preset")
+    private val keyEqualizerBands = stringPreferencesKey("equalizer_bands")
+
+    // --- 语言设置 ---
+    private val keyLanguage = stringPreferencesKey("settings_language")
+
+    // --- 语言设置 Flow ---
+    val language: Flow<String> = dataStore.data.map { it[keyLanguage] ?: "system" }
+
+    // --- 首次曲库快捷键提示 Flow ---
+    val showLibraryShortcutHint: Flow<Boolean> = dataStore.data.map { it[keyShowLibraryShortcutHint] ?: true }
+
+    suspend fun setShowLibraryShortcutHint(show: Boolean) {
+        dataStore.edit { it[keyShowLibraryShortcutHint] = show }
+    }
+
+    /**
+     * 同步获取当前语言设置。
+     *
+     * R-7 第一类修复：attachBaseContext 无法挂起，改读 SharedPreferences 镜像
+     * （[setLanguage] 双写保证一致；镜像未命中时回退默认值并打点）。
+     */
+    fun getLanguageSync(): String {
+        val mirrored = mirrorPrefs.getString("language", null)
+        return mirrored ?: "system"
+    }
+
+    /** 语言双写：DataStore 事实源 + SharedPreferences 镜像（只服务冷启动） */
+    suspend fun setLanguage(lang: String) {
+        dataStore.edit { it[keyLanguage] = lang }
+        mirrorPrefs.edit().putString("language", lang).apply()
+    }
+
+    /**
+     * R-7（第一类）：老版本升级迁移——DataStore 已有语言值但镜像为空时补写镜像。
+     * 由 NasMusicApp.onCreate 在首次读取镜像前调用（一次性，幂等）。
+     */
+    fun migrateLanguageMirrorIfNeeded() {
+        if (mirrorPrefs.contains("language")) return
+        try {
+            val stored = runBlocking(Dispatchers.IO) {
+                dataStore.data.first()[keyLanguage] ?: "system"
+            }
+            mirrorPrefs.edit().putString("language", stored).apply()
+        } catch (e: Exception) {
+            AppLog.w(TAG, "migrateLanguageMirrorIfNeeded failed", e)
+        }
+    }
+
+    // --- K 歌模式：升降调 & 变速（全局记忆）---
+    private val keyPitchSemitones = intPreferencesKey("k_pitch_semitones")
+    private val keyPlaybackSpeed = doublePreferencesKey("k_playback_speed")
+
+    val pitchSemitones: Flow<Int> = dataStore.data.map { it[keyPitchSemitones] ?: 0 }
+    val playbackSpeed: Flow<Double> = dataStore.data.map { it[keyPlaybackSpeed] ?: 1.0 }
+
+    suspend fun setPitchSemitones(semitones: Int) {
+        dataStore.edit { it[keyPitchSemitones] = semitones }
+    }
+
+    suspend fun setPlaybackSpeed(speed: Double) {
+        dataStore.edit { it[keyPlaybackSpeed] = speed }
+    }
+
+    // --- 伴奏分离模式（快速/高质量）---
+    private val keySeparationMode = stringPreferencesKey("k_separation_mode")
+
+    <ELEMENT>/**
+     * 分离模式枚举（R-5：已上提为 player 层顶层 [com.nasmusic.tv.player.SeparationMode]，
+     * 此处 typealias 保持既有引用兼容；新代码请直接用 player 层类型）
+     */
+    typealias SeparationMode = com.nasmusic.tv.player.SeparationMode</ELEMENT>
+
+    val separationMode: Flow<SeparationMode> = dataStore.data.map { prefs ->
+        val value = prefs[keySeparationMode] ?: SeparationMode.FAST.value
+        SeparationMode.entries.find { it.value == value } ?: SeparationMode.FAST
+    }
+
+    suspend fun setSeparationMode(mode: SeparationMode) {
+        dataStore.edit { it[keySeparationMode] = mode.value }
+    }
+
+    // --- 播放统计 ---
+    private val keyPlayRecords = stringPreferencesKey("play_records")
+
+    // --- 搜索历史（序列化为 JSON，30 天 TTL + 上限 200 条）---
+    private val keySearchHistory = stringPreferencesKey("search_history")
+
+    // --- 网盘配置（按 CloudDriveType 存取，JSON 序列化 CloudDriveConfig；token 字段加密）---
+    private val keyCloudDriveConfig = stringPreferencesKey("cloud_drive_configs")
+
+    private val gson = Gson()
+    private val recentSongsMaxSize = 50
+    private val networkFavoritesMaxSize = 500
+    private val searchHistoryMaxSize = 200
+    private val searchHistoryTtlMs = 30L * 24 * 60 * 60 * 1000  // 30 天
+
+    /**
+     * 安全解析 JSON 偏好：解析失败时记录告警并返回 null（调用方应跳过回写，保留原数据），
+     * 而非返回空集合后被无条件回写覆盖 —— 后者会把用户积累的数据（播放记录/收藏/歌单等）
+     * 一次 JSON 异常（写入截断/字段变更）后抹成空。
+     *
+     * @param keyName 偏好键名（仅用于日志定位）
+     * @param json 原始 JSON 字符串
+     * @param parse 解析 lambda
+     * @return 解析结果；解析失败返回 null
+     */
+    private inline fun <T> safeParseJson(keyName: String, json: String, parse: () -> T): T? {
+        return try {
+            parse()
+        } catch (e: Exception) {
+            AppLog.w(TAG, "JSON 解析失败，跳过回写以保留原数据 [$keyName]: ${e.message?.take(80)}")
+            null
+        }
+    }
+
+
+    // --- ServerConfig Flow ---
+    val serverConfig: Flow<ServerConfig> = dataStore.data.map { prefs ->
+        ServerConfig(
+            backendType = prefs[keyBackendType] ?: ServerConfig.TYPE_JELLYFIN,
+            baseUrl = prefs[keyBaseUrl] ?: "",
+            apiToken = CryptoUtils.decrypt(prefs[keyApiToken] ?: ""),
+            username = prefs[keyUsername] ?: "",
+            password = CryptoUtils.decrypt(prefs[keyPassword] ?: ""),
+            isConnected = prefs[keyServerConnected] ?: false,
+            displayName = prefs[keyServerDisplayName] ?: ""
+        )
+    }
+
+    suspend fun saveServerConfig(config: ServerConfig) {
+        dataStore.edit { prefs ->
+            prefs[keyBackendType] = config.backendType
+            prefs[keyBaseUrl] = config.baseUrl
+            prefs[keyApiToken] = CryptoUtils.encrypt(config.apiToken)
+            prefs[keyUsername] = config.username
+            prefs[keyPassword] = CryptoUtils.encrypt(config.password)
+            prefs[keyServerConnected] = config.isConnected
+            prefs[keyServerDisplayName] = config.displayName
+        }
+    }
+
+    suspend fun setServerConnected(connected: Boolean, displayName: String = "") {
+        dataStore.edit { prefs ->
+            prefs[keyServerConnected] = connected
+            if (displayName.isNotBlank()) {
+                prefs[keyServerDisplayName] = displayName
+            }
+        }
+    }
+
+    suspend fun clearServerConfig() {
+        dataStore.edit { prefs ->
+            prefs.remove(keyBackendType)
+            prefs.remove(keyBaseUrl)
+            prefs.remove(keyApiToken)
+            prefs.remove(keyUsername)
+            prefs.remove(keyPassword)
+            prefs[keyServerConnected] = false
+            prefs.remove(keyServerDisplayName)
+        }
+    }
+
+    // --- B-2 最近播放 Flow ---
+    val recentSongIds: Flow<List<String>> = dataStore.data.map { prefs ->
+        val json = prefs[keyRecentSongs] ?: "[]"
+        try {
+            gson.fromJson<List<String>>(json, object : TypeToken<List<String>>() {}.type)
+        } catch (e: Exception) { emptyList() }
+    }
+
+    // --- B-2 播放次数 Flow ---
+    val playCounts: Flow<Map<String, Int>> = dataStore.data.map { prefs ->
+        val json = prefs[keyPlayCounts] ?: "{}"
+        try {
+            gson.fromJson<Map<String, Int>>(json, object : TypeToken<Map<String, Int>>() {}.type)
+        } catch (e: Exception) { emptyMap() }
+    }
+
+    /**
+     * 获取最近播放 ID 列表（一次性读取，调用方需在协程中）
+     */
+    suspend fun getRecentSongIds(): List<String> {
+        return try {
+            dataStore.data.first().let { prefs ->
+                val recentJson = prefs[keyRecentSongs] ?: "[]"
+                gson.fromJson<List<String>>(recentJson, object : TypeToken<List<String>>() {}.type) ?: emptyList()
+            }
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+
+    /**
+     * 记录一次播放（B-2）
+     * 1. 添加到最近播放列表（去重 + LRU，最多 50 条）
+     * 2. 播放次数 +1
+     */
+    suspend fun recordPlay(songId: String) {
+        dataStore.edit { prefs ->
+            // 更新最近播放
+            val recentJson = prefs[keyRecentSongs] ?: "[]"
+            val recentList = safeParseJson("recent_songs", recentJson) {
+                gson.fromJson<MutableList<String>>(recentJson, object : TypeToken<MutableList<String>>() {}.type)
+            }
+            if (recentList != null) {
+                val mutableRecent = recentList.toMutableList()
+                mutableRecent.remove(songId) // 去重
+                mutableRecent.add(0, songId)  // 最新放最前面
+                if (mutableRecent.size > recentSongsMaxSize) {
+                    mutableRecent.removeAt(mutableRecent.lastIndex)
+                }
+                prefs[keyRecentSongs] = gson.toJson(mutableRecent)
+            }
+
+            // 更新播放次数
+            val countsJson = prefs[keyPlayCounts] ?: "{}"
+            val counts = safeParseJson("play_counts", countsJson) {
+                gson.fromJson<MutableMap<String, Int>>(countsJson, object : TypeToken<MutableMap<String, Int>>() {}.type)
+            }
+            if (counts != null) {
+                counts[songId] = (counts[songId] ?: 0) + 1
+                prefs[keyPlayCounts] = gson.toJson(counts)
+            }
+        }
+    }
+
+    // --- B-2b 最近播放完整歌曲对象（含网络歌曲，供"最近播放"区展示/播放）---
+    private data class RecentSongObjectsData(val songs: List<Song> = emptyList())
+
+    /** 最近播放区最大保留歌曲数 */
+    private val recentSongsObjectsMaxSize = 50
+
+    /**
+     * 持久化前的 streamUrl 清理（修复：已下载/本地歌曲恢复后无法播放）：
+     * 仅网络歌曲置空（直链有时效，播放时需重新解析）；
+     * 本地歌曲（含已下载入库，isLocalSong=true）的 file:// URI 永久有效，必须保留，
+     * 否则重启恢复队列 / 最近播放 / 本地歌单场景下无法回放。
+     */
+    private fun Song.stripVolatileStreamUrl(): Song =
+        if (isNetworkSong) copy(streamUrl = null) else this
+
+    /**
+     * 记录一次最近播放的完整歌曲对象（网络歌曲 streamUrl 置空）。
+     * 与 recordPlay 的 id 列表互补：这里存完整元数据，支持网络歌曲/未连 NAS 时展示。
+     */
+    suspend fun recordRecentSongObject(song: Song) {
+        dataStore.edit { prefs ->
+            val json = prefs[keyRecentSongObjects] ?: "{\"songs\":[]}"
+            val data = safeParseJson("recent_song_objects", json) {
+                gson.fromJson<RecentSongObjectsData>(json, RecentSongObjectsData::class.java)
+            } ?: return@edit
+            val list = data.songs.toMutableList()
+            list.removeAll { it.id == song.id } // 去重（保留最新一条）
+            // 网络歌曲 streamUrl 置空（直链有时效）；本地歌曲保留 file:// URI
+            list.add(0, song.stripVolatileStreamUrl())
+            if (list.size > recentSongsObjectsMaxSize) {
+                list.removeAt(list.lastIndex)
+            }
+            prefs[keyRecentSongObjects] = gson.toJson(RecentSongObjectsData(list))
+        }
+    }
+
+    /**
+     * 合并记录播放：单次 DataStore edit 同时更新 id 列表 + 播放次数 + 完整歌曲对象。
+     * 替代分别调用 [recordPlay] + [recordRecentSongObject]（两次 DataStore 写）。
+     */
+    suspend fun recordPlayWithSong(song: Song) {
+        dataStore.edit { prefs ->
+            val songId = song.id
+
+            // 1. 更新最近播放 id 列表（去重 + LRU，最多 50 条）
+            val recentJson = prefs[keyRecentSongs] ?: "[]"
+            val recentList = safeParseJson("recent_songs", recentJson) {
+                gson.fromJson<MutableList<String>>(recentJson, object : TypeToken<MutableList<String>>() {}.type)
+            }
+            if (recentList != null) {
+                recentList.remove(songId)
+                recentList.add(0, songId)
+                if (recentList.size > recentSongsMaxSize) {
+                    recentList.removeAt(recentList.lastIndex)
+                }
+                prefs[keyRecentSongs] = gson.toJson(recentList)
+            }
+
+            // 2. 更新播放次数
+            val countsJson = prefs[keyPlayCounts] ?: "{}"
+            val counts = safeParseJson("play_counts", countsJson) {
+                gson.fromJson<MutableMap<String, Int>>(countsJson, object : TypeToken<MutableMap<String, Int>>() {}.type)
+            }
+            if (counts != null) {
+                counts[songId] = (counts[songId] ?: 0) + 1
+                prefs[keyPlayCounts] = gson.toJson(counts)
+            }
+
+            // 3. 更新完整歌曲对象（含网络歌曲，streamUrl 置空）
+            val objJson = prefs[keyRecentSongObjects] ?: "{\"songs\":[]}"
+            val objData = safeParseJson("recent_song_objects", objJson) {
+                gson.fromJson<RecentSongObjectsData>(objJson, RecentSongObjectsData::class.java)
+            }
+            if (objData != null) {
+                val objList = objData.songs.toMutableList()
+                objList.removeAll { it.id == songId }
+                objList.add(0, song.stripVolatileStreamUrl())
+                if (objList.size > recentSongsObjectsMaxSize) {
+                    objList.removeAt(objList.lastIndex)
+                }
+                prefs[keyRecentSongObjects] = gson.toJson(RecentSongObjectsData(objList))
+            }
+
+            // 4. 月度统计（F2-1）：与上述键同一次 edit 原子写入
+            playStatsRepo.appendMonthlyPlayInEdit(prefs, songId, System.currentTimeMillis())
+        }
+    }
+
+    /**
+     * 获取最近播放歌曲对象（最新在前，streamUrl 为空需播放时重新解析）
+     */
+    suspend fun getRecentSongObjects(): List<Song> {
+        return try {
+            dataStore.data.first().let { prefs ->
+                val json = prefs[keyRecentSongObjects] ?: "{\"songs\":[]}"
+                val data = gson.fromJson<RecentSongObjectsData>(json, RecentSongObjectsData::class.java)
+                data.songs
+            }
+        } catch (e: Exception) {
+            AppLog.w(TAG, "Failed to read recent song objects", e)
+            emptyList()
+        }
+    }
+
+    // --- B-4 均衡器 ---
+    val equalizerPreset: Flow<EqualizerPreset> = dataStore.data.map { prefs ->
+        val ordinal = prefs[keyEqualizerPreset] ?: 0
+        EqualizerPreset.entries.getOrElse(ordinal) { EqualizerPreset.NORMAL }
+    }
+
+    suspend fun setEqualizerPreset(preset: EqualizerPreset) {
+        dataStore.edit { it[keyEqualizerPreset] = preset.ordinal }
+    }
+
+    val equalizerBands: Flow<List<Float>> = dataStore.data.map { prefs ->
+        val json = prefs[keyEqualizerBands] ?: "[]"
+        try {
+            gson.fromJson<List<Float>>(json, object : TypeToken<List<Float>>() {}.type)
+        } catch (e: Exception) { emptyList() }
+    }
+
+    suspend fun setEqualizerBands(bands: List<Float>) {
+        dataStore.edit { it[keyEqualizerBands] = gson.toJson(bands) }
+    }
+
+    suspend fun setEqualizerBand(index: Int, value: Float) {
+        dataStore.edit { prefs ->
+            val json = prefs[keyEqualizerBands] ?: "[]"
+            val bands = safeParseJson("equalizer_bands", json) {
+                gson.fromJson<List<Float>>(json, object : TypeToken<List<Float>>() {}.type)
+                    .toMutableList()
+            } ?: return@edit
+            while (bands.size <= index) bands.add(0f)
+            bands[index] = value
+            prefs[keyEqualizerBands] = gson.toJson(bands)
+        }
+    }
+
+    // --- AppSettings Flow ---
+    val appSettings: Flow<AppSettings> = dataStore.data.map { prefs ->
+        AppSettings(
+            darkTheme = prefs[keyDarkTheme] ?: true,
+            animationsEnabled = prefs[keyAnimations] ?: true,
+            autoPlayNext = prefs[keyAutoPlayNext] ?: true,
+            defaultPlayMode = PlayMode.fromOrdinal(prefs[keyPlayMode] ?: 0),
+            cacheLyrics = prefs[keyCacheLyrics] ?: true,
+            cacheCover = prefs[keyCacheCover] ?: true,
+            lyricsOffsetMs = prefs[keyLyricsOffset] ?: 0L,
+            defaultNetworkSource = prefs[keyDefaultNetworkSource]?.let { NetworkSource.fromKey(it) ?: NetworkSource.fromName(it) } ?: NetworkSource.DEFAULT,
+            metingApiBaseUrl = prefs[keyMetingApiBaseUrl] ?: MetingApiService.DEFAULT_BASE_URL,
+            mvApiBaseUrl = prefs[keyMvApiBaseUrl] ?: BilibiliMvService.DEFAULT_BASE_URL,
+            lyricsKugouBaseUrl = prefs[keyLyricsKugouBaseUrl] ?: com.nasmusic.tv.lyrics.LyricsNetworkProvider.DEFAULT_KUGOU_BASE_URL,
+            lyricsNeteaseBaseUrl = prefs[keyLyricsNeteaseBaseUrl] ?: com.nasmusic.tv.lyrics.LyricsNetworkProvider.DEFAULT_NETEASE_BASE_URL,
+            visualizerTheme = VisualizerTheme.fromKey(prefs[keyVisualizerTheme]),
+            visualizerQuality = VisualQuality.fromKey(prefs[keyVisualizerQuality]),
+            fontAdjustment = prefs[keyFontAdjustment] ?: 0,
+            modelDownloadUrl = prefs[keyModelDownloadUrl] ?: "",
+            language = prefs[keyLanguage] ?: "system",
+            downloadEnabled = prefs[keyDownloadEnabled] ?: true,
+            autoDownloadOnPlay = prefs[keyAutoDownloadOnPlay] ?: false,
+            autoDownloadLimit = prefs[keyAutoDownloadLimit] ?: 50,
+            downloadLocation = prefs[keyDownloadLocation] ?: "INTERNAL"
+        )
+    }
+
+    // --- 全局字体字号调整 ---
+    suspend fun setFontAdjustment(adjustment: Int) =
+        dataStore.edit { it[keyFontAdjustment] = adjustment }
+
+    suspend fun setDarkTheme(enabled: Boolean) = dataStore.edit { it[keyDarkTheme] = enabled }
+
+    suspend fun setDownloadEnabled(v: Boolean) = dataStore.edit { it[keyDownloadEnabled] = v }
+    suspend fun setAutoDownloadOnPlay(v: Boolean) = dataStore.edit { it[keyAutoDownloadOnPlay] = v }
+    suspend fun setAutoDownloadLimit(v: Int) = dataStore.edit { it[keyAutoDownloadLimit] = v.coerceIn(1, 5000) }
+    suspend fun setDownloadLocation(v: String) = dataStore.edit { it[keyDownloadLocation] = v }
+
+    // --- 导出 SAF 授权持久化 ---
+    val exportTreeUri: Flow<String?> = dataStore.data.map { it[keyExportTreeUri] }
+    val exportVolumeId: Flow<String?> = dataStore.data.map { it[keyExportVolumeId] }
+    suspend fun setExportTreeUri(uri: String?) = dataStore.edit { if (uri == null) it.remove(keyExportTreeUri) else it[keyExportTreeUri] = uri }
+    suspend fun setExportVolumeId(id: String?) = dataStore.edit { if (id == null) it.remove(keyExportVolumeId) else it[keyExportVolumeId] = id }
+
+    suspend fun setAnimationsEnabled(enabled: Boolean) = dataStore.edit { it[keyAnimations] = enabled }
+
+    suspend fun setAutoPlayNext(enabled: Boolean) = dataStore.edit { it[keyAutoPlayNext] = enabled }
+
+    suspend fun setDefaultPlayMode(mode: PlayMode) = dataStore.edit { it[keyPlayMode] = mode.ordinal }
+
+    suspend fun setCacheLyrics(enabled: Boolean) = dataStore.edit { it[keyCacheLyrics] = enabled }
+
+    suspend fun setCacheCover(enabled: Boolean) = dataStore.edit { it[keyCacheCover] = enabled }
+
+    suspend fun setLyricsOffset(offsetMs: Long) = dataStore.edit { it[keyLyricsOffset] = offsetMs }
+
+    // --- 歌词显示设置 ---
+    private val keyLyricsFontScale = doublePreferencesKey("lyrics_font_scale")
+
+    val lyricsFontScale: Flow<Float> = dataStore.data.map { prefs ->
+        (prefs[keyLyricsFontScale] ?: 1.0).toFloat()
+    }
+
+    suspend fun setLyricsFontScale(scale: Float) {
+        dataStore.edit { it[keyLyricsFontScale] = scale.coerceIn(0.7f, 1.6f).toDouble() }
+    }
+
+    suspend fun setDefaultNetworkSource(source: NetworkSource) =
+        dataStore.edit { it[keyDefaultNetworkSource] = source.key }
+
+    suspend fun setVisualizerTheme(theme: VisualizerTheme) =
+        dataStore.edit { it[keyVisualizerTheme] = theme.name }
+
+    suspend fun setVisualizerQuality(quality: VisualQuality) =
+        dataStore.edit { it[keyVisualizerQuality] = quality.name }
+
+    suspend fun setMetingApiBaseUrl(url: String) =
+        dataStore.edit {
+            it[keyMetingApiBaseUrl] = url.trim().trim('`', '\'', '"').trim()
+        }
+
+    suspend fun setMvApiBaseUrl(url: String) =
+        dataStore.edit {
+            it[keyMvApiBaseUrl] = url.trim().trim('`', '\'', '"').trim()
+        }
+
+    // --- 网络音乐平台来源 ---
+
+    /**
+     * 同步获取当前音乐平台来源（用于 MetingApiService 的 serverProvider）
+     * 在每次请求时同步读取，支持运行时切换平台。
+     *
+     * R-7 第三类修复（路 A）：读 @Volatile 内存镜像，无 IO 无阻塞。
+     */
+    fun getMusicSourceSync(): String = cachedMusicSource
+
+    suspend fun setMusicSource(sourceKey: String) {
+        dataStore.edit { it[keyMusicSource] = sourceKey }
+    }
+
+    // --- Jamendo（CC 独立音乐）设置 ---
+    suspend fun setJamendoClientId(id: String) {
+        dataStore.edit { it[keyJamendoClientId] = id.trim() }
+    }
+
+    /**
+     * 同步读取 Jamendo Client ID（用于 JamendoService 每次请求时读取）。
+     * R-7 第三类修复（路 A）：读 @Volatile 内存镜像。
+     */
+    fun getJamendoClientIdSync(): String = cachedJamendoClientId
+
+    // --- 天气电台设置 ---
+
+    /**
+     * 获取天气是否启用
+     */
+    val weatherEnabled: Flow<Boolean> = dataStore.data.map { prefs ->
+        prefs[keyWeatherEnabled] ?: true
+    }
+
+    suspend fun setWeatherEnabled(enabled: Boolean) {
+        dataStore.edit { it[keyWeatherEnabled] = enabled }
+    }
+
+    /**
+     * 获取手动设置的城市名（空串=自动定位）
+     */
+    val weatherManualCity: Flow<String> = dataStore.data.map { prefs ->
+        prefs[keyWeatherManualCity] ?: ""
+    }
+
+    suspend fun setWeatherManualCity(city: String) {
+        dataStore.edit { it[keyWeatherManualCity] = city }
+    }
+
+    /**
+     * 获取天气自动刷新开关
+     */
+    val weatherAutoRefresh: Flow<Boolean> = dataStore.data.map { prefs ->
+        prefs[keyWeatherAutoRefresh] ?: true
+    }
+
+    suspend fun setWeatherAutoRefresh(enabled: Boolean) {
+        dataStore.edit { it[keyWeatherAutoRefresh] = enabled }
+    }
+
+    /**
+     * OpenWeatherMap API Key
+     * 当 Open-Meteo 不可用时的备选天气数据源
+     * F-7：读加密键（AES-GCM 解密）；解密失败回退空串
+     */
+    val weatherApiKey: Flow<String> = dataStore.data.map { prefs ->
+        val enc = prefs[keyWeatherApiKeyEnc]
+        if (!enc.isNullOrBlank()) {
+            try { com.nasmusic.tv.util.CryptoUtils.decrypt(enc) } catch (e: Exception) { "" }
+        } else ""
+    }
+
+    /**
+     * R-7 第二类修复：天气 API Key 同步读改 @Volatile 内存镜像。
+     * 调用点 WeatherRadioViewModel.fetchWeather 在 Main 协程内——原先此处
+     * runBlocking 会冻住主线程触发 ANR。
+     */
+    fun getWeatherApiKeySync(): String = cachedWeatherApiKey
+
+    /** F-7：写入加密键（同时清除旧明文键） */
+    suspend fun setWeatherApiKey(key: String) {
+        val trimmed = key.trim()
+        dataStore.edit { prefs ->
+            prefs[keyWeatherApiKeyEnc] = com.nasmusic.tv.util.CryptoUtils.encrypt(trimmed)
+            prefs.remove(keyWeatherApiKey)  // 迁移后清除明文
+        }
+    }
+
+    /**
+     * F-7：一次性迁移——旧明文键有值且加密键为空时，加密搬移。
+     * 幂等；由 startProviderMirrors 前（NasMusicApp.onCreate）调用。
+     */
+    private suspend fun migrateWeatherApiKeyIfNeeded() {
+        val prefs = dataStore.data.first()
+        val legacy = prefs[keyWeatherApiKey]
+        if (!legacy.isNullOrBlank() && prefs[keyWeatherApiKeyEnc].isNullOrBlank()) {
+            setWeatherApiKey(legacy)
+            AppLog.i(TAG, "weather API key migrated to encrypted storage")
+        }
+    }
+
+    // --- 封面滤镜设置 ---
+
+    val coverFilterEnabled: Flow<Boolean> = dataStore.data.map { prefs ->
+        prefs[keyCoverFilterEnabled] ?: false
+    }
+
+    suspend fun setCoverFilterEnabled(enabled: Boolean) {
+        dataStore.edit { it[keyCoverFilterEnabled] = enabled }
+    }
+
+    val coverFilterBlurRadius: Flow<Float> = dataStore.data.map { prefs ->
+        (prefs[keyCoverFilterBlurRadius] ?: 8.0).toFloat()
+    }
+
+    suspend fun setCoverFilterBlurRadius(radius: Float) {
+        dataStore.edit { it[keyCoverFilterBlurRadius] = radius.toDouble() }
+    }
+
+    val coverFilterDarkOverlay: Flow<Float> = dataStore.data.map { prefs ->
+        (prefs[keyCoverFilterDarkOverlay] ?: 0.3).toFloat()
+    }
+
+    suspend fun setCoverFilterDarkOverlay(overlay: Float) {
+        dataStore.edit { it[keyCoverFilterDarkOverlay] = overlay.toDouble() }
+    }
+
+    suspend fun setSpectrumEnabled(enabled: Boolean) {
+        dataStore.edit { it[keySpectrumEnabled] = enabled }
+    }
+
+    // --- F2-5 跨曲交叉淡入淡出 ---
+    private val keyCrossfadeEnabled = booleanPreferencesKey("settings_crossfade_enabled")
+    private val keyCrossfadeDurationSec = intPreferencesKey("settings_crossfade_duration_sec")
+
+    // --- F2-6 音质分级 ---
+    /** 音质档位：AUTO(0，按带宽) / LOSSLESS(999) / HIGH(320) / STANDARD(128) */
+    private val keyQualityTier = intPreferencesKey("settings_quality_tier")
+
+    val crossfadeEnabled: Flow<Boolean> = dataStore.data.map { it[keyCrossfadeEnabled] ?: false }
+    val crossfadeDurationSec: Flow<Int> = dataStore.data.map { it[keyCrossfadeDurationSec] ?: 4 }
+
+    suspend fun setCrossfadeEnabled(enabled: Boolean) {
+        dataStore.edit { it[keyCrossfadeEnabled] = enabled }
+    }
+
+    suspend fun setCrossfadeDurationSec(sec: Int) {
+        dataStore.edit { it[keyCrossfadeDurationSec] = sec.coerceIn(1, 12) }
+    }
+
+    /** F2-6：音质档位（Meting br 参数；AUTO 时不传由 BandwidthEstimator 决策） */
+    val qualityTier: Flow<Int> = dataStore.data.map { it[keyQualityTier] ?: QUALITY_TIER_AUTO }
+
+    suspend fun setQualityTier(tier: Int) {
+        dataStore.edit { it[keyQualityTier] = tier }
+    }
+
+    /**
+     * 同步获取当前默认网络源（用于 NetworkMusicManager 的 defaultSourceProvider）。
+     * R-7 第三类修复（路 A）：读 @Volatile 内存镜像。
+     */
+    fun getDefaultNetworkSourceSync(): String = cachedDefaultNetworkSource
+
+    /** F2-6：同步读取音质档位（MetingApiService qualityTierProvider 用） */
+    fun getQualityTierSync(): Int = cachedQualityTier
+
+    /**
+     * 同步获取 Meting-API 端点 URL（用于 MetingApiService 的 baseUrlProvider）。
+     * R-7 第三类修复（路 A）：读 @Volatile 内存镜像。
+     */
+    fun getMetingApiBaseUrlSync(): String = cachedMetingApiBaseUrl
+
+    /**
+     * 同步获取 MTV 视频搜索端点 URL（用于 BilibiliMvService 的 baseUrlProvider）。
+     * R-7 第三类修复（路 A）：读 @Volatile 内存镜像。
+     */
+    fun getMvApiBaseUrlSync(): String = cachedMvApiBaseUrl
+
+    /**
+     * 同步获取高质量分离模型自定义下载 URL（用于 ModelDownloadManager 的 customUrlProvider）。
+     * 空串表示使用内置默认候选列表（hf-mirror → huggingface）。
+     */
+    fun getModelDownloadUrlSync(): String = cachedModelDownloadUrl
+
+    /** 设置模型自定义下载 URL（空串=恢复默认候选列表） */
+    suspend fun setModelDownloadUrl(url: String) =
+        dataStore.edit {
+            it[keyModelDownloadUrl] = url.trim().trim('`', '\'', '"').trim()
+        }
+
+    // --- 网络歌词端点（Kugou / Netease）---
+    /** R-7 第三类修复（路 A）：读 @Volatile 内存镜像（原主线程急切求值 runBlocking） */
+    fun getLyricsKugouBaseUrlSync(): String = cachedLyricsKugouBaseUrl
+
+    /** R-7 第三类修复（路 A）：读 @Volatile 内存镜像（原主线程急切求值 runBlocking） */
+    fun getLyricsNeteaseBaseUrlSync(): String = cachedLyricsNeteaseBaseUrl
+
+    suspend fun setLyricsKugouBaseUrl(url: String) =
+        dataStore.edit {
+            it[keyLyricsKugouBaseUrl] = url.trim().trim('`', '\'', '"').trim()
+        }
+
+    suspend fun setLyricsNeteaseBaseUrl(url: String) =
+        dataStore.edit {
+            it[keyLyricsNeteaseBaseUrl] = url.trim().trim('`', '\'', '"').trim()
+        }
+
+    // --- 网络歌曲收藏 ---
+
+    /**
+     * 网络收藏列表 Flow（响应式，收藏变化时自动更新）
+     */
+    val networkFavorites: Flow<List<NetworkFavoriteItem>> = dataStore.data.map { prefs ->
+        val json = prefs[keyNetworkFavorites] ?: "[]"
+        try {
+            gson.fromJson<List<NetworkFavoriteItem>>(json, object : TypeToken<List<NetworkFavoriteItem>>() {}.type)
+        } catch (e: Exception) { emptyList() }
+    }
+
+    /**
+     * 同步获取网络收藏列表（用于 isFavorite 判断，非 Flow）
+     */
+    suspend fun getNetworkFavorites(): List<NetworkFavoriteItem> {
+        return try {
+            dataStore.data.first().let { prefs ->
+                val json = prefs[keyNetworkFavorites] ?: "[]"
+                gson.fromJson<List<NetworkFavoriteItem>>(json, object : TypeToken<List<NetworkFavoriteItem>>() {}.type) ?: emptyList()
+            }
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+
+    /**
+     * 切换网络收藏状态（已收藏则取消，未收藏则添加）
+     * 新收藏的歌曲添加到列表头部（最新在前）
+     * 超过 networkFavoritesMaxSize（500 条）时自动清理最旧的收藏
+     */
+    suspend fun toggleNetworkFavorite(item: NetworkFavoriteItem) {
+        dataStore.edit { prefs ->
+            val json = prefs[keyNetworkFavorites] ?: "[]"
+            val list = safeParseJson("network_favorites", json) {
+                gson.fromJson<MutableList<NetworkFavoriteItem>>(json, object : TypeToken<MutableList<NetworkFavoriteItem>>() {}.type)
+            } ?: return@edit  // 解析失败：跳过回写，保留原数据
+
+            val mutable = list.toMutableList()
+            val existing = mutable.indexOfFirst { it.songId == item.songId }
+            if (existing >= 0) {
+                mutable.removeAt(existing)  // 取消收藏
+            } else {
+                mutable.add(0, item)  // 添加收藏（最新在前）
+                // LRU 上限：超过 500 条时移除最旧的（列表末尾）
+                while (mutable.size > networkFavoritesMaxSize) {
+                    mutable.removeAt(mutable.size - 1)
+                }
+            }
+            prefs[keyNetworkFavorites] = gson.toJson(mutable)
+        }
+    }
+
+    // --- 本地歌单（DataStore JSON，独立于 NAS 后端歌单）---
+
+    /**
+     * 本地歌单列表 Flow（响应式，歌单变化时自动更新）
+     */
+    val localPlaylists: Flow<List<LocalPlaylist>> = dataStore.data.map { prefs ->
+        val json = prefs[keyLocalPlaylists] ?: "[]"
+        try {
+            gson.fromJson<List<LocalPlaylist>>(json, object : TypeToken<List<LocalPlaylist>>() {}.type)
+        } catch (e: Exception) { emptyList() }
+    }
+
+    /**
+     * 一次性读取本地歌单列表
+     */
+    suspend fun getLocalPlaylists(): List<LocalPlaylist> {
+        return try {
+            dataStore.data.first().let { prefs ->
+                val json = prefs[keyLocalPlaylists] ?: "[]"
+                gson.fromJson<List<LocalPlaylist>>(json, object : TypeToken<List<LocalPlaylist>>() {}.type) ?: emptyList()
+            }
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+
+    /**
+     * 创建本地歌单（最新创建的放最前）
+     */
+    suspend fun createLocalPlaylist(name: String): LocalPlaylist {
+        val trimmed = name.trim()
+        require(trimmed.isNotEmpty()) { "Playlist name must not be empty" }
+        lateinit var created: LocalPlaylist
+        dataStore.edit { prefs ->
+            val json = prefs[keyLocalPlaylists] ?: "[]"
+            val list = safeParseJson("local_playlists", json) {
+                gson.fromJson<MutableList<LocalPlaylist>>(json, object : TypeToken<MutableList<LocalPlaylist>>() {}.type)
+            } ?: mutableListOf()  // 歌单数据损坏时仍可创建新歌单（原数据保留，本函数不覆盖）
+
+            val playlist = LocalPlaylist(
+                id = java.util.UUID.randomUUID().toString(),
+                name = trimmed,
+                createdAt = System.currentTimeMillis()
+            )
+            val mutable = list.toMutableList()
+            mutable.add(0, playlist)
+            prefs[keyLocalPlaylists] = gson.toJson(mutable)
+            created = playlist
+        }
+        return created
+    }
+
+    /**
+     * 重命名本地歌单
+     */
+    suspend fun renameLocalPlaylist(id: String, newName: String) {
+        val trimmed = newName.trim()
+        if (trimmed.isEmpty()) return
+        dataStore.edit { prefs ->
+            val json = prefs[keyLocalPlaylists] ?: "[]"
+            val list = safeParseJson("local_playlists", json) {
+                gson.fromJson<MutableList<LocalPlaylist>>(json, object : TypeToken<MutableList<LocalPlaylist>>() {}.type)
+            } ?: return@edit
+
+            val mutable = list.toMutableList()
+            val idx = mutable.indexOfFirst { it.id == id }
+            if (idx >= 0) {
+                mutable[idx] = mutable[idx].copy(name = trimmed)
+                prefs[keyLocalPlaylists] = gson.toJson(mutable)
+            }
+        }
+    }
+
+    /**
+     * 删除本地歌单
+     */
+    suspend fun deleteLocalPlaylist(id: String) {
+        dataStore.edit { prefs ->
+            val json = prefs[keyLocalPlaylists] ?: "[]"
+            val list = safeParseJson("local_playlists", json) {
+                gson.fromJson<MutableList<LocalPlaylist>>(json, object : TypeToken<MutableList<LocalPlaylist>>() {}.type)
+            } ?: return@edit
+
+            val mutable = list.toMutableList()
+            if (mutable.removeAll { it.id == id }) {
+                prefs[keyLocalPlaylists] = gson.toJson(mutable)
+            }
+        }
+    }
+
+    /**
+     * 添加歌曲到本地歌单（按 song.id 去重；仅网络歌曲 streamUrl 置空不持久化）
+     * @return true 添加成功；false 歌单不存在或歌曲已在歌单中
+     */
+    suspend fun addSongToPlaylist(playlistId: String, song: Song): Boolean {
+        var added = false
+        dataStore.edit { prefs ->
+            val json = prefs[keyLocalPlaylists] ?: "[]"
+            val list = safeParseJson("local_playlists", json) {
+                gson.fromJson<MutableList<LocalPlaylist>>(json, object : TypeToken<MutableList<LocalPlaylist>>() {}.type)
+            } ?: return@edit
+
+            val mutable = list.toMutableList()
+            val idx = mutable.indexOfFirst { it.id == playlistId }
+            if (idx < 0) {
+                added = false
+            } else {
+                val current = mutable[idx]
+                if (current.songs.any { it.id == song.id }) {
+                    added = false
+                } else {
+                    mutable[idx] = current.copy(songs = current.songs + song.stripVolatileStreamUrl())
+                    prefs[keyLocalPlaylists] = gson.toJson(mutable)
+                    added = true
+                }
+            }
+        }
+        return added
+    }
+
+    /**
+     * 从本地歌单移除歌曲
+     */
+    suspend fun removeSongFromPlaylist(playlistId: String, songId: String) {
+        dataStore.edit { prefs ->
+            val json = prefs[keyLocalPlaylists] ?: "[]"
+            val list = safeParseJson("local_playlists", json) {
+                gson.fromJson<MutableList<LocalPlaylist>>(json, object : TypeToken<MutableList<LocalPlaylist>>() {}.type)
+            } ?: return@edit
+
+            val mutable = list.toMutableList()
+            val idx = mutable.indexOfFirst { it.id == playlistId }
+            if (idx >= 0) {
+                val current = mutable[idx]
+                mutable[idx] = current.copy(songs = current.songs.filterNot { it.id == songId })
+                prefs[keyLocalPlaylists] = gson.toJson(mutable)
+            }
+        }
+    }
+
+    // --- 上次播放队列持久化 ---
+
+    /**
+     * 上次播放队列的持久化数据结构
+     * @param songs 队列歌曲列表（streamUrl 置空，播放时重新解析）
+     * @param currentIndex 当前播放索引
+     */
+    data class LastQueueData(
+        val songs: List<Song>,
+        val currentIndex: Int
+    )
+
+    /**
+     * 保存上次播放队列
+     * 仅网络歌曲 streamUrl 置空后序列化（直链有时效）；本地歌曲保留 file:// URI
+     */
+    suspend fun saveLastQueue(songs: List<Song>, currentIndex: Int) {
+        dataStore.edit { prefs ->
+            val songsToSave = songs.map { it.stripVolatileStreamUrl() }
+            val data = LastQueueData(songsToSave, currentIndex)
+            prefs[keyLastQueue] = gson.toJson(data)
+        }
+    }
+
+    /**
+     * 读取上次播放队列（用于应用启动时恢复，调用方需在协程中）
+     */
+    suspend fun getLastQueue(): LastQueueData? {
+        return try {
+            dataStore.data.first().let { prefs ->
+                val json = prefs[keyLastQueue] ?: return@let null
+                gson.fromJson<LastQueueData>(json, LastQueueData::class.java)
+            }
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    /**
+     * 清除上次播放队列（用户主动清空队列时调用）
+     */
+    suspend fun clearLastQueue() {
+        dataStore.edit { prefs ->
+            prefs.remove(keyLastQueue)
+        }
+    }
+
+    // ========== 播放统计 ==========
+
+    private data class PlayRecordsData(
+        val records: List<com.nasmusic.tv.data.model.PlayRecord> = emptyList()
+    )
+
+    /**
+     * 记录一次播放
+     */
+    suspend fun addPlayRecord(record: com.nasmusic.tv.data.model.PlayRecord) {
+        dataStore.edit { prefs ->
+            val json = prefs[keyPlayRecords] ?: "{\"records\":[]}"
+            val data = safeParseJson("play_records", json) {
+                gson.fromJson<PlayRecordsData>(json, PlayRecordsData::class.java)
+            } ?: return@edit  // 解析失败：跳过回写，保留原数据
+            // 最多保留 500 条记录
+            val updated = PlayRecordsData(
+                records = (listOf(record) + data.records).take(500)
+            )
+            prefs[keyPlayRecords] = gson.toJson(updated)
+        }
+    }
+
+    /**
+     * 获取所有播放记录
+     */
+    suspend fun getPlayRecords(): List<com.nasmusic.tv.data.model.PlayRecord> {
+        return try {
+            dataStore.data.first().let { prefs ->
+                val json = prefs[keyPlayRecords] ?: return emptyList()
+                val data = gson.fromJson<PlayRecordsData>(json, PlayRecordsData::class.java)
+                data.records
+            }
+        } catch (e: Exception) {
+            AppLog.w(TAG, "Failed to read play records", e)
+            emptyList()
+        }
+    }
+
+    /**
+     * 清除所有播放记录
+     */
+    suspend fun clearPlayRecords() {
+        dataStore.edit { prefs ->
+            prefs.remove(keyPlayRecords)
+        }
+    }
+
+    // ========== 搜索历史 ==========
+
+    /**
+     * 搜索历史列表 Flow（响应式）
+     * 列表按 lastSearchedAt 降序（最新在前）
+     */
+    val searchHistory: Flow<List<SearchHistoryItem>> = dataStore.data.map { prefs ->
+        val json = prefs[keySearchHistory] ?: "[]"
+        try {
+            gson.fromJson<List<SearchHistoryItem>>(json, object : TypeToken<List<SearchHistoryItem>>() {}.type)
+        } catch (e: Exception) { emptyList() }
+    }
+
+    /**
+     * 一次性读取搜索历史
+     */
+    suspend fun getSearchHistory(): List<SearchHistoryItem> {
+        return try {
+            dataStore.data.first().let { prefs ->
+                val json = prefs[keySearchHistory] ?: "[]"
+                gson.fromJson<List<SearchHistoryItem>>(json, object : TypeToken<List<SearchHistoryItem>>() {}.type) ?: emptyList()
+            }
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+
+    /**
+     * 记录一次搜索
+     * 1. 同名 query 合并：count+1、lastSearchedAt 更新为当前时间、移到列表头部
+     * 2. 清理超过 30 天的条目
+     * 3. 超过 200 条上限时裁剪尾部
+     */
+    suspend fun recordSearch(query: String) {
+        val trimmed = query.trim()
+        if (trimmed.isEmpty()) return
+        val now = System.currentTimeMillis()
+        dataStore.edit { prefs ->
+            val json = prefs[keySearchHistory] ?: "[]"
+            val list = safeParseJson("search_history", json) {
+                gson.fromJson<MutableList<SearchHistoryItem>>(json, object : TypeToken<MutableList<SearchHistoryItem>>() {}.type)
+            } ?: return@edit
+
+            val mutable = list.toMutableList()
+            // 合并同名条目
+            val existingIdx = mutable.indexOfFirst { it.query == trimmed }
+            if (existingIdx >= 0) {
+                val existing = mutable.removeAt(existingIdx)
+                mutable.add(0, existing.copy(lastSearchedAt = now, count = existing.count + 1))
+            } else {
+                mutable.add(0, SearchHistoryItem(query = trimmed, lastSearchedAt = now, count = 1))
+            }
+            // 30 天 TTL 清理
+            val cutoff = now - searchHistoryTtlMs
+            mutable.removeAll { it.lastSearchedAt < cutoff }
+            // 数量上限裁剪
+            if (mutable.size > searchHistoryMaxSize) {
+                mutable.subList(searchHistoryMaxSize, mutable.size).clear()
+            }
+            prefs[keySearchHistory] = gson.toJson(mutable)
+        }
+    }
+
+    /**
+     * 清理超过 30 天的搜索历史条目
+     * 在应用启动时调用一次
+     */
+    suspend fun purgeExpiredSearchHistory() {
+        val now = System.currentTimeMillis()
+        val cutoff = now - searchHistoryTtlMs
+        dataStore.edit { prefs ->
+            val json = prefs[keySearchHistory] ?: return@edit
+            val list = safeParseJson("search_history", json) {
+                gson.fromJson<MutableList<SearchHistoryItem>>(json, object : TypeToken<MutableList<SearchHistoryItem>>() {}.type)
+            } ?: return@edit
+
+            val mutable = list.toMutableList()
+            val beforeSize = mutable.size
+            mutable.removeAll { it.lastSearchedAt < cutoff }
+            if (mutable.size != beforeSize) {
+                prefs[keySearchHistory] = gson.toJson(mutable)
+            }
+        }
+    }
+
+    // ========== 数据备份 ==========
+
+    /**
+     * 备份文件数据结构
+     *
+     * 注意：不包含敏感字段 —— 密码、API Token、天气 API Key 一律不导出。
+     * 恢复后服务器需重新输入密码连接（isConnected=false）。
+     */
+    // ===================== 网盘配置（CloudDriveConfig，按 CloudDriveType 存取）=====================
+    // 存储：keyCloudDriveConfig 存 JSON Map<type.key, CloudDriveConfigJson>，其中 tokens 的 accessToken/refreshToken 用 CryptoUtils 加密。
+
+    /**
+     * 同步读取某网盘配置。
+     *
+     * R-7 第四类：保留 runBlocking（通用同步入口，供非协程上下文兜底；禁止主线程协程内调用）。
+     * T2（2026-09-14）第一批：外部 UI/App 调用点迁移到 baiduConfigFlow.first()；
+     * 第二批：百度 token/配置便捷方法全部改为 suspend + baiduConfigFlow.first()，
+     * BaiduOAuthClient/BaiduNetdiskService/BaiduMvFileService 调用方已同步迁移，本入口仅作通用兜底。
+     */
+    @androidx.annotation.WorkerThread
+    fun getCloudDriveConfigSync(type: CloudDriveType): CloudDriveConfig? {
+        return try {
+            runBlocking(Dispatchers.IO) {
+                val json = dataStore.data.first()[keyCloudDriveConfig] ?: return@runBlocking null
+                loadCloudDriveConfigs(json)[type.key]
+            }
+        } catch (e: Exception) {
+            AppLog.w(TAG, "getCloudDriveConfigSync error", e)
+            null
+        }
+    }
+
+    /** 百度配置 Flow（修复 H-3：UI 订阅用，替代组合内 runBlocking 同步读） */
+    val baiduConfigFlow: Flow<CloudDriveConfig> = dataStore.data.map { prefs ->
+        loadCloudDriveConfigs(prefs[keyCloudDriveConfig] ?: "{}")[CloudDriveType.BAIDU.key]
+            ?: CloudDriveConfig(CloudDriveType.BAIDU)
+    }
+
+    /** Jamendo Client ID Flow（修复 H-3：同上） */
+    val jamendoClientIdFlow: Flow<String> = dataStore.data.map { prefs ->
+        prefs[keyJamendoClientId] ?: ""
+    }
+
+    /** 异步保存某网盘配置（增量合并到现有 Map） */
+    suspend fun saveCloudDriveConfig(config: CloudDriveConfig) {
+        dataStore.edit { prefs ->
+            val json = prefs[keyCloudDriveConfig] ?: "{}"
+            val map = loadCloudDriveConfigs(json).toMutableMap()
+            map[config.type.key] = config
+            prefs[keyCloudDriveConfig] = saveCloudDriveConfigs(map)
+        }
+    }
+
+    /** 同步保存（OAuth 客户端在非协程上下文调用；R-7 第四类：保留 runBlocking，禁止主线程协程内调用） */
+    @androidx.annotation.WorkerThread
+    fun saveCloudDriveConfigSync(config: CloudDriveConfig) {
+        runBlocking(Dispatchers.IO) { saveCloudDriveConfig(config) }
+    }
+
+    // ---- 百度 token 便捷读写（加解密 accessToken/refreshToken；T2 第二批：suspend + baiduConfigFlow.first()）----
+
+    /** 异步读取百度 token（解密） */
+    suspend fun getBaiduTokens(): BaiduTokens? {
+        val cfg = baiduConfigFlow.first()
+        val t = cfg.tokens ?: return null
+        return try {
+            val decAt = CryptoUtils.decrypt(t.accessToken).ifBlank { return null }
+            val decRt = CryptoUtils.decrypt(t.refreshToken).ifBlank { return null }
+            AppLog.d(TAG, "getBaiduTokens: token decrypted (len=${decAt.length}), expiresAt=${t.expiresAt}")
+            t.copy(accessToken = decAt, refreshToken = decRt)
+        } catch (e: Exception) {
+            AppLog.w(TAG, "getBaiduTokens decrypt error", e)
+            null
+        }
+    }
+
+    /** 异步保存百度 token（加密） */
+    suspend fun saveBaiduTokens(tokens: BaiduTokens) {
+        val cfg = baiduConfigFlow.first().copy(
+            tokens = tokens.copy(
+                accessToken = CryptoUtils.encrypt(tokens.accessToken),
+                refreshToken = CryptoUtils.encrypt(tokens.refreshToken)
+            )
+        )
+        saveCloudDriveConfig(cfg)
+    }
+
+    /** 清除百度 token（登出/刷新失败降级用） */
+    suspend fun clearBaiduTokens() {
+        val cfg = baiduConfigFlow.first().copy(tokens = null)
+        saveCloudDriveConfig(cfg)
+    }
+
+    // ---- 百度配置项便捷存取 ----
+
+    suspend fun getBaiduEnabled(): Boolean = baiduConfigFlow.first().enabled
+    suspend fun setBaiduEnabled(enabled: Boolean) =
+        saveCloudDriveConfig(baiduConfigFlow.first().copy(enabled = enabled))
+    suspend fun getBaiduMusicRootDir(): String {
+        val saved = baiduConfigFlow.first().musicRootDir
+        val appDir = com.nasmusic.tv.backend.network.baidu.BaiduNetdiskConfig.APP_DIR
+        // 空白或不在沙盒 /apps/NASMusicTV 下的旧路径，自动纠正为沙盒目录
+        val corrected = saved.ifBlank { appDir }
+        if (corrected != appDir && !corrected.startsWith(appDir)) {
+            com.nasmusic.tv.util.AppLog.w("AppPreferences", "musicRootDir='$corrected' outside sandbox, resetting to $appDir")
+            setBaiduMusicRootDir(appDir)
+            return appDir
+        }
+        return corrected
+    }
+    suspend fun setBaiduMusicRootDir(dir: String) =
+        saveCloudDriveConfig(baiduConfigFlow.first().copy(musicRootDir = dir))
+    suspend fun getBaiduMvDir(): String? {
+        val saved = baiduConfigFlow.first().mvDir
+        val appDir = com.nasmusic.tv.backend.network.baidu.BaiduNetdiskConfig.APP_DIR
+        // MV 目录不在沙盒下则视为无效，返回 null（调用方会 fallback 到 musicRootDir）
+        if (saved != null && saved.isNotBlank() && !saved.startsWith(appDir)) {
+            com.nasmusic.tv.util.AppLog.w("AppPreferences", "mvDir='$saved' outside sandbox, clearing")
+            setBaiduMvDir(null)
+            return null
+        }
+        return saved
+    }
+    suspend fun setBaiduMvDir(dir: String?) =
+        saveCloudDriveConfig(baiduConfigFlow.first().copy(mvDir = dir))
+    suspend fun getBaiduCustomAppKey(): String? = baiduConfigFlow.first().customAppKey
+    suspend fun setBaiduCustomAppKey(key: String?) =
+        saveCloudDriveConfig(baiduConfigFlow.first().copy(customAppKey = key))
+    suspend fun getBaiduCustomSecretKey(): String? = baiduConfigFlow.first().customSecretKey
+    suspend fun setBaiduCustomSecretKey(secret: String?) =
+        saveCloudDriveConfig(baiduConfigFlow.first().copy(customSecretKey = secret))
+    suspend fun getBaiduApiDriftNotified(): Boolean = baiduConfigFlow.first().apiDriftNotified
+    suspend fun setBaiduApiDriftNotified(v: Boolean) =
+        saveCloudDriveConfig(baiduConfigFlow.first().copy(apiDriftNotified = v))
+
+    // ---- 内部：CloudDriveConfig Map <-> JSON（tokens 加密）----
+
+    private fun loadCloudDriveConfigs(json: String): Map<String, CloudDriveConfig> {
+        return try {
+            val type = object : TypeToken<Map<String, CloudDriveConfig>>() {}.type
+            val raw: Map<String, CloudDriveConfig> = gson.fromJson(json, type) ?: emptyMap()
+            raw
+        } catch (e: Exception) {
+            AppLog.w(TAG, "loadCloudDriveConfigs parse error", e)
+            emptyMap()
+        }
+    }
+
+    private fun saveCloudDriveConfigs(map: Map<String, CloudDriveConfig>): String =
+        try { gson.toJson(map) } catch (e: Exception) { "{}" }
+
+    data class BackupData(
+        val version: Int = 1,
+        val exportedAt: Long = System.currentTimeMillis(),
+        val serverConfig: ServerConfig? = null,
+        val appSettings: AppSettings? = null,
+        val networkFavorites: List<NetworkFavoriteItem> = emptyList(),
+        val localPlaylists: List<LocalPlaylist> = emptyList(),
+        val lastQueue: LastQueueData? = null,
+        val recentSongIds: List<String> = emptyList(),
+        val recentSongObjects: List<Song> = emptyList(),
+        val playCounts: Map<String, Int> = emptyMap(),
+        val playRecords: List<com.nasmusic.tv.data.model.PlayRecord> = emptyList(),
+        val searchHistory: List<SearchHistoryItem> = emptyList(),
+        val equalizerPreset: EqualizerPreset? = null,
+        val equalizerBands: List<Float> = emptyList(),
+        // v2: 新增备份项（旧备份文件恢复时用默认值）
+        val mvCacheEntries: List<com.nasmusic.tv.data.model.MvCacheEntry> = emptyList(),
+        val weatherEnabled: Boolean = true,
+        val weatherManualCity: String = "",
+        val weatherAutoRefresh: Boolean = true,
+        val coverFilterEnabled: Boolean = false,
+        val coverFilterBlurRadius: Double = 8.0,
+        val coverFilterDarkOverlay: Double = 0.3,
+        val musicSource: String = "",
+        val lyricsFontScale: Double = 1.0
+    )
+
+    /**
+     * 导出备份数据（敏感字段已排除：密码、API Token、天气 API Key）
+     */
+    suspend fun exportBackupData(): BackupData {
+        val config = serverConfig.first()
+        val ds = dataStore.data.first()
+        return BackupData(
+            serverConfig = if (config.baseUrl.isNotBlank()) {
+                config.copy(apiToken = "", password = "", isConnected = false)
+            } else null,
+            appSettings = appSettings.first(),
+            networkFavorites = getNetworkFavorites(),
+            localPlaylists = getLocalPlaylists(),
+            lastQueue = getLastQueue(),
+            recentSongIds = getRecentSongIds(),
+            recentSongObjects = getRecentSongObjects(),
+            playCounts = playCounts.first(),
+            playRecords = getPlayRecords(),
+            searchHistory = getSearchHistory(),
+            equalizerPreset = equalizerPreset.first(),
+            equalizerBands = equalizerBands.first(),
+            // v2: 补全之前遗漏的设置项
+            weatherEnabled = ds[keyWeatherEnabled] ?: true,
+            weatherManualCity = ds[keyWeatherManualCity] ?: "",
+            weatherAutoRefresh = ds[keyWeatherAutoRefresh] ?: true,
+            coverFilterEnabled = ds[keyCoverFilterEnabled] ?: false,
+            coverFilterBlurRadius = ds[keyCoverFilterBlurRadius] ?: 8.0,
+            coverFilterDarkOverlay = ds[keyCoverFilterDarkOverlay] ?: 0.3,
+            musicSource = ds[keyMusicSource] ?: "",
+            lyricsFontScale = ds[keyLyricsFontScale] ?: 1.0
+        )
+    }
+
+    /**
+     * 导入备份数据并恢复至 DataStore
+     * 服务器密码/API Token 不在备份中，恢复后 isConnected=false，需重新输入密码连接
+     */
+    suspend fun importBackupData(data: BackupData) {
+        data.serverConfig?.let { config ->
+            saveServerConfig(
+                config.copy(apiToken = "", password = "", isConnected = false)
+            )
+        }
+        data.appSettings?.let { settings ->
+            dataStore.edit { prefs ->
+                prefs[keyDarkTheme] = settings.darkTheme
+                prefs[keyAnimations] = settings.animationsEnabled
+                prefs[keyAutoPlayNext] = settings.autoPlayNext
+                prefs[keyPlayMode] = settings.defaultPlayMode.ordinal
+                prefs[keyCacheLyrics] = settings.cacheLyrics
+                prefs[keyCacheCover] = settings.cacheCover
+                prefs[keyLyricsOffset] = settings.lyricsOffsetMs
+                prefs[keyDefaultNetworkSource] = settings.defaultNetworkSource.key
+                prefs[keyMetingApiBaseUrl] = settings.metingApiBaseUrl
+                prefs[keyMvApiBaseUrl] = settings.mvApiBaseUrl
+                prefs[keyModelDownloadUrl] = settings.modelDownloadUrl
+                prefs[keyVisualizerTheme] = settings.visualizerTheme.name
+                prefs[keyVisualizerQuality] = settings.visualizerQuality.name
+            }
+        }
+        dataStore.edit { prefs ->
+            prefs[keyNetworkFavorites] = gson.toJson(data.networkFavorites)
+            prefs[keyLocalPlaylists] = gson.toJson(data.localPlaylists)
+            prefs[keyRecentSongs] = gson.toJson(data.recentSongIds)
+            prefs[keyRecentSongObjects] = gson.toJson(
+                RecentSongObjectsData(data.recentSongObjects.map { it.stripVolatileStreamUrl() })
+            )
+            prefs[keyPlayCounts] = gson.toJson(data.playCounts)
+            if (data.lastQueue != null) {
+                prefs[keyLastQueue] = gson.toJson(
+                    data.lastQueue.copy(songs = data.lastQueue.songs.map { it.stripVolatileStreamUrl() })
+                )
+            }
+            data.equalizerPreset?.let { prefs[keyEqualizerPreset] = it.ordinal }
+            if (data.equalizerBands.isNotEmpty()) {
+                prefs[keyEqualizerBands] = gson.toJson(data.equalizerBands)
+            }
+            if (data.playRecords.isNotEmpty()) {
+                prefs[keyPlayRecords] = gson.toJson(PlayRecordsData(data.playRecords))
+            }
+            if (data.searchHistory.isNotEmpty()) {
+                prefs[keySearchHistory] = gson.toJson(data.searchHistory)
+            }
+            // v2: 恢复之前遗漏的设置项
+            prefs[keyWeatherEnabled] = data.weatherEnabled
+            prefs[keyWeatherManualCity] = data.weatherManualCity
+            prefs[keyWeatherAutoRefresh] = data.weatherAutoRefresh
+            prefs[keyCoverFilterEnabled] = data.coverFilterEnabled
+            prefs[keyCoverFilterBlurRadius] = data.coverFilterBlurRadius
+            prefs[keyCoverFilterDarkOverlay] = data.coverFilterDarkOverlay
+            if (data.musicSource.isNotBlank()) prefs[keyMusicSource] = data.musicSource
+            prefs[keyLyricsFontScale] = data.lyricsFontScale
+        }
+    }
+}
+
+========
+- valueFir:
+    Class: org.jetbrains.kotlin.fir.declarations.impl.FirTypeAliasImpl
+Value:
+    public final [ResolvedTo(STATUS)] typealias SeparationMode = R|com/nasmusic/tv/player/SeparationMode|
+
+
+========
+- valueFirElementKind:
+    KtRealSourceElementKind
+========
+- valueFirModuleData:
+    Class: org.jetbrains.kotlin.analysis.low.level.api.fir.projectStructure.LLFirModuleData
+Value:
+    Name: <Sources of app>, Platform: JVM (1.8)
+
+========
+- valueFirSource:
+    Class: org.jetbrains.kotlin.KtRealPsiSourceElement
+Value:
+    <File name: AppPreferences.kt, Physical: true>
+/**
+ * 应用偏好存储
+ * 使用 DataStore 持久化服务器配置与通用设置
+ *
+ * 构造期为 `internal`：生产代码一律走 [getInstance] 单例（DataStore 要求同一文件
+ * 只能有一个实例）；单元测试通过 internal 构造器为每个用例构造独立实例，避免
+ * 单例跨用例串扰（Robolectric 每个用例有独立 dataDir，共享单例会导致 DataStore
+ * 文件锁冲突与标记位污染）。
+ */
+class AppPreferences internal constructor(private val context: Context) {
+
+    // =====================================================================
+    // R-4 门面子域（键不迁移只搬访问器，DataStore 单例不变；调用方渐进迁移，
+    // 旧 API 保留至全部调用点迁移后再 @Deprecated）
+    // =====================================================================
+    val server: ServerPrefs by lazy { ServerPrefs(this) }
+    val player: PlayerPrefs by lazy { PlayerPrefs(this) }
+    val lyrics: LyricsPrefs by lazy { LyricsPrefs(this) }
+    val network: NetworkMusicPrefs by lazy { NetworkMusicPrefs(this) }
+    val baidu: BaiduPrefs by lazy { BaiduPrefs(this) }
+    val download: DownloadPrefs by lazy { DownloadPrefs(this) }
+    val weather: WeatherPrefs by lazy { WeatherPrefs(this) }
+    val visualizer: VisualizerPrefs by lazy { VisualizerPrefs(this) }
+    val history: HistoryPrefs by lazy { HistoryPrefs(this) }
+    val playlist: PlaylistPrefs by lazy { PlaylistPrefs(this) }
+    val queue: QueuePrefs by lazy { QueuePrefs(this) }
+    val languagePrefs: LanguagePrefs by lazy { LanguagePrefs(this) }
+    val backup: BackupPrefs by lazy { BackupPrefs(this) }
+
+    companion object {
+        private const val TAG = "AppPreferences"
+
+        /** F2-6：音质档位常量（Meting br 值；AUTO 由 BandwidthEstimator 决策） */
+        const val QUALITY_TIER_AUTO = 0
+        const val QUALITY_TIER_LOSSLESS = 999
+        const val QUALITY_TIER_HIGH = 320
+        const val QUALITY_TIER_STANDARD = 128
+
+        @Volatile
+        private var INSTANCE: AppPreferences? = null
+
+        fun getInstance(context: Context): AppPreferences {
+            return INSTANCE ?: synchronized(this) {
+                INSTANCE ?: AppPreferences(context.applicationContext).also { INSTANCE = it }
+            }
+        }
+    }
+
+    private val dataStore: androidx.datastore.core.DataStore<androidx.datastore.preferences.core.Preferences> by lazy {
+        PreferenceDataStoreFactory.create {
+            File(context.filesDir, "datastore/nas_music_tv.preferences_pb")
+        }
+    }
+
+    // F2-1：月度播放统计仓库（依赖本类 dataStore/gson，recordPlayWithSong 原子联动写入）
+    internal val playStatsRepo by lazy { com.nasmusic.tv.data.stats.PlayStatsRepository(this) }
+
+    /** F2-1：供 PlayStatsRepository 读取的 DataStore 数据流（包内可见） */
+    internal fun dataStoreData() = dataStore.data
+
+    /** F2-1：供 PlayStatsRepository 复用的 Gson 实例（包内可见） */
+    internal fun gson(): Gson = gson
+
+    // =====================================================================
+    // R-7（方案 2026-09）：
+    // 1. 语言键双写（SharedPreferences 镜像 + DataStore 事实源）——
+    //    attachBaseContext 只读镜像，零 IO、无 runBlocking（第一类修复）。
+    // 2. provider 类键的 @Volatile 内存镜像（DataStore Flow 常驻收集更新）——
+    //    get*Sync 读镜像，调用点零改动（第三类修复，路 A）。
+    // =====================================================================
+
+    /** 语言镜像（只服务冷启动 attachBaseContext，其余设置项不搞双写） */
+    private val mirrorPrefs = context.getSharedPreferences("language_mirror", Context.MODE_PRIVATE)
+
+    // ---- provider 键内存镜像（Application scope 常驻收集更新）----
+    @Volatile private var cachedMusicSource: String = com.nasmusic.tv.data.model.MusicSource.DEFAULT_API_KEY
+    @Volatile private var cachedDefaultNetworkSource: String = NetworkSource.DEFAULT.key
+    /** F2-6：音质档位镜像（默认 AUTO） */
+    @Volatile private var cachedQualityTier: Int = QUALITY_TIER_AUTO
+    @Volatile private var cachedJamendoClientId: String = ""
+    @Volatile private var cachedMetingApiBaseUrl: String = MetingApiService.DEFAULT_BASE_URL
+    @Volatile private var cachedMvApiBaseUrl: String = BilibiliMvService.DEFAULT_BASE_URL
+    /** 高质量分离模型自定义下载 URL 镜像（空=用内置默认候选列表） */
+    @Volatile private var cachedModelDownloadUrl: String = ""
+    @Volatile private var cachedLyricsKugouBaseUrl: String = com.nasmusic.tv.lyrics.LyricsNetworkProvider.DEFAULT_KUGOU_BASE_URL
+    @Volatile private var cachedLyricsNeteaseBaseUrl: String = com.nasmusic.tv.lyrics.LyricsNetworkProvider.DEFAULT_NETEASE_BASE_URL
+    @Volatile private var cachedWeatherApiKey: String = ""
+
+    /** 镜像已启动收集标志（ensureMirrorScopeLoaded 只执行一次） */
+    @Volatile private var mirrorStarted = false
+    private val mirrorLock = Any()
+
+    /**
+     * 启动 provider 键镜像收集（由 NasMusicApp.onCreate 注入 applicationScope 调用，仅一次）。
+     * 设置页改动 → DataStore 写入 → Flow 发射 → @Volatile 镜像更新 → get*Sync 立即生效。
+     */
+    fun startProviderMirrors(scope: kotlinx.coroutines.CoroutineScope) {
+        synchronized(mirrorLock) {
+            if (mirrorStarted) return
+            mirrorStarted = true
+        }
+        // F-7：先做天气 Key 明文→加密一次性迁移（幂等），镜像再从加密键读
+        scope.launch { migrateWeatherApiKeyIfNeeded() }
+        scope.launch {
+            dataStore.data.map { prefs ->
+                val enc = prefs[keyWeatherApiKeyEnc]
+                if (!enc.isNullOrBlank()) {
+                    try { com.nasmusic.tv.util.CryptoUtils.decrypt(enc) } catch (e: Exception) { "" }
+                } else ""
+            }.distinctUntilChanged().collect { cachedWeatherApiKey = it }
+        }
+        scope.launch {
+            dataStore.data.map { it[keyMusicSource] ?: com.nasmusic.tv.data.model.MusicSource.DEFAULT_API_KEY }
+                .distinctUntilChanged().collect { cachedMusicSource = it }
+        }
+        scope.launch {
+            dataStore.data.map { it[keyDefaultNetworkSource] ?: NetworkSource.DEFAULT.key }
+                .distinctUntilChanged().collect { cachedDefaultNetworkSource = NetworkSource.fromKey(it)?.key ?: it }
+        }
+        // F2-6：音质档位镜像（qualityTierProvider 同步读，注册进 MetingApiService）
+        scope.launch {
+            dataStore.data.map { it[keyQualityTier] ?: QUALITY_TIER_AUTO }
+                .distinctUntilChanged().collect { cachedQualityTier = it }
+        }
+        scope.launch {
+            dataStore.data.map { it[keyJamendoClientId] ?: "" }
+                .distinctUntilChanged().collect { cachedJamendoClientId = it }
+        }
+        scope.launch {
+            dataStore.data.map { it[keyMetingApiBaseUrl] ?: MetingApiService.DEFAULT_BASE_URL }
+                .distinctUntilChanged().collect { cachedMetingApiBaseUrl = it }
+        }
+        scope.launch {
+            dataStore.data.map { it[keyMvApiBaseUrl] ?: BilibiliMvService.DEFAULT_BASE_URL }
+                .distinctUntilChanged().collect { cachedMvApiBaseUrl = it }
+        }
+        scope.launch {
+            dataStore.data.map { it[keyLyricsKugouBaseUrl] ?: com.nasmusic.tv.lyrics.LyricsNetworkProvider.DEFAULT_KUGOU_BASE_URL }
+                .distinctUntilChanged().collect { cachedLyricsKugouBaseUrl = it }
+        }
+        scope.launch {
+            dataStore.data.map { it[keyLyricsNeteaseBaseUrl] ?: com.nasmusic.tv.lyrics.LyricsNetworkProvider.DEFAULT_NETEASE_BASE_URL }
+                .distinctUntilChanged().collect { cachedLyricsNeteaseBaseUrl = it }
+        }
+        scope.launch {
+            dataStore.data.map { it[keyModelDownloadUrl] ?: "" }
+                .distinctUntilChanged().collect { cachedModelDownloadUrl = it }
+        }
+        // （F-7：weather 镜像改读加密键，见上方 migrateWeatherApiKeyIfNeeded 后的收集块）
+    }
+
+
+    // --- 服务器配置 ---
+    private val keyBackendType = stringPreferencesKey("server_backend_type")
+    private val keyBaseUrl = stringPreferencesKey("server_base_url")
+    private val keyApiToken = stringPreferencesKey("server_api_token")
+    private val keyUsername = stringPreferencesKey("server_username")
+    private val keyPassword = stringPreferencesKey("server_password")
+    private val keyServerConnected = booleanPreferencesKey("server_connected")
+    private val keyServerDisplayName = stringPreferencesKey("server_display_name")
+
+    // --- 通用设置 ---
+    private val keyDarkTheme = booleanPreferencesKey("settings_dark_theme")
+    private val keyAnimations = booleanPreferencesKey("settings_animations")
+    private val keyAutoPlayNext = booleanPreferencesKey("settings_auto_play_next")
+    private val keyPlayMode = intPreferencesKey("settings_play_mode")
+    private val keyCacheLyrics = booleanPreferencesKey("settings_cache_lyrics")
+    private val keyCacheCover = booleanPreferencesKey("settings_cache_cover")
+    private val keyLyricsOffset = longPreferencesKey("settings_lyrics_offset")
+    private val keyDefaultNetworkSource = stringPreferencesKey("settings_default_network_source")
+    private val keyMetingApiBaseUrl = stringPreferencesKey("settings_meting_api_base_url")
+    private val keyMvApiBaseUrl = stringPreferencesKey("settings_mv_api_base_url")
+    private val keyModelDownloadUrl = stringPreferencesKey("settings_model_download_url")
+    private val keyLyricsKugouBaseUrl = stringPreferencesKey("settings_lyrics_kugou_base_url")
+    private val keyLyricsNeteaseBaseUrl = stringPreferencesKey("settings_lyrics_netease_base_url")
+    private val keyJamendoClientId = stringPreferencesKey("settings_jamendo_client_id")
+
+    // --- B-2 最近播放 & 播放次数（序列化为 JSON）---
+    private val keyRecentSongs = stringPreferencesKey("recent_songs")
+    private val keyRecentSongObjects = stringPreferencesKey("recent_song_objects")
+    private val keyPlayCounts = stringPreferencesKey("play_counts")
+
+    // --- 网络歌曲收藏（序列化为 JSON）---
+    private val keyNetworkFavorites = stringPreferencesKey("network_favorites")
+
+    // --- 本地歌单（序列化为 JSON，独立于 NAS 后端歌单）---
+    private val keyLocalPlaylists = stringPreferencesKey("local_playlists")
+
+    // --- 上次播放队列（序列化为 JSON，streamUrl 置空不持久化）---
+    private val keyLastQueue = stringPreferencesKey("last_queue")
+
+    // --- 天气电台设置 ---
+    private val keyWeatherEnabled = booleanPreferencesKey("weather_enabled")
+    private val keyWeatherManualCity = stringPreferencesKey("weather_manual_city")
+    private val keyWeatherAutoRefresh = booleanPreferencesKey("weather_auto_refresh")
+    private val keyWeatherApiKey = stringPreferencesKey("weather_openweathermap_api_key")
+    /**
+     * F-7：加密存储键（OpenWeatherMap key 属付费资源凭证，泄露可被刷量；
+     * 与服务器密码/百度 token 一致走 CryptoUtils AES-GCM。旧明文键保留做一次性迁移读取）。
+     */
+    private val keyWeatherApiKeyEnc = stringPreferencesKey("weather_openweathermap_api_key_enc")
+
+    // --- 封面滤镜设置（Phase 5） ---
+    private val keyCoverFilterEnabled = booleanPreferencesKey("cover_filter_enabled")
+    private val keyCoverFilterBlurRadius = doublePreferencesKey("cover_filter_blur_radius")
+    private val keyCoverFilterDarkOverlay = doublePreferencesKey("cover_filter_dark_overlay")
+
+    // --- 频谱显示设置 ---
+    private val keySpectrumEnabled = booleanPreferencesKey("settings_spectrum_enabled")
+    private val keyVisualizerTheme = stringPreferencesKey("settings_visualizer_theme")
+    private val keyVisualizerQuality = stringPreferencesKey("visualizer_quality")
+
+    // --- 全局字体字号调整 ---
+    private val keyFontAdjustment = intPreferencesKey("settings_font_adjustment")
+
+    // --- 离线下载（需求 6/7/8/9）---
+    private val keyDownloadEnabled = booleanPreferencesKey("settings_download_enabled")
+    private val keyAutoDownloadOnPlay = booleanPreferencesKey("settings_auto_download_on_play")
+    private val keyAutoDownloadLimit = intPreferencesKey("settings_auto_download_limit")
+    private val keyDownloadLocation = stringPreferencesKey("settings_download_location")
+
+    // --- 导出到外接设备：SAF 授权持久化 ---
+    private val keyExportTreeUri = stringPreferencesKey("export_tree_uri")
+    private val keyExportVolumeId = stringPreferencesKey("export_volume_id")
+
+    // --- 首次曲库快捷键提示 ---
+    private val keyShowLibraryShortcutHint = booleanPreferencesKey("show_library_shortcut_hint")
+
+    // --- 网络音乐平台来源 ---
+    private val keyMusicSource = stringPreferencesKey("music_source")
+
+    // --- B-4 均衡器 ---
+    private val keyEqualizerPreset = intPreferencesKey("equalizer_preset")
+    private val keyEqualizerBands = stringPreferencesKey("equalizer_bands")
+
+    // --- 语言设置 ---
+    private val keyLanguage = stringPreferencesKey("settings_language")
+
+    // --- 语言设置 Flow ---
+    val language: Flow<String> = dataStore.data.map { it[keyLanguage] ?: "system" }
+
+    // --- 首次曲库快捷键提示 Flow ---
+    val showLibraryShortcutHint: Flow<Boolean> = dataStore.data.map { it[keyShowLibraryShortcutHint] ?: true }
+
+    suspend fun setShowLibraryShortcutHint(show: Boolean) {
+        dataStore.edit { it[keyShowLibraryShortcutHint] = show }
+    }
+
+    /**
+     * 同步获取当前语言设置。
+     *
+     * R-7 第一类修复：attachBaseContext 无法挂起，改读 SharedPreferences 镜像
+     * （[setLanguage] 双写保证一致；镜像未命中时回退默认值并打点）。
+     */
+    fun getLanguageSync(): String {
+        val mirrored = mirrorPrefs.getString("language", null)
+        return mirrored ?: "system"
+    }
+
+    /** 语言双写：DataStore 事实源 + SharedPreferences 镜像（只服务冷启动） */
+    suspend fun setLanguage(lang: String) {
+        dataStore.edit { it[keyLanguage] = lang }
+        mirrorPrefs.edit().putString("language", lang).apply()
+    }
+
+    /**
+     * R-7（第一类）：老版本升级迁移——DataStore 已有语言值但镜像为空时补写镜像。
+     * 由 NasMusicApp.onCreate 在首次读取镜像前调用（一次性，幂等）。
+     */
+    fun migrateLanguageMirrorIfNeeded() {
+        if (mirrorPrefs.contains("language")) return
+        try {
+            val stored = runBlocking(Dispatchers.IO) {
+                dataStore.data.first()[keyLanguage] ?: "system"
+            }
+            mirrorPrefs.edit().putString("language", stored).apply()
+        } catch (e: Exception) {
+            AppLog.w(TAG, "migrateLanguageMirrorIfNeeded failed", e)
+        }
+    }
+
+    // --- K 歌模式：升降调 & 变速（全局记忆）---
+    private val keyPitchSemitones = intPreferencesKey("k_pitch_semitones")
+    private val keyPlaybackSpeed = doublePreferencesKey("k_playback_speed")
+
+    val pitchSemitones: Flow<Int> = dataStore.data.map { it[keyPitchSemitones] ?: 0 }
+    val playbackSpeed: Flow<Double> = dataStore.data.map { it[keyPlaybackSpeed] ?: 1.0 }
+
+    suspend fun setPitchSemitones(semitones: Int) {
+        dataStore.edit { it[keyPitchSemitones] = semitones }
+    }
+
+    suspend fun setPlaybackSpeed(speed: Double) {
+        dataStore.edit { it[keyPlaybackSpeed] = speed }
+    }
+
+    // --- 伴奏分离模式（快速/高质量）---
+    private val keySeparationMode = stringPreferencesKey("k_separation_mode")
+
+    <ELEMENT>/**
+     * 分离模式枚举（R-5：已上提为 player 层顶层 [com.nasmusic.tv.player.SeparationMode]，
+     * 此处 typealias 保持既有引用兼容；新代码请直接用 player 层类型）
+     */
+    typealias SeparationMode = com.nasmusic.tv.player.SeparationMode</ELEMENT>
+
+    val separationMode: Flow<SeparationMode> = dataStore.data.map { prefs ->
+        val value = prefs[keySeparationMode] ?: SeparationMode.FAST.value
+        SeparationMode.entries.find { it.value == value } ?: SeparationMode.FAST
+    }
+
+    suspend fun setSeparationMode(mode: SeparationMode) {
+        dataStore.edit { it[keySeparationMode] = mode.value }
+    }
+
+    // --- 播放统计 ---
+    private val keyPlayRecords = stringPreferencesKey("play_records")
+
+    // --- 搜索历史（序列化为 JSON，30 天 TTL + 上限 200 条）---
+    private val keySearchHistory = stringPreferencesKey("search_history")
+
+    // --- 网盘配置（按 CloudDriveType 存取，JSON 序列化 CloudDriveConfig；token 字段加密）---
+    private val keyCloudDriveConfig = stringPreferencesKey("cloud_drive_configs")
+
+    private val gson = Gson()
+    private val recentSongsMaxSize = 50
+    private val networkFavoritesMaxSize = 500
+    private val searchHistoryMaxSize = 200
+    private val searchHistoryTtlMs = 30L * 24 * 60 * 60 * 1000  // 30 天
+
+    /**
+     * 安全解析 JSON 偏好：解析失败时记录告警并返回 null（调用方应跳过回写，保留原数据），
+     * 而非返回空集合后被无条件回写覆盖 —— 后者会把用户积累的数据（播放记录/收藏/歌单等）
+     * 一次 JSON 异常（写入截断/字段变更）后抹成空。
+     *
+     * @param keyName 偏好键名（仅用于日志定位）
+     * @param json 原始 JSON 字符串
+     * @param parse 解析 lambda
+     * @return 解析结果；解析失败返回 null
+     */
+    private inline fun <T> safeParseJson(keyName: String, json: String, parse: () -> T): T? {
+        return try {
+            parse()
+        } catch (e: Exception) {
+            AppLog.w(TAG, "JSON 解析失败，跳过回写以保留原数据 [$keyName]: ${e.message?.take(80)}")
+            null
+        }
+    }
+
+
+    // --- ServerConfig Flow ---
+    val serverConfig: Flow<ServerConfig> = dataStore.data.map { prefs ->
+        ServerConfig(
+            backendType = prefs[keyBackendType] ?: ServerConfig.TYPE_JELLYFIN,
+            baseUrl = prefs[keyBaseUrl] ?: "",
+            apiToken = CryptoUtils.decrypt(prefs[keyApiToken] ?: ""),
+            username = prefs[keyUsername] ?: "",
+            password = CryptoUtils.decrypt(prefs[keyPassword] ?: ""),
+            isConnected = prefs[keyServerConnected] ?: false,
+            displayName = prefs[keyServerDisplayName] ?: ""
+        )
+    }
+
+    suspend fun saveServerConfig(config: ServerConfig) {
+        dataStore.edit { prefs ->
+            prefs[keyBackendType] = config.backendType
+            prefs[keyBaseUrl] = config.baseUrl
+            prefs[keyApiToken] = CryptoUtils.encrypt(config.apiToken)
+            prefs[keyUsername] = config.username
+            prefs[keyPassword] = CryptoUtils.encrypt(config.password)
+            prefs[keyServerConnected] = config.isConnected
+            prefs[keyServerDisplayName] = config.displayName
+        }
+    }
+
+    suspend fun setServerConnected(connected: Boolean, displayName: String = "") {
+        dataStore.edit { prefs ->
+            prefs[keyServerConnected] = connected
+            if (displayName.isNotBlank()) {
+                prefs[keyServerDisplayName] = displayName
+            }
+        }
+    }
+
+    suspend fun clearServerConfig() {
+        dataStore.edit { prefs ->
+            prefs.remove(keyBackendType)
+            prefs.remove(keyBaseUrl)
+            prefs.remove(keyApiToken)
+            prefs.remove(keyUsername)
+            prefs.remove(keyPassword)
+            prefs[keyServerConnected] = false
+            prefs.remove(keyServerDisplayName)
+        }
+    }
+
+    // --- B-2 最近播放 Flow ---
+    val recentSongIds: Flow<List<String>> = dataStore.data.map { prefs ->
+        val json = prefs[keyRecentSongs] ?: "[]"
+        try {
+            gson.fromJson<List<String>>(json, object : TypeToken<List<String>>() {}.type)
+        } catch (e: Exception) { emptyList() }
+    }
+
+    // --- B-2 播放次数 Flow ---
+    val playCounts: Flow<Map<String, Int>> = dataStore.data.map { prefs ->
+        val json = prefs[keyPlayCounts] ?: "{}"
+        try {
+            gson.fromJson<Map<String, Int>>(json, object : TypeToken<Map<String, Int>>() {}.type)
+        } catch (e: Exception) { emptyMap() }
+    }
+
+    /**
+     * 获取最近播放 ID 列表（一次性读取，调用方需在协程中）
+     */
+    suspend fun getRecentSongIds(): List<String> {
+        return try {
+            dataStore.data.first().let { prefs ->
+                val recentJson = prefs[keyRecentSongs] ?: "[]"
+                gson.fromJson<List<String>>(recentJson, object : TypeToken<List<String>>() {}.type) ?: emptyList()
+            }
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+
+    /**
+     * 记录一次播放（B-2）
+     * 1. 添加到最近播放列表（去重 + LRU，最多 50 条）
+     * 2. 播放次数 +1
+     */
+    suspend fun recordPlay(songId: String) {
+        dataStore.edit { prefs ->
+            // 更新最近播放
+            val recentJson = prefs[keyRecentSongs] ?: "[]"
+            val recentList = safeParseJson("recent_songs", recentJson) {
+                gson.fromJson<MutableList<String>>(recentJson, object : TypeToken<MutableList<String>>() {}.type)
+            }
+            if (recentList != null) {
+                val mutableRecent = recentList.toMutableList()
+                mutableRecent.remove(songId) // 去重
+                mutableRecent.add(0, songId)  // 最新放最前面
+                if (mutableRecent.size > recentSongsMaxSize) {
+                    mutableRecent.removeAt(mutableRecent.lastIndex)
+                }
+                prefs[keyRecentSongs] = gson.toJson(mutableRecent)
+            }
+
+            // 更新播放次数
+            val countsJson = prefs[keyPlayCounts] ?: "{}"
+            val counts = safeParseJson("play_counts", countsJson) {
+                gson.fromJson<MutableMap<String, Int>>(countsJson, object : TypeToken<MutableMap<String, Int>>() {}.type)
+            }
+            if (counts != null) {
+                counts[songId] = (counts[songId] ?: 0) + 1
+                prefs[keyPlayCounts] = gson.toJson(counts)
+            }
+        }
+    }
+
+    // --- B-2b 最近播放完整歌曲对象（含网络歌曲，供"最近播放"区展示/播放）---
+    private data class RecentSongObjectsData(val songs: List<Song> = emptyList())
+
+    /** 最近播放区最大保留歌曲数 */
+    private val recentSongsObjectsMaxSize = 50
+
+    /**
+     * 持久化前的 streamUrl 清理（修复：已下载/本地歌曲恢复后无法播放）：
+     * 仅网络歌曲置空（直链有时效，播放时需重新解析）；
+     * 本地歌曲（含已下载入库，isLocalSong=true）的 file:// URI 永久有效，必须保留，
+     * 否则重启恢复队列 / 最近播放 / 本地歌单场景下无法回放。
+     */
+    private fun Song.stripVolatileStreamUrl(): Song =
+        if (isNetworkSong) copy(streamUrl = null) else this
+
+    /**
+     * 记录一次最近播放的完整歌曲对象（网络歌曲 streamUrl 置空）。
+     * 与 recordPlay 的 id 列表互补：这里存完整元数据，支持网络歌曲/未连 NAS 时展示。
+     */
+    suspend fun recordRecentSongObject(song: Song) {
+        dataStore.edit { prefs ->
+            val json = prefs[keyRecentSongObjects] ?: "{\"songs\":[]}"
+            val data = safeParseJson("recent_song_objects", json) {
+                gson.fromJson<RecentSongObjectsData>(json, RecentSongObjectsData::class.java)
+            } ?: return@edit
+            val list = data.songs.toMutableList()
+            list.removeAll { it.id == song.id } // 去重（保留最新一条）
+            // 网络歌曲 streamUrl 置空（直链有时效）；本地歌曲保留 file:// URI
+            list.add(0, song.stripVolatileStreamUrl())
+            if (list.size > recentSongsObjectsMaxSize) {
+                list.removeAt(list.lastIndex)
+            }
+            prefs[keyRecentSongObjects] = gson.toJson(RecentSongObjectsData(list))
+        }
+    }
+
+    /**
+     * 合并记录播放：单次 DataStore edit 同时更新 id 列表 + 播放次数 + 完整歌曲对象。
+     * 替代分别调用 [recordPlay] + [recordRecentSongObject]（两次 DataStore 写）。
+     */
+    suspend fun recordPlayWithSong(song: Song) {
+        dataStore.edit { prefs ->
+            val songId = song.id
+
+            // 1. 更新最近播放 id 列表（去重 + LRU，最多 50 条）
+            val recentJson = prefs[keyRecentSongs] ?: "[]"
+            val recentList = safeParseJson("recent_songs", recentJson) {
+                gson.fromJson<MutableList<String>>(recentJson, object : TypeToken<MutableList<String>>() {}.type)
+            }
+            if (recentList != null) {
+                recentList.remove(songId)
+                recentList.add(0, songId)
+                if (recentList.size > recentSongsMaxSize) {
+                    recentList.removeAt(recentList.lastIndex)
+                }
+                prefs[keyRecentSongs] = gson.toJson(recentList)
+            }
+
+            // 2. 更新播放次数
+            val countsJson = prefs[keyPlayCounts] ?: "{}"
+            val counts = safeParseJson("play_counts", countsJson) {
+                gson.fromJson<MutableMap<String, Int>>(countsJson, object : TypeToken<MutableMap<String, Int>>() {}.type)
+            }
+            if (counts != null) {
+                counts[songId] = (counts[songId] ?: 0) + 1
+                prefs[keyPlayCounts] = gson.toJson(counts)
+            }
+
+            // 3. 更新完整歌曲对象（含网络歌曲，streamUrl 置空）
+            val objJson = prefs[keyRecentSongObjects] ?: "{\"songs\":[]}"
+            val objData = safeParseJson("recent_song_objects", objJson) {
+                gson.fromJson<RecentSongObjectsData>(objJson, RecentSongObjectsData::class.java)
+            }
+            if (objData != null) {
+                val objList = objData.songs.toMutableList()
+                objList.removeAll { it.id == songId }
+                objList.add(0, song.stripVolatileStreamUrl())
+                if (objList.size > recentSongsObjectsMaxSize) {
+                    objList.removeAt(objList.lastIndex)
+                }
+                prefs[keyRecentSongObjects] = gson.toJson(RecentSongObjectsData(objList))
+            }
+
+            // 4. 月度统计（F2-1）：与上述键同一次 edit 原子写入
+            playStatsRepo.appendMonthlyPlayInEdit(prefs, songId, System.currentTimeMillis())
+        }
+    }
+
+    /**
+     * 获取最近播放歌曲对象（最新在前，streamUrl 为空需播放时重新解析）
+     */
+    suspend fun getRecentSongObjects(): List<Song> {
+        return try {
+            dataStore.data.first().let { prefs ->
+                val json = prefs[keyRecentSongObjects] ?: "{\"songs\":[]}"
+                val data = gson.fromJson<RecentSongObjectsData>(json, RecentSongObjectsData::class.java)
+                data.songs
+            }
+        } catch (e: Exception) {
+            AppLog.w(TAG, "Failed to read recent song objects", e)
+            emptyList()
+        }
+    }
+
+    // --- B-4 均衡器 ---
+    val equalizerPreset: Flow<EqualizerPreset> = dataStore.data.map { prefs ->
+        val ordinal = prefs[keyEqualizerPreset] ?: 0
+        EqualizerPreset.entries.getOrElse(ordinal) { EqualizerPreset.NORMAL }
+    }
+
+    suspend fun setEqualizerPreset(preset: EqualizerPreset) {
+        dataStore.edit { it[keyEqualizerPreset] = preset.ordinal }
+    }
+
+    val equalizerBands: Flow<List<Float>> = dataStore.data.map { prefs ->
+        val json = prefs[keyEqualizerBands] ?: "[]"
+        try {
+            gson.fromJson<List<Float>>(json, object : TypeToken<List<Float>>() {}.type)
+        } catch (e: Exception) { emptyList() }
+    }
+
+    suspend fun setEqualizerBands(bands: List<Float>) {
+        dataStore.edit { it[keyEqualizerBands] = gson.toJson(bands) }
+    }
+
+    suspend fun setEqualizerBand(index: Int, value: Float) {
+        dataStore.edit { prefs ->
+            val json = prefs[keyEqualizerBands] ?: "[]"
+            val bands = safeParseJson("equalizer_bands", json) {
+                gson.fromJson<List<Float>>(json, object : TypeToken<List<Float>>() {}.type)
+                    .toMutableList()
+            } ?: return@edit
+            while (bands.size <= index) bands.add(0f)
+            bands[index] = value
+            prefs[keyEqualizerBands] = gson.toJson(bands)
+        }
+    }
+
+    // --- AppSettings Flow ---
+    val appSettings: Flow<AppSettings> = dataStore.data.map { prefs ->
+        AppSettings(
+            darkTheme = prefs[keyDarkTheme] ?: true,
+            animationsEnabled = prefs[keyAnimations] ?: true,
+            autoPlayNext = prefs[keyAutoPlayNext] ?: true,
+            defaultPlayMode = PlayMode.fromOrdinal(prefs[keyPlayMode] ?: 0),
+            cacheLyrics = prefs[keyCacheLyrics] ?: true,
+            cacheCover = prefs[keyCacheCover] ?: true,
+            lyricsOffsetMs = prefs[keyLyricsOffset] ?: 0L,
+            defaultNetworkSource = prefs[keyDefaultNetworkSource]?.let { NetworkSource.fromKey(it) ?: NetworkSource.fromName(it) } ?: NetworkSource.DEFAULT,
+            metingApiBaseUrl = prefs[keyMetingApiBaseUrl] ?: MetingApiService.DEFAULT_BASE_URL,
+            mvApiBaseUrl = prefs[keyMvApiBaseUrl] ?: BilibiliMvService.DEFAULT_BASE_URL,
+            lyricsKugouBaseUrl = prefs[keyLyricsKugouBaseUrl] ?: com.nasmusic.tv.lyrics.LyricsNetworkProvider.DEFAULT_KUGOU_BASE_URL,
+            lyricsNeteaseBaseUrl = prefs[keyLyricsNeteaseBaseUrl] ?: com.nasmusic.tv.lyrics.LyricsNetworkProvider.DEFAULT_NETEASE_BASE_URL,
+            visualizerTheme = VisualizerTheme.fromKey(prefs[keyVisualizerTheme]),
+            visualizerQuality = VisualQuality.fromKey(prefs[keyVisualizerQuality]),
+            fontAdjustment = prefs[keyFontAdjustment] ?: 0,
+            modelDownloadUrl = prefs[keyModelDownloadUrl] ?: "",
+            language = prefs[keyLanguage] ?: "system",
+            downloadEnabled = prefs[keyDownloadEnabled] ?: true,
+            autoDownloadOnPlay = prefs[keyAutoDownloadOnPlay] ?: false,
+            autoDownloadLimit = prefs[keyAutoDownloadLimit] ?: 50,
+            downloadLocation = prefs[keyDownloadLocation] ?: "INTERNAL"
+        )
+    }
+
+    // --- 全局字体字号调整 ---
+    suspend fun setFontAdjustment(adjustment: Int) =
+        dataStore.edit { it[keyFontAdjustment] = adjustment }
+
+    suspend fun setDarkTheme(enabled: Boolean) = dataStore.edit { it[keyDarkTheme] = enabled }
+
+    suspend fun setDownloadEnabled(v: Boolean) = dataStore.edit { it[keyDownloadEnabled] = v }
+    suspend fun setAutoDownloadOnPlay(v: Boolean) = dataStore.edit { it[keyAutoDownloadOnPlay] = v }
+    suspend fun setAutoDownloadLimit(v: Int) = dataStore.edit { it[keyAutoDownloadLimit] = v.coerceIn(1, 5000) }
+    suspend fun setDownloadLocation(v: String) = dataStore.edit { it[keyDownloadLocation] = v }
+
+    // --- 导出 SAF 授权持久化 ---
+    val exportTreeUri: Flow<String?> = dataStore.data.map { it[keyExportTreeUri] }
+    val exportVolumeId: Flow<String?> = dataStore.data.map { it[keyExportVolumeId] }
+    suspend fun setExportTreeUri(uri: String?) = dataStore.edit { if (uri == null) it.remove(keyExportTreeUri) else it[keyExportTreeUri] = uri }
+    suspend fun setExportVolumeId(id: String?) = dataStore.edit { if (id == null) it.remove(keyExportVolumeId) else it[keyExportVolumeId] = id }
+
+    suspend fun setAnimationsEnabled(enabled: Boolean) = dataStore.edit { it[keyAnimations] = enabled }
+
+    suspend fun setAutoPlayNext(enabled: Boolean) = dataStore.edit { it[keyAutoPlayNext] = enabled }
+
+    suspend fun setDefaultPlayMode(mode: PlayMode) = dataStore.edit { it[keyPlayMode] = mode.ordinal }
+
+    suspend fun setCacheLyrics(enabled: Boolean) = dataStore.edit { it[keyCacheLyrics] = enabled }
+
+    suspend fun setCacheCover(enabled: Boolean) = dataStore.edit { it[keyCacheCover] = enabled }
+
+    suspend fun setLyricsOffset(offsetMs: Long) = dataStore.edit { it[keyLyricsOffset] = offsetMs }
+
+    // --- 歌词显示设置 ---
+    private val keyLyricsFontScale = doublePreferencesKey("lyrics_font_scale")
+
+    val lyricsFontScale: Flow<Float> = dataStore.data.map { prefs ->
+        (prefs[keyLyricsFontScale] ?: 1.0).toFloat()
+    }
+
+    suspend fun setLyricsFontScale(scale: Float) {
+        dataStore.edit { it[keyLyricsFontScale] = scale.coerceIn(0.7f, 1.6f).toDouble() }
+    }
+
+    suspend fun setDefaultNetworkSource(source: NetworkSource) =
+        dataStore.edit { it[keyDefaultNetworkSource] = source.key }
+
+    suspend fun setVisualizerTheme(theme: VisualizerTheme) =
+        dataStore.edit { it[keyVisualizerTheme] = theme.name }
+
+    suspend fun setVisualizerQuality(quality: VisualQuality) =
+        dataStore.edit { it[keyVisualizerQuality] = quality.name }
+
+    suspend fun setMetingApiBaseUrl(url: String) =
+        dataStore.edit {
+            it[keyMetingApiBaseUrl] = url.trim().trim('`', '\'', '"').trim()
+        }
+
+    suspend fun setMvApiBaseUrl(url: String) =
+        dataStore.edit {
+            it[keyMvApiBaseUrl] = url.trim().trim('`', '\'', '"').trim()
+        }
+
+    // --- 网络音乐平台来源 ---
+
+    /**
+     * 同步获取当前音乐平台来源（用于 MetingApiService 的 serverProvider）
+     * 在每次请求时同步读取，支持运行时切换平台。
+     *
+     * R-7 第三类修复（路 A）：读 @Volatile 内存镜像，无 IO 无阻塞。
+     */
+    fun getMusicSourceSync(): String = cachedMusicSource
+
+    suspend fun setMusicSource(sourceKey: String) {
+        dataStore.edit { it[keyMusicSource] = sourceKey }
+    }
+
+    // --- Jamendo（CC 独立音乐）设置 ---
+    suspend fun setJamendoClientId(id: String) {
+        dataStore.edit { it[keyJamendoClientId] = id.trim() }
+    }
+
+    /**
+     * 同步读取 Jamendo Client ID（用于 JamendoService 每次请求时读取）。
+     * R-7 第三类修复（路 A）：读 @Volatile 内存镜像。
+     */
+    fun getJamendoClientIdSync(): String = cachedJamendoClientId
+
+    // --- 天气电台设置 ---
+
+    /**
+     * 获取天气是否启用
+     */
+    val weatherEnabled: Flow<Boolean> = dataStore.data.map { prefs ->
+        prefs[keyWeatherEnabled] ?: true
+    }
+
+    suspend fun setWeatherEnabled(enabled: Boolean) {
+        dataStore.edit { it[keyWeatherEnabled] = enabled }
+    }
+
+    /**
+     * 获取手动设置的城市名（空串=自动定位）
+     */
+    val weatherManualCity: Flow<String> = dataStore.data.map { prefs ->
+        prefs[keyWeatherManualCity] ?: ""
+    }
+
+    suspend fun setWeatherManualCity(city: String) {
+        dataStore.edit { it[keyWeatherManualCity] = city }
+    }
+
+    /**
+     * 获取天气自动刷新开关
+     */
+    val weatherAutoRefresh: Flow<Boolean> = dataStore.data.map { prefs ->
+        prefs[keyWeatherAutoRefresh] ?: true
+    }
+
+    suspend fun setWeatherAutoRefresh(enabled: Boolean) {
+        dataStore.edit { it[keyWeatherAutoRefresh] = enabled }
+    }
+
+    /**
+     * OpenWeatherMap API Key
+     * 当 Open-Meteo 不可用时的备选天气数据源
+     * F-7：读加密键（AES-GCM 解密）；解密失败回退空串
+     */
+    val weatherApiKey: Flow<String> = dataStore.data.map { prefs ->
+        val enc = prefs[keyWeatherApiKeyEnc]
+        if (!enc.isNullOrBlank()) {
+            try { com.nasmusic.tv.util.CryptoUtils.decrypt(enc) } catch (e: Exception) { "" }
+        } else ""
+    }
+
+    /**
+     * R-7 第二类修复：天气 API Key 同步读改 @Volatile 内存镜像。
+     * 调用点 WeatherRadioViewModel.fetchWeather 在 Main 协程内——原先此处
+     * runBlocking 会冻住主线程触发 ANR。
+     */
+    fun getWeatherApiKeySync(): String = cachedWeatherApiKey
+
+    /** F-7：写入加密键（同时清除旧明文键） */
+    suspend fun setWeatherApiKey(key: String) {
+        val trimmed = key.trim()
+        dataStore.edit { prefs ->
+            prefs[keyWeatherApiKeyEnc] = com.nasmusic.tv.util.CryptoUtils.encrypt(trimmed)
+            prefs.remove(keyWeatherApiKey)  // 迁移后清除明文
+        }
+    }
+
+    /**
+     * F-7：一次性迁移——旧明文键有值且加密键为空时，加密搬移。
+     * 幂等；由 startProviderMirrors 前（NasMusicApp.onCreate）调用。
+     */
+    private suspend fun migrateWeatherApiKeyIfNeeded() {
+        val prefs = dataStore.data.first()
+        val legacy = prefs[keyWeatherApiKey]
+        if (!legacy.isNullOrBlank() && prefs[keyWeatherApiKeyEnc].isNullOrBlank()) {
+            setWeatherApiKey(legacy)
+            AppLog.i(TAG, "weather API key migrated to encrypted storage")
+        }
+    }
+
+    // --- 封面滤镜设置 ---
+
+    val coverFilterEnabled: Flow<Boolean> = dataStore.data.map { prefs ->
+        prefs[keyCoverFilterEnabled] ?: false
+    }
+
+    suspend fun setCoverFilterEnabled(enabled: Boolean) {
+        dataStore.edit { it[keyCoverFilterEnabled] = enabled }
+    }
+
+    val coverFilterBlurRadius: Flow<Float> = dataStore.data.map { prefs ->
+        (prefs[keyCoverFilterBlurRadius] ?: 8.0).toFloat()
+    }
+
+    suspend fun setCoverFilterBlurRadius(radius: Float) {
+        dataStore.edit { it[keyCoverFilterBlurRadius] = radius.toDouble() }
+    }
+
+    val coverFilterDarkOverlay: Flow<Float> = dataStore.data.map { prefs ->
+        (prefs[keyCoverFilterDarkOverlay] ?: 0.3).toFloat()
+    }
+
+    suspend fun setCoverFilterDarkOverlay(overlay: Float) {
+        dataStore.edit { it[keyCoverFilterDarkOverlay] = overlay.toDouble() }
+    }
+
+    suspend fun setSpectrumEnabled(enabled: Boolean) {
+        dataStore.edit { it[keySpectrumEnabled] = enabled }
+    }
+
+    // --- F2-5 跨曲交叉淡入淡出 ---
+    private val keyCrossfadeEnabled = booleanPreferencesKey("settings_crossfade_enabled")
+    private val keyCrossfadeDurationSec = intPreferencesKey("settings_crossfade_duration_sec")
+
+    // --- F2-6 音质分级 ---
+    /** 音质档位：AUTO(0，按带宽) / LOSSLESS(999) / HIGH(320) / STANDARD(128) */
+    private val keyQualityTier = intPreferencesKey("settings_quality_tier")
+
+    val crossfadeEnabled: Flow<Boolean> = dataStore.data.map { it[keyCrossfadeEnabled] ?: false }
+    val crossfadeDurationSec: Flow<Int> = dataStore.data.map { it[keyCrossfadeDurationSec] ?: 4 }
+
+    suspend fun setCrossfadeEnabled(enabled: Boolean) {
+        dataStore.edit { it[keyCrossfadeEnabled] = enabled }
+    }
+
+    suspend fun setCrossfadeDurationSec(sec: Int) {
+        dataStore.edit { it[keyCrossfadeDurationSec] = sec.coerceIn(1, 12) }
+    }
+
+    /** F2-6：音质档位（Meting br 参数；AUTO 时不传由 BandwidthEstimator 决策） */
+    val qualityTier: Flow<Int> = dataStore.data.map { it[keyQualityTier] ?: QUALITY_TIER_AUTO }
+
+    suspend fun setQualityTier(tier: Int) {
+        dataStore.edit { it[keyQualityTier] = tier }
+    }
+
+    /**
+     * 同步获取当前默认网络源（用于 NetworkMusicManager 的 defaultSourceProvider）。
+     * R-7 第三类修复（路 A）：读 @Volatile 内存镜像。
+     */
+    fun getDefaultNetworkSourceSync(): String = cachedDefaultNetworkSource
+
+    /** F2-6：同步读取音质档位（MetingApiService qualityTierProvider 用） */
+    fun getQualityTierSync(): Int = cachedQualityTier
+
+    /**
+     * 同步获取 Meting-API 端点 URL（用于 MetingApiService 的 baseUrlProvider）。
+     * R-7 第三类修复（路 A）：读 @Volatile 内存镜像。
+     */
+    fun getMetingApiBaseUrlSync(): String = cachedMetingApiBaseUrl
+
+    /**
+     * 同步获取 MTV 视频搜索端点 URL（用于 BilibiliMvService 的 baseUrlProvider）。
+     * R-7 第三类修复（路 A）：读 @Volatile 内存镜像。
+     */
+    fun getMvApiBaseUrlSync(): String = cachedMvApiBaseUrl
+
+    /**
+     * 同步获取高质量分离模型自定义下载 URL（用于 ModelDownloadManager 的 customUrlProvider）。
+     * 空串表示使用内置默认候选列表（hf-mirror → huggingface）。
+     */
+    fun getModelDownloadUrlSync(): String = cachedModelDownloadUrl
+
+    /** 设置模型自定义下载 URL（空串=恢复默认候选列表） */
+    suspend fun setModelDownloadUrl(url: String) =
+        dataStore.edit {
+            it[keyModelDownloadUrl] = url.trim().trim('`', '\'', '"').trim()
+        }
+
+    // --- 网络歌词端点（Kugou / Netease）---
+    /** R-7 第三类修复（路 A）：读 @Volatile 内存镜像（原主线程急切求值 runBlocking） */
+    fun getLyricsKugouBaseUrlSync(): String = cachedLyricsKugouBaseUrl
+
+    /** R-7 第三类修复（路 A）：读 @Volatile 内存镜像（原主线程急切求值 runBlocking） */
+    fun getLyricsNeteaseBaseUrlSync(): String = cachedLyricsNeteaseBaseUrl
+
+    suspend fun setLyricsKugouBaseUrl(url: String) =
+        dataStore.edit {
+            it[keyLyricsKugouBaseUrl] = url.trim().trim('`', '\'', '"').trim()
+        }
+
+    suspend fun setLyricsNeteaseBaseUrl(url: String) =
+        dataStore.edit {
+            it[keyLyricsNeteaseBaseUrl] = url.trim().trim('`', '\'', '"').trim()
+        }
+
+    // --- 网络歌曲收藏 ---
+
+    /**
+     * 网络收藏列表 Flow（响应式，收藏变化时自动更新）
+     */
+    val networkFavorites: Flow<List<NetworkFavoriteItem>> = dataStore.data.map { prefs ->
+        val json = prefs[keyNetworkFavorites] ?: "[]"
+        try {
+            gson.fromJson<List<NetworkFavoriteItem>>(json, object : TypeToken<List<NetworkFavoriteItem>>() {}.type)
+        } catch (e: Exception) { emptyList() }
+    }
+
+    /**
+     * 同步获取网络收藏列表（用于 isFavorite 判断，非 Flow）
+     */
+    suspend fun getNetworkFavorites(): List<NetworkFavoriteItem> {
+        return try {
+            dataStore.data.first().let { prefs ->
+                val json = prefs[keyNetworkFavorites] ?: "[]"
+                gson.fromJson<List<NetworkFavoriteItem>>(json, object : TypeToken<List<NetworkFavoriteItem>>() {}.type) ?: emptyList()
+            }
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+
+    /**
+     * 切换网络收藏状态（已收藏则取消，未收藏则添加）
+     * 新收藏的歌曲添加到列表头部（最新在前）
+     * 超过 networkFavoritesMaxSize（500 条）时自动清理最旧的收藏
+     */
+    suspend fun toggleNetworkFavorite(item: NetworkFavoriteItem) {
+        dataStore.edit { prefs ->
+            val json = prefs[keyNetworkFavorites] ?: "[]"
+            val list = safeParseJson("network_favorites", json) {
+                gson.fromJson<MutableList<NetworkFavoriteItem>>(json, object : TypeToken<MutableList<NetworkFavoriteItem>>() {}.type)
+            } ?: return@edit  // 解析失败：跳过回写，保留原数据
+
+            val mutable = list.toMutableList()
+            val existing = mutable.indexOfFirst { it.songId == item.songId }
+            if (existing >= 0) {
+                mutable.removeAt(existing)  // 取消收藏
+            } else {
+                mutable.add(0, item)  // 添加收藏（最新在前）
+                // LRU 上限：超过 500 条时移除最旧的（列表末尾）
+                while (mutable.size > networkFavoritesMaxSize) {
+                    mutable.removeAt(mutable.size - 1)
+                }
+            }
+            prefs[keyNetworkFavorites] = gson.toJson(mutable)
+        }
+    }
+
+    // --- 本地歌单（DataStore JSON，独立于 NAS 后端歌单）---
+
+    /**
+     * 本地歌单列表 Flow（响应式，歌单变化时自动更新）
+     */
+    val localPlaylists: Flow<List<LocalPlaylist>> = dataStore.data.map { prefs ->
+        val json = prefs[keyLocalPlaylists] ?: "[]"
+        try {
+            gson.fromJson<List<LocalPlaylist>>(json, object : TypeToken<List<LocalPlaylist>>() {}.type)
+        } catch (e: Exception) { emptyList() }
+    }
+
+    /**
+     * 一次性读取本地歌单列表
+     */
+    suspend fun getLocalPlaylists(): List<LocalPlaylist> {
+        return try {
+            dataStore.data.first().let { prefs ->
+                val json = prefs[keyLocalPlaylists] ?: "[]"
+                gson.fromJson<List<LocalPlaylist>>(json, object : TypeToken<List<LocalPlaylist>>() {}.type) ?: emptyList()
+            }
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+
+    /**
+     * 创建本地歌单（最新创建的放最前）
+     */
+    suspend fun createLocalPlaylist(name: String): LocalPlaylist {
+        val trimmed = name.trim()
+        require(trimmed.isNotEmpty()) { "Playlist name must not be empty" }
+        lateinit var created: LocalPlaylist
+        dataStore.edit { prefs ->
+            val json = prefs[keyLocalPlaylists] ?: "[]"
+            val list = safeParseJson("local_playlists", json) {
+                gson.fromJson<MutableList<LocalPlaylist>>(json, object : TypeToken<MutableList<LocalPlaylist>>() {}.type)
+            } ?: mutableListOf()  // 歌单数据损坏时仍可创建新歌单（原数据保留，本函数不覆盖）
+
+            val playlist = LocalPlaylist(
+                id = java.util.UUID.randomUUID().toString(),
+                name = trimmed,
+                createdAt = System.currentTimeMillis()
+            )
+            val mutable = list.toMutableList()
+            mutable.add(0, playlist)
+            prefs[keyLocalPlaylists] = gson.toJson(mutable)
+            created = playlist
+        }
+        return created
+    }
+
+    /**
+     * 重命名本地歌单
+     */
+    suspend fun renameLocalPlaylist(id: String, newName: String) {
+        val trimmed = newName.trim()
+        if (trimmed.isEmpty()) return
+        dataStore.edit { prefs ->
+            val json = prefs[keyLocalPlaylists] ?: "[]"
+            val list = safeParseJson("local_playlists", json) {
+                gson.fromJson<MutableList<LocalPlaylist>>(json, object : TypeToken<MutableList<LocalPlaylist>>() {}.type)
+            } ?: return@edit
+
+            val mutable = list.toMutableList()
+            val idx = mutable.indexOfFirst { it.id == id }
+            if (idx >= 0) {
+                mutable[idx] = mutable[idx].copy(name = trimmed)
+                prefs[keyLocalPlaylists] = gson.toJson(mutable)
+            }
+        }
+    }
+
+    /**
+     * 删除本地歌单
+     */
+    suspend fun deleteLocalPlaylist(id: String) {
+        dataStore.edit { prefs ->
+            val json = prefs[keyLocalPlaylists] ?: "[]"
+            val list = safeParseJson("local_playlists", json) {
+                gson.fromJson<MutableList<LocalPlaylist>>(json, object : TypeToken<MutableList<LocalPlaylist>>() {}.type)
+            } ?: return@edit
+
+            val mutable = list.toMutableList()
+            if (mutable.removeAll { it.id == id }) {
+                prefs[keyLocalPlaylists] = gson.toJson(mutable)
+            }
+        }
+    }
+
+    /**
+     * 添加歌曲到本地歌单（按 song.id 去重；仅网络歌曲 streamUrl 置空不持久化）
+     * @return true 添加成功；false 歌单不存在或歌曲已在歌单中
+     */
+    suspend fun addSongToPlaylist(playlistId: String, song: Song): Boolean {
+        var added = false
+        dataStore.edit { prefs ->
+            val json = prefs[keyLocalPlaylists] ?: "[]"
+            val list = safeParseJson("local_playlists", json) {
+                gson.fromJson<MutableList<LocalPlaylist>>(json, object : TypeToken<MutableList<LocalPlaylist>>() {}.type)
+            } ?: return@edit
+
+            val mutable = list.toMutableList()
+            val idx = mutable.indexOfFirst { it.id == playlistId }
+            if (idx < 0) {
+                added = false
+            } else {
+                val current = mutable[idx]
+                if (current.songs.any { it.id == song.id }) {
+                    added = false
+                } else {
+                    mutable[idx] = current.copy(songs = current.songs + song.stripVolatileStreamUrl())
+                    prefs[keyLocalPlaylists] = gson.toJson(mutable)
+                    added = true
+                }
+            }
+        }
+        return added
+    }
+
+    /**
+     * 从本地歌单移除歌曲
+     */
+    suspend fun removeSongFromPlaylist(playlistId: String, songId: String) {
+        dataStore.edit { prefs ->
+            val json = prefs[keyLocalPlaylists] ?: "[]"
+            val list = safeParseJson("local_playlists", json) {
+                gson.fromJson<MutableList<LocalPlaylist>>(json, object : TypeToken<MutableList<LocalPlaylist>>() {}.type)
+            } ?: return@edit
+
+            val mutable = list.toMutableList()
+            val idx = mutable.indexOfFirst { it.id == playlistId }
+            if (idx >= 0) {
+                val current = mutable[idx]
+                mutable[idx] = current.copy(songs = current.songs.filterNot { it.id == songId })
+                prefs[keyLocalPlaylists] = gson.toJson(mutable)
+            }
+        }
+    }
+
+    // --- 上次播放队列持久化 ---
+
+    /**
+     * 上次播放队列的持久化数据结构
+     * @param songs 队列歌曲列表（streamUrl 置空，播放时重新解析）
+     * @param currentIndex 当前播放索引
+     */
+    data class LastQueueData(
+        val songs: List<Song>,
+        val currentIndex: Int
+    )
+
+    /**
+     * 保存上次播放队列
+     * 仅网络歌曲 streamUrl 置空后序列化（直链有时效）；本地歌曲保留 file:// URI
+     */
+    suspend fun saveLastQueue(songs: List<Song>, currentIndex: Int) {
+        dataStore.edit { prefs ->
+            val songsToSave = songs.map { it.stripVolatileStreamUrl() }
+            val data = LastQueueData(songsToSave, currentIndex)
+            prefs[keyLastQueue] = gson.toJson(data)
+        }
+    }
+
+    /**
+     * 读取上次播放队列（用于应用启动时恢复，调用方需在协程中）
+     */
+    suspend fun getLastQueue(): LastQueueData? {
+        return try {
+            dataStore.data.first().let { prefs ->
+                val json = prefs[keyLastQueue] ?: return@let null
+                gson.fromJson<LastQueueData>(json, LastQueueData::class.java)
+            }
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    /**
+     * 清除上次播放队列（用户主动清空队列时调用）
+     */
+    suspend fun clearLastQueue() {
+        dataStore.edit { prefs ->
+            prefs.remove(keyLastQueue)
+        }
+    }
+
+    // ========== 播放统计 ==========
+
+    private data class PlayRecordsData(
+        val records: List<com.nasmusic.tv.data.model.PlayRecord> = emptyList()
+    )
+
+    /**
+     * 记录一次播放
+     */
+    suspend fun addPlayRecord(record: com.nasmusic.tv.data.model.PlayRecord) {
+        dataStore.edit { prefs ->
+            val json = prefs[keyPlayRecords] ?: "{\"records\":[]}"
+            val data = safeParseJson("play_records", json) {
+                gson.fromJson<PlayRecordsData>(json, PlayRecordsData::class.java)
+            } ?: return@edit  // 解析失败：跳过回写，保留原数据
+            // 最多保留 500 条记录
+            val updated = PlayRecordsData(
+                records = (listOf(record) + data.records).take(500)
+            )
+            prefs[keyPlayRecords] = gson.toJson(updated)
+        }
+    }
+
+    /**
+     * 获取所有播放记录
+     */
+    suspend fun getPlayRecords(): List<com.nasmusic.tv.data.model.PlayRecord> {
+        return try {
+            dataStore.data.first().let { prefs ->
+                val json = prefs[keyPlayRecords] ?: return emptyList()
+                val data = gson.fromJson<PlayRecordsData>(json, PlayRecordsData::class.java)
+                data.records
+            }
+        } catch (e: Exception) {
+            AppLog.w(TAG, "Failed to read play records", e)
+            emptyList()
+        }
+    }
+
+    /**
+     * 清除所有播放记录
+     */
+    suspend fun clearPlayRecords() {
+        dataStore.edit { prefs ->
+            prefs.remove(keyPlayRecords)
+        }
+    }
+
+    // ========== 搜索历史 ==========
+
+    /**
+     * 搜索历史列表 Flow（响应式）
+     * 列表按 lastSearchedAt 降序（最新在前）
+     */
+    val searchHistory: Flow<List<SearchHistoryItem>> = dataStore.data.map { prefs ->
+        val json = prefs[keySearchHistory] ?: "[]"
+        try {
+            gson.fromJson<List<SearchHistoryItem>>(json, object : TypeToken<List<SearchHistoryItem>>() {}.type)
+        } catch (e: Exception) { emptyList() }
+    }
+
+    /**
+     * 一次性读取搜索历史
+     */
+    suspend fun getSearchHistory(): List<SearchHistoryItem> {
+        return try {
+            dataStore.data.first().let { prefs ->
+                val json = prefs[keySearchHistory] ?: "[]"
+                gson.fromJson<List<SearchHistoryItem>>(json, object : TypeToken<List<SearchHistoryItem>>() {}.type) ?: emptyList()
+            }
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+
+    /**
+     * 记录一次搜索
+     * 1. 同名 query 合并：count+1、lastSearchedAt 更新为当前时间、移到列表头部
+     * 2. 清理超过 30 天的条目
+     * 3. 超过 200 条上限时裁剪尾部
+     */
+    suspend fun recordSearch(query: String) {
+        val trimmed = query.trim()
+        if (trimmed.isEmpty()) return
+        val now = System.currentTimeMillis()
+        dataStore.edit { prefs ->
+            val json = prefs[keySearchHistory] ?: "[]"
+            val list = safeParseJson("search_history", json) {
+                gson.fromJson<MutableList<SearchHistoryItem>>(json, object : TypeToken<MutableList<SearchHistoryItem>>() {}.type)
+            } ?: return@edit
+
+            val mutable = list.toMutableList()
+            // 合并同名条目
+            val existingIdx = mutable.indexOfFirst { it.query == trimmed }
+            if (existingIdx >= 0) {
+                val existing = mutable.removeAt(existingIdx)
+                mutable.add(0, existing.copy(lastSearchedAt = now, count = existing.count + 1))
+            } else {
+                mutable.add(0, SearchHistoryItem(query = trimmed, lastSearchedAt = now, count = 1))
+            }
+            // 30 天 TTL 清理
+            val cutoff = now - searchHistoryTtlMs
+            mutable.removeAll { it.lastSearchedAt < cutoff }
+            // 数量上限裁剪
+            if (mutable.size > searchHistoryMaxSize) {
+                mutable.subList(searchHistoryMaxSize, mutable.size).clear()
+            }
+            prefs[keySearchHistory] = gson.toJson(mutable)
+        }
+    }
+
+    /**
+     * 清理超过 30 天的搜索历史条目
+     * 在应用启动时调用一次
+     */
+    suspend fun purgeExpiredSearchHistory() {
+        val now = System.currentTimeMillis()
+        val cutoff = now - searchHistoryTtlMs
+        dataStore.edit { prefs ->
+            val json = prefs[keySearchHistory] ?: return@edit
+            val list = safeParseJson("search_history", json) {
+                gson.fromJson<MutableList<SearchHistoryItem>>(json, object : TypeToken<MutableList<SearchHistoryItem>>() {}.type)
+            } ?: return@edit
+
+            val mutable = list.toMutableList()
+            val beforeSize = mutable.size
+            mutable.removeAll { it.lastSearchedAt < cutoff }
+            if (mutable.size != beforeSize) {
+                prefs[keySearchHistory] = gson.toJson(mutable)
+            }
+        }
+    }
+
+    // ========== 数据备份 ==========
+
+    /**
+     * 备份文件数据结构
+     *
+     * 注意：不包含敏感字段 —— 密码、API Token、天气 API Key 一律不导出。
+     * 恢复后服务器需重新输入密码连接（isConnected=false）。
+     */
+    // ===================== 网盘配置（CloudDriveConfig，按 CloudDriveType 存取）=====================
+    // 存储：keyCloudDriveConfig 存 JSON Map<type.key, CloudDriveConfigJson>，其中 tokens 的 accessToken/refreshToken 用 CryptoUtils 加密。
+
+    /**
+     * 同步读取某网盘配置。
+     *
+     * R-7 第四类：保留 runBlocking（通用同步入口，供非协程上下文兜底；禁止主线程协程内调用）。
+     * T2（2026-09-14）第一批：外部 UI/App 调用点迁移到 baiduConfigFlow.first()；
+     * 第二批：百度 token/配置便捷方法全部改为 suspend + baiduConfigFlow.first()，
+     * BaiduOAuthClient/BaiduNetdiskService/BaiduMvFileService 调用方已同步迁移，本入口仅作通用兜底。
+     */
+    @androidx.annotation.WorkerThread
+    fun getCloudDriveConfigSync(type: CloudDriveType): CloudDriveConfig? {
+        return try {
+            runBlocking(Dispatchers.IO) {
+                val json = dataStore.data.first()[keyCloudDriveConfig] ?: return@runBlocking null
+                loadCloudDriveConfigs(json)[type.key]
+            }
+        } catch (e: Exception) {
+            AppLog.w(TAG, "getCloudDriveConfigSync error", e)
+            null
+        }
+    }
+
+    /** 百度配置 Flow（修复 H-3：UI 订阅用，替代组合内 runBlocking 同步读） */
+    val baiduConfigFlow: Flow<CloudDriveConfig> = dataStore.data.map { prefs ->
+        loadCloudDriveConfigs(prefs[keyCloudDriveConfig] ?: "{}")[CloudDriveType.BAIDU.key]
+            ?: CloudDriveConfig(CloudDriveType.BAIDU)
+    }
+
+    /** Jamendo Client ID Flow（修复 H-3：同上） */
+    val jamendoClientIdFlow: Flow<String> = dataStore.data.map { prefs ->
+        prefs[keyJamendoClientId] ?: ""
+    }
+
+    /** 异步保存某网盘配置（增量合并到现有 Map） */
+    suspend fun saveCloudDriveConfig(config: CloudDriveConfig) {
+        dataStore.edit { prefs ->
+            val json = prefs[keyCloudDriveConfig] ?: "{}"
+            val map = loadCloudDriveConfigs(json).toMutableMap()
+            map[config.type.key] = config
+            prefs[keyCloudDriveConfig] = saveCloudDriveConfigs(map)
+        }
+    }
+
+    /** 同步保存（OAuth 客户端在非协程上下文调用；R-7 第四类：保留 runBlocking，禁止主线程协程内调用） */
+    @androidx.annotation.WorkerThread
+    fun saveCloudDriveConfigSync(config: CloudDriveConfig) {
+        runBlocking(Dispatchers.IO) { saveCloudDriveConfig(config) }
+    }
+
+    // ---- 百度 token 便捷读写（加解密 accessToken/refreshToken；T2 第二批：suspend + baiduConfigFlow.first()）----
+
+    /** 异步读取百度 token（解密） */
+    suspend fun getBaiduTokens(): BaiduTokens? {
+        val cfg = baiduConfigFlow.first()
+        val t = cfg.tokens ?: return null
+        return try {
+            val decAt = CryptoUtils.decrypt(t.accessToken).ifBlank { return null }
+            val decRt = CryptoUtils.decrypt(t.refreshToken).ifBlank { return null }
+            AppLog.d(TAG, "getBaiduTokens: token decrypted (len=${decAt.length}), expiresAt=${t.expiresAt}")
+            t.copy(accessToken = decAt, refreshToken = decRt)
+        } catch (e: Exception) {
+            AppLog.w(TAG, "getBaiduTokens decrypt error", e)
+            null
+        }
+    }
+
+    /** 异步保存百度 token（加密） */
+    suspend fun saveBaiduTokens(tokens: BaiduTokens) {
+        val cfg = baiduConfigFlow.first().copy(
+            tokens = tokens.copy(
+                accessToken = CryptoUtils.encrypt(tokens.accessToken),
+                refreshToken = CryptoUtils.encrypt(tokens.refreshToken)
+            )
+        )
+        saveCloudDriveConfig(cfg)
+    }
+
+    /** 清除百度 token（登出/刷新失败降级用） */
+    suspend fun clearBaiduTokens() {
+        val cfg = baiduConfigFlow.first().copy(tokens = null)
+        saveCloudDriveConfig(cfg)
+    }
+
+    // ---- 百度配置项便捷存取 ----
+
+    suspend fun getBaiduEnabled(): Boolean = baiduConfigFlow.first().enabled
+    suspend fun setBaiduEnabled(enabled: Boolean) =
+        saveCloudDriveConfig(baiduConfigFlow.first().copy(enabled = enabled))
+    suspend fun getBaiduMusicRootDir(): String {
+        val saved = baiduConfigFlow.first().musicRootDir
+        val appDir = com.nasmusic.tv.backend.network.baidu.BaiduNetdiskConfig.APP_DIR
+        // 空白或不在沙盒 /apps/NASMusicTV 下的旧路径，自动纠正为沙盒目录
+        val corrected = saved.ifBlank { appDir }
+        if (corrected != appDir && !corrected.startsWith(appDir)) {
+            com.nasmusic.tv.util.AppLog.w("AppPreferences", "musicRootDir='$corrected' outside sandbox, resetting to $appDir")
+            setBaiduMusicRootDir(appDir)
+            return appDir
+        }
+        return corrected
+    }
+    suspend fun setBaiduMusicRootDir(dir: String) =
+        saveCloudDriveConfig(baiduConfigFlow.first().copy(musicRootDir = dir))
+    suspend fun getBaiduMvDir(): String? {
+        val saved = baiduConfigFlow.first().mvDir
+        val appDir = com.nasmusic.tv.backend.network.baidu.BaiduNetdiskConfig.APP_DIR
+        // MV 目录不在沙盒下则视为无效，返回 null（调用方会 fallback 到 musicRootDir）
+        if (saved != null && saved.isNotBlank() && !saved.startsWith(appDir)) {
+            com.nasmusic.tv.util.AppLog.w("AppPreferences", "mvDir='$saved' outside sandbox, clearing")
+            setBaiduMvDir(null)
+            return null
+        }
+        return saved
+    }
+    suspend fun setBaiduMvDir(dir: String?) =
+        saveCloudDriveConfig(baiduConfigFlow.first().copy(mvDir = dir))
+    suspend fun getBaiduCustomAppKey(): String? = baiduConfigFlow.first().customAppKey
+    suspend fun setBaiduCustomAppKey(key: String?) =
+        saveCloudDriveConfig(baiduConfigFlow.first().copy(customAppKey = key))
+    suspend fun getBaiduCustomSecretKey(): String? = baiduConfigFlow.first().customSecretKey
+    suspend fun setBaiduCustomSecretKey(secret: String?) =
+        saveCloudDriveConfig(baiduConfigFlow.first().copy(customSecretKey = secret))
+    suspend fun getBaiduApiDriftNotified(): Boolean = baiduConfigFlow.first().apiDriftNotified
+    suspend fun setBaiduApiDriftNotified(v: Boolean) =
+        saveCloudDriveConfig(baiduConfigFlow.first().copy(apiDriftNotified = v))
+
+    // ---- 内部：CloudDriveConfig Map <-> JSON（tokens 加密）----
+
+    private fun loadCloudDriveConfigs(json: String): Map<String, CloudDriveConfig> {
+        return try {
+            val type = object : TypeToken<Map<String, CloudDriveConfig>>() {}.type
+            val raw: Map<String, CloudDriveConfig> = gson.fromJson(json, type) ?: emptyMap()
+            raw
+        } catch (e: Exception) {
+            AppLog.w(TAG, "loadCloudDriveConfigs parse error", e)
+            emptyMap()
+        }
+    }
+
+    private fun saveCloudDriveConfigs(map: Map<String, CloudDriveConfig>): String =
+        try { gson.toJson(map) } catch (e: Exception) { "{}" }
+
+    data class BackupData(
+        val version: Int = 1,
+        val exportedAt: Long = System.currentTimeMillis(),
+        val serverConfig: ServerConfig? = null,
+        val appSettings: AppSettings? = null,
+        val networkFavorites: List<NetworkFavoriteItem> = emptyList(),
+        val localPlaylists: List<LocalPlaylist> = emptyList(),
+        val lastQueue: LastQueueData? = null,
+        val recentSongIds: List<String> = emptyList(),
+        val recentSongObjects: List<Song> = emptyList(),
+        val playCounts: Map<String, Int> = emptyMap(),
+        val playRecords: List<com.nasmusic.tv.data.model.PlayRecord> = emptyList(),
+        val searchHistory: List<SearchHistoryItem> = emptyList(),
+        val equalizerPreset: EqualizerPreset? = null,
+        val equalizerBands: List<Float> = emptyList(),
+        // v2: 新增备份项（旧备份文件恢复时用默认值）
+        val mvCacheEntries: List<com.nasmusic.tv.data.model.MvCacheEntry> = emptyList(),
+        val weatherEnabled: Boolean = true,
+        val weatherManualCity: String = "",
+        val weatherAutoRefresh: Boolean = true,
+        val coverFilterEnabled: Boolean = false,
+        val coverFilterBlurRadius: Double = 8.0,
+        val coverFilterDarkOverlay: Double = 0.3,
+        val musicSource: String = "",
+        val lyricsFontScale: Double = 1.0
+    )
+
+    /**
+     * 导出备份数据（敏感字段已排除：密码、API Token、天气 API Key）
+     */
+    suspend fun exportBackupData(): BackupData {
+        val config = serverConfig.first()
+        val ds = dataStore.data.first()
+        return BackupData(
+            serverConfig = if (config.baseUrl.isNotBlank()) {
+                config.copy(apiToken = "", password = "", isConnected = false)
+            } else null,
+            appSettings = appSettings.first(),
+            networkFavorites = getNetworkFavorites(),
+            localPlaylists = getLocalPlaylists(),
+            lastQueue = getLastQueue(),
+            recentSongIds = getRecentSongIds(),
+            recentSongObjects = getRecentSongObjects(),
+            playCounts = playCounts.first(),
+            playRecords = getPlayRecords(),
+            searchHistory = getSearchHistory(),
+            equalizerPreset = equalizerPreset.first(),
+            equalizerBands = equalizerBands.first(),
+            // v2: 补全之前遗漏的设置项
+            weatherEnabled = ds[keyWeatherEnabled] ?: true,
+            weatherManualCity = ds[keyWeatherManualCity] ?: "",
+            weatherAutoRefresh = ds[keyWeatherAutoRefresh] ?: true,
+            coverFilterEnabled = ds[keyCoverFilterEnabled] ?: false,
+            coverFilterBlurRadius = ds[keyCoverFilterBlurRadius] ?: 8.0,
+            coverFilterDarkOverlay = ds[keyCoverFilterDarkOverlay] ?: 0.3,
+            musicSource = ds[keyMusicSource] ?: "",
+            lyricsFontScale = ds[keyLyricsFontScale] ?: 1.0
+        )
+    }
+
+    /**
+     * 导入备份数据并恢复至 DataStore
+     * 服务器密码/API Token 不在备份中，恢复后 isConnected=false，需重新输入密码连接
+     */
+    suspend fun importBackupData(data: BackupData) {
+        data.serverConfig?.let { config ->
+            saveServerConfig(
+                config.copy(apiToken = "", password = "", isConnected = false)
+            )
+        }
+        data.appSettings?.let { settings ->
+            dataStore.edit { prefs ->
+                prefs[keyDarkTheme] = settings.darkTheme
+                prefs[keyAnimations] = settings.animationsEnabled
+                prefs[keyAutoPlayNext] = settings.autoPlayNext
+                prefs[keyPlayMode] = settings.defaultPlayMode.ordinal
+                prefs[keyCacheLyrics] = settings.cacheLyrics
+                prefs[keyCacheCover] = settings.cacheCover
+                prefs[keyLyricsOffset] = settings.lyricsOffsetMs
+                prefs[keyDefaultNetworkSource] = settings.defaultNetworkSource.key
+                prefs[keyMetingApiBaseUrl] = settings.metingApiBaseUrl
+                prefs[keyMvApiBaseUrl] = settings.mvApiBaseUrl
+                prefs[keyModelDownloadUrl] = settings.modelDownloadUrl
+                prefs[keyVisualizerTheme] = settings.visualizerTheme.name
+                prefs[keyVisualizerQuality] = settings.visualizerQuality.name
+            }
+        }
+        dataStore.edit { prefs ->
+            prefs[keyNetworkFavorites] = gson.toJson(data.networkFavorites)
+            prefs[keyLocalPlaylists] = gson.toJson(data.localPlaylists)
+            prefs[keyRecentSongs] = gson.toJson(data.recentSongIds)
+            prefs[keyRecentSongObjects] = gson.toJson(
+                RecentSongObjectsData(data.recentSongObjects.map { it.stripVolatileStreamUrl() })
+            )
+            prefs[keyPlayCounts] = gson.toJson(data.playCounts)
+            if (data.lastQueue != null) {
+                prefs[keyLastQueue] = gson.toJson(
+                    data.lastQueue.copy(songs = data.lastQueue.songs.map { it.stripVolatileStreamUrl() })
+                )
+            }
+            data.equalizerPreset?.let { prefs[keyEqualizerPreset] = it.ordinal }
+            if (data.equalizerBands.isNotEmpty()) {
+                prefs[keyEqualizerBands] = gson.toJson(data.equalizerBands)
+            }
+            if (data.playRecords.isNotEmpty()) {
+                prefs[keyPlayRecords] = gson.toJson(PlayRecordsData(data.playRecords))
+            }
+            if (data.searchHistory.isNotEmpty()) {
+                prefs[keySearchHistory] = gson.toJson(data.searchHistory)
+            }
+            // v2: 恢复之前遗漏的设置项
+            prefs[keyWeatherEnabled] = data.weatherEnabled
+            prefs[keyWeatherManualCity] = data.weatherManualCity
+            prefs[keyWeatherAutoRefresh] = data.weatherAutoRefresh
+            prefs[keyCoverFilterEnabled] = data.coverFilterEnabled
+            prefs[keyCoverFilterBlurRadius] = data.coverFilterBlurRadius
+            prefs[keyCoverFilterDarkOverlay] = data.coverFilterDarkOverlay
+            if (data.musicSource.isNotBlank()) prefs[keyMusicSource] = data.musicSource
+            prefs[keyLyricsFontScale] = data.lyricsFontScale
+        }
+    }
+}
+
+========
+- declarationFromDeclarationProvider:
+    Class: <null>
+Value:
+    <null>
+
+========
+- contextVirtualFile:
+    Class: org.jetbrains.kotlin.cli.common.localfs.KotlinLocalVirtualFile
+Value:
+    path: D:/hxzhang/MyGithubSoftware/NasAudio/NASMusicTV/app/src/main/java/com/nasmusic/tv/data/prefs/AppPreferences.kt, filetype: org.jetbrains.kotlin.idea.KotlinFileType@65210319 ,filesystem,org.jetbrains.kotlin.cli.common.localfs.KotlinLocalFileSystem@18da63d8
+
+========
+- isContextInScope:
+    true
+========
+
+org.jetbrains.kotlin.utils.exceptions.KotlinIllegalArgumentExceptionWithAttachments: Inconsistency in the cache. Someone without context put a null value in the cache
+	at org.jetbrains.kotlin.analysis.low.level.api.fir.caches.FirThreadSafeCache.fixInconsistentValue(FirThreadSafeCache.kt:149)
+	at org.jetbrains.kotlin.analysis.low.level.api.fir.caches.FirCacheWithInvalidationKt.getNotNullValueForNotNullContext(FirCacheWithInvalidation.kt:44)
+	at org.jetbrains.kotlin.analysis.low.level.api.fir.symbolProviders.caches.LLPsiAwareClassLikeSymbolCache.getSymbolByClassId(LLPsiAwareClassLikeSymbolCache.kt:70)
+	at org.jetbrains.kotlin.analysis.low.level.api.fir.symbolProviders.caches.LLPsiAwareClassLikeSymbolCache.getSymbolByPsi(LLPsiAwareClassLikeSymbolCache.kt:114)
+	at org.jetbrains.kotlin.analysis.low.level.api.fir.symbolProviders.LLKotlinSourceSymbolProvider.getClassLikeSymbolByPsi(LLKotlinSourceSymbolProvider.kt:344)
+	at org.jetbrains.kotlin.analysis.low.level.api.fir.providers.LLFirProvider.getFirClassifierByDeclaration(LLFirProvider.kt:58)
+	at org.jetbrains.kotlin.analysis.low.level.api.fir.util.DeclarationUtilsKt.findFir(declarationUtils.kt:211)
+	at org.jetbrains.kotlin.analysis.low.level.api.fir.util.DeclarationUtilsKt.findSourceNonLocalFirDeclaration$lambda$0(declarationUtils.kt:62)
+	at org.jetbrains.kotlin.analysis.low.level.api.fir.util.DeclarationUtilsKt.findSourceNonLocalFirDeclarationByProvider(declarationUtils.kt:142)
+	at org.jetbrains.kotlin.analysis.low.level.api.fir.util.DeclarationUtilsKt.findSourceNonLocalFirDeclaration(declarationUtils.kt:59)
+	at org.jetbrains.kotlin.analysis.low.level.api.fir.util.DeclarationUtilsKt.findSourceNonLocalFirDeclaration(declarationUtils.kt:46)
+	at org.jetbrains.kotlin.analysis.low.level.api.fir.api.LLResolutionFacade.findSourceFirSymbol(LLResolutionFacade.kt:161)
+	at org.jetbrains.kotlin.analysis.low.level.api.fir.api.LLResolutionFacade.resolveToFirSymbol$low_level_api_fir(LLResolutionFacade.kt:134)
+	at org.jetbrains.kotlin.analysis.low.level.api.fir.api.LowLevelFirApiFacadeKt.resolveToFirSymbol(LowLevelFirApiFacade.kt:37)
+	at org.jetbrains.kotlin.analysis.api.fir.symbols.KaFirTypeAliasSymbol$special$$inlined$lazyFirSymbol$1.invoke(KaFirPsiSymbol.kt:346)
+	at org.jetbrains.kotlin.analysis.api.fir.symbols.KaFirTypeAliasSymbol$special$$inlined$lazyFirSymbol$1.invoke(KaFirPsiSymbol.kt:257)
+	at kotlin.SafePublicationLazyImpl.getValue(LazyJVM.kt:125)
+	at org.jetbrains.kotlin.analysis.api.fir.symbols.KaFirPsiSymbol.getFirSymbol(KaFirPsiSymbol.kt:72)
+	at org.jetbrains.kotlin.analysis.api.fir.symbols.KaFirTypeAliasSymbol.getExpandedType(KaFirTypeAliasSymbol.kt:69)
+	at org.jetbrains.uast.kotlin.FirKotlinUastResolveProviderService.resolveToDeclaration(FirKotlinUastResolveProviderService.kt:562)
+	at org.jetbrains.uast.kotlin.KotlinUSimpleReferenceExpression.getResolvedDeclaration(KotlinUSimpleReferenceExpression.kt:37)
+	at org.jetbrains.uast.kotlin.KotlinUSimpleReferenceExpression.resolve(KotlinUSimpleReferenceExpression.kt:44)
+	at com.android.tools.lint.client.api.ResourceReference$Companion.get(ResourceReference.kt:123)
+	at com.android.tools.lint.client.api.UElementVisitor$DelegatingUastVisitor.visitSimpleNameReferenceExpression(UElementVisitor.kt:702)
+	at org.jetbrains.uast.kotlin.KotlinUSimpleReferenceExpression.accept(KotlinUSimpleReferenceExpression.kt:58)
+	at org.jetbrains.uast.UQualifiedReferenceExpression.accept(UQualifiedReferenceExpression.kt:33)
+	at org.jetbrains.uast.UQualifiedReferenceExpression.accept(UQualifiedReferenceExpression.kt:33)
+	at org.jetbrains.uast.UIfExpression.accept(UIfExpression.kt:60)
+	at org.jetbrains.uast.internal.ImplementationUtilsKt.acceptList(implementationUtils.kt:15)
+	at org.jetbrains.uast.UExpressionList.accept(UExpressionList.kt:26)
+	at org.jetbrains.uast.kotlin.KotlinULocalVariable.accept(KotlinULocalVariable.kt:60)
+	at org.jetbrains.uast.internal.ImplementationUtilsKt.acceptList(implementationUtils.kt:15)
+	at org.jetbrains.uast.UDeclarationsExpression.accept(UDeclarationsExpression.kt:22)
+	at org.jetbrains.uast.internal.ImplementationUtilsKt.acceptList(implementationUtils.kt:15)
+	at org.jetbrains.uast.UBlockExpression.accept(UBlockExpression.kt:21)
+	at org.jetbrains.uast.ULambdaExpression.accept(ULambdaExpression.kt:40)
+	at org.jetbrains.uast.internal.ImplementationUtilsKt.acceptList(implementationUtils.kt:15)
+	at org.jetbrains.uast.UCallExpression.accept(UCallExpression.kt:98)
+	at org.jetbrains.uast.UQualifiedReferenceExpression.accept(UQualifiedReferenceExpression.kt:34)
+	at org.jetbrains.uast.kotlin.KotlinUField.accept(KotlinUField.kt:53)
+	at org.jetbrains.uast.internal.ImplementationUtilsKt.acceptList(implementationUtils.kt:15)
+	at org.jetbrains.uast.kotlin.AbstractKotlinUClass.accept(AbstractKotlinUClass.kt:223)
+	at org.jetbrains.uast.internal.ImplementationUtilsKt.acceptList(implementationUtils.kt:15)
+	at org.jetbrains.uast.UFile.accept(UFile.kt:89)
+	at com.android.tools.lint.detector.api.UastLintUtilsKt.acceptSourceFile(UastLintUtils.kt:956)
+	at com.android.tools.lint.client.api.UElementVisitor$visitFile$3.run(UElementVisitor.kt:205)
+	at com.android.tools.lint.client.api.LintClient.runReadAction(LintClient.kt:1655)
+	at com.android.tools.lint.LintCliClient.runReadAction(LintCliClient.kt:228)
+	at com.android.tools.lint.client.api.LintDriver$LintClientWrapper.runReadAction(LintDriver.kt:2694)
+	at com.android.tools.lint.client.api.UElementVisitor.visitFile(UElementVisitor.kt:202)
+	at com.android.tools.lint.client.api.LintDriver$visitUastDetectors$1.run(LintDriver.kt:2032)
+	at com.android.tools.lint.client.api.LintClient.runReadAction(LintClient.kt:1655)
+	at com.android.tools.lint.LintCliClient.runReadAction(LintCliClient.kt:228)
+	at com.android.tools.lint.client.api.LintDriver$LintClientWrapper.runReadAction(LintDriver.kt:2694)
+	at com.android.tools.lint.client.api.LintDriver.visitUastDetectors(LintDriver.kt:2030)
+	at com.android.tools.lint.client.api.LintDriver.visitUast(LintDriver.kt:1977)
+	at com.android.tools.lint.client.api.LintDriver.runFileDetectors(LintDriver.kt:1234)
+	at com.android.tools.lint.client.api.LintDriver.checkProject(LintDriver.kt:1041)
+	at com.android.tools.lint.client.api.LintDriver.checkProjectRoot(LintDriver.kt:607)
+	at com.android.tools.lint.client.api.LintDriver.access$checkProjectRoot(LintDriver.kt:179)
+	at com.android.tools.lint.client.api.LintDriver$analyzeOnly$1.invoke(LintDriver.kt:434)
+	at com.android.tools.lint.client.api.LintDriver$analyzeOnly$1.invoke(LintDriver.kt:431)
+	at com.android.tools.lint.client.api.LintDriver.doAnalyze(LintDriver.kt:490)
+	at com.android.tools.lint.client.api.LintDriver.analyzeOnly(LintDriver.kt:431)
+	at com.android.tools.lint.LintCliClient$analyzeOnly$1.invoke(LintCliClient.kt:261)
+	at com.android.tools.lint.LintCliClient$analyzeOnly$1.invoke(LintCliClient.kt:258)
+	at com.android.tools.lint.LintCliClient.run(LintCliClient.kt:307)
+	at com.android.tools.lint.LintCliClient.analyzeOnly(LintCliClient.kt:258)
+	at com.android.tools.lint.Main.run(Main.java:1788)
+	at com.android.tools.lint.Main.run(Main.java:287)
+	at java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke0(Native Method)
+	at java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke(NativeMethodAccessorImpl.java:77)
+	at java.base/jdk.internal.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:569)
+	at com.android.build.gradle.internal.lint.AndroidLintWorkAction.invokeLintMainRunMethod(AndroidLintWorkAction.kt:103)
+	at com.android.build.gradle.internal.lint.AndroidLintWorkAction.runLint(AndroidLintWorkAction.kt:90)
+	at com.android.build.gradle.internal.lint.AndroidLintWorkAction.execute(AndroidLintWorkAction.kt:64)
+	at org.gradle.workers.internal.DefaultWorkerServer.execute(DefaultWorkerServer.java:68)
+	at org.gradle.workers.internal.NoIsolationWorkerFactory$1$1.create(NoIsolationWorkerFactory.java:64)
+	at org.gradle.workers.internal.NoIsolationWorkerFactory$1$1.create(NoIsolationWorkerFactory.java:61)
+	at org.gradle.internal.classloader.ClassLoaderUtils.executeInClassloader(ClassLoaderUtils.java:102)
+	at org.gradle.workers.internal.NoIsolationWorkerFactory$1.lambda$execute$0(NoIsolationWorkerFactory.java:61)
+	at org.gradle.workers.internal.AbstractWorker$1.call(AbstractWorker.java:44)
+	at org.gradle.workers.internal.AbstractWorker$1.call(AbstractWorker.java:41)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$CallableBuildOperationWorker.execute(DefaultBuildOperationRunner.java:210)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$CallableBuildOperationWorker.execute(DefaultBuildOperationRunner.java:205)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$2.execute(DefaultBuildOperationRunner.java:67)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$2.execute(DefaultBuildOperationRunner.java:60)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner.execute(DefaultBuildOperationRunner.java:167)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner.execute(DefaultBuildOperationRunner.java:60)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner.call(DefaultBuildOperationRunner.java:54)
+	at org.gradle.workers.internal.AbstractWorker.executeWrappedInBuildOperation(AbstractWorker.java:41)
+	at org.gradle.workers.internal.NoIsolationWorkerFactory$1.execute(NoIsolationWorkerFactory.java:58)
+	at org.gradle.workers.internal.DefaultWorkerExecutor.lambda$submitWork$0(DefaultWorkerExecutor.java:174)
+	at java.base/java.util.concurrent.FutureTask.run(FutureTask.java:264)
+	at org.gradle.internal.work.DefaultConditionalExecutionQueue$ExecutionRunner.runExecution(DefaultConditionalExecutionQueue.java:191)
+	at org.gradle.internal.work.DefaultConditionalExecutionQueue$ExecutionRunner.access$500(DefaultConditionalExecutionQueue.java:112)
+	at org.gradle.internal.work.DefaultConditionalExecutionQueue$ExecutionRunner$1.run(DefaultConditionalExecutionQueue.java:168)
+	at org.gradle.internal.Factories$1.create(Factories.java:30)
+	at org.gradle.internal.work.DefaultWorkerLeaseService.lambda$withLocksAcquired$0(DefaultWorkerLeaseService.java:280)
+	at org.gradle.internal.work.ResourceLockStatistics$1.measure(ResourceLockStatistics.java:43)
+	at org.gradle.internal.work.DefaultWorkerLeaseService.withLocksAcquired(DefaultWorkerLeaseService.java:278)
+	at org.gradle.internal.work.DefaultWorkerLeaseService.withLocks(DefaultWorkerLeaseService.java:270)
+	at org.gradle.internal.work.DefaultWorkerLeaseService.runAsWorkerThread(DefaultWorkerLeaseService.java:129)
+	at org.gradle.internal.work.DefaultWorkerLeaseService.runAsWorkerThread(DefaultWorkerLeaseService.java:134)
+	at org.gradle.internal.work.DefaultConditionalExecutionQueue$ExecutionRunner.runBatch(DefaultConditionalExecutionQueue.java:163)
+	at org.gradle.internal.work.DefaultConditionalExecutionQueue$ExecutionRunner.run(DefaultConditionalExecutionQueue.java:125)
+	at java.base/java.util.concurrent.Executors$RunnableAdapter.call(Executors.java:539)
+	at java.base/java.util.concurrent.FutureTask.run(FutureTask.java:264)
+	at org.gradle.internal.concurrent.ExecutorPolicy$CatchAndRecordFailures.onExecute(ExecutorPolicy.java:64)
+	at org.gradle.internal.concurrent.AbstractManagedExecutor$1.run(AbstractManagedExecutor.java:47)
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1136)
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:635)
+	at java.base/java.lang.Thread.run(Thread.java:840)
+
+> Task :app:lintReportDebug
+Wrote HTML report to file:///D:/hxzhang/MyGithubSoftware/NasAudio/NASMusicTV/app/build/reports/lint-results-debug.html
+
+> Task :app:lintDebug
+
+[Incubating] Problems report is available at: file:///D:/hxzhang/MyGithubSoftware/NasAudio/NASMusicTV/build/reports/problems/problems-report.html
+
+BUILD SUCCESSFUL in 6m 43s
+49 actionable tasks: 9 executed, 40 up-to-date
+Consider enabling configuration cache to speed up this build: https://docs.gradle.org/9.5.0/userguide/configuration_cache_enabling.html

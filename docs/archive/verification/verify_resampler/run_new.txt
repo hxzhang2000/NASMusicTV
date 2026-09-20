@@ -1,0 +1,23 @@
+== 编译 ==
+JDK      : /c/Program Files/Android/Android Studio/jbr/bin/java.exe
+源文件   : 2 个
+           logs_temp\verify_resampler\gen\StubDemucs.kt
+           app\src\test\java\com\nasmusic\tv\player\LinearResamplerTest.kt
+WARNING: A terminally deprecated method in sun.misc.Unsafe has been called
+WARNING: sun.misc.Unsafe::objectFieldOffset has been called by org.jetbrains.kotlin.com.intellij.util.containers.Unsafe (file:/C:/Users/hxzha/.gradle/caches/modules-2/files-2.1/org.jetbrains.kotlin/kotlin-compiler-embeddable/2.2.10/6882d39ef03b18879c1a5d2a83c2212361bed5fe/kotlin-compiler-embeddable-2.2.10.jar)
+WARNING: Please consider reporting this to the maintainers of class org.jetbrains.kotlin.com.intellij.util.containers.Unsafe
+WARNING: sun.misc.Unsafe::objectFieldOffset will be removed in a future release
+warning: unable to find kotlin-stdlib.jar in the Kotlin home directory. Pass either '-no-stdlib' to prevent adding it to the classpath, or the correct '-kotlin-home'
+warning: unable to find kotlin-script-runtime.jar in the Kotlin home directory. Pass either '-no-stdlib' to prevent adding it to the classpath, or the correct '-kotlin-home'
+warning: unable to find kotlin-reflect.jar in the Kotlin home directory. Pass either '-no-reflect' or '-no-stdlib' to prevent adding it to the classpath, or the correct '-kotlin-home'
+
+== 运行 com.nasmusic.tv.player.LinearResamplerTest ==
+JUnit version 4.13.2
+..........
+Time: 0.247
+
+OK (10 tests)
+
+
+结果：全部通过。
+提醒：这证明的是该类的纯逻辑正确性，不代表 Android 侧行为已验证。

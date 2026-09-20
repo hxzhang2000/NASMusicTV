@@ -515,10 +515,11 @@ JAVA_HOME="C:/Program Files/Android/Android Studio/jbr" \
 因此沿用本仓库 Demucs 那次的既有做法——**绕过 Gradle，用独立 JVM 编译真实源码并跑真实测试类**：
 
 ```bash
-cd logs_temp/verify_feiniu_url && python run.py        # --clean 可强制重编
+cd docs/archive/verification/verify_feiniu_url && python run.py        # --clean 可强制重编
 ```
 
-> ⚠️ `logs_temp/` 在 `.gitignore` 中，该 harness **不入库**（与仓库里 `verify_resampler` 的先例一致）。
+> ⚠️ 该 harness 原先放在 gitignored 的 `logs_temp/`（不入库）；2026-09-20 已随其他验证证据迁入
+> `docs/archive/verification/`，**现已入库**，路径即上面的 `cd` 目标。
 > 机器清理后需重建；脚本只依赖 Gradle 缓存里的 `kotlin-compiler-embeddable` / okhttp / junit，
 > 路径写在 `run.py` 顶部的常量里，版本升级时改常量即可。
 

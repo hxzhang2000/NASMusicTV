@@ -536,7 +536,7 @@
 - **release 包内 4 个图标资源复核**（`aapt2 dump resources`；release 下**文件名已混淆**，故按资源名查表而非按路径找）：`drawable/ic_auto_download` = `0x7f0800a7` → `res/nM.xml` ✓、`drawable/ic_auto_favorite` = `0x7f0800a8` → `res/fl.xml` ✓、`drawable/ic_auto_playlist` = `0x7f0800a9` → `res/AR.xml` ✓、`drawable/ic_auto_queue` = `0x7f0800aa` → `res/_z.xml` ✓；`xml/automotive_app_desc` = `0x7f160000` → `res/oc.xml` ✓
 - **R8 存活复核**（解包 `classes.dex` 做字节匹配）：媒体树业务字符串 `当前播放` / `离线下载` / `收藏` / `歌单` / `NAS Music TV` **全部命中** ✓；图标通路业务字符串 `"android.resource://"` 与 `"drawable/"` **均命中** ✓；**阶段 3 新增的 `"no result for query: "`（`resolveVoiceSearch` 的业务异常文案）命中** ✓（证明该路径进了 release dex）；对照项 `AppLog.w` 的 `"onConnect rejected"` 与 `AppLog.d` 的 `"search(nas) skipped"` **均未命中**（符合预期——`AppLog.d/w` 带 `if (BuildConfig.DEBUG)` 守卫，release 下连字符串常量一起被折掉，**不能据此判"代码丢了"**）。`rasterizeIcon` / `ic_auto_` 查不到属**正常**：前者方法名随 `player` 包被混淆，后者 `R.drawable.*` 在编译期已内联为 int 常量、运行时资源名取自资源表而非 dex 字符串。**`android.media.action.MEDIA_PLAY_FROM_SEARCH` 在 dex 里查不到也属正常** —— 它是**清单**字符串，只存在于 APK 的二进制 `AndroidManifest.xml`，用 `aapt2 dump xmltree` 验（已命中）
 - **阶段 4.1 提供方图标复核**：`aapt2 dump resources` 确认 `drawable/ic_car_attribution` = `0x7f0800b1` → `res/PD.xml` ✓；`aapt2 dump xmltree --file AndroidManifest.xml` 确认 `androidx.car.app.TintableAttributionIcon` meta-data 存在且 `android:resource=@0x7f0800b1` **正好指向它** ✓
-- **图形形状离线核对**（`logs_temp/render_car_icon.py`，比 2.5 的脚本多支持 **Q 曲线展平**与 **`<group>` 变换**）：渲染后包围盒实测 `x∈[12,96] y∈[19,89]`，两轴精确居中（中心 54 = 108/2）✓。**该脚本顺带抓出一个真实错误** —— 见上文「推导时踩到的坑」
+- **图形形状离线核对**（`docs/archive/verification/render_car_icon.py`，比 2.5 的脚本多支持 **Q 曲线展平**与 **`<group>` 变换**）：渲染后包围盒实测 `x∈[12,96] y∈[19,89]`，两轴精确居中（中心 54 = 108/2）✓。**该脚本顺带抓出一个真实错误** —— 见上文「推导时踩到的坑」
 - **未做真机/车机验收**：DHU 需 `adb forward tcp:5277 tcp:5277` + `desktop-head-unit.exe`；真车默认只显示 Play 商店应用、侧载需在 Android Auto 开发者模式打开 "Unknown sources"。按项目约定，上机验证由用户执行
 - **版本**：v2.32.7 → **v2.33.0**（versionCode 146 → 147）
 
@@ -637,7 +637,7 @@
 - 新增 `BackendHostOfUrlTest`（含 IPv6 剥括号，6 例）
 
 ### 验证
-- 独立 JVM harness 复跑：`FeiniuUrlTest` **OK (29 tests)**、`BackendAuthHeadersTest` **OK (6 tests)**（新增 `logs_temp/verify_auth_headers/` harness，与 verify_feiniu_url 同构）
+- 独立 JVM harness 复跑：`FeiniuUrlTest` **OK (29 tests)**、`BackendAuthHeadersTest` **OK (6 tests)**（新增 `docs/archive/verification/verify_auth_headers/` harness，与 verify_feiniu_url 同构）
 - `assembleDebug` / `assembleRelease`（含 R8）/ `compileDebugUnitTestKotlin` BUILD SUCCESSFUL；`lintDebug` **0 Error**（257 Warning）；release dex 冒烟确认三个类与新方法（`hostOfUrl` / `fetchLyricsRaw` / `doToggleFavorite` 等）均未被 R8 收缩
 - `BackendHostOfUrlTest`（6 例，含 IPv6 剥括号）随 CI 的 `testDebugUnitTest` 执行（源码位于 BackendRegistry.kt，无法独立抽取运行；本机已通过编译验证）
 - 真机动态项（A5 / A6 / A14）仍需飞牛真机验收
@@ -648,7 +648,7 @@
 >
 > ⚠️ 旧实现与真实协议在**认证方式、分页参数、端点路径、ID 语义**四个层面均不一致，按旧代码几乎必然连不上或全量 401/404。本次共修正 22 项缺陷，其中 5 项为阻断级（D1 认证头 / D2 令牌字段 / D9 流地址 / D21 播放链路注入 / D22 封面链路注入）。
 >
-> ⚠️ 本机 `testDebugUnitTest` 无法运行（测试 worker 启动即死），**Gradle 侧未跑过任何测试**。验证手段：`assembleDebug` + `assembleRelease` + `lintDebug` + `compileDebugUnitTestKotlin` 均通过；另用独立 JVM harness（`logs_temp/verify_feiniu_url/run.py`，绕过 Gradle）把新增的 `FeiniuUrlTest` 跑出 **OK (25 tests)**，并做反向对照确认 harness 能检出错误（注入旧错误认知后 9/25 失败）。
+> ⚠️ 本机 `testDebugUnitTest` 无法运行（测试 worker 启动即死），**Gradle 侧未跑过任何测试**。验证手段：`assembleDebug` + `assembleRelease` + `lintDebug` + `compileDebugUnitTestKotlin` 均通过；另用独立 JVM harness（`docs/archive/verification/verify_feiniu_url/run.py`，绕过 Gradle）把新增的 `FeiniuUrlTest` 跑出 **OK (25 tests)**，并做反向对照确认 harness 能检出错误（注入旧错误认知后 9/25 失败）。
 >
 > **R8 专项**（AGENTS.md 记载 v2.5.1 曾因 Gson 类型擦除 + R8 崩溃）：本次**未新增任何 Gson 模型类**，解析一律用手写 `JsonObject` 取值，不引入新的反射反序列化面；新增的两个类都在 `-keep class com.nasmusic.tv.backend.**` 覆盖范围内。已对 `NASMusicTV-release-v2-32-4.apk` 的 `classes.dex` 做冒烟检查，确认 `BackendAuthHeaders` / `FeiniuUrl` / `FeiniuAdapter` 三个类与 `music/api/v1`、`Authorization`、`track/stream`、`static/cover`、`lyric/list`、`favorite-track/create`、`user/password-login` 等协议常量**均未被 R8 收缩**。
 >
@@ -705,7 +705,7 @@
 > 另含 P1 性能清单落地 4 项（P1#3 Crossfade 等功率曲线 / P1#4 SleepTimer 协程化 / P1#6 `hueOf` 零分配 / P1#7 Milkdrop 预分配 Canvas）；P1 清单另 4 项经复核判定不宜按报告原建议直接实施（P1#11 设计取舍 / P1#9 非等价优化 / P1#8 需算法改写 / P1#5 需改 30+ 渲染器），逐条理由详见 §10.148。⚠️ 本机测试 worker 无法启动，新增的虚拟时间用例与 S4 的 5 条 MockWebServer 用例**均未经运行**，须由 CI 验证。
 
 ### Fixed
-- **K 歌 / ONNX 专项修复（player）**: 落地 `logs_temp/code-review-karaoke-onnx-2026-09-14.md` 的 2 项 P0 + 3 项 P1 + 5 项 P2（P2-d / P2-e 为 2026-09-14 二次审计后追加），详见 §10.146。**本机 `./gradlew testDebugUnitTest` 始终无法运行（测试 worker 启动即死，exit 268435466）**，故另用 `kotlin-compiler-embeddable` 绕过 Gradle 做独立 JVM 数值验证：39 条断言全部通过，且对已提交的 `LinearResamplerTest.kt` 本体跑出 `OK (10 tests)`。**真机听感仍未验证**：
+- **K 歌 / ONNX 专项修复（player）**: 落地 `docs/archive/code-review-karaoke-onnx-2026-09-14.md` 的 2 项 P0 + 3 项 P1 + 5 项 P2（P2-d / P2-e 为 2026-09-14 二次审计后追加），详见 §10.146。**本机 `./gradlew testDebugUnitTest` 始终无法运行（测试 worker 启动即死，exit 268435466）**，故另用 `kotlin-compiler-embeddable` 绕过 Gradle 做独立 JVM 数值验证：39 条断言全部通过，且对已提交的 `LinearResamplerTest.kt` 本体跑出 `OK (10 tests)`。**真机听感仍未验证**：
   - **P0-1 采样率归一化（`DemucsSeparator.kt`）**: MediaCodec 不重采样、`codec.configure` 也改不了 `KEY_SAMPLE_RATE`，48kHz 源此前原样进入按 44100Hz 设计的模型，而 WAV 头硬编码 44100 → 伴奏时长缩短 8.8%、音高升高约 1.5 个半音。新增流式线性插值重采样器 `LinearResampler`（`inRate == outRate` 时整体旁路），解码阶段统一归一化到 44100Hz，下游分段/overlap-add/WAV 头/时长计算只有一处真相
   - **P0-2 单声道源错乱（`DemucsSeparator.kt`）**: `channelCount` 此前读出但从未使用，无条件按 L/R 成对读 → 单声道源被当成「两倍帧数的立体声」，输出时长减半、播放翻倍速且升八度。改为按真实声道数拆帧（单声道复制为 L/R；>2 声道取前两路并跳过其余），并新增 `INFO_OUTPUT_FORMAT_CHANGED` 处理以 `codec.outputFormat` 为准
   - **P1-3 张量泄漏（`DemucsSeparator.kt`）**: `processSegmentFromBuffer` 原为「先取值、再 close」，`session.run()` 抛异常或强转失败时输入张量（~2.75MB）与 `OrtSession.Result`（~11MB）native 内存双双泄漏，被 `separate()` 的 `catch (e: Exception)` 吞掉后静默累积。改为嵌套 try/finally；同时补输出 shape 校验（错误信息携带实际 shape）
@@ -717,7 +717,7 @@
   - **P2-d 收紧模型大小阈值（`ModelDownloadManager.kt`）**: `isModelDownloaded()` 的快速判定原为 `> EXPECTED_SIZE_BYTES * 0.8`（−20%，约 132.5MB），过宽——截断到 133MB 的残缺文件、镜像站返回的 HTML 错误页都能通过，且只有下界没有上界。收紧到 **±1%**（`163,956,509 ~ 167,268,762` 字节，区间宽 3.16MB）。FP16 权重字节数由 `EXPECTED_SHA256` 锁定、是确定的，不需要 20% 余量
   - **P2-e `lastError` 加 `@Volatile`（`DemucsSeparator.kt`）**: 该字段原非 `@Volatile`。当前所有读取点都紧跟 `withContext`（协程调度天然建立 happens-before），**实际安全**，但属隐性契约——将来出现非协程读取点即变可见性 bug，且这类 bug 在 x86 上几乎不复现、只在 ARM 电视盒上偶发
   - 新增字符串：`demucs_error_bad_model_shape`、`hq_error_model_corrupted`（中英双语）
-  - **验证**：新增 `app/src/test/java/com/nasmusic/tv/player/LinearResamplerTest.kt`（纯 JVM，10 用例）作为长期回归网，`LinearResampler` 可见性由 `private` 放宽到 `internal` 以便测试覆盖；因本机测试 worker 无法启动，另用独立 JVM harness（`logs_temp/verify_resampler/`，含可重跑的 `extract.py`，按标记从源码抽取而非手抄）跑出 **39 PASS / 0 FAIL**，并对提交的测试文件本体跑出 **OK (10 tests)**。关键结论：同速率逐样本 bit-exact、48000→44100 与理想插值 `k*ratio` 逐点 bit-exact、392 组速率/长度属性测试全一致、200 万帧无浮点漂移、`putShortLE` 与 `shortToByteArray` 全 65536 取值字节一致（小端）、PCM 限幅不回绕。**踩坑**：期望帧数不能用 `floor((n-1)/ratio)+1`，double 除法在整除边界给出 `3968.999…`（实测 `in=48000 out=44100 n=4321` 真值 3970、浮点算法给 3969），必须用精确整数运算
+  - **验证**：新增 `app/src/test/java/com/nasmusic/tv/player/LinearResamplerTest.kt`（纯 JVM，10 用例）作为长期回归网，`LinearResampler` 可见性由 `private` 放宽到 `internal` 以便测试覆盖；因本机测试 worker 无法启动，另用独立 JVM harness（`docs/archive/verification/verify_resampler/`，含可重跑的 `extract.py`，按标记从源码抽取而非手抄）跑出 **39 PASS / 0 FAIL**，并对提交的测试文件本体跑出 **OK (10 tests)**。关键结论：同速率逐样本 bit-exact、48000→44100 与理想插值 `k*ratio` 逐点 bit-exact、392 组速率/长度属性测试全一致、200 万帧无浮点漂移、`putShortLE` 与 `shortToByteArray` 全 65536 取值字节一致（小端）、PCM 限幅不回绕。**踩坑**：期望帧数不能用 `floor((n-1)/ratio)+1`，double 除法在整除边界给出 `3968.999…`（实测 `in=48000 out=44100 n=4321` 真值 3970、浮点算法给 3969），必须用精确整数运算
   - **二次审计与遗留（重要）**: 2026-09-14 对照该报告逐条核验当前源码，报告拆出 **14 条**可判定项，现**已修 10 条、未修 4 条**。4 条未修项已全部记入 §10.146 的「遗留」节：§四-3（UI 标注自定义源的信任提示，可选建议）、§七-3（`totalSegments` 为估算，仅影响进度百分比）、§七-4（`onnxruntime-android:1.17.1` 原生库非 16KB 页对齐 × 3，**经专项调研后有意保持不升级**——实测只有 1.29.0 能让警告消失，而它要求 `minSdk 24`（本项目 22），升级等于砍掉 Android 5.0/5.1/6.0；**升 `targetSdk 35` 或上架前必须处理**；注意 lint ID 是 `Aligned16KB`，报告里写的 `NativeLibraryAlignment` 有误）、§七-5（`deleteModel` 与下载并发，UX 问题非数据损坏）。同时回归确认报告 §八「已核对为正确、不建议改动」的 8 项设计**全部完好**，未被本轮修复破坏
 - **T6 修复（visualizer）**: `SpectrumRepository.kt` AudioFrame 双缓冲——2 个预分配实例 + `@Volatile writeIndex`，写端（仅 onFrame/reset）写完翻转发布、读端读 front，volatile 写→读建立 happens-before，消除音频回调线程写/渲染线程读的无同步撕裂；帧序号改仓库级全局计数器；`reset()` 双实例同时清零避免波形跨歌残留。`VisualizerStage.kt` 绘制循环改每帧捕获 front 引用（原持有重组期快照引用会被写端轮询覆盖，双缓冲形同虚设）
 - **T8 修复（visualizer）**: `ParticleRenderers.kt` `val t = targets ?: return` 提前到 createBitmap 之前，消除 Bitmap 必然泄漏路径（targets 为 null 时每帧泄漏 220x660x4B=580KB 内存）
@@ -750,8 +750,8 @@
 
 ### Docs
 - **L4 补充（db）**: `LocalMusicDatabase.kt` 注释强化：`fallbackToDestructiveMigration` 仅适用可由其他数据源重建的本地索引，**未来承载用户数据（下载/收藏/播放列表）的数据库绝不可启用**，必须维护 Migration 类
-- **审阅文档**: `logs_temp/code-review-full-report-2026-09-13.md` 追加"实施记录"段并随 T2/T6/T3 落地持续同步，标注 13 项已修复 + 3 项暂缓（理由）+ 综合评分 74 → 78 → 81
-- **全量报告遗留项持久化（docs）**: 独立审计发现——该报告位于 gitignored 的 `logs_temp/`，其未完成项的唯一记录不进版本控制，一旦目录被清理，后人只会看到 CHANGELOG 的"13 项已修复"而**误判为已全修完**。新增 `docs/technical-overview.md` §10.147，把报告 36 项条目拆解为「已修 13 · 未完成 16 · 判定无需修复 5 · 已 review 关闭 1 · 剔除 1」，并逐条列出未完成的 16 项（含 L1/L2 架构债、L6 待触发、T5 死代码、P1#3/#4/#6/#7/#8/#9/#11 性能项、S4 安全项、P1#5/L3 暂缓、P1#1 决定不做、customAppKey 未做）及其实测证据。此前 L1/L2/L6/T5 与 P1 性能项在 `CHANGELOG.md`/`technical-overview.md` 中均为 0 命中，仅存在于该 gitignored 文件
+- **审阅文档**: `docs/archive/code-review-full-report-2026-09-13.md` 追加"实施记录"段并随 T2/T6/T3 落地持续同步，标注 13 项已修复 + 3 项暂缓（理由）+ 综合评分 74 → 78 → 81
+- **全量报告遗留项持久化（docs）**: 独立审计发现——该报告当时位于 gitignored 的 `logs_temp/`（2026-09-20 已迁入 `docs/archive/` 并入库），其未完成项的唯一记录不进版本控制，一旦目录被清理，后人只会看到 CHANGELOG 的"13 项已修复"而**误判为已全修完**。新增 `docs/technical-overview.md` §10.147，把报告 36 项条目拆解为「已修 13 · 未完成 16 · 判定无需修复 5 · 已 review 关闭 1 · 剔除 1」，并逐条列出未完成的 16 项（含 L1/L2 架构债、L6 待触发、T5 死代码、P1#3/#4/#6/#7/#8/#9/#11 性能项、S4 安全项、P1#5/L3 暂缓、P1#1 决定不做、customAppKey 未做）及其实测证据。此前 L1/L2/L6/T5 与 P1 性能项在 `CHANGELOG.md`/`technical-overview.md` 中均为 0 命中，仅存在于该 gitignored 文件
 - **文档修正（docs）**: §10.145 遗留行原写 lint ID `NativeLibraryAlignment`，与 lint 报告实际 ID 不符，更正为 `Aligned16KB`（实测 `lint-results-debug.txt`：前者 0 命中、后者 4 行命中）；§10.146 表格此前已用正确 ID，本次同步
 - **P1#8 / P1#9 量化复核（docs）**: 这两条此前只给了定性理由（「需算法改写」/「非等价优化」），补上代码级量化后**结论有变**——① **P1#8 判定为「无需修改」**：报告把 12720 次**配对检查**当成了绘制量，实际连线仅 144–614 条（取决于能量与分辨率），而 12720 次纯浮点无分配约 30–60µs ≈ **帧预算 0.2–0.4%**；该渲染器真正的大头是 160 次 `addOval` 的 Path 细分，**空间网格帮不上**——按报告原建议改收益≈0（报告自身亦标注「n=160 量级可控，低优先」）。② **P1#9 的可达性极窄**：`PLASMA_FLOW` 属 `Tier.ULTRA`，而 `VisualQuality.supports()` 要求 ULTRA 必须 `allowFramebuffer`，**仅 HIGH 档满足**（MEDIUM/LOW 均为 false），默认档位是 `MEDIUM` + 主题 `CIRCULAR_RING` → 只有「画质=HIGH 且用户主动选中该效果」才会跑到 350 粒子（估 2–6% 帧预算）；且每帧无堆分配（`hsl` 返回 `Color` value class）。另补一条**量级说明**：可视化是 `AppRoot.kt:360` `if (showVisualizer)` 守卫的**全屏 overlay**，不是常驻开销，退出即卸载。⚠️ 上述数字为**静态推算，未经真机 profile**；确认手段 `adb shell dumpsys gfxinfo com.nasmusic.tv framestats`。已同步 §10.148「未实施 4 项」表 + §10.147 表内两行
 - **16KB 对齐专项调研（docs/build/player）**: 针对 lint `Aligned16KB`（`com.microsoft.onnxruntime:onnxruntime-android:1.17.1`）做了完整可行性取证，结论是**当前有意保持 1.17.1 + `minSdk 22`，不升级**。

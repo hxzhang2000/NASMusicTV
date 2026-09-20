@@ -1,0 +1,56 @@
+{
+  "source": "../../app/src/main/java/com/nasmusic/tv/player/DemucsSeparator.kt",
+  "outputs": [
+    {
+      "file": "Resampler.kt",
+      "banner": [
+        "由 extract_kt_members.py 从 DemucsSeparator.kt 自动抽取。",
+        "不要手工编辑；改实现请改源文件后重跑抽取。"
+      ],
+      "package": null,
+      "wrap": null,
+      "members": [
+        {
+          "kind": "class",
+          "marker": "class LinearResampler(",
+          "kdoc_marker": "流式线性插值重采样器",
+          "replace": [["internal class LinearResampler(", "class LinearResampler("]]
+        }
+      ]
+    },
+    {
+      "file": "StubDemucs.kt",
+      "banner": [
+        "由 extract_kt_members.py 自动生成。DemucsSeparator 桩类，内含抽取出的 LinearResampler，",
+        "目的是让真实的 app/src/test/.../LinearResamplerTest.kt 能在独立 JVM 上运行。"
+      ],
+      "package": "com.nasmusic.tv.player",
+      "wrap": { "kind": "class", "name": "DemucsSeparator" },
+      "members": [
+        {
+          "kind": "class",
+          "marker": "class LinearResampler(",
+          "kdoc_marker": "流式线性插值重采样器"
+        }
+      ]
+    },
+    {
+      "file": "ByteConv.kt",
+      "banner": ["由 extract_kt_members.py 自动抽取，包进 object 便于调用。"],
+      "package": null,
+      "wrap": { "kind": "object", "name": "ByteConv" },
+      "members": [
+        {
+          "kind": "function",
+          "marker": "fun shortToByteArray(",
+          "replace": [["private fun", "fun"]]
+        },
+        {
+          "kind": "function",
+          "marker": "fun putShortLE(",
+          "replace": [["private fun", "fun"]]
+        }
+      ]
+    }
+  ]
+}

@@ -984,8 +984,8 @@ Media3 到 legacy（Android Auto）客户端有**两条**图标通路（`LegacyC
 2. **图形形状** —— 用一个 Python 小脚本解析 `pathData`（只需支持 `M`/`L`/`Z`）高倍渲染后
    LANCZOS 缩小，输出 4 联预览图目视核对：播放三角 / 下箭头+底座 / 五角星 / 三横线，
    **四个形状均正确**。
-   > 脚本与预览图都在 **gitignore 的临时目录**里（`logs_temp/render_auto_icons.py`、
-   > `output/auto-tab-icons-preview.png`），不入库。**形状可随时复核** —— 唯一输入是
+   > 脚本已随验证证据迁入 `docs/archive/verification/render_auto_icons.py`（**已入库**）；
+   > 预览图仍在 gitignored 的 `output/auto-tab-icons-preview.png`。**形状可随时复核** —— 唯一输入是
    > `res/drawable/ic_auto_*.xml` 里那 4 段 `pathData`，而它们是**已入库**的。
 3. **进包与存活** —— release 包用 `aapt2 dump resources` 按资源名查表确认 4 个
    `drawable/ic_auto_*` 存在（⚠️ release 下**资源文件名已混淆**成 `res/nM.xml` 这种，

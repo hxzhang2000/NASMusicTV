@@ -126,7 +126,7 @@ class SmallTouchTargetScanTest {
     }
 
     /**
-     * 与 `logs_temp/audit_small_touch_target.py` 的 `注释里举例的 ... 不算违规` 用例同源。
+     * 与项目根 `audit_small_touch_target.py` 的 `注释里举例的 ... 不算违规` 用例同源。
      *
      * 加同行判定后的**误报防线**：KDoc / 行尾注释里举例的 `.size(8.dp).clickable`
      * 不是真实代码，不得被判违规。
@@ -260,7 +260,7 @@ private val GESTURE = Regex("""^\s*\.(clickable|combinedClickable)""")
  *
  * `GESTURE` 的 `^\s*\.` 锚点只认行首，匹配不到行中的 `.clickable` —— 首版护栏只扫
  * `.size(` **之后的行**，于是单行写法整条漏掉（负向用例 `尺寸字面量写法也必须被判违规`
- * 正是为此设的，曾因此报红）。判定逻辑与 `logs_temp/audit_small_touch_target.py` 的
+ * 正是为此设的，曾因此报红）。判定逻辑与项目根 `audit_small_touch_target.py` 的
  * `CLICK_SAME_LINE` 逐字一致。
  */
 private val GESTURE_SAME_LINE = Regex("""\.(clickable|combinedClickable)\b""")
