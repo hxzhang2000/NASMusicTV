@@ -7,20 +7,42 @@
 >
 > 类型：`Added`（新增） | `Changed`（变更） | `Fixed`（修复） | `Removed`（移除）
 
+## [v2.36.1] - 2026-09-20
+
+> **车机蓝牙媒体按键修复**
+>
+> 修复 release 包下车机蓝牙（AVRCP）暂停 / 上一曲 / 下一曲全部失效的问题：
+> `PlaybackService.onConnect` 不再拒绝系统控制器，安全边界改到可用会话命令。
+>
+> 实现细节见 `docs/technical-overview.md` §10.165。
+>
+> **未实施部分**：① 车机「未播放时按播放键拉起续播」（需播放队列持久化 +
+> `onPlaybackResumption`，故未注册 manifest `MediaButtonReceiver`）；
+> ② 修复后的车机实机复验（需 release 包 + 车机）。
+
+### Fixed
+
+- **车机蓝牙媒体按键全部失效（release 包）**：`PlaybackService.onConnect` 不再拒绝系统控制器，
+  新增 `player/MediaSessionAccessPolicy.kt` 承载准入策略
+- 可用会话命令改以 `DEFAULT_SESSION_AND_LIBRARY_COMMANDS` 为基线「只增不减」
+- 小尺寸触摸目标护栏的同行写法盲区（`SmallTouchTargetScanTest` + `audit_small_touch_target.py`）
+
+### Test
+
+- 新增门禁 `MediaSessionAccessPolicyTest`（8 例，含源码扫描「不得出现 reject」+ 三层自证）
+
 ## [v2.36.0] - 2026-09-19
 
-> **手机竖屏 UI 适配与横竖屏切换 · Release 独立签名 · 车机蓝牙按键修复**
+> **手机竖屏 UI 适配与横竖屏切换 · Release 独立签名**
 >
 > 引入 `UiMode` 形态因子（TV / 手机竖屏 / 手机横屏），逐页适配竖屏，并提供两层方向控制
-> （设置项三选一 + 顶栏单击循环）；Release 改用独立签名、CI 支持正式签名；
-> 修复车机蓝牙媒体按键在 release 包下全部失效的问题。
+> （设置项三选一 + 顶栏单击循环）；Release 改用独立签名、CI 支持正式签名。
 >
 > 设计见 `docs/archive/phone-portrait-ui-plan.md`，维护约定见 `docs/conventions-adaptive-ui.md`，
-> 实现细节见 `docs/technical-overview.md` §10.162–§10.165。
+> 实现细节见 `docs/technical-overview.md` §10.162–§10.164。
 >
 > **未实施部分**：① 修复后的实机视觉复验；② 详情页下滑返回手势；③ 缩放系数 0.82 → 0.88；
-> ④ 平板 `TabletPortrait` 独立分档；⑤ 车机「未播放时按播放键拉起续播」（需队列持久化 +
-> `onPlaybackResumption`）。
+> ④ 平板 `TabletPortrait` 独立分档。
 
 ### Added
 
@@ -76,14 +98,11 @@
 - 播放页模式指示器圆点触摸目标过小
 - 竖屏底栏英文标签被裁：新增底栏短标签
 - `isTVDevice()` 加 `remember` 缓存
-- **车机蓝牙媒体按键全部失效（release 包）**：`PlaybackService.onConnect` 不再拒绝系统控制器，
-  新增 `player/MediaSessionAccessPolicy.kt` 承载准入策略
 
 ### Test
 
-- 新增门禁：`UiModeTest`、`ScreenUiModeCoverageTest`、`FocusableSurfaceColorContractTest`、
-  `MediaSessionAccessPolicyTest`（均含负向自证）
-- 全量 `testDebugUnitTest` **864 例 / 1 失败**（该 1 例位于未提交的并发文件 `SmallTouchTargetScanTest`，
+- 新增门禁：`UiModeTest`、`ScreenUiModeCoverageTest`、`FocusableSurfaceColorContractTest`（均含负向自证）
+- 全量 `testDebugUnitTest` **864 例 / 1 失败**（该 1 例位于并发会话在建文件 `SmallTouchTargetScanTest`，
   与本节改动无关）；`lintDebug` **0 Error / 267 Warning**
 
 ### Changed（构建与签名）
