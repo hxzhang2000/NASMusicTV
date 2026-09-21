@@ -1,6 +1,7 @@
 package com.nasmusic.tv.visualizer.renderers
 
 import android.graphics.Paint
+import android.graphics.Rect
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Color
@@ -35,8 +36,14 @@ import kotlin.random.Random
  * 频谱映射：每个原子 = 一个频段（重原子 → 低频），能量驱动原子半径/光晕/
  * 描边；键的亮度粗细随两端能量变化，键上光点随节拍流动。
  *
- * 布局：绘图区左移（中心 0.40w），右侧文字带显示分子式（[FormulaLayout]
- * 下标排版）+ 中文名（用户指定：左分子、右名称）。
+ * 布局：绘图区左移（中心 0.40w），右侧文字带显示分子式（[ChemicalFormula]
+ * 化学式专用下标排版）+ 中文名（用户指定：左分子、右名称）。
+ *
+ * ⛔ **相位一律按 dt 累加，绝不用「绝对 now × 速率」**（v2.36.4 真机根因，§10.176）：
+ * `now` 是开机毫秒（可达 1e7 量级），拿它乘一个含 `frame.pulse` 的速率，
+ * 等于把 pulse 的每帧抖动放大千万倍 —— 旋转角一帧能跳几百弧度，描线进度也随之
+ * 来回跳（原子闪现/消失）。旋转与描线进度都改为 `+= dt * rate` 累加；
+ * 且 DRAW 期的旋转**恒速、不吃 pulse**（刻画动画本身已经够看，再叠律动就乱）。
  *
  * 性能红线：draw 内零分配 —— screen/drift/appear/Paint 均为成员；DFS 邻接表
  * 在 [pickNext]（换分子时）一次性构建。
@@ -60,6 +67,34 @@ class MoleculeRenderer(
         const val LABEL_BAND_F = 0.18f
         const val FORMULA_CY_F = 0.40f
         const val NAME_CY_F = 0.52f
+
+        /** 分子式基准字号（px；[ChemicalFormula] 会在超宽时按比例缩） */
+        const val FORMULA_EM = 44f
+
+        // ── 运动常量（全部走 dt 累加，见类注释）──
+        /** 自转角速度（rad/s）——约 52s 一圈 */
+        const val ROT_SPEED = 0.12f
+        /** 单帧 dt 上限（ms）：切后台/掉帧回来时不让相位暴走 */
+        const val MAX_DT_MS = 64L
+        /** HOLD/DISSOLVE 期 pulse 对自转速率的调制深度（DRAW 期为 0） */
+        const val PULSE_SPIN = 0.35f
+        /** 单帧 dt 内描线进度的 pulse 加速深度 */
+        const val PULSE_DRAW = 0.15f
+
+        private const val TWO_PI = 6.2831855f
+
+        /**
+         * 单帧自转增量（纯函数，单测护栏见 `MoleculeMotionTest`）。
+         *
+         * @param dtMs 帧间隔，钳到 [0, MAX_DT_MS]
+         * @return 本帧应累加的弧度
+         */
+        internal fun spinDelta(dtMs: Long, phase: Phase, pulse: Float): Float {
+            val dt = dtMs.coerceIn(0L, MAX_DT_MS) / 1000f
+            // DRAW 期恒速：刻画动画已经逐步点亮原子，再叠加节拍抖动只会显乱
+            val rate = if (phase == Phase.DRAW) ROT_SPEED else ROT_SPEED * (1f + pulse * PULSE_SPIN)
+            return dt * rate
+        }
 
         /** 状态迁移纯函数（与催眠 §13.1 同构）：返回下一态，null = 保持 */
         internal fun nextPhase(phase: Phase, elapsedMs: Long): Phase? = when (phase) {
@@ -92,6 +127,7 @@ class MoleculeRenderer(
     private var screen = FloatArray(0)      // n*2 屏幕坐标
     private var drift = FloatArray(0)       // n*2 溃散漂移向量
     private var appearAt = FloatArray(0)    // n 描线出现阈值 0..0.85（DFS 次序）
+    private var seqToAtom = IntArray(0)     // DFS 次序 → 原子下标（笔头高亮要用）
     private var centroid = FloatArray(2)    // 定义坐标质心（旋转中心）
     private var fitScale = 1f               // 1/(外接半径+边距)
 
@@ -108,15 +144,23 @@ class MoleculeRenderer(
     private var lastH = 0f
     private var needsRemap = true
 
+    // ── 时间增量累加（见类注释：绝不用绝对 now 当相位）──
+    private var lastNowMs = 0L
+    private var rotAccum = 0f               // 累计自转角（rad）
+    private var drawAccumMs = 0f            // 累计描线时长（ms，含 pulse 加速）
+
     // ── 右侧文字带 ──
-    private var formula: FormulaLayout.Result? = null
+    private var formula: ChemicalFormula.Result? = null
 
     // ── 复用绘制对象 ──
+    /** ⛔ 必须 LEFT：[ChemicalFormula] 的 runX 是 run 左缘，RIGHT 会让每个 run 左移自身宽度 */
     private val formulaPaint = Paint().apply {
         isAntiAlias = true
         color = 0xFFFFFFFF.toInt()
-        textAlign = Paint.Align.RIGHT
+        textAlign = Paint.Align.LEFT
     }
+    /** 量取下标墨迹高度的复用 Rect（仅 remap 期使用） */
+    private val inkRect = Rect()
     private val namePaint = Paint().apply {
         isAntiAlias = true
         color = 0xFFFFFFFF.toInt()
@@ -137,6 +181,9 @@ class MoleculeRenderer(
     override fun onEnter(ctx: RenderContext) {
         phase = Phase.DRAW
         phaseStartMs = 0L
+        lastNowMs = 0L
+        rotAccum = 0f
+        drawAccumMs = 0f
         needsRemap = true
         order = IntArray(MoleculeLibrary.ALL.size) { it }
         shuffleOrder(-1)
@@ -173,7 +220,10 @@ class MoleculeRenderer(
             screen = FloatArray(atomCount * 2)
             drift = FloatArray(atomCount * 2)
             appearAt = FloatArray(atomCount)
+            seqToAtom = IntArray(atomCount)
         }
+        // 换分子 = 重新刻画：描线进度归零（残留值会让第一帧就"已经画完"）
+        drawAccumMs = 0f
         // 质心与外接半径
         var cx = 0f; var cy = 0f
         for (i in 0 until atomCount) {
@@ -229,20 +279,34 @@ class MoleculeRenderer(
         for (i in 0 until n) if (pos[i] == -1) pos[i] = seq++
         for (i in 0 until n) {
             appearAt[i] = if (n <= 1) 0f else pos[i].toFloat() / (n - 1) * 0.85f
+            seqToAtom[pos[i]] = i        // 笔头高亮要按 DFS 次序查原子
         }
     }
+
+    /** 描线进度 0..1（dt 累加，见类注释） */
+    private fun strokeProgress(): Float = (drawAccumMs / DRAW_MS).coerceIn(0f, 1f)
 
     /** 屏幕映射 + 公式排版（画布尺寸变化或换分子时执行） */
     private fun remap(w: Float, h: Float, safeArea: Float) {
         val d = def ?: return
         // 右缘钳制到 ≥0.82w（对齐 E25 §11.3）；分子式与中文名共用同一条右缘线
         labelRightX = (w - safeArea - 32f).coerceAtLeast(w * 0.82f)
-        formula = FormulaLayout.layout(
-            d.formulaMark, labelRightX, h * FORMULA_CY_F, w * LABEL_BAND_F * 0.86f, 44f
-        ) { text, size ->
-            formulaPaint.textSize = size
-            formulaPaint.measureText(text)
-        }
+        formula = ChemicalFormula.layout(
+            src = d.formulaMark,
+            rightX = labelRightX,
+            centerY = h * FORMULA_CY_F,
+            bandW = w * LABEL_BAND_F * 0.86f,
+            em = FORMULA_EM,
+            measure = { text, size ->
+                formulaPaint.textSize = size
+                formulaPaint.measureText(text)
+            },
+            inkTop = { text, size ->
+                formulaPaint.textSize = size
+                formulaPaint.getTextBounds(text, 0, text.length, inkRect)
+                inkRect.top.toFloat()
+            }
+        )
         lastW = w; lastH = h
     }
 
@@ -264,12 +328,18 @@ class MoleculeRenderer(
 
         val elapsed = (now - phaseStartMs).coerceAtLeast(0L)
 
+        // ── 相位累加（⛔ 绝不用 `now * rate`，见类注释）──
+        val dtMs = if (lastNowMs == 0L) 0L else (now - lastNowMs).coerceIn(0L, MAX_DT_MS)
+        lastNowMs = now
+        rotAccum = (rotAccum + spinDelta(dtMs, phase, frame.pulse)) % TWO_PI
+        drawAccumMs += dtMs * (1f + frame.pulse * PULSE_DRAW)
+        val progress = strokeProgress()
+
         // 绘图区映射：旋转绕定义质心 → 质心屏幕位置恒为 (plotCx, plotCy)
         plotCx = w * PLOT_CX_F
         plotCy = h / 2f
         unitPx = minOf(w, h) * PLOT_R_F * fitScale
-        val rot = now * 0.00012f * (1f + frame.pulse * 0.5f)
-        val cs = cos(rot); val sn = sin(rot)
+        val cs = cos(rotAccum); val sn = sin(rotAccum)
         for (i in 0 until atomCount) {
             val dx = (d.coords[i * 2] - centroid[0]) * unitPx
             val dy = (d.coords[i * 2 + 1] - centroid[1]) * unitPx
@@ -278,18 +348,20 @@ class MoleculeRenderer(
         }
 
         when (phase) {
-            Phase.DRAW -> drawStrokePhase(frame, elapsed)
+            Phase.DRAW -> drawStrokePhase(frame, progress)
             Phase.HOLD -> drawHold(frame, elapsed)
             Phase.DISSOLVE -> drawDissolve(frame, elapsed)
             Phase.GAP -> drawGapOverlay()
         }
 
-        drawLabelBand(frame, elapsed)
+        drawLabelBand(frame, elapsed, progress)
 
         val next = nextPhase(phase, elapsed)
         if (next != null) {
             phase = next
             phaseStartMs = now
+            // 空场 → 刻画：洗牌换下一个分子（pickNext 内部会重置描线进度与 needsRemap）
+            if (next == Phase.DRAW) pickNext()
         }
     }
 
@@ -309,14 +381,14 @@ class MoleculeRenderer(
     }
 
     /** DRAW：描线刻画（对齐催眠 §8.4）——原子按 DFS 次序点亮、键沿次序生长 */
-    private fun DrawScope.drawStrokePhase(frame: AudioFrame, elapsed: Long) {
-        val speed = 1f + frame.pulse * 0.15f
-        val progress = ((elapsed / 1000f) * speed / (DRAW_MS / 1000f)).coerceIn(0f, 1f)
+    private fun DrawScope.drawStrokePhase(frame: AudioFrame, progress: Float) {
         drawBonds(frame, progress, 1f)
         drawAtoms(frame, progress, 1f)
-        // 笔头高亮：正在描画的原子（progress 对应的 DFS 序位）
-        val headIdx = (progress * (atomCount - 1)).toInt().coerceIn(0, atomCount - 1)
-        if (progress < 1f) {
+        // 笔头高亮：正在描画的原子 = **DFS 序位**对应的那个（不是原子下标，
+        // 否则笔头会画在还没出现的原子上）
+        if (progress < 1f && atomCount > 0) {
+            val seq = ((progress / 0.85f) * (atomCount - 1)).toInt().coerceIn(0, atomCount - 1)
+            val headIdx = seqToAtom[seq]
             drawCircle(
                 Color.White, 5f + frame.treble * 4f,
                 Offset(screen[headIdx * 2], screen[headIdx * 2 + 1]),
@@ -452,8 +524,8 @@ class MoleculeRenderer(
         }
     }
 
-    /** 右侧文字带：分子式（FormulaLayout 下标排版）+ 中文名，随状态机同步淡入淡出 */
-    private fun DrawScope.drawLabelBand(frame: AudioFrame, elapsed: Long) {
+    /** 右侧文字带：分子式（[ChemicalFormula] 下标排版）+ 中文名，随状态机同步淡入淡出 */
+    private fun DrawScope.drawLabelBand(frame: AudioFrame, elapsed: Long, progress: Float) {
         val f = formula ?: return
         val d = def ?: return
         if (phase == Phase.GAP) return
@@ -462,14 +534,15 @@ class MoleculeRenderer(
         val h = size.height
 
         val baseA: Float = when (phase) {
-            Phase.DRAW -> (elapsed / DRAW_MS).coerceIn(0f, 1f)
+            // 用 dt 累加的 progress（不是 elapsed）：分子式与骨架同步浮现
+            Phase.DRAW -> progress
             Phase.HOLD -> 0.88f + 0.10f * (0.5f + 0.5f * sin(elapsed * 0.002f))
             Phase.DISSOLVE -> 1f - (elapsed / DISSOLVE_MS).coerceIn(0f, 1f)
             Phase.GAP -> 0f
         }
         if (baseA <= 0.01f) return
 
-        // 分子式 run（下标已由 FormulaLayout 排好）
+        // 分子式 run（下标已由 ChemicalFormula 排好；runX = run 左缘，配 Align.LEFT）
         for (k in 0 until f.runCount) {
             formulaPaint.textSize = f.runSize[k]
             formulaPaint.alpha = (224 * baseA).toInt().coerceIn(0, 255)
@@ -486,7 +559,7 @@ class MoleculeRenderer(
 /**
  * 分子定义（纯 JVM 数据，便于单测校验）。
  *
- * @param formulaMark [FormulaLayout] 源标记（`_` 下标 → 真化学式排版）
+ * @param formulaMark [ChemicalFormula] 源标记（`_` 下标 → 真化学式排版）
  * @param name        中文名（右侧文字带第二行）
  * @param elements    每原子元素索引（[MoleculeLibrary.ELEMENTS] 下标）
  * @param coords      n*2 定义坐标（±150 量级；绘制时自适应缩放）

@@ -68,9 +68,10 @@ class MoleculeLibraryTest {
 
     @Test
     fun `formula marks layout into at least one run`() {
-        val measure = FormulaLayout.MeasureFn { text, size -> text.length * size * 0.6f }
+        val measure = ChemicalFormula.MeasureFn { text, size -> text.length * size * 0.6f }
+        val inkTop = ChemicalFormula.InkTopFn { _, size -> -0.72f * size }
         MoleculeLibrary.ALL.forEach { def ->
-            val r = FormulaLayout.layout(def.formulaMark, 100f, 100f, 200f, 44f, measure)
+            val r = ChemicalFormula.layout(def.formulaMark, 100f, 100f, 200f, 44f, measure, inkTop)
             assertTrue("${def.name}: 公式排版 run 数 > 0", r.runCount > 0)
         }
     }

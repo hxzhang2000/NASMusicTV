@@ -10465,6 +10465,99 @@ if (onDelete != null) { ... }                                                   
 
 **版本**：v2.36.2（versionCode 156）
 
+### 10.176 v2.36.4 — E37「分子」刻画抖动 & 分子式下标错位（2026-09-21）
+
+**用户反馈**：「① 分子结构在刻画时，已经有逐步出现的动画了，就不用抖动了，太乱；
+② 右侧的分子式的下标位置不对，与字母的位置对不上，得换个画分子式的方式」。
+
+#### 10.176.1 ⛔ 抖动根因：拿「绝对 now」当相位，被 pulse 放大千万倍
+
+```kotlin
+// 旧代码（MoleculeRenderer.draw）
+val rot = now * 0.00012f * (1f + frame.pulse * 0.5f)     // 自转相位
+val progress = ((elapsed / 1000f) * speed / 8f)           // 描线进度，speed 同样含 pulse
+```
+
+`ctx.nowMs = frame.timeMs` 是 **开机毫秒**（`SystemClock.uptimeMillis` 量级，开机 83 分钟
+就是 `5e6`）。把它乘一个含 `frame.pulse` 的系数，等于把 pulse 的每帧抖动乘上 `5e6`：
+
+- `pulse` 差 0.3 → 旋转角跳 `5e6 × 0.00012 × 0.15 = 90 rad`（≈14 圈/帧）
+- 描线进度同理：鼓点一来 `progress` 直接跳档，已点亮的原子**退回未画**、随后又闪出来
+
+症状与用户描述完全吻合：刻画动画在按顺序点亮原子，同时整幅图还在狂抖。
+
+**修法**：相位一律按 **dt 累加**（与 E25「催眠」的 `drawAccumulator` 同思路）：
+
+```kotlin
+val dtMs = if (lastNowMs == 0L) 0L else (now - lastNowMs).coerceIn(0L, MAX_DT_MS)
+lastNowMs = now
+rotAccum = (rotAccum + spinDelta(dtMs, phase, frame.pulse)) % TWO_PI
+drawAccumMs += dtMs * (1f + frame.pulse * PULSE_DRAW)
+```
+
+`spinDelta()` 在 **DRAW 期恒速、完全不吃 pulse** —— 用户明确说刻画动画已经够看，再叠
+律动就是乱；HOLD / DISSOLVE 期保留 pulse 调制（那时没有刻画动画，需要律动）。
+`dtMs` 钳到 `[0, 64ms]`：切后台再回来不让相位暴走。
+
+⚠️ **通用教训**：任何「绝对时间 × 实时调制系数」的写法都是错的 —— 时间基数越大，
+调制系数的抖动被放得越狠。相位必须是**累加量**，调制只能作用在**速率**上。
+（同一坑在 E25 催眠已经踩过一次，那里用 `drawAccumulator` 绕开。）
+
+#### 10.176.2 ⛔ 下标错位：`Paint.Align.RIGHT` + 数学排版器的 0.25em
+
+两个独立错误叠在一起：
+
+1. **`Paint.Align.RIGHT` 画 run，而 `runX` 是 run 左缘**。`FormulaLayout.runX` 是
+   「该 run 的左边界」（内部从左往右推进 x），分子渲染器的 `formulaPaint` 却设成了
+   `Align.RIGHT`（催眠渲染器用的是 `Align.LEFT`，只有分子这里写错）→ 每个 run 再向左
+   平移**自身宽度**，`H₂O` 的 `2` 直接压到 `H` 身上。
+2. **下标下沉量不够**。`FormulaLayout` 的下标只是解析器预留：`SUB_LOWER = 0.25em`，
+   而下标字号 `0.65em`、数字墨迹高约 `0.72 × 0.65em ≈ 0.47em` ⇒ 下沉 0.25em < 字高
+   0.47em，下标**骑在主基线上**，与字母对不齐。
+
+**修法（换个画分子式的方式）**：新增 `ChemicalFormula` —— 化学式专用排版器，不再复用
+数学排版器：
+
+| 维度 | `FormulaLayout`（数学，E25） | `ChemicalFormula`（化学式，E37） |
+|---|---|---|
+| 文体 | 基线为主、上标为辅 | **下标为主** |
+| 断行 | 按「词」断行、最多 3 行 | 单行不可断，按带宽缩字号 |
+| 结构 | `frac` / `√{}` / 嵌套上标 | 基线串 + 下标 + 括号 |
+| 下标基线 | 常数 `0.25em` | **`getTextBounds` 实测墨迹高 + 0.06em 间隙** |
+| `runX` 语义 | 左缘 | 左缘（KDoc 里写明必须配 `Align.LEFT`） |
+
+下标下沉量由注入的 `InkTopFn` 算出，探针固定用数字 `0` —— **所有下标共用同一条基线**，
+不能逐个 run 量自己的字高，否则 `10` 与 `2` 会高低不齐。纯 JVM + 注入度量，单测可断言。
+
+#### 10.176.3 顺带修的两处
+
+- **分子从不轮换**：`pickNext()` 只在 `onEnter()` 调用过，GAP → DRAW 的状态迁移没换分子，
+  与 KDoc「洗牌换下一个分子」不符 → 迁移时补 `pickNext()`（内部会重置描线进度与 `needsRemap`）
+- **笔头高亮画在错的原子上**：笔头要按「DFS 序位」找原子，原代码却拿序位当原子下标用
+  → 新增 `seqToAtom` 反查表（`computeDrawOrder` 里一次性填好）
+
+#### 10.176.4 护栏（都带负向自证）
+
+- `ChemicalFormulaTest`（14 项）：run 左缘连续（**回归 `Align.RIGHT`**）、右缘贴 `rightX`、
+  下标下沉量 ≥ 下标字高、超宽缩字号、全库 52 个分子式「数字必须都是下标」+ 排版健全性；
+  负向自证断言「旧 0.25em 小于字高 → 会骑基线」与「RIGHT 对齐会位移整整一个 run 宽」
+- `MoleculeMotionTest`（8 项）：DRAW 期旋转与 pulse 无关（负向自证 HOLD 期**有关**，
+  证明不是参数没接上）、单帧增量 < 0.01 rad（负向自证旧写法跳 90 rad）、
+  dt 钳制（负向自证钳制区间内仍线性可分辨）、负 dt 不倒退、500 帧累加 = 速率 × 累计时间
+
+#### 10.176.5 验证
+
+- `:app:testDebugUnitTest` → **902 例 / 0 失败 / 0 错误 / 0 跳过**（89 个测试类）
+  （v2.36.3 基线 880 + 新增 `ChemicalFormulaTest` 14 例 + `MoleculeMotionTest` 8 例）
+- `:app:lintDebug` → **0 errors / 272 warnings**（与 v2.36.2 基线一致）
+- ⚠️ 首轮跑出 **2 例假红**，都是**测试写错、实现是对的**：
+  ① `Fe(C_{5}H_{5})_{2}` 的基线 run 是 `Fe(C` 不是 `Fe(`（`(` 后还有个 `C`）；
+  ② 裸 `_` 会把 `H_O` 拆成两个基线 run（`H`、`O`）而不是合并成 `HO`。
+  两者都不影响绘制（同一条基线），按实际行为改测试期望。
+- ⚠️ 本版**未做真机复验**（抖动与下标均由用户上机确认）。
+
+**版本**：v2.36.3 → **v2.36.4**（versionCode 157 → 158）
+
 ### 10.152 v2.32.3 — T5：删除死代码 `VocalRemovalProcessor.kt`（算法先归档，2026-09-14）
 
 **来源**：`docs/archive/code-review-full-report-2026-09-13.md` §T5 / `docs/archive/code-review-2026-09-03.md` §P2。文件 348 行，全项目**零调用方**（`PlaybackService.kt:207` 实际 `val vocalRemovalProcessor = SpectralMaskProcessor()`——变量名是历史遗留，类型早就换过了；`PlayerManager.setVocalRemovalProcessor()` 的形参类型同样是 `SpectralMaskProcessor`）。

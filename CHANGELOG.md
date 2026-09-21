@@ -7,6 +7,34 @@
 >
 > 类型：`Added`（新增） | `Changed`（变更） | `Fixed`（修复） | `Removed`（移除）
 
+## [v2.36.4] - 2026-09-21
+
+> **E37「分子」：去掉刻画抖动 · 分子式改专用排版 · 修好分子轮换**
+
+### Fixed
+
+- **E37「分子」刻画阶段整体抖动、原子随节拍闪现**（`visualizer/renderers/MoleculeRenderer.kt`）：
+  旋转角与描线进度原用「绝对 `now` × 含 `pulse` 的速率」算相位 —— `now` 是开机毫秒
+  （1e7 量级），`pulse` 的每帧抖动被放大千万倍，一帧能跳几十弧度。改为 **dt 累加**
+  （`rotAccum` / `drawAccumMs`），且 DRAW 期旋转**恒速、不吃 pulse**
+  （逐步点亮的动画本身已经够看，再叠律动就乱）
+- **右侧分子式下标位置与字母对不上**（新增 `visualizer/renderers/ChemicalFormula.kt`）：
+  ① 绘制用 `Paint.Align.RIGHT` 画 run，而 `runX` 是 **run 左缘** → 每个 run 又被左移
+  自身宽度，下标整块压到前一个字母身上；② 沿用数学排版器 `FormulaLayout` 的
+  `SUB_LOWER = 0.25em`，小于下标字形字高（≈0.45em）→ 下标骑在主基线上。
+  化学式改走**专用排版器**：`runX` = 左缘配 `Align.LEFT`，下标下沉量由
+  `Paint.getTextBounds` 实测的数字墨迹高度算出（所有下标共用同一条基线），
+  并按文字带宽自动缩字号
+- **E37 只画一个分子、从不轮换**：`pickNext()` 只在 `onEnter()` 调用过，
+  空场 → 刻画的状态迁移没换分子（与「洗牌换下一个分子」的设计不符）。GAP → DRAW 时补上
+- **笔头高亮画在错的原子上**：原按原子下标取「DFS 序位」，改为 `seqToAtom` 反查
+
+### Added
+
+- `ChemicalFormula` —— 化学式专用排版器（纯 JVM，文本测量与字体度量均注入，单测可断言）
+- `ChemicalFormulaTest`（化学式排版，含 run 左缘连续性 / 下标下沉量 的负向自证）
+- `MoleculeMotionTest`（运动相位：DRAW 恒速、单帧增量有界、dt 钳制）
+
 ## [v2.36.3] - 2026-09-21
 
 > **手机端手势跟手化 · 横屏图标修正 · 新增 E37「分子」频谱效果**
