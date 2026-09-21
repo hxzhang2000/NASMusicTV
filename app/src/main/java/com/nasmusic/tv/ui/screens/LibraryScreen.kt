@@ -4,13 +4,8 @@ import com.nasmusic.tv.ui.theme.FontSize
 import com.nasmusic.tv.ui.components.AlbumSkeletonGrid
 import com.nasmusic.tv.ui.components.ArtistSkeletonGrid
 
-import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInHorizontally
-import androidx.compose.animation.slideOutHorizontally
-import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.horizontalScroll
@@ -31,8 +26,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.setValue
@@ -41,12 +39,18 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Text
+import kotlinx.coroutines.launch
+import kotlin.math.ceil
+import kotlin.math.floor
+import kotlin.math.roundToInt
 import com.nasmusic.tv.R
 import com.nasmusic.tv.backend.download.model.DownloadState
 import com.nasmusic.tv.data.model.Album
@@ -88,9 +92,6 @@ enum class LibraryTab(val titleRes: Int) {
     RADIO(R.string.library_radio)
 }
 
-/** 曲库子 TAB 左右滑切换的最小水平位移（≈3mm；低于此视为误触或竖直滚动）。 */
-private val LIBRARY_TAB_SWIPE_THRESHOLD = 48.dp
-
 /**
  * 曲库子 TAB 横推动画时长（v2.36.2）：与竖屏播放页的模式切换保持一致的手感。
  */
@@ -99,8 +100,8 @@ private const val LIBRARY_TAB_SLIDE_ANIM_MS = 260
 /**
  * 曲库子 TAB：在**内容区**左右滑切换 TAB（v2.36.1，用户明确要求「手机端横竖屏都要支持」）。
  *
- * 语义与竖屏播放页的「封面 ⟷ 歌词」滑动一致（见 `NowPlayingScreen.portraitModeSwipe`）：
- * **左滑 → 下一个 TAB，右滑 → 上一个 TAB**；到两端不循环（首 TAB 右滑 / 末 TAB 左滑无动作）。
+ * v2.36.4 起：切换改为**真 pager**（跟手 + 相邻页同时平移，见内容区注释），
+ * 本 modifier 只负责识别水平拖拽并把位移/松手事件转给外层。
  *
  * ⚠️ 挂在**内容区** `Box(weight(1f))` 上，**不要**挂到 TAB 行上 —— TAB 行自身是横滑条
  * （窄屏必须滑才能看全 8 个 TAB），两者手势会打架。
@@ -116,33 +117,43 @@ private const val LIBRARY_TAB_SLIDE_ANIM_MS = 260
  * 因此在那类控件上滑动仍是它们自己响应 —— 这是有意为之。
  *
  * ⚠️ 回调必须用 `rememberUpdatedState` 包裹：`pointerInput` 的 key 是 `enabled`，
- * 只要开关不变协程就不重启，若直接捕获 lambda，会读到**首次组合**那一刻的 `activeTab`
- * （陈旧值）→ 表现为「只能在前两个 TAB 之间来回」。这是 Compose 里
- * `pointerInput(Unit)` + 状态闭包的经典陷阱，参见 `portraitModeSwipe` 的同款注释。
+ * 只要开关不变协程就不重启，若直接捕获 lambda，会读到**首次组合**那一刻的
+ * `activeTab` / `tabPageFraction`（陈旧值）→ 表现为「只能在前两个 TAB 之间来回」。
+ * 这是 Compose 里 `pointerInput(Unit)` + 状态闭包的经典陷阱。
  *
- * v2.36.2：回调改为携带**滑动方向**（`SwipeDirection.LEFT/RIGHT`），供外层
- * `AnimatedContent` 按方向选择横推动画的出入场方向（左滑 → 新 TAB 从右推入）。
+ * v2.36.4 真 pager 回调：[onDragStart] 记录起始页索引并清零累积位移，[onDragDelta]
+ * 实时上报位移（外层驱动 `tabPageFraction` 让当前页划走、相邻页跟进），
+ * [onSettle] 在松手/取消时触发（外层按最近页吸附）。
  */
 @Composable
 private fun Modifier.libraryTabSwipe(
     enabled: Boolean,
-    onSwipe: (SwipeDirection) -> Unit,
+    onDragStart: () -> Unit,
+    onDragDelta: (Float) -> Unit,
+    onSettle: () -> Unit,
 ): Modifier {
-    val swipe by rememberUpdatedState(onSwipe)
+    val dragStart by rememberUpdatedState(onDragStart)
+    val dragDelta by rememberUpdatedState(onDragDelta)
+    val settle by rememberUpdatedState(onSettle)
     return this.pointerInput(enabled) {
         if (!enabled) return@pointerInput
-        val thresholdPx = LIBRARY_TAB_SWIPE_THRESHOLD.toPx()
         var accumulated = 0f
         detectHorizontalDragGestures(
-            onDragStart = { accumulated = 0f },
+            onDragStart = {
+                accumulated = 0f
+                dragStart()
+            },
             onDragEnd = {
-                if (accumulated <= -thresholdPx) swipe(SwipeDirection.LEFT)
-                else if (accumulated >= thresholdPx) swipe(SwipeDirection.RIGHT)
+                settle()
                 accumulated = 0f
             },
-            onDragCancel = { accumulated = 0f },
+            onDragCancel = {
+                settle()
+                accumulated = 0f
+            },
         ) { _, dragAmount ->
             accumulated += dragAmount
+            dragDelta(dragAmount)
         }
     }
 }
@@ -234,9 +245,39 @@ fun LibraryScreen(
     modifier: Modifier = Modifier
 ) {
     var showSearchDialog by remember { mutableStateOf(false) }
-    // v2.36.2：最近一次 TAB 切换的方向（手势 → LEFT/RIGHT；点击 TAB 行 → NONE），
-    // 供 AnimatedContent 按方向选择横推/淡入淡出过渡。
-    var tabSwipeDirection by remember { mutableStateOf(SwipeDirection.NONE) }
+    // v2.36.4 跟手 pager：tabPageFraction 是**连续页索引**（0..N-1），拖动中由手指位移
+    // 驱动，相邻页同时组合并按 (页索引 − fraction) × 页宽 平移 —— 当前页划走、相邻页
+    // 跟进，与竖屏播放页「封面 ⟷ 歌词」的跟手效果一致（真机反馈 v2.36.3 的
+    // 「先滑出再推入」两段式观感不如播放页，本版对齐）。
+    val tabScope = rememberCoroutineScope()
+    val contentWidthPx = remember { mutableIntStateOf(0) }
+    val tabPageFraction = remember { Animatable(LibraryTab.entries.indexOf(activeTab).toFloat()) }
+    var tabDragging by remember { mutableStateOf(false) }
+    var tabDragBaseIdx by remember { mutableIntStateOf(0) }
+    var tabDragAccumPx by remember { mutableFloatStateOf(0f) }
+
+    // 外部跳转（如搜索弹窗确认后跳 SEARCH tab）：瞬时对齐（弹窗遮挡屏幕，无需动画）。
+    // 自己 settle 完成的 onTabSelected 不触发此分支（fraction 已等于目标索引）。
+    LaunchedEffect(activeTab) {
+        val idx = LibraryTab.entries.indexOf(activeTab).toFloat()
+        if (tabPageFraction.targetValue != idx) tabPageFraction.snapTo(idx)
+    }
+
+    // 松手 / 取消的统一出口：按「四舍五入到最近页」吸附（拖过半页 → 切换，不足半页 → 弹回）。
+    // snapTo 先对齐当前跟手位置（无跳变），再 animateTo 吸附；到位后才 onTabSelected，
+    // 期间目标页已由 composedRange 组合，视觉连续。
+    val settleTabs: () -> Unit = {
+        val w = contentWidthPx.intValue.coerceAtLeast(1).toFloat()
+        val current = (tabDragBaseIdx - tabDragAccumPx / w)
+            .coerceIn(0f, (LibraryTab.entries.size - 1).toFloat())
+        val targetIdx = current.roundToInt().coerceIn(0, LibraryTab.entries.size - 1)
+        tabScope.launch {
+            tabPageFraction.snapTo(current)
+            tabDragging = false
+            tabPageFraction.animateTo(targetIdx.toFloat(), tween(LIBRARY_TAB_SLIDE_ANIM_MS))
+            onTabSelected(LibraryTab.entries[targetIdx])
+        }
+    }
 
     // Task 14: 首次曲库快捷键提示（3s 自动消失）
     val context = LocalContext.current
@@ -458,9 +499,17 @@ fun LibraryScreen(
                         val selected = tab == activeTab
                         FocusableSurface(
                             onClick = {
-                                // 点击 TAB 行属非手势切换：方向置 NONE，AnimatedContent 退化为淡入淡出
-                                tabSwipeDirection = SwipeDirection.NONE
-                                onTabSelected(tab)
+                                // 点击 TAB 行：动画吸附到目标页（与手势松手同一条动画路径）
+                                val targetIdx = LibraryTab.entries.indexOf(tab)
+                                if (targetIdx >= 0) {
+                                    tabScope.launch {
+                                        tabPageFraction.animateTo(
+                                            targetIdx.toFloat(),
+                                            tween(LIBRARY_TAB_SLIDE_ANIM_MS),
+                                        )
+                                        onTabSelected(tab)
+                                    }
+                                }
                             },
                             modifier = Modifier.padding(horizontal = 2.dp),
                             shape = RoundedCornerShape(8.dp),
@@ -531,60 +580,64 @@ fun LibraryScreen(
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxWidth()
+                    .onSizeChanged { contentWidthPx.intValue = it.width }
+                    // v2.36.4 真 pager：拖动中当前页划走、相邻页跟进（见上方说明）
                     .libraryTabSwipe(
                         enabled = uiMode == UiMode.PhonePortrait || uiMode == UiMode.PhoneLandscape,
-                        onSwipe = { dir ->
-                            when (dir) {
-                                // 左滑 → 下一个 TAB（到末 TAB 为止，不循环）
-                                SwipeDirection.LEFT -> {
-                                    val idx = LibraryTab.entries.indexOf(activeTab)
-                                    if (idx >= 0 && idx < LibraryTab.entries.size - 1) {
-                                        tabSwipeDirection = SwipeDirection.LEFT
-                                        onTabSelected(LibraryTab.entries[idx + 1])
-                                    }
-                                }
-                                // 右滑 → 上一个 TAB（到首 TAB 为止，不循环）
-                                SwipeDirection.RIGHT -> {
-                                    val idx = LibraryTab.entries.indexOf(activeTab)
-                                    if (idx > 0) {
-                                        tabSwipeDirection = SwipeDirection.RIGHT
-                                        onTabSelected(LibraryTab.entries[idx - 1])
-                                    }
-                                }
-                                SwipeDirection.NONE -> {}
-                            }
+                        onDragStart = {
+                            tabDragging = true
+                            tabDragBaseIdx = tabPageFraction.value.roundToInt()
+                                .coerceIn(0, LibraryTab.entries.size - 1)
+                            tabDragAccumPx = 0f
                         },
+                        onDragDelta = { delta ->
+                            tabDragAccumPx += delta
+                        },
+                        onSettle = { settleTabs() },
                     )
             ) {
-            // v2.36.2：子 TAB 切换带**方向感知的横推动画**（左滑 → 新 TAB 从右推入，
-            // 右滑 → 新 TAB 从左推入；点击 TAB 行等非手势切换退化为淡入淡出）。
-            // ⚠️ 过渡期新旧两棵子树会**同时组合**约 260ms：
-            //   - ① `when` 必须用 AnimatedContent 的 `targetTab` 参数而非外层 `activeTab`，
-            //     否则旧页会在过渡中「变成新页」（同 key 复用）导致动画失效；
-            //   - ② 各 Tab 的 LaunchedEffect 加载均幂等（loadRadioDefault / loadJamendoHot /
-            //     onDiscoverEnsureLoaded 有暂存跳过；SONGS/ARTISTS/YEARS 首页加载可重复触发），
-            //     过渡期短暂双组合可接受。
-            AnimatedContent(
-                targetState = activeTab,
-                transitionSpec = {
-                    when (tabSwipeDirection) {
-                        // 左滑：旧页向左推出，新页从右侧推入
-                        SwipeDirection.LEFT ->
-                            (slideInHorizontally(tween(LIBRARY_TAB_SLIDE_ANIM_MS)) { it } togetherWith
-                                slideOutHorizontally(tween(LIBRARY_TAB_SLIDE_ANIM_MS)) { -it })
-                        // 右滑：旧页向右推出，新页从左侧推入
-                        SwipeDirection.RIGHT ->
-                            (slideInHorizontally(tween(LIBRARY_TAB_SLIDE_ANIM_MS)) { -it } togetherWith
-                                slideOutHorizontally(tween(LIBRARY_TAB_SLIDE_ANIM_MS)) { it })
-                        // 非手势切换（点击 TAB 行）：淡入淡出兜底
-                        SwipeDirection.NONE ->
-                            (fadeIn(tween(200)) togetherWith fadeOut(tween(200)))
-                    }
-                },
-                label = "libraryTabSwitch",
-            ) { targetTab ->
-            // SEARCH, DISCOVER, RADIO tabs handle their own loading/empty states
-            when (targetTab) {
+            // v2.36.4：子 TAB 切换改为**真 pager**（对齐竖屏播放页「封面 ⟷ 歌词」的跟手效果）：
+            // 页面位置由连续索引 `tabPageFraction` 唯一决定 —— 拖动中当前页与相邻页
+            // **同时组合**并实时平移（当前页划走、相邻页跟进），松手后吸附到最近页。
+            // ⚠️ 相邻页常驻组合的代价：最多同时组合 2 个 Tab 子树。各 Tab 的
+            // LaunchedEffect 加载均幂等（loadRadioDefault / loadJamendoHot /
+            // onDiscoverEnsureLoaded 有暂存跳过；SONGS/ARTISTS/YEARS 首页加载可重复触发）。
+            // ⚠️ 页内容 lambda 必须用 `LibraryTab.entries[pageIdx]`（连续索引）而非
+            // 外层 `activeTab`，否则拖动中相邻页会渲染成当前页内容。
+            // fraction 读取器：拖动中 = 起始页索引 − 累积位移/页宽（左滑增大）；非拖动 = Animatable 当前值。
+            // ⚠️ 只在 draw 相位（graphicsLayer）与 derivedStateOf 中读取 —— 不在组合期直接读，
+            // 拖动/吸附动画期间仅 draw 失效，不触发逐帧重组。
+            val pagerFractionReader: () -> Float = {
+                if (tabDragging) {
+                    (tabDragBaseIdx - tabDragAccumPx / contentWidthPx.intValue.coerceAtLeast(1))
+                        .coerceIn(0f, (LibraryTab.entries.size - 1).toFloat())
+                } else {
+                    tabPageFraction.value
+                }
+            }
+            // 参与组合的页：fraction 覆盖到的页（当前页 + 拖动方向相邻页）。
+            // derivedStateOf：仅当页区间变化（跨页）时才重组，拖动中逐帧位移不重组。
+            val composedRange by remember {
+                derivedStateOf {
+                    val f = pagerFractionReader()
+                    maxOf(0, floor(f).toInt())..minOf(LibraryTab.entries.size - 1, ceil(f).toInt())
+                }
+            }
+            Box(modifier = Modifier.fillMaxSize()) {
+                for (pageIdx in composedRange) {
+                    val targetTab = LibraryTab.entries[pageIdx]
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            // v2.36.4 修复：平移方向必须是 (页索引 − fraction) ——
+                            // 手指左划 → fraction 增大 → 当前页向左划走、右邻页从右侧跟入
+                            // （写成 (fraction − 页索引) 会整体反向，真机反馈已纠正）。
+                            .graphicsLayer {
+                                translationX = (pageIdx - pagerFractionReader()) * size.width
+                            },
+                    ) {
+                        // SEARCH, DISCOVER, RADIO tabs handle their own loading/empty states
+                        when (targetTab) {
                 LibraryTab.SEARCH -> {
                     SearchTab(
                         searchKeyword = filterQuery,
@@ -755,8 +808,10 @@ fun LibraryScreen(
                         }
                     }
                 }
-            }
-            }   // AnimatedContent(targetTab) 内容 lambda
+                        }   // when (targetTab)
+                    }   // 页面 graphicsLayer Box
+                }   // for (pageIdx in composedRange)
+            }   // pager 容器 Box
 
                 // Task 14: 遥控器快捷键提示浮层（3s 自动消失）
                 androidx.compose.animation.AnimatedVisibility(

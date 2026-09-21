@@ -141,7 +141,10 @@ fun PhoneTopBar(
  *
  * 状态区分：
  * - [ScreenOrientationPref.PORTRAIT]：参考图原样（竖屏手机 + 括号）；
- * - [ScreenOrientationPref.LANDSCAPE]：整体旋转 90°（手机呈横向，括号转到下方）；
+ * - [ScreenOrientationPref.LANDSCAPE]：整体旋转 **-90°**（逆时针）—— v2.36.3 真机反馈修正：
+ *   原先 +90° 顺时针转出的横屏形态「手机躺在上方、括号在下方、Home 胶囊朝左」，
+ *   用户要求「上下翻转一下」；改 -90° 后手机躺在下方、括号转到上方、Home 胶囊朝右，
+ *   与系统横屏图标方向一致；
  * - [ScreenOrientationPref.AUTO]：括号替换为 3/4 圆弧旋转箭头（↻，跟随系统之意）。
  *
  * ⚠️ 颜色取 [LocalFocusableContentColor]（与同排的 material `Icon` 着色来源一致），
@@ -153,7 +156,8 @@ fun PhoneTopBar(
 private fun OrientationToggleIcon(pref: String, modifier: Modifier = Modifier) {
     val tint = LocalFocusableContentColor.current
     val rotation = when (pref) {
-        ScreenOrientationPref.LANDSCAPE -> 90f
+        // v2.36.3：-90°（逆时针）。原先 +90° 转出的横屏形态上下颠倒（真机反馈）。
+        ScreenOrientationPref.LANDSCAPE -> -90f
         else -> 0f
     }
     val isAuto = pref == ScreenOrientationPref.AUTO

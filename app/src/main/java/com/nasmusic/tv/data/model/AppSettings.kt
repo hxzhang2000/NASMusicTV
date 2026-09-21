@@ -89,6 +89,7 @@ IMMERSIVE_BLOOM("沉浸辉光", Tier.BASIC, "01"),
     FRACTAL_TREE("分形", Tier.BASIC, "34"),
     LIGHT_BEAMS("光轴", Tier.BASIC, "35"),
     FERMAT_SPIRAL("螺旋", Tier.BASIC, "36"),
+    MOLECULE("分子", Tier.BASIC, "37"),
     ;
 
     /** 效果分级：决定画质档位可用性 */

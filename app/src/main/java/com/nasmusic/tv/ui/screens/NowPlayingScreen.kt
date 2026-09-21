@@ -3,13 +3,8 @@ package com.nasmusic.tv.ui.screens
 import com.nasmusic.tv.ui.theme.FontSize
 import com.nasmusic.tv.ui.components.common.SourceBadge
 
-import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInHorizontally
-import androidx.compose.animation.slideOutHorizontally
-import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
@@ -36,11 +31,14 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.withFrameNanos
-import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
+import androidx.compose.runtime.key
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -54,6 +52,7 @@ import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
@@ -66,6 +65,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Text
+import kotlinx.coroutines.launch
 import com.nasmusic.tv.R
 import com.nasmusic.tv.data.model.Lyrics
 import com.nasmusic.tv.data.model.LyricsHighlightMode
@@ -1248,10 +1248,9 @@ private fun SleepTimerPickerDialog(
 internal enum class PortraitNowPlayingMode { COVER, LYRICS }
 
 /**
- * 横滑方向（v2.36.2）：手势切换动画的出入场方向依据。
- * LEFT = 手指向左滑（内容向左移动，新页从右侧推入）；
- * RIGHT = 手指向右滑（新页从左侧推入）；
- * NONE = 非手势切换（点击指示器等），动画退化为淡入淡出。
+ * 横滑方向：LEFT = 手指向左滑（内容向左移动）；RIGHT = 手指向右滑；NONE = 非手势切换。
+ * v2.36.3 起竖屏播放页改为跟手 pager（不再按方向播横推动画），本枚举现服务于
+ * 曲库子 TAB 的 `libraryTabSwipe` 方向判定（决定 AnimatedContent 的推入方向）。
  */
 internal enum class SwipeDirection { LEFT, RIGHT, NONE }
 
@@ -1284,41 +1283,26 @@ private const val PORTRAIT_TITLE_LINE_RATIO = 1.3f
 /** 竖屏封面模式：歌名区额外余量 = 封面与歌名之间的 12dp 间距 + 8dp 缓冲。 */
 private val PORTRAIT_TITLE_SPACING = 20.dp
 
-/** 竖屏左右滑切换模式的最小水平位移（≈3mm；低于此视为误触或竖直滚动） */
-private val PORTRAIT_SWIPE_THRESHOLD = 48.dp
+/** 竖屏左右滑切换模式的吸附动画时长（ms）：拖动松手后从当前位置吸附到目标页。 */
+private const val PORTRAIT_SWIPE_SETTLE_MS = 220
 
 /**
- * 竖屏播放页：整块内容区左右滑切换「封面 ⟷ 歌词」（v2.36.0 竖屏体验修复）。
+ * 竖屏播放页跟手滑动（v2.36.3）。
  *
- * ⚠️ 此前手势只挂在底部 28dp 的模式指示器上，而且**不分方向、只做 toggle** ——
- * 用户根本发现不了，实际体验就是"不支持左右滑动切换"。
- * 现在覆盖整块内容区，并带**方向语义**（左滑 → 歌词，右滑 → 封面）+ 位移阈值。
+ * v2.36.2 的实现是「拖动只累积位移、松手过阈值才触发 AnimatedContent 横推」——
+ * 拖动过程内容纹丝不动，用户反馈要求「跟手」。现改为真正的双页 pager：
  *
- * v2.36.2：回调改为携带**滑动方向**（`SwipeDirection.LEFT/RIGHT`），供外层
- * `AnimatedContent` 按方向选择横推动画的出入场方向（左滑 → 新页从右推入）。
- * 点击模式指示器等非手势切换走 `SwipeDirection.NONE`（无方向，用淡入淡出兜底）。
+ * - 页面位置由 [pageFraction]（0 = 封面页完全可见，1 = 歌词页完全可见）唯一决定；
+ * - **拖动期间**：`dragAccumPx` 实时累积位移，`graphicsLayer` 按
+ *   `(基准分数 − dragAccumPx / 页宽)` 直接平移两页 —— 手指在哪内容在哪；
+ * - **松手后**：`snapTo` 把 Animatable 对齐到当前跟手位置（无跳变），再
+ *   `animateTo` 吸附到过半判定出的目标页；首末边界 `coerceIn(0,1)` 直接停住。
  *
- * ⚠️ `pointerInput(Unit)` 不随重组重启。`mode` 由 `by remember { mutableStateOf }` 委托读写，
- * 闭包捕获的是同一个 `MutableState` 实例，读到/写入的永远是当前值，故无需 `rememberUpdatedState`。
- * ⚠️ 只识别水平拖拽：竖直滚动（歌词区）不受影响。
+ * ⚠️ `pointerInput(Unit)` 不随重组重启。`mode` / `dragging` / `dragAccumPx` 均为
+ * `by remember` 委托状态，闭包捕获同一实例，读到/写入的永远是当前值。
+ * ⚠️ 只识别水平拖拽：竖直滚动（歌词区）不受影响；封面页内横向滚动 Chip 行位于
+ * 更深层节点、会先消费事件，与 v2.36.2 行为一致。
  */
-private fun Modifier.portraitModeSwipe(
-    onSwipe: (SwipeDirection) -> Unit,
-): Modifier = this.pointerInput(Unit) {
-    val thresholdPx = PORTRAIT_SWIPE_THRESHOLD.toPx()
-    var accumulated = 0f
-    detectHorizontalDragGestures(
-        onDragStart = { accumulated = 0f },
-        onDragEnd = {
-            if (accumulated <= -thresholdPx) onSwipe(SwipeDirection.LEFT)
-            else if (accumulated >= thresholdPx) onSwipe(SwipeDirection.RIGHT)
-            accumulated = 0f
-        },
-        onDragCancel = { accumulated = 0f },
-    ) { _, dragAmount ->
-        accumulated += dragAmount
-    }
-}
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
@@ -1367,9 +1351,30 @@ private fun NowPlayingPortrait(
     playPauseFocusRequester: FocusRequester,
 ) {
     var mode by remember { mutableStateOf(PortraitNowPlayingMode.COVER) }
-    // v2.36.2：最近一次切换的方向（手势 → LEFT/RIGHT；点击指示器 → NONE），
-    // 供 AnimatedContent 按方向选择横推/淡入淡出过渡。
-    var lastSwipeDirection by remember { mutableStateOf(SwipeDirection.NONE) }
+    // v2.36.3 跟手滑动 pager：pageFraction ∈ [0,1]，0 = 封面页，1 = 歌词页。
+    // 拖动期间由 dragAccumPx 驱动 graphicsLayer 实时平移；松手后 snapTo 对齐当前
+    // 跟手位置（无跳变），再 animateTo 吸附到目标页（见上方跟手滑动说明）。
+    val pagerScope = rememberCoroutineScope()
+    val pagerWidthPx = remember { mutableIntStateOf(0) }
+    val pageFraction = remember { Animatable(0f) }
+    var dragging by remember { mutableStateOf(false) }
+    var dragAccumPx by remember { mutableFloatStateOf(0f) }
+    // 松手 / 取消的统一出口：按「过半」判定目标页并吸附。
+    val settlePager: () -> Unit = {
+        val w = pagerWidthPx.intValue.coerceAtLeast(1).toFloat()
+        val base = if (mode == PortraitNowPlayingMode.LYRICS) 1f else 0f
+        val current = (base - dragAccumPx / w).coerceIn(0f, 1f)
+        val target = if (current > 0.5f) PortraitNowPlayingMode.LYRICS
+        else PortraitNowPlayingMode.COVER
+        pagerScope.launch {
+            pageFraction.snapTo(current)
+            mode = target
+            pageFraction.animateTo(
+                if (target == PortraitNowPlayingMode.LYRICS) 1f else 0f,
+                tween(PORTRAIT_SWIPE_SETTLE_MS),
+            )
+        }
+    }
     var showMoreMenu by remember { mutableStateOf(false) }
     var showQualityDialog by remember { mutableStateOf(false) }
     var showSleepTimerDialog by remember { mutableStateOf(false) }
@@ -1415,47 +1420,58 @@ private fun NowPlayingPortrait(
                 )
             }
 
-            // v2.36.2：左右滑切换模式带**方向感知的横推动画**（左滑 → 新页从右推入，
-            // 右滑 → 新页从左推入；点击指示器等非手势切换退化为淡入淡出）。
-            // ⚠️ 过渡期新旧两棵子树会**同时组合**约 260ms —— 本分支内的两个模式页均无
-            // 组合期副作用（无 LaunchedEffect / 无一次性加载），可安全过渡；
+            // v2.36.3：跟手滑动 pager（原 AnimatedContent 横推改为实时跟手）。
+            // ⚠️ 两页**常驻组合**（原 AnimatedContent 仅过渡期 ~260ms 双树）：两个模式页均无
+            // 组合期副作用（无 LaunchedEffect / 无一次性加载），常驻双树安全；
             // 若日后往模式页里加 `LaunchedEffect(Unit)` 一次性加载，需确认其幂等性。
-            AnimatedContent(
-                targetState = mode,
-                transitionSpec = {
-                    when (lastSwipeDirection) {
-                        // 左滑：旧页向左推出，新页从右侧推入
-                        SwipeDirection.LEFT ->
-                            (slideInHorizontally(tween(260)) { it } togetherWith
-                                slideOutHorizontally(tween(260)) { -it })
-                        // 右滑：旧页向右推出，新页从左侧推入
-                        SwipeDirection.RIGHT ->
-                            (slideInHorizontally(tween(260)) { -it } togetherWith
-                                slideOutHorizontally(tween(260)) { it })
-                        // 非手势切换（点击指示器）：淡入淡出兜底
-                        SwipeDirection.NONE ->
-                            (fadeIn(tween(200)) togetherWith fadeOut(tween(200)))
-                    }
-                },
-                label = "portraitModeSwitch",
-            ) { currentMode ->
-                if (currentMode == PortraitNowPlayingMode.COVER) {
-                // ── 模式 A：封面 ──
+            // ⚠️ 手势挂在 pager 容器上：歌词页竖直滚动（更深层节点先消费竖直事件）、
+            // 封面页 Chip 横向滚动（更深层节点先消费水平事件）均不受影响。
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+                    .onSizeChanged { pagerWidthPx.intValue = it.width }
+                    .pointerInput(Unit) {
+                        detectHorizontalDragGestures(
+                            onDragStart = {
+                                dragging = true
+                                dragAccumPx = 0f
+                            },
+                            onDragEnd = {
+                                dragging = false
+                                settlePager()
+                            },
+                            onDragCancel = {
+                                dragging = false
+                                settlePager()
+                            },
+                        ) { _, dragAmount ->
+                            dragAccumPx += dragAmount
+                        }
+                    },
+            ) {
+                // ── 模式 A：封面 ──（translationX = −fraction × 页宽；拖动中按跟手分数实时平移）
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .graphicsLayer {
+                            val w = size.width.coerceAtLeast(1f)
+                            val frac = if (dragging) {
+                                val base = if (mode == PortraitNowPlayingMode.LYRICS) 1f else 0f
+                                (base - dragAccumPx / w).coerceIn(0f, 1f)
+                            } else {
+                                pageFraction.value
+                            }
+                            translationX = -frac * w
+                        },
+                ) {
                 // 竖屏体验修复：进度条 + 控制按钮要「贴屏幕底部」，上方空间全留给封面。
                 // 原实现整列 `verticalScroll` → 控制区紧跟封面，屏幕下方空一大片。
                 // 现拆为「弹性区（封面 + 歌名，居中）+ 固定贴底区（进度 / 控制 / Chip）」。
                 Column(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(1f)
-                        .padding(horizontal = 16.dp)
-                        // 左滑 → 歌词（右滑已在封面，无动作）
-                        .portraitModeSwipe(
-                            onSwipe = { dir ->
-                                lastSwipeDirection = dir
-                                if (dir == SwipeDirection.LEFT) mode = PortraitNowPlayingMode.LYRICS
-                            },
-                        ),
+                        .fillMaxSize()
+                        .padding(horizontal = 16.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
                     // ② 弹性区：封面 + 歌名，在剩余高度内居中
@@ -1601,20 +1617,26 @@ private fun NowPlayingPortrait(
 
                     Spacer(modifier = Modifier.height(12.dp))
                 }
-            } else {
-                // ── 模式 B：歌词 ──
+                }   // 封面页 graphicsLayer Box
+                // ── 模式 B：歌词 ──（translationX = (1 − fraction) × 页宽）
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .graphicsLayer {
+                            val w = size.width.coerceAtLeast(1f)
+                            val frac = if (dragging) {
+                                val base = if (mode == PortraitNowPlayingMode.LYRICS) 1f else 0f
+                                (base - dragAccumPx / w).coerceIn(0f, 1f)
+                            } else {
+                                pageFraction.value
+                            }
+                            translationX = (1f - frac) * w
+                        },
+                ) {
                 Column(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(1f)
-                        .padding(horizontal = 16.dp)
-                        // 右滑 → 封面（左滑已在歌词，无动作）
-                        .portraitModeSwipe(
-                            onSwipe = { dir ->
-                                lastSwipeDirection = dir
-                                if (dir == SwipeDirection.RIGHT) mode = PortraitNowPlayingMode.COVER
-                            },
-                        ),
+                        .fillMaxSize()
+                        .padding(horizontal = 16.dp),
                 ) {
                     // ③ 歌词工具条：来源循环 / 高亮模式 / 字号循环 / 睡眠定时（右对齐）
                     //
@@ -1774,16 +1796,21 @@ private fun NowPlayingPortrait(
 
                     Spacer(modifier = Modifier.height(6.dp))
                 }
-                }   // if (currentMode == COVER) / else 歌词分支
-            }   // AnimatedContent
+                }   // 歌词页 graphicsLayer Box
+            }   // 跟手滑动 pager Box
 
-            // ⑦ 模式指示器（点击切换；左右滑由内容区的 portraitModeSwipe 处理）
+            // ⑦ 模式指示器（点击切换；左右滑由 pager 容器手势处理）
             PortraitModeIndicator(
                 mode = mode,
-                onSwitch = {
-                    // 点击指示器属非手势切换：方向置 NONE，AnimatedContent 退化为淡入淡出
-                    lastSwipeDirection = SwipeDirection.NONE
-                    mode = it
+                onSwitch = { target ->
+                    // 点击指示器：与手势松手同一条动画路径，平滑吸附到目标页
+                    mode = target
+                    pagerScope.launch {
+                        pageFraction.animateTo(
+                            if (target == PortraitNowPlayingMode.LYRICS) 1f else 0f,
+                            tween(PORTRAIT_SWIPE_SETTLE_MS),
+                        )
+                    }
                 },
             )
             Spacer(modifier = Modifier.height(8.dp))

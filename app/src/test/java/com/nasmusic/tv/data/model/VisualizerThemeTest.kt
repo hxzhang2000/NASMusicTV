@@ -46,27 +46,27 @@ class VisualizerThemeTest {
 
     @Test
     fun `theme library is all concrete effects, no auto mode`() {
-        assertEquals(34, VisualizerTheme.entries.size)
+        assertEquals(35, VisualizerTheme.entries.size)
     }
 
     @Test
     fun `selectable list equals all themes, no auto mode`() {
         val selectable = VisualizerTheme.selectable
-        assertEquals(34, selectable.size)
-        assertEquals(34, selectable.distinct().size)
+        assertEquals(35, selectable.size)
+        assertEquals(35, selectable.distinct().size)
     }
 
     @Test
     fun `ordinal labels are unique`() {
         val labels = VisualizerTheme.entries.map { it.ordinalLabel }
-        assertEquals(34, labels.distinct().size)
+        assertEquals(35, labels.distinct().size)
     }
 
     @Test
     fun `display names are non blank and unique`() {
         val names = VisualizerTheme.entries.map { it.displayName }
         assertTrue(names.none { it.isBlank() })
-        assertEquals(34, names.distinct().size)
+        assertEquals(35, names.distinct().size)
     }
 
     @Test

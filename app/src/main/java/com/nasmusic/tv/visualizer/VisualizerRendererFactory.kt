@@ -36,6 +36,7 @@ import com.nasmusic.tv.visualizer.renderers.ConcentricGearsRenderer
 import com.nasmusic.tv.visualizer.renderers.FractalTreeRenderer
 import com.nasmusic.tv.visualizer.renderers.LightBeamsRenderer
 import com.nasmusic.tv.visualizer.renderers.FermatSpiralRenderer
+import com.nasmusic.tv.visualizer.renderers.MoleculeRenderer
 
 /**
  * 渲染器工厂 —— 主题枚举 → 渲染器实现。
@@ -80,6 +81,7 @@ VisualizerTheme.IMMERSIVE_BLOOM -> BloomRenderer()
         VisualizerTheme.FRACTAL_TREE -> FractalTreeRenderer()
         VisualizerTheme.LIGHT_BEAMS -> LightBeamsRenderer()
         VisualizerTheme.FERMAT_SPIRAL -> FermatSpiralRenderer()
+        VisualizerTheme.MOLECULE -> MoleculeRenderer()
     }
 
     /**
