@@ -685,6 +685,27 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
     /** 上一首歌的歌词来源，用于在播放完成时判断是否提交网络歌词到持久化缓存 */
     private var lastRecordedLyricsSource: LyricsSource? = null
 
+    // =====================================================================
+    // R-1 第二步拆分：Download / MvSearch / VocalSeparation / Visualizer 子 ViewModel。
+    //
+    // ⚠️ v2.36.2 崩溃修复：这四个声明原先位于文件尾部（原 2378 行）、在下方各 init 块
+    // **之后**才初始化。而 init@688 的 currentSong 收集器运行在 Dispatchers.Main.immediate
+    // 上 —— `viewModelScope.launch` 在主线程构造期间**同步**执行，StateFlow 首个值
+    // 也同步送达，收集体首帧就会解引用 `mvVM`（song==null → resetIdle）/ `downloadVM`
+    // （song!=null → onSongChanged）→ 属性尚为 null → 启动即 NPE 崩溃。
+    // 声明必须先于所有引用它的 init 块（Kotlin 按文件顺序初始化）。
+    // =====================================================================
+    val downloadVM = DownloadViewModel(
+        app,
+        nasMusicApp.songDownloadManager,
+        nasMusicApp.modelDownloadManager,
+        nasMusicApp.autoDownloadController
+    )
+    val vocalVM = VocalSeparationViewModel(app, playerManager)
+    val mvVM = MvSearchViewModel(app, mvSearchManager, playerManager)
+    /** 全屏可视化舞台（20 套效果） */
+    val visualizerVM = VisualizerViewModel(app, playerManager, prefs)
+
     init {
         viewModelScope.launch {
             // 初始化播放模式（B-13: 从预设置恢复）——R-1 后由 PlayerViewModel 持有
@@ -2371,20 +2392,10 @@ showError(getApplication<Application>().getString(R.string.toggle_favorite_error
     fun addSongToQueue(song: Song) = playerManager.addToQueue(song)
 
     // =====================================================================
-    // R-1 第二步拆分：Download / MvSearch / VocalSeparation 已迁至子 ViewModel，
+    // R-1 第二步拆分：Download / MvSearch / VocalSeparation 已迁至子 ViewModel。
+    // 声明位置已前移到 init@688 之前（v2.36.2 崩溃修复，见上方说明）。
     // 以下为兼容转发层（AppRoot 的既有引用不变）。
     // =====================================================================
-
-    val downloadVM = DownloadViewModel(
-        app,
-        nasMusicApp.songDownloadManager,
-        nasMusicApp.modelDownloadManager,
-        nasMusicApp.autoDownloadController
-    )
-    val vocalVM = VocalSeparationViewModel(app, playerManager)
-    val mvVM = MvSearchViewModel(app, mvSearchManager, playerManager)
-    /** 全屏可视化舞台（20 套效果） */
-    val visualizerVM = VisualizerViewModel(app, playerManager, prefs)
 
     init {
         // 下载域刷新本地歌曲时联动合并数据

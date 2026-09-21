@@ -23,13 +23,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Icon
-import androidx.tv.material3.Text
 import com.nasmusic.tv.R
 import com.nasmusic.tv.data.model.Screen
 import com.nasmusic.tv.ui.theme.NasMusicColors
@@ -63,7 +63,9 @@ private val PHONE_NAV_ITEMS = listOf(
  * 尺寸（方案 D3 + §2.7 dp 口径）：
  * - 容器高 **56 Compose dp** ≈ 45.9 **物理 dp** ≥ 44dp ✅
  * - 子项 `fillMaxHeight()`，**不加 `padding(vertical = 8.dp)`**，否则热区不足 56dp
- * - Icon 24dp + 文字 12sp
+ * - v2.36.2 竖屏改版：**去掉文字标签**，图标 24dp → **32dp** 等比放大并垂直居中
+ *   （占用原「图标+文字」的空间；无障碍语义不受影响 —— 每项的 `contentDescription`
+ *   由 [stringResource(item.labelRes)] 提供，见下方 `semantics`）。
  *
  * ⚠️ **v2.36.1 起为 5 项**（移除了「设置」，见 [PHONE_NAV_ITEMS]）；每项 `weight(1f)`
  * → 少一项后剩余各项**自动等分占满整宽**，不需要改任何布局代码。
@@ -75,6 +77,7 @@ fun PhoneNavBar(
     onNavigate: (Screen) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val context = LocalContext.current
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -113,23 +116,18 @@ fun PhoneNavBar(
                 // ⛔ 不要去改 `FocusableSurface` 的 `Box` 加 `contentAlignment = Center` ——
                 // 它是全项目共用的，改了会动到 TV 端所有按钮的内部对齐（B1：TV 行为必须逐字不变）。
                 Column(
-                    modifier = Modifier.fillMaxSize(),
+                    modifier = Modifier
+                        .fillMaxSize()
+                        // v2.36.2：无文字后图标即整项，补无障碍标签（视觉去文字 ≠ 去语义）
+                        .semantics { contentDescription = context.getString(item.labelRes) },
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.Center,
                 ) {
                     Icon(
                         imageVector = item.icon,
                         contentDescription = null,
-                        modifier = Modifier.size(24.dp)
-                    )
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Text(
-                        text = stringResource(item.labelRes),
-                        fontSize = 12.sp,
-                        maxLines = 1,
-                        // 兜底：每项宽度固定（weight(1f) 均分），万一某语言标签更长
-                        // （或将来再加一项），省略号比硬裁更像"有意设计"
-                        overflow = TextOverflow.Ellipsis,
+                        // v2.36.2：24dp → 32dp（等比放大，占用原文字空间）
+                        modifier = Modifier.size(32.dp)
                     )
                 }
             }

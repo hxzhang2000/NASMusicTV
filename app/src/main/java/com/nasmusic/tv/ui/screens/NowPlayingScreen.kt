@@ -3,6 +3,13 @@ package com.nasmusic.tv.ui.screens
 import com.nasmusic.tv.ui.theme.FontSize
 import com.nasmusic.tv.ui.components.common.SourceBadge
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
@@ -1240,6 +1247,14 @@ private fun SleepTimerPickerDialog(
 /** 竖屏播放页的两种模式（方案 §4.2） */
 internal enum class PortraitNowPlayingMode { COVER, LYRICS }
 
+/**
+ * 横滑方向（v2.36.2）：手势切换动画的出入场方向依据。
+ * LEFT = 手指向左滑（内容向左移动，新页从右侧推入）；
+ * RIGHT = 手指向右滑（新页从左侧推入）；
+ * NONE = 非手势切换（点击指示器等），动画退化为淡入淡出。
+ */
+internal enum class SwipeDirection { LEFT, RIGHT, NONE }
+
 /** 歌词字号档位（与现状 A/A+/A++/A+++ 一致） */
 private val LYRICS_FONT_SCALES = listOf(0.7f, 1.0f, 1.3f, 1.6f)
 
@@ -1279,21 +1294,24 @@ private val PORTRAIT_SWIPE_THRESHOLD = 48.dp
  * 用户根本发现不了，实际体验就是"不支持左右滑动切换"。
  * 现在覆盖整块内容区，并带**方向语义**（左滑 → 歌词，右滑 → 封面）+ 位移阈值。
  *
+ * v2.36.2：回调改为携带**滑动方向**（`SwipeDirection.LEFT/RIGHT`），供外层
+ * `AnimatedContent` 按方向选择横推动画的出入场方向（左滑 → 新页从右推入）。
+ * 点击模式指示器等非手势切换走 `SwipeDirection.NONE`（无方向，用淡入淡出兜底）。
+ *
  * ⚠️ `pointerInput(Unit)` 不随重组重启。`mode` 由 `by remember { mutableStateOf }` 委托读写，
  * 闭包捕获的是同一个 `MutableState` 实例，读到/写入的永远是当前值，故无需 `rememberUpdatedState`。
  * ⚠️ 只识别水平拖拽：竖直滚动（歌词区）不受影响。
  */
 private fun Modifier.portraitModeSwipe(
-    onToLyrics: () -> Unit,
-    onToCover: () -> Unit,
+    onSwipe: (SwipeDirection) -> Unit,
 ): Modifier = this.pointerInput(Unit) {
     val thresholdPx = PORTRAIT_SWIPE_THRESHOLD.toPx()
     var accumulated = 0f
     detectHorizontalDragGestures(
         onDragStart = { accumulated = 0f },
         onDragEnd = {
-            if (accumulated <= -thresholdPx) onToLyrics()
-            else if (accumulated >= thresholdPx) onToCover()
+            if (accumulated <= -thresholdPx) onSwipe(SwipeDirection.LEFT)
+            else if (accumulated >= thresholdPx) onSwipe(SwipeDirection.RIGHT)
             accumulated = 0f
         },
         onDragCancel = { accumulated = 0f },
@@ -1349,6 +1367,9 @@ private fun NowPlayingPortrait(
     playPauseFocusRequester: FocusRequester,
 ) {
     var mode by remember { mutableStateOf(PortraitNowPlayingMode.COVER) }
+    // v2.36.2：最近一次切换的方向（手势 → LEFT/RIGHT；点击指示器 → NONE），
+    // 供 AnimatedContent 按方向选择横推/淡入淡出过渡。
+    var lastSwipeDirection by remember { mutableStateOf(SwipeDirection.NONE) }
     var showMoreMenu by remember { mutableStateOf(false) }
     var showQualityDialog by remember { mutableStateOf(false) }
     var showSleepTimerDialog by remember { mutableStateOf(false) }
@@ -1394,7 +1415,31 @@ private fun NowPlayingPortrait(
                 )
             }
 
-            if (mode == PortraitNowPlayingMode.COVER) {
+            // v2.36.2：左右滑切换模式带**方向感知的横推动画**（左滑 → 新页从右推入，
+            // 右滑 → 新页从左推入；点击指示器等非手势切换退化为淡入淡出）。
+            // ⚠️ 过渡期新旧两棵子树会**同时组合**约 260ms —— 本分支内的两个模式页均无
+            // 组合期副作用（无 LaunchedEffect / 无一次性加载），可安全过渡；
+            // 若日后往模式页里加 `LaunchedEffect(Unit)` 一次性加载，需确认其幂等性。
+            AnimatedContent(
+                targetState = mode,
+                transitionSpec = {
+                    when (lastSwipeDirection) {
+                        // 左滑：旧页向左推出，新页从右侧推入
+                        SwipeDirection.LEFT ->
+                            (slideInHorizontally(tween(260)) { it } togetherWith
+                                slideOutHorizontally(tween(260)) { -it })
+                        // 右滑：旧页向右推出，新页从左侧推入
+                        SwipeDirection.RIGHT ->
+                            (slideInHorizontally(tween(260)) { -it } togetherWith
+                                slideOutHorizontally(tween(260)) { it })
+                        // 非手势切换（点击指示器）：淡入淡出兜底
+                        SwipeDirection.NONE ->
+                            (fadeIn(tween(200)) togetherWith fadeOut(tween(200)))
+                    }
+                },
+                label = "portraitModeSwitch",
+            ) { currentMode ->
+                if (currentMode == PortraitNowPlayingMode.COVER) {
                 // ── 模式 A：封面 ──
                 // 竖屏体验修复：进度条 + 控制按钮要「贴屏幕底部」，上方空间全留给封面。
                 // 原实现整列 `verticalScroll` → 控制区紧跟封面，屏幕下方空一大片。
@@ -1406,8 +1451,10 @@ private fun NowPlayingPortrait(
                         .padding(horizontal = 16.dp)
                         // 左滑 → 歌词（右滑已在封面，无动作）
                         .portraitModeSwipe(
-                            onToLyrics = { mode = PortraitNowPlayingMode.LYRICS },
-                            onToCover = {},
+                            onSwipe = { dir ->
+                                lastSwipeDirection = dir
+                                if (dir == SwipeDirection.LEFT) mode = PortraitNowPlayingMode.LYRICS
+                            },
                         ),
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
@@ -1563,8 +1610,10 @@ private fun NowPlayingPortrait(
                         .padding(horizontal = 16.dp)
                         // 右滑 → 封面（左滑已在歌词，无动作）
                         .portraitModeSwipe(
-                            onToLyrics = {},
-                            onToCover = { mode = PortraitNowPlayingMode.COVER },
+                            onSwipe = { dir ->
+                                lastSwipeDirection = dir
+                                if (dir == SwipeDirection.RIGHT) mode = PortraitNowPlayingMode.COVER
+                            },
                         ),
                 ) {
                     // ③ 歌词工具条：来源循环 / 高亮模式 / 字号循环 / 睡眠定时（右对齐）
@@ -1725,12 +1774,17 @@ private fun NowPlayingPortrait(
 
                     Spacer(modifier = Modifier.height(6.dp))
                 }
-            }
+                }   // if (currentMode == COVER) / else 歌词分支
+            }   // AnimatedContent
 
             // ⑦ 模式指示器（点击切换；左右滑由内容区的 portraitModeSwipe 处理）
             PortraitModeIndicator(
                 mode = mode,
-                onSwitch = { mode = it },
+                onSwitch = {
+                    // 点击指示器属非手势切换：方向置 NONE，AnimatedContent 退化为淡入淡出
+                    lastSwipeDirection = SwipeDirection.NONE
+                    mode = it
+                },
             )
             Spacer(modifier = Modifier.height(8.dp))
         }

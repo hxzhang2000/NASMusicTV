@@ -161,12 +161,17 @@ fun HomeScreen(
         }
 
         // 2. 快捷操作按钮
-        item(key = "quick_actions") {
-            QuickActionRow(
-                onNavigateToLibrary = onNavigateToLibrary,
-                onNavigateToSearch = onNavigateToSearch,
-                onNavigateToQueue = onNavigateToQueue
-            )
+        // v2.36.2 竖屏：**移除**「曲库 / 搜索 / 播放队列」快捷行 —— 三者均有更近的常驻入口
+        // （曲库/队列在底部导航、搜索在顶栏右上角），首页再放一遍属于重复。
+        // ⚠️ 仅竖屏隐藏；TV 端无底部导航，快捷行保留（B1：TV 行为逐字不变）。
+        if (!isPhonePortrait) {
+            item(key = "quick_actions") {
+                QuickActionRow(
+                    onNavigateToLibrary = onNavigateToLibrary,
+                    onNavigateToSearch = onNavigateToSearch,
+                    onNavigateToQueue = onNavigateToQueue
+                )
+            }
         }
 
         // 3. 最新添加专辑（仅当有数据时显示）

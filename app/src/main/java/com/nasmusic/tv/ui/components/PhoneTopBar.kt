@@ -1,5 +1,6 @@
 package com.nasmusic.tv.ui.components
 
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -20,7 +21,16 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.RoundRect
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -33,6 +43,8 @@ import com.nasmusic.tv.R
 import com.nasmusic.tv.ui.theme.FontSize
 import com.nasmusic.tv.ui.theme.NasMusicColors
 import com.nasmusic.tv.ui.theme.ScreenOrientationPref
+import kotlin.math.cos
+import kotlin.math.sin
 
 /**
  * 竖屏顶部栏（v2.36.0，方案 §4.0 / §8.6）。
@@ -88,6 +100,7 @@ fun PhoneTopBar(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             // 搜索：与现状 HomeBranch / NowPlayingBranch 的「搜索」按钮行为一致
+            // v2.36.2：图标 20dp → 28dp（与横竖屏切换、底部导航放大后的观感一致）
             PhoneTopBarIconButton(
                 contentDescription = stringResource(R.string.common_search),
                 onClick = onNavigateToSearch,
@@ -95,7 +108,7 @@ fun PhoneTopBar(
                 Icon(
                     imageVector = Icons.Default.Search,
                     contentDescription = null,
-                    modifier = Modifier.size(20.dp)
+                    modifier = Modifier.size(28.dp)
                 )
             }
             // 设置（齿轮）：v2.36.1 从底部导航上移到这里，位于方向切换按钮**左侧**
@@ -106,7 +119,7 @@ fun PhoneTopBar(
                 Icon(
                     imageVector = Icons.Default.Settings,
                     contentDescription = null,
-                    modifier = Modifier.size(20.dp)
+                    modifier = Modifier.size(28.dp)
                 )
             }
             // L2 方向切换：单击 = 竖屏 ⟷ 横屏 二态循环 + 立即写 pref（"自动" 只能从设置项进入）
@@ -118,11 +131,120 @@ fun PhoneTopBar(
     }
 }
 
-/** L2 图标：显示 L1 真值（自动 / 竖 / 横），让用户一眼看出当前策略 */
-private fun orientationIcon(pref: String): String = when (pref) {
-    ScreenOrientationPref.PORTRAIT -> "\u25AF"      // ▯ 竖屏
-    ScreenOrientationPref.LANDSCAPE -> "\u25AD"     // ▭ 横屏
-    else -> "\u21BB"                                 // ↻ 自动
+/**
+ * L2 方向切换图标（v2.36.2 重绘，替换原文本字形 ▯/▭/↻）。
+ *
+ * 按用户提供的参考图（横竖屏切换素材）绘制：
+ * - **竖屏手机轮廓**：等线宽描边圆角矩形（外圆角大、内圆角小），底部屏内一颗实心
+ *   Home 胶囊；
+ * - **右侧「横屏」括号**：开口朝左的 C 形圆角折线，两臂端点圆头——表示「旋转到横向」。
+ *
+ * 状态区分：
+ * - [ScreenOrientationPref.PORTRAIT]：参考图原样（竖屏手机 + 括号）；
+ * - [ScreenOrientationPref.LANDSCAPE]：整体旋转 90°（手机呈横向，括号转到下方）；
+ * - [ScreenOrientationPref.AUTO]：括号替换为 3/4 圆弧旋转箭头（↻，跟随系统之意）。
+ *
+ * ⚠️ 颜色取 [LocalFocusableContentColor]（与同排的 material `Icon` 着色来源一致），
+ * 确保按下/聚焦高亮时图标随之变色（Canvas 不会自动继承 tint）。
+ * ⚠️ 24×24 视口坐标由参考图 540×540 像素实测换算而来（÷22.5），等线宽 2.13、
+ * 圆头端帽、外大内小同心圆角是还原关键，勿单独改动某个坐标。
+ */
+@Composable
+private fun OrientationToggleIcon(pref: String, modifier: Modifier = Modifier) {
+    val tint = LocalFocusableContentColor.current
+    val rotation = when (pref) {
+        ScreenOrientationPref.LANDSCAPE -> 90f
+        else -> 0f
+    }
+    val isAuto = pref == ScreenOrientationPref.AUTO
+    Canvas(modifier = modifier.rotate(rotation)) {
+        val s = size.minDimension / 24f
+        val strokeStyle = Stroke(
+            width = 2.13f * s,
+            cap = StrokeCap.Round,
+            join = StrokeJoin.Round,
+        )
+
+        // ── 竖屏手机轮廓（描边，中心线坐标）──
+        val phone = Path().apply {
+            addRoundRect(
+                RoundRect(
+                    left = 1.07f * s, top = 1.42f * s,
+                    right = 14.70f * s, bottom = 22.58f * s,
+                    cornerRadius = CornerRadius(1.60f * s),
+                )
+            )
+        }
+        drawPath(phone, color = tint, style = strokeStyle)
+
+        // ── 屏内底部 Home 胶囊（实心，水平居中、贴底留边）──
+        val capsule = Path().apply {
+            addRoundRect(
+                RoundRect(
+                    left = 5.07f * s, top = 17.96f * s,
+                    right = 10.67f * s, bottom = 20.27f * s,
+                    cornerRadius = CornerRadius(1.16f * s),
+                )
+            )
+        }
+        drawPath(capsule, color = tint)
+
+        if (!isAuto) {
+            // ── 右侧括号：上臂 → 圆角弯头 → 竖直段 → 圆角弯头 → 下臂（开口朝左）──
+            val armTop = 10.00f * s
+            val armBottom = 21.90f * s
+            val xStart = 17.10f * s
+            val xVertical = 22.84f * s
+            val r = 1.38f * s
+            val bracket = Path().apply {
+                moveTo(xStart, armTop)
+                lineTo(xVertical - r, armTop)
+                // 上弯头：从正上方（-90°）顺时针 90° 转向右侧竖直段
+                arcTo(
+                    Rect(center = Offset(xVertical - r, armTop + r), radius = r),
+                    startAngleDegrees = -90f, sweepAngleDegrees = 90f, forceMoveTo = false,
+                )
+                lineTo(xVertical, armBottom - r)
+                // 下弯头：从正右方（0°）顺时针 90° 转向下臂（向左）
+                arcTo(
+                    Rect(center = Offset(xVertical - r, armBottom - r), radius = r),
+                    startAngleDegrees = 0f, sweepAngleDegrees = 90f, forceMoveTo = false,
+                )
+                lineTo(xStart, armBottom)
+            }
+            drawPath(bracket, color = tint, style = strokeStyle)
+        } else {
+            // ── 「自动」：3/4 圆弧旋转箭头（↻）替换括号 ──
+            val cx = 19.8f * s
+            val cy = 15.95f * s
+            val r = 3.2f * s
+            val startDeg = 45f
+            val sweepDeg = 300f
+            val arc = Path().apply {
+                arcTo(
+                    Rect(center = Offset(cx, cy), radius = r),
+                    startAngleDegrees = startDeg, sweepAngleDegrees = sweepDeg,
+                    forceMoveTo = true,
+                )
+            }
+            drawPath(arc, color = tint, style = strokeStyle)
+            // 实心箭头：贴在弧线末端、指向顺时针切线方向
+            val endRad = Math.toRadians((startDeg + sweepDeg).toDouble())
+            val ex = cx + r * cos(endRad).toFloat()
+            val ey = cy + r * sin(endRad).toFloat()
+            val tx = -sin(endRad).toFloat()
+            val ty = cos(endRad).toFloat()
+            val nx = cos(endRad).toFloat()
+            val ny = sin(endRad).toFloat()
+            val arrow = Path().apply {
+                moveTo(ex + tx * 1.7f * s, ey + ty * 1.7f * s)
+                lineTo(ex + nx * 1.1f * s, ey + ny * 1.1f * s)
+                lineTo(ex - nx * 1.1f * s, ey - ny * 1.1f * s)
+                close()
+            }
+            drawPath(arrow, color = tint)
+        }
+    }
 }
 
 /**
@@ -138,6 +260,9 @@ private fun orientationIcon(pref: String): String = when (pref) {
  * 触摸目标：[PHONE_TOUCH_TARGET]（56 Compose dp）。⚠️ 横屏下 `LocalDensity` **同样**被
  * ×0.82 缩放（该处判据是 `isTVDevice` 而非 `uiMode`），故 56 × 0.82 ≈ 45.9 物理 dp ≥ 44 ✅；
  * 若写成 48dp 则只有 ≈39.4 物理 dp，不达标（同 [PhoneTopBarIconButton] 的教训）。
+ *
+ * v2.36.2 竖屏改版：图标 20dp → **28dp**（与底部导航 32dp 放大后的主按钮观感一致）。
+ * ⚠️ 只放大图标尺寸，**触摸热区不变**（仍由 [PhoneTopBarIconButton] 固定为 56dp）。
  */
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
@@ -151,10 +276,10 @@ fun OrientationToggleButton(
         onClick = onToggle,
         modifier = modifier,
     ) {
-        Text(
-            text = orientationIcon(orientationPref),
-            fontSize = FontSize.button(),
-            fontWeight = FontWeight.Medium,
+        // v2.36.2：由文本字形（▯/▭/↻）改为按参考图绘制的矢量图标
+        OrientationToggleIcon(
+            pref = orientationPref,
+            modifier = Modifier.size(28.dp),
         )
     }
 }

@@ -4,6 +4,13 @@ import com.nasmusic.tv.ui.theme.FontSize
 import com.nasmusic.tv.ui.components.AlbumSkeletonGrid
 import com.nasmusic.tv.ui.components.ArtistSkeletonGrid
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.horizontalScroll
@@ -85,6 +92,11 @@ enum class LibraryTab(val titleRes: Int) {
 private val LIBRARY_TAB_SWIPE_THRESHOLD = 48.dp
 
 /**
+ * 曲库子 TAB 横推动画时长（v2.36.2）：与竖屏播放页的模式切换保持一致的手感。
+ */
+private const val LIBRARY_TAB_SLIDE_ANIM_MS = 260
+
+/**
  * 曲库子 TAB：在**内容区**左右滑切换 TAB（v2.36.1，用户明确要求「手机端横竖屏都要支持」）。
  *
  * 语义与竖屏播放页的「封面 ⟷ 歌词」滑动一致（见 `NowPlayingScreen.portraitModeSwipe`）：
@@ -107,15 +119,16 @@ private val LIBRARY_TAB_SWIPE_THRESHOLD = 48.dp
  * 只要开关不变协程就不重启，若直接捕获 lambda，会读到**首次组合**那一刻的 `activeTab`
  * （陈旧值）→ 表现为「只能在前两个 TAB 之间来回」。这是 Compose 里
  * `pointerInput(Unit)` + 状态闭包的经典陷阱，参见 `portraitModeSwipe` 的同款注释。
+ *
+ * v2.36.2：回调改为携带**滑动方向**（`SwipeDirection.LEFT/RIGHT`），供外层
+ * `AnimatedContent` 按方向选择横推动画的出入场方向（左滑 → 新 TAB 从右推入）。
  */
 @Composable
 private fun Modifier.libraryTabSwipe(
     enabled: Boolean,
-    onSwipeLeft: () -> Unit,
-    onSwipeRight: () -> Unit,
+    onSwipe: (SwipeDirection) -> Unit,
 ): Modifier {
-    val swipeLeft by rememberUpdatedState(onSwipeLeft)
-    val swipeRight by rememberUpdatedState(onSwipeRight)
+    val swipe by rememberUpdatedState(onSwipe)
     return this.pointerInput(enabled) {
         if (!enabled) return@pointerInput
         val thresholdPx = LIBRARY_TAB_SWIPE_THRESHOLD.toPx()
@@ -123,8 +136,8 @@ private fun Modifier.libraryTabSwipe(
         detectHorizontalDragGestures(
             onDragStart = { accumulated = 0f },
             onDragEnd = {
-                if (accumulated <= -thresholdPx) swipeLeft()
-                else if (accumulated >= thresholdPx) swipeRight()
+                if (accumulated <= -thresholdPx) swipe(SwipeDirection.LEFT)
+                else if (accumulated >= thresholdPx) swipe(SwipeDirection.RIGHT)
                 accumulated = 0f
             },
             onDragCancel = { accumulated = 0f },
@@ -221,6 +234,9 @@ fun LibraryScreen(
     modifier: Modifier = Modifier
 ) {
     var showSearchDialog by remember { mutableStateOf(false) }
+    // v2.36.2：最近一次 TAB 切换的方向（手势 → LEFT/RIGHT；点击 TAB 行 → NONE），
+    // 供 AnimatedContent 按方向选择横推/淡入淡出过渡。
+    var tabSwipeDirection by remember { mutableStateOf(SwipeDirection.NONE) }
 
     // Task 14: 首次曲库快捷键提示（3s 自动消失）
     val context = LocalContext.current
@@ -441,7 +457,11 @@ fun LibraryScreen(
                     LibraryTab.entries.forEach { tab ->
                         val selected = tab == activeTab
                         FocusableSurface(
-                            onClick = { onTabSelected(tab) },
+                            onClick = {
+                                // 点击 TAB 行属非手势切换：方向置 NONE，AnimatedContent 退化为淡入淡出
+                                tabSwipeDirection = SwipeDirection.NONE
+                                onTabSelected(tab)
+                            },
                             modifier = Modifier.padding(horizontal = 2.dp),
                             shape = RoundedCornerShape(8.dp),
                             focusedScale = 1.05f,
@@ -513,24 +533,58 @@ fun LibraryScreen(
                     .fillMaxWidth()
                     .libraryTabSwipe(
                         enabled = uiMode == UiMode.PhonePortrait || uiMode == UiMode.PhoneLandscape,
-                        onSwipeLeft = {
-                            // 左滑 → 下一个 TAB（到末 TAB 为止，不循环）
-                            val idx = LibraryTab.entries.indexOf(activeTab)
-                            if (idx >= 0 && idx < LibraryTab.entries.size - 1) {
-                                onTabSelected(LibraryTab.entries[idx + 1])
-                            }
-                        },
-                        onSwipeRight = {
-                            // 右滑 → 上一个 TAB（到首 TAB 为止，不循环）
-                            val idx = LibraryTab.entries.indexOf(activeTab)
-                            if (idx > 0) {
-                                onTabSelected(LibraryTab.entries[idx - 1])
+                        onSwipe = { dir ->
+                            when (dir) {
+                                // 左滑 → 下一个 TAB（到末 TAB 为止，不循环）
+                                SwipeDirection.LEFT -> {
+                                    val idx = LibraryTab.entries.indexOf(activeTab)
+                                    if (idx >= 0 && idx < LibraryTab.entries.size - 1) {
+                                        tabSwipeDirection = SwipeDirection.LEFT
+                                        onTabSelected(LibraryTab.entries[idx + 1])
+                                    }
+                                }
+                                // 右滑 → 上一个 TAB（到首 TAB 为止，不循环）
+                                SwipeDirection.RIGHT -> {
+                                    val idx = LibraryTab.entries.indexOf(activeTab)
+                                    if (idx > 0) {
+                                        tabSwipeDirection = SwipeDirection.RIGHT
+                                        onTabSelected(LibraryTab.entries[idx - 1])
+                                    }
+                                }
+                                SwipeDirection.NONE -> {}
                             }
                         },
                     )
             ) {
+            // v2.36.2：子 TAB 切换带**方向感知的横推动画**（左滑 → 新 TAB 从右推入，
+            // 右滑 → 新 TAB 从左推入；点击 TAB 行等非手势切换退化为淡入淡出）。
+            // ⚠️ 过渡期新旧两棵子树会**同时组合**约 260ms：
+            //   - ① `when` 必须用 AnimatedContent 的 `targetTab` 参数而非外层 `activeTab`，
+            //     否则旧页会在过渡中「变成新页」（同 key 复用）导致动画失效；
+            //   - ② 各 Tab 的 LaunchedEffect 加载均幂等（loadRadioDefault / loadJamendoHot /
+            //     onDiscoverEnsureLoaded 有暂存跳过；SONGS/ARTISTS/YEARS 首页加载可重复触发），
+            //     过渡期短暂双组合可接受。
+            AnimatedContent(
+                targetState = activeTab,
+                transitionSpec = {
+                    when (tabSwipeDirection) {
+                        // 左滑：旧页向左推出，新页从右侧推入
+                        SwipeDirection.LEFT ->
+                            (slideInHorizontally(tween(LIBRARY_TAB_SLIDE_ANIM_MS)) { it } togetherWith
+                                slideOutHorizontally(tween(LIBRARY_TAB_SLIDE_ANIM_MS)) { -it })
+                        // 右滑：旧页向右推出，新页从左侧推入
+                        SwipeDirection.RIGHT ->
+                            (slideInHorizontally(tween(LIBRARY_TAB_SLIDE_ANIM_MS)) { -it } togetherWith
+                                slideOutHorizontally(tween(LIBRARY_TAB_SLIDE_ANIM_MS)) { it })
+                        // 非手势切换（点击 TAB 行）：淡入淡出兜底
+                        SwipeDirection.NONE ->
+                            (fadeIn(tween(200)) togetherWith fadeOut(tween(200)))
+                    }
+                },
+                label = "libraryTabSwitch",
+            ) { targetTab ->
             // SEARCH, DISCOVER, RADIO tabs handle their own loading/empty states
-            when (activeTab) {
+            when (targetTab) {
                 LibraryTab.SEARCH -> {
                     SearchTab(
                         searchKeyword = filterQuery,
@@ -586,13 +640,13 @@ fun LibraryScreen(
                     // 专辑/艺术家/歌曲 tab 搜索时有结果直接展示（多源搜索，不依赖 NAS 连接）
                     val hasSearchResults = filterQuery.isNotBlank() && searchResults.isNotEmpty()
                     val showSearchContent = hasSearchResults && (
-                        activeTab == LibraryTab.ALBUMS ||
-                        activeTab == LibraryTab.ARTISTS ||
-                        activeTab == LibraryTab.SONGS
+                        targetTab == LibraryTab.ALBUMS ||
+                        targetTab == LibraryTab.ARTISTS ||
+                        targetTab == LibraryTab.SONGS
                     )
                     if (showSearchContent) {
                         // 搜索模式：直接展示搜索结果，跳过加载/连接/空状态检查
-                        when (activeTab) {
+                        when (targetTab) {
                             LibraryTab.ALBUMS -> AlbumsTab(
                                 albums = filteredAlbums,
                                 songs = searchResults,
@@ -636,7 +690,7 @@ fun LibraryScreen(
                             )
                             Spacer(modifier = Modifier.height(12.dp))
                             // 按 Tab 类型显示对应骨架
-                            when (activeTab) {
+                            when (targetTab) {
                                 LibraryTab.ALBUMS -> AlbumSkeletonGrid()
                                 LibraryTab.ARTISTS -> ArtistSkeletonGrid()
                                 else -> AlbumSkeletonGrid()  // 默认专辑骨架
@@ -645,7 +699,7 @@ fun LibraryScreen(
 
                     } else {
                         // 有数据时直接展示（无论 NAS 是否连接，本地/百度/网络数据同样展示）
-                        when (activeTab) {
+                        when (targetTab) {
                             LibraryTab.ALBUMS -> if (filteredAlbums.isEmpty()) {
                                 EmptyHint(isConnected = isConnected, tab = LibraryTab.ALBUMS)
                             } else {
@@ -702,6 +756,7 @@ fun LibraryScreen(
                     }
                 }
             }
+            }   // AnimatedContent(targetTab) 内容 lambda
 
                 // Task 14: 遥控器快捷键提示浮层（3s 自动消失）
                 androidx.compose.animation.AnimatedVisibility(
