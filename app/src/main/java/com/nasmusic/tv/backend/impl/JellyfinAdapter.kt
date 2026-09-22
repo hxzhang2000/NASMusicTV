@@ -439,8 +439,17 @@ class JellyfinAdapter : BackendAdapter {
         try {
             // 利用 Jellyfin 的 /Items/Filters 端点获取年份列表
             val url = "$baseUrl/Items/Filters?UserId=$userId&IncludeItemTypes=Audio"
-            val json = executeJsonRequest(url) ?: return@withContext emptyList()
-            val yearsArray = json.getAsJsonArray("Years") ?: return@withContext emptyList()
+            // 主题 C②（2026-09-22 审查，待确认中）：/Items/Filters 为 Emby 旧端点，
+            // Jellyfin 现行为 /Items/Filters2。端点暂不变更，先补诊断日志：真机上若
+            // 「年代」恒空且出现本行日志，即可确认 404 并切换端点。
+            val json = executeJsonRequest(url) ?: run {
+                AppLog.w("JellyfinAdapter", "getYears: /Items/Filters null (endpoint may not exist) url=$url")
+                return@withContext emptyList()
+            }
+            val yearsArray = json.getAsJsonArray("Years") ?: run {
+                AppLog.w("JellyfinAdapter", "getYears: response has no Years array (endpoint legacy?) url=$url")
+                return@withContext emptyList()
+            }
             val years = mutableListOf<Int>()
             for (i in 0 until yearsArray.size()) {
                 val year = yearsArray[i].asInt
@@ -576,7 +585,14 @@ class JellyfinAdapter : BackendAdapter {
     }
 
     override fun getStreamUrl(songId: String): String =
-        "$baseUrl/Audio/$songId/stream.mp3?api_key=$apiToken"
+        // 主题 C①决策落地（2026-09-22 审查，用户选方案 B）：stream.mp3 容器后缀
+        // 会强制服务端把原始流转码为 mp3（FLAC 库音质损失 + 无谓转码会话）。
+        // 改 universal 端点：Container 列出可直通容器（FLAC/mp3/m4a 等原样直播），
+        // 清单外冷门格式回落服务端默认转码。
+        // 真机回归点：FLAC/mp3/m4a 各验一首；个别老版本 Jellyfin 对 universal
+        // 行为异常时回退本提交即可。
+        "$baseUrl/Audio/$songId/universal?api_key=$apiToken" +
+            "&Container=flac,mp3,m4a,aac,ogg,opus,wav,webma"
 
     override fun getCoverUrl(songId: String): String {
         val url = "$baseUrl/Items/$songId/Images/Primary?maxWidth=512&quality=90&api_key=$apiToken"
