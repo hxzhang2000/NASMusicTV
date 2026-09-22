@@ -306,16 +306,16 @@ fun NowPlayingScreen(
                 }
             )
     ) {
-        // 空白带修复（2026-09-22 真机截图分析）：top=40dp 是按 TV 设计的，手机横屏
-        // （高度 ~411dp）上是 10% 的纯空带——横屏收紧为 12dp；TV 保持 40dp 不变。
+        // 空白带修复二轮（2026-09-22 用户反馈 12dp 仍无感，要求干脆去掉）：
+        // 手机横屏 padding 全部归零（TV 保持 40/24 不变）。
         val isPhoneLandscape = com.nasmusic.tv.ui.theme.LocalUiMode.current ==
             com.nasmusic.tv.ui.theme.UiMode.PhoneLandscape
         Column(
             modifier = Modifier.fillMaxSize().padding(
-                start = 24.dp,
-                end = 24.dp,
-                top = if (isPhoneLandscape) 12.dp else 40.dp,
-                bottom = if (isPhoneLandscape) 12.dp else 24.dp
+                start = if (isPhoneLandscape) 16.dp else 24.dp,
+                end = if (isPhoneLandscape) 16.dp else 24.dp,
+                top = if (isPhoneLandscape) 0.dp else 40.dp,
+                bottom = if (isPhoneLandscape) 0.dp else 24.dp
             )
         ) {
             // 中部：专辑封面(1/3) + 歌词(2/3)
@@ -323,8 +323,16 @@ fun NowPlayingScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f),
-                horizontalArrangement = Arrangement.spacedBy(if (isImmersiveMode) 24.dp else 48.dp),
-                verticalAlignment = Alignment.CenterVertically
+                horizontalArrangement = Arrangement.spacedBy(
+                    when {
+                        isImmersiveMode -> 24.dp
+                        isPhoneLandscape -> 16.dp
+                        else -> 48.dp
+                    }
+                ),
+                // 横屏：顶部对齐（CenterVertically 会在短视口里把内容挤成中间一团、
+                // 上下各留一条缝——正是用户指出的空带来源之一）
+                verticalAlignment = if (isPhoneLandscape) Alignment.Top else Alignment.CenterVertically
             ) {
                 // 左侧：
                 // - 沉浸模式 = 占满左半屏的大封面，图片右缘虚化并渐变到黑
@@ -344,7 +352,7 @@ fun NowPlayingScreen(
                 } else {
                     Column(
                         modifier = Modifier
-                            .width(380.dp)
+                            .width(if (isPhoneLandscape) 300.dp else 380.dp)
                             .fillMaxHeight()
                             .verticalScroll(rememberScrollState()),
                         horizontalAlignment = Alignment.CenterHorizontally

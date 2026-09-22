@@ -132,7 +132,7 @@ private fun LyricsViewInner(
     //（高度 ~411dp）上吃掉近 1/3 视口——横屏收敛为 40dp；TV 竖向空间充裕保持 120。
     val isPhoneLandscape = com.nasmusic.tv.ui.theme.LocalUiMode.current ==
         com.nasmusic.tv.ui.theme.UiMode.PhoneLandscape
-    val edgeSpacer = if (isPhoneLandscape) 40.dp else 120.dp
+    val edgeSpacer = if (isPhoneLandscape) 16.dp else 120.dp
 
     // —— 手势拖拽跳转（2026-09-22 新增，手机端横竖屏）：拖动浏览歌词时顶部出现
     //    虚线指示条，松手后跳到虚线处歌词的起始时间播放。isDragSeeking 期间
