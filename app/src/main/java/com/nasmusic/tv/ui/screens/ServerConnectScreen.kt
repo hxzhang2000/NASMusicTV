@@ -141,9 +141,9 @@ fun ServerConnectScreen(
     }
     // —— 手机扫码填入服务器配置（2026-09-22 用户需求）：手机表单 → 推送到电视 →
     // 自动填充下方表单，用户核对后用遥控器确认键连接（本流程不代替用户连接）——
+    // 二维码常驻显示（2026-09-22 用户修正：TV 无触摸，不能依赖点击展开）；
+    // HTTP 服务随页面开关：进入本页即启动，离开即关闭。
     var statusMessage by remember { mutableStateOf("") }
-
-    var qrTransferActive by remember { mutableStateOf(false) }
     var qrUrl by remember { mutableStateOf<String?>(null) }
     var qrBitmap by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
     val configTransferServer = remember {
@@ -156,23 +156,17 @@ fun ServerConnectScreen(
                 backendType = backend
                 statusMessage = "已从手机收到服务器配置，请核对后连接"
             }
-        }
-    )
+        })
     }
-    DisposableEffect(qrTransferActive) {
-        if (qrTransferActive) {
-            val ip = NetworkUtils.getLocalIpAddress()
-            if (ip != null) {
-                qrUrl = configTransferServer.buildUrl(ip)
-                qrBitmap = QrCodeGenerator.generateQrBitmap(qrUrl!!, 360)
-                configTransferServer.startServer()
-            } else {
-                statusMessage = "无法获取本机 IP，扫码填入不可用"
-            }
+    DisposableEffect(Unit) {
+        val ip = NetworkUtils.getLocalIpAddress()
+        if (ip != null) {
+            val url0 = configTransferServer.buildUrl(ip)
+            qrUrl = url0
+            qrBitmap = QrCodeGenerator.generateQrBitmap(url0, 150)
+            configTransferServer.startServer()
         } else {
-            configTransferServer.stopServer()
-            qrUrl = null
-            qrBitmap = null
+            statusMessage = "无法获取本机 IP，扫码填入不可用"
         }
         onDispose { configTransferServer.stopServer() }
     }
@@ -208,38 +202,70 @@ fun ServerConnectScreen(
                 .padding(40.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // 顶部服务器图标
-            Box(
-                modifier = Modifier
-                    .size(72.dp)
-                    .background(
-                        NasMusicColors.Primary,
-                        RoundedCornerShape(20.dp)
-                    ),
-                contentAlignment = Alignment.Center
+            // 顶部：标题区（左）+ 手机扫码填入二维码（右，常驻显示）
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(
-                    imageVector = Icons.Default.Storage,
-                    contentDescription = null,
-                    tint = NasMusicColors.TextPrimary,
-                    modifier = Modifier.size(36.dp)
-                )
+                Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.weight(1f)) {
+                    // 顶部服务器图标
+                    Box(
+                        modifier = Modifier
+                            .size(72.dp)
+                            .background(
+                                NasMusicColors.Primary,
+                                RoundedCornerShape(20.dp)
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Storage,
+                            contentDescription = null,
+                            tint = NasMusicColors.TextPrimary,
+                            modifier = Modifier.size(36.dp)
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    Text(
+                        text = stringResource(R.string.server_config_title),
+                        color = Color.White,
+                        fontSize = FontSize.displayLarge()
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = stringResource(R.string.server_connect_desc),
+                        color = NasMusicColors.TextSecondary,
+                        fontSize = FontSize.button(),
+                        textAlign = TextAlign.Center
+                    )
+                }
+                // 二维码（常驻显示；token 随 URL 下发，HTTP 服务随页面开关）
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    qrBitmap?.let { bmp ->
+                        Image(
+                            bitmap = bmp.asImageBitmap(),
+                            contentDescription = "手机扫码填入服务器配置",
+                            modifier = Modifier.size(150.dp)
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            text = "手机扫码填入服务器信息",
+                            fontSize = 12.sp,
+                            color = NasMusicColors.TextSecondary,
+                            textAlign = TextAlign.Center
+                        )
+                    } ?: run {
+                        Text(
+                            text = "二维码生成中…",
+                            fontSize = 12.sp,
+                            color = NasMusicColors.TextSecondary
+                        )
+                    }
+                }
             }
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            Text(
-                text = stringResource(R.string.server_config_title),
-                color = Color.White,
-                fontSize = FontSize.displayLarge()
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(
-                text = stringResource(R.string.server_connect_desc),
-                color = NasMusicColors.TextSecondary,
-                fontSize = FontSize.button(),
-                textAlign = TextAlign.Center
-            )
 
             // 已连接状态
             if (isConnected) {
@@ -348,49 +374,6 @@ fun ServerConnectScreen(
                     onClick = { backendType = ServerConfig.TYPE_FEINIU },
                     modifier = Modifier.weight(1f)
                 )
-            }
-
-            // —— 手机扫码填入（在手机上填 URL/账号/密码，推送后自动填充下方表单）——
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "手机扫码填入服务器信息（免遥控器输入）",
-                    fontSize = 13.sp,
-                    color = NasMusicColors.TextSecondary
-                )
-                Text(
-                    text = if (qrTransferActive) "收起二维码" else "显示二维码",
-                    fontSize = 13.sp,
-                    color = NasMusicColors.Primary,
-                    modifier = Modifier.clickable { qrTransferActive = !qrTransferActive }
-                )
-            }
-            if (qrTransferActive) {
-                Box(
-                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    qrBitmap?.let { bmp ->
-                        Image(
-                            bitmap = bmp.asImageBitmap(),
-                            contentDescription = "扫码填入服务器配置",
-                            modifier = Modifier.size(200.dp)
-                        )
-                    }
-                }
-                qrUrl?.let { url ->
-                    Text(
-                        text = url,
-                        fontSize = 11.sp,
-                        color = NasMusicColors.TextSecondary,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier.fillMaxWidth().padding(top = 4.dp)
-                    )
-                }
-                Spacer(modifier = Modifier.height(8.dp))
             }
 
             Spacer(modifier = Modifier.height(24.dp))
