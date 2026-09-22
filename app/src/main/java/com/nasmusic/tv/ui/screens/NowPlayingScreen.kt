@@ -306,8 +306,17 @@ fun NowPlayingScreen(
                 }
             )
     ) {
+        // 空白带修复（2026-09-22 真机截图分析）：top=40dp 是按 TV 设计的，手机横屏
+        // （高度 ~411dp）上是 10% 的纯空带——横屏收紧为 12dp；TV 保持 40dp 不变。
+        val isPhoneLandscape = com.nasmusic.tv.ui.theme.LocalUiMode.current ==
+            com.nasmusic.tv.ui.theme.UiMode.PhoneLandscape
         Column(
-            modifier = Modifier.fillMaxSize().padding(start = 24.dp, end = 24.dp, top = 40.dp, bottom = 24.dp)
+            modifier = Modifier.fillMaxSize().padding(
+                start = 24.dp,
+                end = 24.dp,
+                top = if (isPhoneLandscape) 12.dp else 40.dp,
+                bottom = if (isPhoneLandscape) 12.dp else 24.dp
+            )
         ) {
             // 中部：专辑封面(1/3) + 歌词(2/3)
             Row(
