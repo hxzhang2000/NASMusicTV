@@ -5,6 +5,13 @@ import com.nasmusic.tv.data.model.Song
 import com.nasmusic.tv.backend.network.baidu.BaiduCoverProvider
 import com.nasmusic.tv.util.AppLog
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -70,85 +77,108 @@ class AlbumCoverResolver(
             }
         }
 
+        // P2 修复（2026-09-22 审查）：原实现逐专辑串行（侧车/iTunes/网络搜索/APIC
+        // 多个阻塞请求），大曲库首刷分钟级且易触发限流。与 ArtistCoverResolver 同款：
+        // Semaphore 并发 + 错峰节流；已封面专辑的索引同步（无网络）保持串行；
+        // 索引批量写与批次回调语义保留。setCoverUrls 已收敛进 cacheLock，并发安全。
         var updatedAlbums = albums
         var processed = 0
-        // 批量收集 fsId → coverUrl，最后一次性写入索引（避免 O(n²) 反复序列化）
-        val pendingIndexUpdates = mutableMapOf<Long, String>()
+        // 批量收集 fsId → coverUrl，最后一次性写入索引（避免 O(n2) 反复序列化 46K 条目）
+        val pendingIndexUpdates = java.util.concurrent.ConcurrentHashMap<Long, String>()
+        val stateMutex = Mutex()
+        val permits = Semaphore(MAX_CONCURRENT)
 
+        // 已有封面的专辑：仅同步同专辑 baidu 歌的索引（歌曲列表显示用，无网络请求）
         for (album in albums) {
+            if (album.coverUrl == null) continue
             val albumKey = album.name.lowercase().trim()
             val songs = albumSongsMap[albumKey] ?: emptyList()
-            // 专辑内所有 baidu 歌的 fsId（用于索引缓存：同专辑歌曲共享封面 URL）
-            val baiduFsIds = songs.mapNotNull { song ->
-                if (song.networkSource == "baidu") song.networkId?.toLongOrNull() else null
+            if (baiduIndexCache != null) {
+                songs.mapNotNull { song ->
+                    if (song.networkSource == "baidu") song.networkId?.toLongOrNull() else null
+                }.forEach { pendingIndexUpdates[it] = album.coverUrl }
             }
-            val baiduFsId = baiduFsIds.firstOrNull()  // 用于侧车/APIC（取第一首）
-            val baiduSong = songs.firstOrNull { it.networkSource == "baidu" && it.networkId != null }
+        }
 
-            // 专辑已有封面 → 跳过解析，但同步到同专辑所有 baidu 歌的索引（歌曲列表显示用）
-            if (album.coverUrl != null) {
-                if (baiduIndexCache != null) {
-                    baiduFsIds.forEach { pendingIndexUpdates[it] = album.coverUrl }
-                }
-                continue
-            }
+        // 待解析专辑：并发解析
+        val pending = albums.filter { it.coverUrl == null }
+        val totalPending = pending.size
+        coroutineScope {
+            for ((index, album) in pending.withIndex()) {
+                launch {
+                    permits.withPermit {
+                        // 错峰节流（对齐 ArtistCoverResolver：5 并发 × 150ms ≈ 27 req/min/源）
+                        delay((index % MAX_CONCURRENT) * 150L)
+                        val albumKey = album.name.lowercase().trim()
+                        val songs = albumSongsMap[albumKey] ?: emptyList()
+                        // 专辑内所有 baidu 歌的 fsId（用于索引缓存：同专辑歌曲共享封面 URL）
+                        val baiduFsIds = songs.mapNotNull { song ->
+                            if (song.networkSource == "baidu") song.networkId?.toLongOrNull() else null
+                        }
+                        val baiduFsId = baiduFsIds.firstOrNull()  // 用于侧车/APIC（取第一首）
+                        val baiduSong = songs.firstOrNull { it.networkSource == "baidu" && it.networkId != null }
 
-            var resolvedUrl: String? = null
+                        var resolvedUrl: String? = null
 
-            // 0. 优先复用索引中已持久化的稳定封面（避免重复网络搜索）
-            if (baiduIndexCache != null && baiduFsId != null) {
-                resolvedUrl = baiduIndexCache.getCoverUrl(baiduFsId)
-            }
+                        // 0. 优先复用索引中已持久化的稳定封面（避免重复网络搜索）
+                        if (baiduIndexCache != null && baiduFsId != null) {
+                            resolvedUrl = baiduIndexCache.getCoverUrl(baiduFsId)
+                        }
 
-            // P1: 侧车封面（同目录 cover 图，不取 APIC）
-            if (resolvedUrl == null && baiduCoverProvider != null) {
-                resolvedUrl = baiduCoverProvider.findSidecarCoverOnly(baiduSong?.path)
-            }
+                        // P1: 侧车封面（同目录 cover 图，不取 APIC）
+                        if (resolvedUrl == null && baiduCoverProvider != null) {
+                            resolvedUrl = baiduCoverProvider.findSidecarCoverOnly(baiduSong?.path)
+                        }
 
-            // P2: iTunes 在线搜索（专辑名+歌手）
-            if (resolvedUrl == null) {
-                resolvedUrl = resolveItunesCover(album.name, album.artist)
-            }
+                        // P2: iTunes 在线搜索（专辑名+歌手）
+                        if (resolvedUrl == null) {
+                            resolvedUrl = resolveItunesCover(album.name, album.artist)
+                        }
 
-            // P3: 网络封面搜索（专辑名+歌手）— 针对无内嵌封面的百度网盘专辑
-            if (resolvedUrl == null) {
-                resolvedUrl = runCatching {
-                    searchCover(album.name.trim(), album.artist.trim())
-                }.getOrNull()
-            }
+                        // P3: 网络封面搜索（专辑名+歌手）— 针对无内嵌封面的百度网盘专辑
+                        if (resolvedUrl == null) {
+                            resolvedUrl = runCatching {
+                                searchCover(album.name.trim(), album.artist.trim())
+                            }.getOrNull()
+                        }
 
-            // P4: 取专辑内第一首 baidu 歌的内嵌 APIC
-            if (resolvedUrl == null && baiduCoverProvider != null) {
-                resolvedUrl = baiduCoverProvider.extractApicOnly(baiduFsId)
-            }
+                        // P4: 取专辑内第一首 baidu 歌的内嵌 APIC
+                        if (resolvedUrl == null && baiduCoverProvider != null) {
+                            resolvedUrl = baiduCoverProvider.extractApicOnly(baiduFsId)
+                        }
 
-            // P5: 取专辑内第一首有 coverUrl 的歌曲封面
-            if (resolvedUrl == null) {
-                resolvedUrl = songs.firstOrNull { it.coverUrl != null }?.coverUrl
-            }
+                        // P5: 取专辑内第一首有 coverUrl 的歌曲封面
+                        if (resolvedUrl == null) {
+                            resolvedUrl = songs.firstOrNull { it.coverUrl != null }?.coverUrl
+                        }
 
-            // P6: 仍为空 → 上层走默认图
+                        // P6: 仍为空 → 上层走默认图
 
-            if (resolvedUrl != null) {
-                // 命中稳定网络封面（非动态 dlink/APIC）→ 收集待批量写入索引
-                if (baiduIndexCache != null && resolvedUrl.startsWith("http")) {
-                    baiduFsIds.forEach { pendingIndexUpdates[it] = resolvedUrl }
-                }
-                val idx = updatedAlbums.indexOfFirst { it.id == album.id }
-                if (idx >= 0) {
-                    updatedAlbums = updatedAlbums.toMutableList().apply {
-                        this[idx] = album.copy(coverUrl = resolvedUrl)
-                    }
-                    processed++
-                    // 每 MAX_CONCURRENT 个回调一次，避免频繁更新 UI
-                    if (processed % MAX_CONCURRENT == 0) {
-                        onUpdated(updatedAlbums)
+                        if (resolvedUrl != null) {
+                            stateMutex.withLock {
+                                // 命中稳定网络封面（非动态 dlink/APIC）→ 收集待批量写入索引
+                                if (baiduIndexCache != null && resolvedUrl.startsWith("http")) {
+                                    baiduFsIds.forEach { pendingIndexUpdates[it] = resolvedUrl }
+                                }
+                                val idx = updatedAlbums.indexOfFirst { it.id == album.id }
+                                if (idx >= 0) {
+                                    updatedAlbums = updatedAlbums.toMutableList().apply {
+                                        this[idx] = album.copy(coverUrl = resolvedUrl)
+                                    }
+                                    processed++
+                                    // 每 MAX_CONCURRENT 个回调一次，避免频繁更新 UI
+                                    if (processed % MAX_CONCURRENT == 0) {
+                                        onUpdated(updatedAlbums)
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }
         }
 
-        // 批量写入索引（单次文件 I/O，避免 O(n²) 反复序列化 46K 条目）
+        // 批量写入索引（单次文件 I/O，避免 O(n2) 反复序列化 46K 条目）
         if (pendingIndexUpdates.isNotEmpty() && baiduIndexCache != null) {
             baiduIndexCache.setCoverUrls(pendingIndexUpdates)
         }
@@ -158,7 +188,7 @@ class AlbumCoverResolver(
             onUpdated(updatedAlbums)
         }
 
-        AppLog.d(TAG, "resolveCovers: processed=$processed/${albums.count { it.coverUrl == null }}, indexUpdates=${pendingIndexUpdates.size}")
+        AppLog.d(TAG, "resolveCovers: processed=$processed/$totalPending, indexUpdates=${pendingIndexUpdates.size}")
     }
 
     /**
