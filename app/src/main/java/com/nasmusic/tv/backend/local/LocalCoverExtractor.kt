@@ -38,7 +38,23 @@ class LocalCoverExtractor(private val context: Context) {
             retriever.setDataSource(audioPath)
             val art = retriever.embeddedPicture
             retriever.release()
-            art?.let { BitmapFactory.decodeByteArray(it, 0, it.size) }
+            art?.let { bytes ->
+                // P3 修复（2026-09-22 审查）：bounds + inSampleSize 先降采样再全解码，
+                // 避免大内嵌图（配合 256KB 智能读取放行的 1-2MB 图）全尺寸解码的内存
+                // 峰值；目标边 2048 优先保大屏清晰度，仅对 4K+ 图降采样。
+                val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+                val opts = BitmapFactory.Options().apply {
+                    var sample = 1
+                    var halfW = bounds.outWidth
+                    var halfH = bounds.outHeight
+                    while (halfW / 2 >= 2048 && halfH / 2 >= 2048) {
+                        sample *= 2; halfW /= 2; halfH /= 2
+                    }
+                    inSampleSize = sample
+                }
+                BitmapFactory.decodeByteArray(bytes, 0, bytes.size, opts)
+            }
         } catch (e: Exception) {
             AppLog.w(TAG, "extract embedded cover failed: ${e.message}")
             null

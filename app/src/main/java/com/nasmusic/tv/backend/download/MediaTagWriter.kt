@@ -96,7 +96,21 @@ object MediaTagWriter {
         var src: Bitmap? = null
         var scaled: Bitmap? = null
         return try {
-            src = BitmapFactory.decodeByteArray(rawBytes, 0, rawBytes.size) ?: return null
+            // P3 修复（2026-09-22 审查）：先解码 bounds 并按目标边长算 inSampleSize，
+            // 超大封面（4K 图）不再先全尺寸解码再缩放（批量下载时的内存峰值/OOM 面）。
+            // 降采样目标与 MAX_COVER_EDGE 一致，输出画质无损。
+            val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            BitmapFactory.decodeByteArray(rawBytes, 0, rawBytes.size, bounds)
+            val opts = BitmapFactory.Options().apply {
+                var sample = 1
+                var halfW = bounds.outWidth
+                var halfH = bounds.outHeight
+                while (halfW / 2 >= MAX_COVER_EDGE && halfH / 2 >= MAX_COVER_EDGE) {
+                    sample *= 2; halfW /= 2; halfH /= 2
+                }
+                inSampleSize = sample
+            }
+            src = BitmapFactory.decodeByteArray(rawBytes, 0, rawBytes.size, opts) ?: return null
             scaled = scaleToMaxEdge(src, MAX_COVER_EDGE)
             val out = ByteArrayOutputStream()
             scaled.compress(Bitmap.CompressFormat.JPEG, JPEG_QUALITY, out)
