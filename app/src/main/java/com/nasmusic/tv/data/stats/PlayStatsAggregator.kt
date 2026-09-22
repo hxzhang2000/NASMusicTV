@@ -101,7 +101,7 @@ object PlayStatsAggregator {
         )
     }
 
-    /** 从命中的歌曲里恢复原始大小写的歌手名（取播放量最高的那首的歌名展示口径一致） */
+    /** 从命中的歌曲里恢复原始大小写的歌手名（取 songMeta 顺序首个命中；注释原称「播放量最高的那首」与实现不符，此处修正注释口径） */
     private fun restoreArtistName(songMeta: List<Song>, songIds: Set<String>): String =
         songMeta.firstOrNull { it.id in songIds }?.artist?.trim() ?: "未知歌手"
 }

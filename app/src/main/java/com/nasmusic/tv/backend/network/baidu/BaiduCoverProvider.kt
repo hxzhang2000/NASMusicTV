@@ -135,6 +135,6 @@ class BaiduCoverProvider(
         private const val ID3_PROBE_BYTES = 256 * 1024
         /** 单次补读上限（避免异常/恶意超长 ID3 标签把内存打爆） */
         private const val MAX_ID3_TAG_BYTES = 16L * 1024 * 1024
-        private val SIDE_CAR_NAMES = setOf("cover", "folder", "album", "front", "cover.jpg")
+        private val SIDE_CAR_NAMES = setOf("cover", "folder", "album", "front") // 2026-09-22 审查：移除 "cover.jpg" 死条目（比对前已 substringBeforeLast(.), 永不命中）
     }
 }

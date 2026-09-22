@@ -154,7 +154,9 @@ object LrcParser {
     }
 
     private val OFFSET_REGEX = Regex("\\[offset:(-?\\d+)\\]")
-    private val LINE_REGEX = Regex("(\\[\\d{1,2}:\\d{2}\\.\\d{2,3}\\])+(.+)")
+    // 修复（2026-09-22 审查 P3）：(.+) 要求时间标签后至少 1 字符，纯时间标签的
+    // 「清屏节拍行」（如 [01:00.00]）被静默丢弃，歌词在空拍处不消失。改 (.*)。
+    private val LINE_REGEX = Regex("(\\[\\d{1,2}:\\d{2}\\.\\d{2,3}\\])+(.*)")
     private val TIME_REGEX = Regex("\\[(\\d{1,2}):(\\d{2})\\.(\\d{2,3})\\]")
     private val WORD_TIMESTAMP_REGEX = Regex("<(\\d{1,2}):(\\d{2})\\.(\\d{2,3})>([^<]+)")
     private val VALID_LRC_REGEX = Regex("\\[\\d{1,2}:\\d{2}\\.\\d{2,3}\\]")
