@@ -2,7 +2,7 @@ package com.nasmusic.tv.ui.components
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.foundation.interaction.collectIsDraggedAsState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -133,7 +133,10 @@ private fun LyricsViewInner(
     //    暂停自动跟行；tap（未滚动）不触发，普通浏览不受影响。
     var isDragSeeking by remember { mutableStateOf(false) }
     var seekTargetLine by remember { mutableStateOf(-1) }
-    val listPressed by listState.interactionSource.collectIsPressedAsState()
+    // 修复（17:51 真机反馈）：LazyColumn 的 scrollable 发出的是 DragInteraction
+    // 而非 PressInteraction——collectIsPressedAsState 永远收不到事件，
+    // isDragSeeking 不会激活，拖拽跳转整体无效。改 collectIsDraggedAsState。
+    val listDragged by listState.interactionSource.collectIsDraggedAsState()
 
     // 逐字模式下使用本地高频时钟插值，平滑过渡（避免 1000ms progress 导致逐字跳动）
     // 基于上次已知 currentTimeMs（1秒锚点）+ 实际流逝时间估算当前进度
@@ -179,9 +182,9 @@ private fun LyricsViewInner(
         }
     }
 
-    // 手指按住且产生滚动 → 进入拖拽跳转模式（tap 无滚动不触发）
-    LaunchedEffect(listPressed, listState.isScrollInProgress) {
-        if (listPressed && listState.isScrollInProgress && !isDragSeeking) {
+    // 手指拖动歌词列表 → 进入拖拽跳转模式（tap 无滚动不触发）
+    LaunchedEffect(listDragged, listState.isScrollInProgress) {
+        if (listDragged && listState.isScrollInProgress && !isDragSeeking) {
             isDragSeeking = true
             seekTargetLine = -1
         }
@@ -197,9 +200,9 @@ private fun LyricsViewInner(
         }?.let { it.index - 1 } ?: -1
     }
 
-    // 松手：跳到目标行起始时间播放
-    LaunchedEffect(listPressed) {
-        if (!listPressed && isDragSeeking) {
+    // 松手：跳到目标行起始时间播放（DragInteraction.Stop = 手指抬起）
+    LaunchedEffect(listDragged) {
+        if (!listDragged && isDragSeeking) {
             isDragSeeking = false
             val target = seekTargetLine
             seekTargetLine = -1
