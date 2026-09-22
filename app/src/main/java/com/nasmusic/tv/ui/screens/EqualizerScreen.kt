@@ -70,10 +70,11 @@ fun EqualizerScreen(
 ) {
     // v2.36.0 竖屏：页 padding 32→16
     val isPhonePortrait = LocalUiMode.current == UiMode.PhonePortrait
+    val isPhoneLandscape = LocalUiMode.current == UiMode.PhoneLandscape
     Column(
         modifier = modifier.fillMaxSize().padding(
-            horizontal = if (isPhonePortrait) 16.dp else 32.dp,
-            vertical = if (isPhonePortrait) 12.dp else 20.dp
+            horizontal = if (isPhoneLandscape) 16.dp else if (isPhonePortrait) 16.dp else 32.dp,
+            vertical = if (isPhoneLandscape) 0.dp else if (isPhonePortrait) 12.dp else 20.dp
         )
     ) {
         // 返回 + 标题

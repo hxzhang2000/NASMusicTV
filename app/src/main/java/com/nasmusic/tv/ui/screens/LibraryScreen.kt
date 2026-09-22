@@ -457,8 +457,8 @@ fun LibraryScreen(
         val isPhonePortrait = uiMode == UiMode.PhonePortrait
         Column(
             modifier = Modifier.fillMaxSize().padding(
-                horizontal = if (isPhonePortrait) 16.dp else 32.dp,
-                vertical = if (isPhonePortrait) 12.dp else 20.dp
+                horizontal = if (uiMode == UiMode.PhoneLandscape) 16.dp else if (isPhonePortrait) 16.dp else 32.dp,
+                vertical = if (uiMode == UiMode.PhoneLandscape) 0.dp else if (isPhonePortrait) 12.dp else 20.dp
             )
         ) {
             // 顶部标题 + TAB + 播放全部

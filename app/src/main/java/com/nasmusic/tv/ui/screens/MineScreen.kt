@@ -130,8 +130,15 @@ fun MineScreen(
     // 外层容器：手机上下排布（单列）、TV 左右排布（双列）
     // v2.36.0 竖屏（方案 §4.4 / P0-15）：页 padding 32→16
     val isPhonePortrait = LocalUiMode.current == UiMode.PhonePortrait
+    val isPhoneLandscape = LocalUiMode.current == UiMode.PhoneLandscape
     Column(
-        modifier = Modifier.fillMaxSize().padding(if (isPhonePortrait) 16.dp else 32.dp)
+        modifier = Modifier.fillMaxSize().padding(
+            when {
+                isPhoneLandscape -> 16.dp
+                isPhonePortrait -> 16.dp
+                else -> 32.dp
+            }
+        )
     ) {
     val isPhone = LocalPhoneCompact.current
     if (isPhone) {

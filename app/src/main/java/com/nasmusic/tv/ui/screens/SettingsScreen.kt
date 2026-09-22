@@ -372,7 +372,15 @@ fun SettingsScreen(
     val mvUrlHint = stringResource(R.string.settings_mv_api_url_hint)
     val mvUrlTitle = stringResource(R.string.settings_mv_api_url)
 
-    Row(modifier = modifier.fillMaxSize().padding(if (isPortraitPhone) 16.dp else 32.dp)) {
+    Row(
+        modifier = modifier.fillMaxSize().padding(
+            when {
+                isPortraitPhone -> 16.dp
+                LocalUiMode.current == UiMode.PhoneLandscape -> 16.dp
+                else -> 32.dp
+            }
+        )
+    ) {
         // --- 左侧：侧边导航栏（bg2 Surface 背景）---
         // v2.36.0：竖屏两级页不显示侧栏（改为分区列表 → 二级全屏内容）
         if (!isPortraitPhone) {

@@ -147,7 +147,11 @@ fun QueueScreen(
         return
     }
 
-    Row(modifier = modifier.fillMaxSize().padding(32.dp)) {
+    Row(
+        modifier = modifier.fillMaxSize().padding(
+            if (LocalUiMode.current == UiMode.PhoneLandscape) 16.dp else 32.dp
+        )
+    ) {
         // --- 左侧：当前播放卡片（bg2 = 深紫）---
         Column(
             modifier = Modifier

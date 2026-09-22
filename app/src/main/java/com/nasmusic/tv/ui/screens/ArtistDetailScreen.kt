@@ -96,11 +96,12 @@ fun ArtistDetailScreen(
 
     // v2.36.0 竖屏（方案 §4.7 / P0-16、P0-24）：头部拆两行（标题行 / 操作行）+ 圆形头像置顶 + 歌曲单列
     val isPhonePortrait = LocalUiMode.current == UiMode.PhonePortrait
+    val isPhoneLandscape = LocalUiMode.current == UiMode.PhoneLandscape
 
     Column(
         modifier = modifier.fillMaxSize().padding(
-            horizontal = if (isPhonePortrait) 16.dp else 32.dp,
-            vertical = if (isPhonePortrait) 12.dp else 20.dp
+            horizontal = if (isPhoneLandscape) 16.dp else if (isPhonePortrait) 16.dp else 32.dp,
+            vertical = if (isPhoneLandscape) 0.dp else if (isPhonePortrait) 12.dp else 20.dp
         )
     ) {
         // 返回 + 标题行 + 操作按钮 + 歌曲数
