@@ -158,8 +158,23 @@ class WeatherRadioManager(
     private suspend fun searchNasSongs(queries: List<String>, maxCount: Int): NasSearchResult {
         // 无后端连接时跳过 NAS 搜索
         val adapter = backendAdapter ?: return NasSearchResult()
-        // 获取全部歌曲（带缓存）
-        val allSongs = adapter.getSongs()?.toList() ?: return NasSearchResult()
+        // P2 修复（2026-09-22 审查）：原 getSongs() 不传参 = 默认第一页 500 首，
+        // 大曲库的天气电台只在「字母序头部 500 首」里做心情匹配与补齐。
+        // 改分页拉全量；封顶 5000 首（采样场景，对齐 SmartRadioManager 硬上限取舍）。
+        // 另注（遗留 P3）：copy(id="nas_"+id) 的前缀篡改会让播放历史/收藏按合成 id
+        // 记账、与原 id 分裂——前缀同时被 buildRadioWithMood 用作命中/补齐分类标记
+        //（75/78 行），摘除需要连带改分类机制，待专项。
+        val allSongs = buildList {
+            val pageSize = 500
+            var offset = 0
+            while (offset < 5000) {
+                val batch = adapter.getSongs(pageSize, offset) ?: break
+                if (batch.isEmpty()) break
+                addAll(batch)
+                offset += pageSize
+                if (batch.size < pageSize) break
+            }
+        }
         if (allSongs.isEmpty()) return NasSearchResult()
 
         val matched = mutableSetOf<Song>()
