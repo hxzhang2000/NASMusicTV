@@ -795,15 +795,40 @@ class AppPreferences internal constructor(private val context: Context) {
     suspend fun setVisualizerQuality(quality: VisualQuality) =
         dataStore.edit { it[keyVisualizerQuality] = quality.name }
 
-    suspend fun setMetingApiBaseUrl(url: String) =
-        dataStore.edit {
-            it[keyMetingApiBaseUrl] = url.trim().trim('`', '\'', '"').trim()
-        }
+    /**
+     * P2 修复（2026-09-22 审查）：网络端点校验。返回 null = 非空白但非法
+     * （scheme 非 http/https、无 host、超长）；空串 = 输入本身为空白。
+     * 非法值由调用方决定回退（设置页保持旧值 / 备份恢复回落默认），杜绝
+     * 任意字符串直接成为请求端点（网络功能静默瘫痪 / 备份重定向流量）。
+     */
+    private fun normalizeEndpointUrl(raw: String): String? {
+        val u = raw.trim().trim('`', '\'', '"').trim()
+        if (u.isEmpty()) return ""
+        val hostPart = u.removePrefix("https://").removePrefix("http://").substringBefore('/')
+        val valid = (u.startsWith("http://") || u.startsWith("https://")) &&
+            u.length <= 500 &&
+            hostPart.isNotBlank() &&
+            (hostPart.contains('.') || hostPart.contains(':') || hostPart == "localhost")
+        return if (valid) u else null
+    }
 
-    suspend fun setMvApiBaseUrl(url: String) =
-        dataStore.edit {
-            it[keyMvApiBaseUrl] = url.trim().trim('`', '\'', '"').trim()
+    suspend fun setMetingApiBaseUrl(url: String) {
+        val normalized = normalizeEndpointUrl(url)
+        if (url.isNotBlank() && normalized == null) {
+            AppLog.w(TAG, "setMetingApiBaseUrl rejected invalid url: " + url.take(80))
+            return
         }
+        dataStore.edit { it[keyMetingApiBaseUrl] = normalized.orEmpty() }
+    }
+
+    suspend fun setMvApiBaseUrl(url: String) {
+        val normalized = normalizeEndpointUrl(url)
+        if (url.isNotBlank() && normalized == null) {
+            AppLog.w(TAG, "setMvApiBaseUrl rejected invalid url: " + url.take(80))
+            return
+        }
+        dataStore.edit { it[keyMvApiBaseUrl] = normalized.orEmpty() }
+    }
 
     // --- 网络音乐平台来源 ---
 
@@ -1009,10 +1034,14 @@ class AppPreferences internal constructor(private val context: Context) {
     fun getModelDownloadUrlSync(): String = cachedModelDownloadUrl
 
     /** 设置模型自定义下载 URL（空串=恢复默认候选列表） */
-    suspend fun setModelDownloadUrl(url: String) =
-        dataStore.edit {
-            it[keyModelDownloadUrl] = url.trim().trim('`', '\'', '"').trim()
+    suspend fun setModelDownloadUrl(url: String) {
+        val normalized = normalizeEndpointUrl(url)
+        if (url.isNotBlank() && normalized == null) {
+            AppLog.w(TAG, "setModelDownloadUrl rejected invalid url: " + url.take(80))
+            return
         }
+        dataStore.edit { it[keyModelDownloadUrl] = normalized.orEmpty() }
+    }
 
     // --- 网络歌词端点（Kugou / Netease）---
     /** R-7 第三类修复（路 A）：读 @Volatile 内存镜像（原主线程急切求值 runBlocking） */
@@ -1021,15 +1050,23 @@ class AppPreferences internal constructor(private val context: Context) {
     /** R-7 第三类修复（路 A）：读 @Volatile 内存镜像（原主线程急切求值 runBlocking） */
     fun getLyricsNeteaseBaseUrlSync(): String = cachedLyricsNeteaseBaseUrl
 
-    suspend fun setLyricsKugouBaseUrl(url: String) =
-        dataStore.edit {
-            it[keyLyricsKugouBaseUrl] = url.trim().trim('`', '\'', '"').trim()
+    suspend fun setLyricsKugouBaseUrl(url: String) {
+        val normalized = normalizeEndpointUrl(url)
+        if (url.isNotBlank() && normalized == null) {
+            AppLog.w(TAG, "setLyricsKugouBaseUrl rejected invalid url: " + url.take(80))
+            return
         }
+        dataStore.edit { it[keyLyricsKugouBaseUrl] = normalized.orEmpty() }
+    }
 
-    suspend fun setLyricsNeteaseBaseUrl(url: String) =
-        dataStore.edit {
-            it[keyLyricsNeteaseBaseUrl] = url.trim().trim('`', '\'', '"').trim()
+    suspend fun setLyricsNeteaseBaseUrl(url: String) {
+        val normalized = normalizeEndpointUrl(url)
+        if (url.isNotBlank() && normalized == null) {
+            AppLog.w(TAG, "setLyricsNeteaseBaseUrl rejected invalid url: " + url.take(80))
+            return
         }
+        dataStore.edit { it[keyLyricsNeteaseBaseUrl] = normalized.orEmpty() }
+    }
 
     // --- 网络歌曲收藏 ---
 
@@ -1773,9 +1810,14 @@ class AppPreferences internal constructor(private val context: Context) {
                 prefs[keyCacheCover] = settings.cacheCover
                 prefs[keyLyricsOffset] = settings.lyricsOffsetMs
                 prefs[keyDefaultNetworkSource] = settings.defaultNetworkSource.keyOrDefault()
-                prefs[keyMetingApiBaseUrl] = settings.metingApiBaseUrl
-                prefs[keyMvApiBaseUrl] = settings.mvApiBaseUrl
-                prefs[keyModelDownloadUrl] = settings.modelDownloadUrl
+                // P2 修复（2026-09-22 审查）：恢复路径同样过端点校验——恶意/异常
+                // 备份不能把请求流量重定向到任意字符串端点；非法值回落默认。
+                prefs[keyMetingApiBaseUrl] =
+                    normalizeEndpointUrl(settings.metingApiBaseUrl) ?: MetingApiService.DEFAULT_BASE_URL
+                prefs[keyMvApiBaseUrl] =
+                    normalizeEndpointUrl(settings.mvApiBaseUrl) ?: BilibiliMvService.DEFAULT_BASE_URL
+                prefs[keyModelDownloadUrl] =
+                    normalizeEndpointUrl(settings.modelDownloadUrl) ?: ""
                 prefs[keyVisualizerTheme] = settings.visualizerTheme.nameOrDefault()
                 prefs[keyVisualizerQuality] = settings.visualizerQuality.nameOrDefault()
             }
