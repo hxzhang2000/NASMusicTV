@@ -1,6 +1,7 @@
 package com.nasmusic.tv.backend.local
 
 import android.content.Context
+import androidx.room.withTransaction
 import com.nasmusic.tv.backend.download.DownloadPathBuilder
 import com.nasmusic.tv.backend.local.db.LocalMusicDao
 import com.nasmusic.tv.backend.local.db.LocalSongEntity
@@ -25,8 +26,10 @@ class LocalMusicRepository(
     private val context: Context,
     private val dao: LocalMusicDao,
     private val scanner: MusicScanner,
-    private var downloadDao: com.nasmusic.tv.backend.download.db.DownloadSongDao? = null,
-    private var downloadRootProvider: () -> java.io.File? = { context.getExternalFilesDir(android.os.Environment.DIRECTORY_MUSIC) }
+    // P3（2026-09-22 审查）：attachDownloadSource 在主线程写、IO 协程读——
+    // 补 @Volatile 对齐 S4 先例（Kotlin 允许构造属性标注字段级 @Volatile）。
+    @Volatile private var downloadDao: com.nasmusic.tv.backend.download.db.DownloadSongDao? = null,
+    @Volatile private var downloadRootProvider: () -> java.io.File? = { context.getExternalFilesDir(android.os.Environment.DIRECTORY_MUSIC) }
 ) {
     companion object { private const val TAG = "LocalMusicRepo" }
 
@@ -188,8 +191,12 @@ class LocalMusicRepository(
             AppLog.w(TAG, "fullScan: scanned list is empty, keep existing index (destructive-rebuild guard)")
             return@withContext loadFromCache()
         }
-        dao.deleteAll()
-        dao.insertAll(scanned.map { it.toEntity() })
+        // P3 修复（2026-09-22 审查）：deleteAll + insertAll 包进 Room 事务，
+        // 中途崩溃不再出现「索引全空」（原需等下次扫描自愈）。
+        com.nasmusic.tv.backend.local.db.LocalMusicDatabase.get(context).withTransaction {
+            dao.deleteAll()
+            dao.insertAll(scanned.map { it.toEntity() })
+        }
         scanned.map { it.toSong() }
     }
 
