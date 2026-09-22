@@ -536,6 +536,30 @@ class NavidromeAdapter : BackendAdapter {
         }
     }
 
+    /**
+     * P1-3 修复（2026-09-22 审查）：原走接口默认 emptyList()，「年代」维度恒空。
+     * 与 SubsonicAdapter.getYears 同款：分页拉歌提取年份（上限 20 页 × 500 = 1 万首，
+     * 超出部分不保证完整，取舍与 Subsonic 一致）。
+     */
+    override suspend fun getYears(): List<Int> = withContext(Dispatchers.IO) {
+        try {
+            val allYears = mutableSetOf<Int>()
+            val pageSize = 500
+            var offset = 0
+            var maxPages = 20
+            while (maxPages-- > 0) {
+                val batch = getSongs(pageSize, offset)
+                if (batch.isEmpty()) break
+                batch.filter { it.year != null }.forEach { allYears.add(it.year!!) }
+                offset += pageSize
+            }
+            allYears.sorted()
+        } catch (e: Exception) {
+            AppLog.e("NavidromeAdapter", "getYears failed", e)
+            emptyList()
+        }
+    }
+
     // ========== F-1 扩展接口 ==========
 
     // --- 播放列表 ---
@@ -594,7 +618,10 @@ class NavidromeAdapter : BackendAdapter {
                     title = title,
                     artist = artist,
                     album = albumName,
-                    albumId = playlistId,
+                    // P1-4 修复（2026-09-22 审查）：原为 playlistId——歌单条目自身的 albumId
+                    // 被丢弃，导致从歌单跳专辑 / 按专辑找封面全部错位（SubsonicAdapter 同构
+                    // 实现是正确的）。恢复解析条目真实 albumId。
+                    albumId = obj.get("albumId")?.asString ?: "",
                     coverUrl = if (coverId.isNotBlank()) buildCoverUrl(coverId) else null,
                     streamUrl = getStreamUrl(id),
                     durationMs = durationSec * 1000,

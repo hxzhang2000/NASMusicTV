@@ -423,11 +423,26 @@ class SubsonicAdapter : BackendAdapter {
 
     override suspend fun getLyrics(songId: String): String? = withContext(Dispatchers.IO) {
         try {
-            val url = buildRestUrl("getLyrics") + "&id=$songId"
-            val json = executeRequest(url) ?: return@withContext null
-            val subsonic = json.getAsJsonObject("subsonic-response")
-            val lyrics = subsonic?.getAsJsonObject("lyrics")
-            lyrics?.get("value")?.asString
+            // P1-2 修复（2026-09-22 审查）：Subsonic 协议的 getLyrics 参数是 artist + title，
+            // 不存在 id 参数——原实现传 id 后服务端因缺 artist/title 恒返回空歌词。
+            // 改为与 NavidromeAdapter 相同的两段式：getSong 取元数据 → getLyrics&artist=&title=。
+            // 1. getSong 获取歌曲元数据（artist + title）
+            val songUrl = buildRestUrl("getSong") + "&id=$songId"
+            val songJson = executeRequest(songUrl) ?: return@withContext null
+            val subsonic = songJson.getAsJsonObject("subsonic-response")
+            val song = subsonic?.getAsJsonObject("song") ?: return@withContext null
+            val artist = EncodingUtils.fixEncoding(song.get("artist")?.asString) ?: return@withContext null
+            val title = EncodingUtils.fixEncoding(song.get("title")?.asString) ?: return@withContext null
+
+            // 2. getLyrics（按歌手 + 标题）
+            val encodedArtist = java.net.URLEncoder.encode(artist, "UTF-8")
+            val encodedTitle = java.net.URLEncoder.encode(title, "UTF-8")
+            val lyricsUrl = buildRestUrl("getLyrics") + "&artist=$encodedArtist&title=$encodedTitle"
+            val lyricsJson = executeRequest(lyricsUrl) ?: return@withContext null
+            val lyricsSubsonic = lyricsJson.getAsJsonObject("subsonic-response")
+            val lyrics = lyricsSubsonic?.getAsJsonObject("lyrics")
+            val value = lyrics?.get("value")?.asString
+            if (value != null) EncodingUtils.fixEncoding(value) else null
         } catch (e: Exception) {
             AppLog.e("SubsonicAdapter", "getLyrics failed", e)
             null

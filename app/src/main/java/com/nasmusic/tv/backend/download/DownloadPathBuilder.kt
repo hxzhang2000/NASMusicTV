@@ -93,6 +93,18 @@ class DownloadPathBuilder(private val rootProvider: () -> File) {
     }
 
     /**
+     * P1-5 修复（2026-09-22 审查）：档位语义只对 Meting 源成立。
+     * StreamUrlResolver 对非网络源返回 actualQuality=请求档（无降级信号），
+     * 而 downloadKeyOf 已对非 Meting 源忽略档位——extOf / baseNameWithQuality
+     * 若不同样忽略，NAS / 网盘歌曲会被存成 "(320).mp3" 的错误容器名
+     * （FLAC 内容 + mp3 扩展名：媒体扫描误识、内嵌必败、档位后缀是假的）。
+     * 与 download/model/DownloadKeys.METING_SOURCE 保持一致
+     * （该常量为 private，此处按同法本地硬编码，注释同步）。
+     */
+    private fun tierOf(song: Song, quality: Int): Int =
+        if (song.isNetworkSong && song.networkSource == METING_SOURCE) quality else QualityTiers.AUTO
+
+    /**
      * 从 URL 路径或 Content-Type 推断扩展名
      *
      * @param quality v2.35.0 多码率：**实际解析命中的档位**
@@ -103,8 +115,9 @@ class DownloadPathBuilder(private val rootProvider: () -> File) {
      *        - 其他具体档位 → `mp3`
      */
     fun extOf(url: String, song: Song, quality: Int = QualityTiers.AUTO): String {
-        if (quality == QualityTiers.LOSSLESS) return "flac"
-        if (quality != QualityTiers.AUTO) return "mp3"
+        val tier = tierOf(song, quality)
+        if (tier == QualityTiers.LOSSLESS) return "flac"
+        if (tier != QualityTiers.AUTO) return "mp3"
         val fromUrl = url.substringBefore('?').substringAfterLast('.', "").lowercase()
         if (fromUrl in AUDIO_EXTS) return fromUrl
         // 网络歌曲默认 mp3
@@ -132,7 +145,7 @@ class DownloadPathBuilder(private val rootProvider: () -> File) {
     fun baseNameWithQuality(song: Song, quality: Int): String {
         val title = sanitize(song.title).ifBlank { "未命名" }
         val base = if (song.trackNumber > 0) "%02d - %s".format(song.trackNumber, title) else title
-        val suffix = when (quality) {
+        val suffix = when (tierOf(song, quality)) {
             QualityTiers.STANDARD -> " (128)"
             QualityTiers.GOOD -> " (192)"
             QualityTiers.HIGH -> " (320)"
@@ -167,6 +180,9 @@ class DownloadPathBuilder(private val rootProvider: () -> File) {
     }
 
     companion object {
+        /** 与 DownloadKeys.METING_SOURCE 同步（private 不可跨用，本地硬编码；改源标识时两处同步） */
+        private const val METING_SOURCE = "meting"
+
         private val ILLEGAL = Regex("[\\\\/:*?\"<>|\\u0000-\\u001F]")
         private const val MAX_SEGMENT = 80
         const val TMP_DIR = ".tmp"
