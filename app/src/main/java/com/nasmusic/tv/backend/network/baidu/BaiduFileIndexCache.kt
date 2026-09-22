@@ -131,22 +131,28 @@ class BaiduFileIndexCache(context: Context) {
      */
     fun setCoverUrls(updates: Map<Long, String>): Int {
         if (updates.isEmpty()) return 0
-        val index = load() ?: return 0
-        val entries = index.entries.toMutableList()
-        var changed = 0
-        for ((fsId, coverUrl) in updates) {
-            val idx = entries.indexOfFirst { it.fsId == fsId }
-            if (idx < 0) continue
-            val old = entries[idx].coverUrl
-            if (old == coverUrl) continue
-            entries[idx] = entries[idx].copy(coverUrl = coverUrl)
-            changed++
+        // P2 修复（2026-09-22 审查）：批量路径原未持 cacheLock——单条 setCoverUrl 的
+        // 注释明确「读-改-写必须整体持锁，否则并发调用会交错覆盖彼此的更新（lost
+        // update）」，批量版同样是读-改-写且 save() 与单条路径并发时会写同名 .tmp
+        // 互踩（APIC 后台提取 + 单曲解析路径并发是真实场景）。统一收敛进锁。
+        synchronized(cacheLock) {
+            val index = load() ?: return 0
+            val entries = index.entries.toMutableList()
+            var changed = 0
+            for ((fsId, coverUrl) in updates) {
+                val idx = entries.indexOfFirst { it.fsId == fsId }
+                if (idx < 0) continue
+                val old = entries[idx].coverUrl
+                if (old == coverUrl) continue
+                entries[idx] = entries[idx].copy(coverUrl = coverUrl)
+                changed++
+            }
+            if (changed > 0) {
+                save(index.copy(entries = entries))
+                AppLog.d(TAG, "setCoverUrls batch: $changed/${updates.size} entries updated")
+            }
+            return changed
         }
-        if (changed > 0) {
-            save(index.copy(entries = entries))
-            AppLog.d(TAG, "setCoverUrls batch: $changed/${updates.size} entries updated")
-        }
-        return changed
     }
 
     fun clear() {
