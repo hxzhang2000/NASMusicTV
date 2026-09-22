@@ -1,6 +1,8 @@
 package com.nasmusic.tv.ui.components
 
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -27,8 +29,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -45,6 +50,9 @@ import com.nasmusic.tv.ui.theme.NasMusicBrushes
 import com.nasmusic.tv.ui.theme.FontSize
 import com.nasmusic.tv.ui.theme.NasMusicColors
 import kotlinx.coroutines.delay
+
+/** 拖拽跳转指示条的纵向位置（顶部 fade mask 下方） */
+private val INDICATOR_OFFSET_Y = 88.dp
 
 /**
  * 歌词视图
@@ -65,7 +73,8 @@ fun LyricsView(
     highlightMode: LyricsHighlightMode = LyricsHighlightMode.LINE_BY_LINE,
     isPlaying: Boolean = true,
     fontSizeMultiplier: Float = 1.0f,
-    fadeMaskColor: Color? = null
+    fadeMaskColor: Color? = null,
+    onSeekToLine: ((Long) -> Unit)? = null
 ) {
     // 手机紧凑模式：恢复原始密度，保持歌词字号不被全局缩放（用户独立调节）
     if (com.nasmusic.tv.ui.theme.LocalPhoneCompact.current) {
@@ -76,10 +85,10 @@ fun LyricsView(
                 fontScale = baseDensity.fontScale
             )
         ) {
-            LyricsViewInner(lyrics, currentTimeMs, modifier, highlightMode, isPlaying, fontSizeMultiplier, fadeMaskColor)
+            LyricsViewInner(lyrics, currentTimeMs, modifier, highlightMode, isPlaying, fontSizeMultiplier, fadeMaskColor, onSeekToLine)
         }
     } else {
-        LyricsViewInner(lyrics, currentTimeMs, modifier, highlightMode, isPlaying, fontSizeMultiplier, fadeMaskColor)
+        LyricsViewInner(lyrics, currentTimeMs, modifier, highlightMode, isPlaying, fontSizeMultiplier, fadeMaskColor, onSeekToLine)
     }
 }
 
@@ -92,7 +101,8 @@ private fun LyricsViewInner(
     highlightMode: LyricsHighlightMode = LyricsHighlightMode.LINE_BY_LINE,
     isPlaying: Boolean = true,
     fontSizeMultiplier: Float = 1.0f,
-    fadeMaskColor: Color? = null
+    fadeMaskColor: Color? = null,
+    onSeekToLine: ((Long) -> Unit)? = null
 ) {
     if (lyrics == null || lyrics.isEmpty) {
         Box(
@@ -117,6 +127,13 @@ private fun LyricsViewInner(
     }
 
     val listState = rememberLazyListState()
+
+    // —— 手势拖拽跳转（2026-09-22 新增，手机端横竖屏）：拖动浏览歌词时顶部出现
+    //    虚线指示条，松手后跳到虚线处歌词的起始时间播放。isDragSeeking 期间
+    //    暂停自动跟行；tap（未滚动）不触发，普通浏览不受影响。
+    var isDragSeeking by remember { mutableStateOf(false) }
+    var seekTargetLine by remember { mutableStateOf(-1) }
+    val listPressed by listState.interactionSource.collectIsPressedAsState()
 
     // 逐字模式下使用本地高频时钟插值，平滑过渡（避免 1000ms progress 导致逐字跳动）
     // 基于上次已知 currentTimeMs（1秒锚点）+ 实际流逝时间估算当前进度
@@ -155,9 +172,40 @@ private fun LyricsViewInner(
         .let { if (it == -1) lyrics.lines.size - 1 else it - 1 }
         .coerceAtLeast(0)
 
-    LaunchedEffect(currentIndex) {
-        if (currentIndex >= 0) {
+    LaunchedEffect(currentIndex, isDragSeeking) {
+        // 拖拽跳转中暂停自动跟行；松手跳转后 currentIndex 变化会自然滚回当前行
+        if (currentIndex >= 0 && !isDragSeeking) {
             listState.animateScrollToItem(currentIndex)
+        }
+    }
+
+    // 手指按住且产生滚动 → 进入拖拽跳转模式（tap 无滚动不触发）
+    LaunchedEffect(listPressed, listState.isScrollInProgress) {
+        if (listPressed && listState.isScrollInProgress && !isDragSeeking) {
+            isDragSeeking = true
+            seekTargetLine = -1
+        }
+    }
+
+    // 拖拽中：计算虚线指示处的目标行（LazyColumn item index = 行 index + 1，头部有 spacer）
+    if (isDragSeeking) {
+        val indicatorPx = with(androidx.compose.ui.platform.LocalDensity.current) { INDICATOR_OFFSET_Y.toPx() }.toInt()
+        val info = listState.layoutInfo
+        seekTargetLine = info.visibleItemsInfo.firstOrNull { item ->
+            item.index in 1..lyrics.lines.size &&
+                item.offset <= indicatorPx && item.offset + item.size > indicatorPx
+        }?.let { it.index - 1 } ?: -1
+    }
+
+    // 松手：跳到目标行起始时间播放
+    LaunchedEffect(listPressed) {
+        if (!listPressed && isDragSeeking) {
+            isDragSeeking = false
+            val target = seekTargetLine
+            seekTargetLine = -1
+            if (target in lyrics.lines.indices) {
+                onSeekToLine?.invoke(lyrics.lines[target].time)
+            }
         }
     }
 
@@ -191,8 +239,10 @@ private fun LyricsViewInner(
                 val isCurrent = index == currentIndex
                 val played = index < currentIndex
                 val near = kotlin.math.abs(index - currentIndex) <= 1
+                val isSeekTarget = isDragSeeking && index == seekTargetLine
 
                 val textColor = when {
+                    isSeekTarget -> NasMusicColors.Primary
                     isCurrent -> NasMusicColors.Primary
                     played -> NasMusicColors.TextSecondary.copy(alpha = 0.45f)
                     near -> NasMusicColors.TextPrimary
@@ -243,6 +293,51 @@ private fun LyricsViewInner(
             }
             item {
                 Box(modifier = Modifier.fillMaxWidth().padding(vertical = 120.dp))
+            }
+        }
+
+        // —— 拖拽跳转指示：顶部虚线 + 目标行时间（松手跳到该行起始时间）——
+        if (isDragSeeking) {
+            val targetTime = lyrics.lines.getOrNull(seekTargetLine)?.time
+            val timeLabel = if (targetTime != null && targetTime >= 0) {
+                val m = (targetTime / 60000).toString().padStart(2, '0')
+                val s = ((targetTime % 60000) / 1000).toString().padStart(2, '0')
+                "$m:$s"
+            } else {
+                "—"
+            }
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .align(Alignment.TopCenter)
+                    .padding(top = INDICATOR_OFFSET_Y - 14.dp)
+            ) {
+                Text(
+                    text = timeLabel,
+                    color = NasMusicColors.Primary,
+                    style = LocalLyricsTheme.current.normalLine,
+                    modifier = Modifier
+                        .align(Alignment.CenterStart)
+                        .padding(start = 24.dp)
+                        .background(NasMusicColors.Surface.copy(alpha = 0.85f), RoundedCornerShape(4.dp))
+                        .padding(horizontal = 10.dp, vertical = 2.dp)
+                )
+                Canvas(
+                    Modifier
+                        .align(Alignment.CenterEnd)
+                        .padding(start = 88.dp, end = 24.dp)
+                        .height(2.dp)
+                        .fillMaxWidth()
+                ) {
+                    drawLine(
+                        color = NasMusicColors.Primary,
+                        start = Offset(0f, size.height / 2),
+                        end = Offset(size.width, size.height / 2),
+                        strokeWidth = 2.dp.toPx(),
+                        cap = StrokeCap.Round,
+                        pathEffect = PathEffect.dashPathEffect(floatArrayOf(14f, 10f))
+                    )
+                }
             }
         }
 

@@ -538,6 +538,7 @@ fun NowPlayingScreen(
                                 highlightMode = highlightMode,
                                 isPlaying = isPlaying,
                                 fontSizeMultiplier = lyricsFontScale,
+                                onSeekToLine = onSeek,
                                 // 沉浸模式歌词区为纯黑底 → 渐隐遮罩同色，避免出现深蓝渐变边
                                 fadeMaskColor = if (isImmersiveMode) Color(0xCC000000) else null,
                                 modifier = Modifier
@@ -1755,6 +1756,7 @@ private fun NowPlayingPortrait(
                                 highlightMode = highlightMode,
                                 isPlaying = isPlaying,
                                 fontSizeMultiplier = lyricsFontScale,
+                                onSeekToLine = onSeek,
                                 modifier = Modifier
                                     .fillMaxSize()
                                     .padding(horizontal = 4.dp, vertical = 4.dp),
