@@ -7,7 +7,7 @@ Compact guide for OpenCode sessions. Every line is something an agent would like
 Android TV music player (Kotlin + Jetpack Compose for TV) that connects to **Jellyfin** or **Navidrome** backends, plus an independent **network music** layer (Meting-API search) and a **weather radio** feature. Single-module Gradle project.
 
 - Package: `com.nasmusic.tv` — Min SDK 22, Target SDK 34, Java 17
-- Kotlin 2.2.10; TV Compose `androidx.tv:tv-material` is **alpha** (`ExperimentalTvMaterial3Api` opt-in set in `app/build.gradle.kts`, used throughout)
+- Kotlin 2.3.10; TV Compose `androidx.tv:tv-material` is **alpha** (`ExperimentalTvMaterial3Api` opt-in set in `app/build.gradle.kts`, used throughout)
 - GPL v3
 
 ## Build (Windows)
