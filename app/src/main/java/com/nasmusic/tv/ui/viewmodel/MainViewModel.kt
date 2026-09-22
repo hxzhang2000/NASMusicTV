@@ -2179,11 +2179,29 @@ showError(getApplication<Application>().getString(R.string.toggle_favorite_error
     // --- B-2 最近播放 & 播放次数 ---
     fun recordPlay(song: Song) {
         viewModelScope.launch {
-            // 单次 DataStore edit 同时更新 id 列表 + 播放次数 + 完整歌曲对象
-            prefs.history.recordPlayWithSong(song)
+            // 单次 DataStore edit 同时更新 id 列表 + 播放次数 + 完整歌曲对象。
+            // P2 修复（2026-09-22 审查）：天气电台对 NAS 歌曲打 nas_/nasf_ 前缀
+            //（命中/补齐分类依赖前缀，见 WeatherRadioManager），播放统计若按合成
+            // id 记账，同一首歌会以两个 id 出现（口径分裂）。在此入口剥离合成
+            // 前缀还原真实歌曲 id，其余路径不变。
+            prefs.history.recordPlayWithSong(song.stripSyntheticRadioPrefix())
             // 刷新最近播放列表，不显示 loading 以避免闪烁
             loadRecentSongs(showLoading = false)
         }
+    }
+
+    /**
+     * 剥离天气电台构建时附加的合成 id 前缀（nasf_ 命中补齐 / nas_ 心情命中），
+     * 还原真实歌曲 id。前缀常量在 WeatherRadioManager 为 private，此处按同法
+     * 本地同步（改前缀时两处同步）。
+     */
+    private fun Song.stripSyntheticRadioPrefix(): Song {
+        val stripped = when {
+            id.startsWith("nasf_") -> id.removePrefix("nasf_")
+            id.startsWith("nas_") -> id.removePrefix("nas_")
+            else -> return this
+        }
+        return copy(id = stripped)
     }
 
     val recentSongIds = prefs.history.recentSongIds
