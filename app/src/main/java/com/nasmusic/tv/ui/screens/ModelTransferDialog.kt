@@ -78,7 +78,7 @@ fun ModelTransferDialog(
     DisposableEffect(Unit) {
         val ip = NetworkUtils.getLocalIpAddress()
         if (ip != null) {
-            val url = "http://$ip:${ModelTransferServer.MODEL_TRANSFER_PORT}/"
+            val url = server.buildUrl(ip)
             serverUrl = url
             qrBitmap = QrCodeGenerator.generateQrBitmap(url, 360)
             val started = server.startServer()

@@ -165,7 +165,7 @@ fun TextInputDialog(
         if (effectiveShowQrCode) {
             val ip = NetworkUtils.getLocalIpAddress()
             if (ip != null) {
-                val url = "http://$ip:${LocalInputServer.DEFAULT_PORT}/"
+                val url = server.buildUrl(ip)
                 serverUrl = url
                 // P3：QR 位图改到后台线程生成——ZXing 编码 + 位图分配在组合期同步跑会掉帧
                 qrScope.launch(Dispatchers.Default) {

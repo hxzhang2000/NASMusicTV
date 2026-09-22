@@ -26,13 +26,19 @@ class LocalInputServer(
 
     private var server: Impl? = null
 
+    /** P1-1：一次性鉴权 token，随二维码 URL 下发（server 重启即更换） */
+    private val authToken = LocalServerAuth.newToken()
+
+    /** P1-1：带 token 的二维码 URL（手机浏览器打开后种 Cookie） */
+    fun buildUrl(ip: String): String = "http://$ip:$port/?t=$authToken"
+
     /**
      * 启动服务器
      * @return true 启动成功；false 端口被占或其他错误
      */
     fun start(onText: (String) -> Unit): Boolean {
         if (server != null) return true
-        val impl = Impl(port) { text ->
+        val impl = Impl(port, authToken) { text ->
             // 去掉换行符，输入框是单行
             val cleaned = text.replace("\r", "").replace("\n", "").trim()
             if (cleaned.isNotEmpty()) {
@@ -74,10 +80,13 @@ class LocalInputServer(
 
     private class Impl(
         port: Int,
+        private val authToken: String,
         private val onText: (String) -> Unit
     ) : NanoHTTPD(port) {
 
         override fun serve(session: IHTTPSession): Response {
+            // P1-1：一次性 token 鉴权（query t= 或 Cookie auth=），拒绝同网段未授权的文本注入
+            if (!LocalServerAuth.isAuthorized(session, authToken)) return LocalServerAuth.forbidden()
             return when {
                 session.uri == "/" && session.method == Method.GET -> serveInputPage()
                 session.uri == "/submit" && session.method == Method.POST -> handleSubmit(session)
@@ -86,11 +95,13 @@ class LocalInputServer(
         }
 
         private fun serveInputPage(): Response {
-            return newFixedLengthResponse(
+            val response = newFixedLengthResponse(
                 Response.Status.OK,
                 "text/html; charset=UTF-8",
                 INPUT_PAGE_HTML
             )
+            response.addHeader("Set-Cookie", LocalServerAuth.cookieHeader(authToken))
+            return response
         }
 
         private fun handleSubmit(session: IHTTPSession): Response {

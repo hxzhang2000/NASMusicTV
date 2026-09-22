@@ -42,6 +42,9 @@ class RemoteControlServer(
     private var server: Impl? = null
     private var serverUrl: String? = null
 
+    /** P1-1：一次性鉴权 token，随二维码 URL 下发（server 重启即更换） */
+    private val authToken = LocalServerAuth.newToken()
+
     /**
      * 启动服务器
      * @param callbacks 操作回调（由 MainViewModel 实现）
@@ -49,12 +52,12 @@ class RemoteControlServer(
      */
     fun start(callbacks: RemoteCallbacks): String? {
         if (server != null) return serverUrl
-        val impl = Impl(port, callbacks, context)
+        val impl = Impl(port, callbacks, context, authToken)
         return try {
             impl.start(30000, false) // 30 秒超时（默认 5 秒在 WiFi 环境下偏短）
             server = impl
             val ip = NetworkUtils.getLocalIpAddress()
-            serverUrl = if (ip != null) "http://$ip:$port" else null
+            serverUrl = if (ip != null) "http://$ip:$port/?t=$authToken" else null
             AppLog.i(TAG, "Started on port $port, url=$serverUrl")
             serverUrl
         } catch (e: Exception) {
@@ -83,7 +86,8 @@ class RemoteControlServer(
     private class Impl(
         port: Int,
         private val callbacks: RemoteCallbacks,
-        private val context: Context
+        private val context: Context,
+        private val authToken: String
     ) : NanoHTTPD(port) {
 
         private val gson = Gson()
@@ -92,6 +96,8 @@ class RemoteControlServer(
         private val searchSlots = java.util.concurrent.Semaphore(MAX_CONCURRENT_SEARCHES)
 
         override fun serve(session: IHTTPSession): Response {
+            // P1-1：一次性 token 鉴权（query t= 或 Cookie auth=），拒绝同网段未授权访问
+            if (!LocalServerAuth.isAuthorized(session, authToken)) return LocalServerAuth.forbidden()
             val uri = session.uri
             val method = session.method
             val params = session.parameters
@@ -115,6 +121,8 @@ class RemoteControlServer(
         private fun serveControlPage(): Response {
             val response = newFixedLengthResponse(Response.Status.OK, "text/html; charset=UTF-8", buildControlPageHtml(context))
             response.addHeader("Cache-Control", "no-cache, no-store, must-revalidate")
+            // P1-1：种 Cookie，页面内 /api/* 同源请求自动携带凭证
+            response.addHeader("Set-Cookie", LocalServerAuth.cookieHeader(authToken))
             return response
         }
 

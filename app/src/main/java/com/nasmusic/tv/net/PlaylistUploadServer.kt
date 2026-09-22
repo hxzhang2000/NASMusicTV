@@ -45,9 +45,15 @@ class PlaylistUploadServer(
 
     private var server: Impl? = null
 
+    /** P1-1：一次性鉴权 token，随二维码 URL 下发（server 重启即更换） */
+    private val authToken = LocalServerAuth.newToken()
+
+    /** P1-1：带 token 的二维码 URL（手机浏览器打开后种 Cookie） */
+    fun buildUrl(ip: String): String = "http://$ip:$port/?t=$authToken"
+
     fun start(): Boolean {
         if (server != null) return true
-        val impl = Impl(context, onFileReceived, port)
+        val impl = Impl(context, onFileReceived, port, authToken)
         return try {
             impl.start(NanoHTTPD.SOCKET_READ_TIMEOUT, false)
             server = impl
@@ -76,12 +82,15 @@ class PlaylistUploadServer(
     private class Impl(
         private val context: Context,
         private val onFileReceived: (fileName: String, bytes: ByteArray) -> String?,
-        port: Int
+        port: Int,
+        private val authToken: String
     ) : NanoHTTPD(port) {
 
         private val gson = Gson()
 
         override fun serve(session: IHTTPSession): Response {
+            // P1-1：一次性 token 鉴权（query t= 或 Cookie auth=），拒绝同网段未授权访问
+            if (!LocalServerAuth.isAuthorized(session, authToken)) return LocalServerAuth.forbidden()
             return when {
                 session.uri == "/" && session.method == Method.GET -> servePage()
                 session.uri == "/api/upload" && session.method == Method.POST -> handleUpload(session)
@@ -93,11 +102,13 @@ class PlaylistUploadServer(
         }
 
         private fun servePage(): Response {
-            return newFixedLengthResponse(
+            val response = newFixedLengthResponse(
                 Response.Status.OK,
                 "text/html; charset=UTF-8",
                 buildUploadPageHtml(context)
             )
+            response.addHeader("Set-Cookie", LocalServerAuth.cookieHeader(authToken))
+            return response
         }
 
         private fun buildUploadPageHtml(context: Context): String {

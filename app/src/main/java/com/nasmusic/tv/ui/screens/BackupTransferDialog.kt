@@ -78,7 +78,7 @@ fun BackupTransferDialog(
     DisposableEffect(Unit) {
         val ip = NetworkUtils.getLocalIpAddress()
         if (ip != null) {
-            val url = "http://$ip:${BackupTransferServer.DEFAULT_PORT}/"
+            val url = server.buildUrl(ip)
             serverUrl = url
             qrBitmap = QrCodeGenerator.generateQrBitmap(url, 360)
             AppLog.i("BackupTransferDialog", "DisposableEffect: starting server at $url")

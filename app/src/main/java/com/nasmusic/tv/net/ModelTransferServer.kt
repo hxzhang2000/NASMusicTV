@@ -59,6 +59,12 @@ class ModelTransferServer(
         }
     }
 
+    /** P1-1：一次性鉴权 token，随二维码 URL 下发（server 重启即更换） */
+    private val authToken = LocalServerAuth.newToken()
+
+    /** P1-1：带 token 的二维码 URL（手机浏览器打开后种 Cookie） */
+    fun buildUrl(ip: String): String = "http://$ip:$MODEL_TRANSFER_PORT/?t=$authToken"
+
     fun startServer(): Boolean {
         return try {
             start(SOCKET_READ_TIMEOUT, false)
@@ -80,6 +86,8 @@ class ModelTransferServer(
     }
 
     override fun serve(session: IHTTPSession): Response {
+        // P1-1：一次性 token 鉴权（query t= 或 Cookie auth=），拒绝同网段未授权访问
+        if (!LocalServerAuth.isAuthorized(session, authToken)) return LocalServerAuth.forbidden()
         val uri = session.uri
         val method = session.method
 
@@ -98,7 +106,9 @@ class ModelTransferServer(
             .replace("{{MODEL_EXISTS}}", exists.toString())
             .replace("{{MODEL_SIZE}}", sizeMB)
             .replace("{{MODEL_PATH}}", modelFile.absolutePath)
-        return newFixedLengthResponse(Response.Status.OK, "text/html; charset=UTF-8", page)
+        val response = newFixedLengthResponse(Response.Status.OK, "text/html; charset=UTF-8", page)
+        response.addHeader("Set-Cookie", LocalServerAuth.cookieHeader(authToken))
+        return response
     }
 
     private fun handleStatus(): Response {
