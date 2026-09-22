@@ -4,8 +4,10 @@ import com.nasmusic.tv.ui.theme.FontSize
 
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -25,6 +27,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Storage
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -37,6 +40,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.TextFieldValue
@@ -50,6 +54,9 @@ import androidx.tv.material3.Text
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import com.nasmusic.tv.NasMusicApp
 import com.nasmusic.tv.R
+import com.nasmusic.tv.net.ServerConfigTransferServer
+import com.nasmusic.tv.util.NetworkUtils
+import com.nasmusic.tv.util.QrCodeGenerator
 import com.nasmusic.tv.backend.BackendRegistry
 import com.nasmusic.tv.data.model.ServerConfig
 import com.nasmusic.tv.ui.components.FocusableSurface
@@ -132,7 +139,43 @@ fun ServerConnectScreen(
             else TextFieldValue()
         )
     }
+    // —— 手机扫码填入服务器配置（2026-09-22 用户需求）：手机表单 → 推送到电视 →
+    // 自动填充下方表单，用户核对后用遥控器确认键连接（本流程不代替用户连接）——
     var statusMessage by remember { mutableStateOf("") }
+
+    var qrTransferActive by remember { mutableStateOf(false) }
+    var qrUrl by remember { mutableStateOf<String?>(null) }
+    var qrBitmap by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
+    val configTransferServer = remember {
+        ServerConfigTransferServer(onConfigReceived = { backend: String, url: String, user: String, pass: String, name: String ->
+            // NanoHTTPD 工作线程回调 → 主线程更新表单状态
+            android.os.Handler(android.os.Looper.getMainLooper()).post {
+                baseUrl = TextFieldValue(url)
+                username = TextFieldValue(user)
+                password = TextFieldValue(pass)
+                backendType = backend
+                statusMessage = "已从手机收到服务器配置，请核对后连接"
+            }
+        }
+    )
+    }
+    DisposableEffect(qrTransferActive) {
+        if (qrTransferActive) {
+            val ip = NetworkUtils.getLocalIpAddress()
+            if (ip != null) {
+                qrUrl = configTransferServer.buildUrl(ip)
+                qrBitmap = QrCodeGenerator.generateQrBitmap(qrUrl!!, 360)
+                configTransferServer.startServer()
+            } else {
+                statusMessage = "无法获取本机 IP，扫码填入不可用"
+            }
+        } else {
+            configTransferServer.stopServer()
+            qrUrl = null
+            qrBitmap = null
+        }
+        onDispose { configTransferServer.stopServer() }
+    }
     var activeInputField by remember { mutableStateOf<InputField?>(null) }
 
     // 连接测试状态
@@ -305,6 +348,49 @@ fun ServerConnectScreen(
                     onClick = { backendType = ServerConfig.TYPE_FEINIU },
                     modifier = Modifier.weight(1f)
                 )
+            }
+
+            // —— 手机扫码填入（在手机上填 URL/账号/密码，推送后自动填充下方表单）——
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "手机扫码填入服务器信息（免遥控器输入）",
+                    fontSize = 13.sp,
+                    color = NasMusicColors.TextSecondary
+                )
+                Text(
+                    text = if (qrTransferActive) "收起二维码" else "显示二维码",
+                    fontSize = 13.sp,
+                    color = NasMusicColors.Primary,
+                    modifier = Modifier.clickable { qrTransferActive = !qrTransferActive }
+                )
+            }
+            if (qrTransferActive) {
+                Box(
+                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    qrBitmap?.let { bmp ->
+                        Image(
+                            bitmap = bmp.asImageBitmap(),
+                            contentDescription = "扫码填入服务器配置",
+                            modifier = Modifier.size(200.dp)
+                        )
+                    }
+                }
+                qrUrl?.let { url ->
+                    Text(
+                        text = url,
+                        fontSize = 11.sp,
+                        color = NasMusicColors.TextSecondary,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth().padding(top = 4.dp)
+                    )
+                }
+                Spacer(modifier = Modifier.height(8.dp))
             }
 
             Spacer(modifier = Modifier.height(24.dp))
