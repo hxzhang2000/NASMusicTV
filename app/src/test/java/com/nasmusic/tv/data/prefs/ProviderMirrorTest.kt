@@ -22,7 +22,7 @@ import org.robolectric.annotation.Config
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
-// CI 时序修正（2026-09-22）：1s 窗口在 CI 慢机（2 核跑 902 测试）上偶发
+// CI 时序修正（2026-09-22 二轮）：3s 窗口仍偶发不足（mv 镜像），放宽到 10s。曾为 1s 在 CI 慢机（2 核跑 902 测试）上偶发
 // TimeoutCancellationException（本地恒通过）——放宽到 3s，轮询间隔与断言不变。
 class ProviderMirrorTest {
 
@@ -46,7 +46,7 @@ class ProviderMirrorTest {
         prefs.startProviderMirrors(scope)
         prefs.setMetingApiBaseUrl("http://mirror-test.example.com/api")
         // 等待镜像更新（DataStore Flow 发射是异步的）
-        withTimeout(3000) {
+        withTimeout(10000) {
             while (prefs.getMetingApiBaseUrlSync() != "http://mirror-test.example.com/api") {
                 kotlinx.coroutines.delay(20)
             }
@@ -58,7 +58,7 @@ class ProviderMirrorTest {
     fun `write mv url then mirror updates within 1s`() = runBlocking {
         prefs.startProviderMirrors(scope)
         prefs.setMvApiBaseUrl("http://mirror-mv.example.com/api")
-        withTimeout(3000) {
+        withTimeout(10000) {
             while (prefs.getMvApiBaseUrlSync() != "http://mirror-mv.example.com/api") {
                 kotlinx.coroutines.delay(20)
             }
@@ -70,7 +70,7 @@ class ProviderMirrorTest {
     fun `write lyrics kugou url then mirror updates within 1s`() = runBlocking {
         prefs.startProviderMirrors(scope)
         prefs.setLyricsKugouBaseUrl("http://mirror-kugou.example.com")
-        withTimeout(3000) {
+        withTimeout(10000) {
             while (prefs.getLyricsKugouBaseUrlSync() != "http://mirror-kugou.example.com") {
                 kotlinx.coroutines.delay(20)
             }
@@ -82,7 +82,7 @@ class ProviderMirrorTest {
     fun `write weather api key then mirror updates within 1s`() = runBlocking {
         prefs.startProviderMirrors(scope)
         prefs.setWeatherApiKey("mirror-key-123")
-        withTimeout(3000) {
+        withTimeout(10000) {
             while (prefs.getWeatherApiKeySync() != "mirror-key-123") {
                 kotlinx.coroutines.delay(20)
             }

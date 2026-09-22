@@ -188,6 +188,20 @@ jobs:
         run: |
           yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses 2>&1 || true
           $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --install "platforms;android-34" "build-tools;34.0.0" 2>&1 || true
+      # Robolectric 首次运行要从 Maven 拉 android-all jar（按 API 层级分文件）；
+      # CI 网络抖动时该下载 SocketException 并拖垮周边测试（2026-09-23 两连挂）。
+      # 缓存 Gradle 依赖与 Robolectric/Maven 仓库后，正常情况下不再依赖外网。
+      - name: Cache Gradle & Robolectric
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches/modules-2
+            ~/.gradle/wrapper
+            ~/.m2/repository/org/robolectric
+            ~/.robolectric
+          key: gradle-robolectric-${{ runner.os }}-${{ hashFiles('**/gradle/wrapper/gradle-wrapper.properties', '**/build.gradle.kts') }}
+          restore-keys: |
+            gradle-robolectric-${{ runner.os }}-
       - name: Run unit tests
         run: ./gradlew testDebugUnitTest --stacktrace
 
