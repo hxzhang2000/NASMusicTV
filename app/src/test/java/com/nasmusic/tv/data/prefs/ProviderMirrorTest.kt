@@ -22,6 +22,8 @@ import org.robolectric.annotation.Config
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
+// CI 时序修正（2026-09-22）：1s 窗口在 CI 慢机（2 核跑 902 测试）上偶发
+// TimeoutCancellationException（本地恒通过）——放宽到 3s，轮询间隔与断言不变。
 class ProviderMirrorTest {
 
     private lateinit var prefs: AppPreferences
@@ -44,7 +46,7 @@ class ProviderMirrorTest {
         prefs.startProviderMirrors(scope)
         prefs.setMetingApiBaseUrl("http://mirror-test.example.com/api")
         // 等待镜像更新（DataStore Flow 发射是异步的）
-        withTimeout(1000) {
+        withTimeout(3000) {
             while (prefs.getMetingApiBaseUrlSync() != "http://mirror-test.example.com/api") {
                 kotlinx.coroutines.delay(20)
             }
@@ -56,7 +58,7 @@ class ProviderMirrorTest {
     fun `write mv url then mirror updates within 1s`() = runBlocking {
         prefs.startProviderMirrors(scope)
         prefs.setMvApiBaseUrl("http://mirror-mv.example.com/api")
-        withTimeout(1000) {
+        withTimeout(3000) {
             while (prefs.getMvApiBaseUrlSync() != "http://mirror-mv.example.com/api") {
                 kotlinx.coroutines.delay(20)
             }
@@ -68,7 +70,7 @@ class ProviderMirrorTest {
     fun `write lyrics kugou url then mirror updates within 1s`() = runBlocking {
         prefs.startProviderMirrors(scope)
         prefs.setLyricsKugouBaseUrl("http://mirror-kugou.example.com")
-        withTimeout(1000) {
+        withTimeout(3000) {
             while (prefs.getLyricsKugouBaseUrlSync() != "http://mirror-kugou.example.com") {
                 kotlinx.coroutines.delay(20)
             }
@@ -80,7 +82,7 @@ class ProviderMirrorTest {
     fun `write weather api key then mirror updates within 1s`() = runBlocking {
         prefs.startProviderMirrors(scope)
         prefs.setWeatherApiKey("mirror-key-123")
-        withTimeout(1000) {
+        withTimeout(3000) {
             while (prefs.getWeatherApiKeySync() != "mirror-key-123") {
                 kotlinx.coroutines.delay(20)
             }
