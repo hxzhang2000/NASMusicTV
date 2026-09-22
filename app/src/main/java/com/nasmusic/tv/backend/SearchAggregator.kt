@@ -12,8 +12,13 @@ import com.nasmusic.tv.data.model.SongWithPinyin
 import com.nasmusic.tv.util.AppLog
 import com.nasmusic.tv.util.PinyinMatcher
 import com.nasmusic.tv.util.PinyinUtils
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 
 /**
@@ -66,6 +71,32 @@ enum class SearchType {
             private const val JAMENDO_TIMEOUT = 5_000L
             private const val LOCAL_TIMEOUT = 2_000L
     }
+
+    /**
+     * P2 修复（2026-09-22 审查）：承载可能长时间阻塞的源搜索的独立 scope。
+     * withTimeoutOrNull 的取消中断不了阻塞 socket 读（runInterruptible 对
+     * suspend 调用不成立、全局 callTimeout 影响面大），改为「限时等待独立
+     * 执行的结果」：超时后主聚合立即返回 null，孤儿搜索由 OkHttp readTimeout
+     * 自然收尾、结果丢弃（连接随即释放）。
+     */
+    private val escapeScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    /**
+     * 硬超时：在 [escapeScope] 中执行 [block]，主协程限时等待结果。
+     * 超时返回 null（与 withTimeoutOrNull 同形，调用点替换零成本）。
+     */
+    private suspend fun <T> withHardTimeout(timeoutMs: Long, block: suspend () -> T): T? =
+        withTimeoutOrNull(timeoutMs) {
+            val result = CompletableDeferred<T>()
+            escapeScope.launch {
+                try {
+                    result.complete(block())
+                } catch (t: Throwable) {
+                    result.completeExceptionally(t)
+                }
+            }
+            result.await()
+        }
 
     /**
      * 并行搜索所有选定源，合并去重后返回结果
@@ -125,7 +156,7 @@ enum class SearchType {
                         }
                     } else {
                         // 中文/混合关键词：走服务端搜索
-                        withTimeoutOrNull(NAS_TIMEOUT) {
+                        withHardTimeout(NAS_TIMEOUT) {
                             backendAdapter.searchSongs(keyword)
                                 .filter { it.title.isNotBlank() }
                                 .map { song ->
@@ -146,7 +177,7 @@ enum class SearchType {
         val networkDeferred = async {
             if (MusicSourceType.NETWORK_MUSIC in sources && networkMusicManager != null) {
                 try {
-                    withTimeoutOrNull(NETWORK_TIMEOUT) {
+                    withHardTimeout(NETWORK_TIMEOUT) {
                         networkMusicManager.search(keyword)
                             .filter { it.title.isNotBlank() }
                             .map { song ->
@@ -177,7 +208,7 @@ enum class SearchType {
                         // 拼音搜索但无本地索引缓存，返回空（用户搜中文时百度结果正常返回）
                         emptyList()
                     } else {
-                        withTimeoutOrNull(BAIDU_TIMEOUT) {
+                        withHardTimeout(BAIDU_TIMEOUT) {
                             val baiduSongs = if (directoryMode) {
                                 baiduService.searchByDirectory(baiduKw)
                             } else {
@@ -203,7 +234,7 @@ enum class SearchType {
         val jamendoDeferred = async {
             if (MusicSourceType.JAMENDO in sources && jamendoService != null) {
                 try {
-                    withTimeoutOrNull(JAMENDO_TIMEOUT) {
+                    withHardTimeout(JAMENDO_TIMEOUT) {
                         jamendoService.search(keyword)
                             .filter { it.title.isNotBlank() }
                             .map { song ->
