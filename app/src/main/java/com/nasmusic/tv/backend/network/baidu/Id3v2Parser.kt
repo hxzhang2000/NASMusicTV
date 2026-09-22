@@ -63,6 +63,44 @@ object Id3v2Parser {
      * 整帧被丢弃 → 有内嵌封面却判为「无」。
      * @return 标签总字节数；无 ID3v2 标签 / v2.2 返回 null
      */
+    /** 智能读取的探测窗口（覆盖绝大多数 < 256KB 的 ID3 标签，常规只读一次） */
+    const val DEFAULT_PROBE_BYTES: Int = 256 * 1024
+
+    /** 智能读取的标签总长上限（16MB，与 BaiduCoverProvider.MAX_ID3_TAG_BYTES 同口径） */
+    const val DEFAULT_MAX_TAG_BYTES: Int = 16 * 1024 * 1024
+
+    /**
+     * 本地文件 ID3v2 头部智能读取（2026-09-22 审查：统一「256KB 固定窗口」遗留）。
+     *
+     * 先读探测窗口（覆盖绝大多数标签，常规只读一次），经 [tagTotalSize] 取标签
+     * 总长；标签超出探测窗口（大 APIC/USLT 帧，常见于高清封面/双语文本）→ 按总长
+     * 重读，上限 [maxTagBytes]。非 ID3v2 文件返回 null（调用方回退其他来源）。
+     * 对齐 BaiduCoverProvider 的 M5 修复语义，供本地封面/歌词提取共用。
+     */
+    fun readLocalHeaderSmart(
+        file: java.io.File,
+        probeBytes: Int = DEFAULT_PROBE_BYTES,
+        maxTagBytes: Int = DEFAULT_MAX_TAG_BYTES
+    ): ByteArray? {
+        return try {
+            if (!file.exists() || file.length() <= 0L) return null
+            java.io.RandomAccessFile(file, "r").use { raf ->
+                val probeSize = minOf(probeBytes.toLong(), file.length()).toInt()
+                val probe = ByteArray(probeSize)
+                raf.readFully(probe)
+                val tagTotal = tagTotalSize(probe) ?: return null
+                if (tagTotal <= probeSize) return probe
+                val want = tagTotal.coerceAtMost(maxTagBytes).coerceAtMost(file.length().toInt())
+                val full = ByteArray(want)
+                raf.seek(0)
+                raf.readFully(full)
+                full
+            }
+        } catch (e: Exception) {
+            null
+        }
+    }
+
     fun tagTotalSize(data: ByteArray): Int? {
         if (data.size < 10) return null
         if (data[0] != 'I'.code.toByte() || data[1] != 'D'.code.toByte() || data[2] != '3'.code.toByte()) return null

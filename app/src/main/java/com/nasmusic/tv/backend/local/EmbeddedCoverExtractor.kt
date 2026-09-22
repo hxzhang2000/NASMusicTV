@@ -113,11 +113,10 @@ object EmbeddedCoverExtractor {
             }.getOrNull()
         }
         val file = audioFile ?: return null
-        val headerSize = minOf(ID3_HEADER_SIZE.toLong(), file.length())
-        if (headerSize <= 0) return null
-        val headerBytes = ByteArray(headerSize.toInt())
-        RandomAccessFile(file, "r").use { raf -> raf.readFully(headerBytes) }
-        return headerBytes
+        // 2026-09-22 审查：256KB 固定窗口 → 智能读取（tagTotalSize 动态补读，
+        // 大 APIC 封面不再恒提取失败）；content:// 分支保持 256KB 上限（流式
+        // 无法二次定位，属平台限制）。
+        return Id3v2Parser.readLocalHeaderSmart(file)
     }
 
     /** 从输入流读取至多 maxBytes 字节（不足则返回实际读到的部分） */

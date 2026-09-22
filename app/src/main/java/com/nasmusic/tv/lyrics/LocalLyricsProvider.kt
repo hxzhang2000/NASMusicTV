@@ -116,9 +116,8 @@ object LocalLyricsProvider {
 
         // 1. 内嵌 ID3v2 USLT 帧（最高优先级）
         try {
-            val headerSize = minOf(ID3_HEADER_SIZE.toLong(), audioFile.length())
-            val headerBytes = ByteArray(headerSize.toInt())
-            RandomAccessFile(audioFile, "r").use { raf -> raf.readFully(headerBytes) }
+            // 2026-09-22 审查：256KB 固定窗口 → 智能读取（大 USLT 帧不再截断）
+            val headerBytes = Id3v2Parser.readLocalHeaderSmart(audioFile) ?: ByteArray(0)
             val lyrics = Id3v2Parser.findUslt(headerBytes)
             if (!lyrics.isNullOrBlank() && LrcParser.isValidLrc(lyrics)) {
                 AppLog.d(TAG, "getLyricsFromPath: embedded USLT hit")
@@ -161,12 +160,8 @@ object LocalLyricsProvider {
         if (!file.exists() || !file.isFile) return null
 
         return try {
-            // 读取文件头部 256KB（ID3v2 标签通常在此范围内）
-            val headerSize = minOf(ID3_HEADER_SIZE.toLong(), file.length())
-            val headerBytes = ByteArray(headerSize.toInt())
-            RandomAccessFile(file, "r").use { raf ->
-                raf.readFully(headerBytes)
-            }
+            // 2026-09-22 审查：256KB 固定窗口 → 智能读取（大 USLT 帧不再截断）
+            val headerBytes = Id3v2Parser.readLocalHeaderSmart(file) ?: ByteArray(0)
             val lyrics = Id3v2Parser.findUslt(headerBytes)
             if (!lyrics.isNullOrBlank()) {
                 AppLog.d(TAG, "extracted embedded lyrics from: ${file.name}")

@@ -53,12 +53,28 @@ class BaiduLyricsProvider(
         return downloadText(ensureAccessToken(dlink) ?: return null)
     }
 
-    /** Range 请求音频文件头部前 256KB，解析 ID3v2 USLT 帧 */
+    /**
+     * Range 请求音频文件头部，解析 ID3v2 USLT 帧。
+     * 2026-09-22 审查：固定 256KB → M5 同款两段式（探测窗口拿 tagTotalSize，
+     * 超出按标签总长补读，上限 16MB）——大 USLT 帧（双语文本/逐字歌词）不再
+     * 因截断静默回退网络匹配（匹配到的常是错版本/纯文本）。
+     */
     private suspend fun extractEmbeddedLyrics(fsId: Long): String? {
         val metas = api.fileMetas(listOf(fsId))
-        val dlink = metas.firstOrNull()?.dlink ?: return null
+        val meta = metas.firstOrNull() ?: return null
+        val dlink = meta.dlink ?: return null
         val authorizedUrl = ensureAccessToken(dlink) ?: return null
-        val headerBytes = downloadRange(authorizedUrl, 0L, (ID3_HEADER_BYTES - 1).toLong()) ?: return null
+        val fileSize = meta.size
+        val probe = downloadRange(authorizedUrl, 0L, (ID3_HEADER_BYTES - 1).toLong()) ?: return null
+        val tagTotal = Id3v2Parser.tagTotalSize(probe) ?: return null
+        val headerBytes = if (tagTotal <= ID3_HEADER_BYTES) {
+            probe
+        } else {
+            val wantEnd = (tagTotal.toLong() - 1).coerceAtMost(MAX_ID3_TAG_BYTES)
+            val safeEnd = if (fileSize > 0) wantEnd.coerceAtMost(fileSize - 1) else wantEnd
+            AppLog.d(TAG, "extractEmbeddedLyrics: tagTotal=$tagTotal > probe, re-read 0-$safeEnd")
+            downloadRange(authorizedUrl, 0L, safeEnd) ?: return null
+        }
         return Id3v2Parser.findUslt(headerBytes)
     }
 
@@ -121,5 +137,8 @@ class BaiduLyricsProvider(
         private const val TAG = "BaiduLyrics"
         /** ID3v2 头部读取字节数（通常足够拿 USLT 帧，256KB） */
         private const val ID3_HEADER_BYTES = 256 * 1024
+
+    /** M5 两段式补读的标签总长上限（16MB，与 BaiduCoverProvider 同口径） */
+    private const val MAX_ID3_TAG_BYTES = 16L * 1024 * 1024
     }
 }
