@@ -108,27 +108,44 @@ jobs:
           fi
           # 清理无效值
           if [ "$PREV_TAG" = "null" ] || [ -z "$PREV_TAG" ]; then PREV_TAG=""; fi
-          if [ -n "$PREV_TAG" ] && [ "$PREV_TAG" != "$TAG" ]; then
+          if [ -n "$PREV_TAG" ] && [ "$PREV_TAG" != "$TAG" ] && grep -q "^## \[$PREV_TAG\]" CHANGELOG.md; then
             echo "Previous release: $PREV_TAG, current: $TAG"
-            # 从 CHANGELOG 开头提取到上一个版本之前
-            awk -v prev="$PREV_TAG" '
-              /^## \[/ { found=1 }
-              found && $0 ~ "^## \\[" prev "\\]" { exit }
-              found { print }
+            # 从 CHANGELOG 开头取到上一个 release 那一节（不含）
+            # = 「上一个 release 之后 → 当前 tag」之间的**全部**小节说明
+            #   （补打多个版本时，中间几版的说明会一并带上，这是期望行为）
+            awk -v prev="$PREV_TAG" -v maxsec=5 '
+              /^## \[/ {
+                started = 1
+                sec++
+                if ($0 ~ "^## \\[" prev "\\]") exit
+                # 双保险：prev 已在上面 grep 过，这里再挡一次，绝不扫到文件尾
+                if (sec > maxsec) exit
+              }
+              started { print }
             ' CHANGELOG.md > release_notes.md
           else
-            echo "No previous release found, extracting current version only"
-            # 没有上一个 release，只提取当前版本
+            echo "Previous release not present in this CHANGELOG, extracting current version only"
+            # ⛔ 上一个 release 的版本号在这份 CHANGELOG 里**没有对应小节**
+            #   （tag 对应的提交早于该 release —— 例如补打旧版本 tag）。
+            #   旧写法此时会让 awk 一路扫到文件尾，把整份 CHANGELOG（36 万字节）
+            #   倒进 notes → 超过 GitHub release body 上限 125000 字符 → HTTP 422。
+            #   这里退化为只取当前 tag 自己那一节，天然有界。
             awk -v tag="$TAG" '
               $0 ~ "^## \\[" tag "\\]" { found=1; next }
               found && /^## \[/ { exit }
               found { print }
             ' CHANGELOG.md > release_notes.md
           fi
-          echo "=== Release notes ==="
+          # 兜底 1：没取到内容时给个占位，避免空 notes
+          if [ ! -s release_notes.md ]; then
+            echo "Release $TAG（详见仓库 CHANGELOG.md）" > release_notes.md
+          fi
+          # 兜底 2：GitHub release body 硬上限 125000 字符，留 5000 余量
+          head -c 120000 release_notes.md > release_notes.md.trim
+          mv release_notes.md.trim release_notes.md
+          echo "=== Release notes ($(wc -c < release_notes.md) bytes) ==="
           cat release_notes.md
           echo "=== End ==="
-          echo "File size: $(wc -c < release_notes.md) bytes"
 
       - name: Create Release
         if: startsWith(github.ref, 'refs/tags/v')
