@@ -592,19 +592,27 @@ class SongDownloadManager(
             val artist = DownloadPathBuilder.sanitize(entity.artist.ifBlank { "未知歌手" }).ifBlank { "未知歌手" }
             val album = DownloadPathBuilder.sanitize(entity.album.ifBlank { DownloadPathBuilder.DEFAULT_ALBUM }).ifBlank { DownloadPathBuilder.DEFAULT_ALBUM }
             if (entity.title.isBlank()) return null
-            val baseName = entity.title
             val albumDir = File(root, "$artist/$album")
             if (!albumDir.exists()) return null
-            // ext 优先用 DB 记录的 containerExt；缺失时遍历常见音频扩展名
+            // P2 修复（2026-09-22 审查）：原候选名只拼 "title.ext"，与实际命名规则
+            // baseNameWithQuality（"%02d - "曲号前缀 + " (128/192/320)"档位后缀）+
+            // uniqueFile（" (2)"去重序号）不符——曲号>0 或非 AUTO 档的孤儿文件恢复
+            // 大面积 miss → DB 落 FAILED 后反复重下，磁盘累积 "(2)" 副本。
+            // 改为目录扫描 + 正则匹配完整命名规则（曲号前缀 / 档位后缀 / 去重序号
+            // 全部可选段），同多命中取修改时间最新；ext 优先 DB containerExt。
+            val safeTitle = Regex.escape(DownloadPathBuilder.sanitize(entity.title))
             val exts = if (entity.containerExt.isNotBlank()) listOf(entity.containerExt.lowercase())
                        else DownloadPathBuilder.AUDIO_EXTS.toList()
             for (ext in exts) {
-                val candidate0 = File(albumDir, "$baseName.$ext")
-                if (candidate0.exists()) return candidate0.absolutePath
-                for (i in 2..10) {
-                    val candidateI = File(albumDir, "$baseName ($i).$ext")
-                    if (candidateI.exists()) return candidateI.absolutePath
-                }
+                val pattern = Regex(
+                    "^(?:\\d{2,3} - )?$safeTitle" +
+                        "(?: \\((?:128|192|320)\\))?" +
+                        "(?: \\(\\d{1,3}\\))?\\." + Regex.escape(ext) + "$",
+                    RegexOption.IGNORE_CASE
+                )
+                val hit = albumDir.listFiles { f -> f.isFile && pattern.matches(f.name) }
+                    ?.maxByOrNull { it.lastModified() }
+                if (hit != null) return hit.absolutePath
             }
             null
         }.getOrNull()

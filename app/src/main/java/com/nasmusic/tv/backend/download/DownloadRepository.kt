@@ -173,11 +173,19 @@ class DownloadRepository(
                 .forEach { file ->
                     val rel = file.relativeTo(root).path
                     val parts = rel.split(File.separator)
-                    val (artist, album, title) = when {
+                    val (artist, album, rawTitle) = when {
                         parts.size >= 3 -> Triple(parts[0], parts[1], file.nameWithoutExtension)
                         parts.size == 2 -> Triple(parts[0], "单曲", file.nameWithoutExtension)
                         else -> Triple("未知歌手", "单曲", file.nameWithoutExtension)
                     }
+                    // P2 修复（2026-09-22 审查）：剥离命名规则附加的曲号前缀 / 档位后缀 /
+                    // 去重序号，还原真实标题——否则 "01 - 标题 (320)" 整串入库污染显示，
+                    // 且 dedupeKey 与真实歌曲永不匹配（跨源去重失效、重复下载）。
+                    val title = rawTitle
+                        .replace(Regex("^(?:\\d{2,3} - )+"), "")
+                        .replace(Regex(" \\((?:128|192|320)\\)$"), "")
+                        .replace(Regex(" \\(\\d{1,3}\\)$"), "")
+                        .ifBlank { rawTitle }
                     val songKey = "local_${com.nasmusic.tv.util.HashUtils.stablePathHash64(file.absolutePath)}"
                     val dedupeKey = "${title.lowercase().replace(Regex("\\s+"), "")}|${artist.lowercase().replace(Regex("\\s+"), "")}"
                     dao.upsert(
