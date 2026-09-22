@@ -285,13 +285,26 @@ internal fun BackupFileRow(
 
 @Composable
 internal fun AboutRow(label: String, value: String) {
+    // 修复（2026-09-22 用户反馈）：原「标签 + weight Spacer + 值」结构在值过长时
+    // Spacer 塌缩、值紧跟标签（视觉上忽左忽右）。改为固定双栏：标签占左（超长换行），
+    // 值恒右对齐（超长换行也按右缘对齐）。手机 / TV 一致。
     Row(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(text = label, color = NasMusicColors.TextSecondary, fontSize = FontSize.button(), modifier = Modifier.padding(end = 16.dp))
-        Spacer(modifier = Modifier.weight(1f))
-        Text(text = value, color = NasMusicColors.TextPrimary, fontSize = FontSize.button())
+        Text(
+            text = label,
+            color = NasMusicColors.TextSecondary,
+            fontSize = FontSize.button(),
+            modifier = Modifier.weight(1f)
+        )
+        Text(
+            text = value,
+            color = NasMusicColors.TextPrimary,
+            fontSize = FontSize.button(),
+            textAlign = androidx.compose.ui.text.style.TextAlign.End,
+            modifier = Modifier.padding(start = 16.dp)
+        )
     }
 }
 
