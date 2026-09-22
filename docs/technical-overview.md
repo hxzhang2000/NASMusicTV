@@ -10558,6 +10558,42 @@ drawAccumMs += dtMs * (1f + frame.pulse * PULSE_DRAW)
 
 **版本**：v2.36.3 → **v2.36.4**（versionCode 157 → 158）
 
+### 10.177 v2.36.4 — CI 创建 Release 报 HTTP 422：整份 CHANGELOG 被当成 body（2026-09-22）
+
+**现象**：tag `v2.36.3` 的工作流在 `Create Release` 步失败 ——
+`HTTP 422: Validation Failed ... body is too long (maximum is 125000 characters)`；
+同一批推送的 `v2.36.4` 却成功了。
+
+**根因**（两个条件同时成立才触发）：
+
+1. notes 的提取逻辑是「从 CHANGELOG 开头一直取到**上一个 release** 那一节」；
+2. `v2.36.3` / `v2.36.4` **同时**推送 → **v2.36.4 的 release 先建好** → v2.36.3 那次跑时
+   `PREV_TAG=v2.36.4`；而 v2.36.3 的提交（`b86cb13`）的 CHANGELOG 里**还没有**
+   `## [v2.36.4]` 这一节 → awk 的 `exit` 条件永不满足 → 一路扫到文件尾，
+   把整份 **368,035 字节**的 CHANGELOG 倒进 notes。
+
+⚠️ 注意「上一个 release 的版本号」是**运行时**从 GitHub 查的，而 CHANGELOG 是
+**tag 对应提交**里那份 —— 两者不属于同一个时间点，这就是坑的来源。
+
+**修法**（保留「上一 release → 当前 tag 之间**全部**小节」的正确语义，只加兜底）：
+
+| 层 | 措施 |
+|---|---|
+| 前置判断 | 先用 `grep -q "^## \[$PREV_TAG\]" CHANGELOG.md` 确认 prev 小节确实存在，存在才走多节分支 |
+| 退化分支 | 不存在时只取当前 tag 自己那一节（367,732 → 3,203 字节，绝不整份倒） |
+| awk 内 | 再加 `maxsec=5` 双保险，最多 5 节 |
+| 收尾 | `head -c 120000` 硬兜底（GitHub 上限 125000，留 5000 余量）；空内容给占位文案 |
+
+**约定（用户明确）**：**中间未推送的版本不打 tag** —— 只打本次真正要发布的那个版本。
+据此 `v2.36.3` 的 tag 已删除（远端 + 本地），其内容由 `v2.36.4` 的 release notes
+覆盖（v2.36.4 + v2.36.3 两节）。
+
+**验证**：用同一份 awk 在本地复算两条分支 ——
+① `v2.36.4` / prev=`v2.36.2` → 5,154 字节 / 2 节（与已发布的 release 一致）；
+② `v2.36.3` / prev=`v2.36.4`（该节不存在）→ 3,203 字节（旧逻辑 367,732 字节）。
+
+**版本**：v2.36.4（CI-only 改动，**不进 CHANGELOG** —— 免得改动已发布 release 的 notes 复算结果）
+
 ### 10.152 v2.32.3 — T5：删除死代码 `VocalRemovalProcessor.kt`（算法先归档，2026-09-14）
 
 **来源**：`docs/archive/code-review-full-report-2026-09-13.md` §T5 / `docs/archive/code-review-2026-09-03.md` §P2。文件 348 行，全项目**零调用方**（`PlaybackService.kt:207` 实际 `val vocalRemovalProcessor = SpectralMaskProcessor()`——变量名是历史遗留，类型早就换过了；`PlayerManager.setVocalRemovalProcessor()` 的形参类型同样是 `SpectralMaskProcessor`）。
