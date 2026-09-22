@@ -1774,6 +1774,8 @@ private fun NowPlayingPortrait(
                                 isPlaying = isPlaying,
                                 fontSizeMultiplier = lyricsFontScale,
                                 onSeekToLine = onSeek,
+                                // 手机竖屏：长按进入歌词跳转模式（规避与横滑切页的轴向手势冲突）
+                                longPressSeekEnabled = true,
                                 modifier = Modifier
                                     .fillMaxSize()
                                     .padding(horizontal = 4.dp, vertical = 4.dp),

@@ -2,6 +2,7 @@ package com.nasmusic.tv.ui.components
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.interaction.collectIsDraggedAsState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -34,6 +35,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -74,7 +76,8 @@ fun LyricsView(
     isPlaying: Boolean = true,
     fontSizeMultiplier: Float = 1.0f,
     fadeMaskColor: Color? = null,
-    onSeekToLine: ((Long) -> Unit)? = null
+    onSeekToLine: ((Long) -> Unit)? = null,
+    longPressSeekEnabled: Boolean = false
 ) {
     // 手机紧凑模式：恢复原始密度，保持歌词字号不被全局缩放（用户独立调节）
     if (com.nasmusic.tv.ui.theme.LocalPhoneCompact.current) {
@@ -85,10 +88,10 @@ fun LyricsView(
                 fontScale = baseDensity.fontScale
             )
         ) {
-            LyricsViewInner(lyrics, currentTimeMs, modifier, highlightMode, isPlaying, fontSizeMultiplier, fadeMaskColor, onSeekToLine)
+            LyricsViewInner(lyrics, currentTimeMs, modifier, highlightMode, isPlaying, fontSizeMultiplier, fadeMaskColor, onSeekToLine, longPressSeekEnabled)
         }
     } else {
-        LyricsViewInner(lyrics, currentTimeMs, modifier, highlightMode, isPlaying, fontSizeMultiplier, fadeMaskColor, onSeekToLine)
+        LyricsViewInner(lyrics, currentTimeMs, modifier, highlightMode, isPlaying, fontSizeMultiplier, fadeMaskColor, onSeekToLine, longPressSeekEnabled)
     }
 }
 
@@ -102,7 +105,8 @@ private fun LyricsViewInner(
     isPlaying: Boolean = true,
     fontSizeMultiplier: Float = 1.0f,
     fadeMaskColor: Color? = null,
-    onSeekToLine: ((Long) -> Unit)? = null
+    onSeekToLine: ((Long) -> Unit)? = null,
+    longPressSeekEnabled: Boolean = false
 ) {
     if (lyrics == null || lyrics.isEmpty) {
         Box(
@@ -188,9 +192,10 @@ private fun LyricsViewInner(
         }
     }
 
-    // 手指拖动歌词列表 → 进入拖拽跳转模式（tap 无滚动不触发）
-    LaunchedEffect(listDragged, listState.isScrollInProgress) {
-        if (listDragged && listState.isScrollInProgress && !isDragSeeking) {
+    // 拖动即进入（TV/横屏默认）。手机竖屏（longPressSeekEnabled）改长按进入：
+    // 普通拖动留给「纵向浏览 + 横向 pager 切页」，避免轴向手势冲突。
+    LaunchedEffect(listDragged, listState.isScrollInProgress, longPressSeekEnabled) {
+        if (!longPressSeekEnabled && listDragged && listState.isScrollInProgress && !isDragSeeking) {
             isDragSeeking = true
             seekTargetLine = -1
         }
@@ -206,9 +211,10 @@ private fun LyricsViewInner(
         }?.let { it.index - 1 } ?: -1
     }
 
-    // 松手：跳到目标行起始时间播放（DragInteraction.Stop = 手指抬起）
+    // 松手（拖动即进入模式）：跳到目标行起始时间播放（DragInteraction.Stop = 手指抬起）。
+    // 长按模式的松手由下方 detectDragGesturesAfterLongPress 的 onDragEnd 处理。
     LaunchedEffect(listDragged) {
-        if (!listDragged && isDragSeeking) {
+        if (!longPressSeekEnabled && !listDragged && isDragSeeking) {
             isDragSeeking = false
             val target = seekTargetLine
             seekTargetLine = -1
@@ -234,11 +240,48 @@ private fun LyricsViewInner(
             NasMusicBrushes.bottomFadeMask
         }
     }
-    Box(modifier = modifier.fillMaxSize()) {
+    Box(
+        modifier = modifier.fillMaxSize().then(
+            if (longPressSeekEnabled) {
+                Modifier.pointerInput(longPressSeekEnabled) {
+                    detectDragGesturesAfterLongPress(
+                        onDragStart = {
+                            // 长按 → 进入跳转模式
+                            isDragSeeking = true
+                            seekTargetLine = -1
+                        },
+                        onDrag = { change, dragAmount ->
+                            // 跳转模式中拖动 = 滚动列表选行（手动驱动，禁用子列表滚动）
+                            change.consume()
+                            listState.dispatchRawDelta(-dragAmount.y)
+                        },
+                        onDragEnd = {
+                            // 松手 → 跳到目标行起始时间播放并退出跳转模式
+                            val target = seekTargetLine
+                            isDragSeeking = false
+                            seekTargetLine = -1
+                            if (target in lyrics.lines.indices) {
+                                onSeekToLine?.invoke(lyrics.lines[target].time)
+                            }
+                        },
+                        onDragCancel = {
+                            isDragSeeking = false
+                            seekTargetLine = -1
+                        }
+                    )
+                }
+            } else {
+                Modifier
+            }
+        )
+    ) {
         // --- 滚动歌词列表（使用 TV 焦点管理，移除了与焦点冲突的 pointerInput）---
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
             state = listState,
+            // 长按跳转模式下禁用列表自身滚动——拖动由外层 pointerInput 接管并
+            // dispatchRawDelta 手动驱动，避免双驱动
+            userScrollEnabled = !(longPressSeekEnabled && isDragSeeking),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             item {
