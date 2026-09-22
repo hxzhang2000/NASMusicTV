@@ -5,7 +5,15 @@ import com.nasmusic.tv.data.model.Song
 import com.nasmusic.tv.util.AppLog
 import com.nasmusic.tv.util.ArtistSplitter
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
+import java.util.concurrent.atomic.AtomicInteger
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.json.JSONObject
@@ -47,6 +55,12 @@ class ArtistCoverResolver(
         private const val ITUNES_SEARCH_URL = "https://itunes.apple.com/search"
         /** 并发解析上限（避免请求过猛） */
         private const val MAX_CONCURRENT = 5
+
+    /** UI 批次回调大小（每解析满 N 个回调一次；与并发数解耦） */
+    private const val CALLBACK_BATCH = 5
+
+    /** 单源连续无命中熔断阈值：达到后本轮跳过该源（防被限流的第三方连坐轰炸） */
+    private const val SOURCE_FAIL_LIMIT = 8
     }
 
     /**
@@ -79,6 +93,11 @@ class ArtistCoverResolver(
         allSongs: List<Song>,
         onUpdated: (List<Artist>) -> Unit
     ) = withContext(Dispatchers.IO) {
+        // P2 修复（2026-09-22 审查）：原实现逐个艺术家串行发最多 3 个阻塞 HTTP 请求
+        //（MAX_CONCURRENT=5 实为回调批次大小而非并发，命名误导）——大曲库首刷可达
+        // 上千次串行第三方请求，分钟级且易触发限流。改为：
+        //   并发池（MAX_CONCURRENT 并发）+ 每槽 150ms 起步节流 + 单源连续 8 次无命中
+        //   熔断冷却 + 批次回调语义保留（满 CALLBACK_BATCH 回调一次 + 最终回调）。
         var updatedArtists = artists
         var processed = 0
 
@@ -86,46 +105,60 @@ class ArtistCoverResolver(
         // O(songs) 构建一次，后续每个艺术家 O(1) 查找（旧实现 O(artists × songs) 遍历）
         val songCoverByArtist = buildSongCoverIndex(allSongs)
 
-        for (artist in artists) {
-            // 已有封面 → 跳过
-            if (artist.coverUrl != null) continue
-            // 跳过本地艺术家（ID 以 local_ 开头，其封面由 buildLocalArtists 的 useSongCover 兜底）
-            if (artist.id.startsWith("local_")) continue
+        val pending = artists.filter {
+            it.coverUrl == null && !it.id.startsWith("local_") && it.name.isNotBlank()
+        }
+        val neteaseFails = AtomicInteger(0)
+        val kugouFails = AtomicInteger(0)
+        val itunesFails = AtomicInteger(0)
+        val updateMutex = Mutex()
+        val permits = Semaphore(MAX_CONCURRENT)
+        val totalPending = pending.size
 
-            val artistName = artist.name.trim()
-            if (artistName.isBlank()) continue
+        coroutineScope {
+            for ((index, artist) in pending.withIndex()) {
+                launch {
+                    permits.withPermit {
+                        // 起步节流：并发槽错峰发起（5 并发 × 150ms ≈ ≤27 req/min/源，
+                        // iTunes 限流量级以内），避免开闸瞬间齐射
+                        delay((index % MAX_CONCURRENT) * 150L)
+                        val artistName = artist.name.trim()
 
-            var resolvedUrl: String? = null
+                        // P1 网易云 → P2 酷狗 → P3 iTunes：单源连续 SOURCE_FAIL_LIMIT
+                        // 次无命中则本轮熔断（不再对被限流的源连坐轰炸）
+                        var resolvedUrl: String? = null
+                        if (neteaseFails.get() < SOURCE_FAIL_LIMIT) {
+                            resolvedUrl = resolveNeteaseArtistCover(artistName)
+                            if (resolvedUrl == null) neteaseFails.incrementAndGet() else neteaseFails.set(0)
+                        }
+                        if (resolvedUrl == null && kugouFails.get() < SOURCE_FAIL_LIMIT) {
+                            resolvedUrl = resolveKugouArtistCover(artistName)
+                            if (resolvedUrl == null) kugouFails.incrementAndGet() else kugouFails.set(0)
+                        }
+                        if (resolvedUrl == null && itunesFails.get() < SOURCE_FAIL_LIMIT) {
+                            resolvedUrl = resolveItunesArtistCover(artistName)
+                            if (resolvedUrl == null) itunesFails.incrementAndGet() else itunesFails.set(0)
+                        }
+                        // P4: 该艺术家名下第一首有封面的歌曲封面（O(1) 查找预构建索引）
+                        if (resolvedUrl == null) {
+                            resolvedUrl = songCoverByArtist[ArtistSplitter.normalizeKey(artistName)]
+                        }
 
-            // P1: 网易云音乐（华语歌手头像）
-            resolvedUrl = resolveNeteaseArtistCover(artistName)
-
-            // P2: 酷狗音乐（歌手头像）
-            if (resolvedUrl == null) {
-                resolvedUrl = resolveKugouArtistCover(artistName)
-            }
-
-            // P3: iTunes（欧美艺术家图片）
-            if (resolvedUrl == null) {
-                resolvedUrl = resolveItunesArtistCover(artistName)
-            }
-
-            // P4: 该艺术家名下第一首有封面的歌曲封面（O(1) 查找预构建索引）
-            if (resolvedUrl == null) {
-                val key = ArtistSplitter.normalizeKey(artistName)
-                resolvedUrl = songCoverByArtist[key]
-            }
-
-            if (resolvedUrl != null) {
-                val idx = updatedArtists.indexOfFirst { it.id == artist.id }
-                if (idx >= 0) {
-                    updatedArtists = updatedArtists.toMutableList().apply {
-                        this[idx] = artist.copy(coverUrl = resolvedUrl)
-                    }
-                    processed++
-                    // 每 MAX_CONCURRENT 个回调一次，避免频繁更新 UI
-                    if (processed % MAX_CONCURRENT == 0) {
-                        onUpdated(updatedArtists)
+                        if (resolvedUrl != null) {
+                            updateMutex.withLock {
+                                val idx = updatedArtists.indexOfFirst { it.id == artist.id }
+                                if (idx >= 0) {
+                                    updatedArtists = updatedArtists.toMutableList().apply {
+                                        this[idx] = artist.copy(coverUrl = resolvedUrl)
+                                    }
+                                    processed++
+                                    // 每 CALLBACK_BATCH 个回调一次，避免频繁更新 UI
+                                    if (processed % CALLBACK_BATCH == 0) {
+                                        onUpdated(updatedArtists)
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -136,7 +169,7 @@ class ArtistCoverResolver(
             onUpdated(updatedArtists)
         }
 
-        AppLog.d(TAG, "resolveCovers: processed=$processed/${artists.count { it.coverUrl == null }}, songCoverMap=${songCoverByArtist.size}")
+        AppLog.d(TAG, "resolveCovers: processed=$processed/$totalPending, songCoverMap=${songCoverByArtist.size}")
     }
 
     /**
