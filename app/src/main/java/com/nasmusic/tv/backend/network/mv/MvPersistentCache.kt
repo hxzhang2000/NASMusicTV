@@ -119,7 +119,15 @@ class MvPersistentCache(context: Context) {
     private fun save() {
         try {
             val json = gson.toJson(cache.toMap())
-            file.writeText(json)
+            // 修复（2026-09-22 审查）：writeText 直写非原子——写盘中途被杀会损坏
+            // mv_cache.json 导致全量缓存丢失。改 tmp+rename 原子写（与
+            // CoverUrlPersistentCache 的 H-5 语义一致；个别 ROM rename 失败回退直写）。
+            val tmp = File(file.parentFile, file.name + ".tmp")
+            tmp.writeText(json)
+            if (!tmp.renameTo(file)) {
+                file.writeText(json)
+                tmp.delete()
+            }
         } catch (e: Exception) {
             AppLog.e(TAG, "save failed: ${e.message}", e)
         }

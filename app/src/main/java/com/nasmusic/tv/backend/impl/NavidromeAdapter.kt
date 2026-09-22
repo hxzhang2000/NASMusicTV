@@ -36,15 +36,20 @@ class NavidromeAdapter : BackendAdapter {
     override val backendType: String = "navidrome"
     override var apiVersion: String = "Navidrome (版本未知)"
 
+@Volatile
     private var baseUrl: String = ""
+@Volatile
     private var username: String = ""
+@Volatile
     private var password: String = ""
+@Volatile
     private var apiToken: String = ""
     override var serverName: String = "Navidrome"
         private set
 
     // B11 修复：固定 salt + token，避免 buildCoverUrl 每次生成新 salt
     // 导致封面 URL 不稳定、Coil 缓存 key 失效、同一封面反复下载。
+@Volatile
     private var salt: String = ""
 
     private val gson = Gson()

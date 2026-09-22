@@ -106,6 +106,16 @@ class LocalInputServer(
 
         private fun handleSubmit(session: IHTTPSession): Response {
             return try {
+                // 防御（2026-09-22 审查）：请求体上限 1MB——postData 全量进内存，
+                // 同网段超大 POST 可耗尽内存（对齐 Backup/Playlist 上传的硬上限口径）。
+                val contentLength = session.headers["content-length"]?.toLongOrNull() ?: -1L
+                if (contentLength > 1L * 1024 * 1024) {
+                    return newFixedLengthResponse(
+                        Response.Status.BAD_REQUEST,
+                        "application/json; charset=UTF-8",
+                        """{"ok":false}"""
+                    )
+                }
                 val files = HashMap<String, String>()
                 session.parseBody(files)
                 val text = files["postData"] ?: ""

@@ -41,12 +41,17 @@ class SubsonicAdapter : BackendAdapter {
     override val backendType: String = "subsonic"
     override var apiVersion: String = "Subsonic (版本未知)"
 
+@Volatile
     private var baseUrl: String = ""
+@Volatile
     private var username: String = ""
+@Volatile
     private var password: String = ""
 
     // Subsonic 认证参数
+@Volatile
     private var apiToken: String = ""
+@Volatile
     private var salt: String = ""
 
     override var serverName: String = "Subsonic"

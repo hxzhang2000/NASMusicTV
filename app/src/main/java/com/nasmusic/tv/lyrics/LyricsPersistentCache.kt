@@ -88,7 +88,14 @@ class LyricsPersistentCache(context: Context) {
         val now = System.currentTimeMillis()
         // 写 LRC 文件
         val lrcFile = lrcFile(entry.songId)
-        lrcFile.writeText(entry.lrcText)
+        // 修复（2026-09-22 审查）：正文与索引同口径原子写（tmp+rename），
+        // 防写盘中途被杀产生半截 LRC（损坏条目 get 时 0 行 fall-through 自愈，但体验差）。
+        val tmp = File(lrcFile.parentFile, lrcFile.name + ".tmp")
+        tmp.writeText(entry.lrcText)
+        if (!tmp.renameTo(lrcFile)) {
+            lrcFile.writeText(entry.lrcText)
+            tmp.delete()
+        }
         // 更新索引
         index[entry.songId] = IndexEntry(
             songId = entry.songId,

@@ -244,6 +244,11 @@ class RemoteControlServer(
 
         private fun parseJsonBody(session: IHTTPSession): JsonObject? {
             return try {
+                // 防御（2026-09-22 审查）：请求体上限 1MB——parseBody 的 postData 全量进
+                // 内存，同网段超大 POST 可耗尽内存（对齐 Backup/Playlist 上传的硬上限口径；
+                // 正常搜索/队列操作 JSON 远小于 1MB）。
+                val contentLength = session.headers["content-length"]?.toLongOrNull() ?: -1L
+                if (contentLength > 1L * 1024 * 1024) return null
                 val files = HashMap<String, String>()
                 session.parseBody(files)
                 val postData = files["postData"] ?: return null

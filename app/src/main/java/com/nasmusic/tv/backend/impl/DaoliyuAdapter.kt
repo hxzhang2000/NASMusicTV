@@ -46,7 +46,9 @@ class DaoliyuAdapter : BackendAdapter {
     override var serverName: String = "道理鱼音乐"
     override var apiVersion: String = "Unknown"
 
+@Volatile
     private var baseUrl: String = ""
+@Volatile
     private var token: String = ""      // JWT Token
     private var userId: String = ""     // 当前用户 ID
 

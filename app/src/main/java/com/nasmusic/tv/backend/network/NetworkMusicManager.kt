@@ -334,8 +334,10 @@ class NetworkMusicManager(
      */
     fun unregisterService(sourceId: String) {
         services.remove(sourceId)
-        // 清理该源相关的播放缓存
-        playUrlCache.entries.removeAll { it.key.startsWith("ntwk_${sourceId}_") }
+        // 清理该源相关的播放缓存。修复（2026-09-22 审查）：playUrlCache 的 key 由
+        // playUrlKey() 生成为 "<networkSource>:<networkId>:<quality>"，原过滤串
+        // "ntwk_<sourceId>_" 是歌曲 id 的格式，永远匹配不上（注销后旧直链残留至 TTL）。
+        playUrlCache.entries.removeAll { it.key.startsWith("${sourceId}:") }
         AppLog.i(TAG, "unregisterService: $sourceId (total=${services.size})")
     }
 

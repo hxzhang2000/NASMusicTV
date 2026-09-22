@@ -110,7 +110,13 @@ object LrcParser {
             } else {
                 line.text
             }
-            sb.append(String.format("[%02d:%02d.%02d]%s\n", minutes, seconds, millis / 10, text))
+            // 修复（2026-09-22 审查）：String.format %02d 受默认 Locale 影响（部分 Locale
+            // 产出非 ASCII 数字，写出的 LRC 回读 isValidLrc 失败）。手写补零，
+            // 与 PlayStatsRepository.dateKey / HashUtils 的 Locale 安全口径一致。
+            val mm = minutes.toString().padStart(2, '0')
+            val ss = seconds.toString().padStart(2, '0')
+            val ms = (millis / 10).toString().padStart(2, '0')
+            sb.append("[$mm:$ss.$ms]$text\n")
         }
         return sb.toString()
     }

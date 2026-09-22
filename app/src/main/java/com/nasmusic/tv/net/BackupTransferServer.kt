@@ -199,6 +199,11 @@ input[type=file]{width:100%;padding:10px;font-size:14px;background:#0a0a23;borde
 
 <script>
 var STR = $strJson;
+// 修复（2026-09-22 审查）：备份文件名可能含 HTML/属性敏感字符（RemoteControlHtml 的
+// esc/escAttr 教训）——展示名走 escHtml，onclick 里的文件名走 JSON.stringify+escAttr
+//（结构引号与数据引号统一过实体层，浏览器解码后仍是合法 JS 字符串字面量）。
+function escHtml(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');}
+function escAttr(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/'/g,'&#39;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 function loadBackups(){
   fetch('/api/list')
     .then(function(r){return r.json()})
@@ -209,12 +214,13 @@ function loadBackups(){
         return;
       }
       list.innerHTML=d.backups.map(function(b){
+        var nameJs = escAttr(JSON.stringify(b.name));
         return '<div class="backup-item">'+
-          '<div class="backup-name">'+b.name+'</div>'+
-          '<div class="backup-time">'+b.time+'</div>'+
+          '<div class="backup-name">'+escHtml(b.name)+'</div>'+
+          '<div class="backup-time">'+escHtml(b.time)+'</div>'+
           '<div class="backup-actions">'+
-            '<button class="btn btn-download" onclick="downloadBackup(\''+b.name+'\')">${context.getString(R.string.html_backup_download)}</button>'+
-            '<button class="btn btn-restore" onclick="restoreBackup(\''+b.name+'\')">${context.getString(R.string.html_backup_restore)}</button>'+
+            '<button class="btn btn-download" onclick=\'downloadBackup('+nameJs+')\'>${context.getString(R.string.html_backup_download)}</button>'+
+            '<button class="btn btn-restore" onclick=\'restoreBackup('+nameJs+')\'>${context.getString(R.string.html_backup_restore)}</button>'+
           '</div>'+
         '</div>';
       }).join('');
