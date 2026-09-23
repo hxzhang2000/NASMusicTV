@@ -2981,10 +2981,17 @@ JAVA_HOME="C:/Program Files/Android/Android Studio/jbr" \
 
 ### 15.4 全部完成后　**3 项**
 
-- [ ] **T13.1** 回填文档实测值
+- [x] **T13.1** 回填文档实测值 ✅ 2026-09-23
   - §14.1 的**实际行数**（对照预估，标注偏差）
   - §12 分期表的实际投入
-- [ ] **T13.2** 对外文档
+  - **实际**：§12 补「实际投入回填」表（主代码 ~6,950 行 / 单测 ~4,200 行 /
+    17 个测试类）；§14.1 补实际行数说明（大头偏差指向 §12 表，不逐行改写）
+- [x] **T13.2** 对外文档 ✅ 2026-09-23
   - README 补「已知限制」：电视内部存储的照片读不到（解法：拷到 U 盘，§6.3）
   - `CHANGELOG.md` 新增当版节（只写「做了什么」）
+  - **实际**：README「播放体验」+照片墙条目 + 新增「已知限制」3 条；
+    CHANGELOG 新节 **v2.37.0**（Added 8 条 + Fixed 1 条）；版本 bump 161→162 / 2.37.0。
+    ⛔ **交付核验**：`aapt2 dump badging` 实测 release 包 —— versionCode 162 /
+    versionName 2.37.0 / `READ_MEDIA_IMAGES` + `READ_MEDIA_VISUAL_USER_SELECTED` 齐全
+    （T9.1 的原始验收口径至此闭环）；`assets/models/yunet_face.onnx` 已打进 APK
 - [ ] **T13.3** 打 tag + 推送（⚠️ **发布行为，需用户明确要求**）
