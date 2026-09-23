@@ -210,6 +210,61 @@ internal fun lineProgress(lineStartMs: Long, lineEndMs: Long, currentMs: Long): 
 }
 
 /**
+ * 逐可视行的覆盖比例（0f..1f）。
+ *
+ * [rowLengths] = 各可视行的字符数（`getLineEnd - getLineStart`），
+ * [coveredChars] = 已唱到的字符位置（含小数，0.5 = 半个字）。
+ *
+ * **契约：前一行必须走完才轮到下一行** —— 第 k 行比例 < 1 时，第 k+1 行必为 0f。
+ * 折行歌词（一句被排成 2~3 个可视行）正是靠这条契约才「走完第一折行再走第二折行」。
+ */
+internal fun karaokeRowCoverage(rowLengths: List<Int>, coveredChars: Float): List<Float> {
+    var remaining = coveredChars
+    val out = ArrayList<Float>(rowLengths.size)
+    for (len in rowLengths) {
+        if (len <= 0 || remaining <= 0f) {
+            out += 0f
+            continue
+        }
+        val take = minOf(remaining, len.toFloat())
+        out += (take / len.toFloat()).coerceIn(0f, 1f)
+        remaining -= take
+    }
+    return out
+}
+
+/**
+ * 某个可视行内「已覆盖 [coveredInRow] 个字符」对应的裁剪右边界 x。
+ *
+ * [xOfOffset] 把**行内**字符下标映射为该字符在布局坐标系里的 x（左缘），
+ * [rowRight] 是该行文本的右缘（`TextLayoutResult.getLineRight`）。
+ *
+ * ⚠️ **为什么不能无脑用 `xOfOffset(base + 1)` 当插值终点**（v2.36.7 修复的根因）：
+ * `base + 1 == rowLength` 时，该 offset 恰好是**软换行边界**。AOSP `Layout.getPrimaryHorizontal`
+ * 内部先 `getLineForOffset(offset)`（二分条件 `getLineStart(guess) > offset` → 边界 offset
+ * 归属**下一行**），于是返回的是**下一可视行行首的 x**。居中对齐时它远小于本行右缘
+ * ⇒ 插值终点跑到本行左半边 ⇒ 边界随进度**向左倒带**（用户看到「第一折行没走完就返回」）。
+ * 故行尾字符一律改用 [rowRight] 作终点。
+ *
+ * 另外 `coerceAtLeast(0f)` 兜底：任何情况下边界都不允许回退（RTL / 极端对齐）。
+ */
+internal fun karaokeRowBoundaryX(
+    coveredInRow: Float,
+    rowLength: Int,
+    xOfOffset: (Int) -> Float,
+    rowRight: Float,
+): Float {
+    if (rowLength <= 0) return rowRight
+    if (coveredInRow >= rowLength) return rowRight
+    if (coveredInRow <= 0f) return xOfOffset(0)
+    val base = coveredInRow.toInt().coerceIn(0, rowLength - 1)
+    val frac = (coveredInRow - base).coerceIn(0f, 1f)
+    val x1 = xOfOffset(base)
+    val x2 = if (base + 1 >= rowLength) rowRight else xOfOffset(base + 1)
+    return x1 + (x2 - x1).coerceAtLeast(0f) * frac
+}
+
+/**
  * 单行 KARAOKE 渲染：双层叠加实现平滑进度
  *
  * - 底层（[baseColor]）：整行歌词
@@ -217,6 +272,8 @@ internal fun lineProgress(lineStartMs: Long, lineEndMs: Long, currentMs: Long): 
  *   进度边界落在字符中间时即实现"半个字被覆盖"，非逐字跳变
  *
  * 使用 TextLayoutResult 定位边界像素，文本左对齐/右对齐均正确。
+ * 折行（一个可视行放不下）时**按可视行逐行推进**：前一行整体覆盖后才进入下一行，
+ * 边界像素由 [karaokeRowBoundaryX] 计算（行尾不回退，见该函数的说明）。
  */
 @Composable
 internal fun KaraokeLineText(
@@ -258,29 +315,25 @@ internal fun KaraokeLineText(
                         // 已覆盖的字符数（含小数 -> 半个字）。
                         // 逐字节奏前快后慢：同样行内进度下，句首字先亮、句尾字慢慢拖亮。
                         val coveredChars = karaokePacingFraction(progress) * text.length
-                        var remaining = coveredChars
 
                         // 逐可视行处理：先覆盖本行全部区域，再进入下一行
-                        for (line in 0 until lr.lineCount) {
-                            val lineStart = lr.getLineStart(line)
-                            val lineEnd = lr.getLineEnd(line)
-                            val lineLen = lineEnd - lineStart
-                            if (lineLen <= 0) continue
-                            if (remaining <= 0f) break
+                        val rowCount = lr.lineCount
+                        val rowLengths = (0 until rowCount).map { lr.getLineEnd(it) - lr.getLineStart(it) }
+                        val rowCoverage = karaokeRowCoverage(rowLengths, coveredChars)
+                        for (line in 0 until rowCount) {
+                            val rowLen = rowLengths[line]
+                            val coveredInRow = rowCoverage.getOrElse(line) { 0f } * rowLen
+                            if (rowLen <= 0 || coveredInRow <= 0f) continue
 
-                            val take = minOf(remaining, lineLen.toFloat())
-                            val boundaryX = if (take >= lineLen) {
-                                // 本行已整体覆盖 -> 边界直接落在这行最右侧
-                                lr.getLineRight(line)
-                            } else {
-                                val base = take.toInt()
-                                val frac = take - base
-                                val boundaryOffset = lineStart + base
-                                // 边界落在半个字中间：在两个字符位置间插值
-                                val x1 = lr.getHorizontalPosition(boundaryOffset, usePrimaryDirection = true)
-                                val x2 = lr.getHorizontalPosition(boundaryOffset + 1, usePrimaryDirection = true)
-                                x1 + (x2 - x1) * frac
-                            }
+                            val lineStart = lr.getLineStart(line)
+                            val boundaryX = karaokeRowBoundaryX(
+                                coveredInRow = coveredInRow,
+                                rowLength = rowLen,
+                                xOfOffset = { i ->
+                                    lr.getHorizontalPosition(lineStart + i, usePrimaryDirection = true)
+                                },
+                                rowRight = lr.getLineRight(line),
+                            )
 
                             clipRect(
                                 left = 0f,
@@ -290,7 +343,6 @@ internal fun KaraokeLineText(
                             ) {
                                 contentScope.drawContent()
                             }
-                            remaining -= take
                         }
                     }
             )

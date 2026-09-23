@@ -10594,6 +10594,81 @@ drawAccumMs += dtMs * (1f + frame.pulse * PULSE_DRAW)
 
 **版本**：v2.36.4（CI-only 改动，**不进 CHANGELOG** —— 免得改动已发布 release 的 notes 复算结果）
 
+### 10.178 v2.36.7 — 逐字歌词折行时高亮「倒带」（2026-09-23）
+
+**现象**（用户真机反馈）：一句歌词太长被排成 2~3 个**可视行**（折行）时，逐字模式下
+「第一折行没走完，出现一个返回的动画效果，然后走第二折行」。期望是**完整走完第一折行
+再继续第二折行**。手机 / TV 全模式都有（同一个渲染组件）。
+
+**根因**：`KaraokeLyricsView.kt` 的 `KaraokeLineText` 逐可视行裁剪时，行内边界用
+「相邻两个字符的 x 做线性插值」：
+
+```kotlin
+val boundaryOffset = lineStart + base          // 本行第 base 个字符
+val x1 = lr.getHorizontalPosition(boundaryOffset,     usePrimaryDirection = true)
+val x2 = lr.getHorizontalPosition(boundaryOffset + 1, usePrimaryDirection = true)
+x1 + (x2 - x1) * frac
+```
+
+`boundaryOffset + 1 == lineEnd`（边界落在**本行最后一个字**上）时，这个 offset 就是
+**软换行边界**。AOSP `android.text.Layout.getPrimaryHorizontal(offset)` 内部先
+`getLineForOffset(offset)`，而它的二分条件是 `getLineStart(guess) > offset`
+→ **边界 offset 归属下一行** → 返回的是**下一可视行行首的 x**。
+
+于是 `x2` 不再是「本行最后一个字的右缘」，而是**下一折行的左缘**。居中对齐
+（`LyricsView` 用 `TextAlign.Center`）时它远小于本行右缘 ⇒ 插值终点跑到本行左半边
+⇒ 边界随进度**向左倒带**，走满后才跳回本行右缘。
+
+⚠️ 放大器：逐字节奏是 `karaokePacingFraction(progress) = progress^0.6`（前快后慢），
+**句尾字耗时最长** —— 倒带正好发生在最后一个字上，窗口被显著拉长，肉眼非常明显。
+（若节奏是匀速，这一帧级回退大概率看不出来。）
+
+**修法**（`KaraokeLyricsView.kt`）：
+
+| 层 | 措施 |
+|---|---|
+| 行尾终点 | `base + 1 >= rowLength` 时插值终点改用本行右缘 `lr.getLineRight(line)`，不再调 `getHorizontalPosition(lineEnd)` |
+| 单调兜底 | `(x2 - x1).coerceAtLeast(0f)` —— 任何情况下边界都不允许回退（RTL / 极端对齐） |
+| 可测性 | 抽出两个纯函数：`karaokeRowCoverage(rowLengths, coveredChars)`（逐行覆盖比例，契约：前一行 < 1 时下一行必为 0f）与 `karaokeRowBoundaryX(coveredInRow, rowLength, xOfOffset, rowRight)` |
+
+**门禁**：`app/src/test/java/com/nasmusic/tv/ui/components/KaraokeRowHighlightTest.kt`
+（含**负向自证**：把「软换行边界返回下一行行首 x」这一 AOSP 行为如实模拟进 `xOfOffset`，
+断言①覆盖比例单调不减、②边界 x 单调不回退；同一套断言喂给旧写法 `legacyBoundaryX`
+必须判出倒带 —— 否则说明护栏空转）。
+
+⚠️ 同类写法排查结论：全项目 `getHorizontalPosition` **只有这一处**调用
+（`grep -rn "getHorizontalPosition" --include=*.kt app/src/main`）。
+
+**版本**：v2.36.6 → **v2.36.7**（versionCode 160 → 161）
+
+### 10.179 v2.36.7 — 手机竖屏全屏沉浸式播放页（2026-09-23）
+
+**需求**（用户）：竖屏播放页点击封面进入全屏沉浸式播放页 —— 上方封面按宽度占满、
+等比例高度；下方整块黑色显示歌词；封面下沿虚化渐变到黑，渐变区内**左对齐**显示
+歌曲名与艺术家；歌词最下方用线条显示播放进度（**不做进度控制**）；歌词支持长按跳转。
+
+**实现**：`ui/screens/NowPlayingScreen.kt` 新增私有组件 `PortraitImmersiveLyrics`，
+在 `NowPlayingPortrait` 内**所有 `remember` 之后**提前返回（见下「坑」）。
+
+| 段 | 做法 |
+|---|---|
+| ① 封面 | `BoxWithConstraints` 取 `coverHeight = min(maxWidth, maxHeight * 0.6)`；`CoverCarousel(contentScale = Crop)` 铺满（非方形图不变形）。高度上限 0.6 是极矮屏兜底，正常竖屏不触发 |
+| 下沿虚化 | 与横屏沉浸页（§10.156 的 `ImmersiveCoverHalf`）**同源三层**：原图 + 模糊副本（`Modifier.blur`，遮罩用 `verticalGradient(0.45→1.0)` + `BlendMode.DstIn`，需 `CompositingStrategy.Offscreen`）+ 渐黑幕（`0f 透明 → 0.5f 黑 72% → 1f 纯黑`）。⚠️ `Modifier.blur` 在 API < 31 是 no-op，此时自动退化为纯渐变（不报错） |
+| 歌名/艺术家 | 落在渐黑带内、`Alignment.BottomStart` + 20dp 内边距 → **左对齐**；白色粗体标题 + 主题色艺术家。放这里的原因同横屏页：该区域底色确定是暗的，亮色文字不必担心与任意封面撞色 |
+| ② 歌词 | `weight(1f)` 占满剩余高度；`LyricsView(fadeMaskColor = Color.Black, longPressSeekEnabled = true, onSeekToLine = onSeek)` —— 上下渐隐与纯黑底无缝，长按激活跳转复用现有实现 |
+| ③ 进度线 | 复用 `PortraitThinProgress`（2dp，只显示不接收手势） |
+| 出口 | 点击封面 / 左上角 ⌄（`PortraitTopBarButton`，56dp 触摸目标）/ 系统 BACK（`MainActivity` Level 0 已处理，系统栏在该状态下隐藏） |
+
+⚠️ **坑（本版差点踩）**：沉浸分支必须放在 `NowPlayingPortrait` 的**所有 `remember` 之后**。
+`mode` / `pageFraction` / `dragging` 等 pager 状态若写在提前返回之后，进出沉浸态时
+会被重新初始化 —— 退出沉浸就回到封面页，看起来像「状态丢失」。
+（同理：`NowPlayingScreen` 顶部的 `showKaraoke` 分支也是提前返回，那条路径没有跨分支状态，无此问题。）
+
+⚠️ 与横屏沉浸页的差异：横屏是**左半封面 + 右半歌词**、信息**竖排右对齐**；
+竖屏是**上封面 + 下歌词**、信息**横排左对齐**。两者共用 `isImmersiveMode` 这一个状态位。
+
+**版本**：v2.36.6 → **v2.36.7**（versionCode 160 → 161）
+
 ### 10.152 v2.32.3 — T5：删除死代码 `VocalRemovalProcessor.kt`（算法先归档，2026-09-14）
 
 **来源**：`docs/archive/code-review-full-report-2026-09-13.md` §T5 / `docs/archive/code-review-2026-09-03.md` §P2。文件 348 行，全项目**零调用方**（`PlaybackService.kt:207` 实际 `val vocalRemovalProcessor = SpectralMaskProcessor()`——变量名是历史遗留，类型早就换过了；`PlayerManager.setVocalRemovalProcessor()` 的形参类型同样是 `SpectralMaskProcessor`）。

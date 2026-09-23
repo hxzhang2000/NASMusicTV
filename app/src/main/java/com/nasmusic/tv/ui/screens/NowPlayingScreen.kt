@@ -1400,12 +1400,36 @@ private fun NowPlayingPortrait(
 
     val isRadio = currentSong?.networkSource?.isRadioSong() == true
 
+    // ── 全屏沉浸式播放页（v2.36.7：点击封面进入）──
+    // 版式：上方封面按宽度 1:1 等比铺满、下沿虚化渐黑；下方纯黑歌词区；
+    // 最底部一条细线显示播放进度（只显示、不做进度控制）。
+    // ⚠️ 必须放在**所有 remember 之后**：进出沉浸态时 mode / pageFraction 等状态不能丢，
+    //    否则退出沉浸会回到封面页（早期写在 remember 之前会踩这个坑）。
+    if (isImmersiveMode) {
+        PortraitImmersiveLyrics(
+            currentSong = currentSong,
+            isPlaying = isPlaying,
+            isRadio = isRadio,
+            progressMs = progressMs,
+            durationMs = durationMs,
+            lyrics = lyrics,
+            highlightMode = highlightMode,
+            lyricsFontScale = lyricsFontScale,
+            coverCandidates = coverCandidates,
+            coverFilterEnabled = coverFilterEnabled,
+            coverFilterBlurRadius = coverFilterBlurRadius,
+            onSeek = onSeek,
+            onExit = onToggleImmersive,
+        )
+        return
+    }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
             .background(
-                if (isImmersiveMode) Brush.verticalGradient(listOf(Color.Black, Color.Black))
-                else Brush.verticalGradient(listOf(NasMusicColors.Background, Color(0xFF0A1020)))
+                // 沉浸态已在上方提前返回，这里只剩普通态背景
+                Brush.verticalGradient(listOf(NasMusicColors.Background, Color(0xFF0A1020)))
             )
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
@@ -1886,6 +1910,220 @@ private fun NowPlayingPortrait(
                 onDismiss = { showQualityDialog = false },
             )
         }
+    }
+}
+
+// =====================================================================================
+// v2.36.7 手机竖屏「全屏沉浸式播放页」
+//
+// 入口：竖屏封面页点击封面（`onToggleImmersive`）。出口：点击封面 / 左上角 ⌄ / 系统 BACK
+//      （BACK 由 `MainActivity` Level 0 处理，系统栏在该状态下被隐藏）。
+//
+// 版式（自上而下三段，整页纯黑底）：
+//   ① 封面：宽度铺满 + 1:1 等比高度（[ContentScale.Crop]，非方形图不变形），
+//      下沿「虚化副本 + 渐黑」带；带内**左对齐**显示歌曲名（白粗）/ 艺术家（主题色）。
+//   ② 歌词：占据剩余全部高度，纯黑底（`fadeMaskColor = Black` 让上下渐隐与背景无缝），
+//      **长按激活跳转**（与歌词页同款：长按 → 虚线指示 + 拖动选行 + 松手跳转）。
+//   ③ 底部一条 2dp 细线显示播放进度：**只显示、不做进度控制**（seek 交给歌词长按跳转）。
+// =====================================================================================
+
+/** 竖屏沉浸页：封面下沿虚化半径默认值（未开启「封面滤镜」时使用），与横屏沉浸页同口径。 */
+private const val PORTRAIT_IMMERSIVE_BLUR_DP = 24f
+
+/** 竖屏沉浸页：封面高度上限（占整页高度比例）——极矮屏上给歌词留出空间。 */
+private const val PORTRAIT_IMMERSIVE_COVER_MAX_RATIO = 0.6f
+
+/** 竖屏沉浸页：「虚化 + 渐黑」带的高度（占封面高度比例）。 */
+private const val PORTRAIT_IMMERSIVE_FADE_BAND_RATIO = 0.5f
+
+/**
+ * 竖屏全屏沉浸式播放页（见文件内 v2.36.7 说明块）。
+ *
+ * @param onSeek 歌词长按跳转的回调（跳到目标行起始时间播放）
+ * @param onExit 退出沉浸（点击封面 / 左上角 ⌄）
+ */
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+private fun PortraitImmersiveLyrics(
+    currentSong: Song?,
+    isPlaying: Boolean,
+    isRadio: Boolean,
+    progressMs: Long,
+    durationMs: Long,
+    lyrics: Lyrics?,
+    highlightMode: LyricsHighlightMode,
+    lyricsFontScale: Float,
+    coverCandidates: List<String>,
+    coverFilterEnabled: Boolean,
+    coverFilterBlurRadius: Float,
+    onSeek: (Long) -> Unit,
+    onExit: () -> Unit,
+) {
+    // 虚化半径沿用用户的「封面滤镜」设置；未开启时给一个温和的默认值
+    val blurDp = if (coverFilterEnabled && coverFilterBlurRadius > 0f) {
+        coverFilterBlurRadius
+    } else {
+        PORTRAIT_IMMERSIVE_BLUR_DP
+    }
+    // 下沿渐黑：0.5 处仍半透明 → 底部纯黑。与横屏沉浸页同一套口径 ——
+    // 该带内底色**确定是暗的**，文字才能固定用亮色，不必担心与任意封面撞色。
+    val bottomFadeBrush = remember {
+        Brush.verticalGradient(
+            0f to Color.Transparent,
+            0.5f to Color.Black.copy(alpha = 0.72f),
+            1f to Color.Black,
+        )
+    }
+    // 模糊副本的显现遮罩：0.45 处不可见 → 底部完全显现（DstIn 只保留不透明区域）
+    val blurMaskBrush = remember {
+        Brush.verticalGradient(
+            0.45f to Color.Transparent,
+            1f to Color.Black,
+        )
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black),
+    ) {
+        // ── ① 封面：宽度铺满 + 1:1 等比高度 ──
+        BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+            val coverHeight = minOf(maxWidth, maxHeight * PORTRAIT_IMMERSIVE_COVER_MAX_RATIO)
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(coverHeight)
+                    // 点击封面退出沉浸（与横屏沉浸页的交互一致）
+                    .clickable(onClick = onExit),
+            ) {
+                // 封面原图（清晰主体）
+                key(currentSong?.id) {
+                    CoverCarousel(
+                        coverCandidates = coverCandidates,
+                        isPlaying = isPlaying,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                }
+
+                // 下沿虚化层（模糊副本 + 垂直渐变遮罩）
+                // ⚠️ `Modifier.blur` 在 API < 31 上是 no-op，此时该层自动退化为纯渐变、
+                //    不会报错（电视 SDK 22 与部分老手机即如此）。
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        // 遮罩需要离屏层，否则 DstIn 会作用到已绘制的整屏内容
+                        .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
+                        .drawWithContent {
+                            drawContent()
+                            drawRect(brush = blurMaskBrush, blendMode = BlendMode.DstIn)
+                        },
+                ) {
+                    key(currentSong?.id) {
+                        CoverCarousel(
+                            coverCandidates = coverCandidates,
+                            isPlaying = isPlaying,
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .blur(blurDp.dp),
+                        )
+                    }
+                }
+
+                // 下沿渐变到黑
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .fillMaxWidth()
+                        .height(coverHeight * PORTRAIT_IMMERSIVE_FADE_BAND_RATIO)
+                        .background(bottomFadeBrush),
+                )
+
+                // 渐变带内：左对齐歌曲名 / 艺术家
+                val songTitle = currentSong?.title?.takeIf { it.isNotBlank() }
+                val songArtist = currentSong?.artist?.takeIf { it.isNotBlank() }
+                Column(
+                    modifier = Modifier
+                        .align(Alignment.BottomStart)
+                        .fillMaxWidth()
+                        .padding(start = 20.dp, end = 20.dp, bottom = 16.dp),
+                ) {
+                    if (songTitle != null) {
+                        Text(
+                            text = songTitle,
+                            color = Color.White,
+                            fontSize = FontSize.title(),
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            textAlign = TextAlign.Start,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
+                    if (songArtist != null) {
+                        Text(
+                            text = songArtist,
+                            color = NasMusicColors.Primary,
+                            fontSize = FontSize.small(),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            textAlign = TextAlign.Start,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
+                }
+
+                // 左上角退出按钮（⌄，与竖屏顶栏「收起」同款图标语义）
+                Box(modifier = Modifier.align(Alignment.TopStart).padding(4.dp)) {
+                    PortraitTopBarButton(
+                        label = "\u2304",
+                        contentDescription = stringResource(R.string.common_back),
+                        onClick = onExit,
+                    )
+                }
+            }
+        }
+
+        // ── ② 歌词区：纯黑，占满剩余高度 ──
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f),
+        ) {
+            if (isRadio) {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Text(
+                        text = stringResource(R.string.player_radio_live),
+                        fontSize = FontSize.title(),
+                        fontWeight = FontWeight.Bold,
+                        color = NasMusicColors.Primary,
+                        textAlign = TextAlign.Center,
+                    )
+                }
+            } else {
+                LyricsView(
+                    lyrics = lyrics,
+                    currentTimeMs = progressMs,
+                    highlightMode = highlightMode,
+                    isPlaying = isPlaying,
+                    fontSizeMultiplier = lyricsFontScale,
+                    // 纯黑底 → 上下渐隐用同色遮罩，边缘与背景无缝
+                    fadeMaskColor = Color.Black,
+                    onSeekToLine = onSeek,
+                    // 手机竖屏：长按进入歌词跳转模式（规避与纵向浏览的手势冲突）
+                    longPressSeekEnabled = true,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(horizontal = 12.dp),
+                )
+            }
+        }
+
+        // ── ③ 底部细进度线：只显示播放进度，不做进度控制 ──
+        PortraitThinProgress(progressMs = progressMs, durationMs = durationMs)
+        Spacer(modifier = Modifier.height(8.dp))
     }
 }
 
