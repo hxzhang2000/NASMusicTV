@@ -1520,13 +1520,16 @@ when {
 
 ### 14.1 文件清单
 
-#### 新增（24 个 Kotlin 源文件 + 1 个模型资产）
+#### 新增（25 个 Kotlin 源文件 + 1 个模型资产）
 
-> ⚠️ 本表在实现期补了 2 项（原写「22 个」）：
+> ⚠️ 本表在实现期补了 3 项（原写「22 个」）：
 > ① `PhotoWallAvailability.kt` —— §7.4「唯一新增逻辑」那三行派生代码**单独成文件**
 > （纯函数可单测 + 收口判定），阶段 7 补；
 > ② `PhotoWallPrefs.kt` —— `visualizer` 分组的既有写法就是「键在 `AppPreferences` +
-> 一个薄委托类」，只加键不加委托类反而不一致，阶段 8 补。
+> 一个薄委托类」，只加键不加委托类反而不一致，阶段 8 补；
+> ③ `PhotoWallAccessPolicy.kt` —— §9.6 的三条授权判据（回弹 / 需不需要申请 / 目录是否失效）
+> **写错之后编译过、lint 过、只在真机上以「功能静默失效」出现**（如风险 R27），
+> 必须与 `Context` / DataStore 解耦才能被单测直接钉住，阶段 9 补。
 
 | # | 路径 | 预估 | 内容 |
 |---|---|---|---|
@@ -1554,16 +1557,19 @@ when {
 | 22 | `ui/screens/settings/PhotoWallSettingsSection.kt` | ~450 | 设置分区 |
 | 23 | `visualizer/photo/PhotoWallAvailability.kt` | ~50 | 三来源开关之「或」派生（§7.4 **唯一新增逻辑**） |
 | 24 | `data/prefs/PhotoWallPrefs.kt` | ~50 | 照片墙域子 Prefs（薄委托，**只提供 setter**） |
-| 25 | `app/src/main/assets/models/yunet_face.onnx` | 337 KB | 模型（⚠️ **`assets/` 目录当前不存在，需新建**） |
+| 25 | `backend/photo/PhotoWallAccessPolicy.kt` | ~60 | 授权判据（纯逻辑：回弹 / 需申请 / 目录失效，§9.6） |
+| 26 | `app/src/main/assets/models/yunet_face.onnx` | 337 KB | 模型（⚠️ **`assets/` 目录当前不存在，需新建**） |
 
-#### 修改（16 个）
+#### 修改（17 个）
 
-> ⚠️ 实现期补了 3 项（原写「13 个」）：
+> ⚠️ 实现期补了 4 项（原写「13 个」）：
 > ① `ui/components/AppRoot.kt` —— 它才是 `VisualizerStage` 的**唯一调用点**，
 > 阶段 7 新增的参数必须由它传下去；
 > ② `ui/components/branches/SettingsBranch.kt` —— `SettingsScreen` 的**唯一调用点**，
 > `photoWallActions` 必须在这里接上 `prefs.photoWall.*`（阶段 8）；
-> ③ `data/prefs/BackupGson.kt` —— 新枚举要登记进 `resolveLegacyEnumName`（阶段 8）。
+> ③ `data/prefs/BackupGson.kt` —— 新枚举要登记进 `resolveLegacyEnumName`（阶段 8）；
+> ④ `ui/viewmodel/MainViewModel.kt` —— 照片墙授权提示要转发到既有的 `errorMessage`
+> 顶部提示通道（阶段 9）。
 
 | # | 文件 | 改动 | 关键行号（当前） |
 |---|---|---|---|
@@ -1581,6 +1587,7 @@ when {
 | 9 | `ui/screens/settings/SettingsSection.kt` | 枚举 +`PHOTO_WALL` | 枚举 **32–42 行** |
 | 10 | `util/PermissionHelper.kt` | +`hasPhotoPermission` / `getPhotoPermissions` | 现有 `hasLocalMusicPermission` **20 行** |
 | 11 | `ui/MainActivity.kt` | +照片目录选择 launcher（照 `exportTreeLauncher`）+ 三态刷新 | `exportTreeLauncher` **78–83 行**；权限请求 **178–200 行** |
+| 11b | `ui/viewmodel/MainViewModel.kt` | 收集 `visualizerVM.photoAccessNotice` → `errorMessage`（复用既有顶部提示通道） | `init` 收集器 **2440 行** 附近 |
 | 12 | `backend/local/StorageMonitor.kt` | **G7 修复** | 短路 **103–106 行**；`intent.data` 日志 **64 行** |
 | 13 | `app/src/test/java/com/nasmusic/tv/data/model/VisualizerThemeTest.kt` | **5 处 `35` → `36`**；`selectable` 改函数调用 | 断言在 **53–56 / 60–70 行** |
 
@@ -2068,6 +2075,7 @@ interface PhotoFaceDao {
 | G10 | `PhotoBufferBudgetTest` | 双缓冲 + LRU 的 `estimatedBytes` ≤ 预算 | 把 `maxCached` 调大 ⇒ 断言超预算 |
 | **G11** | `KotlinBlockCommentBalanceTest` | **源码无未闭合块注释**（见下「实现期新增」） | 在 KDoc 里写「斜杠紧邻星号」⇒ 断言判出未闭合 |
 | **G12** | `PhotoWallPrefsTest`（+`BackupGsonTest` 扩） | 17 个字段默认值对齐 §7.3；读写往返一致；越界时长写入侧被钳制；**老备份（缺 17 键）反序列化 + 导入不抛异常** | 把任一 `AppSettings` 字段的默认值删掉 ⇒ `BackupGsonTest` 的「老备份缺 17 键保持默认」整组变红（证明「必须带默认值」这条约束真的被判住） |
+| **G13** | `PhotoWallAccessPolicyTest`（+`PhotoPermissionStateTest`） | ① 回弹**只**对 `DENIED` 生效；② `PARTIAL` 算**可读**且才需要「重新选择照片」入口；③ 目录 URI 只在**不在** `persistedUriPermissions` 里时才清 | 同时如实模拟**两种**错法：① 二态判定（把 `PARTIAL` 当未授权）⇒ 断言**恰好**在 `PARTIAL` 一处分歧；② 漏了 legacy 态（`state != FULL`）⇒ 断言在 `PARTIAL` + `FULL_LEGACY` 两处分歧。分歧为 0 ⇒ 判门禁空转。这条正是风险 R27（Android 14+「仅选择照片」用户重启后被误回弹）的靶子。⛔ ② 是首版门禁跑红（实测 2 处分歧）后才补上的 —— 负向自证的建模必须如实 |
 
 ⚠️ **G11 是实现期新增（2026-09-23，阶段 1）** —— 不在原设计里。理由：Kotlin 块注释**支持嵌套**，
 KDoc 里出现「斜杠紧邻星号」（最常见是路径通配符）会开一层永不闭合的注释、吞掉其后全部代码。
@@ -2177,7 +2185,7 @@ JAVA_HOME="C:/Program Files/Android/Android Studio/jbr" \
 | 6 随机抽取与时钟 | `feat(visualizer): …` | 4 | ✅ |
 | 7 PhotoRenderer 与 PHOTO_WALL | `feat(visualizer): …` | 5 | ✅ |
 | 8 设置分区 | `feat(settings): …` | 4 | ✅ |
-| 9 权限与 SAF 目录 | `feat(photo): …` | 4 | ⬜ |
+| 9 权限与 SAF 目录 | `feat(photo): …` | 4 | ✅ |
 | 10 Controller 与帧循环接线 ★ | `feat(photo): …` | 4 | ⬜ |
 | 11 人脸检测 | `feat(photo): …` | 4 | ⬜ |
 | 12 P1 转场至 43 种 | `feat(photo): …` | 3 | ⬜ |
@@ -2692,20 +2700,115 @@ JAVA_HOME="C:/Program Files/Android/Android Studio/jbr" \
 
 #### 阶段 9 —— 照片权限与 SAF 目录导入通道　`提交 9`　**4 项**
 
-- [ ] **T9.1** Manifest + 权限工具 + 三态判定
+- [x] **T9.1** Manifest + 权限工具 + 三态判定 ✅ 2026-09-23
   - Manifest +`READ_MEDIA_IMAGES` +`READ_MEDIA_VISUAL_USER_SELECTED`
   - `PermissionHelper.hasPhotoPermission` / `getPhotoPermissions`（照 `hasLocalMusicPermission`，**20 行**）
   - ⛔ 三态判定（`Full` / `Partial` / `FullLegacy` / `Denied`，§9.6 写法）
   - **验收**：`aapt2 dump badging` 可见；Android 14 选「仅选择照片」→ 判为 `Partial` 而非 `Denied`
-- [ ] **T9.2** ⛔ 授权时机与刷新（两处最容易做错）
+  - **实际**：`PermissionHelper` 的四个成员（`PhotoPermissionState` 枚举 /
+    `photoPermissionState` / `hasPhotoPermission` / `getPhotoPermissions`）**阶段 1 就已写好**
+    （`2804594`，当时为了让 `MediaStorePhotoSource.status()` 能判部分授权），
+    本项只补 Manifest 两行 + 把三态判定**钉进门禁**
+  - **验收复核**：新建 `PhotoPermissionStateTest`（**7 例**，Robolectric）——
+    SDK 34 下「只授予 `READ_MEDIA_VISUAL_USER_SELECTED`」必须判 `PARTIAL`（**不是** `DENIED`）、
+    「全部允许」判 `FULL`、「全部拒绝」判 `DENIED`、`getPhotoPermissions()` 返回 2 项；
+    SDK 30 下 `READ_EXTERNAL_STORAGE` 判 `FULL_LEGACY`
+  - ⚠️ **实现期偏差 1（SDK 档位受限）**：本机 Robolectric 只缓存了 **SDK 34 / SDK 30** 两个
+    `android-all` jar（`~/.m2/repository/org/robolectric/android-all-instrumented/`），
+    **没有 SDK 33** ⇒ 「API 33 是两态、没有部分授权」那一支**本机跑不了**，
+    只能靠 `photoPermissionState` 的 `when` 分支结构 + 代码审查保证。
+    ⛔ 想补这一档必须先联网下载 `android-all-instrumented-13-*`，
+    不要在离线环境下硬加（会直接把门禁搞红）
+  - ⚠️ **实现期偏差 2（`aapt2 dump badging` 的核对口径）**：它需要**先有 APK**，
+    而本阶段没有为一条核对去跑一次完整打包。实测改为核对
+    **合并后的 Manifest**（`app/build/intermediates/merged_manifests/debug/processDebugManifest/AndroidManifest.xml`）
+    —— 它正是打进 APK 的那一份，等价性比「打一次包再 dump」只差打包步骤本身。
+    **实测结果**：`READ_MEDIA_AUDIO` / `READ_MEDIA_IMAGES` /
+    `READ_MEDIA_VISUAL_USER_SELECTED` 三条齐全 ✅
+    （⚠️ `merged_manifests/release/` 那份是阶段 9 之前的旧产物，
+    会在阶段 10 出 release 包时重新生成 —— **不要拿它当结论**）
+- [x] **T9.2** ⛔ 授权时机与刷新（两处最容易做错）✅ 2026-09-23
   - ⛔ 授权**由「图库」开关驱动**（**不是** `onCreate` 无条件请求）；拒绝 → 开关**自动回弹为关**
   - ⛔ `onResume` 刷新权限状态（**不能只在启动判一次**）
   - **验收**：真机拒绝后开关变关；系统设置里撤销 → 回到应用即回弹并提示
-- [ ] **T9.3** 「部分授权」入口 + 目录选择 launcher
+  - **实际**：判据抽成纯对象 `backend/photo/PhotoWallAccessPolicy.kt`（新增文件），
+    动作落在 `VisualizerViewModel`：
+    `setGallerySourceEnabled` / `requestGalleryPermission` / `onPhotoPermissionResult` /
+    `refreshPhotoAccess` / `applyGalleryRollback`
+  - ⚠️ **实现期偏差 3（判据与动作分离，且判据单独成文件）**：§14.1 的清单里没有这个文件
+    （本项原写「改 1 / 10 / 11」三处）。抽出来的理由是这三条判据
+    **写错之后编译过、lint 过、只在真机上以「功能静默失效」出现**（见下方偏差 4），
+    必须能被单测直接钉住 ⇒ 判据必须与 `Context` / DataStore 解耦
+  - ⚠️ **实现期偏差 4（回弹判据的靶子 = 风险 R27，且实测抓出两种错法）**：门禁
+    `PhotoWallAccessPolicyTest`（**8 例**）含一条**负向自证**，同时钉住**两种**错法：
+    ① **二态判定**（只认「全部允许」为已授权，把 `PARTIAL` 当未授权）⇒ 必须**恰好**在
+    `PARTIAL` 一处与正确判据分歧 —— 这正是 Android 14+「仅选择照片」用户
+    **重启后被误回弹**的成因；
+    ② **漏了 legacy 态**（把 API ≤32 的 `FULL_LEGACY` 也当成未授权）⇒ 必须在
+    `PARTIAL` + `FULL_LEGACY` 两处分歧。
+    ⛔ **② 是首版门禁跑红之后才补上的**：首版只按「`state != FULL`」建模，断言「恰好 1 处分歧」，
+    实测跑出 **2 处** ⇒ 发现 `FULL_LEGACY` 也在里面。这说明负向自证的**建模必须如实**：
+    把「API ≤32 查 `READ_EXTERNAL_STORAGE`」这一路也算作已授权，
+    否则测的就不是真实错法而是另一个假想错法
+  - ⚠️ **实现期偏差 5（提示通道复用既有 `errorMessage`）**：`VisualizerViewModel` 只发
+    `PhotoAccessNotice` **枚举**（数据层不产出文案，项目硬约定），
+    由 `MainViewModel.init` 取 `getString(notice.messageRes)` 后走**既有的**
+    顶部提示通道（与下载域提示同一条路径）⇒ 不新增任何提示 UI
+  - ⚠️ **实现期偏差 6（`onResume` 之外的**第二条**回弹路径）**：`onResume` 与 DataStore 的
+    首次发射**谁先到不确定** ⇒ 在 `prefs.appSettings` 的收集器里**也**跑一次
+    `applyGalleryRollback`（带 `galleryRollbackPending` 去重，避免同一轮重复提示）。
+    两条路互补，缺一条就会出现「冷启动时开关开着但权限已撤销」漏判
+- [x] **T9.3** 「部分授权」入口 + 目录选择 launcher ✅ 2026-09-23
   - 「部分授权」态显示**「重新选择照片」**入口
   - 照片目录选择 launcher（照 `exportTreeLauncher`，**78–83 行**）+ `takePersistableUriPermission`
   - **验收**：点击唤起系统 reselection UI；重启应用无需重选
-- [ ] **T9.4** **阶段完成** —— 真机三连：拒绝回弹 / 选内部存储被拒 / 选根目录被系统拦（§14.6 第 8–11 条）
+  - **实际**：`MainActivity` +2 个 `registerForActivityResult`
+    （`RequestMultiplePermissions` / `OpenDocumentTree`），在 `onCreate` 里**注入**给
+    `visualizerVM`（与既有 `exportCoordinator.treePickLauncher` 同款做法 ——
+    ViewModel 不能自己注册 launcher）；`onPhotoDirectoryPicked` 里做卷 ID 校验 +
+    `takePersistableUriPermission(READ)` + 写 `photoWallDirUri`
+  - ⚠️ **实现期偏差 7（回调结果一律忽略，重新读三态）**：权限回调的
+    `Map<String, Boolean>` **不参与判定** —— Android 14+「仅选择照片」下
+    `READ_MEDIA_IMAGES` 可能是 `granted` 却只是会话级授予，拿回调当判据会把部分授权
+    当成完全授权。一律 `PermissionHelper.photoPermissionState(...)` 重读
+  - ⚠️ **实现期偏差 8（只申请 READ，不申请 WRITE）**：导出用的 `exportTreeLauncher`
+    申请 `READ|WRITE`（它要写盘），照片墙**只读** ⇒ 只申请
+    `FLAG_GRANT_READ_URI_PERMISSION`（最小权限）。`OpenDocumentTree` 本就同时授予两者，
+    READ 是其合法子集
+  - ⚠️ **实现期偏差 9（目录授权失效的处理是「清空设置」而不是「标记不可用」）**：
+    §9.4 只说「启动时检查 `persistedUriPermissions`」。实测取舍：**清空** `photoWallDirUri` ——
+    否则设置页会显示一个**读不到的**目录 URI（用户以为已经选好了）。
+    清空前用 `runCatching` 兜住 `ContentResolver` 异常（异常时**不清**，宁可留旧值）
+  - ⚠️ **实现期偏差 10（先弹说明这一步落地为 `ConfirmDialog`）**：§9.4 建议
+    「先弹一句说明再触发系统对话框」。实现为 `PhotoWallSettingsSection` 内的
+    `androidx.compose.ui.window.Dialog` + 既有 `ConfirmDialog` 组件；
+    ⚠️ 必须包 `Dialog`（它自建窗口）—— 直接把 `ConfirmDialog` 的 `fillMaxSize()` 放进
+    `LazyColumn` 的 item 里会被无限高约束压成列表内一块，不是弹窗
+  - ⚠️ **实现期偏差 11（`SettingsScreen` 仍只加了 1 个参数）**：运行时值（权限三态、
+    目录拒绝原因）走新引入的 `PhotoWallRuntimeState`（作为 `SettingsScreen` 的
+    **一个**新参数，默认值可省）。阶段 10/11 的照片数 / 人脸进度**往这个 data class 里加字段**，
+    **不再动签名** —— 这正是阶段 8 那句「通过 `PhotoWallSettingsState` 的默认值扩展」
+    的本意，只是把「扩展点」提到了一个更明确的类型上
+  - ⚠️ **实现期偏差 12（`SettingsScreen` 的分区行数 22 → 23）**：
+    「部分授权」态多出一行「重新选择照片」+ 一行说明；
+    「选到内部存储被拒」时在目录行下方多出一行拒绝原因（§6.3 要求**当场给理由**，
+    SAF 选择器无法限制可选范围，用户点到内部存储是常态）
+- [x] **T9.4** **阶段完成** —— 真机三连：拒绝回弹 / 选内部存储被拒 / 选根目录被系统拦（§14.6 第 8–11 条）✅ 2026-09-23
+  - **代码就绪，真机项 ⏳ 待用户复验**（§14.6 项目约定：产物就绪后由用户安装，不自动运行应用）
+  - **本机可验部分**：Manifest 两行权限已加（`READ_MEDIA_IMAGES` /
+    `READ_MEDIA_VISUAL_USER_SELECTED`），并核对过**合并后的 debug Manifest** 三条权限齐全；
+    三态判定由 `PhotoPermissionStateTest` 7 例钉住；
+    回弹 / 目录校验判据由 `PhotoWallAccessPolicyTest` 8 例钉住（含**两种错法**的负向自证）
+  - ⏳ **待用户真机复验**：§14.6 手机第 8–12 条（拒绝回弹 / 内部存储被拒 /
+    子目录重启免重选 / 根目录被系统拦 / Android 14「仅选择照片」不被误回弹）
+  - **门禁**：`testDebugUnitTest` **1108 例 / 107 类 / 0 失败 0 错误**；
+    `lintDebug` **0 Error / 279 Warning**
+  - **涨幅核对**（阶段 8 基线 1093 / 105 → 1108 / 107，**+15 例 / +2 类**）：
+    `PhotoWallAccessPolicyTest` 8 例（新类）+ `PhotoPermissionStateTest` 7 例（新类）= **15** ✅
+    逐项对上，无并发会话混入
+  - ⚠️ **阶段 9 的门禁是「纯判据 + Robolectric 权限」两层**：
+    前者证明「判据对」，后者证明「`checkSelfPermission` 的读法对」。
+    两者都过仍**不能**替代真机 —— 真机上还多一层「系统对话框实际给什么权限」
 
 #### 阶段 10 —— PhotoWallController 与帧循环接线　`提交 10`　★ 首个可上机版本　**4 项**
 

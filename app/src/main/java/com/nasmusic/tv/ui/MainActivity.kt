@@ -86,6 +86,27 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    // ── 照片墙（阶段 9，§9）─────────────────────────────────────────────────
+    // ⛔ 权限对话框**不在这里触发** —— 它由图库开关驱动（§6.2 / §9.4 官方要求：
+    //    "Request these permissions when the app needs storage access, instead of at startup."）。
+    //    本字段只负责「注册 + 把结果转交」，绝不放进 onCreate 里无条件 launch。
+
+    /** 照片权限对话框结果 */
+    private val photoPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { _: Map<String, Boolean> ->
+        // ⛔ 刻意**忽略**回调里的 Map：Android 14+「仅选择照片」下 `READ_MEDIA_IMAGES`
+        // 可能是 granted 却只是**会话级**授权（§9.6）⇒ 一律以重新读取的三态为准。
+        viewModel.visualizerVM.onPhotoPermissionResult()
+    }
+
+    /** 照片目录选择器（§6.3 路线 B）：与导出同款契约，结果走照片墙自己的通道 */
+    private val photoDirectoryLauncher = registerForActivityResult(
+        ActivityResultContracts.OpenDocumentTree()
+    ) { uri: Uri? ->
+        viewModel.visualizerVM.onPhotoDirectoryPicked(uri)
+    }
+
     /**
      * 在每次 Activity 创建（含 recreate）时应用存储的语言设置。
      * resources.updateConfiguration() 仅影响 Application 级别资源，
@@ -208,6 +229,18 @@ class MainActivity : ComponentActivity() {
         // SAF 树选择器（§8.8.4）：注入到 ExportCoordinator，导出时启动系统文件夹选择器
         (application as NasMusicApp).exportCoordinator.treePickLauncher = {
             exportTreeLauncher.launch(null)
+        }
+
+        // 照片墙权限链路（阶段 9）：ViewModel 不能自己 registerForActivityResult，
+        // 只能由 Activity 注入（与上一行的导出做法完全一致）。
+        // ⚠️ 这里只是**接线**，不发起任何请求 —— 请求由「图库」开关触发（§6.2）。
+        viewModel.visualizerVM.photoPermissionLauncher = {
+            photoPermissionLauncher.launch(
+                com.nasmusic.tv.util.PermissionHelper.getPhotoPermissions()
+            )
+        }
+        viewModel.visualizerVM.photoDirectoryLauncher = {
+            photoDirectoryLauncher.launch(null)
         }
 
         setContent {
@@ -499,6 +532,15 @@ class MainActivity : ComponentActivity() {
         super.onResume()
         // Android TV: 主动请求窗口焦点
         window.decorView.requestFocus()
+        // 阶段 9（§6.2 / §9.6）：权限可能在 onStart / onResume 之间被用户改掉（App 不重启）
+        // ⇒ 每次回到前台都重判三态：撤销了就把「图库」开关回弹并提示，
+        //   SAF 目录授权失效就清掉目录设置（否则设置页显示「已选目录」却读不到）。
+        // ⚠️ 不能只在启动判一次 —— 那正是官方点名要避免的写法。
+        try {
+            viewModel.visualizerVM.refreshPhotoAccess()
+        } catch (e: Exception) {
+            AppLog.w("MainActivity", "refreshPhotoAccess failed", e)
+        }
     }
 
     override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {

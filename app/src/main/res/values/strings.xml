@@ -302,6 +302,12 @@
     <string name="settings_photo_wall_sources">照片来源</string>
     <string name="settings_photo_wall_gallery">图库</string>
     <string name="settings_photo_wall_gallery_desc">系统相册；打开后才会申请照片权限</string>
+    <string name="settings_photo_wall_gallery_partial">当前仅可访问你选中的照片</string>
+    <string name="settings_photo_wall_reselect">重新选择照片</string>
+    <string name="settings_photo_wall_reselect_desc">再次唤起系统选择界面，可增选或改选照片</string>
+    <string name="settings_photo_wall_gallery_intro_title">启用图库</string>
+    <string name="settings_photo_wall_gallery_intro_msg">照片墙需要读取设备上的照片。接下来会弹出系统权限对话框，请选择「允许」。</string>
+    <string name="settings_photo_wall_gallery_intro_confirm">继续</string>
     <string name="settings_photo_wall_external">外接存储</string>
     <string name="settings_photo_wall_external_desc">USB 盘 / SD 卡（不含内部存储）</string>
     <string name="settings_photo_wall_jellyfin">Jellyfin 照片库</string>
@@ -349,6 +355,16 @@
     <string name="settings_photo_wall_breathe">随低频呼吸</string>
     <string name="settings_photo_wall_breathe_desc">低频持续时缓慢明暗呼吸</string>
     <string name="settings_photo_wall_seconds">%1$s 秒</string>
+
+    <!-- 照片墙授权提示（阶段 9，§9）：由 MainViewModel 转发到顶部提示通道 -->
+    <string name="photo_wall_notice_gallery_denied">未授予照片权限，图库来源已关闭</string>
+    <string name="photo_wall_notice_gallery_revoked">照片权限已被撤销，图库来源已关闭</string>
+    <string name="photo_wall_notice_gallery_partial">已获得部分照片访问权限（仅你选中的照片）</string>
+    <string name="photo_wall_notice_dir_revoked">照片目录的授权已失效，请重新选择目录</string>
+    <string name="photo_wall_notice_dir_internal">请选择 U 盘或 SD 卡上的文件夹（不支持内部存储）</string>
+    <string name="photo_wall_notice_dir_malformed">该目录不可用，请重新选择</string>
+    <string name="photo_wall_notice_dir_empty">未选择目录</string>
+    <string name="photo_wall_notice_dir_unavailable">当前设备没有可用的文件选择器</string>
 
     <string name="settings_download">下载</string>
     <string name="settings_download_basic">下载设置</string>

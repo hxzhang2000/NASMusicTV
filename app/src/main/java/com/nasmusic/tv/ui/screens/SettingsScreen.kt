@@ -81,6 +81,7 @@ import com.nasmusic.tv.ui.screens.settings.NetworkMusicSettingsState
 import com.nasmusic.tv.ui.screens.settings.PlayerSettingsActions
 import com.nasmusic.tv.ui.screens.settings.PlayerSettingsSection
 import com.nasmusic.tv.ui.screens.settings.PlayerSettingsState
+import com.nasmusic.tv.ui.screens.settings.PhotoWallRuntimeState
 import com.nasmusic.tv.ui.screens.settings.PhotoWallSettingsActions
 import com.nasmusic.tv.ui.screens.settings.PhotoWallSettingsSection
 import com.nasmusic.tv.ui.screens.settings.PhotoWallSettingsState
@@ -263,12 +264,19 @@ fun SettingsScreen(
     /**
      * 照片墙分区的动作（§7.2）。
      *
-     * ⚠️ **状态不在这里**：17 个 `photoWall*` 字段全在 [settings]（`AppSettings`）里，
+     * ⚠️ **设置状态不在这里**：17 个 `photoWall*` 字段全在 [settings]（`AppSettings`）里，
      * 分区直接读它 ⇒ 只多这一个参数，而不是 17 个字段 + 19 个回调。
-     * 运行时可派生值（各来源照片数、人脸检测进度）在阶段 9/10/11 接入，
-     * 届时同样通过 [PhotoWallSettingsState] 的默认值扩展，不再加签名参数。
      */
     photoWallActions: PhotoWallSettingsActions = PhotoWallSettingsActions(),
+    /**
+     * 照片墙的**运行时派生状态**（阶段 9 引入）：权限三态、目录拒绝原因、
+     * 各来源照片数、人脸检测进度。
+     *
+     * ⚠️ 单独成参数而不是塞进 [settings]：这些值**不落盘、不进备份**，
+     * 与 `AppSettings` 的语义完全不同（`AppSettings` 是「用户选的」）。
+     * 阶段 10/11 只需往 [PhotoWallRuntimeState] 里加字段，**不再动本签名**。
+     */
+    photoWallRuntime: PhotoWallRuntimeState = PhotoWallRuntimeState(),
     modifier: Modifier = Modifier
 ) {
     var activeSection by remember { mutableStateOf(SettingsSection.GENERAL) }
@@ -552,6 +560,7 @@ fun SettingsScreen(
                             //   让本来就很长的签名再长一行，且所有调用点都要跟着改。
                             isTV = com.nasmusic.tv.ui.components.isTVDevice(),
                             nasConnected = isConnected,
+                            runtime = photoWallRuntime,
                         ),
                         actions = photoWallActions,
                     )

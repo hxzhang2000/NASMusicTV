@@ -88,6 +88,11 @@ internal fun SettingsBranch(
                     val settingsSection by viewModel.navVM.settingsSection.collectAsState(initial = null)
                     // v2.36.0 屏幕方向（L1 全局策略）
                     val screenOrientation by viewModel.prefs.display.screenOrientation.collectAsState(initial = "auto")
+                    // 阶段 9（§9）：照片墙的运行时状态 —— 权限三态 + 目录拒绝原因。
+                    // ⚠️ 都来自 visualizerVM 的 StateFlow，**不从 AppSettings 读**：
+                    //    权限状态官方禁止落盘（§9.4），目录拒绝是瞬时事实。
+                    val photoWallPermissionState by viewModel.visualizerVM.photoPermissionState.collectAsState()
+                    val photoWallDirectoryReject by viewModel.visualizerVM.photoDirectoryReject.collectAsState()
                     SettingsScreen(
                         selectedSection = settingsSection,
                         onOpenSection = { viewModel.navVM.openSettingsSection(it) },
@@ -244,15 +249,24 @@ internal fun SettingsBranch(
                     // 不必在 MainViewModel 上再加 17 个纯转发方法。
                     // ⚠️ 读值不在这里 —— PhotoWallSettingsSection 直接读 settings（AppSettings）。
                     //
-                    // ⚠️ 四个动作**本阶段刻意留空**（不传 ⇒ 按钮点击无反应）：
-                    //   onPickDirectory  → 阶段 9（SAF 目录 launcher）
-                    //   onRescan         → 阶段 9/10（需要聚合器）
+                    // 阶段 9：授权相关动作走 `visualizerVM`（它不是纯 setter ——
+                    // 「打开图库」要判权限、拉起系统对话框、被拒后回弹），
+                    // 状态与逻辑都收口在那个 ViewModel 里，这里只做接线。
+                    //
+                    // ⚠️ 仍有两个动作**本阶段刻意留空**（不传 ⇒ 按钮点击无反应）：
+                    //   onRescan         → 阶段 10（需要聚合器）
                     //   onStartFaceScan / onClearFaceScan → 阶段 11（人脸检测）
                     //   见 docs/photo-spectrum-effect-plan.md §15.3 阶段 8 的偏差记录。
+                    photoWallRuntime = PhotoWallRuntimeState(
+                        permissionState = photoWallPermissionState,
+                        directoryReject = photoWallDirectoryReject,
+                    ),
                     photoWallActions = PhotoWallSettingsActions(
-                        onToggleGallery = { v ->
-                            coroutineScope.launch { viewModel.prefs.photoWall.setGalleryEnabled(v) }
-                        },
+                        // ⛔ 图库开关是授权的**唯一触发点**（§6.2）：
+                        //    ViewModel 内部会判断「已授权直接开 / 未授权先申请」。
+                        onToggleGallery = { v -> viewModel.visualizerVM.setGallerySourceEnabled(v) },
+                        onReselectPhotos = { viewModel.visualizerVM.requestGalleryPermission() },
+                        onPickDirectory = { viewModel.visualizerVM.requestPhotoDirectoryPick() },
                         onToggleExternal = { v ->
                             coroutineScope.launch { viewModel.prefs.photoWall.setExternalEnabled(v) }
                         },

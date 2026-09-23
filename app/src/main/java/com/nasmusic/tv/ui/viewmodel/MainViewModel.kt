@@ -2442,6 +2442,15 @@ showError(getApplication<Application>().getString(R.string.toggle_favorite_error
                 if (msg != null) showError(msg)
             }
         }
+        // 阶段 9（§9）：照片墙授权提示 → errorMessage 通道。
+        // 复用上面同一条路径的原因与下载域一致：顶部提示已有 UI 消费方，
+        // 不必为一个「权限被撤销」的提示再造一套 UI。
+        // ⚠️ 取文案在这里做（`VisualizerViewModel` 只发枚举）—— 数据层不产出面向用户的文案。
+        viewModelScope.launch {
+            visualizerVM.photoAccessNotice.collect { notice ->
+                showError(getApplication<Application>().getString(notice.messageRes))
+            }
+        }
         // 模型下载状态同步给人声分离域（模式切换门槛判断）
         viewModelScope.launch {
             downloadVM.modelDownloaded.collect { downloaded -> vocalVM.setModelDownloaded(downloaded) }

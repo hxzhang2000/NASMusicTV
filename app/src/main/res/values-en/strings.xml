@@ -299,6 +299,12 @@
     <string name="settings_photo_wall_sources">Photo Sources</string>
     <string name="settings_photo_wall_gallery">Gallery</string>
     <string name="settings_photo_wall_gallery_desc">System photo library; enabling this asks for photo permission</string>
+    <string name="settings_photo_wall_gallery_partial">Only the photos you selected are accessible</string>
+    <string name="settings_photo_wall_reselect">Reselect photos</string>
+    <string name="settings_photo_wall_reselect_desc">Opens the system picker again to add or change photos</string>
+    <string name="settings_photo_wall_gallery_intro_title">Enable gallery</string>
+    <string name="settings_photo_wall_gallery_intro_msg">The photo wall needs to read photos on this device. A system permission dialog will appear next — please choose "Allow".</string>
+    <string name="settings_photo_wall_gallery_intro_confirm">Continue</string>
     <string name="settings_photo_wall_external">External storage</string>
     <string name="settings_photo_wall_external_desc">USB drive / SD card (internal storage excluded)</string>
     <string name="settings_photo_wall_jellyfin">Jellyfin photo library</string>
@@ -346,6 +352,16 @@
     <string name="settings_photo_wall_breathe">Breathe with bass</string>
     <string name="settings_photo_wall_breathe_desc">Slow brightness breathing while bass sustains</string>
     <string name="settings_photo_wall_seconds">%1$s s</string>
+
+    <!-- Photo wall permission notices (stage 9, §9): forwarded to the top banner by MainViewModel -->
+    <string name="photo_wall_notice_gallery_denied">Photo permission not granted; gallery source turned off</string>
+    <string name="photo_wall_notice_gallery_revoked">Photo permission was revoked; gallery source turned off</string>
+    <string name="photo_wall_notice_gallery_partial">Partial photo access granted (only the photos you selected)</string>
+    <string name="photo_wall_notice_dir_revoked">Access to the photo folder expired; please pick a folder again</string>
+    <string name="photo_wall_notice_dir_internal">Please pick a folder on a USB drive or SD card (internal storage is not supported)</string>
+    <string name="photo_wall_notice_dir_malformed">That folder is unavailable; please pick another one</string>
+    <string name="photo_wall_notice_dir_empty">No folder selected</string>
+    <string name="photo_wall_notice_dir_unavailable">No system file picker is available on this device</string>
 
     <string name="settings_download">Downloads</string>
     <string name="settings_download_basic">Download Settings</string>

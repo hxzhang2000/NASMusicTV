@@ -1,5 +1,6 @@
 package com.nasmusic.tv.ui.screens.settings
 
+import androidx.annotation.StringRes
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -11,29 +12,38 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Text
 import com.nasmusic.tv.R
 import com.nasmusic.tv.backend.photo.PhotoScaleMode
+import com.nasmusic.tv.backend.photo.PhotoWallAccessPolicy
+import com.nasmusic.tv.backend.photo.SafDirectoryPolicy
 import com.nasmusic.tv.data.model.AppSettings
+import com.nasmusic.tv.ui.components.ConfirmDialog
 import com.nasmusic.tv.ui.components.FocusableSurface
 import com.nasmusic.tv.ui.components.LocalFocusableContentColor
 import com.nasmusic.tv.ui.components.adaptiveColumns
 import com.nasmusic.tv.ui.components.portraitTouchTarget
 import com.nasmusic.tv.ui.theme.FontSize
 import com.nasmusic.tv.ui.theme.NasMusicColors
+import com.nasmusic.tv.util.PermissionHelper
 import com.nasmusic.tv.visualizer.photo.PhotoTransitionId
 import com.nasmusic.tv.visualizer.photo.PhotoTransitionRegistry
 import java.util.Locale
 
 /**
- * 「照片墙」设置分区（§7.2 的 19 行布局，实现为 22 个控件）。
+ * 「照片墙」设置分区（§7.2 的 19 行布局，实现为 23 个控件）。
  *
  * ## 状态 / 动作分离
  *
@@ -44,21 +54,56 @@ import java.util.Locale
  * ⚠️ **17 个设置字段全部从 `state.settings`（`AppSettings`）读**，而不是拆成 17 个参数 ——
  * `SettingsScreen` 本来就持有整份 `AppSettings`，拆开只会让签名再膨胀 17 行。
  *
+ * ⚠️ **运行时事实（权限 / 计数 / 进度）从 `state.runtime` 读**（阶段 9 引入
+ * [PhotoWallRuntimeState]）—— 它们不落盘、不进备份，与那 17 个字段是两类东西。
+ *
  * ## 平台差异（§7.2 / §7.3）
  *
  * | 行 | 电视 | 手机 |
  * |---|---|---|
- * | 「图库」开关 | **不渲染**（§7.3：仅手机） | 渲染 |
+ * | 「图库」开关 | **不渲染**（§7.3：仅手机） | 渲染（打开时先弹说明再走系统对话框） |
+ * | 「重新选择照片」 | 不渲染 | 仅**部分授权**态出现（§9.6） |
  * | 「选择照片目录」 | 渲染（可留空走自动探测） | 渲染（**必填**） |
  * | 「仅扫描 DCIM / Pictures」 | 渲染（生效） | 渲染（说明「仅电视生效」，不置灰） |
  * | 「画面适配」 | ✅ 渲染 | ✅ 渲染（**四端均暴露**，与横竖屏无关） |
  *
  * ## 哪些动作在本阶段是「空接线」
  *
- * 「重新扫描」（阶段 9/10）、「开始人脸检测」/「清除检测结果」（阶段 11）在本阶段
+ * 「重新扫描」（阶段 10）、「开始人脸检测」/「清除检测结果」（阶段 11）在本阶段
  * 传入 `null` ⇒ 按钮可见但点击无反应。这是刻意的**分阶段推进**，不是遗漏；
  * 见 `docs/photo-spectrum-effect-plan.md` §15.3 阶段 8 的偏差记录。
  */
+
+/**
+ * 照片墙**运行时**派生状态（阶段 9 引入）
+ *
+ * ⛔ 与 `AppSettings` 里的 17 个字段**严格区分**：
+ * - `AppSettings` 的字段是**设置**（用户选的、要落盘、要进备份）
+ * - 这里的字段是**运行时事实**（权限、计数、进度）—— **不落盘、不进备份**
+ *
+ * 之所以单独成类：阶段 10（照片数）/ 阶段 11（人脸进度）还要继续往里加字段，
+ * 而**每加一个字段都不该再动 `SettingsScreen` 的签名**（§14.1 的既定取舍）。
+ */
+data class PhotoWallRuntimeState(
+    /**
+     * 图库权限三态（§9.6）；`null` = 尚未查询（此时按「未授权」处理，不猜）
+     *
+     * ⚠️ 它**不是**设置项：官方明确禁止把权限状态存进 `SharedPreferences` / `DataStore`
+     * （§9.4），所以它只能来自每次现查。
+     */
+    val permissionState: PermissionHelper.PhotoPermissionState? = null,
+    /** 最近一次 SAF 目录选择被拒的原因（`null` = 无待提示的拒绝） */
+    val directoryReject: SafDirectoryPolicy.RejectReason? = null,
+    /** 各来源照片数（阶段 10 由聚合器填；本阶段恒 0） */
+    val galleryCount: Int = 0,
+    val externalCount: Int = 0,
+    val jellyfinCount: Int = 0,
+    /** 合并去重后的总数（阶段 10 填） */
+    val mergedCount: Int = 0,
+    /** 人脸检测进度（阶段 11 填；`total <= 0` ⇒ 不渲染进度行） */
+    val faceScanDone: Int = 0,
+    val faceScanTotal: Int = 0,
+)
 
 /** 照片墙设置分区状态 */
 data class PhotoWallSettingsState(
@@ -68,15 +113,8 @@ data class PhotoWallSettingsState(
     val isTV: Boolean,
     /** NAS 是否已连接（未连接时「Jellyfin 照片库」置灰） */
     val nasConnected: Boolean = false,
-    /** 各来源照片数（阶段 9/10 由聚合器填；本阶段恒 0） */
-    val galleryCount: Int = 0,
-    val externalCount: Int = 0,
-    val jellyfinCount: Int = 0,
-    /** 合并去重后的总数（阶段 9/10 填） */
-    val mergedCount: Int = 0,
-    /** 人脸检测进度（阶段 11 填；`total <= 0` ⇒ 不渲染进度行） */
-    val faceScanDone: Int = 0,
-    val faceScanTotal: Int = 0,
+    /** 运行时派生值（权限 / 计数 / 进度） */
+    val runtime: PhotoWallRuntimeState = PhotoWallRuntimeState(),
 )
 
 /** 照片墙设置分区动作（全部可空：未接线时按「点了没反应」处理） */
@@ -100,6 +138,13 @@ data class PhotoWallSettingsActions(
     val onToggleAudioReactive: ((Boolean) -> Unit)? = null,
     val onTogglePulseZoom: ((Boolean) -> Unit)? = null,
     val onToggleBreathe: ((Boolean) -> Unit)? = null,
+    /**
+     * 「重新选择照片」（阶段 9，§9.6 规则 3）
+     *
+     * 仅在**部分授权**态出现。走的是与「打开图库开关」**同一个**权限请求入口 ——
+     * Android 14+ 下再次请求即唤起系统的 reselection UI。
+     */
+    val onReselectPhotos: (() -> Unit)? = null,
 )
 
 @OptIn(ExperimentalTvMaterial3Api::class)
@@ -109,6 +154,11 @@ internal fun PhotoWallSettingsSection(
     actions: PhotoWallSettingsActions,
 ) {
     val s = state.settings
+    val runtime = state.runtime
+
+    // 「先弹说明再触发系统对话框」（§9.4 建议：提升通过率）
+    // 用本地 state 而不是上层参数 —— 它纯属本分区的瞬时 UI 状态，不需要跨层传递。
+    var showGalleryIntro by remember { mutableStateOf(false) }
 
     Column {
         SectionTitle(stringResource(R.string.settings_photo_wall))
@@ -118,12 +168,40 @@ internal fun PhotoWallSettingsSection(
 
         // 「图库」行**仅手机**渲染（§7.3）：电视没有系统相册，显示它是误导。
         if (!state.isTV) {
+            // ⛔ 打开图库开关**才**申请权限（§6.2）。`null`（尚未查到）按「需要申请」处理：
+            //    宁可多弹一次说明，也不要静默打开一个没有权限的开关。
+            val needsGrant = runtime.permissionState
+                ?.let { PhotoWallAccessPolicy.needsPermissionRequest(it) } ?: true
             SettingSwitch(
                 label = stringResource(R.string.settings_photo_wall_gallery),
                 description = stringResource(R.string.settings_photo_wall_gallery_desc),
                 checked = s.photoWallGalleryEnabled,
-                onClick = { actions.onToggleGallery?.invoke(!s.photoWallGalleryEnabled) }
+                onClick = {
+                    when {
+                        s.photoWallGalleryEnabled -> actions.onToggleGallery?.invoke(false)
+                        needsGrant -> showGalleryIntro = true
+                        else -> actions.onToggleGallery?.invoke(true)
+                    }
+                }
             )
+
+            // Android 14+「仅选择照片」：说明当前范围 + 给「重新选择照片」入口（§9.6 规则 3）。
+            // 没有这个入口，用户想回到「允许全部」只能自己去系统设置里翻。
+            val isPartial = runtime.permissionState
+                ?.let { PhotoWallAccessPolicy.isPartial(it) } ?: false
+            if (s.photoWallGalleryEnabled && isPartial) {
+                Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp)) {
+                    SettingsInfoRow(
+                        stringResource(R.string.settings_photo_wall_gallery),
+                        stringResource(R.string.settings_photo_wall_gallery_partial)
+                    )
+                }
+                SettingActionButton(
+                    label = stringResource(R.string.settings_photo_wall_reselect),
+                    description = stringResource(R.string.settings_photo_wall_reselect_desc),
+                    onClick = { actions.onReselectPhotos?.invoke() }
+                )
+            }
         }
 
         SettingSwitch(
@@ -144,6 +222,16 @@ internal fun PhotoWallSettingsSection(
                 },
                 onClick = { actions.onPickDirectory?.invoke() }
             )
+            // ⛔ 选到内部存储必须**当场给理由**（§6.3）：SAF 选择器无法限制可选范围，
+            //    用户点进来一路选到内部存储是常态，不解释就成了「点了没反应」。
+            runtime.directoryReject?.let { reason ->
+                Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp)) {
+                    SettingsInfoRow(
+                        stringResource(R.string.settings_photo_wall_pick_dir),
+                        stringResource(rejectTextRes(reason))
+                    )
+                }
+            }
             SettingSwitch(
                 label = stringResource(R.string.settings_photo_wall_common_dirs),
                 description = stringResource(R.string.settings_photo_wall_common_dirs_desc),
@@ -179,14 +267,14 @@ internal fun PhotoWallSettingsSection(
                 stringResource(R.string.settings_photo_wall_counts),
                 stringResource(
                     R.string.settings_photo_wall_counts_value,
-                    state.galleryCount,
-                    state.externalCount,
-                    state.jellyfinCount
+                    runtime.galleryCount,
+                    runtime.externalCount,
+                    runtime.jellyfinCount
                 )
             )
             SettingsInfoRow(
                 stringResource(R.string.settings_photo_wall_merged),
-                stringResource(R.string.settings_photo_wall_count_unit, state.mergedCount)
+                stringResource(R.string.settings_photo_wall_count_unit, runtime.mergedCount)
             )
         }
         Spacer(modifier = Modifier.height(8.dp))
@@ -210,14 +298,14 @@ internal fun PhotoWallSettingsSection(
             description = stringResource(R.string.settings_photo_wall_face_scan_desc),
             onClick = { actions.onStartFaceScan?.invoke() }
         )
-        if (state.faceScanTotal > 0) {
+        if (runtime.faceScanTotal > 0) {
             Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp)) {
                 SettingsInfoRow(
                     stringResource(R.string.settings_photo_wall_face_scan),
                     stringResource(
                         R.string.settings_photo_wall_face_scan_progress,
-                        state.faceScanDone,
-                        state.faceScanTotal
+                        runtime.faceScanDone,
+                        runtime.faceScanTotal
                     )
                 )
             }
@@ -322,6 +410,46 @@ internal fun PhotoWallSettingsSection(
             onClick = { actions.onToggleBreathe?.invoke(!s.photoWallBreathe) }
         )
     }
+
+    // 图库授权说明弹窗（§9.4「建议先弹一句说明再触发系统对话框」）
+    //
+    // ⚠️ 用 `androidx.compose.ui.window.Dialog` 包一层（与 SettingsScreen 的清空下载确认弹窗同款）：
+    // 它自建窗口，因此**不受本分区所在 LazyColumn item 的布局约束**，
+    // 否则 `fillMaxSize()` 在无限高约束下不会铺满，弹窗会缩在列表里。
+    if (showGalleryIntro) {
+        Dialog(
+            onDismissRequest = { showGalleryIntro = false },
+            properties = DialogProperties(
+                dismissOnBackPress = false,
+                dismissOnClickOutside = false,
+                usePlatformDefaultWidth = false
+            )
+        ) {
+            ConfirmDialog(
+                title = stringResource(R.string.settings_photo_wall_gallery_intro_title),
+                message = stringResource(R.string.settings_photo_wall_gallery_intro_msg),
+                confirmLabel = stringResource(R.string.settings_photo_wall_gallery_intro_confirm),
+                onConfirm = {
+                    showGalleryIntro = false
+                    actions.onToggleGallery?.invoke(true)
+                },
+                onDismiss = { showGalleryIntro = false }
+            )
+        }
+    }
+}
+
+/**
+ * 目录拒绝原因 → 文案（§6.3）
+ *
+ * ⚠️ 数据层只给枚举（`SafDirectoryPolicy.RejectReason`），文案在这里映射 ——
+ * 「数据层不产出面向用户的文案」是项目硬约定。
+ */
+@StringRes
+private fun rejectTextRes(reason: SafDirectoryPolicy.RejectReason): Int = when (reason) {
+    SafDirectoryPolicy.RejectReason.EMPTY -> R.string.photo_wall_notice_dir_empty
+    SafDirectoryPolicy.RejectReason.MALFORMED -> R.string.photo_wall_notice_dir_malformed
+    SafDirectoryPolicy.RejectReason.INTERNAL_STORAGE -> R.string.photo_wall_notice_dir_internal
 }
 
 /** 「已启用」文案：开着的来源用 ` + ` 连接；一个都没开时显示「未启用任何来源」（§7.2） */

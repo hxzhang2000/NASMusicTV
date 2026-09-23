@@ -9,6 +9,18 @@
         android:maxSdkVersion="32" />
     <!-- Android 13+ 分区存储：只读音频文件 -->
     <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
+    <!--
+      照片墙「图库」来源（仅手机，§9.3）：Android 13+ 只读图片。
+      ⛔ 必须**由「图库」开关触发**请求，不能照搬 onCreate 里那段无条件请求（§9.4）。
+      ⚠️ 手机端「外接存储」只走 SAF（§6.3 路线 B），**不需要**本权限。
+    -->
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
+    <!--
+      Android 14+「仅选择照片」（§9.6）：不声明**也能用**（系统照样给该选项），
+      但系统会把 App 置于兼容模式、由系统接管「重新选择」；
+      声明后我们才能自控设置页里的「重新选择照片」入口。
+    -->
+    <uses-permission android:name="android.permission.READ_MEDIA_VISUAL_USER_SELECTED" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
