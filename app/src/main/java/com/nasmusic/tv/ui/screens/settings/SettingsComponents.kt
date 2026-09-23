@@ -298,12 +298,15 @@ internal fun AboutRow(label: String, value: String) {
             fontSize = FontSize.button(),
             modifier = Modifier.weight(1f)
         )
+        // 竖屏修正（20:40 用户反馈）：值不限定权重时长文本会吃掉整行、把 weight
+        // 标签挤没。改为 标签 1 : 值 1.5 的比例分配（约 40%/60%），长值在右栏内
+        // 换行且恒右对齐，标签任何形态下都保持可见。
         Text(
             text = value,
             color = NasMusicColors.TextPrimary,
             fontSize = FontSize.button(),
             textAlign = androidx.compose.ui.text.style.TextAlign.End,
-            modifier = Modifier.padding(start = 16.dp)
+            modifier = Modifier.weight(1.5f).padding(start = 16.dp)
         )
     }
 }
