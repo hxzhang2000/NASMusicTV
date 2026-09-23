@@ -95,6 +95,13 @@ fun VisualizerStage(
     progressMs: Long,
     theme: VisualizerTheme,
     quality: VisualQuality,
+    /**
+     * 三来源开关之「或」（§7.4）—— 决定底部指示器里**要不要显示**「照片墙」。
+     *
+     * ⛔ 必须由调用方传入、不能用默认值：三个来源全关时指示器上不该出现一个
+     * 左右键也切不到的效果，反之亦然 —— 两处必须用**同一个**布尔值。
+     */
+    photoWallAvailable: Boolean,
     isTV: Boolean,
     onExit: () -> Unit,
     onNextTheme: () -> Unit,
@@ -360,7 +367,7 @@ fun VisualizerStage(
 
             // 底部：指示器（控制栏已移除）
             ThemeIndicator(
-                themes = VisualizerTheme.selectable,
+                themes = VisualizerTheme.selectable(photoWallAvailable),
                 current = theme,
                 quality = quality,
                 modifier = Modifier.align(Alignment.CenterHorizontally)

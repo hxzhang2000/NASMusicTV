@@ -1520,7 +1520,10 @@ when {
 
 ### 14.1 文件清单
 
-#### 新增（22 个 Kotlin 源文件 + 1 个模型资产）
+#### 新增（23 个 Kotlin 源文件 + 1 个模型资产）
+
+> ⚠️ 本表在阶段 7 实现期补了 1 项（原写「22 个」）：`PhotoWallAvailability.kt` ——
+> §7.4「唯一新增逻辑」那三行派生代码**单独成文件**，理由见该文件 KDoc（纯函数可单测 + 收口判定）。
 
 | # | 路径 | 预估 | 内容 |
 |---|---|---|---|
@@ -1546,9 +1549,13 @@ when {
 | 20 | `visualizer/photo/PhotoWallController.kt` | ~250 | 编排（开关 → 扫描 → 缓冲 → 时钟） |
 | 21 | `visualizer/photo/transitions/*.kt` | ~1200 | 76 种转场（P0 先 15 个 ≈ 320 行） |
 | 22 | `ui/screens/settings/PhotoWallSettingsSection.kt` | ~450 | 设置分区 |
-| 23 | `app/src/main/assets/models/yunet_face.onnx` | 337 KB | 模型（⚠️ **`assets/` 目录当前不存在，需新建**） |
+| 23 | `visualizer/photo/PhotoWallAvailability.kt` | ~50 | 三来源开关之「或」派生（§7.4 **唯一新增逻辑**） |
+| 24 | `app/src/main/assets/models/yunet_face.onnx` | 337 KB | 模型（⚠️ **`assets/` 目录当前不存在，需新建**） |
 
-#### 修改（13 个）
+#### 修改（14 个）
+
+> ⚠️ 阶段 7 实现期补了 1 项（原写「13 个」）：`ui/components/AppRoot.kt` ——
+> 它才是 `VisualizerStage` 的**唯一调用点**，新参数必须由它传下去。
 
 | # | 文件 | 改动 | 关键行号（当前） |
 |---|---|---|---|
@@ -1556,9 +1563,10 @@ when {
 | 2 | `data/model/AppSettings.kt` | `VisualizerTheme` +`PHOTO_WALL`；`selectable` 由 `val` 改 `fun`；新增 17 个 `photoWall*` 字段 | `selectable` 在 **119 行**；`VisualQuality.supports` 在 **147 行** |
 | 3 | `data/prefs/AppPreferences.kt` | +17 个 key + getter/setter（新增 `photoWall` 分组，照 `visualizer` 分组的写法） | 分组声明 **63 行**；key 区 **288–289 行**；读写 **737–738 / 1821–1822 行** |
 | 4 | `visualizer/RenderContext.kt` | +7 个 `photo*` 字段（**不加进 `update()`**） | `update()` 在 **49–83 行** |
-| 5 | `visualizer/VisualizerRendererFactory.kt` | +`PHOTO_WALL` 分支；`availableThemes` 改调用新函数 | `availableThemes` 在 **91–92 行** |
-| 6 | `ui/components/VisualizerStage.kt` | 帧循环 +1 行；绘制前 +1 行 `applyTo` | 帧循环 **159–172 行**；绘制 **247–266 行**；`selectable` 调用 **363 行** |
-| 7 | `ui/viewmodel/VisualizerViewModel.kt` | 持有 `PhotoWallController`；`step()` 用过滤后列表 | `selectable` 调用 **131 行** |
+| 5 | `visualizer/VisualizerRendererFactory.kt` | +`PHOTO_WALL` 分支；`availableThemes(quality, photoWallAvailable)` 改签名 + 调用新函数 | `availableThemes` 在 **91–92 行**；⚠️ **全仓库无其他调用者**（2026-09-23 实测） |
+| 6 | `ui/components/VisualizerStage.kt` | ⛔ **+参数 `photoWallAvailable: Boolean`**（§14.1 原漏写）；指示器改传过滤后列表；帧循环 +1 行；绘制前 +1 行 `applyTo` | 帧循环 **159–172 行**；绘制 **247–266 行**；`selectable` 调用 **363 行**；签名 **89–102 行** |
+| 7 | `ui/viewmodel/VisualizerViewModel.kt` | 持有 `PhotoWallController`；`step()` 用过滤后列表 | `selectable` 调用 **131 行**（`step()` 内） |
+| 7b | `ui/components/AppRoot.kt` | `VisualizerOverlay` 向 `VisualizerStage` 传 `photoWallAvailable` | `VisualizerOverlay` **590 行**；`VisualizerStage(...)` **613 行**；其唯一调用点 **386 行** |
 | 8 | `ui/screens/SettingsScreen.kt` | `when (displaySection)` +1 分支 | `when` 在 **474 行**，分支 475–681 |
 | 9 | `ui/screens/settings/SettingsSection.kt` | 枚举 +`PHOTO_WALL` | 枚举 **32–42 行** |
 | 10 | `util/PermissionHelper.kt` | +`hasPhotoPermission` / `getPhotoPermissions` | 现有 `hasLocalMusicPermission` **20 行** |
@@ -2156,7 +2164,7 @@ JAVA_HOME="C:/Program Files/Android/Android Studio/jbr" \
 | 4 PhotoBuffer | `feat(photo): …` | 3 | ✅ |
 | 5 转场策略层 + 15 种 P0 | `feat(visualizer): …` | 4 | ✅ |
 | 6 随机抽取与时钟 | `feat(visualizer): …` | 4 | ✅ |
-| 7 PhotoRenderer 与 PHOTO_WALL | `feat(visualizer): …` | 5 | ⬜ |
+| 7 PhotoRenderer 与 PHOTO_WALL | `feat(visualizer): …` | 5 | ✅ |
 | 8 设置分区 | `feat(settings): …` | 4 | ⬜ |
 | 9 权限与 SAF 目录 | `feat(photo): …` | 4 | ⬜ |
 | 10 Controller 与帧循环接线 ★ | `feat(photo): …` | 4 | ⬜ |
@@ -2497,21 +2505,76 @@ JAVA_HOME="C:/Program Files/Android/Android Studio/jbr" \
 
 #### 阶段 7 —— PhotoRenderer 与 PHOTO_WALL 枚举值　`提交 7`　**5 项**
 
-- [ ] **T7.1** 枚举值与工厂分支
+- [x] **T7.1** 枚举值与工厂分支 ✅ 2026-09-23
   - `VisualizerTheme` +`PHOTO_WALL("照片墙", Tier.ADV, "38")`
   - `VisualizerRendererFactory` +`PHOTO_WALL -> PhotoRenderer()` 分支
   - **验收**：序号不与现有 37 冲突；`when` 穷尽编译通过
-- [ ] **T7.2** `RenderContext` +7 个 `photo*` 字段（**不加进 `update()`**）
+  - **实际**：`AppSettings.kt` 枚举 +1（`"38"`，现有最大 `"37"`）；工厂 `when` +1 分支。
+    `entries.size` 35 → **36**（T7.3 的 `VisualizerThemeTest` 断言同步改）
+- [x] **T7.2** `RenderContext` +7 个 `photo*` 字段（**不加进 `update()`**）✅ 2026-09-23
   - **验收**：其余 35 个渲染器零改动
-- [ ] **T7.3** ⛔ `selectable` 由 `val` 改函数 + **全量同步调用点**（最易漏的一项）
+  - **实际**：7 个字段 = `photoA` / `photoB` / `photoProgress` / `photoTransition` / `photoHoldT` /
+    `photoScaleMode` / `photoAudioBoost`，全部带「什么都不显示」的默认值（`photoA == null`
+    ⇒ `PhotoRenderer.draw` 立即返回）。**35 个既有渲染器零改动**（`update()` 未动，
+    16 个位置参数 / 3 个调用点全部原样）
+  - ⚠️ **实现期决定**：`photoScaleMode` 用 `PhotoScaleMode.Default`（= `CROP`）而不是硬写 `CROP`
+    —— 默认值只应有**一处**定义（枚举自带的 `Default`），避免两处日后不一致
+- [x] **T7.3** ⛔ `selectable` 由 `val` 改函数 + **全量同步调用点**（最易漏的一项）✅ 2026-09-23
   - 签名改 `fun selectable(photoWallAvailable: Boolean)`
   - ⛔ **3 个调用点**：`VisualizerStage.kt:363` / `VisualizerViewModel.kt:131`（`step()`）/ `VisualizerRendererFactory.kt:92`
   - ⛔ `VisualizerThemeTest` **5 处硬断言 `35` → `36`**（`entries.size` / `selectable.size` / `selectable.distinct().size` / `ordinalLabel.distinct().size` / `displayName.distinct().size`）+ `selectable` 改函数调用
   - **验收**：三开关全关时列表**不含** `PHOTO_WALL`；三关时左右键**不会**切到照片墙；该测试类绿
-- [ ] **T7.4** `PhotoRenderer.draw()`
+  - **实际**：`selectable(photoWallAvailable: Boolean): List<VisualizerTheme>`，
+    内部是 `if (available) ALL else WITHOUT_PHOTO_WALL`（**两份列表预生成**，不在每次调用里 `filter` 分配）；
+    **⛔ 刻意不给默认值** —— 三个调用点必须显式表态，防止日后漏传导致「三关时左右键切到空效果」。
+    调用点改动：`VisualizerStage.kt` **新增参数** `photoWallAvailable: Boolean`（+ 指示器改传过滤后列表）、
+    `VisualizerViewModel.step()`、`VisualizerRendererFactory.availableThemes(quality, photoWallAvailable)`、
+    `AppRoot.VisualizerOverlay`（`VisualizerStage` 的唯一调用点，负责传参）
+  - ⚠️ **实现期偏差 1（阶段边界，重要）**：**阶段 7 的三个调用点一律传 `false`（门刻意关着）**。
+    两条理由缺一不可：① 三个来源开关的持久化字段要到**阶段 8** 才落
+    （`AppPreferences` / `AppSettings`）；② 真把照片画出来要靠**阶段 10** 的 `PhotoWallController`
+    —— 在此之前 `RenderContext.photoA` 恒为 `null`，`PhotoRenderer` **一帧都不画**。
+    ⇒ 此时放开只会让用户切到一块空白。三处均已在源码里写明「阶段 8 改成
+    `PhotoWallAvailability.isAvailable(...)` 的真实派生值」
+  - ⚠️ **实现期偏差 2（文档欠账补记）**：§14.1 的文件清单只写了 `VisualizerStage.kt`「帧循环 +1 行 /
+    绘制前 +1 行」，**没写要新增 `photoWallAvailable` 参数** ⇒ 本阶段补上（含 `AppRoot` 传参）。
+    这是 §14.1 的遗漏，不是范围扩张
+  - ⚠️ **实现期偏差 3（本阶段未做）**：§7.4 实现要点 3「三关且当前正显示照片墙 ⇒ 平滑切回 `Default`」
+    **不在阶段 7**（需要设置变更流）—— 归阶段 8/10，届时一并接线
+  - **门禁 G7**：`VisualizerThemeTest` 13 例绿（11 → 13）。新增
+    `photo wall visibility is derived from the three source switches`（**两分支都测** + 断言
+    「开/关两份列表只差 `PHOTO_WALL` 一项」）；原 `selectable list equals all themes` 改名为
+    `selectable list contains every theme when the photo wall is available` 并传 `true`
+- [x] **T7.4** `PhotoRenderer.draw()` ✅ 2026-09-23
   - 读 `ctx.photo*`；切转场 / 切画质时 `prepare`；`b ?: a` 单图退化
   - **验收**：只有 1 张照片时不闪黑；门禁 G7 / G8 绿
-- [ ] **T7.5** **阶段完成** —— 门禁基线更新（`testDebugUnitTest` 全绿，**涨幅先确认来自本轮**）
+  - **实际**：`visualizer/photo/PhotoRenderer.kt`（116 行）。三条硬约束在 KDoc 里逐条写明后果：
+    ① `geom.update(...)` **必须在** `prepare(...)` **之前**（否则 `NoiseDissolveTransition.prepare`
+    拿到 `0×0` 的 `layerBounds`，且 `prepare` 之后不再被调用 ⇒ **噪声溶解永远不显示**）；
+    ② 画布尺寸变化要重新 `prepare`（转屏 / 换分辨率后 `layerBounds` 还是旧尺寸）；
+    ③ `b ?: a` 单图退化（`photoB == null` 时直接 `return` 会在切图瞬间**闪黑**）
+  - ⚠️ **实现期偏差（原方案未列，但必须做）**：重新 `prepare` 的触发条件除了「切转场 / 切画质」，
+    还要加 **`ctx.canvasSize` 变化** —— 原方案只写了前两条
+  - ⛔ **实测踩坑（编译错，值得记档）**：`PhotoTransition.render` 的声明是
+    `fun DrawScope.render(...)` —— 一个**成员扩展函数**（dispatch receiver = `PhotoTransition`，
+    extension receiver = `DrawScope`）。写成 `bound?.render(...)` 会报
+    `Unresolved reference 'render'`：显式接收者 `bound` 被当作**扩展接收者**去匹配 `DrawScope`，
+    类型不匹配。**必须用 `run { }` / `with { }` 把它放成隐式 dispatch receiver** ——
+    项目既有同款写法见 `VisualizerStage.kt:265` 的 `with(cur) { draw(f, renderCtx) }`
+- [x] **T7.5** **阶段完成** —— 门禁基线更新（`testDebugUnitTest` 全绿，**涨幅先确认来自本轮**）✅ 2026-09-23
+  - **实际**：`testDebugUnitTest` **1084 例 / 104 类 / 0 失败 0 错误**；`lintDebug` **0 Error / 277 Warning**
+  - **涨幅核对**（阶段 6 基线 1077 / 103 → 1084 / 104，**+7 例 / +1 类**）：
+    `PhotoWallAvailabilityTest` 5 例（新类，门禁 G8）+ `VisualizerThemeTest` 11 → 13 例（+2）= **7** ✅
+    与「本轮新增/修改的测试文件」逐项对上，无并发会话混入
+  - **门禁 G8**：`PhotoWallAvailabilityTest` 5 例绿 —— 三关 ⇒ `false`；任一单开 ⇒ `true`
+    （§14.4 点名的「只开 Jellyfin」已单列）；`isFullyDisabled` 与 `isAvailable` 在全部 8 种组合上
+    **互斥且穷尽**；**负向自证**：断言「`||` 与 `&&` 在 8 种组合上恰好 6 处分歧」
+    （两者只在全真那一行重合）⇒ 证明本门禁**区分得出**这两个写法（不是空转）
+  - ⚠️ **顺手固化的已知风险**：新增用例
+    `photo wall is an advanced effect so the low tier cannot offer it` —— 把
+    「`PHOTO_WALL` 归 `Tier.ADV` ⇒ `VisualQuality.LOW`（`maxParticles == 0`）**不支持**」
+    钉住。副作用是老电视若被自动判为 `LOW`，**用户完全看不到照片墙**。
+    将来若给 `supports()` 加专属分支，该用例会立刻变红，逼改动者回来同步文档
 
 #### 阶段 8 —— 「照片墙」设置分区　`提交 8`　**4 项**
 

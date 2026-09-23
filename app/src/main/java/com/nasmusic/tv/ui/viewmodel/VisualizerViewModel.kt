@@ -128,7 +128,16 @@ fun nextTheme() = step(+1)
         val now = System.currentTimeMillis()
         if (now - lastStepMs < SWITCH_DEBOUNCE_MS) return
         lastStepMs = now
-        val list = VisualizerTheme.selectable
+        // ⛔ 必须用「过滤后」的列表：三来源开关全关时列表里没有 PHOTO_WALL，
+        //   否则左右键会切到一个画不出东西的空效果上（§7.4 实现要点 1）。
+        //
+        // ⚠️ 阶段 7 的门**刻意关着**（恒 false），原因有两条，缺一不可：
+        //   ① 三个来源开关的持久化字段要到**阶段 8** 才落（`AppPreferences` / `AppSettings`）；
+        //   ② 真把照片画出来要靠**阶段 10** 的 `PhotoWallController`
+        //      —— 在此之前 `RenderContext.photoA` 恒为 `null`，`PhotoRenderer` 一帧都不画。
+        //   ⇒ 此时放开只会让用户切到一块空白。阶段 8 改成
+        //     `PhotoWallAvailability.isAvailable(...)` 的真实派生值。
+        val list = VisualizerTheme.selectable(photoWallAvailable = false)
         if (list.isEmpty()) return
         val from = list.indexOf(_theme.value).let { if (it < 0) 0 else it }
         for (k in 1..list.size) {

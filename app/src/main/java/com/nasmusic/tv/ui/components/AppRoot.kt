@@ -620,6 +620,11 @@ private fun VisualizerOverlay(
         progressMs = progress,
         theme = effectiveTheme,
         quality = quality,
+        // ⚠️ 阶段 7 的门**刻意关着**（与 `VisualizerViewModel.step()` 保持同一个值）：
+        //   三个来源开关在阶段 8 才落盘，`PhotoWallController` 在阶段 10 才存在
+        //   ⇒ 现在放开只会让用户切到一块空白。阶段 8 改成
+        //   `PhotoWallAvailability.isAvailable(...)` 的真实派生值。
+        photoWallAvailable = false,
         isTV = isTV,
         onExit = { vm.exitVisualizer() },
         onNextTheme = { vm.nextTheme() },

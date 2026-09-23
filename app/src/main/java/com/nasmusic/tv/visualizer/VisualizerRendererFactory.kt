@@ -37,6 +37,7 @@ import com.nasmusic.tv.visualizer.renderers.FractalTreeRenderer
 import com.nasmusic.tv.visualizer.renderers.LightBeamsRenderer
 import com.nasmusic.tv.visualizer.renderers.FermatSpiralRenderer
 import com.nasmusic.tv.visualizer.renderers.MoleculeRenderer
+import com.nasmusic.tv.visualizer.photo.PhotoRenderer
 
 /**
  * 渲染器工厂 —— 主题枚举 → 渲染器实现。
@@ -82,12 +83,15 @@ VisualizerTheme.IMMERSIVE_BLOOM -> BloomRenderer()
         VisualizerTheme.LIGHT_BEAMS -> LightBeamsRenderer()
         VisualizerTheme.FERMAT_SPIRAL -> FermatSpiralRenderer()
         VisualizerTheme.MOLECULE -> MoleculeRenderer()
+        VisualizerTheme.PHOTO_WALL -> PhotoRenderer()
     }
 
     /**
      * 在当前画质下实际可用的主题列表。
      * 用于指示器渲染与左右切换时的跳过逻辑。
+     *
+     * @param photoWallAvailable 三来源开关之「或」（§7.4）。三关 ⇒ [VisualizerTheme.PHOTO_WALL] 不出现。
      */
-    fun availableThemes(quality: VisualQuality): List<VisualizerTheme> =
-        VisualizerTheme.selectable.filter { quality.supports(it) }
+    fun availableThemes(quality: VisualQuality, photoWallAvailable: Boolean): List<VisualizerTheme> =
+        VisualizerTheme.selectable(photoWallAvailable).filter { quality.supports(it) }
 }

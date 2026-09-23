@@ -90,6 +90,17 @@ IMMERSIVE_BLOOM("沉浸辉光", Tier.BASIC, "01"),
     LIGHT_BEAMS("光轴", Tier.BASIC, "35"),
     FERMAT_SPIRAL("螺旋", Tier.BASIC, "36"),
     MOLECULE("分子", Tier.BASIC, "37"),
+
+    /**
+     * 照片墙（第 36 个效果，§7.5）
+     *
+     * ⚠️ 归 [Tier.ADV]：照片双缓冲 + 转场叠加在低画质 / 老设备上风险高，必须门控。
+     * 副作用：`VisualQuality.LOW`（`maxParticles == 0`）**不支持**本效果
+     * ⇒ 若老电视被自动判为 `LOW`，照片墙在列表里看不到。见 `docs/technical-overview.md`。
+     *
+     * ⚠️ 本效果**不一定出现在 [selectable] 里** —— 三来源开关全关时被过滤掉（§7.4）。
+     */
+    PHOTO_WALL("照片墙", Tier.ADV, "38"),
     ;
 
     /** 效果分级：决定画质档位可用性 */
@@ -115,8 +126,24 @@ private val LEGACY_MAP = mapOf(
                 ?: LEGACY_MAP[key?.uppercase()]
                 ?: Default
 
-        /** 可手动选择的效果（无自动档；用户选了哪个就恒定显示哪个） */
-        val selectable: List<VisualizerTheme> = entries
+        /**
+         * 可手动选择的效果（无自动档；用户选了哪个就恒定显示哪个）。
+         *
+         * @param photoWallAvailable 三来源开关之「或」（[com.nasmusic.tv.visualizer.photo.PhotoWallAvailability]）。
+         *   三个全关 ⇒ [PHOTO_WALL] **不出现在列表里**：指示器上没有它，
+         *   左右键也切不到它（`VisualizerViewModel.step()` 用的是同一份列表）。
+         *
+         * ⛔ **刻意不给默认值** —— 三个调用点必须显式表态，避免日后漏传导致
+         * 「三开关全关时左右键切到一个画不出东西的空效果上」。
+         */
+        fun selectable(photoWallAvailable: Boolean): List<VisualizerTheme> =
+            if (photoWallAvailable) ALL else WITHOUT_PHOTO_WALL
+
+        /** 全部效果（含 [PHOTO_WALL]）—— 预生成，避免每次调用重新 `filter` 分配 */
+        private val ALL: List<VisualizerTheme> = entries
+
+        /** 三来源全关时的列表 —— 预生成，同上 */
+        private val WITHOUT_PHOTO_WALL: List<VisualizerTheme> = entries.filter { it != PHOTO_WALL }
     }
 }
 
