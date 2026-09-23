@@ -14,8 +14,9 @@ import org.junit.Test
  * 覆盖：值域、确定性（同种子可复现）、独立性（不同种子不同序列）、LCG 不退化。
  * 全部为纯 JVM，无 Android 依赖。
  *
- * ⚠️ 本机 `testDebugUnitTest` 因 Gradle 测试 worker 环境问题无法运行（exit 268435466），
- * 这些用例**只验证了源码可编译**，实际通过与否须由 CI 判定。
+ * ⚠️ 本类最初写着「本机 `testDebugUnitTest` 因 Gradle 测试 worker 环境问题无法运行，
+ * 这些用例只验证了源码可编译」—— **该说法已作废**（2026-09-16 起本机可跑通全量单测，
+ * 见 `AGENTS.md` 的更正）。本机验证手段是「编译 + lint + 单测」，不要再沿用旧口径。
  */
 class VisualizerRandomTest {
 

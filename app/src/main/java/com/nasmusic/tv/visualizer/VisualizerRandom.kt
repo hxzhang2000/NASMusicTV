@@ -35,6 +35,19 @@ class VisualizerRandom(seed: UInt = defaultSeed()) {
     /** 下一个值，范围 `[-1, 1)` */
     fun nextSigned(): Float = next() * 2f - 1f
 
+    /**
+     * 下一个**下标**，范围 `[0, bound)`；`bound <= 0` 时返回 0。
+     *
+     * 抽转场（`PhotoTransitionPicker`）与抽照片（`PhotoSourceAggregator` 的洗牌）都要用，
+     * 集中在这里 ⇒ **随机序列只有一处**，两条业务不会互相消耗（§5.9 / §6.5）。
+     *
+     * ⚠️ 零分配：不构造 `IntRange`、不装箱。`(next() * bound).toInt()` 理论上等于 `bound`
+     * 的边界情况（浮点向上舍入）由 `coerceIn` 兜住 —— `next()` 的返回值 `< 1f`，
+     * 但 `x.toFloat() * bound` 在 `bound` 很大时可能舍入到 `bound` 本身。
+     */
+    fun nextIndex(bound: Int): Int =
+        if (bound <= 1) 0 else (next() * bound).toInt().coerceIn(0, bound - 1)
+
     companion object {
         /**
          * 时间派生种子。

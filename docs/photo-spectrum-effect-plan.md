@@ -2031,6 +2031,17 @@ interface PhotoFaceDao {
 | G2 | `PhotoTransitionPickerTest` | 连续 N 次抽取不出现最近 2 次用过的值；池大小 2 时**必定放行**不死循环 | 把 `recent` 容量改成 1 ⇒ 断言出现 `A-B-A-B` 交替 |
 | G3 | `PhotoTransitionClockTest` | ① `dt = 10s` 时相位推进不超过 `MAX_DT_MS`；② 串行模型下 `EXIT` 起点晚于 `ENTER` 终点；③ 交叉模型下两者重叠 | 去掉 dt 钳制 ⇒ 断言「一帧跳到结束」 |
 | G4 | `PhotoTransitionRegistryTest` | **每个 `PhotoTransitionId` 都能 `get()` 到实现**（枚举 ↔ 注册表一致性） | 注释掉一个注册项 ⇒ 断言失败 |
+
+⚠️ **G3 / G4 的判据在实现期做过口径更正**（详见 §15.3 阶段 5 T5.2 / 阶段 6 T6.2 的偏差记录）：
+
+- **G4**：原文「每个 `PhotoTransitionId` 都能 `get()` 到实现」是**终态**（提交 12 后 43 种）的写法，
+  而本方案 **P2 的 33 种不在计划内** ⇒ 「76 项全都有实现」从阶段 5 到收尾都不可能成立。
+  实测判据改为「**注册表恰好等于「≤ 当前已完成分期」的全部项**」，前沿**硬编码**在测试里
+  （从注册表反推的话，整期被误删时前沿会一起下沉、门禁静默通过 —— 已写负向自证证明这点）。
+- **G3 ②**：原文按「一张照片的完整生命周期（ENTER → HOLD → EXIT）」描述，但 §5.2 的时序图与
+  §14.3 末行（「EXIT 时长 = 同一时段的 ENTER 时长，**无需独立配置**」）说明 EXIT 与 ENTER
+  **共用同一个转场窗口**，且 `start()` 签名里没有第三个时长参数。
+  ⇒ 实测判据改为「**串行下两段不重叠（EXIT 在前），交叉下两段重叠**」。
 | G5 | `PhotoTransitionPoolTest` | 池内**无音频反应类**；老平台（`sdkInt = 22`）下 `LIQUIFY` 与 `NOISE_DISSOLVE` **不同时出现** | 用 `sdkInt = 33` 跑同一断言 ⇒ 两者可共存（证明降级去重确实生效） |
 | G6 | `PhotoScaleModeTest` | `CROP` 的 dst 覆盖全屏；`FIT` 的 dst 保持宽高比且不出界 | 故意用错比例 ⇒ 断言 dst 出界 |
 | G7 | `VisualizerThemeTest`（改） | `entries.size == 36`；`selectable(available = false)` **不含** `PHOTO_WALL` | 传 `true` ⇒ 含 `PHOTO_WALL` |
@@ -2144,7 +2155,7 @@ JAVA_HOME="C:/Program Files/Android/Android Studio/jbr" \
 | 3 聚合与去重 | `feat(photo): …` | 2 | ✅ |
 | 4 PhotoBuffer | `feat(photo): …` | 3 | ✅ |
 | 5 转场策略层 + 15 种 P0 | `feat(visualizer): …` | 4 | ✅ |
-| 6 随机抽取与时钟 | `feat(visualizer): …` | 4 | ⬜ |
+| 6 随机抽取与时钟 | `feat(visualizer): …` | 4 | ✅ |
 | 7 PhotoRenderer 与 PHOTO_WALL | `feat(visualizer): …` | 5 | ⬜ |
 | 8 设置分区 | `feat(settings): …` | 4 | ⬜ |
 | 9 权限与 SAF 目录 | `feat(photo): …` | 4 | ⬜ |
@@ -2402,18 +2413,87 @@ JAVA_HOME="C:/Program Files/Android/Android Studio/jbr" \
 
 #### 阶段 6 —— 转场随机抽取与时钟　`提交 6`　**4 项**
 
-- [ ] **T6.1** `VisualizerRandom.nextIndex(bound)` + `PhotoTransitionPicker`
+- [x] **T6.1** `VisualizerRandom.nextIndex(bound)` + `PhotoTransitionPicker` ✅ 2026-09-23
   - `nextIndex` 零分配（约 3 行）
   - Picker 记**最近 2 次**、重试 8 次后**放行**
   - **验收**：`bound = 1` 返回 0 不抛异常；G2 绿（含负向：容量改 1 → `A-B-A-B`）
-- [ ] **T6.2** `PhotoTransitionClock`（ENTER / HOLD / EXIT + `slotSwapped` + `inGap`）
+  - **实际**：`visualizer/VisualizerRandom.kt` +`nextIndex`（8 行，含 KDoc）、
+    `visualizer/photo/PhotoTransitionPicker.kt`（96 行）
+  - ⚠️ **实现期偏差 1（`pick` 的返回值是「池内下标」）**：按 §14.2.3 的签名，`pick` 返回
+    **`pool` 数组的下标**而不是 `PhotoTransitionId.ordinal` —— 这样 `pool` 可以是任意子集，
+    Picker 不需要知道池里装的是什么。⚠️ 池变化后旧下标会失效，`isRecent` 对越界值自然不匹配
+    （不会误避让）
+  - ⚠️ **实现期新增 1（`recentCapacity` 构造参数）**：默认 2（§5.9），暴露它是为了**负向自证** ——
+    传 1 时同一份生产代码必须能观察到「隔一个就重复」的短周期。若把容量 1 的性质写成断言，
+    它必须失败 ⇒ 这才证明「记 2 次」不是随手写的数
+  - ⚠️ **实现期新增 2（`size == 1` 提前返回）**：池里只有一个时直接返回 0，
+    **不消耗随机序列** —— 让「固定单效果」档下随机序列与画面变化解耦
+  - ⚠️ **实现期新增 3（空池返回 -1）**：§14.2.3 未定义。返回 `-1` 而不是抛异常/返回 0，
+    让调用方（`PhotoWallController`）能「保持当前转场不变」
+  - **门禁**：G2 `PhotoTransitionPickerTest` **9 例**绿（**纯 JVM**）
+- [x] **T6.2** `PhotoTransitionClock`（ENTER / HOLD / EXIT + `slotSwapped` + `inGap`）✅ 2026-09-23
   - ⛔ 相位 `+= dt` 累加（**绝不 `nowMs × 系数`**）+ `dt` 钳 `MAX_DT_MS = 100`
   - ⛔ 模型（交叉 / 串行）在 `start()` 定死并贯穿本次切换
   - **验收**：G3 绿；喂 `dt = 10s` 时相位推进不超过一帧步长；切换中改设置不导致画面跳变
-- [ ] **T6.3** `PhotoTransitionId.randomPool(phase, sdkInt)`
+  - **实际**：`visualizer/photo/PhotoTransitionClock.kt`（215 行）
+  - ⚠️ **实现期偏差 2（G3 ② 的口径更正 —— 重要）**：G3 ② 原文「**串行模型下 `EXIT` 起点晚于
+    `ENTER` 终点**」是按「一张照片的完整生命周期（ENTER → HOLD → EXIT）」描述的；但
+    **§5.2 的时序图**（`旧图 |--HOLD--|--EXIT--|` →（间隙）→ `新图 |--ENTER--|`）与
+    **§14.3 末行**（「EXIT 时长 = 同一时段的 ENTER 时长，**无需独立配置**」）说明
+    **EXIT 与 ENTER 共用同一个转场窗口**，`start()` 的签名里也确实**没有第三个时长参数**。
+    ⇒ 实现按 §5.2 / §14.3（图与表优先于 G3 的一行摘要），G3 的可执行判据改为
+    「**串行下 EXIT 段与 ENTER 段不重叠（EXIT 在前），交叉下两段重叠**」
+  - ⚠️ **实现期偏差 3（`inGap` 是「暗场点两侧的一小段」而非独立时长）**：
+    串行窗口的前半段 = EXIT、后半段 = ENTER，交界 `p = 0.5` 是暗场；
+    `inGap` = `p ∈ [0.46, 0.54]`（`BLACK_POINT = 0.5f` / `GAP_HALF_WIDTH = 0.04f`）。
+    800ms 窗口下约 64ms（≈4 帧），肉眼是一个「顿」。⛔ `BLACK_POINT` **必须与
+    `FadeBlackTransition` 的分界点（0.5）一致**，门禁直接断言这一点
+  - ⚠️ **实现期偏差 4（`finished` 标志；HOLD 结束不进 `IDLE`）**：§5.1 的状态机画的是
+    `[EXIT] ──▶ 回到 [IDLE]`。但若 HOLD 结束那一帧把 `transitionId` / `progress` 清掉，
+    渲染器会读到 `photoTransition == null` ⇒ **闪一下**。⇒ 改为新增 `finished: Boolean`
+    作为「本次切换走完」的信号（控制器据此启动下一次切换），`Phase.IDLE` **只出现在
+    「尚未 `start` 或已 `reset`」**的状态
+  - ⚠️ **实现期新增 4（`maxDtMs` 构造参数）**：默认 `MAX_DT_MS = 100`，暴露它同样是为了
+    **负向自证** —— 传 10_000 即可用**同一份生产代码**模拟「去掉钳制」，
+    断言「一帧跳到结束」（§14.4 G3 的负向自证原文）
+  - ⚠️ **实现期新增 5（`enterMs <= 0` 的硬切路径）**：§5.8 的 `BEAT_CUT` 要求
+    「ENTER / EXIT 时长 = 0」。`elapsedMs < enter` 在 `enter == 0` 时恒为 false ⇒
+    直接进 HOLD（`progress = 1`、`slotSwapped = true`），**不会出现除零**
+  - ⚠️ **实现期新增 6（时钟回拨防御）**：`dt = (nowMs - lastNowMs).coerceIn(0, maxDtMs)` ——
+    负值按 0 处理。`System.currentTimeMillis()` 不是单调时钟（NTP 调整会回拨），
+    若不管，相位会倒退
+  - ⚠️ **未做（明确留给阶段 10）**：§5.8 的「**转场打断**：手动切图时若 ENTER 未完成 →
+    从当前 blend 值反向插值」。时钟**不提供**「从某个 progress 重新 start」的入口 ——
+    正确做法是控制器把「手动切图」请求**排队到本次窗口结束**，从根上避免跳变。
+    ⛔ 不要在窗口进行中调 `start()`（会把 `elapsedMs` 归零 = 从 0 重启）
+  - **门禁**：G3 `PhotoTransitionClockTest` **18 例**绿（**纯 JVM**）
+  - ⚠️ **G3 辅助函数的坑（首版实测失败）**：测试里的「推进到某个时刻」辅助函数
+    **必须维护绝对时间锚点**，不能每次从 0 重新起算 —— `advance()` 算的是
+    `nowMs - lastNowMs`，时间戳回拨会被钳成 `dt = 0`，第二次调用起相位**不再推进**
+- [x] **T6.3** `PhotoTransitionId.randomPool(phase, sdkInt)` ✅ 2026-09-23
   - 排除音频反应类 5 种 + 按**降级后**标识去重
   - **验收**：G5 绿
-- [ ] **T6.4** **阶段完成** —— 门禁 G2 / G3 / G5 绿
+  - **实际**：**阶段 5 已实现**（在 `PhotoTransitionId.companion` 里），本阶段补齐**门禁**
+  - ⚠️ **补做（属 T5.3「参数逐项对齐 §14.3」的欠账）**：§14.3 的**「缓动」列**此前没落进代码
+    （`PhotoTransitionId` 没有 easing 字段，`PhotoTransitionClock` 的 `eased` 就无从取值）。
+    ⇒ 本阶段给枚举加 `easing: (Float) -> Float`：
+    - ⛔ **不给默认值**：76 项全部显式写出 ⇒ 新增枚举项漏写缓动会**编译失败**（编译器即门禁）；
+      给默认值的话漏写会静默用上 `easeInOutQuad`，而 §5.3 里只有 A / D 两类用它是对的
+    - 取值：§14.3 的 P0 15 行优先，其余按 §5.3 的**类别**行；
+      风格化类（J）§5.3 写「按子类型」，按各自机制归入最接近的类别
+    - ⚠️ **唯一冲突**：`SPECTRUM_WIPE` —— §5.3 色彩/光效类别行写 `easeOutQuad`，
+      §14.3 逐项表写 `easeInOutSine` ⇒ **以逐项表为准**（已在枚举 KDoc 注明）
+  - ⚠️ **实现期偏差 5（池大小可精确核算）**：完整枚举下 老平台 `70` = 76 − 5 音频 − 1 降级去重；
+    新平台 `71` = 76 − 5。门禁直接断言这两个数 ⇒ 「多了 / 少了」都能被发现
+  - **门禁**：G5 `PhotoTransitionPoolTest` **10 例**绿（**纯 JVM**）；
+    另在 G4 里加 1 例「随机池必须由 `available()` 构造」的跨模块一致性断言
+- [x] **T6.4** **阶段完成** —— 门禁 G2 / G3 / G5 绿 ✅ 2026-09-23
+  - **实际**：G2 **9 例** + G3 **18 例** + G5 **10 例** = **37 例**新增；
+    G4 从 14 → **15 例**（+1 例池一致性）
+  - **门禁基线**：全量 `testDebugUnitTest` **1077 例 / 0 失败**（1039 + 38）；
+    `lintDebug` **0 error / 277 warning**
+  - ⚠️ 顺手修掉 `VisualizerRandomTest` 里一条**过期注释**（「本机无法运行单测，用例只验证了
+    源码可编译」）—— 该口径自 2026-09-16 起已作废
 
 #### 阶段 7 —— PhotoRenderer 与 PHOTO_WALL 枚举值　`提交 7`　**5 项**
 

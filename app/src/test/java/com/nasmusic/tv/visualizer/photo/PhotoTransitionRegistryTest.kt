@@ -164,7 +164,36 @@ class PhotoTransitionRegistryTest {
         }
     }
 
-    // ────────────────────── ③ 时长参数（T5.3 验收）──────────────────────
+    // ────────────────────── ③ 随机池必须由 available() 构造 ──────────────────────
+
+    /**
+     * §5.9：「池 = **当前已实现的效果**」—— 随机池**只能**由 [PhotoTransitionRegistry.available] 构造。
+     *
+     * 若误用 `PhotoTransitionId.implemented(phase)`（那是**规划**，含未实现的项），
+     * 就会抽到 `get() == null` 的转场 ⇒ 画面卡在上一张不动（静默故障）。
+     *
+     * 当前分期（P0）恰好全部实现 ⇒ 两条路的结果**必须完全一致**。
+     * ⚠️ 阶段 12 补齐 P1 后，`EXPECTED_FRONTIER` 改成 `Phase.P1`，这条断言依然成立
+     * （那时 available 也等于 `implemented(P1)`）—— 所以它不需要随分期改。
+     */
+    @Test
+    fun `random pool is built from the implemented set`() {
+        val available = PhotoTransitionRegistry.available()
+        val fromRegistry = PhotoTransitionId.randomPool(available, sdkInt = 22).toSet()
+        val fromPlan = PhotoTransitionId.randomPool(EXPECTED_FRONTIER, sdkInt = 22).toSet()
+        assertTrue(
+            "注册表池 $fromRegistry 与规划池 $fromPlan 不一致 —— " +
+                "分期已全部实现时两者必须相同；不同则说明规划里有没实现的项被算进了池",
+            fromRegistry == fromPlan,
+        )
+        // 池里每一项都必须真能取到实现（这才是「不会抽到空转场」的直接证据）
+        for (ordinal in fromRegistry) {
+            val id = PhotoTransitionId.entries[ordinal]
+            assertNotNull("池里有 $id，但注册表没有实现它 ⇒ 抽到它会卡住画面", PhotoTransitionRegistry.get(id))
+        }
+    }
+
+    // ────────────────────── ④ 时长参数（T5.3 验收）──────────────────────
 
     /**
      * §14.3 参数表逐项对齐。
