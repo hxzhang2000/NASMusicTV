@@ -2143,7 +2143,7 @@ JAVA_HOME="C:/Program Files/Android/Android Studio/jbr" \
 | 2 PhotoSource 抽象与三来源 | `feat(photo): …` | 5 | ✅ |
 | 3 聚合与去重 | `feat(photo): …` | 2 | ✅ |
 | 4 PhotoBuffer | `feat(photo): …` | 3 | ✅ |
-| 5 转场策略层 + 15 种 P0 | `feat(visualizer): …` | 4 | ⬜ |
+| 5 转场策略层 + 15 种 P0 | `feat(visualizer): …` | 4 | ✅ |
 | 6 随机抽取与时钟 | `feat(visualizer): …` | 4 | ⬜ |
 | 7 PhotoRenderer 与 PHOTO_WALL | `feat(visualizer): …` | 5 | ⬜ |
 | 8 设置分区 | `feat(settings): …` | 4 | ⬜ |
@@ -2297,20 +2297,108 @@ JAVA_HOME="C:/Program Files/Android/Android Studio/jbr" \
 
 #### 阶段 5 —— 转场策略层与 15 种 P0 转场　`提交 5`　**4 项**
 
-- [ ] **T5.1** 转场接口层 + 缓动库
+- [x] **T5.1** 转场接口层 + 缓动库 ✅ 2026-09-23
   - `PhotoMechanism` / `PhotoGeometry` / `PhotoTransition` 接口（§14.2.3）
   - `visualizer/Easing.kt` 缓动库（§5.4 全量）
   - **验收**：`render` 内无任何分配（代码审查）；每个缓动函数端点值正确（`f(0)=0`、`f(1)=1`）
-- [ ] **T5.2** 枚举与注册表
+  - **实际**：`visualizer/Easing.kt`（15 个缓动 + `stagger`，161 行）、
+    `visualizer/photo/PhotoTransition.kt`（`PhotoMechanism` 5 值 + `PhotoRect` + `PhotoGeometry`
+    + `PhotoTransition` 接口，231 行）
+  - ⚠️ **实现期偏差 1（`PhotoRect` 用 `Float`，不用 `android.graphics.Rect`）**：
+    ① 它是 `Int`，照片在大屏上缩放会**累积取整误差**（表现为缓慢抖动）；
+    ② 用它就得为「纯几何计算」引入 Robolectric，而几何正是最该被**纯 JVM 单测**覆盖的部分（G6）。
+    转换到 `Int` 只在最后交给 `drawImage` 那一刻做（`PhotoDraw.drawPhoto` 里 `roundToInt()`）
+  - ⚠️ **实现期偏差 2（`spectrum` 搭在 `PhotoGeometry` 上）**：接口签名（§14.2.3）没有频谱参数，
+    为 `SPECTRUM_WIPE` 单独改接口会动到全部 76 个实现。⇒ 在 `PhotoGeometry` 上加
+    `var spectrum: FloatArray?`（**只存引用、不复制**），由 `PhotoRenderer.draw` 每帧从
+    `AudioFrame.spectrum` 填入。这是**妥协**，已在 KDoc 注明
+  - ⚠️ **实现期新增（`onSwapStart()`）**：`PhotoTransition` 接口加了这个方法 ——
+    `prepare()` **只在「切转场 / 切画质 / 尺寸变化」时调用**，固定转场模式下连续多次切换
+    **不会**重新调用它，所以「每次切换重新随机」的东西（`WIPE_LINEAR` 的 8 个方向、
+    `SHAPE_RANDOM` 的形状）必须另有钩子，否则方向会永远不变
+  - ⚠️ **实现期新增（A/B 各一套 src+dst）**：§14.2.3 只写了单个 `src`（「恒为整图」），
+    那只在 `FIT` 下成立 —— `CROP` 必须裁切源，而 A、B 两图宽高比可以不同
+    ⇒ `PhotoGeometry` 存 `srcA/dstA/srcB/dstB` **四个** `PhotoRect`
+  - **端点门禁**：`EasingTest` **11 例**绿（含 `easeOutElastic` / `easeOutBounce` / Back 类的超调范围）
+  - ⚠️ **负向自证踩坑**：`easeOutElastic` 不带短路时 `t=1` 处算得 `1.0004882812…`，
+    偏差 **4.88e-4** —— 恰好落在 `1e-4`（端点门禁容差）与 `1e-3`（我最初手写的阈值）之间。
+    写 `1e-3` 会让这条负向自证**自己失败**（首轮实测即此）。⇒ 阈值必须引用端点门禁的 `EPS`
+- [x] **T5.2** 枚举与注册表 ✅ 2026-09-23
   - `PhotoTransitionId` 76 值枚举，元信息齐：`mechanism` / `baseDurationMs` / `phase` / `requiresSequential` / `audioReactive` / `degradeTo`
   - `PhotoTransitionRegistry`（id → 实现单例）
   - `MaskCache`：256×256 灰度遮罩，**全进程只生成一次**，仅在 `onEnter` 生成
   - **验收**：76 项全部有 `phase`；G4 绿；绘制路径无 `createBitmap`
-- [ ] **T5.3** 15 种 P0 转场实现
+  - **实际**：`PhotoTransitionId.kt`（76 项：A4+B9+C7+D10+E8+F6+G8+H7+I5+J7+K5，213 行）、
+    `PhotoTransitionRegistry.kt`（P0 **15 项**注册，81 行）、`MaskCache.kt`（94 行）
+  - ⚠️ **实现期偏差 3（`MaskCache` 做成 `object` 单例，且没有 `release()`）**：
+    文档要求「全进程只生成一次」—— 若每个 `PhotoRenderer` 各持一份就会变成
+    「每次进效果重新生成」（256×256 有 6.5 万像素）。⇒ 用 `object`；
+    **不能提供 `release()`**（某个渲染器退出就回收共享位图 = 别人踩空）
+  - ⚠️ **实现期偏差 4（遮罩用 `ARGB_8888`，不用 `ALPHA_8`）**：`Bitmap.setPixels` 对
+    `ALPHA_8` 的取值约定跨版本不一致（部分版本把 alpha 放在 `Int` 的低 8 位，部分是高位）。
+    用 `ARGB_8888` 写 `v shl 24` 语义确定，代价是 4 倍内存（256×256 仅 256 KB，可接受）
+  - ⚠️ **实现期偏差 5（G4 的「分期前沿」口径）**：§14.4 原文「**每个 `PhotoTransitionId` 都能
+    `get()` 到实现**」是**终态**（提交 12 后 43 种）的写法，而本方案 **P2 的 33 种不在计划内**
+    ⇒ 「76 项全都有实现」从阶段 5 到收尾都**不可能成立**。门禁改为
+    「**注册表恰好等于「≤ 当前已完成分期」的全部项**」，并把前沿**硬编码**在测试里
+    （从注册表反推的话，整期被误删时前沿会一起下沉、门禁静默通过 —— 已写负向自证证明这点）
+  - ⚠️ **实现期新增（G4 需要 Robolectric）**：`PhotoTransitionRegistry` 初始化会**真的构造**
+    15 个转场实例，其中 `IrisCircleTransition` 持有 `Path()`、`NoiseDissolveTransition` 持有
+    `Paint()`（→ `android.graphics.*`）。纯 JVM 下 `android.*` 是桩类，构造即抛
+  - ⚠️ **实现期偏差 6（`createBitmap` 的扫描口径）**：T5.2 验收说「绘制路径无 `createBitmap`」，
+    但 `MaskCache.kt` 里**确实有** `createBitmap` —— 那是**允许**的（只在 `prepare` 跑一次）。
+    ⇒ 门禁**只扫 `transitions/` 目录**（= 全部 `render` 实现所在处），简单全文搜会误判正确写法
+- [x] **T5.3** 15 种 P0 转场实现 ✅ 2026-09-23
   - 参数逐项对齐 §14.3
   - ⛔ M4 块数红线：电视 ≤ 84（12×7），手机 ≤ 336（24×14），超限自动合并
   - **验收**：`CROSSFADE` 800ms / `SLIDE_*` 500ms / `BLINDS_*` 900+300ms 等；老电视上 `BLINDS_*` 不掉帧
-- [ ] **T5.4** **阶段完成** —— 门禁 G4 / G6 绿
+  - **实际**：`visualizer/photo/transitions/` 8 个文件 —— `PhotoDraw.kt`（共享绘制辅助）、
+    `FadeTransitions` / `SlideTransitions` / `ZoomTransitions` / `IrisTransitions` /
+    `BlindsTransitions` / `DissolveTransitions` / `LightTransitions`，合计 **621 行**
+  - **时长逐项对齐**（G4 断言）：`CROSSFADE`/`FADE_BLACK` 800 · `SLIDE_*` 500 · `ZOOM_*` 700 ·
+    `IRIS_CIRCLE`/`WIPE_LINEAR` 700 · `BLINDS_*` **1_200（= 单块 900 + 错落 300）** ·
+    `NOISE_DISSOLVE` 1_000 · `LIGHT_SWEEP` 600 · `SPECTRUM_WIPE` 700
+  - ⛔ **M4 块数红线落地**：`BlindsTransition` 用 `BLOCK_PX = 64f` 反算块数并**双重钳制** ——
+    横向 `MAX_BLOCKS_H = 14`、竖向 `MAX_BLOCKS_V = 24`。1080p 下横向 1920/64 = 30 块 ⇒ 被钳到 14
+    （**超限自动合并**：块宽自动放大到 `canvasW / 14`），落在电视 84 块红线内
+  - ⚠️ **实现期偏差 7（`CrossfadeTransition` 旧图 alpha 恒 1）**：写成「旧图 `1−p` 对新图 `p`」
+    会在 `p = 0.5` 时**自发暗场**（两层各半透明，叠出来是 0.75 亮度）。正确写法是
+    旧图恒不透明、新图 `alpha = p` 叠上去
+  - ⚠️ **实现期偏差 8（`NoiseDissolveTransition` 必须自己 `saveLayer`）**：
+    `VisualizerStage` 的 Canvas 本身已是离屏层（`compositingStrategy = Offscreen`），
+    在主画布上 `DstIn` 会**连旧图和背景一起裁掉**。另外**没有用「阈值化」**（文档原文是
+    「阈值 0→1」）—— 阈值化需要每帧构造 `ColorFilter`（分配）且产生硬边；
+    改成「**遮罩 alpha × p**」后零分配、平滑无硬边，视觉上同样是溶解
+  - ⚠️ **实现期偏差 9（`BlindsTransition` 只画一次旧图）**：循环里若每块都「画旧图 + 画新图」，
+    draw call 翻倍而画面完全一样。⇒ 循环**只用 `clipRect` 逐块画新图**
+  - ⚠️ **实现期偏差 10（`LightSweepTransition` 不用 `Brush.linearGradient`）**：
+    `Brush` 是普通对象（非 value class），每帧构造它就是在绘制路径上分配。⇒ 用**三条实心
+    `drawRect`** 模拟高光带
+  - ⚠️ **实现期偏差 11（`IrisCircleTransition` 用 64 边形逼近圆）**：Compose 的 `Path`
+    **没有 `arcTo`**，而 `addOval` 需要 `Rect`（不可变 data class，每帧构造 = 分配）
+    ⇒ 用 `moveTo`/`lineTo` 画 64 边形（1080p 上最大弦高误差约 1.3 px，肉眼不可见）
+  - ⚠️ **实现期偏差 12（`SpectrumWipeTransition` 无频谱时退化为整体淡入）**：
+    不写「留黑屏」—— 频谱数据在极少数帧可能为空，留黑屏会闪一下
+  - ⛔ **首轮编译报错（10 处）**：`clipRect` / `clipPath` / `drawIntoCanvas` 是
+    `androidx.compose.ui.graphics.drawscope` 包下的**顶层扩展函数**，**不是 `DrawScope` 的成员**
+    ⇒ 不写 import 就报 `Unresolved reference`。涉及 5 个文件（`Blinds`/`Dissolve`/`Iris`/`Light`/`Zoom`）
+  - ⏳ **待用户真机复验**：「老电视上 `BLINDS_*` 不掉帧」与「`SPECTRUM_WIPE` 每帧最多 64 次
+    `drawImage`（P0 里 draw call 最多的一个）的帧率」都需要真机观测
+- [x] **T5.4** **阶段完成** —— 门禁 G4 / G6 绿 ✅ 2026-09-23
+  - **实际**：G4 `PhotoTransitionRegistryTest` **14 例**绿（Robolectric sdk 34）、
+    G6 `PhotoScaleModeTest` **14 例**绿（**纯 JVM**，只碰 `PhotoGeometry` 几何）
+  - **门禁基线**：全量 `testDebugUnitTest` **1039 例 / 0 失败 / 100 个测试类**；
+    `lintDebug` **0 error / 277 warning**（新增文件 **0 命中**）
+  - ⚠️ **基线口径更正**：此前记录的 `972 例 / 95 类` 是**阶段 4 之前**的值 ——
+    阶段 4 的 `PhotoBufferBudgetTest`（11）+ `PhotoBufferTest`（17）= **28 例 / 2 类**
+    正好补上 `972 → 1000 / 95 → 97` 的差额，本阶段再 +39 例 / +3 类 = **1039 / 100**。
+    ⇒ 今后引用基线请用 **1039**，不要再沿用 972（会误判「多出来的用例是哪来的」）
+  - ⚠️ **G4 的负向自证踩坑**：最初把「整期被删」场景写成「用 `EXPECTED_FRONTIER` 判 `wiped`」——
+    但当前前沿就是 P0，「删掉 P1」在 P0 阶段本就无影响 ⇒ 那条用例**恒真、空转**（首轮实测失败）。
+    ⇒ 改成**显式给 `Phase.P1` 当声明前沿**，用例在任何阶段都验同一个性质
+  - ⚠️ **G4 的扫描器自证**：除了「真实目录 0 命中」，还往**临时文件**里写满禁用调用
+    （`createBitmap` / `createScaledBitmap` / `BitmapFactory.decode*`）断言扫得出、
+    再给一个干净文件断言扫不出 —— 两个方向都验，才算证明扫描器不是空转
 
 #### 阶段 6 —— 转场随机抽取与时钟　`提交 6`　**4 项**
 
