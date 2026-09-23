@@ -169,19 +169,27 @@ internal fun SettingActionButton(
      * 后续按钮被挤成 0 宽（表现为"网络源音质只有『自动』一个选项"）。
      * 该缺陷在 v2.35.0 之前就存在（音质档位行原本就是 Row + 4 个此组件）。
      */
-    modifier: Modifier = Modifier.fillMaxWidth()
+    modifier: Modifier = Modifier.fillMaxWidth(),
+    /**
+     * 阶段 11 新增：置灰（低画质档的人脸检测，§15.3 T11.4）。
+     *
+     * ⚠️ 与 [SettingSwitch] 的 `enabled` 同一套视觉口径（`Surface.copy(alpha = 0.5f)` +
+     * `TextSecondary`），并且 `onClick` 里**必须**判一次 —— `FocusableSurface` 仍可聚焦，
+     * 单靠颜色挡不住遥控器的「确认」键。
+     */
+    enabled: Boolean = true,
 ) {
     FocusableSurface(
-        onClick = onClick,
+        onClick = { if (enabled) onClick() },
         modifier = modifier
             .padding(vertical = 4.dp),
         shape = RoundedCornerShape(12.dp),
-        focusedScale = 1.03f,
+        focusedScale = if (enabled) 1.03f else 1f,
         animationDurationMs = 250,
-        containerColor = NasMusicColors.Surface,
-        contentColor = NasMusicColors.TextPrimary,
-        focusedContainerColor = NasMusicColors.Primary.copy(alpha = 0.15f),
-        focusedContentColor = NasMusicColors.TextPrimary,
+        containerColor = if (enabled) NasMusicColors.Surface else NasMusicColors.Surface.copy(alpha = 0.5f),
+        contentColor = if (enabled) NasMusicColors.TextPrimary else NasMusicColors.TextSecondary,
+        focusedContainerColor = if (enabled) NasMusicColors.Primary.copy(alpha = 0.15f) else NasMusicColors.SurfaceVariant,
+        focusedContentColor = if (enabled) NasMusicColors.TextPrimary else NasMusicColors.TextSecondary,
         pressedScale = 0.98f,
         focusBorderColor = NasMusicColors.FocusRing.copy(alpha = 0.6f)
     ) {
@@ -190,7 +198,7 @@ internal fun SettingActionButton(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column(modifier = Modifier.weight(1f)) {
-                Text(text = label, color = NasMusicColors.TextPrimary, fontSize = FontSize.button())
+                Text(text = label, color = if (enabled) NasMusicColors.TextPrimary else NasMusicColors.TextSecondary, fontSize = FontSize.button())
                 Text(text = description, color = LocalFocusableContentColor.current, fontSize = FontSize.body())
             }
             Text(

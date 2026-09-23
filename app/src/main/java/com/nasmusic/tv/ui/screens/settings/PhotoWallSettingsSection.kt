@@ -26,6 +26,7 @@ import androidx.compose.ui.window.DialogProperties
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Text
 import com.nasmusic.tv.R
+import com.nasmusic.tv.backend.photo.FaceScanManager
 import com.nasmusic.tv.backend.photo.PhotoScaleMode
 import com.nasmusic.tv.backend.photo.PhotoWallAccessPolicy
 import com.nasmusic.tv.backend.photo.SafDirectoryPolicy
@@ -103,6 +104,18 @@ data class PhotoWallRuntimeState(
     /** 人脸检测进度（阶段 11 填；`total <= 0` ⇒ 不渲染进度行） */
     val faceScanDone: Int = 0,
     val faceScanTotal: Int = 0,
+    /**
+     * 人脸扫描任务阶段（阶段 11 填；`null` = 尚未初始化，按 IDLE 处理）。
+     * ⚠️ 运行时事实，不落盘；「开始 / 停止」按钮的形态由它决定。
+     */
+    val faceScanPhase: FaceScanManager.Phase? = null,
+    /**
+     * 人脸检测**是否可用**（阶段 11）。
+     * 两个来源都是 `false` ⇒ 「开始人脸检测」置灰（T11.4）：
+     * - 低画质档（ARMv7 上跑不动推理，§10.2「老设备策略」）
+     * - 模型加载失败（`YuNetFaceDetector.warmUp()` 返回 false）
+     */
+    val faceScanSupported: Boolean = true,
 )
 
 /** 照片墙设置分区状态 */
@@ -128,6 +141,8 @@ data class PhotoWallSettingsActions(
     val onRescan: (() -> Unit)? = null,
     val onToggleFacesOnly: ((Boolean) -> Unit)? = null,
     val onStartFaceScan: (() -> Unit)? = null,
+    /** 停止正在跑的人脸扫描（阶段 11；已扫的部分保留 ⇒ 下次「开始」是续跑） */
+    val onStopFaceScan: (() -> Unit)? = null,
     val onClearFaceScan: (() -> Unit)? = null,
     val onToggleRandomTransition: ((Boolean) -> Unit)? = null,
     val onChangeFixedTransition: ((PhotoTransitionId) -> Unit)? = null,
@@ -287,16 +302,30 @@ internal fun PhotoWallSettingsSection(
         // ── 显示筛选 ────────────────────────────────────────────────────────
         Spacer(modifier = Modifier.height(12.dp))
         SubSectionTitle(stringResource(R.string.settings_photo_wall_filter))
+        // ⛔ T11.4：低画质档 / 模型不可用 ⇒ 人脸功能整体置灰（开关也一起灰，
+        //   因为开着它等于「照片墙变空」—— 没有检测结果就没有照片可显示）
+        val faceEnabled = runtime.faceScanSupported
         SettingSwitch(
             label = stringResource(R.string.settings_photo_wall_faces_only),
             description = stringResource(R.string.settings_photo_wall_faces_only_desc),
             checked = s.photoWallFacesOnly,
+            enabled = faceEnabled,
             onClick = { actions.onToggleFacesOnly?.invoke(!s.photoWallFacesOnly) }
         )
+        val running = runtime.faceScanPhase == FaceScanManager.Phase.RUNNING
         SettingActionButton(
-            label = stringResource(R.string.settings_photo_wall_face_scan),
-            description = stringResource(R.string.settings_photo_wall_face_scan_desc),
-            onClick = { actions.onStartFaceScan?.invoke() }
+            label = stringResource(
+                if (running) R.string.settings_photo_wall_face_scan_stop
+                else R.string.settings_photo_wall_face_scan
+            ),
+            description = stringResource(
+                if (running) R.string.settings_photo_wall_face_scan_stop_desc
+                else R.string.settings_photo_wall_face_scan_desc
+            ),
+            enabled = faceEnabled,
+            onClick = {
+                if (running) actions.onStopFaceScan?.invoke() else actions.onStartFaceScan?.invoke()
+            }
         )
         if (runtime.faceScanTotal > 0) {
             Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp)) {
@@ -310,9 +339,18 @@ internal fun PhotoWallSettingsSection(
                 )
             }
         }
+        if (runtime.faceScanPhase == FaceScanManager.Phase.UNAVAILABLE) {
+            Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp)) {
+                SettingsInfoRow(
+                    stringResource(R.string.settings_photo_wall_face_scan),
+                    stringResource(R.string.settings_photo_wall_face_unavailable)
+                )
+            }
+        }
         SettingActionButton(
             label = stringResource(R.string.settings_photo_wall_face_clear),
             description = stringResource(R.string.settings_photo_wall_face_clear_desc),
+            enabled = faceEnabled,
             onClick = { actions.onClearFaceScan?.invoke() }
         )
 

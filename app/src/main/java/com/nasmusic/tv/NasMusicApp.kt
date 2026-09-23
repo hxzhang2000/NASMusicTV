@@ -196,6 +196,16 @@ class NasMusicApp : Application(), ImageLoaderFactory {
         )
     }
 
+    /**
+     * 人脸检测结果库（`photo_face.db`，阶段 11）。
+     *
+     * ⚠️ `by lazy`：**不要在 onCreate 里初始化** —— 绝大多数用户不用「仅显示含人像」，
+     * 没必要让每个启动都建第三个 Room 实例。首次「开始人脸检测」才真正打开。
+     */
+    val photoFaceDatabase: com.nasmusic.tv.backend.photo.db.PhotoFaceDatabase by lazy {
+        com.nasmusic.tv.backend.photo.db.PhotoFaceDatabase.get(this)
+    }
+
     // ---- 百度网盘组件（懒构造，仅在用户开启百度源时实例化）----
     /** 百度专用 OkHttpClient（守护线程池 + 系统默认 TLS 校验；独立实例避免与全局播放 client 争抢连接池） */
     val baiduOkHttpClient: OkHttpClient by lazy { BaiduOAuthClient.buildClient() }

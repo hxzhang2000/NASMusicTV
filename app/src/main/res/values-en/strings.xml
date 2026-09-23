@@ -332,6 +332,11 @@
     <string name="settings_photo_wall_face_scan_progress">Progress %1$d / %2$d</string>
     <string name="settings_photo_wall_face_clear">Clear scan results</string>
     <string name="settings_photo_wall_face_clear_desc">Delete the saved face scan results</string>
+    <string name="settings_photo_wall_face_scan_stop">Stop face scan</string>
+    <string name="settings_photo_wall_face_scan_stop_desc">Finished photos are kept; the scan resumes where it stopped</string>
+    <string name="settings_photo_wall_face_unavailable">Not available on this device (model failed to load or quality tier is too low)</string>
+    <string name="photo_wall_notice_no_photos">No photos to scan. Enable at least one photo source first.</string>
+    <string name="photo_wall_notice_face_unavailable">Face detection is unavailable; the scan cannot start</string>
     <string name="settings_photo_wall_transition">Transitions</string>
     <string name="settings_photo_wall_random_transition">Randomize transitions</string>
     <string name="settings_photo_wall_random_transition_desc">When off, always uses the effect selected below</string>

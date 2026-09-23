@@ -99,6 +99,11 @@ internal fun SettingsBranch(
                     // 所以走 `PhotoWallRuntimeState` 而不是 `AppSettings`。
                     val photoWallPerSource by viewModel.visualizerVM.photoWall.perSourceCount.collectAsState()
                     val photoWallMerged by viewModel.visualizerVM.photoWall.mergedCount.collectAsState()
+                    // 阶段 11（§10）：人脸扫描进度 / 可用性 —— 同样是运行时事实。
+                    // ⚠️ `faceScanState` 是 getter（内部 `by lazy`）⇒ 只有进设置页才建
+                    //    `FaceScanManager`（开 photo_face.db / 读 assets），平时零成本。
+                    val photoWallFaceScan by viewModel.visualizerVM.faceScanState.collectAsState()
+                    val faceScanSupported by viewModel.visualizerVM.faceScanSupported.collectAsState()
                     SettingsScreen(
                         selectedSection = settingsSection,
                         onOpenSection = { viewModel.navVM.openSettingsSection(it) },
@@ -259,10 +264,8 @@ internal fun SettingsBranch(
                     // 「打开图库」要判权限、拉起系统对话框、被拒后回弹），
                     // 状态与逻辑都收口在那个 ViewModel 里，这里只做接线。
                     //
-                    // ⚠️ 仍有三个动作**本阶段刻意留空**（不传 ⇒ 按钮点击无反应）：
-                    //   onStartFaceScan / onClearFaceScan → 阶段 11（人脸检测）
-                    //   （onRescan 已在阶段 10 接上聚合器）
-                    //   见 docs/photo-spectrum-effect-plan.md §15.3 阶段 8 的偏差记录。
+                    // ⚠️ 阶段 11 已把人脸检测三个动作接上（`visualizerVM.startFaceScan` /
+                    //   `stopFaceScan` / `clearFaceScan`）；本阶段不再有留空动作。
                     photoWallRuntime = PhotoWallRuntimeState(
                         permissionState = photoWallPermissionState,
                         directoryReject = photoWallDirectoryReject,
@@ -270,6 +273,10 @@ internal fun SettingsBranch(
                         externalCount = photoWallPerSource[PhotoSourceKind.EXTERNAL] ?: 0,
                         jellyfinCount = photoWallPerSource[PhotoSourceKind.JELLYFIN] ?: 0,
                         mergedCount = photoWallMerged,
+                        faceScanDone = photoWallFaceScan.done,
+                        faceScanTotal = photoWallFaceScan.total,
+                        faceScanPhase = photoWallFaceScan.phase,
+                        faceScanSupported = faceScanSupported,
                     ),
                     photoWallActions = PhotoWallSettingsActions(
                         // ⛔ 图库开关是授权的**唯一触发点**（§6.2）：
@@ -295,6 +302,11 @@ internal fun SettingsBranch(
                         onToggleFacesOnly = { v ->
                             coroutineScope.launch { viewModel.prefs.photoWall.setFacesOnly(v) }
                         },
+                        // 阶段 11：人脸检测（§10.2 后台分片 + 可中断 + 可续跑）。
+                        // ⚠️ 「开始」在没有任何照片时会先触发一次重扫（设置页不在照片墙上）。
+                        onStartFaceScan = { viewModel.visualizerVM.startFaceScan() },
+                        onStopFaceScan = { viewModel.visualizerVM.stopFaceScan() },
+                        onClearFaceScan = { viewModel.visualizerVM.clearFaceScan() },
                         onToggleRandomTransition = { v ->
                             coroutineScope.launch { viewModel.prefs.photoWall.setRandomTransition(v) }
                         },

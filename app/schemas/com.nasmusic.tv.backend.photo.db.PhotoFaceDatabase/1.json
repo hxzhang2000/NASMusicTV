@@ -1,0 +1,55 @@
+{
+  "formatVersion": 1,
+  "database": {
+    "version": 1,
+    "identityHash": "a0c066e2f806949ab12feaa8fbd5812f",
+    "entities": [
+      {
+        "tableName": "photo_face",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`photoKey` TEXT NOT NULL, `hasFace` INTEGER NOT NULL, `faceCount` INTEGER NOT NULL, `detectedAt` INTEGER NOT NULL, `fileModifiedSec` INTEGER NOT NULL, PRIMARY KEY(`photoKey`))",
+        "fields": [
+          {
+            "fieldPath": "photoKey",
+            "columnName": "photoKey",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "hasFace",
+            "columnName": "hasFace",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "faceCount",
+            "columnName": "faceCount",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "detectedAt",
+            "columnName": "detectedAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "fileModifiedSec",
+            "columnName": "fileModifiedSec",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "photoKey"
+          ]
+        }
+      }
+    ],
+    "setupQueries": [
+      "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'a0c066e2f806949ab12feaa8fbd5812f')"
+    ]
+  }
+}

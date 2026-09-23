@@ -335,6 +335,11 @@
     <string name="settings_photo_wall_face_scan_progress">进度 %1$d / %2$d</string>
     <string name="settings_photo_wall_face_clear">清除检测结果</string>
     <string name="settings_photo_wall_face_clear_desc">删除已保存的人脸检测结果</string>
+    <string name="settings_photo_wall_face_scan_stop">停止人脸检测</string>
+    <string name="settings_photo_wall_face_scan_stop_desc">已检测的结果会保留，下次从断点继续</string>
+    <string name="settings_photo_wall_face_unavailable">本设备不可用（模型加载失败或画质档过低）</string>
+    <string name="photo_wall_notice_no_photos">没有可扫描的照片，请先开启至少一个照片来源</string>
+    <string name="photo_wall_notice_face_unavailable">人脸检测不可用，无法开始扫描</string>
     <string name="settings_photo_wall_transition">转场效果</string>
     <string name="settings_photo_wall_random_transition">随机切换转场效果</string>
     <string name="settings_photo_wall_random_transition_desc">关闭后固定使用下方选中的效果</string>

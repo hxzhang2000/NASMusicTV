@@ -12,12 +12,16 @@ import androidx.lifecycle.viewModelScope
 import com.nasmusic.tv.NasMusicApp
 import com.nasmusic.tv.R
 import com.nasmusic.tv.backend.photo.ExternalFilePhotoSource
+import com.nasmusic.tv.backend.photo.FaceScanManager
 import com.nasmusic.tv.backend.photo.JellyfinPhotoSource
 import com.nasmusic.tv.backend.photo.MediaStorePhotoSource
 import com.nasmusic.tv.backend.photo.PhotoSource
 import com.nasmusic.tv.backend.photo.PhotoSourceKind
+import com.nasmusic.tv.backend.photo.PhotoThumbnailProvider
 import com.nasmusic.tv.backend.photo.PhotoWallAccessPolicy
 import com.nasmusic.tv.backend.photo.SafDirectoryPolicy
+import com.nasmusic.tv.backend.photo.YuNetFaceDetector
+import com.nasmusic.tv.backend.photo.db.RoomFaceResultStore
 import com.nasmusic.tv.data.model.AppSettings
 import com.nasmusic.tv.data.model.VisualQuality
 import com.nasmusic.tv.data.model.VisualizerTheme
@@ -36,9 +40,12 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * 照片墙授权的用户提示（§9）
@@ -71,6 +78,12 @@ enum class PhotoAccessNotice(@StringRes val messageRes: Int) {
 
     /** 当前设备没有可用的系统文件选择器（电视 ROM 可能裁剪了 DocumentsUI） */
     DIRECTORY_UNAVAILABLE(R.string.photo_wall_notice_dir_unavailable),
+
+    /** 阶段 11：点了「开始人脸检测」但当前没有任何照片可扫 */
+    FACE_SCAN_NO_PHOTOS(R.string.photo_wall_notice_no_photos),
+
+    /** 阶段 11：模型加载失败（ORT 起不来）⇒ 扫描无法开始 */
+    FACE_SCAN_UNAVAILABLE(R.string.photo_wall_notice_face_unavailable),
 }
 
 /**
@@ -207,8 +220,110 @@ class VisualizerViewModel(
      *     构造成本只等于几个纯 Kotlin 对象（`PhotoBuffer` 是等到第一帧知道画布尺寸才建的）。
      */
     val photoWall: PhotoWallController by lazy {
-        PhotoWallController(sources = photoWallSources)
+        PhotoWallController(
+            sources = photoWallSources,
+            faceKeysProvider = { faceScanManager.faceKeys() },
+        )
     }
+
+    // ══════════════════════════════════════════════════════════════════════
+    //  人脸检测（阶段 11，§10）
+    // ══════════════════════════════════════════════════════════════════════
+
+    /**
+     * 人脸检测**当前是否可用**（T11.4：低画质档置灰）。
+     *
+     * ⛔ 判据是**画质档**而不是设备型号：§10.2 的「老设备策略」落在
+     * 「低画质档 ⇒ 置灰」上 —— 同一台 ARMv7 电视调高画质档后 CPU 并没有被
+     * 播放占满，理论上可以跑；跟着画质档走让用户有得选，也和 §7.5 的档位语义一致。
+     *
+     * ⚠️ 这是**派生值**（随画质档实时变），所以做成 `StateFlow` 而不是 `val`——
+     * 否则设置页要在重组里手动重读。
+     */
+    val faceScanSupported: StateFlow<Boolean> =
+        _quality.map { it != VisualQuality.LOW }
+            .stateIn(viewModelScope, SharingStarted.Eagerly, true)
+
+    /**
+     * 人脸扫描管理器。
+     *
+     * ⚠️ `by lazy`：**不要在 init 里碰它** —— 构造会打开 `photo_face.db` 并读 assets，
+     * 而绝大多数用户根本不用「仅显示含人像」。
+     *
+     * ⚠️ 这里显式持有 `Lazy` 委托而不只是 `by lazy`：[onCleared] 里要**只在真的用过**
+     * 的情况下才 `close()`（`Lazy.isInitialized()`），否则每个 ViewModel 销毁都会
+     * 白白建一遍库和 session 再立刻关掉。
+     */
+    private val faceScanManagerLazy: Lazy<FaceScanManager> = lazy {
+        val nasApp = app as NasMusicApp
+        FaceScanManager(
+            store = RoomFaceResultStore(nasApp.photoFaceDatabase.photoFaceDao()),
+            detector = YuNetFaceDetector(app),
+            thumbs = PhotoThumbnailProvider(photoWallSources),
+        )
+    }
+    val faceScanManager: FaceScanManager get() = faceScanManagerLazy.value
+
+    /** 人脸扫描进度（设置页进度行读这个；未经 [faceScanManager] 的 lazy 不产生成本） */
+    val faceScanState: StateFlow<FaceScanManager.FaceScanState>
+        get() = faceScanManager.state
+
+    /** 「开始 / 续跑」人脸检测。已在跑 / 没照片 / 模型不可用时发提示而不是静默失败。 */
+    fun startFaceScan() {
+        viewModelScope.launch {
+            var refs = photoWall.photos.value
+            if (refs.isEmpty()) {
+                // 设置页不在照片墙上 ⇒ 控制器可能还没扫过，主动扫一次再等结果
+                photoWall.rescan()
+                refs = withTimeoutOrNull(PHOTO_SCAN_WAIT_MS) {
+                    photoWall.photos.first { it.isNotEmpty() }
+                } ?: emptyList()
+            }
+            if (refs.isEmpty()) {
+                _photoAccessNotice.tryEmit(PhotoAccessNotice.FACE_SCAN_NO_PHOTOS)
+                return@launch
+            }
+            val started = faceScanManager.start(refs)
+            if (!started && faceScanManager.state.value.phase == FaceScanManager.Phase.UNAVAILABLE) {
+                _photoAccessNotice.tryEmit(PhotoAccessNotice.FACE_SCAN_UNAVAILABLE)
+                return@launch
+            }
+            // ⛔ 扫描完成后要把「已完成」落盘：控制器靠它决定「仅显示含人像」是否生效
+            //   （没完成就过滤 = 空池 = 整面黑墙）。不挂在 init 里收 ⇒ 不用扫描就不开库。
+            faceScanObserver?.cancel()
+            faceScanObserver = viewModelScope.launch {
+                faceScanManager.state.collect { s ->
+                    when (s.phase) {
+                        FaceScanManager.Phase.DONE -> {
+                            prefs.photoWall.setFaceScanDone(true)
+                            faceScanObserver?.cancel()
+                        }
+                        FaceScanManager.Phase.UNAVAILABLE -> {
+                            _photoAccessNotice.tryEmit(PhotoAccessNotice.FACE_SCAN_UNAVAILABLE)
+                            faceScanObserver?.cancel()
+                        }
+                        else -> Unit
+                    }
+                }
+            }
+        }
+    }
+
+    /** 停止扫描（已落库的结果保留 ⇒ 下次「开始」自动续跑） */
+    fun stopFaceScan() {
+        faceScanObserver?.cancel()
+        faceScanObserver = null
+        faceScanManager.stop()
+    }
+
+    /** 清除全部人脸结果（「仅显示含人像」随之失效） */
+    fun clearFaceScan() {
+        stopFaceScan()
+        faceScanManager.clearResults()
+        viewModelScope.launch { prefs.photoWall.setFaceScanDone(false) }
+    }
+
+    private var faceScanObserver: kotlinx.coroutines.Job? = null
 
     /** 最近一次发射的 `AppSettings`（供 `onResume` 同步读取，避免再挂一个订阅） */
     @Volatile private var latestSettings: AppSettings = AppSettings()
@@ -551,6 +666,8 @@ fun nextTheme() = step(+1)
         // 照片墙：停扫描协程、停解码线程、逐张 recycle 位图
         // ⛔ API 22 上 `ImageBitmap` 包装的 `Bitmap` 不会自动回收 ⇒ 不 close 就是泄漏
         photoWall.close()
+        // 人脸扫描：停任务、释放 ORT session（只在真的用过时才 close —— 见其 KDoc）
+        if (faceScanManagerLazy.isInitialized()) faceScanManager.close()
         // 断开对 Activity 的引用（launcher 闭包由 MainActivity 注入）
         photoPermissionLauncher = null
         photoDirectoryLauncher = null
@@ -559,6 +676,9 @@ fun nextTheme() = step(+1)
     private companion object {
         /** 连续按键节流：低于此间隔的（重复/连发）切换直接忽略 */
         const val SWITCH_DEBOUNCE_MS = 180L
+
+        /** 「开始人脸检测」时等控制器扫出第一批照片的上限（超时 ⇒ 提示没有可扫的照片） */
+        const val PHOTO_SCAN_WAIT_MS = 30_000L
 
         const val TAG = "VisualizerViewModel"
     }

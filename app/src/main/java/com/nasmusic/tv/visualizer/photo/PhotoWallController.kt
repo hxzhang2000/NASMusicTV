@@ -101,6 +101,14 @@ class PhotoWallController(
     private val sources: Map<PhotoSourceKind, PhotoSource>,
     private val random: VisualizerRandom = VisualizerRandom(),
     private val externalScope: CoroutineScope? = null,
+    /**
+     * 「仅显示含人像」的 key 集合提供者（阶段 11）。
+     *
+     * ⛔ 与 `FaceScanManager` 的接缝设计同一条理由：让「按 hasFace 过滤」可以被
+     * 纯 JVM 单测钉住（注入一个假集合），不必拉起 Room / ONNX。
+     * `null`（默认）= 本平台没有人脸检测，`photoWallFacesOnly` 形同虚设。
+     */
+    private val faceKeysProvider: (suspend () -> Set<String>)? = null,
     private val bufferFactory: (targetWidth: Int, targetHeight: Int, allowRgb565: Boolean) -> PhotoBuffer? =
         { w, h, rgb ->
             PhotoBuffer(
@@ -131,6 +139,16 @@ class PhotoWallController(
     private val _mergedCount = MutableStateFlow(0)
     /** 合并去重后的总数（设置页「合计」行） */
     val mergedCount: StateFlow<Int> = _mergedCount.asStateFlow()
+
+    /**
+     * 当前生效的照片列表（**过滤之后**的那份）。
+     *
+     * ⚠️ 阶段 11 新增：`FaceScanManager` 的「开始扫描」要从这里拿待扫清单
+     * （设置页不在照片墙上时，控制器也可能已有扫描结果）。
+     * ⚠️ 它是**快照**语义：`FaceScanManager.start()` 里会复制一份，之后池变了不影响本轮。
+     */
+    private val _photos = MutableStateFlow<List<PhotoRef>>(emptyList())
+    val photos: StateFlow<List<PhotoRef>> = _photos.asStateFlow()
 
     private val _statuses = MutableStateFlow<Map<PhotoSourceKind, PhotoSourceStatus>>(emptyMap())
     /** 各来源状态（设置页「为什么不可用」） */
@@ -175,6 +193,10 @@ class PhotoWallController(
     private var lastDirUri: String? = null
     private var lastCommonDirsOnly: Boolean? = null
     private var lastBalance: Boolean? = null
+
+    /** 阶段 11：这两个变化会改变过滤后的池（见 [onSettingsChanged]） */
+    private var lastFacesOnly: Boolean? = null
+    private var lastFaceScanDone: Boolean? = null
 
     // ══════════════════════════════════════════════════════════════════════
     //  ① 帧循环（主线程、与 draw 同帧）
@@ -245,12 +267,17 @@ class PhotoWallController(
         val changed = enabled != lastEnabled ||
             settings.photoWallDirUri != lastDirUri ||
             settings.photoWallCommonDirsOnly != lastCommonDirsOnly ||
-            settings.photoWallSourceBalance != lastBalance
+            settings.photoWallSourceBalance != lastBalance ||
+            // 阶段 11：这两个都可能改变「过滤后」的池（开关翻转 / 扫描完成）
+            settings.photoWallFacesOnly != lastFacesOnly ||
+            settings.photoWallFaceScanDone != lastFaceScanDone
 
         lastEnabled = enabled
         lastDirUri = settings.photoWallDirUri
         lastCommonDirsOnly = settings.photoWallCommonDirsOnly
         lastBalance = settings.photoWallSourceBalance
+        lastFacesOnly = settings.photoWallFacesOnly
+        lastFaceScanDone = settings.photoWallFaceScanDone
 
         if (!changed) return
         needScan = true
@@ -329,6 +356,7 @@ class PhotoWallController(
         canvasH = 0
         _perSourceCount.value = emptyMap()
         _mergedCount.value = 0
+        _photos.value = emptyList()
         _statuses.value = emptyMap()
     }
 
@@ -345,6 +373,7 @@ class PhotoWallController(
                 // 「完全无照片 I/O」：三来源全关 ⇒ 连 status() 都不调（§6.8）
                 pool.clear()
                 resetSlots()
+                _photos.value = emptyList()
                 _perSourceCount.value = emptyMap()
                 _mergedCount.value = 0
                 _statuses.value = emptyMap()
@@ -354,10 +383,14 @@ class PhotoWallController(
                 enabled = enabled,
                 balance = settings.photoWallSourceBalance,
             )
+            // ⛔ 过滤（阶段 11）必须在「写计数 / 建池」**之前**：
+            //    计数显示的应该是用户实际会看到的数量，而不是过滤前的总量
+            val filtered = filterByFaces(result.photos)
             _perSourceCount.value = result.perSource
-            _mergedCount.value = result.photos.size
+            _photos.value = filtered
+            _mergedCount.value = filtered.size
             _statuses.value = result.statuses
-            pool.reset(result.photos)
+            pool.reset(filtered)
             picker.reset()
             resetSlots()
             if (result.photos.isEmpty()) {
@@ -372,6 +405,26 @@ class PhotoWallController(
         if (s.photoWallExternalEnabled) out.add(PhotoSourceKind.EXTERNAL)
         if (s.photoWallJellyfinEnabled) out.add(PhotoSourceKind.JELLYFIN)
         return out
+    }
+
+    /**
+     * 「仅显示含人像」（阶段 11，T11.3）。
+     *
+     * ⛔ **拔盘不清表**（§10.3 / R9）：`FaceResultStore` 里的条目在盘重插后仍有效，
+     * 所以这里**只做交集**（`pool ∩ faceKeys`），盘上已不存在的照片被自然剔除，
+     * 不需要也不应该删表。
+     *
+     * ⛔ **只有「扫描已完成」才过滤**（`photoWallFaceScanDone`）：
+     * 开着开关但一张都没扫过 ⇒ 过滤结果是空 ⇒ 照片墙整面黑。
+     * 在那之前按「不过滤」处理（设置页的进度行会告诉用户扫到哪了）。
+     */
+    private suspend fun filterByFaces(photos: List<PhotoRef>): List<PhotoRef> {
+        if (!settings.photoWallFacesOnly) return photos
+        if (!settings.photoWallFaceScanDone) return photos
+        val provider = faceKeysProvider ?: return photos
+        val keys = provider()
+        if (keys.isEmpty()) return emptyList()
+        return photos.filter { it.id in keys }
     }
 
     private fun resetSlots() {

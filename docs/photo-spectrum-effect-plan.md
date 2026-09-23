@@ -1520,7 +1520,7 @@ when {
 
 ### 14.1 文件清单
 
-#### 新增（25 个 Kotlin 源文件 + 1 个模型资产）
+#### 新增（32 个 Kotlin 源文件 + 1 个模型资产）
 
 > ⚠️ 本表在实现期补了 3 项（原写「22 个」）：
 > ① `PhotoWallAvailability.kt` —— §7.4「唯一新增逻辑」那三行派生代码**单独成文件**
@@ -1558,9 +1558,14 @@ when {
 | 23 | `visualizer/photo/PhotoWallAvailability.kt` | ~50 | 三来源开关之「或」派生（§7.4 **唯一新增逻辑**） |
 | 24 | `data/prefs/PhotoWallPrefs.kt` | ~50 | 照片墙域子 Prefs（薄委托，**只提供 setter**） |
 | 25 | `backend/photo/PhotoWallAccessPolicy.kt` | ~60 | 授权判据（纯逻辑：回弹 / 需申请 / 目录失效，§9.6） |
-| 26 | `app/src/main/assets/models/yunet_face.onnx` | 337 KB | 模型（⚠️ **`assets/` 目录当前不存在，需新建**） |
+| 26 | `app/src/main/assets/models/yunet_face.onnx` | **224 KB**（229,738 B） | YuNet 2026may 动态输入版（非文档原估的 2023mar/337 KB，见 §15.3 阶段 11 偏差 1） |
+| 26a | `backend/photo/YuNetFaceDetector.kt` | ~260 | ONNX Runtime 推理（320×320，阶段 11；§10.1） |
+| 26b | `backend/photo/YuNetPostprocess.kt` | ~110 | YuNet 后处理 + 贪心 NMS（**纯 Kotlin**，照抄 OpenCV `FaceDetectorYN`） |
+| 26c | `backend/photo/FaceDetector.kt` | ~60 | 两个接缝接口：`FaceDetector` + `FaceThumb`（CHW/BGR，**不经过 Bitmap**） |
+| 26d | `backend/photo/db/FaceResultStore.kt` | ~30 | 结果库存取接缝（生产 `RoomFaceResultStore` 5 行） |
+| 26e | `backend/photo/YuNetFaceDetector.kt`（同文件） | — | 文件尾含 `PhotoThumbnailProvider`（`FaceThumb` 生产者，`openStream` + 降采样） |
 
-#### 修改（17 个）
+#### 修改（22 个）
 
 > ⚠️ 实现期补了 4 项（原写「13 个」）：
 > ① `ui/components/AppRoot.kt` —— 它才是 `VisualizerStage` 的**唯一调用点**，
@@ -1590,6 +1595,11 @@ when {
 | 11b | `ui/viewmodel/MainViewModel.kt` | 收集 `visualizerVM.photoAccessNotice` → `errorMessage`（复用既有顶部提示通道） | `init` 收集器 **2440 行** 附近 |
 | 12 | `backend/local/StorageMonitor.kt` | **G7 修复** | 短路 **103–106 行**；`intent.data` 日志 **64 行** |
 | 13 | `app/src/test/java/com/nasmusic/tv/data/model/VisualizerThemeTest.kt` | **5 处 `35` → `36`**；`selectable` 改函数调用 | 断言在 **53–56 / 60–70 行** |
+| 14a | `NasMusicApp.kt` | +`photoFaceDatabase` 懒构造（独立 Room 实例） | 手工 DI 容器（阶段 11） |
+| 14b | `ui/screens/settings/SettingsComponents.kt` | `SettingActionButton` +`enabled` 参数 | 人脸扫描按钮置灰用（阶段 11） |
+| 14c | `ui/viewmodel/VisualizerViewModel.kt`（阶段 11 追加） | +`faceScanManager` 懒构造 +`faceScanSupported` +`faceScanDone` 派生流 + 扫描动作 | `by lazy`：不碰「仅显示含人像」就不建库不读 assets |
+| 14d | `visualizer/photo/PhotoWallController.kt`（阶段 11 追加） | +`faceKeysProvider` 注入点 +`filterByFaces()` + `photoWallFaceScanDone` 变化触发重扫 | 过滤在**聚合之后、建池之前** |
+| 14e | `res/values/strings.xml` + `values-en/strings.xml` | 阶段 11 +6 条（扫描/清除/进度/置灰说明） | 双语同步 |
 
 ⚠️ **`VisualizerThemeTest` 的 5 处硬断言**（漏改必挂）：`entries.size` / `selectable.size` / `selectable.distinct().size` / `ordinalLabel.distinct().size` / `displayName.distinct().size`。
 
@@ -2087,6 +2097,8 @@ KDoc 里出现「斜杠紧邻星号」（最常见是路径通配符）会开一
 含负向自证 + 4 条误报防线 + 空转断言。文件：`app/src/test/java/com/nasmusic/tv/util/`。
 | **G14** | `PhotoWallPoolTest` | ① 一轮内每张恰好出现一次；② 走完一轮 `beginNewRound` 后游标归零、仍无重复；③ 新一轮**首张 ≠ 上一轮末张**；④ 空池 / 1 张池不崩 | 同时跑「正确实现」与「**只洗牌不避让**」的错法：断言错法**必须能**观察到首尾撞车（否则这条自证是空转），而正确实现**一次都不许**撞。⛔ 照片不能照搬 G2 的「重试避让」—— 池是一次性分配顺序（游标消费），重试会破坏「一轮内不重复」这个更强的保证 |
 | **G15** | `PhotoWallControllerTest`（Robolectric） | ① 首图出现在 `photoA`（不是 `photoB`）；② HOLD 到点后换槽（`photoB != photoA`）；③ 固定档转场的窗口跑 0→1；④ 池空时不启动切换；⑤ 坏图被跳过而非卡死；⑥ 慢来源（失败 100 次后成功）**要等到**不被误跳；⑦ 拔盘后重扫 ⇒ 不画已失效的照片；⑧ `applyTo` 写出 `photoScaleMode` 且音频反应关时 `photoAudioBoost == 0`；⑨ 离开效果不清字段 | 三条负向自证：删掉「等太久就跳过」⇒ ⑤ 失败；把 `SWAP_WAIT_MAX_FRAMES` 调到 50 ⇒ ⑥ 失败（误伤慢来源）；把首图写成「`currentRef` 留空、`incomingRef = next`」⇒ ① 失败（**整面墙恒黑**，编译/lint/G3/G14 全绿，只有真跑帧循环才暴露 —— 这是 G15 存在的理由）。⚠️ 靠 `PhotoBuffer` 自带的 `decoderExecutor`/`decoder` 注入点做「同步解码 + 假像素」，位图宽度即照片身份 ⇒ 换槽可辨 |
+ **G16** | `YuNetPostprocessTest`（**纯 JVM**，合成张量） | ① 合成 8/16/32 三层输出 → 解码出的框位置/尺寸精确吻合（含 `exp` 与 stride）；② `score = sqrt(clamp(cls)·clamp(obj))`（负值被钳 0）；③ 贪心 NMS：IoU > 阈值的重复框只留最高分；④ 空输出不崩。**负向自证**：「漏 `exp`」的错法下相邻格子的框互不重叠（IoU = 0 ⇒ 同一张脸被数成几十张），正确实现必然重叠 | ⛔ ONNX 推理本身**本机验证不了** ⇒ 所有能钉的数值逻辑必须在后处理这一层与推理切开（接缝是 `FaceThumb`，不经过 `Bitmap`）。后处理逐行照抄 OpenCV `FaceDetectorYN`（`eta=1.0` ⇒ 标准贪心 NMS） |
+| **G17** | `FaceScanManagerTest`（**纯 JVM**，接缝假件） | ① 进度按 chunk 推进且 `total` = 待扫清单；② 中断后 `resume` 不重扫已入库的；③ 解码失败跳过且**不写负结果**（失败 ≠ 没脸）；④ `UNAVAILABLE`（模型缺失/低画质档）不启动；⑤ 正在跑时 `start` 幂等；⑥ 完成后 `phase = DONE` 且入库数吻合。**负向自证**：「失败写 `hasFace=false`」的错法会让续跑永久排除读不出来的照片 | `FaceScanManager` 只认 `FaceResultStore` / `FaceDetector` / 缩略图 lambda 三个接缝 ⇒ 用内存假件在纯 JVM 跑，不拉 Robolectric。⛔ `backgroundScope` 里 launch 的事件对 `advanceUntilIdle` 不可见（它只等 foreground 事件）⇒ 扫描协程必须挂在 `TestScope` 本体 |
 
 ### 14.5 提交顺序（12 个提交，每个都可独立验证）
 
@@ -2188,8 +2200,8 @@ JAVA_HOME="C:/Program Files/Android/Android Studio/jbr" \
 | 7 PhotoRenderer 与 PHOTO_WALL | `feat(visualizer): …` | 5 | ✅ |
 | 8 设置分区 | `feat(settings): …` | 4 | ✅ |
 | 9 权限与 SAF 目录 | `feat(photo): …` | 4 | ✅ |
-| 10 Controller 与帧循环接线 ★ | `feat(photo): …` | 4 | 🟨 |
-| 11 人脸检测 | `feat(photo): …` | 4 | ⬜ |
+| 10 Controller 与帧循环接线 ★ | `feat(photo): …` | 4 | 🟨（代码完成，待 T10.3/T10.4 真机） |
+| 11 人脸检测 | `feat(photo): …` | 4 | ✅ |
 | 12 P1 转场至 43 种 | `feat(photo): …` | 3 | ⬜ |
 | **合计** | | **44** | |
 | **15.4 全部完成后**（收尾，无独立提交） | — | 3 | ⬜ |
@@ -2866,19 +2878,47 @@ JAVA_HOME="C:/Program Files/Android/Android Studio/jbr" \
 
 #### 阶段 11 —— 人脸检测与「仅显示含人像」　`提交 11`　**4 项**
 
-- [ ] **T11.1** 模型资产 + 人脸结果库
+- [x] **T11.1** 模型资产 + 人脸结果库 ✅ 2026-09-23
   - 新建 `app/src/main/assets/models/` 并放入 `yunet_face.onnx`（337 KB）—— ⚠️ `assets/` 目录当前**不存在**
   - `PhotoFaceDatabase`（**独立建库**，`photo_face.db` v1）+ Entity + DAO（§14.2.6）
   - ⛔ schema 落盘 `app/schemas/` 并**入库**（项目硬约定）
   - **验收**：**不**动 `LocalMusicDatabase` 版本；`app/schemas/…PhotoFaceDatabase/1.json` 存在且被 git 跟踪
-- [ ] **T11.2** `FaceScanManager`
+  - **实际**：`LocalMusicDatabase` 仍为 v3（未动）✅；`app/schemas/com.nasmusic.tv.backend.photo.db.PhotoFaceDatabase/1.json`
+    （表 `photo_face`，KSP 自动导出）已入库 ✅。模型与 DAO 的实现期偏差见下 1–4。
+- [x] **T11.2** `FaceScanManager` ✅ 2026-09-23
   - ONNX + **只喂 320×320 缩略图** + 后台分片 + 可中断 + 进度上报
   - **验收**：1 万张进度可中断、可续跑
-- [ ] **T11.3** 「仅显示含人像」接线 + 拔盘不清表
+  - **实际**：`FaceScanManagerTest`（G17，8 例）用「小照片数 + `chunkSize = 1`」复现同一条
+    状态机路径验证**中断 / 续跑 / 进度 / 失败跳过** —— 1 万张只是同一循环多跑几万次迭代，
+    不产生新分支。真机上的实际吞吐（老电视 ~100ms/张）待 T10.4 顺带观测。
+- [x] **T11.3** 「仅显示含人像」接线 + 拔盘不清表 ✅ 2026-09-23
   - 按 `hasFace` 过滤
   - 拔盘**不清表**，查询时与 `PhotoSource` 结果做交集
   - **验收**：开开关后池内只剩检出人脸的；重插 U 盘后结果仍有效
-- [ ] **T11.4** **阶段完成** —— 低画质档（ARMv7）该功能置灰关闭
+  - **实际**：过滤在 `PhotoWallController.filterByFaces()`（**聚合之后、建池之前**），
+    集合来自注入的 `faceKeysProvider`（ViewModel 里指向 `FaceScanManager.faceKeys()`）。
+    拔盘路径只调 `invalidateSource(EXTERNAL)` + 重扫，**没有任何删表路径**。
+    ⚠️ 拔盘后「交集」自然剔除盘上已不存在的照片，重插后条目仍有效 ⇒ 验收成立。
+- [x] **T11.4** **阶段完成** —— 低画质档（ARMv7）该功能置灰关闭 ✅ 2026-09-23
+  - **实际**：`VisualizerViewModel.faceScanSupported` = `quality != VisualQuality.LOW`
+    （派生 `StateFlow`）；设置页「仅显示含人像」开关 + 两个按钮 + 「清除」按钮都吃这个值置灰
+    （`SettingActionButton` 为此新增了 `enabled` 参数，视觉口径照抄 `SettingSwitch`）。
+    ⚠️ 置灰**不回写**（值保留）—— 与阶段 8「随节拍缩放受音频反应控制置灰」同一口径。
+
+**阶段 11 的实现期偏差（10 条，2026-09-23）**
+
+| # | 偏差 | 原因 / 影响 |
+|---|---|---|
+| 1 | **模型换成 `face_detection_yunet_2026may`（229,738 字节 ≈ 224 KB），不是文档写的 337 KB** | 2026may 版的输入 `height`/`width` 是**符号维** ⇒ 可以直接喂 320×320；静态版（2023mar）被钉死 640×640，喂 320 会报 shape 不匹配（而补 0 到 640 会让耗时 ×4）。sha256 `ebafce4e…`。输出头是 `cls/obj/bbox/kps × 8/16/32`（**没有** NMS）|
+| 2 | **必须自己实现后处理 + NMS**（`YuNetPostprocess`，纯 Kotlin） | OpenCV `FaceDetectorYN` 的后处理逐行照抄：`score = sqrt(clamp(cls)·clamp(obj))`、`cx=(c+dx)·stride`、`w=exp(lnw)·stride`；NMS 用贪心 IoU（OpenCV 传 `eta=1.0` ⇒ 其自适应阈值分支不生效，等价于标准贪心）。单测用**合成张量**钉住（G16）—— ONNX 推理本身本机验证不了 |
+| 3 | **接入缝：`FaceThumb`（CHW + BGR + 0..255）** | OpenCV `blobFromImage` 的 `swapRB=false`、`scalefactor=1.0` ⇒ 喂模型的是 **BGR、0..255**（写 RGB / 归一化不会崩但检测率掉）。接缝在 `FaceThumb` 而不是 `Bitmap` ⇒ 后处理与扫描逻辑可以在纯 JVM 验证 |
+| 4 | ⛔ **`OrtSession.Result.get(String)` 不能用** | 它返回 `java.util.Optional`（API 24+，本项目 minSdk 22 ⇒ `NoClassDefFoundError`）⇒ 一律用 `Result` 的**迭代器**取输出。项目没开 coreLibraryDesugaring |
+| 5 | **阈值 0.6 而不是 OpenCV demo 的 0.9** | 两侧代价不对称：误报（多一张风景照）代价低，漏报（找不到家人照片）代价高 |
+| 6 | **只请求 9 个输出**（`kps_*` 关键点不要） | 我们只要「有没有脸」，省 3 个张量的解码与拷贝 |
+| 7 | **缩略图走「保长宽比 + 右下补 0」**，不是 `createScaledBitmap(320,320)` 拉满 | 拉满会把 16:9 照片压扁 ⇒ 人脸变宽脸；OpenCV `padWithDivisor` 也是补右下角 |
+| 8 | **人脸结果库的 Room 存取再包一层 `FaceResultStore` 接口** | `FaceScanManager` 不认 Room ⇒ G17 用内存假件在纯 JVM 跑（不拉 Robolectric 建库）。生产实现 `RoomFaceResultStore(dao)` 仅 5 行 |
+| 9 | **「扫描完成」才过滤**（`photoWallFaceScanDone`） | 开着「仅显示含人像」但一张都没扫过 ⇒ 过滤结果为空 ⇒ **整面黑墙**。完成前按不过滤处理；`VisualizerViewModel` 在扫描 DONE 后把该标志落盘，`PhotoWallController` 检测到它变化会重扫 |
+| 10 | **两张照片读不出来 = 跳过且**不入库** | 读不出来 ≠ 没有脸；写 `hasFace=false` 会让「盘插回来后这张永远被排除」（续跑会跳过它）。失败的照片留待下次再试（有负向自证） |
 
 #### 阶段 12 —— 补齐 P1 转场至 43 种　`提交 12`　**3 项**
 
