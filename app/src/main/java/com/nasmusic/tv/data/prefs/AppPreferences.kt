@@ -14,6 +14,7 @@ import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import com.nasmusic.tv.backend.network.MetingApiService
 import com.nasmusic.tv.backend.network.mv.BilibiliMvService
+import com.nasmusic.tv.backend.photo.PhotoScaleMode
 import com.nasmusic.tv.data.model.AppSettings
 import com.nasmusic.tv.data.model.BaiduTokens
 import com.nasmusic.tv.data.model.CloudDriveConfig
@@ -30,6 +31,7 @@ import com.nasmusic.tv.data.model.VisualQuality
 import com.nasmusic.tv.data.model.Song
 import com.nasmusic.tv.util.AppLog
 import com.nasmusic.tv.util.CryptoUtils
+import com.nasmusic.tv.visualizer.photo.PhotoTransitionId
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
@@ -68,6 +70,8 @@ class AppPreferences internal constructor(private val context: Context) {
     val backup: BackupPrefs by lazy { BackupPrefs(this) }
     /** 显示域（屏幕方向等**设备本地**偏好；不进 AppSettings 备份 JSON，见 §5.3） */
     val display: DisplayPrefs by lazy { DisplayPrefs(this) }
+    /** 照片墙域（§7.3，17 个字段；进 AppSettings 备份 JSON） */
+    val photoWall: PhotoWallPrefs by lazy { PhotoWallPrefs(this) }
 
     companion object {
         private const val TAG = "AppPreferences"
@@ -82,6 +86,12 @@ class AppPreferences internal constructor(private val context: Context) {
 
         /** 歌单导入历史最大保留条数（超出按 importedAt 淘汰最旧） */
         const val playlistImportHistoryMaxSize = 20
+
+        /** 照片墙转场时长范围（ms，§7.3：300–2000） */
+        val PHOTO_WALL_TRANSITION_MS_RANGE = 300..2000
+
+        /** 照片墙停留时长范围（ms，§7.3：3000–30000；默认 8000） */
+        val PHOTO_WALL_HOLD_MS_RANGE = 3_000..30_000
 
         /** URL 可达性持久化判定窗口（24h）：窗口内的「不可达」标记重启后不重测 */
         const val songReachabilityWindowMs = 24 * 60 * 60 * 1000L
@@ -113,6 +123,24 @@ class AppPreferences internal constructor(private val context: Context) {
 
     /** F2-1：供 PlayStatsRepository 复用的 Gson 实例（包内可见） */
     internal fun gson(): Gson = gson
+
+    /**
+     * 本机是否为电视 —— 决定「外接存储」开关的**平台相关默认值**（§6.8：电视 `true` / 手机 `false`）。
+     *
+     * ⚠️ 与 `NasMusicApp` 的 `isTVDevice` / `ui/components/FocusableSurface.isTVDevice()`
+     * 用**同一套判据**（`android.software.leanback` / `android.hardware.type.television`），
+     * 这里只是不需要 Composable 与 Activity Context 而已。三处判据必须一致，
+     * 否则会出现「按电视给的默认值、按手机渲染的设置页」这类错位。
+     *
+     * ⚠️ `by lazy`：`hasSystemFeature` 在 API 22 上可能是一次 binder 调用，
+     * 而本判定在 `appSettings` 每次发射时都会被读到（设备类型进程内不变，缓存安全）。
+     */
+    private val isTelevisionDevice: Boolean by lazy {
+        context.packageManager.run {
+            hasSystemFeature("android.software.leanback") ||
+                hasSystemFeature("android.hardware.type.television")
+        }
+    }
 
     // =====================================================================
     // R-7（方案 2026-09）：
@@ -287,6 +315,25 @@ class AppPreferences internal constructor(private val context: Context) {
     private val keySpectrumEnabled = booleanPreferencesKey("settings_spectrum_enabled")
     private val keyVisualizerTheme = stringPreferencesKey("settings_visualizer_theme")
     private val keyVisualizerQuality = stringPreferencesKey("visualizer_quality")
+
+    // --- 照片墙（§7.3，17 个字段）---
+    private val keyPhotoWallGalleryEnabled = booleanPreferencesKey("photo_wall_gallery_enabled")
+    private val keyPhotoWallExternalEnabled = booleanPreferencesKey("photo_wall_external_enabled")
+    private val keyPhotoWallJellyfinEnabled = booleanPreferencesKey("photo_wall_jellyfin_enabled")
+    private val keyPhotoWallSourceBalance = booleanPreferencesKey("photo_wall_source_balance")
+    private val keyPhotoWallDirUri = stringPreferencesKey("photo_wall_dir_uri")
+    private val keyPhotoWallCommonDirsOnly = booleanPreferencesKey("photo_wall_common_dirs_only")
+    private val keyPhotoWallFacesOnly = booleanPreferencesKey("photo_wall_faces_only")
+    private val keyPhotoWallFaceScanDone = booleanPreferencesKey("photo_wall_face_scan_done")
+    private val keyPhotoWallRandomTransition = booleanPreferencesKey("photo_wall_random_transition")
+    private val keyPhotoWallFixedTransition = stringPreferencesKey("photo_wall_fixed_transition")
+    private val keyPhotoWallTransitionMs = intPreferencesKey("photo_wall_transition_ms")
+    private val keyPhotoWallHoldMs = intPreferencesKey("photo_wall_hold_ms")
+    private val keyPhotoWallScaleMode = stringPreferencesKey("photo_wall_scale_mode")
+    private val keyPhotoWallKenBurns = booleanPreferencesKey("photo_wall_ken_burns")
+    private val keyPhotoWallAudioReactive = booleanPreferencesKey("photo_wall_audio_reactive")
+    private val keyPhotoWallPulseZoom = booleanPreferencesKey("photo_wall_pulse_zoom")
+    private val keyPhotoWallBreathe = booleanPreferencesKey("photo_wall_breathe")
 
     // --- 全局字体字号调整 ---
     private val keyFontAdjustment = intPreferencesKey("settings_font_adjustment")
@@ -742,7 +789,28 @@ class AppPreferences internal constructor(private val context: Context) {
             downloadEnabled = prefs[keyDownloadEnabled] ?: true,
             autoDownloadOnPlay = prefs[keyAutoDownloadOnPlay] ?: false,
             autoDownloadLimit = prefs[keyAutoDownloadLimit] ?: 50,
-            downloadLocation = prefs[keyDownloadLocation] ?: "INTERNAL"
+            downloadLocation = prefs[keyDownloadLocation] ?: "INTERNAL",
+            // ── 照片墙（§7.3）──
+            // ⚠️ 「外接存储」默认值**按平台**：电视 true / 手机 false（§6.8）。
+            //   其余字段的平台默认值相同，直接写字面量。
+            photoWallGalleryEnabled = prefs[keyPhotoWallGalleryEnabled] ?: false,
+            photoWallExternalEnabled = prefs[keyPhotoWallExternalEnabled] ?: isTelevisionDevice,
+            photoWallJellyfinEnabled = prefs[keyPhotoWallJellyfinEnabled] ?: false,
+            photoWallSourceBalance = prefs[keyPhotoWallSourceBalance] ?: false,
+            photoWallDirUri = prefs[keyPhotoWallDirUri] ?: "",
+            photoWallCommonDirsOnly = prefs[keyPhotoWallCommonDirsOnly] ?: true,
+            photoWallFacesOnly = prefs[keyPhotoWallFacesOnly] ?: false,
+            photoWallFaceScanDone = prefs[keyPhotoWallFaceScanDone] ?: false,
+            photoWallRandomTransition = prefs[keyPhotoWallRandomTransition] ?: true,
+            // 两个枚举都走各自 fromKey()（**永不返回 null**，见 §10.172 的 Gson 枚举坑）
+            photoWallFixedTransition = PhotoTransitionId.fromKey(prefs[keyPhotoWallFixedTransition]),
+            photoWallTransitionMs = prefs[keyPhotoWallTransitionMs] ?: 700,
+            photoWallHoldMs = prefs[keyPhotoWallHoldMs] ?: 8000,
+            photoWallScaleMode = PhotoScaleMode.fromKey(prefs[keyPhotoWallScaleMode]),
+            photoWallKenBurns = prefs[keyPhotoWallKenBurns] ?: true,
+            photoWallAudioReactive = prefs[keyPhotoWallAudioReactive] ?: false,
+            photoWallPulseZoom = prefs[keyPhotoWallPulseZoom] ?: true,
+            photoWallBreathe = prefs[keyPhotoWallBreathe] ?: true
         )
     }
 
@@ -794,6 +862,62 @@ class AppPreferences internal constructor(private val context: Context) {
 
     suspend fun setVisualizerQuality(quality: VisualQuality) =
         dataStore.edit { it[keyVisualizerQuality] = quality.name }
+
+    // --- 照片墙（§7.3，17 个 setter）---
+    //
+    // ⚠️ 两个**数值**字段在这里就做范围钳制（与 `setAutoDownloadLimit` 的既有写法一致）：
+    //   范围来自 §7.3「转场时长 300–2000 ms」「停留时长 3000–30000 ms」。
+    //   在写入侧钳制 ⇒ 无论是设置页的 `+/-` 还是**备份导入**都不会写进越界值。
+    suspend fun setPhotoWallGalleryEnabled(v: Boolean) =
+        dataStore.edit { it[keyPhotoWallGalleryEnabled] = v }
+
+    suspend fun setPhotoWallExternalEnabled(v: Boolean) =
+        dataStore.edit { it[keyPhotoWallExternalEnabled] = v }
+
+    suspend fun setPhotoWallJellyfinEnabled(v: Boolean) =
+        dataStore.edit { it[keyPhotoWallJellyfinEnabled] = v }
+
+    suspend fun setPhotoWallSourceBalance(v: Boolean) =
+        dataStore.edit { it[keyPhotoWallSourceBalance] = v }
+
+    suspend fun setPhotoWallDirUri(v: String) =
+        dataStore.edit { it[keyPhotoWallDirUri] = v }
+
+    suspend fun setPhotoWallCommonDirsOnly(v: Boolean) =
+        dataStore.edit { it[keyPhotoWallCommonDirsOnly] = v }
+
+    suspend fun setPhotoWallFacesOnly(v: Boolean) =
+        dataStore.edit { it[keyPhotoWallFacesOnly] = v }
+
+    suspend fun setPhotoWallFaceScanDone(v: Boolean) =
+        dataStore.edit { it[keyPhotoWallFaceScanDone] = v }
+
+    suspend fun setPhotoWallRandomTransition(v: Boolean) =
+        dataStore.edit { it[keyPhotoWallRandomTransition] = v }
+
+    suspend fun setPhotoWallFixedTransition(v: PhotoTransitionId) =
+        dataStore.edit { it[keyPhotoWallFixedTransition] = v.name }
+
+    suspend fun setPhotoWallTransitionMs(v: Int) =
+        dataStore.edit { it[keyPhotoWallTransitionMs] = v.coerceIn(PHOTO_WALL_TRANSITION_MS_RANGE) }
+
+    suspend fun setPhotoWallHoldMs(v: Int) =
+        dataStore.edit { it[keyPhotoWallHoldMs] = v.coerceIn(PHOTO_WALL_HOLD_MS_RANGE) }
+
+    suspend fun setPhotoWallScaleMode(v: PhotoScaleMode) =
+        dataStore.edit { it[keyPhotoWallScaleMode] = v.name }
+
+    suspend fun setPhotoWallKenBurns(v: Boolean) =
+        dataStore.edit { it[keyPhotoWallKenBurns] = v }
+
+    suspend fun setPhotoWallAudioReactive(v: Boolean) =
+        dataStore.edit { it[keyPhotoWallAudioReactive] = v }
+
+    suspend fun setPhotoWallPulseZoom(v: Boolean) =
+        dataStore.edit { it[keyPhotoWallPulseZoom] = v }
+
+    suspend fun setPhotoWallBreathe(v: Boolean) =
+        dataStore.edit { it[keyPhotoWallBreathe] = v }
 
     /**
      * P2 修复（2026-09-22 审查）：网络端点校验。返回 null = 非空白但非法
@@ -1820,6 +1944,30 @@ class AppPreferences internal constructor(private val context: Context) {
                     normalizeEndpointUrl(settings.modelDownloadUrl) ?: ""
                 prefs[keyVisualizerTheme] = settings.visualizerTheme.nameOrDefault()
                 prefs[keyVisualizerQuality] = settings.visualizerQuality.nameOrDefault()
+                // ── 照片墙（§7.3）──
+                // ⚠️ 枚举一律走 `nameOrDefault()`：`backupGson` 的容错适配器对
+                //   `JsonToken.NULL` 仍会返回 null（只对「名字不认识」做回落），
+                //   而 null 经反射写进非空字段后 `.name` 就是 NPE ⇒ 整份备份导入失败。
+                //   数值字段一律 `coerceIn`：手改过的备份可能写出越界值。
+                prefs[keyPhotoWallGalleryEnabled] = settings.photoWallGalleryEnabled
+                prefs[keyPhotoWallExternalEnabled] = settings.photoWallExternalEnabled
+                prefs[keyPhotoWallJellyfinEnabled] = settings.photoWallJellyfinEnabled
+                prefs[keyPhotoWallSourceBalance] = settings.photoWallSourceBalance
+                prefs[keyPhotoWallDirUri] = settings.photoWallDirUri
+                prefs[keyPhotoWallCommonDirsOnly] = settings.photoWallCommonDirsOnly
+                prefs[keyPhotoWallFacesOnly] = settings.photoWallFacesOnly
+                prefs[keyPhotoWallFaceScanDone] = settings.photoWallFaceScanDone
+                prefs[keyPhotoWallRandomTransition] = settings.photoWallRandomTransition
+                prefs[keyPhotoWallFixedTransition] = settings.photoWallFixedTransition.nameOrDefault()
+                prefs[keyPhotoWallTransitionMs] =
+                    settings.photoWallTransitionMs.coerceIn(PHOTO_WALL_TRANSITION_MS_RANGE)
+                prefs[keyPhotoWallHoldMs] =
+                    settings.photoWallHoldMs.coerceIn(PHOTO_WALL_HOLD_MS_RANGE)
+                prefs[keyPhotoWallScaleMode] = settings.photoWallScaleMode.nameOrDefault()
+                prefs[keyPhotoWallKenBurns] = settings.photoWallKenBurns
+                prefs[keyPhotoWallAudioReactive] = settings.photoWallAudioReactive
+                prefs[keyPhotoWallPulseZoom] = settings.photoWallPulseZoom
+                prefs[keyPhotoWallBreathe] = settings.photoWallBreathe
             }
         }
         dataStore.edit { prefs ->
@@ -1897,3 +2045,11 @@ private fun PlayMode?.ordinalOrDefault(): Int =
 /** 网络音乐源：null → [NetworkSource.DEFAULT] */
 private fun NetworkSource?.keyOrDefault(): String =
     this?.key ?: NetworkSource.DEFAULT.key
+
+/** 照片墙转场：null → [PhotoTransitionId.Default]（`CROSSFADE`） */
+private fun PhotoTransitionId?.nameOrDefault(): String =
+    this?.name ?: PhotoTransitionId.Default.name
+
+/** 画面适配：null → [PhotoScaleMode.Default]（`CROP`） */
+private fun PhotoScaleMode?.nameOrDefault(): String =
+    this?.name ?: PhotoScaleMode.Default.name

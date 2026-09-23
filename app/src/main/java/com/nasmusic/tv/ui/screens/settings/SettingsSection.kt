@@ -6,6 +6,7 @@ import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.MusicNote
+import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material.icons.filled.Tune
@@ -32,6 +33,14 @@ import com.nasmusic.tv.R
 enum class SettingsSection(val titleRes: Int, val icon: ImageVector) {
     GENERAL(R.string.settings_general, Icons.Default.Settings),
     PLAYBACK(R.string.settings_playback, Icons.Default.Audiotrack),
+    /**
+     * 照片墙（§7.1 / §7.2）。
+     *
+     * ⚠️ 插在 PLAYBACK 之后而非追加到末尾：可视化效果本身就在 PLAYBACK 分区里，
+     * 「效果主题」与「照片墙」相邻符合用户预期。本项目**没有**持久化「分区顺序」，
+     * 也没有任何测试断言 `entries` 的顺序 ⇒ 插入是安全的。
+     */
+    PHOTO_WALL(R.string.settings_photo_wall, Icons.Default.PhotoLibrary),
     DOWNLOAD(R.string.settings_download, Icons.Default.Download),
     SERVER(R.string.nav_server, Icons.Default.Storage),
     CACHE(R.string.settings_cache, Icons.Default.Tune),

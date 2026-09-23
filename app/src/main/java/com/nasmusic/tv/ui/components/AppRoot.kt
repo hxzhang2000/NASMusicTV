@@ -596,6 +596,7 @@ private fun VisualizerOverlay(
     val vm = viewModel.visualizerVM
     val theme by vm.theme.collectAsState()
     val quality by vm.quality.collectAsState()
+    val photoWallAvailable by vm.photoWallAvailable.collectAsState()
     val cover by vm.cover.collectAsState()
     val palette by vm.palette.collectAsState()
     val lyrics by viewModel.currentLyrics.collectAsState(initial = null)
@@ -620,11 +621,9 @@ private fun VisualizerOverlay(
         progressMs = progress,
         theme = effectiveTheme,
         quality = quality,
-        // ⚠️ 阶段 7 的门**刻意关着**（与 `VisualizerViewModel.step()` 保持同一个值）：
-        //   三个来源开关在阶段 8 才落盘，`PhotoWallController` 在阶段 10 才存在
-        //   ⇒ 现在放开只会让用户切到一块空白。阶段 8 改成
-        //   `PhotoWallAvailability.isAvailable(...)` 的真实派生值。
-        photoWallAvailable = false,
+        // 三来源开关之「或」—— 与 `VisualizerViewModel.step()` 用的是**同一个** StateFlow
+        // ⇒ 指示器与左右键看到的是同一份列表（不会出现「指示器上没有、却切得到」）。
+        photoWallAvailable = photoWallAvailable,
         isTV = isTV,
         onExit = { vm.exitVisualizer() },
         onNextTheme = { vm.nextTheme() },

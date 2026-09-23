@@ -8,6 +8,7 @@ import com.google.gson.reflect.TypeToken
 import com.google.gson.stream.JsonReader
 import com.google.gson.stream.JsonToken
 import com.google.gson.stream.JsonWriter
+import com.nasmusic.tv.backend.photo.PhotoScaleMode
 import com.nasmusic.tv.data.model.NetworkSource
 import com.nasmusic.tv.data.model.VisualQuality
 import com.nasmusic.tv.data.model.VisualizerTheme
@@ -22,7 +23,7 @@ import com.nasmusic.tv.util.AppLog
  * ## 为什么需要它 —— 「老备份导入失败」的根因
  *
  * 备份 JSON 里保存的是**枚举常量名**（例如 `"visualizerTheme": "CLASSICAL_WAVE"`）。
- * 历史版本删改过枚举常量：`VisualizerTheme` 现在有 34 项，`CLASSICAL_WAVE` 已不在其中。
+ * 历史版本删改过枚举常量：`CLASSICAL_WAVE` 已不在当前 `VisualizerTheme` 中。
  * 而 **Gson 默认的枚举适配器不认历史名**（`gson 2.10.1` / `TypeAdapters.EnumTypeAdapter`）：
  *
  * ```java
@@ -70,6 +71,13 @@ private fun resolveLegacyEnumName(clazz: Class<*>, raw: String): Enum<*>? = when
     VisualizerTheme::class.java -> VisualizerTheme.fromKey(raw)
     VisualQuality::class.java -> VisualQuality.fromKey(raw)
     NetworkSource::class.java -> NetworkSource.fromKey(raw)
+    // 照片墙（§7.3 进 AppSettings 后受同一个坑约束）
+    PhotoScaleMode::class.java -> PhotoScaleMode.fromKey(raw)
+    // ⚠️ `PhotoTransitionId` **刻意不在这里**：它还没有 `fromKey` 之外的历史名，
+    //    而 `fromKey()` 未命中时返回 `Default`（= `CROSSFADE`），与第 ③ 级回落
+    //    （首个常量 = `CROSSFADE`）结果**完全相同** ⇒ 加不加都得到同一个值。
+    //    日后若重命名常量，**必须**把它加进来（否则旧名只能落到首个常量，
+    //    迁移结果未必是期望的那一项）。见 `docs/technical-overview.md` §10.172。
     else -> null
 }
 

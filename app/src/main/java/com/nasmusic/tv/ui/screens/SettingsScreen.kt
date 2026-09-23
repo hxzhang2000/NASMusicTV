@@ -81,6 +81,9 @@ import com.nasmusic.tv.ui.screens.settings.NetworkMusicSettingsState
 import com.nasmusic.tv.ui.screens.settings.PlayerSettingsActions
 import com.nasmusic.tv.ui.screens.settings.PlayerSettingsSection
 import com.nasmusic.tv.ui.screens.settings.PlayerSettingsState
+import com.nasmusic.tv.ui.screens.settings.PhotoWallSettingsActions
+import com.nasmusic.tv.ui.screens.settings.PhotoWallSettingsSection
+import com.nasmusic.tv.ui.screens.settings.PhotoWallSettingsState
 import com.nasmusic.tv.ui.screens.settings.ServerSettingsActions
 import com.nasmusic.tv.ui.screens.settings.ServerSettingsSection
 import com.nasmusic.tv.ui.screens.settings.ServerSettingsState
@@ -257,6 +260,15 @@ fun SettingsScreen(
     // v2.36.0 屏幕方向（L1 全局策略；L2 顶部栏按钮只是快捷改它）
     screenOrientation: String = "auto",
     onChangeScreenOrientation: ((String) -> Unit)? = null,
+    /**
+     * 照片墙分区的动作（§7.2）。
+     *
+     * ⚠️ **状态不在这里**：17 个 `photoWall*` 字段全在 [settings]（`AppSettings`）里，
+     * 分区直接读它 ⇒ 只多这一个参数，而不是 17 个字段 + 19 个回调。
+     * 运行时可派生值（各来源照片数、人脸检测进度）在阶段 9/10/11 接入，
+     * 届时同样通过 [PhotoWallSettingsState] 的默认值扩展，不再加签名参数。
+     */
+    photoWallActions: PhotoWallSettingsActions = PhotoWallSettingsActions(),
     modifier: Modifier = Modifier
 ) {
     var activeSection by remember { mutableStateOf(SettingsSection.GENERAL) }
@@ -529,6 +541,19 @@ fun SettingsScreen(
                             onChangeQualityTier = onChangeQualityTier,
                             onClearQualityOverrides = onClearQualityOverrides,
                         )
+                    )
+                }
+                SettingsSection.PHOTO_WALL -> item {
+                    PhotoWallSettingsSection(
+                        state = PhotoWallSettingsState(
+                            settings = settings,
+                            // ⚠️ 直接用 isTVDevice()（@Composable，进程内缓存），
+                            //   不新增签名参数：设备类型不是「设置状态」，加参数只会
+                            //   让本来就很长的签名再长一行，且所有调用点都要跟着改。
+                            isTV = com.nasmusic.tv.ui.components.isTVDevice(),
+                            nasConnected = isConnected,
+                        ),
+                        actions = photoWallActions,
                     )
                 }
                 SettingsSection.DOWNLOAD -> item {

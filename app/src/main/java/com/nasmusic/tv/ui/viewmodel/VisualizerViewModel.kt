@@ -9,6 +9,7 @@ import com.nasmusic.tv.data.model.VisualizerTheme
 import com.nasmusic.tv.data.prefs.AppPreferences
 import com.nasmusic.tv.player.PlayerManager
 import com.nasmusic.tv.visualizer.AudioFrame
+import com.nasmusic.tv.visualizer.photo.PhotoWallAvailability
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -36,6 +37,17 @@ class VisualizerViewModel(
 
     private val _quality = MutableStateFlow(VisualQuality.Default)
     val quality: StateFlow<VisualQuality> = _quality.asStateFlow()
+
+    /**
+     * 照片墙可用性（三来源开关之「或」，§7.4）。
+     *
+     * ⛔ 它是 `PHOTO_WALL` 是否出现在效果列表里的**唯一判据**，且必须与
+     * `AppRoot.VisualizerOverlay` 传给 `VisualizerStage` 的值**完全一致**
+     * （指示器与左右键切到的是同一份列表，否则会出现「指示器上没有、却切得到」）。
+     * ⇒ 因此收口在这里，由 UI 层 `collectAsState()` 订阅，而不是各自算一遍。
+     */
+    private val _photoWallAvailable = MutableStateFlow(false)
+    val photoWallAvailable: StateFlow<Boolean> = _photoWallAvailable.asStateFlow()
 
     /** 音频帧（来自 SpectrumRepository 单例） */
     val frame: AudioFrame get() = playerManager.spectrumRepository.frame
@@ -97,6 +109,20 @@ class VisualizerViewModel(
             prefs.appSettings.collect { s ->
                 _theme.value = s.visualizerTheme
                 _quality.value = s.visualizerQuality
+                val available = PhotoWallAvailability.isAvailable(
+                    galleryEnabled = s.photoWallGalleryEnabled,
+                    externalEnabled = s.photoWallExternalEnabled,
+                    jellyfinEnabled = s.photoWallJellyfinEnabled,
+                )
+                _photoWallAvailable.value = available
+
+                // §7.4 实现要点 3：三来源全关且当前正显示照片墙 ⇒ **平滑切回**默认效果。
+                // 不需要额外动画代码 —— 主题一变，`RendererSwapper` 的既有 crossfade 就接管了。
+                // ⚠️ 这条同时兜住「冷启动时存档主题是 PHOTO_WALL 但开关已全关」的情况。
+                if (!available && _theme.value == VisualizerTheme.PHOTO_WALL) {
+                    _theme.value = VisualizerTheme.Default
+                    persist()
+                }
             }
         }
     }
@@ -130,14 +156,7 @@ fun nextTheme() = step(+1)
         lastStepMs = now
         // ⛔ 必须用「过滤后」的列表：三来源开关全关时列表里没有 PHOTO_WALL，
         //   否则左右键会切到一个画不出东西的空效果上（§7.4 实现要点 1）。
-        //
-        // ⚠️ 阶段 7 的门**刻意关着**（恒 false），原因有两条，缺一不可：
-        //   ① 三个来源开关的持久化字段要到**阶段 8** 才落（`AppPreferences` / `AppSettings`）；
-        //   ② 真把照片画出来要靠**阶段 10** 的 `PhotoWallController`
-        //      —— 在此之前 `RenderContext.photoA` 恒为 `null`，`PhotoRenderer` 一帧都不画。
-        //   ⇒ 此时放开只会让用户切到一块空白。阶段 8 改成
-        //     `PhotoWallAvailability.isAvailable(...)` 的真实派生值。
-        val list = VisualizerTheme.selectable(photoWallAvailable = false)
+        val list = VisualizerTheme.selectable(photoWallAvailable = _photoWallAvailable.value)
         if (list.isEmpty()) return
         val from = list.indexOf(_theme.value).let { if (it < 0) 0 else it }
         for (k in 1..list.size) {

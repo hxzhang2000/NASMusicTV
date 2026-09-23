@@ -1520,10 +1520,13 @@ when {
 
 ### 14.1 文件清单
 
-#### 新增（23 个 Kotlin 源文件 + 1 个模型资产）
+#### 新增（24 个 Kotlin 源文件 + 1 个模型资产）
 
-> ⚠️ 本表在阶段 7 实现期补了 1 项（原写「22 个」）：`PhotoWallAvailability.kt` ——
-> §7.4「唯一新增逻辑」那三行派生代码**单独成文件**，理由见该文件 KDoc（纯函数可单测 + 收口判定）。
+> ⚠️ 本表在实现期补了 2 项（原写「22 个」）：
+> ① `PhotoWallAvailability.kt` —— §7.4「唯一新增逻辑」那三行派生代码**单独成文件**
+> （纯函数可单测 + 收口判定），阶段 7 补；
+> ② `PhotoWallPrefs.kt` —— `visualizer` 分组的既有写法就是「键在 `AppPreferences` +
+> 一个薄委托类」，只加键不加委托类反而不一致，阶段 8 补。
 
 | # | 路径 | 预估 | 内容 |
 |---|---|---|---|
@@ -1550,24 +1553,31 @@ when {
 | 21 | `visualizer/photo/transitions/*.kt` | ~1200 | 76 种转场（P0 先 15 个 ≈ 320 行） |
 | 22 | `ui/screens/settings/PhotoWallSettingsSection.kt` | ~450 | 设置分区 |
 | 23 | `visualizer/photo/PhotoWallAvailability.kt` | ~50 | 三来源开关之「或」派生（§7.4 **唯一新增逻辑**） |
-| 24 | `app/src/main/assets/models/yunet_face.onnx` | 337 KB | 模型（⚠️ **`assets/` 目录当前不存在，需新建**） |
+| 24 | `data/prefs/PhotoWallPrefs.kt` | ~50 | 照片墙域子 Prefs（薄委托，**只提供 setter**） |
+| 25 | `app/src/main/assets/models/yunet_face.onnx` | 337 KB | 模型（⚠️ **`assets/` 目录当前不存在，需新建**） |
 
-#### 修改（14 个）
+#### 修改（16 个）
 
-> ⚠️ 阶段 7 实现期补了 1 项（原写「13 个」）：`ui/components/AppRoot.kt` ——
-> 它才是 `VisualizerStage` 的**唯一调用点**，新参数必须由它传下去。
+> ⚠️ 实现期补了 3 项（原写「13 个」）：
+> ① `ui/components/AppRoot.kt` —— 它才是 `VisualizerStage` 的**唯一调用点**，
+> 阶段 7 新增的参数必须由它传下去；
+> ② `ui/components/branches/SettingsBranch.kt` —— `SettingsScreen` 的**唯一调用点**，
+> `photoWallActions` 必须在这里接上 `prefs.photoWall.*`（阶段 8）；
+> ③ `data/prefs/BackupGson.kt` —— 新枚举要登记进 `resolveLegacyEnumName`（阶段 8）。
 
 | # | 文件 | 改动 | 关键行号（当前） |
 |---|---|---|---|
 | 1 | `AndroidManifest.xml` | +`READ_MEDIA_IMAGES` +`READ_MEDIA_VISUAL_USER_SELECTED` | — |
 | 2 | `data/model/AppSettings.kt` | `VisualizerTheme` +`PHOTO_WALL`；`selectable` 由 `val` 改 `fun`；新增 17 个 `photoWall*` 字段 | `selectable` 在 **119 行**；`VisualQuality.supports` 在 **147 行** |
-| 3 | `data/prefs/AppPreferences.kt` | +17 个 key + getter/setter（新增 `photoWall` 分组，照 `visualizer` 分组的写法） | 分组声明 **63 行**；key 区 **288–289 行**；读写 **737–738 / 1821–1822 行** |
+| 3 | `data/prefs/AppPreferences.kt` | +17 个 key + getter/setter（新增 `photoWall` 分组，照 `visualizer` 分组的写法）+ `importBackupData` 17 行 + `isTelevisionDevice` | 分组声明 **63 行**；key 区 **288–289 行**；读写 **737–738 / 1821–1822 行** |
 | 4 | `visualizer/RenderContext.kt` | +7 个 `photo*` 字段（**不加进 `update()`**） | `update()` 在 **49–83 行** |
 | 5 | `visualizer/VisualizerRendererFactory.kt` | +`PHOTO_WALL` 分支；`availableThemes(quality, photoWallAvailable)` 改签名 + 调用新函数 | `availableThemes` 在 **91–92 行**；⚠️ **全仓库无其他调用者**（2026-09-23 实测） |
 | 6 | `ui/components/VisualizerStage.kt` | ⛔ **+参数 `photoWallAvailable: Boolean`**（§14.1 原漏写）；指示器改传过滤后列表；帧循环 +1 行；绘制前 +1 行 `applyTo` | 帧循环 **159–172 行**；绘制 **247–266 行**；`selectable` 调用 **363 行**；签名 **89–102 行** |
 | 7 | `ui/viewmodel/VisualizerViewModel.kt` | 持有 `PhotoWallController`；`step()` 用过滤后列表 | `selectable` 调用 **131 行**（`step()` 内） |
 | 7b | `ui/components/AppRoot.kt` | `VisualizerOverlay` 向 `VisualizerStage` 传 `photoWallAvailable` | `VisualizerOverlay` **590 行**；`VisualizerStage(...)` **613 行**；其唯一调用点 **386 行** |
-| 8 | `ui/screens/SettingsScreen.kt` | `when (displaySection)` +1 分支 | `when` 在 **474 行**，分支 475–681 |
+| 8 | `ui/screens/SettingsScreen.kt` | `when (displaySection)` +1 分支；**+1 参数** `photoWallActions` | `when` 在 **474 行**，分支 475–681 |
+| 8b | `ui/components/branches/SettingsBranch.kt` | 接 `photoWallActions`（15 个开关/选择器 → `prefs.photoWall.*`） | `SettingsScreen(...)` 调用 **91–242 行** |
+| 8c | `data/prefs/BackupGson.kt` | `resolveLegacyEnumName` +`PhotoScaleMode`（`PhotoTransitionId` 刻意不登记） | `resolveLegacyEnumName` **69–74 行** |
 | 9 | `ui/screens/settings/SettingsSection.kt` | 枚举 +`PHOTO_WALL` | 枚举 **32–42 行** |
 | 10 | `util/PermissionHelper.kt` | +`hasPhotoPermission` / `getPhotoPermissions` | 现有 `hasLocalMusicPermission` **20 行** |
 | 11 | `ui/MainActivity.kt` | +照片目录选择 launcher（照 `exportTreeLauncher`）+ 三态刷新 | `exportTreeLauncher` **78–83 行**；权限请求 **178–200 行** |
@@ -2057,6 +2067,7 @@ interface PhotoFaceDao {
 | G9 | `PhotoRefIdTest` | `id` 形如 `<kind>:<payload>`，跨来源同名文件不冲突 | 两个来源同名文件 ⇒ 断言 `id` 不同 |
 | G10 | `PhotoBufferBudgetTest` | 双缓冲 + LRU 的 `estimatedBytes` ≤ 预算 | 把 `maxCached` 调大 ⇒ 断言超预算 |
 | **G11** | `KotlinBlockCommentBalanceTest` | **源码无未闭合块注释**（见下「实现期新增」） | 在 KDoc 里写「斜杠紧邻星号」⇒ 断言判出未闭合 |
+| **G12** | `PhotoWallPrefsTest`（+`BackupGsonTest` 扩） | 17 个字段默认值对齐 §7.3；读写往返一致；越界时长写入侧被钳制；**老备份（缺 17 键）反序列化 + 导入不抛异常** | 把任一 `AppSettings` 字段的默认值删掉 ⇒ `BackupGsonTest` 的「老备份缺 17 键保持默认」整组变红（证明「必须带默认值」这条约束真的被判住） |
 
 ⚠️ **G11 是实现期新增（2026-09-23，阶段 1）** —— 不在原设计里。理由：Kotlin 块注释**支持嵌套**，
 KDoc 里出现「斜杠紧邻星号」（最常见是路径通配符）会开一层永不闭合的注释、吞掉其后全部代码。
@@ -2165,7 +2176,7 @@ JAVA_HOME="C:/Program Files/Android/Android Studio/jbr" \
 | 5 转场策略层 + 15 种 P0 | `feat(visualizer): …` | 4 | ✅ |
 | 6 随机抽取与时钟 | `feat(visualizer): …` | 4 | ✅ |
 | 7 PhotoRenderer 与 PHOTO_WALL | `feat(visualizer): …` | 5 | ✅ |
-| 8 设置分区 | `feat(settings): …` | 4 | ⬜ |
+| 8 设置分区 | `feat(settings): …` | 4 | ✅ |
 | 9 权限与 SAF 目录 | `feat(photo): …` | 4 | ⬜ |
 | 10 Controller 与帧循环接线 ★ | `feat(photo): …` | 4 | ⬜ |
 | 11 人脸检测 | `feat(photo): …` | 4 | ⬜ |
@@ -2578,20 +2589,106 @@ JAVA_HOME="C:/Program Files/Android/Android Studio/jbr" \
 
 #### 阶段 8 —— 「照片墙」设置分区　`提交 8`　**4 项**
 
-- [ ] **T8.1** 设置分区骨架
+- [x] **T8.1** 设置分区骨架 ✅ 2026-09-23
   - `SettingsSection` 枚举 +`PHOTO_WALL`（含 `titleRes` + `icon`）
   - `SettingsScreen` 的 `when (displaySection)` +1 分支（现有 `when` 在 **474 行**，分支 475–681）
   - **验收**：一级列表出现该分区；点击进入详情页
-- [ ] **T8.2** 持久化层
+  - **实际**：`SettingsSection` +`PHOTO_WALL(R.string.settings_photo_wall, Icons.Default.PhotoLibrary)`；
+    `SettingsScreen` 的 `when` +1 分支。⚠️ **插在 PLAYBACK 之后**而非追加到末尾
+    （可视化效果本身就在 PLAYBACK 分区里，相邻符合预期；项目没有持久化分区顺序、
+    也没有测试断言 `entries` 顺序 ⇒ 插入安全）
+  - ⚠️ **实现期偏差（重要，签名膨胀的规避）**：新增的 `SettingsScreen` 参数**只有 1 个**
+    （`photoWallActions: PhotoWallSettingsActions`），**不是** 17 个字段 + 19 个回调。
+    原因：`SettingsScreen` 本来就持有整份 `AppSettings`，而 17 个 `photoWall*` 字段
+    全在里面 ⇒ 分区直接读 `state.settings`。写值只需一个动作包。
+    ⇒ 这个做法值得沿用到后续阶段：**运行时可派生值走 `PhotoWallSettingsState` 的默认值扩展，
+    不再加签名参数**（阶段 9/10/11 的照片数、人脸进度都按这条走）
+- [x] **T8.2** 持久化层 ✅ 2026-09-23
   - `AppPreferences` 新增 `photoWall` 分组 + **17 个 key** + getter/setter（照 `visualizer` 分组写法）
   - ⛔ `AppSettings` 新增 17 个字段，**每个都必须带默认值**（Gson 前向兼容硬约束）
   - **验收**：读写往返一致；用旧备份反序列化不抛异常
-- [ ] **T8.3** `PhotoWallSettingsSection` 设置页
+  - **实际**：17 个 `booleanPreferencesKey` / `stringPreferencesKey` / `intPreferencesKey`
+    （前缀 `photo_wall_`）+ `appSettings` 里 17 行读取 + 17 个 setter +
+    `importBackupData()` 里 17 行写入；新增薄委托子域 `data/prefs/PhotoWallPrefs.kt`
+  - ⚠️ **实现期偏差 1（新增文件）**：多了一个 `PhotoWallPrefs.kt`（原 §14.1 文件清单没有）。
+    理由：`visualizer` 分组的既有写法就是「键在 `AppPreferences` + 一个薄委托类」
+    （`VisualizerPrefs`）—— 只加键不加委托类反而与既有风格不一致。
+    它**只提供 setter**（读值走 `AppSettings`，多一份 `Flow` 只是多一条要维护的订阅）
+  - ⚠️ **实现期偏差 2（枚举补 API）**：`PhotoTransitionId` 补了 `Default` + `fromKey()`。
+    原方案只写了「`AppSettings` 加字段」，但**读 DataStore 需要一个永不返回 null 的解析入口**
+    （同 `VisualizerTheme.fromKey` / `PhotoScaleMode.fromKey`）。缺了它就只能裸写
+    `entries.find { … }`，未命中时返回 null ⇒ 非空字段变 null ⇒ NPE
+  - ⚠️ **实现期偏差 3（`BackupGson` 登记）**：`resolveLegacyEnumName` 增加
+    `PhotoScaleMode::class.java -> PhotoScaleMode.fromKey(raw)`。
+    `PhotoTransitionId` **刻意不登记**（还没有历史名；其 `fromKey` 未命中返回 `CROSSFADE`，
+    与第 ③ 级「首个常量」结果相同）—— 已在源码里写明「日后重命名常量必须补进来」
+  - ⚠️ **实现期偏差 4（平台默认值落点）**：`photoWallExternalEnabled` 的「电视 `true` / 手机 `false`」
+    **不在 `AppSettings` 的默认值里**（那里只写 `false`），而在 `AppPreferences` 读取处
+    经 `isTelevisionDevice`（`by lazy`）决定。原因：`AppSettings` 的默认值只服务
+    「Gson 用无参构造器反序列化」这一条路，把它做成平台相关会让同一份备份在不同设备上
+    反序列化出不同结果。⚠️ 该判定与 `NasMusicApp` / `FocusableSurface.isTVDevice()`
+    用**同一套判据**（三处必须一致）
+  - ⚠️ **实现期偏差 5（越界钳制）**：转场 / 停留时长**在 setter 里**也做一次 `coerceIn`
+    （范围常量 `PHOTO_WALL_TRANSITION_MS_RANGE` / `PHOTO_WALL_HOLD_MS_RANGE`）。
+    设置页的 `+/-` 自己会夹一次，但**备份导入不经过 UI** ⇒ 手改过的备份
+    （`photoWallHoldMs: 999999`）只有靠 setter 才能挡住
+  - ⛔ **机制说明（写进代码 KDoc，值得记住）**：为什么「每个字段必须带默认值」——
+    `AppSettings` **全部**参数都有默认值 ⇒ Kotlin 额外生成一个**无参构造器**，
+    Gson 反序列化旧备份时走的就是它 ⇒ 缺的键保持 Kotlin 默认值。
+    一旦有任一参数没有默认值，该构造器消失，Gson 退回 `UnsafeAllocator`（不调构造器）
+    ⇒ **所有**字段变 JVM 默认值（对象类型为 `null`）⇒ 老备份导入必炸。
+    ⇒ 这条护栏已用 `BackupGsonTest` 的一个用例把 17 个字段逐个断言住
+  - **验收复核**：`PhotoWallPrefsTest` 5 例（默认值逐项对齐 §7.3 / 17 字段读写往返 /
+    越界钳制 / `fromKey` 永不返回 null / **老备份导入端到端不抛异常**）；
+    `BackupGsonTest` 9 → **13 例**（+老备份缺 17 键保持默认 / 未知转场名回落 /
+    未知画面适配名回落 / 新枚举导出写常量名）
+- [x] **T8.3** `PhotoWallSettingsSection` 设置页 ✅ 2026-09-23
   - 按 §7.2 布局实现 **19 行**设置项
   - 文案同步 `values/strings.xml` + `values-en/strings.xml` **双份**
   - 竖屏触摸目标统一走 `portraitTouchTarget(x.dp)`
   - **验收**：逐行对照 §7.2 无遗漏；`check_chinese.py` 通过；门禁 `SmallTouchTargetScanTest` 绿
-- [ ] **T8.4** **阶段完成** —— 「画面适配」在**四端（电视 / 手机横 / 手机竖）都渲染**（§7.2 注）
+  - **实际**：新建 `ui/screens/settings/PhotoWallSettingsSection.kt`（约 400 行，含
+    `PhotoWallSettingsState` / `PhotoWallSettingsActions` / 两个私有控件）；
+    双语文案 **47 条 × 2**（`settings_photo_wall*`）
+  - ⚠️ **实现期偏差 1（行数口径）**：§7.2 写「**19 行**」，逐行数实际是 **22 个控件** ——
+    §7.2 的树把「已启用 / 照片数量 / 合并后」三条信息行与「转场效果选择器」等算得较粗。
+    以**树形图为准**实现，22 个控件一个不少
+  - ⚠️ **实现期偏差 2（转场选择器不用 `FlowRow`）**：候选最多 43 个 chip，
+    `FlowRow` 是 `@ExperimentalLayoutApi`（本项目未启用），
+    `horizontalScroll` 又会让 TV 焦点跑到屏幕外 ⇒ 按 `adaptiveColumns(tv=5, medium=4, phonePortrait=3)`
+    **手动分行**（`chunked`），二维焦点导航天然可用
+  - ⚠️ **实现期偏差 3（候选来源）**：chip 列的是
+    **`PhotoTransitionRegistry.available()`**（真有实现的），**不是** `PhotoTransitionId.entries` ——
+    后者含 P1/P2 未实现项，选中只会「什么都没发生」。这条同时让 T12.2
+    「选择器项数 = 43」自动成立（阶段 12 补齐后 `available()` 自然变 43）
+  - ⚠️ **实现期偏差 4（4 个动作刻意留空）**：`onPickDirectory`（→ 阶段 9）、
+    `onRescan`（→ 阶段 9/10，需要聚合器）、`onStartFaceScan` / `onClearFaceScan`（→ 阶段 11）
+    在 `SettingsBranch` 里**不传**（`null` ⇒ 按钮可见但点击无反应）。
+    这是分阶段推进的刻意取舍，不是遗漏
+  - ⚠️ **实现期偏差 5（平台差异按 §7.3 落地）**：「图库」行**仅手机渲染**（电视跳过）；
+    「Jellyfin 照片库」未连接 NAS 时置灰（`nasConnected = isConnected`）；
+    「随节拍缩放 / 随低频呼吸」受「启用音频反应」控制置灰（**值本身保留**）
+  - **验收复核**：`SmallTouchTargetScanTest` **9 例绿**（新控件全部走
+    `FocusableSurface` + `portraitTouchTarget(48.dp)`，没有裸 `clickable`）；
+    `check_chinese.py` 通过（它只扫 `net/` 三个文件，本阶段无涉）；
+    `KotlinBlockCommentBalanceTest` 7 例绿（新增 4 个文件块注释配平已逐文件核对）
+- [x] **T8.4** **阶段完成** —— 「画面适配」在**四端（电视 / 手机横 / 手机竖）都渲染**（§7.2 注）✅ 2026-09-23
+  - **实际**：`PhotoScaleModeSelector` 无条件渲染（**没有任何 `isTV` / `UiMode` 分支**）——
+    「满屏 / 完整」是「显示图片时满屏还是留黑边」的语义，**与横竖屏无关**；
+    电视横屏放竖幅照片同样有取舍（§7.2 注 / §7.3 的 `photoScaleMode` 行）。
+    ⚠️ 竖屏下的可点区域由 `OptionChip` 的 `portraitTouchTarget(48.dp)` 保证
+  - **门禁**：`testDebugUnitTest` **1093 例 / 105 类 / 0 失败 0 错误**；
+    `lintDebug` **0 Error / 279 Warning**
+  - **涨幅核对**（阶段 7 基线 1084 / 104 → 1093 / 105，**+9 例 / +1 类**）：
+    `PhotoWallPrefsTest` 5 例（新类）+ `BackupGsonTest` 9 → 13 例（+4）= **9** ✅
+    逐项对上，无并发会话混入
+  - **lint 涨幅**（277 → 279，**+2**）：两条 `PluralsCandidate`（`%d 张` / `%d photos`
+    被建议改用 `<plurals>`）。**不是** Error，且英文单复数对本功能无意义
+    （照片数量恒 ≥ 0，`0 photos` / `1 photos` 的差异不影响理解）⇒ 接受，不改
+  - ⚠️ **本阶段顺手完成的阶段 7 欠账**：`VisualizerViewModel` 的
+    `photoWallAvailable` 由「恒 `false` 占位」换成**真实派生值**
+    （`PhotoWallAvailability.isAvailable(...)`，与 `AppRoot` 传参共用**同一个** `StateFlow`），
+    并补上 §7.4 实现要点 3「三来源全关且当前正显示照片墙 ⇒ 平滑切回 `Default`」
 
 #### 阶段 9 —— 照片权限与 SAF 目录导入通道　`提交 9`　**4 项**
 

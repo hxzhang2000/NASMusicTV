@@ -1,12 +1,15 @@
 package com.nasmusic.tv.data.prefs
 
 import com.google.gson.Gson
+import com.nasmusic.tv.backend.photo.PhotoScaleMode
 import com.nasmusic.tv.data.model.AppSettings
 import com.nasmusic.tv.data.model.NetworkSource
 import com.nasmusic.tv.data.model.PlayMode
 import com.nasmusic.tv.data.model.VisualQuality
 import com.nasmusic.tv.data.model.VisualizerTheme
+import com.nasmusic.tv.visualizer.photo.PhotoTransitionId
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -16,7 +19,7 @@ import org.junit.Test
  *
  * 覆盖真机故障：用户**以前保存的备份文件导入失败**，且导入后界面毫无提示。
  * 备份 JSON 里 `appSettings.visualizerTheme` 存的是历史枚举名 `CLASSICAL_WAVE`，
- * 该常量早已从 [VisualizerTheme]（现 34 项）中删除。
+ * 该常量早已从 [VisualizerTheme] 中删除。
  *
  * 根因链（本文件第 1 个用例就是它的**负向自证**，前提不成立时会立刻红）：
  * 1. Gson 2.10.1 的 `EnumTypeAdapter#read` 在名字找不到时**返回 null 而不是抛异常**：
@@ -161,5 +164,98 @@ class BackupGsonTest {
         assertNotNull("appSettings 必须被解析出来", settings)
         assertNotNull("visualizerTheme 必须非空 —— 原故障就是它变成 null", settings!!.visualizerTheme)
         assertEquals(VisualizerTheme.CIRCULAR_RING, settings.visualizerTheme)
+    }
+
+    // ── ⑥ 照片墙的 17 个新字段（§7.3）：老备份里一个都没有 ──────────────────────
+
+    /**
+     * ⛔ **这条用例同时是「为什么新字段必须带默认值」的机制证明**。
+     *
+     * `AppSettings` 的**全部**参数都有默认值 ⇒ Kotlin 会额外生成一个**无参构造器**，
+     * Gson 反序列化时走的就是它 ⇒ 老备份里缺的键**保持 Kotlin 默认值**。
+     *
+     * 反过来：只要有一个参数没有默认值，该无参构造器就不再生出，Gson 会退回
+     * `UnsafeAllocator`（不调构造器）⇒ 所有字段变成 JVM 默认值（对象类型为 `null`）
+     * ⇒ 下面每一条 `assertEquals` 都会变成 null / 0 / false。
+     *
+     * ⇒ 本用例是**给整个 `AppSettings` 的护栏**，不只是给照片墙用的。
+     */
+    @Test
+    fun `an old backup without photo wall keys keeps every Kotlin default`() {
+        val settings = backupGson.fromJson(legacySettingsJson, AppSettings::class.java)
+
+        assertFalse(settings.photoWallGalleryEnabled)
+        assertFalse(settings.photoWallExternalEnabled)
+        assertFalse(settings.photoWallJellyfinEnabled)
+        assertFalse(settings.photoWallSourceBalance)
+        assertEquals("", settings.photoWallDirUri)
+        assertTrue(settings.photoWallCommonDirsOnly)
+        assertFalse(settings.photoWallFacesOnly)
+        assertFalse(settings.photoWallFaceScanDone)
+        assertTrue(settings.photoWallRandomTransition)
+        assertEquals(PhotoTransitionId.CROSSFADE, settings.photoWallFixedTransition)
+        assertEquals(700, settings.photoWallTransitionMs)
+        assertEquals(8_000, settings.photoWallHoldMs)
+        assertEquals(PhotoScaleMode.CROP, settings.photoWallScaleMode)
+        assertTrue(settings.photoWallKenBurns)
+        assertFalse(settings.photoWallAudioReactive)
+        assertTrue(settings.photoWallPulseZoom)
+        assertTrue(settings.photoWallBreathe)
+    }
+
+    /**
+     * `PhotoTransitionId` 走第 ③ 级回落（不在 `resolveLegacyEnumName` 里）。
+     *
+     * ⚠️ 结果**恰好等于** `PhotoTransitionId.Default`（`CROSSFADE` 同时是首个常量）——
+     * 这是**有意保持**的巧合：调整枚举顺序会静默改变「无法识别的老名字」的迁移结果，
+     * 所以本断言要写死 `CROSSFADE` 而不是 `entries.first()`（后者会随顺序变化）。
+     */
+    @Test
+    fun `an unknown photo transition name falls back to CROSSFADE, never null`() {
+        val settings = backupGson.fromJson(
+            """{"photoWallFixedTransition":"NO_SUCH_TRANSITION"}""",
+            AppSettings::class.java
+        )
+        val id: PhotoTransitionId? = settings.photoWallFixedTransition
+        assertNotNull("容错适配器绝不允许把非空枚举字段写成 null", id)
+        assertEquals(PhotoTransitionId.CROSSFADE, id)
+        assertEquals(PhotoTransitionId.Default, id)
+    }
+
+    /**
+     * `PhotoScaleMode` 走**第 ② 级**（本阶段把它加进了 `resolveLegacyEnumName`）。
+     *
+     * 与上面 `PhotoTransitionId` 的区别值得记住：`fromKey()` 未命中返回 `Default`
+     * （**不是 null**）⇒ 永远在第 ② 级就返回，到不了第 ③ 级。
+     */
+    @Test
+    fun `an unknown scale mode name falls back to CROP, never null`() {
+        val settings = backupGson.fromJson(
+            """{"photoWallScaleMode":"NO_SUCH_MODE"}""",
+            AppSettings::class.java
+        )
+        val mode: PhotoScaleMode? = settings.photoWallScaleMode
+        assertNotNull("容错适配器绝不允许把非空枚举字段写成 null", mode)
+        assertEquals(PhotoScaleMode.CROP, mode)
+        assertEquals(PhotoScaleMode.Default, mode)
+    }
+
+    /** 导出方向：新枚举同样只写 `enum.name`（与 Gson 默认行为逐字一致） */
+    @Test
+    fun `photo wall enums export as plain constant names`() {
+        val json = backupGson.toJson(
+            AppSettings(
+                photoWallFixedTransition = PhotoTransitionId.NOISE_DISSOLVE,
+                photoWallScaleMode = PhotoScaleMode.FIT,
+            )
+        )
+        assertTrue(
+            "photoWallFixedTransition 必须写出常量名，json=$json",
+            json.contains("\"photoWallFixedTransition\":\"NOISE_DISSOLVE\"")
+        )
+        assertTrue(
+            "photoWallScaleMode 必须写出常量名，json=$json",
+            json.contains("\"photoWallScaleMode\":\"FIT\"")
+        )
     }
 }

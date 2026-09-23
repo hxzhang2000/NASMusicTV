@@ -238,7 +238,64 @@ internal fun SettingsBranch(
                     exportState = viewModel.exportState.collectAsState().value,
                     onExportToDevice = { viewModel.showExportDeviceDialog() },
                     onCancelExport = { viewModel.cancelExport() },
-                    onResetExportState = { viewModel.resetExportState() }
+                    onResetExportState = { viewModel.resetExportState() },
+                    // 照片墙（§7.2）：写值一律走 prefs.photoWall.* 的 setter，
+                    // 与「屏幕方向」同款写法（直接 coroutineScope.launch），
+                    // 不必在 MainViewModel 上再加 17 个纯转发方法。
+                    // ⚠️ 读值不在这里 —— PhotoWallSettingsSection 直接读 settings（AppSettings）。
+                    //
+                    // ⚠️ 四个动作**本阶段刻意留空**（不传 ⇒ 按钮点击无反应）：
+                    //   onPickDirectory  → 阶段 9（SAF 目录 launcher）
+                    //   onRescan         → 阶段 9/10（需要聚合器）
+                    //   onStartFaceScan / onClearFaceScan → 阶段 11（人脸检测）
+                    //   见 docs/photo-spectrum-effect-plan.md §15.3 阶段 8 的偏差记录。
+                    photoWallActions = PhotoWallSettingsActions(
+                        onToggleGallery = { v ->
+                            coroutineScope.launch { viewModel.prefs.photoWall.setGalleryEnabled(v) }
+                        },
+                        onToggleExternal = { v ->
+                            coroutineScope.launch { viewModel.prefs.photoWall.setExternalEnabled(v) }
+                        },
+                        onToggleJellyfin = { v ->
+                            coroutineScope.launch { viewModel.prefs.photoWall.setJellyfinEnabled(v) }
+                        },
+                        onToggleSourceBalance = { v ->
+                            coroutineScope.launch { viewModel.prefs.photoWall.setSourceBalance(v) }
+                        },
+                        onToggleCommonDirsOnly = { v ->
+                            coroutineScope.launch { viewModel.prefs.photoWall.setCommonDirsOnly(v) }
+                        },
+                        onToggleFacesOnly = { v ->
+                            coroutineScope.launch { viewModel.prefs.photoWall.setFacesOnly(v) }
+                        },
+                        onToggleRandomTransition = { v ->
+                            coroutineScope.launch { viewModel.prefs.photoWall.setRandomTransition(v) }
+                        },
+                        onChangeFixedTransition = { id ->
+                            coroutineScope.launch { viewModel.prefs.photoWall.setFixedTransition(id) }
+                        },
+                        onChangeTransitionMs = { ms ->
+                            coroutineScope.launch { viewModel.prefs.photoWall.setTransitionMs(ms) }
+                        },
+                        onChangeHoldMs = { ms ->
+                            coroutineScope.launch { viewModel.prefs.photoWall.setHoldMs(ms) }
+                        },
+                        onChangeScaleMode = { mode ->
+                            coroutineScope.launch { viewModel.prefs.photoWall.setScaleMode(mode) }
+                        },
+                        onToggleKenBurns = { v ->
+                            coroutineScope.launch { viewModel.prefs.photoWall.setKenBurns(v) }
+                        },
+                        onToggleAudioReactive = { v ->
+                            coroutineScope.launch { viewModel.prefs.photoWall.setAudioReactive(v) }
+                        },
+                        onTogglePulseZoom = { v ->
+                            coroutineScope.launch { viewModel.prefs.photoWall.setPulseZoom(v) }
+                        },
+                        onToggleBreathe = { v ->
+                            coroutineScope.launch { viewModel.prefs.photoWall.setBreathe(v) }
+                        }
+                    )
                     )
                     // 扫码传输备份弹窗
                     if (showBackupTransferDialog) {

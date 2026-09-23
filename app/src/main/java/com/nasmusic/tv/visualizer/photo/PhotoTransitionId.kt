@@ -225,6 +225,29 @@ enum class PhotoTransitionId(
     companion object {
 
         /**
+         * 默认转场。
+         *
+         * §7.3：`AppSettings.photoWallFixedTransition` 的默认值就是它。
+         * ⚠️ 它同时是**枚举的第一个常量** —— `BackupGson` 的第 ③ 级回落（无法识别的名字
+         * ⇒ 首个常量）因此恰好落到默认值上，这个巧合是**有意保持**的：
+         * 调整枚举顺序会静默改变「无法识别的老名字」的迁移结果。
+         */
+        val Default: PhotoTransitionId = CROSSFADE
+
+        /**
+         * 从持久化字符串解析（DataStore 那条路）。
+         *
+         * ⚠️ 未命中返回 [Default]（与 `VisualizerTheme.fromKey` / `PhotoScaleMode.fromKey`
+         * 同款语义：**永不返回 null**，避免调用方拿到 null 再抛 NPE）。
+         *
+         * ⛔ 目前**没有历史名映射**（本枚举只增不改名）。日后若重命名任何常量，
+         * 必须在此加映射 —— 否则老备份里的旧名只能走 `BackupGson` 的第 ③ 级回落
+         * （首个常量），迁移结果未必正确。见 `docs/technical-overview.md` §10.172。
+         */
+        fun fromKey(key: String?): PhotoTransitionId =
+            entries.find { it.name == key } ?: Default
+
+        /**
          * 当前分期应实现的全部效果（`phase.ordinal <= 给定分期`）。
          *
          * ⚠️ 这只是**规划**，不代表真有实现 —— 抽池请用 [randomPool] 的

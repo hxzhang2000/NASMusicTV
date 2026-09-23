@@ -1,5 +1,8 @@
 package com.nasmusic.tv.data.model
 
+import com.nasmusic.tv.backend.photo.PhotoScaleMode
+import com.nasmusic.tv.visualizer.photo.PhotoTransitionId
+
 /**
  * 应用通用设置
  *
@@ -42,7 +45,55 @@ data class AppSettings(
     val downloadEnabled: Boolean = true,       // 本地下载总开关（关=禁止一切下载，已下载仍可播放）
     val autoDownloadOnPlay: Boolean = false,   // 播放时自动下载
     val autoDownloadLimit: Int = 50,           // 自动下载数量上限（1-5000）
-    val downloadLocation: String = "INTERNAL"  // 下载位置（当前仅 INTERNAL，CUSTOM 为 P1 预留）
+    val downloadLocation: String = "INTERNAL",  // 下载位置（当前仅 INTERNAL，CUSTOM 为 P1 预留）
+
+    // ── 照片墙（§7.3，17 个字段，全部带默认值）─────────────────────────────
+    //
+    // ⛔ **每个字段都必须有默认值**，这不是风格问题而是**正确性要求**：
+    //   本类所有参数都有默认值 ⇒ Kotlin 会额外生成一个**无参构造器**，
+    //   Gson 反序列化旧备份（缺这些字段）时走的就是它 ⇒ 缺的字段保持默认值。
+    //   一旦有任一参数没有默认值，该无参构造器消失，Gson 会退回 `UnsafeAllocator`
+    //   （不调构造器）⇒ **所有字段变成 JVM 默认值**（对象类型为 `null`）
+    //   ⇒ 声明为非空的 `visualizerTheme` / `photoWallFixedTransition` 变 `null`
+    //   ⇒ 备份导入时 `.name` 抛 NPE。详见 `data/prefs/BackupGson.kt` 的 KDoc。
+    //
+    // ⚠️ 「外接存储」的**平台相关默认值**（电视 `true` / 手机 `false`，§6.8）不在这里，
+    //   而是在 `AppPreferences` 的读取处 —— 数据类的默认值只服务「Gson 构造」这一条路。
+
+    /** 手机端「图库」（原总开关降级而来，§7.4）；**打开才申请照片权限** */
+    val photoWallGalleryEnabled: Boolean = false,
+    /** 外接存储（USB / SD 卡 / SAF 目录）；⚠️ 实际默认值按平台在 `AppPreferences` 决定 */
+    val photoWallExternalEnabled: Boolean = false,
+    /** Jellyfin 照片库；需 NAS 在线**且已建照片库** */
+    val photoWallJellyfinEnabled: Boolean = false,
+    /** 来源均衡：关 = 自然混合（按数量加权）；开 = 每次等概率选来源 */
+    val photoWallSourceBalance: Boolean = false,
+    /** 外接存储的目录（SAF URI，已 `takePersistableUriPermission`）；空 = 未选 */
+    val photoWallDirUri: String = "",
+    /** 仅扫常见目录（`DCIM` / `Pictures`）—— **仅电视自动探测时生效** */
+    val photoWallCommonDirsOnly: Boolean = true,
+    /** 仅显示含人像的照片（需先完成人脸检测） */
+    val photoWallFacesOnly: Boolean = false,
+    /** 人脸检测是否已完成（进度文案见阶段 11） */
+    val photoWallFaceScanDone: Boolean = false,
+    /** 随机切换转场（打开 = 每次切换重新抽；关 = 用 [photoWallFixedTransition]） */
+    val photoWallRandomTransition: Boolean = true,
+    /** 指定转场效果（仅随机关闭时生效）；⚠️ 其**流程模型映射仍生效**（选串行项就走串行） */
+    val photoWallFixedTransition: PhotoTransitionId = PhotoTransitionId.CROSSFADE,
+    /** 转场时长（300–2000 ms） */
+    val photoWallTransitionMs: Int = 700,
+    /** 停留时长（3000–30000 ms）；✅ 默认 8.0s（2026-09-23 用户确认） */
+    val photoWallHoldMs: Int = 8000,
+    /** 画面适配：`CROP` 满屏（裁切）/ `FIT` 完整（留黑边）；**四端均暴露** */
+    val photoWallScaleMode: PhotoScaleMode = PhotoScaleMode.Default,
+    /** 停留期 Ken Burns 缓慢推近 */
+    val photoWallKenBurns: Boolean = true,
+    /** 音频反应（默认**关** —— 见 §5.5「不卡节拍」决策） */
+    val photoWallAudioReactive: Boolean = false,
+    /** 随节拍缩放（受 [photoWallAudioReactive] 控制） */
+    val photoWallPulseZoom: Boolean = true,
+    /** 随低频呼吸（受 [photoWallAudioReactive] 控制） */
+    val photoWallBreathe: Boolean = true
 )
 
 /**
