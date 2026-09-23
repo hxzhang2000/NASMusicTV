@@ -39,6 +39,14 @@ class StorageMonitor(private val context: Context) {
 
     private var receiver: BroadcastReceiver? = null
 
+    /**
+     * **G7 修复（2026-09-23）**：API 22/23 上 `getStorageVolumes()` 不可用，
+     * 广播的 `intent.data`（挂载点 URI）是唯一的实时信息源。
+     *
+     * ⚠️ 只在主线程访问（`BroadcastReceiver.onReceive` 与 `refreshStorageDevices` 都在主线程）。
+     */
+    private val broadcastMounts = LinkedHashSet<String>()
+
     /** 开始监听（Application.onCreate 中调用一次） */
     fun startListening() {
         // P2-4 修复（2026-09-16）：原实现把 MEDIA_* 与 USB_* 广播放进同一个 IntentFilter
@@ -62,6 +70,10 @@ class StorageMonitor(private val context: Context) {
                     Intent.ACTION_MEDIA_MOUNTED,
                     UsbManager.ACTION_USB_DEVICE_ATTACHED -> {
                         AppLog.d(TAG, "Device mounted: ${intent.data}")
+                        // G7 修复：intent.data 一直是挂载点 URI（file:///mnt/usb0），
+                        // 此前只被打了日志却没被使用 —— API 24 以下它是唯一的实时信息源。
+                        LegacyStorageProbe.mountPointFromBroadcast(intent.data?.path)
+                            ?.let { broadcastMounts.add(it) }
                         refreshStorageDevices()
                         _storageDevices.value
                             .filter { it.isMounted && it.type == StorageType.USB }
@@ -71,6 +83,8 @@ class StorageMonitor(private val context: Context) {
                     Intent.ACTION_MEDIA_REMOVED,
                     UsbManager.ACTION_USB_DEVICE_DETACHED -> {
                         AppLog.d(TAG, "Device removed: ${intent.data}")
+                        LegacyStorageProbe.mountPointFromBroadcast(intent.data?.path)
+                            ?.let { broadcastMounts.remove(it) }
                         _storageDevices.value
                             .filter { it.type == StorageType.USB }
                             .forEach { _onDeviceUnmounted.tryEmit(it) }
@@ -101,9 +115,11 @@ class StorageMonitor(private val context: Context) {
 
     /** 刷新存储设备列表 */
     fun refreshStorageDevices() {
-        // StorageManager.getStorageVolumes() 需要 API 24+，低版本跳过
+        // StorageManager.getStorageVolumes() 需要 API 24+（N）
+        // ⇒ 低版本走 [refreshLegacyDevices]（G7 修复，2026-09-23：原实现直接返回空列表，
+        //    导致电视（Android 5.1.1 / API 22）插 U 盘后音乐永远扫不到）
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) {
-            _storageDevices.value = emptyList()
+            refreshLegacyDevices()
             return
         }
         val sm = context.getSystemService(Context.STORAGE_SERVICE) as android.os.storage.StorageManager
@@ -148,4 +164,36 @@ class StorageMonitor(private val context: Context) {
     }
 
     private fun getAvailableSpace(path: String): Long = com.nasmusic.tv.util.StorageUtils.availableBytesAt(java.io.File(path))
+
+    /**
+     * **G7 修复（2026-09-23）**：API 22 / 23 的存储设备枚举。
+     *
+     * 低版本拿不到 `VolumeInfo`，改用两条信息源（见 [LegacyStorageProbe]）：
+     * ① `ACTION_MEDIA_MOUNTED` 广播的挂载点；② 常见挂载点路径探测。
+     *
+     * ⚠️ `availableSpace` 走 `StatFs`，挂载点刚插入时可能读失败 ⇒ 失败按 0 处理，不影响列表非空。
+     */
+    private fun refreshLegacyDevices() {
+        val paths = LegacyStorageProbe.candidates(
+            broadcastMounts = broadcastMounts,
+            exists = { java.io.File(it).isDirectory },
+            children = { dir ->
+                // /mnt、/storage 下的某些目录在低版本上不可读（SecurityException）
+                runCatching { java.io.File(dir).list()?.toList() ?: emptyList() }
+                    .getOrDefault(emptyList())
+            },
+        )
+        val devices = paths.map { path ->
+            StorageDevice(
+                path = path,
+                // 低版本没有 VolumeInfo.getDescription()，用路径兜底
+                name = path,
+                type = LegacyStorageProbe.classify(path),
+                isMounted = true,
+                availableSpace = runCatching { getAvailableSpace(path) }.getOrDefault(0L),
+            )
+        }
+        _storageDevices.value = devices
+        AppLog.d(TAG, "Found ${devices.size} storage devices (legacy API ${Build.VERSION.SDK_INT})")
+    }
 }
