@@ -2142,7 +2142,7 @@ JAVA_HOME="C:/Program Files/Android/Android Studio/jbr" \
 | 1 G7 修复（前置） | `fix(storage): …` | 2 | 🟨 |
 | 2 PhotoSource 抽象与三来源 | `feat(photo): …` | 5 | ✅ |
 | 3 聚合与去重 | `feat(photo): …` | 2 | ✅ |
-| 4 PhotoBuffer | `feat(photo): …` | 3 | ⬜ |
+| 4 PhotoBuffer | `feat(photo): …` | 3 | ✅ |
 | 5 转场策略层 + 15 种 P0 | `feat(visualizer): …` | 4 | ⬜ |
 | 6 随机抽取与时钟 | `feat(visualizer): …` | 4 | ⬜ |
 | 7 PhotoRenderer 与 PHOTO_WALL | `feat(visualizer): …` | 5 | ⬜ |
@@ -2258,16 +2258,42 @@ JAVA_HOME="C:/Program Files/Android/Android Studio/jbr" \
 
 #### 阶段 4 —— PhotoBuffer　`提交 4`　**3 项**
 
-- [ ] **T4.1** 解码管线
+- [x] **T4.1** 解码管线 ✅ 2026-09-23
   - 单线程 `Executors.newSingleThreadExecutor()` + 解码结果经主线程 `Handler` 回写
   - `inSampleSize`：`width/height == 0` 时用 `inJustDecodeBounds` 现算；非 0 时直接算（**不再开流**）
   - **验收**：`peek()` 与 `draw()` 同线程；Jellyfin 来源只发 1 次 HTTP
-- [ ] **T4.2** 缓存与释放
+  - **实际**：`visualizer/photo/PhotoBuffer.kt`（含同文件的 `internal object PhotoBufferMath`，共 ~350 行）
+  - ⚠️ **实现期偏差（关键）**：文档说的「**不再开流**」不够 —— `BitmapFactory` 的流**只能读一次**，
+    而拿宽高要「先 `inJustDecodeBounds` 再解码」。**两次开流 = Jellyfin 两次 HTTP**。
+    ⇒ 实现改为「**读一次字节 → 全部解码走 `decodeByteArray`**」：有尺寸直接算采样率，无尺寸先读头部再解，
+    **两条路都只开 1 次流**。代价是内存里多一份原始字节（只在解码期间存在）。
+    单测直接数 `openStream` 调用次数验证（`PhotoBufferTest`：有尺寸 / 无尺寸两条路各一例）
+  - ⚠️ **实现期新增（注入点）**：构造参数加 `decoder: ((ref, bytes) -> Bitmap?)?`（默认 null ⇒ 走真实
+    `BitmapFactory`）。只为单测存在 —— Robolectric 的 `BitmapFactory` 不真解码、拿不到确定尺寸，
+    验「缓存 / LRU / `close()` 释放」这些**与像素无关**的逻辑反而会被它干扰
+- [x] **T4.2** 缓存与释放 ✅ 2026-09-23
   - 双缓冲 + LRU（`maxCached = 3`），`inPreferredConfig = ARGB_8888`
   - 低画质档降级（1280×720 或 `RGB_565`）
   - `close()` 释放 Executor + **逐张 `bitmap.recycle()`**
   - **验收**：G10 预算 ≤ 41 MB；`Tier.BASIC` 下内存 ≈ 20 MB；反复进出照片墙 `dumpsys meminfo` 不增长
-- [ ] **T4.3** **阶段完成** —— 门禁 G10 绿 + 手写临时入口验证 1080p 解码不 OOM
+  - **实际**：LRU 用 `LinkedHashMap(accessOrder = true)`，**淘汰时立即 `recycle()`**；
+    缓存条目同时持有 `Bitmap`（供 `recycle`）与 `ImageBitmap`（供 draw 路径**零分配**读取 ——
+    若每次 `peek` 都 `asImageBitmap()` 就每帧分配一个包装对象）
+  - ⚠️ **实现期偏差 1（口径区分）**：`estimatedBytes` = **预算上限**（`maxCached` × 满尺寸），
+    不是当前实际占用 —— 否则「把 `maxCached` 调大 ⇒ 断言超预算」这条 G10 负向自证无法成立。
+    实际占用另开 `cachedBytes` / `cachedCount` 两个只读属性供观察
+  - ⚠️ **实现期偏差 2（世代号）**：`clear()` / `invalidateSource()` 会**自增世代号**，
+    丢弃「解码启动时那一代」的在途结果 —— 否则拔盘后已发出的解码任务完成时会把
+    **已失效的照片**写回缓存（用户看到「拔了盘还在显示」）
+  - ⚠️ **实现期偏差 3（降级位置）**：`RGB_565` 由 `allowRgb565` 参数开关，`1280×720` 由调用方
+    调小 `targetWidth/targetHeight` 实现 —— `PhotoBuffer` 不读 `VisualQuality`（保持无 UI 依赖）
+  - ⚠️ **实现期新增（保险）**：`peek` 检查 `bitmap.isRecycled` ⇒ 宁可返回 `null`（画面回落）
+    也不把已回收的位图交给 Skia
+- [x] **T4.3** **阶段完成** —— 门禁 G10 绿 + 手写临时入口验证 1080p 解码不 OOM ✅ 2026-09-23
+  - **实际**：G10 `PhotoBufferBudgetTest` **11 例**绿（纯 JVM，不起 Robolectric）；
+    另加行为测试 `PhotoBufferTest` **17 例**绿（覆盖 T4.1 / T4.2 的验收判据）
+  - ⏳ **待用户真机复验**：「1080p 真实照片解码不 OOM」与「反复进出 `dumpsys meminfo` 不增长」
+    都需要真实图片解码与真机观测 —— 按项目约定不由 AI 装包/运行
 
 #### 阶段 5 —— 转场策略层与 15 种 P0 转场　`提交 5`　**4 项**
 
