@@ -2141,7 +2141,7 @@ JAVA_HOME="C:/Program Files/Android/Android Studio/jbr" \
 |---|---|---|---|
 | 1 G7 修复（前置） | `fix(storage): …` | 2 | 🟨 |
 | 2 PhotoSource 抽象与三来源 | `feat(photo): …` | 5 | ✅ |
-| 3 聚合与去重 | `feat(photo): …` | 2 | ⬜ |
+| 3 聚合与去重 | `feat(photo): …` | 2 | ✅ |
 | 4 PhotoBuffer | `feat(photo): …` | 3 | ⬜ |
 | 5 转场策略层 + 15 种 P0 | `feat(visualizer): …` | 4 | ⬜ |
 | 6 随机抽取与时钟 | `feat(visualizer): …` | 4 | ⬜ |
@@ -2233,12 +2233,28 @@ JAVA_HOME="C:/Program Files/Android/Android Studio/jbr" \
 
 #### 阶段 3 —— 跨来源聚合与去重　`提交 3`　**2 项**
 
-- [ ] **T3.1** `PhotoSourceAggregator` + `PhotoDedup`
+- [x] **T3.1** `PhotoSourceAggregator` + `PhotoDedup` ✅ 2026-09-23
   - `collect(enabled, balance)` 只扫已开来源
   - `PhotoDedup` 指纹 `(size, 秒, 名称)`；⛔ **`JELLYFIN` 项不参与去重**
   - 来源均衡（`balance = true` 时每次等概率选来源）
   - **验收**：G1 绿（**含负向自证：喂毫秒记录 → 断言去重失效**）；关掉的来源**不扫描**（可断点/日志确认）；Jellyfin 5000 + U 盘 50 时两者出现频率同量级
-- [ ] **T3.2** **阶段完成** —— 阶段门禁命令全绿
+  - **实际**：`PhotoDedup.kt`（88 行）+ `PhotoSourceAggregator.kt`（207 行）；单测 `PhotoDedupTest` **10 例** +
+    `PhotoSourceAggregatorTest` **11 例**，全绿
+  - ⚠️ **实现期偏差 1（语义补充）**：`AggregateResult` 三个字段的**精确含义**在文档里没写清，实现时定死：
+    `photos` = 已按 `balance` 排好序的**最终池**（上层用**游标顺序消费**，§6.7「Fisher-Yates + 游标」，
+    ⛔ 不要每次重新随机取，那会让「无重复遍历」失效）；`perSource` = **去重后**各来源条数
+    （`sum == photos.size`，只含「本平台存在且已开启」的来源）；`statuses` 里关掉的来源由**聚合器**
+    填 `DISABLED`（`PhotoSource.status()` 自己不知道开关状态）
+  - ⚠️ **实现期偏差 2（算法）**：「来源均衡」**不是**加权交错 —— 加权交错只是把序列排整齐，
+    **不会**提高小来源在**序列前段**的密度，而「用户看几分钟就退出」正是本选项要解决的场景。
+    实现是「**每轮等概率选一个还没取完的来源**」⇒ Jellyfin 5000 + U 盘 50 时前 100 项里两者**各约 50**
+    （单测同时给出**对照**：自然混合下前 100 项 U 盘只有个位数 ⇒ 证明均衡确实改变了分布）
+  - ⚠️ **实现期偏差 3（随机源）**：`collect` 的洗牌**不用 `list.shuffled()`**（它走全局 `Random.Default`），
+    改为注入 `VisualizerRandom`（§6.5：随机序列只有一处）—— 生产环境由上层注入**共享实例**
+  - ⚠️ **实现期新增（负向自证）**：`statusCalls == 0` 这类断言**天然会被空转实现满足**，
+    故补一例「**同一来源在开启时确实被调用**」；两半合起来才能证明计数是活的（见 `PhotoSourceAggregatorTest` ⑤）
+- [x] **T3.2** **阶段完成** —— 阶段门禁命令全绿 ✅ 2026-09-23
+  - **实际**：全量 `testDebugUnitTest` + `lintDebug` 绿（与 T2.5 同一次门禁覆盖）
 
 #### 阶段 4 —— PhotoBuffer　`提交 4`　**3 项**
 
