@@ -2202,7 +2202,7 @@ JAVA_HOME="C:/Program Files/Android/Android Studio/jbr" \
 | 9 权限与 SAF 目录 | `feat(photo): …` | 4 | ✅ |
 | 10 Controller 与帧循环接线 ★ | `feat(photo): …` | 4 | 🟨（代码完成，待 T10.3/T10.4 真机） |
 | 11 人脸检测 | `feat(photo): …` | 4 | ✅ |
-| 12 P1 转场至 43 种 | `feat(photo): …` | 3 | ⬜ |
+| 12 P1 转场至 43 种 | `feat(photo): …` | 3 | ✅ |
 | **合计** | | **44** | |
 | **15.4 全部完成后**（收尾，无独立提交） | — | 3 | ⬜ |
 | **总计** | | **47** | |
@@ -2922,12 +2922,43 @@ JAVA_HOME="C:/Program Files/Android/Android Studio/jbr" \
 
 #### 阶段 12 —— 补齐 P1 转场至 43 种　`提交 12`　**3 项**
 
-- [ ] **T12.1** 补齐 28 种 P1 转场 + 随机池扩容
+- [x] **T12.1** 补齐 28 种 P1 转场 + 随机池扩容 ✅ 2026-09-23
   - 随机池同步扩容（`PhotoTransitionId.implemented(Phase.P1)`）
   - **验收**：注册表项数 = 43；G5 复跑绿
-- [ ] **T12.2** 设置页转场选择器列出**当前已实现**的全部（§7.2）
+  - **实际**：28 个实现分 7 个文件（按类别聚文件，同 P0 的组织方式）：
+    `FadeP1Transitions`（FADE_WHITE / FADE_COLOR / EXPOSURE_FLASH）、
+    `SlideP1Transitions`（PUSH / COVER / REVEAL / SLIDE_DIAGONAL）、
+    `ZoomP1Transitions`（CROSS_ZOOM / ZOOM_THROUGH / DEPTH_BLUR）、
+    `IrisP1Transitions`（IRIS_DIAMOND / IRIS_STAR / IRIS_HEXAGON / SHAPE_RANDOM /
+    WIPE_CLOCK / WIPE_CROSS）、`TilesP1Transitions`（CHECKERBOARD / BLOCKS_RANDOM /
+    TILE_CASCADE / GLITCH）、`DissolveP1Transitions`（THRESHOLD_SWEEP /
+    SCANLINE_DISSOLVE）、`EffectsP1Transitions`（KALEIDO / CHROMATIC_SPLIT /
+    RGB_SLIDE / SPECTRUM_BARS / BEAT_CUT / CINEMATIC_BARS）。
+    随机池**自动**扩容：池由 `randomPool(registry.available(), sdkInt)` 构造（§5.9），
+    注册表补齐后池自然变 41（43 − 2 个 `audioReactive`），无需改任何代码。
+    **验收复跑**：`PhotoTransitionRegistryTest`（G4）全绿，其中
+    「`enum declares all 76`」断言 P1 累计 43、「registry exactly matches」断言
+    注册表与 `implemented(P1)` 恰好一致。
+- [x] **T12.2** 设置页转场选择器列出**当前已实现**的全部（§7.2）✅ 2026-09-23
   - **验收**：选择器项数 = 43
-- [ ] **T12.3** **阶段完成** —— 门禁 G4 / G5 复跑绿（池扩容后去重仍正确）
+  - **实际**：选择器读 `PhotoTransitionRegistry.available()`（阶段 8 落地时就是
+    「跟着注册表走」的写法）⇒ **零改动自动**变 43 项（含 2 个音频反应项 ——
+    §7.3 允许用户固定选中它们，只是不进随机池）。
+- [x] **T12.3** **阶段完成** —— 门禁 G4 / G5 复跑绿（池扩容后去重仍正确）✅ 2026-09-23
+  - **门禁**：`testDebugUnitTest` **1143 例 / 111 类 / 0 失败**（与阶段 11 持平 ——
+    本阶段只补实现，不新增测试类）；`lintDebug` **0 Error / 279 Warning**（持平）
+
+**阶段 12 的实现期偏差（7 条，2026-09-23）**
+
+| # | 偏差 | 原因 / 影响 |
+|---|---|---|
+| 1 | **`DEPTH_BLUR` 是「噪声遮罩 + 前段略放大」近似，不是真高斯模糊** | 真模糊需要 `RenderEffect`（API 33+）；M3 精神的全平台近似 = 新图从 1.12 缩回 1.0 + 噪声 `DstIn` 渐显，读起来是「从焦外拉回焦内」。⚠️ 与 P2 的 shader 版会有观感差距，但 P2 不在交付范围 |
+| 2 | **`FADE_COLOR` 的纱幕用固定品牌色**（`NasMusicColors.Primary`），不是「当前主题色」 | `RenderContext` / `PhotoGeometry` 都没有主题色输入（§14.2.3 签名没有），为此改全部转场接口不值得。品牌色是静态值，绘制路径零分配 |
+| 3 | **`BLOCKS_RANDOM` 的随机序在 `prepare` 生成、`onSwapStart` 原地 Fisher–Yates 重洗** | onSwapStart 禁止分配 ⇒ 预分配 `IntArray(84)`，切换时只交换元素。副作用：同一转场实例的洗牌顺序跨切换不同（目的达成），但顺序不由种子外部可控 |
+| 4 | **`SPECTRUM_BARS` 压到 24 柱 + 高度量化 8 级** | 与 `SPECTRUM_WIPE`（64 列）区分开：柱状阶梯感 + draw call 从 64 降到 25。无频谱时同样退化为整体淡入 |
+| 5 | **`GLITCH` 的随机偏移用整型散列**（xorshift 风格），种子在 `onSwapStart` 里换 | `Random` 有状态且部分调用分配；散列是纯函数、零分配，且「推进中每 ~8% 进度整体跳变」由 `step = ⌊p×12⌋` 驱动 |
+| 6 | **G4 的负向自证用例换靶子**（FADE_WHITE → RIPPLE） | 原用例的前置条件是「FADE_WHITE（P1）尚未注册」—— 阶段 12 注册它之后前置条件失效（本轮门禁实测红了一次）。越期演示改用仍未实现的 **P2** 项 `RIPPLE`，性质不变 |
+| 7 | ⛔ **`DrawScope.scale(...)` 是顶层扩展函数，必须显式 import**（同 `clipRect`） | 编译期才发现：`KALEIDO` 的镜像画法用 `scale(-1f, 1f, pivot)`，漏 import 报 `Unresolved reference`。与既有「Compose 顶层扩展必须显式 import」教训同款（`clipRect` / `drawIntoCanvas` …），第 5 次踩到 |
 
 ---
 

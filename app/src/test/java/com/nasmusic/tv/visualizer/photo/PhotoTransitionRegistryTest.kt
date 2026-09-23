@@ -338,15 +338,16 @@ class PhotoTransitionRegistryTest {
      */
     @Test
     fun `negative proof - a stray registration is caught`() {
+        // ⚠️ 阶段 12 后 P1 已全部注册 ⇒ 越期演示改用 **P2** 的 RIPPLE（仍未实现，性质相同）
         val real = PhotoTransitionRegistry.available()
-        assertTrue("前置条件：FADE_WHITE 属 P1，本分期不该注册", PhotoTransitionId.FADE_WHITE !in real)
+        assertTrue("前置条件：RIPPLE 属 P2，不该注册", PhotoTransitionId.RIPPLE !in real)
 
-        val broken = real + PhotoTransitionId.FADE_WHITE
+        val broken = real + PhotoTransitionId.RIPPLE
         val violations = registryViolations(broken, EXPECTED_FRONTIER)
-        assertTrue("越期注册 FADE_WHITE 后必须判出问题，实际 $violations", violations.isNotEmpty())
+        assertTrue("越期注册 RIPPLE 后必须判出问题，实际 $violations", violations.isNotEmpty())
         assertTrue(
-            "违例信息应指名道姓说是 FADE_WHITE，实际 $violations",
-            violations.any { it.contains("FADE_WHITE") },
+            "违例信息应指名道姓说是 RIPPLE，实际 $violations",
+            violations.any { it.contains("RIPPLE") },
         )
     }
 
@@ -447,10 +448,11 @@ class PhotoTransitionRegistryTest {
         /**
          * 本阶段已完成的最高分期。
          *
-         * ⛔ **阶段 12 补齐 P1 后，这里要改成 `Phase.P1`** —— 忘记改的话，
-         * 那 28 个新注册的 P1 效果会被判成「越期注册」而报红（不会静默漏过）。
+         * 阶段 12 已补齐 P1（提交 12），按本测试 KDoc 的约定改为 `Phase.P1`。
+         * ⚠️ P2 的 33 种不在计划内（§15.3 阶段 12 的范围就是 P1 = 43）；
+         * 若日后补 P2，同样要把这里改成 `Phase.P2`。
          */
-        val EXPECTED_FRONTIER = PhotoTransitionId.Phase.P0
+        val EXPECTED_FRONTIER = PhotoTransitionId.Phase.P1
 
         /**
          * 绘制路径上禁止出现的**位图分配**调用。

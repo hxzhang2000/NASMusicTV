@@ -1,14 +1,42 @@
 package com.nasmusic.tv.visualizer.photo
 
+import com.nasmusic.tv.visualizer.photo.transitions.BeatCutTransition
 import com.nasmusic.tv.visualizer.photo.transitions.BlindsTransition
+import com.nasmusic.tv.visualizer.photo.transitions.BlocksRandomTransition
+import com.nasmusic.tv.visualizer.photo.transitions.CheckerboardTransition
+import com.nasmusic.tv.visualizer.photo.transitions.ChromaticSplitTransition
+import com.nasmusic.tv.visualizer.photo.transitions.CinematicBarsTransition
+import com.nasmusic.tv.visualizer.photo.transitions.CoverTransition
 import com.nasmusic.tv.visualizer.photo.transitions.CrossfadeTransition
+import com.nasmusic.tv.visualizer.photo.transitions.CrossZoomTransition
+import com.nasmusic.tv.visualizer.photo.transitions.DepthBlurTransition
+import com.nasmusic.tv.visualizer.photo.transitions.DiagonalSlideTransition
+import com.nasmusic.tv.visualizer.photo.transitions.ExposureFlashTransition
 import com.nasmusic.tv.visualizer.photo.transitions.FadeBlackTransition
+import com.nasmusic.tv.visualizer.photo.transitions.FadeColorTransition
+import com.nasmusic.tv.visualizer.photo.transitions.FadeWhiteTransition
+import com.nasmusic.tv.visualizer.photo.transitions.GlitchTransition
 import com.nasmusic.tv.visualizer.photo.transitions.IrisCircleTransition
+import com.nasmusic.tv.visualizer.photo.transitions.IrisDiamondTransition
+import com.nasmusic.tv.visualizer.photo.transitions.IrisHexagonTransition
+import com.nasmusic.tv.visualizer.photo.transitions.IrisStarTransition
+import com.nasmusic.tv.visualizer.photo.transitions.KaleidoTransition
 import com.nasmusic.tv.visualizer.photo.transitions.LightSweepTransition
 import com.nasmusic.tv.visualizer.photo.transitions.NoiseDissolveTransition
+import com.nasmusic.tv.visualizer.photo.transitions.PushTransition
+import com.nasmusic.tv.visualizer.photo.transitions.RevealTransition
+import com.nasmusic.tv.visualizer.photo.transitions.RgbSlideTransition
+import com.nasmusic.tv.visualizer.photo.transitions.ScanlineDissolveTransition
+import com.nasmusic.tv.visualizer.photo.transitions.ShapeRandomTransition
 import com.nasmusic.tv.visualizer.photo.transitions.SlideTransition
+import com.nasmusic.tv.visualizer.photo.transitions.SpectrumBarsTransition
 import com.nasmusic.tv.visualizer.photo.transitions.SpectrumWipeTransition
+import com.nasmusic.tv.visualizer.photo.transitions.ThresholdSweepTransition
+import com.nasmusic.tv.visualizer.photo.transitions.TileCascadeTransition
+import com.nasmusic.tv.visualizer.photo.transitions.WipeClockTransition
+import com.nasmusic.tv.visualizer.photo.transitions.WipeCrossTransition
 import com.nasmusic.tv.visualizer.photo.transitions.WipeLinearTransition
+import com.nasmusic.tv.visualizer.photo.transitions.ZoomThroughTransition
 import com.nasmusic.tv.visualizer.photo.transitions.ZoomTransition
 
 /**
@@ -35,7 +63,8 @@ import com.nasmusic.tv.visualizer.photo.transitions.ZoomTransition
 object PhotoTransitionRegistry {
 
     /**
-     * P0 的 15 种（§14.3 参数表）。
+     * P0 + P1 共 43 种（§14.3 参数表；阶段 12 补齐 P1 后与
+     * `PhotoTransitionId.implemented(Phase.P1)` 恰好一致 —— G4 钉住）。
      *
      * ⚠️ 新增实现时**必须**同时加进这里，否则抽不到（G4 会拦住「加了枚举没加注册」）。
      */
@@ -68,6 +97,56 @@ object PhotoTransitionRegistry {
         // H 色彩光效
         PhotoTransitionId.LIGHT_SWEEP to LightSweepTransition(),
         PhotoTransitionId.SPECTRUM_WIPE to SpectrumWipeTransition(),
+
+        // ───────── P1（阶段 12 补齐，共 28 种）─────────
+
+        // A 淡化
+        PhotoTransitionId.FADE_WHITE to FadeWhiteTransition(),
+        PhotoTransitionId.FADE_COLOR to FadeColorTransition(),
+
+        // B 滑动 / 位移
+        PhotoTransitionId.PUSH to PushTransition(1f, 0f),
+        PhotoTransitionId.COVER to CoverTransition(1f, 0f),
+        PhotoTransitionId.REVEAL to RevealTransition(1f, 0f),
+        PhotoTransitionId.SLIDE_DIAGONAL to DiagonalSlideTransition(),
+
+        // C 缩放 / 深度
+        PhotoTransitionId.CROSS_ZOOM to CrossZoomTransition(),
+        PhotoTransitionId.ZOOM_THROUGH to ZoomThroughTransition(),
+        PhotoTransitionId.DEPTH_BLUR to DepthBlurTransition(),
+
+        // D 遮罩形状
+        PhotoTransitionId.IRIS_DIAMOND to IrisDiamondTransition(),
+        PhotoTransitionId.IRIS_STAR to IrisStarTransition(),
+        PhotoTransitionId.IRIS_HEXAGON to IrisHexagonTransition(),
+        PhotoTransitionId.SHAPE_RANDOM to ShapeRandomTransition(),
+        PhotoTransitionId.WIPE_CLOCK to WipeClockTransition(),
+        PhotoTransitionId.WIPE_CROSS to WipeCrossTransition(),
+
+        // E 条纹 / 分块
+        PhotoTransitionId.CHECKERBOARD to CheckerboardTransition(),
+        PhotoTransitionId.BLOCKS_RANDOM to BlocksRandomTransition(),
+        PhotoTransitionId.TILE_CASCADE to TileCascadeTransition(),
+
+        // F 溶解 / 噪点
+        PhotoTransitionId.THRESHOLD_SWEEP to ThresholdSweepTransition(),
+        PhotoTransitionId.SCANLINE_DISSOLVE to ScanlineDissolveTransition(),
+
+        // G 扭曲（P1 只含 KALEIDO）
+        PhotoTransitionId.KALEIDO to KaleidoTransition(),
+
+        // H 色彩 / 光效
+        PhotoTransitionId.CHROMATIC_SPLIT to ChromaticSplitTransition(),
+        PhotoTransitionId.RGB_SLIDE to RgbSlideTransition(),
+        PhotoTransitionId.EXPOSURE_FLASH to ExposureFlashTransition(),
+
+        // I 音频反应（★ 默认不进随机池，用户固定选中才生效）
+        PhotoTransitionId.SPECTRUM_BARS to SpectrumBarsTransition(),
+        PhotoTransitionId.BEAT_CUT to BeatCutTransition(),
+
+        // J 风格化
+        PhotoTransitionId.GLITCH to GlitchTransition(),
+        PhotoTransitionId.CINEMATIC_BARS to CinematicBarsTransition(),
     )
 
     /** 取实现；未实现的 id 返回 `null`（⚠️ 调用方必须能处理，抽池请用 [available]） */
@@ -76,6 +155,6 @@ object PhotoTransitionRegistry {
     /** 当前**真有实现**的效果集合 —— 随机池只能由它构造（§5.9「池跟着分期走」） */
     fun available(): Set<PhotoTransitionId> = impls.keys
 
-    /** 已实现数量（P0 = 15；观察 / 单测用） */
+    /** 已实现数量（P0 + P1 = 43；观察 / 单测用） */
     val implementedCount: Int get() = impls.size
 }
