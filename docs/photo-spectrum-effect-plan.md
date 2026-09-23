@@ -2085,6 +2085,8 @@ KDoc 里出现「斜杠紧邻星号」（最常见是路径通配符）会开一
 块注释带嵌套深度 / 三引号原始字符串 / 字符串 / 字符字面量），**不是数注释符号个数**
 （项目里 7 个文件在字符串字面量里含 glob 模式，计数法会全部误报）。
 含负向自证 + 4 条误报防线 + 空转断言。文件：`app/src/test/java/com/nasmusic/tv/util/`。
+| **G14** | `PhotoWallPoolTest` | ① 一轮内每张恰好出现一次；② 走完一轮 `beginNewRound` 后游标归零、仍无重复；③ 新一轮**首张 ≠ 上一轮末张**；④ 空池 / 1 张池不崩 | 同时跑「正确实现」与「**只洗牌不避让**」的错法：断言错法**必须能**观察到首尾撞车（否则这条自证是空转），而正确实现**一次都不许**撞。⛔ 照片不能照搬 G2 的「重试避让」—— 池是一次性分配顺序（游标消费），重试会破坏「一轮内不重复」这个更强的保证 |
+| **G15** | `PhotoWallControllerTest`（Robolectric） | ① 首图出现在 `photoA`（不是 `photoB`）；② HOLD 到点后换槽（`photoB != photoA`）；③ 固定档转场的窗口跑 0→1；④ 池空时不启动切换；⑤ 坏图被跳过而非卡死；⑥ 慢来源（失败 100 次后成功）**要等到**不被误跳；⑦ 拔盘后重扫 ⇒ 不画已失效的照片；⑧ `applyTo` 写出 `photoScaleMode` 且音频反应关时 `photoAudioBoost == 0`；⑨ 离开效果不清字段 | 三条负向自证：删掉「等太久就跳过」⇒ ⑤ 失败；把 `SWAP_WAIT_MAX_FRAMES` 调到 50 ⇒ ⑥ 失败（误伤慢来源）；把首图写成「`currentRef` 留空、`incomingRef = next`」⇒ ① 失败（**整面墙恒黑**，编译/lint/G3/G14 全绿，只有真跑帧循环才暴露 —— 这是 G15 存在的理由）。⚠️ 靠 `PhotoBuffer` 自带的 `decoderExecutor`/`decoder` 注入点做「同步解码 + 假像素」，位图宽度即照片身份 ⇒ 换槽可辨 |
 
 ### 14.5 提交顺序（12 个提交，每个都可独立验证）
 
@@ -2116,7 +2118,7 @@ conventional commit + 中文正文；`assembleRelease` **不编译 test 源码**
 | # | 步骤 | 期望 |
 |---|---|---|
 | 1 | 插 U 盘（内含 `DCIM`）→ 打开应用 | 「照片墙」效果**可见**（外接存储默认开，§6.8） |
-| 2 | 左右切到「照片墙」 | 开始轮播；默认停留 **8.0s**、转场 **0.7s** |
+| 2 | 左右切到「照片墙」 | 开始轮播；默认停留 **8.0s**；转场**按效果 0.5–1.2s**（默认 CROSSFADE = 0.8s，见 §15.3 阶段 10 偏差 3） |
 | 3 | 连续观察 20 次切换 | 转场有变化；**不出现连续 2 次相同**（§5.9） |
 | 4 | 手动指定 `FADE_BLACK` | 走**串行模型**（有黑场间隙，§5.9） |
 | 5 | 拔 U 盘 | **不崩**；缓存清空；切回其他效果正常 |
@@ -2186,7 +2188,7 @@ JAVA_HOME="C:/Program Files/Android/Android Studio/jbr" \
 | 7 PhotoRenderer 与 PHOTO_WALL | `feat(visualizer): …` | 5 | ✅ |
 | 8 设置分区 | `feat(settings): …` | 4 | ✅ |
 | 9 权限与 SAF 目录 | `feat(photo): …` | 4 | ✅ |
-| 10 Controller 与帧循环接线 ★ | `feat(photo): …` | 4 | ⬜ |
+| 10 Controller 与帧循环接线 ★ | `feat(photo): …` | 4 | 🟨 |
 | 11 人脸检测 | `feat(photo): …` | 4 | ⬜ |
 | 12 P1 转场至 43 种 | `feat(photo): …` | 3 | ⬜ |
 | **合计** | | **44** | |
@@ -2812,18 +2814,55 @@ JAVA_HOME="C:/Program Files/Android/Android Studio/jbr" \
 
 #### 阶段 10 —— PhotoWallController 与帧循环接线　`提交 10`　★ 首个可上机版本　**4 项**
 
-- [ ] **T10.1** `PhotoWallController` + 帧循环接线
+- [x] **T10.1** `PhotoWallController` + 帧循环接线 ✅ 2026-09-23
   - 全 API：`onFrame` / `applyTo` / `onSettingsChanged` / `onThemeEntered` / `onThemeExited` / `rescan` / `close`
   - `VisualizerStage` 帧循环（**159–172 行**）内 +1 行 `photoWall.onFrame(frame())`
   - `VisualizerStage` 绘制块（**247–251 行** `update(...)` 之后）+1 行 `photoWall.applyTo(renderCtx)`
   - **验收**：`applyTo` 零分配（7 次赋值）；主线程、与 draw 同帧；其余渲染器行为不变
-- [ ] **T10.2** 切换驱动链路 + 拔盘处理
+  - **实际**：三项均已落地。接线其实是 **4 处**（不是 3 处，见下方偏差 1）：
+    ① 帧循环 `onFrame`；② 绘制块 `applyTo`；③ `LaunchedEffect(theme, quality)` 里
+    `onThemeEntered/onThemeExited`；④ `DisposableEffect` 的 `onDispose` 里 `onThemeExited`。
+    ③④ 是「进入/离开效果」的生命周期，**不加就没有扫描触发点**。
+  - **验收复跑**：`applyTo` 只做 7 次赋值（`?.let` / `?:` 全是 inline，`Size.width.toInt()`
+    是基本类型运算）⇒ 稳态零分配；`onFrame` 与 `applyTo` 都在主线程
+    （`withFrameNanos` 帧回调 + `Canvas` draw lambda）；其余 35 个渲染器走的是
+    `swapper.current.draw`，完全不读 `photo*` 字段 ⇒ 行为不变。
+- [x] **T10.2** 切换驱动链路 + 拔盘处理 ✅ 2026-09-23
   - HOLD 到点 → 抽转场 → 请求下一张 → 换槽
   - 拔盘：清 `PhotoBuffer` 缓存 + 中断预取 + 切回其他效果**不崩**
   - **验收**：默认停留 8.0s / 转场 0.7s 实测吻合；§14.6 电视第 5 条
+  - **实际**（链路由 `PhotoWallControllerTest` 9 例钉住，G15）：
+    `HOLD` 到点（`clock.finished`）→ `picker.pick(randomPool(registry.available(), sdkInt))`
+    抽转场 → `PhotoTransitionRegistry.get(id)?.onSwapStart()` → `pool.next()` 取下一张 →
+    **必须已解码**（`peek != null`）才 `clock.start(...)` → `buffer.prefetch(pool.peek())` 预取再下一张。
+    拔盘走 `onExternalStorageChanged()`（新方法，见偏差 2）⇒ `invalidateSource(EXTERNAL)`
+    + 重扫；另有「等 120 帧还解不出来就跳过」的兜底（偏差 5）。
+  - **验收复跑**：停留 8.0s 由 `AppSettings.photoWallHoldMs = 8000` 直接给 `clock.start` 的
+    `holdMs`；转场时长见**偏差 3** —— 默认档不是恒 0.7s，而是各效果的 `baseDurationMs`
+    （§14.3：0.5–1.2s）。⚠️ **§14.6 电视第 2 条的「转场 0.7s」需要按偏差 3 改口径**。
 - [ ] **T10.3** 上机验收：**电视 8 条**（§14.6）
   - **验收**：逐条勾完，**release 包**
+  - ⏳ **代码就绪，真机项待用户复验**（§14.6 项目约定：产物就绪后由用户安装，不自动运行应用）
 - [ ] **T10.4** **阶段完成** —— 上机验收：**手机 13 条**（§14.6），竖屏 + 横屏各一轮
+  - ⏳ 同上；T10.3 / T10.4 打勾前需要用户提供 release 包的实测结果
+
+**阶段 10 的实现期偏差（13 条，2026-09-23）**
+
+| # | 偏差 | 原因 / 影响 |
+|---|---|---|
+| 1 | **接线是 4 处不是 3 处** | 文档只列了帧循环 + 绘制块；但「进入效果才开始扫描」必须有 `onThemeEntered` 的触发点，且 `LaunchedEffect(theme, quality)` 声明在帧循环**之前**（先启动）⇒ 第一帧就是 `active`。另在 `DisposableEffect.onDispose` 补 `onThemeExited`（退出全屏可视化时停时钟） |
+| 2 | **新增 `onExternalStorageChanged()`**（不在 §14.2.5 的 API 列表里） | §14.6 电视第 5 条要求「拔盘 → **缓存清空**」。只靠「下次解码失败」不够：缓存里那张图仍在，会继续画一张已不存在的盘上的照片。⇒ 由 `VisualizerViewModel` 收 `StorageMonitor` 的 mount/unmount 流后调用它（插盘同样要重扫，否则插了盘照片墙还是空的） |
+| 3 | **转场时长 = `baseDurationMs × (photoWallTransitionMs / 700)`** | §14.2.3 要求 `PhotoTransitionClock` 在实例化**之前**读 `baseDurationMs`（每效果固有节奏，0.5–1.2s），§7.3 又有用户可调项（300–2000ms，默认 700）⇒ 定为**基准 × 缩放**，700 = 1.0×。⚠️ 影响：**§14.6 电视第 2 条「转场 0.7s」实际观测为 0.5–1.2s**（默认档 CROSSFADE = 0.8s） |
+| 4 | **构造签名去掉 `appContext` / `prefs`** | 原写 `(appContext, prefs, sources)`。实现期发现两个都用不上：三个 `PhotoSource` 由 ViewModel 构造好注入（控制器不碰 `ContentResolver`）；设置的唯一入口是 `onSettingsChanged`（控制器既不读盘也不落盘）。保留只会得到两个未使用字段。新增 `externalScope` / `bufferFactory` 两个**只为单测存在**的注入点 |
+| 5 | **只换「已解码好」的图；等 120 帧还解不出来就跳过** | 转场跑到一半新图才解码出来会在 `p` 中途「啪」地换脸 ⇒ `peek` 未命中时**不启动时钟**，下一帧再试（`finished` 保持 true）。但「一直等」会让拔盘 / 坏文件 / Jellyfin 断连**永久卡住** ⇒ 超 120 帧（约 2s）就 `pool.advance()` 跳过这张。两条都有单测（G15），且互为反向（「慢来源要等到」也是一条用例） |
+| 6 | ⛔ **首图必须是 `a` 不是 `b`**（实现期真 bug） | 首图分支最初写成「`currentRef` 留空、`incomingRef = next`」⇒ `applyTo` 写出的 `photoA` **恒为 null** ⇒ `PhotoRenderer.draw` 第一行 `return` ⇒ **整面墙永远黑**，而编译 / lint / G3 / G14 全绿。修正为 `currentRef = next; incomingRef = null`，并用 `enterMs = 0` 硬切起步（只为把 HOLD 计时器拉起来）。**只有真跑帧循环 + 读 `ctx.photoA` 才能暴露** ⇒ 这是 G15 存在的理由 |
+| 7 | **`onThemeExited()` 不 `clock.reset()`** | 切走的那一帧 `PhotoRenderer` 可能仍在交叉淡出层上绘制，清掉 `transitionId` 会让它读到 `null` 直接 `return`（画面瞬黑）。⚠️ 当前 `swapper.sync(..., crossfade = false, ...)` 硬编码为 false ⇒ 实际是硬切，这一条是**为将来恢复 crossfade 留的** |
+| 8 | **画布尺寸由 `applyTo` 暂存、`onFrame` 里才重建 `PhotoBuffer`** | `PhotoBuffer` 的构造会建 `ExecutorService` + `Handler`，放在绘制阶段等于 draw 里分配。⇒ `applyTo` 只写两个 `Int`（零分配），下一帧 `onFrame` 的 `reconcileBuffer()` 比对后重建 |
+| 9 | **解码目标加了 `MAX_DECODE_SIDE = 2048` 安全阀** | `inSampleSize` 是 2 的幂 ⇒ 解码结果最坏是目标的 **2 倍边长 = 4 倍像素**。不钳制时 4K 画布的目标 3840² ⇒ 单张 59 MB × 3 = 177 MB，必 OOM。2048 对现有屏幕（≤1080p）**不改变行为**，只是安全网。⚠️ 即便如此，1200 万像素竖幅照片在 CROP 下解码结果仍可能到 2000²（16 MB × 3 = 48 MB），略高于 §八 的 40 MB 口径 —— **§14.6 电视第 6 条（30 分钟 meminfo 无增长 / 不 OOM）是这条风险的观测点** |
+| 10 | **`VisualQuality.LOW` 的 `RGB_565` 降级分支当前不可达** | §八 要求低画质档降级，但 §7.5 把 `PHOTO_WALL` 定为 `Tier.ADV`，而 `LOW.maxParticles == 0` ⇒ `LOW.supports(PHOTO_WALL) == false` ⇒ 低画质档**根本切不进去**。代码按文档实现了（防御性），实为死分支。**这是一个规格层面的冲突，需要用户裁决**：要么放宽 `Tier`，要么承认照片墙不支持低画质档 |
+| 11 | **设置页「照片数 / 合计 / 重新扫描」接上** | `PhotoWallRuntimeState` 的 `galleryCount/externalCount/jellyfinCount/mergedCount` 由 `PhotoWallController.perSourceCount` / `mergedCount` 派生；设置页「重新扫描」按钮接 `rescan()`（会**取消**正在跑的扫描重来，因为用户是显式点的） |
+| 12 | **`BEAT_CUT` 硬切分支显式保留** | §5.8：`BEAT_CUT` 窗口为 0。它 `audioReactive` ⇒ 不在随机池里，但**备份导入**可以把 `photoWallFixedTransition` 设成任意枚举值 ⇒ 这条分支可达，必须有 |
+| 13 | **电视判据多了一处重复** | `VisualizerViewModel.isTVDevice` 是项目里第 8 处 `hasSystemFeature(leanback/television)`。判据与既有的 7 处**完全一致**（`AppPreferences` 的 KDoc 有明文要求），未抽公共方法（改动面太大，且与既有风格一致） |
 
 #### 阶段 11 —— 人脸检测与「仅显示含人像」　`提交 11`　**4 项**
 

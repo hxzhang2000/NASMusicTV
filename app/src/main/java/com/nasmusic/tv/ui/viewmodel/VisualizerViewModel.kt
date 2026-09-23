@@ -3,12 +3,19 @@ package com.nasmusic.tv.ui.viewmodel
 import android.app.Application
 import android.content.Intent
 import android.net.Uri
+import android.os.Build
 import android.provider.DocumentsContract
 import androidx.annotation.StringRes
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.nasmusic.tv.NasMusicApp
 import com.nasmusic.tv.R
+import com.nasmusic.tv.backend.photo.ExternalFilePhotoSource
+import com.nasmusic.tv.backend.photo.JellyfinPhotoSource
+import com.nasmusic.tv.backend.photo.MediaStorePhotoSource
+import com.nasmusic.tv.backend.photo.PhotoSource
+import com.nasmusic.tv.backend.photo.PhotoSourceKind
 import com.nasmusic.tv.backend.photo.PhotoWallAccessPolicy
 import com.nasmusic.tv.backend.photo.SafDirectoryPolicy
 import com.nasmusic.tv.data.model.AppSettings
@@ -21,6 +28,7 @@ import com.nasmusic.tv.util.PermissionHelper
 import com.nasmusic.tv.util.PermissionHelper.PhotoPermissionState
 import com.nasmusic.tv.visualizer.AudioFrame
 import com.nasmusic.tv.visualizer.photo.PhotoWallAvailability
+import com.nasmusic.tv.visualizer.photo.PhotoWallController
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -28,6 +36,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -142,6 +151,65 @@ class VisualizerViewModel(
     /** SAF 目录选择器启动器（同上） */
     var photoDirectoryLauncher: (() -> Unit)? = null
 
+    // ══════════════════════════════════════════════════════════════════════
+    //  照片墙编排（阶段 10，§14.2.5）
+    //
+    //  ⛔ **构造来源的责任在 ViewModel，不在控制器**：三个来源要拿 `Context` /
+    //  `BackendRegistry` / `StorageMonitor`，而控制器刻意不碰这些（见它的 KDoc）。
+    //
+    //  ⚠️ 「图库」**只在手机**上放进 sources 表（§6.2：电视没有系统相册）。
+    //     不放进来 ⇒ 聚合器在 `PhotoSourceKind.entries` 循环里直接 `continue`，
+    //     既不调 `status()` 也不调 `listPhotos()`。
+    // ══════════════════════════════════════════════════════════════════════
+
+    /**
+     * 是否电视。
+     *
+     * ⚠️ 判据与 `AppPreferences.isTelevisionDevice` / `FocusableSurface.isTVDevice()`
+     * `MainActivity` 等处**完全一致**（`leanback` 或 `type.television`）——
+     * 判据不一致会出现「按电视给的默认值、按手机渲染的设置页」这类错位。
+     * ⚠️ `by lazy`：`hasSystemFeature` 在 API 22 上可能是一次 binder 调用。
+     */
+    private val isTVDevice: Boolean by lazy {
+        app.packageManager.run {
+            hasSystemFeature("android.software.leanback") ||
+                hasSystemFeature("android.hardware.type.television")
+        }
+    }
+
+    /** 照片来源表（键 = [PhotoSourceKind]；**没有的键** = 本平台不存在该来源） */
+    private val photoWallSources: Map<PhotoSourceKind, PhotoSource> by lazy {
+        val nasApp = app as NasMusicApp
+        val out = LinkedHashMap<PhotoSourceKind, PhotoSource>(PhotoSourceKind.entries.size)
+        if (!isTVDevice) out[PhotoSourceKind.GALLERY] = MediaStorePhotoSource(app)
+        out[PhotoSourceKind.EXTERNAL] = ExternalFilePhotoSource(
+            context = app,
+            // 电视：自动探测已挂载的 USB / SD 卡（`StorageMonitor` 的当前快照）
+            fileRootsProvider = {
+                nasApp.storageMonitor.storageDevices.value
+                    .filter { it.isMounted }
+                    .map { it.path }
+            },
+            // 手机：用户通过 SAF 选中的目录（留空则走上面的文件遍历路线）
+            safTreeUriProvider = { latestSettings.photoWallDirUri.takeIf { it.isNotBlank() } },
+            commonDirsOnlyProvider = { latestSettings.photoWallCommonDirsOnly },
+        )
+        out[PhotoSourceKind.JELLYFIN] = JellyfinPhotoSource(
+            adapterProvider = { nasApp.backendRegistry.getAdapter() },
+        )
+        out
+    }
+
+    /**
+     * 照片墙编排器（由 `VisualizerStage` 的帧循环 / 绘制块各接一行）。
+     *
+     * ⚠️ 用 `by lazy` 但**实际在 [init] 的 `appSettings` 收集器里就会被触发**（要推设置）；
+     *     构造成本只等于几个纯 Kotlin 对象（`PhotoBuffer` 是等到第一帧知道画布尺寸才建的）。
+     */
+    val photoWall: PhotoWallController by lazy {
+        PhotoWallController(sources = photoWallSources)
+    }
+
     /** 最近一次发射的 `AppSettings`（供 `onResume` 同步读取，避免再挂一个订阅） */
     @Volatile private var latestSettings: AppSettings = AppSettings()
 
@@ -227,7 +295,27 @@ class VisualizerViewModel(
                 // §6.2：冷启动时「存档里图库开着、权限却已被撤销」也要回弹 ——
                 // 与 onResume 的刷新是**两条互补的路**（DataStore 与 onResume 谁先到不确定）。
                 applyGalleryRollback(s, _photoPermissionState.value)
+
+                // 照片墙：设置 / 画质推给编排器。
+                // ⛔ 它自带「要不要重扫」的判断 ⇒ 每改一个不相干的开关都不会重扫 U 盘。
+                photoWall.onSettingsChanged(
+                    settings = s,
+                    quality = s.visualizerQuality,
+                    sdkInt = Build.VERSION.SDK_INT,
+                )
             }
+        }
+
+        // 外接存储插拔（§14.6 电视第 5 条「拔 U 盘 → 不崩；缓存清空」）。
+        // ⚠️ 插入也要重扫 —— 否则插盘后照片墙还是空的。
+        viewModelScope.launch {
+            runCatching { (app as NasMusicApp).storageMonitor }
+                .onFailure { AppLog.w(TAG, "storageMonitor unavailable: ${it.message}") }
+                .getOrNull()?.let { monitor ->
+                    merge(monitor.onDeviceMounted, monitor.onDeviceUnmounted).collect {
+                        photoWall.onExternalStorageChanged()
+                    }
+                }
         }
     }
 
@@ -460,6 +548,9 @@ fun nextTheme() = step(+1)
     override fun onCleared() {
         super.onCleared()
         _showVisualizer.value = false
+        // 照片墙：停扫描协程、停解码线程、逐张 recycle 位图
+        // ⛔ API 22 上 `ImageBitmap` 包装的 `Bitmap` 不会自动回收 ⇒ 不 close 就是泄漏
+        photoWall.close()
         // 断开对 Activity 的引用（launcher 闭包由 MainActivity 注入）
         photoPermissionLauncher = null
         photoDirectoryLauncher = null

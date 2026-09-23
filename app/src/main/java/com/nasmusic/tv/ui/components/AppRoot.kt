@@ -621,6 +621,9 @@ private fun VisualizerOverlay(
         progressMs = progress,
         theme = effectiveTheme,
         quality = quality,
+        // 照片墙编排器（阶段 10）：控制器在 ViewModel 里（跨重组存活），本组件只接线。
+        // ⚠️ 访问 `vm.photoWall` 会触发 `by lazy` 构造 —— 成本只等于几个纯 Kotlin 对象。
+        photoWall = vm.photoWall,
         // 三来源开关之「或」—— 与 `VisualizerViewModel.step()` 用的是**同一个** StateFlow
         // ⇒ 指示器与左右键看到的是同一份列表（不会出现「指示器上没有、却切得到」）。
         photoWallAvailable = photoWallAvailable,

@@ -8,6 +8,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.tv.material3.ExperimentalTvMaterial3Api
+import com.nasmusic.tv.backend.photo.PhotoSourceKind
 import com.nasmusic.tv.data.model.Screen
 import com.nasmusic.tv.data.model.Song
 import com.nasmusic.tv.data.model.ServerConfig
@@ -93,6 +94,11 @@ internal fun SettingsBranch(
                     //    权限状态官方禁止落盘（§9.4），目录拒绝是瞬时事实。
                     val photoWallPermissionState by viewModel.visualizerVM.photoPermissionState.collectAsState()
                     val photoWallDirectoryReject by viewModel.visualizerVM.photoDirectoryReject.collectAsState()
+                    // 阶段 10（§14.2.5）：各来源照片数 / 合计 —— 由 `PhotoWallController` 的
+                    // 聚合结果派生。⚠️ 同样是**运行时事实**（不落盘、不进备份），
+                    // 所以走 `PhotoWallRuntimeState` 而不是 `AppSettings`。
+                    val photoWallPerSource by viewModel.visualizerVM.photoWall.perSourceCount.collectAsState()
+                    val photoWallMerged by viewModel.visualizerVM.photoWall.mergedCount.collectAsState()
                     SettingsScreen(
                         selectedSection = settingsSection,
                         onOpenSection = { viewModel.navVM.openSettingsSection(it) },
@@ -253,13 +259,17 @@ internal fun SettingsBranch(
                     // 「打开图库」要判权限、拉起系统对话框、被拒后回弹），
                     // 状态与逻辑都收口在那个 ViewModel 里，这里只做接线。
                     //
-                    // ⚠️ 仍有两个动作**本阶段刻意留空**（不传 ⇒ 按钮点击无反应）：
-                    //   onRescan         → 阶段 10（需要聚合器）
+                    // ⚠️ 仍有三个动作**本阶段刻意留空**（不传 ⇒ 按钮点击无反应）：
                     //   onStartFaceScan / onClearFaceScan → 阶段 11（人脸检测）
+                    //   （onRescan 已在阶段 10 接上聚合器）
                     //   见 docs/photo-spectrum-effect-plan.md §15.3 阶段 8 的偏差记录。
                     photoWallRuntime = PhotoWallRuntimeState(
                         permissionState = photoWallPermissionState,
                         directoryReject = photoWallDirectoryReject,
+                        galleryCount = photoWallPerSource[PhotoSourceKind.GALLERY] ?: 0,
+                        externalCount = photoWallPerSource[PhotoSourceKind.EXTERNAL] ?: 0,
+                        jellyfinCount = photoWallPerSource[PhotoSourceKind.JELLYFIN] ?: 0,
+                        mergedCount = photoWallMerged,
                     ),
                     photoWallActions = PhotoWallSettingsActions(
                         // ⛔ 图库开关是授权的**唯一触发点**（§6.2）：
@@ -267,6 +277,9 @@ internal fun SettingsBranch(
                         onToggleGallery = { v -> viewModel.visualizerVM.setGallerySourceEnabled(v) },
                         onReselectPhotos = { viewModel.visualizerVM.requestGalleryPermission() },
                         onPickDirectory = { viewModel.visualizerVM.requestPhotoDirectoryPick() },
+                        // 阶段 10：重扫三个来源（§6.8）。⚠️ 会**取消**正在跑的扫描重来一次，
+                        // 因为用户是显式点的按钮，不该被「上一次还没扫完」吞掉。
+                        onRescan = { viewModel.visualizerVM.photoWall.rescan() },
                         onToggleExternal = { v ->
                             coroutineScope.launch { viewModel.prefs.photoWall.setExternalEnabled(v) }
                         },

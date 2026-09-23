@@ -96,6 +96,18 @@ fun VisualizerStage(
     theme: VisualizerTheme,
     quality: VisualQuality,
     /**
+     * 照片墙编排器（阶段 10，§14.2.5）。
+     *
+     * ⛔ **只在这里接线，不在这里实现**：本组件只做两件事 ——
+     * ① 帧循环里 `onFrame(frame)`（与 draw 同帧、同线程）；
+     * ② `renderCtx.update(...)` 之后 `applyTo(renderCtx)`（零分配写 7 个字段）。
+     * 「扫哪些来源 / 什么时候换图 / 用哪个转场」全在控制器里。
+     *
+     * `null` = 未接线（测试 / 预览环境）⇒ 两个调用点都退化为空操作，
+     * **其余 35 个渲染器的行为完全不变**。
+     */
+    photoWall: com.nasmusic.tv.visualizer.photo.PhotoWallController? = null,
+    /**
      * 三来源开关之「或」（§7.4）—— 决定底部指示器里**要不要显示**「照片墙」。
      *
      * ⛔ 必须由调用方传入、不能用默认值：三个来源全关时指示器上不该出现一个
@@ -143,6 +155,12 @@ fun VisualizerStage(
             lyricInfo.line, lyricInfo.nextLine, lyricInfo.progress,
             lyricInfo.hasWords, lyricInfo.lineIndex, lyricInfo.wordStartTimes,
             lyricInfo.maxLineChars, lyricInfo.longestLine, song?.id)
+        // 照片墙生命周期（阶段 10）：进入 → 开始扫描（若未扫过）；离开 → 停时钟、停预取。
+        // ⛔ 必须在帧循环**之前**：本 `LaunchedEffect` 声明在前，先启动 ⇒ `onFrame` 第一帧
+        //    就已经是 `active` 状态。放在帧循环之后会白跑一帧。
+        // ⚠️ 幂等：画质变化也会重跑这个 effect，`onThemeEntered()` 重复调用无副作用。
+        if (theme == VisualizerTheme.PHOTO_WALL) photoWall?.onThemeEntered() else photoWall?.onThemeExited()
+
         // crossfade 能力保留在 RendererSwapper（有单测覆盖）；自动导演档删除后
         // UI 层已无使用场景，因此恒为 false（原为死参数，现收敛到调用处）
         if (swapper.sync(theme, quality, false, renderCtx, System.currentTimeMillis())) {
@@ -158,7 +176,12 @@ fun VisualizerStage(
     }
 
     DisposableEffect(Unit) {
-        onDispose { swapper.release() }
+        onDispose {
+            // 舞台被移除（退出全屏可视化）⇒ 停照片墙的时钟与扫描。
+            // ⚠️ 缓存**不**释放（控制器在 ViewModel 里、跨重组存活）⇒ 再进来是瞬时的。
+            photoWall?.onThemeExited()
+            swapper.release()
+        }
     }
 
     // ── 绘制循环（不触发重组）──────────────────────────────────
@@ -174,6 +197,10 @@ fun VisualizerStage(
                     prevAlpha.floatValue = swapper.previousAlpha(ms)
                     prevRenderer.value = swapper.previous
                 }
+                // 照片墙：与 draw 同帧、同线程（主线程）。
+                // ⛔ 必须在下面 Canvas 的 `renderCtx.update(...)` **之前**跑完，
+                //    这样 `applyTo` 写进 `RenderContext` 的值与本次 draw 看到的是同一帧。
+                photoWall?.onFrame(frame())
             }
         }
     }
@@ -256,6 +283,9 @@ fun VisualizerStage(
                 lyricInfo.line, lyricInfo.nextLine, lyricInfo.progress,
                 lyricInfo.hasWords, lyricInfo.lineIndex, lyricInfo.wordStartTimes,
                 lyricInfo.maxLineChars, lyricInfo.longestLine, song?.id)
+            // 照片墙：零分配写 7 个 `photo*` 字段（§14.2.4 指定「在 update() 之后单独写」）。
+            // ⛔ 必须在 `swapper.current.draw(...)` **之前**：`PhotoRenderer` 读的就是这 7 个字段。
+            photoWall?.applyTo(renderCtx)
             val cur = swapper.current
             // tick 参与读取以确保每帧重绘
             if (tick >= 0L && cur != null && fadeAlpha.floatValue > ALPHA_EPS) {
