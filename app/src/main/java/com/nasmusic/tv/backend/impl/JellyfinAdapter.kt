@@ -600,6 +600,19 @@ class JellyfinAdapter : BackendAdapter {
         return url
     }
 
+    /**
+     * 照片墙通道（§6.4）：Jellyfin 用 `api_key` **查询参数**认证，
+     * 所以任意路径都能这样拼。`baseUrl` / `apiToken` 是本类私有状态，
+     * 外部（`JellyfinPhotoSource`）拿不到 ⇒ 由本方法代劳。
+     */
+    override fun buildAuthenticatedUrl(path: String, query: String): String {
+        val base = "$baseUrl$path?api_key=$apiToken"
+        return if (query.isBlank()) base else "$base&$query"
+    }
+
+    override val currentUserId: String
+        get() = userId
+
     override fun getCoverUrlCandidates(song: Song): List<String> {
         val urls = mutableListOf<String>()
         // 1. 歌曲封面（已含 tag 的精确 URL，或无 tag 的 Primary URL）

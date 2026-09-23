@@ -1425,7 +1425,7 @@ when {
 | **Room 表 + 数据库迁移**（`LocalMusicDatabase` 升版 + schema 入库） | ~150 行 | ⭐⭐ 中（迁移需谨慎） |
 | **「照片墙」设置分区**（**19 行**设置项 ⇒ **17 个持久化字段** + 2 行运行时派生展示；含目录选择 + 人脸进度 UI） | ~450 行 | ⭐⭐ 中（控件已有，主要是接线） |
 | `AppSettings` / `AppPreferences` 字段扩展 | ~160 行 | ⭐ 低 |
-| 单测门禁（**清单见 §14.4**：10 个门禁类，每个含负向自证） | ~700 行 | ⭐⭐ 中 |
+| 单测门禁（**清单见 §14.4**：11 个门禁类，每个含负向自证） | ~750 行 | ⭐⭐ 中 |
 
 **建议**：P0 阶段优先把 **`PhotoBuffer`（内存）** 与 **外接存储来源（真机兼容性）** 做扎实并上机实测，
 再决定后续效果的实现深度 —— 这两项决定整个功能的可行性上限。
@@ -1471,7 +1471,7 @@ when {
 - 「如果已经连了 jellyfin 的音乐后台，是否可以**直接从 jellyfin 的图片库中读取照片**，做照片墙？」（→ 第 7 项）
 - 「**USB 优先，Jellyfin 其次**，最好在设置中能够**选择图片来源**」（→ 第 8 项）
 
-### 13.2 已确定议题汇总（31 项）
+### 13.2 已确定议题汇总（32 项）
 
 | 议题 | 结论 | 位置 | 来源 |
 |---|---|---|---|
@@ -1506,8 +1506,9 @@ when {
 | 图片格式 | `jpg/jpeg/png/bmp/webp/gif`；**排除 HEIC**（电视 API 22 解不了） | §6.5 | 评估建议 |
 | **人脸结果库归属** | ✅ **独立建库 `PhotoFaceDatabase`**（`photo_face.db` v1）—— `LocalMusicDatabase` 开了 `fallbackToDestructiveMigration(true)`，不该让它连带清掉重建成本高（1 万张 ≈ 17 分钟）的人脸结果；沿用 `DownloadDatabase` 既有的「独立建库」约定 | §10.3 / §14.2.6 | 评估建议 |
 | **照片 A/B 交叉的实现归属** | ✅ **在 `PhotoRenderer` 内自实现**，**不复用** `RendererSwapper` —— 后者交换的是**主题级渲染器**，且其 crossfade 分支当前被硬编码关闭（`VisualizerStage.kt:141` 传 `false`） | §5.2 / §14.2.4 | 核实源码 |
+| **块注释未闭合护栏（G11）** | ✅ **新增门禁** `KotlinBlockCommentBalanceTest` —— Kotlin 块注释**支持嵌套**，KDoc 里「斜杠紧邻星号」（最常见是路径通配符）会开一层永不闭合的注释、吞掉其后全部代码，且报错行号落在**文件 EOF**（误导性极强）。本项目已发生 2 次 | §14.4 / §15.3 T1.1 | 🔧 实现期新增 |
 
-**统计**：共 **31** 项 —— 用户确认 **18** + 采纳建议 **2**（小计 20）/ 评估建议 **6** / 核实事实 **4** / 用户澄清推导 **1**（**待确认 0 项**）。
+**统计**：共 **32** 项 —— 用户确认 **18** + 采纳建议 **2**（小计 20）/ 评估建议 **6** / 核实事实 **4** / 用户澄清推导 **1** / 实现期新增 **1**（**待确认 0 项**）。
 
 ---
 
@@ -2036,6 +2037,16 @@ interface PhotoFaceDao {
 | G8 | `PhotoWallAvailabilityTest` | 三来源开关「或」派生；三关 ⇒ `false` | 只开 Jellyfin ⇒ `true` |
 | G9 | `PhotoRefIdTest` | `id` 形如 `<kind>:<payload>`，跨来源同名文件不冲突 | 两个来源同名文件 ⇒ 断言 `id` 不同 |
 | G10 | `PhotoBufferBudgetTest` | 双缓冲 + LRU 的 `estimatedBytes` ≤ 预算 | 把 `maxCached` 调大 ⇒ 断言超预算 |
+| **G11** | `KotlinBlockCommentBalanceTest` | **源码无未闭合块注释**（见下「实现期新增」） | 在 KDoc 里写「斜杠紧邻星号」⇒ 断言判出未闭合 |
+
+⚠️ **G11 是实现期新增（2026-09-23，阶段 1）** —— 不在原设计里。理由：Kotlin 块注释**支持嵌套**，
+KDoc 里出现「斜杠紧邻星号」（最常见是路径通配符）会开一层永不闭合的注释、吞掉其后全部代码。
+本项目已发生**两次**（2026-09-20、2026-09-23）。症状极具误导性：报 `Unclosed comment` 且
+**行号落在文件 EOF**（实测报 `:149:1`，而文件只有 148 行），同时依赖该文件的其他文件报一堆
+`Unresolved reference` —— 看起来像「新文件没被编译」。护栏用**真词法扫描**（跳过行注释 /
+块注释带嵌套深度 / 三引号原始字符串 / 字符串 / 字符字面量），**不是数注释符号个数**
+（项目里 7 个文件在字符串字面量里含 glob 模式，计数法会全部误报）。
+含负向自证 + 4 条误报防线 + 空转断言。文件：`app/src/test/java/com/nasmusic/tv/util/`。
 
 ### 14.5 提交顺序（12 个提交，每个都可独立验证）
 
@@ -2094,7 +2105,7 @@ JAVA_HOME="C:/Program Files/Android/Android Studio/jbr" \
   -Pkotlin.compiler.execution.strategy=in-process
 ```
 
-⚠️ 基线会从 **902 例**往上走（本章新增约 10 个门禁测试类）——**计数漂移先看是不是本轮的**。
+⚠️ 基线会从 **902 例**往上走（本章新增约 11 个门禁测试类）——**计数漂移先看是不是本轮的**。
 
 ---
 
@@ -2128,8 +2139,8 @@ JAVA_HOME="C:/Program Files/Android/Android Studio/jbr" \
 
 | 阶段 | 对应提交 | 任务数 | 状态 |
 |---|---|---|---|
-| 1 G7 修复（前置） | `fix(storage): …` | 2 | ⬜ |
-| 2 PhotoSource 抽象与三来源 | `feat(photo): …` | 5 | ⬜ |
+| 1 G7 修复（前置） | `fix(storage): …` | 2 | 🟨 |
+| 2 PhotoSource 抽象与三来源 | `feat(photo): …` | 5 | ✅ |
 | 3 聚合与去重 | `feat(photo): …` | 2 | ⬜ |
 | 4 PhotoBuffer | `feat(photo): …` | 3 | ⬜ |
 | 5 转场策略层 + 15 种 P0 | `feat(visualizer): …` | 4 | ⬜ |
@@ -2162,34 +2173,63 @@ JAVA_HOME="C:/Program Files/Android/Android Studio/jbr" \
 
 #### 阶段 1 —— G7 修复（前置，独立提交）　`提交 1`　**2 项**
 
-- [ ] **T1.1** G7 修复：`StorageMonitor` 改用广播 `intent.data` + 挂载点探测兜底 + 单测
+- [x] **T1.1** G7 修复：`StorageMonitor` 改用广播 `intent.data` + 挂载点探测兜底 + 单测 ✅ 2026-09-23
   - ⛔ `intent.data?.path` **就是挂载点 URI**（`StorageMonitor.kt:64` 已在打这个日志却没使用）
-  - 叠加常见挂载点探测兜底：`/mnt/usb*`、`/storage/usb*`、`/mnt/media_rw/*`
+  - 叠加常见挂载点探测兜底：`/mnt/usb0`、`/storage/usb0`、`/mnt/media_rw/sda1` 这类
   - 新增单测覆盖广播解析路径
   - **验收**：API 22 上 `storageDevices` 非空；构造 `ACTION_MEDIA_MOUNTED` intent（`file:///mnt/usb0`）→ 设备列表含该项；新测试类绿
+  - **实际**：新增 `backend/local/LegacyStorageProbe.kt`（纯逻辑，黑名单判定 + 探测兜底）；`StorageMonitor` 增 `broadcastMounts` 集合 + `refreshLegacyDevices()`。门禁 `LegacyStorageProbeTest` **13 例绿**；`testDebugUnitTest` 编译 0 错误
+  - ⚠️ **实现期新增**：黑名单必须**精确匹配** `/storage/sdcard0`（内部存储）—— 用 `/storage/sdcard` 前缀会误杀 `/storage/sdcard1`（外接 SD 卡）。已写成单测
 - [ ] **T1.2** **阶段完成** —— 真机：电视插 U 盘 → **音乐能扫到**（既有缺陷复验，与照片解耦）
+  - ⏳ **代码就绪，待用户真机复验**（2026-09-23）：按项目约定不由 AI 装包/运行
 
 #### 阶段 2 —— PhotoSource 抽象与三来源实现　`提交 2`　**5 项**
 
-- [ ] **T2.1** 抽象层与共享契约（§14.2.1）
+- [x] **T2.1** 抽象层与共享契约（§14.2.1）✅ 2026-09-23
   - `PhotoSourceKind` / `PhotoSourceStatus` / `PhotoRef` / `PhotoSource`
   - `PhotoScaleMode` 枚举（`CROP` / `FIT`）
   - 图片扩展名白名单 `jpg/jpeg/png/bmp/webp/gif`，**排除 `heic/heif`**（电视 API 22 解不了）
   - ⛔ **单位归一化在三个实现内完成**：`lastModified` / `dateAdded` 一律输出**秒**
   - **验收**：`PhotoRef` 8 字段齐全；扫到 `.heic` 被过滤；G1 负向自证能判出毫秒记录
-- [ ] **T2.2** `MediaStorePhotoSource`（仅手机）
+  - **实际**：`PhotoSource.kt`（168 行）+ `PhotoScaleMode.kt`（82 行，含 `SafDirectoryPolicy` 与 `PhotoIds`）
+  - ⚠️ **实现期新增（单测抓到）**：`isSupportedPhotoName` 增加「**以点开头一律拒绝**」——
+    首轮单测挂在这条：`.jpg`（点开头且**没有基名**，`lastIndexOf('.') == 0`）被误判成照片。
+    顺带修掉一处**不一致**：`ExternalFilePhotoSource` 的 SAF 路线单独写了隐藏文件过滤、File 路线漏了。
+    ⇒ 该判定现收口到 `isSupportedPhotoName` 一处（三条来源共用），KDoc 已写明
+- [x] **T2.2** `MediaStorePhotoSource`（仅手机）✅ 2026-09-23
   - API 29+ 走 `getContentUri(VOLUME_EXTERNAL)`，23–28 走 `EXTERNAL_CONTENT_URI`
   - **验收**：手机真机列出图库数量 > 0
-- [ ] **T2.3** `ExternalFilePhotoSource`（手机 + 电视）
+  - **实际**：130 行；`status()` 把 `PhotoPermissionState.PARTIAL` 映射成 `PARTIAL_PERMISSION`
+    （**算可用**，§9.6）；`listPhotos()` 仍过白名单（图库里也可能有 HEIC）
+  - ⏳ **代码就绪，待用户真机复验**（2026-09-23）：按项目约定不由 AI 装包/运行
+- [x] **T2.3** `ExternalFilePhotoSource`（手机 + 电视）✅ 2026-09-23
   - `File` 遍历路线复用 `MusicScanner.scanPath` 范式（`walkTopDown` + `.nomedia` 过滤 + `MAX_SCAN_DEPTH = 8`）
   - SAF 兜底路线 `DocumentFile.fromTreeUri`
   - ⛔ 内部存储拦截：SAF 卷 ID 校验 `treeDocId.substringBefore(':') == "primary"` → 拒绝
   - ⛔ 电视自动探测用**黑名单** `INTERNAL_PREFIXES`（`/storage/emulated` / `/sdcard` / `/mnt/sdcard` / `/storage/self`）—— **不用白名单**
   - **验收**：电视 U 盘列出照片；手机选目录后列出照片；选内部存储被拒 + 文案正确；探测结果不含内部存储
-- [ ] **T2.4** `JellyfinPhotoSource`
+  - **实际**：238 行。构造参数全是 **provider lambda**（`fileRootsProvider` / `safTreeUriProvider` /
+    `commonDirsOnlyProvider`）⇒ 设置页改开关 / 换目录后无需重建实例
+  - ⚠️ **实现期偏差 1（依赖）**：**不用 `DocumentFile`** —— `androidx.documentfile` **不在依赖里**，
+    改用 `DocumentsContract` 直接 `query()` 子节点（零新增依赖，符合项目「依赖面刻意收窄」取向）。
+    ⇒ 遍历改成 `ArrayDeque` **迭代式**（不用递归，避免深目录爆栈）
+  - ⚠️ **实现期偏差 2（复用）**：内部存储判定**没有**另写 `INTERNAL_PREFIXES`，而是复用阶段 1 的
+    `LegacyStorageProbe.isInternal`（同一判定只有一处实现，与 T1.1 的 G7 修复共用）
+  - ⚠️ **实现期取舍**：`commonDirsOnly = true` 时若 `DCIM` / `Pictures` **一个都不存在**，
+    回落到整盘扫描 —— 否则「照片放在别处」的用户会看到**一张都不显示**
+  - ⏳ **代码就绪，待用户真机复验**（2026-09-23）：电视 U 盘 / 手机选目录 / 选内部存储被拒 三条均为真机项
+- [x] **T2.4** `JellyfinPhotoSource` ✅ 2026-09-23
   - `IncludeItemTypes=Photo` + `fields=Width,Height` + `Limit/StartIndex` 分页 + `Images/Primary?maxWidth=1920`
   - **验收**：NAS 上照片库能列出条目
-- [ ] **T2.5** **阶段完成** —— 门禁 G9（`PhotoRefIdTest`）绿 + 阶段门禁命令全绿
+  - **实际**：234 行。`status()` 用 `@Volatile lastKnownTotal` 保持轻量（不每次发请求）；
+    文件末尾 `isoToEpochSeconds` 用 `SimpleDateFormat`（⛔ `java.time` 需 API 26，minSdk 22 用不了）
+  - ⚠️ **实现期偏差（封装）**：`JellyfinAdapter` 的 `baseUrl` / `apiToken` / `userId` 是私有的 ⇒
+    不破封装，改在 `BackendAdapter` 加两个**通用**成员 `buildAuthenticatedUrl(path, query)` /
+    `currentUserId`（默认实现 ⇒ `NavidromeAdapter` 不受影响），`JellyfinAdapter` 覆写
+  - ⏳ **代码就绪，待用户真机复验**（2026-09-23）：需 NAS 上有照片库
+- [x] **T2.5** **阶段完成** —— 门禁 G9（`PhotoRefIdTest`）绿 + 阶段门禁命令全绿 ✅ 2026-09-23
+  - **实际**：`PhotoRefIdTest` **19 例**绿（含 3 组负向自证：name-only id 撞车 / `external_primary ≠ primary` / 秒 vs 毫秒）；
+    全量 `testDebugUnitTest` + `lintDebug` 绿
 
 #### 阶段 3 —— 跨来源聚合与去重　`提交 3`　**2 项**
 

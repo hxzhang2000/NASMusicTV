@@ -155,6 +155,30 @@ interface BackendAdapter {
     fun getCoverUrlCandidates(song: Song): List<String> = emptyList()
 
     /**
+     * 构造「**带认证的任意后端路径**」URL —— 照片墙通道用（§6.4）。
+     *
+     * ⚠️ 为什么需要新方法：现有接口只暴露了 [getStreamUrl] / [getCoverUrl] 这类
+     * **为音频写死**的 URL 构造，而照片要查
+     * `/Items?IncludeItemTypes=Photo` 与 `/Items/{id}/Images/Primary?maxWidth=1920`，
+     * 两者都拿不到 —— 尤其后者需要 `maxWidth=1920`（封面那个是 512，放大会糊）。
+     *
+     * 默认返回 `null` = 该后端**不支持**任意路径访问
+     * ⇒ 照片来源按不可用处理（Navidrome 等即走此分支）。
+     *
+     * @param path  以 `/` 开头的后端路径，如 `/Items`
+     * @param query 已编码好的查询串（**不含** `?`），可空
+     */
+    fun buildAuthenticatedUrl(path: String, query: String = ""): String? = null
+
+    /**
+     * 当前登录用户 id —— 部分后端的 `/Items` 查询需要 `UserId` 参数。
+     *
+     * 未知 / 不适用时返回空串（默认实现）。
+     */
+    val currentUserId: String
+        get() = ""
+
+    /**
      * 获取歌词（如果后端支持）
      */
     suspend fun getLyrics(songId: String): String?
