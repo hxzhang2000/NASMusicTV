@@ -2117,6 +2117,7 @@ KDoc 里出现「斜杠紧邻星号」（最常见是路径通配符）会开一
  **G16** | `YuNetPostprocessTest`（**纯 JVM**，合成张量） | ① 合成 8/16/32 三层输出 → 解码出的框位置/尺寸精确吻合（含 `exp` 与 stride）；② `score = sqrt(clamp(cls)·clamp(obj))`（负值被钳 0）；③ 贪心 NMS：IoU > 阈值的重复框只留最高分；④ 空输出不崩。**负向自证**：「漏 `exp`」的错法下相邻格子的框互不重叠（IoU = 0 ⇒ 同一张脸被数成几十张），正确实现必然重叠 | ⛔ ONNX 推理本身**本机验证不了** ⇒ 所有能钉的数值逻辑必须在后处理这一层与推理切开（接缝是 `FaceThumb`，不经过 `Bitmap`）。后处理逐行照抄 OpenCV `FaceDetectorYN`（`eta=1.0` ⇒ 标准贪心 NMS） |
 | **G17** | `FaceScanManagerTest`（**纯 JVM**，接缝假件） | ① 进度按 chunk 推进且 `total` = 待扫清单；② 中断后 `resume` 不重扫已入库的；③ 解码失败跳过且**不写负结果**（失败 ≠ 没脸）；④ `UNAVAILABLE`（模型缺失/低画质档）不启动；⑤ 正在跑时 `start` 幂等；⑥ 完成后 `phase = DONE` 且入库数吻合。**负向自证**：「失败写 `hasFace=false`」的错法会让续跑永久排除读不出来的照片 | `FaceScanManager` 只认 `FaceResultStore` / `FaceDetector` / 缩略图 lambda 三个接缝 ⇒ 用内存假件在纯 JVM 跑，不拉 Robolectric。⛔ `backgroundScope` 里 launch 的事件对 `advanceUntilIdle` 不可见（它只等 foreground 事件）⇒ 扫描协程必须挂在 `TestScope` 本体 |
  **G18** | `PhotoHoldMotionTest`（**纯 JVM**） | ① `motion=0, boost=0` 恒等变换；② Ken Burns 精确放大 8% 且围绕**自身中心**（不是画布中心）；③ 平移只在 CROP（精确 3% 画布）、FIT 禁平移；④ 音频 boost 线性叠加 2%（不是乘法）；⑤ motion 单调递增（推近不回退）；⑥ **负向自证**：错法「围绕画布中心缩放」对不在画布中心的矩形必产生中心漂移，与正确实现分歧 | 停留期运动是「每帧都在动」的效果，写错的表现是缓慢漂移 / 抖动，编译 / lint / 其余门禁全绿 —— 只有把几何公式单独钉住才能拦住 |
+ **G19** | `ChipContentWidthScanTest`（源码扫描，**交付后补**） | ① 修复前写法（外层只给 `height` + 内容 `fillMaxSize()`）**必须命中**；② 压成一行的写法**必须命中**；③ 修复后写法（只填高）放行；④ 外层显式 `fillMaxWidth` / `size` 放行；⑤ 宽度由变量传入 → 放行（静态判不出，跳过而非误报）；⑥ 豁免标记生效；⑦ 注释里举例的写法不得误判（注释剥离）；⑧ 空转断言（调用点数 > 0） | `Row` 给 wrap-content 子项的 `maxWidth` 是**本行剩余宽度**，内容 `fillMaxSize()` 会让第一个子项撑满整行、后续子项被挤成 0 宽 —— 不报错、不警告，只是「选项不见了」（v2.35.0 音质档、v2.37.0 画面适配两次实例） |
 
 ### 14.5 提交顺序（12 个提交，每个都可独立验证）
 
@@ -2714,6 +2715,15 @@ JAVA_HOME="C:/Program Files/Android/Android Studio/jbr" \
     `FocusableSurface` + `portraitTouchTarget(48.dp)`，没有裸 `clickable`）；
     `check_chinese.py` 通过（它只扫 `net/` 三个文件，本阶段无涉）；
     `KotlinBlockCommentBalanceTest` 7 例绿（新增 4 个文件块注释配平已逐文件核对）
+  - ⛔ **交付后修复（2026-09-24，用户上机发现）**：`OptionChip` 的内容容器写了
+    `Box(Modifier.fillMaxSize())` ⇒ 在 `Row` 里取到的是**本行剩余宽度**，
+    **第一个 chip 撑满整行、同排后续 chip 被挤成 0 宽** ⇒「画面适配」只见「满屏」，
+    「完整」不显示（转场 43 个 chip 同样每行只剩第 1 个可见）。
+    修法：内容容器改 `Modifier.fillMaxHeight()`（宽度交给文字 + padding），
+    高度仍由外层 `Modifier.height(portraitTouchTarget(48.dp))` 给定。
+    ⚠️ **同类坑 v2.35.0 已发生过一次**（`SettingActionButton` 默认 `fillMaxWidth()`，
+    表现为「网络源音质只有『自动』一个选项」）⇒ 已固化为门禁
+    `ChipContentWidthScanTest`（源码扫描 + 8 例自证），详见 §10.181
 - [x] **T8.4** **阶段完成** —— 「画面适配」在**四端（电视 / 手机横 / 手机竖）都渲染**（§7.2 注）✅ 2026-09-23
   - **实际**：`PhotoScaleModeSelector` 无条件渲染（**没有任何 `isTV` / `UiMode` 分支**）——
     「满屏 / 完整」是「显示图片时满屏还是留黑边」的语义，**与横竖屏无关**；

@@ -6,7 +6,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -597,7 +597,15 @@ private fun OptionChip(label: String, selected: Boolean, onClick: () -> Unit) {
         focusBorderColor = NasMusicColors.FocusRing.copy(alpha = 0.6f)
     ) {
         Box(
-            modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp),
+            // ⛔ 宽度**必须由内容决定**（文字 + padding），不能用 `fillMaxSize()`：
+            // 本组件总是被放在 `Row` 里并排（画面适配 2 个、转场 43 个），而 `Row`
+            // 给每个 wrap-content 子项的最大宽度是「本行剩余宽度」——`fillMaxSize()`
+            // 会取这个最大值 ⇒ **第一个 chip 撑满整行，同排后续 chip 被挤成 0 宽**。
+            // 症状（2026-09-24 用户报）：画面适配只见「满屏」，「完整」不显示。
+            // 同类坑在 v2.35.0 已发生过一次（`SettingActionButton` 默认 fillMaxWidth，
+            // 表现为「网络源音质只有『自动』一个选项」）。
+            // 高度仍由外层 `Modifier.height(portraitTouchTarget(48.dp))` 给定，故只填高。
+            modifier = Modifier.fillMaxHeight().padding(horizontal = 16.dp),
             contentAlignment = Alignment.Center
         ) {
             Text(

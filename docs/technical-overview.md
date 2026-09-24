@@ -10719,6 +10719,45 @@ at `at0.invokeSuspend(...:133)`，线程 `DefaultDispatcher-worker-N`。**09-22 
 **验证**：门禁 `testDebugUnitTest` + `lintDebug` 通过（1150 例 / 0 失败，0 Error / 279 Warning）；
 **真机待复验**（2026-09-24 用户手机启动不再崩溃后闭环）。
 
+### 10.181 v2.37.0 — 照片墙「画面适配」只剩「满屏」：`Row` 内 `fillMaxSize` 挤掉同排项（2026-09-24）
+
+**现象**（用户上机）：设置 → 照片墙 → 「画面适配」只有「满屏」一个选项，「完整」不见了。
+同源影响：转场效果 43 个 chip **每行只剩第 1 个可见**（其余被挤成 0 宽）。
+
+**根因**：`PhotoWallSettingsSection.kt` 的私有 `OptionChip` 内容容器写的是
+`Box(Modifier.fillMaxSize())`。`Row` 给每个 wrap-content 子项的 `maxWidth` 是
+**本行剩余宽度** ⇒ 第一个 chip 的 `fillMaxSize()` 取到这个最大值，**自己撑满整行**，
+后续 chip 的剩余宽度 ≈ 0 → 宽 0、不可见。**不报错、不警告、编译/lint/单测全绿**，
+只有肉眼能发现。
+
+⚠️ **同一个坑 v2.35.0 已发生过一次**：`SettingActionButton` 默认
+`Modifier.fillMaxWidth()`，表现为「网络源音质只有『自动』一个选项」，
+当时的修法是「放在 `Row` 里时由调用方传固定宽度」（`SettingsComponents.kt` 的 KDoc 有记录）。
+本次是同类缺陷的第二个实例，故不再只修调用点，而是**固化为门禁**。
+
+**修复**（`PhotoWallSettingsSection.kt`）：内容容器改
+`Modifier.fillMaxHeight().padding(horizontal = 16.dp)` —— **只填高、宽度交给文字与 padding**；
+高度仍由外层 `Modifier.height(portraitTouchTarget(48.dp))` 给定（竖屏触摸目标不变）。
+`fillMaxSize` import 同时移除（该文件已无其他用处）。
+
+**门禁 G19 `ChipContentWidthScanTest`**（源码扫描型，项目无 `compose-ui-test` 依赖，
+无法做真实布局断言 ⇒ 与 `SmallTouchTargetScanTest` 同范式）：
+
+- **判定**：`FocusableSurface(` 调用 ① 实参区无显式宽度（`fillMaxWidth(` / `.width(` /
+  `widthIn(` / `weight(` / `.size(`）且 `modifier =` 首行以 `Modifier` 开头；
+  ② 内容 lambda 含 `fillMaxSize()`；③ 本行或向前 3 行无 `ChipWidth-exempt: <理由>`；
+  ④ 先剥离注释（`//` 与 `/* … */`，保留长度与换行 ⇒ 行号不变）
+- **自证 9 例**：修复前写法**必须命中**（含压成一行的写法）、修复后写法放行、
+  外层显式 `fillMaxWidth`/`size` 放行、**宽度由变量传入放行**（静态判不出 → 跳过而非误报，
+  同 G7 对 `size(coverSide)` 的处理）、豁免标记生效、注释里举例不得误判、
+  空转断言（真实扫描 `FocusableSurface(` 调用点数 > 0）
+- **实跑**：`app/src/main/java` 全量 **145 个调用点 / 0 违规**
+- ⚠️ 宽度由**调用方参数**传入的组件（如 `SearchField(modifier = modifier…)`）静态判不出，
+  用 `ChipWidth-exempt: <理由>` 显式豁免，**不要放宽规则**
+
+**验证**：`testDebugUnitTest` **1159 例 / 113 类 / 0 失败**（+9 例 / +1 类，即 G19）；
+`lintDebug` **0 Error / 279 Warning**。**真机待复验**（用户确认「完整」可见 + 转场每行多个 chip）。
+
 ### 10.152 v2.32.3 — T5：删除死代码 `VocalRemovalProcessor.kt`（算法先归档，2026-09-14）
 
 **来源**：`docs/archive/code-review-full-report-2026-09-13.md` §T5 / `docs/archive/code-review-2026-09-03.md` §P2。文件 348 行，全项目**零调用方**（`PlaybackService.kt:207` 实际 `val vocalRemovalProcessor = SpectralMaskProcessor()`——变量名是历史遗留，类型早就换过了；`PlayerManager.setVocalRemovalProcessor()` 的形参类型同样是 `SpectralMaskProcessor`）。
