@@ -30,6 +30,7 @@ import com.nasmusic.tv.visualizer.photo.transitions.applyHoldMotion
  * | 1 | **`geom.update(...)` 必须在 `prepare(...)` 之前** | `NoiseDissolveTransition.prepare` 用 `geom.canvasW/canvasH` 算 `layerBounds`；顺序反了会拿到 `0×0` ⇒ `render` 里 `layerBounds.width <= 0` 直接 return，而 `prepare` 之后不再被调用 ⇒ **噪声溶解永远不显示** |
  * | 2 | **画布尺寸变化要重新 `prepare`** | 转屏 / 换分辨率后 `layerBounds` 还是旧尺寸 ⇒ 溶解只在旧区域生效 |
  * | 3 | **`b ?: a` 的单图退化** | `photoB == null`（只有一张照片 / 下一张未就绪）时若直接 `return`，画面会在切图瞬间**闪一下黑**；把 `a` 当 `b` 传则退化为「同图自转场」，视觉上只是轻微运动 |
+ * | 4 | **`geom.update(...)` 必须把 B 的尺寸也传进去** | 只传 A 的尺寸时 `bW`/`bH` 落到默认值（= A 的尺寸）⇒ B 的 `srcB`/`dstB` 按 **A 的宽高比**算：竖版新图被按横版裁切（或反之 `srcB` 越出 B 的位图边界、留下一块没画到的黑边）。症状是「竖版图片铺不满屏幕」「入场动画走完了照片还没归位」——见 §10.182 |
  *
  * ## 零分配
  *
@@ -86,9 +87,16 @@ class PhotoRenderer : VisualizerRenderer {
     override fun DrawScope.draw(frame: AudioFrame, ctx: RenderContext) {
         val a = ctx.photoA ?: return          // 无照片 ⇒ 直接返回（底层已是暗底）
         val id = ctx.photoTransition ?: return // 未在切换中（理论上不该发生，防御性返回）
+        val b: ImageBitmap = ctx.photoB ?: a   // 单图退化（约束 3）
 
         // ⛔ 顺序：先算几何，再 prepare（约束 1）
-        geom.update(ctx, ctx.photoScaleMode, a.width, a.height)
+        // ⛔ 必须传 **B 自己的尺寸**（约束 4）—— `bW`/`bH` 的默认值就是 A 的尺寸，
+        //    漏传等于「按上一张的宽高比裁下一张」：
+        //    · CROP：`srcB` 的比例按 A 算 ⇒ 新图被裁成 A 的形状（竖版图铺不满屏幕）
+        //    · A 比 B「高」时 `srcB` 还会越出 B 的位图边界 ⇒ 有一块永远画不到（黑边）
+        //    · HOLD 期 `photoB` 仍是刚入场的那张、`p` 恒为 1 ⇒ 整个停留期都在按错误几何绘制，
+        //      直到下一次切换把它换成 `a` 才「跳」回正确形状（用户读作「入场动画没走完」）
+        geom.update(ctx, ctx.photoScaleMode, a.width, a.height, b.width, b.height)
         geom.spectrum = frame.spectrum         // 只存引用，不复制
 
         if (id != lastTransitionId || ctx.quality != lastQuality || ctx.canvasSize.width != lastCanvasW ||
@@ -105,7 +113,6 @@ class PhotoRenderer : VisualizerRenderer {
         }
 
         val t = bound ?: return
-        val b: ImageBitmap = ctx.photoB ?: a   // 单图退化（约束 3）
 
         // ── 停留期运动（§5.6）：作用在几何上，转场自身无感知 ──
         // 检测新周期：progress 回落（HOLD 的 1 → 新 ENTER 的 0）

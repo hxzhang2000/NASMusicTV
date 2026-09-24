@@ -99,8 +99,16 @@ data class PhotoWallRuntimeState(
     val galleryCount: Int = 0,
     val externalCount: Int = 0,
     val jellyfinCount: Int = 0,
-    /** 合并去重后的总数（阶段 10 填） */
+    /** 合并去重后的总数（阶段 10 填）—— 与三个分来源计数**同口径**（都不过人脸过滤） */
     val mergedCount: Int = 0,
+    /**
+     * 人脸过滤之后**实际会展示**的张数（阶段 11 填）。
+     *
+     * ⛔ 与 [mergedCount] 分开是刻意的：开着「仅显示含人像」时两者会差很多
+     * （例如「合并后 6938 张、实际展示 2657 张」）。合成一个数会让用户以为**去重**丢了照片
+     * —— v2.37.0 上机复验的真实困惑，见 `docs/technical-overview.md` §10.183。
+     */
+    val displayCount: Int = 0,
     /** 人脸检测进度（阶段 11 填；`total <= 0` ⇒ 不渲染进度行） */
     val faceScanDone: Int = 0,
     val faceScanTotal: Int = 0,
@@ -291,6 +299,15 @@ internal fun PhotoWallSettingsSection(
                 stringResource(R.string.settings_photo_wall_merged),
                 stringResource(R.string.settings_photo_wall_count_unit, runtime.mergedCount)
             )
+            // ⛔ 只在「仅显示含人像」真的生效时（开关打开 **且** 扫描已完成）才多这一行 ——
+            //   否则它会与「合并后」一模一样，纯属噪音（`PhotoWallController.filterByFaces`
+            //   的生效条件与这里**必须一致**，否则计数与实际展示会对不上）
+            if (s.photoWallFacesOnly && s.photoWallFaceScanDone) {
+                SettingsInfoRow(
+                    stringResource(R.string.settings_photo_wall_faces_only_count),
+                    stringResource(R.string.settings_photo_wall_count_unit, runtime.displayCount)
+                )
+            }
         }
         Spacer(modifier = Modifier.height(8.dp))
         SettingActionButton(

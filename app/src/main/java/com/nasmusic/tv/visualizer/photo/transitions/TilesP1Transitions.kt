@@ -189,13 +189,22 @@ internal class GlitchTransition(
     override fun DrawScope.render(a: ImageBitmap, b: ImageBitmap, p: Float, geom: PhotoGeometry) {
         drawPhoto(a, geom.srcA, geom.dstA)
 
+        val shrink = 1f - p // p → 1 时幅度归零（归位）
+        // ⛔ 归位之后必须**整幅画一次新图**，不能「跳过条带」。
+        //   条带偏移收敛到亚像素时逐带绘制与整幅等价，所以「省掉 12 次 draw」是对的；
+        //   但**跳过之后画面就只剩上面那一层旧图** —— 而 `p` 到 1 之后 HOLD 期一直是 1
+        //   ⇒ 整个停留期都在显示**旧照片**，直到下一次切换才把它换成新图。
+        //   用户看到的就是「入场动画没走完就停了」（§10.182）。
+        if (shrink <= SETTLED) {
+            drawPhoto(b, geom.srcB, geom.dstB)
+            return
+        }
+
         val bandH = geom.canvasH / BANDS
         val step = (p * STEPS).toInt()
-        val shrink = 1f - p // p → 1 时幅度归零（归位）
         for (i in 0 until BANDS) {
             val h1 = hash(seed, i, step)
             val offset = (h1 - 0.5f) * geom.canvasW * MAX_SHIFT * shrink
-            if (abs(offset) < 0.5f && p > 0.95f) continue
             val y0 = i * bandH
             clipRect(0f, y0, geom.canvasW, y0 + bandH) {
                 drawPhotoAt(b, geom.srcB, geom.dstB, offX = offset, offY = 0f)
@@ -218,5 +227,11 @@ internal class GlitchTransition(
 
         /** 最大错位 = 6% 屏宽 */
         const val MAX_SHIFT = 0.06f
+
+        /**
+         * 「归位」阈值：`1 - p ≤ 本值`（即 `p ≥ 0.95`）时条带偏移已收敛到亚像素
+         * （`0.06 × 屏宽 × 0.05 ≈ 6 px` 上限，且多数条带远小于此）⇒ 改为整幅绘制。
+         */
+        const val SETTLED = 0.05f
     }
 }

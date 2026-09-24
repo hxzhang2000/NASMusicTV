@@ -10758,6 +10758,128 @@ at `at0.invokeSuspend(...:133)`，线程 `DefaultDispatcher-worker-N`。**09-22 
 **验证**：`testDebugUnitTest` **1159 例 / 113 类 / 0 失败**（+9 例 / +1 类，即 G19）；
 `lintDebug` **0 Error / 279 Warning**。**真机待复验**（用户确认「完整」可见 + 转场每行多个 chip）。
 
+### 10.182 v2.37.0 — 照片墙：新图几何按**旧图**比例算（竖版铺不满 / 入场未归位）（2026-09-24）
+
+**现象**（用户上机，两条一起报）：
+1. 「竖版图片总是无法占满屏幕」——竖版照片（或横版，取决于相邻两张的比例关系）显示成
+   被裁掉一块的怪比例，或底部/右侧留一条没画到的黑边；
+2. 「很多时候进入动画效果还未完成，就开始停留了」——入场动画走到 p = 1 之后画面
+   看着**还没归位**（像还停在放大中途），下一次切换的瞬间又「跳」一下。
+
+**根因 ①（主因，两条现象同源）**：`PhotoRenderer.draw` 第 91 行
+`geom.update(ctx, ctx.photoScaleMode, a.width, a.height)` —— **只传了 A 的尺寸**。
+`PhotoGeometry.update` 的签名是
+`update(ctx, scaleMode, aW, aH, bW = aW, bH = aH)`，默认值专为「单图自转场（`b == a`）」准备
+⇒ 两图宽高比不同时，B 的 `srcB`/`dstB` 会**按 A 的宽高比**算：
+
+- `CROP`：`dstB` 恒为整画布（看不出问题），但 `srcB` 的比例错了 ⇒ 新图被按旧图的形状裁切；
+  A 比 B「高」时 `srcB` 还会**越出 B 的位图边界**（Skia 取不到像素）⇒ 留一条黑边
+- **HOLD 期 `photoB` 仍是刚入场的那张、`p` 恒为 1** ⇒ 整个停留期都在按错误几何绘制，
+  直到下一次切换把它换成 `a`（那时几何才按它自己的比例重算）才「跳」回正确形状 ——
+  用户把这次跳变读成「入场动画没走完」
+
+`PhotoGeometry` 本身是对的（门禁 G6 的 `update recomputes both a and b` 正是为此写的），
+**错的是唯一那个调用点漏传实参**。
+
+**根因 ②（同批发现的终帧缺陷）**：转场的 `p = 1` 帧**必须等价于「新图整幅绘制」**，
+因为 `p` 到 1 之后整个 HOLD 期都是 1。查出两处违反：
+
+- `GlitchTransition`：`if (abs(offset) < 0.5f && p > 0.95f) continue` —— 「偏移收敛到亚像素
+  就省掉逐带绘制」的优化**跳掉的是新图**，而底色是旧图 ⇒ 最后 5% + **整个停留期显示上一张
+  照片**，下一次切换才补上（原意应是「改画整幅」，见修法）
+- `PolygonIrisTransition`（`IRIS_DIAMOND` / `IRIS_STAR` / `IRIS_HEXAGON` / `SHAPE_RANDOM`）：
+  终态半径沿用 `geom.diagonalHalf` —— 那是**圆**的终态半径（圆心到四角恰好等于对角线/2）。
+  多边形边界比同半径的圆更靠内 ⇒ 菱形需 `(宽+高)/2`、五角星（内径 0.45）需 ≈ 2 倍对角线/2
+  ⇒ `p = 1` 后**四角/凹口仍露旧图**
+- 连带查出 `IrisStarTransition.unitVertices` 把「内外径交替」写成了**按分量**交替
+  （`val outer = i % 2 == 0`，而 x 分量在 `i = 2k`、y 分量在 `i = 2k + 1`）
+  ⇒ 10 个顶点退化成「5 个顶点 + y 压到 0.45 倍」的**扁五边形**，`INNER_RATIO` 形同虚设。
+  修法：交替判据改为 `val k = i / 2; val outer = k % 2 == 0`
+
+**修复**：
+1. `PhotoRenderer.draw`：把 `val b = ctx.photoB ?: a` 提到几何计算之前，改调
+   `geom.update(ctx, ctx.photoScaleMode, a.width, a.height, b.width, b.height)`；
+   KDoc 的「三个必须写对的地方」扩成四个（新增约束 4）
+2. `GlitchTransition`：`shrink <= SETTLED`（`p >= 0.95`）时**整幅画一次 b 并返回**，
+   不再逐带跳过（顺带把 12 次 draw call 压成 1 次）
+3. `PolygonIrisTransition`：新增 `prepare` 里算一次的 `coverRadius`
+   （`polygonCoverRadius(unitVertices, canvasW, canvasH)`），`render` 用 `coverRadius * p`；
+   `ShapeRandomTransition.prepare` **转发**给池里四个形状（否则 `current.coverRadius` 恒 0
+   ⇒ 这个转场什么都不显示）
+4. `IrisStarTransition`：修顶点表的交替判据
+
+`polygonCoverRadius` 用**采样**（`(GRID+1)² = 49²` 个点，1080p 间距 ≈ 22 px）而不是解析求交：
+五角星是**凹**多边形，「四角都在形状内」推不出「整条边都在形状内」（凹口会咬进矩形内部），
+采样对凸/凹一视同仁。结果 × `COVER_MARGIN = 1.05`（网格只保证采样点在形状内，贴边界的
+最坏点可能落在两个采样点之间）。只在 `prepare`（低频）调用 ⇒ 不违反「稳态每帧零分配」。
+
+**门禁**：
+- **G20 `PhotoRenderContractScanTest`**（源码扫描，14 例）：A 组断言 `PhotoGeometry.update`
+  调用点必须传满 6 个实参（语义锚点 = **接收者名 `geom`** ∪ **实参含 `photoScaleMode`**，
+  避免误伤别的 `update(`）；B 组断言转场里不得出现「`p` 与 `[0.5, 1)` 字面量比较」的
+  `continue`/`return`（`p >= 1f` 的终帧兜底刻意放行）。两组各带负向自证 + 空转断言 +
+  **锚点自证** + 豁免标记（`PhotoGeomArgs-exempt` / `TransitionSettle-exempt`）
+- **G21 `PolygonIrisCoverTest`**（4 例）：`p = 1` 时 `coverRadius` 倍多边形必须包含整个画布
+  （**独立算法**：测试用**角度累加**判定内点，生产用射线法；测试网格 61² 比生产的 49² 更密）；
+  负向自证「半径 1 px 时任何形状都盖不住」+「菱形/五角星用 `diagonalHalf` 盖不住」；
+  顺带钉住半径上界（防二分未收敛 / 顶点表退化）
+  ⚠️ 该测试**刻意不拿圆做前置条件**：`IrisCircleTransition` 是 64 边形近似，其**边**的
+  内切半径是 `cos(π/64) = 0.9988` 倍 ⇒ 用 `diagonalHalf` 时四角差 0.3 px（肉眼不可见，
+  且 §14.3 明确指定圆用对角线/2），拿它当「刚好够」的前提反而会误判
+
+**教训**：① **有默认值的参数 = 一个静默的错误入口**：`bW = aW` 这种「单图场景的便利默认值」
+在双图调用点被漏传时，编译器一言不发，而语义从「按自己的比例」变成「按对方的比例」；
+凡是「同一份数据有两个来源」的几何/尺寸计算，调用点都要显式写全。
+② 「转场在 p 快到 1 时省一次绘制」这类优化必须问一句「**省掉之后画面还等于新图吗**」——
+`p = 1` 的终帧会被 HOLD 期**重复播放几秒**，所以终帧错等于「长时间显示错的东西」。
+③ ⛔ **源码扫描门禁的「锚点」和「判据」一样必须自证**：G20 第一版把「实参里出现
+`photoScaleMode`」当**唯一**锚点，自证用例（实参写 `modeOf(settings)`）当场判出**漏扫** ——
+只要把模式先存进局部变量（`val mode = ctx.photoScaleMode`），调用点就再也扫不到，
+而漏扫的门禁**照样报「0 违规」**。空转断言只挡得住「全部扫不到」（`callSites > 0`），
+挡不住「**部分**扫不到」，所以锚点本身也要有一条负向用例钉住。
+
+**验证**：门禁 `testDebugUnitTest` + `lintDebug`（见 §10.183 的合并记录）；
+**真机待复验**（竖版照片铺满 + 入场动画归位 + 菱形/五角星/故障风终帧正确）。
+
+### 10.183 v2.37.0 — 照片墙「照片数量」两行口径不一致（2026-09-24）
+
+**现象**（用户上机提问）：「我只接了图库源，共 6937，但合并后只有 2657 了，去重的逻辑是什么？」
+—— 用户合理怀疑**去重**吃掉了 4280 张。
+
+**取证**（`adb shell content query --uri content://media/external/images/media`）：
+手机 MediaStore 共 **6938 张图片**，扩展名分布 `jpg 6924 / png 10 / jpeg 4`
+⇒ **没有任何 HEIC/HEIF**，`PHOTO_EXTENSIONS` 白名单一张都没滤掉；
+`dumpsys package` 显示 `READ_MEDIA_IMAGES: granted=true`（全量授权，非「仅选择照片」）。
+即：`PhotoDedup` 在**单来源**下几乎不可能命中（指纹 = `size + 修改秒 + 小写文件名`，
+且它只在跨来源重复时才有意义），2657 与去重无关。
+
+**根因（UI 口径不一致，不是数据缺陷）**：设置页三行信息行取自**两个不同阶段**的计数：
+
+| 行 | 数据源 | 计算阶段 |
+|---|---|---|
+| 照片数量（图库 / 外接 / Jellyfin） | `perSourceCount` | 聚合 + **去重后**、人脸过滤**前** |
+| 合并后（去重） | `mergedCount` | 去重后 + **人脸过滤后** |
+
+而用户此时开着「仅显示含人像」（`photoWallFacesOnly` + `photoWallFaceScanDone`）
+⇒ 6938 张里只有 2657 张检出人脸 ⇒ **标签写着「去重」，数字却是人脸过滤后的**
+（`_mergedCount.value = filtered.size`，写它的人当时想着「显示用户实际会看到的数量」，
+但分来源三行并没有同步这个口径）。`PhotoDedup` 完全无辜。
+
+**修复**（口径统一 + 诚实标签）：
+- `PhotoWallController`：`_mergedCount = result.photos.size`（去重后、过滤前，**与分来源同口径**，
+  三者相加 == 它）；**新增** `_displayCount = filtered.size`（人脸过滤后 = 实际展示）
+- `PhotoWallRuntimeState` 新增 `displayCount`；`SettingsBranch` 接线
+- 设置页在「仅显示含人像」**真的生效**（开关打开 **且** 扫描已完成，与 `filterByFaces`
+  的生效条件一致）时**多显示一行**「仅含人像（实际展示）N 张」
+- 新字符串 `settings_photo_wall_faces_only_count`（中英同步）
+
+**教训**：同一屏里并列展示的多个计数，**必须同口径**；若确实要展示不同阶段的数字，
+就把差异**显式写成一行**（这里就是新增的那行），不要靠标签里的一个括号暗示。
+
+**验证**：门禁 `testDebugUnitTest` **1177 例 / 115 类 / 0 失败**（1159 + G20 14 + G21 4）；
+`lintDebug` **0 Error / 279 Warning**（与 §10.182 同批）。
+**真机待复验**（设置页应显示「合并后（去重）6938 张」+「仅含人像（实际展示）2657 张」）。
+
 ### 10.152 v2.32.3 — T5：删除死代码 `VocalRemovalProcessor.kt`（算法先归档，2026-09-14）
 
 **来源**：`docs/archive/code-review-full-report-2026-09-13.md` §T5 / `docs/archive/code-review-2026-09-03.md` §P2。文件 348 行，全项目**零调用方**（`PlaybackService.kt:207` 实际 `val vocalRemovalProcessor = SpectralMaskProcessor()`——变量名是历史遗留，类型早就换过了；`PlayerManager.setVocalRemovalProcessor()` 的形参类型同样是 `SpectralMaskProcessor`）。

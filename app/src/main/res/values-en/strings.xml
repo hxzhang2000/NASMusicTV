@@ -321,6 +321,7 @@
     <string name="settings_photo_wall_counts">Photo counts</string>
     <string name="settings_photo_wall_counts_value">Gallery %1$d · External %2$d · Jellyfin %3$d</string>
     <string name="settings_photo_wall_merged">Merged (deduplicated)</string>
+    <string name="settings_photo_wall_faces_only_count">Faces only (shown)</string>
     <string name="settings_photo_wall_count_unit">%d photos</string>
     <string name="settings_photo_wall_rescan">Rescan</string>
     <string name="settings_photo_wall_rescan_desc">Re-enumerate photos from every source</string>

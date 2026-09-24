@@ -324,6 +324,7 @@
     <string name="settings_photo_wall_counts">照片数量</string>
     <string name="settings_photo_wall_counts_value">图库 %1$d · 外接 %2$d · Jellyfin %3$d</string>
     <string name="settings_photo_wall_merged">合并后（去重）</string>
+    <string name="settings_photo_wall_faces_only_count">仅含人像（实际展示）</string>
     <string name="settings_photo_wall_count_unit">%d 张</string>
     <string name="settings_photo_wall_rescan">重新扫描</string>
     <string name="settings_photo_wall_rescan_desc">重新枚举各来源的照片</string>

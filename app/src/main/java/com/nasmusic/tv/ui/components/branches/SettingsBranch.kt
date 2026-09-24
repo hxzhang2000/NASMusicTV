@@ -99,6 +99,8 @@ internal fun SettingsBranch(
                     // 所以走 `PhotoWallRuntimeState` 而不是 `AppSettings`。
                     val photoWallPerSource by viewModel.visualizerVM.photoWall.perSourceCount.collectAsState()
                     val photoWallMerged by viewModel.visualizerVM.photoWall.mergedCount.collectAsState()
+                    // 阶段 11 追加：人脸过滤后的**实际展示**张数（与 mergedCount 口径不同，见 §10.183）
+                    val photoWallDisplay by viewModel.visualizerVM.photoWall.displayCount.collectAsState()
                     // 阶段 11（§10）：人脸扫描进度 / 可用性 —— 同样是运行时事实。
                     // ⚠️ `faceScanState` 是 getter（内部 `by lazy`）⇒ 只有进设置页才建
                     //    `FaceScanManager`（开 photo_face.db / 读 assets），平时零成本。
@@ -273,6 +275,7 @@ internal fun SettingsBranch(
                         externalCount = photoWallPerSource[PhotoSourceKind.EXTERNAL] ?: 0,
                         jellyfinCount = photoWallPerSource[PhotoSourceKind.JELLYFIN] ?: 0,
                         mergedCount = photoWallMerged,
+                        displayCount = photoWallDisplay,
                         faceScanDone = photoWallFaceScan.done,
                         faceScanTotal = photoWallFaceScan.total,
                         faceScanPhase = photoWallFaceScan.phase,

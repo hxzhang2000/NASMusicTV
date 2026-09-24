@@ -137,8 +137,22 @@ class PhotoWallController(
     val perSourceCount: StateFlow<Map<PhotoSourceKind, Int>> = _perSourceCount.asStateFlow()
 
     private val _mergedCount = MutableStateFlow(0)
-    /** 合并去重后的总数（设置页「合计」行） */
+    /**
+     * 合并去重后的总数（设置页「合并后（去重）」行）。
+     *
+     * ⛔ 与 `perSourceCount` 的**口径必须一致**（都不过人脸过滤）—— 否则三个分来源相加
+     * 不等于「合并后」，用户会以为去重把照片吃掉了（v2.37.0 上机复验的真实困惑：
+     * 只开图库 6938 张、开着「仅显示含人像」⇒ 合并行显示 2657，看起来像去重丢了 4281 张）。
+     */
     val mergedCount: StateFlow<Int> = _mergedCount.asStateFlow()
+
+    private val _displayCount = MutableStateFlow(0)
+    /**
+     * 人脸过滤之后**实际会展示**的张数（设置页「仅含人像（实际展示）」行）。
+     *
+     * ⚠️ 没开「仅显示含人像」/ 人脸扫描未完成时等于 [mergedCount]（`filterByFaces` 原样返回）。
+     */
+    val displayCount: StateFlow<Int> = _displayCount.asStateFlow()
 
     /**
      * 当前生效的照片列表（**过滤之后**的那份）。
@@ -358,6 +372,7 @@ class PhotoWallController(
         canvasH = 0
         _perSourceCount.value = emptyMap()
         _mergedCount.value = 0
+        _displayCount.value = 0
         _photos.value = emptyList()
         _statuses.value = emptyMap()
     }
@@ -378,6 +393,7 @@ class PhotoWallController(
                 _photos.value = emptyList()
                 _perSourceCount.value = emptyMap()
                 _mergedCount.value = 0
+                _displayCount.value = 0
                 _statuses.value = emptyMap()
                 return@launch
             }
@@ -385,12 +401,16 @@ class PhotoWallController(
                 enabled = enabled,
                 balance = settings.photoWallSourceBalance,
             )
-            // ⛔ 过滤（阶段 11）必须在「写计数 / 建池」**之前**：
-            //    计数显示的应该是用户实际会看到的数量，而不是过滤前的总量
+            // ⛔ 过滤（阶段 11）必须在「建池」**之前**：池里放的必须是用户实际会看到的那批。
             val filtered = filterByFaces(result.photos)
             _perSourceCount.value = result.perSource
             _photos.value = filtered
-            _mergedCount.value = filtered.size
+            // ⛔ 两个计数**口径不同**，刻意分开（v2.37.0 上机复验后调整，见 §10.183）：
+            //   「合并后（去重）」= 去重后、**人脸过滤前** ⇒ 与分来源行同口径（三者相加 == 它）
+            //   「实际展示」     = 人脸过滤后        ⇒ 用户真正会看到的张数
+            //   合并成一个数会出现「分来源 6938 / 合并 2657」的错觉：看起来像去重丢了 4281 张。
+            _mergedCount.value = result.photos.size
+            _displayCount.value = filtered.size
             _statuses.value = result.statuses
             pool.reset(filtered)
             picker.reset()

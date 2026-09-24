@@ -2118,6 +2118,8 @@ KDoc 里出现「斜杠紧邻星号」（最常见是路径通配符）会开一
 | **G17** | `FaceScanManagerTest`（**纯 JVM**，接缝假件） | ① 进度按 chunk 推进且 `total` = 待扫清单；② 中断后 `resume` 不重扫已入库的；③ 解码失败跳过且**不写负结果**（失败 ≠ 没脸）；④ `UNAVAILABLE`（模型缺失/低画质档）不启动；⑤ 正在跑时 `start` 幂等；⑥ 完成后 `phase = DONE` 且入库数吻合。**负向自证**：「失败写 `hasFace=false`」的错法会让续跑永久排除读不出来的照片 | `FaceScanManager` 只认 `FaceResultStore` / `FaceDetector` / 缩略图 lambda 三个接缝 ⇒ 用内存假件在纯 JVM 跑，不拉 Robolectric。⛔ `backgroundScope` 里 launch 的事件对 `advanceUntilIdle` 不可见（它只等 foreground 事件）⇒ 扫描协程必须挂在 `TestScope` 本体 |
  **G18** | `PhotoHoldMotionTest`（**纯 JVM**） | ① `motion=0, boost=0` 恒等变换；② Ken Burns 精确放大 8% 且围绕**自身中心**（不是画布中心）；③ 平移只在 CROP（精确 3% 画布）、FIT 禁平移；④ 音频 boost 线性叠加 2%（不是乘法）；⑤ motion 单调递增（推近不回退）；⑥ **负向自证**：错法「围绕画布中心缩放」对不在画布中心的矩形必产生中心漂移，与正确实现分歧 | 停留期运动是「每帧都在动」的效果，写错的表现是缓慢漂移 / 抖动，编译 / lint / 其余门禁全绿 —— 只有把几何公式单独钉住才能拦住 |
  **G19** | `ChipContentWidthScanTest`（源码扫描，**交付后补**） | ① 修复前写法（外层只给 `height` + 内容 `fillMaxSize()`）**必须命中**；② 压成一行的写法**必须命中**；③ 修复后写法（只填高）放行；④ 外层显式 `fillMaxWidth` / `size` 放行；⑤ 宽度由变量传入 → 放行（静态判不出，跳过而非误报）；⑥ 豁免标记生效；⑦ 注释里举例的写法不得误判（注释剥离）；⑧ 空转断言（调用点数 > 0） | `Row` 给 wrap-content 子项的 `maxWidth` 是**本行剩余宽度**，内容 `fillMaxSize()` 会让第一个子项撑满整行、后续子项被挤成 0 宽 —— 不报错、不警告，只是「选项不见了」（v2.35.0 音质档、v2.37.0 画面适配两次实例） |
+ **G20** | `PhotoRenderContractScanTest`（源码扫描，**交付后补**） | A 组：`PhotoGeometry.update(...)` 调用点必须传满 6 个实参（语义锚点 = **接收者名 `geom`** ∪ **实参含 `photoScaleMode`** —— ⛔ 单用后者会把「模式先存进局部变量再传」的写法**静默漏扫**，而漏扫的门禁照样报「0 违规」，那是**空转**；本门禁第一版就栽在这里，由自证用例 `同一行且嵌套调用的写法也必须被判违规` 当场判出）；B 组：转场里不得出现「`p` 与 `[0.5, 1)` 字面量比较」的 `continue` / `return`（`p >= 1f` 的终帧兜底**刻意放行**）。两组各带负向自证 + 正向放行 + 误报防线 + 空转断言 + 锚点自证 + 豁免标记（`PhotoGeomArgs-exempt` / `TransitionSettle-exempt`） | 两类「编译过、lint 过、既有单测过，只有肉眼能发现」的缺陷：① `update` 的 `bW = aW` 默认值让「漏传 B 的尺寸」完全合法 ⇒ 新图按**旧图**的比例裁切（竖版铺不满 / 黑边 / HOLD 期一直按错几何画）；② `p` 到 1 之后**整个 HOLD 期都是 1** ⇒ 终帧少画新图等于「停留期一直显示上一张」。见 §10.182 |
+ **G21** | `PolygonIrisCoverTest`（**纯 JVM**） | ① 4 种形状 × 3 种画布：`coverRadius` 倍多边形必须包含**整个画布**；② 半径必须有限、> 0、且在上界内（防二分未收敛 / 顶点表退化）；③ **负向自证**：半径 1 px 时任何形状都盖不住（证明判定有判别力）+ 菱形 / 五角星用 `diagonalHalf` 盖不住；④ 非法输入（画布 0 / 负、顶点 < 3）返回 `0f` 不抛异常 | `diagonalHalf` 是**圆**的终态半径（圆心到四角 = 对角线/2），多边形边界更靠内 ⇒ 菱形需 `(宽+高)/2`、五角星（内径 0.45）需 ≈ 2 倍对角线/2 ⇒ 用旧值四角/凹口露旧图。⚠️ 覆盖判定用**角度累加**（与生产代码的射线法是两套算法），测试网格 61² 比生产的 49² 更密 —— 否则就是「用生产代码验证生产代码」。⚠️ **刻意不拿圆做前置条件**：64 边形近似下用 `diagonalHalf` 四角差 0.3 px（肉眼不可见且 §14.3 指定如此），拿它当「刚好够」会误判 |
 
 ### 14.5 提交顺序（12 个提交，每个都可独立验证）
 
@@ -2724,6 +2726,15 @@ JAVA_HOME="C:/Program Files/Android/Android Studio/jbr" \
     ⚠️ **同类坑 v2.35.0 已发生过一次**（`SettingActionButton` 默认 `fillMaxWidth()`，
     表现为「网络源音质只有『自动』一个选项」）⇒ 已固化为门禁
     `ChipContentWidthScanTest`（源码扫描 + 8 例自证），详见 §10.181
+  - ⛔ **交付后修复（2026-09-24 第二轮，用户上机提问）**：用户问「只接图库源共 6937，
+    合并后只有 2657，去重的逻辑是什么」。取证：手机 MediaStore 共 **6938 张**，
+    扩展名 `jpg 6924 / png 10 / jpeg 4`（**无 HEIC**）、`READ_MEDIA_IMAGES` 全量授权
+    ⇒ 白名单与去重都没滤掉东西。真因是**两行信息行的口径不一致**：
+    「照片数量（分来源）」= 去重后 / 人脸过滤**前**，而「合并后（去重）」= 去重后 +
+    **人脸过滤后** ⇒ 用户开着「仅显示含人像」，标签写着「去重」的数字其实是过滤后的。
+    修法：`mergedCount` 改为**去重后、过滤前**（与分来源同口径，三者相加 == 它），
+    新增 `displayCount`（过滤后 = 实际展示），设置页在人脸过滤**真的生效**时多显示一行
+    「仅含人像（实际展示）」。详见 §10.183
 - [x] **T8.4** **阶段完成** —— 「画面适配」在**四端（电视 / 手机横 / 手机竖）都渲染**（§7.2 注）✅ 2026-09-23
   - **实际**：`PhotoScaleModeSelector` 无条件渲染（**没有任何 `isTV` / `UiMode` 分支**）——
     「满屏 / 完整」是「显示图片时满屏还是留黑边」的语义，**与横竖屏无关**；
@@ -2991,6 +3002,39 @@ JAVA_HOME="C:/Program Files/Android/Android Studio/jbr" \
     8% 突缩）；外层 `clipRect` 统一裁剪（Compose 绘制默认不裁剪）
   - **验收**：`PhotoHoldMotionTest` 6 例 + G15 补「Ken Burns 关 ⇒ photoHoldT 恒 0」1 例；
     门禁 **1150 例 / 112 类 / 0 失败**、lint 0 Error / 279 Warning
+
+- [x] **T12.5（交付后修复）** 新图几何按旧图比例算 + 转场终帧丢失新图 ✅ 2026-09-24
+  - ⛔ **用户上机报两条**：「竖版图片总是无法占满屏幕」「很多时候进入动画效果还未完成，
+    就开始停留了」。**两条同源**（§10.182）：
+    ① `PhotoRenderer.draw` 调 `geom.update(ctx, mode, a.width, a.height)` —— **漏传 B 的尺寸**，
+    落到默认值 `bW = aW` ⇒ 新图的 `srcB`/`dstB` 按**上一张**的宽高比算（CROP 下还会越出
+    B 的位图边界留黑边）；而 **HOLD 期 `photoB` 仍是刚入场那张、`p` 恒为 1** ⇒ 整个停留期
+    都在按错误几何绘制，下一次切换才「跳」回正确形状（用户读作「入场动画没走完」）
+  - ⛔ **同批查出两处终帧缺陷**：`GlitchTransition` 的
+    `if (abs(offset) < 0.5f && p > 0.95f) continue` 跳掉的是**新图**（底色是旧图）
+    ⇒ 最后 5% + **整个停留期显示上一张**；`PolygonIrisTransition` 沿用 `diagonalHalf`
+    ⇒ 菱形 / 五角星 / 六边形在 `p = 1` 时**四角露旧图**。
+    连带查出 `IrisStarTransition.unitVertices` 把「内外径交替」写成**按分量**交替
+    ⇒ 画出来是**扁五边形**而不是五角星（`INNER_RATIO` 形同虚设）
+  - **修法**：① `PhotoRenderer` 把 `b` 提到几何计算之前并传满 6 个实参；
+    ② `GlitchTransition` 在 `1 - p <= SETTLED` 时**整幅画 b**（顺带 12 次 draw call → 1 次）；
+    ③ `PolygonIrisTransition` 新增 `prepare` 里算一次的 `coverRadius`
+    （`polygonCoverRadius` 采样求最小覆盖半径，×1.05 余量）+ `ShapeRandomTransition.prepare`
+    **转发**给池里四个形状（否则 `coverRadius` 恒 0 ⇒ 转场什么都不显示）；
+    ④ `IrisStarTransition` 的交替判据改 `val k = i / 2; val outer = k % 2 == 0`
+  - **门禁**：新增 **G20 `PhotoRenderContractScanTest`**（14 例，源码扫描两组判据）
+    + **G21 `PolygonIrisCoverTest`**（4 例，纯 JVM；覆盖判定用独立算法）
+    - ⚠️ **G20 首轮门禁自己红了一次**：第一版把「实参里出现 `photoScaleMode`」当**唯一**锚点，
+      自证用例 `同一行且嵌套调用的写法也必须被判违规`（实参写 `modeOf(settings)`）当场判出
+      **漏扫** —— 把模式先存进局部变量（`val mode = ctx.photoScaleMode`）就再也扫不到，
+      而漏扫的门禁**照样报「0 违规」**，那是**空转**不是干净。改为
+      「接收者名 `geom`」∪「实参含 `photoScaleMode`」**并集**锚点，并补一条锚点自证用例。
+      **教训：源码扫描门禁的「锚点」和「判据」一样必须自证**（空转断言只挡得住「全部扫不到」，
+      挡不住「部分扫不到」）
+  - **验收**：`testDebugUnitTest` **1177 例 / 115 类 / 0 失败**（1159 + G20 14 + G21 4）；
+    `lintDebug` 0 Error / 279 Warning（持平 —— 本批只改渲染与文案，未引入新告警）
+  - ⚠️ **教训**：有默认值的参数 = 一个静默的错误入口；「省一次绘制」的优化必须自问
+    「省掉之后画面还等于新图吗」—— `p = 1` 的终帧会被 HOLD 期**重复播放几秒**
 
 **阶段 12 的实现期偏差（7 条，2026-09-23）**
 
