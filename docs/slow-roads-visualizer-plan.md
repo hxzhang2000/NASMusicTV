@@ -3,9 +3,18 @@
 > 目标：在**频谱效果库**里新增第 37 套效果「公路漫游」——效果层不是 Canvas 自绘，
 > 而是一个**全屏 WebView**，加载 `https://slow-roads.pages.dev/`，用遥控器控制自动驾驶与场景切换。
 >
-> 状态：**待开工**（本文件为可开发级方案，未写实现代码）
+> 状态：**待开工**（本文件为可开发级方案，未写实现代码；已按 2026-09-24 代码审阅修订）
 > 基线：v2.37.0 ｜ 门禁 `testDebugUnitTest` **1177 例 / 115 类 / 0 失败**，`lintDebug` **0 Error / 279 Warning**
-> （2026-09-24 实测；计数漂移先确认是不是本轮新增的）
+> （2026-09-24 实测复核：JUnit XML 汇总 115 类 / 1177 例 / 0 失败 / 0 错误 / 0 跳过，与基线一致；计数漂移先确认是不是本轮新增的）
+
+### 文档版本跟踪
+
+| 文档版本 | 日期 | 变更摘要 | 状态 |
+|---|---|---|---|
+| v1.0 | 2026-09-24 | 初稿：可开发级方案，基线门禁实测（1177 例 / 115 类 / 0F、lint 0E/279W） | 已完成编写 |
+| v1.1 | 2026-09-24 | 按代码现状审阅修订：① F1 修 `VisualizerThemeTest` 断言行号错位（§二 #11、§6.2 M4、§十、T1.3——正确集合 7 行，含 `:89` off.size 与 `:90` on.size）；② F2 降级「手机滑动仍切效果」假设并补缓解与验收（§三、§5.2、§9.11、T3.3、T4.4、§12）；③ 补 PHOTO_WALL 粒子门控豁免事实与守护用例（§二 #10、T1.3）；④ minor：§三 NPE→编译不过、§5.2/§8 防抖口径（180L）、§9.4 largeHeap 行号 :72、G24 覆盖 isFocusableInTouchMode | 待开工 |
+
+> ⛔ 本文件每次修订必须在此表**追加一行**；文档版本号只增不改。
 
 ---
 
@@ -62,8 +71,8 @@
 | 7 | 舞台按键：`←`上一效果、`→`下一效果、`↑`**吞掉无动作**，其余放行 | `VisualizerStage.kt:227-237` |
 | 8 | OK 键在 `Screen.NowPlaying` 下 = **播放/暂停** | `util/MediaKeyHandler.kt:43-55`；入口 `ui/MainActivity.kt:546-566` |
 | 9 | 左右步进用的是**过滤后列表**（`selectable` + `quality.supports`） | `ui/viewmodel/VisualizerViewModel.kt:460-478`；工厂 `:95-97` |
-| 10 | 画质门控：`BASIC` 全档可用；`ADV` 要求 `maxParticles > 0`（**LOW 档 = 0 ⇒ 不可见**）；`ULTRA` 要求 `allowFramebuffer`（**仅 HIGH**） | `AppSettings.kt:225-232` |
-| 11 | 测试有 **6 处硬断言 36**，新增枚举必挂 | `app/src/test/.../data/model/VisualizerThemeTest.kt:51,57,58,90,96,103` |
+| 10 | 画质门控：`BASIC` 全档可用；`ADV` 要求 `maxParticles > 0`（**LOW 档 = 0 ⇒ 不可见**）；`ULTRA` 要求 `allowFramebuffer`（**仅 HIGH**）。⚠️ **例外**：`PHOTO_WALL` 已被显式豁免粒子门控（`AppSettings.kt:229-230`，2026-09-23 用户裁决）——新增 `SLOW_ROADS` **不得**搭车豁免（LOW 档老设备跑 3D 的风险必须挡住） | `AppSettings.kt:225-232` |
+| 11 | 测试有 **7 处硬计数断言**（`:51,:57,:58,:90,:96,:103` 断言 `36`，`:89` 断言 `off.size == 35`），新增枚举必挂 | `app/src/test/.../data/model/VisualizerThemeTest.kt:51,57,58,89,90,96,103` |
 | 12 | 项目里**没有现成 WebView**；`MvPlaybackScreen` 的 `AndroidView` 是 ExoPlayer `PlayerView` | `ui/components/MvPlaybackScreen.kt:268-278` |
 | 13 | `INTERNET` 权限已有；`usesCleartextTraffic=true` 已有 | `AndroidManifest.xml:4` / `:70` |
 | 14 | `<application>` **未显式声明** `hardwareAccelerated`（靠默认 true） | `AndroidManifest.xml:62-74` |
@@ -76,7 +85,7 @@
 | 想当然的说法 | 事实 | 正确做法 |
 |---|---|---|
 | 「新增效果 = 写一个 Renderer 子类」 | WebView 是 View，进不了 `DrawScope` | 占位渲染器 + 舞台旁路叠加层（§4.2） |
-| 「既然是占位渲染器，工厂就不用加分支了」 | `RendererSwapper.sync` 会调 `factory(theme)` 并 `onEnter`，返回 null 直接 NPE | 工厂**必须**加分支，返回 `SlowRoadsRenderer()` |
+| 「既然是占位渲染器，工厂就不用加分支了」 | 工厂返回类型**非空**、`when` 必须穷举——少分支**编译不过**；且 `RendererSwapper.sync` 会对每个主题调 `factory(theme)` 并 `onEnter` | 工厂**必须**加分支，返回 `SlowRoadsRenderer()` |
 | 「效果名要同步 `strings.xml` / `values-en`」 | 36 个效果名全是枚举 `displayName` 硬编码中文，UI 直接读它 | 直接写中文，**不要**动 strings（与既有 36 套保持一致） |
 | 「左右键切场景（原方案就这么写的）」 | 左右已被「切效果」占用，改了就切不动效果了 | 场景切换改用 **↑ / ↓** |
 | 「OK 键是空的，拿来开自动驾驶」 | OK 在播放页 = 播放/暂停 | 必须**拦截**，并接受「该效果下 OK 不能暂停」的副作用 |
@@ -84,6 +93,7 @@
 | 「`onPageFinished` 后延时 3s 发 F 就行」 | 页面 finish ≠ 游戏就绪（地形/着色器生成可能十几秒） | 探测 canvas 就绪 + 多次重试（§7.2） |
 | 「给 `Tier.ULTRA` 最保险」 | ULTRA 只在 HIGH 档可见；用户机器默认 MEDIUM ⇒ **根本看不到** | 用 `Tier.ADV`（MEDIUM/HIGH 可见，LOW 挡住最弱设备） |
 | 「WebView 要抢焦点才能收键盘」 | WebView 一拿到焦点，Compose 的左右键就收不到了，效果都切不动 | WebView **设为不可聚焦**，键事件全部由舞台转发 |
+| 「WebView 设为不可聚焦就不会挡手势」 | 不可聚焦只解决**键盘焦点**，不解决**触摸**：WebView 是可滚动页面，手机触摸命中 `AndroidView` 后被 WebView 消费，父级 `detectHorizontalDragGestures`（Main pass）收不到拖拽 | 触摸穿透需单独处理：舞台 Box 在 **Initial pass**（`awaitEachGesture` + `PointerEventPass.Initial`）抢先识别横向拖拽，或宿主层禁用 WebView 触摸（§9.11）；**T3.3 真机验证** |
 
 ---
 
@@ -161,9 +171,12 @@ VisualizerStage (Box, fillMaxSize, 已夺焦)
   OK 键的「播放/暂停」就被本效果接管了（**这是刻意的取舍，需在 README 已知限制里写明**）。
 - **丢弃 repeat**：`event.nativeKeyEvent.repeatCount > 0` 直接返回 `true`（消费但不发），
   否则长按 OK 会连续 toggle 把自动驾驶开开关关。
-- 防连发：`ACTION_DEBOUNCE_MS = 260ms`（与 `VisualizerViewModel.SWITCH_DEBOUNCE_MS` 同量级）。
-- ⛔ 手机端左右滑动切效果的手势（`VisualizerStage.kt:238-252`）在本效果下**保留**：
-  WebView 不可聚焦且游戏不需要拖拽，滑动仍然切效果。
+- 防连发：`ACTION_DEBOUNCE_MS = 260ms`（`VisualizerViewModel.SWITCH_DEBOUNCE_MS` 实为 `180L`；本效果取 260 稍保守——toggle 类动作误触发的代价高于切效果）。
+- ⚠️ 手机端左右滑动切效果的手势（`VisualizerStage.kt:238-252`）**预期保留，但有已知风险**：
+  `isFocusable = false` 只解决键盘焦点，不解决触摸 —— WebView 是可滚动页面，触摸命中
+  `AndroidView` 后被 WebView 消费，父级 `detectHorizontalDragGestures`（Main pass）收不到拖拽。
+  缓解：舞台 Box 在 **Initial pass** 抢先识别横向拖拽，或宿主层禁用 WebView 触摸（§9.11）。
+  **T3.3 挂载后必须真机验证滑动切效果；失效不是可接受态，按上述缓解修。**
 
 ---
 
@@ -190,7 +203,7 @@ VisualizerStage (Box, fillMaxSize, 已夺焦)
 | M1 | `data/model/AppSettings.kt` | `:154`（`PHOTO_WALL` 之后） | 新增 `SLOW_ROADS("公路漫游", Tier.ADV, "39")`；`:100` KDoc「34 套」是**错的**（实际 36），一并改成新增后的 **37 套** |
 | M2 | `visualizer/VisualizerRendererFactory.kt` | `:86`（`PHOTO_WALL` 分支后） | 新增 `VisualizerTheme.SLOW_ROADS -> SlowRoadsRenderer()` + import |
 | M3 | `ui/components/VisualizerStage.kt` | `:253` 之后（Canvas 之后、前景 Column 之前） | 挂载 `SlowRoadsWebViewLayer`；`:227` 前置键位分支 |
-| M4 | `app/src/test/.../VisualizerThemeTest.kt` | `:51,57,58,90,96,103` | 硬断言 36 → 37（`:90` 的 `off.size` 35 → 36） |
+| M4 | `app/src/test/.../VisualizerThemeTest.kt` | `:51,:57,:58,:89,:90,:96,:103` | **共 7 行，一处都不能漏**：`:51,:57,:58,:90,:96,:103` 断言 36 → 37（`:90` 是 `on.size`）；`:89` 是 `off.size` 35 → **36** |
 | M5 | `AndroidManifest.xml` | `:62` | 显式补 `android:hardwareAccelerated="true"`（防止将来被改；WebView/WebGL 强依赖） |
 | M6 | `CHANGELOG.md` / `docs/technical-overview.md` | 新节 / 新 §10.184 | §12 |
 
@@ -475,7 +488,7 @@ fun SlowRoadsWebViewLayer(
 | `AUTO_DRIVE_DELAY_MS` | 5 000 | 页面 finish 后给场景生成留出时间 |
 | `READY_PROBE_INTERVAL_MS` | 2 500 | |
 | `AUTO_DRIVE_MAX_WAIT_MS` | 15 000 | 再久用户也以为卡死了 |
-| `ACTION_DEBOUNCE_MS` | 260 | 与效果切换防抖同量级 |
+| `ACTION_DEBOUNCE_MS` | 260 | 效果切换防抖 `SWITCH_DEBOUNCE_MS` 实为 `180L`；本效果取 260 稍保守（toggle 类动作误触发代价更高） |
 | `WEBGL_PROBE_TIMEOUT_MS` | 8 000 | |
 | WebSettings | `javaScriptEnabled=true`、`domStorageEnabled=true`、`databaseEnabled=true`、`loadWithOverviewMode=true`、`useWideViewPort=true`、`mediaPlaybackRequiresUserGesture=false`、`cacheMode=LOAD_DEFAULT` | 游戏必需 |
 | WebView 焦点 | `isFocusable=false`、`isFocusableInTouchMode=false` | **必须**，否则抢走遥控按键 |
@@ -490,13 +503,14 @@ fun SlowRoadsWebViewLayer(
 | 9.1 | ⚠️ **Android 5.1.1 电视的 WebView 可能没有可用的 WebGL**（最高风险，可能直接判死该设备） | 进入即跑 `probeWebGL()`；失败 ⇒ `NO_WEBGL` 卡片：「当前设备的浏览器内核不支持 3D，无法运行本效果」+「切换效果」按钮。**先手机验、再电视验**（§12） |
 | 9.2 | WebView 版本过旧导致 JS 语法报错（`KeyboardEvent` 构造器等） | 发键结果用 `ValueCallback<String>` 回读，异常即降级提示；不用 `@JavascriptInterface`（省掉 ProGuard keep 与注入面） |
 | 9.3 | 性能：3D 游戏吃满 CPU/GPU，音乐播放卡 | 降低预期：本效果不保证帧率；设置里画质档降到 LOW 时该效果**自动不可见**（`Tier.ADV` 门控） |
-| 9.4 | 内存：WebView + WebGL + ExoPlayer 同驻 | 离开即 `destroy()`；`largeHeap` 已开（`AndroidManifest.xml:73`）；不在本效果里保留其它渲染器的重资源 |
+| 9.4 | 内存：WebView + WebGL + ExoPlayer 同驻 | 离开即 `destroy()`；`largeHeap` 已开（`AndroidManifest.xml:72`）；不在本效果里保留其它渲染器的重资源 |
 | 9.5 | 🔊 **音效冲突**：游戏有引擎声，会盖住音乐 | 默认注入静音脚本（`MUTE_BY_DEFAULT=true`）；⚠️ 实现前须用 `android-dep-api-verify` 核实 minSdk 22 上有没有更可靠的系统级静音 API，有则优先用 |
 | 9.6 | 网络不通 / 被墙 | `onReceivedError` + 超时 ⇒ `LOAD_FAILED` 卡片带「重试」 |
 | 9.7 | 页面改版、按键绑定变更 | 键位集中在 `SlowRoadsKeyMapper`（一处改）；README 已知限制写明「依赖第三方页面，可能失效」 |
 | 9.8 | OK 键被本效果接管后不能暂停 | 已知取舍；写入 README 已知限制 + 效果 Toast 提示 |
 | 9.9 | Android 5.1 hwui 在离屏合成上出现过段错误（既有教训） | 若真机在本效果下闪退，第一步尝试：Canvas 层在本效果下**不启用** `CompositingStrategy.Offscreen` |
 | 9.10 | ProGuard/R8 | 本方案不用 `addJavascriptInterface` ⇒ 无需新增 keep；若后续加了，**必须**补 keep 并复跑 release |
+| 9.11 | ⚠️ **手机端 WebView 消费触摸 → 滑动切效果失效**（`isFocusable=false` 只管焦点不管触摸） | 舞台 Box 在 Initial pass（`awaitEachGesture`）抢先识别横向拖拽，或宿主层禁用 WebView 触摸；**T3.3 真机验证**（§5.2） |
 
 ---
 
@@ -506,7 +520,7 @@ fun SlowRoadsWebViewLayer(
 
 | 门禁 | 类 | 断言要点 |
 |---|---|---|
-| 既有 | `VisualizerThemeTest` | 6 处硬断言 36 → **37**（`:51,57,58,96,103`）与 `off.size` 35 → **36**（`:90`）；`ordinalLabel` 唯一性自动覆盖新项 |
+| 既有 | `VisualizerThemeTest` | **7 行**：`:51,:57,:58,:90,:96,:103` 硬断言 36 → **37**（`:90` 是 `on.size`）+ `:89` `off.size` 35 → **36**；`ordinalLabel` 唯一性自动覆盖新项；T1.3 另增 1 例 `LOW.supports(SLOW_ROADS)` 守护用例 |
 | **G22** | `SlowRoadsKeyMapperTest`（约 12 例） | ① OK↔F、↑↔E、↓↔Q、MENU↔C 双向一致；② `keyCodeOf` 与 `keySpecOf.keyCode` **必须逐项相等**（两条通道不能打架）；③ `←`/`→`/`Back` 映射到 `null`（**负向自证**：若有人图省事把左右也映射进去，测试必须红）；④ KeySpec 的 `code` 必须以 `Key` 开头 |
 | **G23** | `SlowRoadsScriptTest`（约 14 例） | ① 发键脚本**同时**含 `window.dispatchEvent` 与 `document.dispatchEvent`（负向自证：只发 window 的旧写法必须被判出）；② 含 `Object.defineProperty(e, 'keyCode'`（负向自证：只在构造器里传 keyCode 的写法必须被判出）；③ 含 `code:`；④ `probeWebGL` 覆盖 webgl2/webgl/experimental-webgl 三种；⑤ 键名转义：注入 `'` 与 `\` 不破坏 JS 字符串（**负向自证**：未转义的必须被判出）；⑥ 空转断言（脚本常量非空、能被扫到） |
 | **G24** | `SlowRoadsWebViewGuardTest`（源码扫描，约 10 例 + 自证） | ① `visualizer/slowroads/` 与 `ui/components/SlowRoadsWebViewLayer.kt` 内出现 `WebView` 的每处，同文件 32 行内必须有 `isFocusable = false`（负向自证：构造一个只 `new WebView` 不设不可聚焦的样本必须命中）；② 占位渲染器 `draw` 体必须为空（`Unit`）；③ 工厂 `when` 覆盖 `SLOW_ROADS`；④ **空转断言**：扫描到的文件数 ≥ 3，否则测试自红 |
@@ -519,7 +533,7 @@ fun SlowRoadsWebViewLayer(
 
 | # | 提交内容 | 验收点 |
 |---|---|---|
-| C1 | 枚举 + 工厂分支 + 占位渲染器 + 测试断言 36→37 | 门禁绿（1177 + 0 新增）/ 编译过 / 效果列表出现「公路漫游」（选中为黑屏，符合预期） |
+| C1 | 枚举 + 工厂分支 + 占位渲染器 + 测试断言 36→37 | 门禁绿（1177 + 1：T1.3 的 LOW 门控守护用例）/ 编译过 / 效果列表出现「公路漫游」（选中为黑屏，符合预期） |
 | C2 | `SlowRoadsConfig` + `SlowRoadsKeyMapper` + `SlowRoadsScript` + G22/G23 | 门禁绿（+26 例）；**纯 JVM，不碰设备** |
 | C3 | `SlowRoadsWebViewHost` + `SlowRoadsWebViewLayer` + 舞台挂载 | `assembleDebug` + `lintDebug` 0E；能进到该效果并看到网页（无键位也行） |
 | C4 | 舞台键位拦截（OK/↑/↓）+ 自动巡航调度 + G24 | 门禁绿；真机按 OK 能开/关自动驾驶 |
@@ -539,7 +553,7 @@ fun SlowRoadsWebViewLayer(
 2. 等约 5–10 秒 → 画面**自己开始往前开**（自动巡航生效）
 3. 按 OK → 车停下；再按 OK → 又开起来
 4. 按 ↑ / ↓ → 场景（地貌/时段）变化
-5. 按 ← / → → 仍然切的是**频谱效果**（不能被本效果吃掉）
+5. 按 ← / → 、手机左右**滑动** → 仍然切的是**频谱效果**（不能被本效果吃掉；滑动失效按 §9.11 缓解后复测）
 6. 按返回 → 退出可视化，音乐**不中断**，无残留游戏声
 7. 反复进出 5 次 → 无崩溃、无明显内存增长
 
@@ -580,10 +594,11 @@ fun SlowRoadsWebViewLayer(
   - `draw` 体必须是 `= Unit`；KDoc 写明「为什么必须存在」（`RendererSwapper.kt:84` 契约）
   - **验收**：切到该效果不崩；G24 的「draw 体为空」断言绿
 - [ ] **T1.3** 既有测试硬断言 36 → 37
-  - `VisualizerThemeTest.kt:51,57,58,96,103` → 37；`:90` `off.size` → 36
-  - **验收**：`testDebugUnitTest` 绿（1177 例，本阶段不新增）
+  - `VisualizerThemeTest.kt:51,:57,:58,:90,:96,:103` → 37（`:90` 是 `on.size`）；`:89` `off.size` → 36 —— **共 7 行，一处都不能漏**
+  - 顺带增补：`assertFalse(VisualQuality.LOW.supports(VisualizerTheme.SLOW_ROADS))`（守护 ADV 门控；注意 `AppSettings.kt:229-230` 的 PHOTO_WALL 豁免**不得**波及本效果）
+  - **验收**：`testDebugUnitTest` 绿（1177 + 1 例，本阶段仅此新增）
 
-- [ ] **阶段完成**：门禁 1177/0、lint 0E/279W；切到新效果黑屏但不影响其它 36 套
+- [ ] **阶段完成**：门禁 1178/0（1177 + T1.3 新增 1 例）、lint 0E/279W；切到新效果黑屏但不影响其它 36 套
 
 ### 阶段 2 · 纯逻辑（可 JVM 单测）　**4 项**
 
@@ -598,7 +613,7 @@ fun SlowRoadsWebViewLayer(
   - 键名转义函数不能漏（负向自证：注入 `'` / `\` 的旧写法必须被判出）
   - **验收**：G23 全绿（约 14 例）
 
-- [ ] **阶段完成**：`testDebugUnitTest` 1203 例 / 0 失败（1177 + 26）；纯 JVM，不上机
+- [ ] **阶段完成**：`testDebugUnitTest` 1204 例 / 0 失败（1178 + 26）；纯 JVM，不上机
 
 ### 阶段 3 · WebView 宿主与舞台挂载　**5 项**
 
@@ -611,7 +626,7 @@ fun SlowRoadsWebViewLayer(
   - ⛔ 用 `evaluateJavascript` 回读，**不要**用 `addJavascriptInterface`（规避 ProGuard 与注入面）
   - **验收**：进出 5 次无崩溃；失败态有卡片不是黑屏
 - [ ] **T3.3** `VisualizerStage` 挂载（Canvas 之后、前景 Column 之前）
-  - **验收**：`assembleDebug` + `lintDebug` 0E；歌词/指示器仍在最上层且可见
+  - **验收**：`assembleDebug` + `lintDebug` 0E；歌词/指示器仍在最上层且可见；**手机真机：左右滑动仍能切效果**（WebView 触摸消费风险，失效按 §5.2 / §9.11 缓解）
 - [ ] **T3.4** G24 源码扫描门禁
   - 每条 `WebView` 构造附近必须有不可聚焦设置；空转断言（扫描文件数 ≥ 3）
   - **验收**：G24 绿；**故意删掉一处 `isFocusable = false` 时必须变红**
@@ -631,7 +646,7 @@ fun SlowRoadsWebViewLayer(
   - 用户手动按键即 `cancelAutoDrive()`
   - **验收**：进入后 5–15s 内自己开起来；手动按过一次后自动流程不再插手
 - [ ] **T4.4** 左右键/BACK 行为回归
-  - **验收**：本效果下 ←/→ 仍然切效果、BACK 仍然退出可视化（**负向自证**：若被本效果吃掉即失败）
+  - **验收**：本效果下 ←/→ 仍然切效果、BACK 仍然退出可视化（**负向自证**：若被本效果吃掉即失败）；**含手机滑动路径**（§9.11）
 
 - [ ] **阶段完成**：手机 7 条验收全过（§12 手机 1–7）
 
