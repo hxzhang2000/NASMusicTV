@@ -2116,6 +2116,7 @@ KDoc 里出现「斜杠紧邻星号」（最常见是路径通配符）会开一
 | **G15** | `PhotoWallControllerTest`（Robolectric） | ① 首图出现在 `photoA`（不是 `photoB`）；② HOLD 到点后换槽（`photoB != photoA`）；③ 固定档转场的窗口跑 0→1；④ 池空时不启动切换；⑤ 坏图被跳过而非卡死；⑥ 慢来源（失败 100 次后成功）**要等到**不被误跳；⑦ 拔盘后重扫 ⇒ 不画已失效的照片；⑧ `applyTo` 写出 `photoScaleMode` 且音频反应关时 `photoAudioBoost == 0`；⑨ 离开效果不清字段 | 三条负向自证：删掉「等太久就跳过」⇒ ⑤ 失败；把 `SWAP_WAIT_MAX_FRAMES` 调到 50 ⇒ ⑥ 失败（误伤慢来源）；把首图写成「`currentRef` 留空、`incomingRef = next`」⇒ ① 失败（**整面墙恒黑**，编译/lint/G3/G14 全绿，只有真跑帧循环才暴露 —— 这是 G15 存在的理由）。⚠️ 靠 `PhotoBuffer` 自带的 `decoderExecutor`/`decoder` 注入点做「同步解码 + 假像素」，位图宽度即照片身份 ⇒ 换槽可辨 |
  **G16** | `YuNetPostprocessTest`（**纯 JVM**，合成张量） | ① 合成 8/16/32 三层输出 → 解码出的框位置/尺寸精确吻合（含 `exp` 与 stride）；② `score = sqrt(clamp(cls)·clamp(obj))`（负值被钳 0）；③ 贪心 NMS：IoU > 阈值的重复框只留最高分；④ 空输出不崩。**负向自证**：「漏 `exp`」的错法下相邻格子的框互不重叠（IoU = 0 ⇒ 同一张脸被数成几十张），正确实现必然重叠 | ⛔ ONNX 推理本身**本机验证不了** ⇒ 所有能钉的数值逻辑必须在后处理这一层与推理切开（接缝是 `FaceThumb`，不经过 `Bitmap`）。后处理逐行照抄 OpenCV `FaceDetectorYN`（`eta=1.0` ⇒ 标准贪心 NMS） |
 | **G17** | `FaceScanManagerTest`（**纯 JVM**，接缝假件） | ① 进度按 chunk 推进且 `total` = 待扫清单；② 中断后 `resume` 不重扫已入库的；③ 解码失败跳过且**不写负结果**（失败 ≠ 没脸）；④ `UNAVAILABLE`（模型缺失/低画质档）不启动；⑤ 正在跑时 `start` 幂等；⑥ 完成后 `phase = DONE` 且入库数吻合。**负向自证**：「失败写 `hasFace=false`」的错法会让续跑永久排除读不出来的照片 | `FaceScanManager` 只认 `FaceResultStore` / `FaceDetector` / 缩略图 lambda 三个接缝 ⇒ 用内存假件在纯 JVM 跑，不拉 Robolectric。⛔ `backgroundScope` 里 launch 的事件对 `advanceUntilIdle` 不可见（它只等 foreground 事件）⇒ 扫描协程必须挂在 `TestScope` 本体 |
+ **G18** | `PhotoHoldMotionTest`（**纯 JVM**） | ① `motion=0, boost=0` 恒等变换；② Ken Burns 精确放大 8% 且围绕**自身中心**（不是画布中心）；③ 平移只在 CROP（精确 3% 画布）、FIT 禁平移；④ 音频 boost 线性叠加 2%（不是乘法）；⑤ motion 单调递增（推近不回退）；⑥ **负向自证**：错法「围绕画布中心缩放」对不在画布中心的矩形必产生中心漂移，与正确实现分歧 | 停留期运动是「每帧都在动」的效果，写错的表现是缓慢漂移 / 抖动，编译 / lint / 其余门禁全绿 —— 只有把几何公式单独钉住才能拦住 |
 
 ### 14.5 提交顺序（12 个提交，每个都可独立验证）
 
@@ -2966,6 +2967,20 @@ JAVA_HOME="C:/Program Files/Android/Android Studio/jbr" \
 - [x] **T12.3** **阶段完成** —— 门禁 G4 / G5 复跑绿（池扩容后去重仍正确）✅ 2026-09-23
   - **门禁**：`testDebugUnitTest` **1143 例 / 111 类 / 0 失败**（与阶段 11 持平 ——
     本阶段只补实现，不新增测试类）；`lintDebug` **0 Error / 279 Warning**（持平）
+
+- [x] **T12.4（交付核验后补）** 停留期运动 + 音频反应接线（§5.6）✅ 2026-09-24
+  - ⚠️ **这是阶段 12 的漏做项**：§12 的 P1 分期行写明「停留期运动 + 音频反应」、
+    §10 架构清单「[x] Ken Burns 缓慢推近」也打了勾，但 §15.3 阶段 12 的任务清单
+    **漏列了这一项**，实现时也没有落（渲染器不读 `photoHoldT` / `photoAudioBoost`，
+    而控制器阶段 10 就把值写好了 —— `computeAudioBoost` 的注释明说「消费在阶段 12」）。
+    交付核验时回查 §12 分期表才发现。**教训：任务清单的颗粒度漏项会静默通过 ——
+    交付前必须对照分期表逐行核对交付物**
+  - **实际**：几何收口到 `applyHoldMotion()`（纯函数，G18 钉住）：Ken Burns
+    缩放 1.00→1.08 + CROP 平移 3%、音频呼吸/脉冲线性叠加 2%；渲染器检测
+    「progress 回落」把上一帧运动量**冻结给 A**（否则换槽瞬间 A 从 1.08 跳回 1.0，
+    8% 突缩）；外层 `clipRect` 统一裁剪（Compose 绘制默认不裁剪）
+  - **验收**：`PhotoHoldMotionTest` 6 例 + G15 补「Ken Burns 关 ⇒ photoHoldT 恒 0」1 例；
+    门禁 **1150 例 / 112 类 / 0 失败**、lint 0 Error / 279 Warning
 
 **阶段 12 的实现期偏差（7 条，2026-09-23）**
 

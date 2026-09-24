@@ -241,7 +241,9 @@ class PhotoWallController(
         ctx.photoB = incomingRef?.let { buffer?.peek(it) }
         ctx.photoProgress = clock.eased
         ctx.photoTransition = clock.transitionId
-        ctx.photoHoldT = clock.holdT
+        // photoHoldT 语义 = 「停留期运动进度」（§5.6）：Ken Burns 关闭时恒 0，
+        // 渲染器不需要知道开关状态（同 photoAudioBoost 的「关时恒 0」约定）
+        ctx.photoHoldT = if (settings.photoWallKenBurns) clock.holdT else 0f
         ctx.photoScaleMode = settings.photoWallScaleMode
         ctx.photoAudioBoost = audioBoost
     }

@@ -2,10 +2,13 @@ package com.nasmusic.tv.visualizer.photo
 
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.clipRect
+import com.nasmusic.tv.backend.photo.PhotoScaleMode
 import com.nasmusic.tv.data.model.VisualizerTheme
 import com.nasmusic.tv.visualizer.AudioFrame
 import com.nasmusic.tv.visualizer.RenderContext
 import com.nasmusic.tv.visualizer.VisualizerRenderer
+import com.nasmusic.tv.visualizer.photo.transitions.applyHoldMotion
 
 /**
  * 照片墙渲染器（§14.2.4）
@@ -59,6 +62,20 @@ class PhotoRenderer : VisualizerRenderer {
     private var lastCanvasW = 0f
     private var lastCanvasH = 0f
 
+    // ── 停留期运动（§5.6，Ken Burns + 音频呼吸）──
+    //
+    // ⛔ **运动进度绑定「图」而不是「时钟周期」**：photoHoldT 在新周期被时钟清零，
+    // 但 A（旧图）在转场中仍以**上一周期推完的位置**显示 —— 不冻结的话，
+    // 换槽瞬间 A 会从 1.08 跳回 1.0（8% 的画面突缩，CROSSFADE 垫底时尤其明显）。
+    // ⇒ 检测「progress 回落」（新周期开始）时把上一帧运动量冻结给 A。
+    private var frozenAMotion = 0f
+
+    /** 上一帧 B 的运动进度（换周期时变成 A 的冻结值） */
+    private var lastMotion = 0f
+
+    /** 上一帧的 progress（检测回落 = 新周期开始；⛔ 不能比 id —— 固定转场模式下 id 不变） */
+    private var lastProgress = 0f
+
     override fun onEnter(ctx: RenderContext) {
         // 此刻还不知道照片尺寸（要等第一帧 `photoA`），所以几何留到 `draw` 里算。
         // 只把「上一次的残留」清掉，避免复用同一个实例时带着旧尺寸。
@@ -90,6 +107,20 @@ class PhotoRenderer : VisualizerRenderer {
         val t = bound ?: return
         val b: ImageBitmap = ctx.photoB ?: a   // 单图退化（约束 3）
 
+        // ── 停留期运动（§5.6）：作用在几何上，转场自身无感知 ──
+        // 检测新周期：progress 回落（HOLD 的 1 → 新 ENTER 的 0）
+        if (ctx.photoProgress < lastProgress) frozenAMotion = lastMotion
+        lastProgress = ctx.photoProgress
+        val motion = ctx.photoHoldT
+        lastMotion = motion
+        val boost = ctx.photoAudioBoost
+        // ⛔ 平移只在 CROP 下（FIT 平移会露出黑边，见 applyHoldMotion 的 KDoc）
+        val pan = ctx.photoScaleMode == PhotoScaleMode.CROP
+        if (motion > 0f || boost > 0f || frozenAMotion > 0f) {
+            if (b !== a) applyHoldMotion(geom.dstA, frozenAMotion, boost, geom.canvasW, geom.canvasH, pan)
+            applyHoldMotion(geom.dstB, motion, boost, geom.canvasW, geom.canvasH, pan)
+        }
+
         // ⛔ 必须用 `run` 把 `t` 放成**隐式**接收者，不能写成 `t.render(...)`：
         //   `PhotoTransition.render` 的声明是 `fun DrawScope.render(...)` —— 一个
         //   **成员扩展函数**（dispatch receiver = PhotoTransition，extension receiver = DrawScope）。
@@ -98,7 +129,13 @@ class PhotoRenderer : VisualizerRenderer {
         //   放进 `run { }` 后 `t` 变成隐式 dispatch receiver，外层的 `DrawScope` 才被当作扩展接收者。
         //   项目既有同款写法：`VisualizerStage.kt:265` 的 `with(cur) { draw(f, renderCtx) }`。
         //   ⚠️ `run` 是 inline ⇒ 零分配，不违反「每帧零分配」红线。
-        t.run { render(a, b, ctx.photoProgress, geom) }
+        //
+        // ⛔ 外层 `clipRect` 是 Ken Burns 的前置条件：推近 8% 后 dst 超出画布，
+        // 而 Compose 绘制**默认不裁剪**（`ZoomTransition` 自己加 clipRect 正是这个原因）；
+        // 统一在这里兜底，所有转场不必各自关心。
+        clipRect(0f, 0f, geom.canvasW, geom.canvasH) {
+            t.run { render(a, b, ctx.photoProgress, geom) }
+        }
     }
 
     override fun onExit() {
@@ -110,5 +147,8 @@ class PhotoRenderer : VisualizerRenderer {
         lastQuality = null
         lastCanvasW = 0f
         lastCanvasH = 0f
+        frozenAMotion = 0f
+        lastMotion = 0f
+        lastProgress = 0f
     }
 }

@@ -363,12 +363,14 @@ class PhotoWallControllerTest {
         transitionMs: Int = 700,
         randomTransition: Boolean = true,
         scaleMode: PhotoScaleMode = PhotoScaleMode.CROP,
+        kenBurns: Boolean = true,
     ): AppSettings = AppSettings(
         photoWallExternalEnabled = external,
         photoWallHoldMs = holdMs,
         photoWallTransitionMs = transitionMs,
         photoWallRandomTransition = randomTransition,
         photoWallScaleMode = scaleMode,
+        photoWallKenBurns = kenBurns,
     )
 
     private fun bytes(): InputStream = ByteArrayInputStream(byteArrayOf(1, 2, 3))
@@ -419,6 +421,25 @@ class PhotoWallControllerTest {
             dateAdded = 0L,
             source = PhotoSourceKind.EXTERNAL,
         )
+    }
+
+    @Test
+    fun `ken burns off keeps photoHoldT at zero so the renderer needs no switch knowledge`() = runTest {
+        // photoHoldT 的语义是「停留期运动进度」（§5.6）：开关关闭时控制器**恒写 0**，
+        // 与 photoAudioBoost 的「关时恒 0」同一约定 —— 渲染器无条件应用即可。
+        val c = controller(this, listOf("a", "b"))
+        c.onSettingsChanged(settings(kenBurns = false), VisualQuality.HIGH, SDK)
+        c.onThemeEntered()
+        advanceUntilIdle()
+        pump(4)
+        c.applyTo(ctx)
+        assertEquals(0f, ctx.photoHoldT, EPS)
+
+        // 跑过 HOLD 中点（运动本应推进到 ~0.5）后仍为 0
+        pump(120)
+        c.applyTo(ctx)
+        assertTrue("120 帧 ≈ 1.9s，已进入 HOLD", ctx.photoHoldT >= 0f)
+        assertEquals("Ken Burns 关闭 ⇒ photoHoldT 必须恒为 0", 0f, ctx.photoHoldT, EPS)
     }
 
     private companion object {
