@@ -75,6 +75,12 @@ defex.txt
 screen.png
 screenshot.png
 
+# 根目录临时杂项（2026-09-24 追加：一次性预览图 / 测试计数 / agent 产物 json）
+build_test_counts.txt
+orientation_icon_preview.png
+.orientation_icon_preview.png.artifact.json
+image48294fcc-0da3-4613-8282-68ab5cc6e499.png
+
 # Dev tools / agent internal state
 .workbuddy/
 .workbuddy-ai/
