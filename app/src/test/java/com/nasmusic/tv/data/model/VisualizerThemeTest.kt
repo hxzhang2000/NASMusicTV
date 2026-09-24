@@ -123,26 +123,32 @@ class VisualizerThemeTest {
     }
 
     /**
-     * ⚠️ **已知风险的固化**（§7.5 实现要点 4 / §15.3 阶段 7 遗留项）
+     * 照片墙的画质档可用性（⚠️ 2026-09-23 用户裁决**放宽**后反转）。
      *
-     * `PHOTO_WALL` 归 `Tier.ADV`，而 `Tier.ADV` 的可用性判据是 `maxParticles > 0`，
-     * `VisualQuality.LOW` 的 `maxParticles == 0` ⇒ **低画质档下照片墙不可见**。
+     * 历史背景：`PHOTO_WALL` 曾被 `maxParticles > 0` 门控挡在 LOW 档之外
+     * （本用例当时叫「photo wall is an advanced effect so the low tier cannot offer it」，
+     * 用意就是「将来若放宽，本用例变红逼改动者回来显式更新」—— 它如愿变红了）。
      *
-     * 这不是 bug 而是「ADV 必须门控」的直接后果，但它有一个副作用：老电视若被自动判为
-     * `LOW`（`VisualQuality` 自动降档逻辑），用户会**完全看不到照片墙**。
-     *
-     * ⛔ 这条断言的用意是**把这个行为钉住**：将来若给 `supports()` 加 `PHOTO_WALL` 专属分支
-     * （允许 `LOW`），本用例会立刻变红，逼改动者回来显式更新这里与文档。
+     * 裁决结果：照片墙**不走粒子预算门控**（没有粒子，内存由 `PhotoBuffer` 的
+     * LOW 档降级兜住：RGB_565 + 长边 1280），但**其余 ADV 效果仍然要求粒子预算** ——
+     * 后半段断言防止放宽时顺手把整个 ADV 门控拆掉。
      */
     @Test
-    fun `photo wall is an advanced effect so the low tier cannot offer it`() {
+    fun `photo wall is offered on every tier while other advanced effects still require particles`() {
         assertEquals(VisualizerTheme.Tier.ADV, VisualizerTheme.PHOTO_WALL.tier)
-        assertFalse(
-            "LOW 档 maxParticles == 0 ⇒ 不支持 Tier.ADV（照片墙在 LOW 档不可见，见文档 §7.5）",
+        assertTrue(
+            "LOW 档也应提供照片墙（2026-09-23 用户裁决；内存风险由解码降级兜住）",
             VisualQuality.LOW.supports(VisualizerTheme.PHOTO_WALL)
         )
         assertTrue(VisualQuality.MEDIUM.supports(VisualizerTheme.PHOTO_WALL))
         assertTrue(VisualQuality.HIGH.supports(VisualizerTheme.PHOTO_WALL))
+
+        // ⛔ 放宽只限照片墙：粒子类 ADV 在 LOW 档仍然必须被挡
+        assertFalse(
+            "放宽不得波及其他 ADV 效果（LOW 的 maxParticles 仍为 0）",
+            VisualQuality.LOW.supports(VisualizerTheme.PARTICLE_STORM)
+        )
+        assertFalse(VisualQuality.LOW.supports(VisualizerTheme.MILKDROP_FEEDBACK))
     }
 
     @Test

@@ -224,7 +224,10 @@ enum class VisualQuality(
 
     fun supports(theme: VisualizerTheme): Boolean = when (theme.tier) {
         VisualizerTheme.Tier.BASIC -> true
-        VisualizerTheme.Tier.ADV -> maxParticles > 0
+        // 照片墙例外（2026-09-23 用户裁决）：不按粒子预算门控 —— 它没有粒子，
+        // 内存由解码降级兜住（LOW = RGB_565 + 长边 1280）。其余 ADV 仍要求粒子预算。
+        VisualizerTheme.Tier.ADV ->
+            theme == VisualizerTheme.PHOTO_WALL || maxParticles > 0
         VisualizerTheme.Tier.ULTRA -> allowFramebuffer
     }
 

@@ -2152,7 +2152,7 @@ conventional commit + 中文正文；`assembleRelease` **不编译 test 源码**
 | 4 | 手动指定 `FADE_BLACK` | 走**串行模型**（有黑场间隙，§5.9） |
 | 5 | 拔 U 盘 | **不崩**；缓存清空；切回其他效果正常 |
 | 6 | 连续轮播 30 分钟 | `adb shell dumpsys meminfo com.nasmusic.tv` 无持续增长；不 OOM |
-| 7 | 帧率观测 | 老电视 ≥ 24fps（`Tier.ADV` 已在 LOW 档隐藏，§7.5） |
+| 7 | 帧率观测 | 老电视 ≥ 24fps（2026-09-23 裁决后 LOW 档**也提供**照片墙，解码已降级至 RGB_565 + 长边 1280，本条是放宽后的关键观测点） |
 | 8 | 把「画面适配」切到「完整」 | 竖幅照片**完整显示 + 左右黑边**（不拉伸、不裁切）；切回「满屏」则铺满并裁掉超出部分 |
 
 **手机（竖屏 + 横屏各一轮）**
@@ -2622,7 +2622,9 @@ JAVA_HOME="C:/Program Files/Android/Android Studio/jbr" \
     （两者只在全真那一行重合）⇒ 证明本门禁**区分得出**这两个写法（不是空转）
   - ⚠️ **顺手固化的已知风险**：新增用例
     `photo wall is an advanced effect so the low tier cannot offer it` —— 把
-    「`PHOTO_WALL` 归 `Tier.ADV` ⇒ `VisualQuality.LOW`（`maxParticles == 0`）**不支持**」
+    ~~「`PHOTO_WALL` 归 `Tier.ADV` ⇒ `VisualQuality.LOW`（`maxParticles == 0`）**不支持**」~~
+    → **2026-09-23 用户裁决放宽**：照片墙不走粒子预算门控（没有粒子，内存由
+    `PhotoBuffer` 的 LOW 档降级兜住：RGB_565 + 长边 1280）；其余 ADV 效果仍要求粒子预算
     钉住。副作用是老电视若被自动判为 `LOW`，**用户完全看不到照片墙**。
     将来若给 `supports()` 加专属分支，该用例会立刻变红，逼改动者回来同步文档
 
@@ -2888,7 +2890,7 @@ JAVA_HOME="C:/Program Files/Android/Android Studio/jbr" \
 | 7 | **`onThemeExited()` 不 `clock.reset()`** | 切走的那一帧 `PhotoRenderer` 可能仍在交叉淡出层上绘制，清掉 `transitionId` 会让它读到 `null` 直接 `return`（画面瞬黑）。⚠️ 当前 `swapper.sync(..., crossfade = false, ...)` 硬编码为 false ⇒ 实际是硬切，这一条是**为将来恢复 crossfade 留的** |
 | 8 | **画布尺寸由 `applyTo` 暂存、`onFrame` 里才重建 `PhotoBuffer`** | `PhotoBuffer` 的构造会建 `ExecutorService` + `Handler`，放在绘制阶段等于 draw 里分配。⇒ `applyTo` 只写两个 `Int`（零分配），下一帧 `onFrame` 的 `reconcileBuffer()` 比对后重建 |
 | 9 | **解码目标加了 `MAX_DECODE_SIDE = 2048` 安全阀** | `inSampleSize` 是 2 的幂 ⇒ 解码结果最坏是目标的 **2 倍边长 = 4 倍像素**。不钳制时 4K 画布的目标 3840² ⇒ 单张 59 MB × 3 = 177 MB，必 OOM。2048 对现有屏幕（≤1080p）**不改变行为**，只是安全网。⚠️ 即便如此，1200 万像素竖幅照片在 CROP 下解码结果仍可能到 2000²（16 MB × 3 = 48 MB），略高于 §八 的 40 MB 口径 —— **§14.6 电视第 6 条（30 分钟 meminfo 无增长 / 不 OOM）是这条风险的观测点** |
-| 10 | **`VisualQuality.LOW` 的 `RGB_565` 降级分支当前不可达** | §八 要求低画质档降级，但 §7.5 把 `PHOTO_WALL` 定为 `Tier.ADV`，而 `LOW.maxParticles == 0` ⇒ `LOW.supports(PHOTO_WALL) == false` ⇒ 低画质档**根本切不进去**。代码按文档实现了（防御性），实为死分支。**这是一个规格层面的冲突，需要用户裁决**：要么放宽 `Tier`，要么承认照片墙不支持低画质档 |
+| 10 | **`VisualQuality.LOW` 的 `RGB_565` 降级分支当前不可达** | §八 要求低画质档降级，但 §7.5 把 `PHOTO_WALL` 定为 `Tier.ADV`，而 `LOW.maxParticles == 0` ⇒ `LOW.supports(PHOTO_WALL) == false` ⇒ 低画质档**根本切不进去**。代码按文档实现了（防御性），实为死分支。✅ **已裁决（2026-09-23）：放宽** —— `supports()` 加 `PHOTO_WALL` 专属分支，LOW 档降级分支就此激活（提交见「放宽 LOW 档照片墙」；真机观测点 §14.6 电视第 6 / 7 条） |
 | 11 | **设置页「照片数 / 合计 / 重新扫描」接上** | `PhotoWallRuntimeState` 的 `galleryCount/externalCount/jellyfinCount/mergedCount` 由 `PhotoWallController.perSourceCount` / `mergedCount` 派生；设置页「重新扫描」按钮接 `rescan()`（会**取消**正在跑的扫描重来，因为用户是显式点的） |
 | 12 | **`BEAT_CUT` 硬切分支显式保留** | §5.8：`BEAT_CUT` 窗口为 0。它 `audioReactive` ⇒ 不在随机池里，但**备份导入**可以把 `photoWallFixedTransition` 设成任意枚举值 ⇒ 这条分支可达，必须有 |
 | 13 | **电视判据多了一处重复** | `VisualizerViewModel.isTVDevice` 是项目里第 8 处 `hasSystemFeature(leanback/television)`。判据与既有的 7 处**完全一致**（`AppPreferences` 的 KDoc 有明文要求），未抽公共方法（改动面太大，且与既有风格一致） |
