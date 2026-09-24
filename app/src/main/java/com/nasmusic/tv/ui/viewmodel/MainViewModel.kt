@@ -89,6 +89,7 @@ import com.nasmusic.tv.net.RemoteControlServer
 import com.nasmusic.tv.net.RemoteSearchResult
 import android.os.Handler
 import android.os.Looper
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -193,6 +194,22 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
     val serverVM = ServerViewModel(app, backendRegistry)
     val searchVM = SearchViewModel(app, backendRegistry, nasMusicApp.searchAggregator)
     val netVM = NetworkMusicViewModel(app)
+
+    /**
+     * 构造完成信号（v2.37.0 启动崩溃修复，2026-09-24）。
+     *
+     * ⛔ 背景：本类把大量回调（netVM.onMergedDataInvalidated 等）接到了**外 VM 自己的
+     * 调度线程**上，其中 `updateMergedData()` 直接 `launch(Dispatchers.Default)`。
+     * 这些协程可能在主线程**还没跑完本类构造**时就开始执行（构造器在 197 行附近的 init
+     * 块就接线，而 `resolvedAlbumCovers` / `resolvedArtistCovers` 的 `by lazy` 委托字段
+     * 到 1700+ 行才初始化）→ Default worker 读到 null 委托 → NPE 启动即崩
+     * （release 日志：`SynchronizedLazyImpl.getValue` on null，DefaultDispatcher-worker）。
+     *
+     * 修复：类体**最后一个** init 块 `complete()` 本信号；`updateMergedData()` 的
+     * Default 协程体第一行 `await()`，保证合并逻辑只在构造完成后执行。
+     * 构造期触发的调用一律挂起排队，不丢不重。
+     */
+    private val constructorReady = CompletableDeferred<Unit>()
 
     init {
         // ---- ServerViewModel 接线 ----
@@ -1640,6 +1657,9 @@ showError(getApplication<Application>().getString(R.string.toggle_favorite_error
       */
     private fun updateMergedData() {
         viewModelScope.launch(Dispatchers.Default) {
+            // ⛔ 构造期竞态防护：构造未完成（by lazy 委托未初始化）前一律挂起等待，
+            // 详见 constructorReady 的 KDoc（v2.37.0 启动 NPE 修复）
+            constructorReady.await()
             val nasAlbums = _albums.value.dataOrNull() ?: emptyList()
             val nasArtists = _artists.value.dataOrNull() ?: emptyList()
             val localSongs = _localSongs.value
@@ -3382,5 +3402,15 @@ showError(getApplication<Application>().getString(R.string.toggle_favorite_error
             _jamendoState.value = UiState.Success(emptyList())
             _jamendoActiveTag.value = ""
         }
+    }
+
+    /**
+     * ⛔ 类体**最后一个** init 块：执行到此处时，本类所有属性（含 `resolvedAlbumCovers`
+     * 等 1700+ 行才声明的 `by lazy` 委托）均已初始化完毕。放行 [constructorReady]，
+     * 构造期排队等待的 `updateMergedData()` 协程从此处开始执行。
+     * ⚠️ 不要把任何属性声明挪到本 init 块之后（会重新打开构造期竞态窗口）。
+     */
+    init {
+        constructorReady.complete(Unit)
     }
 }

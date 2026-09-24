@@ -10677,6 +10677,48 @@ x1 + (x2 - x1) * frac
 
 **版本**：v2.36.6 → **v2.36.7**（versionCode 160 → 161）
 
+### 10.180 v2.37.0 — release 包启动即崩：构造期协程读未初始化的 `by lazy` 委托（2026-09-24）
+
+**现象**：v2.37.0 release 推到手机后**启动即崩**（crash 循环，重开再崩）。R8 混淆堆栈
+只有一行有效帧：`NullPointerException: ... 'ay2.getValue()' on a null object reference`
+at `at0.invokeSuspend(...:133)`，线程 `DefaultDispatcher-worker-N`。**09-22 的旧版本
+崩溃日志里就有同签名崩溃**（不同 r8-map-id）——不是照片墙新代码引入，但 v2.37.0 让它
+从偶发变成了必现。
+
+**反混淆定位**（本地 `mapping.txt` + grep `-> at0:$`）：
+`at0` = `HomeBranchKt$HomeBranch$1$1`（R8 水平合并了十余个协程类，`MainViewModel$updateMergedData$1` 也在其中）；
+`ay2` = `kotlin.SynchronizedLazyImpl`；行号 133 映射到
+`MainViewModel$updateMergedData$1.invokeSuspend:1654` → 内联帧 `getResolvedAlbumCovers():1727`。
+即：**`updateMergedData()` 的 Default 协程读 `resolvedAlbumCovers`（`by lazy`）时，
+委托字段本身还是 null** —— 只有「构造器尚未执行到 1727 行的属性初始化」一种解释。
+
+**根因（构造期竞态）**：`MainViewModel` 的 init 块在 **197 行**就把
+`netVM.onMergedDataInvalidated = { updateMergedData() }` 等回调接到**外 VM 自己的调度线程**上，
+而 `updateMergedData()` 直接 `launch(Dispatchers.Default)`（1642 行）；
+`resolvedAlbumCovers` / `resolvedArtistCovers` 的 `by lazy` 委托字段**1700+ 行才初始化**。
+任何一条「构造窗口内（239 → 1727 行之间）在后台线程触发的回调」都会让 Default 协程
+抢在主线程跑完构造之前读到 null 委托。窗口宽度 ≈ 主线程跑完 1500 行属性初始化的时间，
+**v2.37.0 新增 `VisualizerViewModel`（708 行声明，内含照片墙控制器/解码池）把窗口显著拉宽**，
+偶发变必现。
+
+**修复**（`MainViewModel.kt`，三处小改）：
+1. 类顶部（init 之前）新增 `private val constructorReady = CompletableDeferred<Unit>()`；
+2. `updateMergedData()` 的 Default 协程体第一行 `constructorReady.await()`——
+   构造期触发的调用一律**挂起排队**，不丢不重；
+3. **类体最后一个 init 块** `constructorReady.complete(Unit)`（类结尾前）——
+   执行到此处时全部属性（含 1700+ 行的 lazy 委托）已初始化。Kotlin 属性初始化按声明顺序，
+   放在类结尾的 init 块保证晚于一切属性初始化器。
+   ⚠️ 纪律：**不要再把任何属性声明挪到该 init 块之后**（会重新打开竞态窗口）。
+
+**教训**：① `init {}` 里把 lambda 接到「别的对象的后台线程」上，等于把本类尚未初始化的
+状态暴露给并发访问——回调体要么只碰**声明在 init 之前**的字段，要么先过「构造完成门闩」；
+② R8 混淆堆栈的 `at0.invokeSuspend(...:133)` 这种「单帧 + 纯数字行号」必须用本地
+`mapping.txt` 反查（grep `-> 混淆名:$`），**Kotlin 协程类会被 R8 水平合并**，
+反查到的类名不等于真实协程类，要以 mapping 里的 invokeSuspend 行号映射为准。
+
+**验证**：门禁 `testDebugUnitTest` + `lintDebug` 通过（1150 例 / 0 失败，0 Error / 279 Warning）；
+**真机待复验**（2026-09-24 用户手机启动不再崩溃后闭环）。
+
 ### 10.152 v2.32.3 — T5：删除死代码 `VocalRemovalProcessor.kt`（算法先归档，2026-09-14）
 
 **来源**：`docs/archive/code-review-full-report-2026-09-13.md` §T5 / `docs/archive/code-review-2026-09-03.md` §P2。文件 348 行，全项目**零调用方**（`PlaybackService.kt:207` 实际 `val vocalRemovalProcessor = SpectralMaskProcessor()`——变量名是历史遗留，类型早就换过了；`PlayerManager.setVocalRemovalProcessor()` 的形参类型同样是 `SpectralMaskProcessor`）。
