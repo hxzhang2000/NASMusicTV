@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NASMusicTV 全量代码审查报告 · 2026-09-22</title>
+<style>
+  :root{
+    --ink:#1a1d21; --ink-2:#4a4f57; --ink-3:#878d96;
+    --paper:#fdfdfc; --paper-2:#f6f6f4; --line:#d9d9d4; --line-2:#ececea;
+    --accent:#8f1d1d; --accent-ink:#7a1818;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{scroll-behavior:smooth}
+  body{
+    font-family:"Source Han Sans SC","Noto Sans SC","PingFang SC","Microsoft YaHei",sans-serif;
+    background:var(--paper); color:var(--ink); font-size:15px; line-height:1.75;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:920px;margin:0 auto;padding:0 32px 96px}
+  /* ---------- 头部 ---------- */
+  header.masthead{padding:72px 0 40px;border-bottom:3px solid var(--ink)}
+  .kicker{font-size:12px;letter-spacing:.35em;color:var(--accent);text-transform:uppercase;margin-bottom:18px}
+  h1{font-family:"Source Han Serif SC","Noto Serif SC","Songti SC",serif;font-weight:900;font-size:44px;line-height:1.2;letter-spacing:.01em}
+  .meta{margin-top:26px;display:flex;flex-wrap:wrap;gap:0 42px;font-size:13px;color:var(--ink-2)}
+  .meta b{color:var(--ink);font-weight:600}
+  /* ---------- 目录 ---------- */
+  nav.toc{padding:26px 0;border-bottom:1px solid var(--line);font-size:13.5px}
+  nav.toc a{color:var(--ink-2);text-decoration:none;margin-right:26px;white-space:nowrap}
+  nav.toc a:hover{color:var(--accent)}
+  /* ---------- 章节骨架 ---------- */
+  section{padding-top:56px}
+  h2{font-family:"Source Han Serif SC","Noto Serif SC",serif;font-size:27px;font-weight:800;margin-bottom:8px;scroll-margin-top:24px}
+  h2 .no{color:var(--accent);margin-right:14px;font-variant-numeric:tabular-nums}
+  .lede{color:var(--ink-2);font-size:15.5px;margin-bottom:28px;max-width:44em}
+  h3{font-size:17px;font-weight:700;margin:34px 0 12px}
+  p{margin-bottom:14px}
+  code{font-family:"JetBrains Mono","Cascadia Code",Consolas,monospace;font-size:.88em;background:var(--paper-2);border:1px solid var(--line-2);padding:1px 5px;border-radius:2px}
+  .ref{color:var(--ink-3);font-size:12.5px}
+  /* ---------- 徽章 ---------- */
+  .badge{display:inline-block;font-size:11.5px;font-weight:700;letter-spacing:.08em;padding:1px 8px;margin-right:10px;vertical-align:2px;white-space:nowrap}
+  .b-p1{background:var(--accent);color:#fff}
+  .b-p2{border:1px solid var(--accent);color:var(--accent-ink)}
+  .b-p3{border:1px solid var(--line);color:var(--ink-3);font-weight:600}
+  /* ---------- 表格 ---------- */
+  table{width:100%;border-collapse:collapse;margin:20px 0 8px;font-size:13.5px}
+  th{font-weight:700;text-align:left;border-bottom:2px solid var(--ink);padding:8px 10px;white-space:nowrap}
+  td{border-bottom:1px solid var(--line-2);padding:8px 10px;vertical-align:top}
+  tr:hover td{background:var(--paper-2)}
+  td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
+  /* ---------- 发现条目 ---------- */
+  .finding{border-top:1px solid var(--line);padding:22px 0 6px}
+  .finding:first-of-type{border-top:none}
+  .finding h4{font-size:16px;font-weight:700;margin-bottom:10px}
+  .finding h4 code{font-weight:600}
+  .finding p{font-size:14.5px;color:var(--ink-2)}
+  .finding p b{color:var(--ink)}
+  .fix{font-size:14px;color:var(--ink);border-left:2px solid var(--accent);padding:2px 0 2px 14px;margin:10px 0 14px}
+  .fix b{color:var(--accent-ink)}
+  /* ---------- 主题块 ---------- */
+  .theme{margin:30px 0 6px;padding:14px 18px;border:1px solid var(--line);background:var(--paper-2)}
+  .theme b{font-size:15px}
+  .theme span{display:block;font-size:13px;color:var(--ink-2);margin-top:2px}
+  ol.theme-list{margin:14px 0 6px 0;padding-left:0;list-style:none;counter-reset:t2}
+  ol.theme-list>li{counter-increment:t2;border-bottom:1px solid var(--line-2);padding:13px 2px;font-size:14.5px}
+  ol.theme-list>li::before{content:counter(t2,cjk-ideographic);color:var(--accent);font-weight:700;margin-right:10px}
+  ol.theme-list .loc{display:block;font-size:12.5px;color:var(--ink-3);margin-top:3px}
+  /* ---------- praise ---------- */
+  .praise li{margin-bottom:10px;font-size:14.5px}
+  .praise b{font-weight:700}
+  .praise{list-style:none}
+  .praise li::before{content:"—";color:var(--accent);margin-right:10px}
+  /* ---------- 结尾 ---------- */
+  footer{margin-top:80px;padding-top:22px;border-top:1px solid var(--line);font-size:12.5px;color:var(--ink-3)}
+  .stat-row{display:flex;gap:0;border:1px solid var(--line);margin:26px 0 6px}
+  .stat{flex:1;padding:18px 10px;text-align:center;border-right:1px solid var(--line)}
+  .stat:last-child{border-right:none}
+  .stat .n{font-family:"Source Han Serif SC",serif;font-size:34px;font-weight:900;line-height:1.1}
+  .stat .n.hot{color:var(--accent)}
+  .stat .l{font-size:12px;color:var(--ink-2);margin-top:4px;letter-spacing:.12em}
+  @media print{body{font-size:12px}.wrap{padding:0 18px}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="masthead">
+  <div class="kicker">Code Review · Full-Source Audit</div>
+  <h1>NASMusicTV 全量代码审查报告</h1>
+  <div class="meta">
+    <span><b>日期</b> 2026-09-22</span>
+    <span><b>范围</b> app/src/main · ~250 文件 / 3.5MB</span>
+    <span><b>技术栈</b> Kotlin 2.2 · Compose TV · Media3 1.2.1 · ONNX 1.17.1 · NanoHTTPD</span>
+    <span><b>方式</b> 12 模块前台直审 + 横切面检查</span>
+  </div>
+</header>
+
+<nav class="toc">
+  <a href="#s1">一 · 总评</a>
+  <a href="#s2">二 · P1 发现</a>
+  <a href="#s3">三 · P2 发现</a>
+  <a href="#s4">四 · 横切面</a>
+  <a href="#s5">五 · 值得点名的设计</a>
+  <a href="#s6">六 · 修复顺序</a>
+</nav>
+
+<!-- ================= 一 ================= -->
+<section id="s1">
+  <h2><span class="no">一</span>总评</h2>
+  <p class="lede">整体质量高于同类项目平均线。这是一个被两轮以上系统化修复迭代打磨过的代码库：修复以编号体系沉淀（P0-x / P1-x / B-x / S-x / F-x / M-x / H-x / L-x / T3），每处修复注释都把根因、方案取舍与验证方式写给后人；纯函数下沉与可注入测试设计贯穿始终。902 个 JVM 单测与本轮发现的高危密度相称。</p>
+
+  <div class="stat-row">
+    <div class="stat"><div class="n">0</div><div class="l">P0 崩溃/丢失</div></div>
+    <div class="stat"><div class="n hot">5</div><div class="l">P1 优先修复</div></div>
+    <div class="stat"><div class="n">21</div><div class="l">P2 改进</div></div>
+    <div class="stat"><div class="n">97</div><div class="l">P3 nit</div></div>
+  </div>
+
+  <p>P1 集中在两类问题：<b>横向安全设计缺失</b>（5 个内嵌 HTTP server 无鉴权），以及<b>协议 / 规则不一致</b>（Subsonic getLyrics、Navidrome 缺 getYears、下载档位泄漏）。P2 的最大公约数是「同一修复没有同步到所有同类点」——这正是这类快速演进项目最典型的债。</p>
+
+  <h3>模块记分卡</h3>
+  <table>
+    <thead><tr><th>模块</th><th class="num">P1</th><th class="num">P2</th><th class="num">P3</th><th>印象</th></tr></thead>
+    <tbody>
+      <tr><td>w01 NAS 适配器</td><td class="num">3</td><td class="num">8</td><td class="num">10</td><td>架构成熟，Feiniu 质量最高，Daoliyu 是半成品</td></tr>
+      <tr><td>w02 下载导出</td><td class="num">1</td><td class="num">2</td><td class="num">11</td><td>两轮修复打磨充分，单测最全</td></tr>
+      <tr><td>w03 本地扫描与歌单</td><td class="num">0</td><td class="num">4</td><td class="num">13</td><td>解析器健壮，封面批量解析性能模型欠佳</td></tr>
+      <tr><td>w04 网络音乐与搜索</td><td class="num">0</td><td class="num">6</td><td class="num">14</td><td>百度体系完整，超时语义失效是主要风险</td></tr>
+      <tr><td>w05 播放核心</td><td class="num">0</td><td class="num">3</td><td class="num">8</td><td>全项目质量巅峰（Media3 源码行号级注释）</td></tr>
+      <tr><td>w06 人声分离与频谱</td><td class="num">0</td><td class="num">2</td><td class="num">6</td><td>教科书级 ONNX 资源管理</td></tr>
+      <tr><td>w07 数据层与歌词</td><td class="num">0</td><td class="num">2</td><td class="num">11</td><td>数据层纪律标杆（safeParseJson / 容错枚举）</td></tr>
+      <tr><td>w08 本地服务与工具</td><td class="num">1</td><td class="num">1</td><td class="num">8</td><td>代码级防护好，横向安全缺失</td></tr>
+      <tr><td>w09 ViewModel</td><td class="num">0</td><td class="num">0</td><td class="num">6</td><td>最干净的一层（反模式扫描零命中）</td></tr>
+      <tr><td>w10 UI 页面 A</td><td class="num">0</td><td class="num">0</td><td class="num">3</td><td>Compose 纪律好，NowPlaying 102KB 待拆</td></tr>
+      <tr><td>w11 UI 页面 B 与组件</td><td class="num">0</td><td class="num">0</td><td class="num">4</td><td>无 WebView 攻击面，导航矩阵待演进</td></tr>
+      <tr><td>w12 可视化渲染</td><td class="num">0</td><td class="num">0</td><td class="num">3</td><td>性能纪律最佳（零分配双缓冲管线）</td></tr>
+    </tbody>
+  </table>
+  <p class="ref">分模块详单（每条含位置、代码证据与建议）：workspace <code>review/findings/w01~w12-*.md</code></p>
+</section>
+
+<!-- ================= 二 ================= -->
+<section id="s2">
+  <h2><span class="no">二</span>P1 发现 · 5 条</h2>
+  <p class="lede">建议在下一个功能迭代前优先处理；前四条合计不超过一天工作量。</p>
+
+  <div class="finding">
+    <h4><span class="badge b-p1">P1-1</span>5 个内嵌 HTTP server 全部无鉴权且绑定 0.0.0.0 —— 备份恢复接口可被同网段任意设备调用</h4>
+    <p><b>位置</b> RemoteControlServer(18082) · BackupTransferServer(18081) · LocalInputServer(18080) · ModelTransferServer(18083) · PlaylistUploadServer(18084)，均为 <code>NanoHTTPD(port)</code> 通配绑定；代码注释自证「服务器绑定 0.0.0.0」（P1-8 只修了 URI scheme 白名单）。</p>
+    <p><b>最重的后果</b>：同一 WiFi 的任意设备可「上传自制备份 → POST /api/restore」<b>远程整体覆盖 / 清空用户全部数据</b>（歌单 / 收藏 / 播放记录）；另可完全遥控播放、经 /api/queue 枚举曲库、向打开中的输入框静默注入文本、覆盖模型文件。威胁模型虽是家庭 LAN，但「静默重置数据」超出项目「有意支持 cleartext」的既定范畴。</p>
+    <div class="fix"><b>修复</b>：启动时生成一次性 token 拼进二维码（<code>http://ip:port/?t=xxx</code>），各 server 的 serve() 头部校验 query/cookie，约 5 行/server；至少先给 BackupTransferServer（数据破坏面）加上。</div>
+  </div>
+
+  <div class="finding">
+    <h4><span class="badge b-p1">P1-2</span>SubsonicAdapter.getLyrics 协议参数用错 —— 通用 Subsonic 服务器歌词恒空</h4>
+    <p><b>位置</b> backend/impl/SubsonicAdapter.kt · 传 <code>getLyrics?id=$songId</code>；Subsonic API 的该端点参数是 <code>artist</code> + <code>title</code>，服务端忽略多余的 id，因缺参返回空歌词。同仓 NavidromeAdapter 已示范正确两段式（getSong 取元数据 → getLyrics&artist=&title=）。</p>
+    <div class="fix"><b>修复</b>：照抄 Navidrome 两段式，或把实现下沉 SubsonicRestClient 共用。</div>
+  </div>
+
+  <div class="finding">
+    <h4><span class="badge b-p1">P1-3</span>NavidromeAdapter 未实现 getYears() —— 「年代」维度恒为空</h4>
+    <p><b>位置</b> BackendAdapter.getYears() 默认 emptyList()，MainViewModel:1284 直接消费。getYears 的 override 只有 Jellyfin 与 Subsonic，官方明确支持的 Navidrome 走默认值，用户侧无任何提示。Subsonic 已示范「分页拉歌提取年份」做法。</p>
+    <div class="fix"><b>修复</b>：给 NavidromeAdapter 补 getYears()（与 Subsonic 实现下沉共用）。</div>
+  </div>
+
+  <div class="finding">
+    <h4><span class="badge b-p1">P1-4</span>Navidrome 歌单歌曲的 albumId 被写成 playlistId</h4>
+    <p><b>位置</b> NavidromeAdapter.getPlaylistSongs()：<code>albumId = playlistId</code>，条目自身的 albumId 字段被丢弃。后果：从歌单跳专辑详情、按专辑找封面的兜底链路全部错位（请求的是歌单的 coverArt，404）。同构的 SubsonicAdapter 实现是对的——属移植走样。</p>
+    <div class="fix"><b>修复</b>：改 <code>albumId = obj.get("albumId")?.asString ?: ""</code>。</div>
+  </div>
+
+  <div class="finding">
+    <h4><span class="badge b-p1">P1-5</span>下载档位参数泄漏到非 Meting 源 —— NAS FLAC 被存成 .mp3</h4>
+    <p><b>位置</b> DownloadPathBuilder.extOf()（非 AUTO 档一律 return "mp3"）+ baseNameWithQuality()（HIGH 加 " (320)"）；触发链 AutoDownloadController → resolveDetailed（非 Meting 源 actualQuality=请求档）→ singleAttempt。downloadKeyOf 已正确忽略档位，extOf / baseNameWithQuality 没有同样忽略。</p>
+    <p>全局默认档位=320 时，一首 NAS FLAC 被存为 <code>01 - xxx (320).mp3</code>——内容仍是 FLAC 字节流：媒体扫描可能拒识、jaudiotagger 按容器解析失败（内嵌必败走旁路）、文件名档位后缀是假的。百度网盘 / jamendo 同理。</p>
+    <div class="fix"><b>修复</b>：extOf / baseNameWithQuality 与 downloadKeyOf 同口径——非 Meting 源一律按 AUTO 处理（不猜 mp3，走 URL/path 推断）。</div>
+  </div>
+</section>
+
+<!-- ================= 三 ================= -->
+<section id="s3">
+  <h2><span class="no">三</span>P2 发现 · 21 条（按主题归组）</h2>
+  <p class="lede">每条的位置、代码证据与修复建议见对应模块详单；此处按主题归组给出索引。</p>
+
+  <div class="theme"><b>主题 A · 同一修复未同步到所有同类点（7 条）</b><span>最典型的债：修复注记在某个文件里写得很清楚，同类位置没有跟进。</span></div>
+  <ol class="theme-list">
+    <li>ID3「256KB 固定窗口」全仓 4 处，仅 BaiduCoverProvider 实现了 M5 动态补读：BaiduLyricsProvider（w04）、LocalLyricsProvider 两处（w07）、EmbeddedCoverExtractor（w03）未同步 → 大封面 / 大歌词帧静默失败回退网络错配。<span class="loc">建议：抽 readId3HeaderSmart(file) 公共函数统一替换。</span></li>
+    <li>缓存落盘非原子：CoverUrlPersistentCache 已修 tmp+rename，MvPersistentCache（w04）与 LyricsPersistentCache 正文（w07）未同步。</li>
+    <li>@Volatile 缺失：Jellyfin S4 加过，Daoliyu / Subsonic / Navidrome 三家同模式未同步（w01）。</li>
+    <li>XSS 转义：RemoteControlHtml 的 esc/escAttr 修复完整，BackupTransferServer 页面 backup-name 拼接未同步（w08，攻击面低）。</li>
+    <li>请求体上限：Backup / Playlist 上传有硬上限，RemoteControl / LocalInput 的 parseBody 全量进内存（w08）。</li>
+    <li>上传完整性：P2-11 已补 ModelTransfer 的 SHA-256，servePage 仍回显模型绝对路径（w08）。</li>
+    <li>Locale 安全格式化：sha256Of 注释了 "%02x 受 Locale 影响" 并手写 hex，LrcParser.toLrcText 的 String.format(%02d) 未同步（w07）。</li>
+  </ol>
+
+  <div class="theme"><b>主题 B · 跨线程 / 一致性（5 条）</b></div>
+  <ol class="theme-list">
+    <li>SearchAggregator 源级超时形同虚设：withTimeoutOrNull 包阻塞 OkHttp execute，取消中断不了 socket 读，NAS 15s 实际受 Jellyfin readTimeout 120s 支配（w04；PlaybackService 的 resolve 同根因）。<span class="loc">建议：per-call callTimeout 或 OkHttp suspend API，两处一起修。</span></li>
+    <li>BaiduFileIndexCache.setCoverUrls 批量写未持 cacheLock——单条版注释明言「必须整锁」，批量版没有 → lost update + 同名 .tmp 互踩（w04）。</li>
+    <li>NetworkMusicManager.unregisterService 清缓存 key 格式写错：拿歌曲 id 前缀匹配 source:id:quality 格式的缓存键，实际是 no-op（w04）。</li>
+    <li>WeatherRadioManager 只取 NAS 第一页 500 首 + copy(id="nas_"+id) 篡改 id → 大曲库采样截断 + 统计口径分裂（w04）。</li>
+    <li>AppPreferences 百度配置便捷写「读改写」无锁：token 刷新与开关切换并发丢字段（w07）。</li>
+  </ol>
+
+  <div class="theme"><b>主题 C · 协议 / 边界正确性（6 条）</b></div>
+  <ol class="theme-list">
+    <li>Jellyfin getStreamUrl 硬编码 stream.mp3，无损库被强制转码（w01，待确认是否有意）。</li>
+    <li>Jellyfin scrobblePlay 语义错位：timestamp 当 PositionTicks、无播放完成上报（w01）。</li>
+    <li>Jellyfin getYears 用 /Items/Filters，现行端点是 Filters2，404 则年代恒空（w01，待确认）。</li>
+    <li>Navidrome / Subsonic getArtists 无图也返回封面 URL，与 Jellyfin 修复相反映，兜底链被跳过（w01）。</li>
+    <li>Navidrome toggleFavorite 用本地缓存集定向，忽略入参 isCurrentlyFavorite，缓存陈旧时方向反（w01）。</li>
+    <li>崩溃恢复反推路径与命名规则不符（缺曲号前缀 / 档位后缀）→ 孤儿恢复大面积 miss；连带 reindexFromDisk 标题污染 dedupeKey（w02）。</li>
+  </ol>
+
+  <div class="theme"><b>主题 D · 安全 / 校验（3 条）</b></div>
+  <ol class="theme-list">
+    <li>五个网络端点设置项无 URL 校验：用户输入 / 备份恢复的任意字符串直接成为请求端点，恶意备份可重定向搜索流量（w07）。<span class="loc">建议：保存与恢复两路统一校验（scheme + host + 长度），非法回默认。</span></li>
+    <li>ModelTransferServer 上传无总量上限（磁盘耗尽 DoS）+ 上传前先删真模型，失败丢 166MB 模型（w08）。</li>
+    <li>艺术家 / 专辑封面批量解析为串行阻塞链且无节流：MAX_CONCURRENT=5 实为回调批次大小；大曲库首刷分钟级且易触发第三方限流（w03）。</li>
+  </ol>
+</section>
+
+<!-- ================= 四 ================= -->
+<section id="s4">
+  <h2><span class="no">四</span>横切面检查</h2>
+  <table>
+    <tbody>
+      <tr><td style="width:130px"><b>加密</b></td><td>AES-256-GCM + 口令派生软件密钥。注释自知「混淆级」非「保密级」，口令经 BuildConfig 进 APK——残留风险已被项目自己记录；长期方向 AndroidKeyStore / StrongBox。encrypt 失败「绝不落盘明文」的纪律与 decrypt 失败「回退原文」的兼容取舍存在张力。</td></tr>
+      <tr><td><b>备份规则</b></td><td>正确：DataStore（含加密凭据）被 backup_rules / data_extraction_rules 双双排除；Feiniu SharedPreferences 只存随机设备 UUID。</td></tr>
+      <tr><td><b>隐私权限</b></td><td>RECORD_AUDIO 用于 Visualizer 频谱，运行时申请，正当。</td></tr>
+      <tr><td><b>依赖陈旧</b></td><td>Media3 1.2.1（2024.1）、Compose BOM 2024.02、lifecycle 2.7.0 落后多个版本；NanoHTTPD 2.3.1 上游 2017 年后无维护，被全部 5 个内嵌 server 依赖——建议长期替换。</td></tr>
+      <tr><td><b>targetSdk</b></td><td>34，低于 Google Play 要求的 35（GitHub Releases 分发暂不受迫，上架即拦）。</td></tr>
+      <tr><td><b>文档漂移</b></td><td>AGENTS.md 写 Kotlin 2.2.10，实际 build.gradle.kts 已是 2.3.10。</td></tr>
+      <tr><td><b>仓库卫生</b></td><td>根目录 3 个未跟踪截图 / artifact 残留。</td></tr>
+      <tr><td><b>测试</b></td><td>902 个 @Test（90 文件）纯 JVM；Compose UI 无 instrumented 测试。最适合补单测的清单散见各模块文件（LrcParser / PlayStatsAggregator / PlayHeatmapBuilder / Radix2Fft 对拍 / Meting parseSongs 字段兼容表驱动）。</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ================= 五 ================= -->
+<section id="s5">
+  <h2><span class="no">五</span>值得点名的设计</h2>
+  <ul class="praise">
+    <li><b>Media3 集成注释体系</b>（w05）：onConnect reject 禁令、onSetMediaItems 非空铁律、语音点歌三律、INDEX_UNSET 语义——每条带 Media3 1.2.1 源码行号。</li>
+    <li><b>DemucsSeparator</b>（w06）：张量嵌套 close、重采样不变式、release/separate 竞态的「先置位后消费」链式论证。</li>
+    <li><b>SpectrumRepository 双缓冲 + PCM 降级管线</b>（w06/w12）：采集 → FFT → @Volatile 翻转发布 → 零分配渲染。</li>
+    <li><b>BackupGson 容错枚举三段式</b>（w07）：把「Gson 反射绕过 Kotlin 非空检查」的根因与三级回落写透。</li>
+    <li><b>safeParseJson</b>（w07）：解析失败跳过回写，杜绝「一次 JSON 异常抹掉用户全部数据」。</li>
+    <li><b>MultipartBoundaryStreamer KMP</b>（w08）：自重叠边界处理正确，朴素匹配漏判案例写在注释里。</li>
+    <li><b>断线续播全链</b>（w05/w09）：F2-4 冻结—断点—去抖恢复、出错单次重解析、队列移除纯函数。</li>
+  </ul>
+</section>
+
+<!-- ================= 六 ================= -->
+<section id="s6">
+  <h2><span class="no">六</span>建议修复顺序（按性价比）</h2>
+  <table>
+    <tbody>
+      <tr><td class="num" style="width:44px;color:var(--accent);font-weight:800">1</td><td><b>P1-1 server 鉴权</b> —— 半天，消除数据丢失面</td></tr>
+      <tr><td class="num" style="color:var(--accent);font-weight:800">2</td><td><b>P1-5 下载 extOf / downloadKeyOf 同口径</b> —— 1h，消除文件错乱</td></tr>
+      <tr><td class="num" style="color:var(--accent);font-weight:800">3</td><td><b>P1-2 / P1-3 / P1-4 Subsonic / Navidrome 三连</b> —— 2h，歌词 / 年代 / 专辑跳转</td></tr>
+      <tr><td class="num" style="color:var(--accent);font-weight:800">4</td><td><b>主题 A 的 7 条「修复未同步」</b> —— 每条 0.5–2h，抽公共函数后成本递减</td></tr>
+      <tr><td class="num" style="color:var(--accent);font-weight:800">5</td><td><b>超时语义</b> —— 2h，SearchAggregator + PlaybackService 一起改 callTimeout</td></tr>
+      <tr><td class="num" style="color:var(--accent);font-weight:800">6</td><td><b>封面批量并发 + 节流</b> —— 半天</td></tr>
+      <tr><td class="num" style="color:var(--accent);font-weight:800">7</td><td>其余 P2 与 P3 按模块详单顺手清理；NowPlayingScreen 拆分作为下一个重构专项</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<footer>
+  分模块详单（P1/P2/P3 全量、含代码证据）：workspace <code>review/findings/w01-nas-adapters.md</code> · <code>w02-download-export.md</code> · <code>w03-local-playlist.md</code> · <code>w04-network-music.md</code> · <code>w05-player-core.md</code> · <code>w06-separation-spectrum.md</code> · <code>w07-data-lyrics.md</code> · <code>w08-net-util.md</code> · <code>w09-viewmodels.md</code> · <code>w10-screens-a.md</code> · <code>w11-screens-b-components.md</code> · <code>w12-visualizer.md</code><br><br>
+  审查执行：AutoClaw 主会话前台直审。方法论备注：审查输出通道对令牌类文本有自动脱敏，所有涉密疑点均经字节级 hex 对拍排除，源码无密钥占位符污染。UI 风格类主观问题按纪律未收录。
+</footer>
+
+</div>
+</body>
+</html>
