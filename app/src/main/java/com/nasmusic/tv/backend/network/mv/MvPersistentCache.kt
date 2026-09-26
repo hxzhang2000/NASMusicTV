@@ -72,13 +72,19 @@ class MvPersistentCache(context: Context) {
     /**
      * 清空全部 MV 持久缓存（内存 + 磁盘文件）。
      * 供设置页"缓存管理"手动清除使用。
+     *
+     * 2026-09-26 审查补修（MvPersistentCache saveLock Low）：清 map 与删文件整体纳入
+     * saveLock —— 否则并发 save() 在 clear 之前捕获的旧 map 会在 rename 后"复活"被清条目
+     *（save 先 toMap 快照、clear 后删文件、save 再 rename 落盘旧数据）。
      */
     fun clear() {
-        cache.clear()
-        try {
-            if (file.exists()) file.delete()
-        } catch (e: Exception) {
-            AppLog.e(TAG, "clear failed: ${e.message}", e)
+        synchronized(saveLock) {
+            cache.clear()
+            try {
+                if (file.exists()) file.delete()
+            } catch (e: Exception) {
+                AppLog.e(TAG, "clear failed: ${e.message}", e)
+            }
         }
         AppLog.d(TAG, "cleared")
     }
@@ -116,7 +122,12 @@ class MvPersistentCache(context: Context) {
         }
     }
 
-    private fun save() {
+    // 2026-09-25 审查修复（2-4）：put()（IO 线程）与 markCompleted()（主线程）可并发进入
+    // save()，两个线程同时写同一 .tmp 互相踩踏 → rename 后 JSON 损坏、下次 load 全量丢失。
+    // 写 tmp+rename 序列整体加锁（与 BaiduFileIndexCache 的 cacheLock 同语义）。
+    private val saveLock = Any()
+
+    private fun save() = synchronized(saveLock) {
         try {
             val json = gson.toJson(cache.toMap())
             // 修复（2026-09-22 审查）：writeText 直写非原子——写盘中途被杀会损坏

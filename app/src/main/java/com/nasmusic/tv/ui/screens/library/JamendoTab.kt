@@ -68,7 +68,8 @@ fun JamendoTab(
     onDownloadSong: (Song) -> Unit = {}
 ) {
     var showSearchDialog by remember { mutableStateOf(false) }
-    val listState = androidx.compose.foundation.lazy.LazyListState()
+    // 2026-09-25 审查修复（#15）：裸 LazyListState() 每次重组新建，滚动位置被重置回顶
+    val listState = androidx.compose.foundation.lazy.rememberLazyListState()
 
     LaunchedEffect(Unit) {
         onLoadHot()

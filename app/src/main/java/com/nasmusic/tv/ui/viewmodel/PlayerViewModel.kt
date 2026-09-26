@@ -104,6 +104,8 @@ class PlayerViewModel(
 
     fun playSong(song: Song) {
         AppLog.d("PlayerViewModel", "playSong: ${song.title}, coverUrl=${song.coverUrl ?: "null"}")
+        // 2026-09-25 审查修复（#9）：playSong 整队替换也会使挂起的旧队列解析过期
+        resolveGeneration++
         playerManager.playSong(song)
         // 歌词由 currentSong.collect 统一触发，避免重复调用
         onRecordPlay?.invoke(song)
@@ -111,6 +113,10 @@ class PlayerViewModel(
 
     fun playQueue(songs: List<Song>, startIndex: Int = 0) {
         if (songs.isEmpty()) return
+        // 2026-09-25 审查修复（#9 旧快照覆盖）：进入即递增代数，needsResolve 分支的异步解析
+        // 在回写 playQueue 前比对代数，期间用户再次 playQueue/playSong/切歌解析则丢弃本次结果
+        //（与 resolveAndPlayByIndex 的 P4 守卫同机制）。
+        val generation = ++resolveGeneration
         val firstSong = songs[startIndex.coerceIn(0, songs.lastIndex)]
         AppLog.d("PlayerViewModel", "playQueue: ${songs.size} songs, start=$startIndex, first=${firstSong.title}, coverUrl=${firstSong.coverUrl ?: "null"}")
 
@@ -120,7 +126,8 @@ class PlayerViewModel(
         // 再降级网络，命中后返回带真实 streamUrl + 来源标识的 Song。
         val needsResolve = songs.any {
             ((it.isNetworkSong || it.isLocalSong) && it.streamUrl.isNullOrBlank()) ||
-            (it.id.startsWith("imported_") && it.streamUrl.isNullOrBlank())
+            (it.id.startsWith("imported_") && it.streamUrl.isNullOrBlank()) ||
+            (!it.isNetworkSong && !it.isLocalSong && !it.id.startsWith("imported_") && it.streamUrl.isNullOrBlank())
         }
         if (needsResolve) {
             // 只解析第一首歌曲的 URL，立即播放；后续歌曲在播放器自动过渡时懒加载。
@@ -165,6 +172,25 @@ class PlayerViewModel(
                     firstSong.isLocalSong && firstSong.streamUrl.isNullOrBlank() ->
                         firstSong.path?.takeIf { it.isNotBlank() }
                             ?.let { firstSong.copy(streamUrl = it) } ?: firstSong
+                    // NAS 歌曲：AppPreferences.stripVolatileStreamUrl 已清空 streamUrl
+                    //（避免 api_key/t=md5/JWT 等凭据落盘），需经 NAS 后端重建
+                    //（与 resolveAndPlayCurrentSong 的 NAS 分支同款）。
+                    !firstSong.isNetworkSong && !firstSong.isLocalSong &&
+                        !firstSong.id.startsWith("imported_") && firstSong.streamUrl.isNullOrBlank() -> {
+                        try {
+                            val adapter = backendRegistry.getAdapter()
+                            val url = adapter?.getSongsByIds(listOf(firstSong.id))?.firstOrNull()?.streamUrl
+                            if (!url.isNullOrBlank()) {
+                                firstSong.copy(streamUrl = url)
+                            } else {
+                                AppLog.w("PlayerViewModel", "playQueue: failed to resolve NAS streamUrl for ${firstSong.title}")
+                                firstSong
+                            }
+                        } catch (e: Exception) {
+                            AppLog.w("PlayerViewModel", "playQueue: NAS resolve failed for ${firstSong.title}", e)
+                            firstSong
+                        }
+                    }
                     else -> firstSong
                 }
                 // 检查第一首歌是否仍然无法解析
@@ -181,6 +207,11 @@ class PlayerViewModel(
                 // 只更新第一首歌的 streamUrl，其余歌曲保持空 URL，在播放器过渡时按需解析
                 val resolved = songs.toMutableList()
                 resolved[startIndex.coerceIn(0, songs.lastIndex)] = resolvedFirst
+                // 2026-09-25 审查修复（#9）：解析期间用户换队列/切歌 → 丢弃旧快照回写
+                if (generation != resolveGeneration) {
+                    AppLog.d("PlayerViewModel", "playQueue: generation stale ($generation != $resolveGeneration), drop resolved queue")
+                    return@launch
+                }
                 AppLog.d("PlayerViewModel", "playQueue: first song resolved, starting playback (url=${resolvedFirst.streamUrl?.take(30)}...)")
                 playerManager.playQueue(resolved, startIndex)
                 onRecordPlay?.invoke(firstSong)
@@ -219,6 +250,9 @@ class PlayerViewModel(
      * - NAS 歌曲：通过 adapter.getSongsByIds() 获取 streamUrl
      */
     private fun resolveAndPlayCurrentSong(song: Song) {
+        // 2026-09-25 审查修复（#9）：与 resolveAndPlayByIndex 同款代数守卫，解析窗口内
+        // 用户切歌/换队列时，旧解析结果不得整体回滚新队列。
+        val generation = ++resolveGeneration
         viewModelScope.launch {
             try {
                 val playUrl = when {
@@ -252,6 +286,11 @@ class PlayerViewModel(
                 val currentIndexValue = playerState.value.currentIndex
                 val updatedQueue = currentQueue.mapIndexed { index, s ->
                     if (index == currentIndexValue) s.copy(streamUrl = playUrl) else s
+                }
+                // 2026-09-25 审查修复（#9）：解析窗口内世界已变 → 丢弃本次结果
+                if (generation != resolveGeneration) {
+                    AppLog.d("PlayerViewModel", "resolveAndPlayCurrentSong: generation stale, drop result for ${song.title}")
+                    return@launch
                 }
                 // 重新加载队列到 ExoPlayer 并播放
                 playerManager.playQueue(updatedQueue, currentIndexValue)
@@ -481,6 +520,9 @@ class PlayerViewModel(
         val currentQueue = playerState.value.queue
         if (currentQueue.isEmpty()) return
         val adapter = backendRegistry.getAdapter() ?: return
+        // 2026-09-25 审查修复（#9 同族）：解析期间队列可能等长变更（跨源替换/补全/自动过渡），
+        // 仅比对 size 会把旧快照整体回滚。改为：递增代数 + 回写前逐项比对 id。
+        val generation = ++resolveGeneration
 
         // 筛选需要更新 streamUrl 的 NAS 歌曲（本地歌曲/已下载不依赖 NAS，排除）
         val nasSongIds = currentQueue.filter { !it.isNetworkSong && !it.isLocalSong }.map { it.id }
@@ -498,8 +540,11 @@ class PlayerViewModel(
                         song
                     }
                 }
-                // 只在队列未变化时更新（避免覆盖用户操作）
-                if (mergedQueue.size == playerState.value.queue.size) {
+                // 只在队列未变化时更新（逐项比对 id，等长变更也不回滚；代数过期同样丢弃）
+                val latestQueue = playerState.value.queue
+                if (generation == resolveGeneration &&
+                    currentQueue.map { it.id } == latestQueue.map { it.id }
+                ) {
                     val currentIndexValue = playerState.value.currentIndex
                     playerManager.restoreQueue(mergedQueue, currentIndexValue)
                     AppLog.d("PlayerViewModel", "updateRestoredQueueStreamUrls: updated ${updatedSongs.size} NAS songs")

@@ -506,6 +506,16 @@ class MainActivity : ComponentActivity() {
         // 从最近任务划掉应用同样保留播放（通知栏可控），符合媒体类应用预期
         if (!isFinishing) return
         val app = (application as NasMusicApp)
+        // 2026-09-25 审查修复（#10）：launcher 闭包捕获 Activity，真退出时置空断开引用
+        //（配置重建 isFinishing=false 走不到这里，onCreate 会重新注入，不影响功能）
+        runCatching {
+            viewModel.visualizerVM.photoPermissionLauncher = null
+            viewModel.visualizerVM.photoDirectoryLauncher = null
+            // 2026-09-26 审查补修（#5 遗留）：ExportCoordinator 由 Application 持有、跨 Activity
+            // 存活，其 treePickLauncher 闭包同样捕获本 Activity ⇒ 真退出时对称置空断开引用
+            //（配置重建 isFinishing=false 走不到这里，onCreate 会重新注入）
+            app.exportCoordinator.treePickLauncher = null
+        }
         // L3：此处**不再**需要手动解绑播放模式回调——订阅跑在 lifecycleScope 中，
         // onDestroy 时作用域自动取消、SharedFlow 自动退订，时序窗口与残留引用一并消失
         // 停止播放服务（如果仍在运行）

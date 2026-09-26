@@ -545,7 +545,8 @@
     <string name="mine_create_playlist">新建歌单</string>
     <string name="mine_rename_playlist">重命名</string>
     <string name="mine_play_playlist">播放</string>
-    <string name="mine_remove_song">移除</string>
+    <string name="mine_delete_playlist">删除歌单</string>
+    <string name="mine_delete_playlist_confirm">确定删除歌单「%1$s」吗？此操作不可撤销。</string>
     <string name="mine_song_count">%d 首</string>
     <string name="mine_add_to_playlist">添加到歌单</string>
     <string name="mine_pick_playlist_title">添加到歌单</string>

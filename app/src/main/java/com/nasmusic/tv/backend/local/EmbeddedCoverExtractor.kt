@@ -24,6 +24,7 @@ import java.security.MessageDigest
  */
 object EmbeddedCoverExtractor {
     private const val TAG = "EmbeddedCover"
+    private const val MISS_CACHE_MAX = 512
     private const val ID3_HEADER_SIZE = 256 * 1024
     private const val MAX_CACHE_ENTRIES = 200
 
@@ -34,6 +35,9 @@ object EmbeddedCoverExtractor {
             return size > MAX_CACHE_ENTRIES
         }
     }
+    // 2026-09-25 审查修复（#14 同族）：负结果（无 APIC）此前不进缓存，列表每次重组都
+    // 重新读文件头。missCache 记录"确认无内嵌封面"的 key（简单容量上限防膨胀）。
+    private val missCache = LinkedHashSet<String>(64)
 
     /**
      * 从音频文件提取内嵌封面，返回可被 Coil 加载的 "file://" URI。
@@ -51,6 +55,11 @@ object EmbeddedCoverExtractor {
         val cacheKey = if (isContentUri) audioPath else Uri.decode(audioPath.removePrefix("file://"))
         val audioFile: File? = if (isContentUri) null else File(cacheKey)
         if (!isContentUri && (audioFile == null || !audioFile.exists() || !audioFile.isFile)) return null
+
+        // 0. 负结果缓存：确认无内嵌封面的歌曲直接跳过，避免重复读文件头（审查修复 #14）
+        synchronized(lock) {
+            if (cacheKey in missCache) return null
+        }
 
         // 1. 内存缓存命中
         synchronized(lock) {
@@ -71,6 +80,10 @@ object EmbeddedCoverExtractor {
             val apic = Id3v2Parser.findApic(headerBytes)
             if (apic == null) {
                 AppLog.d(TAG, "extractCoverUri: no APIC frame in ${audioFile?.name ?: cacheKey}")
+                synchronized(lock) {
+                    missCache.add(cacheKey)
+                    if (missCache.size > MISS_CACHE_MAX) missCache.remove(missCache.first())
+                }
                 return null
             }
 

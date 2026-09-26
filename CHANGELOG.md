@@ -7,6 +7,68 @@
 >
 > 类型：`Added`（新增） | `Changed`（变更） | `Fixed`（修复） | `Removed`（移除）
 
+## [v2.37.1] - 2026-09-25
+
+> **全量代码审查修复：17 条 High + 8 条快修（审查报告 docs/NASMusicTV-代码审查报告-2026-09-25.html）**
+
+### Fixed
+
+- **凭据明文落盘**：NAS 歌曲 streamUrl 含长期凭据（Jellyfin api_key / Subsonic 认证三元组 /
+  道理鱼 JWT），此前持久化只对网络歌曲置空 streamUrl，NAS 凭据 URL 随队列恢复/最近播放/
+  本地歌单明文写入 DataStore；现仅本地歌曲与 `imported_` 前缀（m3u/json 歌单导入的
+  永久直链 stub，无凭据）保留 streamUrl，其余一律置空（NAS 播放时经 adapter 重建）
+- **队列页重复歌曲崩溃**：队列允许重复歌曲而 LazyColumn 以 song.id 作 key，重复即
+  "Key was already used" 崩溃；队列页与歌单管理页 key 改拼 index
+- **手机竖屏电台页布局越界**：单列网格配硬编码 GridItemSpan(2) 导致测量游标不前进，
+  改 GridItemSpan(maxLineSpan)
+- **删除歌单误触**：「移除」按钮实际删除整个歌单且无确认；改「删除歌单」文案 +
+  ConfirmDialog 二次确认（破坏性操作默认聚焦取消）
+- **下载崩溃恢复"僵尸完成"记录**：恢复分支只回写 status/progress 三列不写 audioPath，
+  导致离线播放恒 miss 且永远无法重下；改整体 upsert（含 audioPath/fileSize/completedAt）
+- **导出进度与失败态到不了 UI**：SongExporter 私有 state 的 Running/NO_SPACE/
+  NOTHING_TO_EXPORT 此前从不转发 ExportCoordinator；新增 onStateChanged 回调桥接
+- **百度内嵌封面静默 403**：APIC 提取用裸 dlink 缺 access_token（侧车封面与歌词链路已修，
+  此处漏网），补 ensureAccessToken
+- **播放解析竞态三连**：PlaybackService 后台解析回写前校验队列一致性；playQueue/
+  resolveAndPlayCurrentSong/updateRestoredQueueStreamUrls 接入 resolveGeneration 代数守卫
+  （等长变更不再被旧快照回滚）
+- **子 ViewModel 生命周期**：15 个子 VM 不在 ViewModelStore、onCleared 永不触发 ——
+  VisualizerViewModel 清理逻辑提取为 dispose()，由 MainViewModel.onCleared 统一驱动
+  （照片墙/人脸扫描 ORT session 释放），MainActivity 真退出时断开 launcher 闭包
+- **可视化修复**：MoleculeRenderer 键上光点相位改 dt 累加（原 now×实时系数违反本类红线，
+  长时间运行光点随机闪跳）；MilkdropRenderer 重入 onEnter 前显式 recycle 旧双缓冲
+  （约 7.4MB/次，API 22-25 native 堆延迟回收）
+- **UI 主线程 IO 三连**：缓存设置页目录大小改 LaunchedEffect+IO 计算（原组合期全树遍历）；
+  UnifiedSongRow 封面提取改 remember 缓存 + EmbeddedCoverExtractor 负结果 missCache
+  （原每次重组重复读文件头）；JamendoTab 裸 LazyListState 改 rememberLazyListState
+  （滚动位置被重组重置）
+- **手机触摸 seek 失效**：PlayerControls pointerInput 内把 rememberUpdatedState 委托值
+  冻结进局部 val，首组合 durationMs=0 时点按/拖动进度条永久失效；改手势回调内动态读取
+- **SongList 分页冻结**：derivedStateOf 无 key 捕获首次组合快照，分页触发条件用旧值；
+  补 remember key
+- **密码明文上屏**：TextInputDialog 的 masked 只在自制键盘分支生效，系统 IME 分支
+  （手机端默认）无 visualTransformation；补 PasswordVisualTransformation + Password 键盘
+- **并发修补**：MainViewModel 专辑/艺术家封面缓存换 ConcurrentHashMap（IO 写/Default 读）；
+  SmartRadioManager 三处锁外 playedIds 快照移入 stateLock（CME）；MvPersistentCache.save
+  整体加锁（并发写 .tmp 损坏 JSON）
+- **竖屏设置页**：刷新备份列表的 LaunchedEffect key 由 activeSection 改 displaySection
+  （竖屏下 activeSection 恒为 GENERAL，手机进"数据管理"永不刷新）
+- **竖屏歌曲信息弹层**：PortraitInfoOverlay 补 RegisterDialogBackHandler（此前 BACK 穿透
+  而非关闭弹层，违反同文件 PortraitMoreMenu 既定约定）
+
+**09-26 复审补修（docs/code-review-2026-09-26.md 两条阻断项 + 建议项）**：
+
+- **NAS 歌队列播放恢复**：playQueue 的 needsResolve 补 NAS 分支，resolvedFirst 增 NAS
+  getSongsByIds 重建分支（strip 后 NAS 歌空 URI 静默不播的回归）
+- **遥控删除队列项线程安全**：removeFromQueue 改 mainHandler.post 投递（对齐另三个队列回调）
+- **解析取消竞态补修**：resolveStreamUrlWithoutUi 的 cancel 前移到提前 return 之前，
+  被取消 job 经 isActive 守卫不再回落旧 index 重解析
+- **音质档重播守卫**：replayCurrentWithQuality 回写前重读当前歌曲比对 id，切歌则丢弃
+- **清理项**：VisualizerViewModel.dispose 取消 faceScanObserver；MainActivity 真退出置空
+  exportCoordinator.treePickLauncher；导出二次触发不再清在跑回调；MvPersistentCache.clear
+  纳入 saveLock；WaterfallRenderer 退出 recycle 双缓冲；缓存设置页清理后即时刷新尺寸；
+  删死串 mine_remove_song
+
 ## [v2.37.0] - 2026-09-23
 
 > **照片墙：三来源照片全屏轮播可视化（43 种转场 + 端上人脸检测）**

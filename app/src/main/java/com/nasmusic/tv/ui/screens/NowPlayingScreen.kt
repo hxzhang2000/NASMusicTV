@@ -2298,6 +2298,9 @@ private fun PortraitInfoOverlay(
     onLoadTechnicalInfo: () -> Unit,
     onDismiss: () -> Unit,
 ) {
+    // 2026-09-25 审查修复（8-3）：自建 Box 覆盖层必须注册 BACK 处理（同文件 PortraitMoreMenu
+    // :2342 的既定约定），否则手机竖屏按返回键穿透到下层状态机而非关闭信息面板。
+    RegisterDialogBackHandler(onDismiss)
     Box(
         modifier = Modifier
             .fillMaxSize()

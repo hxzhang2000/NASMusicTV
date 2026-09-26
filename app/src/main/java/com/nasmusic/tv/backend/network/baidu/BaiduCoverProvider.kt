@@ -66,8 +66,11 @@ class BaiduCoverProvider(
     private suspend fun extractEmbeddedCover(fsId: Long): String? {
         val metas = api.fileMetas(listOf(fsId))
         val meta = metas.firstOrNull()
-        val dlink = meta?.dlink ?: return null
-        val fileSize = meta.size
+        val fileSize = meta?.size ?: return null
+        // 2026-09-25 审查修复（内嵌封面链路静默 403）：裸 dlink 不带 access_token，
+        // downloadRange 只接受 206 → 内嵌封面提取恒失败且无报错。与同文件侧车封面路径
+        // （findSidecarCover:62）及 BaiduLyricsProvider（M-15 修复）同口径，先补 token。
+        val dlink = ensureAccessToken(meta.dlink ?: return null) ?: return null
 
         // 1. 先读探测窗口（覆盖绝大多数 < 256KB 的 ID3 标签，常规情况只发 1 次请求）
         val probe = downloadRange(dlink, 0L, (ID3_PROBE_BYTES - 1).toLong()) ?: return null

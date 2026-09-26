@@ -7,6 +7,7 @@ import androidx.compose.ui.geometry.Size as ComposeSize
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.withTransform
@@ -214,7 +215,19 @@ val v = frame.spectrum.getOrElse(i) { 0f }
         curr = p
     }
 
-    override fun onExit() { prev = null; curr = null }
+    override fun onExit() {
+        // 2026-09-26 审查补修（Milkdrop 缓冲 recycle 同族遗漏）：onExit 此前只置 null，
+        // API 22-25 上 Bitmap 像素在 native 堆、仅靠 finalizer 延迟回收。显式 recycle。
+        releaseBuffers()
+    }
+
+    /** 释放乒乓双缓冲（与 MilkdropRenderer 同模式；可安全重复调用，只回收未置空的位图） */
+    private fun releaseBuffers() {
+        try { prev?.asAndroidBitmap()?.recycle() } catch (_: Exception) {}
+        try { curr?.asAndroidBitmap()?.recycle() } catch (_: Exception) {}
+        prev = null
+        curr = null
+    }
 }
 
 // ═══════════════════════════════════════════════════════════════════

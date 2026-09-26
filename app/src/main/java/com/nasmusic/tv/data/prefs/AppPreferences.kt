@@ -15,6 +15,7 @@ import com.google.gson.reflect.TypeToken
 import com.nasmusic.tv.backend.network.MetingApiService
 import com.nasmusic.tv.backend.network.mv.BilibiliMvService
 import com.nasmusic.tv.backend.photo.PhotoScaleMode
+import com.nasmusic.tv.backend.playlist.PlaylistParsers
 import com.nasmusic.tv.data.model.AppSettings
 import com.nasmusic.tv.data.model.BaiduTokens
 import com.nasmusic.tv.data.model.CloudDriveConfig
@@ -621,7 +622,14 @@ class AppPreferences internal constructor(private val context: Context) {
      * 否则重启恢复队列 / 最近播放 / 本地歌单场景下无法回放。
      */
     private fun Song.stripVolatileStreamUrl(): Song =
-        if (isNetworkSong) copy(streamUrl = null) else this
+        // 2026-09-25 审查修复（凭据明文落盘）：NAS 歌曲 streamUrl 含长期凭据
+        // （Jellyfin api_key / Navidrome·Subsonic t=md5(password+salt) / 道理鱼 JWT），
+        // 此前仅 isNetworkSong 置空，NAS 凭据 URL 随队列恢复/最近播放/本地歌单明文写入 DataStore。
+        // 现改为仅本地歌曲保留 file:// URI（恢复播放经 adapter.getSongsByIds 重建）。
+        // 例外：imported_ 前缀（m3u/json 歌单导入的 URL 直链 stub）——其 streamUrl 是
+        // 永久直链、不含凭据，是唯一播放来源（PlaylistImporter.toBareSong 直接落地），
+        // 置空会导致导入歌单无法播放（PlaylistImporterTest 已覆盖）。
+        if (!isLocalSong && !id.startsWith(PlaylistParsers.IMPORTED_ID_PREFIX)) copy(streamUrl = null) else this
 
     /**
      * 记录一次最近播放的完整歌曲对象（网络歌曲 streamUrl 置空）。

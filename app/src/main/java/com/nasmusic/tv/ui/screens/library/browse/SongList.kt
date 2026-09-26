@@ -78,7 +78,9 @@ internal fun SongsTab(
     }
 
     // 检测是否滚动接近底部，触发加载更多
-    val shouldLoadMore by remember {
+    // 2026-09-25 审查修复（#16）：remember 无 key 时 derivedStateOf 捕获首次组合的参数快照，
+    // 分页触发条件永远用冻结的旧列表长度/旧分页标志。加 key 使 lambda 跟随最新参数重建。
+    val shouldLoadMore by remember(songs, songsPaging, isSearching) {
         derivedStateOf {
             val lastVisibleIndex = listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
             val totalItems = songs.size

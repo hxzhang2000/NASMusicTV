@@ -662,12 +662,26 @@ fun nextTheme() = step(+1)
 
     override fun onCleared() {
         super.onCleared()
+        dispose()
+    }
+
+    /**
+     * 2026-09-25 审查修复（#10 子 ViewModel 生命周期）：本 VM 作为 MainViewModel 的普通属性
+     * 不在任何 ViewModelStore 中，[onCleared] 永不被框架调用。清理逻辑提取为 [dispose]，
+     * 由 MainViewModel.onCleared 统一驱动，可安全重复调用（photoWall.close() 幂等）。
+     */
+    fun dispose() {
         _showVisualizer.value = false
         // 照片墙：停扫描协程、停解码线程、逐张 recycle 位图
         // ⛔ API 22 上 `ImageBitmap` 包装的 `Bitmap` 不会自动回收 ⇒ 不 close 就是泄漏
         photoWall.close()
         // 人脸扫描：停任务、释放 ORT session（只在真的用过时才 close —— 见其 KDoc）
         if (faceScanManagerLazy.isInitialized()) faceScanManager.close()
+        // 人脸扫描状态收集协程（2026-09-26 审查补修 #5 遗留）：本 VM 不在任何 ViewModelStore 中，
+        // viewModelScope 永不被框架取消 ⇒ 必须手动 cancel，否则该 collect 会活到 VM 被丢弃之后。
+        // Job.cancel() 幂等、对 null 安全，dispose() 可重复调用。
+        faceScanObserver?.cancel()
+        faceScanObserver = null
         // 断开对 Activity 的引用（launcher 闭包由 MainActivity 注入）
         photoPermissionLauncher = null
         photoDirectoryLauncher = null

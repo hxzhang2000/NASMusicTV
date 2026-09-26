@@ -1746,7 +1746,9 @@ showError(getApplication<Application>().getString(R.string.toggle_favorite_error
     /** 已解析的专辑封面缓存（albumId → coverUrl），跨 updateMergedData 保持 */
     private val resolvedAlbumCovers: MutableMap<String, String> by lazy {
     // 从持久缓存预加载已解析的专辑封面（跨会话复用，避免重复网络搜索）
-    val m = mutableMapOf<String, String>()
+    // 2026-09-25 审查修复（7-1）：IO 线程解析回调写入 + Default 线程 updateMergedData 读取，
+    // 普通 HashMap 无 happens-before（坏情况扩容死循环），换 ConcurrentHashMap。
+    val m = java.util.concurrent.ConcurrentHashMap<String, String>()
     nasMusicApp.coverUrlPersistentCache.exportAll().forEach { (k, v) ->
         if (k.startsWith("album:")) m[k.removePrefix("album:")] = v
     }
@@ -1770,7 +1772,8 @@ showError(getApplication<Application>().getString(R.string.toggle_favorite_error
     /** 已解析的艺术家封面缓存（artistId → coverUrl），跨 updateMergedData 保持 */
     private val resolvedArtistCovers: MutableMap<String, String> by lazy {
     // 从持久缓存预加载已解析的艺术家封面（跨会话复用，避免重复网络搜索）
-    val m = mutableMapOf<String, String>()
+    // 2026-09-25 审查修复（7-1）：同 resolvedAlbumCovers，换 ConcurrentHashMap。
+    val m = java.util.concurrent.ConcurrentHashMap<String, String>()
     nasMusicApp.coverUrlPersistentCache.exportAll().forEach { (k, v) ->
         if (k.startsWith("artist:")) m[k.removePrefix("artist:")] = v
     }
@@ -2519,6 +2522,11 @@ showError(getApplication<Application>().getString(R.string.toggle_favorite_error
 
     override fun onCleared() {
         remoteControlServer.stop()
+        // 2026-09-25 审查修复（#10 子 ViewModel 生命周期）：15 个子 VM 是本类的普通属性、
+        // 不在任何 ViewModelStore 中，它们的 onCleared() 永不被框架调用 —— VisualizerViewModel
+        // 的照片墙/人脸扫描 ORT session 释放与 launcher 闭包清理因此从未执行。统一在此驱动。
+        runCatching { visualizerVM.dispose() }
+            .onFailure { AppLog.e("MainViewModel", "visualizerVM.dispose failed", it) }
         super.onCleared()
     }
 
@@ -2552,7 +2560,9 @@ showError(getApplication<Application>().getString(R.string.toggle_favorite_error
         RemoteSearchResult(nasDeferred.await(), netDeferred.await())
     }
 
-    override fun removeFromQueue(index: Int) = playerManager.removeFromQueue(index)
+    override fun removeFromQueue(index: Int) {
+        mainHandler.post { playerManager.removeFromQueue(index) }
+    }
 
     // （addSongToQueue/addSongsToQueue/toggleQueueSong 已迁至 PlayerViewModel，见播放控制转发区）
 
@@ -2951,7 +2961,15 @@ showError(getApplication<Application>().getString(R.string.toggle_favorite_error
             val actLabel = getApplication<Application>().getString(QualityTiers.labelResOf(result.actualQuality))
             showError(getApplication<Application>().getString(R.string.quality_downgrade_notice, reqLabel, actLabel))
         }
-        playerVM.playSong(song.copy(streamUrl = result.url, resolvedQuality = result.actualQuality))
+        // 2026-09-26 修复（High #7 同族）：异步质量档重解析期间用户可能已切歌，
+        // 无条件用入口 song 快照回写会把旧歌整队回滚、播放被拽回旧歌。
+        // 回写前重读当前播放歌曲比对 id，不一致则丢弃本次回写。
+        val current = playerVM.playerState.value.currentSong
+        if (current == null || current.id != song.id) {
+            AppLog.d("MainViewModel", "replayCurrentWithQuality: current song changed (${song.id} → ${current?.id}), drop quality replay")
+            return
+        }
+        playerVM.playSong(current.copy(streamUrl = result.url, resolvedQuality = result.actualQuality))
     }
 
     /** v2.35.0 多码率：清除全部单曲音质覆盖（设置页入口） */

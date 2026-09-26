@@ -262,7 +262,7 @@ fun PlaylistManagementScreen(
                             state = songsListState,
                             verticalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
-                            itemsIndexed(selectedPlaylistSongs, key = { _, it -> it.id }) { index, song ->
+                            itemsIndexed(selectedPlaylistSongs, key = { index, it -> "pm_${index}_${it.id}" }) { index, song ->
                                 UnifiedSongRow(
                                     song = song,
                                     onClick = { onRemoveSong(song.id) },

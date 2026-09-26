@@ -178,7 +178,10 @@ class PlaylistEnricherTest {
         assertTrue(replaced)
         val song = prefs.getLocalPlaylists().first { it.id == playlist.id }.songs.single()
         assertEquals("nas-3", song.id)
-        assertEquals("http://nas/3.mp3", song.streamUrl)
+        // 2026-09-25 审查修复：NAS 歌曲 streamUrl 含长期凭据（api_key / t=md5 / JWT），
+        // 持久化时由 AppPreferences.stripVolatileStreamUrl 置空；播放时经
+        // adapter.getSongsByIds 重建（PlayerViewModel.resolveStreamUrl else 分支）。
+        assertNull(song.streamUrl)
     }
 
     @Test

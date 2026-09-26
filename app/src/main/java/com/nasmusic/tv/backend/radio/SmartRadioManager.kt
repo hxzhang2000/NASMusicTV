@@ -76,7 +76,9 @@ class SmartRadioManager(
                     playedIds.clear()
                     currentBatchIds.clear()
                 }
-                val batch = RadioSongScorer.generateBatch(library, seed, counts, playedIds.toSet(), BATCH_SIZE)
+                // 审查修复（2-2）：快照读取移入 stateLock（锁外 toSet 与并发 clear 可 CME）
+                val excludedSnapshot = synchronized(stateLock) { playedIds.toSet() }
+                val batch = RadioSongScorer.generateBatch(library, seed, counts, excludedSnapshot, BATCH_SIZE)
                 if (batch.isEmpty()) {
                     // T4 修复：clear + toSet() 快照均在锁内
                     val retry = synchronized(stateLock) {
@@ -121,7 +123,7 @@ class SmartRadioManager(
                     candidates = library,
                     seed = seed,
                     playCounts = counts,
-                    excludedIds = playedIds.toSet(),
+                    excludedIds = synchronized(stateLock) { playedIds.toSet() },  // 审查修复（2-2）
                     batchSize = BATCH_SIZE
                 )
                 if (batch.isEmpty()) {
@@ -170,7 +172,9 @@ class SmartRadioManager(
                     return@launch
                 }
                 val counts = playCountsProvider()
-                val batch = RadioSongScorer.generateBatch(library, seed, counts, playedIds.toSet(), BATCH_SIZE)
+                // 审查修复（2-2）：快照读取移入 stateLock（锁外 toSet 与并发 clear 可 CME）
+                val excludedSnapshot = synchronized(stateLock) { playedIds.toSet() }
+                val batch = RadioSongScorer.generateBatch(library, seed, counts, excludedSnapshot, BATCH_SIZE)
                 if (batch.isEmpty()) {
                     // 曲库真正耗尽（全部历史已播）→ 清历史重来
                     // T4 修复：clear + toSet() 快照均在锁内

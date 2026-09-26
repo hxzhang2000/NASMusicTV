@@ -50,6 +50,7 @@ import com.nasmusic.tv.data.model.LocalPlaylist
 import com.nasmusic.tv.data.model.Song
 import com.nasmusic.tv.data.model.UiState
 import com.nasmusic.tv.data.prefs.AppPreferences
+import com.nasmusic.tv.ui.components.ConfirmDialog
 import com.nasmusic.tv.ui.components.FocusableSurface
 import com.nasmusic.tv.ui.components.LocalFocusableContentColor
 import com.nasmusic.tv.ui.components.common.ActionBar
@@ -126,6 +127,9 @@ fun MineScreen(
     var showCreateDialog by remember { mutableStateOf(false) }
     // 重命名目标歌单
     var renameTarget by remember { mutableStateOf<LocalPlaylist?>(null) }
+    // 2026-09-25 审查修复（#4）：删除整个歌单此前误用「移除」文案且无确认，一键直接执行不可撤销。
+    // 现改为「删除歌单」文案 + ConfirmDialog 二次确认。
+    var deleteTarget by remember { mutableStateOf<LocalPlaylist?>(null) }
 
     // 外层容器：手机上下排布（单列）、TV 左右排布（双列）
     // v2.36.0 竖屏（方案 §4.4 / P0-15）：页 padding 32→16
@@ -251,7 +255,7 @@ fun MineScreen(
                             },
                             onPlay = { onPlayPlaylist(playlist) },
                             onRename = { renameTarget = playlist },
-                            onDelete = { onDeletePlaylist(playlist.id) },
+                            onDelete = { deleteTarget = playlist },
                             stubCount = stats.stubCount,
                             unreachableCount = stats.unreachableCount,
                             enrichProgress = enrichProgress,
@@ -321,7 +325,7 @@ fun MineScreen(
                 },
                 onPlayPlaylist = onPlayPlaylist,
                 onRename = { renameTarget = it },
-                onDelete = { onDeletePlaylist(it) },
+                onDelete = { id -> deleteTarget = localPlaylists.firstOrNull { pl -> pl.id == id } },
                 onPlaySong = onPlaySong,
                 onToggleQueue = onToggleQueue,
                 onRemoveSong = { playlistId, song -> onRemoveSongFromPlaylist(playlistId, song.id) },
@@ -367,6 +371,21 @@ fun MineScreen(
                 renameTarget = null
             },
             onDismiss = { renameTarget = null }
+        )
+    }
+
+    // ===== 删除歌单确认弹窗（2026-09-25 审查修复 #4） =====
+    deleteTarget?.let { playlist ->
+        ConfirmDialog(
+            title = stringResource(R.string.mine_delete_playlist),
+            message = stringResource(R.string.mine_delete_playlist_confirm, playlist.name),
+            confirmLabel = stringResource(R.string.mine_delete_playlist),
+            onConfirm = {
+                onDeletePlaylist(playlist.id)
+                deleteTarget = null
+            },
+            onDismiss = { deleteTarget = null },
+            destructive = true
         )
     }
 
@@ -787,7 +806,7 @@ private fun PlaylistCard(
                 }
                 Spacer(modifier = Modifier.width(10.dp))
                 PlaylistActionButton(
-                    text = stringResource(R.string.mine_remove_song),
+                    text = stringResource(R.string.mine_delete_playlist),
                     color = NasMusicColors.Warning,
                     onClick = onDelete
                 )

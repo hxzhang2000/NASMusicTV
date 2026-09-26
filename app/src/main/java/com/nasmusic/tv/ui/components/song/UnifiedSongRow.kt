@@ -340,41 +340,31 @@ private fun SongRowModeRow(
             ) {
                 // 封面缩略图：已下载 → 内嵌封面（提取到缓存）→ 旁路 .jpg → 后端 URL
                 // 本地歌曲（下载后以 LOCAL 源出现）：downloadKey 不匹配但 song.path 有效
-                val effectiveCoverUrl = when {
-                    downloadState is DownloadState.Completed -> {
-                        val ctx = androidx.compose.ui.platform.LocalContext.current
-                        // 优先提取内嵌 APIC 封面
-                        val embedded = com.nasmusic.tv.backend.local.EmbeddedCoverExtractor.extractCoverUri(
-                            downloadState.path, ctx.cacheDir, ctx
-                        )
-                        val result = when {
-                            embedded != null -> embedded
-                            downloadState.coverPath != null &&
-                                downloadState.coverPath!!.isNotBlank() &&
-                                java.io.File(downloadState.coverPath!!).exists() ->
-                                "file://${downloadState.coverPath}"
-                            else -> song.coverUrl
+                // 2026-09-25 审查修复（#14）：封面提取此前在组合期直接执行且无缓存 ——
+                // 每次重组都重新读文件头/查盘（负结果连 EmbeddedCoverExtractor 的 LRU 都不进），
+                // 并每行每次重组打 3 条 debug 日志。改为 remember 按 (song.id, downloadState,
+                // coverUrl) 缓存，重组零 IO；负结果由 extractor 侧 missCache 兜底。
+                val rowContext = androidx.compose.ui.platform.LocalContext.current
+                val effectiveCoverUrl = remember(song.id, downloadState, song.coverUrl) {
+                    when {
+                        downloadState is DownloadState.Completed -> {
+                            val embedded = com.nasmusic.tv.backend.local.EmbeddedCoverExtractor.extractCoverUri(
+                                downloadState.path, rowContext.cacheDir, rowContext
+                            )
+                            when {
+                                embedded != null -> embedded
+                                !downloadState.coverPath.isNullOrBlank() &&
+                                    java.io.File(downloadState.coverPath).exists() ->
+                                    "file://${downloadState.coverPath}"
+                                else -> song.coverUrl
+                            }
                         }
-                        com.nasmusic.tv.util.AppLog.d("UnifiedSongRow",
-                            "Row cover: song=${song.title}, dlState=Completed, path=${downloadState.path}, " +
-                            "coverPath=${downloadState.coverPath}, embedded=$embedded, result=$result")
-                        result
-                    }
-                    song.isLocalSong && !song.path.isNullOrBlank() -> {
-                        val ctx = androidx.compose.ui.platform.LocalContext.current
-                        val embedded = com.nasmusic.tv.backend.local.EmbeddedCoverExtractor.extractCoverUri(
-                            song.path!!, ctx.cacheDir, ctx
-                        )
-                        val result = embedded ?: song.coverUrl
-                        com.nasmusic.tv.util.AppLog.d("UnifiedSongRow",
-                            "Row cover: song=${song.title}, isLocalSong fallback, path=${song.path}, " +
-                            "embedded=$embedded, result=$result")
-                        result
-                    }
-                    else -> {
-                        com.nasmusic.tv.util.AppLog.d("UnifiedSongRow",
-                            "Row cover: song=${song.title}, dlState=${downloadState.javaClass.simpleName}, using song.coverUrl=${song.coverUrl}")
-                        song.coverUrl
+                        song.isLocalSong && !song.path.isNullOrBlank() -> {
+                            com.nasmusic.tv.backend.local.EmbeddedCoverExtractor.extractCoverUri(
+                                song.path!!, rowContext.cacheDir, rowContext
+                            ) ?: song.coverUrl
+                        }
+                        else -> song.coverUrl
                     }
                 }
                 CoverImage(
@@ -620,22 +610,25 @@ private fun SongRowModeCard(
             modifier = Modifier.fillMaxWidth().padding(6.dp)
         ) {
             // 封面：已下载 → 内嵌封面（提取到缓存）→ 旁路 .jpg → 后端 URL
-            val cardCoverUrl = when (downloadState) {
-                is DownloadState.Completed -> {
-                    val ctx = androidx.compose.ui.platform.LocalContext.current
-                    val embedded = com.nasmusic.tv.backend.local.EmbeddedCoverExtractor.extractCoverUri(
-                        downloadState.path, ctx.cacheDir, ctx
-                    )
-                    when {
-                        embedded != null -> embedded
-                        downloadState.coverPath != null &&
-                            downloadState.coverPath!!.isNotBlank() &&
-                            java.io.File(downloadState.coverPath!!).exists() ->
-                            "file://${downloadState.coverPath}"
-                        else -> song.coverUrl
+            // 2026-09-25 审查修复（#14 同款）：组合期提取改 remember 缓存，重组零 IO
+            // LocalContext.current 是 @Composable 调用，必须在 remember lambda 外读取
+            val cardCtx = androidx.compose.ui.platform.LocalContext.current
+            val cardCoverUrl = remember(song.id, downloadState, song.coverUrl) {
+                when (downloadState) {
+                    is DownloadState.Completed -> {
+                        val embedded = com.nasmusic.tv.backend.local.EmbeddedCoverExtractor.extractCoverUri(
+                            downloadState.path, cardCtx.cacheDir, cardCtx
+                        )
+                        when {
+                            embedded != null -> embedded
+                            !downloadState.coverPath.isNullOrBlank() &&
+                                java.io.File(downloadState.coverPath).exists() ->
+                                "file://${downloadState.coverPath}"
+                            else -> song.coverUrl
+                        }
                     }
+                    else -> song.coverUrl
                 }
-                else -> song.coverUrl
             }
             CoverImage(
                 coverUrl = cardCoverUrl,

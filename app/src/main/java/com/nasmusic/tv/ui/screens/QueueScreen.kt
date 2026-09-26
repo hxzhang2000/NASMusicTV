@@ -311,7 +311,9 @@ private fun QueueListPane(
                 state = listState,
                 modifier = Modifier.fillMaxWidth().weight(1f)
             ) {
-                itemsIndexed(queue, key = { _, song -> song.id }) { index, song ->
+                // 2026-09-25 审查修复（#2）：队列允许重复歌曲（addToQueue 不查重），key 用 song.id
+                // 会触发 Compose "Key was already used" 崩溃；队列操作本就按 index 语义，key 拼 index。
+                itemsIndexed(queue, key = { index, song -> "q_${index}_${song.id}" }) { index, song ->
                     val isCurrent = index == currentIndex
                     // 与 SongRow 相同的实现方式：
                     // 外层 Box(focusGroup) 承载背景/边框/缩放，onFocusChanged 用 hasFocus 追踪子树焦点

@@ -48,6 +48,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
@@ -825,19 +826,33 @@ class PlaybackService : MediaLibraryService() {
      * @return true 已接管本次解析；false 表示无法处理，由 PlayerManager 回落
      */
     private fun resolveStreamUrlWithoutUi(index: Int): Boolean {
+        // 2026-09-26 修复（High #6 残留）：任何新的解析请求都先取消在途 job。
+        // 原实现 cancel 位于 streamUrl 非空提前 return 之后——切到已有 URL 的歌曲时
+        // 旧 job 不被取消，解析完成仍会通过 replayAt 强切回旧歌。
+        uiResolveJob?.cancel()
         val app = application as NasMusicApp
         val song = app.playerManager.getQueueSnapshot().getOrNull(index) ?: return false
         if (!song.streamUrl.isNullOrBlank()) return false
 
-        uiResolveJob?.cancel()
         uiResolveJob = serviceScope.launch {
             val url = withTimeoutOrNull(RESOLVE_TIMEOUT_MS) {
                 runCatching { app.networkMusicManager.resolvePlayUrl(song) }.getOrNull()
             }
             if (url.isNullOrBlank()) {
+                // 2026-09-26 修复（High #6 残留补充）：job 被 cancel() 后，runCatching 会吞掉
+                // CancellationException 走进此分支——此时不得再用旧 index 回落重解析（会与用户
+                // 当前所在歌曲冲突）。被取消则直接退出，由发起方（新请求/切歌路径）自行处理。
+                if (!isActive) return@launch
                 AppLog.w("PlaybackService", "resolveStreamUrlWithoutUi failed: ${song.title}")
                 // 回落 UI 侧（可能为 null）：由其负责重试与自动跳曲
                 app.playerManager.onNeedResolveStreamUrl?.invoke(index)
+                return@launch
+            }
+            // 2026-09-25 审查修复（#8 resolve→replay 竞态）：解析窗口内用户可能切歌/清空队列，
+            // updateStreamUrl/replayAt 只按 index 定位，会把结果写到另一首歌上并强切播放。
+            // 回写前校验目标位置仍是当初发起解析的歌曲，不一致则丢弃。
+            if (app.playerManager.getQueueSnapshot().getOrNull(index)?.id != song.id) {
+                AppLog.d("PlaybackService", "resolveStreamUrlWithoutUi: queue changed during resolve, drop result for ${song.title}")
                 return@launch
             }
             app.playerManager.updateStreamUrl(index, url)

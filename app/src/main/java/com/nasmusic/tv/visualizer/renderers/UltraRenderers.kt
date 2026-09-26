@@ -3,6 +3,7 @@ package com.nasmusic.tv.visualizer.renderers
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Canvas
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.unit.IntOffset
@@ -49,6 +50,10 @@ private val paint = androidx.compose.ui.graphics.Paint()
     private var hue = 120f   // 绿系起点（黄60° → 蓝195°区间流动）
 
     override fun onEnter(ctx: RenderContext) {
+        // 2026-09-25 审查修复（#12 位图泄漏）：RendererSwapper 在画质变化时会重入 onEnter
+        //（RendererSwapper.sync:78-79），旧的双 1280×720 ImageBitmap（约 7.4MB）此前只置 null，
+        // API 22-25 上 Bitmap 像素在 native 堆、仅靠 finalizer 延迟回收。重入/退出前先显式 recycle。
+        releaseBuffers()
         // 降采样到 720p 离屏
         val w = 1280
         val h = 720
@@ -60,6 +65,16 @@ private val paint = androidx.compose.ui.graphics.Paint()
         prevCanvas = Canvas(a)
         currCanvas = Canvas(b)
         rotation = 0f
+    }
+
+    /** 释放乒乓双缓冲（审查修复 #12；可安全重复调用，只回收未置空的位图） */
+    private fun releaseBuffers() {
+        try { prev?.asAndroidBitmap()?.recycle() } catch (_: Exception) {}
+        try { curr?.asAndroidBitmap()?.recycle() } catch (_: Exception) {}
+        prev = null
+        curr = null
+        prevCanvas = null
+        currCanvas = null
     }
 
     override fun DrawScope.draw(frame: AudioFrame, ctx: RenderContext) {
@@ -123,8 +138,8 @@ val n = ctx.quality.barCount
     }
 
     override fun onExit() {
-        prev = null; curr = null
-        prevCanvas = null; currCanvas = null
+        // 审查修复（#12）：显式 recycle 而非仅置 null
+        releaseBuffers()
     }
 }
 

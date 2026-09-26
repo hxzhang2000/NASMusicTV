@@ -43,6 +43,19 @@ class SongExporter(
     private val _state = MutableStateFlow<ExportState>(ExportState.Idle)
     val state: StateFlow<ExportState> = _state.asStateFlow()
 
+    /**
+     * 2026-09-25 审查修复（#6 导出状态机断裂）：ExportCoordinator 此前只在成功终态经
+     * onCompleted 更新自己的 state，本类私有 _state 的 Running 进度与 NO_SPACE /
+     * NOTHING_TO_EXPORT 失败永远到不了 UI（设置页表现为"点了没反应"）。
+     * 新增状态外发回调，由 coordinator 在导出期间订阅转发。
+     */
+    @Volatile var onStateChanged: ((ExportState) -> Unit)? = null
+
+    private fun setState(s: ExportState) {
+        _state.value = s
+        onStateChanged?.invoke(s)
+    }
+
     @Volatile private var isActive = false
     @Volatile private var cancelRequested = false
     private var currentRoot: ExportRoot = ExportRoot.Unavailable
@@ -56,7 +69,7 @@ class SongExporter(
 
     fun cancel() {
         cancelRequested = true
-        _state.value = ExportState.Cancelled
+        setState(ExportState.Cancelled)
     }
 
     /**
@@ -66,18 +79,20 @@ class SongExporter(
      * @param volumeId 卷标识（用于 export_records 增量）
      * @param devicePath 设备路径（用于判定导出目录在应用专属目录时的可见性）
      * @param onCompleted 完成回调（更新本地曲库让新导出的歌出现在 USB 列表）
+     * @return true = 本次拿到互斥锁并真正发起导出；false = 已有导出在跑，本次被忽略（未发起）
      */
-    suspend fun export(root: ExportRoot, volumeId: String, devicePath: String, onCompleted: (Int, Int, Int) -> Unit) {
+    suspend fun export(root: ExportRoot, volumeId: String, devicePath: String, onCompleted: (Int, Int, Int) -> Unit): Boolean {
         // 并发守卫：重复触发直接忽略（避免并发写同一目标 + cancelRequested 互相干扰）
         if (!exportMutex.tryLock()) {
             AppLog.w(TAG, "export: another export is running, ignore duplicate trigger")
-            return
+            return false
         }
         try {
             exportLocked(root, volumeId, devicePath, onCompleted)
         } finally {
             exportMutex.unlock()
         }
+        return true
     }
 
     private suspend fun exportLocked(
@@ -87,12 +102,12 @@ class SongExporter(
         onCompleted: (Int, Int, Int) -> Unit
     ) {
         if (root is ExportRoot.Unavailable) {
-            _state.value = ExportState.Failed(ExportError.NO_PERMISSION)
+            setState(ExportState.Failed(ExportError.NO_PERMISSION))
             return
         }
         val completedSongs = repo.getCompleted().filter { it.audioPath != null }
         if (completedSongs.isEmpty()) {
-            _state.value = ExportState.Failed(ExportError.NOTHING_TO_EXPORT)
+            setState(ExportState.Failed(ExportError.NOTHING_TO_EXPORT))
             return
         }
 
@@ -128,7 +143,7 @@ class SongExporter(
             } }
         }
         if (tasks.isEmpty()) {
-            _state.value = ExportState.Failed(ExportError.NOTHING_TO_EXPORT)
+            setState(ExportState.Failed(ExportError.NOTHING_TO_EXPORT))
             return
         }
 
@@ -136,7 +151,7 @@ class SongExporter(
         val totalBytes = tasks.sumOf { it.src.length() }
         val available = com.nasmusic.tv.util.StorageUtils.availableBytesAt(File(devicePath))
         if (available > 0 && totalBytes > available - RESERVED_BYTES) {
-            _state.value = ExportState.Failed(ExportError.NO_SPACE)
+            setState(ExportState.Failed(ExportError.NO_SPACE))
             return
         }
 
@@ -148,18 +163,18 @@ class SongExporter(
         var failed = 0
         var writtenSinceCheck = 0L
 
-        _state.value = ExportState.Running(0, tasks.size, "", skipped, failed)
+        setState(ExportState.Running(0, tasks.size, "", skipped, failed))
         currentRoot = root
         isActive = true
         cancelRequested = false
 
         for (task in tasks) {
             if (cancelRequested) {
-                _state.value = ExportState.Cancelled
+                setState(ExportState.Cancelled)
                 isActive = false
                 return
             }
-            _state.value = ExportState.Running(done, tasks.size, task.src.name, skipped, failed)
+            setState(ExportState.Running(done, tasks.size, task.src.name, skipped, failed))
 
             // 增量：relPath 已存在 且 srcSize 未变 → 跳过
             val rec = existingMap[task.relPath]
@@ -194,7 +209,7 @@ class SongExporter(
                     writtenSinceCheck = 0
                     val nowAvail = com.nasmusic.tv.util.StorageUtils.availableBytesAt(File(devicePath))
                     if (nowAvail <= RESERVED_BYTES) {
-                        _state.value = ExportState.Failed(ExportError.NO_SPACE)
+                        setState(ExportState.Failed(ExportError.NO_SPACE))
                         isActive = false
                         return
                     }
@@ -202,13 +217,13 @@ class SongExporter(
             } else {
                 failed++
             }
-            _state.value = ExportState.Running(done, tasks.size, task.src.name, skipped, failed)
+            setState(ExportState.Running(done, tasks.size, task.src.name, skipped, failed))
         }
 
         isActive = false
         // 完成 → 触发媒体扫描 + 更新本地曲库
         runCatching { mediaScan(devicePath) }
-        _state.value = ExportState.Completed(done, skipped, failed)
+        setState(ExportState.Completed(done, skipped, failed))
         onCompleted(done, skipped, failed)
     }
 

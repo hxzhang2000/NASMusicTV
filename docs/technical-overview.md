@@ -10880,6 +10880,24 @@ at `at0.invokeSuspend(...:133)`，线程 `DefaultDispatcher-worker-N`。**09-22 
 `lintDebug` **0 Error / 279 Warning**（与 §10.182 同批）。
 **真机待复验**（设置页应显示「合并后（去重）6938 张」+「仅含人像（实际展示）2657 张」）。
 
+### 10.184 v2.37.1 — 09-26 三路复审阻断项与建议项修复（2026-09-26）
+
+**来源**：`docs/code-review-2026-09-26.md`（对 v2.37.1 未提交修复批次的三路并行复审：后端/数据层、播放器/ViewModel、UI/可视化）。复审确认 17 条 High 修复中 15 条正确，另发现 2 条阻断项 + 若干建议项，本批一并返工。
+
+**背景**：09-25 批次引入 `AppPreferences.stripVolatileStreamUrl()` 后 NAS 歌凭据 URL 不再落盘（安全收益真实），但 `PlayerViewModel.playQueue` 的 `needsResolve` 谓词未覆盖 NAS 歌——本地歌单/最近播放含 NAS 歌时 streamUrl 为 null 却走「有 URL 直接播」分支，空 URI 建 MediaItem → `onPlayerError` 把空 URL 当预期静默吞掉 → **不播、无提示、不跳曲**。另一条 High #3（遥控删除队列项跨线程崩溃）是 09-25 批次漏修。
+
+**修复**（12 处，两条 @fixer lane 并行 + 1 处直接补丁）：
+
+- **High #4 回归**（PlayerViewModel.kt `playQueue`）：`needsResolve` 谓词补 NAS 分支（`!isNetworkSong && !isLocalSong && !imported_ && streamUrl.isNullOrBlank()`）；`resolvedFirst` 的 `when` 在 `else` 前新增 NAS 分支，照 `resolveAndPlayCurrentSong` 的 NAS 写法经 `backendRegistry.getAdapter()?.getSongsByIds(...)` 重建 streamUrl，失败返回原歌并 AppLog.w 不抛不崩。四类歌曲（imported_/网络/本地/NAS）解析路径全覆盖，`else` 兜底仍为有 URL 直接播，代数守卫与 imported_ 持久化写回未动。
+- **High #3 未修**（MainViewModel.kt `removeFromQueue`）：直调改 `mainHandler.post`，与 playAt/moveQueueItem/addToQueue 三个回调对齐（NanoHTTPD 工作线程不再跨线程触 ExoPlayer）。
+- **High #6 残留**（PlaybackService.kt `resolveStreamUrlWithoutUi`）：`uiResolveJob?.cancel()` 前移到 streamUrl 非空提前 return 之前（任何新解析请求先取消在途 job，同队列切到已有 URL 的歌不再被旧 job replayAt 强切回）；failure 分支补 `isActive` 守卫（job 被 cancel 后 `runCatching` 吞 CancellationException 不得再用旧 index 回落重解析）。
+- **High #7 同族（Medium）**（MainViewModel.kt `replayCurrentWithQuality`）：回写 `playSong` 前重读 `currentSong` 比对 id，不一致则丢弃（异步质量档重解析期间切歌不再被旧歌整队回滚）；回写基座用重读后的 current（id 一致、字段更新鲜）。
+- **Low**：VisualizerViewModel.dispose 补 `faceScanObserver?.cancel()`；MainActivity 真退出对称置空 `exportCoordinator.treePickLauncher`；SongExporter.export 返回 Boolean + ExportCoordinator 只在真正发起时清回调（二次触发不再清在跑进度）；MvPersistentCache.clear 纳入 saveLock（消除与 save 的 toMap 快照竞态）；WaterfallRenderer onExit 补 releaseBuffers（asAndroidBitmap().recycle()，同 Milkdrop 模式）；CacheSettingsSection 清理缓存后 refreshKey 触发重算尺寸；删死串 `mine_remove_song`；PlayerControls/JamendoTab 注释编号修正。
+
+**验证**：`:app:assembleDebug` + `:app:testDebugUnitTest --rerun-tasks` 全量 **BUILD SUCCESSFUL**（5m 50s）；**1177 tests / 0 failures / 0 errors**。复查报告 `docs/code-review-2026-09-26.md` V1.1 记录逐项复验结论。
+
+**版本**：v2.37.1（versionCode 163，未提交批次内）。
+
 ### 10.152 v2.32.3 — T5：删除死代码 `VocalRemovalProcessor.kt`（算法先归档，2026-09-14）
 
 **来源**：`docs/archive/code-review-full-report-2026-09-13.md` §T5 / `docs/archive/code-review-2026-09-03.md` §P2。文件 348 行，全项目**零调用方**（`PlaybackService.kt:207` 实际 `val vocalRemovalProcessor = SpectralMaskProcessor()`——变量名是历史遗留，类型早就换过了；`PlayerManager.setVocalRemovalProcessor()` 的形参类型同样是 `SpectralMaskProcessor`）。

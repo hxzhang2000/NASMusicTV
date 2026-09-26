@@ -537,7 +537,8 @@
     <string name="mine_create_playlist">New Playlist</string>
     <string name="mine_rename_playlist">Rename</string>
     <string name="mine_play_playlist">Play</string>
-    <string name="mine_remove_song">Remove</string>
+    <string name="mine_delete_playlist">Delete Playlist</string>
+    <string name="mine_delete_playlist_confirm">Delete playlist \"%1$s\"? This cannot be undone.</string>
     <string name="mine_song_count">%d songs</string>
     <string name="mine_add_to_playlist">Add to Playlist</string>
     <string name="mine_pick_playlist_title">Add to Playlist</string>

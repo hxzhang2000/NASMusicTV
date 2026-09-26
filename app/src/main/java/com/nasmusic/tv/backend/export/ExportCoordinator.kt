@@ -143,8 +143,30 @@ class ExportCoordinator(
             if (root is ExportRoot.File) {
                 AppLog.d(TAG, "export fallback to app-specific dir: ${root.dir.absolutePath}")
             }
-            exporter.export(root, volumeId, device.path) { done, skipped, failed ->
-                _state.value = ExportState.Completed(done, skipped, failed)
+            // 2026-09-25 审查修复（#6）：转发 exporter 内部 Running 进度与 NO_SPACE/
+            // NOTHING_TO_EXPORT 失败到本 state（UI 只 collect 本类的 state）。Cancelled 亦转发，
+            // Completed 不转发（由下方 onCompleted 回调统一落终态，携带与 export_records 一致的计数）。
+            exporter.onStateChanged = { s ->
+                when (s) {
+                    is ExportState.Running,
+                    is ExportState.Failed,
+                    is ExportState.Cancelled -> _state.value = s
+                    else -> {}
+                }
+            }
+            var exportStarted = false
+            try {
+                exportStarted = exporter.export(root, volumeId, device.path) { done, skipped, failed ->
+                    _state.value = ExportState.Completed(done, skipped, failed)
+                }
+            } finally {
+                // 2026-09-26 审查补修（#9 Low）：第 2 次触发时 exporter.export 因 exportMutex
+                // tryLock 失败会直接返回 false（未发起本次导出）——不能再无条件清 onStateChanged，
+                // 那会把**正在运行**的第 1 次导出的进度回调清掉（Running 进度丢失）。
+                // 只有本次真正拿到 mutex 发起导出（exportStarted=true）才在收尾时解绑；
+                // 被拒绝的分支不触碰回调。exportStarted 赋值前的异常（export 内部抛）同样
+                // 不触碰——残留的回调是转发到本 state 的无害 lambda，下次 exportTo 会重设。
+                if (exportStarted) exporter.onStateChanged = null
             }
         }
     }

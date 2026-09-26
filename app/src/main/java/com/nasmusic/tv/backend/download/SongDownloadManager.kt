@@ -634,8 +634,22 @@ class SongDownloadManager(
             repo.getUnfinished().forEach { entity ->
                 val finalPath = entity.audioPath ?: recoverFinalPathOrNull(entity)
                 if (finalPath != null && File(finalPath).exists()) {
-                    // 下载已完成但 DB 未更新（崩溃在 rename 后、upsert 前）
-                    repo.updateStatus(entity.songKey, DownloadStatus.COMPLETED, 100, null)
+                    // 下载已完成但 DB 未更新（崩溃在 rename 后、upsert 前）。
+                    // 2026-09-25 审查修复（#5 僵尸完成记录）：原 updateStatus 只更新
+                    // status/progress/errorMsg 三列，audioPath 仍为 null → playableLocalUri 恒 miss、
+                    // executeDownload 幂等检查返回 Already 导致永远无法重下。改为整体 upsert，
+                    // 回写 audioPath/fileSize/completedAt，与正常完成路径一致。
+                    val finalFile = File(finalPath)
+                    repo.upsert(
+                        entity.copy(
+                            status = DownloadStatus.COMPLETED.name,
+                            progress = 100,
+                            errorMsg = null,
+                            audioPath = finalPath,
+                            fileSize = finalFile.length(),
+                            completedAt = System.currentTimeMillis()
+                        )
+                    )
                     _downloadStates.update {
                         it + (entity.songKey to DownloadState.Completed(
                             finalPath,

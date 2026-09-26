@@ -161,31 +161,32 @@ fun ProgressSection(
                 }
                 .pointerInput(Unit) {
                     // key 用 Unit：progressMs 每秒更新，作为 key 会导致手势每秒重启（手机触摸拖动失效）
-                    val duration = latestDurationMs
-                    val live = latestIsLive
-                    val seek = latestOnSeek
+                    // 2026-09-25 审查修复（#14）：不得把 latest* 委托的当前值冻结进局部 val ——
+                    // pointerInput(Unit) 终身只执行一次，首组合时 durationMs=0 会让手势 seek 永久失效。
+                    // 必须在手势回调内直接读委托（动态取最新值）。
                     detectTapGestures { offset ->
+                        val duration = latestDurationMs
+                        val live = latestIsLive
                         if (duration > 0 && !live) {
                             val seekTo = (offset.x / size.width * duration).toLong().coerceIn(0, duration)
-                            seek(seekTo)
+                            latestOnSeek(seekTo)
                         }
                     }
                 }
                 // 手机触摸：拖动 seek（直播态禁用）
                 .pointerInput(Unit) {
-                    val duration = latestDurationMs
-                    val live = latestIsLive
-                    val seek = latestOnSeek
                     detectDragGestures(
                         onDragStart = { offset ->
-                            if (duration > 0 && !live) {
-                                seek((offset.x / size.width * duration).toLong().coerceIn(0, duration))
+                            val duration = latestDurationMs
+                            if (duration > 0 && !latestIsLive) {
+                                latestOnSeek((offset.x / size.width * duration).toLong().coerceIn(0, duration))
                             }
                         },
                         onDrag = { change, _ ->
                             change.consume()
-                            if (duration > 0 && !live) {
-                                seek((change.position.x / size.width * duration).toLong().coerceIn(0, duration))
+                            val duration = latestDurationMs
+                            if (duration > 0 && !latestIsLive) {
+                                latestOnSeek((change.position.x / size.width * duration).toLong().coerceIn(0, duration))
                             }
                         }
                     )

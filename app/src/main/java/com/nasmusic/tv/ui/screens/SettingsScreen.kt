@@ -344,8 +344,11 @@ fun SettingsScreen(
     var baiduMvDirLocal by remember { mutableStateOf(baiduMvDir) }
 
     // 进入"数据管理"分区时刷新备份文件列表
-    LaunchedEffect(activeSection) {
-        if (activeSection == SettingsSection.DATA) onRefreshBackupFiles?.invoke()
+    // 2026-09-25 审查修复（8-2）：竖屏两级页下 activeSection 恒为 GENERAL（侧栏不渲染），
+    // key 用 activeSection 会让手机进 DATA 分区永不刷新。displaySection 横屏==activeSection、
+    // 竖屏==selectedSection，两端语义统一。
+    LaunchedEffect(displaySection) {
+        if (displaySection == SettingsSection.DATA) onRefreshBackupFiles?.invoke()
     }
 
     // 备份操作结果消息显示后自动消费

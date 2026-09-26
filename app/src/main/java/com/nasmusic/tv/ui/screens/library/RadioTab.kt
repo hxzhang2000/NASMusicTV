@@ -195,7 +195,9 @@ fun RadioTab(
                                 onClick = { onPlayStation(station) }
                             )
                         }
-                        item(key = "bottom_spacer", span = { GridItemSpan(2) }) {
+                        // 2026-09-25 审查修复（#3）：phonePortrait=1 列时写死 GridItemSpan(2) 越界，
+                        // foundation 布局游标不前进导致测量异常；maxLineSpan 任意列数下均合法。
+                        item(key = "bottom_spacer", span = { GridItemSpan(maxLineSpan) }) {
                             Spacer(modifier = Modifier.height(16.dp))
                         }
                     }

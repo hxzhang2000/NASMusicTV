@@ -148,6 +148,7 @@ class MoleculeRenderer(
     private var lastNowMs = 0L
     private var rotAccum = 0f               // 累计自转角（rad）
     private var drawAccumMs = 0f            // 累计描线时长（ms，含 pulse 加速）
+    private var bondDotPhase = 0f           // 键上光点相位（dt 累加；审查修复 #11，见 :459）
 
     // ── 右侧文字带 ──
     private var formula: ChemicalFormula.Result? = null
@@ -184,6 +185,7 @@ class MoleculeRenderer(
         lastNowMs = 0L
         rotAccum = 0f
         drawAccumMs = 0f
+        bondDotPhase = 0f
         needsRemap = true
         order = IntArray(MoleculeLibrary.ALL.size) { it }
         shuffleOrder(-1)
@@ -333,6 +335,9 @@ class MoleculeRenderer(
         lastNowMs = now
         rotAccum = (rotAccum + spinDelta(dtMs, phase, frame.pulse)) % TWO_PI
         drawAccumMs += dtMs * (1f + frame.pulse * PULSE_DRAW)
+        // 审查修复（#11）：键上光点相位改 dt 累加（mod 100 保 Float 精度），
+        // 原 `now × (0.4+energy×0.8)` 把 energy 的每帧抖动放大 uptime 量级 → 光点每帧随机闪跳。
+        bondDotPhase = (bondDotPhase + dtMs * 0.001f) % 100f
         val progress = strokeProgress()
 
         // 绘图区映射：旋转绕定义质心 → 质心屏幕位置恒为 (plotCx, plotCy)
@@ -454,9 +459,9 @@ class MoleculeRenderer(
                 drawLine(mainColor, Offset(ax, ay), Offset(gx, gy),
                     alpha = alpha, strokeWidth = width, cap = StrokeCap.Round)
             }
-            // 键上能量光点（能量越足流动越快）
+            // 键上能量光点（能量越足流动越快）；相位 = dt 累加值 × 实时速率（平滑）
             if (energy > 0.3f && fade > 0.3f && g >= 1f) {
-                val t = (now * 0.001f * (0.4f + energy * 0.8f)) % 1f
+                val t = (bondDotPhase * (0.4f + energy * 0.8f)) % 1f
                 val px = ax + (bx - ax) * t
                 val py = ay + (by - ay) * t
                 drawCircle(
