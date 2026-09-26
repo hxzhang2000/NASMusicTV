@@ -10898,6 +10898,51 @@ at `at0.invokeSuspend(...:133)`，线程 `DefaultDispatcher-worker-N`。**09-22 
 
 **版本**：v2.37.1（versionCode 163，未提交批次内）。
 
+### 10.185 v2.37.2 — E33 齿轮效果重做：同心嵌套 → 啮合行星轮系（2026-09-26）
+
+**来源**：用户需求——① 齿轮须绕**各自轴心**旋转（原实现 3~5 只齿轮全部围绕同一屏幕中心嵌套旋转，观感是"同心环"而非齿轮组）；② 多只齿轮须**齿对齿啮合**（啮合）。
+
+**改前**：`ConcentricGearsRenderer`（`BatchFourRenderers.kt`）把 3~5 只等齿数（12 齿）齿轮以递减半径（0.42/0.345/0.27/0.195/0.12 × unit）同心叠放在屏幕中心，仅自转角度不同——齿数与半径不成模数（module 不一致），齿距对不上、永不相啮。前 2 只 beat 棘轮驱动（pulse 上升沿推进一齿距、120ms 缓动），其余 treble 自由自转。
+
+**改后**（行星轮系，仅改 `ConcentricGearsRenderer` 一个类，枚举/工厂/设置零改动）：
+
+- **布局**：中央**太阳轮**（12 齿，半径 0.36×unit，唯一驱动轮）+ **行星轮**（6 齿，半径 0.18×unit）按画质分档 2/3/4 只。行星轮角位取太阳轮齿距（2π/12 = 30°）的整数倍——2 只 0°/180°、3 只 0°/120°/240°、4 只 0°/90°/180°/270°——保证各接触点上太阳轮相位一致，啮合条件只对每只行星轮独立成立。
+- **模数恒定**：齿数 ∝ 半径（0.36/12 = 0.18/6 = 0.03），两轮齿距（circular pitch）一致，齿才能真正交错；`buildGearPath` 参数化 teeth（12/6 两种单位路径，onEnter 预生成）。
+- **啮合中心距** = 太阳轮齿顶 + 行星轮齿根 + 齿隙 = `SUN_R + ROOT_K·SAT_R + MESH_CLEAR` = 0.36 + 0.86·0.18 + 0.005 = **0.5198 × unit**（ROOT_K=0.86 是既有 path 的齿根系数）。数值验证：任意旋转相位下太阳齿顶与行星齿根径向间隙 ≥ 0.005×unit、行星齿顶与太阳齿根间隙 ≥ 0.03×unit，永不撞齿。
+- **运动学锁定**：`angle_sat = −2·sunAngle + π/6`——反向旋转（相邻齿轮旋向相反）、角速度比 = 齿数比（|ω|·N = 12 恒定）、初始半齿相位差（π/N_sat = TAU/12）。相对相位恒定 ⇒ **啮合永不脱齿**。因此**任何齿轮不再自由自转**：鼓点棘轮（每拍推进一齿距，~120ms 缓动）与 treble 提速都只作用于太阳轮；treble 另加共享蠕行（0.12 + 1.4·treble rad/s，全局同相）——高频只全局调速，不打散啮合相位（KDoc 已写明此不变量）。
+- **各自轴心**：每只齿轮中心 = `(cx + offX·unit, cy + offY·unit)`，offX/offY 为 onEnter 预计算的分数偏移（onEnter 无画布尺寸，位置必须存相对分数）；`withTransform(translate(自身中心); rotate; scale)` 绘制。轴心装饰点单独绘制（轴不随齿轮旋转）。
+- **画布适配**：`unit = minDim × 0.67`（原 0.46），最外齿顶 ≈ 0.47·minDim < 0.48 不裁切；加极淡轨道环（alpha 0.14）强化行星结构感。
+- **保留**：暗金/冷灰交替配色、BlendMode.Plus 线框、辐条/轴毂装饰、pulse 脉动轴心、画质分档、**draw 内零分配**。
+
+#### 二次修复（误诊，2026-09-26 同日）
+
+v2.37.2 首版发到真机后用户反馈"圆心还是不对、齿轮乱跑、齿轮应该固定在它自己圆心的地方进行旋转"。当时误判为两处独立缺陷（事后证明轴毂那条是误诊）：
+
+1. ~~**轴毂 drawCircle 漏 center → 飞离轴心**（误诊，非主因）~~。轴毂 `drawCircle(color, radius = 0.30f, style = Stroke(...))` 漏写 `center`，Compose 默认 `center = size.center`。补 `center = Offset.Zero`（→ 显式 `Offset(x,y)`）本身是正确的（轴毂应落于齿轮轴心），但**它不是"乱跑"的根因**——齿轮轮廓 `drawPath` 用路径自身坐标，不受 `drawCircle` 默认 center 影响。补完后用户仍报"乱跑"。
+2. **treble 抖动调速 → 啮合观感不稳**（此项有效，保留）。首版 `ease *= (1 + treble·1.2)` 与 `creep = (0.12 + treble·1.4)·dt` 把帧间抖动的 treble 灌进角速度，齿轮忽快忽慢。**改**：转速只留棘轮缓动（120ms 定值）+ 匀速基线 `0.30·dt`（~17°/s），treble 改去微调轨道环亮度（`0.10 + treble·0.06`，上限 0.18），不参与转速。
+
+二次修复后用户明确反馈"还是乱跑，所有齿轮围着右下角的某个点整体旋转"——并提示**万花筒（KaleidoRenderer）以前有同样问题、已修好**。这才定位到真正根因。
+
+#### 三次修复（真正根因：`rotate` 默认 pivot = 画布中心，2026-09-26 同日）
+
+**根因**：`ConcentricGearsRenderer.draw()` 用 `withTransform({ translate(x,y); rotate(angle*DEG); scale(r,r,pivot=Offset.Zero) })` 绘制每个齿轮。Compose 的 `DrawTransform.rotate(degrees)` **默认 `pivot = center`（画布中心 `size.center`），不是 translate 之后的局部原点 (x,y)**。因此每个齿轮虽然 translate 到了各自 (x,y)，`rotate` 却仍绕**画布中心**转——所有齿轮绕同一个固定点（画布中心；若可视化画布是屏幕的某个子区域，画布中心在屏幕上就落在偏右下，正是用户说的"右下角的某个点"）刚体公转。同心布局下齿轮轴心恰=画布中心，默认 pivot 巧合落对，故原同心实现从未暴露此 bug；行星布局下各齿轮轴心偏离画布中心，bug 显形。二次修复里"几何上齿轮钉在 (x,y)、`withTransform` 后乘 `T·R·S` → `(x,y)+r·R(p)`"的推导**错在假设 `rotate` 绕局部原点**——实际绕 `center`。
+
+**先例**：`KaleidoRenderer`（`AdvancedRenderers.kt:33-94`）以前同病，已修——**手算世界坐标，完全不用 `withTransform({ rotate })`**：`px = cx + lx*baseCos - ly*baseSin`，复用单例 `Path`（`reset()`），`drawPath` 无任何 transform。
+
+**改**（照 kaleido 模式重写 `ConcentricGearsRenderer` 绘制段，仅此一类）：
+- `buildGearPath(teeth): Path` → `buildGearVerts(teeth): FloatArray`（同齿数数学，发单位顶点 `[x0,y0,…]`，r∈{1.0,0.86}）；`gearPaths` 字段 → `gearVerts` + 单例复用 `gearPath: Path`。
+- draw 齿轮循环删掉 `withTransform({ translate; rotate; scale })`。每齿轮：`cosA=cos(angle); sinA=sin(angle)`，单位顶点 `(ux,uy)` → 世界坐标 `wx = x + r*(ux*cosA - uy*sinA)`、`wy = y + r*(ux*sinA + uy*cosA)`（translate+rotate+scale 全烘焙进顶点），喂进 `gearPath.reset()` 后 `moveTo/lineTo/close`，`drawPath` **无 transform**，`Stroke(1.6f)`（屏幕像素常量，不再是 `1.6f/r`）。
+- 轴毂：`drawCircle(center = Offset(x,y), radius = r*0.30f, Stroke(1.2f))`——显式绝对中心，无 transform。
+- 辐条 ×4：手算旋转后端点 `sa = spoke*TAU/4 + angle`，`drawLine(Offset(x+r*0.32f*cos(sa), y+r*0.32f*sin(sa)), Offset(x+r*0.78f*cos(sa), …), strokeWidth=1.0f)`。
+- 删除 `withTransform` import 与 `DEG` 常量（均不再用）。grep 确认零 `withTransform(`/`rotate(`/`scale(`/`gearPaths`/`buildGearPath`/`DEG` 残留（仅注释里出现）。
+- **不变**：行星布局/中心距/运动学锁定（`angle = sunAngle*gearRatio + gearPhase`）、calm 旋转（棘轮缓动 + `0.30·dt` 匀速基线，不接 treble 调速）、画质分档、暗金/冷灰配色、BlendMode.Plus、轨道环、轴心 pulse 点、**draw 内零分配**（复用 `gearPath` via `reset()`）。
+
+齿轮中心 `(x,y) = (cx+gearOffX[g]*unit, cy+gearOffY[g]*unit)` 帧间恒定（cx/cy 来自画布尺寸、gearOffX/Y 在 onEnter 固定、unit=minDim*0.67 恒定）；旋转烘焙进顶点的 `cos(angle)/sin(angle)`——齿轮绕自身 (x,y) 自转，不再绕任何固定点公转。
+
+**验证**：`assembleDebug` + `lintDebug` + `testDebugUnitTest`（`--no-daemon -Pkotlin.compiler.execution.strategy=in-process`）**BUILD SUCCESSFUL**（9m18s）；**1177 tests / 0 failures / 0 errors**；lint 0 Error。`assembleRelease` 复编译 BUILD SUCCESSFUL，APK `NASMusicTV-release-v2-37-2.apk`（22.4 MB）。改动范围仅 `BatchFourRenderers.kt` 一个文件。
+
+**版本**：v2.37.2（versionCode 164）。
+
 ### 10.152 v2.32.3 — T5：删除死代码 `VocalRemovalProcessor.kt`（算法先归档，2026-09-14）
 
 **来源**：`docs/archive/code-review-full-report-2026-09-13.md` §T5 / `docs/archive/code-review-2026-09-03.md` §P2。文件 348 行，全项目**零调用方**（`PlaybackService.kt:207` 实际 `val vocalRemovalProcessor = SpectralMaskProcessor()`——变量名是历史遗留，类型早就换过了；`PlayerManager.setVocalRemovalProcessor()` 的形参类型同样是 `SpectralMaskProcessor`）。

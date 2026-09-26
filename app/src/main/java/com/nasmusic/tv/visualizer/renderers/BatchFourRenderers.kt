@@ -6,7 +6,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.drawscope.withTransform
 import com.nasmusic.tv.data.model.VisualizerTheme
 import com.nasmusic.tv.visualizer.AudioFrame
 import com.nasmusic.tv.visualizer.RenderContext
@@ -15,13 +14,19 @@ import kotlin.math.cos
 import kotlin.math.sin
 
 /**
- * E33 `CONCENTRIC_GEARS` — 齿轮 · 同心齿轮
+ * E33 `CONCENTRIC_GEARS` — 齿轮 · 啮合齿轮系（行星轮）
  *
- * 视觉：暗金/冷灰配色的线框齿轮组，机械、复古、时钟质感。
- * 大齿轮由鼓点驱动"缓慢转动一个刻度"（棘轮感：beat 上升沿推进目标角度，
- * 100ms 快速缓动到位）；小齿轮由高频驱动疯狂旋转。
+ * 视觉：暗金/冷灰配色的线框齿轮系，机械、复古、时钟质感。
+ * 布局为行星轮系：中央太阳轮（12 齿）作驱动轮，2~4 个行星轮（6 齿）沿太阳轮
+ * 齿距整数倍的角位布置并与之啮合。齿数 ∝ 半径（模数恒定、节距一致），啮合
+ * 中心距 = 齿顶 + 齿根 + 齿隙。太阳轮由鼓点棘轮驱动（beat 上升沿每拍推进一个
+ * 齿距，~120ms 快速缓动到位）；行星轮按齿数比反向锁定跟随（|ω|·N 恒定、初始
+ * 半齿相位差 → 齿/槽永远交错啮合）。高频只做全局调速（共享蠕行 + 棘轮提速），
+ * 不引入任何独立自转，啮合相位永不破坏。
  *
- * 性能红线：draw 内零分配。齿轮轮廓 Path 全部 onEnter 预生成，每帧只 rotate。
+ * 性能红线：draw 内零分配。齿轮单位顶点 onEnter 预生成，每帧手算世界坐标烘焙旋转
+ * （照 KaleidoRenderer 模式，绝不用 withTransform({ rotate })——其默认 pivot=画布中心，
+ * 会让所有齿轮绕同一固定点公转）。
  */
 class ConcentricGearsRenderer : VisualizerRenderer {
 
@@ -29,9 +34,14 @@ class ConcentricGearsRenderer : VisualizerRenderer {
 
     private companion object {
         const val TAU = (2 * Math.PI).toFloat()
-        const val DEG = 57.2958f
         const val RATCHET_MS = 120f        // 刻度缓动时长
-        const val TEETH = 12               // 齿数
+        const val SUN_TEETH = 12           // 太阳轮齿数（驱动轮）
+        const val SAT_TEETH = 6            // 行星轮齿数（齿数比 2:1，模数一致）
+        const val SUN_R = 0.36f            // 太阳轮绘制半径（×unit）
+        const val SAT_R = 0.18f            // 行星轮绘制半径（×unit）
+        const val ROOT_K = 0.86f           // 齿根系数（path 齿根 = 0.86 × 外径）
+        const val MESH_CLEAR = 0.005f      // 齿顶-齿根间隙（×unit）
+        const val UNIT_K = 0.67f           // unit = minDim × 0.67（整机外缘 ≈ 0.47·minDim < 0.48）
     }
 
     // 暗金配色（固定，不用封面色——机械时钟质感自成体系）
@@ -39,17 +49,22 @@ class ConcentricGearsRenderer : VisualizerRenderer {
     private val goldDim = Color(0xFF8A7418)
     private val coldGray = Color(0xFF8B95A1)
 
-    /** 齿轮轮廓 Path（onEnter 预生成，单位半径=1，绘制时 scale） */
-    private val gearPaths = mutableListOf<Path>()
+    /** 每个齿轮的单位顶点数组（onEnter 预生成，[x0,y0,x1,y1,...]，单位半径） */
+    private val gearVerts = mutableListOf<FloatArray>()
+
+    /** draw 内复用的单例 Path（零分配：每帧 reset 重填世界坐标顶点） */
+    private val gearPath = Path()
 
     /** 每个齿轮的静态参数 */
-    private var gearR = FloatArray(0)         // 相对半径
-    private var gearDir = IntArray(0)         // 方向
-    private var gearIsBeatDriven = BooleanArray(0)
-    private var gearAngle = FloatArray(0)     // 当前角（rad）
-    private var gearTarget = FloatArray(0)    // 棘轮目标角
+    private var gearR = FloatArray(0)         // 绘制半径（×unit）
+    private var gearOffX = FloatArray(0)      // 中心偏移（×unit，相对屏幕中心）
+    private var gearOffY = FloatArray(0)
+    private var gearRatio = FloatArray(0)     // 角速度比（太阳轮=1，行星轮=-N_sun/N_sat 反向锁定）
+    private var gearPhase = FloatArray(0)     // 初始相位（rad，半齿差 → 保证啮合）
     private var gearCount = 0
 
+    private var sunAngle = 0f        // 太阳轮当前角（整组齿轮的唯一驱动角）
+    private var sunTarget = 0f       // 棘轮目标角
     private var lastPulse = 0f
     private var lastMs = 0L
     private var trebleSmooth = 0f
@@ -58,37 +73,61 @@ class ConcentricGearsRenderer : VisualizerRenderer {
         lastPulse = 0f
         lastMs = 0L
         trebleSmooth = 0f
+        sunAngle = 0f
+        sunTarget = 0f
 
-        // ── 画质分档：LOW 3 / MED 4 / HIGH 5 个齿轮 ──
-        gearCount = when (ctx.quality) {
-            com.nasmusic.tv.data.model.VisualQuality.LOW -> 3
-            com.nasmusic.tv.data.model.VisualQuality.MEDIUM -> 4
-            com.nasmusic.tv.data.model.VisualQuality.HIGH -> 5
+        // ── 画质分档：LOW 3 / MED 4 / HIGH 5 个齿轮（太阳轮 + 2/3/4 行星轮）──
+        val sats = when (ctx.quality) {
+            com.nasmusic.tv.data.model.VisualQuality.LOW -> 2
+            com.nasmusic.tv.data.model.VisualQuality.MEDIUM -> 3
+            else -> 4
         }
+        gearCount = sats + 1
 
-        // 齿轮轮廓预生成（单位半径）
-        gearPaths.clear()
-        repeat(gearCount) {
-            gearPaths.add(buildGearPath(TEETH))
+        // 啮合中心距 = 太阳轮齿顶 + 行星轮齿根 + 齿隙（×unit）
+        val centerDist = SUN_R + ROOT_K * SAT_R + MESH_CLEAR
+
+        // 齿轮单位顶点预生成（单位半径，齿数 ∝ 半径 → 模数恒定）
+        // 顶点存为 FloatArray [x0,y0,x1,y1,...]，draw 时手算世界坐标烘焙旋转
+        gearVerts.clear()
+        gearVerts.add(buildGearVerts(SUN_TEETH))
+        var i = 0
+        while (i < sats) {
+            gearVerts.add(buildGearVerts(SAT_TEETH))
+            i++
         }
 
         gearR = FloatArray(gearCount)
-        gearDir = IntArray(gearCount)
-        gearIsBeatDriven = BooleanArray(gearCount)
-        gearAngle = FloatArray(gearCount)
-        gearTarget = FloatArray(gearCount)
-        for (i in 0 until gearCount) {
-            gearR[i] = 0.42f - i * 0.075f      // 0.42 / 0.345 / 0.27 / 0.195 / 0.12
-            gearDir[i] = if (i % 2 == 0) 1 else -1
-            // 大齿轮（前 2 个）beat 驱动棘轮；小齿轮 treble 连续旋转
-            gearIsBeatDriven[i] = i < 2
+        gearOffX = FloatArray(gearCount)
+        gearOffY = FloatArray(gearCount)
+        gearRatio = FloatArray(gearCount)
+        gearPhase = FloatArray(gearCount)
+
+        // 太阳轮（驱动轮，屏幕中心）
+        gearR[0] = SUN_R
+        gearOffX[0] = 0f
+        gearOffY[0] = 0f
+        gearRatio[0] = 1f
+        gearPhase[0] = 0f
+
+        // 行星轮：角位取太阳轮齿距整数倍（各接触点相位一致），锁定跟随 + 半齿初始相位
+        i = 0
+        while (i < sats) {
+            val k = i + 1
+            val a = i * TAU / sats          // 0°/180° / 0°/120°/240° / 0°/90°/180°/270°
+            gearR[k] = SAT_R
+            gearOffX[k] = cos(a) * centerDist
+            gearOffY[k] = sin(a) * centerDist
+            gearRatio[k] = -SUN_TEETH.toFloat() / SAT_TEETH   // 反向、齿数比锁定
+            gearPhase[k] = TAU / (2 * SAT_TEETH)              // = π/N_sat（半齿相位差）
+            i++
         }
     }
 
-    /** 生成齿轮轮廓（单位半径）：外齿 + 内圈 */
-    private fun buildGearPath(teeth: Int): Path {
-        val p = Path()
+    /** 生成齿轮单位顶点数组（[x0,y0,x1,y1,...]，半径 1.0/0.86 交替） */
+    private fun buildGearVerts(teeth: Int): FloatArray {
         val seg = teeth * 4
+        val verts = FloatArray(seg * 2)
         var i = 0
         while (i < seg) {
             // 每齿 4 段：齿根→齿升→齿顶→齿降
@@ -108,13 +147,11 @@ class ConcentricGearsRenderer : VisualizerRenderer {
                 0, 3 -> rIn
                 else -> rOut
             }
-            val x = cos(a) * r
-            val y = sin(a) * r
-            if (i == 0) p.moveTo(x, y) else p.lineTo(x, y)
+            verts[i * 2] = cos(a) * r
+            verts[i * 2 + 1] = sin(a) * r
             i++
         }
-        p.close()
-        return p
+        return verts
     }
 
     override fun DrawScope.draw(frame: AudioFrame, ctx: RenderContext) {
@@ -131,73 +168,92 @@ class ConcentricGearsRenderer : VisualizerRenderer {
 
         val cx = w * 0.5f
         val cy = h * 0.5f
-        val unit = ctx.minDim * 0.46f
+        val unit = ctx.minDim * UNIT_K
 
-        // ── 棘轮：beat 上升沿（pulse 涨跳）推进大齿轮目标角 ──
+        // ── 棘轮：beat 上升沿（pulse 涨跳）推进太阳轮目标角（一个齿距）──
         val pulse = frame.pulse
         if (pulse - lastPulse > 0.18f) {
-            var g = 0
-            while (g < gearCount) {
-                if (gearIsBeatDriven[g]) {
-                    // 每拍推进一个齿距（12 齿 → 30°）
-                    gearTarget[g] += TAU / TEETH
-                }
-                g++
-            }
+            sunTarget += TAU / SUN_TEETH
         }
         lastPulse = pulse
 
-        // 大齿轮向目标角快速缓动（120ms 到位 → 机械棘轮感）
-        var g = 0
-        while (g < gearCount) {
-            if (gearIsBeatDriven[g]) {
-                val diff = gearTarget[g] - gearAngle[g]
-                gearAngle[g] += diff * (dtSec * 1000f / RATCHET_MS).coerceIn(0f, 1f)
-            } else {
-                // 小齿轮：treble 疯狂旋转
-                gearAngle[g] += (2.5f + trebleSmooth * 9f) * gearDir[g] * dtSec
-            }
-            if (gearAngle[g] > TAU) gearAngle[g] -= TAU
-            if (gearAngle[g] < -TAU) gearAngle[g] += TAU
-            g++
-        }
+        // ── 驱动角：棘轮缓动（120ms 到位）+ 极慢匀速基线 ──
+        //   ⚠️ 不接 treble 调速：treble 帧间抖动会让角速度忽快忽慢，啮合观感像"乱跑"；
+        //   齿轮只绕自身轴心匀速旋转 + 节拍推进，啮合相位恒定不被打散
+        val ease = (dtSec * 1000f / RATCHET_MS).coerceIn(0f, 1f)
+        sunAngle += (sunTarget - sunAngle) * ease
+        sunAngle += 0.30f * dtSec        // 匀速基线 ~17°/s，平滑可见
+        if (sunAngle > TAU) { sunAngle -= TAU; sunTarget -= TAU }
+        if (sunAngle < -TAU) { sunAngle += TAU; sunTarget += TAU }
 
-        // ── 绘制：从大到小，暗金→冷灰交替 ──
-        g = 0
+        // ── 轨道环（极淡，行星轮系结构感；treble 微调亮度不参与转速）──
+        val orbitR = SUN_R + ROOT_K * SAT_R + MESH_CLEAR
+        drawCircle(goldDim, radius = orbitR * unit, center = Offset(cx, cy),
+            style = Stroke(1f), alpha = (0.10f + trebleSmooth * 0.06f).coerceAtMost(0.18f),
+            blendMode = BlendMode.Plus)
+
+        // ── 绘制：太阳轮（最亮）→ 行星轮交替暗金/冷灰 ──
+        //   ⚠️ 旋转烘焙进顶点（手算世界坐标），绝不用 withTransform({ rotate })：
+        //   Compose DrawTransform.rotate 默认 pivot=画布中心，会让所有齿轮绕同一固定点
+        //   公转（用户反馈"整体绕右下角旋转"的根因）。照 KaleidoRenderer 模式：cos/sin
+        //   矩阵作用于单位顶点，齿轮绕自身 (x,y) 自转。
+        var g = 0
         while (g < gearCount) {
             val r = gearR[g] * unit
             val color = if (g % 2 == 0) gold else coldGray
-            val alpha = (0.9f - g * 0.10f).coerceAtLeast(0.5f)
-            val path = gearPaths[g]
+            val alpha = (0.95f - g * 0.06f).coerceAtLeast(0.55f)
+            val verts = gearVerts[g]
+            // 行星轮角 = 齿数比锁定跟随驱动角（啮合永不破）+ 初始相位
+            val angle = sunAngle * gearRatio[g] + gearPhase[g]
+            val x = cx + gearOffX[g] * unit
+            val y = cy + gearOffY[g] * unit
+            val cosA = cos(angle)
+            val sinA = sin(angle)
 
-            withTransform({
-                translate(cx, cy)
-                rotate(gearAngle[g] * DEG)
-                scale(r, r, pivot = Offset.Zero)
-            }) {
-                drawPath(path, color, style = Stroke(1.6f / r), alpha = alpha,
-                    blendMode = BlendMode.Plus)
-                // 内圈（轴心装饰）
-                drawCircle(color, radius = 0.30f, style = Stroke(1.2f / r), alpha = alpha * 0.8f)
-                // 辐条 × 4
-                var spoke = 0
-                while (spoke < 4) {
-                    val a = spoke * TAU / 4
-                    drawLine(
-                        color, Offset(cos(a) * 0.32f, sin(a) * 0.32f),
-                        Offset(cos(a) * 0.78f, sin(a) * 0.78f),
-                        strokeWidth = 1.0f / r, alpha = alpha * 0.7f,
-                        blendMode = BlendMode.Plus
-                    )
-                    spoke++
-                }
+            // 齿轮轮廓：单位顶点 → 世界坐标烘焙旋转，复用单例 Path（零分配）
+            gearPath.reset()
+            var vi = 0
+            while (vi < verts.size) {
+                val ux = verts[vi]
+                val uy = verts[vi + 1]
+                val wx = x + r * (ux * cosA - uy * sinA)
+                val wy = y + r * (ux * sinA + uy * cosA)
+                if (vi == 0) gearPath.moveTo(wx, wy) else gearPath.lineTo(wx, wy)
+                vi += 2
+            }
+            gearPath.close()
+            drawPath(gearPath, color, style = Stroke(1.6f), alpha = alpha,
+                blendMode = BlendMode.Plus)
+
+            // 轴毂：显式绝对中心，无 transform（半径/stroke 均为屏幕像素）
+            drawCircle(color, radius = r * 0.30f, center = Offset(x, y),
+                style = Stroke(1.2f), alpha = alpha * 0.8f, blendMode = BlendMode.Plus)
+
+            // 辐条 ×4：手算旋转后端点（spoke 本地角 + 齿轮角）
+            var spoke = 0
+            while (spoke < 4) {
+                val sa = spoke * TAU / 4 + angle
+                val cs = cos(sa)
+                val ss = sin(sa)
+                drawLine(color,
+                    Offset(x + r * 0.32f * cs, y + r * 0.32f * ss),
+                    Offset(x + r * 0.78f * cs, y + r * 0.78f * ss),
+                    strokeWidth = 1.0f, alpha = alpha * 0.7f, blendMode = BlendMode.Plus)
+                spoke++
             }
             g++
         }
 
-        // ── 中心轴点：pulse 脉动 ──
-        drawCircle(goldDim, radius = unit * (0.03f + frame.pulse * 0.012f),
-            center = Offset(cx, cy), alpha = 0.9f)
+        // ── 各齿轮轴心点：pulse 脉动（轴静止不随齿轮旋转，独立绘制）──
+        g = 0
+        while (g < gearCount) {
+            val r = gearR[g] * unit
+            val axR = r * (0.05f + frame.pulse * 0.02f)
+            drawCircle(goldDim, radius = axR,
+                center = Offset(cx + gearOffX[g] * unit, cy + gearOffY[g] * unit),
+                alpha = 0.9f, blendMode = BlendMode.Plus)
+            g++
+        }
     }
 }
 
