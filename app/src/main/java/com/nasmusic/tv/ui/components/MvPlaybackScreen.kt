@@ -125,6 +125,9 @@ fun MvPlaybackScreen(
     var controlsVisible by remember { mutableStateOf(true) }
     var lastInteraction by remember { mutableLongStateOf(System.currentTimeMillis()) }
     val screenFocusRequester = remember { FocusRequester() }
+    // K 歌页同款：进入页面时把焦点落在播放/暂停按钮上（控制组内），
+    // 而不是外层 Box —— 遥控器一进来就在控制组内，左右可直达返回/下一首。
+    val playPauseFocusRequester = remember { FocusRequester() }
     fun activateControls() { lastInteraction = System.currentTimeMillis() }
     LaunchedEffect(lastInteraction) {
         controlsVisible = true
@@ -157,10 +160,12 @@ fun MvPlaybackScreen(
         }
     }
 
-    // 进入 MTV 页面时夺取页面焦点，确保 AndroidView 视频层不会截断遥控按键的预览链路。
+    // 进入 MTV 页面时夺取页面焦点，确保 AndroidView 视频层不会截断遥控按键的预览链路；
+    // 随后把焦点移入控制组的播放/暂停按钮（与 K 歌页一致）。
     LaunchedEffect(Unit) {
         try {
             screenFocusRequester.requestFocus()
+            playPauseFocusRequester.requestFocus()
         } catch (_: Exception) {
         }
     }
@@ -276,6 +281,17 @@ fun MvPlaybackScreen(
                         ViewGroup.LayoutParams.MATCH_PARENT
                     )
                     setBackgroundColor(android.graphics.Color.BLACK)
+                    // ⛔ v2.37.5 遥控器焦点修复：视频层必须完全让出 Android 侧视图焦点。
+                    // AndroidComposeView.dispatchKeyEvent 仅在自身 isFocused（持有视图焦点）
+                    // 时把方向键送入 Compose 焦点系统；PlayerView 子树一旦拿到视图焦点，
+                    // 方向键全部路由到 Android 视图层，Compose 焦点搜索不再执行 ——
+                    // 表现为 MTV 页「焦点卡在返回按钮，无法移到右侧控制组」。
+                    // 三件套：自身不可聚焦 + 子树全禁聚焦 + 不可点击/长按。
+                    isFocusable = false
+                    isFocusableInTouchMode = false
+                    descendantFocusability = ViewGroup.FOCUS_BLOCK_DESCENDANTS
+                    isClickable = false
+                    isLongClickable = false
                 }
             },
             update = { it.player = exoPlayer },
@@ -401,7 +417,8 @@ fun MvPlaybackScreen(
                             if (exoPlayer.isPlaying) exoPlayer.pause() else exoPlayer.play()
                         },
                         icon = if (isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
-                        contentDescription = if (isPlaying) "Pause" else "Play"
+                        contentDescription = if (isPlaying) "Pause" else "Play",
+                        focusRequester = playPauseFocusRequester
                     )
                     Spacer(Modifier.width(20.dp))
                     MiniIconButton(
@@ -466,11 +483,13 @@ fun MvPlaybackScreen(
 private fun MiniIconButton(
     onClick: () -> Unit,
     icon: androidx.compose.ui.graphics.vector.ImageVector,
-    contentDescription: String?
+    contentDescription: String?,
+    focusRequester: FocusRequester? = null
 ) {
     FocusableSurface(
         onClick = onClick,
         modifier = Modifier.size(56.dp),
+        focusRequester = focusRequester,
         shape = RoundedCornerShape(50),
         focusedScale = 1.12f,
         animationDurationMs = 200,

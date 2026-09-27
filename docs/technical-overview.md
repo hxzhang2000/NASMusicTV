@@ -11036,6 +11036,39 @@ W/PhotoWallController:   scan produced an empty pool: {GALLERY=DISABLED, EXTERNA
 
 **版本**：v2.37.4（versionCode 166）。发布后需把手机从 debug 换回 release（数据清空需重连 Jellyfin）。
 
+### 10.189 v2.37.5 — MTV 页遥控器焦点卡在返回按钮：PlayerView 视频层抢 Android 视图焦点（2026-09-27）
+
+**线上症状**：电视端进入 MTV 全屏页后，遥控器方向键无法把焦点从左下角「返回」按钮移到右侧控制组（上一首/播放/下一首/歌词/切换/搜B站），焦点一直停在返回按钮。手机端触摸正常（不依赖 D-Pad 焦点搜索）。K 歌页（`KaraokePlaybackScreen`）布局同款（`SpaceBetween` + 左返回 + 右控制组）却工作正常。
+
+**根因链**（从 Compose 1.6.1 源码确证，本地 Gradle 缓存 `ui-android-1.6.1-sources.jar`）：
+
+1. `AndroidComposeView.dispatchKeyEvent`（`compose/ui/ui/.../AndroidComposeView.android.kt`）按自身 `isFocused` 分流：
+   - `isFocused == true` → `focusOwner.dispatchKeyEvent` → Compose 焦点系统 → `moveFocus(Right)` → 二维焦点搜索。
+   - `isFocused == false` → `super.dispatchKeyEvent` → 路由到持有视图焦点的子 Android 视图（即 AndroidView 包装的 PlayerView 子树），**Compose 焦点搜索根本不执行**。
+2. `TwoDimensionalFocusSearch.searchChildren` + `DelegatableNode.visitChildren`（同 jar `focus/TwoDimensionalFocusSearch.kt` / `node/DelegatableNode.kt`）：搜索会穿透非可聚焦容器（`aggregateChildKindSet & mask == 0` 时继续下钻 layout 子节点）—— 即从「返回」按钮往右**算法上能搜到**控制组按钮（Previous 最近、`weightedDistance` 最小）。**搜索算法本身不是瓶颈**。
+3. 唯一结构性差异：MTV 页有全屏 `AndroidView(PlayerView)`，K 歌页没有。PlayerView 子树（含内部 SurfaceView / 残留控制器视图）在某些 TV 焦点流转时机下拿到 Android 视图焦点 → `AndroidComposeView.isFocused` 变 false → 后续方向键全部进 Android 视图层、被未处理的事件吞掉 → 焦点停在「返回」。
+4. 这与 v2.32.1（§10.134）「AndroidView 视频层截断遥控按键的预览链路」属同一类问题——彼次只修了预览链路（`screenFocusRequester` 夺页面焦点保 `onPreviewKeyEvent` 生效），未触及方向键路由根因。
+
+**修复**（`ui/components/MvPlaybackScreen.kt`）：
+
+| 位置 | 改动 |
+|---|---|
+| `PlayerView` factory | 视频层完全让出 Android 侧视图焦点：`isFocusable=false` / `isFocusableInTouchMode=false` / `descendantFocusability=FOCUS_BLOCK_DESCENDANTS` / `isClickable=false` / `isLongClickable=false`（子树全禁聚焦，PlayerView 永不持有视图焦点 → `isFocused` 恒 true → 方向键恒进 Compose 焦点系统） |
+| 进入页 `LaunchedEffect` | 仿 K 歌页：`screenFocusRequester.requestFocus()` 后再 `playPauseFocusRequester.requestFocus()`，焦点直接落控制组播放/暂停按钮（而非外层 Box），左右可直达返回/下一首 |
+| `MiniIconButton`（私有） | 新增 `focusRequester: FocusRequester? = null` 形参并透传 `FocusableSurface`（与 K 歌页同款 `FocusableSurface` 既有参数一致） |
+| 播放/暂停按钮 | 传 `focusRequester = playPauseFocusRequester` |
+
+**为什么不在 K 歌页也加 PlayerView 三件套**：K 歌页无 `AndroidView`，不涉及视图焦点抢占；其控制组本就工作，无需改动。
+
+**验证**：
+
+| 手段 | 结果 |
+|---|---|
+| `assembleRelease --no-daemon -Pkotlin.compiler.execution.strategy=in-process` | BUILD SUCCESSFUL in 7m 19s（54 actionable tasks）；`lintDebug` 0 Error（既有 Warning，无新增） |
+| 真机（电视 192.168.0.113，release v2.37.5） | ✅ 进入 MTV 页焦点落在播放/暂停按钮；左方向键 → 上一首 → 返回；右方向键 → 下一首 → 歌词 → 切换；返回按钮 OK 退出。修复确认 |
+
+**版本**：v2.37.5（versionCode 167）。
+
 ### 10.152 v2.32.3 — T5：删除死代码 `VocalRemovalProcessor.kt`（算法先归档，2026-09-14）
 
 **来源**：`docs/archive/code-review-full-report-2026-09-13.md` §T5 / `docs/archive/code-review-2026-09-03.md` §P2。文件 348 行，全项目**零调用方**（`PlaybackService.kt:207` 实际 `val vocalRemovalProcessor = SpectralMaskProcessor()`——变量名是历史遗留，类型早就换过了；`PlayerManager.setVocalRemovalProcessor()` 的形参类型同样是 `SpectralMaskProcessor`）。
