@@ -11036,6 +11036,61 @@ W/PhotoWallController:   scan produced an empty pool: {GALLERY=DISABLED, EXTERNA
 
 **版本**：v2.37.4（versionCode 166）。发布后需把手机从 debug 换回 release（数据清空需重连 Jellyfin）。
 
+### 10.190 v2.37.6 — 精简可视化效果库：移除 11 个效果（2026-09-27）
+
+**范围**：从 `VisualizerTheme` 枚举移除 11 个效果，同步删除对应 Renderer 类、工厂分支、LEGACY_MAP 迁移映射、测试引用。仅涉及效果库（`visualizer/renderers/` + `data/model/AppSettings.kt`），不涉及照片转场（`visualizer/photo/`）。`GALAXY_SPIRAL`（E11）不在移除清单，保留。
+
+**移除清单**：
+
+| 枚举键 | 显示名 | 序号 | Renderer 类 | 原所在文件 |
+|---|---|---|---|---|
+| IMMERSIVE_BLOOM | 沉浸辉光 | 01 | BloomRenderer | BasicRenderers.kt |
+| RADIAL_BURST | 径向星芒 | 06 | RadialBurstRenderer | BasicRenderers.kt |
+| PARTICLE_STORM | 粒子风暴 | 08 | ParticleStormRenderer | ParticleRenderers.kt |
+| PARTICLE_GALAXY | 粒子银河 | 09 | ParticleGalaxyRenderer | ParticleRenderers.kt |
+| MIRROR_KALEIDO | 万花筒 | 10 | KaleidoRenderer | AdvancedRenderers.kt |
+| PRISM_HOLO | 棱镜彩虹 | 21 | PrismHoloRenderer | PrismHoloRenderer.kt（整文件删） |
+| AURORA | 极光 | 22 | AuroraRenderer | AuroraRenderer.kt（整文件删） |
+| VECTOR_WAVES | 声弦 | 26 | VectorWavesRenderer | BatchOneRenderers.kt（整文件删） |
+| PULSING_POLYGONS | 几何环 | 27 | PulsingPolygonsRenderer | BatchOneRenderers.kt（整文件删） |
+| BAUHAUS_SHAPES | 构成 | 28 | BauhausShapesRenderer | BatchTwoRenderers.kt |
+| FERMAT_SPIRAL | 螺旋 | 36 | FermatSpiralRenderer | BatchFourRenderers.kt |
+
+**文件改动**：
+
+| 文件 | 改动 |
+|---|---|
+| `AppSettings.kt` | enum 移除 11 条（37→26）；KDoc「34 套手动效果」→「23 套」；`LEGACY_MAP` 修正 `NEON_PULSE`（原指向已删的 IMMERSIVE_BLOOM → 改指 CIRCULAR_RING）+ 新增 11 条已移除主题名 → CIRCULAR_RING |
+| `VisualizerRendererFactory.kt` | 重写：移除 11 个 import + 11 个 when 分支，保留 26 个分支 |
+| `BasicRenderers.kt` | 删除 BloomRenderer + RadialBurstRenderer（462→328 行） |
+| `ParticleRenderers.kt` | 删除 ParticleStormRenderer + ParticleGalaxyRenderer（410→266 行） |
+| `AdvancedRenderers.kt` | 删除 KaleidoRenderer（保留 GalaxySpiralRenderer） |
+| `BatchTwoRenderers.kt` | 删除 BauhausShapesRenderer（467→241 行） |
+| `BatchFourRenderers.kt` | 删除 FermatSpiralRenderer（768→656 行）+ 修 2 处过时 KaleidoRenderer 注释 |
+| `PrismHoloRenderer.kt` / `AuroraRenderer.kt` / `BatchOneRenderers.kt` | 整文件删除（BatchOne 删后仅剩 package + imports） |
+
+**迁移策略**（`AppSettings.kt` `LEGACY_MAP`）：老用户 DataStore 存的旧主题键经 `VisualizerTheme.fromKey()` 查 `LEGACY_MAP`，11 个已移除名 + `NEON_PULSE`（原指向已删的 IMMERSIVE_BLOOM）全部回落到 `CIRCULAR_RING`（默认效果）。与既有 `AUTO_DIRECTOR` 回落同模式。
+
+**测试调整**：
+
+| 文件 | 改动 |
+|---|---|
+| `VisualizerThemeTest.kt` | 6×`assertEquals(37,…)`→`26` + 1×`assertEquals(36,…)`→`25`（原 37 = 34 手动 + 3 非手动含 PHOTO_WALL，移 11 后 = 26）；4×`PARTICLE_STORM`→`SPECTRO_WATERFALL`（ADV 同级）；`IMMERSIVE_BLOOM`→`CIRCULAR_RING`（BASIC 同级，line 22 + 110） |
+| `RendererSwapperTest.kt` | `PARTICLE_GALAXY`→`SPECTRO_WATERFALL`（line 137）；`RADIAL_BURST`→`CIRCULAR_RING`（line 157） |
+| `BackupGsonTest.kt` | 注释 `IMMERSIVE_BLOOM`→`TUNNEL_FLY`（line 73） |
+
+**验证**：
+
+| 手段 | 结果 |
+|---|---|
+| `compileDebugKotlin`（随 `testDebugUnitTest` 触发） | ✅ 编译通过，仅既有 warning（与本次改动无关） |
+| `testDebugUnitTest --tests "*VisualizerThemeTest" --tests "*RendererSwapperTest" --tests "*BackupGsonTest"` | ✅ 33 tests, 0 failures（BUILD SUCCESSFUL in 1m 5s） |
+| grep `VisualizerTheme.(11 个枚举键)` | ✅ 0 处代码引用残留 |
+| grep renderer 类名 | ✅ 仅 BatchFourRenderers.kt 2 处过时注释（已修） |
+| `lintDebug` | ✅ 0 Error（BUILD SUCCESSFUL in 11m 2s；既有 Warning 无新增） |
+
+**版本**：v2.37.6（versionCode 168）。
+
 ### 10.189 v2.37.5 — MTV 页遥控器焦点卡在返回按钮：PlayerView 视频层抢 Android 视图焦点（2026-09-27）
 
 **线上症状**：电视端进入 MTV 全屏页后，遥控器方向键无法把焦点从左下角「返回」按钮移到右侧控制组（上一首/播放/下一首/歌词/切换/搜B站），焦点一直停在返回按钮。手机端触摸正常（不依赖 D-Pad 焦点搜索）。K 歌页（`KaraokePlaybackScreen`）布局同款（`SpaceBetween` + 左返回 + 右控制组）却工作正常。

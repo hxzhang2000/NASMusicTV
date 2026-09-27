@@ -19,7 +19,7 @@ class VisualizerThemeTest {
     @Test
     fun `legacy enum names migrate to the new themes`() {
         assertEquals(VisualizerTheme.CIRCULAR_RING, VisualizerTheme.fromKey("COLOR_FLOW"))
-        assertEquals(VisualizerTheme.IMMERSIVE_BLOOM, VisualizerTheme.fromKey("NEON_PULSE"))
+        assertEquals(VisualizerTheme.CIRCULAR_RING, VisualizerTheme.fromKey("NEON_PULSE"))
         assertEquals(VisualizerTheme.CIRCULAR_RING, VisualizerTheme.fromKey("CLASSICAL_WAVE"))
         assertEquals(VisualizerTheme.CIRCULAR_RING, VisualizerTheme.fromKey("SONIC_TERRAIN"))
         assertEquals(VisualizerTheme.CIRCULAR_RING, VisualizerTheme.fromKey("CIRCULAR_NEBULA"))
@@ -48,14 +48,14 @@ class VisualizerThemeTest {
 
     @Test
     fun `theme library is all concrete effects, no auto mode`() {
-        assertEquals(37, VisualizerTheme.entries.size)
+        assertEquals(26, VisualizerTheme.entries.size)
     }
 
     @Test
     fun `selectable list contains every theme when the photo wall is available`() {
         val selectable = VisualizerTheme.selectable(photoWallAvailable = true)
-        assertEquals(37, selectable.size)
-        assertEquals(37, selectable.distinct().size)
+        assertEquals(26, selectable.size)
+        assertEquals(26, selectable.distinct().size)
         assertTrue(selectable.contains(VisualizerTheme.PHOTO_WALL))
     }
 
@@ -86,35 +86,35 @@ class VisualizerThemeTest {
             listOf(VisualizerTheme.PHOTO_WALL),
             on.filter { it !in off.toSet() }
         )
-        assertEquals(36, off.size)
-        assertEquals(37, on.size)
+        assertEquals(25, off.size)
+        assertEquals(26, on.size)
     }
 
     @Test
     fun `ordinal labels are unique`() {
         val labels = VisualizerTheme.entries.map { it.ordinalLabel }
-        assertEquals(37, labels.distinct().size)
+        assertEquals(26, labels.distinct().size)
     }
 
     @Test
     fun `display names are non blank and unique`() {
         val names = VisualizerTheme.entries.map { it.displayName }
         assertTrue(names.none { it.isBlank() })
-        assertEquals(37, names.distinct().size)
+        assertEquals(26, names.distinct().size)
     }
 
     @Test
     fun `quality tiers gate advanced and ultra effects`() {
         // BASIC 三档全支持
         VisualQuality.entries.forEach { q ->
-            assertTrue("$q should support BASIC", q.supports(VisualizerTheme.IMMERSIVE_BLOOM))
+            assertTrue("$q should support BASIC", q.supports(VisualizerTheme.CIRCULAR_RING))
             assertTrue("$q should support HYPNOTIC_FUNCTION", q.supports(VisualizerTheme.HYPNOTIC_FUNCTION))
         }
 
         // ADV 需要粒子预算：LOW 的 maxParticles = 0 → 禁用
-        assertFalse(VisualQuality.LOW.supports(VisualizerTheme.PARTICLE_STORM))
-        assertTrue(VisualQuality.MEDIUM.supports(VisualizerTheme.PARTICLE_STORM))
-        assertTrue(VisualQuality.HIGH.supports(VisualizerTheme.PARTICLE_STORM))
+        assertFalse(VisualQuality.LOW.supports(VisualizerTheme.SPECTRO_WATERFALL))
+        assertTrue(VisualQuality.MEDIUM.supports(VisualizerTheme.SPECTRO_WATERFALL))
+        assertTrue(VisualQuality.HIGH.supports(VisualizerTheme.SPECTRO_WATERFALL))
 
         // ULTRA 需要帧缓冲：只有 HIGH 允许
         assertFalse(VisualQuality.LOW.supports(VisualizerTheme.MILKDROP_FEEDBACK))
@@ -146,7 +146,7 @@ class VisualizerThemeTest {
         // ⛔ 放宽只限照片墙：粒子类 ADV 在 LOW 档仍然必须被挡
         assertFalse(
             "放宽不得波及其他 ADV 效果（LOW 的 maxParticles 仍为 0）",
-            VisualQuality.LOW.supports(VisualizerTheme.PARTICLE_STORM)
+            VisualQuality.LOW.supports(VisualizerTheme.SPECTRO_WATERFALL)
         )
         assertFalse(VisualQuality.LOW.supports(VisualizerTheme.MILKDROP_FEEDBACK))
     }

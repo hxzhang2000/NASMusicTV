@@ -25,7 +25,7 @@ import kotlin.math.sin
  * 不引入任何独立自转，啮合相位永不破坏。
  *
  * 性能红线：draw 内零分配。齿轮单位顶点 onEnter 预生成，每帧手算世界坐标烘焙旋转
- * （照 KaleidoRenderer 模式，绝不用 withTransform({ rotate })——其默认 pivot=画布中心，
+ * （照手动旋转模式，绝不用 withTransform({ rotate })——其默认 pivot=画布中心，
  * 会让所有齿轮绕同一固定点公转）。
  */
 class ConcentricGearsRenderer : VisualizerRenderer {
@@ -195,7 +195,7 @@ class ConcentricGearsRenderer : VisualizerRenderer {
         // ── 绘制：太阳轮（最亮）→ 行星轮交替暗金/冷灰 ──
         //   ⚠️ 旋转烘焙进顶点（手算世界坐标），绝不用 withTransform({ rotate })：
         //   Compose DrawTransform.rotate 默认 pivot=画布中心，会让所有齿轮绕同一固定点
-        //   公转（用户反馈"整体绕右下角旋转"的根因）。照 KaleidoRenderer 模式：cos/sin
+        //   公转（用户反馈"整体绕右下角旋转"的根因）。照手动旋转模式：cos/sin
         //   矩阵作用于单位顶点，齿轮绕自身 (x,y) 自转。
         var g = 0
         while (g < gearCount) {
@@ -653,115 +653,3 @@ class LightBeamsRenderer : VisualizerRenderer {
     private val pathBuf = Path()
 }
 
-/**
- * E36 `FERMAT_SPIRAL` — 螺旋 · 费马螺旋（向日葵）
- *
- * 视觉：数百个小点按黄金角 137.5° 螺旋分布（葵花籽排列），极度规则舒适。
- * 低音让整体螺旋向外膨胀松散（黄金角动态偏移 1~3°）；高频让内圈点组整体旋转。
- * 点亮度按环序映射 spectrum 频段（内圈高频外圈低频）。
- *
- * 性能红线：draw 内零分配。点位 onEnter 预计算存 FloatArray。
- */
-class FermatSpiralRenderer : VisualizerRenderer {
-
-    override val theme = VisualizerTheme.FERMAT_SPIRAL
-
-    private companion object {
-        const val GOLDEN_ANGLE = 2.39996f      // 137.507°
-        const val POINTS_LOW = 160
-        const val POINTS_MED = 260
-        const val POINTS_HIGH = 380
-        const val RING_BUCKETS = 4
-    }
-
-    /** 预计算点位（相对半径 0..1 × 点序号） */
-    private var ptR = FloatArray(0)          // 相对半径（0..1，对应最大半径）
-    private var ptAng = FloatArray(0)        // 基础角
-    private var ptCount = 0
-
-    /** 内圈旋转组：内圈 K 个点作为一组整体旋转（视觉等价、零逐点开销） */
-    private var innerGroupRot = 0f
-    private var trebleSmooth = 0f
-    private var bassSmooth = 0f
-    private var goldenOffset = 0f
-    private var lastMs = 0L
-
-    override fun onEnter(ctx: RenderContext) {
-        innerGroupRot = 0f
-        trebleSmooth = 0f
-        bassSmooth = 0f
-        goldenOffset = 0f
-        lastMs = 0L
-
-        ptCount = when (ctx.quality) {
-            com.nasmusic.tv.data.model.VisualQuality.LOW -> POINTS_LOW
-            com.nasmusic.tv.data.model.VisualQuality.MEDIUM -> POINTS_MED
-            com.nasmusic.tv.data.model.VisualQuality.HIGH -> POINTS_HIGH
-        }
-        ptR = FloatArray(ptCount)
-        ptAng = FloatArray(ptCount)
-        var i = 0
-        while (i < ptCount) {
-            ptR[i] = kotlin.math.sqrt(i + 0.5f) / kotlin.math.sqrt(ptCount.toFloat())
-            ptAng[i] = i * GOLDEN_ANGLE
-            i++
-        }
-    }
-
-    override fun DrawScope.draw(frame: AudioFrame, ctx: RenderContext) {
-        val w = size.width
-        val h = size.height
-        if (w < 2f || h < 2f) return
-
-        val now = ctx.nowMs
-        if (lastMs == 0L) lastMs = now
-        val dtSec = ((now - lastMs) / 1000f).coerceIn(0f, 0.1f)
-        lastMs = now
-
-        trebleSmooth += (frame.treble - trebleSmooth) * 0.20f
-        bassSmooth += (frame.bass - bassSmooth) * 0.10f
-
-        // ── 膨胀：低音驱动半径放大 ──
-        val inflate = 1f + bassSmooth * 0.28f
-        // ── 松散：黄金角动态偏移（低音越大越松散）──
-        goldenOffset += (bassSmooth * 1.5f) * dtSec
-        val maxR = ctx.minDim * 0.40f * inflate
-
-        val cx = w * 0.5f
-        val cy = h * 0.5f
-        val accent = ctx.palette.accent
-        val secondary = ctx.palette.secondary
-
-        // ── 内圈旋转组角度：treble 驱动 ──
-        innerGroupRot += (0.4f + trebleSmooth * 2.4f) * dtSec
-
-        // spectrum 桶边界（内圈=高频桶，外圈=低频桶）
-        val bins = frame.spectrum.size
-        val s = frame.spectrum
-
-        var i = 0
-        while (i < ptCount) {
-            val rr = ptR[i]
-            val bin = ((1f - rr) * (bins - 1)).toInt().coerceIn(0, bins - 1)  // 内圈高频
-            val v = s[bin]
-
-            // 角度：基础角 + 松散偏移（随半径放大外圈偏移更多）+ 内圈组旋转
-            val innerRot = if (rr < 0.35f) innerGroupRot else 0f
-            val ang = ptAng[i] + goldenOffset * rr * 3f + innerRot
-            val radius = rr * maxR
-            val x = cx + cos(ang) * radius
-            val y = cy + sin(ang) * radius
-
-            // ── 颜色与亮度：内圈 accent，外圈 accent/secondary 混合，亮度=v ──
-            val color = if (rr < 0.5f) accent else secondary
-            val alpha = (0.22f + v * 0.75f).coerceAtMost(0.95f)
-            val dotR = (1.4f + v * 2.6f) * (0.8f + rr * 0.4f)
-
-            drawCircle(color, radius = dotR, center = Offset(x, y), alpha = alpha)
-            i++
-        }
-
-        // ── 中心装饰：极小光点 ──
-        drawCircle(accent, radius = 2.5f + frame.pulse * 4f, center = Offset(cx, cy), alpha = 0.9f)
-    }
-}

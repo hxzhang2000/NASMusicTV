@@ -70,7 +70,7 @@ class BackupGsonTest {
      *
      * `VisualizerTheme.fromKey()` 未命中时返回 `Default`（= `CIRCULAR_RING`）而**不是** null，
      * 所以本枚举永远在第 ② 级就返回了，**到不了**第 ③ 级「首个常量」。
-     * 断言必须写 `Default`，写 `entries.first()`（= `IMMERSIVE_BLOOM`）会假红。
+     * 断言必须写 `Default`，写 `entries.first()`（= `TUNNEL_FLY`）会假红。
      */
     @Test
     fun `an unknown theme name falls back to the theme default, never null`() {

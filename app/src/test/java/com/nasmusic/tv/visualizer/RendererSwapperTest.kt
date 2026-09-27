@@ -134,7 +134,7 @@ class RendererSwapperTest {
         val h = Harness()
         h.swapper.sync(VisualizerTheme.CIRCULAR_RING, VisualQuality.MEDIUM, true, h.ctx, t0)
         val first = h.swapper.current as FakeRenderer
-        h.swapper.sync(VisualizerTheme.PARTICLE_GALAXY, VisualQuality.MEDIUM, true, h.ctx, t0 + 10)
+        h.swapper.sync(VisualizerTheme.SPECTRO_WATERFALL, VisualQuality.MEDIUM, true, h.ctx, t0 + 10)
         val second = h.swapper.current as FakeRenderer
 
         h.swapper.release()
@@ -154,7 +154,7 @@ class RendererSwapperTest {
         val middle = h.swapper.previous as FakeRenderer
 
         // 8s 驻留保证正常不会发生；此处验证防御分支不泄漏
-        h.swapper.sync(VisualizerTheme.RADIAL_BURST, VisualQuality.MEDIUM, true, h.ctx, t0 + 20)
+        h.swapper.sync(VisualizerTheme.CIRCULAR_RING, VisualQuality.MEDIUM, true, h.ctx, t0 + 20)
 
         assertEquals("被顶掉的中间层必须释放", 1, middle.exitCount)
         assertTrue(h.swapper.isCrossfading)

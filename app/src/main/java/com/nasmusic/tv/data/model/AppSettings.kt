@@ -97,7 +97,7 @@ data class AppSettings(
 )
 
 /**
- * 可视化效果主题（34 套手动效果，无自动导演档）。
+ * 可视化效果主题（23 套手动效果，无自动导演档）。
  *
  * [tier] 决定该效果在各画质档位下的可用性，见 [VisualQuality.supports]。
  */
@@ -106,14 +106,9 @@ enum class VisualizerTheme(
     val tier: Tier,
     val ordinalLabel: String
 ) {
-IMMERSIVE_BLOOM("沉浸辉光", Tier.BASIC, "01"),
     TUNNEL_FLY("隧道穿越", Tier.BASIC, "03"),
     CIRCULAR_RING("圆形频谱环", Tier.BASIC, "05"),
-    RADIAL_BURST("径向星芒", Tier.BASIC, "06"),
     FREQUENCY_MOUNTAIN("频率山峦", Tier.BASIC, "07"),
-    PARTICLE_STORM("粒子风暴", Tier.ADV, "08"),
-    PARTICLE_GALAXY("粒子银河", Tier.ADV, "09"),
-    MIRROR_KALEIDO("万花筒", Tier.ADV, "10"),
     GALAXY_SPIRAL("星系螺旋", Tier.ADV, "11"),
     SPECTRO_WATERFALL("频谱瀑布", Tier.ADV, "12"),
     LIQUID_GRID("液态网格", Tier.ADV, "13"),
@@ -124,14 +119,9 @@ IMMERSIVE_BLOOM("沉浸辉光", Tier.BASIC, "01"),
     MILKDROP_FEEDBACK("反馈残像", Tier.ULTRA, "18"),
     PARTICLE_TEXT("粒子文字", Tier.ULTRA, "19"),
     PLASMA_FLOW("等离子流场", Tier.ULTRA, "20"),
-    PRISM_HOLO("棱镜彩虹", Tier.ADV, "21"),
-    AURORA("极光", Tier.ADV, "22"),
-        LYRICS_DOT_MATRIX("歌词点阵", Tier.ADV, "23"),
+    LYRICS_DOT_MATRIX("歌词点阵", Tier.ADV, "23"),
     ECG_WAVE("心跳", Tier.BASIC, "24"),
     HYPNOTIC_FUNCTION("催眠", Tier.BASIC, "25"),
-    VECTOR_WAVES("声弦", Tier.BASIC, "26"),
-    PULSING_POLYGONS("几何环", Tier.BASIC, "27"),
-    BAUHAUS_SHAPES("构成", Tier.ADV, "28"),
     ORBITAL_RINGS("轨道", Tier.ADV, "29"),
     RADAR_GRID("雷达", Tier.BASIC, "30"),
     ORIGAMI_POLY("折纸", Tier.ADV, "31"),
@@ -139,7 +129,6 @@ IMMERSIVE_BLOOM("沉浸辉光", Tier.BASIC, "01"),
     CONCENTRIC_GEARS("齿轮", Tier.BASIC, "33"),
     FRACTAL_TREE("分形", Tier.BASIC, "34"),
     LIGHT_BEAMS("光轴", Tier.BASIC, "35"),
-    FERMAT_SPIRAL("螺旋", Tier.BASIC, "36"),
     MOLECULE("分子", Tier.BASIC, "37"),
     VINTAGE_TV("怀旧", Tier.BASIC, "38"),
 
@@ -164,13 +153,25 @@ IMMERSIVE_BLOOM("沉浸辉光", Tier.BASIC, "01"),
         /** 历史枚举名 → 新主题。老用户 DataStore 存的是旧名，需平滑迁移 */
 private val LEGACY_MAP = mapOf(
         "COLOR_FLOW" to CIRCULAR_RING,
-        "NEON_PULSE" to IMMERSIVE_BLOOM,
+        "NEON_PULSE" to CIRCULAR_RING,
         "SONIC_TERRAIN" to CIRCULAR_RING,
         "CIRCULAR_NEBULA" to CIRCULAR_RING,
         "CLASSICAL_WAVE" to CIRCULAR_RING,
         // AUTO_DIRECTOR 档已删除：老用户存过该值时回落到默认效果。
         // 与 fromKey 末尾 fallback 行为一致，显式写出是为了固化该迁移意图。
         "AUTO_DIRECTOR" to CIRCULAR_RING,
+        // 以下 11 个效果已从效果库移除：老用户存过的值回落到默认 CIRCULAR_RING
+        "IMMERSIVE_BLOOM" to CIRCULAR_RING,
+        "RADIAL_BURST" to CIRCULAR_RING,
+        "PARTICLE_STORM" to CIRCULAR_RING,
+        "PARTICLE_GALAXY" to CIRCULAR_RING,
+        "MIRROR_KALEIDO" to CIRCULAR_RING,
+        "PRISM_HOLO" to CIRCULAR_RING,
+        "AURORA" to CIRCULAR_RING,
+        "VECTOR_WAVES" to CIRCULAR_RING,
+        "PULSING_POLYGONS" to CIRCULAR_RING,
+        "BAUHAUS_SHAPES" to CIRCULAR_RING,
+        "FERMAT_SPIRAL" to CIRCULAR_RING,
     )
 
         fun fromKey(key: String?): VisualizerTheme =
