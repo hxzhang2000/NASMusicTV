@@ -1,7 +1,7 @@
 ﻿# NAS Music TV — 技术架构概述
 
-> 版本：v2.13.1
-> 最后更新：2026-09-01
+> 版本：v2.13.2
+> 最后更新：2026-09-27
 > 本文档记录项目当前的完整技术架构，作为后续迭代的基准参考。
 
 ---
@@ -10975,6 +10975,27 @@ v2.37.2 首版发到真机后用户反馈"圆心还是不对、齿轮乱跑、�
 - 位置链闭环：行中心 = 位图中心 = 屏幕中心（`dstX = (w - bmpW)/2 + 抖动`，抖动 ±1.5px 正弦、均值 0、低音增强）。
 
 **验证**：`assembleRelease`（含 lintVital）BUILD SUCCESSFUL；APK `NASMusicTV-release-v2-37-3.apk`（23.5 MB）adb 推送真机 192.168.0.113 安装 Success。CHANGELOG v2.37.3 已按「只记做了什么」补 Added/Changed/Fixed。
+
+**版本**：v2.37.3（versionCode 165）。
+
+### 10.187 v2.37.3 — 怀旧效果纸感配色定稿（滚动暗带/反色文字/暗角重做，2026-09-27）
+
+**来源**：10.186 后真机回归 4 轮，用户逐轮反馈定稿。最终形态与 10.186 的深灰蓝黑底差别巨大：纸感配色（黄白 → 偏黄牛皮纸）、黑/灰黑文字、竖条与雪花全部移除、暗角收敛到 4:3 画面区、左下歌曲信息反色模式。
+
+**迭代时间线**（10.186 三个提交之后的工作树，未分次提交，一并归档）：
+
+1. **复古包**（首轮未提交）：竖条强化（宽收窄 8~23px → 4~9px）、**抖动相位改 dt 累加**（禁 `nowMs×系数`——大时间基数下 float 精度丢失会把正弦抖动冻结/跳变）、暗角 + 圆角屏面、滚动暗带（每 6~10s 一条、带高 h×7%、4~5.5s 从屏底上扫全屏）、雪花爆发、RGB 色差重影（红左青右、随低音增强）、4:3 黑边 + 台标 OSD（"CH 3" 等，1s 亮/1s 灭）、暖荧光粉色调。
+2. **黄白版**：背景 `#F5EDD9`、黑色歌词、细竖条 0.2%~0.45% 屏宽（可见性由 400~600ms 时长保证）、横竖条互斥、删雪花爆发、噪点色 = 背景暗化色（`#6E6044`，随浅底变化）；`VisualizerStage` 联动：左下歌曲信息与主题指示器点转深色（浅底可读）。
+3. **去竖条 + `#DBB98E`**：竖条常量/字段/函数/数据类全删，滚动带互斥检查随之删除；背景改 `#DBB98E` 偏黄牛皮纸；**暗角改按 4:3 画面区定界**（全屏定界时四角整块落在 pillarbox 黑边之下——真机「四个暗角看不出来」）并加深到 0.65；圆角屏面同步收敛到画面区。
+4. **定稿**：歌词 `#34322B` + `BlurMaskFilter` 边缘虚化（半径 = 字号 2.5%，86px 字 ≈ 2px，`measureText` 不受影响换行仍准确）；**暗角改平滑渐变**（0.03/0.08/0.18 → 边缘 0.5，中性起即压暗——原「0.45 半径内全透明」在画面中间画出明显亮圆边界，真机「像太阳」）；**歌曲信息反色模式**：黑带区白字、画面区黑字，双层裁剪、分界 = 黑带右缘（不再按暗角阈值外扩——真机反馈白字伸进画面太多）。
+
+**关键实现**：
+
+- **反色文字（⛔ 本机 Android 5.1 无 BlendMode.Difference，API 29+）**：`VisualizerStage` 双层 `SongInfoTexts`（抽取的私有 Composable，颜色/裁剪由调用方传入）。白层 `Modifier.drawWithContent { clipRect(right = 黑带右缘) { this@drawWithContent.drawContent() } }`、黑层 `clipRect(left = 黑带右缘)`。要点：① `clipRect` 是 `androidx.compose.ui.graphics.drawscope` 的**扩展函数**，必须显式 import；② `drawContent()` 是外层 `ContentDrawScope` 成员，在 clipRect（接收者 `DrawScope`）内必须写 `this@drawWithContent.drawContent()` 显式接收者。黑带右缘 = `maxOf((screenW - screenH×4/3)/2, 0f).dp`（`LocalConfiguration` 屏幕 dp）；Box `end = 黑带宽` 内边距把文字挡在右黑带外。竖屏无黑带 → 白层裁剪为空、黑层全屏 ✓。
+- **暗角几何**：半径 = 画面区半对角线 `sqrt((pictureW/2)² + (h/2)²)`（`pictureW = minOf(w, h×4/3)`）、中心 (w/2, h/2)。边缘 alpha 0.5 是「画面区黑字可读（≥3.5:1）」与「四角可见」的平衡点；0.65 时黑字在左下角暗区低至 2.4:1 不可读。
+- **零分配约束保持**：`vignetteBrush`/`cornerPath` 按尺寸缓存；`nowMs×系数` 依旧禁用。
+
+**验证**：`assembleRelease` + `testDebugUnitTest` 多轮全绿（1177 tests / 0 failures / 0 errors）；APK 23.5MB adb 推送 192.168.0.113（Android 5.1.1，density 240，1920×1080）安装 Success；用户逐项验收：歌词效果 ✓、暗角 ✓、无亮圆 ✓、反色分界 ✓ → **定稿**。
 
 **版本**：v2.37.3（versionCode 165）。
 

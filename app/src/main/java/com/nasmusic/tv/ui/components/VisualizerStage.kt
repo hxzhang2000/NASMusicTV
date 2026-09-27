@@ -31,6 +31,7 @@ import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.CornerRadius
@@ -39,6 +40,7 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
@@ -46,6 +48,7 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
@@ -335,6 +338,16 @@ fun VisualizerStage(
 
         val isVintageTv = theme == VisualizerTheme.VINTAGE_TV
 
+        // 怀旧 4:3 反色文字（2026-09-27 二次定稿）：
+        // 仅「黑带」区用白字、画面区一律黑字 —— 分界即 4:3 黑带右缘，
+        // 不随暗角阈值外扩（真机反馈：白字伸进画面太多）。
+        // ⛔ 本机 Android 5.1 无 BlendMode.Difference（API 29+），故用双层裁剪实现。
+        val cfg = LocalConfiguration.current
+        val vintagePillarDp = if (isVintageTv) {
+            maxOf((cfg.screenWidthDp - cfg.screenHeightDp * 4f / 3f) / 2f, 0f).dp
+        } else 0.dp
+        val vintageBandEndPx = with(LocalDensity.current) { (vintagePillarDp - 48.dp).toPx() }
+
         // ③ 前景层
         Column(Modifier.fillMaxSize()) {
             // 顶部歌词行（怀旧效果已自带中间大字歌词，隐藏顶部栏）
@@ -378,22 +391,32 @@ fun VisualizerStage(
             Spacer(Modifier.weight(1f))
 
             // 左下：歌曲信息
-            Column(
+            // 怀旧 4:3：黑带是纯黑背景、画面区是纸底 —— 单色文字必有一侧不可见
+            // （真机反馈：黑字落在纯黑 band 上看不到）。反色文字模式：黑带区白字、
+            // 画面区黑字，双层裁剪、分界 = 黑带右缘；右端以 end 内边距挡在黑带之外。
+            Box(
                 Modifier
                     .fillMaxWidth()
-                    .padding(start = 48.dp, bottom = 8.dp)
+                    .padding(start = 48.dp, bottom = 8.dp, end = vintagePillarDp)
             ) {
-                Text(
-                    text = song?.title ?: "",
-                    color = Color.White,
-                    fontSize = 24.sp,
-                    maxLines = 1
+                // 左黑带区 → 白字（与背景反色）
+                SongInfoTexts(
+                    song = song,
+                    titleColor = Color.White,
+                    artistColor = Color.White.copy(alpha = 0.6f),
+                    modifier = Modifier.drawWithContent {
+                        clipRect(right = vintageBandEndPx) { this@drawWithContent.drawContent() }
+                    }
                 )
-                Text(
-                    text = song?.artist ?: "",
-                    color = Color.White.copy(alpha = 0.6f),
-                    fontSize = 16.sp,
-                    maxLines = 1
+                // 画面区 → 黑字（非怀旧：整体白字、不裁剪，布局与旧版一致）
+                SongInfoTexts(
+                    song = song,
+                    titleColor = if (isVintageTv) Color.Black else Color.White,
+                    artistColor = if (isVintageTv) Color.Black.copy(alpha = 0.6f)
+                    else Color.White.copy(alpha = 0.6f),
+                    modifier = if (isVintageTv) Modifier.drawWithContent {
+                        clipRect(left = vintageBandEndPx) { this@drawWithContent.drawContent() }
+                    } else Modifier
                 )
             }
 
@@ -402,6 +425,7 @@ fun VisualizerStage(
                 themes = VisualizerTheme.selectable(photoWallAvailable),
                 current = theme,
                 quality = quality,
+                onLightBg = isVintageTv,
                 modifier = Modifier.align(Alignment.CenterHorizontally)
             )
 
@@ -581,12 +605,37 @@ internal fun computeLyricInfo(
     )
 }
 
+/** 左下角歌曲信息（歌曲名 + 艺术家）；颜色/裁剪由调用方传入（怀旧反色模式双层绘制） */
+@Composable
+private fun SongInfoTexts(
+    song: Song?,
+    titleColor: Color,
+    artistColor: Color,
+    modifier: Modifier = Modifier
+) {
+    Column(modifier) {
+        Text(
+            text = song?.title ?: "",
+            color = titleColor,
+            fontSize = 24.sp,
+            maxLines = 1
+        )
+        Text(
+            text = song?.artist ?: "",
+            color = artistColor,
+            fontSize = 16.sp,
+            maxLines = 1
+        )
+    }
+}
+
 /** 底部圆点指示器（含 AUTO 档） */
 @Composable
 private fun ThemeIndicator(
     themes: List<VisualizerTheme>,
     current: VisualizerTheme,
     quality: VisualQuality,
+    onLightBg: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     // 圆点用 Canvas drawCircle 绘制，而非 21 个 CircleShape clip：
@@ -610,9 +659,12 @@ private fun ThemeIndicator(
             val active = t == current
             drawCircle(
                 color = when {
-                    !supported -> Color.White.copy(alpha = 0.18f)
+                    // 浅底（怀旧黄白）上白点不可见 → 换深色点
+                    !supported -> if (onLightBg) Color.Black.copy(alpha = 0.22f)
+                    else Color.White.copy(alpha = 0.18f)
                     active -> NasMusicColors.Primary
-                    else -> Color.White.copy(alpha = 0.42f)
+                    else -> if (onLightBg) Color.Black.copy(alpha = 0.45f)
+                    else Color.White.copy(alpha = 0.42f)
                 },
                 radius = if (active) radiusDp.toPx() else smallRadiusDp.toPx(),
                 center = Offset(cx0 + i * spacingDp.toPx(), cy)
