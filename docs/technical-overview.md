@@ -11036,6 +11036,43 @@ W/PhotoWallController:   scan produced an empty pool: {GALLERY=DISABLED, EXTERNA
 
 **版本**：v2.37.4（versionCode 166）。发布后需把手机从 debug 换回 release（数据清空需重连 Jellyfin）。
 
+### 10.191 v2.37.6 — 怀旧（VINTAGE_TV）两侧黑边改胶片边缘 + 向上滚动（2026-09-27）
+
+**范围**：仅 `VintageTvRenderer.kt` 单文件（+206/−11）。4:3 画面两侧 pillarbox（1080p 各 240px）由纯黑改为胶片边缘渲染，并让条带匀速向上滚动。画面区内容（歌词/扫描线/暗角/圆角/OSD）、时机逻辑与其他效果零改动；无枚举/工厂/测试变动。
+
+**设计定稿（三轮）**：① 先产出预览 `output/vintage-tv-film-edge-preview.html`（整屏 + 放大细节 + 尺寸标注表），针对「两边不一样、左右侧是反的」给出两种解读——A 镜像（切孔靠外缘、光向翻转）、B 错位（右列反相错半格），用户确认 A；② 追加「胶片向上滚动」；③ 首版 release 实测后用户按真实胶片参考收敛为**方孔、孔距加宽、切孔居中、两侧一致**（见下）。预览产物位于 gitignored 的 `output/`，不入库。
+
+**胶片边缘几何**（全部按 `side`（pillarbox 宽度）的百分比，分辨率无关）：
+
+| 元素 | 比例（×side） | 说明 |
+|---|---|---|
+| 切孔 | 30% × 30%（近正方形） | 圆角矩形 rx 5%（约孔边 1/6）；**居中排列**：外/内边距各 35%（35+30+35=100），与框线（2.5%）、外缘高光（1%）及 bevel 阴影均不重叠 |
+| 孔距 pitch | 60% | 行距，gap = 30% ＝孔宽（黑区较初版 26.25% 拉宽），滚动取模用 |
+| 片格分隔线 | k·pitch | #302E27，横贯条带，位于孔间黑区正中，随胶片滚动 |
+| 框线 | 2.5% | 画面朝向侧竖线 #4B4539 + 内亮线 #6F6553（宽度钳制，绝不越过画面区）；静止 |
+| 外缘高光 | 1% | #DBB98E @30%，贴屏幕外缘；静止 |
+
+**两侧一致（实测后改版）**：初版按理解 A 做镜像（片基光向翻转、切孔靠外缘、bevel 随侧翻转）；用户实测后要求「切孔放黑边中间，两边就一样的」——改为两侧平移复制、完全一致：片基纯色 **#17150F**（`FILM_BASE_FLAT`，原横向镜像渐变删除）、切孔渐变同向（LIT→DIM）、bevel 同向（左上高光 / 右下落影）。保留的 `left` 分支仅剩框线与外缘高光的方位放置（相对本条带的位置两侧相同）。
+
+**向上滚动**：字段 `filmScrollPx`，`onEnter` 重置；每帧 `filmScrollPx = (filmScrollPx + FILM_SCROLL_SPEED × side × dt) % pitch`，`FILM_SCROLL_SPEED = 0.30f` side/s（1080p = 72px/s；pitch 改为 60% 后 = 144px ⇒ **2.0s/格**，匀速无缓动、无音频响应）。切孔行与片格分隔线共用同一 offset（同相位移＝同一条胶片），绘制 k 起点提前一个 pitch（k=−1，已按新 pitch 复核不漏行），屏外行剔除；片基/框线/外缘高光等屏幕空间元素不参与位移。**用 `dt` 累加而非 `nowMs × 系数`**——遵循本文件 KDoc 既有约束（大时间基下 float 精度冻结/跳变）；offset 每帧被 pitch 取模恒驻 `[0, pitch)`，无长会话精度漂移；`dt` 源自滚动暗带同一时钟（`ctx.nowMs` 差分，coerceIn 0~0.25s）。
+
+**零每帧分配**：切孔渐变 shader 仅在 `(w, side)` 变化时重建（缓存字段 + `onEnter`/`onExit` 复位），绘制路径仅 primitive 局部变量 + 复用 `filmRect`；两个 Paint 分工（solid 换 `color`、gradient 只换 `shader`，防阴影 60% alpha 污染渐变填充）。
+
+**文件改动**：`VintageTvRenderer.kt` —— 新增字段（`filmHoleL/R` shader 缓存、`filmPaint`、`filmGradPaint`、`filmRect`、`filmScrollPx`）、几何常量与色板（含 `FILM_BASE_FLAT`）、`drawPillarbox` 重写（新增 `ensureFilmGradients`/`drawFilmStrip`，签名改为 `drawPillarbox(w, h, dt)`）、KDoc 特征列表更新（方孔居中 + 两侧一致 + 向上滚动）。
+
+**验证**：
+
+| 手段 | 结果 |
+|---|---|
+| `assembleRelease lintDebug testDebugUnitTest`（--no-daemon + in-process，单次调用） | ✅ BUILD SUCCESSFUL in 3m 57s（GRADLE_EXIT=0） |
+| `testDebugUnitTest` 全量 | ✅ 1180 tests, 0 failures, 0 errors（115 suites） |
+| `lintDebug` | ✅ 0 Error（blocking lint 通过） |
+| `assembleRelease` | ✅ `NASMusicTV-release-v2-37-6.apk` 22.4 MB（2026-09-27 21:59） |
+
+> 注：首跑（`film_round2_build.log`）唯一失败为 `MetingResolveTest`「首选端点不可用时 fallback…」（断言 `actualQuality ∈ {320,128}`）——该测试 fallback 会命中 3 个**真实公网端点**（测试文件 192-194 行注释已自证 flaky 风险），与本改动无关，重跑全绿。日志中的 `Inconsistency in the cache` 栈为 lint 分析期既有良性异常（AGENTS.md 已记录），不影响报告与结果。
+
+**版本**：并入 v2.37.6（versionCode 168；应用户要求不升版本号，v2.37.6 未推送，发版时含本项）。
+
 ### 10.190 v2.37.6 — 精简可视化效果库：移除 11 个效果（2026-09-27）
 
 **范围**：从 `VisualizerTheme` 枚举移除 11 个效果，同步删除对应 Renderer 类、工厂分支、LEGACY_MAP 迁移映射、测试引用。仅涉及效果库（`visualizer/renderers/` + `data/model/AppSettings.kt`），不涉及照片转场（`visualizer/photo/`）。`GALAXY_SPIRAL`（E11）不在移除清单，保留。
