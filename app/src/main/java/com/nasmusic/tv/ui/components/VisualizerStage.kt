@@ -266,7 +266,6 @@ fun VisualizerStage(
         androidx.compose.foundation.Canvas(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 24.dp)
                 // T9：叠加发光需要离屏层，否则部分 API 版本退化为 SrcOver
                 .graphicsLayer {
                     compositingStrategy = CompositingStrategy.Offscreen
@@ -308,7 +307,6 @@ fun VisualizerStage(
             androidx.compose.foundation.Canvas(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(horizontal = 24.dp)
                     .graphicsLayer {
                         compositingStrategy = CompositingStrategy.Offscreen
                         alpha = prevAlpha.floatValue
@@ -335,17 +333,21 @@ fun VisualizerStage(
             }
         }
 
+        val isVintageTv = theme == VisualizerTheme.VINTAGE_TV
+
         // ③ 前景层
         Column(Modifier.fillMaxSize()) {
-            // 顶部歌词行
-            LyricTopBar(
-                lyrics = lyrics,
-                progressMs = progressMs,
-                fallback = song?.let { "${it.title} — ${it.artist ?: ""}" },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 40.dp, start = 48.dp, end = 48.dp)
-            )
+            // 顶部歌词行（怀旧效果已自带中间大字歌词，隐藏顶部栏）
+            if (!isVintageTv) {
+                LyricTopBar(
+                    lyrics = lyrics,
+                    progressMs = progressMs,
+                    fallback = song?.let { "${it.title} — ${it.artist ?: ""}" },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 40.dp, start = 48.dp, end = 48.dp)
+                )
+            }
 
             Spacer(Modifier.weight(1f))
 

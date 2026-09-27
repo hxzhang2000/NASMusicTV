@@ -99,9 +99,9 @@ class VintageTvRenderer : VisualizerRenderer {
         const val JITTER_FREQUENCY = 0.008f // 抖动频率
         
         // 字体
-        const val BASE_FONT_SIZE_RATIO = 0.045f // 基础字体大小占屏高比例
-        const val MIN_FONT_SIZE_RATIO = 0.035f
-        const val MAX_FONT_SIZE_RATIO = 0.065f
+        const val BASE_FONT_SIZE_RATIO = 0.08f // 基础字体大小占屏高比例（放大）
+        const val MIN_FONT_SIZE_RATIO = 0.06f
+        const val MAX_FONT_SIZE_RATIO = 0.12f
     }
 
     override fun onEnter(ctx: RenderContext) {
@@ -328,7 +328,7 @@ class VintageTvRenderer : VisualizerRenderer {
 
         val bitmap = lyricBitmap!!
         
-        // 计算抖动偏移
+        // 计算抖动偏移（正弦波动，平均值为0，不影响整体居中）
         val timeSec = nowMs * 0.001f
         val jitterX = sin(timeSec * JITTER_FREQUENCY * 1000f) * JITTER_AMPLITUDE
         val jitterY = cos(timeSec * JITTER_FREQUENCY * 1000f * 1.3f) * JITTER_AMPLITUDE * 0.5f
@@ -336,11 +336,13 @@ class VintageTvRenderer : VisualizerRenderer {
         // 低音增强抖动
         val bassBoost = 1f + frame.bass * 0.5f
         
-        // 绘制歌词位图（中心位置 + 抖动）
+        // 绘制歌词位图：严格居中 + 抖动偏移
         val bitmapW = bitmap.width.toFloat()
         val bitmapH = bitmap.height.toFloat()
-        val dstX = ((w - bitmapW) / 2f + jitterX * bassBoost).roundToInt()
-        val dstY = ((h - bitmapH) / 2f + jitterY * bassBoost).roundToInt()
+        val centerX = (w - bitmapW) / 2f
+        val centerY = (h - bitmapH) / 2f
+        val dstX = (centerX + jitterX * bassBoost).roundToInt()
+        val dstY = (centerY + jitterY * bassBoost).roundToInt()
         
         drawImage(
             bitmap,
@@ -350,48 +352,112 @@ class VintageTvRenderer : VisualizerRenderer {
 
     /**
      * 重建歌词位图（离屏渲染，避免每帧分配）
+     * 支持多行换行显示
      */
     private fun rebuildLyricBitmap(text: String, canvasW: Float, canvasH: Float, fontSize: Float) {
         val paint = lyricPaint!!
         paint.textSize = fontSize
         
-        // 测量文本宽度
-        val textWidth = paint.measureText(text)
-        val maxWidth = canvasW * 0.85f
-        
-        // 如果文本过长，截断并加省略号
-        val displayText = if (textWidth <= maxWidth) {
-            text
-        } else {
-            var trimmed = text
-            while (trimmed.isNotEmpty() && paint.measureText(trimmed + "…") > maxWidth) {
-                trimmed = trimmed.dropLast(1)
-            }
-            trimmed + "…"
-        }
+        // 最大宽度：屏幕宽度 90%
+        val maxWidth = canvasW * 0.9f
         
         // 获取字体度量
         val fm = paint.fontMetrics
         val fontHeight = kotlin.math.ceil(fm.bottom - fm.top).toInt()
+        val lineHeight = kotlin.math.ceil(fontHeight * 1.3f).toInt() // 行高 = 字体高度 * 1.3
         val baseline = kotlin.math.ceil(-fm.top).toInt()
         
-        // 位图尺寸（留白边距）
+        // 将文本按宽度拆分成多行
+        val lines = wrapText(text, paint, maxWidth)
+        
+        // 位图尺寸
         val paddingX = kotlin.math.ceil(fontSize * 0.5f).toInt()
         val paddingY = kotlin.math.ceil(fontSize * 0.3f).toInt()
-        val bmpW = maxOf(kotlin.math.ceil(paint.measureText(displayText) + paddingX * 2).toInt(), 100)
-        val bmpH = maxOf(fontHeight + paddingY * 2, 50)
+        val bmpW = maxOf(kotlin.math.ceil(maxWidth + paddingX * 2).toInt(), 100)
+        val bmpH = maxOf(lines.size * lineHeight + paddingY * 2, 50)
         
         // 创建 Android Bitmap 用于绘制文本
         val androidBmp = Bitmap.createBitmap(bmpW, bmpH, Bitmap.Config.ARGB_8888)
         val androidCanvas = AndroidCanvas(androidBmp)
         
-        // 绘制文本（居中）
-        val x = (bmpW - paint.measureText(displayText)) / 2f
-        val y = baseline + paddingY
-        androidCanvas.drawText(displayText, x, y.toFloat(), paint)
+        // 逐行绘制（垂直居中）
+        val totalTextHeight = lines.size * lineHeight
+        val startY = (bmpH - totalTextHeight) / 2f + baseline
+        
+        for (i in lines.indices) {
+            val line = lines[i]
+            val lineWidth = paint.measureText(line)
+            val x = (bmpW - lineWidth) / 2f
+            val y = startY + i * lineHeight
+            androidCanvas.drawText(line, x, y.toFloat(), paint)
+        }
         
         // 转换为 ImageBitmap (使用扩展函数 asImageBitmap)
         lyricBitmap = androidBmp.asImageBitmap()
+    }
+    
+    /**
+     * 将文本按最大宽度拆分成多行
+     */
+    private fun wrapText(text: String, paint: AndroidPaint, maxWidth: Float): List<String> {
+        val words = text.split(" ").filter { it.isNotBlank() }
+        if (words.isEmpty()) return listOf(text)
+        
+        val lines = mutableListOf<String>()
+        var currentLine = ""
+        
+        for (word in words) {
+            val testLine = if (currentLine.isEmpty()) word else "$currentLine $word"
+            val testWidth = paint.measureText(testLine)
+            
+            if (testWidth <= maxWidth) {
+                currentLine = testLine
+            } else {
+                // 当前行已满，换行
+                if (currentLine.isNotEmpty()) {
+                    lines.add(currentLine)
+                }
+                // 如果单个词就超过宽度，强制按字符拆分
+                if (paint.measureText(word) > maxWidth) {
+                    lines.addAll(splitLongWord(word, paint, maxWidth))
+                    currentLine = ""
+                } else {
+                    currentLine = word
+                }
+            }
+        }
+        
+        if (currentLine.isNotEmpty()) {
+            lines.add(currentLine)
+        }
+        
+        return if (lines.isEmpty()) listOf(text) else lines
+    }
+    
+    /**
+     * 拆分过长的单个词（按字符强制拆分）
+     */
+    private fun splitLongWord(word: String, paint: AndroidPaint, maxWidth: Float): List<String> {
+        val parts = mutableListOf<String>()
+        var current = ""
+        
+        for (char in word) {
+            val test = current + char
+            if (paint.measureText(test) <= maxWidth) {
+                current = test
+            } else {
+                if (current.isNotEmpty()) {
+                    parts.add(current)
+                }
+                current = char.toString()
+            }
+        }
+        
+        if (current.isNotEmpty()) {
+            parts.add(current)
+        }
+        
+        return parts
     }
 
     /**
