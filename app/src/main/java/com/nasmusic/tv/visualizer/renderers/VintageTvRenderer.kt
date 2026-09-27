@@ -365,31 +365,38 @@ class VintageTvRenderer : VisualizerRenderer {
         val fm = paint.fontMetrics
         val fontHeight = kotlin.math.ceil(fm.bottom - fm.top).toInt()
         val lineHeight = kotlin.math.ceil(fontHeight * 1.3f).toInt() // 行高 = 字体高度 * 1.3
-        val baseline = kotlin.math.ceil(-fm.top).toInt()
         
         // 将文本按宽度拆分成多行
         val lines = wrapText(text, paint, maxWidth)
         
-        // 位图尺寸
+        // 计算实际最大行宽（用于位图宽度和水平居中）
+        var actualMaxLineWidth = 0f
+        for (line in lines) {
+            val w = paint.measureText(line)
+            if (w > actualMaxLineWidth) actualMaxLineWidth = w
+        }
+        
+        // 位图尺寸：基于实际文本宽度 + 少量内边距
         val paddingX = kotlin.math.ceil(fontSize * 0.5f).toInt()
         val paddingY = kotlin.math.ceil(fontSize * 0.3f).toInt()
-        val bmpW = maxOf(kotlin.math.ceil(maxWidth + paddingX * 2).toInt(), 100)
+        val bmpW = maxOf(kotlin.math.ceil(actualMaxLineWidth + paddingX * 2).toInt(), 100)
         val bmpH = maxOf(lines.size * lineHeight + paddingY * 2, 50)
-        
+
         // 创建 Android Bitmap 用于绘制文本
         val androidBmp = Bitmap.createBitmap(bmpW, bmpH, Bitmap.Config.ARGB_8888)
         val androidCanvas = AndroidCanvas(androidBmp)
-        
-        // 逐行绘制（垂直居中）
-        val totalTextHeight = lines.size * lineHeight
-        val startY = (bmpH - totalTextHeight) / 2f + baseline
-        
+
+        // ⛔ 水平：paint.align = CENTER，drawText 以 x 为中心展开 —— x 必须给
+        //    位图中心 bmpW/2，不能给「左边缘」坐标，否则每行向左偏半个行宽
+        //    （历史 bug：x=(bmpW-lineWidth)/2 导致整体偏左 + 长行左侧被裁）。
+        // 垂直：整块文本（首行字形顶 → 末行字形底）在位图内精确居中。
+        //    blockHeight = fontHeight + (n-1)*lineHeight（非 n*lineHeight，
+        //    末行只有 descent、首行只有 ascent，用 n*lineHeight 会偏高）。
+        val blockHeight = fontHeight + (lines.size - 1) * lineHeight
+        val firstBaselineY = (bmpH - blockHeight) / 2f - fm.top
+
         for (i in lines.indices) {
-            val line = lines[i]
-            val lineWidth = paint.measureText(line)
-            val x = (bmpW - lineWidth) / 2f
-            val y = startY + i * lineHeight
-            androidCanvas.drawText(line, x, y.toFloat(), paint)
+            androidCanvas.drawText(lines[i], bmpW / 2f, firstBaselineY + i * lineHeight, paint)
         }
         
         // 转换为 ImageBitmap (使用扩展函数 asImageBitmap)

@@ -10943,6 +10943,41 @@ v2.37.2 首版发到真机后用户反馈"圆心还是不对、齿轮乱跑、�
 
 **版本**：v2.37.2（versionCode 164）。
 
+### 10.186 v2.37.3 — 怀旧频谱效果 + 歌词居中根因修复（Align.CENTER 语义冲突，2026-09-27）
+
+**来源**：用户需求——新增「怀旧」老电视 CRT 频谱效果（深灰蓝背景、中间大号白色歌词、雪花噪点、间歇白色竖条、文字微抖、扫描线、铺满全屏）。真机回归反馈三连：① 效果没占满全屏；② 歌词偏左不居中；③ 修复过程中长行文字出现左侧截断。另要求怀旧效果**只**隐藏顶部歌词栏（其他效果保留）。
+
+**新增**：`VINTAGE_TV("怀旧", Tier.BASIC, "38")`（PHOTO_WALL 顺延 "39"），`VintageTvRenderer` + 工厂注册，`VisualizerThemeTest` 更新为 37 主题。要点：背景 `#0D1018`、240 条扫描线、噪点缓冲（100ms 更新）、竖条干扰（3~8s 间隔、同时 ≤3 条、80ms）、歌词离屏 `Bitmap → asImageBitmap()` 缓存（仅文本/画布尺寸/字号变化才重建）、`wrapText` 按词换行 + 超长词按字拆分（maxWidth = 屏宽 90%，行高 = 字体高 ×1.3）、字号 = 屏高 8%（6%~12% 自适应）。字体基线由小改大（0.045→0.08），去掉省略号截断改多行换行。
+
+#### 修复①全屏（影响所有效果）
+
+`VisualizerStage.kt` 两个效果 Canvas（新效果 + 交叉淡出旧效果）均带 `.padding(horizontal = 24.dp)`——**全部 37 个效果**左右各留 24dp 边距。移除后效果层铺满全屏；`safeAreaPx`（5% overscan）仍按原链路传给需要的渲染器。
+
+#### 修复②怀旧效果隐藏顶部歌词栏
+
+`VisualizerStage`：`theme == VisualizerTheme.VINTAGE_TV` 时不渲染 `LyricTopBar`（画面中间已有大字歌词，顶部小字重复）；其余 36 个效果保持不变。
+
+#### 修复③歌词居中根因（重点，前两轮误诊）
+
+**现象**：歌词整体偏左，修复过程中又出现长行左侧被截断。前两轮曾改 bitmap 宽度（`maxWidth` → 实测最长行宽）与居中公式，均无效。
+
+**根因**：`onEnter` 设 `paint.textAlign = Align.CENTER`，`drawText` 以 x **为中心**向两侧展开；而绘制代码按**左对齐语义**给 `x = (bmpW - lineWidth) / 2`（本意是「左边缘该放的位置」）。两者叠加后每行实际跨度变成 `[bmpW/2 - 行宽, bmpW/2]`——右边缘恰落在位图正中：
+
+- **偏左**：文字只占据位图左半，位图居中贴屏后整体左偏 **半个行宽**（长行可达数百 px）；
+- **截断**：最长行左半越出位图左边界被裁（`paddingX = 0.5×字号` 远小于半行宽）。
+
+偏差是**行宽量级的系统性语义冲突**，不是定位参数问题——这就是调 bitmap 宽度/居中公式怎么调都没用的原因。
+
+**改**（仅 `VintageTvRenderer.rebuildLyricBitmap`）：
+
+- 水平：`drawText(lines[i], bmpW / 2f, …)`——x 固定位图中心。配合 CENTER 对齐，每行以**自身宽度**精确居中，且与 `measureText` 取整无关。最长行跨度 `[paddingX, paddingX + 行宽] ⊂ [0, bmpW]`，**结构上不可能截断**。
+- 垂直：按真实字形块高度居中——`blockHeight = fontHeight + (行数-1)×lineHeight`（末行只有 descent、首行只有 ascent，用 `行数×lineHeight` 会整体偏高），`firstBaselineY = (bmpH - blockHeight)/2 - fm.top`。
+- 位置链闭环：行中心 = 位图中心 = 屏幕中心（`dstX = (w - bmpW)/2 + 抖动`，抖动 ±1.5px 正弦、均值 0、低音增强）。
+
+**验证**：`assembleRelease`（含 lintVital）BUILD SUCCESSFUL；APK `NASMusicTV-release-v2-37-3.apk`（23.5 MB）adb 推送真机 192.168.0.113 安装 Success。CHANGELOG v2.37.3 已按「只记做了什么」补 Added/Changed/Fixed。
+
+**版本**：v2.37.3（versionCode 165）。
+
 ### 10.152 v2.32.3 — T5：删除死代码 `VocalRemovalProcessor.kt`（算法先归档，2026-09-14）
 
 **来源**：`docs/archive/code-review-full-report-2026-09-13.md` §T5 / `docs/archive/code-review-2026-09-03.md` §P2。文件 348 行，全项目**零调用方**（`PlaybackService.kt:207` 实际 `val vocalRemovalProcessor = SpectralMaskProcessor()`——变量名是历史遗留，类型早就换过了；`PlayerManager.setVocalRemovalProcessor()` 的形参类型同样是 `SpectralMaskProcessor`）。
