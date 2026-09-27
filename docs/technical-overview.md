@@ -11036,6 +11036,54 @@ W/PhotoWallController:   scan produced an empty pool: {GALLERY=DISABLED, EXTERNA
 
 **版本**：v2.37.4（versionCode 166）。发布后需把手机从 debug 换回 release（数据清空需重连 Jellyfin）。
 
+### 10.192 v2.37.6 — 轨道（ORBITAL_RINGS）重做为完整太阳系（倾斜视角+全屏自适应）+ 太阳随音乐律动（2026-09-27）
+
+**范围**：仅 `visualizer/renderers/BatchTwoRenderers.kt` 单文件（+724/−166），`OrbitalRingsRenderer` 类整体重写（E29），**三轮迭代**：① 主体规格（太阳系/卫星/星空）→ ② 中央太阳音乐律动（用户追加）→ ③ 倾斜视角 + 全屏自适应（见下）。原「倾斜椭圆轨道交织 + 光球拖尾 + 低音晃动」改为纯展示太阳系动画；枚举名/工厂分支/显示名（轨道）/Tier.ADV 不变，其余效果零改动。**不升版本号**（并入 v2.37.6）。
+
+**架构选型**：沿用本 app 既有可视化框架——Compose `DrawScope` 渲染器（`VisualizerRenderer` 接口，`VisualizerStage` 供画布），而非需求稿通用的独立 MainActivity 入口（画布由框架代供）。纯展示：无触摸/按钮/缩放，不渲染任何文字（数据类 `name` 仅内部标识）。
+
+**数据/绘制分离**：私有数据类 `Planet`/`Moon`（name/color/radius/orbit/period/phase/moons；radius、orbit 为世界单位，经 project/scale 投影，period 为秒），`buildSystem()` 构造期一次性生成 8 行星 + 11 卫星表；位置统一由纯函数 `angleAt(time, period, phase)` 驱动（先 `time % period` 再乘 2π，Double 全程 → 三角输入恒 < 2π）。
+
+**天体表**（radius/orbit＝世界单位，period＝显示秒）：
+
+| 行星 | 色 | 半径 | 轨道 | 周期 | 卫星 |
+|---|---|---|---|---|---|
+| 水星 | #9C9A94 | 0.0060 | 0.095 | 12 | — |
+| 金星 | #F2E3B8 | 0.0095 | 0.134 | 20 | — |
+| 地球 | #4A93E0 | 0.0105 | 0.176 | 30 | 月球（灰白 8s） |
+| 火星 | #C45A3A | 0.0075 | 0.216 | 45 | 火卫一 3.5s / 火卫二 5.5s |
+| 木星 | #C9A063 | 0.0225 | 0.282 | 90 | 伽利略四卫（Io/Europa/Ganymede/Callisto，6/9/13/19s） |
+| 土星 | #E0C089 | 0.0195 | 0.356 | 150 | 土卫六 Titan（24s） |
+| 天王星 | #B3E3E8 | 0.0135 | 0.417 | 240 | 天卫 Titania/Oberon（可选，30/42s） |
+| 海王星 | #5C7CE8 | 0.0125 | 0.452 | 380 | 海卫一偏粉（可选，26s） |
+
+周期/半径/轨道均按真实顺序压缩保序（内快外慢、木星最大水星最小、卫星恒小于其行星、卫星轨道恒小于行星轨道）；初相黄金比分摊 `orbitPhase(i)=(i×0.618+0.17)%1` → 八行星永不连成一线；轨道统一 `ORBIT_SQUASH=0.94` 俯视压扁；一切以 `ctx.minDim`（短边）为基准缩放 → 竖横屏全轨道可见、太阳居中。
+
+**倾斜视角 + 全屏自适应（第三轮）**：`TILT = 0.5f`（1.0＝顶视正圆、0.0＝退化直线永不取，推荐 0.3~0.6）取代旧 `ORBIT_SQUASH=0.94`——天体位置与轨道线统一经 `project(worldX, worldY, center, scale) = Offset(cx + wx×scale, cy + wy×scale×TILT)` 投影（`Offset` 为 `@JvmInline` value class，已核 compose-ui-geometry 1.6.1 源码 → 返回零堆分配）；椭圆 ry/rx 恒 ＝ TILT ＝ 0.5，**与屏幕宽高比无关**（只由倾斜系数决定）。`scale/center` 在 `ensureLayout(w,h)` 尺寸变化时重算：`extentX` 由数据推导（海王星主导，`max(轨道+最外卫星环 reach、土星环 reach) × (1+NEAR_FAR_K)` ＝ 0.47554）、`extentY = extentX × TILT`、**`scale = min(w/2/extentX, h/2/extentY) × 0.9`**（0.9 留白系数）、`center = (w/2, h/2)`；半径/线宽/辉光全部改走 `scale`。双例核验：1920×1080 → scale 1817（海王星 rx 821px，较旧 minDim 方案横向多用 68%）、1080×1920 → scale 1022；两例含近大远小的最远触及均 ≤ 0.9 边界（860.1≤864 / 483.8≤486）。配套增强：**深度分层**（每帧 8 行星按屏幕 y 插入排序入复用 `IntArray` 零分配；绘制序＝星野 → 全部轨道椭圆 → y<cy 后排行星（远→近）→ 太阳 → y≥cy 前排行星，前排行星可遮挡太阳；行星内部序——卫星环/土星前后弧/本体/细节/卫星——不变）与**近大远小**（`NEAR_FAR_K = 0.10`，按行星 y 归一化 ±10%，行星与其卫星环/卫星共用同一系数保持比例）。尺寸变化不重置 `elapsed`（Manifest `configChanges` 含 orientation|screenSize 等 → 旋转/折叠不重建 composition、时间连续；真正 Activity 重建/主题切换归零属既有行为，未改结构）。
+
+**视觉**：深空底色 #05070D + 固定种子星野（LCG `0x5EEDF00D`，onEnter 一次生成 70/140/220 颗按档位，永不重掷 → 零闪烁，每 4 颗一颗偏蓝）；太阳黄橙发光圆（内核 #FFCE64 + 热核 #FFF0B8 + 径向渐变辉光）；**土星 20° 倾斜椭圆环**，「远侧半弧 → 行星盘 → 近侧半弧」三段绘制、遮挡正确；MEDIUM+ 地球绿斑/木星条纹，HIGH 斜上高光。
+
+**中央太阳律动（全场唯一消费音频，用户追加需求）**：`bass/pulse/energy` 三路低通（0.10/0.25/0.08，RadarGrid 同款写法）→ 半径 `1+bass×0.14+pulse×0.11`（上限 +25%，TV 保守防不适）、辉光 alpha `0.72..1.0`；渐变 Brush 几何按 (w,h,scale) 烘焙固定只调 alpha（放大半径裁不出渐变外圈）。行星/卫星/轨道/星野纯时间驱动完全忽略音频。⚠️ 原始 bass/pulse 逐帧跳动大，必须低通（直接用会抖）。
+
+**精度与零分配**：`elapsed` 由逐帧 dt（clamp 0.1s）累加为 Double——⛔ 不用 `nowMs × 系数`（大时间基数 float 精度冻结，与 §10.191 同约束）；Stroke×3、太阳 RadialGradient Brush 按 (w,h,scale) 缓存（尺寸或 scale 变化才重建）；土星环成员 Path 手工参数方程旋转复用（⛔ 不用 `withTransform`——捕获 lambda 每帧分配 2 对象）；深度排序就地操作成员 `IntArray`；List 下标 while 遍历。
+
+**画质分档**：八行星任何档全量保留；LOW 70 星 + 跳过可选卫星（天卫/海卫）+ 太阳纯圆层；MEDIUM 140 星 + 全部 11 卫星 + 太阳渐变 + 地表/木星条纹；HIGH 220 星 + 日冕层 + 行星高光。
+
+**文件改动**：`BatchTwoRenderers.kt` —— `OrbitalRingsRenderer` 三轮重写（`Planet`/`Moon` 数据类、`buildSystem`/`angleAt`/`project`/`drawPlanetAt`/`drawSaturnRing`/`drawStars`/`ensureLayout`/`buildExtentX`、`TILT`/`SCALE_MARGIN`/`NEAR_FAR_K` 常量、太阳律动三平滑字段、深度排序 `posY`/`order` 数组）。
+
+**验证**：
+
+| 手段 | 结果 |
+|---|---|
+| `assembleRelease lintDebug testDebugUnitTest`（--no-daemon + in-process，单次调用） | ✅ BUILD SUCCESSFUL in 9m 45s（GRADLE_EXIT=0，日志 `logs_temp/orbital_tilt_build.log`，含倾斜视角+自适应终态） |
+| `testDebugUnitTest` 全量 | ✅ 1180 tests, 0 failures, 0 errors（115 suites） |
+| `lintDebug` | ✅ 0 Error（blocking lint 通过） |
+| `assembleRelease` | ✅ `NASMusicTV-release-v2-37-6.apk` 22.4 MB（2026-09-28 00:03） |
+| 编译快验（designer 阶段） | ✅ `compileDebugKotlin` ×3（主体 + 太阳律动 + 倾斜/自适应）均 BUILD SUCCESSFUL |
+| 几何双例核算（designer 阶段） | ✅ 1920×1080 / 1080×1920 椭圆比恒 0.5000，含近大远小最远触及 ≤0.9 边界（860.1≤864 / 483.8≤486） |
+
+**版本**：并入 v2.37.6（versionCode 168；同 §10.191，不升版本号、未推送）。
+
 ### 10.191 v2.37.6 — 怀旧（VINTAGE_TV）两侧黑边改胶片边缘 + 向上滚动（2026-09-27）
 
 **范围**：仅 `VintageTvRenderer.kt` 单文件（+206/−11）。4:3 画面两侧 pillarbox（1080p 各 240px）由纯黑改为胶片边缘渲染，并让条带匀速向上滚动。画面区内容（歌词/扫描线/暗角/圆角/OSD）、时机逻辑与其他效果零改动；无枚举/工厂/测试变动。
