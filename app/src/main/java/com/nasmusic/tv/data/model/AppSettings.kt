@@ -141,9 +141,10 @@ IMMERSIVE_BLOOM("沉浸辉光", Tier.BASIC, "01"),
     LIGHT_BEAMS("光轴", Tier.BASIC, "35"),
     FERMAT_SPIRAL("螺旋", Tier.BASIC, "36"),
     MOLECULE("分子", Tier.BASIC, "37"),
+    VINTAGE_TV("怀旧", Tier.BASIC, "38"),
 
     /**
-     * 照片墙（第 36 个效果，§7.5）
+     * 照片墙（第 39 个效果，§7.5）
      *
      * ⚠️ 归 [Tier.ADV]：照片双缓冲 + 转场叠加在低画质 / 老设备上风险高，必须门控。
      * 副作用：`VisualQuality.LOW`（`maxParticles == 0`）**不支持**本效果
@@ -151,7 +152,7 @@ IMMERSIVE_BLOOM("沉浸辉光", Tier.BASIC, "01"),
      *
      * ⚠️ 本效果**不一定出现在 [selectable] 里** —— 三来源开关全关时被过滤掉（§7.4）。
      */
-    PHOTO_WALL("照片墙", Tier.ADV, "38"),
+    PHOTO_WALL("照片墙", Tier.ADV, "39"),
     ;
 
     /** 效果分级：决定画质档位可用性 */

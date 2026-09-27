@@ -37,6 +37,7 @@ import com.nasmusic.tv.visualizer.renderers.FractalTreeRenderer
 import com.nasmusic.tv.visualizer.renderers.LightBeamsRenderer
 import com.nasmusic.tv.visualizer.renderers.FermatSpiralRenderer
 import com.nasmusic.tv.visualizer.renderers.MoleculeRenderer
+import com.nasmusic.tv.visualizer.renderers.VintageTvRenderer
 import com.nasmusic.tv.visualizer.photo.PhotoRenderer
 
 /**
@@ -83,6 +84,7 @@ VisualizerTheme.IMMERSIVE_BLOOM -> BloomRenderer()
         VisualizerTheme.LIGHT_BEAMS -> LightBeamsRenderer()
         VisualizerTheme.FERMAT_SPIRAL -> FermatSpiralRenderer()
         VisualizerTheme.MOLECULE -> MoleculeRenderer()
+        VisualizerTheme.VINTAGE_TV -> VintageTvRenderer()
         VisualizerTheme.PHOTO_WALL -> PhotoRenderer()
     }
 
