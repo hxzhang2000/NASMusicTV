@@ -19,7 +19,7 @@ import java.util.concurrent.TimeUnit
  *
  * ## 接口
  *
- * - 列表：`/Items?IncludeItemTypes=Photo&Recursive=true&fields=Width,Height&UserId=…`
+ * - 列表：`/Items?IncludeItemTypes=Photo&Recursive=true&fields=Width,Height,Path&UserId=…`
  * - 取图：`/Items/{id}/Images/Primary?maxWidth=1920&quality=90`
  *
  * ⚠️ `maxWidth=1920` 是刻意的 —— 音频封面用的是 512，照片放大到全屏会糊。
@@ -37,6 +37,9 @@ import java.util.concurrent.TimeUnit
  * ## 宽高 / 时间
  *
  * - 宽高：`fields=Width,Height` **免费**返回 ⇒ 填真实值（§14.2.1 宽高契约）
+ * - 扩展名：`fields=Path` 返回实际文件路径 ⇒ 从文件名判白名单（HEIC / RAW 过滤）。
+ *   ⛔ Jellyfin 的 `Name` **不带扩展名**，不能拿它过滤 —— v2.37.4 之前正是这里
+ *   把全部照片滤成 0 张（见 §10.188）
  * - 时间：`DateCreated` 是 ISO 8601 ⇒ 必须自己转成**秒**
  *   ⛔ 不能用 `java.time`（需要 API 26，本项目 `minSdk = 22`）
  *   ⇒ 用 `SimpleDateFormat` 手工归一化（见 [isoToEpochSeconds]）
@@ -124,7 +127,7 @@ class JellyfinPhotoSource(
         val query = buildString {
             append("IncludeItemTypes=Photo")
             append("&Recursive=true")
-            append("&fields=Width,Height")
+            append("&fields=Width,Height,Path")
             append("&SortBy=SortName&SortOrder=Ascending")
             append("&StartIndex=$startIndex")
             append("&Limit=$limit")
@@ -162,9 +165,14 @@ class JellyfinPhotoSource(
 
     private fun elementToRef(o: JsonObject): PhotoRef? {
         val id = o.stringOr("Id", null) ?: return null
+        // ⛔ Jellyfin 的 Name **不含文件扩展名**（如 '0001'、'图'），扩展名在 Path 字段里
+        // ⇒ 必须从 Path 取文件名判白名单（HEIC / RAW 电视解不了）。
+        //    拿 Name 过滤会把所有照片滤掉（v2.37.4 修复，§10.188）。
+        //    Path 缺失时不过滤 —— Jellyfin 已按 IncludeItemTypes=Photo 返回，
+        //    解码层对无法解码的项会跳过（PhotoWallController "skip undecodable photo"）。
+        val path = o.stringOr("Path", null)
+        if (path != null && !isSupportedPhotoPath(path)) return null
         val name = o.stringOr("Name", null) ?: id
-        // Jellyfin 里也可能混入 HEIC / RAW ⇒ 仍要过白名单（电视解不了）
-        if (!isSupportedPhotoName(name)) return null
         val created = isoToEpochSeconds(o.stringOr("DateCreated", null))
         return PhotoRef(
             id = PhotoIds.of(PhotoSourceKind.JELLYFIN, id),

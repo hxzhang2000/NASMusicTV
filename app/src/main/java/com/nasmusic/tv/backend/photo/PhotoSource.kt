@@ -166,3 +166,18 @@ fun isSupportedPhotoName(fileName: String): Boolean {
     if (dot <= 0 || dot == fileName.length - 1) return false
     return fileName.substring(dot + 1).lowercase() in PHOTO_EXTENSIONS
 }
+
+/**
+ * 路径（如 Jellyfin `Path` 字段返回的**实际文件路径**）是否指向受支持的照片格式。
+ *
+ * 先剥掉目录部分（兼容 Windows `\` 与 POSIX `/` 两种分隔符）取文件名，
+ * 再过 [isSupportedPhotoName] 白名单。
+ *
+ * ⛔ 为什么需要它：Jellyfin 照片条目的 `Name` 字段**不带扩展名**（如 `0001`、`图`），
+ * 直接拿 Name 过白名单会把**所有**照片滤掉（v2.37.4 修复，见 technical-overview §10.188）。
+ * 扩展名只存在于 `Path` 字段（如 `G:\photo\照片\0001.jpg`），必须从那里取。
+ */
+fun isSupportedPhotoPath(path: String): Boolean {
+    val fileName = path.substringAfterLast('/').substringAfterLast('\\')
+    return isSupportedPhotoName(fileName)
+}

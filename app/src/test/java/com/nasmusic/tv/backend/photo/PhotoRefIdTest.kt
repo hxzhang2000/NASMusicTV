@@ -154,6 +154,47 @@ class PhotoRefIdTest {
         assertTrue("白名单应当包含 jpg", "jpg" in PHOTO_EXTENSIONS)
     }
 
+    // ────────────────────── ③b 路径版白名单（Jellyfin Path 字段） ──────────────────────
+
+    /**
+     * Jellyfin 照片条目的 `Name` 不带扩展名（如 `0001`、`图`），扩展名只在 `Path` 字段。
+     * 拿 Name 过白名单会把全部照片滤掉（v2.37.4 修复的线上 bug）——路径版必须从
+     * Path 末尾剥出文件名再判白名单，且 Windows（`\`）与 POSIX（`/`）分隔符都要支持。
+     */
+    @Test
+    fun `supported photo paths are accepted`() {
+        for (p in listOf(
+            "G:\\photo\\照片\\0001.jpg",
+            "G:/photo/照片/001.JPG",
+            "/mnt/photos/2024/IMG_0001.jpeg",
+            "C:\\Users\\me\\Pictures\\a.png",
+            "photo.bmp",
+        )) {
+            assertTrue("$p 应当被接受", isSupportedPhotoPath(p))
+        }
+    }
+
+    @Test
+    fun `unsupported photo paths are rejected`() {
+        for (p in listOf(
+            "G:\\photo\\照片\\scan.heic",
+            "/mnt/photos/a.HEIF",
+            "G:/photo/raw/IMG_1234.cr2",
+            "G:\\photo\\noext",
+            "G:\\photo\\照片\\a.",
+        )) {
+            assertTrue("$p 必须被拒绝（电视解不了）", !isSupportedPhotoPath(p))
+        }
+    }
+
+    @Test
+    fun `jellyfin name without extension must not be judged by itself`() {
+        // 线上 bug 的回归断言：'0001' / '图' 这类无扩展名 Name 在 Jellyfin 里合法，
+        // 但单独拿来判白名单必须被拒 —— 证明它不能作为 Jellyfin 的过滤依据。
+        assertTrue("无扩展名 Name 不能通过白名单", !isSupportedPhotoName("0001"))
+        assertTrue("无扩展名 Name 不能通过白名单", !isSupportedPhotoName("图"))
+    }
+
     // ────────────────────── ④ SAF 卷策略 ──────────────────────
 
     @Test

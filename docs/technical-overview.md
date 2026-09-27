@@ -10999,6 +10999,43 @@ v2.37.2 首版发到真机后用户反馈"圆心还是不对、齿轮乱跑、�
 
 **版本**：v2.37.3（versionCode 165）。
 
+### 10.188 v2.37.4 — 照片墙 Jellyfin 照片源全 0：Name 无扩展名被白名单滤光（2026-09-27）
+
+**线上症状**：手机端（USB 91846823 调试）已连接 Jellyfin，照片墙设置页 Jellyfin 源开启、点「重新扫描」后计数仍为 0，且 release 版看不到任何错误日志。
+
+**排查过程（debug 版拿到决定性日志）**：
+
+```
+D/JellyfinPhotoSource:   Scanned 0 photos via Jellyfin (total=44028)
+D/PhotoSourceAggregator: JELLYFIN: 0 photos (OK)
+W/PhotoWallController:   scan produced an empty pool: {GALLERY=DISABLED, EXTERNAL=DISABLED, JELLYFIN=OK}
+```
+
+- `total=44028` 但 `items=0` —— 查询本身 **HTTP 200 成功**（无 401/500），不是连接问题。
+- 用用户提供的 Jellyfin 凭据（hxzhang）从 PC 直接查同一接口：**TotalRecordCount=44028，Items 正常返回**（Type=Photo、带 Width/Height、327ms）→ 服务器 100% 正常，问题在 App 端解析。
+- 观察条目字段：`Name='0001'`、`Name='图'`（**均无扩展名**），而 `Path='G:\photo\照片\...\0001.jpg'`（**带扩展名**）。100 条抽样扩展名分布：jpg 98 / png 2，全部在白名单内。
+
+**根因**：`JellyfinPhotoSource.elementToRef` 用 `isSupportedPhotoName(Name)` 过滤，但 Jellyfin 照片条目的 `Name` 字段**不含文件扩展名**（扩展名只在 `Path` 字段）→ `isSupportedPhotoName` 对全部条目返回 false → 每页 items 为空，`listPhotos` 首屏即 break → 0 张。这是「把文件系统白名单规则错套到 API 条目上」的典型案例。
+
+**修复**（`backend/photo/`）：
+
+| 位置 | 改动 |
+|---|---|
+| `PhotoSource.kt` | 新增 `isSupportedPhotoPath(path)`：剥掉目录（兼容 `\` 与 `/`）取文件名再过 `isSupportedPhotoName` 白名单 |
+| `JellyfinPhotoSource.kt` | 查询字段 `fields=Width,Height` → `fields=Width,Height,Path`；`elementToRef` 改为 `Path` 缺失时不过滤（Jellyfin 已按 Photo 类型返回，解码层会跳过无法解码的项——`PhotoWallController` "skip undecodable photo"），`Path` 存在时按 `isSupportedPhotoPath(Path)` 判白名单 |
+
+**设计取舍**：HEIC / RAW 过滤意图保留（电视 API 22 解不了），但判定依据从「条目名」换成「实际文件路径」——只有这样才能真正命中扩展名。`Path` 缺失的极端情形不过滤，靠解码层兜底，避免再次出现「全部滤光」。
+
+**验证**：
+
+| 手段 | 结果 |
+|---|---|
+| 新增单测（`PhotoRefIdTest` ③b 节，4 例） | 路径版白名单接受 jpg/png/bmp（含中文目录、双分隔符）、拒绝 heic/heif/cr2/无扩展名；回归断言「无扩展名 Name 单独判白名单必须被拒」（证明它不能作过滤依据） |
+| `testDebugUnitTest --no-daemon -Pkotlin.compiler.execution.strategy=in-process` | 见提交（本机单测可跑，§10.155 起口径） |
+| 真机（手机 91846823，debug 版） | 设置 → 照片墙 → 开启 Jellyfin 源 → 重新扫描，计数从 0 变为 44028 量级 |
+
+**版本**：v2.37.4（versionCode 166）。发布后需把手机从 debug 换回 release（数据清空需重连 Jellyfin）。
+
 ### 10.152 v2.32.3 — T5：删除死代码 `VocalRemovalProcessor.kt`（算法先归档，2026-09-14）
 
 **来源**：`docs/archive/code-review-full-report-2026-09-13.md` §T5 / `docs/archive/code-review-2026-09-03.md` §P2。文件 348 行，全项目**零调用方**（`PlaybackService.kt:207` 实际 `val vocalRemovalProcessor = SpectralMaskProcessor()`——变量名是历史遗留，类型早就换过了；`PlayerManager.setVocalRemovalProcessor()` 的形参类型同样是 `SpectralMaskProcessor`）。
