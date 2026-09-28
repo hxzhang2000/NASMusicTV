@@ -1,6 +1,7 @@
 package com.nasmusic.tv.visualizer.renderers
 
 import android.graphics.Bitmap
+import android.os.SystemClock
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
@@ -49,8 +50,14 @@ import kotlin.math.sqrt
  * phase_i = mod step_i (β_i + π) β_i = 父轮指向该轮的安装角（接触点落齿槽中心）
  * ```
  * 相位按接触点标定、速比按齿数锁定 ⇒ **啮合相位永不漂移**。`mainAngle` 只有
- * 两路合成：匀速基线（TAU/56 ≈ 17°/s）+ 鼓点棘轮（pulse 上升沿推进一个中心
- * 齿距，120ms 缓动到位）。子轮没有任何独立调速，整链刚性跟随。
+ * 两路合成，且**必须分开累加**：匀速基线 = `BASE_SPEED·elapsed` 绝对求值
+ * （TAU/56 ≈ 6.4°/s，帧帧恒正推进、不回退）+ 鼓点棘轮（pulse 上升沿推进一个
+ * 中心齿距，120ms 缓动到位；缓动只作用在棘轮**自己的**累加器上、只加不减）。
+ * ⛔ 绝不能把棘轮弹簧直接加在含基线的 `mainAngle` 上 —— `ratchetTarget` 里没有
+ * 基线，弹簧会把基线每帧减回去，整组在鼓点之间冻成静止（只在鼓点跳一齿）。
+ * 子轮没有任何独立调速，整链刚性跟随。`elapsed` 由**渲染时钟**
+ * （`SystemClock.uptimeMillis` 逐帧差分）推进，⛔ 不读 `ctx.nowMs` —— 后者是
+ * 25Hz 分析线程取样的 `f.timeMs`，暂停/PCM 停摆时冻结会让整组停转。
  *
  * **卫星组（独立小齿轮组，不与主组相接、不共用 mainAngle）**：随机散布在主组外围
  * 空域，组数随档位 LOW 1 / MED 2 / HIGH 4，组内 1–3 齿（模数 SAT_MODULE 0.016，
@@ -94,7 +101,8 @@ import kotlin.math.sqrt
  * onEnter 预生成（5 点/齿：root@0.00/0.22、tip@0.36/0.64、root@0.78 ⇒ 齿槽跨
  * 0.78→1.22，横向余量经 backlash 核验），每帧手算世界坐标烘焙旋转（绝不用
  * withTransform({ rotate })——其默认 pivot=画布中心，会让所有齿轮绕同一固定点
- * 公转）。卫星组的自转角 = `phase + angVel·elapsed`（线性、无缓动、无上限 ⇒ 恒速连续）。
+ * 公转）。卫星组的自转角 = `phase + angVel·elapsed`（线性、无缓动、无上限 ⇒ 恒速连续；
+ * 与主组基线**共用同一个 `elapsed` 时间基**，同一 dt 钳位、同一归零时机）。
  */
 class ConcentricGearsRenderer : VisualizerRenderer {
 
@@ -275,7 +283,8 @@ class ConcentricGearsRenderer : VisualizerRenderer {
     private var gearCount = 0               // 主组当前档位绘制数（8 / 11 / 13）
     private var satCount = 0                // 卫星齿轮数（0 / ≤2 / ≤5 / ≤9）；生成期随放置即时回写
 
-    private var mainAngle = 0f        // 唯一驱动角（子轮全部由它推导）
+    private var mainAngle = 0f        // 唯一驱动角（绘制用；= 基线 BASE·elapsed + 棘轮分量）
+    private var ratchetAngle = 0f     // 棘轮缓动分量（独立累加：只加不减，⛔ 不碰基线）
     private var ratchetTarget = 0f    // 棘轮目标角
     private var lastPulse = 0f
     private var lastMs = 0L
@@ -297,6 +306,7 @@ class ConcentricGearsRenderer : VisualizerRenderer {
         energyS = 0f
         groupEnergy = 0f
         mainAngle = 0f
+        ratchetAngle = 0f
         ratchetTarget = 0f
 
         // ⚠️ 画质变化时 RendererSwapper 会对**同一实例**重入 onEnter（不走 onExit）：
@@ -1047,7 +1057,11 @@ class ConcentricGearsRenderer : VisualizerRenderer {
         if (w < 2f || h < 2f || gearCount == 0) return
 
         // ── dt 累加器（elapsed 只在 onEnter 归零）────────────────────────
-        val now = ctx.nowMs
+        // 时间基 = 渲染时钟。⛔ 不用 ctx.nowMs —— 它是 25Hz 分析线程取样的
+        // f.timeMs：暂停后只补发一帧静音就再也不更新（PcmSpectrumTap 版本号不变
+        // 直接 return）、PCM 卡顿同理 ⇒ elapsed 停走、整组停转；且 40ms 量化步进
+        // 与 60fps 渲染不合拍。与 WorldRenderer 同一约定（时间推进自己取样）。
+        val now = SystemClock.uptimeMillis()
         if (lastMs == 0L) lastMs = now
         val dt = ((now - lastMs) / 1000f).coerceIn(0f, 0.1f)
         lastMs = now
@@ -1074,14 +1088,25 @@ class ConcentricGearsRenderer : VisualizerRenderer {
         }
         lastPulse = frame.pulse
 
-        // ── 驱动角：棘轮 120ms 缓动 + 匀速基线。
+        // ── 驱动角 = 匀速基线（绝对式）+ 棘轮缓动分量（只加不减）──────────
+        //    ⚠️ 两段必须**分开累加**（TV 第 4 轮反馈「齿轮并未一直旋转、偶尔停顿、
+        //    偶尔反转抽搐」的根因）：旧实现把棘轮弹簧直接加在含基线的 mainAngle 上，
+        //    而 ratchetTarget 里只有棘轮、没有基线 ⇒ 弹簧每帧把刚加上去的基线又
+        //    减回去，稳态收敛到 mainAngle ≈ ratchetTarget + BASE·RATCHET_MS/1000、
+        //    净速率为 0 —— 鼓点之间整组冻住（停顿），只有鼓点时才"跳一齿"（抽搐），
+        //    反向子轮（gearRatio<0）在每次跳变里看着像倒抽（反转）；无鼓点素材
+        //    更是几分钟纹丝不动。
+        //    现在：基线 = BASE_SPEED·elapsed 绝对求值（elapsed 单调 ⇒ 每帧恒正推进、
+        //    天然不回退、无累积漂移）；棘轮只在自己的 ratchetAngle 上缓动（目标恒
+        //    ≥ 当前、ease<1 ⇒ 只加不减、不过冲）；两者相加 ⇒ 帧帧推进、永不停顿、
+        //    永不反转。基线与卫星组共用**同一个 elapsed**（同一时间基、同一 dt 钳位）。
         //    ⚠️ 不接 treble/mid 调速：帧间抖动会让角速度忽快忽慢；
         //    子轮无独立自转，全部 angle = phase + ratio·mainAngle 刚性跟随。
         //    不做 TAU 回绕：子轮回绕会跳 ratio·TAU（齿对齿但辐条可见跳位），
         //    且浮点增长 24h 内相位误差仍 < 1% 齿距。
         val ease = (dt * 1000f / RATCHET_MS).coerceIn(0f, 1f)
-        mainAngle += (ratchetTarget - mainAngle) * ease
-        mainAngle += BASE_SPEED * dt
+        ratchetAngle += (ratchetTarget - ratchetAngle) * ease
+        mainAngle = BASE_SPEED * elapsed + ratchetAngle
 
         // ── 音频映射 → 强度（α 公式 + 上限，见交付报告映射表）──────────
         val gearAlpha = (0.62f + bassS * 0.33f).coerceAtMost(0.95f)
