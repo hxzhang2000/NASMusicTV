@@ -42,7 +42,7 @@ class PlayerManager(private val applicationContext: Context) {
     // ── N-4 拆分组件 ──
 
     /** 均衡器/频谱管理（N-4 提取） */
-    private val playerEqualizer = PlayerEqualizer(Handler(Looper.getMainLooper()))
+    private val playerEqualizer = PlayerEqualizer()
 
     /**
      * 频谱数据仓库 —— 全屏可视化舞台的数据源。
@@ -378,9 +378,9 @@ class PlayerManager(private val applicationContext: Context) {
             _buffering.value = playbackState == Player.STATE_BUFFERING
             val dur = player?.duration ?: 0
             if (dur > 0) _duration.value = dur
-            // 播放器就绪后尝试初始化频谱分析器
+            // 播放器就绪后启动 PCM 频谱通道
             if (playbackState == Player.STATE_READY) {
-                playerEqualizer.initSpectrumAnalyzer(player)
+                playerEqualizer.initSpectrumAnalyzer()
                 // 会话变更兜底：ExoPlayer 重建/切轨更换 audioSession 时重建均衡器，
                 // 避免 EQ 静默失效（此前仅用户下次拖动频段才重建）。
                 playerEqualizer.ensureEqualizerForSession(player)
@@ -528,8 +528,8 @@ class PlayerManager(private val applicationContext: Context) {
         if (exoPlayer.isPlaying) {
             progressHandler.post(progressUpdateRunnable)
         }
-        // 尝试初始化频谱分析器（如果音频会话已就绪）
-        playerEqualizer.initSpectrumAnalyzer(exoPlayer)
+        // 启动 PCM 频谱通道（唯一通道，无需音频会话；幂等）
+        playerEqualizer.initSpectrumAnalyzer()
         AppLog.d("PlayerManager", "setPlayer: player initialized")
     }
 
@@ -1344,8 +1344,8 @@ class PlayerManager(private val applicationContext: Context) {
      * 初始化均衡器（在 setPlayer 之后调用）
      */
     /**
-     * P6：注入 PCM 降级通道（由 PlaybackService 创建，
-     * 其 processor 已挂在 AudioSink 处理器链最前）。
+     * 注入 PCM 频谱通道（由 PlaybackService 创建，
+     * 其 processor 已挂在 AudioSink 处理器链最前，取人声消除之前的原始信号）。
      */
     fun setPcmFallbackChannel(channel: com.nasmusic.tv.player.PcmFallbackChannel) {
         playerEqualizer.pcmFallback = channel

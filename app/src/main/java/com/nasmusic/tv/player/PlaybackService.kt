@@ -246,8 +246,9 @@ class PlaybackService : MediaLibraryService() {
         // VocalRemovalProcessor 一并正名
         val spectralMaskProcessor = SpectralMaskProcessor()
 
-        // P6：PCM 降级通道 —— 部分国产 TV 的 Visualizer 绑定成功却恒返回全 0，
-        // 此时改用 AudioSink 里的 PCM 自算频谱。挂在链最前，取人声消除之前的原始信号。
+        // PCM 频谱通道（唯一通道，v2.37.6 起）—— 频谱数据来自 AudioSink 链最前端的
+        // PCM 透传自算 FFT，无需 RECORD_AUDIO 权限（原 Visualizer 通道已移除）。
+        // 挂在链最前，取人声消除之前的原始信号。
         val pcmFallback = com.nasmusic.tv.player.PcmFallbackChannel()
 
         // 自定义 RenderersFactory，注入人声消除处理器 SpectralMaskProcessor 到 AudioSink
@@ -282,10 +283,8 @@ class PlaybackService : MediaLibraryService() {
         mediaLibraryTree = MediaLibraryTree(this, browseCache)
 
         // Store player reference in manager + inject vocal removal processor
-        // 顺序关键：PCM 降级通道必须先于 setPlayer 注入 —— setPlayer 内部会触发
-        // initSpectrumAnalyzer→attach；若 TV 的 Visualizer 不可用而 attach 抛异常，
-        // SpectrumAnalyzer.degradeToPcm 在 pcmFallback==null 时会直接放弃降级，
-        // 导致 frame 恒 0、全部效果静止（P6 实测坑）。
+        // 顺序关键：PCM 频谱通道必须先于 setPlayer 注入 —— setPlayer 内部会触发
+        // initSpectrumAnalyzer→start，start 需要 pcmFallback 已注入。
         (application as NasMusicApp).playerManager.setPcmFallbackChannel(pcmFallback)
         (application as NasMusicApp).playerManager.setPlayer(player)
         // A-13：注册无 UI 依赖的 streamUrl 解析器。
