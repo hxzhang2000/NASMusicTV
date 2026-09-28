@@ -11036,6 +11036,45 @@ W/PhotoWallController:   scan produced an empty pool: {GALLERY=DISABLED, EXTERNA
 
 **版本**：v2.37.4（versionCode 166）。发布后需把手机从 debug 换回 release（数据清空需重连 Jellyfin）。
 
+### 10.193 v2.37.6 — 新增可视化效果 DNA（DNA 双螺旋）（2026-09-28）
+
+**范围**：新增独立渲染器 `visualizer/renderers/DnaRenderer.kt`（674 行）+ 枚举接入（`AppSettings.kt`：`DNA("DNA 双螺旋", Tier.ADV, "40")`——序号 40 = 现最大 39+1、不复用历史空号；枚举头注释 23→27 套）+ 工厂分支（`VisualizerRendererFactory.kt`）+ `VisualizerThemeTest` 计数断言 26→27（共 7 处数字同步，仅改数字未弱化任何断言）。效果库 26 → **27**。**不升版本号**（并入 v2.37.6）。
+
+**选型**：沿用既有 `VisualizerRenderer`/`DrawScope` 框架（需求稿的 AudioRecord/Visualizer API 问题映射到项目既有 `AudioFrame` 分析层——零新权限、零新音频模块）；纯展示：无交互、无文字、无按钮。
+
+**几何**：
+- 中心路径 = **12 控制点**（`CP_N` 8→12，2026-09-28 第三轮：新形状下 8 点对 2.5π 空间频率仅 2.8 采样/周期会混叠）均匀 Catmull-Rom（端点复制法，等价三次 Bezier），**双正弦形状演化**（固定 S 形 `BASE_Y` 已删）：`cpY = BEND_BASE(0.30) × (0.6·sin(1.5π·x̂ + φ₁) + 0.4·sin(2.5π·x̂ + φ₂)) × bend + noise`，`x̂ = x/pathHalfSpan`，相位 φ₁/φ₂ 以 **47s/73s** 互质长周期推进（与 9/11/16/17/37s 全无谐波，LCM 57min 无可见重复）——10s 内波形沿链平移 ≈317px（1920×1080），**曲线形状本身持续缓慢变形**（第三轮「曲线要变化」反馈的正解；前两轮 ±15% 幅度缩放被判定看不出变化）；y 叠加 11s/17s 互质噪声漂移（包络 ≤ 0.05）；`bend` = 37s 自主漂移 ±15% × 音频 ±10%（∈ [0.85, 1.265]）**只作整体幅度调制**，不参与形状。确定性低频噪声替代 Perlin，零分配。
+- 双骨架绕路径 θ = 2×2π×t + phase（`TURNS = 2`，三轮演进 4→3→2：「扭曲太厉害」→「缠绕再松」），骨架 B 传 phase+π ⇒ 恒 180° 反相；`helixPoint(t, phase, amp)` 输出走成员 `FloatArray(3)`（⛔ 不用 Triple 装箱）；屏面内偏移 = 单位法向 × cosθ × amp（`HELIX_AMP` 三轮 0.16→0.115→**0.097**），带符号深度 z = sinθ ∈ [−1,1]。**world→screen 投影集中在 `helixPoint` 出口**：`screen = center + world × scale`（`centerX/centerY/layoutScale` 由 `ensureLayout` 缓存，与齿轮效果 `cx + offset×unit` 同约定），尺寸全部单次 ×scale 无双重缩放——初版漏了这一步，整条链塌缩到画布原点 ~2px 不可见，2026-09-28 上机发现后修复。
+- 全局旋转 `ROTATION_PERIOD = 16s`/周（规格 12–20s 取中）。
+- **z 分批遮挡**：每帧最多 478 元素（`RUNGS_MAX` 96：段 190 + 横档 96 + 节点 192 ≤ `EL_CAPACITY` 512，`STRIDE` 128 / 解码位移 `STRIDE_SHIFT` 7，全链无裸位宽字面量）入成员 `elZ`/`elCode` 原地插入排序（稳定：段先入 → 节点后画盖住段端），升序绘制 = 后→前；前元素 4 线宽桶 0.75→1.32×、alpha 0.40→1.00、节点半径 0.65→1.35×。
+
+**音频（慢呼吸）**：唯一输入 `AudioFrame.energy`，EMA `SMOOTHING_FACTOR = 0.08`（≈0.42s 时间常数 @30fps，0.05–0.12 可调）；仅小幅慢调制——螺旋振幅 ±10%、横档亮度上限 +12%、骨架亮度上限 +6% + 9s 正弦 ±5% 慢起伏；中心路径弯曲另有 37s 正弦自主漂移 ±15%（`BEND_DRIFT_GAIN`/`BEND_DRIFT_PERIOD`，与音频 ±10% 复合 ∈ [0.85, 1.265]，2026-09-28「弯曲角度缓慢变化」反馈所加；周期取质数 37 避开 9/11/16/17s 谐波）。⛔ 不读 beat/pulse，无节拍闪烁、无逐帧跳变。
+
+**布局（自适应，第三轮改「两端出屏」）**：用户 2026-09-28 推翻「整链完整在屏内」旧规——**链两端要超出左右屏幕，垂直方向仍完整在屏内**。故 scale 改为垂直主导 `layoutScale = 0.9 × (h/2) / WORLD_EXTENT_Y(0.75)`（`WORLD_EXTENT_X` 已删——横向 fit 语义不复存在，出屏校验改由下述参数表达）；路径半跨度 `pathHalfSpan = max(MIN_PATH_HALF 1.3, 1.06×(w/2)/layoutScale + END_MARGIN 0.14)` 于 `ensureLayout` 动态计算（`END_MARGIN` = x 漂移 0.03 + 振幅最大横向投影 0.097×1.10 上取整——不加则最坏情形端点缩回屏内 −3.2%），控制点 x 以半跨度等距铺开。两组核算：1920×1080 → scale 648、半高 486 = 0.9×540 ✓、pathHalfSpan 1.7104、端点屏幕 x 1108 vs w/2 960 = **+15.5% 出屏**（最坏 +6.0% ✓）；1080×1920 → scale 1152、半高 864 = 0.9×960 ✓、半跨度取下限 1.3、端点 +177% 出屏；超宽 2560×720 → 半跨度 3.28、最坏 +6.0% ✓（唯一触发 RUNGS_MAX 上限的场景）。垂直 bound 重推：|cpY| ≤ 0.30×1.265+0.05 = 0.4295 → 凸包 0.5727 + 振幅 0.1067 + `GLOW_MAX` 0.0597 + 线宽 0.0034 = 0.7425 → **0.75**。线宽/节点半径/振幅/横档间距全部 scale 派生、无硬编码像素；尺寸变化只走 `ensureLayout`（`pathHalfSpan`/rungs/线宽缓存同块重建，键 = (scale, pathHalfSpan, 档位)），`elapsed` 不动（仅 `onEnter` 重置）。
+
+**视觉/分档**：BG #05070D + 固定种子星野（LCG `0x5EEDF00D`，70/140/220 按档，同太阳系方案）；骨架 A 青 #00E5FF / B 紫 #B388FF；横档 A/T/G/C 四柔和色 `#4DB6AC #FF8A65 #9575CD #FFD54F`；横档数不再按档固定，改为**按弧长导出**：`rungs = clamp(弧长×1.1 / 目标间距, 24, 96)`，目标间距 LOW 0.090 / MEDIUM 0.065 / HIGH 0.050 世界单位（弧长取 φ=0 名义形状折线 ⇒ 与帧无关，间距偏差 ≤±0.8%；1920×1080 → LOW 46 / MED 64 / HIGH 83），保证链加长后密度不稀——三轮加密演进 14/20/24 → 20/30/40 → 按间距自适应。`NODE_R` 0.020→**0.017**（HIGH 峰值节点间隙 −2.4px 重叠 → +2.8px ✓），`GLOW_MAX` 同步 0.0597；最外层光晕（低 α 0.10/0.18/0.26）沿链相融属可接受柔光，KDoc 有记。三档均为完整双螺旋（LOW 无光晕 + 0.090 稀间距、MEDIUM 双层光晕+中点球、HIGH 三层光晕+前景高光）。
+
+**时间/零分配**：`elapsed` Double 逐帧 dt（clamp 0.1s）累加（⛔ 不用 `nowMs × 系数`，同 §10.191/§10.192 约束）；draw 无 List/map/装箱/lambda/Path 分配；`drawLine` 走 CanvasDrawScope 复用的 `obtainStrokePaint()`（ui-graphics-1.6.1 源码核实）；线宽成员 `FloatArray(4)` 桶缓存，键 = scale、`ensureLayout` 检测到变化才重建。
+
+**文件改动**：`DnaRenderer.kt`（新建）、`AppSettings.kt`（枚举 + 头注释）、`VisualizerRendererFactory.kt`（import + when 分支）、`VisualizerThemeTest.kt`（7 处计数数字）。
+
+**验证**：
+
+| 手段 | 结果 |
+|---|---|
+| `assembleRelease lintDebug testDebugUnitTest`（--no-daemon + in-process，单次调用） | ✅ BUILD SUCCESSFUL in 8m 49s（GRADLE_EXIT=0，日志 `logs_temp/dna_build.log`） |
+| 同上（投影缺失修复后复验，2026-09-28） | ✅ BUILD SUCCESSFUL in 9m 39s（日志 `logs_temp/dna_fix_build.log`）；1180 tests, 0 failures, 0 errors；APK 重出 08:37 |
+| 同上（三处调优后复验，2026-09-28） | ✅ BUILD SUCCESSFUL in 9m 36s（日志 `logs_temp/dna_tune_build.log`）；1180 tests, 0 failures, 0 errors；APK 重出 09:13 |
+| 同上（第三轮四项调优后复验，2026-09-28） | ✅ BUILD SUCCESSFUL in 9m 34s（日志 `logs_temp/dna_r3_build.log`）；1180 tests, 0 failures, 0 errors；APK 重出 10:17 |
+| `testDebugUnitTest` 全量 | ✅ 1180 tests, 0 failures, 0 errors（115 suites） |
+| `lintDebug` | ✅ 0 Error（blocking lint 通过） |
+| `assembleRelease` | ✅ `NASMusicTV-release-v2-37-6.apk` 22.4 MB（2026-09-28 00:57） |
+| `VisualizerThemeTest` + `BackupGsonTest`（designer 阶段定向） | ✅ 13/13 + 13/13，0 失败（7 处计数断言同步后无弱化） |
+| 编译快验（designer 阶段） | ✅ `compileDebugKotlin` BUILD SUCCESSFUL（2m52s，`DnaRenderer.kt` 零警告） |
+| 两宽高比包围盒核算（designer 阶段） | ✅ 1920×1080 内容半宽 854.6 ≤ 864、1080×1920 480.7 ≤ 486，均在 0.9 留白内 |
+
+**版本**：并入 v2.37.6（versionCode 168；同 §10.191/§10.192，不升版本号、未推送）。
+
 ### 10.192 v2.37.6 — 轨道（ORBITAL_RINGS）重做为完整太阳系（倾斜视角+全屏自适应）+ 太阳随音乐律动（2026-09-27）
 
 **范围**：仅 `visualizer/renderers/BatchTwoRenderers.kt` 单文件（+724/−166），`OrbitalRingsRenderer` 类整体重写（E29），**三轮迭代**：① 主体规格（太阳系/卫星/星空）→ ② 中央太阳音乐律动（用户追加）→ ③ 倾斜视角 + 全屏自适应（见下）。原「倾斜椭圆轨道交织 + 光球拖尾 + 低音晃动」改为纯展示太阳系动画；枚举名/工厂分支/显示名（轨道）/Tier.ADV 不变，其余效果零改动。**不升版本号**（并入 v2.37.6）。

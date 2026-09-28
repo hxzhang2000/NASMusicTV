@@ -1,10 +1,10 @@
 # 可视化效果列表
 
 > **版本**：v2.37.6（versionCode 168）
-> **更新日期**：2026-09-27
+> **更新日期**：2026-09-28
 > **来源**：`app/src/main/java/com/nasmusic/tv/data/model/AppSettings.kt` — `VisualizerTheme` 枚举
 
-共 **26 个**效果（2026-09-27 移除 11 个后的现值：37 → 26，详见 `docs/technical-overview.md` §10.190）。
+共 **27 个**效果（2026-09-27 移除 11 个：37 → 26，详见 `docs/technical-overview.md` §10.190；2026-09-28 新增 DNA：26 → 27，§10.193）。
 
 ## BASIC 档（画质全档可用）
 
@@ -38,6 +38,7 @@
 | E29 | ORBITAL_RINGS | 轨道 |
 | E31 | ORIGAMI_POLY | 折纸 |
 | E39 | PHOTO_WALL | 照片墙 |
+| E40 | DNA | DNA 双螺旋 |
 
 ## ULTRA 档（需帧缓冲，仅 HIGH）
 

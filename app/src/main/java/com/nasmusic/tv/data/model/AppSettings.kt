@@ -97,7 +97,7 @@ data class AppSettings(
 )
 
 /**
- * 可视化效果主题（23 套手动效果，无自动导演档）。
+ * 可视化效果主题（27 套手动效果，无自动导演档）。
  *
  * [tier] 决定该效果在各画质档位下的可用性，见 [VisualQuality.supports]。
  */
@@ -142,6 +142,17 @@ enum class VisualizerTheme(
      * ⚠️ 本效果**不一定出现在 [selectable] 里** —— 三来源开关全关时被过滤掉（§7.4）。
      */
     PHOTO_WALL("照片墙", Tier.ADV, "39"),
+
+    /**
+     * DNA 双螺旋（第 40 个效果）
+     *
+     * 视觉：一条自由弯曲的 DNA 双螺旋缎带蜿蜒于画面中央 —— 青/紫双骨架绕中心
+     * Catmull-Rom 样条反相螺旋、4 色碱基对横档连接，深空星野底（同「轨道」风格）。
+     *
+     * 归 [Tier.ADV]：按粒子预算门控（`VisualQuality.LOW` 不提供，与其余 ADV 一致）；
+     * 无照片墙式特殊门控 —— [selectable] 恒含本项，三来源开关不影响。
+     */
+    DNA("DNA 双螺旋", Tier.ADV, "40"),
     ;
 
     /** 效果分级：决定画质档位可用性 */
