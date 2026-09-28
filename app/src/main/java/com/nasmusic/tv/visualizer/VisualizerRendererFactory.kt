@@ -28,6 +28,7 @@ import com.nasmusic.tv.visualizer.renderers.LightBeamsRenderer
 import com.nasmusic.tv.visualizer.renderers.MoleculeRenderer
 import com.nasmusic.tv.visualizer.renderers.VintageTvRenderer
 import com.nasmusic.tv.visualizer.renderers.DnaRenderer
+import com.nasmusic.tv.visualizer.renderers.WorldRenderer
 import com.nasmusic.tv.visualizer.photo.PhotoRenderer
 
 /**
@@ -66,6 +67,7 @@ object VisualizerRendererFactory {
         VisualizerTheme.VINTAGE_TV -> VintageTvRenderer()
         VisualizerTheme.PHOTO_WALL -> PhotoRenderer()
         VisualizerTheme.DNA -> DnaRenderer()
+        VisualizerTheme.WORLD -> WorldRenderer()
     }
 
     /**
