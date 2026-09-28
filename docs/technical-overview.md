@@ -1,7 +1,7 @@
 ﻿# NAS Music TV — 技术架构概述
 
-> 版本：v2.13.2
-> 最后更新：2026-09-27
+> 版本：v2.14.0
+> 最后更新：2026-09-28
 > 本文档记录项目当前的完整技术架构，作为后续迭代的基准参考。
 
 ---
@@ -11036,6 +11036,92 @@ W/PhotoWallController:   scan produced an empty pool: {GALLERY=DISABLED, EXTERNA
 
 **版本**：v2.37.4（versionCode 166）。发布后需把手机从 debug 换回 release（数据清空需重连 Jellyfin）。
 
+### 10.195 v2.37.6 — 移除 RECORD_AUDIO 权限：频谱可视化反转为 PCM 唯一通道（2026-09-28）
+
+**背景**：应用启动即请求麦克风权限。全仓排查（12 条权限清单）确认 RECORD_AUDIO 仅来自本项目自身（`AndroidManifest.xml` + `MainActivity` 启动时无条件请求），无任何依赖注入、K 歌/人声分离均不录音；根因是 Android 10+ 将 `audiofx.Visualizer` 归入 RECORD_AUDIO，而频谱可视化的数据源正是 Visualizer（`SpectrumAnalyzer.kt` 唯一使用处）。已存在的 PCM 降级通道（`PcmFallbackChannel`，ExoPlayer AudioSink 处理器链 `PcmTapProcessor` 透传采样 + `PcmSpectrumTap` 后台 FFT）不依赖任何权限。
+
+**决策（用户选定方案 2）**：频谱数据源从「Visualizer 主通道 + PCM 降级」反转为「**PCM 唯一通道**」，彻底删除 RECORD_AUDIO 权限及其启动请求。`frame.waveform` 无渲染消费方（EcgWaveRenderer 注释明确不用；AdvancedRenderers 用本地 sin）→ PCM 模式 waveBuf 恒 0，无行为回归。**本次不升版本号**（并入 v2.37.6，versionCode 168 不变）。
+
+**API 契约（编排方统一定死，接线层与改造层各自遵守）**：
+
+| 项 | 旧 | 新 |
+|---|---|---|
+| 启动 | `attach(audioSessionId)` | `start()`（无参，幂等；pcmFallback 未注入时记日志返回） |
+| 分析 | `analyze(mag, bins, rate, fromPcm)` | `analyze(mag, bins, rate)`（删除 `fromPcm`，PCM 语义唯一） |
+| 暂停 | 依赖降级仲裁 | `PlayerEqualizer.setPlaying` 改调新增 `onPlaybackChanged(playing)`，暂停瞬间 `emitSilence()` 柱子归零 |
+| 其余 | `pcmFallback` / `repository` / `release()` | 保留原名原语义 |
+
+**改动清单**：
+
+| 文件 | 改动 |
+|---|---|
+| `AndroidManifest.xml` | 删除 `RECORD_AUDIO` 权限 |
+| `ui/MainActivity.kt` | 删除启动时 RECORD_AUDIO 请求块（212–227 行；POST_NOTIFICATIONS 保留） |
+| `player/SpectrumAnalyzer.kt` | 单通道化：删除 Visualizer 字段/监听/watchdog、`processFft`、`fillWaveform`、降级仲裁全家（`onVisualizerSilence`/`onPcmFrame`/`degradeToPcm`/`rollbackToVisualizer`/`resetPcmArbitration`/`stopPcmFallback`）、自适应噪声基底、垃圾信号检测、`magnitudeBuf`/`diagWavePeak` 及 8 个仲裁常量；`attach`→`start`、`analyze` 去 `fromPcm` 与双分支、新增 `onPlaybackChanged`；静音判定收敛为绝对阈值（`frameMax <= PCM_SILENCE_EPS` → `emitSilence`）；保留 64 柱映射/三段 AGC/双通道输出/采样率防御/诊断心跳全部管线核心 |
+| `player/PlayerEqualizer.kt` | 构造改无参；`setPlaying` 改调 `onPlaybackChanged(playing)`；`initSpectrumAnalyzer` 调 `start()`；去 retry 逻辑/retryHandler |
+| `player/PlayerManager.kt` | `initSpectrumAnalyzer()` 两处调用改无参 |
+| `player/PlaybackService.kt` | 注释更新（PcmFallbackChannel 创建/注入保留，代码未动） |
+| 测试 `SpectrumAnalyzerTest.kt` | `processFft` 全部改驱动 `analyze(magnitudes(...))`；`fft(Byte)` 辅助函数改 `magnitudes(Float)`（HEAVY=120f/LIGHT=30f，数值断言不变）；静音/空输入/越界防御测试改写；类头注释更新 |
+| 测试 `SpectrumAnalyzerPcmTest.kt` | 全部删 `fromPcm` 参数；「噪声门限对比」测试改写为唯一通道小信号（0.5f）必须可见 |
+
+**验证**：⚠️ 编译/单测由用户后续执行（本记录编写时尚未跑 Gradle）。已做静态验收：grep 确认 `SpectrumAnalyzer.kt` 无 `Visualizer`（除说明历史的注释）/`attach`/`processFft`/`fromPcm`/`degradeToPcm`/`watchdog`/`noiseFloor` 残留；全仓无 `processFft`/`fromPcm`/`.attach(` 调用残留；接线层 `start()`/`onPlaybackChanged(playing)`/`release()`/注入点与新版 API 完全对齐。
+
+**版本**：v2.37.6（未变；versionCode 168）。
+
+### 10.196 v2.37.6 — 新增 E41「世界」（WORLD）可视化：海岸线地图 + 城市光点 + 真实航空规模大圆航线 + 真实 UTC 晨昏线（2026-09-28）
+
+**范围**：新增 6 个渲染器/数据文件（`WorldRenderer`/`WorldCities`/`WorldNetwork`/`WorldProjection`/`WorldTerminator`/`WorldMapData`）+ 2 个测试文件（`WorldLogicTest`/`WorldMapDataTest`）；枚举 `VisualizerTheme.WORLD("世界", Tier.ADV, "41")` 与工厂 `VisualizerRendererFactory` 的 `WORLD -> WorldRenderer()` 分支已接入。效果为纯展示：暗调极简海岸线地图 + 城市光点 + 按真实航空客流规模生成的动态大圆航线 + 分频段音频驱动 + 真实 UTC 晨昏线，**零交互、零文字**（符合本 app 渲染器零文字红线）。**不升版本号**（并入 v2.37.6，versionCode 168，与 §10.195 一致）。`VisualizerThemeTest` 的主题计数断言同步 27→28（`off` 26→27、`on` 27→28，共 4 处）。
+
+**效果构成（12 层绘制序，见 `WorldRenderer.draw()`）**：背景夜侧渐变（96 条 `NIGHT_STRIPS` 按太阳几何分区）→ 大气辉光 → 陆地填充/描边 → 城市光点（Tier 1–4 四级光晕）→ 焦点城市轮换光圈 → 大圆航线弧（`ARC_PTS=56` 采样，主干/支线分级）→ 活跃航线滑行光点（`MAX_FLIGHTS=34`）→ 航线着陆涟漪（`RIPPLE_MAX=24`）→ 拍点/分频段共振。布局以短边为基准等比缩放（`ensureLayout`），任意分辨率等比。焦点城市 20–30s 轮换、慢过渡。
+
+**音频驱动（复用既有分析层，零新权限）**：直接消费 `AudioFrame` 的 `bass/bassRaw/mid/treble/energy/sectionEnergy/beat/pulse/bpm`，经分频段 EMA 映射到各层振幅/航线活跃度/光晕强度；**⛔ 不申请 RECORD_AUDIO、不用 AudioRecord/Visualizer**——与 §10.195 的「PCM 唯一通道」方向一致，本效果不引入任何新权限。
+
+**地图数据（预抽取内嵌，非 GeoJSON 运行时解析）**：源为 `ne_110m_land` **海岸线**，Robinson 投影，**3 档 LOD**（0.55°/0.22°/0.08° 容差），编译期内嵌（3 档环数 122/125/127、点数 1504/2798/4169、编码串 6137/11316/16802 字符，分块 2/3/5，总 34255 字符）。编码契约：4 字符/点 = 2 经度 + 2 纬度，64 字符字母表 `0-9A-Za-z-_`（不含 `/`），`/` 环分隔符，`lonIdx=round((lon+180)/360*4095)`、`latIdx=round((lat+90)/180*4095)`，每档 chunk ≤4000 字符（JVM 64KB 常量上限），`source(lod)` 懒拼接缓存、`decodeWorld` 同 lod 返回同一实例。生成器与解码器双向校验（`logs_temp/world_map_gen/`）。
+
+**大洲色温移除决策（A/B 实证）**：需求稿中「大洲色温」原文为「可用」（选配），未采纳为硬需求。实测国家层（`ne_110m_admin_0_countries`）53.6% 描边墨量是内陆国界；land 层欧亚大陆合并单环导致按大洲上色时「欧洲蓝」塌 94.5%。故**数据源换成海岸线层 + 单一中性陆地色**（`LAND_INK = 0xFF7C8899`），去 `WorldContinent` 与 `WorldLandmass.continent` 字段，A/B 对比证据图 `output/world_ab_coastline_1920x1080.png`。
+
+**航线网络模型（三轮修复，数值见下）**：`klass = classify(fromTier, toTier)` 纯端点驱动类别（拍点只影响选中、不覆盖类别），`MAX_ROUTE_KM = 15000f` 距离门，叶端双向 locality（最近 2–3 候选，权重 0.50/0.30/0.20）。**修复记录**：① 最远航线 max 14,993.913 km = 134.843°（<15000 门限）；② `klass == classify` 恒成立（30,000 路由采样 0 违例）；③ 无焦点 FEEDER p95 8,336 → 6,412 km（locality 拉近）；④ 两类复现路由双向不可达（局部性不对称）已修；⑤ 类混合三轮修复零漂移。**刻意取舍（已写 KDoc）**：Tier4 焦点压过拍点（STRONG 拍下仍出 FEEDER）；「互选 k 近邻」规则实测不可行（会删掉 19/26 枢纽的毛细航线），未实现。
+
+**城市表/焦点/灵敏度**：`WorldCities` 32 城按机场年吞吐量 Tier 1–4 分级（8/8/10/6），孟买/利马坐标内移 ~0.25° 保证三档 LOD 全在陆（实测 16.5 km / 1.4 km 离岸）。每城活跃航线上限 `activeFlightRange`：Tier1≤8 / Tier2≤5 / Tier3≤3 / Tier4≤1。灵敏度为**常量枚举**（CALM 0.045/0.55、STANDARD 0.075/1.00、INTENSE 0.115/1.45），无设置 UI（效果要求零交互，留可扩展主题接口）。
+
+**反经线断笔修复**：大圆航线/陆地路径跨 ±180° 断笔由 `SEAM_JUMP_FRAC=0.35f`（跳跃段丢弃阈值）+ `SEAM_LON_JUMP_DEG=180f`（经度跳变判定）+ `POLAR_LAT=89.9f`（极点丢弃）共同处理，修复前航线会横穿全图画直线。诊断：`output/` 下有反经线前后对比与航线路由图。
+
+**已知残留（如实标注）**：① 夜侧赤道采样对极夜/极昼区低估（太阳几何简化）；② 大气辉光为正圆（未做椭圆大气透视）；③ 700–900 draw call 为全仓最高（复杂多层效果固有）；④ **未真机验证**——电视离线 + 用户选定静态验证，Compose 实际渲染/动画/音频响应未经真机确认。
+
+**验证**：`WorldLogicTest` 54 例 + `WorldMapDataTest` 21 例（真实 Gradle `testDebugUnitTest` 单类运行）全绿；`WorldContinent` 全仓库 grep 0 残留；`compileDebugKotlin` 0 错误 0 警告（反经线修复后）。**全量补跑（2026-09-28）**：`testDebugUnitTest` 1255 例 / 0 失败 / 0 错误 / 0 跳过 + `lintDebug` 通过，`BUILD SUCCESSFUL in 7m 10s`（日志 `logs_temp/world_verify_full2.log`）。首次全量跑暴露 `VisualizerThemeTest` 4 处主题计数硬编码 27 未随新主题同步（entries/selectable/ordinalLabel/displayName），已修正为 28。
+
+**版本**：v2.37.6（未变；versionCode 168）。
+
+### 10.194 v2.37.6 — 齿轮（CONCENTRIC_GEARS）质感重做：随机布局 13 轮三级啮合链 + 卫星组 + 14 层纹理/光层（2026-09-28）
+
+**范围**：仅 `visualizer/renderers/BatchFourRenderers.kt` 的 `ConcentricGearsRenderer` 类（三轮合计 +1186/−159，类体现为 L99–1296，同文件 `FractalTreeRenderer`/`LightBeamsRenderer` 零改动）；枚举/工厂/测试不动（既有 E33 `CONCENTRIC_GEARS`，Tier.BASIC）。**不升版本号**（并入 v2.37.6）。需求稿中的「歌名/歌手/底部圆点/关闭按钮」不属渲染器范畴（本 app 渲染器零文字红线），未实现。实现分三轮：des-11/12 轮 1 齿轮系统+运动学（des-11 尝试整类单消息落盘撞输出上限截断，同会话续做）、des-13 轮 2 纹理/光层、des-14/15 轮 3 随机化+卫星组（des-14 断于编译步，des-15 收尾自查并修复 2 处缺口，见下）。
+
+**主组布局/啮合（恒定模数 0.024，齿隙 0.012；轮 3 起随机生成）**：13 轮三级链结构保留（中心主轮 → 内圈 5 → 外圈 7），布局改为 **onEnter 种子随机**：① 齿数区间随机（中心 26–34T、内圈 12–18T、外圈 8–13T；轮 1/2 曾用固定 30T + 16/15/16/14/15T + 安装角 18/90/162/234/306° 五等分，TV 反馈「不需要有规律」后废弃）；② 安装角只落**父轮齿中心栅格** `β = phase_p + (k+0.5)·step_p`（连续取角会破坏接触点相位标定）；③ 碰撞判据：非父轮两两 `dist ≥ tip₁+tip₂+0.012`，`reach ≤ MAIN_REACH_RAW(1.05714)`；④ 单轮随机 ≤32 次，落空走 `fallbackMain`（齿数阶梯下探至 6T 下限 × 全齿槽扫描，放不下改挂候选父轮）。400 种子 × 3 档 = **1200 布局统计：随机成功率 97.7%、兜底 333/14400、负余量 0、非啮合最小 +0.000068、reach ≤0.7399**。啮合物理不变：中心距 = rp_a+rp_b+0.012、相位标定齿槽、速比 (−1)^d·N_c/N_i —— 随机化只改「选哪些齿数/装在哪」。参数化齿廓 5 点/齿（root@0.00/0.22、tip@0.36/0.64、root@0.78），`depth = min(0.0252, rp×0.16)`；轮毂（0.26×tip）+ 辐条 中 6/内 4/外 3。档位降量按齿数降序裁外圈尾（索引 6–12 插入排序，父指针 0–5 恒有效）：**LOW 8 / MED 11 / HIGH 13** 主组，布局不变 ⇒ 降档无几何跳变（轮 3 起不再要求 LOW 对径对称）。**布局种子**：`VisualizerRandom.defaultSeed()`（时间派生，轮 3 修复——原常量 `0xC0FFEE11` 会导致每次新实例同一套「随机」布局）⇒ 每次进效果全新布局；尺寸变化不重掷（世界坐标只换 unit）；切画质按 `RendererSwapper.sync` 契约重入 onEnter 有意重掷 + 归零状态。
+
+**卫星组（独立小齿轮组，轮 3 新增）**：主组外围随机散布的独立小齿轮组，**零啮合、零接触、不共用 mainAngle**——模数 `SAT_MODULE` 0.016（比主组细）、齿数 6–11、半径带 **0.78–1.038**（`BEZEL_R − 0.012`，齿顶恒不越表圈 1.05 留作外框），单组 1–3 齿（锚轮 + 组内啮合成员，组内 `ω_员 = (−1)^链深 · N锚/N员 · ω_锚`，链上每级反向）。档位 **LOW 1 组/≤2 齿 · MED 2 组/≤5 齿 · HIGH 4 组/≤9 齿**；圈速 20–90s、两两差 ≥8s 且避开主组 56s（兜底表 31/47/68/84 + 0.5s 全扫描，理论不可达）。组↔组/组↔主组余量由 `satClearance` 校验（轮 3 修复：`satCount` 随放置即时回写——原实现只在末尾回写导致检查空转）；脚本实测卫星最小余量 **+0.000061**。
+
+**运动学（主组唯一驱动角 mainAngle；卫星组独立恒速）**：主组 `angle_i = phase_i + ratio_i·mainAngle`，`ratio_i = (−1)^d × N_center/N_i`（d=外啮合次数 ⇒ 内圈反向、外圈同向）；相位按接触点标定（子轮齿槽对父轮齿心）⇒ **啮合相位永不漂移**。`mainAngle = 匀速基线 TAU/56（56s/圈）+ pulse 上升沿棘轮推进（每沿 +TAU/30，120ms 缓动）`；不做 TAU 回绕（子轮回绕会跳 ratio×TAU 致辐条可见跳位；浮点增长 24h 相位误差 <1% 齿距）。**卫星组恒速连续**（TV 反馈③）：`angle = phase + ω·elapsed` —— 线性、无缓动、无回绕、不接棘轮、**永不停止**；各组转速互异（主组 56s/圈，卫星圈速 20–90s 两两差 ≥8s，组员按齿数比缩放，ω 符号随机 ⇒ 有的正转有的反转）。**有意偏离需求稿**（设计裁决）：中频不接转速、子轮无独立调速 —— 帧间抖动会让角速度忽快忽慢破坏啮合观感，律动由棘轮+呼吸缩放接管；轮廓起伏不做 —— 保持规则齿形（需求稿本身也要求「清晰齿形不是随机波浪」）。
+
+**14 层绘制顺序（轮 2，底→顶）**：① 近黑基底 `#020306` 实心 → ② 中心 `#0B0E15` 径向纵深（半对角线为半径，任意宽高比四角落渐变末端）→ ③ 暗角 vignette（纯径向渐变，边缘 α0.55，⛔ 无模糊）→ ④ 颗粒（128/256px 预渲染 speckle tile `drawImage` 平铺，MED α0.045/HIGH 0.060，**LOW 整层省略**）→ ⑤ 固定种子星野（LOW 40/MED 70/HIGH 110 颗，椭圆缓漂移 41s + 全局微脉动 13s）→ **save/translate/scale/restore 整组能量缩放**（画在背景之外一切层之上）→ ⑥ 环境光晕（1.45·unit 径向渐变环）→ ⑦ 表圈 60 刻度 → ⑧ 节圆导引三淡环 → ⑨ **啮合父子轮中心连线**（最弱档，画在齿轮层前）→ ⑩ 齿内径向渐变填充（13 支 Brush 布局期缓存）→ ⑪ **双层描边**（外 4.6px 淡金光晕 + 内 1.6/2.2px 亮线）→ ⑫ 轴毂/辐条 → ⑬ 轴心核心光晕（2 层渐隐同心圆 + 脉动点，ringBoost 1.0/0.6/0.4 ⇒ 中心最亮向外递减）→ ⑭ 青色啮合火花。
+
+**音频映射（全 EMA + α 公式 + 上限）**：底噪通道 α0.08；`groupEnergy` 二级慢 EMA α0.06（尺寸变化不碰、仅 onEnter 归零）；`groupScale = clamp(0.990 + 0.010·sin(2π·t/9s) + 0.050·groupEnergy, 0.98, 1.05)`（静音保持极缓呼吸）；`glowGain = 0.85+0.55e ≤1.40`（核心光晕/齿内填充）；描边 α `0.10+0.17e ≤0.30`；环境光 `0.055+0.075e ≤0.135`；连线 `0.045+0.085e ≤0.14`；齿内填充 `(0.50+0.45·bass)·glowGain ≤1`；bass → 齿轮廓 1.6↔2.2px；mid → 表圈 α ≤0.32；treble → 火花 α ≤0.80；pulse → 棘轮推进 + 轴心半径 0.05+pulse×0.025 + 火花放大。
+
+**适配（FIT_K 0.43 + 主组收缩 0.70）**：轮 2 峰值呼吸 1.05 曾使表圈达 93.6% 半短边越安全区 ⇒ `FIT_K` 0.45→0.43；轮 3 为卫星带腾空域，主组世界坐标再乘 `MAIN_SHRINK = 0.70`（生成期按 `MAIN_REACH_RAW = 0.74/0.70` 把关后等比收缩，中心距/齿隙/相位/速比同比 ⇒ 啮合公式一行未动）。`unit = 0.43/1.06·minDim`（1080p = **438.1px**），世界预算 `max_world = 0.9×1.06/(2×0.43×1.05) = 1.0565`（表圈 1.05 即全图最外元素）。占比（半短边，静态→峰值 ×1.05）：主组 **60.0%→63.0%**、卫星带上限 **84.2%→88.4%**、表圈 **85.2%→89.4%**（483.0px ≤ 486.0px 预算）⇒ 全部 ≤90% 安全线；`minDim` 横竖屏同值 ⇒ 两向同数、4K 百分比不变。
+
+**性能红线**：draw 内零分配 —— 齿廓顶点（主组 13 + 卫星 ≤9）/14 条布局数组（容量 22，含 `gearAngVel`）/星点（固定种子 LCG）在 onEnter；**布局 LCG 仅 onEnter 调用，draw 内一次不碰**；5 Stroke、单例 Path、背景 3 Brush + 齿内填充 `fillBrushes[22]`（绝对坐标 ⇒ 随尺寸重建）、颗粒 tile 位图在 onEnter/尺寸变化时缓存；`onExit`/`onEnter` 显式 `recycle()` 颗粒位图（API22–25 native 堆）；整组缩放用 `canvas.save/translate/scale/restore`。⛔ 旋转烘焙进顶点手算世界坐标（绝不用 `withTransform({rotate})`——默认 pivot=画布中心会让所有轮绕同一点公转，历史缺陷）。
+
+**验证**：
+
+| 轮次 | 内容 | 构建/测试/lint | 结果 |
+|---|---|---|---|
+| 轮 1 | 齿轮系统+运动学（+368/−156） | `assembleRelease lintDebug testDebugUnitTest`（`logs_temp/gears_build.log`） | ✅ GRADLE_EXIT=0，1180 例/0 失败，lint 0 Error |
+| 轮 2 | 14 层纹理/光层（净增 ~125 行） | `compileDebugKotlin`（`logs_temp/gears2_compile.log`） | ✅ BUILD SUCCESSFUL 2m49s |
+| 裁决 | FIT_K 0.45→0.43 + KDoc/注释同步 + CHANGELOG 行措辞修正 | `assembleRelease lintDebug testDebugUnitTest`（`logs_temp/gears2_build.log`，12m9s） | ✅ GRADLE_EXIT=0，testDebugUnitTest 实跑 0 失败，lint 阻断通过，APK 23,515,754 B（13:13:38） |
+| 轮 3a | 随机布局 + 卫星组实现（des-14，断于编译步） | `gears_layout_check_v2.py`（400 种子 × 3 档 = 1200 布局 / 14400 轮） | ✅ PASS：负余量 0、reach ≤0.7399、卫星最小余量 +0.000061、圈速互异、重试有界 |
+| 轮 3b | des-15 收尾自查 + 2 修复（`satClearance` 即时回写 `satCount`；布局种子改 `VisualizerRandom.defaultSeed()`） | 修复后重跑脚本（`logs_temp/gears3_layout_run.log`，EXIT=0）+ 全类结构自查（括号平衡 0/0/0、符号闭合、零分配扫描、14 层/音频映射未误伤） | ✅ PASS（`D 结果：PASS`）；**按用户指示未编译**（仓库另一进程并行改动 World 效果中，禁止全量构建） |
+
+> ✅ **轮 3 编译验证（所有者执行，2026-09-28 21:04–21:12）**：`testDebugUnitTest lintDebug` **BUILD SUCCESSFUL 7m10s**（117 个测试类全绿、lintDebug 阻断通过，`logs_temp/world_verify_full2.log`；运行于含本轮代码的工作区）。本轮随该次验证通过后完成本地提交。
+
 ### 10.193 v2.37.6 — 新增可视化效果 DNA（DNA 双螺旋）（2026-09-28）
 
 **范围**：新增独立渲染器 `visualizer/renderers/DnaRenderer.kt`（674 行）+ 枚举接入（`AppSettings.kt`：`DNA("DNA 双螺旋", Tier.ADV, "40")`——序号 40 = 现最大 39+1、不复用历史空号；枚举头注释 23→27 套）+ 工厂分支（`VisualizerRendererFactory.kt`）+ `VisualizerThemeTest` 计数断言 26→27（共 7 处数字同步，仅改数字未弱化任何断言）。效果库 26 → **27**。**不升版本号**（并入 v2.37.6）。
@@ -12095,3 +12181,7 @@ lint 内有一份硬编码的「已知安全依赖」白名单 `PageAlignmentDet
 **验证**：`:app:compileDebugKotlin` / `:app:assembleDebug` / `:app:testDebugUnitTest` 全量 **BUILD SUCCESSFUL**。实机验证路径：设置→播放设置，右键进入内容区任意横排按钮组，连续按左键——应能穿过横排、逐行左移，最终落到左栏「播放设置」导航项；其他 8 个分区同路径抽测。
 
 **版本**：v2.31.3 → **v2.31.4**（versionCode 137 → 138）
+
+## V2.14.0 (2026-09-28)
+- **变更类型**：新增
+- **变更内容**：§10.195 记录「移除 RECORD_AUDIO 权限：频谱可视化反转为 PCM 唯一通道」
