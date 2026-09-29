@@ -29,7 +29,14 @@ import java.io.File
  * 主路径：BFS 逐目录 list + 60ms 节流（[BaiduPanApi.listDir]）；listall 单请求方案未验证，
  * 实测通过后可在 [BaiduPanApi.listAllAudio] 启用作为可选加速。
  */
-class BaiduFileIndexCache(context: Context) {
+class BaiduFileIndexCache(
+    context: Context,
+    /**
+     * [load] 的体积安全阀阈值（字节）。
+     * 设为可注入，测试才能用极小值验证安全阀，不必真的写 128MB 文件。
+     */
+    private val maxCacheBytes: Long = MAX_CACHE_BYTES
+) {
 
     private val file: File = File(context.filesDir, "baidu_index.json")
     private val gson = Gson()
@@ -58,9 +65,26 @@ class BaiduFileIndexCache(context: Context) {
         cachedIndex?.let { return it }
         return try {
             if (!file.exists()) return null
-            val json = file.readText()
+            // 安全阀：OutOfMemoryError 是 Error 不是 Exception，下面这个 catch 接不住。
+            // 索引没有条目上限，条目含 path/filename/title/artist/coverUrl 五个长字符串字段，
+            // 曲库继续长大只能先判死触发重扫，而不是等整进程崩。
+            val size = file.length()
+            if (size > maxCacheBytes) {
+                AppLog.e(TAG, "index too large: $size bytes > $maxCacheBytes bytes, dropping cache for rescan")
+                clear()
+                return null
+            }
+            // ⛔ 必须流式解析，不能用 file.readText()。
+            //    readText() 内部走 StringWriter：先把全文攒进 char[]，再 toString() 复制成
+            //    UTF-16 String —— 峰值约 3× 文件体积。实测 60MB 索引在 512MB heap 上直接
+            //    OOM（StringWriter.toString 单次申请 123,562,136 字节），app 启动即崩
+            //    （2026-09-29，BaiduFileIndexCache.allSongs → load 路径）。
+            //    流式解析让 JsonReader 边读边建对象图，中间没有任何大字符串中转，
+            //    峰值 = 对象图本身。
             val type = object : TypeToken<BaiduFileIndex>() {}.type
-            val index = gson.fromJson<BaiduFileIndex>(json, type)
+            val index = file.bufferedReader().use { reader ->
+                gson.fromJson<BaiduFileIndex>(reader, type)
+            }
             synchronized(cacheLock) {
                 cachedIndex = index
                 dirIndex = null  // 失效目录索引，下次 searchByDirectory 时重建
@@ -78,7 +102,9 @@ class BaiduFileIndexCache(context: Context) {
             // 原实现 writeText 先截断后写，写盘中途被杀会导致索引 JSON 损坏，
             // load() 返回 null 等效全库丢失并触发整盘重扫。
             val tmp = java.io.File(file.parentFile, file.name + ".tmp")
-            tmp.writeText(gson.toJson(index))
+            // ⛔ 必须流式写：gson.toJson(index) 先整份构造出 String，writeText 再复制一份，
+            //    和 load 的 readText() 是同一种「字符串中转」放大，写盘路径一样会 OOM。
+            tmp.bufferedWriter().use { writer -> gson.toJson(index, writer) }
             if (!tmp.renameTo(file)) {
                 // rename 失败（罕见）时退回覆盖写
                 tmp.copyTo(file, overwrite = true)
@@ -553,6 +579,16 @@ class BaiduFileIndexCache(context: Context) {
 
     companion object {
         private const val TAG = "BaiduFileIndexCache"
+
+        /**
+         * 索引文件体积上限（128MB），load() 读前判死用。
+         *
+         * 这是纵深防御，不是本次 OOM 的修复（见 [load] 里的流式解析注释）：
+         * 3.8 万条目的正常曲库约 60MB，128MB 只挡失控增长。之所以要它，是因为
+         * OutOfMemoryError 属于 Error，[load] 的 `catch (e: Exception)` 接不住——
+         * 体积失控时唯一可靠的做法是在分配之前就放弃读取。
+         */
+        private const val MAX_CACHE_BYTES = 128L * 1024L * 1024L
     }
 
     // ---- APIC 后台提取 ----

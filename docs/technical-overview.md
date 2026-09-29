@@ -11188,6 +11188,34 @@ three-globe 2.45.2 **没有** `sun()`/`moon()` API（实测 `showSun`/`sunTextur
 
 **说明**：v2.37.5（`78b7bde`）CI 全绿属**假绿** —— 该次 lint job 的 `Run lint` 步在 `> Task :app:lintDebug` 打印后约 1 秒即进入 job 收尾（`Terminate orphan process`），日志内无 `Lint found` 汇总行；而 `MediaStore.VOLUME_EXTERNAL` 这一行在 `78b7bde` 便一字不差存在。故 4 个 error 中 `MusicScanner` / `PermissionHelper` 两项为遗留项，`WorldGlobeRenderer` 两项由 E41 3D 地球（§10.197）引入。`versionCode` / `versionName` 未动（v2.37.6 从未产出 Release，tag 前移重打而非升版）。
 
+### 10.200 百度网盘索引加载 OOM 致手机启动崩溃（2026-09-29）
+
+**现象**：手机装 v2.37.6 后启动即崩。
+
+```
+java.lang.OutOfMemoryError: Failed to allocate a 123562136 byte allocation
+  with 60751976 free bytes and 57MB until OOM, target footprint 536870912
+  at java.lang.StringWriter.toString(StringWriter.java:218)
+  at com.nasmusic.tv.backend.network.baidu.BaiduFileIndexCache.load(...)
+  at com.nasmusic.tv.backend.network.baidu.BaiduFileIndexCache.allSongs(...)
+```
+
+**根因**：`load()` 用 `file.readText()` 读 `baidu_index.json`。Kotlin 的 `readText()` 内部走 `StringWriter`——先把全文写进一块 `char[]`，再 `toString()` 复制成 UTF-16 String，**峰值约 3× 文件体积**。`123,562,136` 字节 ≈ 60MB 正是一次 `toString()` 的复制量，反推索引文件本身约 60MB（3.8 万条目 × `path`/`filename`/`title`/`artist`/`coverUrl` 五个长字符串字段）。`save()` 的 `writeText(gson.toJson(index))` 是同一种中转放大（Gson 内部 `toJson(Object)` 也先 `StringWriter` + `toString`），写盘路径同样会炸。
+
+**为何 `catch` 没救回来**：`OutOfMemoryError` 继承 `Error`，不是 `Exception`，`load()` 的 `catch (e: Exception)` 接不住。
+
+**修复**（`BaiduFileIndexCache`）：
+
+1. `load()` 改 `file.bufferedReader().use { gson.fromJson<BaiduFileIndex>(it, type) }` —— 走 Gson 的 `fromJson(Reader, Type)` 重载，`JsonReader` 边读边建对象图，中间不构造整份 String，峰值降为对象图本身。
+2. `save()` 改 `tmp.bufferedWriter().use { gson.toJson(index, it) }` —— 走 `toJson(Object, Writer)` 重载，`JsonWriter` 直接小缓冲刷盘。
+3. 新增体积安全阀：`load()` 在解析**之前**按 `file.length()` 判死，超限则 `clear()` 弃缓存返回 null 触发重扫。阈值 `MAX_CACHE_BYTES = 128MB` 经构造参数 `maxCacheBytes` 注入（默认值不变），测试可用极小值验证，不必真写 128MB。
+
+**为什么保留旧缓存格式**：JSON 格式完全未变（`toJson(Object)` 与 `toJson(Object, Writer)` 输出逐字节一致），用户磁盘上已有的几十 MB 索引继续可读，不触发全量重扫——这一点由单测 `legacy readText writeText cache file is still readable` 守住。
+
+**同类排查**：全仓库共 4 处 `readText()`/`writeText(gson.toJson(...))` 同款反模式，其余 3 处均安全，因为有条目上限或体积量级小得多——`CoverUrlPersistentCache`（`MAX_ENTRIES = 10000`，约 2.6MB）、`LyricsPersistentCache`（index 约 4MB）、`MvPersistentCache`（MV 条目少）、`BackupFileUtils`（有界）。`BaiduFileIndexCache` 是唯一**既无条目上限、条目又最肥**的，因此也是唯一炸掉的。
+
+**验证**：新增 `BaiduFileIndexCacheTest` 6 例全通过（流式写→流式读全字段往返 / 旧格式缓存仍可读 / 超限文件在解析前被弃并清除 / 无文件返回 null / 内存缓存命中同一实例 / 写盘原子且不留 tmp）。⚠️ 峰值内存本身无法在单测里断言（测试 JVM 堆远大于真机），测试证明的是「去掉字符串中转后行为完全等价」；OOM 修复依据是 Gson 的 Reader/Writer 重载全程不构造大 String。**待真机复测**：装包后确认大曲库用户不再启动崩溃。
+
 ### 10.196 v2.37.6 — 新增 E41「世界」（WORLD）可视化：海岸线地图 + 城市光点 + 真实航空规模大圆航线 + 真实 UTC 晨昏线（2026-09-28）
 
 **范围**：新增 6 个渲染器/数据文件（`WorldRenderer`/`WorldCities`/`WorldNetwork`/`WorldProjection`/`WorldTerminator`/`WorldMapData`）+ 2 个测试文件（`WorldLogicTest`/`WorldMapDataTest`）；枚举 `VisualizerTheme.WORLD("世界", Tier.ADV, "41")` 与工厂 `VisualizerRendererFactory` 的 `WORLD -> WorldRenderer()` 分支已接入。效果为纯展示：暗调极简海岸线地图 + 城市光点 + 按真实航空客流规模生成的动态大圆航线 + 分频段音频驱动 + 真实 UTC 晨昏线，**零交互、零文字**（符合本 app 渲染器零文字红线）。**不升版本号**（并入 v2.37.6，versionCode 168，与 §10.195 一致）。`VisualizerThemeTest` 的主题计数断言同步 27→28（`off` 26→27、`on` 27→28，共 4 处）。
