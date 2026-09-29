@@ -127,9 +127,12 @@ class BeatFireworkRenderer : VisualizerRenderer {
  * `energy` 高时粒子被吸向目标，`beat` 时炸散。
  *
  * **minSdk 22 兼容说明**：
- * `ImageBitmap.readPixels()` 需 API 29、`Path.getSegment()` 需 API 24，
- * 二者在 minSdk 22 下均不可用 → 只能退回 `Bitmap.getPixel()` 全图扫描。
- * 采样仅在进入/文本变化时执行一次（约 5–15ms），未完成前先渲染普通粒子。
+ * `ImageBitmap.readPixels()` 需 API 29、`Path.getSegment()` 需 API 24，二者在 minSdk 22 下均不可用；
+ * ⚠️ 但这**不等于"只能用 `getPixel()`"** —— `Bitmap.getPixels(pixels, offset, stride, x, y, w, h)`
+ * **自 API 1 就可用**（同项目 `backend/photo/YuNetFaceDetector.kt` 已在用），逐行批读即可把 JNI
+ * 从"每像素一次"降到"每行一次"。当前用逐像素 `getPixel()` 全图扫描（约 16,280 次 JNI / 8–20 ms，
+ * 且发生在 `draw` 内）是**待优化的热点**，见 `docs/visualizer-texture-upgrade-plan.md` §G11 / §B5。
+ * 采样仅在进入/文本变化时执行一次，未完成前先渲染普通粒子。
  */
 class ParticleTextRenderer : VisualizerRenderer {
 
