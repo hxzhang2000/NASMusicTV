@@ -1,0 +1,165 @@
+package com.nasmusic.tv.visualizer.renderers
+
+import androidx.compose.ui.graphics.drawscope.DrawScope
+import com.nasmusic.tv.visualizer.AudioFrame
+import com.nasmusic.tv.visualizer.RenderContext
+import com.nasmusic.tv.visualizer.VisualizerRandom
+import com.nasmusic.tv.visualizer.VisualizerRenderer
+import com.nasmusic.tv.visualizer.fx.FxBudget
+import com.nasmusic.tv.visualizer.fx.FxLevel
+import com.nasmusic.tv.visualizer.fx.OverlayFx
+
+/**
+ * 渲染器基类（模板方法）。
+ *
+ * ## 为什么要有它（§四 G13）
+ * 29 个渲染器原本**全部直接实现 [VisualizerRenderer]** ⇒ 后处理 / `dt` 时钟 / 资源释放
+ * 三类共性问题各写各的：grain tile 逐字重复 2 份、vignette 手写 3 份、`dt` 钳制 6 种写法。
+ *
+ * ## 三条**语法级**保证（子类绕不过）
+ * 1. [draw] 是 `final` ⇒ 子类只能实现 [drawContent]，**无法漏调后处理**；
+ * 2. `dt` 只能从 [FrameClock] 取 ⇒ **无法自己拿 `ctx.nowMs` 算差**（§四 G13 重复 ⑥）；
+ * 3. [onExit] 是 `final` 且内部 `release()` ⇒ **无法漏释放**共享纹理（§九 R2）。
+ *
+ * ## 迁移的零风险性
+ * [postFx] 默认 [PostFx.NONE] ⇒ 迁移后**画面逐像素不变**；观感改动与迁移解耦。
+ *
+ * ## ⛔ 不继承本类的两类
+ * - **View 型**（`isViewBased = true`，如 `WorldGlobeRenderer`）：`draw` 根本不被调用；
+ * - **后处理与内容交错**的（`VintageTvRenderer`：扫描线在背景之后、vignette 在歌词之后，
+ *   不是"末尾一次"）—— 且其画面已定稿（§C4）。
+ */
+abstract class RendererFx : VisualizerRenderer {
+
+    /** 后处理配置。**默认全关** ⇒ 迁移后画面逐像素不变。子类覆写即为"有意改动观感" */
+    protected open val postFx: PostFx get() = PostFx.NONE
+
+    /** 效果主体。子类**只实现这个**，不再实现 [draw] */
+    protected abstract fun DrawScope.drawContent(
+        frame: AudioFrame,
+        ctx: RenderContext,
+        fx: FxFrame,
+    )
+
+    // ── 模板方法（final ⇒ 不可绕过）──────────────────────────────
+
+    final override fun DrawScope.draw(frame: AudioFrame, ctx: RenderContext) {
+        // ① 时钟：只接受 frame.timeMs，内部算差 + 钳上限（照抄 PhotoTransitionClock 的正确做法）
+        val fx = clock.advance(frame)
+        fx.level = FxBudget.of(ctx.quality)
+        // ② 效果主体
+        drawContent(frame, ctx, fx)
+        // ③ 后处理：postFx 为 NONE 或档位 OFF 时**整段零开销**（不进入任何 draw 调用）
+        if (fx.level != FxLevel.OFF) applyPostFx(ctx, fx, postFx)
+    }
+
+    final override fun onEnter(ctx: RenderContext) {
+        clock.reset()                 // 尺寸/时长状态一并复位
+        onEnterContent(ctx)
+    }
+
+    final override fun onExit() {
+        onExitContent()
+        OverlayFx.release()           // ⛔ 共享纹理必须释放（API 22–25 位图在 native 堆）
+    }
+
+    /** 子类自己的 onEnter（**不要**再写 `override fun onEnter`） */
+    protected open fun onEnterContent(ctx: RenderContext) {}
+
+    /** 子类自己的 onExit（**不要**再写 `override fun onExit`） */
+    protected open fun onExitContent() {}
+
+    // ── 基类提供的公共设施（子类直接用，不要再各声明一份）──────────
+
+    /** 每渲染器一个实例，零分配（原本 9 处各自 `private val rng = VisualizerRandom()`） */
+    protected val rng = VisualizerRandom()
+
+    /** `(w, h)` 双键缓存 —— §C4 O2 那 2 处 bug 的**根治手段** */
+    private val sizeCache = SizeCache()
+
+    private val clock = FrameClock()
+
+    /** 末尾一次性后处理（vignette / grain / scanline，按 [postFx] 配置；任一为 0 即跳过） */
+    private fun DrawScope.applyPostFx(ctx: RenderContext, fx: FxFrame, postFx: PostFx) {
+        with(OverlayFx) {
+            if (postFx.vignette > 0f) drawVignette(ctx, postFx.vignette)
+            if (postFx.grain > 0f) drawGrain(ctx, fx.seq, postFx.grain)
+            if (postFx.scanline > 0f) drawScanlines(ctx)
+        }
+    }
+}
+
+/** 后处理配置。字段名与 [OverlayFx] 的参数一一对应 */
+data class PostFx(
+    val vignette: Float = 0f,      // 0 = 关
+    val grain: Float = 0f,         // 0 = 关
+    val scanline: Float = 0f,      // 0 = 关
+) {
+    companion object { val NONE = PostFx() }
+}
+
+/**
+ * 帧时钟 —— **渲染器版 `PhotoTransitionClock`**（`photo/PhotoTransitionClock.kt` 是它的先例）。
+ *
+ * ⛔ **只接受 [AudioFrame.timeMs]，绝不用 `ctx.nowMs`** —— 后者在 `VisualizerStage`
+ * 三个调用点语义不一致（`:165` 墙钟 / `:315`·`:359` 单调毫秒，见 §四 G13 重复 ⑥）。
+ *
+ * [maxDtMs] 暴露出来是**为了负向自证**（与 `PhotoTransitionClock` 同一手法）：
+ * 传一个大值 ⇒ 断言相位会一帧跳到结束 ⇒ 证明钳制那一行不是冗余代码。
+ */
+internal class FrameClock(private val maxDtMs: Long = MAX_DT_MS) {
+    private var initialized = false   // ⛔ 不用 lastMs==0L 哨兵：首帧 timeMs 可能恰为 0
+    private var lastMs = 0L
+    private val frame = FxFrame()          // 复用单例，零每帧分配
+
+    fun advance(frameIn: AudioFrame): FxFrame {
+        val now = frameIn.timeMs
+        val dtMs = if (!initialized) 0L else (now - lastMs).coerceIn(0L, maxDtMs)   // ⛔ 上界钳制，方向不可反
+        initialized = true
+        lastMs = now
+        frame.dt = dtMs / 1000f
+        frame.nowMs = now
+        frame.seq = frameIn.seq
+        return frame
+    }
+
+    fun reset() { initialized = false; lastMs = 0L; frame.dt = 0f }
+
+    companion object { const val MAX_DT_MS = 100L }   // 与 PhotoTransitionClock 对齐
+}
+
+/** 每帧复用单例。⛔ 渲染层不得跨帧持有（`AudioFrame` 的同一红线） */
+class FxFrame internal constructor() {
+    var dt = 0f
+        internal set
+    var nowMs = 0L
+        internal set
+    var seq = 0L
+        internal set
+
+    /** 当前档位（由 `FxBudget.of(quality)` 推出，见 §5.4） */
+    var level: FxLevel = FxLevel.OFF
+        internal set
+}
+
+/**
+ * `(w, h)` 双键缓存。⛔ **缓存键的维度必须 ⊇ 被缓存对象实际依赖的维度**
+ * —— `VintageTvRenderer` 的 `vignetteBrush` 只判 `w` 而 `radius` 依赖 `h`，
+ * `rollBandH` 只在 `onEnter` 重置，就是这条没做到的后果（§C4 O2）。
+ *
+ * ⚠️ [get] 的 `build` lambda 是**构造期**捕获的（每渲染器 1 个实例，**不是每帧**）
+ * ⇒ 不违反零分配红线。
+ */
+internal class SizeCache {
+    private var w = -1f
+    private var h = -1f
+    private var value: Any? = null
+
+    @Suppress("UNCHECKED_CAST")
+    fun <T> get(w: Float, h: Float, build: (Float, Float) -> T): T {
+        if (value == null || this.w != w || this.h != h) {
+            value = build(w, h); this.w = w; this.h = h
+        }
+        return value as T
+    }
+}
