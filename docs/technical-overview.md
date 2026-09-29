@@ -11216,6 +11216,82 @@ java.lang.OutOfMemoryError: Failed to allocate a 123562136 byte allocation
 
 **验证**：新增 `BaiduFileIndexCacheTest` 6 例全通过（流式写→流式读全字段往返 / 旧格式缓存仍可读 / 超限文件在解析前被弃并清除 / 无文件返回 null / 内存缓存命中同一实例 / 写盘原子且不留 tmp）。⚠️ 峰值内存本身无法在单测里断言（测试 JVM 堆远大于真机），测试证明的是「去掉字符串中转后行为完全等价」；OOM 修复依据是 Gson 的 Reader/Writer 重载全程不构造大 String。**待真机复测**：装包后确认大曲库用户不再启动崩溃。
 
+### 10.201 E41「世界」电视端黑屏：WebView 能力实测与 ES5 降级修复（2026-09-29）
+
+**现象**：电视（创维 9R54_G8S / Android 5.1.1 / SDK 22）选 E41「世界」后纯黑屏，logcat 每秒约 10 次
+`Uncaught ReferenceError: WorldGlobe is not defined`。
+
+**链路**：`WorldGlobeRenderer` 每 100ms 注入 JS 调 `WorldGlobe.setAudio(...)`；`globe.js:35` 有
+`if (!THREE || !ThreeGlobe) return;`，库加载失败即提前 return，`window.WorldGlobe` 永不赋值。
+
+**根因（实测，非推断）**：该机系统 WebView 是 **Chrome 39**（`dumpsys webviewupdate` 返回空 →
+无 Play WebView provider，用的是 AOSP 5.1.1 自带 WebView，不可更新）。用探针页逐项 `eval` 实测，
+Chrome 39 的 ES6 支持是**残缺**的：
+
+| SyntaxError | 可用 |
+|---|---|
+| `class`、箭头函数、`let`、模板串、解构、默认参数、rest、简写属性、`?.`、`??` | `const`、`for...of`、generator |
+
+`three.min.js`（class×207、arrow×25、let×892、const×1858、模板串×44、`?.`×2）与
+`three-globe.min.js`（class×373、arrow×780、let×1113、const×2643、模板串×717、`?.`×9、spread×142）
+必然在第一处 `class` 就 SyntaxError → `window.THREE` / `window.ThreeGlobe` 永不定义 → 上面那条链路 → 黑屏。
+
+`globe.js` **本身已是纯 ES5**（24 个反引号全在注释里；acorn `ecmaVersion:5` 解析通过），**不参与转译**。
+
+**⛔ 被实测推翻的假设（本条是本节最重要的教训）**：修复前判断「RTD2990 无 3D GPU，WebGL 可能返 null
+或走 SwiftShader 软渲染，地球只能跑 2-10 fps，因此必须降纹理 / 降分辨率 / 做 2D 兜底」。探针**否掉了这个前提**：
+
+| 项 | 实测值 |
+|---|---|
+| WebGL2 / WebGL1 | NULL / **OK**（`WebGL 1.0 (OpenGL ES 2.0 Chromium)`，`GLSL ES 1.0`） |
+| UNMASKED_VENDOR / RENDERER | `Imagination Technologies` / **`PowerVR Rogue G6110`** |
+| 是否软件渲染 | **false —— 真实硬件 GPU** |
+| 填充率：纯色全屏 quad | 731.7 fps |
+| 填充率：4096×2048 三线性 ×3 采样 @960×540 | **545.5 fps** |
+| 屏幕 | 1280×720、dpr 1.5；`globe.js` 强制 `setPixelRatio(1)` → 实际渲染 0.92 Mpx |
+| MAX_TEXTURE_SIZE / MAX_RENDERBUFFER_SIZE | 8192 / 8192（4096×2048 地球贴图放得下） |
+| 纹理单元 | 16 / 合并 48 |
+| 关键扩展 | derivatives ✓、anisotropic ✓、instanced_arrays ✓、VAO ✓ |
+| 缺失扩展 | `EXT_color_buffer_float` ✗、`OES_texture_float_linear` ✗ |
+
+`globe.js` 用 `MeshPhongMaterial`、无 `envMap`、无 `PMREMGenerator`、`glslVersion` 未设（走 GLSL ES 1.00）、
+`onBeforeCompile` 三处命中全在注释里（该注入方案已试过并放弃），所以缺失的两个浮点扩展**不影响**。
+
+> **教训**：`ro.hardware=rtd2990` 与 `ro.opengles.version=196609` **都不能**用来推断 WebGL 能力——
+> 国产电视盒子这两个属性常不准（该机真实 GPU 是 PowerVR）。**能力必须实测**，属性推断会直接带偏方案选型。
+
+**真机 typeof 实测缺失的 ES2015+ API**：`Object.assign`、`Array.from`、`Object.values`、`Object.entries`、
+`String.prototype.includes`、`String.prototype.startsWith`、`Array.prototype.includes`、`Array.prototype.find`、`Proxy`。
+**已存在无需补**：`Symbol` 与 `Symbol.iterator`、`Promise`、`Map`、`Set`、`WeakMap`、`Number.isFinite`、
+TypedArray、`performance.now`、`requestAnimationFrame`。
+
+**修复**：
+
+1. `three.es5.js` / `three-globe.es5.js` —— `@babel/preset-env` `targets:{chrome:"39"}` 降级后经 terser 压缩。
+   三个必须显式关闭的选项：`modules:false`（保 UMD 包装；preset-env 默认会转 CommonJS，破坏
+   `<script src>` 直接挂 `window.THREE` 的方式）、`useBuiltIns:false`（API 交给自己的 polyfill）、
+   `loose:false`（避免 class 转换跳过 `_classCallCheck` 之类的语义检查）。产物 654KB→734KB、1248KB→1433KB。
+2. `polyfill.es5.js`（11.8KB，手写纯 ES5）—— 补上面 8 个缺失 API，按「实测缺失」与「防御补齐」分组标注，
+   全部特性检测，现代 WebView 上全是 no-op。
+   **刻意不补 `Proxy` 与 `Object.getOwnPropertySymbols`**：二者无法真正实现；空壳会让
+   `typeof Proxy === "function"` 误判为「支持」，随后 `new Proxy(...)` 拿到坏对象，**行为比「不支持」更糟**。
+3. `index.html` 改为 `polyfill.es5.js` → `three.es5.js` → `three-globe.es5.js` → `globe.js` 顺序加载。
+   polyfill 必须最先——Babel 只降语法不注入内建 API，降级后的库依然调 `Object.assign` / `Array.from`。
+4. `downlevel_libs.mjs`（与资产同目录）—— 可复现转译脚本，固定
+   `@babel/core@7.26.0` / `@babel/preset-env@7.26.0` / `terser@5.37.0` / `acorn@8.14.0`；`node_modules` 不入库。
+5. ES6 原版 `three.min.js` / `three-globe.min.js` **保留不删**，供逐字节比对（`index.html` 不再加载它们）。
+6. 产物用 **acorn `ecmaVersion:5` 解析**证明合法 ES5（`polyfill.es5.js` / `three.es5.js` /
+   `three-globe.es5.js` / `globe.js` 四个文件全部通过）。
+   ⛔ 不用正则扫产物：minified 代码里 `"..."` / `"class a"` / 反引号大量出现在**字符串与正则字面量**中
+   （GLSL chunk 源码、加载文案），正则无法区分语法与字面量，必然误报——首版脚本就是这样误报并差点误判失败。
+
+**⚠️ 未验证（按当前约定本轮不做编译与真机验证）**：已验证的只有「四个脚本都是合法 ES5」。仍待真机确认：
+
+1. `WorldGlobe is not defined` 刷屏消失 —— 解析通过的干净信号；
+2. three r160 的 WebGL1 路径能否在 Chrome 39 的 ANGLE→GLES3 上编译着色器。若失败会看到
+   `THREE.WebGLProgram: Shader Error`（`webChromeClient.onConsoleMessage` 会转发到 logcat）；
+3. 2.1MB ES5 产物在 2014 年 ARM CPU 上的解析耗时（预计 2-4 秒，表现为地球出现慢几秒）。
+
 ### 10.196 v2.37.6 — 新增 E41「世界」（WORLD）可视化：海岸线地图 + 城市光点 + 真实航空规模大圆航线 + 真实 UTC 晨昏线（2026-09-28）
 
 **范围**：新增 6 个渲染器/数据文件（`WorldRenderer`/`WorldCities`/`WorldNetwork`/`WorldProjection`/`WorldTerminator`/`WorldMapData`）+ 2 个测试文件（`WorldLogicTest`/`WorldMapDataTest`）；枚举 `VisualizerTheme.WORLD("世界", Tier.ADV, "41")` 与工厂 `VisualizerRendererFactory` 的 `WORLD -> WorldRenderer()` 分支已接入。效果为纯展示：暗调极简海岸线地图 + 城市光点 + 按真实航空客流规模生成的动态大圆航线 + 分频段音频驱动 + 真实 UTC 晨昏线，**零交互、零文字**（符合本 app 渲染器零文字红线）。**不升版本号**（并入 v2.37.6，versionCode 168，与 §10.195 一致）。`VisualizerThemeTest` 的主题计数断言同步 27→28（`off` 26→27、`on` 27→28，共 4 处）。

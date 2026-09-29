@@ -33,10 +33,24 @@
     最后一个带 UMD three.min.js 的版本，WebGL1 兜底支持完好）。
     three-globe 2.45.2 UMD（peerDependency three >=0.154，兼容 r160）。
   -->
+  <!--
+    加载顺序不可调换：
+      1) polyfill.es5.js      —— Chrome 39 缺失的 ES2015+ API（Object.assign / Array.from /
+                                Object.values / Object.entries / String.includes /
+                                String.startsWith / Array.includes / Array.find）
+      2) three.es5.js         —— 上游 three.min.js（r160 UMD）的 ES5 降级产物
+      3) three-globe.es5.js   —— 上游 three-globe.min.js（2.45.2 UMD）的 ES5 降级产物
+      4) globe.js             —— 本项目渲染逻辑，**本身已是纯 ES5**，未参与转译
+    polyfill 必须最先：Babel 的 useBuiltIns:false 只降语法不注入内建 API，
+    降级后的库依然会调用 Object.assign / Array.from 等。
+    three.min.js / three-globe.min.js（ES6 原版）保留在同目录仅供逐字节比对，**不加载**。
+    详见 docs/technical-overview.md §10.201 与仓库根的 downlevel_globe_libs.mjs
+  -->
   <div id="globe-container"></div>
 
-  <script src="./three.min.js"></script>
-  <script src="./three-globe.min.js"></script>
+  <script src="./polyfill.es5.js"></script>
+  <script src="./three.es5.js"></script>
+  <script src="./three-globe.es5.js"></script>
   <script src="./globe.js"></script>
 </body>
 </html>
