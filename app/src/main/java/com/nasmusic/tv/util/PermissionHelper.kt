@@ -70,7 +70,10 @@ object PermissionHelper {
 
     /** 当前照片读取权限状态 */
     fun photoPermissionState(context: Context): PhotoPermissionState {
-        val imagesGranted = granted(context, Manifest.permission.READ_MEDIA_IMAGES)
+        // READ_MEDIA_IMAGES 是 API 33+ 常量；下面的分支只有 TIRAMISU+ 会用到它。
+        // 条件取值既过 NewApi 门禁，也避免 API ≤ 32 上白查一次权限。
+        val imagesGranted = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU)
+            granted(context, Manifest.permission.READ_MEDIA_IMAGES) else false
         return when {
             Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE -> when {
                 imagesGranted -> PhotoPermissionState.FULL

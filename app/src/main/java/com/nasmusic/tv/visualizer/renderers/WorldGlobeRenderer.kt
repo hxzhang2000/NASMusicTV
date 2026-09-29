@@ -3,6 +3,7 @@ package com.nasmusic.tv.visualizer.renderers
 import android.annotation.SuppressLint
 import android.content.Context
 import android.net.Uri
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.view.View
@@ -14,6 +15,7 @@ import android.webkit.WebResourceResponse
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import androidx.annotation.RequiresApi
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import com.google.gson.Gson
 import com.nasmusic.tv.NasMusicApp
@@ -233,6 +235,9 @@ internal class WorldGlobeRenderer(context: Context) : VisualizerRenderer {
                 }
 
                 // 资源/页面加载失败时留痕（黑屏诊断用）
+                // 本重载（WebResourceRequest / WebResourceError 参数）从 API 23 起才由系统回调，
+                // 因此标记 @RequiresApi 而非在方法体内包 SDK 判断。
+                @RequiresApi(Build.VERSION_CODES.M)
                 override fun onReceivedError(
                     view: WebView?,
                     request: WebResourceRequest?,

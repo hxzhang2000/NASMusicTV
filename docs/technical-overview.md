@@ -11172,6 +11172,22 @@ three-globe 2.45.2 **没有** `sun()`/`moon()` API（实测 `showSun`/`sunTextur
 
 **版本**：v2.37.6（未变；versionCode 168）。
 
+### 10.199 v2.37.6 — CI 放行修复：tinypinyin 仓库补齐 + 4 处 NewApi 门禁（2026-09-29）
+
+**背景**：v2.37.6 首次打 tag（`b43f35d`）时 CI 三 job 中 `build` 与 `Lint` 双双失败，`Create Release` 被 skip，tag 指向无产物。
+
+**根因一（依赖解析）**：`com.github.promeg:tinypinyin:2.0.3` 在 `settings.gradle.kts` 已配置的仓库里全部不可用 —— JitPack 上游构建已失败（`/api/builds/com.github.promeg/tinypinyin/2.0.3` 返回 `status=Error`）、Maven Central 无此坐标（`search.maven.org` `numFound=0`）、aliyun google/central 均 404。实测唯一可达来源为 **aliyun jcenter 镜像**（`tinypinyin-2.0.3.pom` 200 / 614B，`.jar` 200 / 96410B），且 jar 字节数与本机 Gradle 缓存中的 `tinypinyin-2.0.3.jar` 完全一致（96410）。`settings.gradle.kts` 历史上从未配置过 jcenter。修复：在 aliyun 镜像组末尾追加 `maven { url = uri("https://maven.aliyun.com/repository/jcenter") }`。
+
+**根因二（4 个 lint error）**：`Lint found 4 errors and 301 warnings`，全为 `NewApi`，分布 3 个文件：
+
+- `WorldGlobeRenderer.kt:241` ×2 —— `WebResourceError#getDescription` / `#getErrorCode` 需 API 23。整个 `onReceivedError(view, request, error)` 重载自 API 23 起才由系统回调，故在覆写方法上标 `@RequiresApi(Build.VERSION_CODES.M)`（语义精确，不在方法体内包一层永真的 SDK 判断）。
+- `PermissionHelper.kt:73` —— `Manifest.permission.READ_MEDIA_IMAGES` 需 API 33，但仅 TIRAMISU+ 分支用到；改为条件取值（`SDK_INT >= TIRAMISU` 才查询），既过门禁也避免 API ≤ 32 上白查一次权限。
+- `MusicScanner.kt:45` —— `MediaStore.VOLUME_EXTERNAL` 需 API 29。该字段是 `static final String` 编译期常量，Kotlin 会内联为字面量 `"external"`；API < 29 上 `getContentUri("external")` 返回 `content://media/external/audio/media`，同为共享外置卷的正确 URI，不会 `NoSuchMethodError`。用 `@SuppressLint("NewApi")` 并在注释中写明内联事实（优于直接硬编码 `"external"` 字面量，后者会与 SDK 常量漂移）。
+
+**验证**：本地 `./gradlew.bat lintDebug --no-daemon -Pkotlin.compiler.execution.strategy=in-process` → `BUILD SUCCESSFUL in 11m 3s`，HTML 报告 NewApi 命中数由 4 降为 0。依赖解析未用 `--refresh-dependencies` 强刷（本机缓存已含该构件），改以 HTTP 200 + jar 字节数一致性作为可达性依据。
+
+**说明**：v2.37.5（`78b7bde`）CI 全绿属**假绿** —— 该次 lint job 的 `Run lint` 步在 `> Task :app:lintDebug` 打印后约 1 秒即进入 job 收尾（`Terminate orphan process`），日志内无 `Lint found` 汇总行；而 `MediaStore.VOLUME_EXTERNAL` 这一行在 `78b7bde` 便一字不差存在。故 4 个 error 中 `MusicScanner` / `PermissionHelper` 两项为遗留项，`WorldGlobeRenderer` 两项由 E41 3D 地球（§10.197）引入。`versionCode` / `versionName` 未动（v2.37.6 从未产出 Release，tag 前移重打而非升版）。
+
 ### 10.196 v2.37.6 — 新增 E41「世界」（WORLD）可视化：海岸线地图 + 城市光点 + 真实航空规模大圆航线 + 真实 UTC 晨昏线（2026-09-28）
 
 **范围**：新增 6 个渲染器/数据文件（`WorldRenderer`/`WorldCities`/`WorldNetwork`/`WorldProjection`/`WorldTerminator`/`WorldMapData`）+ 2 个测试文件（`WorldLogicTest`/`WorldMapDataTest`）；枚举 `VisualizerTheme.WORLD("世界", Tier.ADV, "41")` 与工厂 `VisualizerRendererFactory` 的 `WORLD -> WorldRenderer()` 分支已接入。效果为纯展示：暗调极简海岸线地图 + 城市光点 + 按真实航空客流规模生成的动态大圆航线 + 分频段音频驱动 + 真实 UTC 晨昏线，**零交互、零文字**（符合本 app 渲染器零文字红线）。**不升版本号**（并入 v2.37.6，versionCode 168，与 §10.195 一致）。`VisualizerThemeTest` 的主题计数断言同步 27→28（`off` 26→27、`on` 27→28，共 4 处）。

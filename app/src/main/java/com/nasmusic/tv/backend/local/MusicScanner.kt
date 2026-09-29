@@ -1,5 +1,6 @@
 package com.nasmusic.tv.backend.local
 
+import android.annotation.SuppressLint
 import android.content.ContentUris
 import android.content.Context
 import android.media.MediaMetadataRetriever
@@ -42,6 +43,9 @@ class MusicScanner(private val context: Context) {
      */
     suspend fun scanAllMusic(): List<ScannedSong> = withContext(Dispatchers.IO) {
         val songs = mutableListOf<ScannedSong>()
+        // VOLUME_EXTERNAL 是 API 29 常量，Kotlin 会把它内联成字面量 "external"（不会 NoSuchMethodError）；
+        // API<29 上 getContentUri("external") 同样是共享外置卷的正确 URI，故此处只是过 NewApi 门禁。
+        @SuppressLint("NewApi")
         val collection = MediaStore.Audio.Media.getContentUri(MediaStore.VOLUME_EXTERNAL)
 
         // androidx 修复：VOLUME_NAME 为 API 29+ 才有。旧设备（API<29，本应用 minSdk 22）
