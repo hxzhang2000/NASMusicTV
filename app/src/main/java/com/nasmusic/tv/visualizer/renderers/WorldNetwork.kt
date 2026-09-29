@@ -705,17 +705,61 @@ internal object WorldNetwork {
 
     // ── 并发上限 ───────────────────────────────────────────────
 
+    /**
+     * 同一对城市之间**允许同时在飞的并行航线数**上限。
+     *
+     * ## 需求来源
+     * 2026-09-29 真机反馈：「不应该画完一条再画一条，应该按繁华比例，两个城市间
+     * 可以同时画多条」——原先是「一条飞完再换下一条」，枢纽城市读起来永远只有
+     * 单条航线，繁忙度看不出来。
+     *
+     * ## 「繁华比例」= 两端中**较弱**的那一端（tier 较大者）
+     * ```
+     * 两端都是 Tier1      → 3   枢纽↔枢纽：最繁忙，最多三条并行
+     * 较弱端 = Tier2      → 2   枢纽↔次级枢纽 / 次级↔次级
+     * 较弱端 ≥ Tier3      → 1   支线/毛细维持「一条一条来」的观感
+     * ```
+     *
+     * ⛔ **刻意用「较弱端」而不是「较优端」**（后者会让 T1↔T4 也拿到 3 条）：
+     *   一条走廊的繁忙度不该只看它最好的那个端点。本文件通篇的立场是
+     *   「毛细航线必须稀疏」——它们又长又细，密度一高就会被误读成主干，
+     *   「主干 + 支线」的层级对比直接消失（见类 KDoc「地理就近」一节）。
+     *   T1↔T4 是典型的「枢纽挂末端」，给它 3 条并行线既不合理也会糊成一片。
+     *
+     * @param from 起点城市下标
+     * @param to 终点城市下标
+     * @return 并行航线条数上限，取值 1..3
+     */
+    fun maxParallelLanes(from: Int, to: Int): Int {
+        val a = WorldCities.tierOf(from)
+        val b = WorldCities.tierOf(to)
+        val weakest = if (a > b) a else b // 两端中「较弱」的那个（tier 越大越次要）
+        return when {
+            weakest <= 1 -> 3
+            weakest == 2 -> 2
+            else -> 1
+        }
+    }
+
     /** 帧时间预算：超过即开始降级（16.7ms 是 60fps 理论值，留 20% 余量） */
     private const val FRAME_BUDGET_MS = 20f
 
     /** 每超出一段 [DEGRADE_STEP_MS] 就少留 1 条航线 */
     private const val DEGRADE_STEP_MS = 4f
 
-    /** 并发航线数下限（再卡也保留 6 条，否则画面完全静止、失去「世界在动」的感觉） */
-    const val MIN_ACTIVE_FLIGHTS = 6
+    /** 并发航线数下限（再卡也保留 10 条，否则画面几乎静止、失去「世界在动」的感觉） */
+    const val MIN_ACTIVE_FLIGHTS = 10
 
-    /** 并发航线数上限 */
-    const val MAX_ACTIVE_FLIGHTS = 34
+    /**
+     * 并发航线数上限。
+     *
+     * 2026-09-29 由 34 提到 46：真机反馈「航线太少，非洲/大洋洲看不到航线」。
+     * 根因是枢纽城市只集中在亚欧北美（见 [WorldCities.ALL] 的 2026-09-29 补表说明），
+     * 补齐各大洲枢纽后仍需足够的并发数才能让每个大洲都同时有航线在飞。
+     * 代价可控：同期已把 WebView 侧像素比锁到 1.0 并去掉每帧材质查找，
+     * 真机 WebView 渲染进程从 133% CPU 降到流畅档（见 CHANGELOG 对应条目）。
+     */
+    const val MAX_ACTIVE_FLIGHTS = 46
 
     private const val LOW_PARTICLE_BUDGET = 0
     private const val MEDIUM_PARTICLE_BUDGET = 150
@@ -725,9 +769,9 @@ internal object WorldNetwork {
      *
      * ## 画质档映射（入参是画质档的**粒子预算**）
      * ```
-     * LOW     0  → 12
-     * MEDIUM 150 → 22
-     * HIGH   350 → 34
+     * LOW     0  → 18
+     * MEDIUM 150 → 32
+     * HIGH   350 → 46
      * ```
      * 预算阈值用 `<=0` / `<=150` 判定，>150 一律当 HIGH ⇒ 对未知档位前向兼容。
      *
@@ -735,9 +779,8 @@ internal object WorldNetwork {
      * ```
      * n = 基线 − ceil( max(0, frameMs − 20) / 4 )
      * ```
-     * 即每超预算 4ms 少留 1 条；最后 `coerceIn(6, 34)`。
+     * 即每超预算 4ms 少留 1 条；最后 `coerceIn(10, 46)`。
      * 单调性：对 `frameMs` 单调不增（[ceil] 单调不减）⇒ 帧率抖动不会来回切档。
-     * 实测：HIGH 档 10ms → 34，33ms → 30；LOW 档 33ms → 8。
      *
      * ⚠️ **调用方必须按 weight 升序淘汰**（先砍最细的、保留主干），
      * 否则「只降数量」会把主干全砍光、剩下密密麻麻的毛细航线。
@@ -745,8 +788,8 @@ internal object WorldNetwork {
      */
     fun maxActiveFlights(qualityTierParticles: Int, frameMs: Float): Int {
         val base = when {
-            qualityTierParticles <= LOW_PARTICLE_BUDGET -> 12
-            qualityTierParticles <= MEDIUM_PARTICLE_BUDGET -> 22
+            qualityTierParticles <= LOW_PARTICLE_BUDGET -> 18
+            qualityTierParticles <= MEDIUM_PARTICLE_BUDGET -> 32
             else -> MAX_ACTIVE_FLIGHTS
         }
         var n = base

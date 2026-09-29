@@ -94,12 +94,27 @@ internal class WorldCity(
 internal object WorldCities {
 
     /**
-     * 全部 32 座城市，**按层级分组**排列（Tier1 8 → Tier2 8 → Tier3 10 → Tier4 6）。
+     * 全部 37 座城市，**按层级分组**排列（Tier1 9 → Tier2 11 → Tier3 11 → Tier4 6）。
      * 顺序即「表下标」，被 [weightOf] / [distanceKm] / [nearestHub] 以索引形式消费；
      * ⚠️ 重排会改变随机序列与测试断言，新增城市请**追加到所属层的末尾**。
+     *
+     * ## 2026-09-29 新增 5 座（真机反馈：「城市集中在北半球」「非洲一个都没有」）
+     * 改表前的分布是 **北半球 25 / 南半球 7**，且 **Tier1+2 的 16 座枢纽全部在北半球**
+     * ——枢纽分布只有 亚洲 8 / 欧洲 5 / 北美 3，**非洲、南美、大洋洲 = 0**。
+     * 后果是这三大洲只剩 Tier3/Tier4 的小暗点，既读不出「繁忙」，视觉上也几乎不可见
+     * （非洲原有 3 座全是 Tier4：开罗/约翰内斯堡/内罗毕）。
+     * 故按「每个大洲至少一座 Tier1/Tier2」补齐：
+     * ```
+     * 拉各斯   Tier1  非洲     3.38E   6.52N
+     * 开普敦   Tier2  非洲    18.42E  33.92S   ← 同时补南半球
+     * 里约热内卢 Tier2 南美   43.17W  22.91S   ← 同时补南半球
+     * 墨尔本   Tier2  大洋洲 144.96E  37.81S   ← 同时补南半球
+     * 圣地亚哥 Tier3  南美    70.65W  33.45S
+     * ```
+     * 补后 Tier1/Tier2 覆盖：非洲 2 / 亚洲 8 / 欧洲 5 / 北美 3 / 南美 1 / 大洋洲 1。
      */
     val ALL: Array<WorldCity> = arrayOf(
-        // ── Tier 1（8 座）：全球骨干枢纽 ────────────────────────────
+        // ── Tier 1（9 座）：全球骨干枢纽 ────────────────────────────
         WorldCity("伦敦", "lundun", -0.13f, 51.50f, 1, 84.48f),
         WorldCity("纽约", "niuyue", -74.01f, 40.71f, 1, 142.00f),
         WorldCity("上海", "shanghai", 121.47f, 31.23f, 1, 135.00f),
@@ -108,8 +123,10 @@ internal object WorldCities {
         WorldCity("北京", "beijing", 116.58f, 40.08f, 1, 124.00f),
         WorldCity("迪拜", "dibai", 55.36f, 25.25f, 1, 95.20f),
         WorldCity("亚特兰大", "yatelanda", -84.43f, 33.64f, 1, 106.00f),
+        // 2026-09-29 新增：非洲唯一 Tier1（原先非洲最高只到 Tier4）
+        WorldCity("拉各斯", "lageersi", 3.38f, 6.52f, 1, 12.00f),
 
-        // ── Tier 2（8 座）：区域枢纽 ──────────────────────────────
+        // ── Tier 2（11 座）：区域枢纽 ──────────────────────────────
         WorldCity("巴黎", "bali", 2.55f, 49.01f, 2, 72.03f),
         WorldCity("芝加哥", "zhijiage", -87.90f, 41.98f, 2, 104.00f),
         WorldCity("达拉斯", "dalasi", -97.04f, 32.90f, 2, 103.00f),
@@ -118,8 +135,14 @@ internal object WorldCities {
         WorldCity("新加坡", "xinjiapo", 103.99f, 1.36f, 2, 69.98f),
         WorldCity("广州", "guangzhou", 113.31f, 23.39f, 2, 83.58f),
         WorldCity("德里", "deli", 77.10f, 28.56f, 2, 78.15f),
+        // 2026-09-29 新增：大洋洲 / 南半球
+        WorldCity("墨尔本", "moerben", 144.96f, -37.81f, 2, 37.00f),
+        // 2026-09-29 新增：南美洲 / 南半球
+        WorldCity("里约热内卢", "liyueheneilu", -43.17f, -22.91f, 2, 14.00f),
+        // 2026-09-29 新增：非洲南部 / 南半球
+        WorldCity("开普敦", "kaipudun", 18.42f, -33.92f, 2, 10.00f),
 
-        // ── Tier 3（10 座）：次级节点 ─────────────────────────────
+        // ── Tier 3（11 座）：次级节点 ─────────────────────────────
         WorldCity("法兰克福", "fulankefu", 8.56f, 50.04f, 3, 63.20f),
         WorldCity("莫斯科", "mosike", 37.41f, 55.97f, 3, 60.00f),
         // ⚠️ 孟买偏内 0.26°（≈27 km，见下方「坐标微调」）
@@ -131,6 +154,8 @@ internal object WorldCities {
         WorldCity("成都", "chengdu", 103.95f, 30.58f, 3, 85.00f),
         WorldCity("迈阿密", "maiami", -80.29f, 25.79f, 3, 80.00f),
         WorldCity("悉尼", "xinni", 151.18f, -33.94f, 3, 40.00f),
+        // 2026-09-29 新增：南美洲南锥
+        WorldCity("圣地亚哥", "shengdiyage", -70.65f, -33.45f, 3, 24.00f),
 
         // ── Tier 4（6 座）：末端节点 ──────────────────────────────
         WorldCity("开罗", "kailuo", 31.41f, 30.11f, 4, 40.00f),
@@ -143,7 +168,7 @@ internal object WorldCities {
     )
 
     /** 城市总数；与 [ALL].size 由 `WorldLogicTest` 锁死 */
-    const val COUNT = 32
+    const val COUNT = 37
 
     /** 层级数（Tier 取值 1..4） */
     const val TIER_COUNT = 4

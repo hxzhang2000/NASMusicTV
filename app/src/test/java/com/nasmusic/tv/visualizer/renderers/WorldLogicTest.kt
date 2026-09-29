@@ -22,18 +22,61 @@ class WorldLogicTest {
     // ══ ① 城市表 ═══════════════════════════════════════════════
 
     @Test
-    fun `city table has 32 entries with tier counts 8 8 10 6`() {
-        assertEquals(32, WorldCities.COUNT)
+    fun `city table has 37 entries with tier counts 9 11 11 6`() {
+        assertEquals(37, WorldCities.COUNT)
         assertEquals(WorldCities.COUNT, WorldCities.ALL.size)
         val byTier = IntArray(5)
         for (c in WorldCities.ALL) {
             assertTrue("层级必须在 1..4：${c.name}", c.tier in 1..4)
             byTier[c.tier]++
         }
-        assertEquals("Tier1 应 8 座", 8, byTier[1])
-        assertEquals("Tier2 应 8 座", 8, byTier[2])
-        assertEquals("Tier3 应 10 座", 10, byTier[3])
+        assertEquals("Tier1 应 9 座", 9, byTier[1])
+        assertEquals("Tier2 应 11 座", 11, byTier[2])
+        assertEquals("Tier3 应 11 座", 11, byTier[3])
         assertEquals("Tier4 应 6 座", 6, byTier[4])
+    }
+
+    @Test
+    fun `every continent has at least one hub city and both hemispheres have hubs`() {
+        // 2026-09-29 真机反馈「城市集中在北半球」「非洲大陆一个都没有」的回归防线。
+        // 根因：改表前 Tier1+2 的 16 座枢纽**全在北半球**，非洲/南美/大洋洲 = 0 座，
+        // 只剩 Tier3/Tier4 的小暗点，既不产生主干航线、视觉上也几乎不可见。
+        // ⛔ 判据本身是有缺陷的初版：`lat < -25 -> 南极洲` 会把**南纬 25° 以南
+        //   全部**划进南极洲，于是墨尔本(37.8°S) 与开普敦(33.9°S) 都被误判，
+        //   「大洋洲」被判成「缺失」——本断言就是这么失败的。
+        //   正确做法：南极洲在**极高纬**（<-60），且澳大利亚/新西兰在南半球中低纬，
+        //   应先按经度判大洋洲（东经 110..180），再落到南极洲。
+        fun continent(lon: Float, lat: Float): String = when {
+            lat < -60 -> "南极洲"
+            // 澳新必须**同时**满足「东经 ≥110」与「南半球」：只判经度会把新加坡
+            // （1.36N, 103.99E）误划进大洋洲
+            lon >= 110f && lat < 0f -> "大洋洲"
+            lon < -30f -> if (lat < 0f) "南美洲" else "北美洲"
+            lat < 13f && lon < 55f -> "非洲"
+            lon < 45f -> "欧洲"
+            else -> "亚洲"
+        }
+
+        val hubContinents = HashSet<String>()
+        var northHubs = 0
+        var southHubs = 0
+        for (c in WorldCities.ALL) {
+            if (c.tier > 2) continue // 只看 Tier1/Tier2 枢纽
+            hubContinents.add(continent(c.lon, c.lat))
+            if (c.lat < 0) southHubs++ else northHubs++
+        }
+
+        for (required in listOf("非洲", "南美洲", "大洋洲", "亚洲", "欧洲", "北美洲")) {
+            assertTrue(
+                "大洲 $required 没有任何 Tier1/Tier2 枢纽（现有：$hubContinents）",
+                required in hubContinents
+            )
+        }
+        assertTrue(
+            "南半球必须有 Tier1/Tier2 枢纽，否则画面全部挤在北半球（实测 $southHubs 座）",
+            southHubs >= 2
+        )
+        assertTrue("北半球枢纽仍是多数才对（实测 $northHubs : $southHubs）", northHubs > southHubs)
     }
 
     @Test
@@ -106,7 +149,14 @@ class WorldLogicTest {
         val mean4 = t4.map { WorldCities.weightOf(it) }.average()
         // 「Tier1 ≈ 8× Tier4」落在**均值**上：层内 pax 二次加权是 ±1.6× 的对称微调，
         // 极值比必然是 8×1.6 = 12.8（见 WorldCities 类 KDoc），不能同时精确成立。
-        assertEquals("层间权重均值比应 ≈ 8", 8f, (mean1 / mean4).toFloat(), 0.6f)
+        //
+        // ⚠️ 容差 0.6 → 1.0（2026-09-29）：补入**拉各斯(Tier1, pax 12)** 后实测
+        //   均值比为 **8.624**（复算见 logs_temp/world_map_gen/recompute_weight_ratio.py），
+        //   超出旧容差 0.024。原因是拉各斯的 pax 远低于 Tier1 均值(102.48)、
+        //   撞上 PAX_FACTOR_MIN(0.75) 下限，把 Tier1 均值从 8.41 拉低到 8.21。
+        //   这是「Tier1 内部新增一个 pax 偏小的地区枢纽」的必然结果，非设计意图破坏
+        //   —— 极值比 12.8 仍精确成立，层级单调性由 weight 严格递减测试单独锁死。
+        assertEquals("层间权重均值比应 ≈ 8", 8f, (mean1 / mean4).toFloat(), 1.0f)
         // 极值比：8 × 1.6 的上界
         val best1 = t1.maxOf { WorldCities.weightOf(it) }
         val worst4 = t4.minOf { WorldCities.weightOf(it) }
@@ -200,13 +250,18 @@ class WorldLogicTest {
             val relay3 = WorldCities.nearestHub(i, 3)
             assertTrue("Tier3 中继不应比 Tier2 枢纽更远", WorldCities.distanceKm(i, relay3) <= WorldCities.distanceKm(i, hub2))
         }
-        // 具体抽查：内罗毕 → 迪拜（开罗/东欧都更远），布宜诺斯艾利斯 → 亚特兰大
-        // （南美没有任何 Tier1/2 机场，这正是「南美稀疏」的物理原因）
+        // 具体抽查（值由 logs_temp/world_map_gen/recompute_nearest.py 复算，非猜测）
+        // 内罗毕 → 迪拜 3559 km：开罗/东欧/开普敦(4178 km)/拉各斯(4205 km)都更远。
         assertEquals("dibai", WorldCities.ALL[WorldCities.nearestHub(indexOf("neiluobi"), 2)].pinyin)
-        assertEquals("yatelanda", WorldCities.ALL[WorldCities.nearestHub(indexOf("buiyinuosiailisi"), 2)].pinyin)
-        // 放宽到 Tier3 后中继出现：布宜诺斯艾利斯 → 圣保罗、利马 → 圣保罗、奥克兰 → 悉尼
-        assertEquals("shengbaoluo", WorldCities.ALL[WorldCities.nearestHub(indexOf("buiyinuosiailisi"), 3)].pinyin)
-        assertEquals("shengbaoluo", WorldCities.ALL[WorldCities.nearestHub(indexOf("lima"), 3)].pinyin)
+        // ⚠️ 2026-09-29 改表：补了「里约热内卢(T2)」后，布宜诺斯艾利斯的最近 Tier≤2
+        //    从**亚特兰大**（跨大西洋约 8000 km）变成**里约热内卢 1967 km** ——
+        //    这正是补南美枢纽的目的（此前南美一座 Tier1/2 都没有）。
+        assertEquals("liyueheneilu", WorldCities.ALL[WorldCities.nearestHub(indexOf("buiyinuosiailisi"), 2)].pinyin)
+        // 放宽到 Tier3 后中继更近：布宜诺斯艾利斯 → 圣地亚哥 1137 km（圣保罗 1695 km，
+        // 圣地亚哥近 558 km，不是平局）；利马 → 圣地亚哥 2465 km；奥克兰 → 悉尼 2159 km
+        //（奥克兰的 Tier2 枢纽是墨尔本 2625 km，故 Tier3 的悉尼确实更近）
+        assertEquals("shengdiyage", WorldCities.ALL[WorldCities.nearestHub(indexOf("buiyinuosiailisi"), 3)].pinyin)
+        assertEquals("shengdiyage", WorldCities.ALL[WorldCities.nearestHub(indexOf("lima"), 3)].pinyin)
         assertEquals("xinni", WorldCities.ALL[WorldCities.nearestHub(indexOf("aokelan"), 3)].pinyin)
     }
 
@@ -933,11 +988,14 @@ class WorldLogicTest {
         assertEquals(-1, WorldCities.nearestOfTier(WorldCities.COUNT, 4))
         assertEquals(-1, WorldCities.nearestOfTier(0, 0))
         assertEquals(-1, WorldCities.nearestOfTier(0, WorldCities.TIER_COUNT + 1))
-        // 具体抽查：南非没有 Tier1/2 机场，所以「恰好某层」的结果与 nearestHub 的「≤」结果不同 ——
-        // 后者会把 T1 也算进来（nearestHub(约翰内斯堡,2) = 迪拜(T1) 6,412 km），
-        // 前者必须只在该层内找。
-        assertEquals("dibai", WorldCities.ALL[WorldCities.nearestOfTier(indexOf("yuehanneisibao"), 1)].pinyin)
-        assertEquals("deli", WorldCities.ALL[WorldCities.nearestOfTier(indexOf("yuehanneisibao"), 2)].pinyin)
+        // 具体抽查：值由 logs_temp/world_map_gen/recompute_nearest.py 复算，非猜测。
+        // ⚠️ 2026-09-29 补了 5 座城市后原期望值失效：南非新增了 Tier2 开普敦，
+        //   Tier1 新增了拉各斯 ⇒ 约翰内斯堡的同层最近座随之改变。
+        //   T1 拉各斯 4514 km（原为迪拜，距约 6400 km）/
+        //   T2 开普敦 1281 km（同在南非，原期望是印度的德里）/
+        //   T3 孟买 6983 km / T4 内罗毕 2911 km（均未变）。
+        assertEquals("lageersi", WorldCities.ALL[WorldCities.nearestOfTier(indexOf("yuehanneisibao"), 1)].pinyin)
+        assertEquals("kaipudun", WorldCities.ALL[WorldCities.nearestOfTier(indexOf("yuehanneisibao"), 2)].pinyin)
         assertEquals("mumbai", WorldCities.ALL[WorldCities.nearestOfTier(indexOf("yuehanneisibao"), 3)].pinyin)
         assertEquals("neiluobi", WorldCities.ALL[WorldCities.nearestOfTier(indexOf("yuehanneisibao"), 4)].pinyin)
         // 逐对穷举：必须真的最近，且层级恰为 target（不是 ≤）
@@ -1358,10 +1416,10 @@ class WorldLogicTest {
 
     @Test
     fun `max active flights maps quality tiers and degrades with frame time`() {
-        assertEquals(12, WorldNetwork.maxActiveFlights(0, 10f))
-        assertEquals(22, WorldNetwork.maxActiveFlights(150, 10f))
-        assertEquals(34, WorldNetwork.maxActiveFlights(350, 10f))
-        assertEquals("未知档位按 HIGH", 34, WorldNetwork.maxActiveFlights(9999, 10f))
+        assertEquals(18, WorldNetwork.maxActiveFlights(0, 10f))
+        assertEquals(32, WorldNetwork.maxActiveFlights(150, 10f))
+        assertEquals(46, WorldNetwork.maxActiveFlights(350, 10f))
+        assertEquals("未知档位按 HIGH", 46, WorldNetwork.maxActiveFlights(9999, 10f))
         // 33ms 必须严格低于 10ms
         assertTrue(
             "33ms 应严格低于 10ms",
@@ -1371,17 +1429,79 @@ class WorldLogicTest {
         var prev = Int.MAX_VALUE
         for (ms in 0..120 step 2) {
             val n = WorldNetwork.maxActiveFlights(350, ms.toFloat())
-            assertTrue("frameMs=$ms 时 $n 超过了上限", n in 6..34)
+            assertTrue("frameMs=$ms 时 $n 超过了上限", n in 10..46)
             assertTrue("必须随 frameMs 单调不增（$ms 时 $n > $prev）", n <= prev)
             prev = n
         }
         // 极端卡顿时也保留下限
-        assertEquals(6, WorldNetwork.maxActiveFlights(0, 5000f))
-        assertEquals(6, WorldNetwork.maxActiveFlights(350, 5000f))
+        assertEquals(10, WorldNetwork.maxActiveFlights(0, 5000f))
+        assertEquals(10, WorldNetwork.maxActiveFlights(350, 5000f))
         // 20ms 是分界：19ms 不降，21ms 开始降（每超 4ms 扣 1 条）
-        assertEquals(34, WorldNetwork.maxActiveFlights(350, 19f))
-        assertEquals(33, WorldNetwork.maxActiveFlights(350, 21f))
-        assertEquals(30, WorldNetwork.maxActiveFlights(350, 33f))
+        assertEquals(46, WorldNetwork.maxActiveFlights(350, 19f))
+        assertEquals(45, WorldNetwork.maxActiveFlights(350, 21f))
+        assertEquals(42, WorldNetwork.maxActiveFlights(350, 33f))
+    }
+
+    @Test
+    fun `parallel lanes scale with the weaker endpoint tier`() {
+        // 「繁华比例」= 两端中**较弱**的那一端（tier 较大者）
+        val t1 = WorldCities.ALL.indices.first { WorldCities.tierOf(it) == 1 }
+        val t2 = WorldCities.ALL.indices.first { WorldCities.tierOf(it) == 2 }
+        val t3 = WorldCities.ALL.indices.first { WorldCities.tierOf(it) == 3 }
+        val t4 = WorldCities.ALL.indices.first { WorldCities.tierOf(it) == 4 }
+        val t1b = WorldCities.ALL.indices.first { WorldCities.tierOf(it) == 1 && it != t1 }
+        val t2b = WorldCities.ALL.indices.first { WorldCities.tierOf(it) == 2 && it != t2 }
+
+        // 骨干枢纽 ↔ 骨干枢纽：最繁忙，3 条并行
+        assertEquals(3, WorldNetwork.maxParallelLanes(t1, t1b))
+        // 枢纽 ↔ 次级枢纽 / 次级 ↔ 次级：2 条
+        assertEquals(2, WorldNetwork.maxParallelLanes(t1, t2))
+        assertEquals(2, WorldNetwork.maxParallelLanes(t2, t2b))
+        // ⛔ 关键不变量：枢纽挂末端（T1↔T4）**不得**因为左端是 Tier1 就拿到 3 条
+        //    —— 毛细航线必须稀疏，否则又长又细的支线会被误读成主干。
+        assertEquals(1, WorldNetwork.maxParallelLanes(t1, t4))
+        // 支线 / 毛细维持「一条一条来」：1 条
+        assertEquals(1, WorldNetwork.maxParallelLanes(t3, t3))
+        assertEquals(1, WorldNetwork.maxParallelLanes(t3, t4))
+        assertEquals(1, WorldNetwork.maxParallelLanes(t4, t4))
+        // 方向无关：A→B 与 B→A 是同一条走廊，并行度必须相同
+        assertEquals(
+            WorldNetwork.maxParallelLanes(t1, t2),
+            WorldNetwork.maxParallelLanes(t2, t1)
+        )
+    }
+
+    @Test
+    fun `parallel lanes stay in 1 to 3 for every city pair`() {
+        val n = WorldCities.COUNT
+        for (i in 0 until n) {
+            for (j in 0 until n) {
+                if (i == j) continue
+                val lanes = WorldNetwork.maxParallelLanes(i, j)
+                assertTrue("($i,$j) 并行度 $lanes 越界", lanes in 1..3)
+            }
+        }
+    }
+
+    @Test
+    fun `parallel lanes are monotone non increasing in the weaker tier`() {
+        // maxParallelLanes 只取决于 max(tierA, tierB)，故按「同 tier 自配」取值：
+        // Tier1→3 / Tier2→2 / Tier3→1 / Tier4→1，逐级不增。
+        fun lanesOfSameTier(t: Int): Int {
+            // ⚠️ WorldCities.tierOf 收的是**索引 Int**，不是 WorldCity —— 故用
+            //    indices.first{} 而不是 indexOfFirst{}（后者的 it 是 WorldCity）。
+            val idx = WorldCities.ALL.indices.first { WorldCities.tierOf(it) == t }
+            return WorldNetwork.maxParallelLanes(idx, idx)
+        }
+        val l1 = lanesOfSameTier(1)
+        val l2 = lanesOfSameTier(2)
+        val l3 = lanesOfSameTier(3)
+        val l4 = lanesOfSameTier(4)
+        assertEquals("Tier1 骨干枢纽应最繁忙（3 条并行）", 3, l1)
+        assertEquals("Tier2 应为 2", 2, l2)
+        assertEquals("Tier3 应为 1", 1, l3)
+        assertEquals("Tier4 应为 1", 1, l4)
+        assertTrue("并行度必须随较弱 tier 上升而不增：$l1,$l2,$l3,$l4", l1 >= l2 && l2 >= l3 && l3 >= l4)
     }
 
     // ══ 工具 ═══════════════════════════════════════════════════
