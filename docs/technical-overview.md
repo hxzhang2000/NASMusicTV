@@ -11068,6 +11068,31 @@ W/PhotoWallController:   scan produced an empty pool: {GALLERY=DISABLED, EXTERNA
 
 **版本**：v2.37.6（未变；versionCode 168）。
 
+### 10.197 v2.37.6 — E41「世界」重写为 three-globe 3D 地球版（WebView + WebGL，完全离线）：暗色球体 + Tier 城市光点 + 大圆航线生长动画 + 分频段音频驱动（2026-09-29）
+
+**范围**：新增 `visualizer/renderers/WorldGlobeRenderer.kt`（View 型渲染器）+ `assets/globe/` 5 文件（`index.html`/`globe.js`/`cities.json`/`three.min.js`/`three-globe.min.js`，共 ~1.95MB 离线打包）；改动 `VisualizerRenderer.kt`（View 型旁路 4 默认成员）、`VisualizerRendererFactory.kt`（`WORLD -> WorldGlobeRenderer(context)`）、`RendererSwapper.kt`（构造注入 context）、`VisualizerStage.kt`（按 `isViewBased` 分支 AndroidView/Canvas + key 重建 + `!cur.isViewBased` 防御）、`AndroidManifest.xml`（`android:hardwareAccelerated="true"`，WebGL 必需）。**3D 版复用 E41「世界」序号**：效果列表仍 28 项、E41 行不新增；旧 2D 版 [WorldRenderer] 及数据文件**保留在源码、不再被工厂引用**（隐藏）。**不升版本号**（并入 v2.37.6，versionCode 168，与 §10.196 一致）。
+
+**方案取舍（为什么 WebView，为什么保持 minSdk 22）**：需求为「三维地球 + 大圆航线 + 城市光点 + 音频驱动」。候选 WorldWindKotlin（原生 OpenGL 地球库）要求 **minSdk 24**，会砍掉 Android 5.0/5.1/6.0（含创维 5.1.1 开发机，真机回归基准）被否决；手写 OpenGL ES 球体细分/光照/大圆插值成本过高。最终选 **three-globe（系统 WebView + WebGL）**：minSdk 22 兼容（WebGL1 兜底 → three.js ≤ r162；实测 three-globe 2.45.2 的 UMD peerDep ≥0.154 兼容），完全离线（页面只引本地相对路径脚本，运行时零网络、零远程资源），且不动 INTERNET 权限（本 app 本就需要联网 NAS；页面本身零请求）。
+
+**库版本锁（勿随手升级）**：`three.min.js` 654KB UMD（r150–r159 警告头「deprecated with r150+, removed with r160」确认 ≤ r162、WebGL1 OK）；`three-globe.min.js` 1247KB UMD 2.45.2（全局名 `ThreeGlobe`，尾部 `(window.THREE?...).Group` 直接读 window.THREE，与 three.min.js UMD 全局配对）。index.html 注释与打包一致。⚠️ 不要换成 ESM 版（file:// 下模块加载受限）、不要升级 three ≥ r163（WebGL1 兜底被移除）。
+
+**globe.js API 契约（编排方定死，Kotlin 侧与资产侧共同遵守，勿单边改动）**：
+```
+window.WorldGlobe.initCities(cities)   // [{lat,lng,tier,name}] tier 1..4，页面加载后发一次
+window.WorldGlobe.updateRoutes(routes) // [{fromLat,fromLng,toLat,toLng,klass}] klass 0主干/1支线/2次要
+window.WorldGlobe.setAudio(params)     // {energy,bass,mid,treble,beat} 全 0..1，100ms 事件粒度
+window.WorldGlobe.isReady()            // → true
+```
+cities.json 从 `WorldCities.ALL` 重新导出（Kotlin 字段 `lon` → JS 契约 `lng`；UTF-8 无 BOM；32 城全名不截断——此前 fix-10 中断残留的 GBK 编码 + 尾字截断已整体重写）。`updateRoutes` 在 JS 侧做 `JSON.stringify` 去重（Kotlin 100ms 推一次，数据未变不重建弧线几何）。
+
+**音频桥接（Kotlin → JS 单向，100ms Handler 事件粒度）**：`WorldGlobeRenderer` 经 `onViewAttached` 启动 100ms `Handler` 定时器，读 `PlayerManager.spectrumRepository.frame`（`app as NasMusicApp` 取全局实例），EMA 平滑（α0.35；beat 用 `1f` 或 `×0.80` 衰减）后 `evaluateJavascript` 推 `setAudio`；航线用 `WorldNetwork.pickRoute(rnd, focusCity, BeatStrength)` 复用既有选线模型（节拍分类器 `BeatClassifier` + 焦点城市 20s 轮换 + 能量驱动 spawn 概率 `0.18 + 0.62·energy + 0.30·beat`，容量 `maxActiveFlights(quality.maxParticles, 100ms)` 钳位 6–34，FIFO 移除最旧模拟「航班离场」）；**连续动画（弧线 dash 流动 / 光点脉冲 / 自转 / 大气呼吸）全部留在 JS rAF 循环**——Kotlin 侧零绘制开销。`VisualizerThemeTest` 计数断言不变（复用序号，仍 28）。
+
+**globe.js 视觉实现（ES5，兼容 Android 5.1 老 WebView）**：⛔ 全文件 `var`/`function`，无 const/let/箭头/模板串/Promise。暗色球体 = `globeImageUrl(null)` + 自建 `MeshPhongMaterial`（color `0x0a1424`、emissive `0x060d1a`）；大气层 `showAtmosphere(true)` + `atmosphereColor('#274b7a')`；城市光点 `pointsMerge(true)` 合批（单 draw call），Tier 1–4 半径 0.16/0.12/0.085/0.055、颜色 `#a8dcff/#5aa8f0/#2f6fc0/#1c4a80`，`pointsTransitionDuration(180)` 供拍点脉冲平滑过渡（beat>0.5 且距上次 ≥300ms 触发：半径 ×1.55 → 220ms 回落）；大圆航线 `arcsGreatCircle(true)`，klass 0/1/2 分色（`rgba(150,205,255)/rgba(90,150,230)/rgba(60,110,180)`）、粗细 0.9/0.6/0.35、dash 动画周期 1600/2600/3800ms、`arcDashInitialGap` 随机相位防齐步走；rAF 自转 `0.0006·(1+1.6·energy)`、材质 `emissiveIntensity = 0.35+0.75·energy` 随能量呼吸。背景 `#03050a`、像素比钳 1.5。
+
+**验证**：`node --check globe.js` 语法通过；`cities.json` 32 城 JSON 有效；`compileDebugKotlin` BUILD SUCCESSFUL（先补空 `draw` 实现——接口抽象成员要求，View 型旁路下不调用）；`testDebugUnitTest` 全量 BUILD SUCCESSFUL；`lintDebug` BUILD SUCCESSFUL **0 errors**（283 warnings，含既有 256 基线；新增 1 条 `SetJavaScriptEnabled` 已 `@SuppressLint` 标注——页面为本地资产、无外部输入、无 XSS 面）；`assembleDebug` 成功且 APK 内 `assets/globe/` 5 文件齐全（globe.js 8242B / cities.json 2120B / index.html 1111B / three-globe.min.js 1277688B / three.min.js 669884B）。**⚠️ 未真机验证**：3D 效果未上电视目视（依赖电视端 WebView WebGL 可用性、性能与遥控器焦点；仅编译/单测/lint/打包证据）。
+
+**版本**：v2.37.6（未变；versionCode 168）。
+
 ### 10.196 v2.37.6 — 新增 E41「世界」（WORLD）可视化：海岸线地图 + 城市光点 + 真实航空规模大圆航线 + 真实 UTC 晨昏线（2026-09-28）
 
 **范围**：新增 6 个渲染器/数据文件（`WorldRenderer`/`WorldCities`/`WorldNetwork`/`WorldProjection`/`WorldTerminator`/`WorldMapData`）+ 2 个测试文件（`WorldLogicTest`/`WorldMapDataTest`）；枚举 `VisualizerTheme.WORLD("世界", Tier.ADV, "41")` 与工厂 `VisualizerRendererFactory` 的 `WORLD -> WorldRenderer()` 分支已接入。效果为纯展示：暗调极简海岸线地图 + 城市光点 + 按真实航空客流规模生成的动态大圆航线 + 分频段音频驱动 + 真实 UTC 晨昏线，**零交互、零文字**（符合本 app 渲染器零文字红线）。**不升版本号**（并入 v2.37.6，versionCode 168，与 §10.195 一致）。`VisualizerThemeTest` 的主题计数断言同步 27→28（`off` 26→27、`on` 27→28，共 4 处）。

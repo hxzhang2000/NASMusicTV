@@ -1,5 +1,6 @@
 package com.nasmusic.tv.visualizer
 
+import android.content.Context
 import com.nasmusic.tv.data.model.VisualQuality
 import com.nasmusic.tv.data.model.VisualizerTheme
 
@@ -18,10 +19,20 @@ import com.nasmusic.tv.data.model.VisualizerTheme
  * 避免长期双份绘制（粒子类是主要开销）。
  *
  * 本类**不触碰 Compose**（只依赖渲染器与 [RenderContext]），便于单测。
+ *
+ * ⚠️ **不在这里创建/销毁 View** —— View 型渲染器的 View 生命周期由
+ * `VisualizerStage` 的 `AndroidView` 管理；本类只负责 [VisualizerRenderer.onEnter]/
+ * [onExit]/[sync] 这些既有的逻辑层生命周期。
  */
 class RendererSwapper(
+    /**
+     * 供默认工厂创建 View 型渲染器用（如 three-globe 的 WebView）。
+     * 传自定义 [factory] 时可省略。
+     */
+    private val context: Context? = null,
     private val durationMs: Long = CROSSFADE_MS,
-    private val factory: (VisualizerTheme) -> VisualizerRenderer = { VisualizerRendererFactory.create(it) }
+    private val factory: (VisualizerTheme) -> VisualizerRenderer =
+        { theme -> VisualizerRendererFactory.create(theme, requireNotNull(context)) }
 ) {
 
     /** 当前主题的渲染器（首次 [sync] 前为 null） */

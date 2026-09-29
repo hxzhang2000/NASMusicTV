@@ -1,5 +1,6 @@
 package com.nasmusic.tv.visualizer
 
+import android.content.Context
 import com.nasmusic.tv.data.model.VisualQuality
 import com.nasmusic.tv.data.model.VisualizerTheme
 import com.nasmusic.tv.visualizer.renderers.BeatFireworkRenderer
@@ -28,7 +29,7 @@ import com.nasmusic.tv.visualizer.renderers.LightBeamsRenderer
 import com.nasmusic.tv.visualizer.renderers.MoleculeRenderer
 import com.nasmusic.tv.visualizer.renderers.VintageTvRenderer
 import com.nasmusic.tv.visualizer.renderers.DnaRenderer
-import com.nasmusic.tv.visualizer.renderers.WorldRenderer
+import com.nasmusic.tv.visualizer.renderers.WorldGlobeRenderer
 import com.nasmusic.tv.visualizer.photo.PhotoRenderer
 
 /**
@@ -39,7 +40,15 @@ import com.nasmusic.tv.visualizer.photo.PhotoRenderer
  */
 object VisualizerRendererFactory {
 
-    fun create(theme: VisualizerTheme): VisualizerRenderer = when (theme) {
+    /**
+     * 主题枚举 → 渲染器实现。
+     *
+     * [context] 供 View 型渲染器（如 three-globe 的 WebView）创建 View 用；
+     * 现有所有 Canvas 渲染器都忽略它，保持原实现。WORLD 分支已切到
+     * 3D 版 [WorldGlobeRenderer]（WebView + three-globe）；旧 2D 版
+     * [WorldRenderer] 保留在源码中、不再被本工厂引用（隐藏）。
+     */
+    fun create(theme: VisualizerTheme, context: Context): VisualizerRenderer = when (theme) {
         VisualizerTheme.TUNNEL_FLY -> TunnelRenderer()
         VisualizerTheme.CIRCULAR_RING -> CircularRingRenderer()
         VisualizerTheme.FREQUENCY_MOUNTAIN -> FrequencyMountainRenderer()
@@ -67,7 +76,7 @@ object VisualizerRendererFactory {
         VisualizerTheme.VINTAGE_TV -> VintageTvRenderer()
         VisualizerTheme.PHOTO_WALL -> PhotoRenderer()
         VisualizerTheme.DNA -> DnaRenderer()
-        VisualizerTheme.WORLD -> WorldRenderer()
+        VisualizerTheme.WORLD -> WorldGlobeRenderer(context)
     }
 
     /**

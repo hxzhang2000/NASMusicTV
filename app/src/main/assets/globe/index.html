@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <title>WorldGlobe</title>
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      background: #000;
+      overflow: hidden;
+    }
+    #globe-container {
+      position: fixed;
+      left: 0;
+      top: 0;
+      width: 100%;
+      height: 100%;
+    }
+    canvas {
+      display: block;
+    }
+  </style>
+</head>
+<body>
+  <!--
+    NASMusicTV「世界」可视化 — 3D 地球（完全离线）。
+    仅加载本地相对路径脚本，运行时零网络。
+    three.js r160 UMD（r161+ 起 npm 不再发布 UMD 构建；r160 是 ≤r162 中
+    最后一个带 UMD three.min.js 的版本，WebGL1 兜底支持完好）。
+    three-globe 2.45.2 UMD（peerDependency three >=0.154，兼容 r160）。
+  -->
+  <div id="globe-container"></div>
+
+  <script src="./three.min.js"></script>
+  <script src="./three-globe.min.js"></script>
+  <script src="./globe.js"></script>
+</body>
+</html>

@@ -22,6 +22,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -49,6 +50,7 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
@@ -56,6 +58,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.tv.material3.Icon
 import androidx.tv.material3.Text
 import com.nasmusic.tv.R
@@ -135,7 +138,9 @@ fun VisualizerStage(
 
     // ── 渲染器生命周期（自动导演档 600ms 交叉淡入）────────────
     val renderCtx = remember { RenderContext() }
-    val swapper = remember { RendererSwapper() }
+    // LocalContext 供默认工厂创建 View 型渲染器（three-globe WebView）用
+    val context = LocalContext.current
+    val swapper = remember { RendererSwapper(context) }
     var canvasSize by remember { mutableStateOf(Size.Zero) }
 
     // 淡入透明度：由绘制循环逐帧写入，在绘制阶段读取 → 只重绘不重组
@@ -145,6 +150,10 @@ fun VisualizerStage(
     val rendererFailed = remember { mutableStateOf(false) }
     // 正在淡出的旧渲染器（null = 无旧层）；用 State 以便出现/消失时重组
     val prevRenderer = remember { mutableStateOf<VisualizerRenderer?>(null) }
+    // 当前生效渲染器的 State 快照：swapper.current 是普通 var（sync 后才更新、
+    // 且不触发重组），view 型旁路的 AndroidView / Canvas 分支切换依赖此快照重组。
+    // 首次 sync 前为 null ⇒ 走 Canvas 空帧分支（与改造前行为一致）。
+    val currentRenderer = remember { mutableStateOf<VisualizerRenderer?>(null) }
 
     // 歌词级常量（最长行字数 / 最长行文本）：只随 lyrics 变化。
     // 每帧重算是 O(N) 全量扫描，必须缓存。
@@ -167,6 +176,9 @@ fun VisualizerStage(
         // crossfade 能力保留在 RendererSwapper（有单测覆盖）；自动导演档删除后
         // UI 层已无使用场景，因此恒为 false（原为死参数，现收敛到调用处）
         if (swapper.sync(theme, quality, false, renderCtx, System.currentTimeMillis())) {
+            // 快照同步进 State：swapper.current 变化本身不触发重组，
+            // 这里写 State 才能让下面的 Canvas / AndroidView 分支切换生效
+            currentRenderer.value = swapper.current
             prevRenderer.value = swapper.previous
             if (swapper.isCrossfading) {
                 fadeAlpha.floatValue = 0f
@@ -266,40 +278,64 @@ fun VisualizerStage(
         )
 
         // ② 效果层（新效果；交叉淡入时从透明渐显）
-        androidx.compose.foundation.Canvas(
-            modifier = Modifier
-                .fillMaxSize()
-                // T9：叠加发光需要离屏层，否则部分 API 版本退化为 SrcOver
-                .graphicsLayer {
-                    compositingStrategy = CompositingStrategy.Offscreen
-                    alpha = fadeAlpha.floatValue
+        val active = currentRenderer.value
+        if (active != null && active.isViewBased) {
+            // View 型渲染器旁路（three-globe 等 WebView 渲染器）：
+            // 用 AndroidView 承载，不经 DrawScope —— draw() 不再被调用。
+            // ⛔ 不叠加 graphicsLayer Offscreen/alpha —— 对 View 无效。
+            // key(active)：渲染器实例变化（切主题）⇒ 重建整个组 ⇒ AndroidView 的
+            // factory 重新执行、旧 View 随组销毁，避免「旧 View 配新渲染器」。
+            key(active) {
+                AndroidView(
+                    factory = { ctx -> active.createView(ctx)!! },
+                    modifier = Modifier.fillMaxSize()
+                )
+                // attach 在组合后（此时 factory 已建好 View）、
+                // detach 在离开组合 / 渲染器被 key 换掉时触发
+                DisposableEffect(Unit) {
+                    active.onViewAttached()
+                    onDispose { active.onViewDetached() }
                 }
-        ) {
-            canvasSize = Size(size.width, size.height)
-            // T6：每帧捕获一次 front 引用，绘制期间引用不变
-            val f = frame()
-            // 计算当前歌词行 & 行内进度（给 E23 歌词点阵用）
-            // 复用实例，零分配
-            renderCtx.update(quality, palette, cover, canvasSize,
-                minOf(size.width, size.height) * safeArea, f.timeMs, song?.title,
-                lyricInfo.line, lyricInfo.nextLine, lyricInfo.progress,
-                lyricInfo.hasWords, lyricInfo.lineIndex, lyricInfo.wordStartTimes,
-                lyricInfo.maxLineChars, lyricInfo.longestLine, song?.id)
-            // 照片墙：零分配写 7 个 `photo*` 字段（§14.2.4 指定「在 update() 之后单独写」）。
-            // ⛔ 必须在 `swapper.current.draw(...)` **之前**：`PhotoRenderer` 读的就是这 7 个字段。
-            photoWall?.applyTo(renderCtx)
-            val cur = swapper.current
-            // tick 参与读取以确保每帧重绘
-            if (tick >= 0L && cur != null && fadeAlpha.floatValue > ALPHA_EPS) {
-                // 渲染器绘制异常若直接抛出会中断整个绘制线程 → 电视上可能表现为
-                // native 崩溃（Skia 收到非法几何/状态）。捕获后跳过该帧并告警。
-                try {
-                    with(cur) { draw(f, renderCtx) }
-                } catch (t: Throwable) {
-                    if (!rendererFailed.value) {
-                        rendererFailed.value = true
-                        android.util.Log.w("VisualizerStage",
-                            "renderer draw failed, skipped frame: ${cur::class.simpleName}", t)
+            }
+        } else {
+            androidx.compose.foundation.Canvas(
+                modifier = Modifier
+                    .fillMaxSize()
+                    // T9：叠加发光需要离屏层，否则部分 API 版本退化为 SrcOver
+                    .graphicsLayer {
+                        compositingStrategy = CompositingStrategy.Offscreen
+                        alpha = fadeAlpha.floatValue
+                    }
+            ) {
+                canvasSize = Size(size.width, size.height)
+                // T6：每帧捕获一次 front 引用，绘制期间引用不变
+                val f = frame()
+                // 计算当前歌词行 & 行内进度（给 E23 歌词点阵用）
+                // 复用实例，零分配
+                renderCtx.update(quality, palette, cover, canvasSize,
+                    minOf(size.width, size.height) * safeArea, f.timeMs, song?.title,
+                    lyricInfo.line, lyricInfo.nextLine, lyricInfo.progress,
+                    lyricInfo.hasWords, lyricInfo.lineIndex, lyricInfo.wordStartTimes,
+                    lyricInfo.maxLineChars, lyricInfo.longestLine, song?.id)
+                // 照片墙：零分配写 7 个 `photo*` 字段（§14.2.4 指定「在 update() 之后单独写」）。
+                // ⛔ 必须在 `swapper.current.draw(...)` **之前**：`PhotoRenderer` 读的就是这 7 个字段。
+                photoWall?.applyTo(renderCtx)
+                val cur = swapper.current
+                // tick 参与读取以确保每帧重绘
+                // ⛔ `!cur.isViewBased` 防御：换主题瞬间（sync 后、State 重组前）本分支
+                //    仍是 Canvas，而 swapper.current 已指向新渲染器 —— 若是 view 型
+                //    绝不能在这里调它的 draw()，跳过等重组切到 AndroidView 分支。
+                if (tick >= 0L && cur != null && !cur.isViewBased && fadeAlpha.floatValue > ALPHA_EPS) {
+                    // 渲染器绘制异常若直接抛出会中断整个绘制线程 → 电视上可能表现为
+                    // native 崩溃（Skia 收到非法几何/状态）。捕获后跳过该帧并告警。
+                    try {
+                        with(cur) { draw(f, renderCtx) }
+                    } catch (t: Throwable) {
+                        if (!rendererFailed.value) {
+                            rendererFailed.value = true
+                            android.util.Log.w("VisualizerStage",
+                                "renderer draw failed, skipped frame: ${cur::class.simpleName}", t)
+                        }
                     }
                 }
             }
@@ -307,6 +343,9 @@ fun VisualizerStage(
 
         // ② 效果层（旧效果；仅交叉淡入期间存在，1→0 淡出）
         prevRenderer.value?.let { old ->
+            // 防御：view 型渲染器恒硬切（crossfade=false），正常不会进入淡出分支；
+            // 且 AndroidView 无法在 DrawScope 里「淡出」，真进来了也只能跳过。
+            if (old.isViewBased) return@let
             androidx.compose.foundation.Canvas(
                 modifier = Modifier
                     .fillMaxSize()

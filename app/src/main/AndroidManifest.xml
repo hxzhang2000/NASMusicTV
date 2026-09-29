@@ -67,6 +67,7 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.NASMusicTV"
         android:usesCleartextTraffic="true"
+        android:hardwareAccelerated="true"
         android:banner="@drawable/banner"
         android:largeHeap="true"
         android:fullBackupContent="@xml/backup_rules"
