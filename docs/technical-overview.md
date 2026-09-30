@@ -11279,7 +11279,11 @@ TypedArray、`performance.now`、`requestAnimationFrame`。
    polyfill 必须最先——Babel 只降语法不注入内建 API，降级后的库依然调 `Object.assign` / `Array.from`。
 4. `downlevel_libs.mjs`（与资产同目录）—— 可复现转译脚本，固定
    `@babel/core@7.26.0` / `@babel/preset-env@7.26.0` / `terser@5.37.0` / `acorn@8.14.0`；`node_modules` 不入库。
-5. ES6 原版 `three.min.js` / `three-globe.min.js` **保留不删**，供逐字节比对（`index.html` 不再加载它们）。
+5. ES6 原版 `three.min.js` / `three-globe.min.js` **永久保留、永不删除、永不修改、永不加载**，
+   作为 ES5 产物的**比对基线**：产物出问题时必须能逐字节 diff 回上游，确认差异只来自「ES6→ES5 降级」，
+   而非库的版本漂移或误改。删掉就永久丧失该能力，改掉内容同样失效。代价约 1.9MB 源资源，换可回溯性。
+   ⛔ 该策略已写进代码（`.min.js` 本身不得改动，故记在「读取它」与「生成它」两处）：
+   `index.html` 的加载注释、`downlevel_libs.mjs` 头部的「本目录文件清单与保留策略」。
 6. 产物用 **acorn `ecmaVersion:5` 解析**证明合法 ES5（`polyfill.es5.js` / `three.es5.js` /
    `three-globe.es5.js` / `globe.js` 四个文件全部通过）。
    ⛔ 不用正则扫产物：minified 代码里 `"..."` / `"class a"` / 反引号大量出现在**字符串与正则字面量**中

@@ -43,8 +43,13 @@
       4) globe.js             —— 本项目渲染逻辑，**本身已是纯 ES5**，未参与转译
     polyfill 必须最先：Babel 的 useBuiltIns:false 只降语法不注入内建 API，
     降级后的库依然会调用 Object.assign / Array.from 等。
-    three.min.js / three-globe.min.js（ES6 原版）保留在同目录仅供逐字节比对，**不加载**。
-    详见 docs/technical-overview.md §10.201 与仓库根的 downlevel_globe_libs.mjs
+    ⛔ three.min.js / three-globe.min.js（ES6 原版）：**永久保留、永不删除、永不加载**。
+       它们是 three.es5.js / three-globe.es5.js 的**比对基线**——转译产物出问题时，
+       必须能逐字节 diff 回上游，以确认差异只来自「ES6→ES5 降级」而不来自库的版本漂移
+       或误改。删掉它们就永久丧失这个能力；同理也**不要修改这两个文件的内容**，
+       改了就失去比对意义。体积代价约 1.9MB 源资源（压缩后增量远小于此），换可回溯性。
+    详见同目录 downlevel_libs.mjs（转译脚本 + 完整文件清单）与
+         docs/technical-overview.md §10.201
   -->
   <div id="globe-container"></div>
 

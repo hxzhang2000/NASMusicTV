@@ -18,13 +18,32 @@
  * 同时补 polyfill.es5.js（9 个 Chrome 39 缺失的 API），因为 preset-env 默认
  * `useBuiltIns: false` 只转语法、不注入内建 API。
  *
+ * ---------------------------------------------------------------------------
+ * 本目录文件清单与保留策略（改动前先读这段）
+ * ---------------------------------------------------------------------------
+ *   three.min.js            上游 ES6 原版，r160 UMD。        ⛔ 永久保留，永不删除，永不修改
+ *   three-globe.min.js      上游 ES6 原版，2.45.2 UMD。      ⛔ 永久保留，永不删除，永不修改
+ *   three.es5.js            本脚本产物（654KB → 734KB）。    运行时装载
+ *   three-globe.es5.js      本脚本产物（1248KB → 1433KB）。  运行时装载
+ *   polyfill.es5.js         手写，Chrome 39 缺失 API。       运行时装载，必须最先
+ *   globe.js                本项目渲染逻辑，纯 ES5，**不参与转译**
+ *   cities.json             城市坐标数据
+ *   earth*.jpg / moon.jpg   贴图（earth.jpg 为 4096×2048）
+ *   index.html              装配页，⛔ 不要加载 .min.js 原版
+ *   downlevel_libs.mjs      本脚本
+ *
+ *   ⛔ **两个 ES6 原版（three.min.js / three-globe.min.js）永久保留、不得删除。**
+ *      它们是 ES5 产物的**比对基线**：产物出问题时必须能逐字节 diff 回上游，以确认
+ *      差异只来自 ES6→ES5 降级，而非库的版本漂移或误改。删掉就永久丧失这个能力。
+ *      同理**不得修改其内容**（含格式化、去重、换压缩级别）——改了就失去比对意义。
+ *      代价约 1.9MB 源资源，换可回溯性。
+ * ---------------------------------------------------------------------------
+ *
  * 用法（node_modules 不入库，需先装一次依赖；本脚本与被处理的资产同目录）：
  *   cd app/src/main/assets/globe
  *   npm install --no-save @babel/core@7.26.0 @babel/preset-env@7.26.0 terser@5.37.0 acorn@8.14.0
  *   node downlevel_libs.mjs [assetsDir]      # assetsDir 缺省 = 脚本所在目录
  *   装完记得清理：rm -rf node_modules package.json package-lock.json（或用 --no-save 并手工删）
- *
- * 产物：three.es5.js / three-globe.es5.js（原版 .min.js **保留**，便于逐字节比对）
  */
 
 import { transformAsync } from "@babel/core";
