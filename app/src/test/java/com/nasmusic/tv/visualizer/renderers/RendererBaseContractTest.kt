@@ -138,7 +138,8 @@ class RendererBaseContractTest {
 
     @Test
     fun `⑥⑦⑧⑨ 真实子类源码扫描 - 零违规且扫描非空`() {
-        // 测试夹具子类（下方 FixtureRenderer）保证扫描到的子类数 > 0（⑨ 空转自证）
+        // ── ① 判据自证：合法夹具零违规 ──
+        // 测试夹具子类（下方 FixtureProbeRenderer）保证扫描到的子类数 > 0（⑨ 空转自证）
         val fixtureSrc = """
             class FixtureProbeRenderer : RendererFx() {
                 override val theme = VisualizerTheme.TUNNEL_FLY
@@ -150,6 +151,21 @@ class RendererBaseContractTest {
         val v = violationsIn(fixtureSrc)
         assertTrue("合法子类不应被判违规: $v", v.isEmpty())
         assertTrue(violationsIn(fixtureSrc).isEmpty())
+
+        // ── ② ⛔ 真扫源码 ──
+        // 此前本用例只把上面那段**夹具字符串**喂进判据 ⇒ 对真实代码**恒为通过**（空转），
+        // 而用例名与类 KDoc 都写着「对全部 RendererFx 子类」。现改为真读 `renderers/`+`photo/`。
+        val real = realFxSubclasses()
+        assertTrue(
+            "真实 RendererFx 子类数应 ≥ 5（扫描器空转自证），实测 ${real.keys}",
+            real.size >= 5
+        )
+        assertTrue(
+            "扫描应覆盖 TunnelRenderer（S1.5 首个迁移的子类）",
+            real.containsKey("TunnelRenderer")
+        )
+        val realBad = real.entries.flatMap { (name, body) -> violationsIn(body).map { "$name: $it" } }
+        assertTrue("真实 RendererFx 子类不得违规：$realBad", realBad.isEmpty())
     }
 
     @Test
@@ -250,7 +266,102 @@ class RendererBaseContractTest {
         error("找不到 app/src/main/java")
     }
 
-    private fun stripComments(src: String): String =
-        src.replace(Regex("/\\*.*?\\*/", RegexOption.DOT_MATCHES_ALL), "")
-            .replace(Regex("//.*"), "")
+    /**
+     * 真扫 `renderers/` + `photo/` 下的 `RendererFx` 子类源码 ⇒ `类名 to 类体`。
+     *
+     * ⛔ 本函数是「⑥⑦⑧⑨」用例不再空转的关键：此前该用例只把一段**夹具字符串**
+     * 喂进判据，从不读真实子类 ⇒ 对真实代码恒为通过（用例名与类 KDoc 却都写着
+     * 「对全部 RendererFx 子类」）。判据（[violationsIn]）本身没变。
+     *
+     * 类体用**花括号配对**截取（而非正则），保证 `violationsIn` 只看该类自己的代码，
+     * 不会把同文件后续类/顶层函数的写法算到它头上。
+     */
+    private fun realFxSubclasses(): Map<String, String> {
+        val out = LinkedHashMap<String, String>()
+        val classHead = Regex("""(?m)^\s*(?:(?:internal|open|abstract|private|sealed|final)\s+)*class\s+(\w+)""")
+        for (sub in listOf("renderers", "photo")) {
+            val dir = mainSourceRoot().resolve("com/nasmusic/tv/visualizer/$sub")
+            if (!dir.isDirectory) continue
+            dir.walkTopDown()
+                .filter { it.isFile && it.extension == "kt" }
+                .sortedBy { it.name }
+                .forEach { f ->
+                    val src = stripComments(f.readText())
+                    classHead.findAll(src).forEach { m ->
+                        // 类头窗口 = 声明行起点 + 其后 400 字符（覆盖多行继承列表）
+                        val lineStart = src.lastIndexOf('\n', m.range.first).let { if (it < 0) 0 else it + 1 }
+                        val window = src.substring(lineStart, minOf(lineStart + 400, src.length))
+                        val brace = window.indexOf('{')
+                        if (brace < 0) return@forEach
+                        if (!window.substring(0, brace).contains(": RendererFx(")) return@forEach
+                        out[m.groupValues[1]] = braceBody(src, lineStart + brace)
+                    }
+                }
+        }
+        return out
+    }
+
+    /** 从 `openIdx`（必须是 `{`）取配对花括号块（含两端）。 */
+    private fun braceBody(text: String, openIdx: Int): String {
+        var depth = 0
+        var i = openIdx
+        while (i < text.length) {
+            when (text[i]) {
+                '{' -> depth++
+                '}' -> {
+                    depth--
+                    if (depth == 0) return text.substring(openIdx, i + 1)
+                }
+            }
+            i++
+        }
+        return text.substring(openIdx)
+    }
+
+    /**
+     * 去注释（**嵌套块注释** + **字符串感知**）。
+     *
+     * ⛔ 不能用「非贪婪正则匹配块注释」的写法：Kotlin 的块注释**可嵌套**，
+     * 非贪婪正则会**在遇到的第一个块注释结束符处收尾**，把其后的真实代码一并吞掉
+     * （正是 MEMORY 里记的「裸写块注释起始符吞掉其后全部代码」那类事故）；
+     * 字符串里的双斜杠（如 URL）也会被误删。块注释内的换行**保留**，
+     * 保证行号/行结构与原文件一致。
+     *
+     * ⚠️ 本 KDoc 本身**不得出现块注释的起始符或结束符字面量** —— 它们会提前闭合本注释
+     * （写这段时踩过一次，由 `logs_temp/s17_paren.py` 的**词法级**括号配平自查抓出）。
+     */
+    private fun stripComments(src: String): String {
+        val sb = StringBuilder(src.length)
+        var i = 0
+        var inString = false
+        while (i < src.length) {
+            val c = src[i]
+            if (inString) {
+                sb.append(c)
+                if (c == '\\' && i + 1 < src.length) {
+                    sb.append(src[i + 1]); i += 2; continue
+                }
+                if (c == '"') inString = false
+                i++
+                continue
+            }
+            if (c == '"') { inString = true; sb.append(c); i++; continue }
+            if (c == '/' && i + 1 < src.length && src[i + 1] == '*') {
+                i += 2
+                var depth = 1
+                while (i < src.length && depth > 0) {
+                    if (src[i] == '/' && i + 1 < src.length && src[i + 1] == '*') { depth++; i += 2 }
+                    else if (src[i] == '*' && i + 1 < src.length && src[i + 1] == '/') { depth--; i += 2 }
+                    else { if (src[i] == '\n') sb.append('\n'); i++ }
+                }
+                continue
+            }
+            if (c == '/' && i + 1 < src.length && src[i + 1] == '/') {
+                while (i < src.length && src[i] != '\n') i++
+                continue
+            }
+            sb.append(c); i++
+        }
+        return sb.toString()
+    }
 }
