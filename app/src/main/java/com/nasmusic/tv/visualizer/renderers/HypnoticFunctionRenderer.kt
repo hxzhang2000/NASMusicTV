@@ -9,15 +9,17 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.unit.IntSize
 import com.nasmusic.tv.data.model.VisualQuality
 import com.nasmusic.tv.data.model.VisualizerTheme
 import com.nasmusic.tv.visualizer.AudioFrame
 import com.nasmusic.tv.visualizer.CoverPalette
 import com.nasmusic.tv.visualizer.RenderContext
 import com.nasmusic.tv.visualizer.VisualizerMath
-import com.nasmusic.tv.visualizer.VisualizerRenderer
+import com.nasmusic.tv.visualizer.fx.ProceduralTexture
 import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.cos
@@ -38,12 +40,39 @@ import kotlin.random.Random
  *
  * 性能红线：draw 内零分配——pts/screen/jitter/vanishAt/particleBuf/Paint/Path
  * 均为成员；公式 run 与刻度标签在采样期一次性生成。
+ *
+ * ## §B8 质感升级（T4.8）
+ * - **① 网格三级明度**：主刻度（主轴 x=0 / y=0）`AXIS_ALPHA = 0.55f` →
+ *   次刻度（沿主轴的刻度短线）`TICK_ALPHA = 0.30f` → 细网格（5×5 内部线）
+ *   `GRID_ALPHA = 0.14f`；线宽同步分档（2.6 / 1.8 / 1.2 px）——§B8 的问题描述是
+ *   "同色**单线**"，只分 alpha 仍是同宽，故一并分档（见 §12.4）。
+ * - **② 曲线"双层 + 法线明暗"**：辉光（10px `Plus`）→ 主线（`MAIN_STROKE_W = 2.2f`，
+ *   `MAIN_ALPHA_BASE = 0.9f`）→ **上方偏移 `HIGHLIGHT_OFFSET = 0.8f` px 的高光线**
+ *   （`HIGHLIGHT_STROKE_W = 0.9f`，色 `towardWhite(mainColor, HIGHLIGHT_WHITE_MIX = 0.6f)`）
+ *   ⇒ 曲线有**受光侧**，不再是一条平色线。
+ * - **③ 方格纸底纹**：叠 1 层 `ProceduralTexture.Id.PAPER`（`PAPER_ALPHA = 0.10f`，
+ *   1 次 `drawImage`）—— 与"数学函数"气质匹配。
+ * - **④ 后处理**：`postFx = PostFx(vignette = 0.44f, grain = 0.028f)`。
+ *
+ * ## ⛔ 帧率绑定修复（§B8 未列，但与前六批同族）
+ * 旧实现的 `dt` 取自 **相位内累计时间**（`(now - phaseStartMs) / 1000f`，钳 0.1s），
+ * 既不是帧间差、又被钳到 0.1s ⇒ 描线累加器每帧 `+min(相位已过毫秒, 100)`，
+ * **实际描线时长 ≈ 1.4s**（KDoc 声明 8.0s，差约 5.7×）且**随帧率变化**。
+ * 迁移后改为基类 `fx.dt`（帧间差、已钳 100ms、首帧为 0）⇒ 描线恢复 8.0s 且帧率无关。
+ *
+ * ## ⛔ 随机源为什么不复用基类的 `rng`（§12.4 偏差）
+ * `FunctionLibrary.weightedShuffle` 的形参是 `kotlin.random.Random`（内部用 `nextInt`），
+ * 而基类给的是 `VisualizerRandom`（LCG，**无 `nextInt`**）；且 `HypnoticScheduleTest`
+ * 依赖 `seed` 构造参数注入的确定性 ⇒ 保留一个**改名**的 `shuffleRng`（不与基类 `rng` 撞名）。
  */
 class HypnoticFunctionRenderer(
     private val seed: Long = System.nanoTime()   // 生产用默认；测试注入固定值断言确定性
-) : VisualizerRenderer {
+) : RendererFx() {
 
     override val theme = VisualizerTheme.HYPNOTIC_FUNCTION
+
+    /** §B8-④ 收尾后处理（暗角 + 颗粒）。`FxLevel.OFF` 档位下整段零开销 */
+    override val postFx = PostFx(vignette = 0.44f, grain = 0.028f)
 
     companion object {
         const val DRAW_MS = 8000f
@@ -59,6 +88,42 @@ class HypnoticFunctionRenderer(
 
         /** y 方向绘制系数：plotH 的 88%（上下各 12% 留白，§4.2） */
         private const val Y_SPAN = 0.44f
+
+        // ── §B8 质感常量（T4.8）────────────────────────────────────
+
+        /** §B8-① 三级明度：主刻度（主轴）/ 次刻度（刻度短线）/ 细网格（5×5 内部线） */
+        const val AXIS_ALPHA = 0.55f
+        const val TICK_ALPHA = 0.30f
+        const val GRID_ALPHA = 0.14f
+
+        /** §B8-① 线宽同步分档（§B8 只给 alpha；问题描述是"同色单线"⇒ 一并分宽，见 §12.4） */
+        const val AXIS_STROKE_W = 2.6f
+        const val TICK_STROKE_W = 1.8f
+        const val GRID_STROKE_W = 1.2f
+
+        /** §B8-② 曲线：主线（有厚度）+ 上方高光线（受光侧） */
+        const val MAIN_STROKE_W = 2.2f
+        const val HIGHLIGHT_STROKE_W = 0.9f
+        const val MAIN_ALPHA_BASE = 0.9f
+        const val HIGHLIGHT_ALPHA_BASE = 0.82f
+        const val HIGHLIGHT_WHITE_MIX = 0.6f
+
+        /** §B8-② 高光线相对主线的**上移量**（px）——"受光侧"就来自这一条 */
+        const val HIGHLIGHT_OFFSET = 0.8f
+
+        /** §B8-③ 方格纸底纹不透明度 */
+        const val PAPER_ALPHA = 0.10f
+
+        /**
+         * 描线累加（§B8 dt 化）。⛔ **纯函数** ⇒ 门禁直调它验证"帧率无关"，
+         * 不必在测试里复制算法（复制必然漂移）。
+         *
+         * @param accumulatorMs 已累计毫秒
+         * @param dtSec         帧间秒（来自 `fx.dt`，基类已算差并钳 100ms）
+         * @param speed         音频驱动的速度系数
+         */
+        internal fun advanceStroke(accumulatorMs: Float, dtSec: Float, speed: Float): Float =
+            accumulatorMs + dtSec * 1000f * speed
 
         /** 状态迁移纯函数（§13.1 可测）：返回下一态，null = 保持。 */
         internal fun nextPhase(phase: Phase, elapsedMs: Long, drawDone: Boolean): Phase? = when (phase) {
@@ -94,7 +159,9 @@ class HypnoticFunctionRenderer(
     private var particlesOn = false
 
     // ── 随机调度 ──
-    private val rng = Random(seed)           // 构造期一次，永不重取（§7.3）
+    // ⛔ 不用基类的 `rng`（VisualizerRandom，无 nextInt）—— weightedShuffle 的形参是
+    //    kotlin.random.Random，且 HypnoticScheduleTest 靠 `seed` 注入确定性（见 §12.4）。
+    private val shuffleRng = Random(seed)    // 构造期一次，永不重取（§7.3）
     private var order = IntArray(0)
     private var orderPtr = 0
 
@@ -134,7 +201,17 @@ class HypnoticFunctionRenderer(
     private val axisPath = Path()
     private val tickPath = Path()
     private val glowStroke = Stroke(width = 10f, cap = StrokeCap.Round, join = StrokeJoin.Round)
-    private val mainStroke = Stroke(width = 2.6f, cap = StrokeCap.Round, join = StrokeJoin.Round)
+
+    /** §B8-② 主线：有厚度的"绳" */
+    private val mainStroke = Stroke(width = MAIN_STROKE_W, cap = StrokeCap.Round, join = StrokeJoin.Round)
+
+    /** §B8-② 法线高光线（上移 `HIGHLIGHT_OFFSET` px ⇒ 曲线有受光侧） */
+    private val highlightStroke = Stroke(width = HIGHLIGHT_STROKE_W, cap = StrokeCap.Round, join = StrokeJoin.Round)
+
+    /** §B8-① 三级明度的线宽档：主轴（最亮最粗）/ 次刻度 / 细网格（最暗最细） */
+    private val axisStroke = Stroke(width = AXIS_STROKE_W, cap = StrokeCap.Round, join = StrokeJoin.Round)
+    private val tickStroke = Stroke(width = TICK_STROKE_W, cap = StrokeCap.Round, join = StrokeJoin.Round)
+    private val gridStroke = Stroke(width = GRID_STROKE_W, cap = StrokeCap.Round, join = StrokeJoin.Round)
     private val labelPaint = Paint().apply {
         isAntiAlias = true
         textSize = 34f
@@ -159,22 +236,26 @@ class HypnoticFunctionRenderer(
     private var mainColor = Color(0xFF7DE2FF)
     private var glowColor = Color(0xFF7DE2FF)
 
+    /** §B8-② 高光线色：`towardWhite(mainColor, 0.6f)`，随 palette 变化重算（零每帧分配） */
+    private var highlightColor = Color(0xFF7DE2FF)
+
     // ── 生命周期 ────────────────────────────────────────────────
 
-    override fun onEnter(ctx: RenderContext) {
+    protected override fun onEnterContent(ctx: RenderContext) {
         phase = Phase.DRAW
-        phaseStartMs = 0L
+        // ⛔ 哨兵取 -1 而非 0：`AudioFrame.timeMs` 首帧可能恰为 0（`FrameClock` 同一坑）
+        phaseStartMs = -1L
         drawAccumulator = 0f
         dissolveP = 0f
         needsSample = true
         // 洗牌序列：构造期即建，切歌不重置（§7.1/§7.3）
         order = IntArray(FunctionLibrary.ALL.size) { it }
-        FunctionLibrary.weightedShuffle(rng, order, -1)
+        FunctionLibrary.weightedShuffle(shuffleRng, order, -1)
         orderPtr = 0
         pickNext()
     }
 
-    override fun onExit() {
+    protected override fun onExitContent() {
         particlesOn = false
         formula = null
     }
@@ -183,7 +264,7 @@ class HypnoticFunctionRenderer(
     private fun pickNext() {
         if (orderPtr >= order.size) {
             val lastIdx = order[order.size - 1]
-            FunctionLibrary.weightedShuffle(rng, order, lastIdx)
+            FunctionLibrary.weightedShuffle(shuffleRng, order, lastIdx)
             orderPtr = 0
         }
         currentIdx = order[orderPtr++]
@@ -213,7 +294,7 @@ class HypnoticFunctionRenderer(
     private fun resample() {
         val d = def ?: return
         segCount = FunctionLibrary.sample(d, n, pts, segs, axis, domain)
-        for (k in 0 until n) jitterPhase[k] = rng.nextFloat() * 2f * PI.toFloat()
+        for (k in 0 until n) jitterPhase[k] = shuffleRng.nextFloat() * 2f * PI.toFloat()
         particlesOn = false
         needsSample = false
         needsRemap = true
@@ -339,14 +420,15 @@ class HypnoticFunctionRenderer(
 
     // ── 绘制 ────────────────────────────────────────────────────
 
-    override fun DrawScope.draw(frame: AudioFrame, ctx: RenderContext) {
+    override fun DrawScope.drawContent(frame: AudioFrame, ctx: RenderContext, fx: FxFrame) {
         val w = size.width
         val h = size.height
         if (w < 2f || h < 2f) return
         ensureBuffers(ctx.quality)
 
-        val now = ctx.nowMs
-        if (phaseStartMs == 0L) {
+        // ⛔ 时钟只从 `fx.nowMs`（= `frame.timeMs`）取，绝不用 `ctx.nowMs`（§四 G13 重复 ⑥）
+        val now = fx.nowMs
+        if (phaseStartMs < 0L) {
             phaseStartMs = now
             needsSample = true
         }
@@ -359,7 +441,14 @@ class HypnoticFunctionRenderer(
         // 色彩（palette 变化才重算）
         refreshColors(ctx)
 
-        val dt = ((now - phaseStartMs) / 1000f).coerceIn(0f, 0.1f)
+        // §B8-③ 方格纸底纹（1 次 drawImage）。⛔ 不随 FxLevel 关闭 —— 它承担"不再浮在纯黑上"
+        val iw = w.toInt().coerceIn(1, 4096)
+        val ih = h.toInt().coerceIn(1, 4096)
+        ProceduralTexture.ensure(iw, ih)
+        ProceduralTexture.tile(ProceduralTexture.Id.PAPER)?.let {
+            drawImage(it, dstSize = IntSize(iw, ih), alpha = PAPER_ALPHA)
+        }
+
         val elapsed = (now - phaseStartMs).coerceAtLeast(0L)
 
         val axisAlpha = if (phase == Phase.GAP) 0.15f else 1f
@@ -367,10 +456,13 @@ class HypnoticFunctionRenderer(
         drawTickLabels()
         drawFormula(frame, ctx, elapsed)
 
+        // ⛔ 帧间 dt 一律取 `fx.dt`（基类已算差 + 钳 100ms + 首帧为 0）。
+        //    旧写法 `(now - phaseStartMs) / 1000f` 是**相位内累计时间**（不是帧间差），
+        //    且被钳到 0.1s ⇒ 描线实际 ≈ 1.4s 且随帧率变化（见类 KDoc）。
         when (phase) {
-            Phase.DRAW -> drawStroke(frame, ctx, w, h, dt)
+            Phase.DRAW -> drawStroke(frame, ctx, w, h, fx.dt)
             Phase.HOLD -> drawStill(frame, ctx, w, h, elapsed)
-            Phase.DISSOLVE -> drawDissolve(frame, ctx, w, h, elapsed, dt)
+            Phase.DISSOLVE -> drawDissolve(frame, ctx, w, h, elapsed, fx.dt)
             Phase.GAP -> drawGap()
         }
 
@@ -385,6 +477,8 @@ class HypnoticFunctionRenderer(
             val base = if (ctx.palette == CoverPalette.Fallback) Color(0xFF7DE2FF) else accent
             mainColor = VisualizerMath.neonize(base)
             glowColor = mainColor
+            // §B8-② 高光线：向白插值 0.6 —— 只在 palette 变化时算，零每帧分配
+            highlightColor = VisualizerMath.towardWhite(mainColor, HIGHLIGHT_WHITE_MIX)
         }
     }
 
@@ -392,7 +486,7 @@ class HypnoticFunctionRenderer(
     private fun DrawScope.drawStroke(frame: AudioFrame, ctx: RenderContext, w: Float, h: Float, dt: Float) {
         if (segCount == 0) return
         val speed = 1f + frame.pulse * 0.15f
-        drawAccumulator += dt * 1000f * speed
+        drawAccumulator = advanceStroke(drawAccumulator, dt, speed)
         val progress = (drawAccumulator / DRAW_MS).coerceIn(0f, 1f)
         val idx = (progress * (n - 1)).toInt().coerceIn(0, n - 1)
         val frac = progress * (n - 1) - idx
@@ -415,10 +509,11 @@ class HypnoticFunctionRenderer(
             }
             // 末端插值（消除步进感，§8.4）
             if (idx in start..end - 1 && frac > 0f) {
-                val fx = VisualizerMath.lerp(screen[idx * 2], screen[(idx + 1) * 2], frac)
-                val fy = VisualizerMath.lerp(screen[idx * 2 + 1], screen[(idx + 1) * 2 + 1], frac)
-                curvePath.lineTo(fx, fy)
-                headX = fx; headY = fy
+                // ⛔ 局部量不叫 `fx` —— 那个名字已被基类帧对象 `FxFrame` 占用（避免误读）
+                val lerpX = VisualizerMath.lerp(screen[idx * 2], screen[(idx + 1) * 2], frac)
+                val lerpY = VisualizerMath.lerp(screen[idx * 2 + 1], screen[(idx + 1) * 2 + 1], frac)
+                curvePath.lineTo(lerpX, lerpY)
+                headX = lerpX; headY = lerpY
             } else if (idx == end) {
                 headX = screen[end * 2]; headY = screen[end * 2 + 1]
             }
@@ -426,7 +521,14 @@ class HypnoticFunctionRenderer(
 
         val glowA = 0.16f + frame.energy * 0.14f
         drawPath(curvePath, glowColor, alpha = glowA, style = glowStroke, blendMode = BlendMode.Plus)
-        drawPath(curvePath, mainColor, alpha = (0.85f + frame.bass * 0.1f).coerceAtMost(1f), style = mainStroke)
+        val mainA = (MAIN_ALPHA_BASE + frame.bass * 0.08f).coerceAtMost(0.98f)
+        drawPath(curvePath, mainColor, alpha = mainA, style = mainStroke)
+        // §B8-② 法线高光线：整体上移 `HIGHLIGHT_OFFSET` px ⇒ 曲线有**受光侧**。
+        // `translate` 是 `withTransform` 的薄封装，**不分配对象**（§15.4-A7，仓库既有用法）
+        val hiA = (HIGHLIGHT_ALPHA_BASE + frame.energy * 0.08f).coerceAtMost(0.95f)
+        translate(0f, -HIGHLIGHT_OFFSET) {
+            drawPath(curvePath, highlightColor, alpha = hiA, style = highlightStroke)
+        }
 
         if (headX.isFinite()) {
             val headR = 10f * (1f + frame.treble * 0.3f)
@@ -464,7 +566,11 @@ class HypnoticFunctionRenderer(
         val energyGlow = 0.16f + frame.energy * 0.14f
         val glowA = energyGlow * (0.7f + 0.3f * (0.5f + 0.5f * sin(holdT * 2f * PI.toFloat())))
         drawPath(curvePath, glowColor, alpha = glowA, style = glowStroke, blendMode = BlendMode.Plus)
-        drawPath(curvePath, mainColor, style = mainStroke)
+        drawPath(curvePath, mainColor, alpha = MAIN_ALPHA_BASE, style = mainStroke)
+        // §B8-② HOLD 期同样保留受光侧（与 DRAW 期观感一致）
+        translate(0f, -HIGHLIGHT_OFFSET) {
+            drawPath(curvePath, highlightColor, alpha = HIGHLIGHT_ALPHA_BASE, style = highlightStroke)
+        }
     }
 
     // ── DISSOLVE：双档溃散（§6）──
@@ -566,9 +672,9 @@ class HypnoticFunctionRenderer(
                 if (mag > 0.001f) {
                     tx = tx / mag * 60f; ty = ty / mag * 60f
                 }
-                particleBuf[i + 2] = tx + (rng.nextFloat() - 0.5f) * 80f
-                particleBuf[i + 3] = ty + (rng.nextFloat() - 0.5f) * 80f - 30f
-                particleBuf[i + 4] = DISSOLVE_MS * (0.7f + rng.nextFloat() * 0.3f)
+                particleBuf[i + 2] = tx + (shuffleRng.nextFloat() - 0.5f) * 80f
+                particleBuf[i + 3] = ty + (shuffleRng.nextFloat() - 0.5f) * 80f - 30f
+                particleBuf[i + 4] = DISSOLVE_MS * (0.7f + shuffleRng.nextFloat() * 0.3f)
                 particleBuf[i + 5] = 0f
                 particlePoint[cnt] = k
                 cnt++
@@ -585,12 +691,12 @@ class HypnoticFunctionRenderer(
     private fun initDissolve() {
         dissolveP = 0f
         particlesOn = false
-        for (k in 0 until n) vanishAt[k] = curveVanishThreshold(rng)
+        for (k in 0 until n) vanishAt[k] = curveVanishThreshold(shuffleRng)
         val f = formula
         if (f != null) {
             for (k in 0 until f.runCount) {
-                runVanishAt[k] = runVanishThreshold(rng)
-                runJitter[k] = rng.nextFloat() * 2f * PI.toFloat()
+                runVanishAt[k] = runVanishThreshold(shuffleRng)
+                runJitter[k] = shuffleRng.nextFloat() * 2f * PI.toFloat()
             }
         }
     }
@@ -620,7 +726,8 @@ class HypnoticFunctionRenderer(
             val gy = top + plotH * g / 5f
             gridPath.moveTo(left, gy); gridPath.lineTo(right, gy)
         }
-        drawPath(gridPath, axisColor.copy(alpha = 0.14f * alphaScale), style = mainStroke)
+        // §B8-① 细网格（三级明度最低档：0.14，线宽最细）
+        drawPath(gridPath, axisColor.copy(alpha = GRID_ALPHA * alphaScale), style = gridStroke)
 
         // 主轴：数学 x=0 / y=0（归一化边界 ±1.05 内可见——y=0 恰在自动范围边缘时
         // ty 可达 ±1.0001，绘制时钳制到绘图区）
@@ -643,7 +750,8 @@ class HypnoticFunctionRenderer(
             axisPath.moveTo(right, y0); axisPath.lineTo(right - 12f, y0 - 6f)
             axisPath.moveTo(right, y0); axisPath.lineTo(right - 12f, y0 + 6f)
         }
-        drawPath(axisPath, axisColor.copy(alpha = 0.55f * alphaScale), style = mainStroke)
+        // §B8-① 主刻度：主轴 x=0 / y=0（最亮、最粗）
+        drawPath(axisPath, axisColor.copy(alpha = AXIS_ALPHA * alphaScale), style = axisStroke)
 
         // 刻度短线（沿主轴）
         tickPath.reset()
@@ -661,7 +769,8 @@ class HypnoticFunctionRenderer(
                 tickPath.moveTo(x0 - 6f, tickY[i]); tickPath.lineTo(x0 + 6f, tickY[i])
             }
         }
-        drawPath(tickPath, axisColor.copy(alpha = 0.4f * alphaScale), style = mainStroke)
+        // §B8-① 次刻度：沿主轴的刻度短线（中间档：0.30）
+        drawPath(tickPath, axisColor.copy(alpha = TICK_ALPHA * alphaScale), style = tickStroke)
     }
 
     private fun DrawScope.drawTickLabels() {

@@ -55,14 +55,14 @@ class FxCoverageScanTest {
         "ParticleTextRenderer",        // E19 粒子文字（§B5 + §12.4 补后处理 暗角 0.46 + 颗粒 0.030）
         "PlasmaFlowRenderer",          // E20 等离子流场（§B6 暗角 0.48 + 颗粒 0.030）
         "LyricsDotMatrixRenderer",     // E23 歌词点阵（§B7 暗角 0.44 + 颗粒 0.026）
+        "HypnoticFunctionRenderer",    // E25 催眠（§B8 暗角 0.44 + 颗粒 0.028）
     )
 
     // ── 豁免名单：阶段推进时逐条移入 covered（理由必须写明，便于复核） ──
     private val exempt = mapOf(
         // ⭐ 阶段 3 · 批次 A（E03/E05/E07/E12/E13/E15/E17/E24/E30/E31/E32）已**全部**移入 covered
-        // ⭐ 阶段 4 · 批次 B 自 T4.1 起逐套移入（E11 / E14 / E16 / E18 / E19 / E20 / E23 已完成）
-        // 阶段 4 · 批次 B 剩余 3 套
-        "HypnoticFunctionRenderer" to "S4 批次 B（E25 催眠）",
+        // ⭐ 阶段 4 · 批次 B 自 T4.1 起逐套移入（E11 / E14 / E16 / E18 / E19 / E20 / E23 / E25 已完成）
+        // 阶段 4 · 批次 B 剩余 2 套
         "FractalTreeRenderer" to "S4 批次 B（E34 分形）",
         "LightBeamsRenderer" to "S4 批次 B（E35 光轴）",
         // 阶段 5 · 批次 C 7 套
