@@ -60,8 +60,11 @@ abstract class BarSpectrumRenderer : VisualizerRenderer {
  * E03 `TUNNEL_FLY` — 隧道穿越
  *
  * 同心环沿 Z 轴迎面飞来。WebGL 霓虹隧道的 2D 平替，性价比最高。
+ *
+ * ⛔ 已迁移到 [RendererFx] 基类（§5.5 S1.5 试点）：`postFx` 默认 `NONE`
+ * ⇒ 迁移逐像素不变；只实现 `onEnterContent` / `drawContent`。
  */
-class TunnelRenderer : VisualizerRenderer {
+class TunnelRenderer : RendererFx() {
 
     override val theme = VisualizerTheme.TUNNEL_FLY
 
@@ -70,9 +73,9 @@ class TunnelRenderer : VisualizerRenderer {
     // 替代最多 ~192 次独立 drawCircle；3 次 drawPath 换取原视觉层次
     private val dotPaths = Array(3) { Path() }
 
-    override fun onEnter(ctx: RenderContext) { offset = 0f }
+    override fun onEnterContent(ctx: RenderContext) { offset = 0f }
 
-    override fun DrawScope.draw(frame: AudioFrame, ctx: RenderContext) {
+    override fun DrawScope.drawContent(frame: AudioFrame, ctx: RenderContext, fx: FxFrame) {
         offset += 1.2f + frame.bass * 6f
         if (frame.beat) offset += 8f
 
