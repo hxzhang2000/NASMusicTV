@@ -24,6 +24,12 @@ class ParticlePool(val capacity: Int, private val rng: VisualizerRandom) {
         const val LIFE = 4
         const val HUE = 5
         const val STRIDE = 6
+
+        /**
+         * [updateAttract] 的每帧寿命衰减（§B5-P1）。
+         * `1.0f / 0.004f = 250` 帧 ⇒ 60fps 下约 **4.2 s** 一个生命周期。
+         */
+        const val LIFE_DECAY = 0.004f
     }
 
     val data = FloatArray(capacity * STRIDE)
@@ -91,8 +97,37 @@ class ParticlePool(val capacity: Int, private val rng: VisualizerRandom) {
         }
     }
 
-    /** 吸附到目标点（E19 粒子文字用） */
-    fun updateAttract(targets: FloatArray, accel: Float, jitter: Float) {
+    /**
+     * 吸附到目标点（E19 粒子文字用）。
+     *
+     * **§B5-P1（T4.5）：`LIFE <= 0` 时不再 `removeAt`，改为「从画布外缘重生 + 复位寿命」。**
+     *
+     * ⛔ 原实现是 swap-remove，同时造成两个缺陷：
+     * ① `count` 每降 1，槽位 `i` 对应的 `targets[i]` 就不再是那个粒子的目标点 ⇒ **目标错位**，
+     *    文字逐渐"糊掉"；
+     * ② E19 **只在 `caption` 变化时 `spawn`**，粒子全灭后**没有任何重生路径**
+     *    ⇒ 250 帧（≈ 4.2 s @60fps）后 `count` 归零、**画面永久空白**（直到切效果 / 换歌）。
+     *
+     * 改为重生后 `count` 恒 == `capacity`，`i → targets[i]` **永不错位**，
+     * 且每个粒子每约 4.2 s 从外缘"流"回文字一次（轻微流动感）。
+     *
+     * ⚠️ **本方法专属语义** —— 其余使用方走 [update]（仍是 swap-remove），不受影响。
+     *
+     * @param targets 目标点（长度 ≥ `capacity * 2`，索引与粒子槽位**一一对应**）
+     * @param accel   吸附加速度系数
+     * @param jitter  随机抖动
+     * @param w       画布宽（重生投放用）
+     * @param h       画布高（重生投放用）
+     * @param decay   每帧寿命衰减（默认 [LIFE_DECAY]）
+     */
+    fun updateAttract(
+        targets: FloatArray,
+        accel: Float,
+        jitter: Float,
+        w: Float,
+        h: Float,
+        decay: Float = LIFE_DECAY
+    ) {
         var i = 0
         while (i < count) {
             val o = i * STRIDE
@@ -104,9 +139,41 @@ class ParticlePool(val capacity: Int, private val rng: VisualizerRandom) {
             data[o + VY] *= 0.86f
             data[o + X] += data[o + VX]
             data[o + Y] += data[o + VY]
-            data[o + LIFE] -= 0.004f
-            if (data[o + LIFE] <= 0f) removeAt(i) else i++
+            data[o + LIFE] -= decay
+            // ⛔ 不 removeAt、不 i++ 之外的分支：count 恒定 ⇒ 槽位与 targets 永远对齐
+            if (data[o + LIFE] <= 0f) respawnFromEdge(i, w, h)
+            i++
         }
+    }
+
+    /**
+     * §B5-P1 从画布**四边**随机一点重新投放，并复位速度与寿命。
+     *
+     * 刻意**避开画布中部** ⇒ 观感是"从外向内被吸回文字"，而不是原地闪烁。
+     */
+    private fun respawnFromEdge(i: Int, w: Float, h: Float) {
+        val o = i * STRIDE
+        when ((rng.next() * 4f).toInt().coerceIn(0, 3)) {
+            0 -> {
+                data[o + X] = rng.next() * w
+                data[o + Y] = 0f
+            }
+            1 -> {
+                data[o + X] = rng.next() * w
+                data[o + Y] = h
+            }
+            2 -> {
+                data[o + X] = 0f
+                data[o + Y] = rng.next() * h
+            }
+            else -> {
+                data[o + X] = w
+                data[o + Y] = rng.next() * h
+            }
+        }
+        data[o + VX] = 0f
+        data[o + VY] = 0f
+        data[o + LIFE] = 1f
     }
 
     private fun removeAt(i: Int) {
