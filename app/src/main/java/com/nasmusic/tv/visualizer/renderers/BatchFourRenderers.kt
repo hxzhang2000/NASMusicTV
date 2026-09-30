@@ -12,13 +12,18 @@ import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntSize
 import com.nasmusic.tv.data.model.VisualQuality
 import com.nasmusic.tv.data.model.VisualizerTheme
 import com.nasmusic.tv.visualizer.AudioFrame
 import com.nasmusic.tv.visualizer.RenderContext
 import com.nasmusic.tv.visualizer.VisualizerRandom
+import com.nasmusic.tv.visualizer.VisualizerMath
 import com.nasmusic.tv.visualizer.VisualizerRenderer
+import com.nasmusic.tv.visualizer.fx.ProceduralTexture
+import com.nasmusic.tv.visualizer.fx.Shading2D
 import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.floor
@@ -1323,33 +1328,196 @@ class ConcentricGearsRenderer : VisualizerRenderer {
 /**
  * E34 `FRACTAL_TREE` — 分形 · 极简分形树
  *
- * 视觉：屏幕底部中心一根不断分叉的极简树状结构（细线，无叶）。
- * 低音让主干变粗、分支向外生长（深度逐层展开）；高频让分支尖端闪烁电弧。
+ * 视觉：屏幕底部中心一根不断分叉的树状结构。低音让主干变粗、分支向外生长
+ * （深度逐层展开）；高频让分支尖端闪烁电弧。
  *
- * 实现：**不每帧递归**。onEnter 把分叉拓扑拍平进数组（每段记录深度/父段/角度系数），
- * 每帧只做端点计算 + 深度门控绘制。生长 = bass 驱动"展开深度"整数推进。
+ * 实现：**不每帧递归**。`onEnterContent` 把分叉拓扑拍平进数组（每段记录深度/父段/
+ * 角度系数），每帧只做端点计算 + 深度门控绘制。生长 = bass 驱动"展开深度"整数推进。
+ *
+ * ## §B9 质感升级（T4.9）
+ * ① **锥度 + 受光**：线宽由「线性递减」改为**几何递减** `TRUNK_STROKE_W · TAPER^d`
+ *    （`TAPER = 0.72f`，与每层长度衰减同系数）；**颜色随层级向亮端插值**
+ *    （`depthColorArgb` 表：第 0 层 = `accent`，第 `MAX_DEPTH` 层 =
+ *    `towardWhite(accent, TIP_LIGHT_MIX)`）⇒ **越往梢越细越亮**。
+ *    ⚠️ 同时把 alpha 曲线由「明显递减」改为**近平** —— 否则「顶梢更亮」会被 alpha
+ *    的衰减抵消（见 §12.4）。
+ * ② **叶/花**：在当前**生长前沿**的末级节点画**旋转椭圆叶形**（长轴 = 短轴 ×
+ *    `LEAF_ASPECT` = 2.2，长轴按 `Shading2D.LIGHT_ANGLE_DEG` 定向）。tip 按下标
+ *    **固定分 3 桶**（`leafBucketOf`），每桶的叶长由**一条 spectrum 频段**驱动
+ *    （`LEAF_BANDS` = 低 / 中 / 高）⇒ **3 档大小**；每桶合批成 **1 条 `Path`**（共 3 条）。
+ * ③ **背景纵深**：`Shading2D.shadeBrushCached` 的**径向纵深**（树根处微亮 → 四角暗，
+ *    半径 = 半对角线）+ `ProceduralTexture.Id.STARFIELD` 星野 tile。
+ * ④ **后处理**：`postFx = PostFx(vignette = 0.48f, grain = 0.030f)`。
+ *
+ * ## ⛔ 迁移到 [RendererFx] 时顺带修掉的缺陷
+ * 旧实现用 `ctx.nowMs` + `lastMs == 0L` 哨兵算帧间差；[FrameClock] 的 KDoc 明确
+ * **不得用 `lastMs == 0L` 当"未初始化"哨兵**（首帧 `timeMs` 可能恰为 0）⇒ 改走
+ * `fx.dt`，哨兵由 `FrameClock.initialized` 承担。⚠️ 本效果的生长量
+ * （`depthF += growRate · dt`）**本来就是 dt 化的**，无帧率绑定缺陷（与 T4.1–T4.8 不同）。
+ *
+ * ## ⛔ 叶形的成本（有意取舍，见 §12.4）
+ * 每片叶 = `moveTo` + 4 × `cubicTo` —— ⛔ **不能**用 `Path.addOval(Rect)`：Compose 的
+ * `addOval` **只有对象重载**（每片叶一次 `Rect` 分配），且**轴对齐**椭圆表达不了
+ * 「按光向定向」。MEDIUM 档终态叶数 = 生长前沿节点数 = `2^7 = 128` ⇒ 路径顶点写入
+ * ≈ **640 次/帧**。换来的是 §B9 的验收「末级有**叶**」。⛔ 叶**合批成 3 条 `Path`**
+ * （不是 128 次 `drawPath`）。⚠️ §7.5 的成本表**低估**了这一项（脚本不把「循环体内
+ * 调用的 helper」按调用次数放大，见 §四 G15 同族）。
  *
  * 性能红线：draw 内零分配。
  */
-class FractalTreeRenderer : VisualizerRenderer {
+class FractalTreeRenderer : RendererFx() {
 
     override val theme = VisualizerTheme.FRACTAL_TREE
 
-    private companion object {
+    /** §B9-④ 后处理（⛔ 数值字面量，基类要求） */
+    override val postFx = PostFx(vignette = 0.48f, grain = 0.030f)
+
+    internal companion object {
         const val MAX_DEPTH = 8
-        /** 展开深度缓动速率 */
+
+        /** 展开深度缓动速率（bass 系数） */
         const val DEPTH_SPEED = 1.8f
+
+        /** 安静段落也缓慢生长的底盘速率（深度/秒） */
+        const val DEPTH_BASE = 0.15f
+
+        /** 正在展开的那一层（分数层）的长度 / 叶尺寸折算系数 */
+        const val GROW_FRACTIONAL_K = 0.8f
+
+        /** 每层长度衰减 */
+        const val LEN_K = 0.72f
+
         const val ARC_JAG = 3             // 电弧折线段数
+
+        // ── §B9-① 锥度 + 受光 ────────────────────────────────────────
+        /** 主干线宽（px） */
+        const val TRUNK_STROKE_W = 2.6f
+
+        /** 每层线宽衰减系数（几何级数；与 [LEN_K] 同值） */
+        const val TAPER = 0.72f
+
+        /** 线宽下限（保证末梢仍可见） */
+        const val MIN_STROKE_W = 0.7f
+
+        /** 顶梢向白插值的比例 ⇒ 越往梢越亮（= 受光） */
+        const val TIP_LIGHT_MIX = 0.55f
+
+        /** 主干 alpha */
+        const val SEG_ALPHA_BASE = 0.90f
+
+        /** 每层 alpha 衰减（⛔ 只留很小斜率，见类 KDoc） */
+        const val SEG_ALPHA_FALLOFF = 0.025f
+
+        /** alpha 下限 */
+        const val SEG_ALPHA_MIN = 0.60f
+
+        // ── §B9-② 叶形 ──────────────────────────────────────────────
+        /** 叶桶数（= 3 档大小） */
+        const val LEAF_BUCKETS = 3
+
+        /** 叶长轴 / 短轴（§B9-②） */
+        const val LEAF_ASPECT = 2.2f
+
+        /** 叶半长轴基准（px） */
+        const val LEAF_R_MIN = 2.4f
+
+        /** 叶半长轴受频谱驱动的增益 */
+        const val LEAF_R_GAIN = 2.1f
+
+        /** 叶填充色向白插值的比例（比枝干更亮 ⇒ 受光） */
+        const val LEAF_LIGHT_MIX = 0.72f
+
+        /** 椭圆 4 段三次贝塞尔的 kappa（标准值 0.5523） */
+        const val KAPPA = 0.5522847f
+
+        /** 椭圆的三次贝塞尔段数（每段 3 个控制点 ⇒ 共 12 个采样点） */
+        const val LEAF_CUBIC_SEGS = 4
+
+        /** 3 桶各自的填充 alpha（"大"桶更实 ⇒ 叶有层次） */
+        val LEAF_ALPHAS = floatArrayOf(0.55f, 0.74f, 0.94f)
+
+        /** 3 桶各自绑定的 spectrum 频段（低 / 中 / 高） */
+        val LEAF_BANDS = intArrayOf(6, 21, 42)
+
+        /** 单位椭圆 12 个采样点的**长轴方向**局部坐标 */
+        val LEAF_U = floatArrayOf(
+            1f, 1f, KAPPA, 0f, -KAPPA, -1f, -1f, -1f, -KAPPA, 0f, KAPPA, 1f
+        )
+
+        /** 单位椭圆 12 个采样点的**短轴方向**局部坐标 */
+        val LEAF_V = floatArrayOf(
+            0f, KAPPA, 1f, 1f, 1f, KAPPA, 0f, -KAPPA, -1f, -1f, -1f, -KAPPA
+        )
+
+        // ── §B9-③ 背景纵深 ───────────────────────────────────────────
+        /** 径向纵深整体 alpha */
+        const val BG_DEPTH_ALPHA = 0.30f
+
+        /** 星野 tile alpha */
+        const val STAR_ALPHA = 0.32f
+
+        /** 背景纵深底色（accent）的暗化系数 */
+        const val BG_DARKEN = 0.62f
+
+        /**
+         * `Shading2D.shadeBrushCached` 的**具名盐**。⛔ `Shading2D` 是 Kotlin **object**
+         * ⇒ 它的 16 槽 Brush 缓存**进程级共享**；不带盐会在切换效果后复用别人的
+         * 半径与基色（§四 G4 / §12.4）。
+         */
+        const val E34_KEY_SALT = 0x34343434L
+
+        // ── 纯函数（供门禁直调，⛔ 不复制算法）────────────────────────
+
+        /** 生长：`depthF` 的 dt 化推进（30 / 60 / 120 fps 下 1 秒累计量恒等） */
+        internal fun advanceDepth(depthF: Float, dtSec: Float, bass: Float, maxDepth: Int): Float =
+            (depthF + (DEPTH_BASE + bass * DEPTH_SPEED) * dtSec).coerceAtMost(maxDepth.toFloat())
+
+        /** 深度门控：本段可见长度系数（正在展开的层做分数长度 = 生长感） */
+        internal fun growAt(d: Int, depthInt: Int, depthFrac: Float): Float = when {
+            d <= depthInt -> 1f
+            d == depthInt + 1 -> depthFrac * GROW_FRACTIONAL_K
+            else -> 0f
+        }
+
+        /** 叶桶下标（按下标**固定**分桶 ⇒ 桶不逐帧跳变，避免叶尺寸闪烁） */
+        internal fun leafBucketOf(index: Int): Int {
+            val b = index % LEAF_BUCKETS
+            return if (b < 0) b + LEAF_BUCKETS else b
+        }
+
+        /** 某桶的叶半长轴（由该桶绑定的 spectrum 频段驱动） */
+        internal fun leafRadiusOf(spectrumValue: Float): Float =
+            LEAF_R_MIN * (1f + spectrumValue.coerceIn(0f, 1f) * LEAF_R_GAIN)
+
+        /**
+         * 逐层受光色：第 0 层 = [baseArgb]、第 [depthCap] 层 = [tipArgb]，中间按**通道**
+         * 线性插值。⛔ 不用 `androidx.compose.ui.graphics.lerp`（它会走色彩空间转换）——
+         * 通道直插更省且**可单测**。
+         */
+        internal fun depthColorArgbOf(baseArgb: Int, tipArgb: Int, depth: Int, depthCap: Int): Int {
+            val t = if (depthCap <= 0) 0f else (depth.toFloat() / depthCap).coerceIn(0f, 1f)
+            return (chan(baseArgb, tipArgb, t, 24) shl 24) or
+                (chan(baseArgb, tipArgb, t, 16) shl 16) or
+                (chan(baseArgb, tipArgb, t, 8) shl 8) or
+                chan(baseArgb, tipArgb, t, 0)
+        }
+
+        /** 单通道线性插值（含 0..255 夹紧） */
+        private fun chan(baseArgb: Int, tipArgb: Int, t: Float, shift: Int): Int {
+            val b = (baseArgb shr shift) and 0xFF
+            val p = (tipArgb shr shift) and 0xFF
+            return (b + (p - b) * t).toInt().coerceIn(0, 255)
+        }
     }
 
-    /** 拓扑段数组（onEnter 预生成，最大 2^9-1 = 511 段） */
+    /** 拓扑段数组（onEnterContent 预生成，最大 2^9-1 = 511 段） */
     private var segDepth = IntArray(0)      // 深度 0=主干
     private var segParent = IntArray(0)     // 父段索引（-1=根）
     private var segSide = IntArray(0)       // -1 左枝 / +1 右枝 / 0 主干
     private var segAngleK = FloatArray(0)   // 相对父段的角度偏移系数
     private var segCount = 0
 
-    /** 每帧计算的端点（供递归画线） */
+    /** 每帧计算的端点（供深度门控画线用） */
     private var endX = FloatArray(0)
     private var endY = FloatArray(0)
     private var endAng = FloatArray(0)
@@ -1357,20 +1525,26 @@ class FractalTreeRenderer : VisualizerRenderer {
     /** 当前展开深度（0..MAX_DEPTH，bass 驱动缓慢推进） */
     private var depthF = 0f
 
-    private var lastMs = 0L
-
-    /** 当前展开深度上限（onEnter 时固化，避免每帧扫描） */
+    /** 当前展开深度上限（onEnterContent 时固化，避免每帧扫描） */
     private var maxDepth = 8
 
-    override fun onEnter(ctx: RenderContext) {
+    /** §B9-① 逐层受光色（ARGB 表；仅在 accent 变化时重算 ⇒ draw 期零分配零 JNI） */
+    private val depthColorArgb = IntArray(MAX_DEPTH + 1)
+    private var depthColorAccent = Int.MIN_VALUE
+    private var leafColorArgb = 0
+
+    /** §B9-② 叶形合批：3 桶各 1 条 `Path`（构造期建一次，draw 期只 `rewind`） */
+    private val leafPaths = arrayOf(Path(), Path(), Path())
+
+    protected override fun onEnterContent(ctx: RenderContext) {
         depthF = 0f
-        lastMs = 0L
+        depthColorAccent = Int.MIN_VALUE     // 强制下一帧重算逐层色
 
         // ── 画质分档：LOW 深度 6 / MED 7 / HIGH 8 ──
         maxDepth = when (ctx.quality) {
-            com.nasmusic.tv.data.model.VisualQuality.LOW -> 6
-            com.nasmusic.tv.data.model.VisualQuality.MEDIUM -> 7
-            com.nasmusic.tv.data.model.VisualQuality.HIGH -> MAX_DEPTH
+            VisualQuality.LOW -> 6
+            VisualQuality.MEDIUM -> 7
+            VisualQuality.HIGH -> MAX_DEPTH
         }
 
         // 生成拓扑（前序遍历）
@@ -1384,10 +1558,11 @@ class FractalTreeRenderer : VisualizerRenderer {
         endAng = FloatArray(cap)
         segCount = 0
 
-        var rng = 0xA11CEu
+        // ⛔ 局部量**不叫 `rng`** —— 基类有 `protected val rng`（名字遮蔽会被 lint 记警告）
+        var topoRng = 0xA11CEu
         fun nextRand(): Float {
-            rng = rng * 1664525u + 1013904223u
-            return (rng shr 8).toFloat() / 16777216f
+            topoRng = topoRng * 1664525u + 1013904223u
+            return (topoRng shr 8).toFloat() / 16777216f
         }
 
         // 迭代式前序生成（深度优先，父段先于子段）
@@ -1432,35 +1607,65 @@ class FractalTreeRenderer : VisualizerRenderer {
         }
     }
 
-    override fun DrawScope.draw(frame: AudioFrame, ctx: RenderContext) {
+    override fun DrawScope.drawContent(frame: AudioFrame, ctx: RenderContext, fx: FxFrame) {
         val w = size.width
         val h = size.height
         if (w < 2f || h < 2f) return
 
-        val now = ctx.nowMs
-        if (lastMs == 0L) lastMs = now
-        val dtSec = ((now - lastMs) / 1000f).coerceIn(0f, 0.1f)
-        lastMs = now
-
-        // ── 生长：bass 驱动展开深度（含 energy 底盘保证安静歌也缓慢生长）──
-        val growRate = 0.15f + frame.bass * DEPTH_SPEED
-        depthF = (depthF + growRate * dtSec).coerceAtMost(maxDepth.toFloat())
+        // ── 生长：bass 驱动展开深度（含底盘速率保证安静歌也缓慢生长）──
+        // ⛔ dt 只从 fx 取（首帧 / 负差 / 上界钳制由 FrameClock 统一承担）
+        depthF = advanceDepth(depthF, fx.dt, frame.bass, maxDepth)
         val depthInt = depthF.toInt()
         val depthFrac = depthF - depthInt
 
         val accent = ctx.palette.accent
+        ensureDepthColors(accent)
 
-        // ── 主干基准 ──
+        // ── 主干基准（树根：底部中心）──
         val trunkLen = h * 0.22f
         val baseX = w * 0.5f
         val baseY = h * 0.88f
+
+        // ── §B9-③ 背景纵深：① 径向纵深（树根处微亮 → 四角暗）② 星野 tile ──
+        // 与 E13 / E15 / E32 同范式：背景**不随 FxLevel 关闭**（它承担"不再浮在纯黑上"），
+        // 按档位关的是 vignette / grain（见 postFx）。
+        val iw = w.toInt().coerceIn(1, 4096)
+        val ih = h.toInt().coerceIn(1, 4096)
+        ProceduralTexture.ensure(iw, ih)
+        drawRect(
+            brush = Shading2D.shadeBrushCached(
+                key = (w.toRawBits().toLong() shl 32) xor h.toRawBits().toLong() xor
+                    accent.toArgb().toLong() xor E34_KEY_SALT,
+                center = Offset(baseX, baseY),
+                radius = sqrt(w * w + h * h) * 0.5f,
+                base = VisualizerMath.darken(accent, BG_DARKEN),
+                contrast = 0.10f
+            ),
+            alpha = BG_DEPTH_ALPHA
+        )
+        ProceduralTexture.tile(ProceduralTexture.Id.STARFIELD)?.let {
+            drawImage(it, dstSize = IntSize(iw, ih), alpha = STAR_ALPHA)
+        }
+
+        // ── §B9-② 叶形：3 桶各合批 1 条 `Path`（尺寸由 3 条 spectrum 频段驱动）──
+        val sp = frame.spectrum
+        val leafR0 = leafRadiusOf(bandAt(sp, LEAF_BANDS[0]))
+        val leafR1 = leafRadiusOf(bandAt(sp, LEAF_BANDS[1]))
+        val leafR2 = leafRadiusOf(bandAt(sp, LEAF_BANDS[2]))
+        val ld = Shading2D.lightDir            // ⛔ 全库唯一主光方向
+        val ux = ld.x; val uy = ld.y           // 叶长轴方向
+        val vx = -uy; val vy = ux              // 叶短轴方向（法向）
+        var lb = 0
+        while (lb < LEAF_BUCKETS) {
+            leafPaths[lb].rewind()
+            lb++
+        }
 
         // ── 逐段计算端点（前序序保证父先于子）──
         var i = 0
         while (i < segCount) {
             val d = segDepth[i]
             val par = segParent[i]
-            val lenK = 0.72f                       // 每层长度衰减
             val px: Float; val py: Float; val pa: Float
             if (par < 0) {
                 px = baseX; py = baseY; pa = -1.5707964f   // -90°（向上）
@@ -1471,44 +1676,112 @@ class FractalTreeRenderer : VisualizerRenderer {
             val sway = frame.treble * 0.10f * d
             val ang = pa + segAngleK[i] * (0.85f + 0.15f * frame.mid) + sway * segSide[i]
             // 深度门控：正在展开的层做分数长度（生长感）
-            val grow = if (d <= depthInt) 1f else if (d == depthInt + 1) depthFrac * 0.8f else 0f
+            val grow = growAt(d, depthInt, depthFrac)
             if (grow <= 0f) {
                 endX[i] = px; endY[i] = py; endAng[i] = ang
                 i++
                 continue
             }
-            val len = trunkLen * lenK.pow(d) * grow * (0.9f + 0.2f * frame.bass)
+            val len = trunkLen * LEN_K.pow(d) * grow * (0.9f + 0.2f * frame.bass)
             endX[i] = px + cos(ang) * len
             endY[i] = py + sin(ang) * len
             endAng[i] = ang
             i++
         }
 
-        // ── 绘制：逐段画线，主干粗、末梢细 ──
+        // ── 绘制：逐段画线；§B9-① 主干粗、末梢细且**更亮** ──
         i = 0
         while (i < segCount) {
             val d = segDepth[i]
             val par = segParent[i]
-            val grow = if (d <= depthInt) 1f else if (d == depthInt + 1) depthFrac * 0.8f else 0f
+            val grow = growAt(d, depthInt, depthFrac)
             if (grow <= 0f) { i++; continue }
             val px: Float; val py: Float
             if (par < 0) { px = baseX; py = baseY } else { px = endX[par]; py = endY[par] }
             val ex = endX[i]; val ey = endY[i]
 
-            // 主干变粗：低音驱动；逐层变细
-            val baseW = (2.6f - d * 0.28f).coerceAtLeast(0.8f)
+            // §B9-① 锥度 = 几何递减；受光 = 逐层色表；主干由低音加粗
+            val baseW = (TRUNK_STROKE_W * TAPER.pow(d)).coerceAtLeast(MIN_STROKE_W)
             val width = baseW * (1f + frame.bass * 0.9f)
-            val alpha = (0.9f - d * 0.08f).coerceAtLeast(0.4f)
+            val alpha = (SEG_ALPHA_BASE - d * SEG_ALPHA_FALLOFF).coerceAtLeast(SEG_ALPHA_MIN)
+            val segColor = Color(depthColorArgb[d])
 
-            drawLine(accent, Offset(px, py), Offset(ex, ey), strokeWidth = width, alpha = alpha)
+            drawLine(segColor, Offset(px, py), Offset(ex, ey), strokeWidth = width, alpha = alpha)
 
             // ── 电弧：末梢段（最外两层）+ treble 超阈值时确定性抖动 ──
             if (d >= depthInt - 1 && depthInt >= 2 && frame.treble > 0.40f) {
-                drawArcJitter(px, py, ex, ey, width, accent, frame.seq, i)
+                drawArcJitter(px, py, ex, ey, width, segColor, frame.seq, i)
+            }
+
+            // ── §B9-② 生长前沿的末级节点长叶（尺寸 ∝ grow ⇒ 抽芽感）──
+            if (d >= depthInt) {
+                val bucket = leafBucketOf(i)
+                val r = when (bucket) {
+                    0 -> leafR0
+                    1 -> leafR1
+                    else -> leafR2
+                } * grow
+                buildLeaf(leafPaths[bucket], ex, ey, r, ux, uy, vx, vy)
             }
             i++
         }
+
+        // ── §B9-② 3 条叶 Path 一次性落笔（⛔ 不是 128 次 `drawPath`）──
+        val leafColor = Color(leafColorArgb)
+        lb = 0
+        while (lb < LEAF_BUCKETS) {
+            drawPath(leafPaths[lb], leafColor, alpha = LEAF_ALPHAS[lb])
+            lb++
+        }
     }
+
+    /**
+     * 把一片**旋转椭圆叶**追加进 [path]（中心 = 枝端 `(cx, cy)`；半长轴 [r] 沿主光向）。
+     *
+     * 成本 = 1 `moveTo` + [LEAF_CUBIC_SEGS] 次 `cubicTo`；⛔ 全程**零分配**
+     * （局部坐标表 [LEAF_U] / [LEAF_V] 是常量，`Path` 是构造期建好的成员）。
+     */
+    private fun buildLeaf(
+        path: Path,
+        cx: Float, cy: Float, r: Float,
+        ux: Float, uy: Float, vx: Float, vy: Float,
+    ) {
+        if (r <= 0.01f) return
+        val b = r / LEAF_ASPECT
+        val ax = r * ux; val ay = r * uy
+        val bx = b * vx; val by = b * vy
+        path.moveTo(cx + LEAF_U[0] * ax + LEAF_V[0] * bx, cy + LEAF_U[0] * ay + LEAF_V[0] * by)
+        var k = 0
+        while (k < LEAF_CUBIC_SEGS) {
+            val i1 = k * 3 + 1
+            val i2 = i1 + 1
+            val i3 = (i1 + 2) % 12
+            path.cubicTo(
+                cx + LEAF_U[i1] * ax + LEAF_V[i1] * bx, cy + LEAF_U[i1] * ay + LEAF_V[i1] * by,
+                cx + LEAF_U[i2] * ax + LEAF_V[i2] * bx, cy + LEAF_U[i2] * ay + LEAF_V[i2] * by,
+                cx + LEAF_U[i3] * ax + LEAF_V[i3] * bx, cy + LEAF_U[i3] * ay + LEAF_V[i3] * by,
+            )
+            k++
+        }
+        path.close()
+    }
+
+    /**
+     * §B9-① 逐层受光色 + 叶色（**仅在 `accent` 变化时重算** ⇒ draw 期零分配、零 JNI）。
+     * ⛔ 键就是 `accent.toArgb()`：色表**只**依赖 accent（不含 w/h / 能量）。
+     */
+    private fun ensureDepthColors(accent: Color) {
+        val argb = accent.toArgb()
+        if (argb == depthColorAccent) return
+        depthColorAccent = argb
+        val tip = VisualizerMath.towardWhite(accent, TIP_LIGHT_MIX).toArgb()
+        for (k in 0..MAX_DEPTH) depthColorArgb[k] = depthColorArgbOf(argb, tip, k, MAX_DEPTH)
+        leafColorArgb = VisualizerMath.towardWhite(accent, LEAF_LIGHT_MIX).toArgb()
+    }
+
+    /** 取频谱某频段（越界自动环绕；`barCount` 变档也不崩） */
+    private fun bandAt(sp: FloatArray, band: Int): Float =
+        if (sp.isEmpty()) 0f else sp[band % sp.size]
 
     /** 末梢电弧：3 段折线确定性抖动（零分配） */
     private fun DrawScope.drawArcJitter(
@@ -1519,7 +1792,7 @@ class FractalTreeRenderer : VisualizerRenderer {
         val dy = y1 - y0
         val nx = -dy
         val ny = dx
-        val nLen = kotlin.math.sqrt(nx * nx + ny * ny).coerceAtLeast(0.001f)
+        val nLen = sqrt(nx * nx + ny * ny).coerceAtLeast(0.001f)
         var prevX = x0
         var prevY = y0
         var s = 1

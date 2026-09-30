@@ -27,7 +27,9 @@ import java.io.File
  *
  * ## 负向自证（§八 开头规矩：必须有，否则门禁可能是空转）
  *  N1 从 [covered] 摘掉一个**真覆盖**的类 ⇒ 完整性断言必须挂；
- *  N2 把一个**未覆盖**的类塞进 [covered] ⇒ 覆盖断言必须挂；
+ *  N2 把一个**未覆盖**的类塞进 [covered] ⇒ 覆盖断言必须挂
+ *     （⚠️ 样本由 [pickUncoveredSample] 按**不变式**现场挑选，**不写死类名** ——
+ *      E11/E14/E16/E18/E19/E20/E23/E25/E34 都当过样本，写死则每迁移一套就过期一次）；
  *  N3 **View 型排除自证**：`WorldGlobeRenderer` 移出 [exempt] ⇒ 完整性断言必须挂
  *     （证明豁免名单真的在起作用，而不是"恰好没扫到"）；
  *  N4 判据函数自证：含 `OverlayFx.` 判覆盖 / 不含判未覆盖 / **注释里的不算** /
@@ -56,14 +58,14 @@ class FxCoverageScanTest {
         "PlasmaFlowRenderer",          // E20 等离子流场（§B6 暗角 0.48 + 颗粒 0.030）
         "LyricsDotMatrixRenderer",     // E23 歌词点阵（§B7 暗角 0.44 + 颗粒 0.026）
         "HypnoticFunctionRenderer",    // E25 催眠（§B8 暗角 0.44 + 颗粒 0.028）
+        "FractalTreeRenderer",         // E34 分形（§B9 暗角 0.48 + 颗粒 0.030）
     )
 
     // ── 豁免名单：阶段推进时逐条移入 covered（理由必须写明，便于复核） ──
     private val exempt = mapOf(
         // ⭐ 阶段 3 · 批次 A（E03/E05/E07/E12/E13/E15/E17/E24/E30/E31/E32）已**全部**移入 covered
-        // ⭐ 阶段 4 · 批次 B 自 T4.1 起逐套移入（E11 / E14 / E16 / E18 / E19 / E20 / E23 / E25 已完成）
-        // 阶段 4 · 批次 B 剩余 2 套
-        "FractalTreeRenderer" to "S4 批次 B（E34 分形）",
+        // ⭐ 阶段 4 · 批次 B 自 T4.1 起逐套移入（E11 / E14 / E16 / E18 / E19 / E20 / E23 / E25 / E34 已完成）
+        // 阶段 4 · 批次 B 剩余 1 套
         "LightBeamsRenderer" to "S4 批次 B（E35 光轴）",
         // 阶段 5 · 批次 C 7 套
         "OrbitalRingsRenderer" to "S5 批次 C（E29 轨道）",
@@ -211,6 +213,25 @@ class FxCoverageScanTest {
     private fun isCovered(d: Decl): Boolean =
         if (d.fxBase) coveredByPostFx(d.body) else coveredByOverlayCall(d.body)
 
+    /**
+     * 结构型豁免（非「还没做」，而是**按设计不适用**：View 型 / 死代码 / G7 原始口径豁免）。
+     * ⚠️ 只用于 [pickUncoveredSample] 的**偏好**（它们永远不覆盖，作样本区分力弱）——
+     * 判据强度不依赖本集合，即使它过期，N2 也只是退回到拿结构型当样本，不会失真。
+     */
+    private val structuralExempt = setOf("WorldGlobeRenderer", "WorldRenderer", "PhotoRenderer")
+
+    /**
+     * N2 的样本选择（**不变式**，⛔ 不写死类名）。
+     *
+     * 优先从 [exempt] 里挑「**按设计可覆盖、只是还没做**」的类（排除 [structuralExempt]）；
+     * 批次 B / C 全部做完后 [exempt] 只剩结构型，此时兜底仍会选中它们。
+     * 返回 `null` ⇒ [exempt] 里没有任何未覆盖的类 ⇒ 负向自证失效，N2 必须报错。
+     */
+    private fun pickUncoveredSample(decls: Map<String, Decl>): String? {
+        val prefer = exempt.keys.filter { it !in structuralExempt }
+        return (prefer + exempt.keys).firstOrNull { n -> decls[n]?.let { !isCovered(it) } == true }
+    }
+
     // ── 正向断言 ──
 
     @Test
@@ -282,15 +303,16 @@ class FxCoverageScanTest {
     @Test
     fun `负向N2 未覆盖的类塞进覆盖名单必须被覆盖断言抓到`() {
         val decls = rendererDecls().associateBy { it.name }
-        // ⚠️ 样本必须是**当前确实未覆盖**的类：E11 / E14 / E16 / E18 / E19 / E20 / E23 已分别
-        //    在 T4.1–T4.7 移入 covered（它们现在都有 postFx）⇒ 若继续拿它们当样本，
-        //    上面的 assertFalse 前提会直接挂。改用批次 B 中**尚未开工**的 E34 分形。
-        val sample = "FractalTreeRenderer"
-        val d = decls.getValue(sample)
-        assertFalse("前提：$sample 当前未覆盖", isCovered(d))
+        // ⚠️ 样本必须是**当前确实未覆盖**的类。⛔ 不写死类名：E11 / E14 / E16 / E18 / E19 / E20 /
+        //    E23 / E25 / E34 都当过样本，写死则**每迁移一套就过期一次**（本仓库第 N 次踩同类坑）
+        //    ⇒ 改为**不变式**：从 [exempt] 里现场挑一个「按设计可覆盖、只是还没做」的类。
+        val sample = pickUncoveredSample(decls)
+        assertTrue("exempt 里必须存在**未覆盖**的类可作样本，否则本负向自证会退化成空转", sample != null)
+        val d = decls.getValue(sample!!)
+        assertFalse("前提：$sample 当前未覆盖（若它已覆盖，应移入 [covered] 而不是留在这里）", isCovered(d))
         val brokenCovered = covered + sample
         val bad = brokenCovered.filter { n -> decls[n]?.let { isCovered(it) } != true }
-        assertTrue("塞进未覆盖的类 ⇒ 覆盖断言应报出它", bad.contains(sample))
+        assertTrue("塞进未覆盖的类 ⇒ 覆盖断言应报出它（样本 $sample）", bad.contains(sample))
     }
 
     @Test
