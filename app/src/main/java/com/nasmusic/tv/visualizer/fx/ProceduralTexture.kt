@@ -19,13 +19,16 @@ import kotlin.math.sin
  *
  * 实现说明：平铺型（GRAIN/SCANLINE）与球面贴图的像素生成是**纯 Kotlin 函数**
  * （`grainPixels` / `scanlinePixels` / `spherePixels`），可被 JVM 单测直接做逐像素
- * 确定性门禁（§八 G3），不依赖 Robolectric；全屏纹理（STARFIELD/PAPER/WATER/CAUSTIC）
- * 逐行生成后 `setPixels` 写入（瞬时分锚只有一行，避免 1080p 下一次性 8MB 数组）。
+ * 确定性门禁（§八 G3），不依赖 Robolectric；全屏纹理（STARFIELD/PAPER/WATER/CAUSTIC/
+ * PLASMA/FOG）逐行生成后 `setPixels` 写入（瞬时分锚只有一行，避免 1080p 下一次性 8MB 数组）。
  */
 object ProceduralTexture {
 
-    /** 可平铺的固定尺寸纹理；每类固定占 [VARIANTS] 个槽位（`variant and 7`） */
-    enum class Id { GRAIN, SCANLINE, STARFIELD, PAPER, WATER, CAUSTIC, PLASMA }
+    /**
+     * 可平铺的固定尺寸纹理；每类固定占 [VARIANTS] 个槽位（`variant and 7`）。
+     * ⛔ **新增必须追加到最后一项**（`ordinal` 是 [slots] / [keys] 的下标基准）。
+     */
+    enum class Id { GRAIN, SCANLINE, STARFIELD, PAPER, WATER, CAUSTIC, PLASMA, FOG }
 
     const val VARIANTS = 8
     const val GRAIN_TILE = 128      // px，见 §7.1
@@ -53,10 +56,12 @@ object ProceduralTexture {
     private fun lcgFloat(state: UInt): Float = ((state shr 8) and 0xFFFFFFu).toFloat() / 16777216f
 
     /**
-     * 按画布尺寸准备全屏型纹理（STARFIELD / PAPER / WATER / CAUSTIC / PLASMA）。
+     * 按画布尺寸准备全屏型纹理（STARFIELD / PAPER / WATER / CAUSTIC / PLASMA / FOG）。
      * 平铺型（GRAIN / SCANLINE）在此首次调用时生成一次。
      *
      * ⚠️ 必须在 **`onEnter` 或尺寸变化时**调用，⛔ 不得在 `draw` 内调用。
+     * （⚠️ 已迁移的效果里有若干处例外，登记在 §12.4；⛔ 本注释刻意不写具体处数 ——
+     * 那种数字会随任务推进过期。）
      */
     fun ensure(w: Int, h: Int) {
         if (w <= 0 || h <= 0) return
@@ -85,6 +90,7 @@ object ProceduralTexture {
         ensureFullscreen(Id.WATER, w, h, fullKey) { row, y -> waterRow(row, y, w, h) }
         ensureFullscreen(Id.CAUSTIC, w, h, fullKey) { row, y -> causticRow(row, y, w, h) }
         ensureFullscreen(Id.PLASMA, w, h, fullKey) { row, y -> plasmaRow(row, y, w, h) }
+        ensureFullscreen(Id.FOG, w, h, fullKey) { row, y -> fogRow(row, y, w, h) }
     }
 
     private inline fun ensureFullscreen(
@@ -348,6 +354,44 @@ object ProceduralTexture {
             val lum = (r + g + b) / 765f                       // 0..1（三通道均值）
             val a = (PLASMA_A * lum).toInt().coerceIn(0, PLASMA_A)
             out[x] = (a shl 24) or (rr shl 16) or (gg shl 8) or bb
+        }
+    }
+
+    /**
+     * FOG：**3 组超低频 `sin`** 叠加 → 大尺度灰白雾团。
+     *
+     * ① **只留亮部**（`v > [FOG_FLOOR]`）⇒ 暗区完全透明，得到「一团一团」的雾而不是
+     *    均匀灰幕；② 灰阶随浓度上抬（`196 → 255`）⇒ 浓处更白，有厚薄感。
+     *
+     * 波长约 `2π/0.0268 ≈ 234 px` / `2π/0.0183 ≈ 343 px` / `2π/0.0094 ≈ 668 px`
+     * ⇒ 1080p 上可见 3–5 团，与 `WATER`（同样 3–4 组 `sin`）同族但**更慢更团**。
+     *
+     * ⚠️ alpha 上限 **0.90**（调用方再乘 `FOG_ALPHA = 0.12` ⇒ 实际叠加 ≤ 0.108）。
+     * 与 [PLASMA_A] 的 0.70 口径不同是**有意**的：PLASMA 的调用方乘 0.16–0.26，
+     * 本 tile 的调用方只乘 0.12 ⇒ 上限抬高才能落到同一可见区间。
+     *
+     * ⚠️ 每像素 **3 次 `sin`**（与 [plasmaRow] 同量级）。本 tile 会在每次
+     * `ensure(w, h)` 里**全屏生成一次**，是 `ensure` 的固定成本项之一。
+     */
+    private val FOG_A = (0.90f * 255f).toInt()   // 229
+
+    /** 第三组的相位偏移（黄金角 ⇒ 三组在空间上错开，不成规则波纹） */
+    private const val FOG_PHASE = 2.3999632f
+
+    /** 只保留 `v > FOG_FLOOR` 的亮部；负值 ⇒ 过半面积有雾（不然整屏会太干净） */
+    private const val FOG_FLOOR = -0.05f
+
+    internal fun fogRow(out: IntArray, y: Int, w: Int, h: Int) {
+        val fy = y.toFloat()
+        for (x in 0 until w) {
+            val fx = x.toFloat()
+            val v = (sin(fx * 0.0183f + fy * 0.0121f) +
+                sin(fx * -0.0094f + fy * 0.0231f) +
+                sin(fx * 0.0268f + fy * 0.0043f + FOG_PHASE)) / 3f      // -1..1
+            val net = ((v - FOG_FLOOR) / (1f - FOG_FLOOR)).coerceIn(0f, 1f)
+            val a = (FOG_A * net).toInt().coerceIn(0, FOG_A)
+            val g = (196f + net * 59f).toInt().coerceIn(0, 255)         // 浓处更白
+            out[x] = (a shl 24) or (g shl 16) or (g shl 8) or g
         }
     }
 

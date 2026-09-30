@@ -12,6 +12,7 @@ import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
@@ -1830,47 +1831,270 @@ class FractalTreeRenderer : RendererFx() {
 /**
  * E35 `LIGHT_BEAMS` — 光轴 · 旋转光轴
  *
- * 视觉：几束极细光束从屏幕边缘向中心射出（激光灯交叉扫射），带轻微扇形区域。
- * 低音改变光束仰角（缓变），高频让光束瞬间碎裂成虚线（手动分段，避开
- * dashPathEffect 的每帧分配）。
+ * 视觉：几束极细光束从屏幕边缘向中心射出（激光灯交叉扫射）。低音改变光束仰角（缓变），
+ * 高频让光束瞬间碎裂成虚线（手动分段，避开 `dashPathEffect` 的每帧分配）。
  *
- * 性能红线：draw 内零分配。
+ * ## T4.10（§B10 五条）改造
+ * **① 光束改渐变** —— 旧实现是「2 条**等宽** `drawLine`（7f 辉光 + 1.6f 芯线）+ 1 个
+ * `alpha 0.05` 的**纯色**扇形多边形」，三者都是硬边色块。现改为 **2 个锥形多边形**
+ * （体积体 + 芯线；外缘端粗 / 中心端细 ⇒ 纵深），沿光束轴填 `Brush.linearGradient`
+ * （**外缘端** `alpha 0.42` → **中心端** 透明，§B10-① 明文）。几何与 `Brush` **只在
+ * `(cx, cy, maxLen, accent, secondary)` 变化时重建**（照 `RadarGridRenderer.ensureBrush`
+ * 范式）；逐束旋转交给 `withTransform`（**`inline` ⇒ 零分配**，§15.4-A7；先例
+ * `BatchThreeRenderers.kt:203`）。⛔ 扇形多边形**删除**（理由见 §12.4）。
+ * **② 体积雾** —— 新增 `ProceduralTexture.Id.FOG`（**第 8 类 tile**，全屏型灰白低频雾团），
+ * 整屏 1 次 `drawImage`（`alpha = 0.12`，§B10-② 明文），中心随 `sectionEnergy` 缓慢漂移
+ * （`dstSize` 放大 [FOG_OVERSCAN]、`dstOffset` 落在 `[-2·ov, 0]` ⇒ 漂移不露边）。
+ * **③ 尘埃** —— [DUST_N] 个极小亮点（半径 0.50 / 0.65 / 0.80 px，`alpha` 0.20 / 0.32 / 0.45，
+ * `Plus`），沿**各自所属光束**方向缓慢漂移（越界环绕 ⇒ 数量恒定，**不重生**）。
+ * 按**固定下标**分 [DUST_BUCKETS] 桶，每桶合批 1 条 `Path` ⇒ 每帧恒 3 次 `drawPath`
+ * （⛔ 不是 48 次 `drawCircle`）。
+ * **④ 镜头光斑** —— 交汇处 1 组「光晕（1 次 `Shading2D.shadeBrushCached`，带具名盐
+ * [E35_KEY_SALT]）+ 六芒（[FLARE_SPOKES] 条 `drawLine`）」，§B10-④ 明文。
+ * **⑤ 后处理** —— `postFx`（暗角 0.50 + 颗粒 0.030，§B10-⑤ 明文）。
+ *
+ * ## ⛔ 迁移顺带修掉的两条红线（§B10 未列）
+ * - `private var lastMs = 0L` + `if (lastMs == 0L) lastMs = now` **哨兵** —— `FrameClock`
+ *   的 KDoc 明确不得用 `0L` 当哨兵（首帧 `timeMs` 可能恰为 0）⇒ 删除 `lastMs`，改走 `fx.dt`；
+ * - `val tSec = frame.timeMs * 0.001f` **当相位** —— 开机毫秒是大基数，float 尾数不足
+ *   ⇒ 相位冻结 / 跳变（§10.176 根因⑩）。改为**增量式相位**：`elapsedSec += fx.dt` 与
+ *   `beamAng[i] = advanceBeamAngle(beamAng[i], fx.dt, …)`。
+ *
+ * 性能红线：`drawContent` 内零分配（`withTransform` 是 `inline`，其 lambda 内联、不分配）。
  */
-class LightBeamsRenderer : VisualizerRenderer {
+class LightBeamsRenderer : RendererFx() {
 
     override val theme = VisualizerTheme.LIGHT_BEAMS
 
-    private companion object {
+    /** §B10-⑤ 后处理（⛔ 数值字面量，基类要求） */
+    override val postFx = PostFx(vignette = 0.50f, grain = 0.030f)
+
+    internal companion object {
         const val TAU = (2 * Math.PI).toFloat()
-        const val BEAMS = 6
-        const val SEGMENTS = 14            // 虚线分段数
-        const val ELEV_SMOOTH = 0.06f      // 仰角低通
+
+        /** 光束数上限（HIGH 档；LOW 4 / MEDIUM 6 / HIGH 8） */
+        const val BEAM_MAX = 8
+
+        /** 碎裂虚线的分段数 */
+        const val SEGMENTS = 14
+
+        /** 虚线占空比（每段只画前 55%） */
+        const val SEG_DUTY = 0.55f
+
+        /** 仰角低通系数 */
+        const val ELEV_SMOOTH = 0.06f
+
+        /** 仰角最大偏转（度） */
         const val MAX_ELEV_DEG = 14f
+
+        /** 度 → 弧度 */
+        const val DEG2RAD = 0.017453292f
+
+        /** 弧度 → 度 */
+        const val RAD2DEG = 57.29578f
+
+        // ── §B10-① 光束渐变 ────────────────────────────────────────────
+        /** 光束**外缘端**（起点）的渐变 alpha —— §B10-① 明文 0.42 */
+        const val BEAM_NEAR_ALPHA = 0.42f
+
+        /** 光束**中心端**（终点）的渐变 alpha —— §B10-① 明文「透明」 */
+        const val BEAM_FAR_ALPHA = 0f
+
+        /** 芯线**外缘端** alpha（比体积体更亮 ⇒ 激光芯） */
+        const val CORE_NEAR_ALPHA = 0.86f
+
+        /** 体积体半宽（× `maxLen`）：外缘端 / 中心端（由粗到细 = 纵深） */
+        const val BEAM_HALF_W_NEAR = 0.0060f
+        const val BEAM_HALF_W_FAR = 0.0009f
+
+        /** 芯线半宽相对体积体的比例（≈ 1 px @1080p） */
+        const val CORE_W_K = 0.14f
+
+        /** 光束外缘端半径 / 中心端半径（× `maxLen`） */
+        const val START_R_K = 1.05f
+        const val END_R_K = 0.06f
+
+        // ── §B10-② 体积雾 ──────────────────────────────────────────────
+        /** 雾层 alpha —— §B10-② 明文 0.12 */
+        const val FOG_ALPHA = 0.12f
+
+        /** 雾漂移基准速度（× `maxLen` / s），随 `sectionEnergy` 放大 */
+        const val FOG_DRIFT = 0.012f
+
+        /** 雾漂移的纵向 / 横向速率比（避免纯斜线漂移） */
+        const val FOG_DRIFT_Y_K = 0.61f
+
+        /** 雾过扫描量（px）—— 漂移 ±[FOG_OVERSCAN] 时仍铺满画布（不露边） */
+        const val FOG_OVERSCAN = 48
+
+        // ── §B10-③ 尘埃 ────────────────────────────────────────────────
+        /** 尘埃数 —— §B10-③ 明文 40–60 */
+        const val DUST_N = 48
+
+        /** 尘埃合批桶数 —— §B10-③ 明文「3 条 `Path`」 */
+        const val DUST_BUCKETS = 3
+
+        /** 尘埃池字段跨度：x / y / 所属光束下标 / 半径（x、y 为**归一化**坐标） */
+        const val DUST_STRIDE = 4
+
+        /** 3 桶各自半径（px）—— 直径 1.0 / 1.3 / 1.6，落在 §B10-③ 的 1–1.6 px */
+        val DUST_R = floatArrayOf(0.50f, 0.65f, 0.80f)
+
+        /** 3 桶各自 alpha —— 落在 §B10-③ 的 0.20–0.45 */
+        val DUST_ALPHAS = floatArrayOf(0.20f, 0.32f, 0.45f)
+
+        /** 沿所属光束方向的漂移速度（归一化坐标 / s；≈ 18 s 穿过一屏） */
+        const val DUST_DRIFT = 0.055f
+
+        /** 圆的三次贝塞尔 kappa（标准值 0.5523） */
+        const val KAPPA = 0.5522847f
+
+        // ── §B10-④ 镜头光斑 ────────────────────────────────────────────
+        /** 光晕半径（× `minDim`） */
+        const val FLARE_R_K = 0.085f
+
+        /** 六芒线半长（× 光晕半径） */
+        const val FLARE_SPOKE_K = 2.10f
+
+        /** 六芒线宽（px） */
+        const val FLARE_SPOKE_W = 1.3f
+
+        /** 六芒条数（3 条过中心 ⇒ 6 个芒尖）—— §B10-④ 明文「3 条 `drawLine`」 */
+        const val FLARE_SPOKES = 3
+
+        /** 光晕自转速率（rad/s） */
+        const val FLARE_SPIN = 0.25f
+
+        /** 中心光核基准半径（px）与 pulse 增益 */
+        const val CORE_R = 6f
+        const val CORE_R_PULSE = 14f
+
+        /**
+         * `Shading2D.shadeBrushCached` 的**具名盐**。⛔ `Shading2D` 是 Kotlin **object**
+         * ⇒ 它的 16 槽 `Brush` 缓存**进程级共享**；不带盐会在切换效果后复用别人的
+         * 半径与基色（§四 G4 / §12.4）。
+         */
+        const val E35_KEY_SALT = 0x35353535L
+
+        // ── 纯函数（供门禁直调，⛔ 不复制算法）────────────────────────
+
+        /** 光束角度累加（`dt` 化 ⇒ 30 / 60 / 120 fps 下 1 秒累计量恒等） */
+        internal fun advanceBeamAngle(
+            ang: Float, dtSec: Float, speed: Float, trebleSmooth: Float
+        ): Float = ang + speed * (0.5f + trebleSmooth * 0.8f) * dtSec
+
+        /** 光束当前极角 = 基准角 + 累加相位 + 静态错相位 */
+        internal fun beamAngleOf(baseAng: Float, phaseAccum: Float, phaseStatic: Float): Float =
+            baseAng + phaseAccum + phaseStatic * 0.1f
+
+        /** 尘埃分桶（按**固定下标** ⇒ 桶不逐帧跳变，避免尺寸/亮度闪烁） */
+        internal fun dustBucketOf(index: Int): Int {
+            val b = index % DUST_BUCKETS
+            return if (b < 0) b + DUST_BUCKETS else b
+        }
+
+        /** 尘埃沿光束方向的位移增量（`dt` 化；越界由 [wrap01] 环绕） */
+        internal fun driftDelta(dtSec: Float, speed: Float): Float = speed * dtSec
+
+        /** 归一化坐标环绕到 `[0, 1)`（⛔ 不用 `%`：Kotlin 的 `%` 保留被除数符号） */
+        internal fun wrap01(v: Float): Float {
+            if (v >= 0f && v < 1f) return v
+            val f = v - floor(v)
+            return when {
+                f >= 1f -> 0f
+                f < 0f -> f + 1f
+                else -> f
+            }
+        }
     }
 
-    /** 每束光的静态参数 */
+    // ── 每束光的静态参数（`onEnterContent` 预生成）──
     private var beamPhase = FloatArray(0)
     private var beamSpeed = FloatArray(0)
     private var beamBaseAng = FloatArray(0)
+
+    /** 逐束**增量式**角度累加（§10.176：⛔ 不用 `timeMs × 系数` 当相位） */
+    private var beamAng = FloatArray(0)
+
+    /** 逐束本帧最终极角（尘埃要用它当漂移方向） */
+    private var beamFinalAng = FloatArray(0)
     private var beamCount = 0
 
     private var elevSmooth = 0f
-    private var lastMs = 0L
     private var trebleSmooth = 0f
 
-    override fun onEnter(ctx: RenderContext) {
-        elevSmooth = 0f
-        lastMs = 0L
-        trebleSmooth = 0f
+    /** 相位累计时间（秒）—— 由 `fx.dt` 累加（⛔ 不是 `frame.timeMs`） */
+    private var elapsedSec = 0f
 
+    /** 雾漂移累计（归一化坐标 0..1） */
+    private var fogDriftX = 0f
+    private var fogDriftY = 0f
+
+    // ── §B10-① 光束几何（**规范朝向**：自 `(cx, cy)` 沿 +X 伸出；逐束靠 `withTransform` 旋转）──
+    private var beamBody: Path? = null
+    private var beamCore: Path? = null
+
+    /** 4 个缓存 `Brush`：体积体 / 芯线 × accent / secondary（⛔ 不每帧重建） */
+    private var bodyBrushA: Brush? = null
+    private var coreBrushA: Brush? = null
+    private var bodyBrushB: Brush? = null
+    private var coreBrushB: Brush? = null
+
+    /** 碎裂虚线的 `Stroke`（⛔ `Stroke()` 每帧新建会分配 ⇒ 与几何同键缓存） */
+    private var dashStroke: Stroke? = null
+
+    /** 几何 + `Brush` 的缓存键（照 `RadarGridRenderer.ensureBrush` 的哨兵范式） */
+    private var geoCx = -1f
+    private var geoCy = -1f
+    private var geoMaxLen = -1f
+    private var geoAccent = Color.Unspecified
+    private var geoSecondary = Color.Unspecified
+
+    // ── §B10-③ 尘埃池（零分配）：`DUST_N × DUST_STRIDE` 平铺 ──
+    private val dust = FloatArray(DUST_N * DUST_STRIDE)
+
+    /** 3 桶尘埃合批 `Path`（构造期建一次，`draw` 期只 `rewind`） */
+    private val dustPaths = arrayOf(Path(), Path(), Path())
+
+    /** 碎裂虚线合批 `Path`（构造期建一次，逐束 `rewind` 重建） */
+    private val dashPath = Path()
+
+    /** 尘埃色 / 光斑基色（仅在 `accent` 变化时重算 ⇒ draw 期零 JNI） */
+    private var dustColor = Color.White
+    private var flareBase = Color.White
+    private var colorAccent = Color.Unspecified
+
+    protected override fun onEnterContent(ctx: RenderContext) {
+        elevSmooth = 0f
+        trebleSmooth = 0f
+        elapsedSec = 0f
+        fogDriftX = 0f
+        fogDriftY = 0f
+        colorAccent = Color.Unspecified
+        beamBody = null
+        beamCore = null
+        bodyBrushA = null
+        coreBrushA = null
+        bodyBrushB = null
+        coreBrushB = null
+        dashStroke = null
+        geoCx = -1f
+        geoCy = -1f
+        geoMaxLen = -1f
+        geoAccent = Color.Unspecified
+        geoSecondary = Color.Unspecified
+
+        // ── 画质分档：LOW 4 / MEDIUM 6 / HIGH 8 ──
         beamCount = when (ctx.quality) {
-            com.nasmusic.tv.data.model.VisualQuality.LOW -> 4
-            com.nasmusic.tv.data.model.VisualQuality.MEDIUM -> 6
-            com.nasmusic.tv.data.model.VisualQuality.HIGH -> 8
+            VisualQuality.LOW -> 4
+            VisualQuality.MEDIUM -> 6
+            VisualQuality.HIGH -> BEAM_MAX
         }
         beamPhase = FloatArray(beamCount)
         beamSpeed = FloatArray(beamCount)
         beamBaseAng = FloatArray(beamCount)
+        beamAng = FloatArray(beamCount)
+        beamFinalAng = FloatArray(beamCount)
         var i = 0
         while (i < beamCount) {
             beamPhase[i] = i * 2.399f        // 黄金角错相位
@@ -1878,114 +2102,285 @@ class LightBeamsRenderer : VisualizerRenderer {
             beamBaseAng[i] = i * TAU / beamCount
             i++
         }
+
+        // 尘埃池：位置**归一化**（与画布尺寸无关 ⇒ 改分辨率不跳），所属光束下标固定
+        i = 0
+        while (i < DUST_N) {
+            val o = i * DUST_STRIDE
+            dust[o] = rng.next()
+            dust[o + 1] = rng.next()
+            dust[o + 2] = (i % beamCount).toFloat()
+            dust[o + 3] = DUST_R[dustBucketOf(i)]
+            i++
+        }
     }
 
-    override fun DrawScope.draw(frame: AudioFrame, ctx: RenderContext) {
+    override fun DrawScope.drawContent(frame: AudioFrame, ctx: RenderContext, fx: FxFrame) {
         val w = size.width
         val h = size.height
         if (w < 2f || h < 2f) return
 
-        val now = ctx.nowMs
-        if (lastMs == 0L) lastMs = now
-        val dtSec = ((now - lastMs) / 1000f).coerceIn(0f, 0.1f)
-        lastMs = now
-
+        // ── 时钟：`dt` 只从 `fx` 取（首帧 / 负差 / 上界钳制由 `FrameClock` 统一承担）──
+        elapsedSec += fx.dt
         elevSmooth += (frame.bass - elevSmooth) * ELEV_SMOOTH
         trebleSmooth += (frame.treble - trebleSmooth) * 0.25f
 
         val cx = w * 0.5f
         val cy = h * 0.5f
-        val maxLen = kotlin.math.sqrt(w * w + h * h) * 0.55f
+        val minDim = if (w < h) w else h
+        val maxLen = sqrt(w * w + h * h) * 0.55f
         val accent = ctx.palette.accent
         val secondary = ctx.palette.secondary
-        val tSec = frame.timeMs * 0.001f
+        ensureColors(accent)
+
+        // ── §B10-② 体积雾：1 层 `Id.FOG`（随 `sectionEnergy` 缓慢漂移；过扫描 ⇒ 不露边）──
+        // ⚠️ `ensure` 放在 `drawContent` 内违反基类注释，与 E25 / E34 同一处理（§12.4）
+        val iw = w.toInt().coerceIn(1, 4096)
+        val ih = h.toInt().coerceIn(1, 4096)
+        ProceduralTexture.ensure(iw, ih)
+        val fogSpeed = FOG_DRIFT * (0.35f + frame.sectionEnergy)
+        fogDriftX = wrap01(fogDriftX + fogSpeed * fx.dt)
+        fogDriftY = wrap01(fogDriftY + fogSpeed * FOG_DRIFT_Y_K * fx.dt)
+        // 漂移 ∈ [-ov, ov]，`dstOffset` = -ov + 漂移 ∈ [-2ov, 0] ⇒ 放大 ov 后仍铺满画布
+        val ov = FOG_OVERSCAN
+        val fogDx = -ov + ((fogDriftX - 0.5f) * 2f * ov).toInt()
+        val fogDy = -ov + ((fogDriftY - 0.5f) * 2f * ov).toInt()
+        ProceduralTexture.tile(ProceduralTexture.Id.FOG)?.let {
+            drawImage(
+                image = it,
+                srcOffset = IntOffset.Zero,
+                srcSize = IntSize(it.width, it.height),
+                dstOffset = IntOffset(fogDx, fogDy),
+                dstSize = IntSize(iw + ov * 2, ih + ov * 2),
+                alpha = FOG_ALPHA,
+                blendMode = BlendMode.Plus
+            )
+        }
+
+        // ── §B10-① 光束：几何 + `Brush` 只在 `(cx, cy, maxLen, accent, secondary)` 变化时重建 ──
+        ensureBeamGeometry(cx, cy, maxLen, accent, secondary)
+        val body = beamBody
+        val core = beamCore
+        val bBodyA = bodyBrushA
+        val cCoreA = coreBrushA
+        val bBodyB = bodyBrushB
+        val cCoreB = coreBrushB
+        val stroke = dashStroke
+        val startR = maxLen * START_R_K
+        val endR = maxLen * END_R_K
+        val broken = frame.treble > 0.50f   // 碎裂触发
 
         // ── 逐束绘制 ──
         var i = 0
         while (i < beamCount) {
-            // 旋转：各束不同速慢转 + treble 加速
-            val ang = beamBaseAng[i] + tSec * beamSpeed[i] * (0.5f + trebleSmooth * 0.8f) +
-                beamPhase[i] * 0.1f
+            // 旋转：各束不同速慢转 + treble 加速（**增量式相位**，⛔ 不用 `timeMs × 系数`）
+            beamAng[i] = advanceBeamAngle(beamAng[i], fx.dt, beamSpeed[i], trebleSmooth)
             // 仰角扰动：低音驱动（低通后）+ 每束相位差
-            val elev = elevSmooth * MAX_ELEV_DEG * 0.01745f * sin(tSec * 0.6f + beamPhase[i])
-            val finalAng = ang + elev
-            val color = if (i % 2 == 0) accent else secondary
-            val broken = frame.treble > 0.50f   // 碎裂触发
+            val elev = elevSmooth * MAX_ELEV_DEG * DEG2RAD * sin(elapsedSec * 0.6f + beamPhase[i])
+            val finalAng = beamAngleOf(beamBaseAng[i], beamAng[i], beamPhase[i]) + elev
+            beamFinalAng[i] = finalAng
 
-            val dx = cos(finalAng)
-            val dy = sin(finalAng)
-            // 从边缘向中心：起点在半径 1.1×外接圆处，终点在中心附近
-            val startR = maxLen * 1.05f
-            val endR = maxLen * 0.06f
+            val even = (i % 2 == 0)
+            val deg = finalAng * RAD2DEG
 
+            if (body == null || core == null || stroke == null) {
+                i++
+                continue
+            }
             if (!broken) {
-                // 连续光束：宽淡辉光 + 细亮芯线
-                drawLine(
-                    color,
-                    Offset(cx + dx * startR, cy + dy * startR),
-                    Offset(cx + dx * endR, cy + dy * endR),
-                    strokeWidth = 7f, alpha = 0.10f, blendMode = BlendMode.Plus
-                )
-                drawLine(
-                    color,
-                    Offset(cx + dx * startR, cy + dy * startR),
-                    Offset(cx + dx * endR, cy + dy * endR),
-                    strokeWidth = 1.6f, alpha = 0.75f, blendMode = BlendMode.Plus
-                )
-                // 扇形区域（极弱）
-                drawFan(cx, cy, finalAng, maxLen, color, 0.05f + frame.energy * 0.05f)
+                // 连续光束：**锥形渐变**体积体 + 更亮的芯线（都是渐变 ⇒ 无硬边）
+                if (even) {
+                    withTransform({ rotate(deg, Offset(cx, cy)) }) {
+                        drawPath(body, bBodyA!!, alpha = 1f, blendMode = BlendMode.Plus)
+                        drawPath(core, cCoreA!!, alpha = 1f, blendMode = BlendMode.Plus)
+                    }
+                } else {
+                    withTransform({ rotate(deg, Offset(cx, cy)) }) {
+                        drawPath(body, bBodyB!!, alpha = 1f, blendMode = BlendMode.Plus)
+                        drawPath(core, cCoreB!!, alpha = 1f, blendMode = BlendMode.Plus)
+                    }
+                }
             } else {
-                // 碎裂虚线：手动分段 + 确定性闪烁（避开 dashPathEffect 每帧分配）
+                // 碎裂虚线：手动分段 + 确定性闪烁（避开 `dashPathEffect` 每帧分配）
+                // ⛔ 合批进 1 条 `Path` ⇒ 每束 1 次 `drawPath`（旧实现是最多 14 次 `drawLine`）
+                dashPath.rewind()
                 val segLen = (startR - endR) / SEGMENTS
                 var s = 0
                 while (s < SEGMENTS) {
                     val r0 = startR - s * segLen
-                    val r1 = r0 - segLen * 0.55f   // 55% 占空比
-                    // 确定性明暗
+                    val r1 = r0 - segLen * SEG_DUTY
                     val seed = (frame.seq * 17 + i * 31 + s) and 0xFFFFL
-                    val flick = ((seed % 5L) < 3L)
-                    if (flick) {
-                        val a = 0.55f + (seed % 4L) / 4f * 0.35f
-                        drawLine(
-                            color,
-                            Offset(cx + dx * r0, cy + dy * r0),
-                            Offset(cx + dx * r1, cy + dy * r1),
-                            strokeWidth = 1.8f, alpha = a.toFloat(),
-                            blendMode = BlendMode.Plus
-                        )
+                    if ((seed % 5L) < 3L) {
+                        dashPath.moveTo(cx + r0, cy)
+                        dashPath.lineTo(cx + r1, cy)
                     }
                     s++
+                }
+                if (even) {
+                    withTransform({ rotate(deg, Offset(cx, cy)) }) {
+                        drawPath(dashPath, cCoreA!!, alpha = 1f, style = stroke, blendMode = BlendMode.Plus)
+                    }
+                } else {
+                    withTransform({ rotate(deg, Offset(cx, cy)) }) {
+                        drawPath(dashPath, cCoreB!!, alpha = 1f, style = stroke, blendMode = BlendMode.Plus)
+                    }
                 }
             }
             i++
         }
 
+        // ── §B10-③ 尘埃：沿**所属光束**方向漂移（越界环绕 ⇒ 数量恒定）──
+        var b = 0
+        while (b < DUST_BUCKETS) {
+            dustPaths[b].rewind()
+            b++
+        }
+        val dStep = driftDelta(fx.dt, DUST_DRIFT)
+        var k = 0
+        while (k < DUST_N) {
+            val o = k * DUST_STRIDE
+            val bi = dust[o + 2].toInt()
+            val dir = if (bi >= 0 && bi < beamCount) beamFinalAng[bi] else 0f
+            val nx = wrap01(dust[o] + cos(dir) * dStep)
+            val ny = wrap01(dust[o + 1] + sin(dir) * dStep)
+            dust[o] = nx
+            dust[o + 1] = ny
+            addDot(dustPaths[dustBucketOf(k)], nx * w, ny * h, dust[o + 3])
+            k++
+        }
+        b = 0
+        while (b < DUST_BUCKETS) {
+            drawPath(dustPaths[b], dustColor, alpha = DUST_ALPHAS[b], blendMode = BlendMode.Plus)
+            b++
+        }
+
         // ── 中心光核：pulse 脉动 ──
-        val coreR = 6f + frame.pulse * 14f
+        val coreR = CORE_R + frame.pulse * CORE_R_PULSE
         drawCircle(accent, radius = coreR * 1.8f, center = Offset(cx, cy), alpha = 0.12f, blendMode = BlendMode.Plus)
         drawCircle(accent, radius = coreR, center = Offset(cx, cy), alpha = 0.55f, blendMode = BlendMode.Plus)
-    }
 
-    /** 极弱扇形（光束的面积感） */
-    private fun DrawScope.drawFan(
-        cx: Float, cy: Float, ang: Float, r: Float, color: Color, alpha: Float
-    ) {
-        if (alpha <= 0.01f) return
-        val halfW = 0.045f
-        val p = pathBuf
-        p.reset()
-        p.moveTo(cx, cy)
-        val steps = 6
-        var s = 0
-        while (s <= steps) {
-            val a = ang - halfW + (2 * halfW) * s / steps
-            p.lineTo(cx + cos(a) * r, cy + sin(a) * r)
-            s++
+        // ── §B10-④ 镜头光斑：交汇处「光晕（1 次 `shadeBrushCached`）+ 六芒（3 条 `drawLine`）」──
+        val flareR = minDim * FLARE_R_K
+        drawCircle(
+            brush = Shading2D.shadeBrushCached(
+                key = (w.toRawBits().toLong() shl 32) xor h.toRawBits().toLong() xor
+                    accent.toArgb().toLong() xor E35_KEY_SALT,
+                center = Offset(cx, cy),
+                radius = flareR,
+                base = flareBase,
+                contrast = 0.55f
+            ),
+            radius = flareR,
+            center = Offset(cx, cy),
+            alpha = 0.45f + frame.pulse * 0.35f,
+            blendMode = BlendMode.Plus
+        )
+        val spoke = flareR * FLARE_SPOKE_K
+        val spin = elapsedSec * FLARE_SPIN
+        var s2 = 0
+        while (s2 < FLARE_SPOKES) {
+            val a = s2 * (TAU / FLARE_SPOKES) + spin
+            val dx = cos(a) * spoke
+            val dy = sin(a) * spoke
+            drawLine(
+                accent, Offset(cx - dx, cy - dy), Offset(cx + dx, cy + dy),
+                strokeWidth = FLARE_SPOKE_W, alpha = 0.30f + frame.pulse * 0.25f,
+                blendMode = BlendMode.Plus
+            )
+            s2++
         }
-        p.close()
-        drawPath(p, color, alpha = alpha)
     }
 
-    private val pathBuf = Path()
+    /**
+     * §B10-① 光束几何 + 4 个渐变 `Brush`（**只在键变化时重建**）。
+     *
+     * 几何一律建在**规范朝向**（自 `(cx, cy)` 沿 `+X` 伸出）—— 逐束旋转交给
+     * `withTransform`（`inline` ⇒ 零分配，§15.4-A7）。若把旋转烘进顶点，就等于
+     * 每帧重建 `Path`（E33 的注释里记过同一取舍）。
+     *
+     * ⚠️ 渐变轴 = **外缘端 → 中心端**（`startR > endR`）⇒ 「起点亮 `alpha 0.42` →
+     * 终点透明」按 §B10-① 的字面语义落在**光束从屏幕边缘射入**的方向上。
+     */
+    private fun ensureBeamGeometry(
+        cx: Float, cy: Float, maxLen: Float, accent: Color, secondary: Color
+    ) {
+        if (beamBody != null && geoCx == cx && geoCy == cy && geoMaxLen == maxLen &&
+            geoAccent == accent && geoSecondary == secondary
+        ) return
+        geoCx = cx; geoCy = cy; geoMaxLen = maxLen
+        geoAccent = accent; geoSecondary = secondary
+
+        val startR = maxLen * START_R_K
+        val endR = maxLen * END_R_K
+        val wNear = maxLen * BEAM_HALF_W_NEAR
+        val wFar = maxLen * BEAM_HALF_W_FAR
+        val cNear = wNear * CORE_W_K
+        val cFar = wFar * CORE_W_K
+
+        val body = Path()
+        body.moveTo(cx + startR, cy - wNear)
+        body.lineTo(cx + endR, cy - wFar)
+        body.lineTo(cx + endR, cy + wFar)
+        body.lineTo(cx + startR, cy + wNear)
+        body.close()
+        beamBody = body
+
+        val core = Path()
+        core.moveTo(cx + startR, cy - cNear)
+        core.lineTo(cx + endR, cy - cFar)
+        core.lineTo(cx + endR, cy + cFar)
+        core.lineTo(cx + startR, cy + cNear)
+        core.close()
+        beamCore = core
+
+        val near = Offset(cx + startR, cy)
+        val far = Offset(cx + endR, cy)
+        bodyBrushA = beamBrush(accent, BEAM_NEAR_ALPHA, near, far)
+        coreBrushA = beamBrush(accent, CORE_NEAR_ALPHA, near, far)
+        bodyBrushB = beamBrush(secondary, BEAM_NEAR_ALPHA, near, far)
+        coreBrushB = beamBrush(secondary, CORE_NEAR_ALPHA, near, far)
+
+        // 碎裂虚线的线宽 ≈ 芯线宽度（旧实现写死 1.8f）
+        dashStroke = Stroke(width = (cNear * 2f).coerceAtLeast(1.2f))
+    }
+
+    /** 沿光束轴的线性渐变：`nearAlpha`（外缘端）→ [BEAM_FAR_ALPHA]（中心端） */
+    private fun beamBrush(base: Color, nearAlpha: Float, near: Offset, far: Offset): Brush =
+        Brush.linearGradient(
+            listOf(base.copy(alpha = nearAlpha), base.copy(alpha = BEAM_FAR_ALPHA)),
+            start = near,
+            end = far
+        )
+
+    /**
+     * 把一个半径 [r] 的**圆点**追加进 [path]（1 `moveTo` + 4 `cubicTo` + `close`）。
+     *
+     * ⛔ 不用 `Path.addOval(Rect(...))` —— Compose 的 `addOval` 只有对象重载、
+     * `Rect` 是 `data class` ⇒ 每点一次堆分配（E19 已踩过）；`android.graphics.Path`
+     * 的 float 重载只存在于 native 侧（§15.4-A4）。
+     * ⛔ 也不用逐点 `drawCircle`（48 次 draw ⇒ 失去 §B10-③ 的合批）。
+     */
+    private fun addDot(path: Path, cx: Float, cy: Float, r: Float) {
+        if (r <= 0.01f) return
+        val k = r * KAPPA
+        path.moveTo(cx + r, cy)
+        path.cubicTo(cx + r, cy + k, cx + k, cy + r, cx, cy + r)
+        path.cubicTo(cx - k, cy + r, cx - r, cy + k, cx - r, cy)
+        path.cubicTo(cx - r, cy - k, cx - k, cy - r, cx, cy - r)
+        path.cubicTo(cx + k, cy - r, cx + r, cy - k, cx + r, cy)
+        path.close()
+    }
+
+    /**
+     * 尘埃色 / 光斑基色（**仅在 `accent` 变化时重算** ⇒ draw 期零分配、零 JNI）。
+     * ⛔ 键就是 `accent` 本身（`Color` 是 `@JvmInline value class` ⇒ `==` 不触发 `toArgb()`）；
+     * 这两个色**只**依赖 accent（不含 w/h / 能量）。
+     */
+    private fun ensureColors(accent: Color) {
+        if (accent == colorAccent) return
+        colorAccent = accent
+        dustColor = VisualizerMath.towardWhite(accent, 0.45f)
+        flareBase = VisualizerMath.towardWhite(accent, 0.55f)
+    }
 }
 

@@ -29,7 +29,7 @@ import java.io.File
  *  N1 从 [covered] 摘掉一个**真覆盖**的类 ⇒ 完整性断言必须挂；
  *  N2 把一个**未覆盖**的类塞进 [covered] ⇒ 覆盖断言必须挂
  *     （⚠️ 样本由 [pickUncoveredSample] 按**不变式**现场挑选，**不写死类名** ——
- *      E11/E14/E16/E18/E19/E20/E23/E25/E34 都当过样本，写死则每迁移一套就过期一次）；
+ *      E11/E14/E16/E18/E19/E20/E23/E25/E34/E35 都当过样本，写死则每迁移一套就过期一次）；
  *  N3 **View 型排除自证**：`WorldGlobeRenderer` 移出 [exempt] ⇒ 完整性断言必须挂
  *     （证明豁免名单真的在起作用，而不是"恰好没扫到"）；
  *  N4 判据函数自证：含 `OverlayFx.` 判覆盖 / 不含判未覆盖 / **注释里的不算** /
@@ -59,14 +59,14 @@ class FxCoverageScanTest {
         "LyricsDotMatrixRenderer",     // E23 歌词点阵（§B7 暗角 0.44 + 颗粒 0.026）
         "HypnoticFunctionRenderer",    // E25 催眠（§B8 暗角 0.44 + 颗粒 0.028）
         "FractalTreeRenderer",         // E34 分形（§B9 暗角 0.48 + 颗粒 0.030）
+        "LightBeamsRenderer",          // E35 光轴（§B10 暗角 0.50 + 颗粒 0.030）
     )
 
     // ── 豁免名单：阶段推进时逐条移入 covered（理由必须写明，便于复核） ──
     private val exempt = mapOf(
         // ⭐ 阶段 3 · 批次 A（E03/E05/E07/E12/E13/E15/E17/E24/E30/E31/E32）已**全部**移入 covered
-        // ⭐ 阶段 4 · 批次 B 自 T4.1 起逐套移入（E11 / E14 / E16 / E18 / E19 / E20 / E23 / E25 / E34 已完成）
-        // 阶段 4 · 批次 B 剩余 1 套
-        "LightBeamsRenderer" to "S4 批次 B（E35 光轴）",
+        // ⭐ 阶段 4 · 批次 B 自 T4.1 起逐套移入，T4.10 收尾 ⇒ **10 套全部完成**
+        //    （E11 / E14 / E16 / E18 / E19 / E20 / E23 / E25 / E34 / E35）
         // 阶段 5 · 批次 C 7 套
         "OrbitalRingsRenderer" to "S5 批次 C（E29 轨道）",
         "ConcentricGearsRenderer" to "S5 批次 C（E33 齿轮）",
@@ -304,7 +304,7 @@ class FxCoverageScanTest {
     fun `负向N2 未覆盖的类塞进覆盖名单必须被覆盖断言抓到`() {
         val decls = rendererDecls().associateBy { it.name }
         // ⚠️ 样本必须是**当前确实未覆盖**的类。⛔ 不写死类名：E11 / E14 / E16 / E18 / E19 / E20 /
-        //    E23 / E25 / E34 都当过样本，写死则**每迁移一套就过期一次**（本仓库第 N 次踩同类坑）
+        //    E23 / E25 / E34 / E35 都当过样本，写死则**每迁移一套就过期一次**（本仓库第 N 次踩同类坑）
         //    ⇒ 改为**不变式**：从 [exempt] 里现场挑一个「按设计可覆盖、只是还没做」的类。
         val sample = pickUncoveredSample(decls)
         assertTrue("exempt 里必须存在**未覆盖**的类可作样本，否则本负向自证会退化成空转", sample != null)
