@@ -54,14 +54,14 @@ class FxCoverageScanTest {
         "MilkdropRenderer",            // E18 反馈残像（§B4 + §12.4 补后处理 暗角 0.48 + 颗粒 0.030）
         "ParticleTextRenderer",        // E19 粒子文字（§B5 + §12.4 补后处理 暗角 0.46 + 颗粒 0.030）
         "PlasmaFlowRenderer",          // E20 等离子流场（§B6 暗角 0.48 + 颗粒 0.030）
+        "LyricsDotMatrixRenderer",     // E23 歌词点阵（§B7 暗角 0.44 + 颗粒 0.026）
     )
 
     // ── 豁免名单：阶段推进时逐条移入 covered（理由必须写明，便于复核） ──
     private val exempt = mapOf(
         // ⭐ 阶段 3 · 批次 A（E03/E05/E07/E12/E13/E15/E17/E24/E30/E31/E32）已**全部**移入 covered
-        // ⭐ 阶段 4 · 批次 B 自 T4.1 起逐套移入（E11 / E14 / E16 / E18 / E19 / E20 已完成）
-        // 阶段 4 · 批次 B 剩余 4 套
-        "LyricsDotMatrixRenderer" to "S4 批次 B（E23 歌词点阵）",
+        // ⭐ 阶段 4 · 批次 B 自 T4.1 起逐套移入（E11 / E14 / E16 / E18 / E19 / E20 / E23 已完成）
+        // 阶段 4 · 批次 B 剩余 3 套
         "HypnoticFunctionRenderer" to "S4 批次 B（E25 催眠）",
         "FractalTreeRenderer" to "S4 批次 B（E34 分形）",
         "LightBeamsRenderer" to "S4 批次 B（E35 光轴）",
@@ -282,10 +282,9 @@ class FxCoverageScanTest {
     @Test
     fun `负向N2 未覆盖的类塞进覆盖名单必须被覆盖断言抓到`() {
         val decls = rendererDecls().associateBy { it.name }
-        // ⚠️ 样本必须是**当前确实未覆盖**的类：E11 已在 T4.1 移入 covered（它现在有 postFx），
-        //    E14 已在 T4.2、E16 已在 T4.3、E18 已在 T4.4、E19 已在 T4.5 移入 covered ⇒
-        //    若继续拿它们当样本，上面的 assertFalse 前提会直接挂。
-        //    改用批次 B 中**尚未开工**的 E34 分形。
+        // ⚠️ 样本必须是**当前确实未覆盖**的类：E11 / E14 / E16 / E18 / E19 / E20 / E23 已分别
+        //    在 T4.1–T4.7 移入 covered（它们现在都有 postFx）⇒ 若继续拿它们当样本，
+        //    上面的 assertFalse 前提会直接挂。改用批次 B 中**尚未开工**的 E34 分形。
         val sample = "FractalTreeRenderer"
         val d = decls.getValue(sample)
         assertFalse("前提：$sample 当前未覆盖", isCovered(d))

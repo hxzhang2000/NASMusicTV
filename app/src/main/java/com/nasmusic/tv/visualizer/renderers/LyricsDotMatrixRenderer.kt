@@ -4,8 +4,6 @@ import android.graphics.Bitmap
 import android.graphics.Canvas as AndroidCanvas
 import android.graphics.Paint as AndroidPaint
 import android.graphics.Typeface
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.asAndroidPath
 import androidx.compose.ui.graphics.Path
@@ -14,8 +12,6 @@ import com.nasmusic.tv.data.model.VisualizerTheme
 import com.nasmusic.tv.visualizer.AudioFrame
 import com.nasmusic.tv.visualizer.RenderContext
 import com.nasmusic.tv.visualizer.VisualizerMath
-import com.nasmusic.tv.visualizer.VisualizerRandom
-import com.nasmusic.tv.visualizer.VisualizerRenderer
 import kotlin.math.cos
 import kotlin.math.sin
 
@@ -32,13 +28,39 @@ import kotlin.math.sin
  * 3. 第一行唱完 → 从左到右逐字消散（稍慢）
  * 4. 第二行上移到第一行位置 + 新行从下方凝聚（从左到右逐字凝聚，稍慢）
  * 5. 循环
+ *
+ * ## §B7 优化（T4.7）—— 用户要求「以性能优化为主；画面优化不得增加性能消耗」
+ *
+ * **性能（P）—— 全部为净降耗**
+ * - **P2** 两遍 `getPixel()` → **逐行 `getPixels()`**：JNI ≈ 71,000 → ≈ 346（每次换行）、
+ *   耗时 35–70 ms → < 1 ms；额外内存仅 `IntArray(bmpW)` ≈ 7 KB（跨次复用）。
+ * - **P3** 全局量提到循环外（`sinB` / `amp`）⇒ 每帧省 7,200 次 `sin` + ≈ 14,400 次乘加。
+ *   ⚠️ `floatY` 里的 `sin(globalT*2 + localX*10)` 含逐点 `localX`，**提不了**。
+ * - **P4** 删死代码：`phaseVal`（零引用）、`textLen`（未使用形参）、`baseSize`（恒 1.0f）。
+ * - **P5** `paths.reset()` → `rewind()`（保留内部数据结构供快速复用）。
+ * - **P6** `step` 3 → **1**（P2 之后采样已 < 1 ms ⇒ 近乎免费；同样 `cap` 个点覆盖更完整，
+ *   点总数与每帧绘制成本**完全不变**）。
+ *
+ * **观感（Q）—— 零额外 draw / 分配**
+ * - **Q2** 亮档去 `Plus` 过曝：core 峰值 0.98 → 0.76，省下的亮度给外辉光（亮部有边界）。
+ * - **Q4** 后处理（暗角 0.44 + 颗粒 0.026；`FxLevel.OFF` 档位下整段零开销）。
+ *
+ * ## ⛔ 本轮不做的两项（§12.4 已登记偏差）
+ * - **P1**（`dotPath` 池 + `addPath` 平移复用）：其收益是「消除每点 `Rect` 分配」，而
+ *   **T1.6.2 已改用 `asAndroidPath().addOval(l, t, r, b)` float 重载** ⇒ `Rect` 分配早已为 0；
+ *   P1 只剩「native 调用 9,000 → 7,416」的边际收益，却要付出半径 **6 档量化（≈ 8% 误差）**
+ *   ⇒ 收益/代价不成立，**不做**。
+ * - **Q3**（4 档亮度 / 8 条 `Path`）：§B7 标注为**可选**（需先确认重建成本），收益小、复杂度高 ⇒ 不做。
+ *
+ * ## ⛔ 卡拉OK 逐字亮度分档必须保留（§13.5-D4）
+ * 它不是性能瓶颈，删了反而更慢 —— 详见 [addLineToPaths] 内的守卫注释。
  */
-class LyricsDotMatrixRenderer : VisualizerRenderer {
+class LyricsDotMatrixRenderer : RendererFx() {
 
     override val theme = VisualizerTheme.LYRICS_DOT_MATRIX
 
-    /** P1#5：本渲染器独立的随机源 */
-    private val rng = VisualizerRandom()
+    /** §B7-Q4 收尾后处理（暗角 + 颗粒）。`FxLevel.OFF` 档位下整段零开销 */
+    override val postFx = PostFx(vignette = 0.44f, grain = 0.026f)
 
     // ── 单行粒子数据（两行各一份） ──────────────────────────
     // 每粒子 8 float：x, y, vx, vy, tx, ty, size, phase
@@ -60,6 +82,10 @@ class LyricsDotMatrixRenderer : VisualizerRenderer {
 
     // 6 条 Path：3 档亮度 × 2 层（批量绘制）
     private val paths = Array(6) { Path() }
+
+    // ── §B7-P2 采样缓冲（首次采样时分配一次，此后复用 ⇒ 零分配）──
+    /** 逐行批读缓冲（长度 ≥ `bmpW`）。⛔ 只读**当前行**，不整图读（§B7 R12） */
+    private var rowBuf: IntArray? = null
 
     // ── 状态机 ──────────────────────────────────────────────
     private enum class Phase {
@@ -141,7 +167,7 @@ class LyricsDotMatrixRenderer : VisualizerRenderer {
         return base.coerceIn(h * MIN_FONT_S, h * MAX_FONT_S)
     }
 
-    override fun onEnter(ctx: RenderContext) {
+    protected override fun onEnterContent(ctx: RenderContext) {
         val cap = capacityFor(ctx)
         line0 = FloatArray(cap * STRIDE)
         line1 = FloatArray(cap * STRIDE)
@@ -165,7 +191,7 @@ class LyricsDotMatrixRenderer : VisualizerRenderer {
         cachedLongest = null
     }
 
-    override fun onExit() {
+    protected override fun onExitContent() {
         line0 = FloatArray(0)
         line1 = FloatArray(0)
         line0CharIdx = IntArray(0)
@@ -242,11 +268,10 @@ class LyricsDotMatrixRenderer : VisualizerRenderer {
         val xOff = (bmpW - textWidth) / 2
         canvas.drawText(displayText, xOff, -fm.top, paint)
 
-        // 自适应步长
-        val estPixels = fontSize * textWidth * 0.20f
-        val idealStep = kotlin.math.sqrt(estPixels / cap.toFloat())
-            .coerceIn(1f, 3f).toInt().coerceAtLeast(1)
-        val step = idealStep
+        // §B7-P6：采样改逐行批读后（P2）采样耗时已 < 1 ms ⇒ `step` 恒 1。
+        // 旧的 `coerceIn(1f, 3f)` 是为了限制采样耗时而故意加粗的，正是"点阵有空洞 / 笔画断"的直接原因。
+        // ⚠️ 点总数不变（仍 `cap`/行）⇒ **每帧绘制成本完全不变**，只是同样多的点覆盖更完整。
+        val step = 1
 
         // 计算每个字符的 x 范围（用于字索引映射）
         val charXBounds = FloatArray(displayText.length + 1)
@@ -270,12 +295,17 @@ class LyricsDotMatrixRenderer : VisualizerRenderer {
 
         // 收集所有有效像素的行（y）坐标分布，用于按行配额
         // 记录每一行（按 step 步进）的有效像素计数
+        // §B7-P2：两遍里的 `getPixel(x, y)` → **每行一次** `getPixels`，行内改纯数组下标访问。
+        // JNI：`2 × ceil(bmpW/step) × ceil(bmpH/step)`（≈ 71,000）→ `2 × ceil(bmpH/step)`（≈ 346）。
+        // 额外内存仅 `IntArray(bmpW)` ≈ 7 KB（跨次复用）。⛔ 不整图读 `IntArray(bmpW * bmpH)`（R12）。
+        val rowBufLocal = rowBuf?.takeIf { it.size >= bmpW } ?: IntArray(bmpW).also { rowBuf = it }
         val maxRows = (bmpH + step - 1) / step
         val rowPixelCount = IntArray(maxRows)
         for (y in 0 until bmpH step step) {
+            b.getPixels(rowBufLocal, 0, bmpW, 0, y, bmpW, 1)
             var cnt = 0
             for (x in 0 until bmpW step step) {
-                if (b.getPixel(x, y) and 0xFF000000.toInt() != 0) cnt++
+                if (rowBufLocal[x] and 0xFF000000.toInt() != 0) cnt++
             }
             rowPixelCount[y / step] = cnt
             totalPixels += cnt
@@ -296,9 +326,10 @@ class LyricsDotMatrixRenderer : VisualizerRenderer {
             var taken = 0
             var filled = 0
             val takeEvery = (rowPixelCount[ri].toFloat() / targetCount).coerceAtLeast(1f)
+            b.getPixels(rowBufLocal, 0, bmpW, 0, y, bmpW, 1)
             for (x in 0 until bmpW step step) {
                 if (curRowFill >= cap) break
-                if (b.getPixel(x, y) and 0xFF000000.toInt() != 0) {
+                if (rowBufLocal[x] and 0xFF000000.toInt() != 0) {
                     taken++
                     // 该行内等距抽取 targetCount 个
                     if (((taken - 1).toFloat() % takeEvery) < 0.5f) {
@@ -392,7 +423,7 @@ class LyricsDotMatrixRenderer : VisualizerRenderer {
 
     // ── 主绘制 ──────────────────────────────────────────────
 
-    override fun DrawScope.draw(frame: AudioFrame, ctx: RenderContext) {
+    override fun DrawScope.drawContent(frame: AudioFrame, ctx: RenderContext, fx: FxFrame) {
         val w = size.width
         val h = size.height
         val cap = line0.size / STRIDE
@@ -541,7 +572,14 @@ class LyricsDotMatrixRenderer : VisualizerRenderer {
         val bassPulse = 1f + frame.bass * 0.05f
         val t = frame.timeMs * 0.004f
 
-        for (p in paths) p.reset()
+        // §B7-P3：把「与逐点无关的全局量」提到循环外算一次。
+        // ⛔ `breath` 里的 `sin(globalT * 2)` 可提；`floatY` 里的 `sin(globalT * 2 + localX * 10)`
+        //    含逐点 `localX`，**提不了**（旧口径写"省 14,400 次 sin"高估了 2 倍）。
+        val sinB = sin(t * 2.0f)
+        val amp = 2.2f * (0.35f + frame.bass.coerceIn(0f, 1f) * 2.2f)
+
+        // §B7-P5：`rewind()` 保留内部数据结构供快速复用（`reset()` 会丢弃）
+        for (p in paths) p.rewind()
 
         // 绘制上行
         if (line0Count > 0) {
@@ -555,11 +593,12 @@ class LyricsDotMatrixRenderer : VisualizerRenderer {
                 isSinging = line0Singing,
                 isScattering = phase == Phase.SCATTERING_TOP,
                 scatterElapsedMs = if (phase == Phase.SCATTERING_TOP) elapsed else 0L,
-                textLen = line0Text.length,
                 kProgress = kProgress,
                 hasLyrics = hasLyrics,
                 bassPulse = bassPulse,
                 globalT = t,
+                sinB = sinB,
+                amp = amp,
                 frame = frame,
                 activeHue = activeHue
             )
@@ -580,11 +619,12 @@ class LyricsDotMatrixRenderer : VisualizerRenderer {
                 isSinging = line1Singing,
                 isScattering = false,
                 scatterElapsedMs = 0L,
-                textLen = line1Text.length,
                 kProgress = 0f,
                 hasLyrics = hasLyrics && line1Text.isNotBlank(),
                 bassPulse = bassPulse,
                 globalT = t,
+                sinB = sinB,
+                amp = amp,
                 frame = frame,
                 activeHue = activeHue,
                 isCoalescing = line1Coalescing,
@@ -606,11 +646,11 @@ class LyricsDotMatrixRenderer : VisualizerRenderer {
         drawPath(paths[2], VisualizerMath.hsl(midHue, 0.85f, 0.65f),
             alpha = 0.60f, blendMode = BlendMode.Plus)
 
-        // 亮档
+        // 亮档（§B7-Q2：core 峰值 0.98 → 0.76，省下的亮度给外辉光 ⇒ 亮部仍有边界，不再"曝白"）
         drawPath(paths[5], VisualizerMath.hsl(activeHue, 1.0f, 0.75f),
-            alpha = 0.18f + frame.pulse * 0.1f, blendMode = BlendMode.Plus)
+            alpha = 0.26f + frame.pulse * 0.10f, blendMode = BlendMode.Plus)
         drawPath(paths[4], VisualizerMath.hsl(activeHue, 1.0f, 0.7f),
-            alpha = 0.80f + frame.pulse * 0.18f, blendMode = BlendMode.Plus)
+            alpha = 0.62f + frame.pulse * 0.14f, blendMode = BlendMode.Plus)
     }
 
     // ── 将一行粒子添加到 Path 中 ────────────────────────────
@@ -624,11 +664,12 @@ class LyricsDotMatrixRenderer : VisualizerRenderer {
         isSinging: Boolean,
         isScattering: Boolean,
         scatterElapsedMs: Long,
-        textLen: Int,
         kProgress: Float,
         hasLyrics: Boolean,
         bassPulse: Float,
         globalT: Float,
+        sinB: Float,
+        amp: Float,
         frame: AudioFrame,
         activeHue: Float,
         isCoalescing: Boolean = false,
@@ -638,8 +679,6 @@ class LyricsDotMatrixRenderer : VisualizerRenderer {
             val o = i * STRIDE
             val ci = charIndices[i]
             val localX = localXs[i]
-            val baseSize = arr[o + SIZE]
-            val phaseVal = arr[o + PHASE]
 
             // 计算该字的可见度（消散/凝聚）
             val visibility = when {
@@ -660,7 +699,10 @@ class LyricsDotMatrixRenderer : VisualizerRenderer {
 
             if (visibility <= 0.01f) continue
 
-            // 卡拉OK亮度（仅正在唱的行）
+            // 卡拉OK亮度（仅正在唱的行）。
+            // ⛔ **不得以“性能”为由删除**（§13.5-D4 / §B7 专项评估）：实测每点仅 +4 比较 +4 乘除、
+            //    0 分配 0 JNI、`drawPath` 恒 6 次；删掉后统一取"正在唱"会让 oval 数 **+60%**（更慢），
+            //    统一取"待唱"则丢掉逐字推进感。它是"字色逐字变化"观感的唯一来源。
             val brightness = when {
                 !hasLyrics -> 0.9f
                 !isSinging -> 0.25f + frame.energy * 0.08f  // 待唱行：暗
@@ -681,15 +723,15 @@ class LyricsDotMatrixRenderer : VisualizerRenderer {
             }
 
             // 整体呼吸：所有粒子用同一全局相位同步缩放（避免各粒子独立相位造成的“抖动感”）
-            val breath = 1f + sin(globalT * 2.0f) * 0.10f * (0.25f + brightness * 0.75f)
-            val size = baseSize * breath * breath * bassPulse * (0.85f + brightness * 0.4f) * visibility
+            // §B7-P3：`sinB` 已提到循环外；`baseSize` 恒为 1.0f（`sampleLine` 是唯一写入点）⇒ 内联
+            val breath = 1f + sinB * 0.10f * (0.25f + brightness * 0.75f)
+            val size = breath * breath * bassPulse * (0.85f + brightness * 0.4f) * visibility
 
             val px = arr[o + X]
             // 节奏性律动：所有粒子同步以低音（bass）驱动上下起伏，
             // 叠加一个依赖粒子横向位置的固定波相位，形成整行的规整波浪，
             // 鼓点（bass 峰值）到来时浮动幅度增大，节奏感强、不发散。
-            val bassCue = frame.bass.coerceIn(0f, 1f)
-            val amp = 2.2f * (0.35f + bassCue * 2.2f)
+            // §B7-P3：`amp` 已提到循环外；此处只剩含逐点 `localX` 的那次 `sin`（提不了）
             val floatY = sin(globalT * 2.0f + localX * 10f) * amp
             val py = arr[o + Y] + yOffset + floatY
 
@@ -837,21 +879,6 @@ class LyricsDotMatrixRenderer : VisualizerRenderer {
     // ── 辅助函数 ────────────────────────────────────────────
 
     /**
-     * 按每行有效像素占比，把 cap 个粒子配额分配给各行。
-     * 确保字形密集的上/中部和下/底部都按实际占比得到粒子，垂直方向完整覆盖。
-     */
-    private fun calculateRowQuota(rowPixelCount: IntArray, totalPixels: Int, cap: Int): IntArray {
-        val quota = IntArray(rowPixelCount.size)
-        if (totalPixels <= 0 || cap <= 0) return quota
-        for (ri in rowPixelCount.indices) {
-            val cnt = rowPixelCount[ri]
-            if (cnt <= 0) continue
-            quota[ri] = (cnt.toLong() * cap / totalPixels).toInt().coerceAtLeast(1)
-        }
-        return quota
-    }
-
-    /**
      * 将 line1 提升为 line0（行切换时使用）。
      * 复制所有粒子数据，TY 保持在下行位置（SHIFTING 阶段通过 rowOffsetY 做上移动画）。
      */
@@ -879,17 +906,7 @@ class LyricsDotMatrixRenderer : VisualizerRenderer {
         }
     }
 
-    private fun karaokePacing(t: Float): Float {
-        val u = t.coerceIn(0f, 1f)
-        return 1f - (1f - u) * (1f - u) * (1f - u)
-    }
-
-    private fun easeOutCubic(t: Float): Float {
-        val u = t.coerceIn(0f, 1f)
-        return 1f - (1f - u) * (1f - u) * (1f - u)
-    }
-
-    companion object {
+    internal companion object {
         private const val X = 0
         private const val Y = 1
         private const val VX = 2
@@ -905,5 +922,36 @@ class LyricsDotMatrixRenderer : VisualizerRenderer {
         private const val MIN_FONT_S = 0.05f
         /** 字号上限（屏高比例）：超过则粒子太稀、文字空洞（3600 粒子/行固定） */
         private const val MAX_FONT_S = 0.16f
+
+        // ── §B7 纯函数（`internal` 供门禁直接调；⛔ 测试不复制算法 —— 复制必然漂移）──
+
+        /**
+         * §B7-Q1：按每行有效像素占比，把 `cap` 个粒子配额分配给各行。
+         * 确保字形密集的上/中部和下/底部都按实际占比得到粒子，垂直方向完整覆盖。
+         *
+         * ⛔ 这是本项目**已验证的正确算法**（旧"行优先 + 满了就 break"会丢字形下半部）。
+         */
+        internal fun calculateRowQuota(rowPixelCount: IntArray, totalPixels: Int, cap: Int): IntArray {
+            val quota = IntArray(rowPixelCount.size)
+            if (totalPixels <= 0 || cap <= 0) return quota
+            for (ri in rowPixelCount.indices) {
+                val cnt = rowPixelCount[ri]
+                if (cnt <= 0) continue
+                quota[ri] = (cnt.toLong() * cap / totalPixels).toInt().coerceAtLeast(1)
+            }
+            return quota
+        }
+
+        /** §B7-Q1：卡拉OK 推进曲线（快起慢落的三次缓出，`u ∈ [0,1]`） */
+        internal fun karaokePacing(t: Float): Float {
+            val u = t.coerceIn(0f, 1f)
+            return 1f - (1f - u) * (1f - u) * (1f - u)
+        }
+
+        /** 行上移缓动（与 [karaokePacing] 同式，语义不同：这里是空间位移） */
+        internal fun easeOutCubic(t: Float): Float {
+            val u = t.coerceIn(0f, 1f)
+            return 1f - (1f - u) * (1f - u) * (1f - u)
+        }
     }
 }
