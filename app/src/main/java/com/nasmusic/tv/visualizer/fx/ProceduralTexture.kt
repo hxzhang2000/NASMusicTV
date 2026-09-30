@@ -25,7 +25,7 @@ import kotlin.math.sin
 object ProceduralTexture {
 
     /** 可平铺的固定尺寸纹理；每类固定占 [VARIANTS] 个槽位（`variant and 7`） */
-    enum class Id { GRAIN, SCANLINE, STARFIELD, PAPER, WATER, CAUSTIC }
+    enum class Id { GRAIN, SCANLINE, STARFIELD, PAPER, WATER, CAUSTIC, PLASMA }
 
     const val VARIANTS = 8
     const val GRAIN_TILE = 128      // px，见 §7.1
@@ -53,7 +53,7 @@ object ProceduralTexture {
     private fun lcgFloat(state: UInt): Float = ((state shr 8) and 0xFFFFFFu).toFloat() / 16777216f
 
     /**
-     * 按画布尺寸准备全屏型纹理（STARFIELD / PAPER / WATER / CAUSTIC）。
+     * 按画布尺寸准备全屏型纹理（STARFIELD / PAPER / WATER / CAUSTIC / PLASMA）。
      * 平铺型（GRAIN / SCANLINE）在此首次调用时生成一次。
      *
      * ⚠️ 必须在 **`onEnter` 或尺寸变化时**调用，⛔ 不得在 `draw` 内调用。
@@ -84,6 +84,7 @@ object ProceduralTexture {
         ensureFullscreen(Id.PAPER, w, h, fullKey) { row, y -> paperRow(row, y, w, h) }
         ensureFullscreen(Id.WATER, w, h, fullKey) { row, y -> waterRow(row, y, w, h) }
         ensureFullscreen(Id.CAUSTIC, w, h, fullKey) { row, y -> causticRow(row, y, w, h) }
+        ensureFullscreen(Id.PLASMA, w, h, fullKey) { row, y -> plasmaRow(row, y, w, h) }
     }
 
     private inline fun ensureFullscreen(
@@ -317,6 +318,36 @@ object ProceduralTexture {
             val net = (v - 0.72f).coerceAtLeast(0f) / 0.28f   // 只留网线
             val a = (CAUSTIC_A * net).toInt().coerceIn(0, CAUSTIC_A)
             out[x] = (a shl 24) or 0x00EAF6FF.toInt()
+        }
+    }
+
+    /**
+     * PLASMA：**3 通道**低频 `sin` 场合成（R / G / B 各一条，相位互差 120°）
+     * ⇒ 大尺度彩色云团；alpha 按**三通道均值亮度**取（暗区近乎全透明）
+     * ⇒ 只留亮部成"等离子丝"。alpha 上限 0.70（调用方再乘 `0.16 + energy*0.10`）。
+     *
+     * ⚠️ 每像素 **3 次 `sin`**（比 [waterRow] 的 4 次更省）。本 tile 会在每次
+     * `ensure(w, h)` 里**全屏生成一次**，是 `ensure` 的固定成本项之一。
+     */
+    private val PLASMA_A = (0.70f * 255f).toInt()   // 178
+
+    /** G / B 通道的相位偏移（120° / 240°），使三通道在空间上错开 ⇒ 彩色云团而非灰阶 */
+    private const val PLASMA_PHASE_G = 2.0943951f
+    private const val PLASMA_PHASE_B = 4.1887902f
+
+    internal fun plasmaRow(out: IntArray, y: Int, w: Int, h: Int) {
+        val fy = y.toFloat()
+        for (x in 0 until w) {
+            val fx = x.toFloat()
+            val r = (sin(fx * 0.0113f + fy * 0.0071f) * 0.5f + 0.5f) * 255f
+            val g = (sin(fx * 0.0137f - fy * 0.0094f + PLASMA_PHASE_G) * 0.5f + 0.5f) * 255f
+            val b = (sin(fx * 0.0091f + fy * 0.0126f + PLASMA_PHASE_B) * 0.5f + 0.5f) * 255f
+            val rr = r.toInt().coerceIn(0, 255)
+            val gg = g.toInt().coerceIn(0, 255)
+            val bb = b.toInt().coerceIn(0, 255)
+            val lum = (r + g + b) / 765f                       // 0..1（三通道均值）
+            val a = (PLASMA_A * lum).toInt().coerceIn(0, PLASMA_A)
+            out[x] = (a shl 24) or (rr shl 16) or (gg shl 8) or bb
         }
     }
 
