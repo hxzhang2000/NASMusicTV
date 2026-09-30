@@ -36,6 +36,17 @@
 
   // ---------------------------------------------------------------- [实测缺失]
 
+  // globalThis（ES2020，Chrome 71+ 才有）
+  // ⛔ 严格说**不补也能工作**：两个库的 UMD 前导段都是
+  //    `e = "undefined"!=typeof globalThis ? globalThis : e||self`，
+  //    自带 `e||self` 回退，而 `e` 是传入的 this —— 经典脚本里就是 window。
+  //    这里仍显式补上，是为了让正确性不依赖那条回退路径：一旦某个构建改成只用
+  //    globalThis，缺失就是 ReferenceError，且炸在 UMD 最前面，排查成本很高。
+  //    这个实现是**正确**的（指向全局对象本身），与 Proxy 那种假实现不同。
+  if (typeof globalThis === "undefined") {
+    define(global, "globalThis", global);
+  }
+
   // Object.assign：three ×28、three-globe ×58
   if (!has(Object, "assign")) {
     define(Object, "assign", function assign(target) {

@@ -34,22 +34,25 @@
     three-globe 2.45.2 UMD（peerDependency three >=0.154，兼容 r160）。
   -->
   <!--
-    加载顺序不可调换：
-      1) polyfill.es5.js      —— Chrome 39 缺失的 ES2015+ API（Object.assign / Array.from /
-                                Object.values / Object.entries / String.includes /
-                                String.startsWith / Array.includes / Array.find）
-      2) three.es5.js         —— 上游 three.min.js（r160 UMD）的 ES5 降级产物
-      3) three-globe.es5.js   —— 上游 three-globe.min.js（2.45.2 UMD）的 ES5 降级产物
-      4) globe.js             —— 本项目渲染逻辑，**本身已是纯 ES5**，未参与转译
-    polyfill 必须最先：Babel 的 useBuiltIns:false 只降语法不注入内建 API，
-    降级后的库依然会调用 Object.assign / Array.from 等。
-    ⛔ three.min.js / three-globe.min.js（ES6 原版）：**永久保留、永不删除、永不加载**。
-       它们是 three.es5.js / three-globe.es5.js 的**比对基线**——转译产物出问题时，
-       必须能逐字节 diff 回上游，以确认差异只来自「ES6→ES5 降级」而不来自库的版本漂移
-       或误改。删掉它们就永久丧失这个能力；同理也**不要修改这两个文件的内容**，
-       改了就失去比对意义。体积代价约 1.9MB 源资源（压缩后增量远小于此），换可回溯性。
-    详见同目录 downlevel_libs.mjs（转译脚本 + 完整文件清单）与
-         docs/technical-overview.md §10.201
+    加载 ES5 降级产物。电视（创维 9R54_G8S / Android 5.1.1）系统 WebView 是 **Chrome 39**，
+    解析不了 class / 箭头函数 / let / 模板串（实测 SyntaxError；const / for-of / generator 可用），
+    加载 ES6 原版会黑屏。详见 docs/technical-overview.md §10.201。
+
+    顺序不可调换：polyfill 必须最先 —— 降级只转语法，库依然会调
+    Object.assign / Array.from 等 Chrome 39 缺失的 API。
+
+    ⛔ 降级器是 **TypeScript**，⛔ 不是 Babel。
+       Babel preset-env targets:{chrome:"39"} 的产物**运行时初始化即崩**
+       （TypeError: e.Box3 is not a constructor），已排除 terser（mangle/compress
+       全关、乃至完全不压缩共 5 组配置同样报错）与 UMD 实参（两版传的是同一对象）。
+       → 缺陷在 Babel 的 class 降级语义本身。改降级器前先读 downlevel_libs.mjs。
+
+    ⚠️ ES5 语法校验（acorn ecmaVersion=5）**只证明语法，不证明运行时**。
+       任何改动都必须配 vm 加载测试：删掉 Chrome 39 缺失的 API 后按本顺序加载全链路。
+
+    ⛔ three.min.js / three-globe.min.js（ES6 原版）：**永久保留、永不删除、永不修改**。
+       它们是 ES5 产物的**比对基线**——产物出问题时必须能逐字节 diff 回上游，
+       确认差异只来自降级而非库的版本漂移或误改。
   -->
   <div id="globe-container"></div>
 

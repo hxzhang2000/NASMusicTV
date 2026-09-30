@@ -11267,34 +11267,76 @@ TypedArray、`performance.now`、`requestAnimationFrame`。
 
 **修复**：
 
-1. `three.es5.js` / `three-globe.es5.js` —— `@babel/preset-env` `targets:{chrome:"39"}` 降级后经 terser 压缩。
-   三个必须显式关闭的选项：`modules:false`（保 UMD 包装；preset-env 默认会转 CommonJS，破坏
-   `<script src>` 直接挂 `window.THREE` 的方式）、`useBuiltIns:false`（API 交给自己的 polyfill）、
-   `loose:false`（避免 class 转换跳过 `_classCallCheck` 之类的语义检查）。产物 654KB→734KB、1248KB→1433KB。
+1. `three.es5.js` / `three-globe.es5.js` —— **降级器是 TypeScript 5.7.2（`tsc`），⛔ 不是 Babel**。
+   关键选项：`downlevelIteration:false`（只需数组的 `for..of`；置 true 会引入 `__values`/`__read` 辅助，
+   徒增风险）、`importHelpers:false`（`__extends` 等辅助内联，不引 tslib）、`removeComments:false`、
+   `useDefineForClassFields:false`。产物 654KB→988KB、1248KB→2008KB。**不做压缩**（tsc 产物已是合法 ES5，
+   再过压缩器只为省体积，不值得引入额外变量）。
+
+   **⛔ Babel 路线已实证失败，勿重蹈**：`@babel/preset-env targets:{chrome:"39"}` 产出的 three-globe
+   **运行时初始化即崩** —— `TypeError: e.Box3 is not a constructor`。逐项排除：
+   - **不是 terser**：`mangle` / `compress` 全关、乃至**完全不压缩**（Babel 原始输出），共 5 组配置
+     全部同样报错（1433 / 1508 / 1456 / 1564 / 1579 KB 五份产物，报错位置一致）；
+   - **不是 UMD 实参**：把 `t(e.THREE)` 改写为 `t(__farg=e.THREE, e.THREE)` 后证实，ES6 原版与 Babel 产物
+     传给工厂的是**同一个对象**（`REVISION=160`、`Box3=function`、416 个键）；
+   - **只在 three-globe 侧**：tsc 产物 three-globe + Babel 版 three 混搭可正常加载。
+   → 缺陷在 Babel 的 class 降级语义本身（`class … extends THREE.InstancedBufferGeometry` 被转成继承
+   辅助调用后，工厂体内 `e` 的引用语义变了）。
+
+   **⚠️ 本条是本节最重要的教训**：「产物能被 ES5 解析器解析」**不等于**「产物能正确运行」。
+   当时只用 acorn `ecmaVersion:5` 做了**语法**校验就汇报「验证通过」，结论下早了——而那份产物在**所有设备上**
+   （含现代 WebView 的手机）都初始化失败，等于把一个只在电视上的问题变成了全局回归。**必须配 vm 加载测试**。
 2. `polyfill.es5.js`（11.8KB，手写纯 ES5）—— 补上面 8 个缺失 API，按「实测缺失」与「防御补齐」分组标注，
    全部特性检测，现代 WebView 上全是 no-op。
    **刻意不补 `Proxy` 与 `Object.getOwnPropertySymbols`**：二者无法真正实现；空壳会让
    `typeof Proxy === "function"` 误判为「支持」，随后 `new Proxy(...)` 拿到坏对象，**行为比「不支持」更糟**。
+   实测 `new Proxy` 在 three-globe 中出现 ×3，**全部位于 three 的 TSL / node material 子系统**
+   （含 `'TSL: "Fn()" was declared but not invoked'` 提示）；`globe.js` 只用 `MeshPhongMaterial`，
+   不走 node material，这些代码**不会执行**。故不补亦安全——但这是「当前配置下安全」，
+   若将来改用 `MeshStandardNodeMaterial` 之类必须重新评估。
+   另补 `globalThis`（ES2020）：两个库的 UMD 前导段都有
+   `e="undefined"!=typeof globalThis?globalThis:e||self`，**自带 `e||self` 回退**（经典脚本里 `e` 即 `this`
+   = `window`），所以不补也能工作；显式补只是不让正确性依赖那条回退路径。这个实现是**正确**的
+   （指向全局对象本身），与 `Proxy` 的假实现性质不同。
 3. `index.html` 改为 `polyfill.es5.js` → `three.es5.js` → `three-globe.es5.js` → `globe.js` 顺序加载。
    polyfill 必须最先——Babel 只降语法不注入内建 API，降级后的库依然调 `Object.assign` / `Array.from`。
-4. `downlevel_libs.mjs`（与资产同目录）—— 可复现转译脚本，固定
-   `@babel/core@7.26.0` / `@babel/preset-env@7.26.0` / `terser@5.37.0` / `acorn@8.14.0`；`node_modules` 不入库。
+4. `downlevel_libs.mjs`（与资产同目录）—— 可复现转译脚本，固定 `typescript@5.7.2` + `acorn@8.14.0`；
+   `node_modules` 不入库。脚本头部同时记录了「⛔ 为什么不用 Babel」的完整排除过程，
+   避免后来者重走一遍。
 5. ES6 原版 `three.min.js` / `three-globe.min.js` **永久保留、永不删除、永不修改、永不加载**，
    作为 ES5 产物的**比对基线**：产物出问题时必须能逐字节 diff 回上游，确认差异只来自「ES6→ES5 降级」，
    而非库的版本漂移或误改。删掉就永久丧失该能力，改掉内容同样失效。代价约 1.9MB 源资源，换可回溯性。
    ⛔ 该策略已写进代码（`.min.js` 本身不得改动，故记在「读取它」与「生成它」两处）：
    `index.html` 的加载注释、`downlevel_libs.mjs` 头部的「本目录文件清单与保留策略」。
-6. 产物用 **acorn `ecmaVersion:5` 解析**证明合法 ES5（`polyfill.es5.js` / `three.es5.js` /
-   `three-globe.es5.js` / `globe.js` 四个文件全部通过）。
-   ⛔ 不用正则扫产物：minified 代码里 `"..."` / `"class a"` / 反引号大量出现在**字符串与正则字面量**中
-   （GLSL chunk 源码、加载文案），正则无法区分语法与字面量，必然误报——首版脚本就是这样误报并差点误判失败。
+6. **验证分四道关，缺一不可**（`final_verify` 系列脚本，Node vm 沙箱）：
+   - **关1 语法**：四个脚本都能被 acorn `ecmaVersion:5` 解析。
+     ⛔ 不用正则扫产物：minified 代码里 `"..."` / `"class a"` / 反引号大量出现在**字符串与正则字面量**中
+     （GLSL chunk 源码、加载文案），正则无法区分语法与字面量，必然误报——首版脚本就是这样误报并差点误判失败。
+   - **关2 对照组**：Chrome39 环境**不加载** polyfill → `three.es5.js` 必须报错。
+     用来证明「剥离确实生效」，否则关3 的成功毫无意义。
+   - **关3 运行时**：Chrome39 环境按 `index.html` 顺序加载全链路 → `THREE`、`ThreeGlobe` 均已定义。
+     剥离方式：真机 probe.html 实测缺失的 20 个 API（`Object.assign`/`Object.values`/`Object.entries`/
+     `Array.from`/`Array.flat`/`Array.flatMap`/`Array.fill`/`String.prototype.{includes,startsWith,endsWith,
+     trimStart,trimEnd,padStart,padEnd}`/`Array.prototype.{includes,find,findIndex}`/`Number.{isNaN,isInteger}`/
+     `Math.trunc`）逐个 `delete`。
+   - **关4 基线**：ES6 原版在现代引擎下同样正常 —— 确认模拟没有过度删减。
+   **本次 12/12 通过。**
+   ⚠️ 已知模拟盲区：`Proxy` 与 `globalThis` 在 vm 全局里**不可配置、删不掉**（`typeof` 仍为
+   `function`/`object`），故这两条路径未被动态验证——但已用代码分析确认二者良性（见第 2 条）。
+7. **对照结论**：在同一沙箱里，ES6 原版（现代引擎）、ES6 原版 + polyfill（Chrome39 模拟）、
+   tsc 产物 + polyfill（Chrome39 模拟）三组的加载结果**完全一致**（`THREE` 与 `ThreeGlobe` 均已定义），
+   即 tsc 产物与原版**行为等价**。
+   （`globe.js` 在沙箱里 `WorldGlobe` 始终为 `undefined`——三组一致，故是沙箱没有真实 WebGL 上下文所致，
+   **不是**回归。）
 
-**⚠️ 未验证（按当前约定本轮不做编译与真机验证）**：已验证的只有「四个脚本都是合法 ES5」。仍待真机确认：
+**⚠️ 仍待真机确认（本轮按约定不做编译与真机验证）**：
 
 1. `WorldGlobe is not defined` 刷屏消失 —— 解析通过的干净信号；
 2. three r160 的 WebGL1 路径能否在 Chrome 39 的 ANGLE→GLES3 上编译着色器。若失败会看到
    `THREE.WebGLProgram: Shader Error`（`webChromeClient.onConsoleMessage` 会转发到 logcat）；
-3. 2.1MB ES5 产物在 2014 年 ARM CPU 上的解析耗时（预计 2-4 秒，表现为地球出现慢几秒）。
+3. ~3MB ES5 产物在 2014 年 ARM CPU 上的解析耗时（预计 2-4 秒，表现为地球出现慢几秒）；
+4. **手机端必须一并复测**——上一轮的 Babel 产物在手机上也是黑的（库初始化失败），
+   本次 tsc 产物虽已通过模拟验证，但真机才是最终判据。
 
 ### 10.196 v2.37.6 — 新增 E41「世界」（WORLD）可视化：海岸线地图 + 城市光点 + 真实航空规模大圆航线 + 真实 UTC 晨昏线（2026-09-28）
 
