@@ -1042,7 +1042,8 @@ class MatrixRainRenderer : RendererFx() {
         val baseY = (bh - (measure.descent() - measure.ascent())) / 2f - measure.ascent()
         val cx = pad + bw / 2f
         val cy = pad + bh / 2f
-        val baseline = pad + baseY
+        // ⛔ 文字绘制原点不在这里定：头部与非头部的位图尺寸差一个 pad，
+        //    统一坐标会让其中一档的字形整体出界被裁（见下方 shade 循环内的说明）。
 
         // ⛔ Paint / Shader **复用**（只 3 个 Paint + 1 个光晕 shader + 每档 1 个填充 shader）。
         //    每张字形各 new 一遍会让 §7.5 的「分配/帧」列虚高（该列把**重建路径**也计入）。
@@ -1075,9 +1076,19 @@ class MatrixRainRenderer : RendererFx() {
             val pw = if (isHead) bw + pad * 2 else bw
             val ph = if (isHead) bh + pad * 2 else bh
             val rgb = SHADE_RGB[shade]
+            // ⛔⛔ 绘制原点必须随位图尺寸走（2026-09-30 修复「数字雨尾迹整条消失」）
+            //   只有头部档位的位图四周留了 pad；非头部的 pw/ph 就是 bw×bh。
+            //   若沿用带 pad 的 cx/baseline，文字会整体右下偏移 pad（= bh×0.9，约 0.9 个字高），
+            //   超出位图下缘被裁掉 ⇒ 10 张字形里 9 张全白 ⇒ 屏幕上只剩头部那一个数字。
+            //   ⛔ 改 pad / bh / textSize / GLOW_R_RATIO 任一时都要复核这三行的联动。
+            val ox = if (isHead) pad else 0
+            val oy = if (isHead) pad else 0
+            val textCx = ox + bw / 2f      // 文字水平中心
+            val textBase = oy + baseY      // 文字基线
             // ③ 中心偏白的垂直渐变填充 shader：**每档 1 个**（⛔ 不在字符循环里重建）（§B3-③）
+            //    渐变区间同样要跟随 oy，否则非头部的渐变整体下移、字形上下亮度分布被截断。
             fill.shader = android.graphics.LinearGradient(
-                0f, pad.toFloat(), 0f, (pad + bh).toFloat(),
+                0f, oy.toFloat(), 0f, (oy + bh).toFloat(),
                 intArrayOf(rgb, glyphHighlightArgb(rgb), rgb),
                 floatArrayOf(0f, 0.5f, 1f),
                 android.graphics.Shader.TileMode.CLAMP
@@ -1085,12 +1096,12 @@ class MatrixRainRenderer : RendererFx() {
             for (d in 0 until 2) {
                 val bmp = android.graphics.Bitmap.createBitmap(pw, ph, android.graphics.Bitmap.Config.ARGB_8888)
                 val c = android.graphics.Canvas(bmp)
-                // ① 头部光晕在最底层（中心 alpha GLOW_ALPHA → 边缘 0）
+                // ① 头部光晕在最底层（中心 alpha GLOW_ALPHA → 边缘 0）；仅头部档位有 pad
                 if (isHead) c.drawCircle(cx, cy, pad.toFloat(), glow)
                 // ② 深绿外描边（§B3-③）
-                c.drawText(digits[d].toString(), cx, baseline, outline)
+                c.drawText(digits[d].toString(), textCx, textBase, outline)
                 // ③ 中心偏白的垂直渐变填充（§B3-③）
-                c.drawText(digits[d].toString(), cx, baseline, fill)
+                c.drawText(digits[d].toString(), textCx, textBase, fill)
                 arr[shade * 2 + d] = bmp
             }
         }

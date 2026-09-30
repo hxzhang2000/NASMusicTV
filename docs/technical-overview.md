@@ -11338,6 +11338,49 @@ TypedArray、`performance.now`、`requestAnimationFrame`。
 4. **手机端必须一并复测**——上一轮的 Babel 产物在手机上也是黑的（库初始化失败），
    本次 tsc 产物虽已通过模拟验证，但真机才是最终判据。
 
+### 10.202 数字雨尾迹整条消失（MatrixRainRenderer 字形裁切，2026-09-30）
+
+**现象**：E41 之后新增的「数字雨」（`MatrixRainRenderer`）每个数字**后面拉的那一串尾迹全部消失**，
+只剩单个头部数字在落。
+
+**回归来源**：`b35c5de`（质感升级 S2–S4，批次 A 迁移 `RendererFx`）给字形加了一圈**头部光晕**，
+位图尺寸从此按档位分叉，但绘制坐标没有跟着分叉。
+
+**根因**：`MatrixRainRenderer.buildGlyphs` 里
+
+```kotlin
+val pw = if (isHead) bw + pad * 2 else bw   // 非头部：无 pad
+val ph = if (isHead) bh + pad * 2 else bh
+val cx = pad + bw / 2f                      // ⛔ 却一律按「有 pad」算
+val baseline = pad + baseY
+c.drawText(d, cx, baseline, outline)        // ⛔ 非头部：文字整体右下偏 pad
+```
+
+`pad = bh × GLOW_R_RATIO = bh × 0.9` ⇒ 非头部字形整体右下方移约 **0.9 个字高**，
+超出 `bh` 高的位图下缘被裁掉 ⇒ **10 张字形里 9 张全白**（`SHADES=5` × 2 字符）。
+头部那张因为位图含 pad 所以正常 —— 于是症状精确表现为「只剩头部，尾迹全无」。
+
+**修复**：绘制原点随位图尺寸走，并在渐变区间上同步：
+
+```kotlin
+val ox = if (isHead) pad else 0
+val oy = if (isHead) pad else 0
+val textCx = ox + bw / 2f
+val textBase = oy + baseY
+// 渐变区间也从 pad..pad+bh 改为 oy..oy+bh，否则非头部渐变整体下移被截断
+```
+
+同时删除已无引用的 `val baseline`（避免留下未使用的局部变量）。
+
+**教训**：**「按档位分叉的尺寸」与「共用的绘制坐标」是同一处代码里最容易失配的一对**。
+`pw/ph` 带 `if (isHead)` 而 `cx/baseline` 不带，看起来只差一个 `pad`，实际差 0.9 个字高 ——
+编译期无提示、运行期只是「某档位的东西不见了」，没有任何报错指向根因。
+新增任何**逐档位变化的画布内边距**时，必须同步复核绘制原点与 shader 渐变区间。
+
+⚠️ 顺带记录：本次迁移同时**故意反转**了尾迹亮度方向（旧实现 `fade = 1 - k/perCol` 是越远越亮，
+与 KDoc 矛盾）。新实现 `trailFade(k, perCol) = k / perCol`，头部 `k = perCol-1` 最亮、
+向远端递减，并加 `TRAIL_ALPHA_FLOOR = 0.08` 防止最远格 alpha 归零。**方向本身是对的，不要回退。**
+
 ### 10.196 v2.37.6 — 新增 E41「世界」（WORLD）可视化：海岸线地图 + 城市光点 + 真实航空规模大圆航线 + 真实 UTC 晨昏线（2026-09-28）
 
 **范围**：新增 6 个渲染器/数据文件（`WorldRenderer`/`WorldCities`/`WorldNetwork`/`WorldProjection`/`WorldTerminator`/`WorldMapData`）+ 2 个测试文件（`WorldLogicTest`/`WorldMapDataTest`）；枚举 `VisualizerTheme.WORLD("世界", Tier.ADV, "41")` 与工厂 `VisualizerRendererFactory` 的 `WORLD -> WorldRenderer()` 分支已接入。效果为纯展示：暗调极简海岸线地图 + 城市光点 + 按真实航空客流规模生成的动态大圆航线 + 分频段音频驱动 + 真实 UTC 晨昏线，**零交互、零文字**（符合本 app 渲染器零文字红线）。**不升版本号**（并入 v2.37.6，versionCode 168，与 §10.195 一致）。`VisualizerThemeTest` 的主题计数断言同步 27→28（`off` 26→27、`on` 27→28，共 4 处）。
