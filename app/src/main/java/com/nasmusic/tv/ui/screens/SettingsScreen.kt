@@ -50,6 +50,7 @@ import com.nasmusic.tv.data.model.AppSettings
 import com.nasmusic.tv.data.model.BaiduFile
 import com.nasmusic.tv.data.model.PlayMode
 import com.nasmusic.tv.data.model.VisualizerTheme
+import com.nasmusic.tv.data.model.VisualQuality
 import com.nasmusic.tv.ui.components.BaiduDirPickerDialog
 import com.nasmusic.tv.ui.components.ConfirmDialog
 import com.nasmusic.tv.ui.components.FocusableSurface
@@ -206,6 +207,9 @@ fun SettingsScreen(
     onScanTransferModel: (() -> Unit)? = null,
     // 可视化频谱主题
     visualizerTheme: VisualizerTheme = VisualizerTheme.Default,
+    // T1.6.4（§十三 裁决项 9=A）：可视化画质三档（低/中/高）
+    visualizerQuality: VisualQuality = VisualQuality.Default,
+    onChangeVisualizerQuality: (VisualQuality) -> Unit = {},
     onChangeVisualizerTheme: (VisualizerTheme) -> Unit = {},
     // 数据管理（备份/恢复）
     backupFiles: List<com.nasmusic.tv.util.BackupFileUtils.BackupFile> = emptyList(),
@@ -516,8 +520,9 @@ fun SettingsScreen(
                     PlayerSettingsSection(
                         state = PlayerSettingsState(
                             settings = settings,
-                            visualizerTheme = visualizerTheme,
-                            separationMode = separationMode,
+                        visualizerTheme = visualizerTheme,
+                        visualizerQuality = visualizerQuality,
+                        separationMode = separationMode,
                             modelDownloaded = modelDownloaded,
                             modelDownloading = modelDownloading,
                             modelDownloadProgress = modelDownloadProgress,
@@ -538,6 +543,7 @@ fun SettingsScreen(
                         actions = PlayerSettingsActions(
                             onToggleAutoPlayNext = onToggleAutoPlayNext,
                             onChangeVisualizerTheme = onChangeVisualizerTheme,
+                            onChangeVisualizerQuality = onChangeVisualizerQuality,
                             onChangePlayMode = onChangePlayMode,
                             onOpenEqualizer = onOpenEqualizer,
                             onChangeSeparationMode = onChangeSeparationMode,

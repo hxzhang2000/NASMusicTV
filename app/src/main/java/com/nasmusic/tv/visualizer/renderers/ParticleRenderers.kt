@@ -6,6 +6,7 @@ import android.graphics.Paint as AndroidPaint
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.graphics.asAndroidPath
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import com.nasmusic.tv.data.model.VisualizerTheme
@@ -62,7 +63,8 @@ class BeatFireworkRenderer : VisualizerRenderer {
             val bh = v * h * 0.14f
             val x0 = i * slot
             val x1 = x0 + slot * 0.6f
-            bgPath.addRect(Rect(x0, h - bh, x1, h))
+            // T1.6.2（§四 G15）：android addRect 四 float 重载，零 Rect 分配
+            bgPath.asAndroidPath().addRect(x0, h - bh, x1, h, android.graphics.Path.Direction.CCW)
         }
         drawPath(bgPath, accent, alpha = 0.12f)
 

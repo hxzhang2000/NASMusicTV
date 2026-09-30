@@ -141,7 +141,9 @@ fun VisualizerStage(
     // LocalContext 供默认工厂创建 View 型渲染器（three-globe WebView）用
     val context = LocalContext.current
     val swapper = remember { RendererSwapper(context) }
-    var canvasSize by remember { mutableStateOf(Size.Zero) }
+    // T1.6.3（§四 G16 伴生 · v1.15 修正口径）：原 `var canvasSize by remember { ... }` 已删 ——
+    // 它在 Canvas draw 块内每帧写入、又在同一块内被 renderCtx.update 读取（§2.4 曾误判「只写不读」），
+    // 改为 draw 块内局部 val（§12.4 偏差记录：状态 → 局部值，行为逐帧等价、少一个 State 订阅）。
 
     // 淡入透明度：由绘制循环逐帧写入，在绘制阶段读取 → 只重绘不重组
     val fadeAlpha = remember { mutableFloatStateOf(1f) }
@@ -301,13 +303,18 @@ fun VisualizerStage(
             androidx.compose.foundation.Canvas(
                 modifier = Modifier
                     .fillMaxSize()
-                    // T9：叠加发光需要离屏层，否则部分 API 版本退化为 SrcOver
+                    // T9：叠加发光需要离屏层，否则部分 API 版本退化为 SrcOver。
+                    // ⚠️ G14 现状说明（§2.4/v1.14 裁决项 10）：这层目前是**无条件**挂载 ——
+                    //    交叉淡入的 600ms 之外 fadeAlpha 恒 1.0，整屏离屏缓冲（1080p ≈ 16.6 MB/帧带宽）
+                    //    在静止期收益为零、只有成本；T1.7.1 将条件化为 `fadeAlpha < 1f` 才挂。
+                    //    ⛔ 不要因为看到这层就以为「Plus 叠加必须有它」而照抄到新画布。
                     .graphicsLayer {
                         compositingStrategy = CompositingStrategy.Offscreen
                         alpha = fadeAlpha.floatValue
                     }
             ) {
-                canvasSize = Size(size.width, size.height)
+                // T1.6.3：draw 块内局部 val（原 remember State，读写同块、逐帧等价）
+                val canvasSize = Size(size.width, size.height)
                 // T6：每帧捕获一次 front 引用，绘制期间引用不变
                 val f = frame()
                 // 计算当前歌词行 & 行内进度（给 E23 歌词点阵用）

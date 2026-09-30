@@ -7,6 +7,7 @@ import androidx.compose.ui.geometry.RoundRect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.asAndroidPath
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.withTransform
@@ -113,8 +114,10 @@ class TunnelRenderer : RendererFx() {
                     val px = cx + cos(a) * rr
                     val py = cy + sin(a) * rr
                     val rDot = 3f * s + v * 3f
-                    dotPaths[(fade * 3f).toInt().coerceIn(0, 2)].addOval(
-                        Rect(px - rDot, py - rDot, px + rDot, py + rDot))
+                    // T1.6.2（§四 G15）：float addOval 零 Rect 分配（真圆不变）
+                    dotPaths[(fade * 3f).toInt().coerceIn(0, 2)].asAndroidPath().addOval(
+                        px - rDot, py - rDot, px + rDot, py + rDot,
+                        android.graphics.Path.Direction.CCW)
                 }
             }
         }
@@ -219,10 +222,11 @@ class CircularRingRenderer : VisualizerRenderer {
             peaks[i] = if (v >= peaks[i]) v else maxOf(v, peaks[i] * 0.985f - 0.004f)
             val pr = rStart + VisualizerMath.barHeight(peaks[i], maxLen, 3f) * scale
             val bucket = ((t * 8).toInt()).coerceIn(0, 7)
-            peakPaths[bucket].addOval(Rect(
+            // T1.6.2（§四 G15）：float addOval 零 Rect 分配（真圆不变）
+            peakPaths[bucket].asAndroidPath().addOval(
                 cx + cosA * pr - 2.5f, cy + sinA * pr - 2.5f,
-                cx + cosA * pr + 2.5f, cy + sinA * pr + 2.5f
-            ))
+                cx + cosA * pr + 2.5f, cy + sinA * pr + 2.5f,
+                android.graphics.Path.Direction.CCW)
         }
 
         // ①.5 峰值帽 → 8 条 Path 一次绘制（颜色按桶内中间 hue）

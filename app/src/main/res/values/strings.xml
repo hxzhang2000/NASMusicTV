@@ -1119,6 +1119,14 @@
     <string name="quality_tier_high">320k</string>
     <string name="quality_tier_good">192k</string>
     <string name="quality_tier_standard">128k</string>
+    <!-- T1.6.4（§十三 裁决项 9=A）：可视化画质三档选择器（接 VisualizerViewModel.setQuality ⇒ 写 DataStore） -->
+    <string name="settings_visualizer_quality">可视化画质</string>
+    <string name="settings_visualizer_quality_low">低</string>
+    <string name="settings_visualizer_quality_low_desc">省电低负载：32 列 / 无粒子 / 无拖尾，ULTRA 效果不可选</string>
+    <string name="settings_visualizer_quality_medium">中</string>
+    <string name="settings_visualizer_quality_medium_desc">默认均衡：64 列 / 150 粒子 / 2 层辉光</string>
+    <string name="settings_visualizer_quality_high">高</string>
+    <string name="settings_visualizer_quality_high_desc">最高画质：350 粒子 / 3 层辉光 / 允许帧缓冲，低端设备可能掉帧</string>
     <string name="quality_downgrade_notice">该曲无 %1$s 版本，已降级为 %2$s</string>
     <string name="quality_probe_loading">正在获取可用音质…</string>
     <string name="quality_probe_none">无法获取该曲的播放直链</string>

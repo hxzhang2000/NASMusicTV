@@ -24,6 +24,7 @@ import com.nasmusic.tv.backend.network.QualityTiers
 import com.nasmusic.tv.data.model.AppSettings
 import com.nasmusic.tv.data.model.PlayMode
 import com.nasmusic.tv.data.model.VisualizerTheme
+import com.nasmusic.tv.data.model.VisualQuality
 import com.nasmusic.tv.data.prefs.AppPreferences
 import com.nasmusic.tv.ui.theme.FontSize
 import com.nasmusic.tv.ui.theme.NasMusicColors
@@ -49,6 +50,8 @@ data class PlayerSettingsState(
     val crossfadeDurationSec: Int = 4,
     // F2-6：音质档位
     val qualityTier: Int = 0,
+    // T1.6.4（§十三 裁决项 9=A）：可视化画质档位（此前无 UI 入口 ⇒ 恒 MEDIUM，ULTRA 三套不可达）
+    val visualizerQuality: VisualQuality = VisualQuality.Default,
 )
 
 /** 播放设置分区动作 */
@@ -71,6 +74,8 @@ data class PlayerSettingsActions(
     val onClearQualityOverrides: (() -> Unit)? = null,
     /** F2-6：音质档位（AUTO=0/999/320/128） */
     val onChangeQualityTier: (Int) -> Unit = {},
+    /** T1.6.4：可视化画质三档（SettingsBranch 接 visualizerVM.setQuality ⇒ 写 DataStore） */
+    val onChangeVisualizerQuality: (VisualQuality) -> Unit = {},
 )
 
 /** 播放设置分区（原 SettingsScreen PLAYBACK 分支，逻辑逐行搬迁） */
@@ -172,6 +177,38 @@ internal fun PlayerSettingsSection(
             description = stringResource(R.string.quality_override_clear_desc),
             onClick = { actions.onClearQualityOverrides?.invoke() }
         )
+        // ── T1.6.4（§十三 裁决项 9=A / §2.4 方案 A）：可视化画质三档 ──
+        // 背景：VisualQuality 此前无任何 UI 入口 ⇒ 恒 MEDIUM ⇒ E18 反馈残像 / E19 粒子文字 /
+        // E20 等离子流场（Tier.ULTRA → allowFramebuffer）被 supports() 永久过滤、从未渲染过。
+        // 接 VisualizerViewModel.setQuality() ⇒ 写 DataStore ⇒ VisualizerStage 的
+        // LaunchedEffect(theme, quality) 重新 sync ⇒ RendererSwapper 对现有渲染器重进 onEnter，
+        // **立即生效、无需重启**（§2.4 ④ 已核实 RendererSwapper.sync 支持仅画质变化的复用路径）。
+        Spacer(modifier = Modifier.height(24.dp))
+        SubSectionTitle(stringResource(R.string.settings_visualizer_quality))
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 16.dp, top = 4.dp)
+        ) {
+            // 遍历单一真相源（三档），避免"档位加了 UI 忘了加"的漂移
+            VisualQuality.entries.forEach { q ->
+                val label = when (q) {
+                    VisualQuality.LOW -> stringResource(R.string.settings_visualizer_quality_low)
+                    VisualQuality.MEDIUM -> stringResource(R.string.settings_visualizer_quality_medium)
+                    VisualQuality.HIGH -> stringResource(R.string.settings_visualizer_quality_high)
+                }
+                val desc = when (q) {
+                    VisualQuality.LOW -> stringResource(R.string.settings_visualizer_quality_low_desc)
+                    VisualQuality.MEDIUM -> stringResource(R.string.settings_visualizer_quality_medium_desc)
+                    VisualQuality.HIGH -> stringResource(R.string.settings_visualizer_quality_high_desc)
+                }
+                SettingActionButton(
+                    label = if (state.visualizerQuality == q) "▶ $label" else label,
+                    description = desc,
+                    onClick = { actions.onChangeVisualizerQuality(q) }
+                )
+            }
+        }
         // ── 人声分离模式 ──
         Spacer(modifier = Modifier.height(24.dp))
         SubSectionTitle(stringResource(R.string.settings_separation_mode_title))

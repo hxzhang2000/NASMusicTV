@@ -8,6 +8,7 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.asAndroidBitmap
+import androidx.compose.ui.graphics.asAndroidPath
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.withTransform
@@ -72,9 +73,13 @@ override fun DrawScope.draw(frame: AudioFrame, ctx: RenderContext) {
                 val p = VisualizerMath.polar(cx, cy, r, ang)
                 val pr = 2.6f + v * 6.5f   // 粒子加大（原 1.6 + v*4.5）
                 if (v > 0.4f) {
-                    brightPath.addOval(Rect(Offset(p.x - pr, p.y - pr), Offset(p.x + pr, p.y + pr)))
+                    // T1.6.2（§四 G15）：addOval 走 android.graphics.Path 的 float 重载，零 Rect 分配
+                    brightPath.asAndroidPath().addOval(
+                        p.x - pr, p.y - pr, p.x + pr, p.y + pr, android.graphics.Path.Direction.CCW)
                 } else {
-                    dimPath.addOval(Rect(Offset(p.x - pr * 0.7f, p.y - pr * 0.7f), Offset(p.x + pr * 0.7f, p.y + pr * 0.7f)))
+                    dimPath.asAndroidPath().addOval(
+                        p.x - pr * 0.7f, p.y - pr * 0.7f, p.x + pr * 0.7f, p.y + pr * 0.7f,
+                        android.graphics.Path.Direction.CCW)
                 }
             }
         }
@@ -129,10 +134,8 @@ class WaterfallRenderer : VisualizerRenderer {
 val v = frame.spectrum.getOrElse(i) { 0f }
             val hue = VisualizerMath.hueGradient(60f, 195f, v)   // 黄(60°)→蓝(195°)
             paint.color = VisualizerMath.hsl(hue, 1.0f, 0.50f + v * 0.40f)
-            cb.drawRect(
-                androidx.compose.ui.geometry.Rect(i * cw, y, (i + 1) * cw, y + 1f),
-                paint
-            )
+            // T1.6.2（§四 G15）：Canvas 四 float 重载，零 Rect 分配（画面不变）
+            cb.drawRect(i * cw, y, (i + 1) * cw, y + 1f, paint)
         }
 
         // ③ 铺满画布 + 交换缓冲
@@ -249,7 +252,9 @@ val wave =
             val v = spec.getOrElse(i % spec.size) { 0f }
             val r = (2.6f + v * 4f).coerceAtLeast(1.2f)
             val seg = ((i % cols) * 4 / cols).coerceIn(0, 3)
-            ptPaths[seg].addOval(Rect(Offset(xs[i], ys[i]), r))
+            // T1.6.2（§四 G15）：float addOval 零 Rect 分配
+            ptPaths[seg].asAndroidPath().addOval(
+                xs[i] - r, ys[i] - r, xs[i] + r, ys[i] + r, android.graphics.Path.Direction.CCW)
         }
         val hueBase = 60f   // 黄(60°)→绿(105°)→蓝(150°)→亮蓝(195°)
         for (s in 0 until 4) {
@@ -366,8 +371,14 @@ class MatrixRainRenderer : VisualizerRenderer {
     private val perCol = 14
 
     // 预渲染字形缓存：[0..7] = shade*2 + digit（4 档绿 × 字符 0/1，二进制雨）
-    private var glyphs: Array<android.graphics.Bitmap>? = null
-    private var glyphKey = ""
+    // G13④：internal（非 private）仅供 PerfBudgetContractTest 注入 stub 缓存、验证键三元组
+    internal var glyphs: Array<android.graphics.Bitmap>? = null
+
+    // S1.6/T1.6.1（§四 G16 / §八 G13④）：字形缓存键 = 三元组 Int 字段。
+    // ⛔ 不得改回字符串模板键 "slot:cell:n" —— 那是每帧一次 String 分配（draw 可达路径）。
+    internal var keySlot = 0
+    internal var keyCell = 0
+    internal var keyN = 0
     private var gW = 0
     private var gH = 0
     private val blitPaint = AndroidPaint()
@@ -396,11 +407,15 @@ class MatrixRainRenderer : VisualizerRenderer {
         val cellH = h / perCol
         val textSize = minOf(slot * 0.8f, cellH * 0.9f).coerceIn(10f, 48f)
 
-        // 尺寸/列数变化 → 重建字形缓存（首次进入或画质变化）
-        val key = "${(slot * 10).toInt()}:${(cellH * 10).toInt()}:$n"
-        if (glyphs == null || glyphKey != key) {
+        // 尺寸/列数变化 → 重建字形缓存（首次进入或画质变化；键比较零分配，G13④）
+        val slot10 = (slot * 10).toInt()
+        val cell10 = (cellH * 10).toInt()
+        // 缓存未建（首次/重建后）由调用点短路；键三元组比较零分配（G13④）
+        if (glyphs == null || glyphCacheStale(slot10, cell10, n)) {
             buildGlyphs(textSize)
-            glyphKey = key
+            keySlot = slot10
+            keyCell = cell10
+            keyN = n
         }
         val g = glyphs ?: return
 
@@ -429,6 +444,14 @@ class MatrixRainRenderer : VisualizerRenderer {
             }
         }
     }
+
+    /**
+     * G13④：字形缓存键三元组比较 —— 任一维变化 ⇒ 需要重建。零分配。
+     * 「缓存未建 ⇒ 重建」不在本函数（untestable：glyphs 是 Bitmap 数组），
+     * 由 draw 调用点的 `glyphs == null ||` 短路兜底。
+     */
+    internal fun glyphCacheStale(slot10: Int, cell10: Int, n: Int): Boolean =
+        keySlot != slot10 || keyCell != cell10 || keyN != n
 
     /** 一次性预渲染 0/1 两字符 × 4 档绿 = 8 张字形 Bitmap（二进制雨） */
     private fun buildGlyphs(textSize: Float) {
@@ -563,7 +586,10 @@ class ConstellationRenderer : VisualizerRenderer {
             val life = stars[o + 2]
             if (life <= 0f) continue
             val r = (stars[o + 3] * (0.6f + life * 0.4f)).coerceAtLeast(0.8f)
-            starPath.addOval(Rect(Offset(stars[o], stars[o + 1]), r))
+            // T1.6.2（§四 G15）：float addOval 零 Rect 分配
+            starPath.asAndroidPath().addOval(
+                stars[o] - r, stars[o + 1] - r, stars[o] + r, stars[o + 1] + r,
+                android.graphics.Path.Direction.CCW)
         }
         drawPath(starPath, starColor, alpha = 1f)
     }

@@ -151,6 +151,10 @@ internal fun SettingsBranch(
                         onChangeWeatherApiKey = { viewModel.updateWeatherApiKey(it) },
                         visualizerTheme = settings.visualizerTheme,
                         onChangeVisualizerTheme = { viewModel.updateVisualizerTheme(it) },
+                        // T1.6.4（§十三 裁决项 9=A）：接已有的 setQuality（写 DataStore ⇒ 立即生效）。
+                        // ⛔ 不走 MainViewModel.updateVisualizerQuality（它没有降档回退主题的逻辑）。
+                        visualizerQuality = settings.visualizerQuality,
+                        onChangeVisualizerQuality = { viewModel.visualizerVM.setQuality(it) },
                         fontAdjustment = settings.fontAdjustment,
                         onChangeFontAdjustment = { viewModel.updateFontAdjustment(it) },
                         // 语言设置

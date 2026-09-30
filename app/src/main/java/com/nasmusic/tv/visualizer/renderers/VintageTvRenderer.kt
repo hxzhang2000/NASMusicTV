@@ -13,6 +13,7 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.RoundRect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.graphics.asAndroidPath
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
@@ -418,7 +419,7 @@ class VintageTvRenderer : VisualizerRenderer {
         if (rollBandH <= 0f) rollBandH = h * ROLL_BAND_FRACTION
         if (rollBrush == null || rollBrushBandH != rollBandH) {
             rollBrush = Brush.verticalGradient(
-                colors = listOf(
+                colors = listOf(   // Perf-exempt: rollBrush 按带高缓存（带高变化才重建），非每帧分配
                     Color.Transparent,
                     Color.Black.copy(alpha = ROLL_PEAK_ALPHA),
                     Color.Transparent
@@ -631,7 +632,10 @@ class VintageTvRenderer : VisualizerRenderer {
                 lineTo(left + pictureW, h)
                 lineTo(left, h)
                 close()
-                addRoundRect(RoundRect(Rect(left, 0f, left + pictureW, h), r, r))
+                // T1.6.2（§四 G15）：android addRoundRect float 重载，零 RoundRect/Rect 分配
+                // （与旧 RoundRect(Rect(...), r, r) 逐像素等价；EvenOdd 填充在 compose Path 上已设）
+                asAndroidPath().addRoundRect(
+                    left, 0f, left + pictureW, h, r, r, android.graphics.Path.Direction.CCW)
             }
             cornerW = w
             cornerH = h

@@ -7,6 +7,7 @@ import android.graphics.Typeface
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.graphics.asAndroidPath
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import com.nasmusic.tv.data.model.VisualizerTheme
@@ -695,12 +696,22 @@ class LyricsDotMatrixRenderer : VisualizerRenderer {
             if (size < 0.3f) continue
 
             val coreIdx = tier * 2
-            paths[coreIdx].addOval(Rect(Offset(px - size, py - size), size * 2f))
+            // T1.6.2（§四 G15）：float addOval 零 Rect 分配（本渲染器每帧上万次 oval，分配大头）。
+            // ⛔ 几何逐像素对齐旧码 `Rect(Offset(px - size, py - size), size * 2f)`：
+            //   圆心 = (px - size, py - size)、半径 = size*2 ⇒ l/t = center - r、r/b = center + r。
+            paths[coreIdx].asAndroidPath().addOval(
+                px - size - size * 2f, py - size - size * 2f,
+                px - size + size * 2f, py - size + size * 2f,
+                android.graphics.Path.Direction.CCW)
 
             if (tier >= 1) {
                 val glowIdx = tier * 2 + 1
                 val glowR = size * (if (tier == 2) 2.2f else 1.4f)
-                paths[glowIdx].addOval(Rect(Offset(px - glowR, py - glowR), glowR * 2f))
+                // 同上：旧码圆心 (px - glowR, py - glowR)、半径 glowR*2
+                paths[glowIdx].asAndroidPath().addOval(
+                    px - glowR - glowR * 2f, py - glowR - glowR * 2f,
+                    px - glowR + glowR * 2f, py - glowR + glowR * 2f,
+                    android.graphics.Path.Direction.CCW)
             }
         }
     }
