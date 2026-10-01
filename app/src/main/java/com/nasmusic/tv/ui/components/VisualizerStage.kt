@@ -19,6 +19,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.FloatState
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -69,10 +70,22 @@ import com.nasmusic.tv.data.model.VisualizerTheme
 import com.nasmusic.tv.ui.theme.NasMusicColors
 import com.nasmusic.tv.visualizer.AudioFrame
 import com.nasmusic.tv.visualizer.CoverPalette
+import com.nasmusic.tv.visualizer.FpsMeter
 import com.nasmusic.tv.visualizer.RenderContext
 import com.nasmusic.tv.visualizer.RendererSwapper
 import com.nasmusic.tv.visualizer.VisualizerRenderer
 import com.nasmusic.tv.visualizer.VisualizerRendererFactory
+
+/**
+ * 帧率读数的开关键（`Settings.Global`，只读）。
+ *
+ * 开：`adb shell settings put global nasmusic_fps 1` ⇒ 重进可视化即右上角显示当前效果帧率。
+ * 关：`adb shell settings put global nasmusic_fps 0`（或直接删键）。
+ *
+ * 走系统全局设置而不是 App 设置页：release 包可用、零持久化 plumbing，
+ * 且⛔ 不会在普通用户的播放器 UI 上留下常驻调试信息。
+ */
+private const val FPS_SETTING_KEY = "nasmusic_fps"
 
 /**
  * 全屏可视化舞台（三层结构）。
@@ -161,6 +174,18 @@ fun VisualizerStage(
     // 每帧重算是 O(N) 全量扫描，必须缓存。
     val lyricMetrics = remember(lyrics) { computeLyricMetrics(lyrics) }
 
+    // ── 帧率读数（真机验收用）───────────────────────────────────
+    // 开关走 Settings.Global 而非设置页：⛔ 不在播放器 UI 上留常驻调试信息，
+    // 又能 release 包直接开 —— `adb shell settings put global nasmusic_fps 1`（0 或删键即关）。
+    // 只在进入舞台时读一次（切效果 / 重启 App 后生效），不做轮询。
+    val showFps = remember {
+        runCatching {
+            android.provider.Settings.Global.getInt(context.contentResolver, FPS_SETTING_KEY, 0) == 1
+        }.getOrDefault(false)
+    }
+    val fpsMeter = remember { FpsMeter() }
+    val fpsValue = remember { mutableFloatStateOf(0f) }
+
     // 主题 / 画质变化 → 同步渲染器（自动导演走淡入，手动切换硬切）
     LaunchedEffect(theme, quality) {
         val lyricInfo = computeLyricInfo(lyrics, progressMs, lyricMetrics)
@@ -207,6 +232,7 @@ fun VisualizerStage(
         while (true) {
             withFrameNanos { ns ->
                 tick = ns
+                if (showFps && fpsMeter.onFrame(ns)) fpsValue.floatValue = fpsMeter.fps
                 if (swapper.isCrossfading) {
                     val ms = ns / 1_000_000L
                     swapper.advance(ms)
@@ -478,6 +504,16 @@ fun VisualizerStage(
             Spacer(Modifier.size(24.dp))
         }
 
+        // 右上：帧率读数（真机验收用，⛔ 默认关闭 ⇒ 常驻 UI 上不可见）
+        if (showFps) {
+            FpsBadge(
+                fps = fpsValue,
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(top = 12.dp, end = 20.dp)
+            )
+        }
+
         // 左上（仅手机）：返回按钮
         //
         // ⛔ v2.36.2：**不能用 `androidx.tv.material3.IconButton`**（真机反馈「看得见、按不动」）。
@@ -648,6 +684,32 @@ internal fun computeLyricInfo(
     return LyricInfo(
         current.text, next?.text, progress, hasWords, idx, wordStarts,
         metrics.maxChars, metrics.longest ?: current.text
+    )
+}
+
+/**
+ * 右上角帧率读数（真机验收用）。
+ *
+ * 单独成 `@Composable` ⇒ 2 Hz 的 State 写入只重组这一个节点，不带着整个前景层重算。
+ * 底色用 `drawBehind` 画圆角矩形，⛔ 不用 `RoundedCornerShape` clip（同 Toast 的理由：
+ * Android 5.1 的 hwui Region 路径会段错误）。
+ */
+@Composable
+private fun FpsBadge(fps: FloatState, modifier: Modifier = Modifier) {
+    val v = fps.floatValue
+    Text(
+        text = if (v <= 0f) "-- fps" else "${(v * 10).toInt() / 10f} fps",
+        color = Color(0xFF9BFFB4),
+        fontSize = 12.sp,
+        maxLines = 1,
+        modifier = modifier
+            .drawBehind {
+                drawRoundRect(
+                    color = Color.Black.copy(alpha = 0.45f),
+                    cornerRadius = CornerRadius(6.dp.toPx())
+                )
+            }
+            .padding(horizontal = 8.dp, vertical = 3.dp)
     )
 }
 
