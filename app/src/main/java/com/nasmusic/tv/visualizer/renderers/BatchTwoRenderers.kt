@@ -49,8 +49,15 @@ import kotlin.math.sin
  *    （BASS_FOLLOW/PULSE_FOLLOW/ENERGY_FOLLOW），直接用会抖成筛子；
  *  - **精度**：elapsed 由逐帧 dt（clamp 0.1s）累加为 Double（⛔ 禁 nowMs × 速率，
  *    长会话 float 精度会掉），角度先对周期取模再算三角 → 输入恒 < 2π；
- *  - **星野**：固定种子 LCG 在 onEnter 生成一次存 FloatArray（永不重掷 → 零闪烁）；
- *    位置按 w/h 归一化 ⇒ **星野不参与倾斜**，只有星点半径随 scale；
+ *  - **星野（视觉层级受 §13.5-D5 约束，⛔ 不得改回均匀分布）**：固定种子 LCG 在 [onEnter]
+ *    生成一次存 FloatArray（永不重掷 → 零闪烁）；位置按 w/h 归一化 ⇒ **星野不参与倾斜**，
+ *    只有星点半径随 scale。半径 = **立方幂律** `STAR_R_MIN + u³ × STAR_R_SPAN`
+ *    （上限 `0.00150f` = 场景最小实体（火卫一 Phobos `0.0024f`）的 **62.5%**）⇒ 绝大多数是
+ *    亚像素暗星、只有约 **3.5%** 落在上限 10% 区间；alpha = `u²` **同源** + 25% 抖动
+ *    （上限 `0.50f`）⇒ 大星更亮、层级自然，且不会出现「小而亮」的孤立亮点（§四 G18 第 4 条）；
+ *    **中心静默区** `QUIET_R = 0.15f`（内太阳系不出现前景亮星，符合真实行星际空间）。
+ *    ⚠️ 视觉层级链（世界单位）：太阳 `0.0420` > Jupiter `0.0225` > Mercury `0.0060` >
+ *    Phobos `0.0024` > **最大星 `0.00150`**；
  *  - **画质档**：八行星任何档全量保留。LOW 70 星 + 跳过可选卫星（天卫/海卫）+
  *    太阳纯圆层；MEDIUM 140 星 + 全部 11 卫星 + 太阳径向渐变 + 地表/木星条纹；
  *    HIGH 220 星 + 日冕层 + 行星斜上高光。
@@ -87,7 +94,7 @@ class OrbitalRingsRenderer : VisualizerRenderer {
         val moons: List<Moon>
     )
 
-    private companion object {
+    internal companion object {
         /** Double 版 2π：elapsed/period 全程 Double，取模后三角输入恒 < 2π（长会话精度） */
         const val TAU_D = Math.PI * 2.0
         /**
@@ -128,6 +135,78 @@ class OrbitalRingsRenderer : VisualizerRenderer {
 
         const val STAR_MAX = 220
 
+        // ── 星野（§C1 第 0 条 P0 · §四 G18 / §13.5-D5 钉死；⛔ 不得改回均匀分布）─────
+
+        /**
+         * 星点半径下限（世界单位）。1080p 上 ≈ **0.64 px** ⇒ 真正的**亚像素暗星**做衬底
+         * （改造前下限 `0.0010f` ≈ 1.8 px —— 最小星也是一个可见圆点）。
+         */
+        const val STAR_R_MIN = 0.00035f
+        /**
+         * 星点半径区间：上限 = `STAR_R_MIN + STAR_R_SPAN` = **0.00150f**
+         * = 场景最小实体（火卫一 Phobos `0.0024f`）的 **62.5%**
+         * ⇒ 恢复「星 < 卫星 < 行星 < 太阳」。⛔ 不得抬回改造前的 `0.0030f`（越界值）。
+         */
+        const val STAR_R_SPAN = 0.00115f
+        /** 星点 alpha 下限（几乎看不见的底噪）。⛔ 不得低于 `0.08f` ⇒ 远景一片纯黑（§九 R19） */
+        const val STAR_A_MIN = 0.12f
+        /** 星点 alpha 区间：上限 = `STAR_A_MIN + STAR_A_SPAN` = **0.50f**（改造前 `0.90f`） */
+        const val STAR_A_SPAN = 0.38f
+        /**
+         * 中心静默区半径（**世界单位**）—— 介于金星轨道 `0.134` 与地球轨道 `0.176` 之间
+         * ⇒ 「内太阳系」不出现前景亮星（真实行星际空间也没有）。
+         */
+        const val QUIET_R = 0.15f
+        /** 静默区中心的 alpha 压制比例（区内线性 `0.25 → 1.0`；⛔ 不是"关掉"，只是压暗） */
+        const val QUIET_FLOOR = 0.25f
+
+        /**
+         * 星野生成（**纯函数**：只写传入数组，与 [OrbitalRingsRenderer.onEnter] 共用同一份实现，
+         * 门禁可直接调用 ⇒ 不复制算法）。
+         *
+         * ⚠️ **LCG 消耗顺序 = `u → x → y → jitter`**（每星 4 次）：`u` 同时驱动**半径**
+         * （`u³` 立方幂律）与**亮度**（`u²` 同源），`jitter` 只给 alpha 加 25% 抖动。
+         * ⛔ 顺序不可交换 —— 交换会改变整批星的位置（位置本身无意义，但**同源性**有意义）。
+         *
+         * 参数化形参（`sizePow` / `alphaShared` 等）**只为门禁的负向自证**提供
+         * 「同一份谓词 + 不同生成参数」的对照；生产调用一律走默认值。
+         */
+        internal fun fillStars(
+            starX: FloatArray, starY: FloatArray, starR: FloatArray, starA: FloatArray,
+            rMin: Float = STAR_R_MIN, rSpan: Float = STAR_R_SPAN,
+            aMin: Float = STAR_A_MIN, aSpan: Float = STAR_A_SPAN,
+            sizePow: Int = 3, alphaShared: Boolean = true,
+        ) {
+            var rng = 0x5EEDF00Du
+            fun nextRand(): Float {
+                rng = rng * 1664525u + 1013904223u
+                return (rng shr 8).toFloat() / 16777216f
+            }
+            var s = 0
+            while (s < starX.size) {
+                val u = nextRand()                            // ① 尺寸 / 亮度主参数（幂律）
+                starX[s] = nextRand()                         // ②
+                starY[s] = nextRand()                         // ③
+                val j = nextRand()                            // ④ alpha 抖动
+                val uu = if (sizePow >= 3) u * u * u else if (sizePow == 2) u * u else u
+                starR[s] = rMin + uu * rSpan
+                // 亮度与尺寸同源（u²）+ 25% 抖动 ⇒ 大星更亮、层级自然，又不完全共线
+                val k = if (alphaShared) u * u * 0.75f + j * 0.25f else j
+                starA[s] = aMin + k * aSpan
+                s++
+            }
+        }
+
+        /**
+         * 中心静默区 alpha 归一化（**纯函数**，零 `sqrt` / 零除法 / 零分配）。
+         *
+         * [e] = **椭圆归一化距离的平方**（`0` = 画面中心，`1` = 静默区边界）：
+         * 区内线性压到 [QUIET_FLOOR]，区外恒 `1f`。
+         * ⛔ 必须保留 `e >= 1f` 的**截断** —— 去掉它静默区外也会被压暗（那等于全场降亮度）。
+         */
+        internal fun quietAlpha(e: Float): Float =
+            if (e >= 1f) 1f else QUIET_FLOOR + (1f - QUIET_FLOOR) * e
+
         /** 行星表下标常量（buildSystem 顺序） */
         const val EARTH = 2
         const val JUPITER = 4
@@ -166,6 +245,15 @@ class OrbitalRingsRenderer : VisualizerRenderer {
     /** 世界系垂直半径 = 水平半径 × [TILT]（椭圆比例只由 TILT 决定，与画幅无关） */
     private val extentY: Float = extentX * TILT
 
+    /*
+     * ⚠️ 这里**故意不**提供「场景最小实体半径」的成员/常量：门禁（§八 G14 断言 ①）需要它，
+     * 而单测**不能构造本类**（字段初始化会建 `Path()` → `android.graphics.Path`，JVM 单测抛
+     * 「not mocked」）。⇒ 门禁改为**扫 [buildSystem] 源码**解析出全部实体半径再取 min，
+     * 行星表一改判据跟着变，**同样不漂移**。
+     *
+     * ⚠️ 用普通块注释（不是 KDoc）—— 否则它会被当成**下一个属性**的文档。
+     */
+
     private val bgColor = Color(BG)
     private val orbitLineColor = Color(ORBIT_LINE)
     private val moonOrbitLineColor = Color(MOON_ORBIT_LINE)
@@ -180,7 +268,11 @@ class OrbitalRingsRenderer : VisualizerRenderer {
     private val starWhite = Color.White
     private val starBlue = Color(STAR_BLUE)
 
-    /** 星野（onEnter 固定种子生成一次 → 零闪烁；坐标为 w/h 归一化 0..1，半径/透明度定值） */
+    /**
+     * 星野（[onEnter] 固定种子生成一次 → 零闪烁；坐标为 w/h 归一化 0..1）。
+     * 半径为**生成期定值**（立方幂律，见 [fillStars]）、alpha 同为生成期定值，
+     * `draw` 内只读。
+     */
     private val starX = FloatArray(STAR_MAX)
     private val starY = FloatArray(STAR_MAX)
     private val starR = FloatArray(STAR_MAX)
@@ -200,6 +292,14 @@ class OrbitalRingsRenderer : VisualizerRenderer {
     private var orbitStroke: Stroke = Stroke(1f)
     private var moonStroke: Stroke = Stroke(1f)
     private var ringStroke: Stroke = Stroke(1f)
+
+    /**
+     * 中心静默区的**椭圆归一化分母的倒数**（[ensureLayout] 只在尺寸 / scale 变化时算一次）：
+     * `quietInvX = 1 / (s × QUIET_R)`、`quietInvY = 1 / (s × QUIET_R × TILT)`。
+     * ⇒ [drawStars] 每星只做 `(px − cx) × quietInvX` 的乘法，**无 `sqrt` / 无除法 / 无分配**。
+     */
+    private var quietInvX = 0f
+    private var quietInvY = 0f
 
     /** 土星环半弧复用缓冲（成员 Path，reset 后逐帧重画，零分配） */
     private val ringBuf = Path()
@@ -234,6 +334,9 @@ class OrbitalRingsRenderer : VisualizerRenderer {
         brushW = -1f
         brushScale = -1f
         strokeScale = -1f
+        // 0 ⇒ 尺寸未定前不构成有效归一化（drawStars 恒在 ensureLayout 之后调用）
+        quietInvX = 0f
+        quietInvY = 0f
         // ⚠️ 此处是唯一重置 elapsed 的地方（onEnter）；ensureLayout/尺寸变化路径不碰 elapsed
 
         // ── 画质分档：八行星任何档全量保留，只降装饰 ──
@@ -249,19 +352,8 @@ class OrbitalRingsRenderer : VisualizerRenderer {
         }
 
         // ── 星野：固定种子 LCG 一次性生成，之后永不重掷（零闪烁）──
-        var rng = 0x5EEDF00Du
-        fun nextRand(): Float {
-            rng = rng * 1664525u + 1013904223u
-            return (rng shr 8).toFloat() / 16777216f
-        }
-        var s = 0
-        while (s < STAR_MAX) {
-            starX[s] = nextRand()
-            starY[s] = nextRand()
-            starR[s] = 0.0010f + nextRand() * 0.0020f
-            starA[s] = 0.25f + nextRand() * 0.65f
-            s++
-        }
+        //    半径 = 立方幂律（绝大多数是亚像素暗星）、alpha 与半径 u² 同源（见 [fillStars]）
+        fillStars(starX, starY, starR, starA)
     }
 
     override fun DrawScope.draw(frame: AudioFrame, ctx: RenderContext) {
@@ -516,15 +608,31 @@ class OrbitalRingsRenderer : VisualizerRenderer {
         drawPath(ringBuf, color = if (back) ringBack else ringFront, style = stroke)
     }
 
-    /** 星野（固定种子、onEnter 生成 → 位置永不变化、零闪烁；每 4 颗一颗偏蓝） */
+    /**
+     * 星野（固定种子、[onEnter] 生成 → 位置永不变化、零闪烁；每 4 颗一颗偏蓝）。
+     *
+     * 尺寸 / 亮度是**生成期**定值（立方幂律 + `u²` 同源，见 [fillStars]）；本函数只做
+     * 「**中心静默区**」压制：椭圆归一化距离落在 [QUIET_R] 内时 alpha 线性降到 [QUIET_FLOOR]
+     * （消除「太阳边上一个白点」）。成本：每星 5 乘 + 1 加 + 1 比较 ——
+     * **无 `sqrt` / 无分配 / 无 JNI / 不新增 draw 调用**。
+     * ⛔ **不得改回均匀分布**（§四 G18 / §13.5-D5）：那正是「星光太大压住主体」的根因。
+     */
     private fun DrawScope.drawStars(w: Float, h: Float, scale: Float) {
+        val cx = w * 0.5f
+        val cy = h * 0.5f
         var s = 0
         while (s < starCount) {
+            val px = starX[s] * w
+            val py = starY[s] * h
+            val dx = (px - cx) * quietInvX
+            val dy = (py - cy) * quietInvY
+            // 0 = 中心，1 = 静默区边界（[quietAlpha] 内已含 `e >= 1f` 截断）
+            val quiet = quietAlpha(dx * dx + dy * dy)
             drawCircle(
                 color = if ((s and 3) == 0) starBlue else starWhite,
                 radius = starR[s] * scale,
-                center = Offset(starX[s] * w, starY[s] * h),
-                alpha = starA[s]
+                center = Offset(px, py),
+                alpha = starA[s] * quiet
             )
             s++
         }
@@ -560,6 +668,9 @@ class OrbitalRingsRenderer : VisualizerRenderer {
             orbitStroke = Stroke((s * 0.0016f).coerceAtLeast(1.2f))
             moonStroke = Stroke((s * 0.0011f).coerceAtLeast(1f))
             ringStroke = Stroke(s * RING_W)
+            // 中心静默区：椭圆归一化分母的倒数（与轨道同为 TILT 压扁 ⇒ 静默区也是椭圆）
+            quietInvX = 1f / (s * QUIET_R)
+            quietInvY = 1f / (s * QUIET_R * TILT)
         }
         return s
     }
