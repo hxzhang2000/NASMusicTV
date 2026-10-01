@@ -126,7 +126,7 @@ class HypnoticFunctionTest {
     // ═════════════════ ④ §B8-② 曲线双层 + 法线高光 ═════════════════
 
     @Test
-    fun `④ §B8-② 曲线主线 2.2f 加 0.9f 高光线、上移 0.8px`() {
+    fun `④ §B8-② 曲线主线 2·2f 加 0·9f 高光线、上移 0·8px`() {
         val body = classBody(codeOfE25(), "HypnoticFunctionRenderer")
         assertEquals("主线宽必须 2.2f", 2.2f, HypnoticFunctionRenderer.MAIN_STROKE_W, 1e-6f)
         assertEquals("高光线宽必须 0.9f", 0.9f, HypnoticFunctionRenderer.HIGHLIGHT_STROKE_W, 1e-6f)
@@ -164,7 +164,7 @@ class HypnoticFunctionTest {
     // ═════════════════════ ⑤ §B8-③ 方格纸底纹 ═════════════════════
 
     @Test
-    fun `⑤ §B8-③ 方格纸 tile alpha 0.10`() {
+    fun `⑤ §B8-③ 方格纸 tile alpha 0·10`() {
         val body = classBody(codeOfE25(), "HypnoticFunctionRenderer")
         val draw = funBody(body, "drawContent")
         assertEquals("PAPER_ALPHA 必须 0.10f", 0.10f, HypnoticFunctionRenderer.PAPER_ALPHA, 1e-6f)
@@ -181,7 +181,7 @@ class HypnoticFunctionTest {
     // ═════════════════════ ⑥ dt 段：帧率绑定修复 ═════════════════════
 
     @Test
-    fun `⑥ dt 化 - 只取 fx.dt 且不再有相位累计写法`() {
+    fun `⑥ dt 化 - 只取 fx·dt 且不再有相位累计写法`() {
         val body = classBody(codeOfE25(), "HypnoticFunctionRenderer")
         val draw = funBody(body, "drawContent")
         assertTrue(

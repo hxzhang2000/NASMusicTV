@@ -133,7 +133,7 @@ class ParticleTextTest {
     }
 
     @Test
-    fun `④ 内外圈 - 椭圆归一化距离（中心 0 / 角点 1 / 轴端点 1 根号 2）`() {
+    fun `④ 内外圈 - 椭圆归一化距离（中心 0、角点 1、轴端点 1 根号 2）`() {
         val halfW = 500f
         val halfH = 100f
         assertEquals("中心必须是 0", 0f, norm(0f, 0f, 0f, 0f, halfW, halfH), 1e-6f)
@@ -294,7 +294,7 @@ class ParticleTextTest {
     }
 
     @Test
-    fun `负向N2 旧 swap-remove 必须被判目标错位 / 粒子归零`() {
+    fun `负向N2 旧 swap-remove 必须被判目标错位、粒子归零`() {
         // 复刻旧实现：LIFE <= 0 时 swap-remove（末位粒子填到 i，count--）
         val cap = 8
         val life = FloatArray(cap) { 1f }

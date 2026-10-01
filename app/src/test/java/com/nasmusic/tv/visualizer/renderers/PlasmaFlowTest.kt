@@ -186,7 +186,7 @@ class PlasmaFlowTest {
     // ═══════════════════════════ ③ 色相分桶 ═══════════════════════════
 
     @Test
-    fun `③ 色相分桶 - 桶号恒在 0..7、负 flow 不塌缩、8 桶全用满`() {
+    fun `③ 色相分桶 - 桶号恒在 0~7、负 flow 不塌缩、8 桶全用满`() {
         for (flow in listOf(-3f, -1.5f, -1f, -0.5f, -0.01f, 0f, 0.3f, 0.75f, 1f, 1.5f, 3f)) {
             val b = C.bucketOf(flow)
             assertTrue("flow=$flow ⇒ 桶号 $b 越界 [0,${C.BUCKETS})", b in 0 until C.BUCKETS)
@@ -265,7 +265,7 @@ class PlasmaFlowTest {
     // ═══════════════════════════ ⑤⑥ 帧率无关 ═══════════════════════════
 
     @Test
-    fun `⑤ 帧率无关 - evolve / 位移 / 寿命衰减三档帧率一致`() {
+    fun `⑤ 帧率无关 - evolve、位移、寿命衰减三档帧率一致`() {
         // ⚠️ 位移与寿命衰减要 ×fps 才是「1 秒累计量」（谓词比的是 1 秒，不是单帧）
         assertTrue(
             "正向：dt 化 evolve 必须帧率无关",
@@ -328,7 +328,7 @@ class PlasmaFlowTest {
     // ═══════════════════════════ ⑦ 源码段 ═══════════════════════════
 
     @Test
-    fun `⑦ 源码 - drawContent 内 0 个 drawCircle / drawOval、drawPath 单一调用点、零 Rect 分配`() {
+    fun `⑦ 源码 - drawContent 内 0 个 drawCircle、drawOval、drawPath 单一调用点、零 Rect 分配`() {
         val code = codeOfE20()
         val draw = funBody(classBody(code, "PlasmaFlowRenderer"), "drawContent")
         assertTrue("能切出 drawContent 体", draw.isNotEmpty())
