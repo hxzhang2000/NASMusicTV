@@ -153,8 +153,14 @@ class BeatFireworkTest {
             "60/30/15 fps 必须给出同一相位（§B2 核心验收：环的扩散速度与帧率无关）",
             frameRateInvariant { f, s -> ringPhaseNew(f, s) }
         )
-        // 60fps 下 1 秒的积分量 == 1 / RING_SEC（速率量纲自洽）
-        assertEquals(1f / C.RING_SEC, ringPhaseNew(60, 1f), 1e-3f)
+        // ⛔ v1.38 修：原断言取「1 秒」，但生产端 `ringPhase = (ringPhase + dt / RING_SEC).coerceAtMost(1f)`
+        // 有钳位（1 = 扩散结束、不再绘制），1 秒时 1/0.55 = 1.818 早已饱和成 1.0 ⇒ 恒判失败。
+        // 改为取**未饱和**的 0.5 秒（0.5/0.55 = 0.909 < 1），才是真正的「速率量纲自洽」校验。
+        val halfSec = 0.5f
+        assertTrue("0.5s 时尚未触及钳位上限（否则本断言失去意义）", halfSec / C.RING_SEC < 1f)
+        assertEquals(halfSec / C.RING_SEC, ringPhaseNew(60, halfSec), 1e-3f)
+        // 饱和后必须恒为 1（= 结束态），这才是钳位本身该被断言的性质
+        assertEquals(1f, ringPhaseNew(60, 1f), 1e-6f)
         assertTrue("RING_SEC 必须为正（否则相位不推进）", C.RING_SEC > 0f)
     }
 

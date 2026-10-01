@@ -519,16 +519,32 @@ class LightBeamsTest {
         return a
     }
 
-    /** 切出 `class <name>` 的类体（到下一个顶层 class / 文件尾） */
+    /** 切出 `class <name>` 的类体（到下一个顶层 class / 文件尾），⛔ **含紧邻上方的 KDoc** */
     private fun classBody(txt: String, name: String): String {
         val m = Regex("""(?m)^\s*(?:(?:internal|open|abstract|private)\s+)*class\s+$name\b""").find(txt)
             ?: return ""
+        // ⛔ v1.38 修：必须把**紧邻上方的 KDoc 一并纳入**。
+        // 类的自述文档就在 KDoc 里（"⛔ 迁移顺带修掉的两条红线"那段写着 `lastMs == 0L`
+        // 与 `frame.timeMs * 0.001f`），而这**正是「必须剥注释」的前提**。
+        // 原实现只取 `class` 关键字之后 ⇒ 负向自证的见证文本落在 body 之外，
+        // 于是「原文里确有旧写法」这条断言恒假。
+        // 对**已剥过注释**的文本走本函数时 KDoc 已被清空 ⇒ 下面这段回退不触发，行为不变。
+        var start = m.range.first
+        var p = start - 1
+        while (p >= 0 && txt[p].isWhitespace()) p--
+        if (p >= 1 && txt[p] == '/' && txt[p - 1] == '*') {
+            var open = txt.lastIndexOf("/*", p - 1)
+            while (open >= 0 && txt.substring(open + 2, p).contains("*/")) {
+                open = txt.lastIndexOf("/*", open - 1)
+            }
+            if (open >= 0) start = open
+        }
         val rest = txt.substring(m.range.last + 1)
         val nxt = Regex("""(?m)^\s*(?:(?:internal|open|abstract|private)\s+)*class\s+\w+""").find(rest)
         return if (nxt == null) {
-            txt.substring(m.range.first)
+            txt.substring(start)
         } else {
-            txt.substring(m.range.first, m.range.last + 1 + nxt.range.first)
+            txt.substring(start, m.range.last + 1 + nxt.range.first)
         }
     }
 

@@ -184,9 +184,15 @@ class GalaxySpiralTest {
             val b = (v * C.BUCKETS).toInt().coerceIn(0, C.BUCKETS - 1)
             return b    // ⛔ 故意不处理 far
         }
-        // 同一个「远臂必须 ≤ 近臂」谓词，正负向共用
-        fun depthOk(f: (Float, Boolean) -> Int): Boolean =
-            (0..20).all { i -> f(i / 20f, true) <= f(i / 20f, false) }
+        // ⛔ v1.38 修：谓词原来只有 `far ≤ near`（**非严格**），而"完全不降档"会产生
+        // **相等**的桶位、依然满足 `<=` ⇒ 谓词恒真，负向夹具反而判"通过"。
+        // 生产端 [starBucket] 是 `(b - 1).coerceAtLeast(0)` 的**严格**降一档，
+        // 因此谓词必须**同时**要求：① 远臂桶位处处不高于近臂；② 存在严格降档的点。
+        fun depthOk(f: (Float, Boolean) -> Int): Boolean {
+            val noBrighter = (0..20).all { i -> f(i / 20f, true) <= f(i / 20f, false) }
+            val strictDrop = (0..20).any { i -> f(i / 20f, true) < f(i / 20f, false) }
+            return noBrighter && strictDrop
+        }
 
         assertTrue("正向：生产函数满足纵深谓词", depthOk { v, far -> C.starBucket(v, far) })
         assertFalse(

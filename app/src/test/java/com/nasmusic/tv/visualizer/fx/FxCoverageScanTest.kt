@@ -140,7 +140,15 @@ class FxCoverageScanTest {
         val body: String,
     )
 
-    private val classRe = Regex("""(?m)^\s*(?:(?:internal|open|abstract)\s+)*class\s+(\w+)""")
+    /**
+     * ⛔ **必须是 `[ \t]*` 而不是 `\s*`**（v1.38 修）：`\s` 含换行，配合 `(?m)^` 后，
+     * 类声明**前面有空行**时匹配起点会落在那个空行的 `\n` 上 ⇒
+     * `lineStart = lastIndexOf('\n', first) + 1` 与 `lineEnd = indexOf('\n', first)`
+     * 双双等于该 `\n` 的下标，`lineStart` 还多 1 ⇒ `substring` 抛
+     * `StringIndexOutOfBoundsException: begin N, end N-1`（本类 8 个用例全挂）。
+     * 改成只吃水平空白后，匹配起点恒在声明行的首个非空白字符上。
+     */
+    private val classRe = Regex("""(?m)^[ \t]*(?:(?:internal|open|abstract)[ \t]+)*class[ \t]+(\w+)""")
     private val viewRe = Regex("""isViewBased[^\n]*=\s*true""")
     private val drawFunRe = Regex("""override\s+fun\s+DrawScope\.draw\s*\(""")
     private val postFxRe = Regex("""override\s+val\s+postFx\s*=\s*PostFx\(([^)]*)\)""")
@@ -202,12 +210,20 @@ class FxCoverageScanTest {
         return numRe.findAll(m.groupValues[1]).any { it.groupValues[1].toFloat() > 0f }
     }
 
-    /** 判据 B：未迁移 ⇒ `draw` 体内至少一次 `OverlayFx.` */
+    /**
+     * ⛔ **必须同时认 `with(OverlayFx)` 与 `OverlayFx.xxx()` 两种写法**（v1.38 修）。
+     * 原来只找字面量 `"OverlayFx."`，而 `RendererFx` 迁移后生产代码一律写成
+     * `with(OverlayFx) { ... }` ⇒ 该字面量在主源码里**根本不存在**（只出现在 import 与 KDoc）
+     * ⇒ 判据 B 对 6 个未迁移渲染器**恒判「未覆盖」**，B 段整体空转。
+     */
+    private val overlayUseRe = Regex("""with\s*\(\s*OverlayFx\s*\)|OverlayFx\s*\.""")
+
+    /** 判据 B：未迁移 ⇒ `draw` 体内至少一次使用 `OverlayFx`（两种写法都认） */
     private fun coveredByOverlayCall(classBody: String): Boolean {
         val m = drawFunRe.find(classBody) ?: return false
         val brace = classBody.indexOf('{', m.range.last)
         if (brace < 0) return false
-        return braceBody(classBody, brace).contains("OverlayFx.")
+        return overlayUseRe.containsMatchIn(braceBody(classBody, brace))
     }
 
     private fun isCovered(d: Decl): Boolean =
@@ -331,7 +347,12 @@ class FxCoverageScanTest {
         val bodyWith = "class X : VisualizerRenderer {\n" +
             "    override fun DrawScope.draw(f: AudioFrame, c: RenderContext) {\n" +
             "        with(OverlayFx) { drawVignette(c, 0.44f) }\n    }\n}"
-        assertTrue("含真实调用 ⇒ 判覆盖", coveredByOverlayCall(bodyWith))
+        assertTrue("含真实调用（with 接收者写法）⇒ 判覆盖", coveredByOverlayCall(bodyWith))
+
+        val bodyDirect = "class X : VisualizerRenderer {\n" +
+            "    override fun DrawScope.draw(f: AudioFrame, c: RenderContext) {\n" +
+            "        OverlayFx.drawVignette(c, 0.44f)\n    }\n}"
+        assertTrue("含真实调用（直接调用写法）⇒ 判覆盖", coveredByOverlayCall(bodyDirect))
 
         val bodyWithout = "class X : VisualizerRenderer {\n" +
             "    override fun DrawScope.draw(f: AudioFrame, c: RenderContext) {\n" +
@@ -344,6 +365,14 @@ class FxCoverageScanTest {
         assertFalse(
             "⛔ 注释里的 OverlayFx. 不得算数（stripComments 后应消失）",
             coveredByOverlayCall(stripComments(bodyCommented))
+        )
+
+        val bodyCommentedWith = "class X : VisualizerRenderer {\n" +
+            "    override fun DrawScope.draw(f: AudioFrame, c: RenderContext) {\n" +
+            "        // with(OverlayFx) { drawVignette(c, 0.44f) }\n    }\n}"
+        assertFalse(
+            "⛔ 注释里的 with(OverlayFx) 同样不得算数",
+            coveredByOverlayCall(stripComments(bodyCommentedWith))
         )
 
         assertTrue("postFx 非 NONE ⇒ 判覆盖",
