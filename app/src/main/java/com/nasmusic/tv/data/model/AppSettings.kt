@@ -100,11 +100,20 @@ data class AppSettings(
  * 可视化效果主题（27 套手动效果，无自动导演档）。
  *
  * [tier] 决定该效果在各画质档位下的可用性，见 [VisualQuality.supports]。
+ *
+ * @param needsParticleBudget 本效果的渲染器**是否真的读取 `ctx.quality.maxParticles`**。
+ *   ⚠️ 它不是"看起来像不像粒子效果"的观感分类，而是一条可核对的事实：
+ *   全仓库只有 `BeatFireworkRenderer` / `ParticleTextRenderer` / `PlasmaFlowRenderer` /
+ *   `WorldGlobeRenderer` 四处读该预算，其余效果的开销与它无关。
+ *   门控只消费 ADV 档上的该值（ULTRA 档由 [VisualQuality.allowFramebuffer] 决定），
+ *   ULTRA 的粒子效果照实标注是为了让该字段本身可读。
+ *   背景见 `docs/technical-overview.md`。
  */
 enum class VisualizerTheme(
     val displayName: String,
     val tier: Tier,
-    val ordinalLabel: String
+    val ordinalLabel: String,
+    val needsParticleBudget: Boolean = false
 ) {
     TUNNEL_FLY("隧道穿越", Tier.BASIC, "03"),
     CIRCULAR_RING("圆形频谱环", Tier.BASIC, "05"),
@@ -112,13 +121,13 @@ enum class VisualizerTheme(
     GALAXY_SPIRAL("星系螺旋", Tier.ADV, "11"),
     SPECTRO_WATERFALL("频谱瀑布", Tier.ADV, "12"),
     LIQUID_GRID("液态网格", Tier.ADV, "13"),
-    BEAT_FIREWORK("节拍烟花", Tier.ADV, "14"),
+    BEAT_FIREWORK("节拍烟花", Tier.ADV, "14", needsParticleBudget = true),
     LIQUID_RIPPLE("液态涟漪", Tier.ADV, "15"),
     MATRIX_RAIN("数字雨", Tier.ADV, "16"),
     CONSTELLATION("星座", Tier.ADV, "17"),
     MILKDROP_FEEDBACK("反馈残像", Tier.ULTRA, "18"),
-    PARTICLE_TEXT("粒子文字", Tier.ULTRA, "19"),
-    PLASMA_FLOW("等离子流场", Tier.ULTRA, "20"),
+    PARTICLE_TEXT("粒子文字", Tier.ULTRA, "19", needsParticleBudget = true),
+    PLASMA_FLOW("等离子流场", Tier.ULTRA, "20", needsParticleBudget = true),
     LYRICS_DOT_MATRIX("歌词点阵", Tier.ADV, "23"),
     ECG_WAVE("心跳", Tier.BASIC, "24"),
     HYPNOTIC_FUNCTION("催眠", Tier.BASIC, "25"),
@@ -135,9 +144,9 @@ enum class VisualizerTheme(
     /**
      * 照片墙（第 39 个效果，§7.5）
      *
-     * ⚠️ 归 [Tier.ADV]：照片双缓冲 + 转场叠加在低画质 / 老设备上风险高，必须门控。
-     * 副作用：`VisualQuality.LOW`（`maxParticles == 0`）**不支持**本效果
-     * ⇒ 若老电视被自动判为 `LOW`，照片墙在列表里看不到。见 `docs/technical-overview.md`。
+     * ⚠️ 归 [Tier.ADV]：照片双缓冲 + 转场叠加在老设备上风险高。
+     * 但本效果**没有粒子** ⇒ [needsParticleBudget] 为 false，故 `VisualQuality.LOW` **提供**它
+     * （2026-09-23 用户裁决，内存由解码降级兜住：LOW = RGB_565 + 长边 1280）。
      *
      * ⚠️ 本效果**不一定出现在 [selectable] 里** —— 三来源开关全关时被过滤掉（§7.4）。
      */
@@ -149,7 +158,8 @@ enum class VisualizerTheme(
      * 视觉：一条自由弯曲的 DNA 双螺旋缎带蜿蜒于画面中央 —— 青/紫双骨架绕中心
      * Catmull-Rom 样条反相螺旋、4 色碱基对横档连接，深空星野底（同「轨道」风格）。
      *
-     * 归 [Tier.ADV]：按粒子预算门控（`VisualQuality.LOW` 不提供，与其余 ADV 一致）；
+     * 归 [Tier.ADV]，但**不**标注 [needsParticleBudget]（渲染器不读 `maxParticles`，
+     * 骨架 / 碱基对 / 星野的规模都是常量）⇒ 三档均可选，与数字雨同理。
      * 无照片墙式特殊门控 —— [selectable] 恒含本项，三来源开关不影响。
      */
     DNA("DNA 双螺旋", Tier.ADV, "40"),
@@ -164,14 +174,15 @@ enum class VisualizerTheme(
      * 高频→尾迹与光晕；拍点分层（弱/中/强）分别驱动 Tier4 闪烁 / Tier3 支线 / Tier1 主干
      * + 涟漪。⛔ 不渲染任何文字、标签、数据面板，也不响应任何触摸。
      *
-     * 归 [Tier.ADV]：地图解码 + 最多 34 条活跃航线 + 分层光晕，按粒子预算门控
-     * （`VisualQuality.LOW` 的 `maxParticles == 0` 不提供，与其余 ADV 一致）。
+     * 归 [Tier.ADV] 且标注 [needsParticleBudget]：地图解码 + 最多 34 条活跃航线 + 分层光晕
+     * 的规模由 `ctx.quality.maxParticles` 决定（[com.nasmusic.tv.visualizer.renderers.WorldGlobeRenderer]
+     * 真读该预算）⇒ `VisualQuality.LOW`（`maxParticles == 0`）不提供本效果。
      *
      * **音频源复用既有分析层**（[com.nasmusic.tv.visualizer.AudioFrame]），
      * ⛔ 不新增 `RECORD_AUDIO` 权限、不用 `AudioRecord`/`Visualizer` ——
      * 与其余 40 套效果同源，零新增权限、零新增依赖。
      */
-    WORLD("世界", Tier.ADV, "41"),
+    WORLD("世界", Tier.ADV, "41", needsParticleBudget = true),
     ;
 
     /** 效果分级：决定画质档位可用性 */
@@ -256,10 +267,13 @@ enum class VisualQuality(
 
     fun supports(theme: VisualizerTheme): Boolean = when (theme.tier) {
         VisualizerTheme.Tier.BASIC -> true
-        // 照片墙例外（2026-09-23 用户裁决）：不按粒子预算门控 —— 它没有粒子，
-        // 内存由解码降级兜住（LOW = RGB_565 + 长边 1280）。其余 ADV 仍要求粒子预算。
-        VisualizerTheme.Tier.ADV ->
-            theme == VisualizerTheme.PHOTO_WALL || maxParticles > 0
+        // （2026-10-01 用户裁决，取"方案 C"）ADV 的门槛是**该效果是否真消耗粒子预算**，
+        // 不再是"它是不是 ADV"。原先用 `maxParticles > 0` 当 ADV 代理条件是语义错配：
+        // 数字雨 / 星座 / DNA / 照片墙…一颗粒子都不画，却被代理条件挡在 LOW 档之外
+        // （表现为"能渲染却不可选"，切走即永久回不来）。
+        // 照片墙（2026-09-23 用户裁决）没有粒子、内存由解码降级兜住（LOW = RGB_565 + 长边 1280），
+        // ⇒ 该裁决现在由同一条规则自然成立，不再需要特例分支。
+        VisualizerTheme.Tier.ADV -> !theme.needsParticleBudget || maxParticles > 0
         VisualizerTheme.Tier.ULTRA -> allowFramebuffer
     }
 

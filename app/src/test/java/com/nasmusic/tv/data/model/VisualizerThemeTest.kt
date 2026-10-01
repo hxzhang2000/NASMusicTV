@@ -111,12 +111,19 @@ class VisualizerThemeTest {
             assertTrue("$q should support HYPNOTIC_FUNCTION", q.supports(VisualizerTheme.HYPNOTIC_FUNCTION))
         }
 
-        // ADV 需要粒子预算：LOW 的 maxParticles = 0 → 禁用
-        assertFalse(VisualQuality.LOW.supports(VisualizerTheme.SPECTRO_WATERFALL))
+        // ADV：只有真消耗粒子预算的效果才需要预算（2026-10-01 用户裁决，方案 C）。
+        // 频谱瀑布的渲染器只读 barCount ⇒ LOW 必须可选。
+        assertTrue(VisualQuality.LOW.supports(VisualizerTheme.SPECTRO_WATERFALL))
         assertTrue(VisualQuality.MEDIUM.supports(VisualizerTheme.SPECTRO_WATERFALL))
         assertTrue(VisualQuality.HIGH.supports(VisualizerTheme.SPECTRO_WATERFALL))
 
-        // ULTRA 需要帧缓冲：只有 HIGH 允许
+        // 节拍烟花 / 世界的渲染器真读 ctx.quality.maxParticles ⇒ LOW 的 0 预算仍须挡住
+        assertFalse(VisualQuality.LOW.supports(VisualizerTheme.BEAT_FIREWORK))
+        assertFalse(VisualQuality.LOW.supports(VisualizerTheme.WORLD))
+        assertTrue(VisualQuality.MEDIUM.supports(VisualizerTheme.BEAT_FIREWORK))
+        assertTrue(VisualQuality.MEDIUM.supports(VisualizerTheme.WORLD))
+
+        // ULTRA 需要帧缓冲：只有 HIGH 允许（与本条裁决无关，一字未动）
         assertFalse(VisualQuality.LOW.supports(VisualizerTheme.MILKDROP_FEEDBACK))
         assertFalse(VisualQuality.MEDIUM.supports(VisualizerTheme.MILKDROP_FEEDBACK))
         assertTrue(VisualQuality.HIGH.supports(VisualizerTheme.MILKDROP_FEEDBACK))
@@ -130,11 +137,16 @@ class VisualizerThemeTest {
      * 用意就是「将来若放宽，本用例变红逼改动者回来显式更新」—— 它如愿变红了）。
      *
      * 裁决结果：照片墙**不走粒子预算门控**（没有粒子，内存由 `PhotoBuffer` 的
-     * LOW 档降级兜住：RGB_565 + 长边 1280），但**其余 ADV 效果仍然要求粒子预算** ——
-     * 后半段断言防止放宽时顺手把整个 ADV 门控拆掉。
+     * LOW 档降级兜住：RGB_565 + 长边 1280）。
+     *
+     * ⚠️ 本用例原名「…while other advanced effects still require particles」，
+     * 2026-10-01 的"方案 C"把这条**特例**升级成 ADV 档的**通则**
+     * （ADV 门槛 = 该效果是否真读 `maxParticles`）⇒ 照片墙不再需要例外分支，
+     * 后半段"其余 ADV 仍要求预算"的断言**已作废**，改由 [ParticleBudgetGateTest]
+     * 用源码扫描判定"谁真的读预算"。
      */
     @Test
-    fun `photo wall is offered on every tier while other advanced effects still require particles`() {
+    fun `photo wall is offered on every tier`() {
         assertEquals(VisualizerTheme.Tier.ADV, VisualizerTheme.PHOTO_WALL.tier)
         assertTrue(
             "LOW 档也应提供照片墙（2026-09-23 用户裁决；内存风险由解码降级兜住）",
@@ -143,10 +155,11 @@ class VisualizerThemeTest {
         assertTrue(VisualQuality.MEDIUM.supports(VisualizerTheme.PHOTO_WALL))
         assertTrue(VisualQuality.HIGH.supports(VisualizerTheme.PHOTO_WALL))
 
-        // ⛔ 放宽只限照片墙：粒子类 ADV 在 LOW 档仍然必须被挡
+        // 放宽靠的是「照片墙不读预算」这条事实，不再靠 supports() 里的特例分支
+        assertFalse(VisualizerTheme.PHOTO_WALL.needsParticleBudget)
         assertFalse(
-            "放宽不得波及其他 ADV 效果（LOW 的 maxParticles 仍为 0）",
-            VisualQuality.LOW.supports(VisualizerTheme.SPECTRO_WATERFALL)
+            "真读预算的效果（节拍烟花）在 LOW 档仍然必须被挡",
+            VisualQuality.LOW.supports(VisualizerTheme.BEAT_FIREWORK)
         )
         assertFalse(VisualQuality.LOW.supports(VisualizerTheme.MILKDROP_FEEDBACK))
     }
