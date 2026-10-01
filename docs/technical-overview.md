@@ -11338,6 +11338,68 @@ TypedArray、`performance.now`、`requestAnimationFrame`。
 4. **手机端必须一并复测**——上一轮的 Babel 产物在手机上也是黑的（库初始化失败），
    本次 tsc 产物虽已通过模拟验证，但真机才是最终判据。
 
+### 10.203 v2.38.0 — 可视化质感升级：渲染器基类 + 21 套效果重做（2026-10-01）
+
+**方案**：`docs/visualizer-texture-upgrade-plan.md`（v1.38）。**提交**：`0f81d25` ~ `591571f` 共 10 个（质感升级 S0–S4）、`2931d33`（T5.1）、`4318019`（修测试树编译失败）。
+
+#### 一、核心设计：`RendererFx` 基类 + 后处理工具箱
+
+`renderers/RendererFx.kt`（142 行）把「后处理 / 时钟 / 资源释放」三件事从自觉变成**语法强制**：
+
+- `draw` / `onEnter` / `onExit` 在基类是 **`final override`** ⇒ 子类在语法上无法漏调后处理、无法用 `ctx.nowMs` 算 `dt`、无法漏 `recycle()`
+- `postFx` **默认 `PostFx.NONE`** ⇒ 「迁移」与「改画面」**解耦**，迁移本身逐像素不变
+- 已有先例：`photo/transitions/EffectsP1Transitions.kt` 的 `ChannelGhostTransition` 就是这个模式
+
+⚠️ Kotlin 坑：`override` 成员**默认 `open`**，必须显式写 `final override`，否则子类可再覆写、`final` 静默失效（本仓库当前 0 处 `final override`）。
+
+工具箱在 `visualizer/fx/`（三级降级：`FxLevel.OFF / LITE / FULL`）：`OverlayFx`（暗角/颗粒/扫描线）、`OffscreenFx`、`Shading2D`、`ProceduralTexture`（tile 化程序纹理）、`AudioSmoother`、`SizeCache`。
+
+**当前状态**：`covered` 21 套 / `exempt` 8 条 / 在册 29 个渲染器三者自洽（`FxCoverageScanTest` 实测）。未覆盖 7 套 = E29（仅做了星野 P0）/ E33 / E37 / E38（⛔ 按设计不迁移）/ E39（⛔ 按设计豁免）/ E40 / E41（⛔ View 型）。
+
+#### 二、顺带修掉的两个真 bug
+
+1. **`VisualQuality` 是死代码** ⇒ 3 套 ULTRA 效果在任何设备上都从未被渲染过。`VisualizerViewModel.setQuality()`（`:485`）与 `MainViewModel.updateVisualizerQuality()`（`:3034`）**全仓库零调用点**，唯一写入 DataStore 的路径是 `AppPreferences.importBackupData`。修法：设置页接 `visualizerVM.setQuality()`（⛔ 不走 `updateVisualizerQuality` —— 它缺「降档回退主题」逻辑）。
+2. **`Shading2D` 的 `Brush` 缓存是进程级共享** —— 它是 Kotlin `object` + 16 槽缓存，键里若不含区分维度，后画的渲染器会拿到先画者的 `Brush`（`center`/`radius`/`base`/`contrast` 全在实例内）⇒ 切换效果后背景渐变复用别人的参数（未定义行为，谁先画谁赢）。E15 早先自查发现后只加了自己的 `E15_KEY_SALT`；本轮给 E03 / E07 / E13 各补盐，并给 E32 自带盐。
+
+#### 三、⛔ 提交前门禁抓出：测试树自 T4.5 起编译不过
+
+T5.1 提交前按方案 §十 的硬规矩跑 `testDebugUnitTest`，**首跑即 10 条编译错误**：
+
+```
+e: HypnoticFunctionTest.kt:129/167/184  Name contains illegal characters
+e: LightBeamsTest.kt:168 / ParticleTextTest.kt:136,297 / PlasmaFlowTest.kt:189,268,331
+e: OrbitalStarFieldTest.kt:101
+```
+
+**根因**：`@Test` 的**反引号函数名**里放了 `.` 与 `/`。Kotlin 源码允许反引号内放任意字符，**JVM 方法名禁止** `. ; [ / < >` ⇒ `:app:compileDebugUnitTestKotlin` 失败，**`testDebugUnitTest` 整类不可跑**。
+
+**为什么潜伏了 4 个提交**：涉及的 `b8249f6`(T4.5) / `e485b0d`(T4.6) / `848edc9`(T4.8) / `591571f`(T4.10) 全部**未推送** ⇒ CI 从未触发 ⇒ **T4.5 之后所有"免 Gradle 自查全绿"的声明都建立在没编译过的代码上**。
+
+**修法**（`4318019`，仅改函数名、**不动任何断言**）：区间 `..`→`~`、小数与标识符 `.`→`·`、分隔符 `/`→`，`。已确认这些方法名**无任何脚本或其他测试引用**（0 外部命中）。验证器：`logs_temp/scan_illegal_testnames.py`（全量复扫，0 残留）。
+
+#### 四、教训：免 Gradle 自查不能替代真编译
+
+本项目已实测到**两例**「脚本全绿但编译不过」：
+
+| 版本 | 盲区 |
+|---|---|
+| v1.25 | Compose `Path` 的 `add*` **只收对象**（`Rect`/`RoundRect` 是 data class），13 个自查脚本全绿仍漏掉 16 条 `e:` |
+| v1.38 | 反引号函数名的 **JVM 非法字符**，同一批自查脚本全绿仍漏掉 10 条 `e:` |
+
+⇒ **新增第三方 API 调用、或新增测试文件后，必须真跑一次 `testDebugUnitTest`**。免 Gradle 自查只能查语法结构 / 数值契约 / 项目内约定，**查不出编译器层面的事实**。
+
+⛔ 另：`s17_state.py` 目前**已腐坏**（`AdvancedRenderers.kt` 行数断言写死 1396、实测 1407）⇒ **自查脚本自身缺少漂移检测**，会随代码演进腐坏而无人察觉。
+
+#### 五、⏰ 尚未验收：真机侧 0 / 38
+
+- 21 套观感改造**未在真机看过一眼**（§11.1 `U1–U7` + §11.2 `V1–V31` 全未勾）
+- `postFx` 已随各套重写一并打开（方案 S5.5 与 S2–S4 **合并执行**）⇒ **观感失去单效果粒度回退**，某套出问题只能 revert 整个 commit
+- 阶段 1.7（P1 性能 4 项）**全部**依赖真机帧耗时，而「改造前」基线**现在测是最后的窗口**（改动已落库 12 个提交）
+
+详见方案文档 §12.5（审阅结论与账实核对）。
+
+**版本**：v2.37.6 → **v2.38.0**（versionCode 168 → 169）
+
 ### 10.202 数字雨尾迹整条消失（MatrixRainRenderer 字形裁切，2026-09-30）
 
 **现象**：E41 之后新增的「数字雨」（`MatrixRainRenderer`）每个数字**后面拉的那一串尾迹全部消失**，
