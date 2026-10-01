@@ -11338,6 +11338,134 @@ TypedArray、`performance.now`、`requestAnimationFrame`。
 4. **手机端必须一并复测**——上一轮的 Babel 产物在手机上也是黑的（库初始化失败），
    本次 tsc 产物虽已通过模拟验证，但真机才是最终判据。
 
+### 10.205 v2.38.0 — 可视化 ADV 门控语义修正：方案 C「按是否真消耗粒子预算」（2026-10-01）
+
+**背景**：§10.204 遗留的第 2 条（低画质进不去数字雨）挡住 P-1 的 LOW 复量。用户裁决「选 C，按这个逻辑改」。
+
+**根因**：`VisualQuality.supports()` 把 `maxParticles > 0` 当作 `Tier.ADV` 的门槛，是**代理条件当成判据**——
+它想表达的是「这套效果在低端机上太重」，实际表达的却是「这套效果画粒子」。全仓库真读
+`ctx.quality.maxParticles` 的只有四处：`BeatFireworkRenderer`（`ParticleRenderers.kt:176`）、
+`ParticleTextRenderer`（同文件 `:489`，ULTRA）、`PlasmaFlowRenderer`（`UltraRenderers.kt:376`，ULTRA）、
+`WorldGlobeRenderer`（`:341`；旧 `WorldRenderer:630` 是死代码）。数字雨 / 星座 / DNA / 液态网格…
+一颗粒子都不画，却被这条代理条件整体挡在 LOW 档之外。
+
+**改法**（`AppSettings.kt`）：
+
+1. `VisualizerTheme` 加第 4 个构造参数 `needsParticleBudget: Boolean = false`，
+   只有上述四处对应的 `BEAT_FIREWORK` / `WORLD` / `PARTICLE_TEXT` / `PLASMA_FLOW` 标 `true`。
+   ULTRA 三项照实标注（门控不消费它们，ULTRA 由 `allowFramebuffer` 决定），为的是让该字段**本身可读**。
+2. `ADV -> !theme.needsParticleBudget || maxParticles > 0` ⇒ **照片墙的特例分支删除**
+   （2026-09-23 用户裁决「照片墙不受粒子门控」由通则自然覆盖，`supports()` 里不再硬编码效果名）。
+3. 结果：LOW 档可选的 ADV 从 **1 套 → 11 套**；`BEAT_FIREWORK` / `WORLD` 仍被挡（LOW 预算为 0）。
+
+**同步修正的 KDoc**：`PHOTO_WALL`（原文说「LOW 不支持本效果」，在放宽裁决后就已滞后）、
+`DNA`（原写「按粒子预算门控」，渲染器其实不读预算）、`WORLD`（补注真读预算的位置）。
+
+**门禁**：新增 `ParticleBudgetGateTest`（5 例）—— 正向是**源码扫描**：从 `VisualizerRendererFactory`
+的 `VisualizerTheme.X -> YRenderer(` 抽出映射，再扫 `renderers/` + `photo/` 的类体找 `maxParticles` 读取，
+反推「真消耗预算」集合，与枚举标注做集合相等断言。注释与构造参数声明行都不算读取。
+
+⚠️ **扫描必须只在 `depth == 0` 时认新类**：`WorldGlobeRenderer.kt:145` 有嵌套
+`private class Flight(val spec: WorldRouteSpec, val lane: Int)`，按「遇到 class 就切当前类」的写法
+会把 `:341` 的预算读取记到 `Flight` 头上 ⇒ `WORLD` 被误判为不耗预算 ⇒ **门禁反向放水**。
+第一版就是这么写的，靠 `assertFalse(LOW.supports(WORLD))` 变红才暴露。
+
+**负向自证**两条：① naive「ADV 一律要求预算」必须挡数字雨而真实现放行（证明改法有判别力）；
+② 标注集合必须**严格小于** ADV 全集（否则"扫描 == 标注"可能只是两条都退化成一刀切的巧合）。
+
+**已核对的风险**：新放行的 `DNA` / `轨道` / `星座` 规模是常量、不随档位收缩。
+`DnaRenderer:577` 与 `BatchTwoRenderers:379`（`OrbitalRingsRenderer`）各有 `drawRect(bgColor)` 全屏底，
+`ConstellationRenderer` 有全屏星野 `drawImage` ⇒ 不会新增 §10.204 那类 `createTJunctionFreeRegion` 脏区雷区；
+其余新放行的效果均走 `RendererFx` 基类的 `drawDamageCoalescer`。**但它们在本机的低画质帧率一个都没量过**，
+这是放行的代价，须由真机验收补上（见 §11.3.6）。
+
+**门禁复跑**：**1522 例 / 144 类 / 0 失败 / 0 错误 / 0 跳过**，`lintDebug` **0 Error / 281 Warning**，
+`assembleRelease` 通过（`NASMusicTV-release-v2-38-0.apk`，27,319,118 B）。
+
+**放行后的低画质全档实测**（用户机上读 `FpsMeter` 小字，23 套，完整表见方案文档 §11.3.6）：
+
+- ✅ **数字雨 LOW = 59.4 fps**（合并前同档 7.6）⇒ §10.204 的 P-1 在两个档位都收口（MEDIUM 44.1 SF 口径）。
+  ⚠️ 口径提示：机内读数上限就是 60（vsync）、无分位数，与 SF 那行不可直接相减，但量级差远大于口径差。
+- 🔴 **新放行的 7 套里有 4 套只有 7–11 fps**：歌词点阵 7 / 星座 9 / 折纸 9 / 星系螺旋 11；
+  而同档频谱瀑布 59、分子 59、雷达 50、液态涟漪 30、DNA 30、圆形频谱环 30、阶梯 31、轨道 29、
+  液态网格 29、隧道 27 都在 27 以上。慢的四套共同点是**元素数是常量、不随档位收缩**
+  （§7.5 登记 805 / 626 / 405 原语，与合并前 E16 的 478 同量级）。
+  ⇒ 结论：**按 tier 一刀切当初不算全错，错在把便宜的一起误挡**；修法不是回退门控，
+  而是给这四套做与 E16 同型的**逐元素合并**（已登记为待裁决项，未动代码）。
+- ⚠️ **频谱瀑布顶部一大片黑**：`FADE_ALPHA = 0.06` 每帧把 200 行乒乓缓冲整体 ×0.94，
+  70 帧即衰减到 1.4% ⇒ 可见带恒占底部约 1/4，**三档皆然**，不是低画质造成；
+  此前低画质根本进不到这套效果（正是本次修的门控），所以从没人看见过。
+- ⚠️ **液态网格低画质没有连线**：`AdvancedRenderers.kt:537` 的
+  `drawLines = ctx.quality != VisualQuality.LOW` 是刻意降级（省 4 次 `drawPath` + 160 段建路径），
+  ⛔ 该分支在本次放行之前是**死代码** —— 这是"低画质专属分支在门控放宽前无法被验证"的通用教训：
+  **凡是按档位分叉的绘制路径，放宽门控时要把该档位重新过一遍目视**。
+- 照片墙低画质未测（本机没接照片源）。ULTRA 三套与节拍烟花 / 世界仍按设计进不去低画质。
+
+### 10.204 v2.38.0 — 数字雨上机四项：暗角染色 / 低画质原生闪退 / 列条合并 / 机内帧率读数（2026-10-01）
+
+**方案**：`docs/visualizer-texture-upgrade-plan.md`（v1.45，§11.3.6 实测记录 P-1 / P-2 / P-3）。**改动文件**：生产 `visualizer/fx/OverlayFx.kt`、`visualizer/renderers/RendererFx.kt`、`visualizer/renderers/AdvancedRenderers.kt`、`ui/components/VisualizerStage.kt`、新增 `visualizer/FpsMeter.kt`；门禁 `MatrixRainTest.kt`（13 → 15 例）、`RendererBaseContractTest.kt`（+2 例）、新增 `FpsMeterTest.kt`（7 例）。**门禁**：`testDebugUnitTest` **1517 例 / 143 类 / 0 失败**，`lintDebug` **0 Error / 281 Warning**（新增代码 0 告警）。
+
+#### 一、P-2：暗角边色取自封面 `palette.accent` ⇒ 换歌把整幅染成封面色
+
+用户反馈「数字雨没有黑客帝国的味道」，**根因不在字形颜色**：`OverlayFx.drawVignette` 的边色用封面主色，切到蓝紫封面后整幅被染色，绿色字形对比度被吃掉。**同曲同进度切 LOW 的对照实验**（LOW 档后处理全关 ⇒ 背景立刻回纯黑、绿字形/光晕/拖影清晰）确认了这一点。
+
+修法：`PostFx` 新增 `vignetteEdge: Color? = null` ⇒ `drawVignette` 新增 `edgeOverride`，非 null 时取代 accent **并跳过 `coolShiftDeg`**；`MatrixRainRenderer` 锁 `VIGNETTE_EDGE = rgb(0, 52, 20)`（比最暗字形档再暗一档）。**默认 null ⇒ 其余 20 套逐像素不变**；⛔ 其他效果是否同样锁边色**尚未裁决**。
+
+顺带修掉一个**真实缓存缺陷**：暗角 `Brush` 旧键用 `shl 32` / `shl 40` 拼位段，accent 段（40..71）与 width 段（32..63）**重叠** ⇒ 不同 `(w, accent)` 可撞键、换歌沿用旧色。改为乘性混合，五维全部进键。
+
+#### 二、P-3：低画质进入数字雨 **原生 SIGSEGV**（非 Java 异常，无栈可 catch）
+
+**取证**（`⚠️ TEMP-P3` 临时埋点 + `debug.nasmusic.rain.cols` sysprop 二分，同一台创维 Android 5.1.1 同一首歌）：
+
+| 档位 | 列数 / 每帧碎 blit | 结果 |
+|---|---|---|
+| LOW | 24 / 336 | **954 ms 崩**（复现第二次 636 ms） |
+| LOW（sysprop 压到 4 列） | 4 / 56 | **68 s、4020 帧不崩**，约 59 fps |
+| MEDIUM | 32 / 448（后处理开） | **119 s、480+ 帧不崩** |
+
+**根因**：崩在 HWUI 的脏区处理 —— `libui` 的 `android::Region::createTJunctionFreeRegion(Region const&)+104`（`pc 000084b7`）。触发条件是**每帧存在大量互不相连的小矩形、且没有任何一次全屏绘制把脏区并掉**，**与原始数多少不直接相关**（MEDIUM 的原语更多反而不崩）。MEDIUM 不崩是因为暗角/颗粒/扫描线是 3 次全屏 `drawRect`，脏区退化成整块矩形走不到那条路径；LOW 档 `FxLevel.OFF` 把后处理整段跳过 ⇒ 全屏绘制消失。⛔ 早期两条解读已撤回：「`r0` 随原语数增长」（同为 LOW/24 列的两批崩溃 `r0` = 5162 与 7745，与列数无关）、「内存耗尽」（`nativeKb` 全程平在 7.8 / 11.2 MB，无台阶）。
+
+**修法**（基类统一，非 E16 局部）：`PostFx.hasFullScreenPass()` + `RendererFx.needsDamageCoalescer(level, postFx)` + `OverlayFx.drawDamageCoalescer()` —— 本帧**确定没有**全屏绘制时，补一层不可见全屏 `drawRect`（alpha = `1f/255`）把脏区并掉。判据由 `RendererBaseContractTest` ⑩ 护住，负向⑩ 用三种错误实现（恒开 / 恒关 / 只看 `postFx` 不看档位）产生可观测分歧。诊断埋点与 sysprop 开关**已全部删除**。
+
+#### 三、P-1：这台电视的第一成本维度是「每帧绘制原语数」⇒ 列条合并
+
+实测斜率 **≈ 0.41–0.47 ms/原语**、固定开销 **≈ 24.6 ms/帧**（E03 21 原语 / 34.52 ms，E16 478 原语 / 249.18 ms）⇒ **合并原语**才是抓手，减像素不是（CPU 侧已排除：E16 期间主线程 0%、`RenderThread` 25%）。⚠️ 斜率仅 2 点，尚不可当预算用。
+
+**做法**：10 张字形位图不再直接上屏 —— 先在 `buildStrips(cellH)` 里合成 **2 张「整列条带」**（索引 = 头部数字），每帧每列 **1 次** `drawBitmap`：
+
+| 档位 | 旧（列 × 格） | 新（= 列数） |
+|---|---|---|
+| LOW | 336 | 24 |
+| MEDIUM | 448 | 32 |
+| HIGH | 672 | 48 |
+
+**为什么数字仍然每 300 ms 翻转**：`digit(k) = headDigit xor ((headK − k) and 1)`（模 2 加法的性质，由 `MatrixRainTest` ⑩ 穷举 64 列 × 16 tick × 14 格证明），而**亮度档与 alpha 只依赖 `k`** ⇒ 条带可静态烘死，"翻哪个数字"退化成"取哪一条带"，**不需要重建位图**。用户提出的「运动过程中冻结每列数字」经同一分析**否掉**：它不减少任何每帧操作（原语数不变），只把缓存从 2 张降到 1 张，代价是丢掉招牌观感。
+
+**等价性**：SrcOver 满足结合律，且条带内仍按 `k` 升序、列主序绘制 ⇒ 与旧的逐格 blit 同序；差异仅**每行 ≤0.5 px 的整数量化**与中间 alpha 的 8-bit 舍入。⚠️ 两处布局必须同源（条带 `(0,0)` = 头部字形位图含光晕 `pad` 放在第 0 格时的左上角；`drawContent` 的 `stripDx/stripDy` 由同一公式反推）。⚠️ 每帧 blit 用**独立的 `stripPaint`（alpha 恒 255）**，与重建期逐格调 alpha 的 `blitPaint` 严格分开 —— 混用会把上一格的 alpha 带进每一帧。内存 ≈ **1.3 MB**（条带 141×1171 ARGB_8888 × 2），随 `releaseGlyphs()` 一并 `recycle()`。
+
+**⛔ 合并不是崩溃的替代修法**：全屏脏区占位（P-3）与列条合并（P-1）解决的是两件事，两者都必须保留。
+
+#### 四、机内帧率读数（右上角小字，默认关）
+
+`visualizer/FpsMeter.kt`（0.5 s **滚动窗口**，3 个标量字段、零分配）+ `VisualizerStage` 的 `FpsBadge`：
+
+- 口径 = **Compose 帧回调的实际到点率**（绘制循环 `while(true) withFrameNanos {}` 被上一帧顶住 ⇒ 回调间隔 ≈ 上屏间隔），与 `dumpsys SurfaceFlinger --latency` 同源不同采样点，**不一致时以 SF 为准**。
+- 开关走 `Settings.Global` 键 `nasmusic_fps`（`adb shell settings put global nasmusic_fps 1`，重进可视化生效）：⛔ 不做成设置页开关（要动 6 处持久化 plumbing，且会在播放器 UI 上留常驻调试信息）；⛔ 也不挂 `BuildConfig.DEBUG`（上机一律 release 包，挂了等于没有）。
+- 底色用 `drawBehind` 画圆角矩形，⛔ 不用 `RoundedCornerShape` clip —— 与效果名 Toast 同一处 API 22 hwui Region 段错误的规避。
+- 门禁 `FpsMeterTest`：5 正向 + 2 负向自证（累计平均版必须被历史拖住、按帧数除标称窗口的版式必须对 30/60 fps 报同一个数）。
+
+#### 五、实测结果（合并包 · MEDIUM · 同一台电视同一首歌）
+
+**44.1 fps / p50 20.42 ms / p95 40.65 ms / jank 14.5%**（改造前按成本模型外推 ≈4.5 fps）。
+
+🔴 这第 3 个数据点**把 v1.41 那条线证伪了一半**：38 个原语总共只花 22.7 ms，**比模型算出的"固定开销 24.6 ms"本身还快** ⇒ 说明截距不是常数（它是从 478 个**小位图** op 回归出来的），真实规律是「成本随**每帧独立小矩形的数量**超线性；大 quad 走快速纹理路径、且不制造独立脏区」。⛔ 旧斜率 `0.47 ms/原语` 作废，不得再用于给未改造效果估预算。
+
+#### 六、遗留
+
+- ✅ ~~LOW 档帧率复测~~ **v1.45 阻塞在别处**：低画质根本**选不进**数字雨（见下条），MEDIUM 已量到 44.1 fps。
+- ✅ ~~**既有缺陷待裁决**：`LOW.maxParticles = 0` ⇒ `supports()` 判所有 `Tier.ADV` 效果低画质不支持，而 `setQuality()` 只在当次改档位时回落、启动期不校验 ⇒ **低画质 + 数字雨能渲染却不可选，切走即永久回不来**~~ —— **v1.46 已按方案 C 修复**，详见 **§10.205**。
+- ⚠️ 采集口径：`dumpsys gfxinfo` 在 API 22 基准机上恒空，改用 `dumpsys SurfaceFlinger --latency`（`logs_temp/sf_sample.sh`）。
+
 ### 10.203 v2.38.0 — 可视化质感升级：渲染器基类 + 21 套效果重做（2026-10-01）
 
 **方案**：`docs/visualizer-texture-upgrade-plan.md`（v1.38）。**提交**：`0f81d25` ~ `591571f` 共 10 个（质感升级 S0–S4）、`2931d33`（T5.1）、`4318019`（修测试树编译失败）。

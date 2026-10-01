@@ -15,10 +15,40 @@
 > 要真 bloom / 真色差、观感基调"精致/电影感"、⛔ **启用 600ms 交叉淡入**（推翻 §13.5-D3）、E24 增益保持，
 > 其余五项按推荐 ⇒ 见 **§十三 的 ✅ 标记与 §13.5 D7–D12**。**开工前先看 §十三**。
 >
+> 🔴 **当前进度（v1.47 · 2026-10-01 回填，⛔ 不要再按"可开工"理解本文件）**
+>
+> | 维度 | 状态 |
+> |---|---|
+> | 任务打勾 | **38 / 59（64%）** —— 阶段 0/0.5/1/1.5/1.6/2 已完成，阶段 3/4 仅剩上机验收，阶段 5/6/7 与 **1.7** 未做完 |
+> | 代码落地 | **21 / 28 套**已迁 `RendererFx()` 并打开 `postFx`（`covered` == 21 / `exempt` == 8 / 在册 29 ✓）；S0–S4 已提交，⛔ **T5.1 未提交** |
+> | **真机验收** | 🟡 **3 / 38**（§11.1 `U1`✅ `U4`✅ / `U2` `U3` `U5` `U6` `U7` 未过；§11.2 `V1`✅ / `V14`⛔ 需在修复包上逐条重判 / 其余 `V` 未勾）—— 详见 **§11.3.6 实测记录**。三条阻塞项状态：**P-2**（暗角封面染色）✅ 已修 + MEDIUM 目视复验通过；**P-3**（LOW 档原生 SIGSEGV）✅ 已修 + 真机复验「现在不崩溃」；**P-1**（电视卡顿）✅ **数字雨两档均闭环**：MEDIUM **44.1 fps**（SF 口径）/ LOW **59.4 fps**（机内读数，合并前同档 7.6），第 3 个成本点已把旧斜率证伪，见 §11.3.6；✅ v1.46 修好 `supports()` 后已补齐**低画质全 23 套读数** ⇒ ⛔ 新暴露的欠账改口为「**放行后仍慢的 4 套**（星座 9 / 歌词点阵 7 / 折纸 9 / 星系螺旋 11）待裁决，见 §12.5.3 第 8 项」+ 两项观感待判（第 9 项） |
+> | 未提交工作区 | ⛔ **11 个代码文件**（生产 6：`OverlayFx.kt` / `RendererFx.kt` / `AdvancedRenderers.kt` / `VisualizerStage.kt` / **新增 `FpsMeter.kt`** / **`AppSettings.kt`（方案 C 门控）**；门禁 5：`MatrixRainTest.kt` / `RendererBaseContractTest.kt` / **新增 `FpsMeterTest.kt`** / **新增 `ParticleBudgetGateTest.kt`** / `VisualizerThemeTest.kt`）—— 覆盖 P-2 暗角边色 + P-3 全屏脏区占位 + P-1 列条合并 + 机内帧率读数 + ADV 门控语义修正。✅ **`⚠️ TEMP-P3` 诊断埋点与 sysprop 开关已全部删除**；门禁 **1522 例 / 144 类 / 0 失败**、`lintDebug` **0 Error / 281 Warning**。✅ **`supports()` 修法已裁决并落码（C）** |
+>
+> 📌 **v1.40 更正两处「文档曾当作已落地」的事实**（源码实测，见 §11.3.5）：
+> ① ⛔ **裁决项 4 / §13.5-D3 的「启用 600ms 交叉淡入」尚未落码** —— `VisualizerStage.kt:180` 第 3 实参
+> 仍是硬编码 `false`（该文件最后一次改动是 S1.6 `ca23876`）；改码动作排在**阶段 1.7**（0/4）。
+> ⚠️ **`CHANGELOG.md` v2.38.0 的 Added 条目「效果切换过渡：启用 600ms 交叉淡入」与现状不符**，
+> 同节「离屏层按画质档位条件生效」亦不符（`VisualizerStage.kt:312` 仍**无条件** `Offscreen`）。
+> ② **T1.7.2（E17 星座 O(n²) → 网格分桶）的实质代码已在 T3.3 完成**（§7.5 注① `51,362 → 805`），
+> 该项只剩真机量帧耗时 + 视觉密度复核，⛔ **不要重写一遍网格**。
+>
+> ⇒ **下一步不是继续写批次 C，而是先做一次上机验收**：见 **§12.2 进度快照**与 **§11.1 U1–U7**。
+> 理由：阶段 1.7（4 项）与 S2/S3/S4 的验收条件**全部**卡在真机帧耗时上；且 `postFx` 已随各套一并打开
+> （S5.5 与 S2–S4 合并执行），**观感没有单效果粒度的回退** —— 再叠加 7 套未验收的批次 C 会放大风险敞口。
+>
 > **基线**：v2.37.6（versionCode 168）｜门禁 `testDebugUnitTest` **1177 例 / 115 类 /
 > 0 失败 / 0 错误 / 0 跳过**（来源 `build_test_counts.txt`，实测汇总）；
 > `lintDebug` **0 Error / 279 Warning**（v2.37.0 口径，**本方案开工前必须复跑确认**）。
 > ⚠️ 计数漂移先确认是不是本轮新增的文件 —— 本项目存在并发会话改同一工作区的情况。
+>
+> 🔴 **v1.37 更正**：上面这组数字是**开工前**基线，**已过期**。v1.18 曾自报 1320/127。
+> 📌 **v1.39 已用真跑回填权威基线（2026-10-01 · `testDebugUnitTest` + `lintDebug` 实测）**：
+> **`142` 个测试类 / `1504` 例 / `0` 失败 / `0` 错误 / `0` 跳过**；`lintDebug` **`0` Error / `280` Warning**。
+> （该数字由 `app/build/test-results/testDebugUnitTest/TEST-*.xml` 逐文件累加得出，**不是**从构建日志抽的；
+> 静态 `@Test` 计数同样是 1504，两者吻合。）
+> ⚠️ v1.37 那条「静态 `@Test` 1504 ≠ 实跑例数」的**不确定性已消解** —— 本次两者恰好相等，
+> 但**回填一律以实跑 XML 累加为准**，静态计数只作交叉验证。
+> ⚠️ 另注：`lint` 的 Warning 数从 279（v2.37.0 口径）漂到 **280**，Error 仍为 0，不影响 CI 阻塞判定。
 
 ### 文档版本跟踪
 
@@ -41,8 +71,38 @@
 | v1.14 | 2026-09-29 | **§十三 的十项裁决全部拍板 ⇒ 方案由「待拍板」转为「全量开工」**（用户逐项裁决，原文：「1 改造深度：全量改造 / 2 是否要真 bloom / 真色差（离屏层）：要 / 3 观感基调："精致/电影感" / 4 效果切换是否启用 600ms 交叉淡入：启用 / 5 E24 心跳的显示增益 AMP_FRACTION：保持 / 其他问题按推荐处理」）。① **改造深度 = 全量 28 套**（裁决项 1 选 B）⇒ §十 S2–S5 全做、**无"只做批次 A"分支**；§12.2 合计 **58 → 59**（因裁决项 9 选 A 追加 **T1.6.4**）。② **要真 bloom / 真色差（离屏层）**（裁决项 2 选 A）⇒ §十 **S6 由"可选"变"必做"**、§12.2 阶段 6 保留 3 项。③ **观感基调 = "精致/电影感"**（裁决项 3 选 A）⇒ §7.1 取值一律走**区间上半段**（暗角 `0.42` 偏上、星座/雷达/世界 `0.50–0.52`；颗粒 `0.030` 偏上至 `0.034`；色差 `0.55` **可见**），**例外**：E39 照片墙仍按"照片优先"降到 `0.34 / 0.018`。④ ⛔ **效果切换启用 600ms 交叉淡入**（裁决项 4 选 A）—— 改 `VisualizerStage.kt:178` 第 3 个实参 `false` → `true`。**这推翻了 §13.5-D3（硬切）**，D3 已同步改写；并连带 **更正 §四 G14 的口径**：`crossfade = true` 后 `fadeAlpha` 在切换的 600ms 内**真的会 < 1** ⇒ 离屏层**不再是"100% 无用"**，但**切换期外仍恒为 `1.0f`** ⇒ **裁决项 10 的"条件化"依然成立、且更精确**（把离屏代价**限制在 600ms 窗口内**）。⚠️ **View 型（E41 世界）不参与淡入**（`VisualizerStage.kt:347-348` 的 `if (old.isViewBased) return@let` —— `AndroidView` 无法在 `DrawScope` 里淡出）⇒ **涉及 E41 的进出场仍是硬切**，已写进 §11.1 U2 与 §11.2 V31 ⑥。⑤ **E24 心跳显示增益 `AMP_FRACTION` 保持 `0.26`**（裁决项 5 选 A）⇒ §A8 第 0 条**不改增益**，R 峰维持近垂直尖刺（1 mV ≈ 281 px），不做"降到 0.16"的监护仪化。⑥ **裁决项 6–10 按各自"推荐"项执行**：**6=A** E30 方位/距离**与频率解耦**（只把回波强度接频谱）/ **7=A** E32 **全宽展开、不镜像**（列分辨率翻倍）/ **8=A** §5.5 **建基类 + 全量迁移 26 套**（`postFx` 一律 `NONE` ⇒ 逐像素不变）/ **9=A** **加设置页"可视化画质"三档选择器**接 `VisualizerViewModel.setQuality()`（`:485-492`，已实现零调用点）/ **10=A** `CompositingStrategy.Offscreen` **条件化**（`fadeAlpha < 1f` 才挂）。⑦ **文档同步（本版共 30 处编辑）**：§1.1「十四条」→ **十五条**（新增 ⑮ 裁决拍板行）+ §1.2 新增末行 / **§十三 标题与引言**（10 项待拍板 → 10 项已拍板）+ 10 项表**逐行加 ✅** + **§13.5 新增 D7–D12** + **D3 改写**（硬切 → 启用淡入）/ §三 #2 / **§四 G14 关键条与参考条** / §7.1 表头 / §十 S6 行与末尾注 / §11.1 U2 / §11.2 **V31 新增 ⑥** / §12.2 阶段 6 行 + 合计 + 注 / §12.3 **阶段 1.6 标题 3 → 4 项** + T1.6.3 末条 + **新增 T1.6.4** + T1.7.1 验收口径 / §15.4-**A18** / §15.7 **第 3 条**。⛔ **本版不改任何源码** —— 裁决只落到文档；代码开工从 §十 S0 开始 | **可开工（全量 28 套）** |
 | v1.15 | 2026-09-29 | **全文复审（除 E41 世界外）—— 修正 80 处与源码不符 / 自相矛盾之处**（用户要求「除了世界这个效果，其他的内容，再审阅一遍文档」）。① ⛔ **会照着做出错的一处**：`T1.6.3` 与 `§15.7 #14` 原写「`VisualizerStage.kt:310` 的 `canvasSize` 只写不读 ⇒ 删该行与 `:144` 声明」—— **实测 `:315` 的 `renderCtx.update(…, canvasSize, …)` 在读它**，且被 `PhotoRenderer.kt:102-103/111-112` 与 `PhotoTransition.kt:132` 消费（E39 的尺寸缓存键）⇒ **删了直接编译失败**。已改为"把写入时机从 draw 阶段移到布局阶段（`Modifier.onSizeChanged`），或整条跳过"。② **口径回灌（裁决连带）**：`§5.5.3` 的 bloom「默认不做」→ **已裁决必做（落点 §十 S6）**；`§12.3` 阶段 6 标题「可选」+ 同节"故放最后且可选" + `§15.6 S6` 的「（可选）」→ **必做**；`§15.7 #15` 的「`crossfade` 恒 `false` ⇒ 收益为零」→ 按 D3 改判改写；`§15.3.2 #9/#10` 补上"v1.14 已改判"；`§十三` 裁决项 10 选项 A 补 v1.14 更正注。③ **计数 / 区间修正**：G1「25/28」→ **26/28**（§1.2 + G1 标题 + §5.1 共 4 处）；G18「5 套有星野」→ **4 套**（含同节末注）；§7.5「未解析」合计 **43 → 49**（逐行求和）与注⑤ 活代码口径 **42 → 48**；§15.0 自检表 3 处（「12 类」→ **14 类**、「S1–S7」→ **S0–S7**、「U1–U5 + V1–V28」→ **U1–U7 + V1–V31**）；§5.5.4 与 §十 S5.5 的 `V1–V28` → `V1–V31`；§12.3 四处 `U1–U5` → `U1–U7`；§15.6 S5 的 `V22–V28` → `V22–V31`；T7.4「17 条 / 剩下的 8 条」→ **20 条 / 17 条**；G13 负向 **3 条 → 4 条**（§15.1.2 #26 + §15.6 S1.6）；§15.1.1 测试总账 **860+750 → 750+750**（原式 1610 ≠ 1500，`PerfBudgetContractTest` 被两张表重复计入）；§2.3 复核注 `54 → 65`；`VisualizerThemeTest` 计数断言 **6 处 → 7 处**（全文 5 处）。④ **文件名 / 类名 / 行号**：`MilkdropRenderer.kt`（**仓库无此文件**）6 处 → `UltraRenderers.kt`；`LiquidGridRenderer.kt` / `GalaxySpiralRenderer.kt` → `AdvancedRenderers.kt`；G8 的 `AdvancedRenderers.kt:244（PlasmaFlow）` → **`UltraRenderers.kt:244`（`PlasmaFlowRenderer`）**；G12 的 `:113（E01 Bloom）` → `（E03 隧道穿越）`、`:252（E13 频谱山）` → `（E13 液态网格）`；`WorldNetwork.kt:829` → `:872`；`BasicRenderers.kt` 的 `mirrored` `:56-59` → `:48-52`（§15.7#13 的 `:58` → `:48`）；D1 与 §15.7#8 的 `AdvancedRenderers.kt:433` → `:435`；A19 的 `BatchTwoRenderers.kt:256` → `BatchFourRenderers.kt:256`；`DnaRenderer.kt:467-681` → `:109-896`（§2.2 / §C6 两处）+ §C6 内部 3 处行号；`photo/PhotoRenderer.kt:87-…` 省略号 → `:49-161`（§2.2 / §C5 / §15.3.1#15）；`BatchFourRenderers.kt:1566-…` → `:1566-1718`；§15.1.2 的 `AdvancedRenderers 568 → 570`、`ParticleRenderers 265 → 268`。⑤ **§六 可执行性**：A11 的镜像选项标签**与 §十三 裁决项 7 相反**（改为 A = 全宽展开、B = 保留镜像并标已被否）；A10/A11 的「不能用 `withTransform`（每帧分配）」**与本文件 §15.4-A7 自相矛盾**（改为"少一次 save/restore"）；A2 的"径向渐变环"实为 `sweepGradient`（改名 + 补 `Stroke` + 补缓存要求）、"峰值帽辉光并入同一 `Path`"物理不可行（改为另开 `Path`）；A4 删掉与操作顺序互斥的"新行亮度反向补偿"；A3 的 Catmull-Rom 参照 `:467-681` → `:686-800` 且"128 段"→ **126 段**；A2/A4 的暗角 `0.40/0.38` → `0.44`（D9 下限 0.42）；三处"三段式背景"补齐第三段；B5 的 JNI `16,280 → 220` → **74**（`size = 220` ⇒ `bmp = 660×220`）；C5 的「43 种转场」→ **76 种**（枚举实测）；§八 G14 断言③ `≤ 0.55f` → `≤ 0.50f`；§2.2 E35 星级 `★★★` → `★★`（与 §2.3 一致）；§2.4③ 航线上限 `12/22/34（钳 6–34）` → **`18/32/46`（钳 10–46）**、"恒 22" → **恒 32**；§15.3.1 #17 的 `implemented(P1) 28 → 34` → **43 → 49**；`drawGrain` 默认值 `0.035f` → **`0.030f`**（与 §7.1 一致）；§15.4-A17 的"必改前 4 处" → **3 处**（与 §15.5 一致）；§15.1.2 补 `OrbitalStarFieldTest`（#27，§八 G14 载体，原**整表缺失**）并把表后注"28 个渲染器"→ **27 个**；§1.1 ② 的"18 条全是'看起来假'的根因"拆成 G1–G13 / G14–G18 两类。⛔ **本版不改任何源码，也不动 E41 世界的实质内容**（该效果正由并发会话重写；`§15.7 #20` 与 `§九 R20 ⑤` 已加"待重核"标记） | **可开工（全量 28 套）** |
 | v1.16 | 2026-09-29 | **v1.15 复审的第二遍（补漏 + 行号全量核对）**。① **补 v1.15 声称但未落盘的 8 处**（v1.15 的补丁脚本 `apply_v115.py` 实际只落了 78 条，版本表行却按 80 处写了）：`VisualizerThemeTest` 计数断言 **6 处 → 7 处**（全文 **4 处**未改：§三 #4 / §八基线注 / T0.1 / §13.5-D2）；`§1.1 ⑭` 的 §7.5 注⑤ 交叉引用 `42 → 48`；`§13.5-D1` 与 `§15.7 #8` 的 `AdvancedRenderers.kt:433 → :435`；`LiquidGridRenderer.kt` / `GalaxySpiralRenderer.kt` / `RadarGridRenderer.kt` / `OrigamiPolyRenderer.kt`（**仓库无这 4 个文件**）→ 真实宿主文件 `AdvancedRenderers.kt` / `BatchThreeRenderers.kt`。② **新写的行号核对工具 `logs_temp/verify_linerefs.py`**（把文档里全部 **323 处** `File.kt:NNN` 引用逐条解析到源码那一行并打印）⇒ 又抓出 8 处：`BlissTransitions.kt:38 → BlindsTransitions.kt:38`（`Bliss` 类全仓库不存在，实际类名是 `BlindsTransition`）；§2.2 E16/E17 的 `:354-475` / `:486-568` → `:356-477` / `:488-570`（E16 的 KDoc 在 2026-09-29 加过 2 行「二进制雨」说明，其后行号整体 +2）；`AdvancedRenderers.kt:343-353 → :343-355`、§15.7#8 的 `:366/:433/:431/:448 → :368/:435/:433/:450`；`AdvancedRenderers.kt:146-158 → :152-158`（`releaseBuffers()` 实现体，`146-150` 是 `onExit`）；`ParticleRenderers.kt:210 → :213`（`sample()` 调用点）、`:178-188 → :181-190`；`EcgWaveRenderer.kt:150 → :151`（`colMs += colStepMs`）。③ **§15.1.1 测试总账**：v1.15 补了 §15.1.2 #27（`OrbitalStarFieldTest` 100 行）却没同步本注（仍写「6 类 / 750 / 合计 1500」）⇒ 改为「**7 类 / 850 / 合计 1600**」。④ **`Color.kt:638/119` 限定为 `androidx.compose.ui.graphics.Color.kt`**（原写法会让人去 grep 本仓库的 `ui/theme/Color.kt`，那个只有 19 行；实测 1.6.1 sources jar：`:119` = `value class Color(val value: ULong)`、`:638` = `fun Color.toArgb(): Int`，两处**本来就对**，只是文件名有歧义）。⑤ **§C7 航线档位** `12 / 22 / 34（钳 6–34）` → **`18 / 32 / 46`（钳 10–46）**，与 §2.4③ 一致 —— ⚠️ 该值来自**并发会话对 `WorldNetwork.kt` 的未提交改动**（HEAD 仍是 `12/22/34`，钳 `6–34`）⇒ **E41 定稿/提交后需整体重核 §C7**（`globe.js` 行数、`WorldGlobeRenderer` 行数等同理）。⛔ 本版同样**不改任何源码** | **可开工（全量 28 套）** |
+| v1.17 | 2026-09-29 | **E41 世界定稿复核**（用户「世界效果已经定稿了你重新评估」）。并发会话对 E41 的未提交大改已定稿（`globe.js` 215 → **821 行**，`WorldGlobeRenderer.kt` 369 → **538 行**，新增 5 张贴图）。① **§C7 现状表重写**：真彩贴图球（`earth_lit.jpg`）+ ShaderMaterial 昼夜壳（`earth_night` 灯光 + `earth_glow` 大陆辉光）+ 太阳/三层星空/月球（110 s 公转 + 月食）+ **暖色系**城市点（真机反馈「看不出来」，原 4 级全蓝与球体零对比）+ **黄金角呼吸 + 拍点包络**（`pulseCities` 一次性脉冲已删除）+ 航线**车道分层**（`lane × 1/1.34/1.68` 弧高 + dash 错相）+ **航线目标收敛模型**（保底 + 强度、`frameSeq` 判停播、并行车道重抽而非放弃）。② **杠杆改判**：N2 降 P3（原 emissive 呼吸已被上游废弃 —— 会毁昼夜分界，现恒 0.30，音频反应移至 NIGHT_LEVEL/CONTINENT_GLOW/太阳/自转）；N3 大半被上游取代（配色/半径已重做、脉冲已重做）；N4 的 `arcAltitudeAutoScale` 建议**作废**（显式弧高下是死配置）；N5 ② **已做**（Kotlin `lastRoutesJson` 去重 + 空列表也必须发）。③ **六条处置 #1 理由更新**（不再是纯色球）。④ **日志洪水解除**：逐请求 `intercept` 日志已删，R20⑤ / §15.7 #20 的「待重核」标记解除（`AppLog` 只剩 catch/error/console 三处）。⑤ **行号全量重核**：`draw()` :62→:65、禁焦 :121-125→:181-183、detach :211-226→:274-289、cap :273→:336-337、桥接 :244-260/:314-354→:307-323/:335-372/:484-523、rng :69→:124、`globe.js` 六段锚点全改（灯光 :58-119 / 材质与夜面壳 :288-378 / 城市点 :558-586 / 航线 :588-629 / 尺寸 :635-650 / 主循环 :738-821）。⑥ 隐藏旧实现 3300+ → **2,840 行**。同步点位：§C7 / §1.1⑭ / §2.2 第 41 行 / §2.4③ / §四 G13④、G16 / V28 / V31 / R20⑤ / T5.7 / §15.1.2 #14 / §15.3.1 #14 / §15.7 #20 / D6 |
+| v1.18 | 2026-09-30 | **S1.5 试点迁移 + S1.6 全量性能 P0 组 + 阶段 2 前 3 套观感（T2.1–T2.3）代码落盘**（提交 `3b3b1ce` / `ca23876`）。① **S1.5**：`TunnelRenderer` 改 `: RendererFx()`，`postFx` 默认 `NONE` ⇒ **逐像素不变**（§十 S1.5 落地）。② **S1.6 四项（全量性能优化 P0 组，零画面变化）**：**T1.6.1** E16 数字雨字形缓存键 `"${...}:${...}:$n"` 字符串模板 → **三元组 `(slot10, cell10, n)` 纯 Int 键**（`glyphCacheStale()` 抽成**可测纯函数**，`glyphs == null` 的**空值短路**留在 draw 调用点）；**T1.6.2** **10 处带参 `Rect(` 全消**（`Path.asAndroidPath().addOval(float×4)` + `drawRect(float×4)`；⚠️ **几何陷阱**：`Rect(Offset(px-size, py-size), size*2f)` 的圆心是 `(px-size, py-size)`、半径 `2×size` ⇒ float 展开必须是 `(px-size)±2size`，按「粒子圆心」想当然写会整体偏移）；**T1.6.3** `VisualizerStage` 的 `canvasSize` **死状态**（`remember` 只写不读）→ draw 内局部 `val`，`:315` 的 `renderCtx.update` 读取点不变 ⇒ **逐帧等价**（⚠️ 保留 `onSizeChanged` 方案作为备选，见 §15.7 #14 更正）；**T1.6.4** 设置页新增「**可视化画质**」三档选择器 → 接 `visualizerVM.setQuality()`（⛔ **不走** `MainViewModel.updateVisualizerQuality` —— 它缺「降档回退主题」逻辑）⇒ **裁决项 9 落地**，3 套 ULTRA（E18/E19/E20）**首次可达**。③ **门禁**：新增 **§八 G13 `PerfBudgetContractTest`**（9 例 = 源码扫描 2 + E16 行为 2 + 负向 N1–N5）+ **`VisualizerQualityWiringTest`**（6 例）⇒ 基线 **1305 例/125 类 → 1320 例/127 类/0 失败**、`lintDebug` **0 Error**；G13 **首跑即抓出 3 处规格外真违规**（`ParticleRenderers.kt` 带参 `Rect(`、`VintageTvRenderer.kt` 的 `listOf` 与 `Rect(`）⇒ 证明门禁**非空转**。④ **阶段 2 前 3 套观感代码落盘**（`BasicRenderers.kt`，**尚未提交**）：**T2.1** E03（§A1 六条：6 桶 `fade²` / 壁灯光晕 / 8 条速度线 / 中心光源 / `postFx` = vignette `0.46` + grain `0.030`）、**T2.2** E05（§A2 六条：圆柱双笔 `±0.35×wdt` / **假光晕整段删除** → 1 次宽笔 / `sweepGradient` 环 / 径向渐变盘 / 峰帽辉光仅 `bucket==7` / 后处理）、**T2.3** E07（§A3 六条：三段式背景 / 中点二次贝塞尔 / 层透视 / 双描边 / 接触阴影渐变 / 后处理）。⑤ **实现期偏差 6 条已写入 §12.4**（G13⑤ 口径变更、E03 壁灯光晕降级、E07 冷相偏移省略、E05 hue 量化 12 档、E05 Brush 缓存用成员 lambda、import 连带清理）。⑥ **新增工作约定**：**编译由用户执行**（用户 2026-09-30 明确「你编译太慢了，以后跟我说，我来编译」）⇒ 交付前只做**免 Gradle 的字节级自查**（G13 扫描器的 python 复现 + token 自检）。⛔ **本版不改任何源码行为**：源码改动集中在 `BasicRenderers.kt`（T2.1–T2.3）与已提交的 S1.5/S1.6；**`docs/` 的改动不进入代码提交** | **阶段 2 进行中**（T2.4 / T2.5 待做；V1–V4 待上机） |
+| v1.19 | 2026-09-30 | **阶段 2 完成：T2.4（E12 频谱瀑布 §A4 六条）+ T2.5（`FxCoverageScanTest` 首次启用）+ 批次 A 4 套基类迁移收口**。① **T2.4 · E12 `WaterfallRenderer` 整类重写**：横向分辨率 `128` → `barCount × 4`（HIGH/MEDIUM = 256、LOW = 128）并做**行内相邻桶线性插值**；`cb.drawImage(p, Offset(0,-1))` 之后叠**纯黑 alpha `0.06` 衰减层**（⛔ 顺序 = 先「上移 + 衰减」再写新行，原方案与之互斥的「新行亮度反向补偿」已删）；底部新行按 **16 个色阶桶**合并为 **16 次 `drawPath`**（`android.graphics.Path` + `nativeCanvas`，替代 `n × 4` 次 `drawRect`）；亮度曲线 `0.50 + v×0.40` → **`0.34 + pow(v, 0.72f) × 0.52f`**；新增 **4 条等分垂直参考线**（1 次 `drawPath`，OFF 档跳过）；`postFx = PostFx(vignette = 0.44f, scanline = 0.12f)`。② **T2.5 · `FxCoverageScanTest` 首次启用**（`test/.../fx/FxCoverageScanTest.kt`，**8 例** = 4 正向 + 4 负向自证）：只覆盖本阶段 4 套；判据改为**两条并列**（迁移基类看 `postFx` 非 NONE / 未迁移看 `draw` 内 `OverlayFx.`）；豁免改为**集中名单**（`exempt: 类名 → 理由`）并加**完整性断言** `covered ∪ exempt ⊇ 在册渲染器`。③ **批次 A 4 套基类迁移收口**：E05 / E07 / E12 一并改为 `: RendererFx()`（E03 已在 S1.5 迁移）⇒ §十 **S2 与 S5.5 对这 4 套合并执行**，后处理改为**声明式 `postFx`**；LOW 档（`FxLevel.OFF`）行为逐像素一致。④ **遗留清理**：删除 `BasicRenderers.kt` 的 `abstract class BarSpectrumRenderer`（**零子类死代码**，v1.9 ⑦ / §15.7 要求）。⑤ **实现期偏差 6 条已写入 §12.4**（§A4 第 4/6 条 tile 重复合并、§A4 第 3 条桶键用 `v`、S2 与 S5.5 合并执行、§八 G7 判据更新、G7 豁免机制改为集中名单、`BarSpectrumRenderer` 删除）。⑥ ⛔ **尚未提交、尚未上机**：源码改动在 `BasicRenderers.kt` / `AdvancedRenderers.kt` / 新增测试 1 个；**V1–V4 与「4 套帧耗时 ≤ 改造前」待上机**（§十 S2 的验收条件）| **阶段 2 待上机验收**（代码完成；T3.x 待开工） |
+| v1.20 | 2026-09-30 | **阶段 3 前 3 套：T3.1（E13 液态网格 §A5 六条）+ T3.2（E15 液态涟漪 §A6 五条）+ T3.3（E17 星座 §A7 五条）代码落盘**（**尚未提交、尚未上机**）。① **T3.1 · E13 `LiquidGridRenderer`**：⛔ 修相位红线（`t = frame.timeMs` × 系数 → `elapsed += fx.dt`，与太阳系 / `DnaRenderer` 一致）；连线改**受光网格**（按顶点高度分 4 桶，`lerp(darken(accent,0.50f), towardWhite(accent,0.35f), h)`）；顶点由圆点改**镜面反光**（沿「光向垂线」拉长的椭圆，长轴 = 短轴 × 2.4，**参数方程 8 段多边形**）；新增**三段式背景**（径向纵深 + `WATER` 水纹 tile + `STARFIELD` 远景微粒）与**水下焦散**（`CAUSTIC` tile 缓慢漂移，`dstOffset` 负向偏移 + `dstSize` 同步放大 ⇒ 永不露边）；`postFx = PostFx(vignette = 0.46f, grain = 0.032f)`。② **T3.2 · E15 `LiquidRippleRenderer`**：**双边水波**（内圈 `darken` + 外圈 `towardWhite`，半径 `r` / `r + wIn`）、**扩散变薄**（宽度按 `life` 量化 4 档 + 预分配 `Stroke`）、**水面底纹**（径向纵深 + `WATER` tile `0.14f`）、**中心高光**（`beat` 白亮光斑替代 5 个同心细环 → 2 个环 + 光斑）、节流由 `frame.timeMs % 8 < 2` 统一到 `fx.dt` 累加；`postFx = PostFx(vignette = 0.44f, grain = 0.030f)`。③ **T3.3 · E17 `ConstellationRenderer`**：**星芒**（`size > 3.2f` 且 `life > 0.45f` 的亮星加十字光芒，**合批 1 条 `Path`**）、**连线分级**（距离 2 档 × `min(life)` 3 桶 ⇒ 6 条 `Path`）、**空间网格分桶**（`cell = max(linkDist, w/32, h/32)`，邻接 9 桶，`IntArray` 全预分配）、**背景星野**（`STARFIELD` `alpha 0.28f`，不衰减）；`postFx = PostFx(vignette = 0.50f, grain = 0.026f)`。④ **门禁**：`FxCoverageScanTest` 的 `covered` 扩到 **7 套**（E13/E15/E17 各加一行，对应 `exempt` 各删一行）；单测名 `本阶段 4 套…` → `覆盖名单里的渲染器必须已覆盖后处理`。⑤ **免 Gradle 自查**（新增 `logs_temp/s17_constgrid.py`）：空间网格的**配对集合**与 `O(n²)` 参考实现在 **108 组场景**下**逐对完全一致**，判定次数下降 **12.94×**（本节原估 9×）；G13 扫描器复现 **0 违规**、`FxCoverageScanTest` 全部断言复现 **19 条全过**、括号配平 `curly=0 paren=0`。⑥ **实现期偏差 7 条已写入 §12.4**（参数方程替代 `drawOval`、`WATER` 替代「水下颗粒」、连线 4 条 Path ⇒ 总 draw 5→8、宽度量化 4 档、星芒合批 + `life` 门限、网格桶数封顶、单测改名）。⛔ **本版不改任何已提交行为**：源码改动集中在 `AdvancedRenderers.kt`（E13/E15/E17 三套）与 `FxCoverageScanTest.kt`；**`docs/` 的改动不进入代码提交** | **阶段 3 进行中**（T3.4–T3.8 待做；V5–V7 待上机） |
+| v1.21 | 2026-09-30 | **阶段 3 · T3.4（E24 心跳 §A8 六条）代码落盘 + 修掉两处门禁空转与一处编译期错误**（**尚未提交、尚未上机**）。① **T3.4 · `EcgWaveRenderer.kt` 整文件重写**：**第 0 条（P0 波形真实化）** —— `colMs`/`beatAtMs`/`lastFireMs` 三个 `Float` → **整数列号** `colIdx`/`beatCol`/`lastFireCol`（顺带**删掉** `REBASE_AT_MS` 的 float 回绕 hack）、`HB_T` + `HB_V` 两张 14 点表 → **单表 `HB`（50 点，一列一采样）**、`heartbeatAt` 由「线性扫描 + 分段线性插值」改 **O(1) 整数索引**（`internal` 可见，供门禁直接读生产表）；**第 1 条**栅格纵深（线色 alpha 中心 `0.30` → 边缘 `0.10`，除中线外一律**普通叠加**）+ **心电纸大格**（大格 `0.2 s` = `gridStepCols` 列，**由 `speed` 推导**，再 5 等分小格；260+ 条竖线按 **4 档 alpha 合批** ⇒ 只 4 次 `drawPath`）；**第 2 条**余辉拖尾（`ghost` = `history` 的逐帧 ×`0.90` 衰减副本，**原地乘、零分配**，作为最底层 Path `alpha 0.16`）；**第 3 条**辉光改径向（主线 + 1 层 3× 宽的 `alpha 0.10`，**仅 `FxLevel != OFF` 时画**）；**第 4 条** CRT 后处理（`postFx = PostFx(vignette = 0.48f, grain = 0.030f, scanline = 0.14f)`）；**第 5 条**基线漂移（呼吸波 `wanderPhase += fx.dt × 0.9`，幅度 `0.012` ≤ 0.015）。⛔ **不新增扫描头 / 节拍圆点**（KDoc「峰顶无帽」既有裁决；§A8 原第 5 条已作废）。② **新增门禁 `EcgWaveformTest`**（**10 正向 + 4 负向自证**）：①表长 50 列且 `< MIN_GAP_COLS`、②R 峰落在列 19 且满幅、③S 谷为全表最低、④PR/ST 段等电位、⑤T/QRS 相对宽度比 > 1.5、⑥T 波单峰、⑦查表越界返回 0、⑧**查表严格等于生产表（无插值）**、⑨P 波圆钝（峰顶跨列 4–5）、⑩QRS 升快降慢；负向自证把旧实现（14 点 + 线性插值）按同一显示网格重采样后喂进**与正向完全相同**的谓词，④②⑤⑧**四条全部按预期判失败**。③ **`FxCoverageScanTest.covered` 扩到 8 套**（E24 移入，`exempt` 同步删一行）。④ ⛔ **修掉两处门禁空转**：**（a）`RendererBaseContractTest` 的「⑥⑦⑧⑨ 真实子类源码扫描」此前只扫夹具字符串**（对真实代码**恒为通过**）⇒ 改为真扫 `renderers/` + `photo/`（`realFxSubclasses()` + 花括号配对取类体）并加空转自证；**（b）`EcgWaveformTest` ⑤ 原宽度比判据按全表峰值取门限** ⇒ 新旧表**都判 false** ⇒ 改为「各自 5% 峰值高度的样本数比」。⑤ ⛔ **修掉一处编译期错误**：`MIN_GAP_COLS` 与 `LAST_FIRE_NONE` 在 companion 内**声明顺序写反** ⇒ Kotlin 不允许同作用域前向引用（`Variable 'MIN_GAP_COLS' must be initialized`），已调整顺序并写明原因。⑥ **免 Gradle 自查（新增两件套）**：**`logs_temp/s17_paren.py`** 词法级括号配平（跳过注释 / 字符串 / **模板表达式** / 原始串 / 字符字面量 + 检查注释内块注释定界符成对）—— 该口径**首跑即抓出**一处真编译错误（`RendererBaseContractTest` 的 KDoc 内写了块注释定界符字面量 ⇒ 提前闭合注释）；**`logs_temp/s17_initorder.py`** 属性初始化前向引用（**4 条负向自证**，全仓 538 个 `.kt` 复扫 **0 处**）。其余自查全绿：`s17_ecg.py`（E24 数值，含旧表 4 条负向自证）、`s17_fxcover.py`（20 条断言）、`s17_g13.py`（0 违规）、`s17_basecontract2.py`（真扫 8 子类 0 违规 + 3 条自证）。⑦ **实现期偏差 6 条已写入 §12.4**（宽度比口径、栅格间距单一真源、门禁空转修复、编译期前向引用、括号配平口径、以及上一条工具口径更正）。⛔ **本版不改任何已提交行为**：源码改动集中在 `EcgWaveRenderer.kt`（E24）与测试 `EcgWaveformTest.kt` / `RendererBaseContractTest.kt` / `FxCoverageScanTest.kt`；**`docs/` 的改动不进入代码提交** | **阶段 3 进行中**（T3.5–T3.8 待做；V8 待上机） |
+| v1.22 | 2026-09-30 | **阶段 3 · T3.5（E30 雷达 §A9 四条）代码落盘**（**尚未提交、尚未上机**）。① **T3.5 · `RadarGridRenderer` 整类重写**：`: VisualizerRenderer` → `: RendererFx()`，`postFx = PostFx(vignette = 0.52f, grain = 0.034f, scanline = 0.15f)`。**第 0 条（P0 真实 PPI 重建）**：新增**目标池** `FloatArray(TARGET_N × STRIDE)` = `24 × 8`（槽：`BEARING` / `RANGE` / `DRIFT_B` / `DRIFT_R` / `BIN` / `BRIGHT` / `PEAK` / `LIFE`，全预分配零分配）；`crossed()` 区间判定**左开右闭**（`(prev, cur]`，抗跨 0 回绕 + `span >= TAU` 兜底）；`BRIGHT` 线性衰减 `holdSec = (TAU / SWEEP_SPEED) × 1.15 / (1 + treble × 0.8)` ≈ 4.52 s ⇒ **撑到下一圈**；目标**连续漂移**（`DRIFT_B` ±0.03–0.10 rad/s ⇒ 每圈 7–23°）⇒ 下一圈换位置；寿命到**重生**（`respawnInto`，**不是消失** —— E19 的「池耗尽」坑）。⛔ **删掉 `drawSpectrumArcs` 整段**（原 32 段弧「焊在扫线上」的错机制），回波改由目标池 `drawArc` 画在**目标自己的方位角**上（短弧 `BEAM_RAD = 0.157f` ≈ 9°，弧宽随 `PEAK` 缩放，`alpha` 带距离衰减 `1 − 0.35 × RANGE`）。⛔ **修掉真 bug**：旧 `ensureBrush` 在尺寸未变时直接 `return`，而 `SweepGradient` 停靠点按 `sweepAngle` 算 ⇒ 亮扇**钉死 252°–360° 从不旋转**（画面上「在转的」只有那条 2.5 px 主扫线）；现停靠点**固定 0.86–1.0**（与 `sweepAngle` 无关）+ `withTransform { rotate(...) }`（inline、零分配）真正跟着转。转速改**恒定** `SWEEP_SPEED = 1.6f` rad/s（3.93 s/圈，不再被 treble 拉 6×），treble 改为**缩短余辉**。**第 1 条**荧光屏纵深（同心圆 alpha `0.28 → 0.14` + 中心极淡绿光 `alpha 0.10`）；**第 2 条**三档明度（`gridDim = darken(green, 0.45f)` / `gridColor` / `gridBright = towardWhite(gridColor, 0.5f)`）；**第 3 条** CRT 后处理。② **新增门禁 `RadarSweepTest`**（**11 正向 + 4 负向自证**）：①左开右闭端点归属、②跨 0 回绕、③`span >= TAU` 兜底、④`wrapTau` 归一、⑤一圈 3.93 ± 0.4 s、⑥`activeCount` 8→24 封顶封底、⑦**三池对照**（initial / drifted / frozen，同 seed 的**独立** `Random`）证「连续漂移 ⇒ 换位置」、⑧900 帧（跨多次重生）`RANGE`/`BEARING`/`BIN` 全部有界、⑨`holdSec > 周期` ⇒ 余辉不归零、⑩寿命到**重生**（池不空）、⑪一帧扫满一圈 ⇒ `BRIGHT = 1` 且 `PEAK = spectrum[BIN]`；负向自证：①旧「距离式穿越判定」漏检回绕 + 误报区间外、②去 bounce 必然越界、③短 `holdSec` 余辉全归零、④**置零式重生让全池耗尽**（并加生产实现对照）。③ **`FxCoverageScanTest.covered` 扩到 9 套**（E30 移入；`exempt` 只剩 `OrigamiPolyRenderer` / `StaircaseWaveRenderer`）。④ **免 Gradle 自查七件套**（新增 `logs_temp/s17_radar.py`）：E30 数值复核 **34 条断言全过**（3.927 s/圈、16/16 漂移、900 帧有界、最小 `BRIGHT = 0.262`、4 条负向按预期判失败）；`s17_paren.py` **原始串口径修正**（最长引号串规则）后全仓 **539 个 `.kt` 零问题**，并补 **14 条自证夹具**；`s17_initorder.py` 0 处、`s17_fxcover.py` 21 条全过、`s17_g13.py` 0 违规、`s17_basecontract2.py` ALL PASS、`s17_ecg.py` 全过。⑤ **实现期偏差 6 条已写入 §12.4**（`holdSec` 漏「× 周期」、`nextRandom` 构造期捕获、`gridDim` 用 `darken` + 清扫双真源常量、回波 `Size` 全限定名、负向④自证缺陷修复、括号配平原始串口径）。⛔ **本版不改任何已提交行为**：源码改动集中在 `BatchThreeRenderers.kt`（E30 一类）与 `RadarSweepTest.kt` / `FxCoverageScanTest.kt`；**`docs/` 的改动不进入代码提交** | **阶段 3 进行中**（T3.6–T3.8 待做；V8/V9 待上机） |
+| v1.23 | 2026-09-30 | **阶段 3 · T3.6（E31 折纸 §A10 五条）代码落盘 + §7.5 成本表全量重算 + 修掉自查脚本静默漏统计**（**尚未提交、尚未上机**）。① **T3.6 · `OrigamiPolyRenderer` 整类重写**：`: VisualizerRenderer` → `: RendererFx()`，`postFx = PostFx(vignette = 0.42f, grain = 0.030f)`。**§A10 五条全部完成**：**第 1 条**折痕高光（沿**铰边** `towardWhite(midColor, 0.55f)`，⛔ **合批单条 `creasePath`** ⇒ 1 次 `drawPath`，不是 64 次 `drawLine`）；**第 2 条**接触阴影（折叠中同形三角沿**光向反方向**偏移 4 px，方向由 `Shading2D.lightDir` 推导 ⇒ ⛔ 不另写光源角；合批 1 条 `shadowPath`，**顺序 = 填充 → 阴影 → 折痕**）；**第 3 条**纸张纹理（`Id.PAPER` 整屏 1 次 `drawImage`，`PAPER_ALPHA = 0.28f` —— ⛔ **不是**原文 `0.10`）；**第 4 条**折痕渐变（⛔ **按降级方案**：不做逐三角 `linearGradient` ⇒ 改 `Shading2D.lambert` 连续明暗，正面 `× (0.80 + 0.40 × lit)` / 背面 `× (0.44 + 0.26 × lit)` ⇒ 两面区间**永不重叠**（0.70 < 0.80），90° 再乘 `1 − 0.35`；法线用**未投影**自由顶点 ⇒ 折叠全程 `lit` **逐帧恒定**）；**第 5 条**pulse 微光 `0.06 → 0.035`。另⛔ **修相位红线**（旧用 `ctx.nowMs` + `lastMs == 0L` 哨兵 ⇒ 改基类 `FxFrame.dt`）并修正 `triBaseL` 的 KDoc（0.85..1.15 → **0.82..1.12**，既有文档债）。② **新增数值自查 `logs_temp/s17_origami.py`**（**62 条断言 / 5 条负向自证**）：三角数 16/36/64、`foldK` 由 +1 **单调**扫到 −1（55 帧 / 0.917 s @60fps，单帧跳变 ≤ 0.0581）、铰边两端点全程**逐像素不动**、`foldK = 0` 自由顶点恰落铰边中点、`foldK = −1` = 关于铰边中点的镜像、`lit` 整段跨度 `0.00e+00`（负向：改用**投影后**顶点 ⇒ 跨度 **0.9968**；用**归一化坐标** ⇒ 最大差 0.1409 ⇒ 必须乘 w/h）、正/背面 lightness 中位数差 0.148、下钳位 0.16 **可达**（命中 1173 次）而上钳位 0.62 不可达（纯防御）、`drawContent` 内**零堆分配**（`Offset/IntSize/Color` 是 value class，扫描器含负向夹具）、`PAPER_ALPHA` 有效峰值 `0.0318` vs 原文 `0.0114`。③ **`FxCoverageScanTest.covered` 扩到 10 套**（E31 移入；`exempt` 只剩 `StaircaseWaveRenderer`），`s17_fxcover.py` **22 条断言全过**。④ ⛔ **修掉自查脚本静默漏统计**：`renderer_loop_estimate.py` / `renderer_cost_audit.py` 原先只认 `override fun DrawScope.draw(` 作入口 ⇒ 自 S1.5 起迁到 `RendererFx` 的 **9 套**（E03/E05/E07/E12/E13/E15/E17/E24/E30）**整类从成本表消失**；修好后 9 套全部回来。⑤ **§7.5 成本表全量重算**：29 行 + 新合计 **3102 / 3930 / 152 / 88**，标题加「· **v1.23 重算**」；`OrigamiPolyRenderer` = **52 / 626 / 0**；注① 改写（`ConstellationRenderer` 51,362 → **805**，T3.3 空间分桶成果）；「超 MEDIUM 档上限（120）」由「4 套」更正为 **9 套**；新增注⑥ 说明重算原因与「`when` 分支按调用点数计」的口径提醒。⑥ **免 Gradle 自查八件套全绿**：`s17_paren.py`（自证 14/14 + 全仓 **539 个 `.kt` 零问题**）、`s17_initorder.py`（0 处）、`s17_g13.py`（0 违规）、`s17_fxcover.py`（22 条）、`s17_basecontract2.py`（ALL PASS）、`s17_ecg.py` / `s17_radar.py` / `s17_constgrid.py` / `s17_origami.py`（各效果数值）。⑦ **实现期偏差 8 条已写入 §12.4**（折痕渐变降级 + 未投影法线、纸张 alpha 0.10→0.28、折痕合批、阴影方向与顺序、pulse 0.06→0.035、`ProceduralTexture.ensure` 调用位置与既有 5 处一致、相位红线 + `triBaseL` KDoc、§7.5 重算 + 脚本入口缺陷）。⛔ **本版不改任何已提交行为**：源码改动集中在 `BatchThreeRenderers.kt`（E31 一类）与 `FxCoverageScanTest.kt`；**`docs/` 的改动不进入代码提交** | **阶段 3 进行中**（T3.7–T3.8 待做；V8/V9/V10 待上机） |
+| v1.24 | 2026-09-30 | **阶段 3 · T3.7（E32 阶梯 §A11 六条）代码落盘 + 修掉跨效果 `shadeBrushCached` 撞键 + §7.5 再重算**（**尚未提交、尚未上机**）。① **T3.7 · `StaircaseWaveRenderer` 整类重写**：`: VisualizerRenderer` → `: RendererFx()`，`postFx = PostFx(vignette = 0.46f, grain = 0.030f, scanline = 0.10f)`。**第 0 条（P0 全柱独立频段映射，按文档要求先做）**：⛔ 删掉旧 `src = i / half * (n / 2)`（① 只映射**前 32 个桶** ⇒ 中高频**永不参与**；② 左右**严格镜像**且多列共用同一桶 ⇒ 命中不同桶只有列数的一半；③ `STEPS = 16` 吃掉小动态）⇒ 改为 `cols` 列**顺序全宽展开**（§十三 裁决项 7，⛔ 不镜像）覆盖**全部 64 桶**，每列一个**互不重叠桶区间** + **区间均值**；边界表 `buildBands(cols, k = PERCEPT_K = 1.6)` 在 `onEnterContent` 建一次（`IntArray(cols + 1)`，draw 内只读 ⇒ 零分配）；`STEPS` 16 → **24**；静音门槛 = `SpectrumContract.MIN_AMPLITUDE`（有信号的列**至少 1 格**）；亮度改 `level = (st + 1f) / STEPS`（分母为**常量** ⇒ 同一格位亮度与列高无关，**修闪烁**）；`gap` 拆成 `gapX` / `gapY`。**第 1 条**圆角 + 接缝暗线（每列 1 段 ⇒ **合批 1 条 `seamPath`** ⇒ 1 次 `drawPath`，⛔ 画在方块**之后**才看得见）；**第 2 条**外发光（全部方块合批 1 条 `glowPath`，**仅 `FxLevel != OFF` 时画**；⛔ 用 `addRect` **直角**而非 `addRoundRect` —— 后者要 `RoundRect`（`data class`）⇒ **每块一次堆分配**）；**第 3 条**碎裂（顶部 2 格拆 2×2，**确定性位移表** + **整数度旋转** ±32° ≤ 0.6 rad，4 角点**手工算**；⛔ 逐碎块 `blockAlpha(st)` 会**无法合批**（最坏 `4 × 2 × cols = 288` 次 `drawPath`）⇒ 按格位**量化 4 档** ⇒ 恒 ≤ **4 次**）；**第 4 条**三段式背景（径向纵深 + `PAPER` `0.10f` + `STARFIELD` `0.16f`，**不随 `FxLevel` 关闭**）；**第 5 条**后处理。② ⛔ **修掉跨效果真 bug：`Shading2D` 的 Brush 缓存是进程级共享的** —— 它是 Kotlin **object**，而 E03 / E07 / E13 都用 `(w, h, accent)` 三元键 ⇒ **撞键**：后画的渲染器拿到先画者的 `Brush`（`center` / `radius` / `base` / `contrast` **全在实例内**）⇒ **切换效果后背景渐变复用别人的参数**（E15 早已因此加了 `E15_KEY_SALT`，但**只修了自己**）。本轮给 **E03 / E07 / E13 各补一个盐**并给 E32 自带盐；⚠️ 该 bug 是**未定义行为（谁先画谁赢）** ⇒ **E03 / E07 / E13 的背景观感会变**（变回各自设计值），**建议复看**。③ ⛔ **修掉一处必然编译失败**：新写的 `accent.toArgb()` **缺 `import androidx.compose.ui.graphics.toArgb`**（扩展函数必须显式 import；同文件 E30/E31 不用它故此前没暴露）；顺带**删掉死状态 `lastShatter`**。④ **新增门禁 `StaircaseMappingTest`**（**8 正向 + 4 负向自证**）：①覆盖全频段 + 严格单调、②**命中不同桶数 == `cols`**（20/28/36）、③区间和 == 64、⑦每列区间非空、④**感知分桶相对线性基线**、⑤小信号至少 1 格、⑥亮度与 `steps` 无关、⑧碎块档位契约；负向自证四条喂进**与正向完全相同**的谓词，全部按预期判失败。⚠️ **§八 G10 断言 ④ 本身在 HIGH 下不成立**：原文写「前 8 桶占列数 ≥ `cols / 4`」，而 HIGH（36 列铺 64 桶）实测只占 **8 < 36/4 = 9** —— 根因是「每列至少 1 桶」的下界压倒了感知展开 ⇒ 判据改为**相对 `k = 1.0` 线性基线**，并为此给生产 API 加 `k` 形参（⛔ 不让测试复制算法）。⑤ **`FxCoverageScanTest.covered` 扩到 11 套**（E32 移入 ⇒ 阶段 3 批次 A **全部**移入，`exempt` 里 A 批条目清零），`s17_fxcover.py` **23 条断言全过**。⑥ **新增自查工具 `s17_brushkey.py`**（扫全仓 `shadeBrushCached(` 调用点断言 `key` 两两不同 + 盐常量确有定义；**含已知局限自证**：文本比较抓不到 `size.width` vs `w` 这类**别名等价**，故它是**必要条件**）—— **首跑即抓出 E03/E07/E13 三处撞键**。⑦ **免 Gradle 自查十三件套全绿**（新增 `s17_staircase.py` **67 条断言** + `s17_brushkey.py`）：`s17_paren.py`（自证 14/14 + 全仓 539 个 `.kt` 零问题）、`s17_initorder.py`（0 处）、`s17_g13.py`（0 违规）、`s17_fxcover.py`（23 条）、`s17_basecontract2.py`（ALL PASS）、`s17_ecg/radar/constgrid/origami/staircase/brushkey` 各数值全过；⛔ 顺手**修掉 `s17_origami.py` 的假阳性**（`body` 终止符是下一个 `class` 关键字 ⇒ **下一个类的 KDoc 被包进来**，KDoc 里的 `IntArray(cols + 1)` 被当成分配 ⇒ 改为**扫代码前先剥注释**）。⑧ **§7.5 再重算**：`StaircaseWaveRenderer` 由 **5 / 0 / 0 / 0** → **10 / 739 / 3 / 0**，合计 **3102 / 3930 / 152 / 88** → **3107 / 4669 / 155 / 88**，标题改「**v1.24 重算**」。⑨ **实现期偏差 9 条已写入 §12.4**。⛔ **本版不改任何已提交行为**（除 ② 的撞键修复会改变 E03/E07/E13 背景渐变的**未定义**取值）：源码改动集中在 `BatchThreeRenderers.kt`（E32）+ `BasicRenderers.kt` / `AdvancedRenderers.kt`（撞键盐）+ 新增测试 2 个；**`docs/` 的改动不进入代码提交** | **阶段 3 进行中**（T3.8 待做；V8/V9/V10/V11 待上机） |
+| v1.25 | 2026-09-30 | **阶段 3 · T3.7 首轮编译失败修复：Compose `Path` 无 float 形状重载**（**尚未提交、尚未上机**）。① ⛔ **用户首轮 `assembleDebug` 报 16 条 `e:`**，全部指向 `BatchThreeRenderers.kt:978 / 986 / 987 / 997 / 1032 / 1033`：`Too many arguments for 'fun addRect(rect: Rect)'` + `Argument type mismatch: actual type is 'Float', but 'Rect' was expected`。**根因（源码级实测 `ui-graphics-android-1.6.1-sources.jar`）**：`androidx.compose.ui.graphics.Path` 的 6 个 `add*` **全部只收对象** —— `commonMain/.../graphics/Path.kt` 的 `:161 addRect(rect: Rect)` / `:170 addOval(oval: Rect)` / `:182 addArcRad` / `:194 addArc` / `:199 addRoundRect(roundRect: RoundRect)` / `:205 addPath`；`androidMain/.../AndroidPath.android.kt` 恰好这 6 个 `override`；**全源码 `fun Path.addXxx` 顶层扩展 0 命中**。⛔ **不能顺手用 `Rect(...)` 包一下**：`Rect` 是 `data class`（**非** value class）⇒ 违反零分配红线（§四 G15 / §八 G13），且 T1.6.2 已把全仓带参 `Rect(` 清零 ⇒ **唯一合规写法 = 手工 4 点**。② **修法**：新增私有辅助 `addAxisRect(path, l, t, r, b)`（`moveTo` / `lineTo` / `close`，零分配），替换全部 4 处调用；顺手改掉 `drawBlock` 的 KDoc 措辞（原写「用 `addRect` 直角」，已不成立）。③ **全仓复核（0 处遗留）**：所有 `addRect` / `addOval` / `addRoundRect` / `addArc` 调用点**其余全部合法** —— 要么走 `.asAndroidPath()`（`BasicRenderers.kt:116/121/294/300`、`AdvancedRenderers.kt:90/93/984`、`LyricsDotMatrixRenderer.kt:702/711`、`ParticleRenderers.kt:67`、`VintageTvRenderer.kt:637`），要么是原生 `AndroidPath()` 数组（`AdvancedRenderers.kt:149` 的 `bucketPaths`，`:202` 用 5 参重载 + `Direction.CCW`）。④ **新增护栏 `logs_temp/s17_pathapi.py`**（12 个调用点 / 0 违规 / **7 条自证** = 4 负向 + 白名单 3 类 + 剥注释 + 参数计数）；⛔ 已写明两条局限（假阳性 / 假阴性）⇒ **必要条件非充分**。⑤ ⛔ **本轮真正的教训 = 「免构建自查的盲区」**：13 个自查脚本**全绿**仍没拦住它 —— 它们查的是**语法结构 / 数值契约 / 项目内约定**，**不查第三方 API 签名** ⇒ 新写第三方 API 调用时必须走 `jar xf` + `grep` 核实（3 条命令 vs 一轮 6–12 分钟构建往返）；结论已同步进技能 `android-dep-api-verify`（新增「陷阱 9」+ 战果第 7 例）。⑥ **实现期偏差 10 条已写入 §12.4**（新增末条）。⛔ **本版不改任何已提交行为**：源码改动集中在 `BatchThreeRenderers.kt`；**`docs/` 的改动不进入代码提交** | **阶段 3 进行中**（T3.8 待做；V8/V9/V10/V11 待上机） |
+| v1.26 | 2026-09-30 | **阶段 4 · 批次 B 首套：T4.1（E11 星系螺旋 §B1 五条）代码落盘 + §7.5 成本表重算并修掉脚本口径 bug**（**尚未提交、尚未上机**）。① **T4.1 · `GalaxySpiralRenderer` 整类重写**：`: VisualizerRenderer` → `: RendererFx()`，`postFx = PostFx(vignette = 0.46f, grain = 0.028f)`。**§B1 五条全部完成**：**①** 星点 **4 桶**（`starPaths: Array(BUCKETS) { Path() }` + `STAR_WHITE` / `STAR_ALPHA` 两张表）+ **远臂纵深**（`t > FAR_T = 0.62` ⇒ 半径 `× FAR_R_K = 0.6`、桶位**降一档**且不越界，纯函数 `starBucket(v, far)`）；**②** 尘埃带 —— 16 条螺线**合批进 1 条 `dustPath`**（每臂 `DUST_SEG = 24` 段，`break` 截断）⇒ **1 次 `drawPath`**，`alpha = 0.10f` / `darken(accent, 0.40f)` / 描边宽 `= maxR × 0.10`（**按 4 档尺寸预分配 `Stroke`** ⇒ draw 内零分配）；**③** 中心核径向渐变（`shadeBrushCached` + `E11_KEY_SALT = 0x11111111L`，⛔ **键里不含 `energy`**）+ 内高光；**④** ⛔ **修掉帧率绑定**（旧 `:46` 每帧 `+= (ROT_BASE_DEG + bpm / BPM_DIV)`）⇒ 改 `rotation += rotRateDegPerSec(bpm) × fx.dt`（纯函数 `rotRateDegPerSec`，60fps 基准）；**⑤** 暗角 + 颗粒。另⛔ 星点改走 **`asAndroidPath().addOval(l, t, r, b)`**（`android.graphics.Path` 的 4-float 重载）—— Compose `Path.addOval` **只收 `Rect`**（`data class`）⇒ 每颗星一次堆分配，违反零分配红线（§四 G15）。② **新增门禁 `GalaxySpiralTest`**（**8 正向 + 3 负向自证**）：帧率无关谓词由**参数注入积分函数**（正负向喂**同一份判据**）、桶位边界、远臂降档不越界、档位单调封顶、螺线自洽 + **跨效果盐互不相同**；负向 N1 旧实现喂同一谓词**必须判失败**（并断言 30fps 恰为 60fps 的 **50%**）。③ **`FxCoverageScanTest.covered` 扩到 12 套**（E11 移入；`exempt` 改为「阶段 4 · 批次 B 剩余 9 套」），负向 N2 样本由 E11 换成 `BeatFireworkRenderer`（E11 已有 `postFx`，原「前提：当前未覆盖」断言会挂）。④ **免 Gradle 自查**：新增 `logs_temp/s17_galaxy.py`（**A–F 六组 + 4 条负向**）—— **帧率无关已实证**（bpm 0/90/120/200 下 60/30/15 fps 积分 1 秒都得到 **9.0 / 13.5 / 15.0 / 19.0 度**；旧实现 60fps `15.000` vs 30fps `7.500`）；bpm = 120 ⇒ **24.0 秒/圈**；螺线在 `t ≈ 0.540` 越 `maxR`；1080 档描边 **62.6 px**；`drawContent` 内 6 类禁用模式 **0 命中**；总 draw = **7**。⑤ ⛔ **修掉 §7.5 成本脚本的真 bug**：`renderer_loop_estimate.py` 的 `split_functions` 用「`fun` 之后第一个 `{`」当函数体 ⇒ 对**带显式返回类型的单表达式函数**（`fun f(...): T = expr`）会**一路吃到后面某个函数的 `{`**，把中间整段代码当成本函数的体（① 虚增计数；② 造出**不存在的调用边** —— `OrbitalRingsRenderer.project` 被误判为**自调用**，加权口径下把该类次数顶到**饱和上限 3,000,227**）。修法：**先匹配参数表右括号，再看先遇到 `{` 还是 `=`**；新增 `--selftest`（**14 条自证含 2 条负向**）。修复影响 5 行（`WorldRenderer` 分配 **73 → 38** 等），合计分配 **153 → 108**。⚠️ **残留盲区已登记不修**：脚本**不知道 helper 被调用几次** ⇒ 「把绘制搬进 helper」会让数字骤降（E32 路径列 **739 → 14** 是**口径假象**；新增 `logs_temp/s17_cost_weighted.py` 调用点加权实测 ≈ **16,470**）⇒ §7.5 加 **注⑦**：⛔ 本表**禁止**用于改造前后绝对对比。⑥ **§7.5 重算（v1.26）**：`StaircaseWaveRenderer` **739 → 14**（口径）、`GalaxySpiralRenderer` **3/0/2/2 → 7/5/0/3**，合计 **3107 / 4669 / 155 / 88** → **3098 / 3946 / 108 / 87**；注② 加 **v1.26 更正**（E11 的 880 次 `addOval` 已不再分配）；「超 MEDIUM 上限 9 套」清单同步数字。⑦ **实现期偏差 4 条已写入 §12.4**（星点 `addOval` 走 `asAndroidPath`、核渐变键不含 `energy`、尘埃带 `Stroke` 按档预分配、成本脚本口径修复 + 残留盲区登记）。⛔ **本版不改任何已提交行为**：源码改动集中在 `AdvancedRenderers.kt`（E11 一类）+ 新增测试 `GalaxySpiralTest.kt` + `FxCoverageScanTest.kt`；**`docs/` 的改动不进入代码提交** | **阶段 4 进行中**（T4.2–T4.11 待做；V12 待上机） |
+| v1.27 | 2026-09-30 | **阶段 4 · 批次 B 第 2 套：T4.2（E14 节拍烟花 §B2 四条）代码落盘 + §7.5 E14 行重算**（**尚未提交、尚未上机**）。① **T4.2 · `BeatFireworkRenderer` 整类重写**：`: VisualizerRenderer` → `: RendererFx()`，`postFx = PostFx(vignette = 0.44f, grain = 0.030f)`。**§B2 四条全部完成**：**①** 拖尾按 hue **8 桶**合批（`trailPaths` + **桶 life 均值** alpha，`TRAIL_K = 2.5f` / `TRAIL_ALPHA_K = 0.35f` / `life > 0.12f` 才画）⇒ 恒 ≤ 8 次 `drawPath`（⛔ 不是逐粒子 `drawLine`）；**②** 冲击波环（**`dt` 化相位** `ringPhase += fx.dt / RING_SEC`，半径 `0 → 0.25×minDim`、alpha `0.55 → 0`、`width 3f`）+ 中心闪光（`translate(flashX, flashY)` 平移画布 + 缓存 `Brush` 的 `center` 恒 `Offset.Zero`，`alpha = pulse×0.45`）；**③** 静音期底纹 `0.12 → 0.18` + 径向纵深（**不随 `FxLevel` 关闭**）；**④** 后处理。② **新增门禁 `BeatFireworkTest`**（**8 正向 + 3 负向自证**）：桶位边界 / 单调 / 全覆盖、尾迹与速度反向、环半径与 alpha 单调且端点正确、**帧率无关**（60/30/15 fps 同一墙钟时间相位一致）、两盐互不相同且非零、§B2 明文常量逐条对齐；负向 N1 每帧固定增量 ⇒ 判帧率绑定（30fps 恰为 50%）、**N2 字面 `pulse` 当半径 ⇒ 判非单调**（峰值在中途）、N3 恒定桶位 ⇒ 判桶位失效。③ **`FxCoverageScanTest.covered` 扩到 13 套**（E14 移入；`exempt` 批次 B 剩 8 套），负向 **N2 样本由 `BeatFireworkRenderer` 换成 `MatrixRainRenderer`**（否则「前提：当前未覆盖」断言会挂）。④ **免 Gradle 自查**：新增 `logs_temp/s17_e14.py`（A–H 八组 + 负向夹具全过：桶位 9 例边界、端点点积 ≤ 0、环单调、**帧率无关实证**、`pulse` 版峰值 `t = 0.05 s` 后回落到 **21%**、`drawContent` 6 类禁用模式 0 命中、固定 draw `1 → 12`、§B2 十处明文 ↔ 生产常量逐条对齐）；`s17_fxcover.py` **25 条断言全过**；`s17_paren` / `s17_g13` / `s17_pathapi` / `s17_initorder` / `s17_basecontract2` / `s17_brushkey` 全绿。⑤ **§7.5 E14 行重算** `151 / 65 → **162 / 373**`（标题改 `v1.27 重算`；合计 `**3109** / **4254** / **108** / 87`；超 120 名单 E14 改 **162**）；⚠️ 路径列 +308 是**真实增长**（拖尾每粒子 2 次 `moveTo`/`lineTo`）—— **合批只压住 draw 调用（150 → ≤8），不减少 path 写入**。⑥ **实现期偏差 5 条已写入 §12.4**（环相位 `dt` 化取代字面 `pulse`；闪光靠 `translate` 移动缓存 `Brush` + 两盐；拖尾 8 桶合批与桶均值 alpha；**`postFx` 必须写数值字面量**，否则门禁**静默判否**；**落盘器 `write_text` 把 LF 写成 CRLF**）。⛔ **本版不改任何已提交行为**：源码改动集中在 `ParticleRenderers.kt`（E14 块；**E19 未动**）与 `FxCoverageScanTest.kt` + 新增 `BeatFireworkTest.kt`；**`docs/` 的改动不进入代码提交** | **阶段 4 进行中**（T4.3–T4.10 待做；V13 待上机） |
+| v1.28 | 2026-09-30 | **阶段 4 · 批次 B 第 3 套：T4.3（E16 数字雨 §B3 四条）代码落盘 + §7.5 E16 行重算**（**尚未提交、尚未上机**）。① **T4.3 · `MatrixRainRenderer` 整类重写**：`: VisualizerRenderer` → `: RendererFx()`，`postFx = PostFx(vignette = 0.50f, grain = 0.030f, scanline = 0.16f)`。**§B3 四条全部完成**：**①** 头部光晕**烘进「白热头部」字形贴图**（`RadialGradient` 半径 `字形高 × 0.9`、中心 alpha `0.30`）⇒ **额外 draw = 0**（⛔ 不按 §B3 原文「每列 1 次 draw，HIGH 48 列」—— 那会与 S1.7/T1.7.4「降 blit 数」对撞）；**②** 垂直拖影 —— ⛔ **修掉反向 fade**（旧 `1 - k / perCol` ⇒ 越远越亮，与 KDoc 声明的「亮白绿头部 → 亮绿 → 中绿 → 暗绿」相反），改 `trailFade = k / perCol` + alpha 下限 `0.08`；**未新增 per-column `drawRect`**；**③** 字形质感 —— 深绿外描边（`STROKE`，宽 `textSize × 0.055` 钳 `1..3` px）+ 中心偏白的垂直渐变填充；档位 **4 → 5**（新增「白热头部」`rgb(235,255,235)`）⇒ 张数 **8 → 10**，⛔ 每帧 blit 路径与 draw 次数不变；**④** 后处理。另修 **帧率绑定**（`colY += speed` 每帧固定增量 → `advanceCol(..., fx.dt, ...) × 60`，60 fps 下逐像素等同）。② **新增门禁 `MatrixRainTest`**（**8 正向 + 3 负向自证**）：fade 端点/单调/头部最亮、alpha 下限与单调、档位映射覆盖 5 档、**帧率无关**（60/30/15 fps 同一秒位移一致）、5 档亮度严格递减、描边最暗、高光亮于基色、`packRgb` 语义；负向 N1 旧反向 fade 判非单调、N2 旧「每帧 + speed」判帧率绑定（30 fps 恰 50%）、N3 恒定档位判分档失效。③ **`FxCoverageScanTest.covered` 扩到 14 套**（E16 移入；`exempt` 批次 B 剩 7 套），负向 **N2 样本由 `MatrixRainRenderer` 换成 `FractalTreeRenderer`**。④ **免 Gradle 自查**：新增 `logs_temp/s17_e16.py`（**A–I 九组 + 负向夹具全过**，58 条：帧率无关实证 `7200.0`、旧口径 60/30 fps `7200/3600`、5 档亮度 `246.8/232.3/161.1/123.1/79.7`、描边 `55.1`、档位分布全覆盖、**门禁原版正则对 `postFx` 正/负双证**）；`s17_apply_e16.py` **46 条落盘校验全过**；`s17_fxcover` / `s17_paren` / `s17_g13` / `s17_initorder` / `s17_basecontract2` / `s17_brushkey` / `s17_pathapi` / `s17_e14` / `s17_ecg` / `s17_radar` / `s17_constgrid` / `s17_origami` / `s17_staircase` / `s17_galaxy` 全绿。⑤ **§7.5 E16 行重算** `456 / 1 / 8` → **`478 / 1 / 16`**（标题改 `v1.28 重算`；合计 `3109 / 4254 / 108 / 87` → **`3131 / 4254 / 116 / 87`**；超 120 名单 E16 改 **478**）；⚠️ **+22 原语 / +8 分配全部落在字形重建路径**（`drawText` `8 → 20` + 光晕 `drawCircle` 10；`LinearGradient` 每档 1 个、`RadialGradient` 全局 1 个、`AndroidPaint` 复用 4 个）—— ⛔ **每帧 blit 路径与 draw 次数未变**。⑥ **实现期偏差 5 条已写入 §12.4**（光晕烘贴图不额外 draw；反向 fade 修正 + 不新增 per-column `drawRect`；档位 4 → 5 与 Paint/Shader 复用 + `packRgb` 纯 Kotlin；列位移 dt 化；§7.5 脚本对互斥分支的重复计入）。⛔ **本版不改任何已提交行为**：源码改动集中在 `AdvancedRenderers.kt`（E16 一块 + 摘掉失效的 `VisualizerRandom` import；**E17 及之后未动**）与 `FxCoverageScanTest.kt` + 新增 `MatrixRainTest.kt`；**`docs/` 的改动不进入代码提交** | **阶段 4 进行中**（T4.4–T4.10 待做；V14 待上机） |
+| v1.29 | 2026-09-30 | **阶段 4 · 批次 B 第 4 套：T4.4（E18 反馈残像 §B4 五条）代码落盘 + 补后处理（§B4 原文缺项）+ §7.5 E18 行重算**（**尚未提交、尚未上机**）。① **T4.4 · `MilkdropRenderer` 整类重写**：`: VisualizerRenderer` → `: RendererFx()`，`postFx = PostFx(vignette = 0.48f, grain = 0.030f)`（⛔ **数值字面量**）。**§B4 五条全部完成**：**①** 衰减色调 —— 新增成员画笔 `decayPaint`（`Color.Black.copy(alpha = DECAY_ALPHA)`，构造期建一次）⇒ `cb.drawRect(0f, 0f, c.width, c.height, decayPaint)`，⛔ **必须放在 `cb.restore()` 之后**（否则黑层跟着旋转/缩放，四角露白）；`DECAY_ALPHA = 0.06f` 与 §A4-2 的 E12 `FADE_ALPHA` **同值同义**；**②** 3-tap 径向模糊 —— `TAP_SCALE = [1.0, 1.012, 1.024]`（相对基准 `scale`）、`TAP_ALPHA = [0.6, 0.25, 0.15]`（**和为 1** ⇒ 单帧回绘总亮度与改造前持平）；每个 tap **独立 `save()` / `restore()`** ⇒ 缩放互不累积；**③** 段落色温 —— `sectionEnergy` 经**极慢 EMA**（`SECTION_RATE = 0.60f` /s ⇒ τ ≈ 1.7 s）驱动 hue 流速 `hueRate = HUE_RATE_BASE(0.35) + sectionHue × HUE_RATE_SECTION(1.20) + treble × 2f`；**④** 双边明暗（同 §A2-1）—— 每根条 **2 次 `drawLine`**，暗 / 亮侧沿**切向** ±`SIDE_OFFSET(0.35) × wdt`，明度 `−SIDE_LIT_DARK(0.22)` / `+SIDE_LIT_BRIGHT(0.20)`；**⑤** 后处理。另⛔ **顺带修帧率绑定**（§B4 原文未列，与 T4.1/T4.2/T4.3 同一条约定）：`rotation` 与 `hue` 均 **dt 化**（`× fx.dt × FPS_BASE`，`FPS_BASE = 60f`）⇒ **60 fps 下与旧实现逐像素等同**，30 / 15 fps 不再翻倍。② ⛔ **补后处理（§B4 原文缺项，登记 §12.4）**：§B4 是批次 B **唯一没有后处理项**的一条（其余 9 套都以 `drawVignette + drawGrain` 收尾），而覆盖门禁只认 `postFx` / `OverlayFx.*` ⇒ E18 **无法进 `covered`**、T4.11 的「A+B 共 21 套」会缺 1 套 ⇒ 经用户裁决补 `postFx(vignette = 0.48f, grain = 0.030f)`。③ **新增门禁 `MilkdropTest`**（**11 正向 + 4 负向自证**）：§B4 明文常量齐备、TAP 表结构（长度 == `TAP_COUNT` / 缩放严格递增 / **alpha 和为 1**）、衰减与 E12 同值、**帧率无关**（60 / 30 / 15 fps 1 秒位移一致 + 解析解）、**60 fps 与旧实现逐像素等同**、hue 基准流速一致 + 段落单调、段落 EMA 三档帧率差 < 2% 且收敛到 0.40–0.50、双边明暗切向正交 + 明度差 0.42、源码段（衰减层在 `cb.restore()` 之后 / 恰 1 处 / 复用 `decayPaint` / **`drawContent` 体内不新建 `Paint`**）、**3-tap 上界必须可被 §7.5 成本脚本解析**、**门禁原版正则对 `postFx` 正 / 负双证**；负向 N1 每帧固定增量判帧率绑定（30 fps 恰 50%）、N2 每帧固定系数 EMA 判帧率绑定、N3 `TAP_ALPHA` 当绝对 alpha 判总亮度不符、N4 `.indices` 写法被判据识别。④ **`FxCoverageScanTest.covered` 扩到 15 套**（E18 移入；`exempt` 批次 B 剩 **6 套**），负向 **N2 样本仍为 `FractalTreeRenderer`**（本轮未换）。⑤ **免 Gradle 自查**：新增 `logs_temp/s17_e18.py`（**①–⑧ + N1–N4 + ⑨–⑪ 全过**，用 **float32 精确模拟**（`struct` 往返）实证 **迭代次数恰为 60 / 30 / 15**（排除 off-by-one 顶穿容差）；`s17_apply_e18.py` **45 条落盘校验** + `s17_patch_e18_tap.py` **9 条**全过；`s17_fxcover.py`（**15 套**）、`s17_state_t43.py` → **`s17_state.py`**（滚动状态复核，扩到 T4.4）、`run_all_checks.sh` 扩到 **20 项**全绿。⑥ **§7.5 E18 行重算** `66 / 0 / 0` → **`133 / 0 / 0`**（标题改 `v1.29 重算`；合计 `3131 / 4254 / 116 / 87` → **`3198 / 4254 / 116 / 87`**；超 MEDIUM 上限名单由 9 套 → **10 套**，新增 E18 133）；⚠️ **+67 原语** = 双边明暗 `drawLine` **64 → 128**（+64）+ 3-tap `drawImageRect` **1 → 3**（+2，循环内单一调用点 ×3）+ 衰减 `drawRect` **0 → 1**（+1），**画布状态操作不计入**；未解析 0。⑦ **实现期偏差 4 条已写入 §12.4**（§B4 缺后处理 ⇒ 补 `postFx`；§B4 缺 dt 化 ⇒ 顺带修；双边明暗使 draw 翻倍；废弃 `.indices` 写法改用 `TAP_COUNT`）。⛔ **本版不改任何已提交行为**：源码改动集中在 `UltraRenderers.kt`（E18 一块 + 新增 `Color` import；**E20 未动**）与 `FxCoverageScanTest.kt` + 新增 `MilkdropTest.kt`；**`docs/` 的改动不进入代码提交** | **阶段 4 进行中**（T4.5–T4.10 待做；V15 待上机） |
+| v1.30 | 2026-09-30 | **阶段 4 · 批次 B 第 5 套：T4.5（E19 粒子文字 §B5 十一条）代码落盘 + 修掉「4.2 s 后永久空白」+ §7.5 E19 行重算**（**尚未提交、尚未上机**）。① **T4.5 · `ParticleTextRenderer` 整类重写**：`: VisualizerRenderer` → `: RendererFx()`，`postFx = PostFx(vignette = 0.46f, grain = 0.030f)`（⛔ **数值字面量**）。**P1 · 死亡改重生（修缺陷 1）**：`ParticlePool.updateAttract` 签名扩为 `(targets, accel, jitter, w, h, decay = LIFE_DECAY)`；`LIFE <= 0` **不再 `removeAt`**，改 `respawnFromEdge(i, w, h)` ⇒ `count` **恒 == `capacity`**、`i → targets[i]` **永不错位**，同时修掉「≈ 4.2 s（250 帧 @60fps）后永久空白」与「目标错位 ⇒ 文字糊掉」；新增 `LIFE_DECAY = 0.004f`；⚠️ `update()`（E08 / E09 / E14 四个使用方）**未动**，仍是 swap-remove。**P3** 采样改**逐行 `bmp.getPixels(...)`**（JNI 由每像素降到每行）；**P4** 照搬 E23 的**两遍 + 按行配额**（第一遍数行 + 顺手记墨迹包围盒；第二遍 `rc[k] × poolCap / total`，非空行 ≥ 1，行内等距抽取）⇒ 修「只覆盖字形上部」；**P2** `dotPath`（`moveTo` + **4 段 `cubicTo`**，`CIRCLE_K = 4/3·tan(π/8) ≈ 0.5522847`）+ `addPath` 合批成 **3 条成员 `Path`** ⇒ **350 次 `drawCircle` → 3 次 `drawPath`**（⛔ 不用 `addOval(Rect(...))`：Compose `Path.addOval` 只收 `Rect`，`data class` ⇒ 每帧堆分配）；**P5** `SAMPLE_STEP` 3 → **1**；**Q1** `measureText` 自适应字号 + `Align.CENTER`；**Q2** 墨迹包围盒适配（`FIT_W_K = 0.78` / `FIT_H_K = 0.50` 双约束取小）+ 居中；**Q3** 内外圈按**椭圆归一化距离**（`√(nx²+ny²) × INV_SQRT2`，角点 ≈ 1，`INNER_K = 0.42`）分组 + 提亮 / 压暗 + alpha 偏移；**Q4** `Plus` **只留给「内圈且 `pulse > 0.5`」的子集**（修整片过曝死白）；**Q5** 后处理；**Q6** `sectionEnergy` 经 `AudioSmoother(0.02/0.02)` 驱动色温漂移（`SECTION_HUE_SPAN = 40f`），调色板变化时才 `rgbToHsl`（⛔ 返回 `Triple` ⇒ 不每帧调）。② **新增门禁 `ParticleTextTest`**（**11 正向 + 4 负向自证**）：常量齐备 / 按行配额（非空行 ≥ 1、空行 0、单调）/ 墨迹适配（双约束 + 居中）/ 椭圆归一化（中心 0、角点 1、轴端点 1/√2）/ `CIRCLE_K` / 半径线性 / **真跑 `ParticlePool.updateAttract`**（`count` 恒 8、耗尽粒子落四边且 `LIFE` 复位、长跑 2000 帧不归零）/ `STRIDE` 与 `LIFE_DECAY` / 源码段（`drawContent` 体内无 `Paint(` 无 `Rect(`、恰好 3 个 `drawPath`、0 个 `drawCircle`、0 个逐像素 `getPixel`、`getPixels` 恰好 2 个调用点、行数上界可静态解析、`postFx` 字面量）；负向 N1 逐像素 `getPixel`（且**不误伤 `getPixels(`**）、N2 旧 swap-remove（`count` 下降 + 目标错位）、N3 具名常量 `postFx`、N4 旧 350 次 `drawCircle`。③ **`FxCoverageScanTest.covered` 扩到 16 套**（E19 移入；`exempt` 批次 B 剩 **5 套**），负向 **N2 样本仍为 `FractalTreeRenderer`**（它仍在 `exempt`）。④ **免 Gradle 自查**：新增 `logs_temp/s17_e19.py`（**①–⑫ 正向 + N1–N4 负向 + ⑬ 名单交叉核对 全过**，用 **float32 精确模拟**；`updateAttract` 算法**独立复刻**长跑 2000 帧）；`s17_fxcover` / `s17_paren` / `s17_g13` / `s17_initorder` / `s17_basecontract2` / `s17_brushkey` / `s17_pathapi` / `s17_state`（滚动）全绿。⑤ **§7.5 E19 行重算** `151 / 0 / 2 / 1` → **`4 / 460 / 5 / 0`**（标题改 `v1.30 重算`；合计 `3198 / 4254 / 116 / 87` → **`3051 / 4714 / 119 / 86`**）；⚠️ **原语 −97.4%（151 → 4），但「路径·文本」0 → 460、「分配」2 → 5 全部落在「采样」路径**（仅 `caption` 变化时执行一次）—— ⛔ **每帧路径零分配**由门禁 ⑨ 护住；E19 因此**移出**「超 MEDIUM 档上限」名单（**10 套 → 9 套**）。⑥ **实现期偏差 6 条已写入 §12.4**（成本账「+1 光晕」无对应项 ⇒ 类内 draw 实为 3；Q3 具体化为椭圆归一化；Q1 补 `12f` 下限；Q6 的 `AudioSmoother` 本身帧率绑定（§7.3 规定）；`updateAttract` 签名扩展；P3/P5 的 JNI 两种口径）。⛔ **本版不改任何已提交行为**：源码改动集中在 `ParticleRenderers.kt`（E19 块）与 `ParticlePool.kt` + `FxCoverageScanTest.kt` + 新增 `ParticleTextTest.kt`；**`docs/` 的改动不进入代码提交** | **阶段 4 进行中**（T4.6–T4.10 待做；V16 待上机） |
+| v1.31 | 2026-09-30 | **阶段 4 · 批次 B 第 6 套：T4.6（E20 等离子流场 §B6 四条）代码落盘 + 新增 `ProceduralTexture.Id.PLASMA` + §7.5 E20 行重算**（**尚未提交、尚未上机**）。① **T4.6 · `PlasmaFlowRenderer` 整类重写**：`: VisualizerRenderer` → `: RendererFx()`，`postFx = PostFx(vignette = 0.48f, grain = 0.030f)`（⛔ **数值字面量**）。**§B6 四条全部完成**：**① 网格加密 + fbm 双倍频** —— `GW × GH` = **16×9 → 24×14**（144 → 336 格），`noise[gy*GW+gx] = fbmAt(gx, gy, evolve)`（**两层**：`v1 + 0.5 × v2`），每 `NOISE_EVERY = 3` **帧**刷新一次（帧数口径，⛔ 不随 `dt` 折算）；⚠️ **与 §B6 原文的偏差**：fbm **在更新循环里合并**而非在 `sampleFlow` 里插值两次⇒ 不新增常驻数组、每粒子只做 **1 次**双线性（两者**数学等价**：双线性是线性算子，见 §12.4）。**② 等离子底色**（两层，⛔ 均**不随 `FxLevel` 关闭**，与 E07 / E13 同一约定）—— **新增 `ProceduralTexture.Id.PLASMA`**（**第 7 类 tile**：3 通道低频 `sin`，R/G/B 相位互差 **120°**；`alpha = 178 × 三通道均值亮度`）整屏 1 次 `drawImage`（`alpha = 0.16 + energy × 0.10`）+ **中心径向渐变**（`Shading2D.shadeBrushCached`，键带 `E20_KEY_SALT = 0x20202020L`，`alpha = 0.10 + pulse × 0.10`）替代原「1 个纯色圆」。**③ 粒子短条** —— 原「每粒子 1 次 `drawCircle`」（≈150 次/帧）改**按色相分 8 桶合批**（桶号由 `bucketOf(flow)` 求出，`t` 先归一到 `[0, HUE_SPAN)` 再分桶 —— ⛔ Kotlin 的 `%` 保留被除数符号，忘了归一 `flow < 0` 会塌缩到桶 0）；每粒子按**速度方向**拉长的椭圆（`aMaj = bMin × ELONG = 1.8`，`SEG = 8` 段参数方程多边形，`cosSeg`/`sinSeg` 构造期算一次）写进本桶 `Path`；⇒ 每帧 draw **151 → 10**（1 tile + 1 渐变 + 桶循环内单一 `drawPath` × 8 桶）。⛔ **不用 `drawOval`**（Compose 的 `drawOval` 只能画**轴对齐**椭圆，表达不了速度方向；与 E13 同一坑）。⚠️ 两处**有意取舍**（登记 §12.4）：桶内 alpha 取**均值**、桶内重叠按**非零环绕**。**④ 后处理**。⛔ 顺带修**帧率绑定**（§B6 未列，与 T4.1–T4.4 同一约定）：`evolve` / `life` / `speed` 三处 `× fx.dt × FPS_BASE`（`FPS_BASE = 60f`）⇒ **60fps 下与旧实现逐像素等同**；`frame.beat` 的 `evolve += BEAT_KICK` 是**事件踢** ⇒ 保持不折算。② **新增门禁 `PlasmaFlowTest`**（**11 例 = 9 正向 + 2 负向自证**）：行为段**直接调生产纯函数**（`Companion.fbmAt` / `bucketOf` / `ellipsePoint`，⛔ 不复制算法）—— ① §B6 明文常量齐备（含 `GW*GH > 16*9`）；② fbm 逐点数值 + 权重挂**第二层**（负向「权重错位」）+ ⭐ **双线性可交换等价性**（`bilinear(合并) ≡ bilinear(v1) + K·bilinear(v2)`，4 组 `(u,v)`）；③ 色相分桶（边界 / **负 flow 不塌缩** / 8 桶用满 / 桶中心色相）；④ 参数方程（`ELONG` 自洽 / `s = 0` 沿速度方向 / `s = SEG/4` 沿法线 / 极值半径 / **长轴随方向旋转** + 负向「轴对齐椭圆」）；⑤⑥ 帧率无关三档一致（比 **1 秒累计量**，⛔ 不比单帧）+ 负向 N1 旧实现 + 绝对值 `1.68 / 0.21 / 0.36` + 60fps `k == 1` 与旧实现逐项等同；⑦ 源码段（`drawContent` 内 0 `drawCircle` / 0 `drawOval` / 0 `Rect(` / **1 个 `drawPath` 调用点** / 1 个 `drawImage` / `sampleFlow` 内**不得有 `fbmAt(`** / `bucketPaths` 预分配 / 不得自带 `rng` / 不得覆写 `final` 成员）；⑧ `postFx` 字面量**正负双证**；⑨ 等离子 tile（`Id` 含 `PLASMA` / `ensureFullscreen(Id.PLASMA,` 在位 / `plasmaRow` 逐行确定 + alpha ≤ 178 + 三通道彩色 > 50% + 不同 y 不同）；负向 N2 旧「每粒子 `drawCircle`」被抓（且不误伤 `drawPath`）、N4 轴对齐 `drawOval` 被抓。③ **`FxCoverageScanTest.covered` 扩到 17 套**（E20 移入；`exempt` 批次 B 剩 **4 套** = E23/E25/E34/E35），负向 **N2 样本仍为 `FractalTreeRenderer`**。④ **免 Gradle 自查**：新增 `logs_temp/s17_e20.py`（**①–⑨ 正向 + N1–N4 负向 + ⑩ 名单交叉核对**，**147 条断言**，用 **float32 精确模拟**（`struct` 往返））；`s17_e18.py` 的文件形态断言由「CRLF 396」改为「**LF ≥ 657**」（T4.6 合法改变了该文件）；`s17_e19.py` 的名单计数由快照值改为**不变式**（精确计数归 `s17_fxcover.py` / `s17_state.py`）；`s17_state.py` 扩到 **T4.6**（新增 §9 `ProceduralTexture.kt` / §10 `PlasmaFlowTest.kt` / §11 E20 生产块）；`run_all_checks.sh` 扩到 **23 项**全绿。⑤ **§7.5 E20 行重算** `151 / 0 / 0 / 0` → **`10 / 1 / 0 / 2`**（标题改 `v1.31 重算`；合计 `3051 / 4714 / 119 / 86` → **`2910 / 4715 / 119 / 88`**）；E20 因此**移出**「超 MEDIUM 档上限」名单（**9 套 → 8 套**）。⚠️ 「路径·文本」列 **0 → 1**（`for (p in bucketPaths) p.reset()`），`moveTo`/`lineTo` 因外层循环上界（`xs.size`）**不可解析**被计入「未解析」（**0 → 2**）。⑥ **实现期偏差 6 条已写入 §12.4**（fbm 合并位置与 §B6 原文不同但**数学等价**；**新增 `Id.PLASMA`**（§15.2.3 无此规格）；`drawOval` → 参数方程 8 段；桶内 alpha 取均值 + 非零环绕；顺带修帧率绑定；**动了已提交的 S1 共享件 `ProceduralTexture.kt`** + 补齐尾随换行）。⛔ **本版不改任何已提交行为**：源码改动集中在 `UltraRenderers.kt`（E20 一块，**E18 未动**）与 `fx/ProceduralTexture.kt`（**只在末尾追加**，既有 6 类 tile 逐像素不变）+ `FxCoverageScanTest.kt` + 新增 `PlasmaFlowTest.kt`；**`docs/` 的改动不进入代码提交** | **阶段 4 进行中**（T4.7–T4.10 待做；V17 待上机） |
+| v1.32 | 2026-09-30 | **阶段 4 · 批次 B 第 7 套：T4.7（E23 歌词点阵 §B7，性能为主）代码落盘 + §7.5 E23 行重算 + ⛔ 更正 §B7 的 P0-1 过期描述（P1 不做）**（**尚未提交、尚未上机**）。① **T4.7 · `LyricsDotMatrixRenderer` 迁移 `: RendererFx()`**，`postFx = PostFx(vignette = 0.44f, grain = 0.026f)`（⛔ **数值字面量**）。**性能（P2–P6）**：**P2** 两遍 `b.getPixel(x, y)` → **每行一次** `b.getPixels(rowBufLocal, 0, bmpW, 0, y, bmpW, 1)`（`rowBuf` = 成员 `IntArray(bmpW)`，跨次复用；⛔ 不整图读 `IntArray(bmpW * bmpH)`）⇒ JNI **71,224 → 346**（**−99.51%**）；**P3** `sinB = sin(t * 2.0f)` 与 `amp = 2.2f * (0.35f + bass.coerceIn(0f,1f) * 2.2f)` 提到循环外（`bassCue` 内联进 `amp`；`floatY` 的 `sin(globalT*2 + localX*10)` 含逐点 `localX` ⇒ 照 §B7 **保留**）；**P4** 删 `phaseVal`（零引用）/ `textLen`（未使用形参 + 两处实参）/ `baseSize`（`arr[o+SIZE]` 恒 1.0f ⇒ 内联），⚠️ **`STRIDE` 保持 8**、写入点保留（照 §B7「只删读取」的建议）；**P5** `for (p in paths) p.reset()` → `p.rewind()`；**P6** 删 `estPixels` / `idealStep` / `coerceIn(1f, 3f)`，`val step = 1` ⇒ **点总数不变**（仍 `cap`/行）、**每帧绘制成本完全不变**，只是覆盖更完整。**画面（Q2/Q4）**：**Q2** 亮档去过曝 —— `paths[4]`（core）`0.80 + pulse*0.18` → **`0.62f + pulse*0.14f`**（峰值 0.98 → 0.76）、`paths[5]`（外辉光）`0.18` → **`0.26f + pulse*0.10f`**；**Q4** 后处理。⛔ **保留卡拉OK 的逐字亮度分档**（§13.5-D4）并**首次在代码里加守卫注释**（§15.7 第 18 条）；⛔ **不做 P1**（§B7 的 P0-1「每点 `addOval(Rect(...))`」**描述已过期** —— T1.6.2 早已改用 `asAndroidPath().addOval(l, t, r, b)` float 重载、`Rect` 分配早已为 0 ⇒ P1 只剩 −17.6% native 调用却要付 8% 半径量化误差）；⛔ **不做 Q3**（§B7 自己标注**可选**）。② **新增门禁 `LyricsDotMatrixTest`**（**13 例 = 11 正向 + 2 负向自证**）：① 迁移形态（`: RendererFx()` / `drawContent` / `onEnterContent` / `onExitContent` 在位；⛔ 不覆写 `final` 的 `draw`/`onEnter`/`onExit`；⛔ 无自带 `rng`；⛔ 不 import `VisualizerRenderer`/`VisualizerRandom`）；② P2（`getPixel(` **0 处**、`getPixels(` **≥ 2 处**、`rowBuf?.takeIf { it.size >= bmpW }` 在位、⛔ 无 `IntArray(bmpW * bmpH)`）；③ P6（`val step = 1`；⛔ 无 `coerceIn(1f, 3f)` / 无 `idealStep`）；④ P5（`rewind()` 在位、`reset()` 为 0）；⑤ P3（`drawContent` 算 `sinB`/`amp`，`addLineToPaths` 内**无** `frame.bass.coerceIn` / **无** `val amp =`；`floatY` 的 `sin(globalT * 2.0f + localX * 10f)` **保留**）；⑥ P4（`phaseVal` / `baseSize` / `textLen` 全无）；⑦ 卡拉OK 保留（三档阈值 + `drawPath` **恰 6 次** + **未剥注释**的原文含守卫注释）；⑧ Q2（新 alpha 在位、旧 `0.80f + pulse*0.18f` 不在）；⑨ `postFx` 字面量**正负双证**；⑩ 行为 `calculateRowQuota`（`[1,3,0]/4/100 ⇒ [25,75,0]`、空行 0、非空行 ≥ 1、`total=0`/`cap=0` 全 0 + 负向「均分」）；⑪ 行为 `karaokePacing`（端点 / `p(0.25)=0.578125` / 21 点单调 / 快起慢落 / 越界钳制 + 负向线性）；负向 N1 旧逐像素 `getPixel` 被抓（且**不误伤 `getPixels(`**）、N2 旧 `coerceIn(1f,3f)` 与 `p.reset()` 各被抓。③ **`FxCoverageScanTest.covered` 扩到 18 套**（E23 移入；`exempt` 批次 B 剩 **3 套** = E25/E34/E35，总条目 **11**），负向 **N2 样本仍为 `FractalTreeRenderer`**。④ **免 Gradle 自查**：新增 `logs_temp/s17_e23.py`（**①–⑫ 正向 + N1/N2 负向 + ⑬ 名单交叉核对**，**77 条断言**；`calculateRowQuota` / `karaokePacing` 用 **float32 精确模拟**）；`s17_e20.py` 的名单计数由快照值改为**不变式**（精确计数归 `s17_fxcover.py` / `s17_state.py`）；`s17_state.py` 扩到 **T4.7**；`run_all_checks.sh` 扩到 **24 项**全绿。⑤ **§7.5 E23 行重算** `7 / 405 / 6 / 3` → **`7 / 405 / 7 / 1`**（标题改 `v1.32 重算`；合计 `2910 / 4715 / 119 / 88` → **`2910 / 4715 / 120 / 86`**）；⛔ 「绘制原语」列 **7 不变** ⇒ **仍在「超 MEDIUM 档上限」名单之外**（名单仍 **8 套**）。⚠️ 两列变化**都不是真实成本上升**：「分配」+1 是 P2 新增的 `rowBuf`；「未解析」−2 是原 `getPixel` 两处调用点随 P2 消失（它们落在 `step` 非常量的循环里 ⇒ 上界不可解析 ⇒ 只记「未解析」）。⑥ **实现期偏差 8 条已写入 §12.4**（⛔ **§B7 的 P0-1/P1 现状描述已过期 ⇒ P1 不做**；Q3 不做；P3 的 `bassCue`/`pulse` 落盘形态；采样 JNI 口径 `116` vs `346`；P4 只删读取不动 `STRIDE`；卡拉OK 守卫注释 + ⛔ 断言注释正文的引号必须逐字节一致；3 个纯函数移入 `internal companion object`；§7.5 的 `分配/未解析` 变化属**工具可解析性**而非成本上升）。⛔ **本版不改任何已提交行为**：源码改动集中在 `LyricsDotMatrixRenderer.kt` 一个文件 + `FxCoverageScanTest.kt` + 新增 `LyricsDotMatrixTest.kt`；**`docs/` 的改动不进入代码提交** | **阶段 4 进行中**（T4.8–T4.10 待做；V18 待上机） |
+| v1.33 | 2026-09-30 | **阶段 4 · 批次 B 第 8 套：T4.8（E25 催眠 §B8 四条）代码落盘 + ⛔ 修掉 dt 帧率绑定 + §7.5 E25 行重算**（**尚未提交、尚未上机**）。① **T4.8 · `HypnoticFunctionRenderer` 迁移 `: RendererFx()`**，`postFx = PostFx(vignette = 0.44f, grain = 0.028f)`（⛔ **数值字面量**）。**画面（§B8-①~④）**：**①** 网格/坐标轴三级明度 —— 主轴（`AXIS_ALPHA = 0.55f` / `AXIS_STROKE_W = 2.6f`）> 刻度（`TICK_ALPHA = 0.30f` / `TICK_STROKE_W = 1.8f`）> 细网格（`GRID_ALPHA = 0.14f` / `GRID_STROKE_W = 1.2f`），⚠️ §B8 只给 alpha，**额外把线宽也分档**；**②** 曲线受光侧 —— 主线 `MAIN_STROKE_W = 2.2f` / `MAIN_ALPHA_BASE = 0.9f` + 高光线 `HIGHLIGHT_STROKE_W = 0.9f` / `HIGHLIGHT_ALPHA_BASE = 0.82f` / `highlightColor = towardWhite(mainColor, 0.6f)`（`refreshColors` 内缓存）/ `translate(0f, -HIGHLIGHT_OFFSET)`（`0.8f`）⇒ **DRAW 与 HOLD 两态都画**；**③** 纸纹底 —— 复用 `ProceduralTexture.Id.PAPER`（**不新增 tile**），`PAPER_ALPHA = 0.10f`，`drawContent` 内 `ensure(iw, ih)` + `drawImage(it, dstSize = IntSize(iw, ih), alpha = PAPER_ALPHA)`；**④** 后处理。⛔ **dt 帧率绑定修复（§B8 未列，顺带修）**：旧 `:362` 的 `val dt = ((now - phaseStartMs)/1000f).coerceIn(0f, 0.1f)` **实为相位内累计时间**（且被钳 0.1 s）⇒ 绘制推进速度帧率绑定；改为 `drawAccumulator = advanceStroke(drawAccumulator, fx.dt, speed)`（新增 `internal fun advanceStroke`）⇒ 30/60/120 fps 一致（旧口径实测 **1.328 s** @60fps）。⛔ **随机源不复用基类 `rng`**：保留 `shuffleRng = Random(seed)`（`weightedShuffle` 形参是 `kotlin.random.Random`，`VisualizerRandom` 传不进）；⛔ 相位哨兵 `0L → -1L`（单测 `timeMs` 恒 0）+ `ctx.nowMs → fx.nowMs`。② **新增门禁 `HypnoticFunctionTest`**（**11 例 = 9 正向 + 2 负向自证**）：① 迁移形态；② `postFx` 字面量正负双证；③ §B8-① 三级明度（**直调生产常量** + 三级递减谓词）；④ §B8-② 线段常量 + 两态 `hasLitEdge` + `highlightColor` 缓存；⑤ §B8-③ `PAPER_ALPHA` + `hasPaper` + `ensure` 在 `drawContent` 内；⑥ dt 化（`drawStroke(…, fx.dt)` / `drawDissolve(…, fx.dt)` + 无 `val fx =`）；⑥b **行为段直调生产纯函数** `advanceStroke`（30/60/120 fps 恒等）；⑦ 随机源（`shuffleRng` / 类体内无 `VisualizerRandom`）；⑧ 每帧零堆分配（11 个 `draw*` 函数体 × 10 条 `ALLOC_RES`）；负向 N1 旧相位累计 dt 被抓、N2 旧网格/曲线片段判否。③ **`FxCoverageScanTest.covered` 扩到 19 套**（E25 移入；`exempt` 批次 B 剩 **2 套** = E34/E35，总条目 **10**），负向 **N2 样本仍为 `FractalTreeRenderer`**。④ **免 Gradle 自查**：新增 `logs_temp/s17_e25.py`（**①–⑪ 正向 + 负向 + 剥注释自证**，`advanceStroke` 用 **float32 精确模拟**）；`s17_state.py` 扩到 **T4.8**（新增 §14/§15）；`s17_fxcover.py`（19/10）；⚠️ **`s17_e23.py` 的名单计数由快照值（`18 / 11 / 3`）改为不变式**（T4.8 把 E25 移出 `exempt` 会合法改变这三个数 ⇒ 快照值必然假 FAIL；与 `s17_e20.py` 同一条教训，**精确计数归 `s17_fxcover.py` / `s17_state.py`**）；`run_all_checks.sh` 扩到 **25 项**全绿。⑤ **§7.5 E25 行重算** `9 / 754 / 5 / 14` → **`12 / 754 / 5 / 14`**（标题改 `v1.33 重算`；合计 `2910 / 4715 / 120 / 86` → **`2913 / 4715 / 120 / 86`**）；⛔ 12 ≪ 120 ⇒ **仍在「超 MEDIUM 档上限」名单之外**（名单仍 **8 套**）。⚠️ **本版 +3 是真实成本上升**（高光线 ×2 态 + PAPER 底纹），与 T4.7 的「工具口径」不同。⑥ **实现期偏差 7 条已写入 §12.4**（dt 修复；线宽分档；HOLD 期保留高光；随机源 `shuffleRng`；相位哨兵 `-1L` + `ctx.nowMs → fx.nowMs`；`ensure` 在 `drawContent` 内违反基类注释；§7.5 `9 → 12` 属真实成本）。⛔ **本版不改任何已提交行为**：源码改动集中在 `HypnoticFunctionRenderer.kt` 一个文件 + `FxCoverageScanTest.kt` + 新增 `HypnoticFunctionTest.kt`；**`docs/` 的改动不进入代码提交** | **阶段 4 进行中**（T4.9–T4.10 待做；V19 待上机） |
+| v1.34 | 2026-09-30 | **阶段 4 · 批次 B 第 9 套：T4.9（E34 分形 §B9 四条）代码落盘 + ⛔ 修掉 `lastMs == 0L` 哨兵 + §7.5 E34 行重算**（**尚未提交、尚未上机**）。① **T4.9 · `FractalTreeRenderer` 迁移 `: RendererFx()`**，`postFx = PostFx(vignette = 0.48f, grain = 0.030f)`（⛔ **数值字面量**）。**画面（§B9-①~④）**：**①** 锥度 + 受光 —— 线宽 `(TRUNK_STROKE_W * TAPER.pow(d)).coerceAtLeast(MIN_STROKE_W)`（`2.6f` / `0.72f` = `LEN_K` / `0.7f`）+ 逐层色表 `depthColorArgb[d]`（0 层 `accent` → `MAX_DEPTH` 层 `towardWhite(accent, 0.55f)`，`internal fun depthColorArgbOf`），⚠️ §B9 未提 alpha 但**必须同时改为近平**（`SEG_ALPHA_BASE = 0.90f` / `SEG_ALPHA_FALLOFF = 0.025f` / `SEG_ALPHA_MIN = 0.60f`）否则顶梢亮度被抵消；**②** 叶形 —— 生长前沿末级（`if (d >= depthInt)`）画旋转椭圆叶（`moveTo` + 4 × `cubicTo` 12 点，`KAPPA = 0.5522847f`，⛔ **不用 `addOval`**），长轴 = 短轴 × `LEAF_ASPECT = 2.2f`、按 `Shading2D.lightDir` 定向；下标**固定**分 3 桶（`leafBucketOf(i) = i % 3`），叶长由 `LEAF_BANDS = 6/21/42` 驱动（`LEAF_R_MIN = 2.4f` × (1 + `v * LEAF_R_GAIN = 2.1f`)），**每桶合批 1 条 `Path`**（`LEAF_ALPHAS = 0.55/0.74/0.94`）；**③** 背景纵深 —— `shadeBrushCached`（半对角线半径、带盐 `E34_KEY_SALT = 0x34343434L`、键含 `(w,h,accent)`、`alpha = 0.30f`）+ 复用既有 `Id.STARFIELD`（`alpha = 0.32f`，⛔ 不新增 tile），**不随 FxLevel 关闭**；**④** 后处理。⛔ **迁移顺带修掉 `lastMs == 0L` 哨兵**（旧 `ctx.nowMs` + `if (lastMs == 0L) lastMs = now`；`FrameClock` 的 KDoc 明确不得用 `0L` 当哨兵，单测 `timeMs` 恒 0）⇒ 改走 `depthF = advanceDepth(depthF, fx.dt, frame.bass, maxDepth)`；⚠️ 本效果生长量**本来就是 dt 化的** ⇒ 只换时钟源、**不改行为**。② **新增门禁 `FractalTreeTest`**（**10 例 = 8 正向 + 2 负向自证**）：① 迁移形态（含 ⛔ 无 `lastMs`）；② `postFx` 字面量正负双证；③ §B9-① 几何锥度谓词 + `depthColorArgbOf` 行为（端点精确 / 亮度单调不减 / 反序不同 / 越界钳 / 除零护栏）；④ §B9-② 手写椭圆 + ⛔ `addOval` 缺席 + `leafBucketOf` / `leafRadiusOf` 行为；⑤ §B9-③ 带盐渐变 + 星野 + 缓存键维度；⑥ dt 化（`advanceDepth` 30/60/120 fps 恒等 + `growAt` 五分支）；⑦ 每帧零堆分配（4 个函数体 × 10 条 `ALLOC_RES`）；⑧ 叶合批（`drawPath` 恰 1 个调用点 × 3 桶）；负向 N1 旧哨兵被抓、N2 旧线性锥度 / 旧 alpha 曲线被判否。③ **`FxCoverageScanTest.covered` 扩到 20 套**（E34 移入；`exempt` 批次 B 剩 **1 套** = E35，总条目 **9**）；⚠️ **负向 N2 样本由写死类名改为不变式**（`pickUncoveredSample` 现场挑未覆盖的类，该样本已连续被换 9 次 ⇒ 改为「covered 只增不减 / exempt 只减不增 / 批次 B 残余 ⊆ {E35}」）。④ **免 Gradle 自查**：新增 `logs_temp/s17_e34.py`（**①–⑪ 正向 + 负向 + 剥注释自证**，5 个纯函数用 **float32 精确模拟**，§⑨ **真跑** `renderer_loop_estimate.py` 取数）；`s17_state.py` 扩到 **T4.9**（新增 §16/§17）；`s17_fxcover.py`（20/9）；`run_all_checks.sh` 扩到 **26 项**全绿。⑤ **§7.5 E34 行重算** `240 / 0 / 0 / 1` → **`245 / 8 / 0 / 1`**（标题改 `v1.34 重算`；合计 `2913 / 4715 / 120 / 86` → **`2918 / 4723 / 120 / 86`**）；⚠️ E34 **原本就在**「超 MEDIUM 档上限（120）」名单内 ⇒ 改后 **245 仍超限**（**名单仍 8 套**）。⚠️ 两列变化**都是真实成本上升**；⛔ **但表里 8 仍低估叶形成本**（脚本不把「循环体内调用的 helper」按调用次数放大 ⇒ 真实 ≈ 640/帧）。⑥ **实现期偏差 8 条已写入 §12.4**（alpha 改近平；叶形手写贝塞尔 ⛔ 不用 `addOval`；分桶口径改为「下标固定 + 频段驱动尺寸」；背景两层且不随 FxLevel 关闭；`E34_KEY_SALT` 具名盐；`lastMs` 哨兵；§7.5 `240 → 245` / `0 → 8` 属真实成本；§7.5 低估叶形成本）。⛔ **本版不改任何已提交行为**：源码改动集中在 `BatchFourRenderers.kt`（仅 E34 一个类）+ `FxCoverageScanTest.kt` + 新增 `FractalTreeTest.kt`；**`docs/` 的改动不进入代码提交** | **阶段 4 进行中**（T4.10 待做；V20 待上机） |
+| v1.35 | 2026-09-30 | **阶段 4 · 批次 B 第 10 套（收尾）：T4.10（E35 光轴 §B10 五条）代码落盘 + ⭐ 新增 `ProceduralTexture.Id.FOG`（用户裁决）+ ⛔ 修掉旧时钟哨兵与 `timeMs` 相位 + §7.5 E35 行重算**（**尚未提交、尚未上机**）。① **T4.10 · `LightBeamsRenderer` 迁移 `: RendererFx()`**，`postFx = PostFx(vignette = 0.50f, grain = 0.030f)`（⛔ **数值字面量**）。**画面（§B10-①~⑤）**：**①** 光束改渐变 —— 锥形 `Path`（`moveTo` + 3 `lineTo` + `close`）填 `Brush.linearGradient`（`start = 外缘端` → `end = 中心端`，`BEAM_NEAR_ALPHA = 0.42f` → `BEAM_FAR_ALPHA = 0f`；芯线 `CORE_NEAR_ALPHA = 0.86f` / `CORE_W_K = 0.14f`），**4 个 `Brush` 按 `(cx, cy, maxLen, accent, secondary)` 五维键缓存**（`ensureBeamGeometry`，照 `RadarGridRenderer.ensureBrush` 范式），逐束旋转交给 `withTransform`（**`inline` ⇒ 零分配**，§15.4-A7）；**②** 体积雾 —— 叠 1 层 `Id.FOG`（⭐ **新增第 8 类 tile**：3 组超低频 `sin`（波长 ≈ 234/343/668 px）+ 只留亮部（`FOG_FLOOR = -0.05f`）+ 灰阶随浓度 `196 → 255`，alpha 上限 `FOG_A`），`alpha = FOG_ALPHA = 0.12f`，随 `sectionEnergy` 漂移（`FOG_DRIFT = 0.012f` × (0.35 + sectionEnergy)，`FOG_DRIFT_Y_K = 0.61f`），`FOG_OVERSCAN = 48` 过扫描；**③** 尘埃 —— `DUST_N = 48`（明文 40–60）个亮点，半径 `0.50/0.65/0.80`（直径 1.0/1.3/1.6 px）、`alpha 0.20/0.32/0.45`、`Plus`；沿**所属光束**的 `beamFinalAng` 漂移（`DUST_DRIFT = 0.055f`，归一化坐标 + `wrap01` 环绕 ⇒ 数量恒定）；**合批成 3 条 `Path`**（`moveTo` + 4 `cubicTo` + `close`，`KAPPA = 0.5522847f`，⛔ 不用 `addOval`）；**④** 镜头光斑 —— 交汇处「光晕（1 次 `shadeBrushCached` + 1 次 `drawCircle(brush=…)`，带盐 `E35_KEY_SALT = 0x35353535L`，`FLARE_R_K = 0.085f`）+ 六芒（**3 条 `drawLine`**，`FLARE_SPOKE_K = 2.10f` / `FLARE_SPOKE_W = 1.3f` / `FLARE_SPIN = 0.25f`）」，中心光核 `CORE_R = 6f` + `CORE_R_PULSE = 14f × pulse`；**⑤** 后处理。⛔ **迁移顺带修掉两条红线**：旧 `lastMs == 0L` 哨兵（`FrameClock` 的 KDoc 明确不得用 `0L`）⇒ 改走 `fx.dt`；旧 `frame.timeMs * 0.001f` **当相位**（开机毫秒大基数 + 墙钟 ⇒ float 尾数不足 + 帧率绑定）⇒ 改 `elapsedSec += fx.dt` + `beamAng[i] = advanceBeamAngle(beamAng[i], fx.dt, beamSpeed[i], trebleSmooth)`；⛔ 旧 `drawFan` + `pathBuf` 删除。② **新增门禁 `LightBeamsTest`**（**13 例 = 11 正向 + 2 负向自证**）：① 迁移形态（含 ⛔ 无 `lastMs` / 无 `frame.timeMs`）；② `postFx` 字面量正负双证；③ §B10-① 锥形渐变 + 4 缓存 `Brush` + 五维键；④ §B10-② 雾（含 **201 采样覆盖不变式**：`dstOffset ∈ [-2ov, 0]` ⇒ 画布必被铺满）；⑤ §B10-③ 尘埃形态（3 桶合批 + `addDot` 圆点）；⑥ 尘埃行为（`dustBucketOf` / `wrap01` / `driftDelta`）；⑦ §B10-④ 光斑；⑧ dt 化（`advanceBeamAngle` 30/60/120 fps 恒等 + 解析解 + 旧口径负向）；⑨ 每帧零堆分配（`drawContent` / `addDot` × 10 条 `ALLOC_RES` + 缓存键守卫自证）；⑩ `Id.FOG` tile（**真跑生产 `ProceduralTexture.fogRow`**）；⑪ 覆盖门禁名单交叉核对；负向 N1 旧哨兵 / 旧 `timeMs` 相位被抓、N2 旧硬边光束 / 旧 `drawFan` 被判否。③ **`FxCoverageScanTest.covered` 扩到 21 套**（E35 移入；`exempt` 批次 B 剩 **0 套** ⇒ **批次 B 10 套全部收尾**，总条目 **8**）。④ **免 Gradle 自查**：新增 `logs_temp/s17_e35.py`（**①–⑬ 正向 + N1/N2 负向 + 剥注释自证**，**267 条断言**，5 个纯函数用 **float32 精确模拟**，§⑬ **真跑** `renderer_loop_estimate.py` 取数）；`s17_state.py` 扩到 **T4.10**（新增 §16b E35 生产块 / §18 `LightBeamsTest.kt`；`ProceduralTexture.kt` 356 → **400**、`BatchFourRenderers.kt` 1991 → **2386**、`covered` 20 → **21**、批次 B 1 → **0**、`exempt` 9 → **8**）；⚠️ **`s17_e34.py` 的合计断言由快照值改为不变式**（合计 == 各行之和）—— T4.10 合法改变了合计（`2918 → 2925` 等），写死快照必然假 FAIL（与 `s17_e20.py` / `s17_e23.py` 同一条教训，**精确快照归文档 §7.5 + `s17_doc75_diff.py`**）；`run_all_checks.sh` 扩到 **27 项**全绿。⑤ **§7.5 E35 行重算** `3 / 2 / 0 / 4` → **`10 / 16 / 2 / 13`**（标题改 `v1.35 重算`；合计 `2918 / 4723 / 120 / 86` → **`2925 / 4737 / 122 / 95`**）；⛔ 10 ≪ 120 ⇒ E35 **仍在**「超 MEDIUM 档上限（120）」名单**之外**（**名单仍 8 套**）。⚠️ 四列变化**全部是真实成本上升**（雾 `drawImage` +1、尘埃 `drawPath` ×3、光核 `drawCircle` ×2、光斑 `drawCircle` +1、六芒 `drawLine` ×3、路径 16、分配 2）。⛔ **「未解析」4 → 13 是工具口径**：主循环上界 `beamCount` 是**运行期 `var`**（按画质赋值）⇒ 脚本解析不出 ⇒ 该循环内 6 `drawPath` + 3 路径写入 + 4 `withTransform` 只记未解析；真实每帧 draw ≈ **22**（MEDIUM）。**不改工具**（口径统一优先），仅在 §12.4 写明。⑥ **实现期偏差 9 条已写入 §12.4**（⭐ 新增 `Id.FOG`（**用户裁决**）；渐变轴取「外缘端 → 中心端」；尘埃「沿光束方向」落为「`beamFinalAng` + 归一化 `wrap01` 环绕」；尘埃圆点手写 `cubicTo` ⛔ 不用 `addOval`；「1 次 `shadeBrush`」落为 `drawCircle(brush=…)` + 具名盐；⛔ 顺带修 `lastMs` 哨兵与 `timeMs` 相位**两条红线**；§7.5 四列上升属真实成本；§7.5 未解析暴涨的成因；旧 `drawFan` / `pathBuf` 删除）。⛔ **本版不改任何已提交行为**：源码改动集中在 `BatchFourRenderers.kt`（仅 E35 一个类）+ `fx/ProceduralTexture.kt`（**只在末尾追加** `Id.FOG` + `fogRow`，既有 7 类 tile 逐像素不变）+ `FxCoverageScanTest.kt` + 新增 `LightBeamsTest.kt`；**`docs/` 的改动不进入代码提交** | **阶段 4 · 批次 B 代码完成（10/10）**（U1–U7 + V8–V21 待上机） |
+| v1.36 | 2026-09-30 | **阶段 5 · 批次 C 首项：T5.1（E29 轨道 §C1 第 0 条 · P0 背景星野降级）代码落盘**（**尚未提交、尚未上机**）。① **P0-1**：`starR` 由均匀分布改**立方幂律**（`STAR_R_MIN 0.00035f + u³ × STAR_R_SPAN 0.00115f`，上限 **0.00150f** = 场景最小实体（火卫一 Phobos `0.0024f`）的 **62.5%**）、`starA` 改**与 `u²` 同源** + 25% 抖动（`STAR_A_MIN 0.12f + (u² × 0.75 + jitter × 0.25) × STAR_A_SPAN 0.38f`，上限 **0.50f**）；新 LCG 消耗顺序 **`u → x → y → jitter`**；星野生成抽成 companion **纯函数 `fillStars`**（`onEnter` 只调它，⛔ 不内联复制）。② **P0-2**：`ensureLayout` 缓存 `quietInvX` / `quietInvY`（只在尺寸 / scale 变化时算一次）；`drawStars` 逐星算**椭圆归一化距离**并走 companion 纯函数`quietAlpha(e)`（`QUIET_R = 0.15f` / `QUIET_FLOOR = 0.25f`）——每星 **5 乘 + 1 加 + 1 比较**，**无 `sqrt` / 无分配 / 无 JNI / 不新增 draw 调用**。③ **量化结果**（1080p · MEDIUM 140 星）：最大星直径 **10.89 → 5.45 px（−50%）**、中位星直径 **7.65 → 1.72 px（−78%）**、alpha 上限 **0.89 → 0.48**、星野总发光量 **3758 → 231 px²·α（−94%）**、**最大星 / Phobos 由 125%（越界）→ 62.5%（层级恢复）**。④ **新增门禁 `OrbitalStarFieldTest`（§八 G14）**：**13 例 = 8 正向（尺寸层级 / 幂律性 / 亮度上界 / 尺寸亮度同源（Spearman 秩相关）/ 位置合法性 / `quietAlpha` 契约 / 零分配源码扫描 / 生产接线）+ 5 条负向自证**（均匀分布 / 旧 alpha / 独立采样 / 去截断 / 逐星 `Brush.radialGradient`），**负向与正向喂同一份谓词**；⛔ 门禁**不构造** `OrbitalRingsRenderer()`（会建 Compose `Path()` ⇒ JVM 单测「not mocked」）⇒ 最小实体半径**扫 `buildSystem()` 源码**取得。⑤ **免 Gradle 自查**：新增 `logs_temp/s17_e29.py`（**8 组 + 5 条负向**，全部从**源码解析**常量与行星表，不复制）⇒ 全套 **27 → 28 项 ALL GREEN**；`s17_state.py` 扩到 T5.1（§19）；`s17_doc75_diff.py` EXIT=0（§7.5 **零变化**）。⑥ ⛔ **守卫注释（§15.7 第 19 条）**：类 KDoc 的「星野」与「画质档」两条 + `:183` 字段注释 + `drawStars` 的 KDoc 四处同步改写，并写明「**⛔ 不得改回均匀分布**（§四 G18 / §13.5-D5）」—— 否则后来者会把「所有星都一样大」当成 bug 修回均匀分布。⑦ **实现期偏差 7 条已写入 §12.4**（幂律指数形参化、负向③复用 `j`、`quietAlpha` 抽纯函数、最小实体半径扫源码、负向⑤落为源码样本、§15.1.2 #27 行数更正、§7.5 零变化）。⛔ **明确不做**：不改星点位置生成方式（`w/h` 归一化、不参与 `TILT`、固定种子不重掷 ⇒ 零闪烁）、不改 `STAR_MAX` 与档位星数 70/140/220、不引入 `fx/` 依赖。⛔ **本版不改任何已提交行为**：源码改动集中在 `BatchTwoRenderers.kt`（E29 一类）+ 新增测试 `OrbitalStarFieldTest.kt`；**`docs/` 的改动不进入代码提交** | **阶段 5 进行中**（T5.1b / T5.2–T5.8 待做；**V30** 待上机） |
+| v1.37 | 2026-10-01 | **进度复审（纯回填 + 账实核对，⛔ 不改任何源码与 §六/§七 规格）**。① ⛔ **修掉 §12.2 进度总览「状态」列长期全 `⬜` 的失真** —— 该列自 v1.18 起从未回填，与 §12.3 的 **38/59** 实测打勾**直接矛盾**，且违反 §12.1 自己的「⛔ 改任务清单后必须同步改 §12.2」规程。已按**源码实测**回填：`covered` 21 / `exempt` 8 / 在册 29 ✓、提交号逐个回填（S0+S1 `0f81d25` / S1.5 `3b3b1ce` / S1.6 `ca23876` / S2–S3 `b35c5de` / S4 `c31a8c2`…`591571f`），并新增「已完成」列与**进度快照**（代码 21/28、验收 **0/38**）。② **账实核对发现的失真**（**6 条：4 条已订正、2 条登记待裁决**）：**(a) 已订正** §8 基线 `1177 例 / 115 类`（开工前口径）标注为**已过期**（v1.18 曾自报 1320/127；静态实测 `@Test` **1504** / 141 文件）—— ⛔ **故意不填新数字**：静态 `@Test` ≠ JUnit 实跑例数，在真跑前回填即为假数据；**(b) 已订正（且比原先报告的范围更大）** —— 不只 `OrbitalStarFieldTest`：实测 7 个门禁测试类**行数总账全面过期**（原账 850 → 实测 **1919**，+1069；`fx/` 7 类原账 750 → 实测 **718**，−32；**测试总账 1600 → ≥2637**），§15.1.1 已加 v1.37 订正表、§15.1.2 #27 由 `+515` 改 `+481`（实测）、§12.4 末条同步；✅ **但 `@Test` 条数是准确的**（14/15/12/15/9/13 逐一对上）⇒ **失真的只有行数，断言覆盖无欠账**；**(c) 已订正** §7.5 末注「>120 原语实为 **9** 套」→「**8** 套」（那第 9 套就是它自己声明要排除的已隐藏 `WorldRenderer`(491)，与 v1.5 自述矛盾）；**(d) 登记待修** 免 Gradle 自查 **`s17_state.py` 已不复绿**（`AdvancedRenderers.kt` 行数断言写死 1396、实测 **1407**）⇒ 「全套 28 项 ALL GREEN」不可复现，**自查脚本自身缺少漂移检测**；**(e) 登记待裁决** v1.18 的工作约定「**编译由用户执行**」与 `AGENTS.md`「本机 `testDebugUnitTest` 实测可跑（`--no-daemon`）」**已脱节** —— 而 1.7 阶段 4 项**全部**依赖真机帧耗时、当前无人认领；**(f) 登记待清理** 仓库卫生：T5.1 的源码 + 新测试**未提交**，`docs/` 下另有 **8** 个临时 HTML（`fire*.html` / `fight.html`）与 1 个 699 KB 的 `.bak` 备份。③ ⭐ **新增 §12.5「审阅结论与账实核对」**（第三方视角的合理性判断 + 4 项复核新发现 + **5 项待裁决** + 建议的下一步顺序，含严重度分级与**显式「不确定」标注**）。④ ⛔ **本版不改任何源码**：改动仅限本文件；`.opencode/rules.md` 要求的 `CHANGELOG.md` / `technical-overview.md` §10 同步**留待阶段 7**（⚠️ 但 S0–S4 共 10 个提交**至今未进 CHANGELOG**，建议在 S7 之前先补一条） | **阶段 5 进行中**（T5.1 未提交；T5.1b–T5.8 / 阶段 1.7 / 阶段 6 / 阶段 7 待做；**U1–U7 与 V1–V31 全部待上机**） |
+| v1.38 | 2026-10-01 | **T5.1 提交 + 🔴 提交前门禁首跑即抓出「测试树自 T4.5 起编译不过」**（用户指示「T5.1 先提交」）。① ⛔ **按 §十 的硬规矩**（"⛔ 改测试文件必须跑 `testDebugUnitTest`……坏文件会直接进 HEAD"）先跑门禁，**首跑即失败 10 条**：`HypnoticFunctionTest`(3) / `LightBeamsTest`(1) / `ParticleTextTest`(2) / `PlasmaFlowTest`(3) / `OrbitalStarFieldTest`(1)，全部是 `Name contains illegal characters: . /` —— **根因：`@Test` 的反引号函数名里放了 `.` 与 `/`；Kotlin 源码允许，JVM 方法名禁止 `. ; [ / < >`**。② ⚠️ **这 4 个已提交 commit（`b8249f6` T4.5 / `e485b0d` T4.6 / `848edc9` T4.8 / `591571f` T4.10）自落地起就没编译过** —— 因本地 16 个提交**全部未推送**、CI 从未触发 ⇒ **T4.5 之后所有"免 Gradle 自查全绿"声明都建立在没编译过的代码上**。③ **修法**（仅改函数名、**不动任何断言**）：区间 `..`→`~`、小数与标识符 `.`→`·`、分隔符 `/`→`，`；已用 `logs_temp/scan_illegal_testnames.py` **全量复扫 0 处残留**，且确认这些方法名**无任何脚本或其他测试引用**（0 外部命中）。④ **两个提交**：`4318019` `fix:`（9 处 / 4 个已提交文件，可独立回退）+ `2931d33` `feat:`（T5.1 本体，`BatchTwoRenderers.kt` + 新建 `OrbitalStarFieldTest.kt`）。⛔ **只 stage 目标文件**（`.opencode/rules.md`），`docs/` 按本方案约定**不进代码提交**。⑤ ✅ **复跑门禁通过**：`BUILD SUCCESSFUL in 1m 22s`，`OrbitalStarFieldTest` 实测 **13 tests / 0 failures / 0 errors / 0 skipped** —— 与 §八 G14 声明的「8 正向 + 5 负向」吻合。⑥ §12.2 阶段 5 与 §12.5 已同步；§12.5.2 新增 **(0) 号风险（严重度最高）**、§12.5.3 待裁决项 2 标记已裁决。⛔ **本版不含任何"免 Gradle 自查"作为放行依据的结论** —— 两次盲区（v1.25 Compose `Path` 无 float 重载、本次 JVM 非法字符）都只能靠真编译暴露 | **阶段 5 进行中**（T5.1 已提交；T5.1b–T5.8 / 阶段 1.7 / 阶段 6 / 阶段 7 待做；**U1–U7 与 V1–V31 全部待上机**） |
+| v1.39 | 2026-10-01 | **全量门禁首跑 ⇒ 修 4 道门禁的 11 个失败；版本升级 v2.38.0；权威基线回填**（用户裁决「先修 11 个失败，再提交 v2.38.0 作为绿灯版本」+「提交时只做本地提交」）。① 🔴 **这是 `testDebugUnitTest` 自 T4.5 依赖以来第一次真正跑完** ⇒ 暴露 11 个失败，**全部是门禁自身失效，无一条指向生产代码**：见 §12.5.2(2′) 的 0-a～0-e 五张表（`FxCoverageScanTest` 整类 8 例因 `classRe` 的 `\s*` 吞换行而抛越界；判据 B 因只找 `OverlayFx.` 字面量而**整段空转**；`BeatFireworkTest` ⑥ 断言忘了 `coerceAtMost(1f)` 钳位；`GalaxySpiralTest` 负向 N2 谓词非严格而**恒真**；`LightBeamsTest` 负向 N1 的 `classBody()` 把见证 KDoc 排除在外）。② ✅ **防空转复核**：独立脚本确认修好后的解析器认出 **29 个**在册渲染器（= 21 + 8）⇒ 不是「扫到 0 个类导致真空通过」。③ ✅ **权威基线回填**（v1.37 标注的「静态 `@Test` ≠ 实跑例数」这一不确定性就此消解）：**142 类 / 1504 例 / 0 失败 / 0 错误 / 0 跳过**、`lintDebug` **0 Error / 280 Warning**（Warning 由 279 漂到 280，Error 仍 0，不影响 CI 阻塞判定）；数字取自 `TEST-*.xml` 逐文件累加而非构建日志。④ **两个本地提交（未推送）**：`c2b0c0e` `fix:`（4 个门禁文件，+69/−12）+ `0482399` `chore:`（`build.gradle.kts` 169/2.38.0、`CHANGELOG.md` v2.38.0 节、`technical-overview` **§10.203**、`README.md` 画质档位）。⛔ **`origin/main` 仍停在 `0e78926`，本次全部只做本地提交**。⛔ **本版不改任何生产代码** | **阶段 5 进行中**（T5.1 已提交、门禁全绿；T5.1b–T5.8 / 阶段 1.7 / 阶段 6 / 阶段 7 待做；**U1–U7 与 V1–V31 全部待上机**） |
+| v1.40 | 2026-10-01 | **按 §12.5.4 启动「上机验收」+ 源码复核发现 2 处「文档/CHANGELOG 把未落地当已落地」**（用户裁决：下一步 = **先做上机验收**；`docs/` 临时文件 = **挪进 `logs_temp/`**）。① ✅ **新增 §11.3「上机操作流程」**（只写"怎么跑"，判据仍回 §11.1/§11.2 勾选，避免双份清单漂移）：**§11.3.1 两个包** —— 改造后 = `HEAD`（v2.38.0），改造前基线 = **`ca23876`（S1.6）**，并写明**为什么取它**（最后一个逐像素不变的提交 ⇒ 与 S0/S1 性能改动可比、与 S2 起观感改造互为对照）；⛔ 例外：**T1.7.1 的 A/B 基线不用 `ca23876`**（离屏层自 S1 起无条件挂着 ⇒ 基线就是当前 HEAD）；**§11.3.2 装机命令**（含 `INSTALL_FAILED_UPDATE_INCOMPATIBLE` 需先 `uninstall` 的既有坑）；**§11.3.3 帧耗时采集**三条口径（同设备以电视为准 / 同画质档 / 同曲同进度）；**§11.3.4 截图只进 `output/`**（AGENTS.md 仓库卫生）；**§11.3.5 本轮不适用判据清单**。② ⛔ **发现 1（源码实测）**：**裁决项 4 / §13.5-D3 的 600ms 交叉淡入从未落码** —— `VisualizerStage.kt:180` 第 3 实参仍是硬编码 `false`，且该文件最后一次改动是 S1.6 `ca23876`；⇒ **`CHANGELOG.md` v2.38.0 的「效果切换过渡：启用 600ms 交叉淡入」为虚报**，同节「离屏层按画质档位条件生效」亦虚报（`:312` 仍无条件 `CompositingStrategy.Offscreen`，`:307-310` 注释自己也写明"待 T1.7.1"）。⚠️ **本文件头部的「已启用」表述同样过期** —— 已在 §11.3.5 把 U2 的淡入两条判据标为**本轮不适用**；✅ **CHANGELOG 经用户裁决保留不动**（"后面反正要做这个事情"），⛔ 条件是**发版前阶段 1.7 必须真落地**，否则回头删。③ **发现 2**：**T1.7.2 的实质代码已在 T3.3 完成**（E17 空间网格分桶，§7.5 注① `51,362 → 805`）⇒ 该项只剩「量帧耗时 + 视觉密度差 ≤ 5%」，⛔ 不要再写一遍网格（已在 §11.3.5 与头部注明）。④ **复核通过的既有账目（0 处不符）**：`grep ": RendererFx()"` == **21** 套，与 `FxCoverageScanTest` 的 `covered` 21 / `exempt` 8 / 在册 29 **三者自洽**；未迁移的 8 个类逐个核对确为批次 C 目标 + 3 个结构性豁免（`WorldGlobeRenderer` View 型 / 旧 `WorldRenderer` 死代码 / `PhotoRenderer`）；阶段 1.7 = 0/4、阶段 5 = 1/9 与代码一致。⑤ **仓库卫生**：`docs/` 根下 **8 个 `fire*.html` + `fight.html` + `visualizer-texture-upgrade-plan.md.bak-t51-20260930-223252`（699 KB）已挪进 `logs_temp/`**（§12.5.3 待裁决项 5 就此闭环，可恢复、未 `rm`）。⑥ ⛔ **本版不改任何源码**：改动仅限本文件新增 §11.3 + 头部进度块两行更正 + 本行。 | **上机验收进行中**（U2 淡入两条不适用；其余 U1–U7 / V1–V31 待真机；T5.1b–T5.8 / 1.7 / 6 / 7 待做） |
+| v1.41 | 2026-10-01 | **上机验收首轮真跑 ⇒ 采集口径被推翻 + 2 条新发现（P-1 / P-2）+ P-2 的 E16 侧修复落码**（v2.38.0 release 已装机；用户裁决顺序 =「先改绿色的这个」）。①  **§11.3.3 采集法作废并重写**：`dumpsys gfxinfo com.nasmusic.tv` 在基准电视（Android 5.1.1 / API 22）上 **`Profile data in ms` 段恒空**，对 launcher 同样为空 ⇒ 是系统 HWUI 帧回调未接上，**与本项目无关**；改用 **`dumpsys SurfaceFlinger --latency` 轮询 + 按帧入队时间戳去重**（脚本 `logs_temp/sf_sample.sh`），并登记 3 个实现坑（CRLF 导致 `1e9/refresh` 除零 / SF 历史环小 ⇒ 必须轮询 / **p50 ≈ 33 ms 不等于达标**，因渲染循环是逐 vsync 的 `withFrameNanos`，KDoc 里"30fps"说的是**频谱数据**更新率）。⚠️ 同一份 dump 的 `Caches:` 段仍可用。② 🔴 **发现 P-1：这台电视的第一成本维度是「每帧绘制原语数」**，实测 **斜率 ≈ 0.47 ms/原语、固定开销 ≈ 24.6 ms**（两点：E03 21 原语 / 34.52 ms，E16 478 原语 / 249.18 ms）⇒ 换算 **30 fps 需 ≤ ~18 原语**；**CPU 侧已排除**（E16 期间 `top -t` 连采 4 轮：主线程 **0%**、`RenderThread` 25%、整机 27%），**后处理也已排除**（LOW 档关掉全部后处理只把 4.0 → 7.6 fps）⇒ 抓手是**合并原语**（整列一条渐变带 / 图集 `drawBitmapMesh` / 残像复用），与 V25 的「E38 2282 → 47 次 draw」同形。⚠️ **斜率仅 2 点，尚不可当预算用**，需再补 3–5 套跨档位点。③  **发现 P-2：暗角边色取自封面 `palette.accent` ⇒ 换歌把整幅染成封面色**，用户原话「根本没有黑客帝国电影中的效果，应该更加偏绿色」的**根因在此、不在字形颜色**；✅ **同曲同进度切 LOW 的对照实验已做**（背景立刻回纯黑、绿字形/光晕/拖影全部清晰可辨）。④ ✅ **P-2 的 E16 侧修复落码**：`PostFx` 新增 `vignetteEdge: Color? = null` → `OverlayFx.drawVignette` 新增 `edgeOverride`（非 null 时取代 accent **并跳过 `coolShiftDeg`**），`MatrixRainRenderer` 锁 `VIGNETTE_EDGE = rgb(0,52,20)`（比最暗字形档再暗一档）；**默认 null ⇒ 其余 20 套逐像素不变**；⛔ 其余效果口径未裁决，P-2 **不关闭**。⑤ ⚠️ **顺带修掉暗角 Brush 撞键 bug**：旧键 `shl 32` / `shl 40` 拼位段，accent 段（40..71）与 width 段（32..63）**重叠** ⇒ 不同 `(w, accent)` 可撞键、换歌沿用旧色；改乘性混合五维全进键。⑥ **门禁**：`postFx` 由 `protected` 改 `internal`（override 不写可见性即沿用 ⇒ 21 处子类零改动）⇒ 单测**直接读 `postFx` 本体**，`MatrixRainTest` 新增 ⑨ + 负向 N4（**9 正向 + 4 负向 = 13 例全过**）、`FxCoverageScanTest` 8 例全过。⑦ ✅ **U1 通过**（30 min 真机，pid 未重启、0 FATAL/ANR，脚本 `logs_temp/u1_watch.sh`）、✅ **U4 通过**（LOW 档后处理完全不生效）。⑧ **进度**：真机验收 **2 / 38**（U1、U4）；V1（E03 两条）✅，V14 ⛔ **因 P-2 染色须在修复包上重测**。⑨ ⚠️ 本版**改生产代码 3 个文件**（`OverlayFx.kt` / `RendererFx.kt` / `AdvancedRenderers.kt`）+ 1 个测试文件 | **上机验收进行中**（P-1 待补点、P-2 待上机复验；T5.1b–T5.8 / 1.7 / 6 / 7 待做） |
+| v1.42 | 2026-10-01 | **P-2 修复包产出 + 本文件勾选状态与实测记录对齐**。① ✅ **门禁全绿复跑**：`testDebugUnitTest` **1506 例 / 0 失败 / 0 错误 / 0 跳过**（较 v1.39 基线 +2 = `MatrixRainTest` ⑨/N4）、`lintDebug` **0 Error / 280 Warning**（与基线**逐条持平** ⇒ 本次改动未引入新告警）。② ✅ **release 包已重打**：`app/build/outputs/apk/release/NASMusicTV-release-v2-38-0.apk`（15:43，含 P-2 修复）。⚠️ **`versionName` 未动 ⇒ 文件名与已装包完全同名**，装机前后在设备上无法区分，复验请**以安装时间为准**；是否升 `2.38.1` 待裁决。③ 🔴 **修正本文件的进度失真**：§11.1/§11.2 的**规范勾选框**此前与 §11.3.6 实测记录**脱节**（`U4` `V1` 实测已过却仍未勾，`V14` 未记「不可判过」）⇒ 现补勾 `U4` `V1`、给 `V14` 加 ⛔ 说明，真机验收定为 **3 / 38**（header 的 0/38、v1.41 行的「2/38」均不准，已同步）。④ **§12.5.2 快照三行同步**（门禁基线 / 真机验收 / 未提交），header 进度块由 v1.37 抬到 v1.41、「未提交工作区」改为**4 个代码文件**。⑤ ⚠️ **`U3` 补记为当前不可执行**：除本机 `gfxinfo` 恒空（改量法见 §11.3.3）外，**「改造前」基准包 `ca23876` 至今未产出** ⇒ `U3`/`U6` 两条对比项卡在同一个前置上。⑥ 🔧 一次 `lintDebug` 后台跑**在配置阶段即退出 1、日志无 `FAILURE`**，`./gradlew.bat --stop` 后前台重跑即通过 ⇒ 该签名属守护进程竞争，不是 lint 问题 | **P-2 待上机复验**（`V14` 须在新包上重测 MEDIUM；P-1 待补点；T5.1b–T5.8 / 1.7 / 6 / 7 待做） |
+| v1.43 | 2026-10-01 | **P-3 由假设升为实测定位结论 ⇒ 解除 `V14` 阻塞**（用户裁决「你编译 debug 版装到电视上自己调试」+「你不用截图，我来测试」⇒ 改为**用户操作、我读日志**的分工）。① ✅ **产出诊断版 release**：`AdvancedRenderers.kt` 的 `MatrixRainRenderer` 加 `⚠️ TEMP-P3` 埋点（进效果打 `quality/cols/perCol`、每 60 帧打 `帧数/native 堆`），并加 `debug.nasmusic.rain.cols` **sysprop 强制列数**开关用于二分；走 `AppLog.e`（**无 `BuildConfig.DEBUG` 守卫 ⇒ release 保留**，见 AGENTS.md）。② ✅ **四行 A/B 实测表（同一台电视、同一首歌）**：LOW 24 列 / 336 碎 blit ⇒ **954 ms 崩**；LOW 压制到 4 列 / 56 blit ⇒ **68 s、4020 帧不崩，约 59 fps**；MEDIUM 32 列 / 448 blit（后处理开）⇒ **119 s、480+ 帧不崩**；LOW 24 列复现 ⇒ **636 ms 崩**。③ 🔴 **结论（改判 P-3 的机制口径）**：崩不崩**不由原语数决定**，而由「每帧存在大量互不相连的小矩形、且没有一次全屏绘制把脏区并掉」决定 —— MEDIUM 的暗角/颗粒/扫描线是 3 次全屏 `drawRect`，脏区退化成整块矩形 ⇒ 系统的 `createTJunctionFreeRegion` 走不到。⛔ **撤回两处早期解读**：「`r0 = 5162` 两次相同 ⇒ 随原语数增长的量」（同为 LOW/24 列的两批崩溃 `r0` 分别是 5162 与 7745，与列数无关），以及「E16 在 API 22 基准机上目前不可用」（MEDIUM 可用）。✅ **内存耗尽假设已排除**：`nativeKb` 全程平在约 7.8 MB（LOW）/ 11.2 MB（MEDIUM），无台阶无增长。④ ⚠️ **顺带查明第二个既有缺陷（与崩溃无关）**：`supports()` 因 `LOW.maxParticles = 0` 判所有 `Tier.ADV` 效果在低画质不支持，而 `setQuality()` 只在**当次改档位**时回落、启动期不校验 ⇒ **低画质 + 数字雨能渲染却不可选**，切走即永久回不来（用户实测「切换到其他效果后无法切换回来了」）。⛔ 修法待裁决。⑤ **本文件同步**：P-3 判读段按实测重写（拆成 ✅ 实测 / ⚠️ 仍是假设两栏）、**删掉一段与新版重复的旧「处置」**、`V14` 标注 ✅ 阻塞解除并**规定复验改在 MEDIUM 做**（LOW 下暗角整段不生效，P-2 的改动在 LOW 肉眼不可见）。⛔ **本版不改生产代码**：诊断埋点为临时代码，**提交前必须删除并恢复干净包**（干净包备份 `logs_temp/p2_fixed_clean_v2.38.0.apk`，27,317,466 B；当前设备上是诊断包 27,317,353 B）。⚠️ 真机验收仍 **3 / 38**（P-3 只是解除阻塞，`V14` 本身还没判） | **P-2 待 MEDIUM 复验**（`V14` 阻塞已解除；P-3 修法 + `supports()` 修法待裁决；P-1 待补点；T5.1b–T5.8 / 1.7 / 6 / 7 待做） |
+| v1.44 | 2026-10-01 | **P-3 治崩步落码并经用户上机确认 + P-1 第二步（E16 列条合并）落码**（用户裁决链：「效果不着急，先解决崩溃的问题」→「1. 现在不崩溃 2. 画面卡顿」→「每一列在运动过程中，数字可以不变的，这样应该可以加快性能吧」）。① ✅ **治崩（第一步）落码 3 个文件**：`RendererFx.draw` 末尾新增第 ④ 步 —— 当 `needsDamageCoalescer(level, postFx) = level == OFF || !postFx.hasFullScreenPass()` 为真时调 `OverlayFx.drawDamageCoalescer()`，画一个 **`alpha = 1/255` 的整画布 `drawRect`**（肉眼与截图均不可辨）把脏区并成一整块矩形 ⇒ `createTJunctionFreeRegion` 走不到。**放基类而非只改 E16**：崩溃条件与效果无关，LOW 档所有 `PostFx.NONE` 的效果（E17 / E19 / E23）都在同一雷区；`PostFx` 因此加 `hasFullScreenPass()`。② ✅ **上机确认**：用户「现在不崩溃」（LOW 档，此前 266–954 ms 必崩）⇒ **P-3 崩溃项闭环**；日志侧 `logs_temp/p3fix_watch.log` **0 条 `Fatal signal`**、进程存活。③ ⛔ **用户提出的「每列数字运动中不变」经分析不采纳**（已写入 P-3 处置）：每帧成本驱动是**指令条数**而非画了哪个字，冻结数字**不减一条 op**，只把预渲染 2 张条带降到 1 张（省一次性构建），代价是丢掉 300 ms 翻转的招牌观感 ⇒ **保留翻转 + 做合并**。④ ✅ **治慢（第二步）落码**：`MatrixRainRenderer` 新增 `columnStrips`（2 张整列条带，索引 = 头部数字），`buildGlyphs(textSize)` → `buildGlyphs(textSize, cellH)` 末尾调 `buildStrips(cellH)`，`drawContent` 的**内层格循环整段删除** ⇒ 每帧每列 1 次 `drawBitmap`，绘制 op **336 → 24 / 448 → 32 / 672 → 48**；`releaseGlyphs()` 一并 `recycle()` 条带（≈1.3 MB，API 22–25 在 native 堆）；数字算式提为 `internal fun digitAt`（选条带与排条带**同源**，⛔ 不各写一遍）；每帧 blit 用 `stripPaint`（alpha 恒 255）、合成用 `blitPaint`（逐格 alpha），**混用会把上一格的 alpha 带进每一帧**。⑤ **门禁**：`MatrixRainTest` 新增 **⑩ + 负向N5**（谓词 `stripFormulaHolds` / `alternates` 正负向**共用**，全域 64 列 × 16 tick × 14 格；负向夹具 = 偶数步长 16 与「每两格」项 `k/2`），该类 **15 例**；`RendererBaseContractTest` 的 **⑩ + 负向⑩**（三种错误实现：只看档位 / `&&` 用反 / `hasFullScreenPass` 漏判颗粒扫描线）该类 **17 例**。⑥ **§7.5 口径同步**：E16 退出「超 MEDIUM 档上限（120）」名单 ⇒ **8 套 → 7 套**；⚠️ 历史数字（478 / 456）**不回改**。⑦ **待收**：⏳ LOW 档真机帧率复测（旧值 **7.6 fps**）与条带观感目视确认；⛔ **本版未提交**（P-2 + 两步修复共 4 个生产文件 + 2 个测试文件）。⑧ ✅ 本版**已改生产代码 4 个文件**（`RendererFx.kt` / `OverlayFx.kt` / `AdvancedRenderers.kt` + 上一版遗留），`⚠️ TEMP-P3` 诊断埋点**已全部删除**（工作区回到 P-2 + 修复的净差异） | **上机验收进行中**（P-3 崩溃闭环、P-1 第二步待复测帧率；`V14` 逐条判定与 `supports()` 修法待裁决；T5.1b–T5.8 / 1.7 / 6 / 7 待做） |
+| v1.47 | 2026-10-01 | **低画质全效果帧率扫描（23 套，机内读数口径）⇒ P-1 在数字雨上闭环 + 放行副作用登记**（用户上机读数，无需 adb）。① ✅ **E16 数字雨 LOW = 59.4 fps**（合并前同档 **7.6**）⇒ §11.3.6 的 LOW 行不再是欠账，**P-1 的三步（治崩 / 合并 / 复量）在两个档位全部收口**：MEDIUM 44.1（SF）+ LOW 59.4（机内）。② ⚠️ **口径声明**：本轮读数是 `FpsMeter` 机内小字，**没有分位数**、且上限就是 60（vsync）⇒ 与上表 SF 口径的 7.6 那一行**不可直接相减**，但 7.6 → 59.4 的量级差远大于口径差；判据不变（冲突时以 SF 为准）。③ 🔴 **新信息 = "低画质不等于便宜"**：方案 C 新放行的 7 套里 **4 套只有 7–11 fps**（歌词点阵 7 / 星座 9 / 折纸 9 / 星系螺旋 11），而同档频谱瀑布 59、液态涟漪 30、液态网格 29、DNA 30、轨道 29、数字雨 59.4 都不慢；四套慢的共同点是**规模是常量、§7.5 登记原语数 805 / 626 / 405**（与合并前的 E16 478 同量级）⇒ 说明当年"按 tier 一刀切"**不算全错**，错在把便宜的一起误挡；⛔ **修法不是回退门控**，是给这四套做 E16 同型的合并 ⇒ 登记为**待裁决项 8**（A 合并 / B 按档减规模 / C 接受现状，本轮未动代码）。④ ⚠️ **两项观感反馈落表**（§12.5.3 新增第 9 项）：**频谱瀑布顶部一大片黑**经核对**不是低画质造成** —— `FADE_ALPHA = 0.06` 每帧把 200 行缓冲整体 ×0.94，70 帧即衰减到 1.4% ⇒ 可见带恒占底部约 1/4，**三档皆然**，只是此前低画质进不去、没人看见；**液态网格低画质无连线**是 `AdvancedRenderers.kt:537` `drawLines = quality != LOW` 的**刻意降级**，⚠️ 该分支今天之前是**死代码**（这套效果根本进不到 LOW），第一次被跑到就暴露出来 —— 二者都待用户判改不改。⑤ 照片墙低画质**未测**（本机没接照片源）。⑥ **文档同步**：§11.3.6 加「低画质全效果扫描」表 + 口径声明 + 四条结论、§12.5.3 第 7 项标 ✅ 已收、新增第 8 / 9 项、header 进度块 | **上机验收进行中**（P-1 数字雨两档闭环 ✅；⛔ 待裁决项 8（四套慢效果修法）与 9（两项观感）；`V14` 逐条判定、其余 `V`/`U` 项待做；T5.1b–T5.8 / 1.7 / 6 / 7 待做） |
+| v1.46 | 2026-10-01 | **`supports()` 门控按方案 C 落码 ⇒ LOW 复量的最后一道闸打开**（用户裁决：「选 C，按这个逻辑改」）。① ✅ **`VisualizerTheme` 新增 `needsParticleBudget`**（默认 `false`；只有渲染器**真读** `ctx.quality.maxParticles` 的 4 套标 `true` —— `BEAT_FIREWORK` / `WORLD` / `PARTICLE_TEXT` / `PLASMA_FLOW`）。② ✅ **`ADV -> !theme.needsParticleBudget \|\| maxParticles > 0`** ⇒ 低画质可选的 ADV 从 **1 套（照片墙）→ 11 套**（数字雨 / 星系螺旋 / 频谱瀑布 / 液态网格 / 液态涟漪 / 星座 / 歌词点阵 / 轨道 / 折纸 / DNA），粒子型两项仍旧挡；⛔ **照片墙那条特例分支同时删除** —— 2026-09-23 的裁决被通则自然覆盖，`supports()` 里不再有硬编码效果名。③ ⚠️ **放行的副作用已核对**：`DNA` / `轨道` / `星座` 的规模是常量、不随档位收缩，现在低画质也能进；已确认 `DnaRenderer` / `OrbitalRingsRenderer` 各有 `drawRect(bgColor)` 全屏底、`ConstellationRenderer` 有全屏星野 `drawImage` ⇒ **不会新增 §P-3 那类脏区雷区**（其余新放行的都走 `RendererFx` 基类的 `drawDamageCoalescer`）；但它们的**低画质帧率一个都没量**。④ ✅ **门禁 `ParticleBudgetGateTest`（5 例）**：正向用**源码扫描**（工厂映射 → 类体深度追踪 → `maxParticles` 读取）反推真值集合，与枚举标注逐一对比 ⇒ 今后改渲染器不标 `true`（或反之）都会变红；负向两条 = 「naive 按 tier 一刀切必须挡住数字雨而真实现放行」+「标注集合必须**严格小于** ADV 全集，否则等价于退回一刀切」。⚠️ 扫描踩到一个坑：只在 `depth == 0` 时认新类，否则 `WorldGlobeRenderer.kt` 的嵌套 `private class Flight` 会把 341 行的预算读取记到错的类头上 ⇒ **世界被反向放水**（第一版就是这么漏的，靠 LOW 断言变红才抓到）。⑤ **既有断言反转**：`VisualizerThemeTest` 两处「LOW 不支持 `SPECTRO_WATERFALL`」改为「支持」，并把仍须被挡的例子换成 `BEAT_FIREWORK` / `WORLD`；照片墙那条用例改名（原名的"其余 ADV 仍要求预算"已不成立）。⑥ **门禁复跑**：**1517 → 1522 例 / 143 → 144 类 / 0 失败**，`lintDebug` **0 Error / 281 Warning**，release 包 `NASMusicTV-release-v2-38-0.apk`（22:08，27,319,118 B）。⑦ **文档同步**：§12.5.3 第 7 项闭环（含落地要点 ①–⑤ 与遗留）、header 进度块两行、§12.5.2 快照两行、`CHANGELOG.md` v2.38.0 Changed 补 1 条、`docs/technical-overview.md` **§10.205** | **上机验收进行中**（⏳ P-1 的 **LOW 数字雨复量**现在可测 —— 装新包、切低画质、读右上角帧率小字；`V14` 逐条判定待做；T5.1b–T5.8 / 1.7 / 6 / 7 待做） |
+| v1.45 | 2026-10-01 | **列条合并包上机复验（MEDIUM 44.1 fps）⇒ 旧成本斜率被第 3 个点证伪 + 机内帧率读数落码**（用户裁决顺序：先量帧率；随后追加需求「能否将帧率在每个效果的右上角用小字显示出来」）。① ✅ **P-1 第二步真机复验**（同一台创维 / 同曲《三万英尺》/ MEDIUM / `sf_sample.sh`）：**44.1 fps、p50 20.42 ms、p95 40.65 ms、jank 14.5%**（原始数据 `logs_temp/gfx/after_E16_matrixrain_medium_sf.txt`，截图 `output/after_E16_matrixrain_medium.png`）；截图同时确认 **P-2 生效**（四角是暗绿不是封面色）与**合并无观感退化**（32 列、绿色字形、头部光晕、逐格拖影俱在）。② 🔴 **成本模型修正**：38 原语 / 22.7 ms 实测**比 v1.41 那条线算出的"固定开销 24.6 ms"本身还快** ⇒ 说明**截距不是常数**（它是从 478 个**小位图** op 回归出来的），真实规律是「成本随**每帧独立小矩形数量**超线性，大 quad 走快速纹理路径且不制造独立脏区」；⛔ **旧斜率 0.47 ms/原语作废，不得再用于给未改造效果估预算**，§11.3.6 表已补第 3 行与该结论。③ ✅ **新增机内帧率读数**（用户要求）：`visualizer/FpsMeter.kt`（0.5 s **滚动窗口**、3 个标量字段、零分配）+ `VisualizerStage` 右上角 `FpsBadge`（12sp、`drawBehind` 圆角底 ⛔ 不用 `RoundedCornerShape` clip —— 同 Toast 那处规避的 API 22 Region 段错误）。口径 = Compose 帧回调实际到点率，与 SurfaceFlinger 同源不同采样点，**不一致时以 SF 为准**。④ ️ **开关刻意不走设置页**：`Settings.Global` 键 `nasmusic_fps`（`adb shell settings put global nasmusic_fps 1`，重进可视化生效，0/删键即关）—— 新增一个 App 设置项要动 `AppSettings`/`AppPreferences`/导入导出/VM/设置页/分支 **6 处**，且会在播放器 UI 上留常驻调试信息；⛔ **也不挂 `BuildConfig.DEBUG`**（上机一律 release 包，挂了等于没有）。⑤ **门禁**：新增 `FpsMeterTest` **5 正向 + 2 负向自证**（负向① 累计平均版在同一份变速序列上必须被历史拖住、与滚动窗口分歧 > 3 fps；负向② 按帧数除标称窗口的版式对 30/60 fps 报同一个数 ⇒ 证明 ⑤ 有区分力）⇒ **1510 → 1517 例 / 142 → 143 类 / 0 失败**，`lintDebug` **0 Error / 281 Warning**（新增代码 0 告警），release 包 `NASMusicTV-release-v2-38-0.apk`（21:27，27,318,910 B）已装机。⑥ ⛔ **本版仍未解决 LOW 复量**：低画质根本选不到数字雨（`supports()` 用 `maxParticles > 0` 当 ADV 门槛，而数字雨一颗粒子都不用）⇒ 修法 **待裁决**（§12.5.3 第 7 项：A 启动期也校验并回落 / B 当前效果始终可选 / **v1.45 新增 C 按"是否真消耗粒子预算"门控 —— 建议取 C**）。裁决前 §11.3.6 的 LOW 行只能沿用合并前的 7.6 fps。⑦ **文档同步**：§11.3.3 加「机内读数为首选采集法 + 与 SF 的优先级」、§11.3.6 补第 3 行与成本模型修正段、header 进度块两行、§12.5.2 快照三行、`CHANGELOG.md` v2.38.0 补 3 条（数字雨整列合成 / 暗角染色修复 / 低画质闪退修复）、`docs/technical-overview.md` **§10.204** 记 P-2/P-3/P-1 三项全细节 | **上机验收进行中**（P-1 MEDIUM 闭环、LOW 卡 `supports()` 裁决；`V14` 逐条判定待做；T5.1b–T5.8 / 1.7 / 6 / 7 待做） |
 > ⛔ 本文件每次修订必须在此表**追加一行**；文档版本号只增不改。
-
 ---
 
 ## 一、目标与核心结论
@@ -66,7 +126,7 @@
 | ⑪ **3 套 ULTRA 效果在手机上"直接跳过了、从来都没测试过"；手机上顺畅的效果在电视上很卡（举例：数字雨）⇒ 要作全部效果的性能优化** | **可达性**：§二 **§2.4**（根因 = `VisualQuality` 无 UI 入口 ⇒ 档位恒 MEDIUM ⇒ 3 套被 `supports()` 永久过滤）+ §十三 **裁决项 9**。**性能**：§四 **G14–G17** + **§7.5 全量成本表** + §八 **G13** + §九 **R17/R18** + §十 **S1.6/S1.7** + §十三 **裁决项 10** + **§15.4.4 A45–A48** |
 | ⑫ **E23 歌词点阵的「文字颜色逐字改变」是不是性能瓶颈、能不能删**（用户 2026-09-29） | **§B7 专项评估**（结论：**不是瓶颈、不要删**）+ §13.5 **D4** + §15.4.4 **A49** + §15.7 **第 18 条** + T4.7 / V18 口径同步 |
 | ⑬ **E29 轨道的背景星光太大、压住太阳系主体**（用户 2026-09-29） | §四 **G18**（背景装饰无视觉层级预算）+ §六 **§C1 第 0 条（P0 背景星野降级）**（立方幂律 + alpha 同源下调 + 中心静默区）+ §C6 第 0 条（E40 DNA 同源缺陷）+ §八 **G14** + §九 **R19** + §11.2 **V30** + §13.5 **D5** + §15.7 **第 19 条** + 审计脚本 `logs_temp/orbital_rings_star_audit.py` |
-| ⑭ **E41 世界已换开发方案，需要重新读取和评估**（用户 2026-09-29） | **§C7 整节重评**（旧 12 层 Canvas 六条中 **5 条作废** ⇒ 新观感杠杆全在 `assets/globe/globe.js`：N1–N5）+ §2.2 第 41 行 + §2.4 ③（档位分支已换实现）+ §三 #1（vignette 活代码只剩 2 份）+ §四 **G16 第二实例**（每 100 ms JSON 序列化 + 字符串模板）+ **G17 / G18 口径更正**（旧 491 原语与 E41 星野均属已隐藏实现）+ §7.5 **注⑤**（活代码 2,683 / 54,483 / 752 / 48）+ §八 **G7 补 View 型排除 + 排除自证** + §九 **R20** + §十 S5 + §11.2 **V28 重写 + V31 新增** + §12.2 阶段 5（迁移 6 → **5** 套）+ §12.3 **T5.7 重写** + §十三 裁决项 8（27 → **26** 套）+ §13.5 **D6** + §十四 前提更正 + §15.1.2 / §15.3.1 第 14 行 + §15.6 S5 + §15.7 **第 20 条** |
+| ⑭ **E41 世界已换开发方案，需要重新读取和评估**（用户 2026-09-29） | **§C7 整节重评**（旧 12 层 Canvas 六条中 **5 条作废** ⇒ 新观感杠杆全在 `assets/globe/globe.js`：N1–N5）+ §2.2 第 41 行 + §2.4 ③（档位分支已换实现）+ §三 #1（vignette 活代码只剩 2 份）+ §四 **G16 第二实例**（每 100 ms JSON 序列化 + 字符串模板）+ **G17 / G18 口径更正**（旧 491 原语与 E41 星野均属已隐藏实现）+ §7.5 **注⑤**（活代码 2,683 / 54,483 / 752 / 48）+ §八 **G7 补 View 型排除 + 排除自证** + §九 **R20** + §十 S5 + §11.2 **V28 重写 + V31 新增** + §12.2 阶段 5（迁移 6 → **5** 套）+ §12.3 **T5.7 重写** + §十三 裁决项 8（27 → **26** 套）+ §13.5 **D6** + §十四 前提更正 + §15.1.2 / §15.3.1 第 14 行 + §15.6 S5 + §15.7 **第 20 条**（该轮落地后 E41 又经并发会话大改并定稿 ⇒ **v1.17 再复核**：§C7 / §2.2 第 41 行 / §2.4③ / §四 G13④·G16 / V28·V31 / R20⑤ / T5.7 / §15.1.2 #14 / §15.3.1 #14 / §15.7 #20 / D6） |
 
 | ⑮ **§十三 的十项裁决全部拍板**（用户 2026-09-29） | **改造深度 = 全量 28 套**（不再是"只做批次 A"）＋ **要真 bloom / 真色差**（阶段 6 必做）＋ **观感基调 = "精致/电影感"**（§7.1 取值走区间上半段）＋ ⛔ **启用 600ms 交叉淡入**（推翻 §13.5-D3 的硬切；并连带更正 §四 G14 的口径）＋ E24 增益保持 `0.26` ＋ 其余五项按各自推荐（§十三 **D7–D12**、§十 S6 / §12.2 合计 59 / §12.3 T1.6.4） |
 
@@ -194,7 +254,7 @@
 | 38 | `VINTAGE_TV` | 怀旧 | `VintageTvRenderer.kt:286-905` | **09-27** | 扫描线、噪点 buffer、滚动暗带、**RGB 色差 `ColorFilter`**、vignette、圆角、胶片孔 + 走片、OSD、纸感配色 | ⛔ **用户已定稿画面（2026-09-27 / v2.37.3）⇒ 只做性能优化、画面不动**。实测每帧 **2282 次 draw 调用 / 7.04 MPix 填充**（本项目单效果最高，60fps 需 **422 MPix/s**）：**噪点 2000 次 `drawRect`（占 88% 的指令数）**、扫描线 **195 次 `drawLine`**、胶片条带 **80 次 native draw**；另有 **2 处真 bug**（① `:601` vignette `Brush` 只按 `w` 缓存，而 `radius` 依赖 `h` ⇒ 暗角形状错；② `:418` `rollBandH` 只在 `onEnter` 重置、`h` 变化不更新 ⇒ 滚动暗带高度与渐变终点停在旧值）与 3 处可省开销（`:767`/`:770` 每行两次 `setShader`、歌词位图**每次换行分配 ≈1.7 MB**、`BlurMaskFilter` 每次重建新建） | ★ | C（**仅性能**） |
 | 39 | `PHOTO_WALL` | 照片墙 | `photo/PhotoRenderer.kt:49-161` | 09-27 | 76 种转场、Ken Burns、音频呼吸、双缓冲 | 转场多为几何变换（**无光效类转场**）；**停留期无画面后期**（无暗角/颗粒/色差 → 与"老照片"气质不符） | ★ | C |
 | 40 | `DNA` | DNA 双螺旋 | `DnaRenderer.kt:109-896` | **09-28** | Catmull-Rom 中心路径、深度 z 排序遮挡、4 桶线宽/alpha、3 层辉光、星野 | 骨架是**单色 `drawLine`**（无沿法线的明暗 → **无绸缎/体积感**）；背景**纯色**（无径向纵深）；**无暗角/无颗粒/无色差** | ★ | C |
-| 41 | `WORLD` | 世界 | `WorldGlobeRenderer.kt`（+ `assets/globe/`） | **09-29**（**换实现**） | **WebView + three-globe（WebGL，完全离线）**：暗色 Phong 球体 + 大气层 + Tier 分级城市光点 + 大圆航线 dash 生长 + 音频驱动的自转/呼吸/脉冲。⚠️ 旧 2D 版 `WorldRenderer.kt`（12 层 Canvas 管线）**保留在源码但不被任何调用点引用（隐藏）** | Kotlin 侧 `draw()` 是**空实现** ⇒ 暗角/颗粒/描边/纹理一类 **Canvas 手段全部不适用**（§C7 原六条中 5 条作废）；观感杠杆全在 `assets/globe/globe.js`；**Kotlin↔JS 桥接每 100 ms 一次 JSON 序列化 + 字符串模板**（§四 G16 第二实例）；WebView 生命周期与 **Android 5.1.1 WebGL1 可用性尚未上机验证**（§九 R20 / §11.2 V31） | ★ | C |
+| 41 | `WORLD` | 世界 | `WorldGlobeRenderer.kt`（+ `assets/globe/`） | **09-29**（**换实现**） | **WebView + three-globe（WebGL，完全离线）**：真彩贴图球（`earth_lit.jpg` + 昼夜混合夜面壳）+ 太阳/星空/月球 + 大气层 + Tier 分级**暖色**城市光点（黄金角呼吸 + 拍点包络）+ 大圆航线 dash 生长（车道分层）+ 音频驱动的自转与航线目标收敛（v1.17 定稿复核）。⚠️ 旧 2D 版 `WorldRenderer.kt`（12 层 Canvas 管线）**保留在源码但不被任何调用点引用（隐藏）** | Kotlin 侧 `draw()` 是**空实现** ⇒ 暗角/颗粒/描边/纹理一类 **Canvas 手段全部不适用**（§C7 原六条中 5 条作废）；观感杠杆全在 `assets/globe/globe.js`；**Kotlin↔JS 桥接每 100 ms 一次 JSON 序列化 + 字符串模板**（§四 G16 第二实例）；WebView 生命周期与 **Android 5.1.1 WebGL1 可用性尚未上机验证**（§九 R20 / §11.2 V31） | ★ | C |
 
 ### 2.3 汇总（计数自洽校验）
 
@@ -249,7 +309,7 @@
 | 位置 | 只有 `LOW`/`HIGH` 才走到的分支 | 现状 |
 |---|---|---|
 | `AdvancedRenderers.kt:376-380` | `MatrixRainRenderer.cols = 48(HIGH) / 24(LOW) / 32(其余)` | 恒 32 |
-| ~~`WorldRenderer.kt:1518-1530`~~ → **`WorldGlobeRenderer.kt:273`** | 旧：`lodFor(q)` / `tierFor(q)` ⇒ 地图 LOD 0/1/2（**已随旧 2D 实现隐藏 ⇒ 失效**）；新：`WorldNetwork.maxActiveFlights(quality.maxParticles, 100f)` ⇒ 活跃航线上限 **18 / 32 / 46**（LOW/MED/HIGH，钳 10–46；`MIN_ACTIVE_FLIGHTS = 10` / `MAX_ACTIVE_FLIGHTS = 46`，`:751`/`:762`） | 恒 **32** |
+| ~~`WorldRenderer.kt:1518-1530`~~ → **`WorldGlobeRenderer.kt:336-337`**（v1.17 重核；v1.13 时 `:273`） | 旧：`lodFor(q)` / `tierFor(q)` ⇒ 地图 LOD 0/1/2（**已随旧 2D 实现隐藏 ⇒ 失效**）；新：`WorldNetwork.maxActiveFlights(quality.maxParticles, 100f)` ⇒ 活跃航线上限 **18 / 32 / 46**（LOW/MED/HIGH，钳 10–46；`MIN_ACTIVE_FLIGHTS = 10` / `MAX_ACTIVE_FLIGHTS = 46`，`:751`/`:762`） | 恒 **32** |
 | `BatchFourRenderers.kt:200-204` | `SAT_GROUP_LOW=1 / MED=2 / HIGH=4`（卫星齿轮组数） | 恒 2 |
 | `HypnoticFunctionRenderer.kt:195-199` | `ensureBuffers`：240(HIGH) / 180(MEDIUM) | 恒 180 |
 | `BatchThreeRenderers.kt:423-425` | `COLS_LOW=20 / MED=28 / HIGH=36`（E32 阶梯列数） | 恒 28 |
@@ -509,7 +569,7 @@
   后来者照抄极易把方向抄反（把"至多"写成"至少"）。
 - **重复 ④：`VisualizerRandom()` 9 处各自 `private val rng = ...`**
   （`AdvancedRenderers.kt:279/361/493`、`LyricsDotMatrixRenderer.kt:40`、`ParticleRenderers.kt:34/142`、
-  `UltraRenderers.kt:161`、`VintageTvRenderer.kt:67`、`WorldGlobeRenderer.kt:69`）。
+  `UltraRenderers.kt:161`、`VintageTvRenderer.kt:67`、`WorldGlobeRenderer.kt:124`）。（v1.17 重核：v1.13 时 `:69`）
 - **重复 ⑤：共享纹理的释放点在 `VisualizerStage` 手工维护**
   §15.3.1 #19 现在要求在 `VisualizerStage.kt:198` 的 `onDispose` 里**手工补两行**
   （`OverlayFx.release()` + `ProceduralTexture.release()`，⛔ 且有顺序要求）
@@ -597,17 +657,17 @@
   **在 `draw()` 里每帧拼一个字符串**（`StringBuilder` + `String` + 多次 `toInt().toString()`），
   只为判断"字形缓存要不要重建"（`:401` 的 `if (glyphs == null || glyphKey != key)`）。
 - **正确做法**：改成三个 `Int` 字段比较（`keySlot` / `keyCell` / `keyN`），**零分配**。
-- **另一处实例（不在 `draw()` 内 ⇒ 扫描型门禁抓不到，v1.13 新增）**：`WorldGlobeRenderer.kt:314-354`
+- **另一处实例（不在 `draw()` 内 ⇒ 扫描型门禁抓不到，v1.13 新增；v1.17 行号重核）**：`WorldGlobeRenderer.kt:307-323`（`tick`）与 `:335-372`（`maintainRoutes`）
   —— **View 型渲染器（E41 世界）的 Kotlin↔JS 桥接每 100 ms 分配一次**：
   `sendCities()` 的 `buildList{}` + `mapOf(...)`×32 + `gson.toJson(list)`（一次性，有 `citiesSent` 守卫）；
   `sendAudio()` 的 `mapOf(...)` + `gson.toJson(params)` + 字符串模板
   `"WorldGlobe.setAudio(${gson.toJson(params)})"`（**每 tick**）；
-  `sendRoutes()` 的 `buildList{}` + `mapOf(...)`×N + `gson.toJson(list)` + 字符串模板（**每 tick**）。
+  `sendRoutes()` 的 `buildList{}` + `mapOf(...)`×N + `gson.toJson(list)` + 字符串模板（`:495-523`；**v1.17 注：定稿已加 Kotlin 侧内容去重** —— `json == lastRoutesJson` 才发，无变化不再 `evaluateJavascript`；但去重前的 `buildList` + 序列化每 tick 仍在）。
   ⚠️ 量级是"每 100 ms 一次"而不是"每帧一次"（约小 3 倍），但**同样是纯分配**；且因为它
   **不在 `draw()` 可达路径里**，**§八 G13 的源码扫描段（扫 `draw()` 可达代码）扫不到它**
   ⇒ 修它只能靠**人工复核**，或把扫描范围扩到"View 型渲染器的 `tick` 路径"（§九 R20）。
-  修法见 §C7 的 **N5**：`sendAudio` 改手写 `StringBuilder`（固定 5 个浮点，无需 Gson）、
-  `sendRoutes` 把 JS 侧的 `lastRoutesKey` 去重**前移到 Kotlin 侧**（只在集合真变化时推）。
+  修法见 §C7 的 **N5**：`sendAudio` 改手写 `StringBuilder`（固定 5 个浮点，无需 Gson，**仍待做**）；
+  `sendRoutes` 的去重前移**定稿已做**（`WorldGlobeRenderer.kt:516-521`；空列表也必须发）。
 - 同类但**可接受**的（只在歌词换行时触发，不是每帧）：`VintageTvRenderer.kt:853` 的
   `"$currentLine $word"`、`:888` 的 `current + char`（§C4 的 O9 已计划改 `StringBuilder`）。
 - ⚠️ 这一条**单看很小**（每帧 1 个 String ≈ 几十字节），但它代表一类问题：
@@ -2880,29 +2940,29 @@ private var lyricBmpH = 0
   画面四角有暗角；节点高光方向与主光一致；**背景星野不抢主体**
   （最大星世界半径 **≤ 0.00150** < 最小实体；见 §C1 第 0 条）。
 
-#### C7 · E41 世界 `WORLD`（**已换实现**：`WorldGlobeRenderer.kt` + `assets/globe/` · v1.13 整节重评）
+#### C7 · E41 世界 `WORLD`（**已换实现**：`WorldGlobeRenderer.kt` + `assets/globe/` · v1.13 整节重评 · **v1.17 定稿复核**）
 
 > ⚠️ **本节已于 v1.13 整节重评**。v1.0–v1.12 写的是**旧 2D 实现**（`WorldRenderer.kt` 的
 > 12 层 Canvas 管线）的六条观感精修；现役实现是 **WebView + WebGL**，
-> Kotlin 侧 `draw()` 是**空实现**（`WorldGlobeRenderer.kt:62`）⇒ 六条里 **5 条作废**。
+> Kotlin 侧 `draw()` 是**空实现**（`WorldGlobeRenderer.kt:65`，v1.13 时 `:62`）⇒ 六条里 **5 条作废**。
 
-**现状（2026-09-29 已提交 `62155d3`）**：
+**现状（2026-09-29 换实现提交 `62155d3`；**v1.17 定稿复核** —— 同日并发会话对 E41 的未提交大改（视觉重做 + 航线模型重做）已定稿，本表按定稿工作区取证，改动尚未提交）**：
 
 | 维度 | 事实 |
 |---|---|
 | 承载 | `WorldGlobeRenderer`（`VisualizerRenderer` 的 **View 型旁路**：`isViewBased = true` + `createView` / `onViewAttached` / `onViewDetached`） |
-| 渲染 | `assets/globe/`：`index.html` + `three.min.js`（≤ r162 UMD）+ `three-globe.min.js`（2.45.2 UMD）+ `globe.js`（215 行 ES5）+ `cities.json`（32 城） |
+| 渲染 | `assets/globe/`：`index.html` + `three.min.js`（≤ r162 UMD）+ `three-globe.min.js`（2.45.2 UMD）+ `globe.js`（**821 行** ES5，v1.13 时为 215 行）+ `cities.json`（32 城）+ **5 张贴图**（`earth.jpg` 方位校准背景 / `earth_lit.jpg` NASA Blue Marble **主贴图** / `earth_night.jpg` 夜面灯光 / `earth_glow.jpg` 大陆辉光掩膜（乘陆地掩膜，物理上不可能溢出到海洋）/ `moon.jpg` 月球） |
 | 加载 | 虚拟 HTTPS 资产域 `https://appassets.androidplatform.net/globe` + `shouldInterceptRequest` 流式读 assets（**绕开 Android 12+ 的 `file://` 子资源限制**；资产域内**永不返回 null**，否则 fallback 真联网 ⇒ 黑屏） |
 | 音频桥接 | Kotlin 侧 **100 ms** tick ⇒ EMA 平滑（`EMA_ALPHA = 0.35f`）⇒ `WorldGlobe.setAudio({energy,bass,mid,treble,beat})` |
-| 航线 | 复用 `WorldCities` / `WorldNetwork` / `BeatClassifier`（**活依赖**）；`cap = WorldNetwork.maxActiveFlights(quality.maxParticles, 100f)`（**18 / 32 / 46**，钳 10–46） |
-| 视觉 | 暗色 `MeshPhongMaterial` 球 + 大气层（`#274b7a` / altitude 0.16）+ Tier 分级城市光点（4 档色/径，`pointsMerge(true)` ⇒ 单 draw call）+ 大圆航线 dash 生长（3 档亮度/粗细/周期）+ 能量驱动自转与 `emissiveIntensity` 呼吸 + 拍点城市脉冲 |
-| 隐藏的旧实现 | `WorldRenderer.kt`（2106 行）+ `WorldMapData.kt` + `WorldProjection.kt` + `WorldTerminator.kt` ≈ **168 KB / 3300+ 行** —— `grep` 实测只被彼此与 `WorldCities.kt` 的 KDoc 交叉引用（`WorldMapData`/`WorldProjection`/`WorldTerminator` 仅被 `WorldRenderer` + 两个测试文件引用） |
+| 航线 | 复用 `WorldCities` / `WorldNetwork` / `BeatClassifier`（**活依赖**）；`cap = WorldNetwork.maxActiveFlights(quality.maxParticles, 100f)`（**18 / 32 / 46**，钳 10–46）。**定稿重做**（真机反馈「航线多少跟音乐强度结合，有最低值；没音乐就没航线」）：不再是「固定上限 + 概率生成」，改为**向目标数量收敛** —— `target = 保底 + (cap − 保底) × (emaEnergy + beatKick)`，保底 `musicFloorRoutes`（随 cap 缩放、下限 `MUSIC_FLOOR_MIN`），目标 EMA 平滑，每 tick 限量进场（`MAX_SPAWN_PER_TICK`），减航从头部淘汰（最老航班先落地）；`isMusicPlaying` 用 `frameSeq` 停更判定（`FRAME_STALE_MS`，**不用** `energy == 0` —— 曲头/曲尾静音会误清）；同端点对可并行多条（`maxParallelLanes`，**端点对按无序处理** `A→B` ≡ `B→A`，否则两条航线叠在同一条弧上），满了**重抽**（`ROUTE_SPAWN_RETRY`）而非放弃；焦点城市按权重轮换（Tier1，`FOCUS_SWAP_MS`） |
+| 视觉 | **真彩贴图球**（v1.17 定稿）：`globeImageUrl('./earth_lit.jpg')`（NASA Blue Marble，`globe.js:524`）+ 自定义 **ShaderMaterial 夜面球壳**（`earth_night.jpg` 城市灯光 + `earth_glow.jpg` 大陆辉光，随 `energy` 起伏 `NIGHT_LEVEL = 0.88 + 0.22·energy` / `CONTINENT_GLOW = 0.95 + 0.45·energy`，`globe.js:788-792`）+ `MeshPhongMaterial`（`shininess 8` / `specular 0x14243c`；`emissiveIntensity` **恒 0.30** —— 旧 `0.35 + 0.75·energy` 呼吸已废弃，均匀加光会毁掉昼夜分界线，`globe.js:794-798`）+ 太阳（`DirectionalLight 3.4` + sprite 固定画面右上、随 energy 呼吸 ±10%）+ 三层星空（LCG 确定性、极慢反向自转）+ **月球**（110 s 公转 + 月食亮度 EMA `applyMoonEclipse`）+ 大气层（`#274b7a` / altitude 0.16）+ Tier 分级**暖色系**城市光点（`#fff1b8/#ffc14d/#ff7a5c/#5ec8b5`，半径 4 档 `0.20/0.15/0.11/0.08`，`pointsMerge(true)`）+ **黄金角相位呼吸**（±18%，~30 Hz 限流）与拍点包络叠加（`BEAT_AMP 0.5` / 每帧 ×0.94 衰减；`pulseCities` 一次性脉冲已删除）+ 大圆航线 dash 生长（3 档；**车道分层**：`lane` 乘 1/1.34/1.68 弧高 + dash 相位错开）+ 能量驱动自转（`0.00022·(1 + 0.8·energy)`，≈400 s 一天） |
+| 隐藏的旧实现 | `WorldRenderer.kt`（2106 行）+ `WorldMapData.kt` + `WorldProjection.kt` + `WorldTerminator.kt` ≈ **2,840 行**（2106 + 240 + 255 + 239；v1.13 时误写 3300+ —— 已实测四文件 wc -l）—— `grep` 实测只被彼此与 `WorldCities.kt` 的 KDoc 交叉引用（`WorldMapData`/`WorldProjection`/`WorldTerminator` 仅被 `WorldRenderer` + 两个测试文件引用） |
 
 **⛔ 原六条观感精修的处置（逐条）**：
 
 | 原条 | 内容 | 处置 |
 |---|---|---|
-| 1 | 陆地地形纹理（`clipPath` 裁剪颗粒） | ⛔ **作废** —— 无 Canvas；球体是**纯色材质**（`globeImageUrl(null)`） |
+| 1 | 陆地地形纹理（`clipPath` 裁剪颗粒） | ⛔ **作废** —— 无 Canvas；球体现在**已有真彩贴图**（`earth_lit.jpg` + 夜面灯光/大陆辉光壳；v1.13 时还是纯色 `globeImageUrl(null)`，理由已按定稿更新），Canvas 颗粒裁剪思路在 WebGL 下无意义 |
 | 2 | 球面光照错觉（叠 `linearGradient` 覆盖层） | ⛔ **作废** —— 现役是**真 3D 光照**（`AmbientLight` + 2×`DirectionalLight` + Phong 法线）⇒ 已是本条想要的结果的**上游** |
 | 3 | grain tile 接缝（`TileMode.Repeated`） | ⛔ **作废** —— WebGL 版**没有 grain** |
 | 4 | 城市光点 bloom（叠放大小光斑） | ⚠️ **改写** ⇒ 见下面「新观感杠杆 **N3**」 |
@@ -2913,11 +2973,11 @@ private var lyricBmpH = 0
 
 | # | 杠杆 | 现状 | 建议 | 优先级 |
 |---|---|---|---|---|
-| **N1** | **球体材质质感** | `MeshPhongMaterial`（`color 0x0a1424` / `emissive 0x060d1a` / `shininess 8` / `specular 0x14243c`） | 试 `shininess 8 → 24`、`specular → 0x1e3450`（更紧的高光点）；或加一层 `BackSide` 描边球模拟边缘光。⚠️ **必须先真机看** —— Phong 高光在 WebGL1 + 移动 GPU 上极易过曝成白斑 | P2 |
-| **N2** | **大气层层次** | `showAtmosphere(true)` + `atmosphereColor('#274b7a')` + `atmosphereAltitude(0.16)` | 大气强度**已**随 `audio.energy` 呼吸（`globe.js:208` `emissiveIntensity = 0.35 + 0.75·energy`）；可再让**色温**随 `sectionEnergy` 在暖/冷之间漂（`setAudio` 增加一个 `warm` 参数） | P2 |
-| **N3** | **城市光点"夜景感"**（= 原第 4 条的正确落法） | `TIER_RADIUS` 4 档（0.16 / 0.12 / 0.085 / 0.055）+ `TIER_COLOR` 4 档 + `pointsMerge(true)` | 拍点脉冲**已有**（`pulseCities()` 1.55× ⇒ 220 ms 回落）。可加**第二层更小更亮的内芯**（`pointAltitude` 略高、`pointRadius ×0.45`）⇒ 点像"有芯的光斑"。⚠️ **代价**：`pointsMerge(true)` 的合批优势会被第二个 points layer 抵消一部分（多一次 draw call），需实测 | P1 |
-| **N4** | **航线密度与节奏** | 3 档 `KLASS_COLOR` / `KLASS_STROKE` / `KLASS_DASH_MS`（1600 / 2600 / 3800 ms） | `arcDashInitialGap = Math.random()` **已有**（避免齐步走，好）。可让 `arcAltitudeAutoScale(0.5)` 随 `energy` 变化（能量高时航线拱得更高 ⇒ 更"忙"） | P2 |
-| **N5** | **桥接开销**（§四 G16 第二实例） | 每 100 ms：`buildList{}` + `mapOf{}`×N + `gson.toJson` + 字符串模板 | ① `sendAudio()` 改**手写 `StringBuilder`**（固定 5 个浮点，无需 Gson）；② `sendRoutes()` 只在 `activeRoutes` **实际变化**时推（现状每 tick 都推，靠 JS 侧 `lastRoutesKey` 去重 ⇒ **把去重前移到 Kotlin 侧**）；③ `sendCities()` 已是**一次性**（`citiesSent` 守卫），无需改 | P1 |
+| **N1** | **球体材质质感** | `makeGlobeMaterial()`（`globe.js:288-296`：`shininess 8` / `specular 0x14243c`）。**定稿后球面已是真彩贴图**（`earth_lit.jpg`），「暗色纯色球」的前提不复存在 | 试 `shininess 8 → 24`、`specular → 0x1e3450`（更紧的高光点）；或加一层 `BackSide` 描边球模拟边缘光。⚠️ **必须先真机看** —— Phong 高光在 WebGL1 + 移动 GPU 上极易过曝成白斑；且昼夜混合是**自定义 ShaderMaterial** 算的，改 Phong 参数前先确认不与夜面壳叠加冲突 | P2 |
+| **N2** | **大气层层次** | `showAtmosphere(true)` + `atmosphereColor('#274b7a')` + `atmosphereAltitude(0.16)`。⚠️ **原「大气 emissiveIntensity 随 energy 呼吸」（旧公式 `0.35 + 0.75·energy`）定稿已废弃**：emissive 是全表面均匀加光，会把夜面一起抬亮、**昼夜分界线消失**（`globe.js:794-798` 现恒 0.30） | 音频反应**已被上游取代**：定稿把「音频呼吸」移到 `NIGHT_LEVEL` / `CONTINENT_GLOW` / 太阳呼吸 / 自转加速四处（`globe.js:785-807`）。若仍想要大气变化，只剩「色温随 `sectionEnergy` 漂」（`setAudio` 加 `warm` 参数）一条路，但同样有削弱昼夜对比的风险 ⇒ **降级 P3、默认不做** | P3 |
+| **N3** | **城市光点"夜景感"**（= 原第 4 条的正确落法） | **定稿已大改**（真机反馈「城市点看不出来」—— 原 4 级全蓝与蓝色球体同色系、零对比）：配色改**暖色互补系**（`#fff1b8` 暖金 / `#ffc14d` 琥珀 / `#ff7a5c` 珊瑚 / `#5ec8b5` 薄荷青，`globe.js:563-568`）；半径 `0.20/0.15/0.11/0.08`（`:569`）；`pointAltitude 0.02` 抬离球面防 z-fighting；`pointsTransitionDuration(0)`（留 180 ms transition 会让呼吸滞后、动作发黏）。**拍点脉冲已重做**：原「一次性 1.55×、220 ms 回落」（`pulseCities`）已删除，改为**持续呼吸（黄金角相位 ±18%）+ 拍点包络叠加**（`BEAT_AMP 0.5`、每帧 ×0.94 衰减，`globe.js:659-702`）—— 呼吸与拍点互不打断 | 剩余可选：**第二层更小更亮的内芯**（`pointRadius ×0.45`）⇒ 点像「有芯的光斑」。⚠️ **代价**：`pointsMerge(true)` 的合批优势会被第二个 points layer 抵消一部分（多一次 draw call），需实测 | P2 |
+| **N4** | **航线密度与节奏** | 3 档 `KLASS_COLOR` / `KLASS_STROKE`（`1.1/0.75/0.5`，真机反馈「有些粗」已调细）/ `KLASS_DASH_MS`（1600 / 2600 / 3800 ms）。**`arcDashInitialGap` 定稿 = `lane×0.37 + Math.random()×0.12`**（并行车道错相 + 随机微扰，`globe.js:626-628`）；**弧高显式给出**（`:614-618`：`span/180×0.22` 兜底 0.05，`lane` 乘 1/1.34/1.68 **分层错开**）⇒ ⛔ **无 `arcAltitudeAutoScale`**（`:621` 注释明说：已给显式 arcAltitude，自动缩放是**死配置**） | 原建议「让 `arcAltitudeAutoScale` 随 energy 变化」**作废**（死配置）。新落法：在 `arcAltitude` 闭包里乘 `1 + 0.2·audio.energy` —— 但 accessor 只在 `arcsData` 重建时求值，随能量重算弧高会连带弧线几何重建，**代价大，默认不做**（P3） | P3 |
+| **N5** | **桥接开销**（§四 G16 第二实例） | 每 100 ms：`buildList{}` + `mapOf{}`×N + `gson.toJson` + 字符串模板。**定稿已做掉建议②**：`sendRoutes()` 现已在 **Kotlin 侧内容去重**（`WorldGlobeRenderer.kt:516-521`：序列化后与 `lastRoutesJson` 比较，无变化不 `evaluateJavascript`；JS 侧 `lastRoutesKey`（`globe.js:655/714`）保留为双保险）。⚠️ 空列表**也必须发**（「没音乐就没航线」后若提前 return，JS 会一直持有最后一批航线，暂停也不消失）。桥接参数新增 **lane** 字段（并行车道号）。**仍待做**：`sendAudio()` 还是 `mapOf + gson.toJson`（`:484-493`，固定 5 个浮点）；`sendCities()` 已一次性（`citiesSent` 守卫），无需改 | 剩余：`sendAudio()` 改**手写 `StringBuilder`**（P2 —— 每秒 10 次的固定开销里 `evaluateJavascript` 本身占大头，收益有限） | P2 |
 
 **⛔ 明确不做**：
 1. **不把 E41 改回 Canvas**（已裁决 **§13.5-D6**）—— three-globe 是**已落地**的实现，回退成本远大于收益。
@@ -2926,7 +2986,7 @@ private var lyricBmpH = 0
 4. **不动 `assets/globe/` 的库版本** —— `three.min.js` ≤ r162 是 **WebGL1 兜底的上限**（r161+ 不再发布 UMD）；`three-globe.min.js` 2.45.2 的 peerDep 是 `three >= 0.154`。
 
 **验收**：**V28（已重写）** + **V31（新增）**。
-- **观感**：球体有**明确的球面明暗**（不是平涂）；大气层**有一圈可见辉光**；32 个城市点**分层可辨**（Tier1 明显大于 Tier4）；航线**可见生长**（同位置相隔 1 s 两张截图，dash 位置不同）。
+- **观感**：球体有**明确的昼夜分界线**（真彩贴图 + 夜面灯光壳，背光面可见城市灯带 —— 不是平涂）；大气层**有一圈可见辉光**；32 个城市点**暖色、分层可辨**（Tier1 明显大于 Tier4，且与蓝色球体有互补对比）；并行航线**分层错开**（同走廊多条不重叠成一条）；航线**可见生长**（同位置相隔 1 s 两张截图，dash 位置不同）。
 - **性能**：`adb shell dumpsys gfxinfo` 的 **Compose 口径几乎为 0**（View 型不经 DrawScope）⇒ 必须换 **WebView 侧口径**（`chrome://inspect` 的帧率，或 AppLog 打点），判据 = **不出现持续掉帧**。
 - **生命周期（必过）**：切走 E41 后 `onViewDetached` 必须执行（日志有 `removeView` + `destroy`）；**连续切换 10 次不涨内存**（`adb shell dumpsys meminfo` 前后对比）。
 
@@ -3005,7 +3065,7 @@ private var lyricBmpH = 0
 | MEDIUM | ≤ 3 | ≤ 120 | 暗角 1 + 颗粒 1 + 纹理 1 |
 | HIGH | ≤ 8（含离屏 4） | ≤ 200 | 沿用既有"单帧 ≤200 独立绘制指令"约束（`AdvancedRenderers.kt:34-35`） |
 
-### 7.5 全量成本实测表（28 套 · MEDIUM 档 · 自动生成 · v1.10 新增）
+### 7.5 全量成本实测表（28 套 · MEDIUM 档 · 自动生成 · v1.10 新增 · **v1.35 重算**）
 
 > **口径**：`logs_temp/renderer_cost_audit.py`（结构：绘制原语 / 循环 / 分配点）+
 > `logs_temp/renderer_loop_estimate.py`（次数：调用点 × **可解析的循环次数**，循环次数
@@ -3018,43 +3078,46 @@ private var lyricBmpH = 0
 
 | 类（效果） | 文件 | 绘制原语/帧 | 路径·文本 JNI/帧 | 分配/帧 | 未解析 |
 |---|---|---:|---:|---:|---:|
-| `ConstellationRenderer`（E17 星座） | AdvancedRenderers.kt | 2 | **51,362**（上界，见注①） | 160 | 0 |
-| `LiquidGridRenderer`（E13 液态网格） | AdvancedRenderers.kt | 5 | **1,382** | 0 | 1 |
-| `HypnoticFunctionRenderer`（E25 催眠） | HypnoticFunctionRenderer.kt | 9 | 754 | 5 | 8 |
-| `WorldRenderer`（E41 世界 · **旧实现，已隐藏**） | WorldRenderer.kt | **491** | 72 | 73 | 1 |
-| `VintageTvRenderer`（E38 怀旧） | VintageTvRenderer.kt | **457** | 1 | 12 | 5 |
-| `MatrixRainRenderer`（E16 数字雨） | AdvancedRenderers.kt | **456**（448 blit + 8 字形） | 1 | 8 | 0 |
-| `LyricsDotMatrixRenderer`（E23 歌词点阵） | LyricsDotMatrixRenderer.kt | 7 | 405 | **406** | 2 |
-| `FrequencyMountainRenderer`（E07 频率山峦） | BasicRenderers.kt | 10 | 255 | 0 | 0 |
-| `OrigamiPolyRenderer`（E31 折纸） | BatchThreeRenderers.kt | 49 | 192 | 0 | 0 |
-| `FractalTreeRenderer`（E34 分形） | BatchFourRenderers.kt | **240** | 0 | 0 | 1 |
-| `ConcentricGearsRenderer`（E33 齿轮） | BatchFourRenderers.kt | **231** | 0 | 18 | 9 |
-| `BeatFireworkRenderer`（E14 节拍烟花） | ParticleRenderers.kt | 151 | 65 | 64 | 0 |
-| `LiquidRippleRenderer`（E15 液态涟漪） | AdvancedRenderers.kt | 200 | 0 | 0 | 0 |
-| `ParticleTextRenderer`（E19 粒子文字） | ParticleRenderers.kt | 151 | 0 | 2 | 1 |
-| `PlasmaFlowRenderer`（E20 等离子流场） | UltraRenderers.kt | 151 | 0 | 0 | 0 |
-| `OrbitalRingsRenderer`（E29 轨道） | BatchTwoRenderers.kt | 138 | 1 | 1 | 4 |
+| `ConstellationRenderer`（E17 星座） | AdvancedRenderers.kt | 9 | 805 | 0 | 0 |
+| `HypnoticFunctionRenderer`（E25 催眠） | HypnoticFunctionRenderer.kt | 12 | 754 | 5 | 14 |
+| `OrigamiPolyRenderer`（E31 折纸） | BatchThreeRenderers.kt | 52 | 626 | 0 | 0 |
+| `LiquidGridRenderer`（E13 液态网格） | AdvancedRenderers.kt | 12 | 626 | 0 | 4 |
+| `WorldRenderer`（E41 世界 · **旧实现，已隐藏**） | WorldRenderer.kt | 491 | 72 | 38 | 12 |
+| `VintageTvRenderer`（E38 怀旧） | VintageTvRenderer.kt | 457 | 2 | 10 | 9 |
+| `MatrixRainRenderer`（E16 数字雨） | AdvancedRenderers.kt | 478 | 1 | 16 | 0 |
+| `LyricsDotMatrixRenderer`（E23 歌词点阵） | LyricsDotMatrixRenderer.kt | 7 | 405 | 7 | 1 |
+| `FrequencyMountainRenderer`（E07 频率山峦） | BasicRenderers.kt | 18 | 270 | 5 | 0 |
+| `FractalTreeRenderer`（E34 分形） | BatchFourRenderers.kt | 245 | 8 | 0 | 1 |
+| `ConcentricGearsRenderer`（E33 齿轮） | BatchFourRenderers.kt | 231 | 0 | 18 | 12 |
+| `BeatFireworkRenderer`（E14 节拍烟花） | ParticleRenderers.kt | 162 | 373 | 0 | 0 |
+| `WaterfallRenderer`（E12 频谱瀑布） | AdvancedRenderers.kt | 20 | 177 | 0 | 1 |
+| `LiquidRippleRenderer`（E15 液态涟漪） | AdvancedRenderers.kt | 163 | 0 | 1 | 0 |
+| `ParticleTextRenderer`（E19 粒子文字） | ParticleRenderers.kt | 4 | 460 | 5 | 0 |
+| `PlasmaFlowRenderer`（E20 等离子流场） | UltraRenderers.kt | 10 | 1 | 0 | 2 |
+| `OrbitalRingsRenderer`（E29 轨道） | BatchTwoRenderers.kt | 133 | 1 | 1 | 4 |
+| `EcgWaveRenderer`（E24 心跳） | EcgWaveRenderer.kt | 16 | 115 | 2 | 2 |
 | `DnaRenderer`（E40 DNA 双螺旋） | DnaRenderer.kt | 119 | 0 | 0 | 0 |
-| `MoleculeRenderer`（E37 分子） | MoleculeRenderer.kt | 75 | 4 | 8 | 5 |
-| `EcgWaveRenderer`（E24 心跳） | EcgWaveRenderer.kt | 19 | 57 | 1 | 0 |
-| `WaterfallRenderer`（E12 频谱瀑布） | AdvancedRenderers.kt | 66 | 0 | **64** | 0 |
-| `MilkdropRenderer`（E18 反馈残像） | UltraRenderers.kt | 66 | 0 | 0 | 0 |
-| `RadarGridRenderer`（E30 雷达） | BatchThreeRenderers.kt | 47 | 0 | 1 | 1 |
-| `CircularRingRenderer`（E05 圆形频谱环） | BasicRenderers.kt | 20 | 1 | 0 | 5 |
-| `LightBeamsRenderer`（E35 光轴） | BatchFourRenderers.kt | 3 | 2 | 0 | 3 |
-| `StaircaseWaveRenderer`（E32 阶梯） | BatchThreeRenderers.kt | 5 | 0 | 0 | 0 |
-| `TunnelRenderer`（E03 隧道穿越） | BasicRenderers.kt | 3 | 1 | 0 | 1 |
-| `GalaxySpiralRenderer`（E11 星系螺旋） | AdvancedRenderers.kt | 3 | 0（但 **880 次 `addOval` 在循环里，脚本因 `Rect` 未计入**） | 2 | 2 |
-| `WorldGlobeRenderer`（E41 世界 · **现役**，View 型 ⇒ `draw` 不被调用） | WorldGlobeRenderer.kt | **0** | **0** | **0** | 0 |
+| `MoleculeRenderer`（E37 分子） | MoleculeRenderer.kt | 75 | 2 | 8 | 6 |
+| `MilkdropRenderer`（E18 反馈残像） | UltraRenderers.kt | 133 | 0 | 0 | 0 |
+| `StaircaseWaveRenderer`（E32 阶梯） | BatchThreeRenderers.kt | 10 | 14 | 1 | 0 |
+| `TunnelRenderer`（E03 隧道穿越） | BasicRenderers.kt | 21 | 2 | 0 | 3 |
+| `CircularRingRenderer`（E05 圆形频谱环） | BasicRenderers.kt | 14 | 2 | 0 | 6 |
+| `RadarGridRenderer`（E30 雷达） | BatchThreeRenderers.kt | 16 | 0 | 3 | 2 |
+| `GalaxySpiralRenderer`（E11 星系螺旋） | AdvancedRenderers.kt | 7 | 5 | 0 | 3 |
+| `LightBeamsRenderer`（E35 光轴） | BatchFourRenderers.kt | 10 | 16 | 2 | 13 |
+| `WorldGlobeRenderer`（E41 世界 · **现役**，View 型 ⇒ `draw` 不被调用） | WorldGlobeRenderer.kt | 0 | 0 | 0 | 0 |
 | `PhotoRenderer`（E39 照片墙） | PhotoRenderer.kt | 0 | 0 | 0 | 0 |
-| **合计** | | **3,174** | **54,555**（上界） | **825** | 49 |
+| **合计** | | **2925** | **4737** | **122** | 95 |
 
-> **注①**：`ConstellationRenderer` 的 51,362 是**上界** —— 脚本把 `if (d2 < linkDist²)` 当成恒真，
-> 于是把 160×159/2 = 12,720 对连线全算成 2 次路径写入。真实值 = 12,720 × 2 × **命中率**。
-> 但**12,720 次迭代本身是每帧必然发生的**（浮点乘法，不涉 JNI）⇒ 这一套的瓶颈是 **CPU**，不是 JNI。
+> **注①（v1.22 改写）**：`ConstellationRenderer` 的路径·文本数已从 v1.10 登记的 **51,362** 降到
+> **805** —— 那是 §A7-3「**空间网格分桶**」的成果（T3.3 落地）：连线判定由 O(n²)（160×159/2 = 12,720 对）
+> 改为「邻接 9 桶」，**判定次数下降 12.94×**（`logs_temp/s17_constgrid.py` 实测，与 O(n²) 参考实现
+> 在 108 组场景下逐对比对完全一致）。⚠️ v1.10 的 51,362 是**旧实现的 CPU 上界**，不是 JNI 真值 ——
+> 保留这句话只为留痕：**那一版每帧必然跑 12,720 次迭代**（浮点乘法），瓶颈在 CPU。
 > **注②**：`GalaxySpiralRenderer` 的 16 臂 × 55 = **880 次 `addOval`** 在脚本里被归到"分配"
 > （每个 `addOval(Rect(...))` 分配 2 个 `Rect` + 1 个 `Offset`），所以"绘制原语"列只有 3 ——
 > **读这张表时必须三列一起看**，任何一列为 0 都不代表这套效果便宜。
+> **注②-v1.26 更正**：**T4.1（§B1）重写 E11 后本条已不成立** —— 星点改用 `asAndroidPath().addOval(l, t, r, b)`（`android.graphics.Path` 的 4-float 重载，§四 G15 已核实**零分配**）⇒ 脚本「分配」列 **2 → 0**、「绘制原语」列 **3 → 7**。本条描述的「880 次 `addOval` 归到分配」**只对 v1.24 及更早的实现成立**。
 > **注③**：脚本对"可达但被缓存短路"的调用会**高估**（例：`MatrixRainRenderer.buildGlyphs`
 > 从 `draw()` 可达，其中的 8 次 `drawText` 被计入，实际只在尺寸/列数变化时执行一次）。
 > ⇒ **§7.5 只用于"决定先量哪几套"，不能当成判据**（§九 R18）。
@@ -3070,11 +3133,62 @@ private var lyricBmpH = 0
 > **0 / 0 / 0** **不代表它便宜** —— 它的成本在 **WebView/WebGL**（GPU 侧）与
 > **每 100 ms 一次的桥接分配**（§四 G16 第二实例），**都不在本表的统计口径内**。
 
+> **注⑥（v1.22 · 本表重算的原因）**：`logs_temp/renderer_loop_estimate.py` 原先只认
+> `override fun DrawScope.draw(` 作为入口 —— 自 S1.5 起迁到 `RendererFx` 的子类只有
+> `override fun DrawScope.drawContent(` ⇒ 这 **9 套**（E03 / E05 / E07 / E12 / E13 / E15 / E17 / E24 / E30）
+> 曾**整类从表里消失**（静默漏统计，比没有这张表更糟）。已修（入口接受 `draw` 或 `drawContent`，
+> 并把 `onEnterContent` / `onExitContent` 归入生命周期），本表据**修好后的脚本**全量重算。
+> ⚠️ 重算后 9 套里 **4 套的原语数上升**（`TunnelRenderer` 3 → 21、`FrequencyMountainRenderer` 10 → 18、
+> `LiquidGridRenderer` 5 → 12、`ConstellationRenderer` 2 → 9）—— 不是本轮引入的回归，而是
+> **v1.10 之后各批次真实新增的绘制**（§A1–§A7 的质感改造）第一次被量到。
+> ⚠️ 「路径·文本」列对 `when` 分支会**按调用点数**计（三支各算一次）⇒ `OrigamiPolyRenderer` 的
+> 626 里**实际每帧只执行约 1/3**（≈ 210）；口径与原表一致，读表时按此折减。
+> **注⑦（v1.26 · 口径修复 + 一处残留盲区）**：本次重算前**修掉了脚本的一个真 bug**：
+> `split_functions` 原先用「`fun` 之后第一个 `{`」当函数体，对**单表达式函数**
+> （`fun f(...): T = expr`）会**一路吃到后面某个函数的 `{`**，把中间整段代码
+> （含**其它函数的调用**）当成本函数的体。老实现想用 `re.search(r"\)\s*=")` 兜住，
+> 但**带显式返回类型**时 `)` 后面是 `: Offset =`，该正则匹配不上 ⇒ 漏网。
+> ⚠️ **暴露点**：`OrbitalRingsRenderer.project`（`): Offset =`）被误判为**自调用**，
+> 在「调用点加权」口径下把该类的次数**顶到饱和上限**（3,000,227）—— 环是假象，根因是切错体。
+> 修法：**先匹配参数表右括号，再看它之后先遇到 `{` 还是 `=`**；`renderer_loop_estimate.py --selftest`
+> 有 **14 条自证（含 2 条负向：老实现必须切错）**。修复影响 **5 行**：`WorldRenderer` 分配
+> **73 → 38**、`MatrixRainRenderer` **464/2/16 → 456/1/8**、`OrbitalRingsRenderer` **138/1/1 → 133/1/1**、
+> `MoleculeRenderer` 路径 **4 → 2**、`StaircaseWaveRenderer` 分配 **3 → 1**；合计分配 **153 → 108**。
+> ⛔ **残留盲区（本次**不**修，只登记）**：脚本**不知道一个 helper 被调用了几次** ——
+> helper 体内的 `moveTo/lineTo/drawRoundRect` 永远只按 **1 次**计入。于是「**把绘制搬进私有 helper**」
+> 这种重构会让数字**骤降，哪怕工作量一点没少**。`StaircaseWaveRenderer` 就是活例：T3.7（§A11 六条）
+> 拆出 `drawBlock`/`addAxisRect`/`addRotRect`/`addShards` 后，路径列 **739 → 14**，
+> 而 14 恰好 = `addAxisRect` 体内 4 + `addRotRect` 体内 4 + 6 次 `reset()`，**与"画了多少方块"无关**。
+> `logs_temp/s17_cost_weighted.py`（调用点加权口径）实测同代码路径列 ≈ **16,470**（≈ 旧口径的 **1176 倍**）；
+> 加权后 30 行里 **8 行**变化。⇒ ⛔ **本表只可用于「同口径下的相对排序 / 决定先量哪几套」，
+> 禁止用于「改造前 vs 改造后」的绝对对比**（§九 R18 的立场由此从"提醒"升级为"硬约束"）。
+> ⚠️ 另：**注①–注⑥ 里引用的具体数字属各自版本的口径**（例：注④ 的 `138 / 1 / 1` 在 v1.26 已是
+> **133 / 1 / 1**），只作留痕，**不要**拿它们与当前表体逐格核对。`RendererFx`（抽象基类，全 0）
+> 不进本表 —— 本表只列效果实现类。
+
+
 > **怎么用这张表**（与 §7.4 的关系）：§7.4 给的是"**后处理**额外 draw 的预算"（新增开销），
 > §7.5 给的是"**现状**每帧总成本"（存量开销）。两者相加才是改造后的上限：
 > `现状原语数 + 后处理额外 draw ≤ §7.4 的单效果总 draw 上限`。
-> ⚠️ 按此式核对，**当前已有 4 套超 MEDIUM 档上限（120）**：E38 怀旧 457、
-> E16 数字雨 456、E34 分形 240、E33 齿轮 231 —— 它们**本来就该先做减法，再谈加后处理**。
+> ⚠️ 按此式核对，**当前已有 8 套超 MEDIUM 档上限（120）**：E16 数字雨 478、E38 怀旧 457、E34 分形 245、E33 齿轮 231、E15 液态涟漪 163、E14 节拍烟花 162、E29 轨道 133、E18 反馈残像 133（**v1.29 新增**）
+> ⛔ **v1.30**：E19 粒子文字由 **151 → 4**（合批成 3 条 `drawPath`）⇒ **移出该名单**（**9 套**）。⚠️ 它移出的依据是**「绘制原语」列**；E19 的「路径·文本」列反而升到 460 —— 那是**采样路径**（仅在 `caption` 变化时执行一次），不属「每帧绘制原语」口径。
+> ⛔ **v1.31**：E20 等离子流场由 **151 → 10**（1 张 tile `drawImage` + 1 次渐变 `drawRect` + 桶循环内**单一** `drawPath` 调用点 × 8 桶）⇒ **移出该名单**（**8 套**）。⚠️ 移出依据同样是**「绘制原语」列**；「路径·文本」列 **0 → 1**（`for (p in bucketPaths) p.reset()`），而 `moveTo`/`lineTo` 因**外层循环上界（`xs.size`）不可解析**被计入「未解析」（**0 → 2**）。
+> ⛔ **v1.32**：E23 歌词点阵的「绘制原语」列 **7 不变** ⇒ **仍在「超 MEDIUM 档上限」名单之外**（名单仍 **8 套**）。⚠️ 本版只动两列，且**都不是真实成本上升**：① 「分配」**6 → 7** —— P2 新增的 `rowBuf`（`IntArray(bmpW)` ≈ 7 KB，**跨次复用**）被记入该列；② 「未解析」**3 → 1** —— 原 `b.getPixel(x, y)` 的 **2 处未解析调用点随 P2 一起消失**（它们落在 `for (x in 0 until bmpW step step)` 里，而 `step` 当时是**非常量局部量** ⇒ 循环上界不可解析 ⇒ 整条调用点只记进「未解析」列、不进数值列）。⚠️ 这正是 §四 G15 那一族「**工具自身的可解析性会伪装成成本变化**」。
+> ⛔ **v1.33**：E25 催眠的「绘制原语」列 **9 → 12（+3）** ⇒ 12 远低于 MEDIUM 档上限 **120**，**仍在「超 MEDIUM 档上限」名单之外**（名单仍 **8 套**）。⚠️ 与 v1.32 注**性质不同**：那版的列变化纯属**脚本可解析性**（工具口径），**本版 +3 是真实新增的每帧绘制调用** —— ① §B8-② 的高光线在 **DRAW / HOLD 两态**各 1 次 `drawPath`（**+2**）；② §B8-③ 的 PAPER 底纹 1 次 `drawImage`（**+1**）。其余三列（路径·文本 **754** / 分配 **5** / 未解析 **14**）**全不变**。
+> ⛔ **v1.34**：E34 分形的「绘制原语」列 **240 → 245（+5）**、「路径·文本」列 **0 → 8** ⇒ ⚠️ **E34 本来就在**「超 MEDIUM 档上限（120）」名单内（240 > 120），改后 **245 仍超限** ⇒ **名单仍 8 套**（只是该行数字 240 → 245）。⚠️ 两列变化**都是真实成本上升**（不是工具口径）：① 径向纵深 1 次 `drawRect`（+1）；② 星野 1 次 `drawImage`（+1）；③ 叶落笔 1 个调用点 × `LEAF_BUCKETS`(3) = 3 次 `drawPath`（+3）；④ 路径列 8 = `moveTo`(1) + `cubicTo` × `LEAF_CUBIC_SEGS`(4) + `rewind` × 3。⛔ **但表里 8 仍低估了叶形成本**：脚本**不把「循环体内调用的 helper」按调用次数放大**（`buildLeaf` 在 128 次的 `while (i < segCount)` 里只算 1 次）⇒ 真实路径顶点写入 ≈ **640/帧**（128 片叶 × 5），属 §四 G15 同族；**不据此改表**（口径统一），仅在类 KDoc 与 §12.4 写明。
+> ⛔ **v1.35**：E35 光轴的「绘制原语」列 **3 → 10**、「路径·文本」列 **2 → 16**、「分配」列 **0 → 2**、「未解析」列 **4 → 13** ⇒ ⚠️ **10 ≪ 120** ⇒ E35 **仍在**「超 MEDIUM 档上限（120）」名单**之外** ⇒ **名单仍 8 套**（本行不进入名单枚举）。⚠️ 四列变化**全部是真实成本上升**（不是工具口径）：① 雾 tile 1 次 `drawImage`（+1）；② 尘埃 3 桶合批 1 个调用点 × `DUST_BUCKETS`(3) = 3 次 `drawPath`（+3）；③ 中心光核 2 次 `drawCircle`（+2）；④ 镜头光斑 1 次 `drawCircle(brush=…)`（+1）；⑤ 六芒 1 个调用点 × `FLARE_SPOKES`(3) = 3 次 `drawLine`（+3）；⑥ 路径列 16 = 尘埃 `rewind` × 3 + `addDot`(1 `moveTo` + 4 `cubicTo`) + `ensureBeamGeometry`(2 `moveTo` + 6 `lineTo`)；⑦ 分配列 2 = `ensureBeamGeometry` 的 `Path()` × 2。⛔ **「未解析」4 → 13 的成因**：光束主循环上界 `while (i < beamCount)` 的 `beamCount` 是**运行期 `var`**（按画质赋值 LOW 4 / MEDIUM 6 / HIGH 8，`onEnterContent` 内，生命周期不计入调用图）⇒ 脚本解析不出 ⇒ 该循环内的 6 个 `drawPath` 调用点、3 个路径写入（`dashPath` 的 `rewind` / `moveTo` / `lineTo`）与 4 个 `withTransform` 全部只记「未解析」（6 / 3 / 4）。⚠️ **这是下界**：真实每帧 draw ≈ `beamCount` × 2 + 3 + 2 + 1 + 3 + 1 = **22**（MEDIUM），与 §四 G15 / v1.26 注⑦ 同族（脚本不把「循环体内调用的 helper」按调用次数放大）—— **不据此改表**（口径统一），仅在类 KDoc 与 §12.4 写明。
+> —— 它们**本来就该先做减法，再谈加后处理**。
+> ⚠️ **v1.22 更正**：原文写「4 套」（457 / 456 / 240 / 231）与「> 120」的口径**不符** ——
+> 那 4 个只是「> 200」的；按「绘制原语 > 120」（排除已隐藏的 `WorldRenderer`）实为 **8 套**。
+> ⚠️ **v1.37 订正**：原写 **9 套** —— 那第 9 套就是**已隐藏的 `WorldRenderer`（491）**本身，与本行
+> 「排除已隐藏的 `WorldRenderer`」的前提**自相矛盾**，且与 v1.35 自述的「名单仍 8 套」打架。
+> 逐行复核（>120 的在册项）：`MatrixRain` 478 / `VintageTv` 457 / `FractalTree` 245 /
+> `ConcentricGears` 231 / `LiquidRipple` 163 / `BeatFirework` 162 / `Milkdrop` 133 / `OrbitalRings` 133 = **8**。
+> ⚠️ **v1.44 订正：`MatrixRain` 已退出该名单 ⇒ 在册超上限者为 7 套。** 列条合并（P-1 第二步）把内层
+> `for (k in 0 until perCol)` **整段删除**，每帧绘制原语从「`n × perCol` 448 + 零头 = 478」降到
+> **`n` 本身**（LOW 24 / MEDIUM 32 / HIGH 48），叠 `PostFx` 的暗角+颗粒+扫描线 3 次 ≈ **35**（MEDIUM）。
+> ⚠️ 该列口径**不变**（仍是「调用点 × 可解析循环次数」），是**真实成本下降**，不是工具修正。
+> 上方的 478 / 456 等历史数字**不回改**（它们记录的是当时口径下的实测）。
 > ⚠️ **v1.13 更正**：原写的 **5 套**含「E41 世界 491」，但 E41 已于 2026-09-29 换成
 > View 型 `WorldGlobeRenderer`（Kotlin 侧绘制原语 = **0**）⇒ **E41 退出该名单**（491 是
 > **已隐藏的旧 2D 实现**的数字）。⇒ 旧结论"**E41 世界是 §7.5 表里最贵的一套**"**已不成立**
@@ -3154,7 +3268,7 @@ JAVA_HOME="C:/Program Files/Android/Android Studio/jbr" \
 | R17 | **去掉/条件化 `CompositingStrategy.Offscreen` 后 `BlendMode.Plus` 的合成结果可能变化**（G14） | §十 **S1.7 · T1.7.1**（只在 `fadeAlpha < 1f` 时挂 `Offscreen`） | 若 hwui 对非 `SrcOver` 混合真的"每个 op 一次 `saveLayer`"，那么去掉整屏层会让**每个 `Plus` 各建一层** ⇒ **反而更慢**；反之若 hwui 能直接画，则去掉整屏层是大赚。若合成退化为 `SrcOver`，则发光层**变暗/不透** ⇒ 多套效果观感变化（`BatchFourRenderers` 有 24 处 `Plus`） | ① **必须截图比对**（同尺寸/同歌/同进度），重点看 E33 齿轮 / E24 心跳 / E23 歌词点阵 / E25 催眠 / E37 分子；② 帧耗时下降 ≥ 15% 才保留，否则**回退**并把优化预算转投 G15/G16/G17；③ ⛔ 不得在未比对的情况下提交；④ 结论写入 §12.4 偏差记录与 §15.4-A47 |
 | R18 | **§7.5 的所有数字都是静态估算，不是真机实测** | 直接照 §7.5 的排序做优化 | 优化了**不是瓶颈**的那一项（白干），或漏掉真正的瓶颈（例：电视上可能是 GPU 填充率而不是 CPU） | ① 每套效果改动前**先量一次** `adb shell dumpsys gfxinfo com.nasmusic.tv`；② **电视与手机各量一次，以电视为准**；③ §7.5 只用于"决定先量哪几套"；④ §十 S1.7 的 4 项**每项单独提交、单独量**，可单独回退 |
 | R19 | **星野降级"过头"** ⇒ 背景太空、失去星空感（§C1 第 0 条 P0-1 / P0-2） | 幂律指数取太大（`u⁴` 以上）、`STAR_A_MIN` 取太小（< 0.08f）、或静默区半径取太大（> 0.25） | 远景变纯黑、效果像"没有背景"，与用户诉求（"不影响主体"）方向相反 —— 用户要的是**层级**，不是**去掉背景** | ① **不改数量**（140 星保持）—— 数量不是主要矛盾，减数量换不来"变小"只会换来"变空"（反事实 ④）；② 幂律指数**固定为 3**、`STAR_A_MIN` **固定 0.12f**、`QUIET_R` **固定 0.15f**（都在 §13.5-D5 里钉死）；③ 上机验收按 **V30 ②**："远景区应能看到**大量几乎不可辨的极暗小点**" —— 若远景一片纯黑，说明降过头，**回调 `STAR_A_MIN` 到 0.15f**（仍 < 0.25 的旧下限）；④ ⛔ 不得用"提高上限"的方式换回星空感（那正是被修掉的缺陷） |
-| R20 | **E41 世界的 WebView 承载方式带来的新风险**（§C7 / §13.5-D6） | ① WebView 生命周期管理不当（未 `removeView` 就 `destroy`、或 `destroy` 时机早于 detach）⇒ 崩溃或内存泄漏；② **Android 5.1.1（电视）的 WebView 未必支持 WebGL1**（或支持但极慢）⇒ 电视上黑屏/卡顿；③ `shouldInterceptRequest` 若返回 `null` ⇒ WebView fallback 真联网（保留域无公网 DNS ⇒ 国内失败 ⇒ 黑屏）；④ 每 tick 的 `evaluateJavascript` 在页面卸载竞态下抛异常（现已被 `try/catch` 静默）；⑤ **诊断代码残留**：`WorldGlobeRenderer.kt:138` 的 `AppLog.e("WorldGlobe", "intercept: $url")` **对每个请求都打一行日志**（含 `serving …` / `globals after load` / `JS[...]`），release 包里会造成日志洪水（§15.7 第 20 条） | ① **必须先上机验证**（V31 ①–⑤）—— ⛔ 在电视上验证之前，**不要假设 E41 在电视上可用**；② 若电视不可用：优先「**按设备隐藏该效果**」（`VisualizerRendererFactory.availableThemes()` 过滤）而不是回退旧 2D 实现（旧实现每帧 491 原语，在电视上更慢）；③ `onViewDetached` 保持 `post{ removeView + destroy }` 的顺序（`WorldGlobeRenderer.kt:219-225`）；④ 资产域内请求**永不返回 `null`**（`:143-159`，解析失败也返回空 body）；⑤ **上机验证通过后清理诊断日志**（保留 `onReceivedError` / `onConsoleMessage` 的**降级为 debug 级**或加开关，删掉逐请求的 `intercept:` 打印）；⑥ 若将来 View 型渲染器增多，应把"View 型旁路契约"单独门禁化（`isViewBased` 为 true ⇒ `draw` 必须为空实现 + 必须实现 `createView`），现暂以 §八 G7 的第 ④ 条自证代替 |
+| R20 | **E41 世界的 WebView 承载方式带来的新风险**（§C7 / §13.5-D6） | ① WebView 生命周期管理不当（未 `removeView` 就 `destroy`、或 `destroy` 时机早于 detach）⇒ 崩溃或内存泄漏；② **Android 5.1.1（电视）的 WebView 未必支持 WebGL1**（或支持但极慢）⇒ 电视上黑屏/卡顿；③ `shouldInterceptRequest` 若返回 `null` ⇒ WebView fallback 真联网（保留域无公网 DNS ⇒ 国内失败 ⇒ 黑屏）；④ 每 tick 的 `evaluateJavascript` 在页面卸载竞态下抛异常（现已被 `try/catch` 静默）；⑤ ~~诊断代码残留~~ **v1.17 定稿复核解除**：逐请求 `intercept:` 日志与 `globals after load` 探针**已删除**，定稿只剩 3 处 `AppLog`（`:224` `asset not found, serving empty` 仅 catch 分支 / `:241` `onReceivedError` → `page/resource error` / `:249` `onConsoleMessage` 转发 JS console）⇒ 日志洪水风险基本消除；剩余小项：`onConsoleMessage` 的逐条转发可降级或加开关（§15.7 第 20 条） | ① **必须先上机验证**（V31 ①–⑤）—— ⛔ 在电视上验证之前，**不要假设 E41 在电视上可用**；② 若电视不可用：优先「**按设备隐藏该效果**」（`VisualizerRendererFactory.availableThemes()` 过滤）而不是回退旧 2D 实现（旧实现每帧 491 原语，在电视上更慢）；③ `onViewDetached` 保持 `post{ removeView + destroy }` 的顺序（`WorldGlobeRenderer.kt:219-225`）；④ 资产域内请求**永不返回 `null`**（`:143-159`，解析失败也返回空 body）；⑤ **上机验证通过后清理诊断日志**（保留 `onReceivedError` / `onConsoleMessage` 的**降级为 debug 级**或加开关，删掉逐请求的 `intercept:` 打印）；⑥ 若将来 View 型渲染器增多，应把"View 型旁路契约"单独门禁化（`isViewBased` 为 true ⇒ `draw` 必须为空实现 + 必须实现 `createView`），现暂以 §八 G7 的第 ④ 条自证代替 |
 
 
 **明确不做（范围守卫）**：
@@ -3212,10 +3326,15 @@ JAVA_HOME="C:/Program Files/Android/Android Studio/jbr" \
 
 ### 11.1 通用（每批次都跑）
 
-- [ ] **U1** 电视上连续播放 ≥ 30 分钟，无闪退、无 ANR
+- [x] **U1** 电视上连续播放 ≥ 30 分钟，无闪退、无 ANR —— ✅ **通过**（v1.41 · 2026-10-01 14:58–15:28
+      真机 v2.38.0 release / 创维电视 Android 5.1.1。脚本 `logs_temp/u1_watch.sh`：清 logcat → 每 20 s
+      扫 `FATAL EXCEPTION` / `ANR in com.nasmusic.tv` / `Force finishing activity` + 核对 `pidof`，
+      结果 **pid 4513 全程未重启、命中 0 行**。⚠️ 窗口内含 3 次效果切换 + 1 次画质档切换）
 - [ ] **U2** 切换全部已改造效果，切换过程**无黑屏/无卡顿**。✅ **已启用 600ms 交叉淡入**（§十三 裁决项 4 / §13.5-D3）⇒ 额外确认三条：① 淡入**平滑**（不是"闪一下"）；② 切换**总耗时**仍 ≤ 1 s（不能因为 600ms 淡入让用户觉得"按了没反应"）；③ ⚠️ **E41 世界进出场仍是硬切**（View 型不参与淡入，`VisualizerStage.kt:347-348`）—— 这是**已知行为，不是缺陷**
 - [ ] **U3** `adb shell dumpsys gfxinfo com.nasmusic.tv` 帧耗时：改造后**不高于**改造前（同效果对比）
-- [ ] **U4** LOW 档下后处理**完全不生效**（对照截图：LOW 档画面应与改造前一致）
+      ⚠️ **本机 `gfxinfo` 帧统计恒空**（API 22，launcher 亦空）⇒ 改量法见 **§11.3.3**，
+      脚本 `logs_temp/sf_sample.sh`；且"改造前"基准包（`ca23876`）**尚未产出** ⇒ 本条当前**不可执行**。
+- [x] **U4** LOW 档下后处理**完全不生效**（对照截图：LOW 档画面应与改造前一致）—— ✅ **通过**（v1.41，判据与截图见 §11.3.6）
 - [ ] **U5** 竖屏（手机）下暗角形状**正确**（不是按宽度算的扁暗角）
 - [ ] **U6**（v1.10 新增）电视上**逐个效果**量 `adb shell dumpsys gfxinfo com.nasmusic.tv` 帧耗时，
       与 §7.5 表的估算排序对照（**估算只是排序依据，不是判据** —— §九 R18）
@@ -3224,7 +3343,7 @@ JAVA_HOME="C:/Program Files/Android/Android Studio/jbr" \
 
 ### 11.2 逐效果判据（在截图上可指认）
 
-- [ ] **V1** E03 隧道：近端环明显亮于远端环（≥3 档明度差）；远端**无同心台阶**
+- [x] **V1** E03 隧道：近端环明显亮于远端环（≥3 档明度差）；远端**无同心台阶** —— ✅ **两条均通过**（v1.41，判据见 §11.3.6；⚠️ 截图上的"一环一环"是**实体隧道环**不是 banding）
 - [ ] **V2** E05 圆形频谱环：单根条**可辨亮侧/暗侧**；外圈**无 8 段接缝**
 - [ ] **V3** E07 频率山峦：山脊**无锯齿**；5 层**有前后关系**；静音时**不是纯黑**
 - [ ] **V4** E12 瀑布：**可数出 ≥8 个频段边界**；持续高频**底部不死白**
@@ -3238,9 +3357,14 @@ JAVA_HOME="C:/Program Files/Android/Android Studio/jbr" \
 - [ ] **V12** E11 星系：可见**尘埃带**；中心核**径向渐变**；30/60fps 下**转速一致**
 - [ ] **V13** E14 烟花：粒子**有拖尾**；`beat` 有**冲击波环 + 闪光**
 - [ ] **V14** E16 数字雨：列头**有光晕**；头上有**拖影**；字形**有描边与内部明暗**；字符集**仍为 0/1**
+      ⚠️ **判据本身四条在 v1.41 的 LOW 截图上已全部成立**，⛔ 但本条**故意不勾**：
+      v1.43 复验只在 **MEDIUM** 上取了"观感不被封面染色"这一项，**四条判据未在 MEDIUM 逐条重判**
+      （且 MEDIUM 下 `cols = 32`、拖影长度与 LOW 不同）。⇒ 需一次**逐条**确认后才勾。见 §11.3.6 的 P-2 / P-3。
+      ⛔ **不可判过**（v1.41）：四条在 **LOW** 下全部成立，但 MEDIUM 档的画面被 **P-2**（暗角吃封面 accent）
+      染色掩盖 ⇒ 必须等 P-2 修完的包**重测 MEDIUM** 再判（见 §11.3.6）
 - [ ] **V15** E18 残像：连续 5 分钟**不发灰白**；有**柔化**；色温随段落变化
 - [ ] **V16** E19 粒子文字：**连续播放 5 分钟画面不消失**（修 4.2s 空白）；粒子覆盖**整个字形**（不再只有上部）；**不出现整片死白**；字有**中心亮/边缘暗**的纵深；换歌时**无可见卡顿**
-- [ ] **V17** E20 等离子：流场**无块状**；背景**有流动纹理**；粒子呈**短条**
+- [ ] **V17** E20 等离子：流场**无块状**；背景**有流动纹理**；粒子呈**短条**（代码已落盘，⛔ **待上机**）
 - [ ] **V18** E23 歌词点阵：**性能判据（必过）**——① 每次歌词换行**无可见卡顿**（`dumpsys gfxinfo` 无 > 32 ms 帧）；② 连续播放 10 分钟**帧耗时无周期性尖峰**（`Rect` 分配归零后 GC 抖动消失）；③ 改造前后**每帧 draw 调用数不增加**（除 Q4 的 2 次后处理）。**观感判据**——④ 亮档**不曝白**（演唱字与相邻字之间有边界）；⑤ 点阵**覆盖整个字形**（不再有空洞）；⑥ 待唱/演唱中/刚唱过**明度层次可辨**；⑦ **卡拉OK 逐字变色仍然存在**（演唱前沿两侧的字色/明度不同）—— 它是零成本的（§B7 专项评估），⛔ **不得以"性能"为由删除**（§13.5-D4）
 - [ ] **V19** E25 催眠：曲线**有受光侧**；网格**三级明度**；有纸纹
 - [ ] **V20** E34 分形：枝干**越梢越细越亮**；末级**有叶**
@@ -3263,7 +3387,7 @@ JAVA_HOME="C:/Program Files/Android/Android Studio/jbr" \
 - [ ] **V28**（**v1.13 重写**）E41 世界（**现役 = WebView + three-globe**，§C7）：
       ① 球体有**明确的球面明暗**（不是平涂）；② 大气层有**一圈可见的辉光**；
       ③ 32 个城市点**分层可辨**（Tier1 明显大于 Tier4）；④ 航线**可见生长**
-      （同一位置相隔 1 s 两张截图，dash 位置不同）；⑤ 拍点脉冲可见（鼓点处城市点放大后回落）。
+      （同一位置相隔 1 s 两张截图，dash 位置不同）；⑤ 拍点脉冲可见（鼓点处城市点放大后回落；定稿 = **持续呼吸 ±18% 与拍点包络叠加**，静止时也有慢呼吸，不再是死画面）。
       ⛔ **不再验**"陆地明暗 / grain 无接缝 / 城市外溢辉光" —— 那三条属**已隐藏的旧 2D 实现**
       （`WorldRenderer.kt`），现役实现里根本没有 grain / vignette / Canvas 描边
 - [ ] **V29**（v1.10 新增 · 仅在 §十三 裁决项 9 落地后适用）E18 / E19 / E20 ——
@@ -3281,17 +3405,17 @@ JAVA_HOME="C:/Program Files/Android/Android Studio/jbr" \
       ⑤ **层级一眼可辨**：截图上能明确排出 **太阳 > 行星 > 卫星 > 星野** 四级
 - [ ] **V31**（v1.13 新增）E41 世界（**View 型旁路 · 生命周期与焦点**，必过）：
       ① **不抢焦点**：E41 播放中，遥控器方向键仍能切效果 / 返回键仍能退出（WebView 子树已用
-      **禁焦三件套**让出焦点，`WorldGlobeRenderer.kt:121-125`：`isFocusable = false` /
+      **禁焦三件套**让出焦点，`WorldGlobeRenderer.kt:181-183`（v1.17 重核；v1.13 时 `:121-125`）：`isFocusable = false` /
       `isFocusableInTouchMode = false` / `descendantFocusability = FOCUS_BLOCK_DESCENDANTS`）；
       ② **首帧非黑屏**：切入 E41 后 **1 s 内**出现球体 —— 改造过程中曾因
       **① `file://` 子资源限制 ② 场景缺灯光（Phong 只剩 `emissive`）③ 容器尺寸为 0**
       三次黑屏，三个修复都要在真机复验（`shouldInterceptRequest` / `AmbientLight`+`DirectionalLight` /
       `ensureSize`）；
-      ③ **尺寸自适应**：横竖屏切换 / 窗口尺寸变化后**画面不错位**（`globe.js:122-132` 的
+      ③ **尺寸自适应**：横竖屏切换 / 窗口尺寸变化后**画面不错位**（`globe.js:635-650` 的（v1.17 重核；v1.13 时 `:122-132`）
       `ensureSize` 在 rAF 里逐帧比对，`lastW/lastH` 变化才 `setSize`）；
       ④ **释放干净**：切走 E41 后连续切换 **10 次**，`adb shell dumpsys meminfo com.nasmusic.tv`
       的 PSS **不单调上涨**（`onViewDetached` 的 `post{ removeView + destroy }` 生效，
-      `WorldGlobeRenderer.kt:211-226`）；
+      `WorldGlobeRenderer.kt:274-289`；v1.17 重核，v1.13 时 `:211-226`）；
       ⑤ **电视可用（⛔ 未验证项）**：Android 5.1.1 / SDK 22 的 WebView 上**球体可见**
       （WebGL1 兜底）—— ⛔ 若不可用，按 §九 R20 的处置：**优先"按设备隐藏该效果"**，
       而不是回退旧 2D 实现（旧实现每帧 491 原语，电视上更慢）；
@@ -3300,6 +3424,289 @@ JAVA_HOME="C:/Program Files/Android/Android Studio/jbr" \
       （`AndroidView` 无法在 `DrawScope` 里淡出）⇒ **切进/切出 E41 时画面是瞬变**。
       ⛔ **不要把"E41 切换没有淡入"当成缺陷去修**（要修得动 `VisualizerStage` 的 View 承载方式，
       收益为零、风险极高）；只需确认**瞬变过程不黑屏、不残留上一效果的最后一帧**
+
+### 11.3 上机操作流程（v1.40 新增 · 只做"怎么跑"，判据仍回 §11.1 / §11.2 勾选）
+
+#### 11.3.1 两个包
+
+| 包 | 来源 | 用途 |
+|---|---|---|
+| **改造后** | 当前 `HEAD`（`0482399`，v2.38.0）⇒ `NASMusicTV-release-v2-38-0.apk` | 跑 U1–U7 + V1–V31 全部判据 |
+| **改造前基线** | `git stash` + `git checkout ca23876`（**S1.6**）⇒ 另建一个 release 包 | 只用于「改造前 vs 改造后」**帧耗时对比**与**成对截图** |
+
+> ⚠️ 为什么基线取 `ca23876`：它是**最后一个逐像素不变的提交**（S1.5 迁移 + S1.6 P0 性能，
+> `postFx` 全 `NONE`）⇒ 它与 S0/S1 的**性能改动可比**、与 S2 起的**观感改造互为对照**。
+> ⚠️ 例外：**T1.7.1（离屏层条件化 A/B）不要用 `ca23876` 当基线** —— 离屏层自 S1 起就无条件挂着，
+> 该项的基线就是**当前 HEAD**，A/B 靠临时改 `VisualizerStage.kt:312` 对比。
+
+#### 11.3.2 装机（⛔ 由用户操作，Agent 不得自行安装 / 启动）
+
+```powershell
+$ADB = "C:\Users\hxzha\AppData\Local\Android\Sdk\platform-tools\adb.exe"
+& $ADB connect 192.168.0.114:5555
+& $ADB -s 192.168.0.114:5555 install -r app\build\outputs\apk\release\NASMusicTV-release-v2-38-0.apk
+```
+
+> ⚠️ 电视上若已装**签名不同**的包（debug 版，或 release 切独立签名前的旧包），`install -r` 会报
+> `INSTALL_FAILED_UPDATE_INCOMPATIBLE` ⇒ 先 `& $ADB -s 192.168.0.114:5555 uninstall com.nasmusic.tv`。
+
+> 📌 **v1.43 记录一次例外**（用户裁决「要么你编译 debug 版本，装到电视上，自己调试吧」）：
+> 为定位 P-3，Agent 曾**自行构建并 `install -r` 诊断版**（同签名 ⇒ 无需卸载，未动账号/收藏/模型）。
+> ⛔ 该例外**仅覆盖崩溃定位**；之后的复验分工回到用户裁决「你不用截图，我来进行测试，需要我操作什么跟我说就行」
+> ⇒ **装包/切换由用户操作，Agent 只读 `logcat` / `dumpsys`**。⛔ 卸载与清数据始终由用户执行。
+
+#### 11.3.3 帧耗时采集（每套效果一次，U3 / U6 / V18 / T1.7.x 共用）
+
+> ✅ **v1.45 起首选「机内帧率读数」**（`VisualizerStage` 右上角小字，`FpsMeter` 滚动 0.5 s 窗口）：
+>
+> ```powershell
+> & $ADB shell settings put global nasmusic_fps 1    # 开（重进可视化生效；0 或删键即关）
+> ```
+>
+> 口径 = **Compose 帧回调的实际到点率**（绘制循环 `while(true) withFrameNanos {}` 被上一帧顶住 ⇒
+> 回调间隔 ≈ 上屏间隔），与下面的 SurfaceFlinger 法**同源不同采样点**，量级一致。
+> 优点：切效果**立刻**出新数、不占 adb 轮询、release 包可用；
+> ⛔ 默认关闭 ⇒ 普通用户的播放器 UI 上不会出现调试信息。开关走 `Settings.Global` 而不是设置页：
+> 零持久化 plumbing（新增一个 App 设置项要动 `AppSettings` / `AppPreferences` / 导入导出 / VM / 设置页 / 分支 6 处）。
+> 门禁：`FpsMeterTest`（5 正向 + 2 负向自证 —— 累计平均版与按帧数版都必须与真实现产生可观测分歧）。
+>
+> ⚠️ 两者不一致时**以 SurfaceFlinger 为准**（它量的是真正上屏的时刻）。
+
+> ⛔ **v1.41 实测推翻：`dumpsys gfxinfo` 在基准电视上取不到帧统计。**
+
+> Android 5.1.1 / API 22 上 `dumpsys gfxinfo com.nasmusic.tv` 的 `Profile data in ms:` 段
+> **恒为空**（只有 ViewRootImpl 一行、无 Total/Janky/percentile），且**对 launcher 同样为空**
+> ⇒ 是该系统版本的 HWUI 帧回调未接上，**不是本项目的问题**。
+> ⚠️ 但同一份 dump 的 **`Caches:` 段可用**（`PathCache` / `TextureCache` / `LayerCache` 实测有效，见 §11.3.6）。
+
+**替代口径 = SurfaceFlinger 逐帧时间戳轮询去重**（脚本 `logs_temp/sf_sample.sh`，v1.41 起为唯一采集手段）：
+
+```powershell
+# 用法：bash logs_temp/sf_sample.sh <before|after> <编号> <效果名> [秒=30]
+bash logs_temp/sf_sample.sh after E03 tunnel 30
+# 内部：每 1s 取一次 dumpsys SurfaceFlinger --latency '<pkg>/<pkg>.ui.MainActivity'
+#       → 按 col1（帧入队时刻 ns）跨次去重 → 排序 → 算相邻间隔的 p50/p90/p95/p99/max + fps
+# 产物：logs_temp/gfx/<tag>_sf.txt（原始） + output/<tag>.png（截图）
+```
+
+> ⚠️ 三个实现坑（都踩过）：① `adb shell` 输出是 **CRLF**，awk 里必须先 `sub(/\r$/,"")`，
+> 否则首行刷新周期匹配不上 → `1e9/refresh` 除零；② SF 的历史环**很小**，单次 dump 只覆盖最后几秒
+> ⇒ 必须**轮询 + 按时间戳去重**才能覆盖 30 s；③ 判 jank 的阈值取 **2× 刷新周期**（本机 60 Hz ⇒ 33.3 ms），
+> 但**本项目渲染循环是 `withFrameNanos` 逐 vsync 驱动**（`VisualizerStage.kt:86-87` 的"30fps"指**频谱数据**更新率，
+> ⛔ **不是**渲染帧率上限）⇒ **p50 ≈ 33 ms 就等于掉到 30 fps**，不是"达标"。
+
+> ⚠️ **三条口径**，否则数字不可比：① **同设备**（以**电视**为准，§九 R18）；② **同画质档**
+> （MEDIUM 默认；U4 要单独跑 LOW）；③ **同曲同进度**（建议固定一首有镲片 + 有静音段的曲子，
+> V11 ② 的"高音段有响应"也靠它）。
+> 📌 判据是「**改造后 ≤ 改造前**」（§十 S2/S3/S4 验收条件）；T1.7.x 另加「**下降 ≥ 15% 才保留**」。
+> ⛔ **该判据目前无法执行** —— "改造前"那一列要等 §11.3.1 的 `ca23876` 基线包出出来才填得上，
+> 现阶段所有数字都只是**现状存档**，不得据此判定通过或退化。
+
+#### 11.3.4 截图（V 系列多数判据要"相隔 1 s 两张"或"成对比对"）
+
+```powershell
+& $ADB exec-out screencap -p > output\after_e32_staircase_1.png
+```
+
+> ⛔ 截图**只进 `output/`**，不落仓库根（AGENTS.md 仓库卫生规定）。
+> 命名建议 `<before|after>_<编号>_<效果名>[_<序号>].png`，便于成对复核。
+
+#### 11.3.5 本轮**不适用**的判据（先跳过，别当成失败）
+
+| 判据 | 为什么本轮不适用 |
+|---|---|
+| **U2 的 ①②（淡入平滑 / 切换总耗时 ≤ 1 s）** | ⛔ **600ms 交叉淡入尚未落地** —— `VisualizerStage.kt:180` 第 3 实参仍硬编码 `false`，裁决项 4 / §13.5-D3 的改码动作排在**阶段 1.7**（0/4）。⇒ 本轮 U2 只验「切换**无黑屏 / 无卡顿**」。<br>✅ **2026-10-01 用户裁决**：`CHANGELOG.md` v2.38.0 的「启用 600ms 交叉淡入」+「离屏层按画质档位条件生效」两条**保留不动**（原话"先留着，后面反正要做这个事情"）⇒ 待**阶段 1.7**（crossfade 改码 + T1.7.1 条件化）落地后自然变真。⛔ **发版 / 打 tag 前若阶段 1.7 仍未做完，必须回头删这两条** |
+| **T1.7.1 / T1.7.3 / T1.7.4 的"改造后"数字** | 三项**尚未开工**，本轮只**采集基线**（改造前 + 现状），供后续 A/B 用 |
+| **T1.7.2** | ⚠️ **实质代码已在 T3.3 做完**（E17 空间网格分桶，§7.5 注① `51,362 → 805`）⇒ 本项只剩「量帧耗时 + 视觉密度差 ≤ 5%」，**不要再写一遍网格** |
+
+#### 11.3.6 实测记录（v1.41 起，§11.3.3 新口径 · 设备 = 创维电视 Android 5.1.1 / 1080p）
+
+> ⛔ 本表**只有"改造后"一列** —— "改造前"要等 `ca23876` 基线包（§11.3.1）。
+> 所以这里的数字是**现状存档**，不是"通过"。U3 / U6 / T1.7.x 的判据在基线列填上之前一律**悬空**。
+
+| 效果 | 档 | §7.5 原语/帧 | fps | p50 | p90 | p95 | p99 | max | HWUI 缓存水位 |
+|---|---|---:|---|---|---|---|---|---|---|
+| **E03 隧道** | MEDIUM | 21 | 27.5 | 34.52 | 44.02 | 47.50 | 53.91 | 62.05 | ⚠️ **`PathCache` 33,112,452 / 33,554,432 = 98.7% 满**（`TextureCache` 44.7 / 75.5 MB） |
+| **E16 数字雨** | MEDIUM | **478** | **4.0** | **249.18** | 331.63 | 379.14 | 449.57 | 471.00 | `PathCache` 18.0 / 33.5 MB · `TextureCache` 49.8 / 75.5 MB |
+| **E16 数字雨** | **LOW** | ≈337（24 列） | **7.6** | 123.21 | 183.92 | 199.68 | 220.17 | 246.74 | 同上 |
+| **E16 数字雨（v1.44 列条合并后）** | MEDIUM | **≈38**（32 条带 + 3 全屏后处理 + 背景） | **44.1** | **20.42** | 37.39 | 40.65 | 43.37 | 50.76 | 原始采样 `logs_temp/gfx/after_E16_matrixrain_medium_sf.txt`，jank 14.5% |
+
+**v1.46 · 低画质全效果扫描**（方案 C 放行后首次可达 · **口径 = 机内帧率读数 `FpsMeter`**，非 SurfaceFlinger ⇒ **没有分位数**，且读数上限就是 60（vsync）；与 SF 冲突时以 SF 为准。同一台创维 / 同曲 / 每项一个稳定读数）：
+
+| 效果 | fps | 效果 | fps | 效果 | fps |
+|---|---:|---|---:|---|---:|
+| **E16 数字雨（合并后）** | **59.4** | E37 分子 | 59 | E30 雷达 | 50 |
+| E35 光轴 | 19 | E33 齿轮 | 19 | E25 催眠 | 14 |
+| E11 星系螺旋 ⚠️新放行 | 11 | E24 心跳 | 9.9 | E17 星座 ⚠️新放行 | 9 |
+| E31 折纸 ⚠️新放行 | 9 | E38 怀旧 | 9 | E23 歌词点阵 ⚠️新放行 | 7 |
+| E07 频率山峦 | **3** | E03 隧道 | 27 | E29 轨道 ⚠️新放行 | 29 |
+| E05 圆形频谱环 | 30 | E32 阶梯 | 31 | E40 DNA ⚠️新放行 | 30 |
+| E13 液态网格 ⚠️新放行 | 29 | E15 液态涟漪 ⚠️新放行 | 30 | E12 频谱瀑布 ⚠️新放行 | 59 |
+| E39 照片墙 | 未测（本机无照片源） | — | — | — | — |
+
+⛔ 表里没有的 5 套是低画质**本来就进不去**的：`E18 反馈残像` / `E19 粒子文字` / `E20 等离子流场`（ULTRA，`allowFramebuffer=false`）与 `E14 节拍烟花` / `E41 世界`（真读粒子预算）—— 方案 C 的语义正是这两类该被挡。
+
+> ✅ **P-1 在数字雨上闭环**：低画质 **59.4 fps**（合并前同档 7.6 fps，见上表第 3 行；⚠️ 那行是 SF 口径，本行是机内读数，两者不同采样点 ⇒ 但 7.6 → 59.4 的量级差远大于口径差）。MEDIUM 44.1 / LOW 59.4 的差也自洽：LOW 是 24 列 + `FxLevel.OFF`（无拖尾、无全屏后处理），op 数 24 vs 32 再省掉 3 条全屏 pass。
+> 🔴 **本轮真正新增的信息是"低画质不等于便宜"**：⚠️ 新放行的 7 套里有 **4 套只有 7–11 fps**（星座 9 / 歌词点阵 7 / 折纸 9 / 星系螺旋 11 / 轨道 29 / DNA 30 中的前四套），而它们的共同点是**规模不随档位收缩**（星点数、点阵单元数、折面板数都是常量）⇒ 当初"按 tier 一刀切"挡得**不算全错**，错的是把数字雨 / 频谱瀑布（59）/ 液态涟漪（30）/ 液态网格（29）这些**本来就便宜**的也一起挡了。
+> ⇒ **不要为此把门控加回 tier 一刀切**（那会重新误挡数字雨，正是本次裁决要修的）。修法与 E16 同型：**逐元素提交合并** —— 这四套的慢与 §7.5 的登记值同量级（E17 星座 805 / E31 折纸 626 / E23 歌词点阵 405 原语，都在合并前 E16 的 478 那一档），缺的正是 E16 那一步 ⇒ 见 §12.5.3 新增待裁决项 8。
+> ⚠️ **观感两项待办**（用户上机反馈，均**与低画质无关**或**为刻意分支**，见 §12.5.3 第 9 项）：
+> ① **E12 频谱瀑布顶部一大片黑** —— 不是低画质造成：`FADE_ALPHA = 0.06` 每帧把整张 200 行缓冲 ×0.94，
+> 70 帧前（≈底部之上 1/3）就衰减到 1.4% ⇒ 可见带只占底部约 1/4，**三档皆然**，只是此前低画质进不来、没人看见。
+> ② **E13 液态网格低画质没有连线** —— `AdvancedRenderers.kt:537` 的
+> `drawLines = ctx.quality != VisualQuality.LOW` 是**刻意**的低档降级（省 4 次 `drawPath` + 160 段建路径），
+> ⚠️ 该分支今天之前是**死代码**（低画质根本进不到这套效果），现在第一次被跑到。
+
+
+> 🔴 **发现 P-1（v1.41）：这台电视上「每帧绘制原语数」就是第一成本维度，且斜率极陡。**
+> 用两个 MEDIUM 点定线（E03 21 原语 / 34.52 ms，E16 478 原语 / 249.18 ms）：
+> **斜率 ≈ 0.47 ms / 原语**，截距 ≈ 24.6 ms（= 无条件离屏层 + 3 条全屏后处理 + 背景，见 §11.3.3）。
+> 换算成预算：**要 60 fps（16.7 ms）⇒ 原语数必须 ≤ 0**（截距就已超）；**要 30 fps（33 ms）⇒ ≤ ~18 原语**。
+> ⛔ 所以 §7.5 表里 **478 / 457 / 245 / 231 / 163** 那一档（E16 / E38 / E34 / E33 / E15）在电视上
+> **结构性不可能流畅**，与"改没改观感"无关。
+> ✅ **CPU 侧已排除**：E16 MEDIUM 期间 `top -t` 连采 4 轮 —— 主线程 **0%**、`RenderThread` **25%**、
+> 整机 ≈27% ⇒ 不是 Kotlin/JNI 分配瓶颈（G15/G16 那两条不是本次瓶颈），是**逐 op 的驱动/提交开销**。
+> ⚠️ **该斜率目前只有 2 个点**，且截距项尚未独立验证 ⇒ 必须再补 3–5 套跨档位的点才能当预算用
+> （候选：E17 805 JNI / E31 626 / E34 245 / E40 119 / E23 405）。
+> 🔴 **v1.45 补到第 3 个点，且它把这条线证伪了一半**：E16 列条合并后 MEDIUM 实测 **≈38 原语 / 22.7 ms（44.1 fps）**，
+> 而按上面的线外推应是 `24.6 + 38×0.47 = 42.5 ms` —— **实测比模型算出的"固定开销"本身还快**。⇒ 两点结论：
+> ① **截距 24.6 ms 不是常数**：它是从 E16 旧版那 478 个**小位图** op 身上回归出来的，把小矩形提交的代价摊进了截距；
+> ② 38 个原语**总共**只花 22.7 ms（平均 0.6 ms/op **含**全部固定开销）⇒ 成本不是随"原语数"线性，
+> 而是随"**每帧独立小矩形的数量**"超线性 —— 14 个 33×60 的小 blit 合成 1 个 141×1171 的大 blit 后，
+> 走的是快速纹理路径、且不再制造 14 份独立脏区。
+> ⛔ **所以不要用这条斜率给未改造的效果估预算**，尤其别用它论证"合并大位图不值"—— 恰恰相反。
+> ✅ 真正可用的判据回归到 §四 G14/G15 的原始形态：**每帧的独立绘制提交数**（合并）+ **是否有全屏绘制把脏区并掉**（P-3）。
+> 📌 **同一形状的先例**：V25 的性能判据③「E38 怀旧 `draw` 调用数 2282 → 47」正是这条规律的正面用法
+> ⇒ 电视优化的正确抓手是**合并原语**（整列一条渐变带、图集 `drawBitmapMesh`、残像复用），不是减像素。
+
+> 🔴 **发现 P-2（v1.41）：暗角边色取自封面调色板 ⇒ 换歌会把整幅画面染成封面色。**
+> `OverlayFx.drawVignette`（`OverlayFx.kt:55-63`）的 edge 色 = `darken(ctx.palette.accent, 0.20)` + 偏冷，
+> 以 `strength` 全屏 `drawRect` 叠上去。**E16 数字雨 MEDIUM 档 `vignette = 0.50`** ⇒
+> 播迪克牛仔（封面蓝紫 + 暗红）时**纯黑底被压成蓝紫、中间还浮一团暗红**，
+> 用户原话「根本没有黑客帝国电影中的效果，应该更加偏绿色，整体」的**根因在这里，不在字形颜色**。
+> ✅ **对照实验已做**：同曲同进度切 **LOW**（后处理全关）⇒ 背景立刻回到纯黑、绿色字形/光晕/拖影全部清晰可辨。
+> ⚠️ 影响面是**全部 21 套已迁移效果**（都吃同一个 `palette.accent`）⇒ 观感会随封面漂移，
+> 属 §四 G 系列级别的共性缺口，需在裁决项里定口径（候选：暗角边色改中性黑 / 改效果自身主色 / 加"按效果锁定"开关）。
+>
+> ✅ **E16 侧已修并复验通过（v1.41 落码 · v1.43 于 MEDIUM 真机复验，见下方 P-3 之后的实测记录）**：
+> `PostFx` 新增 `vignetteEdge: Color? = null`
+> （`RendererFx.kt`）→ `OverlayFx.drawVignette` 新增同名 `edgeOverride` 形参，
+> 非 null 时**取代 accent 并跳过 `coolShiftDeg`**；`MatrixRainRenderer` 锁定
+> `VIGNETTE_EDGE = rgb(0,52,20)`（比最暗字形档 `SHADE_RGB[4] = rgb(0,130,30)` 再暗一档）。
+> **默认 null ⇒ 其余 20 套逐像素不变**；⛔ 其余效果的口径**仍未裁决**，本条不关闭。
+> ⚠️ 顺带修掉一处**暗角 Brush 缓存键撞键**：旧键用 `shl 32` / `shl 40` 拼位段，
+> accent 段（40..71）与 width 段（32..63）**重叠** ⇒ 不同 `(w, accent)` 组合可撞键、换歌后沿用旧色。
+> 改为乘性混合（`key * 31 + …`，五维全进键）。门禁：`MatrixRainTest` ⑨ + 负向 N4
+> （`postFx` 由 `protected` 改 `internal` ⇒ 单测**直接读本体**，能验"参数真接上了"）。
+
+#### 🔴 发现 P-3（v1.42 提出 · v1.43 定位；2026-10-01 18:55 复验时命中）：E16 在基准电视上**原生 SIGSEGV 闪退**
+
+P-2 修复包（15:43 那个，设备侧 `base.apk` 27,317,466 字节已核对一致）装机后**一切到数字雨就闪退**。
+`logcat -b crash` 抓到 2 次，**两次都是同一处原生栈**、都在 RenderThread：
+
+```
+Fatal signal 11 (SIGSEGV), code 1 (SEGV_MAPERR)  tid=RenderThread  >>> com.nasmusic.tv <<<
+#00 /system/lib/libui.so
+#01 libui.so android::Region::createTJunctionFreeRegion(android::Region const&)+104
+#02..#07 /system/lib/libhwui.so
+#08 libhwui.so android::uirenderer::renderthread::RenderThread::threadLoop()+66
+```
+
+**判读（哪些是实测、哪些还是假设）**：
+
+- ✅ **崩在系统 HWUI 的脏区（dirty `Region`）处理里，不在本项目 Kotlin 侧** —— 栈里没有任何 app 帧，
+  8 帧全是 `libui` / `libhwui` / `RenderThread::threadLoop`。
+- ✅ **触发条件是「大量互不相连的小矩形 + 没有一次全屏绘制」，不是「原语数过某个绝对阈值」**（判据见下面的四行实测表）：
+  E16 每帧 `cols × perCol = 24×14 = 336` 个碎 blit，LOW 档必崩；同效果 MEDIUM 档 **448 个碎 blit 反而不崩**，
+  因为 MEDIUM 多出的暗角/颗粒/扫描线是 **3 次全屏 `drawRect`** ⇒ 脏区被并进一整块矩形，
+  `createTJunctionFreeRegion` 那条"碎矩形消 T 型交叉"的代码路径根本走不到。
+- ✅ **不是内存耗尽**：诊断版逐 60 帧打 `Debug.getNativeHeapAllocatedSize()`，崩溃前一路平在
+  **约 7.8 MB / 11.2 MB**（进入时 11249 KB、崩溃前最后一次采样无台阶），无增长趋势。
+- ⚠️ **`createTJunctionFreeRegion` 内部为什么段错误**（span 数组越界？分配失败未判空？）
+  本机拿不到系统源码级证据 ⇒ **该函数的内部机理仍是假设**；已定位的只是**外部触发条件**（上面那条），
+  这也够了：修法只要"让每帧不再产生几百个碎矩形"，不必依赖对系统内部的理解。
+- ✅ **故障点是同一个确定的指令**：四次崩溃（18:55 两次 + 19:17 / 19:28 各一次）的 `#01` 全是
+  `pc 000084b7 … createTJunctionFreeRegion+104`、`#00` 全是 `pc 00008334` ⇒ 同一条代码、同一种触发。
+- ⚠️ **但寄存器给不出结论**：诊断包两次 LOW / `cols = 24` 崩溃的 `r0` 都是 `0x1e41 = 7745`，
+  而 18:55 那一对（同为 LOW）的 `r0` 是 `0x142a = 5162` ⇒ **`r0` 与列数无关、也不跨会话可比**。
+  ⛔ 早期"两次 `r0` 完全相同 ⇒ 某个随原语数增长、跨阈值就炸的量"的解读**就此撤回**。
+  唯一稳定复现的非零常量是 `r4 = 0x56f = 1391`（后三次），本机无系统源码，**不作解读**。
+- ⛔→✅ **P-2 的改动已排除，且是硬排除**：用户确认崩溃时处于 **LOW 档**。LOW ⇒ `FxBudget.of(quality) == FxLevel.OFF`
+  ⇒ `RendererFx.draw` 里 `if (fx.level != FxLevel.OFF) applyPostFx(...)` **整段跳过**，
+  `OverlayFx.drawVignette` 即使被调也是**第一行 return** ⇒ 本次改动（`edgeOverride` / 缓存键 / `VIGNETTE_EDGE`）
+  在崩溃现场**一行都没有执行** ⇒ 与 SIGSEGV 无因果关系。
+  ⚠️ 原以为"下午旧包跑 E16 没崩"是反证，**该对照不成立**：U4 在 LOW 只停留数秒、MEDIUM 采样约 10 s，
+  而本次两次崩溃分别在启动后 **约 49 s / 约 16 s** ⇒ 旧包暴露时长根本不够，不能据此判定"是新包引入的"。
+
+**✅ 已实测确认（v1.43 · 诊断版 release + `debug.nasmusic.rain.cols` sysprop 二分，同一台电视同一首歌）**：
+
+| 时刻 | 档位 | `cols` | 每帧碎 blit | 全屏后处理 | 结果 |
+|---|---|---|---|---|---|
+| 19:17:43 | LOW | 24 | 336 | **关** | **954 ms 崩** |
+| 19:19:59 | LOW | 4（sysprop 压制） | 56 | **关** | **68 s / 4020 帧不崩，约 59 fps** |
+| 19:25:58 | MEDIUM | 32 | 448 | **开** | **119 s / 480+ 帧不崩**（约 4 fps） |
+| 19:28:29 | LOW | 24 | 336 | **关** | **636 ms 崩** |
+
+⇒ **两个变量各自独立地指向同一处**：崩不崩取决于「每帧是否有大量互不相连的小矩形、且没有一次全屏绘制把脏区并掉」。
+MEDIUM 下暗角/颗粒/扫描线是 **3 次全屏 `drawRect`** ⇒ 脏区退化成一整块矩形，系统那段碎矩形合并代码根本走不到；
+LOW 下后处理整段不跑 ⇒ 脏区一直是几百个碎矩形 ⇒ `createTJunctionFreeRegion` 段错误。
+⛔ **原"跨阈值"假设里"列数越多越容易崩"这一半被推翻**：448 个 blit 的 MEDIUM 反而不崩。
+
+**⚠️ 顺带查明的第二个既有缺陷（与崩溃无关，但会吃掉效果）**：`AppSettings.kt:257` 的 `supports()` 里
+`LOW.maxParticles = 0` ⇒ 所有 `Tier.ADV` 效果在低画质下判为不支持，而数字雨是 `MATRIX_RAIN(Tier.ADV)`。
+但 `setQuality()` 只在**当次改档位**时回落（`VisualizerViewModel.kt:488`），**启动时不做该校验**
+⇒ 低画质 + 数字雨这个组合**能渲染、却不可选**，用户一旦切走就**永久回不来**（只能靠改档位）。
+⛔ 本条待裁决：是补启动期校验，还是让"当前正在渲染的效果"始终可选。
+
+**处置（v1.44 落码 · 分两步，先治崩再治慢）**：
+
+- ✅ **第一步 = 治崩（本次落码，改动 3 个文件）**：在**基类** `RendererFx.draw` 末尾补一次
+  **「脏区合并占位绘制」** —— `OverlayFx.drawDamageCoalescer()` 画一个 `alpha = 1/255` 的整画布
+  `drawRect`（肉眼与截图均不可辨），使**本帧没有任何全屏绘制项**时脏区仍被并成一整块矩形。
+  触发条件由纯函数 `RendererFx.needsDamageCoalescer(level, postFx) = level == OFF || !postFx.hasFullScreenPass()`
+  决定 ⇒ LITE/FULL 且配了任一全屏项（暗角/颗粒/扫描线）时**不重复画**，零额外开销。
+  ⚠️ **放在基类而不是只改 E16**：崩溃条件是「大量碎矩形 + 无全屏绘制」，与效果无关 ——
+  低画质档所有 `PostFx.NONE` 的效果（E17 805 原语 / E23 点阵 / E19 粒子）都在同一个雷区里。
+  门禁：`RendererBaseContractTest` **⑩ + 负向⑩**（三种错误实现：只看档位 / `&&` 用反 / `hasFullScreenPass` 漏判颗粒扫描线，
+  都必须与判据产生可观测分歧）。
+- ✅ **第二步 = 治慢（v1.44 落码，只改 `AdvancedRenderers.kt` + `MatrixRainTest.kt`）**：
+  新增 `columnStrips`（**2 张整列条带位图**，索引 = 头部数字），`buildGlyphs` 末尾调 `buildStrips(cellH)`
+  把 10 张字形按格号排进条带，`drawContent` 的内层 `for (k in 0 until perCol)` **整段删除** ⇒
+  每帧每列 **1 次** `drawBitmap`，原语数 **336 → 24 / 448 → 32 / 672 → 48**。
+  成立的不变式（门禁 `MatrixRainTest` **⑩ + 负向N5**，谓词与判据**共用**）：
+  格 `k` 的数字 = 头部数字 ⊕ 与头部的格距奇偶（`digitAt` 提为 `internal` 纯函数，选条带与排条带同源），
+  且 `shadeFor` / `trailAlpha` 只依赖 `k` ⇒ 每格的档位与 alpha 静态可烘。
+  ⚠️ **条带比 `slot` 宽 `2 × glowPad`**（1080p 实测 141 px vs `slot` 60 px）—— 头部光晕本来就盖到邻列，
+  必须保住；逐列、逐格的绘制顺序与旧实现一致（源合成满足结合律 ⇒ 合并为中间位图不改结果）。
+  ⚠️ 与旧实现的差异只有两处、均不可辨：每格行位取整到整像素（≤0.5 px）、中间 8bit 缓冲的 alpha 舍入。
+  ⚠️ 内存代价 ≈ **1.3 MB**（2 张条带，`releaseGlyphs()` 内一并 `recycle()`）。
+  ⛔ **两步各治一件事，都要做**：合并降的是**绘制 op 数**（P-1 的 0.41–0.47 ms/op 成本），
+  而脏区的 **span 数 ≈ 各矩形覆盖行数之和**，14 格拼成 1 条后总行数基本不变
+  —— 实测存活的 56 blit / 崩溃的 336 blit 都是按"覆盖行数"在分档。
+- ⚠️ **用户提出的「运动过程中每列数字不变」不采纳（v1.44 裁决）**：数字固定**不减每帧 op 数**
+  （成本驱动是指令条数，不是画了哪个字），只把预渲染从 2 张条带降到 1 张（省的是**一次性构建**）；
+  代价是丢掉 300 ms 翻转的招牌观感（整列变成静止字形平移）。⇒ **保留翻转 + 做合并**，
+  合并本身不影响翻转（翻转 = 换一条带，不重建）。
+
+
+- [x] **U4** LOW 档后处理**完全不生效** —— ✅ **通过**（v1.41 · E16 LOW 截图：无暗角、无颗粒、无扫描线，
+      背景纯黑；对照 §11.3.6 的 MEDIUM 截图差异肉眼可辨）
+- [x] **V1** E03 隧道 ① 近端环亮于远端环 ≥3 档明度差 —— ✅ **通过**（1080p 截图：外圈两条大环明显亮且粗，
+      向内逐环衰减，中段已接近不可辨）；② 远端无同心台阶 —— ✅ **通过**（中心雾核为平滑径向渐变，
+      未见一圈圈色带；⚠️ 截图上"一环一环"是**实体隧道环**不是 banding，别误判）
+- [ ] **V14** E16 数字雨 —— ⚠️ **两条在 MEDIUM 下被 P-2 的染色掩盖，LOW 下全部成立**：
+      ① 列头光晕 ✅（绿色径向晕清晰）；② 拖影 ✅（LOW 截图上每列"亮头→暗尾"梯度可辨，
+      方向正确 = §B3-② 的 `k` 越大越亮）；③ 字形描边 + 内部明暗 ✅；④ 字符集仍为 0/1 ✅。
+      ⛔ **但 MEDIUM 档的正式判定必须等 P-2 修完重测** —— 现在这张图不能算 V14 通过。
+      🔴 **v1.42：重测已无法进行 —— P-2 修复包在切到数字雨时原生 SIGSEGV（见 P-3），本条被阻塞。**
+      ✅ **v1.43：阻塞解除** —— 崩溃经实测定位为 **LOW 档专属的既有缺陷**（与 P-2 改动无因果，见 P-3 的四行实测表），
+      MEDIUM 档可正常渲染数字雨 ⇒ **本条的正式判定改在 MEDIUM 做**（LOW 下暗角整段不生效，P-2 的效果在 LOW 看不见）。
+      ✅ **P-2 复验通过（v1.43 · 19:40:01 起，MEDIUM / `cols = 32` / pid 31996，用户目视裁决）**：
+      同曲同档位下 **① 背景回到接近纯黑（不再被封面染成蓝紫/暗红）② 整体明显偏绿 ③ 暗角四角为深绿而非封面色**
+      —— 三条全中 ⇒ **`VIGNETTE_EDGE = rgb(0,52,20)` 的锁定生效**，用户原话「没有黑客帝国味道」的问题**关闭**。
+      ⚠️ 同场顺带补到 **两个 P-3 数据点**：19:39:23 用户先切 LOW ⇒ **266 ms 崩**（第三次复现）；
+      MEDIUM 侧连续 2 次进入、累计 **63 s / 240+ 帧不崩** ⇒ `V14` 的 MEDIUM 复验**可行**。
+      ⛔ **本条仍不勾**：V14 的四条判据（光晕 / 拖影 / 描边明暗 / 字符集 0-1）此前只在 **LOW 截图**上逐条判过，
+      MEDIUM 下尚未逐条重判 ⇒ 待补。
 
 ---
 
@@ -3334,22 +3741,34 @@ JAVA_HOME="C:/Program Files/Android/Android Studio/jbr" \
 
 ### 12.2 进度总览
 
-| 阶段 | 名称 | 提交号 | 任务数 | 状态 |
-|---|---|---|---|---|
-| 0 | 准备 | — | 1 | ⬜ |
-| **0.5** | **§5.5 渲染器基类 + 契约门禁**（零渲染器接入） | **S0** | 2 | ⬜ |
-| 1 | 工具箱（`fx/` 6 文件 + 7 门禁） | S1 | 7 | ⬜ |
-| **1.5** | **试点迁移 1 套**（`TunnelRenderer`，`postFx = NONE`） | **S1.5** | 1 | ⬜ |
-| **1.6** | **全量性能优化 · P0（零画面变化）** | **S1.6** | 4 | ⬜ |
-| **1.7** | **全量性能优化 · P1（每项需真机实测）** | **S1.7** | 4 | ⬜ |
-| 2 | 批次 A 前 4 套（+ 同步迁移） | S2 | 5 | ⬜ |
-| 3 | 批次 A 其余 7 套（+ 同步迁移） | S3 | 8 | ⬜ |
-| 4 | 批次 B 10 套（+ 同步迁移） | S4 | 11 | ⬜ |
-| 5 | 批次 C 精修 7 套（迁移其中 **5** 套；⛔ E38 后处理交错、E41 View 型 ⇒ 都不迁移） | S5 | 9 | ⬜ |
-| **5.5** | **逐套打开 `postFx`**（观感开关，一次一个） | **S5.5** | 并入各效果 | ⬜ |
-| 6 | 离屏层（✅ 裁决项 2 = 要 ⇒ **必做**） | S6 | 3 | ⬜ |
-| 7 | 收尾与文档同步 | S7 | 4 | ⬜ |
-| **合计** | | | **59** | |
+| 阶段 | 名称 | 提交号 | 任务数 | 已完成 | 状态 |
+|---|---|---|---|---|---|
+| 0 | 准备 | — | 1 | 1/1 | ✅ |
+| **0.5** | **§5.5 渲染器基类 + 契约门禁**（零渲染器接入） | **S0** `0f81d25` | 2 | 2/2 | ✅ |
+| 1 | 工具箱（`fx/` 6 文件 + 7 门禁） | S1 `0f81d25` | 7 | 7/7 | ✅ |
+| **1.5** | **试点迁移 1 套**（`TunnelRenderer`，`postFx = NONE`） | **S1.5** `3b3b1ce` | 1 | 1/1 | ✅ |
+| **1.6** | **全量性能优化 · P0（零画面变化）** | **S1.6** `ca23876` | 4 | 4/4 | ✅ |
+| **1.7** | **全量性能优化 · P1（每项需真机实测）** | **S1.7** | 4 | 0/4 | ⬜ 未开始 —— 4 项**全部**需真机帧耗时，**当前无执行路径** |
+| 2 | 批次 A 前 4 套（+ 同步迁移） | S2 `b35c5de` | 5 | 5/5 | ✅ 代码完成 · ⛔ **未上机验收** |
+| 3 | 批次 A 其余 7 套（+ 同步迁移） | S3 `b35c5de`+ | 8 | 7/8 | 🟨 T3.8 仅剩上机验收（U1–U7 + 帧耗时对比） |
+| 4 | 批次 B 10 套（+ 同步迁移） | S4 `c31a8c2`…`591571f` | 11 | 10/11 | 🟨 T4.11 仅剩上机验收（U1–U7 + 21 套帧耗时对比） |
+| 5 | 批次 C 精修 7 套（迁移其中 **5** 套；⛔ E38 后处理交错、E41 View 型 ⇒ 都不迁移） | S5 `2931d33` | 9 | 1/9 | 🟨 T5.1 **已提交**；T5.1b–T5.8 待做 |
+| **5.5** | **逐套打开 `postFx`**（观感开关，一次一个） | **S5.5** | 并入各效果 | — | ✅ **已与各批次合并执行**（v1.19 起，⚠️ 见下方注） |
+| 6 | 离屏层（✅ 裁决项 2 = 要 ⇒ **必做**） | S6 | 3 | 0/3 | ⬜ 未开始（依赖 T1.7.1 离屏层条件化） |
+| 7 | 收尾与文档同步 | S7 | 4 | 0/4 | ⬜ 未开始（⚠️ `CHANGELOG.md` 尚未记任何一条质感升级） |
+| **合计** | | | **59** | **38/59（64%）** | |
+
+> 📌 **进度快照（2026-10-01 · 按源码实测回填）**
+>
+> - **代码侧**：**21 / 28 套**已迁到 `RendererFx()` 且已打开 `postFx`（`FxCoverageScanTest` 实测 `covered` == **21** 条、
+>   `exempt` == **8** 条，合计 29 个在册渲染器 ✓）。未覆盖的 **7 套** = E29 轨道（只做了 §C1 第 0 条 P0 星野）/
+>   E33 齿轮 / E37 分子 / E38 怀旧（⛔ 按设计不迁移）/ E39 照片墙（⛔ 按设计豁免）/ E40 DNA / E41 世界（⛔ View 型）。
+> - **提交侧**：S0–S4 已全部落库（10 个提交）；⛔ **T5.1（E29 星野 + `OrbitalStarFieldTest`）仍在工作区未提交**。
+> - **验收侧**：⛔ **§11.1 U1–U7 与 §11.2 V1–V31 全部未勾（0 / 38）** —— 即 **21 套观感改造从未在真机看过一眼**。
+>   §10 对 S2/S3/S4 的验收条件（「上机看 N 套 + 帧耗时 ≤ 改造前」）**均未满足**。
+> - ⚠️ **S5.5 合并执行的代价**（v1.19 已登记）：`postFx` 未按原设计「一次改一个效果」，而是**随各套重写一并打开**
+>   ⇒ 观感**不具备单效果粒度的回退**（某套观感出问题只能整套 revert，而非改一行 `postFx`）。
+>   配合「零上机验收」，这是当前**最大的质量风险敞口**。
 
 > ✅ **十项裁决已全部拍板（2026-09-29），本表按裁决结果确定范围**：裁决项 8 = **A** ⇒ 阶段 0.5 / 1.5 **保留**
 > （选 C 的 55 项分支**已作废**）；裁决项 1 = **全量 28 套** ⇒ 阶段 2–5 **全做**；裁决项 2 = **要** ⇒ 阶段 6 **必做**（不再"可选"）。
@@ -3364,50 +3783,50 @@ JAVA_HOME="C:/Program Files/Android/Android Studio/jbr" \
 
 #### 阶段 0 · 准备（1 项）
 
-- [ ] **T0.1** 复跑基线门禁并落盘
+- [x] **T0.1** 复跑基线门禁并落盘
   - `testDebugUnitTest` + `lintDebug` 各跑一次，把**实测计数**写回本文件头部与 §八
   - 确认 `VisualizerThemeTest` **7 处**计数断言当前值（应为 28/27）
   - **验收**：本文件头部基线数字 = 实测数字；差异已注明原因
 
 #### 阶段 0.5 · 渲染器基类（2 项 · 需裁决项 8 选 A 或 B）
 
-- [ ] **T0.5.1** `renderers/RendererFx.kt`：`RendererFx` 抽象基类 + `PostFx` + `FrameClock` + `FxFrame` + `SizeCache`
+- [x] **T0.5.1** `renderers/RendererFx.kt`：`RendererFx` 抽象基类 + `PostFx` + `FrameClock` + `FxFrame` + `SizeCache`
   - 见 **§5.5.2 的可粘贴代码**（骨架已给全）；⛔ `draw` / `onEnter` / `onExit` **三者必须 `final override`**（§15.4-A41：`override` 默认 `open`，漏写 `final` 则保证静默失效）
   - ⛔ `FrameClock` 只接受 `frame.timeMs`，**不得用 `ctx.nowMs`**（§四 G13 重复 ⑥）
   - ⛔ `FrameClock` 的 `coerceIn(0L, maxDtMs)` **方向不可反**（上界钳制）
   - ⛔ `SizeCache` 的缓存键必须 `(w, h)` 双维（§C4 O2 的根治）
   - **验收**：类可编译；**没有任何渲染器继承它**（本阶段零调用点）⇒ 真机画面零变化
 
-- [ ] **T0.5.2** `renderers/RendererBaseContractTest.kt`（§八 G12）
+- [x] **T0.5.2** `renderers/RendererBaseContractTest.kt`（§八 G12）
   - 行为段 5 条（上界钳制 / 负差钳零 / 首帧不跳 / `reset` / 复用单例）+ 源码扫描段 4 条（不得覆写三方法 / 不得用 `ctx.nowMs` / 不得自建 `rng` / 空转自证）
   - **验收**：12–14 例全绿，且 **5 条负向自证都能挂**（尤其：把 `coerceIn` 改成 `coerceAtLeast` ⇒ 必须判失败）
 
 #### 阶段 1 · 工具箱（7 项）
 
-- [ ] **T1.1** `fx/FxLevel.kt`：`FxLevel{OFF,LITE,FULL}` + `FxBudget.of(quality)`
+- [x] **T1.1** `fx/FxLevel.kt`：`FxLevel{OFF,LITE,FULL}` + `FxBudget.of(quality)`
   - ⛔ 不给 `VisualQuality` 加字段（§三 #3）
   - **验收**：`FxBudgetTest` 绿（含负向：分支对调必须判失败）
 
-- [ ] **T1.2** `fx/AudioSmoother.kt`：attack/release 分离包络
+- [x] **T1.2** `fx/AudioSmoother.kt`：attack/release 分离包络
   - **验收**：`AudioSmootherTest` 绿（含负向：attack/release 对调必须判失败）
 
-- [ ] **T1.3** `fx/ProceduralTexture.kt`：6 种 tile 生成与缓存（grain / scanline / star / paper / water / caustic）
+- [x] **T1.3** `fx/ProceduralTexture.kt`：6 种 tile 生成与缓存（grain / scanline / star / paper / water / caustic）
   - 全部在 `ensure(w,h)` 时一次性生成；⛔ `recycle()` 必须显式
   - **验收**：`ProceduralTextureRecycleTest` 绿（含负向：只置 null 必须判失败）
 
-- [ ] **T1.4** `fx/Shading2D.kt`：`lambert` / `specular` / `rim` / `bevelStroke` / `contactShadow` / `shadeBrush` / `toneMap`
+- [x] **T1.4** `fx/Shading2D.kt`：`lambert` / `specular` / `rim` / `bevelStroke` / `contactShadow` / `shadeBrush` / `toneMap`
   - ⛔ `LIGHT_ANGLE_DEG = 315f` 是**全库唯一**光源常量
   - **验收**：`Shading2DTest` 绿（含负向：改光源角后明暗必须反转）
 
-- [ ] **T1.5** `fx/OverlayFx.kt`：`drawVignette` / `drawGrain` / `drawScanlines` / `drawTexture` / `drawExposureCompensation` / `release`
+- [x] **T1.5** `fx/OverlayFx.kt`：`drawVignette` / `drawGrain` / `drawScanlines` / `drawTexture` / `drawExposureCompensation` / `release`
   - `OFF` 档**全部方法直接 return**
   - **验收**：`ScanlineTileTest` 绿（含负向：周期改错必须判失败）
 
-- [ ] **T1.6** `fx/OffscreenFx.kt` 骨架（**本阶段只建类与 `ensure`/`onExit`，不接任何效果**）
+- [x] **T1.6** `fx/OffscreenFx.kt` 骨架（**本阶段只建类与 `ensure`/`onExit`，不接任何效果**）
   - 不变式：`currCanvas` 恒包装 `curr`
   - **验收**：类可编译；`onExit` 后位图全部 `isRecycled`
 
-- [ ] **T1.7** **阶段完成**：门禁全绿 + **画面零变化**
+- [x] **T1.7** **阶段完成**：门禁全绿 + **画面零变化**
   - ⛔ 本阶段**不得有任何渲染器接入** —— 这是"工具箱无副作用"的证明
   - **验收**：`testDebugUnitTest` 全绿且计数净增 40–60；真机上任意效果画面与改造前**逐像素一致**（截图比对）
 
@@ -3416,31 +3835,31 @@ JAVA_HOME="C:/Program Files/Android/Android Studio/jbr" \
 > 目的：在批量迁移前先证明「**迁移 ≠ 改画面**」（`postFx` 默认 `NONE` ⇒ 逐像素不变）。
 > 选 `TunnelRenderer`：无后处理、无对象池、`dt` 用法简单（`BasicRenderers.kt`）。
 
-- [ ] **T1.5.1** `TunnelRenderer` 改成 `: RendererFx()`（§5.5 · §十 **S1.5**）
+- [x] **T1.5.1** `TunnelRenderer` 改成 `: RendererFx()`（§5.5 · §十 **S1.5**）
   - `postFx` 保持默认 `NONE`；原 `draw()` 体搬进 `drawContent()`，`onEnter`/`onExit` 同上
   - ⛔ 不改任何绘制参数、不改 `rng` 消耗序列、不改 `dt` 语义（搬移，不是重写）
   - **验收**：`RendererBaseContractTest`（§八 G12）绿；真机截图**逐像素不变**（同尺寸/同歌/同进度各 1 帧）；`lintDebug` 0 Error
 
 #### 阶段 1.6 · 全量性能优化 P0（4 项 · **零画面变化** · v1.10 新增，v1.14 追加 T1.6.4）
 
-- [ ] **T1.6.1** 删掉所有每帧字符串 / 容器分配（§四 **G16**）
+- [x] **T1.6.1** 删掉所有每帧字符串 / 容器分配（§四 **G16**）
   - `AdvancedRenderers.kt:400` 的 `glyphKey` 字符串 → 三个 `Int` 字段（`keySlot` / `keyCell` / `keyN`）
   - 全量扫一遍 `draw()` 可达代码里的 `"$…"`、`listOf`、`mutableListOf`、`map{}`、`sortedBy{}`
   - **验收**：§八 G13 的源码扫描段断言 ① 全绿；**逐像素不变**（同尺寸/同歌/同进度各截 1 帧比对）
 
-- [ ] **T1.6.2** 消掉 `draw()` 内的 `Rect()` 分配（§四 **G15** · §G12 的 8 处）
+- [x] **T1.6.2** 消掉 `draw()` 内的 `Rect()` 分配（§四 **G15** · §G12 的 8 处）
   - 位置：`AdvancedRenderers.kt:75/77/252/566`、`BasicRenderers.kt:113/219`、`LyricsDotMatrixRenderer.kt:698/703`
   - 做法：`addOval(Rect(Offset(x-r,y-r), Offset(x+r,y+r)))` → `moveTo` + 4 段 `cubicTo`（§15.3.2 #15 的 `dotPath` 方案），或改走 `android.graphics.Path` 的 float 重载（§15.4-A37）
   - ⚠️ `cubicTo` 近似的圆与 `addOval` 的真圆在抗锯齿下**有 ≤1/255 的差** ⇒ 允许，但**必须截图比对**
   - **验收**：§八 G13 断言 ② 全绿；截图差 ≤ 1/255
 
-- [ ] **T1.6.3** 清掉死代码与死状态写（§四 **G16** 的伴生项）
+- [x] **T1.6.3** 清掉死代码与死状态写（§四 **G16** 的伴生项）
   - `VisualizerStage.kt:310` 的 `canvasSize = Size(size.width, size.height)` —— **只写不读**（`grep -rn "canvasSize" ui/` 的读点全在 `VisualEqualizer.kt` 的**另一个同名形参**上）⇒ 删该行与 `:144` 的 `var canvasSize` 声明
   - `VisualizerStage.kt:304-308` 的 T9 注释**补上 G14 的现状说明**（否则下一个人会以为这层是必需的）
   - ✅ **裁决项 9 = A** ⇒ `VisualizerViewModel.kt:485-492` 的 `setQuality()` **接 UI**（见 **T1.6.4**）；⛔ **不要删该方法** —— 它是裁决项 9 的落地接口
   - **验收**：`testDebugUnitTest` 全绿且**测试计数不变**（证明零行为改动）
 
-- [ ] **T1.6.4**（**v1.14 新增 · 因 §十三 裁决项 9 = A**）把 `VisualizerViewModel.setQuality()` 接到设置页 UI（§2.4 ④ 方案 A）
+- [x] **T1.6.4**（**v1.14 新增 · 因 §十三 裁决项 9 = A**）把 `VisualizerViewModel.setQuality()` 接到设置页 UI（§2.4 ④ 方案 A）
   - 设置页新增「**可视化画质**」三档选择器（`LOW` / `MEDIUM` / `HIGH`），新增文案**同步 `res/values-en/`**
   - 接**已有**的 `VisualizerViewModel.setQuality()`（`:485-492`，**已实现但全仓库零调用点**）⇒ 写 DataStore ⇒ `VisualQuality` 生效
   - ⛔ **不要改 `VisualQuality.supports()` 的门控**（`AppSettings.kt:263` 的 `Tier.ULTRA -> allowFramebuffer`）——
@@ -3480,39 +3899,52 @@ JAVA_HOME="C:/Program Files/Android/Android Studio/jbr" \
 
 #### 阶段 2 · 批次 A 前 4 套（5 项）
 
-- [ ] **T2.1** E03 隧道穿越（§A1 六条）
+- [x] **T2.1** E03 隧道穿越（§A1 六条）
   - **验收**：V1 判据全部通过
 
-- [ ] **T2.2** E05 圆形频谱环（§A2 六条）
+- [x] **T2.2** E05 圆形频谱环（§A2 六条）
   - 重点：`glowLayers` 假光晕整段删除；外圈 8 段 `drawArc` → 1 次 `sweepGradient`
   - **验收**：V2 判据全部通过
 
-- [ ] **T2.3** E07 频率山峦（§A3 六条）
+- [x] **T2.3** E07 频率山峦（§A3 六条）
   - 重点：`lineTo` → `quadraticBezierTo` 平滑（零分配）
   - **验收**：V3 判据全部通过
+  - ⚠️ **实现状态（2026-09-30）**：T2.1 / T2.2 / T2.3 的代码已落盘（`BasicRenderers.kt`，**尚未提交**）——
+    三项均**待编译 + 上机跑 V1–V3 判据**；实现期偏差共 6 条已登记在 **§12.4**
 
-- [ ] **T2.4** E12 频谱瀑布（§A4 六条）
+- [x] **T2.4** E12 频谱瀑布（§A4 六条）
   - 重点：底部新行 64 次 `drawRect` → 16 条 `Path`；历史行加衰减
   - **验收**：V4 判据全部通过
 
-- [ ] **T2.5** **阶段完成**：`FxCoverageScanTest` 首次启用（仅覆盖本阶段 4 套，其余加豁免标记）
+- [x] **T2.5** **阶段完成**：`FxCoverageScanTest` 首次启用（仅覆盖本阶段 4 套，其余加豁免标记）
   - 电视上实测 4 套帧耗时（`dumpsys gfxinfo`）
   - **验收**：U1–U7 通用项通过；4 套帧耗时 ≤ 改造前
+  - ⚠️ **实现状态（2026-09-30）**：T2.4 / T2.5 代码已落盘（**尚未提交**）——
+    `FxCoverageScanTest` 共 **8 例**（4 正向 + 4 负向自证），**首次启用即只覆盖本阶段 4 套**；
+    豁免改为**测试内集中名单**（§八 G7 判据同步更新），偏差共 6 条见 **§12.4**。
+    ⛔ **电视实测 4 套帧耗时（`dumpsys gfxinfo`）待上机**，本项尚未完成。
 
 #### 阶段 3 · 批次 A 其余 7 套（8 项）
 
-- [ ] **T3.1** E13 液态网格（§A5 六条）
+- [x] **T3.1** E13 液态网格（§A5 六条）
   - ⛔ **必须修 `timeMs` 违规**（`:210-213`）→ `dt` 累加
   - **验收**：V5 通过；喂 `dt = 10s` 时相位推进不超一帧步长
 
-- [ ] **T3.2** E15 液态涟漪（§A6 五条）
+- [x] **T3.2** E15 液态涟漪（§A6 五条）
   - **验收**：V6 通过
 
-- [ ] **T3.3** E17 星座（§A7 五条）
+- [x] **T3.3** E17 星座（§A7 五条）
   - 重点：连线判定改空间网格分桶（12720 → ~1440 次）
   - **验收**：V7 通过；HIGH 档 draw 耗时下降
+  - ⚠️ **实现状态（2026-09-30）**：T3.1–T3.3 代码已落盘（**尚未提交、尚未上机**）。
+    E13 / E15 / E17 均改为 `: RendererFx()` 并打开 `postFx` ⇒ `FxCoverageScanTest` 的
+    `covered` 同步扩到 **7 套**（判据与豁免机制不变）。T3.3 的空间网格分桶，其**配对集合**
+    已用 python 与 `O(n²)` 参考实现在 **108 组场景**（9 种分辨率/能量 × 12 次扰动）上
+    逐对比对**完全一致**，判定次数下降 **12.94×**（优于本节估的 9×，脚本见
+    `logs_temp/s17_constgrid.py`）。实现期偏差共 6 条见 **§12.4**。
+    ⛔ **V5–V7 与「HIGH 档 draw 耗时下降」待上机**（后者需 `adb shell dumpsys gfxinfo`）。
 
-- [ ] **T3.4** E24 心跳（§A8 **六条**）
+- [x] **T3.4** E24 心跳（§A8 **六条**）
   - ⛔ **顺序不可反**：**先做第 0 条（波形真实化）** —— 它是纯数据 + 表驱动，
     零新增分配 / 零新增 draw，可独立提交、独立验证；再做 1–5 的观感改造
   - 第 0 条重点：`colMs`/`beatAtMs`/`lastFireMs` → 整数列号 `colIdx`/`beatCol`/`lastFireCol`
@@ -3521,8 +3953,16 @@ JAVA_HOME="C:/Program Files/Android/Android Studio/jbr" \
   - 第 2 条重点：新增延迟波形层（余辉拖尾），`FloatArray` 原地衰减
   - ⛔ 不新增扫描头 / 节拍圆点（KDoc `:45`「峰顶无帽」既有裁决；原第 5 条已作废）
   - **验收**：V8 ①②③④（波形形状，**必过**）+ ⑤⑥⑦（观感）
+  - ⚠️ **实现状态（2026-09-30）**：`EcgWaveRenderer.kt` **整文件重写**已落盘（**尚未提交、尚未上机**）。
+    第 0 条（整数列号 + 50 点单表 + O(1) 查表）与第 1–5 条（栅格纵深 / 余辉 / 径向辉光 /
+    CRT 后处理 / 呼吸波）一并完成；新增门禁 `EcgWaveformTest`（**10 正向 + 4 负向自证**），
+    `FxCoverageScanTest.covered` 扩到 **8 套**（E24 移入）。数值复核（`logs_temp/s17_ecg.py`）：
+    `HB` 50 点 / 555.6 ms、`HB[19] = 1.000`、`HB[22] = −0.28`、PR 与 ST 段全 0、
+    T/QRS 相对宽度比 **1.86**、旧表四条负向自证**全部按预期判失败**。
+    ⛔ **V8 全部子项（波形形状 / 拖影 / 网格四角变暗 / 扫描线无摩尔纹）待上机**。
+    ⚠️ 本轮另修掉两处**门禁空转**与一处**编译期错误**，详见 §12.4 末三条。
 
-- [ ] **T3.5** E30 雷达（§A9 **四条**）
+- [x] **T3.5** E30 雷达（§A9 **四条**）
   - ⛔ **顺序不可反**：**先做第 0 条（真实 PPI 重建）** —— 它把"回波焊在扫线上"改成
     "目标池 + 磷光余辉"，可独立提交、独立验证；再做 1–3 的观感改造
   - 第 0 条重点：① 目标池 `FloatArray(24×8)` + `crossed()` 区间判定（左开右闭，抗跨 0 回绕）；
@@ -3534,11 +3974,48 @@ JAVA_HOME="C:/Program Files/Android/Android Studio/jbr" \
   - ⛔ **不改** `:106-134` 的同心圆 / 射线结构（只在第 1 条里改 alpha 与分档明度）
   - **验收**：V9 ①②③④（真实 PPI，**必过**）+ ⑤⑥⑦（观感）
 
-- [ ] **T3.6** E31 折纸（§A10 五条）
+  - ⚠️ **实现状态（2026-09-30）**：`RadarGridRenderer` **整类重写**已落盘（**尚未提交、尚未上机**）。
+    `: VisualizerRenderer` → `: RendererFx()`；第 0 条（真实 PPI 重建：目标池 `FloatArray(24×8)` +
+    `crossed()` 左开右闭区间判定 + `BRIGHT` 线性衰减 + 连续漂移 + 寿命**重生**）与第 1–3 条
+    （同心圆纵深 + 中心绿光 / 三档明度 / CRT 后处理）一并完成；⛔ **`drawSpectrumArcs` 整段删除**，
+    回波改由目标池的 `drawArc` 画在**目标自己的方位角**上。⛔ **修掉真 bug**：旧 `ensureBrush`
+    尺寸未变即 `return`，而停靠点按 `sweepAngle` 算 ⇒ 亮扇**钉死 252°–360° 从不旋转**；
+    现停靠点**固定 0.86–1.0** + `withTransform { rotate(...) }`（inline，零分配）。
+    新增门禁 `RadarSweepTest`（**11 正向 + 4 负向自证**），`FxCoverageScanTest.covered` 扩到 **9 套**
+    （E30 移入，`exempt` 只剩 `OrigamiPolyRenderer` / `StaircaseWaveRenderer`）。
+    数值复核（`logs_temp/s17_radar.py`，**34 条断言全过**）：一圈 **3.927 s**、`activeCount` 8→24 封顶封底、
+    100 帧后 **16/16** 目标方位漂移、900 帧（跨多次重生）`RANGE ∈ [0.25, 1]` 且 `BEARING ∈ [0, TAU]`、
+    100 帧后最小 `BRIGHT = 0.262 > 0`（余辉撑过一圈）、旧「距离式穿越判定」与「置零式重生」
+    四条负向自证**全部按预期判失败**。实现期偏差共 6 条见 **§12.4**。
+    ⛔ **V9 全部子项（回波留原地 / 下圈换位 / 扫线匀速 3.9 ± 0.4 s / 余辉扇跟着转 / 回波短弧）待上机**。
+
+- [x] **T3.6** E31 折纸（§A10 五条）
   - ⚠️ 第 4 条"折痕渐变"若触发零分配红线，**按文档写的降级方案执行**（保留纯色 + 法线明暗）
   - **验收**：V10 通过
 
-- [ ] **T3.7** E32 阶梯（§A11 **六条**）
+  - ⚠️ **实现状态（2026-09-30）**：`OrigamiPolyRenderer` **整类重写**已落盘（**尚未提交、尚未上机**）。
+    `: VisualizerRenderer` → `: RendererFx()`；`postFx = PostFx(vignette = 0.42f, grain = 0.030f)`。
+    §A10 五条全部完成：**第 1 条**折痕高光（沿**铰边**画 1 条 `towardWhite(midColor, 0.55f)` 细线，
+    ⛔ **全部合批进单条 `creasePath`** ⇒ 1 次 `drawPath`，**不是** 64 次 `drawLine`）；
+    **第 2 条**接触阴影（**折叠中**（`fold > 0 && |foldK| < 0.9`）的同形三角沿**光向反方向**偏移
+    `SHADOW_DROP = 4 px`，偏移量由 `Shading2D.lightDir` 推导 ⇒ ⛔ 不另写光源角；合批 1 条 `shadowPath`，
+    **绘制顺序在填充之后** ⇒ 投影才落在相邻三角上看得见"抬起"）；
+    **第 3 条**纸张纹理（`ProceduralTexture.Id.PAPER` 整屏 1 次 `drawImage`，`alpha = 0.28f` —— ⛔ **不是**原文的 `0.10`，见 §12.4）；
+    **第 4 条**折痕渐变（⛔ **按降级方案执行**：不做逐三角 `Brush.linearGradient` ⇒ 改 `Shading2D.lambert` **连续明暗**，
+    正面 `× (0.80 + 0.40 × lit)` / 背面 `× (0.44 + 0.26 × lit)` ⇒ 两面区间**永不重叠**（0.70 < 0.80），
+    折到 90° 再乘 `1 − 0.35` 侧面压暗；法线用**未投影**的自由顶点算 ⇒ 整段折叠中 `lit` **逐帧恒定**）；
+    **第 5 条**低音节拍微光（`alpha = frame.pulse × 0.035f`，⛔ 由原文 `0.06` 降下来防过曝）。
+    另⛔ **修掉相位红线**：旧实现用 `ctx.nowMs` + `lastMs == 0L` 哨兵自算 dt ⇒ 改由基类 `FxFrame.dt`
+    （`frame.timeMs` 差分 + 100 ms 钳制）；顺带修正 `triBaseL` 的 KDoc（写「0.85..1.15」，实际 `0.82 + r × 0.30` ⇒ 0.82..1.12）。
+    数值复核（`logs_temp/s17_origami.py`，**62 条断言全过 / 5 条负向自证**）：三角数 16/36/64、
+    `foldK` 由 +1 **单调**扫到 −1（55 帧 / 0.917 s @60fps）、铰边两端点全程**逐像素不动**、
+    `foldK = 0` 自由顶点恰落铰边中点、`lit` 整段跨度 `0.00e+00`（改用投影后顶点则跨度 **0.9968** ⇒ 该设计选择非多余）、
+    纸纹有效峰值 alpha `0.0318`（原文 `0.10` ⇒ 仅 `0.0114` ≈ 3 灰阶、**肉眼不可见**）、
+    `drawContent` 内**零堆分配**且 `Offset/IntSize/Color` 全为 value class。
+    实现期偏差共 8 条见 **§12.4**。
+    ⛔ **V10 全部子项（折叠中的三角**可见下方投影** / 折边有**受光亮线** / 整屏有**纸纹质感**且**不是规则网格**）待上机**。
+
+- [x] **T3.7** E32 阶梯（§A11 **六条**）
   - ⛔ **先做第 0 条（P0 全柱独立频段映射），再做 1–5 的观感** —— **顺序不可反**：
     映射没修好之前，加圆角/发光只是在"错的柱高"上化妆，V11 ① ② 必挂
   - 第 0 条重点：① 删掉 `n / 2` 半区，覆盖 `0..63`；② `cols` 列 → `cols` 个**互不重叠桶区间**
@@ -3552,62 +4029,306 @@ JAVA_HOME="C:/Program Files/Android/Android Studio/jbr" \
   - **验收**：V11 ①②③（**必过**）+ ④⑤⑥⑦（观感）；`StaircaseMappingTest`（§八 G10）全绿
     且 3 条负向自证**实测挂掉**
 
+  - ⚠️ **实现状态（2026-09-30）**：`StaircaseWaveRenderer` **整类重写**已落盘（**尚未提交、尚未上机**）。
+    `: VisualizerRenderer` → `: RendererFx()`；`postFx = PostFx(vignette = 0.46f, grain = 0.030f, scanline = 0.10f)`。
+    **第 0 条（P0 全柱独立频段映射）先做**：⛔ 删掉旧 `src = i / half * (n / 2)`（① 只映射**前 32 个桶** ⇒
+    中高频**永不参与**；② 左右**严格镜像**且多列共用同一桶 ⇒ 命中不同桶只有列数的一半；
+    ③ `STEPS = 16` 吃掉小动态）⇒ 改为 `cols` 列**顺序全宽展开**（§十三 裁决项 7，⛔ 不镜像）覆盖**全部 64 桶**，
+    每列一个**互不重叠桶区间** + **区间均值**；边界表 `buildBands(cols, k = PERCEPT_K = 1.6)` 在
+    `onEnterContent` 建一次（`IntArray(cols + 1)`，draw 内只读 ⇒ 零分配）；`STEPS` 16 → **24**；
+    静音门槛 = `SpectrumContract.MIN_AMPLITUDE`（有信号的列**至少 1 格**，只有真静音才画 `alpha 0.10` 轮廓格）；
+    亮度改 `level = (st + 1f) / STEPS`（分母是**常量** ⇒ 同一格位亮度与列高无关，**修掉闪烁**）；
+    `gap` 拆成 `gapX` / `gapY`（各算各的）。
+    **第 1 条**圆角 `drawRoundRect(cornerRadius = CornerRadius(1.5f))`（构造期算一次，value class ⇒ 零分配）
+    + 接缝暗线（每列 1 段 ⇒ **合批 1 条 `seamPath`** ⇒ 1 次 `drawPath`，`darken(accent, 0.80f)`，
+    ⛔ 画在方块**之后**才看得见）；
+    **第 2 条**外发光（全部方块合批 1 条 `glowPath`，`GLOW_EXPAND = 2 px` / `GLOW_ALPHA = 0.12f`，
+    **仅 `FxLevel != OFF` 时画**；⛔ 用 `addAxisRect`（**直角**，4 点手工 `moveTo` / `lineTo` / `close`）
+    而非 `addRoundRect` —— 后者要 `RoundRect`（`data class`）⇒ **每块一次堆分配**，违反零分配红线；
+    ⛔ 也**不能**写 `path.addRect(l, t, r, b)`：Compose 的 `Path` **没有这个重载**，见 §12.4 末条）；
+    **第 3 条**碎裂（顶部 2 格拆 2×2 碎块，**确定性位移表** `DISP_X` / `DISP_Y`（索引 =
+    `(seq + col + st × 2 + qy × 2 + qx) and 3`）+ **整数度旋转**（`(seq % 9 − 4) × 8°` ⇒ ±32° ≤ 0.6 rad），
+    4 个角点**手工算**（⛔ 不用 `withTransform`，省一次 `save`/`restore`）；⛔ 逐碎块用 `blockAlpha(st)`
+    会让每个碎块 alpha 各异 ⇒ **无法合批**（最坏 `4 × 2 × cols = 288` 次 `drawPath`）
+    ⇒ 按格位**量化到 4 档**（`SHARD_TIERS = 4`）⇒ 恒 ≤ **4 次**）；
+    **第 4 条**三段式背景（径向纵深 `shadeBrushCached` + `PAPER` tile `0.10f` + `STARFIELD` tile `0.16f`，
+    **不随 `FxLevel` 关闭** —— 它承担「不再浮在纯黑上」）；**第 5 条**后处理。
+    另⛔ **修掉两处真问题**：**(a)** 新写的 `accent.toArgb()` **缺 `import androidx.compose.ui.graphics.toArgb`**
+    （`toArgb` 是扩展函数，必须显式 import；同文件的 E30/E31 不用它，所以此前没暴露）⇒ **必然编译失败**，已补；
+    **(b)** 删掉死状态 `lastShatter`（只写不读）。**(c)** 跨效果见 §12.4 的 `shadeBrushCached` 撞键一条。
+    **(d)** ⛔ **用户首轮 `assembleDebug` 编译失败（16 条 `e:`）**：`path.addRect(l, t, r, b)` ——
+    **Compose 的 `Path` 根本没有 float 形状重载**（实测 `ui-graphics-android-1.6.1-sources.jar`：
+    `Path.kt` / `AndroidPath.android.kt` 都只有 `addRect(rect: Rect)`，全源码无 `fun Path.addXxx` 顶层扩展）
+    ⇒ 新增 `addAxisRect` 辅助（4 点手工写，零分配）替换 4 处调用；新增护栏 `logs_temp/s17_pathapi.py`。
+    详见 §12.4 末条。
+    数值复核（`logs_temp/s17_staircase.py`，**67 条断言全过**）：边界表 LOW/MED/HIGH = 20/28/36 列且
+    `band[cols] == 64`、Σ 区间 == 64、每列区间 ≥ 1 桶、**命中不同桶数 == cols**（旧镜像映射实测只有
+    10/14/18）、最右列覆盖 `bin [58, 64)`（高频有独立柱）、**感知分桶 vs 线性基线**（LOW 6>3 / MED 8>4 /
+    HIGH 8>5；前段步长 6/7/9 < 后段 24）、旧 16 档下 `v ∈ [MIN_AMP, 1/16)` 高度为 **0**（小信号被整个吃掉）、
+    亮度与 `steps` 无关且严格递增（上限 `0.94 < 0.95`）、碎块最高档与顶部正常块亮度同量级、
+    HIGH 最坏 `801` 次 drawPath（规格 864）。
+    ⚠️ **亮度侧移**（规格 0.6 的直接副作用，已记 §12.4）：分母由列高改为常量 `STEPS` 后，
+    矮列明显变暗（列高 1：旧 0.408 → 新 0.250），满列基本持平（0.645 → 0.595）。
+    实现期偏差共 **10** 条见 **§12.4**。
+    ⛔ **V11 全部子项（相邻柱高度普遍不同 / 低中高频段都有柱在动 / `cols` 个柱起伏包络互不相同 /
+    静音一起回落；观感：可见接缝 / 发光外溢 / 碎裂有明显位移与角度 / 同一高度不再闪烁）待上机**。
+
 - [ ] **T3.8** **阶段完成**：`FxCoverageScanTest` 覆盖率扩到 A 批 11 套（移除豁免）
   - **验收**：U1–U7 通过；11 套帧耗时 ≤ 改造前
 
+  - ⚠️ **实现状态（2026-09-30）**：**覆盖率部分已完成** —— `covered` 已扩到 **11 套**
+    （E03 / E05 / E07 / E12 / E13 / E15 / E17 / E24 / E30 / E31 / E32），`exempt` 里**阶段 3 批次 A 的条目清零**
+    （剩余 18 条全是批次 B / C 与结构型豁免）。⛔ **仍待办**：**U1–U7 上机验收** 与
+    **「11 套帧耗时 ≤ 改造前」的对比实测**（需真机）。
+
 #### 阶段 4 · 批次 B 10 套（11 项）
 
-- [ ] **T4.1** E11 星系螺旋（§B1）
+- [x] **T4.1** E11 星系螺旋（§B1）
   - ⛔ 必须修 `dt` 化旋转（`:46` 帧率绑定）
   - **验收**：V12 通过
 
-- [ ] **T4.2** E14 节拍烟花（§B2）
+  - ⚠️ **实现状态（2026-09-30）**：`GalaxySpiralRenderer` **整类重写**已落盘（**尚未提交、尚未上机**）。
+    `: VisualizerRenderer` → `: RendererFx()`；`postFx = PostFx(vignette = 0.46f, grain = 0.028f)`。
+    §B1 五条全部完成：
+    **①** 星点 **4 桶**（`starPaths: Array(BUCKETS) { Path() }`，亮度 `STAR_WHITE` / alpha `STAR_ALPHA` 两张表）
+    + **远臂纵深**（`t > FAR_T = 0.62` ⇒ 半径 `× FAR_R_K = 0.6`、桶位**降一档**且不越界，`starBucket(v, far)`）；
+    **②** 尘埃带 —— 16 条螺线**合批进 1 条 `dustPath`**（每臂 `DUST_SEG = 24` 段采样，`break` 截断）
+    ⇒ **1 次 `drawPath`**（⛔ 不是 16 次），`alpha = DUST_ALPHA = 0.10f`、
+    `darken(accent, DUST_DARKEN = 0.40f)`、描边宽 `= maxR × DUST_W_K = 0.10`（按 4 档尺寸**预分配** `Stroke`，draw 内零分配）；
+    **③** 中心核径向渐变（`shadeBrushCached` + `E11_KEY_SALT = 0x11111111L`，⛔ **键里不含 energy** —— 否则每帧 miss 且每帧重建 `Brush`）
+    + **内高光**（`CORE_HL_K = 0.42` / `CORE_HL_ALPHA = 0.55` / `towardWhite(accent, 0.85)`）；
+    **④** ⛔ **修掉帧率绑定**（旧 `:46` 每帧 `+= (ROT_BASE_DEG + bpm / BPM_DIV)`）⇒ 改
+    `rotation += rotRateDegPerSec(frame.bpm) × fx.dt`，`rotRateDegPerSec = (0.15 + bpm / 1200) × 60`；
+    **⑤** 后处理暗角 + 颗粒。
+    另⛔ 星点改走 **`asAndroidPath().addOval(l, t, r, b)`**（`android.graphics.Path` 的 4-float 重载）
+    —— Compose 的 `Path.addOval` **只收 `Rect`**，而 `Rect(...)` 是 `data class` ⇒ **每颗星一次堆分配**，
+    违反零分配红线（§四 G15 / §八 G13）。⇒ §7.5 的 E11「分配」列 **2 → 0**（见 §7.5 注②-v1.26）。
+    数值复核（`logs_temp/s17_galaxy.py`，A–F 六组 + 4 条负向全过）：
+    **帧率无关已实证** —— bpm 0/90/120/200 下 60/30/15 fps 积分 1 秒都得到 9.0 / 13.5 / 15.0 / 19.0 度；
+    旧实现 60fps `15.000` vs 30fps `7.500`（**恰好 50%**）；bpm = 120 ⇒ 15 度/秒 ⇒ **24.0 秒/圈**；
+    螺线在 `t ≈ 0.540` 处越过 `maxR`（`break` 合理）；尘埃带采样 ≈ 208 点、星点 LOW/MED ≈ 480 / HIGH ≈ 778；
+    1080 档描边 **62.6 px**；档位表 720/1080/1440/2160 边界正确、4000 封顶；
+    `drawContent` 内 6 类禁用模式 **0 命中**；总 draw 次数 = **7**（1 尘埃带 + 4 星点 + 2 核）。
+    门禁：`GalaxySpiralTest`（新建，**8 正向 + 3 负向自证**）、`FxCoverageScanTest.covered` 扩到 **12 套**、
+    `logs_temp/s17_apply_e11.py`（CRLF 安全整块替换）。
+    ⛔ **V12 待上机**（含"旋转**与帧率无关**"与"远臂有纵深"两条）。
+
+- [x] **T4.2** E14 节拍烟花（§B2）
   - 拖尾需按 hue 分 8 桶合并 `Path`
   - **验收**：V13 通过
 
-- [ ] **T4.3** E16 数字雨（§B3）
+  - ⚠️ **实现状态（2026-09-30）**：`BeatFireworkRenderer` **整类重写**已落盘（**尚未提交、尚未上机**）。
+    `: VisualizerRenderer` → `: RendererFx()`；`postFx = PostFx(vignette = 0.44f, grain = 0.030f)`。
+    §B2 四条全部完成：
+    **①** 拖尾 —— 按 hue 分 **8 桶**（`trailPaths: Array(TRAIL_BUCKETS) { Path() }`）合批，
+    每粒子 `moveTo(x, y)` + `lineTo(x − vx·TRAIL_K, y − vy·TRAIL_K)`（`TRAIL_K = 2.5f`），
+    桶 alpha = **该桶 life 均值 × `TRAIL_ALPHA_K = 0.35f`**，`Stroke(1.6f)` **构造期建一次**，
+    `life > TRAIL_MIN_LIFE = 0.12f` 才画 ⇒ **恒 ≤ 8 次 `drawPath`**（⛔ 不是每粒子一次 `drawLine`）；
+    **②** 冲击波环（**`dt` 化相位** `ringPhase += fx.dt / RING_SEC`，半径 `0 → RING_MAX_K × minDim = 0.25 × minDim`、
+    `alpha 0.55 → 0`、`width 3f`）+ 中心闪光（`translate(flashX, flashY)` 平移画布 +
+    `shadeBrushCached(center = Offset.Zero)`，`alpha = frame.pulse × 0.45`）；
+    **③** 静音期底纹 `0.12 → 0.18` + 径向纵深
+    （`drawRect(brush = shadeBrushCached(..., base = darken(accent, 0.62f), contrast = 0.10f))`，
+    中心 `(w/2, h×0.62)`、半径 `maxOf(w,h) × 0.62f`，**不随 `FxLevel` 关闭**）；
+    **④** 后处理暗角 0.44 + 颗粒 0.030。
+    数值复核（`logs_temp/s17_e14.py`，A–H 八组 + 负向夹具全过）：
+    桶位 9 例边界 + 单调不减 + 全覆盖 8 桶；尾迹端点与速度**反向**（点积 ≤ 0）；
+    环半径 / alpha **单调**且端点正确（`0.25 × minDim` / `0.55 → 0`）；
+    **帧率无关已实证**（60 / 30 / 15 / 10 fps 下相位恒 == `min(1, t / RING_SEC)`）；
+    负向：字面 `pulse` 当半径 ⇒ **峰值在中途（t = 0.05 s）**、0.6 s 回落到峰值的 **21%** ⇒ 环会「缩回去」；
+    `drawContent` 内 6 类禁用模式 **0 命中**；固定 draw 次数 **1 → 12**（1 径向 + 1 底纹 + 8 拖尾 + 1 环 + 1 闪光）。
+    门禁：`BeatFireworkTest`（新建，**8 正向 + 3 负向自证**）、`FxCoverageScanTest.covered` 扩到 **13 套**
+    （负向 N2 样本 `BeatFireworkRenderer` → `MatrixRainRenderer`）、
+    `logs_temp/s17_apply_e14.py`（**按原行尾回写**的整块替换 + 27 条落盘校验）。
+    ⚠️ §7.5 该行 `151 / 65` → **`162 / 373`**：原语 **+11** = 固定部分 `1 → 12`；
+    路径 **+308** = 拖尾 `150 × 2`（脚本按 `BOUNDS["p.count"] = 150` 计）+ 8 次 `drawPath`
+    ⇒ **合批只压住 draw 调用，不减少 path 写入**（见 §12.4）。
+    ⛔ **V13 待上机**（"粒子有拖尾" 与 "`beat` 有冲击波环 + 闪光" 两条）。
+
+- [x] **T4.3** E16 数字雨（§B3）
   - ⛔ **字符集固定为 0/1**（§13.5 已裁决）；只把字形档位 4 → 5、加描边 + 垂直渐变，缓存 8 → 10 张
   - 拖影/光晕与字形质感分两次改，便于回退
   - **验收**：V14 通过
+  - ⚠️ **实现状态（2026-09-30）**：**已落盘**。`MatrixRainRenderer` 整类重写：
+    `: VisualizerRenderer` → `: RendererFx()`，
+    `postFx = PostFx(vignette = 0.50f, grain = 0.030f, scanline = 0.16f)`（⛔ **字面量**，见 §12.4）。
+    §B3 四条全部完成：
+    **①** 头部光晕 —— ⛔ **不额外发 draw**：光晕**预渲染进「白热头部」字形 Bitmap**
+    （`RadialGradient`，半径 `字形高 × GLOW_R_RATIO = 0.9f`、中心 alpha `GLOW_ALPHA = 0.30f`）；
+    该贴图四周各多 `glowPad`，blit 用**偏移量** `off = if (isHead) -pad else 0f` 抵消
+    （⛔ 不写第二条 `drawBitmap` 分支 —— 估算脚本会把两个**互斥分支**各乘一遍循环，`456 → 926` 假性翻倍）。
+    **②** 垂直拖影 —— 逐格 `trailFade(k) = k / perCol` **修正为「从头部向外衰减」**
+    （旧实现写 `1 - k / perCol` ⇒ 越远越亮，与 KDoc 声明的「亮白绿头部 → 亮绿 → 中绿 → 暗绿」**方向相反**）；
+    blit alpha = `TRAIL_ALPHA_FLOOR(0.08) + fade × 0.92`（⛔ 无 per-column `drawRect`，理由同 ①）。
+    **③** 字形质感 —— 每张 = **深绿外描边**（`Paint.Style.STROKE`，宽 `textSize × STROKE_RATIO(0.055)` 钳 `1..3` px）
+    + **中心偏白的垂直渐变填充**（`LinearGradient` 三停靠 `base → towardWhite(base, 0.55) → base`）；
+    档位 **4 → 5**（新增「白热头部」`rgb(235,255,235)`）⇒ 张数 **8 → 10**，
+    ⛔ **每帧 blit 路径与 draw 次数不变**；**④** 后处理。
+    另修 **帧率绑定**：旧 `colY += speed`（**每帧**固定增量）⇒ 改
+    `advanceCol = (y + speed × fx.dt × 60) mod span` ⇒ **60fps 下与旧实现逐像素等同**，30/15 fps 不再翻倍。
+    数值复核（`logs_temp/s17_e16.py`，**A–I 九组 + 负向夹具全过，58 条**）：
+    fade 端点 + 单调 + **头部严格亮于最远格**；alpha 下限 `0.08` + 单调；
+    档位分布 `[4,4,4,4,3,3,3,2,2,2,1,1,1,0]`（**全覆盖 5 档**）；
+    **帧率无关已实证**（60 / 30 / 15 fps 积分 1 秒都得到 **7200.0**；旧口径 60 fps `7200` vs 30 fps `3600`）；
+    5 档亮度严格递减（**246.8 / 232.3 / 161.1 / 123.1 / 79.7**）且描边最暗（**55.1**）；
+    高光逐档**亮于**基色；`packRgb` 与 `android.graphics.Color.rgb` 语义一致；
+    **门禁原版正则对 `postFx` 做正 / 负双证**（具名常量写法被**静默判否**）。
+    门禁：`MatrixRainTest`（新建，**8 正向 + 3 负向自证**）、`FxCoverageScanTest.covered` 扩到 **14 套**
+    （负向 N2 样本 `MatrixRainRenderer` → `FractalTreeRenderer`）、
+    `logs_temp/s17_apply_e16.py`（**按原行尾回写**的整块替换 + **46 条**落盘校验）。
+    ⚠️ §7.5 该行 `456 / 1 / 8` → **`478 / 1 / 16`**：原语 **+22** 与分配 **+8** 全部落在
+    **字形重建路径**（`buildGlyphs`：`drawText` `8 → 20`、新增光晕 `drawCircle` 10；
+    `LinearGradient` 每档 1 个、`RadialGradient` 全局 1 个、`AndroidPaint` 复用为 4 个）
+    —— ⛔ **每帧 blit 路径与 draw 次数未变**（见 §12.4）；
+    合计 `3109 / 4254 / 108 / 87` → **`3131 / 4254 / 116 / 87`**。
+    ⛔ **V14 待上机**（"列头有光晕"、"头上有拖影"、"字形有描边与内部明暗"、"字符集仍为 0/1" 四条）。
 
-- [ ] **T4.4** E18 反馈残像（§B4）
+- [x] **T4.4** E18 反馈残像（§B4）
   - 重点：离屏缓冲内加衰减色调，抑制灰白累积
+  - ⛔ **§B4 是批次 B 唯一没有后处理项的一条**（其余 9 套都以 `drawVignette + drawGrain` 收尾），而覆盖门禁只认 `postFx` / `OverlayFx.*` ⇒ 经用户裁决**补 `postFx(vignette = 0.48f, grain = 0.030f)`**（登记 §12.4）
   - **验收**：V15 通过（连续 5 分钟）
+  - ⚠️ **实现状态（2026-09-30）**：**已落盘**。`MilkdropRenderer` 整类重写：
+    `: VisualizerRenderer` → `: RendererFx()`，`postFx = PostFx(vignette = 0.48f, grain = 0.030f)`（⛔ **字面量**，见 §12.4）。
+    §B4 五条全部完成：
+    **①** 衰减色调 —— 新增成员画笔 `decayPaint`（`Color.Black.copy(alpha = DECAY_ALPHA)`，构造期建一次）⇒ `cb.drawRect(0f, 0f, c.width, c.height, decayPaint)`，⛔ **必须放在 `cb.restore()` 之后**（否则黑层跟着旋转/缩放，四角露白）；`DECAY_ALPHA = 0.06f` 与 §A4-2 的 E12 `FADE_ALPHA` **同值同义**；
+    **②** 3-tap 径向模糊 —— `TAP_SCALE = [1.0, 1.012, 1.024]`（相对基准 `scale`）、`TAP_ALPHA = [0.6, 0.25, 0.15]`（**和为 1** ⇒ 单帧回绘总亮度与改造前持平）；每个 tap **独立 `save()` / `restore()`** ⇒ 缩放互不累积；
+    **③** 段落色温 —— `sectionEnergy` 经**极慢 EMA**（`SECTION_RATE = 0.60f` /s ⇒ τ ≈ 1.7 s）驱动 hue 流速：`hueRate = HUE_RATE_BASE(0.35) + sectionHue × HUE_RATE_SECTION(1.20) + treble × 2f`；
+    **④** 双边明暗（同 §A2-1）—— 每根条 **2 次 `drawLine`**，暗 / 亮侧沿**切向** ±`SIDE_OFFSET(0.35) × wdt`，明度 `−SIDE_LIT_DARK(0.22)` / `+SIDE_LIT_BRIGHT(0.20)`；**⑤** 后处理。
+    另⛔ **顺带修帧率绑定**（§B4 原文未列，与 T4.1 / T4.2 / T4.3 同一条约定）：`rotation` 与 `hue` 均 **dt 化**（`× fx.dt × FPS_BASE`，`FPS_BASE = 60f`）⇒ **60 fps 下与旧实现逐像素等同**，30 / 15 fps 不再翻倍。
+    数值复核（`logs_temp/s17_e18.py`，**①–⑧ + N1–N4 + ⑨–⑪ 全过**，用 **float32 精确模拟**（`struct` 往返）排除「循环次数 off-by-one 顶穿容差」）：
+    TAP 表结构（长度 == `TAP_COUNT`、缩放严格递增、**alpha 和恰为 1**）；
+    **帧率无关已实证**（60 / 30 / 15 fps 积分 1 秒都得到 **36.0000 度**；旧口径 60 fps `36.0` vs 30 fps `18.0`）；
+    **60 fps 与旧实现逐像素等同**（mid 0 / 0.35 / 1 三档差 `0.00e+00`）；
+    段落 EMA 三档帧率 **0.4528 / 0.4545 / 0.4579**（差 < 2%）且落在 0.40–0.50；
+    双边明暗切向**正交于径向**（7 个角度残差 < 1e-5）+ 明度差 **0.42**；
+    `drawContent` 内**不新建 `Paint`**（⛔ 判据只扫函数体 —— 成员初始化是构造期一次，合规）；
+    **门禁原版正则对 `postFx` 做正 / 负双证**（具名常量写法被**静默判否**）。
+    门禁：`MilkdropTest`（新建，**11 正向 + 4 负向自证**）、`FxCoverageScanTest.covered` 扩到 **15 套**（负向 N2 样本**仍为** `FractalTreeRenderer`）、
+    `logs_temp/s17_apply_e18.py`（**按原行尾回写**的整块替换 + **45 条**落盘校验）+ `s17_patch_e18_tap.py`（**9 条**）。
+    ⚠️ §7.5 该行 `66 / 0 / 0` → **`133 / 0 / 0`**：原语 **+67** = 双边明暗 `drawLine` **64 → 128**（+64）+ 3-tap `drawImageRect` **1 → 3**（+2，循环内**单一调用点** ×3）+ 衰减 `drawRect` **0 → 1**（+1）；**画布状态操作（`save`/`restore`/`scale`/`translate`/`rotate`）不计入**；未解析 **0**；
+    合计 `3131 / 4254 / 116 / 87` → **`3198 / 4254 / 116 / 87`**。
+    ⛔ **V15 待上机**（"连续 5 分钟不发灰白"、"有柔化 / 拖影"、"色温随段落变化" 三条）。
 
-- [ ] **T4.5** E19 粒子文字（§B5）—— ⚠️ **本节是本轮性能技法的试点，必须先于 T4.7 完成**
+- [x] **T4.5** E19 粒子文字（§B5）—— ⚠️ **本节是本轮性能技法的试点，必须先于 T4.7 完成**
   - **顺序不可反**：P1 重生修复（4.2s 空白）→ P3 逐行 `getPixels` → P4 按行配额采样（照搬 E23 歌词点阵）→ P2 `dotPath` + `addPath` 批量（350 draw → 1）→ P5 `step = 1` → Q1–Q6 观感
   - ⚠️ P2 的收益必须用 `dumpsys gfxinfo` 实测（风险 R11）；不达标则退回 350 `drawCircle`（本就零分配）
   - ⛔ 不得为观感增加每帧 draw 数超过 §B5 成本账里写的 6 次
   - **验收**：V16 通过（含"连续播放 5 分钟画面不消失"）
 
-- [ ] **T4.6** E20 等离子流场（§B6）
-  - 网格 16×9 → 24×14 + fbm 双倍频
-  - **验收**：V17 通过
+  - **实现状态（2026-09-30 · T4.5 已完成）**：
+    **P1 · 死亡改重生（修缺陷 1）**：`ParticlePool.updateAttract` 签名扩为 `(targets, accel, jitter, w, h, decay = LIFE_DECAY)`；
+    `LIFE <= 0` **不再 `removeAt`**，改 `respawnFromEdge(i, w, h)`（四边等概率 + 速度归零 + `LIFE = 1f`）
+    ⇒ `count` **恒 == `capacity`**、`i → targets[i]` **永不错位**；新增 `const val LIFE_DECAY = 0.004f`（`1 / 0.004 = 250` 帧 ≈ 4.17 s @60fps）。
+    ⚠️ `update()`（E08 / E09 / E14 四个使用方）**未动**，仍是 swap-remove —— 本方法是 E19 专属语义（§B5-P1 原文即如此规定）。
+    **P3 · 采样改逐行批读（修缺陷 3）**：`bmp.getPixels(buf, 0, bmpW, 0, y, bmpW, 1)` —— JNI 由「每像素」降到「每行」（`SAMPLE_H = 220`）。
+    **P4 · 照搬 E23 的两遍 + 按行配额（修缺陷 4）**：第一遍数每行有效像素 + **顺手记墨迹包围盒**（`minX/maxX/minY/maxY`）；
+    第二遍 `quota[k] = rc[k].toLong() * poolCap / total`（非空行 `coerceAtLeast(1)`）+ 行内等距抽取（`takeEvery`）；
+    未填满时循环复用已有点位 ⇒ 粒子数不减半。⇒ 修掉「粒子只覆盖字形上部几行」。
+    **P2 · 350 次 `drawCircle` → 3 次 `drawPath`（修缺陷 2）**：`dotPath`（`moveTo` + **4 段 `cubicTo`**，
+    `CIRCLE_K = 4/3·tan(π/8) ≈ 0.5522847`）+ `N × addPath(dotPath, Offset(x, y))` 合批成 **3 条成员 `Path`**
+    （外圈 / 内圈 / 高亮），每帧 `rewind()` 复用。⛔ **不用 `addOval(Rect(...))`**：Compose 的 `Path.addOval` 只收 `Rect`，
+    而 `Rect` 是 `data class`（非 value class）⇒ 每帧 350 次堆分配。⇒ **每帧 draw 350 → 3**（−99.1%）、**`Rect` 分配 0**、hwui 崩溃风险消除。
+    **P5 · `step` 3 → 1（修缺陷 5）**：`SAMPLE_STEP = 1` ⇒ 全字形覆盖；`poolCap` 的「填满即停」逻辑保留。
+    **Q1** `measureText` 自适应字号（`TEXT_SIZE_MAX = 150f`，超宽按比例缩，下限 `12f`）+ `Align.CENTER` + 水平居中；
+    **Q2** 按**墨迹包围盒**适配缩放（`FIT_W_K = 0.78f` / `FIT_H_K = 0.50f` 双约束取小）并按墨迹中心居中（复用预分配 `scaled` 数组 ⇒ 零分配）；
+    **Q3** 内 / 外圈按**椭圆归一化距离**（`norm = √(nx² + ny²) × INV_SQRT2`，以墨迹半宽 / 半高为轴，角点 ≈ 1）分 2 组，
+    `INNER_K = 0.42f`（内圈椭圆半轴 ≈ 0.594 × 墨迹半宽）；内圈 `towardWhite(accent, 0.25f)` + `alpha + 0.10`，外圈 `darken(accent, 0.38f)` + `alpha − 0.10`；
+    **Q4** `BlendMode.Plus` **只留给「内圈且 `pulse > GLOW_PULSE(0.5f)`」的子集**（第 3 条 Path），主体 2 条走 `SrcOver` ⇒ 修整片过曝死白；
+    **Q5** 后处理 `override val postFx = PostFx(vignette = 0.46f, grain = 0.030f)`（⛔ **数值字面量**，否则覆盖门禁**静默判否**）；
+    **Q6** `sectionEnergy` 经 `AudioSmoother(SECTION_ATTACK = 0.02f, SECTION_RELEASE = 0.02f)`（§7.3 参数）驱动**段落色温漂移**
+    （`SECTION_HUE_SPAN = 40f` 半幅，`hsl(cachedHue + (section − 0.5f) × SPAN, …)`）；
+    ⛔ 调色板 `accent` **变化时**才调 `VisualizerMath.rgbToHsl`（它返回 `Triple` ⇒ **分配**，绝不每帧调；`Color` 是 value class ⇒ `!=` 比较零分配）。
+    数值复核（`logs_temp/s17_e19.py`，**①–⑫ 正向 + N1–N4 负向 + ⑬ 名单交叉核对 全过**，用 **float32 精确模拟**（`struct` 往返））：
+    按行配额（非空行 **≥ 1** 点 / 空行 0 / 随行像素数**单调不减** / 总和 ≤ `poolCap` 且 > 90%）；
+    墨迹适配（宽 / 高两极端各验一次「双约束取小」，且缩放后**墨迹中心恰落画布中心**，残差 < 1e-2）；
+    椭圆归一化（中心 **0.0** / 角点 **1.0** / 长轴端点 **1/√2**，内圈半轴 ≈ **0.594 × halfW**，内外圈边界两侧各验一次）；
+    `CIRCLE_K` == `4/3·tan(π/8)` 且 `dotPath.cubicTo` 恰 **4** 段、无 `addOval`；
+    粒子半径 `r(0) = 2.4 / r(0.5) = 3.7 / r(1) = 5.0` 且**严格线性**；
+    `updateAttract` 算法**独立复刻**长跑 **2000 帧**：`count` 恒 == 8、耗尽粒子落在四边之一且 `LIFE` 复位为 1；
+    负向：旧 swap-remove 模拟（`count` 下降 + **目标错位 > 0**）、旧逐像素 `getPixel(`（判据抓到且**不误伤 `getPixels(`**）、
+    具名常量 `postFx` 被**静默判否**、旧 350 次 `drawCircle`。
+    门禁：`ParticleTextTest`（新建，**11 正向 + 4 负向自证**）、`FxCoverageScanTest.covered` 扩到 **16 套**
+    （负向 N2 样本**仍为** `FractalTreeRenderer` —— 它仍在 `exempt`）。
+    ⚠️ §7.5 该行 `151 / 0 / 2 / 1` → **`4 / 460 / 5 / 0`**：绘制原语 **151 → 4**（**−97.4%**）；
+    ⚠️ 但「路径·文本」**0 → 460**、「分配」**2 → 5** —— 二者**全部落在「采样」路径**
+    （`Bitmap.createBitmap` / `AndroidPaint()` / 三个 `IntArray` 缓冲 / `drawText` / `measureText` / `moveTo` + 4 `cubicTo` / `addPath`），
+    而采样**只在 `caption` 变化时执行一次**（非每帧路径）；
+    ⛔ **每帧路径的堆分配仍为 0** —— 由 `ParticleTextTest` ⑨ 护住（`drawContent` 体内无 `Paint(` / 无 `Rect(`，且词边界排除 `AndroidPaint(` / `drawRect(`）。
+    合计 `3198 / 4254 / 116 / 87` → **`3051 / 4714 / 119 / 86`**；E19 因此**移出**「超 MEDIUM 档上限」名单（**10 套 → 9 套**）。
+    ⛔ **V16 待上机**（"连续 5 分钟画面不消失" / "粒子覆盖整个字形" / "不出现整片死白" / "中心亮、边缘暗" / "换歌无可见卡顿" 五条）。
+- [x] **T4.6** E20 等离子流场（§B6）
+  - 网格 16×9 → **24×14** + fbm 双倍频（⛔ **在每 `NOISE_EVERY` 帧的更新循环里合并**，不是在 `sampleFlow` 里插值两次 —— 数学等价，见 §12.4）
+  - 等离子底色：**新增 `ProceduralTexture.Id.PLASMA`** tile（3 通道低频 `sin`，相位互差 120°）+ 中心径向渐变（替代原「1 个纯色圆」）
+  - 粒子短条：**按色相分 8 桶合批**（`aMaj = bMin × 1.8`，8 段参数方程多边形写 `Path`）⇒ 每帧 draw **151 → 10**；⛔ **不用 `drawOval`**（Compose 的 `drawOval` 只能画轴对齐椭圆）
+  - ⛔ 顺带修帧率绑定：`evolve` / `life` / `speed` 三处 `× fx.dt × FPS_BASE`（`beat` 保持**事件踢**不折算）
+  - 数值自查：`logs_temp/s17_e20.py`（**①–⑨ 正向 + N1–N4 负向 + ⑩ 名单交叉核对**，**147 条断言**，用 **float32 精确模拟**）
+  - 门禁：`PlasmaFlowTest`（新建，**11 例 = 9 正向 + 2 负向自证**，行为段**直接调生产纯函数**）；`FxCoverageScanTest.covered` 扩到 **17 套**（负向 N2 样本仍为 `FractalTreeRenderer`）
+  - ⚠️ §7.5 该行 `151 / 0 / 0 / 0` → **`10 / 1 / 0 / 2`**（合计 `3051 / 4714 / 119 / 86` → **`2910 / 4715 / 119 / 88`**）；E20 因此**移出**「超 MEDIUM 档上限」名单（**9 套 → 8 套**）
+  - **验收**：V17 通过（⛔ **待上机**）
 
-- [ ] **T4.7** E23 歌词点阵（§B7）—— ⛔ **性能优化为主**（用户 2026-09-29 明确要求），画面优化不得增加消耗
-  - **顺序不可反**：P0-1/P1 `Rect` 分配归零（**9000 → 0**）→ P0-2/P2 逐行 `getPixels`（71,000 → 116 次 JNI）→ P3 提全局量到循环外 → P4 删死代码（`phaseVal`/`textLen`）→ P5 `reset()` → `rewind()` → P6 `step = 1` → Q2/Q4 观感
-  - ⛔ **采样结构（两遍 + `calculateRowQuota`）保持不变**，只换读取方式 —— 它是本项目已验证的正确算法（`:257-260` 注释）
-  - ⛔ 不得整图读 `IntArray(bmpW * bmpH)`（风险 R12）；一律逐行读
-  - Q3（4 档亮度 → 8 条 Path / 48 个 `dotPath`）**是可选**，需先确认重建成本可接受
-  - ⛔ **保留卡拉OK 的逐字亮度/色相分档**（`:663-680`）—— 实测**每点仅 +4 比较 +4 乘除、0 分配 0 JNI**、`drawPath` 恒 6 次；删掉它反而可能让 oval 数 **+60%**。⛔ **不得以"性能"为由删除**（§13.5-D4、§B7 专项评估）
-  - **验收**：V18 通过（**含 3 条性能判据**，缺一不可）
+- [x] **T4.7** E23 歌词点阵（§B7）—— ⛔ **性能优化为主**（用户 2026-09-29 明确要求），画面优化不得增加消耗
+  - **顺序不可反**：P0-1/P1 `Rect` 分配归零（**9000 → 0**）→ P0-2/P2 逐行 `getPixels`（≈ 71,000 → 346 次 JNI）→ P3 提全局量到循环外 → P4 删死代码（`phaseVal`/`textLen`）→ P5 `reset()` → `rewind()` → P6 `step = 1` → Q2/Q4 观感
+  - ⛔ **采样结构（两遍 + `calculateRowQuota`）保持不变**，只换读取方式 —— 它是本项目已验证的正确算法（旧「行优先 + 满了就 `break`」会丢字形下半部）
+  - ⛔ 不得整图读 `IntArray(bmpW * bmpH)`（风险 R12）；一律逐行读 ⇒ 只新增 `IntArray(bmpW)`（≈ 7 KB，跨次复用）
+  - ⛔ **P0-1 / P1 现状更正（见 §12.4）**：§B7 描述的「每点 `addOval(Rect(...))` / 9000 个 `Rect` 分配」**已过期** —— T1.6.2 早已改用 `asAndroidPath().addOval(l, t, r, b)` float 重载（**零分配**）⇒ P1（`dotPath` 池）**不做**
+  - ⛔ **Q3（4 档亮度 → 8 条 Path）本轮不做** —— §B7 自己标注**可选**；收益小、复杂度高（每档一条 Path + 每点一次比较 + 每帧 8 次 `rewind`），而卡拉OK 已提供亮度层次
+  - ⛔ **保留卡拉OK 的逐字亮度/色相分档** —— 实测**每点仅 +4 比较 +4 乘除、0 分配 0 JNI**、`drawPath` 恒 6 次；删掉它反而会让 oval 数 **+60%**。⛔ **不得以“性能”为由删除**（§13.5-D4、§B7 专项评估）⇒ **首次在代码里加守卫注释**（§15.7 第 18 条要求）
+  - **落盘**：`LyricsDotMatrixRenderer` 迁移 `: RendererFx()`（`postFx = PostFx(vignette = 0.44f, grain = 0.026f)`，**数值字面量**）；**P2** 两遍 `getPixel` → 每行一次 `getPixels`（`rowBuf` 跨次复用）；**P3** `sinB` / `amp` 提到循环外；**P4** 删 `phaseVal` / `textLen` / `baseSize`；**P5** `reset()` → `rewind()`；**P6** `step` 恒 `1`；**Q2** 亮档去过曝（`paths[4]` `0.80 + pulse*0.18` → `0.62f + pulse*0.14f`，`paths[5]` `0.18` → `0.26f + pulse*0.10f`）；**Q4** 后处理
+  - **数值自查**：`logs_temp/s17_e23.py`（**①–⑫ 正向 + N1/N2 负向 + ⑬ 名单交叉核对**，**77 条断言**；`calculateRowQuota` / `karaokePacing` 用 **float32 精确模拟**）
+  - **门禁**：`LyricsDotMatrixTest`（新建，**13 例 = 11 正向 + 2 负向自证**，行为段**直接调生产纯函数** `calculateRowQuota` / `karaokePacing`）；`FxCoverageScanTest.covered` 扩到 **18 套**（负向 N2 样本仍为 `FractalTreeRenderer`）
+  - ⚠️ §7.5 该行 `7 / 405 / 6 / 3` → **`7 / 405 / 7 / 1`**（合计 `2910 / 4715 / 119 / 88` → **`2910 / 4715 / 120 / 86`**）；⛔ E23「绘制原语」列 **7 不变** ⇒ **不进**「超 MEDIUM 档上限」名单（**仍 8 套**）
+  - **验收**：V18 通过（**含 3 条性能判据**，缺一不可；⛔ **待上机**）
 
-- [ ] **T4.8** E25 催眠（§B8）
-  - **验收**：V19 通过
+- [x] **T4.8** E25 催眠（§B8）—— ⛔ **画面质感为主**（§B8 四条）
+  - **§B8-① 三级明度**：`drawGridAndAxes` 由「一种 alpha 画所有线」改为**三级递减** —— 主轴（`AXIS_ALPHA = 0.55f` / 宽 `AXIS_STROKE_W = 2.6f`）> 刻度（`TICK_ALPHA = 0.30f` / 宽 `TICK_STROKE_W = 1.8f`）> 细网格（`GRID_ALPHA = 0.14f` / 宽 `GRID_STROKE_W = 1.2f`）。⚠️ §B8 只给了 alpha 三档，**额外把线宽也分档**（理由：问题描述原文是「同色**单线**」）
+  - **§B8-② 曲线受光侧**：主线 `MAIN_STROKE_W = 2.2f` / `MAIN_ALPHA_BASE = 0.9f`；高光线 `HIGHLIGHT_STROKE_W = 0.9f` / `HIGHLIGHT_ALPHA_BASE = 0.82f`，颜色 `highlightColor = towardWhite(mainColor, 0.6f)`（在 `refreshColors` 内缓存），用 `translate(0f, -HIGHLIGHT_OFFSET)`（`HIGHLIGHT_OFFSET = 0.8f`）上移 0.8px 画一层细亮线 ⇒ **DRAW 与 HOLD 两态都画**
+  - **§B8-③ 纸纹底**：复用 `ProceduralTexture.Id.PAPER`（**不新增 tile**），`PAPER_ALPHA = 0.10f`；`drawContent` 内 `ProceduralTexture.ensure(iw, ih)` + `tile(PAPER)?.let { drawImage(it, dstSize = IntSize(iw, ih), alpha = PAPER_ALPHA) }`
+  - **§B8-④ 后处理**：`postFx = PostFx(vignette = 0.44f, grain = 0.028f)`（**数值字面量**）
+  - ⛔ **dt 帧率绑定修复（§B8 未列，同族缺陷顺带修）**：旧 `:362` 的 `val dt = ((now - phaseStartMs) / 1000f).coerceIn(0f, 0.1f)` **实为相位内累计时间**（不是帧间差）且被钳 0.1 s ⇒ 绘制推进速度**帧率绑定**。改为 `drawAccumulator = advanceStroke(drawAccumulator, fx.dt, speed)`（`internal fun advanceStroke(accumulatorMs, dtSec, speed)`）⇒ **30 / 60 / 120 fps 一致**。⚠️ 旧口径实测 **1.328 s**（83 帧 × 16 ms @60fps），与类 KDoc 声明值不符且帧率一变就变
+  - ⛔ **随机源不复用基类 `rng`**：`private val rng = VisualizerRandom()` 改名 `shuffleRng = Random(seed)` —— `FunctionLibrary.weightedShuffle(rng: kotlin.random.Random, …)` 的形参是 **`kotlin.random.Random`**，而 `VisualizerRandom`（自写 LCG）**既不是其子类、也没有 `nextFloat()`/`nextInt()`** ⇒ 传不进；且 `HypnoticScheduleTest` / `HypnoticPhaseTest` 直接依赖 `HypnoticFunctionRenderer(seed)` 的确定性
+  - **落盘**：`HypnoticFunctionRenderer` 迁移 `: RendererFx()`（`postFx` 数值字面量）；`drawContent(frame, ctx, fx)` + `onEnterContent` / `onExitContent`；`phaseStartMs = -1L`（**哨兵**：`onEnterContent` 拿不到 w/h，且测试里 `timeMs` 恒 0 ⇒ 不能用 `0L`）+ `ctx.nowMs → fx.nowMs`；四个成员 `Stroke`（`highlightStroke` / `axisStroke` / `tickStroke` / `gridStroke`）；`drawStroke` 内局部量 `fx`/`fy` **改名 `lerpX`/`lerpY`**（避免与 `FxFrame fx` 撞名）
+  - **数值自查**：`logs_temp/s17_e25.py`（**①–⑪ 正向 + 负向 + 剥注释自证**；`advanceStroke` 用 **float32 精确模拟**）
+  - **门禁**：`HypnoticFunctionTest`（新建，**11 例 = 9 正向 + 2 负向自证**，行为段**直接调生产纯函数** `advanceStroke`）；`FxCoverageScanTest.covered` 扩到 **19 套**（负向 N2 样本仍为 `FractalTreeRenderer`）
+  - ⚠️ §7.5 该行 `9 / 754 / 5 / 14` → **`12 / 754 / 5 / 14`**（合计 `2910 / 4715 / 120 / 86` → **`2913 / 4715 / 120 / 86`**）；⛔ 「绘制原语」列 **9 → 12**（+3 = 高光线 ×2 态 + PAPER 底纹）**是真实成本上升**，但 12 ≪ 120 ⇒ **不进**「超 MEDIUM 档上限」名单（**仍 8 套**）
+  - **验收**：V19 通过（⛔ **待上机**）
 
-- [ ] **T4.9** E34 分形（§B9）
-  - **验收**：V20 通过
+- [x] **T4.9** E34 分形（§B9）—— ⛔ **画面质感为主**（§B9 四条）
+  - **§B9-① 锥度 + 受光**：线宽 `(TRUNK_STROKE_W * TAPER.pow(d)).coerceAtLeast(MIN_STROKE_W)`（`TRUNK_STROKE_W = 2.6f` / `TAPER = 0.72f`（= `LEN_K`）/ `MIN_STROKE_W = 0.7f`）；颜色走逐层色表 `depthColorArgb[d]`（第 0 层 = `accent`，第 `MAX_DEPTH = 8` 层 = `towardWhite(accent, TIP_LIGHT_MIX = 0.55f)`；`internal fun depthColorArgbOf(base, tip, depth, cap)` 逐通道直插 + 0..255 夹紧）⇒ **越往梢越细越亮**。⚠️ §B9-① 未提 alpha，但旧 alpha 曲线（`0.9f - d * 0.08f`）会把「顶梢更亮」**抵消** ⇒ 顺带改为**近平**（`SEG_ALPHA_BASE = 0.90f` / `SEG_ALPHA_FALLOFF = 0.025f` / `SEG_ALPHA_MIN = 0.60f`）
+  - **§B9-② 叶形**：生长前沿末级节点（`if (d >= depthInt)`）画**旋转椭圆叶** —— `moveTo` + 4 × `cubicTo`（12 点，`KAPPA = 0.5522847f`，⛔ **不用 `Path.addOval`**），长轴 = 短轴 × `LEAF_ASPECT = 2.2f`、按 `Shading2D.lightDir` 定向；下标**固定**分 3 桶（`leafBucketOf(i) = i % 3`），叶长由 3 条 spectrum 频段驱动（`LEAF_BANDS = 6 / 21 / 42`，`LEAF_R_MIN = 2.4f` × (1 + `v * LEAF_R_GAIN = 2.1f`)）；**每桶合批 1 条 `Path`**（共 3 条；`LEAF_ALPHAS = 0.55 / 0.74 / 0.94`）⇒ 3 档大小 + 层次
+  - **§B9-③ 背景纵深**：① `Shading2D.shadeBrushCached`（`key` 带 `E34_KEY_SALT = 0x34343434L`，覆盖 `(w, h, accent)`；`radius = sqrt(w*w + h*h) * 0.5f` 半对角线；`base = darken(accent, BG_DARKEN = 0.62f)`；`alpha = BG_DEPTH_ALPHA = 0.30f`）；② 复用既有 `ProceduralTexture.Id.STARFIELD`（**不新增 tile**）`drawImage(it, dstSize = IntSize(iw, ih), alpha = STAR_ALPHA = 0.32f)`。⚠️ 与 E13 / E15 / E32 同范式：背景**不随 FxLevel 关闭**
+  - **§B9-④ 后处理**：`postFx = PostFx(vignette = 0.48f, grain = 0.030f)`（**数值字面量**）
+  - **落盘**：`FractalTreeRenderer` 迁移 `: RendererFx()`；`drawContent(frame, ctx, fx)` + `onEnterContent`（`depthF = 0f` / `depthColorAccent = Int.MIN_VALUE` / 画质分档 `LOW 6 · MEDIUM 7 · HIGH MAX_DEPTH` / 重建拓扑数组）；`companion` 放宽为 `internal`（**5 个纯函数供门禁直调**：`advanceDepth` / `growAt` / `leafBucketOf` / `leafRadiusOf` / `depthColorArgbOf`）；拓扑生成的局部 LCG **改名 `topoRng`**（⛔ 不遮蔽基类 `protected val rng`）
+  - ⛔ **迁移顺带修掉 `lastMs == 0L` 哨兵（§B9 未列）**：旧实现用 `ctx.nowMs` + `if (lastMs == 0L) lastMs = now` 判「未初始化」，而 `FrameClock` 的 KDoc 明确**不得用 `0L` 当哨兵**（首帧 `timeMs` 可能恰为 0）⇒ 删除 `lastMs`，改走 `depthF = advanceDepth(depthF, fx.dt, frame.bass, maxDepth)`，哨兵由 `FrameClock.initialized` 承担。⚠️ 本效果的生长量**本来就是 dt 化的**（与 T4.1–T4.8 的帧率绑定缺陷不同）⇒ 本次只换时钟源、**不改行为**
+  - **数值自查**：`logs_temp/s17_e34.py`（**①–⑪ 正向 + 负向 + 剥注释自证**；`depthColorArgbOf` / `advanceDepth` / `growAt` / `leafBucketOf` / `leafRadiusOf` 用 **float32 精确模拟**；§⑨ **真跑** `renderer_loop_estimate.py` 取数，不手算）
+  - **门禁**：`FractalTreeTest`（新建，**10 例 = 8 正向 + 2 负向自证**，行为段**直接调生产纯函数**）；`FxCoverageScanTest.covered` 扩到 **20 套**（`exempt` 批次 B 剩 **1 套** = E35，总条目 **9**）；⚠️ **负向 N2 样本改为不变式**（`pickUncoveredSample` 现场挑未覆盖的类，⛔ 不再写死类名 —— 写死会随阶段推进过期，该样本已连续被换 9 次）
+  - ⚠️ §7.5 该行 `240 / 0 / 0 / 1` → **`245 / 8 / 0 / 1`**（合计 `2913 / 4715 / 120 / 86` → **`2918 / 4723 / 120 / 86`**）；⛔ +5 = 径向纵深 `drawRect`(1) + 星野 `drawImage`(1) + 叶落笔 `drawPath` × `LEAF_BUCKETS`(3)；路径列 8 = `moveTo`(1) + `cubicTo` × `LEAF_CUBIC_SEGS`(4) + `rewind` × 3。⚠️ E34 **原本就在**「超 MEDIUM 档上限（120）」名单内，改后 **245 仍超限** ⇒ 名单仍 **8 套**（仅该行数字 240 → 245）
+  - **验收**：V20 通过（⛔ **待上机**）
 
-- [ ] **T4.10** E35 光轴（§B10）
-  - ⚠️ 光束 `Brush` 必须按 `(w,h)` 缓存（参考 `RadarGridRenderer.ensureBrush` 范式）
-  - **验收**：V21 通过
+- [x] **T4.10** E35 光轴（§B10）—— ⛔ **画面质感为主**（§B10 五条）
+  - **§B10-① 光束改渐变**：多边形填充改 `Brush.linearGradient`（`start = 外缘端` → `end = 中心端`），起点亮 `alpha = BEAM_NEAR_ALPHA = 0.42f`（§B10 明文）→ 终点 `BEAM_FAR_ALPHA = 0f`（明文「透明」）；芯线更亮（`CORE_NEAR_ALPHA = 0.86f`，半宽 `CORE_W_K = 0.14f`）；锥形几何 `moveTo` + 3 × `lineTo` + `close`（半宽 `BEAM_HALF_W_NEAR = 0.0060f` / `BEAM_HALF_W_FAR = 0.0009f`，半径 `START_R_K = 1.05f` / `END_R_K = 0.06f`）；**4 个 `Brush` 按 `(cx, cy, maxLen, accent, secondary)` 五维键缓存**（`ensureBeamGeometry`，照 `RadarGridRenderer.ensureBrush` 的哨兵范式，⛔ 不每帧重建）；逐束旋转交给 `withTransform`（**`inline` ⇒ 零分配**，§15.4-A7；⛔ 不把旋转烘进顶点 —— 那等于每帧重建 `Path`）
+  - **§B10-② 体积雾**：叠 1 层 `ProceduralTexture` 的雾 tile，`alpha = FOG_ALPHA = 0.12f`（明文），随 `sectionEnergy` 缓慢漂移（`fogSpeed = FOG_DRIFT(0.012f) × (0.35f + sectionEnergy)`，`FOG_DRIFT_Y_K = 0.61f` 纵向速率比）⇒ ⛔ **`Id.FOG` 在 `ProceduralTexture.Id` 里原本不存在**，经**用户裁决**新增（**第 8 类 tile**、全屏型第 6 类，见 §12.4）；`FOG_OVERSCAN = 48` 过扫描 ⇒ 漂移 ±48 px 仍铺满画布（不露边）
+  - **§B10-③ 尘埃**：`DUST_N = 48`（明文 40–60）个极小亮点，半径 `DUST_R = 0.50f / 0.65f / 0.80f`（直径 1.0 / 1.3 / 1.6 px，落在明文 1–1.6 px）、`DUST_ALPHAS = 0.20f / 0.32f / 0.45f`（落在明文 0.20–0.45）、`BlendMode.Plus`；**沿所属光束方向**缓慢漂移（`DUST_DRIFT = 0.055f` 归一化坐标/s ≈ 18 s 穿过一屏，方向取该粒所属光束的 `beamFinalAng`）；位置**归一化** + `wrap01` 环绕（⛔ 不用 `%`：Kotlin 的 `%` 保留被除数符号）⇒ **数量恒定、改分辨率不跳**；**合并为 3 条 `Path`**（`DUST_BUCKETS = 3`，明文「3 条 `Path`」）—— 圆点用 `moveTo` + 4 × `cubicTo` + `close` 手写（`KAPPA = 0.5522847f`，⛔ **不用 `addOval`**：Compose 的 `addOval` 只收 `Rect`）
+  - **§B10-④ 镜头光斑**：交汇处 1 组「光晕 + 六芒」—— 光晕 = **1 次** `Shading2D.shadeBrushCached`（`key` 带具名盐 `E35_KEY_SALT = 0x35353535L`，半径 `FLARE_R_K = 0.085f × minDim`，`contrast = 0.55f`，`alpha = 0.45f + pulse × 0.35f`）；六芒 = **3 条 `drawLine`**（`FLARE_SPOKES = 3`，明文，半长 `FLARE_SPOKE_K = 2.10f × flareR`，线宽 `FLARE_SPOKE_W = 1.3f`，自转 `FLARE_SPIN = 0.25f` rad/s × `elapsedSec`）；中心光核 `CORE_R = 6f` + `CORE_R_PULSE = 14f × pulse`
+  - **§B10-⑤ 后处理**：`postFx = PostFx(vignette = 0.50f, grain = 0.030f)`（**数值字面量**）
+  - **落盘**：`LightBeamsRenderer` 迁移 `: RendererFx()`；`drawContent(frame, ctx, fx)` + `onEnterContent`（清空全部缓存 + 画质分档 `LOW 4 · MEDIUM 6 · HIGH BEAM_MAX(8)` + 尘埃池归一化初始化）；`companion` 放宽为 `internal`（**5 个纯函数供门禁直调**：`advanceBeamAngle` / `beamAngleOf` / `dustBucketOf` / `driftDelta` / `wrap01`）；⛔ 旧 `drawFan`（纯色扇形多边形）+ `pathBuf` 成员**删除**
+  - ⛔ **迁移顺带修掉两条既有红线（§B10 未列）**：① 旧 `private var lastMs = 0L` + `if (lastMs == 0L) lastMs = now` **哨兵** —— `FrameClock` 的 KDoc 明确不得用 `0L` 当哨兵（首帧 `timeMs` 可能恰为 0，单测里恒为 0）⇒ 删除 `lastMs`，改走 `fx.dt`；② 旧 `val tSec = frame.timeMs * 0.001f` **当相位** —— 开机毫秒是大基数，float 尾数不足 ⇒ 改 `elapsedSec += fx.dt` + `beamAng[i] = advanceBeamAngle(beamAng[i], fx.dt, beamSpeed[i], trebleSmooth)`（**增量式相位**，§10.176 根因⑩）
+  - **数值自查**：`logs_temp/s17_e35.py`（**①–⑬ 正向 + N1/N2 负向 + 剥注释自证**，**267 条断言**；5 个纯函数用 **float32 精确模拟**；§⑬ **真跑** `renderer_loop_estimate.py` 取数，不手算）
+  - **门禁**：`LightBeamsTest`（新建，**13 例 = 11 正向 + 2 负向自证**，行为段**直接调生产纯函数** + **真跑** `ProceduralTexture.fogRow`）；`FxCoverageScanTest.covered` 扩到 **21 套**（`exempt` 批次 B 剩 **0 套** —— **批次 B 10 套全部收尾**，总条目 **8**）
+  - ⚠️ §7.5 该行 `3 / 2 / 0 / 4` → **`10 / 16 / 2 / 13`**（合计 `2918 / 4723 / 120 / 86` → **`2925 / 4737 / 122 / 95`**）；⛔ 10 ≪ 120 ⇒ E35 **仍在**「超 MEDIUM 档上限（120）」名单**之外**（名单仍 **8 套**）。⚠️ 四列变化**全部是真实成本上升**；「未解析」4 → 13 的成因是 `beamCount` 是**运行期 `var`**（脚本解析不出 ⇒ 该循环内 6 `drawPath` + 3 路径写入 + 4 `withTransform` 只记未解析）
+  - **验收**：V21 通过（光束**有渐变** / 可见**尘埃** / 交汇处**有光斑**）（⛔ **待上机**）
 
-- [ ] **T4.11** **阶段完成**：`FxCoverageScanTest` 覆盖 A+B 共 21 套
+- [ ] **T4.11** **阶段完成**：`FxCoverageScanTest` 覆盖 A+B 共 21 套（⚠️ **覆盖面已由 T4.10 达成**：`covered` == 21 套、`exempt` 批次 B 残余 == 0；本项**只剩上机验收**）
   - **验收**：U1–U7 通过；21 套帧耗时 ≤ 改造前
+
+  - ⚠️ **实现状态（2026-09-30）**：**代码 10/10 完成** —— 批次 B 已移入 `covered` 的是 **E11**（T4.1）、**E14**（T4.2）、**E16**（T4.3）、**E18**（T4.4）、**E19**（T4.5）、**E20**（T4.6）、**E23**（T4.7）、**E25**（T4.8）、**E34**（T4.9）与 **E35**（T4.10）；
+    `exempt` 里批次 B 剩 **0 套**（⛔ **批次 B 收尾**）。
+    ⛔ **仍待办**：**U1–U7 上机验收**、**「21 套帧耗时 ≤ 改造前」的对比实测**（需真机）、**V8–V21 逐项上机**。
+    ⚠️ 提醒：§7.5 的成本表**不能**用作「帧耗时 ≤ 改造前」的判据（v1.26 注⑦：口径既会低估也会高估，
+    且对「搬进 helper」的重构失真）—— 该验收只能靠 `adb shell dumpsys gfxinfo`。
 
 #### 阶段 5 · 批次 C 精修 7 套（9 项）
 
-- [ ] **T5.1** E29 轨道（§C1 **第 0 条 · P0**：背景星野降级）—— **可单独先做、单独提交**
+- [x] **T5.1** E29 轨道（§C1 **第 0 条 · P0**：背景星野降级）—— **可单独先做、单独提交**
   - **P0-1**：`starR` 由均匀分布改**立方幂律**（`STAR_R_MIN + u³ × STAR_R_SPAN`，新增 4 常量，
     上限 **0.00150f**）；`starA` 改与 `u²` 同源 + 25% 抖动（上限 **0.50f**）
   - **P0-2**：`ensureLayout` 缓存 `quietInvX` / `quietInvY`；`drawStars` 加椭圆归一化静默
@@ -3617,6 +4338,9 @@ JAVA_HOME="C:/Program Files/Android/Android Studio/jbr" \
     1080p 最大星直径 **10.89 → 5.45 px**、中位星直径 **7.65 → 1.72 px**；
     暂停后星点位置**仍静止**（零闪烁不变式）
 
+  - ⚠️ **实现状态（2026-09-30）**：**代码完成** —— `starR` 立方幂律（上限 `0.00150f`）+ `starA` `u²` 同源下调（上限 `0.50f`）+ 中心静默区（`QUIET_R = 0.15f` / `QUIET_FLOOR = 0.25f`）；门禁 `OrbitalStarFieldTest` **13 例（8 正向 + 5 负向）**；免 Gradle 自查新增 `s17_e29.py`（全套 28 项）。
+    ⛔ **仍待上机**：**V30**（必过）。⚠️ §C1 第 1–5 条（行星光照 / 边缘光 / 土星环缝 / 轨道线辉光 / 后处理）
+    归 **T5.1b**，本轮**未做**；⚠️ **E40 DNA 同源缺陷**（§C6 第 0 条，参数与 E29 逐字相同）归 **T5.6**。
 - [ ] **T5.1b** E29 轨道（§C1 第 1–5 条 · 观感精修）
   - 重点：行星球面光照 + 高光随位置变化 + 土星环缝 + 轨道线辉光 + 后处理
   - **验收**：V22 通过
@@ -3649,12 +4373,12 @@ JAVA_HOME="C:/Program Files/Android/Android Studio/jbr" \
   - **验收**：V27 通过
 
 - [ ] **T5.7** E41 世界（§C7 **已整节重评** —— 现役是 WebView + three-globe，旧六条中 **5 条作废**）
-  - ⛔ **本项不改 Kotlin 代码**：E41 的实现已于 2026-09-29 提交（`62155d3`），旧 `WorldRenderer`
-    的六条 Canvas 精修**不适用**（§C7 的"原六条处置"表逐条说明）；本项只做**验收** +
-    **可选的 JS 侧精修**
-  - 可选（P1，**全部改 `assets/globe/globe.js`，不碰 Kotlin**）：**N3** 城市光点内芯
-    （第二层更小更亮的 points layer）；**N5** 桥接开销（`sendAudio` 手写 `StringBuilder`、
-    `sendRoutes` 把去重从 JS 前移到 Kotlin）
+  - ⛔ **本项不改 Kotlin 代码**：E41 的实现已于 2026-09-29 提交（`62155d3`）并定稿（v1.17 复核），
+    旧 `WorldRenderer` 的六条 Canvas 精修**不适用**（§C7 的"原六条处置"表逐条说明）；
+    本项只做**验收** + **可选的 JS 侧精修**
+  - 可选（P2，**全部改 `assets/globe/globe.js`，不碰 Kotlin**）：**N3** 城市光点内芯
+    （第二层更小更亮的 points layer）；**N5** 桥接开销（`sendAudio` 手写 `StringBuilder`；
+    `sendRoutes` 去重前移**定稿已做**：`WorldGlobeRenderer.kt:516-521`）
   - ⛔ **不把 E41 改回 Canvas**（§13.5 **D6**）；不给 E41 接 `fx/` / 不迁移到 `RendererFx`（§5.5.4）；
     不动 `assets/globe/` 的库版本（`three.min.js` ≤ r162 是 WebGL1 兜底上限）
   - **验收**：**V28**（已重写）+ **V31**（新增）通过
@@ -3706,9 +4430,265 @@ JAVA_HOME="C:/Program Files/Android/Android Studio/jbr" \
 
 | 日期 | 任务 | 文档原写 | 实际做法 | 原因 |
 |---|---|---|---|---|
-| — | — | — | — | 待实现期填写 |
+| 2026-09-30 | T1.6.1 · §八 G13⑤ | 判据③「每套渲染器的**估算原语数 + 路径·文本数**必须 ≤ §7.5 表登记值」，并给负向自证「把表里数字改小 ⇒ 必须判失败」 | **未做成单测断言**：以 §7.5 **静态登记** + 真机 `dumpsys gfxinfo` 复核为准 | 该判据需**运行时统计绘制调用**，而 JVM 单测里 `DrawScope` 不可实例化 ⇒ 门禁只保留「源码扫描段 + E16 行为段」，⑤ 降级为人工复核，并在 §八 G13 头部写明（**不是漏做，是口径变更**） |
+| 2026-09-30 | T2.1 · §A1 第 3 条 | 「每个壁灯点各画一次 `Shading2D.shadeBrush`」（壁灯光晕） | 壁灯光晕**降级为「同几何 2.1× 放大的低 alpha 点组」**（并入 `glowPaths[6]` 一次 `drawPath`）；字面 `shadeBrushCached` 只用在**位置固定**的 §A1-5 中心光源上 | ⛔ `Brush` 的 `center`/`radius` **编码在实例内部** ⇒ 逐点调用 = 每帧约 **192 次 `Brush` 分配**，违反零分配红线（§四 G15）。放大实心点是**单 alpha、无台阶**的层，视觉等效「点周微光」且**零新增分配** |
+| 2026-09-30 | T2.3 · §A3 第 1 条 | 三段式背景第 ① 段「径向纵深 + **色相偏冷 8°**」 | 只做「中心提亮 / 边缘压暗」的纵深近似；**冷相偏移省略** —— 由后处理 `OverlayFx.drawVignette` 的 `coolShiftDeg`（默认 `8f`）统一承担 | `Shading2D.shadeBrushCached` 是**亮度对比**着色（`contrast` 参数），**不可表达色相旋转**；另写一个带色相偏移的 Brush 会污染缓存键空间（§15.4-A4「键维度 ⊇ 依赖维度」） |
+| 2026-09-30 | T2.2 · §A2 第 4 条 | 中央圆盘「3 层同心圆 → 1 次径向渐变 + 0.5px 亮边」，渐变 `hue` 随 `energy` **连续**变化 | 渐变 `hue` **量化到 12 档**（`(glowHueRaw / 30f).toInt().coerceIn(0,11) * 30f`）后进缓存键；**呼吸感改由 `alpha` 承担** | `Shading2D.shadeBrushCached` 的缓存**只有 16 槽** ⇒ 连续 `hue` 会**每帧打爆缓存**（等价于每帧新建 `Brush`）。12 档 = 相邻档差 30°，同档内**零分配**，跨档过渡在能量渐变下不可辨 |
+| 2026-09-30 | T2.2 · §A2 第 3 条 | 外圈环 `8` 段 `drawArc` → 1 次 `sweepGradient` + `Stroke`，「`Brush` 按 `(w,h)` 缓存」 | 缓存实现为 `ringBrushCache.get(w, h, ringBrushBuilder)`，其中 `ringBrushBuilder` 是**构造期捕获的成员 lambda**（`private val ringBrushBuilder: (Float, Float) -> Brush`） | ⛔ 写成调用点 lambda（`get(w, h) { ... }`）会**每帧分配一个 lambda 实例**（§15.4-A4）⇒ 与「缓存 `Brush` 省分配」的初衷相反。提为成员后 `get()` 调用点**零分配** |
+| 2026-09-30 | T2.1–T2.3（import 连带） | §15.1.2 未登记（观感改造引入的新引用） | `BasicRenderers.kt` 的 import 块：补 `androidx.compose.ui.graphics.Brush` / `fx.ProceduralTexture` / `androidx.compose.ui.unit.IntSize`；去重 `fx.Shading2D`（同名冲突）；清掉 T1.6.2 后**已 0 使用**的 `CornerRadius` / `Rect` / `RoundRect` / `Size` / `withTransform`；另清死变量 `sizeKey`（赋值后从未使用） | 新代码用到三类新引用：`Brush`（缓存类型）、`ProceduralTexture`（背景 tile）、`IntSize`（`drawImage` 的 `dstSize`）。⚠️ 未解析引用会在 `draw` 内**级联报 5 处**（`Brush` 一处在 L224/230/451 + 级联 L343/414），看起来像逻辑错，其实只差 import —— 新增「用到 `Brush` / 贴图 / 整数尺寸」的渲染代码时**先核对 import 块** |
+| 2026-09-30 | T2.4 · §A4 第 4 条 | 「叠 1 张 `ProceduralTexture` 的**水平细线 tile**（alpha `0.10`）」+ 第 6 条「`drawScanlines(periodPx = 3, dark = 0.12f)`」 | **两者合并**：只保留第 6 条的 `postFx.scanline = 0.12f`（`OverlayFx.drawScanlines`）；第 4 条只做「**4 条等分垂直参考线**」 | `ProceduralTexture` **只有一种 SCANLINE tile**（1×3、周期固定）⇒ 第 4 条的「水平细线 tile」与第 6 条的 `drawScanlines` **是同一张**，照字面实现会把同一张 tile 叠两遍；且 `drawScanlines` **没有 `periodPx` 形参**（签名是 `(ctx, dark)`）⇒ 「`periodPx = 3`」无法传参，改为按 tile 固有周期 |
+| 2026-09-30 | T2.4 · §A4 第 3 条 | 「按 16 个 **hue** 桶合并进 16 条 `Path`」 | 桶键直接用 **`v`**（`(v * 16).toInt()`）而非 `hue`；桶色**构造期算一次**（每帧零颜色计算） | `VisualizerMath.hueGradient(60f, 195f, v)` 的最短弧 `d = 135°`（既不 `> 180` 也不 `< -180`）⇒ `hue = 60 + 135·v` 是 **`v` 的线性单调函数** ⇒ **`v` 的等分 = `hue` 的等分**。⚠️ **代价**：色阶被量化到 16 级（低能量端相邻级差 ≈ 5% 亮度）—— 这正是第 3 条「16 桶」的固有含义，且与第 1 条验收「能数出至少 8 个频段色带边界」一致 |
+| 2026-09-30 | T2.2 / T2.3 / T2.4 · §十 **S2** | 「接入批次 A 前 4 套（E03/E05/E07/E12）+ **同步迁移这 4 套到基类**」（`postFx` 仍 `NONE`），观感在 S5.5 才逐套打开 | E05 / E07 / E12 **一并迁移到 `RendererFx()` 并同时打开 `postFx`**（E03 已在 S1.5 迁移）⇒ **S2 与 S5.5 对这 4 套合并执行**；后处理从「`draw` 末尾内联 `with(OverlayFx){…}`」改为**声明式 `override val postFx`** | ⛔ **§13.5-D7 / 裁决项 8 = 全量迁移 26 套**，且明确否决了「两套写法并存」⇒ 迁移必须做；既然观感改造已在同一批文件里动过，「迁移逐像素不变」已无法单独验证 ⇒ 合并执行省一轮改动。**行为等价性**：`OverlayFx` 的三个 draw 函数本身在 `FxLevel.OFF` 早返回，而 `RendererFx.draw` 也是 `if (fx.level != FxLevel.OFF) applyPostFx(...)` ⇒ **LOW 档行为逐像素一致**；E05 的 `fxLevelOf(ctx)` 换成 基类下发的 `fx.level`，判据不变 |
+| 2026-09-30 | T2.5 · §八 G7 **判据** | 「所有 `Tier.BASIC`/`Tier.ADV` 渲染器的 **`draw` 内至少调用一次 `OverlayFx.*`**」 | 改为**两条并列判据**：① 已迁移 `RendererFx` ⇒ `override val postFx` 且 `vignette`/`grain`/`scanline` **至少一个 > 0**；② 未迁移 ⇒ `draw` 体内调过 `OverlayFx.` | ⛔ 原判据在 §5.5 迁移之后**必然误判**：`RendererFx.draw` 是 `final`，子类只写 `drawContent`，后处理由基类按 `postFx` 施加 ⇒ 迁移后的渲染器**永远不会**在源码里出现 `OverlayFx.`（实测全仓 `OverlayFx.` 调用点**当前为 0**）。**本文件（`FxCoverageScanTest`）是唯一权威口径** |
+| 2026-09-30 | T2.5 · §八 G7 **豁免机制** | 行级标记 `// Fx-exempt: 理由` | 改为**测试内的集中名单** `covered` / `exempt`（`exempt` 为 `类名 → 理由` 映射，理由写明所属阶段与效果名） | 标记要写进 **24 个文件**、且会在 T3.8 / T4.11 / T5.8 被**逐批删除**（churn 三遍）⇒ 集中名单等价、且「移一批」= 改一行。⚠️ 代价：新增渲染器必须**显式归属**，否则完整性断言（`covered ∪ exempt ⊇ 在册渲染器`）会挂 —— 这是**有意的**，避免新类静默逃过门禁 |
+| 2026-09-30 | 遗留清理（v1.9 ⑦ / §15.7） | 「`BasicRenderers.kt:29` 的 `abstract class BarSpectrumRenderer`（**零子类**）必须一并删除，否则仓库里有两个『柱状频谱基类』」 | **已删除**（34 行），并清掉该文件随之失效的 `VisualizerRenderer` import | 实测 `grep -rn "BarSpectrumRenderer" app/src/` **只命中声明本身**（零子类、零测试引用、零反射）⇒ 纯死代码。顺带消除其 KDoc 里与实现相反的「低频居中」说法（§15.7 第 13 条记录过同一处矛盾） |
+| 2026-09-30 | T3.1 · §A5 第 3 条 | 顶点反光「`drawOval`，长轴 = 短轴 × 2.4，旋转角 = `LIGHT_ANGLE_DEG + 90°`」 | 改用**参数方程 8 段多边形**写入 `Path`（`P(θ) = c + a·cosθ·u + b·sinθ·v`，`u` = 光向垂线、`v` = 光向），并**省掉 `close()`**（填充路径按 Skia 语义隐式闭合） | ⛔ `Path.addOval`（`android.graphics.Path` 与 Compose `Path` 都一样）**只能生成轴对齐椭圆**，无法表达 45° 旋转；而 45° 旋转椭圆的**轴对齐外接框退化为圆**（半径 `√((a²+b²)/2) ≈ 0.92·r`）⇒ 「先算外接框再 `addOval`」会**完全丢失拉长**。8 段在 `r ≈ 1.2–6.6 px` 下的最大偏差 ≈ `0.08·r ≤ 0.5 px`，肉眼不可辨。⛔ 本节原有的「用 `withTransform` 会每帧分配 lambda」认知**已作废**（`rotate`/`withTransform` 在 1.6.1 里都是 `inline`） |
+| 2026-09-30 | T3.1 · §A5 第 4 条 | 三段式背景第 ② 段「**水下颗粒** tile（`alpha 0.18`）」 | 落地为 `ProceduralTexture.Id.**WATER**` 全屏水纹 tile（`alpha 0.18f`） | ① 「颗粒」在 `ProceduralTexture` 里是 **GRAIN**，但它是 **128×128 平铺型**，全屏只能走 `ImageShader` 平铺（即 `OverlayFx.drawTexture`，该函数在 `FxLevel.OFF` 早返回）⇒ 与本节已落地的 E07「**全屏 tile 直接 `drawImage`、不随档位关**」范式不一致；② GRAIN 已被后处理层（`postFx.grain`）占用，背景再叠一层同款 tile 语义重复；③ WATER 与 E13 的液态主题一致 |
+| 2026-09-30 | T3.1 · §A5 第 2 条 | 「连线按高度分 4 桶合并进 4 条 `Path`（复用现有 4 段结构，**零额外 draw 调用**）」 | 连线确实改为 4 条 `Path`，但**顶点仍用原来的 4 条 `ptPaths`** ⇒ 总 `drawPath` 从 **5 → 8** 次 | 原「4 段结构」是**顶点按列分 4 段 hue** 的路径；「受光网格」要求**连线按顶点高度分 4 桶**，两者分桶维度不同（列 vs 高度）⇒ 无法共用同 4 条 Path。8 次 `drawPath` 远在「单帧 ≤ 200 独立绘制指令」预算内，且**没有**任何逐线段 draw 调用 |
+| 2026-09-30 | T3.2 · §A6 第 2 条 | 「`Stroke.width` 改为 `base × (1f - progress)`」（逐环连续变细） | 宽度按 `life` **量化到 4 档**（`base × (level+1)/4`），`Stroke` 在**构造期预分配**（`inStrokes`/`outStrokes` 各 `2 × 4` 个） | ⛔ 逐环 `Stroke(width = …)` 是**每帧 80 次堆分配**（40 环 × 内/外圈），直接违反零分配红线（§四 G15）；原实现已经是 40 次/帧的既有债，本次不应翻倍。4 档在 `base = 1.2f / 3f` 下的相邻差为 0.3 / 0.75 px，配合 `alpha` 线性衰减，验收项「环在扩散过程中明显变细」成立 |
+| 2026-09-30 | T3.3 · §A7 第 1 条 | 亮星「额外画 1 条十字光芒（`drawLine` ×2，长度 = `r*3.2`，`alpha 0.22`）」 | 光芒**全部合批进 1 条 `flarePath`**（1 次 `drawPath`，`Stroke(1f)`）；并**加 `life > 0.45f` 门限** | ① 合批：`drawLine` ×2 逐星调用在「`size > 3.2f` 的星约占多数」时会产生 **60+ 次 draw**，而合批后恒为 **1 次**（项目既有红线：能合并的必须合并，Android 5.1 hwui region 合并 SIGSEGV）；② 门限：`spectrum` 是**已 gamma 压缩**的显示通道 ⇒ `size = 2.2 + v×5 > 3.2` 等价于 `v > 0.2`，实际占比 **60–80%**，远高于本节估的「约 20%」；加 `life` 门限既压住数量，也避免「将熄灭的星还在闪光芒」 |
+| 2026-09-30 | T3.3 · §A7 第 3 条 | 「`cell = linkDist`，`cols×rows` 桶，只查邻接 9 桶」 | `cell = max(linkDist, w/32, h/32)`，单轴桶数上限 `GRID_MAX = 32` ⇒ 桶总数 ≤ 1024（`cellHead = IntArray(1024)` 预分配） | `cell = linkDist` 时桶数随 `linkDist`（`75 → 155 px`）反比变化，**4K 分辨率**下会超出任何固定上限 ⇒ 必须给「单轴桶数」封顶。⚠️ `cell ≥ linkDist` 是**邻接 9 桶完备**的充要条件（`|dx| < linkDist ≤ cell ⇒ |gx₁-gx₂| ≤ 1`），**不可**为了减小桶数把 `cell` 降到 `linkDist` 以下 |
+| 2026-09-30 | T2.5 · §八 G7 单测名 | `本阶段 4 套必须已覆盖后处理` | 改名 `覆盖名单里的渲染器必须已覆盖后处理` | 断言体本来就是**遍历 `covered` 名单**（非硬编码 4 套），阶段推进时名单逐批增长 ⇒ 原名字在 T3 起即不成立，属**名实不符**的文档债 |
+| 2026-09-30 | T3.4 · §A8 第 0 条 · **T/QRS 宽度比口径** | KDoc 与 §A8 表格写「T/QRS 宽度比 = **1.80**」；`EcgWaveformTest` ⑤ 原判据为「T 波宽度 > QRS 宽度 × 1.5」 | 门禁统一为**可测量**口径：**「T 波与 QRS 各自 5% 峰值高度以上的样本数之比」**（新表 13/7 = **1.86**）；KDoc 显式写明三种口径并存（**设计区间** 15/9 = 1.67 / **可测量** 1.86 / 文档旧粗记 1.80） | ⛔ 原判据按**全表峰值** 5% 取门限 ⇒ 对**新表与旧表都判 `false`**（**空转**，无法做负向自证）。**区间长度是设计意图**，无法在「重采样后的旧表」上验证 ⇒ 同样不能用于负向自证。改成「各自 5%」后：新表 1.86 **通过**、旧表 1.22 **判失败** ⇒ 判据**能区分新旧表**，负向自证成立 |
+| 2026-09-30 | T3.4 · §A8 第 1 条 · **栅格间距的单一真源** | 「写成一个 `private val gridStepCols = 18` 常量并加注释，别硬编码 px」 | 落为 `private val gridStepCols = (speed * 0.2f).toInt()`（**由 `speed` 推导**）；并把 `speed` 提为 **`internal const val SPEED_COLS_PER_SEC = 90f`** 作单一真源 | 硬编码 `18` 在改 `speed` 时**静默失配**（栅格与波形表不再同步，且没有任何门禁会报）。提为 `internal` 常量后，门禁 `EcgWaveformTest` ① 能把**「表长 ↔ speed ↔ 最短间隔」三者绑在一起**（`HB.size < MIN_GAP_COLS` + 时长换算 < 最短间隔），改 `speed` 忘重建表会被抓 |
+| 2026-09-30 | T3.4 · §八 G12 · **门禁空转修复** | 用例名「⑥⑦⑧⑨ **真实子类源码扫描**」、类 KDoc「源码扫描段对**全部 `RendererFx` 子类**」 | 此前实现**只把一段夹具字符串**喂进 `violationsIn(...)`，**从不读真实子类源码** ⇒ 对真实代码**恒为通过**。已改为**真扫** `renderers/` + `photo/`（新增 `realFxSubclasses()`：花括号配对取类体），并加**空转自证**（子类数 ≥ 5、必须含 `TunnelRenderer`）；`stripComments` 一并换成**嵌套块注释 + 字符串感知**版 | 门禁空转 = 假绿灯。实测真实 **8 个**子类**零违规**（`logs_temp/s17_basecontract2.py`，含 4 条自证全过）⇒ 改真扫**不会误报**。⛔ 不换 `stripComments` 不行：Kotlin **块注释可嵌套**，非贪婪正则在第一个结束符处收尾，会把其后的真实代码一并吞掉 |
+| 2026-09-30 | T3.4 · §A8 第 0 条 · **编译期前向引用** | 未提（§A8 只给 `HB` 表与两个哨兵值，**未规定 companion 内的声明顺序**） | `MIN_GAP_COLS` **必须排在** `LAST_FIRE_NONE = -(MIN_GAP_COLS + 1)` **之前** | ⛔ Kotlin **不允许同作用域内的属性初始化前向引用** ⇒ 写反报 `Variable 'MIN_GAP_COLS' must be initialized`（`const val` 同样会报，虽然字节码里会被内联）。已固化为自查脚本 `logs_temp/s17_initorder.py`（含 **4 条负向自证**），全仓 **538 个 `.kt` 复扫 0 处** |
+| 2026-09-30 | T3.4 · **自查工具（括号配平口径）** | v1.20 记载的自查是「`s17_tokencheck.py` 的**按行粗算**括号配平（`curly=0 paren=0`）」 | 该口径**不可靠**：会把**字符字面量** `'{'` / `'}'`（`when (text[i]) { '{' -> … }` 这类写法里必有）与**夹具字符串**里的花括号都算进去 —— 实测 `RendererBaseContractTest` 报 `curly=+2`、`FxCoverageScanTest` 报 `curly=+6`，**全是假阳性**。新增**词法级** `logs_temp/s17_paren.py`（跳过注释 / 普通字符串 / **模板表达式 `${…}`** / 原始串 / 字符字面量；并检查注释正文里的块注释定界符是否**成对**） | 新口径**首跑即抓出一处真编译错误**：`RendererBaseContractTest` 的 KDoc 里写了块注释定界符字面量 ⇒ **提前闭合注释**、把其后的说明文字变成代码（正是 MEMORY 记的「KDoc 块注释事故」）。⛔ **后续交付自查一律用 `s17_paren.py`**，不要再用按行粗算 |
+| 2026-09-30 | T3.5 · §A9 第 0 条 · **`holdSec` 公式漏了「× 周期」** | 音频映射段写 `holdSec = 1.15f / (1f + trebleSmooth * 0.8f)` | 落为 `holdSec = (TAU / SWEEP_SPEED) * HOLD_FACTOR / (1f + trebleSmooth * 0.8f)`（即 `1.15 × 周期 ≈ 4.52 s`，`HOLD_FACTOR = 1.15f`） | ⛔ 文档那条公式算出来是 **1.15 s**，**比一圈（3.93 s）还短** ⇒ 余辉**撑不到下一圈**，直接违反同节表格第 3 条「回波留在原地衰减……可撑到下一圈」与验收 ①（「相隔 1 s 两张截图……亮度下降」而不熄灭）。文档同段上文本来就写了 `holdSec ≈ 1.15 × 周期` ⇒ 落盘按「**周期 × HOLD_FACTOR**」实现，`HOLD_FACTOR` 的语义是**周期的倍数** |
+| 2026-09-30 | T3.5 · §A9 第 0 条 · **`nextRandom` 的捕获时机** | 只写 `respawn(o)` / 未规定 `nextRandom` 怎么传 | 落为**构造期成员 lambda** `private val nextRandom: () -> Float = { rng.next() }`；`initPool` / `stepTargets` 仍把 `nextRandom` 收成**参数**（门禁可注入可复现序列），只是**传的是成员、不是临时 lambda** | ⛔ 写成**调用点** lambda（`stepTargets(..., { rng.next() })`）会**每帧新建一个捕获 `this` 的 lambda 实例** ⇒ 违反零分配红线（§四 G15 / §八 G13）。成员 lambda 只在构造期分配一次 |
+| 2026-09-30 | T3.5 · §A9 第 2 条 · **`gridDim` 的来源 + 清扫死常量** | 只写「3 档明度（`gridDim` / `gridColor` / `towardWhite(gridColor, 0.5f)`）」，**未定义 `gridDim`** | `gridDim = VisualizerMath.darken(Color(RADAR_GREEN), 0.45f)`；并**删掉**旧常量 `RADAR_GREEN_DIM` 与 `SWEEP_BASE_SPEED` | ① 复用既有 `VisualizerMath.darken`（`l × 0.45` 钳 `0.06..0.24` + 降饱和 `s × 0.6`）而非另写一个硬编码暗绿 ⇒ 与其它渲染器的「暗化」口径统一；② `SWEEP_BASE_SPEED` 随「转速恒定」一并作废（§A9 第 0 条 ⑤），留着会与 `SWEEP_SPEED` 构成**双真源** |
+| 2026-09-30 | T3.5 · §A9 第 0 条 · **回波 `Size` 用全限定名** | 绘制 snippet 写 `size = Size(rr * 2f, rr * 2f)` | 落为 `size = androidx.compose.ui.geometry.Size(rr * 2f, rr * 2f)`（本文件**不新增** `import ...geometry.Size`） | `drawArc` / `drawRect` 的形参**就叫 `size`**，与 `DrawScope.size` 属性同名 ⇒ `size = Size(...)` 读起来有歧义。属**既有项目风格**（`BatchThreeRenderers.kt` / `Shading2D.kt` / `EffectsP1Transitions.kt` 三处都这样写），非本轮新立 |
+| 2026-09-30 | T3.5 · §八 G9 · **`RadarSweepTest` 负向④ 自证缺陷** | 文档未规定负向自证的具体构造 | 负向④「置零式重生必须让池耗尽」改为**跑满 900 帧 + 双池对照**（`broken` 只减不重生 / `fixed` 走生产 `stepTargets`，同 seed 同初值） | ⛔ 原写法只把 `LIFE -= 0.1f` **减了一帧**，而 `initPool` 的 `LIFE` 初值是 **6–20 s** ⇒ 池根本到不了 0、`allDead` **恒为 `false`** ⇒ 该用例**必然在 JVM 上失败**（由 `logs_temp/s17_radar.py` 忠实复现后抓出 —— 免 Gradle 自查的第二次实战命中）。改为跑满寿命并加对照池后：`broken` 全池归零、`fixed` 全池 `> 0`，两条断言**都能区分** |
+| 2026-09-30 | T3.5 · **自查工具（括号配平 · 原始串口径）** | v1.21 记载 `s17_paren.py` 已按「词法级」重写，但**原始串**只按「遇到的第一个 `"""`」判结束 | 改为「**最长连续引号串的最后 3 个**才是结束符」；并给脚本补 **14 条自证夹具**（含 3 条负向） | ⛔ 按「第一个 `"""`」判会**截断原始串正文**、把其后的真实代码当成新字符串吞掉 ⇒ `PerfBudgetContractTest.kt`（`Regex("""[^"\n]*\$[^"\n]*""""`）与 `VisualizerQualityWiringTest.kt`（`Regex("""name="$key"""")`）在 `--all` 下报**假不平衡**（`curly=+2`）。修正后全仓 **539 个 `.kt` 零问题**。⚠️ 教训：**扫描器自己也得有负向夹具** —— 否则「0 问题」既可能是真干净、也可能是扫描器在空转（技能 `source-scan-guard-selftest`） |
+| 2026-09-30 | T3.6 · §A10 第 4 条 · **折痕渐变走降级方案** | 「三角面用 `Brush.linearGradient` 沿折痕方向做渐变」（并附「若触发零分配红线则降级为保留纯色 + 法线明暗」） | 落为 **`Shading2D.lambert` 连续明暗**：正面 `triBaseL × (0.80 + 0.40 × lit)`、背面 `× (0.44 + 0.26 × lit)`、折到 90° 再乘 `1 − 0.35`；`lit` 由**未投影**的「铰边中点 → 自由顶点」夹角算 | ⛔ 逐三角 `Brush.linearGradient` = **每帧 64 次 `Brush` 堆分配**（§四 G15 / §八 G13）。降级后正/背面区间 `[0.80, 1.20]` 与 `[0.44, 0.70]` **永不重叠** ⇒ 「折起来看得见正反」不靠 `lit` 而靠**区间分离**，`lit` 只负责同一面内的连续过渡（`s17_origami.py` 断言两面 lightness 中位数差 > 0.05）。⚠️ `lit` **必须**用未投影顶点：用投影后顶点会让法线在折叠中剧烈摆动（实测跨度 **0.9968**，而正确写法跨度 `0.00e+00`）⇒ 三角会在折叠时"闪" |
+| 2026-09-30 | T3.6 · §A10 第 3 条 · **纸张纹理 alpha 0.10 → 0.28** | 「叠 1 张 `ProceduralTexture` 的 **PAPER** tile（`alpha 0.10`）」 | `PAPER_ALPHA = 0.28f` | ⛔ `ProceduralTexture.paperRow` **自身写出的 alpha 上限只有 `30/255 ≈ 0.118`、均值仅 `0.035`**（逐像素 `abs(v)/6 × 30`，`v = 低频 sin 交叉纹 ±4 + 噪点 ±2` 再钳 ±6）⇒ 再乘 `0.10` 后**峰值有效 alpha 仅 `0.0114`（≈3 灰阶）、均值 `0.0035`（≈1 灰阶）**，肉眼**完全不可见**，与验收项「整屏有纸纹质感（**放大可见**细微纹理）」直接冲突。取 `0.28` ⇒ 峰值 `0.0318`（≈8 灰阶）、均值 `0.0098`（≈2.5 灰阶）。实测由 `s17_origami.py` 按 `paperRow` 源码逐像素复现（200×200 代表块） |
+| 2026-09-30 | T3.6 · §A10 第 1 条 · **折痕高光合批** | 「每个三角沿**折痕边**画一条提亮的细线」（未规定绘制方式） | 折痕写入**单条** `creasePath`（在 `while` 内三个 `when (dir)` 分支各 `moveTo/lineTo` 一段），**1 次 `drawPath` + 构造期预分配 `Stroke(1.2f)`** | 字面照抄 = **64 次 `drawLine`/帧**（HIGH 档 64 三角），项目既有红线「能合并的必须合并」（Android 5.1 hwui region 合并 SIGSEGV）。合批后恒为 **1 次**，且**每帧恒有 64 段**（折痕不受折叠状态影响 ⇒ 不闪断）。⚠️ 两条合批 Path **必须每帧 `reset()`**，否则逐帧累积 ⇒ 越画越亮 + 无限增长 |
+| 2026-09-30 | T3.6 · §A10 第 2 条 · **接触阴影的方向与顺序** | 「**折叠中**的三角向下投影一个暗影」（未规定方向来源与绘制顺序） | 同形三角沿 **光向反方向** 偏移 `SHADOW_DROP = 4 px`（`shadowOff = −Shading2D.lightDir × 4f`，构造期算一次）；合批 1 条 `shadowPath`；**绘制顺序 = 填充 → 阴影 → 折痕** | ① 方向必须由 `Shading2D.LIGHT_ANGLE_DEG`（315°）唯一推导（§四 G4：渲染器内不得另写光源角），"向下"是错的——主光在**右上**，投影该落在**左下**；② ⛔ 若把 `drawPath(shadowPath, …)` 放在填充**之前**，投影会被后画的三角**整片盖住**，等于没画（验收项「折叠中的三角**可见下方投影**」直接不成立） |
+| 2026-09-30 | T3.6 · §A10 第 5 条 · **pulse 微光强度** | 「低音节拍时全屏叠一层 accent 微光（`alpha = pulse × 0.06f`）」 | `PULSE_ALPHA = 0.035f`（≈ 原文的 58%） | `BlendMode.Plus` 叠加在**已含 `postFx` 暗角**的画面上，`0.06` 会把整屏明显提亮并**冲掉纸纹对比**（纸纹有效 alpha 才 `0.032`）⇒ 微光比质感还亮，本末倒置。降到 `0.035` 后仍在验收「低音节拍可见全屏微光」范围内 |
+| 2026-09-30 | T3.6 · **`ProceduralTexture.ensure` 的调用位置** | `ProceduralTexture` KDoc 写「⚠️ 必须在 **`onEnter` 或尺寸变化时**调用，⛔ **不得在 `draw` 内调用**」 | 落为在 `drawContent` 内调用（`val iw = w.toInt()…; ProceduralTexture.ensure(iw, ih)`） | ⛔ 按 KDoc 放进 `onEnterContent` 会**引入 bug**：`RendererSwapper.sync()`（→ `onEnter`）在 `VisualizerStage.kt:180` 的**组合体**里执行，而 `renderCtx.update(…, canvasSize, …)` 在 `:317` 的 **Canvas draw 块**里 ⇒ **首次组合时 `onEnter` 拿到的 `canvasSize == Size.Zero`** ⇒ `ensure(0,0)` 被开头 `if (w <= 0 || h <= 0) return` 早返回，而 `onEnter` **只调一次** ⇒ 纹理**永不生成**（PAPER 整屏不出现）。`ensure` 自带 `ensuredW/ensuredH` 幂等短路 ⇒ 每帧调用的实际成本仅「首帧 / 换尺寸」一次。⚠️ **既有 5 处调用点同此写法**（`BasicRenderers.kt:389`、`AdvancedRenderers.kt:347 / 549 / 873`）⇒ 本处是**沿用既有范式**，不是新立的例外；KDoc 那句应理解为「不得在**每帧都重算**的意义上调」，或后续把 `ensure` 的入口改为「`onEnter` + `draw` 兜底」双保险 |
+| 2026-09-30 | T3.6 · **相位红线 + `triBaseL` KDoc 数值** | §A10 未提相位来源（原实现 `ctx.nowMs` + `lastMs == 0L` 哨兵自算 dt）；`triBaseL` 的 KDoc 写「基础亮度 **0.85..1.15**」 | 相位一律走基类 `FxFrame.dt`（`frame.timeMs` 差分 + `MAX_DT_MS = 100` 钳制，`RendererFx` 的 `FrameClock`）；KDoc 改为「**0.82..1.12**」 | ① `ctx.nowMs` 在 `VisualizerStage` 三个调用点**语义不一致**（`:165` 墙钟 / `:315`·`:359` 单调毫秒，§四 G13 重复 ⑥）⇒ 迁到 `RendererFx` 后统一用 `fx.dt`；② `lastMs == 0L` 哨兵在**首帧 `timeMs` 恰为 0** 时失效（`FrameClock` 的 KDoc 已写明改用 `initialized` 标志）；③ 实际代码是 `0.82f + nextRand() * 0.30f` ⇒ **0.82..1.12**，原 KDoc 的 0.85..1.15 是**既有文档债**，顺手修正 |
+| 2026-09-30 | T3.6 · **§7.5 成本表全量重算 + 自查脚本入口缺陷** | §7.5「渲染原语 / 路径·文本 / 每帧分配」表；§八 G13 判据③「每套渲染器估算原语数 + 路径·文本数 ≤ §7.5 表登记值」 | 用修好的脚本**全量重算** §7.5（29 行 + 新合计 **3102 / 3930 / 152 / 88**），`OrigamiPolyRenderer` 登记 **52 原语 / 626 路径·文本 / 0 分配** | ⛔ **发现自查脚本静默漏统计（比没有这张表更糟）**：`logs_temp/renderer_loop_estimate.py` 与 `renderer_cost_audit.py` 原先只认 `override fun DrawScope.draw(` 作入口 —— 自 S1.5 起迁到 `RendererFx` 的子类**只有 `drawContent`** ⇒ 这 **9 套**（E03/E05/E07/E12/E13/E15/E17/E24/E30）**整类从成本表消失**。修法：两个脚本都改为接受 `draw` **或** `drawContent`，并把 `onEnterContent`/`onExitContent` 归入生命周期。⚠️ 重算后另发现**旧表对已迁移渲染器早已过期**（`ConstellationRenderer` 登记 **51,362** 是 T3.3 空间分桶**之前**的 O(n²) 值 ⇒ 现为 **805**；`TunnelRenderer` 登记 3 ⇒ 现为 138）。「超 MEDIUM 档上限（120）」的套数由「4 套」更正为 **9 套**（E16 464 / E38 457 / E34 240 / E33 231 / E15 163 / E14 151 / E19 151 / E20 151 / E29 138） |
+| 2026-09-30 | T3.7 · §A11 第 0 条 · **全宽展开 + 感知分桶** | 「`cols` 列覆盖 0..63 频段；④ **镜像决策**（§十三 裁决项 7，默认**全宽展开**）；③ `PERCEPT_K = 1.6f` 感知分桶」 | `cols` 列**顺序**（左低右高，⛔ 不镜像）覆盖全部 64 桶；边界表由 **纯函数** `buildBands(cols, k = PERCEPT_K)` 生成，`k = 1.0` 即线性划分（门禁据此做**可判定对照**） | ⛔ §十三 裁决项 7 已选 **A = 全宽展开**，镜像只作为 B 选项留痕（已被否）。把 `k` 做成**形参**而不是让测试复制一份算法：否则门禁与生产会**各自漂移**，而 §八 G10 ④ 恰恰要求「感知 vs 线性」的对照。 |
+| 2026-09-30 | T3.7 · §八 G10 **断言 ④ 判据本身在 HIGH 下不成立** | 「前 8 个频段（0–2.5 kHz）占用列数 ≥ `cols / 4`（LOW ≥ 5 列），且前段步长 < 后段步长」 | 改为**相对 `k = 1.0` 线性基线**：`low > lowLinear`（LOW 6>3 / MED 8>4 / HIGH 8>5）+ `frontStep < backStep` | ⛔ 按原文写死阈值 **HIGH 档必然失败**：HIGH = 36 列铺 64 桶，已接近「1 桶/列」⇒「每列至少 1 桶」的下界**压倒了感知展开**，实测前 8 桶只占 **8 < 36/4 = 9**。用**相对基线**则三种列数都成立，且线性划分下该判据**退化为 `x > x`（恒 false）** ⇒ 负向自证天然成立。 |
+| 2026-09-30 | T3.7 · §A11 0.6 · **亮度侧移（分母改常量 `STEPS`）** | 「块亮度改 `level = (st + 1f) / STEPS`（修闪烁）」 | 照做（`STEPS = 24`）；亮度 `(0.22f + level × 0.72f)` 钳 `0.95` | ⚠️ **规格要求的副作用，V11 上机需留意**：分母由**列高**改成**常量**后，同一格位在不同列高下亮度恒定（这正是修闪烁的目的），但**矮列整体变暗** —— 实测（`s17_staircase.py`）：列高 1 的均 α 由 **0.408 → 0.250**、列高 3 由 0.733 → 0.280、列高 24 由 0.639 → **0.595**（满列基本持平）。叠上「区间均值」后短时高值的可见度会略降。⛔ 这是**有意的取舍**，不要靠调增益「绕」回去（会同时抬亮满列 ⇒ 过曝）。 |
+| 2026-09-30 | T3.7 · §A11 第 2 条 · **外发光用直角 `addRect`** | 「每个方块向外扩一圈低 alpha 发光」 | 全部方块的发光矩形合批进**单条 `glowPath`**（1 次 `drawPath`），且用 `addRect`（**直角**）而非 `addRoundRect` | ⛔ `addRoundRect` 需要 `RoundRect` 对象，而 `RoundRect` 是 **`data class`**（不是 value class）⇒ **每块一次堆分配**，违反零分配红线（§四 G15）。外扩仅 2 px 且 alpha 只有 0.12，圆角差肉眼不可辨；攒进**同一条 Path** 还顺带保证相邻发光**不会叠加两次 alpha**（同一条 Path 只填一次）。 |
+| 2026-09-30 | T3.7 · §A11 第 3 条 · **碎块按格位量化 4 档** | 「碎裂：方块拆 2×2 碎块，带位移与旋转」 | 碎块 alpha 按**格位量化到 4 档**（`SHARD_TIERS = 4`，`shardTier(st)` / `shardAlpha(tier)`），每条档位合批 1 条 `Path` ⇒ 恒 **≤ 4 次** `drawPath` | ⛔ 逐碎块用 `blockAlpha(st)` 会让**每个碎块的 alpha 都不同** ⇒ **无法合批**（最坏 `4 × 2 × cols = 288` 次 `drawPath`，Android 5.1 hwui 会明显掉帧）。量化后总量从 801（HIGH 最坏）**不超过规格的 864**。⚠️ 档位 alpha 取**档位上沿**，保证「顶部 2 格」的碎块与同列正常块**亮度同量级**（否则碎裂瞬间整块跳暗）。 |
+| 2026-09-30 | T3.7 · §A11 0.5 · **旧 16 档的真实缺陷不是「恒定矮柱」** | （§A11 0.5 只说「`STEPS` 16 → 24」） | 照做；并在自查脚本里把旧行为**分两段**断言：`v ∈ [MIN_AMP, 1/16)` 高度为 **0**；`v ∈ [1/16, 2/16)` 才恒为 1 格 | ⚠️ **修掉我自己写错的一条对照断言**：首版写「旧 16 档下 `v ∈ [0.02, 0.125)` 高度完全相同」—— 实测 `int(v × 16)` 在 `[0.02, 0.0625)` 上得 **0**（**一个方块都不画**），比「恒定矮柱」更严重：`v ≥ MIN_AMPLITUDE` 却完全不可见。新实现用「`v ≥ MIN_AMPLITUDE` ⇒ 至少 1 格」修掉。 |
+| 2026-09-30 | T3.7 · **跨效果：`Shading2D.shadeBrushCached` 撞键（进程级共享缓存）** | （§四 G4 / §15.4-A4：「缓存键的维度必须 ⊇ 被缓存对象实际依赖的维度」） | E03 / E07 / E13 **各补一个具名盐**（`E03_KEY_SALT` / `E07_KEY_SALT` / `E13_KEY_SALT`），E32 自带 `E32_KEY_SALT`；新增自查工具 `logs_temp/s17_brushkey.py` 全仓扫描撞键 | ⛔ **真 bug（此前只修了一半）**：`Shading2D` 是 Kotlin **object** ⇒ 它内部的 16 槽 Brush 缓存是**进程级共享**的。E03 / E07 / E13 都用 `(w, h, accent)` 三元键 ⇒ **撞键**：后画的渲染器会拿到先画者的 `Brush`，而 `Brush` 的 `center` / `radius` / `base` / `contrast` **全编码在实例内** ⇒ **切换效果后背景径向渐变复用别人的参数**（E03 的 `base = towardWhite(accent, 0.55f)` / `radius = minDim × 0.30` 与 E07/E13 的 `darken(accent, 0.55f)` / `maxOf(w,h) × 0.62` **完全不同**，视觉差异明显）。E15 早已因此加了 `E15_KEY_SALT`（注释就写着「否则切换效果后会复用错半径的 Brush」）—— **只修了自己**。⚠️ **该 bug 是未定义行为（谁先画谁赢）** ⇒ 修好后 **E03 / E07 / E13 三套的背景观感会变**（变回各自设计值），**建议连同 V11 一起复看**。⚠️ `s17_brushkey.py` 只做**文本**比较 ⇒ 抓不到 `size.width` vs `w` 这类**别名等价**（E03 正是这么写的），故它是**必要条件**而非充分条件 —— 该局限已写成脚本内的自证断言。 |
+| 2026-09-30 | T3.7 · **`accent.toArgb()` 缺 import ⇒ 必然编译失败** | （§15.1.2 未登记：观感改造引入的新引用） | `BatchThreeRenderers.kt` 补 `import androidx.compose.ui.graphics.toArgb` | ⛔ `toArgb` 是**扩展函数**（`androidx.compose.ui.graphics.Color.toArgb`），**必须显式 import**。同文件的 E30 / E31 都没用它 ⇒ 此前不暴露；本轮 E32 的背景缓存键用到了它。⚠️ 教训：新增「用到 `Color` 的位运算 / 缓存键」的代码时**先核对 import 块**（与 T2.1–T2.3 的 `Brush` 那条同类）。顺带删掉死状态 `lastShatter`（只写不读）。 |
+| 2026-09-30 | T3.7 · **自查脚本假阳性：`body` 终止符把下一个类的 KDoc 包了进来** | （`logs_temp/s17_origami.py` 的「`drawContent` 内零堆分配」断言） | 扫描分配前**先剥注释**（`strip_comments`，保留换行），并加一条自证断言「剥注释后段内不再含 KDoc 文字」 | ⛔ E32 插入到 E31 之后 ⇒ `s17_origami.py` 的 `body`（终止符 = 下一个顶层 `class` 关键字）**把 E32 的 KDoc 也包了进来**，而那份 KDoc 为解释设计写了 `IntArray(cols + 1)` / `Stroke()` 之类字样 ⇒ 被当成**真分配**，E31 的「零分配」断言**被假阳性打挂**。修法：扫**代码**之前先剥注释。⚠️ 首版自证断言写成 `" * " not in dc` 也是错的（乘法 `i * 3` 里合法出现 ` * `）⇒ 改为 KDoc 特征判据`^\s*\*` 行数 == 0。 |
+| 2026-09-30 | T3.7 · **`Path.addRect(l, t, r, b)` 不存在 ⇒ 首轮编译失败（Compose `Path` 无 float 形状重载）** | （§15.1.2 未登记：本轮新引入的第三方 API 调用） | 新增私有辅助 `addAxisRect(path, l, t, r, b)`（4 点手工 `moveTo` / `lineTo` / `close`，**零分配**），替换全部 4 处调用；新增护栏 `logs_temp/s17_pathapi.py` | ⛔ **用户实测 16 条 `e:`**（`BatchThreeRenderers.kt:978 / 986 / 987 / 997 / 1032 / 1033`）：`Too many arguments for 'fun addRect(rect: Rect)'` + `Argument type mismatch: actual type is 'Float', but 'Rect' was expected`。**源码级实测 `ui-graphics-android-1.6.1-sources.jar`**：`commonMain/.../graphics/Path.kt` 的 6 个 `add*` **全部只收对象** —— `:161 addRect(rect: Rect)` / `:170 addOval(oval: Rect)` / `:182 addArcRad(oval, s, e)` / `:194 addArc(oval, s, e)` / `:199 addRoundRect(roundRect: RoundRect)` / `:205 addPath(path, offset)`；`androidMain/.../AndroidPath.android.kt` 恰好这 6 个 `override`（`:135/:142/:148/:152/:159/:180`）；**全源码 `fun Path.addXxx` 顶层扩展 0 命中**。⛔ **不能顺手用 `Rect(...)` 包一下**：`Rect` 是 `data class`（**非** value class）⇒ 每块一次堆分配，违反零分配红线（§四 G15 / §八 G13；T1.6.2 已把全仓带参 `Rect(` 清零）⇒ **唯一合规写法 = 手工 4 点**（与同文件既有的 `addRotRect` 同一手法）。⚠️ **float 重载只存在于 `android.graphics.Path`**（经 `asAndroidPath()` 取到，或 `AndroidPath()` 构造）—— `ParticleRenderers.kt:67`、`AdvancedRenderers.kt:149` 的 `bucketPaths`（`:202` 用 5 参重载 + `Direction.CCW`）**是合法的，别顺手「统一」改掉**。新增护栏 `logs_temp/s17_pathapi.py`：12 个调用点 / 0 违规 / **7 条自证**（4 条负向 + 白名单 3 类 + 剥注释 + 参数计数）；判据 = 接收者不含 `asAndroidPath`、不含下标、非构造调用时，`addRect`/`addOval`/`addRoundRect` 必须 1 参、`addArc`/`addArcRad` 必须 3 参。⚠️ 已写明**两条局限**（假阳性：原生 Path 存进纯标识符变量；假阴性：Compose Path 写进数组）⇒ **必要条件，非充分条件**。⛔ **本轮真正的教训 = 「免构建自查的盲区」**：13 个自查脚本**全绿**仍没拦住它 —— 它们查的是**语法结构 / 数值契约 / 项目内约定**，**不查第三方 API 签名** ⇒ 新写第三方 API 调用时必须走 `jar xf` + `grep` 核实（成本 3 条命令 vs 一轮 6–12 分钟构建往返）。该结论已同步进技能 `android-dep-api-verify`（**新增「陷阱 9 · 同名类跨包，API 面完全不同」+ 战果第 7 例**）。 |
+| 2026-09-30 | T4.1 · §B1-① · **星点 `addOval` 走 `asAndroidPath()` 的 float 重载** | 「星点 4 桶 + 远臂纵深」（未规定 `addOval` 的调用形式） | 星点写入 `starPaths[bucket].asAndroidPath().addOval(p.x−pr, p.y−pr, p.x+pr, p.y+pr, Direction.CCW)`（`android.graphics.Path` 的 **5 参** float 重载） | ⛔ Compose 的 `Path.addOval` **只收 `Rect`**（`Path.kt:170`），而 `Rect` 是 `data class` ⇒ 每颗星一次堆分配；本效果每帧星点 **LOW/MED ≈ 480 / HIGH ≈ 778** ⇒ 直接违反零分配红线（§四 G15 / §八 G13）。与 T3.7 的 `addAxisRect` 同源，但**对象不同**：那里是每帧数百次的方块轮廓，这里是每帧数百次的圆点。⚠️ 副作用：§7.5 的 E11「分配」列 **2 → 0**（见 §7.5 注②-v1.26）。 |
+| 2026-09-30 | T4.1 · §B1-③ · **核径向渐变的缓存键半径不含 `energy`** | 「中心核径向渐变 + 内高光」（未规定渐变半径是否随能量呼吸） | 缓存键的 `radius` **固定为 `minDim × CORE_R_K`**；「呼吸」改由**绘制半径** `coreR = minDim × CORE_R_K × (1 + energy × 0.45)` 与 `alpha = 0.5 + pulse × 0.5` 承担（渐变本身不呼吸） | ⛔ `Shading2D.shadeBrushCached` 只有 **16 槽**且键空间**进程级共享**（§四 G4 / §15.4-A4）。把每帧变化的 `energy` 写进键 ⇒ **每帧 miss + 每帧重建 `Brush`**（分配 `Pair` + 两个 `List`）⇒ 与「用缓存省分配」的初衷相反。视觉上「核在呼吸」由半径/alpha 表达，**看不出**渐变内部对比度不随呼吸变化。⚠️ 同族先例：T2.2 的「`hue` 量化到 12 档」。 |
+| 2026-09-30 | T4.1 · §B1-② · **尘埃带描边宽按 4 档尺寸预分配** | 「`strokeWidth = maxR × 0.10`」（字面读作每帧现算） | 构造期预分配 `dustStrokes = Array(DIM_TIERS.size) { Stroke(width = DIM_TIERS[i] × MAX_R_K × DUST_W_K) }`，draw 内只按 `dustTier(minDim)` 取 | ⛔ `Stroke` 是**普通 class**（非 `@JvmInline value class`）⇒ 每帧 `Stroke(width = …)` 是**堆分配**。`maxR = minDim × MAX_R_K` 依赖画布尺寸，而尺寸只有有限档位 ⇒ **按档位预分配**即可零分配（与 T3.2 的 `inStrokes` / `outStrokes` 同一范式）。实测 1080 档描边 **62.6 px**（在 30–90 合理区间）。 |
+| 2026-09-30 | T4.1 · **§7.5 成本脚本的口径 bug（单表达式函数体切错）** | （§7.5 表「自动生成」，未规定 `split_functions` 的判据） | 修 `logs_temp/renderer_loop_estimate.py`：**先匹配参数表右括号，再看它之后先遇到 `{` 还是 `=`**；新增 `--selftest`（**14 条自证，含 2 条负向**：老实现必须切错）。§7.5 据此重算到 **v1.26** | ⛔ 老实现用「`fun` 之后第一个 `{`」当函数体 ⇒ 对**带显式返回类型的单表达式函数**（`fun f(...): T = expr`）会**一路吃到后面某个函数的 `{`**，把中间整段代码（含**其它函数的调用**）当成本函数的体：① 虚增计数；② 在调用图里造出**不存在的边** —— 实测 `OrbitalRingsRenderer.project`（`): Offset =`）被误判为**自调用**，在「调用点加权」口径下把该类次数**顶到饱和上限 3,000,227**。老实现想用 `re.search(r"\)\s*=")` 兜住，但带返回类型时 `)` 后面是 `: Offset =` ⇒ **匹配不上**。修复影响 5 行（`WorldRenderer` 分配 **73 → 38**、`MatrixRainRenderer` **464/2/16 → 456/1/8** 等），合计分配 **153 → 108**。⚠️ **残留盲区（本次不修，只登记）**：脚本**不知道 helper 被调用了几次** ⇒ 「把绘制搬进私有 helper」会让数字骤降（E32 路径列 **739 → 14** 纯属口径假象；加权口径实测 ≈ **16,470**）⇒ ⛔ 本表**禁止**用于改造前后绝对对比（§7.5 注⑦）。 |
+| 2026-09-30 | T4.2 · §B2 第 ② 条 · **环半径的驱动量** | 「半径随 **`pulse`** 从 0 扩散到 `0.25×minDim`」 | 改为 **`dt` 化相位** `ringPhase += fx.dt / RING_SEC`（`RING_SEC = 0.55f`），`beat` 时复位为 0 并从**新的爆炸点**重新扩散；`ringRadius(phase, minDim)` / `ringAlpha(phase)` 抽为 `internal` 纯函数（门禁可直接调用） | ⛔ `pulse` 是**快起慢落**包络（attack ≈ 0.05 s、decay τ ≈ 0.35 s）⇒ 拿它当半径会让环**先涨后缩**，与「扩散」语义相反；且**中途再命中一次 `beat` 会跳变**（半径被拉回接近 0 又冲高）。`logs_temp/s17_e14.py` 用同一个「单调」谓词实证：`pulse` 版峰值在 `t = 0.05 s`、到 0.6 s 已回落到峰值的 **21%**（判失败）；`dt` 化相位版全程单调不减。另：`dt` 化 ⇒ **帧率无关**（60/30/15/10 fps 下相位恒 == `min(1, t / RING_SEC)`）。⚠️ **闪光仍按原文用 `pulse`** —— 那是 alpha 包络，「快起慢落」正是想要的 |
+| 2026-09-30 | T4.2 · §B2 第 ② 条 · **中心闪光的 `Brush` 怎么跟着爆炸点走** | 「1 次中心闪光（`shadeBrush` 径向白亮，`alpha = pulse*0.45`）」（未规定 `Brush` 的 `center` 从哪来） | `shadeBrushCached` 的 `center` **固定写 `Offset.Zero`**（**不进缓存键**），绘制时用 `translate(flashX, flashY) { drawCircle(brush = …, center = Offset.Zero, …) }` **平移画布**；两个调用点用**两个不同盐**（`E14_BG_SALT` / `E14_FLASH_SALT`） | ① `Brush` 的 `center`/`radius`/`base`/`contrast` **全编码在实例内** ⇒ 把每拍变化的爆炸中心写进键 = **每拍 miss + 重建 `Brush`**（§四 G4 / §15.4-A4），16 槽缓存会被单一效果打爆；② `translate` 是 **`inline`**（零分配），且 `Brush` 的着色器在**当前画布坐标系**里求值 —— 依据是 E30 雷达的旋转扇靠 `withTransform { rotate(...) }` 让 `SweepGradient` 真正跟着转（T3.5 已落地）；③ ⛔ **两个调用点必须两个盐**：同盐会让闪光拿到背景纵深的 `Brush`（`center`/`radius`/`base` 全错），`s17_brushkey.py` 与 `s17_e14.py` 都会抓；④ 加 `burstArmed` 门控 —— 否则**首帧**会在画布左上角 `(0,0)` 画一个闪光 |
+| 2026-09-30 | T4.2 · §B2 第 ① 条 · **拖尾的合批粒度与 alpha 口径** | 「按 `(x - vx*k, y - vy*k)` 画 1 条短 `drawLine`（`k = 2.5f`，**`alpha = life*0.35`**）—— ⛔ 若要合并为 `Path`，须按 hue 分 8 桶」 | 采用**合批分支**：8 桶 `Path`（恒 ≤ 8 次 `drawPath`）；桶 alpha = **该桶 life 均值 × 0.35**（不是逐粒子 alpha）；`Stroke(1.6f)` 与 8 个桶色**构造期**建一次；`life > TRAIL_MIN_LIFE = 0.12f` 才画 | ① ⛔ 逐粒子 `drawLine` 会让固定 draw 从 **1 → 150**（E14 本就在 §7.5 超限名单里）⇒ 合批后恒 ≤ 8；② 同一条 `Path` 只能有**一个 alpha** ⇒ 逐粒子 alpha 不可表达，改取**桶均值**（同桶内 life 分布接近，视觉不可辨）；③ `Stroke` 是**普通 class** ⇒ 逐帧构造即分配（§四 G15 / §八 G13）；④ `life ≤ 0.12` 的粒子不画 —— 否则会出现「亮尾迹 + 看不见的头」。⚠️ **合批只压住 draw 调用，不减少 path 写入**：拖尾仍是每粒子 2 次 `moveTo`/`lineTo` ⇒ §7.5 的 E14「路径·文本」列 **65 → 373**（+308，脚本按 `BOUNDS["p.count"] = 150` 计）**是真实增长**，不是口径假象 |
+| 2026-09-30 | T4.2 · §八 G7 · **`postFx` 必须写数值字面量** | 「后处理 `drawVignette(0.44f)` + `drawGrain(seq, 0.030f)`」（§B2-④ 明文） | `override val postFx = PostFx(vignette = 0.44f, grain = 0.030f)`（**字面量**）。初版草稿写的 `PostFx(vignette = VIGNETTE, grain = GRAIN)` 在落盘前**已改回字面量** | ⛔ `FxCoverageScanTest` 的判据是 `postFxRe = PostFx\(([^)]*)\)` + `numRe = =\s*([0-9]*\.?[0-9]+)f` ⇒ **只认数值字面量**。写具名常量会让 `coveredByPostFx` **静默返回 false** ⇒ `覆盖名单里的渲染器必须已覆盖后处理` 直接挂（**假阴性**，且报错信息指向「未覆盖后处理」，与真因无关）。⚠️ 已把这条约束写进 E14 的 KDoc；`logs_temp/s17_e14.py` 的 E 组用**门禁原版正则**做正 / 负向双证。⇒ **T4.3–T4.10 的 `postFx` 一律写字面量** |
+| 2026-09-30 | T4.2 · **落盘器把 LF 源码写成了 CRLF** | （§15.1.2 未登记：本轮新增的落盘工具） | `logs_temp/s17_apply_e14.py` 改为 `read_bytes()` / `write_bytes()` + **按原行尾回写**，并把「行尾保持」做成落盘后校验的第 1 条 | ⛔ Python 的 `Path.write_text()` 在 Windows 上默认 `newline=None` ⇒ 会把 `\n` **翻译成 `os.linesep`（`\r\n`）**。`ParticleRenderers.kt` 原本是 **LF（271 行）**，落盘后变成 **CRLF（535 行）** —— 功能无影响，但产生**整文件 diff** 且违反本仓库「该文件是 LF」的既有约定。⚠️ 读侧的 `read_text()` 会做**反向翻译** ⇒ 落盘器自己写的「无 CR」自检**照样通过**（**假绿灯**）。⇒ 一切改源码的 applier 都必须**字节级读写 + 显式行尾断言**。⚠️ 同族先例：§15.4-A4 的「缓存键维度 ⊇ 依赖维度」也是「工具 / 缓存自身的缺陷」（免构建自查的盲区） |
+| 2026-09-30 | T4.3 · §B3 第 ① 条 · **头部光晕的实现方式** | 「头部字形 blit 后叠 1 层 `shadeBrush` 绿光斑（半径 = `gH*0.9`，`alpha 0.30`）—— 每列 1 次，HIGH 档 48 列 = 48 次 draw（可接受，或按亮度分 4 桶合并）」 | 光晕**预渲染进「白热头部」字形 Bitmap**（`RadialGradient`，半径 `字形高 × GLOW_R_RATIO(0.9f)`、中心 alpha `GLOW_ALPHA(0.30f)`）；该贴图四周各多 `glowPad`，blit 用**偏移量** `off = if (isHead) -pad else 0f` 抵消 ⇒ **额外 draw = 0** | ① E16 已是 §7.5 里 draw 数**第 2 高**的效果（456 原语/帧），再加 48 次 draw 直接与 **S1.7 / T1.7.4「降 blit 数」** 的目标对撞（用户 2026-09-29 明确「电视上很慢，就像数字雨」）；② ⛔ **「按亮度分 4 桶合并」拿不到径向衰减** —— 一条 `Path` 只能有 1 个 alpha/颜色，4 桶合并只能给**平涂色块**，烘进贴图才是**真径向渐变**；③ ⚠️ 代价 = 头部 blit **面积**增大（`(bw+2pad) × (bh+2pad)`），但 **blit 次数不变**（每列仍 1 次），且只作用于 48 个头部格 |
+| 2026-09-30 | T4.3 · §B3 第 ② 条 · **垂直拖影：反向 fade 修正 + 不新增 per-column `drawRect`** | 「在头部上方叠 1 条垂直 `linearGradient`（`alpha 0.35 → 0`，高 = `cellH*3`）—— 1 次 `drawRect(brush=)`」 | 不新增 `drawRect`；改为**修正逐格 fade 方向** + 字形内部垂直渐变（③）共同承担「格间过渡」：`trailFade(k) = k / perCol`，blit alpha = `TRAIL_ALPHA_FLOOR(0.08) + fade × 0.92` | ① ⛔ **旧实现的 fade 方向是反的**：写 `1 - k / perCol` ⇒ 越远离头部越亮，与 KDoc 声明的「亮白绿头部 → 亮绿 → 中绿 → 暗绿」**相反**，观感是「头部上方先暗一截、再亮起来」（断成两截）；实测旧口径 `fadeOld(13) < fadeOld(0)`（**头部最暗**）；② 每列 1 次 `drawRect` = **+48 次/帧**，理由同 ① 条（性能优先）；③ `TRAIL_ALPHA_FLOOR` 是为避免最远格 `alpha = 0` 的**无效 blit**（照画不显示） |
+| 2026-09-30 | T4.3 · §B3 第 ③ 条 · **字形档位 4 → 5 与 Paint / Shader 复用** | 「预渲染阶段给每张字形加『深绿 1px 外描边 + 中心偏白的垂直渐变填充』，档位 4 → 5（新增白热头部 `rgb(235,255,235)`）⇒ 张数 8 → 10」 | 5 档 = 白热头部 `(235,255,235)` / 亮白绿 `(200,255,200)` / 亮绿 `(0,255,100)` / 中绿 `(0,200,50)` / 暗绿 `(0,130,30)`；描边宽 = `textSize × STROKE_RATIO(0.055)` 钳 `1..3` px；填充 = `LinearGradient` 三停靠。⛔ **Paint / Shader 复用**：`AndroidPaint` 只 **4** 个（measure / outline / fill / glow）、`RadialGradient` 全局 **1** 个（与档位无关）、`LinearGradient` **每档 1** 个（⛔ 不在字符循环里） | ① 色表用**纯 Kotlin `packRgb()`** 而非 `android.graphics.Color.rgb` —— 单测 `unitTests.isReturnDefaultValues = true` 下后者是 **no-op 返回 0**，常量表会被静默清成**透明黑**且**编译期毫无提示**；② 每张字形各 `new` 一遍 Paint / Shader 会让 §7.5 的「分配/帧」列虚高（该列把**重建路径**也计入）⇒ 复用后 `LinearGradient` **10 → 5**、`RadialGradient` **10 → 1**；③ ⚠️ 档位 5 = 「4 档绿 + 白热头部」，**字符集仍固定 0/1**（§13.5-D1：⛔ 质感靠描边 / 渐变 / 光晕，不靠堆字符种类） |
+| 2026-09-30 | T4.3 · **列位移的帧率绑定**（§B3 未列；与 T4.1 / T4.2 同一条约定） | （§B3 未涉及；旧实现 `colY[i] = (colY[i] + speed) % span` 是**每帧固定增量**） | 改 `colY[i] = advanceCol(colY[i], speed, fx.dt, span)`，`advanceCol = (y + speed × dt × RAIN_FPS_BASE) mod span`，`RAIN_FPS_BASE = 60f`；抽为 `internal` 纯函数供门禁直接调用 | ① 每帧固定增量 ⇒ **60 fps 的雨速是 30 fps 的 2 倍**（同一效果在不同设备上速度不同）；② 取 `RAIN_FPS_BASE = 60` ⇒ **60 fps 下与旧实现逐像素等同**（零观感回归；实测 60 fps 1 秒位移两边都是 `7200`）；③ 与 **T4.1**（E11 旋转）/ **T4.2**（E14 环相位）**同一条约定**，避免同一类问题逐套重踩 |
+| 2026-09-30 | T4.3 · **§7.5 估算脚本对「互斥分支」的重复计入** | （§7.5 口径：「调用点 × 可解析循环次数」） | 头部 blit 改为**单一调用点** + 偏移量 `off = if (isHead) -pad else 0f`，而不是 `if / else` 两条 `nc.drawBitmap(...)` | ⛔ 脚本**不知道 `if / else` 两分支互斥** ⇒ 两个 `drawBitmap` 调用点各乘一遍 `n × perCol` ⇒ E16 从 `456` 虚增到 **`926`**（其中 **+448 纯属假象**：实际每格只 blit 一次）。⚠️ 与 §7.5 注⑦ 的「不知道 helper 被调用几次」是**同一族口径盲区**（§四 G15 的同类教训：**工具自身的缺陷会成为免构建自查的盲区**）。⇒ 写渲染循环时**避免为同一操作制造第二个调用点** |
+| 2026-09-30 | T4.4 · **§B4 原文缺「后处理」这一条**（批次 B 唯一） | §B4 五条 = 衰减色调 / 3-tap 径向模糊 / 段落色温 / 双边明暗 /（**无后处理**）；其余 9 套（§B1–§B3、§B5–§B10）都以 `drawVignette + drawGrain` 收尾 | 补 `override val postFx = PostFx(vignette = 0.48f, grain = 0.030f)`（**数值字面量**）；经验证与 §B4 的「抑制灰白累积」同向（暗角压边 + 颗粒打散平场） | ⛔ **不补则 E18 永远进不了 `covered`**：`FxCoverageScanTest` 的判据只有两条 —— `coveredByPostFx`（认 `postFx = PostFx(<数值>)`）或 `coveredByOverlayCall`（未迁移类的 `draw` 内含 `OverlayFx.`）。E18 本轮已迁移到 `RendererFx`（不再是「未迁移类」）⇒ 两条判据都不成立 ⇒ `覆盖名单里的渲染器必须已覆盖后处理` **必挂**，且 T4.11 的「A+B 共 21 套」会**缺 1 套**。⚠️ 已请用户裁决（2026-09-30）⇒ **补**。⚠️ 取值口径：暗角 `0.48` 与 §B1（E11 `0.46`）/§B2（E14 `0.44`）/§B3（E16 `0.50`）同区间；颗粒 `0.030` 与 §B2/§B3 一致 |
+| 2026-09-30 | T4.4 · **§B4 未列「帧率绑定」，顺带修**（与 T4.1 / T4.2 / T4.3 同一条约定） | （§B4 未涉及；旧实现 `rotation += 0.3f + mid * 0.5f` 与 `hue += hueRate` 都是**每帧固定增量**） | `rotation += (0.3f + mid * 0.5f) × fx.dt × FPS_BASE`、`hue = 60f + (hue + hueRate × fx.dt × FPS_BASE − 60f) mod 135f`，`FPS_BASE = 60f` | ① 每帧固定增量 ⇒ **60 fps 的旋转/变色速度是 30 fps 的 2 倍**（同一效果在不同设备上观感不同）；② 取 `FPS_BASE = 60` ⇒ **60 fps 下与旧实现逐像素等同**（零观感回归，`s17_e18.py` ⑤ 实证三档 mid 差 `0.00e+00`）；③ 段落 EMA 同步 dt 化（`sectionHue += (target − sectionHue) × (fx.dt × SECTION_RATE).coerceIn(0f, 1f)`）—— 三档帧率 1 秒后 `0.4528 / 0.4545 / 0.4579`（差 < 2%），若用**每帧固定系数**（如 `WorldRenderer` 的形态）则 60 fps `0.7024` vs 15 fps `0.2614`（**差 0.441**）；④ 与 T4.1（E11 旋转）/ T4.2（E14 环相位）/ T4.3（E16 列位移）**同一条约定**，避免逐套重踩 |
+| 2026-09-30 | T4.4 · §B4-④ · **双边明暗使该效果的 draw 数翻倍**（已知代价，不修） | 「双边明暗（同 §A2-1）」未规定每根条几次 `drawLine` | 每根条 **2 次** `drawLine`（暗侧 `lit − SIDE_LIT_DARK`、亮侧 `lit + SIDE_LIT_BRIGHT`，两侧沿**切向** ±`SIDE_OFFSET × wdt` 错开） | ⛔ 代价：§7.5 的 `MilkdropRenderer` 原语 **64 → 128**（`drawLine` 列翻倍）。E18 原本 66 原语/帧、**不在**超 MEDIUM 上限（120）名单里；改后 **133**，**首次进入该名单**（9 套 → 10 套）。⚠️ 权衡：§B4-④ 是 E18「环状频谱条」唯一的立体感来源（§A2 族已在 E05/E13/E15 验证过观感），且 E18 的瓶颈在**离屏 blit**（1280×720 乒乓）而非 draw 调用 ⇒ 接受该代价并**登记**，不改为单侧。⚠️ 若后续 `dumpsys gfxinfo` 显示 E18 超预算，**优先**降 `TAP_COUNT`（3 → 2）或缩离屏尺寸，**不要**先砍双边明暗 |
+| 2026-09-30 | T4.4 · §B4-② · **3-tap 循环上界：废弃 `.indices`，改 `TAP_COUNT` 常量** | （§B4 未规定循环写法） | 新增 `const val TAP_COUNT = 3`，循环写 `for (t in 0 until TAP_COUNT)`（⛔ **不是** `TAP_SCALE.indices`）；两张表的长度一致性由 `MilkdropTest` ② 兜住 | ⛔ `logs_temp/renderer_loop_estimate.py` 的 `resolve_bound()` 对 **`.indices` 显式 `return None`**（第 314–315 行）⇒ 循环体里的 `drawImageRect` 会被记进**「未解析」列**而不是「绘制原语」列 ⇒ §7.5 出现**假性降耗**（E18 会显示成 `67` 而非 `133`，白丢 3-tap 的全部成本）。而脚本的符号表收 `\bconst\s+val\s+(\w+)\s*(?::\s*Int)?\s*=\s*(\d+)` ⇒ `TAP_COUNT` **可解析**。⚠️ 与 T4.3 的「互斥分支重复计入」是**同一族口径盲区**（工具自身的缺陷会成为免构建自查的盲区，§四 G15）⇒ 写循环时**优先用常量上界，不用 `.indices` / `.size`** |
+| 2026-09-30 | T4.5 · **成本账的「+1 光晕」在 §B5 正文里无对应项** | 成本账表「每帧 `draw` 调用：现状 350 → **3 + 1 光晕 + 2 后处理 = 6**」 | 类内 draw = **3**（外圈 / 内圈 / 高亮 三条 `drawPath`）+ 后处理 **2**（由基类 `postFx` 施加，**不在类内**）⇒ 合计 **5**（不是 6）；「+1 光晕」**未实现** | §B5 正文的 Q1–Q6 里**只有 3 条 Path**（Q3 的 2 条 + Q4 的 1 条），成本账的「3」已含 Q4 那条 ⇒ 「+1 光晕」是**多算的第 4 条**，在正文里找不到依据。⚠️ 若日后要补「光晕」，必须同时把 Q4 的 `Plus` 子集另计，否则重复 |
+| 2026-09-30 | T4.5 · §B5-Q3 · **分组基准具体化为「椭圆归一化距离」** | 「按『距墨迹中心的**归一化距离**』分 2 组」（未说是圆还是椭圆） | 落为**椭圆归一化**：`norm = √(nx² + ny²) × INV_SQRT2`（`nx = (px − cx) / halfW`、`ny = (py − cy) / halfH`，`INV_SQRT2 = 1/√2`）⇒ **角点恰为 1**；`INNER_K = 0.42f` ⇒ 内圈椭圆半轴 ≈ **0.594 × 墨迹半宽** | 文字墨迹是**宽扁**的（`inkW / inkH ≈ 3:1`）⇒ 用**圆**归一化会让左右两端永远落在外圈、上下两端永远落在内圈（`norm` 按长轴算），「中心亮、边缘暗」退化成「左右暗、上下亮」。椭圆归一化与墨迹形状**同构**，视觉上是真正的「由内向外」 |
+| 2026-09-30 | T4.5 · §B5-Q1 · **`textSize` 补下限 `12f`** | 「`textSize = min(150f, (bmp.width - 40) / (measureText(150f) / 150f))`」 | 落为 `paint.textSize = TEXT_SIZE_MAX; if (wFull > wMax) paint.textSize = (TEXT_SIZE_MAX * wMax / wFull).coerceAtLeast(12f)`（数学等价于原文，**多一个 `12f` 下限**） | 极长标题（如 30 个汉字）按原文算出的字号会掉到 **3–5 px** ⇒ 采样位图里墨迹只有零星几像素、且 `poolCap` 的「填满即停」会把同一像素**重复计数**成几百个点（粒子**叠在同一点**上）。`12f` 保证至少能采出可辨认的轮廓；再长则由 Q2 的适配缩放兜住（画布内等比缩小） |
+| 2026-09-30 | T4.5 · §B5-Q6 · **`AudioSmoother(0.02 / 0.02)` 本身是「每帧固定系数」EMA ⇒ 帧率绑定**（与 T4.1–T4.4 的「顺带修帧率绑定」不同） | §7.3 规定 `sectionEnergy` 的 attack / release **均为 0.02** | **照 §7.3 落盘**（`SECTION_ATTACK = SECTION_RELEASE = 0.02f`），⛔ **不**改成 `dt` 化 | T4.1–T4.4 修的是**相位 / 旋转**这类「累计量」（每帧固定增量 ⇒ 帧率变则总量线性变），**必须** `dt` 化；而 `AudioSmoother` 是 §7.3 明文规定的**滤波系数**（全项目 6 处共用同一套参数），改成 `dt` 化会让 E19 与其余效果的段落响应**不一致**。⚠️ 代价：60 fps 与 30 fps 的段落跟随速度不同（τ ≈ 0.85 s vs 1.7 s）—— 已登记，待 V16 上机时留意 |
+| 2026-09-30 | T4.5 · §B5-P1 · **`updateAttract` 的落地方式（签名扩展）** | 「`updateAttract` 里 `LIFE <= 0` 时不 `removeAt`，改为把该粒子从画布外缘随机位置重新投放并复位 `LIFE = 1f`」（未规定怎么拿到画布尺寸、怎么取随机点） | 签名扩为 `updateAttract(targets, accel, jitter, w, h, decay = LIFE_DECAY)`；新增 `private fun respawnFromEdge(i, w, h)`（四边等概率 + 速度归零 + `LIFE = 1f`）；新增 `const val LIFE_DECAY = 0.004f` 作单一真源 | 重生需要**画布尺寸**（`w` / `h`）与**每帧衰减**（`decay`）两个新输入 ⇒ 必须扩签名；`decay` 给**默认值**使旧调用点与门禁注入两不误。⚠️ 随机源用池自带的 `rng`（P1#5 已规定「随机源由宿主注入」）⇒ 不引入新的进程级共享状态 |
+| 2026-09-30 | T4.5 · §B5-P3 / P5 · **采样 JNI 的两种口径（`74` vs `220`）** | §B5-P3 写「JNI **16,280 → 74**」（`step = 3` 口径）；同节成本账写「采样 JNI **16,280 → 220**」（`step = 1` 口径） | 按 **P5**（`SAMPLE_STEP = 1`）落盘 ⇒ 行数 = **220**（每遍）；两遍 = **440** 次 `getPixels` | 两处数字**各自都对**，只是 `step` 不同：`220 / 3 = 73.3 → 74`（P5 之前）vs `220 / 1 = 220`（P5 之后）。P5 明确要求 `step = 1`（全字形覆盖），故以 **220** 为准；成本账那一行与落盘一致 |
+
+| 2026-09-30 | T4.6 · §B6-① · **fbm 的合并位置** | 「在 `sampleFlow` 内加 1 次 fbm（**需第二个 `FloatArray`**）」 | 改为**在（每 `NOISE_EVERY` 帧一次的）更新循环里合并**：`noise[gy*GW+gx] = fbmAt(gx, gy, evolve)`，`sampleFlow` 保持**单层**双线性；⛔ **不新增常驻数组** | ① 双线性插值是**线性算子** ⇒ `bilinear(f1 + k·f2) ≡ bilinear(f1) + k·bilinear(f2)`（`logs_temp/s17_e20.py` ② 用 4 组 `(u,v)` 实测**最大偏差 `0.000e+00`**）⇒ 两种写法**数学等价**；② 每粒子由 **2 次**双线性降为 **1 次**（粒子 150 个/帧）；③ 省掉一个 `FloatArray(GW*GH)` 常驻数组。⚠️ 代价：`sampleFlow` 的 KDoc 必须写明「单层」，否则后来者会以为漏了 fbm（已写，并由 `PlasmaFlowTest` ⑦ 的 `sampleFlow 内不得出现 fbmAt(` 钉住） |
+| 2026-09-30 | T4.6 · §B6-② · **新增 `ProceduralTexture.Id.PLASMA`（第 7 类 tile）** | §B6-② 点名要「等离子底纹 tile」，但 **§15.2.3 的 tile 生成规格表里没有它**（原文只列 GRAIN / SCANLINE / STARFIELD / PAPER / WATER / CAUSTIC 六类）⇒ **文档内部不一致**（与 §B4 缺后处理同族） | 经**用户裁决****新增 `Id.PLASMA`**（`plasmaRow`：3 通道低频 `sin`，R/G/B 相位互差 120°；`alpha = 178 × 三通道均值亮度`）并同步 `ensure` 的 `ensureFullscreen(Id.PLASMA, …)`；⛔ **不复用现有 tile** | ⛔ 复用任一类都会**语义错位**：`GRAIN`/`SCANLINE` 是**平铺型**（全屏要走 `ImageShader`，即 `OverlayFx.drawTexture` —— 该函数在 `FxLevel.OFF` 早返回，与 §B6-② 「背景不随档位关」矛盾）；`WATER`/`CAUSTIC` 已被 E13 占用且语义是「水」；`STARFIELD` 是**星点**。⚠️ 新增枚举项**必须是最后一项**（`ordinal` 决定槽位偏移，插在中间会让已生成的 tile 串位）—— 由 `s17_state.py` §9 的 `ids[-1] == "PLASMA"` 断言护住 |
+| 2026-09-30 | T4.6 · §B6-③ · **「粒子拉长为短条」用参数方程 8 段，不用 `drawOval`** | 「粒子改**拉长椭圆**（长轴 = 短轴 × 1.8），按速度方向旋转」 | 落为**参数方程多边形**：`P(θ) = c + aMaj·cosθ·u + bMin·sinθ·v`（`u = (cos, sin)` = **速度方向**），`SEG = 8` 段，`cosSeg`/`sinSeg` **构造期算一次**（draw 期零三角函数）；⛔ 不用 `drawOval` | ⛔ Compose 的 `drawOval(topLeft, size)` **只能画轴对齐椭圆**，表达不了「按速度方向拉长」（与 E13 顶点反光同一坑，见 T3.1 那条）；`Path.addOval` 只收 `Rect`（`data class`）⇒ 每粒子一次堆分配。⚠️ 8 段在 `aMaj ≤ 14.4 px` 下的最大偏差 **< 0.3 px**（肉眼不可辨）。`PlasmaFlowTest` ④ 用「速度 0° ⇒ 长轴沿 +x、90° ⇒ 沿 +y」+ 负向「轴对齐椭圆无论方向都只能给出 `(aMaj, 0)`」双向钉住 |
+| 2026-09-30 | T4.6 · §B6-③ · **桶内 alpha 取均值 + 桶内重叠按非零环绕**（两处有意取舍） | 「按 hue 分 8 桶合批（若合并为 `Path`）」—— 未规定**桶内 alpha** 与**桶内重叠**怎么处理 | ① 桶 alpha = **该桶 life 均值 × `ALPHA_K`**（`Σ life / count × 0.8f`），不是逐粒子 alpha；② 桶内重叠粒子按**非零环绕**只覆盖一次（跨桶仍 `BlendMode.Plus` 累加） | ① 同一条 `Path` 只能有**一个 alpha** ⇒ 逐粒子寿命衰减**不可表达**，改取桶均值（同桶内 life 分布接近，视觉不可辨；与 T4.2 拖尾 8 桶合批**同一取舍**）；② 逐粒子 `Plus` 累加需要逐粒子一次 draw ⇒ 会退化成 150 次绘制；非零环绕下**总亮度低于旧实现**（这是「151 → 10」的必然代价）。⚠️ 两条都已在类 KDoc 写明 |
+| 2026-09-30 | T4.6 · **§B6 未列「帧率绑定」，顺带修**（与 T4.1 / T4.2 / T4.3 / T4.4 同一条约定） | （§B6 未涉及；旧实现 `evolve += 0.01f + mid × 0.03f`、`life -= 0.006f`、`speed = (1.5f + treble × 5f) / 1000f` 全是**每帧固定增量**） | 统一 `× fx.dt × FPS_BASE`（`FPS_BASE = 60f`）；⚠️ `frame.beat` 的 `evolve += BEAT_KICK` 是**事件踢**（不是速率）⇒ **保持不折算** | ⛔ 每帧固定增量 ⇒ 60fps 的演化速度是 30fps 的 **2 倍**（§四 G13 · 根因⑩）。`FPS_BASE = 60` ⇒ **60fps 下与旧实现逐像素等同**（`s17_e20.py` ⑤⑥ 实证：三档帧率 1 秒累计量恒为 `1.68 / 0.21 / 0.36`；旧口径 30fps 恰为 60fps 的 **50%**）。⚠️ §B1-④ 对 E11 列了这一条、§B6 未列 ⇒ 属同族缺陷的顺带修复 |
+| 2026-09-30 | T4.6 · **`ProceduralTexture` 是共享工具箱 ⇒ 本任务动了已提交的 S1 代码** | （§15.2.3 / §15.1.2 未登记：`fx/ProceduralTexture.kt` 属 S1 已交付件） | 在 `enum class Id` 末尾加 `PLASMA`、加 `PLASMA_A` / `PLASMA_PHASE_G` / `PLASMA_PHASE_B` / `plasmaRow`，并在 `ensure` 末尾加一行 `ensureFullscreen(Id.PLASMA, …)`；**顺带补齐文件末的尾随换行** | ① 该文件是**多效果共享**的（E03/E07/E13/E15/E16/E17/E31/E32 等都在调 `ensure`），改动**必须保持既有 6 类 tile 逐像素不变** —— 本次只在**末尾**追加枚举项 + 追加一次 `ensureFullscreen`，不动任何既有分支（`Id.entries.size` 从 6 → 7 ⇒ `slots` / `keys` 数组自动扩容，槽位偏移由 `ordinal` 决定，**已生成的 6 类不受影响**）；② ⚠️ 原文件**末尾缺尾随换行**（`wc -l` 355 / `splitlines` 356）⇒ 与仓库其余文件不一致，一并补齐（**356 行 + LF**） |
+| 2026-09-30 | T4.7 · §B7 的 **P0-1 / P1 现状描述已过期 ⇒ P1 不做** | §B7-P0-1 写「`:698` / `:703` 每点 `addOval(Rect(...))` ⇒ 9000 个 `Rect` 分配/帧」；§B7-P1 的收益写「`Rect` 分配 **9,000 → 0**；JNI `9,000(addOval) → 7,200(addPath) + 216`」 | ⛔ **该描述对当前源码不成立**：`LyricsDotMatrixRenderer.kt` 早已是 `paths[coreIdx].asAndroidPath().addOval(l, t, r, b, Direction.CCW)`（`android.graphics.Path` 的 **4-float 重载**，§四 G15 已核实**零分配**）—— 这是 **T1.6.2** 的成果，§B7 未回头更新。⇒ **P1（`dotPath` 池）不做**：其收益「消除每点 `Rect` 分配」**已被实现**，只剩 native `addOval` `9,000 → 7,416` 的边际收益（**−17.6%**），却要付**半径 6 档量化**（最大误差 = 档宽/2 = `rMax/12` ≈ **8%**，§B7-P1 自述） | ① ⛔ **收益/代价不成立**：省 17.6% 的 native 调用换 8% 的几何误差 + 36 条常驻 `Path`（≈ 36 × 内部数组）；② ⚠️ 这条也是**规格文档自身会过期**的实证 —— §B7 的 `file:line`（`:698` / `:703`）与实现描述都停留在 T1.6.2 之前，**读 §B7 时必须先对源码复核**（本仓库第 N 次「文档写死的现状会漂移」）；③ ⛔ 若日后 `dumpsys gfxinfo` 显示 E23 的 native 调用是瓶颈，**再**考虑 P1（届时 `R = 12` 可把误差压到 4%） |
+| 2026-09-30 | T4.7 · §B7-Q3（**4 档亮度 → 8 条 `Path`**）**本轮不做** | §B7-Q3 明确写「**收益/代价都小，列为可选**」，需先把 `paths` 从 6 条扩到 8 条（4 tier × 2 层）、`dotPath` 池 36 → 48 | **不做**，保持 3 档 / 6 条 `Path` | ① §B7 自己标注**可选**；② 收益只是「多一个明度层次」，而卡拉OK 的「推进感」已由 `karaokePacing`（快起慢落三次缓出）+ 3 档亮度提供；③ 代价是每点 +1 次阈值比较、每帧 8 次 `rewind`（vs 6 次）、外加 2 条常驻 `Path`。⚠️ 若 V18 上机后认为「推进感不足」，**再**做 Q3（届时同步把 `dotPath` 池扩到 48） |
+| 2026-09-30 | T4.7 · §B7-P3 · **外提变量的落盘形态（`bassCue` / `pulse`）** | §B7-P3 要求算一次：`sinB = sin(globalT * 2.0f)`、`bassCue = frame.bass.coerceIn(0f, 1f)`、`amp = 2.2f * (0.35f + bassCue * 2.2f)`、`pulse = frame.pulse` | 落盘只建 **2 个**局部量：`val sinB = sin(t * 2.0f)` 与 `val amp = 2.2f * (0.35f + frame.bass.coerceIn(0f, 1f) * 2.2f)`（**`bassCue` 内联进 `amp`**，不单独建变量）；`pulse` **不外提** | ① `bassCue` 只被 `amp` 用一次 ⇒ 内联后少一个局部量、**逐点浮点总量不变**（`coerceIn` 仍在循环外算一次）；② ⚠️ `frame.pulse` **不在逐点循环里** —— 它只出现在 `drawPath(paths[4/5], …, alpha = … + frame.pulse * …)` 两处，而这两行在**循环之外**（§B7-P3 把它列进「循环内重算」是**误列**）⇒ 外提无收益；③ ⚠️ `floatY` 的 `sin(globalT * 2.0f + localX * 10f)` 含**逐点** `localX` ⇒ 照 §B7 自述**保留**（提不了） |
+| 2026-09-30 | T4.7 · **采样 JNI 的两种口径（`116` vs `346`）** | §B7-P2 写「JNI **≈ 71,000 → 2 × ceil(bmpH/step) ≈ 116**（−99.8%）」；§B7-P6 要求 `step` 降到 **1** | 按 **P6** 落盘 ⇒ 每遍 `ceil(bmpH/1) = 173` 行，两遍 = **346** 次 `getPixels`（源码注释即写 346） | 两处数字**各自都对**，只是 `step` 不同：`2 × ceil(173/3) = 116`（P6 之前）vs `2 × 173 = 346`（P6 之后）。⚠️ 与 **T4.5**（§B5-P3/P5 的 `74` vs `220`）**同族** —— §B7 的收益数字是**按旧 `step` 算的**，落盘 `step = 1` 后必然更大。⇒ 收益仍为 **71,224 → 346（−99.51%）**，「耗时 35–70 ms → < 1 ms」的结论**不变**（全变成数组下标访问） |
+| 2026-09-30 | T4.7 · §B7-P4 · **`arr[o + SIZE]` 只删读取、不动 `STRIDE`** | §B7-P4 写「`arr[o + SIZE]` 恒为 `1.0f` ⇒ 删该槽（`STRIDE` 8 → 7）**或至少删读取**；**建议本轮只删读取，不动 `STRIDE`**（风险更低）」 | 按建议落盘：循环内改为字面量 `1.0f`（原 `baseSize = arr[o + SIZE]` 连同该局部量一并删除），`STRIDE` **保持 8**，`sampleLine` 里的写入 `target[o + SIZE] = 1.0f` **保留** | ① ⛔ 动 `STRIDE` 要同步 4 处（`o = i * STRIDE` / `FloatArray(cap * STRIDE)` / `sampleLine` 的写入 / `initCoalesce` 与 `updateLine*` 的偏移常量）—— 与「本轮性能优化」无关的**高风险改动**，§B7 自己也不建议；② ⚠️ 代价：每次**换行**（非每帧）多 3600 次无谓写入 ≈ 14 KB —— 与「采样耗时 < 1 ms」相比可忽略；③ 收益（7200 次/帧数组读 → 0）**全额拿到**，因为它只依赖「读」的那一侧 |
+| 2026-09-30 | T4.7 · **卡拉OK 守卫注释（§15.7 第 18 条）+ ⛔ 断言注释正文的引号必须逐字节一致** | §15.7 第 18 条要求「在代码里加守卫注释」，防止后续（人或 agent）按「性能」直觉删掉卡拉OK | 在 `addLineToPaths` 的 `val brightness = when {` **之前**加 4 行注释：说明 §13.5-D4 裁决、实测成本（每点 +4 比较 +4 乘除 / 0 分配 0 JNI / `drawPath` 恒 6 次）、以及「删掉后统一取正在唱会让 oval 数 **+60%**」的反事实 | ⛔ **踩过一次**：测试 `LyricsDotMatrixTest` ⑦ 用 `assertTrue(源码含「不得以“性能”为由删除」)` 断言**注释正文**，而源码首版写的是 **ASCII 双引号** `"性能"`（`0x22`）、测试与文档用的是**中文引号** `“性能”`（`0x201C/0x201D`）⇒ 断言会**假 FAIL**。修法：把源码统一为中文引号。⚠️ 教训：**用注释正文做断言 = 把引号形态变成契约** —— 凡此类断言，源码/文档/测试三处的引号必须**逐字节一致**（本仓库的文档规范本来就要求中文引号） |
+| 2026-09-30 | T4.7 · **3 个纯函数移入 `internal companion object`（供门禁直调）** | §B7 未规定门禁怎么验证 `calculateRowQuota` 与卡拉OK 的推进曲线 | 把 `calculateRowQuota`（按行配额）/ `karaokePacing`（三次缓出）/ `easeOutCubic`（行上移缓动）移入 `internal companion object`，并把原 `companion object` 整体改为 `internal companion object`；门禁用 `private val C = LyricsDotMatrixRenderer.Companion` 直调，**不复制算法** | ⛔ **单测环境不能安全构造 Compose `Path()`**（依赖渲染后端）⇒ 门禁若要验证生产函数，该函数必须是**无状态纯函数**且可被 `internal` 访问。⚠️ 与 T4.6（`fbmAt`/`bucketOf`/`ellipsePoint`）、T4.4（`advanceCol`）**同一条做法**：**复制算法必然漂移**，抽 `internal` 纯函数是唯一可靠路径。⚠️ 副作用：`companion object` 的可见性由 `private` 变 `internal`（仅模块内可见，**不影响 APK**） |
+| 2026-09-30 | T4.7 · **§7.5「分配」列 `6 → 7`、「未解析」列 `3 → 1` —— 工具口径，⛔ 不是成本上升** | §7.5 口径：「调用点 × 可解析的循环次数」；**解析不出循环次数的调用点不计入数值列，只记进「未解析」列** | （无需改代码；如实登记口径变化） | ⛔ 实测（把 HEAD 版 E23 换入后重跑脚本，逐行对比）：HEAD = `7 | 0 | 405 | 1 | 6 | **2**`；T4.7 后 = `7 | 0 | 405 | 1 | **7** | **0**`。① 「分配」**6 → 7**：P2 新增的 `rowBuf`（`IntArray(bmpW)`，≈ 7 KB，**跨次复用**）被 `ALLOC_PATTERNS` 的 `\bIntArray\s*\(` 命中 ⇒ **+1**；② 「未解析」**3 → 1**：全部来自 alloc 列的 **2 → 0** —— 原 `b.getPixel(x, y)` 两处调用点**落在 `for (x in 0 until bmpW step step)` 里**，而 `step` 当时是**非常量局部量**（`idealStep.coerceIn(1f, 3f)` 的结果）⇒ 循环上界不可解析 ⇒ 只记「未解析」；P6 把 `step` 改成**字面量 `1`**、P2 又把 `getPixel` 换成 `getPixels`（`getPixels(` 的 `(` 前有 `s`，**不匹配** `\bgetPixel\s*\(`）⇒ 两条调用点整体消失。⚠️ ⇒ **读 §7.5 的「分配/未解析」列时必须记住：它同时受「真实代码」与「脚本可解析性」影响**（§四 G15 同族：**工具自身的缺陷会成为免构建自查的盲区**）。真实成本变化见 §12.3 的 T4.7 条目 |
+| 2026-09-30 | T4.8 · **§B8 未列「帧率绑定」，顺带修**（与 T4.1–T4.4 / T4.6 同一条约定） | （§B8 未涉及；旧 `HypnoticFunctionRenderer.kt:362` 的 `val dt = ((now - phaseStartMs) / 1000f).coerceIn(0f, 0.1f)`） | 删除该死代码，`drawStroke` 改为 `drawAccumulator = advanceStroke(drawAccumulator, fx.dt, speed)`；新增 `internal fun advanceStroke(accumulatorMs: Float, dtSec: Float, speed: Float): Float = accumulatorMs + dtSec * 1000f * speed` | ⛔ 旧 `dt` 名字叫「帧间差」但**实为相位内累计时间**（`now − phaseStartMs` 是自相位开始起的毫秒数，不是上一帧到本帧的差），且被 `coerceIn(0f, 0.1f)` 钳到 **100 ms** ⇒ 绘制推进速度**帧率绑定**（§四 G13 · 根因⑩）。⚠️ 用 float32 精确模拟（60 fps / +16 ms/帧）实测旧口径 = **83 帧 = 1.328 s**，与类 KDoc 声明值**不一致**且帧率一变就变；`fx.dt` 化后 30 / 60 / 120 fps **恒等**（`s17_e25.py` ⑨ 实证：`speed=1` 恒 1000 ms、`speed=2` 恒 2000 ms、`dt=0` 原地不动） |
+| 2026-09-30 | T4.8 · §B8-① · **除 alpha 三档外，额外把线宽也分档** | §B8-① 只给 `alpha 0.55/0.30/0.14`（主刻度 / 次刻度 / 细网格） | 三级同时分**线宽**：`AXIS_STROKE_W = 2.6f` / `TICK_STROKE_W = 1.8f` / `GRID_STROKE_W = 1.2f`（各配 `axisStroke` / `tickStroke` / `gridStroke` 三个成员 `Stroke`） | ⛔ 问题描述原文是「网格/坐标轴**同色单线**」—— 只分 alpha 仍会因同宽而**糊成一片**（`drawLine` 默认 `Stroke` 宽度下，0.14 与 0.55 的线在电视上亮度差会被抗锯齿抹平）。⚠️ 代价 = **0**（`Stroke` 是构造期成员、draw 期零分配，线宽是 GPU 参数） |
+| 2026-09-30 | T4.8 · §B8-② · **高光线在 HOLD 期也保留** | §B8-② 只写「曲线改『双层 + 法线明暗』」，未区分 DRAW / HOLD 两态 | DRAW（`drawStroke`）与 HOLD（`drawStill`）**都**画 `translate(0f, -HIGHLIGHT_OFFSET) { drawPath(curvePath, highlightColor, …, highlightStroke) }` | ⛔ 旧实现 HOLD 期本就保留双层描线 ⇒ 只给 DRAW 加高光会让**保持阶段**的曲线「掉一层」，与 §B8 的验收「曲线有**受光侧**」冲突（用户在 HOLD 期停留最久）。⚠️ 代价：HOLD 期多 1 次 `drawPath`（该态无音频驱动、帧预算充裕） |
+| 2026-09-30 | T4.8 · **随机源不复用基类 `rng`：改名 `shuffleRng = Random(seed)`** | §B8 未涉及；`RendererFx` 基类提供 `protected val rng = VisualizerRandom()`，直觉上应直接复用 | **不复用**：保留 `private val shuffleRng = kotlin.random.Random(seed)`（原 `rng` 改名），4 处 `nextFloat()` + 2 处 `weightedShuffle(shuffleRng, …)` 全部改指向它 | ⛔ `FunctionLibrary.weightedShuffle(rng: Random, order, prevLast)` 的形参类型是 **`kotlin.random.Random`**，而 `VisualizerRandom`（自写 LCG）**既不是其子类、也没有 `nextFloat()`/`nextInt()`** ⇒ 传不进；⚠️ 且 `HypnoticScheduleTest` / `HypnoticPhaseTest` 直接依赖 `HypnoticFunctionRenderer(seed)` 的确定性（`Random(2026)`）⇒ **泛化 `weightedShuffle` 会引入行为风险**。⚠️ 另注：`s17_basecontract2.py` 的违规正则只抓 `private val rng = VisualizerRandom()`，**不抓 `Random(seed)`** ⇒ 不触发迁移门禁 |
+| 2026-09-30 | T4.8 · **相位哨兵 `0L → -1L` + `ctx.nowMs → fx.nowMs`** | 旧实现用 `ctx.nowMs` 做相位计时，并以 `phaseStartMs = 0L` 表示「尚未开始」 | 改用 `val now = fx.nowMs`（`RendererFx` 经 `clock.advance(frame)` 给出的帧时钟）；`phaseStartMs` 初值改 **`-1L`**，在 `drawContent` 里 `if (phaseStartMs < 0L) { phaseStartMs = now; needsSample = true }` | ⛔ ① 基类 `FrameClock.advance` 只接受 `frameIn.timeMs`（⛔ 不得用 `ctx.nowMs`）⇒ 迁移后必须换源；② `AudioFrame.timeMs` 由 `SpectrumRepository` 在 `withFrameNanos` 内赋值，**单测里恒为 0** ⇒ 若仍用 `0L` 作哨兵，`onEnter` 后第一次 `draw` 会**误判为「相位已开始」**；用 `-1L` 则不可能与真实 `timeMs` 撞值（`FrameClock` 首帧 `dt = 0` 但 `nowMs` 是真实帧时钟） |
+| 2026-09-30 | T4.8 · §B8-③ · **`ProceduralTexture.ensure` 在 `drawContent` 内调用（违反基类注释）** | §B8-③ 要求「叠 1 层方格纸纹理 tile」，但 `ProceduralTexture.ensure(w, h)` 的注释写「**必须在 `onEnter` 或尺寸变化时调用，⛔ 不得在 `draw` 内调用**」 | 落为在 `drawContent` 内 `val iw = w.toInt().coerceIn(1, 4096); val ih = h.toInt().coerceIn(1, 4096); ProceduralTexture.ensure(iw, ih); ProceduralTexture.tile(Id.PAPER)?.let { drawImage(it, dstSize = IntSize(iw, ih), alpha = PAPER_ALPHA) }` | ⛔ **两处硬约束冲突，取「可用性」**：① `onEnterContent` **拿不到 w/h**（基类 `onEnter(ctx)` 只给 `RenderContext`，画布尺寸只在 `draw` 期可得）；② ⚠️ `ensure` 内部**按 `(w,h)` 双键缓存**，重复调用只在尺寸变化时重建（**幂等**），每帧调用的实际开销 = 2 次 `Int` 比较（无分配）⇒ 可接受。⚠️ 这是本项目**第一处**在 `draw` 内调 `ensure` —— 若日后 `ensure` 改为「无条件重建」会立刻变成每帧全屏位图重建，**必须在 KDoc 写明**（已写） |
+| 2026-09-30 | T4.8 · **§7.5「绘制原语」列 `9 → 12` —— ⛔ 这是真实成本上升（画面质感的代价），与 T4.7 的「工具口径」不同** | §7.5 口径：「调用点 × 可解析的循环次数」 | （无需改代码；如实登记） | ⛔ 实测（把 HEAD 版 E25 换入后重跑脚本，逐行对比）：HEAD = `9 | 8 | 754 | 6 | 5 | 0`；T4.8 后 = `12 | 8 | 754 | 6 | 5 | 0`。「绘制原语」**9 → 12（+3）**：① §B8-② 的高光线在 **DRAW / HOLD 两态**各 1 次 `drawPath` ⇒ **+2**；② §B8-③ 的 PAPER 底纹 1 次 `drawImage` ⇒ **+1**。⚠️ 其余三列**全不变**（路径·文本 754 / 分配 5 / 未解析 14 = 8+6+0）。⛔ 12 ≪ MEDIUM 档上限 **120** ⇒ **仍不进**「超 MEDIUM 档上限」名单（**仍 8 套**）。⚠️ 对照 T4.7（`7 → 7` 不变、两列变化纯属**脚本可解析性**）—— 本版 +3 是**真实新增的每帧绘制调用**，登记为「画面质感换成本」 |
+| 2026-09-30 | T4.9 · §B9-① · **除「几何锥度 + 颜色向亮端插值」外，必须同时把 alpha 曲线改为近平** | §B9-① 只写「每级 `strokeWidth` 按 `0.72f` 递减 + 颜色随层级**向亮端插值**」 | 三级同时改：① 线宽 `(TRUNK_STROKE_W * TAPER.pow(d)).coerceAtLeast(MIN_STROKE_W)`；② 颜色 `depthColorArgb[d]`（`depthColorArgbOf` 逐通道直插）；③ alpha 由旧 `(0.9f - d * 0.08f).coerceAtLeast(0.4f)` 改为 `(SEG_ALPHA_BASE - d * SEG_ALPHA_FALLOFF).coerceAtLeast(SEG_ALPHA_MIN)`（`0.90f` / `0.025f` / `0.60f`） | ⛔ **验收 V20 原文是「枝干越往梢越细越亮」** —— 只改线宽 + 颜色**不够**：旧 alpha 每层 −0.08（8 层从 0.90 掉到 0.26）会把顶梢的亮度增益**整体抵消**，肉眼仍是「越往梢越暗」。⚠️ 改后 alpha 仅 −0.025（末层 0.70，下限 0.60）⇒ 亮度增益**净可见**。⚠️ 代价 = 0（alpha 是 `drawLine` 的既有形参） |
+| 2026-09-30 | T4.9 · §B9-② · **叶形手写 4 段三次贝塞尔（⛔ 不用 `Path.addOval`）** | §B9-② 只说「画 3 档大小的**叶形**（椭圆，长轴 = 短轴 × 2.2，按 `LIGHT_ANGLE_DEG` 定向）」 | `buildLeaf`：`path.moveTo(...)` + `while (k < LEAF_CUBIC_SEGS) path.cubicTo(...)`（12 采样点，`KAPPA = 0.5522847f`）+ `path.close()`；局部坐标表 `LEAF_U` / `LEAF_V`（各 12 个常量） | ⛔ Compose 的 `Path.addOval` **只有对象重载**（`addOval(rect: Rect)`）⇒ 每片叶一次 `Rect` 分配（**每帧 128 次**），且它**轴对齐**、表达不了「按主光向定向」。⚠️ `addOval` 的 float 重载只存在于 `android.graphics.Path`（`s17_pathapi.py` 的护栏） |
+| 2026-09-30 | T4.9 · §B9-② · **叶「按 `spectrum` 分桶」落为「按**下标**固定分桶 + 桶长由 spectrum 频段驱动」** | §B9-② 原文「在最末级节点按 `spectrum` 分桶画 3 档大小的叶形」 | `leafBucketOf(i) = i % LEAF_BUCKETS`（**下标固定分桶**）；每桶的叶长由该桶绑定的 spectrum 频段驱动（`LEAF_BANDS = 6 / 21 / 42`，低 / 中 / 高） | ⛔ 若真按「频谱值」分桶，桶归属会**逐帧跳变**（同一片叶这帧属「大」桶、下帧属「小」桶）⇒ 叶尺寸**闪烁**。⚠️ 改成「桶固定 + 尺寸由频段驱动」后：3 档大小仍在、且**帧间连续**。⚠️ 另注：叶尺寸还乘了 `grow`（生长前沿的分数系数）⇒ 有「抽芽感」 |
+| 2026-09-30 | T4.9 · §B9-③ · **背景纵深落为「径向渐变 + 复用既有 STARFIELD」，且背景不随 FxLevel 关闭** | §B9-③ 只写「径向纵深 + 星野/微粒 tile」 | ① `Shading2D.shadeBrushCached`（半对角线半径、树根 `(w/2, h*0.88)` 处微亮 → 四角暗、`alpha = 0.30f`）；② **复用** `ProceduralTexture.Id.STARFIELD`（⛔ **不新增 tile**、不改 `ProceduralTexture`），`alpha = 0.32f` | ⛔ ① 「不新增 tile」沿用 T4.8（PAPER）的先例：`ProceduralTexture` 的每个 `Id` 都要维护生成 + 缓存 + 释放，能复用就不加（`Id.PLASMA` 是 T4.6 唯一新增，因为既有 tile 无法表达流场）；② 背景**按 E13 / E15 / E32 的既有范式**放在 `drawContent` 里、**不随 `FxLevel` 关闭** —— 按档位关的是 `postFx` 的 vignette / grain，背景承担「不再浮在纯黑上」 |
+| 2026-09-30 | T4.9 · §B9-③ · **`shadeBrushCached` 必须带具名盐 `E34_KEY_SALT`** | §B9-③ 未涉及；§四 G4 要求「缓存键维度 ⊇ 依赖维度」 | `key = (w.toRawBits().toLong() shl 32) xor h.toRawBits().toLong() xor accent.toArgb().toLong() xor E34_KEY_SALT`（`E34_KEY_SALT = 0x34343434L`） | ⛔ `Shading2D` 是 Kotlin **object** ⇒ 它的 **16 槽 Brush 缓存是进程级共享**；不带盐会在切换效果后复用别套的半径与基色（E11 / E13 / E15 / E20 / E32 已各带盐）。⚠️ 键里同时含 `(w, h)` 与 `accent` ⇒ 尺寸或配色一变就重建（§四 G4） |
+| 2026-09-30 | T4.9 · **§B9 未列「旧时钟哨兵」，顺带修** | （§B9 未涉及；旧 `BatchFourRenderers.kt` 的 `if (lastMs == 0L) lastMs = now` + `ctx.nowMs`） | 删除 `private var lastMs` 与整段自算时钟，改为 `depthF = advanceDepth(depthF, fx.dt, frame.bass, maxDepth)` | ⛔ 基类 `FrameClock` 的 KDoc 明确**不得用 `lastMs == 0L` 当「未初始化」哨兵**（`AudioFrame.timeMs` 由 `SpectrumRepository` 在 `withFrameNanos` 内赋值，**单测里恒为 0** ⇒ 首帧会被误判为「已初始化」）⇒ 哨兵由 `FrameClock.initialized` 承担。⚠️ **与 T4.1–T4.8 不同**：本效果的生长量 `depthF += growRate · dt` **本来就是 dt 化的**（旧代码已有 `dtSec`）⇒ 本次**只换时钟源、不改行为**，故无「帧率绑定」可修 |
+| 2026-09-30 | T4.9 · **§7.5「绘制原语」列 `240 → 245`（+5）且「路径·文本」列 `0 → 8`** | §7.5 口径：「调用点 × 可解析的循环次数」 | （无需改代码；如实登记） | ⛔ 两列变化**都是真实成本上升**：① 径向纵深 1 次 `drawRect`（+1）；② 星野 1 次 `drawImage`（+1）；③ 叶落笔 1 个调用点 × `LEAF_BUCKETS`(3) = 3 次 `drawPath`（+3）；④ 路径列 8 = `moveTo`(1) + `cubicTo` × `LEAF_CUBIC_SEGS`(4) + `rewind` × 3。⚠️ 合计 `2913 / 4715 / 120 / 86` → **`2918 / 4723 / 120 / 86`**。⛔ **E34 本来就在**「超 MEDIUM 档上限（120）」名单内（240 > 120）⇒ 改后 **245 仍超限**，**名单仍 8 套**（仅该行数字 240 → 245）。⚠️ 与 v1.32（纯工具口径）不同，本版是真实上升 |
+| 2026-09-30 | T4.9 · ⚠️ **§7.5 低估了叶形成本（脚本不放大 helper 的调用次数）** | §7.5 口径：「**函数体内**的调用点 × 该函数体内**可解析的循环次数**」—— 它**不知道一个 helper 被调用了几次** | （不据此改表；仅在类 KDoc 与 §12.4 写明真实量级） | ⛔ `buildLeaf` 在 128 次的 `while (i < segCount)` 里被调用 ⇒ 真实路径顶点写入 ≈ **128 × 5 = 640/帧**，而表里「路径·文本」列只记 **8**（`buildLeaf` 体内的 1 次 `moveTo` + 4 次 `cubicTo`，加上循环外的 `rewind` × 3）。⚠️ 这是 §四 G15 / v1.26 注⑦ 同族的「工具口径失真」（`s17_cost_weighted.py` 的调用图加权口径才反映真实量级）。⚠️ **有意接受**：§B9-② 的验收「末级有叶」必须付出这个代价，且叶**已合批成 3 条 `Path`**（不是 128 次 `drawPath`）⇒ GPU 侧仍是 3 次提交 |
+| 2026-09-30 | T4.10 · §B10-② · ⭐ **新增 `ProceduralTexture.Id.FOG`（第 8 类 tile）** | §B10-② 原文「叠 1 层 `ProceduralTexture` 的**雾 tile**（`alpha 0.12`，随 `sectionEnergy` 缓慢漂移）」—— ⛔ 但 `ProceduralTexture.Id` 里**没有雾**（原有 7 类：`GRAIN` / `SCANLINE` / `STARFIELD` / `PAPER` / `WATER` / `CAUSTIC` / `PLASMA`，后 5 类为全屏型） | **经用户裁决（2026-09-30）⇒ 新增 `Id.FOG`**：全屏型第 6 类；`fogRow` 用 **3 组超低频 `sin`** 叠加（波长 ≈ 234 / 343 / 668 px）→ **只留亮部**（`v > FOG_FLOOR = -0.05f`）⇒ 暗区完全透明、雾**成团不成幕**；灰阶随浓度上抬（`196 → 255`，⛔ `R == G == B`）；alpha 上限 `FOG_A = (0.90f × 255f).toInt()`（调用方再乘 `FOG_ALPHA = 0.12f` ⇒ 实际叠加 ≤ 0.108）；`FOG_PHASE = 2.3999632f`；`ensure()` 里走 `ensureFullscreen(Id.FOG, …)` | ⛔ **不新增就做不了 §B10-②**：既有 7 类里没有「低频大尺度灰白雾团」——`PAPER` 是细纹纸面、`GRAIN` 是高频道噪声、`WATER` / `CAUSTIC` 是水波 / 焦散、`PLASMA` 是彩色流场，**都表达不了「体积雾」**。⚠️ 与 T4.6 新增 `Id.PLASMA` 同范式（**有裁决先例**）。⛔ **`FOG` 必须追加到枚举最后一项**（`ordinal` 是 `slots` / `keys` 的下标基准 ⇒ 插队会串槽）。⚠️ 代价：`ensure(w, h)` 的全屏位图由 5 张 → **6 张**（1080p 下 +8.3 MB） |
+| 2026-09-30 | T4.10 · §B10-① · **渐变轴取「外缘端 → 中心端」** | §B10-① 只写「多边形填充改 `Brush.linearGradient`（起点亮 `alpha 0.42` → 终点透明）」 | `start = Offset(cx + startR, cy)`（外缘端，`startR = maxLen × START_R_K(1.05f)`）、`end = Offset(cx + endR, cy)`（中心端，`endR = maxLen × END_R_K(0.06f)`）；即 `startR > endR`，渐变**由外向内** | ⛔ 若按「中心端 → 外缘端」排（`startR < endR`），亮端会落在**屏幕中心**⇒ 光束看起来像「从中心向外发散的探照灯」，与 §B10 的「光轴」语义（**光束从屏幕边缘射入、在交汇处收束**）相反。⚠️ §B10-① 的「起点 / 终点」按**光束射出方向**读（起点 = 外缘）⇒ 与 V21「光束有渐变」的观感一致。⚠️ 代价 = 0（只是 `start` / `end` 两个实参互换） |
+| 2026-09-30 | T4.10 · §B10-③ · **尘埃「沿光束方向漂移」落为「按所属光束的 `beamFinalAng` + 归一化坐标 `wrap01` 环绕」** | §B10-③ 原文「沿光束方向缓慢漂移」 | 每粒尘埃预生成时绑定一个**固定**光束下标（`dust[o + 2] = (i % beamCount).toFloat()`，`onEnterContent` 内）；每帧方向取 `beamFinalAng[bi]`（该束**本帧**最终极角），位置 `dust[o] = wrap01(dust[o] + cos(dir) × dStep)`（`dStep = driftDelta(fx.dt, DUST_DRIFT)`） | ⛔ ① **方向必须取「本帧最终极角」而不是「基准角」**：光束本身在慢转 + treble 加速 + 仰角扰动 ⇒ 尘埃要**跟着光束转**才有「被光束带着走」的感觉。⚠️ 故 `beamFinalAng` 必须单独存一份（`beamAng[i]` 是**累加相位**，不是极角）。② **位置用归一化坐标（0..1）而不是像素** ⇒ 改分辨率 / 换画质时尘埃**不跳**；`wrap01` 环绕 ⇒ 越界不消失 ⇒ **数量恒定**（`DUST_N` 恒 48）。⛔ ③ 环绕**不能用 `%`**：Kotlin 的 `%` 保留被除数符号（`-0.25f % 1f == -0.25f`）⇒ 用 `wrap01`（`v - floor(v)` + 边界归一） |
+| 2026-09-30 | T4.10 · §B10-③ · **尘埃圆点手写 4 段三次贝塞尔（⛔ 不用 `Path.addOval`）** | §B10-③ 只写「40–60 个极小亮点（1–1.6px …）」 | `addDot(path, cx, cy, r)`：`path.moveTo(cx + r, cy)` + 4 × `path.cubicTo(...)`（`KAPPA = 0.5522847f`）+ `path.close()`，写进对应桶的 `Path` | ⛔ Compose 的 `Path.addOval` **只有对象重载**（`addOval(rect: Rect)`）⇒ 每点一次 `Rect` 堆分配（**每帧 48 次**），违反零分配红线；`android.graphics.Path` 的 float 重载（`asAndroidPath().addOval(l, t, r, b)`）在 `Path` 上要先转类型。⚠️ 与 T4.9（E34 叶形）/ T4.1（E11 星点）同一取舍；`s17_pathapi.py` 是这条的护栏 |
+| 2026-09-30 | T4.10 · §B10-④ · **「1 次 `shadeBrush`」落为「1 次 `shadeBrushCached` + 1 次 `drawCircle(brush = …)`」** | §B10-④ 原文「交汇处 1 组『光晕 + 六芒』（1 次 `shadeBrush` + 3 条 `drawLine`）」 | 光晕：`Shading2D.shadeBrushCached(key = …, center = Offset(cx, cy), radius = flareR, base = flareBase, contrast = 0.55f)` → `drawCircle(brush = it, radius = flareR, center = …, alpha = 0.45f + pulse × 0.35f, blendMode = Plus)`；六芒：`while (s2 < FLARE_SPOKES)` 内 `drawLine(accent, 起点, 终点, strokeWidth = FLARE_SPOKE_W, alpha = 0.30f + pulse × 0.25f)` | ⚠️ §B10-④ 的「1 次 `shadeBrush`」**本身就是 draw 调用**（`Brush` 只是形参、不是绘制）⇒ 落成 `drawCircle(brush = …)` 是**唯一**能消费球面渐变的画法（`drawCircle` 的 `brush` 重载）。⛔ `key` 必须带**具名盐** `E35_KEY_SALT = 0x35353535L`：`Shading2D` 是 Kotlin **object** ⇒ 16 槽 `Brush` 缓存**进程级共享**，不带盐会在切换效果后复用别套的半径与基色（§四 G4）。⚠️ 键里含 `(w, h, accent)` 的 raw bits ⇒ 尺寸或配色一变就重建 |
+| 2026-09-30 | T4.10 · ⛔ **§B10 未列「旧时钟哨兵 + `timeMs` 当相位」，顺带修（两条红线）** | （§B10 未涉及；旧 `BatchFourRenderers.kt` 的 `private var lastMs = 0L` + `if (lastMs == 0L) lastMs = now` + `val tSec = frame.timeMs * 0.001f` 当相位） | ① 删除 `lastMs` 与整段自算时钟，改走 `fx.dt`（哨兵由 `FrameClock.initialized` 承担）；② 新增 `private var elapsedSec`（`elapsedSec += fx.dt`）与逐束 `beamAng[i] = advanceBeamAngle(beamAng[i], fx.dt, beamSpeed[i], trebleSmooth)`（**增量式相位**） | ⛔ ① 基类 `FrameClock` 的 KDoc 明确**不得用 `lastMs == 0L` 当「未初始化」哨兵**（`AudioFrame.timeMs` 在 `withFrameNanos` 内赋值，**单测里恒为 0** ⇒ 首帧会被误判为「已初始化」）。② `frame.timeMs` 是**开机毫秒**（大基数）⇒ `× 0.001f` 后 float 尾数不足，相位会**跳变/冻结**；且 `timeMs` 是**墙钟**（暂停时仍走）⇒ 帧率绑定（§10.176 根因⑩）。⚠️ 本效果**两条都有**（与 T4.1–T4.8 的单条不同）⇒ 一并修掉 |
+| 2026-09-30 | T4.10 · **§7.5「绘制原语」`3 → 10`、「路径·文本」`2 → 16`、「分配」`0 → 2`、「未解析」`4 → 13`** | §7.5 口径：「调用点 × 可解析的循环次数」 | （无需改代码；如实登记） | ⛔ **四列变化全部是真实成本上升**：① 雾 tile `drawImage`（+1）；② 尘埃 3 桶 `drawPath` （1 个调用点 × `DUST_BUCKETS`(3)，+3）；③ 中心光核 `drawCircle` ×2（+2）；④ 光斑 `drawCircle(brush=…)`（+1）；⑤ 六芒 `drawLine`（1 个调用点 × `FLARE_SPOKES`(3)，+3）；⑥ 路径列 16 = 尘埃 `rewind` × 3 + `addDot`(5) + `ensureBeamGeometry`(8)；⑦ 分配列 2 = `ensureBeamGeometry` 的 `Path()` × 2。⚠️ 合计 `2918 / 4723 / 120 / 86` → **`2925 / 4737 / 122 / 95`**。⛔ 10 ≪ 120 ⇒ E35 **仍在**「超 MEDIUM 档上限（120）」名单**之外**（**名单仍 8 套**） |
+| 2026-09-30 | T4.10 · ⚠️ **§7.5「未解析」`4 → 13` 的成因：主循环上界 `beamCount` 是运行期 `var`** | §7.5 口径：「**解析不出**循环次数的调用点**不计入**（宁可低估），另列『未解析』列」 | （不据此改表；仅在类 KDoc 与 §12.4 写明真实量级） | ⛔ `while (i < beamCount)` 的 `beamCount` 在 `onEnterContent` 内按画质赋值（LOW 4 / MEDIUM 6 / HIGH 8），而**生命周期函数不计入调用图** ⇒ 脚本解析不出 ⇒ 该循环内的 **6 个 `drawPath` 调用点**、**3 个路径写入**（`dashPath` 的 `rewind` / `moveTo` / `lineTo`）与 **4 个 `withTransform`** 全部只记「未解析」。⚠️ **真实每帧 draw ≈ `beamCount` × 2 + 3 + 2 + 1 + 3 + 1 = 22**（MEDIUM）—— 属 §四 G15 / v1.26 注⑦ 同族「工具口径失真」。⚠️ **有意接受**：把 `beamCount` 写死成常量会让画质分档失效（T4.6 的 `CLASS_SYMBOL_OVERRIDE` 是另一条路，但会改动**共享**估算器并让 `s17_e34.py` 的合计快照过期）⇒ **不改工具**，口径统一优先 |
+| 2026-09-30 | T4.10 · **旧 `drawFan`（纯色扇形多边形）与 `pathBuf` 成员删除** | （§B10-① 要求「多边形填充改 `Brush.linearGradient`」） | 删除 `private fun DrawScope.drawFan(...)` 与 `private val pathBuf = Path()`；改为 `ensureBeamGeometry` 预建的 `beamBody` / `beamCore`（锥形 `Path`） | ⛔ 旧实现每帧在 `pathBuf` 上 `rewind` + `moveTo` + N × `lineTo` 重建扇形（**顶点写入随扇段数线性增长**）；新实现把几何**烘成规范朝向的 `Path`**、逐束只做 `withTransform` 旋转（`inline` ⇒ 零分配）⇒ 顶点写入降为 **0（稳态）**。⚠️ 这也是「§7.5 路径列 2 → 16」里那 16 全部落在**只在键变化时执行**的 `ensureBeamGeometry` 上的原因 |
+| 2026-09-30 | T5.1 · §C1 第 0 条 · **幂律指数 / 同源开关由形参注入** | §C1 草案写死 `u * u * u` 与 `u * u * 0.75f + j * 0.25f` | 门禁的负向自证 ①③ 必须与正向**喂同一份谓词**，而「同一份谓词」的前提是**同一份生成代码** ⇒ `fillStars` 增 `sizePow: Int = 3` / `alphaShared: Boolean = true` 两个**仅供门禁**的形参（生产调用一律走默认值）。⛔ 这是「给门禁留**生产 API 形参**优于测试复制算法」的落地；若改用「测试里另写一份旧算法」，谓词会随生产漂移 |
+| 2026-09-30 | T5.1 · §C1 第 0 条 · **负向③「alpha 改独立均匀」落为「复用第 4 次抽样的 `j`」** | §C1 写 `starA = STAR_A_MIN + nextRand() × STAR_A_SPAN`（即**第 5 次** `nextRand()`） | 语义等价（`j` 本身就是一个独立均匀值），但**不额外消耗一次 LCG** ⇒ 星点**位置与半径完全不受该开关影响**（否则负向样本会把位置一起换掉，「同一份谓词」就不再是唯一变量）。实测秩相关 **0.9269 → 0.0355**，④ 如期判失败 |
+| 2026-09-30 | T5.1 · §C1 第 0 条 · **`quietAlpha` 抽成 companion 纯函数** | §C1 只在 `drawStars` 里内联 `if (e >= 1f) 1f else …` | 门禁 ⑥（`quietAlpha(e)` 在 `e = 0` 时 `== QUIET_FLOOR`、`e ≥ 1` 时 `== 1f`，且单调不减）要求**直调生产函数**；内联写法只能靠源码扫描，抓不到「去掉截断」这类**语义**缺陷。落为 `internal fun quietAlpha(e: Float)` + `drawStars` 调它 ⇒ 生产与门禁**单一真源** |
+| 2026-09-30 | T5.1 · §C1 第 0 条 · ⛔ **「场景最小实体半径」不落生产常量，改由门禁扫源码取得** | §八 G14 断言 ① 写 `0.00150f < MIN_ENTITY_R`，但**没说 `MIN_ENTITY_R` 从哪来** | ⛔ 单测**不能构造** `OrbitalRingsRenderer()` —— 字段初始化会建 Compose `Path()`（→ `android.graphics.Path`）⇒ JVM 单测抛「not mocked」（本仓库既有约定：门禁只调**无状态纯函数**）。若落成生产 `const MIN_ENTITY_R = 0.0024f` 则与 `buildSystem()` 的行星表**双真源**。⇒ 门禁 `minEntityRadius()` **扫 `buildSystem()` 源码**解析 8 行星 + 11 卫星半径取 min（实测 `Phobos 0.0024`，并断言「19 项」防空转）—— 行星表一改判据跟着变 |
+| 2026-09-30 | T5.1 · §八 G14 负向 ⑤ · **落为「源码扫描谓词的配对样本」** | §八 G14 写「在某颗星上改用 `Brush.radialGradient` 做柔光 ⇒ ⑦ 必须判失败」 | ⑦ 是**源码扫描**判据（`drawStars` 可达代码里不得出现 `Rect(` / `Path(` / `Brush.` / `radialGradient`）⇒ 负向也只能是源码样本：测试常量 `HEAVY_ALLOC_SNIPPET` 喂**同一份** `noHeavyAllocOk()`。另加一条「干净片段必须判通过」的反向对照，防谓词恒假（空转） |
+| 2026-09-30 | T5.1 · ⚠️ **§15.1.2 #27 的行数估算 `+100` 过期** | 表内写 `OrbitalStarFieldTest.kt` **+100** 行 | ⚠️ **v1.37 再订正**：当行记「实测 **515 行**」也**偏高 34 行**，2026-10-01 重新 `Get-Content` 实测为 **481 行**（13 例 = 8 正向 + 5 负向；含 `spearman` / `ranksOf` / `minEntityRadius` / `stripComments` 等辅助与谓词）。§15.1.2 #27 已同步为 **+481** |
+| 2026-09-30 | T5.1 · ⚠️ **§7.5 成本表零变化（P0 是纯算术）** | — | §C1 明写「§7.5 登记的 **138 原语 / 1 分配**不变」；实测 `renderer_loop_estimate.py` 的 E29 行仍为 `133 / 2 / 1 / 2 / 1 / 0`（未解析合计 **4**）⇒ §7.5 **不改**，标题仍写 **v1.35 重算**，`s17_doc75_diff.py` EXIT=0。⛔ 本项**不触发** v1.36 的 §7.5 重算 |
+---
+
+### 12.5 审阅结论与账实核对（2026-10-01 独立复核 · ⛔ 本节是**第三方视角**的结论，不改 §六/§七 规格）
+
+> **性质**：§12.4 是**实现者自述**的偏差；本节是**事后按源码逐条复核**得出的结论，含对**方案本身**的判断。
+> 复核手段：`git log` / `git status`、源码正则扫描、`logs_temp/s17_*` 免 Gradle 自查、`Get-Content` 行数实测、
+> §7.5 表**逐行求和**复核、§12.3 checkbox 逐条计数。
+> ⛔ **本节不含任何源码改动**；所有"建议"均为待用户裁决项，**未经裁决不得擅自执行**。
+
+#### 12.5.1 进度账实（可核）
+
+| 维度 | 文档曾写 | 实测 | 判定 |
+|---|---|---|---|
+| 任务打勾 | — | **38 / 59** | §12.3 逐条 checkbox 计数 |
+| §12.2 状态列 | **全 `⬜`** | 与 §12.3 矛盾 | 🔴 失真 **18 个版本**，已修 |
+| 代码迁移 | — | **21 / 28 套** `: RendererFx()` | `covered` 21 / `exempt` 8 / 在册 **29** ✓ 三者自洽 |
+| 门禁基线 | 1177 例 / 115 类 | ✅ **1522 例 / 0 失败 / 0 错误 / 0 跳过**（v1.46 复跑，**144 类**） | v1.39 真跑回填 142 类 / 1504 例；此后 +`MatrixRainTest` ⑨/N4、+`RendererBaseContractTest` ⑩/负向⑩、+`MatrixRainTest` ⑩/N5、+`FpsMeterTest` 7 例、+**`ParticleBudgetGateTest` 5 例**（`VisualizerThemeTest` 同步反转 2 处断言，例数不变）；`lint` **0 Error / 281 Warning** |
+| **测试树可编译性** | 文档多处称"全绿" | ✅ **已修并全绿**（v1.39，`c2b0c0e`） | 曾自 T4.5 起整类编译失败；见 §12.5.2(0) |
+| 真机验收 | — | 🟡 **3 / 38**（`U1` `U4` `V1` 过；`V14`⛔ 需在修复包上逐条重判） | 见 §11.3.6；🔴 其余见 §12.5.2(1) |
+| 未提交 | — | 方案文档 + **11 个代码文件**（生产 6：`OverlayFx` / `RendererFx` / `AdvancedRenderers` / `VisualizerStage` / 新增 `FpsMeter` / `AppSettings`；门禁 5：`MatrixRainTest` / `RendererBaseContractTest` / 新增 `FpsMeterTest` / 新增 `ParticleBudgetGateTest` / `VisualizerThemeTest`） | ⚠️ 覆盖 P-2 + P-3 + P-1 第二步 + 机内帧率读数 + ADV 门控（方案 C 已落码）；**待 LOW 复量后提交** |
+
+#### 12.5.2 合理性判断
+
+**（1）站得住的部分** —— 有独立证据，不是客套
+
+| 判断 | 证据 |
+|---|---|
+| **「迁移」与「改画面」解耦是本方案最好的设计** | `postFx` 默认 `NONE` ⇒ 21 套批量迁移做到逐像素不变，把高风险动作拆成了低风险动作。这是 S0–S4 能连续推进 10 个提交的前提 |
+| **门禁强制负向自证，且真的抓到了东西** | 抓到 4 类空转/失真：`RendererBaseContractTest` 源码扫描段只扫夹具字符串（对真实代码**恒过**）、`EcgWaveformTest` ⑤ 新旧表**都判 false**、自查脚本**静默漏统计** 9 套（迁到基类后整类从成本表消失）、`s17_paren` 首跑抓出 KDoc 内块注释定界符导致**提前闭合注释** |
+| **§12.4 偏差记录是文档可信度的来源** | 36 个版本几乎每条偏差都记了原因。本轮独立复核的 §7.5 合计 **2925 / 4737 / 122 / 95** **逐行求和完全吻合** |
+| **挖到两个真 bug（不是调参）** | ① `VisualQuality` 是**死代码**（`setQuality()` / `updateVisualizerQuality()` 全仓零调用点）⇒ 3 套 ULTRA **在任何设备上都从未被渲染过**；② `Shading2D` 是 `object` + 16 槽进程级 `Brush` 缓存 ⇒ E03/E07/E13 撞键，**切换效果后背景渐变复用别人的参数**（未定义行为，谁先画谁赢） |
+
+**（2）站不住 / 有风险的部分**
+
+| # | 结论 | 依据 | 严重度 |
+|---|---|---|---|
+| **0** | ✅ **已修**（v1.39 · `c2b0c0e`）：「免 Gradle 自查全绿」不等于能编译 —— **自 T4.5 起测试树就编译不过**。`@Test` 的**反引号函数名**里放了 `.` 与 `/`（Kotlin 源码允许，**JVM 方法名禁止** `. ; [ / < >`）⇒ `:app:compileDebugUnitTestKotlin` 失败，**`testDebugUnitTest` 整类不可跑**。跨 **4 个已提交 commit**（`b8249f6` T4.5 / `e485b0d` T4.6 / `848edc9` T4.8 / `591571f` T4.10）共 10 处 | 修法见 §12.5.2(0′)。⚠️ **根因是 16 个提交全部未推送 ⇒ CI 从未触发**，所以 T4.5 之后所有"全绿"声明都建立在**没编译过**的代码上 | **已闭环** |
+| 1 | 🔴 **验收侧 0%** —— §十 给 S2/S3/S4 定的验收条件是"上机看 + 帧耗时 ≤ 改造前"，**一条都没做**。21 套观感改造**未在真机看过** | §11.1 / §11.2 全未勾 | **高** |
+| 2 | 🔴 **S5.5 被合并执行 ⇒ 观感失去单效果回退粒度**。原设计"一次改一个效果、可独立回退"正是为控制观感风险；实际 `postFx` 随各套重写一并打开 | v1.19 已登记合并，但**未登记其代价** | **高** |
+| 3 | 🟨 **阶段 1.7 事实性停摆** —— 4 项**全部**需真机帧耗时；v1.18 记的"编译由用户执行"约定使其**无执行路径**。而 `AGENTS.md` 已写明本机 `testDebugUnitTest` 实测可跑 ⇒ **该约定已过期**（v1.38 已实测：单类 1m22s 通过） | 约定脱节 + 无人认领 | 中 |
+| 4 | 🟨 **"免 Gradle 自查"是有已证实盲区的替代方案** —— v1.25 记了 13 个脚本全绿仍漏掉一个编译错误；v1.38 又实测出**第二例**（见上 (0)）。本轮 `s17_state.py` **亦已腐坏**（行数断言写死 1396 / 实测 1407）⇒ 脚本会随代码漂移失效，且**无漂移检测** | v1.25 + v1.38 实跑 | 中 |
+| 5 | 🟨 **文档维护成本本身是风险** —— 5000+ 行 / 37 个版本，每次修订要同步十几处交叉计数。已出现 §15.1.1↔§15.1.2、§7.5↔v1.5、§12.4↔§15.1.2 三类自相矛盾 | 本轮全部复核出来 | 中 |
+| 6 | 🟨 **CHANGELOG 欠账 10 个提交** —— S0–S4 无一条进 `CHANGELOG.md` / `technical-overview.md` §10，违反 `.opencode/rules.md` | `git log -- CHANGELOG.md` 最后停在 E41 定稿 | 中 |
+
+**（2′）v1.39 · 门禁首跑暴露的另外 4 类失效（提交 `c2b0c0e`，⛔ 全部是**门禁自身**的问题，无一条指向生产代码）**
+
+| # | 门禁 | 失效方式 | 修法 |
+|---|---|---|---|
+| 0-a | `FxCoverageScanTest`（**整类 8 例**） | `classRe` 的 `(?m)^\s*` 允许 `\s*` 吞换行 ⇒ 类声明**前有空行**时匹配起点落在空行的 `\n` 上，`lineStart`/`lineEnd` 双双指向该 `\n` 且 `lineStart` 多 1 ⇒ `substring` 抛 `StringIndexOutOfBoundsException: begin N, end N-1` | `(?m)^\s*` → `(?m)^[ \t]*`（只吃水平空白） |
+| 0-b | `FxCoverageScanTest` 负向 N4 | 判据 B 只找字面量 `"OverlayFx."`，而 `RendererFx` 迁移后生产代码一律写 `with(OverlayFx) { }` ⇒ 该字面量在主源码里**根本不存在**（只在 import 与 KDoc）⇒ **判据 B 对 6 个未迁移渲染器恒判「未覆盖」，整段空转** | 判据改为 `with\s*\(\s*OverlayFx\s*\)\|OverlayFx\s*\.`；并补两条夹具锁住两种写法 |
+| 0-c | `BeatFireworkTest` ⑥ | 断言拿**未钳位**的 `1/RING_SEC` 去比，而生产端 `ringPhase` 有 `coerceAtMost(1f)`（1 = 扩散结束不绘制）⇒ 1 秒时 `1/0.55 = 1.818` 早已饱和成 `1.0` | 改用**未饱和**的 0.5 秒；另加一条断言锁住「饱和后恒为 1」这个钳位性质本身 |
+| 0-d | `GalaxySpiralTest` 负向 N2 | 纵深谓词只有「远臂 **≤** 近臂」（**非严格**），而"完全不降档"产生**相等**的桶位、依然满足 ⇒ **谓词恒真**，负向夹具反而判"通过" | 生产端 `starBucket` 是 `(b-1).coerceAtLeast(0)` 的**严格**降一档 ⇒ 谓词补上「**存在严格降档的点**」 |
+| 0-e | `LightBeamsTest` 负向 N1 | `classBody()` 只取 `class` 关键字**之后**，把紧邻上方的 KDoc 排除在外 —— 而「修掉了 `lastMs == 0L` 哨兵」那段自述正写在 KDoc 里 ⇒ 见证断言恒假 | `classBody()` 改为**纳入紧邻 KDoc**（这正是「必须剥注释」的前提；对**已剥注释**的文本行为不变） |
+
+✅ **验证**：`testDebugUnitTest` **142 类 / 1504 例 / 0 失败 / 0 错误 / 0 跳过**；`lintDebug` **0 Error / 280 Warning**。
+⛔ **另外做了防空转复核**：用独立脚本复现修好后的解析器，确认它认出 **29 个**在册渲染器
+（= `covered` 21 + `exempt` 8）⇒ **不是「扫到 0 个类导致全部门禁真空通过」**。
+📌 这一条本身就是 §八 开篇那条规矩的实践：**门禁绿 ≠ 门禁在干活**，必须单独验证它的输入非空。
+
+**（3）复核过程中新发现（本轮之前无人记录）**
+
+| # | 发现 | 影响 |
+|---|---|---|
+| A | **§15.1.1 / §15.1.2 行数总账全面过期**，且是**同一类算术错误的第二次发生** —— v1.15 已修过一次 `PerfBudgetContractTest` 双算，本次是"预估表无回填机制"的复发 | 见 §15.1.1 的 v1.37 订正表；**「测试总账」已不可作为工作量依据** |
+| B | **`VintageBatchMathTest` 至今不存在** —— §八 G11 / §15.1.1 / §15.1.2 都在引用它，但归 T5.4 / E38 且**未开工** | 属预期（与 §12.2 阶段 5 一致），但**引用它的 3 处应标"待建"** |
+| C | **门禁的 `@Test` 条数是准确的，失真的只有行数** —— 7 类逐一对上（14/15/12/15/9/13） | 属**好消息**：门禁**断言覆盖**没有欠账，欠的只是估算表 |
+| D | **§7.5 末注"超 120 原语实为 9 套"自相矛盾** —— 第 9 套就是它自己声明要排除的已隐藏 `WorldRenderer`(491)；在册只有 **8 套** | 已订正；与 v1.35「名单仍 8 套」对齐 |
+
+#### 12.5.3 待裁决项（⛔ 需用户拍板，本节**未执行**任何一项）
+
+1. ~~**§八 权威基线回填**~~ —— ✅ **v1.39 已执行**：真跑 `testDebugUnitTest` + `lintDebug`，
+   权威值 **142 类 / 1504 例**（v1.42 复跑 1506 = +`MatrixRainTest` ⑨/N4）、lint **0 Error / 280 Warning**，
+   数字取自 `TEST-*.xml` 逐文件累加。
+2. ~~**T5.1 提交还是回退**~~ —— ✅ **v1.38 已裁决并执行：提交**（`2931d33`）。提交前门禁首跑炸出
+   **10 处测试树编译失败**（§12.5.2(0)），已先修（`4318019`）再提交。
+3. **`CHANGELOG.md` 补写方式** —— 挂到现有 v2.37.6 节下，还是新开版本节？**需先定版本号**，故本轮未动。
+4. **§7.5「帧耗时 ≤ 改造前」的"改造前"基线何时测** —— ⚠️ **这是时间敏感项**：
+   改动已落库 10 个提交，**越往后回退对比的成本越高**；且 T1.7.1–1.7.4 / T3.8 / T4.11 全部卡在它。
+5. ~~**`docs/` 临时文件清理**~~ —— ✅ **v1.40 已执行**：8 个 `*.html` + `fight.html` + `.bak-t51-*`（699 KB）
+   已用可恢复方式挪进 `logs_temp/`，未 `rm`。
+6. ~~**P-1 / P-3 的第二步是否开工**~~ —— ✅ **v1.44 已裁决并执行：走选项 A（E16 列条位图合并）**。
+   治崩（基类补不可见全屏绘制）与治慢（`columnStrips`：每列 14 次 blit → 1 次，op 数 336/448/672 →
+   24/32/48）**两步均已落码**，详见 P-3 的「处置」。**选项 B / C 未被否决，只是排后**：
+   B（补 3–5 套跨档位点做实斜率/截距）仍是 §7.5 成本表的欠账，C（阶段 1.7 条件离屏）动的是截距项。
+   ✅ **v1.45 MEDIUM 已收**：**44.1 fps / p50 20.42 ms**（合并前按成本模型外推 ≈4.5 fps），
+   目视确认拖影 / 光晕 / 字符翻转**无退化**（截图 `output/after_E16_matrixrain_medium.png`）⇒ 见 §11.3.6 第 3 行。
+   ⛔ **LOW 那一列现在量不了** —— 不是慢，是**根本选不进去**（卡在下面第 7 项）。
+   ⚠️ 原记「会动 `MatrixRainTest`『只保留一个 `drawBitmap` 调用点』的口径」已**作废** ——
+   内层格循环整段删除后该约束自然消失，改为 ⑩ 守「数字可由头部数字复原」这条新不变式。
+   ⛔ **A 不能替代已落码的治崩步**：合并降的是 op 数，脏区 span 数（≈ 各矩形覆盖行数之和）基本不变。
+7. ~~**`supports()` / 启动期校验**~~ —— ✅ **v1.46 已裁决并执行：取 C**（用户「选 C，按这个逻辑改」）。
+   原问题（v1.43 记录）：低画质 + `Tier.ADV` 效果**能渲染却不可选**，切走即永久回不来。
+   选项 A：启动期也做校验（进 LOW 时把当前效果回落到 BASIC）；
+   选项 B：让"当前正在渲染的效果"始终可选（不改 `supports()`，只改选择器过滤）。
+   🔴 **v1.45 曾升级为「阻塞项」**：P-1 的 LOW 复量（合并前 7.6 fps 那一列）必须等这条裁决。
+   ⛔ **v1.45 实测给出的第 3 个选项**：`supports()` 拿 `maxParticles > 0` 当 ADV 门槛是**语义错配** ——
+   全仓库只有 `ParticleRenderers`(2 处) / `UltraRenderers`(1) / `WorldGlobeRenderer` / `WorldRenderer`
+   真读 `quality.maxParticles`，其余 ADV 效果（含数字雨，**一颗粒子都不用**）被代理条件误挡；
+   而合并后数字雨在 LOW 只有 **24 个绘制 op**，比多数 BASIC 效果还便宜，被禁掉毫无依据。
+   ⇒ **C：按"该效果是否真的消耗粒子预算"门控**（数字雨这类直接放行，粒子型 ADV 仍旧挡）。
+   建议取 **C**（A 只是把野状态藏起来，B 让选择器与门控长期不一致）。
+   **落地要点**：① `VisualizerTheme` 新增 `needsParticleBudget`（默认 `false`，
+   只有 `BEAT_FIREWORK` / `WORLD` / `PARTICLE_TEXT` / `PLASMA_FLOW` 标 `true`）；
+   ② `ADV -> !theme.needsParticleBudget || maxParticles > 0` ⇒ **照片墙那条特例分支删除**，
+   2026-09-23 的裁决由通则自然覆盖；③ 低画质新增 **10 套**可选（原先 13 套 ADV 只有照片墙能进）；
+   ④ 门禁 `ParticleBudgetGateTest` 用**源码扫描**反推真值集合与枚举标注对比
+   （⚠️ 扫描必须只在 `depth == 0` 时认新类：`WorldGlobeRenderer.kt` 里的嵌套 `private class Flight`
+   会把 341 行的预算读取记到错的类头上 ⇒ 世界反向放水，这条已写进用例注释）；
+   ⑤ ⚠️ **放行的副作用**：`DNA` / `轨道` / `星座` 等效果的规模是**常量**、不随档位收缩，
+   现在低画质也能进 —— 已核对二者均有 `drawRect(bgColor)` 全屏底（不会新增 §P-3 的脏区雷区），
+   但**低画质帧率仍未量**（正是本次要复测的项）。
+   ⏳ **待收**：LOW 数字雨帧率复量（见 §11.3.6 那一行旧值 7.6 fps）。
+   ✅ **v1.46 已收**：LOW 数字雨 **59.4 fps**（机内读数），并顺带拿到**低画质全 23 套的读数** ⇒ 见 §11.3.6。
+8. **低画质放行后暴露的 4 套慢效果怎么办**（🔴 **v1.46 新增**，源自上面那份低画质全档扫描）——
+   星座 9 / 歌词点阵 7 / 折纸 9 / 星系螺旋 11 fps（同档的数字雨 59.4、频谱瀑布 59 可作对照）。
+   这三套 §7.5 登记原语数就是 805 / 405 / 626，与合并前的 E16 同量级 ⇒ **不是门控的问题，是它们本来就没做合并**。
+   可选项：**A：对这四套做 E16 同型的位图合并**（工作量大，但这是唯一能让它们在电视上流畅的路径，
+   且做完后门控不用再动）；**B：给它们补一条真实的低画质降级**（按档位减星点 / 减面数 ——
+   ⚠️ 这才是 `needsParticleBudget` 想表达的"重"，只是它现在连不到"该不该降规模"）；
+   **C：接受现状**（低画质本来就是"能选到、但慢"，用户自己选低画质自己承担）。
+   ⛔ **不要退回按 tier 一刀切** —— 那会把数字雨 / 频谱瀑布 / 液态涟漪这些无辜的再次误挡。
+   ⚠️ 本轮**未动代码**，等裁决。
+9. **频谱瀑布顶部一大片黑 / 液态网格低画质没有连线**（⚠️ **v1.46 新增，均为观感项、与崩溃无关**）——
+   前者是 `FADE_ALPHA = 0.06` × 200 行缓冲的**固有比例问题**（70 帧即衰减到 1.4% ⇒ 可见带只占底部约 1/4，
+   **三档皆然**，只是以前低画质进不去、没人看到）；后者是 `AdvancedRenderers.kt:537` 刻意的低档降级，
+   该分支今天第一次被跑到。⇒ 待用户判：瀑布要不要把 `rows` 缩短 / 衰减改慢（改观感 = 改已定稿画面），
+   液态网格的连线在低画质是**保留**（多 4 次 `drawPath` + 160 段建路径）还是**照旧省掉**。
+
+#### 12.5.4 建议的下一步顺序（**建议**，非裁决）
+
+> ⛔ **不建议直接继续写 T5.2–T5.8。** 理由：验收侧 0% + 观感已失去单效果回退粒度 ⇒ 再叠加 7 套未验收改动，
+> 风险敞口线性累积；而 1.7 / T3.8 / T4.11 **全部**卡在同一个真机基线上。
+
+1. 先定 T5.1 提交 / 回退（待裁决项 2）
+2. 装机上电视，按 **§11.1 U1–U7** 跑一遍，21 套逐套截图（**U7 现在就能验** —— T1.6.4 已把画质选择器接进设置页）
+3. `adb shell dumpsys gfxinfo com.nasmusic.tv` 记**改造前基线** ⇒ 解锁 T1.7.1–1.7.4 / T3.8 / T4.11
+4. 再决定 T5.2–T5.8
+5. 阶段 6（离屏层 / bloom，裁决项 2 **必做**）排在批次 C **之后** —— bloom 是**全局叠加**，放最后对已有画面冲击最小
 
 ---
+
 
 ## 十三、裁决记录（10 项**已全部拍板** 2026-09-29 · 已裁决 D1–D12）
 
@@ -3741,7 +4721,7 @@ JAVA_HOME="C:/Program Files/Android/Android Studio/jbr" \
 | D3 | **效果切换的过渡方式**（⚠️ **2026-09-29 由"硬切"改判为"启用 600ms 交叉淡入"**） | ✅ **启用 600ms 交叉淡入** —— 改 `VisualizerStage.kt:178` 第 3 个实参 `false` → `true`（`RendererSwapper` 的 crossfade 早已实现：`RendererSwapper.kt:102-107` + `:120-126`，有单测）。⚠️ **View 型（E41 世界）不参与淡入** —— `VisualizerStage.kt:347-348` 的 `if (old.isViewBased) return@let`（`AndroidView` 无法在 `DrawScope` 里淡出）⇒ **涉及 E41 的进出场仍是硬切**，这是**已知且接受**的行为。⚠️ 启用后 **§四 G14 的"收益为零"结论只在切换期外成立**（切换的 600ms 内 `fadeAlpha < 1`，离屏层**真的参与合成**）⇒ **裁决项 10 的"条件化"更有必要**：只在 `fadeAlpha < 1f` 时挂离屏层 = "只在 600ms 窗口内付代价" | **2026-09-29 用户裁决**（§十三 裁决项 4 选 A「启用」）⇒ 本项**推翻了此前的硬切裁决**。此前的硬切理由是"用户按键后需即时反馈"，现改为 **600ms 淡入**（§十 S1.7 需增一步改 `VisualizerStage.kt:178`；§15.4-A18 与 §15.7 第 3 条的"陈旧注释"判定随之**失效并改写**，见该两处） |
 | D4 | **E23 歌词点阵的「文字颜色逐字改变」（卡拉OK 亮度/色相分档）** | **保留**。⛔ **不得以"性能"为由删除** —— 实测它不是瓶颈（每点仅 +4 比较 +4 乘除、**0 分配 / 0 JNI / 0 `sin`**、`drawPath` 恒 6 次），且删掉后若演唱行统一取亮亮度会让 oval 数 **+60%（更慢）** | **2026-09-29 用户提问后的实测结论**（`logs_temp/lyrics_karaoke_cost_audit.py`；§B7 专项评估）；E23 的瓶颈是 P0-1 每点 `Rect` 分配与 P0-2 两遍 `getPixel()` 采样，**两者都与卡拉OK 无关** |
 | D5 | **E29 轨道（及 E40 DNA）的背景星野必须服从「视觉层级」** | **背景元素最大尺寸 < 场景最小实体**。E29 星点半径上限固定为 **`0.00150f`**（= 最小卫星 Phobos `0.0024f` 的 **62.5%**），alpha 上限 **`0.50f`**，且**必须**有中心静默区（`QUIET_R = 0.15f` / `QUIET_FLOOR = 0.25f`）。⛔ **不得**再把星点改回**均匀分布**、不得把上限抬回 `0.0030f`、不得去掉静默区、不得用"减数量"替代"减尺寸" | **2026-09-29 用户反馈**：「E29 轨道（太阳系）`ORBITAL_RINGS`，这个效果，**背景的星光太大了**，最好能**不影响太阳系的主体地位**」。量化根因：改造前最大星 `0.0030` **> Phobos `0.0024` / Deimos `0.0028`**（星比两颗卫星还大）、alpha 上限 `0.90`、半径基准用 `scale`（1817）而 E33/E41 用 `minDim`（1080）⇒ **最亮星单颗发光量 = E41 世界的 20 倍**（`logs_temp/orbital_rings_star_audit.py`；§四 G18 / §C1 第 0 条） |
-| D6 | **E41 世界 `WORLD` 的承载方式** | **WebView + three-globe（WebGL，完全离线）**，由 `WorldGlobeRenderer`（**View 型旁路**）承载。⛔ **不得改回 Compose Canvas**、不得把旧 `WorldRenderer`（12 层 Canvas 管线）重新接回工厂、不得把 WebGL / WebView 路径**推广到其他效果** | **2026-09-29 已落地并提交**（`62155d3`：新增 `WorldGlobeRenderer.kt` + `assets/globe/` 5 文件 ≈1.95 MB，改 `VisualizerRenderer`（+4 个 View 型旁路成员）/ `VisualizerRendererFactory` / `RendererSwapper`（构造注入 `context`）/ `VisualizerStage`（`AndroidView` 分支）/ `AndroidManifest.xml`（`hardwareAccelerated="true"`）+ `docs/technical-overview.md` §10.197）。**理由**：① WorldWindKotlin 要 minSdk 24，被本项目锁 22（含创维 5.1.1 真机基准）否决；② 手写 OpenGL ES 的球面细分 / 光照 / 大圆插值成本极高；③ three-globe 走**系统 WebView + WebGL1 兜底** ⇒ 兼容 minSdk 22、**完全离线**（assets 打包零网络）、**Kotlin 侧零绘制开销**。⚠️ **代价**：WebView 生命周期 / 焦点 / 内存需单独验证（§11.2 V31），且 **Android 5.1.1 的 WebGL 可用性尚未上机验证**（§九 R20） |
+| D6 | **E41 世界 `WORLD` 的承载方式** | **WebView + three-globe（WebGL，完全离线）**，由 `WorldGlobeRenderer`（**View 型旁路**）承载。⛔ **不得改回 Compose Canvas**、不得把旧 `WorldRenderer`（12 层 Canvas 管线）重新接回工厂、不得把 WebGL / WebView 路径**推广到其他效果** | **2026-09-29 已落地并提交**（`62155d3`；同日 v1.17 定稿复核：并发会话的视觉大改与航线收敛模型已定稿于工作区、**尚未提交** —— 承载方式与 D6 裁决不变。新增 `WorldGlobeRenderer.kt` + `assets/globe/` 5 文件 ≈1.95 MB，改 `VisualizerRenderer`（+4 个 View 型旁路成员）/ `VisualizerRendererFactory` / `RendererSwapper`（构造注入 `context`）/ `VisualizerStage`（`AndroidView` 分支）/ `AndroidManifest.xml`（`hardwareAccelerated="true"`）+ `docs/technical-overview.md` §10.197）。**理由**：① WorldWindKotlin 要 minSdk 24，被本项目锁 22（含创维 5.1.1 真机基准）否决；② 手写 OpenGL ES 的球面细分 / 光照 / 大圆插值成本极高；③ three-globe 走**系统 WebView + WebGL1 兜底** ⇒ 兼容 minSdk 22、**完全离线**（assets 打包零网络）、**Kotlin 侧零绘制开销**。⚠️ **代价**：WebView 生命周期 / 焦点 / 内存需单独验证（§11.2 V31），且 **Android 5.1.1 的 WebGL 可用性尚未上机验证**（§九 R20） |
 | D7 | **改造深度**（§十三 裁决项 1） | ✅ **全量改造 = 批次 A + B + C 共 28 套**（**不采用**"只做批次 A 11 套"）。⛔ **不得**在中途以"工作量"为由缩回批次 A | **2026-09-29 用户裁决**原文「**改造深度：全量改造**」。影响：§十 S2–S5 全做、S5.5 逐套打开 `postFx` 覆盖全量、§12.2 合计 **59** |
 | D8 | **是否要真 bloom / 真色差（离屏层）**（§十三 裁决项 2） | ✅ **要** —— 保留 §十 **S6**（`OffscreenFx` + `VisualizerStage` 接线），E38 色差"变真"、HIGH 档 bloom 可见。⛔ **不得**以"电视风险"为由静默砍掉 S6 —— 风险由 **LOW/MEDIUM 档零额外成本** + **HIGH 档真机实测帧耗时**两条约束来管（§九 R17） | **2026-09-29 用户裁决**原文「**是否要真 bloom / 真色差（离屏层）：要**」 |
 | D9 | **观感基调**（§十三 裁决项 3） | ✅ **"精致/电影感"** —— §7.1 全表取值走**区间上半段**：暗角 `VIGNETTE_STRENGTH` `0.42` 偏上（星座/雷达/世界 `0.50–0.52`）、颗粒 `GRAIN_INTENSITY` `0.030` 偏上（雷达/怀旧 `0.034`）、`CHROMA_ALPHA` `0.55` **可见**。⚠️ **唯一例外**：**E39 照片墙**仍按"照片优先"降到 `0.34 / 0.018`（选项 A 原文即含此例外）。⛔ **不得**在实现时把数值"取中"或"取小"以求稳妥 —— 那是选项 B（"清爽/科技感"）的取值，**已被否** | **2026-09-29 用户裁决**原文「**观感基调："精致/电影感"**」 |
@@ -3835,6 +4815,25 @@ JAVA_HOME="C:/Program Files/Android/Android Studio/jbr" \
 > `VintageBatchMathTest` 120 / `RendererBaseContractTest` 130 / `PerfBudgetContractTest` 110 / `OrbitalStarFieldTest` 100）。
 > ⚠️ v1.7 前此处写作「测试 880 行」= `fx/` 750 + `StaircaseMappingTest` 130 —— **漏计了**
 > `EcgWaveformTest` 120 与 `RadarSweepTest` 140（二者列在 §15.1.2 #21/#22），v1.8 一并更正。
+>
+> 🔴 **v1.37 全面订正：上面整段行数总账已全面过期，⛔ 不可再作为工作量依据**
+> （2026-10-01 逐文件 `Get-Content` 实测；**本表原为开工前「预估」值，多年累加后与实际差距很大**）：
+>
+> | 分类 | 原账（预估） | 实测 | 差异 |
+> |---|---:|---:|---|
+> | §15.1.1 表内 `fx/` 7 类 | 750 | **718** | −32 |
+> | §15.1.2 #21–#27 渲染器测试 7 类 | 850 | **1919**（含 6 类；`VintageBatchMathTest` **尚未创建**） | **+1069** |
+> | **测试总账** | **1600** | **≥ 2637**（718 + 1919，`VintageBatchMathTest` 待补） | **≥ +1037** |
+>
+> 逐文件实测（`fx/` 7 类）：`FxCoverageScanTest` **302** / `ProceduralTextureRecycleTest` **117** /
+> `AudioSmootherTest` **80** / `ScanlineTileTest` **61** / `Shading2DTest` **61** /
+> `GrainDeterminismTest` **58** / `FxBudgetTest` **39**。
+> 逐文件实测（渲染器测试）：`OrbitalStarFieldTest` **481** / `RendererBaseContractTest` **343** /
+> `RadarSweepTest` **312** / `StaircaseMappingTest` **286** / `EcgWaveformTest` **260** /
+> `PerfBudgetContractTest` **237** / `VintageBatchMathTest` **不存在**（归 T5.4 / E38，未开工 —— 与 §12.2 阶段 5 一致）。
+> 📌 **「测试总账」本就是 `PerfBudgetContractTest` 双算过一次后修的算术**（v1.15），此次是**同一类错误的第二次发生**：
+> 预估表**没有随实现回填机制**，靠人记。⇒ 后续任何引用总账的地方**一律以实测为准**。
+> ✅ **例：断言条数（`@Test`）是准确的** —— 7 类逐一对上（14 / 15 / 12 / 15 / 9 / 13），**失真的只有行数**。
 
 #### 15.1.2 修改文件（渲染器 28 处 + 接线 1 处 + 照片墙转场 3 处 + 测试 7 处）
 
@@ -3853,7 +4852,7 @@ JAVA_HOME="C:/Program Files/Android/Android Studio/jbr" \
 | 11 | `visualizer/renderers/MoleculeRenderer.kt` | 1216 | **+55 / −20** | E37 |
 | 12 | `visualizer/renderers/VintageTvRenderer.kt` | 905 | **+150 / −95** | E38（**仅性能，画面已定稿**）：**P0 画面逐像素不变** ≈ **+85 / −60**（O1 四层绘制区域收敛 `leftInset`/`drawW` / O2 修 **2 处尺寸缓存键**（vignette `w→(w,h)` / `rollBandH` 加入 `h`） / O3 `filmGradPaint.shader` 提循环外 / O4 胶片条带合批：4 个复用 `android.graphics.Path` 成员 + 三段 `while` 重写）、**P1 画面不可辨** ≈ **+45 / −25**（O5 噪点 8 档 `noisePaths` + 重写 `drawNoise` / O6 扫描线 16 档 `scanlinePaths` + 缓存 `Stroke`）、**P2 只减分配** ≈ **+20 / −10**（O7 歌词位图复用 / O8 `BlurMaskFilter` 缓存 / O9 `StringBuilder`） |
 | 13 | `visualizer/renderers/DnaRenderer.kt` | 896 | **+50 / −10** | E40 |
-| 14 | ~~`visualizer/renderers/WorldRenderer.kt`~~ → **`visualizer/renderers/WorldGlobeRenderer.kt`** | 369（旧文件 2106，**已隐藏**） | **0 / 0**（E41 已于 2026-09-29 提交 `62155d3`，本方案**不再改它**） | E41（**仅验收**） |
+| 14 | ~~`visualizer/renderers/WorldRenderer.kt`~~ → **`visualizer/renderers/WorldGlobeRenderer.kt`** | **538**（v1.13 时 369；旧文件 2106，**已隐藏**） | **0 / 0**（E41 已于 2026-09-29 提交 `62155d3`；v1.17 定稿复核确认本方案**不再改它**，可选 JS 精修除外） | E41（**仅验收**） |
 | 15 | `visualizer/photo/PhotoRenderer.kt` | 161 | **+18** | E39 |
 | 16 | `visualizer/photo/PhotoTransitionId.kt` | — | **+6**（新增 6 个枚举项） | E39 |
 | 17 | `visualizer/photo/PhotoTransitionRegistry.kt` | — | **+6**（注册 6 项，P1 阶段） | E39 |
@@ -3866,7 +4865,7 @@ JAVA_HOME="C:/Program Files/Android/Android Studio/jbr" \
 | 24 | `app/src/test/java/.../visualizer/renderers/VintageBatchMathTest.kt`（**新建**） | — | **+120** | E38（§八 G11：合批与量化等价性门禁 —— 行间不重叠几何前提 / 噪点 `rng` 消耗序列不变 / 噪点量化上界 1.91·255⁻¹ / 扫描线量化上界 0.82·255⁻¹ / 档位单调且门槛一致 / O1 收敛几何含竖屏退化，含 3 条负向自证） |
 | 25 | `app/src/test/java/.../visualizer/renderers/RendererBaseContractTest.kt`（**新建**） | — | **+130** | §5.5（§八 G12：基类契约门禁 —— `FrameClock` 行为段 5 条（上界钳制 / 负差钳零 / 首帧不跳 / `reset` / 复用单例）+ 源码扫描段 4 条（子类不得覆写 `draw`·`onEnter`·`onExit` / 不得用 `ctx.nowMs` / 不得自建 `rng` / 空转自证），含 5 条负向自证） |
 | 26 | `app/src/test/java/.../visualizer/renderers/PerfBudgetContractTest.kt`（**新建**） | — | **+110** | 全量性能（§八 G13：性能预算门禁 —— 源码扫描段 3 条（`draw()` 可达代码不得有字符串模板 / 不得有 `Rect(` / 估算原语数 ≤ §7.5 登记值）+ 行为段 1 条（`MatrixRainRenderer` 缓存键三元组不重建），含 **4 条**负向自证） |
-| 27 | `app/src/test/java/.../visualizer/renderers/OrbitalStarFieldTest.kt`（**新建**） | — | **+100** | E29 / E40（§八 G14：背景装饰「视觉层级」不变式 —— 尺寸层级 / 幂律性（非均匀分布）/ 亮度上界 / 尺寸亮度同源（秩相关）/ 位置合法性 + 中心静默 / 零分配自证，含 5 条负向自证）。⚠️ **v1.15 补**：原表**整行缺失**，但 §八 G14 与 §15.6-S5 都在引用它 |
+| 27 | `app/src/test/java/.../visualizer/renderers/OrbitalStarFieldTest.kt`（**新建**） | — | **+481**（⚠️ v1.37 实测订正，原写 `+100` → v1.36 改 `+515` → **实测 481**） | E29 / E40（§八 G14：背景装饰「视觉层级」不变式 —— 尺寸层级 / 幂律性（非均匀分布）/ 亮度上界 / 尺寸亮度同源（秩相关）/ 位置合法性 + 中心静默 / 零分配自证，含 5 条负向自证）。⚠️ **v1.15 补**：原表**整行缺失**，但 §八 G14 与 §15.6-S5 都在引用它 |
 
 > 📌 **§5.5 基类迁移的附加改动**（若 §十三 裁决项 8 选 **A 全量迁移**）：
 > 上表 **#1–#14（27 个渲染器；实际迁移 26 个 —— 排除 `VintageTvRenderer`（#12，后处理交错）
@@ -4386,7 +5385,7 @@ class OffscreenFx(private val downscale: Int = 3) {
 | 11 | `MoleculeRenderer.kt` | `:454-459` 双线键；`:476-490` 原子纯色圆；`:492` 分子式；`:513-515` **3 层同心辉光** | E37 分子：原子改 `sphereSprite` + 高光点；键改上下明暗；辉光 3 层 → 1 次径向（或 2 层）；分子式偏移重绘发光（⛔ 不用 `setShadowLayer`，API 22 可能不生效）；末尾 `OverlayFx` |
 | 12 | `VintageTvRenderer.kt` | **P0**：`:305` 背景全屏 `drawRect`；`:308`→`:331-352` 扫描线；`:314`+`:417-457` 滚动暗带；`:320`+`:600-613` **vignette 只按 `w` 缓存**（真 bug）；`:418` **`rollBandH` 只在 `onEnter` 重置**（真 bug，`:248-249`）；`:767`/`:770` 切孔循环内两次 `setShader`；`:713-790` `drawFilmStrip`（分隔线 8.5 / 切孔 24 / 框线 / 高光）。**P1**：`:357-383` 2000 次 `drawRect` 噪点；`:337-351` 240 条 `drawLine`（实测 195.3 条过门）。**P2**：`:570` `Bitmap.createBitmap`；`:543` `BlurMaskFilter`；`:853`/`:888` 字符串拼接 | E38 怀旧（**仅性能，画面已定稿**）：**O1** 四层（背景 / 扫描线 / 滚动暗带 / vignette）绘制区域由全屏收敛到画面区 `[leftInset, leftInset + drawW]`（依据 `:736-737` 片基 `FILM_BASE_FLAT` 不透明；竖屏 `side == 0` 自动退化）；**O2** 修 **2 处尺寸缓存键缺陷** —— ① vignette `w → (w, h)`（`:601`；`radius = sqrt(pictureW²/4 + h²/4)` 依赖 `h`，`:609`）；② `rollBandH` 加入 `h` 作为缓存键（`:418`，现状只判 `<= 0f` ⇒ `h` 变化后带高与 `rollBrush` 渐变终点停在旧值，`:427`/`:457`；对照 `cornerPath` 的 `:623` 是对的）；**O3** `filmGradPaint.shader` 提循环外（省 32 次 `setShader`/帧）；**O4** 胶片条带按层合批（4 个复用 `android.graphics.Path`，每侧 40 → 8 次 `nativeCanvas.drawPath`）；**O5** 噪点按 alpha 分 8 档 `Path`（2000 → 8，⛔ `rng.next()` 消耗序列不变）；**O6** 扫描线分 16 档 `Path` + 缓存 `Stroke`（195 → 16）；**O7** 歌词位图复用；**O8** `BlurMaskFilter` 按字号缓存；**O9** `wrapText` / `splitLongWord` 用 `StringBuilder`。⛔ 原 6 条观感改造（tile 扫描线 / 真 grain / 真色差 / 桶形畸变 / 磷光余晖）**全部作废** |
 | 13 | `DnaRenderer.kt` | `:577` 纯色底；`:605/611` 4 桶单色 `drawLine`；`:656-661` 3 层辉光；`:665` 固定高光 | E40 DNA 双螺旋：骨架加"受光窄边"（按深度桶合并 2 条 `Path`）；背景改径向纵深；横档加柔光；`specular` 方向化；末尾 `OverlayFx` |
-| 14 | ~~`WorldRenderer.kt`~~ → **`WorldGlobeRenderer.kt` + `assets/globe/globe.js`** | 旧 `WorldRenderer.kt` 的 `:679` 陆地 fill / `:691-692` 双层描边 / `:783-792` grain 平铺 / `:1446` vignette / `:1481` 城市 `Brush` —— **全部已随旧实现隐藏，不再改**。现役：`WorldGlobeRenderer.kt:244-260`（桥接 `tick`，§四 G16 第二实例）；`globe.js:44-57` 灯光 / `:60-72` 球体材质与大气 / `:76-91` 城市光点 / `:93-115` 大圆航线 / `:122-132` 尺寸自适应 / `:196-213` 主循环 | E41 世界（**已换 WebView + WebGL 实现；本方案只做验收 + 可选 JS 精修**）：可选 **N3** 城市光点内芯、**N5** 桥接开销（`sendAudio` 手写 `StringBuilder` / `sendRoutes` 去重前移）。⛔ 原六条 Canvas 精修**全部作废**（§C7 的"原六条处置"表） |
+| 14 | ~~`WorldRenderer.kt`~~ → **`WorldGlobeRenderer.kt` + `assets/globe/globe.js`** | 旧 `WorldRenderer.kt` 的 `:679` 陆地 fill / `:691-692` 双层描边 / `:783-792` grain 平铺 / `:1446` vignette / `:1481` 城市 `Brush` —— **全部已随旧实现隐藏，不再改**。现役（**v1.17 定稿行号**）：`WorldGlobeRenderer.kt:307-323`（`tick`）+ `:335-372`（`maintainRoutes` 航线收敛模型）+ `:484-523`（`sendAudio`/`sendRoutes`，§四 G16 第二实例）；`globe.js:58-119` 灯光与太阳 / `:288-378` 球体材质与夜面壳 / `:558-586` 城市光点 / `:588-629` 大圆航线 / `:635-650` 尺寸自适应 / `:738-821` 主循环 | E41 世界（**已换 WebView + WebGL 实现；本方案只做验收 + 可选 JS 精修**）：可选 **N3** 城市光点内芯、**N5** 桥接开销（`sendAudio` 手写 `StringBuilder`；`sendRoutes` 去重前移**定稿已做**）。⛔ 原六条 Canvas 精修**全部作废**（§C7 的"原六条处置"表） |
 | 15 | `photo/PhotoRenderer.kt` | `:87` 起（`draw` 末尾；类范围 `:49-161`） | E39 照片墙：加轻量 `drawVignette(0.34f)` + `drawGrain(seq, 0.018f)`；转场期叠 `photoA` 偏移副本做运动模糊（**复用已有双图，零新增缓冲**） |
 | 16 | `photo/PhotoTransitionId.kt` | 枚举体（76 项，`Phase.P1` 段） | E39 照片墙：新增 6 项 `LIGHT_FLASH_*` / `LIGHT_LEAK_*` / `LIGHT_BLOOM_*` 等（命名遵循既有前缀风格） |
 | 17 | `photo/PhotoTransitionRegistry.kt` | `P1` 注册表 | E39 照片墙：注册 6 个实现（`implemented(Phase.P1)` 从 **43** → **49**，与 §15.5 的 `:66` 断言一致；原写 `28 → 34` 与 §15.5 矛盾） |
@@ -4557,4 +5556,4 @@ class OffscreenFx(private val downscale: Int = 3) {
 | 17 | `docs/visualizer-texture-upgrade-plan.md` §12.2 / §12.3 | ⛔ **文档自身不一致（v1.9 遗留，2026-09-29 已修）**：§12.2 进度总览列了「阶段 1.5 · 试点迁移 1 套（1 项）」，但 §12.3 里**没有对应的 `#### 阶段 1.5` 任务块** ⇒ 按 §12.1 自己的规矩（"两处不一致时**以 checkbox 实测为准**，并回头修表"）实测 §12.3 = **49** ≠ 表里 **50** | 已补 `#### 阶段 1.5 · 试点迁移 1 套（1 项 · 需裁决项 8 选 A 或 B）` + `T1.5.1`（`TunnelRenderer` → `: RendererFx()`，`postFx = NONE`，逐像素不变）。⚠️ **教训：改 §12.2 的表必须同时建 §12.3 的块** —— 二者是同一份清单的两个视图，`grep "^#### 阶段"` 数块是最快的自检（v1.10 实测 12 块 / 57 项 = §12.2 合计 ✓） |
 | 18 | `LyricsDotMatrixRenderer.kt:663-680`（`brightness` + `tier` 那段） | 代码里**没有任何注释说明**这段"逐字变色"是**零成本**的 ⇒ 后来者（人或 agent）很可能按"这段看着最复杂、删了应该能提速"的直觉把它删掉（**本次用户提问正是这个直觉的体现**） | 加一行守卫注释：「⚠️ 卡拉OK 亮度/色相分档 —— **每点仅 +4 比较 +4 乘除、0 分配 / 0 JNI / `drawPath` 恒 6 次**；删掉后若统一取亮亮度会让 glow 点数 +60%（**更慢**）。**⛔ 不得以"性能"为由删除**（§13.5-D4、§B7 专项评估）」；⛔ 仅改注释 |
 | 19 | `BatchTwoRenderers.kt:52-53`（类 KDoc 的「星野」与「画质档」两条）、`:183`（字段注释）、`:519`（`drawStars` 的 KDoc） | **改动后会全部失真的注释**：`:52-53` 只写「固定种子 LCG 在 `onEnter` 生成一次存 `FloatArray`（永不重掷 → 零闪烁）；位置按 `w/h` 归一化 ⇒ 星野不参与倾斜，只有星点半径随 `scale`」—— **完全没说半径是均匀分布**；`:183` 写「半径为定值」；`:519` 写「固定种子、`onEnter` 生成 → 位置永不变化、零闪烁；每 4 颗一颗偏蓝」 | 随 §C1 第 0 条一起改：① `:52-53` 补上「半径 = **立方幂律** `STAR_R_MIN + u³ × STAR_R_SPAN`（上限 `0.00150f` = 最小卫星 Phobos 的 62.5%）⇒ 绝大多数是亚像素暗星、只有约 3.5% 落在上限 10% 区间；alpha = `u²` 同源 + 25% 抖动（上限 `0.50f`）；**中心静默区** `QUIET_R = 0.15f`（内太阳系无前景亮星）」；② `:183` 的「半径为定值」改为「半径为**生成期定值**（幂律分布，`draw` 内只读）」；③ `:519` 的 KDoc 补上「⛔ **不得改回均匀分布**（§四 G18 / §13.5-D5）」—— **这是本轮最重要的一条守卫注释**：否则后来者看到"所有星都一样大"会以为是 bug 而"修"回均匀分布。⛔ 仅改注释 |
-| 20 | `WorldGlobeRenderer.kt`（⚠️ **v1.15 待重核**） | ⛔ **原描述与源码不符**：本条（与 §九 R20 ⑤）称 `:138` 对**每个请求**打 `AppLog.e("WorldGlobe", "intercept: $url")`、`:154` 打 `serving …`、`:165-167` 打 globals 探针。**实测全文 `grep -n "intercept:\|serving\|globals\|AppLog"` 只剩 3 处**：`:224`（`asset not found, serving empty` —— 只在 `catch` 分支）、`:241`（`onReceivedError` → `page/resource error`）、`:249`（`onConsoleMessage` → 转发 JS console）。⚠️ 且**文件已从 369 行增长到 538 行** ⇒ 原行号全部失效 | ⛔ **本轮不动**（E41 正由并发会话重写，见 `git status` 的 `WorldGlobeRenderer.kt` / `WorldNetwork.kt` / `WorldCities.kt` / `globe.js` 未提交改动）⇒ 待该效果定稿后**重取一次行号**再改。届时保留的原则不变：`onReceivedError` 与 `catch` 分支的告警**必须保留**（只在出错时触发），只把 `onConsoleMessage` 的**逐条转发**降级或加开关。⚠️ 与 §九 R20 ⑤ 同步 |
+| 20 | `WorldGlobeRenderer.kt`（**v1.17 已定稿复核**） | ⛔ **原描述与源码不符**：本条（与 §九 R20 ⑤）称 `:138` 对**每个请求**打 `AppLog.e("WorldGlobe", "intercept: $url")`、`:154` 打 `serving …`、`:165-167` 打 globals 探针。**定稿实测全文 `AppLog` 只剩 3 处**：`:224`（`asset not found, serving empty` —— 只在 `catch` 分支）、`:241`（`onReceivedError` → `page/resource error`）、`:249`（`onConsoleMessage` → 转发 JS console）。文件现为 **538 行**（v1.13 时 369） | 原则落定：`onReceivedError` 与 `catch` 分支的告警**必须保留**（只在出错时触发）；剩余唯一小项 = `onConsoleMessage` 的**逐条转发**可降级或加开关（release 里 JS 侧任何 `console.log` 都会经它进 logcat；现 globe.js 的 `[dbg]` 日志只在贴图加载失败时打，风险低）。⚠️ 与 §九 R20 ⑤ 同步 |
