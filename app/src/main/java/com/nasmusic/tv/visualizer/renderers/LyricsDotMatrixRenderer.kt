@@ -52,6 +52,11 @@ import kotlin.math.sin
  *   ⇒ 收益/代价不成立，**不做**。
  * - **Q3**（4 档亮度 / 8 条 `Path`）：§B7 标注为**可选**（需先确认重建成本），收益小、复杂度高 ⇒ 不做。
  *
+ * ## ⚠️ 低画质的降密度（v1.47 真机：本套 7 fps，全档最慢）
+ * 本套的 `drawPath` 提交次数已经是 **6 次/帧**（3 档亮度 × 2 层），无从再省；
+ * 真正贵的是每次提交里装的**椭圆个数**。故低档只降 [capacityForTier] 的粒子上限，
+ * 并按 [fontMaxRatio] 同步收缩字号上限以维持点阵密度（不缩字号 = 低档文字出空洞）。
+ *
  * ## ⛔ 卡拉OK 逐字亮度分档必须保留（§13.5-D4）
  * 它不是性能瓶颈，删了反而更慢 —— 详见 [addLineToPaths] 内的守卫注释。
  */
@@ -128,16 +133,21 @@ class LyricsDotMatrixRenderer : RendererFx() {
     // 即将进入的下下行文本（在 SHIFTING 阶段使用）
     private var incomingNextText: String = ""
 
-    // 固定每行粒子数上限（无画质等级，直接取最高密度）
-    private fun capacityFor(ctx: RenderContext): Int = 3600
+    // 每行粒子数上限：高/中档取最高密度，低档必须降（见 companion 的 capacityForTier）
+    private fun capacityFor(ctx: RenderContext): Int = capacityForTier(ctx.quality)
 
     // ── 自适应字号 ──────────────────────────────────────────
     // 规则（用户需求）：
     //   1. 找全曲最长的一句歌词（取实际文本，而非仅字数，测量更准）
     //   2. 字号 = 让这一句占满屏幕宽度 80% 时的字号
     //   3. 约束：字体整体高度 ≤ 屏幕高度 40%（预留两行显示空间）
-    //   4. 硬性区间 [MIN, MAX]：粒子数固定（3600/行），字号过大→粒子太稀→文字空洞
-    private fun computeFontSize(ctx: RenderContext, w: Float, h: Float): Float {
+    //   4. 硬性区间 [MIN, MAX]：字号过大→粒子太稀→文字空洞，故上限随该档粒子数收缩
+    private fun computeFontSize(
+        ctx: RenderContext,
+        w: Float,
+        h: Float,
+        cap: Int
+    ): Float {
         // 优先用整曲最长行；无歌词时回退到当前文本 / 标题
         val longest = ctx.longestLyricLine
             ?.takeIf { it.isNotBlank() }
@@ -164,7 +174,11 @@ class LyricsDotMatrixRenderer : RendererFx() {
         val base = minOf(fontFromWidth, fontFromHeight)
         // 硬性区间夹稳，防止极端长/短歌词 + 粒子稀释导致文字空洞
         // MIN_FONT_S/MAX_FONT_S 是屏高比例，须乘以 h 换算成真实字号
-        return base.coerceIn(h * MIN_FONT_S, h * MAX_FONT_S)
+        // ⚠️ 上限随 `cap` 收缩（[fontMaxRatio]）：本套的开销是**椭圆个数**（= cap），
+        //    与提交次数无关 ⇒ 低档只能减点；减点若不同步缩字号，同样多的点摊到更大的字上
+        //    就会「文字空洞」，正是上面第 4 条要避免的情形。下限 [MIN_FONT_S] 是**可读性**
+        //    底线，与密度无关 ⇒ 不随 cap 收缩。
+        return base.coerceIn(h * MIN_FONT_S, h * fontMaxRatio(cap))
     }
 
     protected override fun onEnterContent(ctx: RenderContext) {
@@ -435,7 +449,7 @@ class LyricsDotMatrixRenderer : RendererFx() {
             ?: ctx.currentLyricLine?.takeIf { it.isNotBlank() }
             ?: ctx.caption?.takeIf { it.isNotBlank() }
         if (w != cachedFontW || h != cachedFontH || longestKey != cachedLongest) {
-            fontSizePx = computeFontSize(ctx, w, h)
+            fontSizePx = computeFontSize(ctx, w, h, cap)
             lineHeightPx = fontSizePx * 1.4f
             cachedFontW = w
             cachedFontH = h
@@ -918,10 +932,33 @@ class LyricsDotMatrixRenderer : RendererFx() {
         private const val STRIDE = 8
         /** 字号测量参考值：在参考字号下测字宽/行高，再换算成真实字号 */
         private const val REF_FONT = 100f
-        /** 字号下限（屏高比例）：太小时字形笔画挤作一团难辨 */
-        private const val MIN_FONT_S = 0.05f
-        /** 字号上限（屏高比例）：超过则粒子太稀、文字空洞（3600 粒子/行固定） */
+        /** 字号下限（屏高比例）：太小时字形笔画挤作一团难辨。⛔ 必须 ≤ 低档的 [fontMaxRatio]，否则 `coerceIn` 抛异常 */
+        internal const val MIN_FONT_S = 0.05f
+        /** 字号上限（屏高比例）：超过则粒子太稀、文字空洞。⚠️ 实际取 [fontMaxRatio]，随粒子数收缩 */
         private const val MAX_FONT_S = 0.16f
+
+        /**
+         * 每行粒子上限。⚠️ 本套 6 次 `drawPath` 的**提交次数已经是最优**，贵的是**椭圆个数**
+         * （= 粒子数 × (1~2 层)）—— 低画质下 3600×2 行最多 10,800 个互不相连的小椭圆，
+         * 而本机实测曲线是「≈500 个 ⇒ 7.6 fps / ≈24 个 ⇒ 59 fps」（§11.3.6 P-1，数字雨合并前后），
+         * 所以低档**只能减点**，v1.47 真机低画质扫描里本套是全档最慢的一套（7 fps）。
+         */
+        private const val CAP_HIGH = 3600
+        private const val CAP_LOW = 900
+
+        /** 按档位选每行粒子上限（**纯函数**，门禁可直接调用） */
+        internal fun capacityForTier(
+            quality: com.nasmusic.tv.data.model.VisualQuality
+        ): Int = if (quality == com.nasmusic.tv.data.model.VisualQuality.LOW) CAP_LOW else CAP_HIGH
+
+        /**
+         * 字号上限随粒子上限收缩的比例（**纯函数**，门禁可直接调用）。
+         *
+         * 点阵密度 = `cap / 字面积`，要维持密度不变 ⇒ 字面积 ∝ `cap` ⇒ 线性字号 ∝ `sqrt(cap)`。
+         * 以 [CAP_HIGH] 档的 [MAX_FONT_S] 为基准做等比缩放。
+         */
+        internal fun fontMaxRatio(cap: Int): Float =
+            MAX_FONT_S * kotlin.math.sqrt(cap.toFloat() / CAP_HIGH.toFloat())
 
         // ── §B7 纯函数（`internal` 供门禁直接调；⛔ 测试不复制算法 —— 复制必然漂移）──
 

@@ -118,9 +118,18 @@ class GalaxySpiralRenderer : RendererFx() {
         /** 度 → 弧度换算里的 57.3（原实现直接写死；`VisualizerMath.rad` 只做弧度化） */
         const val RAD2DEG = 57.3f
 
-        /** 每臂星点数（HIGH 档更密） */
+        /**
+         * 每臂星点数。
+         *
+         * ⚠️ **低画质必须单独一档**（v1.47 真机低画质全效果扫描：本套 11 fps）。
+         * 本套的 4 条星点 `Path` 只是**提交次数**少，**元素数**并没有少 —— 低画质取 55 时
+         * 每帧仍有 16 × 55 = 880 个互不相连的小椭圆，而本机实测
+         * **≈500 个零散小矩形 ≈ 7.6 fps / ≈24 个 ≈ 59 fps**（§11.3.6 P-1，数字雨合并前后两个实测点）。
+         * 取 16 ⇒ 256 个，落在同一曲线上。
+         */
         const val PER_ARM_HIGH = 90
-        const val PER_ARM_LOW = 55
+        const val PER_ARM_MEDIUM = 55
+        const val PER_ARM_LOW = 16
 
         /** §B1-② 尘埃带 */
         const val DUST_SEG = 24
@@ -145,6 +154,18 @@ class GalaxySpiralRenderer : RendererFx() {
         const val ROT_BASE_DEG = 0.15f
         const val BPM_DIV = 1200f
         const val FPS_REF = 60f
+
+        /**
+         * 按档位选每臂星点数（**纯函数**，门禁可直接调用）。
+         * 判据是**元素总数**（`ARMS × perArm`），不是提交次数 —— 见 [PER_ARM_LOW] 的说明。
+         */
+        internal fun perArmFor(
+            quality: com.nasmusic.tv.data.model.VisualQuality
+        ): Int = when (quality) {
+            com.nasmusic.tv.data.model.VisualQuality.HIGH -> PER_ARM_HIGH
+            com.nasmusic.tv.data.model.VisualQuality.MEDIUM -> PER_ARM_MEDIUM
+            com.nasmusic.tv.data.model.VisualQuality.LOW -> PER_ARM_LOW
+        }
 
         /** ⛔ 见类 KDoc：`Shading2D` 的 Brush 缓存进程级共享 ⇒ 每个调用点必须有自己的盐 */
         const val E11_KEY_SALT = 0x11111111L
@@ -190,8 +211,7 @@ class GalaxySpiralRenderer : RendererFx() {
         val minDim = ctx.minDim
         val accent = ctx.palette.accent
         val n = ctx.quality.barCount
-        val perArm = if (ctx.quality == com.nasmusic.tv.data.model.VisualQuality.HIGH)
-            PER_ARM_HIGH else PER_ARM_LOW
+        val perArm = perArmFor(ctx.quality)
         val maxR = minDim * MAX_R_K
         val a0 = minDim * A0_K
 
@@ -329,12 +349,12 @@ class WaterfallRenderer : RendererFx() {
     private var curr: ImageBitmap? = null
     private val paint = androidx.compose.ui.graphics.Paint()
 
-    /** §A4-2 衰减层画笔：纯黑 alpha 0.06，构造期建一次（每帧只写不改） */
+    /** §A4-2 衰减层画笔：纯黑 `alpha = FADE_ALPHA`，构造期建一次（每帧只写不改） */
     private val fadePaint = androidx.compose.ui.graphics.Paint().apply {
         color = Color.Black.copy(alpha = FADE_ALPHA)
     }
 
-    private val rows = 200
+    private val rows = BUFFER_ROWS
 
     /**
      * §A4-3：底部新行按 [HUE_BUCKETS] 个色阶桶合并 ⇒ **16 次 `drawPath`** 取代 `n × 4` 次 `drawRect`。
@@ -382,7 +402,9 @@ class WaterfallRenderer : RendererFx() {
 
         // ② §A4-2 衰减：⛔ **顺序不可反** —— 先「上移 + 衰减」、再写底部新行，
         //    否则黑层会压到新行（原方案写的「新行亮度反向补偿 +0.06」与这个顺序互斥，已删）。
-        //    每行 ×0.94 ⇒ 历史行按距离衰减，消除「持续高频时底部一片白」。
+        //    每行 ×0.98 ⇒ 历史行按距离衰减，消除「持续高频时底部一片白」。
+        //    ⛔ 衰减率与缓冲行数是一对（顶层残留须落在 1%–5%，见 FADE_ALPHA 的 KDoc）：
+        //    0.06 那版只让底部 1/3 有内容，上面 2/3 恒为全黑。
         cb.drawRect(0f, 0f, bw.toFloat(), bh.toFloat(), fadePaint)
 
         // ③ §A4-3 底部新行：n × SUB_COLS 个子列 → 16 条 Path（16 次 drawPath）
@@ -444,15 +466,31 @@ class WaterfallRenderer : RendererFx() {
         curr = null
     }
 
-    private companion object {
+    internal companion object {
         /** §A4-1 每个频谱桶横向展开的子列数 */
         const val SUB_COLS = 4
 
         /** §A4-3 色阶桶数（= hue 桶数，因 `hue` 是 `v` 的线性函数） */
         const val HUE_BUCKETS = 16
 
-        /** §A4-2 每行衰减量（1 - 0.06 = ×0.94） */
-        const val FADE_ALPHA = 0.06f
+        /**
+         * §A4-2 每行衰减量（1 - 0.02 = ×0.98）。
+         *
+         * ⛔ **必须与 [BUFFER_ROWS] 一起定**：拖尾要刚好铺满缓冲，即顶层残留
+         * `(1-FADE_ALPHA)^BUFFER_ROWS` 落在「看得见但已接近黑」的 1%–5% 区间。
+         * 原值 0.06（配 200 行）⇒ 第 63 行就衰减到 2%、**上面 2/3 屏恒为全黑**，
+         * v1.47 真机低画质扫描时用户反馈「上面都是黑色的」。
+         * ⚠️ 该缺陷**三档皆然**，只是低画质此前根本进不到这套效果，没人看见过。
+         * ⛔ 与 E18 `MilkdropRenderer.DECAY_ALPHA` 的"同值同义"关系**自此解除**：
+         * E18 的衰减层压的是「3-tap 回绘累积成灰白」，与这里的拖尾长度不是同一个量。
+         */
+        const val FADE_ALPHA = 0.02f
+
+        /**
+         * 乒乓缓冲的行数（每帧上移 1 行、底部写 1 新行 ⇒ 缓冲 = 屏幕上的拖尾历史长度）。
+         * 与 [FADE_ALPHA] 的耦合见上，门禁 `WaterfallTrailFadeTest` 守着。
+         */
+        const val BUFFER_ROWS = 200
 
         /** §A4-4 垂直参考线等分数（4 条线 ⇒ 5 等分） */
         const val GRID_DIV = 5
@@ -534,7 +572,6 @@ class LiquidGridRenderer : RendererFx() {
         val ih = h.toInt().coerceIn(1, 4096)
         val accent = ctx.palette.accent
         val scale = 1f + (if (frame.beat) 0.06f else 0f)
-        val drawLines = ctx.quality != com.nasmusic.tv.data.model.VisualQuality.LOW
 
         elapsed += fx.dt
 
@@ -593,37 +630,37 @@ class LiquidGridRenderer : RendererFx() {
         }
 
         // ── §A5-2 受光网格：连线按顶点高度分 4 桶着色（4 次 drawPath）──
-        if (drawLines) {
-            for (p in linePaths) p.reset()
-            for (gy in 0 until rows) {
-                val rowBase = gy * cols
-                for (gx in 0 until cols - 1) {
-                    val i = rowBase + gx
-                    val b = heightBucket((ws[i] + ws[i + 1]) * 0.5f)
-                    linePaths[b].moveTo(xs[i], ys[i])
-                    linePaths[b].lineTo(xs[i + 1], ys[i + 1])
-                }
+        // 低画质**不再跳过连线**（v1.47 真机：低档实测 29 fps，省这 4 次 drawPath 换不回帧率，
+        // 丢的却是这套效果唯一的结构感；该分支在低画质能进本效果之前是死代码，从没被验证过）
+        for (p in linePaths) p.reset()
+        for (gy in 0 until rows) {
+            val rowBase = gy * cols
+            for (gx in 0 until cols - 1) {
+                val i = rowBase + gx
+                val b = heightBucket((ws[i] + ws[i + 1]) * 0.5f)
+                linePaths[b].moveTo(xs[i], ys[i])
+                linePaths[b].lineTo(xs[i + 1], ys[i + 1])
             }
-            for (gx in 0 until cols) {
-                for (gy in 0 until rows - 1) {
-                    val i = gy * cols + gx
-                    val j = i + cols
-                    val b = heightBucket((ws[i] + ws[j]) * 0.5f)
-                    linePaths[b].moveTo(xs[i], ys[i])
-                    linePaths[b].lineTo(xs[j], ys[j])
-                }
+        }
+        for (gx in 0 until cols) {
+            for (gy in 0 until rows - 1) {
+                val i = gy * cols + gx
+                val j = i + cols
+                val b = heightBucket((ws[i] + ws[j]) * 0.5f)
+                linePaths[b].moveTo(xs[i], ys[i])
+                linePaths[b].lineTo(xs[j], ys[j])
             }
-            val lo = VisualizerMath.darken(accent, 0.50f)
-            val hi = VisualizerMath.towardWhite(accent, 0.35f)
-            val lineAlpha = 0.32f + frame.energy * 0.12f
-            for (b in 0 until 4) {
-                drawPath(
-                    linePaths[b],
-                    lerp(lo, hi, (b + 0.5f) * 0.25f),
-                    alpha = lineAlpha,
-                    style = lineStroke
-                )
-            }
+        }
+        val lo = VisualizerMath.darken(accent, 0.50f)
+        val hi = VisualizerMath.towardWhite(accent, 0.35f)
+        val lineAlpha = 0.32f + frame.energy * 0.12f
+        for (b in 0 until 4) {
+            drawPath(
+                linePaths[b],
+                lerp(lo, hi, (b + 0.5f) * 0.25f),
+                alpha = lineAlpha,
+                style = lineStroke
+            )
         }
 
         // ── §A5-3 顶点 = 镜面反光：沿"光向垂线"拉长的椭圆（长轴 = 短轴 × 2.4）──
@@ -877,6 +914,7 @@ class LiquidRippleRenderer : RendererFx() {
  * 每帧改用 nativeCanvas.drawBitmap 快速 blit —— 纹理 blit 远快于逐字符 drawText
  * 的文本排布度量，显著降低 TV 弱 GPU 上的每帧开销。每列高度由 perCol 控制，
  * 列数随画质档位调整，整体保持在小幅 draw 预算内。
+ * ⚠️ 10 张字形**不直接上屏**：先合成 2 张「整列条带」（见下方 ⑤），每帧每列只 1 次 blit。
  *
  * ## §B3 质感改造（T4.3）
  *
@@ -901,6 +939,18 @@ class LiquidRippleRenderer : RendererFx() {
  *
  * **④ 后处理** —— `PostFx(vignette = 0.50f, grain = 0.030f, scanline = 0.16f)`。
  *
+ * **⑤ 列条合并（P-1 第二步，§11.3.6）** —— ①–③ 都是「把成本搬进预渲染」，
+ * 但**每帧仍然 14 次 blit/列**。本机实测成本 ≈ **0.45 ms/op**（P-1 的成本模型）
+ * ⇒ MEDIUM 的 448 个 op 把帧率压到个位数。现按 [columnStrips] 的不变式把一整列
+ * **预合成成 1 张条带位图** ⇒ 每帧每列 **1 次** blit
+ * （LOW 336 → 24、MEDIUM 448 → 32、HIGH 672 → 48 个绘制 op）。
+ * ⚠️ 代价：条带比单列内容宽 `2 × glowPad`（头部光晕本来就会盖到邻列，必须保住），
+ * 像素吞吐上升、native 堆多 ≈1.3 MB —— 本机瓶颈是 **op 数**而非像素，故划算。
+ * ⚠️ 与逐格 blit 的差异只有两处且都不可辨：每格行位取整到整像素（≤0.5 px）、
+ * 中间 8bit 缓冲的 alpha 舍入（源合成满足结合律，绘制顺序与旧实现逐格一致）。
+ * ⛔ **数字每 300 ms 翻转的招牌观感保留** —— 翻转由「取哪一条色带的条带」完成，
+ * 不是重建条带（这也是 2 张条带就够的原因）。
+ *
  * ## 帧率无关（与 E11 / E14 同一约定）
  * 旧实现 `colY += speed`（**每帧**固定增量）⇒ 60fps 的雨速是 30fps 的 2 倍。
  * 现改为 `colY += speed × fx.dt × [RAIN_FPS_BASE]`：`RAIN_FPS_BASE = 60` ⇒
@@ -914,7 +964,14 @@ class MatrixRainRenderer : RendererFx() {
     override val theme = VisualizerTheme.MATRIX_RAIN
 
     // §B3-④ 收尾后处理（CRT 扫描线 + 暗角 + 颗粒）
-    override val postFx = PostFx(vignette = 0.50f, grain = 0.030f, scanline = 0.16f)
+    // P-2：暗角边色锁死为深绿 —— 本效果的身份色就是绿，若沿用封面 accent，
+    //       播蓝紫封面的歌时 `vignette = 0.50` 会把整幅压成蓝紫，"黑客帝国"感全失。
+    override val postFx = PostFx(
+        vignette = 0.50f,
+        grain = 0.030f,
+        scanline = 0.16f,
+        vignetteEdge = VIGNETTE_EDGE
+    )
 
     private var colY = FloatArray(0)
     private var colSpeed = FloatArray(0)
@@ -939,7 +996,34 @@ class MatrixRainRenderer : RendererFx() {
     /** 头部贴图四周留出的光晕环宽（px）。由 [buildGlyphs] 写入；非头部 blit 不受影响 */
     private var glowPad = 0
 
+    /**
+     * P-1 第二步（§11.3.6）：**整列拖影合并位图**，索引 = 头部数字（0 / 1），共 2 张。
+     *
+     * 为什么 2 张就够（⛔ 改动前必须复核这条不变式，门禁 ⑩ 锁的就是它）：
+     *  ① 每格数字 `digitIdx = (i*31 + k*17 + tick) and 1`，**17 是奇数** ⇒ 同一列内数字逐格必然交替
+     *    ⇒ 整列的数字形态只由「头部那一格是 0 还是 1」决定；
+     *  ② 每格的档位 `shadeFor(k, perCol)` 与 alpha `trailAlpha(k, perCol)` **只依赖 `k`**（静态）。
+     * ⇒ 每帧每列从 **14 次 `drawBitmap` 降到 1 次**（LOW 336 → 24、MEDIUM 448 → 32、HIGH 672 → 48 个绘制 op）。
+     * ⚠️ 它治的是 P-1 的**卡顿**（实测 ≈0.45 ms/op），**不治 P-3 的崩溃**（脏区 span 数 ≈ 各矩形覆盖行数之和，
+     *    合并后基本不变）—— 崩溃由 `RendererFx` 的脏区占位绘制负责。
+     * **条带布局**（⛔ 改动必须与 `drawContent` 里的 `stripDx / stripDy` 同步）：
+     * 条带 `(0,0)` = 「头部字形位图（含光晕 `pad`）放在第 0 格时它的左上角」
+     * ⇒ 格 `k` 的本地坐标：头部 `(0, k×cellH)`、其余 `(pad, k×cellH + pad)`，
+     * 尺寸 `(gW + 2pad) × ((perCol-1)×cellH + gH + 2pad)`。
+     * ⚠️ 头部光晕半径 `pad = 字形高 × [GLOW_R_RATIO]`（1080p 实测 54 px）**本来就盖到邻列**
+     *    （`slot` 只有 60 px）⇒ 条带比 `slot` 宽不是 bug，是旧实现的既有观感，必须保住；
+     *    逐列、逐格的绘制先后**与旧实现完全一致**（源合成满足结合律 ⇒ 合并成中间位图不改结果）。
+     * ⚠️ 每格行位**取整到整像素**（旧实现逐格浮点定位）⇒ 单格位置差 ≤0.5 px；
+     *    整条带仍以浮点坐标 blit，下落动画的平滑度不受影响。
+     * ⛔ 与 [glyphs] 同生同灭，且必须一起进 [releaseGlyphs]（API 22–25 位图在 native 堆，§九 R2）。
+     */
+    private var columnStrips: Array<android.graphics.Bitmap>? = null
+
+    /** **重建路径**专用：合成条带时逐格 alpha（⛔ 每帧 blit 不得用它 —— alpha 会被上一格残留污染） */
     private val blitPaint = AndroidPaint()
+
+    /** **每帧**条带 blit 专用：alpha 恒 255（逐格衰减已烘进条带） */
+    private val stripPaint = AndroidPaint()
 
     override fun onEnterContent(ctx: RenderContext) {
         cols = when (ctx.quality) {
@@ -970,17 +1054,20 @@ class MatrixRainRenderer : RendererFx() {
         val cell10 = (cellH * 10).toInt()
         // 缓存未建（首次/重建后）由调用点短路；键三元组比较零分配（G13④）
         if (glyphs == null || glyphCacheStale(slot10, cell10, n)) {
-            buildGlyphs(textSize)
+            buildGlyphs(textSize, cellH)
             keySlot = slot10
             keyCell = cell10
             keyN = n
         }
-        val g = glyphs ?: return
 
         val nc = drawContext.canvas.nativeCanvas
+        val st = columnStrips ?: return
         val tick = (frame.timeMs / 300L).toInt()
         val span = h + cellH * perCol
         val pad = glowPad.toFloat()
+        // 条带 (0,0) 相对「头部名义格位」的偏移 —— 与 [buildStrips] 的布局同源，⛔ 两处必须一致
+        val stripDx = (slot - gW) / 2f - pad
+        val stripDy = (cellH - gH) / 2f - pad
 
         for (i in 0 until n) {
             val v = frame.spectrum.getOrElse((i * frame.spectrum.size / n).coerceAtMost(frame.spectrum.size - 1)) { 0f }
@@ -988,24 +1075,8 @@ class MatrixRainRenderer : RendererFx() {
             // 帧率无关：× fx.dt × RAIN_FPS_BASE（60fps 下与旧的「每帧 + speed」逐像素等同）
             colY[i] = advanceCol(colY[i], speed, fx.dt, span)
             val headY = colY[i] - cellH * perCol
-
-            for (k in 0 until perCol) {
-                val y = headY + k * cellH
-                if (y < -cellH || y > h) continue
-                val digitIdx = (i * 31 + k * 17 + tick) and 1
-                val shade = shadeFor(k, perCol)
-                val bmp = g[shade * 2 + digitIdx]
-                // ⛔ 只保留**一个** `drawBitmap` 调用点：头部贴图四周多 pad ⇒ 用偏移量抵消，
-                //    而不是写 if/else 两条 blit。否则 §7.5 估算脚本会把两个**互斥分支**
-                //    各乘一遍循环次数（456 → 926 的假性翻倍），成本表口径立刻失真。
-                val isHead = shade == SHADE_HEAD
-                val off = if (isHead) -pad else 0f
-                val bx = i * slot + (slot - gW) / 2f + off
-                val by = y + (cellH - gH) / 2f + off
-                blitPaint.alpha =
-                    if (isHead) 255 else (trailAlpha(k, perCol) * 255f).toInt().coerceIn(0, 255)
-                nc.drawBitmap(bmp, bx, by, blitPaint)
-            }
+            // 整列 1 次 blit（P-1 第二步）：取哪一条 = 头部数字，数字翻转不必重建条带
+            nc.drawBitmap(st[digitAt(i, perCol - 1, tick)], i * slot + stripDx, headY + stripDy, stripPaint)
         }
     }
 
@@ -1023,9 +1094,12 @@ class MatrixRainRenderer : RendererFx() {
      * 档位 **5**（§B3-③，原 4）：`0` = 白热头部（`rgb(235,255,235)`，**额外烘入径向光晕**）、
      * `1..4` = 亮白绿 / 亮绿 / 中绿 / 暗绿。字符集固定 `0`/`1`（⛔ 不扩，§13.5-D1）。
      * 每张 = **深绿外描边** + **中心偏白的垂直渐变填充**。
-     * ⇒ 共 **10 张**，⛔ 每帧 blit 路径与 draw 次数**不变**。
+     * ⇒ 共 **10 张**；这 10 张**不再直接上屏**，而是由 [buildStrips] 合成为 2 张整列条带（⑤）。
+     *
+     * ⛔ `cellH` 也必须进签名并传给 [buildStrips] —— 条带的行位取决于格高，
+     *    只传 `textSize` 会让条带按旧格高排版（尺寸变化时整列错位）。
      */
-    private fun buildGlyphs(textSize: Float) {
+    private fun buildGlyphs(textSize: Float, cellH: Float) {
         val digits = charArrayOf('0', '1')
         val measure = AndroidPaint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
             typeface = android.graphics.Typeface.MONOSPACE
@@ -1106,16 +1180,62 @@ class MatrixRainRenderer : RendererFx() {
             }
         }
         glyphs = arr.filterNotNull().toTypedArray()
+        buildStrips(cellH)
+    }
+
+    /**
+     * 把 10 张字形合成为 **2 张整列条带**（⑤ · P-1 第二步），索引 = 头部数字。
+     *
+     * 依赖 [columnStrips] 的 KDoc 里那条不变式（列内数字只由头部数字决定、
+     * 档位与 alpha 只由格号决定）—— 门禁 `MatrixRainTest` ⑩ 锁的就是它，
+     * 一旦 `31` / `17` / `perCol` / [shadeFor] 任一改到破坏「同列逐格交替」，⑩ 会直接红。
+     *
+     * ⛔ 逐格 alpha 用 [blitPaint]（重建路径），每帧 blit 用 [stripPaint] —— 混用会把
+     *    最后一格的 alpha 带进每一帧。
+     */
+    private fun buildStrips(cellH: Float) {
+        val g = glyphs ?: return
+        val pad = glowPad
+        val stripW = gW + pad * 2
+        val stripH = kotlin.math.ceil((perCol - 1) * cellH).toInt() + gH + pad * 2
+        val arr = arrayOfNulls<android.graphics.Bitmap>(2)
+        for (headDigit in 0 until 2) {
+            val bmp = android.graphics.Bitmap.createBitmap(
+                stripW, stripH, android.graphics.Bitmap.Config.ARGB_8888
+            )
+            val c = android.graphics.Canvas(bmp)
+            // ⛔ 必须按 k 升序绘制（与旧的逐格 blit 同序）：头部光晕与上一格字形重叠，
+            //    源合成虽满足结合律，但**顺序**决定谁压在上面。
+            val headK = perCol - 1
+            for (k in 0 until perCol) {
+                val shade = shadeFor(k, perCol)
+                val isHead = shade == SHADE_HEAD
+                val rowY = if (isHead) {
+                    kotlin.math.ceil(k * cellH).toInt()
+                } else {
+                    kotlin.math.ceil(k * cellH).toInt() + pad
+                }
+                blitPaint.alpha =
+                    if (isHead) 255 else (trailAlpha(k, perCol) * 255f).toInt().coerceIn(0, 255)
+                // 不变式：格 k 的数字 = 头部数字 ⊕ 与头部的格距奇偶（⊕ 只在 and 1 上做）
+                val d = headDigit xor ((headK - k) and 1)
+                c.drawBitmap(g[shade * 2 + d], if (isHead) 0f else pad.toFloat(), rowY.toFloat(), blitPaint)
+            }
+            arr[headDigit] = bmp
+        }
+        columnStrips = arr.filterNotNull().toTypedArray()
     }
 
     override fun onExitContent() {
         releaseGlyphs()
     }
 
-    /** 释放字形缓存：API < 26 上 Bitmap 像素在 native 堆，主动 recycle 更稳 */
+    /** 释放字形与条带缓存：API < 26 上 Bitmap 像素在 native 堆，主动 recycle 更稳 */
     private fun releaseGlyphs() {
         glyphs?.forEach { it.recycle() }
         glyphs = null
+        columnStrips?.forEach { it.recycle() }
+        columnStrips = null
     }
 
     internal companion object {
@@ -1144,6 +1264,14 @@ class MatrixRainRenderer : RendererFx() {
 
         /** 深绿外描边色（§B3-③） */
         val OUTLINE_RGB = packRgb(0, 90, 20)
+
+        /**
+         * 暗角边色 = 深绿 `rgb(0, 52, 20)`（§11.3.6 P-2）。
+         *
+         * 取「比最暗字形 `SHADE_RGB[4] = rgb(0,130,30)` 再暗一档」：暗角负责把底色拉成绿黑，
+         * 但⛔ 不得亮过最暗的那一档，否则拖影会被自己的背景吃掉。
+         */
+        val VIGNETTE_EDGE = Color(0xFF003414)
 
         /** 字形垂直渐变的高光位置（中心偏白）与强度（§B3-③） */
         const val GLYPH_HIGHLIGHT = 0.55f
@@ -1196,6 +1324,15 @@ class MatrixRainRenderer : RendererFx() {
         /** 帧率无关的列位移（纯函数，供门禁直接验证）：`(y + speed × dt × 60) mod span` */
         internal fun advanceCol(y: Float, speed: Float, dt: Float, span: Float): Float =
             (y + speed * dt * RAIN_FPS_BASE) % span
+
+        /**
+         * 格 `(i, k)` 在 `tick` 时刻显示哪个数字（0/1）—— **单一权威定义**，
+         * `drawContent`（选条带）与 [buildStrips]（排条带）都走这里，⛔ 不得各写一遍算式。
+         *
+         * `31` / `17` 皆为奇数 ⇒ 同一列内数字**逐格必然交替**（⑤ 条带合并成立的前提），
+         * `i × 31` 的奇偶 = `i` ⇒ 相邻列反相，`tick` 每 300 ms 全体翻转。
+         */
+        internal fun digitAt(i: Int, k: Int, tick: Int): Int = (i * 31 + k * 17 + tick) and 1
     }
 }
 
@@ -1218,6 +1355,8 @@ class MatrixRainRenderer : RendererFx() {
  *   （`cell ≥ linkDist` ⇒ 只查邻接 9 桶即完备）⇒ 判定次数 ≈ 1440（**9 倍**）。
  *   ⛔ 桶结构全部 `IntArray` 预分配（`List<Int>` 违反零分配）；
  * - **背景星野（G9）**：`STARFIELD` 静态远景星野（`alpha 0.28f`，**不衰减**）；
+ * - **低画质降密度**（v1.47）：星点池 160 → 64（[starCapFor]）—— 本套贵在**元素数**而非提交次数，
+ *   9 次 `drawPath` 里装着几百条互不相连的细线段，降提交数无从可降；
  * - **后处理**：`PostFx(vignette = 0.50f, grain = 0.026f)`（星座类暗角要重一些）。
  */
 class ConstellationRenderer : RendererFx() {
@@ -1230,6 +1369,12 @@ class ConstellationRenderer : RendererFx() {
     // x, y, life, size
     private var stars = FloatArray(STARS * 4)
     private var head = 0
+
+    /**
+     * 本档实际使用的星点池容量（≤ [STARS]，数组仍按 [STARS] 分配 ⇒ 切档不重新分配）。
+     * 判据见 [starCapFor]：本套的瓶颈是**连线线段的元素数**，而线段数 ∝ 密度²。
+     */
+    private var starCap = STARS
 
     // 连线 [距离档][life 桶] → 6 条 Path；星点 / 星芒各 1 条。
     // 合并进 Path 是硬要求（Android 5.1 hwui region 合并 SIGSEGV 高危）
@@ -1244,6 +1389,7 @@ class ConstellationRenderer : RendererFx() {
     private val cellNext = IntArray(STARS)
 
     override fun onEnterContent(ctx: RenderContext) {
+        starCap = starCapFor(ctx.quality)
         stars.fill(0f)
         head = 0
     }
@@ -1273,11 +1419,11 @@ class ConstellationRenderer : RendererFx() {
             stars[o + 1] = h * 0.12f + (1f - v) * h * 0.76f
             stars[o + 2] = 1f
             stars[o + 3] = 2.2f + v * 5f
-            head = (head + 1) % STARS
+            head = (head + 1) % starCap
         }
 
         // 更新星点（衰减减慢 → 星点和连线存留更久、更密）
-        for (i in 0 until STARS) {
+        for (i in 0 until starCap) {
             val oi = i * 4
             val li = stars[oi + 2]
             if (li <= 0f) continue
@@ -1291,7 +1437,7 @@ class ConstellationRenderer : RendererFx() {
         val grows = (h / cell).toInt().coerceIn(1, GRID_MAX)
         val cells = gcols * grows
         cellHead.fill(-1, 0, cells)
-        for (i in 0 until STARS) {
+        for (i in 0 until starCap) {
             val oi = i * 4
             if (stars[oi + 2] <= 0f) { cellNext[i] = -1; continue }
             val gx = (stars[oi] / cell).toInt().coerceIn(0, gcols - 1)
@@ -1352,7 +1498,7 @@ class ConstellationRenderer : RendererFx() {
         starPath.reset()
         flarePath.reset()
         val starColor = VisualizerMath.towardWhite(accent, 0.70f + frame.pulse * 0.3f)
-        for (i in 0 until STARS) {
+        for (i in 0 until starCap) {
             val o = i * 4
             val life = stars[o + 2]
             if (life <= 0f) continue
@@ -1387,9 +1533,23 @@ class ConstellationRenderer : RendererFx() {
         p.lineTo(stars[oj], stars[oj + 1])
     }
 
-    private companion object {
-        /** 星点池容量（§A7：160 颗） */
+    internal companion object {
+        /** 星点池容量上限（§A7：160 颗）；低画质取 [STARS_LOW]，见 [starCapFor] */
         const val STARS = 160
+        const val STARS_LOW = 64
+
+        /**
+         * 按档位选星点池容量（**纯函数**，门禁可直接调用）。
+         *
+         * 低画质必须降容量（v1.47 真机低画质全效果扫描：本套 9 fps）。
+         * ⚠️ 本套**提交次数已经很少**（9 次 `drawPath`），贵的是**元素数**：
+         * 连线段数 ∝ 星点密度²（网格分桶后每星只查邻接 9 桶），
+         * 所以容量 160 → 64 时线段数约降 **6.3 倍**（`(64/160)²`），星点本身只降 2.5 倍。
+         * 本机实测曲线：≈500 个零散小矩形 ≈ 7.6 fps、≈24 个 ≈ 59 fps（§11.3.6 P-1）。
+         */
+        internal fun starCapFor(
+            quality: com.nasmusic.tv.data.model.VisualQuality
+        ): Int = if (quality == com.nasmusic.tv.data.model.VisualQuality.LOW) STARS_LOW else STARS
 
         /** 空间网格单轴最大桶数 ⇒ 桶总数 ≤ 32×32 */
         const val GRID_MAX = 32

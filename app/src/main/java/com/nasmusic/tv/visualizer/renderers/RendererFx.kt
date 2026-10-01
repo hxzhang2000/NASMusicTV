@@ -1,5 +1,6 @@
 package com.nasmusic.tv.visualizer.renderers
 
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import com.nasmusic.tv.visualizer.AudioFrame
 import com.nasmusic.tv.visualizer.RenderContext
@@ -31,8 +32,14 @@ import com.nasmusic.tv.visualizer.fx.OverlayFx
  */
 abstract class RendererFx : VisualizerRenderer {
 
-    /** 后处理配置。**默认全关** ⇒ 迁移后画面逐像素不变。子类覆写即为"有意改动观感" */
-    protected open val postFx: PostFx get() = PostFx.NONE
+    /**
+     * 后处理配置。**默认全关** ⇒ 迁移后画面逐像素不变。子类覆写即为"有意改动观感"。
+     *
+     * ⚠️ `internal`（原 `protected`）：单测需要**直接读到 `postFx` 本体**才能给
+     * "某个效果确实把参数接上了"这类判据把门（`MatrixRainTest` ⑨）。
+     * Kotlin 里 override 不写可见性即沿用被覆盖成员的可见性 ⇒ 21 处子类无需改动。
+     */
+    internal open val postFx: PostFx get() = PostFx.NONE
 
     /** 效果主体。子类**只实现这个**，不再实现 [draw] */
     protected abstract fun DrawScope.drawContent(
@@ -51,6 +58,9 @@ abstract class RendererFx : VisualizerRenderer {
         drawContent(frame, ctx, fx)
         // ③ 后处理：postFx 为 NONE 或档位 OFF 时**整段零开销**（不进入任何 draw 调用）
         if (fx.level != FxLevel.OFF) applyPostFx(ctx, fx, postFx)
+        // ④ 脏区合并占位（§11.3.6 P-3）：本帧没有任何全屏绘制项时补一次不可见全屏 drawRect，
+        //    否则 LOW 档大量碎矩形会把系统 HWUI 的 Region 处理推进原生 SIGSEGV
+        if (needsDamageCoalescer(fx.level, postFx)) with(OverlayFx) { drawDamageCoalescer() }
     }
 
     final override fun onEnter(ctx: RenderContext) {
@@ -82,19 +92,54 @@ abstract class RendererFx : VisualizerRenderer {
     /** 末尾一次性后处理（vignette / grain / scanline，按 [postFx] 配置；任一为 0 即跳过） */
     private fun DrawScope.applyPostFx(ctx: RenderContext, fx: FxFrame, postFx: PostFx) {
         with(OverlayFx) {
-            if (postFx.vignette > 0f) drawVignette(ctx, postFx.vignette)
+            if (postFx.vignette > 0f)
+                drawVignette(ctx, postFx.vignette, edgeOverride = postFx.vignetteEdge)
             if (postFx.grain > 0f) drawGrain(ctx, fx.seq, postFx.grain)
             if (postFx.scanline > 0f) drawScanlines(ctx)
         }
     }
+
+    companion object {
+        /**
+         * 本帧是否需要补一次**脏区合并占位绘制**（§11.3.6 P-3，纯函数供门禁直接验证）。
+         *
+         * 成立条件：**这一帧确定不会发生任何全屏绘制** ——
+         *  · 档位 `OFF`（LOW）⇒ [applyPostFx] 整段跳过，即使 `postFx` 配了全屏项也不会画；
+         *  · 或 `postFx` 三项全 0 ⇒ [applyPostFx] 进了也是零 draw。
+         * 反之（LITE/FULL 且至少一项全屏）由 [OverlayFx] 的那次 `drawRect` 天然把脏区并掉，
+         * ⛔ 不要再补一次，白白多一遍全屏填充。
+         */
+        internal fun needsDamageCoalescer(level: FxLevel, postFx: PostFx): Boolean =
+            level == FxLevel.OFF || !postFx.hasFullScreenPass()
+    }
 }
 
-/** 后处理配置。字段名与 [OverlayFx] 的参数一一对应 */
+/**
+ * 后处理配置。字段名与 [OverlayFx] 的参数一一对应。
+ *
+ * ⚠️ 默认全关 ⇒ 迁移后画面逐像素不变。
+ */
 data class PostFx(
     val vignette: Float = 0f,      // 0 = 关
     val grain: Float = 0f,         // 0 = 关
     val scanline: Float = 0f,      // 0 = 关
+    /**
+     * 暗角边色覆盖（§11.3.6 P-2）。`null` = 沿用封面 `palette.accent`（20 套效果的既有行为）。
+     *
+     * 非 null 用于**有固定身份色**的效果：accent 暗角会随换歌漂移，把整幅画面染成封面色
+     * —— 数字雨实测被蓝紫封面压成蓝紫底，"黑客帝国"感全失（`vignette = 0.50` 全屏叠加）。
+     */
+    val vignetteEdge: Color? = null,
 ) {
+    /**
+     * 是否含**整屏绘制**项（§11.3.6 P-3 的判据之一）。
+     *
+     * 三项在 [OverlayFx] 里各自都以一次 `drawRect(… size = size)` 收尾 ⇒ 只要有一项 > 0，
+     * 本帧的脏区就会被并成一整块矩形（这正是 MEDIUM 档 448 个碎 blit 不崩的原因）。
+     * ⚠️ 只看"配了没有"，不看档位 —— 档位为 `OFF` 时这些绘制一次都不会发生。
+     */
+    internal fun hasFullScreenPass(): Boolean = vignette > 0f || grain > 0f || scanline > 0f
+
     companion object { val NONE = PostFx() }
 }
 

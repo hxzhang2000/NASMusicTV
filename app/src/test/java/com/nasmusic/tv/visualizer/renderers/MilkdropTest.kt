@@ -110,12 +110,14 @@ class MilkdropTest {
     }
 
     @Test
-    fun `③ 衰减色调 0_06 且与 E12 的 FADE_ALPHA 同值同义`() {
+    fun `③ 衰减色调 0_06 且每帧保留比例小于 1`() {
         assertEquals(0.06f, C.DECAY_ALPHA, 1e-6f)
         // 抑制灰白的方向：每帧亮度乘 (1 - DECAY_ALPHA) ⇒ 稳态亮度上界 = 注入/(衰减) 而非累积到 1
         val keep = 1f - C.DECAY_ALPHA
         assertTrue("每帧保留比例必须 < 1", keep < 1f)
-        assertEquals("与 §A4-2 的 E12 同值", 0.94f, keep, 1e-6f)
+        assertEquals("每帧保留 0.94", 0.94f, keep, 1e-6f)
+        // ⚠️ 2026-10-01 起本用例**不再**断言"与 §A4-2 的 E12 FADE_ALPHA 同值"：
+        // E12 的衰减改押在「拖尾长度 == 缓冲行数」上（0.02 × 200 行），与本类的回绘累积是两个量。
     }
 
     @Test

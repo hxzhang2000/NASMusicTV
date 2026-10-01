@@ -39,28 +39,39 @@ object OverlayFx {
     private var vignetteBrush: Brush? = null
     private var vignetteKey = 0L
 
-    /** 暗角：径向渐变，中心透明 → 边缘压暗 + 轻微偏冷（[coolShiftDeg]，8° = 全量） */
+    /**
+     * 暗角：径向渐变，中心透明 → 边缘压暗 + 轻微偏冷。
+     *
+     * [edgeOverride]（§11.3.6 P-2）：非 null 时**完全取代**封面 accent，并且**跳过** [coolShiftDeg]
+     * —— 覆盖色是效果自己挑定的身份色，再套一层冷相偏移等于偷偷改它。
+     * ⚠️ 默认 null ⇒ 其余 20 套效果逐像素不变。
+     */
     fun DrawScope.drawVignette(
         ctx: RenderContext,
         strength: Float = 0.42f,
-        coolShiftDeg: Float = 8f
+        coolShiftDeg: Float = 8f,
+        edgeOverride: Color? = null
     ) {
         if (FxBudget.of(ctx.quality) == FxLevel.OFF) return
-        val key = (size.width.toLong() shl 32) or size.height.toLong() or
-            (ctx.palette.accent.toArgb().toLong() shl 40) or
-            ((strength.toRawBits().toLong() and 0xFFFFL) shl 8) or
-            (coolShiftDeg.toRawBits().toLong() and 0xFFL)
+        val base = edgeOverride ?: VisualizerMath.darken(ctx.palette.accent, 0.20f)
+        // 轻微偏冷：R 压一点、B 提一点（程度由 coolShiftDeg/8 归一）
+        val k = if (edgeOverride == null) (coolShiftDeg / 8f).coerceIn(0f, 1f) else 0f
+        val edge = Color(
+            red = base.red * (1f - 0.15f * k),
+            green = base.green * (1f - 0.05f * k),
+            blue = (base.blue + 0.10f * k).coerceAtMost(1f),
+            alpha = 1f
+        ).copy(alpha = strength)
+        // ⚠️ 键必须 ⊇ 全部依赖维度（§15.4-A4）。旧写法用 `shl 32` / `shl 40` 拼位段，
+        //    而 accent 段（40..71）与 width 段（32..63）**重叠** ⇒ 不同 (w, accent) 组合会撞键、
+        //    换歌后沿用旧颜色的暗角。改乘性混合，不再切位段。
+        var key = size.width.toRawBits().toLong()
+        key = key * 31 + size.height.toRawBits()
+        key = key * 31 + edge.toArgb()
+        key = key * 31 + strength.toRawBits()
+        key = key * 31 + coolShiftDeg.toRawBits()
         if (vignetteBrush == null || vignetteKey != key) {
             val c = Offset(size.width / 2f, size.height / 2f)
-            val edge0 = VisualizerMath.darken(ctx.palette.accent, 0.20f)
-            // 轻微偏冷：R 压一点、B 提一点（程度由 coolShiftDeg/8 归一）
-            val k = (coolShiftDeg / 8f).coerceIn(0f, 1f)
-            val edge = Color(
-                red = edge0.red * (1f - 0.15f * k),
-                green = edge0.green * (1f - 0.05f * k),
-                blue = (edge0.blue + 0.10f * k).coerceAtMost(1f),
-                alpha = 1f
-            ).copy(alpha = strength)
             vignetteBrush = Brush.radialGradient(
                 0.62f to Color.Transparent,
                 1.00f to edge,
@@ -156,6 +167,29 @@ object OverlayFx {
         drawRect(Color.Black, topLeft = Offset.Zero, size = size, alpha = gain.coerceIn(0f, 0.5f))
     }
 
+    /**
+     * **脏区合并占位绘制**（§11.3.6 P-3）。⚠️ 它**不是后处理**：不受画质档位、不受 [PostFx] 配置影响。
+     *
+     * 真机实测（创维 / API 22 / 1080p）：LOW 档 E16 数字雨每帧 **336 个互不相连的小 blit 矩形**、
+     * 且本帧**没有任何一次全屏绘制** ⇒ 约 **0.6–1.0 s** 内原生 SIGSEGV
+     * （`libui!android::Region::createTJunctionFreeRegion`，崩在 `RenderThread`，栈里无 app 帧）；
+     * 同一效果 **MEDIUM 档 448 个矩形反而不崩** —— 暗角/颗粒/扫描线是 **3 次全屏 `drawRect`**，
+     * 脏区被并成一整块矩形，系统那段"消除 T 型交叉"的碎矩形处理根本走不到。
+     * ⇒ 本帧若无任何全屏绘制，就补一次**不可见**（alpha = 1/255，肉眼与截图均无差）的全屏 `drawRect`。
+     *
+     * ⛔ **必须是整画布矩形**：`topLeft` / `size` 任一写小、或把 alpha 写成 0 期待"空绘制"，
+     *    脏区就不再被并掉，P-3 的闪退会立刻回来。调用条件由
+     *    `RendererFx.needsDamageCoalescer` 决定（有全屏后处理项时不重复画，零额外开销）。
+     */
+    fun DrawScope.drawDamageCoalescer() {
+        drawRect(
+            Color.Black,
+            topLeft = Offset.Zero,
+            size = size,
+            alpha = DAMAGE_COALESCER_ALPHA
+        )
+    }
+
     /** 释放内部缓存（`Brush` / `Shader`）。由舞台/基类调一次；⛔ 不回收位图（归 [ProceduralTexture] 管） */
     fun release() {
         for (i in grainBrushes.indices) grainBrushes[i] = null
@@ -164,3 +198,6 @@ object OverlayFx {
         vignetteKey = 0L
     }
 }
+
+/** [OverlayFx.drawDamageCoalescer] 的不透明度：1/255 ⇒ 参与脏区计算但视觉不可辨（§11.3.6 P-3） */
+private const val DAMAGE_COALESCER_ALPHA = 1f / 255f

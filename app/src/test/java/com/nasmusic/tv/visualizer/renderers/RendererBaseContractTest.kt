@@ -4,6 +4,7 @@ import androidx.compose.ui.graphics.drawscope.DrawScope
 import com.nasmusic.tv.data.model.VisualizerTheme
 import com.nasmusic.tv.visualizer.AudioFrame
 import com.nasmusic.tv.visualizer.RenderContext
+import com.nasmusic.tv.visualizer.fx.FxLevel
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotSame
@@ -16,7 +17,8 @@ import java.io.File
 /**
  * 渲染器基类契约门禁（§八 G12 · §5.5）—— **行为段 + 源码扫描段**双段。
  *
- * 行为段对 [FrameClock]（5 条）；源码扫描段对全部 `RendererFx` 子类（4 条）。
+ * 行为段对 [FrameClock]（5 条）与脏区占位判据 [RendererFx.needsDamageCoalescer]（⑩，1 条 + 负向），
+ * 源码扫描段对全部 `RendererFx` 子类（4 条）。
  * ⛔ 全部负向自证必须真的能挂 —— 否则门禁是空转（§八 开头规矩）。
  */
 class RendererBaseContractTest {
@@ -116,6 +118,41 @@ class RendererBaseContractTest {
         assertEquals(0.1f, tight.advance(frameAt(10_000L)).dt, 1e-6f)
         // 二者不同 ⇒ 钳制那一行真的在读 maxDtMs（不是写死的常量）
         assertTrue(FrameClock().advance(frameAt(0L)).dt <= 0.1f)
+    }
+
+    // ═══════════════ 行为段（脏区合并占位判据，§11.3.6 P-3）═══════════════
+
+    private fun pf(v: Float = 0f, g: Float = 0f, s: Float = 0f) = PostFx(vignette = v, grain = g, scanline = s)
+
+    @Test
+    fun `⑩ 脏区占位判据 - 本帧确定没有全屏绘制时才补`() {
+        // (a) LOW ⇒ FxBudget 为 OFF，后处理整段不跑 ⇒ 无论 postFx 配了什么都要补
+        assertTrue(RendererFx.needsDamageCoalescer(FxLevel.OFF, PostFx.NONE))
+        assertTrue("E16 在 LOW：配了 3 项全屏后处理但一次都不会执行",
+            RendererFx.needsDamageCoalescer(FxLevel.OFF, pf(0.50f, 0.030f, 0.16f)))
+        // (b) 效果压根没配后处理 ⇒ 任何档位都没有全屏项
+        assertTrue(RendererFx.needsDamageCoalescer(FxLevel.FULL, PostFx.NONE))
+        assertTrue(RendererFx.needsDamageCoalescer(FxLevel.LITE, PostFx.NONE))
+        // (c) LITE/FULL 且至少一项全屏 ⇒ OverlayFx 的那次 drawRect 已经把脏区并掉，⛔ 不重复画
+        assertFalse(RendererFx.needsDamageCoalescer(FxLevel.LITE, pf(v = 0.42f)))
+        assertFalse(RendererFx.needsDamageCoalescer(FxLevel.FULL, pf(s = 0.16f)))
+        assertFalse(RendererFx.needsDamageCoalescer(FxLevel.FULL, pf(g = 0.03f)))
+    }
+
+    @Test
+    fun `负向⑩ 三种错误实现必须与判据产生可观测分歧`() {
+        // 错误 A：只看档位（`level == OFF`），漏掉"效果没配后处理"这一半
+        val onlyLevel = { l: FxLevel, p: PostFx -> l == FxLevel.OFF }
+        assertTrue(onlyLevel(FxLevel.FULL, PostFx.NONE) !=
+            RendererFx.needsDamageCoalescer(FxLevel.FULL, PostFx.NONE))
+        // 错误 B：两个条件写成 `&&`（与或非门用反），LOW + 有后处理配置时漏补 ⇒ 正是 P-3 的崩溃现场
+        val andGate = { l: FxLevel, p: PostFx -> l == FxLevel.OFF && !p.hasFullScreenPass() }
+        assertTrue(andGate(FxLevel.OFF, pf(v = 0.5f)) !=
+            RendererFx.needsDamageCoalescer(FxLevel.OFF, pf(v = 0.5f)))
+        // 错误 C：`hasFullScreenPass` 只判 vignette ⇒ 只有颗粒/扫描线的效果被漏保
+        val onlyVignette = { l: FxLevel, p: PostFx -> l == FxLevel.OFF || p.vignette <= 0f }
+        assertTrue(onlyVignette(FxLevel.FULL, pf(g = 0.03f)) !=
+            RendererFx.needsDamageCoalescer(FxLevel.FULL, pf(g = 0.03f)))
     }
 
     // ═══════════════════ 源码扫描段（对 RendererFx 子类）═══════════════════

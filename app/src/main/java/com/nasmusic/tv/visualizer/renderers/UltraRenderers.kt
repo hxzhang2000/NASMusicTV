@@ -237,8 +237,10 @@ class MilkdropRenderer : RendererFx() {
 
     internal companion object {
         /**
-         * §B4-① 衰减色调：每帧抹掉 6% 亮度（与 §A4-2 的 E12 `FADE_ALPHA` 同值同义）。
+         * §B4-① 衰减色调：每帧抹掉 6% 亮度。
          * ⛔ 调大 → 拖影变短；调小 → 抑制灰白变慢。0.06 是"连续 5 分钟不糊"的折中。
+         * ⚠️ 2026-10-01 起**不再**与 §A4-2 的 E12 `FADE_ALPHA` 同值：那边压的是**拖尾长度**
+         * （改成 0.02 才铺得满 200 行缓冲），这里压的是**3-tap 回绘的累积亮度**，两个量无关。
          */
         const val DECAY_ALPHA = 0.06f
 
