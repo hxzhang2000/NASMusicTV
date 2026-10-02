@@ -168,7 +168,7 @@
 3. ⛔ **两处「~1.3 倍台阶 / hash 精度」隐患未在真机判读**：
    - v1.4 的加色叠加在亮线段起点约 1.3× 的台阶（`SEG_GAMMA` / `RING_ALPHA` 一行可调）；
    - v1.5 的 `hash01` 只有约 3e3 个可区分 Float 值，1920 个 `(band,k,n)` 三元组中会有碰撞。fix-3 判断无害（四路参数流相互独立），**但若真机读作「规律重复」，正解是换 32 位整数 hash，而非调参**。
-4. ⛔ `docs/starry-sky-preview.html`（浏览器原型）**未随之归档**，仍在 `docs/` 根。它在 v1.5 已**不再是契约来源**（原型是累积缓冲机制，Kotlin 侧 v1.4 起已改为「底环 + 亮线段」），保留仅为对照设计演进。是否一并归档待所有者决定。
+4. ✅ `docs/starry-sky-preview.html`（浏览器原型）**已删除**（2026-10-02，所有者决定）。它是累积缓冲机制的历史原型，Kotlin 侧 v1.4 起已改为「底环 + 亮线段」，**从来不是契约来源**；其驱动过的设计决策（`t^0.72` 半径映射、流星必须用圆弧、枯树替代人物剪影、地平线占底部 1/4、虚化平台被否决等）已完整记入 `docs/archive/starry-sky-visualizer-plan.md` 与 `technical-overview.md` §10.207，原型本体不再保留。
 
 > 引用改写：2 处（均在 `technical-overview.md` §10.206），路径 `docs/starry-sky-visualizer-plan.md` → `docs/archive/starry-sky-visualizer-plan.md`。死链 **0 新增**（裸文件名 grep 已扫，无遗漏）。
 >
