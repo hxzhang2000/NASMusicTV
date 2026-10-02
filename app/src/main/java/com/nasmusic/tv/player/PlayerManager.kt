@@ -67,6 +67,7 @@ class PlayerManager(private val applicationContext: Context) {
     val crossfadeController = CrossfadeController(
         context = applicationContext,
         mainPlayerProvider = { player },
+        appVolumeProvider = { appVolume },
         onCrossfadeComplete = { nextIndex ->
             // 窗口结束：主播放器切到新歌（v2.28.1 的 IDLE 安全恢复路径复用）
             transitionToIndex(nextIndex)
@@ -79,6 +80,10 @@ class PlayerManager(private val applicationContext: Context) {
 
     @Volatile
     var crossfadeDurationSec: Int = 4
+
+    /** 应用内音量（0.0–1.0，独立于系统音量；经 applyAppVolume 应用，跨淡由 CrossfadeController 按比例缩放） */
+    @Volatile
+    var appVolume: Float = 1f
 
     /** F2-2：睡眠定时到期回调（PlaybackService 注册以刷新通知） */
     var onSleepTimerExpired: (() -> Unit)? = null
@@ -285,6 +290,13 @@ class PlayerManager(private val applicationContext: Context) {
 
     /** 清除伴奏缓存（返回删除的文件数） */
     fun clearAccompanimentCache(): Int = hqOrchestrator.clearAccompanimentCache()
+
+    /** 应用内音量（0.0–1.0）：立即生效于主播放器，跨淡由 CrossfadeController 按比例缩放 */
+    fun applyAppVolume(volume: Float) {
+        val v = volume.coerceIn(0f, 1f)
+        appVolume = v
+        player?.volume = v
+    }
 
     // ── 升降调 & 变速（仅 K 歌页面使用，由 MainViewModel 调用）──
 
@@ -524,6 +536,7 @@ class PlayerManager(private val applicationContext: Context) {
 
         player = exoPlayer
         exoPlayer.addListener(playerListener)
+        exoPlayer.volume = appVolume
         // 仅在播放时启动进度更新
         if (exoPlayer.isPlaying) {
             progressHandler.post(progressUpdateRunnable)

@@ -81,6 +81,7 @@ import com.nasmusic.tv.ui.components.LocalFocusableContentColor
 import com.nasmusic.tv.ui.components.KaraokePlaybackScreen
 import com.nasmusic.tv.ui.components.ProgressSection
 import com.nasmusic.tv.ui.components.SongInfoPanel
+import com.nasmusic.tv.ui.components.VolumeControl
 import com.nasmusic.tv.ui.components.PHONE_TOUCH_TARGET
 import com.nasmusic.tv.ui.components.portraitTouchTarget
 import com.nasmusic.tv.ui.theme.NasMusicColors
@@ -178,6 +179,9 @@ fun NowPlayingScreen(
     onCollapse: () -> Unit = {},
     /** 竖屏「队列」入口 */
     onOpenQueue: () -> Unit = {},
+    // === 应用内音量（应用级增益 0.0–1.0，独立于系统音量；播放页 OSD / 控制条）===
+    appVolume: Float = 1f,
+    onChangeAppVolume: (Float) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     var showInfoPanel by remember { mutableStateOf(false) }
@@ -273,6 +277,8 @@ fun NowPlayingScreen(
             onToggleImmersive = onToggleImmersive,
             onCollapse = onCollapse,
             onOpenQueue = onOpenQueue,
+            appVolume = appVolume,
+            onChangeAppVolume = onChangeAppVolume,
             playPauseFocusRequester = playPauseFocusRequester,
         )
         return
@@ -412,10 +418,19 @@ fun NowPlayingScreen(
                         )
                 ) {
                     // 歌词来源标签和高亮模式切换（可聚焦 — 保留 Surface）
-                    Row(
+                    //
+                    // ⚠️ 应用内音量 chip 加入本行后，手机横屏（窄右栏）整行可能放不下 →
+                    // 复用竖屏歌词工具条既定的「Box(CenterEnd) + horizontalScroll」包裹：
+                    // 内容窄于行宽时整体贴右（等价于原 Arrangement.End），溢出时可横向滚动
+                    // 而非截断。TV 上内容恒不溢出，行为与改动前一致（B1）。
+                    Box(
                         modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
-                        horizontalArrangement = Arrangement.End
+                        contentAlignment = Alignment.CenterEnd
                     ) {
+                        Row(
+                            modifier = Modifier.horizontalScroll(rememberScrollState()),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
                         val currentSource = lyrics?.source
                         SourceTag(
                             label = com.nasmusic.tv.data.model.LyricsSource.EMBEDDED.displayName,
@@ -495,6 +510,13 @@ fun NowPlayingScreen(
                             selected = sleepTimerState is com.nasmusic.tv.player.SleepTimerController.State.Running,
                             onClick = { showSleepTimerDialog = true }
                         )
+                        Spacer(modifier = Modifier.width(12.dp))
+                        // F2-7：应用内音量（OSD：TV 聚焦后左右键 ±5%，失焦自动收起；手机点按展开）
+                        VolumeControl(
+                            volume = appVolume,
+                            onChangeVolume = onChangeAppVolume,
+                        )
+                        }
                     }
 
                     // F2-2b：睡眠定时弹窗（输入框 -/+ 步进 + 15/30 快捷档 + 取消）
@@ -1366,6 +1388,8 @@ private fun NowPlayingPortrait(
     onToggleImmersive: () -> Unit,
     onCollapse: () -> Unit,
     onOpenQueue: () -> Unit,
+    appVolume: Float,
+    onChangeAppVolume: (Float) -> Unit,
     playPauseFocusRequester: FocusRequester,
 ) {
     var mode by remember { mutableStateOf(PortraitNowPlayingMode.COVER) }
@@ -1645,7 +1669,7 @@ private fun NowPlayingPortrait(
 
                     Spacer(modifier = Modifier.height(10.dp))
 
-                    // ⑥ 次级操作 Chip 横排可滚动（音质 / 定时 / 频谱 / K 歌 / MTV）
+                    // ⑥ 次级操作 Chip 横排可滚动（音质 / 定时 / 频谱 / K 歌 / MTV / 音量）
                     PortraitSecondaryChips(
                         qualityLabel = qualityLabel,
                         onOpenQuality = { showQualityDialog = true },
@@ -1655,6 +1679,8 @@ private fun NowPlayingPortrait(
                         onEnterKaraoke = onEnterKaraoke,
                         mvAvailable = mvAvailable,
                         onEnterMv = onEnterMv,
+                        appVolume = appVolume,
+                        onChangeAppVolume = onChangeAppVolume,
                     )
 
                     Spacer(modifier = Modifier.height(12.dp))
@@ -2183,6 +2209,8 @@ private fun PortraitSecondaryChips(
     onEnterKaraoke: () -> Unit,
     mvAvailable: Boolean,
     onEnterMv: () -> Unit,
+    appVolume: Float,
+    onChangeAppVolume: (Float) -> Unit,
 ) {
     Row(
         modifier = Modifier
@@ -2222,6 +2250,11 @@ private fun PortraitSecondaryChips(
         if (mvAvailable) {
             SourceTag(label = "MTV", available = true, selected = false, onClick = onEnterMv)
         }
+        // 应用内音量（手机分支：点 chip 展开成 − / +，3s 无操作自动收起）
+        VolumeControl(
+            volume = appVolume,
+            onChangeVolume = onChangeAppVolume,
+        )
     }
 }
 

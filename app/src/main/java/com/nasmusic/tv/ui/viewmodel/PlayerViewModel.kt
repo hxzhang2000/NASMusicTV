@@ -17,6 +17,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 /**
@@ -59,6 +60,16 @@ class PlayerViewModel(
     fun startSleepTimer(minutes: Int) = playerManager.sleepTimer.start(minutes)
     fun cancelSleepTimer() = playerManager.sleepTimer.cancel()
 
+    /** 应用内音量（0.0–1.0，默认 1f；与设置页/播放页共用） */
+    val appVolume: StateFlow<Float> = prefs.player.appVolume.stateIn(
+        viewModelScope, kotlinx.coroutines.flow.SharingStarted.Eagerly, 1f
+    )
+
+    fun setAppVolume(volume: Float) {
+        playerManager.applyAppVolume(volume)
+        viewModelScope.launch { prefs.player.setAppVolume(volume) }
+    }
+
     init {
         // F2-5：crossfade 设置注入 PlayerManager（volatile 字段，进度轮询读取）
         viewModelScope.launch {
@@ -66,6 +77,10 @@ class PlayerViewModel(
         }
         viewModelScope.launch {
             prefs.player.crossfadeDurationSec.collect { playerManager.crossfadeDurationSec = it }
+        }
+        // 应用内音量：启动恢复 + 外部变更同步（与 crossfade 同款 collect 模式）
+        viewModelScope.launch {
+            prefs.player.appVolume.collect { playerManager.applyAppVolume(it) }
         }
     }
 

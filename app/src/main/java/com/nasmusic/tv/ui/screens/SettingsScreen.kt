@@ -138,6 +138,9 @@ fun SettingsScreen(
     crossfadeDurationSec: Int = 4,
     onToggleCrossfade: (Boolean) -> Unit = {},
     onChangeCrossfadeDuration: (Int) -> Unit = {},
+    // F2-7：应用内音量（应用级增益 0.0–1.0，独立于系统音量）
+    appVolume: Float = 1f,
+    onChangeAppVolume: (Float) -> Unit = {},
     // F2-6：音质档位
     qualityTier: Int = 0,
     onChangeQualityTier: (Int) -> Unit = {},
@@ -537,6 +540,8 @@ fun SettingsScreen(
                             // F2-5：crossfade
                             crossfadeEnabled = crossfadeEnabled,
                             crossfadeDurationSec = crossfadeDurationSec,
+                            // F2-7：应用内音量
+                            appVolume = appVolume,
                             // F2-6：音质档位
                             qualityTier = qualityTier,
                         ),
@@ -555,6 +560,7 @@ fun SettingsScreen(
                             onChangeCoverDarkOverlay = onChangeCoverDarkOverlay,
                             onToggleCrossfade = onToggleCrossfade,
                             onChangeCrossfadeDuration = onChangeCrossfadeDuration,
+                            onChangeAppVolume = onChangeAppVolume,
                             onChangeQualityTier = onChangeQualityTier,
                             onClearQualityOverrides = onClearQualityOverrides,
                         )

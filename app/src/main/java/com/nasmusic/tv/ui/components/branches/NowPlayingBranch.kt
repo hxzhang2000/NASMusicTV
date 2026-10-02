@@ -162,6 +162,9 @@ internal fun NowPlayingBranch(
                             // === v2.36.0 竖屏：顶栏「收起」回首页（播放继续，由 MiniPlayer 承载）===
                             onCollapse = { viewModel.navVM.navigateTo(Screen.Home) },
                             onOpenQueue = { viewModel.navVM.navigateTo(Screen.Queue) },
+                            // === 应用内音量（应用级增益，独立于系统音量）===
+                            appVolume = viewModel.playerVM.appVolume.collectAsState(initial = 1f).value,
+                            onChangeAppVolume = { viewModel.playerVM.setAppVolume(it) },
                         )
                     }
 }

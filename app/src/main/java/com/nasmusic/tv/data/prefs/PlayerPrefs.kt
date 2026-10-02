@@ -16,6 +16,10 @@ class PlayerPrefs internal constructor(private val prefs: AppPreferences) {
     suspend fun setCrossfadeEnabled(enabled: Boolean) = prefs.setCrossfadeEnabled(enabled)
     suspend fun setCrossfadeDurationSec(sec: Int) = prefs.setCrossfadeDurationSec(sec)
 
+    // 应用内音量（0.0–1.0，独立于系统音量；跨淡按比例缩放）
+    val appVolume = prefs.appVolume
+    suspend fun setAppVolume(volume: Float) = prefs.setAppVolume(volume)
+
     // F2-6：音质档位（AUTO=0/无损999/高音质320/标准128）
     val qualityTier = prefs.qualityTier
     suspend fun setQualityTier(tier: Int) = prefs.setQualityTier(tier)

@@ -47,6 +47,8 @@ internal fun SettingsBranch(
                     // F2-5：crossfade 设置状态
                     val crossfadeEnabled by viewModel.prefs.player.crossfadeEnabled.collectAsState(initial = false)
                     val crossfadeDurationSec by viewModel.prefs.player.crossfadeDurationSec.collectAsState(initial = 4)
+                    // F2-7：应用内音量（PlayerViewModel 状态，独立于系统音量）
+                    val appVolume by viewModel.playerVM.appVolume.collectAsState(initial = 1f)
                     // F2-6：音质档位
                     val qualityTier by viewModel.prefs.player.qualityTier.collectAsState(initial = 0)
                     val weatherApiKey by viewModel.prefs.weather.weatherApiKey.collectAsState(initial = "")
@@ -133,6 +135,9 @@ internal fun SettingsBranch(
                         crossfadeDurationSec = crossfadeDurationSec,
                         onToggleCrossfade = { viewModel.setCrossfadeEnabled(it) },
                         onChangeCrossfadeDuration = { viewModel.setCrossfadeDurationSec(it) },
+                        // F2-7：应用内音量接线
+                        appVolume = appVolume,
+                        onChangeAppVolume = { viewModel.playerVM.setAppVolume(it) },
                         // F2-6：音质档位接线
                         qualityTier = qualityTier,
                         onChangeQualityTier = { viewModel.setQualityTier(it) },

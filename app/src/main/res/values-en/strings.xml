@@ -1064,6 +1064,12 @@
     <string name="settings_crossfade">Crossfade</string>
     <string name="settings_crossfade_desc">Fade out old track while fading in the next (off by default; disabled in Karaoke/MTV mode)</string>
 
+    <!-- App volume (independent of system volume) -->
+    <string name="settings_app_volume">App volume</string>
+    <string name="settings_app_volume_desc">Independent of system volume; affects playback in this app only</string>
+    <string name="nowplaying_volume">Volume</string>
+    <string name="nowplaying_volume_hint">Adjust with left/right keys</string>
+
     <!-- F2-6 Quality tier -->
     <string name="settings_quality_tier">Network Source Quality (Meting only)</string>
     <string name="quality_tier_auto">Auto</string>

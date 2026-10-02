@@ -16,6 +16,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.background
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Text
@@ -28,6 +29,7 @@ import com.nasmusic.tv.data.model.VisualQuality
 import com.nasmusic.tv.data.prefs.AppPreferences
 import com.nasmusic.tv.ui.theme.FontSize
 import com.nasmusic.tv.ui.theme.NasMusicColors
+import kotlin.math.roundToInt
 
 /** 播放设置分区状态（自动播放/频谱/模式/分离/模型/封面滤镜） */
 data class PlayerSettingsState(
@@ -48,6 +50,8 @@ data class PlayerSettingsState(
     // F2-5：跨曲交叉淡入淡出
     val crossfadeEnabled: Boolean = false,
     val crossfadeDurationSec: Int = 4,
+    // F2-7：应用内音量（应用级增益 0.0–1.0，独立于系统音量）
+    val appVolume: Float = 1f,
     // F2-6：音质档位
     val qualityTier: Int = 0,
     // T1.6.4（§十三 裁决项 9=A）：可视化画质档位（此前无 UI 入口 ⇒ 恒 MEDIUM，ULTRA 三套不可达）
@@ -70,6 +74,8 @@ data class PlayerSettingsActions(
     /** F2-5：crossfade 开关/时长 */
     val onToggleCrossfade: (Boolean) -> Unit = {},
     val onChangeCrossfadeDuration: (Int) -> Unit = {},
+    /** F2-7：应用内音量（应用级增益 0.0–1.0，独立于系统音量） */
+    val onChangeAppVolume: (Float) -> Unit = {},
     /** v2.35.0 多码率：清除全部单曲音质覆盖（方案 §5.3） */
     val onClearQualityOverrides: (() -> Unit)? = null,
     /** F2-6：音质档位（AUTO=0/999/320/128） */
@@ -112,6 +118,45 @@ internal fun PlayerSettingsSection(
                     )
                 }
             }
+        }
+        // ── 应用内音量（应用级增益 0.0–1.0，独立于系统音量）──
+        // 仿封面滤镜的 AdjustButton 行：− [居中百分比] +，5% 步进（0–100）。
+        // 与封面滤镜的差异：百分比用 weight(1f) + 居中文本把 − / + 拉到整行两端，
+        // 视觉上是"一条音量条"而非"左侧一簇按钮"，D-Pad 左右各一格的节奏更明确。
+        Spacer(modifier = Modifier.height(12.dp))
+        Text(
+            text = stringResource(R.string.settings_app_volume),
+            color = NasMusicColors.TextPrimary,
+            fontSize = FontSize.button(),
+            modifier = Modifier.padding(start = 4.dp)
+        )
+        Text(
+            text = stringResource(R.string.settings_app_volume_desc),
+            color = NasMusicColors.TextSecondary,
+            fontSize = FontSize.small(),
+            modifier = Modifier.padding(start = 4.dp, top = 2.dp)
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            AdjustButton("-", onClick = {
+                val pct = (state.appVolume * 100).roundToInt()
+                actions.onChangeAppVolume((pct - 5).coerceAtLeast(0) / 100f)
+            })
+            Text(
+                text = "${(state.appVolume * 100).roundToInt()}%",
+                color = NasMusicColors.Primary,
+                fontSize = FontSize.title(),
+                textAlign = TextAlign.Center,
+                modifier = Modifier.weight(1f).padding(horizontal = 8.dp)
+            )
+            AdjustButton("+", onClick = {
+                val pct = (state.appVolume * 100).roundToInt()
+                actions.onChangeAppVolume((pct + 5).coerceAtMost(100) / 100f)
+            })
         }
         // F2-6：音质分级（仅 Meting 网络源生效；NAS 原品质直传）
         Spacer(modifier = Modifier.height(12.dp))

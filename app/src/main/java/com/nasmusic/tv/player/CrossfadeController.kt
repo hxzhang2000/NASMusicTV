@@ -30,10 +30,14 @@ import kotlinx.coroutines.flow.StateFlow
  *
  * 音频焦点：crossfadePlayer setAudioAttributes(USAGE_MEDIA, handleAudioFocus=false)——
  * 焦点仍由主 player 独占持有。
+ *
+ * 应用内音量（F2-7）：所有音量写入经 [volume] 按 appVolume（PlayerManager.appVolume，
+ * 0.0–1.0）等比缩放——等功率曲线形状不变，整体增益随 appVolume 缩放。
  */
 class CrossfadeController(
     private val context: Context,
     private val mainPlayerProvider: () -> ExoPlayer?,
+    private val appVolumeProvider: () -> Float,
     private val onCrossfadeComplete: (Int) -> Unit
 ) {
     sealed interface State {
@@ -49,6 +53,9 @@ class CrossfadeController(
     private val handler = Handler(Looper.getMainLooper())
     private var fadeRunnable: Runnable? = null
     private var activeNextIndex: Int = -1
+
+    /** 应用内音量缩放：f × appVolume（clamped 0–1），所有音量写入统一走这里 */
+    private fun volume(f: Float) = f * appVolumeProvider().coerceIn(0f, 1f)
 
     /**
      * 尝试启动 crossfade（进度轮询钩子调用）。
@@ -92,7 +99,7 @@ class CrossfadeController(
             cfPlayer.prepare()
             cfPlayer.play()
 
-            main.volume = 1f
+            main.volume = volume(1f)
             val totalSteps = (durationSec * 1000) / STEP_MS
             val volumeStep = 1f / totalSteps
             var step = 0
@@ -102,9 +109,9 @@ class CrossfadeController(
                     step++
                     val frac = (step * volumeStep).coerceAtMost(1f)
                     try {
-                        // P1#3：等功率曲线（sin²+cos²=1），端点仍为 (1,0)→(0,1)
-                        main.volume = kotlin.math.cos(frac * HALF_PI)
-                        cfPlayer.volume = kotlin.math.sin(frac * HALF_PI)
+                        // P1#3：等功率曲线（sin²+cos²=1），端点仍为 (1,0)→(0,1)，整体按 appVolume 缩放
+                        main.volume = volume(kotlin.math.cos(frac * HALF_PI))
+                        cfPlayer.volume = volume(kotlin.math.sin(frac * HALF_PI))
                     } catch (e: Exception) {
                         AppLog.w(TAG, "fade step failed: ${e.message}")
                         abort()
@@ -139,7 +146,7 @@ class CrossfadeController(
             onCrossfadeComplete(nextIndex)
         }
         // 恢复主播放器音量（切歌完成后）
-        mainPlayerProvider()?.volume = 1f
+        mainPlayerProvider()?.volume = volume(1f)
     }
 
     /** 立即中断（手动切歌/出错）：释放资源，不切歌 */
@@ -160,7 +167,7 @@ class CrossfadeController(
         }
         crossfadePlayer = null
         if (restoreMainVolume) {
-            try { mainPlayerProvider()?.volume = 1f } catch (_: Exception) {}
+            try { mainPlayerProvider()?.volume = volume(1f) } catch (_: Exception) {}
         }
     }
 

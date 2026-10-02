@@ -11597,6 +11597,27 @@ e: OrbitalStarFieldTest.kt:101
 
 **版本**：v2.37.6 → **v2.38.0**（versionCode 168 → 169）
 
+### 10.208 v2.38.1 — 应用内音量：应用级增益独立于系统音量（设置页滑条 + 播放页 OSD + 跨淡适配，2026-10-02）
+
+**背景**：Android TV 遥控器音量键被系统截获（`KEYCODE_VOLUME_*` 到不了应用），电视端无法独立调节播放音量；系统音量与 `ExoPlayer.volume`（0.0–1.0 浮点增益）互相独立，可在应用内实现一套独立音量。
+
+**数据流**：UI（设置页/播放页）→ `PlayerViewModel.appVolume / setAppVolume()` → `PlayerManager.applyAppVolume()`（写 `player.volume`）+ `AppPreferences`（DataStore 持久化）。
+
+- **持久化**：`AppPreferences` 新增 `settings_app_volume`（`floatPreferencesKey`，默认 1f），`PlayerPrefs` 门面转发 `appVolume` / `setAppVolume()`。
+- **播放层**：`PlayerManager` 新增 `@Volatile var appVolume: Float` + `applyAppVolume()`（clamp 0–1 后写 `player.volume`）；`setPlayer()` 恢复持久化音量。
+  ⚠️ 方法命名 **`applyAppVolume` 而非 `setAppVolume`**：`var appVolume` 的属性 setter 在 JVM 层生成 `setAppVolume(F)`，同名 fun 直接编译期 `Platform declaration clash`（首次编译实踩，改方法名解围）。
+- **跨曲交叉淡入（F2-5）**：`CrossfadeController` 构造新增 `appVolumeProvider: () -> Float`，所有音量写入经 `volume(f) = f × appVolume` 等比缩放（等功率曲线与 50ms ramp 时序不变）；`complete()` / `abort()` 的主播放器恢复值由硬编码 `1f` 改为 `volume(1f)`——此前跨淡每次切歌都会把应用内音量重置回 100%。
+- **ViewModel**：`PlayerViewModel.appVolume: StateFlow<Float>`（`stateIn` Eagerly）供两处 UI 共用；`setAppVolume()` 先即时作用于播放器、再异步持久化；init 块另以 `collect` 做启动恢复与外部变更同步（与 crossfade 设置同款模式）。
+- **UI**（designer 通道）：设置页「播放设置」分区新增音量调节行（− / 居中百分比 / +，5% 步进）；播放页新增 `ui/components/VolumeControl.kt`——TV 聚焦后左/右键调节、失焦自动收起（−/+ 为装饰性视觉锚点、刻意不可聚焦，避免展开/收起时焦点节点消失卡死）；手机点按展开、3s 无操作自动收起、触屏热区 ≥44dp。文案走 `settings_app_volume` / `settings_app_volume_desc` / `nowplaying_volume` / `nowplaying_volume_hint` 四组双语字符串。
+- **不受影响**：均衡器（audioSessionId）、频谱（PCM 透传）均与 `player.volume` 无关；Media3 `setDeviceVolume` 调系统设备音量，与应用内音量互不干扰。⏳ 音频焦点 duck 后恢复值是否回到 appVolume 待真机实测（AudioFocusManager 直接改 `player.volume`）。
+
+**测试**：`CrossfadeControllerTest` 新增 3 例 F2-7（appVolume=0.5：ramp 端点等比缩放、`complete()` / `abort()` 后主播放器恢复 0.5 而非 1f；真实 ExoPlayer + Mockito mock 主播放器捕获 setVolume）。
+⚠️ ramp 驱动用 `ShadowLooper.idleFor(ms, MILLISECONDS)` 而非 `advanceBy`——Robolectric 4.11.1 的 `ShadowLooper` **无 `advanceBy`**（编译期 `Unresolved reference` 实踩），仓库既有模式是 `idle()` / `idleFor()`。
+
+**验证**：`:app:compileDebugKotlin` / `:app:testDebugUnitTest`（全量 **922 例 0 失败**，含 CrossfadeControllerTest 13 例）/ `:app:lintDebug` 全部 **BUILD SUCCESSFUL**。
+
+**版本**：v2.38.0 → **v2.38.1**（versionCode 169 → 170）
+
 ### 10.202 数字雨尾迹整条消失（MatrixRainRenderer 字形裁切，2026-09-30）
 
 **现象**：E41 之后新增的「数字雨」（`MatrixRainRenderer`）每个数字**后面拉的那一串尾迹全部消失**，

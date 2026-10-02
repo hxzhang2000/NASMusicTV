@@ -3,6 +3,7 @@ package com.nasmusic.tv.data.prefs
 import android.content.Context
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.doublePreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
@@ -1110,6 +1111,15 @@ class AppPreferences internal constructor(private val context: Context) {
 
     suspend fun setCrossfadeDurationSec(sec: Int) {
         dataStore.edit { it[keyCrossfadeDurationSec] = sec.coerceIn(1, 12) }
+    }
+
+    // --- 应用内音量（0.0–1.0，独立于系统音量，DataStore 持久化） ---
+    private val keyAppVolume = floatPreferencesKey("settings_app_volume")
+
+    val appVolume: Flow<Float> = dataStore.data.map { it[keyAppVolume] ?: 1f }
+
+    suspend fun setAppVolume(volume: Float) {
+        dataStore.edit { it[keyAppVolume] = volume.coerceIn(0f, 1f) }
     }
 
     /** F2-6：音质档位（Meting br 参数；AUTO 时不传由 BandwidthEstimator 决策） */
