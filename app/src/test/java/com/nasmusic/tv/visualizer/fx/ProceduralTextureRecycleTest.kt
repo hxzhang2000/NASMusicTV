@@ -95,6 +95,112 @@ class ProceduralTextureRecycleTest {
         ProceduralTexture.release()
     }
 
+    // ═══════════ ensureFullscreenOnly（只烘 1 张全屏纹理） ═══════════
+
+    @Test
+    fun `ensureFullscreenOnly 只烘被点名的那一张 - 其余五张仍为 null`() {
+        ProceduralTexture.release()
+        ProceduralTexture.ensureFullscreenOnly(ProceduralTexture.Id.STARFIELD, 64, 48)
+
+        val star = ProceduralTexture.tile(ProceduralTexture.Id.STARFIELD)
+        assertNotNull("STARFIELD 应就位", star)
+        assertEquals(64, star!!.width)
+        assertEquals(48, star.height)
+
+        // ⛔ 断言：另外 5 张全屏纹理一张都不许烘（这正是首帧黑屏 6369ms 的成本来源）
+        for (id in listOf(
+            ProceduralTexture.Id.PAPER, ProceduralTexture.Id.WATER,
+            ProceduralTexture.Id.CAUSTIC, ProceduralTexture.Id.PLASMA, ProceduralTexture.Id.FOG,
+        )) {
+            assertNull("$id 不应被 ensureFullscreenOnly 烘出", ProceduralTexture.tile(id))
+        }
+        // 平铺型同样不该被这次调用带出来（ensureFullscreenOnly 不碰它们）
+        assertNull("GRAIN 是平铺型，不应被 ensureFullscreenOnly 带出", ProceduralTexture.tile(ProceduralTexture.Id.GRAIN))
+        assertNull("SCANLINE 同理", ProceduralTexture.tile(ProceduralTexture.Id.SCANLINE))
+
+        ProceduralTexture.release()
+    }
+
+    @Test
+    fun `ensureFullscreenOnly 同尺寸重复调用是 no-op - 槽位实例不变`() {
+        ProceduralTexture.release()
+        ProceduralTexture.ensureFullscreenOnly(ProceduralTexture.Id.STARFIELD, 64, 48)
+        val first = ProceduralTexture.tile(ProceduralTexture.Id.STARFIELD)
+        ProceduralTexture.ensureFullscreenOnly(ProceduralTexture.Id.STARFIELD, 64, 48)
+        val second = ProceduralTexture.tile(ProceduralTexture.Id.STARFIELD)
+        assertTrue("同尺寸重复调用必须是 no-op（同一实例）", first === second)
+
+        // 尺寸变化 ⇒ 必须重建（缓存键含 (w,h)，与 ensure 同一套记账）
+        ProceduralTexture.ensureFullscreenOnly(ProceduralTexture.Id.STARFIELD, 80, 60)
+        val third = ProceduralTexture.tile(ProceduralTexture.Id.STARFIELD)!!
+        assertTrue("尺寸变化必须重建", third.width == 80 && third.height == 60)
+        assertTrue("重建后是不同实例", first !== third)
+        ProceduralTexture.release()
+    }
+
+    @Test
+    fun `负向 - ensureFullscreenOnly 传平铺型 Id 必须抛异常`() {
+        ProceduralTexture.release()
+        for (id in listOf(ProceduralTexture.Id.GRAIN, ProceduralTexture.Id.SCANLINE)) {
+            try {
+                ProceduralTexture.ensureFullscreenOnly(id, 64, 48)
+                fail("$id 是平铺型，ensureFullscreenOnly 必须拒绝（否则门禁空转）")
+            } catch (expected: IllegalArgumentException) {
+                assertTrue("异常信息应点名是平铺型", expected.message!!.contains("平铺型"))
+            }
+        }
+        ProceduralTexture.release()
+    }
+
+    @Test
+    fun `负向 - 若 ensureFullscreenOnly 偷偷调 ensure - 本判据必须挂`() {
+        // 自证：门禁检查的正是「另外 5 张槽位为 null」这件事。
+        // 模拟"实现里改调了 ensure"（6 张全烘）⇒ 判据必须真的挂。
+        ProceduralTexture.release()
+        ProceduralTexture.ensure(64, 48)   // 假装是新实现的行为
+        val leaked = ProceduralTexture.tile(ProceduralTexture.Id.FOG)
+        try {
+            assertNull("回退到 ensure 后 FOG 会被烘出，判据应挂", leaked)
+            fail("只烘 1 张的判据必须是真判据（否则本门禁是空转）")
+        } catch (expected: AssertionError) {
+            // ✅ 预期：判据真的在工作
+        } finally {
+            ProceduralTexture.release()
+        }
+    }
+
+    @Test
+    fun `六个全屏 Id 逐个走 ensureFullscreenOnly 都能烘出 - 防止两份映射漂移`() {
+        // ⛔ `ensure` 里那六行 `ensureFullscreen(Id.X, …)` 与 [rowFiller] 的 when 是**同一组
+        //    lambda 的两份拷贝**（`ensure` 的字面量被 LightBeamsTest / PlasmaFlowTest 的源码
+        //    扫描门禁锁死，不能改成循环）。本条锁住 `rowFiller` **没有漏掉任何一张**。
+        val fullscreen = listOf(
+            ProceduralTexture.Id.STARFIELD, ProceduralTexture.Id.PAPER, ProceduralTexture.Id.WATER,
+            ProceduralTexture.Id.CAUSTIC, ProceduralTexture.Id.PLASMA, ProceduralTexture.Id.FOG,
+        )
+        for (id in fullscreen) {
+            ProceduralTexture.release()
+            ProceduralTexture.ensureFullscreenOnly(id, 32, 24)
+            val t = ProceduralTexture.tile(id)
+            assertNotNull("ensureFullscreenOnly($id) 必须能烘出", t)
+            assertEquals("$id 宽", 32, t!!.width)
+            assertEquals("$id 高", 24, t.height)
+        }
+        ProceduralTexture.release()
+    }
+
+    @Test
+    fun `ensure 语义未被 ensureFullscreenOnly 改动 - 六张全屏纹理仍全部就位`() {
+        ProceduralTexture.release()
+        ProceduralTexture.ensure(64, 48)
+        for (id in ProceduralTexture.Id.entries) {
+            if (id == ProceduralTexture.Id.GRAIN) continue
+            assertNotNull("ensure 回归：$id 缺失", ProceduralTexture.tile(id))
+        }
+        assertEquals(128, ProceduralTexture.tile(ProceduralTexture.Id.GRAIN)!!.width)
+        ProceduralTexture.release()
+    }
+
     @Test
     fun `负向 - 未回收的位图必须被门禁判失败`() {
         // 门禁实现：assertAllRecycled（与上面 release 用例同一判据）

@@ -84,13 +84,75 @@ object ProceduralTexture {
         }
 
         // 全屏型：键含 (w,h) —— 尺寸变化自动重建（§C4 O2 的缓存键纪律）
-        val fullKey = (w.toLong() shl 32) or h.toLong()
+        val fullKey = fullscreenKey(w, h)
         ensureFullscreen(Id.STARFIELD, w, h, fullKey) { row, y -> starfieldRow(row, y, w, h, starLayout(w, h)) }
         ensureFullscreen(Id.PAPER, w, h, fullKey) { row, y -> paperRow(row, y, w, h) }
         ensureFullscreen(Id.WATER, w, h, fullKey) { row, y -> waterRow(row, y, w, h) }
         ensureFullscreen(Id.CAUSTIC, w, h, fullKey) { row, y -> causticRow(row, y, w, h) }
         ensureFullscreen(Id.PLASMA, w, h, fullKey) { row, y -> plasmaRow(row, y, w, h) }
         ensureFullscreen(Id.FOG, w, h, fullKey) { row, y -> fogRow(row, y, w, h) }
+    }
+
+    /**
+     * ⭐ 只确保 [id] 这一张**全屏型**纹理（其余全屏型**不**生成）。
+     *
+     * ⚠️ **为什么需要它**：[ensure] 一次生成 [FULLSCREEN_IDS] 的**全部 6 张**全屏纹理，
+     * 每张都是 `Bitmap.createBitmap(w, h)` + 逐行 Kotlin 像素运算 + JNI `setPixels` ——
+     * 1920×1080 × 6 ≈ **1240 万像素**的逐像素数学 + **6480 次** JNI `setPixels`，
+     * 而且**同步**发生在**首帧**（`ctx.canvasSize` 在 `onEnter` 时还是 `Size.Zero`，
+     * `ensure` 只能等到第一次 `drawContent` 才被触发，见 `VisualizerStage.kt:192`）。
+     *
+     * ⇒ 只用 1 张全屏纹理的效果（星空星轨 E42 只用 [Id.STARFIELD]）若调 [ensure]，
+     * 会为 5 张**永远不画**的纹理付出全部代价 —— 真机实测冷启动首帧黑屏 **6369 ms**。
+     *
+     * 语义与 [ensure] 一致（同样的 `ensuredW`/`ensuredH` 记账、同样的 [fullscreenKey] 键），
+     * 差别只在「生成哪几张」。⛔ 对**平铺型**（[Id.GRAIN] / [Id.SCANLINE]）调用会抛
+     * [IllegalArgumentException] —— 那两类与画布尺寸无关，本就该由 [ensure] 生成。
+     */
+    fun ensureFullscreenOnly(id: Id, w: Int, h: Int) {
+        require(id in FULLSCREEN_IDS) {
+            "ensureFullscreenOnly 只接受全屏型 Id，$id 是平铺型（请改用 ensure）"
+        }
+        if (w <= 0 || h <= 0) return
+        val key = fullscreenKey(w, h)
+        // 与 ensure 同一套记账：命中缓存（同尺寸 + 该槽已烘好）直接返回，⛔ 不重复烘焙
+        if (ensuredW == w && ensuredH == h &&
+            keys[id.ordinal * VARIANTS] == key && slots[id.ordinal * VARIANTS] != null
+        ) {
+            return
+        }
+        ensuredW = w
+        ensuredH = h
+        ensureFullscreen(id, w, h, key, id.rowFiller(w, h))
+    }
+
+    /** 全屏型 Id 清单（⛔ **仅引用既有 [Id]**、**不新增枚举项**、不改动 `Id.entries` 顺序）。 */
+    private val FULLSCREEN_IDS = listOf(
+        Id.STARFIELD, Id.PAPER, Id.WATER, Id.CAUSTIC, Id.PLASMA, Id.FOG,
+    )
+
+    /** 全屏型缓存键 = `(w << 32) | h`（尺寸变化自动重建，§C4 O2 的缓存键纪律）。 */
+    private fun fullscreenKey(w: Int, h: Int): Long = (w.toLong() shl 32) or h.toLong()
+
+    /**
+     * 该 Id 的逐行像素填充器（[ensureFullscreenOnly] 专用）。
+     *
+     * ⚠️ 与 [ensure] 里那六行 `ensureFullscreen(Id.X, …) { … }` 是**同一组 lambda 的两份拷贝**，
+     *    刻意不复用：[ensure] 的逐行展开是 `LightBeamsTest`（`ensureFullscreen(Id.FOG, w, h, fullKey)`）
+     *    与 `PlasmaFlowTest`（`ensureFullscreen(Id.PLASMA,`）的**源码扫描门禁**锁死的字面量，
+     *    改成循环或改写调用形状都会让那两条门禁**静默**失效。
+     *    ⇒ ⛔ 增删全屏型 Id 时**两处都要改**；`ProceduralTextureRecycleTest` 的
+     *    「六个全屏 Id 逐个走 ensureFullscreenOnly 都能烘出」一条专门防漏。
+     */
+    private fun Id.rowFiller(w: Int, h: Int): (IntArray, Int) -> Unit = when (this) {
+        Id.STARFIELD -> { row, y -> starfieldRow(row, y, w, h, starLayout(w, h)) }
+        Id.PAPER -> { row, y -> paperRow(row, y, w, h) }
+        Id.WATER -> { row, y -> waterRow(row, y, w, h) }
+        Id.CAUSTIC -> { row, y -> causticRow(row, y, w, h) }
+        Id.PLASMA -> { row, y -> plasmaRow(row, y, w, h) }
+        Id.FOG -> { row, y -> fogRow(row, y, w, h) }
+        // 平铺型不会走到这里（ensureFullscreenOnly 已 require 拦截；ensure 也不会遍历它们）
+        Id.GRAIN, Id.SCANLINE -> { _, _ -> }
     }
 
     private inline fun ensureFullscreen(

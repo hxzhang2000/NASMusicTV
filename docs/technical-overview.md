@@ -1,4 +1,4 @@
-﻿# NAS Music TV — 技术架构概述
+# NAS Music TV — 技术架构概述
 
 > 版本：v2.14.0
 > 最后更新：2026-09-28
@@ -11401,6 +11401,75 @@ TypedArray、`performance.now`、`requestAnimationFrame`。
   **凡是按档位分叉的绘制路径，放宽门控时要把该档位重新过一遍目视**。
 - 照片墙低画质未测（本机没接照片源）。ULTRA 三套与节拍烟花 / 世界仍按设计进不去低画质。
 
+### 10.206 v2.38.0 — 新增第 29 套可视化效果 E42「星空星轨」（长曝光星轨）（2026-10-02）
+
+**方案**：`docs/archive/starry-sky-visualizer-plan.md`（v1.5，已归档）。**改动**：生产 `data/model/AppSettings.kt`（枚举 + 陈腐 KDoc 计数，`:185` 后追加 / `:100`）、`visualizer/VisualizerRendererFactory.kt`；新增 `visualizer/renderers/StarrySkyRenderer.kt`（~911 行）、`test/.../renderers/StarrySkyTest.kt`；门禁同步 `VisualizerThemeTest.kt` 7 处硬计数 28→29 / 27→28、`FxCoverageScanTest.kt` 的 `covered` 名单 + `decls.size >= 29`。**门禁**：`testDebugUnitTest` 1569 例 / 0 失败、`lintDebug` 0 Error、`assembleDebug` 通过。
+
+#### 一、实现方案
+
+长曝光星轨：**频率 → 半径、幅值 → 扫掠角/线宽、鼓点 → 极点闪光 + 切向流星、响度 → 天色、静音 → 自转星场**（绝不全黑）。地景占底部 1/4（`HORIZON_K = 0.75`），山脊用 3 段三次贝塞尔画在星轨**之上**且不透明 ⇒ 星轨在地平线自然截止；其上是一棵枯树（无叶、5 主枝、描边 + 二次分叉）。⭐ 自转**不进流水线**：天极角由单一时钟 `poleAngleDeg(fx.nowMs, t0Ms)`（`ROT_DEG_PER_S = 3.2`）推出，零 transform。
+
+| 输入 | 映射 |
+|---|---|
+| 频率 | 半径 `rInner + (rOuter−rInner)·t^0.72`（低音贴天极、高音外扩） |
+| 幅值 | 扫掠角（满幅 `MAX_SWEEP_DEG = 46`）、线宽 `1.2 + 2.2·amp` dp |
+| 鼓点 | 天极闪光 + 2–4 颗切向流星 |
+| 响度 | 天色交叉淡入 `skyMix(sectionEnergy)` |
+| 静音 | 自转星场 + 呼吸辉光 |
+
+**本版机制**：ping-pong `ImageBitmap`（结构先例 E18 `MilkdropRenderer`，⛔ 不搬它的 3-tap 缩放回绘——会把历史画面放大/旋转做成 K 粉酸 pattern）+ `PorterDuff.Mode.DST_OUT` 全缓冲指数衰减（`TRAIL_TAU_S = 0.75s`，半衰期 ≈0.52s）；每帧 复制 → 衰减 → 画新弧 → 翻转，⛔ Canvas 必须跟着位图一起换（否则写回同一张图）。衰减层只能用 `drawRect(0f,0f,w,h,paint)` 四 float 重载（`drawRect(Rect(...))` 每帧堆分配）。
+
+**读源码推不出来的常量**：`TRAIL_TAU_S 0.75s`、`FLARE_DECAY_S 0.18s`、`ATTACK_S/RELEASE_S = 0.025/0.24s`（快攻慢放，⛔ 不复用 `AudioSmoother`，其语义相反）、`MAX_SWEEP_DEG 46`、`SILENT_FLOOR 0.012`；⭐ `RADIUS_SHAPE 0.72` 与 `COLOR_SHAPE 0.55` **刻意不同**（外圈要更快转冷，否则读不出「核心白炽 / 外圈淡蓝」）；`HORIZON_K 0.75`；缓冲三档 1280/960/640。
+
+#### 二、⭐ 踩坑（实施期）
+
+- ⛔ `postFx` 必须逐字写成 `override val postFx = PostFx(...)`：门禁 `FxCoverageScanTest.postFxRe` 要求 `override\s+val\s+postFx\s*=\s*PostFx\(`，**加类型标注或写 `get()` 就完全不匹配** ⇒ **静默**判「未覆盖」（只 `return false`，不报错）。
+- ⛔ `t0Ms` 不能取 `ctx.nowMs`：`VisualizerStage.kt:193` 写的是墙钟 `System.currentTimeMillis()`，而 `frame.timeMs` 是单调 `SystemClock.uptimeMillis()`（`SpectrumAnalyzer.kt:322`），相减 ≈ **−1.7e12 ms** ⇒ 天极角永久冻结；且 `RendererBaseContractTest` 禁类体出现 `ctx.nowMs`。正解：首次 `drawContent` 从 `fx.nowMs` 惰性捕获，且重入 `onEnter` 不复位（否则切画质「画面炸一下」）。
+- ⛔ `AudioFrame.spectrum` **恒为** `SpectrumContract.BAR_COUNT`(64)（`SpectrumRepository.kt:24-25`）；`VisualQuality.LOW.barCount`(=32) 是**另一个字段** ⇒ 「LOW 只有 32 柱」是错的，LOW 降级走 `stride` 隔柱取样。
+- ⛔ `onEnter` 时 `ctx.canvasSize` 仍是 `Size.Zero`（`VisualizerStage.kt:192`）⇒ 只在 `onEnter` 调 `ProceduralTexture.ensure` 会漏掉旋转/软 resize；正解：`ensure` 的**单一调用点**放在尺寸守卫的重建路径里。
+- ⛔ `Canvas.scale(sx,sy)` 的支点是**缓冲中心**而不是 `(0,0)`，会把整幅几何平移 `c·(1−s)` ⇒ 必须写 `withScale(s, s, 0f, 0f)`。
+- ⛔ 在 `Canvas` 接收者的 lambda 里 `density` 解析成 `Canvas.getDensity(): Int`，**遮蔽** `DrawScope.density: Float` ⇒ 先取到局部量再进 lambda。
+- ⛔ 流星画成 `moveTo/lineTo` **直线弦** ⇒ 逐帧留下一根直线肋骨、绕极成「鱼刺」；必须用 `Path.addArc(rect, 尾迹角, 带符号扫掠角)`，符号即移动方向。
+- ⛔ `Path` **没有** 4 参 `addArc`（带 `forceMoveTo` 的是 `arcTo`）；且 `addArc` 第 2/3 参是**扫掠角**不是终止角（方案原稿两处都写错）。
+- ⛔ 两条门控推理被实测推翻：门控 `allowFramebuffer`（默认 MEDIUM=false）会让效果永远没有拖尾；`needsParticleBudget = false` 才是让 ADV 档三档画质全可选的正确字段（`AppSettings.kt:276`）。
+
+#### 三、地景与确定性
+
+`ridgeYAt` / `ridgeDy` 必须拆成 companion **纯函数**：JVM 单测不允许构造渲染器（字段初始化会建 `Path`/`Paint`/`Bitmap` ⇒ "not mocked"），不拆开就只能退化成源码扫描、失去「反解与 Bernstein 正算逐点对齐 < 1e-3 px」这条最硬的判据。山脊控制点 x 取 1/3 与 2/3 ⇒ `x(t)` 线性、无需求二次根，且「画路径」与「取树根基点」共用同一张表 ⇒ 树根必然落在脊线上。枯枝抖动只用确定性 `hash01`（⛔ 不用 `Math.random()`：否则每次 resize 树都不一样且无法写测）。⛔ 画面无人物剪影（原型两轮判失败后整体删除，`G10` 源码扫描防死代码回流）。
+
+#### ⚠️ 真机验收（V4–V12）尚未进行
+
+仅完成 V1–V3（本机编译 + 单测 + lint），渲染观感未在真机看过。⛔ 最大未量化风险（方案 §九 R1）：API 22 真机（创维 5.1.1 / 2014 ARM CPU）对「两张 ≤0.5MP 双缓冲 + 每帧 2 次全缓冲回绘 + 1 次全屏合成」的填充率缺口从未实测（E18 也从未在真机跑过、无现成数据）；若掉帧兜底是**降缓冲宽度**（960 → 640），⛔ 不是改档位。
+
+> ⚠️ **本节已被 §10.207 取代**：本节的「乒乓缓冲 + `DST_OUT` 衰减」机制已在真机上判失败并整体删除，天幕亦已改为一整片低色差的 3 档垂直渐变（中途试过的「两层 + 虚化平台」结构同样被真机判失败并删除）。读本效果以 **§10.207** 为准。
+
+### 10.207 E42「星空星轨」真机六轮：⭐ 弧机制整体更换 + ⭐ spray 喷溅弧场 + ⭐ 首帧黑屏修复 + ⭐ 天幕改为一整片低色差 3 档渐变（2026-10-02）
+
+**方案**：`docs/archive/starry-sky-visualizer-plan.md`（v1.5，**已归档，⛔ 不再更新**）。**改动**：`renderers/StarrySkyRenderer.kt`、`renderers/StarrySkyTest.kt`（前一轮另有 `fx/ProceduralTexture.kt` 纯新增 `ensureFullscreenOnly` + `fx/ProceduralTextureRecycleTest.kt`）；文档即本节。**门禁**：`testDebugUnitTest` 1596 例 / 147 类 / 0 失败、`lintDebug` 0 Error / 281 Warning、`assembleDebug` 通过。
+
+#### 一、实现方案（六轮真机反馈驱动）
+
+- **弧机制整体更换**：ping-pong 机制在真机上一次暴露**四个**缺陷 —— 过粗（`1.2 + 2.2·amp` dp 画进 **960 宽降采样**缓冲再放大 ~2× ⇒ 屏上 2.4–6.8 dp）、中心**烧成死白**（自转 3.2°/s ≈ 0.1°/帧 ⇒ 每帧新弧与前几十帧**叠在同一角度**，内侧小半径环弧最短、叠得最厚，`BlendMode.Plus` 饱和）、读成**同心虚线**（逐帧短弧 + 指数衰减 ⇒ 老段变暗新段变亮）、**锯齿**（960×540 缓冲最近邻放大到 1920×1080）。四者**同源于架构而非参数** ⇒ `DST_OUT` / `PorterDuffXfermode` / `prevCanvas`·`currCanvas` / `withScale` / `TRAIL_TAU_S` / `decayAlphaFor` / 缓冲三档**整套删除**，换成用户口述的「**用细线画圆，然后线上有一段一段的描出来亮线**」：**Pass A** 64 圈整圈细线底环（`RING_W = 1.0f` dp 恒定、**原生尺寸**位图烘焙、每帧 **1 次** `drawImage` 1:1 直贴）+ **Pass B** 逐柱 `SEG_K = 3` 段首尾相接子弧（`Butt` 端、`BlendMode.Plus`、alpha 自尾向头按 `SEG_GAMMA = 1.6f` 爬升、线宽 `1.0 + 0.8·amp` dp）。⭐ 同一环的子弧相邻不重叠、异环半径互不相同 ⇒ 逐子弧改 alpha **不可能**再同点叠加，这正是死白的根因。`R_INNER_K` `0.055 → 0.10`（中心留暗核）。**✅ 该弧形态已获所有者真机确认（29.7 fps，密度亦被接受）**。
+- ⭐ **spray 喷溅弧场**（回应「分布太均匀 / 亮弧不够多」）：底环 `RING_ALPHA` `0.26 → 0.10`（圆几乎隐去）；新增一层**静态**短弧，每带 `SPRAY_PER_BAND` 条（FULL 6 / LITE 5 / OFF 3 ⇒ **384 / 320 / 192**），参数全由 `(bandIndex, k)` 的确定性哈希给出：半径 ±`SPRAY_RADIUS_JITTER`(0.45)×最近邻间距、**28% 被 `SPRAY_CUTOFF` 剔除 ⇒ 空档**、相位逐弧独立、扫掠 4°–26° 参差、4 色桶。
+- ⭐ **进入黑屏修复（✅ 已确认）**：`ctx.canvasSize` 在 `onEnter` 仍是 `Size.Zero` ⇒ 纹理烘焙必然落在**首帧**上；叠加 `ProceduralTexture.ensure` 一次烘 **6 张**全屏纹理（≈ **1240 万像素** Kotlin 逐像素 + **6480 次** JNI `setPixels`，同步）⇒ 冷启动首帧黑屏。`rebuildGeometry` 改调新增的 `ensureFullscreenOnly(STARFIELD, …)`，**只烘 1 张**；`ensure` 语义一字未动。
+- ⭐ **天幕 = 一整片低色差 3 档垂直渐变**（v1.7，两轮真机打回后的终态）：`0.00 #0A1026` / `0.50 #141E44` / `1.00 #26325C`，**自上而下严格单调、总色差小、底部永不明亮**。v1.6 的「两层 + 虚化平台」11 档结构（`SKY_LAYER_TOP`/`SKY_RAMP_IN`/`SKY_HAZE_A|B|C`/`SKY_RAMP_OUT`/`SKY_LOWER`/`SKY_LOWER_PEAK`/`SKY_TAIL`）连同 `skyHazeSpan`/`skyMaxStep`/`saturationOf`/`skyMeanSaturation`**整套删除**。三条设计契约各有门禁：① 相邻档亮度严格 `>`（无凹陷/无平台/无回落）；② `skyLightRatio` 顶→底比 ≤ `SKY_MAX_LIGHT_RATIO`(3.25)，实测暗版 **3.095×** / 亮版 **2.869×**（旧 11 档 **12.70×**）；③ 山脊以上可见段（`HORIZON_K`→`1.0`）WCAG **线性**亮度 < `SKY_MAX_VISIBLE_LIN`(0.15)，实测最亮 **0.0347**（旧画底 `#8C99E0` 是 **0.3374**）。亮版同 3 位置、相对提亮**自上而下递减**（+18.4%→+13.1%→+9.8%）⇒ 响度大时**上面先亮**。逐帧天幕由 3 次 draw 降到 **2 次** `drawRect`。
+- ⭐ **两处加性层整体删除**（v1.7，比色标表更直接的「海面」来源）：**地平线辉光带**（`BlendMode.Plus`、`alpha 0.42`、色 `#8C99E0`、覆盖 0.59h–0.79h，**横跨地平线**）与**地平线大气纵深**（径向 `Plus`、`alpha 0.18`、中心 `(0.5w, horizonY)`、半径 `0.5h`）。⛔ 不是"调弱"而是"删掉"（`BAND_*`/`HAZE_*` 一并删除）。⛔ **天极辉光保留**（`POLE_GLOW_R_K = 0.40` 不变）—— 它是本效果的识别特征，且背后换成暗天空后才终于干净。
+
+#### 二、⭐ 踩坑（实施期）
+
+- ⛔⛔ **天幕底部的亮带 / 近淡青紫读作「水 / 海面」，而不是天空** —— 本条让天幕返工了**两轮**。9 档与 11 档两版表都把最亮点放在 `#7E88B6…#98A1CE`（线性亮度 0.21–0.37）且集中在画面**下缘** 0.68–0.82，再叠一条横跨地平线的加性亮带 ⇒ 读成「地平线以下一片海」。所有者原话「天空下面是不是一片海？干脆不要了」。⇒ 对「夜空」效果：**亮端必须留在暗部**（现表画底线性 0.0347，比旧画底**暗 11×**），画面里唯一允许的亮部是**天极辉光**。
+- ⛔⛔ **无 shader 红线下，「虚化」在整片渐变里应表达为「总色差小」，⛔ 不是局部色带**。前两轮先后试过「宽而低对比的平台」与「去饱和 + 平坦平台」，真机均判失败（先报「没有带」，后报「太快 / 变化太快」）；真正的要求是**整片天空都渐变、且色差不大**。⇒ 判据从「某个带内每步多小」换成 `skyLightRatio` 顶→底总比值 —— 这也顺带淘汰了前一轮那两个**指标选错**的教训（不能用「最大单步差 ÷ 带总差」的比例：平台在绝对意义上是平的却是最窄的带，除以很小的带总差会把比例抬高，把正确的表判成错的）。
+- ⛔ `ProceduralTexture.ensure` 是**全仓库陷阱**：它一次生成 STARFIELD/PAPER/WATER/CAUSTIC/PLASMA/FOG **全部 6 张**全屏纹理，只用 1 张的效果也在为 5 张永不画的纹理付费。正解是**纯增量**的 `ensureFullscreenOnly(id, w, h)`（同样的 `ensuredW/H` 记账、同样的 `fullKey`、对平铺型 `require` 抛 `IllegalArgumentException`）；⛔ `ensure` 本身、`ensureFullscreen`、`Id` 枚举项与顺序全部一字未动。⚠️ 但它**六行** `ensureFullscreen(Id.X, …)` 的**字面量展开**被 `LightBeamsTest` / `PlasmaFlowTest` 的源码扫描门禁锁死 ⇒ 改成循环会**静默**失效，勿"顺手重构"。
+- ⛔ **spray 必须烘焙**（本设计的命门）：逐帧对 ~320 条弧各调一次 `drawArc` 会把 29.7 fps 直接砍半。正解是「**一条 `Path` 装一个颜色桶的全部弧 + 一次旋转变换画完**」—— 烘焙期 4 次 `Path.addArc`，每帧 **1 次 `withTransform` + 4 次 `drawPath`**；spray 弧是静态的 ⇒ 两种画法**像素等价**，代价低两个数量级。
+- ⛔ Compose 的 `Path.addArc(oval, start, sweep)` **只有 3 参、无 `forceMoveTo`**（`javap` 核对 1.9.3）⇒ 每个弧轮廓前必须显式 `moveTo` 到自己的起点，否则相邻轮廓被直线连起来（= §10.206 的「鱼刺」故障）。⛔ 旋转支点必须是**天极**而非画布中心（spray 弧半径是抖动的、不在同心圆上，绕中心转会把整片场平移出去）。⛔ `hash01`（`sin(i)·43758.5453`）只有约 3e3 个可区分 Float 值，1920 个 `(band,k,n)` 三元组必然碰撞；若真机读作规律重复，**正解是换 32 位整数 hash 而非调参**。⚠️ 附带：`addArc` 收**不可变** `geometry.Rect` ⇒ 烘焙期每弧一次堆分配，与 `PerfBudgetContractTest` 的「带参 `Rect(`」判据冲突 ⇒ 本类零分配判据改为**逐行豁免** `// Perf-exempt`。
+
+#### ⚠️ 真机验收状态
+
+✅ **已获所有者真机确认**：① 进入速度**已无黑屏延迟**（`ensureFullscreenOnly` 生效）；② §10.206 弧形态 29.7 fps、spray 密度被接受；③ 12 帧长曝光的暗蓝观感方向正确。
+⚠️ **进入延迟从来不是 E42 专属**：所有者在同一台机器上复测**其他所有效果同样没有黑屏延迟**，其自测对照为 E42 进入 4084 ms vs Canvas→Canvas 的 E40→E39 4075 ms ⇒ 约 4 s 的基线是**平台/启动**开销（冷启、解码、首帧），**不是**本效果的纹理烘焙。`ensureFullscreenOnly` 仍是正确且值得保留的修复（6 张 → 1 张是实打实的 6× 像素削减），但**不应再被当作黑屏的根因**。
+✅ **已获所有者真机确认并定稿**（2026-10-02）：① 进入速度**已无黑屏延迟**；② spray 弧场密度被接受（「亮弧的密度可以了」）；③ 全新 3 档天幕 + 地平大气层删除后观感获认可（「这个效果特别好，就这样定稿」）。至此 E42 的全部真机验收项闭环。
+
+⛔ `STARFIELD_ALPHA` 保持 **0.55** 未动：`starLayout` 的 `w*h/9000`（密度）在共享的 `fx/ProceduralTexture.kt` 里、⛔ 不可改，而 `STARFIELD_ALPHA` 只是**亮度**旋钮、**改不了密度**；且天幕整体变暗后同时改两个变量会让真机反馈无法归因。
 ### 10.204 v2.38.0 — 数字雨上机四项：暗角染色 / 低画质原生闪退 / 列条合并 / 机内帧率读数（2026-10-01）
 
 **方案**：`docs/visualizer-texture-upgrade-plan.md`（v1.45，§11.3.6 实测记录 P-1 / P-2 / P-3）。**改动文件**：生产 `visualizer/fx/OverlayFx.kt`、`visualizer/renderers/RendererFx.kt`、`visualizer/renderers/AdvancedRenderers.kt`、`ui/components/VisualizerStage.kt`、新增 `visualizer/FpsMeter.kt`；门禁 `MatrixRainTest.kt`（13 → 15 例）、`RendererBaseContractTest.kt`（+2 例）、新增 `FpsMeterTest.kt`（7 例）。**门禁**：`testDebugUnitTest` **1517 例 / 143 类 / 0 失败**，`lintDebug` **0 Error / 281 Warning**（新增代码 0 告警）。
@@ -11503,7 +11572,7 @@ e: OrbitalStarFieldTest.kt:101
 
 **为什么潜伏了 4 个提交**：涉及的 `b8249f6`(T4.5) / `e485b0d`(T4.6) / `848edc9`(T4.8) / `591571f`(T4.10) 全部**未推送** ⇒ CI 从未触发 ⇒ **T4.5 之后所有"免 Gradle 自查全绿"的声明都建立在没编译过的代码上**。
 
-**修法**（`4318019`，仅改函数名、**不动任何断言**）：区间 `..`→`~`、小数与标识符 `.`→`·`、分隔符 `/`→`，`。已确认这些方法名**无任何脚本或其他测试引用**（0 外部命中）。验证器：`logs_temp/scan_illegal_testnames.py`（全量复扫，0 残留）。
+**修法**（`4318019`，仅改函数名、**不动任何断言**）：区间 `..`→`~`、小数与标识符 `.`→`·`、分隔符 `/`→`，`。已确认这些方法名**无任何脚本或其他测试引用**（0 外部命中）。验证器：`docs/archive/verification/scripts/scan_illegal_testnames.py`（全量复扫，0 残留）。
 
 #### 四、教训：免 Gradle 自查不能替代真编译
 

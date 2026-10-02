@@ -60,6 +60,7 @@ class FxCoverageScanTest {
         "HypnoticFunctionRenderer",    // E25 催眠（§B8 暗角 0.44 + 颗粒 0.028）
         "FractalTreeRenderer",         // E34 分形（§B9 暗角 0.48 + 颗粒 0.030）
         "LightBeamsRenderer",          // E35 光轴（§B10 暗角 0.50 + 颗粒 0.030）
+        "StarrySkyRenderer",           // E42 星空星轨（暗角 0.42 + 颗粒 0.026）
     )
 
     // ── 豁免名单：阶段推进时逐条移入 covered（理由必须写明，便于复核） ──
@@ -254,7 +255,7 @@ class FxCoverageScanTest {
     fun `在册渲染器全部有归属 名单无重叠无遗漏`() {
         val decls = rendererDecls()
         assertTrue("扫描到的渲染器类应 > 0（空转自证）", decls.isNotEmpty())
-        assertTrue("渲染器类数应 ≥ 28，实测 ${decls.size}", decls.size >= 28)
+        assertTrue("渲染器类数应 ≥ 29，实测 ${decls.size}", decls.size >= 29)
         // ⛔ 解析器自证：多行构造参数的两个类必须被解析到，否则是"静默漏类"
         for (n in listOf("MoleculeRenderer", "HypnoticFunctionRenderer", "WaterfallRenderer", "PhotoRenderer")) {
             assertTrue("解析器应解析到 $n（漏类会让门禁空转）", decls.any { it.name == n })

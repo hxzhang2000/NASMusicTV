@@ -1,0 +1,1121 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>星空星轨 · Star Trails — Audio Visualizer Preview</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --ink: rgba(16, 20, 38, 0.78);
+    --ink-strong: rgba(13, 16, 30, 0.92);
+    --line: rgba(160, 175, 220, 0.16);
+    --txt: rgba(226, 232, 250, 0.92);
+    --txt-dim: rgba(196, 205, 232, 0.55);
+    --accent: #9FB0E8;
+    --accent-warm: #FFF7EA;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  html, body {
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background: #0A1026;
+    font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI",
+                 "PingFang SC", "Microsoft YaHei", Roboto, "Helvetica Neue", sans-serif;
+    -webkit-font-smoothing: antialiased;
+    cursor: default;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  #stage {
+    position: fixed;
+    inset: 0;
+    display: block;
+  }
+
+  /* ---------- Start overlay ---------- */
+  #overlay {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 14px;
+    background: radial-gradient(120% 120% at 50% 40%, rgba(10,16,38,0.28) 0%, rgba(6,8,20,0.62) 100%);
+    z-index: 20;
+    transition: opacity 0.9s ease, visibility 0.9s ease;
+    cursor: pointer;
+    text-align: center;
+    padding: 24px;
+  }
+  #overlay.hidden { opacity: 0; visibility: hidden; pointer-events: none; }
+
+  #overlay .glyph {
+    font-size: 30px;
+    letter-spacing: 0.4em;
+    color: var(--accent);
+    animation: pulse 3.2s ease-in-out infinite;
+    text-shadow: 0 0 26px rgba(159,176,232,0.55);
+  }
+  #overlay .main {
+    font-size: clamp(19px, 2.6vw, 30px);
+    font-weight: 500;
+    letter-spacing: 0.12em;
+    color: var(--txt);
+    text-shadow: 0 2px 30px rgba(0,0,0,0.6);
+  }
+  #overlay .sub {
+    font-size: clamp(12px, 1.4vw, 14px);
+    letter-spacing: 0.18em;
+    color: var(--txt-dim);
+    text-shadow: 0 1px 12px rgba(0,0,0,0.6);
+  }
+  #overlay .keys {
+    margin-top: 6px;
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+  #overlay .key {
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    color: var(--txt-dim);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 3px 8px;
+    background: rgba(16,20,38,0.5);
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 0.55; transform: scale(1); }
+    50%      { opacity: 1.00; transform: scale(1.06); }
+  }
+
+  /* ---------- Control bar ---------- */
+  #bar {
+    position: fixed;
+    left: 18px;
+    bottom: 18px;
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 9px 11px;
+    border-radius: 12px;
+    background: var(--ink);
+    backdrop-filter: blur(12px) saturate(1.2);
+    -webkit-backdrop-filter: blur(12px) saturate(1.2);
+    border: 1px solid var(--line);
+    box-shadow: 0 8px 32px rgba(0,0,0,0.45);
+  }
+  #bar .dot {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: var(--accent);
+    box-shadow: 0 0 8px var(--accent);
+    flex: 0 0 auto;
+  }
+  #bar .sep {
+    width: 1px; height: 18px;
+    background: var(--line);
+    flex: 0 0 auto;
+  }
+  #bar .label {
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    color: var(--txt-dim);
+    white-space: nowrap;
+  }
+  .btn {
+    appearance: none;
+    background: transparent;
+    border: 1px solid var(--line);
+    color: var(--txt);
+    font-size: 12px;
+    letter-spacing: 0.06em;
+    padding: 6px 12px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background 0.18s ease, border-color 0.18s ease, color 0.18s ease;
+    white-space: nowrap;
+    font-family: inherit;
+  }
+  .btn:hover   { background: rgba(159,176,232,0.14); border-color: rgba(159,176,232,0.5); }
+  .btn.active  {
+    background: rgba(159,176,232,0.22);
+    border-color: var(--accent);
+    color: #fff;
+    box-shadow: 0 0 14px rgba(159,176,232,0.25);
+  }
+  .btn .k {
+    font-size: 10px;
+    color: var(--txt-dim);
+    letter-spacing: 0;
+    margin-left: 4px;
+  }
+  .btn.active .k { color: rgba(226,232,250,0.7); }
+
+  #hint {
+    position: fixed;
+    left: 18px;
+    bottom: 76px;
+    z-index: 10;
+    font-size: 11px;
+    letter-spacing: 0.06em;
+    color: var(--txt-dim);
+    opacity: 0;
+    transition: opacity 0.6s ease;
+    text-shadow: 0 1px 8px rgba(0,0,0,0.6);
+    pointer-events: none;
+  }
+  #hint.show { opacity: 1; }
+</style>
+</head>
+<body>
+
+<canvas id="stage"></canvas>
+
+<div id="overlay">
+  <div class="glyph">✦ ✧ ✦</div>
+  <div class="main">点击开始 · Tap to start</div>
+  <div class="sub">长曝光星轨音频可视化 · long-exposure star trails</div>
+  <div class="keys">
+    <span class="key">D · 演示</span>
+    <span class="key">M · 麦克风</span>
+    <span class="key">Space · 旋转</span>
+  </div>
+</div>
+
+<div id="bar">
+  <span class="dot"></span>
+  <span class="label" id="srcLabel">演示 Demo</span>
+  <span class="sep"></span>
+  <button class="btn active" id="btnDemo">演示<span class="k">D</span></button>
+  <button class="btn" id="btnMic">麦克风<span class="k">M</span></button>
+  <span class="sep"></span>
+  <button class="btn" id="btnPause">暂停旋转<span class="k">Space</span></button>
+</div>
+
+<div id="hint"></div>
+
+<script>
+(function () {
+  'use strict';
+
+  /* ============================================================
+   * 参数（与 Android TV 效果规格一致 —— 勿改物理 / 调色板）
+   * ============================================================ */
+
+  const POLE_FRAC = { x: 0.70, y: 0.52 };      // 天极（横屏，右偏）
+  const ROT_SPEED_DEG = 3.2;                    // 整体自转 度/秒（时间基准，帧率无关）
+  const TRAIL_TAU      = 0.75;                  // 轨迹累积衰减时间常数（秒）
+  const FLARE_TAU      = 0.18;                  // 拍点极光衰减时间常数（秒）
+  const MAX_SWEEP_DEG  = 46.0;                  // 满幅扫掠角
+  const SILENCE_FLOOR  = 0.012;                 // 静音阈值（低于此 → 扫掠角为 0）
+  const NBANDS         = 64;                    // 频带数
+  const RINNER_FRAC    = 0.055;                 // 内半径 ≈ min(w,h) 的 5.5%
+  const ROUTER_FRAC    = 0.78;                  // 外半径 ≈ min(w,h) 的 78%
+  const POW_BIAS       = 0.72;                  // 半径映射指数 t^0.72（向天极聚拢）
+  const ATTACK_S       = 0.025;                 // 包络起音（快）
+  const RELEASE_S      = 0.24;                  // 包络释音（慢 → 平滑尾迹）
+
+  const C_TOP    = hex('#0A1026');
+  const C_UPPER  = hex('#16255A');
+  const C_MID    = hex('#2C3E82');
+  const C_LOWER  = hex('#56659F');
+  const C_GLOW   = hex('#8D97C6');
+  const C_GROUND = hex('#0B0B12');
+  const C_TRAIL_CORE = hex('#FFF7EA');           // 内圈暖白
+  const C_TRAIL_OUT  = hex('#8FA4DF');           // 外圈冷蓝
+  const C_POLE       = hex('#9FB0E8');           // 极光浅紫蓝
+
+  /* ============================================================
+   * 工具
+   * ============================================================ */
+  function hex(h) {
+    const n = parseInt(h.slice(1), 16);
+    return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+  }
+  function css(c, a) {
+    a = (a == null) ? 1 : a;
+    return 'rgba(' + c[0] + ',' + c[1] + ',' + c[2] + ',' + a + ')';
+  }
+  function mix(c1, c2, t) {
+    return [
+      c1[0] + (c2[0] - c1[0]) * t,
+      c1[1] + (c2[1] - c1[1]) * t,
+      c1[2] + (c2[2] - c1[2]) * t
+    ];
+  }
+  function clamp(v, a, b) { return v < a ? a : (v > b ? b : v); }
+  function lerp(a, b, t) { return a + (b - a) * t; }
+
+  /* ============================================================
+   * DOM
+   * ============================================================ */
+  const canvas = document.getElementById('stage');
+  const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('Canvas 2D not supported');
+
+  const overlay    = document.getElementById('overlay');
+  const bar        = document.getElementById('bar');
+  const btnDemo    = document.getElementById('btnDemo');
+  const btnMic     = document.getElementById('btnMic');
+  const btnPause   = document.getElementById('btnPause');
+  const srcLabel   = document.getElementById('srcLabel');
+  const hintEl     = document.getElementById('hint');
+
+  /* ============================================================
+   * 状态
+   * ============================================================ */
+  let mode = 'demo';               // 'demo' | 'mic'
+  let started = false;             // 用户是否点击过（解锁音频）
+  let paused = false;              // 是否暂停旋转
+
+  // 几何（resize 时重算）
+  let G = null;
+  // 离屏累积画布（轨迹）
+  let acc = null;
+  let accCtx = null;
+  // 缓存的静态背景 & 前景
+  let skyCanvas = null, silCanvas = null, vignCanvas = null, noiseCanvas = null, noisePattern = null;
+  let brightGrad = null, poleGrad = null;
+
+  // 音频
+  let audioCtx = null;
+  let analyser = null;
+  let freqU8 = null;
+  let demoAudio = null;           // 演示音频节点集合
+  const bandBuf = new Float32Array(NBANDS);      // 原始频带功率 0..1
+  const envBuf  = new Float32Array(NBANDS);      // 平滑包络 0..1
+  const bandRad = new Float32Array(NBANDS);      // 每带半径
+  const bandCos = new Float32Array(NBANDS);      // 每带固定方位角 cos
+  const bandSin = new Float32Array(NBANDS);
+
+  // 静态星空
+  let stars = [];
+  // 流星
+  let meteors = [];
+  // 拍点检测
+  let beatEnergyAvg = 0;
+  let lastBeatAt = -10;
+  let flare = 0;
+
+  // 旋转累积角（rad）
+  let rotRad = 0;
+
+  /* ============================================================
+   * 几何 & 缓存重建
+   * ============================================================ */
+  const dpr = Math.min(1.5, window.devicePixelRatio || 1);
+
+  function computeGeometry() {
+    const w = canvas.width;
+    const h = canvas.height;
+
+    const minDim = Math.min(w, h);
+    const aspect = w / h;
+
+    // 横屏强度：宽 → 1，窄/方 → 0（把天极向中心收）
+    const ls = clamp((aspect - 1.0) / 0.8, 0, 1);
+    const px = w * lerp(0.5, POLE_FRAC.x, ls);
+    const py = h * lerp(0.5, POLE_FRAC.y, ls);
+
+    const rInner = RINNER_FRAC * minDim;
+    let rOuter = ROUTER_FRAC * minDim;
+    // 竖屏 / 近方形：收紧外半径，避免星轨飞出屏
+    if (aspect < 1.4) {
+      const room = Math.max(Math.max(px, w - px), Math.max(py, h - py));
+      rOuter = Math.min(rOuter, Math.max(rInner + 1, room * 0.96));
+    }
+
+    const horizonY = h * 0.75;   // 地平线（底部约 1/4 是剪影）
+
+    G = { w, h, px, py, rInner, rOuter, horizonY, aspect, ls };
+
+    // 每带半径 + 固定方位角（稳定伪随机，跨帧不变）
+    const rng = mulberry(1337);
+    for (let i = 0; i < NBANDS; i++) {
+      const t = i / (NBANDS - 1);
+      bandRad[i] = rInner + (rOuter - rInner) * Math.pow(t, POW_BIAS);
+      const a = rng() * Math.PI * 2;
+      bandCos[i] = Math.cos(a);
+      bandSin[i] = Math.sin(a);
+    }
+
+    buildSkyCache();
+    buildSilhouetteCache();
+    buildVignetteCache();
+    buildNoiseCache();
+    buildPoleGradient();
+    buildAccumulation();
+    regenStars();
+  }
+
+  function mulberry(seed) {
+    let a = seed >>> 0;
+    return function () {
+      a |= 0; a = (a + 0x6D2B79F5) | 0;
+      let t = Math.imul(a ^ (a >>> 15), 1 | a);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+
+  /* ---------- 天空（渐变 + 地平线辉光带） ---------- */
+  function buildSkyCache() {
+    const w = G.w, h = G.h, horizonY = G.horizonY;
+
+    skyCanvas = skyCanvas || document.createElement('canvas');
+    skyCanvas.width = w; skyCanvas.height = h;
+    const s = skyCanvas.getContext('2d');
+
+    // 垂直天空渐变
+    const g = s.createLinearGradient(0, 0, 0, h);
+    g.addColorStop(0.00, css(C_TOP));
+    g.addColorStop(0.34, css(C_UPPER));
+    g.addColorStop(0.56, css(C_MID));
+    g.addColorStop(0.76, css(C_LOWER));
+    g.addColorStop(0.88, css(C_GLOW));
+    g.addColorStop(1.00, css(C_GLOW));
+    s.fillStyle = g;
+    s.fillRect(0, 0, w, h);
+
+    // 地平线 periwinkle 辉光带（叠加，柔和）
+    const band = s.createLinearGradient(0, horizonY - h * 0.16, 0, horizonY + h * 0.04);
+    band.addColorStop(0.0, css(C_GLOW, 0));
+    band.addColorStop(0.55, css(C_GLOW, 0.42));
+    band.addColorStop(1.0, css(C_GLOW, 0.0));
+    s.globalCompositeOperation = 'screen';
+    s.fillStyle = band;
+    s.fillRect(0, horizonY - h * 0.16, w, h * 0.20);
+    s.globalCompositeOperation = 'source-over';
+
+    // 亮度抬升渐变（响度驱动，'lighter' 叠加）
+    brightGrad = ctx.createLinearGradient(0, 0, 0, h);
+    brightGrad.addColorStop(0.00, css(mix(C_TOP, C_UPPER, 0.0), 0.0));
+    brightGrad.addColorStop(0.55, css(mix(C_MID, C_GLOW, 0.25), 0.0));
+    brightGrad.addColorStop(0.80, css(mix(C_LOWER, C_GLOW, 0.55), 0.55));
+    brightGrad.addColorStop(0.94, css(C_GLOW, 0.85));
+    brightGrad.addColorStop(1.00, css(C_GLOW, 0.0));
+  }
+
+  /* ---------- 地面剪影（起伏山脊 + 枯树） ---------- */
+  function buildSilhouetteCache() {
+    const w = G.w, h = G.h, horizonY = G.horizonY;
+
+    silCanvas = silCanvas || document.createElement('canvas');
+    silCanvas.width = w; silCanvas.height = h;
+    const s = silCanvas.getContext('2d');
+
+    /* --- 山脊定义 ---
+       每段是一段三次贝塞尔，两个控制点的 x 固定取 1/3、2/3，
+       于是 x(t) 关于 t 线性（x = x0 + (x1-x0)t），ridgeY 无需求二次方程根，
+       路径与「取点」用的是同一组控制点，树根必然落在脊线上。
+       y 均为相对 horizonY 的 h 倍数，负值 = 更靠上（山脊更高）。 */
+    const RIDGE = [
+      // x0    x1    y0      c1      c2      y1
+      { x0: 0.00, x1: 0.30, y0:  0.014, c1:  0.006, c2: -0.014, y1: -0.020 }, // 左坡 -> 树下的脊顶
+      { x0: 0.30, x1: 0.60, y0: -0.020, c1: -0.014, c2:  0.024, y1:  0.026 }, // 中部下凹
+      { x0: 0.60, x1: 1.00, y0:  0.026, c1:  0.018, c2: -0.002, y1: -0.006 }  // 右侧再度抬升
+    ];
+    const ridgeY = (x) => {
+      const u = x / w;                       // 归一化到 0..1
+      let g = RIDGE[RIDGE.length - 1];
+      for (let i = 0; i < RIDGE.length; i++) {
+        if (u <= RIDGE[i].x1) { g = RIDGE[i]; break; }
+      }
+      const t = clamp((u - g.x0) / (g.x1 - g.x0), 0, 1);
+      const k = 1 - t;
+      const dy = k * k * k * g.y0 + 3 * k * k * t * g.c1 + 3 * k * t * t * g.c2 + t * t * t * g.y1;
+      return horizonY + dy * h;
+    };
+
+    s.fillStyle = css(C_GROUND);
+    s.beginPath();
+    s.moveTo(0, horizonY + RIDGE[0].y0 * h);
+    for (let i = 0; i < RIDGE.length; i++) {
+      const g = RIDGE[i];
+      const dx = g.x1 - g.x0;
+      s.bezierCurveTo(
+        (g.x0 + dx / 3) * w, horizonY + g.c1 * h,
+        (g.x0 + dx * 2 / 3) * w, horizonY + g.c2 * h,
+        g.x1 * w, horizonY + g.y1 * h
+      );
+    }
+    s.lineTo(w, h + 2);
+    s.lineTo(0, h + 2);
+    s.closePath();
+    s.fill();
+
+    /* --- 确定性伪随机（供枯枝抖动使用；剪影需在 resize 后完全可复现） --- */
+    const hash = (i) => { const v = Math.sin(i * 12.9898) * 43758.5453; return v - Math.floor(v); }; // 0..1
+
+    /* ================= 枯树（落叶、光秃、虬枝） ================= */
+    const th = h * 0.40;                     // 树高
+    // 树心 = 「外圈星环最左端」与左边框的中点，即把树放到环外左侧的空天上。
+    // 两个边界条件：
+    //  a) 窄画幅下 G.rOuter 相对 w 很大，星环本身已越过左边界，中点会变成负值；
+    //  b) 枝条会从树心向左伸出约 TREE_BRANCH_REACH，若树心太靠左，枝尖会贴边甚至出画。
+    // 故取二者与「枝尖 + 边框余量」的下界中的较大者。
+    const ringLeft = G.px - G.rOuter;
+    const TREE_BRANCH_REACH = h * 0.196;    // 实测最左枝尖伸出树心的距离
+    const TREE_EDGE_GAP = w * 0.025;         // 枝尖与左边框之间至少保留的空隙
+    const treeX = Math.max(ringLeft * 0.5, TREE_BRANCH_REACH + TREE_EDGE_GAP);
+    const treeBase = ridgeY(treeX) + 2;       // 树根略埋入脊线
+    const splitY = treeBase - th * 0.40;      // 分叉高度
+    const midY = treeBase + (splitY - treeBase) * 0.5;
+    // 顶端整体左倾，且中段控制点比线性中点更偏左 => 树干微弓
+    const leanTop = -th * 0.050;
+    const leanMid = leanTop * 0.38;
+    // 根部外扩；中段控制半宽刻意大于线性中点 => 下粗上细的强烈收分
+    const hwBase = h * 0.032, hwMid = h * 0.026, hwTop = h * 0.011;
+
+    s.fillStyle = css(C_GROUND);
+    s.beginPath();
+    s.moveTo(treeX - hwBase, treeBase);
+    s.quadraticCurveTo(treeX + leanMid - hwMid, midY, treeX + leanTop - hwTop, splitY);
+    s.quadraticCurveTo(treeX + leanTop, splitY - h * 0.003, treeX + leanTop + hwTop, splitY); // 叉口略收
+    s.quadraticCurveTo(treeX + leanMid + hwMid, midY, treeX + hwBase, treeBase);
+    s.closePath();
+    s.fill();
+
+    /* 一节裸枝：沿 ang 方向（0 = 竖直向上，正 = 顺时针）画 len 长，分 4 段描边。
+       每段：轻微随机抖动 + 向竖直方向收回 —— 前者出虬结，后者让枝条一路向上扬，
+       避免出现向外下垂的「蜘蛛腿」。depth > 0 时在末端分叉出两条更细的子枝。 */
+    s.strokeStyle = css(C_GROUND);
+    s.lineCap = 'round';
+    s.lineJoin = 'round';
+    const drawLimb = (x0, y0, ang, len, wd, depth, seed, curl) => {
+      const SEG = 4;
+      let px = x0, py = y0, a = ang;
+      for (let i = 0; i < SEG; i++) {
+        const sl = len / SEG;
+        a += curl * (hash(seed * 7 + i) - 0.5) * 0.7;   // 抖动
+        a *= 0.90;                                       // 向竖直收回
+        const ex = px + Math.sin(a) * sl;
+        const ey = py - Math.cos(a) * sl;
+        const mx = (px + ex) / 2, my = (py + ey) / 2;
+        const bow = sl * 0.18 * (hash(seed * 13 + i) - 0.5) * 2; // 沿法向偏移中点 -> 段成弧
+        s.beginPath();
+        s.moveTo(px, py);
+        s.quadraticCurveTo(mx + Math.cos(a) * bow, my + Math.sin(a) * bow, ex, ey);
+        s.lineWidth = Math.max(0.7, wd * (1 - (i / SEG) * 0.72));
+        s.stroke();
+        px = ex; py = ey;
+      }
+      if (depth > 0) {
+        const spread = 0.42 + hash(seed * 5) * 0.20;            // 分叉张角 ≈ 24°..36°
+        const cl = len * 0.58;
+        drawLimb(px, py, a - spread, cl, wd * 0.58, depth - 1, seed * 3 + 1, curl * 1.2);
+        drawLimb(px, py, a + spread, cl * 0.86, wd * 0.52, depth - 1, seed * 3 + 2, curl * 1.2);
+      }
+    };
+
+    /* 5 条主枝：角度 / 长度 / 出枝高度都刻意不对称（3 左 2 右，整体左倾）。
+       出枝点沿树干下移，低位侧枝才不会全部挤在同一个叉口上。 */
+    const bw = h * 0.012;                            // 主枝起始粗细
+    const limbs = [
+      // 角度(度)  长度系数  分叉层数  种子   出枝点（0 = 叉口，1 = 树根）
+      { deg:  20, len: 0.95, depth: 0, seed: 11, at: 0.00 },   // 偏左的顶梢（最高）
+      { deg:  36, len: 0.80, depth: 1, seed: 23, at: 0.00 },   // 主左枝，二次分叉
+      { deg: -44, len: 0.66, depth: 1, seed: 37, at: 0.05 },   // 主右枝，二次分叉
+      { deg:  54, len: 0.34, depth: 0, seed: 51, at: 0.48 },   // 低伏的左扫枝（半腰出）
+      { deg: -32, len: 0.30, depth: 0, seed: 67, at: 0.66 }    // 低伏的右扫枝（近根出）
+    ];
+    for (let i = 0; i < limbs.length; i++) {
+      const L = limbs[i];
+      const a = L.deg * Math.PI / 180;
+      // 沿树干曲线插值出枝点（叉口 -> 树根），再沿枝向内埋一点，保证无缝
+      const t = L.at;
+      const ox = (treeX + leanTop) * (1 - t) + treeX * t - Math.sin(a) * h * 0.010;
+      const oy = (splitY) * (1 - t) + treeBase * t + Math.cos(a) * h * 0.010;
+      const budget = oy - (treeBase - th);           // 该出枝点以上、树顶以下的可用上升高度
+      drawLimb(ox, oy, a, budget * L.len, bw, L.depth, L.seed, 0.42);
+    }
+  }
+
+  /* ---------- 暗角 ---------- */
+  function buildVignetteCache() {
+    const w = G.w, h = G.h;
+    vignCanvas = vignCanvas || document.createElement('canvas');
+    vignCanvas.width = w; vignCanvas.height = h;
+    const s = vignCanvas.getContext('2d');
+    const cx = w * 0.42, cy = h * 0.46;  // 中心略偏天极
+    const r = Math.hypot(w, h) * 0.62;
+    const g = s.createRadialGradient(cx, cy, r * 0.42, cx, cy, r * 1.05);
+    g.addColorStop(0.0, 'rgba(0,0,0,0)');
+    g.addColorStop(0.72, 'rgba(0,0,0,0.10)');
+    g.addColorStop(1.0, 'rgba(0,0,0,0.42)');
+    s.fillStyle = g;
+    s.fillRect(0, 0, w, h);
+  }
+
+  /* ---------- 胶片颗粒（噪声瓦片，随机偏移） ---------- */
+  function buildNoiseCache() {
+    const N = 256;
+    noiseCanvas = noiseCanvas || document.createElement('canvas');
+    noiseCanvas.width = N; noiseCanvas.height = N;
+    const s = noiseCanvas.getContext('2d');
+    const img = s.createImageData(N, N);
+    const d = img.data;
+    for (let i = 0; i < d.length; i += 4) {
+      const v = (Math.random() * 255) | 0;
+      const n = 128 + (v - 128) * 0.55;
+      d[i] = n; d[i + 1] = n; d[i + 2] = n; d[i + 3] = 255;
+    }
+    s.putImageData(img, 0, 0);
+    noisePattern = ctx.createPattern(noiseCanvas, 'repeat');
+  }
+
+  /* ---------- 极光渐变 ---------- */
+  function buildPoleGradient() {
+    const r = Math.max(1, G.rOuter);
+    poleGrad = ctx.createRadialGradient(G.px, G.py, 0, G.px, G.py, r);
+    poleGrad.addColorStop(0.00, css(C_POLE, 1.0));
+    poleGrad.addColorStop(0.20, css(C_POLE, 0.55));
+    poleGrad.addColorStop(0.55, css(C_POLE, 0.16));
+    poleGrad.addColorStop(1.00, css(C_POLE, 0.0));
+  }
+
+  /* ---------- 累积画布 ---------- */
+  function buildAccumulation() {
+    acc = acc || document.createElement('canvas');
+    acc.width = G.w; acc.height = G.h;
+    accCtx = acc.getContext('2d');
+    accCtx.clearRect(0, 0, G.w, G.h);
+  }
+
+  /* ---------- 静态星空 ---------- */
+  function regenStars() {
+    const rng = mulberry(20260909);
+    const N = Math.round(clamp((G.w * G.h) / 5200, 140, 520));
+    stars = new Array(N);
+    const maxR = Math.hypot(G.w, G.h);
+    for (let i = 0; i < N; i++) {
+      const ang = rng() * Math.PI * 2;
+      const rr = Math.sqrt(rng()) * maxR * 0.98;  // 越靠外越稀疏
+      // 丢掉地平面以下的星（留一点余量）
+      const x = G.px + Math.cos(ang) * rr;
+      const y = G.py + Math.sin(ang) * rr;
+      if (y > G.horizonY) { i--; continue; }
+      stars[i] = {
+        ang: ang,
+        r: rr,
+        size: 0.4 + rng() * 1.15,
+        base: 0.25 + rng() * 0.65,
+        phase: rng() * Math.PI * 2,
+        speed: 0.4 + rng() * 1.2,
+        warm: rng()           // 少量暖星
+      };
+    }
+  }
+
+  /* ============================================================
+   * 音频源
+   * ============================================================ */
+  function ensureAudioCtx() {
+    if (audioCtx) return;
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return;
+    audioCtx = new AC();
+    analyser = audioCtx.createAnalyser();
+    analyser.fftSize = 1024;
+    analyser.smoothingTimeConstant = 0.72;
+    freqU8 = new Uint8Array(analyser.frequencyBinCount);
+  }
+
+  function makeNoiseBuffer(ctx) {
+    const len = ctx.sampleRate * 1.5;
+    const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+    return buf;
+  }
+
+  /* ---------- 演示：合成 OSC + 噪声 + 拍点 ---------- */
+  function startDemoAudio() {
+    stopMic();
+    ensureAudioCtx();
+    if (!audioCtx) return;
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    if (demoAudio) return;
+
+    const c = audioCtx;
+    demoAudio = {};
+    const t = c.currentTime;
+
+    // 低音（锯齿）
+    const bass = c.createOscillator(); bass.type = 'sawtooth'; bass.frequency.value = 55;
+    const bassG = c.createGain(); bassG.gain.value = 0.10;
+    bass.connect(bassG);
+    // 底鼓（正弦，短促）
+    const kick = c.createOscillator(); kick.type = 'sine'; kick.frequency.value = 60;
+    const kickG = c.createGain(); kickG.gain.value = 0.0;
+    kick.connect(kickG);
+    // 高音琶音（方形）
+    const arp = c.createOscillator(); arp.type = 'triangle'; arp.frequency.value = 440;
+    const arpG = c.createGain(); arpG.gain.value = 0.05;
+    arp.connect(arpG);
+    // 噪声（带通 → 亮/沙沙）
+    const noise = c.createBufferSource(); noise.buffer = makeNoiseBuffer(c); noise.loop = true;
+    const nf = c.createBiquadFilter(); nf.type = 'bandpass'; nf.frequency.value = 3200; nf.Q.value = 0.9;
+    const noiseG = c.createGain(); noiseG.gain.value = 0.035;
+    noise.connect(nf); nf.connect(noiseG);
+
+    const master = c.createGain(); master.gain.value = 0.85;
+    bassG.connect(master); kickG.connect(master); arpG.connect(master); noiseG.connect(master);
+    master.connect(analyser);
+    analyser.connect(c.destination);
+
+    bass.start(); kick.start(); arp.start(); noise.start();
+
+    demoAudio = { bass, bassG, kick, kickG, arp, arpG, nf, noiseG, master };
+  }
+
+  function stopDemoAudio() {
+    if (!demoAudio) return;
+    try {
+      Object.values(demoAudio).forEach((n) => {
+        try { if (n.stop && !n.master) n.stop(); } catch (e) {}
+      });
+      demoAudio.master.disconnect();
+      if (analyser) analyser.disconnect();
+    } catch (e) {}
+    demoAudio = null;
+  }
+
+  /* ---------- 麦克风 ---------- */
+  let micStream = null;
+
+  function startMic() {
+    ensureAudioCtx();
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      showHint('麦克风不可用：请用 localhost 或 HTTPS 打开');
+      return;
+    }
+    stopDemoAudio();
+    stopMic();
+    navigator.mediaDevices.getUserMedia({ audio: true, video: false })
+      .then((stream) => {
+        micStream = stream;
+        ensureAudioCtx();
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+        const src = audioCtx.createMediaStreamSource(stream);
+        src.connect(analyser);
+        // 不连输出 → 无回授；仅喂分析器
+      })
+      .catch((err) => {
+        micStream = null;
+        showHint('麦克风被拒绝或不可用（file:// 下常需 HTTPS/localhost）');
+      });
+  }
+
+  function stopMic() {
+    if (micStream) {
+      try { micStream.getTracks().forEach((tr) => tr.stop()); } catch (e) {}
+      micStream = null;
+    }
+  }
+
+  /* ---------- 频带读取 ---------- */
+  function demoMusic(t, out) {
+    const bpm = 116;
+    const beat = 60 / bpm;
+    const ph = (t % beat) / beat;                 // 0..1 拍内相位
+    const barIdx = Math.floor(t / (beat * 4)) % 4;
+    const kick = ph < 0.10 ? (1 - ph / 0.10) : 0; // 底鼓脉冲
+
+    // 低音跐点（每小节移一次，含一个上行的低音）
+    const bassCenter = 3 + (barIdx === 2 ? 1.6 : 0);
+
+    // 高音琶音（16 分音符阶梯）
+    const step = Math.floor(t / (beat / 4)) % 16;
+    const ladder = [0, 4, 7, 12, 7, 4, 7, 12, 0, 4, 7, 12, 14, 12, 7, 4];
+    const arpBand = 32 + ladder[step];
+    const arpEnv = 0.42 + 0.28 * Math.sin(t * 11.3);
+
+    const shimmer = 0.5 + 0.5 * Math.sin(t * 1.7);
+
+    for (let i = 0; i < NBANDS; i++) {
+      let v = 0.006; // 噪声底（低于静音阈值 → 干净留白）
+      v += 0.55 * Math.exp(-Math.pow((i - bassCenter) / 3.4, 2)) * (0.45 + 0.55 * Math.max(kick * 1.4, 0.25));
+      v += kick * 0.95 * Math.exp(-Math.pow((i - 2) / 2.1, 2));
+      v += arpEnv * 0.62 * Math.exp(-Math.pow((i - arpBand) / 1.9, 2));
+      v += shimmer * 0.30 * Math.exp(-Math.pow((i - 54) / 6.5, 2));
+      out[i] = v > 1 ? 1 : v;
+    }
+  }
+
+  function analyserBands(out) {
+    if (!analyser) { out.fill(0); return; }
+    analyser.getByteFrequencyData(freqU8);
+    const binCount = freqU8.length;
+    const sr = audioCtx.sampleRate;
+    const binHz = sr / (binCount * 2);
+    const f0 = 40, f1 = 12000;
+    for (let b = 0; b < NBANDS; b++) {
+      const lo = f0 * Math.pow(f1 / f0, b / NBANDS);
+      const hi = f0 * Math.pow(f1 / f0, (b + 1) / NBANDS);
+      let i0 = Math.floor(lo / binHz);
+      let i1 = Math.ceil(hi / binHz);
+      if (i0 > i1) { const t = i0; i0 = i1; i1 = t; }
+      i0 = clamp(i0, 0, binCount - 1);
+      i1 = clamp(i1, 0, binCount - 1);
+      let sum = 0, n = 0;
+      for (let i = i0; i <= i1; i++) { sum += freqU8[i]; n++; }
+      const v = n ? sum / (n * 255) : 0;
+      // 对数压缩增强动态范围
+      out[b] = v;
+    }
+  }
+
+  function deriveBands(t) {
+    if (mode === 'demo') {
+      demoMusic(t, bandBuf);
+      // 若真正音频已启动，同步小幅度补上 OSC 参数（可选，视觉不受影响）
+      if (demoAudio) updateDemoParams(t);
+    } else {
+      if (analyser) analyserBands(bandBuf);
+      else bandBuf.fill(0);
+    }
+  }
+
+  function updateDemoParams(t) {
+    if (!demoAudio) return;
+    const d = demoAudio;
+    const bpm = 116, beat = 60 / bpm;
+    try {
+      const barIdx = Math.floor(t / (beat * 4)) % 4;
+      const bassHz = [55, 55, 65.4, 55][barIdx];
+      d.bass.frequency.setTargetAtTime(bassHz, audioCtx.currentTime, 0.03);
+      const ph = (t % beat) / beat;
+      const kick = ph < 0.10 ? (1 - ph / 0.10) : 0;
+      d.kickG.gain.setTargetAtTime(kick * 0.9, audioCtx.currentTime, 0.02);
+    } catch (e) {}
+  }
+
+  /* ============================================================
+   * 包络 / 拍点 / 响度
+   * ============================================================ */
+  let loudness = 0;
+
+  function processEnvelope(dt) {
+    // 每带平滑包络（起音快 / 释音慢）
+    const ka = 1 - Math.exp(-dt / ATTACK_S);
+    for (let i = 0; i < NBANDS; i++) {
+      const a = bandBuf[i];
+      if (a < envBuf[i]) {
+        // 目标在下：指数向目标收敛（平滑尾迹）
+        envBuf[i] = a + (envBuf[i] - a) * Math.exp(-dt / RELEASE_S);
+      } else {
+        // 目标在上：快速起音
+        envBuf[i] += (a - envBuf[i]) * ka;
+      }
+    }
+
+    // 整体响度（低频加权）
+    let sum = 0, wsum = 0;
+    for (let i = 0; i < NBANDS; i++) {
+      const w = 1.05 - i / NBANDS * 0.5; // 低频略重
+      sum += envBuf[i] * w;
+      wsum += w;
+    }
+    const target = sum / wsum;
+    const kl = 1 - Math.exp(-dt / 0.09);
+    loudness += (target - loudness) * kl;
+
+    // 拍点检测（低频瞬态能量突增）
+    let bass = 0;
+    for (let i = 0; i < 8; i++) bass += envBuf[i];
+    bass /= 8;
+    beatEnergyAvg = beatEnergyAvg * (1 - kl * 0.4) + bass * (kl * 0.4);
+    if (bass > beatEnergyAvg * 1.55 + 0.006 && (performance.now() / 1000 - lastBeatAt) > 0.24) {
+      lastBeatAt = performance.now() / 1000;
+      onBeat();
+    }
+  }
+
+  function onBeat() {
+    flare = 1.0;
+    // 生成 3~6 颗切向流星
+    const n = 3 + Math.floor(Math.random() * 4);
+    const now = performance.now() / 1000;
+    for (let i = 0; i < n; i++) {
+      const r = G.rInner + Math.random() * (G.rOuter - G.rInner);
+      // 沿星轨圆切线方向高速抛射
+      const ang = Math.random() * Math.PI * 2;
+      const dir = Math.random() < 0.5 ? 1 : -1;
+      meteors.push({
+        r: r,
+        ang: ang,
+        dir: dir,
+        speed: (1.6 + Math.random() * 2.6) * (G.rOuter / r), // 切线角速度（近天极者稍快）
+        len: 0.12 + Math.random() * 0.22,
+        age: 0,
+        life: 0.28 + Math.random() * 0.30,
+        warm: Math.random() < 0.35,
+      });
+    }
+    // 精简：上限
+    if (meteors.length > 40) meteors.splice(0, meteors.length - 40);
+  }
+
+  /* ============================================================
+   * 渲染
+   * ============================================================ */
+  function drawArc(i, sweep) {
+    if (sweep <= 0.0006) return;
+    const r = bandRad[i];
+    const t = i / (NBANDS - 1);
+    const a = clamp(sweep / (MAX_SWEEP_DEG * Math.PI / 180), 0, 1); // 归一化幅度
+    const col = mix(C_TRAIL_CORE, C_TRAIL_OUT, Math.pow(t, 0.55));
+
+    // 弧中心角 = 固定方位 + 旋转；扫掠角 = sweep
+    const ang = Math.atan2(bandSin[i], bandCos[i]) + rotRad;
+    const start = ang - sweep / 2;
+    const end = ang + sweep / 2;
+
+    accCtx.strokeStyle = css(col, clamp(a * 0.85, 0.0, 1.0));
+    accCtx.lineWidth = 0.6 + a * 2.7;
+    accCtx.lineCap = 'round';
+    accCtx.beginPath();
+    accCtx.arc(G.px, G.py, r, start, end, false);
+    accCtx.stroke();
+  }
+
+  function drawMeteors(dt) {
+    const now = performance.now() / 1000;
+    // 更新
+    for (let i = meteors.length - 1; i >= 0; i--) {
+      const m = meteors[i];
+      m.age += dt;
+      m.ang += m.dir * m.speed * dt;
+      m.r += m.dir * m.speed * m.r * 0.10 * dt; // 轻微外漂
+      if (m.age >= m.life) { meteors.splice(i, 1); continue; }
+    }
+    // 画进累积缓冲（自然随轨迹一起衰减）
+    for (let i = 0; i < meteors.length; i++) {
+      const m = meteors[i];
+      const fade = 1 - m.age / m.life;
+      const arcLen = m.len * m.r;
+      const a0 = m.ang;
+      const tail = a0 - m.dir * arcLen / m.r;   // 尾迹角：位于头角之后
+      const col = m.warm ? C_TRAIL_CORE : mix(C_TRAIL_CORE, C_POLE, 0.5);
+      accCtx.strokeStyle = css(col, fade * 0.85);
+      accCtx.lineWidth = 1.0 + fade * 1.6;
+      accCtx.lineCap = 'round';
+      // 沿同一圆画短弧（而非直线弦）——逐帧累积后得到连续弯曲的流线
+      accCtx.beginPath();
+      accCtx.arc(G.px, G.py, m.r, Math.min(a0, tail), Math.max(a0, tail), m.dir < 0);
+      accCtx.stroke();
+    }
+  }
+
+  let lastT = performance.now() / 1000;
+  let grainX = 0, grainY = 0;
+
+  function frame(nowMs) {
+    const now = nowMs / 1000;
+    let dt = now - lastT;
+    lastT = now;
+    if (dt <= 0) dt = 1 / 60;
+    if (dt > 0.1) dt = 0.1;   // 标签页切回不跳变
+
+    // 读取频带（演示合成 / 麦克风分析器，二者共用同一 bandBuf）
+    deriveBands(now);
+    processEnvelope(dt);
+
+    // 旋转角（可暂停，时间基准 → 帧率无关）
+    if (!paused) rotRad += (ROT_SPEED_DEG * Math.PI / 180) * dt;
+
+    // 拍点极光衰减
+    flare *= Math.exp(-dt / FLARE_TAU);
+
+    const w = G.w, h = G.h;
+
+    // 1) 天空底
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.globalAlpha = 1;
+    ctx.drawImage(skyCanvas, 0, 0);
+
+    // 2) 响度驱动的亮度抬升（屏光 → periwinkle）
+    if (loudness > 0.001) {
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.globalAlpha = clamp(loudness * 0.5, 0, 0.85);
+      ctx.fillStyle = brightGrad;
+      ctx.fillRect(0, 0, w, h);
+      ctx.globalAlpha = 1;
+    }
+
+    // 3) 静态星空（慢自转 + 闪烁）
+    ctx.globalCompositeOperation = 'source-over';
+    for (let i = 0; i < stars.length; i++) {
+      const st = stars[i];
+      const tw = 0.62 + 0.38 * Math.sin(now * st.speed + st.phase);
+      const a = st.base * tw;
+      // 世界角 = ang + rotRad
+      const x = G.px + Math.cos(st.ang + rotRad) * st.r;
+      const y = G.py + Math.sin(st.ang + rotRad) * st.r;
+      if (y > G.horizonY) continue;
+      const col = st.warm > 0.86 ? mix(C_POLE, C_TRAIL_CORE, 0.7) : C_POLE;
+      ctx.fillStyle = css(col, a);
+      const sz = st.size;
+      ctx.fillRect(x - sz / 2, y - sz / 2, sz, sz);
+    }
+
+    // 4) 累积缓冲 —— 先指数衰减，再叠新弧
+    const fade = 1 - Math.exp(-dt / TRAIL_TAU);
+    accCtx.globalCompositeOperation = 'destination-out';
+    accCtx.fillStyle = 'rgba(0,0,0,' + fade + ')';
+    accCtx.fillRect(0, 0, w, h);
+    accCtx.globalCompositeOperation = 'lighter';
+    for (let i = 0; i < NBANDS; i++) {
+      const a = envBuf[i];
+      const sweepF = clamp((a - SILENCE_FLOOR) / (1 - SILENCE_FLOOR), 0, 1);
+      const sweep = sweepF * MAX_SWEEP_DEG * Math.PI / 180;
+      drawArc(i, sweep);
+    }
+    drawMeteors(dt);
+
+    // 合成到屏幕（加色）
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.globalAlpha = 1;
+    ctx.drawImage(acc, 0, 0);
+
+    // 5) 极光（呼吸 + 拍点 flare）
+    const breath = 0.32 + 0.12 * Math.sin(now * 0.9) + 0.08 * Math.sin(now * 2.3 + 1.3);
+    const glowA = clamp(breath + flare * 1.25, 0, 1.5);
+    const glowR = G.rOuter * (0.55 + flare * 0.35);
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.globalAlpha = clamp(glowA, 0, 1);
+    ctx.fillStyle = poleGrad;
+    ctx.beginPath();
+    ctx.arc(G.px, G.py, glowR, 0, Math.PI * 2);
+    ctx.fill();
+    // 极亮核（拍点时更亮）
+    if (flare > 0.02) {
+      ctx.globalAlpha = flare * 0.9;
+      const coreG = ctx.createRadialGradient(G.px, G.py, 0, G.px, G.py, G.rOuter * 0.12);
+      coreG.addColorStop(0, css(C_TRAIL_CORE, 1));
+      coreG.addColorStop(1, css(C_POLE, 0));
+      ctx.fillStyle = coreG;
+      ctx.beginPath();
+      ctx.arc(G.px, G.py, G.rOuter * 0.12, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalAlpha = 1;
+    }
+
+    // 6) 地面剪影（干净截断星轨）
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.globalAlpha = 1;
+    ctx.drawImage(silCanvas, 0, 0);
+
+    // 7) 暗角
+    ctx.drawImage(vignCanvas, 0, 0);
+
+    // 8) 胶片颗粒（高 ISO 质感）
+    ctx.globalCompositeOperation = 'overlay';
+    ctx.globalAlpha = 0.05;
+    grainX = (grainX + Math.random() * 7 + 1.4) % 256;
+    grainY = (grainY + Math.random() * 5 + 0.9) % 256;
+    ctx.save();
+    ctx.translate(-grainX, -grainY);
+    ctx.fillStyle = noisePattern;
+    ctx.fillRect(grainX, grainY, w + 256, h + 256);
+    ctx.restore();
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.globalAlpha = 1;
+
+    requestAnimationFrame(frame);
+  }
+
+  /* ============================================================
+   * UI 交互
+   * ============================================================ */
+  function setMode(m) {
+    mode = m;
+    bandBuf.fill(0);
+    envBuf.fill(0);
+    loudness = 0;
+    btnDemo.classList.toggle('active', m === 'demo');
+    btnMic.classList.toggle('active', m === 'mic');
+    srcLabel.textContent = m === 'demo' ? '演示 Demo' : '麦克风 Mic';
+    if (started) {
+      if (m === 'demo') {
+        startDemoAudio();
+        showHint('演示音频已开启（合成 OSC + 噪声）');
+      } else {
+        startMic();
+      }
+    }
+  }
+
+  function togglePause() {
+    paused = !paused;
+    btnPause.textContent = paused ? '继续旋转 · Space' : '暂停旋转 · Space';
+    btnPause.classList.toggle('active', paused);
+  }
+
+  let hintTimer = null;
+  function showHint(msg) {
+    hintEl.textContent = msg;
+    hintEl.classList.add('show');
+    if (hintTimer) clearTimeout(hintTimer);
+    hintTimer = setTimeout(() => hintEl.classList.remove('show'), 3200);
+  }
+
+  function start() {
+    if (started) return;
+    started = true;
+    overlay.classList.add('hidden');
+    // 解锁音频（演示合成声音；麦克风需用户再点）
+    if (mode === 'demo') {
+      startDemoAudio();
+    } else {
+      startMic();
+    }
+  }
+
+  overlay.addEventListener('click', start);
+  btnDemo.addEventListener('click', () => { setMode('demo'); if (!started) start(); });
+  btnMic.addEventListener('click', () => { setMode('mic'); if (!started) start(); });
+  btnPause.addEventListener('click', togglePause);
+
+  window.addEventListener('keydown', (e) => {
+    const k = e.key.toLowerCase();
+    if (k === 'd') { setMode('demo'); if (!started) start(); }
+    else if (k === 'm') { setMode('mic'); if (!started) start(); }
+    else if (e.code === 'Space') { e.preventDefault(); togglePause(); }
+  });
+
+  /* ============================================================
+   * 尺寸自适应
+   * ============================================================ */
+  function resize() {
+    canvas.width = Math.floor(window.innerWidth * dpr);
+    canvas.height = Math.floor(window.innerHeight * dpr);
+    canvas.style.width = window.innerWidth + 'px';
+    canvas.style.height = window.innerHeight + 'px';
+    // dpr 缩放（canvas 内部像素 = CSS 像素 * dpr）
+    computeGeometry();
+  }
+  window.addEventListener('resize', resize);
+  window.addEventListener('orientationchange', () => setTimeout(resize, 120));
+
+  /* ============================================================
+   * 启动
+   * ============================================================ */
+  resize();
+  requestAnimationFrame(frame);
+
+})();
+</script>
+</body>
+</html>

@@ -29,6 +29,7 @@ import com.nasmusic.tv.visualizer.renderers.LightBeamsRenderer
 import com.nasmusic.tv.visualizer.renderers.MoleculeRenderer
 import com.nasmusic.tv.visualizer.renderers.VintageTvRenderer
 import com.nasmusic.tv.visualizer.renderers.DnaRenderer
+import com.nasmusic.tv.visualizer.renderers.StarrySkyRenderer
 import com.nasmusic.tv.visualizer.renderers.WorldGlobeRenderer
 import com.nasmusic.tv.visualizer.photo.PhotoRenderer
 
@@ -77,6 +78,7 @@ object VisualizerRendererFactory {
         VisualizerTheme.PHOTO_WALL -> PhotoRenderer()
         VisualizerTheme.DNA -> DnaRenderer()
         VisualizerTheme.WORLD -> WorldGlobeRenderer(context)
+        VisualizerTheme.STAR_TRAILS -> StarrySkyRenderer()
     }
 
     /**

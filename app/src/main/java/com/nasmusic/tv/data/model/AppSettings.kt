@@ -97,7 +97,7 @@ data class AppSettings(
 )
 
 /**
- * 可视化效果主题（27 套手动效果，无自动导演档）。
+ * 可视化效果主题（29 套手动效果，无自动导演档）。
  *
  * [tier] 决定该效果在各画质档位下的可用性，见 [VisualQuality.supports]。
  *
@@ -183,6 +183,31 @@ enum class VisualizerTheme(
      * 与其余 40 套效果同源，零新增权限、零新增依赖。
      */
     WORLD("世界", Tier.ADV, "41", needsParticleBudget = true),
+
+    /**
+     * 星空星轨（第 42 个效果）
+     *
+     * 视觉：长曝光星轨照片的母题 —— 深蓝天幕（5 段垂直渐变）+ 绕**天极**自转的同心弧星轨
+     * + 真实的**时间曝光拖尾**（自有 ping-pong 累积缓冲 + 指数衰减）+ 近黑地景剪影
+     * （起伏山脊 + 一棵枯树，地面占底部 1/4）。⛔ **画面中不出现任何人物剪影**。
+     *
+     * 频率 → 环绕天极的**弧半径**（低音贴天极、高音外扩，半径指数 `t^0.72` 向极聚密）；
+     * 幅值 → 弧的**扫掠角 / 线宽 / 亮度**；鼓点（`bassRaw` + `beat`）→ 极点闪光 + 沿同心圆弧
+     * 抛射的切向流星；段落响度（`sectionEnergy`）→ 天色向亮蓝紫偏移；`pulse` → 静音时的
+     * 辉光呼吸（⛔ 静音**不全黑**，仍可见缓慢自转的星场与残迹）。
+     *
+     * 归 [Tier.ADV]（双缓冲像素回绘与照片墙同风险档）但**刻意标注
+     * [needsParticleBudget] = false** —— 这是该字段唯一被消费的可核对事实：本效果
+     * [com.nasmusic.tv.visualizer.renderers.StarrySkyRenderer] **一个粒子都不画**，
+     * 拖尾是两张**固定尺寸**的 `ImageBitmap`（按 `fx.level` 三档 1280 / 960 / 640 降分辨率），
+     * 规模与 `ctx.quality.maxParticles` 毫无关系；柱数恒读 `frame.spectrum.size`。
+     * ⇒ [VisualQuality.supports] 的 ADV 分支恒为 true，**三档画质全部可选**（含 LOW：
+     * LOW 只把缓冲宽降到 640 并把弧线隔柱取样，视觉效果保留）。
+     *
+     * **不**门控 [VisualQuality.allowFramebuffer]（同照片墙的取舍）：门控后默认 MEDIUM
+     * 档恒无拖尾，效果就退化成一块星空衬底、失去「长曝光」本体。
+     */
+    STAR_TRAILS("星空星轨", Tier.ADV, "42", needsParticleBudget = false),
     ;
 
     /** 效果分级：决定画质档位可用性 */
