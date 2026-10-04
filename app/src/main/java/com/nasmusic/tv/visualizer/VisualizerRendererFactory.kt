@@ -22,6 +22,7 @@ import com.nasmusic.tv.visualizer.renderers.HypnoticFunctionRenderer
 import com.nasmusic.tv.visualizer.renderers.OrbitalRingsRenderer
 import com.nasmusic.tv.visualizer.renderers.RadarGridRenderer
 import com.nasmusic.tv.visualizer.renderers.OrigamiPolyRenderer
+import com.nasmusic.tv.visualizer.renderers.SeasideRenderer
 import com.nasmusic.tv.visualizer.renderers.StaircaseWaveRenderer
 import com.nasmusic.tv.visualizer.renderers.ConcentricGearsRenderer
 import com.nasmusic.tv.visualizer.renderers.FractalTreeRenderer
@@ -79,6 +80,7 @@ object VisualizerRendererFactory {
         VisualizerTheme.DNA -> DnaRenderer()
         VisualizerTheme.WORLD -> WorldGlobeRenderer(context)
         VisualizerTheme.STAR_TRAILS -> StarrySkyRenderer()
+        VisualizerTheme.SEASIDE -> SeasideRenderer()
     }
 
     /**

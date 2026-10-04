@@ -97,7 +97,7 @@ data class AppSettings(
 )
 
 /**
- * 可视化效果主题（29 套手动效果，无自动导演档）。
+ * 可视化效果主题（30 套手动效果，无自动导演档）。
  *
  * [tier] 决定该效果在各画质档位下的可用性，见 [VisualQuality.supports]。
  *
@@ -208,6 +208,37 @@ enum class VisualizerTheme(
      * 档恒无拖尾，效果就退化成一块星空衬底、失去「长曝光」本体。
      */
     STAR_TRAILS("星空星轨", Tier.ADV, "42", needsParticleBudget = false),
+
+    /**
+     * 海边（第 43 个效果）
+     *
+     * 视觉：俯拍一条俯冲的海岸线 —— 上半屏是**离岸渐远**的深水（底色竖向渐变 + 低分辨率
+     * 水体场 + 粼光/焦散网），下半屏是**烘焙好的干沙**；一条**离散浪队列**（`WAVE_POOL`
+     * 个槽位）自外海向岸推进，把白浪带一路推上滩，抵滩后**与退水并行**地淡出（泡沫原地
+     * 淡出、水线在自适应时长里回退），露出**逐列记忆的湿沙**与退水残沫，再按逐列干燥
+     * 时间常数收干。另有沙滩小螃蟹横穿（纯装饰、不参与任何模拟量）。
+     *
+     * ## ⛔ 归 [Tier.BASIC] 的理由（§3.4）
+     * - [VisualQuality.supports] 的现行规则（2026-10-01 用户裁决）是
+     *   `ADV -> !needsParticleBudget || maxParticles > 0`。本效果**一个粒子都不画**、
+     *   ⛔ **不读** `ctx.quality.maxParticles` ⇒ 即便标 `false` 也是三档全可见；
+     *   而 `BASIC -> true` 是**无条件**分支，语义上也更准确 —— 它真的「什么都不消耗」。
+     * - ⛔ **不要**由此推断 `allowFramebuffer`：`ULTRA -> allowFramebuffer`，而本效果
+     *   **不用帧缓冲**（全部是矢量绘制 + 尺寸变化时烘焙的位图），故与该字段无关。
+     *
+     * ## ⛔ 第 4 参 `needsParticleBudget = false` 是**可核对的事实**，不是观感分类
+     * 全仓库只有 `BeatFireworkRenderer` / `ParticleTextRenderer` / `PlasmaFlowRenderer` /
+     * `WorldGlobeRenderer` 四处真读该预算（见本枚举 KDoc）。本效果所有「数量」都是**编译期
+     * 常量**（浪槽位 [com.nasmusic.tv.visualizer.renderers.SeasideWaves.WAVE_POOL] = 6、
+     * 飞沫 180 点、残沫 52 点、浪花手指 30 根、水洼 16 个），逐帧按 `fx.level` 分档而
+     * **不按粒子预算分档**；频谱柱数亦恒读 `frame.spectrum.size`。
+     * ⚠️ 因为 [tier] 是 BASIC，[VisualQuality.supports] 的 BASIC 分支**根本不看**这一项 ——
+     * 写成 `true` 也不会有任何行为差异。仍显式写 `false`：它是关于渲染器的真话，
+     * 且一旦日后有人把它改挂 ADV，这一项必须已经是对的。
+     *
+     * **不**门控 [VisualQuality.allowFramebuffer]（§3.4 末条）。
+     */
+    SEASIDE("海边", Tier.BASIC, "43", needsParticleBudget = false),
     ;
 
     /** 效果分级：决定画质档位可用性 */

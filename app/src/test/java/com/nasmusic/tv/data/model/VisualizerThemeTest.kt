@@ -48,14 +48,14 @@ class VisualizerThemeTest {
 
     @Test
     fun `theme library is all concrete effects, no auto mode`() {
-        assertEquals(29, VisualizerTheme.entries.size)
+        assertEquals(30, VisualizerTheme.entries.size)
     }
 
     @Test
     fun `selectable list contains every theme when the photo wall is available`() {
         val selectable = VisualizerTheme.selectable(photoWallAvailable = true)
-        assertEquals(29, selectable.size)
-        assertEquals(29, selectable.distinct().size)
+        assertEquals(30, selectable.size)
+        assertEquals(30, selectable.distinct().size)
         assertTrue(selectable.contains(VisualizerTheme.PHOTO_WALL))
     }
 
@@ -86,21 +86,21 @@ class VisualizerThemeTest {
             listOf(VisualizerTheme.PHOTO_WALL),
             on.filter { it !in off.toSet() }
         )
-        assertEquals(28, off.size)
-        assertEquals(29, on.size)
+        assertEquals(29, off.size)
+        assertEquals(30, on.size)
     }
 
     @Test
     fun `ordinal labels are unique`() {
         val labels = VisualizerTheme.entries.map { it.ordinalLabel }
-        assertEquals(29, labels.distinct().size)
+        assertEquals(30, labels.distinct().size)
     }
 
     @Test
     fun `display names are non blank and unique`() {
         val names = VisualizerTheme.entries.map { it.displayName }
         assertTrue(names.none { it.isBlank() })
-        assertEquals(29, names.distinct().size)
+        assertEquals(30, names.distinct().size)
     }
 
     @Test

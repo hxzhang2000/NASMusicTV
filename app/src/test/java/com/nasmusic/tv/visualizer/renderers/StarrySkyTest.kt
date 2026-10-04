@@ -1036,7 +1036,7 @@ class StarrySkyTest {
         assertEquals("显示名", "星空星轨", t.displayName)
         assertEquals("ordinalLabel", "42", t.ordinalLabel)
         assertEquals("档位", VisualizerTheme.Tier.ADV, t.tier)
-        assertEquals("⛔ 效果总数（门禁硬计数）", 29, VisualizerTheme.entries.size)
+        assertEquals("⛔ 效果总数（门禁硬计数）", 30, VisualizerTheme.entries.size)
         assertEquals("从键反查必须回到自己", t, VisualizerTheme.fromKey("STAR_TRAILS"))
         assertTrue("必须出现在可选列表里", VisualizerTheme.selectable(true).contains(t))
         // 工厂分支存在（穷举 when 的完备性：每个枚举都有分支）
