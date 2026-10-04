@@ -1,0 +1,3430 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="color-scheme" content="dark" />
+<title>海边 · SEASIDE — 频谱效果原型</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; height: 100%; overflow: hidden;
+    background: #0b1214; color: #e8f2f0;
+    font-family: "SF Pro Text", -apple-system, BlinkMacSystemFont, "Segoe UI",
+                 "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei",
+                 "Noto Sans SC", system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    touch-action: none; user-select: none; -webkit-user-select: none;
+  }
+  #stage { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+
+  /* ── Control strip ────────────────────────────────────────────── */
+  .panel {
+    position: fixed; left: 20px; bottom: 20px; z-index: 20;
+    display: flex; flex-direction: column; gap: 9px;
+    padding: 11px 13px 10px;
+    border-radius: 15px;
+    background: rgba(11, 20, 22, .42);
+    border: 1px solid rgba(242, 247, 245, .13);
+    box-shadow: 0 10px 34px rgba(0, 0, 0, .34);
+    -webkit-backdrop-filter: blur(15px) saturate(1.25);
+    backdrop-filter: blur(15px) saturate(1.25);
+    opacity: 0; transform: translateY(10px);
+    transition: opacity .8s ease, transform .8s cubic-bezier(.2,.8,.25,1);
+    pointer-events: none;
+  }
+  .panel.ready { opacity: 1; transform: none; pointer-events: auto; }
+  .row { display: flex; gap: 6px; }
+  .btn {
+    appearance: none; border: 1px solid transparent; cursor: pointer;
+    display: inline-flex; align-items: center; gap: 7px;
+    font: inherit; font-size: 12px; letter-spacing: .02em;
+    color: rgba(232, 242, 240, .68);
+    background: rgba(255, 255, 255, .045);
+    padding: 6px 11px; border-radius: 9px;
+    transition: background .22s ease, color .22s ease, border-color .22s ease;
+    white-space: nowrap;
+  }
+  .btn:hover { background: rgba(255, 255, 255, .10); color: rgba(232, 242, 240, .92); }
+  .btn:focus-visible { outline: 2px solid rgba(242, 247, 245, .55); outline-offset: 2px; }
+  .btn.on {
+    background: rgba(242, 247, 245, .16); color: #f2f7f5;
+    border-color: rgba(242, 247, 245, .30);
+  }
+  .dot {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: rgba(232, 242, 240, .30);
+    transition: background .22s ease, box-shadow .22s ease;
+  }
+  .btn.on .dot { background: #8fe3d2; box-shadow: 0 0 8px rgba(143, 227, 210, .75); }
+  kbd {
+    font: inherit; font-size: 9.5px; letter-spacing: .06em;
+    color: rgba(232, 242, 240, .42);
+    border: 1px solid rgba(232, 242, 240, .16);
+    border-radius: 4px; padding: 0 4px; line-height: 14px;
+  }
+  .meters { display: flex; align-items: center; gap: 10px; padding: 0 2px; }
+  .m { display: inline-flex; align-items: center; gap: 5px; }
+  .m em {
+    font-style: normal; font-size: 9.5px; letter-spacing: .08em;
+    color: rgba(232, 242, 240, .40);
+  }
+  .m b {
+    display: block; width: 30px; height: 3px; border-radius: 2px;
+    background: rgba(255, 255, 255, .10); position: relative; overflow: hidden;
+  }
+  .m b::after {
+    content: ""; position: absolute; top: 0; bottom: 0; left: 0;
+    right: var(--w, 100%);
+    background: linear-gradient(90deg, #7fd6cf, #f2f7f5);
+    transition: right .06s linear;
+  }
+  .lvl {
+    font-size: 9.5px; letter-spacing: .08em; margin-left: auto;
+    color: rgba(232, 242, 240, .34); font-variant-numeric: tabular-nums;
+  }
+  .note {
+    font-size: 10px; letter-spacing: .03em; color: #ffbf9c;
+    max-width: 250px; opacity: 0; transition: opacity .3s ease;
+  }
+  .note.show { opacity: 1; }
+
+  /* ── 单浪模式读数（键 1）─────────────────────────────────────────────
+     ⛔ 不复用 .note：那是给橙色闪动提示用的，max-width 250px + 短文案。
+     这里是一行长遥测，需要更宽、更暗、等宽感，且**常驻可见**（不用 opacity）。 */
+  .solo {
+    font-size: 10.5px; letter-spacing: .02em; line-height: 1.55;
+    color: #cfe6ea; opacity: .92;
+    font-variant-numeric: tabular-nums;
+    max-width: none; margin-top: 6px;
+    padding-top: 6px; border-top: 1px solid rgba(160,220,230,.16);
+  }
+  .solo b { color: #8fe3d6; font-weight: 600; }
+  .solo[hidden] { display: none; }
+
+  /* ── Start gate ───────────────────────────────────────────────── */
+  #gate {
+    position: fixed; inset: 0; z-index: 40;
+    display: grid; place-items: center;
+    background: radial-gradient(120% 90% at 50% 40%, rgba(8,16,18,.42), rgba(6,12,14,.80));
+    -webkit-backdrop-filter: blur(2px); backdrop-filter: blur(2px);
+    transition: opacity .7s ease, -webkit-backdrop-filter .7s ease, backdrop-filter .7s ease;
+    cursor: pointer;
+  }
+  #gate.hide { opacity: 0; pointer-events: none; backdrop-filter: blur(0); }
+  .gate-in { text-align: center; padding: 24px; transform: translateY(-2vh); }
+  .overline {
+    font-size: 10px; letter-spacing: .42em; text-transform: uppercase;
+    color: rgba(242, 247, 245, .40); margin-bottom: 20px;
+  }
+  .title {
+    font-family: "Songti SC", "Noto Serif SC", "Source Han Serif SC",
+                 "SimSun", Georgia, "Times New Roman", serif;
+    font-size: clamp(46px, 8vw, 88px); font-weight: 400;
+    letter-spacing: .22em; margin: 0 0 6px; color: #f4faf8;
+    text-shadow: 0 4px 40px rgba(0, 0, 0, .45);
+  }
+  .sub {
+    font-size: 12px; letter-spacing: .20em; color: rgba(232, 242, 240, .44);
+    margin-bottom: 40px;
+  }
+  .cta {
+    display: inline-flex; align-items: center; gap: 11px;
+    font-size: 12.5px; letter-spacing: .20em; color: #f2f7f5;
+    border: 1px solid rgba(242, 247, 245, .28);
+    border-radius: 999px; padding: 12px 26px;
+    background: rgba(242, 247, 245, .07);
+    animation: breathe 3.4s ease-in-out infinite;
+  }
+  .cta .pulse {
+    width: 7px; height: 7px; border-radius: 50%; background: #8fe3d2;
+    box-shadow: 0 0 0 0 rgba(143, 227, 210, .55);
+    animation: ping 2.4s ease-out infinite;
+  }
+  @keyframes breathe {
+    0%, 100% { transform: translateY(0); background: rgba(242,247,245,.07); }
+    50%      { transform: translateY(-3px); background: rgba(242,247,245,.13); }
+  }
+  @keyframes ping {
+    0%   { box-shadow: 0 0 0 0 rgba(143,227,210,.55); }
+    70%  { box-shadow: 0 0 0 11px rgba(143,227,210,0); }
+    100% { box-shadow: 0 0 0 0 rgba(143,227,210,0); }
+  }
+  .keys {
+    margin-top: 34px; font-size: 10.5px; letter-spacing: .10em;
+    color: rgba(232, 242, 240, .32);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .cta, .cta .pulse { animation: none; }
+  }
+  @media (max-width: 560px) {
+    .panel { left: 12px; bottom: 12px; padding: 9px 10px 8px; }
+    kbd { display: none; }
+  }
+</style>
+</head>
+<body>
+<canvas id="stage"></canvas>
+
+<div class="panel" id="panel">
+  <div class="row">
+    <button class="btn on" data-act="demo"><span class="dot"></span>演示 <kbd>D</kbd></button>
+    <button class="btn" data-act="mic"><span class="dot"></span>麦克风 <kbd>M</kbd></button>
+    <button class="btn" data-act="pause"><span class="dot"></span>暂停 <kbd>Space</kbd></button>
+    <button class="btn" data-act="solo"><span class="dot"></span>单浪 <kbd>1</kbd></button>
+  </div>
+  <div class="solo" id="solo" hidden></div>
+  <div class="meters">
+    <i class="m"><b id="mLow"></b><em>低</em></i>
+    <i class="m"><b id="mMid"></b><em>中</em></i>
+    <i class="m"><b id="mHigh"></b><em>高</em></i>
+    <span class="lvl" id="lvl">—</span>
+  </div>
+  <div class="note" id="note"></div>
+</div>
+
+<div id="gate">
+  <div class="gate-in">
+    <div class="overline">E43 · Audio Spectrum</div>
+    <h1 class="title">海边</h1>
+    <div class="sub">SEASIDE — aerial shoreline</div>
+    <div class="cta"><span class="pulse"></span>点击开始 · Tap to start</div>
+    <div class="keys">D 演示 &nbsp;·&nbsp; M 麦克风 &nbsp;·&nbsp; Space 暂停</div>
+  </div>
+</div>
+
+<script>
+(() => {
+'use strict';
+
+/* ══════════════════════════════════════════════════════════════════════════
+   0 · PARAMETERS — 全部对应方案 §5 的初值，Kotlin 端口可逐项对照
+   ══════════════════════════════════════════════════════════════════════════ */
+// ⭐ 岸线就是 0 号浪带（贴岸主浪带）的前缘。水与沙之间没有一条「色界线」，
+//    交界处本身就是那层浪花 —— 这是反馈二的要点。
+// ⭐ 反馈七·2：所有者决定把水线抬到 ~0.62h（海略过半屏，同时留够沙滩给颗粒）。
+//    0.740 → 0.620。随之：
+//      · SEA_BOTTOM_K 必须 ≥ 水线的最大上冲（0.62 + 0.105·1.40 = 0.767）
+//        再留破碎余量 ⇒ +0.20 = 0.820（原 +0.13 是按旧的 0.740 定的）
+//      · 沙滩从 0.26h 变成 0.38h，多了 1.46 倍，所以 SWASH_REACH 反而**上调**
+//        0.095 → 0.105：水线跑 0.105h，留 0.275h 的干沙滩
+//      · 干燥时间常数改挂到「出浪间隔」而不是固定周期（见下）
+const SHORE_K        = 0.620;   // 岸线的平均位置（占 h）
+// the sea field is painted a little past the waterline (the waterline itself
+// swings) so no unpainted seam can ever show
+const SEA_BOTTOM_K   = SHORE_K + 0.20;
+
+// ══════════════════════════════════════════════════════════════════════════
+// 反馈七·5 ⭐⭐ 浪是**离散的个体**，排成队列一轮一轮替换，不是相位三角。
+// ══════════════════════════════════════════════════════════════════════════
+const WAVE_POOL    = 6;       // 同时在册的浪数上限
+// ⭐⭐ 反馈八：T 的散布必须 < 出浪间隔 ⇒ 先后次序永不翻转（后面的浪永远
+//    追不上前面的，也就不需要「追上替换」）。存活数 ≈ (T̄ + FADE)/GAP
+//    = (5000 + 900)/2360 ≈ 2.5 条在场（稳态 2~3 条）。
+const WAVE_GAP_MS  = 2360;    // 出浪间隔（决定海面上同时有 ~2.5 条浪）
+const WAVE_T_MIN   = 4200;    // 最快的一条浪从外海跑到滩上所需时间（ms）
+const WAVE_T_MAX   = 5800;    // 最慢的（T 散布 1600 < GAP 2360 ⇒ 次序稳定）
+// ⛔ 已删除 `WAVE_REACH_Y`（与下面的 `W_REACH_Y` 同值 1.00、零引用的重复声明）。
+// ⭐⭐ 反馈八：浪不再「出生在固定水深再上滩」—— 统一前缘公式里前缘深度
+//    = H·swashReachNow·(5·adv−4)：adv=0 出生在外海约 0.42h、adv=0.8 越过
+//    平均岸线、adv=1 涌到滩顶（+SWASH_REACH）。出生水深与上滩距离因此
+//    天然解耦，浪列分散在整个海域，不需要独立的 WAVE_SPAWN_K。
+const WAVE_FADE_MS = 900;     // 消散时泡沫在滩上原地淡出的时长
+const WAVE_SPAWN_RAMP_MS = 700; // 出生后泡沫淡入时长（不「啪」地出现）
+const SWASH_RETREAT_MS = 440;  // 退水时长**下限**（前浪消散后水线向海后退）
+// ⭐ 退水时长**上限**。owner：「前浪回退不应该退到中间就停止了，应该继续回退，
+//   直到碰到后浪」⇒ 不该固定 440ms 退完就静止等后浪（实测要等 ~2s）。
+//   ⛔ 但完全按后浪 ETA 自适应会把退水拉到 ~5.7s（94.5px/5.7s ≈ 17px/s），
+//   实测中位后退只剩 6.1px —— 那已经不叫退水了。⇒ 在 [下限, 上限] 间自适应。
+const SWASH_RETREAT_MAX = 1600;
+let retreatDur = SWASH_RETREAT_MS;   // 本帧实际选定的退水时长（阶段判定/HUD 共用同一值）
+const SWELL_BAND_W = 0.042;   // 浪带宽度（占 h）
+const SWASH_REACH  = 0.105;   // 浪完全涌上滩时，水线高出平均岸线的距离（占 h）
+// ── 反馈八·10「破碎线 / 冲流线解耦」（owner 选方案 3）────────────────────────
+// ⭐ 一条浪带**两个位置量**，各管一件事：
+//   · 破碎线（breaker）：H·(SHORE_K − WAVE_SPAWN_DEPTH) → shoreYs[i]，行程约 **640px**。
+//     这是**画出来的白浪带**，也是「第二条浪全程可见」的依据。
+//   · 冲流线（swash）：swashFrontY → wlineFull，行程只有 H·SWASH_REACH ≈ 81px。
+//     这是**水在沙滩上的边缘**，驱动湿沙/退水/干燥。
+//   交接不再是「位置突变」，而是**职责增加**：破碎线走到滩上（adv→1）时，它的位置
+//   本来就等于冲流线满位 ⇒ 无跳变；且它**不消失**，只是开始同时定义冲流线。
+// ⛔ 早先把两者塞进一个 adv（破碎线 ~640px vs 冲流线 81px），交接判据
+//   `front.y >= a` 拿两个参数化空间直接比较 ⇒ 瞬移 150~387px（已修，见下）。
+//   ⚠️ 出生水深 WAVE_SPAWN_DEPTH 决定破碎线**总行程**：改它会同时改「海面铺开多远」
+//     与「进入画面的角度」，交接连续性不受影响（终点恒为 shoreYs[i]）。
+// ⭐ 破碎线的出生水深（占 h）。owner：「后浪直接浮现在上面 1/6 左右的位置，而不是从
+//   边缘进入」⇒ 出生点必须落在**画面顶边略上方**（y 略小于 0），让它从画外滑入。
+//   ⛔ 0.42 时 spawnFar = H·(0.62−0.42) = 0.20h ≈ 180px ⇒ 浮在顶部 1/5 处。
+//   ⭐ 0.66 ⇒ spawnFar = −0.04h（顶边上方 36px）；顺带把破碎线行程从 ~459px
+//   拉长到 ~640px（终点 shoreYs 实测 535~637px），海面铺开更远。
+const WAVE_SPAWN_DEPTH = 0.66;
+const SWASH_LEAD_ADV  = 0.85;    // 破碎线走到这个 adv 就开始驱动冲流（上涌）
+const SWASH_RUNUP_MS  = 900;     // 冲流从 0 爬到满位所需时间（破碎线抵滩时恰好满位）
+// ⭐ 干燥时间常数挂到出浪间隔上：两个浪之间裸露的时间就是 WAVE_GAP_MS。
+const SWASH_DRY_FRAC = 0.60;
+const SWASH_DRY_MIN  = 420;
+const SWASH_DRY_MAX  = 2600;
+const SWASH_LAG       = 0.16;  // 逐列推进滞后（占 y）⇒ 水线参差成舌
+// ⭐ 相邻浪共用**同一条**浪脊剖面、只在 u 上错开一段（不是各自独立的噪声）。
+//    真实涌浪是一组相干的浪列；用独立噪声会让相邻带交叉出透镜状伪影。
+const CREST_LANE_SHIFT = 0.18;
+// ⭐ 破碎线（后浪）浪脊相位随**该浪自己的 adv** 漂移的总量（u 单位）。
+//   owner：「后浪的曲线现在是固定的，应该随着前进方向，一直在变化，但变化不要太大」。
+//   ⛔ 早先挂在全局时间 t*0.0000060：后浪一生 ~10s 期间 u 仅变 0.06 ⇒ 读作固定。
+//   ⭐ 0.35 ⇒ 整条旅程里曲线相位走 0.35u（等效 ≈103px），每帧 ≈0.10px。
+const CREST_DRIFT_ADV = 0.35;
+// ⭐ 出生淡入按**行程**计（占 adv）。owner：「后浪是凭空出现的吗？应该从最远端
+//   逐渐清晰化出现」。⛔ 纯时间淡入 700ms 在后浪一生（~10s）里只占 7% ⇒ 看着像
+//   「凭空出现」；加上行程淡入后，它在最远端那 1/5 行程里逐渐清晰化。
+const WAVE_SPAWN_FADE_ADV = 0.20;
+// ⭐⭐ 交接地形态连续化的起点（adv）。后浪从 MORPH_START 起把**整个位置**连续插值到
+//   前浪的 shoreYs ⇒ 位置与曲线形态一起变成前浪的，adv=1 时严格相等。
+//   ⛔ 早先的做法是在最后 15%（SWASH_LEAD_ADV=0.85）才开始，用 crestK 把 198px 的
+//     起伏淡出到 0 ⇒ owner 报「接近前浪时曲线形状跳变」。
+//   ⚠️ 0.55 ⇒ 过渡占行程 45%，198px 的变化摊到 ~2.5 万帧里（约 0.008px/帧）。
+const MORPH_START = 0.55;
+// ⭐⭐ 反馈七·4「泡沫的距离律」：泡沫强度随离岸距离衰减，到最远处与海水无异。
+//    这是**次要**乘子；主要定位由「浪面倾角律」负责（见 foamSlope）。
+//    0.62h → 0.12h 覆盖整个海域；pow 2.4 让最外那条几乎归零。
+const FOAM_FAR_SPAN = 0.50;
+// harness 实测（60fps/90s，按 adv 分桶量 kA）：⛔ pow 2.4 时第二条浪
+//   adv 0..0.2 的 farLaw 只有 0.043、kA 0.061，**67% 的绘制调用 kA<0.12 被 cull**
+//   （外海泡沫/扰动的下限）⇒ 它整条读作「没有白沫」；领头浪因 farLaw/slopeLaw
+//   被硬编码为 1，kA 是它的 5~6 倍。
+//   ⇒ 2.4 太陡：pow 1.6 让 0.043→0.08、中段 0.16→0.30，最外侧仍趋 0
+//   （保留 owner「最远处与海水同样」的诉求），但中段浪全程可见。
+const FOAM_FAR_POW  = 1.6;
+// ⭐ 反馈七·4 的「倾角律」增益：把 |dy/dx| 归一化到 0..1
+const FOAM_SLOPE_GAIN = 0.62;
+const COLS            = 96;
+// 外海泡沫（反馈六·5 / 七·6）
+const SEA_FOAM_TILES  = 6;       // 烘出来的泡沫贴图张数（每张 256×256）
+const SEA_FOAM_PATCH  = 22;      // 每条浪铺多少块贴图
+const SEA_FOAM_A      = 0.46;    // 泡沫贴图的整体强度
+// ⭐ 波面上的**大白沫晕**：一条浪不是只有前缘那一线白 —— 破碎之后整个浪面
+//    都挂着被搅起来的水沫，前缘最亮、往后拖出长长的尾迹。
+//    ��有这一层，100% 下看到的是「沿着浪脊画了一道白轮廓线」。
+const SEA_FOAM_WASH_A = 0.34;
+const SEA_FOAM_WASH_BACK = 2.4;  // 往后拖几个浪带宽
+const SEA_FOAM_WASH_FRONT = 0.30; // 前缘往前出多少个浪带宽
+// ⭐ 反馈八·5a「离岸浪读成苍白的水脊」：每条推进中的浪都必须把**前缘前方**的
+//    水搅出碎沫（a wake-like band of agitation ahead of a moving crest），
+//    浪才读成「正在破碎移动的水」，而不是一条静止的淡色脊。
+//    这一层把烘好的泡沫贴图**前置**到浪脊前方 0.3~1.45 个带宽处：贴图本身是
+//    撕碎的丝缕，前方就是翻涌的碎沫、拖到浪后变成尾迹；逐块吃 slopeLaw×farLaw
+//    ⇒ 陡的浪面多搅、最远处照旧归零。⚠ 只对海里的浪画（贴岸领头浪的前缘
+//    就是水线本身，那里的泡沫由贴岸各层负责）。
+const DISTURB_PATCH = 18;      // 每条浪的扰动块数
+const DISTURB_DEP0  = 0.30;    // 距浪脊前缘最近（占带宽）
+const DISTURB_DEP1  = 1.45;    // 最远
+const DISTURB_A     = 2.40;    // 扰动强度（碎沫贴图比拖尾小 ⇒ 需要更高 alpha 才看得见）
+const DISTURB_SIZE  = 1.35;    // 贴图尺寸系数（比拖尾块小 ⇒ 碎沫感）
+// ⭐ 反馈八·5a 的配套：非领头浪的白沫晕把峰值从前缘内侧挪到**前缘线上**
+//    （翻卷的浪面在浪脊处最亮），并让前出距离多 40% —— 浪的「亮面」就是
+//    它的前脸，不是一条对称的淡带。
+const SEA_FOAM_WASH_FRONT_NL = 0.42;
+// ⭐ 反馈七·3「水线处白色更多、更明显」：贴岸主浪带的泡沫晕额外加成
+const SHORE_FOAM_BOOST = 1.55;
+// ⭐ 反馈七·6「浪脊像淡绸不像碎浪」：破碎浪脊有一道**锐利的唇**，
+//    唇两侧各一条很窄的高光/暗带。早先只有柔和中段 ⇒ 丝绸感。
+const LIP_W   = 0.16;      // 唇的宽度（浪带宽的倍数）
+const LIP_A   = 0.55;      // 唇的亮度加成
+
+// 泡沫前缘的分形破碎：三个八度 + 每列 hash 抖动，振幅按 ~0.47 逐级衰减
+const FRAY_K  = [0.0090, 0.0261, 0.0592];
+// ⛔ 反馈六·1：前缘破碎的横向漂移速率整体放缓 ~4.5×
+const FRAY_W  = [0.00016, -0.00034, 0.00064];
+const FRAY_A  = [0.55, 0.26, 0.12];
+const FRAY_JIT = 0.055;
+const FRAY_FRONT = 0.35;        // 前缘纵向位移 = 抖动 × FRAY_FRONT × 浪带宽
+const FRAY_WIDTH = 0.30;        // 整条带厚度一起缩放（保证窄带边界不交叉）
+const HOLE_MAX   = 18;          // 每层窄带上的破洞数量上限
+const HOLE_PERIOD_MS = 1100;    // 破洞场重算周期 ⇒ 白沫「沸腾」（⛔ 260ms 太快，已放缓 4.2×）
+
+const FOAM_EDGE_A  = 0.85;   // 前缘峰值
+const FOAM_CORE_A  = 0.42;   // 浪心（双峰的第二个峰），⛔ 其峰值不得超过它
+// 泡沫剖面的分段边界（占浪带宽度）—— edge / core / tail 三层合成 ⭐双峰
+const CREST_OUT  = 0.42;    // 前缘高光衰减到 0 的位置
+const CREST_HOLD = 0.14;    // 唇口保持全亮的宽度（真实白沫前段是一大片密实白）
+const HEART_IN   = 0.20;
+const HEART_FULL = 0.45;    // 浪心到达平台的位置
+const HEART_HOLD = 0.62;    // 平台结束位置
+const HEART_OUT  = 0.88;
+const TAIL_IN    = 0.66;
+const TAIL_OUT   = 1.25;    // 拖尾终点，正好归零
+
+const WAVE_K   = [0.0060, 0.0125, 0.0240];
+const WAVE_W   = [0.00055, 0.00091, 0.00148];
+const WAVE_A   = [0.020, 0.017, 0.011];
+const WAVE_SGN = [1, -1, 1];
+const WAVE_PHI = [0, 2.10, 4.37];
+// 第四、五组谐波已由 crestProfile（域扭曲 fBm）取代 —— 正弦叠加读成「碗里的涟漪」
+const WAVE_K4 = 0.0405, WAVE_A4 = 0.0055;
+const WAVE_K5 = 0.0730, WAVE_A5 = 0.0034;
+
+// ⭐ 浪脊横向起伏的幅度（占 h）。crestProfile 的输出典型值约 ±0.30
+// ⭐ 浪脊横向起伏的幅度（占 h）。crestProfile 的输出峰峰值约 0.6~0.9。
+// ⛔ 反馈五说「海浪线太平了」：0.105/0.088 时峰峰值只有 78px，
+//    在 1600×900 上只是一条缓缓起伏的带子。现在 0.22/0.13 ⇒
+//    峰峰值 ~164px（外海）/ ~97px（岸线），浪脊才真的在「抬起来又落下去」。
+// ⚠ 上限受 LANE_GAP 约束：相邻浪带前缘不能交叉（交叉会产生透镜状伪影）。
+//    因为四条带共用同一条剖面、只在 u 上错开 0.23，交叉余量很宽；
+//    harness 里有**含泳道位移**的断言守着这一条。
+const CREST_AMP       = 0.220;
+const CREST_AMP_SHORE = 0.130;
+
+// ══════════════════════════════════════════════════════════════════════════
+// 涌浪周期（反馈二）—— 水线真的会上滩再退回，退后露出湿沙并逐渐变干
+// ══════════════════════════════════════════════════════════════════════════
+// ⛔⛔ SWASH_REACH 已上移到浪队列那一段（与 WAVE_* 常量放在一起，0.105）。
+// ⛔⛔ 反馈六·3 的「参差」很容易做成「撕碎」。实测 reach 0.115 + 逐列滞后
+//    0.22 + 涌高 0.35..1.85 ⇒ 岸线在 900px 画幅上上下铺开 ~250px，渲染出来
+//    是沙子上被啃出的一个个深缺口（像咬痕），不是涌浪的水舌。
+//    现在的组合把总铺开压到 ~100px：参差但仍是一道前缘。
+const REACH_LO = 0.55, REACH_HI = 0.85;
+// ⛔ SWASH_UP_END / SWASH_BACK_END / swashCurve / swashStage 全部删除了。
+//    反馈七·5：相位三角做不到「浪被下一浪追上并替换」—— 三角只有一条线，
+//    没有「离散个体」这个概念。现在推进量来自浪队列（见 stepWaves）。
+const SHEEN_A       = 0.19;    // 湿沙的镜面高光强度
+const PUDDLE_MAX    = 16;
+
+const SPLASH_MAX  = 180;
+const RESIDUE_MAX = 52;
+const RESIDUE_A   = 0.17;
+const SAND_LINES  = 26;
+const SAND_LINE_A = 0.055;   // ⛔ 防摩尔纹的 alpha 上限；实际三档取其 0.29/0.44/0.58
+
+const SET_TAU_MS     = 500;
+const SILENCE_FLOOR  = 0.012;
+const ENERGY_TO_SHADE = 0.45;
+const ENERGY_TO_LAYERS = 0.60;
+const SPLASH_A   = 0.85;
+const CAUSTIC_A  = 0.075;
+const CAUSTIC_SHORE_A = 0.10;
+const WET_LINE_A   = 0.42;    // 岸线上那道细亮湿线
+const RESIDUE_STREAK_A = 0.075; // 退水留在湿沙上的羽状残沫
+const FINGER_MAX  = 30;      // 浪花手指数量
+const MOTTLE_A    = 0.030;    // 低频斑驳，避免任何区域是「数学上平的颜色」
+// ⭐ 沙面质感（反馈三）。沙本身几乎不动，所以整块烘一次，之后每帧只做
+//    一次「裁剪 + blit」，代价与帧率无关。
+// ⭐⭐ 纹理起点（占 h）。**必须高过水线的最大摆动**，否则退水时露出的那段没有纹理。
+//   水线 = swashFrontY + H·swashReachNow·adv，而 swashFrontY = H·SHORE_K + 潮汐
+//     + crestProfile·H·CREST_AMP_SHORE ⇒ 最小 y = 0.620 − 0.130 − 0.006 = **0.484h**。
+//   ⛔ 早先取 0.62（= SHORE_K）⇒ 水线退到 0.62h 以上时，0.484h~0.62h 这段在
+//     裁剪区内却没有纹理 ⇒ 露出**海水底色**，肉眼看到「沙滩颜色与底色的交界」；
+//     而且视觉上「沙」从 0.62h 才开始 ⇒ owner 报「海水回退退到快中间就不退了」
+//     与「应该退的都是沙滩的颜色」—— **两条是同一个根因**。
+//   ⭐ 0.46 留了 0.024h（≈22px）余量。
+const SAND_TEX_TOP = 0.46;
+const SAND_GRAIN_A  = 0.062;   // 细颗粒（像素尺度，主导纹理）
+const SAND_GRAIN2_A = 0.030;   // 第二层更细的砂纸感
+const SAND_RIPPLE_A = 0.040;   // 宽而柔的沿岸起伏带
+const SAND_RIPPLE_N = 7;       // 带数
+const SAND_DAMP_A   = 0.30;    // 深色潮湿斑块的最大压暗量
+
+/** 确定性 2D 值噪声（hash 晶格 + 双线性），用于沙的斑驳与条纹扭曲 */
+function vnoise2(x, y, seed){
+  const xi = Math.floor(x), yi = Math.floor(y);
+  const xf = x - xi, yf = y - yi;
+  const sx = xf * xf * (3 - 2 * xf), sy = yf * yf * (3 - 2 * yf);
+  const h = function (a, b){
+    return hash32((Math.imul(a | 0, 73856093) ^ Math.imul(b | 0, 19349663) ^ seed) | 0);
+  };
+  return lerp(lerp(h(xi, yi), h(xi + 1, yi), sx),
+              lerp(h(xi, yi + 1), h(xi + 1, yi + 1), sx), sy);
+}
+
+const PAL = {
+  seaFar:'#2E9AA8', seaNear:'#1E7A8C', seaDeep:'#14586B',
+  ridge:'#6FD0CC', trough:'#0E4A5C', shoal:'#A6D8C4',
+  wet:'#B08A5E', sandNear:'#C9A063', sandMid:'#C4A876', sandFar:'#D9BE8C',
+  foam:'#F2F7F5', foamCore:'#CBE7E3', foamTail:'#B4DEDA', caustic:'#EAF6FF',
+  // 沙滩偶客：一只小螃蟹。陶土橙压一点灰 —— 纯饱和橙会在暖沙上炸成一小块广告。
+  crabShell:'#B4603A', crabShellHi:'#D4905F', crabRim:'#6A3520',
+  crabLeg:'#83422A', crabLegFar:'#63301D', crabClaw:'#C97245', crabShadow:'#4A3520'
+};
+
+/* ── deterministic hash / RNG (⛔ never Math.random) ──────────────────── */
+function hash32(x){
+  x = (x ^ 61) ^ (x >>> 16); x = (x + (x << 3)) | 0;
+  x = Math.imul(x, 0x27d4eb2d); x ^= x >>> 15;
+  return (x >>> 0) / 4294967296;
+}
+function hash2(i, salt){ return hash32(Math.imul(i + 1, 2654435761) ^ Math.imul(salt + 7, 40503)); }
+function mulberry32(a){
+  return function(){
+    a |= 0; a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+/* ── math helpers ─────────────────────────────────────────────────────── */
+const clamp = (v, a, b) => v < a ? a : (v > b ? b : v);
+const lerp  = (a, b, t) => a + (b - a) * t;
+function smoothstep(e0, e1, x){ const t = clamp((x - e0) / (e1 - e0), 0, 1); return t * t * (3 - 2 * t); }
+function wrap01(v){ const r = v % 1; return r < 0 ? r + 1 : r; }
+
+// sin LUT — hot loop in the water field calls this hundreds of thousands of times
+const LUT_N = 4096, LUT_MASK = 4095, LUT_SCALE = 4096 / (Math.PI * 2);
+const SIN = new Float32Array(LUT_N + 1);
+for (let i = 0; i <= LUT_N; i++) SIN[i] = Math.sin(i / LUT_SCALE);
+function fsin(a){ return SIN[(a * LUT_SCALE | 0) & LUT_MASK]; }
+
+function hexRgb(h){
+  const n = parseInt(h.slice(1), 16);
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   1 · CANVAS
+   ══════════════════════════════════════════════════════════════════════════ */
+const cvs = document.getElementById('stage');
+const ctx = cvs.getContext('2d', { alpha: false });
+let W = 0, H = 0, DPR = 1;
+let kScale = 1;                 // keeps the scallop count stable across window sizes
+
+const fieldCvs = document.createElement('canvas');
+const fieldCtx = fieldCvs.getContext('2d', { alpha: false });
+let fieldImg = null, fw = 0, fh = 0, fieldData = null;
+// 反馈六·4：粗糙度场与行级对比度场（沿 x / 沿 y 各一份，O(fw)+O(fh)）
+let roughX = null, rowAmp = null, roughY = null;
+
+// cached geometry (rebuilt on resize only)
+let vignetteGrad = null;
+let grainPattern = null, mottlePattern = null;
+let colPhase = null, colMid = null, colFine = null;
+let rowPhase = null, rowMid = null, rowFine = null;
+
+function buildGeometry(){
+  DPR = clamp(window.devicePixelRatio || 1, 1, 2);
+  W = cvs.clientWidth || window.innerWidth;
+  H = cvs.clientHeight || window.innerHeight;
+  cvs.width  = Math.max(2, Math.round(W * DPR));
+  cvs.height = Math.max(2, Math.round(H * DPR));
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  ctx.imageSmoothingEnabled = true;
+  if ('imageSmoothingQuality' in ctx) ctx.imageSmoothingQuality = 'high';
+
+  kScale = 1920 / Math.max(W, 1);
+
+  const seaPx = Math.max(4, Math.round(H * SEA_BOTTOM_K * DPR));
+  const scale = clamp(Math.ceil(Math.sqrt((W * DPR * seaPx) / 52000)), 4, 14);
+  fw = Math.max(2, Math.ceil((W * DPR) / scale));
+  fh = Math.max(2, Math.ceil(seaPx / scale));
+  fieldCvs.width = fw; fieldCvs.height = fh;
+  fieldImg = fieldCtx.createImageData(fw, fh);
+  fieldData = fieldImg.data;
+
+  colPhase = new Float32Array(fw);   // x-dependent phase of the big swell
+  colMid   = new Float32Array(fw);   // x-dependent phase of the mid ripple
+  colFine  = new Float32Array(fw);   // x-dependent phase of the fine chop
+  rowPhase = new Float32Array(fh);   // y-dependent phase of the big swell
+  rowMid   = new Float32Array(fh);   // y-dependent phase of the mid ripple
+  rowFine  = new Float32Array(fh);   // y-dependent phase of the fine chop
+  // 反馈六·4：行/列级粗糙度与对比度场
+  roughX   = new Float32Array(fw);   // x-dependent roughness (calm gaps vs trains)
+  rowAmp   = new Float32Array(fh);   // y-dependent crest contrast
+  roughY   = new Float32Array(fh);   // y-dependent roughness
+
+  // ⛔ 干沙底色不再用 CanvasGradient —— 反馈三要求沙有像素级颗粒/起伏带/
+  //    潮湿斑，那只能走 ImageData。渐变已由 buildSandTexture() 烘成纹理。
+  // ⛔ 湿沙不再用固定渐变 —— 反馈二要求它随涌浪周期逐列变化：
+  //    宽度/深浅来自 per-column 的 wetEdge/wetAmt，由 drawWetWash() 现场生成。
+
+  const vr = Math.hypot(W, H) * 0.62;
+  vignetteGrad = ctx.createRadialGradient(W * 0.5, H * 0.46, vr * 0.30, W * 0.5, H * 0.5, vr);
+  vignetteGrad.addColorStop(0, 'rgba(0,0,0,0)');
+  vignetteGrad.addColorStop(0.72, 'rgba(3,10,12,.10)');
+  vignetteGrad.addColorStop(1, 'rgba(3,10,12,.34)');
+
+  buildGrain();
+  buildSandTexture();
+  buildFoamTiles();   // 反馈六·5：外海泡沫贴图，resize 时烘一次
+  buildLaceNet();     // 反馈八·5b：水线蕾丝的「网」拓扑，resize 时烘一次
+  buildCausticNet();  // 反馈八·5c：焦散胞格网的格壁拓扑，resize 时烘一次
+  resetWaves();     // 反馈七·5：换尺寸时不留半个浪队列
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   沙面纹理（反馈三）—— ⭐ 烘一次，之后每帧只 blit
+   分层：底色渐变 + 像素级细颗粒 + 第二层细砂 + 宽柔沿岸起伏带 + 潮湿斑块
+   ══════════════════════════════════════════════════════════════════════════ */
+const sandTex = document.createElement('canvas');
+let sandTexTop = 0;
+function buildSandTexture(){
+  const tw = Math.max(4, Math.round(W * DPR));
+  const top = H * SAND_TEX_TOP;
+  sandTexTop = top;
+  const th = Math.max(4, H - top);
+  // 一次性开销要可控：像素太多就按比例降采样
+  const k = Math.min(1, Math.sqrt(3200000 / (tw * th)));
+  const sw = Math.max(4, Math.round(tw * k)), sh = Math.max(4, Math.round(th * k));
+  sandTex.width = sw; sandTex.height = sh;
+  const c = sandTex.getContext('2d');
+  const id = c.createImageData(sw, sh);
+  const d = id.data;
+
+  const cNear = hexRgb(PAL.sandNear), cMid = hexRgb(PAL.sandMid), cFar = hexRgb(PAL.sandFar);
+  const cDamp = hexRgb('#8E7048');
+  let p = 0;
+  for (let y = 0; y < sh; y++){
+    const v = y / (sh - 1);                       // 0 = 靠水, 1 = 画面下缘
+    const t = Math.pow(v, 0.86);
+    // ① 底色：靠水更暗更湿，下缘更亮更干
+    let r = t < 0.42 ? lerp(cNear[0], cMid[0], t / 0.42) : lerp(cMid[0], cFar[0], (t - 0.42) / 0.58);
+    let g = t < 0.42 ? lerp(cNear[1], cMid[1], t / 0.42) : lerp(cMid[1], cFar[1], (t - 0.42) / 0.58);
+    let b = t < 0.42 ? lerp(cNear[2], cMid[2], t / 0.42) : lerp(cMid[2], cFar[2], (t - 0.42) / 0.58);
+    const dampDrift = 1 - 0.10 * (1 - v);        // 整体湿→干的微渐变
+
+    for (let x = 0; x < sw; x++){
+      const u = x / (sw - 1);
+
+      // ② 宽而柔的沿岸起伏带：被低频噪声扭曲，所以不是等距直线
+      const warp = vnoise2(u * 3.1, v * 2.2, 7717) * 2.6 + vnoise2(u * 7.7, v * 5.0, 3313) * 1.1;
+      const rip = Math.sin((v * SAND_RIPPLE_N + warp) * Math.PI * 2);
+      const ripK = 1 + SAND_RIPPLE_A * rip;
+
+      // ③ 潮湿斑块：软边低频斑。近水处更多，但整块干沙也有零星几片
+      const dv = vnoise2(u * 4.3, v * 3.1, 9151) * 0.62 + vnoise2(u * 11.0, v * 7.0, 4423) * 0.38;
+      const damp = smoothstep(0.54, 0.82, dv)
+                 * (0.30 + 0.70 * (1 - smoothstep(0.10, 0.80, v))) * SAND_DAMP_A;
+
+      let rr = r * ripK, gg = g * ripK, bb = b * ripK;
+      rr = lerp(rr, cDamp[0], damp); gg = lerp(gg, cDamp[1], damp); bb = lerp(bb, cDamp[2], damp);
+
+      // ④ 像素级细颗粒（主导纹理）+ 更细的第二层
+      const g1 = hash32(Math.imul(y, 374761393) + Math.imul(x, 668265263) + 12345) - 0.5;
+      const g2 = hash32(Math.imul(y, 1274126177) + Math.imul(x, 2654435761) + 777) - 0.5;
+      const grain = g1 * SAND_GRAIN_A + g2 * SAND_GRAIN2_A;
+      const gain = dampDrift;
+
+      const R = (rr + grain * 255 * gain) * (1 - damp * 0.10);
+      const G = (gg + grain * 255 * gain) * (1 - damp * 0.10);
+      const B = (bb + grain * 255 * gain) * (1 - damp * 0.10);
+      d[p]     = R < 0 ? 0 : R > 255 ? 255 : R;
+      d[p + 1] = G < 0 ? 0 : G > 255 ? 255 : G;
+      d[p + 2] = B < 0 ? 0 : B > 255 ? 255 : B;
+      d[p + 3] = 255;
+      p += 4;
+    }
+  }
+  c.putImageData(id, 0, 0);
+}
+
+// fine film grain — a 128px tile, offsets cycle so it never crawls
+const GRAIN_N = 128;
+const grainCvs = document.createElement('canvas');
+grainCvs.width = grainCvs.height = GRAIN_N;
+// ⭐ low-frequency mottle: bilinear value-noise on a 16×16 lattice, so it holds
+// NO high frequencies at all — it adds tonal variation without any moiré risk
+const MOTTLE_N = 256, MOTTLE_CELLS = 16;
+const mottleCvs = document.createElement('canvas');
+mottleCvs.width = mottleCvs.height = MOTTLE_N;
+function buildGrain(){
+  const g = grainCvs.getContext('2d');
+  const id = g.createImageData(GRAIN_N, GRAIN_N);
+  const rnd = mulberry32(0x9E3779B9);
+  for (let i = 0; i < GRAIN_N * GRAIN_N; i++){
+    const v = clamp(128 + (rnd() - 0.5) * 96, 0, 255) | 0;
+    id.data[i*4] = id.data[i*4+1] = id.data[i*4+2] = v;
+    id.data[i*4+3] = 255;
+  }
+  g.putImageData(id, 0, 0);
+  grainPattern = ctx.createPattern(grainCvs, 'repeat');
+
+  // value noise: random lattice, bilinear interpolation, ⛔ never Math.random
+  const m = mottleCvs.getContext('2d');
+  const mid = m.createImageData(MOTTLE_N, MOTTLE_N);
+  const mr = mulberry32(0x1D3A5C7);
+  const lat = new Float32Array(MOTTLE_CELLS * MOTTLE_CELLS);
+  for (let i = 0; i < lat.length; i++) lat[i] = mr();
+  const step = MOTTLE_N / MOTTLE_CELLS;
+  for (let y = 0; y < MOTTLE_N; y++){
+    const gy = y / step, y0 = gy | 0, fy = gy - y0;
+    const sy = fy * fy * (3 - 2 * fy);
+    for (let x = 0; x < MOTTLE_N; x++){
+      const gx = x / step, x0 = gx | 0, fx = gx - x0;
+      const sx = fx * fx * (3 - 2 * fx);
+      const a = lat[(y0 % MOTTLE_CELLS) * MOTTLE_CELLS + (x0 % MOTTLE_CELLS)];
+      const b = lat[(y0 % MOTTLE_CELLS) * MOTTLE_CELLS + ((x0 + 1) % MOTTLE_CELLS)];
+      const c = lat[((y0 + 1) % MOTTLE_CELLS) * MOTTLE_CELLS + (x0 % MOTTLE_CELLS)];
+      const d = lat[((y0 + 1) % MOTTLE_CELLS) * MOTTLE_CELLS + ((x0 + 1) % MOTTLE_CELLS)];
+      const n = lerp(lerp(a, b, sx), lerp(c, d, sx), sy);
+      const v = clamp(96 + n * 96, 0, 255) | 0;
+      const p = (y * MOTTLE_N + x) * 4;
+      mid.data[p] = v; mid.data[p+1] = v; mid.data[p+2] = v; mid.data[p+3] = 255;
+    }
+  }
+  m.putImageData(mid, 0, 0);
+  mottlePattern = ctx.createPattern(mottleCvs, 'repeat');
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   2 · SCATTERED POINTS — 飞沫 / 残沫，⛔ 确定性烘焙，绝不 Math.random
+   ══════════════════════════════════════════════════════════════════════════ */
+const SPLASH = [];
+for (let i = 0; i < SPLASH_MAX; i++){
+  SPLASH.push({
+    u:      hash2(i, 1),                                   // column 0..1
+    period: 900 + 1500 * hash2(i, 2),                      // life cycle ms
+    phase:  hash2(i, 3) * 4000,
+    reach:  0.008 + 0.075 * hash2(i, 4),                   // travel distance (fraction of h)
+    lift:   (hash2(i, 5) - 0.5) * 0.022,                   // lateral scatter
+    size:   0.9 + 2.8 * hash2(i, 6),
+    bright: 0.30 + 0.70 * hash2(i, 7)
+  });
+}
+
+// residue dots: seeded LCG with a minimum-separation rejection ⇒ 孤立、不成纹.
+// v is biased toward the wet-sand edge (residue foam collects where the water
+// last reached) rather than spread evenly over the dry sand.
+const RESIDUE = [];
+{
+  const rnd = mulberry32(0x5EA51DE);
+  const MIN_SEP2 = 0.092 * 0.092;
+  let tries = 0;
+  while (RESIDUE.length < RESIDUE_MAX && tries < 8000){
+    tries++;
+    const u = 0.03 + 0.94 * rnd();
+    const v = Math.pow(rnd(), 0.62) * 0.94;        // sqrt-ish ⇒ denser near the top
+    let ok = true;
+    for (let k = 0; k < RESIDUE.length; k++){
+      const du = RESIDUE[k].u - u, dv = RESIDUE[k].v - v;
+      if (du*du + dv*dv < MIN_SEP2){ ok = false; break; }
+    }
+    if (!ok) continue;
+    RESIDUE.push({ u, v, s: 1.0 + 2.6 * rnd(), a: 0.5 + 0.5 * rnd() });
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   3 · PURE GEOMETRY (mirrors the plan's companion object)
+   ══════════════════════════════════════════════════════════════════════════ */
+let t0 = 0;
+
+/** 确定性 1-D 值噪声（hash 晶格 + smoothstep 插值）—— 沿shore轴的随机性来源 */
+function noise1(x, seed){
+  const xi = Math.floor(x), xf = x - xi;
+  const s = xf * xf * (3 - 2 * xf);
+  return lerp(hash2(xi, seed), hash2(xi + 1, seed), s);
+}
+/** 分形叠加（fBm），八度比 2.07 ⇒ 频率互不成整数比 ⇒ 没有可察觉的重复。
+ *  ⛔ 衰减用 0.5 时能量几乎全在最低八度 ⇒ 浪脊波长很长、幅度很小，
+ *    看起来就是几条平缓的带子。把衰减放缓到 0.60，能量更多地留在
+ *    中间八度 ⇒ 浪脊才有「起伏」而不是「一条斜线」。 */
+function fbm1(x, seed, oct){
+  let a = 0, amp = 0.5, f = 1;
+  for (let o = 0; o < oct; o++){
+    a += amp * (noise1(x * f, seed + o * 977) * 2 - 1);
+    f *= 2.07; amp *= 0.60;
+  }
+  return a;
+}
+
+/** ⭐⭐ 把 fbm1 的输出**拉满到 0..1**，供各种包络/密度场使用。
+ *
+ *  ⛔⛔ fbm1 的实际 p10..p90 只有 ±0.39（oct=2 实测，见 range.js），
+ *    而不是理论上的 ±0.5。反馈六里我到处写 `0.5 + 0.62*fbm1(...)`，
+ *    结果所有包络都被压在 0.26~0.74：既到不了 0（这条浪列消失 ⇒
+ *    「局地浪列 / 平静空档」做不出来），也到不了 1（最强处不够强）。
+ *    这就是「加了包络但看起来没变化」的原因。
+ *  0.5 + 1.45·fbm1 ⇒ p10..p90 覆盖 0..1，p1..p99 略微溢出、交给 clamp。 */
+function fbmNorm(x, seed, oct){
+  return clamp(0.5 + 1.45 * fbm1(x, seed, oct), 0, 1);
+}
+/** 同上，但返回 −1..1（给需要双向偏移的场合，例如逐列相位滞后） */
+function fbmSigned(x, seed, oct){
+  return (fbmNorm(x, seed, oct) - 0.5) * 2;
+}
+
+/** ⭐ 浪脊横向剖面（反馈一 a/b）—— 域扭曲的 fBm，不是正弦叠加。
+ *  ⛔ 之前是 5 个正弦 ⇒ 视觉上「一排等距平行波」，像碗里的涟漪。
+ *  ① 域扭曲（两个低频 fBm 偏移采样坐标）⇒ 浪脊自己会拐弯、成 S，
+ *     局部在推进、局部在后退，而不是整齐的平行正弦
+ *  ② 四段八度、频率互不成整数比 ⇒ 眼睛找不到重复
+ *  ③ env 包络 ⇒ 有的岸段浪脊又长又强，有的短而碎（间距/长度/曲率都在变）
+ *  ④ u 里含 t ⇒ 整个图案沿shore缓慢漂移，任何时刻都不会两次相同 */
+function crestProfile(u, seed){
+  const wx = fbm1(u * 0.83, seed + 511, 2);
+  const wy = fbm1(u * 0.61, seed + 733, 2);
+  const v  = u + wx * 1.70 + wy * 0.85;
+  // ⛔ 包络下限 0.30 → 0.12：反馈六·3「有的地方弧得很高、有的地方一直很低」。
+  //    0.30~1.00 时所有岸段的浪脊强度差不多，读起来还是「一条平缓的带」。
+  const env = 0.12 + 0.88 * (0.5 + 0.5 * fbm1(u * 0.37, seed + 613, 2));
+  return (0.62 * fbm1(v, seed + 101, 4) + 0.38 * fbm1(v * 2.9, seed + 211, 2)) * env;
+}
+
+/** ⭐ 水位场 —— 浪脊由 crestProfile 给出，横向形状随机且连续演化。
+ *  ⭐ `layer` 只用来在剖面上**错开**一段（CREST_LANE_SHIFT）：四条浪带是
+ *    同一条剖面的平移副本 ⇒ 看起来是一组相干的浪列（真实涌浪就是这样），
+ *    而且相邻带的差值只有「局部斜率 × 错开量」，绝不会互相穿越。
+ *  ⛔ 早先每条带一个独立 seed（811 + L*104729）⇒ 要么交叉产生透镜伪影，
+ *    要么根本不像同一组浪。
+ *  ⛔ 漂移 0.000060 → 0.0000060：**10× 更慢**（19.4 px/s → 1.9 px/s）。
+ *    反馈六·1「海浪太快了」；反馈一的「图案沿shore缓慢漂移、任何时刻不重复」
+ *    靠的是分钟量级 —— 这个速率下 60 s 走 117px，仍在变，但一帧一帧看不出来。 */
+/* ⛔ 已删除 `waveFrontY(x, t, baseY, h, layer)` 与 `waveDepthK(w, adv)`（反馈八·9）。
+ *   它们给非领头浪的前缘用**破碎线尺度**（行程约 340px），而领头浪用水线尺度
+ *   （H·swashReachNow ≈ 81px）—— 两套**互不兼容的坐标定义**。交接判据
+ *   `front.y >= a` 于是变成拿两个不同参数化空间的 adv 直接比较，交接发生在
+ *   「破碎线还远在海外」的时刻（实测 adv 0.41~0.77），整条带瞬移 150~267px。
+ *   owner 选方案 B 后，两端统一到水线空间定位，见 drawSwellBands 的 bfy 计算。
+ *   ⚠️ 不要把破碎线尺度的定位加回来 —— 它与交接连续性天然冲突。 */
+/** ⭐ 岸线（= 0 号浪带前缘）的**平均**位置：不含涌浪周期，
+ *  真正的水线 = 这里 + 涌浪推进量（见 computeShore）
+ *  ⚠ 振幅克制：±0.02·h 左右。早先按 WAVE_A 原样叠加出 ±0.10·h，岸线像山脉。 */
+function swashFrontY(x, t, h){
+  let y = h * SHORE_K;
+  y += h * 0.0060 * Math.sin(t * 0.000042);                     // 潮汐：极慢整体升降
+  // ⛔ 漂移速率 0.000052 → 0.0000105（约 5× 更慢）。反馈六·1：「海浪太快了」。
+  const u = x * 0.00310 * kScale + t * 0.0000105;
+  y += crestProfile(u, 2711) * h * CREST_AMP_SHORE;
+  return y;
+}
+/* ══════════════════════════════════════════════════════════════════════════
+   反馈七·5 + 反馈三·3 · ⭐⭐ 浪队列 —— 离散的浪，一条一条走完一生
+   ══════════════════════════════════════════════════════════════════════════
+   为什么不能用相位三角：所有者要的是**个体**。
+     「N 到达滩上 → 原地消散 → 水线后退（露出湿沙、干燥锋面跟进）→
+       N+1 的前缘追上退中的水线 → 水线随 N+1 重新上涌 → N+1 到滩消散 → 再退 …」
+   相位三角（sin 曲线）永远做不到「后退 / 前缘追上」的离散交接。
+
+   ⛔ 反馈三·3：**海里没有「被追上顶替」这回事** —— 一条浪只有走到滩上
+      （y ≥ W_REACH_Y）才算终点，中途**绝不会**被消耗。
+   ⭐ 不相交保证（跟随者更慢 ⇒ 比早先「T 跨度 < 出浪间隔」强得多）：
+      领头浪 T ≤ WAVE_T_MAX 5800ms；跟随者 T ≥ FOLLOW_T_SLOW × WAVE_T_MIN
+      = 2.0 × 4200 = 8400ms ⇒ 相邻到达至少相隔 **≥2600ms**
+      ⇒ 后面那条永远追不上前面那条，自然不需要顶替。
+
+   数据结构：定长池 WAVE_POOL 个槽位，每个槽位就是一条浪：
+   ┌──────────────────────────────────────────────────────────────────┐
+   │ state   生命周期状态（见下）                                     │
+   │ y       行程 0 = 外海出生线，1.0 = 到达滩上                       │
+   │ v       推进速度（每 ms 的 Δy，出生时定死，途中不变）              │
+   │ reach   这条浪自己的涌高系数（每条浪舌头形状不同）                  │
+   │ seed    这条浪自己的 hash 种子（形状/长度各不相同）                 │
+   │ aliveT  出生后已过的毫秒数（泡沫淡入用）                          │
+   │ fadeT   消散已进行的毫秒数                                       │
+   │ hit     到过滩上？= 会留湿沙                                     │
+   │ peak[]  到达滩上那一瞬、逐列的水线 y（= 湿沙高水位）               │
+   └──────────────────────────────────────────────────────────────────┘
+
+   状态转移（唯一允许的边）：
+     (空槽) ──spawn──▶ ADVANCING
+     ADVANCING ──y ≥ W_REACH_Y──▶ REACHED        到达滩上
+     REACHED  ──同一帧──▶ FADING                   消散（**留**湿沙）
+     FADING   ──fadeT ≥ WAVE_FADE_MS──▶ DEAD        淡出完毕，槽位回收
+     DEAD     ──▶ (空槽)
+   ⛔ 只有 REACHED 才写湿沙（commitWetMarks）—— 上冲途中一个字都不写，
+     这正是反馈七·1「湿沙只在退水之后出现」。
+   ⛔ 滩上最后一条浪 DEAD 之后，水线进入**退水**（SWASH_RETREAT_MS，见
+     waterlineAdvance）：后退到被下一条 ADVANCING 浪的前缘追上为止（交接），
+     若海面暂时没有浪则钉在海缘等待 —— 这就是「退水 + 干燥锋面」的节奏源。
+
+   ⛔⛔ 反馈六·2 的时钟约束依然成立：这里只吃 dt（以及 hash）。
+      dt 在暂停时是 0，所以暂停会真正冻结整个队列。
+   ══════════════════════════════════════════════════════════════════════════ */
+const W_EMPTY = 0, W_ADVANCING = 1, W_REACHED = 2, W_FADING = 3;
+const W_REACH_Y = 1.00;   // y 到 1.0 = 「到达滩上」⇒ 消散
+// ⛔⛔ **不设「到达间隔」常量**。这里曾有 MIN_ARRIVE_GAP_MS = 1300，用于强行
+//   保证后浪比前浪晚到 ≥1300ms。owner 指出这是错的：两条浪本来就该**独立**，
+//   「第二条浪来得早就退得短、来得晚就退得长」正是要保留的自然变化。强行等间隔
+//   既抹掉了变化，又把后浪顶到离滩很近的位置 ⇒ 退水恒为 117ms/20.7px。
+//   ⛔ 位置钳位（WAVE_SPACING_Y）更早被移除：它把后浪冻在 0.45，adv 从未超过 0.6。
+//   ⇒ 现在两条浪之间**没有任何人为的时间或位置约束**，只有各自独立的 T。
+// ⭐ 补浪时机：前一条走过 WAVE_FOLLOW_Y（**约 1/3 行程**，⛔ 不是大半程）就补
+//   下一条排在它后面 ⇒ 稳态恒为「1 条在最前 + 1 条排队」（owner）。
+//   定时器（WAVE_GAP_MS）只做海面全空时的最小间隔闸。
+const WAVE_FOLLOW_Y = 0.62;
+// ⭐ 跟随者（海面上第二条浪）的行程倍率 —— >1 即更慢。
+//   owner：「第二条浪走的太快了，前浪还没来得及回退」+「靠近前浪时还是会消失」。
+//   ⛔ 不是到达间隔硬约束（那条被 owner 明确否定），只是把后浪的 T 分布后移。
+//   ⚠️ 调大幅度会同时拉长周期：1.5 ⇒ 周期约 +50%，浪更稀疏。
+const FOLLOW_T_SLOW = 2.0;
+const waves = [];
+let waveSerial = 0, spawnAcc = 0;
+let retreatT = -1;        // 退水已进行的毫秒数；<0 = 不在退水（水线由浪驱动）
+for (let i = 0; i < WAVE_POOL; i++) waves.push({ state: W_EMPTY, y: 0, v: 0, reach: 1, seed: 0, serial: -1, aliveT: 0, fadeT: 0, hit: false, swashT: 0 });
+/* ══════════════════════════════════════════════════════════════════════════
+   ⭐⭐ 单浪模式（临时看「一条浪的完整生命周期」）—— 键 `1` / 面板按钮
+   ──────────────────────────────────────────────────────────────────────────
+   ⛔ **只过滤绘制，完全不动模拟**：队列照旧补浪、间距钳位、交接、退水全保留。
+      若改成「只发一条浪」，那条浪消散后海上会空一段（退水钉在海缘等它），
+      看到的就不是真实节奏了 —— 而 owner 要看的是**真实模型里**一条浪的一生。
+   ⭐ 跟踪用 **serial** 而不是对象引用：waves[] 是定长池、槽位会回收复用，
+      引用会把「下一条浪」误认成同一条。serial 每出生 +1，天然区分。 */
+let soloWave = false;     // 单浪模式开关
+let soloSerial = -1;      // 当前跟踪的那条浪的 serial；-1 = 还没选
+const soloInfo = { on: false, have: false, phase: '', state: 0, adv: 0, fade: 0,
+                   v: 0, reach: 0, ser: -1, ms: 0, wline: 0, retreating: false,
+                   wetMax: 0, nextIn: -1 };
+const SOLO_PHASE = ['空槽', '推进中', '抵滩', '消散', '已回收'];
+/** 选一条浪跟踪：优先最靠岸的那条（owner 关注的是最前浪），否则最靠外海的。 */
+function soloPick(){
+  let beach = null, front = null;
+  for (let i = 0; i < WAVE_POOL; i++){
+    const w = waves[i];
+    if (w.state === W_EMPTY) continue;
+    const b = (w.state === W_REACHED || w.state === W_FADING);
+    if (b && !beach) beach = w;
+    if (!front || w.y > front.y) front = w;
+  }
+  const pick = beach || front;
+  if (pick) soloSerial = pick.serial;
+}
+/** 每帧更新单浪读数。⛔ 严格只读：绝不调用任何有副作用的模拟函数。 */
+function soloTick(){
+  soloInfo.on = soloWave;
+  soloInfo.have = false;
+  if (!soloWave) return;
+  const find = () => {
+    for (let i = 0; i < WAVE_POOL; i++)
+      if (waves[i].state !== W_EMPTY && waves[i].serial === soloSerial) return waves[i];
+    return null;
+  };
+  let w = find();
+  if (!w){
+    soloPick();                       // 跟踪对象消散了 ⇒ 换下一条
+    w = find();
+    // ⛔ 海上可能**一条浪都没有**（初始态 / 两条浪之间的空窗）⇒ soloPick 挑不到，
+    //   serial 不变 ⇒ 这里若递归回去就是**无限递归**（实测 Maximum call stack
+    //   size exceeded，frame 0 直接崩）。故：找不到就留空，下一帧再挑。
+    if (!w) return;
+  }
+  soloInfo.have = true;
+  soloInfo.ser = w.serial;
+  soloInfo.state = w.state;
+  soloInfo.phase = SOLO_PHASE[w.state] || '?';
+  soloInfo.adv = clamp(w.y, 0, 1);
+  soloInfo.fade = waveFade(w);
+  soloInfo.v = w.v;
+  soloInfo.reach = w.reach;
+  soloInfo.ms = w.aliveT;
+  // ⛔ 水线读数取 swashPos 的均值，**不能调 waterlineAdvance()**：那个函数
+  //   有副作用（beach 分支会写 retreatT = -1，retreat 分支会做交接），
+  //   在 HUD 里调它等于每帧偷偷改模拟状态 —— 与「只过滤绘制」的承诺矛盾，
+  //   也会让「单浪开关不改变模拟」的对照实验因错误原因失败。
+  let sum = 0;
+  for (let c = 0; c <= COLS; c++) sum += swashPos[c];
+  soloInfo.wline = COLS > 0 ? sum / (COLS + 1) : 0;
+  soloInfo.retreating = retreatT >= 0 && retreatT < retreatDur;
+  let wm = 0, nw = -1;
+  for (let c = 0; c <= COLS; c++) if (wetMark[c] > wm) wm = wetMark[c];
+  soloInfo.wetMax = wm;
+  for (let i = 0; i < WAVE_POOL; i++){
+    const o = waves[i];
+    if (o.state === W_ADVANCING && o.serial !== soloSerial && (nw < 0 || o.y > nw)) nw = o.y;
+  }
+  soloInfo.nextIn = nw;
+}
+for (let i = 0; i < WAVE_POOL; i++) waves[i].peak = new Float32Array(COLS + 1);
+
+function spawnWave(){
+  let slot = -1;
+  for (let i = 0; i < WAVE_POOL; i++) if (waves[i].state === W_EMPTY){ slot = i; break; }
+  if (slot < 0) return false;                 // 池满：这一拍不出浪（不丢帧、不跳变）
+  const w = waves[slot], sd = 3300 + waveSerial * 733;
+  // ⭐⭐ **到达间隔** —— 替代曾经的 WAVE_SPACING_Y 位置钳位。
+  //   把这条浪的行程**抬高**，使它至少比前浪晚到 MIN_ARRIVE_GAP_MS。
+  //   ⇒ 后浪全程**自由推进**（位置不被冻结，符合 owner「中间不停顿」），且必定
+  //     晚到 ⇒ 前浪消散 + 水退完之后它才抵达，退水窗口才看得见。
+  //   ⛔ 不抬高 T 的话，两条浪几乎同时到滩，后浪贴在 y=1.0 等岸，前浪一消散就被
+  //     接管 ⇒ 退水被压成闪动（harness 实测 83ms/13.5px = 满程的 14%）。
+  //   ⛔ 也因此不再有「T 散布 < 出浪间隔 ⇒ 次序永不翻转」那条保证：现在的保证是
+  //     **构造出来的到达间隔**，比散布强 —— 前浪的剩余时间被显式算了进去。
+  // ⛔⛔ 扫描「前浪」必须在这条浪被写成 ADVANCING **之前**，并且按身份排除自身。
+  //   否则会扫到**刚创建的自己**：那时 w.y=0、w.v 还是上一条浪残留的 0 ⇒
+  //   frontRemainMs = (1-0)/0*1000 = Infinity ⇒ T=Infinity ⇒ w.v=0 ⇒ 这条浪
+  //   永远不动；而且它一直挂在池里，之后每次发浪都再算出一个 Infinity
+  //   （harness 实测：ser0 T=Infinity v=0 front=ser0，海上只剩 1 条不会动的浪）。
+  // ⭐⭐ **跟随者减速**（owner：「第二条浪走的太快了，前浪还没来得及回退」）。
+  //   ⛔ 这**不是**硬性到达间隔 —— owner 明确否定过那种「强行限制」（它把退水
+  //     压成恒定的 117ms/20.7px，抹掉了「来得早就退得短、来得晚就退得长」）。
+  //     这里只把**后浪的行程分布整体后移**，每条浪仍然抽自己的随机 T。
+  //   ⭐ 为什么这同时修掉「靠近前浪时消失」：后浪不再在领头浪消散前就推进到
+  //     adv 0.9+、深进领头浪那条更亮的泡沫带 —— 两条带重叠合并后，后浪就失去
+  //     可辨识性（它一直在被画，只是画在别人里面）。
+  //   ⚠️ 判据必须在写 w.state 之前算：否则会把自己算成跟随者（下面 front 扫描
+  //     已经踩过这个坑，见 T=Infinity 那条注释）。
+  let follower = false;
+  for (let i = 0; i < WAVE_POOL; i++)
+    if (waves[i].state === W_ADVANCING){ follower = true; break; }
+  const f = fbmNorm(waveSerial * 1.37, sd, 3);
+  const T = lerp(WAVE_T_MIN, WAVE_T_MAX, f) * (follower ? FOLLOW_T_SLOW : 1);
+  // ── 字段一次性写完（v 必须与 state 同批落地，不能留 0 给上面的扫描）────────
+  w.serial = waveSerial;                    // ⭐ 单浪模式靠它区分「同槽位复用 = 不同的浪」
+  waveSerial++;
+  w.state  = W_ADVANCING;
+  w.y      = 0;
+  w.v      = 1 / T;                         // ⭐ 速度出生时定死、途中不变
+  w.reach  = 0.62 + 0.78 * fbmNorm(waveSerial * 2.11, sd + 7, 2);   // 0.62..1.40
+  w.seed   = sd;
+  w.aliveT = 0;
+  w.fadeT  = 0;
+  w.hit    = false;
+  w.swashT = 0;                // ⭐ 冲流计时（反馈八·10）：出生时为 0
+  return true;
+}
+
+/** 推进整个队列一帧（第一段：出浪 / 推进 / 到达）。
+ *  ⛔ 这里**不做** REACHED→FADING：那一步必须等 computeShore 把当帧的逐列
+ *    水线写进 w.peak[] 之后才能做，否则 peak 永远是空的、湿沙永远不出现
+ *    （这个顺序错误真实发生过：wetMark 一列都没被写过）。
+ *  ⛔⛔ 反馈三·3：**没有「被追上/顶替」** —— ADVANCING 的浪不会被任何东西
+ *    消耗，唯一的终点就是 y ≥ W_REACH_Y。T 值域跨度 < 出浪间隔，所以
+ *    后面那条永远追不上前面那条，这个不变式由构造保证（见 spawnWave）。 */
+function stepWaves(dt){
+  const dms = dt * 1000;
+  // ── 出浪调度：稳态恒为「1 条在最前 + 1 条排队」（owner）───────────────
+  //   判据是**前浪是否过半程**，不是固定出浪定时器：
+  //   ⛔ 定时器与行程不同步 ⇒ 补浪时早时晚，实测「两个槽位同时存在」的帧
+  //       只占 16%，读作「海上只有 1 条浪」。
+  //   ⛔ 滩上正有浪在消散时不补：此时「最前」已被占住，再补就变成 3 条。
+  spawnAcc += dms;
+  let advN = 0, beachAny = false, front = null;
+  for (let i = 0; i < WAVE_POOL; i++){
+    const o = waves[i];
+    if (o.state === W_REACHED || o.state === W_FADING) beachAny = true;
+    if (o.state !== W_ADVANCING) continue;
+    advN++;
+    if (!front || o.y > front.y) front = o;
+  }
+  let want = false;
+  if (beachAny) want = false;                                   // 前槽已占
+  else if (advN === 0) want = spawnAcc >= WAVE_GAP_MS;          // 海面空：受最小间隔闸
+  else if (advN === 1 && front.y >= WAVE_FOLLOW_Y) want = true; // 前浪过半程：补一条排队
+  if (want && spawnWave()) spawnAcc = 0;
+
+  // ① 推进 + 到达判定。
+  //    ⛔ 防御性闸门：滩上还有浪在消散（REACHED/FADING）时，后来的浪贴岸
+  //    **等待**（y 钳在 1.0，但不转入 REACHED）—— 只是等，不是被消耗；
+  //    滩上一空，下一帧立即到达。正常情况下相邻到达至少相隔 ≥2600ms
+  //    （见上「不相交保证」），闸门只在边角情形短暂生效。
+  let shoreBusy = false;
+  for (let i = 0; i < WAVE_POOL; i++){
+    const s = waves[i].state;
+    if (s === W_REACHED || s === W_FADING){ shoreBusy = true; break; }
+  }
+  for (let i = 0; i < WAVE_POOL; i++){
+    const w = waves[i];
+    if (w.state === W_EMPTY) continue;
+    w.aliveT += dms;
+    // ⭐ 反馈八·10：破碎线进入上涌区（adv ≥ SWASH_LEAD_ADV）后开始**驱动冲流**。
+    //   ⚠️ 对 REACHED/FADING 也累积（它们 y 保持 1.0 ≥ 0.85）—— 冲流要在浪
+    //   抵滩后继续爬到满位，于是「破碎线到达滩上」与「冲线满位」同时发生。
+    if (w.y >= SWASH_LEAD_ADV) w.swashT += dms;
+    if (w.state !== W_ADVANCING) continue;
+    // ⭐⭐ **自由推进，不做位置钳位**。owner 要求后浪「一直向沙滩推进，直到遇上
+    //   回退的海水，中间不停顿」「应该一直推进到沙滩的」。
+    //   浪与浪的分开靠**发浪时的到达间隔**（MIN_ARRIVE_GAP_MS），不是靠冻结位置。
+    //   ⛔ 冻结位置（曾用 WAVE_SPACING_Y）实测有害：后浪 adv **从未超过 0.6**、
+    //   永远到不了滩，且 67% 的绘制调用因 kA 过低被 cull ⇒ 读作「走到中间就消失」。
+    //   ⛔ shoreBusy 闸门保留（正常情况下已不会触发）：滩上有浪在消散时贴岸的浪
+    //   **等待**，只是等、不是被消耗，滩上一空下一帧立即到达。
+    w.y += w.v * dms;
+    if (w.y >= W_REACH_Y){
+      w.y = W_REACH_Y;
+      if (!shoreBusy) w.state = W_REACHED;
+    }
+  }
+}
+/** ⭐ 把队列恢复到「海上一条浪都没有」的初始态。
+ *  resize() 会调用它（换尺寸时不该留半个队列）；harness 也用它来证明
+ *  「音频不进时间轴」—— 从同一个初态跑两遍，状态必须逐字相同。 */
+function resetWaves(){
+  for (let i = 0; i < WAVE_POOL; i++){
+    const w = waves[i];
+    w.state = W_EMPTY; w.y = 0; w.v = 0; w.reach = 1; w.seed = 0; w.serial = -1;
+    w.aliveT = 0; w.fadeT = 0; w.hit = false; w.swashT = 0;
+    for (let c = 0; c <= COLS; c++) w.peak[c] = -1e9;
+  }
+  waveSerial = 0; spawnAcc = 0; retreatT = -1; soloSerial = -1; soloInfo.have = false;
+}
+/** 第二段：REACHED → FADING、淡出、回收、起退水。
+ *  必须在 computeShore 写完 peak[] 之后调用。 */
+function finishWaves(dt){
+  const dms = dt * 1000;
+  for (let i = 0; i < WAVE_POOL; i++){
+    const w = waves[i];
+    if (w.state !== W_REACHED) continue;
+    w.state = W_FADING; w.fadeT = 0; w.hit = true;
+    // ⭐ owner：「然后浪花消失同时海水回退」—— ⛔ 早先是**先后**：抵滩后先淡出
+    //   WAVE_FADE_MS(900ms)，等浪死透才起退水 ⇒ 泡沫早已消失，退水才开始。
+    //   ⭐ 改为**抵滩即起退水**：泡沫在 WAVE_FADE_MS 里淡出、退水在 retreatDur 里
+    //   回落，两者**并行** ⇒ 视觉上「浪花消失」与「海水回退」同时发生。
+    //   ⚠️ 只在滩上**最后**一条时起退（否则前一条还在，前一条的水线该继续主导）。
+    // ⛔⛔ 且**退水已在进行时不得重新起退**（harness 实测的 78.79px 跳变根因）：
+    //   若此时把 retreatT 重置为 0，下一帧的退水推进量会从「已接近完全退回」
+    //   （实测 meanAdv 0.0685）被瞬间拽回满位（0.9611）⇒ 水线一帧跳 78px。
+    {
+      let stillBeach = false;
+      for (let j = 0; j < WAVE_POOL; j++){
+        const o = waves[j];
+        if (o !== w && (o.state === W_REACHED || o.state === W_FADING)){ stillBeach = true; break; }
+      }
+      if (!stillBeach && retreatT < 0) retreatT = 0;
+    }
+    // ⛔ 补浪**不在这里**做：出浪调度统一由 stepWaves 按「前浪过半程」判定，
+    //    在此再发一次会绕过「滩上不补」的约束 ⇒ 海上多出一条。
+  }
+  for (let i = 0; i < WAVE_POOL; i++){
+    const w = waves[i];
+    if (w.state !== W_FADING) continue;
+    w.fadeT += dms;
+    if (w.fadeT >= WAVE_FADE_MS){
+      w.state = W_EMPTY; w.y = 0; w.fadeT = 0; w.hit = false;
+      // ⭐ **兜底触发**：若这条浪抵滩时前一条还在滩上（见上段的 stillBeach 守卫），
+      //   那次「抵滩即起退水」会被跳过；而它的 REACHED 转换已经发生过了、不会
+      //   再触发 ⇒ 整轮退水被吞掉（harness 实测：90 秒只剩 1 次退水）。
+      //   ⇒ 滩上最后一条消失时补一次。⛔ 同样要求退水未在进行（否则会把水线
+      //   从已退回的位置瞬间拽回满位 —— 那就是 78.79px 跳变的根因）。
+      let left = false;
+      for (let j = 0; j < WAVE_POOL; j++){
+        const s = waves[j].state;
+        if (s === W_REACHED || s === W_FADING){ left = true; break; }
+      }
+      if (!left && retreatT < 0) retreatT = 0;
+    }
+  }
+}
+/** 领头的浪 —— 水线就跟着它。
+ *  ⛔ 必须把 FADING 也算进来：到达滩上正在消散的那条，**仍然定义着水线**，
+ *    否则会出现「有浪在消散却没有 lead」⇒ 泡沫前缘与沙面脱开 100px。
+ *  ⭐ 滩上的浪（REACHED/FADING）**优先**于海里的浪：同一帧里若有一条在滩上
+ *    消散、另一条贴岸等待（y 都到 1.0），那条**正在消散的**才是水线的定义者。 */
+function leadWave(){
+  let best = null;
+  for (let i = 0; i < WAVE_POOL; i++){
+    const w = waves[i];
+    if (w.state === W_EMPTY) continue;
+    if (!best) { best = w; continue; }
+    const bBeach = best.state === W_REACHED || best.state === W_FADING;
+    const wBeach = w.state === W_REACHED || w.state === W_FADING;
+    if (wBeach && !bBeach){ best = w; continue; }
+    if (wBeach === bBeach && w.y > best.y) best = w;
+  }
+  return best;
+}
+/** ⭐⭐ 队列级水线推进量 0..1 —— 新生命周期下全队列的**单一驱动**：
+ *  ① 有浪在滩上（REACHED/FADING）：钉在 1（浪在原地消散，水线停在涌高顶点）；
+ *  ② 前浪已亡、退水进行中：按 SWASH_RETREAT_MS 后退；后退途中若最靠岸的
+ *     ADVANCING 浪的前缘（行程）追上退中的水线 ⇒ 交接，水线随它重新上涌；
+ *     退到海缘（=0）而浪还很远 ⇒ 钉在海缘等它（交接判定持续生效）；
+ *  ③ 无滩上浪、也不在退水：水线跟着最靠岸的 ADVANCING 浪走（0..1），
+ *     没有浪则为 0（海平面）。
+ *  ⛔ 交接点按构造连续：交接发生的那一帧，浪的行程恰好追上退水推进量。 */
+function waterlineAdvance(dms){
+  // ⭐⭐ 反馈八·10（方案 3）：冲流线由「**冲流拥有者**」定义，而拥有者是一条
+  //   **破碎线已经走上涌区**的浪 —— 交接不再是位置突变，而是职责增加。
+  //   优先级：滩上的浪（REACHED/FADING）> 破碎线已进上涌区的浪（取 y 最大的）。
+  // ⛔⛔ 这里**不再**有任何 `front.y >= a` 这类比较：那是拿破碎线 adv（459px 尺度）
+  //   与冲流 adv（81px 尺度）直接比 —— 两种参数化空间不可比，正是 150~267px 瞬移
+  //   的根源（实测交接发生在 adv 0.41~0.77，即破碎线还远在海外时）。
+  let owner = null, ownerBeach = false, front = null;
+  for (let i = 0; i < WAVE_POOL; i++){
+    const w = waves[i];
+    if (w.state === W_EMPTY) continue;
+    const isBeach = (w.state === W_REACHED || w.state === W_FADING);
+    if (isBeach){ if (!ownerBeach){ owner = w; ownerBeach = true; } continue; }
+    if (w.state === W_ADVANCING && (!front || w.y > front.y)) front = w;
+    if (w.swashT <= 0) continue;                        // 破碎线还没进上涌区
+    if (!owner || (!ownerBeach && w.y > owner.y)) owner = w;
+  }
+  const push = owner ? clamp(owner.swashT / SWASH_RUNUP_MS, 0, 1) : 0;
+  if (retreatT >= 0){                                   // 退水：冲流回落，露出湿沙
+    retreatT += dms;
+    // ⭐⭐ 退水**自适应**：让它恰好在「后浪抵达上涌区」那一刻收尾。
+    //   owner：「前浪回退不应该退到中间就停止了，应该继续回退，直到碰到后浪」。
+    //   ⛔ 固定 SWASH_RETREAT_MS 的病：水线 440ms 就退完，然后**静止等**后浪
+    //     （实测等 ~2s）—— 视觉上就是「退到一半停住不动了」。
+    //   ⭐ 用后浪进入上涌区的 ETA 作退水时长下限（w.v 是 adv/ms，故 ETA 直接是 ms）。
+    const eta = front ? Math.max(0, (SWASH_LEAD_ADV - front.y) / front.v) : 0;
+    retreatDur = Math.max(SWASH_RETREAT_MS, Math.min(SWASH_RETREAT_MAX, eta));
+    const a = Math.max(0, 1 - retreatT / retreatDur);
+    // ⭐ **同空间**比较：a 与后浪的 nextPush 都是「冲流 adv」（0=完全退回，1=满位），
+    //   两者交叉时交接 ⇒ 水线连续。
+    //   ⛔ 早先的 `front.y >= a` 是拿**破碎线 adv**（459px 尺度）比**冲流 adv**
+    //   （81px 尺度）—— 两个参数化空间不可比，那才是 150~387px 瞬移的根源。
+    // ⛔⛔ 交接必须拿**非滩上**的 owner（即正在进来的后浪）的 push 比：
+    //   · 排除 ownerBeach：退水改为「抵滩即起」后，起退水时 owner 正是那条刚
+    //     抵滩的浪、swashT 已满 ⇒ push = 1，而 a 起始也是 1 ⇒ `push >= a` 立刻
+    //     成立 ⇒ 退水在第一帧就被取消（harness 实测：退水只剩 1 次）。
+    //   ⛔⛔ 但⛔ **不能**写成 `front !== owner`：后浪进上涌区后自己就成了 owner，
+    //     于是条件永远不成立 ⇒ 交接永不触发 ⇒ retreatT 永远不重置为 −1 ⇒
+    //     之后所有起退水的守卫（retreatT < 0）全被挡住 ⇒ 整轮退水被吞。
+    const incoming = (owner && !ownerBeach) ? owner : null;
+    const nextPush = (incoming && incoming.swashT > 0)
+                   ? clamp(incoming.swashT / SWASH_RUNUP_MS, 0, 1) : 0;
+    if (nextPush > 0 && nextPush >= a){ retreatT = -1; return nextPush; }
+    return a;
+  }
+  if (owner) return push;
+  return 0;                                             // 无拥有者 ⇒ 冲流完全退回
+}
+/** 浪的泡沫可见度：出生淡入（WAVE_SPAWN_RAMP_MS，no pop），淡出时线性归零 */
+function waveFade(w){
+  if (!w) return 0;
+  // ⭐ 出生淡入 = 时间淡入 × **行程淡入**。
+  //   owner：「后浪是凭空出现的吗？应该从最远端逐渐清晰化出现」。
+  //   ⛔ 只用时间：700ms 在后浪一生（~10s）里只占 7% ⇒ 视觉上就是「凭空出现」。
+  //   ⭐ 行程淡入让它在**最远端那 WAVE_SPAWN_FADE_ADV（20%）段里逐渐清晰化**，
+  //     到岸附近时 rampIn 已满（y=1），与从前一致。
+  const rampIn = clamp(w.aliveT / WAVE_SPAWN_RAMP_MS, 0, 1)
+               * clamp(w.y / WAVE_SPAWN_FADE_ADV, 0, 1);
+  if (w.state !== W_FADING) return rampIn;
+  return rampIn * clamp(1 - w.fadeT / WAVE_FADE_MS, 0, 1);
+}
+/* ⛔ `waveDepthK(w, adv)` 已删除（反馈八·9）。它把出生水深（0.42h）与上滩距离
+ *   解耦，撑起了「浪列铺开 340px」的破碎线尺度 —— 但那套尺度与水线尺度不兼容，
+ *   正是交接瞬移 150~267px 的根源。删除说明见 waveFrontY 处的注释块。 */
+/** ⭐ 反馈七·1：湿沙高水位**只在浪到达滩上那一瞬**写入。
+ *  ⛔ 上冲途中一个字都不写 —— 那里的沙还在水下。 */
+function commitWetMarks(){
+  for (let i = 0; i < WAVE_POOL; i++){
+    const w = waves[i];
+    if (w.state !== W_FADING || !w.hit) continue;
+    for (let c = 0; c <= COLS; c++){
+      if (w.peak[c] > wetMark[c]) wetMark[c] = w.peak[c];
+      if (w.peak[c] > -1e8) wetAmt[c] = 1;
+    }
+  }
+}
+
+/** ⭐ 层序强度（反馈七·5 后不再按「层号」而是按**离岸进度**）。
+ *  反馈六的版本按层号 rank 递减，那是「四条固定泳道」的遗产；
+ *  现在一条浪离岸越近越强 —— 这既是物理，也让远处的浪自然淡出。 */
+function layerAlpha(adv, energy){
+  const nearness = clamp(adv, 0, 1);                          // 0 = 最外海，1 = 到滩上
+  // ⭐ 近岸项的下限 0.22 → 0.32。harness 实测：⛔ 0.22 时第二条浪**起步段**
+  //   （adv 0..0.2）的 kA 只有 0.055，87.7% 的绘制调用被外海泡沫的
+  //   `kA < 0.12` 丢弃 ⇒ owner 读作「关掉单浪模式白沫就没了」。
+  //   ⚠️ 只抬高**下限**，不改斜率与距离律（FOAM_FAR_POW）—— 「最远处与海水
+  //   同样」这个诉求由距离律负责，两件事分开调。
+  const strength = 0.32 + 0.68 * nearness;                     // ⭐ 越靠岸越强
+  const thresh   = ENERGY_TO_LAYERS * 0.5 * (1 - nearness);
+  const appear   = 0.30 + 0.70 * smoothstep(thresh, 1, energy);
+  return clamp(strength * appear, 0, 1);
+}
+/** ⭐ 浪心（heart）的 alpha：⛔ 两端都低于中部 ⇒ 帐篷形，与前缘合成「双峰」。
+ *  宽平台而非尖峰 —— 参考图里大片白水体才是浪带的主体。峰值锁在 FOAM_CORE_A 以内。 */
+function foamCoreAt(n){
+  if (n <= HEART_IN || n >= HEART_OUT) return 0;
+  return FOAM_CORE_A
+       * smoothstep(HEART_IN, HEART_FULL, n)
+       * (1 - smoothstep(HEART_HOLD, HEART_OUT, n));
+}
+/** ⭐ 前缘（crest）：唇口最实（≈FOAM_EDGE_A）并保持 CREST_HOLD 那么宽，
+ *  之后才衰减。早期版本从 n=0 就开始掉，前段只剩几像素亮线，
+ *  整体读成「玻璃带」而不是白沫 —— 这是「不真实」的主因之一。 */
+function foamEdgeAt(n){
+  if (n >= CREST_OUT) return 0;
+  return FOAM_EDGE_A * 0.94 * (1 - smoothstep(CREST_HOLD, CREST_OUT, n));
+}
+/** 拖尾（tail）的 alpha：先平滑接入浪心，再二次渐隐，正好归零 */
+function foamTailAt(n){
+  if (n >= TAIL_OUT) return 0;
+  const ramp = smoothstep(TAIL_IN, TAIL_IN + 0.16, n);
+  const u = clamp((n - TAIL_IN) / (TAIL_OUT - TAIL_IN), 0, 1);
+  return 0.175 * ramp * (1 - u) * (1 - u);
+}
+/** 泡沫总剖面（供生成阶梯） */
+function foamTargetAt(n){ return foamEdgeAt(n) + foamCoreAt(n) + foamTailAt(n); }
+
+/** ⭐ 把解析剖面量化为若干条「互不重叠」的窄带 —— 逐条填充即得该剖面。
+ *  前缘处边界更密（唇口是眼睛读得最细的地方），后段可用半分辨率采样。
+ *  14 段 rmsErr 0.026；只用 10 段会升到 0.038，浪带内部显出「等高线」分层。 */
+const FOAM_EDGES = [0, .035, .075, .125, .185, .255, .335, .425, .525, .635, .765, .905, 1.07, 1.25];
+function buildLadder(edges){
+  const out = [];
+  for (let i = 0; i < edges.length - 1; i++){
+    const mid = (edges[i] + edges[i + 1]) / 2;
+    const a = foamTargetAt(mid);
+    if (a < 0.006) continue;                       // ⛔ 丢弃不可见窄带
+    out.push({ n0: edges[i], n1: edges[i + 1], a });
+  }
+  return out;
+}
+function fillTears(L){
+  const slow = (L & 1) === 0;
+  for (let i = 0; i <= COLS; i++){
+    const x = W * i / COLS;
+    if (slow){
+      ragA[i] = 1 + 0.22 * Math.sin(x * 0.0410 * kScale + L * 1.73)
+                   + 0.12 * Math.sin(x * 0.1490 * kScale + L * 0.41);
+    } else {
+      ragB[i] = 1 + 0.15 * Math.sin(x * 0.0885 * kScale + L * 2.91)
+                   + 0.08 * Math.sin(x * 0.2630 * kScale + L * 1.09);
+    }
+  }
+}
+const FOAM_LADDER = buildLadder(FOAM_EDGES);
+// 外侧两条弱浪带用隔一取二的粗阶梯：它们本就淡到看不清剖面，省一半开销
+const FOAM_LADDER_COARSE = buildLadder(FOAM_EDGES.filter((_, i) => i % 2 === 0));
+
+/* ══════════════════════════════════════════════════════════════════════════
+   4 · AUDIO — AnalyserNode + in-page demo synth + optional mic
+   ══════════════════════════════════════════════════════════════════════════ */
+const A = {
+  low:0, mid:0, high:0, energy:0,     // smoothed (显示通道)
+  rawLow:0, bassAvg:0.20, setImp:0, beat:false,
+  sLow:0, sMid:0, sHigh:0, sEnergy:0
+};
+
+let actx = null, analyser = null, freqData = null;
+let demo = null, micStream = null;
+let mode = 'demo';                       // 'demo' | 'mic' | 'off'
+let paused = false;
+let noiseBuf = null;
+
+function makeNoiseBuffer(ctx){
+  const len = Math.floor(ctx.sampleRate * 2);
+  const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+  const d = buf.getChannelData(0);
+  const rnd = mulberry32(0xB16B00B5);
+  let last = 0;
+  for (let i = 0; i < len; i++){
+    const w = rnd() * 2 - 1;
+    last = 0.82 * last + 0.18 * w;        // slightly pink-ish, less harsh
+    d[i] = w * 0.55 + last * 0.9;
+  }
+  return buf;
+}
+
+function ensureCtx(){
+  if (actx) return actx;
+  const AC = window.AudioContext || window.webkitAudioContext;
+  actx = new AC();
+  analyser = actx.createAnalyser();
+  analyser.fftSize = 1024;
+  analyser.smoothingTimeConstant = 0.68;
+  analyser.minDecibels = -95;
+  analyser.maxDecibels = -20;
+  // some engines will not process a graph that never reaches the destination,
+  // so hang a zero-gain sink off the analyser to keep currentTime advancing
+  const sink = actx.createGain(); sink.gain.value = 0; sink.connect(actx.destination);
+  analyser.connect(sink);
+  freqData = new Uint8Array(analyser.frequencyBinCount);
+  noiseBuf = makeNoiseBuffer(actx);
+  return actx;
+}
+
+/** In-page demo music: a low drone with scheduled kicks, a mid pad, and airy noise.
+ *  Everything is routed into the analyser only — the output gain is 0, so it is silent. */
+function buildDemo(){
+  const ac = ensureCtx();
+  const out = ac.createGain(); out.gain.value = 1; out.connect(analyser);
+
+  const master = ac.createGain(); master.gain.value = 0.62; master.connect(out);
+
+  // BASS: two sines → drone gain → scheduled kick envelope → lowpass
+  const bLp = ac.createBiquadFilter(); bLp.type = 'lowpass'; bLp.frequency.value = 185; bLp.Q.value = 1.05;
+  bLp.connect(master);
+  const kick = ac.createGain(); kick.gain.value = 0.03; kick.connect(bLp);
+  const drone = ac.createGain(); drone.gain.value = 0.055; drone.connect(kick);
+  const b1 = ac.createOscillator(); b1.type = 'sine'; b1.frequency.value = 55; b1.connect(drone); b1.start();
+  const b2 = ac.createOscillator(); b2.type = 'sine'; b2.frequency.value = 82.4; b2.connect(drone); b2.start();
+
+  // MID: saw + triangle → bandpass
+  const mBp = ac.createBiquadFilter(); mBp.type = 'bandpass'; mBp.frequency.value = 780; mBp.Q.value = 0.75;
+  mBp.connect(master);
+  const midGain = ac.createGain(); midGain.gain.value = 0.055; midGain.connect(mBp);
+  const m1 = ac.createOscillator(); m1.type = 'sawtooth'; m1.frequency.value = 330; m1.connect(midGain); m1.start();
+  const m2 = ac.createOscillator(); m2.type = 'triangle'; m2.frequency.value = 1320; m2.connect(midGain); m2.start();
+
+  // HIGH: noise → highpass
+  const hp = ac.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 4200; hp.Q.value = 0.6;
+  const hiGain = ac.createGain(); hiGain.gain.value = 0.05; hp.connect(hiGain); hiGain.connect(master);
+  const nz = ac.createBufferSource(); nz.buffer = noiseBuf; nz.loop = true; nz.connect(hp); nz.start();
+
+  // slow LFOs so mid / high / master breathe — this is the "section energy"
+  const lfoM = ac.createOscillator(); lfoM.type = 'sine'; lfoM.frequency.value = 0.131;
+  const ampM = ac.createGain(); ampM.gain.value = 0.034; lfoM.connect(ampM); ampM.connect(midGain.gain); lfoM.start();
+  const lfoH = ac.createOscillator(); lfoH.type = 'sine'; lfoH.frequency.value = 0.373;
+  const ampH = ac.createGain(); ampH.gain.value = 0.030; lfoH.connect(ampH); ampH.connect(hiGain.gain); lfoH.start();
+  const lfoS = ac.createOscillator(); lfoS.type = 'sine'; lfoS.frequency.value = 0.055;
+  const ampS = ac.createGain(); ampS.gain.value = 0.30; lfoS.connect(ampS); ampS.connect(master.gain); lfoS.start();
+  const lfoS2 = ac.createOscillator(); lfoS2.type = 'sine'; lfoS2.frequency.value = 0.083;
+  const ampS2 = ac.createGain(); ampS2.gain.value = 0.20; lfoS2.connect(ampS2); ampS2.connect(master.gain); lfoS2.start();
+
+  return { out, kick, drone, midGain, hiGain, master, b1, b2, m1, m2, nz,
+           nextBeat: ac.currentTime + 0.2, beatCount: 0 };
+}
+
+function pumpBeats(){
+  if (!demo || mode !== 'demo') return;
+  const ac = actx, g = demo.kick.gain, now = ac.currentTime;
+  while (demo.nextBeat < now + 0.15){
+    const t = Math.max(demo.nextBeat, now);
+    const strong = (demo.beatCount % 4) === 0;
+    const peak = strong ? 0.62 : 0.34;
+    g.cancelScheduledValues(t);
+    g.setValueAtTime(0.03, t);
+    g.linearRampToValueAtTime(peak, t + 0.014);
+    g.exponentialRampToValueAtTime(0.05, t + (strong ? 0.22 : 0.13));
+    g.exponentialRampToValueAtTime(0.03, t + (strong ? 0.40 : 0.26));
+    // occasional octave blip for musical variety
+    demo.m1.frequency.setValueAtTime(demo.beatCount % 8 === 6 ? 415.3 : 330, t);
+    demo.beatCount++;
+    demo.nextBeat += 0.462 + 0.02 * hash2(demo.beatCount, 11);
+  }
+}
+
+/** read the three bands + overall energy out of the analyser */
+function readAnalyser(dt){
+  analyser.getByteFrequencyData(freqData);
+  const sr = actx.sampleRate, bins = freqData.length, binHz = sr / bins;
+  let lo = 0, nLo = 0, mi = 0, nMi = 0, hi = 0, nHi = 0, all = 0, nAll = 0;
+  for (let i = 1; i < bins; i++){
+    const f = i * binHz;
+    if (f > 20000) break;
+    const v = freqData[i] / 255;
+    all += v; nAll++;
+    if (f <= 250){ lo += v; nLo++; }
+    else if (f <= 3000){ mi += v; nMi++; }
+    else { hi += v; nHi++; }
+  }
+  const rawLow  = nLo ? lo / nLo : 0;
+  const rawMid  = nMi ? mi / nMi : 0;
+  const rawHigh = nHi ? hi / nHi : 0;
+  const rawAll  = nAll ? all / nAll : 0;
+
+  A.rawLow = rawLow;
+  A.bassAvg += (rawLow - A.bassAvg) * (1 - Math.exp(-dt * 1000 / 700));
+  if (rawLow > A.bassAvg * 1.42 + 0.055 && !paused){
+    A.beat = true;
+    A.setImp = clamp(A.setImp + (rawLow - A.bassAvg) * 2.4, 0, 1);
+  } else A.beat = false;
+  A.setImp *= Math.exp(-dt * 1000 / SET_TAU_MS);
+
+  A.low    = clamp(rawLow  * 1.00, 0, 1);
+  A.mid    = clamp(rawMid  * 1.15, 0, 1);
+  A.high   = clamp(rawHigh * 1.95, 0, 1);
+  A.energy = clamp(rawAll  * 1.35, 0, 1);
+}
+
+function readFallback(dt){
+  // If no analyser is available (very old browser, blocked context), synthesize
+  // the same values from the same music script so the scene still moves.
+  const t = performance.now() / 1000;
+  const kick = Math.pow(Math.max(0, Math.sin(t * 6.8)), 8);
+  A.rawLow = 0.22 + 0.55 * kick + 0.10 * Math.sin(t * 1.7);
+  A.bassAvg += (A.rawLow - A.bassAvg) * (1 - Math.exp(-dt * 1000 / 700));
+  if (A.rawLow > A.bassAvg * 1.42 + 0.055){ A.beat = true; A.setImp = clamp(A.setImp + 0.5, 0, 1); }
+  else A.beat = false;
+  A.setImp *= Math.exp(-dt * 1000 / SET_TAU_MS);
+  A.low    = clamp(A.rawLow, 0, 1);
+  A.mid    = clamp(0.30 + 0.28 * Math.sin(t * 0.81), 0, 1);
+  A.high   = clamp(0.16 + 0.30 * Math.pow(Math.max(0, Math.sin(t * 2.34)), 2), 0, 1);
+  A.energy = clamp(0.34 + 0.34 * Math.sin(t * 0.345), 0, 1);
+}
+
+function smoothAudio(dt){
+  const up = 55, down = 260;
+  // ⛔ both bounds matter: a negative dt (clock going backwards, tab restore,
+  //    a harness replaying an old timestamp) made 1-exp(-dt*1000/up) huge and the
+  //    one-pole smoother diverged to ±1e81, poisoning every downstream value.
+  const k = (cur, tgt) => {
+    const tau = tgt > cur ? up : down;
+    const f = 1 - Math.exp(-Math.max(0, dt) * 1000 / tau);
+    const v = cur + (tgt - cur) * f;
+    return v > 0 ? (v < 1 ? v : 1) : 0;      // ⛔ never let a non-finite leak out
+  };
+  A.sLow    = k(A.sLow, A.low);
+  A.sMid    = k(A.sMid, A.mid);
+  A.sHigh   = k(A.sHigh, A.high);
+  A.sEnergy = k(A.sEnergy, A.energy);
+}
+
+async function startDemo(){
+  stopMic();
+  try {
+    ensureCtx();
+    if (actx.state === 'suspended') await actx.resume();
+    if (!demo) demo = buildDemo();
+    mode = 'demo';
+  } catch (err){
+    // no Web Audio at all (very old browser, or a blocked file:// context):
+    // fall back to the in-page synth, the scene still moves
+    mode = 'fallback';
+    flash('无法启用音频引擎，已切到内置合成：' + (err && err.name ? err.name : 'error'));
+  }
+  paused = false; frozenT = null;
+  syncButtons();
+}
+
+async function startMic(){
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+    flash('此浏览器在 file:// 下不提供麦克风（需 https / localhost）');
+    return;
+  }
+  try {
+    ensureCtx();
+    if (actx.state === 'suspended') await actx.resume();
+    micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    const src = actx.createMediaStreamSource(micStream);
+    src.connect(analyser);
+    if (demo) demo.master.gain.value = 0;
+    mode = 'mic'; paused = false;
+    syncButtons(); flash('');
+  } catch (err){
+    flash('麦克风不可用：' + (err && err.name ? err.name : 'error'));
+  }
+}
+
+function stopMic(){
+  if (micStream){ micStream.getTracks().forEach(tr => tr.stop()); micStream = null; }
+  if (demo) demo.master.gain.value = 0.62;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   5 · UI wiring
+   ══════════════════════════════════════════════════════════════════════════ */
+const panel = document.getElementById('panel');
+const gate  = document.getElementById('gate');
+const note  = document.getElementById('note');
+const lvlEl = document.getElementById('lvl');
+const mLow = document.getElementById('mLow'), mMid = document.getElementById('mMid'), mHigh = document.getElementById('mHigh');
+
+let noteTimer = 0;
+function flash(msg){
+  note.textContent = msg;
+  note.classList.toggle('show', !!msg);
+  clearTimeout(noteTimer);
+  if (msg) noteTimer = setTimeout(() => note.classList.remove('show'), 5200);
+}
+
+function syncButtons(){
+  const map = { demo: mode === 'demo' && !paused, mic: mode === 'mic' && !paused,
+                pause: paused, solo: soloWave };
+  document.querySelectorAll('.btn').forEach(b => {
+    b.classList.toggle('on', !!map[b.dataset.act]);
+  });
+}
+
+function togglePause(){
+  paused = !paused;
+  if (!paused) frozenT = null;
+  syncButtons();
+}
+
+/** ⭐ 单浪模式开关：只隐藏绘制，**不改模拟**（队列/间距/交接/退水照旧）。 */
+function toggleSolo(){
+  soloWave = !soloWave;
+  if (soloWave) soloSerial = -1;              // 重新挑一条跟踪
+  syncButtons();
+}
+function syncSolo(){
+  soloTick();
+  const el = document.getElementById('solo');
+  if (!soloInfo.on || !soloInfo.have){ if (el) el.hidden = true; return; }
+  if (!el) return;
+  el.hidden = false;
+  const pct = v => Math.round(v * 100) + '%';
+  const extra = soloInfo.retreating
+    ? `退水中 ${Math.round(retreatT)}/${Math.round(retreatDur)}ms`
+    : (soloInfo.state === W_ADVANCING ? `距滩上 ${pct(1 - soloInfo.adv)}` : '—');
+  el.textContent =
+    `单浪 #${soloInfo.ser} ｜ ${soloInfo.phase} ｜ adv ${pct(soloInfo.adv)} ｜ 泡沫 ${pct(soloInfo.fade)}`
+    + ` ｜ 水线 ${pct(soloInfo.wline)} ｜ ${extra}`
+    + ` ｜ 涌高 ${soloInfo.reach.toFixed(2)} ｜ 行程 ${Math.round(soloInfo.ms)}ms`
+    + (soloInfo.nextIn >= 0 ? ` ｜ 下一条 ${pct(soloInfo.nextIn)}` : ' ｜ 下一条 —')
+    + ` ｜ 湿沙 ${Math.round(soloInfo.wetMax)}px`;
+}
+
+document.querySelectorAll('.btn').forEach(b => {
+  b.addEventListener('click', () => {
+    const act = b.dataset.act;
+    if (act === 'demo') startDemo();
+    else if (act === 'mic') startMic();
+    else if (act === 'solo') toggleSolo();
+    else togglePause();
+  });
+});
+
+addEventListener('keydown', e => {
+  if (e.repeat) return;
+  const k = e.key.toLowerCase();
+  if (k === 'd') startDemo();
+  else if (k === 'm') startMic();
+  else if (k === '1') toggleSolo();
+  else if (e.code === 'Space' || k === ' '){ e.preventDefault(); togglePause(); }
+});
+
+/* ══════════════════════════════════════════════════════════════════════════
+   6 · WATER FIELD — ⭐ the sea is recomputed per pixel every frame.
+   Three incommensurate band sets (counts 7 / 23 / 47, all drifting at
+   different rates) sum into the horizontal swell banding the photos need.
+   Using ONE band set made the surface read as corduroy / brushed metal —
+   three sets at mutually prime counts break that up.
+   ══════════════════════════════════════════════════════════════════════════ */
+const C_FAR = hexRgb(PAL.seaFar), C_DEEP = hexRgb(PAL.seaDeep);
+const C_RIDGE = hexRgb(PAL.ridge), C_TROUGH = hexRgb(PAL.trough), C_SHOAL = hexRgb(PAL.shoal);
+const TAU = Math.PI * 2;
+// ⛔ 反馈六·4「不要那么多横条纹」：11/29/61 在 940px 高的海域里是 85/32/15px
+//    一条，等距、贯穿全幅 ⇒ 规则梳子。现在降到 8/19/43，并且间距与对比度
+//    都被噪声打散（见 drawSeaField）。
+const N_BIG = 8, N_MID = 19, N_FINE = 43;
+
+function drawSeaField(t, energy){
+  // per-column phase (hoisted out of the pixel loop)
+  for (let i = 0; i < fw; i++){
+    const u = i / (fw - 1);
+    // wobble keeps the bands from being dead-straight stripes, but too much and
+    // the surface reads as topographic contours rather than water
+    // ⛔ 所有速率除以 ~4.2（反馈六·1「海浪太快了」）
+    const wBig = 0.46 * Math.sin(u * TAU * 1.3 + t * 0.000069)
+               + 0.27 * Math.sin(u * TAU * 2.7 - t * 0.000112 + 1.7)
+               + 0.15 * Math.sin(u * TAU * 4.9 + t * 0.000174 + 4.1)
+               + 0.08 * Math.sin(u * TAU * 8.3 - t * 0.000264 + 2.6);
+    colPhase[i] = ((wBig + t * 0.00010) % TAU + TAU) % TAU;
+    const wMid = 0.34 * Math.sin(u * TAU * 3.9 - t * 0.000217 + 0.6)
+               + 0.21 * Math.sin(u * TAU * 7.3 + t * 0.000317 + 3.4);
+    colMid[i]   = ((wMid - t * 0.000233) % TAU + TAU) % TAU;
+    colFine[i]  = ((u * TAU * 11.0 + t * 0.000486) % TAU + TAU) % TAU;
+    // ⭐ 反馈六·4「有的地方平静、有的地方粗糙」：沿shore 的**大尺度**粗糙度场。
+    //    ⛔ 早先写 0.28 + 0.92*(0.5+0.5*fbm1) ⇒ 实际只有 0.54..0.94
+    //    （fbm1 的 p10..p90 只有 ±0.39），空档根本做不出来。用 fbmNorm。
+    roughX[i] = 0.22 + 1.05 * fbmNorm(u * 2.6 + 71.2 + t * 0.000010, 6201, 2);
+  }
+  for (let j = 0; j < fh; j++){
+    const v = j / (fh - 1);
+    // ⭐⭐ 反馈六·4「整个海面太规律」：原来是 `v * TAU * N_BIG` ——
+    //    一个**完美等距**的竖直梳子，正是「一排横条纹」的来源。
+    //    现在先用低频 fBm 扭曲 v（浪列间距不均 ⇒ 密集团之间有空档），
+    //    再叠加一个行级对比度场（有的浪脊很亮、有的几乎看不见）。
+    rowPhase[j] = ((v * TAU * N_BIG
+        + 2.9 * fbmSigned(v * 3.1 + 11.7 + t * 0.000013, 6001, 3)
+        + t * 0.000100) % TAU + TAU) % TAU;
+    rowAmp[j]  = 0.10 + 1.55 * fbmNorm(v * 4.7 + 9.3 + t * 0.000022, 6101, 2);
+    rowMid[j]   = ((v * TAU * N_MID  - t * 0.000233) % TAU + TAU) % TAU;
+    rowFine[j]  = ((v * TAU * N_FINE + t * 0.000486) % TAU + TAU) % TAU;
+    // ⭐ 纵向的粗糙度场：与 roughX 相乘 ⇒ 二维的「大块平静区」
+    roughY[j] = 0.20 + 1.10 * fbmNorm(v * 3.7 + 51.1 + t * 0.000016, 6301, 2);
+  }
+
+  const shadeBoost = 1 + 0.28 * energy;
+  const depthBias = 0.10 + 0.55 * ENERGY_TO_SHADE * energy;   // loud ⇒ 更深更饱和
+  const d = fieldData;
+  let p = 0;
+
+  for (let j = 0; j < fh; j++){
+    const v = j / (fh - 1);
+    const rp = rowPhase[j], rm = rowMid[j], rf = rowFine[j];
+    const ra = rowAmp[j], ry = roughY[j];
+
+    // ⭐ 深度线索：画面顶部（外海）更深、更饱和；越靠近浪线越浅、越透。
+    //   （与 §5.6「远海/近海」命名相反，此处按俯拍实拍效果取向。）
+    const dep = clamp(1 - 0.78 * Math.pow(v, 0.90) * (0.72 + depthBias * 0.55), 0, 1);
+    const br = lerp(C_FAR[0], C_DEEP[0], dep);
+    const bg = lerp(C_FAR[1], C_DEEP[1], dep);
+    const bb = lerp(C_FAR[2], C_DEEP[2], dep);
+    // 浪线前方的浅滩带：水在这里明显变浅（反馈二要求的 refraction）
+    const shoalW = smoothstep(0.84, 1.03, v) * (0.30 + 0.22 * energy);
+
+    for (let i = 0; i < fw; i++){
+      // ── primary swell bands (horizontal light/dark banding) ──
+      const s = fsin(rp + colPhase[i]);
+      // cheap steepening (cubic term) so crests read distinctly — Math.pow here
+      // cost more than the whole rest of the pixel loop put together
+      const sb = s + 0.20 * s * s * s;
+      // ⭐ 涌浪背面受光、槽底背光：正面(正)提亮比背面(负)压暗更强，读成立体而非条纹
+      // ⭐ra / roughX / roughY 让不同位置、不同时间的浪脊强弱相差可达 4 倍
+const amp = ra * roughX[i] * ry;
+      // ⛔ 强度降到 0.55：反馈七之后，涌浪的体积感由 drawSwellBody 按**真实的浪**
+      //    给出，海面场自己那套条纹退成底噪。早先两者同强度 ⇒ 海面上两套
+      //    互不相干的横条纹叠在一起，读起来就是「规则的花纹」。
+      const light = (sb * 0.44 + fsin(rm + colMid[i]) * 0.36 + fsin(rf + colFine[i]) * 0.20) * amp * 0.55;
+
+      let r, g, b;
+      if (light > 0){
+        const k = Math.min(light * 0.30 * shadeBoost, 1);
+        r = lerp(br, C_RIDGE[0], k); g = lerp(bg, C_RIDGE[1], k); b = lerp(bb, C_RIDGE[2], k);
+      } else {
+        const k = -light * 0.26 * shadeBoost;
+        r = lerp(br, C_TROUGH[0], k); g = lerp(bg, C_TROUGH[1], k); b = lerp(bb, C_TROUGH[2], k);
+      }
+      if (shoalW > 0){
+        r = lerp(r, C_SHOAL[0], shoalW); g = lerp(g, C_SHOAL[1], shoalW); b = lerp(b, C_SHOAL[2], shoalW);
+      }
+
+      d[p] = r < 0 ? 0 : r > 255 ? 255 : r;
+      d[p+1] = g < 0 ? 0 : g > 255 ? 255 : g;
+      d[p+2] = b < 0 ? 0 : b > 255 ? 255 : b;
+      d[p+3] = 255;
+      p += 4;
+    }
+  }
+
+  fieldCtx.putImageData(fieldImg, 0, 0);
+  ctx.drawImage(fieldCvs, 0, 0, fw, fh, 0, 0, W, H * SEA_BOTTOM_K);
+}
+
+/* ── caustic glint net over the water ────────────────────────────────────
+ * ⛔ 早先 15 条近水平虚线 ⇒ 读成「刻痕 / 接缝」：整幅横贯的平行横线。
+ * ⭐ 真实水面焦散是一张**斜向交错、缓慢漂移、忽明忽暗**的网：
+ *    · 两族交叉的斜向射线（↗ / ↘ 各 6 根），每根只画成 4~8 段短划，
+ *      斜率逐根不同、随时间漂移 + 弯曲 ⇒ 绝无横贯全幅的连续线。
+ *    · 少量**短**横碎片（屏宽 3%~8%）点缀其间，压住「横」的联想又不连成线。
+ *    · ~26 颗闪烁的亮点落在交叉处 ⇒ 焦散的「亮结」，随能量明灭。
+ *  全部只在海水区裁剪内绘制（sea clip），alpha 仍是 CAUSTIC_A 量级。 */
+/* ── 焦散胞格网（反馈八·5c）—— resize 时烘一次拓扑 ────────────────────────
+ * ⛔ 前两版都败在这一步：v1 = 15 条近水平虚线 ⇒ 横贯全幅的平行横线（刻痕）；
+ *    v2 = 12 条**孤立**直线短划 ⇒ 仍是刻痕，只是变短了。
+ * ⭐ 真实水面焦散的本质是**胞壁网**：抖动网格的格壁连成多边形，水从格中透过。
+ *    孤立短划像刻痕，正因它没有「格」。补上胞形与连通性即可，不必靠斜率躲避。
+ *    ⛔ 不做周期环绕：环绕会在右/下边界生成横贯全幅的长线 ⇒ 又回到刻痕。
+ */
+const CNX = 20, CNY = 9;                 // 胞格数（约 70~90px 一格）
+let causNX = null, causNY = null, causE = null;
+function buildCausticNet(){
+  const seaH = H * SEA_BOTTOM_K;
+  causNX = new Float32Array(CNY * CNX);
+  causNY = new Float32Array(CNY * CNX);
+  // ⭐ 去规整化：真实焦散的胞格**大小差异很大、边缘角度各异**，不是等距方格纸。
+  //    · 列/行坐标各过一次低频平滑 warp ⇒ 胞格宽窄不均
+  //    · 每行一个哈希横向错切 ⇒ 行与行的壁角度不同（同行内仍近似平行）
+  //    ⛔ 幅度压在 ±0.3 格以内：warp 过大会让相邻胞格翻转自交 ⇒ 网会破。
+  const wC = [], wR = [];
+  for (let k = 0; k < 4; k++){
+    wC.push((hash2(3100 + k, 301) - 0.5) * 2);
+    wR.push((hash2(3200 + k, 303) - 0.5) * 2);
+  }
+  const warp = (arr, v) => {
+    let s = 0, amp = 1, tot = 0;
+    for (let o = 0; o < 4; o++){
+      const x = v * (1 << o), i0 = Math.floor(x), fr = x - i0;
+      const u = fr * fr * (3 - 2 * fr);
+      const a = arr[o], b = arr[(o + 1) & 3];
+      s += (a + (b - a) * u) * amp; tot += amp; amp *= 0.55;
+    }
+    return s / tot;
+  };
+  const cw = W / CNX;
+  for (let cy = 0; cy < CNY; cy++){
+    const fy = (cy + 0.5) / CNY;
+    const ry = fy + warp(wR, fy * 2.0) * 0.30 / CNY;
+    const shear = (hash2(3300 + cy, 305) - 0.5) * 0.22;
+    for (let cx = 0; cx < CNX; cx++){
+      const id = 2000 + cy * CNX + cx;
+      const fx = (cx + 0.5) / CNX;
+      const rx = fx + warp(wC, fx * 2.0) * 0.30 / CNX;
+      causNX[cy * CNX + cx] = W * (rx + shear * (ry - 0.5) * 0.5) + (hash2(id, 201) - 0.5) * 0.30 * cw;
+      causNY[cy * CNX + cx] = seaH * (ry + (hash2(id, 203) - 0.5) * 0.30 / CNY);
+    }
+  }
+  // 每格连「右」「下」两条格壁；出界不连（边界胞由画面裁切闭合）
+  const e = [];
+  for (let cy = 0; cy < CNY; cy++)
+    for (let cx = 0; cx < CNX; cx++){
+      const i0 = cy * CNX + cx, k2 = i0 * 2;
+      if (cx < CNX - 1) e.push({ a: i0, b: i0 + 1,    bow: (hash2(k2, 205) - 0.5) * 2, ph: hash2(k2, 207) * 6.2832, lw: 0.55 + 0.60 * hash2(k2, 209), tr: hash2(k2, 211) });
+      if (cy < CNY - 1) e.push({ a: i0, b: i0 + CNX, bow: (hash2(k2 + 1, 205) - 0.5) * 2, ph: hash2(k2 + 1, 207) * 6.2832, lw: 0.55 + 0.60 * hash2(k2 + 1, 209), tr: hash2(k2 + 1, 211) });
+    }
+  causE = e;
+}
+
+function drawCausticNet(t, energy){
+  const aBase = CAUSTIC_A * (0.30 + 0.70 * energy);
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(0, 0, W, H * SEA_BOTTOM_K);
+  ctx.clip();
+  ctx.lineCap = 'round';
+  ctx.strokeStyle = PAL.caustic;
+  // ⭐ 1) 斜向射线族：两族交叉（↗ / ↘），每根漂移 + 摆动，绝不横贯；
+  //    斜率刻意拉陡（0.2~0.75 px/px，另有 1/5 是陡射）⇒ 读作「交叉扇」而非斜横线
+  const RAYS = 30;
+  for (let i = 0; i < RAYS; i++){
+    const dirm = (i & 1) ? 1 : -1;
+    const y0 = H * SEA_BOTTOM_K * (0.10 + 0.80 * hash2(i, 41));
+    const steep = (i % 5 === 0);
+    const sl = (steep ? (0.65 + 0.55 * hash2(i, 42)) : (0.18 + 0.42 * hash2(i, 43))) * kScale;
+    const xOff = W * (0.2 + 0.6 * hash2(i, 45));
+    const span = W * (0.35 + 0.55 * hash2(i, 47));
+    const drift = (hash2(i, 49) - 0.5) * 46 * Math.sin(t * 0.00006 + hash2(i, 51) * 6.2832);
+    const sway = (hash2(i, 53) - 0.5) * 14 * Math.sin(t * 0.00010 + hash2(i, 55) * 6.2832);
+    const x0 = xOff - span * 0.5;
+    ctx.beginPath();
+    const dashes = 5 + Math.floor(hash2(i, 57) * 5);
+    for (let d = 0; d < dashes; d++){
+      const a0 = (d + hash2(i, 130 + d) * 0.4) / dashes;
+      const a1 = Math.min(1, a0 + (0.16 + 0.30 * hash2(i, 150 + d)) / dashes);
+      const am = (a0 + a1) * 0.5;
+      const sx = x0 + a0 * span, ex = x0 + a1 * span;
+      const m0 = dirm * sl * (sx - xOff), m1 = dirm * sl * (ex - xOff);
+      // 每划一次正弦（中点采样）⇒ 整划上下浮沉，端点 sin 数量减半
+      const sh = sway * Math.sin(am * 3.1416);
+      ctx.moveTo(sx, y0 + m0 + sh + drift * a0);
+      ctx.lineTo(ex, y0 + m1 + sh + drift * a1);
+    }
+    ctx.lineWidth = 0.8 + 1.0 * hash2(i, 59);
+    ctx.globalAlpha = aBase * (0.45 + 0.55 * hash2(i, 61)) * 1.15;
+    ctx.stroke();
+  }
+  // ⭐ 2) 连通胞壁网（反馈八·5c）：抖动网格的格壁连成多边形，水从格中透过。
+  //    ⛔ 取代 v2 的 12 条孤立直线短划 —— 孤立无胞形 ⇒ 读作「划痕」。
+  //    每条壁画成二次曲线（垂直方向弓起 + 缓慢漂移）⇒ 绝无笔直硬线。
+  //    按亮度分 3 档批量描边（3 次 stroke，而非每壁一次）。
+  if (causE){
+    const cellW = W / CNX, cellH = (H * SEA_BOTTOM_K) / CNY;
+    for (let tier = 0; tier < 3; tier++){
+      ctx.beginPath();
+      let any = false;
+      for (let e = 0; e < causE.length; e++){
+        const ed = causE[e];
+        if ((ed.tr * 3 | 0) !== tier) continue;
+        const ax = causNX[ed.a], ay = causNY[ed.a];
+        const bx = causNX[ed.b], by = causNY[ed.b];
+        const mx = (ax + bx) * 0.5, my = (ay + by) * 0.5;
+        // 垂直于壁方向的弓起量：静偏 + 随时间缓慢摆动 ⇒ 壁是弯的，且会呼吸
+        const nx = -(by - ay), ny = (bx - ax);
+        const nl = Math.hypot(nx, ny) || 1;
+        const wob = ed.bow * (0.55 + 0.45 * Math.sin(t * 0.00007 + ed.ph)) * cellW * 0.30;
+        ctx.moveTo(ax, ay);
+        ctx.quadraticCurveTo(mx + nx / nl * wob, my + ny / nl * wob, bx, by);
+        any = true;
+      }
+      if (!any) continue;
+      ctx.lineWidth = tier === 1 ? 1.15 : (tier === 2 ? 0.85 : 0.6);
+      ctx.globalAlpha = aBase * (tier === 1 ? 0.62 : (tier === 2 ? 0.44 : 0.28));
+      ctx.stroke();
+    }
+  }
+  // ⭐ 3) 闪烁亮结：格壁交点的小亮点，随能量与各自相位明灭
+  ctx.fillStyle = PAL.caustic;
+  for (let i = 0; i < 56; i++){
+    const id = 1300 + i;
+    const x = W * hash2(id, 75);
+    const y = H * SEA_BOTTOM_K * (0.10 + 0.82 * hash2(id, 77));
+    const flick = 0.5 + 0.5 * Math.sin(t * (0.00015 + 0.00010 * hash2(id, 79)) + hash2(id, 81) * 6.2832);
+    if (flick < 0.45) continue;                       // 忽亮忽灭
+    const size = 1 + Math.floor(hash2(id, 83) * 2.6);
+    ctx.globalAlpha = aBase * (0.80 + 0.90 * flick);
+    ctx.fillRect(x, y, size, size);
+  }
+  ctx.restore();
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   7 · SHORE — 岸线 = 贴岸主浪带的前缘，不是色界线
+   ══════════════════════════════════════════════════════════════════════════ */
+let shoreXs = null, shoreYs = null, shoreTmp = null;
+// ── 反馈二：per-column 记忆 ──
+let wetMark = null;      // 该列**历史上**被水淹到的最内陆 y（只增不减 = 历史最高水位）
+let wetAmt  = null;      // 该列当前湿润度 0..1（退水后按时间常数衰减）
+let wetEdge = null;      // 本帧用于渲染的湿区外沿（随干燥向水线收拢）
+let reachK  = null;      // 该列的涌高系数（沿岸不规则 ⇒ 水舌参差）
+let dryK    = null;      // 该列的干燥速率系数（洼地存水久、沙脊干得快）
+let swashPos = null;     // 该列当前的涌浪推进量 0..1
+let wetTmp   = null;     // 沿岸平滑 wetAmt 用的临时缓冲
+let swashStageNow = 0, swashReachNow = 0;
+function ensureShoreArrays(){
+  const n = COLS + 1;
+  if (!shoreXs || shoreXs.length !== n){
+    shoreXs   = new Float32Array(n);
+    shoreYs   = new Float32Array(n);
+    shoreTmp  = new Float32Array(n);
+    wetMark   = new Float32Array(n);
+    wetAmt    = new Float32Array(n);
+    wetEdge   = new Float32Array(n);
+    reachK    = new Float32Array(n);
+    dryK      = new Float32Array(n);
+    swashPos  = new Float32Array(n);
+    wetTmp    = new Float32Array(n);
+    // ⛔ 必须初始化为「比任何水线都靠海一侧」的值。早期版本写 wetMark[i] = H，
+    //    而水线永远在 H 之上，于是 `y > wetMark[i]` 恒为 false —— 最高水位
+    //    从来没被记下来，湿区一直撑到画面底边（表现为一条 246px 的假水渍）。
+    for (let i = 0; i < n; i++) wetMark[i] = -1e9;
+  }
+}
+
+/** ⭐ 岸线 + 浪队列 + per-column 湿润记忆 —— 全场景的唯一基准。
+ *  dt 为秒；无 dt 时退水不会干（静态单帧渲染用）。
+ *  ⛔⛔ 反馈六·2：这里**不出现**任何 A.sLow / A.sMid。
+ *      音频只影响 swashReachNow（涌得多高 = 外观）与 wetAmt 的强度。
+ *  ⭐⭐ 反馈七·5：推进量来自**领头的浪**，不是相位函数。
+ *  ⭐ 反馈七·1：wetMark / wetAmt **只在浪到达滩上那一瞬**写入（commitWetMarks），
+ *      上冲途中一个字都不写 —— 那里的沙还在水下。 */
+function computeShore(t, W0, dt){
+  ensureShoreArrays();
+  fillFray(t, 0);
+  stepWaves(dt);                                   // ⭐ 队列先走一步
+  const lead = leadWave();
+  const push = waterlineAdvance(dt * 1000);        // ⭐ 水线推进量 = 队列级状态机
+  swashReachNow = SWASH_REACH * (0.62 + 0.48 * A.sLow);   // 音频只管「涌多高」
+  // 干燥时间常数挂在**出浪间隔**上：两个浪之间裸露的时间就是 WAVE_GAP_MS
+  const dryTau = clamp(WAVE_GAP_MS * SWASH_DRY_FRAC, SWASH_DRY_MIN, SWASH_DRY_MAX);
+  const decay = dt > 0 ? Math.exp(-dt * 1000 / dryTau) : 0;
+  // 阶段：0 = 上涌/滩上有浪，1 = 退水（backwash），2 = 裸露干燥
+  {
+    let beachAny = false, advAny = false;
+    for (let i = 0; i < WAVE_POOL; i++){
+      const s = waves[i].state;
+      if (s === W_REACHED || s === W_FADING) beachAny = true;
+      else if (s === W_ADVANCING) advAny = true;
+    }
+    const retreating = retreatT >= 0 && retreatT < retreatDur;
+    swashStageNow = (beachAny || advAny) ? (retreating ? 1 : 0) : 2;
+  }
+  const seedLag = lead ? lead.seed : 2711;
+
+  for (let i = 0; i <= COLS; i++){
+    const x = W * i / COLS;
+    shoreXs[i] = x;
+    const uu = x * 0.0042 * kScale;
+    // ⭐ 逐列推进滞后：同一个确定性噪声场（种子跟着领头浪走 ⇒ 每条浪的
+    //    舌头形状都不同），有的岸段已经冲上滩、有的还在半路 ⇒ 前缘成舌。
+    const lag = clamp(
+        1.00 * fbmSigned(uu * 0.75 + 91.3, 4409, 2)
+      + 0.35 * fbmSigned(uu * 2.30 + 17.7, 4523, 2), -1, 1);
+    const rk = REACH_LO + REACH_HI * Math.pow(fbmNorm(uu + t * 0.00004 + seedLag, 3301, 2), 1.6);
+    reachK[i] = rk;
+    dryK[i] = 0.52 + 0.96 * fbmNorm(uu * 1.63 + 41.7, 5701, 2);
+    // ⛔⛔ 不再对 y 做 smoothstep/三角：领头浪的 y 就是推进量本身
+    const adv = clamp(push - lag * SWASH_LAG, 0, 1);
+    swashPos[i] = adv;
+    const base = swashFrontY(x, t, H) + fray[i] * W0 * FRAY_FRONT * 0.42;
+    const y = base + H * swashReachNow * adv;
+    shoreYs[i] = y;
+    // ⭐ 反馈七·1：这一帧浪「刚好到达滩上」时，把逐列水线交给 peak[]，
+    //    由 commitWetMarks 统一写进湿沙记忆 —— 这是唯一的写入点。
+    if (lead && lead.state === W_REACHED) lead.peak[i] = y;
+    // ⭐⭐ 反馈七·1 + 反馈二：变干的判据是「这一列**此刻是否裸露**」，
+    //    不是「全体有没有浪在推进」。早先写 `adv <= 0.004` ⇒ 只要海面上还有
+    //    任何一条浪在推进，全岸的干燥就一起暂停，湿沙永远降不下来
+    //    （实测最低湿润度卡在 0.49）。正确判据：该列的湿区此刻露在外面
+    //    （水线在 wetMark 的海侧）才变干；被新水盖住就暂停。
+    if (wetMark[i] > y + 0.5 && decay < 1) wetAmt[i] *= Math.pow(decay, dryK[i]);
+    // 干燥锋面 + 内陆沿的随机起伏（反馈七·6：内沿太平会读成一条条竖带）
+    const inland = H * 0.012 * fbmSigned(x * 0.0075 * kScale + 63.1, 6607, 2);
+    wetEdge[i] = Math.max(y, lerp(y, wetMark[i], Math.pow(clamp(wetAmt[i], 0, 1), 0.55)) + inland);
+  }
+  // ⛔ 顺序要紧：先让当帧到滩的浪拿到 peak[]，再让它转 FADING 并写湿沙
+  finishWaves(dt);
+  commitWetMarks();
+  // ⭐ 沿岸做一次 3 抽头平滑。逐列记忆在物理上没错，但**相邻列不该差这么多**：
+  //    海滩是横向连着的（水会横向渗），一列湿 1.0 而邻居 0.3 在 100% 下就是
+  //    一道竖直硬边 —— 实测逐列亮度偏差 0.48 lum、最大 6.8（颗粒基线 0.30）。
+  //    平滑后偏差回到 ~0.35，而干燥锋面与水舌的参差完全保留。
+  for (let i = 1; i < COLS; i++){
+    wetTmp[i] = 0.25 * wetAmt[i - 1] + 0.50 * wetAmt[i] + 0.25 * wetAmt[i + 1];
+  }
+  wetTmp[0] = 0.5 * wetAmt[0] + 0.5 * wetAmt[1];
+  wetTmp[COLS] = 0.5 * wetAmt[COLS] + 0.5 * wetAmt[COLS - 1];
+  for (let i = 0; i <= COLS; i++){
+    wetAmt[i] = wetTmp[i];
+    wetEdge[i] = Math.max(shoreYs[i], lerp(shoreYs[i], wetMark[i],
+      Math.pow(clamp(wetAmt[i], 0, 1), 0.55)));
+  }
+}
+
+/** smoothed polyline through the sampled points (quadratic through midpoints).
+ *  `stride` lets a strip be built at half column resolution without collapsing
+ *  onto the left half of the frame — ⛔ the xs array is indexed i*stride. */
+function smoothRun(path, xs, ys, n, forward, moveFirst, stride){
+  stride = stride || 1;
+  const X = i => xs[i * stride], Y = i => ys[i * stride];
+  if (forward){
+    if (moveFirst) path.moveTo(X(0), Y(0)); else path.lineTo(X(0), Y(0));
+    for (let i = 1; i < n - 1; i++){
+      path.quadraticCurveTo(X(i), Y(i), (X(i) + X(i + 1)) / 2, (Y(i) + Y(i + 1)) / 2);
+    }
+    path.lineTo(X(n - 1), Y(n - 1));
+  } else {
+    if (moveFirst) path.moveTo(X(n - 1), Y(n - 1)); else path.lineTo(X(n - 1), Y(n - 1));
+    for (let i = n - 2; i > 0; i--){
+      path.quadraticCurveTo(X(i), Y(i), (X(i) + X(i - 1)) / 2, (Y(i) + Y(i - 1)) / 2);
+    }
+    path.lineTo(X(0), Y(0));
+  }
+}
+
+/** 沿一串 y 值填充一条带状 path（用于沙/湿沙/残沫） */
+function ribbon(path, xs, ys, n, stride){
+  smoothRun(path, xs, ys, n, true, true, stride);
+  smoothRun(path, xs, ys, n, false, false, stride);
+  path.closePath();
+}
+
+let sandPath = null;
+function drawSand(t){
+  const n = COLS + 1;
+
+  // 干沙主体：上边界就是岸线，⛔ 不留任何硬缝。
+  // 底色/颗粒/起伏带/潮湿斑都来自烘好的纹理（反馈三）
+  sandPath = new Path2D();
+  smoothRun(sandPath, shoreXs, shoreYs, n, true, true);
+  sandPath.lineTo(W, H + 4);
+  sandPath.lineTo(-2, H + 4);
+  sandPath.closePath();
+  ctx.save();
+  ctx.clip(sandPath);
+  // ⛔ 源矩形必须是 (0,0,texW,texH)：把 sandTexTop 当成源 y 偏移会采到纹理外面，
+  //    结果整块沙变成灰暗的条纹
+  ctx.drawImage(sandTex, 0, 0, sandTex.width, sandTex.height,
+                     0, sandTexTop, W, H - sandTexTop);
+  ctx.restore();
+
+  drawWetWash();      // per-column 湿润度 → 深色湿沙（退水后暴露、下部还湿）
+  drawSheen();        // 新湿的镜面高光，随干燥淡出
+  drawPuddles();      // 洼地里的小水洼/反光
+  return sandPath;
+}
+
+/** ⭐ 湿沙：宽度来自 per-column 的 wetEdge，深浅来自 per-column 的 wetAmt。
+ *
+ *  ⛔ 三种试过的写法都有硬伤，记下来免得再走一遍：
+ *   ① 沿岸分 10 段、每段一条自己的渐变  → 相邻段 alpha 阶跃 ⇒ 10 道竖直色带
+ *   ② 全幅共用一条竖直渐变 + 逐列 alpha → 深浅锚在全幅 y 上，而单列的湿区只有
+ *      全幅范围的 1/3，于是每列只走了渐变的前 1/3 ⇒ 一整条**深棕平板**；
+ *      且列底 wetEdge 处的残留 alpha 造成**阶梯状下沿**
+ *   ③ 逐列 createLinearGradient         → 97 个渐变对象/帧，太贵
+ *  ⭐ 现在是 ④：**把渐变烘成 2×64 的小条，逐列 drawImage 拉到该列自己的深度**。
+ *    每列的渐变都从最深走到全透明、终点正好落在 wetEdge[i] ⇒ 没有平板、没有阶梯；
+ *    x 取整 + 宽度 +1px ⇒ 相邻列之间没有抗锯齿缝；一帧只建 1 个渐变。 */
+let wetStrip = null, wetStripCtx = null, sheenStrip = null, sheenStripCtx = null;
+function buildWetStrip(){
+  const HGT = 64;
+  if (!wetStrip){
+    wetStrip = document.createElement('canvas');
+    wetStrip.width = 2; wetStrip.height = HGT;
+    wetStripCtx = wetStrip.getContext('2d');
+  }
+  const g = wetStripCtx.createLinearGradient(0, 0, 0, HGT);
+  g.addColorStop(0.00, 'rgba(74,50,26,0.76)');
+  g.addColorStop(0.26, 'rgba(82,57,30,0.60)');
+  g.addColorStop(0.55, 'rgba(90,65,36,0.33)');
+  g.addColorStop(0.80, 'rgba(98,75,44,0.11)');
+  g.addColorStop(1.00, 'rgba(106,84,54,0)');
+  wetStripCtx.clearRect(0, 0, 2, HGT);
+  wetStripCtx.fillStyle = g;
+  wetStripCtx.fillRect(0, 0, 2, HGT);
+
+  // ⭐ 高光也烘成小条：早先逐列 createLinearGradient（97 个/帧）而且
+  //    宽度 +1px 重叠 ⇒ 每列接缝处二次合成，在 100% 下是一列列的亮竖线；
+  //    矩形的硬顶边还在水线上留下阶梯。
+  if (!sheenStrip){
+    sheenStrip = document.createElement('canvas');
+    sheenStrip.width = 2; sheenStrip.height = HGT;
+    sheenStripCtx = sheenStrip.getContext('2d');
+  }
+  const s = sheenStripCtx.createLinearGradient(0, 0, 0, HGT);
+  // ⛔ 冷蓝调太多会变成一层灰雾；用暖白 + 一点点青。
+  s.addColorStop(0.00, 'rgba(232,240,236,' + SHEEN_A.toFixed(4) + ')');
+  s.addColorStop(0.38, 'rgba(170,206,210,' + (SHEEN_A * 0.42).toFixed(4) + ')');
+  s.addColorStop(1.00, 'rgba(140,180,190,0)');
+  sheenStripCtx.clearRect(0, 0, 2, HGT);
+  sheenStripCtx.fillStyle = s;
+  sheenStripCtx.fillRect(0, 0, 2, HGT);
+}
+// ⭐ 湿沙/高光的顶端要抬到水线**之上**多少像素，让 clip（那条平滑曲线）独自
+//    决定上沿。⛔ 抬 4px 不够：列与列之间 shoreYs 可以差 7~8px，clip 曲线在列内
+//    还会更低，于是每块的硬顶边在某些列露出来 ⇒ 水线上出现一列列的阶梯。
+//    必须 ≥ 一个列间距的起伏量。
+const WET_OVER = 16;
+function drawWetWash(){
+  const n = COLS + 1;
+  let any = false;
+  for (let i = 0; i < n; i++) if (wetAmt[i] > 0.012) { any = true; break; }
+  if (!any) return;
+  buildWetStrip();
+  // ⛔ 颜色要「湿」而不是「灰」：湿沙是同一块沙被打湿 + 变深 + 变饱和，
+//    所以往棕/琥珀方向压，而不是往灰方向压。alpha 也要够高，
+//    0.55 左右的浅棕叠在 #C9A063 上只会得到一片脏灰。
+  ctx.save();
+  ctx.clip(sandPath);
+  const colW = W / COLS;
+  for (let i = 0; i < n; i++){
+    const d = wetEdge[i] - shoreYs[i];
+    if (wetAmt[i] < 0.012 || d < 0.6) continue;
+    // ⛔⛔ 反馈六·3 让水线变得很参差之后，**共享**一条烘焙渐变 + 逐列 alpha
+    //    的写法崩了：相邻列的 wetAmt 可以是 1.0 与 0.3（那正是一条水舌的
+    //    边界），实测逐列亮度偏差从 0.33 跳到 0.53、最大 10.5 lum ——
+    //    一列列的竖线。改成**逐列自己的渐变**：每列都从最深走到全透明、
+    //    终点正好落在 wetEdge[i]。代价是 97 个渐变对象/帧（实测 +0.1ms）。
+    //    竖直方向的平板与阶梯因此彻底消失；剩下的竖向阶跃是水舌边界，
+    //    那本来就该是硬边。
+    // ⛔ x 用浮点、不取整也不 +1px：取整会在 16.667px 的列宽上留 0.33px 的
+    //    缝，重叠则会在接缝二次合成 ⇒ 两种都会变成竖线。
+    // ⛔ 顶端抬到 shoreYs 之上 WET_OVER：让 clip（那条平滑曲线）独自决定上沿。
+    const yT = shoreYs[i] - WET_OVER, yB = wetEdge[i];
+    const gr = ctx.createLinearGradient(0, yT, 0, yB);
+    const a = wetAmt[i];
+    gr.addColorStop(0.00, 'rgba(74,50,26,' + (0.76 * a).toFixed(4) + ')');
+    gr.addColorStop(0.26, 'rgba(82,57,30,' + (0.60 * a).toFixed(4) + ')');
+    gr.addColorStop(0.55, 'rgba(90,65,36,' + (0.33 * a).toFixed(4) + ')');
+    gr.addColorStop(0.80, 'rgba(98,75,44,' + (0.11 * a).toFixed(4) + ')');
+    gr.addColorStop(1.00, 'rgba(106,84,54,0)');
+    ctx.fillStyle = gr;
+    ctx.fillRect(shoreXs[i] - colW * 0.5, yT, colW, yB - yT);
+  }
+  ctx.restore();
+  ctx.globalAlpha = 1;
+}
+
+/** ⭐ 镜面高光：刚被水打湿的沙面会反光，越干越弱。贴着水线的一条窄亮痕。
+ *  逐列：沿岸有的地方反光强（刚被水舌舔过）、有的已经哑了。
+ *  与湿沙同一套做法：浮点平铺、不重叠、顶端抬到水线之上让 clip 决定上沿。 */
+function drawSheen(){
+  const n = COLS + 1;
+  let cnt = 0;
+  for (let i = 0; i < n; i++) if (wetAmt[i] > 0.05) cnt++;
+  if (cnt < 4) return;
+  buildWetStrip();
+  const depth = H * 0.030;
+  ctx.save();
+  ctx.clip(sandPath);
+  ctx.globalCompositeOperation = 'lighter';
+  const colW = W / COLS;
+  for (let i = 0; i < n; i++){
+    if (wetAmt[i] < 0.05) continue;
+    ctx.globalAlpha = wetAmt[i];
+    ctx.drawImage(sheenStrip, 0, 0, 2, 64,
+      shoreXs[i] - colW * 0.5, shoreYs[i] - WET_OVER, colW, depth + WET_OVER);
+  }
+  ctx.restore();
+  ctx.globalAlpha = 1;
+  ctx.globalCompositeOperation = 'source-over';
+}
+
+/** ⭐ 洼地里的小水洼 + 反光斑（退水后残留）
+ *  ⛔ 早先用 ellipse + 一个 fillRect 画「反光细亮线」，在 100% 下那个矩形
+ *    清楚得能看见边，读起来像画上去的方块，不是水。现在水洼本体用椭圆，
+ *    反光用一条更窄的椭圆（软边、没有直角）。 */
+function drawPuddles(){
+  let wet = 0;
+  for (let i = 0; i <= COLS; i++) wet += wetAmt[i];
+  wet /= (COLS + 1);
+  if (wet < 0.06) return;
+  ctx.save();
+  ctx.clip(sandPath);
+  for (let i = 0; i < PUDDLE_MAX; i++){
+    const h = i * 3 + 7;
+    const p = 0.03 + 0.94 * hash2(h, 811);
+    const ci = Math.min(COLS, Math.max(0, Math.round(p * COLS)));
+    const band = hash2(h, 812);
+    const y = lerp(shoreYs[ci], wetEdge[ci], 0.12 + 0.80 * band);
+    const rx = W * (0.008 + 0.024 * hash2(h, 813));
+    const ry = H * (0.0020 + 0.0050 * hash2(h, 814));
+    const a = 0.20 * wet * wetAmt[ci] * (0.4 + 0.6 * hash2(h, 815));
+    if (a < 0.02) continue;
+    ctx.globalAlpha = a;
+    ctx.fillStyle = '#93AEB8';
+    ctx.beginPath();
+    ctx.ellipse(p * W, y, rx, ry, 0, 0, 6.2832);
+    ctx.fill();
+    // 水面反光：同样椭圆、压扁、偏上，无直角
+    ctx.globalAlpha = a * 0.85;
+    ctx.fillStyle = '#DCEBF0';
+    ctx.beginPath();
+    ctx.ellipse(p * W - rx * (0.12 + 0.22 * hash2(h, 816)), y - ry * 0.22,
+                rx * (0.28 + 0.30 * hash2(h, 817)), ry * 0.26, 0, 0, 6.2832);
+    ctx.fill();
+  }
+  ctx.restore();
+  ctx.globalAlpha = 1;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   海滩偶客 —— 一只小螃蟹。⛔ 浪/冲流模型一个字没动，这只是 §7 沙层里多画的
+   一层。调用点在 frame() 里 drawSand() 之后、drawSwellBands() 之前 ⇒
+   它压在沙与湿沙之上，而**在所有泡沫层之下** ⇒ 浪真的能盖住它。
+   ══════════════════════════════════════════════════════════════════════════
+   ⛔ 一切都由 t 决定（⛔ 无 Math.random）：亮相时刻、过境间隔、方向、朝向、
+      步态相位全部取自 hash2(第几只, salt)。同一个 t 永远画出同一只蟹 ——
+      连「出现在哪、什么时候出现」都不需要任何累积状态；暂停时 t 冻结，
+      它也就跟着冻结（绝不读墙钟）。
+   ⭐ 唯一的帧状态是 cy（纵坐标的一阶低通，见下）。
+   为什么需要它：水线逐帧最多能跳 10.8px（harness 实测的 max|Δy|），
+   硬跟着 shoreYs 走就是一下一下地弹；低通之后它读作「浪逼上来、蟹退两步」。
+   一阶滤波的输出只由（输入序列, 初值）决定，而初值由第几只决定 ⇒
+   从同一时刻重放必然逐帧一致。 */
+const CRAB_T0_MS  = 6800;                     // 第一次亮相（再晚等于没有这回事）
+const CRAB_GAP_LO = 25000, CRAB_GAP_HI = 45000;   // 两次过境之间的间隔
+const CRAB_SPEED  = 0.150;                    // 步速（占 h / s）⇒ 900px 上约 135 px/s
+const CRAB_SPAN   = 0.0335;                   // 全身跨度（占 h）⇒ 约 30px
+const CRAB_GAIT   = 0.0150;                   // 步频（rad/ms）≈ 2.4 Hz
+const CRAB_FADE   = 420;                      // 进/出画的淡入淡出
+const CRAB_CLEAR  = 8;                        // 脚下离水线的最小距离（px）
+// 离平均岸线的干沙纵深（占 h）。⛔ 不能写死一个绝对 y：岸线沿 x 起伏 ±0.13h，
+//   固定 y 会在某几列直接走进水里；所以纵坐标也挂在岸线上，只是往内陆挪。
+const CRAB_OFF_LO = 0.030, CRAB_OFF_HI = 0.132;
+const CRAB_LEG_Y  = [-0.55, -0.12, 0.33, 0.72];    // 四对步足沿体轴的髋位（单位 R）
+const CRAB_LEG_SPREAD = 1.5708;                    // 相邻步足的相位差（rad，= π/2）
+/** 第 i 次过境与下一次之间的间隔。
+ *  ⛔ 别写成 `0.62*hash + 0.38*hash`：两个均匀分布取平均 ⇒ 方差砍半，实测
+ *    5 个间隔全落在 30~35s（正好是 25~45 的中段），看着就像「每 32 秒准时
+ *    来一次」。这里先用 1.30 的对比度把单次 hash 拉满到 0..1（p2/p98 才够到
+ *    两端），再叠 12% 的第二个 hash 作抖动。
+ *  ⛔ 没有闭式解（间隔之和没有解析形式），但 25s 一次 ⇒ 跑一小时也才 144 遍，
+ *    每帧 144 次 hash 完全不痛。 */
+function crabGapMs(i){
+  const u = 0.88 * clamp(0.5 + (hash2(i, 9211) - 0.5) * 1.30, 0, 1)
+          + 0.12 * hash2(i, 9213);
+  return CRAB_GAP_LO + (CRAB_GAP_HI - CRAB_GAP_LO) * u;
+}
+/** 当前是第几只 + 它已经走了多久（ms）。纯函数，同样的 t 必然同样的结果。 */
+function crabSlot(t){
+  let k = 0, tk = CRAB_T0_MS, g = crabGapMs(0);
+  while (t >= tk + g){ tk += g; k++; g = crabGapMs(k); }
+  return { k: k, age: t - tk };
+}
+let crabIdx = -1, crabCy = 0;
+function drawCrab(t, dtMs){
+  const slot = crabSlot(t), k = slot.k, age = slot.age;
+  // ── ① 横向：匀速，起点在画外 ⇒ 它是「走进来」而不是「凭空出现」────────
+  const dir  = hash2(k, 9217) < 0.5 ? -1 : 1;
+  const spd  = CRAB_SPEED * H * (0.86 + 0.30 * hash2(k, 9219));   // px/s
+  const span = CRAB_SPAN * H;
+  const pad  = span * 0.5 + 4;
+  const runMs = (W + pad * 2) / spd * 1000;
+  if (age > runMs) return;                                   // 走出画外 ⇒ 没了
+  const x = (dir > 0 ? -pad : W + pad) + dir * spd * age / 1000;
+  const vis = smoothstep(0, CRAB_FADE, age) * (1 - smoothstep(runMs - CRAB_FADE, runMs, age));
+  if (vis < 0.02) return;
+  // ── ② 纵向：挂在岸线上（慢），再被水线顶回来（快）⇒ 浪逼上来它就退 ─────
+  const base = swashFrontY(x, t, H);                          // 平均岸线（纯函数）
+  const want = base + H * (CRAB_OFF_LO + (CRAB_OFF_HI - CRAB_OFF_LO) *
+                           Math.pow(hash2(k, 9221), 0.75));
+  // ⛔ 硬地板取**身位三列的最大值**，不是所在列 —— 蟹有 30px 宽，只看一列
+  //   会有一半身子踩在水里。
+  const ci = clamp(Math.round(x / W * COLS), 0, COLS);
+  let floor = -1e9;
+  for (let d = -1; d <= 1; d++){
+    const c = clamp(ci + d, 0, COLS);
+    if (shoreYs[c] + CRAB_CLEAR > floor) floor = shoreYs[c] + CRAB_CLEAR;
+  }
+  const goal = Math.max(want, floor);
+  if (crabIdx !== k){ crabIdx = k; crabCy = goal; }          // 新的一只 ⇒ 直接落位
+  crabCy += (goal - crabCy) * (1 - Math.exp(-dtMs / 220));   // ⛔ dt=0（暂停）⇒ 不动
+  // ── ③ 体型与姿态 ──────────────────────────────────────────────────
+  const R    = span * 0.2326;                                // 身体半宽（尺度基准）
+  const gait = age * CRAB_GAIT + hash2(k, 9223) * 6.2832;    // 逐只不同的步态相位
+  const face = hash2(k, 9225) < 0.5 ? -1 : 1;                // 朝上还是朝下
+  const tilt = (hash2(k, 9227) - 0.5) * 0.42;                // ±12°，免得像贴纸
+  const bob  = -0.13 * R * fsin(gait * 2);                   // 随蹬腿一上一下
+  const sway =  0.11 * R * fsin(gait);                       // 侧向摆
+  ctx.save();
+  ctx.globalAlpha = vis;
+  // ① 影子先落：没有它，蟹就是一张贴在沙上的贴纸。
+  //    ⛔ 必须是**半透明**的 —— 直接拿 crabShadow 这个深棕
+  //    按 alpha=1 画出来，12× 截图上它是一坦实心污渍，比蟹本身还抢眼。
+  ctx.fillStyle = PAL.crabShadow;
+  ctx.globalAlpha = vis * 0.13;
+  ctx.beginPath();
+  ctx.ellipse(x + 0.30 * R, crabCy + 0.52 * R, 1.18 * R, 0.54 * R, 0, 0, 6.2832);
+  ctx.fill();
+  ctx.globalAlpha = vis;
+  ctx.translate(x, crabCy + bob);
+  ctx.rotate(tilt);
+  ctx.scale(1, face);
+  ctx.translate(sway, 0);
+  // ② 八条步足：左右两侧**反相**。⛔ 这是「横着走」的全部秘密 —— 两侧同相
+  //   就变成普通的前爬了，读不出螃蟹。同侧四条再各差一个相位 ⇒ 步足像波浪
+  //   一样从前往后传。腿摆动方向是**前后**（体轴），推动方向才是横向。
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  for (let side = 0; side < 2; side++){
+    ctx.beginPath();
+    for (let i = 0; i < CRAB_LEG_Y.length; i++){
+      const hy = CRAB_LEG_Y[i] * R;
+      const sw = fsin(gait + i * CRAB_LEG_SPREAD + (side ? 3.1416 : 0));
+      // ⭐ 足端 = **撑出去/收回来 + 前后摆 + 抬起**。
+      // ⛔ 早先只做前后摆（振幅 0.62R）而髀距只有 0.43R ⇒
+      //   正弦的相位每转一圈就有两对腿落在同一处，
+      //   12× 截图上四条腿糊成一坦方块。半径随相位一起变
+      //   之后 x、y 两个方向同时错开，任何相位都不重合
+      //   —— 而这本来就是真实蟹蟑腿的运动：蹬出去、收回来，
+      //   而不是原地前后晃。
+      const rad = (1.98 + 0.22 * sw) * R;
+      const lift = 0.16 * R * (0.5 + 0.5 * sw);
+      const fore = rad * 0.34 * sw;
+      const s = side ? -1 : 1;
+      const hx = s * 1.02 * R, kx = s * rad * 0.70;
+      const ky = hy + fore * 0.45 - lift * 0.5;
+      const fx = s * rad,        fy = hy + fore - lift;
+      ctx.moveTo(hx, hy);
+      ctx.quadraticCurveTo((hx + kx) * 0.5 + s * 0.12 * R, (hy + ky) * 0.5, kx, ky);
+      ctx.lineTo(fx, fy);
+    }
+    ctx.lineWidth = Math.max(1.0, (side ? 0.21 : 0.26) * R);
+    ctx.strokeStyle = side ? PAL.crabLegFar : PAL.crabLeg;
+    ctx.stroke();
+  }
+  // ③ 甲壳：画在步足**之上**，髋部自然被壳沿盖住（真实螃蟹就是这样）
+  ctx.fillStyle = PAL.crabShell;
+  ctx.beginPath();
+  ctx.ellipse(0, 0, 1.06 * R, 0.76 * R, 0, 0, 6.2832);
+  ctx.fill();
+  ctx.strokeStyle = PAL.crabRim;
+  ctx.lineWidth = Math.max(0.8, 0.13 * R);
+  ctx.stroke();
+  // ④ 背上一道高光（左上，受光方向与湿沙高光一致）—— 壳才有体积而不是椭圆
+  ctx.strokeStyle = PAL.crabShellHi;
+  ctx.lineWidth = Math.max(0.8, 0.18 * R);
+  ctx.beginPath();
+  ctx.ellipse(0, 0, 0.82 * R, 0.50 * R, 0, 3.55, 5.05);
+  ctx.stroke();
+  // ⑤ 双螯 + 眼柄：⭐ 这两样才是「一眼认出是螃蟹」的关键，尺寸不能省。
+  //   ⛔ 螯必须**凸出壳的前缘**并自带 V 形缺口 —— 早先把它摆在壳缘上
+  //   （±0.96R, −0.84R，壳 ry 就是 0.86R）⇒ 整只螯糊在深色壳沿里，
+  //   4× 截图上只剩两个圆点，读出来是「蜱虫」不是「螃蟹」。
+  const bite = 0.20 * R * fsin(gait + 1.2);                  // 螯微微开合
+  const CP = 0.72 * R, CQ = 0.40 * R;
+  // ⭐ 螯臂：从壳的前肩斜撑到螯。⛔ 可省 —— 没它的话螯像两块崩在壳边上的
+  //   碎块，而不是「举着的头」。
+  ctx.strokeStyle = PAL.crabLeg;
+  ctx.lineWidth = Math.max(1.0, 0.24 * R);
+  ctx.beginPath();
+  for (let side = 0; side < 2; side++){
+    const s = side ? 1 : -1;
+    ctx.moveTo(s * 0.50 * R, -0.64 * R);
+    ctx.lineTo(s * 0.84 * R, -1.06 * R);
+  }
+  ctx.stroke();
+  for (let side = 0; side < 2; side++){
+    const s = side ? 1 : -1;
+    ctx.save();
+    ctx.translate(s * 0.86 * R, -1.10 * R);
+    ctx.rotate(s * (0.40 + bite));
+    ctx.beginPath();
+    ctx.moveTo(-CP * 0.80, -CQ);
+    ctx.quadraticCurveTo(CP * 0.60, -CQ * 1.06, CP * 0.88, -CQ * 0.46);
+    ctx.lineTo(CP * 0.30, 0);                                 // 钳口
+    ctx.lineTo(CP * 0.88, CQ * 0.46);
+    ctx.quadraticCurveTo(CP * 0.60, CQ * 1.06, -CP * 0.80, CQ);
+    ctx.quadraticCurveTo(-CP * 1.12, 0, -CP * 0.80, -CQ);
+    ctx.closePath();
+    // ⛔ 螯不能与壳同色：同色同描边 ⇒ 12× 截图上壳与螯糊成一整块橙。
+    //   亮一档 + 更深的边，螯才「浮」在壳前面。
+    ctx.fillStyle = PAL.crabClaw;
+    ctx.fill();
+    ctx.strokeStyle = PAL.crabRim;
+    ctx.lineWidth = Math.max(0.8, 0.15 * R);
+    ctx.stroke();
+    ctx.restore();
+  }
+  ctx.strokeStyle = PAL.crabLeg;
+  ctx.lineWidth = Math.max(0.7, 0.14 * R);
+  ctx.beginPath();
+  for (let side = 0; side < 2; side++){
+    const s = side ? 1 : -1;
+    ctx.moveTo(s * 0.30 * R, -0.56 * R);
+    ctx.lineTo(s * (0.36 + bite * 0.6) * R, -1.22 * R);
+  }
+  ctx.stroke();
+  ctx.fillStyle = PAL.crabRim;
+  for (let side = 0; side < 2; side++){
+    const s = side ? 1 : -1;
+    ctx.beginPath();
+    ctx.arc(s * (0.36 + bite * 0.6) * R, -1.26 * R, 0.24 * R, 0, 6.2832);
+    ctx.fill();
+  }
+  ctx.restore();
+  ctx.globalAlpha = 1;
+}
+
+// ⭐ 残留泡沫：退水留在湿沙上的羽状条纹（不是点，是被水拖出来的丝缕）。
+//  必须短 —— 太长就成了「等高线」。位置落在 [水线, 湿区外沿] 之间，
+//  越靠内陆（退水路过最久的地方）越密 ⇒ 读起来像退水的路径。
+function drawResidualStreaks(t){
+  const n = COLS + 1;
+  let wet = 0;
+  for (let i = 0; i < n; i++) wet += wetAmt[i];
+  wet /= n;
+  if (wet < 0.05) return;
+  ctx.save();
+  ctx.clip(sandPath);
+  ctx.lineCap = 'round';
+  for (let pass = 0; pass < 3; pass++){
+    ctx.beginPath();
+    for (let seg = 0; seg < 26; seg++){
+      const h = seg * 3 + pass;
+      const a0 = hash2(h, 501);
+      const a1 = a0 + 0.012 + 0.065 * hash2(h, 502);
+      const band = Math.pow(hash2(h, 503), 0.65);        // 偏向内陆
+      for (let k = 0; k <= 6; k++){
+        const p = lerp(a0, a1, k / 6);
+        const i = Math.min(COLS, Math.max(0, Math.round(p * COLS)));
+        const x = W * p;
+        const y = lerp(shoreYs[i], wetEdge[i], 0.06 + 0.90 * band)
+                + 0.0026 * H * Math.sin(x * 0.026 * kScale + h * 1.7 + t * 0.00042);
+        if (k === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+      }
+    }
+    ctx.lineWidth = 0.9 + 0.8 * pass;
+    ctx.strokeStyle = PAL.foam;
+    ctx.globalAlpha = RESIDUE_STREAK_A * (1 - pass * 0.28) * (0.35 + 0.65 * wet);
+    ctx.stroke();
+  }
+  ctx.restore();
+  ctx.globalAlpha = 1;
+}
+
+/** ⭐ 细亮湿线：正好压在岸线上。退水期最亮（刚被水舔过），干燥期淡出。 */
+function drawWetLine(t){
+  const n = COLS + 1;
+  const boost = swashStageNow === 0 ? 0.55 : (swashStageNow === 1 ? 1.0 : 0.30);
+  ctx.save();
+  ctx.clip(sandPath);
+  ctx.lineCap = 'round';
+  for (let pass = 0; pass < 2; pass++){
+    ctx.beginPath();
+    for (let seg = 0; seg < 11; seg++){
+      const a0 = seg / 11, a1 = (seg + 0.88) / 11;
+      for (let k = 0; k <= 6; k++){
+        const p = lerp(a0, a1, k / 6);
+        const i = Math.min(COLS, Math.round(p * COLS));
+        const y = shoreYs[i] + pass * 1.6 + 0.0022 * H * Math.sin(p * W * 0.011 * kScale + seg * 2.3 + t * 0.00052);
+        if (k === 0) ctx.moveTo(W * p, y); else ctx.lineTo(W * p, y);
+      }
+    }
+    ctx.lineWidth = 1.0 + pass * 1.5;
+    ctx.strokeStyle = PAL.foam;
+    ctx.globalAlpha = WET_LINE_A * (1 - pass * 0.42) * boost;
+    ctx.stroke();
+  }
+  ctx.restore();
+  ctx.globalAlpha = 1;
+}
+
+/** ⭐ 浪花手指：贴着水线往沙上爬的不规则花边。
+ *  上冲期最长最显（舌头上带泡沫），退回期迅速萎缩，干燥期几乎没有。
+ *  ⛔ 早先按 (i+0.5)/FINGER_MAX 等距排布 + 固定形状 ⇒ 渲染出来是一排
+ *    等距的半圆扇贝，像装饰花边而不是浪花。现在位置/长度/宽度都按 hash
+ *    抖动，并且只让少数「舌头」明显伸出去。 */
+function drawSwashFingers(t){
+  const st = swashStageNow;
+  const vigor = st === 0 ? 1.0 : (st === 1 ? 0.50 : 0.10);
+  if (vigor < 0.05) return;
+  ctx.save();
+  ctx.clip(sandPath);
+  ctx.fillStyle = PAL.foam;
+  for (let tier = 0; tier < 3; tier++){
+    ctx.globalAlpha = (0.15 - tier * 0.042) * vigor * (0.4 + 0.6 * A.sLow);
+    ctx.beginPath();
+    for (let i = tier; i < FINGER_MAX; i += 3){
+      const h = i * 3 + tier;
+      // ⛔ 位置：等距栅格 + 大幅 hash 抖动（±0.85 格）⇒ 不再是等距扇贝
+      const p = (i + 0.5) / FINGER_MAX + 0.85 * (hash2(h, 601) - 0.5);
+      if (p < -0.02 || p > 1.02) continue;
+      // ⛔ 只有 45% 的位置真的伸出去，其余几乎贴着水线 ⇒ 参差
+      const reach = Math.pow(hash2(h, 604), 2.2);
+      if (reach < 0.06) continue;
+      const ci = Math.min(COLS, Math.max(0, Math.round(p * COLS)));
+      const base = shoreYs[ci];
+      const len = H * (0.002 + 0.030 * reach) * (0.35 + 0.65 * A.sMid) * vigor;
+      const wide = W * (0.006 + 0.026 * Math.pow(hash2(h, 603), 1.6));
+      const y0 = base - H * 0.003;
+      const lean = (hash2(h, 605) - 0.5) * wide * 0.9;
+      ctx.moveTo(W * p - wide * 0.5, y0);
+      ctx.bezierCurveTo(W * p - wide * 0.46, y0 + len * 0.60,
+                        W * p - wide * 0.14, y0 + len * 0.90,
+                        W * p + lean, y0 + len);
+      ctx.bezierCurveTo(W * p + wide * 0.26, y0 + len * 0.70,
+                        W * p + wide * 0.46, y0 + len * 0.30,
+                        W * p + wide * 0.5, y0);
+      ctx.closePath();
+    }
+    ctx.fill();
+  }
+  ctx.restore();
+  ctx.globalAlpha = 1;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   8 · SWELL BANDS — 4 stacked foam lines, ⭐ shoreward one is strongest.
+   Each band is quantised into FOAM_LADDER disjoint narrow strips (tail→front),
+   so filling each strip at its own alpha reproduces foamTargetAt() exactly:
+   lip brightest → translucent heart → tail dissolving to zero.
+   ══════════════════════════════════════════════════════════════════════════ */
+const bxs  = new Float32Array(COLS + 1);
+const bfy  = new Float32Array(COLS + 1);
+const bwj  = new Float32Array(COLS + 1);
+// 反馈六·5：大白沫晕的上下沿（每帧重算）
+const washA = new Float32Array(COLS + 1);
+const washB = new Float32Array(COLS + 1);
+// 反馈七·4：逐列的倾角律与距离律（泡沫强度场）
+const slopeLaw = new Float32Array(COLS + 1);
+const farLaw   = new Float32Array(COLS + 1);
+const ragA = new Float32Array(COLS + 1);   // slow tear pattern (bands 0, 2)
+const ragB = new Float32Array(COLS + 1);   // fast tear pattern (bands 1, 3)
+const fray = new Float32Array(COLS + 1);   // ⭐ 分形破碎场
+const edgeYs = new Float32Array(COLS + 1);
+// scratch rows (preallocated: ⛔ no per-frame arrays)
+const slabLo = new Float32Array(COLS + 1);
+const slabHi = new Float32Array(COLS + 1);
+let edgeValid = false;
+
+/** ⭐ 确定性分形破碎：三个八度（振幅按 ~0.47 衰减）+ 每列固定 hash 抖动。
+ *  光滑正弦边缘一眼就是 CG；真实白沫是大瓣 → 碎瓣 → 细丝的自相似结构。 */
+function fillFray(t, L){
+  for (let i = 0; i <= COLS; i++){
+    const x = W * i / COLS;
+    fray[i] = FRAY_A[0] * fsin(x * FRAY_K[0] * kScale + t * FRAY_W[0] + L * 2.13)
+            + FRAY_A[1] * fsin(x * FRAY_K[1] * kScale + t * FRAY_W[1] + L * 5.31)
+            + FRAY_A[2] * fsin(x * FRAY_K[2] * kScale + t * FRAY_W[2] + L * 1.07)
+            + FRAY_JIT * (hash2(i, 300 + L) - 0.5) * 2;
+  }
+}
+
+/** 在一条窄带上挖破洞（evenodd ⇒ 水从洞里透出来 ⇒ 白沫是「花边」不是「实心带」）
+ *  破洞要够大够圆才读成「泡沫之间的空隙」；早期版本只有 8×2px 的细缝，
+ *  看起来像条划痕而不是孔洞。
+ *  ⛔⛔ **不要**用 `Math.floor(t / HOLE_PERIOD_MS)` 给破洞场换随机种子：
+ *    那会让所有洞在每个周期的**同一帧整体瞬移**（位置与半径同时跳变），
+ *    而破洞是 evenodd 挖进白沫路径里的 ⇒ 白沫图案整帧闪一次，owner 读作
+ *    「老是闪烁」。⛔ 而且所有洞同帧变化 = 一起眨眼，最刺眼。
+ *    （上一轮只把周期从 260ms 放慢到 1100ms —— 只治了频率，没治跳变。）
+ *  ⭐ 现在：每洞有**自己的相位**，沿条带**连续漂移**，半径按 sin(πu) 生长→收缩。
+ *    ⚠️ 半径**不是**真的到 0：`hr = gap·(0.06 + 0.30·grow)·k` 有 0.06 的地板值，
+ *    u→0/1 时半径 = gap·0.06·k（典型 0.7px），**落在下面的 ry<1.5 丢弃阈值之下**
+ *    ⇒ 视觉上仍是「生灭不突变」，但机制是「收缩到阈值以下被丢弃」，不是「归零」。
+ *    各洞相位错开，不会齐闪。 */
+function punchHoles(path, L, strip, n0, n1, W0, kA, t, dir){
+  const gap = n1 - n0;
+  if (gap < 0.07) return;                       // 太窄的条带挖不动，会破形
+  const count = Math.round(HOLE_MAX * kA * clamp(1.15 - gap * 1.6, 0, 1));
+  for (let h = 0; h < count; h++){
+    const ph = hash2(h, 700 + strip * 31 + L * 7);              // 每洞固定相位偏移
+    const u  = ((t / HOLE_PERIOD_MS) + ph) % 1;                // 连续 0..1（⛔ 不取整）
+    const hx = clamp(ph + 0.13 * Math.sin(t * 0.00021 + ph * 6.2832), 0.02, 0.98);   // 缓慢横漂
+    //   ⛔ 不可写成 `(ph + 0.13*sin(..) + 1) % 1`：回绕会让 hx 从 ~1.0 跳到 ~0.0
+    //   ⇒ 洞横穿整屏（实测 1600px/帧）。clamp 是有界振荡，边界处导数归零 ⇒ 连续。
+    const grow = Math.sin(Math.PI * u);                         // 0 → 1 → 0：生灭不突变
+    const hn = n0 + gap * (0.12 + 0.76 * u);                    // 沿条带连续推进
+    const hr = gap * (0.06 + 0.30 * grow) * (0.70 + 0.60 * hash2(h, 720 + strip * 17 + L * 5));
+    const col = Math.min(COLS, Math.max(0, Math.round(hx * COLS)));
+    const cy = bfy[col] + dir * hn * bwj[col] * W0;
+    const ry = hr * bwj[col] * W0;
+    const rx = ry * (1.1 + 1.5 * hash2(h, 730 + strip + L * 11));
+    const cx = hx * W;                        // ⛔ 同样不要吸附到列栅格
+    if (ry < 1.5 || rx < 2.5) continue;
+    path.moveTo(cx + rx, cy);
+    for (let a = 1; a <= 9; a++){             // 粗略椭圆，9 段足够
+      const th = a / 9 * Math.PI * 2;
+      path.lineTo(cx + Math.cos(th) * rx, cy + Math.sin(th) * ry);
+    }
+    path.closePath();
+  }
+}
+
+function bandAmp(L){
+  const e = (L === 0) ? A.sLow : (A.sLow * 0.70 + A.sMid * 0.30);
+  let a = 0.26 + 0.74 * e;
+  if (L === 0) a += A.setImp * 0.55;           // the shoreward band takes the set wave
+  return clamp(a, 0, 1.35);                     // ⛔ clamp BOTH ends, Math.min only caps above
+}
+
+/** 一条窄带的填充。亮的窄带沿 x 方向再切成 3 段重叠的子路径，每段一个
+ *  由 hash 决定的 alpha —— 连续不断的实心亮带正是「读成插画」的主因之一，
+ *  真实白沫前段是断开的一团团。暗的窄带整条画，省开销。 */
+/** 一条窄带的填充（整条一次 fill）。
+ *  ⛔ 曾经试过把亮带沿 x 切成 3 段重叠子路径、各给不同 alpha 来制造「断开感」，
+ *     但 source-over 下重叠段会叠得更亮，屏幕上就是一块块硬边矩形。改用
+ *     punchHoles（洞）+ drawFoamLace（丝网）来打散，形状才有机。 */
+function fillStrip(L, s, ladder, step2, W0, kA, t, dir){
+  const alpha = clamp(ladder[s].a * kA, 0, 1);
+  if (alpha < 0.015) return;
+  for (let j = 0; j <= COLS; j += step2){
+    const w = bwj[j];
+    slabLo[j] = bfy[j] + dir * ladder[s].n0 * w * W0;
+    slabHi[j] = bfy[j] + dir * ladder[s].n1 * w * W0;
+  }
+  const m = (COLS / step2) + 1;
+  const p = new Path2D();
+  smoothRun(p, bxs, slabLo, m, true, true, step2);
+  smoothRun(p, bxs, slabHi, m, false, false, step2);
+  p.closePath();
+  punchHoles(p, L, s, ladder[s].n0, ladder[s].n1, W0, kA, t, dir);
+  ctx.globalAlpha = alpha;
+  ctx.fillStyle = ladder[s].a >= 0.35 ? PAL.foam : PAL.foamCore;
+  ctx.fill(p, 'evenodd');
+}
+
+/** ⭐ 浪花蕾丝（反馈四）—— 反馈八·5b 第四次重写：连成一整张的网。
+ *  ⛔ 早先用「一堆圆」当泡沫胞 ⇒ 泡泡浴。
+ *  ⛔ 第二版把丝做成「沿行进方向拉长的竖直丝」⇒ 一排名副其实的竖直短毛。
+ *  ⛔ 第三版（上一版）是 322 根互不共享端点的短横丝（1%~4.5% 屏宽，独立 hash
+ *     起点、独立终点）：丝太短、彼此不接 ⇒ 100% 下读成「散落的苍白毛发」。
+ *  ⭐ 真实白沫是**沿岸铺开的一层网**：长丝沿岸延伸、由短筋互相连成网眼，
+ *    网眼里露出水。关键不是「丝的形状」而是「丝是连通的」——
+ *    所以 5b 把网的**拓扑**在 resize 时烘好（u-v 空间的节点 + 边），
+ *    每帧只把每条边的两个端点映射到浪几何上：端点**共享** ⇒ 网永不散架。
+ *     · 10×4 抖动网格：每行 9 条沿岸长丝（每根横跨 ~10% 屏宽）+ 2 条环绕屏
+ *       边的包边丝 ⇒ 整行绕屏无缝；行间 ~72% 竖直短筋 + ~64% 斜筋连成网眼。
+ *     · 每个格子里再放一根更细的短丝当网眼填充，水从网眼里透出来。
+ *     · 丝内部点叠缓慢漂移的正弦（端点钉死在共享节点上）⇒ 活而不散。
+ *     · 分 3 个「离前缘的距离」档描边 ⇒ 近前缘密而亮、后段散而淡。
+ *  描边而非图元：stroke 天然给出细线，粗细就是丝的粗细。
+ *  `dir`：+1 向岸、−1 向海。贴岸那条带的主体在它 ⭐ 海侧。 */
+let laceNet = null;
+function buildLaceNet(){
+  laceNet = [];
+  const GX = 10, GY = 4;
+  const rowV = [0.03, 0.22, 0.40, 0.58];       // 各行离前缘的 v（0..1 带宽内）
+  const u = new Float32Array(GX * GY), v = new Float32Array(GX * GY);
+  for (let gy = 0; gy < GY; gy++){
+    for (let gx = 0; gx < GX; gx++){
+      const i = gy * GX + gx;
+      u[i] = clamp((gx + 0.5) / GX + (hash2(i, 5501) - 0.5) * 0.12, 0.015, 0.985);
+      v[i] = clamp(rowV[gy] + (hash2(i, 5507) - 0.5) * 0.10, 0.01, 0.92);
+    }
+  }
+  let se = 1;
+  const push = function(ua, va, ub, vb, xs, kind){
+    laceNet.push({
+      ua: ua, va: va, ub: ub, vb: vb, xs: xs, kind: kind,
+      ph: 6.2832 * hash2(se, 5601), f1: 0.9 + 1.6 * hash2(se, 5603),
+      amp: 0.5 + 1.6 * hash2(se, 5605), rate: 0.00006 + 0.00010 * hash2(se, 5607),
+      wj: 0.60 + 0.85 * hash2(se, 5609), aj: 0.80 + 0.20 * hash2(se, 5611),
+    });
+    se++;
+  };
+  // 沿岸长丝（每行 9 条）+ 左右两条环绕屏边 ⇒ 整行绕屏一圈，无缝
+  for (let gy = 0; gy < GY; gy++){
+    const r = gy * GX;
+    for (let gx = 0; gx < GX - 1; gx++) push(u[r + gx], v[r + gx], u[r + gx + 1], v[r + gx + 1], 0, 0);
+    push(u[r + GX - 1], v[r + GX - 1], u[r], v[r], 1, 0);    // 右出屏环绕
+    push(u[r], v[r], u[r + GX - 1], v[r + GX - 1], -1, 0);   // 左出屏环绕
+  }
+  // 竖直短筋（把行连成网眼）+ 斜筋（打散网格感）
+  let ci = 1;
+  for (let gy = 0; gy < GY - 1; gy++){
+    for (let gx = 0; gx < GX; gx++){
+      const a = gy * GX + gx, b = (gy + 1) * GX + gx;
+      if (hash2(ci, 5701) < 0.72) push(u[a], v[a], u[b], v[b], 0, 1);
+      if (gx < GX - 1){
+        if (hash2(ci, 5703) < 0.42) push(u[a], v[a], u[b + 1], v[b + 1], 0, 2);
+        if (hash2(ci, 5705) < 0.22) push(u[a + 1], v[a + 1], u[b], v[b], 0, 2);
+      }
+      ci++;
+    }
+  }
+  // 网眼填充：每个格子一根更细的短丝（v 错开，不碰网格端点）
+  for (let gy = 0; gy < GY - 1; gy++){
+    for (let gx = 0; gx < GX; gx++){
+      if (hash2(ci, 5801) > 0.76){ ci++; continue; }
+      const a = gy * GX + gx, b = gy * GX + ((gx + 1) % GX);
+      const vm = (v[a] + v[a + GX]) * 0.5;
+      const fa = clamp(vm + (hash2(ci, 5803) - 0.5) * 0.18, 0.02, 0.90);
+      const fb = clamp(vm + (hash2(ci, 5805) - 0.5) * 0.18, 0.02, 0.90);
+      push(u[a], fa, u[b], fb, gx === GX - 1 ? 1 : 0, 3);
+      ci++;
+    }
+  }
+}
+function drawFoamLace(L, W0, kA, t, dir){
+  if (kA < 0.10 || !laceNet) return;
+  const dens = L === 0 ? 1.30 : 0.62 + 0.30 * (1 - L / 3);   // 贴岸那条最「成熟」
+  const bandA = [1.00, 0.62, 0.30];      // 近前缘亮、后段淡
+  const bandW = [0.85, 1.10, 1.30];
+  const kindW = [1.00, 0.75, 0.85, 0.60]; // 长丝 / 竖筋 / 斜筋 / 网眼填充
+  const kindA = [1.00, 0.80, 0.80, 0.55];
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  ctx.strokeStyle = '#ffffff';
+  const aBase = clamp(kA * 1.25, 0, 1) * dens * 0.66;
+  const net = laceNet;
+  // ⭐⭐ 端点**共享**是「连通」的关键：同一条边的两个端点来自烘好的节点，
+  //    所有边在节点处严格相交，丝永远不会各自为政地断开。
+  for (let e = 0; e < net.length; e++){
+    const ed = net[e];
+    const dv = 0.05 * Math.sin(t * 0.00003 + ed.ph + L * 0.9);   // 缓慢呼吸
+    const va = clamp(ed.va + dv, 0.015, 0.95);
+    const vb = clamp(ed.vb + dv, 0.015, 0.95);
+    const colA = Math.min(COLS, Math.max(0, Math.round(ed.ua * COLS)));
+    const colB = Math.min(COLS, Math.max(0, Math.round(ed.ub * COLS)));
+    const xa = ed.ua * W;
+    const xb = (ed.ub + ed.xs) * W;       // xs=±1 ⇒ 包边丝画出/左出屏
+    const ya = bfy[colA] + dir * va * bwj[colA] * W0;
+    const yb = bfy[colB] + dir * vb * bwj[colB] * W0;
+    const lenPx = Math.hypot(xb - xa, yb - ya);
+    if (lenPx < 1.5) continue;
+    const vm = (va + vb) * 0.5;
+    const b = vm < 0.20 ? 0 : (vm < 0.38 ? 1 : 2);
+    const a = aBase * bandA[b] * kindA[ed.kind] * ed.aj;
+    if (a < 0.012) continue;
+    const nx = -(yb - ya) / lenPx, ny = (xb - xa) / lenPx;
+    const amp = Math.min(ed.amp * 1.9, lenPx * 0.12, 9);
+    const steps = Math.max(1, Math.min(10, Math.round(lenPx / 22)));
+    ctx.globalAlpha = Math.min(a, 0.95);
+    ctx.lineWidth = (0.55 + 0.85 * ed.wj) * bandW[b] * kindW[ed.kind];
+    ctx.beginPath();
+    ctx.moveTo(xa, ya);
+    // ⭐ 内部点叠正弦，但两端 sin(0)=sin(π)=0 ⇒ 端点钉死，网不散
+    for (let s = 1; s < steps; s++){
+      const q = s / steps;
+      const wob = amp * Math.sin(Math.PI * q) * Math.sin(q * ed.f1 * 6.2832 + ed.ph + t * ed.rate);
+      ctx.lineTo(xa + (xb - xa) * q + nx * wob, ya + (yb - ya) * q + ny * wob);
+    }
+    ctx.lineTo(xb, yb);
+    ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   反馈六·5 · 外海泡沫 —— 烘好的贴图 + 每帧 drawImage
+   ══════════════════════════════════════════════════════════════════════════
+   ⛔ 逐像素噪声画泡沫是不行的：软件光栅 1920×1080 已经 118ms/帧。
+     这里改成「每张 256×256 的泡沫贴图在 resize 时烘一次，
+     运行时只按浪脊几何 drawImage 摆位」—— 每帧成本 = N 次贴图 blit。
+   贴图内容：撕碎的丝缕 + 软边斑块 + 破洞，边缘 alpha 渐隐
+   （渐隐很重要：直接硬边矩形贴上去会看见一个个方块）。            */
+let foamTiles = null;
+function buildFoamTiles(){
+  const TS = 256;
+  if (!foamTiles){
+    foamTiles = [];
+    for (let k = 0; k < SEA_FOAM_TILES; k++){
+      const c = document.createElement('canvas');
+      c.width = TS; c.height = TS;
+      foamTiles.push(c);
+    }
+  }
+  for (let k = 0; k < SEA_FOAM_TILES; k++){
+    const c = foamTiles[k];
+    const g = c.getContext('2d');
+    g.clearRect(0, 0, TS, TS);
+    g.lineCap = 'round';
+    g.lineJoin = 'round';
+    // ── 软边斑块：泡沫团的底子 ──
+    for (let b = 0; b < 9; b++){
+      const h = k * 61 + b * 7;
+      const bx = 26 + 204 * hash2(h, 901);
+      const by = 26 + 204 * hash2(h, 902);
+      const br = 16 + 46 * Math.pow(hash2(h, 903), 1.6);
+      const rg = g.createRadialGradient(bx, by, 0, bx, by, br);
+      const a = 0.16 + 0.26 * hash2(h, 904);
+      rg.addColorStop(0.00, 'rgba(255,255,255,' + a.toFixed(3) + ')');
+      rg.addColorStop(0.55, 'rgba(238,250,252,' + (a * 0.42).toFixed(3) + ')');
+      rg.addColorStop(1.00, 'rgba(220,244,250,0)');
+      g.fillStyle = rg;
+      g.beginPath(); g.ellipse(bx, by, br, br * (0.42 + 0.5 * hash2(h, 905)), 0, 0, 6.2832); g.fill();
+    }
+    // ── 撕碎的丝缕：短、蜿蜒、相互搭接 ──
+    for (let s = 0; s < 26; s++){
+      const h = k * 131 + s * 11;
+      const x0 = 14 + 228 * hash2(h, 911);
+      const y0 = 14 + 228 * hash2(h, 912);
+      const len = 26 + 96 * Math.pow(hash2(h, 913), 1.4);
+      const ang = (hash2(h, 914) - 0.5) * 2.4;                 // 多数近水平
+      const a2 = 0.22 + 0.44 * hash2(h, 915);
+      g.strokeStyle = '#ffffff';
+      g.globalAlpha = a2;
+      g.lineWidth = 0.9 + 2.3 * Math.pow(hash2(h, 916), 1.7);
+      g.beginPath();
+      const steps = 11;
+      for (let q = 0; q <= steps; q++){
+        const f = q / steps;
+        const px = x0 + Math.cos(ang) * f * len + 13 * Math.sin(f * 5.1 + h);
+        const py = y0 + Math.sin(ang) * f * len + 9 * Math.sin(f * 7.7 + h * 1.7);
+        if (q === 0) g.moveTo(px, py); else g.lineTo(px, py);
+      }
+      g.stroke();
+    }
+    // ── 边缘渐隐：把硬边矩形变成可以随意摆放的软斑 ──
+    //    ⛔ 外径必须 **小于** TS/2。早先写 0.52·TS ⇒ 四条边的中点（距中心
+    //    0.5·TS）还留着 ~0.05 的 alpha，贴图内容在边上被切断 ⇒ 渲染出来
+    //    能看见一个个淡方框。现在 0.44·TS ⇒ 边界处已经全透明。
+    g.globalAlpha = 1;
+    g.globalCompositeOperation = 'destination-in';
+    const eg = g.createRadialGradient(TS / 2, TS / 2, TS * 0.13, TS / 2, TS / 2, TS * 0.44);
+    eg.addColorStop(0.00, 'rgba(0,0,0,1)');
+    eg.addColorStop(0.70, 'rgba(0,0,0,0.80)');
+    eg.addColorStop(1.00, 'rgba(0,0,0,0)');
+    g.fillStyle = eg;
+    g.fillRect(0, 0, TS, TS);
+    g.globalCompositeOperation = 'source-over';
+  }
+}
+/** ⭐ 波面上的大白沫晕（反馈六·5「应该有很多泡沫」的关键一层）。
+ *  一条路径 + 一条竖直渐变，按浪带的整体 y 范围锚定。
+ *  ⛔ 不用逐列渐变：那是 97 个渐变对象/帧，而且这一层是柔和低对比的，
+ *    锚在整体范围上的误差看不出来。 */
+function drawSeaFoamWash(L, W0, kA, dir){
+  if (kA < 0.10) return;
+  const n = COLS + 1;
+  let yTop = 1e9, yBot = -1e9, any = 0;
+  for (let i = 0; i < n; i++){
+    // ⛔ 尾迹长度用**固定**的 W0 倍数，不能乘 bwj[i]：bwj 逐列变化时，
+    //    yBot 就跟着变，而渐变是锚在全幅范围上的 ⇒ 每列的渐变进度不同，
+    //    外沿会出现一道「撕纸」一样的硬边。固定偏移后，尾迹就是浪脊的
+    //    等距副本，每列的渐变进度完全一致 ⇒ 外沿软而干净。
+    const a = bfy[i] + dir * (dir > 0 ? SEA_FOAM_WASH_FRONT_NL : SEA_FOAM_WASH_FRONT) * W0;
+    const b = bfy[i] - dir * SEA_FOAM_WASH_BACK * W0;
+    if (a < yTop) yTop = a;
+    if (b > yBot) yBot = b;
+    washA[i] = a; washB[i] = b;
+    if (bwj[i] > 0.35) any = 1;
+  }
+  if (!any || yBot - yTop < 4) return;
+  // ⭐⭐ 反馈七·4：白沫晕也要**逐段**按倾角律/距离律调 alpha。
+  //    一整条一个 alpha 就没有远近差别（实测近岸/远处饱和度只差 0.03）。
+  //    分 8 段、每段用它自己那段列的平均 foamK；段与段**共用 smoothRun 的
+  //    曲线**而不是直线端点 ⇒ 相邻段之间不会出现竖直接缝。
+  const G = 8, per = Math.ceil(n / G);
+  for (let g = 0; g < G; g++){
+    const i0 = g * per, i1 = Math.min(n, i0 + per);
+    if (i1 - i0 < 2) continue;
+    let fk = 0, cnt = 0, yT = 1e9, yB = -1e9;
+    for (let i = i0; i < i1; i++) {
+      fk += slopeLaw[i] * farLaw[i]; cnt++;
+      if (washA[i] < yT) yT = washA[i];
+      if (washB[i] > yB) yB = washB[i];
+    }
+    fk /= cnt;
+    const A = SEA_FOAM_WASH_A * clamp(kA, 0, 1) * (0.06 + 0.94 * fk);
+    if (A < 0.004 || yB - yT < 2) continue;
+    const gr = ctx.createLinearGradient(0, yT, 0, yB);
+    // ⭐ 反馈八·5a：非领头浪的峰值从「拖尾侧」挪到「前脸侧」。
+    //    早先峰值在 0.16（靠海侧 = 浪后方），整条浪读成一条对称的淡色
+    //    水脊；碎浪的亮面是**前缘线**（翻卷处），往后才拖成尾迹。
+    //    渐变方向恒为 海侧(0) → 岸侧(1)，所以非领头浪把峰值压到 1.0 端。
+    if (dir > 0){
+      gr.addColorStop(0.00, 'rgba(222,240,246,' + (A * 0.05).toFixed(4) + ')');
+      gr.addColorStop(0.35, 'rgba(226,242,246,' + (A * 0.24).toFixed(4) + ')');
+      gr.addColorStop(0.62, 'rgba(230,245,248,' + (A * 0.55).toFixed(4) + ')');
+      gr.addColorStop(0.85, 'rgba(234,248,250,' + (A * 0.95).toFixed(4) + ')');
+      gr.addColorStop(1.00, 'rgba(236,250,251,' + A.toFixed(4) + ')');
+    } else {
+      gr.addColorStop(0.00, 'rgba(226,242,246,' + (A * 0.10).toFixed(4) + ')');
+      gr.addColorStop(0.16, 'rgba(232,246,249,' + A.toFixed(4) + ')');
+      gr.addColorStop(0.42, 'rgba(224,240,245,' + (A * 0.62).toFixed(4) + ')');
+      gr.addColorStop(0.74, 'rgba(214,234,240,' + (A * 0.24).toFixed(4) + ')');
+      gr.addColorStop(1.00, 'rgba(206,228,236,0)');
+    }
+    // 沿用该段的列号（smoothRun 的 stride 语义：xs/ys 仍按 i*1 索引，
+    // 这里直接构造一个只含 [i0, i1] 的子路径，所以要用偏移视图）
+    const p = new Path2D();
+    smoothRunRange(p, bxs, washA, i0, i1);
+    smoothRunRange(p, bxs, washB, i0, i1);
+    p.closePath();
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = gr;
+    ctx.fill(p);
+  }
+}
+/** smoothRun 的区间版本：沿 [i0, i1) 画一条平滑折线（两端落在端点上）。 */
+function smoothRunRange(path, xs, ys, i0, i1){
+  const X = i => xs[i], Y = i => ys[i];
+  if (i1 - i0 < 2){ path.moveTo(X(i0), Y(i0)); path.lineTo(X(i1 - 1), Y(i1 - 1)); return; }
+  path.moveTo(X(i0), Y(i0));
+  for (let i = i0; i < i1 - 1; i++){
+    path.quadraticCurveTo(X(i), Y(i), (X(i) + X(i + 1)) / 2, (Y(i) + Y(i + 1)) / 2);
+  }
+  path.lineTo(X(i1 - 1), Y(i1 - 1));
+}
+
+/** ⭐⭐ 浪的**水体**（反馈七·4 + 七·6）。
+ *
+ *  ⛔⛔ 反馈七之前，外海一条浪的**全部**视觉表现就是它的白沫。所以把距离律
+ *    正确地做成「远处没有泡沫」之后，整片海上**一条浪都看不见了**
+ *    （实测：远景平均饱和度 0.79 vs 近岸 0.76，浪完全消失）。
+ *    物理上不对：远处的浪仍然是浪，只是没有白。
+ *
+ *  ⭐ 所以浪必须有自己的**非泡沫**表现：俯拍看下去，一道涌浪是
+ *    「迎光面亮 + 背光面暗」的体积感。这一层按浪脊位置画一条
+ *    暗→亮→透明的渐变带（用调色板里的 trough / ridge 两个色，
+ *    和海面本身的明暗语言一致）。
+ *    ⭐ 它的距离衰减**远比泡沫慢**（pow 0.55 vs 泡沫的 2.4）：
+ *    远处的浪仍然有形状，只是没有白 —— 这正是反馈七·4 要的那个梯度。
+ */
+const SWELL_BODY_A = 0.55;
+const SWELL_BODY_BACK = 2.1;    // 背光面往后拖几个浪带宽
+const SWELL_BODY_FRONT = 0.55;  // 迎光面前出多少
+const SWELL_BODY_FAR_POW = 0.55;
+function drawSwellBody(L, W0, kA, dir){
+  if (kA < 0.06) return;
+  const n = COLS + 1;
+  const G = 6, per = Math.ceil(n / G);
+  for (let g = 0; g < G; g++){
+    const i0 = g * per, i1 = Math.min(n, i0 + per);
+    if (i1 - i0 < 2) continue;
+    let fk = 0, cnt = 0, yT = 1e9, yB = -1e9;
+    for (let i = i0; i < i1; i++){
+      // ⭐ 水体的距离律比泡沫平缓得多（0.55 次方 vs 2.4）
+      const far = Math.pow(farLaw[i] > 0 ? 1 / (1 + (1 - farLaw[i]) * 3.2) : 1, 1);
+      fk += (0.35 + 0.65 * slopeLaw[i]) * far; cnt++;
+      const a = bfy[i] + dir * SWELL_BODY_FRONT * W0;
+      const b = bfy[i] - dir * SWELL_BODY_BACK * W0;
+      if (a < yT) yT = a;
+      if (b > yB) yB = b;
+      washA[i] = a; washB[i] = b;
+    }
+    fk /= cnt;
+    const A = SWELL_BODY_A * clamp(kA, 0, 1) * fk;
+    if (A < 0.004 || yB - yT < 3) continue;
+    const gr = ctx.createLinearGradient(0, yT, 0, yB);
+    const dk = 'rgba(' + C_TROUGH[0] + ',' + C_TROUGH[1] + ',' + C_TROUGH[2] + ',';
+    const lt = 'rgba(' + C_RIDGE[0] + ',' + C_RIDGE[1] + ',' + C_RIDGE[2] + ',';
+    gr.addColorStop(0.00, dk + (A * 0.95).toFixed(4) + ')');   // 背光：槽底暗
+    gr.addColorStop(0.34, dk + (A * 0.42).toFixed(4) + ')');
+    gr.addColorStop(0.62, lt + (A * 0.30).toFixed(4) + ')');
+    gr.addColorStop(0.80, lt + (A * 0.85).toFixed(4) + ')');   // 迎光：浪脊亮
+    gr.addColorStop(1.00, lt + '0)');
+    const p = new Path2D();
+    smoothRunRange(p, bxs, washA, i0, i1);
+    smoothRunRange(p, bxs, washB, i0, i1);
+    p.closePath();
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = gr;
+    ctx.fill(p);
+  }
+  void SWELL_BODY_FAR_POW;
+}
+
+/** ⭐ 把烘好的泡沫贴图铺到一条外侧浪带上。
+ *  位置由浪脊几何决定：贴着浪带前缘、越靠前越密 ⇒ 泡沫「长在」浪上，
+ *  而不是一层均匀的白纱。密度另受一个独立噪声场控制 ⇒ 有的岸段被撕得很碎、
+ *  有的几乎干净。 */
+function drawOpenSeaFoam(L, W0, kA, t, dir){
+  if (kA < 0.12 || !foamTiles) return;
+  const base = kA * SEA_FOAM_A * (L === 1 ? 1.0 : (L === 2 ? 0.82 : 0.60));
+  for (let k = 0; k < SEA_FOAM_PATCH; k++){
+    const h = k * 17 + L * 613;
+    // ⭐ 密度场：0.15..1.0，缓慢漂移 ⇒ 同一片海面过一会儿「碎的地方」会换
+const dens = fbmNorm((k * 0.37 + L * 2.1) * 1.9 + t * 0.00006, 7701 + L * 37, 2);
+    // ⭐ 位置**不是均匀随机**：先用一个低频场把贴图聚成几团
+    //    （被撕碎的浪列），再叠一点点抖动。均匀撒开 = 又一层规则的花纹。
+    const p = clamp(0.5 + 0.46 * fbmSigned(k * 0.075 + L * 5.1, 9301, 2)
+                  + 0.16 * (hash2(h, 921) - 0.5) * 2, 0, 1);
+    const col = Math.min(COLS, Math.max(0, Math.round(p * COLS)));
+    // ⭐ 深度位置：-0.15..1.05 ⇒ 一部分盖住浪脊前缘，一部分拖在后面
+    const dep = hash2(h, 922) * 1.90 - 0.35;
+    const y = bfy[col] + dir * dep * bwj[col] * W0;
+    // ⛔ 尺寸必须接近贴图的原生 256px。早先 W0·(1.4..3.7) = 54..140px，
+    //    等于把 256px 的丝缕缩到 0.2~0.55 倍 ⇒ 细丝全部糊成灰雾，
+    //    100% 下只看到「淡淡一块脏东西」，完全没有撕碎的感觉。
+    const size = W0 * (2.40 + 2.40 * Math.pow(hash2(h, 923), 1.2));
+    const tile = foamTiles[(h) % SEA_FOAM_TILES];
+    // ⭐⭐ 反馈七·4 + 七·6：这里是**逐块**的局部调制点。
+    //    ⛔ 之前倾角律/距离律只折进了「带宽」（bwj），alpha 没动 ——
+    //    实测近岸与最远处的平均饱和度只差 0.03，泡沫根本没有随距离消退。
+    //    每块贴图本来就落在某一列上，所以按那一列的 foamK 缩 alpha
+    //    是**零额外开销**的局部调制：陡的地方/近的地方多贴，平的地方/
+    //    远处的地方少贴。不再靠「统一抬 alpha」，也就不会糊成实心白带。
+    const fk = slopeLaw[col] * farLaw[col];
+    const a = base * dens * (0.55 + 0.60 * hash2(h, 924)) * (0.10 + 0.90 * fk);
+    if (a < 0.012) continue;
+    ctx.globalAlpha = Math.min(a, 0.45);
+    ctx.drawImage(tile, bxs[col] - size * 0.5, y - size * 0.5, size, size);
+  }
+  ctx.globalAlpha = 1;
+}
+
+/** ⭐⭐ 反馈八·5a：离岸浪的**扰动前锋**（agitation ahead of the moving crest）。
+ *  仅对海里推进的浪画（领头浪的前缘 = 水线，由贴岸各层负责）。
+ *  ⛔ 之前外海浪的全部泡沫都贴在浪脊上/后面（drawOpenSeaFoam 的 dep 大多
+ *     落在 −0.35..+1.55 的拖尾侧），浪前方是一段干净的静水 —— 于是整条浪
+ *     读成「苍白的水脊」。真实碎浪的前脸是翻涌的碎沫：浪脊前方、前缘面上
+ *     全是刚被搅起的白水，随着浪往前走又拖成尾迹。
+ *  做法（baked-then-transformed）：把烘好的丝缕贴图**前置**到前缘前方
+ *  0.30..1.45 个带宽处，尺寸更小更密；逐块乘 slopeLaw×farLaw（就地采当列），
+ *  陡的浪面多搅、最远处照旧归零 ⇒ 仍然 plausibly 随离岸距离消退。 */
+function drawDisturbance(L, W0, kA, t, dir){
+  if (kA < 0.12 || !foamTiles) return;
+  const base = kA * DISTURB_A * (L === 1 ? 1.0 : 0.78);
+  for (let k = 0; k < DISTURB_PATCH; k++){
+    const h = k * 29 + L * 977 + 300;
+    // 密度场：与拖尾贴图同源的独立慢漂移场 ⇒ 碎沫团会缓慢移动
+    const dens = fbmNorm((k * 0.41 + L * 1.7) * 2.3 + t * 0.00008, 8801 + L * 41, 2);
+    // 位置：低频场聚团 + 小抖动（与拖尾贴图同一套语言）
+    const p = clamp(0.5 + 0.5 * fbmSigned(k * 0.083 + L * 6.3, 9401, 2)
+                  + 0.14 * (hash2(h, 930) - 0.5) * 2, 0, 1);
+    const col = Math.min(COLS, Math.max(0, Math.round(p * COLS)));
+    // ⭐ 关键：贴图放在浪脊**前方**（dir>0 即前缘方向），而非拖尾侧
+    const dep = DISTURB_DEP0 + (DISTURB_DEP1 - DISTURB_DEP0) * hash2(h, 931);
+    const y = bfy[col] + dir * dep * bwj[col] * W0;
+    const size = W0 * DISTURB_SIZE * (1.2 + 1.3 * Math.pow(hash2(h, 932), 1.3));
+    // ⛔ 距离律不能用贴岸那条 FOAM_FAR_POW=2.4 —— 那条把 0.42h 出生深度的浪
+    //    压到 farLaw≈0.011，前置扰动整条都是 0（实测全帧零像素差）。这里是
+    //    「扰前锋」，用一条更缓的距离律：地平线处仍归零（^0.35 保持远端衰减），
+    //    但中海的浪能保留可见的碎沫团。
+    const fk = slopeLaw[col] * Math.pow(farLaw[col], 0.35);
+    const a = base * dens * (0.4 + 0.6 * hash2(h, 933)) * (0.35 + 0.65 * fk);
+    if (a < 0.008) continue;
+    ctx.globalAlpha = Math.min(a, 0.40);
+    ctx.drawImage(foamTiles[(h + 2) % SEA_FOAM_TILES], bxs[col] - size * 0.5, y - size * 0.5, size, size);
+  }
+  ctx.globalAlpha = 1;
+}
+
+function drawSwellBands(t){
+  const n = COLS + 1;
+  // ⛔⛔ 反馈六·2：这里没有任何音频。反馈七·5：这里**没有固定的四条浪带** ——
+  //    画的是队列里**当下在场**的浪，每条在自己的 y 上。四条固定泳道就是
+  //    「一排平行白缎带」的根源（实测行中值自相关 0.83）。
+  //   ⭐ 画序：按 adv 升序（外海先画、近岸后画）。
+  //   ⛔ 早先这里是 `const lead = leadWave()` + 「领头浪最后压上去」—— 两者都失效了：
+  //     `leadWave()` 在滩上无浪时返回 adv 最大的推进中浪，会让还在外海的浪提前
+  //     被判为前浪而瞬间切到水线尺度（实测交接跳变 187px）；且自 反馈八·10 起
+  //     绘制侧的前浪身份只看 `state`（REACHED/FADING），与 leadWave 无关。
+  //     ⇒ 该变量删除；下面的 `isLead` 才是唯一的「前浪」判据。
+  const order = [];
+  for (let i = 0; i < WAVE_POOL; i++){
+    const w = waves[i];
+    if (w.state === W_EMPTY) continue;
+    order.push(w);
+  }
+  order.sort(function (a, b) { return a.y - b.y; });      // y 小的（更外海）先画
+
+  // ⭐⭐ 单浪模式：**只过滤绘制**。队列照旧补浪/间距钳位/交接/退水，模拟一个字没改。
+  //   ⛔ 不可改成「只发一条浪」——那样它消散后海上会空一段（退水钉在海缘等它），
+  //   看到的就不是真实节奏了；owner 要看的是**真实模型**里一条浪的一生。
+  if (soloWave){
+    let keep = -1;
+    for (let i = 0; i < order.length; i++) if (order[i].serial === soloSerial){ keep = i; break; }
+    if (keep >= 0){ const solo = order[keep]; order.length = 0; order.push(solo); }
+  }
+
+  for (let wi = 0; wi < order.length; wi++){
+    const w = order[wi];
+    // ⭐⭐ 反馈八·10（方案 3）：**绘制上的「前浪」= 真正抵达滩上的那条**。
+    //   ⛔ 旧写法 `const isLead = (w === lead)`：leadWave() 在滩上无浪时返回
+    //     「adv 最大的推进中浪」—— 那条还在外海（adv 0.41~0.77），它的带是按
+    //     **破碎线尺度**画的；一旦被判定为前浪，bfy 立刻改用 **shoreYs（水线尺度）**
+    //     ⇒ 整条带瞬移。实测交接跳变回到中位 187px / 最大 387px。
+    //   ⭐ 现在：只有 REACHED/FADING 才按前浪画（此时它已在 wlineFull，与破碎线
+    //     adv=1 的位置重合 ⇒ 连续）；还在推进的一律按破碎线画。
+    const isLead = (w.state === W_REACHED || w.state === W_FADING);
+    // ⭐⭐ 泳道号只由**浪的身份**决定，与「是不是前浪」无关。
+    //   ⛔⛔ 旧写法 `isLead ? 0 : (wi & 1) + 1` 有两个问题：
+    //     ① `wi` 是按 y 排序后的绘制次序下标 —— 别的浪出生/回收时它会变；
+    //     ② 更要命的是 isLead 翻转时 lane 从 1/2 跳到 0（或跳回）。
+    //   实测（harness 泳道稳定性）：**每条浪一生恰好跳变 2 次**，正是
+    //   「成为前浪」与「不再是前浪」那两帧。位置那时已经连续了，但
+    //   fillFray / fillTears / 蕾丝 / 泡沫贴图 的**噪声实现整套切换**
+    //   ⇒ owner 报「后浪还是会跳变」。
+    //   ⭐ 改为 `1 + (serial % 3)`：终身固定 ⇒ 交接时纹理连续。
+    //     同时不用 lane 0，任意两条在场的浪（serial 必不同）大概率取到不同泳道。
+    const lane = 1 + (w.serial % 3);
+    // ⛔⛔ `wi` 是**按 y 排序后的绘制次序下标**，别的浪出生/回收时它会变 ——
+    //   一条浪的样子绝不该取决于它此刻排在第几位。harness 实测 14/15 条浪的 wi
+    //   都会变一次（0↔1），而 wi 泄漏在三处：
+    //     · bandAmp(1 + wi%2)   → amp（实测跳 0.0042，折算 W0 仅 0.09px，可忽略）
+    //     · nb1 的 `wi * 2.13`   → bwj
+    //     · env 的 `wi * 7.3` 与 hash 种子 `8100 + wi*53`
+    //       ⛔⛔ 种子随 wi 变 ⇒ env 换成**完全不同的噪声实现** ⇒ envK 直接乘进
+    //         bwj（带宽）⇒ wi 翻转时带宽花纹整个换掉 ⇒ 画面跳变。**这是主因**。
+    //   ⭐ 一律改用 wiS：只由该浪身份决定、终身固定，同时保留「逐浪不同」的 variety。
+    const wiS = w.serial & 3;
+    const adv = clamp(w.y, 0, 1);
+    // ⭐ 反馈七·6「白色更多、更明显」：贴岸主浪带额外加成
+    // ⭐ 非领头浪的 amp 基线 0.30 → 0.46：harness 实测领头浪 amp ≈ 0.90、
+    //   第二条浪 ≈ 0.59，第二条浪的 kA 因此只有领头浪的 ~1/5。它是「海上第二条
+    //   浪」不是「附带的余波」，白沫不该差这么多。⚠️ 只抬基线不改增益斜率。
+    const amp = isLead ? (0.55 + 0.45 * bandAmp(0))
+                       : (0.46 + 0.45 * bandAmp(1 + (wiS % 2)));
+    if (amp <= SILENCE_FLOOR) continue;
+    const fade = waveFade(w);
+    if (fade <= 0.02) continue;
+    // ⭐⭐ 非领头浪的 kA：**不吃音频门控、不吃近岸斜坡**。
+    //   owner：「第二条浪不应该抑制浪花啊，应该一直保持浪花，我才能知道第二条浪
+    //   走到哪里了」—— 它的浪花是**位置指示器**，不是音强的表达。
+    //   ⛔ 早先只软化距离律（FOAM_FAR_POW→0.35 幂）几乎无效（39.2%→38.2%），
+    //     因为真正的抑制来自 layerAlpha 里两项**叠乘**：
+    //       nearness（外海 0.32）× appear（音频能量门控，静音趋 0.30）= 0.096
+    //       × amp 0.698 ⇒ kA ≈ 0.067 ⇒ 82% 的绘制调用被 `kA < 0.12` 丢弃。
+    //   ⭐ 距离感仍然保留：由**带宽**（foamK = slopeLaw × farLaw）与逐块 alpha 承担，
+    //     所以它外海时是「更窄、更淡」而不是「没有」—— 这正是「能看见它在哪」。
+    //   ⚠️ 系数 0.55 是刻意低于领头浪的：领头浪另有 SHORE_FOAM_BOOST 1.55，
+    //     两条浪的主次关系不能反过来。
+    const kA = isLead ? clamp(amp * layerAlpha(adv, A.sEnergy) * fade, 0, 1)
+                      : clamp(amp * 0.55 * fade, 0, 1);
+    // ⭐⭐ 反馈七·4「倾角律」：泡沫由浪面的**坡度**决定，平的地方 → 0。
+    //    概念移植自 WebGL Insights ch.11 的 `1.25*dot(normal, shore_dir)-0.1`：
+    //    我们没有法线（minSdk 22，无 shader），用浪脊线的横向斜率 |dy/dx| 作代理。
+    //    斜率大 ⇒ 浪面朝岸倾斜 ⇒ 破碎 ⇒ 泡沫峰值；斜率小 ⇒ 几乎水平 ⇒ 无泡沫。
+    //    距离项是**次要**乘子，负责「最远处与海水无异」。
+    const W0 = H * SWELL_BAND_W * (0.62 + 0.62 * amp) * (isLead ? 1.0 : 0.92);
+    fillFray(t, lane);
+    // ⛔⛔ 取用判据必须与 `fillTears` 的写入判据**完全一致**。
+    //   fillTears: `slow = (L & 1) === 0` ⇒ 偶数 lane 写 ragA、奇数写 ragB。
+    //   ⛔ 早先这里是 `(lane === 0 || lane === 1) ? ragA : ragB`，而
+    //     `lane = 1 + (serial % 3)` 恒不取 0 ⇒ lane 1 读 ragA（却写 ragB）、
+    //     lane 2 读 ragB（却写 ragA）⇒ **这条浪的撕裂场内容来自同帧/上帧另一条浪**
+    //     ⇒ 又是「外观依赖绘制次序」，违反红线 6。
+    const rag = ((lane & 1) === 0) ? ragA : ragB;
+    fillTears(lane);
+
+    for (let i = 0; i < n; i++){
+      const x = W * i / COLS;
+      bxs[i] = x;
+      // 领头浪的前缘 = 水线本身（computeShore 的结果）⇒ 逐像素一致
+      // ⭐⭐⭐ **后浪改用「水线尺度」定位**（owner 选方案 B）—— 交接连续性的根本修复。
+      //   ⛔ 旧实现（破碎线尺度）的病根：一个浪对象带**两套互不兼容的坐标定义** ——
+      //     非领头浪 = waveFrontY(x,t, H*(SHORE_K − waveDepthK(adv)), …) ← 行程 ~340px
+      //     领头浪   = shoreYs[i]                          ← 行程仅 H·swashReachNow ≈ 81px
+      //     而交接判据 `front.y >= a` 拿这两个**不同参数化空间**的 adv 直接比较
+      //     ⇒ 交接发生在「破碎线还远在海外」的时刻（实测 adv 0.41~0.77），
+      //     一交接整条带就被拽到岸边：harness 实测跳变 **150~267px**
+      //     （bfy 398→601、337→605、432→594）⇒ owner 读作「第二条浪消失、
+      //     然后下一条浪出现」—— 前后其实是**同一条浪**换了位置公式。
+      //   ⭐ 现在的做法（方案 3 + 形态连续化）：破碎线出生在**远海**、终点是
+      //     **前浪的实际位置 shoreYs[i]**，中间用 morph 连续插值 ⇒ adv=1 时严格相等。
+      //   ⚠️ 出生水深偏移（reach）已移除：它会破坏交接连续性。逐浪差异改由
+      //     T（速度）、w.seed（浪脊相位/形状）与 env/rag/fray 噪声承担。
+      // ⭐⭐ **破碎线（breaker）**：出生在远海 `H·(SHORE_K − WAVE_SPAWN_DEPTH)`，
+      //    终点 shoreYs[i] ⇒ 行程约 **640px**（实测 535~637px 的 shoreYs 减出生点
+      //    −36px）。这是「画出来的白浪带」，也是「第二条浪全程可见」的依据。
+      //    ⛔ 方案 B 曾把两端都压进水线空间（行程仅 81px），实测后果是第二条浪
+      //      **整个藏在领头浪的带里**（kA 0.29~0.38、bwj 0.35~0.41 都正常，
+      //      但两条带几乎同位置，领头浪 bwj 1.17 + SHORE_FOAM_BOOST 1.55 把它盖死）
+      //      ⇒ owner 报「彻底看不到」。方案 3 让两者解耦，各走各的尺度。
+      const spawnFar   = H * (SHORE_K - WAVE_SPAWN_DEPTH);
+      // ⭐⭐ 后浪的浪脊**必须有曲线与波动**（owner：「基本是一条直线，没有曲线，
+      //   也没有波动」）。⛔ 那是删掉 waveFrontY 时的连带损失：它同时提供了
+      //   `crestProfile(u, 811)·h·CREST_AMP` 这一项 S 形起伏。
+      //   `- lane * CREST_LANE_SHIFT` 让每条浪的曲线**相位错开**（否则两条浪同形）。
+      // ⭐⭐ **交接地：位置与形态一起连续化**（owner：「接近前浪的位置时，会有一个曲线
+      //   形状的跳变」）。
+      //   ⛔ 上一轮用 `crestK = 1 - smoothstep(SWASH_LEAD_ADV, 1, adv)` 把起伏幅度
+      //     **淡出到 0** 来换取位置连续。但 CREST_AMP·h ≈ 198px 的幅度在最后 15%
+      //     行程里塌掉 ⇒ 视觉上就是「曲线形状跳变」。
+      //   ⭐ 改为把**整个位置**从「破碎线位置」连续插值到「前浪的实际位置 shoreYs」：
+      //     位置与曲线形态**一起**变成前浪的，adv=1 时严格等于 shoreYs ⇒ 无缝。
+      //   ⚠️ 关键：`shoreYs[i]` 里**已经包含前浪自己的曲线**（`swashFrontY` 内含
+      //     `crestProfile(u,2711)·h·CREST_AMP_SHORE`）与 fray（系数 0.42），
+      //     所以破碎线的起伏项与 fray 项都必须随 morph 被**吸收**，
+      //     ⛔ 不能在 lerp 之上再叠加（否则重复计入 ⇒ 交接处又出现跳变）。
+      const morph = smoothstep(MORPH_START, 1, adv);
+      // ⭐⭐ **位置参数化：前 55% 线性推进，后 45% 平滑补足**。
+      //   ⛔ 旧写法 `lerp(breakerY, shoreYs, morph)` 在 adv<MORPH_START 时
+      //     morph=0 ⇒ bfy = spawnFar + crest —— 而 spawnFar 是**常数**、crest 一生
+      //     只漂移约 103px ⇒ **前 55% 的旅程画面上几乎不动**，之后 morph 启动
+      //     一次性从 spawnFar 扫到 shoreYs。owner：「后浪浮现后，就等待在原位置，
+      //     过一会就会以较快的速度冲出去」。完全对得上。
+      //   ⭐ tAdv 单调、终点为 1、且在 adv<MORPH_START 时 tAdv≡adv ⇒ 全程可见移动。
+      const tAdv = adv + (1 - adv) * morph;
+      // 破碎线的 S 形起伏（漂移挂 adv ⇒ 随前进方向演化；种子用 w.seed ⇒ 逐浪不同）
+      // ⚠️ 乘 (1−morph)：shoreYs 里已含前浪自己的曲线，不吸收就会重复计入。
+      const uC = x * 0.00340 * kScale + adv * CREST_DRIFT_ADV - lane * CREST_LANE_SHIFT;
+      const crest = crestProfile(uC, w.seed) * H * CREST_AMP * (1 - morph);
+      bfy[i] = (isLead ? shoreYs[i]
+                       : spawnFar + (shoreYs[i] - spawnFar) * tAdv + crest)
+             + (isLead ? 0 : (1 - morph) * fray[i] * W0 * FRAY_FRONT * 0.42);
+      // 逐列斜率（反馈七·4 的代理量）：用相邻两列的 y 差，单位 = 每像素
+      const dx = (i === 0) ? 0 : (bfy[i] - bfy[i - 1]) / (W / COLS);
+      slopeLaw[i] = clamp(Math.abs(dx) * FOAM_SLOPE_GAIN * 4.0, 0, 1);
+      // 距离项（次要乘子）：离岸越远越淡，到最远处归零
+      // ⭐⭐ **非领头浪用平缓的距离律**（0.35 幂），领头浪的 farLaw 下一行就被
+      //   硬编码为 1 ⇒ 距离律本来就**只作用于离岸浪，也就是第二条浪**。
+      //   owner：「第二条浪不应该抑制浪花啊，应该一直保持浪花，我才能知道第二条浪
+      //   走到哪里了」—— 它的浪花是**位置指示器**，不是装饰。
+      //   ⛔ 早先统一用 FOAM_FAR_POW=1.6 仍把它的起步段 kA 压到 0.08，
+      //   80.9% 的绘制调用被外海泡沫的 `kA < 0.12` 丢弃 ⇒ 读作「走到中间就没了」。
+      //   ⭐ 0.35 幂与 drawDisturbance 里已有的同款处理一致；最外侧仍趋 0。
+      //   ⚠️ 副作用（如实记录）：owner 早先「浪线越到远处越浅、最远处与海水同样」
+      //   那条诉求，对第二条浪就此作废 —— 两条要求作用在同一批浪上，只能取一。
+      farLaw[i] = Math.pow(clamp(1 - (SHORE_K * H - bfy[i]) / (FOAM_FAR_SPAN * H), 0, 1),
+                           isLead ? FOAM_FAR_POW : 0.35);
+      if (isLead){ slopeLaw[i] = 1; farLaw[i] = 1; }     // 水线处永远满泡沫（反馈七·3）
+// ⭐ 泡沫强度 = 倾角律（主）× 距离律（次）。
+      //    ⛔⛔ **距离律只作用在泡沫的 alpha 上，不作用在带宽上**。
+      //    早先两者都折进 bwj ⇒ 外海的浪整个消失（farLaw 在出生水深 0.42h
+      //    处只有 0.03 ⇒ 带宽 ×0.04），整片海上只剩一条极淡的线。
+      //    反馈七·4 要的是「泡沫看不见」，不是「浪看不见」——
+      //    远处的浪仍然要有形状，只是没有白。
+      const foamK = slopeLaw[i] * farLaw[i];
+      // ⛔ nb2 的波长早先是 2π/0.0791 ≈ 79px（≈5 列）⇒ 浪带宽度以这个周期
+      //    起伏，渲染出来是沿岸一排**等距的小扇贝**，像装饰花边。
+      //    降到 0.0290（≈217px）并减小幅度 ⇒ 宽度变化变成缓慢的起伏。
+      const nb1 = 0.5 + 0.5 * Math.sin(x * 0.0173 * kScale + t * 0.00017 + wiS * 2.13);
+      const nb2 = 0.5 + 0.5 * Math.sin(x * 0.0290 * kScale - t * 0.00062 + wiS * 0.77);
+      // 局部「这里有没有浪」的低频包络（反馈六·4）
+      const env = isLead ? 1
+        : Math.pow(fbmNorm(x * 0.00165 * kScale + wiS * 7.3 + w.seed * 0.001 + t * 0.000012, 8100 + wiS * 53, 2), 2.4);
+      // ⭐⭐ 带宽**不允许归零**（owner 选的方案 A）。
+      //   ⛔ 早先没有任何下限：三项衰减因子连乘即可把 bwj 乘到 0 ⇒ 那一帧整条
+      //     浪带宽度为 0 ⇒ 读作「浪突然消失」。
+      //   ⛔ 我最初只以为是 `1 + fray·FRAY_WIDTH` 的问题（owner 也据此选了 A），
+      //     ⛔⛔ 但那只钳住了三项里最轻的一项 —— 真正的元凶是
+      //     `0.02 + 0.98·env`：`env = pow(fbmNorm(...), 2.4)`，fbmNorm 偏小处被
+      //     2.4 次幂压到趋 0 ⇒ 该因子趋 0.02。⇒ 下限必须加在**乘积**上。
+      //   harness 实测（修复前，非领头浪）：bwj 中位 0.076 / 最低 0.005；
+      //     塌陷率在 adv 80~90% 达 48.5%，平均 bwj 从外海 0.251 缩到 0.113 ——
+      //     正是 owner 说的「靠近前浪时突然消失」。
+      //   ⚠️ 下限 0.30 是「破碎缺口不再把带宽清零」的意思，不是「取消破碎感」：
+      //     缺口仍然让带宽在 0.30~1.0 之间起伏。
+      const frayK = 1 + fray[i] * FRAY_WIDTH;                          // 浪脊边缘的破碎缺口
+      const envK  = isLead ? 1 : 0.02 + 0.98 * env;                    // 低频包络
+      const slK   = isLead ? 1 : 0.30 + 0.70 * slopeLaw[i];            // 倾角律（不用距离律）
+      const shrink = Math.max(0.30, frayK * envK * slK);
+      bwj[i] = (0.84 + 0.30 * nb1 + 0.14 * nb2) * rag[i] * shrink;
+      if (isLead){ edgeYs[i] = bfy[i]; edgeValid = true; }
+    }
+    // 这条浪的平均距离律（给只有单一 alpha 的唇用）
+    let farSum = 0;
+    for (let i = 0; i < n; i++) farSum += farLaw[i];
+    const farMean = isLead ? 1 : farSum / n;
+
+    // ⭐ 反馈七·4：泡沫强度 = 倾角律（主）× 距离律（次）。逐列 ⇒ 泡沫集中在
+    //    浪脊陡的地方、在浪脊平缓与最远处自然消失，而不是一条全局 alpha。
+    const boost = isLead ? SHORE_FOAM_BOOST : 1;
+    const dir = isLead ? -1 : 1;
+    const ladder = isLead ? FOAM_LADDER : FOAM_LADDER_COARSE;
+    for (let s = ladder.length - 1; s >= 0; s--){
+      fillStrip(lane, s, ladder, ladder[s].a < 0.25 ? 2 : 1,
+                W0, kA * boost, t, dir);
+    }
+    drawSwellBody(lane, W0, kA * boost, dir);
+    drawSeaFoamWash(lane, W0, kA * boost, dir);
+    drawOpenSeaFoam(lane, W0, kA * boost, t, dir);
+    if (!isLead) drawDisturbance(lane, W0, kA, t, dir);   // ⭐ 反馈八·5a
+    drawFoamLace(lane, W0, kA * boost, t, dir);
+    // ⭐ 反馈七·6：破碎浪脊有一道**锐利的唇**（此前只有柔和中段 ⇒ 丝绸感）
+    //    ⛔⛔ 但唇必须吃距离律：唇是一条 1~2px 的硬线，远处本来该「没有泡沫」，
+    //    结果它变成一条画在水上的白线 —— 100% 下最像「用笔画了一条」的地方。
+    if (!isLead) drawCrestLip(W0, kA * boost * farMean, dir);
+    ctx.globalAlpha = 1;
+  }
+}
+/** ⭐ 锐利的浪唇：贴着浪脊前缘的一条很窄的高光带 + 紧贴其后的暗带。
+ *  这是「破碎」与「丝绸」的分界 —— 柔和中段只会读成飘动的绸缎。 */
+function drawCrestLip(W0, kA, dir){
+  const n = COLS + 1;
+  ctx.save();
+  ctx.lineCap = 'round';
+  for (let pass = 0; pass < 2; pass++){
+    ctx.beginPath();
+    for (let i = 0; i < n; i++){
+      const x = bxs[i];
+      const y = bfy[i] + dir * (pass === 0 ? LIP_W * 0.35 : LIP_W * 0.95) * bwj[i] * W0;
+      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    }
+    ctx.lineWidth = 0.9 + pass * 1.6;
+    ctx.strokeStyle = pass === 0 ? '#ffffff' : '#cfe6ea';
+    ctx.globalAlpha = (pass === 0 ? 0.85 : 0.42) * clamp(kA, 0, 1);
+    ctx.stroke();
+  }
+  ctx.restore();
+  ctx.globalAlpha = 1;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   9 · SPLASH — fine foam specks sprayed shoreward off the crest
+   ══════════════════════════════════════════════════════════════════════════ */
+function drawSplash(t){
+  if (!edgeValid) return;
+  const count = Math.floor(SPLASH_MAX * clamp(A.sHigh * 0.85 + 0.15, 0, 1));
+  ctx.fillStyle = PAL.foam;
+  for (let i = 0; i < count; i++){
+    const s = SPLASH[i];
+    const u = wrap01(t / s.period + s.phase / s.period);
+    if (u > 1) continue;
+    const x = s.u * W;
+    const crest = edgeYs[Math.min(COLS, Math.round(s.u * COLS))] || H * 0.58;
+    const fade = Math.pow(1 - u, 1.15);
+    const y = crest + H * s.reach * Math.pow(u, 0.62) + s.lift * H * u;
+    const a = SPLASH_A * s.bright * fade * (0.45 + 0.55 * A.sHigh);
+    if (a < 0.006) continue;
+    ctx.globalAlpha = a;
+    const sz = s.size * (1 - 0.35 * u);
+    ctx.fillRect(x - sz * 0.5, y, sz, sz * 0.78);
+  }
+  ctx.globalAlpha = 1;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   10 · SAND RIPPLES + RESIDUE DOTS
+   ══════════════════════════════════════════════════════════════════════════ */
+function drawRipples(t, clipPath){
+  const yTop = H * SHORE_K + H * 0.050;
+  const yBot = H;
+  const groupDrift = 3.0 * Math.sin(t * 0.000095);          // slow, no wrap ⇒ no shimmer
+  const span = yBot - yTop;
+  // wind ripples catch the light on their crests — dark 1px lines at α≤0.055 on
+  // light sand are invisible, so all three tiers are light tints of varying weight.
+  // Each line is broken into 2–4 segments: an unbroken full-width line reads as a
+  // scanline, not as sand.
+  const tiers = [[0.29, '#eedab4'], [0.44, '#f7e8cb'], [0.58, '#fff5e2']];
+
+  ctx.save();
+  ctx.clip(clipPath);
+  ctx.lineWidth = 1;
+  ctx.lineCap = 'round';
+  for (let ti = 0; ti < tiers.length; ti++){
+    ctx.globalAlpha = SAND_LINE_A * tiers[ti][0] * (0.55 + 0.45 * clamp(0.35 + A.sHigh * 0.9, 0, 1));
+    ctx.strokeStyle = tiers[ti][1];
+    ctx.beginPath();
+    for (let i = 0; i < SAND_LINES; i++){
+      if (hash2(i, 77) < 0.18) continue;                    // ⛔ count stays fixed; only visibility varies
+      const v = (i + 0.5) / SAND_LINES;
+      const y = yTop + v * span + groupDrift
+              + 1.0 * Math.sin(t * 0.00021 + i * 0.83);
+      const jitter = 0.0056 * H * hash2(i, 21);
+      const segs = 2 + Math.floor(hash2(i, 41) * 3);
+      for (let g = 0; g < segs; g++){
+        const a0 = (g + hash2(i, 60 + g) * 0.55) / segs;
+        const a1 = Math.min(1, a0 + (0.55 + 0.45 * hash2(i, 70 + g)) / segs * 0.85);
+        const xa = W * a0, xb = W * a1;
+        if (xb - xa < 10) continue;
+        for (let k = 0; k <= 6; k++){
+          const x = lerp(xa, xb, k / 6);
+          const yy = y + jitter
+                   + 0.0016 * H * Math.sin(x * 0.0071 * kScale + i * 1.9 + t * 0.00012);
+          if (k === 0) ctx.moveTo(x, yy); else ctx.lineTo(x, yy);
+        }
+      }
+    }
+    ctx.stroke();
+  }
+  ctx.restore();
+  ctx.globalAlpha = 1;
+}
+
+/** 残沫白点：⛔ 早先是一个纯色小方块 —— 反馈三要求「坐在颗粒上、还带一圈亮边」。
+ *  现在画成：软阴影 → 亮芯 → 左上缘高光 ⇒ 球体感，而不是平贴的方点。 */
+function drawResidue(clipPath){
+  ctx.save();
+  ctx.clip(clipPath);
+  const dens = clamp(0.40 + 0.60 * A.sHigh, 0, 1);
+  const count = Math.ceil(RESIDUE_MAX * dens);
+  const yBase = H * SHORE_K + H * 0.085;
+  const ySpan = H * (1 - SHORE_K) - H * 0.135;
+  for (let i = 0; i < count; i++){
+    const p = RESIDUE[i];
+    const x = p.u * W;
+    const y = yBase + p.v * ySpan;
+    const a = RESIDUE_A * p.a * (0.45 + 0.55 * dens);
+    const s = p.s;
+    // ① 软阴影：略暗、略大 ⇒ 颗粒陷在沙里的凹陷
+    ctx.globalAlpha = a * 0.50;
+    ctx.fillStyle = '#7A5E38';
+    ctx.fillRect(x - s * 0.7, y + s * 0.1, s * 2.0, s * 2.0);
+    // ② 亮芯
+    ctx.globalAlpha = a * 0.85;
+    ctx.fillStyle = '#f2f8f4';
+    ctx.fillRect(x, y, s, s * 0.8);
+    // ③ 左上缘高光 ⇒ 球体感
+    ctx.globalAlpha = Math.min(1, a * 1.2);
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(x, y, s, Math.max(0.7, s * 0.3));
+  }
+  ctx.restore();
+  ctx.globalAlpha = 1;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   11 · POST
+   ══════════════════════════════════════════════════════════════════════════ */
+let grainTick = 0;
+const GRAIN_OFF = [[0,0],[37,11],[73,52],[19,88],[61,29],[95,74],[8,41],[52,96]];
+function drawPost(reduced){
+  if (mottlePattern){                 // ⭐ 低频斑驳：海与沙都不是「平的颜色」
+    ctx.save();
+    ctx.globalAlpha = MOTTLE_A;
+    ctx.globalCompositeOperation = 'overlay';
+    ctx.fillStyle = mottlePattern;
+    ctx.fillRect(0, 0, W, H);
+    ctx.restore();
+  }
+  if (grainPattern){
+    const o = reduced ? GRAIN_OFF[0] : GRAIN_OFF[grainTick % GRAIN_OFF.length];
+    if (!paused) grainTick++;          // ⛔ else the grain alone keeps "paused" moving
+    ctx.save();
+    ctx.globalAlpha = 0.020;
+    ctx.globalCompositeOperation = 'overlay';
+    ctx.translate(o[0], o[1]);
+    ctx.fillStyle = grainPattern;
+    ctx.fillRect(-o[0], -o[1], W, H);
+    ctx.restore();
+  }
+  if (vignetteGrad){
+    ctx.fillStyle = vignetteGrad;
+    ctx.fillRect(0, 0, W, H);
+  }
+  ctx.globalAlpha = 1;
+  ctx.globalCompositeOperation = 'source-over';
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   12 · MAIN LOOP
+   ══════════════════════════════════════════════════════════════════════════ */
+const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+const TIME_SCALE = reduced ? 0.35 : 1.0;
+
+let started = false, lastNow = 0, frozenT = null;
+
+function resize(){
+  const w = cvs.clientWidth || window.innerWidth, h = cvs.clientHeight || window.innerHeight;
+  if (w === W && h === H && DPR) return;      // guards double-fire from resize + RO
+  buildGeometry();
+}
+addEventListener('resize', resize);
+if (window.ResizeObserver){ new ResizeObserver(resize).observe(cvs); }
+resize();
+
+function frame(now){
+  requestAnimationFrame(frame);
+  if (!started || W < 2 || H < 2) return;
+
+  // ⛔ clamp BOTH ends — Math.min alone let a negative dt through and the audio
+  //    smoother then diverged, which poisoned swashW0 and made the shore NaN
+  const dtReal = lastNow ? clamp((now - lastNow) / 1000, 0, 0.1) : 0.016;
+  lastNow = now;
+  let t = (now - t0) * TIME_SCALE;
+  if (paused){ if (frozenT === null) frozenT = t; t = frozenT; }
+  else frozenT = null;
+
+  if (!paused){
+    pumpBeats();
+    if (analyser && (mode === 'demo' || mode === 'mic')) readAnalyser(dtReal);
+    else readFallback(dtReal);
+    smoothAudio(dtReal);
+  }
+
+  const energy = A.sEnergy;
+
+  // ── ⭐ 顺序就是「从外海走向内陆」的水/沙剖面 ──
+  //  外海(最深) → 浅滩(变浅变透) → 浪带 3/2/1 → 贴岸主浪带(＝水边线本身)
+  //  → 沙 → 湿沙(滞后) → 浪花手指/残沫/细亮湿线 → 飞沫 → 沙纹 → 残沫点 → 后处理
+  const swashW0 = H * SWELL_BAND_W * (0.55 + 0.75 * Math.min(1.35, bandAmp(0)));
+  // ⛔ 暂停时 dt 必须传 0 —— 否则 dtReal 继续走，退水段的湿沙会一直变干，
+  //    画面在「暂停」状态下仍在缓慢变化
+  computeShore(t, swashW0, paused ? 0 : dtReal);
+  drawSeaField(t, energy);
+  drawCausticNet(t, energy);
+  const clip = drawSand(t);
+  // ⭐ 蟹画在沙之上、所有泡沫层之下 ⇒ 浪真的能盖住它（浪盖不到的东西不算细节）
+  drawCrab(t, paused ? 0 : dtReal);
+  drawSwellBands(t);           // 主浪带的浪花直接压在岸线上，并漫到湿沙上
+  drawSwashFingers(t);
+  drawResidualStreaks(t);
+  drawWetLine(t);
+  drawSplash(t);
+  drawRipples(t, clip);
+  drawResidue(clip);
+  drawPost(reduced);
+
+  // HUD
+  setMeter(mLow, A.sLow); setMeter(mMid, A.sMid); setMeter(mHigh, A.sHigh);
+  lvlEl.textContent = (paused ? '⏸ ' : '') + Math.round(energy * 100) + '%';
+  syncSolo();          // ⭐ 单浪模式读数（只读状态，不参与模拟）
+}
+
+function setMeter(el, v){
+  el.style.setProperty('--w', (clamp(v, 0, 1) * 100).toFixed(0) + '%');
+}
+
+/* ── start ─────────────────────────────────────────────────────────────── */
+function begin(){
+  if (started) return;
+  started = true;
+  t0 = performance.now();
+  gate.classList.add('hide');
+  panel.classList.add('ready');
+  startDemo();
+  setTimeout(() => gate.remove(), 900);
+}
+gate.addEventListener('click', begin);
+
+requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>

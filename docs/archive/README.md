@@ -217,6 +217,11 @@
 | `parse_lint.py` | 解析 lint HTML 报告（可复用工具） |
 | `_depsrc/`（media3-session 1.2.1 源码，51 文件） | §10.165 的证据链 |
 | `verify_resampler/`、`verify_feiniu_url/`、`verify_auth_headers/`、`verify_ort/` | `CHANGELOG.md` / §10.146 / §10.155 的验证 harness（源码与说明，不含编译产物） |
+| `scripts/seaside_wave_harness.js` | **E43 海边原型的帧驱动 harness**（2026-10-03 归档）。`vm` 沙箱桩掉 DOM/canvas/`Path2D`，打桩 `requestAnimationFrame` 驱动**真实页面代码**，注入探针读浪队列闭包状态。产出交接跳变 / 退水深长 / 浪数 / 每帧位移上限等全部量化阈值，`seaside-visualizer-plan.md` §7 把它列为 Kotlin 端单测的断言口径来源 |
+| `scripts/seaside_hole_continuity_check.js` | 泡沫破洞场连续性（可见洞逐帧位移 0.74px = 0.31× 洞半径，8.4× 优于旧实现） |
+| `scripts/seaside_caustic_geom_check.py` | 焦散胞壁网 vs 旧孤立短划的 1:1 栅格化对比（PIL） |
+| `scripts/seaside_visual_driver.mjs` | 真浏览器 CDP 驱动（`snap`/`series`/`waterline`/`cost`），rAF 打桩、确定性推进；截图落 `output/seaside_frames/` |
+| `scripts/html_syntax_check.js` | 从 HTML 里抽出内联 `<script>` 做 `new Function` 语法检查（不落盘临时文件） |
 
 **未迁入**（可重新生成的构建产物与一次性日志，已移出 `logs_temp/`）：
 `*.class`、`*.kotlin_module`、`aapt2-out/*.zip`、`iconprobe/`（37 M）、`adb_verify/`（22 M）、

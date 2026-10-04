@@ -78,6 +78,13 @@ JAVA_HOME="C:/Program Files/Android/Android Studio/jbr" \
 - Git/branch/commit rules live in `.opencode/rules.md` (conventional-commit prefixes, `main`/`dev`/`feat/*`, and the rule to update `CHANGELOG.md` + `docs/technical-overview.md` §10 after verified changes). Follow that file; don't duplicate here.
 - Implementation/change history is recorded in `docs/technical-overview.md` §10 — only verified changes. For change context, `docs/code-review-*.md` and `CHANGELOG.md` are more current than prose elsewhere.
 - Tests: `app/src/test/`, Robolectric JUnit4. Run targeted: `./gradlew.bat test --tests "*PinyinUtilsTest"`.
+- **浏览器原型（`docs/*.html`）的验证脚本**在 `docs/archive/verification/scripts/`，与本目录的审计脚本同处。E43 海边那套（2026-10-03 归档）：
+  `seaside_wave_harness.js`（**帧驱动 harness**：`vm` 沙箱桩掉 DOM/canvas/`Path2D`，打桩 `requestAnimationFrame` 驱动**真实页面代码**，并注入探针读浪队列闭包状态 —— 几何/时序类断言全靠它）、
+  `seaside_hole_continuity_check.js`、`seaside_caustic_geom_check.py`、`seaside_visual_driver.mjs`（真浏览器 CDP 驱动：`snap`/`series`/`waterline`/`cost`，rAF 打桩、确定性推进）、
+  `html_syntax_check.js`。
+  ⭐ **Kotlin 端的单测可以直接照抄 harness 的断言口径**（它测的都是纯函数：位置映射、噪声连续性、cull 阈值、每帧位移上限），不需要图形设备。
+  ⚠️ 这类 harness 的探针**必须挂在目标变量赋值之后**：挂错作用域会读到上一帧的残留值，量出「间距恒等于 0」这类假结论（真实发生过）。
+- ⛔ **绝不用 PowerShell 对 UTF-8 源文件做文本往返**（`(Get-Content -Raw) -replace … | Set-Content`）。它按控制台代码页（CP936）读、按 UTF-8 写回，会把中文注释全变成乱码，并**吞掉紧邻的 ASCII 标点与换行** ⇒ 引号/括号/换行被破坏、语法直接崩。批量替换一律用 `edit`/`write` 工具，或 `python -c` 配 `encoding='utf-8'`。（2026-10-03：这条规则当时已写进脚本文件头，我仍然违反它，毁掉了一个 2400 行、未提交、无备份的原型文件。）
 - **Doc writing style (user-mandated, 2026-09-20)**: `README.md` lists **features only** — user-facing, concise, drop minor/implementation-level items. `CHANGELOG.md` entries state **what was done only** — one line each, **no root cause, no implementation detail, no source line numbers, no verification narrative**; all of that belongs in `docs/technical-overview.md` §10.N. Touch **only the current version's section** — never rewrite historical sections.
 - ⛔ **Never `reject()` in `MediaSession.Callback.onConnect`** (root cause of "car Bluetooth media buttons dead", §10.165). System-side controllers (Bluetooth AVRCP / SystemUI / car) arrive via the framework `MediaController` and Media3 routes them through `MediaSessionLegacyStub.tryGetController() → onConnect`; rejecting makes Media3 drop the command silently. Put the security boundary in `setAvailableSessionCommands` instead — and since that is **strict set membership** (not additive), only ever **add to** `DEFAULT_SESSION_AND_LIBRARY_COMMANDS`. Gate: `MediaSessionAccessPolicyTest`. ⚠️ Only reproducible in **release** builds.
 
