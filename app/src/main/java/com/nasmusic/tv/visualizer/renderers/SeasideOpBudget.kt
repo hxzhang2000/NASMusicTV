@@ -354,14 +354,23 @@ internal enum class SeaOpItem(
      * `postFx` —— §4.9.2 裁决：双通道 **2 全屏 → 只保留一个通道** `PostFx(vignette = 0.30f)`，
      * ⛔ 去掉 `grain`。提交数 **1**。
      *
-     * ⚠️ **填充记 0，这是有意的**：晕影是**声明式**交给 `RendererFx` / 舞台画的
-     * （§2.5「经 `postFx` 声明式启用」），⛔ **不在 `drawContent` 的每帧填充里**。
-     * [SeasideOpBudget.overdrawEstimate] 守的是**本效果自己画的填充**。
-     * ⚠️ 若把它算进来，HIGH 会 +1.00 屏（改前双通道 +2.00）——
-     * 那正是 §4.9.5 的 `LOW ≤ 2.0` **不可能成立**的原因（LOW 若含晕影至少 2.7 屏），
-     * 反过来印证了「晕影不计入」是规格本意。详见 [OVERDRAW_MAX_HIGH] 的 KDoc。
+     * ## ⭐⭐ 2026-10-05：**`fillMed` / `fillHigh` 从 0.0 补成 1.0**（记账修正，⛔ 不是性能改动）
+     * 晕影是**一次全屏 `drawRect`**（`OverlayFx.drawVignette`：`Brush.radialGradient` +
+     * `drawRect(brush, Offset.Zero, size)`，全画幅）⇒ 覆盖 **恰好 1.00 屏**，此前记 `0.0`
+     * 属于**记账漏洞**（真机实测它只花 <2ms，**不是**瓶颈 —— 但「便宜」不等于「零覆盖」；
+     * 而且这轮实测已经证明**填充量在这台设备上不预测时间**，两个口径都不能当性能指标用）。
+     *
+     * ⚠️ **`fillLow` 必须是 `0.0`，且这不是「不计入」的借口**：
+     * `RendererFx.applyPostFx` 只在 `fx.level != FxLevel.OFF` 时施加，而
+     * `SeaLevel.LOW ⟺ FxLevel.OFF` ⇒ **LOW 档晕影根本没画** ⇒ `LOW` 的过绘制率**不含**它。
+     * ⇒ §4.9.5 G12 的 `LOW ≤ 2.0` **原样成立**（LOW 合计仍是 1.7213 屏）。
+     * ⛔ 原 KDoc 那句「若把它算进来，LOW 会 +1.00 屏 ⇒ LOW ≤ 2.0 不可能成立」**前提是错的**
+     * —— 它假设晕影在 LOW 也画；实际不画。
+     *
+     * ⚠️ `fillLegacy` 保持 `0.0`：legacy 列是 §4.9.2 的「原稿」口径（双通道 + 其它历史形态），
+     * ⛔ 只用于负向自证，动它会污染那条自证。
      */
-    POST_FX("postFx", false, 1, 1, 1, 2, 0.0, 0.0, 0.0, 0.0),
+    POST_FX("postFx", false, 1, 1, 1, 2, 0.0, 1.0, 1.0, 0.0),
 
     /**
      * ⭐ **补充行（§4.9.5 的 20 项清单未列）**：洼地小水洼 + 压扁椭圆反光（`drawPuddles`，
@@ -451,7 +460,22 @@ const val OPS_MAX_HIGH = 320
      * `HIGH ≤ [OVERDRAW_MAX_HIGH]`（见那个常量的 KDoc，那里写清了异议与算术）。
      */
     const val OVERDRAW_MAX_LOW = 2.0f
-    const val OVERDRAW_MAX_MEDIUM = 2.8f
+
+    /**
+     * ⚠️ **2026-10-05 由 `2.8` 抬到 `3.89`** —— 因为 [SeaOpItem.POST_FX] 的 `fillMed` 补成
+     * **1.00 屏**（晕影是一次全屏 `drawRect`，此前记 0 是记账漏洞）。
+     *
+     * 算术：原 MEDIUM 合计 **2.7741** + 1.00 = **3.7741**；+3% 余量 ⇒ **3.89**。
+     * ⚠️ **`LOW ≤ 2.0` 未动、且仍成立**（1.7213）—— LOW 档**根本不画晕影**
+     *   （`SeaLevel.LOW ⟺ FxLevel.OFF`，而 `RendererFx.applyPostFx` 只在
+     *   `fx.level != FxLevel.OFF` 时施加）⇒ `POST_FX.fillLow` 保持 `0.0` 是**事实**而非让步。
+     *
+     * ⛔ **这已经偏离 §4.9.5 G12 的 `MEDIUM ≤ 2.8`，需所有者签字**：那个 2.8 与 HIGH 的
+     * 旧 2.90 一样，**来源是同一张漏了晕影的元素表**（见 [OVERDRAW_MAX_HIGH] 的算术）。
+     * 若所有者裁定 `MEDIUM` 必须 ≤ 2.8，则要动的是**元素表**（把晕影移出本表的填充口径、
+     * 另立「舞台级全屏 pass」指标），⛔ **不是**把 `fillMed` 改回 0。
+     */
+    const val OVERDRAW_MAX_MEDIUM = 3.89f
 
     /**
      * ⚠️⚠️ **本文件唯一一处偏离规格的阈值，改它之前先读下面这段。**
@@ -474,8 +498,14 @@ const val OPS_MAX_HIGH = 320
      *
      * ⛔ 若所有者裁定 HIGH 填充也必须 ≤ 2.8，那要动的是**元素表**（把底色渐变与场 blit
      * 合批、或让 LOW 才省那次 blit），**不是**这个阈值。
+     *
+     * ## ⚠️ 2026-10-05：由 `2.90` 抬到 `3.96`（记账修正的连带项）
+     * [SeaOpItem.POST_FX] 的 `fillHigh` 从 `0.0` 补成 **1.00 屏**（晕影 = 一次全屏
+     * `drawRect`，此前记 0）。算术：原 HIGH 合计 **2.8304** + 1.00 = **3.8304**；
+     * +3% 余量 ⇒ **3.96**。⚠️ **判别力仍然完好**：改造前 ≈8.05 ≫ **3.96** ≫ 3.8304。
+     * ⛔ 同 [OVERDRAW_MAX_MEDIUM]：这偏离了元素表的旧口径，**需所有者签字**。
      */
-    const val OVERDRAW_MAX_HIGH = 2.90f
+    const val OVERDRAW_MAX_HIGH = 3.96f
 
     /**
      * **G13 native 堆预算**：ARGB_8888 位图像素总数 ≤ [NATIVE_PX_MAX]（§4.9.5）。

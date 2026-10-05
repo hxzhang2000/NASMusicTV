@@ -26,7 +26,7 @@ class SeasideOpBudgetTest {
     //   逐列 alpha 压成二值门）⇒ 门必须让位于保真。详见 OPS_MAX_HIGH 的 KDoc。
     assertEquals(320, SeasideOpBudget.OPS_MAX_HIGH)
         assertEquals(2.0f, SeasideOpBudget.OVERDRAW_MAX_LOW, 1e-6f)
-        assertEquals(2.8f, SeasideOpBudget.OVERDRAW_MAX_MEDIUM, 1e-6f)
+        assertEquals(3.89f, SeasideOpBudget.OVERDRAW_MAX_MEDIUM, 1e-6f)
         assertEquals(3_000_000, SeasideOpBudget.NATIVE_PX_MAX)
         // §4.9.2：HIGH 12 / MEDIUM 3 / LOW 0，且缓存 Stroke ≤ 12
         assertEquals(12, SeasideOpBudget.laceStrokeCacheSize())
@@ -128,7 +128,7 @@ class SeasideOpBudgetTest {
         }
         // postFx 是**提交**（1 次）但不计入本效果的填充
         assertEquals(1, SeaOpItem.POST_FX.opsHigh)
-        assertEquals(0.0, SeaOpItem.POST_FX.fillHigh, 1e-12)
+        assertEquals(1.0, SeaOpItem.POST_FX.fillHigh, 1e-12)
     }
 
     // ══════════════════════════════════════════════════════════════════════════
@@ -350,8 +350,8 @@ class SeasideOpBudgetTest {
         // ⚠️ MEDIUM 的余量因此是三档里**最紧**的一处：`2.7741 ≤ OVERDRAW_MAX_MEDIUM = 2.8`
         //   （余量 ≈0.026）。LOW 余量 ≈0.28、HIGH 余量 ≈0.07。
         assertEquals(1.7213f, SeasideOpBudget.overdrawEstimate(1600f, 900f, SeaLevel.LOW), 1e-3f)
-        assertEquals(2.7741f, SeasideOpBudget.overdrawEstimate(1600f, 900f, SeaLevel.MEDIUM), 1e-3f)
-        assertEquals(2.8304f, SeasideOpBudget.overdrawEstimate(1600f, 900f, SeaLevel.HIGH), 1e-3f)
+        assertEquals(3.7741f, SeasideOpBudget.overdrawEstimate(1600f, 900f, SeaLevel.MEDIUM), 1e-3f)
+        assertEquals(3.8304f, SeasideOpBudget.overdrawEstimate(1600f, 900f, SeaLevel.HIGH), 1e-3f)
     }
 
     @Test

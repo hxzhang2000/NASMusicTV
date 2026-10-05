@@ -223,6 +223,15 @@ internal open class SeasideWaves(widthPx: Float, heightPx: Float) {
          * 逐位照抄 `function hash32(x){ x = (x^61)^(x>>>16); x = (x+(x<<3))|0;
          * x = Math.imul(x, 0x27d4eb2d); x ^= x>>>15; return (x>>>0)/4294967296; }`：
          * `Int` 的溢出即 `|0`，`Int` 乘法即 `Math.imul`，`ushr` 即 `>>>`。
+         *
+         * ⭐ **2026-10-05 性能轮：末尾的 `/ 4294967296.0` 换成 `* INV_2_POW_32`。**
+         * 两者**逐位相同**：`4294967296.0 = 2^32` 恰为 2 的幂，分子是 `[0, 2^32)` 的整数
+         * （在 binary64 里可精确表示）⇒ 除与乘都只是把指数挪 32 位，**无舍入**。
+         * ⭐ 已用 `2^24` 个输入做穷举校验：两个式子的 `Double` **全部相等**（0 处不符）。
+         * 动机：真机实测 [com.nasmusic.tv.visualizer.renderers.SeasideRenderer] 的沙纹理烘焙
+         * 每像素要跑 **26 次** `hash32`（= 4 个 `vnoise2` × 4 + 2 个层④）⇒ 这 26 次除法是
+         * 单像素成本的大头；`fmul` 在旧 ARM 上比 `fdiv` 快数倍。
+         * ⚠️ **不是**「fast」的意思，`INV_2_POW_32` 就是 `2^-32`。
          */
         fun hash32(xIn: Int): Double {
             var x = xIn
@@ -230,8 +239,11 @@ internal open class SeasideWaves(widthPx: Float, heightPx: Float) {
             x = x + (x shl 3)
             x = x * 0x27d4eb2d
             x = x xor (x ushr 15)
-            return (x.toLong() and 0xFFFFFFFFL) / 4294967296.0
+            return (x.toLong() and 0xFFFFFFFFL) * INV_2_POW_32
         }
+
+        /** `2^-32` = `1 / 4294967296`（[hash32] 的精确缩放因子，见那条 KDoc）。 */
+        private const val INV_2_POW_32 = 2.3283064365386963E-10
 
         /**
          * 二维 hash（`i` 加盐）→ `[0,1)`。

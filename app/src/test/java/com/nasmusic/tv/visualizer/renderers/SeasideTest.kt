@@ -880,7 +880,7 @@ class SeasideTest {
                     sb.append(src[i])
                     if (src[i] == '\\' && i + 1 < src.length) { sb.append(src[i + 1]); i += 2; continue }
                     i++
-                    if (sb[i - 1] == '"') break
+                    if (src[i - 1] == '"') break
                 }
                 continue
             }

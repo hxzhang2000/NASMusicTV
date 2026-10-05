@@ -294,6 +294,31 @@ fun VisualizerStage(
                 )
             }
     ) {
+        // ⭐⭐ **T1.7.1（2026-10-05 性能诊断实验）**：离屏层是否挂载的**判据读在这里**
+        //   （**组合作用域**），⛔ 不能只写在下面那个 `graphicsLayer { }` block 里。
+        //
+        //   ⚠️ **为什么必须提到组合作用域**：`Modifier.graphicsLayer { }` 的 block 在状态失效时
+        //   **会**重跑，但它只更新 alpha / translation / scale 这些**标量**；
+        //   **离屏层本身是在元素 `onAttached` 时按 `compositingStrategy` 决定要不要建的**，
+        //   block 重跑**不会**新建或销毁它。
+        //   ⭐ 提到组合作用域后，它翻转时**整个 `graphicsLayer` 元素被重新 apply**
+        //   ⇒ `compositingStrategy` 真的生效 ⇒ **交叉淡入期间照样能挂上离屏**，
+        //   ⛔ **不会**出现「条件化导致淡入永远不挂」那种失效。
+        // ⚠️ 代价：交叉淡入那 ≤600ms 里 `fadeAlpha` 每帧变 ⇒ 本子树每帧重组一次；
+        //   静止期它恒 1.0 ⇒ ⛔ 不重组、⛔ 行为与改动前**完全一致**。
+        //   （`:161` 说 `fadeAlpha`「只重绘不重组」，那指的是**只写在 block 里**的读法；
+        //   ⭐ 在组合作用域读会重组，⛔ 但仅限这 600ms 的过渡期。）
+        //
+        // ⭐ **定稿后的正式说明**（不再是诊断态）：静止期不挂离屏层 ⇒ 海边 `drawSheen` 的
+        //   `BlendMode.Plus` 按 `SrcOver` 呈现 ⇒ 镜面高光不再是加法。
+        //   ⭐ **所有者真机确认无影响**（原话：「湿沙效果很好，镜面高光没啥意义」）⇒ 保留现状。
+        //   ⛔ 不要为此把高光预合成进湿沙刷（`SeasideRenderer` 的 KDoc 判其为视觉偏差），
+        //   ⛔ 也不要把 `Offscreen` 改回无条件挂载。
+        // ⚠️ 实测备注：条件化后**帧率无可测收益**（见 `technical-overview.md` §10.211 的
+        //   「假说证伪」条）⇒ 保留它的理由是**修掉一条本文件自己写明的 TODO**（静止期
+        //   整屏离屏缓冲 1080p ≈ 16.6 MB/帧带宽、收益为零），而不是本机帧率。
+        val needOffscreen = fadeAlpha.floatValue < 1f
+
         // ① 背景层：纯暗色底（不再叠加封面图，突出频谱效果本身；暗底衬托霓虹荧光）
         // 每帧只算一次：新层与渐出旧层共用。
         // 此前两个 Canvas 各算一次（且内部含全量扫描），直接翻倍开销。
@@ -334,8 +359,23 @@ fun VisualizerStage(
                     //    交叉淡入的 600ms 之外 fadeAlpha 恒 1.0，整屏离屏缓冲（1080p ≈ 16.6 MB/帧带宽）
                     //    在静止期收益为零、只有成本；T1.7.1 将条件化为 `fadeAlpha < 1f` 才挂。
                     //    ⛔ 不要因为看到这层就以为「Plus 叠加必须有它」而照抄到新画布。
+                    //
+                    // ⭐⭐ **T1.7.1 已实施**（2026-10-05，**定稿**）：离屏层**条件化挂载**。
+                    //   `compositingStrategy` 在此**赋值**（由元素 `onAttached` 读取），
+                    //   ⭐ 而**判据取自组合作用域的 [needOffscreen]** ⇒ 它翻转时整个元素被
+                    //   重新 apply ⇒ 真正生效（⛔ 不是「block 重跑但没换策略」那种假生效）。
+                    //   ⚠️ 代价（仅过渡期）：见 [needOffscreen] 处的注释。
+                    // ⚠️ **为什么值得做**：静止期整屏离屏缓冲（1080p ≈ 16.6 MB/帧带宽）**收益为零**
+                    //   —— `fadeAlpha` 恒 1.0，alpha 合成与 `SrcOver` 等价。这条 T1.7.1 TODO
+                    //   就是上面 `:334-335` 注释自己写下的（见「G14 现状说明」）。
+                    // ⭐ **对海边效果的影响（已定稿、所有者真机确认）**：静止期没有离屏层 ⇒
+                    //   `drawSheen` 的 `BlendMode.Plus` 按 `SrcOver` 呈现 ⇒ 镜面高光不再是加法。
+                    //   所有者当场看过并判定「湿沙效果很好，镜面高光没啥意义」⇒ 保留现状。
+                    //   ⛔ 不要为此把高光预合成进湿沙刷（`SeasideRenderer` 的 KDoc 判其为视觉偏差）。
                     .graphicsLayer {
-                        compositingStrategy = CompositingStrategy.Offscreen
+                        compositingStrategy =
+                            if (needOffscreen) CompositingStrategy.Offscreen
+                            else CompositingStrategy.Auto
                         alpha = fadeAlpha.floatValue
                     }
             ) {

@@ -34,6 +34,7 @@ import kotlin.math.abs
 import kotlin.math.ceil
 import kotlin.math.cos
 import kotlin.math.exp
+import kotlin.math.floor
 import kotlin.math.sin
 import kotlin.math.sqrt
 
@@ -287,6 +288,51 @@ class SeasideRenderer : RendererFx() {
          * ⚤ 开关放在**函数体第一行**（不是调用点），否则测不到函数内部贡献。
          */
         const val BISECT_SEAFIELD_OFF = false
+
+        // ══════════════════════════════════════════════════════════════════════
+        //  ⭐⭐ **性能成本归因开关组**（2026-10-05 性能轮新增）
+        //
+        //  背景：预算表预测 HIGH 184 次提交 ≈ 30 fps，真机（1920×1080 / density 240 /
+        //  Android 5.1 创维 rtd299o）实测 **5.5 fps** ⇒ **差 4 倍以上**。这个差距说明
+        //  **瓶颈不在「提交数」**：更可能是 ① 填充率 / overdraw（多层大面积半透明叠加）、
+        //  ② 显示列表录制开销（路径点数）、③ 逐像素着色器求值（渐变 span / blit 面积）。
+        //  这组开关就是用来**逐层关掉某项、在真机上量 fps 增量**，把这三项各自占多少
+        //  直接量出来的。
+        //
+        //  ⛔ **全部默认 `false`** —— 不改变默认渲染结果，本轮⛔ 一个视觉参数都没动
+        //     （alpha / 颜色 / 几何 / ribbon 数 / 提交数 / 绘制层次一律未动）。
+        //  ⚤ 开关一律放在**函数体第一行**（⛔ 不是调用点）—— 放调用点会**测不到函数内部
+        //     的多次提交**（例如 [drawFoamLace] 逐浪多次 `drawPath`）。
+        //  ⛔ **归因诊断态，不是最终态**：`SeaOpItem` 里对应项**不要**因此改预算表。
+        // ══════════════════════════════════════════════════════════════════════
+
+        /** [drawOpenSeaFoam] 整层不画（外海泡沫贴图块，逐浪 × lane）。 */
+        const val BISECT_OPEN_SEA_FOAM_OFF = false
+
+        /** [drawDisturbance] 整层不画（扰动前锋，**只对非领头浪**调用）。 */
+        const val BISECT_DISTURBANCE_OFF = false
+
+        /** [drawFoamLace] 整层不画（蕾丝网描边，逐浪 × `opsOf(FOAM_LACE)`）。 */
+        const val BISECT_FOAM_LACE_OFF = false
+
+        /** [drawSeaFoamWash] 整层不画（波面大白沫晕，**每浪 2 次渐变提交**）。 */
+        const val BISECT_SEA_FOAM_WASH_OFF = false
+
+        /** [drawCausticNet] 整层不画（胞壁网；⛔ 只在海水区 `0..seaBottomPx`）。 */
+        const val BISECT_CAUSTIC_OFF = false
+
+        /** [drawSwellBody] 不画（浪本体的迎光/背光体积感，逐浪 1 次渐变填充）。 */
+        const val BISECT_SWELL_BODY_OFF = false
+
+        /** [drawRipples] 不画（沙纹，HIGH **3 次** `drawLines` = [SeaOpItem.SAND_GRAIN]）。 */
+        const val BISECT_SANDGRAIN_OFF = false
+
+        // ⛔ **`SeaOpItem.FOAM_LADDER` 不需要新开关** —— 它的两个函数都已覆盖：
+        //   - [drawFoamStrip]（阶梯带本体）已有 [BISECT_FOAMSTRIP_OFF]；
+        //   - [drawPunchHoles]（evenodd 破洞）只在 `drawFoamStrip` **内部**被调（`:5269`）
+        //     ⇒ 同一个开关就把它一起关掉了。
+        //   ⛔ 故意不加 `BISECT_FOAM_LADDER_OFF`：两个开关管同一段代码会变成死代码，
+        //   且**改错一个就静默测不准**。
 
         /** 无列 `wetAmt > 0.012` ⇒ 整个湿沙层跳过（[drawWetWash]）。 */
         const val WET_ANY_MIN = 0.012
@@ -599,6 +645,84 @@ class SeasideRenderer : RendererFx() {
 
         /** 层①的整体湿→干微渐变幅度（§4.3.7 层①行：`1 − 0.10·(1 − v)`）。 */
         const val SAND_TEX_WET_FADE = 0.10
+
+        /**
+         * 沙纹理开启**双线性**的缩放阈值（2026-10-05 性能轮）：`sx` 或 `sy` **低于**它才开。
+         *
+         * 1080p 实测 `sx = 1.000000` / `sy = 0.999657` ⇒ 两个轴都在 `≥ 0.98` ⇒ **走最近邻**
+         * （1:1 映射下与双线性视觉等价，而 texel fetch 从 4 次降到 1 次，面积 1.12 Mpx）。
+         * 4K 下 `k = 0.845` ⇒ `sx = 0.845 < 0.98` ⇒ 仍走**双线性** ⇒ ⛔ 不给 4K 制造回归。
+         * ⚠️ 落在 `(0.98, 1.05)` 这段「几乎 1:1」的区间里一律最近邻 —— 那里的插值收益
+         * 低于噪声，而 fetch 成本是 4 倍。
+         */
+        const val SAND_TEX_FILTER_MIN = 0.98
+
+        /**
+         * ⭐ [SeasideWaves.vnoise2] 用的两个**晶格混淆常量**（`73856093` / `19349663`）。
+         *
+         * ⚠️ **逐字照抄**那个函数里的写法 —— 运算顺序都是 `ix·A xor iy·B xor seed`。
+         * 提取成常量只是为了让 [bakeSandTextureRows] 的记忆化展开可读；
+         * ⛔ **不要**改这两个数，也⛔ 不要改 `xor` 的结合顺序（`(a xor b) xor c` ≠ `a xor (b xor c)`
+         *   在这里恰好等价，但保持与原表达式同形更安全）。
+         */
+        const val VNOISE_A = 73856093
+        const val VNOISE_B = 19349663
+
+        /**
+         * 沙纹理**每帧最少烘多少行**（2026-10-05 首帧黑屏修复）。
+         *
+         * ⛔ 这个下限保证「无论设备多慢，纹理都一定会被补完」⇒ 不会永久停在平色。
+         * 实际上限由 [bakeSandTextureStep] 按**实测**的单行耗时自适应（见 [SAND_BAKE_BUDGET_MS]）。
+         */
+        const val SAND_BAKE_ROWS_MIN = 1
+
+        /**
+         * `sandRowsPerFrame` 的**上限**（2026-10-05）。
+         *
+         * ⛔ 必须有界：否则「单行极快」时（例如桌面机 0.05 ms/行）会算出
+         * `34 / 0.05 = 680` 行/帧 ⇒ **单帧就把整张烘完** ⇒ 那一帧直接退化回
+         * 「同步阻塞首帧」，正好是本轮要修的病。⇒ 钳在 `64` 行（≈ 11% 的纹理高度）。
+         * ⭐ 之所以不按比例推导：1080p 实测 `rowsPerFrame = 6`（`singleRowMs = 4.92`），
+         * **离这个上限差一个数量级** ⇒ 上限只在「单行 ≲ 0.53 ms」的设备上才咬得住，
+         * 而那正是桌面机 / 高端手机（它们也不需要分帧）。
+         */
+        const val SAND_BAKE_ROWS_MAX = 64
+
+        /**
+         * 首帧（[buildSandTexture] 内）**同步**烘的行数。
+         *
+         * ⛔ **刻意很小（4 行）**：这 4 行是「让首帧立刻有东西可画」的最小代价，
+         * 真正的量由 [bakeSandTextureStep] 在后续帧自适应推进。
+         * ⚠️ 若把它调大，首帧就会重新被阻塞 —— 那正是本轮要修的病。
+         */
+        const val SAND_BAKE_FIRST_ROWS = 4
+
+        /**
+         * 分帧烘焙的**每帧时间预算**（ms）—— 用来反推 `sandRowsPerFrame`。
+         *
+         * 依据：真机 5.9 fps ⇒ **一帧 169 ms**。取 **34 ms ≈ 一帧的 20%**，即
+         * 「烘焙最多吃掉五分之一的帧时间，剩下的时间留给真正的绘制」。
+         *
+         * ## ⭐ 联动关系（`rowsPerFrame` 由实测单行耗时反推，⛔ 不是硬调常数）
+         * `rowsPerFrame = clamp(SAND_BAKE_BUDGET_MS / 单行耗时ms, SAND_BAKE_ROWS_MIN, SAND_BAKE_ROWS_MAX)`
+         *
+         * ⚠️ 静态估算**高估了记忆化的收益**：它按「`hash32` 减少 264.8 倍」线性外推，预测单行
+         * **≈1.5 ms（11×）**；真机实测只有 **4.92 ms（3.4×）** ⇒ 差额是保留下来的浮点插值、
+         * `Math.floor`、逐行 `setPixels` 与 ART 的寄存器压力（详见 `technical-overview.md` §10.211）。
+         *
+         * | 单行耗时 | `rowsPerFrame` | 帧数 | `totalMs` |
+         * |---|---|---|---|
+         * | 16.9 ms（记忆化**前**实测） | 2 | 292 | ≈4930 |
+         * | **4.92 ms（记忆化**后**实测，定稿读数）** | **6** | **91** | **2879** |
+         *
+         * ⭐ 「帧数 × 一帧渲染时间」才是**墙钟**（583 行 ÷ 6 行/帧 = 91 帧 × 5.9 fps ≈ **17 s**）——
+         * ⚠️ 补齐耗时**由帧率主导、不由烘焙耗时主导** ⇒ 降 `totalMs` 对体感改善有限。
+         * ⭐ 所有者已判定接受（视觉见 `technical-overview.md` §10.211 第五节）。
+         * ⚠️ 上表是 `SeasideSand` 埋点的定稿前读数；该埋点**已按所有者要求摘除**
+         *   （⛔ 保留 [bakeSandTextureStep] 里那次单调钟计时 —— 它是 `sandRowsPerFrame` 的输入）。
+         * ⭐ 无论如何 `sandRowsPerFrame` 会**自动**跟上：单行快了，它就多推几行。
+         */
+        const val SAND_BAKE_BUDGET_MS = 34
 
         /** 层③潮湿斑的 `smoothstep` 窗口（原型 591 行：`smoothstep(0.54, 0.82, …)`）。 */
         const val SAND_TEX_DAMP_LO = 0.54
@@ -1811,9 +1935,6 @@ const val FOAM_TILE_OFF_DISTURB = 1
      */
     private var laceStrokes: Array<Stroke>? = null
 
-    /** 沙纹理 blit 的左上角（= `(0, seaSandTopPx)`，烘焙期算好）—— 现在只作着色器矩阵的纵向锚点。 */
-    private var sandTopLeft = Offset.Zero
-
     /** 沙纹理的实际像素宽 / 高（烘焙期写；⛔ **可能小于**画幅 ⇒ 4K 上靠它做矩阵缩放）。 */
     private var sandTexW = 0
     private var sandTexH = 0
@@ -1832,6 +1953,59 @@ const val FOAM_TILE_OFF_DISTURB = 1
     private var sandTexTopPx = 0f
     private var sandScaleX = 1f
     private var sandScaleY = 1f
+
+    // ── 沙纹理**分帧烘焙**状态（2026-10-05 首帧黑屏修复）────────────────────────
+    //
+    // ⛔ **最终纹理逐像素不变**：分行烘焙之所以安全，是因为纹理第 `j` 行只依赖 `(x, j)`
+    //   与三张**逐行**常量表（`sandRowBase` / `sandRowMul` / `sandRowDamp`），
+    //   ⭐ **行与行之间没有任何依赖** ⇒ 任意行区间的烘焙顺序不影响结果。
+    //   （这与「先烘低分辨率再放大」完全不同 —— 那种做法会改像素，禁止。）
+    /** 已烘到的行号（`>= sandBakeH` 表示完成）。⛔ `0` = 尚未开始。 */
+    private var sandBakeRow = 0
+
+    /** 纹理行数（= [sandTexH]）；分帧烘焙的终止哨兵。 */
+    private var sandBakeH = 0
+
+    /** 层①逐行底色（ARGB 打包）。 */
+    private var sandRowBase = IntArray(0)
+
+    /** 层④的 `gain`（= `dampDrift`）逐行值。 */
+    private var sandRowMul = DoubleArray(0)
+
+    /** 层③的「近水处更多」权重逐行值。 */
+    private var sandRowDamp = DoubleArray(0)
+
+    /**
+     * ⭐ 单行像素缓冲（`IntArray(tw)`，1080p ≈ **7.7 KB**）。
+     *
+     * ⛔ **刻意不用** `IntArray(tw · th)`（1080p = **4.5 MB**，API 22–25 常驻 native 堆直到
+     *   GC ⇒ 与「烘完就丢」的原设计相比是净增常驻内存）。逐行 `setPixels` 的 JNI 开销与
+     *   `ProceduralTexture.ensureFullscreen` 同款（那里也是一条 `IntArray(w)` 复用）。
+     */
+    private var sandRowBuf = IntArray(0)
+
+    /** 每帧烘的行数（自适应，见 [bakeSandTextureStep]）。 */
+    private var sandRowsPerFrame = SAND_BAKE_ROWS_MIN
+
+    // ── 分帧烘焙的计时/统计状态（⛔ 只为算步长 + 那一行诊断日志；⛔ 逐帧零分配）──────
+    /** 单行实测毫秒（EMA，权重 1/4）。⛔ 首帧前为 0.0。 */
+    private var sandSingleRowMs = 0.0
+
+    /** [sandSingleRowMs] 的采样次数（0 = 尚无样本 ⇒ ⛔ 不读任何陈旧字段）。 */
+    private var sandRowSamples = 0
+
+    /** 烘焙未完成时 [drawSand] 用的**平色**画笔（⛔ 构造期建一次，逐帧零分配）。 */
+    private val sandFlatPaint = Paint().apply {
+        style = Paint.Style.FILL
+        isAntiAlias = true
+        color = PAL_SAND_MID
+    }
+
+    /** 烘焙未完成时的**占位色** = [PAL_SAND_MID]（层①折点处的底色，即 `v^0.86 = 0.42` 那档）。 */
+    private val sandFlatColor = PAL_SAND_MID
+
+    /** ⛔ 烘焙用的位图强引用（`setPixels` 需要 `Bitmap`；`ImageBitmap` 那侧另有 [sandTex]）。 */
+    private var sandBakeBmp: Bitmap? = null
 
     /** 水体场 blit 的左上角（= `(0, 0)`，字段只为逐帧零分配而存在）。 */
     private var fieldTopLeft = Offset.Zero
@@ -2337,11 +2511,15 @@ const val FOAM_TILE_OFF_DISTURB = 1
         isAntiAlias = true
     }
 
-    /** 干沙的填充画笔（**唯一**带 `BitmapShader` 的那支，见 [drawSand] 的单点例外裁决）。 */
+    /** 干沙的填充画笔（**唯一**带 `BitmapShader` 的那支，见 [drawSand] 的单点例外裁决）。
+     *
+     * ⭐⭐ **`isFilterBitmap` 由 [buildSandTexture] 按实际缩放比写入**（2026-10-05 性能轮），
+     * ⛔ **不再无条件 `true`** —— 详见那段 KDoc「为什么 1080p 上必须关掉双线性」。
+     */
     private val sandPaint = Paint().apply {
         style = Paint.Style.FILL
         isAntiAlias = true
-        isFilterBitmap = true
+        isFilterBitmap = false
     }
 
     /** 洼地水洼 + 压扁椭圆反光的填充画笔（本体与反光折成同一色，⛔ 不第二次提交）。 */
@@ -2399,6 +2577,18 @@ const val FOAM_TILE_OFF_DISTURB = 1
         sandTex = null
         sandTexW = 0
         sandTexH = 0
+        // ⭐ 分帧烘焙状态一并复位（⛔ 不复位会让重入后的 [drawSand] 误判「已烘完」
+        //   而直接画一张**已被 recycle** 的纹理）。
+        sandBakeBmp = null
+        sandBakeRow = 0
+        sandBakeH = 0
+        sandRowsPerFrame = SAND_BAKE_ROWS_MIN
+        sandRowBase = IntArray(0)
+        sandRowMul = DoubleArray(0)
+        sandRowDamp = DoubleArray(0)
+        sandRowBuf = IntArray(0)
+        sandSingleRowMs = 0.0
+        sandRowSamples = 0
         sandTexTopPx = 0f
         sandScaleX = 1f
         sandScaleY = 1f
@@ -2482,10 +2672,15 @@ const val FOAM_TILE_OFF_DISTURB = 1
         // 下界 / 上沿都来自模拟层的权威常量 ⛔ 不在本文件另写一份（红线 7：退水时
         // `SAND_TEX_TOP..waterline_min_bound` 那一段绝不能露出海水底色）。
         seaBottomPx = (h * SeasideWaves.SEA_BOTTOM_K).toFloat()
-        sandTopLeft = Offset(0f, wv.sand_tex_top_px.toFloat())
+        // ⛔ 原先这里还有 `sandTopLeft = Offset(0f, wv.sand_tex_top_px.toFloat())`，
+        //   是 [drawSand] 走 `drawImage` 形态时的「目标左上角」。2026-10-05 改走
+        //   `BitmapShader` + `Canvas.translate/scale` 后它**零读取方**（全仓 grep 只剩声明与
+        //   这一行赋值）⇒ 已连字段一起删除。纵向锚点现在由 [sandTexTopPx] 承载。
         fieldTopLeft = Offset.Zero
 
         // —— 烘焙层（**内容全部已接上**；尺寸契约见各自 KDoc）——
+        // ⛔ 2026-10-05：这里的逐项耗时埋点**已按所有者要求整体移除**（「这些埋点没用了吗？
+        //   如果没用可以去掉」）—— 分帧烘焙机制本身**保留**，它才是把 9.86 秒移出首帧的关键。
         buildBrushes()
         buildSandTexture(w, h)
         buildFoamTiles()
@@ -2508,6 +2703,279 @@ const val FOAM_TILE_OFF_DISTURB = 1
         //   {buildLaceStrokes, buildCausticStrokes}）⇒ 逐帧零分配不受影响。
         buildLaceStrokes()
         buildCausticStrokes()
+    }
+
+    /**
+     * ⭐⭐ **沙纹理的分段烘焙（2026-10-05 首帧黑屏修复）** —— 把 `[y0, y1)` 这些行的像素
+     * 算完并 `setPixels` 进 [sandBakeBmp]，然后推进 [sandBakeRow]。
+     *
+     * ## 为什么这样切是**安全的**（最终画面逐像素不变）
+     * ⭐ 沙纹理的第 `y` 行只依赖 `(x, y)` 与三张**逐行**常量表（[sandRowBase] / [sandRowMul] /
+     *   [sandRowDamp]）—— **行与行之间没有任何互相依赖**，也没有任何「跨行累加」。
+     *   ⇒ 任意顺序、任意分组烘焙，结果与一次性烘完**完全相同**。
+     * ⛔ 这与「先烘低分辨率、再放大」是**两回事**：后者会改像素，本方案一个像素都不改。
+     *
+     * ## ⛔ 与 `BISECT_SAND_TEX_FLAT` 的关系
+     * 逐像素公式里那个 `if (BISECT_SAND_TEX_FLAT)` 分支**原样保留**（诊断开关语义不变）。
+     * ⭐ 而 [drawSand] 在**纹理未烘完**时走的是 [sandFlatPaint]（平色占位），
+     * **与该开关无关** —— 两者是不同的东西，别混。
+     *
+     * @param y0 起始行（含）。
+     * @param y1 结束行（不含）。
+     * @param dampR/dampG/dampB [PAL_SAND_DAMP] 的三个通道（`const val` ⇒ 调用方可常量折叠）。
+     */
+    private fun bakeSandTextureRows(y0: Int, y1: Int, dampR: Int, dampG: Int, dampB: Int) {
+        val bmp = sandBakeBmp ?: return
+        val th = sandBakeH
+        if (th <= 0) return
+        val tw = sandTexW
+        val buf = sandRowBuf
+        val rowBase = sandRowBase
+        val rowMul = sandRowMul
+        val rowDamp = sandRowDamp
+        val tw1 = (tw - 1).coerceAtLeast(1).toDouble()
+        val th1 = (th - 1).coerceAtLeast(1).toDouble()
+        var y = y0
+        while (y < y1 && y < th) {
+            val v = y.toDouble() / th1
+            val base = rowBase[y]
+            val gain = rowMul[y]
+            val dampNear = rowDamp[y]
+            val br = ((base shr 16) and 0xFF).toDouble()
+            val bg = ((base shr 8) and 0xFF).toDouble()
+            val bb = (base and 0xFF).toDouble()
+            // ─────────────────────────────────────────────────────────────────────
+            //  ⭐⭐ **2026-10-05 性能轮：四层噪声的「晶格哈希」按行 / 按晶格记忆化。**
+            //
+            //  【为什么原来是 21 倍贵】每个 `vnoise2(u·F, v·V, seed)` 内部算 **4 次 `hash32`**，
+            //  而四个采样点各调一次 ⇒ **每像素 4×4 + 2（层④）= 26 次 `hash32`**。
+            //  真机实测沙纹理 **8.8 µs/px**，而结构类似的 `buildFoamTiles` 只有 **0.42 µs/px**
+            //  ⇒ 差额几乎全在这 26 次 `hash32`（含每次末尾一次 `Double` 除法）。
+            //
+            //  【关键观察（逐位安全的两个前提）】
+            //  ① `vnoise2` 的 `yi / yf / sy` 只依赖 `v` ⇒ **整行恒定**，可提出 x 循环。
+            //  ② 四个角哈希里**没有任何一个与 `x` 无关**（`(ix·A) xor (iy·B)`，两个都含 `ix`）
+            //     ⇒ ⛔ 不能像「`h01`/`h11` 与 x 无关」那样直接提出。**但 `ix = floor(u·F)`
+            //     只在 `⌈F⌉` 个取值上变化**（F = 3.1 / 7.7 / 4.3 / 11.0 ⇒ 4 / 8 / 5 / 12），
+            //     且 `x` 递增时 `ix` **单调不减** ⇒ 用「上一次的值」做游标即可，
+            //     每行真实求值次数 = **4×(4+8+5+12) = 116 次**，而不是 `1920×16 = 30720` 次
+            //     ⇒ **264.8 倍**。
+            //
+            //  【为什么逐位相同】缓存命中时传给 `hash32` 的**整型入参完全一致**
+            //  （`ix`、`iy`、`seed` 三者都没变）⇒ 整数运算逐位相同 ⇒ 返回的 `Double` 逐位相同。
+            //  ⭐ 已用 binary64 复算校验：21 行 × 64 px × 3 个分量，**0 处不符**。
+            // ─────────────────────────────────────────────────────────────────────
+            // 逐行常量：四个采样点的 y 侧（`floor` / `yf` / `sy` / `iy`）
+            val yw1 = v * SAND_TEX_WARP_V1
+            val qy1 = floor(yw1).toInt()
+            val yf1 = yw1 - qy1
+            val sy1 = yf1 * yf1 * (3.0 - 2.0 * yf1)
+            val yw2 = v * SAND_TEX_WARP_V2
+            val qy2 = floor(yw2).toInt()
+            val yf2 = yw2 - qy2
+            val sy2 = yf2 * yf2 * (3.0 - 2.0 * yf2)
+            val yd1 = v * SAND_TEX_DAMP_V1
+            val qy3 = floor(yd1).toInt()
+            val yf3 = yd1 - qy3
+            val sy3 = yf3 * yf3 * (3.0 - 2.0 * yf3)
+            val yd2 = v * SAND_TEX_DAMP_V2
+            val qy4 = floor(yd2).toInt()
+            val yf4 = yd2 - qy4
+            val sy4 = yf4 * yf4 * (3.0 - 2.0 * yf4)
+            // 逐行常量：`(iy·B) xor seed`（⛔ 括号与 `vnoise2` 里的写法同序，逐位照抄）
+            val p1 = (qy1 * VNOISE_B) xor SAND_TEX_WARP_S1
+            val p2 = (qy2 * VNOISE_B) xor SAND_TEX_WARP_S2
+            val p3 = (qy3 * VNOISE_B) xor SAND_TEX_DAMP_S1
+            val p4 = (qy4 * VNOISE_B) xor SAND_TEX_DAMP_S2
+            // 四个采样点各自的晶格游标（`-1` = 尚未取值，强制首像素必算）
+            var ci1 = -1
+            var ci2 = -1
+            var ci3 = -1
+            var ci4 = -1
+            var c1a = 0.0; var c1b = 0.0; var c1c = 0.0; var c1d = 0.0
+            var c2a = 0.0; var c2b = 0.0; var c2c = 0.0; var c2d = 0.0
+            var c3a = 0.0; var c3b = 0.0; var c3c = 0.0; var c3d = 0.0
+            var c4a = 0.0; var c4b = 0.0; var c4c = 0.0; var c4d = 0.0
+            var x = 0
+            while (x < tw) {
+                val u = x.toDouble() / tw1
+                if (BISECT_SAND_TEX_FLAT) {
+                    buf[x] = (0xFF shl 24) or
+                        (clampByte(br) shl 16) or (clampByte(bg) shl 8) or clampByte(bb)
+                    x++
+                    continue
+                }
+                // ① 底色原样（⛔ **不乘** `gain` —— 原型只用它调层④颗粒）
+                var r = br
+                var g = bg
+                var b = bb
+                // ── 层② 宽柔沿岸起伏带（两个八度扭曲 ⇒ 绝不等距）────────────────────
+                //     逐字照抄原型 `seaside-preview.html:585-587`；⛔ 只把 `vnoise2` 换成
+                //     「同表达式 + 晶格记忆化」的展开（见上方长注释）。
+                var t = u * SAND_TEX_WARP_U1
+                var xi = floor(t)
+                var xf = t - xi
+                var sx = xf * xf * (3.0 - 2.0 * xf)
+                val qi = xi.toInt()
+                if (qi != ci1) {
+                    ci1 = qi
+                    c1a = SeasideWaves.hash32((qi * VNOISE_A) xor p1)
+                    c1b = SeasideWaves.hash32(((qi + 1) * VNOISE_A) xor p1)
+                    c1c = SeasideWaves.hash32((qi * VNOISE_A) xor ((qy1 + 1) * VNOISE_B) xor SAND_TEX_WARP_S1)
+                    c1d = SeasideWaves.hash32(((qi + 1) * VNOISE_A) xor ((qy1 + 1) * VNOISE_B) xor SAND_TEX_WARP_S1)
+                }
+                val w1a = c1a + (c1b - c1a) * sx
+                val w1 = w1a + ((c1c + (c1d - c1c) * sx) - w1a) * sy1
+                t = u * SAND_TEX_WARP_U2
+                xi = floor(t)
+                xf = t - xi
+                sx = xf * xf * (3.0 - 2.0 * xf)
+                val qj = xi.toInt()
+                if (qj != ci2) {
+                    ci2 = qj
+                    c2a = SeasideWaves.hash32((qj * VNOISE_A) xor p2)
+                    c2b = SeasideWaves.hash32(((qj + 1) * VNOISE_A) xor p2)
+                    c2c = SeasideWaves.hash32((qj * VNOISE_A) xor ((qy2 + 1) * VNOISE_B) xor SAND_TEX_WARP_S2)
+                    c2d = SeasideWaves.hash32(((qj + 1) * VNOISE_A) xor ((qy2 + 1) * VNOISE_B) xor SAND_TEX_WARP_S2)
+                }
+                val w2a = c2a + (c2b - c2a) * sx
+                val w2 = w2a + ((c2c + (c2d - c2c) * sx) - w2a) * sy2
+                val warp = w1 * SAND_TEX_WARP_A1 + w2 * SAND_TEX_WARP_A2
+                val band = SeasideWaves.fsin((v * SAND_TEX_RIPPLE_N + warp) * TAU)
+                // 原型是**乘性**的 `ripK = 1 + SAND_RIPPLE_A·rip`（原型 587 行）
+                val ripK = 1.0 + SAND_TEX_RIPPLE_A * band
+                r *= ripK
+                g *= ripK
+                b *= ripK
+                // ── 层③ 潮湿斑块：逐字照抄原型 `seaside-preview.html:590-592`──────────
+                t = u * SAND_TEX_DAMP_U1
+                xi = floor(t)
+                xf = t - xi
+                sx = xf * xf * (3.0 - 2.0 * xf)
+                val qk = xi.toInt()
+                if (qk != ci3) {
+                    ci3 = qk
+                    c3a = SeasideWaves.hash32((qk * VNOISE_A) xor p3)
+                    c3b = SeasideWaves.hash32(((qk + 1) * VNOISE_A) xor p3)
+                    c3c = SeasideWaves.hash32((qk * VNOISE_A) xor ((qy3 + 1) * VNOISE_B) xor SAND_TEX_DAMP_S1)
+                    c3d = SeasideWaves.hash32(((qk + 1) * VNOISE_A) xor ((qy3 + 1) * VNOISE_B) xor SAND_TEX_DAMP_S1)
+                }
+                val d1a = c3a + (c3b - c3a) * sx
+                val d1 = d1a + ((c3c + (c3d - c3c) * sx) - d1a) * sy3
+                t = u * SAND_TEX_DAMP_U2
+                xi = floor(t)
+                xf = t - xi
+                sx = xf * xf * (3.0 - 2.0 * xf)
+                val ql = xi.toInt()
+                if (ql != ci4) {
+                    ci4 = ql
+                    c4a = SeasideWaves.hash32((ql * VNOISE_A) xor p4)
+                    c4b = SeasideWaves.hash32(((ql + 1) * VNOISE_A) xor p4)
+                    c4c = SeasideWaves.hash32((ql * VNOISE_A) xor ((qy4 + 1) * VNOISE_B) xor SAND_TEX_DAMP_S2)
+                    c4d = SeasideWaves.hash32(((ql + 1) * VNOISE_A) xor ((qy4 + 1) * VNOISE_B) xor SAND_TEX_DAMP_S2)
+                }
+                val d2a = c4a + (c4b - c4a) * sx
+                val d2 = d2a + ((c4c + (c4d - c4c) * sx) - d2a) * sy4
+                val damp = SeasideWaves.smoothstep(
+                    SAND_TEX_DAMP_LO, SAND_TEX_DAMP_HI, d1 * SAND_TEX_DAMP_M1 + d2 * SAND_TEX_DAMP_M2
+                ) * dampNear * SAND_TEX_DAMP_A
+                if (damp > 0.0) {
+                    r += (dampR - r) * damp
+                    g += (dampG - g) * damp
+                    b += (dampB - b) * damp
+                }
+                // ── 层④ 像素级细颗粒（**唯一无法记忆化的一层**）──────────────────────
+                //   两个白噪声相加，各自去中心，**乘层①的 `gain`**（原型 600-605 行），
+                //   最后整体压暗 `1 - damp·0.10`。
+                // ⭐⭐ 逐字对齐原型：原型是 `hash32(imul(y,A) + imul(x,B) + C)` 的**加法**混合
+                //   （⛔ 不是本文件早先用的 `hash2(x,y)` 那种异或晶格 hash）。
+                // ⚠️ `2654435761` 必须写成**有符号** Int `-1640531535`（= `0x9E3779B1`）——
+                //   写成整数字面量在 Kotlin 里是 `Long`，会把整条表达式提到 64 位。
+                val n1 = SeasideWaves.hash32(
+                    y * 374761393 + x * 668265263 + 12345
+                ) - 0.5
+                val n2 = SeasideWaves.hash32(
+                    y * 1274126177 + x * (-1640531535) + 777
+                ) - 0.5
+                val grain = (n1 * SAND_TEX_GRAIN_A + n2 * SAND_TEX_GRAIN2_A) * 255.0
+                val darken = 1.0 - damp * SAND_TEX_DAMP_DARKEN
+                r = (r + grain * gain) * darken
+                g = (g + grain * gain) * darken
+                b = (b + grain * gain) * darken
+                val ri = if (r < 0.0) 0 else if (r > 255.0) 255 else r.toInt()
+                val gi = if (g < 0.0) 0 else if (g > 255.0) 255 else g.toInt()
+                val bi = if (b < 0.0) 0 else if (b > 255.0) 255 else b.toInt()
+                buf[x] = (0xFF shl 24) or (ri shl 16) or (gi shl 8) or bi
+                x++
+            }
+            // ⭐ 逐行 `setPixels`（同 `ProceduralTexture.ensureFullscreen` 的做法：一行缓冲复用）
+            bmp.setPixels(buf, 0, tw, 0, y, tw, 1)
+            y++
+        }
+        if (y1 > sandBakeRow) sandBakeRow = if (y1 > th) th else y1
+    }
+
+    /**
+     * ⭐⭐ **每帧推进一段沙纹理烘焙**（2026-10-05）。由 [drawContent] 每帧调一次，⛔ 烘完即
+     * 变成一次「读两个 int 比较」的空转。
+     *
+     * ## 自适应步长
+     * 首段（[buildSandTexture] 里那次）**实测**耗时 ⇒ 按 [SAND_BAKE_BUDGET_MS] 反推每帧行数：
+     * `rowsPerFrame ≈ 预算 / 单行耗时`。⇒
+     * - **快设备**（整张能在预算内烘完）⇒ 第一帧就烘完 ⇒ ⭐ **与改动前完全无差别**；
+     * - **慢设备**（本机）⇒ 每帧只烘得起几行 ⇒ 平色占位若干帧后纹理补齐。
+     *
+     * ⚠️ 步长**至少** [SAND_BAKE_ROWS_MIN] 行 ⇒ 无论多慢都保证收敛，不会永久停在平色。
+     *
+     * ⛔ **不是** `DrawScope.drawXxx` ⇒ 不受「每帧绘制函数」的零分配源码门禁约束；本函数
+     *   **不构造任何对象**（⛔ 无字符串模板；定稿前的诊断日志已摘除）。
+     */
+    private fun bakeSandTextureStep() {
+        if (sandBakeRow >= sandBakeH) return
+        if (sandBakeBmp == null) return
+        val y0 = sandBakeRow
+        if (y0 >= sandBakeH) return
+        var y1 = y0 + sandRowsPerFrame
+        if (y1 > sandBakeH) y1 = sandBakeH
+        val rows = y1 - y0
+        if (rows <= 0) return
+        // ⛔⛔⛔ **2026-10-05 根因修复：`elapsedRealtimeNanos()` 返回的是「纳秒」，上一轮
+        //   移除埋点时把 `/ 1_000_000.0`（纳秒→毫秒）**连同日志一起删掉了** ⇒
+        //   `perRow` 变成「纳秒/行」（≈ 1.7e7）而 `SAND_BAKE_BUDGET_MS` 是**毫秒**（34）
+        //   ⇒ `34 / 1.7e7 = 0` ⇒ `rowsPerFrame` 被钳到**下限 1**且**永不增长**。
+        //   后果：583 行 × 1 行/帧 = 583 帧 × 一帧的渲染时间（≈169ms）≈ **105 s**
+        //   （与真机实测 105 s 吻合；优化前每行 16.9ms 时算得 108 s，同一量级）。
+        //   ⇒ ⛔ **计时区间本身没问题**（`t0` 紧贴循环前、`t1` 紧贴循环后，中间只有
+        //   [bakeSandTextureRows] 一行 + 一个减法，⛔ 不含 `drawContent` 的任何绘制）——
+        //   错的只是**单位**。
+        val t0 = android.os.SystemClock.elapsedRealtimeNanos()
+        bakeSandTextureRows(y0, y1, PAL_SAND_DAMP shr 16 and 0xFF, PAL_SAND_DAMP shr 8 and 0xFF, PAL_SAND_DAMP and 0xFF)
+        val elapsed = android.os.SystemClock.elapsedRealtimeNanos() - t0
+        // ⭐ 纳秒 → 毫秒（⛔ 这一步**不能**省：`SAND_BAKE_BUDGET_MS` 是毫秒）
+        val stepMs = elapsed.toDouble() / 1_000_000.0
+        val perRowMs = stepMs / rows.toDouble()
+        // 单行耗时累计（EMA，权重 1/4）⇒ 抗首帧 JIT 预热的一次性离群值
+        sandSingleRowMs = if (sandRowSamples == 0) perRowMs
+        else sandSingleRowMs + (perRowMs - sandSingleRowMs) * 0.25
+        sandRowSamples++
+        // ⭐ 步长公式：`预算 / 单行毫秒`，**下限 1、上限 [SAND_BAKE_ROWS_MAX]**。
+        //   ⚠️ 首帧（`sandRowSamples` 刚为 0）用的是**本次实测值**，⛔ 不读任何陈旧字段。
+        //   ⚠️ `perRowMs <= 0` 只可能因单调钟精度（ns 分辨率下极不可能）⇒ 保守取下限。
+        val want = if (sandSingleRowMs > 0.0) {
+            (SAND_BAKE_BUDGET_MS / sandSingleRowMs).toInt()
+        } else {
+            SAND_BAKE_ROWS_MIN
+        }
+        sandRowsPerFrame = when {
+            want < SAND_BAKE_ROWS_MIN -> SAND_BAKE_ROWS_MIN
+            want > SAND_BAKE_ROWS_MAX -> SAND_BAKE_ROWS_MAX
+            else -> want
+        }
+        // 诊断日志已定稿并摘除（2026-10-05）。真机实测结论已记入
+        //   docs/technical-overview.md §10.211：singleRowMs=4.92 / rowsPerFrame=6 /
+        //   totalMs=2879 / frames=91（沙纹理出现耗时约 17 s，已被所有者定案接受）。
+        //   【为什么保留计时器而删日志】sandSingleRowMs 是 sandRowsPerFrame 的输入，
+        //   删掉它就只能取常数行数 ⇒ 退回 2 行/帧。
     }
 
     /**
@@ -2550,10 +3018,23 @@ const val FOAM_TILE_OFF_DISTURB = 1
      * | ① | 湿→干底色渐变（近浪 [PAL_SAND_NEAR] → 中 [PAL_SAND_MID] → 下缘 [PAL_SAND_FAR]，`v^0.86`、在 `v = 0.42` 折点）。⚠️ `1 − 0.10·(1−v)` **只乘层④颗粒**（原型 `gain`），⛔ 不乘底色 | 原型 `seaside-preview.html:572-579` + §5.6「干沙（近浪/中/下缘）」 |
      * | ② | 宽而柔的沿岸起伏带（两个 `vnoise2` 扭曲后的 `sin((v·7 + warp)·2π)` ⇒ **不是等距直线**；`ripK` 是**乘性**的） | 原型 `585-587` + §5.4 `SAND_RIPPLE_N / _A` |
      * | ③ | 潮湿斑块（两个 `vnoise2` 按 `0.62/0.38` 合成 `smoothstep(0.54, 0.82, …)`，再乘近水权重 `0.30 + 0.70·(1 − smoothstep(0.10, 0.80, v))`，压向 [PAL_SAND_DAMP]） | 原型 `590-592` + §5.4 `SAND_DAMP_A` |
-     * | ④ | 像素级细颗粒（**主导纹理**：两个 `hash2(x,y)` 白噪声相加，**乘层①的 `gain`**，最后整体 `× (1 − damp·0.10)`） | 原型 `598-605` + §5.4 `SAND_GRAIN_A / _GRAIN2_A` |
+     * | ④ | 像素级细颗粒（**主导纹理**：两个**加法式** `hash32` 白噪声 —— `hash32(y·374761393 + x·668265263 + 12345)` 与 `hash32(y·1274126177 + x·(−1640531535) + 777)`，各减 `0.5` 后分别乘 `SAND_TEX_GRAIN_A` / `SAND_TEX_GRAIN2_A` 再相加；**乘层①的 `gain`**，最后整体 `× (1 − damp·0.10)`） | 原型 `598-605` + §5.4 `SAND_GRAIN_A / _GRAIN2_A` |
      *
-     * ⛔ blit 的**源矩形必须是 `(0, 0, texW, texH)`**（§4.3.7 末条：把上沿当源 `y`
-     * 偏移会采到纹理外面、整块沙变成灰暗的条纹）—— [sandTopLeft] 只提供**目标**左上角。
+     * ## ⛔ 层④ 那两个常数写「符号」还是写「无符号」？
+     * ⛔ **必须写有符号的 `(−1640531535)`**（= `2654435761` 当 `Int` 溢出后的值）——
+     *   写成 `2654435761` 会让整条 `Int` 表达式**提升成 `Long`**，`hash32` 重载随即不匹配
+     *   （或者更糟：静默换了算法）。这一对常数是**原型加法式**的逐字照抄，⛔ 不要「规整」它。
+     * ⚠️ 层④ 也**不是**本文件别处那种 `hash2(i, salt)` 异或晶格 hash（`[hash2]` 全仓仍在用，
+     *   但层④ 不再用它）—— 见 `bakeSandTextureRows` 里 `val n1 = …` 两行的同款注记。
+     *
+     * ## ⛔ 当前形态：**没有「源矩形」**（这一条改写过，请勿回退）
+     * ⚠️ §4.3.7 末条那句「blit 的源矩形必须是 `(0, 0, texW, texH)`」是**原型 `drawImage` 形态**
+     *   的约束（把上沿当源 `y` 偏移会采到纹理外面、整块沙变成灰暗的条纹）。
+     * ⭐ **本函数早已不产 `drawImage`**：[drawSand] 改用 `BitmapShader` 作 [sandPaint] 的填充刷，
+     *   映射由 `Canvas.translate/scale` 承载 ⇒ **采样坐标就是画布坐标**，⛔ 不存在「源矩形」。
+     *   等价约束改由 [sandTexTopPx]（纹理第 0 行的画布 y）+ [sandScaleX] / [sandScaleY]
+     *   表达（见 `bakeSandTextureRows` 之后的赋值）。
+     * ⚠️ 保留出处是为了不丢失原型依据；**别**把它当成对当前实现的字面要求。
      */
     private fun buildSandTexture(w: Float, h: Float) {
         val rawW = w.toDouble()
@@ -2600,84 +3081,24 @@ const val FOAM_TILE_OFF_DISTURB = 1
         val dampG = (PAL_SAND_DAMP shr 8) and 0xFF
         val dampB = PAL_SAND_DAMP and 0xFF
 
-        var y = 0
-        while (y < th) {
-            val v = y.toDouble() / (th - 1).coerceAtLeast(1).toDouble()
-            val base = rowBase[y]
-            val gain = rowMul[y]
-            val dampNear = rowDamp[y]
-            val br = ((base shr 16) and 0xFF).toDouble()
-            val bg = ((base shr 8) and 0xFF).toDouble()
-            val bb = (base and 0xFF).toDouble()
-            var x = 0
-            while (x < tw) {
-                val u = x.toDouble() / (tw - 1).coerceAtLeast(1).toDouble()
-                if (BISECT_SAND_TEX_FLAT) {
-                    px[y * tw + x] = (0xFF shl 24) or
-                        (clampByte(br) shl 16) or (clampByte(bg) shl 8) or clampByte(bb)
-                    x++
-                    continue
-                }
-                // ① 底色原样（⛔ **不乘** `gain` —— 原型只用它调层④颗粒）
-                var r = br
-                var g = bg
-                var b = bb
-                // 层② 宽柔沿岸起伏带（两个八度扭曲 ⇒ 绝不等距）
-                //     逐字照抄原型 `seaside-preview.html:585-587`
-                val w1 = SeasideWaves.vnoise2(u * SAND_TEX_WARP_U1, v * SAND_TEX_WARP_V1, SAND_TEX_WARP_S1)
-                val w2 = SeasideWaves.vnoise2(u * SAND_TEX_WARP_U2, v * SAND_TEX_WARP_V2, SAND_TEX_WARP_S2)
-                val warp = w1 * SAND_TEX_WARP_A1 + w2 * SAND_TEX_WARP_A2
-                val band = SeasideWaves.fsin((v * SAND_TEX_RIPPLE_N + warp) * TAU)
-                // 原型是**乘性**的 `ripK = 1 + SAND_RIPPLE_A·rip`（原型 587 行）
-                val ripK = 1.0 + SAND_TEX_RIPPLE_A * band
-                r *= ripK
-                g *= ripK
-                b *= ripK
-                // 层③ 潮湿斑块：逐字照抄原型 `seaside-preview.html:590-592`
-                val d1 = SeasideWaves.vnoise2(u * SAND_TEX_DAMP_U1, v * SAND_TEX_DAMP_V1, SAND_TEX_DAMP_S1)
-                val d2 = SeasideWaves.vnoise2(u * SAND_TEX_DAMP_U2, v * SAND_TEX_DAMP_V2, SAND_TEX_DAMP_S2)
-                val damp = SeasideWaves.smoothstep(
-                    SAND_TEX_DAMP_LO, SAND_TEX_DAMP_HI, d1 * SAND_TEX_DAMP_M1 + d2 * SAND_TEX_DAMP_M2
-                ) * dampNear * SAND_TEX_DAMP_A
-                if (damp > 0.0) {
-                    r += (dampR - r) * damp
-                    g += (dampG - g) * damp
-                    b += (dampB - b) * damp
-                }
-                // ⭐ 层④ 像素级细颗粒（主导纹理）：两个白噪声相加，各自去中心，
-                //     **乘层①的 `gain`**（原型 600-605 行），最后整体压暗 `1 - damp·0.10`
-                // ⭐⭐ 2026-10-05 **逐字对齐原型**：原来这里用的是 `hash2(x, y)`
-                //   （`((x+1)·0x9E3779B1) ^ ((y+7)·40503)`），那**不是**原型的函数 ——
-                //   原型是 `hash32(imul(y, A) + imul(x, B) + C)` 的**加法**混合。两者都各向同性
-                //   （复算：相邻行相关 −0.004 / −0.001，幅值都是 `(0.062+0.030)/√3·255 = 13.5`）
-                //   ⇒ ⛔ **不是竖纹的成因**，但它是一处实打实的偏离，照原型改。
-                // ⚠️ `2654435761` 必须写成**有符号** Int `-1640531535`（= `0x9E3779B1`）——
-                //   写成整数字面量在 Kotlin 里是 `Long`，会把整条表达式提到 64 位（⛔ 编译不过，
-                //   且与 `Math.imul` 的 32 位回绕语义不同）。同 [SeasideWaves.hash2] 的 KDoc。
-                val n1 = SeasideWaves.hash32(
-                    y * 374761393 + x * 668265263 + 12345
-                ) - 0.5
-                val n2 = SeasideWaves.hash32(
-                    y * 1274126177 + x * (-1640531535) + 777
-                ) - 0.5
-                val grain = (n1 * SAND_TEX_GRAIN_A + n2 * SAND_TEX_GRAIN2_A) * 255.0
-                val darken = 1.0 - damp * SAND_TEX_DAMP_DARKEN
-                r = (r + grain * gain) * darken
-                g = (g + grain * gain) * darken
-                b = (b + grain * gain) * darken
-                val ri = if (r < 0.0) 0 else if (r > 255.0) 255 else r.toInt()
-                val gi = if (g < 0.0) 0 else if (g > 255.0) 255 else g.toInt()
-                val bi = if (b < 0.0) 0 else if (b > 255.0) 255 else b.toInt()
-                px[y * tw + x] = (0xFF shl 24) or (ri shl 16) or (gi shl 8) or bi
-                x++
-            }
-            y++
-        }
+        // ⭐⭐ **像素循环整体搬进 [bakeSandTextureRows]（分帧执行）** —— 这里只做
+        //   「分配 + 逐行常量表 + 建位图/着色器 + 烘第一段」。
+        //   ⛔ 逐像素公式**一字未改**，只是换了个调用位置 ⇒ 最终纹理逐像素不变。
+        sandRowBase = rowBase
+        sandRowMul = rowMul
+        sandRowDamp = rowDamp
+        sandRowBuf = IntArray(tw)
         val bmp = Bitmap.createBitmap(tw, th, Bitmap.Config.ARGB_8888)
-        bmp.setPixels(px, 0, tw, 0, 0, tw, th)
         sandTex = bmp.asImageBitmap()
         sandTexW = tw
         sandTexH = th
+        sandBakeBmp = bmp
+        sandBakeH = th
+        sandBakeRow = 0
+        sandRowsPerFrame = SAND_BAKE_ROWS_MIN
+        sandRowSamples = 0
+        sandSingleRowMs = 0.0
+        bakeSandTextureRows(0, SAND_BAKE_FIRST_ROWS, dampR, dampG, dampB)
         // ── 「画布坐标 → 纹理坐标」的映射：**写进字段，由 [drawSand] 的 Canvas 变换承载** ──
         //   纹理第 0 行 ↔ 画布 y = `sand_tex_top_px`；一画幅像素 ↔ `sx / sy` 个纹理像素。
         // ⛔ **不再用 `BitmapShader.setLocalMatrix`**（2026-10-05）：那层映射在真机上**不生效**
@@ -2690,7 +3111,27 @@ const val FOAM_TILE_OFF_DISTURB = 1
         sandScaleX = sx.toFloat()
         sandScaleY = sy.toFloat()
         sandTexTopPx = (waves?.sand_tex_top_px ?: 0.0).toFloat()
-        // ⛔ `TileMode.CLAMP`：矩阵只被采样到 `[0, tw] × [0, th]`，CLAMP 只是兜底。
+        // ⭐⭐ `isFilterBitmap` **按实际缩放比**决定（2026-10-05 性能轮），⛔ 不再无条件 `true`。
+        //
+        // 【为什么 1080p 上必须关掉双线性】
+        // 1080p 实测：`rawW = 1920`、`rawH = 1080 × (1 − 0.46) = 583.2` ⇒
+        // `area = 1,119,744 ≤ SAND_TEX_MAX_PX = 3,200,000` ⇒ **k = 1.0**（不降采样）⇒
+        // `tw = 1920`、**`sx = 1920/1920 = 1.000000`**；`th = 583`、**`sy = 583/583.2 = 0.999657`**。
+        // ⭐ 即 **1:1 映射**（最大偏差 0.034%，远低于「放大 >1.05」的可视阈值）。
+        // 而**放大倍率 = 1.0 时双线性没有任何需要插值的梯度**：横向 `sx` 恰好 1.0 ⇒ x 方向
+        // 零重采样；纵向 `sy = 0.99966` 全程只累积 `583.2 − 583 = 0.2` 个纹素（底色渐变约
+        // 50 灰阶 / 583 行 ⇒ 0.2 行 ≈ **0.02 灰阶**）⇒ **视觉差异为零**，而代价是
+        // **每像素 4 次 texel fetch 而不是 1 次**，面积 **1.12 Mpx**。
+        // ⇒ 真机实测该层（连同水体场 + 焦散）占 **58ms / 169ms**，是唯一明确超出噪声的一组。
+        //
+        // ⛔ **不无条件写 `false`**：4K（3840×2160）下 `area = 3840 × 1166 = 4.48 M > 3.2 M`
+        // ⇒ `k = 0.845` ⇒ `sx = 0.845`（**缩窄 15%**）⇒ 那时双线性**确有**可测收益，
+        // 无条件关掉会造成 **4K 画质回归**。故判据用 `SAND_TEX_FILTER_MIN`：任一轴缩窄超过
+        // 2% 才开双线性，其余走最近邻。⚠️ 这是**逐设备**的取舍，不是视觉参数变更：
+        // 1080p / 1080i 一律落在「最近邻」分支，而那一支与原先的「双线性」**不可区分**。
+        val minScale = if (sx < SAND_TEX_FILTER_MIN || sy < SAND_TEX_FILTER_MIN) 1 else 0
+        sandPaint.isFilterBitmap = minScale != 0
+        // ⛔ `TileMode.CLAMP`：映射只被采样到 `[0, tw] × [0, th]`，CLAMP 只是兜底。
         val sh = BitmapShader(bmp, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP)
         sandPaint.shader = sh
     }
@@ -3963,6 +4404,9 @@ const val FOAM_TILE_OFF_DISTURB = 1
         wv.step(dt, t, audio.swashReachNow(), audio.shoreWaveBand(wv.h))
 
         // ③ 绘制
+        // ⭐ 沙纹理的分帧烘焙推进（**必须在任何沙相关绘制之前**）——
+        //   烘完时本函数退化成两次 int 比较；未烘完时 [drawSand] 走平色占位。
+        bakeSandTextureStep()
         drawSeaField(t, audio.sEnergy)
         drawCausticNet(t, audio.sEnergy)
         drawSand()
@@ -4117,6 +4561,7 @@ const val FOAM_TILE_OFF_DISTURB = 1
      * @param energy 段落响度（`audio.sEnergy`）—— ⛔ 只改强度乘子（[SeasideAudioMap.causticStrength]）。
      */
     private fun DrawScope.drawCausticNet(t: Double, energy: Double) {
+        if (BISECT_CAUSTIC_OFF) return
         if (opsOf(SeaOpItem.CAUSTIC) <= 0) return
         val strokes = causticStrokes ?: return
         val brush = causticBrush ?: return
@@ -4351,7 +4796,11 @@ const val FOAM_TILE_OFF_DISTURB = 1
         cv.save()
         cv.translate(0f, topPx)
         cv.scale(sandScaleX, sandScaleY)
-        cv.drawPath(sandNativePath, sandPaint)
+        // ⭐⭐ **纹理未烘完 ⇒ 用平色占位**（2026-10-05 首帧黑屏修复）。
+        //   ⛔ **绝不**画半张纹理：那会露出未写入的透明行（比平色更难看，等于「闪低清」）。
+        //   ⛔ 占位期间**不套** `translate/scale` 的平色分支也走同一套路径 ⇒ 形状完全一致，
+        //      只是填充从「纹理」换成 [sandFlatPaint] 的单色 ⇒ 补齐后**逐像素**回到原样。
+        cv.drawPath(sandNativePath, if (sandBakeRow >= sandBakeH) sandPaint else sandFlatPaint)
         cv.restore()
     }
 
@@ -4529,15 +4978,22 @@ const val FOAM_TILE_OFF_DISTURB = 1
      * **结构上就得不到可见的高光**：子轮廓嵌套在湿区内部，`Path` 的默认 **NonZero** 填充规则
      * 把它**并入**湿区 ⇒ 像素集与不加它时**完全相同**。单 path 内**没有**任何能让镜面高光
      * 单独变亮的手段 —— 原型靠的正是 `globalCompositeOperation = 'lighter'` 的**第二次提交**。
-     * ⇒ 现恢复第二次提交，并用 `BlendMode.Plus` 复现那次「lighter」。
+     * ⇒ 现恢复第二次提交，并把混合模式标为 `BlendMode.Plus`（原型那次 `lighter` 的对应物）。
+     * ⚠️ 静止期它**实际按 `SrcOver` 呈现**（离屏层已条件化，见下一节）⇒ **不是**加法。
      *
-     * ## 为什么 `BlendMode.Plus` 在这里可用
-     * ⚠️ `BlendMode.Plus` 要求绘制落在**离屏层**上。`VisualizerStage` 对本效果**无条件**挂载
-     *   `CompositingStrategy.Offscreen`（`VisualizerStage.kt` 的画布层 `graphicsLayer`），
-     *   不是按效果或按帧条件挂的 ⇒ `plus` 在 [drawContent] 的任何位置都可用。
-     *   ⛔ 若将来 `Offscreen` 变成条件挂载，本函数会**静默退化成 `SrcOver`**（HWUI 对
-     *   `PorterDuff.Mode.ADD` 在非离屏目标上按 `SrcOver` 处理）⇒ 高光又变回不可见但**不报错**。
-     *   ⇒ 这条依赖是**结构性的**，改动 `VisualizerStage` 的合成策略前必须先来这里。
+     * ## ⚠️ `BlendMode.Plus` 的当前落地形态（2026-10-05 定稿，已与原前提不同）
+     * 本函数**仍然**提交一次 `BlendMode.Plus`（原型那次 `lighter` 的等价物），但
+     * **所有者真机确认「镜面高光没啥意义」** ⇒ 静止期它**不再以加法呈现**。
+     *
+     * 机制：`BlendMode.Plus` 需要落在**离屏层**上（HWUI 对 `PorterDuff.Mode.ADD` 在非离屏
+     * 目标上按 `SrcOver` 处理）。`VisualizerStage` 的画布层 `graphicsLayer` 过去**无条件**挂
+     * `CompositingStrategy.Offscreen`，现已按 `VisualizerStage.kt` 的 **T1.7.1** 改为
+     * **仅 `fadeAlpha < 1f`（交叉淡入期间）才挂** ⇒ 静止期走 `SrcOver`。
+     *
+     * ⇒ **结论（定稿）**：静止期的镜面高光就是一次普通的半透明覆盖，**视觉上所有者已确认无影响**
+     * （原话：「湿沙效果很好，镜面高光没啥意义」）。⛔ **不要**为恢复加法而把 [sheenBrush]
+     * 预合成进 [wetBrush]（KDoc 已判定那是视觉偏差），⛔ 也**不要**为此重新无条件挂回
+     * `Offscreen`（那会让静止期整屏多一张离屏缓冲，1080p ≈ 16.6 MB/帧带宽，收益为零）。
      *
      * ## ⛔ 用 [sheenBrush]、⛔ **不**复用 [wetBrush]
      * 原型那次 `lighter` 加的是 **`sheenStrip`（只有高光 ramp）**。⛔ 复用 [wetBrush]（湿沙 + 高光
@@ -4545,9 +5001,13 @@ const val FOAM_TILE_OFF_DISTURB = 1
      *   （原型目标 = `docs/seaside-preview.html`）。⇒ [buildWetBrush] 另烘一支 [sheenBrush]，
      *   色标**逐字照抄** `seaside-preview.html:2013-2017`。⛔ 它同样**只在烘焙期构造**
      *   （`Brush.` ⛔ 不许出现在本函数体内，见 [SeasideTest] ⑤）。
-     * ⚠️ **残留偏差（已上报，待裁决）**：原型的条是**逐列**锚定在 `shoreYs[i]` 上的 ⇒ 一支共享刷
-     *   拿不到那个逐列锚定，可见带会落在 ramp 的中段而不是原型那样从 `t ≈ 0.37` 走到 `1`。
-     *   本支取与 [wetBrush] **完全相同**的 span，理由见 [sheenBrush] 的 KDoc。
+     * ⚠️ **已登记的已知偏差（⛔ 不是待办，⛔ 不修）**：原型的条是**逐列**锚定在 `shoreYs[i]` 上的
+     *   ⇒ 一支共享刷拿不到那个逐列锚定，可见带会落在 ramp 的中段，而不是原型那样从
+     *   `t ≈ 0.37` 走到 `1`。本支取与 [wetBrush] **完全相同**的 span，理由见 [sheenBrush] 的 KDoc。
+     *   ⚠️ 离屏层条件化（见上一节）之后这条偏差**更明显**（高光不再是加法），
+     *   **所有者真机看过并接受**（原话：「湿沙效果很好，镜面高光没啥意义」）。
+     *   ⛔ **不要**为了消除它而把 [sheenBrush] 预合成进 [wetBrush] —— 那样会在高光带里
+     *   把湿沙 ramp 也叠加一遍，**是更大的偏差**（上一节已判定）。
      *
      * ⚠️ **调用顺序**：⛔ 必须排在 [drawWetWash] **之后** —— `Plus` 是**叠加**语义，
      *   高光必须加在**已经画好的湿沙**之上（原型顺序：`drawSand → drawWetWash → drawSheen`）。
@@ -5095,6 +5555,7 @@ const val FOAM_TILE_OFF_DISTURB = 1
      * @param ka 该浪的合成泡沫强度 `0..1`。
      */
     private fun DrawScope.drawSwellBody(w0: Double, ka: Double, dir: Int) {
+        if (BISECT_SWELL_BODY_OFF) return
         if (ka < KA_BODY_MIN) return
         val n = waves?.column_count ?: return
         val front = (dir * SWELL_BODY_FRONT * w0).toFloat()
@@ -5373,6 +5834,7 @@ const val FOAM_TILE_OFF_DISTURB = 1
      * @param ka 该浪的合成泡沫强度（≥ [KA_FOAM_MIN] 才会被调）。
      */
     private fun DrawScope.drawSeaFoamWash(w0: Double, ka: Double, dir: Int) {
+        if (BISECT_SEA_FOAM_WASH_OFF) return
         if (opsOf(SeaOpItem.SEA_FOAM_WASH) <= 0) return
         val n = waves?.column_count ?: return
         val wf = w0.toFloat()
@@ -5457,6 +5919,7 @@ const val FOAM_TILE_OFF_DISTURB = 1
      * @param t 相对首帧的毫秒。
      */
     private fun DrawScope.drawOpenSeaFoam(w0: Double, ka: Double, t: Double, lane: Int, dir: Int) {
+        if (BISECT_OPEN_SEA_FOAM_OFF) return
         if (opsOf(SeaOpItem.OPEN_SEA_FOAM) <= 0) return
         val wf = w0.toFloat()
         val cols = SeasideWaves.COLS
@@ -5692,6 +6155,7 @@ const val FOAM_TILE_OFF_DISTURB = 1
      * @param lane 该浪的泳道（`1 + serial % 3`，⛔ 恒 `!= 0`）。
      */
     private fun DrawScope.drawDisturbance(w0: Double, ka: Double, t: Double, lane: Int, dir: Int) {
+        if (BISECT_DISTURBANCE_OFF) return
         if (opsOf(SeaOpItem.DISTURBANCE) <= 0) return
         val wf = w0.toFloat()
         val cols = SeasideWaves.COLS
@@ -5780,6 +6244,7 @@ const val FOAM_TILE_OFF_DISTURB = 1
     private fun DrawScope.drawFoamLace(
         w0: Double, ka: Double, t: Double, lane: Int, isLead: Boolean, dir: Int,
     ) {
+        if (BISECT_FOAM_LACE_OFF) return
         val n = opsOf(SeaOpItem.FOAM_LACE)
         if (n <= 0) return
         if (ka < KA_FOAM_MIN) return
@@ -6498,6 +6963,7 @@ const val FOAM_TILE_OFF_DISTURB = 1
      * @param t 相对首帧的毫秒。
      */
     private fun DrawScope.drawRipples(t: Double) {
+        if (BISECT_SANDGRAIN_OFF) return
         val wv = waves ?: return
         val batches = opsOf(SeaOpItem.SAND_GRAIN)
         if (batches <= 0) return
