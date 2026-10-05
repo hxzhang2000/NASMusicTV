@@ -222,7 +222,9 @@ fun WeatherRadioScreen(
                         onClick = { onPlaySong(song, index) },
                         mode = SongRowMode.MODE_ROW,
                         index = index,
-                        isFavorited = song.id in favoriteIds,
+                        // M3 修复（2026-10-06，代码审查报告 §4）：天气电台的合成 id（nas_/nasf_
+                        // 前缀）不在收藏集合中，旧判定心形恒空；剥离前缀后按真实 id 匹配。
+                        isFavorited = song.id.removePrefix("nasf_").removePrefix("nas_") in favoriteIds,
                         onToggleFavorite = { onToggleFavorite(song) },
                         isInQueue = song.id in queueSongIds,
                         onToggleQueue = { onToggleQueue(song) },

@@ -1391,7 +1391,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
         for (i in dimensions.indices) {
             val opt = dimensions[i].options.getOrNull(selections.getOrNull(i) ?: 0)
                 ?: continue
-            if (opt.label == "所有") continue
+            if (opt.isAll) continue  // M8 修复：结构化标志替代文案哨兵，label 本地化不影响判定
             if (opt.keywords.isEmpty()) continue
             // 从该选项的关键词列表中随机选一个
             keywordList.add(opt.keywords.random())
@@ -1414,7 +1414,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
                     for (i in dimensions.indices) {
                         val opt = dimensions[i].options.getOrNull(selections.getOrNull(i) ?: 0)
                             ?: continue
-                        if (opt.label == "所有") continue
+                        if (opt.isAll) continue  // M8 修复：结构化标志替代文案哨兵，label 本地化不影响判定
                         if (opt.keywords.isEmpty()) continue
                         combo.add(opt.keywords.random())
                     }
@@ -1427,7 +1427,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
                     for (i in dimensions.indices) {
                         val opt = dimensions[i].options.getOrNull(selections.getOrNull(i) ?: 0)
                             ?: continue
-                        if (opt.label == "所有") continue
+                        if (opt.isAll) continue  // M8 修复：结构化标志替代文案哨兵，label 本地化不影响判定
                         labels.add(opt.label)
                     }
                     return labels.filter { it.isNotBlank() }.joinToString(" ").trim()

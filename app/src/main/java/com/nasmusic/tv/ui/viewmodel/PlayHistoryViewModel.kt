@@ -32,11 +32,17 @@ class PlayHistoryViewModel(app: Application) : AndroidViewModel(app) {
 
     /**
      * 记录播放事件（歌曲切换或播放完成时调用）
+     *
+     * M3 修复（2026-10-06，代码审查报告 §4）：剥离天气电台合成 id 前缀（nas_/nasf_）
+     * 再建 PlayRecord——旧实现按合成 id 记账，同一首歌以两个 id 出现在时间线，
+     * uniqueSongsPlayed 计两次、topSongs 分裂。与 MainViewModel.recordPlay 的
+     * stripSyntheticRadioPrefix 同口径（改前缀时两处同步）。
      */
     fun recordPlayEvent(song: Song, durationPlayedMs: Long) {
         if (durationPlayedMs < 5000) return // 少于 5 秒不计入
+        val songId = song.id.removePrefix("nasf_").removePrefix("nas_")
         val record = PlayRecord(
-            songId = song.id,
+            songId = songId,
             title = song.title,
             artist = song.artist,
             album = song.album,

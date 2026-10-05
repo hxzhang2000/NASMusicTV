@@ -88,3 +88,14 @@ class SleepTimerController(
     /** 是否处于计时中 */
     fun isRunning(): Boolean = _state.value is State.Running
 }
+
+/**
+ * L11 修复（2026-10-06，代码审查报告 §5）：剩余分钟公式收敛——此前 NowPlayingScreen
+ * 三处内联 `(endsAtMs - now + 59_999) / 60_000`，与 [SleepTimerController.remainingMinutes]
+ * （可注入时钟版）发生口径漂移。本顶层扩展与 controller 版逐位同义（向上取整），
+ * 并补 UI 所需下限 1（显示层不出现「0 分钟」，到期前最后一分钟仍显示 1）。
+ * ⚠️ 必须是**文件顶层**扩展（类内成员扩展跨文件不可见，首次实现曾因此编译失败）。
+ */
+fun SleepTimerController.State.Running.remainingMinutesDisplay(
+    nowMs: Long = System.currentTimeMillis()
+): Int = ((endsAtMs - nowMs + 59_999) / 60_000).toInt().coerceAtLeast(1)

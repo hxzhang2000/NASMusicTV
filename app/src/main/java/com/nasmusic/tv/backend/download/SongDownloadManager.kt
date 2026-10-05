@@ -114,6 +114,18 @@ class SongDownloadManager(
     private var cancelRequested = false
 
     /**
+     * M4 修复（2026-10-06）：下载后置段（封面/歌词/rename/embed/落库）的取消检查点。
+     * 该窗口内 currentCall 已置 null、cancelAll 的 call.cancel() 空操作，
+     * 若不主动检查，cancelAll 标记的 FAILED 会被随后的 upsert(COMPLETED) 无条件覆盖。
+     */
+    private fun checkCancelled() {
+        if (cancelRequested) throw DownloadCancelledException()
+    }
+
+    /** M4 修复：取消专用异常——executeDownload 的重试判定看到后不重试、直接落 FAILED */
+    private class DownloadCancelledException : java.io.IOException("download cancelled by user")
+
+    /**
      * 当前进行中的下载 Call。
      * 仅 cancel 协程不会中断 OkHttp 的阻塞 socket 读，必须显式 call.cancel()，
      * 否则 cancelAll() 后旧下载仍会继续写盘（覆盖窗口）。
@@ -316,12 +328,20 @@ class SongDownloadManager(
         }
 
         // 6. 封面 + 歌词
+        // M4 修复（2026-10-06，代码审查报告 §4）：downloadFile 返回后 currentCall 已在
+        // finally 置 null，此后 cancelAll 的 call.cancel() 一律空操作——而 cancelAll 会把
+        // 未完成任务标 FAILED，随后下方无条件 upsert(COMPLETED) 覆盖 FAILED，取消被静默
+        // 吞掉、通知仍弹「已下载」。修复：每个 IO 边界（封面/歌词/rename/embed）检查
+        // cancelRequested，已取消则走 CancelledException（executeDownload 的重试判定
+        // 看到后不再重试、直接落 FAILED——与 call.cancel() 中断下载的路径同语义）。
+        checkCancelled()
         coverWriter.writeArtistCover(p.artistDir, song)
         val coverBytes = coverWriter.writeAlbumCover(p.albumDir, song)
         val lrc = runCatching { lyricsProvider(song) }.getOrNull()
 
         // 7. 原子 rename 到最终路径（必须在 embed 之前，否则 .part 扩展名
         //    不在 EMBEDDABLE 集合中，supportsEmbedding() 返回 false 导致永远不内嵌）
+        checkCancelled()
         if (!p.tmpFile.renameTo(p.finalFile)) {
             // 跨目录 rename 失败（极少数情况）：复制 + 删除
             val copied = runCatching { p.tmpFile.copyTo(p.finalFile, overwrite = true) }.isSuccess
@@ -340,6 +360,8 @@ class SongDownloadManager(
         var lyricPath: String? = null
         var embedded = false
         try {
+            // M4 修复：embed 前终检（这是 upsert(COMPLETED) 前的最后取消机会）
+            checkCancelled()
             // 8. 元数据内嵌（失败走旁路）
             val fileExt = p.finalFile.extension.lowercase()
             AppLog.d(TAG, "embed: file=${p.finalFile.name}, ext=$fileExt, supportsEmbed=${MediaTagWriter.supportsEmbedding(p.finalFile)}, coverBytes=${coverBytes?.size}, lrc=${lrc?.take(50)}")

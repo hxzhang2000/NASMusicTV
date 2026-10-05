@@ -309,7 +309,33 @@ class SongExporter(
                 ?: current.createDirectory(dir)
                 ?: return null
         }
-        return current.findFile(fileName) ?: current.createFile("audio/*", fileName)
+        return current.findFile(fileName) ?: current.createFile(mimeTypeFor(fileName), fileName)
+    }
+
+    /**
+     * L9 修复（2026-10-06，代码审查报告 §5）：SAF 分支按扩展名映射 MIME——
+     * 旧实现对所有文件（含封面 jpg / 歌词 lrc）硬编码 audio 通配 MIME，导出的
+     * 封面/歌词在部分 DocumentsProvider 下被识别为音频。（注：createFile 的
+     * mimeType 对多数 Provider 只是建议值，真实类型由扩展名推导；本修复消除
+     * 依赖建议值的场景。）
+     * ⚠️ 注释内不得出现斜杠+星号字面（Kotlin 块注释可嵌套，会吞掉后续代码）。
+     */
+    private fun mimeTypeFor(fileName: String): String {
+        val ext = fileName.substringAfterLast('.', "").lowercase()
+        return when (ext) {
+            "jpg", "jpeg" -> "image/jpeg"
+            "png" -> "image/png"
+            "gif" -> "image/gif"
+            "webp" -> "image/webp"
+            "lrc", "txt" -> "text/plain"
+            "mp3" -> "audio/mpeg"
+            "flac" -> "audio/flac"
+            "wav" -> "audio/wav"
+            "m4a" -> "audio/mp4"
+            "aac" -> "audio/aac"
+            "ogg", "opus" -> "audio/ogg"
+            else -> "audio/*"
+        }
     }
 
     /** 音频相对路径（歌手/专辑/文件名）。原 volumeId/song 为未使用的死参数，易误导「按卷隔离」 */

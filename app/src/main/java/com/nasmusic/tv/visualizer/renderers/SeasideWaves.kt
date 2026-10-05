@@ -378,9 +378,9 @@ internal open class SeasideWaves(widthPx: Float, heightPx: Float) {
         /** 推进速度（每 ms 的 `Δy`）。⭐ 出生时定死、途中不变。 */
         var v: Double = 0.0
 
-        /** 这条浪自己的涌高系数（`0.62 + 0.78·fbmNorm` ⇒ `0.62..1.40`）。
-         *  ⚠️ **当前不参与任何几何**（逐列 `reachK` 已被移除，§5.2 / §5.5）⇒ 保留字段仅为对齐原型。 */
-        var reach: Double = 1.0
+        // L14 修复（2026-10-06，代码审查报告 §5）：删除死字段 reach——逐浪涌高系数
+        // 只写不读（原型 §5.2/§5.5 已移除逐列 reachK），保留仅为对齐原型字段表；
+        // 连同 :676/:966 两处写入一并移除（原型端口不再携带该字段）。
 
         /** `3300 + serial·733` —— ⭐ 破碎线浪脊形状的唯一来源。 */
         var seed: Int = 0
@@ -673,7 +673,6 @@ internal open class SeasideWaves(widthPx: Float, heightPx: Float) {
             wv.state = W_EMPTY
             wv.y = 0.0
             wv.v = 0.0
-            wv.reach = 1.0
             wv.seed = 0
             wv.serial = -1
             wv.alive_t = 0.0
@@ -962,8 +961,6 @@ internal open class SeasideWaves(widthPx: Float, heightPx: Float) {
         wv.state = W_ADVANCING
         wv.y = 0.0
         wv.v = 1.0 / travel
-        // ⚠️ 原型此处用的是**自增之后**的 waveSerial（逐位照抄）
-        wv.reach = 0.62 + 0.78 * fbm_norm(wave_serial * 2.11, sd + 7, 2)
         wv.seed = sd
         wv.alive_t = 0.0
         wv.fade_t = 0.0

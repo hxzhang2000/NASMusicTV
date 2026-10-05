@@ -71,6 +71,8 @@ import com.nasmusic.tv.data.model.Lyrics
 import com.nasmusic.tv.data.model.LyricsHighlightMode
 import com.nasmusic.tv.data.model.PlayMode
 import com.nasmusic.tv.data.model.Song
+import com.nasmusic.tv.player.SleepTimerController
+import com.nasmusic.tv.player.remainingMinutesDisplay
 import com.nasmusic.tv.data.model.isRadioSong
 import com.nasmusic.tv.ui.RegisterDialogBackHandler
 import com.nasmusic.tv.ui.components.LyricsView
@@ -443,7 +445,9 @@ fun NowPlayingScreen(
                             label = com.nasmusic.tv.data.model.LyricsSource.LOCAL_FILE.displayName,
                             available = currentSource == com.nasmusic.tv.data.model.LyricsSource.LOCAL_FILE,
                             selected = currentSource == com.nasmusic.tv.data.model.LyricsSource.LOCAL_FILE,
-                            onClick = { }
+                            // L11 修复（2026-10-06）：纯展示元素——传 null 使其不可聚焦，
+                            // 原 onClick = { } 会让 D-Pad 停在一个无行为的焦点上
+                            onClick = null
                         )
                         Spacer(modifier = Modifier.width(6.dp))
                         SourceTag(
@@ -501,8 +505,7 @@ fun NowPlayingScreen(
                                 is com.nasmusic.tv.player.SleepTimerController.State.Running ->
                                     stringResource(
                                         R.string.np_sleep_timer_on,
-                                        ((st.endsAtMs - System.currentTimeMillis() + 59_999) / 60_000)
-                                            .toInt().coerceAtLeast(1)
+                                        st.remainingMinutesDisplay()  // L11：公式收敛到 SleepTimerController.State
                                     )
                                 else -> stringResource(R.string.np_sleep_timer_off)
                             },
@@ -1129,10 +1132,11 @@ private fun SourceTag(
     label: String,
     available: Boolean,
     selected: Boolean,
-    onClick: () -> Unit
+    // L11 修复：onClick 允许 null —— 纯展示标签（如 LOCAL_FILE 来源标记）不应可聚焦
+    onClick: (() -> Unit)?
 ) {
     FocusableSurface(
-        onClick = { if (available) onClick() },
+        onClick = onClick?.let { cb -> { if (available) cb() } } ?: {},
         modifier = Modifier,
         shape = RoundedCornerShape(6.dp),
         focusedScale = 1.1f,
@@ -1147,7 +1151,7 @@ private fun SourceTag(
                        else NasMusicColors.TextPrimary,
         focusedContentColor = if (selected) Color.Black else NasMusicColors.Primary,
         pressedScale = 0.95f,
-        showFocusBorder = available
+        showFocusBorder = available && onClick != null  // L11：无行为标签不画焦点框
     ) {
         Text(
             text = label,
@@ -1786,8 +1790,7 @@ private fun NowPlayingPortrait(
                                     is com.nasmusic.tv.player.SleepTimerController.State.Running ->
                                         stringResource(
                                             R.string.np_sleep_timer_on,
-                                            ((st.endsAtMs - System.currentTimeMillis() + 59_999) / 60_000)
-                                                .toInt().coerceAtLeast(1)
+                                            st.remainingMinutesDisplay()  // L11：公式收敛到 SleepTimerController.State
                                         )
                                     else -> stringResource(R.string.np_sleep_timer_off)
                                 },
@@ -2227,7 +2230,7 @@ private fun PortraitSecondaryChips(
                 is com.nasmusic.tv.player.SleepTimerController.State.Running ->
                     stringResource(
                         R.string.np_sleep_timer_on,
-                        ((st.endsAtMs - System.currentTimeMillis() + 59_999) / 60_000).toInt().coerceAtLeast(1)
+                        st.remainingMinutesDisplay()
                     )
                 else -> stringResource(R.string.np_sleep_timer_off)
             },

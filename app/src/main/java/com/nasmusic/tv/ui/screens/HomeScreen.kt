@@ -393,16 +393,13 @@ private fun StatCard(
     label: String,
     value: String
 ) {
-    FocusableSurface(
-        onClick = {},
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(12.dp),
-        focusedScale = 1.04f,
-        animationDurationMs = 200,
-        containerColor = NasMusicColors.Surface.copy(alpha = 0.5f),
-        focusedContainerColor = NasMusicColors.Primary.copy(alpha = 0.15f),
-        contentColor = NasMusicColors.TextPrimary,
-        focusedContentColor = NasMusicColors.Primary
+    // L11 修复（2026-10-06，代码审查报告 §5）：StatCard 是纯展示卡片——原实现借
+    // FocusableSurface 的 clickable 获得焦点（D-Pad 会停在一个无行为的可聚焦节点上）；
+    // 改为普通 Box 容器，视觉不变、不再参与焦点搜索。
+    androidx.compose.foundation.layout.Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(NasMusicColors.Surface.copy(alpha = 0.5f), RoundedCornerShape(12.dp))
     ) {
         Column(
             modifier = Modifier
@@ -419,7 +416,7 @@ private fun StatCard(
             Text(
                 text = label,
                 fontSize = FontSize.body(),
-                color = LocalFocusableContentColor.current
+                color = NasMusicColors.TextSecondary
             )
         }
     }

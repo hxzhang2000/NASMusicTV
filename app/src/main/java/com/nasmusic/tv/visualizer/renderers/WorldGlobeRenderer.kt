@@ -31,8 +31,8 @@ import kotlin.math.roundToInt
 /**
  * E41「世界」3D 版渲染器 —— three-globe（WebView + WebGL）承载。
  *
- * 与旧 2D 版 [WorldRenderer] 的关系：**3D 版复用 E41「世界」序号**，工厂只
- * 引用本类；[WorldRenderer] 保留在源码中但不被任何调用点引用（隐藏）。效果
+ * 与旧 2D 版 WorldRenderer 的关系：**3D 版复用 E41「世界」序号**，工厂只
+ * 引用本类；旧 2D 版已整文件删除归档（M11 修复，2026-10-06）。效果
  * 列表仍是 28 项、E41 行不新增。
  *
  * ## 为什么用 WebView 而不是纯 Canvas / OpenGL ES

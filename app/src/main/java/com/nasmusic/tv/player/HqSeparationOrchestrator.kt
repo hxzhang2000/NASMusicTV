@@ -428,6 +428,13 @@ class HqSeparationOrchestrator(
                         // 分离完成，关闭快速模式 DSP + 切换到伴奏文件 + 恢复播放
                         val totalSec = (System.currentTimeMillis() - separationStartTimeMs) / 1000.0
                         AppLog.d(TAG, "enableHighQualityRemoval: completed in ${String.format("%.1f", totalSec)}s")
+                        // M5 修复（2026-10-06）：分离结果（伴奏/人声 WAV，单曲 30-60MB）落盘后
+                        // 立即触发 LRU 淘汰——本地歌曲路径不走 saveOriginalFile，旧实现下
+                        // 淘汰从不触发、缓存无上限增长（500MB/10 文件双上限失效）。
+                        // 注意时点：须在 switchToAccompaniment 之前执行，防刚落盘的目标
+                        // 文件在极端 LRU 淘汰下被误删后仍被播放（cleanupCache 按
+                        // lastModified 淘汰最旧，本曲文件是最新写入、不会命中）。
+                        accompanimentCache?.cleanup()
                         _separationProgress.value = 1f to appContext.getString(R.string.hq_progress_done, totalSec)
                         _hqSuccess.value = appContext.getString(R.string.hq_success_separation_done, totalSec)
                         host.setFastVocalRemoval(false)

@@ -31,13 +31,33 @@ class MvPersistentCache(context: Context) {
         private const val MAX_ENTRIES = 5000
     }
 
-    init {
-        load()
+    /**
+     * L5 修复（2026-10-06，代码审查报告 §5）：load 从构造期 init 块改为首次访问惰性加载。
+     * 本类在 NasMusicApp.onCreate（主线程）构造，旧实现同步读盘 + Gson 解析 5000 条
+     * JSON 会拖慢冷启动（潜在主线程卡顿）；首次真正 get/put 时才读盘。
+     * 线程安全：volatile 双检 + 加载后不可变标志，与旧语义一致（只有主线程与
+     * mvVM 协程访问，双检足够；写操作本身已在调用方串行化）。
+     */
+    @Volatile
+    private var loaded = false
+
+    private fun ensureLoaded() {
+        if (loaded) return
+        synchronized(this) {
+            if (!loaded) {
+                load()
+                loaded = true
+            }
+        }
     }
 
-    fun get(songId: String): MvCacheEntry? = cache[songId]
+    fun get(songId: String): MvCacheEntry? {
+        ensureLoaded()
+        return cache[songId]
+    }
 
     fun put(entry: MvCacheEntry) {
+        ensureLoaded()
         cache[entry.songId] = entry
         if (cache.size > MAX_ENTRIES) evictOldest()
         save()
@@ -48,6 +68,7 @@ class MvPersistentCache(context: Context) {
      * 已有条目则 playCount++ + 更新 bvid/lastPlayedAt；无则新建。
      */
     fun markCompleted(songId: String, songTitle: String, songArtist: String, bvid: String, mvTitle: String) {
+        ensureLoaded()
         val existing = cache[songId]
         val entry = MvCacheEntry(
             songId = songId,
@@ -65,6 +86,7 @@ class MvPersistentCache(context: Context) {
     }
 
     fun remove(songId: String) {
+        ensureLoaded()
         cache.remove(songId)
         save()
     }
@@ -78,6 +100,7 @@ class MvPersistentCache(context: Context) {
      *（save 先 toMap 快照、clear 后删文件、save 再 rename 落盘旧数据）。
      */
     fun clear() {
+        ensureLoaded()
         synchronized(saveLock) {
             cache.clear()
             try {
@@ -90,10 +113,14 @@ class MvPersistentCache(context: Context) {
     }
 
     /** 导出全部条目（供备份用） */
-    fun exportAll(): List<MvCacheEntry> = cache.values.toList()
+    fun exportAll(): List<MvCacheEntry> {
+        ensureLoaded()
+        return cache.values.toList()
+    }
 
     /** 导入条目（恢复备份用，覆盖现有数据） */
     fun importAll(entries: List<MvCacheEntry>) {
+        ensureLoaded()
         cache.clear()
         entries.forEach { cache[it.songId] = it }
         if (cache.size > MAX_ENTRIES) evictOldest()

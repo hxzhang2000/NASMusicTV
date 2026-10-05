@@ -39,7 +39,7 @@ object VisualizerRendererFactory {
      * [context] 供 View 型渲染器（如 three-globe 的 WebView）创建 View 用；
      * 现有所有 Canvas 渲染器都忽略它，保持原实现。WORLD 分支已切到
      * 3D 版 [WorldGlobeRenderer]（WebView + three-globe）；旧 2D 版
-     * [WorldRenderer] 保留在源码中、不再被本工厂引用（隐藏）。
+     * WorldRenderer 已整文件删除归档（M11 修复，2026-10-06，原 2106 行零实例化死代码）。
      */
     fun create(theme: VisualizerTheme, context: Context): VisualizerRenderer = when (theme) {
         VisualizerTheme.CIRCULAR_RING -> CircularRingRenderer()

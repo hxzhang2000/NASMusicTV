@@ -201,10 +201,15 @@ class SmartRadioManager(
      * F2-3 首页列表化：仅生成批次供首页浏览（不自动播放，用户点卡片后播）。
      * 已有电台上下文（currentSeed）则视为"换一批"（排除已推荐歌曲），
      * 否则无种子启动（偏好加权随机）。回调内不播歌，只更新首页批次列表。
+     *
+     * M2 修复（2026-10-06，代码审查报告 §4）：有种子时改走 [skip] 的生成路径
+     * （只清当前批次、保留跨批次去重历史与曲库缓存）。旧实现走
+     * startFromCurrentSong → stopInternal(resetState=true) 全量重置——已推荐
+     * 歌曲可被立即重新推荐（去重失效），且每次重新分页拉全量曲库。
      */
     fun generateOnly(onBatchReady: (List<Song>, SeedContext) -> Unit) {
         val seed = currentSeed
-        if (seed != null) startFromCurrentSong(seed, onBatchReady)
+        if (seed != null) skip(onBatchReady)
         else startFromScratch(onBatchReady)
     }
 

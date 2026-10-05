@@ -81,16 +81,22 @@ enum class BrowseDimension(
     /**
      * 浏览选项。
      *
-     * @param label 显示名，如"粤语""萨克斯"。ALL 保留特殊含义。
+     * M8 修复（2026-10-06，代码审查报告 §4）：新增 [isAll] 结构化标志——此前
+     * 调用方用 `opt.label == "所有"` 文案哨兵判定，label 一旦本地化（EN locale）
+     * 「所有」过滤与维度判断会整体静默失效。isAll 不依赖文案，展示名可自由本地化。
+     *
+     * @param label 显示名，如"粤语""萨克斯"。[ALL] 的展示名，仅 UI 展示用。
      * @param keywords 构建搜索词时随机取一个，ALL 时此列表无关。
      */
     data class Option(
         val label: String,
-        val keywords: List<String> = emptyList()
+        val keywords: List<String> = emptyList(),
+        /** 该选项是否为「所有」（不参与搜索词拼接）。判定一律用此标志，⛔ 不得比较 label 文案 */
+        val isAll: Boolean = false
     ) {
         companion object {
             /** "所有"选项，表示该维度不参与搜索词拼接 */
-            val ALL = Option("所有")
+            val ALL = Option("所有", isAll = true)
         }
     }
 }

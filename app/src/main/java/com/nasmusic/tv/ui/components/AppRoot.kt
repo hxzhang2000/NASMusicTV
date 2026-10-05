@@ -128,7 +128,9 @@ fun AppRoot(
     // Handler 轮询驱动，顶层收集会每秒驱动 AppRoot 全树重组（含 LazyColumn 状态与
     // D-Pad 焦点搜索）；下沉到 NowPlayingScreen 分支内收集（与 H-3 频谱流下沉同向）。
     val networkCoverUrl by viewModel.networkCoverUrl.collectAsState(initial = null)
-    val songDownloadStates by viewModel.songDownloadStates.collectAsState(initial = emptyMap())
+    // M7 修复（2026-10-06，代码审查报告 §4）：songDownloadStates 不再顶层收集——
+    // 512KB 步长的高频下载进度会驱动 AppRoot 顶层读取位置重组。已下沉到
+    // Library/Mine/AlbumDetail/ArtistDetail/WeatherRadio 五个分支内自行收集。
     val songs by viewModel.songs.collectAsState(initial = UiState.Loading as UiState<List<Song>>)
     val isLoading by viewModel.isLoading.collectAsState(initial = false)
     val isLibraryLoading by viewModel.isLibraryLoading.collectAsState(initial = false)
@@ -288,12 +290,10 @@ fun AppRoot(
                     isLoading = isLoading,
                     isLibraryLoading = isLibraryLoading,
                     isConnected = isConnected,
-                    songDownloadStates = songDownloadStates,
                     onPickSongForPlaylist = { song -> pickerSong = song }
                 )
                 Screen.Mine -> MineBranch(
                     viewModel = viewModel,
-                    songDownloadStates = songDownloadStates
                 )
                 Screen.Queue -> QueueBranch(
                     viewModel = viewModel,
@@ -326,12 +326,10 @@ fun AppRoot(
                 )
                 Screen.AlbumDetail -> AlbumDetailBranch(
                     viewModel = viewModel,
-                    songDownloadStates = songDownloadStates,
                     onPickSongForPlaylist = { song -> pickerSong = song }
                 )
                 Screen.ArtistDetail -> ArtistDetailBranch(
                     viewModel = viewModel,
-                    songDownloadStates = songDownloadStates,
                     onPickSongForPlaylist = { song -> pickerSong = song }
                 )
                 Screen.Equalizer -> EqualizerBranch(
@@ -346,7 +344,6 @@ fun AppRoot(
                 )
                 Screen.WeatherRadio -> WeatherRadioBranch(
                     viewModel = viewModel,
-                    songDownloadStates = songDownloadStates,
                     onPickSongForPlaylist = { song -> pickerSong = song }
                 )
                 Screen.PlayStats -> PlayStatsBranch(

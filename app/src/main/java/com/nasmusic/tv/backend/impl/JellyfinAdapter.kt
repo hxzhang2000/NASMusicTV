@@ -437,29 +437,38 @@ class JellyfinAdapter : BackendAdapter {
 
     override suspend fun getYears(): List<Int> = withContext(Dispatchers.IO) {
         try {
-            // 利用 Jellyfin 的 /Items/Filters 端点获取年份列表
-            val url = "$baseUrl/Items/Filters?UserId=$userId&IncludeItemTypes=Audio"
-            // 主题 C②（2026-09-22 审查，待确认中）：/Items/Filters 为 Emby 旧端点，
-            // Jellyfin 现行为 /Items/Filters2。端点暂不变更，先补诊断日志：真机上若
-            // 「年代」恒空且出现本行日志，即可确认 404 并切换端点。
-            val json = executeJsonRequest(url) ?: run {
-                AppLog.w("JellyfinAdapter", "getYears: /Items/Filters null (endpoint may not exist) url=$url")
-                return@withContext emptyList()
-            }
-            val yearsArray = json.getAsJsonArray("Years") ?: run {
-                AppLog.w("JellyfinAdapter", "getYears: response has no Years array (endpoint legacy?) url=$url")
-                return@withContext emptyList()
-            }
-            val years = mutableListOf<Int>()
-            for (i in 0 until yearsArray.size()) {
-                val year = yearsArray[i].asInt
-                if (year > 0) years.add(year)
-            }
-            years.sortedDescending()
+            // L6 修复（2026-10-06，代码审查报告 §5）：/Items/Filters 为 Emby 旧端点，
+            // 部分 Jellyfin 版本返回 404/null → 年代筛选整页空白。改为先试 Jellyfin 现行
+            // /Items/Filters2，失败或无 Years 字段再回退旧端点（两代服务器都兼容）。
+            val years = fetchYearsFromEndpoint("Filters2")
+                ?: fetchYearsFromEndpoint("Filters")
+            years ?: emptyList()
         } catch (e: Exception) {
             AppLog.e("JellyfinAdapter", "getYears failed", e)
             emptyList()
         }
+    }
+
+    /**
+     * L6 修复：单端点取年份。返回 null 表示该端点不可用（应回退另一端点）；
+     * 返回空列表表示端点可用但无年份（不再回退）。
+     */
+    private suspend fun fetchYearsFromEndpoint(endpoint: String): List<Int>? {
+        val url = "$baseUrl/Items/$endpoint?UserId=$userId&IncludeItemTypes=Audio"
+        val json = executeJsonRequest(url) ?: run {
+            AppLog.w("JellyfinAdapter", "getYears: /Items/$endpoint returned null (endpoint may not exist)")
+            return null
+        }
+        val yearsArray = json.getAsJsonArray("Years") ?: run {
+            AppLog.w("JellyfinAdapter", "getYears: /Items/$endpoint has no Years array")
+            return null
+        }
+        val years = mutableListOf<Int>()
+        for (i in 0 until yearsArray.size()) {
+            val year = yearsArray[i].asInt
+            if (year > 0) years.add(year)
+        }
+        return years.sortedDescending()
     }
 
     override suspend fun searchSongs(query: String): List<Song> = withContext(Dispatchers.IO) {

@@ -232,18 +232,31 @@ fun BaiduAuthDialog(
                     // 授权失败：显示具体错误信息
                     connectionState is NetworkMusicViewModel.BaiduConnectionState.Failed -> {
                         Spacer(modifier = Modifier.height(36.dp))
-                        // 根据 message 内容区分失败阶段
-                        val failTitle = if (connectionState.message.contains("设备码") ||
-                            connectionState.message.contains("网络") ||
-                            connectionState.message.contains("scope") ||
-                            connectionState.message.contains("网盘权限")) {
-                            stringResource(R.string.baidu_auth_scope_missing)
-                        } else if (connectionState.message.contains("拒绝")) {
-                            stringResource(R.string.baidu_user_declined)
-                        } else if (connectionState.message.contains("超时")) {
-                            stringResource(R.string.baidu_auth_timeout)
-                        } else {
-                            stringResource(R.string.netdisk_auth_failed)
+                        // M8 修复（2026-10-06，代码审查报告 §4）：按结构化 reason 区分失败
+                        // 阶段——旧实现 message.contains 中文哨兵在 EN locale（message 来自
+                        // getString）下必然落空，一律退化为兜底文案。
+                        val failTitle = when (connectionState.reason) {
+                            NetworkMusicViewModel.BaiduConnectionState.FailReason.SCOPE_MISSING,
+                            NetworkMusicViewModel.BaiduConnectionState.FailReason.DEVICE_CODE_FAILED ->
+                                stringResource(R.string.baidu_auth_scope_missing)
+                            NetworkMusicViewModel.BaiduConnectionState.FailReason.DECLINED ->
+                                stringResource(R.string.baidu_user_declined)
+                            NetworkMusicViewModel.BaiduConnectionState.FailReason.TIMEOUT ->
+                                stringResource(R.string.baidu_auth_timeout)
+                            NetworkMusicViewModel.BaiduConnectionState.FailReason.UNKNOWN ->
+                                // 旧写入点（未标注 reason 的）回退文案哨兵——保持向后兼容
+                                if (connectionState.message.contains("设备码") ||
+                                    connectionState.message.contains("网络") ||
+                                    connectionState.message.contains("scope") ||
+                                    connectionState.message.contains("网盘权限")) {
+                                    stringResource(R.string.baidu_auth_scope_missing)
+                                } else if (connectionState.message.contains("拒绝")) {
+                                    stringResource(R.string.baidu_user_declined)
+                                } else if (connectionState.message.contains("超时")) {
+                                    stringResource(R.string.baidu_auth_timeout)
+                                } else {
+                                    stringResource(R.string.netdisk_auth_failed)
+                                }
                         }
                         Text(
                             text = failTitle,

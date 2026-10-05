@@ -155,6 +155,8 @@ fun TextInputDialog(
     var qrText by remember { mutableStateOf<String?>(null) }
     val server = remember { LocalInputServer() }
     val qrScope = rememberCoroutineScope()
+    // L11：NanoHTTPD 回调统一投递到主线程（见 server.start 内注释）
+    val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
 
     val keyboardController = LocalSoftwareKeyboardController.current
     val textFieldFocusRequester = remember { FocusRequester() }
@@ -177,8 +179,11 @@ fun TextInputDialog(
                     withContext(Dispatchers.Main) { qrBitmap = bmp }
                 }
                 server.start { received ->
-                    // NanoHTTPD 后台线程回调，mutableStateOf 支持跨线程写入
-                    qrText = received
+                    // NanoHTTPD 后台线程回调写 Compose 状态。L11 修复（2026-10-06，
+                    // 代码审查报告 §5）：mutableStateOf 跨线程写按 Compose 设计即线程安全，
+                    // 但紧邻 175-178 的 QR 生成已规范地切到 Main；此处统一对齐，
+                    // 消除「同文件两处回调两种写法」的不一致（快照写一致性更可预期）。
+                    mainHandler.post { qrText = received }
                 }
             }
         }

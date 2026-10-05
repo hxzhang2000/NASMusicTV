@@ -1448,20 +1448,10 @@ class StarrySkyRenderer : RendererFx() {
         }
 
         /**
-         * 纯 Compose 侧的颜色插值（渐变构建期用，⛔ 绝不进每帧路径）。
-         *
-         * ⛔ **v1.6 起生产代码已无调用点**（旧亮版天幕靠它插值，新亮版直接用 `*_LIT` 具名色标）。
-         * 保留是因为它是**通用工具**且门禁会核对它的插值语义；若确认无外部价值可一并删除。
+         * L14 修复（2026-10-06，代码审查报告 §5）：删除死方法 mixColor——v1.6 起生产代码
+         * 零调用点，其注释声称「门禁会核对它的插值语义」但测试侧同样零引用（报告核验
+         * 证实该半句亦失真）。如需通用颜色插值，优先 VisualizerMath 的现成实现。
          */
-        fun mixColor(a: Color, b: Color, t: Float): Color {
-            val k = t.coerceIn(0f, 1f)
-            return Color(
-                red = a.red + (b.red - a.red) * k,
-                green = a.green + (b.green - a.green) * k,
-                blue = a.blue + (b.blue - a.blue) * k,
-                alpha = a.alpha + (b.alpha - a.alpha) * k,
-            )
-        }
 
         /**
          * 山脊基线高度（px）—— ⛔ **与画路径同源**（见 [RIDGE] 的 1/3、2/3 控制点说明）。

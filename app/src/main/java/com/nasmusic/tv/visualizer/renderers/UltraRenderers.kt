@@ -135,7 +135,7 @@ class MilkdropRenderer : RendererFx() {
         val cb = currCanvas ?: return
 
         // §B4-③ 段落色温：source 已是 8s 均值，再叠一层极慢 EMA 只取"更慢"的方向
-        //（同 WorldRenderer:612 的手法；⛔ 这里按 dt 折算，故帧率无关）
+        //（同旧 WorldRenderer 已删实现的每帧固定系数手法；⛔ 这里按 dt 折算，故帧率无关）
         sectionHue += (frame.sectionEnergy - sectionHue) *
             (fx.dt * SECTION_RATE).coerceIn(0f, 1f)
 

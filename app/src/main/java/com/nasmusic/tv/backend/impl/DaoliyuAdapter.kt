@@ -36,12 +36,6 @@ import java.util.concurrent.TimeUnit
  */
 class DaoliyuAdapter : BackendAdapter {
 
-    companion object {
-        private const val TAG = "DaoliyuAdapter"
-        private const val PAGE_SIZE = 500
-        private const val SONG_ID_PREFIX = "daoliyu_"
-    }
-
     override val backendType: String = ServerConfig.TYPE_DAOLIYU
     override var serverName: String = "道理鱼音乐"
     override var apiVersion: String = "Unknown"
@@ -550,7 +544,7 @@ class DaoliyuAdapter : BackendAdapter {
         val album = EncodingUtils.fixEncoding(obj.get("album")?.asString ?: obj.get("albumName")?.asString) ?: ""
         val rawAlbumId = obj.get("albumId")?.asString ?: albumId
         val coverUrl = obj.get("coverUrl")?.asString ?: obj.get("image")?.asString
-        val durationMs = obj.get("duration")?.asLong?.let { if (it > 100000) it else it * 1000 } ?: 0L
+        val durationMs = parseDurationMs(obj.get("duration")?.asLong)
         val trackNumber = obj.get("trackNumber")?.asInt ?: obj.get("track")?.asInt ?: 0
 
         return Song(
@@ -566,4 +560,24 @@ class DaoliyuAdapter : BackendAdapter {
         )
     }
 
+    companion object {
+        private const val TAG = "DaoliyuAdapter"
+        private const val PAGE_SIZE = 500
+        private const val SONG_ID_PREFIX = "daoliyu_"
+        /** M1 修复：duration 单位启发式阈值（见 parseDurationMs KDoc） */
+        internal const val DURATION_MS_HEURISTIC_THRESHOLD = 100_000L
+
+        /**
+         * M1 修复（2026-10-06，代码审查报告 §4）：duration 单位启发式抽成可测纯函数。
+         *
+         * ⚠️ 协议背景：道理鱼 API 的 duration 字段单位未实证（全端点 INFERRED）。
+         * 启发式规则：值 > 100000 视为已是毫秒，否则视为秒 ×1000。
+         * 已知边界缺陷（保留待协议实证）：毫秒单位下时长 <100s 的歌（如 90000ms）
+         * 会被 ×1000 错判为 25 小时；秒单位下 >100s 的歌（如 101s）会被当作毫秒
+         * （101ms）。两侧跳变点在 100s/100000。实证后应改为固定单位并删除本启发式。
+         * ⚠️ 须为 companion 成员（class 实例成员无法被单测以类名静态调用）。
+         */
+        internal fun parseDurationMs(raw: Long?): Long =
+            raw?.let { if (it > DURATION_MS_HEURISTIC_THRESHOLD) it else it * 1000 } ?: 0L
+    }
 }

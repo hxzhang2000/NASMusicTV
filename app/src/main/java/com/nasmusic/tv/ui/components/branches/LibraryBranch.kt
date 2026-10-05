@@ -32,9 +32,12 @@ internal fun LibraryBranch(
     isLoading: Boolean,
     isLibraryLoading: Boolean,
     isConnected: Boolean,
-    songDownloadStates: Map<String, com.nasmusic.tv.backend.download.model.DownloadState>,
     onPickSongForPlaylist: (Song) -> Unit
 ) {
+                    // M7 修复（2026-10-06，代码审查报告 §4）：下载进度流下沉到分支内收集——
+                    // 旧实现在 AppRoot 顶层收集、作为参数下传，512KB 步长的高频更新会
+                    // 驱动 AppRoot 全分支范围读取位置重组；各分支自收后互不影响。
+                    val songDownloadStates by viewModel.songDownloadStates.collectAsState(initial = emptyMap())
                     val albums by viewModel.albums.collectAsState(initial = UiState.Loading as UiState<List<Album>>)
                     val genres by viewModel.genres.collectAsState(initial = UiState.Success(emptyList()))
                     val favoriteIds by viewModel.favoriteIds.collectAsState(initial = emptySet())

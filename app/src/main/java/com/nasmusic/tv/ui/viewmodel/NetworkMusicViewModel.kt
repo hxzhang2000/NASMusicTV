@@ -156,7 +156,19 @@ class NetworkMusicViewModel(app: Application) : AndroidViewModel(app) {
         object Connecting : BaiduConnectionState()     // 设备码轮询中
         object LoggedIn : BaiduConnectionState()      // 已登录
         object DirMissing : BaiduConnectionState()    // 已登录但音乐根目录不存在，需重新设置
-        data class Failed(val message: String) : BaiduConnectionState()
+        /**
+         * M8 修复（2026-10-06，代码审查报告 §4）：新增结构化 [reason]——此前
+         * BaiduAuthDialog 用 `message.contains("拒绝"/"超时"/...)` 文案哨兵区分失败
+         * 阶段，而 message 本身来自已本地化的 getString(...)，EN locale 下哨兵必然
+         * 落空、一律退化为兜底文案。reason 不依赖文案，可自由本地化。
+         */
+        data class Failed(
+            val message: String,
+            val reason: FailReason = FailReason.UNKNOWN
+        ) : BaiduConnectionState()
+
+        /** 失败原因的结构化标记（文案只作展示，判定一律用 reason） */
+        enum class FailReason { SCOPE_MISSING, DECLINED, TIMEOUT, DEVICE_CODE_FAILED, UNKNOWN }
     }
 
     private val _baiduConnectionState = MutableStateFlow<BaiduConnectionState>(BaiduConnectionState.Off)
@@ -256,7 +268,7 @@ class NetworkMusicViewModel(app: Application) : AndroidViewModel(app) {
                             val retryResult = baiduApi.listDir(BaiduNetdiskConfig.APP_DIR)
                             if (retryResult.errno != 0) {
                                 val desc = BaiduNetdiskConfig.describeErrno(retryResult.errno)
-                                _baiduConnectionState.value = BaiduConnectionState.Failed(desc)
+                                _baiduConnectionState.value = BaiduConnectionState.Failed(desc, BaiduConnectionState.FailReason.SCOPE_MISSING)
                                 AppLog.w("BaiduAuth", "verifyBaiduTokenAsync: retry after create failed errno=${retryResult.errno}")
                             } else {
                                 // APP_DIR 创建成功，检查用户音乐根目录是否存在
@@ -264,7 +276,7 @@ class NetworkMusicViewModel(app: Application) : AndroidViewModel(app) {
                             }
                         } else {
                             val desc = "目录不存在且创建失败 (errno=$createErrno)"
-                            _baiduConnectionState.value = BaiduConnectionState.Failed(desc)
+                            _baiduConnectionState.value = BaiduConnectionState.Failed(desc, BaiduConnectionState.FailReason.SCOPE_MISSING)
                             AppLog.w("BaiduAuth", "verifyBaiduTokenAsync: createDir failed errno=$createErrno")
                         }
                     } else if (result.errno == -6) {
@@ -349,7 +361,7 @@ class NetworkMusicViewModel(app: Application) : AndroidViewModel(app) {
             val code = baiduOAuth.requestDeviceCode()
             if (code == null) {
                 AppLog.w("BaiduAuth", "startBaiduDeviceCodeFlow: requestDeviceCode returned null")
-                _baiduConnectionState.value = BaiduConnectionState.Failed(getApplication<Application>().getString(R.string.baidu_get_device_code_failed))
+                _baiduConnectionState.value = BaiduConnectionState.Failed(getApplication<Application>().getString(R.string.baidu_get_device_code_failed), BaiduConnectionState.FailReason.DEVICE_CODE_FAILED)
                 return@launch
             }
             AppLog.d("BaiduAuth", "startBaiduDeviceCodeFlow: got device code=${code.userCode}, expiresIn=${code.expiresIn}s, starting poll")
@@ -392,7 +404,7 @@ class NetworkMusicViewModel(app: Application) : AndroidViewModel(app) {
                     }
                     BaiduOAuthClient.PollResult.Declined -> {
                         AppLog.d("BaiduAuth", "pollDeviceCode: Declined -> Failed")
-                        _baiduConnectionState.value = BaiduConnectionState.Failed(getApplication<Application>().getString(R.string.baidu_user_declined))
+                        _baiduConnectionState.value = BaiduConnectionState.Failed(getApplication<Application>().getString(R.string.baidu_user_declined), BaiduConnectionState.FailReason.DECLINED)
                         _baiduDeviceCode.value = null
                         return@launch
                     }
@@ -410,7 +422,7 @@ class NetworkMusicViewModel(app: Application) : AndroidViewModel(app) {
                 }
             }
             AppLog.d("BaiduAuth", "pollDeviceCode: timeout -> Failed")
-            _baiduConnectionState.value = BaiduConnectionState.Failed(getApplication<Application>().getString(R.string.baidu_auth_timeout))
+            _baiduConnectionState.value = BaiduConnectionState.Failed(getApplication<Application>().getString(R.string.baidu_auth_timeout), BaiduConnectionState.FailReason.TIMEOUT)
             _baiduDeviceCode.value = null
         }
     }

@@ -424,7 +424,8 @@ class MoleculeRenderer(
     private fun DrawScope.drawBonds(frame: AudioFrame, growth: Float, fade: Float) {
         val d = def ?: return
         val nb = d.bonds.size / 2
-        val now = frame.timeMs
+        // L14 修复（2026-10-06）：删除死变量 now——本函数体从不读取它（与类注释
+        // 「绝不用绝对 now × 速率」的自相矛盾是那次修复的残留）。
         for (b in 0 until nb) {
             val a = d.bonds[b * 2]
             val e = d.bonds[b * 2 + 1]

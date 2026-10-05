@@ -931,6 +931,10 @@ class PlaybackService : MediaLibraryService() {
             return
         }
         artworkLoadJob?.cancel()
+        // L10 修复（2026-10-06，代码审查报告 §5）：捕获发起时的 mediaId，Coil 返回后
+        // 校验当前播放项仍是发起时的那一首才写入 cachedArtworkBitmap——旧实现
+        // Coil 返回(:942)到赋值(:946)之间无守卫，切歌竞态下通知会持续显示上一首封面。
+        val originMediaId = mediaItem?.mediaId
         artworkLoadJob = serviceScope.launch(Dispatchers.IO) {
             try {
                 val result = Coil.imageLoader(this@PlaybackService).execute(
@@ -942,7 +946,9 @@ class PlaybackService : MediaLibraryService() {
                 )
                 val drawable = result.drawable
                 val bitmap = drawable?.toBitmap()
-                if (bitmap != null) {
+                if (bitmap != null && isActive &&
+                    mediaLibrarySession?.player?.currentMediaItem?.mediaId == originMediaId
+                ) {
                     cachedArtworkBitmap = bitmap
                     // 重置去重状态，强制下次 updateNotification 重建通知（含新封面）
                     lastNotificationState = null

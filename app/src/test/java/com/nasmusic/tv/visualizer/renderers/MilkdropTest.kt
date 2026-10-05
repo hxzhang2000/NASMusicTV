@@ -64,7 +64,7 @@ class MilkdropTest {
         return s
     }
 
-    /** 旧写法：**每帧**固定系数 EMA（`WorldRenderer:612` 的形态 ⇒ 与帧率绑定） */
+    /** 旧写法：**每帧**固定系数 EMA（已删除的旧 WorldRenderer 形态 ⇒ 与帧率绑定） */
     private fun sectionPerFrame(seconds: Float, fps: Int, target: Float, k: Float): Float {
         val dt = 1f / fps
         var s = 0f
@@ -256,7 +256,7 @@ class MilkdropTest {
 
     @Test
     fun `负向N2 每帧固定系数 EMA 必须被判帧率绑定`() {
-        val k = 0.02f   // WorldRenderer:612 的形态（每帧 ×0.02，不看 dt）
+        val k = 0.02f   // 已删除的旧 WorldRenderer 形态（每帧 ×0.02，不看 dt）
         val at60 = sectionPerFrame(1f, 60, 1f, k)
         val at15 = sectionPerFrame(1f, 15, 1f, k)
         assertTrue("每帧固定系数 EMA 必须表现出强帧率依赖（实际 $at60 vs $at15）",

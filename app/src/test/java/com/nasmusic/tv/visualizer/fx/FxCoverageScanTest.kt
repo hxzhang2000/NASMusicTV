@@ -68,7 +68,9 @@ class FxCoverageScanTest {
         "DnaRenderer" to "S5 批次 C（E40 DNA）",
         // 结构型豁免（非"还没做"，而是**按设计不适用**）
         "WorldGlobeRenderer" to "View 型（`isViewBased = true`）：draw 是空实现且根本不被调用",
-        "WorldRenderer" to "已隐藏的旧 E41 实现（死代码，不在工厂里）",
+        // M11 修复（2026-10-06，代码审查报告 §4）：WorldRenderer（旧 E41 2D 版，2106 行
+        // 零实例化死代码）已整文件删除归档；本条目随之从豁免名单移除（stale 判据
+        // 会在文件存在而名单缺失时报错，删除后名单必须同步，见 :266-267 的 stale 门禁）。
         "PhotoRenderer" to "E39 照片墙：§八 G7 原始口径即豁免 PHOTO_WALL（照片优先，暗角/颗粒降到 0.34 / 0.018）",
     )
 
@@ -227,7 +229,7 @@ class FxCoverageScanTest {
      * ⚠️ 只用于 [pickUncoveredSample] 的**偏好**（它们永远不覆盖，作样本区分力弱）——
      * 判据强度不依赖本集合，即使它过期，N2 也只是退回到拿结构型当样本，不会失真。
      */
-    private val structuralExempt = setOf("WorldGlobeRenderer", "WorldRenderer", "PhotoRenderer")
+    private val structuralExempt = setOf("WorldGlobeRenderer", "PhotoRenderer")  // WorldRenderer 已删除（M11）
 
     /**
      * N2 的样本选择（**不变式**，⛔ 不写死类名）。
@@ -247,7 +249,7 @@ class FxCoverageScanTest {
     fun `在册渲染器全部有归属 名单无重叠无遗漏`() {
         val decls = rendererDecls()
         assertTrue("扫描到的渲染器类应 > 0（空转自证）", decls.isNotEmpty())
-        assertTrue("渲染器类数应 ≥ 22（2026-10-05 删掉 9 个效果后重数：原 31 → 22），实测 ${decls.size}", decls.size >= 22)
+        assertTrue("渲染器类数应 ≥ 21（2026-10-05 删 9 个效果后 22；M11 修复（2026-10-06）再删死代码 WorldRenderer → 21），实测 ${decls.size}", decls.size >= 21)
         // ⛔ 解析器自证：多行构造参数的两个类必须被解析到，否则是"静默漏类"
         // ⚠️ 2026-10-05：原样本 `WaterfallRenderer` 随效果删除 ⇒ 只摘它一个，保留其余样本。
         for (n in listOf("MoleculeRenderer", "HypnoticFunctionRenderer", "PhotoRenderer")) {

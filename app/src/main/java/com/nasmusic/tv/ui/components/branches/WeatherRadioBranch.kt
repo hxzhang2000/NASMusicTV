@@ -31,9 +31,10 @@ import com.nasmusic.tv.ui.viewmodel.*
 @Composable
 internal fun WeatherRadioBranch(
     viewModel: MainViewModel,
-    songDownloadStates: Map<String, com.nasmusic.tv.backend.download.model.DownloadState>,
     onPickSongForPlaylist: (Song) -> Unit
 ) {
+                    // M7 修复：下载进度流下沉到分支内收集（原 AppRoot 顶层收集下传）
+                    val songDownloadStates by viewModel.songDownloadStates.collectAsState(initial = emptyMap())
                     val weatherRadioQueue by viewModel.weatherRadioVM.weatherRadioQueue.collectAsState(initial = null)
                     val weatherData by viewModel.weatherRadioVM.weatherData.collectAsState(initial = null)
                     val currentWeatherMood by viewModel.weatherRadioVM.currentWeatherMood.collectAsState()

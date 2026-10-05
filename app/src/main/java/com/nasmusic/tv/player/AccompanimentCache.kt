@@ -104,6 +104,17 @@ class AccompanimentCache(
     }
 
     /**
+     * M5 修复（2026-10-06，代码审查报告 §4）：公开 LRU 淘汰入口。
+     *
+     * 旧缺陷：[cleanupCache] 唯一触发点在 [saveOriginalFile] 且受 `!dest.exists()`
+     * 保护——本地歌曲（无输入文件、不走 saveOriginalFile）与网络歌曲二次分离
+     * 都不触发，但分离出的伴奏/人声 WAV（单曲 30-60MB）就写在同一缓存目录，
+     * 缓存无上限增长（KDoc 承诺 500MB/10 文件双上限失效）。
+     * 修复：分离结果落盘完成后由调用方（HqSeparationOrchestrator）显式调用本方法。
+     */
+    fun cleanup() = cleanupCache()
+
+    /**
      * 获取缓存文件数
      */
     fun getCacheFileCount(): Int {

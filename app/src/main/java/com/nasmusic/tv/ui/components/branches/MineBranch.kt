@@ -27,9 +27,10 @@ import com.nasmusic.tv.ui.viewmodel.*
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 internal fun MineBranch(
-    viewModel: MainViewModel,
-    songDownloadStates: Map<String, com.nasmusic.tv.backend.download.model.DownloadState>
+    viewModel: MainViewModel
 ) {
+                    // M7 修复：下载进度流下沉到分支内收集（原 AppRoot 顶层收集下传）
+                    val songDownloadStates by viewModel.songDownloadStates.collectAsState(initial = emptyMap())
                     val favoriteSongsState by viewModel.favoriteSongs.collectAsState(initial = UiState.Success(emptyList()))
                     val networkFavoriteSongs by viewModel.networkFavoriteSongs.collectAsState(initial = emptyList())
                     val recentSongsState by viewModel.recentSongs.collectAsState(initial = UiState.Success(emptyList()))

@@ -28,9 +28,10 @@ import com.nasmusic.tv.ui.viewmodel.*
 @Composable
 internal fun ArtistDetailBranch(
     viewModel: MainViewModel,
-    songDownloadStates: Map<String, com.nasmusic.tv.backend.download.model.DownloadState>,
     onPickSongForPlaylist: (Song) -> Unit
 ) {
+                    // M7 修复：下载进度流下沉到分支内收集（原 AppRoot 顶层收集下传）
+                    val songDownloadStates by viewModel.songDownloadStates.collectAsState(initial = emptyMap())
                     val selectedArtistName by viewModel.selectedArtistName.collectAsState(initial = null)
                     val artistDetailSongsCache by viewModel.artistDetailSongsCache.collectAsState(initial = emptyMap())
                     val artistSongs = selectedArtistName?.let { artistDetailSongsCache[it] } ?: emptyList()
