@@ -261,6 +261,19 @@ private val LEGACY_MAP = mapOf(
         "PULSING_POLYGONS" to CIRCULAR_RING,
         "BAUHAUS_SHAPES" to CIRCULAR_RING,
         "FERMAT_SPIRAL" to CIRCULAR_RING,
+        // 以下 9 个效果已于 v2.38.2 从效果库移除（30 → 21）：同样回落到默认
+        // CIRCULAR_RING。⛔ `fromKey` 末位 fallback 本就等价，补进来是为了
+        // 与上一批 11 个保持同一份「迁移意图」清单，并让
+        // `docs/visualizer-effects-list.md` 的说明继续成立。
+        "TUNNEL_FLY" to CIRCULAR_RING,
+        "FREQUENCY_MOUNTAIN" to CIRCULAR_RING,
+        "GALAXY_SPIRAL" to CIRCULAR_RING,
+        "SPECTRO_WATERFALL" to CIRCULAR_RING,
+        "PARTICLE_TEXT" to CIRCULAR_RING,
+        "PLASMA_FLOW" to CIRCULAR_RING,
+        "ORIGAMI_POLY" to CIRCULAR_RING,
+        "STAIRCASE_WAVE" to CIRCULAR_RING,
+        "FRACTAL_TREE" to CIRCULAR_RING,
     )
 
         fun fromKey(key: String?): VisualizerTheme =
