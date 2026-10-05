@@ -53,21 +53,18 @@ class MetingApiService(
 
     override val sourceId = "meting"
 
-    /**
-     * 守护线程池：防止 OkHttp 非守护线程阻止进程退出
-     * 与 JellyfinAdapter / NavidromeAdapter 保持一致
-     */
-    private val daemonExecutor = java.util.concurrent.Executors.newCachedThreadPool { r ->
-        Thread(r, "Meting-OkHttp").apply { isDaemon = true }
-    }
-
     // 安全修复（C-1）：移除 trust-all，恢复系统默认证书校验。
     // 原实现因老盒子缺 Let's Encrypt 根证书而放宽校验；现恢复严格校验，
     // 老设备遇 https LE 端点握手失败时改用 http 端点即可（应用已允许明文流量）。
 
+    // L2 修复（2026-10-06，代码审查报告 §5）：改用 BackendRegistry 的共享线程池与
+    // 连接池——旧实现自建 cached 守护线程池（无并发上限、且 MetingApiService 无
+    // close() 永不回收），背弃「跨适配器共享 OkHttp 防电视 WiFi 栈过载」的设计意图。
+    // sharedDispatcher（16/8 并发上限）+ sharedConnectionPool 全 app 复用。
     private val client: OkHttpClient by lazy {
         OkHttpClient.Builder()
-            .dispatcher(okhttp3.Dispatcher(daemonExecutor))
+            .dispatcher(com.nasmusic.tv.backend.BackendRegistry.sharedDispatcher)
+            .connectionPool(com.nasmusic.tv.backend.BackendRegistry.sharedConnectionPool)
             .connectTimeout(15, TimeUnit.SECONDS)
             .readTimeout(15, TimeUnit.SECONDS)
             .build()
@@ -76,7 +73,8 @@ class MetingApiService(
     /** 不跟随重定向，用于获取 302 Location */
     private val noRedirectClient: OkHttpClient by lazy {
         OkHttpClient.Builder()
-            .dispatcher(okhttp3.Dispatcher(daemonExecutor))
+            .dispatcher(com.nasmusic.tv.backend.BackendRegistry.sharedDispatcher)
+            .connectionPool(com.nasmusic.tv.backend.BackendRegistry.sharedConnectionPool)
             .connectTimeout(15, TimeUnit.SECONDS)
             .readTimeout(15, TimeUnit.SECONDS)
             .followRedirects(false)
