@@ -211,52 +211,12 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
      */
     private val constructorReady = CompletableDeferred<Unit>()
 
-    init {
-        // ---- ServerViewModel 接线 ----
-        serverVM.onConnected = {
-            loadLibrary()
-            // 更新恢复队列中 NAS 歌曲的 streamUrl
-            updateRestoredQueueStreamUrls()
-            // 导航到首页
-            navVM.navigateTo(Screen.Home)
-            loadHomeDashboard()
-        }
-        serverVM.onDisconnected = {
-            _albums.value = UiState.Loading
-            _songs.value = UiState.Loading
-            _songsPaging.value = SongsPagingState()
-            _artists.value = UiState.Success(emptyList())
-            _years.value = UiState.Success(emptyList())
-            _recentSongs.value = UiState.Success(emptyList())
-            searchVM.clearSearch()
-            _genres.value = UiState.Success(emptyList())
-            _favoriteSongs.value = UiState.Success(emptyList())
-            _playlists.value = UiState.Success(emptyList())
-        }
-        serverVM.checkSavedConfigOnStart()
-        serverVM.refreshApiVersionsAsync()
-
-        // ---- SearchViewModel 接线 ----
-        searchVM.libraryActiveTabProvider = { _libraryActiveTab.value }
-        searchVM.librarySearchKeywordProvider = { _librarySearchKeyword.value }
-        searchVM.nasLocalSongsProvider = { _songsPaging.value.songs }
-        searchVM.localDeviceSongsProvider = { _localSongs.value }
-        searchVM.onAddToQueue = { playerManager.addToQueue(it) }
-        searchVM.onPlayBatch = { songs, startIndex -> playNetworkBatch(songs, startIndex) }
-        searchVM.showMessage = { showError(it) }
-        searchVM.showMessageFor = { added, skipped, _ ->
-            serverVM.postConnectMessage(
-                getApplication<Application>().getString(R.string.added_to_queue_with_skipped, added, skipped)
-            )
-        }
-
-        // ---- NetworkMusicViewModel 接线 ----
-        netVM.onPlayQueue = { songs, startIndex -> playQueue(songs, startIndex) }
-        netVM.showMessage = { showError(it) }
-        netVM.onMergedDataInvalidated = { updateMergedData() }
-        // 启动期恢复百度索引状态 + 触发合并
-        netVM.restoreBaiduIndexOnStart { _ -> updateMergedData() }
-    }
+    // ⛔ H2 修复（2026-10-06，代码审查报告 §3）：构造期接线原先位于此处的 init 块
+    //    （init 在 214 行、navVM 等字段在 262 行之后才声明），init 块内直接解引用
+    //    navVM / _homeDashboardData / _albums / _playlists 等 15 个后声明字段——
+    //    Kotlin 属性按声明顺序初始化，一旦任何接线在构造期被同步触发即启动 NPE。
+    //    修复：接线整体后移到「类体最后一个 init 块」（文件尾部、全部字段之后），
+    //    并由 constructorReady 保证后移后每个被引用字段都已完成初始化。
 
     // --- 导航状态（R-1 第四步：已迁至 NavigationViewModel，此处转发）---
     val navVM = NavigationViewModel(app)
@@ -698,6 +658,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
     // 记录上一首歌的 ID，用于在切歌时统计播放记录
     private var lastRecordedSongId: String? = null
     private var lastRecordedSong: Song? = null
+    /** H3 修复（2026-10-06）：30s 兜底快照。切歌记账已改为事件点直读 progress，
+     *  此字段仅由兜底轮询维护，不再作为 recordPlayEvent 的数据源。 */
     private var lastRecordedPositionMs: Long = 0L
     /** 上一首歌的歌词来源，用于在播放完成时判断是否提交网络歌词到持久化缓存 */
     private var lastRecordedLyricsSource: LyricsSource? = null
@@ -768,7 +730,13 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
             playerVM.playerState.map { it.currentSong }.collect { song ->
                 // 记录上一首歌的播放
                 val previousSong = lastRecordedSong
-                val previousPosition = lastRecordedPositionMs
+                // H3 修复（2026-10-06，代码审查报告 §3）：切歌事件点直接读取实时进度，
+                // 不再依赖 30s 轮询快照（旧实现下短歌被记成上一首的残留时长，
+                // 且每首歌开头 30s 内快照恒为 0 → 完全不被记账）。
+                // 时序依据：progress 由 PlayerManager 的 1s 轮询在主线程更新，切歌
+                // （自然过渡 / next / previous / playSong）都不会先把 progress 置 0，
+                // 故此处读到的正是上一首歌的最后位置（至多滞后 1s）。
+                val previousPosition = playerVM.progress.value
                 if (previousSong != null && previousPosition > 5000L
                     && previousSong.id != song?.id) {
                     recordPlayEvent(previousSong, previousPosition)
@@ -800,11 +768,15 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
             }
         }
 
-        // 每 30 秒更新一次播放位置（用于切歌时记录精确的播放时长）
+        // 每 30 秒刷新一次播放位置快照（H3 修复后的兜底：正常记账已在切歌事件点
+        // 直接读取实时 progress，此快照仅在长时间单曲循环/极端场景下兜底）。
+        // ⚠️ 无需再维护 lastRecordedPositionMs 供切歌读取——已删除该字段。
         viewModelScope.launch {
             while (true) {
                 delay(30000)
-                lastRecordedPositionMs = playerVM.progress.value
+                if (playerVM.playerState.value.currentSong != null) {
+                    lastRecordedPositionMs = playerVM.progress.value
+                }
             }
         }
 
@@ -3420,6 +3392,65 @@ showError(getApplication<Application>().getString(R.string.toggle_favorite_error
             _jamendoState.value = UiState.Success(emptyList())
             _jamendoActiveTag.value = ""
         }
+    }
+
+    // =====================================================================
+    // H2 修复（2026-10-06，代码审查报告 §3）：构造期接线后置。
+    //
+    // 原先这些接线位于文件头部第一个 init 块（早于 navVM/_homeDashboardData/
+    // _albums/_playlists 等 15 个字段声明）。Kotlin 属性按声明顺序初始化，
+    // 回调闭包虽在构造完成后才触发，但 `onConnected` 等任何一条若将来出现
+    // 同步触发点（或子 VM 在赋值回调前就读取 provider），都会读到未初始化字段
+    // → 启动 NPE（v2.37.0 曾因同类问题崩溃过一次）。
+    //
+    // 现接线区位于**全部字段声明之后**（本 init 块紧贴文件尾部的 constructorReady
+    // init 块之前），任何被引用字段在接线执行时都已初始化完毕。
+    // =====================================================================
+    init {
+        // ---- ServerViewModel 接线 ----
+        serverVM.onConnected = {
+            loadLibrary()
+            // 更新恢复队列中 NAS 歌曲的 streamUrl
+            updateRestoredQueueStreamUrls()
+            // 导航到首页
+            navVM.navigateTo(Screen.Home)
+            loadHomeDashboard()
+        }
+        serverVM.onDisconnected = {
+            _albums.value = UiState.Loading
+            _songs.value = UiState.Loading
+            _songsPaging.value = SongsPagingState()
+            _artists.value = UiState.Success(emptyList())
+            _years.value = UiState.Success(emptyList())
+            _recentSongs.value = UiState.Success(emptyList())
+            searchVM.clearSearch()
+            _genres.value = UiState.Success(emptyList())
+            _favoriteSongs.value = UiState.Success(emptyList())
+            _playlists.value = UiState.Success(emptyList())
+        }
+        serverVM.checkSavedConfigOnStart()
+        serverVM.refreshApiVersionsAsync()
+
+        // ---- SearchViewModel 接线 ----
+        searchVM.libraryActiveTabProvider = { _libraryActiveTab.value }
+        searchVM.librarySearchKeywordProvider = { _librarySearchKeyword.value }
+        searchVM.nasLocalSongsProvider = { _songsPaging.value.songs }
+        searchVM.localDeviceSongsProvider = { _localSongs.value }
+        searchVM.onAddToQueue = { playerManager.addToQueue(it) }
+        searchVM.onPlayBatch = { songs, startIndex -> playNetworkBatch(songs, startIndex) }
+        searchVM.showMessage = { showError(it) }
+        searchVM.showMessageFor = { added, skipped, _ ->
+            serverVM.postConnectMessage(
+                getApplication<Application>().getString(R.string.added_to_queue_with_skipped, added, skipped)
+            )
+        }
+
+        // ---- NetworkMusicViewModel 接线 ----
+        netVM.onPlayQueue = { songs, startIndex -> playQueue(songs, startIndex) }
+        netVM.showMessage = { showError(it) }
+        netVM.onMergedDataInvalidated = { updateMergedData() }
+        // 启动期恢复百度索引状态 + 触发合并
+        netVM.restoreBaiduIndexOnStart { _ -> updateMergedData() }
     }
 
     /**

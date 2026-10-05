@@ -12,7 +12,9 @@ import kotlin.math.sin
 /**
  * 程序化纹理仓库。**所有纹理在此生成一次并缓存**，`draw` 期只做 `drawImage`。
  *
- * ⛔ 生命周期：由 `VisualizerStage` 在舞台离开时调一次 [release]；
+ * ⛔ 生命周期：由渲染器基类 [com.nasmusic.tv.visualizer.renderers.RendererFx]
+ * 的 `onExit()` 在每次效果切离时调一次 [release]（H4 修复，2026-10-06；
+ * 旧文档声称由 `VisualizerStage` 调用，实际从未有过生产调用点，已订正）；
  * 渲染器**不得**自行调用（多个渲染器共享同一份缓存）。
  * ⛔ 缓存查找必须是**数组下标**（见 [slots]），不得用 `HashMap` —— 后者在
  * draw 路径上会因装箱产生分配。
@@ -48,6 +50,52 @@ object ProceduralTexture {
     private var ensuredW = 0
     private var ensuredH = 0
 
+    /**
+     * H4 修复（2026-10-06，代码审查报告 §3）：[ensure] 与 [ensureFullscreenOnly] 拆分记账。
+     *
+     * 旧缺陷：两类调用共享同一对 [ensuredW]/[ensuredH]，且 [ensure] 的尺寸早退位于
+     * 所有逐 key 守卫之前 —— [ensureFullscreenOnly] 先烘过一张后，同尺寸下后续渲染器
+     * 的 [ensure] 整体早退，其余 5 张全屏纹理永不生成（StarrySky → LightBeams 切换即触发）。
+     *
+     * 修复：[ensure] 的早退改为「平铺槽 + 全部 6 张全屏槽**逐槽**就绪」才返回；
+     * [ensureFullscreenOnly] 只按自己的 key 槽判断，不再污染整组记账。
+     */
+    private fun ensureTiledSlots() {
+        // GRAIN ×8（平铺型，与画布尺寸无关，只生成一次）
+        val g = Id.GRAIN.ordinal * VARIANTS
+        for (v in 0 until VARIANTS) {
+            if (keys[g + v] == TILED_KEY && slots[g + v] != null) continue
+            slots[g + v] = makeBitmap(GRAIN_TILE, GRAIN_TILE, grainPixels(v))
+            keys[g + v] = TILED_KEY
+        }
+        // SCANLINE ×1
+        val s = Id.SCANLINE.ordinal * VARIANTS
+        if (keys[s] != TILED_KEY || slots[s] == null) {
+            slots[s] = makeBitmap(1, SCANLINE_H, scanlinePixels())
+            keys[s] = TILED_KEY
+        }
+    }
+
+    /** [ensure] 的早退判据：平铺槽与全部 6 张全屏槽（当前尺寸 key）逐槽就绪才算已烘。 */
+    private fun allSlotsReady(w: Int, h: Int): Boolean {
+        if (ensuredW == w && ensuredH == h) {
+            // 尺寸未变，但需逐槽确认（ensureFullscreenOnly 可能只烘过 1 张）
+            val fullKey = fullscreenKey(w, h)
+            val g = Id.GRAIN.ordinal * VARIANTS
+            for (v in 0 until VARIANTS) {
+                if (keys[g + v] != TILED_KEY || slots[g + v] == null) return false
+            }
+            val s = Id.SCANLINE.ordinal * VARIANTS
+            if (keys[s] != TILED_KEY || slots[s] == null) return false
+            for (id in FULLSCREEN_IDS) {
+                val idx = id.ordinal * VARIANTS
+                if (keys[idx] != fullKey || slots[idx] == null) return false
+            }
+            return true
+        }
+        return false
+    }
+
     /** 平铺型纹理的常量键（与画布尺寸无关） */
     private const val TILED_KEY = -7L
 
@@ -65,23 +113,14 @@ object ProceduralTexture {
      */
     fun ensure(w: Int, h: Int) {
         if (w <= 0 || h <= 0) return
-        if (ensuredW == w && ensuredH == h) return
+        // H4 修复：早退判据从「尺寸相同」改为「逐槽就绪」（ensureFullscreenOnly
+        // 只烘 1 张时其余 5 张为 null，这里必须继续烘而不是整体返回）
+        if (allSlotsReady(w, h)) return
         ensuredW = w
         ensuredH = h
 
-        // GRAIN ×8（平铺型，与画布尺寸无关，只生成一次）
-        val g = Id.GRAIN.ordinal * VARIANTS
-        for (v in 0 until VARIANTS) {
-            if (keys[g + v] == TILED_KEY && slots[g + v] != null) continue
-            slots[g + v] = makeBitmap(GRAIN_TILE, GRAIN_TILE, grainPixels(v))
-            keys[g + v] = TILED_KEY
-        }
-        // SCANLINE ×1
-        val s = Id.SCANLINE.ordinal * VARIANTS
-        if (keys[s] != TILED_KEY || slots[s] == null) {
-            slots[s] = makeBitmap(1, SCANLINE_H, scanlinePixels())
-            keys[s] = TILED_KEY
-        }
+        // 平铺型（与画布尺寸无关，只生成一次）
+        ensureTiledSlots()
 
         // 全屏型：键含 (w,h) —— 尺寸变化自动重建（§C4 O2 的缓存键纪律）
         val fullKey = fullscreenKey(w, h)
@@ -115,12 +154,10 @@ object ProceduralTexture {
         }
         if (w <= 0 || h <= 0) return
         val key = fullscreenKey(w, h)
-        // 与 ensure 同一套记账：命中缓存（同尺寸 + 该槽已烘好）直接返回，⛔ 不重复烘焙
-        if (ensuredW == w && ensuredH == h &&
-            keys[id.ordinal * VARIANTS] == key && slots[id.ordinal * VARIANTS] != null
-        ) {
-            return
-        }
+        // H4 修复：只按本 Id 自己的槽位判断，⛔ 不再以 ensuredW/ensuredH 早退——
+        // 那会让同尺寸下后续 ensure 误以为「整组已烘」而跳过其余 5 张。
+        val idx = id.ordinal * VARIANTS
+        if (keys[idx] == key && slots[idx] != null) return
         ensuredW = w
         ensuredH = h
         ensureFullscreen(id, w, h, key, id.rowFiller(w, h))

@@ -201,6 +201,53 @@ class ProceduralTextureRecycleTest {
         ProceduralTexture.release()
     }
 
+    // ═══════════ H4 修复回归（2026-10-06）：ensure / ensureFullscreenOnly 记账拆分 ═══════════
+    // ⛔ 旧缺陷：两者共享 ensuredW/ensuredH 且 ensure 以「尺寸相同」整体早退 ⇒
+    //    StarrySky（ensureFullscreenOnly）切到 LightBeams（ensure）后，其余 5 张
+    //    全屏纹理永不生成。以下用例锁死「先 Only 后 ensure」的交叉场景。
+
+    @Test
+    fun `H4 - 先 ensureFullscreenOnly 后 ensure 同尺寸必须补齐其余五张`() {
+        ProceduralTexture.release()
+        // 场景：StarrySky 首帧只烘 STARFIELD
+        ProceduralTexture.ensureFullscreenOnly(ProceduralTexture.Id.STARFIELD, 64, 48)
+        assertNotNull(ProceduralTexture.tile(ProceduralTexture.Id.STARFIELD))
+        // 切到 LightBeams 等 ensure 型渲染器：同尺寸下必须补齐全部（含平铺型）
+        ProceduralTexture.ensure(64, 48)
+        for (id in ProceduralTexture.Id.entries) {
+            if (id == ProceduralTexture.Id.GRAIN) continue
+            assertNotNull("H4：$id 应被 ensure 补齐", ProceduralTexture.tile(id))
+        }
+        for (v in 0 until ProceduralTexture.VARIANTS) {
+            assertNotNull("H4：GRAIN 变体 $v 应被 ensure 补齐", ProceduralTexture.tile(ProceduralTexture.Id.GRAIN, v))
+        }
+        assertEquals(64, ProceduralTexture.tile(ProceduralTexture.Id.PAPER)!!.width)
+        assertEquals(48, ProceduralTexture.tile(ProceduralTexture.Id.PAPER)!!.height)
+        ProceduralTexture.release()
+    }
+
+    @Test
+    fun `H4 - 反向交叉 先 ensure 后 ensureFullscreenOnly 同尺寸不重建已烘纹理`() {
+        ProceduralTexture.release()
+        ProceduralTexture.ensure(64, 48)
+        val before = ProceduralTexture.tile(ProceduralTexture.Id.STARFIELD)
+        // ensure 已烘全 6 张 ⇒ ensureFullscreenOnly 同尺寸必须命中缓存不重建
+        ProceduralTexture.ensureFullscreenOnly(ProceduralTexture.Id.STARFIELD, 64, 48)
+        assertTrue("同尺寸且该槽已烘，必须是 no-op", before === ProceduralTexture.tile(ProceduralTexture.Id.STARFIELD))
+        ProceduralTexture.release()
+    }
+
+    @Test
+    fun `H4 - release 后 ensureFullscreenOnly 的记账一并复位`() {
+        ProceduralTexture.release()
+        ProceduralTexture.ensureFullscreenOnly(ProceduralTexture.Id.STARFIELD, 64, 48)
+        ProceduralTexture.release()
+        // release 复位 ensuredW/H ⇒ 同尺寸再次 ensureFullscreenOnly 必须重烘而不是误判已烘
+        ProceduralTexture.ensureFullscreenOnly(ProceduralTexture.Id.STARFIELD, 64, 48)
+        assertNotNull("release 后同尺寸必须能重烘", ProceduralTexture.tile(ProceduralTexture.Id.STARFIELD))
+        ProceduralTexture.release()
+    }
+
     @Test
     fun `负向 - 未回收的位图必须被门禁判失败`() {
         // 门禁实现：assertAllRecycled（与上面 release 用例同一判据）

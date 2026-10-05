@@ -9,6 +9,7 @@ import com.nasmusic.tv.visualizer.VisualizerRenderer
 import com.nasmusic.tv.visualizer.fx.FxBudget
 import com.nasmusic.tv.visualizer.fx.FxLevel
 import com.nasmusic.tv.visualizer.fx.OverlayFx
+import com.nasmusic.tv.visualizer.fx.ProceduralTexture
 
 /**
  * 渲染器基类（模板方法）。
@@ -71,6 +72,15 @@ abstract class RendererFx : VisualizerRenderer {
     final override fun onExit() {
         onExitContent()
         OverlayFx.release()           // ⛔ 共享纹理必须释放（API 22–25 位图在 native 堆）
+        // H4 修复（2026-10-06）：ProceduralTexture 在效果切离时释放——旧实现生产代码
+        // 零调用点，全屏位图（6 张 1080p ARGB ≈ 47MB）在 native 常驻且无自愈路径。
+        // 时序前提（当前成立）：生产路径 crossfade 恒为 false（VisualizerStage 硬切），
+        // 时序为 fresh.onEnter → old.onExit → 新渲染器首帧 drawContent 才 ensure，
+        // 故此处释放不会波及新渲染器已烘纹理。⚠️ 若日后开启 crossfade：淡出结束
+        // （RendererSwapper.advance）时旧渲染器 onExit 晚于新渲染器首帧 ensure，
+        // 需把本释放点移到 RendererSwapper 层并保证在新渲染器重烘之后；好在逐槽
+        // 记账修复（ensure 对空槽会重烘）下，最坏情况也只是缺一帧后自愈。
+        ProceduralTexture.release()
     }
 
     /** 子类自己的 onEnter（**不要**再写 `override fun onEnter`） */
