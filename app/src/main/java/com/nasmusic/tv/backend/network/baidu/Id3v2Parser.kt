@@ -90,7 +90,11 @@ object Id3v2Parser {
                 raf.readFully(probe)
                 val tagTotal = tagTotalSize(probe) ?: return null
                 if (tagTotal <= probeSize) return probe
-                val want = tagTotal.coerceAtMost(maxTagBytes).coerceAtMost(file.length().toInt())
+                // L4 修复（2026-10-06，代码审查报告 §5）：全程 Long 比较——旧实现的
+                // `file.length().toInt()` 在 ≥2GiB 文件上溢出为负 ⇒ want 为负 ⇒
+                // ByteArray(want) 抛 NegativeArraySizeException 被外层 catch 吞成 null
+                // （标签提取静默失败）。
+                val want = minOf(tagTotal.toLong(), maxTagBytes.toLong(), file.length()).toInt()
                 val full = ByteArray(want)
                 raf.seek(0)
                 raf.readFully(full)

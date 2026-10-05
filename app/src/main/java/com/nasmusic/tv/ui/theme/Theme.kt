@@ -8,6 +8,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -275,11 +277,30 @@ fun NASMusicTVTheme(
         dimLine = LyricsTheme.dimLine
     )
     // Task 12: 检测系统高对比度模式
+    // L15 修复（2026-10-06，代码审查报告 §5）：旧实现用 `uiMode and 0x20000` 掩码判断，
+    // 但 0x20000 不是任何 Android 高对比度标志位（UI_MODE_NIGHT_MASK=0x30）⇒ 恒为 false，
+    // 4 个消费分支（AlbumGrid/ArtistList）整条从未生效；且 remember 包裹不随配置变化重组。
+    // 修复：读 Settings.Secure 的 high_text_contrast_enabled（API 21+，minSdk 22 兼容；
+    // AccessibilityManager.isHighTextContrastTextEnabled 是 API 36+ 不可用），
+    // 并注册 ContentObserver 监听系统开关变化 ⇒ 状态变化时自动重组。
     val context = androidx.compose.ui.platform.LocalContext.current
-    val isHighContrast = remember {
-        val uiMode = context.resources.configuration.uiMode
-        (uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK) == android.content.res.Configuration.UI_MODE_NIGHT_YES &&
-        (uiMode and 0x20000) != 0 // UI_MODE_NIGHT_YES 高对比度标志
+    var isHighContrast by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+    androidx.compose.runtime.DisposableEffect(context) {
+        fun readFlag(): Boolean = android.provider.Settings.Secure.getInt(
+            context.contentResolver,
+            "high_text_contrast_enabled", 0
+        ) == 1
+        isHighContrast = readFlag()
+        val observer = object : android.database.ContentObserver(null) {
+            override fun onChange(selfChange: Boolean) {
+                isHighContrast = readFlag()
+            }
+        }
+        context.contentResolver.registerContentObserver(
+            android.provider.Settings.Secure.getUriFor("high_text_contrast_enabled"),
+            false, observer
+        )
+        onDispose { context.contentResolver.unregisterContentObserver(observer) }
     }
     androidx.compose.runtime.CompositionLocalProvider(
         LocalLyricsTheme provides lyricsTheme,
@@ -353,7 +374,9 @@ val LocalPhoneCompact = androidx.compose.runtime.staticCompositionLocalOf { fals
 /**
  * Task 12: 高对比度模式
  *
- * 读取系统 UI_MODE_MASK_HIGH_CONTRAST 标志，提供 CompositionLocal 供组件使用。
+ * 读取 Settings.Secure.high_text_contrast_enabled（L15 修复，2026-10-06：
+ * 旧注释引用的 `UI_MODE_MASK_HIGH_CONTRAST` 常量并不存在，原掩码实现恒为 false），
+ * 提供 CompositionLocal 供组件使用。
  * 高对比度模式下：分割线加粗、焦点边框加宽、文字对比增强。
  */
 val LocalHighContrast = androidx.compose.runtime.staticCompositionLocalOf { false }

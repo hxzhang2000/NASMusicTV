@@ -55,7 +55,12 @@ class WeatherApi {
                 .header("User-Agent", "NASMusicTV/2.6")
                 .build()
             // 必须 use{} 关闭 Response，否则连接/连接池资源泄漏
+            // M9 修复（2026-10-06）：先查 isSuccessful 再读 body，失败时记录 HTTP code
             val body = client.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) {
+                    AppLog.w(TAG, "getIpLocation: HTTP ${response.code}")
+                    return@withContext IpLocation()
+                }
                 response.body?.string()
             } ?: return@withContext IpLocation()
             val json = gson.fromJson(body, JsonObject::class.java)
@@ -99,7 +104,13 @@ class WeatherApi {
                 .url(url)
                 .header("User-Agent", "NASMusicTV/2.6")
                 .build()
+            // M9 修复（2026-10-06）：先查 isSuccessful（Open-Meteo 的 4xx/5xx 是合法 JSON
+            // 错误体，旧实现解析后取 "current" 为 null 静默返回、丢失诊断信息）
             val body = client.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) {
+                    AppLog.w(TAG, "Open-Meteo: HTTP ${response.code}")
+                    return@withContext null
+                }
                 response.body?.string()
             } ?: return@withContext null
             val json = gson.fromJson(body, JsonObject::class.java)
@@ -139,7 +150,13 @@ class WeatherApi {
                 .url(url)
                 .header("User-Agent", "NASMusicTV/2.6")
                 .build()
+            // M9 修复（2026-10-06）：先查 isSuccessful——OWM key 失效返回 401（合法 JSON
+            // 错误体），旧实现静默返回 null，用户只看到「检查网络」而非「key 无效」
             val body = client.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) {
+                    AppLog.w(TAG, "OpenWeatherMap: HTTP ${response.code} (key invalid?)")
+                    return null
+                }
                 response.body?.string()
             } ?: return null
             val json = gson.fromJson(body, JsonObject::class.java)
@@ -188,6 +205,11 @@ class WeatherApi {
                 .header("User-Agent", "NASMusicTV/2.6")
                 .build()
             val body = client.newCall(request).execute().use { response ->
+                // M9 修复（2026-10-06）：同 getWeatherOpenWeatherMap——先查 isSuccessful
+                if (!response.isSuccessful) {
+                    AppLog.w(TAG, "getForecast: HTTP ${response.code}")
+                    return@withContext emptyList()
+                }
                 response.body?.string()
             } ?: return@withContext emptyList()
             val json = gson.fromJson(body, JsonObject::class.java)

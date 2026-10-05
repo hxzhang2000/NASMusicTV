@@ -131,20 +131,83 @@ class DownloadDatabaseMigrationTest {
     }
 
     /**
-     * 用**生产代码的升级路径**打开：`Room.databaseBuilder` + `MIGRATION_1_2`。
-     * Room 会在此校验迁移后的表结构与 `DownloadSongEntity` 定义是否一致，
+     * 用**生产代码的升级路径**打开：`Room.databaseBuilder` + 全部迁移。
+     * v1 库会依次走 MIGRATION_1_2 → MIGRATION_2_3 升到 v3；v2 库直接走 MIGRATION_2_3。
+     * Room 会在此校验迁移后的表结构与实体定义是否一致，
      * 不一致会抛 `IllegalStateException`（测试失败 = 真实设备会崩溃）。
      */
-    private fun openV2(): DownloadDatabase =
+    private fun openLatest(): DownloadDatabase =
         Room.databaseBuilder(context, DownloadDatabase::class.java, DB_NAME)
-            .addMigrations(DownloadDatabase.MIGRATION_1_2)
+            .addMigrations(DownloadDatabase.MIGRATION_1_2, DownloadDatabase.MIGRATION_2_3)
             .allowMainThreadQueries()
             .build()
 
     @Test
+    fun `v1 升 v3 后 export_records 的 size 死列已移除`() {
+        seedV1()
+        // v1 库先写一条 export_records 存量行（含 size 列）
+        seedV1ExportRecord()
+        val db = openLatest()
+        try {
+            // Room 打开成功本身已校验「实体定义 == 实际表结构」（size 列若还在会抛
+            // IllegalStateException）；这里再显式验证列集合：Robolectric 的老 SQLite
+            // 不支持 pragma_table_info() 表值函数，改用 PRAGMA table_info 逐行扫。
+            val columns = mutableListOf<String>()
+            db.query("PRAGMA table_info(export_records)", null).use { c ->
+                while (c.moveToNext()) columns.add(c.getString(1))
+            }
+            assertEquals(
+                listOf("id", "volume_id", "rel_path", "src_path", "src_size", "exported_at"),
+                columns
+            )
+            // 存量行必须保留且业务字段完好
+            val rec = runBlocking { db.exportRecordDao().byVolume("vol-1") }
+            assertEquals(1, rec.size)
+            assertEquals("周杰伦/七里香/01 - 七里香.mp3", rec[0].relPath)
+            assertEquals(100L, rec[0].srcSize)
+            // 新写入不带 size 字段（实体已删列）
+            runBlocking {
+                db.exportRecordDao().upsert(
+                    com.nasmusic.tv.backend.download.db.ExportRecordEntity(
+                        volumeId = "vol-1",
+                        relPath = "新歌/01.mp3",
+                        srcPath = "/m/new.mp3",
+                        srcSize = 200L,
+                        exportedAt = 1L
+                    )
+                )
+            }
+            assertEquals(2, runBlocking { db.exportRecordDao().countByVolume("vol-1") })
+        } finally {
+            db.close()
+        }
+    }
+
+    /** 在 v1 库里写一条 export_records 存量行（含已废弃的 size 列） */
+    private fun seedV1ExportRecord() {
+        val helper = FrameworkSQLiteOpenHelperFactory().create(
+            SupportSQLiteOpenHelper.Configuration.builder(context)
+                .name(DB_NAME)
+                .callback(object : SupportSQLiteOpenHelper.Callback(1) {
+                    override fun onCreate(db: SupportSQLiteDatabase) = Unit
+                    override fun onUpgrade(db: SupportSQLiteDatabase, old: Int, new: Int) = Unit
+                })
+                .build()
+        )
+        helper.use { h ->
+            h.writableDatabase.execSQL(
+                """
+                INSERT INTO export_records (id, volume_id, rel_path, src_path, size, src_size, exported_at)
+                VALUES (1, 'vol-1', '周杰伦/七里香/01 - 七里香.mp3', '/m/1.mp3', 100, 100, 1000)
+                """.trimIndent()
+            )
+        }
+    }
+
+    @Test
     fun `迁移后存量行数不变 一条都不丢`() {
         seedV1()
-        val db = openV2()
+        val db = openLatest()
         try {
             val dao = db.downloadSongDao()
             assertEquals("存量 4 行必须全部保留", 4, db.query("SELECT COUNT(*) FROM download_songs", null).use { c ->
@@ -160,7 +223,7 @@ class DownloadDatabaseMigrationTest {
     @Test
     fun `迁移后 songKey 未被改写`() {
         seedV1()
-        val db = openV2()
+        val db = openLatest()
         try {
             val keys = mutableListOf<String>()
             db.query("SELECT songKey FROM download_songs ORDER BY songKey", null).use { c ->
@@ -178,7 +241,7 @@ class DownloadDatabaseMigrationTest {
     @Test
     fun `迁移后 quality 列全部为 0（AUTO 档）`() {
         seedV1()
-        val db = openV2()
+        val db = openLatest()
         try {
             db.query("SELECT COUNT(*) FROM download_songs WHERE quality = 0", null).use { c ->
                 c.moveToFirst()
@@ -196,7 +259,7 @@ class DownloadDatabaseMigrationTest {
     @Test
     fun `迁移后业务字段原样保留`() {
         seedV1()
-        val db = openV2()
+        val db = openLatest()
         try {
             val e = runBlocking { db.downloadSongDao().get("ntwk_meting_1001") }
             assertTrue("存量行必须可读", e != null)
@@ -214,7 +277,7 @@ class DownloadDatabaseMigrationTest {
     @Test
     fun `songId 索引存在且可用`() {
         seedV1()
-        val db = openV2()
+        val db = openLatest()
         try {
             db.query(
                 "SELECT name FROM sqlite_master WHERE type='index' AND name='index_download_songs_songId'",
@@ -233,7 +296,7 @@ class DownloadDatabaseMigrationTest {
     @Test
     fun `迁移后能与带档位后缀的新行共存 不撞主键`() {
         seedV1()
-        val db = openV2()
+        val db = openLatest()
         try {
             val dao = db.downloadSongDao()
             // 这是 v2 的核心能力：同曲多档共存
@@ -256,7 +319,7 @@ class DownloadDatabaseMigrationTest {
     @Test
     fun `迁移后唯一索引仍生效 重复 songKey 被拒`() {
         seedV1()
-        val db = openV2()
+        val db = openLatest()
         try {
             val rejected = try {
                 // upsert 是 REPLACE 语义不抛异常；用裸 INSERT 验证唯一约束
@@ -286,7 +349,7 @@ class DownloadDatabaseMigrationTest {
     @Test
     fun `AUTO 档能命中存量行 升级后不会重复下载`() {
         seedV1()
-        val db = openV2()
+        val db = openLatest()
         try {
             // 模拟 v2 的 isDownloaded(song, AUTO)：查无后缀 key
             val hit = runBlocking { db.downloadSongDao().getCompletedByKey("ntwk_meting_1001") }

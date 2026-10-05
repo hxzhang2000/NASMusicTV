@@ -15,7 +15,7 @@ import kotlin.math.cos
 import kotlin.math.sin
 
 /**
- * E29 `ORBITAL_RINGS` — 轨道 · 太阳系
+ * E29 `ORBITAL_RINGS` — 太阳系
  *
  * 视觉：完整太阳系——中央恒星随音乐缩放律动、悬于深空星野之上，八大行星
  * （水星→海王星）沿**倾斜视点下的椭圆**轨道公转，轨道间距/尺寸/周期按真实顺序
@@ -23,7 +23,8 @@ import kotlin.math.sin
  * 倾斜（20°）的椭圆光环，按「远侧半弧 → 行星盘 → 近侧半弧」三段绘制，
  * 遮挡关系正确。每颗行星自带卫星系统（绕行星公转、内快外慢、跟随行星移动）：
  * 地球月球、火卫一/二、木星四颗伽利略卫星、土卫六、天卫 Titania/Oberon、
- * 海卫一（偏粉）——卫星环更细更淡、半径恒小于行星轨道。
+ * 海卫一（偏粉）——卫星环更细更淡、半径恒小于行星轨道；卫星本体同样按轨道
+ * 远/近侧**分两段**绘制（远侧画在行星盘之前 ⇒ 转到行星背后时被盘遮住）。
  *
  *  - **倾斜视点（[TILT] = 0.5）**：不是「正圆俯视」，而是斜俯视——轨道线、
  *    行星/卫星位置的 **y 分量统一乘 [TILT]** ⇒ 每条轨道都是椭圆，
@@ -428,10 +429,16 @@ class OrbitalRingsRenderer : VisualizerRenderer {
         }
 
         // ── 中央恒星：全场唯一随音乐律动的天体（低音+节拍 → 半径，能量 → 辉光强度）
-        //    三路信号均低通平滑（E29 旧版直接用原始值；邻居 RadarGrid 同款 bassSmooth 写法）──
-        bassSmooth += (frame.bass - bassSmooth) * BASS_FOLLOW
-        pulseSmooth += (frame.pulse - pulseSmooth) * PULSE_FOLLOW
-        energySmooth += (frame.energy - energySmooth) * ENERGY_FOLLOW
+        //    三路信号均低通平滑（E29 旧版直接用原始值；邻居 RadarGrid 同款 bassSmooth 写法）
+        //    M10 修复（2026-10-06）：EMA 系数乘 dt 参数化——旧实现固定系数等价于隐含
+        //    「60fps 基准」，帧率不稳时鼓点跟随忽快忽慢。改为 1-(1-k)^(dt·60)（与原系数
+        //    在 60fps 下逐帧等价），dtSec 上文已算好（clamp 0.1s）。
+        val bassK = 1f - Math.pow((1f - BASS_FOLLOW).toDouble(), (dtSec * 60f).toDouble()).toFloat()
+        val pulseK = 1f - Math.pow((1f - PULSE_FOLLOW).toDouble(), (dtSec * 60f).toDouble()).toFloat()
+        val energyK = 1f - Math.pow((1f - ENERGY_FOLLOW).toDouble(), (dtSec * 60f).toDouble()).toFloat()
+        bassSmooth += (frame.bass - bassSmooth) * bassK
+        pulseSmooth += (frame.pulse - pulseSmooth) * pulseK
+        energySmooth += (frame.energy - energySmooth) * energyK
         val sunScale = 1f + bassSmooth * RADIUS_BASS_GAIN + pulseSmooth * RADIUS_PULSE_GAIN
         val sunR = scale * SUN_R * sunScale
         val glowAlpha = GLOW_ALPHA_BASE + energySmooth * GLOW_ALPHA_GAIN
@@ -471,8 +478,20 @@ class OrbitalRingsRenderer : VisualizerRenderer {
         Offset(center.x + worldX * scale, center.y + worldY * scale * TILT)
 
     /**
-     * 绘制单颗行星系统（内部顺序固定，不可调整）：
-     * 卫星环 → 土星远弧 → 行星盘 → 细节 → 高光 → 土星近弧 → 卫星本体。
+     * 绘制单颗行星系统（**远侧元素 → 行星盘 → 近侧元素**）：
+     * 卫星轨道环 → 土星远弧 → **远侧卫星本体** → 行星盘 → 细节 → 高光 →
+     * 土星近弧 → 近侧卫星本体。
+     *
+     * **卫星本体按轨道远/近侧分两段绘制**（2026-10-05 修「卫星转到行星背后却盖在上面」）：
+     * 卫星屏幕 y 与行星盘屏幕 y 之差 = `sin(ma) × orbit × scale × TILT`（两者世界 x 只差
+     * `cos(ma) × orbit`，而 [project] 只把 y 乘 [TILT]）⇒ **`sin(ma) < 0` 即屏幕上方**，
+     * 与行星级深度分层同一约定（[draw] 里屏幕 y < 中线 = 远侧、画在太阳之前）⇒
+     * `sin(ma) < 0` 的卫星在轨道远侧，**必须画在行星盘之前**。
+     *
+     * ⛔ **不再加「卫星是否落在行星轮廓内」的判据**：行星盘是不透明遮挡体，先画远侧卫星
+     * 后画盘 ⇒ 落在盘内的部分自然被吃掉、露在盘外的部分自然露出，正是正确的遮挡
+     * （部分可见本身就是深度线索）。若改成「只在完全落入盘内才提前画」，卫星会在跨越
+     * 盘边缘的瞬间整颗跳变/闪烁。
      *
      * @param idx 行星下标（由深度分层排序结果给出）
      * @param extentYScreen 系统屏幕垂直半径，近大远小的归一化分母
@@ -514,6 +533,25 @@ class OrbitalRingsRenderer : VisualizerRenderer {
         // 土星：远侧半弧 → 行星盘 → 近侧半弧（遮挡正确）
         if (idx == SATURN) drawSaturnRing(px, py, pr, ringStroke, back = true)
 
+        // 远侧卫星本体（sin(ma) < 0 ⇒ 屏幕 y 在盘之上 ⇒ 轨道远侧）：画在行星盘之前，
+        // 盘内的部分被行星遮住、盘外的部分露出（遮挡正确，见本函数 KDoc 判定式）
+        mi = 0
+        while (mi < p.moons.size) {
+            val mo = p.moons[mi]
+            if (tier > 0 || !mo.optional) {
+                val ma = angleAt(elapsed, mo.period, mo.phase)
+                val sma = sin(ma)
+                if (sma < 0f) {
+                    drawCircle(
+                        mo.color,
+                        radius = mo.radius * scale * depth,
+                        center = project(wx + cos(ma) * mo.orbit, wy + sma * mo.orbit, center, scale)
+                    )
+                }
+            }
+            mi++
+        }
+
         drawCircle(p.color, radius = pr, center = pos)
 
         // 行星细节（LOW 跳过）
@@ -547,17 +585,21 @@ class OrbitalRingsRenderer : VisualizerRenderer {
 
         if (idx == SATURN) drawSaturnRing(px, py, pr, ringStroke, back = false)
 
-        // 卫星本体：世界坐标整体过 project（含 TILT），半径同享 depth 系数
+        // 近侧卫星本体（sin(ma) ≥ 0 ⇒ 轨道近侧）：画在行星盘之后，可盖住盘缘；
+        // 世界坐标整体过 project（含 TILT），半径同享 depth 系数
         mi = 0
         while (mi < p.moons.size) {
             val mo = p.moons[mi]
             if (tier > 0 || !mo.optional) {
                 val ma = angleAt(elapsed, mo.period, mo.phase)
-                drawCircle(
-                    mo.color,
-                    radius = mo.radius * scale * depth,
-                    center = project(wx + cos(ma) * mo.orbit, wy + sin(ma) * mo.orbit, center, scale)
-                )
+                val sma = sin(ma)
+                if (sma >= 0f) {
+                    drawCircle(
+                        mo.color,
+                        radius = mo.radius * scale * depth,
+                        center = project(wx + cos(ma) * mo.orbit, wy + sma * mo.orbit, center, scale)
+                    )
+                }
             }
             mi++
         }

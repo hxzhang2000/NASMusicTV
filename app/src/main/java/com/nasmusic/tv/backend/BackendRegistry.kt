@@ -102,7 +102,9 @@ class BackendRegistry(private val appContext: Context? = null) {
             ok
         } catch (e: Exception) {
             AppLog.e("BackendRegistry", "initialize: exception during adapter.initialize()", e)
-            try { adapter.close() } catch (_: Exception) {}
+            // L1 修复（2026-10-06）：失败分支对称走 releaseAdapter（logout + close）——
+            // 旧实现只 close 不 logout，与成功替换路径（releaseAdapter）不对称。
+            releaseAdapter(adapter)
             false
         }
 
@@ -126,7 +128,8 @@ class BackendRegistry(private val appContext: Context? = null) {
             // 其他后端 streamHeaders 为空 Map，注入后行为不变。
             BackendAuthHeaders.update({ adapter.streamHeaders }, hostOf(config.baseUrl))
         } else {
-            try { adapter.close() } catch (_: Exception) {}
+            // L1 修复：同上——对称 releaseAdapter，防服务端 session 残留
+            releaseAdapter(adapter)
         }
 
         success

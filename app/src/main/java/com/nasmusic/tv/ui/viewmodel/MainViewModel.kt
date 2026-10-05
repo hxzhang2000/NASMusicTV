@@ -629,14 +629,35 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
     private val _errorMessage = MutableStateFlow<String?>(null)
     val errorMessage: StateFlow<String?> = _errorMessage.asStateFlow()
 
+    // --- 连接类瞬态消息（M6 修复：本地直写站点的统一入口）---
+    // MainViewModel 内 8 处「写 _connectMessage + delay + 置 null」曾各自持有独立
+    // 定时器（2s/5s 不等），后一条消息会被前一条的定时器提前清掉（M6）。
+    // 统一走单调版本号清除；serverVM.postConnectMessage 已另行修复。
+    private var connectMessageVersion: Long = 0L
+
+    private fun postLocalConnectMessage(msg: String?, clearAfterMs: Long = 2000) {
+        val token = ++connectMessageVersion
+        _connectMessage.value = msg
+        viewModelScope.launch {
+            delay(clearAfterMs)
+            if (token == connectMessageVersion) _connectMessage.value = null
+        }
+    }
+
     /** v2.35.0 多码率：对外暴露的轻量提示入口（UI 层需要主动报错时使用） */
     fun showMessage(msg: String) = showError(msg)
 
+    /** M6 修复（2026-10-06）：消息单调版本号——旧定时器只允许清掉自己写入的那条消息 */
+    private var errorMessageVersion: Long = 0L
+
     private fun showError(msg: String) {
+        val token = ++errorMessageVersion
         _errorMessage.value = msg
         viewModelScope.launch {
             delay(5000)
-            _errorMessage.value = null
+            // M6 修复：仅当没有更新的消息写入时才清空——旧实现后一条消息会被
+            // 前一条的 5s 定时器提前清掉（「提示闪现即逝」）
+            if (token == errorMessageVersion) _errorMessage.value = null
         }
     }
 
@@ -2257,11 +2278,8 @@ showError(getApplication<Application>().getString(R.string.toggle_favorite_error
         _isNetworkAvailable.value = true
         // MTV 模式下不弹提示（MV 视频流请求可能导致网络抖动，频繁弹"网络已恢复"打扰观看）
         if (!mvVM.showMv.value) {
-            _connectMessage.value = getApplication<Application>().getString(R.string.status_network_restored)
-            viewModelScope.launch {
-                delay(2000)
-                _connectMessage.value = null
-            }
+            postLocalConnectMessage(
+                getApplication<Application>().getString(R.string.status_network_restored), 2000)
         }
         // F2-4：断线续播——取回断点，2 秒去抖后重解析当前歌并 seek 回断点
         val resumePoint = playerManager.onNetworkRestored()
@@ -2295,11 +2313,8 @@ showError(getApplication<Application>().getString(R.string.toggle_favorite_error
         // F2-4：标记断网（PlayerManager 冻结错误跳歌，等待恢复续播）
         playerManager.onNetworkGone()
         if (!mvVM.showMv.value) {
-            _connectMessage.value = getApplication<Application>().getString(R.string.status_network_disconnected)
-            viewModelScope.launch {
-                delay(5000)
-                _connectMessage.value = null
-            }
+            postLocalConnectMessage(
+                getApplication<Application>().getString(R.string.status_network_disconnected), 5000)
         }
     }
 
@@ -2468,9 +2483,8 @@ showError(getApplication<Application>().getString(R.string.toggle_favorite_error
     fun clearAccompanimentCache() {
         viewModelScope.launch {
             val count = vocalVM.clearAccompanimentCache()
-            _connectMessage.value = getApplication<Application>().getString(R.string.status_accompaniment_cache_cleared, count)
-            delay(2000)
-            _connectMessage.value = null
+            postLocalConnectMessage(
+                getApplication<Application>().getString(R.string.status_accompaniment_cache_cleared, count))
         }
     }
 
@@ -2482,11 +2496,8 @@ showError(getApplication<Application>().getString(R.string.toggle_favorite_error
     }
     fun clearMvPersistentCache() {
         mvVM.clearPersistentCache {
-            viewModelScope.launch {
-                _connectMessage.value = getApplication<Application>().getString(R.string.status_mv_cache_cleared)
-                delay(2000)
-                _connectMessage.value = null
-            }
+            postLocalConnectMessage(
+                getApplication<Application>().getString(R.string.status_mv_cache_cleared))
         }
     }
 
@@ -3080,9 +3091,8 @@ showError(getApplication<Application>().getString(R.string.toggle_favorite_error
     fun clearLyricsCache() {
         viewModelScope.launch {
             lyricsManager.clearCache()
-            _connectMessage.value = getApplication<Application>().getString(R.string.status_lyrics_cache_cleared)
-            delay(2000)
-            _connectMessage.value = null
+            postLocalConnectMessage(
+                getApplication<Application>().getString(R.string.status_lyrics_cache_cleared))
         }
     }
 
@@ -3097,9 +3107,8 @@ showError(getApplication<Application>().getString(R.string.toggle_favorite_error
             imageLoader.memoryCache?.clear()
             imageLoader.diskCache?.clear()
             AppLog.d("MainViewModel", "clearCoverCache: cache cleared")
-            _connectMessage.value = getApplication<Application>().getString(R.string.status_cover_cache_cleared)
-            delay(2000)
-            _connectMessage.value = null
+            postLocalConnectMessage(
+                getApplication<Application>().getString(R.string.status_cover_cache_cleared))
         }
     }
 
@@ -3190,15 +3199,13 @@ showError(getApplication<Application>().getString(R.string.toggle_favorite_error
                 if (result != null) {
                     val current = _playlists.value.dataOrNull() ?: emptyList()
                     _playlists.value = UiState.Success(current + result)
-                    _connectMessage.value = getApplication<Application>().getString(R.string.playlist_created)
+                    postLocalConnectMessage(getApplication<Application>().getString(R.string.playlist_created))
                 } else {
-                    _connectMessage.value = getApplication<Application>().getString(R.string.create_failed)
+                    postLocalConnectMessage(getApplication<Application>().getString(R.string.create_failed))
                 }
             } catch (e: Exception) {
-                _connectMessage.value = getApplication<Application>().getString(R.string.create_failed_with_msg, e.message)
+                postLocalConnectMessage(getApplication<Application>().getString(R.string.create_failed_with_msg, e.message))
             }
-            delay(2000)
-            _connectMessage.value = null
         }
     }
 
@@ -3214,15 +3221,13 @@ showError(getApplication<Application>().getString(R.string.toggle_favorite_error
                     if (selSongs != null && selSongs.any { it.albumId == playlist.id }) {
                         _selectedPlaylistSongs.value = UiState.Success(emptyList())
                     }
-                    _connectMessage.value = getApplication<Application>().getString(R.string.playlist_deleted)
+                    postLocalConnectMessage(getApplication<Application>().getString(R.string.playlist_deleted))
                 } else {
-                    _connectMessage.value = getApplication<Application>().getString(R.string.delete_failed)
+                    postLocalConnectMessage(getApplication<Application>().getString(R.string.delete_failed))
                 }
             } catch (e: Exception) {
-                _connectMessage.value = getApplication<Application>().getString(R.string.delete_failed_with_msg, e.message)
+                postLocalConnectMessage(getApplication<Application>().getString(R.string.delete_failed_with_msg, e.message))
             }
-            delay(2000)
-            _connectMessage.value = null
         }
     }
 

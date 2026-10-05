@@ -29,7 +29,9 @@ data class ExportRecordEntity(
     @ColumnInfo(name = "volume_id") val volumeId: String,    // 卷 UUID 或路径哈希（设备标识）
     @ColumnInfo(name = "rel_path") val relPath: String,      // 相对导出根，如 "周杰伦/七里香/01 - 七里香.mp3"
     @ColumnInfo(name = "src_path") val srcPath: String,      // 本地源文件绝对路径
-    @ColumnInfo(name = "size") val size: Long,
+    // L13 修复（2026-10-06，代码审查报告 §5）：删除死列 size——旧实现写入与 srcSize
+    // 完全相同的 task.src.length()，全仓唯一读取点（增量过滤）只用 srcSize。
+    // 随 MIGRATION_2_3 重建表移除该列。
     @ColumnInfo(name = "src_size") val srcSize: Long,        // 用于判断源文件是否变化需重导
     @ColumnInfo(name = "exported_at") val exportedAt: Long
 )

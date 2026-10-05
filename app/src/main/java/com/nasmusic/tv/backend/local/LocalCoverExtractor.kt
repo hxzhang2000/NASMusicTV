@@ -31,13 +31,14 @@ class LocalCoverExtractor(private val context: Context) {
         )
     }
 
-    /** 从音频文件内嵌元数据提取封面图片 */
+    /** 从音频文件内嵌元数据提取封面图片
+     *  L7 修复（2026-10-06，代码审查报告 §5）：retriever.release() 移入 finally——
+     *  旧实现在 try 内、setDataSource 抛异常时 native 句柄泄漏（损坏文件路径必现）。 */
     fun extractEmbeddedCover(audioPath: String): Bitmap? {
+        val retriever = MediaMetadataRetriever()
         return try {
-            val retriever = MediaMetadataRetriever()
             retriever.setDataSource(audioPath)
             val art = retriever.embeddedPicture
-            retriever.release()
             art?.let { bytes ->
                 // P3 修复（2026-09-22 审查）：bounds + inSampleSize 先降采样再全解码，
                 // 避免大内嵌图（配合 256KB 智能读取放行的 1-2MB 图）全尺寸解码的内存
@@ -58,6 +59,8 @@ class LocalCoverExtractor(private val context: Context) {
         } catch (e: Exception) {
             AppLog.w(TAG, "extract embedded cover failed: ${e.message}")
             null
+        } finally {
+            runCatching { retriever.release() }
         }
     }
 

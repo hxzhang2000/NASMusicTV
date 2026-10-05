@@ -8,15 +8,15 @@ import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
 /**
- * 下载索引数据库（downloads.db，version = 2）
+ * 下载索引数据库（downloads.db，version = 3）
  *
- * **schema 导出已开启**（v2.35.0）：本库现在有真实迁移 `MIGRATION_1_2`，
- * 导出的 `app/schemas/.../DownloadDatabase/{1,2}.json` 是 `MigrationTestHelper`
+ * **schema 导出已开启**（v2.35.0）：本库现在有真实迁移 `MIGRATION_1_2` / `MIGRATION_2_3`，
+ * 导出的 `app/schemas/.../DownloadDatabase/{1,2,3}.json` 是 `MigrationTestHelper`
  * 验证"迁移后表结构与实体定义一致"的唯一依据。改动表结构时必须同步 bump version，
  * 并让 KSP 重新导出新版本 JSON（**不要手改 JSON**）。
  *
  * **独立建库，绝不并入 LocalMusicDatabase**：
- * - [com.nasmusic.tv.backend.local.db.LocalMusicDatabase] 当前为 v2 且开启 `fallbackToDestructiveMigration(true)`，
+ * - [com.nasmusic.tv.backend.local.db.LocalMusicDatabase] 当前为 v3 且开启 `fallbackToDestructiveMigration(true)`，
  *   任何 schema 变更都会破坏性重建 —— 把下载索引并入会导致 schema 变更时下载记录全丢、
  *   文件变孤儿、用户重复下载。
  * - 下载索引命中"按字段查询/聚合"（COUNT 配额、SUM 占用、按 dedupeKey 查重）+
@@ -32,7 +32,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         DownloadSongEntity::class,
         ExportRecordEntity::class
     ],
-    version = 2,
+    version = 3,
     exportSchema = true
 )
 abstract class DownloadDatabase : RoomDatabase() {
@@ -64,13 +64,44 @@ abstract class DownloadDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * L13 修复（2026-10-06，代码审查报告 §5）：export_records 移除死列 `size`
+         * （与 srcSize 写入完全相同的值、零读取方）。SQLite 不支持 DROP COLUMN
+         * 兼容路径（API 22 上的 SQLite 版本），按标准 12 步重建表。
+         */
+        val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS export_records_new (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        volume_id TEXT NOT NULL,
+                        rel_path TEXT NOT NULL,
+                        src_path TEXT NOT NULL,
+                        src_size INTEGER NOT NULL,
+                        exported_at INTEGER NOT NULL
+                    )
+                    """.trimIndent()
+                )
+                db.execSQL(
+                    "INSERT INTO export_records_new (id, volume_id, rel_path, src_path, src_size, exported_at) " +
+                        "SELECT id, volume_id, rel_path, src_path, src_size, exported_at FROM export_records"
+                )
+                db.execSQL("DROP TABLE export_records")
+                db.execSQL("ALTER TABLE export_records_new RENAME TO export_records")
+                db.execSQL(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS index_export_records_volume_id_rel_path ON export_records (volume_id, rel_path)"
+                )
+            }
+        }
+
         fun get(context: Context): DownloadDatabase = INSTANCE ?: synchronized(this) {
             INSTANCE ?: Room.databaseBuilder(
                 context.applicationContext,
                 DownloadDatabase::class.java,
                 "downloads.db"
             )
-                .addMigrations(MIGRATION_1_2)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
                 // 不启用 fallbackToDestructiveMigration：下载记录不可重建（会导致孤儿文件）
                 .build()
                 .also { INSTANCE = it }

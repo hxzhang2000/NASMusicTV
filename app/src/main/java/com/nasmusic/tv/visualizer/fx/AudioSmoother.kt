@@ -23,5 +23,18 @@ class AudioSmoother(
         return value
     }
 
+    /**
+     * M10 修复（2026-10-06，代码审查报告 §4）：dt 参数化变体——固定系数版 [update]
+     * 等价于隐含 60fps 基准，帧率不稳时跟随速度随帧率漂移。本变体按
+     * `1-(1-k)^(dt·60)` 换算，在 60fps 下与 [update] 逐帧等价。
+     * ⚠️ 当前生产代码无调用方（零消费）；新效果接入时应优先使用本变体。
+     */
+    fun updateDt(target: Float, dtSec: Float): Float {
+        val base = if (target >= value) attack else release
+        val k = 1f - Math.pow((1f - base).toDouble(), (dtSec * 60f).toDouble()).toFloat()
+        value += (target - value) * k
+        return value
+    }
+
     fun reset() { value = 0f }
 }

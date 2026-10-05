@@ -54,15 +54,17 @@ object MusicMerger {
         }
 
         nasAlbums.forEach { album ->
-            val key = album.name.lowercase().trim()
+            // L8 修复（2026-10-06）：album 去重键统一走 normalizeKey（NFKC 全角→半角）——
+            // 旧 lowercase().trim() 下全角专辑名（"ＬＯＶＥ"）与半角不被归并，跨源重复。
+            val key = ArtistSplitter.normalizeKey(album.name)
             if (key.isNotBlank()) mergeInto(key, album)
         }
         localAlbums.forEach { album ->
-            val key = album.name.lowercase().trim()
+            val key = ArtistSplitter.normalizeKey(album.name)
             if (key.isNotBlank()) mergeInto(key, album)
         }
         baiduAlbums.forEach { album ->
-            val key = album.name.lowercase().trim()
+            val key = ArtistSplitter.normalizeKey(album.name)
             if (key.isNotBlank()) mergeInto(key, album)
         }
 
@@ -133,7 +135,8 @@ object MusicMerger {
     fun buildLocalAlbums(localSongs: List<Song>): List<Album> =
         localSongs
             .filter { it.album.isNotBlank() }
-            .groupBy { it.album.lowercase().trim() }
+            // L8 修复：与 mergeAlbums 的 album 键统一走 normalizeKey
+            .groupBy { ArtistSplitter.normalizeKey(it.album) }
             .map { (key, songs) ->
                 val first = songs.first()
                 Album(
@@ -189,7 +192,8 @@ object MusicMerger {
                 if (song.artist.isNotBlank() && dirName.lowercase().trim() == song.artist.lowercase().trim()) return@mapNotNull null
                 dirName to song
             }
-            .groupBy { (albumName, _) -> albumName.lowercase().trim() }
+            // L8 修复：与 mergeAlbums 的 album 键统一走 normalizeKey
+            .groupBy { (albumName, _) -> ArtistSplitter.normalizeKey(albumName) }
             .map { (_, entries) ->
                 val albumName = entries.first().first
                 val songs = entries.map { it.second }

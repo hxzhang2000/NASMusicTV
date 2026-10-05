@@ -693,24 +693,25 @@ class NavidromeAdapter : BackendAdapter {
     }
 
     // --- 收藏 ---
-    // 本地缓存收藏状态，避免每次 toggle 都拉取全量收藏列表
+    // 本地缓存收藏状态（H1 修复后仅用于展示层同步，不再决定 star/unstar 方向）
     private val _favoriteIds = java.util.Collections.synchronizedSet(mutableSetOf<String>())
-    private var _favoritesLoaded = false
 
     override suspend fun toggleFavorite(songId: String, isCurrentlyFavorite: Boolean): Boolean = withContext(Dispatchers.IO) {
         try {
-            // 懒加载收藏列表
-            if (!_favoritesLoaded) {
-                loadFavorites()
-            }
-            val isStarred = songId in _favoriteIds
-            val method = if (isStarred) "unstar" else "star"
+            // H1 修复（2026-10-06，代码审查报告 §3）：以调用方传入的 isCurrentlyFavorite
+            // 决定 star/unstar（对齐 SubsonicAdapter:458-467 的修复版本）。
+            // 旧实现完全忽略入参、依赖 _favoriteIds 会话缓存判断——当 getStarred2 拉取
+            // 失败或返回空时（调用方传入值同样来自第二次 getStarred2），两边同为空、
+            // 全部走 star，用户无法取消收藏。_favoriteIds 仅用于展示层同步。
+            val method = if (isCurrentlyFavorite) "unstar" else "star"
             val url = buildRestUrl(method) + "&id=$songId"
             val json = executeRequest(url)
             val responseSubsonic = json?.getAsJsonObject("subsonic-response")
             val ok = responseSubsonic?.get("status")?.asString == "ok"
             if (ok) {
-                if (isStarred) _favoriteIds.remove(songId) else _favoriteIds.add(songId)
+                if (isCurrentlyFavorite) _favoriteIds.remove(songId) else _favoriteIds.add(songId)
+                // H1 修复：成功后与服务器全量对账，消除本地缓存与服务器漂移
+                runCatching { syncFavoritesFromServer() }
             }
             ok
         } catch (e: Exception) {
@@ -719,16 +720,24 @@ class NavidromeAdapter : BackendAdapter {
         }
     }
 
-    private suspend fun loadFavorites() {
+    private suspend fun syncFavoritesFromServer() {
+        // H1 修复后的展示层同步：重新拉取全量收藏到 _favoriteIds（仅用于 UI 展示状态，
+        // 不再参与 star/unstar 方向判定）。失败时保留旧缓存并记日志。
         val url = buildRestUrl("getStarred2")
-        val json = executeRequest(url) ?: return
+        val json = executeRequest(url) ?: run {
+            AppLog.w("NavidromeAdapter", "syncFavoritesFromServer: getStarred2 request failed")
+            return
+        }
         val subsonic = json.getAsJsonObject("subsonic-response")
         val starredWrap = subsonic?.getAsJsonObject("starred2")
-        val songs = starredWrap?.getAsJsonArray("song") ?: return
+        val songs = starredWrap?.getAsJsonArray("song") ?: run {
+            AppLog.w("NavidromeAdapter", "syncFavoritesFromServer: starred2/song missing")
+            return
+        }
+        _favoriteIds.clear()
         for (i in 0 until songs.size()) {
             songs[i].asJsonObject.get("id")?.asString?.let { _favoriteIds.add(it) }
         }
-        _favoritesLoaded = true
     }
 
     override suspend fun getFavorites(): List<Song> = withContext(Dispatchers.IO) {

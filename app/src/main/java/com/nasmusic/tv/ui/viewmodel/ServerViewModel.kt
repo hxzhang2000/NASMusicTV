@@ -79,12 +79,17 @@ class ServerViewModel(
         _showConnectPrompt.value = false
     }
 
-    /** 供其他域短暂显示连接类消息（如「已加入队列 N 首」），显示后自动清除 */
+    /** 供其他域短暂显示连接类消息（如「已加入队列 N 首」），显示后自动清除。
+     *  M6 修复（2026-10-06）：单调版本号防竞态——后一条消息不会被前一条的
+     *  定时器提前清掉（旧实现下两条消息先后到达时显示错乱）。 */
+    private var connectMessageVersion: Long = 0L
+
     fun postConnectMessage(message: String) {
+        val token = ++connectMessageVersion
         _connectMessage.value = message
         viewModelScope.launch {
             delay(3000)
-            _connectMessage.value = null
+            if (token == connectMessageVersion) _connectMessage.value = null
         }
     }
 

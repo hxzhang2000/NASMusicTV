@@ -196,7 +196,7 @@ class SongExporter(
                             volumeId = volumeId,
                             relPath = task.relPath,
                             srcPath = task.src.absolutePath,
-                            size = task.src.length(),
+                            // L13 修复：size 死列已移除（与 srcSize 写入完全相同的值）
                             srcSize = task.src.length(),
                             exportedAt = System.currentTimeMillis()
                         )
