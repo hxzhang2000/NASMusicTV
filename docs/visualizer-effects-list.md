@@ -1,6 +1,6 @@
 # 可视化效果列表
 
-> **版本**：v2.38.2（versionCode 171）
+> **版本**：v2.38.3（versionCode 172）
 > **更新日期**：2026-10-05
 > **来源**：`app/src/main/java/com/nasmusic/tv/data/model/AppSettings.kt` — `VisualizerTheme` 枚举
 
@@ -36,7 +36,7 @@
 | E16 | MATRIX_RAIN | 数字雨 |
 | E17 | CONSTELLATION | 星座 |
 | E23 | LYRICS_DOT_MATRIX | 歌词点阵 |
-| E29 | ORBITAL_RINGS | 轨道 |
+| E29 | ORBITAL_RINGS | 太阳系 |
 | E39 | PHOTO_WALL | 照片墙 |
 | E40 | DNA | DNA 双螺旋 |
 | E41 | WORLD | 世界 |

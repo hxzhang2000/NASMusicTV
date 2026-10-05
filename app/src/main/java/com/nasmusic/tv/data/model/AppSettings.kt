@@ -126,7 +126,7 @@ enum class VisualizerTheme(
     LYRICS_DOT_MATRIX("歌词点阵", Tier.ADV, "23"),
     ECG_WAVE("心跳", Tier.BASIC, "24"),
     HYPNOTIC_FUNCTION("催眠", Tier.BASIC, "25"),
-    ORBITAL_RINGS("轨道", Tier.ADV, "29"),
+    ORBITAL_RINGS("太阳系", Tier.ADV, "29"),
     RADAR_GRID("雷达", Tier.BASIC, "30"),
     CONCENTRIC_GEARS("齿轮", Tier.BASIC, "33"),
     LIGHT_BEAMS("光轴", Tier.BASIC, "35"),
@@ -148,7 +148,7 @@ enum class VisualizerTheme(
      * DNA 双螺旋（第 40 个效果）
      *
      * 视觉：一条自由弯曲的 DNA 双螺旋缎带蜿蜒于画面中央 —— 青/紫双骨架绕中心
-     * Catmull-Rom 样条反相螺旋、4 色碱基对横档连接，深空星野底（同「轨道」风格）。
+     * Catmull-Rom 样条反相螺旋、4 色碱基对横档连接，深空星野底（同「太阳系」风格）。
      *
      * 归 [Tier.ADV]，但**不**标注 [needsParticleBudget]（渲染器不读 `maxParticles`，
      * 骨架 / 碱基对 / 星野的规模都是常量）⇒ 三档均可选，与数字雨同理。
