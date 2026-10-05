@@ -1,7 +1,7 @@
 import re, io, sys
 
 HTML = r"D:\hxzhang\MyGithubSoftware\NasAudio\NASMusicTV\docs\seaside-preview.html"
-DOC  = r"D:\hxzhang\MyGithubSoftware\NasAudio\NASMusicTV\docs\seaside-visualizer-plan.md"
+DOC  = r"D:\hxzhang\MyGithubSoftware\NasAudio\NASMusicTV\docs\archive\seaside-visualizer-plan.md"
 
 html = io.open(HTML, encoding="utf-8").read()
 doc  = io.open(DOC,  encoding="utf-8").read()

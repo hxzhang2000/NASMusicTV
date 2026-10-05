@@ -217,7 +217,7 @@
 | `parse_lint.py` | 解析 lint HTML 报告（可复用工具） |
 | `_depsrc/`（media3-session 1.2.1 源码，51 文件） | §10.165 的证据链 |
 | `verify_resampler/`、`verify_feiniu_url/`、`verify_auth_headers/`、`verify_ort/` | `CHANGELOG.md` / §10.146 / §10.155 的验证 harness（源码与说明，不含编译产物） |
-| `scripts/seaside_wave_harness.js` | **E43 海边原型的帧驱动 harness**（2026-10-03 归档）。`vm` 沙箱桩掉 DOM/canvas/`Path2D`，打桩 `requestAnimationFrame` 驱动**真实页面代码**，注入探针读浪队列闭包状态。产出交接跳变 / 退水深长 / 浪数 / 每帧位移上限等全部量化阈值，`seaside-visualizer-plan.md` §7 把它列为 Kotlin 端单测的断言口径来源 |
+| `scripts/seaside_wave_harness.js` | **E43 海边原型的帧驱动 harness**（2026-10-03 归档）。`vm` 沙箱桩掉 DOM/canvas/`Path2D`，打桩 `requestAnimationFrame` 驱动**真实页面代码**，注入探针读浪队列闭包状态。产出交接跳变 / 退水深长 / 浪数 / 每帧位移上限等全部量化阈值，`docs/archive/seaside-visualizer-plan.md` §7 把它列为 Kotlin 端单测的断言口径来源 |
 | `scripts/seaside_hole_continuity_check.js` | 泡沫破洞场连续性（可见洞逐帧位移 0.74px = 0.31× 洞半径，8.4× 优于旧实现） |
 | `scripts/seaside_caustic_geom_check.py` | 焦散胞壁网 vs 旧孤立短划的 1:1 栅格化对比（PIL） |
 | `scripts/seaside_visual_driver.mjs` | 真浏览器 CDP 驱动（`snap`/`series`/`waterline`/`cost`），rAF 打桩、确定性推进；截图落 `output/seaside_frames/` |
@@ -242,6 +242,10 @@
 | 移入 `docs/articles/` | 5 | 0 | 0 | **5** |
 | 同步改写引用 | 52 处 / 20 文件 | 57 处 / 41 文件 | 68 处 / 29 文件 | **177 处**（涉及 65+ 文件，各轮有重叠） |
 | `docs/` 根目录 | 62 → 21 | 21 → 15 | 15 → **2** | **−60**（仅剩 2 篇活文档） |
+| `seaside-visualizer-plan.md` | E43 海边实现方案 v1.3。**已 shipped**（`SeasideRenderer.kt` / `SeasideWaves.kt` / `SeasideOpBudget.kt`，v2.38.2；视觉由所有者真机逐项确认后定稿）。**归档时仍带未决项**：§12.5「仍未解决 / 未验证」的 **U1**（单列尖峰 10.77 px，成因未定位）、**U8**（G13 与 §4.7① 在 4K 上冲突，**待裁定**）、**U9**（两处规格歧义，已按「不猜」记录待确认），以及 §4.7 表「逐帧水线最大位移 10.77 px ⛔ 未解决」。接替记录：`docs/seaside-preview.html` 是只读规格基准；全部已验证结论已落 `technical-overview.md` §10.209–§10.211 |
+| `photo-spectrum-effect-plan.md` | 照片墙转场与频谱方案。**已 shipped**（`PHOTO_WALL` = E39，在册于 `VisualizerTheme`）。**归档时待确认项为 0**（文档 §统计自述「待确认 0 项」）；但 §实现期记录着两条**用户上机报告的缺陷**：「竖版图片总是无法占满屏幕」「很多时候进入动画效果还未完成…」，**是否已修复未在文档中回填** —— 需要时回查源码或重上机。⛔ 已知遗留：转场打断（手动切歌/切图时从当前 blend 反向插值）明确留给阶段 10 |
+
+> **2026-10-05 追加归档 2 份**（所有者裁决）：`seaside-visualizer-plan.md`、`photo-spectrum-effect-plan.md` → `docs/archive/`。同步改写引用 **5 处 / 4 文件**（`SeasideWaves.kt`、`PhotoWallSettingsSection.kt`、`docs/archive/README.md`、`docs/archive/starry-sky-visualizer-plan.md`）。⚠️ 其中 **1 处是真正会跑坏的脚本**：`verification/scripts/seaside_doc_consistency_check.py` 的硬编码绝对路径用的是**反斜杠**，因此 `docs/` 正斜杠扫描扫不到——归档时必须手动扫**裸文件名**。⇒ 此论在本轮已被实证两次。
 
 > 上表只计「三轮归档」。另有 **2 份审查报告**自 `logs_temp/` 迁入 `docs/archive/`
 > （见上文「附：验证证据迁移」），故 `docs/archive/` 现共 **57 篇文档 + 本索引**。

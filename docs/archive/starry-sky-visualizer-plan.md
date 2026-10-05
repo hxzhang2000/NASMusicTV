@@ -158,7 +158,7 @@ var timeMs: Long; var seq: Long
 | 禁物 | 依据 | 替代 |
 |---|---|---|
 | AGSL `RuntimeShader` / `.glsl` / `.frag` / OpenGL / EGL | `visualizer-texture-upgrade-plan.md:8-10,994,3276,4681`（`RuntimeShader` 需 API 33+，本项目 minSdk 22） | `BlurMaskFilter` + 预烘焙辉光精灵 |
-| `RenderEffect`（真高斯模糊） | 从未使用；污点近似已是惯例（`photo/transitions/ZoomP1Transitions.kt:23`、`photo-spectrum-effect-plan.md:3043`） | 软件层 `BlurMaskFilter` 或重复贴图淡入 |
+| `RenderEffect`（真高斯模糊） | 从未使用；污点近似已是惯例（`photo/transitions/ZoomP1Transitions.kt:23`、`docs/archive/photo-spectrum-effect-plan.md:3043`） | 软件层 `BlurMaskFilter` 或重复贴图淡入 |
 | `BitmapShader`（整块） | 无一处使用；纹理走 `ProceduralTexture` | `ProceduralTexture` 或 `nativeCanvas` 的 `LinearGradient` |
 | `BlendMode.Difference` | API 29+，`VisualizerStage.kt:416` 已显式绕行 | 用 `BlendMode.Plus`（底环 blit + 亮线段子弧，均加性） |
 | 圆角 `clip` | API 22 三星 hwui 段错误（`VisualizerStage.kt:750-752`，真机 3 次复现） | `drawCircle` / `drawRoundRect` / `Path` 直接绘制 |
