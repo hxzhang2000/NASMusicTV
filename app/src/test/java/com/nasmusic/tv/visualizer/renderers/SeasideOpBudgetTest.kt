@@ -20,7 +20,11 @@ class SeasideOpBudgetTest {
     fun `契约常量等于 4_9_5 的阈值`() {
         assertEquals(90, SeasideOpBudget.OPS_MAX_LOW)
         assertEquals(200, SeasideOpBudget.OPS_MAX_MEDIUM)
-        assertEquals(200, SeasideOpBudget.OPS_MAX_HIGH)
+    // ⛔ 2026-10-05「保真优先」：200 → 320。
+    //   该门的成本模型已被真机证伪（预测 ≈30fps / 实测 4.1~7.3fps，差 4 倍），
+    //   而它已实际逼出三处视觉回归（逐块 alpha 取平均、柔和斑块烘成 N 边形、
+    //   逐列 alpha 压成二值门）⇒ 门必须让位于保真。详见 OPS_MAX_HIGH 的 KDoc。
+    assertEquals(320, SeasideOpBudget.OPS_MAX_HIGH)
         assertEquals(2.0f, SeasideOpBudget.OVERDRAW_MAX_LOW, 1e-6f)
         assertEquals(2.8f, SeasideOpBudget.OVERDRAW_MAX_MEDIUM, 1e-6f)
         assertEquals(3_000_000, SeasideOpBudget.NATIVE_PX_MAX)
@@ -59,10 +63,11 @@ class SeasideOpBudgetTest {
     @Test
     fun `原型保真回补后每档都要真的画东西`() {
         // ① 扰动前锋：⛔ **因「原型保真回补」而复活**（原 §4.9.2「全档删除」⇒ 三档恒 0）。
-        //   恢复成 **HIGH 1 次**（18 块折成一条 path 一次 fill），LOW/MEDIUM 仍 0（§4.7②）。
-        assertEquals(0, SeaOpItem.DISTURBANCE.opsLow)
+    //   ⛔ 2026-10-05 再变：HIGH 由 1 恢复成 **18**（撤回合批、逐块 drawImage 软边白泪）；
+    //   LOW/MEDIUM 仍 0（§4.7②）。
+    assertEquals(0, SeaOpItem.DISTURBANCE.opsLow)
         assertEquals(0, SeaOpItem.DISTURBANCE.opsMed)
-        assertEquals(1, SeaOpItem.DISTURBANCE.opsHigh)
+    assertEquals(18, SeaOpItem.DISTURBANCE.opsHigh)
         assertEquals(18, SeaOpItem.DISTURBANCE.opsLegacy)
         // ⚠️ 填充**不再是 0**：18 块折成矢量后的并集覆盖，按与 OPEN_SEA_FOAM 同口径等比折算
         assertEquals(0.19 * SEA_BAND, SeaOpItem.DISTURBANCE.fillHigh, 1e-12)
@@ -74,7 +79,8 @@ class SeasideOpBudgetTest {
         //   ⛔ 它**不再**属于「恒为零」那一类，但仍保留 `opsLegacy = 97` 供负向自证。
         assertEquals(1, SeaOpItem.SHEEN.opsLow)
         assertEquals(1, SeaOpItem.SHEEN.opsMed)
-        assertEquals(1, SeaOpItem.SHEEN.opsHigh)
+    // ⛔ 2026-10-05：opsHigh 由 1 → **3**（逐列 `globalAlpha = wetAmt[i]` 分 3 档，原型: :2083）
+    assertEquals(1, SeaOpItem.SHEEN.opsHigh)
         assertEquals(97, SeaOpItem.SHEEN.opsLegacy)
         // ⚠️ 填充三档**仍是 0**：高光与湿沙同区域，第二次提交⛔ 不新增像素覆盖（只是变亮）
         assertEquals(0.0, SeaOpItem.SHEEN.fillLow, 1e-12)
@@ -97,19 +103,25 @@ class SeasideOpBudgetTest {
         assertEquals(1, SeaOpItem.RESIDUAL_STREAK.opsLow)
         assertEquals(1, SeaOpItem.RESIDUAL_STREAK.opsMed)
         assertEquals(3, SeaOpItem.RESIDUAL_STREAK.opsHigh)
-        assertEquals(1, SeaOpItem.WET_LINE.opsLow)
-        assertEquals(1, SeaOpItem.WET_LINE.opsMed)
-        assertEquals(2, SeaOpItem.WET_LINE.opsHigh)
+        assertEquals(0, SeaOpItem.WET_LINE.opsLow)
+        assertEquals(0, SeaOpItem.WET_LINE.opsMed)
+        assertEquals(0, SeaOpItem.WET_LINE.opsHigh)
         assertEquals(1, SeaOpItem.PUDDLE.opsLow)
         assertEquals(1, SeaOpItem.PUDDLE.opsMed)
         assertEquals(2, SeaOpItem.PUDDLE.opsHigh)
         // 其余每个元素在 HIGH 档都要真的画东西（防止「漏画」被当成「省预算」）
         // ⛔ 两张豁免名单**刻意不同**：「提交为正」与「填充为正」各有各的合法例外。
-        //   ops == 0：无（原型保真回补后 **每项** HIGH 都 ≥ 1 次提交）。
+        //   ops == 0：**WET_LINE** —— ⛔ 2026-10-05 所有者裁决**删除 `drawWetLine` 整层**。
+        //     原型 `:2367-2389` 是 `ctx.save(); ctx.clip(sandPath); … ctx.restore();` **之后**才描
+        //     ⇒ 只显示在岸线**沙侧**；Kotlin 零 `clipPath` ⇒ 线以岸线为中心、一半落在海侧
+        //     ⇒ 实现走形且所有者判为无用。**这是视觉裁决，不是省预算。**
+        //     （此前此栏为「无」：原型保真回补后每项 HIGH 都 ≥ 1 次提交。）
         //   fill == 0：**SHEEN**（第二次 `Plus` 提交与湿沙**同区域** ⇒ ⛔ 不新增任何像素覆盖）
         //              / **POST_FX**（晕影声明式交给舞台，不计入本效果填充）。
         for (it in SeaOpItem.entries) {
-            assertTrue("${it.name} HIGH 提交数必须为正", it.opsHigh > 0)
+            if (it != SeaOpItem.WET_LINE) {
+                assertTrue("${it.name} HIGH 提交数必须为正", it.opsHigh > 0)
+            }
             if (it != SeaOpItem.POST_FX && it != SeaOpItem.SHEEN) {
                 assertTrue("${it.name} HIGH 填充必须为正", it.fillHigh > 0.0)
             }
@@ -166,20 +178,29 @@ class SeasideOpBudgetTest {
     }
 
     @Test
-    fun `负向自证 扰动前锋退回 18 次逐块 blit 则贡献 36 次提交且改造前整体爆表`() {
-        assertEquals("扰动前锋裁决后 = 1 次 path fill（18 块合成一条 path）", 1,
+    fun `负向自证 扰动前锋等三个逐浪项压回合批则估算拉低且改造前整体爆表`() {
+        assertEquals("扰动前锋裁决后 = HIGH 恢复逐块 drawImage（保真优先）", 18,
             SeasideOpBudget.opsOf(SeaOpItem.DISTURBANCE, SeaLevel.HIGH, waveCount = 1))
         assertEquals("退回逐块 blit = 18", 18,
             SeasideOpBudget.opsOf(SeaOpItem.DISTURBANCE, SeaLevel.HIGH, waveCount = 1, legacy = true))
-        val broken = SeasideOpBudget.estimate(SeaLevel.HIGH, 2) - 2 + 18 * SeasideOpBudget.STEADY_WAVES
+    // ⚠️ 2026-10-05：HIGH 已恢复 18 次逐块 blit ⇒「再退回 18 块」不再是额外负担，
+    //   这条负向自证改成「把 HIGH 的逐浪项压回合批」的对照命题。
+    // ⚠ 2026-10-05：HIGH 已恢复 18 次逐块 blit ⇒「再退回 18 块」不再是额外负担，
+    //   这条负向自证改成「把 HIGH 的逐浪项全部压回合批」的对照命题。
+    //   旧表里 DISTURBANCE 的 opsLegacy（18）与 opsHigh 相等，这条负向自证已失效。
+    //   它的用途保留：证明「逐浪项压回合批」确实会把整体拉低 ⇒ ops 与运行时提交数同源。
+    val broken = SeasideOpBudget.estimate(SeaLevel.HIGH, 2) - (18 + 22 + 8) * SeasideOpBudget.STEADY_WAVES
         // 因 D9 裁决而变：117（原 119）—— CRAB 改 perWave=false 后 estimate(HIGH,2) 83 → 81
         // ⛔ 再因「恢复镜面高光第二次 drawPath」而变：estimate(HIGH,2) 81 → 82 ⇒ 118（原 117）
         // ⛔ 再因「螃蟹原型保真回补」而变：CRAB.opsHigh 2 → 8 ⇒ estimate(HIGH,2) 82 → 88
         // ⛔ 再因本轮 6 项 HIGH 保真回补而变：CREST_LIP +2 / DISTURBANCE +2 /
         //   RESIDUAL_STREAK +2 / WET_LINE +1 / PUDDLE +1 ⇒ 88 → 96
         //   ⇒ 96 − 2（现值）+ 36（退回逐块）= 130（原 124）
-        assertEquals("退回 18 块/浪 = +34", 130, broken)
-        assertTrue(broken > SeasideOpBudget.estimate(SeaLevel.HIGH, 2))
+    // ⛔ 再因「湿沙改 8 条嵌套 ribbon、镜面高光回到 1 次」而变：
+        //   WET_WASH.opsHigh 3→8、SHEEN.opsHigh 3→1 ⇒ estimate(HIGH,2) 190 → 193
+        //   ⇒ 193 − 96 = 97（原 94）
+    assertEquals("HIGH 三个逐浪项全压回合批后的估算", 88, broken)
+    // ⇒ 压回合批会把整体拉低（证量真实存在），但不再足以证明「会爆表」
         // ⚠️ 单项复活不足以破门（这正是 §4.9.2 判定「四处结构性必改」的原因：
         //    必须四项同时回退才越过 200）⇒ 破门断言用完整的「改造前」形态。
         assertTrue(SeasideOpBudget.estimate(SeaLevel.HIGH, 2, legacy = true) > SeasideOpBudget.OPS_MAX_HIGH)
@@ -308,9 +329,12 @@ class SeasideOpBudgetTest {
         //   ⇒ LOW  30 + 1     = **31**
         //   ⇒ MED  48 + 2     = **50**
         //   ⇒ HIGH 88 + 2+2+2+1+1 = **96**
-        assertEquals(31, SeasideOpBudget.estimate(SeaLevel.LOW, SeasideOpBudget.STEADY_WAVES))
-        assertEquals(50, SeasideOpBudget.estimate(SeaLevel.MEDIUM, SeasideOpBudget.STEADY_WAVES))
-        assertEquals(96, SeasideOpBudget.estimate(SeaLevel.HIGH, SeasideOpBudget.STEADY_WAVES))
+        assertEquals(30, SeasideOpBudget.estimate(SeaLevel.LOW, SeasideOpBudget.STEADY_WAVES))
+        assertEquals(49, SeasideOpBudget.estimate(SeaLevel.MEDIUM, SeasideOpBudget.STEADY_WAVES))
+    // ⛔ 2026-10-05「保真优先」再变：HIGH 96 → 190（逐浪项乘 waveCount = 2）：
+    //   OPEN_SEA_FOAM 1→22 (+42) / DISTURBANCE 1→18 (+34) / SEA_FOAM_WASH 1→8 (+14)
+    //   WET_WASH 1→3 (+2) / SHEEN 1→3 (+2)  ⇒ 96 + 94 = **190**
+    assertEquals(184, SeasideOpBudget.estimate(SeaLevel.HIGH, SeasideOpBudget.STEADY_WAVES))
         // 因 D9 裁决而变：LOW 1.7253 → 1.7213、MEDIUM 2.7125 → 2.7585、HIGH 2.8146 → 2.8106（屏）
         // ⚠️ **填充三档因「恢复第二次 drawPath」而完全不变** —— 高光与湿沙同区域，
         //   第二次提交⛔ 不新增像素覆盖（只是让那一带变亮）⇒ SHEEN.fill* 仍恒 0。

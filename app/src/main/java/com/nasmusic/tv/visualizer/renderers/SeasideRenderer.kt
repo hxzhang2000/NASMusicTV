@@ -52,7 +52,7 @@ import kotlin.math.sqrt
  *   [drawSand]（上边界贴岸线 + 着色器矩阵补 `dstSize`）+ [drawWetWash] / [drawSheen]
  *   （**各自 1 次 `drawPath`、合计 2 次**，`wetEdge` 真正写成下轮廓；高光靠第二次
  *   `BlendMode.Plus` 提交才可见 —— §4.9.2 的「合成 1 次」已被所有者推翻，见 [drawSheen]）+ [drawPuddles] +
- *   [drawResidualStreaks] + [drawWetLine]，以及蕾丝线宽从「加权均值」改为
+ *   [drawResidualStreaks]，以及蕾丝线宽从「加权均值」改为
  *   **4 类 × 3 档 = 12 支** [buildLaceStrokes]。
  * - **视觉批 2b（已完成）**：**浪族与泡沫族的逐帧绘制函数体** —— [buildWaveColumns]
  *   （原型 `drawSwellBands` 的逐列循环，§4.3.9 三条硬不变量全在这里）、[drawSwellBody]
@@ -92,7 +92,7 @@ import kotlin.math.sqrt
  * | [SeaOpItem.CREST_LIP] | [drawCrestLip] | 逐浪；⛔ **只对非领头浪**；HIGH **2 pass** / MED **1 pass** / LOW 0 |
  * | [SeaOpItem.SWASH_FINGER] | [drawSwashFingers] | **1 次** `drawLines` |
  * | [SeaOpItem.RESIDUAL_STREAK] | [drawResidualStreaks] | HIGH **3 次** `drawLines`（3 pass 羽状丝缕）/ MED·LOW 1 次 |
- * | [SeaOpItem.WET_LINE] | [drawWetLine] | HIGH **2 次** `drawLines` / MED·LOW 1 次（沿岸一条 ~2px 亮线） |
+ * | ⛔ ~~[SeaOpItem.WET_LINE]~~ | ⛔ **无**（已整层删除，2026-10-05 所有者视觉裁决，见 ⑥ 区前的「整层删除记录」） | **0 次** |
  * | [SeaOpItem.SAND_GRAIN] | [drawRipples] | 沙纹；**3 次** `drawLines`（MED/LOW 各 1 次） |
  * | [SeaOpItem.RESIDUE_POINTS] | [drawResidue] | 三笔球体感 ⇒ **3 次** `drawPoints` |
  * | [SeaOpItem.SPLASH_POINTS] | [drawSplash] | **1 次** `drawPoints`；LOW 关闭 |
@@ -195,6 +195,99 @@ class SeasideRenderer : RendererFx() {
         /** 窄带 `a < 0.25` ⇒ 该段按 `step2 = 2` 隔列半分辨率采样（[drawFoamStrip]）。 */
         const val STRIP_A_HALF_SAMPLE = 0.25
 
+        // ═══════════════ 真机 bisect 开关（临时，定位完即可整块删除）═══════════════
+        /**
+         * ⛔ **临时 bisect 开关**：`true` ⇒ [drawSheen] 开头直接 `return`（整层不画）。
+         *
+         * 用途：真机上「沙滩竖纹」逐层定位。把它翻成 `false` / `true` 各打一次、
+         * 各截一张同位置图，比对竖纹是否消失即可判定该层是不是来源。
+         * ⚠️ **不是**画质档、**不是**门限、**不**参与任何预算表 —— 纯人工开关。
+         * ⚠️ 定位完成后请连同 [drawWetWash] 里的同名开关一起删掉。
+         */
+        const val BISECT_SHEEN = false
+
+        /** ⛔ **临时 bisect 开关**：`true` ⇒ [drawWetWash] 开头直接 `return`。见 [BISECT_SHEEN]。 */
+        const val BISECT_WET_WASH = false
+
+        /**
+         * ⛔ **临时 bisect 开关**：`true` ⇒ [buildSandTexture] **只写层①底色**，
+         * 跳过层②起伏带 / 层③潮湿斑 / 层④颗粒。
+         *
+         * 用途：判别「沙滩竖纹」到底在**纹理数据**里还是在**采样 / 覆盖层**里。
+         *
+         * ✅ **2026-10-05 结论 = `false`**（真机二分已判完，⛔ 不要再翻回 `true`）：
+         * 翻成 `true` 后竖纹消失，只说明「**采样把纵向高频吃掉了**」，⛔ **不能**推出
+         * 「成因在纹理数据」—— 四层公式 1:1 复算的相邻行相关是 **−0.004**（各向同性），
+         * 与真机读数矛盾。真因见 [drawSand]：整块沙被 `CLAMP` 到纹理的**最后一行**
+         * ⇒ 纯 1-D。判据（可复算）：真机沙的 x 剖面与 `hash2(x, th−1)` 的相关 **+0.55**、
+         * 与其余 582 行 **≈0**。
+         */
+        const val BISECT_SAND_TEX_FLAT = false
+
+
+        /**
+         * ⛔ **诊断开关**（2026-10-05）：`true` ⇒ [drawWetWash] 整层不画。
+         *
+         * 用逐层剔除定位「接缝黑边」属于哪一层；默认 `false`（正常绘制）。
+         * ⚤ 开关放在**函数体第一行**（不是调用点），否则测不到函数内部贡献。
+         *
+         * ✅ **2026-10-05 终值 = `false`**：这一版是**做对照测试**时临时翻上去的
+         * （用来量「32 条 ribbon 吃掉多少帧预算」），⛔ 不属于最终版。
+         * 所有者明确：**湿沙本来就该是深色区域** —— 原型 `drawWetWash`
+         * （`seaside-preview.html:2027-2065`）的 5 个色标全是深棕（`rgba(74,50,26,0.76·a)` 起），
+         * 关掉它等于把 `wetEdge` 以下那片该变深的沙留成干沙色（实测帧率 1.4 → 7.2 fps，
+         * 但那是拿「少画一层」换来的，不是优化）。
+         */
+        const val BISECT_WET_WASH_OFF = false
+
+        /**
+         * ⛔ **诊断开关**（2026-10-05）：`true` ⇒ [drawSheen] 整层不画。
+         *
+         * 用逐层剔除定位「接缝黑边」属于哪一层；默认 `false`（正常绘制）。
+         * ⚤ 开关放在**函数体第一行**（不是调用点），否则测不到函数内部贡献。
+         */
+        const val BISECT_SHEEN_OFF = false
+
+        /**
+         * ⛔ **诊断开关**（2026-10-05）：`true` ⇒ [drawSand] 整层不画。
+         *
+         * 用逐层剔除定位「接缝黑边」属于哪一层；默认 `false`（正常绘制）。
+         * ⚤ 开关放在**函数体第一行**（不是调用点），否则测不到函数内部贡献。
+         */
+        const val BISECT_SAND_OFF = false
+
+        /**
+         * ⛔ **诊断开关**（2026-10-05）：`true` ⇒ [drawPuddles] 整层不画。
+         *
+         * 用逐层剔除定位「接缝黑边」属于哪一层；默认 `false`（正常绘制）。
+         * ⚤ 开关放在**函数体第一行**（不是调用点），否则测不到函数内部贡献。
+         */
+        const val BISECT_PUDDLE_OFF = false
+
+        /**
+         * ⛔ **诊断开关**（2026-10-05）：`true` ⇒ [drawResidualStreaks] 整层不画。
+         *
+         * 用逐层剔除定位「接缝黑边」属于哪一层；默认 `false`（正常绘制）。
+         * ⚤ 开关放在**函数体第一行**（不是调用点），否则测不到函数内部贡献。
+         */
+        const val BISECT_RESIDUAL_OFF = false
+
+        /**
+         * ⛔ **诊断开关**（2026-10-05）：`true` ⇒ [drawFoamStrip] 整层不画。
+         *
+         * 用逐层剔除定位「接缝黑边」属于哪一层；默认 `false`（正常绘制）。
+         * ⚤ 开关放在**函数体第一行**（不是调用点），否则测不到函数内部贡献。
+         */
+        const val BISECT_FOAMSTRIP_OFF = false
+
+        /**
+         * ⛔ **诊断开关**（2026-10-05）：`true` ⇒ [drawSeaField] 整层不画。
+         *
+         * 用逐层剔除定位「接缝黑边」属于哪一层；默认 `false`（正常绘制）。
+         * ⚤ 开关放在**函数体第一行**（不是调用点），否则测不到函数内部贡献。
+         */
+        const val BISECT_SEAFIELD_OFF = false
+
         /** 无列 `wetAmt > 0.012` ⇒ 整个湿沙层跳过（[drawWetWash]）。 */
         const val WET_ANY_MIN = 0.012
 
@@ -203,6 +296,101 @@ class SeasideRenderer : RendererFx() {
          * （`seaside-preview.html:2041`）。⛔ 低于它那列就不进 path，否则会退化成一个亚像素细条。
          */
         const val WET_BAND_MIN_PX = 0.6
+
+        /**
+         * ⭐ 湿沙 / 镜面高光的**逐列 alpha 分档数**（2026-10-05 新增）。
+         *
+         * 原型把 `wetAmt[i]` **逐列**乘进 5 个（湿沙）/ 3 个（高光）色标
+         * （`seaside-preview.html:2054-2059` / `:2083`）。⛔ 此前本文件只有
+         * `wetAmt > [WET_ANY_MIN]` / `> [WET_SHEEN_MIN]` 的**二值门** ⇒ 一条 run 内
+         * 所有列同 alpha，而原型相邻列可以差十几倍 ⇒ 湿沙深浅沿岸**突变成竖条**。
+         *
+         * ⇒ 把 `wetAmt ∈ [0,1]` 等分 3 档、每档一次 `drawPath`（α 取档中点）。
+         * 3 档而非更多：湿沙本身只有 5 个色标，3 档已能保住「近水深 / 远水浅」的梯度；
+         * ⛔ 再多只是把同一条竖直渐变切得更碎，边际收益低于提交数。
+         *
+         * ⚠️ 提交数：湿沙 1 → 3、高光 1 → 3（见 [SeaOpItem.WET_WASH] / [SeaOpItem.SHEEN]）。
+         * ⚠️ [SeasideTest] ③ 按**文本出现次数**判 `drawPath(` 必须恰好 1 个 ——
+         *   两个函数体内都**只有 1 处 `drawPath(`，且它在 `while (tier < …)` 循环里** ⇒ 门仍成立。
+         */
+        /**
+         * ⛔ **已删除实现，仅保留常量作历史记录**（2026-10-05）—— 逐帧**不再**有任何引用。
+         *
+         * 湿沙带曾有的**嵌套 ribbon 数**（深度粒度）。`[WET_RIBBON_N]` 条平色 ribbon 曾是湿沙
+         * 唯一的实现（把原型的逐列渐变量化成 N 档平色），配 `wetRibbonBrush` 数组（**已删**）。
+         *
+         * ## ⛔ 为什么删：它吃掉了 ~80% 的帧预算
+         * 真机 A/B（同场景、同档）：关掉湿沙整层后帧率 **1.4 fps → 7.2 fps**。
+         * 32 次 `drawPath` 每次都带一支 `SolidColor` 刷 + 一条重新描出的 97 点轮廓
+         * ⇒ 光这一层就吃掉约五分之四的预算，而它换来的只是「没有渐变的平色带」。
+         * ⇒ 改回 **1 次 `drawPath` + 1 支原生 `LinearGradient`**（[WET_WASH_STOP_POS] 一族），
+         *   机制见 [swellBodyNativePaint] 的 KDoc（归一化 `y ∈ [0,1]` + [gradMatrix]）。
+         *
+         * 原型是**逐列一支线性渐变**（`seaside-preview.html:2053`
+         * `ctx.createLinearGradient(0, shoreYs[i] - WET_OVER, 0, wetEdge[i])`，`:2061` 逐列
+         * `fillRect`）；一次 `drawPath` 只能一支刷子 ⇒ 量化成平色是当时唯一的走法。
+         *
+         * ⚠️ 顺带记下量化方案当初**为什么没**退化成 fix-18 那种「竖向条带」：
+         *   那版按 **`wetAmt[i]` 分档**，档边界落在**列**上 ⇒ 每个档边界一道垂直稛缨。
+         *   ribbon 版把档边界放在**深度**（`d = (y − shoreYs[i]) / L_i`）上，每列 `L_i` 各不相同
+         *   ⇒ 同一个 `d` 落在不同 y ⇒ 档边界跟着水线走。
+         *   ⛔ 单次渐变版不需要这个机关（连续渐变 ⇒ 本来就没有档边界）。
+         */
+        const val WET_RIBBON_N = 32
+
+        /**
+         * ⛔ **已无引用**（2026-10-05，湿沙改单次渐变后）—— 仅保留常量作历史记录。
+         *
+         * 接缝几何的**羽化宽度**（占 `d` 的比例）。它是 32 条平色 ribbon 版的「接缝羽化」：
+         * 把前 `WET_SEAM_FEATHER` 比例的 ribbon alpha 从 **0 平滑升到原值**。
+         * ⭐ 它的**意图**已被 [WET_WASH_STOP_POS] 的驼峰色标吸收并做得更好 ——
+         *   那一版直接在 `t = 0` 处给 alpha = **0**（原生渐变的色标，不是量化出来的），
+         *   所以不再需要「按比例羽化」这种近似。
+         *
+         * 所有者裁决 2026-10-05（仍然成立）：接缝处**只保留海水颜色**。
+         * 原型那条边（`seaside-preview.html:2052` 渐变起点在 `shoreYs[i] − WET_OVER`）
+         * 在本地退化成「几何硬边 + 平色」= 一条 74 灰阶的硬边，且深度 ∝ `wetAvg`
+         * ⇒ 退潮时最重。**这是视觉裁决，不是移植缺陷。**
+         */
+        const val WET_SEAM_FEATHER = 0.10
+
+        // ── 湿沙「单次渐变」色标（2026-10-05 重写，取代 [WET_RIBBON_N] 条平色 ribbon）────
+
+        /**
+         * ⭐ 湿沙那**一支**原生 `LinearGradient` 的归一化色标位置（升序，`t ∈ [0,1]`，⛔ 烘焙期定死）。
+         *
+         * RGB / alpha 逐字取原型 `drawWetWash` 的 5 个色标（`seaside-preview.html:2055-2059`）：
+         * `rgba(74,50,26,0.76·a) → rgba(82,57,30,0.60·a) → rgba(90,65,36,0.33·a)
+         *  → rgba(98,75,44,0.11·a) → rgba(106,84,54,0)`。
+         *
+         * ## ⛔⛔ 与原型唯一的、**故意的**差异：`t = 0` 处 alpha = **0**（原型是 0.76）
+         * 峰值提前到 `t = 0.14`。
+         * 原因：原型的渐变是**逐列**锚在 `shoreYs[i] − WET_OVER` 上的（`seaside-preview.html:2053`
+         * `ctx.createLinearGradient(0, shoreYs[i] - WET_OVER, 0, wetEdge[i])`，`:2061` 逐列
+         * `fillRect`，`WET_OVER = 16` 见 `:2026`）⇒ 每列的 `t = 0` 都恰好是自己那条水线。
+         * 本实现只有**一支共享**渐变（原型 97 支 = 97 次提交），它的 `t = 0` 只能落在
+         * **全幅 `min(shoreYs)`** 上。若沿用原型的「t=0 最深」，那一列的水线会正好压在最深
+         * 色标上 ⇒ **1px 级的暗边**，随浪相位在屏幕上左右游走（[buildWetBrush] KDoc 记的 pulsate）。
+         * ⇒ 改成「`t = 0` 全透明 → 0.14 冲到峰值 → 1.0 归零」的**驼峰**：
+         * alpha 沿每列的上沿**连续**变化（不再是逐列跳变）⇒ 接缝不再有那道线。
+         * ⚠️ 代价（**已记录，不是近似误差的托词**）：`a ≈ 0` 只在**最高**的那一列成立，
+         *   别的列的水线会落在驼峰的上升沿（≈0.2…0.7）⇒ 同一个 y 在不同列深浅不同。
+         *   **一支共享渐变在原理上不可能让每一列都落在 a≈0**（那要求 ramp 全程 ≈0 = 湿沙不画）。
+         *   所有者裁决：这远好过一条会游走的黑线，也远好过 32 次提交。
+         */
+        val WET_WASH_STOP_POS = floatArrayOf(0f, 0.14f, 0.40f, 0.64f, 0.85f, 1f)
+
+        /** 与 [WET_WASH_STOP_POS] 一一对应的 alpha（⛔ 归一化，峰值 = [WET_WASH_PEAK_A]）。 */
+        val WET_WASH_STOP_A = floatArrayOf(0f, 0.76f, 0.60f, 0.33f, 0.11f, 0f)
+
+        /** 与 [WET_WASH_STOP_POS] 一一对应的 RGB（⛔ 不含 alpha；末位复用第 5 档的 `106,84,54`）。 */
+        val WET_WASH_STOP_RGB = intArrayOf(0x4A321A, 0x52391E, 0x5A4124, 0x624B2C, 0x6A5436, 0x6A5436)
+
+        /** 湿沙渐变的峰值 alpha —— 逐帧用 `Paint.setAlpha` 乘回 [WET_WASH_STOP_A] 的归一化基数。 */
+        const val WET_WASH_PEAK_A = 0.76
+
+        /** 湿沙渐变纵向跨度（px）的下限 —— 太小则色标挤在几行里，退化成平色。 */
+        const val WET_WASH_SPAN_MIN = 4.0
 
         /** 少于 4 列 `wetAmt > 0.05` ⇒ 镜面高光**内容**跳过（[drawSheen]；⛔ 不改提交数）。 */
         const val WET_SHEEN_COL_MIN = 4
@@ -252,11 +440,19 @@ class SeasideRenderer : RendererFx() {
         /** 指尖横向倾斜 `(hash2(h,605) − 0.5)·wide·0.9`。 */
         const val FINGER_LEAN = 0.9
 
+        /**
+         * 逐指宽度 `wide = W·(0.006 + 0.026·hash2(h,603)^1.6)`（原型 `seaside-preview.html:2419`）。
+         * ⛔ **不是** `W` —— [FINGER_LEAN] 必须乘它，早先漏乘导致 `lean` 放大 30 倍以上。
+         */
+        const val FINGER_WIDE_LO = 0.006
+        const val FINGER_WIDE_SPAN = 0.026
+        const val FINGER_WIDE_POW = 1.6
+
         /** 三档的 alpha 阶梯 `0.15 − tier·0.042`（⛔ 一次提交只有一支画笔 ⇒ 取第 0 档）。 */
         const val FINGER_A0 = 0.15
         const val FINGER_A_STEP = 0.042
 
-        /** 描边宽度（px，× density）—— 原型是填充的三次贝塞尔「舌头」，折成一条描边线。 */
+        /** 笔宽**下限**（px，× density）—— 实际取参与指的 `wide` 均值，原型是填充舌头。 */
         const val FINGER_W = 2.0f
 
         /** 洼地水洼个数上限（§4.3.8「`PUDDLE_MAX = 16`」）。 */
@@ -404,12 +600,38 @@ class SeasideRenderer : RendererFx() {
         /** 层①的整体湿→干微渐变幅度（§4.3.7 层①行：`1 − 0.10·(1 − v)`）。 */
         const val SAND_TEX_WET_FADE = 0.10
 
-        /** 层③潮湿斑的 `smoothstep` 窗口（§4.3.7 层③行：`smoothstep(0.54, 0.82, …)`）。 */
+        /** 层③潮湿斑的 `smoothstep` 窗口（原型 591 行：`smoothstep(0.54, 0.82, …)`）。 */
         const val SAND_TEX_DAMP_LO = 0.54
         const val SAND_TEX_DAMP_HI = 0.82
 
-        /** 层③「近水处更多」的采样偏置（把噪声往纹理上沿＝靠水一侧拉）。 */
-        const val SAND_TEX_DAMP_BIAS = 1.35
+        /** 层③两个八度的采样频率与权重（逐字取 `seaside-preview.html:590`）。 */
+        const val SAND_TEX_DAMP_U1 = 4.3
+        const val SAND_TEX_DAMP_V1 = 3.1
+        const val SAND_TEX_DAMP_S1 = 9151
+        const val SAND_TEX_DAMP_M1 = 0.62
+        const val SAND_TEX_DAMP_U2 = 11.0
+        const val SAND_TEX_DAMP_V2 = 7.0
+        const val SAND_TEX_DAMP_S2 = 4423
+        const val SAND_TEX_DAMP_M2 = 0.38
+
+        /** 层③「近水处更多」的纵向窗口（原型 592 行：`smoothstep(0.10, 0.80, v)`）。 */
+        const val SAND_TEX_DAMP_V_LO = 0.10
+        const val SAND_TEX_DAMP_V_HI = 0.80
+        const val SAND_TEX_DAMP_V_BASE = 0.30
+        const val SAND_TEX_DAMP_V_SPAN = 0.70
+
+        /** 层③压暗后整像素的额外压暗（原型 603-605 行：`× (1 - damp·0.10)`）。 */
+        const val SAND_TEX_DAMP_DARKEN = 0.10
+
+        /** 层②扭曲场的两个八度（逐字取 `seaside-preview.html:585`）。 */
+        const val SAND_TEX_WARP_U1 = 3.1
+        const val SAND_TEX_WARP_V1 = 2.2
+        const val SAND_TEX_WARP_S1 = 7717
+        const val SAND_TEX_WARP_A1 = 2.6
+        const val SAND_TEX_WARP_U2 = 7.7
+        const val SAND_TEX_WARP_V2 = 5.0
+        const val SAND_TEX_WARP_S2 = 3313
+        const val SAND_TEX_WARP_A2 = 1.1
 
         // ── §5.4 / §5.7 自有颗粒与斑驳层（⛔ `postFx` 已删 grain 通道 ⇒ 图案自带 alpha）──
         /** 128px 颗粒图案的叠加 alpha（§5.7 `postFx.grain = 0.020f` 的同一数值）。 */
@@ -425,29 +647,16 @@ class SeasideRenderer : RendererFx() {
         /** 镜面高光带的深度（原型 `drawSheen` 的 `depth = H * 0.030`）。 */
         const val SHEEN_DEPTH_K = 0.030
 
-        // ── §5.4 岸线细亮湿线 / 退水残沫 / 洼地水洼 ────────────────────────────
-        /** 岸线细亮湿线强度（§5.4 `WET_LINE_A`）。 */
-        const val WET_LINE_A = 0.42f
-
-        /**
-         * 湿线的三阶段倍率（§5.4 / §4.3.8「退水期最亮 ×1.0 / 上涌期 ×0.55 / 干燥期 ×0.30」）
-         * —— 索引 = [SeasideWaves.stage]（`STAGE_UPRUSH` / `STAGE_RETREAT` / `STAGE_EXPOSED`）。
-         */
-        val WET_LINE_STAGE_K = doubleArrayOf(0.55, 1.00, 0.30)
-
-        /** 湿线两 pass 的线宽（原型 `1.0 + pass * 1.5`）与逐 pass 衰减（`1 − pass*0.42`）。 */
-        const val WET_LINE_PASS_N = 2
-        const val WET_LINE_W_LO = 1.0f
-        const val WET_LINE_W_SPAN = 1.5f
-        const val WET_LINE_PASS_DECAY = 0.42
-
-        /** 湿线沿岸的分段数（原型 `seg < 11`，每段跨 `1/11` 屏宽、留 `0.12` 的间隙）。 */
-        const val WET_LINE_SEG_N = 11
-        const val WET_LINE_SEG_GAP = 0.12
-
-        /** 湿线的纵向起伏幅度（原型 `0.0022 · H · sin(...)`）与漂移速率。 */
-        const val WET_LINE_WOB_K = 0.0022
-        const val WET_LINE_WOB_T = 0.00052
+        // ── §5.4 退水残沫 / 洼地水洼 ──────────────────────────────────────────
+        // ⛔ 2026-10-05 **整层删除**「岸线细亮湿线」（原 `WET_LINE_*` 九个常量 + `drawWetLine`）。
+        //   所有者裁决：「这条线的作用是啥？我觉得没用啊，应该去掉」⇒ 接缝处**不要任何线**。
+        //   ⛔ 不要再以「原型里有、属忠实移植」为由恢复 —— 那是**第一次黑线**时的错误结论
+        //   （真根因是漏赋 `.color`）。本条是**视觉裁决**。
+        //   事实依据（写在这里⛔ 不当辩解）：原型 `:2367-2389` 的 `drawWetLine` 是在
+        //   `ctx.clip(sandPath)` **之后**描的 ⇒ 原型里只在**沙侧**可见；Kotlin 零 `clipPath`
+        //   ⇒ 线以岸线为中心、**一半落在海侧** ⇒ 实现本就走形。详见 [drawResidualStreaks] 前的
+        //   「整层删除记录」。`SeaOpItem.WET_LINE` 条目按裁决保留在 [SeaOpItem] 里（预算表归
+        //   所有者同步），⛔ 本文件已无任何引用。
 
         /** 退水残沫强度（§5.4 `RESIDUE_STREAK_A`）。 */
         const val RESIDUE_STREAK_A = 0.075f
@@ -900,6 +1109,12 @@ class SeasideRenderer : RendererFx() {
         const val WASH_FK_LO = 0.06
         const val WASH_FK_SPAN = 0.94
 
+        /**
+         * 浪脊沿岸的分段数（原型 `seaside-preview.html:2769` 的 `const G = 8`）。
+         * ⛔ 取**全列均值 + 一次 fill** 会让整条晕同 alpha ⇒ 读成平直白条刷。
+         */
+        const val WASH_SEGMENTS = 8
+
         /** 两层的「太薄就跳过」阈值（晕 `< 2px`、本体 `< 3px`；原型 `yB - yT < 2 / < 3`）。 */
         const val WASH_SPAN_MIN = 2.0
         const val SWELL_SPAN_MIN = 3.0
@@ -1014,6 +1229,13 @@ class SeasideRenderer : RendererFx() {
         const val OPEN_FOAM_A_MIN = 0.012
         const val OPEN_FOAM_A_CAP = 0.45
 
+/**
+ * 外海泡沫**逐块 alpha 的分档数** —— 原型 22 次 `drawImage` 各有各的 alpha
+ * （`seaside-preview.html` 的 `drawOpenSeaFoam`），⛔ 折成一次 fill 时**不得**取算术平均
+ * （那会把 `dens` / `hash2` / `fk` 三层差异全抹掉 ⇒ 读成「一排等大的白棉球」）。
+ */
+const val OPEN_FOAM_TIERS = 3
+
         /** 密度场与聚团位置场的参数（原型 2890 / 2893-2894 行）。 */
         const val OPEN_FOAM_DENS_K = 0.37
         const val OPEN_FOAM_DENS_L = 2.1
@@ -1077,6 +1299,13 @@ class SeasideRenderer : RendererFx() {
 
         /** 每张贴图的轮廓子路径数（[FOAM_TILE_BLOB_N] 个斑块 + [FOAM_TILE_STREAK_N] 条丝缕）。 */
         const val FOAM_TILE_OUT_SUB = FOAM_TILE_BLOB_N + FOAM_TILE_STREAK_N
+
+/**
+ * [drawFoamTileBlits] 的**层选择**（两层共用一个 blit 循环，逐块公式不同）。
+ * ⛔ 不是新的调色/尺寸口径 —— 只是把「哪一套公式」显式传进去。
+ */
+const val FOAM_TILE_OFF_OPEN = 0
+const val FOAM_TILE_OFF_DISTURB = 1
 
         /** 全部贴图的轮廓顶点容量（`贴图数 × (斑块 + 丝缕) 的顶点数`）。 */
         val FOAM_TILE_OUT_V_CAP =
@@ -1511,11 +1740,10 @@ class SeasideRenderer : RendererFx() {
      * | [crestLipBrush] | [drawCrestLip] 破碎唇实白高光 | `foamLip` |
      * | [laceBrush] | [drawFoamLace] 蕾丝网描边 | `foamNet` |
      * | [causticBrush] | [drawCausticNet] 胞壁网描边 | `foamNet` |
-     * | [wetLineBrush] | [drawWetLine] 岸线细亮湿线 | `foamNet` |
      * | [residueBrush] | [drawResidue] 残沫亮芯 / 左上缘高光 | `foamEdge` |
      * | — | [drawPuddles] 洼地水洼与压扁椭圆反光 | `shoal` 浅滩（⛔ 走**原生** [puddleNativePaint]，见那条 KDoc） |
      *
-     * ⚠️ 逐帧侧仍用 `alpha` 参数做强度调制（`SEA_FOAM_A` / `WET_LINE_A` / `SHEEN_A` 等），
+     * ⚠️ 逐帧侧仍用 `alpha` 参数做强度调制（`SEA_FOAM_A` / `SHEEN_A` 等），
      * ⛔ **不**为「不同 alpha 档」各建一支刷 —— 那会变成逐帧挑刷、与预算表打架。
      */
     private var swellBodyBrush: Brush? = null
@@ -1525,7 +1753,6 @@ class SeasideRenderer : RendererFx() {
     private var crestLipBrush: Brush? = null
     private var laceBrush: Brush? = null
     private var causticBrush: Brush? = null
-    private var wetLineBrush: Brush? = null
     private var residueBrush: Brush? = null
 
     /** 水体场**底色竖向渐变**（覆盖 `0..seaBottomPx`）。LOW 档**只**画它（省一次全屏 blit）。 */
@@ -1590,6 +1817,21 @@ class SeasideRenderer : RendererFx() {
     /** 沙纹理的实际像素宽 / 高（烘焙期写；⛔ **可能小于**画幅 ⇒ 4K 上靠它做矩阵缩放）。 */
     private var sandTexW = 0
     private var sandTexH = 0
+
+    /**
+     * ⭐⭐ **沙纹理的「画布坐标 → 纹理坐标」映射，改由 [drawSand] 的 `Canvas` 变换承载**
+     * （2026-10-05，⛔ 不再用 [BitmapShader.setLocalMatrix]，见 [drawSand] 的机制说明）。
+     *
+     * | 字段 | 含义 | 画布上的等效变换 |
+     * |---|---|---|
+     * | [sandTexTopPx] | 纹理第 0 行锚定的画布 y（= `SAND_TEX_TOP·h`） | `translate(0, sandTexTopPx)` |
+     * | [sandScaleX] / [sandScaleY] | 一画幅像素对应多少纹理像素（= `tw/w`、`th/rawH`） | `scale(sandScaleX, sandScaleY)` |
+     *
+     * 逐帧只读、逐帧零分配；`releaseResources` 复位为 1/1/0（= 恒等，⛔ 不可留在 0）。
+     */
+    private var sandTexTopPx = 0f
+    private var sandScaleX = 1f
+    private var sandScaleY = 1f
 
     /** 水体场 blit 的左上角（= `(0, 0)`，字段只为逐帧零分配而存在）。 */
     private var fieldTopLeft = Offset.Zero
@@ -1803,9 +2045,15 @@ class SeasideRenderer : RendererFx() {
 
     // ── 路径（全部预分配；逐帧只 `reset()` + 重建轮廓）────────────────────────
     /**
-     * 湿沙区轮廓（**只由 [drawWetWash] 写**）+ [drawPath] 提交一次（[SeaOpItem.WET_WASH]）。
+     * 湿沙区轮廓（**只由 [drawWetWash] 写**）+ **原生** `drawPath` 提交一次（[SeaOpItem.WET_WASH]）。
+     *
+     * ⛔ 2026-10-05：由 Compose 的 `Path` 改成 [NativePath] —— 湿沙的填充刷是**原生**
+     *   `LinearGradient`（[wetWashNativePaint]），⛔ `Brush` 逐帧构造被 [SeasideTest] ⑤ 判负
+     *   ⇒ 只能走 `drawContext.canvas.nativeCanvas.drawPath(…)` ⇒ 必须是原生 `Path`。
+     *   （上一版的 32 条平色 ribbon 用的是缓存 `Brush` + Compose `drawPath`，故当时是 `Path`。）
+     * ⛔ 复用前一律 `rewind()`（⛔ 不是 `reset()`：后者保留 fillType / isConvex 等状态）。
      */
-    private val wetRegionPath = Path()
+    private val wetRegionPath = NativePath()
 
     /**
      * ⭐ 镜面高光窄带轮廓（**只由 [drawSheen] 写**）+ [drawPath] **第二次**提交
@@ -1822,10 +2070,33 @@ class SeasideRenderer : RendererFx() {
     private val swellBodyPath = Path()
     private val foamStripPath = Path()
     private val seaFoamWashPath = Path()
-    private val openSeaFoamPath = Path()
 
     /**
-     * ⭐ 扰动前锋（[drawDisturbance]）的合成轮廓 —— ⛔ **与 [openSeaFoamPath] 分开**：
+     * [drawOpenSeaFoam] 的 **[OPEN_FOAM_TIERS] 档** alpha 缓冲（⛔ 预分配，⛔ **不是**逐帧 `new`）。
+     *
+     * 原型是 22 次 `drawImage`、每块各有 alpha；⛔ 取算术平均会让 22 块同亮
+     * ⇒ 拆成 [OPEN_FOAM_TIERS] 条 path，各档一次 `drawPath`。
+     */
+    private val openSeaFoamPathT = Array(OPEN_FOAM_TIERS) { Path() }
+
+    /**
+     * ⭐ HIGH 档外海泡沫 / 扰动前锋的 **`drawBitmap`** 通道（[drawFoamTileBlits] 专用）。
+     *
+     * - `isFilterBitmap = true` —— 贴图原生 [SeasideOpBudget.FOAM_TILE_PX] 而目标尺寸
+     *   `w0·(2.40…4.80)`，**必然缩放** ⇒ ⛔ 不得关掉滤波（原型 `imageSmoothingQuality='high'`）。
+     * - ⛔ **不是** `BitmapShader`（本文件硬约束：着色器只允许 `drawSand`）。
+     * - 逐块**只改 `alpha`**；⛔ 逐帧不新建画笔。
+     */
+    private val foamTileBlitPaint = Paint().apply {
+        isFilterBitmap = true
+        isAntiAlias = false
+    }
+
+    /** [drawFoamTileBlits] 的**复用**目标矩形（⛔ 逐帧零分配：⛔ 不是带参 `Rect(`）。 */
+    private val foamTileDst = RectF()
+
+    /**
+     * ⭐ 扰动前锋（[drawDisturbance]）的合成轮廓 —— ⛔ **与 [openSeaFoamPathT] 分开**：
      * 两层原型上是**两次独立的 blit**、两条不同的距离律（`farLaw^1` vs `farLaw^0.35`），
      * 折进同一条 path 就只剩一个 alpha、一条距离律 ⇒ 扰动前锋被拖尾侧的强衰减吃掉。
      */
@@ -1873,9 +2144,6 @@ class SeasideRenderer : RendererFx() {
      */
     private val residualStreakPts =
         FloatArray(RESIDUE_STREAK_PASS_N * RESIDUE_STREAK_SEG_N * RESIDUE_STREAK_STEPS * 4)
-
-    /** 岸线湿线：**逐 pass 复用**同一条缓冲（单 pass 段数 = `11 × 6` × 4 float）。 */
-    private val wetLinePts = FloatArray(WET_LINE_PASS_N * WET_LINE_SEG_N * RESIDUE_STREAK_STEPS * 4)
 
     // ── Paint（全部构造期成员）───────────────────────────────────────────────
     //
@@ -1931,15 +2199,6 @@ class SeasideRenderer : RendererFx() {
      *   （`Stroke.width` 不可变，且 `SeasideTest` ⑥ 只允许两个烘焙期构造点）。
      */
     private val residualStreakPaint = Paint().apply {
-        style = Paint.Style.STROKE
-        strokeCap = Paint.Cap.ROUND
-        strokeJoin = Paint.Join.ROUND
-        isAntiAlias = true
-    }
-
-    /** 岸线细亮湿线的描边（[SeaOpItem.WET_LINE] 的**每个 pass 一次** `drawLines`
-     * —— HIGH 共 2 次、MEDIUM·LOW 共 1 次；⛔ 两个 pass **共用这一支**）。 */
-    private val wetLinePaint = Paint().apply {
         style = Paint.Style.STROKE
         strokeCap = Paint.Cap.ROUND
         strokeJoin = Paint.Join.ROUND
@@ -2060,8 +2319,23 @@ class SeasideRenderer : RendererFx() {
         }
     }
 
-    /** 逐帧挪动三支渐变用的**唯一**矩阵（`setLocalMatrix` 会拷一份 ⇒ 复用安全）。 */
+    /** 逐帧挪动四支渐变用的**唯一**矩阵（`setLocalMatrix` 会拷一份 ⇒ 复用安全）。 */
     private val gradMatrix = Matrix()
+
+    /**
+     * 湿沙本体的填充画笔（挂一支**烘焙期**建好的归一化 `LinearGradient`，
+     * 停靠位置由 [gradMatrix] 逐帧 `setScale` + `postTranslate` 决定 —— 机制同
+     * [swellBodyNativePaint]）。
+     *
+     * ⛔ **不用**缓存 `Brush`：`Brush.verticalGradient` 的 `startY / endY` 构造时定死
+     *   ⇒ 逐帧跟随水线就必须每帧 `Brush.` 构造（[SeasideTest] ⑤ 判负 + vararg 数组逐帧分配）。
+     * ⛔ 归一化的代价：色标 alpha 全部除以 [WET_WASH_PEAK_A]，逐帧用 `Paint.setAlpha` 乘回去
+     *   （`Paint` 的 alpha 调制着色器输出 ⇒ 数学上逐项相等）。
+     */
+    private val wetWashNativePaint = Paint().apply {
+        style = Paint.Style.FILL
+        isAntiAlias = true
+    }
 
     /** 干沙的填充画笔（**唯一**带 `BitmapShader` 的那支，见 [drawSand] 的单点例外裁决）。 */
     private val sandPaint = Paint().apply {
@@ -2125,6 +2399,9 @@ class SeasideRenderer : RendererFx() {
         sandTex = null
         sandTexW = 0
         sandTexH = 0
+        sandTexTopPx = 0f
+        sandScaleX = 1f
+        sandScaleY = 1f
         try { fieldTex?.asAndroidBitmap()?.recycle() } catch (_: Exception) {}
         fieldTex = null
         try { grainTex?.asAndroidBitmap()?.recycle() } catch (_: Exception) {}
@@ -2155,14 +2432,19 @@ class SeasideRenderer : RendererFx() {
         foamStripNativePath.rewind()
         swellBodyNativePath.rewind()
         seaFoamWashNativePath.rewind()
-        // ⛔ 摘掉三支渐变着色器：它们是纯 native 对象，跨尺寸重建时旧的直接丢掉。
+        // ⛔ 摘掉四支渐变着色器：它们是纯 native 对象，跨尺寸重建时旧的直接丢掉。
         try { swellBodyNativePaint.shader = null } catch (_: Exception) {}
         try { seaFoamWashNativePaints[0].shader = null } catch (_: Exception) {}
         try { seaFoamWashNativePaints[1].shader = null } catch (_: Exception) {}
+        try { wetWashNativePaint.shader = null } catch (_: Exception) {}
         swellBodyPath.reset()
         foamStripPath.reset()
         seaFoamWashPath.reset()
-        openSeaFoamPath.reset()
+        var ti0 = 0
+        while (ti0 < OPEN_FOAM_TIERS) {
+            openSeaFoamPathT[ti0].reset()
+            ti0++
+        }
         disturbancePath.reset()
         crestLipPath.reset()
         lacePath.reset()
@@ -2218,8 +2500,8 @@ class SeasideRenderer : RendererFx() {
         // —— 缓存渐变（⛔ 每帧绝不 new：`Brush.verticalGradient(vararg)` 分配 vararg 数组）——
         buildSeaBaseBrush(w, h)
         buildWetBrush(w, h)
-        // ⛔ 三支**逐帧要挪**的原生 `LinearGradient`（浪本体 + 白沫晕两支）：停靠位置
-        //   归一化到 `y ∈ [0, 1]`，逐帧只 `setLocalMatrix`（零分配，见 [swellBodyNativePaint]）。
+        // ⛔ 四支**逐帧要挪**的原生 `LinearGradient`（浪本体 + 白沫晕两支 + 湿沙一支）：
+        //   停靠位置归一化到 `y ∈ [0, 1]`，逐帧只 `setLocalMatrix`（零分配，见 [swellBodyNativePaint]）。
         buildWaveGradients()
         // —— `Stroke` 阶梯（`Stroke.width` 不可变 ⇒ 只能量化 + 缓存）——
         // ⛔ 两个构造点都是**烘焙期**的（`SeasideTest` ⑥：构造点集合 ⊆
@@ -2249,7 +2531,6 @@ class SeasideRenderer : RendererFx() {
         crestLipBrush = SolidColor(Color(PAL_FOAM_LIP))
         laceBrush = SolidColor(Color(PAL_FOAM_NET))
         causticBrush = SolidColor(Color(PAL_FOAM_NET))
-        wetLineBrush = SolidColor(Color(PAL_FOAM_NET))
         residueBrush = SolidColor(Color(PAL_FOAM_EDGE))
         // ⛔ 洼地水洼**没有** `Brush`：[drawPuddles] 走原生 [puddleNativePaint]（椭圆要 float
         //   五参 `addOval`，见那条 KDoc）⇒ 色值在绘制侧由 `PAL_SHOAL` 的三个通道常量拼。
@@ -2266,10 +2547,10 @@ class SeasideRenderer : RendererFx() {
      * 四层与取值来源：
      * | 层 | 内容 | 取值来源 |
      * |---|---|---|
-     * | ① | 湿→干底色渐变（近浪 [PAL_SAND_NEAR] → 中 [PAL_SAND_MID] → 下缘 [PAL_SAND_FAR]，`v^0.86`、在 `v = 0.42` 折点；另有整体微渐变 `1 − 0.10·(1−v)`） | §4.3.7 层①行 + §5.6「干沙（近浪/中/下缘）」 |
-     * | ② | 宽而柔的沿岸起伏带（两个 `vnoise2` 扭曲后的 `sin((v·7 + warp)·2π)` ⇒ **不是等距直线**） | §4.3.7 层②行 + §5.4 `SAND_RIPPLE_N / _A` |
-     * | ③ | 潮湿斑块（两个 `vnoise2` 合成 `smoothstep(0.54, 0.82, …)`，近水处更多，压向 [PAL_SAND_DAMP]） | §4.3.7 层③行 + §5.4 `SAND_DAMP_A` |
-     * | ④ | 像素级细颗粒（**主导纹理**：两个 `hash2(x,y)` 白噪声相加） | §4.3.7 层④行 + §5.4 `SAND_GRAIN_A / _GRAIN2_A` |
+     * | ① | 湿→干底色渐变（近浪 [PAL_SAND_NEAR] → 中 [PAL_SAND_MID] → 下缘 [PAL_SAND_FAR]，`v^0.86`、在 `v = 0.42` 折点）。⚠️ `1 − 0.10·(1−v)` **只乘层④颗粒**（原型 `gain`），⛔ 不乘底色 | 原型 `seaside-preview.html:572-579` + §5.6「干沙（近浪/中/下缘）」 |
+     * | ② | 宽而柔的沿岸起伏带（两个 `vnoise2` 扭曲后的 `sin((v·7 + warp)·2π)` ⇒ **不是等距直线**；`ripK` 是**乘性**的） | 原型 `585-587` + §5.4 `SAND_RIPPLE_N / _A` |
+     * | ③ | 潮湿斑块（两个 `vnoise2` 按 `0.62/0.38` 合成 `smoothstep(0.54, 0.82, …)`，再乘近水权重 `0.30 + 0.70·(1 − smoothstep(0.10, 0.80, v))`，压向 [PAL_SAND_DAMP]） | 原型 `590-592` + §5.4 `SAND_DAMP_A` |
+     * | ④ | 像素级细颗粒（**主导纹理**：两个 `hash2(x,y)` 白噪声相加，**乘层①的 `gain`**，最后整体 `× (1 − damp·0.10)`） | 原型 `598-605` + §5.4 `SAND_GRAIN_A / _GRAIN2_A` |
      *
      * ⛔ blit 的**源矩形必须是 `(0, 0, texW, texH)`**（§4.3.7 末条：把上沿当源 `y`
      * 偏移会采到纹理外面、整块沙变成灰暗的条纹）—— [sandTopLeft] 只提供**目标**左上角。
@@ -2293,6 +2574,7 @@ class SeasideRenderer : RendererFx() {
         val invHi = 1.0 / (1.0 - vvBreak)
         val rowBase = IntArray(th)
         val rowMul = DoubleArray(th)
+        val rowDamp = DoubleArray(th)
         var j = 0
         while (j < th) {
             val v = j.toDouble() / (th - 1).coerceAtLeast(1).toDouble()
@@ -2303,8 +2585,15 @@ class SeasideRenderer : RendererFx() {
                 col = mixArgb(col, PAL_SAND_FAR, (vv - vvBreak) * invHi)
             }
             rowBase[j] = col
-            // 整体湿→干微渐变（§4.3.7 层①行）
+            // ⭐ `dampDrift`（原型 `seaside-preview.html:579`）= `1 - 0.10·(1 - v)`：
+            //   **整体湿→干的微渐变**。⚠️ 原型只把它当**层④颗粒**的增益 `gain`
+            //   （原型 601 / 603-605 行），⛔ **不乘底色** —— 早先这里乘在底色上、
+            //   颗粒反而原样相加，是**两头都反了**（⇒ 近水处底色被额外压暗 10%、
+            //   颗粒不随干湿衰减）。
             rowMul[j] = 1.0 - SAND_TEX_WET_FADE * (1.0 - v)
+            // 层③的「近水处更多」权重（原型 591-592 行的 `(0.30 + 0.70·(1 - smoothstep(0.10, 0.80, v)))`）
+            rowDamp[j] = SAND_TEX_DAMP_V_BASE + SAND_TEX_DAMP_V_SPAN *
+                (1.0 - SeasideWaves.smoothstep(SAND_TEX_DAMP_V_LO, SAND_TEX_DAMP_V_HI, v))
             j++
         }
         val dampR = (PAL_SAND_DAMP shr 16) and 0xFF
@@ -2315,44 +2604,67 @@ class SeasideRenderer : RendererFx() {
         while (y < th) {
             val v = y.toDouble() / (th - 1).coerceAtLeast(1).toDouble()
             val base = rowBase[y]
-            val mul = rowMul[y]
-            val br = (base shr 16) and 0xFF
-            val bg = (base shr 8) and 0xFF
-            val bb = base and 0xFF
-            // 层③的「近水处更多」：把第二层噪声的采样点往纹理上沿（靠水一侧）拉。
-            val dvBias = (1.0 - v) * SAND_TEX_DAMP_BIAS
+            val gain = rowMul[y]
+            val dampNear = rowDamp[y]
+            val br = ((base shr 16) and 0xFF).toDouble()
+            val bg = ((base shr 8) and 0xFF).toDouble()
+            val bb = (base and 0xFF).toDouble()
             var x = 0
             while (x < tw) {
                 val u = x.toDouble() / (tw - 1).coerceAtLeast(1).toDouble()
-                var r = br * mul
-                var g = bg * mul
-                var b = bb * mul
-                // 层② 宽柔沿岸起伏带（两个八度扭曲 ⇒ 绝不等距）
-                val w1 = SeasideWaves.vnoise2(u * 2.6, v * 1.9, 1201)
-                val w2 = SeasideWaves.vnoise2(u * 6.1, v * 4.3, 1207)
-                val warp = (w1 - 0.5) * 1.6 + (w2 - 0.5) * 0.7
-                val band = SeasideWaves.fsin((v * SAND_TEX_RIPPLE_N + warp) * TAU)
-                val rip = band * SAND_TEX_RIPPLE_A * 255.0
-                r += rip
-                g += rip
-                b += rip
-                // 层③ 潮湿斑块
-                val d1 = SeasideWaves.vnoise2(u * 3.4, v * 2.2, 1301)
-                val d2 = SeasideWaves.vnoise2(u * 8.3, v * 5.1 - dvBias, 1307)
-                val dm = SeasideWaves.smoothstep(SAND_TEX_DAMP_LO, SAND_TEX_DAMP_HI, d1 * 0.65 + d2 * 0.35)
-                if (dm > 0.0) {
-                    val k = dm * SAND_TEX_DAMP_A
-                    r += (dampR - r) * k
-                    g += (dampG - g) * k
-                    b += (dampB - b) * k
+                if (BISECT_SAND_TEX_FLAT) {
+                    px[y * tw + x] = (0xFF shl 24) or
+                        (clampByte(br) shl 16) or (clampByte(bg) shl 8) or clampByte(bb)
+                    x++
+                    continue
                 }
-                // 层④ 像素级细颗粒（主导纹理）：两个白噪声相加，各自去中心
-                val n1 = SeasideWaves.hash2(x, y) - 0.5
-                val n2 = SeasideWaves.hash2(x + 7919, y + 104729) - 0.5
+                // ① 底色原样（⛔ **不乘** `gain` —— 原型只用它调层④颗粒）
+                var r = br
+                var g = bg
+                var b = bb
+                // 层② 宽柔沿岸起伏带（两个八度扭曲 ⇒ 绝不等距）
+                //     逐字照抄原型 `seaside-preview.html:585-587`
+                val w1 = SeasideWaves.vnoise2(u * SAND_TEX_WARP_U1, v * SAND_TEX_WARP_V1, SAND_TEX_WARP_S1)
+                val w2 = SeasideWaves.vnoise2(u * SAND_TEX_WARP_U2, v * SAND_TEX_WARP_V2, SAND_TEX_WARP_S2)
+                val warp = w1 * SAND_TEX_WARP_A1 + w2 * SAND_TEX_WARP_A2
+                val band = SeasideWaves.fsin((v * SAND_TEX_RIPPLE_N + warp) * TAU)
+                // 原型是**乘性**的 `ripK = 1 + SAND_RIPPLE_A·rip`（原型 587 行）
+                val ripK = 1.0 + SAND_TEX_RIPPLE_A * band
+                r *= ripK
+                g *= ripK
+                b *= ripK
+                // 层③ 潮湿斑块：逐字照抄原型 `seaside-preview.html:590-592`
+                val d1 = SeasideWaves.vnoise2(u * SAND_TEX_DAMP_U1, v * SAND_TEX_DAMP_V1, SAND_TEX_DAMP_S1)
+                val d2 = SeasideWaves.vnoise2(u * SAND_TEX_DAMP_U2, v * SAND_TEX_DAMP_V2, SAND_TEX_DAMP_S2)
+                val damp = SeasideWaves.smoothstep(
+                    SAND_TEX_DAMP_LO, SAND_TEX_DAMP_HI, d1 * SAND_TEX_DAMP_M1 + d2 * SAND_TEX_DAMP_M2
+                ) * dampNear * SAND_TEX_DAMP_A
+                if (damp > 0.0) {
+                    r += (dampR - r) * damp
+                    g += (dampG - g) * damp
+                    b += (dampB - b) * damp
+                }
+                // ⭐ 层④ 像素级细颗粒（主导纹理）：两个白噪声相加，各自去中心，
+                //     **乘层①的 `gain`**（原型 600-605 行），最后整体压暗 `1 - damp·0.10`
+                // ⭐⭐ 2026-10-05 **逐字对齐原型**：原来这里用的是 `hash2(x, y)`
+                //   （`((x+1)·0x9E3779B1) ^ ((y+7)·40503)`），那**不是**原型的函数 ——
+                //   原型是 `hash32(imul(y, A) + imul(x, B) + C)` 的**加法**混合。两者都各向同性
+                //   （复算：相邻行相关 −0.004 / −0.001，幅值都是 `(0.062+0.030)/√3·255 = 13.5`）
+                //   ⇒ ⛔ **不是竖纹的成因**，但它是一处实打实的偏离，照原型改。
+                // ⚠️ `2654435761` 必须写成**有符号** Int `-1640531535`（= `0x9E3779B1`）——
+                //   写成整数字面量在 Kotlin 里是 `Long`，会把整条表达式提到 64 位（⛔ 编译不过，
+                //   且与 `Math.imul` 的 32 位回绕语义不同）。同 [SeasideWaves.hash2] 的 KDoc。
+                val n1 = SeasideWaves.hash32(
+                    y * 374761393 + x * 668265263 + 12345
+                ) - 0.5
+                val n2 = SeasideWaves.hash32(
+                    y * 1274126177 + x * (-1640531535) + 777
+                ) - 0.5
                 val grain = (n1 * SAND_TEX_GRAIN_A + n2 * SAND_TEX_GRAIN2_A) * 255.0
-                r += grain
-                g += grain
-                b += grain
+                val darken = 1.0 - damp * SAND_TEX_DAMP_DARKEN
+                r = (r + grain * gain) * darken
+                g = (g + grain * gain) * darken
+                b = (b + grain * gain) * darken
                 val ri = if (r < 0.0) 0 else if (r > 255.0) 255 else r.toInt()
                 val gi = if (g < 0.0) 0 else if (g > 255.0) 255 else g.toInt()
                 val bi = if (b < 0.0) 0 else if (b > 255.0) 255 else b.toInt()
@@ -2366,26 +2678,20 @@ class SeasideRenderer : RendererFx() {
         sandTex = bmp.asImageBitmap()
         sandTexW = tw
         sandTexH = th
-        // ── 把纹理挂成填充刷（[drawSand] 的唯一提交通道）────────────────────────
-        // 矩阵把「画幅矩形 `(0, sandTexTop) – (w, h)`」映射到「位图像素 `(0,0) – (tw,th)`」：
-        //   x' = x · tw/w                      （横向 = `drawImage` 的 `dstSize`，⛔ 不再露缝）
-        //   y' = (y − sandTexTop) · th/rawH    （纵向锚在 SAND_TEX_TOP·h，尺寸契约不变）
-        // ⛔ `TileMode.CLAMP`：矩阵只被采样到 `[0, tw] × [0, th]`，CLAMP 只是兜底。
+        // ── 「画布坐标 → 纹理坐标」的映射：**写进字段，由 [drawSand] 的 Canvas 变换承载** ──
+        //   纹理第 0 行 ↔ 画布 y = `sand_tex_top_px`；一画幅像素 ↔ `sx / sy` 个纹理像素。
+        // ⛔ **不再用 `BitmapShader.setLocalMatrix`**（2026-10-05）：那层映射在真机上**不生效**
+        //   ⇒ 采样退化成恒等 ⇒ 沙滩（画布 y ∈ `[0.484h, h]`）整体越过 `th` 行、被
+        //   `CLAMP` 钉在**最后一行** ⇒ 整块沙只剩 x 方向的变化（竖纹），层①的湿→干渐变与
+        //   层②的起伏带同时消失。判据：真机沙的 x 剖面与 `hash2(x, th−1)` 相关 **+0.55**、
+        //   与其余 582 行 **≈0**（见 [drawSand]）。
         val sx = if (rawW > 0.0) tw / rawW else 1.0
         val sy = if (rawH > 0.0) th / rawH else 1.0
-        val topPx = (waves?.sand_tex_top_px ?: 0.0).toFloat()
-        val mtx = Matrix()
-        // ⛔ `Matrix.setValues` 是**行向量**约定 `x' = x·m[0] + y·m[1] + m[2]`、
-        //   `y' = x·m[3] + y·m[4] + m[5]` ⇒ 平移必须落在下标 **2 / 5**（⛔ 不是 6 / 7）。
-        mtx.setValues(
-            floatArrayOf(
-                sx.toFloat(), 0f, 0f,
-                0f, sy.toFloat(), -topPx * sy.toFloat(),
-                0f, 0f, 1f
-            )
-        )
+        sandScaleX = sx.toFloat()
+        sandScaleY = sy.toFloat()
+        sandTexTopPx = (waves?.sand_tex_top_px ?: 0.0).toFloat()
+        // ⛔ `TileMode.CLAMP`：矩阵只被采样到 `[0, tw] × [0, th]`，CLAMP 只是兜底。
         val sh = BitmapShader(bmp, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP)
-        sh.setLocalMatrix(mtx)
         sandPaint.shader = sh
     }
 
@@ -2636,11 +2942,13 @@ class SeasideRenderer : RendererFx() {
     }
 
     /**
-     * 三支**逐帧要挪**的原生 `LinearGradient`（[buildWaveGradients]）。
+     * 四支**逐帧要挪**的原生 `LinearGradient`（[buildWaveGradients]）。
      *
      * - [swellBodyNativePaint]：迎光 [PAL_RIDGE] → 背光 [PAL_TROUGH] 的 5 停靠体积渐变
      *   （原型 2864-2868 行），停靠位置 / alpha 见 [SWELL_BODY_STOP_POS] / [SWELL_BODY_STOP_A]。
      * - [seaFoamWashNativePaints]：`0` = 领头浪那支、`1` = 非领头浪那支（原型 2787-2799）。
+     * - [wetWashNativePaint]：湿沙本体那**一支**（原型 `drawWetWash` 的 5 个色标，
+     *   `seaside-preview.html:2055-2059`；色标位置 / alpha / RGB 见 [WET_WASH_STOP_POS] 一族）。
      *
      * ⛔ 渐变一律建在**归一化**的 `y ∈ [0, 1]` 上 ⇒ 逐帧只用 [gradMatrix] `setScale` +
      *   `postTranslate` 挪到本帧的 `yT..yB`，**零分配**。
@@ -2665,6 +2973,25 @@ class SeasideRenderer : RendererFx() {
         seaFoamWashNativePaints[1].shader = LinearGradient(
             0f, 0f, 0f, 1f, argbWith(WASH_NL_STOP_A, WASH_NL_STOP_RGB),
             WASH_NL_STOP_POS, Shader.TileMode.CLAMP
+        )
+        // ── [wetWashNativePaint]：湿沙本体那**一支**（2026-10-05，取代 [WET_RIBBON_N] 条 ribbon）──
+        // ⛔ 色标的 RGB / alpha 逐字取 `seaside-preview.html:2055-2059`；只有 `t = 0` 那一档
+        //   从 `0.76` 改成 **0**、峰值提前到 `t = 0.14`（驼峰）—— 理由与代价见
+        //   [WET_WASH_STOP_POS] 的 KDoc（一支共享渐变的 `t=0` 只能落在全幅 `min(shoreYs)` 上，
+        //   沿用原型的「t=0 最深」会让那一列的水线正好压在最深色标上 = 会游走的暗边）。
+        val wwColors = IntArray(WET_WASH_STOP_POS.size)
+        i = 0
+        while (i < wwColors.size) {
+            val rr = (WET_WASH_STOP_RGB[i] shr 16) and 0xFF
+            val gg = (WET_WASH_STOP_RGB[i] shr 8) and 0xFF
+            val bb = WET_WASH_STOP_RGB[i] and 0xFF
+            wwColors[i] = AndroidColor.argb(
+                alpha255(WET_WASH_STOP_A[i].toDouble() / WET_WASH_PEAK_A), rr, gg, bb
+            )
+            i++
+        }
+        wetWashNativePaint.shader = LinearGradient(
+            0f, 0f, 0f, 1f, wwColors, WET_WASH_STOP_POS, Shader.TileMode.CLAMP
         )
     }
 
@@ -3329,6 +3656,12 @@ class SeasideRenderer : RendererFx() {
     private fun buildSeaBaseBrush(w: Float, h: Float) {
         if (seaBottomPx <= 0f) return
         val depthK = SEA_DEPTH_GAIN * (SEA_DEPTH_BIAS0 + SeasideAudioMap.DEPTH_BIAS_LO * 0.55)
+        // ⛔⛔⛔ **必须走 `Color(Int)` / [AndroidColor.argb]，⛔ 不得用 `Color(Float×4)`。**
+        //   `androidx.compose.ui.graphics.Color(red, green, blue, alpha)` 的四个分量是
+        //   **`0.0..1.0`**；本行算出来的 `r/g/b` 是 `0..255`。传 20f/88f/107f 进去会把
+        //   整条水体底色渐变打成近黑（真机实测：整片海 `#0F080A`，G 通道中位数 15，
+        //   而正确值应是 105~128）。⇒ 一律 `AndroidColor.argb(255, r, g, b)`。
+        //   （本文件其余 17 处色值全部走 `Color(0x…)` 整型重载，⛔ 别在这里破例。）
         val stops = Array<Pair<Float, Color>>(5) { s ->
             val v = s.toDouble() / 4.0
             val dep = SeasideWaves.clamp(1.0 - depthK * powD(v, SEA_DEPTH_POW), 0.0, 1.0)
@@ -3336,10 +3669,7 @@ class SeasideRenderer : RendererFx() {
             val g = SEA_FAR_G + (SEA_DEEP_G - SEA_FAR_G) * dep
             val b = SEA_FAR_B + (SEA_DEEP_B - SEA_FAR_B) * dep
             (s.toFloat() / 4.0f) to Color(
-                clampByte(r).toFloat(),
-                clampByte(g).toFloat(),
-                clampByte(b).toFloat(),
-                1.0f
+                AndroidColor.argb(255, clampByte(r), clampByte(g), clampByte(b))
             )
         }
         seaBaseBrush = Brush.verticalGradient(
@@ -3398,6 +3728,13 @@ class SeasideRenderer : RendererFx() {
         val sandPos = floatArrayOf(0.00f, 0.26f, 0.55f, 0.80f, 1.00f)
         val sheenPos = floatArrayOf(0.00f, 0.38f, 1.00f)
 
+        // ⛔⛔ 2026-10-05：这里原来还烘 [WET_RIBBON_N] = 32 条**平色** ribbon 刷子供
+        //   `drawWetWash` 用（那才是吃掉 ~80% 帧预算的东西：32 次 `drawPath`）。
+        //   ⇒ 已**删除**：湿沙本体改走 [wetWashNativePaint] 的**单支**原生渐变
+        //     （色标逐字照抄原型 `seaside-preview.html:2055-2059`，见 [WET_WASH_STOP_POS]）。
+        //   ⇒ 仍需要 alpha 随 `wetAmt` 调制，所以 `sandA` / `sandR` 这两个色标表**保留**
+        //     —— [wetBrush]（下面那支）与 [sheenBrush] 的 `lighter` 预合成还在用它们。
+
         val startY = SeasideWaves.waterline_min_bound(h.toDouble()).toFloat()
         val endY = (h.toDouble() * (SeasideWaves.SHORE_K + SEA_WET_BAND)).toFloat()
         if (endY <= startY) return
@@ -3425,12 +3762,7 @@ class SeasideRenderer : RendererFx() {
                 g = ((sr[1] * sa + hr[1] * k) / outA).toInt().toDouble()
                 b = ((sr[2] * sa + hr[2] * k) / outA).toInt().toDouble()
             }
-            pos[i] to Color(
-                (if (r < 0.0) 0 else if (r > 255.0) 255 else r).toFloat(),
-                (if (g < 0.0) 0 else if (g > 255.0) 255 else g).toFloat(),
-                (if (b < 0.0) 0 else if (b > 255.0) 255 else b).toFloat(),
-                outA.toFloat()
-            )
+            pos[i] to Color(AndroidColor.argb(alpha255(outA), clampByte(r), clampByte(g), clampByte(b)))
         }
         wetBrush = Brush.verticalGradient(*stops, startY = startY, endY = endY, tileMode = TileMode.Clamp)
 
@@ -3444,12 +3776,7 @@ class SeasideRenderer : RendererFx() {
             val p = pos[i].toDouble()
             val hr = sampleRamp(sheenPos, sheenR, p)
             val ha = sampleRampF(sheenPos, sheenA, p)
-            pos[i] to Color(
-                hr[0].toFloat(),
-                hr[1].toFloat(),
-                hr[2].toFloat(),
-                ha.toFloat()
-            )
+            pos[i] to Color(AndroidColor.argb(alpha255(ha), hr[0], hr[1], hr[2]))
         }
         sheenBrush = Brush.verticalGradient(
             *sheenStops,
@@ -3583,7 +3910,7 @@ class SeasideRenderer : RendererFx() {
      *   → ② waves.step(dt, t, 涌高, 岸线带宽) 模拟：一次调用完成整帧（内部顺序另有约束）
      *   → ③ drawSeaField → drawCausticNet → drawSand → drawWetWash → drawSheen
      *      → drawPuddles → drawCrab → drawSwellBands → drawSwashFingers
-     *      → drawResidualStreaks → drawWetLine → drawSplash → drawRipples → drawResidue
+     *      → drawResidualStreaks → drawSplash → drawRipples → drawResidue
      * ```
      *
      * ⚠️ **`drawSheen` 排在 `drawWetWash` 之后**（镜面高光靠 `BlendMode.Plus` **叠加**在湿沙
@@ -3646,7 +3973,6 @@ class SeasideRenderer : RendererFx() {
         drawSwellBands(t)
         drawSwashFingers(t)
         drawResidualStreaks(t)
-        drawWetLine(t)
         drawSplash(t)
         drawRipples(t)
         drawResidue()
@@ -3737,6 +4063,7 @@ class SeasideRenderer : RendererFx() {
      * @param energy 段落响度（`audio.sEnergy`）—— ⛔ 只改外观（水色加深 / 浅滩带宽度）。
      */
     private fun DrawScope.drawSeaField(t: Double, energy: Double) {
+        if (BISECT_SEAFIELD_OFF) return
         val brush = seaBaseBrush ?: return
         drawRect(brush = brush, size = Size(seaW, seaBottomPx))
         if (seaLevel == SeaLevel.LOW) return
@@ -3772,7 +4099,7 @@ class SeasideRenderer : RendererFx() {
      *   ⛔ 也不是 56 次 `drawCircle`。折进去的代价：射线逐根的线宽 `0.8 + 1.0·hash`
      *   与逐根 alpha、亮结的逐颗 alpha 都被**该档的固定值**取代（档分配见下）。
      * - ⛔ **只在海水区**（`0..seaBottomPx`）⇒ ⛔ 整屏叠（[CAUSTIC_SHORE_A] 是死常量，
-     *   岸线处的亮线由 [drawWetLine] 与贴岸各层负责，§5.5 清单）。
+     *   岸线处的亮线由贴岸各层负责（⛔ 原 `drawWetLine` 已于 2026-10-05 整层删除，§5.5 清单）。
      *   ⛔ 全文件零 `clipPath` ⇒ 越界的射线端点**逐点夹到 `[0, seaBottomPx]`**。
      * - ⛔ **绝不可退回「孤立短横划」** —— 没有胞形的短线一律读作划痕（§4.2「为什么必须是胞壁网」）。
      *
@@ -3964,27 +4291,68 @@ class SeasideRenderer : RendererFx() {
      *   ⛔ 零 `BitmapShader` **同时**成立时，「上沿贴岸线的**纹理** blit」**无法实现** ——
      *   Compose 的 `drawImage` 只收矩形，把位图填进任意轮廓**只有** shader 一条路。
      *
+     * ## ⭐⭐⭐ 竖纹的**确切成因**与修法（2026-10-05，真机指纹定位）
+     *
+     * **症状**（真机 `dev_80_v1.png` 1920×1080，沙滩 `y ∈ [780,1020]`）：
+     * x 方向标准差 17.9、y 方向只有 4.6、相邻行相关 **0.978**、去趋势后行内逐点值
+     * （`x=600..613`）在 `y=803` 以下**逐行完全相同** ⇒ **整块沙只剩 x 方向的变化**。
+     *
+     * **指纹判据（可复算，1:1 移植 [SeasideWaves] 的 `hash32`/`hash2` 到脚本）**：
+     * 把屏幕行 `y=814/900/926/1000/1039/1055` 的 x 剖面与**纹理每一行**的层④
+     * `hash2(x, j)` 求相关 ⇒
+     * - 与 **`j = th−1 = 582`（最后一行）相关 +0.542…+0.563**，且**六行都是同一个 `j`**；
+     * - 与其余 582 行 **|r| ≤ 0.10**（纯白噪声的量级）；与**原型的加法 hash** 只有 +0.09。
+     *
+     * ⇒ **机制**：`th = 583` 行，而沙滩在画布上占 `y ∈ [0.484h, h] = [523, 1080]`。
+     * `BitmapShader.setLocalMatrix()` 承载的 `y' = sy·(y − sand_tex_top_px)` 在真机上
+     * **不生效** ⇒ 采样退化成**恒等** `y' = y` ⇒ 整片沙滩的 `y' ≥ th` ⇒ `TileMode.CLAMP`
+     * 把它**钉在最后一行** ⇒ 竖纹。⛔ 这**不是**纹理数据的问题（四层公式 1:1 复算的
+     * 相邻行相关是 −0.004，各向同性），也**不是**上传/采样/`TileMode` 的问题。
+     * 同一条退化**顺带吃掉层①的湿→干纵向渐变与层②的 7 条起伏带** ——
+     * 这正是真机上「沙滩越往下越**暗**」（实测 `R−G ≈ 18` 全程不变、`y=760→1040`
+     * 由 181.9 掉到 175.3，全是暗角）而原型是越往下越**亮**的原因。
+     *
+     * **修法**：⛔ 不再依赖 `setLocalMatrix`，把同一组映射搬进 **`Canvas` 变换** ——
+     * `translate(0, sandTexTopPx)` + `scale(sandScaleX, sandScaleY)`，路径的 y 全部
+     * 减去 `sandTexTopPx`。于是着色器在**恒等**坐标下就采到
+     * `(x·sx, (y − top)·sy)` = **与原型 `drawImage(sandTex, 0, top, W, H−top)` 等价**
+     * 的映射；`CLAMP` 不再被踩到（上沿 `y'=0`、下沿 `y'=th`）。
+     * 代价：`translate` + `scale` + `restore` 三次 native 调用、⛔ 零分配、**不新增提交**。
+     *
      * ⛔ **无入参**（原型签名带 `t`，本实现不吃：沙几乎不动，全部内容都在纹理里）。
      */
     private fun DrawScope.drawSand() {
+        if (BISECT_SAND_OFF) return
         if (sandPaint.shader == null) return
         val wv = waves ?: return
         val n = wv.column_count
         if (n < 2) return
+        val topPx = sandTexTopPx
         sandNativePath.rewind()
         // ⛔ 上边界逐列取岸线：⛔ 不取整、⛔ 不加 `+1px`（相邻列共享像素会抗锯齿成竖缝）
-        sandNativePath.moveTo(wv.shore_xs[0].toFloat(), wv.shore_ys[0].toFloat())
+        // ⭐ y 全部减去 `topPx`：与下面的 `translate(0, topPx)` 配对 ⇒ 纹理第 0 行正好落在
+        //   `SAND_TEX_TOP·h`（⛔ 换算交给 Canvas，⛔ 不靠 `setLocalMatrix`）。
+        sandNativePath.moveTo(wv.shore_xs[0].toFloat(), wv.shore_ys[0].toFloat() - topPx)
         var i = 1
         while (i < n) {
-            sandNativePath.lineTo(wv.shore_xs[i].toFloat(), wv.shore_ys[i].toFloat())
+            sandNativePath.lineTo(wv.shore_xs[i].toFloat(), wv.shore_ys[i].toFloat() - topPx)
             i++
         }
         // 向下合拢到画面底边外侧 4px（原型 `lineTo(W, H+4) / lineTo(-2, H+4)`）
         val hpx = size.height
-        sandNativePath.lineTo(seaW + 2f, hpx + 4f)
-        sandNativePath.lineTo(-2f, hpx + 4f)
+        val yBottom = hpx + 4f - topPx
+        sandNativePath.lineTo(seaW + 2f, yBottom)
+        sandNativePath.lineTo(-2f, yBottom)
         sandNativePath.close()
-        drawContext.canvas.nativeCanvas.drawPath(sandNativePath, sandPaint)
+        // ⭐⭐ 映射搬到这里：`translate` 定纵向锚点、`scale` 定「一画幅像素 ↔ 几个纹理像素」
+        //   （两者都只在 4K 触发降采样时才 ≠ 1/1；1080p 下 `sx=1.0`、`sy=583/583.2`）。
+        //   ⛔ `scale` 之后 path 的 x 才是画布像素（`sx` 极接近 1，⛔ 不引入可见缝）。
+        val cv = drawContext.canvas.nativeCanvas
+        cv.save()
+        cv.translate(0f, topPx)
+        cv.scale(sandScaleX, sandScaleY)
+        cv.drawPath(sandNativePath, sandPaint)
+        cv.restore()
     }
 
     // ── ④ 湿沙 + 镜面高光（**各自 1 次提交，合计 2 次 `drawPath`**）──────────────
@@ -3992,25 +4360,66 @@ class SeasideRenderer : RendererFx() {
     /**
      * [SeaOpItem.WET_WASH] —— 湿沙。**恰好 1 次 `drawPath`**（⛔ 只写 [wetRegionPath]）。
      *
+     * ## ⭐⭐ 2026-10-05 重写：32 条平色 ribbon → **1 次 `drawPath` + 1 支原生渐变**
+     * 上一版把原型那条逐列渐变量化成 [WET_RIBBON_N] = **32** 条嵌套的平色 ribbon
+     * ⇒ **32 次 `drawPath`**。真机 A/B（同场景同档）实测：整层关掉后帧率
+     * **1.4 fps → 7.2 fps** ⇒ 这一层吃掉约 **80% 的帧预算**，而它换来的只是
+     * 「没有渐变的平色带」。⇒ 改回原型形态的**连续渐变**，且仍是 **1 次提交**。
+     * 预算表：`WET_WASH.opsLow / opsMed / opsHigh` 建议值全部 = **1**。
+     *
      * ## ⭐ 本路径的分工
      * | 谁 | 负责什么 |
      * |---|---|
-     * | [wetBrush] 的**竖向渐变** | 纵向的浓淡分布（从最深走到全透明） |
+     * | [wetWashNativePaint] 的**竖向渐变** | 纵向的浓淡分布（`t=0` 全透明 → 0.14 峰值 → `t=1` 归零） |
      * | **本函数写的 `wetEdge[i]` 下轮廓** | 湿区的**下边界形状**（逐列记忆量真正落到几何上） |
      * | **本函数写的 `shoreYs[i]` 上轮廓** | 湿区的上沿 = 水线本身（⛔ 不再需要 clip 定上沿） |
      *
      * ⛔ 函数体内**不得**出现 `createLinearGradient` / `Brush.verticalGradient` /
-     *   `drawRect(brush =`：渐变是 [wetBrush]（[rebuildGeometry] 烘一次）。
+     *   `drawRect(brush =`：渐变是 [wetWashNativePaint] 的着色器（[buildWaveGradients] 烘一次）。
      * ⛔ 原稿 97 个逐列渐变 quad 的 `WET_OVER = 16px` 技巧（把顶端抬到水线之上、让 clip 独自
      *   决定上沿）被 subsume —— 这里上沿**就是** `shoreYs[i]`。
      * ⛔ **本函数体内不得出现第二个 `drawPath(`** —— 高光那一次归 [drawSheen]（§4.9.2 的
      *   「折成同一次」已被所有者推翻，见 [drawSheen] 的 KDoc）。
+     *
+     * ## ⛔⛔ 渐变的竖向 span **绝不能锚在全幅**（这是前两轮连着踩的坑）
+     * 上一版的 [wetBrush] 把 span 锚在 `[waterline_min_bound, SHORE_K + SEA_WET_BAND]`
+     * （1080p 下 ≈ `[522.7, 794.3]` px），而 `shoreYs[i]` 实际在 **658…731** px 之间摆动
+     * （真机 `dev_20…dev_70` 逐帧量，行中位 R>G 的第一行；理论包络更宽：
+     * `h·(SHORE_K ∓ CREST_AMP_SHORE ∓ TIDE_AMP)` = 1080 × `0.484…0.756` = **523…817** px）
+     * ⇒ 原型那条「`t=0` 最深」的渐变落到岸线上时 alpha 从 **0.31 一路掉到 0 并被 clamp**
+     * ⇒ 接缝处出现一条**深浅随浪 pulsate** 的暗线（凹陷深度实测 0…112，p90 = 45）。
+     * ⇒ **本版把 span 挪到「盖住岸线整个摆动范围」**：
+     * ```
+     * yT = min(shoreYs[i])                            （在门控列上取，下同）
+     * yB = max( max(wetEdge[i]), max(shoreYs[i]) )
+     * ```
+     * 1080p 实测（`dev_70_s1`，水线 ≈671px）：`yT ≈ 658`、`yB ≈ 731 + 湿区厚`
+     * ⇒ **span ≈ 75…150 px**，而不是 271.6px 的全幅锚、也不是 523→817 的理论包络。
+     * 配合 [WET_WASH_STOP_POS] 的**驼峰**（`t=0` 处 alpha = **0**）⇒
+     * 接缝**没有硬边**（alpha 沿每列上沿**连续**变化，不再是「逐列跳变」）⇒ 暗线消失。
+     *
+     * ## 接缝 alpha 估算（span ≈ 102 px、色标见 [WET_WASH_STOP_POS]、取自 `dev_70_s1`）
+     * ```
+     * t(y) = (y − 658) / 102
+     * 最高岸线  y=658 → t=0.000 → a=0.00   ⛔ 零 alpha、无硬边
+     * 本帧水线  y=671 → t=0.127 → a≈0.70   ← 落在驼峰上升沿末段
+     * 最低岸线  y=731 → t=0.716 → a≈0.22
+     * 湿区下缘  y=760 → t=1.000 → a=0.00
+     * ```
+     * ⚠️ **残留偏差（明确记录，不是近似误差的托词）**：`a ≈ 0` 这条**只在最高的那一列成立**。
+     *   一支共享渐变**不可能**让每一列的水线都落在 alpha≈0 处 —— 那要求 ramp 在整个 span 上
+     *   ≈0，等于湿沙整层不画。真正消掉的是**跳变**：旧版 alpha 在列间从 0.31 跳到 0（被 clamp），
+     *   那道**游走的暗线**就是这条跳变的形状；现在 alpha 沿上沿**连续**变化 ⇒ 没有线，只有浓淡。
+     *   **所有者裁决**：这远好过一条会游走的黑线，也远好过 32 次提交。
+     *   要彻底消掉只能回到原型的 97 支逐列渐变（= 97 次提交，见 `:2053`）。
+     * ⛔ **不得**用「等高线状分层」换掉它：连续渐变 ⇒ 深度方向上没有任何档边界。
      *
      * ## 逐列 alpha 的取舍（明确记录，不是近似误差的托词）
      * 原型给每列的渐变色标都乘 `wetAmt[i]`（逐列）。一条 path + 一支刷拿不到逐列 alpha
      * ⇒ 改用**逐列 `wetAmt` 的门控 + 连续段（run）切子路径**：某一列干到
      * `wetAmt ≤ [WET_ANY_MIN]`（或湿区厚度 < [WET_BAND_MIN_PX]）就断开 ⇒ 段与段之间的
      * 竖向阶跃正是**水舌边界**，那本来就该是硬边（原型注释原话）。
+     * 整层的标量 alpha 取**门控列的 `wetAmt` 平均值**（`Paint.setAlpha` 逐帧乘回归一化基数）。
      * ⛔ x 用浮点、不取整也不 `+1px`（取整留 0.33px 缝、重叠二次合成，两者都会变成竖线）。
      *
      * 门控（§4.7①）：无列 `wetAmt > [WET_ANY_MIN]` ⇒ 整个湿沙层跳过。
@@ -4023,48 +4432,81 @@ class SeasideRenderer : RendererFx() {
      *   但**绘制次序必须**照上面那样。
      */
     private fun DrawScope.drawWetWash() {
+        if (BISECT_WET_WASH_OFF) return
+        if (BISECT_WET_WASH) return
         val wv = waves ?: return
-        val brush = wetBrush ?: return
-        // ⛔ 自己 `reset()`：高光已迁到 [sheenPath]（第二次提交），本 path 是**唯一**写入者。
-        wetRegionPath.reset()
         val n = wv.column_count
-        var any = false
+        val ys = wv.shore_ys
+        val we = wv.wet_edge
+        // 门控：无列够湿 ⇒ 整层跳过（原型 `seaside-preview.html:2030-2031, 2041`）
+        // ⭐ 同时把渐变的 span 求出来（**只在门控列上取**）：
+        //   `yT = min(shoreYs)`、`yB = max(max(wetEdge), max(shoreYs))`。
+        // ⛔ `yB` **必须**再兜一个 `max(shoreYs)`：`wetEdge` 是**记忆量**（退水路过留下的最高水位，
+        //   上界 `h·(SHORE_K + SWASH_REACH·1.10)`），而 `shoreYs` 的下界是
+        //   `h·(SHORE_K + CREST_AMP_SHORE + TIDE_AMP)` —— **后者更大**。
+        //   退潮深处会出现 `max(wetEdge) < max(shoreYs)` ⇒ 若只取 `max(wetEdge)`，
+        //   那些列的整条湿区会落在 span **之外** ⇒ 被 `CLAMP` 到 `t=0`（alpha = 0）
+        //   ⇒ 湿沙在最深的一批列上整条消失。
+        var sum = 0.0
+        var cnt = 0
+        var yT = Double.MAX_VALUE
+        var yB = -Double.MAX_VALUE
         var i = 0
         while (i < n) {
-            if (wv.wet_amt[i] > WET_ANY_MIN) {
-                any = true
-                break
+            if (wv.wet_amt[i] > WET_ANY_MIN &&
+                (we[i] - ys[i]) >= WET_BAND_MIN_PX
+            ) {
+                sum += wv.wet_amt[i]
+                cnt++
+                if (ys[i] < yT) yT = ys[i]
+                if (ys[i] > yB) yB = ys[i]
+                if (we[i] > yB) yB = we[i]
             }
             i++
         }
-        if (!any) return
-        // 逐段填 wetRegionPath：上轮廓 shore_ys[i]（正向）、下轮廓 wet_edge[i]（回程）
+        if (cnt <= 0) return
+        // ⇒ 逐列平均湿润度（只作 `Paint.alpha` 的标量因子）
+        val wetAvg = sum / cnt
+        val span = yB - yT
+        if (span < WET_WASH_SPAN_MIN) return
+        val paint = wetWashNativePaint
+        val shader = paint.shader ?: return
+        // ⛔ 原生 `Path` 复用前必须 `rewind()`（§零分配：不是 `reset()`，后者会留 fillType）
+        wetRegionPath.rewind()
+        // ── 逐列门控 + 连续段（run）切子路径：上轮廓 = 水线，下轮廓 = 湿区记忆边缘 ──
         var run = -1
         i = 0
         while (i <= n) {
             val on = i < n && wv.wet_amt[i] > WET_ANY_MIN &&
-                (wv.wet_edge[i] - wv.shore_ys[i]) >= WET_BAND_MIN_PX
+                (we[i] - ys[i]) >= WET_BAND_MIN_PX
             if (on) {
                 if (run < 0) run = i
             } else if (run >= 0) {
-                wetRegionPath.moveTo(wv.shore_xs[run].toFloat(), wv.shore_ys[run].toFloat())
-                var j = run + 1
-                while (j <= i - 1) {
-                    wetRegionPath.lineTo(wv.shore_xs[j].toFloat(), wv.shore_ys[j].toFloat())
-                    j++
+                wetRegionPath.moveTo(wv.shore_xs[run].toFloat(), ys[run].toFloat())
+                var b = run + 1
+                while (b <= i - 1) {
+                    wetRegionPath.lineTo(wv.shore_xs[b].toFloat(), ys[b].toFloat())
+                    b++
                 }
-                j = i - 2
-                while (j >= run) {
-                    wetRegionPath.lineTo(wv.shore_xs[j].toFloat(), wv.wet_edge[j].toFloat())
-                    j--
+                b = i - 2
+                while (b >= run) {
+                    wetRegionPath.lineTo(wv.shore_xs[b].toFloat(), we[b].toFloat())
+                    b--
                 }
-                wetRegionPath.lineTo(wv.shore_xs[run].toFloat(), wv.wet_edge[run].toFloat())
+                wetRegionPath.lineTo(wv.shore_xs[run].toFloat(), we[run].toFloat())
                 wetRegionPath.close()
                 run = -1
             }
             i++
         }
-        drawPath(wetRegionPath, brush, alpha = 1f)
+        // ⭐ 把归一化渐变 `setScale` + `postTranslate` 到本帧的 `yT..yB`（**零分配**，
+        //   机制与 [swellBodyNativePaint] 同一套，见 :2258-2269 的 KDoc）。
+        gradMatrix.setScale(1f, span.toFloat())
+        gradMatrix.postTranslate(0f, yT.toFloat())
+        shader.setLocalMatrix(gradMatrix)
+        // 色标 alpha 已除以 [WET_WASH_PEAK_A]（[buildWaveGradients]）⇒ 乘回去
+        paint.alpha = alpha255(wetAvg * WET_WASH_PEAK_A)
+        drawContext.canvas.nativeCanvas.drawPath(wetRegionPath, paint)
     }
 
     /**
@@ -4112,16 +4554,24 @@ class SeasideRenderer : RendererFx() {
      *   见 [drawWetWash] 的 KDoc。
      */
     private fun DrawScope.drawSheen() {
+        if (BISECT_SHEEN_OFF) return
+        if (BISECT_SHEEN) return
         val wv = waves ?: return
-        sheenPath.reset()
         val n = wv.column_count
-        var cols = 0
+        var sum = 0.0
+        var cnt = 0
         var i = 0
         while (i < n) {
-            if (wv.wet_amt[i] > WET_SHEEN_MIN) cols++
+            if (wv.wet_amt[i] > WET_SHEEN_MIN) {
+                sum += wv.wet_amt[i]
+                cnt++
+            }
             i++
         }
-        if (cols < WET_SHEEN_COL_MIN) return
+        // 门控：少于 [WET_SHEEN_COL_MIN] 列 ⇒ 内容跳过（原型 `:2073-2074`）
+        if (cnt < WET_SHEEN_COL_MIN) return
+        sheenPath.reset()
+        // ⚠ 固定带深（原型 `depth + WET_OVER`，被 `clip(sandPath)` 切成 `H·0.030`）
         val depth = (size.height * SHEEN_DEPTH_K).toFloat()
         var run = -1
         i = 0
@@ -4138,26 +4588,21 @@ class SeasideRenderer : RendererFx() {
                 }
                 j = i - 2
                 while (j >= run) {
-                    sheenPath.lineTo(
-                        wv.shore_xs[j].toFloat(),
-                        wv.shore_ys[j].toFloat() + depth
-                    )
+                    sheenPath.lineTo(wv.shore_xs[j].toFloat(), wv.shore_ys[j].toFloat() + depth)
                     j--
                 }
-                sheenPath.lineTo(
-                    wv.shore_xs[run].toFloat(),
-                    wv.shore_ys[run].toFloat() + depth
-                )
+                sheenPath.lineTo(wv.shore_xs[run].toFloat(), wv.shore_ys[run].toFloat() + depth)
                 sheenPath.close()
                 run = -1
             }
             i++
         }
-        // ⛔ 用 [sheenBrush]（**只含高光 ramp**），⛔ **不用** [wetBrush] —— 原型那次
-        //   `lighter` 只加 `sheenStrip`；用合并刷会把湿沙 ramp 二次叠加 ⇒ 引入视觉偏差。
-        //   ⛔ 逐帧只读字段，⛔ 不构造刷子（`Brush.` 只许出现在 [buildWetBrush] 里）。
+        // ⚠ 原型是**逐列** `globalAlpha = wetAmt[i]`（`:2083`）。一次 `drawPath` 只能一个标量
+        //   ⇒ 取逐列平均。⚠ 不分档：fix-18 的 3 档在**列**上切线 ⇒ 每道档边界
+        //   都是垂直稛缨（真机实拍的「一排竖条依次缩掉」）。
+        //   ⚠ 当前仍保留 run 切分：run 边界是**水躿的水舌边界**，HTML 也在那里消失。
         val brush = sheenBrush ?: return
-        drawPath(sheenPath, brush, alpha = 1f, blendMode = BlendMode.Plus)
+        drawPath(sheenPath, brush, alpha = (sum / cnt).toFloat(), blendMode = BlendMode.Plus)
     }
 
     // ── ⑤ 沙面覆盖层 ────────────────────────────────────────────────────────
@@ -4194,8 +4639,30 @@ class SeasideRenderer : RendererFx() {
      * ⚠️ 16 个本体椭圆与 16 个反光椭圆之间**可能共享抗锯齿边界像素** ⇒ 本体的深色描边
      *   会在反光外缘留一道极细的暗圈。这是原型同款几何（原型是 32 次独立 `fill`，
      *   逐块 alpha 也不同）留下的**固有**结果，⛔ 不是靠取整坐标能消掉的（那会改形状）。
+     *
+     * ## ✅ 两条成因都已修（2026-10-05）
+     * 真机 `dev_70_s1.png` / `dev_80_v1.png` 的**干沙**上有一堆淡青半透明圆饼，HTML 基准帧
+     * `output/seaside_ref/html_series_400_200_f_59115.png` **没有**。成因两条，都在本函数：
+     *
+     * 1. **⛔ 缺逐点裁剪** ⇒ **已修**：见 [addSandGatedOvalCap]。原型每个水洼都在
+     *    `ctx.clip(sandPath)`（`:2102`）之内 ⇒ 只有 `shoreYs[]` 以下可见；本项目⛔ 零
+     *    `clipPath`（§4.9.3）⇒ 改用与 [drawRipples] / [drawResidue] 同款的**逐列门控**：
+     *    逐列取 `[shoreXs[c], shoreXs[c+1]] × shoreYs[c..c+1]` 的中点高度 `sm`，
+     *    `sm ≥ cy + ry` 的列整列跳过，其余列只发「`sm` 以下的那块椭圆帽」。
+     *    ⭐ **与 [drawSand] 用的是同一条岸线折线** ⇒ 水洼边界与沙边界不可能错位。
+     * 2. **`wet_edge` 是记忆量、`wet_amt` 只在圆心列采样** ⇒ **已修**：`a` 里的 `wetAmt`
+     *    改成**椭圆横向覆盖到的列的算术平均**（循环内的 `wetC`），
+     *    ⛔ 不再只取圆心那一列 ⇒ 「圆心还剩一丝 `wetAmt`、邻居列已全干」的椭圆不再成立。
+     *
+     * ⭐ **提交数不变**：逐列的「椭圆帽」全部并进**同一条** [puddleNativePath]（NonZero 下
+     *   自然取并集）⇒ 仍是 **HIGH 2 次 / MED·LOW 1 次** `drawPath`，⛔ 没有为门控加提交。
+     *   1080p 下 `cols = 96`（列宽 20px）、`2·rx ≤ 122px` ⇒ 每个水洼最多跨 **7 列**、
+     *   全帧 ≤ `16 × 7 = 112` 个五点多边形，仍是**烘焙期之外零分配**（⛔ 不新建任何对象）。
+     *
+     * @param t 相对首帧的毫秒。
      */
     private fun DrawScope.drawPuddles() {
+        if (BISECT_PUDDLE_OFF) return
         val wv = waves ?: return
         val n = wv.column_count
         var sum = 0.0
@@ -4226,14 +4693,30 @@ class SeasideRenderer : RendererFx() {
             val y = (y0 + (y1 - y0) * band).toFloat()
             val rx = (w * (PUDDLE_RX_LO + PUDDLE_RX_SPAN * SeasideWaves.hash2(hh, 813))).toFloat()
             val ry = (h * (PUDDLE_RY_LO + PUDDLE_RY_SPAN * SeasideWaves.hash2(hh, 814))).toFloat()
-            val a = PUDDLE_A * wet * wv.wet_amt[ci] *
+            // ⭐⭐ 成因 2 的修法：`wetAmt` **逐列取均值**（椭圆横向覆盖到的那些列），
+            //   ⛔ 不再只取圆心列 `ci`。`wv.cols = 96` ⇒ 1080p 列宽 20px，`2·rx ≤ 122px`
+            //   ⇒ 覆盖 ≤ 7 列，这个小循环逐帧总次数 ≤ `16 × 7 = 112`（⛔ 可忽略）。
+            val cols = wv.cols
+            var cc0 = (((x - rx) / w) * cols).toInt()
+            var cc1 = (((x + rx) / w) * cols).toInt()
+            if (cc0 < 0) cc0 = 0
+            if (cc1 > cols - 1) cc1 = cols - 1
+            var wetSum = 0.0
+            var wetN = 0
+            var cc = cc0
+            while (cc <= cc1) {
+                wetSum += wv.wet_amt[cc]
+                wetN++
+                cc++
+            }
+            val wetC = if (wetN > 0) wetSum / wetN.toDouble() else 0.0
+            val a = PUDDLE_A * wet * wetC *
                 (PUDDLE_A_H_LO + PUDDLE_A_H_SPAN * SeasideWaves.hash2(hh, 815))
             // ⛔ 太薄的水洼不画（等价原型 `a < 0.02 ⇒ continue`，且避免亚像素椭圆）
             if (a >= 0.02 && ry >= den * 0.5f && rx >= den) {
-                puddleNativePath.addOval(
-                    x - rx, y - ry, x + rx, y + ry, NativePath.Direction.CW
-                )
-                // 水面反光：同样椭圆、压扁、偏上，无直角
+                // ⭐⭐ 逐列门控的椭圆帽（等价原型 `ctx.clip(sandPath)`）：⛔ 不再整颗 `addOval`
+                addSandGatedOvalCap(puddleNativePath, x, y, rx, ry)
+                // 水面反光：同样椭圆、压扁、偏上，无直角 —— ⭐ **同样要过门控**
                 val sdx = (rx * (PUDDLE_SPEC_DX_LO +
                     PUDDLE_SPEC_DX_SPAN * SeasideWaves.hash2(hh, 816))).toFloat()
                 val srx = (rx * (PUDDLE_SPEC_RX_LO +
@@ -4241,9 +4724,7 @@ class SeasideRenderer : RendererFx() {
                 val sry = (ry * PUDDLE_SPEC_RY_K).toFloat()
                 val scy = y - (ry * PUDDLE_SPEC_DY_K).toFloat()
                 val target = if (twoPass) puddleSpecNativePath else puddleNativePath
-                target.addOval(
-                    x - sdx - srx, scy - sry, x - sdx + srx, scy + sry, NativePath.Direction.CW
-                )
+                addSandGatedOvalCap(target, x - sdx, scy, srx, sry)
             }
             k++
         }
@@ -4269,6 +4750,76 @@ class SeasideRenderer : RendererFx() {
     }
 
     /**
+     * ⭐⭐ **把一颗椭圆按当前岸线裁剪后并进 [path]** —— 原型 `ctx.clip(sandPath)`
+     * （`seaside-preview.html:2102`）在本项目的**等价物**（2026-10-05，[drawPuddles] 成因 1）。
+     *
+     * ## 为什么不能直接 `addOval`
+     * ⛔ 零 `clipPath`（§4.9.3，Android 5.1 真机三次复现 hwui SIGSEGV）⇒ 没法把位图/椭圆
+     * 真正裁进「岸线折线以下」。而 `addOval` 是**整颗**加入 ⇒ 椭圆上缘会探到水线之上，
+     * 在**干沙**上读成「浮着的青色圆饼」（HTML 基准帧没有这个现象）。
+     *
+     * ## 做法（与 [drawRipples] / [drawResidue] 同款的**逐列门控**）
+     * 逐列 `c`（列宽 = `w / cols`，`cols = [SeasideWaves.COLS]` = 96）：
+     * 1. 列区间 `[shoreXs[c], shoreXs[c+1]]` —— ⭐ **直接复用** [drawSand] 那条岸线折线的
+     *    顶点 ⇒ 水洼边界与沙边界**不可能错位**（⛔ 不另立一套网格，也就不会有缝）。
+     * 2. 取该列中点的岸线高度 `sm`（`shoreYs[c]` 与 `shoreYs[c+1]` 的均值）。
+     * 3. `sm ≥ cy + ry` ⇒ 这一列**整列**在水线之上 ⇒ ⛔ 不发任何几何。
+     * 4. 否则发「`sm` 以下的那块**椭圆帽**」：上沿 `yTop = max(sm, cy − ry)`，
+     *    半宽 `hx = rx·√(1 − v²)`（`v = clamp((yTop − cy)/ry, −1, 1)`）——
+     *    ⭐ 完全落在水里时 `yTop = cy − ry`、`v = −1`、`hx = rx` ⇒ **精确还原整颗椭圆**；
+     *    部分被裁时就是下方的帽。
+     * 5. 下弧取 2 个 45° 采样点（`ry` 只有 2–8px，⛔ 再细分也读不出来）⇒ 五点多边形。
+     *
+     * ⛔ **零分配**：只读预分配数组 + 往调用方给好的 [path] 里写顶点，
+     *    ⛔ 不构造 `Path` / `Rect` / `RectF` / 任何 lambda。⚠️ 因不是 `DrawScope.drawXxx`
+     *    ⇒ 不会被「每帧 `draw*` 函数」那几道源码门扫到，⛔ 但它确实逐帧被调用，语义等价。
+     * ⛔ 非零环绕（NonZero）下多颗 CW 子路径自动取并集 ⇒ [drawPuddles] 的**提交数不变**
+     *    （HIGH 2 次 / MED·LOW 1 次 `drawPath`），⛔ 没有为门控新增提交。
+     *
+     * @param path 目标路径（[puddleNativePath] 或 [puddleSpecNativePath]）。
+     * @param cx 椭圆心 x（画布 px）。
+     * @param cy 椭圆心 y（画布 px）。
+     * @param rx 横向半径（px）。
+     * @param ry 纵向半径（px）。
+     */
+    private fun addSandGatedOvalCap(path: NativePath, cx: Float, cy: Float, rx: Float, ry: Float) {
+        val wv = waves ?: return
+        val cols = wv.cols
+        val w = seaW
+        if (cols < 1 || w <= 0f || rx <= 0f || ry <= 0f) return
+        // 椭圆横向覆盖到的列区间（⛔ 与调用方同一套换算：`x → col = (x/w)·cols`）
+        var c0 = (((cx - rx) / w) * cols).toInt()
+        var c1 = (((cx + rx) / w) * cols).toInt()
+        if (c0 < 0) c0 = 0
+        if (c1 > cols - 1) c1 = cols - 1
+        val yBot = cy + ry
+        val yEllTop = cy - ry
+        // 椭圆 45° 处的归一化坐标（⛔ 常量：`cos45 = √2/2`，⛔ 不调 `pow`）
+        val k45 = 0.70710678f
+        var c = c0
+        while (c <= c1) {
+            val xm = ((wv.shore_xs[c] + wv.shore_xs[c + 1]) * 0.5).toFloat()
+            val sm = ((wv.shore_ys[c] + wv.shore_ys[c + 1]) * 0.5).toFloat()
+            // 整列都在水线之上 ⇒ 这一列不画（⭐ 这就是「圆饼探到干沙上」的正解）
+            if (sm < yBot) {
+                val yTop = if (sm > yEllTop) sm else yEllTop
+                var v = (yTop - cy) / ry
+                if (v < -1f) v = -1f else if (v > 1f) v = 1f
+                val hx = rx * sqrt(1f - v * v)
+                val yMid = cy + ry * k45
+                val hMid = rx * k45
+                path.moveTo(xm - hx, yTop)
+                path.lineTo(xm + hx, yTop)
+                path.lineTo(xm + hMid, yMid)
+                path.lineTo(xm, yBot)
+                path.lineTo(xm - hMid, yMid)
+                path.close()
+            }
+            c++
+        }
+    }
+
+    /**
      * [SeaOpItem.RESIDUAL_STREAK] —— 退水残沫（3 pass 羽状丝缕）。
      * **HIGH 3 次 `drawLines` / MEDIUM·LOW 1 次**（⛔ 因「原型保真回补」而变，原先恒 1 次）。
      *
@@ -4290,6 +4841,7 @@ class SeasideRenderer : RendererFx() {
      *   `Stroke.width` 不可变、且 `SeasideTest` ⑥ 只允许两个烘焙期构造点）。
      */
     private fun DrawScope.drawResidualStreaks(t: Double) {
+        if (BISECT_RESIDUAL_OFF) return
         val passes = opsOf(SeaOpItem.RESIDUAL_STREAK)
         if (passes <= 0) return
         val wv = waves ?: return
@@ -4347,6 +4899,12 @@ class SeasideRenderer : RendererFx() {
                 seg++
             }
             if (count >= 4) {
+                // ⛔ 2026-10-05 补上**漏掉的颜色**：`residualStreakPaint` 此前只设了
+                //   `alpha` / `strokeWidth`，`.color` 从未赋值 ⇒ 保持 `Paint()` 默认
+                //   **纯黑 (0,0,0)**。原型是 `ctx.strokeStyle = PAL.foam`
+                //   （`seaside-preview.html:2427`），`PAL.foam = '#F2F7F5'`
+                //   （`:441`）= 本文件 [PAL_FOAM_EDGE]（`:476`，`0xFFF2F7F5`）⇒ 逐字对齐。
+                residualStreakPaint.color = PAL_FOAM_EDGE
                 residualStreakPaint.strokeWidth =
                     (RESIDUE_STREAK_W_LO + RESIDUE_STREAK_W_SPAN * pass) * den
                 residualStreakPaint.alpha = alpha255(
@@ -4359,78 +4917,28 @@ class SeasideRenderer : RendererFx() {
         }
     }
 
-    /**
-     * [SeaOpItem.WET_LINE] —— 岸线细亮湿线。**HIGH 2 次 `drawLines` / MEDIUM·LOW 1 次**
-     * （⛔ 因「原型保真回补」而变，原先恒 1 次）。
-     *
-     * 填充 ≈ `2px / h`（[SeaOpItem.WET_LINE] 的 KDoc）⇒ 沿岸一条极窄的描边带。
-     * ⛔ **两个 pass 都改动**（第二次提交落在同一条线上，只是更宽更淡）。
-     *
-     * 逐项照搬 `drawWetLine`（`seaside-preview.html:2367-2391`）：
-     * - 三阶段倍率 `boost`（原型 `swashStageNow === 0 ? 0.55 : (=== 1 ? 1.0 : 0.30)`）
-     *   ⇒ 退水期最亮、上涌期 ×0.55、干燥期 ×0.30（[WET_LINE_STAGE_K]，索引 = [SeasideWaves.stage]）。
-     * - alpha `WET_LINE_A · (1 − 0.42·pass) · boost`；线宽 `1.0 + 1.5·pass`。
-     * - 沿岸分 `11` 段，每段跨 `1/11` 屏宽并留 `0.12` 的间隙（读作断续的亮痕，不是整条实线）。
-     * - 纵向 `y = shoreYs[i] + pass·1.6 + 0.0022·H·sin(p·W·0.011·kScale + seg·2.3 + t·0.00052)`
-     *   —— 第 `pass` 遍整体下移 `1.6`px，是「亮线有厚度」而不是「同一条线画两遍」。
-     *
-     * ⛔ **逐 pass 重填同一条 [wetLinePts]**（⛔ 不开两条缓冲）：每个 pass 填满后整条提交。
-     * ⛔ 走缓存画笔，⛔ 不逐帧构造 `Stroke`。
-     */
-    private fun DrawScope.drawWetLine(t: Double) {
-        val passes = opsOf(SeaOpItem.WET_LINE)
-        if (passes <= 0) return
-        val wv = waves ?: return
-        val n = wv.column_count
-        if (n < 2) return
-        val w = size.width
-        val h = size.height
-        val den = if (density > 0f) density else 1f
-        val kScale = if (w > 1f) CAUSTIC_SLOPE_REF_W / w else 1f
-        var stage = wv.stage
-        if (stage < 0) stage = 0 else if (stage >= WET_LINE_STAGE_K.size) stage = WET_LINE_STAGE_K.size - 1
-        val boost = WET_LINE_STAGE_K[stage]
-        var pass = 0
-        while (pass < passes) {
-            var count = 0
-            var seg = 0
-            while (seg < WET_LINE_SEG_N) {
-                val a0 = seg.toDouble() / WET_LINE_SEG_N.toDouble()
-                val a1 = (seg + 1.0 - WET_LINE_SEG_GAP) / WET_LINE_SEG_N.toDouble()
-                val dy = pass * 1.6
-                var px = 0f
-                var py = 0f
-                var k = 0
-                while (k <= RESIDUE_STREAK_STEPS) {
-                    val p = a0 + (a1 - a0) * (k.toDouble() / RESIDUE_STREAK_STEPS.toDouble())
-                    var ci = (p * (n - 1)).toInt()
-                    if (ci < 0) ci = 0 else if (ci > n - 1) ci = n - 1
-                    val x = (w * p).toFloat()
-                    val y = (wv.shore_ys[ci] + dy + WET_LINE_WOB_K * h *
-                        sin(p * w * 0.011 * kScale + seg * 2.3 + t * WET_LINE_WOB_T)).toFloat()
-                    if (k > 0 && count + 4 <= wetLinePts.size) {
-                        wetLinePts[count] = px
-                        wetLinePts[count + 1] = py
-                        wetLinePts[count + 2] = x
-                        wetLinePts[count + 3] = y
-                        count += 4
-                    }
-                    px = x
-                    py = y
-                    k++
-                }
-                seg++
-            }
-            if (count >= 4) {
-                wetLinePaint.strokeWidth = (WET_LINE_W_LO + WET_LINE_W_SPAN * pass) * den
-                wetLinePaint.alpha = alpha255(
-                    WET_LINE_A.toDouble() * (1.0 - WET_LINE_PASS_DECAY * pass) * boost
-                )
-                drawLinesBatch(wetLinePts, 0, count, wetLinePaint)
-            }
-            pass++
-        }
-    }
+    // ── ⛔ 整层删除记录：「岸线细亮湿线」（原 `drawWetLine` / `SeaOpItem.WET_LINE`）────────
+    //
+    // ⛔ **2026-10-05 所有者视觉裁决：接缝处不要任何线。** 原话：「原来的黑线改成白色的线了，
+    //   这条线的作用是啥？我觉得没用啊，应该去掉」。
+    //
+    // 为什么 Kotlin 版**本就走形**（不是移植缺陷，是实现缺陷）：
+    // - 原型 `seaside-preview.html:2367-2389` 的 `drawWetLine` 是在 `ctx.save(); ctx.clip(sandPath);`
+    //   **之后**才描的 ⇒ 原型里这条线**只在沙侧**可见，是「湿沙上的一道亮痕」。
+    // - 本项目⛔ 零 `clipPath`（§4.9.3，Android 5.1 真机三次复现 hwui SIGSEGV）⇒ 线以岸线
+    //   为中心、**一半落在海侧**，读成「把海沙接缝描了一遍」—— 这正是所有者看到的那条线。
+    // - ⛔ **不要再**用「HTML 原型里有这条线、属忠实移植」来解释或保留它：那是**第一次黑线**
+    //   时的错误结论（后来证实真根因是 `wetLinePaint` 漏赋 `.color`，默认纯黑）。
+    //   补上颜色后它变成白线，视觉裁决判定它本身无用 ⇒ 整层删除。
+    //
+    // 一并清除的死物（⛔ 不留无引用的死常量/死字段）：`WET_LINE_A` / `WET_LINE_STAGE_K` /
+    // `WET_LINE_PASS_N` / `WET_LINE_W_LO` / `WET_LINE_W_SPAN` / `WET_LINE_PASS_DECAY` /
+    // `WET_LINE_SEG_N` / `WET_LINE_SEG_GAP` / `WET_LINE_WOB_K` / `WET_LINE_WOB_T` /
+    // `wetLinePts` / `wetLinePaint` / `wetLineBrush`（后者本就只写不读）/ `BISECT_WETLINE_OFF`，
+    // 以及 [drawContent] 帧序里的那次调用。
+    //
+    // `SeaOpItem.WET_LINE` 的枚举条目**按裁决保留**在 [SeaOpItem] 里（预算表归所有者同步，
+    // ⛔ 本文件已无任何引用；`SeasideOpBudgetTest` 只读枚举值，⛔ 不受影响）。
 
     // ── ⑥ 浪 ────────────────────────────────────────────────────────────────
 
@@ -4652,6 +5160,34 @@ class SeasideRenderer : RendererFx() {
     }
 
     /**
+     * [SeaOpItem.SEA_FOAM_WASH] 的 [drawRibbonNative] **区间版本**（原型 `smoothRunRange`，
+     * `seaside-preview.html:2811-2820`）—— [drawSeaFoamWash] 逐段提交时要只画 `[i0, i1)`。
+     *
+     * ⭐ 两端都**落在端点上**（⛔ 不是外推到半格）⇒ 相邻段首尾的曲线控制点重合，
+     * 所以段与段之间不会出现竖直接缝（原型 2767-2768 的原话）。
+     *
+     * ⛔ 不新建任何对象；命名带 `draw` 前缀的理由同 [drawRibbonNative]。
+     */
+    private fun DrawScope.drawRibbonRangeNative(
+        path: NativePath, i0: Int, i1: Int, useA: Boolean,
+    ) {
+        if (i1 - i0 < 2) {
+            if (useA) path.moveTo(bxs[i0], washA[i0]) else path.lineTo(bxs[i0], washB[i0])
+            path.lineTo(bxs[i1 - 1], if (useA) washA[i1 - 1] else washB[i1 - 1])
+            return
+        }
+        if (useA) path.moveTo(bxs[i0], washA[i0]) else path.lineTo(bxs[i0], washB[i0])
+        var i = i0
+        while (i < i1 - 1) {
+            val ya = if (useA) washA[i] else washB[i]
+            val yb = if (useA) washA[i + 1] else washB[i + 1]
+            path.quadTo(bxs[i], ya, (bxs[i] + bxs[i + 1]) * 0.5f, (ya + yb) * 0.5f)
+            i++
+        }
+        path.lineTo(bxs[i1 - 1], if (useA) washA[i1 - 1] else washB[i1 - 1])
+    }
+
+    /**
      * [SeaOpItem.FOAM_LADDER] 的**原生折线**（原型 `smoothRun`，
      * `seaside-preview.html:1926-1942`）—— `stride` 让窄带能以**半列分辨率**采样
      * 而不塌缩到屏幕左半。
@@ -4700,6 +5236,7 @@ class SeasideRenderer : RendererFx() {
         t: Double,
         dir: Int,
     ) {
+        if (BISECT_FOAMSTRIP_OFF) return
         val segs = opsOf(SeaOpItem.FOAM_LADDER)
         if (segs <= 0) return
         // 领头浪用完整阶梯（13 条）、外侧弱浪用隔一取二的粗阶梯（6 条）。
@@ -4816,9 +5353,21 @@ class SeasideRenderer : RendererFx() {
     }
 
     /**
-     * [SeaOpItem.SEA_FOAM_WASH] —— 波面大白沫晕。**逐浪 1 次**；⛔ **LOW 跳过**。
+     * [SeaOpItem.SEA_FOAM_WASH] —— 波面大白沫晕。**逐浪 [WASH_SEGMENTS] 次**；⛔ **LOW 跳过**。
      *
-     * 分 8 段、每段按自己那段列的 `foamK` 调 alpha（§4.3.5）。
+     * ## ⭐ 逐段 alpha（原型 `seaside-preview.html:2765-2809`）
+     * 原型把浪脊沿岸分 `G = 8` 段，**每段用它自己那段列的平均 `slopeLaw·farLaw`**：
+     * ```
+     * const A = SEA_FOAM_WASH_A * clamp(kA, 0, 1) * (0.06 + 0.94 * fk);
+     * ```
+     * 原型注释写明「一整条一个 alpha 就没有远近差别（实测近岸/远处饱和度只差 0.03）」。
+     * ⛔ 早先这里取的是**全列均值 + 一次 fill** ⇒ 整条晕同一个 alpha ⇒ 真机读成
+     * **一根平直的白色条刷纹路**（这正是「泡沫全是条刷纹路」的一条直接成因）。
+     * ⇒ 现按 [WASH_SEGMENTS] 段分提交，各段自己的渐变 span + 自己的 alpha。
+     * ⚠️ 段与段**共用 `smoothRun` 的曲线**（原型 2803-2804 的 `smoothRunRange`），
+     * 所以相邻段之间不会出现竖直接缝。
+     * ⚠️ **提交数**：预算表 [SeaOpItem.SEA_FOAM_WASH] 的 `opsHigh = 1`，本函数现在
+     * 是 8 次 ⇒ **每浪 +7 提交**（⛔ 按指令不改门限，差额登记在交付报告里）。
      *
      * @param wv 该浪。
      * @param ka 该浪的合成泡沫强度（≥ [KA_FOAM_MIN] 才会被调）。
@@ -4840,49 +5389,68 @@ class SeasideRenderer : RendererFx() {
             i++
         }
         if (!any) return
-        // ⭐⭐ 渐变锚在**逐列** y 极值（全幅 min/max）上；⛔ 不是段极值 —— 原型每段建一支
-        //   新渐变、锚在本段上，折成单支后若仍锚在段极值，外沿会被 Canvas clamp
-        //   成一块平整板（原型精确踩过这个病症）。
-        var yT = Float.MAX_VALUE
-        var yB = -Float.MAX_VALUE
-        var fk = 0.0
-        i = 0
-        while (i < n) {
-            if (washA[i] < yT) yT = washA[i]
-            if (washB[i] > yB) yB = washB[i]
-            fk += slopeLaw[i] * farLaw[i]
-            i++
-        }
-        val a = SEA_FOAM_WASH_A * SeasideWaves.clamp(ka, 0.0, 1.0) *
-            (WASH_FK_LO + WASH_FK_SPAN * (fk / n.toDouble()))
-        val span = (yB - yT).toDouble()
-        if (a < WASH_A_MIN || span < WASH_SPAN_MIN) return
-        seaFoamWashNativePath.rewind()
-        drawRibbonNative(seaFoamWashNativePath, n, true)
-        drawRibbonNative(seaFoamWashNativePath, n, false)
-        seaFoamWashNativePath.close()
         val paint = seaFoamWashNativePaints[if (dir > 0) 1 else 0]
         val shader = paint.shader ?: return
-        gradMatrix.setScale(1f, span.toFloat())
-        gradMatrix.postTranslate(0f, yT)
-        shader.setLocalMatrix(gradMatrix)
-        paint.alpha = alpha255(a)
-        drawContext.canvas.nativeCanvas.drawPath(seaFoamWashNativePath, paint)
+        val kaC = SeasideWaves.clamp(ka, 0.0, 1.0)
+        // ⭐ 逐段（原型 `G = 8`）：段内自己求 `yT/yB` 与**段内**平均 `fk`，各段一次 fill。
+        //   ⛔ 不再取全列均值 —— 那正是「平直白条刷」的成因（见本函数 KDoc）。
+        val per = (n + WASH_SEGMENTS - 1) / WASH_SEGMENTS
+        var g = 0
+        while (g < WASH_SEGMENTS) {
+            val i0 = g * per
+            val i1 = if (i0 + per < n) i0 + per else n
+            if (i1 - i0 >= 2) {
+                var yT = Float.MAX_VALUE
+                var yB = -Float.MAX_VALUE
+                var fk = 0.0
+                var j = i0
+                while (j < i1) {
+                    if (washA[j] < yT) yT = washA[j]
+                    if (washB[j] > yB) yB = washB[j]
+                    fk += slopeLaw[j] * farLaw[j]
+                    j++
+                }
+                val a = SEA_FOAM_WASH_A * kaC *
+                    (WASH_FK_LO + WASH_FK_SPAN * (fk / (i1 - i0).toDouble()))
+                val span = (yB - yT).toDouble()
+                if (a >= WASH_A_MIN && span >= WASH_SPAN_MIN) {
+                    seaFoamWashNativePath.rewind()
+                    drawRibbonRangeNative(seaFoamWashNativePath, i0, i1, true)
+                    drawRibbonRangeNative(seaFoamWashNativePath, i0, i1, false)
+                    seaFoamWashNativePath.close()
+                    gradMatrix.setScale(1f, span.toFloat())
+                    gradMatrix.postTranslate(0f, yT)
+                    shader.setLocalMatrix(gradMatrix)
+                    paint.alpha = alpha255(a)
+                    drawContext.canvas.nativeCanvas.drawPath(seaFoamWashNativePath, paint)
+                }
+            }
+            g++
+        }
     }
 
     /**
-     * [SeaOpItem.OPEN_SEA_FOAM] —— 外海泡沫贴图。**逐浪 1 次**；⛔ **LOW 跳过**。
+     * [SeaOpItem.OPEN_SEA_FOAM] —— 外海泡沫贴图。
+     * **逐浪 [SEA_FOAM_PATCH] 次（HIGH）/ [OPEN_FOAM_TIERS] 次（MEDIUM·LOW）**。
      *
-     * ⭐ **`SEA_FOAM_PATCH` = 22**（§5.3 行 888 的原型值，⛔ 不再折成 8），且 22 块用
-     * u-v 空间预烘轮廓合成**一条 path 一次 fill** —— ⛔ **不是** 22 次 `drawImage`
-     * （合成一条 path 正是为了拿掉 source-over 的重叠叠亮，也是 §4.9.2 的合批裁决）。
-     * ⇒ **块数回到原型、提交数不变**（合批后 22 块只是更多几何、零额外提交）。
      * ⛔ **不**吸附到列栅格（吸附会得到一排规则花纹）。
      *
-     * ⛔ **职责边界**：本函数**只**画**拖尾侧**（`dep = hash·[OPEN_FOAM_DEP_LO..+SPAN]`
+     * ## ⭐ 两条路径：**HIGH 走 `drawImage` 贴图**（原型形态），其余档走矢量多边形
+     * ⛔ **HIGH 绝不许再走多边形。** 斑块内部的柔和 alpha 剖面（`paintBlob` 的
+     * `peak·(1−d²)` 径向衰减、`paintStreak` 的 `(1−s·0.55)(1−d²)`、
+     * [FOAM_TILE_FADE_R] 边缘渐隐、边缘乘 `PAL_FOAM_EDGE`）**只存在于贴图像素里** ——
+     * 那张贴图此前从未被 draw 过（只造、只回收）。拿 N 边形 + 一支平色去 fill
+     * ⇒ **硬边棱角块**（真机实测：灰色棱角多边形）。
+     * ⇒ HIGH 逐块 `drawBitmap`，`alpha = min(a, [OPEN_FOAM_A_CAP])`（原型 `:2913` 逐字）。
+     * ✅ **尺寸公式本来就是对的**：`sizePx = w0·(2.40 + 2.40·hash2^1.2)`（原型 `:2902` 逐字一致）。
+     *    原型注释 `:2899-2901` 明确要求「尺寸必须接近贴图的原生 256px」，早先的
+     *    `W0·(1.4..3.7)` 才是错的 ⇒ 实测多边形 100–400px **符合**原型，⛔ 勿再去「修」尺寸。
+     *
+     * ## ⛔ 职责边界
+     * 本函数**只**画**拖尾侧**（`dep = hash·[OPEN_FOAM_DEP_LO..+SPAN]`
      * = `-0.35 … 1.55`）。前缘**前方**的扰动前锋由 [drawDisturbance] 单独画 ——
-     * ⛔ **绝不**把两者折进同一条 path（那正是本轮要拆掉的老做法：它让扰动前锋
-     * 继承了拖尾侧的距离律 `farLaw^1`，在 `0.42h` 出生深度上整层归零 ⇒ 实测全帧零像素差）。
+     * ⛔ **绝不**把两者折进同一次提交（那会让扰动前锋继承拖尾侧的距离律
+     * `farLaw^1`，在 `0.42h` 出生深度上整层归零 ⇒ 实测全帧零像素差）。
      *
      * @param wv 该浪。
      * @param ka 该浪的合成泡沫强度（≥ [KA_PATCH_MIN] 才会被调）。
@@ -4890,14 +5458,24 @@ class SeasideRenderer : RendererFx() {
      */
     private fun DrawScope.drawOpenSeaFoam(w0: Double, ka: Double, t: Double, lane: Int, dir: Int) {
         if (opsOf(SeaOpItem.OPEN_SEA_FOAM) <= 0) return
+        val wf = w0.toFloat()
+        val cols = SeasideWaves.COLS
+        val base = ka * SEA_FOAM_A * OPEN_FOAM_LANE_K[lane]
+        if (base <= 0.0) return
+        // ⭐ HIGH = 原型形态（逐块 `drawImage` 软边白沫）；MEDIUM / LOW = 便宜的多边形
+        if (seaLevel == SeaLevel.HIGH) {
+            drawFoamTileBlits(
+                SEA_FOAM_PATCH, t, w0, wf, cols, base, lane, dir,
+                FOAM_TILE_OFF_OPEN, OPEN_FOAM_A_MIN, OPEN_FOAM_A_CAP
+            )
+            return
+        }
         if (foamTileOutN <= 0) return
         val brush = openSeaFoamBrush ?: return
-        val wf = w0.toFloat()
-        val w = size.width
-        val cols = SeasideWaves.COLS
-        openSeaFoamPath.reset()
-        var aSum = 0.0
-        var aCnt = 0
+        openSeaFoamPathT[0].reset()
+        openSeaFoamPathT[1].reset()
+        openSeaFoamPathT[2].reset()
+        var cnt = 0
         var k = 0
         while (k < SEA_FOAM_PATCH) {
             val h = k * 17 + lane * 613
@@ -4915,7 +5493,6 @@ class SeasideRenderer : RendererFx() {
             var col = (p * cols + 0.5).toInt()
             if (col < 0) col = 0 else if (col > cols) col = cols
             // —— 拖尾侧（原型 `drawOpenSeaFoam`）——
-            val base = ka * SEA_FOAM_A * OPEN_FOAM_LANE_K[lane]
             val dep = OPEN_FOAM_DEP_LO + OPEN_FOAM_DEP_SPAN * SeasideWaves.hash2(h, 922)
             val sizePx = w0 * (OPEN_FOAM_SIZE_LO + OPEN_FOAM_SIZE_SPAN *
                 powD(SeasideWaves.hash2(h, 923), OPEN_FOAM_SIZE_POW))
@@ -4929,6 +5506,7 @@ class SeasideRenderer : RendererFx() {
                 val tile = h % SeasideOpBudget.FOAM_TILES
                 val st = foamTileOutStart[tile]
                 val sub = foamTileOutSub[tile]
+                val path = openSeaFoamPathT[tier(a, base)]
                 var vp = st
                 var si = 0
                 while (si < sub) {
@@ -4937,27 +5515,166 @@ class SeasideRenderer : RendererFx() {
                     while (q < nv && vp + 1 < foamTileOutN) {
                         val uu = cx + (foamTileOutV[vp] - 0.5f) * szf
                         val vv = cy + (foamTileOutV[vp + 1] - 0.5f) * szf
-                        if (q == 0) openSeaFoamPath.moveTo(uu, vv) else openSeaFoamPath.lineTo(uu, vv)
+                        if (q == 0) path.moveTo(uu, vv) else path.lineTo(uu, vv)
                         vp += 2
                         q++
                     }
-                    openSeaFoamPath.close()
+                    path.close()
                     si++
                 }
-                aSum += if (a < OPEN_FOAM_A_CAP) a else OPEN_FOAM_A_CAP
-                aCnt++
+                cnt++
             }
             k++
         }
-        if (aCnt <= 0) return
-        // ⚠️ **已记录的折叠**：原型是 22 次 `drawImage`，每块各有自己的 alpha；折成一次
-        //   `fill` 后逐块 alpha 拿不到（一次提交只有一支刷）⇒ 取参与块的**算术平均**。
-        drawPath(openSeaFoamPath, brush, alpha = (aSum / aCnt).toFloat())
+        if (cnt <= 0) return
+        var ti = 0
+        while (ti < OPEN_FOAM_TIERS) {
+            drawPath(
+                openSeaFoamPathT[ti], brush,
+                alpha = (base * (ti + 0.5) / OPEN_FOAM_TIERS).toFloat()
+            )
+            ti++
+        }
+    }
+
+    /**
+     * ⭐⭐ **HIGH 档的外海泡沫 / 扰动前锋 —— 逐块 `drawBitmap` 软边贴图**（原型形态）。
+     *
+     * ## 为什么必须回到 `drawImage`
+     * 泡沫斑块的柔和剖面（径向 `1−d²` 衰减、丝缕的 `1−s·0.55`、边缘渐隐、
+     * 边缘乘 `PAL_FOAM_EDGE`）**只烘在 [foamTiles] 的像素里**。把它折成 N 边形 +
+     * 一支平色去 fill ⇒ 硬边棱角块（真机实测「灰色棱角多边形」）。
+     * ⇒ 本函数是 HIGH 档唯一的白沫渲染通道，⛔ 不得再被合批折掉。
+     *
+     * ## ⛔ 零分配
+     * - 目标矩形复用 [foamTileDst]（一个 [RectF]，⛔ **不是**带参 `Rect(`）；
+     * - 画笔复用 [foamTileBlitPaint]，逐块**只改 `alpha`**；
+     * - 块几何（`dens` / `p` / `col` / `dep` / `sizePx` / `fk` / `a`）与原型逐字同式，
+     *   ⛔ 但**不缓存**（22 块 × 2 层 × 每帧重算是本来的开销，且缓存数组 = 逐帧内存增长）。
+     *
+     * ## 两层的差异**只在参数**，本函数共用
+     * | | [drawOpenSeaFoam] | [drawDisturbance] |
+     * |---|---|---|
+     * | 块数 | [SEA_FOAM_PATCH] = 22 | [DISTURB_PATCH] = 18 |
+     * | `h` | `k·17 + L·613` | `k·29 + L·977 + 300` |
+     * | 贴图下标 | `h % 6` | `(h+2) % 6` |
+     * | `dep` | `hash·1.90 − 0.35` | `0.30 + 1.15·hash` |
+     * | `sizePx` | `w0·(2.40 + 2.40·hash^1.2)` | `w0·1.35·(1.2 + 1.3·hash^1.3)` |
+     * | `fk` | `slopeLaw·farLaw` | `slopeLaw·farLaw^0.35` |
+     * | alpha | `base·dens·(0.55+0.60h)·(0.10+0.90fk)` | `base·dens·(0.4+0.6h)·(0.35+0.65fk)` |
+     * | 门槛 / 上限 | `0.012` / `0.45` | `0.008` / `0.40` |
+     *
+     * @param patchCount 块数（[SEA_FOAM_PATCH] 或 [DISTURB_PATCH]）
+     * @param kind [FOAM_TILE_OFF_OPEN] 或 [FOAM_TILE_OFF_DISTURB]（决定逐块公式）
+     *
+     * ⛔ **元素归属**：**无独立 [SeaOpItem]** —— 它是 [drawOpenSeaFoam] 与
+     * [drawDisturbance] **共用**的 blit 原语，那 22 + 18 次提交已分别记在
+     * [SeaOpItem.OPEN_SEA_FOAM] / [SeaOpItem.DISTURBANCE] 上。
+     */
+    private fun DrawScope.drawFoamTileBlits(
+        patchCount: Int,
+        t: Double,
+        w0: Double,
+        wf: Float,
+        cols: Int,
+        base: Double,
+        lane: Int,
+        dir: Int,
+        kind: Int,
+        aMin: Double,
+        aCap: Double,
+    ) {
+        if (foamTileOutN <= 0) return
+        val paint = foamTileBlitPaint
+        val dst = foamTileDst
+        val canvas = drawContext.canvas.nativeCanvas
+        val disturb = kind == FOAM_TILE_OFF_DISTURB
+        var k = 0
+        while (k < patchCount) {
+            val h = if (disturb) {
+                k * DISTURB_H_K + lane * DISTURB_H_L + DISTURB_H_B0
+            } else {
+                k * 17 + lane * 613
+            }
+            // 密度场：两层的种子 / 频率各自独立（原型 2890 与 2934）
+            val dens = if (disturb) {
+                SeasideWaves.fbm_norm(
+                    (k * DISTURB_DENS_K + lane * DISTURB_DENS_L) * DISTURB_DENS_F +
+                        t * DISTURB_DENS_T,
+                    DISTURB_DENS_SEED + lane * DISTURB_DENS_SEED_L, 2
+                )
+            } else {
+                SeasideWaves.fbm_norm(
+                    (k * OPEN_FOAM_DENS_K + lane * OPEN_FOAM_DENS_L) * OPEN_FOAM_DENS_F +
+                        t * OPEN_FOAM_DENS_T, 7701 + lane * 37, 2
+                )
+            }
+            // 位置：低频场聚团 + 小抖动（⛔ 不吸附列栅格之外 anything）
+            val p = if (disturb) {
+                SeasideWaves.clamp(
+                    0.5 + 0.5 * SeasideWaves.fbm_signed(
+                        k * DISTURB_CLUMP_K + lane * DISTURB_CLUMP_L, DISTURB_CLUMP_SEED, 2
+                    ) + DISTURB_JIT * (SeasideWaves.hash2(h, 930) - 0.5) * 2, 0.0, 1.0
+                )
+            } else {
+                SeasideWaves.clamp(
+                    0.5 + 0.46 * SeasideWaves.fbm_signed(
+                        k * OPEN_FOAM_CLUMP_K + lane * OPEN_FOAM_CLUMP_L, 9301, 2
+                    ) + OPEN_FOAM_JIT * (SeasideWaves.hash2(h, 921) - 0.5) * 2, 0.0, 1.0
+                )
+            }
+            var col = (p * cols + 0.5).toInt()
+            if (col < 0) col = 0 else if (col > cols) col = cols
+            val dep: Double
+            val sizePx: Double
+            val fk: Double
+            val a: Double
+            if (disturb) {
+                dep = DISTURB_DEP0 + (DISTURB_DEP1 - DISTURB_DEP0) * SeasideWaves.hash2(h, 931)
+                sizePx = w0 * DISTURB_SIZE * (DISTURB_SIZE_LO + DISTURB_SIZE_SPAN *
+                    powD(SeasideWaves.hash2(h, 932), DISTURB_SIZE_POW))
+                fk = slopeLaw[col] * powD(farLaw[col].toDouble(), DISTURB_FAR_POW)
+                a = base * dens * (DISTURB_A_H_LO + DISTURB_A_H_SPAN * SeasideWaves.hash2(h, 933)) *
+                    (DISTURB_FK_LO + DISTURB_FK_SPAN * fk)
+            } else {
+                dep = OPEN_FOAM_DEP_LO + OPEN_FOAM_DEP_SPAN * SeasideWaves.hash2(h, 922)
+                sizePx = w0 * (OPEN_FOAM_SIZE_LO + OPEN_FOAM_SIZE_SPAN *
+                    powD(SeasideWaves.hash2(h, 923), OPEN_FOAM_SIZE_POW))
+                fk = (slopeLaw[col] * farLaw[col]).toDouble()
+                a = base * dens * (OPEN_FOAM_A_H_LO + OPEN_FOAM_A_H_SPAN * SeasideWaves.hash2(h, 924)) *
+                    (OPEN_FOAM_FK_LO + OPEN_FOAM_FK_SPAN * fk)
+            }
+            if (a >= aMin) {
+                val tile = foamTiles[(if (disturb) h + 2 else h) % SeasideOpBudget.FOAM_TILES]
+                if (tile != null) {
+                    val cx = bxs[col]
+                    val cy = bfy[col] + (dir * dep * bwj[col] * wf).toFloat()
+                    val half = (sizePx * 0.5).toFloat()
+                    dst.set(cx - half, cy - half, cx + half, cy + half)
+                    paint.alpha = alpha255(if (a < aCap) a else aCap)
+                    canvas.drawBitmap(tile.asAndroidBitmap(), null, dst, paint)
+                }
+            }
+            k++
+        }
+    }
+
+    /**
+     * 逐块 alpha 落到哪一档（`[OPEN_FOAM_TIERS]` 等分 `a / base`，⛔ 零分配）。
+     *
+     * `a / base = dens·(0.55 + 0.60·hash)·(0.10 + 0.90·fk)` ∈ `[0.008, 1.15]`
+     * ⇒ 钳到 `[0, 1]` 后等分三档即可保住 `dens` / `hash` / `fk` 三层差异。
+     */
+    private fun tier(a: Double, base: Double): Int {
+        var q = a / base
+        if (q < 0.0) q = 0.0 else if (q > 1.0) q = 1.0
+        val tier = (q * OPEN_FOAM_TIERS).toInt()
+        return if (tier >= OPEN_FOAM_TIERS) OPEN_FOAM_TIERS - 1 else tier
     }
 
     /**
      * [SeaOpItem.DISTURBANCE] —— 扰动前锋：**浪脊前方**、刚被搅起的碎沫白水。
-     * **逐浪 1 次**；⛔ **MEDIUM / LOW 跳过**（§4.7② 贴图泡沫只在 MEDIUM/HIGH）。
+     * **逐浪 [DISTURB_PATCH] 次（HIGH）/ 1 次（其余在册档）**；⛔ **LOW 跳过**。
      *
      * ## 为什么必须单独成层（⛔ 别再折进 [drawOpenSeaFoam]）
      * 原型是两层独立 blit：拖尾侧用 `farLaw^1`，扰动前锋用 `farLaw^[DISTURB_FAR_POW]`
@@ -4965,10 +5682,10 @@ class SeasideRenderer : RendererFx() {
      * `farLaw≈0.011`，前置扰动整条都是 0」）。两者折进同一次提交就只剩一个 alpha
      * 与一条距离律 ⇒ 扰动前锋被拖尾侧的强衰减吃掉 ⇒ **实测全帧零像素差**。
      *
-     * ## ⛔ 合批路径（⛔ 绝不恢复成 18 次 `drawImage`）
-     * 18 块用 u-v 空间**预烘轮廓**合成**一条 path 一次 fill** —— 提交数 **1**，
-     * 与 [SeaOpItem.DISTURBANCE] 的 `opsHigh = 1` 一一对应（`opsLegacy = 18`）。
-     * 逐块的 alpha / 位置 / 尺寸 / 种子**逐条照抄原型**，⛔ 只在**提交**上折。
+     * ## ⭐ HIGH 走 `drawImage`（原型形态），MEDIUM 保留多边形
+     * ⛔ **HIGH 绝不许走多边形** —— 理由与 [drawOpenSeaFoam] 完全相同：柔和剖面只在
+     * 贴图像素里。⇒ HIGH = [DISTURB_PATCH] 次 `drawBitmap`（`kind = [FOAM_TILE_OFF_DISTURB]`）。
+     * ⛔ MEDIUM 仍用 u-v 预烘轮廓合成**一条 path 一次 fill**（`opsMed = 0`，本层不画）。
      *
      * @param w0 该浪的带宽（`h·SWELL_BAND_W·(0.62 + 0.62·amp)·0.92`）。
      * @param ka 该浪的合成泡沫强度 —— ⛔ 原型传的是 **`kA`（⛔ 不含 `SHORE_FOAM_BOOST`）**。
@@ -4976,12 +5693,20 @@ class SeasideRenderer : RendererFx() {
      */
     private fun DrawScope.drawDisturbance(w0: Double, ka: Double, t: Double, lane: Int, dir: Int) {
         if (opsOf(SeaOpItem.DISTURBANCE) <= 0) return
-        if (foamTileOutN <= 0) return
-        val brush = openSeaFoamBrush ?: return
         val wf = w0.toFloat()
         val cols = SeasideWaves.COLS
-        disturbancePath.reset()
         val base = ka * DISTURB_A * DISTURB_LANE_K[lane]
+        if (base <= 0.0) return
+        if (seaLevel == SeaLevel.HIGH) {
+            drawFoamTileBlits(
+                DISTURB_PATCH, t, w0, wf, cols, base, lane, dir,
+                FOAM_TILE_OFF_DISTURB, DISTURB_A_MIN, DISTURB_A_CAP
+            )
+            return
+        }
+        if (foamTileOutN <= 0) return
+        val brush = openSeaFoamBrush ?: return
+        disturbancePath.reset()
         var aSum = 0.0
         var aCnt = 0
         var k = 0
@@ -5210,6 +5935,19 @@ class SeasideRenderer : RendererFx() {
      * 门控（§4.7①）：`vigor < VIGOR_FINGER_MIN`（干燥期 `vigor = VIGOR_DRY`）⇒ 跳过。
      * ⛔ 位置按 hash 大幅抖动 + 只有约 45% 真的伸出去 —— 等距栅格会读成装饰花边。
      *
+     * ## ⭐ `wide` / `lean` 必须成对（真机实测「沙滩全是划痕」的成因之一）
+     * 原型 `seaside-preview.html:2419-2421`：
+     * ```
+     * const wide = W * (0.006 + 0.026 * Math.pow(hash2(h, 603), 1.6));
+     * const lean = (hash2(h, 605) - 0.5) * wide * 0.9;      // ⛔ 乘的是 wide，不是 W
+     * ```
+     * ⛔ 早先这里写的是 `(hash2(hs, 605) - 0.5) * w * FINGER_LEAN` —— **漏了 `wide`**，
+     * 于是 `lean` 最大 ±`0.45·W`（1600px 宽 ⇒ ±720px），而原型最大 ±`0.45·wide`
+     * （`wide ∈ 0.006W..0.032W` ⇒ ±4px..±23px）⇒ **放大了 30 倍以上**。
+     * 后果：一根手指被画成**横贯大半屏、长 700px 的 2px 细划痕**，
+     * 而原型是一枚 `wide` 宽、`≤0.032h` 长的**填充舌头** ⇒ 满屏白划痕而非水线花边。
+     * ⛔ `drawLines` 只有一支笔 ⇒ 笔宽取**参与指的 `wide` 均值**（下限 [FINGER_W]）。
+     *
      * @param t 相对首帧的毫秒。
      */
     private fun DrawScope.drawSwashFingers(t: Double) {
@@ -5223,6 +5961,8 @@ class SeasideRenderer : RendererFx() {
         // ⛔ `drawLines` **没有逐段剔除** ⇒ 被跳过的手指必须从缓冲里**压掉**，
         //   否则会留下上一帧 / 初始的 (0,0) 残点，在画面左上角画出一串点。
         var k = 0
+        var wSum = 0.0
+        var wCnt = 0
         var f = 0
         while (f < FINGER_MAX) {
             // 原型遍历 `tier = 0,1,2` × `i = tier, tier+3, …` ⇒ 30 个 `(i, tier)` 组合恰好
@@ -5239,23 +5979,29 @@ class SeasideRenderer : RendererFx() {
                     if (ci < 0) ci = 0 else if (ci > n - 1) ci = n - 1
                     val y0 = (wv.shore_ys[ci] - h * FINGER_BASE_UP).toFloat()
                     val len = (h * (FINGER_LEN_LO + FINGER_LEN_SPAN * reach) * lenK * vigor).toFloat()
-                    val lean = ((SeasideWaves.hash2(hs, 605) - 0.5) * w * FINGER_LEAN).toFloat()
+                    // ⭐ 原型 2419-2421：`lean` 乘的是**逐指的 `wide`**，⛔ 不是 `W`
+                    val wide = w * (FINGER_WIDE_LO +
+                        FINGER_WIDE_SPAN * powD(SeasideWaves.hash2(hs, 603), FINGER_WIDE_POW))
+                    val lean = ((SeasideWaves.hash2(hs, 605) - 0.5) * wide * FINGER_LEAN).toFloat()
                     fingerPts[k * 4] = (w * p).toFloat()
                     fingerPts[k * 4 + 1] = y0
                     fingerPts[k * 4 + 2] = (w * p + lean).toFloat()
                     fingerPts[k * 4 + 3] = y0 + len
+                    wSum += wide
+                    wCnt++
                     k++
                 }
             }
             f++
         }
+        if (k <= 0) return
         val den = if (density > 0f) density else 1f
+        // ⛔ 原型是**逐指宽度**的填充舌头；`drawLines` 只有一支笔 ⇒ 取参与指的均值
         linePaint.color = PAL_FOAM_EDGE
-        linePaint.strokeWidth = FINGER_W * den
+        linePaint.strokeWidth = maxOf(FINGER_W, (wSum / wCnt).toFloat()) * den
         // ⚠️ **已记录的折叠**：原型是 3 个 tier 各一次 `fill`（alpha 0.15 / 0.108 / 0.066）；
         //   `SeaOpItem.SWASH_FINGER.ops* = 1` ⇒ 一次提交只有一支画笔 ⇒ 30 根全部取第 0 档。
         linePaint.alpha = alpha255(FINGER_A0 * vigor * audio.fingerAlpha())
-        if (k <= 0) return
         drawLinesBatch(fingerPts, 0, k * 4, linePaint)
     }
 
@@ -5713,6 +6459,41 @@ class SeasideRenderer : RendererFx() {
      *   沙纹整片抹掉（湿区是水线**内陆**那条，而 `sandPath` 覆盖岸线以下的**全部**干沙），
      *   那是比原型更严重的偏差。`drawResidue` 同理。
      * ⛔ 与 [drawResidue] **形态必须不同**（线 vs 点）且分层绘制，否则读成噪点。
+     *
+     * ## ✅ 已核对：本函数是**横向**沙纹，与原型 1:1，⛔ **不是**真机竖纹的成因
+     * 原型 `drawRipples`（`seaside-preview.html:3254-3272`）里 `k` 循环推进的是 **`x`**：
+     * ```
+     * :3266  for (let k = 0; k <= 6; k++){
+     * :3267    const x  = lerp(xa, xb, k / 6);            // ⛔ 沿 x 延展
+     * :3268-9  const yy = y + jitter
+     *            + 0.0016 * H * Math.sin(x * 0.0071 * kScale + i * 1.9 + t * 0.00012);
+     * :3270    if (k === 0) ctx.moveTo(W * p… , yy); else ctx.lineTo(…, yy);
+     * ```
+     * 本函数 `:6445-6451` 逐字对应（`x = xa + (xb − xa)·f`，`rippleY[k] = yLine + jitter + 摆动`）
+     * ⇒ **两端点同 y、沿 x 延展 = 横向**，⛔ 方向**没有画反**。
+     * 另：原型 `:3244` 三档色 `#eedab4 / #f7e8cb / #fff5e2` 是**浅色**、`:3248` `lineWidth = 1`、
+     *   `:3243` 原文「 unbroken full-width line reads as a scanline」⇒ 沙纹本身也**画不出**
+     *   截图里那种 ±13 灰阶、**相邻行几乎相同**的**宽带**竖纹。
+     *
+     * ## ⛔ 真机竖纹：**已定位并已修**（2026-10-05；⛔ 上一版此处的「未修 / 采样层」结论是**错的**）
+     *
+     * 实测签名（`output/seaside_device/dev_80_v1.png`，1920×1080，沙滩 `y∈[780,1020]`）：
+     * x 方向标准差 **17.9**、y 方向只有 **4.6**、相邻行相关 **0.978**、96×64 裁切放大 4×
+     * 后能看见**等距的细竖线**（≈5.5px 一根）、`y=803` 以下**逐行数值完全相同**。
+     * ⚠️ 「60% 的 x 方差落在周期 2–8px」这条**不是**竖纹的证据 —— 白噪声的功率谱本来就是
+     * 平的，2–8px 恰好覆盖最高频那一段（本次复算：纯白噪声纹理同样是 **75%**）。
+     *
+     * **定位（可复算）**：把屏幕行的 x 剖面与纹理**每一行**的层④ `hash2(x, j)` 求相关 ⇒
+     * 六行屏幕（`y=814…1055`）**全部**命中 **`j = th−1 = 582`**（r = +0.54…+0.56），
+     * 其余 582 行 |r| ≤ 0.10。⇒ 整块沙被 `CLAMP` 钉在**纹理最后一行**。
+     * **机制与修法见 [drawSand] 的 KDoc**（`BitmapShader.setLocalMatrix` 不生效 ⇒ 采样退化成
+     * 恒等 ⇒ `y' = y ≥ th` ⇒ `CLAMP`）。**已修**：`setLocalMatrix` 换成 `Canvas` 的
+     * `translate + scale`。
+     *
+     * ⚠️ **海面不是同一个成因**：[drawSeaField] 走 `drawImage(…, dstSize)`（Compose 的
+     * 矩形缩放 blit，⛔ 不用 shader），它的「近纯 x」是**设计使然** —— 原型 `drawSeaField`
+     * 本来就是 `colPhase / colMid / colFine / roughX` **逐列**数组（§4.2）。⛔ 别再往
+     * 「共同上游」找，那条推论是顺着「两个现象同因」的错误前提走的。
      *
      * @param t 相对首帧的毫秒。
      */

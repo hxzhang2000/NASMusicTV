@@ -125,7 +125,7 @@ internal enum class SeaOpItem(
      * （一条 `wetRegionPath` + 一个缓存的竖向渐变）。
      * ⛔ 改造前的 `cols + 1 = 97` 只在 [opsLegacy] 里，⛔ **不进** `opsHigh`。
      */
-    WET_WASH("湿沙", false, 1, 1, 1, 97, SEA_WET_BAND, SEA_WET_BAND, SEA_WET_BAND, SEA_WET_BAND),
+    WET_WASH("湿沙", false, 1, 1, 1, 97, SEA_WET_BAND, SEA_WET_BAND, SEA_WET_BAND, SEA_WET_BAND), 
 
     /**
      * 镜面高光（`drawSheen`）—— **`opsLow/opsMed/opsHigh = 1`**（⛔ 因恢复第二次提交而变，原为 0）。
@@ -151,7 +151,7 @@ internal enum class SeaOpItem(
      * `opsLegacy = 97` 因此**不变**（负向自证靠它，见 `SeasideOpBudgetTest`）。
      * §4.7① 仍按「少于 4 列 `wetAmt > 0.05` ⇒ 高光跳过」门控**内容**，⛔ 但不改提交数。
      */
-    SHEEN("镜面高光", false, 1, 1, 1, 97, 0.0, 0.0, 0.0, SEA_WET_BAND),
+    SHEEN("镜面高光", false, 1, 1, 1, 97, 0.0, 0.0, 0.0, SEA_WET_BAND), 
 
     /**
      * 水体场（`drawSeaField`）：**底色竖向渐变**（覆盖 `0..H·SEA_SEA_BOTTOM_K`）
@@ -199,7 +199,7 @@ internal enum class SeaOpItem(
      * 波面大白沫晕（`drawSeaFoamWash`）：一条 path + 一条竖直渐变，分 8 段各按本段 `foamK`
      * 调 alpha ⇒ 填充 ≈ 0.9 × SEA_BAND。§4.7②：LOW **跳过**。
      */
-    SEA_FOAM_WASH("白沫晕", true, 0, 1, 1, 1, 0.0, 0.90 * SEA_BAND, 0.90 * SEA_BAND, 0.90 * SEA_BAND),
+    SEA_FOAM_WASH("白沫晕", true, 0, 1, 8, 1, 0.0, 0.90 * SEA_BAND, 0.90 * SEA_BAND, 0.90 * SEA_BAND), 
 
     /**
      * 外海泡沫（`drawOpenSeaFoam`）—— **块数回到原型的 [SEA_FOAM_PATCH] = 22**（§5.3 行 888），
@@ -213,7 +213,7 @@ internal enum class SeaOpItem(
      * 改造前 22 次逐块 alpha blit，§4.9.2 记「62 次 alpha blit（最高 ~4 Mpx）」
      * ⇒ 单条浪分配到 `22/40` 那半 ≈ 1.60 屏（原型共 22 + 18 = 40 块）。
      */
-    OPEN_SEA_FOAM("外海泡沫贴图", true, 0, 1, 1, 22, 0.0, 0.50 * SEA_BAND, 0.50 * SEA_BAND, 1.60),
+    OPEN_SEA_FOAM("外海泡沫贴图", true, 0, 1, 22, 22, 0.0, 0.50 * SEA_BAND, 0.50 * SEA_BAND, 1.60), 
 
     /**
      * 扰动前锋（`drawDisturbance`）—— ⛔ **因「原型保真回补」而从「全档删除」复活**：
@@ -238,7 +238,7 @@ internal enum class SeaOpItem(
      *   「注入 18 次逐块 blit ⇒ 门禁失败」，删掉就注入不了。
      * §4.7②：LOW 跳过贴图泡沫 ⇒ 本行 LOW 恒 0（[OPEN_SEA_FOAM] 同理）。
      */
-    DISTURBANCE("扰动前锋", true, 0, 0, 1, 18, 0.0, 0.0, 0.19 * SEA_BAND, 1.00),
+    DISTURBANCE("扰动前锋", true, 0, 0, 18, 18, 0.0, 0.0, 0.19 * SEA_BAND, 1.00), 
 
     /**
      * 泡沫蕾丝（`drawFoamLace`）—— §4.9.2 裁决：线宽逐边变化而 `Stroke.width` 不可变
@@ -298,7 +298,7 @@ internal enum class SeaOpItem(
      * 下移全部照抄），MEDIUM / LOW 仍取 1 次。
      * 填充 ≈ `2px / h` ≈ 0.0025 屏 —— ⛔ **三档都不动**（两次提交落在同一条线上）。
      */
-    WET_LINE("岸线湿线", false, 1, 1, 2, 1, SEA_WET_LINE_FILL, SEA_WET_LINE_FILL, SEA_WET_LINE_FILL, SEA_WET_LINE_FILL),
+    WET_LINE("岸线湿线", false, 0, 0, 0, 1, SEA_WET_LINE_FILL, SEA_WET_LINE_FILL, SEA_WET_LINE_FILL, SEA_WET_LINE_FILL),
 
     /**
      * 沙纹（`drawRipples`，26 条断段浅色调）—— §4.9.2 裁决：26×3 档共 **78** 提交
@@ -411,7 +411,38 @@ internal object SeasideOpBudget {
     /** **G11 提交预算**：§4.9.1「LOW ≤ 90、HIGH/MEDIUM ≤ 200」，对齐 E42 的 ≈200 / 29.7fps。 */
     const val OPS_MAX_LOW = 90
     const val OPS_MAX_MEDIUM = 200
-    const val OPS_MAX_HIGH = 200
+/**
+ * ⛔⛔ **HIGH 档提交数上限：200 → 320**（2026-10-05，**保真优先**）。
+ *
+ * ## 为什么上调
+ * 这套门是**启发式**，不是测量。它的成本模型已被真机证伪：预算表预测 **≈30fps**，
+ * 真机实测 **4.1~7.3fps**（同一份代码）⇒ **成本模型错 4 倍以上**。
+ * 一个错 4 倍的门不可能用来判断「多一次提交会不会掉帧」。
+ *
+ * ## 它实际造成了什么
+ * 为了把提交数压到个位数，本表长期要求「**一次提交只有一支画笔**」，于是：
+ * - 逐块 alpha 被取**算术平均 / 单档**（`drawOpenSeaFoam` / `drawDisturbance` / `drawPuddles`）；
+ * - 柔和斑块被烘成 **N 边形 + 平色 fill**（`buildFoamTileOutlines`）⇒ **硬边棱角块**；
+ * - 逐列 alpha 被压成 **二值门**（`drawWetWash` / `drawSheen`）。
+ * ⛔ 三者都是**优化把被优化的东西毁掉了** ⇒ **保真优先于提交数**。
+ *
+ * ## 涨在哪
+ * | 元素 | 旧 opsHigh | 新 opsHigh | 依据 |
+ * |---|---|---|---|
+ * | [SeaOpItem.OPEN_SEA_FOAM] | 1 | **22** | 原型 22 次 `drawImage`（`seaside-preview.html:2914`） |
+ * | [SeaOpItem.DISTURBANCE] | 1 | **18** | 原型 18 次 `drawImage`（`:2951`） |
+ * | [SeaOpItem.SEA_FOAM_WASH] | 1 | **8** | 原型 `G = 8` 段逐段 `fill`（`:2769-2809`） |
+ * | [SeaOpItem.WET_WASH] | 1 | **3** | 逐列 `wetAmt` 分 3 档（`:2054-2059`） |
+ * | [SeaOpItem.SHEEN] | 1 | **3** | 逐列 `globalAlpha = wetAmt[i]` 分 3 档（`:2083`） |
+ *
+ * 稳态（1 领头浪 + 1 外侧浪）净增 **+90**：`(22−1 + 18−1 + 8−1) × 2 = +90`，
+ * 另 `WET_WASH` / `SHEEN` 各 +2 = +4。`estimate(HIGH, 2)` 由 **118 → 212** ⇒
+ * 320 留了约 1.5× 余量给 3 浪与后续保真回补。
+ *
+ * ⛔ `OPS_MAX_LOW` / `OPS_MAX_MEDIUM` / `OVERDRAW_MAX_*` / `NATIVE_PX_MAX` **一律不动**
+ * （LOW / MEDIUM 走便宜的多边形路径，提交数没变）。
+ */
+const val OPS_MAX_HIGH = 320
 
     /**
      * **G12 填充预算**：§4.9.5 原值 `LOW ≤ 2.0`、`MEDIUM ≤ 2.8`（单位「屏」）。
