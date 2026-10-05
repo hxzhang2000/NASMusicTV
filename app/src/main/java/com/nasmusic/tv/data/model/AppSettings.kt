@@ -97,14 +97,15 @@ data class AppSettings(
 )
 
 /**
- * 可视化效果主题（30 套手动效果，无自动导演档）。
+ * 可视化效果主题（21 套手动效果，无自动导演档）。
  *
  * [tier] 决定该效果在各画质档位下的可用性，见 [VisualQuality.supports]。
  *
  * @param needsParticleBudget 本效果的渲染器**是否真的读取 `ctx.quality.maxParticles`**。
  *   ⚠️ 它不是"看起来像不像粒子效果"的观感分类，而是一条可核对的事实：
- *   全仓库只有 `BeatFireworkRenderer` / `ParticleTextRenderer` / `PlasmaFlowRenderer` /
- *   `WorldGlobeRenderer` 四处读该预算，其余效果的开销与它无关。
+ *   全仓库只有 `BeatFireworkRenderer` / `WorldGlobeRenderer` 两处读该预算，其余效果的
+ *   开销与它无关（2026-10-05 删掉 9 个效果后重数；原名单里的 `ParticleTextRenderer` /
+ *   `PlasmaFlowRenderer` 随其效果一同删除）。
  *   门控只消费 ADV 档上的该值（ULTRA 档由 [VisualQuality.allowFramebuffer] 决定），
  *   ULTRA 的粒子效果照实标注是为了让该字段本身可读。
  *   背景见 `docs/technical-overview.md`。
@@ -115,28 +116,19 @@ enum class VisualizerTheme(
     val ordinalLabel: String,
     val needsParticleBudget: Boolean = false
 ) {
-    TUNNEL_FLY("隧道穿越", Tier.BASIC, "03"),
     CIRCULAR_RING("圆形频谱环", Tier.BASIC, "05"),
-    FREQUENCY_MOUNTAIN("频率山峦", Tier.BASIC, "07"),
-    GALAXY_SPIRAL("星系螺旋", Tier.ADV, "11"),
-    SPECTRO_WATERFALL("频谱瀑布", Tier.ADV, "12"),
     LIQUID_GRID("液态网格", Tier.ADV, "13"),
     BEAT_FIREWORK("节拍烟花", Tier.ADV, "14", needsParticleBudget = true),
     LIQUID_RIPPLE("液态涟漪", Tier.ADV, "15"),
     MATRIX_RAIN("数字雨", Tier.ADV, "16"),
     CONSTELLATION("星座", Tier.ADV, "17"),
     MILKDROP_FEEDBACK("反馈残像", Tier.ULTRA, "18"),
-    PARTICLE_TEXT("粒子文字", Tier.ULTRA, "19", needsParticleBudget = true),
-    PLASMA_FLOW("等离子流场", Tier.ULTRA, "20", needsParticleBudget = true),
     LYRICS_DOT_MATRIX("歌词点阵", Tier.ADV, "23"),
     ECG_WAVE("心跳", Tier.BASIC, "24"),
     HYPNOTIC_FUNCTION("催眠", Tier.BASIC, "25"),
     ORBITAL_RINGS("轨道", Tier.ADV, "29"),
     RADAR_GRID("雷达", Tier.BASIC, "30"),
-    ORIGAMI_POLY("折纸", Tier.ADV, "31"),
-    STAIRCASE_WAVE("阶梯", Tier.BASIC, "32"),
     CONCENTRIC_GEARS("齿轮", Tier.BASIC, "33"),
-    FRACTAL_TREE("分形", Tier.BASIC, "34"),
     LIGHT_BEAMS("光轴", Tier.BASIC, "35"),
     MOLECULE("分子", Tier.BASIC, "37"),
     VINTAGE_TV("怀旧", Tier.BASIC, "38"),
@@ -227,8 +219,8 @@ enum class VisualizerTheme(
      *   **不用帧缓冲**（全部是矢量绘制 + 尺寸变化时烘焙的位图），故与该字段无关。
      *
      * ## ⛔ 第 4 参 `needsParticleBudget = false` 是**可核对的事实**，不是观感分类
-     * 全仓库只有 `BeatFireworkRenderer` / `ParticleTextRenderer` / `PlasmaFlowRenderer` /
-     * `WorldGlobeRenderer` 四处真读该预算（见本枚举 KDoc）。本效果所有「数量」都是**编译期
+     * 全仓库只有 `BeatFireworkRenderer` / `WorldGlobeRenderer` 两处真读该预算（见本枚举
+     * KDoc；2026-10-05 删掉 9 个效果后重数）。本效果所有「数量」都是**编译期
      * 常量**（浪槽位 [com.nasmusic.tv.visualizer.renderers.SeasideWaves.WAVE_POOL] = 6、
      * 飞沫 180 点、残沫 52 点、浪花手指 30 根、水洼 16 个），逐帧按 `fx.level` 分档而
      * **不按粒子预算分档**；频谱柱数亦恒读 `frame.spectrum.size`。

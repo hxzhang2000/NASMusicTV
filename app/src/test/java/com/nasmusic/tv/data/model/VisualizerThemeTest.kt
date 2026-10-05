@@ -48,14 +48,14 @@ class VisualizerThemeTest {
 
     @Test
     fun `theme library is all concrete effects, no auto mode`() {
-        assertEquals(30, VisualizerTheme.entries.size)
+        assertEquals(21, VisualizerTheme.entries.size)
     }
 
     @Test
     fun `selectable list contains every theme when the photo wall is available`() {
         val selectable = VisualizerTheme.selectable(photoWallAvailable = true)
-        assertEquals(30, selectable.size)
-        assertEquals(30, selectable.distinct().size)
+        assertEquals(21, selectable.size)
+        assertEquals(21, selectable.distinct().size)
         assertTrue(selectable.contains(VisualizerTheme.PHOTO_WALL))
     }
 
@@ -86,21 +86,21 @@ class VisualizerThemeTest {
             listOf(VisualizerTheme.PHOTO_WALL),
             on.filter { it !in off.toSet() }
         )
-        assertEquals(29, off.size)
-        assertEquals(30, on.size)
+        assertEquals(20, off.size)
+        assertEquals(21, on.size)
     }
 
     @Test
     fun `ordinal labels are unique`() {
         val labels = VisualizerTheme.entries.map { it.ordinalLabel }
-        assertEquals(30, labels.distinct().size)
+        assertEquals(21, labels.distinct().size)
     }
 
     @Test
     fun `display names are non blank and unique`() {
         val names = VisualizerTheme.entries.map { it.displayName }
         assertTrue(names.none { it.isBlank() })
-        assertEquals(30, names.distinct().size)
+        assertEquals(21, names.distinct().size)
     }
 
     @Test
@@ -112,10 +112,12 @@ class VisualizerThemeTest {
         }
 
         // ADV：只有真消耗粒子预算的效果才需要预算（2026-10-01 用户裁决，方案 C）。
-        // 频谱瀑布的渲染器只读 barCount ⇒ LOW 必须可选。
-        assertTrue(VisualQuality.LOW.supports(VisualizerTheme.SPECTRO_WATERFALL))
-        assertTrue(VisualQuality.MEDIUM.supports(VisualizerTheme.SPECTRO_WATERFALL))
-        assertTrue(VisualQuality.HIGH.supports(VisualizerTheme.SPECTRO_WATERFALL))
+        // 液态网格的渲染器只读 barCount ⇒ LOW 必须可选。
+        // ⚠️ 2026-10-05：原样本是频谱瀑布（`SPECTRO_WATERFALL`），随效果删除 ⇒ 换成同为
+        //   `Tier.ADV` 且 `needsParticleBudget = false` 的 `LIQUID_GRID`，判据语义不变。
+        assertTrue(VisualQuality.LOW.supports(VisualizerTheme.LIQUID_GRID))
+        assertTrue(VisualQuality.MEDIUM.supports(VisualizerTheme.LIQUID_GRID))
+        assertTrue(VisualQuality.HIGH.supports(VisualizerTheme.LIQUID_GRID))
 
         // 节拍烟花 / 世界的渲染器真读 ctx.quality.maxParticles ⇒ LOW 的 0 预算仍须挡住
         assertFalse(VisualQuality.LOW.supports(VisualizerTheme.BEAT_FIREWORK))

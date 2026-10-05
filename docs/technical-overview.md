@@ -13103,3 +13103,154 @@ lint 内有一份硬编码的「已知安全依赖」白名单 `PageAlignmentDet
 本轮为定位上述问题新增过 17 个 `BISECT_*` 归因开关（逐层关闭测 fps 用），**定稿时全部为 `false` 且行为等价于「不关闭任何层」** ⇒ 它们可以留在源码里作为调试设施，但 ⛔ 任何人**改其中任何一个为 `true` 都会立刻改变画面**。
 
 ---
+### 10.212 v2.38.2 — 从效果库移除 9 个效果（30 → 21）
+
+#### 一、裁决与清单
+
+所有者裁决（2026-10-05）：从可视化效果库**彻底删除** 9 个效果。这是纯删除重构，
+⛔ 未改动任何渲染行为与视觉参数 —— 被删的类整体移除，它们的 `when` 分支与枚举项同时消失。
+
+| 枚举项 | 显示名 | 编号 | tier | 渲染器类 | 所在文件 | 删除行数 |
+|---|---|---|---|---|---|---|
+| `TUNNEL_FLY` | 隧道穿越 | 03 | BASIC | `TunnelRenderer` | `BasicRenderers.kt` | 145 |
+| `FREQUENCY_MOUNTAIN` | 频率山峦 | 07 | BASIC | `FrequencyMountainRenderer` | `BasicRenderers.kt` | 122 |
+| `GALAXY_SPIRAL` | 星系螺旋 | 11 | ADV | `GalaxySpiralRenderer` | `AdvancedRenderers.kt` | 283 |
+| `SPECTRO_WATERFALL` | 频谱瀑布 | 12 | ADV | `WaterfallRenderer` | `AdvancedRenderers.kt` | 178 |
+| `PARTICLE_TEXT` | 粒子文字 | 19 | ULTRA | `ParticleTextRenderer` | `ParticleRenderers.kt` | 446 |
+| `PLASMA_FLOW` | 等离子流场 | 20 | ULTRA | `PlasmaFlowRenderer` | `UltraRenderers.kt` | 366 |
+| `ORIGAMI_POLY` | 折纸 | 31 | ADV | `OrigamiPolyRenderer` | `BatchThreeRenderers.kt` | 343 |
+| `STAIRCASE_WAVE` | 阶梯 | 32 | BASIC | `StaircaseWaveRenderer` | `BatchThreeRenderers.kt` | 416 |
+| `FRACTAL_TREE` | 分形 | 34 | BASIC | `FractalTreeRenderer` | `BatchFourRenderers.kt` | 502 |
+
+合计删除 **2 816 行**渲染器代码 + **39 条**因失去使用者而失效的 `import`。
+
+⭐ **类名以代码为准**：9 个类名与 `FxCoverageScanTest` 的清单完全一致，无出入。
+
+#### 二、⭐ 为什么编号不重排
+
+删掉的 03 / 07 / 11 / 12 / 19 / 20 / 31 / 32 / 34 就此**成为空号**，现存枚举里本来
+就已经缺 01 / 02 / 04 / 06 / 08 / 09 / 10 / 21 / 22 / 26 / 27 / 28 / 36（13 个）⇒ 删完共
+**22 个空号**。
+
+**留空号是本仓既有惯例，不是新决定**：`ordinalLabel` 记录的是「该效果**当初**是第几套加入的」，
+是一段**历史**。重排会把这段历史抹掉，并且让任何按编号写的外部记录（截图、issue、文档）
+全部错位。⇒ **`ordinalLabel` 一个字未改，其余项的编号也未动。**
+
+#### 三、⭐ 持久化按 `name`，所以无需迁移代码
+
+`AppSettings.fromKey(key: String?)` 的解析顺序是
+`entries.find { it.name == key } ?: LEGACY_MAP[key?.uppercase()] ?: Default`。
+
+⇒ 老用户 DataStore 里存的是**枚举名**（如 `"TUNNEL_FLY"`），不是下标。删掉枚举项后
+`entries.find` 失配、`LEGACY_MAP` 也没有这个键 ⇒ **直接落到 `Default`（= `CIRCULAR_RING`）**，
+正是删除该效果的预期行为。**因此不需要写任何迁移代码。**
+
+⚠️ 登记一处**与既有惯例的偏离**：`LEGACY_MAP` 里已有 11 个历史移除项（`IMMERSIVE_BLOOM` …）
+显式列在那里，注释写着「显式写出是为了固化该迁移意图」。本轮 9 个新删的**没有**加进去 ——
+因为它们的行为与 fallback 完全一致，加不加都落到 `CIRCULAR_RING`。⇒ 这是一处**有意的
+不一致**，留待裁决。
+
+#### 四、被同步的计数与清单断言
+
+| 位置 | 原值 | 新值 | 依据 |
+|---|---|---|---|
+| `AppSettings.kt` 枚举 KDoc | 30 套 | **21 套** | `entries.size` |
+| `AppSettings.kt` `needsParticleBudget` KDoc | 4 个渲染器 | **2 个** | 见下 |
+| `VisualizerThemeTest` `entries.size` | 30 | **21** | — |
+| `VisualizerThemeTest` `selectable(true).size` / `.distinct()` | 30 | **21** | `ALL = entries` |
+| `VisualizerThemeTest` `selectable(false).size` | 29 | **20** | `WITHOUT_PHOTO_WALL` |
+| `VisualizerThemeTest` `on.size` | 30 | **21** | — |
+| `VisualizerThemeTest` `ordinalLabel` 去重数 | 30 | **21** | — |
+| `VisualizerThemeTest` `displayName` 去重数 | 30 | **21** | — |
+| `FxCoverageScanTest` 渲染器类数下界 | `≥ 30` | **`≥ 22`** | 扫描实得 22（原 31 − 9） |
+| `FxCoverageScanTest` `covered` 名单 | 23 项 | **14 项** | 删掉 9 行 |
+| `ParticleBudgetGateTest` 映射覆盖断言 | 30 | **21** | ⭐ 见下 |
+| `LowTierElementBudgetTest` `ABS_BUDGET` | 400 | **400（不变）** | ⭐ 见下 |
+
+⭐ **`ParticleBudgetGateTest` 断言值「自动」跟着变，一行都没改**：它写的是
+`assertEquals("工厂应映射全部 ${VisualizerTheme.entries.size} 套效果", entries.size, mapping.size)`
+—— 期望值由枚举长度**推导**而非写死 ⇒ 删掉 9 个 `when` 分支后自然变成 21 ≡ 21。
+同理 `needsParticleBudget` 的一致性断言也无需改：标注侧剩 `BEAT_FIREWORK` / `WORLD`，
+源码扫描侧也正好是这两个渲染器。
+
+⭐ **`LowTierElementBudgetTest` 的 `ABS_BUDGET` 为什么不用改**：它是**锚在实测帧率曲线上的
+物理门限**（≈478 个零散元素 ⇒ 7.6 fps；≈24 个 ⇒ 59 fps），不是「某一套效果的个数」。
+删掉星系螺旋（低档 16 臂 × 16 = 256 个）后，受该门限约束的两套里最大的是
+`E17 星座` 的 **805 × (64/160)² = 128.8** 个 ⇒ 余量反而变大，门禁不需要重画。
+它的**负向自证**改由星座承担（改造前的 805 > 400 仍然打红）⇒ 门禁强度未被削弱。
+
+#### 五、⭐ 连带处理：6 个「专属测试文件」+ 4 处「拿被删枚举当样本值」
+
+⚠️ 删枚举会连带打断 11 个测试文件。分两类处理：
+
+**A. 整文件删除（6 个，2 151 行）** —— 100% 只测被删渲染器的 internal 纯函数：
+`GalaxySpiralTest`(216) / `ParticleTextTest`(468) / `PlasmaFlowTest`(603) /
+`FractalTreeTest`(463) / `WaterfallTrailFadeTest`(98) / **`StaircaseMappingTest`(303)**。
+⭐ 最后一个**不在最初的删除清单里**，是本次 grep 才发现的（第 6 个）—— 它有 32 处引用
+`StaircaseWaveRenderer` 的 internal 纯函数，与清单里那 5 个同类。**不删它整个 test 源集
+编译不过、所有测试都跑不了。** 删前已核实：这 6 个文件的顶层符号**只有各自的类名**
+（helper 全是 class-private），⛔ 没有别的测试依赖它们。
+
+**B. 只换样本值、断言一字不动（4 个文件）** —— 这些文件只是「随手拿一个枚举当值」，
+被删的枚举与测试意图无关：
+
+| 文件 | 原样本 | 换成 | 判据是否变动 |
+|---|---|---|---|
+| `BackupGsonTest` | `TUNNEL_FLY` | `ECG_WAVE`（BASIC） | 否（仍是「非默认项」） |
+| `RendererSwapperTest`（5 处） | `TUNNEL_FLY` | `ECG_WAVE`（BASIC） | 否（Harness 注入 `FakeRenderer`） |
+| `RendererSwapperTest`（1 处） | `SPECTRO_WATERFALL` | `LIQUID_GRID`（ADV） | 否 |
+| `RendererBaseContractTest`（2 处夹具） | `TUNNEL_FLY` | `ECG_WAVE` | 否 |
+| `RendererBaseContractTest`（1 处扫描锚点） | `TunnelRenderer` | `CircularRingRenderer` | 否（同为 S1.5 批次在册子类） |
+| `LightBeamsTest` | `FractalTreeRenderer` | `MatrixRainRenderer` | 否（同属 T4 批次 B） |
+| `VisualizerThemeTest`（3 处档位） | `SPECTRO_WATERFALL` | `LIQUID_GRID` | 否（同为 ADV + 不耗预算） |
+
+⚠️ 另有**两处「负向自证」的样本**必须换，否则会退化成空转：
+`FxCoverageScanTest` 的 N1（从 `covered` 摘掉一个真覆盖的类）原用 `WaterfallRenderer`
+⇒ 换成 `MilkdropRenderer`，并**新增一条前提断言**「样本必须仍在 `covered` 里」，
+把「样本会过期」这个第 N 次踩的坑变成可执行的门禁。
+
+⭐ `BackupGsonTest` 里那条注释顺带修正了一个**因删除而成立的隐患**：
+原文写「写 `entries.first()` 会假红」—— 删掉 `TUNNEL_FLY` 后 `entries.first()` **恰好就是**
+`CIRCULAR_RING`（= `Default`）⇒ 它不再是「另一种等价写法」，而是**恒等于 `Default` 的空断言**。
+
+#### 六、分派点与孤儿扫描
+
+**唯一的分派点是 `VisualizerRendererFactory.create()`（`when (theme)`，21 个分支）**
+—— 全仓库没有第二处主题→渲染器映射。删掉 9 个分支 + 9 条 `import` 后仍是**穷尽式
+`when`**（编译器保证新增枚举项必须补分支）。
+
+⭐ **孤儿扫描结果**（逐个符号统计**代码**引用，已剥注释）：
+
+- `RenderContext` 的成员：**零孤儿**。KDoc 里提到的 `songTitle`（"E19 粒子文字用"）在
+  `RenderContext` 里**根本不存在**（那是 `LyricsCacheEntry` / `MvInfo` 等别的类的字段）⇒ 无需处理。
+- `ParticlePool.kt` 新出现 **3 个孤儿**，全部是 E19 专用、随 `ParticleTextRenderer` 一起失效：
+  `updateAttract`（public，零引用）、`respawnFromEdge`（private，仅被 `updateAttract` 调用）、
+  `LIFE_DECAY`（companion 常量，仅作 `updateAttract` 的默认实参）。
+  ⛔ 按裁决**未删**（公共 API 不动，只删渲染器类本身）。
+  ⚠️ 连带登记：`ParticlePool` 的类 KDoc 写着「粒子池（E08 / E09 / E14 / E19 共用）」——
+  E08 / E09 早已不存在、E19 本轮删除 ⇒ **现在只剩 E14（`BeatFireworkRenderer`）一个使用方**，
+  该 KDoc 已失真（本轮未改，不在本轮文件清单内）。
+- 顶层符号：**零孤儿**（`LEGACY_MAP` 只在本文件内使用，是误报）。
+- 删类的连带面：6 个渲染器文件里 **39 条 `import` 失去使用者**（如 `BasicRenderers` 的
+  `ProceduralTexture`、`UltraRenderers` 的 `Shading2D`）⇒ 已一并删除，否则全是无用告警。
+
+#### 七、教训
+
+⭐ **删除一个枚举项的连带面远大于枚举本身**：本轮实际触碰 **17 个文件**（8 个主源 + 9 个测试）
++ 6 个删除 + 2 个文档，只删 9 个效果。真正吃时间的不是删类，是
+**① 找齐所有「拿它当样本值」的测试**（4 个文件，性质与「专属测试」完全不同，处理方式也不同）
+与 **② 找齐所有「负向自证」的样本**（`FxCoverageScanTest` N1 用的是 `WaterfallRenderer`，
+它不在任何「引用清单」的直觉范围内，只在 grep 残留引用时才会浮出来）。
+⚠️ 前者会让**整个 test 源集编译不过**（不是某条断言挂），后者会让门禁**静默空转** ——
+后者更危险，因为它**看起来是绿的**。
+
+---
+#### 补记：第 8 处计数断言（StarrySkyTest ⑥）
+
+【守稀补上】本轮初次提交时 	estDebugUnitTest 报 **1619 例 / 1 失败**：
+StarrySkyTest.kt:1039 的 ⑤ 注册链 枚举 工厂 计数三处一致 断言 ssertEquals(30, VisualizerTheme.entries.size)
+是第 8 处带硬计数的断言，子代理定位时漏了它（它在 isualizer/renderers/ 下，与 VisualizerThemeTest 各在一处）。
+⚠️ 当轮实际同时改动了 **9 个测试文件**，而子代理报告中的清单仅有 5 个 —— 它实际被点名清单里漏掉的 1 个（StaircaseMappingTest）就是它自己 grep 时发现的。
+⇒ **学习：删枚举会特影响至少三类东西**：① 枚举定义；② 渲染器分派点；③ **分散在不同测试包里的「效果总数」硬计数**（本轮共 8 处，分布在 5 个文件）。
+③ 类不在同一包里、KDoc 也不引用它们 ⇒ 只能靠全仓 grep 找。
+

@@ -179,7 +179,7 @@ class RendererBaseContractTest {
         // 测试夹具子类（下方 FixtureProbeRenderer）保证扫描到的子类数 > 0（⑨ 空转自证）
         val fixtureSrc = """
             class FixtureProbeRenderer : RendererFx() {
-                override val theme = VisualizerTheme.TUNNEL_FLY
+                override val theme = VisualizerTheme.ECG_WAVE
                 override fun androidx.compose.ui.graphics.drawscope.DrawScope.drawContent(
                     frame: AudioFrame, ctx: RenderContext, fx: FxFrame
                 ) { val t = fx.nowMs }   // ✅ 合法：用 fx 的 nowMs（ctx 的同名字段是被禁写法，见负向⑦）
@@ -198,8 +198,10 @@ class RendererBaseContractTest {
             real.size >= 5
         )
         assertTrue(
-            "扫描应覆盖 TunnelRenderer（S1.5 首个迁移的子类）",
-            real.containsKey("TunnelRenderer")
+            // ⚠️ 2026-10-05：锚点原为 `TunnelRenderer`（S1.5 首个迁移的子类），随效果删除
+            //   ⇒ 换成同批次仍在册的 `CircularRingRenderer`（§A2-6），扫描器自证的**作用不变**。
+            "扫描应覆盖 CircularRingRenderer（S1.5 同批迁移的子类）",
+            real.containsKey("CircularRingRenderer")
         )
         val realBad = real.entries.flatMap { (name, body) -> violationsIn(body).map { "$name: $it" } }
         assertTrue("真实 RendererFx 子类不得违规：$realBad", realBad.isEmpty())
@@ -281,7 +283,7 @@ class RendererBaseContractTest {
 
     /** 扫描段的"真实子类"锚点（保证子类数 > 0，防扫描空转）；本身必须零违规 */
     private class FixtureProbeRenderer : RendererFx() {
-        override val theme = VisualizerTheme.TUNNEL_FLY
+        override val theme = VisualizerTheme.ECG_WAVE
         override fun DrawScope.drawContent(
             frame: AudioFrame,
             ctx: RenderContext,

@@ -70,7 +70,9 @@ class BackupGsonTest {
      *
      * `VisualizerTheme.fromKey()` 未命中时返回 `Default`（= `CIRCULAR_RING`）而**不是** null，
      * 所以本枚举永远在第 ② 级就返回了，**到不了**第 ③ 级「首个常量」。
-     * 断言必须写 `Default`，写 `entries.first()`（= `TUNNEL_FLY`）会假红。
+     * 断言必须写 `Default`。⚠️ 2026-10-05：`entries.first()` 现在**恰好就是** `CIRCULAR_RING`
+     *   （原为 `TUNNEL_FLY`，随效果删除）⇒ 写 `entries.first()` 不再是"另一种等价写法"，
+     *   而是**恒等于 `Default` 的空断言** ⇒ 更不能这么写。
      */
     @Test
     fun `an unknown theme name falls back to the theme default, never null`() {
@@ -145,11 +147,11 @@ class BackupGsonTest {
     @Test
     fun `export still writes the plain enum constant name`() {
         val json = backupGson.toJson(
-            AppSettings(visualizerTheme = VisualizerTheme.TUNNEL_FLY)
+            AppSettings(visualizerTheme = VisualizerTheme.ECG_WAVE)
         )
         assertTrue(
             "容错适配器的 write 必须与 Gson 默认行为一致（写出 enum.name），json=$json",
-            json.contains("\"visualizerTheme\":\"TUNNEL_FLY\"")
+            json.contains("\"visualizerTheme\":\"ECG_WAVE\"")
         )
     }
 

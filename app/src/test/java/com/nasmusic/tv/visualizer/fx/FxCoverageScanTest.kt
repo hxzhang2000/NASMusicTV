@@ -39,26 +39,17 @@ class FxCoverageScanTest {
 
     // ── 覆盖名单：已打开后处理（阶段推进时逐条从 [exempt] 移入）──
     private val covered = listOf(
-        "TunnelRenderer",              // E03 隧道穿越（S1.5 迁移 + §A1-6）
         "CircularRingRenderer",        // E05 圆形频谱环（§A2-6）
-        "FrequencyMountainRenderer",   // E07 频率山峦（§A3-6）
-        "WaterfallRenderer",           // E12 频谱瀑布（§A4-6）
         "LiquidGridRenderer",          // E13 液态网格（§A5-6）
         "LiquidRippleRenderer",        // E15 液态涟漪（§A6-5）
         "ConstellationRenderer",       // E17 星座（§A7-5）
         "EcgWaveRenderer",             // E24 心跳（§A8-4 CRT 后处理）
         "RadarGridRenderer",           // E30 雷达（§A9-3 CRT 后处理）
-        "OrigamiPolyRenderer",         // E31 折纸（§A10-5 暗角 0.42 + 颗粒 0.030）
-        "StaircaseWaveRenderer",       // E32 阶梯（§A11-5 暗角 0.46 + 颗粒 0.030 + 扫描线 0.10）
-        "GalaxySpiralRenderer",        // E11 星系螺旋（§B1-5 暗角 0.46 + 颗粒 0.028）
         "BeatFireworkRenderer",        // E14 节拍烟花（§B2-④ 暗角 0.44 + 颗粒 0.030）
         "MatrixRainRenderer",          // E16 数字雨（§B3-④ 暗角 0.50 + 颗粒 0.030 + 扫描线 0.16）
         "MilkdropRenderer",            // E18 反馈残像（§B4 + §12.4 补后处理 暗角 0.48 + 颗粒 0.030）
-        "ParticleTextRenderer",        // E19 粒子文字（§B5 + §12.4 补后处理 暗角 0.46 + 颗粒 0.030）
-        "PlasmaFlowRenderer",          // E20 等离子流场（§B6 暗角 0.48 + 颗粒 0.030）
         "LyricsDotMatrixRenderer",     // E23 歌词点阵（§B7 暗角 0.44 + 颗粒 0.026）
         "HypnoticFunctionRenderer",    // E25 催眠（§B8 暗角 0.44 + 颗粒 0.028）
-        "FractalTreeRenderer",         // E34 分形（§B9 暗角 0.48 + 颗粒 0.030）
         "LightBeamsRenderer",          // E35 光轴（§B10 暗角 0.50 + 颗粒 0.030）
         "StarrySkyRenderer",           // E42 星空星轨（暗角 0.42 + 颗粒 0.026）
         "SeasideRenderer",             // E43 海边（§4.9.2 裁决：只保留暗角 0.30，去掉颗粒）
@@ -256,9 +247,10 @@ class FxCoverageScanTest {
     fun `在册渲染器全部有归属 名单无重叠无遗漏`() {
         val decls = rendererDecls()
         assertTrue("扫描到的渲染器类应 > 0（空转自证）", decls.isNotEmpty())
-        assertTrue("渲染器类数应 ≥ 30，实测 ${decls.size}", decls.size >= 30)
+        assertTrue("渲染器类数应 ≥ 22（2026-10-05 删掉 9 个效果后重数：原 31 → 22），实测 ${decls.size}", decls.size >= 22)
         // ⛔ 解析器自证：多行构造参数的两个类必须被解析到，否则是"静默漏类"
-        for (n in listOf("MoleculeRenderer", "HypnoticFunctionRenderer", "WaterfallRenderer", "PhotoRenderer")) {
+        // ⚠️ 2026-10-05：原样本 `WaterfallRenderer` 随效果删除 ⇒ 只摘它一个，保留其余样本。
+        for (n in listOf("MoleculeRenderer", "HypnoticFunctionRenderer", "PhotoRenderer")) {
             assertTrue("解析器应解析到 $n（漏类会让门禁空转）", decls.any { it.name == n })
         }
 
@@ -313,9 +305,13 @@ class FxCoverageScanTest {
     @Test
     fun `负向N1 覆盖名单摘掉真覆盖的类必须被完整性断言抓到`() {
         val decls = rendererDecls()
-        val broken = covered - "WaterfallRenderer"
+        // ⚠️ 2026-10-05：样本原为 `WaterfallRenderer`（E12），随效果删除 ⇒ 换成 `MilkdropRenderer`
+        //   （E18，仍在 covered 里）。⚠️ 样本**必须仍在 [covered] 中**否则这条会退化成空转。
+        val sample = "MilkdropRenderer"
+        assertTrue("前提：样本 $sample 必须仍在 covered 里，否则本负向自证空转", sample in covered)
+        val broken = covered - sample
         val unassigned = decls.map { it.name }.filter { it !in broken && it !in exempt.keys }
-        assertTrue("摘掉真覆盖的类 ⇒ 它应落入「无归属」", unassigned.contains("WaterfallRenderer"))
+        assertTrue("摘掉真覆盖的类 ⇒ 它应落入「无归属」", unassigned.contains(sample))
     }
 
     @Test

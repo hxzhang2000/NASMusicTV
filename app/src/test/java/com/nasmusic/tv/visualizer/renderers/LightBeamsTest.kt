@@ -346,7 +346,10 @@ class LightBeamsTest {
         assertTrue("exempt 必须能切出来（空转自证）", exe.isNotEmpty())
         assertTrue("covered 必须含 LightBeamsRenderer（T4.10）", "\"LightBeamsRenderer\"" in cov)
         assertFalse("⛔ exempt 不得再含 LightBeamsRenderer", "\"LightBeamsRenderer\"" in exe)
-        assertTrue("covered 必须含 FractalTreeRenderer（T4.9，防回退）", "\"FractalTreeRenderer\"" in cov)
+        // ⚠️ 2026-10-05：原样本 `FractalTreeRenderer`（T4.9）随效果删除 ⇒ 换成同属 T4 批次 B
+        //   的 `MatrixRainRenderer`（E16 / §B3-④，仍在 covered 里）。本条只是「covered 非空且
+        //   名单本身没被削空」的元断言，被断言的对象与本文件的主角（LightBeams）不同即可。
+        assertTrue("covered 必须含 MatrixRainRenderer（T4 批次 B，防回退）", "\"MatrixRainRenderer\"" in cov)
         assertTrue("N2 必须仍是**不变式**（⛔ 不写死类名）", "pickUncoveredSample" in t)
     }
 

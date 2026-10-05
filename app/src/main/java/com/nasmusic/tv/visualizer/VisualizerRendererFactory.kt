@@ -6,26 +6,17 @@ import com.nasmusic.tv.data.model.VisualizerTheme
 import com.nasmusic.tv.visualizer.renderers.BeatFireworkRenderer
 import com.nasmusic.tv.visualizer.renderers.CircularRingRenderer
 import com.nasmusic.tv.visualizer.renderers.ConstellationRenderer
-import com.nasmusic.tv.visualizer.renderers.FrequencyMountainRenderer
-import com.nasmusic.tv.visualizer.renderers.GalaxySpiralRenderer
 import com.nasmusic.tv.visualizer.renderers.LiquidGridRenderer
 import com.nasmusic.tv.visualizer.renderers.LiquidRippleRenderer
 import com.nasmusic.tv.visualizer.renderers.MatrixRainRenderer
 import com.nasmusic.tv.visualizer.renderers.MilkdropRenderer
-import com.nasmusic.tv.visualizer.renderers.ParticleTextRenderer
-import com.nasmusic.tv.visualizer.renderers.PlasmaFlowRenderer
 import com.nasmusic.tv.visualizer.renderers.LyricsDotMatrixRenderer
-import com.nasmusic.tv.visualizer.renderers.WaterfallRenderer
-import com.nasmusic.tv.visualizer.renderers.TunnelRenderer
 import com.nasmusic.tv.visualizer.renderers.EcgWaveRenderer
 import com.nasmusic.tv.visualizer.renderers.HypnoticFunctionRenderer
 import com.nasmusic.tv.visualizer.renderers.OrbitalRingsRenderer
 import com.nasmusic.tv.visualizer.renderers.RadarGridRenderer
-import com.nasmusic.tv.visualizer.renderers.OrigamiPolyRenderer
 import com.nasmusic.tv.visualizer.renderers.SeasideRenderer
-import com.nasmusic.tv.visualizer.renderers.StaircaseWaveRenderer
 import com.nasmusic.tv.visualizer.renderers.ConcentricGearsRenderer
-import com.nasmusic.tv.visualizer.renderers.FractalTreeRenderer
 import com.nasmusic.tv.visualizer.renderers.LightBeamsRenderer
 import com.nasmusic.tv.visualizer.renderers.MoleculeRenderer
 import com.nasmusic.tv.visualizer.renderers.VintageTvRenderer
@@ -51,28 +42,19 @@ object VisualizerRendererFactory {
      * [WorldRenderer] 保留在源码中、不再被本工厂引用（隐藏）。
      */
     fun create(theme: VisualizerTheme, context: Context): VisualizerRenderer = when (theme) {
-        VisualizerTheme.TUNNEL_FLY -> TunnelRenderer()
         VisualizerTheme.CIRCULAR_RING -> CircularRingRenderer()
-        VisualizerTheme.FREQUENCY_MOUNTAIN -> FrequencyMountainRenderer()
-        VisualizerTheme.GALAXY_SPIRAL -> GalaxySpiralRenderer()
-        VisualizerTheme.SPECTRO_WATERFALL -> WaterfallRenderer()
         VisualizerTheme.LIQUID_GRID -> LiquidGridRenderer()
         VisualizerTheme.BEAT_FIREWORK -> BeatFireworkRenderer()
         VisualizerTheme.LIQUID_RIPPLE -> LiquidRippleRenderer()
         VisualizerTheme.MATRIX_RAIN -> MatrixRainRenderer()
         VisualizerTheme.CONSTELLATION -> ConstellationRenderer()
         VisualizerTheme.MILKDROP_FEEDBACK -> MilkdropRenderer()
-        VisualizerTheme.PARTICLE_TEXT -> ParticleTextRenderer()
-        VisualizerTheme.PLASMA_FLOW -> PlasmaFlowRenderer()
         VisualizerTheme.LYRICS_DOT_MATRIX -> LyricsDotMatrixRenderer()
         VisualizerTheme.ECG_WAVE -> EcgWaveRenderer()
         VisualizerTheme.HYPNOTIC_FUNCTION -> HypnoticFunctionRenderer()
         VisualizerTheme.ORBITAL_RINGS -> OrbitalRingsRenderer()
         VisualizerTheme.RADAR_GRID -> RadarGridRenderer()
-        VisualizerTheme.ORIGAMI_POLY -> OrigamiPolyRenderer()
-        VisualizerTheme.STAIRCASE_WAVE -> StaircaseWaveRenderer()
         VisualizerTheme.CONCENTRIC_GEARS -> ConcentricGearsRenderer()
-        VisualizerTheme.FRACTAL_TREE -> FractalTreeRenderer()
         VisualizerTheme.LIGHT_BEAMS -> LightBeamsRenderer()
         VisualizerTheme.MOLECULE -> MoleculeRenderer()
         VisualizerTheme.VINTAGE_TV -> VintageTvRenderer()
