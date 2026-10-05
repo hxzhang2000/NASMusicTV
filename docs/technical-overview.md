@@ -12880,3 +12880,143 @@ lint 内有一份硬编码的「已知安全依赖」白名单 `PageAlignmentDet
 ## V2.14.0 (2026-09-28)
 - **变更类型**：新增
 - **变更内容**：§10.195 记录「移除 RECORD_AUDIO 权限：频谱可视化反转为 PCM 唯一通道」
+### 10.210 v2.38.2 — E43 海边真机对齐 HTML 定稿（接缝黑线 / 湿沙 / 竖纹 / 岸线线）
+
+**背景**：E43 首版落地后逐轮真机比对，发现 4 项与 HTML 定稿不一致的视觉缺陷。基准为
+`docs/seaside-preview.html`（所有者确认定稿，**只读**）。本轮全部以真机截图 + 像素探针取证，
+⛔ 不靠推算。
+
+#### ① 接缝黑线 —— `Paint.color` 从未赋值（真根因）
+
+三轮误判的教训必须留档：
+
+| 轮次 | 当时结论 | 实际 |
+|---|---|---|
+| fix-19 | 「HTML 也有这条边，属忠实移植」 | ⛔ **错误**。真根因是移植时漏赋色 |
+| fix-20 | 「8 条湿沙 ribbon 的第 0 条 alpha 0.72 在岸线压出 74 灰阶硬边」 | ⚠️ **部分对但非主因**。改 32 条后实测亮度比仅 0.60 → 0.76（判据 >0.92） |
+| 真根因 | — | ✅ `drawWetLine` 的 `wetLinePaint` **全文件 4 处引用、0 处 `.color =`** |
+
+那簇画笔（`SeasideRenderer.kt:2107-2168`）的 `apply{}` 块**只设** `style` / `strokeCap` /
+`strokeJoin` / `isAntiAlias`，color 必须在逐帧提交前赋值 ⇒ 漏赋即保持
+`android.graphics.Paint()` 默认**纯黑**。
+
+六项实测观测全部对上：`:4715` `shore_ys[ci]` 精确沿岸线；`:4706` `dy = pass*1.6` 致 HIGH 档
+2 遍共 1–2px；关湿沙层仍在；残沫改白后仍在（不同画笔）；`:4698`
+`boost = WET_LINE_STAGE_K[stage]` 随潮汐阶段变化 ⇒ **退潮时最重**，正是所有者报的
+「尤其在退潮时」。
+
+⚠️ HTML `:2367-2389` 的 `drawWetLine` 是 `ctx.save(); ctx.clip(sandPath); … ctx.restore();`
+**之后**才描 ⇒ 原型里只显示在岸线**沙侧**；Kotlin 零 `clipPath`（§12.4 D11 死结）⇒ 线以岸线
+为中心、一半落在海侧 ⇒ **实现本就走形**。
+
+**同类缺陷全簇排查**：逐一核对 `.color` 赋值 —— `crestLipPaint` / `linePaint` / `pointPaint` /
+`residualStreakPaint` 均有；`sandGrainPaints` / `crabPaint` / `residuePaints` 虽 0 处，但绘制点
+走的是**局部 `paint` 变量**（`:6338` / `:5956-6061` / `:6436-6444`）⇒ **并非死代码**。
+只有 `wetLinePaint` 真的漏赋。
+
+#### ② 湿沙：32 条 ribbon → 单次渐变
+
+`WET_RIBBON_N` 8 → 32 是为消「等高线分层 + 黑线」引入的，实测**吃掉约 80% 帧预算**
+（关掉湿沙层后真机 **1.4 → 7.2 fps**）。最终改为 **1 次 `nativeCanvas.drawPath` + 1 支原生
+`LinearGradient`**，沿用 `swellBodyNativePaint` 的既有机制：渐变烘在归一化 `y∈[0,1]` 上，逐帧只用
+预分配的 `gradMatrix` 做 `setScale` + `postTranslate`（§4.9.4 硬约束：
+`Brush.verticalGradient` 的 `startY/endY` 构造时定死，逐帧 `Brush.` 构造被 `SeasideTest` ⑤ 判负）。
+
+⚠️ **有意偏离 HTML**：原型 `:2053` 是**逐列**
+`createLinearGradient(0, shoreYs[i]−16, 0, wetEdge[i])`，97 支/帧且 alpha 逐列乘 `wetAmt[i]`
+—— 在「一支共享画笔 + 提交预算」下**原理上不可达**。span 改取
+`yT = min(shoreYs)`、`yB = max(max(wetEdge), max(shoreYs))`（后者兜底是因为 `wetEdge` 是记忆量，
+退潮深处 `max(wetEdge) < max(shoreYs)`，只取前者会让最深那批列整条被 `CLAMP` 到 alpha 0 而消失）。
+代价：接缝处 alpha ≈ 0 **只在最高那一列成立**，但沿上沿**连续**变化 ⇒ 没有线，只有浓淡。
+
+⚠️ 附带修正一条错误线索：「`:1996-2000` 的固定 span 渐变」在原型里**本身就是死变量**
+（只有创建/填充，全文件**无** `drawImage(wetStrip, …)`）。
+
+#### ③ 竖纹 —— 位图映射 `translate` 锚点错位
+
+真机 bisect 判定：`BISECT_SAND_TEX_FLAT = true`（沙纹理换平色）后竖纹**完全消失** ⇒
+成因在纹理数据/映射；⛔ **排除**位图采样、`TileMode`（全文件零 `REPEAT`/`MIRROR`）、
+`isFilterBitmap`（`:2362` 已为 `true`）。
+
+实测签名：周期 **2–8px**、幅值 **≈±13 灰阶**、**相邻行相关 0.991**、**每列从上到下完全同色**
+（1-D 纯 x）⇒ 指向 `translate` 锚点错位把 `hash2(x, j)` **钉死在单一行 `j=582`**。
+
+修复同时让**此前根本没生效**的三层恢复：① 湿→干纵向渐变、② 7 条沿岸起伏带、
+③ 近水潮湿斑块 ⇒ 沙滩从「越往下越暗」（实测 `y=760→1040` 由 `R=181.9` 掉到 `175.3`、
+`R−G≈18` 全程不变 ⇒ 纯暗角而非纹理）变成原型式「越往下越**亮**」。
+
+⚠️ `grainTex` / `mottleTex` 两个死代码**裁决不接**：原型 `MOTTLE_A=0.030` 配 `overlay` 落在沙色上
+只剩 ±0.6 灰阶，却要 +2 提交并动 `MOTTLE_PX` 预算；且所有者要的「横向不规则深色变化」已由
+层②的 7 条沿岸起伏带提供。
+
+#### ④ 岸线湿线整层删除（所有者视觉裁决）
+
+补上正确颜色后 `drawWetLine` 读作一条**白线**，所有者判定「没用，应该去掉」⇒ 整层删除。连带清理
+10 个 `WET_LINE_*` 常量、`wetLinePaint`、`wetLinePts`、`wetLineBrush`（后者本就只写不读）、
+`BISECT_WETLINE_OFF`。`SeaOpItem.WET_LINE` 条目**按裁决保留**在枚举里（三档记 0），否则会破坏
+`SeasideOpBudgetTest:42` 的元素名清单。
+
+⚠️ 这**推翻了 `SeasideOpBudgetTest` 的负向自证命题**「ops == 0：无（原型保真回补后每项 HIGH 都
+≥ 1 次提交）」⇒ 该断言增列 `WET_LINE` 豁免并注明这是**视觉裁决而非省预算**。
+
+⚠️ `SeasideTest ⑨`（`draw*` ↔ `SeaOpItem` 双向穷举映射）**未失败**，靠的是它**自带的**豁免机制：
+源码中有一行同时含 `SeaOpItem.X` 且含 `**无**` 即视为已声明移除（对照 `POST_FX` 的
+`**无**（声明式）` 写法）⇒ ⛔ 不必改测试，只需把删除记录的措辞对齐该约定。
+
+#### ⑤ 沙滩青色圆饼 —— 逐列岸线门控 + 逐列 `wetAmt`
+
+原型每个水洼都在 `ctx.clip(sandPath)` 内（`:2102`）⇒ 只有 `shoreYs[]` 以下可见；Kotlin 零
+`clipPath` 且缺逐点门控 ⇒ 椭圆（横向半径最大 `W·0.032 ≈ 61px ≈ ±3 列`）上缘会探到水线之上。
+
+修法：新增 `addSandGatedOvalCap`，⭐ **直接复用 `drawSand` 那条岸线折线的顶点**（不另立网格 ⇒
+边界不可能错位），逐列取中点岸线高度 `sm`：`sm ≥ cy+ry` ⇒ 整列在水线之上 ⇒ **不发任何几何**
+（这正是「圆饼探上干沙」的正解）；否则发 `sm` 以下的椭圆帽，上沿 `yTop = max(sm, cy−ry)`、
+半宽 `hx = rx·√(1−v²)`（完全在水里时 `v=−1`、`hx=rx` ⇒ **精确还原整颗椭圆**）。⭐ 反光那条
+`puddleSpecNativePath` **同样漏了门控**，一并修。`a` 的 `wetAmt` 由「只取圆心列」改为椭圆覆盖列
+`[cc0..cc1]` 的算术平均（16 水洼 × ≤7 列 = ≤112 次循环，可忽略）。
+
+逐列椭圆帽全并进**同一条 `Path`**，NonZero 环绕下多颗同向子路径自动取并集 ⇒
+`PUDDLE.opsHigh` 仍为 **2**，**零新增提交**。
+
+#### 提交预算（按 `SeasideOpBudget.kt` 表**实算**，非手算）
+
+| 档 | 值 | 变化 |
+|---|---|---|
+| LOW | **30** | `WET_LINE` 1 → 0 |
+| MEDIUM | **49** | `WET_WASH` 1（不变）、`WET_LINE` 1 → 0 |
+| HIGH | **184** | `WET_WASH` 32 → 1（单次渐变）、`WET_LINE` 2 → 0 |
+
+「三个逐浪项全压回合批」的对照值 **88**。
+
+#### 验证
+
+真机逐项确认：黑线消失 ✅ / 湿沙消失方式正确 ✅ / 帧率 1.4 → 5.5 ✅ / 竖纹消失 ✅ /
+明暗条带有 ✅ / 湿沙有 ✅。`testDebugUnitTest` **1685 例 0 失败**、`lintDebug` **0 errors**。
+装机包经 **dex 符号核验**（`drawWetLine` / `wetLinePaint` / `wetLinePts` 已删、
+`addSandGatedOvalCap` 在、`drawWetWash` 在）。
+
+⚠️ **帧率仍远低于预期**：预算表预测 ≈30 fps，真机 **5.5 fps**，差 4 倍以上 ⇒ 性能治理单独一轮，
+**硬约束：不得影响已定稿的视觉效果**。
+
+#### 本轮方法论教训（写给下一轮）
+
+1. ⛔ **不要凭读代码推断视觉行为** —— 本轮四次靠推算交差**全部**被真机数据证伪（黑线误判 3 次）。
+   判别工具：`logs_temp/seam_probe.py`（亮度判据）、`logs_temp/seam_vs_dark.py`
+   （**色相 `R−B` + 亮度两条独立判据**）
+2. ⛔ **「探针假设最暗行 = 接缝」这个前提本身要先验证** —— `seam_vs_dark.py` 用 `R−B` 独立找海/沙
+   分界，才同时暴出两条不同结论：偏移 `p50 = −1px`（暗线**确实**在接缝上）与暗线处
+   `R−B = −37`（那里是**海色被压暗**，不是描边）。前者否掉「线画在别处」，后者把方向从「描边」
+   掰到「半透明叠加 / 漏赋色」
+3. ⚠️ **`android.graphics.Paint()` 默认色是黑** —— 任何漏赋 `.color` 的原生 Paint 通道，提交出来
+   就是黑线。移植原生 Paint 通道时**必须逐支核对 color 赋值**，⛔ 不要只核对 `alpha`/`strokeWidth`
+4. ⛔ **不要在 `BUILD FAILED` 之后装机** —— gradle 里失败的可能是测试任务而 `assembleDebug`
+   并未产出新包，`devinstall.py` 会签到**旧 APK**。改为「exit≠0 就不装机」+ **dex 符号核验**
+5. ⛔ **子代理说「没有测试会挂」不可信** —— `SeasideTest ⑨` 的双向穷举映射没被提到；且修法应
+   **先找测试自带的豁免机制**，而不是改测试迁就实现
+6. ⛔ **提交预算表必须按表实算** —— 本轮手算连续两次算错（一次漏 `perWave` 乘数），已固化为
+   `logs_temp/calc_budget.py`
+7. ⚠️ **诊断用的 bisect 开关绝不能留在最终版** —— 本轮曾把 `drawWetWash` 整层关掉做对照，
+   所有者指出「湿沙本来就是深色的」，那一步的目的（看暗线是否还在）说明不清才留下了错误状态
+
+---
+
