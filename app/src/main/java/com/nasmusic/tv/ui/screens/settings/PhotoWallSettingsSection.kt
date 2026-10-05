@@ -72,7 +72,7 @@ import java.util.Locale
  *
  * 「重新扫描」（阶段 10）、「开始人脸检测」/「清除检测结果」（阶段 11）在本阶段
  * 传入 `null` ⇒ 按钮可见但点击无反应。这是刻意的**分阶段推进**，不是遗漏；
- * 见 `docs/photo-spectrum-effect-plan.md` §15.3 阶段 8 的偏差记录。
+ * 见 `docs/archive/photo-spectrum-effect-plan.md` §15.3 阶段 8 的偏差记录。
  */
 
 /**
