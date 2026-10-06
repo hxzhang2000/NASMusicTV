@@ -9,7 +9,8 @@
 > 本地音乐的同款链路；④ 不引入新依赖；⑤ 不动 `usesCleartextTraffic` 等已确认的设计取舍；
 > ⑥ **签名线只改 CI 配置与工作流守卫，不改 `app/build.gradle.kts` 的签名逻辑本身**。
 >
-> **状态**：**可开工**（§十三 有 1 项待裁决，不阻塞 A/B/D 三条线）。
+> **状态**：**可开工**（⛔ **无待裁决项** —— §十三 的电池优化已于 2026-10-06 裁决走 **C1 彻底删除**，
+> 全文不再保留「若走 C2 则…」的岔路）。
 >
 > ⚠️ **D 线（签名）是 B 线落地的前置条件**，不是可选项 —— 理由见 §1.3，务必先读。
 >
@@ -29,6 +30,7 @@
 | v1.1 | 2026-10-06 | **新增 D 线：发布签名统一**（用户反馈「每次更新都要先卸载旧版」）。① §1.3 记根因：`gh secret list` 返回**空** ⇒ `build.yml:54` 恒走 else ⇒ `build.yml:66` 每次 `keytool -genkey` 生成一次性 `ci-keystore.jks` ⇒ **每次构建签名都不同**（v2.37.4 / v2.37.5 / v2.38.0 / v2.38.2 四次 tag 构建日志实况均为 fallback）；② 新增 **§十四**（含 ⛔ `CRYPTO_PASSPHRASE` 漏配的静默陷阱、PowerShell base64 编码陷阱、日志 grep 的 ANSI 假匹配陷阱、fail-fast 加固 D5）；③ **§7.4 新增 `G4 ReleaseSigningGateTest`**（源码扫描门禁，防 fallback 静默复发）、原 §7.4「既有测试影响」顺延为 **§7.5**；④ §9.4 新增 **V1–V6** 验收（含「首次仍需卸载一次」的历史断档说明）；⑤ §十 新增 **S0** 并声明它是 B 线上线前置；⑥ §十一 新增 4 条签名风险；⑦ §十二 新增 4 条陈旧注释（`build.yml:41-45`、`:45`、`AGENTS.md` CI 段、`app/build.gradle.kts:87-89`）；⑧ 原 §十四「明确不做」顺延为 **§十五**，并追加 3 条（不给 debug 用正式 key、不试图修复签名历史断档、不改 Gradle 签名逻辑）。⛔ **另修 v1.0 遗留的编号冲突**：§5.2 的「门控点 G1–G7」与 §七 的「单测门禁 G1–G4」同字母不同含义 ⇒ 门控点整体改名 **M1–M7**（Master gate），全文 11 处引用同步 | **可开工** |
 | v1.2 | 2026-10-06 | **新增 §十六 完工后的权限全景（目标态速查）**（用户要求补「完工后剩余什么权限、干什么用、什么时候申请」）。含 §16.1 声明与申请时机总表（8 条 · 逐条标注**保护级别**与**申请时机** · 拒绝后果）／§16.2 按 Android 版本的实际弹窗矩阵（API 22–28 / 29–32 / 33 / 34+ 四档，标出全新用户最多被问 1–2 次）／§16.3 **不需要权限但仍要用户「给一下」** 的 5 项（SAF 两处 · MediaStore Downloads · 应用专属目录 · 电池优化）／§16.4 权限↔功能对照（含「已下载歌曲不受总开关影响」这条容易漏的边界）／§16.5 与 §二 的对照摘要。⛔ §16.5 明确写入一条**对外表述纪律**：dangerous 权限**数量没有减少**（仍 4 条），本方案只是把申请时机从「开机无条件」改成「按需」⇒ **发版说明不得写成「减少了权限」**。⚠️ §16.2 另标 1 项**待实测**（Android 13 权限迁移可能让老用户一个弹窗都看不到）并说明 §五 的设计对此安全 | **可开工** |
 | v1.3 | 2026-10-06 | **按源码逐条核对并修正**（本轮把 §一/§二/§四/§五/§六/§七/§九/§十二/§十四/§十六 的全部 `file:line` 与事实断言逐个对回源码）。① ⛔ **修 1 处内部矛盾**：§5.1-D2 原写「关闭时只清 `_localSongs` 内存态」，与 §5.2/§5.4 的裁定「`_localSongs` = Room 全表、不受总开关影响」**直接冲突** ⇒ D2 改写为「不清、隐藏走 `visibleLocalSongs`」；② ⛔ **修 1 处会误导实现的命名不一致**：§5.5 的 launcher 回调原写 `localMusicPermissionResult()`，与下文入口函数 `onLocalMusicPermissionResult()` 对不上 ⇒ 统一为后者；③ ⛔ **修 1 处事实错误**：§2.2 / §9.1-U6 / §16.3-3 原称「删 `WRITE_EXTERNAL_STORAGE` 后 **API 24–28** 少一份公共目录副本」—— 实际 API 23–28 **今天就已经写不进去**（该权限是 dangerous，而全仓唯一运行时申请点是 `POST_NOTIFICATIONS`），真正差异**只在 API 22** ⇒ 改为按 API 分档表；§2.1-#9 的「**仅** `BackupFileUtils.kt:38-42 / 86-91`」补全为三处触碰点（写 `:86-91` / 列 `:142` / 删 `:203-205`）；④ **修 5 处引用错位**：`AppSettings.kt:42-48`→`:52-63`、`PhotoWallPrefsTest` 竞态说明 `:26-27`→`:31-32`、`BatteryOptimizationHelper` 引文 `:13-16`→`:72-75`（类 KDoc 在 `:11-16`）、§5.2「见 §5.3 的 `visibleLocalSongs`」→**§5.4**、§5.5 注释 `:96-99`→`:89-92` + `:97-99`；⑤ **补 1 处漏项**：§5.6 的 `SettingsScreen` 分支清单漏了 `:738` DATA（实为 10 支、非 9 支）；⑥ **修 1 条不可执行命令**：§14.3 的 `apksigner` 用 `$env:ANDROID_HOME`，而本机该变量为空 ⇒ 改显式 `$SDK` 路径；⑦ **新增 2 条实现期提醒**：§5.4 的 `visibleLocalSongs` ⛔ 别用 `WhileSubscribed`（M6 的 provider 按需读 `.value` 会读到陈旧值）、§5.4-M7 用 `first()` 而非 `firstOrNull()`（与 `NasMusicApp.kt:400/456` 既有写法一致）；⑧ **补记**：§5.6 指出 `local_music_refreshed` / `refresh_local_music_error`（`strings.xml:1002-1003`）**已存在**、勿重复新建；§六 补注 `BatteryOptimizationHelper.kt` 在 `player/` 而非 `util/`；§16.2 拆出 API 22 行（**无弹窗**，原稿与 23–28 合并有误）。**已核对无误、无需改动**：§2.1 的 11 条声明与 8/3 拆分、§1.2 的「唯一 `requestPermissions` / 两个函数零调用方 / 唯一 `notify()` / `refreshLocalMusic` 零调用方」、§5.2 的 6 个 `init` 块与 M1–M7 行号、§5.3 的 5 跳链路 + 「`AppPreferences` 无 `MutableStateFlow`」、§5.5 照抄源 `VisualizerViewModel.kt:57-87 / 132-135 / 511-565 / 621-655`、§7.5 的「测试 0 命中」、§14.1 的双模式与 `build.yml` 全部行号、§十二 的 10 条注释定位 | **可开工** |
+| v1.4 | 2026-10-06 | ✅ **关闭唯一待裁决项：电池优化走 C1（彻底删除）**（用户裁决）。① §六 从「两条路线请裁决」改为「**C1 落地清单**」4 项（删声明 / 删 `MainActivity.kt:194-195` / **删整个 `BatteryOptimizationHelper.kt`** / 设置页不加入口），并**收紧原 C1 措辞**：原稿说「只保留 `isIgnoringBatteryOptimizations()` 备用」，实测删掉另两个方法后它与 `isPhoneDevice()` **都变成零调用方**（原调用点 `:44` / `:82` / `:77` 全在被删方法内，全仓唯一外部引用是 `MainActivity.kt:195`，测试 0 命中）⇒ 保留即死代码，且与 §十五 #10「不做设置页入口」矛盾 ⇒ 改为**整文件删除**；② §十三 更名「**裁决记录**」并写明 C2 分支作废、本方案**已无待裁决项**；③ 同步 5 处岔路：文档头「状态」行、§三 表 C 行、§4.1 的 `:27` 行、§十 S2、§16.3 #5；④ §9.3 U13 由「C2 才需要的设置页行」改为「⛔ 设置页**不存在**电池优化入口（期望行为）」，U14 改为**机器可判据**（grep `BatteryOptimizationHelper` / `ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` / `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` 三符号 0 命中）；⑤ §十五 新增第 10 条「不给电池优化做设置页入口」；⑥ §十一 新增 1 条风险（C1 后用户无处自助加白名单，并注明**改前也一样**，附 git 取回命令）；⑦ §十二 第 4 条标记 **已自动关闭**（整文件删除 ⇒ 无 KDoc 需改写） | **可开工**（无待裁决项） |
 
 ---
 
@@ -172,7 +174,7 @@
 |---|---|---|---|
 | **A** | 权限瘦身：删 3 条声明 + 删开机弹窗 | 权限 #9 #10 #11 | **低**（纯删除，且无任何单测引用） |
 | **B** | 本地音乐总开关 + 按需申请权限 | 权限 #3 #4 的**申请时机** | **中**（新增持久化偏好 + 6 处门控点） |
-| **C** | 电池优化降级 | 权限 #11 的**触发时机** | **低**（待裁决，见 §十三） |
+| **C** | 电池优化**彻底删除**（已裁决 **C1**） | 权限 #11 **整条移除** + 辅助类整文件删除 | **低**（纯删除，全仓无任何引用方、无单测引用；见 §六 / §十三） |
 | **D** | 发布签名统一：配齐 5 个 repo secrets + CI fail-fast 加固 | **不影响 Android 权限**，改的是「用户能否覆盖安装」 | **低**（配置项，不改代码逻辑；但配错会静默产出错包，见 §14.2） |
 
 提交顺序见 §十。**A 线不依赖 B/C/D，可先合、先验；但 S0（D）必须最先发版**，理由见 §1.3。
@@ -189,7 +191,7 @@
 |---|---|
 | `:6-7` | ❌ 删除 `WRITE_EXTERNAL_STORAGE`（含 `maxSdkVersion="28"`）整块 |
 | `:26` | ❌ 删除 `POST_NOTIFICATIONS` |
-| `:27` | ❌ 删除 `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS`（与 §六 联动；若 §十三 裁决走 C2 则**保留**） |
+| `:27` | ❌ 删除 `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS`（**C1 已裁决**，与 §六 联动；C2 分支已作废） |
 | `:10` | 📝 注释补一句：`READ_MEDIA_AUDIO` 由「本地音乐」开关按需申请（`MainActivity` 的 `localMusicPermissionLauncher`），不再于启动时申请 |
 
 ⚠️ **删除顺序无所谓**（Manifest 不允许重复声明，删掉即彻底移除）。
@@ -440,20 +442,36 @@ fun onLocalMusicPermissionResult()
 ⚠️ **文件路径**：`BatteryOptimizationHelper.kt` 在 **`app/src/main/java/com/nasmusic/tv/player/`**，
 **不是** `util/`（全文引用它时都省略了路径，实现时别找错目录）。
 
-**两条处置路线，请裁决（§十三）**：
+✅ **已裁决（2026-10-06）：走 C1 彻底删除。** 下文即 C1 的落地清单；C2 分支作废，不再保留。
 
-| 路线 | 做法 | 优点 | 缺点 |
-|---|---|---|---|
-| **C1（推荐）** | 彻底删除：`REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` 声明 + `MainActivity.kt:195` 调用 + `requestIgnoreBatteryOptimizations()` + `checkAndRequest()`。只保留 `isIgnoringBatteryOptimizations()` 备用 | 权限表最干净，零自动行为 | 设置页无入口，用户得自己去系统设置找 |
-| **C2** | 保留声明，只把自动触发改成「设置页状态展示 + 用户点击才跳」 | 保留可达性 | 权限表仍多一条；⚠️ **声明不能删**——`ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` 需要该权限，否则 `SecurityException` |
+**C1 落地清单（4 项，缺一不可）**：
 
-**C1 的额外清理**：删掉 `checkAndRequest` 后，
-`BatteryOptimizationHelper.kt:72-75` 那个**方法自己的** KDoc「启动时检查并请求忽略电池优化（仅手机端）」
-随方法一起删；类 KDoc `:11-16`（原文是「检测并请求关闭电池优化，确保后台播放稳定。仅在手机端生效」）
-也要同步改写（§十二 第 4 条）。⚠️ 原稿把这两处混为一谈 —— 引文其实在 `:73`，不在 `:13-16`。
+| # | 位置 | 动作 |
+|---|---|---|
+| 1 | `AndroidManifest.xml:27` | ❌ 删除 `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` 声明 |
+| 2 | `MainActivity.kt:194-195` | ❌ 删除那两行（注释 + `BatteryOptimizationHelper.checkAndRequest(this)` 调用） |
+| 3 | `app/src/main/java/com/nasmusic/tv/player/BatteryOptimizationHelper.kt` | ❌ **整个文件删除**（90 行） |
+| 4 | 设置页 | ⛔ **不新增**任何「电池优化」入口（§16.3 #5 / §十五 #10） |
 
-**推荐 C1**，理由与用户诉求一致：「这些内容可以由用户自行操作，无需我们主动做」——
-保留入口本身也是一种「替用户做决定」。
+⚠️ **第 3 项为什么是「整文件」而不是「保留 `isIgnoringBatteryOptimizations()` 备用」**（对原稿 C1 措辞的收紧，已实测）：
+
+- 该文件共 4 个成员，删掉 `checkAndRequest()` 与 `requestIgnoreBatteryOptimizations()` 后：
+  `isIgnoringBatteryOptimizations()`（`:24-31`）**只剩它自己**——原两个调用点（`:44` / `:82`）都在被删的方法里；
+  `isPhoneDevice()`（`:66-70`）**唯一调用点是 `:77`**（在 `checkAndRequest` 里）。
+- 全仓 grep 确认：`BatteryOptimizationHelper` 的**唯一外部引用**就是 `MainActivity.kt:195`，
+  `app/src/test` / `app/src/androidTest` **0 命中**，设置页也没有任何消费方。
+- ⇒ 「保留备用」= 留下 2 个零调用方函数（含一个 `@Suppress`/NewApi 分支要维护），
+  与 §十五 #10「本方案不做设置页入口」直接矛盾。**没有入口就不该留查询函数** —— 真要加设置页时再写回来成本极低。
+
+⚠️ 连带效果：删掉第 2 项后，`ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` 在全仓**不再出现**
+（唯一使用点是 `:50`，在被删的方法内）⇒ 这正好可作为 §9.3 U14 的**机器可判据**。
+
+⚠️ **不影响任何既有行为**：该链路只在**手机端**且**未加白名单**时把用户弹到系统设置，
+与播放保活本身无关（前台服务 `FOREGROUND_SERVICE` / `FOREGROUND_SERVICE_MEDIA_PLAYBACK` 照旧保留，
+见 §2.1 #7 #8）。删除后后台播放策略**一字未变**，只是不再主动打扰用户。
+
+⚠️ **陈旧注释**：随文件一起消失，无需单独改写；§十二 第 4 条因此**自动关闭**（原稿写「类 KDoc 要改写」，
+整文件删除后该条不再适用 —— 见 §十二 表内标注）。
 
 ---
 
@@ -581,13 +599,13 @@ $env:JAVA_HOME = "C:\Program Files\Android\Android Studio\jbr"
 | U10 | 打开开关后在**系统设置里撤销**音乐权限 → 回 App | 开关自动回弹为关 + 提示（`onResume` 重判生效） |
 | U11 | 开着开关时插 U 盘 | 自动扫描并入库（`onDeviceMounted` 观察者工作正常） |
 
-### §9.3 U12–U14 · 电池优化
+### §9.3 U12–U14 · 电池优化（**C1 已裁决**）
 
 | # | 步骤 | 期望 |
 |---|---|---|
-| U12 | 全新安装后首启 | **不再**被弹到系统电池优化设置页 |
-| U13 | C2 路线才需要：设置 → 播放 → 电池优化行 | 状态显示正确，点击才跳转 |
-| U14 | 电视上打开 App | 无任何电池优化相关表现（`isPhoneDevice()` 判据仍正确） |
+| U12 | 全新安装后首启（**手机 + 电视各一次**） | **不再**被弹到系统电池优化设置页（改前手机端必弹） |
+| U13 | 设置页逐分区通览 | ⛔ **不存在**任何「电池优化」入口 —— 这是 C1 的**期望行为**，不是缺陷（§16.3 #5 / §十五 #10） |
+| U14 | 全仓 grep 三个符号：`BatteryOptimizationHelper`、`ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS`、`REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` | **0 命中**（文件已删 + 声明已删）；顺带确认 `player/BatteryOptimizationHelper.kt` **已不存在** |
 
 ### §9.4 V1–V6 · 签名统一（D 线）
 
@@ -611,7 +629,7 @@ $env:JAVA_HOME = "C:\Program Files\Android\Android Studio\jbr"
 |---|---|---|---|
 | **S0** | **D1–D5**：配齐 5 个 repo secrets（§14.2）+ `build.yml` fail-fast 加固（D5）+ `ReleaseSigningGateTest`（G4） | — | V1/V2/V6 + G4 |
 | **S1** | A1/A2：删 `WRITE_EXTERNAL_STORAGE` + `POST_NOTIFICATIONS`；删 `MainActivity.kt:197-210`；修正错误注释 | — | U1–U6 + G3 |
-| **S2** | A3 + C：删 `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` + 电池优化处置（按 §十三 裁决） | — | U12/U14 |
+| **S2** | A3 + C：删 `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` + 删 `MainActivity.kt:194-195` + **删整个 `BatteryOptimizationHelper.kt`**（**C1 已裁决**，§六 有 4 项清单） | — | U12–U14 |
 | **S3** | B-1：`AppSettings` 新字段 + `AppPreferences` 4 处 + `strings.xml` 新文案 | — | G2 |
 | **S4** | B-2：`MainViewModel` 门控（M1/M2/M3/M6）+ `startLocalMusicRuntime()` 抽取 + 运行期观察者 + `visibleLocalSongs` | S3 | G3 + U7/U8/U11 |
 | **S5** | B-3：`SearchAggregator` provider 化（M7） | S4 | G3 L3 |
@@ -636,6 +654,7 @@ DataStore 被清空 ⇒ B 线的 `local_music_enabled` 回落默认 `true` ⇒ �
 | 抽 `startLocalMusicRuntime()` 时把 USB 订阅重复注册 | 中 | 中 | `collect` 非终止 ⇒ 重复调用会**叠加多个**收集器；G3 L2 + U11 复核 |
 | `AppSettings` 新字段漏默认值 | 低 | **高**（旧备份导入整体崩） | §5.3 第 4 跳已标 ⚠️；G2 的 L3/L4 专测这条 |
 | 删 `WRITE_EXTERNAL_STORAGE` 影响 API 22 的备份副本 | 低 | 低 | 该副本本就是「尽力而为」，§2.2 已按 API 分档核过；API 23–28 今天就已经没有这份副本 |
+| **C1 删掉电池优化链路后，用户无处自助加白名单** | 中 | 低 | 后台播放可能被系统限制（Android 官方行为）。⚠️ **改前也一样** —— 原来那个弹窗只是把用户送到系统设置，并未替他加白名单；真要恢复入口，`git show f8a7528:app/src/main/java/com/nasmusic/tv/player/BatteryOptimizationHelper.kt` 即可取回 |
 | **只配 4 个签名 secret、漏 `CRYPTO_PASSPHRASE`** | **中高** | **高** | CI 会产出「签名正确但加密口令不同」的 APK ⇒ 装得上、但已存的 NAS/百度凭据解不开。⚠️ 比签名不一致更隐蔽，因为**装上去不报错**。D2 已把 5 个 secret 列为同一批必配；D5 的 L3 断言把占位值挡在 `push`/`tag` 之外 |
 | PowerShell 生成的 base64 含 `CRLF` / UTF-16 BOM | **中** | 高 | `build.yml:56` 的 `base64 -d` 可能解不出正确密钥 ⇒ 要么构建失败，要么解出坏 keystore。D3 强制用 `[Convert]::ToBase64String([IO.File]::ReadAllBytes(...))`（**精确单行、无 BOM**），并要求 V2 校验证书指纹 |
 | 以后谁清了 secret ⇒ 又静默回到随机签名 | 中 | **高**（会复发且难察觉） | 这才是根因。**D5 fail-fast + G4 门禁**是唯一防线，比配一次 secret 重要 |
@@ -655,7 +674,7 @@ DataStore 被清空 ⇒ B 线的 `local_music_enabled` 回落默认 `true` ⇒ �
 | 1 | `AndroidManifest.xml:10` | 「Android 13+ 分区存储：只读音频文件」 | 补一句「由『本地音乐』开关按需申请，启动时不申请」 |
 | 2 | `MainActivity.kt:197` | 「媒体通知/下载通知依赖 POST_NOTIFICATIONS」 | ⛔ **整块删除**——这句本来就是错的，下载通知不是系统通知 |
 | 3 | `PermissionHelper.kt:9-14` 类 KDoc | 「统一处理本地音乐所需的存储权限」 | 补一句「`getLocalMusicPermissions()` 自 vX 起由『本地音乐』总开关驱动」 |
-| 4 | `BatteryOptimizationHelper.kt:72-75`（`checkAndRequest` 的 KDoc；类 KDoc 在 `:11-16`） | 「启动时检查并请求忽略电池优化（仅手机端）」 | C1 下删除该方法 ⇒ 该 KDoc 随方法删除；类 KDoc 改为「仅提供状态查询，供设置页展示」 |
+| 4 | ~~`BatteryOptimizationHelper.kt:72-75`（`checkAndRequest` 的 KDoc；类 KDoc 在 `:11-16`）~~ | ~~「启动时检查并请求忽略电池优化（仅手机端）」~~ | ✅ **已自动关闭**（2026-10-06，C1 裁决）：整文件随 §六 第 3 项删除，不存在需要改写的 KDoc |
 | 5 | `PlaybackService.kt:1043-1064` | 通知构造，无豁免说明 | ⛔ **必须加注释**：`MediaStyle` 模板是 `POST_NOTIFICATIONS` 豁免的**唯一依据**，删了会连带失去豁免（§2.3） |
 | 6 | `BackupFileUtils.kt:18-22` | 「API < 29 … 另写一份到外部存储公共 Downloads 目录供文件管理器访问」 | 补一句：vX 起无 `WRITE_EXTERNAL_STORAGE`，**API 22** 该副本会静默失败（API 23–28 本来就已经失败，见 §2.2），主备份在内部存储不受影响 |
 | 7 | `.github/workflows/build.yml:41-45` | 「模式 B（fallback）：未配置 secrets 时，临时生成 throwaway ci-keystore.jks … APK 不可覆盖安装到已有数据的设备」 | ⚠️ 这段注释**准确且必须保留**，但要补一句：**push / tag 构建已改为 fail-fast，不再走模式 B**（D5）；模式 B 只留给 PR 与本地演练 |
@@ -665,11 +684,14 @@ DataStore 被清空 ⇒ B 线的 `local_music_enabled` 回落默认 `true` ⇒ �
 
 ---
 
-## §十三 待裁决
+## §十三 裁决记录（原「待裁决」节，**已全部关闭**）
 
-| # | 事项 | 推荐 | 影响 |
-|---|---|---|---|
-| 1 | 电池优化走 **C1（彻底删除）** 还是 **C2（保留声明 + 手动跳转）** | **C1** | 只影响 S2 与 U13。**不阻塞 S1 / S3–S8**，可先按 C1 开工，之后改 C2 成本很低 |
+| # | 事项 | 裁决 | 日期 | 落地位置 |
+|---|---|---|---|---|
+| 1 | 电池优化走 **C1（彻底删除）** 还是 **C2（保留声明 + 手动跳转）** | ✅ **C1 彻底删除** | 2026-10-06 | §六 的 4 项清单；验收 U12–U14；S2 |
+
+⛔ **C2 分支已作废**：全文不再出现「若 §十三 裁决走 C2 则保留声明」这类岔路。
+⇒ **本方案已无待裁决项，S0–S8 可直接按现有文本开工。**
 
 ---
 
@@ -796,6 +818,7 @@ G4 `ReleaseSigningGateTest`（§7.4）是这层的护栏：它把「`push`/`tag`
 | 7 | **不把 `debug` 也改成用正式 key 签名** | 会让 debug 包带发布身份；且 fork PR 的 CI 拿不到正式密钥。debug↔release 互装必须卸载是 Android 固有限制，接受 |
 | 8 | **不试图「修复」签名历史断档** | 已装机的随机签名包无法与未来的正式签名共存 ⇒ 过渡期**必须卸载一次**。这是 Android 签名机制决定的，不是配置能改的 |
 | 9 | 不改 `app/build.gradle.kts` 的签名逻辑本身 | 双模式机制（v2.36.0）设计是对的，问题只在 workflow 侧的配置与守卫（§14.1） |
+| 10 | **不给电池优化做设置页入口**（C1 已裁决） | §六 / §16.3 #5：保留入口本身也是「替用户做决定」；用户可自行去系统设置。⚠️ 因此 `isIgnoringBatteryOptimizations()` 也不保留（否则就是零调用方的死代码，见 §六） |
 
 ---
 
@@ -853,7 +876,7 @@ G4 `ReleaseSigningGateTest`（§7.4）是这层的护栏：它把「`push`/`tag`
 | 2 | 照片墙「外接存储」来源 | 同上（独立的一棵树） | 用户打开该来源开关 | 照片墙少一个来源；⚠️ 该实现只 `takePersistableUriPermission(FLAG_GRANT_READ_URI_PERMISSION)`（`VisualizerViewModel.kt:586-613`），**不主动释放**，属既有设计 |
 | 3 | 备份文件写到公共 `Downloads/NASMusic/` | API 29+ 走 `MediaStore.Downloads`（免权限）；API 23–28 的公共目录副本**今天就已经静默失败**（`WRITE_EXTERNAL_STORAGE` 声明了却从未在运行时申请，写入被拒后由 `BackupFileUtils.kt:92-94` 吞掉）；API 22 删除声明后同样失败 | 用户点「导出备份」 | 主机侧看不到副本，**主备份与应用内「恢复」不受影响**，全程无崩溃 |
 | 4 | 应用专属目录（下载的歌曲、模型、歌词缓存、转存） | `context.getExternalFilesDir(...)`，**任何版本都免权限** | 自动 | 卸载即清空（既有行为） |
-| 5 | 电池优化白名单 | **C1 路线下本方案完全不做** ⇒ 由用户自行去系统设置 | — | 后台播放可能被系统限制（Android 官方行为，非本方案引入） |
+| 5 | 电池优化白名单 | **已裁决 C1：整条链路删除**（连 `player/BatteryOptimizationHelper.kt` 一并删，§六）⇒ 本应用**不再有任何**电池优化交互，由用户自行去系统设置 | — | 后台播放可能被系统限制（Android 官方行为，非本方案引入；⚠️ **改前也一样** —— 加白名单本来也只是用户可自行操作的项） |
 
 ### §16.4 完工后的「权限 vs 功能」对照
 
