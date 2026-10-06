@@ -28,6 +28,7 @@
 | v1.0 | 2026-10-06 | 初稿至可开发级：§二 11 条权限完整清单 + 裁决结论／§四 权限瘦身逐行改造点（`AndroidManifest.xml` + `MainActivity.kt`）／§五 本地音乐总开关（现状链路 `file:line` 门控点 · 新增偏好 5 跳链路 · 运行期开关的 provider 化设计 · 设置页新 section）／§六 电池优化两条处置路线／§七 单测门禁 3 类（含 Robolectric SDK 限制的规避）／§九 上机验收 U1–U14／§十 4 批提交顺序／§十二 陈旧注释 6 条 | **可开工**（§十三 待裁决 1 项不阻塞） |
 | v1.1 | 2026-10-06 | **新增 D 线：发布签名统一**（用户反馈「每次更新都要先卸载旧版」）。① §1.3 记根因：`gh secret list` 返回**空** ⇒ `build.yml:54` 恒走 else ⇒ `build.yml:66` 每次 `keytool -genkey` 生成一次性 `ci-keystore.jks` ⇒ **每次构建签名都不同**（v2.37.4 / v2.37.5 / v2.38.0 / v2.38.2 四次 tag 构建日志实况均为 fallback）；② 新增 **§十四**（含 ⛔ `CRYPTO_PASSPHRASE` 漏配的静默陷阱、PowerShell base64 编码陷阱、日志 grep 的 ANSI 假匹配陷阱、fail-fast 加固 D5）；③ **§7.4 新增 `G4 ReleaseSigningGateTest`**（源码扫描门禁，防 fallback 静默复发）、原 §7.4「既有测试影响」顺延为 **§7.5**；④ §9.4 新增 **V1–V6** 验收（含「首次仍需卸载一次」的历史断档说明）；⑤ §十 新增 **S0** 并声明它是 B 线上线前置；⑥ §十一 新增 4 条签名风险；⑦ §十二 新增 4 条陈旧注释（`build.yml:41-45`、`:45`、`AGENTS.md` CI 段、`app/build.gradle.kts:87-89`）；⑧ 原 §十四「明确不做」顺延为 **§十五**，并追加 3 条（不给 debug 用正式 key、不试图修复签名历史断档、不改 Gradle 签名逻辑）。⛔ **另修 v1.0 遗留的编号冲突**：§5.2 的「门控点 G1–G7」与 §七 的「单测门禁 G1–G4」同字母不同含义 ⇒ 门控点整体改名 **M1–M7**（Master gate），全文 11 处引用同步 | **可开工** |
 | v1.2 | 2026-10-06 | **新增 §十六 完工后的权限全景（目标态速查）**（用户要求补「完工后剩余什么权限、干什么用、什么时候申请」）。含 §16.1 声明与申请时机总表（8 条 · 逐条标注**保护级别**与**申请时机** · 拒绝后果）／§16.2 按 Android 版本的实际弹窗矩阵（API 22–28 / 29–32 / 33 / 34+ 四档，标出全新用户最多被问 1–2 次）／§16.3 **不需要权限但仍要用户「给一下」** 的 5 项（SAF 两处 · MediaStore Downloads · 应用专属目录 · 电池优化）／§16.4 权限↔功能对照（含「已下载歌曲不受总开关影响」这条容易漏的边界）／§16.5 与 §二 的对照摘要。⛔ §16.5 明确写入一条**对外表述纪律**：dangerous 权限**数量没有减少**（仍 4 条），本方案只是把申请时机从「开机无条件」改成「按需」⇒ **发版说明不得写成「减少了权限」**。⚠️ §16.2 另标 1 项**待实测**（Android 13 权限迁移可能让老用户一个弹窗都看不到）并说明 §五 的设计对此安全 | **可开工** |
+| v1.3 | 2026-10-06 | **按源码逐条核对并修正**（本轮把 §一/§二/§四/§五/§六/§七/§九/§十二/§十四/§十六 的全部 `file:line` 与事实断言逐个对回源码）。① ⛔ **修 1 处内部矛盾**：§5.1-D2 原写「关闭时只清 `_localSongs` 内存态」，与 §5.2/§5.4 的裁定「`_localSongs` = Room 全表、不受总开关影响」**直接冲突** ⇒ D2 改写为「不清、隐藏走 `visibleLocalSongs`」；② ⛔ **修 1 处会误导实现的命名不一致**：§5.5 的 launcher 回调原写 `localMusicPermissionResult()`，与下文入口函数 `onLocalMusicPermissionResult()` 对不上 ⇒ 统一为后者；③ ⛔ **修 1 处事实错误**：§2.2 / §9.1-U6 / §16.3-3 原称「删 `WRITE_EXTERNAL_STORAGE` 后 **API 24–28** 少一份公共目录副本」—— 实际 API 23–28 **今天就已经写不进去**（该权限是 dangerous，而全仓唯一运行时申请点是 `POST_NOTIFICATIONS`），真正差异**只在 API 22** ⇒ 改为按 API 分档表；§2.1-#9 的「**仅** `BackupFileUtils.kt:38-42 / 86-91`」补全为三处触碰点（写 `:86-91` / 列 `:142` / 删 `:203-205`）；④ **修 5 处引用错位**：`AppSettings.kt:42-48`→`:52-63`、`PhotoWallPrefsTest` 竞态说明 `:26-27`→`:31-32`、`BatteryOptimizationHelper` 引文 `:13-16`→`:72-75`（类 KDoc 在 `:11-16`）、§5.2「见 §5.3 的 `visibleLocalSongs`」→**§5.4**、§5.5 注释 `:96-99`→`:89-92` + `:97-99`；⑤ **补 1 处漏项**：§5.6 的 `SettingsScreen` 分支清单漏了 `:738` DATA（实为 10 支、非 9 支）；⑥ **修 1 条不可执行命令**：§14.3 的 `apksigner` 用 `$env:ANDROID_HOME`，而本机该变量为空 ⇒ 改显式 `$SDK` 路径；⑦ **新增 2 条实现期提醒**：§5.4 的 `visibleLocalSongs` ⛔ 别用 `WhileSubscribed`（M6 的 provider 按需读 `.value` 会读到陈旧值）、§5.4-M7 用 `first()` 而非 `firstOrNull()`（与 `NasMusicApp.kt:400/456` 既有写法一致）；⑧ **补记**：§5.6 指出 `local_music_refreshed` / `refresh_local_music_error`（`strings.xml:1002-1003`）**已存在**、勿重复新建；§六 补注 `BatteryOptimizationHelper.kt` 在 `player/` 而非 `util/`；§16.2 拆出 API 22 行（**无弹窗**，原稿与 23–28 合并有误）。**已核对无误、无需改动**：§2.1 的 11 条声明与 8/3 拆分、§1.2 的「唯一 `requestPermissions` / 两个函数零调用方 / 唯一 `notify()` / `refreshLocalMusic` 零调用方」、§5.2 的 6 个 `init` 块与 M1–M7 行号、§5.3 的 5 跳链路 + 「`AppPreferences` 无 `MutableStateFlow`」、§5.5 照抄源 `VisualizerViewModel.kt:57-87 / 132-135 / 511-565 / 621-655`、§7.5 的「测试 0 命中」、§14.1 的双模式与 `build.yml` 全部行号、§十二 的 10 条注释定位 | **可开工** |
 
 ---
 
@@ -47,12 +48,14 @@
 - **权限声明 11 条**，其中 `WRITE_EXTERNAL_STORAGE` / `POST_NOTIFICATIONS` /
   `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` 三条**没有任何实际价值**（§二）。
 - **运行时弹窗只有 2 处**：
-  ① `MainActivity.kt:198-210` 在 `onCreate` **无条件**申请 `POST_NOTIFICATIONS`（Android 13+），
-  这是全仓**唯一**一处 `ActivityCompat.requestPermissions(` 调用（grep 确认 1 命中）；
+  ① `MainActivity.kt:198-210` 在 `onCreate` 申请 `POST_NOTIFICATIONS`（Android 13+）——
+  这是全仓**唯一**一处 `ActivityCompat.requestPermissions(` 调用（grep 确认 1 命中）。
+  ⚠️ 严格说它不是「无条件」：代码里有 `SDK_INT >= 33 && 未授予` 两个条件。
+  它的「无条件」在于**不依赖任何用户操作**（一进 App 就问）—— 这正是要删掉的那一点；
   ② `MainActivity.kt:220-224` 由设置页「图库」开关触发的照片权限（设计正确，是本方案的模板）。
 - **全仓唯一的 `notify()` 调用点**是 `PlaybackService.kt:980-981`，且是媒体通知。
   ⛔ **「下载通知」不是系统通知**：`SongDownloadManager.onNotify` / `onProgress`
-  的消息走 `NasMusicApp._downloadNotifyMessage`（`:121-122`）→ `MainViewModel.kt:2428-2432`
+  的消息走 `NasMusicApp._downloadNotifyMessage`（`:121-122`）→ `MainViewModel.kt:2434-2438`
   → `showError(msg)` → UI 上的一条提示。`MainActivity.kt:197` 那句
   「下载通知依赖 POST_NOTIFICATIONS」的注释**是错的**，必须一并修正（§十二 第 2 条）。
 - **`PermissionHelper.getLocalMusicPermissions()` / `hasLocalMusicPermission()`
@@ -76,7 +79,7 @@
 ⇒ 每次从 Releases 下载的 APK 签名证书都不同 ⇒ `adb install -r` 报
 `INSTALL_FAILED_UPDATE_INCOMPATIBLE` ⇒ 只能先卸载。**与设备、ROM、versionCode 都无关。**
 
-**⛔ 取证陷阱（我自己差点踩）**：`build.yml:53-74` 是 `run: |` 块，GitHub 会**先把整个脚本文本回显一遍**，
+**⛔ 取证陷阱（我自己差点踩）**：`build.yml:53-76` 是 `run: |` 块（`if` 到末尾的 `sed` 回显都在内），GitHub 会**先把整个脚本文本回显一遍**，
 带 ANSI 转义（`^[[36;1m  echo "Using release keystore from GitHub Secrets"`）。
 ⇒ 直接 grep `Using release keystore` 会**同时命中两个分支**，看起来像走了正式签名。
 **必须只匹配无 ANSI 的真实执行输出行**：
@@ -109,7 +112,7 @@
 | 6 | `READ_MEDIA_VISUAL_USER_SELECTED` | Android 14+ | 「仅选择照片」部分授权的持久标识 | **必须** | 保留，随图库开关一起申请 |
 | 7 | `FOREGROUND_SERVICE` | Android 9+ | 后台播放前台服务 | **必须** | 保留 |
 | 8 | `FOREGROUND_SERVICE_MEDIA_PLAYBACK` | Android 14+ | 同上，`mediaPlayback` 类型 | **必须** | 保留 |
-| 9 | `WRITE_EXTERNAL_STORAGE` | `maxSdkVersion=28` | **仅** `BackupFileUtils.kt:38-42 / 86-91` 在 API<29 往公共 Downloads 写一份**辅助**备份副本 | **可去掉** | ❌ **删除** |
+| 9 | `WRITE_EXTERNAL_STORAGE` | `maxSdkVersion=28` | **只有** `BackupFileUtils.kt` 在 API<29 触碰公共 Downloads（写辅助副本 `:86-91`、列目录 `:142`、删副本 `:203-205`） | **可去掉** | ❌ **删除** |
 | 10 | `POST_NOTIFICATIONS` | Android 13+ | 仅媒体通知（平台已豁免） | **可去掉** | ❌ **删除** |
 | 11 | `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` | Android 6+ | 电池优化白名单 | **可去掉** | ❌ **删除**（§六） |
 
@@ -124,8 +127,15 @@
   公共 Downloads 副本（`:86-91`）已经被 `try/catch` 包成「尽力而为」，
   且 KDoc `:20-22` 自己就写着「部分电视 ROM 的公共存储是 RAM-backed，断电即丢失，故内部存储才是可靠主备份」。
 
-⇒ 删掉 `WRITE_EXTERNAL_STORAGE` 的唯一后果：**API 24–28 设备少一份公共目录副本**，
-主备份与「恢复」功能完全不受影响。这条本来就只是给文件管理器看的便利副本。
+⇒ 删掉 `WRITE_EXTERNAL_STORAGE` 的后果，**按 API 分档才准确**（原稿写作「API 24–28 少一份副本」是错的）：
+
+| API | 今天（声明仍在） | 删除声明后 |
+|---|---|---|
+| **22** | 无运行时权限机制 ⇒ **安装即授予** ⇒ 公共目录副本**能写成功** | 副本**写不进去**（静默失败，`try/catch` 吞掉，无崩溃） |
+| **23–28** | `WRITE_EXTERNAL_STORAGE` 是 **dangerous** 权限，而全仓**唯一**的运行时申请点是 `MainActivity.kt:204` 的 `POST_NOTIFICATIONS`（grep 确认 1 命中）⇒ 从未申请 ⇒ 未授予 ⇒ 副本**今天就已经写不进去**（同样被 `:92-94` 吞掉） | **无变化** |
+
+⇒ **唯一的行为差异出现在 API 22**（Android 5.1）；API 23–28 上这份副本早就没有了。
+主备份（`filesDir/backups/`）与「恢复」功能在任何 API 上都不受影响。这条本来就只是给文件管理器看的便利副本。
 
 ### §2.3 为什么 #10 可以去掉（三重依据）
 
@@ -215,7 +225,7 @@
 | # | 决策 | 理由 |
 |---|---|---|
 | D1 | 偏好 `local_music_enabled` **默认 `true`** | **零回归**。今天的行为一字不变，也**不在启动时弹任何窗**。开关的作用是让用户能**关掉**，以及在**关→开**时触发权限申请（从而修掉 bug）。 |
-| D2 | 关闭时**保留 Room 索引**，只清 `_localSongs` 内存态 | 否则用户下次开开关要重扫全盘。索引是本地缓存，不是隐私数据。 |
+| D2 | 关闭时**保留 Room 索引**；`_localSongs` 内存态也**不清**，隐藏由 §5.4 的派生流 `visibleLocalSongs` 负责 | 否则用户下次开开关要重扫全盘。索引是本地缓存，不是隐私数据。⛔ 这条与 §5.2 的裁定「`_localSongs` 的内容 = Room 全表、不受总开关影响」是**同一件事**，实现时勿写成「关闭时清空 `_localSongs`」（那会连带影响 M4/M5 与已下载曲目）。 |
 | D3 | 关闭时**不影响已下载歌曲** | `NasMusicApp.kt:406-451` 的 `upsertDownloaded()` 读的是**应用专属目录自己写的文件**，与 `MediaStore` / `READ_MEDIA_AUDIO` 无关；下载曲另有 `MusicSourceType.DOWNLOAD` 出口。⛔ 切勿把 `MusicSourceType.LOCAL` 的门控波及到 `DOWNLOAD`。 |
 | D4 | 开关状态进 `SearchAggregator` 必须用 **provider 闭包**，不能传快照 | `SearchAggregator` 在 `NasMusicApp.kt:499` 进程内构造**一次**，而开关是运行期可变。传快照 = 改了开关搜索仍走本地源。⚠️ 本项目已有同类教训：`BackendAuthHeaders` 的 `provider` 形态就是为了不漏掉静默重登换新令牌（AGENTS.md）。 |
 
@@ -232,13 +242,13 @@ MainViewModel（⚠️ 有 6 个 init 块：:544 :621 :709 :2428 :3414 :3467，�
  └─ :874-913  本地音乐启动块
      ├─ 步骤1 :878  loadFromCache()                  ← 门控点 M1
      ├─ 步骤2 :888  incrementalScan()               ← 门控点 M2
-     └─ 步骤3 :899  storageMonitor.onDeviceMounted.collect { scanUsbDevice() }  ← 门控点 M3
+     └─ 步骤3 :900  storageMonitor.onDeviceMounted.collect { scanUsbDevice() }  ← 门控点 M3
          ⚠️ 步骤3 是**同一 launch 内的非终止挂起** ⇒ 不能在步骤2 之后 return，
             只能把整个 launch 用 if 包住
 
 其他触达 _localSongs 的点
  ├─ :815   下载完成监听 → loadFromCache()          ← 门控点 M4（关闭时不该被触发）
- ├─ :2441  downloadVM.onLocalSongsChanged → 同上   ← 门控点 M5（⚠️ 与 D3 相关，见下）
+ ├─ :2439  downloadVM.onLocalSongsChanged = { … } ← 门控点 M5（赋值在 :2439、体内 `loadFromCache()` 在 :2441）
  ├─ :1901  refreshLocalMusic() → fullScan()        ← 死代码，改由设置页按钮调用
  └─ :3443  searchVM.localDeviceSongsProvider = { _localSongs.value }   ← 门控点 M6
 
@@ -255,7 +265,7 @@ PermissionHelper
 ⇒ **设计裁定**：`_localSongs` 的内容 = **Room 全表**，不受总开关影响；
 总开关只 gate **扫描行为**（M1/M2/M3）、**搜索源**（M7）与 **UI 展示**。
 这样 D3「不影响下载」自动成立，无需在 M4/M5 加判断。
-UI 层要隐藏时，用一个新的派生 StateFlow（见 §5.3 的 `visibleLocalSongs`）。
+UI 层要隐藏时，用一个新的派生 StateFlow（见 §5.4 的 `visibleLocalSongs`）。
 
 ### §5.3 新增偏好（5 跳链路，照抄 `photoWallExternalEnabled`）
 
@@ -267,15 +277,15 @@ UI 层要隐藏时，用一个新的派生 StateFlow（见 §5.3 的 `visibleLoc
 | # | 文件:行 | 动作 |
 |---|---|---|
 | 1 | `data/prefs/AppPreferences.kt:321` 附近 | 加 `private val keyLocalMusicEnabled = booleanPreferencesKey("local_music_enabled")` |
-| 2 | `AppPreferences.kt:805-806` 附近 | 在唯一的 `appSettings: Flow<AppSettings>` map 里加一行：`localMusicEnabled = prefs[keyLocalMusicEnabled] ?: true,` |
+| 2 | `AppPreferences.kt:805-806` 附近 | 在唯一的 `appSettings: Flow<AppSettings>` map（声明在 `:779`）里加一行：`localMusicEnabled = prefs[keyLocalMusicEnabled] ?: true,` |
 | 3 | `AppPreferences.kt:883` 附近 | 加 `suspend fun setLocalMusicEnabled(v: Boolean) = dataStore.edit { it[keyLocalMusicEnabled] = v }` |
 | 4 | `data/model/AppSettings.kt:51` 附近 | 加字段 —— ⚠️ **必须给默认值** |
 | 5 | `AppPreferences.kt:1970-1978` 附近 | `importBackupData()` 里加一行，否则备份/恢复不带这个字段 |
 
-⚠️ **第 4 跳的默认值不是可选的**：`AppSettings.kt:42-48` 的 KDoc 记录了
+⚠️ **第 4 跳的默认值不是可选的**：`AppSettings.kt:52-63` 的 KDoc（⛔ 那一段不在 `:42-48`）记录了
 「字段没有默认值 ⇒ Kotlin 生成的无参构造消失 ⇒ Gson 回退 `UnsafeAllocator` ⇒
 所有字段变 JVM 默认值、non-null 枚举变 `null`」，**旧备份导入会整体崩**。
-必须照抄 `:172-191` 那条 legacy-backup 单测作为门禁（§七 G2）。
+必须照抄 `PhotoWallPrefsTest.kt:172-191` 那条 legacy-backup 单测作为门禁（§七 G2）。
 
 ⚠️ **不给 `local_music_enabled` 加门面类**。照片墙有 `PhotoWallPrefs` 是因为它有 17 个字段；
 本地音乐只有 1 个，直接在 `AppPreferences` 上放 `setLocalMusicEnabled` 即可，
@@ -291,6 +301,12 @@ visibleLocalSongs: StateFlow<List<Song>> = combine(_localSongs, 开关) { songs,
 ```
 
 ⚠️ 初始值取 `_localSongs.value` 而不是 `emptyList()`，否则首帧会闪一下空列表。
+⚠️ **`SharingStarted` 别用 `WhileSubscribed`**：`WhileSubscribed` 下上游 `combine` 只在**有订阅者**时才跑，
+没有订阅者时 `.value` 会停在最后一次算出来的值（本项目的 UI 会 collect，但 M6 的 provider 是在
+`SearchAggregator` 的 `async {}` 里**按需读 `.value`**）⇒ 一旦某一刻没有 UI 订阅者，开关翻转后
+`.value` 就是**旧的**。用 `SharingStarted.Eagerly`（这个流很轻，没有生命周期成本），
+或者让 M6 直接读 `if (开关) _localSongs.value else emptyList()`。注意 M7 是最终闸门，
+所以即便 `.value` 一时陈旧，搜索也不会真的命中本地源 —— 但别依赖这个巧合。
 
 **M1–M3**：`MainViewModel.kt:874-913` 整块用
 `if (nasMusicApp.appPreferences.appSettings.first().localMusicEnabled)` 包住。
@@ -321,13 +337,16 @@ viewModelScope.launch {
 ⇒ 把 `:874-913` 的三步**抽成 `private fun startLocalMusicRuntime()`**（`viewModelScope` 内 launch），
 启动块与观察者都调它。⛔ **不要**把 `wasEnabled` 写成 `var` 在 `MainViewModel` 类字段上再跨协程共享。
 
-**M6**：`MainViewModel.kt:3443` 改为 `searchVM.localDeviceSongsProvider = { visibleLocalSongs.value }`。
+**M6**：`MainViewModel.kt:3443` 改为 `searchVM.localDeviceSongsProvider = { visibleLocalSongs.value }`
+（⚠️ 见上方 `visibleLocalSongs` 的 `SharingStarted` 提醒）。
 
 **M7**：`SearchAggregator.kt:256` 的条件追加 `&& localMusicEnabled()`，
 其中 `localMusicEnabled` 是构造参数 **`() -> Boolean`**（见 D4）。
-`NasMusicApp.kt:494-501` 构造处传 `{ appPreferences.appSettings.firstOrNull()?.localMusicEnabled ?: true }`
+`NasMusicApp.kt:494-501` 构造处传 `{ appPreferences.appSettings.first().localMusicEnabled }`
+—— ⚠️ 用 `first()` 而**不是** `firstOrNull()?.…?: true`：`appSettings` 是非空 `Flow<AppSettings>`，
+同文件 `:400` / `:456` 的既有写法都是 `appPreferences.appSettings.first()`，保持一致。
 —— ⚠️ 在 `SearchAggregator` 的 `async {}` 里首次求值会挂起，但 `async` 是挂起上下文，
-`firstOrNull()` 可用；若嫌每次搜索都读 DataStore，加一层 `@Volatile` 快照 + pref 变化时更新
+`first()` 可用；若嫌每次搜索都读 DataStore，加一层 `@Volatile` 快照 + pref 变化时更新
 （**不要**只在构造时读一次）。
 
 **M1/M2 的反向保护**：`MusicScanner.scanAllMusic()` 的宽泛 catch
@@ -343,9 +362,9 @@ viewModelScope.launch {
 
 | # | 文件:行 | 动作 |
 |---|---|---|
-| 1 | `ui/MainActivity.kt:95-108` 附近 | 新增 `private val localMusicPermissionLauncher = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { viewModel.localMusicPermissionResult() }`，⛔ **注释照抄 `:96-99`**（「不在这里触发，由开关驱动」） |
-| 2 | `MainActivity.kt:212` 附近 | 注入 `viewModel.localMusicPermissionLauncher = { localMusicPermissionLauncher.launch(PermissionHelper.getLocalMusicPermissions()) }` |
-| 3 | `MainActivity.kt:482-501` `onDestroy` | 在 `runCatching` 里加 `viewModel.localMusicPermissionLauncher = null`（⚠️ 该块有 `if (!isFinishing) return` 守卫，别改守卫） |
+| 1 | `ui/MainActivity.kt:95-101` 附近（照片墙 launcher 的位置） | 新增 `private val localMusicPermissionLauncher = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { viewModel.onLocalMusicPermissionResult() }`，⛔ **注释照抄 `:89-92`**（「不在这里触发，由开关驱动」）；结果回调里「忽略 Map、只重读状态」的写法照抄 `:97-99`。⚠️ 回调名必须与下方入口函数 `onLocalMusicPermissionResult()` **逐字一致**（不要写成 `localMusicPermissionResult()`） |
+| 2 | `MainActivity.kt:220-227` 附近（照片墙 launcher 的注入位置） | 注入 `viewModel.localMusicPermissionLauncher = { localMusicPermissionLauncher.launch(PermissionHelper.getLocalMusicPermissions()) }` |
+| 3 | `MainActivity.kt:482-501` `onDestroy` | 在 `runCatching` 里加 `viewModel.localMusicPermissionLauncher = null`（⚠️ 该块有 `if (!isFinishing) return` 守卫，在 `:490`，别改守卫） |
 | 4 | `MainActivity.kt:524-537` `onResume` | 加 `viewModel.refreshLocalMusicAccess()`，与 `refreshPhotoAccess()` 同款 |
 | 5 | `MainViewModel` 状态字段区 | 新增 `var localMusicPermissionLauncher: (() -> Unit)? = null`、`private val _localMusicPermissionState = MutableStateFlow(localMusicStateNow())`（**初值现查，不读缓存**，照抄 `VisualizerViewModel.kt:132-135`）、`private val _localMusicNotice = MutableSharedFlow<LocalMusicNotice>(replay = 0, extraBufferCapacity = 4)` |
 
@@ -360,7 +379,7 @@ fun requestLocalMusicPermission()
     launcher == null → tryEmit(LOCAL_MUSIC_DENIED)，⛔ 绝不静默把开关打开
 
 fun onLocalMusicPermissionResult()
-    重读权限态（⛔ 忽略回调里的 Map，理由同 :99-103 的 Android 14 部分授权）
+    重读权限态（⛔ 忽略回调里的 Map，理由同 `:97-99` 的 Android 14 部分授权）
     已授权 → 落盘 true + 启动扫描；拒绝 → 落盘 false + tryEmit(LOCAL_MUSIC_DENIED)
 ```
 
@@ -376,8 +395,11 @@ fun onLocalMusicPermissionResult()
 
 现状：`SettingsBranch.kt`（377 行）**不是分区切换器**，只是一个 state-hoisting 委托，
 末尾一次 `SettingsScreen(...)`；真正的分区列表是枚举
-`ui/screens/settings/SettingsSection.kt:33-51`，在 `ui/screens/SettingsScreen.kt` 的
-`LazyColumn` 里逐分支 dispatch（`:513 / :530 / :577 / :591 / :614 / :626 / :636 / :649 / :676`）。
+`ui/screens/settings/SettingsSection.kt:33-51`，在 `ui/screens/SettingsScreen.kt`（1102 行）的
+`LazyColumn` 里逐分支 dispatch —— **共 10 个分支**（枚举 10 项，一项不落）：
+`:513` GENERAL / `:530` PLAYBACK / `:577` PHOTO_WALL / `:591` DOWNLOAD / `:614` SERVER /
+`:626` ABOUT / `:636` CACHE / `:649` NETDISK / `:676` NETWORK / `:738` DATA。
+（⚠️ 原稿漏了 `:738` DATA 那一支。新增 `LOCAL_MUSIC` 后应为 **11** 个分支。）
 
 **新增 `LOCAL_MUSIC` 分区**，插在 `PHOTO_WALL`（`:43`）与 `DOWNLOAD`（`:44`）之间。
 ⚠️ `SettingsSection.kt:36-42` 的 KDoc 已明确写了这条插入是安全的：
@@ -389,6 +411,10 @@ fun onLocalMusicPermissionResult()
   与 `:313` 图库那条同款口径）、`settings_local_music_rescan` / `_desc`、
   `settings_local_music_count`（`已入库 %d 首`）、`local_music_denied`（拒绝提示）。
   ⛔ 字符串一律进资源，**不要硬编码**（HEAD `85eaf16` 刚做完全量文本资源化）。
+  ⚠️ **已有两条可复用、别重复新建**：`local_music_refreshed`（`本地音乐已刷新（%d 首）`）
+  与 `refresh_local_music_error`（`刷新本地音乐失败: %s`），位置 `strings.xml:1002-1003` ——
+  它们正是 `refreshLocalMusic()`（`MainViewModel.kt:1907/1910`）现在就在用的，
+  §5.6 把该函数复活为「重新扫描」按钮后照旧复用即可。
 - `SettingsScreen.kt`：新增 `when` 分支 + 该分区的焦点 requester（`:313-314` 是逐分区预建的）。
 - 新建 `ui/screens/settings/LocalMusicSettingsSection.kt`：一个 `SettingSwitch` +
   一个 `SettingsInfoRow`（曲目数）+ 一个 `SettingActionButton`（重新扫描）。
@@ -406,10 +432,13 @@ fun onLocalMusicPermissionResult()
 
 ## §六 改动线 C：电池优化
 
-现状：`MainActivity.kt:195` **无条件**调
+现状：`MainActivity.kt:195` 在 `onCreate` 里调
 `BatteryOptimizationHelper.checkAndRequest(this)`，后者在手机端（`isPhoneDevice()` 判据）
 检测到未加白名单就 `startActivity(ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS)`
-（`BatteryOptimizationHelper.kt:49-56`）——用户一开 App 就被弹到系统设置，确实越界。
+（`BatteryOptimizationHelper.kt:49-59`，`startActivity` 在 `:53`）——用户一开 App 就被弹到系统设置，确实越界。
+
+⚠️ **文件路径**：`BatteryOptimizationHelper.kt` 在 **`app/src/main/java/com/nasmusic/tv/player/`**，
+**不是** `util/`（全文引用它时都省略了路径，实现时别找错目录）。
 
 **两条处置路线，请裁决（§十三）**：
 
@@ -419,7 +448,9 @@ fun onLocalMusicPermissionResult()
 | **C2** | 保留声明，只把自动触发改成「设置页状态展示 + 用户点击才跳」 | 保留可达性 | 权限表仍多一条；⚠️ **声明不能删**——`ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` 需要该权限，否则 `SecurityException` |
 
 **C1 的额外清理**：删掉 `checkAndRequest` 后，
-`BatteryOptimizationHelper.kt:13-16` 的类 KDoc「启动时检查并请求忽略电池优化（仅手机端）」必须同步改写（§十二 第 4 条）。
+`BatteryOptimizationHelper.kt:72-75` 那个**方法自己的** KDoc「启动时检查并请求忽略电池优化（仅手机端）」
+随方法一起删；类 KDoc `:11-16`（原文是「检测并请求关闭电池优化，确保后台播放稳定。仅在手机端生效」）
+也要同步改写（§十二 第 4 条）。⚠️ 原稿把这两处混为一谈 —— 引文其实在 `:73`，不在 `:13-16`。
 
 **推荐 C1**，理由与用户诉求一致：「这些内容可以由用户自行操作，无需我们主动做」——
 保留入口本身也是一种「替用户做决定」。
@@ -459,7 +490,8 @@ SDK **34** 与 **30** 两个 `android-all` jar，**API 33 跑不了**。
 
 ⚠️ 模板里两条硬性写法照抄：
 ① `private suspend fun settle() = delay(30)`（datastore 1.0.0 在 Windows + Robolectric 下
-连续快速写同名文件有 rename 竞态，`:26-27` 有说明）；
+连续快速写同名文件有 rename 竞态，`:31-32` 有说明 —— ⚠️ 原稿写的 `:26-27` 是 Robolectric
+判为「手机」那段，不是竞态说明）；
 ② `@RunWith(RobolectricTestRunner::class) @Config(sdk = [34])`。
 
 ### §7.3 G3 · `LocalMusicGateTest`（新增，纯 JVM，覆盖门控契约）
@@ -537,7 +569,7 @@ $env:JAVA_HOME = "C:\Program Files\Android\Android Studio\jbr"
 | U3 | 播放 → 切后台 → 回前台 | 通知栏媒体控制**照常**显示并可用（豁免生效） |
 | U4 | 锁屏 + 蓝牙音箱 AVRCP 上一首/下一首 | 照常（走 `MediaSession`，与通知权限无关） |
 | U5 | API 33+ → 设置 → 数据 → 备份 → 导出 | 正常（`WRITE_EXTERNAL_STORAGE` 删除后 API≥29 走 MediaStore，无影响） |
-| U6 | **API 24–28 设备**（若还持有）导出备份 | 主备份成功；公共 Downloads 副本缺失且**无崩溃** |
+| U6 | **API 22 设备**（若还持有）导出备份 | 主备份成功；公共 Downloads 副本缺失且**无崩溃**。⚠️ API 23–28 上这份副本**今天就已经写不进去**（§2.2），别把「删除后少了副本」记成回归 |
 
 ### §9.2 U7–U11 · 本地音乐总开关
 
@@ -603,7 +635,7 @@ DataStore 被清空 ⇒ B 线的 `local_music_enabled` 回落默认 `true` ⇒ �
 | 开关状态用快照传给 `SearchAggregator` | 中 | 中 | D4 已定 provider 化；G3 L3 断言把关 |
 | 抽 `startLocalMusicRuntime()` 时把 USB 订阅重复注册 | 中 | 中 | `collect` 非终止 ⇒ 重复调用会**叠加多个**收集器；G3 L2 + U11 复核 |
 | `AppSettings` 新字段漏默认值 | 低 | **高**（旧备份导入整体崩） | §5.3 第 4 跳已标 ⚠️；G2 的 L3/L4 专测这条 |
-| 删 `WRITE_EXTERNAL_STORAGE` 影响 API 24–28 的备份副本 | 低 | 低 | 该副本本就是「尽力而为」，§2.2 已核 |
+| 删 `WRITE_EXTERNAL_STORAGE` 影响 API 22 的备份副本 | 低 | 低 | 该副本本就是「尽力而为」，§2.2 已按 API 分档核过；API 23–28 今天就已经没有这份副本 |
 | **只配 4 个签名 secret、漏 `CRYPTO_PASSPHRASE`** | **中高** | **高** | CI 会产出「签名正确但加密口令不同」的 APK ⇒ 装得上、但已存的 NAS/百度凭据解不开。⚠️ 比签名不一致更隐蔽，因为**装上去不报错**。D2 已把 5 个 secret 列为同一批必配；D5 的 L3 断言把占位值挡在 `push`/`tag` 之外 |
 | PowerShell 生成的 base64 含 `CRLF` / UTF-16 BOM | **中** | 高 | `build.yml:56` 的 `base64 -d` 可能解不出正确密钥 ⇒ 要么构建失败，要么解出坏 keystore。D3 强制用 `[Convert]::ToBase64String([IO.File]::ReadAllBytes(...))`（**精确单行、无 BOM**），并要求 V2 校验证书指纹 |
 | 以后谁清了 secret ⇒ 又静默回到随机签名 | 中 | **高**（会复发且难察觉） | 这才是根因。**D5 fail-fast + G4 门禁**是唯一防线，比配一次 secret 重要 |
@@ -623,9 +655,9 @@ DataStore 被清空 ⇒ B 线的 `local_music_enabled` 回落默认 `true` ⇒ �
 | 1 | `AndroidManifest.xml:10` | 「Android 13+ 分区存储：只读音频文件」 | 补一句「由『本地音乐』开关按需申请，启动时不申请」 |
 | 2 | `MainActivity.kt:197` | 「媒体通知/下载通知依赖 POST_NOTIFICATIONS」 | ⛔ **整块删除**——这句本来就是错的，下载通知不是系统通知 |
 | 3 | `PermissionHelper.kt:9-14` 类 KDoc | 「统一处理本地音乐所需的存储权限」 | 补一句「`getLocalMusicPermissions()` 自 vX 起由『本地音乐』总开关驱动」 |
-| 4 | `BatteryOptimizationHelper.kt:13-16` | 「启动时检查并请求忽略电池优化（仅手机端）」 | C1 下删除该方法 ⇒ KDoc 改为「仅提供状态查询，供设置页展示」 |
+| 4 | `BatteryOptimizationHelper.kt:72-75`（`checkAndRequest` 的 KDoc；类 KDoc 在 `:11-16`） | 「启动时检查并请求忽略电池优化（仅手机端）」 | C1 下删除该方法 ⇒ 该 KDoc 随方法删除；类 KDoc 改为「仅提供状态查询，供设置页展示」 |
 | 5 | `PlaybackService.kt:1043-1064` | 通知构造，无豁免说明 | ⛔ **必须加注释**：`MediaStyle` 模板是 `POST_NOTIFICATIONS` 豁免的**唯一依据**，删了会连带失去豁免（§2.3） |
-| 6 | `BackupFileUtils.kt:18-22` | 「API < 29 … 另写一份到外部存储公共 Downloads 目录供文件管理器访问」 | 补一句：vX 起无 `WRITE_EXTERNAL_STORAGE`，API 24–28 该副本会静默失败，主备份在内部存储不受影响 |
+| 6 | `BackupFileUtils.kt:18-22` | 「API < 29 … 另写一份到外部存储公共 Downloads 目录供文件管理器访问」 | 补一句：vX 起无 `WRITE_EXTERNAL_STORAGE`，**API 22** 该副本会静默失败（API 23–28 本来就已经失败，见 §2.2），主备份在内部存储不受影响 |
 | 7 | `.github/workflows/build.yml:41-45` | 「模式 B（fallback）：未配置 secrets 时，临时生成 throwaway ci-keystore.jks … APK 不可覆盖安装到已有数据的设备」 | ⚠️ 这段注释**准确且必须保留**，但要补一句：**push / tag 构建已改为 fail-fast，不再走模式 B**（D5）；模式 B 只留给 PR 与本地演练 |
 | 8 | `.github/workflows/build.yml:45` | 「用占位值时产出的 APK 加密密钥与正式包不同，仅供 CI 验证，不可覆盖安装到已有数据的设备」 | 同上，保留；D5 后可加「正式发版路径已禁止占位值」 |
 | 9 | `AGENTS.md` 的 CI 段落 | 「CI `build` job 的 signing step 是 **dual-mode**（v2.36.0）：如果仓库有 GitHub Secrets … 否则回退 throwaway」 | 补一句：vX 起 **5 个 secrets 已配齐**（含 `CRYPTO_PASSPHRASE`），正式发版走模式 A；模式 B 仅存于 PR，tag/push 走 fail-fast。**这条不更新，下一个会话会再次误判 CI 在用随机签名** |
@@ -708,9 +740,15 @@ Remove-Item Env:\JKS_PW
 APK 侧用 `apksigner` —— ⛔ **不要**用 keytool 读 APK，读不出 v2/v3 签名：
 
 ```powershell
-& "$env:ANDROID_HOME\build-tools\34.0.0\apksigner.bat" verify --print-certs `
+# ⚠️ 本机 **没有** ANDROID_HOME / ANDROID_SDK_ROOT 环境变量（实测为空），
+#    所以不能写 "$env:ANDROID_HOME\..."（会展开成 "\build-tools\..." 而失败）。
+#    SDK 位置取自 local.properties 的 sdk.dir：
+$SDK = "C:\Users\hxzha\AppData\Local\Android\Sdk"
+& "$SDK\build-tools\34.0.0\apksigner.bat" verify --print-certs `
   "$env:USERPROFILE\Downloads\NASMusicTV-release-v2-38-3.apk"
 ```
+
+⚠️ `build-tools\34.0.0` 在本机确实存在（同级还有 35/36/36.1/37），版本号不用改。
 
 两边 SHA-256 必须完全一致（= 验收项 V2）。
 
@@ -790,10 +828,15 @@ G4 `ReleaseSigningGateTest`（§7.4）是这层的护栏：它把「`push`/`tag`
 
 | Android 版本 | 本地音乐开关弹的权限 | 图库开关弹的权限 | 系统对话框形态 | 一个全新用户最多被问几次 |
 |---|---|---|---|---|
-| **API 22–28**（5.0–9） | `READ_EXTERNAL_STORAGE` | `READ_EXTERNAL_STORAGE`（同一权限，只问一次） | 两选一 | **1 次** |
+| **API 22**（5.1） | **不弹窗** —— 无运行时权限机制，安装即授予 | **不弹窗**（同一权限） | — | **0 次** |
+| **API 23–28**（6–9） | `READ_EXTERNAL_STORAGE` | `READ_EXTERNAL_STORAGE`（同一权限，只问一次） | 两选一 | **1 次** |
 | **API 29–32**（10–12L） | `READ_EXTERNAL_STORAGE` | `READ_EXTERNAL_STORAGE` | 两选一 | **1 次** |
 | **API 33**（13） | `READ_MEDIA_AUDIO` | `READ_MEDIA_IMAGES` | 各两选一 | **2 次** |
 | **API 34+**（14+） | `READ_MEDIA_AUDIO` | `READ_MEDIA_IMAGES` + `READ_MEDIA_VISUAL_USER_SELECTED` | 图库为**三选一**（全部 / 仅选择照片 / 不允许），本地音乐为两选一 | **2 次** |
+
+⚠️ **API 22 与 23–28 必须分开看**（原稿合并成「22–28」是错的）：API 22 是 `minSdk`，
+但它**没有运行时权限**，`READ_EXTERNAL_STORAGE` 在安装时即授予、开关切换时**不弹任何窗**；
+「被问 1 次」只适用于 API 23–28。表头的 Android 版本也应写 **5.1–9**（5.0 = API 21，低于本项目 minSdk）。
 
 ⚠️ 待实测（**不要**当成既定事实写进发版说明）：Android 13 的**权限迁移**机制可能把升级前已授予的
 `READ_EXTERNAL_STORAGE` 自动转成 `READ_MEDIA_*`，导致部分老用户**一个弹窗都看不到**。
@@ -808,7 +851,7 @@ G4 `ReleaseSigningGateTest`（§7.4）是这层的护栏：它把「`push`/`tag`
 |---|---|---|---|---|
 | 1 | 导出备份到外接设备 / U 盘 | SAF `ACTION_OPEN_DOCUMENT_TREE` + `takePersistableUriPermission` | 用户点「导出」 | 下次导出需重选目录 |
 | 2 | 照片墙「外接存储」来源 | 同上（独立的一棵树） | 用户打开该来源开关 | 照片墙少一个来源；⚠️ 该实现只 `takePersistableUriPermission(FLAG_GRANT_READ_URI_PERMISSION)`（`VisualizerViewModel.kt:586-613`），**不主动释放**，属既有设计 |
-| 3 | 备份文件写到公共 `Downloads/NASMusic/` | API 29+ 走 `MediaStore.Downloads`（免权限）；API ≤28 的公共目录副本因无 `WRITE_EXTERNAL_STORAGE` **会静默失败** | 用户点「导出备份」 | 主机侧看不到副本，**主备份与应用内「恢复」不受影响** |
+| 3 | 备份文件写到公共 `Downloads/NASMusic/` | API 29+ 走 `MediaStore.Downloads`（免权限）；API 23–28 的公共目录副本**今天就已经静默失败**（`WRITE_EXTERNAL_STORAGE` 声明了却从未在运行时申请，写入被拒后由 `BackupFileUtils.kt:92-94` 吞掉）；API 22 删除声明后同样失败 | 用户点「导出备份」 | 主机侧看不到副本，**主备份与应用内「恢复」不受影响**，全程无崩溃 |
 | 4 | 应用专属目录（下载的歌曲、模型、歌词缓存、转存） | `context.getExternalFilesDir(...)`，**任何版本都免权限** | 自动 | 卸载即清空（既有行为） |
 | 5 | 电池优化白名单 | **C1 路线下本方案完全不做** ⇒ 由用户自行去系统设置 | — | 后台播放可能被系统限制（Android 官方行为，非本方案引入） |
 
