@@ -1,7 +1,7 @@
 package com.nasmusic.tv.data.prefs
 
 import com.nasmusic.tv.data.model.PlayMode
-import com.nasmusic.tv.data.prefs.AppPreferences.SeparationMode
+import com.nasmusic.tv.player.SeparationMode
 import kotlinx.coroutines.flow.Flow
 
 /**

@@ -145,7 +145,7 @@ internal fun NowPlayingBranch(
                             onResetPitch = { viewModel.vocalVM.resetPitch() },
                             onResetSpeed = { viewModel.vocalVM.resetSpeed() },
                             // === 分离模式（快速/高质量） ===
-                            isHighQualityMode = separationMode == com.nasmusic.tv.data.prefs.AppPreferences.SeparationMode.HIGH_QUALITY,
+                            isHighQualityMode = separationMode == com.nasmusic.tv.player.SeparationMode.HIGH_QUALITY,
                             isSeparating = separating,
                             separationProgress = separationProgress,
                             hqError = hqError,

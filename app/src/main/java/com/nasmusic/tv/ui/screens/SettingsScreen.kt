@@ -179,8 +179,8 @@ fun SettingsScreen(
     language: String = "system",
     onChangeLanguage: ((String) -> Unit)? = null,
     // 分离模式设置
-    separationMode: com.nasmusic.tv.data.prefs.AppPreferences.SeparationMode = com.nasmusic.tv.data.prefs.AppPreferences.SeparationMode.FAST,
-    onChangeSeparationMode: ((com.nasmusic.tv.data.prefs.AppPreferences.SeparationMode) -> Unit)? = null,
+    separationMode: com.nasmusic.tv.player.SeparationMode = com.nasmusic.tv.player.SeparationMode.FAST,
+    onChangeSeparationMode: ((com.nasmusic.tv.player.SeparationMode) -> Unit)? = null,
     // 歌曲离线下载设置
     downloadEnabled: Boolean = true,
     autoDownloadOnPlay: Boolean = false,

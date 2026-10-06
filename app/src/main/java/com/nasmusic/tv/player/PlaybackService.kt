@@ -962,6 +962,11 @@ class PlaybackService : MediaLibraryService() {
         }
     }
 
+    // ⛔ 豁免依据（方案 §9.6，v2.38.3 权限瘦身后显式声明）：Android 13+ 的
+    // POST_NOTIFICATIONS 运行时权限对「媒体会话通知」豁免（MediaStyle + setMediaSession
+    // 模板，见 buildNotification 内注释）——本通知属豁免范畴，无需声明/申请权限。
+    // lint 的 NotificationPermission 检查器不实现该豁免（已知限制），故方法级压制。
+    @android.annotation.SuppressLint("NotificationPermission")
     private fun updateNotification() {
         val session = mediaLibrarySession ?: return
         val player = session.player

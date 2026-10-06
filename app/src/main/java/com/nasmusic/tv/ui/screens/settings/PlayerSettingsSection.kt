@@ -27,6 +27,7 @@ import com.nasmusic.tv.data.model.PlayMode
 import com.nasmusic.tv.data.model.VisualizerTheme
 import com.nasmusic.tv.data.model.VisualQuality
 import com.nasmusic.tv.data.prefs.AppPreferences
+import com.nasmusic.tv.player.SeparationMode
 import com.nasmusic.tv.ui.theme.FontSize
 import com.nasmusic.tv.ui.theme.NasMusicColors
 import kotlin.math.roundToInt
@@ -35,7 +36,7 @@ import kotlin.math.roundToInt
 data class PlayerSettingsState(
     val settings: AppSettings,
     val visualizerTheme: VisualizerTheme,
-    val separationMode: AppPreferences.SeparationMode,
+    val separationMode: SeparationMode,
     val modelDownloaded: Boolean,
     val modelDownloading: Boolean,
     val modelDownloadProgress: Float,
@@ -64,7 +65,7 @@ data class PlayerSettingsActions(
     val onChangeVisualizerTheme: (VisualizerTheme) -> Unit,
     val onChangePlayMode: (PlayMode) -> Unit,
     val onOpenEqualizer: (() -> Unit)?,
-    val onChangeSeparationMode: ((AppPreferences.SeparationMode) -> Unit)?,
+    val onChangeSeparationMode: ((SeparationMode) -> Unit)?,
     val onDownloadModel: (() -> Unit)?,
     val onDeleteModel: (() -> Unit)?,
     val onScanTransferModel: (() -> Unit)?,
@@ -258,7 +259,7 @@ internal fun PlayerSettingsSection(
         Spacer(modifier = Modifier.height(24.dp))
         SubSectionTitle(stringResource(R.string.settings_separation_mode_title))
         run {
-            val isHq = state.separationMode == AppPreferences.SeparationMode.HIGH_QUALITY
+            val isHq = state.separationMode == SeparationMode.HIGH_QUALITY
             val hqLabel = if (state.modelDownloaded) stringResource(R.string.settings_hq_mode_downloaded) else stringResource(R.string.settings_hq_mode_not_downloaded)
             val hqDesc = when {
                 !state.modelDownloaded -> stringResource(R.string.settings_download_model_hint)
@@ -270,7 +271,7 @@ internal fun PlayerSettingsSection(
                 description = hqDesc,
                 checked = isHq,
                 enabled = state.modelDownloaded,
-                onClick = { actions.onChangeSeparationMode?.invoke(if (isHq) AppPreferences.SeparationMode.FAST else AppPreferences.SeparationMode.HIGH_QUALITY) }
+                onClick = { actions.onChangeSeparationMode?.invoke(if (isHq) SeparationMode.FAST else SeparationMode.HIGH_QUALITY) }
             )
         }
         // 模型下载区

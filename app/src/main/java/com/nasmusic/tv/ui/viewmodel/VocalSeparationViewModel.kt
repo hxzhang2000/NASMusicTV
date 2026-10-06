@@ -7,6 +7,7 @@ import com.nasmusic.tv.NasMusicApp
 import com.nasmusic.tv.backend.network.mv.MvSearchManager
 import com.nasmusic.tv.data.prefs.AppPreferences
 import com.nasmusic.tv.player.PlayerManager
+import com.nasmusic.tv.player.SeparationMode
 import com.nasmusic.tv.util.AppLog
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -90,10 +91,10 @@ class VocalSeparationViewModel(
 
     // --- 分离模式（快速/高质量）---
     /** 当前分离模式（同步 prefs → PlayerManager） */
-    val separationMode: StateFlow<AppPreferences.SeparationMode> = prefs.player.separationMode.stateIn(
+    val separationMode: StateFlow<SeparationMode> = prefs.player.separationMode.stateIn(
         scope = viewModelScope,
         started = SharingStarted.Eagerly,
-        initialValue = AppPreferences.SeparationMode.FAST
+        initialValue = SeparationMode.FAST
     ).also { flow ->
         // 启动时将持久化的模式同步到 PlayerManager
         viewModelScope.launch {
@@ -122,32 +123,32 @@ class VocalSeparationViewModel(
     }
 
     /** 设置分离模式（从设置页调用） */
-    fun setSeparationMode(mode: AppPreferences.SeparationMode) {
+    fun setSeparationMode(mode: SeparationMode) {
         applySeparationMode(mode)
     }
 
     /** 切换分离模式（快速↔高质量），持久化到 AppPreferences */
     fun toggleSeparationMode() {
         val currentMode = separationMode.value
-        val newMode = if (currentMode == AppPreferences.SeparationMode.FAST) {
-            AppPreferences.SeparationMode.HIGH_QUALITY
+        val newMode = if (currentMode == SeparationMode.FAST) {
+            SeparationMode.HIGH_QUALITY
         } else {
-            AppPreferences.SeparationMode.FAST
+            SeparationMode.FAST
         }
         applySeparationMode(newMode)
     }
 
     /** 删除模型后回退快速模式（由 DownloadViewModel 回调） */
     fun onModelDeleted() {
-        if (separationMode.value == AppPreferences.SeparationMode.HIGH_QUALITY) {
-            applySeparationMode(AppPreferences.SeparationMode.FAST)
+        if (separationMode.value == SeparationMode.HIGH_QUALITY) {
+            applySeparationMode(SeparationMode.FAST)
         }
     }
 
     /** 统一分离模式切换逻辑 */
-    private fun applySeparationMode(newMode: AppPreferences.SeparationMode) {
+    private fun applySeparationMode(newMode: SeparationMode) {
         // 切换到高质量模式前检查模型是否已下载
-        if (newMode == AppPreferences.SeparationMode.HIGH_QUALITY && !modelDownloaded.value) {
+        if (newMode == SeparationMode.HIGH_QUALITY && !modelDownloaded.value) {
             AppLog.w("VocalSeparationViewModel", "applySeparationMode: model not downloaded, blocked")
             return
         }
@@ -157,7 +158,7 @@ class VocalSeparationViewModel(
 
         if (_vocalRemovalEnabled.value) {
             // K歌模式正在伴唱，切换模式时保持伴唱状态
-            if (newMode == AppPreferences.SeparationMode.HIGH_QUALITY) {
+            if (newMode == SeparationMode.HIGH_QUALITY) {
                 // 快速→高质量：关闭 DSP，切换到伴奏文件
                 playerManager.setVocalRemovalEnabled(false)
                 playerManager.enableHighQualityRemoval()
@@ -168,7 +169,7 @@ class VocalSeparationViewModel(
             }
         } else {
             // 非K歌/原唱模式，只切换模式标记
-            if (newMode == AppPreferences.SeparationMode.HIGH_QUALITY) {
+            if (newMode == SeparationMode.HIGH_QUALITY) {
                 // 不主动触发分离，等用户进入K歌时再分离
             } else {
                 playerManager.disableHighQualityRemoval()

@@ -17,6 +17,7 @@ import com.nasmusic.tv.backend.network.MetingApiService
 import com.nasmusic.tv.backend.network.mv.BilibiliMvService
 import com.nasmusic.tv.backend.photo.PhotoScaleMode
 import com.nasmusic.tv.backend.playlist.PlaylistParsers
+import com.nasmusic.tv.player.SeparationMode
 import com.nasmusic.tv.data.model.AppSettings
 import com.nasmusic.tv.data.model.BaiduTokens
 import com.nasmusic.tv.data.model.CloudDriveConfig
@@ -453,11 +454,9 @@ class AppPreferences internal constructor(private val context: Context) {
     // --- 伴奏分离模式（快速/高质量）---
     private val keySeparationMode = stringPreferencesKey("k_separation_mode")
 
-    /**
-     * 分离模式枚举（R-5：已上提为 player 层顶层 [com.nasmusic.tv.player.SeparationMode]，
-     * 此处 typealias 保持既有引用兼容；新代码请直接用 player 层类型）
-     */
-    typealias SeparationMode = com.nasmusic.tv.player.SeparationMode
+    // 分离模式枚举在 player 层顶层（R-5 上提）。2026-10-06 删除此处兼容 typealias：
+    // lint 的 K2 分析器在 CI 上对 member typealias 稳定崩溃（Inconsistency in the cache），
+    // 消费方已全部直连 com.nasmusic.tv.player.SeparationMode。
 
     val separationMode: Flow<SeparationMode> = dataStore.data.map { prefs ->
         val value = prefs[keySeparationMode] ?: SeparationMode.FAST.value

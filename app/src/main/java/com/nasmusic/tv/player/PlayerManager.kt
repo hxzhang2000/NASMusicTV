@@ -269,7 +269,7 @@ class PlayerManager(private val applicationContext: Context) {
     }
 
     /** 切换分离模式（快速/高质量） */
-    fun setSeparationMode(mode: AppPreferences.SeparationMode) {
+    fun setSeparationMode(mode: SeparationMode) {
         hqOrchestrator.setSeparationMode(mode)
     }
 
