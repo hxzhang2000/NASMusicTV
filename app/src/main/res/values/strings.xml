@@ -381,6 +381,16 @@
     <string name="photo_wall_notice_dir_empty">未选择目录</string>
     <string name="photo_wall_notice_dir_unavailable">当前设备没有可用的文件选择器</string>
 
+    <!-- 本地音乐分区（§五，权限瘦身方案）：总开关 = 音乐权限的唯一申请触发点 -->
+    <string name="settings_local_music">本地音乐</string>
+    <string name="settings_local_music_source">本地音乐源</string>
+    <string name="settings_local_music_source_desc">扫描本机与 U 盘上的音乐；打开后才会申请音乐权限</string>
+    <string name="settings_local_music_rescan">重新扫描</string>
+    <string name="settings_local_music_rescan_desc">全量重扫本机与 U 盘上的音乐文件</string>
+    <string name="settings_local_music_count">已入库 %d 首</string>
+    <string name="local_music_denied">未授予音乐权限，本地音乐源已关闭</string>
+    <string name="local_music_revoked">音乐权限已被撤销，本地音乐源已关闭</string>
+
     <string name="settings_download">下载</string>
     <string name="settings_download_basic">下载设置</string>
     <string name="settings_download_stats">下载统计</string>

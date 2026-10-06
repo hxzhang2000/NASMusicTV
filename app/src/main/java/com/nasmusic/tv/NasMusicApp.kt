@@ -497,7 +497,9 @@ autoDownloadController = com.nasmusic.tv.backend.download.AutoDownloadController
             baiduService = baiduNetdiskService,
             jamendoService = jamendoService,
             localMusicRepository = localMusicRepository,
-            isTVDevice = isTVDevice
+            isTVDevice = isTVDevice,
+            // M7（§5.2）：suspend provider，与同文件 appSettings.first() 既有写法一致
+            localMusicEnabled = { appPreferences.appSettings.first().localMusicEnabled }
         )
 
         // 启动时清理超过 30 天的搜索历史

@@ -3,11 +3,14 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
-    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"
-        android:maxSdkVersion="28" />
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
         android:maxSdkVersion="32" />
-    <!-- Android 13+ 分区存储：只读音频文件 -->
+    <!--
+      Android 13+ 分区存储：只读音频文件。
+      ⛔ 由设置 → 本地音乐的总开关按需申请（MainActivity 的 localMusicPermissionLauncher），
+      不在启动时申请（Google 官方要求 "Request these permissions when the app needs
+      storage access, instead of at startup."）。
+    -->
     <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
     <!--
       照片墙「图库」来源（仅手机，§9.3）：Android 13+ 只读图片。
@@ -23,8 +26,16 @@
     <uses-permission android:name="android.permission.READ_MEDIA_VISUAL_USER_SELECTED" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
-    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+    <!--
+      运行时通知权限已删除（2026-10-06 权限瘦身）：
+      全仓唯一的通知是媒体通知（PlaybackService 的 MediaStyle 模板），平台对
+      MediaSession 通知强制豁免该权限（AOSP NotificationManagerService 按
+      isMediaNotification() 放行）⇒ 声明与开机申请均无价值。
+      ⚠️ 豁免绑定在「MediaStyle + setMediaSession」模板上 —— 改通知构造会连带
+      失去豁免（PlaybackService 通知构造处有注释）。
+      电池优化白名单权限已删除（C1 裁决）：不再主动把用户弹到系统电池优化
+      设置页；加白名单由用户自行去系统设置。
+    -->
 
     <!-- Device features: both TV and phone supported -->
     <uses-feature

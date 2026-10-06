@@ -1040,6 +1040,12 @@ class PlaybackService : MediaLibraryService() {
         // F2-2：下一首 subText（队尾/无队列不显示）
         val nextUpText = nextSongTitle()
 
+        // ⛔ 运行时通知权限豁免的**唯一依据**（2026-10-06 权限瘦身，方案 §2.3）：
+        //    本 App 未声明通知权限，全仓唯一的通知就是这条媒体通知 —— 平台对
+        //    「MediaStyle + setMediaSession」的 MediaSession 通知强制豁免
+        //    （AOSP NotificationManagerService 按 isMediaNotification() 放行）。
+        //    ⚠️ 改这里的通知构造（去掉 setStyle MediaStyle / setMediaSession，
+        //    或新增任何**非媒体**通知）会连带失去豁免 ⇒ 通知在 Android 13+ 上静默不显示。
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle(title ?: "NAS Music TV")
             .setContentText(artist)

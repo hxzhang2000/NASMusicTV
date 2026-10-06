@@ -86,6 +86,8 @@ internal fun SettingsBranch(
                     // 歌单导入：最近导入记录 + 导入结果消息
                     val playlistImportHistory by viewModel.playlistImportVM.importHistory.collectAsState(initial = emptyList())
                     val playlistImportMessage by viewModel.playlistImportVM.importMessage.collectAsState(initial = null)
+                    // 本地音乐（§5.6）：Room 已入库曲目数 —— 含已下载曲，不受总开关影响（D2）
+                    val localMusicSongs by viewModel.localSongs.collectAsState(initial = emptyList())
                     // v2.36.0 竖屏设置两级页：当前进入的分区（null = 一级列表）。
                     // 状态归 NavigationViewModel —— AppRoot 的 BACK handler 需要读它（方案 §6.2 / K2）
                     val settingsSection by viewModel.navVM.settingsSection.collectAsState(initial = null)
@@ -346,7 +348,17 @@ internal fun SettingsBranch(
                         onToggleBreathe = { v ->
                             coroutineScope.launch { viewModel.prefs.photoWall.setBreathe(v) }
                         }
-                    )
+                    ),
+                    // 本地音乐（§5.6）：开关是音乐权限的**唯一触发点**（§5.5）——
+                    // 「已授权直接开 / 未授权先申请、被拒回弹」全在 MainViewModel 里判。
+                    localMusicState = LocalMusicSettingsState(
+                        settings = settings,
+                        libraryCount = localMusicSongs.size,
+                    ),
+                    localMusicActions = LocalMusicSettingsActions(
+                        onSetEnabled = { v -> viewModel.setLocalMusicEnabled(v) },
+                        onRescan = { viewModel.refreshLocalMusic() },
+                    ),
                     )
                     // 扫码传输备份弹窗
                     if (showBackupTransferDialog) {

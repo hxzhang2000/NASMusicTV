@@ -46,7 +46,8 @@ internal fun LibraryBranch(
                     val mergedArtistsList by viewModel.mergedArtists.collectAsState(initial = emptyList())
                     val yearsState by viewModel.years.collectAsState(initial = UiState.Success(emptyList()))
                     val songsPaging by viewModel.songsPaging.collectAsState(initial = com.nasmusic.tv.data.model.SongsPagingState())
-                    val localSongsList by viewModel.localSongs.collectAsState(initial = emptyList())
+                    // 本地音乐总开关（§5.4）：visibleLocalSongs 在开关关闭时仅含已下载曲目
+                    val localSongsList by viewModel.visibleLocalSongs.collectAsState(initial = emptyList())
                     val searchResultsState by viewModel.searchVM.searchResults.collectAsState(initial = UiState.Success(emptyList()))
                     val albumList = albums.dataOrNull() ?: emptyList()
                     val songList = songsState.dataOrNull() ?: emptyList()

@@ -5,6 +5,7 @@ import androidx.compose.material.icons.filled.Audiotrack
 import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.LibraryMusic
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.Settings
@@ -41,6 +42,13 @@ enum class SettingsSection(val titleRes: Int, val icon: ImageVector) {
      * 也没有任何测试断言 `entries` 的顺序 ⇒ 插入是安全的。
      */
     PHOTO_WALL(R.string.settings_photo_wall, Icons.Default.PhotoLibrary),
+    /**
+     * 本地音乐（§5.6 权限瘦身）：总开关（唯一触发音乐权限申请的入口）+ 重扫。
+     * ⚠️ 插在 PHOTO_WALL 与 DOWNLOAD 之间：与照片墙同为「本机媒体」域，且
+     * 「已下载」是它开关关闭时唯一保留的本地内容（D3），相邻符合语义。
+     * 同上：无持久化分区顺序、无 entries 顺序断言 ⇒ 插入安全。
+     */
+    LOCAL_MUSIC(R.string.settings_local_music, Icons.Default.LibraryMusic),
     DOWNLOAD(R.string.settings_download, Icons.Default.Download),
     SERVER(R.string.nav_server, Icons.Default.Storage),
     CACHE(R.string.settings_cache, Icons.Default.Tune),

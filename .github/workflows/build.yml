@@ -34,15 +34,16 @@ jobs:
           yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses 2>&1 || true
           $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --install "platforms;android-34" "build-tools;34.0.0" 2>&1 || true
 
-      # 签名密钥（v2.36.0 起双模式）：
-      #   - 模式 A（正式签名）：仓库 Secrets 配置了 SIGNING_KEYSTORE_BASE64 等四个值时，
+      # 签名密钥（v2.36.0 起双模式；v2.38.3 起 push/tag 走 fail-fast，权限与签名统一方案 D5）：
+      #   - 模式 A（正式签名）：仓库 Secrets 配置了 SIGNING_KEYSTORE_BASE64 等五个值时，
       #     base64 解码出 release-key.jks，配合 SIGNING_STORE_PASSWORD / SIGNING_KEY_ALIAS /
       #     SIGNING_KEY_PASSWORD 签名——产出与本地一致的正式发布 APK。
-      #   - 模式 B（fallback）：未配置 secrets 时，临时生成 throwaway ci-keystore.jks，
-      #     只用于 CI 验证「能编译 + 签名通过」，APK 不可覆盖安装到已有数据的设备。
-      # S1 阶段 A+：release 打包 guard 要求 cryptoPassphrase 非空。
-      # 优先取仓库 secret（与正式发布一致）；未配置时回退占位值，保证 CI 仍可构建。
-      # 注：用占位值时产出的 APK 加密密钥与正式包不同，仅供 CI 验证，不可覆盖安装到已有数据的设备。
+      #   - 模式 B（fallback，仅 pull_request）：未配置 secrets 时，临时生成 throwaway
+      #     ci-keystore.jks，只用于 CI 验证「能编译 + 签名通过」，APK 不可覆盖安装到已有
+      #     数据的设备。fork PR 本来就拿不到 secrets，这是模式 B 存在的唯一场景。
+      #   - push（main/develop）/ tag（v*）是正式发版路径：secrets 缺失立即失败（exit 1），
+      #     不再允许静默回退——静默回退会产出「签名随机、装不上」或「签名对但解不开
+      #     已存凭据」的包（方案 §14.2/§14.4）。正式发版路径已禁止占位 passphrase。
       - name: Set up signing keystore
         env:
           SIGNING_KEYSTORE_BASE64: ${{ secrets.SIGNING_KEYSTORE_BASE64 }}
@@ -51,6 +52,17 @@ jobs:
           SIGNING_KEY_PASSWORD: ${{ secrets.SIGNING_KEY_PASSWORD }}
           CRYPTO_PASSPHRASE: ${{ secrets.CRYPTO_PASSPHRASE }}
         run: |
+          # D5 fail-fast：push / tag（正式发版路径）不允许模式 B（方案 §14.4）
+          if [ "$GITHUB_EVENT_NAME" != "pull_request" ]; then
+            if [ -z "$SIGNING_KEYSTORE_BASE64" ]; then
+              echo "::error::D5 fail-fast: SIGNING_KEYSTORE_BASE64 is empty on $GITHUB_EVENT_NAME ($GITHUB_REF_NAME) — configure the 5 repo signing secrets before release."
+              exit 1
+            fi
+            if [ -z "$CRYPTO_PASSPHRASE" ]; then
+              echo "::error::D5 fail-fast: CRYPTO_PASSPHRASE is empty on $GITHUB_EVENT_NAME ($GITHUB_REF_NAME) — APK would fail to decrypt stored credentials (plan §14.2)."
+              exit 1
+            fi
+          fi
           if [ -n "$SIGNING_KEYSTORE_BASE64" ]; then
             echo "Using release keystore from GitHub Secrets"
             echo "$SIGNING_KEYSTORE_BASE64" | base64 -d > release-key.jks
@@ -59,16 +71,21 @@ jobs:
               echo "storePassword=$SIGNING_STORE_PASSWORD"
               echo "keyAlias=$SIGNING_KEY_ALIAS"
               echo "keyPassword=$SIGNING_KEY_PASSWORD"
-              echo "cryptoPassphrase=${CRYPTO_PASSPHRASE:-ci-build-only-placeholder}"
+              # 正式路径：passphrase 非空已由上方 D5 fail-fast 保证（同仓库 PR 场景五个
+              # secrets 同批配置）；这里不写占位 fallback，漏配让它响亮失败。
+              echo "cryptoPassphrase=$CRYPTO_PASSPHRASE"
             } > keystore.properties
           else
-            echo "No signing secrets found, falling back to throwaway CI keystore"
+            echo "No signing secrets found (pull_request only), falling back to throwaway CI keystore"
+            echo "⚠️ Mode B: throwaway 产物不可覆盖安装到正式签名的设备"
             keytool -genkey -v -keystore ci-keystore.jks -alias ci -keyalg RSA -keysize 2048 -validity 3650 -storepass ci-pass -keypass ci-pass -dname "CN=CI,OU=CI,O=CI,L=CI,S=CI,C=CI"
             {
               echo "storeFile=ci-keystore.jks"
               echo "storePassword=ci-pass"
               echo "keyAlias=ci"
               echo "keyPassword=ci-pass"
+              # 模式 B（仅 PR）：占位 passphrase 只影响 throwaway 产物的加密密钥，
+              # 该产物不可覆盖安装，无一致性要求。
               echo "cryptoPassphrase=${CRYPTO_PASSPHRASE:-ci-build-only-placeholder}"
             } > keystore.properties
           fi

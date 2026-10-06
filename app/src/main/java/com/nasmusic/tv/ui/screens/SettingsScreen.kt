@@ -75,6 +75,9 @@ import com.nasmusic.tv.ui.screens.settings.DownloadSettingsState
 import com.nasmusic.tv.ui.screens.settings.GeneralSettingsActions
 import com.nasmusic.tv.ui.screens.settings.GeneralSettingsSection
 import com.nasmusic.tv.ui.screens.settings.GeneralSettingsState
+import com.nasmusic.tv.ui.screens.settings.LocalMusicSettingsActions
+import com.nasmusic.tv.ui.screens.settings.LocalMusicSettingsSection
+import com.nasmusic.tv.ui.screens.settings.LocalMusicSettingsState
 import com.nasmusic.tv.ui.screens.settings.NetworkMusicDialogActions
 import com.nasmusic.tv.ui.screens.settings.NetworkMusicSection
 import com.nasmusic.tv.ui.screens.settings.NetworkMusicSettingsActions
@@ -284,6 +287,12 @@ fun SettingsScreen(
      * 阶段 10/11 只需往 [PhotoWallRuntimeState] 里加字段，**不再动本签名**。
      */
     photoWallRuntime: PhotoWallRuntimeState = PhotoWallRuntimeState(),
+    /**
+     * 本地音乐分区（§5.6 权限瘦身）：开关值在 [settings]（localMusicEnabled）里，
+     * 这里传运行时计数（Room 已入库数，不落盘）。
+     */
+    localMusicState: LocalMusicSettingsState = LocalMusicSettingsState(),
+    localMusicActions: LocalMusicSettingsActions = LocalMusicSettingsActions(),
     modifier: Modifier = Modifier
 ) {
 var activeSection by remember { mutableStateOf(SettingsSection.GENERAL) }
@@ -586,6 +595,12 @@ var activeSection by remember { mutableStateOf(SettingsSection.GENERAL) }
                             runtime = photoWallRuntime,
                         ),
                         actions = photoWallActions,
+                    )
+                }
+                SettingsSection.LOCAL_MUSIC -> item {
+                    LocalMusicSettingsSection(
+                        state = localMusicState,
+                        actions = localMusicActions,
                     )
                 }
                 SettingsSection.DOWNLOAD -> item {

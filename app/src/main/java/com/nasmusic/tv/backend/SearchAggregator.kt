@@ -61,7 +61,13 @@ enum class SearchType {
         private val baiduService: BaiduNetdiskService?,
         private val jamendoService: JamendoService?,
         private val localMusicRepository: LocalMusicRepository? = null,
-        private val isTVDevice: Boolean = false
+        private val isTVDevice: Boolean = false,
+        /**
+         * M7（§5.2）：本地音乐总开关。**suspend provider** 形态（D4：不能传构造时
+         * 快照，开关翻转后下一次搜索立即生效）；每次搜索实时读 DataStore
+         * （有内存缓存，开销可忽略）。
+         */
+        private val localMusicEnabled: suspend () -> Boolean = { true }
     ) {
         companion object {
             private const val TAG = "SearchAggregator"
@@ -253,7 +259,7 @@ enum class SearchType {
 
         // 本地音乐搜索
         val localDeferred = async {
-            if (MusicSourceType.LOCAL in sources && localMusicRepository != null) {
+            if (MusicSourceType.LOCAL in sources && localMusicRepository != null && localMusicEnabled()) {
                 try {
                     if (isPinyinQuery && localDeviceSongs.isNotEmpty() && isTVDevice) {
                         // 拼音搜索：本地源 Room LIKE 查询不认拼音，改用客户端过滤

@@ -2,6 +2,7 @@ package com.nasmusic.tv.ui.viewmodel
 
 import android.app.Application
 import android.net.Uri
+import androidx.annotation.StringRes
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import coil.Coil
@@ -84,6 +85,7 @@ import com.nasmusic.tv.lyrics.LrcParser
 import com.nasmusic.tv.player.PlayerManager
 import com.nasmusic.tv.player.ModelDownloadManager
 import com.nasmusic.tv.util.AppLog
+import com.nasmusic.tv.util.PermissionHelper
 import com.nasmusic.tv.net.RemoteCallbacks
 import com.nasmusic.tv.net.RemoteControlServer
 import com.nasmusic.tv.net.RemoteSearchResult
@@ -99,9 +101,12 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -122,6 +127,18 @@ sealed interface MvAvailability {
     object Searching : MvAvailability
     data class Ready(val mv: MvInfo, val alternatives: List<MvCandidate> = emptyList()) : MvAvailability
     object NotFound : MvAvailability
+}
+
+/**
+ * 本地音乐授权提示（§5.5，形状照抄 `VisualizerViewModel.PhotoAccessNotice`）。
+ * 数据层不产出面向用户的文案 —— [MainViewModel] collect 后才 `getString(messageRes)`。
+ */
+enum class LocalMusicNotice(@StringRes val messageRes: Int) {
+    /** 用户在系统权限对话框里点了「不允许」⇒ 开关回弹为关 */
+    DENIED(R.string.local_music_denied),
+
+    /** 授权在系统设置里被撤销，回到应用后开关被回弹（§5.5 回弹判据） */
+    REVOKED(R.string.local_music_revoked),
 }
 
 /**
@@ -299,6 +316,61 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
     // --- 本地音乐（USB / 设备存储，独立数据源）---
     private val _localSongs = MutableStateFlow<List<Song>>(emptyList())
     val localSongs: StateFlow<List<Song>> = _localSongs.asStateFlow()
+
+    /**
+     * 本地音乐总开关（settings.localMusicEnabled）的运行期镜像（§5.2）。
+     *
+     * 由启动块的开关观察者协程在 collect 回调里同步写入（MutableStateFlow.value
+     * 即写即读、跨线程可见），供 [visibleLocalSongsNow] 的**同步**读取路径使用——
+     * 读 settings flow（stateIn 调度传播）保证不了与观察者写入的 happens-before。
+     */
+    private val _localMusicEnabled = MutableStateFlow(true)
+
+    /**
+     * UI 可见的本地歌曲（§5.4「UI 展示」维度，U8）：
+     * 开 → Room 全表；关 → 仅已下载曲目（storageType == "DOWNLOAD"，走应用专属
+     * 目录，与 READ_MEDIA_AUDIO 无关——D3：勿波及下载）。
+     * ⛔ [_localSongs]（Room 全表）本身永不过滤、永不清空（D2）。
+     */
+    val visibleLocalSongs: StateFlow<List<Song>> =
+        combine(_localSongs, _localMusicEnabled) { songs, enabled ->
+            if (enabled) songs else songs.filter { it.storageType == "DOWNLOAD" }
+        }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
+    // --- 本地音乐权限接线（§5.5，照抄照片墙模板）---
+
+    /** 当前本地音乐权限态（Boolean 二态：READ_MEDIA_AUDIO 无「部分授权」概念）；初值现查，不读缓存 */
+    private val _localMusicPermissionState =
+        MutableStateFlow(PermissionHelper.hasLocalMusicPermission(nasMusicApp))
+    val localMusicPermissionState: StateFlow<Boolean> = _localMusicPermissionState.asStateFlow()
+
+    /**
+     * 授权相关提示（单向事件流）。`replay = 0`：提示是事件不是状态；
+     * `extraBufferCapacity` 是 tryEmit 能成功的前提（0 缓冲时无订阅者必失败）。
+     */
+    private val _localMusicNotice = MutableSharedFlow<LocalMusicNotice>(
+        replay = 0,
+        extraBufferCapacity = 4,
+    )
+    val localMusicNotice: SharedFlow<LocalMusicNotice> = _localMusicNotice.asSharedFlow()
+
+    /**
+     * 系统权限对话框启动器（由 `MainActivity` 注入）。
+     * ViewModel 无法自己 registerForActivityResult；未注入（测试环境）⇒
+     * 视为拿不到授权，不静默把开关打开。
+     */
+    var localMusicPermissionLauncher: (() -> Unit)? = null
+
+    /**
+     * 转移式回弹判据（§5.5，与照片墙的**状态式**刻意不同）：上一次权限查询是否
+     * 已授权（null = 进程内未查过）。⛔ 不能用「开关开 && 现在未授权」的状态式
+     * 判据 —— 本地音乐默认开（D1），状态式会让全新装机首启 onResume 就把开关
+     * 翻成关 + 弹提示（违反 U7 零回归）；只有「曾经授权 → 被撤销」的转移才回弹。
+     */
+    private var lastLocalMusicGranted: Boolean? = null
+
+    /** 回弹防重：回弹写是异步落盘，落盘前重复 onResume 会重复提示（照抄 galleryRollbackPending） */
+    private var localMusicRollbackPending = false
 
     /** 合并后的专辑（NAS + 本地，按 albumName 去重） */
     private val _mergedAlbums = MutableStateFlow<List<Album>>(emptyList())
@@ -871,7 +943,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
         // 加载播放记录
         playHistoryVM.loadPlayRecords()
 
-        // 本地音乐初始化：先加载缓存，再后台增量扫描，监听 USB 插拔
+        // 本地音乐初始化（§5.2 门控，M1 修正版）：缓存加载**不设开关门**——
+        // 读自家 Room 免权限，表内含已下载曲目（D3：已下载歌曲走应用专属目录，
+        // 与 READ_MEDIA_AUDIO 无关，开关关闭时仍需出现在曲库）。
+        // 增量扫描（M2）与 USB 监听（M3）受开关门控，由下方观察者按边沿 start/stop。
         viewModelScope.launch {
             try {
                 // 1. 立即从缓存加载（毫秒级）
@@ -881,36 +956,25 @@ class MainViewModel(app: Application) : AndroidViewModel(app), RemoteCallbacks {
             } catch (e: Exception) {
                 AppLog.e("MainViewModel", "load local music cache failed: ${e.message}", e)
             }
+        }
 
-            // 2. 后台增量扫描（不阻塞 UI）
-            launch(Dispatchers.IO) {
-                try {
-                    val result = nasMusicApp.localMusicRepository.incrementalScan()
-                    if (result.hasChanges()) {
-                        _localSongs.value = nasMusicApp.localMusicRepository.loadFromCache()
-                        updateMergedData()
-                        AppLog.i("MainViewModel", "local scan: +${result.newSongs.size} new, -${result.deletedPaths.size} deleted")
-                    }
-                } catch (e: Exception) {
-                    AppLog.e("MainViewModel", "local incremental scan failed: ${e.message}", e)
-                }
-            }
-
-            // 3. 监听 USB 设备插拔
-            nasMusicApp.storageMonitor.onDeviceMounted
-                .collect { device ->
-                    try {
-                        val result = nasMusicApp.localMusicRepository.scanUsbDevice(device.path)
-                        if (result.hasChanges()) {
-                            _localSongs.value = nasMusicApp.localMusicRepository.loadFromCache()
-                            updateMergedData()
-                            AppLog.i("MainViewModel", "USB mounted scan: ${result.newSongs.size} songs")
-                        }
-                    } catch (e: Exception) {
-                        AppLog.e("MainViewModel", "USB mount scan failed: ${e.message}", e)
-                    }
+        // 本地音乐总开关观察者（§5.4）：维护 _localMusicEnabled 镜像 + 按边沿驱动
+        // 运行期（M2/M3）+ 开关翻转时重算合并数据（U8：本地曲目从曲库即时消失/出现）。
+        // ⚠️ 首个值也触发 updateMergedData：冷启动时缓存加载可能先于 DataStore 首读完成，
+        // 若上次开关为关，这里负责把已进入 merged 数据的本地部分修正掉。
+        viewModelScope.launch {
+            var wasEnabled: Boolean? = null
+            prefs.appSettings
+                .map { it.localMusicEnabled }
+                .distinctUntilChanged()
+                .collect { enabled ->
+                    _localMusicEnabled.value = enabled
+                    if (enabled) startLocalMusicRuntime() else stopLocalMusicRuntime()
+                    if (wasEnabled != enabled) updateMergedData()
+                    wasEnabled = enabled
                 }
         }
+
         // 监听 NAS 专辑/艺术家加载完成，重新合并（本地+NAS 去重）
         viewModelScope.launch {
             _albums.collect {
@@ -1655,7 +1719,7 @@ showError(getApplication<Application>().getString(R.string.toggle_favorite_error
             constructorReady.await()
             val nasAlbums = _albums.value.dataOrNull() ?: emptyList()
             val nasArtists = _artists.value.dataOrNull() ?: emptyList()
-            val localSongs = _localSongs.value
+            val localSongs = visibleLocalSongsNow()
             val baiduSongs = baiduIndexCache.allSongs()  // 全量加载一次，供 buildBaiduAlbums/buildBaiduArtists 共用
 
             var mergedAlbums = MusicMerger.mergeAlbums(
@@ -1705,7 +1769,7 @@ showError(getApplication<Application>().getString(R.string.toggle_favorite_error
      * @param baiduSongs 已加载的百度歌曲列表（由 updateMergedData 传入，避免重复 allSongs()）
      */
     private fun updateArtistSongCounts(baiduSongs: List<Song> = baiduIndexCache.allSongs()) {
-        val allSongs = _songsPaging.value.songs + _localSongs.value + baiduSongs
+        val allSongs = _songsPaging.value.songs + visibleLocalSongsNow() + baiduSongs
         // 按 ArtistSplitter 拆分后的艺术家名统计歌曲数
         val artistSongCounts = mutableMapOf<String, Int>()
         for (song in allSongs) {
@@ -1797,7 +1861,7 @@ showError(getApplication<Application>().getString(R.string.toggle_favorite_error
         if (coverResolveJob?.isActive == true) return
 
         coverResolveJob = viewModelScope.launch {
-            val allSongs = _songsPaging.value.songs + _localSongs.value + (cachedBaiduSongs ?: baiduIndexCache.allSongs())
+            val allSongs = _songsPaging.value.songs + visibleLocalSongsNow() + (cachedBaiduSongs ?: baiduIndexCache.allSongs())
             for (album in pending) {
                 albumCoverAttempts[album.id] = (albumCoverAttempts[album.id] ?: 0) + 1
             }
@@ -1850,7 +1914,7 @@ showError(getApplication<Application>().getString(R.string.toggle_favorite_error
                 artistCoverAttempts[artist.id] = (artistCoverAttempts[artist.id] ?: 0) + 1
             }
             // 全量歌曲（NAS + 本地 + 百度），用于 P4 歌曲封面兜底
-            val allSongs = _songsPaging.value.songs + _localSongs.value + (cachedBaiduSongs ?: baiduIndexCache.allSongs())
+            val allSongs = _songsPaging.value.songs + visibleLocalSongsNow() + (cachedBaiduSongs ?: baiduIndexCache.allSongs())
 
             // 1. 主解析：P1(网易云) → P2(酷狗) → P3(iTunes) → P4(歌曲封面)
             if (pending.isNotEmpty()) {
@@ -1894,6 +1958,150 @@ showError(getApplication<Application>().getString(R.string.toggle_favorite_error
                     }
                 }
             }
+        }
+    }
+
+    // --- 本地音乐门控与运行期（§5.2 M2/M3、§5.4）---
+
+    /**
+     * 同步读当前 UI 可见本地歌曲（过滤公式与 [visibleLocalSongs] 流一致）。
+     *
+     * 供 updateMergedData / 浏览路径 / M6 provider 等**同步**消费点使用：
+     * 它们在写入 _localSongs 后立即重算，等流传播（stateIn 调度）会读到旧值。
+     */
+    private fun visibleLocalSongsNow(): List<Song> {
+        val songs = _localSongs.value
+        return if (_localMusicEnabled.value) songs
+        else songs.filter { it.storageType == "DOWNLOAD" }
+    }
+
+    /** 增量扫描 + USB 监听的宿主 Job（开关观察者按边沿 start/stop） */
+    private var localMusicRuntimeJob: Job? = null
+
+    /**
+     * 启动本地音乐运行期：M2 后台增量扫描 + M3 USB 插拔监听。
+     * 防重入：已在运行直接返回——观察者只在边沿调用，但冷启动首值与用户
+     * 反复切开关时仍可能连续触发（防收集器叠加，§十一风险表）。
+     */
+    private fun startLocalMusicRuntime() {
+        if (localMusicRuntimeJob?.isActive == true) return
+        localMusicRuntimeJob = viewModelScope.launch {
+            // 后台增量扫描（不阻塞 UI）
+            launch(Dispatchers.IO) {
+                try {
+                    val result = nasMusicApp.localMusicRepository.incrementalScan()
+                    if (result.hasChanges()) {
+                        _localSongs.value = nasMusicApp.localMusicRepository.loadFromCache()
+                        updateMergedData()
+                        AppLog.i("MainViewModel", "local scan: +${result.newSongs.size} new, -${result.deletedPaths.size} deleted")
+                    }
+                } catch (e: Exception) {
+                    AppLog.e("MainViewModel", "local incremental scan failed: ${e.message}", e)
+                }
+            }
+
+            // 监听 USB 设备插拔
+            nasMusicApp.storageMonitor.onDeviceMounted
+                .collect { device ->
+                    try {
+                        val result = nasMusicApp.localMusicRepository.scanUsbDevice(device.path)
+                        if (result.hasChanges()) {
+                            _localSongs.value = nasMusicApp.localMusicRepository.loadFromCache()
+                            updateMergedData()
+                            AppLog.i("MainViewModel", "USB mounted scan: ${result.newSongs.size} songs")
+                        }
+                    } catch (e: Exception) {
+                        AppLog.e("MainViewModel", "USB mount scan failed: ${e.message}", e)
+                    }
+                }
+        }
+    }
+
+    /**
+     * 停止本地音乐运行期（开关关→USB 插拔不再触发扫描，M3 关向语义）。
+     * ⛔ 不清 _localSongs / Room（D2）：已入库曲目与已下载曲目保持原样。
+     */
+    private fun stopLocalMusicRuntime() {
+        localMusicRuntimeJob?.cancel()
+        localMusicRuntimeJob = null
+    }
+
+    // --- 本地音乐权限入口（§5.5，签名与行为照抄照片墙三件套）---
+
+    /**
+     * 设置页「本地音乐」总开关入口。
+     * - 关 → 直接落盘 false（Room/已下载曲目不受影响，D2/D3）
+     * - 开且已授权 → 直接落盘 true（观察者关→开边沿自动启动扫描，M2/M3）
+     * - 开且未授权 → 拉起系统对话框，结果由 [onLocalMusicPermissionResult] 处理
+     *
+     * ⚠️ 无论哪条路都不写任何「已授权」标志（权限态只现查，§5.5）。
+     */
+    fun setLocalMusicEnabled(enabled: Boolean) {
+        if (!enabled) {
+            viewModelScope.launch { prefs.setLocalMusicEnabled(false) }
+            return
+        }
+        val granted = PermissionHelper.hasLocalMusicPermission(nasMusicApp)
+        _localMusicPermissionState.value = granted
+        if (granted) {
+            viewModelScope.launch { prefs.setLocalMusicEnabled(true) }
+            return
+        }
+        requestLocalMusicPermission()
+    }
+
+    /** 拉起系统权限对话框；launcher 未注入（测试环境）⇒ 提示且**绝不静默把开关打开** */
+    fun requestLocalMusicPermission() {
+        val launcher = localMusicPermissionLauncher
+        if (launcher == null) {
+            _localMusicNotice.tryEmit(LocalMusicNotice.DENIED)
+            return
+        }
+        launcher.invoke()
+    }
+
+    /**
+     * 系统权限对话框返回。
+     *
+     * ⛔ **不看回调给的 `Map<String, Boolean>`，而是重新读一次权限态**
+     * （照抄照片墙：回调值可能撒谎，一律以重读为准）。
+     * 已授权 → 落盘 true（扫描由开关观察者的关→开边沿自动启动）；
+     * 拒绝 → 落盘 false（开关回弹为关）+ 提示。
+     */
+    fun onLocalMusicPermissionResult() {
+        val granted = PermissionHelper.hasLocalMusicPermission(nasMusicApp)
+        _localMusicPermissionState.value = granted
+        lastLocalMusicGranted = granted
+        if (granted) {
+            viewModelScope.launch { prefs.setLocalMusicEnabled(true) }
+        } else {
+            viewModelScope.launch { prefs.setLocalMusicEnabled(false) }
+            _localMusicNotice.tryEmit(LocalMusicNotice.DENIED)
+        }
+    }
+
+    /**
+     * 回到前台时刷新授权状态（onResume 调用，照抄 refreshPhotoAccess 的位置语义）。
+     *
+     * 回弹判据是**转移式**（[lastLocalMusicGranted] 从 true 变 false 且开关开着），
+     * 与照片墙的状态式刻意不同——理由见 [lastLocalMusicGranted] 的 KDoc。
+     * 已知取舍：撤销授权 + 进程死亡后重启不回弹（进程内无「上一次」记录），可接受
+     * —— 真正的修复发生在用户下次关→开时（系统对话框会重新弹出）。
+     */
+    fun refreshLocalMusicAccess() {
+        val granted = PermissionHelper.hasLocalMusicPermission(nasMusicApp)
+        val previouslyGranted = lastLocalMusicGranted
+        lastLocalMusicGranted = granted
+        _localMusicPermissionState.value = granted
+        if (!_localMusicEnabled.value) {
+            localMusicRollbackPending = false
+            return
+        }
+        if (previouslyGranted == true && !granted) {
+            if (localMusicRollbackPending) return
+            localMusicRollbackPending = true
+            viewModelScope.launch { prefs.setLocalMusicEnabled(false) }
+            _localMusicNotice.tryEmit(LocalMusicNotice.REVOKED)
         }
     }
 
@@ -1952,7 +2160,7 @@ showError(getApplication<Application>().getString(R.string.toggle_favorite_error
                 when {
                     src.startsWith("local_album_") -> {
                         // 本地专辑详情：同时列出本地 + 百度同名歌（保留原行为）
-                        collected += filterSongsByAlbumName(albumName, _localSongs.value)
+                        collected += filterSongsByAlbumName(albumName, visibleLocalSongsNow())
                         collected += baiduIndexCache.songsByAlbumName(albumName)
                     }
                     src.startsWith("baidu_album_") -> {
@@ -1967,7 +2175,7 @@ showError(getApplication<Application>().getString(R.string.toggle_favorite_error
                             }
                         } else {
                             // 无 NAS 连接：用已加载歌曲按名兜底（保留原无 NAS 行为）
-                            val candidates = _localSongs.value + baiduIndexCache.songsByAlbumName(albumName) + _songsPaging.value.songs
+                            val candidates = visibleLocalSongsNow() + baiduIndexCache.songsByAlbumName(albumName) + _songsPaging.value.songs
                             collected += filterSongsByAlbumName(albumName, candidates)
                         }
                     }
@@ -2007,7 +2215,7 @@ showError(getApplication<Application>().getString(R.string.toggle_favorite_error
             for (src in sources) {
                 when {
                     src.startsWith("local_album_") -> {
-                        collected += filterSongsByAlbumName(albumName, _localSongs.value)
+                        collected += filterSongsByAlbumName(albumName, visibleLocalSongsNow())
                         collected += baiduIndexCache.songsByAlbumName(albumName)
                     }
                     src.startsWith("baidu_album_") -> {
@@ -2022,7 +2230,7 @@ showError(getApplication<Application>().getString(R.string.toggle_favorite_error
                                 showError(getApplication<Application>().getString(R.string.load_album_songs_error, e.message?.take(50)))
                             }
                         } else {
-                            val candidates = _localSongs.value + baiduIndexCache.songsByAlbumName(albumName) + _songsPaging.value.songs
+                            val candidates = visibleLocalSongsNow() + baiduIndexCache.songsByAlbumName(albumName) + _songsPaging.value.songs
                             collected += filterSongsByAlbumName(albumName, candidates)
                         }
                     }
@@ -2081,7 +2289,7 @@ showError(getApplication<Application>().getString(R.string.toggle_favorite_error
                 val (nasSongs, pagingSongs, localDeviceSongs, baiduSongs, networkSongs) = coroutineScope {
                     // 快源：纯内存读取，不放在 async 里直接同步取
                     val fastPaging = async(Dispatchers.Default) { _songsPaging.value.songs }
-                    val fastLocal = async(Dispatchers.Default) { _localSongs.value }
+                    val fastLocal = async(Dispatchers.Default) { visibleLocalSongsNow() }
                     // 百度索引：按艺术家直接在 raw entry 上过滤，不创建全部 Song 对象
                     val fastBaidu = async(Dispatchers.Default) { baiduIndexCache.songsByArtist(artistName) }
 
@@ -2228,7 +2436,7 @@ showError(getApplication<Application>().getString(R.string.toggle_favorite_error
     fun getSongsByGenre(genre: String, onResult: (List<Song>) -> Unit) {
         viewModelScope.launch {
             // 本地歌曲按 genre 过滤（不依赖 NAS）
-            val localMatches = _localSongs.value.filter { it.genre?.equals(genre, ignoreCase = true) == true }
+            val localMatches = visibleLocalSongsNow().filter { it.genre?.equals(genre, ignoreCase = true) == true }
             val adapter = backendRegistry.getAdapter()
             if (adapter == null) {
                 onResult(localMatches)
@@ -2248,7 +2456,7 @@ showError(getApplication<Application>().getString(R.string.toggle_favorite_error
     fun getSongsByYearRange(fromYear: Int, toYear: Int, onResult: (List<Song>) -> Unit) {
         viewModelScope.launch {
             // 本地歌曲按 year 过滤（不依赖 NAS）
-            val localMatches = _localSongs.value.filter { song ->
+            val localMatches = visibleLocalSongsNow().filter { song ->
                 song.year != null && song.year in fromYear..toYear
             }
             val adapter = backendRegistry.getAdapter()
@@ -2458,6 +2666,13 @@ showError(getApplication<Application>().getString(R.string.toggle_favorite_error
         // ⚠️ 取文案在这里做（`VisualizerViewModel` 只发枚举）—— 数据层不产出面向用户的文案。
         viewModelScope.launch {
             visualizerVM.photoAccessNotice.collect { notice ->
+                showError(getApplication<Application>().getString(notice.messageRes))
+            }
+        }
+        // 本地音乐授权提示 → errorMessage（§5.5，与照片墙 notice 同一条路径：
+        // 数据层只发枚举，文案在这里取）。
+        viewModelScope.launch {
+            localMusicNotice.collect { notice ->
                 showError(getApplication<Application>().getString(notice.messageRes))
             }
         }
@@ -3440,7 +3655,7 @@ showError(getApplication<Application>().getString(R.string.toggle_favorite_error
         searchVM.libraryActiveTabProvider = { _libraryActiveTab.value }
         searchVM.librarySearchKeywordProvider = { _librarySearchKeyword.value }
         searchVM.nasLocalSongsProvider = { _songsPaging.value.songs }
-        searchVM.localDeviceSongsProvider = { _localSongs.value }
+        searchVM.localDeviceSongsProvider = { visibleLocalSongsNow() }
         searchVM.onAddToQueue = { playerManager.addToQueue(it) }
         searchVM.onPlayBatch = { songs, startIndex -> playNetworkBatch(songs, startIndex) }
         searchVM.showMessage = { showError(it) }

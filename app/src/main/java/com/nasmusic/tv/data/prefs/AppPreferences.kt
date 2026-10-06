@@ -343,6 +343,9 @@ class AppPreferences internal constructor(private val context: Context) {
     // --- 离线下载（需求 6/7/8/9）---
     private val keyDownloadEnabled = booleanPreferencesKey("settings_download_enabled")
     private val keyAutoDownloadOnPlay = booleanPreferencesKey("settings_auto_download_on_play")
+
+    // --- 本地音乐总开关（§五，权限瘦身方案；关⇒不扫描/不进搜索源/曲库隐藏）---
+    private val keyLocalMusicEnabled = booleanPreferencesKey("local_music_enabled")
     private val keyAutoDownloadLimit = intPreferencesKey("settings_auto_download_limit")
     private val keyDownloadLocation = stringPreferencesKey("settings_download_location")
 
@@ -799,6 +802,7 @@ class AppPreferences internal constructor(private val context: Context) {
             autoDownloadOnPlay = prefs[keyAutoDownloadOnPlay] ?: false,
             autoDownloadLimit = prefs[keyAutoDownloadLimit] ?: 50,
             downloadLocation = prefs[keyDownloadLocation] ?: "INTERNAL",
+            localMusicEnabled = prefs[keyLocalMusicEnabled] ?: true,
             // ── 照片墙（§7.3）──
             // ⚠️ 「外接存储」默认值**按平台**：电视 true / 手机 false（§6.8）。
             //   其余字段的平台默认值相同，直接写字面量。
@@ -833,6 +837,15 @@ class AppPreferences internal constructor(private val context: Context) {
     suspend fun setAutoDownloadOnPlay(v: Boolean) = dataStore.edit { it[keyAutoDownloadOnPlay] = v }
     suspend fun setAutoDownloadLimit(v: Int) = dataStore.edit { it[keyAutoDownloadLimit] = v.coerceIn(1, 5000) }
     suspend fun setDownloadLocation(v: String) = dataStore.edit { it[keyDownloadLocation] = v }
+
+    /**
+     * 本地音乐总开关（§五）。
+     *
+     * ⚠️ **写 `true` 不等于授权**：设置页的开关回调走 `MainViewModel.setLocalMusicEnabled`
+     * （先判权限、未授权先拉起系统对话框），**不走这个裸 setter**——直接写 true 会留下
+     * 「开关开着但扫不到数据」的静默坏状态。本 setter 供 MainViewModel 在权限确认后落盘。
+     */
+    suspend fun setLocalMusicEnabled(v: Boolean) = dataStore.edit { it[keyLocalMusicEnabled] = v }
 
     // --- 导出 SAF 授权持久化 ---
     val exportTreeUri: Flow<String?> = dataStore.data.map { it[keyExportTreeUri] }
@@ -1962,6 +1975,8 @@ class AppPreferences internal constructor(private val context: Context) {
                     normalizeEndpointUrl(settings.modelDownloadUrl) ?: ""
                 prefs[keyVisualizerTheme] = settings.visualizerTheme.nameOrDefault()
                 prefs[keyVisualizerQuality] = settings.visualizerQuality.nameOrDefault()
+                // ── 本地音乐总开关（§五）──
+                prefs[keyLocalMusicEnabled] = settings.localMusicEnabled
                 // ── 照片墙（§7.3）──
                 // ⚠️ 枚举一律走 `nameOrDefault()`：`backupGson` 的容错适配器对
                 //   `JsonToken.NULL` 仍会返回 null（只对「名字不认识」做回落），

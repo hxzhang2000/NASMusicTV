@@ -49,6 +49,17 @@ data class AppSettings(
     val autoDownloadLimit: Int = 50,           // 自动下载数量上限（1-5000）
     val downloadLocation: String = "INTERNAL",  // 下载位置（当前仅 INTERNAL，CUSTOM 为 P1 预留）
 
+    // ── 本地音乐（§五，权限瘦身方案）──
+    /**
+     * 本地音乐总开关（默认 true = 零回归，与历史行为一致）。
+     *
+     * ⚠️ **只 gate 扫描行为（启动加载缓存 / 增量扫描 / USB 监听）、搜索源（LOCAL）
+     * 与 UI 展示**；`_localSongs` 的内容 = Room 全表（含已下载曲目）不受影响
+     * （已下载歌曲走应用专属目录，与 `READ_MEDIA_AUDIO` 无关，§5.1-D3）。
+     * ⛔ **打开（关→开）是申请音乐权限的唯一触发点** —— 启动时不申请任何权限。
+     */
+    val localMusicEnabled: Boolean = true,
+
     // ── 照片墙（§7.3，17 个字段，全部带默认值）─────────────────────────────
     //
     // ⛔ **每个字段都必须有默认值**，这不是风格问题而是**正确性要求**：

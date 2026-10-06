@@ -10,36 +10,36 @@ import androidx.core.content.ContextCompat
  * 权限辅助类
  *
  * 统一处理本地音乐所需的存储权限（Android 13+ 用 READ_MEDIA_AUDIO，
- * 低版本用 READ_EXTERNAL_STORAGE）。
+ * 低版本用 READ_EXTERNAL_STORAGE）。自 v2.38.3 起由「本地音乐」总开关
+ * 按需驱动申请（`getLocalMusicPermissions()`），启动时不再申请。
  */
 object PermissionHelper {
 
     /**
+     * 本地音乐权限按系统版本选取（纯函数，sdkInt 可注入 —— G1 门禁的测试入口）。
+     *
+     * API 33+ 用细粒度媒体权限；API ≤ 32 用旧版存储权限（系统已降级为「仅媒体」语义）。
+     */
+    internal fun localMusicPermissionsForSdk(sdkInt: Int): Array<String> =
+        if (sdkInt >= Build.VERSION_CODES.TIRAMISU) {
+            arrayOf(Manifest.permission.READ_MEDIA_AUDIO)
+        } else {
+            arrayOf(Manifest.permission.READ_EXTERNAL_STORAGE)
+        }
+
+    /**
      * 检查是否已授予本地音乐读取权限
      */
-    fun hasLocalMusicPermission(context: Context): Boolean {
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            ContextCompat.checkSelfPermission(
-                context,
-                Manifest.permission.READ_MEDIA_AUDIO
-            ) == PackageManager.PERMISSION_GRANTED
-        } else {
-            ContextCompat.checkSelfPermission(
-                context,
-                Manifest.permission.READ_EXTERNAL_STORAGE
-            ) == PackageManager.PERMISSION_GRANTED
+    fun hasLocalMusicPermission(context: Context): Boolean =
+        localMusicPermissionsForSdk(Build.VERSION.SDK_INT).all {
+            ContextCompat.checkSelfPermission(context, it) == PackageManager.PERMISSION_GRANTED
         }
-    }
 
     /**
      * 获取本地音乐所需权限数组（用于 requestPermissions）
      */
     fun getLocalMusicPermissions(): Array<String> =
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            arrayOf(Manifest.permission.READ_MEDIA_AUDIO)
-        } else {
-            arrayOf(Manifest.permission.READ_EXTERNAL_STORAGE)
-        }
+        localMusicPermissionsForSdk(Build.VERSION.SDK_INT)
 
     // ══════════════════════════════════════════════════════════════════
     //  照片读取权限（照片墙，§九）

@@ -378,6 +378,16 @@
     <string name="photo_wall_notice_dir_empty">No folder selected</string>
     <string name="photo_wall_notice_dir_unavailable">No system file picker is available on this device</string>
 
+    <!-- Local music section (§5, permission-slim plan): master switch = the only trigger for music permission request -->
+    <string name="settings_local_music">Local Music</string>
+    <string name="settings_local_music_source">Local music source</string>
+    <string name="settings_local_music_source_desc">Scan music on this device and USB drives; enabling this asks for music permission</string>
+    <string name="settings_local_music_rescan">Rescan</string>
+    <string name="settings_local_music_rescan_desc">Fully rescan music files on this device and USB drives</string>
+    <string name="settings_local_music_count">%d songs indexed</string>
+    <string name="local_music_denied">Music permission not granted; local music source is off</string>
+    <string name="local_music_revoked">Music permission revoked; local music source is off</string>
+
     <string name="settings_download">Downloads</string>
     <string name="settings_download_basic">Download Settings</string>
     <string name="settings_download_stats">Download Statistics</string>

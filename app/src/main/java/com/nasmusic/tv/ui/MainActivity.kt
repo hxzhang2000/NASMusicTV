@@ -100,6 +100,19 @@ class MainActivity : ComponentActivity() {
         viewModel.visualizerVM.onPhotoPermissionResult()
     }
 
+    // ── 本地音乐（§5.5 权限瘦身）───────────────────────────────────────────
+    // ⛔ 权限对话框**不在这里触发** —— 它由「设置 → 本地音乐」的总开关驱动
+    //    （§5.5 官方要求：仅在需要访问时申请，绝不在启动时申请）。
+    //    本字段只负责「注册 + 把结果转交」，绝不放进 onCreate 里无条件 launch。
+
+    /** 本地音乐权限对话框结果 */
+    private val localMusicPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { _: Map<String, Boolean> ->
+        // ⛔ 刻意**忽略**回调里的 Map（照抄上方照片墙写法）：一律以重新读取的状态为准。
+        viewModel.onLocalMusicPermissionResult()
+    }
+
     /** 照片目录选择器（§6.3 路线 B）：与导出同款契约，结果走照片墙自己的通道 */
     private val photoDirectoryLauncher = registerForActivityResult(
         ActivityResultContracts.OpenDocumentTree()
@@ -191,23 +204,10 @@ class MainActivity : ComponentActivity() {
             }
         }
 
-        // 手机端：检查电池优化白名单，确保后台播放稳定
-        com.nasmusic.tv.player.BatteryOptimizationHelper.checkAndRequest(this)
-
-        // 修复（M-5）：Android 13+ 通知运行时权限——媒体通知/下载通知依赖 POST_NOTIFICATIONS
-        if (android.os.Build.VERSION.SDK_INT >= 33 &&
-            androidx.core.content.ContextCompat.checkSelfPermission(
-                this, android.Manifest.permission.POST_NOTIFICATIONS
-            ) != android.content.pm.PackageManager.PERMISSION_GRANTED
-        ) {
-            try {
-                androidx.core.app.ActivityCompat.requestPermissions(
-                    this, arrayOf(android.Manifest.permission.POST_NOTIFICATIONS), 2001
-                )
-            } catch (e: Exception) {
-                AppLog.w("MainActivity", "request POST_NOTIFICATIONS failed", e)
-            }
-        }
+        // 2026-10-06 权限瘦身：原「电池优化白名单检查」（辅助类已随 C1 裁决整链路删除）
+        // 与「Android 13+ POST_NOTIFICATIONS 开机申请」已移除 ——
+        // 前者不再主动把用户弹到系统设置；后者是媒体通知，平台按 MediaStyle 模板豁免，
+        // 无需申请（详见 AndroidManifest 的删除说明与 docs/permission-and-signing-plan.md §四/§六）。
 
         // SAF 树选择器（§8.8.4）：注入到 ExportCoordinator，导出时启动系统文件夹选择器
         (application as NasMusicApp).exportCoordinator.treePickLauncher = {
@@ -224,6 +224,12 @@ class MainActivity : ComponentActivity() {
         }
         viewModel.visualizerVM.photoDirectoryLauncher = {
             photoDirectoryLauncher.launch(null)
+        }
+        // 本地音乐权限链路（§5.5）：同款接线，不发起任何请求 —— 请求由总开关触发。
+        viewModel.localMusicPermissionLauncher = {
+            localMusicPermissionLauncher.launch(
+                com.nasmusic.tv.util.PermissionHelper.getLocalMusicPermissions()
+            )
         }
 
         setContent {
@@ -494,6 +500,7 @@ class MainActivity : ComponentActivity() {
         runCatching {
             viewModel.visualizerVM.photoPermissionLauncher = null
             viewModel.visualizerVM.photoDirectoryLauncher = null
+            viewModel.localMusicPermissionLauncher = null
             // 2026-09-26 审查补修（#5 遗留）：ExportCoordinator 由 Application 持有、跨 Activity
             // 存活，其 treePickLauncher 闭包同样捕获本 Activity ⇒ 真退出时对称置空断开引用
             //（配置重建 isFinishing=false 走不到这里，onCreate 会重新注入）
@@ -533,6 +540,12 @@ class MainActivity : ComponentActivity() {
             viewModel.visualizerVM.refreshPhotoAccess()
         } catch (e: Exception) {
             AppLog.w("MainActivity", "refreshPhotoAccess failed", e)
+        }
+        // 本地音乐（§5.5）：权限可能在系统设置里被撤销 ⇒ 转移式回弹（见 MainViewModel）
+        try {
+            viewModel.refreshLocalMusicAccess()
+        } catch (e: Exception) {
+            AppLog.w("MainActivity", "refreshLocalMusicAccess failed", e)
         }
     }
 
