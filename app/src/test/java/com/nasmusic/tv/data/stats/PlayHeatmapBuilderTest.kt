@@ -188,8 +188,10 @@ class PlayHeatmapBuilderTest {
         val h = build(emptyMap())
         // 窗口 2025-09-14 ~ 2026-09-17 → 覆盖 2025-09 … 2026-09 共 13 个月
         assertEquals(13, h.monthLabels.size)
-        assertEquals("9月", h.monthLabels.first().text)
-        assertEquals("9月", h.monthLabels.last().text)
+        // §10.213 资源化迁移后 builder 只产出纯数字月份（"9"），
+        // 「月」后缀由 UI 层 stats_heatmap_month_format 拼（zh: %1$s月 / en: %1$s）
+        assertEquals("9", h.monthLabels.first().text)
+        assertEquals("9", h.monthLabels.last().text)
         // 列号递增且不重叠
         val cols = h.monthLabels.map { it.weekIndex }
         assertEquals(cols.sorted(), cols)
@@ -199,7 +201,7 @@ class PlayHeatmapBuilderTest {
     @Test
     fun `month label points at the first column of that month`() {
         val h = build(emptyMap())
-        val oct = h.monthLabels.first { it.text == "10月" }
+        val oct = h.monthLabels.first { it.text == "10" }
         val col = h.weeks[oct.weekIndex]
         val firstOfCol = col.firstOrNull { it != null }
         // 该列第一个有效日期应落在 10 月
