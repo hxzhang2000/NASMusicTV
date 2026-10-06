@@ -13254,3 +13254,72 @@ StarrySkyTest.kt:1039 的 ⑤ 注册链 枚举 工厂 计数三处一致 断言 
 ⇒ **学习：删枚举会特影响至少三类东西**：① 枚举定义；② 渲染器分派点；③ **分散在不同测试包里的「效果总数」硬计数**（本轮共 8 处，分布在 5 个文件）。
 ③ 类不在同一包里、KDoc 也不引用它们 ⇒ 只能靠全仓 grep 找。
 
+---
+
+### 10.213 v2.38.3 — 全量硬编码文本提取至字符串资源并结构化改造（2026-10-06）
+
+#### 一、背景与范围
+
+本地化对齐遗留：仓库内仍有硬编码中文直达 UI 文本的路径，英文语言环境下混显中文。
+本轮做**全仓收口**：`app/src` 下 Kotlin 全部静态中文串逐条核对，
+把「用户可见」的硬编码文本提取进 `values/` + `values-en/` 两套资源，
+`strings.xml` 键集对齐至 **zh/en 各 1350 键**（此前 1284 → 新增 66 + 兜底 6）。
+涉及 **62 个主源 + 2 个测试 + 2 个资源文件 + CHANGELOG，共 70 文件，+1338 / −498 行**。
+
+#### 二、提取清单（按模块）
+
+- **百度网盘**（`backend/network/baidu/`）：
+  - `BaiduNetdiskConfig.kt`：`ERRNO_MAP` 由「中文文案值」改为 `Map<Int, Int>`（@StringRes），
+    新增 `describeErrno(context, errno)`；41 条 errno 文案 + `baidu_errno_unknown` 全部资源化。
+  - `BaiduOAuthClient.kt`：构造签名加 `context`；6 处 OAuth Failed 消息（`baidu_oauth_*`）资源化。
+  - `BaiduPanApi.kt`：构造签名加 `context`；3 处 `describeErrno` 改为传入 context。
+  - `BaiduFileIndexCache.kt`：`context` 改类字段；扫描中断 / 索引不存在 2 处资源化
+    （`netdisk_scan_interrupted` / `netdisk_index_missing`）。
+  - `BaiduPanApiTest.kt`：构造调用同步补 `context`（命名参数）。
+- **下载**（`player/ModelDownloadManager.kt` + `backend/download/`）：
+  - 模型下载 9 处错误（`model_download_*`，含 sha 校验 `model_verify_*`、`%1$dMB` 等占位符）资源化；
+  - `SongDownloadManager` / `StorageGuard` / `AutoDownloadController` 的下载状态消息资源化。
+- **备份**（`util/BackupFileUtils.kt`，兜底发现）：6 处中文 `Exception` 消息
+  （`backup_util_*`）此前**未提取**，会被 `BackupTransferServer` 的 `backup_msg_*` 模板
+  `%1$s` 拼进用户可见 toast/html —— 属收口目标，随本轮一并提取。
+- **网络音乐预设端点**（`backend/network/MetingApiService.kt` / `backend/network/mv/BilibiliMvService.kt`）：
+  `PRESET_ENDPOINTS` 类型由 `List<Pair<String, String>>` 改为 `List<Pair<Int, String>>`，
+  名称改为 `@StringRes`（`meting_endpoint_*` / `mv_endpoint_bili_default`）；
+  `NetworkMusicSection.kt` 渲染处改 `stringResource(nameRes)`（isPreset 判断仍用 url，不受影响）。
+- **displayName 资源对偶**（`data/model/*`）：`BrowseDimension` / `PlayMode` / `LyricsSource` /
+  `CloudDriveType` / `WeatherMood` / `EqualizerPreset` / `SourceIdentifier` / `AppSettings` /
+  `WeatherData` / `PlayHeatmap` 等枚举/常量由「中文文案字段 + displayNameRes 兜底」收敛为
+  **统一 `displayNameRes` + 结构标志**（如 `isAll` / 类型判定不再依赖文案字面量）。
+- **其余 UI 组件**：`PlayerControls` / `SongInfoPanel` / `QualityBadgeLabel` / `VisualizerStage` /
+  `LibraryBranch` / `SourceBadge` / `UnifiedSongRow` / `EqualizerScreen` / `HomeScreen` /
+  `LibraryScreen` / `NowPlayingScreen` / `SettingsScreen` / `TextInputDialog` / `DiscoverTab` /
+  `SearchTab` / `BaiduAuthDialog` / `SettingsComponents` / `LinkUtils` / `PhotoTransitionId` 等
+  的 UI 直显字符串同步资源化。
+
+#### 三、明确保留（不提取）
+
+- **品牌名**：`道理鱼音乐` / `飞牛音乐` / `百度网盘(View)*`（与 `Jellyfin` / `Navidrome` 同标准，
+  UI 层按品牌展示）。
+- **数据用途**：`DownloadPathBuilder` 路径名（`未知歌手`/`未命名`/`单曲`）、`SongDownloadManager`
+  DB errorMsg（UI 只显示 ✕）、`PlaylistImporter` 默认名、`RadioStation` 模板、`WeatherApi` 默认城市、
+  `MainViewModel` 榜单名、`LyricsManager` 关键词、`SearchViewModel` 附加词、`BaiduFilenameParser` 正则等。
+- **崩溃级/断言**：`DemucsSeparator` / `PcmRingBuffer` / `Radix2Fft` / `ProceduralTexture` 的
+  `require()` / `IllegalStateException`（内部不变量校验，非 UX 文本）。
+- **AppLog 日志**：日志仅 DEBUG 可见，不属本地化范围（已按 `BuildConfig.DEBUG` 守卫）。
+
+#### 四、验证
+
+- 键集对称脚本：zh/en 各 **1350 键**，无 only-zh / only-en，`</resources>` 各 1 处。
+- `R.string.*` 引用 1200 处**零悬空**；新增 72 键全部在 Kotlin 中被引用。
+- 全仓中文串复核：547 处逐条归类（注释误抓 / 品牌名 / AppLog / 数据用途 / displayNameRes 对偶 /
+  require 异常），无收口范围内残留。
+- **编译验证**：`assembleRelease --no-daemon -Pkotlin.compiler.execution.strategy=in-process`
+  BUILD SUCCESSFUL（7m1s）；过程中修复 3 处漏 `import R`（`SongDownloadManager`/`StorageGuard`/
+  `BackupFileUtils`）与 `NasMusicApp` 2 处 Baidu 构造调用未随新签名同步（补 `context` 实参）。
+- 产物 `NASMusicTV-release-v2-38-3.apk`（versionCode 172 / 2.38.3），CN=NASMusicTV 正式签名校验通过。
+
+#### 五、教训
+
+⭐ **中文哨兵 ≠ 只查 `String` 字面量**：`BackupFileUtils` 的异常消息藏在 `Exception("...")` 里，
+表面不是 UI 文本，但会被上层模板 `%1$s` 拼接进 toast —— 这类「间接用户可见」只有沿
+**消费链**（谁读了这段消息、拼到哪里）才能发现。后续加新异常消息时先问一句：它会进 UI 吗？
