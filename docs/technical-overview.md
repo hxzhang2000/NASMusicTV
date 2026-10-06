@@ -13323,3 +13323,126 @@ StarrySkyTest.kt:1039 的 ⑤ 注册链 枚举 工厂 计数三处一致 断言 
 ⭐ **中文哨兵 ≠ 只查 `String` 字面量**：`BackupFileUtils` 的异常消息藏在 `Exception("...")` 里，
 表面不是 UI 文本，但会被上层模板 `%1$s` 拼接进 toast —— 这类「间接用户可见」只有沿
 **消费链**（谁读了这段消息、拼到哪里）才能发现。后续加新异常消息时先问一句：它会进 UI 吗？
+
+---
+
+### 10.214 v2.38.3 — 权限与签名统一：本地音乐总开关 / Manifest 权限瘦身 / CI 签名 fail-fast（2026-10-06）
+
+依据 `docs/permission-and-signing-plan.md` v1.5（状态「可开工，无待裁决项」），S0–S8 全批次实施。
+四条改动线：**A** 权限瘦身、**B** 本地音乐总开关、**C** 电池优化彻底删除、**D** 签名统一。
+
+#### 一、背景与根因
+
+- **开机弹窗越界**：App 启动即申请外部存储权限，但本地音乐只是可选功能之一（NAS / 网络音乐 /
+  天气电台都不需要它）——把「可能永远用不到」的权限前置到了首启体验里。
+- **通知豁免无据可查**：运行时通知权限声明已删，但播放通知仍正常弹出（MediaStyle + MediaSession
+  模板豁免）；豁免的唯一依据此前没有任何注释固化，改通知构造的人随时可能无意中破坏它。
+- **电池优化跳转是电视上的死胡同**：`REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` 跳转意图在
+  Android TV 上多数不可达，且音乐播放靠前台服务 + MediaSession 已足够，该入口纯属遗留。
+- **CI 签名静默回退**：workflow 缺 signing secrets 时静默落入 throwaway 密钥（模式 B），
+  push / tag 产出「看似成功但装不上正式设备」的 APK——失败被掩盖到安装那一刻才发现。
+
+#### 二、改动线 A / C：Manifest 瘦身 + 电池优化整删
+
+- **删 3 条声明**：写存储、运行时通知（POST_NOTIFICATIONS）、忽略电池优化（REQUEST_IGNORE_BATTERY_
+  OPTIMIZATIONS）。保留媒体读取两条（READ_MEDIA_AUDIO 33+ / READ_EXTERNAL_STORAGE 22–32）——
+  它们转为**按需申请**（见线 B），不再开机即弹。
+- **删开机申请块**：`MainActivity` 的启动期 `requestPermissions` 调用整块移除；全 app 申请音乐权限的
+  **唯一触发点**变为设置页的本地音乐总开关（方案 §5.5）。
+- **BatteryOptimizationHelper.kt 整删**（连 `MainActivity` 的跳转入口），全仓库 0 残留。
+- **U14 判据**：被删权限的**符号字面量**（含注释提及）在 Manifest 全文 0 命中——
+  `LocalMusicGateTest.L4` 不剥离注释、全文扫描；S1 遗留的 :30 注释残留（写了权限全名）已改写为
+  「运行时通知权限已删除」。
+- **豁免注释固化**：`PlaybackService.kt` 通知构造前新增 ⛔ 注释——运行时通知权限豁免的**唯一依据**
+  是 MediaStyle + `setMediaSession` 模板；改通知构造或新增非媒体通知会连带失去豁免。
+
+#### 三、改动线 B：本地音乐总开关
+
+**持久化链路**（默认 `true`，与旧行为兼容）：
+
+- `AppSettings.localMusicEnabled`（:348，默认 true）→ `AppPreferences` 读写（:805 / :848）→
+  备份导入导出透传（:1979，`LocalMusicPrefsTest.L4/L5` 锁定 legacy JSON 无字段也可导入）。
+
+**同步 / 异步双读路径**（S4 核心设计）：
+
+- `visibleLocalSongs`（StateFlow，UI 层 `collectAsState`）+ `visibleLocalSongsNow()`（同步函数，
+  直读 `_localMusicEnabled.value`）。**为什么需要同步版**：`stateIn` 传播需要调度，而
+  `updateMergedData` 在写完 `_localSongs` 后立即重算合并列表——同一协程里读 StateFlow 会拿到
+  **旧值**，导致关开关后合并列表残留本地曲。12 处消费点全部改用同步函数。
+- 门控口径（D2/D3）：开关关闭时仅保留 `storageType == "DOWNLOAD"` 的已下载曲（用户主动下载的
+  内容不受开关影响）；扫描（M1）、U 盘（M2/M3）、搜索聚合（M7）统一受控。
+
+**运行期观察者**（:965–975）：`distinctUntilChanged()` 监听开关 + 权限状态，`wasEnabled` 三态
+判定——只有 **true→false 的转移**才回弹开关（状态式判定会让全新装机首启即翻关）。方案原文的
+M1 门控位置有一处与实际代码流不符，已按实现修正（方案 v1.6 实施记录里有偏差说明）。
+
+**M7 suspend provider**：`SearchAggregator` 构造参数 `localMusicEnabled: suspend () -> Boolean = { true }`。
+方案原文写的是 `() -> Boolean`，但消费侧是 `first()` 挂起调用——非 suspend 的 `() -> Boolean`
+在 K2 下无法编译，`suspend () -> Boolean` 是唯一可编译形态。
+
+**权限接线**（S6）：`setLocalMusicEnabled(true)`（:2038）——已授权直接开 / 未授权先走
+`PermissionHelper` 申请、被拒则回弹开关（转移式回弹见上）。`refreshLocalMusic`（:2090）复活为
+设置页「重新扫描」入口。**新增后端若需要其他运行时权限，照此模式接，不要恢复开机申请。**
+
+**设置页 S7**：`LocalMusicSettingsSection` 新分区（LOCAL_MUSIC）——总开关 + 已入库曲目数
+（`localSongs` 含已下载曲，不受开关影响，D2）+ 重新扫描入口。`SettingsBranch` 注入
+`LocalMusicSettingsState/Actions`。
+
+#### 四、改动线 D：CI 签名 fail-fast（D5）
+
+`build.yml` 签名步双模改造：
+
+- **事件门**（:55–65）：`GITHUB_EVENT_NAME != "pull_request"`（push / tag）时，
+  `SIGNING_KEYSTORE_BASE64` 或 `CRYPTO_PASSPHRASE` 为空即 `exit 1`——**tag push 的 event name
+  也是 push**，所以一个 `!= pull_request` 就覆盖了正式发版全路径。漏配让它响亮失败，
+  优于占位值静默产出错包。
+- **模式 A**（secrets 齐备）：`cryptoPassphrase` 直取 secret，**无占位 fallback**——
+  push / tag 路径的兜底已由 fail-fast 前移，同仓库 PR 的 secrets 与 push 同批，不存在
+  「模式 A 跑到一半发现 secret 缺失」的场景。
+- **模式 B**（throwaway `ci-keystore.jks`）**仅 pull_request**：`keytool -genkey` 只在
+  else 分支出现，且带「产物不可覆盖安装到正式签名设备」的显式警告。
+
+#### 五、门禁测试（G1–G4）
+
+| 测试 | 锁什么 |
+|---|---|
+| `LocalMusicPermissionPolicyTest`（G1） | SDK 分支（33+ / 22–32）权限集、授权状态判定（Robolectric grant/deny） |
+| `LocalMusicPrefsTest`（G2） | 默认 true、读写往返、`AppSettings()` 默认值、legacy JSON 导入、export→翻转→import 恢复 |
+| `LocalMusicGateTest`（G3） | `startLocalMusicRuntime()` 存在、`distinctUntilChanged()` 观察者、SearchAggregator provider、Manifest 三权限 0 命中（不剥离注释）、MainActivity 无申请块、负向自证 |
+| `ReleaseSigningGateTest`（G4） | fail-fast 三要素（事件门 + 两个空检查各带 `exit 1`）、一次性密钥不在模式 A 路径、占位值不在模式 A、负向自证 |
+
+源码文本扫描范式照 `MediaSessionAccessPolicyTest`：行为断言 + 负向自证（故意塞回违规内容必须
+翻红）+ 空转自证（测试自身在跑）。
+
+**实现坑（三个，都浪费了至少一轮构建）**：
+
+- ⚠️ **K2 下 raw string 拦不住模板插值**：`"""...\$GITHUB_EVENT_NAME..."""` 报 Unresolved
+  reference，改 `${'$'}` **依然报**——两种写法都逃不过 K2 插值。最终方案：**普通字符串 +
+  `\$` 转义 + `String.replace`（字面串，非 regex）**。
+- ⚠️ **regex 裸 `$` 是行尾锚**：负向自证里用正则匹配 `$GITHUB_EVENT_NAME` 永不命中
+  （`$` 被解释为行尾），测试假绿。同上，放弃 regex 改字面串替换。
+- ⚠️ **`shadowOf(Context)` 落到 ShadowContext**（无 grant/deny 方法）——必须取
+  `ApplicationProvider.getApplicationContext<Application>()` 才能操作权限授予状态
+  （照 `PhotoPermissionStateTest` 的写法）。
+
+#### 六、验证
+
+- **单测全量**：1646 例 / 2 失败——均为 `PlayHeatmapBuilderTest` 的 month label 断言，
+  `git stash push -u` 在干净 HEAD 复验同样 2 败，**确证预先存在、与本批改动无关**，stash pop
+  恢复全部改动。
+- **编译修复 3 处**（均为 import 缺陷，非逻辑错误）：`LocalMusicSettingsSection` import 区
+  （原只有 Column）、`SettingsScreen` 3 个新类型 import、`MainViewModel` 补
+  `MutableSharedFlow`。
+- **版本口径**：versionName 2.38.3 / versionCode 172 尚未发版，本批并入 §10.213 的 v2.38.3
+  工作节（不另行 bump）；涉及版本注释的 8 个文件统一写 v2.38.3。
+
+#### 七、遗留与发版顺序
+
+- **D1/D2 secrets 已配齐**（2026-10-06 同日：`gh secret set` 从本地 `keystore.properties` 透传、
+  keystore 用 base64 单行编码，`gh secret list` 五条全数就位）。push / tag 若再缺 secrets 会被
+  D5 fail-fast 挡下（这是设计行为，不是故障）。最易漏的是 `CRYPTO_PASSPHRASE`
+  （keystore.properties 的 `cryptoPassphrase` 行对应）。
+- **发版顺序**（secrets 已配齐）：打 tag 发 S0 版（在 CI 上验证 V1–V6：正式签名产物、
+  fail-fast 不误伤已配齐路径、APK 可覆盖安装）→ 再发本批功能。
+- **实机验收 U1–U14**：清单在方案 §十一（首启无弹窗 / 开关开申请一次 / 被拒回弹 /
+  关开关下载曲仍在 / 备份导入导出往返 / 车机蓝牙不受影响等），发版后逐项过。
