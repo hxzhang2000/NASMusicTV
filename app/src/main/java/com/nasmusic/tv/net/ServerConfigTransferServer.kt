@@ -3,6 +3,7 @@ package com.nasmusic.tv.net
 import android.content.Context
 import com.google.gson.Gson
 import com.google.gson.JsonObject
+import com.nasmusic.tv.R
 import com.nasmusic.tv.util.AppLog
 import com.nasmusic.tv.util.UrlSanitizer
 import fi.iki.elonen.NanoHTTPD
@@ -24,6 +25,7 @@ import java.io.IOException
  * token 把访问者限定为「能看到电视二维码的人」。
  */
 class ServerConfigTransferServer(
+    private val context: Context,
     private val onConfigReceived: (backendType: String, baseUrl: String, username: String, password: String, displayName: String) -> Unit,
     private val port: Int = DEFAULT_PORT
 ) : NanoHTTPD(port) {
@@ -87,7 +89,7 @@ class ServerConfigTransferServer(
         return try {
             val contentLength = session.headers["content-length"]?.toLongOrNull() ?: -1L
             if (contentLength <= 0L || contentLength > MAX_BODY_BYTES) {
-                return json(false, "配置内容为空或过大")
+                return json(false, context.getString(R.string.cfg_msg_web_ui_empty_or_large))
             }
             // 定长分块读取（keep-alive 上不能 read 到 -1；不按 Content-Length 预分配）
             val buffer = java.io.ByteArrayOutputStream()
@@ -100,24 +102,24 @@ class ServerConfigTransferServer(
                 remaining -= read
             }
             val body = String(buffer.toByteArray(), Charsets.UTF_8)
-            if (body.isBlank()) return json(false, "配置内容为空")
+            if (body.isBlank()) return json(false, context.getString(R.string.cfg_msg_web_ui_empty))
             val obj = Gson().fromJson(body, JsonObject::class.java)
-                ?: return json(false, "配置格式错误")
+                ?: return json(false, context.getString(R.string.cfg_msg_web_ui_format))
             val backendType = obj.get("backendType")?.asString?.trim() ?: ""
             val baseUrl = obj.get("baseUrl")?.asString?.trim() ?: ""
             val username = obj.get("username")?.asString?.trim() ?: ""
             val password = obj.get("password")?.asString ?: ""
             val displayName = obj.get("displayName")?.asString?.trim() ?: ""
-            if (backendType !in ALLOWED_TYPES) return json(false, "不支持的后端类型：$backendType")
+            if (backendType !in ALLOWED_TYPES) return json(false, context.getString(R.string.cfg_msg_web_ui_unsupported, backendType))
             if (!baseUrl.startsWith("http://") && !baseUrl.startsWith("https://")) {
-                return json(false, "服务器地址必须以 http:// 或 https:// 开头")
+                return json(false, context.getString(R.string.cfg_msg_web_ui_url_scheme))
             }
             AppLog.i(TAG, "config received: type=$backendType url=${UrlSanitizer.sanitize(baseUrl)}")
             onConfigReceived.invoke(backendType, baseUrl, username, password, displayName)
-            json(true, "已发送到电视，请在电视上核对并按确认键连接")
+            json(true, context.getString(R.string.cfg_msg_web_ui_sent))
         } catch (e: Exception) {
             AppLog.e(TAG, "handleConfig failed", e)
-            json(false, "处理失败：${e.message ?: e.javaClass.simpleName}")
+            json(false, context.getString(R.string.cfg_msg_web_ui_failed, e.message ?: e.javaClass.simpleName))
         }
     }
 
@@ -135,7 +137,7 @@ class ServerConfigTransferServer(
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>服务器配置填入</title>
+<title>${context.getString(R.string.cfg_web_title)}</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:#1a1a2e;color:#eee;display:flex;justify-content:center;align-items:flex-start;min-height:100vh;padding:24px}
@@ -155,8 +157,8 @@ button:disabled{background:#555;color:#999}
 <body>
 <div class="card">
 <h2>NAS Music TV</h2>
-<p class="sub">填写服务器信息，提交后自动填入电视端（需在电视上确认连接）</p>
-<label>后端类型</label>
+<p class="sub">${context.getString(R.string.cfg_web_subtitle)}</p>
+<label>${context.getString(R.string.cfg_web_backend_type)}</label>
 <select id="backendType">
   <option value="jellyfin">Jellyfin</option>
   <option value="navidrome">Navidrome</option>
@@ -164,15 +166,15 @@ button:disabled{background:#555;color:#999}
   <option value="daoliyu">道理鱼音乐</option>
   <option value="feiniu">飞牛音乐</option>
 </select>
-<label>服务器地址（http:// 或 https:// 开头）</label>
+<label>${context.getString(R.string.cfg_web_url)}</label>
 <input type="url" id="baseUrl" placeholder="http://192.168.1.10:8096">
-<label>用户名</label>
+<label>${context.getString(R.string.cfg_web_username)}</label>
 <input type="text" id="username" autocomplete="off">
-<label>密码</label>
+<label>${context.getString(R.string.cfg_web_password)}</label>
 <input type="password" id="password" autocomplete="off">
-<label>显示名（可选，用于区分多个服务器）</label>
-<input type="text" id="displayName" placeholder="例如：客厅 NAS">
-<button id="submitBtn" onclick="submitConfig()">发送到电视</button>
+<label>${context.getString(R.string.cfg_web_display_name)}</label>
+<input type="text" id="displayName" placeholder="${context.getString(R.string.cfg_web_display_name_placeholder)}">
+<button id="submitBtn" onclick="submitConfig()">${context.getString(R.string.cfg_web_submit)}</button>
 <div class="status" id="status"></div>
 </div>
 <script>
@@ -186,16 +188,16 @@ function submitConfig(){
     password:document.getElementById('password').value,
     displayName:document.getElementById('displayName').value.trim()
   };
-  if(!payload.baseUrl){show('请填写服务器地址','err');return;}
+  if(!payload.baseUrl){show('${context.getString(R.string.cfg_web_js_url_required)}','err');return;}
   btn.disabled=true;
-  show('发送中...','');
+  show('${context.getString(R.string.cfg_web_js_sending)}','');
   fetch('/api/config',{method:'POST',body:JSON.stringify(payload)})
     .then(function(r){return r.json()})
     .then(function(d){
-      show(d.message||'完成', d.ok?'ok':'err');
+      show(d.message||'${context.getString(R.string.cfg_web_js_done)}', d.ok?'ok':'err');
       if(d.ok){document.getElementById('password').value='';}
     })
-    .catch(function(e){show('发送失败: '+e.message,'err');})
+    .catch(function(e){show('${context.getString(R.string.cfg_web_js_send_failed)}'+e.message,'err');})
     .finally(function(){btn.disabled=false;});
 }
 function show(msg,cls){

@@ -153,7 +153,7 @@ fun TextInputDialog(
     var qrBitmap by remember { mutableStateOf<Bitmap?>(null) }
     var serverUrl by remember { mutableStateOf<String?>(null) }
     var qrText by remember { mutableStateOf<String?>(null) }
-    val server = remember { LocalInputServer() }
+    val server = remember { LocalInputServer(context) }
     val qrScope = rememberCoroutineScope()
     // L11：NanoHTTPD 回调统一投递到主线程（见 server.start 内注释）
     val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())

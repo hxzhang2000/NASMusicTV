@@ -435,14 +435,14 @@ fun NowPlayingScreen(
                         ) {
                         val currentSource = lyrics?.source
                         SourceTag(
-                            label = com.nasmusic.tv.data.model.LyricsSource.EMBEDDED.displayName,
+                            label = stringResource(com.nasmusic.tv.data.model.LyricsSource.EMBEDDED.displayNameRes),
                             available = lyricsAvailability.hasBackend,
                             selected = currentSource == com.nasmusic.tv.data.model.LyricsSource.EMBEDDED,
                             onClick = { onSwitchLyricsSource(com.nasmusic.tv.data.model.LyricsSource.EMBEDDED) }
                         )
                         Spacer(modifier = Modifier.width(6.dp))
                         SourceTag(
-                            label = com.nasmusic.tv.data.model.LyricsSource.LOCAL_FILE.displayName,
+                            label = stringResource(com.nasmusic.tv.data.model.LyricsSource.LOCAL_FILE.displayNameRes),
                             available = currentSource == com.nasmusic.tv.data.model.LyricsSource.LOCAL_FILE,
                             selected = currentSource == com.nasmusic.tv.data.model.LyricsSource.LOCAL_FILE,
                             // L11 修复（2026-10-06）：纯展示元素——传 null 使其不可聚焦，
@@ -451,14 +451,14 @@ fun NowPlayingScreen(
                         )
                         Spacer(modifier = Modifier.width(6.dp))
                         SourceTag(
-                            label = com.nasmusic.tv.data.model.LyricsSource.NETWORK.displayName,
+                            label = stringResource(com.nasmusic.tv.data.model.LyricsSource.NETWORK.displayNameRes),
                             available = true,
                             selected = currentSource == com.nasmusic.tv.data.model.LyricsSource.NETWORK,
                             onClick = { onSwitchLyricsSource(com.nasmusic.tv.data.model.LyricsSource.NETWORK) }
                         )
                         Spacer(modifier = Modifier.width(6.dp))
                         SourceTag(
-                            label = com.nasmusic.tv.data.model.LyricsSource.CACHED.displayName,
+                            label = stringResource(com.nasmusic.tv.data.model.LyricsSource.CACHED.displayNameRes),
                             available = lyricsAvailability.hasCached,
                             selected = currentSource == com.nasmusic.tv.data.model.LyricsSource.CACHED,
                             onClick = { onSwitchLyricsSource(com.nasmusic.tv.data.model.LyricsSource.CACHED) }
@@ -1056,7 +1056,9 @@ Text(
             //
             // 放在这一行而不是底部控制按钮行：底部行在 380dp 宽度下已容纳 7 个控件，
             // 第 8 个会被裁掉（手机端实测看不到入口）。
-            val qualityBadgeText = com.nasmusic.tv.ui.components.qualityBadgeLabel(currentSong, qualityLabel)
+            val autoLabel = stringResource(R.string.quality_badge_auto)
+            val losslessLabel = stringResource(R.string.quality_badge_lossless)
+            val qualityBadgeText = com.nasmusic.tv.ui.components.qualityBadgeLabel(currentSong, qualityLabel, autoLabel, losslessLabel)
             if (qualityBadgeText != null) {
                 Spacer(modifier = Modifier.width(8.dp))
                 if (currentSong?.isNetworkSong == true) {
@@ -1734,8 +1736,8 @@ private fun NowPlayingPortrait(
                             val currentSource = lyrics?.source
                             val sourceIdx = LYRICS_SOURCE_CYCLE.indexOf(currentSource).let { if (it < 0) 1 else it }
                             SourceTag(
-                                label = currentSource?.displayName
-                                    ?: com.nasmusic.tv.data.model.LyricsSource.NETWORK.displayName,
+                                label = stringResource(currentSource?.displayNameRes
+                                    ?: com.nasmusic.tv.data.model.LyricsSource.NETWORK.displayNameRes),
                                 available = true,
                                 selected = true,
                                 onClick = {

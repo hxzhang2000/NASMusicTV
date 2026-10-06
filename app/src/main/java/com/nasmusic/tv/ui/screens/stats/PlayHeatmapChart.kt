@@ -129,7 +129,7 @@ fun PlayHeatmapChart(
                     Box(modifier = Modifier.width(gridWidth).height(monthRowHeight)) {
                         heatmap.monthLabels.forEach { ml ->
                             Text(
-                                text = ml.text,
+                                text = stringResource(R.string.stats_heatmap_month_format, ml.text),
                                 color = labelColor,
                                 fontSize = captionSize,
                                 modifier = Modifier.offset(x = (cell + gap) * ml.weekIndex)

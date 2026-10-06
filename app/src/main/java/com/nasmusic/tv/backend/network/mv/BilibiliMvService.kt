@@ -2,6 +2,7 @@ package com.nasmusic.tv.backend.network.mv
 
 import com.google.gson.Gson
 import com.google.gson.JsonObject
+import com.nasmusic.tv.R
 import com.nasmusic.tv.data.model.MvInfo
 import com.nasmusic.tv.data.model.MvCandidate
 import com.nasmusic.tv.data.model.MvSearchResult
@@ -406,8 +407,8 @@ class BilibiliMvService(
         const val DEFAULT_BASE_URL = "https://api.bilibili.com"
 
         /** 预设视频端点列表（供设置页选择） */
-        val PRESET_ENDPOINTS: List<Pair<String, String>> = listOf(
-            "B站官方 API（默认）" to DEFAULT_BASE_URL
+        val PRESET_ENDPOINTS: List<Pair<Int, String>> = listOf(
+            R.string.mv_endpoint_bili_default to DEFAULT_BASE_URL
         )
 
         /** 浏览器 UA（B 站防盗链检查之一） */

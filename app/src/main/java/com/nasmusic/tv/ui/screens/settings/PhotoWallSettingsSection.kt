@@ -585,7 +585,7 @@ private fun PhotoTransitionChips(
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 rowIds.forEach { id ->
                     OptionChip(
-                        label = id.displayName,
+                        label = stringResource(id.displayNameRes),
                         selected = id == selected,
                         onClick = { onSelect(id) }
                     )

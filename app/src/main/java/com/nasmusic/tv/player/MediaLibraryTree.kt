@@ -219,12 +219,12 @@ class MediaLibraryTree(
      */
     fun getItem(mediaId: String): MediaItem? = when {
         mediaId == ROOT_ID -> getLibraryRoot()
-        mediaId == QUEUE_ID -> browseItem(QUEUE_ID, "当前播放", rootIconOf(QUEUE_ID))
-        mediaId == DOWNLOAD_ID -> browseItem(DOWNLOAD_ID, "离线下载", rootIconOf(DOWNLOAD_ID))
-        mediaId == FAVORITE_ID -> browseItem(FAVORITE_ID, "收藏", rootIconOf(FAVORITE_ID))
-        mediaId == PLAYLIST_ID -> browseItem(PLAYLIST_ID, "歌单", rootIconOf(PLAYLIST_ID))
+        mediaId == QUEUE_ID -> browseItem(QUEUE_ID, context.getString(R.string.media_tree_now_playing), rootIconOf(QUEUE_ID))
+        mediaId == DOWNLOAD_ID -> browseItem(DOWNLOAD_ID, context.getString(R.string.media_tree_offline_download), rootIconOf(DOWNLOAD_ID))
+        mediaId == FAVORITE_ID -> browseItem(FAVORITE_ID, context.getString(R.string.media_tree_favorites), rootIconOf(FAVORITE_ID))
+        mediaId == PLAYLIST_ID -> browseItem(PLAYLIST_ID, context.getString(R.string.media_tree_playlists), rootIconOf(PLAYLIST_ID))
         mediaId.startsWith(PLAYLIST_PREFIX) ->
-            browseItem(mediaId, playlistTitles[mediaId] ?: "歌单")
+            browseItem(mediaId, playlistTitles[mediaId] ?: context.getString(R.string.media_tree_playlists))
         mediaId.startsWith(BrowseCache.SONG_PREFIX) ->
             browseCache.songOf(mediaId)?.let { songToItem(it) }
         else -> null
@@ -263,10 +263,10 @@ class MediaLibraryTree(
     /** 根菜单：固定 4 项可浏览节点（各配单色白色图标），按 root hints 上限裁剪 */
     private fun loadRootChildren(): List<MediaItem> {
         val all = listOf(
-            browseItem(QUEUE_ID, "当前播放", rootIconOf(QUEUE_ID)),
-            browseItem(DOWNLOAD_ID, "离线下载", rootIconOf(DOWNLOAD_ID)),
-            browseItem(FAVORITE_ID, "收藏", rootIconOf(FAVORITE_ID)),
-            browseItem(PLAYLIST_ID, "歌单", rootIconOf(PLAYLIST_ID))
+            browseItem(QUEUE_ID, context.getString(R.string.media_tree_now_playing), rootIconOf(QUEUE_ID)),
+            browseItem(DOWNLOAD_ID, context.getString(R.string.media_tree_offline_download), rootIconOf(DOWNLOAD_ID)),
+            browseItem(FAVORITE_ID, context.getString(R.string.media_tree_favorites), rootIconOf(FAVORITE_ID)),
+            browseItem(PLAYLIST_ID, context.getString(R.string.media_tree_playlists), rootIconOf(PLAYLIST_ID))
         )
         val limit = rootChildrenLimit.coerceIn(1, all.size)
         return all.take(limit)
@@ -422,7 +422,7 @@ class MediaLibraryTree(
                     .setIsPlayable(false)
                     .setTitle(playlist.name)
                     .setSubtitle(
-                        if (playlist.songCount > 0) "${playlist.songCount} 首" else null
+                        if (playlist.songCount > 0) context.getString(R.string.media_tree_song_count, playlist.songCount) else null
                     )
                     .setArtworkUri(
                         playlist.coverUrls.firstOrNull()

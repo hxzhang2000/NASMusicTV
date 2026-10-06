@@ -200,7 +200,7 @@ fun BaiduAuthDialog(
                                 focusedContentColor = NasMusicColors.TextPrimary
                             ) {
                                 Text(
-                                    text = "复制",
+                                    text = stringResource(R.string.netdisk_auth_copy),
                                     fontSize = FontSize.body(),
                                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp)
                                 )
@@ -232,9 +232,9 @@ fun BaiduAuthDialog(
                     // 授权失败：显示具体错误信息
                     connectionState is NetworkMusicViewModel.BaiduConnectionState.Failed -> {
                         Spacer(modifier = Modifier.height(36.dp))
-                        // M8 修复（2026-10-06，代码审查报告 §4）：按结构化 reason 区分失败
-                        // 阶段——旧实现 message.contains 中文哨兵在 EN locale（message 来自
-                        // getString）下必然落空，一律退化为兜底文案。
+// M8 修复（2026-10-06，代码审查报告 §4）：按结构化 reason 区分失败；
+                        // message 只作展示、不参与逻辑判断（旧实现 contains 中文哨兵在
+                        // EN locale 下必落空，且文案已本地化后不可再当逻辑依据）。
                         val failTitle = when (connectionState.reason) {
                             NetworkMusicViewModel.BaiduConnectionState.FailReason.SCOPE_MISSING,
                             NetworkMusicViewModel.BaiduConnectionState.FailReason.DEVICE_CODE_FAILED ->
@@ -244,19 +244,7 @@ fun BaiduAuthDialog(
                             NetworkMusicViewModel.BaiduConnectionState.FailReason.TIMEOUT ->
                                 stringResource(R.string.baidu_auth_timeout)
                             NetworkMusicViewModel.BaiduConnectionState.FailReason.UNKNOWN ->
-                                // 旧写入点（未标注 reason 的）回退文案哨兵——保持向后兼容
-                                if (connectionState.message.contains("设备码") ||
-                                    connectionState.message.contains("网络") ||
-                                    connectionState.message.contains("scope") ||
-                                    connectionState.message.contains("网盘权限")) {
-                                    stringResource(R.string.baidu_auth_scope_missing)
-                                } else if (connectionState.message.contains("拒绝")) {
-                                    stringResource(R.string.baidu_user_declined)
-                                } else if (connectionState.message.contains("超时")) {
-                                    stringResource(R.string.baidu_auth_timeout)
-                                } else {
-                                    stringResource(R.string.netdisk_auth_failed)
-                                }
+                                stringResource(R.string.netdisk_auth_failed)
                         }
                         Text(
                             text = failTitle,

@@ -137,7 +137,7 @@ fun SongInfoPanel(
             // 歌曲来源（统一走 MusicSourceType 体系，与列表 SourceBadge 文案一致；
             // 原实现显示 networkSource 原始大写标识（BAIDU/METING 等），文案不统一）
             Spacer(modifier = Modifier.height(8.dp))
-            InfoRow(stringResource(R.string.song_info_network_source_label), song.sourceType.displayName)
+            InfoRow(stringResource(R.string.song_info_network_source_label), stringResource(song.sourceType.displayNameRes))
         }
     }
 }

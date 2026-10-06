@@ -342,7 +342,7 @@ fun ControlButtonsRow(
                 PlayMode.REPEAT_ONE -> Icons.Filled.RepeatOne
                 else -> Icons.Filled.Repeat
             }
-            Icon(imageVector = icon, contentDescription = playMode.displayName,
+            Icon(imageVector = icon, contentDescription = stringResource(playMode.displayNameRes),
                 tint = NasMusicColors.TextPrimary,
                 modifier = Modifier.size(if (compact) 20.dp else 28.dp))
         })

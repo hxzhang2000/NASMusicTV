@@ -148,7 +148,7 @@ internal fun PlayModeSelector(current: PlayMode, onSelect: (PlayMode) -> Unit) {
                     focusedContentColor = if (selected) androidx.compose.ui.graphics.Color.Black else NasMusicColors.TextPrimary,
                     pressedScale = 0.95f
                 ) {
-                    Text(text = mode.displayName, color = if (selected) androidx.compose.ui.graphics.Color.Black else NasMusicColors.TextPrimary, fontSize = FontSize.button(), modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp))
+                    Text(text = stringResource(mode.displayNameRes), color = if (selected) androidx.compose.ui.graphics.Color.Black else NasMusicColors.TextPrimary, fontSize = FontSize.button(), modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp))
                 }
             }
         }

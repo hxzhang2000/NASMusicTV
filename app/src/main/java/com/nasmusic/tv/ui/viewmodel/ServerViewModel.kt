@@ -161,12 +161,12 @@ class ServerViewModel(
         }
 
         // 2. 百度网盘（静态常量）
-        result.add(VersionInfo.Static("百度网盘", "PCS rest/2.0", "接口静默演进，无显式版本号"))
+        result.add(VersionInfo.Static("百度网盘", "PCS rest/2.0", getApplication<Application>().getString(R.string.about_baidu_netdisk_note)))
 
         // 3. 外部服务（静态常量）
         result.add(VersionInfo.Static("Jamendo", "v3.0"))
-        result.add(VersionInfo.Static("Open-Meteo", "v1.0", "默认天气源"))
-        result.add(VersionInfo.Static("OpenWeatherMap", "v2.5", "备用天气源"))
+        result.add(VersionInfo.Static("Open-Meteo", "v1.0", getApplication<Application>().getString(R.string.about_openmeteo_note)))
+        result.add(VersionInfo.Static("OpenWeatherMap", "v2.5", getApplication<Application>().getString(R.string.about_owm_note)))
 
         // 4. 无版本号服务（仅展示服务名）
         result.add(VersionInfo.NoVersion("Meting-API"))

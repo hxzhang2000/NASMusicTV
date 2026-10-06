@@ -1,6 +1,8 @@
 package com.nasmusic.tv.data.model
 
 import androidx.compose.ui.graphics.Color
+import com.nasmusic.tv.R
+import androidx.annotation.StringRes
 
 /**
  * 统一音乐来源标识
@@ -9,22 +11,24 @@ import androidx.compose.ui.graphics.Color
  * 每个类型包含中文显示名、图标字符、主题色，供 UI 组件（SourceBadge 等）使用。
  */
 enum class MusicSourceType(
-    /** 中文显示名（用于 UI 标签） */
+    /** 显示名资源 ID（本地化展示用） */
+    @StringRes val displayNameRes: Int,
+    /** 中文显示名（数据用途，如搜索词/持久化；UI 展示走 [displayNameRes]） */
     val displayName: String,
     /** 图标字符 */
     val icon: String,
     /** 主题色 */
     val color: Color
 ) {
-    NAS("NAS", "🎵", Color(0xFF60A5FA)),           // 蓝色
-    NETWORK_MUSIC("网络", "🌐", Color(0xFF34D399)),  // 绿色
-    BAIDU_PAN("百度", "☁", Color(0xFFFBBF24)),      // 橙色
-    RADIO("电台", "📻", Color(0xFFA78BFA)),          // 紫色
-    JAMENDO("Jamendo", "♪", Color(0xFFF472B6)),     // 粉色
-    WEATHER_RADIO("天气电台", "🌤", Color(0xFF67E8F9)), // 天蓝色
-    LOCAL("本地", "📱", Color(0xFFFB923C)),          // 橙色（本地音乐）
-    DOWNLOAD("已下载", "⬇", Color(0xFF22D3EE)),     // 青色（应用专属目录下载的歌曲）
-    IMPORTED("导入", "📥", Color(0xFF9CA3AF));       // 灰色（歌单导入的裸 stub，尚未补全）
+    NAS(R.string.music_source_type_nas, "NAS", "🎵", Color(0xFF60A5FA)),           // 蓝色
+    NETWORK_MUSIC(R.string.music_source_type_network_music, "网络", "🌐", Color(0xFF34D399)),  // 绿色
+    BAIDU_PAN(R.string.music_source_type_baidu_pan, "百度", "☁", Color(0xFFFBBF24)),      // 橙色
+    RADIO(R.string.music_source_type_radio, "电台", "📻", Color(0xFFA78BFA)),          // 紫色
+    JAMENDO(R.string.music_source_type_jamendo, "Jamendo", "♪", Color(0xFFF472B6)),     // 粉色
+    WEATHER_RADIO(R.string.music_source_type_weather_radio, "天气电台", "🌤", Color(0xFF67E8F9)), // 天蓝色
+    LOCAL(R.string.music_source_type_local, "本地", "📱", Color(0xFFFB923C)),          // 橙色（本地音乐）
+    DOWNLOAD(R.string.music_source_type_download, "已下载", "⬇", Color(0xFF22D3EE)),     // 青色（应用专属目录下载的歌曲）
+    IMPORTED(R.string.music_source_type_imported, "导入", "📥", Color(0xFF9CA3AF));       // 灰色（歌单导入的裸 stub，尚未补全）
 
     companion object {
         /** 默认参与搜索的来源（排除 RADIO / WEATHER_RADIO / DOWNLOAD，它们不是搜索源） */

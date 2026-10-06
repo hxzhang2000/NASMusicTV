@@ -44,6 +44,7 @@ import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Text
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import com.nasmusic.tv.R
 import com.nasmusic.tv.backend.download.model.DownloadState
 import com.nasmusic.tv.backend.download.model.isDownloadableSong
 import com.nasmusic.tv.data.model.Song
@@ -490,8 +491,8 @@ private fun SongRowModeRow(
             )
         ) {
             ConfirmDialog(
-                title = "删除下载",
-                message = "确认删除「${song.title}」的已下载文件？",
+title = stringResource(R.string.download_delete_title),
+                message = stringResource(R.string.download_delete_message, song.title),
                 destructive = true,
                 onConfirm = {
                     onDeleteDownload?.invoke()

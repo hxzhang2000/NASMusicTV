@@ -209,8 +209,8 @@ class NasMusicApp : Application(), ImageLoaderFactory {
     // ---- 百度网盘组件（懒构造，仅在用户开启百度源时实例化）----
     /** 百度专用 OkHttpClient（守护线程池 + 系统默认 TLS 校验；独立实例避免与全局播放 client 争抢连接池） */
     val baiduOkHttpClient: OkHttpClient by lazy { BaiduOAuthClient.buildClient() }
-    val baiduOAuthClient: BaiduOAuthClient by lazy { BaiduOAuthClient(baiduOkHttpClient, appPreferences) }
-    val baiduPanApi: BaiduPanApi by lazy { BaiduPanApi(baiduOkHttpClient, baiduOAuthClient) }
+val baiduOAuthClient: BaiduOAuthClient by lazy { BaiduOAuthClient(this, baiduOkHttpClient, appPreferences) }
+    val baiduPanApi: BaiduPanApi by lazy { BaiduPanApi(this, baiduOkHttpClient, baiduOAuthClient) }
     val baiduStreamFactory: BaiduStreamFactory by lazy { BaiduStreamFactory(baiduPanApi, baiduOAuthClient) }
     val baiduFileIndexCache: BaiduFileIndexCache by lazy { BaiduFileIndexCache(this) }
     val baiduLyricsProvider: BaiduLyricsProvider by lazy { BaiduLyricsProvider(baiduPanApi, baiduOkHttpClient, baiduOAuthClient) }
@@ -449,7 +449,8 @@ class NasMusicApp : Application(), ImageLoaderFactory {
                 }
             }
         )
-        autoDownloadController = com.nasmusic.tv.backend.download.AutoDownloadController(
+autoDownloadController = com.nasmusic.tv.backend.download.AutoDownloadController(
+            context = this,
             settings = {
                 // P3：单次快照，避免 4 次 first() 读到不一致的设置状态
                 val snap = appPreferences.appSettings.first()

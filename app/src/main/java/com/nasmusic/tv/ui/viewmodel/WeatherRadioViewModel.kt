@@ -39,7 +39,7 @@ class WeatherRadioViewModel(
     private val backendRegistry = nasMusicApp.backendRegistry
     private val prefs = nasMusicApp.appPreferences
 
-    val weatherApi = WeatherApi()
+    val weatherApi = WeatherApi(app)
     var weatherRadioManager: WeatherRadioManager? = null
         private set
 

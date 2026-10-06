@@ -112,7 +112,7 @@ internal fun AlbumCard(
                             .padding(horizontal = 4.dp, vertical = 1.dp),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text(text = album.sourceType.displayName, color = androidx.compose.ui.graphics.Color.White, fontSize = 9.sp)
+                        Text(text = stringResource(album.sourceType.displayNameRes), color = androidx.compose.ui.graphics.Color.White, fontSize = 9.sp)
                     }
                 } else {
                     // 无来源时仍显示歌曲数

@@ -126,15 +126,15 @@ internal fun DownloadSettingsSection(
             )
             Spacer(modifier = Modifier.height(8.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                AdjustButton("内", onClick = { actions.onChangeDownloadLocation?.invoke("INTERNAL") })
-                AdjustButton("外", onClick = { actions.onChangeDownloadLocation?.invoke("CUSTOM") })
+                AdjustButton(stringResource(R.string.settings_download_btn_internal), onClick = { actions.onChangeDownloadLocation?.invoke("INTERNAL") })
+                AdjustButton(stringResource(R.string.settings_download_btn_external), onClick = { actions.onChangeDownloadLocation?.invoke("CUSTOM") })
             }
         }
         // P1-17: 清空所有下载
         Spacer(modifier = Modifier.height(12.dp))
         SettingActionButton(
-            label = "清空所有下载",
-            description = "删除所有已下载的歌曲文件，此操作不可撤销",
+            label = stringResource(R.string.settings_clear_downloads_title),
+            description = stringResource(R.string.settings_clear_downloads_desc),
             onClick = onClearAllDownloadsRequested
         )
         // 导出到外接设备（§8.8.9）

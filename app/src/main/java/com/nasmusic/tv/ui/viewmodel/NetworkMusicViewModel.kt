@@ -213,9 +213,9 @@ class NetworkMusicViewModel(app: Application) : AndroidViewModel(app) {
     /** API 错误回调注册（由 MainViewModel 在构造期注入 errno=-6 分支） */
     var onBaiduApiError: ((Int, String) -> Unit)? = null
 
-    /** 认证失败（errno=-6）：设 Failed 状态（由 MainViewModel 的 onApiError 回调转发） */
+/** 认证失败（errno=-6）：设 Failed 状态（由 MainViewModel 的 onApiError 回调转发） */
     fun onBaiduAuthFailed(desc: String) {
-        _baiduConnectionState.value = BaiduConnectionState.Failed(desc)
+        _baiduConnectionState.value = BaiduConnectionState.Failed(desc, BaiduConnectionState.FailReason.SCOPE_MISSING)
     }
 
     private var deviceCodePollJob: kotlinx.coroutines.Job? = null
@@ -267,7 +267,7 @@ class NetworkMusicViewModel(app: Application) : AndroidViewModel(app) {
                             AppLog.i("BaiduAuth", "verifyBaiduTokenAsync: createDir returned errno=$createErrno, retrying listDir...")
                             val retryResult = baiduApi.listDir(BaiduNetdiskConfig.APP_DIR)
                             if (retryResult.errno != 0) {
-                                val desc = BaiduNetdiskConfig.describeErrno(retryResult.errno)
+                                val desc = BaiduNetdiskConfig.describeErrno(getApplication(), retryResult.errno)
                                 _baiduConnectionState.value = BaiduConnectionState.Failed(desc, BaiduConnectionState.FailReason.SCOPE_MISSING)
                                 AppLog.w("BaiduAuth", "verifyBaiduTokenAsync: retry after create failed errno=${retryResult.errno}")
                             } else {
@@ -275,18 +275,18 @@ class NetworkMusicViewModel(app: Application) : AndroidViewModel(app) {
                                 checkMusicRootDirAfterVerify()
                             }
                         } else {
-                            val desc = "目录不存在且创建失败 (errno=$createErrno)"
+                            val desc = getApplication<Application>().getString(R.string.baidu_dir_create_failed, createErrno)
                             _baiduConnectionState.value = BaiduConnectionState.Failed(desc, BaiduConnectionState.FailReason.SCOPE_MISSING)
                             AppLog.w("BaiduAuth", "verifyBaiduTokenAsync: createDir failed errno=$createErrno")
                         }
-                    } else if (result.errno == -6) {
+} else if (result.errno == -6) {
                         // access_token 无效
-                        val desc = BaiduNetdiskConfig.describeErrno(result.errno)
-                        _baiduConnectionState.value = BaiduConnectionState.Failed(desc)
+                        val desc = BaiduNetdiskConfig.describeErrno(getApplication(), result.errno)
+                        _baiduConnectionState.value = BaiduConnectionState.Failed(desc, BaiduConnectionState.FailReason.SCOPE_MISSING)
                         AppLog.w("BaiduAuth", "verifyBaiduTokenAsync: errno=-6 (auth failed), set state=Failed")
                     } else if (result.errno != 0) {
                         // 其他 API 错误（非认证），token 本身有效，按登录处理
-                        val desc = BaiduNetdiskConfig.describeErrno(result.errno)
+                        val desc = BaiduNetdiskConfig.describeErrno(getApplication(), result.errno)
                         AppLog.w("BaiduAuth", "verifyBaiduTokenAsync: errno=${result.errno} ($desc), not auth-related, treating as logged in")
                         checkMusicRootDirAfterVerify()
                     } else {
@@ -453,7 +453,7 @@ class NetworkMusicViewModel(app: Application) : AndroidViewModel(app) {
                 AppLog.d("BaiduAuth", "listBaiduDir: got ${result.files.size} files, hasMore=${result.hasMore}, errno=${result.errno}")
                 // API 返回错误时设置 Failed 状态（不再依赖回调）
                 if (result.errno != 0) {
-                    val desc = BaiduNetdiskConfig.describeErrno(result.errno)
+                    val desc = BaiduNetdiskConfig.describeErrno(getApplication(), result.errno)
                     AppLog.w("BaiduAuth", "listBaiduDir: errno=${result.errno} ($desc), setting state=Failed")
                     _baiduConnectionState.value = BaiduConnectionState.Failed(desc)
                 }
@@ -707,11 +707,16 @@ class NetworkMusicViewModel(app: Application) : AndroidViewModel(app) {
                         _baiduConnectionState.value = BaiduConnectionState.Connecting
                         AppLog.d("BaiduAuth", "init: set state=Connecting, verifying token...")
                         try {
-                            val verifyResult = baiduApi.listDir(BaiduNetdiskConfig.APP_DIR)
+val verifyResult = baiduApi.listDir(BaiduNetdiskConfig.APP_DIR)
                             if (verifyResult.errno != 0) {
                                 // 直接从结果读取 errno，不依赖回调
-                                val desc = BaiduNetdiskConfig.describeErrno(verifyResult.errno)
-                                _baiduConnectionState.value = BaiduConnectionState.Failed(desc)
+                                val desc = BaiduNetdiskConfig.describeErrno(getApplication(), verifyResult.errno)
+                                val reason = if (verifyResult.errno == -6) {
+                                    BaiduConnectionState.FailReason.SCOPE_MISSING
+                                } else {
+                                    BaiduConnectionState.FailReason.UNKNOWN
+                                }
+                                _baiduConnectionState.value = BaiduConnectionState.Failed(desc, reason)
                                 AppLog.w("BaiduAuth", "init: verify failed errno=${verifyResult.errno}, set state=Failed($desc)")
                             } else {
                                 _baiduConnectionState.value = BaiduConnectionState.LoggedIn

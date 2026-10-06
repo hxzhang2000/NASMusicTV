@@ -3,6 +3,7 @@ package com.nasmusic.tv.backend.network.baidu
 import android.content.Context
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
+import com.nasmusic.tv.R
 import com.nasmusic.tv.data.model.BaiduFile
 import com.nasmusic.tv.data.model.BaiduFileIndex
 import com.nasmusic.tv.data.model.BaiduIndexEntry
@@ -30,7 +31,7 @@ import java.io.File
  * 实测通过后可在 [BaiduPanApi.listAllAudio] 启用作为可选加速。
  */
 class BaiduFileIndexCache(
-    context: Context,
+    private val context: Context,
     /**
      * [load] 的体积安全阀阈值（字节）。
      * 设为可注入，测试才能用极小值验证安全阀，不必真的写 128MB 文件。
@@ -452,7 +453,7 @@ class BaiduFileIndexCache(
             AppLog.e(TAG, "fullScan interrupted, partial saved", e)
             val partial = BaiduFileIndex(rootPath = rootPath, lastSyncAt = System.currentTimeMillis(), entries = entries)
             save(partial)
-            onProgress?.onFailed(e.message ?: "扫描中断")
+            onProgress?.onFailed(e.message ?: context.getString(R.string.netdisk_scan_interrupted))
             return@withContext partial
         }
 
@@ -618,7 +619,7 @@ class BaiduFileIndexCache(
         onProgress: ApicProgressCallback? = null
     ) = withContext(Dispatchers.IO) {
         val index = load() ?: run {
-            onProgress?.onFailed("索引不存在")
+            onProgress?.onFailed(context.getString(R.string.netdisk_index_missing))
             return@withContext
         }
         // 筛选：音频文件（非视频）且 coverUrl 为空

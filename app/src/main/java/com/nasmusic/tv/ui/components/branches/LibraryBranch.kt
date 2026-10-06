@@ -96,19 +96,27 @@ internal fun LibraryBranch(
                     val browseResultsState by viewModel.browseResults.collectAsState(initial = UiState.Success(emptyList()))
                     val browseIsLoading by viewModel.isBrowseSearching.collectAsState(initial = false)
                     val browseResultsList = browseResultsState.dataOrNull() ?: emptyList()
-                    // Build DiscoverTab-compatible dimensions from BrowseDimension enum
+// Build DiscoverTab-compatible dimensions from BrowseDimension enum
+                    // (不带字符串，只带资源 ID——remember 块内不能调 composable stringResource，
+                    // 渲染在 DiscoverTab 组合作用域做)
                     val discoverDimensions = remember {
-                        com.nasmusic.tv.data.model.BrowseDimension.entries.map { dim ->
+                        com.nasmusic.tv.data.model.BrowseDimension.entries.mapIndexed { dimIdx, dim ->
                             com.nasmusic.tv.ui.screens.library.BrowseDimension(
-                                label = dim.displayName,
-                                options = dim.options.map { it.label }
+                                dimIndex = dimIdx,
+                                labelRes = dim.displayNameRes,
+                                options = dim.options.mapIndexed { optIdx, opt ->
+                                    com.nasmusic.tv.ui.screens.library.BrowseOption(
+                                        optionIndex = optIdx,
+                                        labelRes = opt.labelRes
+                                    )
+                                }
                             )
                         }
                     }
-                    val discoverCurrentDimensionValues = remember(browseSelections) {
+val discoverCurrentDimensionValues = remember(browseSelections) {
                         com.nasmusic.tv.data.model.BrowseDimension.entries.mapIndexed { dimIdx, dim ->
                             val selectedIdx = browseSelections.getOrElse(dimIdx) { 0 }
-                            dim.displayName to dim.options.getOrElse(selectedIdx) { dim.options.first() }.label
+                            dimIdx to selectedIdx.coerceIn(0, dim.options.lastIndex)
                         }.toMap()
                     }
                     LibraryScreen(
@@ -186,15 +194,8 @@ internal fun LibraryBranch(
                         discoverFilteredSongs = browseResultsList,
                         discoverIsLoading = browseIsLoading,
                         discoverCurrentDimensionValues = discoverCurrentDimensionValues,
-                        onDiscoverDimensionChanged = { dimensionLabel, optionLabel ->
-                            val dimIdx = com.nasmusic.tv.data.model.BrowseDimension.entries.indexOfFirst { it.displayName == dimensionLabel }
-                            if (dimIdx >= 0) {
-                                val dim = com.nasmusic.tv.data.model.BrowseDimension.entries[dimIdx]
-                                val optIdx = dim.options.indexOfFirst { it.label == optionLabel }
-                                if (optIdx >= 0) {
-                                    viewModel.selectBrowseOption(dimIdx, optIdx)
-                                }
-                            }
+onDiscoverDimensionChanged = { dimIdx, optIdx ->
+                            viewModel.selectBrowseOption(dimIdx, optIdx)
                         },
                         onDiscoverPlayAll = {
                             if (browseResultsList.isNotEmpty()) {

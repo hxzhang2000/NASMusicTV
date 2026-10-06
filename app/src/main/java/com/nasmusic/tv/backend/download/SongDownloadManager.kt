@@ -11,6 +11,7 @@ import com.nasmusic.tv.backend.download.model.downloadKeyOf
 import com.nasmusic.tv.backend.network.QualityTiers
 import com.nasmusic.tv.data.model.Song
 import com.nasmusic.tv.util.AppLog
+import com.nasmusic.tv.R
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -217,7 +218,7 @@ class SongDownloadManager(
                     }
                 }
             } catch (e: StorageFullException) {
-                onNotify("存储空间不足（已预留 100MB），请清理后重试")
+                onNotify(context.getString(R.string.download_storage_full))
                 DownloadResult.StorageFull
             } catch (e: CancellationException) {
                 throw e
@@ -251,7 +252,7 @@ class SongDownloadManager(
             // 重试耗尽 → FAILED（key 为最后一次解析命中的档位，无降级信息时即请求档位）
             repo.updateStatus(key, DownloadStatus.FAILED, 0, reason ?: "下载失败")
             _downloadStates.update { it + (key to DownloadState.Failed(reason)) }
-            onNotify("下载失败：${song.title}")
+            onNotify(context.getString(R.string.download_failed_format, song.title))
             return result
         }
     }
@@ -415,7 +416,7 @@ class SongDownloadManager(
 
         // 10. 触发媒体扫描（best-effort）
         triggerMediaScan(p.finalFile)
-        onNotify("已下载：${song.title}")
+        onNotify(context.getString(R.string.download_completed_format, song.title))
         AppLog.i(TAG, "downloaded: ${p.finalFile.absolutePath}")
         // 11. 即时入库 local_songs（§7.5.5）：由 NasMusicApp 接管，构建 ScannedSong + upsertDownloaded + 刷新 _localSongs
         runCatching { onCompleted?.invoke(done) }

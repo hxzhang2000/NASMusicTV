@@ -7,6 +7,7 @@ import com.nasmusic.tv.backend.impl.JellyfinAdapter
 import com.nasmusic.tv.backend.impl.NavidromeAdapter
 import com.nasmusic.tv.backend.impl.SubsonicAdapter
 import com.nasmusic.tv.data.model.ServerConfig
+import com.nasmusic.tv.R
 import com.nasmusic.tv.util.AppLog
 import com.nasmusic.tv.util.UrlSanitizer
 import kotlinx.coroutines.Dispatchers
@@ -196,7 +197,7 @@ class BackendRegistry(private val appContext: Context? = null) {
             TYPE_SUBSONIC -> SubsonicAdapter()
             TYPE_DAOLIYU -> DaoliyuAdapter()
             TYPE_FEINIU -> FeiniuAdapter(appContext)
-            else -> return@withContext Pair(false, "不支持的后端类型")
+            else -> return@withContext Pair(false, appContext?.getString(R.string.backend_unsupported_type) ?: "")
         }
 
         val success = adapter.initialize(
@@ -217,7 +218,7 @@ class BackendRegistry(private val appContext: Context? = null) {
             // 即使失败也尝试 logout（部分 Jellyfin 可能已创建 session）
             try { adapter.logout() } catch (e: Exception) { AppLog.w("BackendRegistry", "testConnection failed: logout", e) }
             try { adapter.close() } catch (e: Exception) { AppLog.w("BackendRegistry", "testConnection failed: close", e) }
-            Pair(false, "连接失败，请检查地址和凭据")
+            Pair(false, appContext?.getString(R.string.server_connect_failed_generic) ?: "")
         }
     }
 

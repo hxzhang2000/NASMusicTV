@@ -7,6 +7,7 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
+import com.nasmusic.tv.R
 
 /**
  * 链接相关工具：打开浏览器 / 复制到剪贴板
@@ -40,6 +41,6 @@ object LinkUtils {
     fun copyToClipboard(context: Context, label: String, text: String) {
         val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
         clipboard.setPrimaryClip(ClipData.newPlainText(label, text))
-        Toast.makeText(context, "已复制到剪贴板", Toast.LENGTH_SHORT).show()
+        Toast.makeText(context, context.getString(R.string.link_copied_clipboard), Toast.LENGTH_SHORT).show()
     }
 }

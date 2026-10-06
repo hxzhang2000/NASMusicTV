@@ -34,7 +34,7 @@ import java.util.concurrent.TimeUnit
 class NavidromeAdapter : BackendAdapter {
 
     override val backendType: String = "navidrome"
-    override var apiVersion: String = "Navidrome (版本未知)"
+    override var apiVersion: String = "Unknown"
 
 @Volatile
     private var baseUrl: String = ""

@@ -1,6 +1,8 @@
 package com.nasmusic.tv.visualizer.photo
 
 import com.nasmusic.tv.visualizer.Easing
+import com.nasmusic.tv.R
+import androidx.annotation.StringRes
 
 /**
  * 照片转场效果（**76 种**，§4.2 完整清单）
@@ -21,6 +23,9 @@ import com.nasmusic.tv.visualizer.Easing
  * 那个是**一次切换内的阶段**，这里是**交付分期**。
  */
 enum class PhotoTransitionId(
+    /** 显示名资源 ID（本地化展示用） */
+    @StringRes val displayNameRes: Int,
+    /** 中文显示名（数据用途，如搜索词/持久化；UI 展示走 [displayNameRes]） */
     val displayName: String,
     val mechanism: PhotoMechanism,
     /** ENTER 基准时长（ms）；EXIT 与同一时段等长，无需独立配置（§5.3） */
@@ -65,158 +70,158 @@ enum class PhotoTransitionId(
 
     // ────────────────────────── A. 淡化类（4）· §5.3：easeInOutQuad ──────────────────────────
 
-    CROSSFADE("交叉淡化", PhotoMechanism.M1_CLIP, 800, Phase.P0, easing = Easing::easeInOutQuad),
+    CROSSFADE(R.string.photo_transition_crossfade, "交叉淡化", PhotoMechanism.M1_CLIP, 800, Phase.P0, easing = Easing::easeInOutQuad),
     FADE_BLACK(
-        "经黑场", PhotoMechanism.M1_CLIP, 800, Phase.P0,
+        R.string.photo_transition_fade_black, "经黑场", PhotoMechanism.M1_CLIP, 800, Phase.P0,
         requiresSequential = true, easing = Easing::easeInOutQuad,
     ),
     FADE_WHITE(
-        "白闪", PhotoMechanism.M1_CLIP, 800, Phase.P1,
+        R.string.photo_transition_fade_white, "白闪", PhotoMechanism.M1_CLIP, 800, Phase.P1,
         requiresSequential = true, easing = Easing::easeInOutQuad,
     ),
-    FADE_COLOR("主题色过渡", PhotoMechanism.M1_CLIP, 800, Phase.P1, easing = Easing::easeInOutQuad),
+    FADE_COLOR(R.string.photo_transition_fade_color, "主题色过渡", PhotoMechanism.M1_CLIP, 800, Phase.P1, easing = Easing::easeInOutQuad),
 
     // ────────────────────────── B. 滑动 / 位移类（9）· §5.3：easeOutCubic ──────────────────────────
 
-    SLIDE_LEFT("左滑", PhotoMechanism.M2_TRANSFORM, 500, Phase.P0, easing = Easing::easeOutCubic),
-    SLIDE_RIGHT("右滑", PhotoMechanism.M2_TRANSFORM, 500, Phase.P0, easing = Easing::easeOutCubic),
-    SLIDE_UP("上滑", PhotoMechanism.M2_TRANSFORM, 500, Phase.P0, easing = Easing::easeOutCubic),
-    SLIDE_DOWN("下滑", PhotoMechanism.M2_TRANSFORM, 500, Phase.P0, easing = Easing::easeOutCubic),
-    PUSH("推挤", PhotoMechanism.M2_TRANSFORM, 500, Phase.P1, easing = Easing::easeOutCubic),
-    COVER("覆盖", PhotoMechanism.M2_TRANSFORM, 500, Phase.P1, easing = Easing::easeOutCubic),
-    REVEAL("揭示", PhotoMechanism.M2_TRANSFORM, 500, Phase.P1, easing = Easing::easeOutCubic),
-    SLIDE_DIAGONAL("对角滑动", PhotoMechanism.M2_TRANSFORM, 500, Phase.P1, easing = Easing::easeOutCubic),
-    PARALLAX_SLIDE("视差滑动", PhotoMechanism.M2_TRANSFORM, 500, Phase.P2, easing = Easing::easeOutCubic),
+    SLIDE_LEFT(R.string.photo_transition_slide_left, "左滑", PhotoMechanism.M2_TRANSFORM, 500, Phase.P0, easing = Easing::easeOutCubic),
+    SLIDE_RIGHT(R.string.photo_transition_slide_right, "右滑", PhotoMechanism.M2_TRANSFORM, 500, Phase.P0, easing = Easing::easeOutCubic),
+    SLIDE_UP(R.string.photo_transition_slide_up, "上滑", PhotoMechanism.M2_TRANSFORM, 500, Phase.P0, easing = Easing::easeOutCubic),
+    SLIDE_DOWN(R.string.photo_transition_slide_down, "下滑", PhotoMechanism.M2_TRANSFORM, 500, Phase.P0, easing = Easing::easeOutCubic),
+    PUSH(R.string.photo_transition_push, "推挤", PhotoMechanism.M2_TRANSFORM, 500, Phase.P1, easing = Easing::easeOutCubic),
+    COVER(R.string.photo_transition_cover, "覆盖", PhotoMechanism.M2_TRANSFORM, 500, Phase.P1, easing = Easing::easeOutCubic),
+    REVEAL(R.string.photo_transition_reveal, "揭示", PhotoMechanism.M2_TRANSFORM, 500, Phase.P1, easing = Easing::easeOutCubic),
+    SLIDE_DIAGONAL(R.string.photo_transition_slide_diagonal, "对角滑动", PhotoMechanism.M2_TRANSFORM, 500, Phase.P1, easing = Easing::easeOutCubic),
+    PARALLAX_SLIDE(R.string.photo_transition_parallax_slide, "视差滑动", PhotoMechanism.M2_TRANSFORM, 500, Phase.P2, easing = Easing::easeOutCubic),
 
     // ────────────────────────── C. 缩放 / 深度类（7）· §5.3：easeInOutCubic ──────────────────────────
 
-    ZOOM_IN("缩放进入", PhotoMechanism.M2_TRANSFORM, 700, Phase.P0, easing = Easing::easeInOutCubic),
-    ZOOM_OUT("缩放退出", PhotoMechanism.M2_TRANSFORM, 700, Phase.P0, easing = Easing::easeInOutCubic),
-    CROSS_ZOOM("交叉缩放", PhotoMechanism.M2_TRANSFORM, 700, Phase.P1, easing = Easing::easeInOutCubic),
-    ZOOM_THROUGH("穿越", PhotoMechanism.M2_TRANSFORM, 700, Phase.P1, easing = Easing::easeInOutCubic),
+    ZOOM_IN(R.string.photo_transition_zoom_in, "缩放进入", PhotoMechanism.M2_TRANSFORM, 700, Phase.P0, easing = Easing::easeInOutCubic),
+    ZOOM_OUT(R.string.photo_transition_zoom_out, "缩放退出", PhotoMechanism.M2_TRANSFORM, 700, Phase.P0, easing = Easing::easeInOutCubic),
+    CROSS_ZOOM(R.string.photo_transition_cross_zoom, "交叉缩放", PhotoMechanism.M2_TRANSFORM, 700, Phase.P1, easing = Easing::easeInOutCubic),
+    ZOOM_THROUGH(R.string.photo_transition_zoom_through, "穿越", PhotoMechanism.M2_TRANSFORM, 700, Phase.P1, easing = Easing::easeInOutCubic),
     DEPTH_BLUR(
-        "景深虚化过渡", PhotoMechanism.M3_MASK_BITMAP, 700, Phase.P1,
+        R.string.photo_transition_depth_blur, "景深虚化过渡", PhotoMechanism.M3_MASK_BITMAP, 700, Phase.P1,
         easing = Easing::easeInOutCubic,
     ),
     PERSPECTIVE_PUSH(
-        "3D 纵深推拉", PhotoMechanism.M2_TRANSFORM, 700, Phase.P2,
+        R.string.photo_transition_perspective_push, "3D 纵深推拉", PhotoMechanism.M2_TRANSFORM, 700, Phase.P2,
         easing = Easing::easeInOutCubic,
     ),
-    DOLLY_ZOOM("希区柯克变焦", PhotoMechanism.M2_TRANSFORM, 700, Phase.P2, easing = Easing::easeInOutCubic),
+    DOLLY_ZOOM(R.string.photo_transition_dolly_zoom, "希区柯克变焦", PhotoMechanism.M2_TRANSFORM, 700, Phase.P2, easing = Easing::easeInOutCubic),
 
     // ────────────────────────── D. 遮罩形状类（10）· §5.3：easeInOutQuad ──────────────────────────
 
-    IRIS_CIRCLE("圆形光圈", PhotoMechanism.M1_CLIP, 700, Phase.P0, easing = Easing::easeInOutQuad),
-    IRIS_DIAMOND("菱形展开", PhotoMechanism.M1_CLIP, 700, Phase.P1, easing = Easing::easeInOutQuad),
-    IRIS_STAR("星形展开", PhotoMechanism.M1_CLIP, 700, Phase.P1, easing = Easing::easeInOutQuad),
-    IRIS_HEXAGON("六边形蜂巢", PhotoMechanism.M1_CLIP, 700, Phase.P1, easing = Easing::easeInOutQuad),
-    IRIS_TRIANGLE("三角形展开", PhotoMechanism.M1_CLIP, 700, Phase.P2, easing = Easing::easeInOutQuad),
-    SHAPE_RANDOM("随机形状池", PhotoMechanism.M1_CLIP, 700, Phase.P1, easing = Easing::easeInOutQuad),
-    WIPE_LINEAR("线性擦除", PhotoMechanism.M1_CLIP, 700, Phase.P0, easing = Easing::easeInOutQuad),
-    WIPE_CLOCK("时钟擦除", PhotoMechanism.M1_CLIP, 700, Phase.P1, easing = Easing::easeInOutQuad),
-    WIPE_SPIRAL("螺旋擦除", PhotoMechanism.M1_CLIP, 700, Phase.P2, easing = Easing::easeInOutQuad),
-    WIPE_CROSS("十字擦除", PhotoMechanism.M1_CLIP, 700, Phase.P1, easing = Easing::easeInOutQuad),
+    IRIS_CIRCLE(R.string.photo_transition_iris_circle, "圆形光圈", PhotoMechanism.M1_CLIP, 700, Phase.P0, easing = Easing::easeInOutQuad),
+    IRIS_DIAMOND(R.string.photo_transition_iris_diamond, "菱形展开", PhotoMechanism.M1_CLIP, 700, Phase.P1, easing = Easing::easeInOutQuad),
+    IRIS_STAR(R.string.photo_transition_iris_star, "星形展开", PhotoMechanism.M1_CLIP, 700, Phase.P1, easing = Easing::easeInOutQuad),
+    IRIS_HEXAGON(R.string.photo_transition_iris_hexagon, "六边形蜂巢", PhotoMechanism.M1_CLIP, 700, Phase.P1, easing = Easing::easeInOutQuad),
+    IRIS_TRIANGLE(R.string.photo_transition_iris_triangle, "三角形展开", PhotoMechanism.M1_CLIP, 700, Phase.P2, easing = Easing::easeInOutQuad),
+    SHAPE_RANDOM(R.string.photo_transition_shape_random, "随机形状池", PhotoMechanism.M1_CLIP, 700, Phase.P1, easing = Easing::easeInOutQuad),
+    WIPE_LINEAR(R.string.photo_transition_wipe_linear, "线性擦除", PhotoMechanism.M1_CLIP, 700, Phase.P0, easing = Easing::easeInOutQuad),
+    WIPE_CLOCK(R.string.photo_transition_wipe_clock, "时钟擦除", PhotoMechanism.M1_CLIP, 700, Phase.P1, easing = Easing::easeInOutQuad),
+    WIPE_SPIRAL(R.string.photo_transition_wipe_spiral, "螺旋擦除", PhotoMechanism.M1_CLIP, 700, Phase.P2, easing = Easing::easeInOutQuad),
+    WIPE_CROSS(R.string.photo_transition_wipe_cross, "十字擦除", PhotoMechanism.M1_CLIP, 700, Phase.P1, easing = Easing::easeInOutQuad),
 
     // ────────────────────────── E. 条纹 / 分块类（8）· §5.3：每块 easeOut ⇒ easeOutQuad ──────────────────────────
 
     // ⚠️ 900ms + 逐块 stagger 300ms ⇒ 基准总时长取 1200
-    BLINDS_H("横向百叶窗", PhotoMechanism.M4_TILES, 1_200, Phase.P0, easing = Easing::easeOutQuad),
-    BLINDS_V("竖向百叶窗", PhotoMechanism.M4_TILES, 1_200, Phase.P0, easing = Easing::easeOutQuad),
-    CHECKERBOARD("棋盘格", PhotoMechanism.M4_TILES, 1_200, Phase.P1, easing = Easing::easeOutQuad),
-    BLOCKS_RANDOM("随机方块消融", PhotoMechanism.M4_TILES, 1_200, Phase.P1, easing = Easing::easeOutQuad),
-    GRID_FLIP("网格 3D 翻转", PhotoMechanism.M4_TILES, 1_200, Phase.P2, easing = Easing::easeOutQuad),
-    MOSAIC("马赛克渐显", PhotoMechanism.M4_TILES, 1_200, Phase.P2, easing = Easing::easeOutQuad),
-    TILE_CASCADE("瓦片错落", PhotoMechanism.M4_TILES, 1_200, Phase.P1, easing = Easing::easeOutQuad),
-    PUZZLE("拼图碎片", PhotoMechanism.M4_TILES, 1_200, Phase.P2, easing = Easing::easeOutQuad),
+    BLINDS_H(R.string.photo_transition_blinds_h, "横向百叶窗", PhotoMechanism.M4_TILES, 1_200, Phase.P0, easing = Easing::easeOutQuad),
+    BLINDS_V(R.string.photo_transition_blinds_v, "竖向百叶窗", PhotoMechanism.M4_TILES, 1_200, Phase.P0, easing = Easing::easeOutQuad),
+    CHECKERBOARD(R.string.photo_transition_checkerboard, "棋盘格", PhotoMechanism.M4_TILES, 1_200, Phase.P1, easing = Easing::easeOutQuad),
+    BLOCKS_RANDOM(R.string.photo_transition_blocks_random, "随机方块消融", PhotoMechanism.M4_TILES, 1_200, Phase.P1, easing = Easing::easeOutQuad),
+    GRID_FLIP(R.string.photo_transition_grid_flip, "网格 3D 翻转", PhotoMechanism.M4_TILES, 1_200, Phase.P2, easing = Easing::easeOutQuad),
+    MOSAIC(R.string.photo_transition_mosaic, "马赛克渐显", PhotoMechanism.M4_TILES, 1_200, Phase.P2, easing = Easing::easeOutQuad),
+    TILE_CASCADE(R.string.photo_transition_tile_cascade, "瓦片错落", PhotoMechanism.M4_TILES, 1_200, Phase.P1, easing = Easing::easeOutQuad),
+    PUZZLE(R.string.photo_transition_puzzle, "拼图碎片", PhotoMechanism.M4_TILES, 1_200, Phase.P2, easing = Easing::easeOutQuad),
 
     // ────────────────────────── F. 溶解 / 噪点类（6）· §5.3：linear ──────────────────────────
 
-    NOISE_DISSOLVE("噪声溶解", PhotoMechanism.M3_MASK_BITMAP, 1_000, Phase.P0, easing = Easing::linear),
-    THRESHOLD_SWEEP("阈值扫过", PhotoMechanism.M3_MASK_BITMAP, 1_000, Phase.P1, easing = Easing::linear),
-    SCANLINE_DISSOLVE("扫描线溶解", PhotoMechanism.M3_MASK_BITMAP, 1_000, Phase.P1, easing = Easing::linear),
-    GRAIN_DISSOLVE("颗粒溶解", PhotoMechanism.M3_MASK_BITMAP, 1_000, Phase.P2, easing = Easing::linear),
-    PIXELATE("像素化过渡", PhotoMechanism.M4_TILES, 1_000, Phase.P2, easing = Easing::linear),
-    HALFTONE("半调网点", PhotoMechanism.M3_MASK_BITMAP, 1_000, Phase.P2, easing = Easing::linear),
+    NOISE_DISSOLVE(R.string.photo_transition_noise_dissolve, "噪声溶解", PhotoMechanism.M3_MASK_BITMAP, 1_000, Phase.P0, easing = Easing::linear),
+    THRESHOLD_SWEEP(R.string.photo_transition_threshold_sweep, "阈值扫过", PhotoMechanism.M3_MASK_BITMAP, 1_000, Phase.P1, easing = Easing::linear),
+    SCANLINE_DISSOLVE(R.string.photo_transition_scanline_dissolve, "扫描线溶解", PhotoMechanism.M3_MASK_BITMAP, 1_000, Phase.P1, easing = Easing::linear),
+    GRAIN_DISSOLVE(R.string.photo_transition_grain_dissolve, "颗粒溶解", PhotoMechanism.M3_MASK_BITMAP, 1_000, Phase.P2, easing = Easing::linear),
+    PIXELATE(R.string.photo_transition_pixelate, "像素化过渡", PhotoMechanism.M4_TILES, 1_000, Phase.P2, easing = Easing::linear),
+    HALFTONE(R.string.photo_transition_halftone, "半调网点", PhotoMechanism.M3_MASK_BITMAP, 1_000, Phase.P2, easing = Easing::linear),
 
     // ────────────────────────── G. 扭曲 / 形变类（8）· §5.3：easeInOutSine ──────────────────────────
 
     // ⚠️ M5 项：老平台走**同 id 内**的 M3 近似（§4.4），不是换效果
-    RIPPLE("波纹扭曲", PhotoMechanism.M5_SHADER, 700, Phase.P2, easing = Easing::easeInOutSine),
-    WAVE_WARP("波浪位移", PhotoMechanism.M5_SHADER, 700, Phase.P2, easing = Easing::easeInOutSine),
-    SWIRL("漩涡", PhotoMechanism.M5_SHADER, 700, Phase.P2, easing = Easing::easeInOutSine),
+    RIPPLE(R.string.photo_transition_ripple, "波纹扭曲", PhotoMechanism.M5_SHADER, 700, Phase.P2, easing = Easing::easeInOutSine),
+    WAVE_WARP(R.string.photo_transition_wave_warp, "波浪位移", PhotoMechanism.M5_SHADER, 700, Phase.P2, easing = Easing::easeInOutSine),
+    SWIRL(R.string.photo_transition_swirl, "漩涡", PhotoMechanism.M5_SHADER, 700, Phase.P2, easing = Easing::easeInOutSine),
     LIQUIFY(
-        "液化", PhotoMechanism.M5_SHADER, 700, Phase.P2,
+        R.string.photo_transition_liquify, "液化", PhotoMechanism.M5_SHADER, 700, Phase.P2,
         degradeTo = NOISE_DISSOLVE, easing = Easing::easeInOutSine,
     ),
-    KALEIDO("万花筒转场", PhotoMechanism.M4_TILES, 700, Phase.P1, easing = Easing::easeInOutSine),
-    SHATTER("玻璃破碎", PhotoMechanism.M4_TILES, 700, Phase.P2, easing = Easing::easeInOutSine),
-    VORONOI("Voronoi 碎片化", PhotoMechanism.M4_TILES, 700, Phase.P2, easing = Easing::easeInOutSine),
-    MELT("融化流淌", PhotoMechanism.M5_SHADER, 700, Phase.P2, easing = Easing::easeInOutSine),
+    KALEIDO(R.string.photo_transition_kaleido, "万花筒转场", PhotoMechanism.M4_TILES, 700, Phase.P1, easing = Easing::easeInOutSine),
+    SHATTER(R.string.photo_transition_shatter, "玻璃破碎", PhotoMechanism.M4_TILES, 700, Phase.P2, easing = Easing::easeInOutSine),
+    VORONOI(R.string.photo_transition_voronoi, "Voronoi 碎片化", PhotoMechanism.M4_TILES, 700, Phase.P2, easing = Easing::easeInOutSine),
+    MELT(R.string.photo_transition_melt, "融化流淌", PhotoMechanism.M5_SHADER, 700, Phase.P2, easing = Easing::easeInOutSine),
 
     // ────────────────────────── H. 色彩 / 光效类（7）· §5.3：easeOutQuad ──────────────────────────
 
-    LIGHT_SWEEP("光扫", PhotoMechanism.M2_TRANSFORM, 600, Phase.P0, easing = Easing::easeOutQuad),
+    LIGHT_SWEEP(R.string.photo_transition_light_sweep, "光扫", PhotoMechanism.M2_TRANSFORM, 600, Phase.P0, easing = Easing::easeOutQuad),
     CHROMATIC_SPLIT(
-        "RGB 色彩分离", PhotoMechanism.M2_TRANSFORM, 600, Phase.P1,
+        R.string.photo_transition_chromatic_split, "RGB 色彩分离", PhotoMechanism.M2_TRANSFORM, 600, Phase.P1,
         easing = Easing::easeOutQuad,
     ),
-    RGB_SLIDE("色彩分离滑入", PhotoMechanism.M2_TRANSFORM, 600, Phase.P1, easing = Easing::easeOutQuad),
-    EXPOSURE_FLASH("曝光闪白", PhotoMechanism.M1_CLIP, 600, Phase.P1, easing = Easing::easeOutQuad),
+    RGB_SLIDE(R.string.photo_transition_rgb_slide, "色彩分离滑入", PhotoMechanism.M2_TRANSFORM, 600, Phase.P1, easing = Easing::easeOutQuad),
+    EXPOSURE_FLASH(R.string.photo_transition_exposure_flash, "曝光闪白", PhotoMechanism.M1_CLIP, 600, Phase.P1, easing = Easing::easeOutQuad),
     BLOOM_TRANSITION(
-        "光晕绽放", PhotoMechanism.M2_TRANSFORM, 600, Phase.P2,
+        R.string.photo_transition_bloom_transition, "光晕绽放", PhotoMechanism.M2_TRANSFORM, 600, Phase.P2,
         easing = Easing::easeOutQuad,
     ),
-    COLOR_BURN("色彩烧灼", PhotoMechanism.M3_MASK_BITMAP, 600, Phase.P2, easing = Easing::easeOutQuad),
+    COLOR_BURN(R.string.photo_transition_color_burn, "色彩烧灼", PhotoMechanism.M3_MASK_BITMAP, 600, Phase.P2, easing = Easing::easeOutQuad),
     // ⚠️ 唯一与 §5.3 类别行冲突的项：§14.3 逐项表写 easeInOutSine ⇒ 以逐项表为准
-    SPECTRUM_WIPE("频谱擦除", PhotoMechanism.M1_CLIP, 700, Phase.P0, easing = Easing::easeInOutSine),
+    SPECTRUM_WIPE(R.string.photo_transition_spectrum_wipe, "频谱擦除", PhotoMechanism.M1_CLIP, 700, Phase.P0, easing = Easing::easeInOutSine),
 
     // ────────────────────────── I. 音频反应类（5）★ 默认不启用 · §5.3：easeInOutSine ──────────────────────────
 
     SPECTRUM_BARS(
-        "频谱条带切换", PhotoMechanism.M4_TILES, 700, Phase.P1,
+        R.string.photo_transition_spectrum_bars, "频谱条带切换", PhotoMechanism.M4_TILES, 700, Phase.P1,
         audioReactive = true, easing = Easing::easeInOutSine,
     ),
     BEAT_CUT(
-        "节拍硬切", PhotoMechanism.M1_CLIP, 700, Phase.P1,
+        R.string.photo_transition_beat_cut, "节拍硬切", PhotoMechanism.M1_CLIP, 700, Phase.P1,
         audioReactive = true, easing = Easing::easeInOutSine,
     ),
     BASS_BLOOM(
-        "低频绽放", PhotoMechanism.M1_CLIP, 700, Phase.P2,
+        R.string.photo_transition_bass_bloom, "低频绽放", PhotoMechanism.M1_CLIP, 700, Phase.P2,
         audioReactive = true, easing = Easing::easeInOutSine,
     ),
     WAVEFORM_WIPE(
-        "波形擦除", PhotoMechanism.M1_CLIP, 700, Phase.P2,
+        R.string.photo_transition_waveform_wipe, "波形擦除", PhotoMechanism.M1_CLIP, 700, Phase.P2,
         audioReactive = true, easing = Easing::easeInOutSine,
     ),
     PULSE_DISSOLVE(
-        "脉动溶解", PhotoMechanism.M3_MASK_BITMAP, 700, Phase.P2,
+        R.string.photo_transition_pulse_dissolve, "脉动溶解", PhotoMechanism.M3_MASK_BITMAP, 700, Phase.P2,
         audioReactive = true, easing = Easing::easeInOutSine,
     ),
 
     // ────────────────────────── J. 风格化类（7）· §5.3「按子类型」⇒ 归入最接近的类别 ──────────────────────────
 
     // 故障风 / 胶片卷动 / 漫画分格 = 分块类 ⇒ easeOutQuad
-    GLITCH("故障风", PhotoMechanism.M4_TILES, 800, Phase.P1, easing = Easing::easeOutQuad),
-    FILM_ROLL("胶片卷动", PhotoMechanism.M4_TILES, 800, Phase.P2, easing = Easing::easeOutQuad),
-    COMIC_PANEL("漫画分格", PhotoMechanism.M4_TILES, 800, Phase.P2, easing = Easing::easeOutQuad),
+    GLITCH(R.string.photo_transition_glitch, "故障风", PhotoMechanism.M4_TILES, 800, Phase.P1, easing = Easing::easeOutQuad),
+    FILM_ROLL(R.string.photo_transition_film_roll, "胶片卷动", PhotoMechanism.M4_TILES, 800, Phase.P2, easing = Easing::easeOutQuad),
+    COMIC_PANEL(R.string.photo_transition_comic_panel, "漫画分格", PhotoMechanism.M4_TILES, 800, Phase.P2, easing = Easing::easeOutQuad),
     // 电影黑边收缩 = 暗场语义的裁剪 ⇒ 淡化类 ⇒ easeInOutQuad
     CINEMATIC_BARS(
-        "电影黑边收缩", PhotoMechanism.M1_CLIP, 800, Phase.P1,
+        R.string.photo_transition_cinematic_bars, "电影黑边收缩", PhotoMechanism.M1_CLIP, 800, Phase.P1,
         requiresSequential = true, easing = Easing::easeInOutQuad,
     ),
     // 3D 翻页 = 空间变换 ⇒ 缩放/深度类 ⇒ easeInOutCubic
-    PAGE_FLIP("3D 翻页", PhotoMechanism.M2_TRANSFORM, 800, Phase.P2, easing = Easing::easeInOutCubic),
+    PAGE_FLIP(R.string.photo_transition_page_flip, "3D 翻页", PhotoMechanism.M2_TRANSFORM, 800, Phase.P2, easing = Easing::easeInOutCubic),
     // 数字雨 / 霓虹描边 = 光效 ⇒ 色彩/光效类 ⇒ easeOutQuad
-    MATRIX_OVERLAY("数字雨覆盖", PhotoMechanism.M2_TRANSFORM, 800, Phase.P2, easing = Easing::easeOutQuad),
-    NEON_TRACE("霓虹描边", PhotoMechanism.M2_TRANSFORM, 800, Phase.P2, easing = Easing::easeOutQuad),
+    MATRIX_OVERLAY(R.string.photo_transition_matrix_overlay, "数字雨覆盖", PhotoMechanism.M2_TRANSFORM, 800, Phase.P2, easing = Easing::easeOutQuad),
+    NEON_TRACE(R.string.photo_transition_neon_trace, "霓虹描边", PhotoMechanism.M2_TRANSFORM, 800, Phase.P2, easing = Easing::easeOutQuad),
 
     // ────────────────────────── K. 有机 / 模拟类（5）· §5.3：easeOutSine ──────────────────────────
 
-    INK_SPREAD("泼墨扩散", PhotoMechanism.M3_MASK_BITMAP, 1_200, Phase.P2, easing = Easing::easeOutSine),
-    WATERCOLOR("水彩晕染", PhotoMechanism.M3_MASK_BITMAP, 1_200, Phase.P2, easing = Easing::easeOutSine),
-    SAND_DISSOLVE("沙化", PhotoMechanism.M3_MASK_BITMAP, 1_200, Phase.P2, easing = Easing::easeOutSine),
-    BURN("火焰燃烧", PhotoMechanism.M3_MASK_BITMAP, 1_200, Phase.P2, easing = Easing::easeOutSine),
-    FROST("冰冻结晶", PhotoMechanism.M3_MASK_BITMAP, 1_200, Phase.P2, easing = Easing::easeOutSine),
+    INK_SPREAD(R.string.photo_transition_ink_spread, "泼墨扩散", PhotoMechanism.M3_MASK_BITMAP, 1_200, Phase.P2, easing = Easing::easeOutSine),
+    WATERCOLOR(R.string.photo_transition_watercolor, "水彩晕染", PhotoMechanism.M3_MASK_BITMAP, 1_200, Phase.P2, easing = Easing::easeOutSine),
+    SAND_DISSOLVE(R.string.photo_transition_sand_dissolve, "沙化", PhotoMechanism.M3_MASK_BITMAP, 1_200, Phase.P2, easing = Easing::easeOutSine),
+    BURN(R.string.photo_transition_burn, "火焰燃烧", PhotoMechanism.M3_MASK_BITMAP, 1_200, Phase.P2, easing = Easing::easeOutSine),
+    FROST(R.string.photo_transition_frost, "冰冻结晶", PhotoMechanism.M3_MASK_BITMAP, 1_200, Phase.P2, easing = Easing::easeOutSine),
     ;
 
     /** 交付分期（⛔ 不是「一次切换内的阶段」—— 那是 `PhotoTransitionClock.Phase`） */

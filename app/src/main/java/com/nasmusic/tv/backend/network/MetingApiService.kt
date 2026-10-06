@@ -3,6 +3,7 @@ package com.nasmusic.tv.backend.network
 import com.google.gson.Gson
 import com.google.gson.JsonObject
 import com.google.gson.reflect.TypeToken
+import com.nasmusic.tv.R
 import com.nasmusic.tv.data.model.Song
 import com.nasmusic.tv.util.AppLog
 import com.nasmusic.tv.util.EncodingUtils
@@ -112,10 +113,10 @@ class MetingApiService(
          *
          * 这些端点由社区维护，可能随时间失效。用户也可自建端点或输入其他公共端点。
          */
-        val PRESET_ENDPOINTS: List<Pair<String, String>> = listOf(
-            "Mikus（默认）" to "https://meting.mikus.ink/api",
-            "Redcha" to "https://meting.api.redcha.cn/api",
-            "Qijieya" to "https://api.qijieya.cn/meting"
+        val PRESET_ENDPOINTS: List<Pair<Int, String>> = listOf(
+            R.string.meting_endpoint_mikus to "https://meting.mikus.ink/api",
+            R.string.meting_endpoint_redcha to "https://meting.api.redcha.cn/api",
+            R.string.meting_endpoint_qijieya to "https://api.qijieya.cn/meting"
         )
     }
 

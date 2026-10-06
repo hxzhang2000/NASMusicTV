@@ -39,7 +39,7 @@ import java.util.concurrent.TimeUnit
 class SubsonicAdapter : BackendAdapter {
 
     override val backendType: String = "subsonic"
-    override var apiVersion: String = "Subsonic (版本未知)"
+    override var apiVersion: String = "Unknown"
 
 @Volatile
     private var baseUrl: String = ""

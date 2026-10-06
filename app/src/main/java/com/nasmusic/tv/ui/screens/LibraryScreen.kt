@@ -213,12 +213,12 @@ fun LibraryScreen(
     // ── SEARCH Tab ──
     onSearchTabPlayAll: () -> Unit = {},
     onSearchTabAddAllToQueue: () -> Unit = {},
-    // ── DISCOVER Tab ──
+// ── DISCOVER Tab ──
     discoverDimensions: List<com.nasmusic.tv.ui.screens.library.BrowseDimension> = emptyList(),
     discoverFilteredSongs: List<Song> = emptyList(),
     discoverIsLoading: Boolean = false,
-    discoverCurrentDimensionValues: Map<String, String> = emptyMap(),
-    onDiscoverDimensionChanged: (String, String) -> Unit = { _, _ -> },
+    discoverCurrentDimensionValues: Map<Int, Int> = emptyMap(),
+    onDiscoverDimensionChanged: (Int, Int) -> Unit = { _, _ -> },
     onDiscoverPlayAll: () -> Unit = {},
     onDiscoverAddAllToQueue: () -> Unit = {},
     onDiscoverShuffle: () -> Unit = {},
@@ -827,7 +827,7 @@ fun LibraryScreen(
                             .padding(horizontal = 20.dp, vertical = 10.dp)
                     ) {
                         Text(
-                            text = "◀ ▶ 导航  |  ◀◀ ▶▶ 切歌  |  确认 播放  |  长按 菜单  |  侧边索引 跳转",
+                            text = stringResource(R.string.library_remote_hint),
                             color = NasMusicColors.TextSecondary,
                             fontSize = FontSize.button(),
                             maxLines = 1

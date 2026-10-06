@@ -1,6 +1,8 @@
 package com.nasmusic.tv.data.model
 
 import com.nasmusic.tv.backend.photo.PhotoScaleMode
+import com.nasmusic.tv.R
+import androidx.annotation.StringRes
 import com.nasmusic.tv.visualizer.photo.PhotoTransitionId
 
 /**
@@ -111,27 +113,30 @@ data class AppSettings(
  *   背景见 `docs/technical-overview.md`。
  */
 enum class VisualizerTheme(
+    /** 显示名资源 ID（本地化展示用） */
+    @StringRes val displayNameRes: Int,
+    /** 中文显示名（数据用途，如搜索词/持久化；UI 展示走 [displayNameRes]） */
     val displayName: String,
     val tier: Tier,
     val ordinalLabel: String,
     val needsParticleBudget: Boolean = false
 ) {
-    CIRCULAR_RING("圆形频谱环", Tier.BASIC, "05"),
-    LIQUID_GRID("液态网格", Tier.ADV, "13"),
-    BEAT_FIREWORK("节拍烟花", Tier.ADV, "14", needsParticleBudget = true),
-    LIQUID_RIPPLE("液态涟漪", Tier.ADV, "15"),
-    MATRIX_RAIN("数字雨", Tier.ADV, "16"),
-    CONSTELLATION("星座", Tier.ADV, "17"),
-    MILKDROP_FEEDBACK("反馈残像", Tier.ULTRA, "18"),
-    LYRICS_DOT_MATRIX("歌词点阵", Tier.ADV, "23"),
-    ECG_WAVE("心跳", Tier.BASIC, "24"),
-    HYPNOTIC_FUNCTION("催眠", Tier.BASIC, "25"),
-    ORBITAL_RINGS("太阳系", Tier.ADV, "29"),
-    RADAR_GRID("雷达", Tier.BASIC, "30"),
-    CONCENTRIC_GEARS("齿轮", Tier.BASIC, "33"),
-    LIGHT_BEAMS("光轴", Tier.BASIC, "35"),
-    MOLECULE("分子", Tier.BASIC, "37"),
-    VINTAGE_TV("怀旧", Tier.BASIC, "38"),
+    CIRCULAR_RING(R.string.visualizer_theme_circular_ring, "圆形频谱环", Tier.BASIC, "05"),
+    LIQUID_GRID(R.string.visualizer_theme_liquid_grid, "液态网格", Tier.ADV, "13"),
+    BEAT_FIREWORK(R.string.visualizer_theme_beat_firework, "节拍烟花", Tier.ADV, "14", needsParticleBudget = true),
+    LIQUID_RIPPLE(R.string.visualizer_theme_liquid_ripple, "液态涟漪", Tier.ADV, "15"),
+    MATRIX_RAIN(R.string.visualizer_theme_matrix_rain, "数字雨", Tier.ADV, "16"),
+    CONSTELLATION(R.string.visualizer_theme_constellation, "星座", Tier.ADV, "17"),
+    MILKDROP_FEEDBACK(R.string.visualizer_theme_milkdrop_feedback, "反馈残像", Tier.ULTRA, "18"),
+    LYRICS_DOT_MATRIX(R.string.visualizer_theme_lyrics_dot_matrix, "歌词点阵", Tier.ADV, "23"),
+    ECG_WAVE(R.string.visualizer_theme_ecg_wave, "心跳", Tier.BASIC, "24"),
+    HYPNOTIC_FUNCTION(R.string.visualizer_theme_hypnotic_function, "催眠", Tier.BASIC, "25"),
+    ORBITAL_RINGS(R.string.visualizer_theme_orbital_rings, "太阳系", Tier.ADV, "29"),
+    RADAR_GRID(R.string.visualizer_theme_radar_grid, "雷达", Tier.BASIC, "30"),
+    CONCENTRIC_GEARS(R.string.visualizer_theme_concentric_gears, "齿轮", Tier.BASIC, "33"),
+    LIGHT_BEAMS(R.string.visualizer_theme_light_beams, "光轴", Tier.BASIC, "35"),
+    MOLECULE(R.string.visualizer_theme_molecule, "分子", Tier.BASIC, "37"),
+    VINTAGE_TV(R.string.visualizer_theme_vintage_tv, "怀旧", Tier.BASIC, "38"),
 
     /**
      * 照片墙（第 39 个效果，§7.5）
@@ -142,7 +147,7 @@ enum class VisualizerTheme(
      *
      * ⚠️ 本效果**不一定出现在 [selectable] 里** —— 三来源开关全关时被过滤掉（§7.4）。
      */
-    PHOTO_WALL("照片墙", Tier.ADV, "39"),
+    PHOTO_WALL(R.string.visualizer_theme_photo_wall, "照片墙", Tier.ADV, "39"),
 
     /**
      * DNA 双螺旋（第 40 个效果）
@@ -154,7 +159,7 @@ enum class VisualizerTheme(
      * 骨架 / 碱基对 / 星野的规模都是常量）⇒ 三档均可选，与数字雨同理。
      * 无照片墙式特殊门控 —— [selectable] 恒含本项，三来源开关不影响。
      */
-    DNA("DNA 双螺旋", Tier.ADV, "40"),
+    DNA(R.string.visualizer_theme_dna, "DNA 双螺旋", Tier.ADV, "40"),
 
     /**
      * 世界（第 41 个效果）
@@ -174,7 +179,7 @@ enum class VisualizerTheme(
      * ⛔ 不新增 `RECORD_AUDIO` 权限、不用 `AudioRecord`/`Visualizer` ——
      * 与其余 40 套效果同源，零新增权限、零新增依赖。
      */
-    WORLD("世界", Tier.ADV, "41", needsParticleBudget = true),
+    WORLD(R.string.visualizer_theme_world, "世界", Tier.ADV, "41", needsParticleBudget = true),
 
     /**
      * 星空星轨（第 42 个效果）
@@ -199,7 +204,7 @@ enum class VisualizerTheme(
      * **不**门控 [VisualQuality.allowFramebuffer]（同照片墙的取舍）：门控后默认 MEDIUM
      * 档恒无拖尾，效果就退化成一块星空衬底、失去「长曝光」本体。
      */
-    STAR_TRAILS("星空星轨", Tier.ADV, "42", needsParticleBudget = false),
+    STAR_TRAILS(R.string.visualizer_theme_star_trails, "星空星轨", Tier.ADV, "42", needsParticleBudget = false),
 
     /**
      * 海边（第 43 个效果）
@@ -230,7 +235,7 @@ enum class VisualizerTheme(
      *
      * **不**门控 [VisualQuality.allowFramebuffer]（§3.4 末条）。
      */
-    SEASIDE("海边", Tier.BASIC, "43", needsParticleBudget = false),
+    SEASIDE(R.string.visualizer_theme_seaside, "海边", Tier.BASIC, "43", needsParticleBudget = false),
     ;
 
     /** 效果分级：决定画质档位可用性 */

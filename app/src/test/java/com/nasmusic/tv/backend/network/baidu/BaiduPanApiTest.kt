@@ -11,6 +11,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.mockito.Mockito.mock
 import org.robolectric.RobolectricTestRunner
+import androidx.test.core.app.ApplicationProvider
 import okhttp3.OkHttpClient
 
 /**
@@ -25,6 +26,7 @@ import okhttp3.OkHttpClient
 class BaiduPanApiTest {
 
     private val api = BaiduPanApi(
+        context = ApplicationProvider.getApplicationContext(),
         client = mock(OkHttpClient::class.java),
         oauth = mock(BaiduOAuthClient::class.java)
     )

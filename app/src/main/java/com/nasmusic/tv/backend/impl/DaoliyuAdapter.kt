@@ -151,9 +151,9 @@ class DaoliyuAdapter : BackendAdapter {
         try {
             val json = executeGet("$baseUrl/health")  // ⚠️ INFERRED
             val version = json?.get("version")?.asString
-            apiVersion = if (!version.isNullOrBlank()) "Daoliyu API $version" else "Daoliyu (版本未知)"
+            apiVersion = if (!version.isNullOrBlank()) "Daoliyu API $version" else "Unknown"
         } catch (e: Exception) {
-            apiVersion = "Daoliyu (版本未知)"
+            apiVersion = "Unknown"
         }
     }
 
@@ -164,7 +164,7 @@ class DaoliyuAdapter : BackendAdapter {
             if (!version.isNullOrBlank()) {
                 VersionInfo.Runtime("Daoliyu", version, "/health", System.currentTimeMillis())
             } else {
-                VersionInfo.Disconnected("Daoliyu", "版本未知")
+                VersionInfo.Disconnected("Daoliyu", "Unknown")
             }
         } catch (e: Exception) {
             AppLog.w(TAG, "getApiVersion failed", e)

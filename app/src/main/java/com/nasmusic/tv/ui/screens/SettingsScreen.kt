@@ -286,7 +286,7 @@ fun SettingsScreen(
     photoWallRuntime: PhotoWallRuntimeState = PhotoWallRuntimeState(),
     modifier: Modifier = Modifier
 ) {
-    var activeSection by remember { mutableStateOf(SettingsSection.GENERAL) }
+var activeSection by remember { mutableStateOf(SettingsSection.GENERAL) }
     // 竖屏只认 PhonePortrait；TV 与手机横屏走现状两栏（B1 硬规则）
     val isPortraitPhone = LocalUiMode.current == UiMode.PhonePortrait
     // 分区路由主体：竖屏用 navVM 的 selectedSection（非空时才会渲染内容），否则用两栏的 activeSection
@@ -294,6 +294,14 @@ fun SettingsScreen(
         selectedSection ?: SettingsSection.GENERAL
     } else {
         activeSection
+    }
+    // 双形态状态统一（2026-10-06）：竖屏选中分区（navVM 持久）后，横屏/TV 的局部
+    // activeSection 跟随同步 ⇒ 竖屏二级页 → 旋转/切横屏时侧栏高亮与内容不丢分区。
+    // ⛔ 反向不行：activeSection 是两栏局部状态，**不写回 navVM.settingsSection**——
+    //    TV 端 settingsSection 恒为 null（AppRoot BACK 语义约束，见 AppRoot.kt:229 注释）。
+    //    selectedSection 为 null（一级列表）时不覆盖，保留横屏上次停留分区。
+    LaunchedEffect(selectedSection) {
+        if (selectedSection != null) activeSection = selectedSection
     }
 
     // D-Pad 焦点修复：内容区按左键移回左侧导航栏
@@ -1080,8 +1088,8 @@ fun SettingsScreen(
             )
         ) {
             ConfirmDialog(
-                title = "清空所有下载",
-                message = "确认删除所有已下载的歌曲文件？此操作不可撤销。",
+title = stringResource(R.string.settings_clear_downloads_title),
+                message = stringResource(R.string.settings_clear_downloads_message),
                 destructive = true,
                 onConfirm = {
                     onClearAllDownloads?.invoke()

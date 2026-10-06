@@ -131,7 +131,7 @@ class ModelTransferServer(
             return newFixedLengthResponse(
                 Response.Status.BAD_REQUEST,
                 "application/json; charset=UTF-8",
-                """{"ok":false,"message":"缺少 multipart boundary，content-type=$contentType"}"""
+                """{"ok":false,"message":"${context.getString(R.string.model_msg_boundary_missing, contentType)}"}"""
             )
         }
         val boundaryStr = boundaryMatch.groupValues[1].trim().trim('"')
@@ -166,7 +166,7 @@ class ModelTransferServer(
                 return newFixedLengthResponse(
                     Response.Status.BAD_REQUEST,
                     "application/json; charset=UTF-8",
-                    """{"ok":false,"message":"文件太小（${fileSize / (1024 * 1024)}MB，预期约166MB），请确认上传的是 htdemucs_ft_vocals_fp16weights.onnx"}"""
+                    """{"ok":false,"message":"${context.getString(R.string.model_msg_file_too_small, fileSize / (1024 * 1024))}"}"""
                 )
             }
 
@@ -184,7 +184,7 @@ class ModelTransferServer(
                 return newFixedLengthResponse(
                     Response.Status.BAD_REQUEST,
                     "application/json; charset=UTF-8",
-                    """{"ok":false,"message":"文件校验失败（SHA-256 不匹配）：期望 ${ModelDownloadManager.EXPECTED_SHA256.take(16)}…，实际 ${actualSha.take(16)}…。请确认上传的是官方 htdemucs_ft_vocals_fp16weights.onnx（约 158MB）"}"""
+                    """{"ok":false,"message":"${context.getString(R.string.model_msg_sha_mismatch, ModelDownloadManager.EXPECTED_SHA256.take(16), actualSha.take(16))}"}"""
                 )
             }
             AppLog.i(TAG, "handleUpload: SHA-256 verified ($actualSha)")
@@ -193,7 +193,7 @@ class ModelTransferServer(
             return newFixedLengthResponse(
                 Response.Status.OK,
                 "application/json; charset=UTF-8",
-                """{"ok":true,"message":"模型上传成功！文件已保存（${fileSize / (1024 * 1024)}MB）"}"""
+                """{"ok":true,"message":"${context.getString(R.string.model_msg_upload_success, fileSize / (1024 * 1024))}"}"""
             )
         } catch (e: Exception) {
             AppLog.e(TAG, "handleUpload failed", e)
@@ -201,7 +201,7 @@ class ModelTransferServer(
             return newFixedLengthResponse(
                 Response.Status.INTERNAL_ERROR,
                 "application/json; charset=UTF-8",
-                """{"ok":false,"message":"上传失败：${e.javaClass.simpleName}: ${e.message?.take(200) ?: "未知错误"}"}"""
+                """{"ok":false,"message":"${context.getString(R.string.model_msg_upload_failed, e.javaClass.simpleName, e.message?.take(200) ?: context.getString(R.string.model_msg_unknown_error))}"}"""
             )
         }
     }

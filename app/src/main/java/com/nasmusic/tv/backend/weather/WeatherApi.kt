@@ -3,6 +3,7 @@ package com.nasmusic.tv.backend.weather
 import com.google.gson.Gson
 import com.google.gson.JsonObject
 import com.google.gson.reflect.TypeToken
+import com.nasmusic.tv.R
 import com.nasmusic.tv.data.model.IpLocation
 import com.nasmusic.tv.data.model.WeatherData
 import com.nasmusic.tv.data.model.WeatherForecast
@@ -25,7 +26,7 @@ import java.util.concurrent.TimeUnit
  * OpenWeatherMap 文档：https://openweathermap.org/current
  * ip-api.com 文档：https://ip-api.com/docs
  */
-class WeatherApi {
+class WeatherApi(private val context: android.content.Context) {
 
     private val client = OkHttpClient.Builder()
         .connectTimeout(10, TimeUnit.SECONDS)
@@ -182,7 +183,7 @@ class WeatherApi {
                 windSpeed = wind?.get("speed")?.asDouble ?: 0.0,
                 weatherCode = mapOpenWeatherMapCode(weatherObj?.get("id")?.asInt ?: 0),
                 isDay = isDay,
-                description = weatherObj?.get("description")?.asString ?: "未知"
+                description = weatherObj?.get("description")?.asString ?: context.getString(R.string.weather_desc_unknown)
             )
         } catch (e: Exception) {
             AppLog.e(TAG, "OpenWeatherMap failed: ${e.message}", e)
@@ -235,7 +236,7 @@ class WeatherApi {
                     temperatureLow = main?.get("temp_min")?.asDouble ?: 0.0,
                     humidity = main?.get("humidity")?.asDouble ?: 0.0,
                     weatherCode = mapOpenWeatherMapCode(weatherObj?.get("id")?.asInt ?: 0),
-                    description = weatherObj?.get("description")?.asString ?: "未知",
+                    description = weatherObj?.get("description")?.asString ?: context.getString(R.string.weather_desc_unknown),
                     iconCode = weatherObj?.get("icon")?.asString ?: "01d"
                 ))
 
@@ -318,32 +319,32 @@ class WeatherApi {
      * 情绪匹配走 `WeatherData.weatherCode` + `WeatherMood.matchingWeatherCodes`，不受影响。
      */
     private fun describeWeatherCode(code: Int): String = when (code) {
-        0 -> "晴天"
-        1 -> "少云"
-        2 -> "多云"
-        3 -> "阴天"
-        45 -> "雾"
-        48 -> "雾凇"
-        51 -> "小毛毛雨"
-        53 -> "毛毛雨"
-        55 -> "浓毛毛雨"
-        56, 57 -> "冻毛毛雨"
-        61 -> "小雨"
-        63 -> "中雨"
-        65 -> "大雨"
-        66, 67 -> "冻雨"
-        71 -> "小雪"
-        73 -> "中雪"
-        75 -> "大雪"
-        77 -> "雪粒"
-        80 -> "小阵雨"
-        81 -> "中阵雨"
-        82 -> "强阵雨"
-        85 -> "小阵雪"
-        86 -> "大阵雪"
-        95 -> "雷暴"
-        96 -> "雷暴伴小冰雹"
-        99 -> "雷暴伴大冰雹"
-        else -> "未知"
+        0 -> context.getString(R.string.weather_desc_0)
+        1 -> context.getString(R.string.weather_desc_1)
+        2 -> context.getString(R.string.weather_desc_2)
+        3 -> context.getString(R.string.weather_desc_3)
+        45 -> context.getString(R.string.weather_desc_45)
+        48 -> context.getString(R.string.weather_desc_48)
+        51 -> context.getString(R.string.weather_desc_51)
+        53 -> context.getString(R.string.weather_desc_53)
+        55 -> context.getString(R.string.weather_desc_55)
+        56, 57 -> context.getString(R.string.weather_desc_56)
+        61 -> context.getString(R.string.weather_desc_61)
+        63 -> context.getString(R.string.weather_desc_63)
+        65 -> context.getString(R.string.weather_desc_65)
+        66, 67 -> context.getString(R.string.weather_desc_66)
+        71 -> context.getString(R.string.weather_desc_71)
+        73 -> context.getString(R.string.weather_desc_73)
+        75 -> context.getString(R.string.weather_desc_75)
+        77 -> context.getString(R.string.weather_desc_77)
+        80 -> context.getString(R.string.weather_desc_80)
+        81 -> context.getString(R.string.weather_desc_81)
+        82 -> context.getString(R.string.weather_desc_82)
+        85 -> context.getString(R.string.weather_desc_85)
+        86 -> context.getString(R.string.weather_desc_86)
+        95 -> context.getString(R.string.weather_desc_95)
+        96 -> context.getString(R.string.weather_desc_96)
+        99 -> context.getString(R.string.weather_desc_99)
+        else -> context.getString(R.string.weather_desc_unknown)
     }
 }

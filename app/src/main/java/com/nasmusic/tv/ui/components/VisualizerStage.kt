@@ -484,7 +484,7 @@ fun VisualizerStage(
                 modifier = Modifier.align(Alignment.CenterHorizontally)
             ) {
                 Text(
-                    text = theme.displayName,
+                    text = stringResource(theme.displayNameRes),
                     color = Color.White.copy(alpha = 0.85f),
                     fontSize = 20.sp,
                     modifier = Modifier

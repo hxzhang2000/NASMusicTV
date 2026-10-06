@@ -325,17 +325,17 @@ loadBackups();
         /** 下载指定备份文件 */
         private fun handleDownload(session: IHTTPSession): Response {
             return try {
-                val name = getQueryParam(session, "name") ?: return notFound("missing name")
+                val name = getQueryParam(session, "name") ?: return notFound(context.getString(R.string.backup_msg_missing_name))
                 val backups = BackupFileUtils.listBackups(context)
                 val target = backups.find { it.displayName == name }
-                    ?: return notFound("backup not found: $name")
+                    ?: return notFound(context.getString(R.string.backup_msg_not_found, name))
 
                 val result = BackupFileUtils.read(context, target.uri)
                 val json = result.getOrElse { e ->
                     return newFixedLengthResponse(
                         Response.Status.INTERNAL_ERROR,
                         "text/plain; charset=UTF-8",
-                        "读取失败: ${e.message}"
+                        context.getString(R.string.backup_msg_read_failed, e.message)
                     )
                 }
 
@@ -352,7 +352,7 @@ loadBackups();
                 newFixedLengthResponse(
                     Response.Status.INTERNAL_ERROR,
                     "text/plain; charset=UTF-8",
-                    "下载失败: ${e.message}"
+                    context.getString(R.string.backup_msg_download_failed, e.message)
                 )
             }
         }
@@ -366,11 +366,11 @@ loadBackups();
                 val contentLength = session.headers["content-length"]?.toLongOrNull() ?: -1L
                 AppLog.i(TAG, "handleUpload: contentLength=$contentLength")
                 if (contentLength <= 0L) {
-                    return jsonResponse(false, "上传内容为空")
+                    return jsonResponse(false, context.getString(R.string.backup_msg_upload_empty))
                 }
                 if (contentLength > MAX_UPLOAD_BYTES) {
                     AppLog.w(TAG, "handleUpload: rejected, contentLength=$contentLength > $MAX_UPLOAD_BYTES")
-                    return jsonResponse(false, "上传内容过大（上限 ${MAX_UPLOAD_BYTES / 1024 / 1024}MB）")
+                    return jsonResponse(false, context.getString(R.string.backup_msg_upload_too_large, MAX_UPLOAD_BYTES / 1024 / 1024))
                 }
                 // 安全：不按 Content-Length 预分配数组（客户端可谎报 → 巨型 ByteArray 直接 OOM），
                 // 改为按 Content-Length 定长分块读取（keep-alive 连接上不能 `read 到 -1`，
@@ -388,7 +388,7 @@ loadBackups();
                     buffer.write(chunk, 0, read)
                 }
                 if (totalRead == 0) {
-                    return jsonResponse(false, "上传内容为空")
+                    return jsonResponse(false, context.getString(R.string.backup_msg_upload_empty))
                 }
                 var json = String(buffer.toByteArray(), Charsets.UTF_8)
                 // 去掉 UTF-8 BOM（如果有）
@@ -397,46 +397,46 @@ loadBackups();
                 }
                 AppLog.i(TAG, "handleUpload: body length=${json.length}")
                 if (json.isEmpty()) {
-                    return jsonResponse(false, "上传内容为空")
+                    return jsonResponse(false, context.getString(R.string.backup_msg_upload_empty))
                 }
                 val result = BackupFileUtils.export(context, json)
                 if (result.isSuccess) {
                     val savedName = result.getOrThrow()
                     AppLog.i(TAG, "Upload saved: $savedName (${json.length} chars)")
                     onBackupChanged.invoke()
-                    jsonResponse(true, "已保存: $savedName")
+                    jsonResponse(true, context.getString(R.string.backup_msg_saved, savedName))
                 } else {
-                    jsonResponse(false, "保存失败: ${result.exceptionOrNull()?.message}")
+                    jsonResponse(false, context.getString(R.string.backup_msg_save_failed, result.exceptionOrNull()?.message))
                 }
             } catch (e: Exception) {
                 AppLog.e(TAG, "handleUpload failed", e)
-                jsonResponse(false, "上传失败: ${e.message}")
+                jsonResponse(false, context.getString(R.string.backup_msg_upload_failed, e.message))
             }
         }
 
         /** 恢复指定备份文件 */
         private fun handleRestore(session: IHTTPSession): Response {
             return try {
-                val name = getQueryParam(session, "name") ?: return jsonResponse(false, "缺少 name 参数")
+                val name = getQueryParam(session, "name") ?: return jsonResponse(false, context.getString(R.string.backup_msg_missing_name))
                 val backups = BackupFileUtils.listBackups(context)
                 val target = backups.find { it.displayName == name }
-                    ?: return jsonResponse(false, "备份不存在: $name")
+                    ?: return jsonResponse(false, context.getString(R.string.backup_msg_not_found, name))
 
                 val result = BackupFileUtils.read(context, target.uri)
                 val json = result.getOrElse { e ->
-                    return jsonResponse(false, "读取失败: ${e.message}")
+                    return jsonResponse(false, context.getString(R.string.backup_msg_read_failed, e.message))
                 }
 
                 // 调用恢复回调（非挂起；调用方在工作线程上同步桥接 suspend 逻辑）
                 val ok = onRestore.invoke(json)
                 if (ok) {
-                    jsonResponse(true, "恢复成功")
+                    jsonResponse(true, context.getString(R.string.backup_msg_restore_ok))
                 } else {
-                    jsonResponse(false, "恢复失败，数据格式可能不兼容")
+                    jsonResponse(false, context.getString(R.string.backup_msg_restore_format))
                 }
             } catch (e: Exception) {
                 AppLog.e(TAG, "handleRestore failed", e)
-                jsonResponse(false, "恢复失败: ${e.message}")
+                jsonResponse(false, context.getString(R.string.backup_msg_restore_failed, e.message))
             }
         }
 

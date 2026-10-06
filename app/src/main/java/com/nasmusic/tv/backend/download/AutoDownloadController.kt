@@ -26,6 +26,7 @@ import kotlinx.coroutines.launch
  * 失败不自动重试（避免失败循环），仅保留 ✕ 供用户手动重试。
  */
 class AutoDownloadController(
+    private val context: android.content.Context,
     private val settings: suspend () -> DownloadSettings,
     private val repo: DownloadRepository,
     private val storage: StorageGuard,
@@ -91,7 +92,7 @@ class AutoDownloadController(
                 val now = System.currentTimeMillis()
                 if (now - lastQuotaNotifyAt > NOTIFY_THROTTLE_MS) {
                     lastQuotaNotifyAt = now
-                    notify("已达设置的最大下载数量（$limit），可在设置中调整（手动下载不受限制）")
+                    notify(context.getString(com.nasmusic.tv.R.string.download_auto_quota_reached, limit))
                 }
                 return@launch
             }

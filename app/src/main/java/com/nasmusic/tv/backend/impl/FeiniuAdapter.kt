@@ -265,7 +265,7 @@ class FeiniuAdapter(private val appContext: Context? = null) : BackendAdapter {
             str(data, "serverName")?.let { if (it.isNotBlank()) serverName = it }
             serverVersion = str(data, "serverVersion") ?: ""
             mediasrvVersion = str(data, "mediasrvVersion") ?: ""
-            apiVersion = serverVersion.ifBlank { "飞牛音乐" }
+            apiVersion = serverVersion.ifBlank { "Unknown" }
             AppLog.d(TAG, "sys/config: name=$serverName, version=$serverVersion, mediasrv=$mediasrvVersion")
         } catch (e: Exception) {
             AppLog.w(TAG, "sys/config failed", e)

@@ -157,7 +157,7 @@ fun WeatherRadioScreen(
                                 color = NasMusicColors.TextPrimary
                             )
                             Text(
-                                text = "${weatherData.cityName}  \u00B7  ${weatherData.description}",
+                                text = if (weatherData.cityName.isBlank()) stringResource(R.string.weather_unknown_location) else "${weatherData.cityName}  \u00B7  ${weatherData.description}",
                                 fontSize = FontSize.small(),
                                 color = LocalFocusableContentColor.current
                             )
@@ -186,7 +186,7 @@ fun WeatherRadioScreen(
                                 focusedContentColor = NasMusicColors.Primary
                             ) {
                                 Text(
-                                    text = "${mood.icon} ${mood.displayName}",
+                                    text = "${mood.icon} ${stringResource(mood.displayNameRes)}",
                                     modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
                                     fontSize = FontSize.small(),
                                     color = if (isSelected) NasMusicColors.Primary else LocalFocusableContentColor.current

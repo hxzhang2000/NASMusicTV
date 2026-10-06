@@ -1,6 +1,7 @@
 package com.nasmusic.tv.player
 
 import android.content.Context
+import com.nasmusic.tv.R
 import com.nasmusic.tv.util.AppLog
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -223,9 +224,9 @@ class ModelDownloadManager(
                 if (actualSha == null || !actualSha.equals(EXPECTED_SHA256, ignoreCase = true)) {
                     val got = tempFile.length() / (1024 * 1024)
                     lastError = if (actualSha == null) {
-                        "模型校验失败（无法读取下载文件）"
+                        context.getString(R.string.model_verify_read_failed)
                     } else {
-                        "模型校验失败（SHA-256 不匹配，已下载 ${got}MB）"
+                        context.getString(R.string.model_verify_sha_mismatch, got)
                     }
                     AppLog.e(TAG, "downloadModel: integrity check failed from $urlStr, size=${tempFile.length()}, expected=$EXPECTED_SHA256, actual=$actualSha")
                     tempFile.delete()
@@ -237,7 +238,7 @@ class ModelDownloadManager(
                     finalFile.delete()
                 }
                 if (!tempFile.renameTo(finalFile)) {
-                    lastError = "文件保存失败（重命名失败）"
+                    lastError = context.getString(R.string.model_save_rename_failed)
                     AppLog.e(TAG, "downloadModel: rename failed")
                     tempFile.delete()
                     continue
@@ -251,7 +252,7 @@ class ModelDownloadManager(
             }
         }
         tempFile.delete()
-        lastError ?: "所有下载源均失败，请检查网络后重试"
+        lastError ?: context.getString(R.string.model_download_sources_failed)
     }
 
     /**
@@ -276,7 +277,7 @@ class ModelDownloadManager(
 
             if (connection.responseCode != HttpURLConnection.HTTP_OK) {
                 AppLog.e(TAG, "tryDownloadUrl: HTTP ${connection.responseCode}")
-                return "服务器返回错误（HTTP ${connection.responseCode}）"
+                return context.getString(R.string.model_download_http_error, connection.responseCode)
             }
 
             val totalBytes = connection.contentLength.toLong()
@@ -302,10 +303,10 @@ class ModelDownloadManager(
             null
         } catch (e: Exception) {
             val msg = when (e) {
-                is java.net.SocketTimeoutException -> "连接超时，请检查网络"
-                is java.net.UnknownHostException -> "无法解析服务器地址，请检查网络/DNS"
-                is java.io.FileNotFoundException -> "服务器上未找到模型文件（404）"
-                else -> "网络异常：${e.message?.take(60) ?: "未知错误"}"
+                is java.net.SocketTimeoutException -> context.getString(R.string.model_download_timeout)
+                is java.net.UnknownHostException -> context.getString(R.string.model_download_dns_error)
+                is java.io.FileNotFoundException -> context.getString(R.string.model_download_not_found)
+                else -> context.getString(R.string.model_download_network_error, e.message?.take(60) ?: context.getString(R.string.model_unknown_error))
             }
             AppLog.e(TAG, "tryDownloadUrl: failed from $urlStr", e)
             msg

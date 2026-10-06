@@ -92,10 +92,10 @@ internal fun NetworkMusicSection(
                 modifier = Modifier.padding(start = 4.dp, top = 8.dp, bottom = 8.dp)
             )
             val currentNormalized = state.metingApiBaseUrl.trim().trimEnd('/')
-            com.nasmusic.tv.backend.network.MetingApiService.PRESET_ENDPOINTS.forEach { (name, url) ->
+            com.nasmusic.tv.backend.network.MetingApiService.PRESET_ENDPOINTS.forEach { (nameRes, url) ->
                 val selected = currentNormalized == url.trimEnd('/')
                 PresetEndpointRow(
-                    name = name,
+                    name = stringResource(nameRes),
                     url = url,
                     selected = selected,
                     onClick = { actions.onChangeMetingApiBaseUrl(url) }
@@ -189,10 +189,10 @@ internal fun NetworkMusicSection(
                 modifier = Modifier.padding(start = 4.dp, top = 8.dp, bottom = 8.dp)
             )
             val mvCurrentNormalized = state.mvApiBaseUrl.trim().trimEnd('/')
-            com.nasmusic.tv.backend.network.mv.BilibiliMvService.PRESET_ENDPOINTS.forEach { (name, url) ->
+            com.nasmusic.tv.backend.network.mv.BilibiliMvService.PRESET_ENDPOINTS.forEach { (nameRes, url) ->
                 val selected = mvCurrentNormalized == url.trimEnd('/')
                 PresetEndpointRow(
-                    name = name,
+                    name = stringResource(nameRes),
                     url = url,
                     selected = selected,
                     onClick = { actions.onChangeMvApiBaseUrl(url) }

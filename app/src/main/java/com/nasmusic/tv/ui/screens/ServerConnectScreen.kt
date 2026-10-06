@@ -143,18 +143,19 @@ fun ServerConnectScreen(
     // 自动填充下方表单，用户核对后用遥控器确认键连接（本流程不代替用户连接）——
     // 二维码常驻显示（2026-09-22 用户修正：TV 无触摸，不能依赖点击展开）；
     // HTTP 服务随页面开关：进入本页即启动，离开即关闭。
+val context = LocalContext.current
     var statusMessage by remember { mutableStateOf("") }
     var qrUrl by remember { mutableStateOf<String?>(null) }
     var qrBitmap by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
     val configTransferServer = remember {
-        ServerConfigTransferServer(onConfigReceived = { backend: String, url: String, user: String, pass: String, name: String ->
+        ServerConfigTransferServer(context, onConfigReceived = { backend: String, url: String, user: String, pass: String, name: String ->
             // NanoHTTPD 工作线程回调 → 主线程更新表单状态
             android.os.Handler(android.os.Looper.getMainLooper()).post {
                 baseUrl = TextFieldValue(url)
                 username = TextFieldValue(user)
                 password = TextFieldValue(pass)
                 backendType = backend
-                statusMessage = "已从手机收到服务器配置，请核对后连接"
+                statusMessage = context.getString(R.string.server_config_received_hint)
             }
         })
     }
@@ -166,7 +167,7 @@ fun ServerConnectScreen(
             qrBitmap = QrCodeGenerator.generateQrBitmap(url0, 150)
             configTransferServer.startServer()
         } else {
-            statusMessage = "无法获取本机 IP，扫码填入不可用"
+            statusMessage = context.getString(R.string.server_config_no_ip)
         }
         onDispose { configTransferServer.stopServer() }
     }
@@ -177,8 +178,7 @@ fun ServerConnectScreen(
     var testStatus by remember { mutableStateOf("") }  // "" | "success:xxx" | "error:xxx"
     val testScope = rememberCoroutineScope()
     val appContext = LocalContext.current
-    val backendRegistry = remember { (appContext.applicationContext as NasMusicApp).backendRegistry }
-    val context = LocalContext.current
+val backendRegistry = remember { (appContext.applicationContext as NasMusicApp).backendRegistry }
 
     // v2.36.0 竖屏（方案 §4.8 / P0-18）：固定 760dp 卡片在 360dp 宽屏上溢出 → 改「撑满留边 + 上限 420dp」
     val isPhonePortrait = LocalUiMode.current == UiMode.PhonePortrait
@@ -247,19 +247,19 @@ fun ServerConnectScreen(
                     qrBitmap?.let { bmp ->
                         Image(
                             bitmap = bmp.asImageBitmap(),
-                            contentDescription = "手机扫码填入服务器配置",
+                            contentDescription = stringResource(R.string.server_config_scan_desc),
                             modifier = Modifier.size(150.dp)
                         )
                         Spacer(modifier = Modifier.height(6.dp))
                         Text(
-                            text = "手机扫码填入服务器信息",
+                            text = stringResource(R.string.server_config_scan_hint),
                             fontSize = 12.sp,
                             color = NasMusicColors.TextSecondary,
                             textAlign = TextAlign.Center
                         )
                     } ?: run {
                         Text(
-                            text = "二维码生成中…",
+                            text = stringResource(R.string.server_config_qr_generating),
                             fontSize = 12.sp,
                             color = NasMusicColors.TextSecondary
                         )

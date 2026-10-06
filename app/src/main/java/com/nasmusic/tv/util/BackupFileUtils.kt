@@ -6,6 +6,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
+import com.nasmusic.tv.R
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -70,16 +71,16 @@ object BackupFileUtils {
                 }
                 val collection = MediaStore.Downloads.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
                 val uri = context.contentResolver.insert(collection, values)
-                    ?: return Result.failure(Exception("无法创建备份文件"))
+                    ?: return Result.failure(Exception(context.getString(R.string.backup_util_create_failed)))
                 context.contentResolver.openOutputStream(uri)?.use { out ->
                     out.write(json.toByteArray(Charsets.UTF_8))
-                } ?: return Result.failure(Exception("无法写入备份文件"))
+                } ?: return Result.failure(Exception(context.getString(R.string.backup_util_write_failed)))
                 Result.success(fileName)
             } else {
                 // 主备份：应用内部存储（/data 真闪存，断电不丢）
                 val internalDir = internalBackupDir(context)
                 if (!internalDir.exists() && !internalDir.mkdirs()) {
-                    return Result.failure(Exception("无法创建备份目录"))
+                    return Result.failure(Exception(context.getString(R.string.backup_util_mkdir_failed)))
                 }
                 File(internalDir, fileName).writeText(json, Charsets.UTF_8)
                 // 辅助副本：公共 Downloads（普通 ROM 上文件管理器可访问；RAM 盘 ROM 上尽力而为）
@@ -172,7 +173,7 @@ object BackupFileUtils {
             val json = context.contentResolver.openInputStream(uri)
                 ?.bufferedReader(Charsets.UTF_8)
                 ?.use { it.readText() }
-                ?: return Result.failure(Exception("无法读取备份文件"))
+                ?: return Result.failure(Exception(context.getString(R.string.backup_util_read_failed)))
             Result.success(json)
         } catch (e: Exception) {
             AppLog.e(TAG, "read failed", e)
@@ -191,7 +192,7 @@ object BackupFileUtils {
             val deleted = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 context.contentResolver.delete(uri, null, null)
             } else {
-                val file = File(uri.path ?: return Result.failure(Exception("无效的文件路径")))
+                val file = File(uri.path ?: return Result.failure(Exception(context.getString(R.string.backup_util_invalid_path))))
                 val fileName = file.name
                 var count = 0
                 // 两份副本（内部存储 + 公共 Downloads）都删除，避免列表去重后残留
@@ -207,7 +208,7 @@ object BackupFileUtils {
             if (deleted > 0) {
                 Result.success(Unit)
             } else {
-                Result.failure(Exception("删除失败，文件不存在或已被删除"))
+                Result.failure(Exception(context.getString(R.string.backup_util_delete_failed)))
             }
         } catch (e: Exception) {
             AppLog.e(TAG, "delete failed", e)

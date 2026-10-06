@@ -1,6 +1,8 @@
 package com.nasmusic.tv.backend.network.baidu
 
+import android.content.Context
 import com.nasmusic.tv.data.model.CloudDriveType
+import com.nasmusic.tv.R
 
 /**
  * 百度网盘开放平台 API 集中常量表
@@ -86,50 +88,50 @@ object BaiduNetdiskConfig {
     // ---- API 错误码映射表（errno）----
     // 对照百度网盘开放平台官方错误码表（2026-08-13 更新）
     // 本地错误码（-100 系列）不与官方 errno 冲突，明确区分本地与服务器错误
-    val ERRNO_MAP: Map<Int, String> = mapOf(
-        -100 to "本地 token 缺失或无效，未调用百度 API，请重新登录百度网盘",
-        -101 to "网络请求异常，未获得百度响应，请检查网络连接",
-        -1 to "权益已过期",
-        -3 to "文件不存在",
-        -6 to "身份验证失败，请检查 access_token 是否有效、授权是否成功",
-        -7 to "文件或目录名错误或无权访问",
-        -8 to "文件或目录已存在",
-        -9 to "文件或目录不存在",
-        2 to "参数错误，请检查必选参数是否已填写、参数位置和值是否正确",
-        6 to "不允许接入用户数据，建议10分钟后重新授权",
-        10 to "转存文件已经存在",
-        11 to "用户不存在(uid不存在)",
-        111 to "有其他异步任务正在执行，稍后可重新请求",
-        31023 to "参数错误",
-        31024 to "没有访问权限",
-        31034 to "命中接口频控，请降低请求频率",
+    val ERRNO_MAP: Map<Int, Int> = mapOf(
+        -100 to R.string.baidu_errno_n100,
+        -101 to R.string.baidu_errno_n101,
+        -1 to R.string.baidu_errno_n1,
+        -3 to R.string.baidu_errno_n3,
+        -6 to R.string.baidu_errno_n6,
+        -7 to R.string.baidu_errno_n7,
+        -8 to R.string.baidu_errno_n8,
+        -9 to R.string.baidu_errno_n9,
+        2 to R.string.baidu_errno_2,
+        6 to R.string.baidu_errno_6,
+        10 to R.string.baidu_errno_10,
+        11 to R.string.baidu_errno_11,
+        111 to R.string.baidu_errno_111,
+        31023 to R.string.baidu_errno_31023,
+        31024 to R.string.baidu_errno_31024,
+        31034 to R.string.baidu_errno_31034,
         // P1#2 修复（2026-09-13）：补 31079 映射（百度"文件不存在/已删除"类错误）
-        31079 to "文件不存在或已被删除，请刷新目录",
-        31045 to "access_token 验证未通过，请检查 token 是否过期或用户是否已授权网盘权限",
-        31061 to "文件已存在",
-        31062 to "文件名无效，包含特殊字符",
-        31064 to "上传路径错误",
-        31066 to "文件名不存在",
-        31300 to "下载相关错误",
-        31326 to "命中防盗链，请检查 User-Agent 请求头",
-        31341 to "视频正在转码，可重新请求",
-        31346 to "视频转码失败",
-        31360 to "url 过期，请重新获取",
-        31362 to "签名错误，请检查链接地址是否完整",
-        31363 to "分片缺失",
-        31649 to "字幕不存在",
-        42213 to "共享目录鉴权失败",
-        42905 to "查询用户名失败，可重试",
-        20011 to "应用审核中，仅限前10个完成 OAuth 授权的用户测试应用",
-        20012 to "访问超限，调用次数已达上限",
-        20013 to "权限不足，当前应用无接口权限，请完成应用上线审核并申请对应接口权限",
-        20015 to "该应用已失效，暂不支持访问",
-        20016 to "access_token 已过期",
-        20017 to "access_token 无效，可能因用户解绑或授权撤销等原因失效",
-        20020 to "路径不在允许的访问范围内，仅限 /apps/应用名 目录",
-        20021 to "无法获取应用名称，请检查应用id是否准确",
-        20022 to "路径参数格式不正确",
-        20023 to "缺少必需的路径参数"
+        31079 to R.string.baidu_errno_31079,
+        31045 to R.string.baidu_errno_31045,
+        31061 to R.string.baidu_errno_31061,
+        31062 to R.string.baidu_errno_31062,
+        31064 to R.string.baidu_errno_31064,
+        31066 to R.string.baidu_errno_31066,
+        31300 to R.string.baidu_errno_31300,
+        31326 to R.string.baidu_errno_31326,
+        31341 to R.string.baidu_errno_31341,
+        31346 to R.string.baidu_errno_31346,
+        31360 to R.string.baidu_errno_31360,
+        31362 to R.string.baidu_errno_31362,
+        31363 to R.string.baidu_errno_31363,
+        31649 to R.string.baidu_errno_31649,
+        42213 to R.string.baidu_errno_42213,
+        42905 to R.string.baidu_errno_42905,
+        20011 to R.string.baidu_errno_20011,
+        20012 to R.string.baidu_errno_20012,
+        20013 to R.string.baidu_errno_20013,
+        20015 to R.string.baidu_errno_20015,
+        20016 to R.string.baidu_errno_20016,
+        20017 to R.string.baidu_errno_20017,
+        20020 to R.string.baidu_errno_20020,
+        20021 to R.string.baidu_errno_20021,
+        20022 to R.string.baidu_errno_20022,
+        20023 to R.string.baidu_errno_20023,
     )
 
     /** 网盘类型（首批仅百度） */
@@ -154,5 +156,7 @@ object BaiduNetdiskConfig {
     fun parseMvFsId(bvid: String): Long? = bvid.removePrefix(MV_BVID_PREFIX).toLongOrNull()
 
     /** errno → 用户友好提示 */
-    fun describeErrno(errno: Int): String = ERRNO_MAP[errno] ?: "errno=$errno"
+    fun describeErrno(context: Context, errno: Int): String =
+        context.getString(ERRNO_MAP[errno] ?: R.string.baidu_errno_unknown, errno)
 }
+

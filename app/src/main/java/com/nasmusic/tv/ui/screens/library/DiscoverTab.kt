@@ -31,6 +31,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
+import androidx.annotation.StringRes
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.tv.material3.ExperimentalTvMaterial3Api
@@ -52,11 +53,20 @@ import kotlinx.coroutines.launch
 import com.nasmusic.tv.backend.download.model.stateOfSong
 
 /**
- * 多维度浏览维度数据
+ * 多维度浏览的单个选项（索引化——选项名本地化后只做展示，回查一律用 optionIndex）
+ */
+data class BrowseOption(
+    val optionIndex: Int,
+    @StringRes val labelRes: Int
+)
+
+/**
+ * 多维度浏览维度数据（索引化——维度名本地化后只做展示，回查一律用 dimIndex）
  */
 data class BrowseDimension(
-    val label: String,
-    val options: List<String>
+    val dimIndex: Int,
+    @StringRes val labelRes: Int,
+    val options: List<BrowseOption>
 )
 
 /**
@@ -73,8 +83,8 @@ fun DiscoverTab(
     isLoading: Boolean = false,
     favoriteIds: Set<String> = emptySet(),
     queueSongIds: Set<String> = emptySet(),
-    currentDimensionValues: Map<String, String> = emptyMap(),
-    onDimensionChanged: (String, String) -> Unit = { _, _ -> },
+currentDimensionValues: Map<Int, Int> = emptyMap(),
+    onDimensionChanged: (Int, Int) -> Unit = { _, _ -> },
     onPlayAll: () -> Unit = {},
     onShuffle: () -> Unit = {},
     onAddAllToQueue: () -> Unit = {},
@@ -126,13 +136,13 @@ fun DiscoverTab(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                // 维度筛选行（始终显示，占满整行）
+// 维度筛选行（始终显示，占满整行）
                 dimensions.forEach { dimension ->
-                    item(key = "dim_${dimension.label}", span = { GridItemSpan(maxLineSpan) }) {
+                    item(key = "dim_${dimension.dimIndex}", span = { GridItemSpan(maxLineSpan) }) {
                         DimensionRow(
                             dimension = dimension,
-                            selectedValue = currentDimensionValues[dimension.label],
-                            onSelected = { onDimensionChanged(dimension.label, it) }
+                            selectedValue = currentDimensionValues[dimension.dimIndex],
+                            onSelected = { onDimensionChanged(dimension.dimIndex, it) }
                         )
                     }
                 }
@@ -238,15 +248,15 @@ fun DiscoverTab(
 @Composable
 private fun DimensionRow(
     dimension: BrowseDimension,
-    selectedValue: String?,
-    onSelected: (String) -> Unit
+    selectedValue: Int?,
+    onSelected: (Int) -> Unit
 ) {
     Row(
         modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(
-            text = dimension.label,
+            text = stringResource(dimension.labelRes),
             color = NasMusicColors.TextSecondary,
             fontSize = FontSize.body(),
             modifier = Modifier.width(70.dp)
@@ -254,8 +264,8 @@ private fun DimensionRow(
         LazyRow(
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            itemsIndexed(dimension.options) { index, option ->
-                val isSelected = option == selectedValue
+            itemsIndexed(dimension.options) { _, option ->
+                val isSelected = option.optionIndex == selectedValue
                 val bgColor by animateColorAsState(
                     targetValue = if (isSelected) NasMusicColors.Primary
                     else NasMusicColors.Primary.copy(alpha = 0.2f),
@@ -267,7 +277,7 @@ private fun DimensionRow(
                     label = "dim_text"
                 )
                 FocusableSurface(
-                    onClick = { onSelected(option) },
+                    onClick = { onSelected(option.optionIndex) },
                     shape = RoundedCornerShape(8.dp),
                     focusedScale = 1.08f,
                     animationDurationMs = 150,
@@ -277,7 +287,7 @@ private fun DimensionRow(
                     focusedContentColor = Color(0xFF0C1222)
                 ) {
                     Text(
-                        text = option,
+                        text = stringResource(option.labelRes),
                         fontSize = FontSize.body(),
                         color = textColor,
                         modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)

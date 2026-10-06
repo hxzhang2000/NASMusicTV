@@ -244,7 +244,7 @@ fun QueueScreen(
                 MiniIconButton(onClick = onNext, icon = Icons.Filled.SkipNext, contentDescription = "Next")
             }
             Spacer(modifier = Modifier.height(20.dp))
-            Text(text = playMode.displayName, color = NasMusicColors.TextSecondary, fontSize = FontSize.body())
+            Text(text = stringResource(playMode.displayNameRes), color = NasMusicColors.TextSecondary, fontSize = FontSize.body())
         }
 
         // --- 右侧：队列列表（v2.36.0 抽为 QueueListPane，竖屏复用同一实现）---

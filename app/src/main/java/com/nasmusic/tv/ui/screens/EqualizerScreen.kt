@@ -164,7 +164,7 @@ items(presets, key = { it.name }) { preset ->
                             fontSize = FontSize.button()
                         )
                         Text(
-                            text = preset.displayName,
+                            text = stringResource(preset.displayNameRes),
                             color = LocalFocusableContentColor.current,
                             fontSize = FontSize.button(),
                             maxLines = 1,

@@ -38,7 +38,7 @@ import java.util.concurrent.TimeUnit
 class JellyfinAdapter : BackendAdapter {
 
     override val backendType: String = "jellyfin"
-    override var apiVersion: String = "Jellyfin (版本未知)"
+    override var apiVersion: String = "Unknown"
 
     private var baseUrl: String = ""
 
@@ -169,7 +169,7 @@ class JellyfinAdapter : BackendAdapter {
                 if (response.isSuccessful) {
                     val body = response.body?.string() ?: return@use VersionInfo.Disconnected("Jellyfin")
                     val json = JsonParser.parseString(body).asJsonObject
-                    val version = json.get("Version")?.asString ?: "未知"
+                    val version = json.get("Version")?.asString ?: "Unknown"
                     VersionInfo.Runtime("Jellyfin", version, "/System/Info/Public", System.currentTimeMillis())
                 } else {
                     VersionInfo.Disconnected("Jellyfin")

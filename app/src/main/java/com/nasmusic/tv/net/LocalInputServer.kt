@@ -1,5 +1,7 @@
 package com.nasmusic.tv.net
 
+import android.content.Context
+import com.nasmusic.tv.R
 import com.nasmusic.tv.util.AppLog
 import fi.iki.elonen.NanoHTTPD
 import java.io.IOException
@@ -13,9 +15,11 @@ import java.io.IOException
  * 生命周期：由 TextInputDialog 在打开时 [start]，关闭时 [stop]。
  * 端口固定 [DEFAULT_PORT]，URL 不变，手机可保持页面打开连续输入。
  *
+ * @param context 用于读取扫码页面文案（本地化）
  * @param onText 回调在 NanoHTTPD 内部线程上调用，调用方需自行切线程更新 UI
  */
 class LocalInputServer(
+    private val context: Context,
     private val port: Int = DEFAULT_PORT
 ) {
 
@@ -38,7 +42,7 @@ class LocalInputServer(
      */
     fun start(onText: (String) -> Unit): Boolean {
         if (server != null) return true
-        val impl = Impl(port, authToken) { text ->
+        val impl = Impl(port, authToken, context) { text ->
             // 去掉换行符，输入框是单行
             val cleaned = text.replace("\r", "").replace("\n", "").trim()
             if (cleaned.isNotEmpty()) {
@@ -81,6 +85,7 @@ class LocalInputServer(
     private class Impl(
         port: Int,
         private val authToken: String,
+        private val context: Context,
         private val onText: (String) -> Unit
     ) : NanoHTTPD(port) {
 
@@ -98,7 +103,7 @@ class LocalInputServer(
             val response = newFixedLengthResponse(
                 Response.Status.OK,
                 "text/html; charset=UTF-8",
-                INPUT_PAGE_HTML
+                buildInputPageHtml(context)
             )
             response.addHeader("Set-Cookie", LocalServerAuth.cookieHeader(authToken))
             return response
@@ -139,8 +144,11 @@ class LocalInputServer(
     }
 }
 
-/** 手机端输入页面 HTML */
-private val INPUT_PAGE_HTML = """
+/** 手机端输入页面 HTML（文案取本地化资源） */
+private fun buildInputPageHtml(context: Context): String {
+    val sentPrefix = context.getString(R.string.local_input_sent_prefix)
+    val failed = context.getString(R.string.local_input_failed)
+    return """
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
@@ -149,13 +157,13 @@ private val INPUT_PAGE_HTML = """
 <title>NAS Music TV</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
-body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:#1a1a2e;color:#eee;display:flex;flex-direction:column;align-items:center;min-height:100vh;padding:24px}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:#1a1a2e;color:#eee;display:flex;flex-direc
 .card{background:#16213e;border-radius:16px;padding:28px;width:100%;max-width:480px;box-shadow:0 8px 32px rgba(0,0,0,.3)}
 h2{text-align:center;margin-bottom:8px;font-size:22px}
 .sub{text-align:center;color:#888;font-size:13px;margin-bottom:24px}
 input{width:100%;padding:16px;font-size:18px;border:2px solid #0f3460;border-radius:10px;background:#0a0a23;color:#eee;outline:none}
 input:focus{border-color:#e94560}
-button{width:100%;padding:16px;font-size:18px;background:#e94560;color:#fff;border:none;border-radius:10px;margin-top:14px;font-weight:600;cursor:pointer;transition:.2s}
+button{width:100%;padding:16px;font-size:18px;background:#e94560;color:#fff;border:none;border-radius:10px;margin-top:14px;font-weig
 button:active{transform:scale(.98);background:#c73e54}
 .status{text-align:center;margin-top:14px;font-size:15px;color:#4ecca3;min-height:22px}
 .hint{text-align:center;color:#666;font-size:12px;margin-top:20px;line-height:1.6}
@@ -164,12 +172,12 @@ button:active{transform:scale(.98);background:#c73e54}
 <body>
 <div class="card">
 <h2>NAS Music TV</h2>
-<p class="sub">扫码输入 - 文字将显示在电视输入框</p>
-<input type="text" id="t" placeholder="输入歌曲/歌手名..." autofocus>
-<button onclick="send()">发送到电视</button>
+<p class="sub">${context.getString(R.string.local_input_subtitle)}</p>
+<input type="text" id="t" placeholder="${context.getString(R.string.local_input_placeholder)}" autofocus>
+<button onclick="send()">${context.getString(R.string.local_input_submit)}</button>
 <div class="status" id="s"></div>
 </div>
-<p class="hint">可连续输入多次，每次点发送后文字会立即出现在电视上</p>
+<p class="hint">${context.getString(R.string.local_input_hint)}</p>
 <script>
 function send(){
   var t=document.getElementById('t').value;
@@ -178,13 +186,13 @@ function send(){
     .then(function(r){return r.json()})
     .then(function(d){
       if(d.ok){
-        document.getElementById('s').textContent='已发送: '+t;
+        document.getElementById('s').textContent='${sentPrefix}'+t;
         document.getElementById('t').value='';
         document.getElementById('t').focus();
       }
     })
     .catch(function(e){
-      document.getElementById('s').textContent='发送失败';
+      document.getElementById('s').textContent='${failed}';
     });
 }
 document.getElementById('t').addEventListener('keydown',function(e){
@@ -194,3 +202,4 @@ document.getElementById('t').addEventListener('keydown',function(e){
 </body>
 </html>
 """.trimIndent()
+}

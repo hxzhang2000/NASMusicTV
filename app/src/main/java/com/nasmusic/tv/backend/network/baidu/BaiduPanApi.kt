@@ -5,6 +5,8 @@ import com.google.gson.JsonObject
 import com.nasmusic.tv.data.model.BaiduFile
 import com.nasmusic.tv.data.model.BaiduFileMeta
 import com.nasmusic.tv.data.model.BaiduThumbs
+import android.content.Context
+import com.nasmusic.tv.R
 import com.nasmusic.tv.util.AppLog
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -25,6 +27,7 @@ import java.net.URLEncoder
  * 所有方法在 access_token 缺失时返回空结果，不抛异常。
  */
 class BaiduPanApi(
+    private val context: Context,
     private val client: OkHttpClient,
     private val oauth: BaiduOAuthClient,
     private val gson: Gson = Gson()
@@ -109,7 +112,7 @@ class BaiduPanApi(
                     } else if (errno == -8) {
                         AppLog.i(TAG, "createDir: dir already exists dir=$dir")
                     } else {
-                        val desc = BaiduNetdiskConfig.describeErrno(errno)
+                        val desc = BaiduNetdiskConfig.describeErrno(context, errno)
                         AppLog.w(TAG, "createDir: errno=$errno $desc dir=$dir")
                         onApiError?.invoke(errno, desc)
                     }
@@ -306,7 +309,7 @@ class BaiduPanApi(
                 val json = gson.fromJson(body, JsonObject::class.java) ?: return null to -1
                 val errno = json.get("errno")?.asInt ?: 0
                 if (errno != 0) {
-                    val desc = BaiduNetdiskConfig.describeErrno(errno)
+                    val desc = BaiduNetdiskConfig.describeErrno(context, errno)
                     AppLog.w(TAG, "errno=$errno $desc url=${sanitizeUrl(url)}")
                     onApiError?.invoke(errno, desc)
                 }
@@ -351,7 +354,7 @@ class BaiduPanApi(
                 val json = gson.fromJson(body, JsonObject::class.java) ?: return BaiduListResult(emptyList(), false, errno = -1)
                 val errno = json.get("errno")?.asInt ?: 0
                 if (errno != 0) {
-                    val desc = BaiduNetdiskConfig.describeErrno(errno)
+                    val desc = BaiduNetdiskConfig.describeErrno(context, errno)
                     AppLog.w(TAG, "errno=$errno $desc url=${sanitizeUrl(url)}")
                     AppLog.w(TAG, "full response body: $body")
                     onApiError?.invoke(errno, desc)

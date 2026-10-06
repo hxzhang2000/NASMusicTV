@@ -8,6 +8,7 @@ import android.os.Build
 import android.os.StatFs
 import com.nasmusic.tv.util.AppLog
 import com.nasmusic.tv.util.StorageUtils
+import com.nasmusic.tv.R
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -72,7 +73,7 @@ class StorageGuard(
         val now = System.currentTimeMillis()
         if (now - lastFullNotifyAt < NOTIFY_THROTTLE_MS) return false
         lastFullNotifyAt = now
-        notify("存储空间不足（已预留 100MB），请清理后重试")
+        notify(context.getString(R.string.download_storage_full))
         return true
     }
 

@@ -230,7 +230,7 @@ private fun SearchSourceBar(
                 focusedContentColor = Color(0xFF0C1222)
             ) {
                 Text(
-                    text = (if (isEnabled) "● " else "○ ") + source.displayName,
+                    text = (if (isEnabled) "● " else "○ ") + stringResource(source.displayNameRes),
                     color = LocalFocusableContentColor.current,
                     fontSize = FontSize.small(),
                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)

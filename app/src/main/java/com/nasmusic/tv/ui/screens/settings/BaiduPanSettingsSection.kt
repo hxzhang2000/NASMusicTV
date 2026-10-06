@@ -153,9 +153,9 @@ internal fun BaiduPanSettingsSection(
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
                     text = if (state.baiduApicExtracting) {
-                        "封面提取中… ${state.baiduApicExtracted}/${state.baiduApicTotal}"
+                        stringResource(R.string.settings_baidu_apic_extracting, state.baiduApicExtracted, state.baiduApicTotal)
                     } else {
-                        "封面提取完成：${state.baiduApicTotal} 首"
+                        stringResource(R.string.settings_baidu_apic_done, state.baiduApicTotal)
                     },
                     color = if (state.baiduApicExtracting) NasMusicColors.Primary else NasMusicColors.TextSecondary,
                     fontSize = FontSize.body(),
@@ -191,7 +191,7 @@ internal fun BaiduPanSettingsSection(
         Spacer(modifier = Modifier.height(24.dp))
         SubSectionTitle(stringResource(R.string.settings_netdisk_group_others))
         com.nasmusic.tv.data.model.CloudDriveType.PLACEHOLDER.forEach { type ->
-            PlaceholderRow(name = type.displayName)
+            PlaceholderRow(name = stringResource(type.displayNameRes))
         }
     }
 }

@@ -1,8 +1,10 @@
 package com.nasmusic.tv.backend.network.baidu
 
+import android.content.Context
 import com.google.gson.Gson
 import com.google.gson.JsonObject
 import com.nasmusic.tv.BuildConfig
+import com.nasmusic.tv.R
 import com.nasmusic.tv.data.model.BaiduTokens
 import com.nasmusic.tv.data.prefs.AppPreferences
 import com.nasmusic.tv.util.AppLog
@@ -27,6 +29,7 @@ import java.util.concurrent.TimeUnit
  * ⚠️ refresh_token 单次有效：刷新成功后响应带新值，必须原子写回。
  */
 class BaiduOAuthClient(
+    private val context: Context,
     private val client: OkHttpClient,
     private val prefs: AppPreferences,
     /** Token 端点（测试可注入 MockWebServer URL 覆盖默认线上端点） */
@@ -130,8 +133,8 @@ class BaiduOAuthClient(
      * @param deviceCode [DeviceCodeResult.deviceCode]
      */
     suspend fun pollDeviceToken(deviceCode: String): PollResult = withContext(Dispatchers.IO) {
-        val appKey = resolveAppKey() ?: return@withContext PollResult.Failed("AppKey 未配置")
-        val secret = resolveSecretKey() ?: return@withContext PollResult.Failed("SecretKey 未配置")
+        val appKey = resolveAppKey() ?: return@withContext PollResult.Failed(context.getString(R.string.baidu_oauth_appkey_missing))
+        val secret = resolveSecretKey() ?: return@withContext PollResult.Failed(context.getString(R.string.baidu_oauth_secretkey_missing))
         try {
             // 官方文档要求 GET + URL query 参数（非 POST FormBody）
             val url = BaiduNetdiskConfig.TOKEN_URL.toHttpUrl().newBuilder()
@@ -144,15 +147,15 @@ class BaiduOAuthClient(
                 .header("User-Agent", "pan.baidu.com")
                 .build()
             client.newCall(req).execute().use { resp ->
-                val body = resp.body?.string() ?: return@use PollResult.Failed("空响应")
+                val body = resp.body?.string() ?: return@use PollResult.Failed(context.getString(R.string.baidu_oauth_empty_response))
                 val json = gson.fromJson(body, JsonObject::class.java)
-                    ?: return@use PollResult.Failed("响应解析失败: ${body.take(100)}")
+                    ?: return@use PollResult.Failed(context.getString(R.string.baidu_oauth_parse_failed, body.take(100)))
                 if (resp.code == 200 && json.has("access_token")) {
                     val grantedScope = json.get("scope")?.asString ?: BaiduNetdiskConfig.SCOPE
                     AppLog.i(TAG, "pollDeviceToken: granted scope='$grantedScope'")
                     if (!grantedScope.contains("netdisk")) {
                         AppLog.e(TAG, "pollDeviceToken: scope 缺少 netdisk! granted='$grantedScope', 阻断保存 token")
-                        return@use PollResult.Failed("授权范围缺少网盘权限(netdisk)，请在手机授权页面勾选网盘权限后重试")
+                        return@use PollResult.Failed(context.getString(R.string.baidu_oauth_scope_missing))
                     }
                     val tokens = BaiduTokens(
                         accessToken = json.get("access_token").asString,
@@ -180,7 +183,7 @@ class BaiduOAuthClient(
             }
         } catch (e: Exception) {
             AppLog.e(TAG, "pollDeviceToken error", e)
-            PollResult.Failed(e.message ?: "网络错误")
+            PollResult.Failed(e.message ?: context.getString(R.string.baidu_oauth_network_error))
         }
     }
 

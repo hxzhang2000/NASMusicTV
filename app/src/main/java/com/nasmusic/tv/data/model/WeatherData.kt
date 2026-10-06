@@ -13,7 +13,7 @@ data class WeatherData(
     val windSpeed: Double,             // 风速（km/h）
     val weatherCode: Int,              // WMO 天气代码（https://open-meteo.com/en/docs#weathervariables）
     val isDay: Boolean = true,         // 是否为白天
-    val cityName: String = "未知位置",  // 城市名称
+    val cityName: String = "",         // 城市名称（空时由 UI 兜底显示"未知位置"）
     val description: String = ""       // 天气描述文本
 )
 

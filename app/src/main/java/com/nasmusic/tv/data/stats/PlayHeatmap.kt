@@ -175,7 +175,7 @@ object PlayHeatmapBuilder {
             prevMonth = month
             val at = maxOf(w, lastLabelWeek + 3)
             if (at <= raw.lastIndex) {
-                labels.add(HeatmapMonthLabel("${month}月", at))
+                labels.add(HeatmapMonthLabel(month.toString(), at))
                 lastLabelWeek = at
             }
         }

@@ -828,7 +828,7 @@ private fun HomeWeatherCard(
                         color = NasMusicColors.TextPrimary
                     )
                     Text(
-                        text = "${weatherData.cityName}  \u00B7  ${weatherData.description}",
+                        text = if (weatherData.cityName.isBlank()) stringResource(R.string.weather_unknown_location) else "${weatherData.cityName}  \u00B7  ${weatherData.description}",
                         fontSize = FontSize.body(),
                         color = LocalFocusableContentColor.current
                     )
