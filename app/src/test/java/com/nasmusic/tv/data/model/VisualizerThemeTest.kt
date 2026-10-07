@@ -123,7 +123,19 @@ class VisualizerThemeTest {
         assertFalse(VisualQuality.LOW.supports(VisualizerTheme.BEAT_FIREWORK))
         assertFalse(VisualQuality.LOW.supports(VisualizerTheme.WORLD))
         assertTrue(VisualQuality.MEDIUM.supports(VisualizerTheme.BEAT_FIREWORK))
-        assertTrue(VisualQuality.MEDIUM.supports(VisualizerTheme.WORLD))
+        // ⛔ 2026-10-07 所有者裁决：E41「世界」由 `Tier.ADV` 提到 `Tier.ULTRA`
+        //   （该机 WebView 只能画首帧，见 WorldRender 的 KDoc 与方案文档 §2.2）
+        //   ⇒ **MEDIUM 也不再提供**，原先的 `assertTrue(MEDIUM.supports(WORLD))` 作废。
+        //   仍保留这条显式断言而不是删掉：它是本裁决的**正向自证**，
+        //   防止日后有人把 WORLD 悄悄降回 ADV。
+        assertFalse(
+            "E41 由 ULTRA 门控后 MEDIUM 不应再提供（2026-10-07 裁决）",
+            VisualQuality.MEDIUM.supports(VisualizerTheme.WORLD)
+        )
+        assertTrue(VisualQuality.HIGH.supports(VisualizerTheme.WORLD))
+        // ⛔ needsParticleBudget 仍须为 true：渲染器确实读 maxParticles，
+        //   `ParticleBudgetGateTest` 用源码扫描反推真值集合，标错就会红。
+        assertTrue(VisualizerTheme.WORLD.needsParticleBudget)
 
         // ULTRA 需要帧缓冲：只有 HIGH 允许（与本条裁决无关，一字未动）
         assertFalse(VisualQuality.LOW.supports(VisualizerTheme.MILKDROP_FEEDBACK))

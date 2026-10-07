@@ -182,15 +182,30 @@ enum class VisualizerTheme(
      * 高频→尾迹与光晕；拍点分层（弱/中/强）分别驱动 Tier4 闪烁 / Tier3 支线 / Tier1 主干
      * + 涟漪。⛔ 不渲染任何文字、标签、数据面板，也不响应任何触摸。
      *
-     * 归 [Tier.ADV] 且标注 [needsParticleBudget]：地图解码 + 最多 34 条活跃航线 + 分层光晕
-     * 的规模由 `ctx.quality.maxParticles` 决定（[com.nasmusic.tv.visualizer.renderers.WorldGlobeRenderer]
-     * 真读该预算）⇒ `VisualQuality.LOW`（`maxParticles == 0`）不提供本效果。
+     * **归 [Tier.ULTRA] ⇒ 只有最高画质档（[VisualQuality.HIGH]）提供本效果**（2026-10-07
+     * 所有者裁决）。`supports()` 对 ULTRA 的门槛是 `allowFramebuffer`，该字段只有 HIGH 为
+     * `true` ⇒ MEDIUM / LOW 一律不提供。
+     *
+     * ⚠️ **为什么从 ADV 提到 ULTRA**（这是一次真实故障后的取舍，不是分级调高）：
+     * 本效果是全 App **唯一**走 WebView + WebGL 的渲染器。2026-10-06 在创维 9R54_G8S
+     * （Android 5.1.1 / 系统 WebView = Chrome 39）上精确定位到：该 WebView 被 Compose
+     * `AndroidView` 承载时**只画出第一帧，之后永不更新**——普通 2D canvas 同样不上屏，
+     * 而 JS 侧一切正常（frames 持续增长、画布回读有真实像素、`screencap` 却是精确
+     * (0,0,0)）。已排除 `preserveDrawingBuffer` / `LAYER_TYPE_SOFTWARE`（后者直接
+     * `Error creating WebGL context`）/ `onResume` 三条路。详见
+     * `docs/archive/e41-tv-blackscreen-fix-plan.md`。
+     *   ⇒ 观感最好的一版**保留**（手机上完美显示），老旧设备上则**黑屏**；
+     *     把本效果限定在最高档，是让「能显示它的设备」与「该用最高档的设备」尽量重合，
+     *     而不是让用户在低档设备上切到一个黑屏效果。
+     * ⛔ 由 ULTRA 门控带来的取舍：MEDIUM 用户不再能在列表里看到 E41（`needsParticleBudget`
+     *   标注**照实保留**，渲染器确实读 `maxParticles`，`ParticleBudgetGateTest` 的源码扫描
+     *   仍要求它为 true）。
      *
      * **音频源复用既有分析层**（[com.nasmusic.tv.visualizer.AudioFrame]），
      * ⛔ 不新增 `RECORD_AUDIO` 权限、不用 `AudioRecord`/`Visualizer` ——
      * 与其余 40 套效果同源，零新增权限、零新增依赖。
      */
-    WORLD(R.string.visualizer_theme_world, "世界", Tier.ADV, "41", needsParticleBudget = true),
+    WORLD(R.string.visualizer_theme_world, "世界", Tier.ULTRA, "41", needsParticleBudget = true),
 
     /**
      * 星空星轨（第 42 个效果）
