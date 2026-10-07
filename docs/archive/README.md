@@ -250,11 +250,16 @@
 | `seaside-preview.html` | E43 海边的**浏览器原型**（2663 行单文件）。**所有者 2026-10-07 裁决：「归档吧，不用了」** ⇒ 它不再是视觉基准。⭐ **这不是「方案未完成」，而是「职责转移」**：原型已完成使命（v2.38.2 真机逐项对齐后 `SeasideRenderer.kt` 定稿），此后**真机实现是唯一权威**。⚠️ 后果已显形：`SeasideRenderer.kt` 与 `SeasideOpBudget.kt` 里有 **100+ 处 `seaside-preview.html:NNNN` 形式的行号引用**，它们此后只能指向**一份冻结的快照**——⛔ **不要再拿原型去「对齐」真机**，行号会骗人。**归档时仍带 3 项未决**：① `verification/scripts/seaside_doc_consistency_check.py` 的 `MUST` 断言 `lerp(spawnFar, shoreYs[i], tAdv)` 在原型里**已不存在**（实测 `常量不一致数: 1`）——脚本比原型旧，⛔ 别信它的绿灯；② `seaside_wave_harness.js` 的 5b/5c 段判定已失效（仍在检查被 `wiS` 取代的 `wi`，见 `seaside-visualizer-plan.md` U4）；③ 5 个脚本仍可跑（路径已同步），但它们验的是**原型**，不再覆盖真机 |
 | `permission-and-signing-plan.md` | 权限与签名统一方案 v1.5。**已 shipped**（S0–S8 全批次实施，v2.38.3；`ReleaseSigningGateTest` / `LocalMusicGateTest` 三道门禁 + CI fail-fast 全部落地）。**归档时待裁决项为 0**（§状态自述「可开工，无待裁决项」，`technical-overview.md` §10.214 已回填实施结果）。⚠️ **它的引用密度是全 `docs/` 最高的**：`AGENTS.md`、`.github/workflows/build.yml`、`app/build.gradle.kts`、3 个门禁测试的**断言失败消息**都在引它 ⇒ 全部已改写为 `docs/archive/` 路径（12 处里占 6 处） |
 | `e41-tv-blackscreen-fix-plan.md` | E41「世界」电视端黑屏的**诊断与裁决记录**。**❌ 修复已永久放弃**（所有者 2026-10-07 裁决：方案 A / B 均否决，「改回原来很好效果的代码……就是黑屏吧」）。定位到的真根因是**宿主**而非渲染层：该机 WebView 被 Compose `AndroidView` 承载时**只画首帧、永不更新**（2D canvas 同样不上屏），故任何页面内改动都救不了。**最终落地**：`WORLD` 由 `Tier.ADV` 提到 `Tier.ULTRA`，仅最高画质档提供（v2.38.4）。**归档时仍带未决项**：§八 的**真机验收 U1/U2** 待所有者执行——① 电视上确认 MEDIUM/LOW 档不再出现 E41；② 手机上确认观感与回退前一致。全部已验证结论已落 `technical-overview.md` §10.215 |
+| `solar-system-upgrade-plan.md` | E29 太阳系程序化质感增强**功能清单 + 当时的编译错误清单**。**已 shipped**（2026-10-08：功能 ①–⑥ 全部落地，22 处错误清零，`OrbitalProceduralEnhanceTest` 11 例门禁；版本号按所有者指示**未提升**）。⚠️ **归档时必须提醒的两点**：① 本文第二节那张错误表**已过期**，头部与二级标题均已标注「历史快照」，⛔ 不要再照它排查；② 实现**偏离原规格 6 处**（预烘 16 档角度→连续角度、原色夜色→压暗、sweepGradient→径向渐变、1.04→1.18、smoothstep 边缘柔化→半径调制、楔形缝→整圈同心内圈），理由逐条记在 `technical-overview.md` §10.219 的表里 —— 原规格里 ①②④⑤ 四项**照写就会画错**。**归档时仍带未决项**：§四 的每档新增提交（LOW +2 / MED +18 / HIGH +38）是**静态估算**，真机帧率待所有者上机（§九 R18）|
 
 > **2026-10-05 追加归档 2 份**（所有者裁决）：`seaside-visualizer-plan.md`、`photo-spectrum-effect-plan.md` → `docs/archive/`。同步改写引用 **5 处 / 4 文件**（`SeasideWaves.kt`、`PhotoWallSettingsSection.kt`、`docs/archive/README.md`、`docs/archive/starry-sky-visualizer-plan.md`）。⚠️ 其中 **1 处是真正会跑坏的脚本**：`verification/scripts/seaside_doc_consistency_check.py` 的硬编码绝对路径用的是**反斜杠**，因此 `docs/` 正斜杠扫描扫不到——归档时必须手动扫**裸文件名**。⇒ 此论在本轮已被实证两次。
 
 > **2026-10-07 追加归档 1 份**：`e41-tv-blackscreen-fix-plan.md` → `docs/archive/`。
 > 同步改写引用 **2 处 / 2 文件**（`AppSettings.kt` 的 `WORLD` KDoc、`technical-overview.md` §10.215）。
+
+> **2026-10-08 追加归档 1 份**：`solar-system-upgrade-plan.md` → `docs/archive/`（E29 太阳系程序化增强，已 shipped）。
+> 该文档**归档前从未入库**（工作区新增），故用普通 `mv` 而非 `git mv` —— **无历史可保留**，
+> 引用改写 **1 处 / 1 文件**（`OrbitalProceduralEnhanceTest.kt` 的 KDoc 指向 `docs/archive/` 路径）。
 > ⚠️ 本篇是**同一次会话内先建后归档**，故上表「`docs/` 根目录」一列未变（净增删为 0），
 > 只更新了「移入」与「同步改写引用」的合计。
 

@@ -13935,3 +13935,114 @@ WATER 实测（1920×8 采样）：截断取整时 **0.78%** 像素跨档 ⇒ �
   `LightBeamsTest` 14 例（含 E35）、`HypnoticFunctionTest` 11 例、
   `PerfBudgetContractTest` 9 例（draw 路径预算门禁，移除埋点后仍绿）—— **全部 0 失败**
 - `lintDebug`：**0 errors / 289 warnings**，与移除前**逐个持平**（无新增）
+
+### 10.219 v2.38.4 — E29 太阳系程序化质感增强：修复 22 处编译错误并补齐彗星（功能 ⑥）（2026-10-08）
+
+**背景**：工作区里有一份**未提交**的 E29（`OrbitalRingsRenderer`，`BatchTwoRenderers.kt`）程序化增强代码，
+`compileDebugKotlin` **22 处错误**，方案文档的功能 ⑥「彗星」尚未开始。本轮把 22 处全部修掉、补齐彗星、
+并按仓库红线补齐门禁。⛔ **版本号未提升**（所有者指示），实现落 v2.38.4 段。
+
+#### 一、22 处编译错误的三类根因
+
+| 类 | 处数 | 根因 | 修法 |
+|---|---|---|---|
+| Double/Float 不匹配 | 14 | 噪声链里混进 `Math.sin`/`Math.PI`（Double）与无后缀字面量 `* 0.5`，**整条链被升成 Double**，一路污染到 `Path.moveTo/lineTo` | 噪声/几何链一律走 `kotlin.math` 的 **Float 重载** + Float 字面量；`elapsed` 保留 Double（长会话精度），只在乘角度处 `.toFloat()` 一次 |
+| `save/translate/scale/restoreToCount` Unresolved | 4 | 这三者是**原生 `Canvas`** 的方法，`DrawScope` 在 BOM 2024.02.00（compose-ui 1.6.1）上只有**块形式** `translate(...) { }`；且 1.6.1 的 `Canvas` **没有 `restoreToCount`** | 改走仓库既有范式 `drawContext.canvas.save() → translate → rotate/scale → drawPath → restore()`（同 `BatchFourRenderers.kt` 的整组缩放），零捕获 lambda |
+| `Brush.sweepGradient(IntArray, startAngle, endAngle)` + `toArgb` | 4 | 该重载在当前版本**不存在**（`sweepGradient` 只收 `List<Color>` / `List<Pair<Float,Color>>`，且无起止角参数） | **整个思路换掉**：改为单元空间 `Brush.radialGradient`（透明→白→透明）+ canvas 缩放摆放（理由见二-3） |
+
+API 面是从 **Gradle 缓存里的 `compose-ui` jar 用 `javap` 实测**的，不是猜的 —— 这三类错误里有两类
+「换个写法」其实换不通，必须先确认版本到底提供什么。
+
+#### 二、审查时发现的 5 个设计缺陷（比编译错误更严重，一并纠正）
+
+WIP 即使编译通过也会画出**错的东西**，逐条记录：
+
+1. **夜侧用了原色**：`p.color.copy(alpha = 0.6f)` 叠在同一个 `p.color` 的盘上 ⇒
+   `0.6·c + 0.4·c = c`，**像素恒等**，等于白画一遍。改为按 `PLANET_NIGHT_SHADE = 0.34f` 压暗 RGB 再叠。
+2. **预烘 16 档方位角的半圆遮罩画反了方向且是环形**：原实现把**被照亮那一侧**盖暗了，
+   且形状是环带不是半盘；预烘离散档位还会让分界线每档**突跳一次**。改为**单位圆半盘烘一次**
+   （`bakeTerminator()`，幂等守卫）+ 逐帧 `cvs.rotate(nightSideDegrees(ldx, ldy))` 取**连续**角度。
+   ⚠️ 遮罩必须画在「盘 + 地表细节 + 高光」**之后**，否则夜侧的云带/高光仍是全亮 ⇒ 假立体感。
+3. **屏心 `sweepGradient` 做大气边缘光不成立**：扫角渐变按屏幕中心取角，摆到偏心的行星盘上
+   只会把盘面**染成一块平色**，不产生边缘光。改为**单元空间径向渐变**（峰值 0.85→1.0 之间，
+   画在 `radius = pr × 1.18` 的缩放圆上）⇒ 峰值恒落在盘缘外一圈，Brush 构造期建好、逐帧零分配。
+4. **卡西尼缝用 `lineTo` 续接楔形**：从主环弧终点 `lineTo` 过去会**多描出一条径向杂线**，
+   且每帧 `arrayOf(...)` 装箱分配。改为同一条 `ringBuf` 里以 `moveTo` 起**独立子路径**的同心内圈
+   （`SATURN_RING_INNER_K = 0.72`），仍是 1 次 `drawPath` ⇒ 提交数不增；缝改为**整圈同心**（真实卡西尼缝如此）。
+5. **太阳米粒组织里有恒定 `edgeSoft`**：原实现的衰减系数与 `elapsed` 无关（死变量），
+   净效果是**把太阳整体缩小 8%** 而非表面纹理。改为 96 段噪声圆，半径
+   `sunR × (1 + n × 0.35 × 0.20)`，`n` 是**四层**正弦（权重和 = 1 ⇒ 值域 ±1）⇒ 只在 ±7% 内摆动，
+   面积均值不变；`sunCoreHot` 亮核第二次提交保留（原视觉层级不动）。
+
+#### 三、彗星（功能 ⑥）的实现口径
+
+⛔ **禁 `Random`**：`k = floor(elapsed / 45)` 定**这一颗**的全部参数（起始延迟 / 时长 / 半长轴 /
+离心率 / 轨道朝向 / 运行方向 / 彗核大小 / 尾弯向，8 路独立盐位 `hashUnit(k, salt)`），
+窗口内进度 `p` 定它在轨道上的位置 ⇒ 同一时刻永远算出同一颗，**可回放、零闪烁**。
+
+| 项 | 口径 |
+|---|---|
+| 节律 | 窗口 45 s，起始延迟 `[0,8)`，时长 `[9,13)` ⇒ 一颗**永不跨窗口**，相邻间隔恒落在 **24~44 s** 且非恒定 |
+| 几何 | **太阳在焦点**：`M = π + 2πp`（从远日点起整圈）⇒ 进画/出画都在画外；一阶开普勒 `E = M + e·sin M` ⇒ 近日快远日慢；`r = a(1 − e·cos E)` |
+| 尺度 | `a = [0.82,1.00] × M`，`M = max(半宽/s, 半高/(s·TILT))` = 可见世界椭圆的**外接圆半径** ⇒ `r_apo ≥ 1.312M` **与画幅无关**地恒在画外 |
+| 倾斜 | 轨道点走 `project()`（含 `TILT`）⇒ 与行星轨道同一倾斜约定 |
+| 尾向 | `normalize(彗星 − 画面中心)`（太阳在画面中心 ⇒ 天然背日），近日变长（`0.055 → 0.205`）、按 hash 决定弯向 |
+| 提交 | 轨道弧 1（MED+）+ 彗尾 1 + 彗核 1 + 彗头光晕 1（仅 HIGH）= LOW **2** / MED **3** / HIGH **4** |
+| 进出场 | 两端各 `COMET_FADE = 12%` 时长的淡入淡出 ⇒ 极角恰好落在画内的罕见参数下也不突现突灭 |
+
+#### 四、每档新增提交（静态估算）
+
+| 档 | ① 晨昏线 | ② 大气光 | ③ 云带 | ④ 米粒 | ⑤ 卡西尼 | ⑥ 彗星 | 合计 |
+|---|---|---|---|---|---|---|---|
+| LOW | 0 | 0 | 0 | 0 | 0 | +2 | **+2** |
+| MEDIUM | +8 | 0 | +7 | 0 | 0 | +3 | **+18** |
+| HIGH | +8 | +8 | +18 | 0（2→2） | 0 | +4 | **+38** |
+
+彗星按 45 s 窗口里约 34% 的占空比计。E29 的 HIGH 档基数在 **250~300 次提交**量级（星野 220 为大头），
++38 ≈ **13%**；LOW 档（创维 5.1.1 / API 22 的主战场）只 +2。
+⚠️ 这是**静态估算**，不是验收判据（§九 R18）⇒ 真机帧率仍以屏上角标 / SurfaceFlinger 为准，**待所有者上机**。
+
+#### 五、门禁 `OrbitalProceduralEnhanceTest`（新增 11 例）
+
+三段结构照抄 `OrbitalStarFieldTest`：数值/行为段**直调生产纯函数**（`hashUnit` / `cometStartAt` /
+`cometDuration` / `cometAnomaly` / `cometRadius` / `nightSideDegrees` / `bandLatCenter` /
+`bandThickness` / `bandChordFraction`），⛔ 不复制算法、⛔ **不构造渲染器**（字段初始化建 `Path()` ⇒ JVM 抛 "not mocked"）；
+源码段一律**先剥注释**。
+
+| 例 | 契约 | 负向自证（同一份谓词） |
+|---|---|---|
+| ① | hash 值域 `[0,1)`、纯函数、8 路盐去相关 | 常数函数 / 忽略盐 / 值域越界 |
+| ② | 不跨窗口、间隔 24~44 s、间隔非常量 | 时长 46 s / 起始+时长越界 / 恒 45 s 节律 / 0 s |
+| ③ | `r_apo > M`（恒在画外）、`r_peri < 0.5M`、`E(M)` 单调、`|E−M| ≤ e` | `A_MIN=0.5` / `e=0`（圆轨道）/ `A_CAP=1.6` / 漏乘 e / `E=−M` |
+| ④ | 四象限 + 512 点抽样：`rotate(deg)` 后单位 +x 必须等于**背日方向** | 算成日方向 / x·y 写反 |
+| ④b | 夜色 `shade < 0.6` 且 `alpha > 0.2` | `shade=1`（原色）/ `alpha=0` |
+| ⑤ | 4 组（木/土 × HIGH/MED）逐条带：含扰动上限仍在单位盘内、带厚 < 间距、纬度覆盖闭合 | `chord=1.3` / `BAND_WIDTH_K=1.0` |
+| ⑤b | 光晕半径 > 1.05、米粒摆动 < 0.1、卡西尼内圈 ∈ (0.5,0.9) | `1.0` / `0.5` 调制 / 内圈 `1.0`、`0.3` |
+| ⑥ | 7 个每帧函数零 `Random`/`Path()`/`Brush.`/`Rect(`/`arrayOf`/`listOf`/`withTransform` | 五种对应片段逐个喂同一谓词 |
+| ⑥b | 「禁 Random」守卫注释在**原文**、`Random` 只出现在**注释**里 | 对照断言原文确含 `Random`（证明剥注释自证非空转） |
+| ⑦ | 六项全部真的挂在每帧路径上 + 遮罩画在云带**之后**（按 index 比较）+ 环仍只 1 次提交 | — |
+| ⑦b | 档位门控逐条：`tier > 0` / `tier == 2` 的正则锚定（防止命中别处同名分支） | 每帧函数含 `withTransform` 即判失败 |
+
+#### 六、与方案文档的偏差（已按上述理由偏离原规格）
+
+| 文档原述 | 实际落地 | 理由 |
+|---|---|---|
+| ① 预烘 **16 档方位角** | 单位圆半盘**烘一次** + 逐帧连续角度 | 预烘档位会让分界线突跳；且原形状/朝向都错（见二-2） |
+| ① `color.copy(alpha = 0.6f)` | RGB 先乘 `PLANET_NIGHT_SHADE` | 原色叠加恒等（见二-1） |
+| ② `Brush.sweepGradient` + `drawCircle(radius = pr × 1.04)` | 单元空间 `radialGradient` + `radius = pr × 1.18` | sweep 思路不成立（见二-3）；1.04 的峰值会被盘缘切掉 |
+| ④ 边缘 `smoothstep(0.92, 1.0)` 柔化 | 去掉，改为 `±7%` 半径调制 | 恒定衰减系数只是把太阳缩小（见二-5） |
+| ⑤ 缝楔形「长轴端点、角宽 0.25、内外边界 0.55/0.65」 | 整圈同心内圈，`INNER_K = 0.72` | 楔形续接会多一条径向杂线；真实卡西尼缝是整圈 |
+
+#### 七、验证
+
+命令一律 `--no-daemon "-Pkotlin.compiler.execution.strategy=in-process"`，日志落 `logs_temp/`：
+
+- `compileDebugKotlin`：**BUILD SUCCESSFUL**（22 处错误 → 0；`BatchTwoRenderers.kt` 仅剩 4 条既有
+  `Redundant call of conversion method` 警告，全在**未改动**的 `sunBrush` 十六进制字面量行上）
+- `testDebugUnitTest`：**155 类 / 1680 例 / 0 失败 / 0 错误 / 0 跳过**（含新增 `OrbitalProceduralEnhanceTest` 11 例；
+  既有 `OrbitalStarFieldTest`、`FxCoverageScanTest`（21 个渲染器类）等门禁均未受本轮改写影响）
+- `lintDebug`：**0 errors / 289 warnings**，与 §10.217 记录的基线**逐个持平**（无新增）
+- `assembleRelease`：**BUILD SUCCESSFUL**（R8 + 资源压缩，`NASMusicTV-release-v2-38-4.apk` **24.35 MB**）；
+  ⛔ `versionName` 未提升（所有者指示），故本轮实现落在 v2.38.4 段、需随下一次发版一并带出
+- ⛔ **真机上机验收未做**（§四 的每档提交数是静态估算）：E29 的晨昏线 / 大气光 / 云带 / 米粒 / 卡西尼缝 /
+  彗星 观感与 LOW 档帧率待所有者在创维 5.1.1 上确认
