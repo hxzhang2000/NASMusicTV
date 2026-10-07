@@ -103,7 +103,19 @@ class LiquidGridRenderer : RendererFx() {
         // ── §A5-4 三段式背景（G9）：① 径向纵深 ② 水纹 tile ③ 远景微粒 tile ──
         // 背景三段**不随 FxLevel 关闭**（与已落地的 E07 一致）：它承担"不再浮在纯黑上"，
         // 而 vignette / grain 这类"胶片感"后处理才按档位关（见 postFx）。
-        ProceduralTexture.ensure(iw, ih)
+        // ⛔ 不用 `ensure()`：它一次烘**全部 6 张**全屏纹理（1920×1080 × 6 ≈ 1240 万像素
+        //    Kotlin 逐像素 + 6480 次 JNI `setPixels`），且因 `ctx.canvasSize` 在 `onEnter`
+        //    时还是 `Size.Zero` 而必然同步落在**首帧** ⇒ 真机实测冷启动首帧黑屏 6369 ms
+        //    （见 `ProceduralTexture.ensureFullscreenOnly` 的 KDoc）。本效果**只画**下面
+        //    点名的 3 张 ⇒ 逐张点名，降到约 3/6。
+        // ⚠️ `ensureTiled()` 不能省：`postFx.grain = 0.032f` 经 `OverlayFx.drawGrain`
+        //    读 `tile(Id.GRAIN)`，读不到就静默不画；而平铺槽只有它会烘。
+        // ⚠️ 仍留在 `drawContent`：挪进 `onEnterContent` 对黑帧**零收益**（画布尺寸那时尚为
+        //    `Size.Zero`，同一份烘焙只会改落到首帧的尺寸分支）。见 E42 `rebuildGeometry` 的同款说明。
+        ProceduralTexture.ensureTiled()
+        ProceduralTexture.ensureFullscreenOnly(ProceduralTexture.Id.WATER, iw, ih)
+        ProceduralTexture.ensureFullscreenOnly(ProceduralTexture.Id.STARFIELD, iw, ih)
+        ProceduralTexture.ensureFullscreenOnly(ProceduralTexture.Id.CAUSTIC, iw, ih)
         drawRect(brush = Shading2D.shadeBrushCached(
             key = (w.toRawBits().toLong() shl 32) xor h.toRawBits().toLong() xor
                 accent.toArgb().toLong() xor E13_KEY_SALT,
@@ -314,7 +326,12 @@ class LiquidRippleRenderer : RendererFx() {
         val maxR = ctx.minDim * 0.80f
 
         // ── §A6-3 水面底纹（G9）：径向纵深 + 水纹 tile ──
-        ProceduralTexture.ensure(iw, ih)
+        // ⛔ 不用 `ensure()`（一次烘 6 张全屏纹理 ≈ 1240 万像素 + 6480 次 JNI `setPixels`，
+        //    同步落在首帧 ⇒ 首帧黑屏 6369 ms）；本效果**只画 WATER 一张** ⇒ 降到约 1/6。
+        // ⚠️ `ensureTiled()` 不能省：`postFx.grain = 0.030f` 经 `OverlayFx.drawGrain` 读
+        //    `tile(Id.GRAIN)`，读不到就静默不画；平铺槽只有它会烘。
+        ProceduralTexture.ensureTiled()
+        ProceduralTexture.ensureFullscreenOnly(ProceduralTexture.Id.WATER, iw, ih)
         drawRect(brush = Shading2D.shadeBrushCached(
             key = (w.toRawBits().toLong() shl 32) xor h.toRawBits().toLong() xor
                 accent.toArgb().toLong() xor E15_KEY_SALT,
@@ -927,7 +944,12 @@ class ConstellationRenderer : RendererFx() {
         val accent = ctx.palette.accent
 
         // ── §A7-4 背景星野（G9）：静态远景，不衰减 ⇒ 与动态星立刻分出纵深 ──
-        ProceduralTexture.ensure(iw, ih)
+        // ⛔ 不用 `ensure()`（一次烘 6 张全屏纹理 ≈ 1240 万像素 + 6480 次 JNI `setPixels`，
+        //    同步落在首帧 ⇒ 首帧黑屏 6369 ms）；本效果**只画 STARFIELD 一张** ⇒ 降到约 1/6。
+        // ⚠️ `ensureTiled()` 不能省：`postFx.grain = 0.026f` 经 `OverlayFx.drawGrain` 读
+        //    `tile(Id.GRAIN)`，读不到就静默不画；平铺槽只有它会烘。
+        ProceduralTexture.ensureTiled()
+        ProceduralTexture.ensureFullscreenOnly(ProceduralTexture.Id.STARFIELD, iw, ih)
         ProceduralTexture.tile(ProceduralTexture.Id.STARFIELD)?.let {
             drawImage(it, dstSize = IntSize(iw, ih), alpha = 0.28f)
         }

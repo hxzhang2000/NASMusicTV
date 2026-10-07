@@ -1414,6 +1414,21 @@ class StarrySkyTest {
             "⛔ 必须只点名 STARFIELD（不得一次烘多张）",
             Regex("""ProceduralTexture\.ensureFullscreenOnly\(\s*ProceduralTexture\.Id\.STARFIELD""").findAll(src).count() == 1,
         )
+        // ⛔ 平铺槽必须单独烘（2026-10-07 补）：`postFx.grain = 0.026f` 经 `OverlayFx.drawGrain`
+        //    读 `tile(Id.GRAIN)`，读不到就**静默 return**（不报错、不画）；而平铺槽的唯一
+        //    生产者是 `ensure()` 内部的 `ensureTiledSlots`，`ensureFullscreenOnly` 刻意不碰。
+        //    ⇒ E42 迁移到 `ensureFullscreenOnly` 时若漏掉 `ensureTiled()`，胶片颗粒层
+        //    会**静默消失** —— 这正是本效果曾经的实际状态，靠肉眼与既有门禁都发现不了。
+        assertTrue(
+            "⛔ 必须调 ensureTiled()（postFx.grain 依赖 tile(Id.GRAIN)，漏了则颗粒层静默消失）",
+            src.contains("ProceduralTexture.ensureTiled()"),
+        )
+        // ⛔ 负向自证：`ensureTiled()` 不得被误写成会带出 6 张全屏纹理的 `ensure(`。
+        //    判据必须带**左括号** —— `ensureFullscreenOnly(` / `ensureTiled(` 都不匹配。
+        assertFalse(
+            "⛔ ensureTiled() 不得写成裸 ProceduralTexture.ensure(（那会回到 6 张全屏）",
+            Regex("""ProceduralTexture\.ensure\(\s*""").containsMatchIn(src),
+        )
         // onEnterContent 必须能触发重建（否则首帧没有渐变 / 剪影 / 纹理）
         assertTrue("onEnterContent 必须调 rebuildGeometry", funBody(src, "onEnterContent").contains("rebuildGeometry("))
         // 尺寸变化分支：先释放再重建（否则旧位图泄漏）

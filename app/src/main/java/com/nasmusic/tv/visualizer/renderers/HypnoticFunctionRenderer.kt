@@ -444,7 +444,14 @@ class HypnoticFunctionRenderer(
         // §B8-③ 方格纸底纹（1 次 drawImage）。⛔ 不随 FxLevel 关闭 —— 它承担"不再浮在纯黑上"
         val iw = w.toInt().coerceIn(1, 4096)
         val ih = h.toInt().coerceIn(1, 4096)
-        ProceduralTexture.ensure(iw, ih)
+        // ⛔ 不用 `ensure()`：它一次烘**全部 6 张**全屏纹理（1920×1080 × 6 ≈ 1240 万像素
+        //    Kotlin 逐像素 + 6480 次 JNI `setPixels`），且因 `ctx.canvasSize` 在 `onEnter`
+        //    时还是 `Size.Zero` 而必然同步落在**首帧** ⇒ 真机实测冷启动首帧黑屏 6369 ms。
+        //    本效果**只画 PAPER 一张** ⇒ 降到约 1/6。
+        // ⚠️ `ensureTiled()` 不能省：`postFx.grain = 0.028f` 经 `OverlayFx.drawGrain`
+        //    读 `tile(Id.GRAIN)`，读不到就静默不画；平铺槽只有它会烘。
+        ProceduralTexture.ensureTiled()
+        ProceduralTexture.ensureFullscreenOnly(ProceduralTexture.Id.PAPER, iw, ih)
         ProceduralTexture.tile(ProceduralTexture.Id.PAPER)?.let {
             drawImage(it, dstSize = IntSize(iw, ih), alpha = PAPER_ALPHA)
         }

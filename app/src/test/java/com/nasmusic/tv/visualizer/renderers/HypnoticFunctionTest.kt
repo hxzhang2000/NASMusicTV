@@ -174,8 +174,30 @@ class HypnoticFunctionTest {
             "⛔ 未引用 Id.PAPER 的 drawImage 必须判否",
             hasPaper("drawImage(it, dstSize = IntSize(iw, ih), alpha = 0.10f)")
         )
-        // ⛔ 必须在 drawContent 内调 ensure（首次组合 onEnter 拿 Size.Zero）
-        assertTrue("ensure 必须在 drawContent 内调", "ProceduralTexture.ensure(iw, ih)" in draw)
+        // ⛔ 负向自证：不得出现**裸** `ProceduralTexture.ensure(`。旧写法一次烘**全部 6 张**
+        //    全屏纹理（1920×1080 × 6 ≈ 1240 万像素 Kotlin 逐像素 + 6480 次 JNI `setPixels`），
+        //    而本效果只画 PAPER 一张；又因 `ctx.canvasSize` 在 `onEnter` 时还是 `Size.Zero`，
+        //    这份烘焙必然同步落在**首帧** ⇒ 真机实测冷启动首帧黑屏 6369 ms。
+        //    ⚠️ 注意判据必须带**左括号**：`ensureFullscreenOnly(` / `ensureTiled(` 都不匹配，
+        //    否则本条会把这两种正确写法一并判否。
+        assertFalse(
+            "⛔ E25 不得调裸 ProceduralTexture.ensure(（只为 5 张永不画的纹理付费）",
+            body.contains("ProceduralTexture.ensure("),
+        )
+        assertEquals(
+            "ensureFullscreenOnly 必须只有一个调用点",
+            1, Regex("""ProceduralTexture\.ensureFullscreenOnly\(""").findAll(body).count(),
+        )
+        assertTrue(
+            "ensureFullscreenOnly 必须只点名 PAPER（不得一次烘多张）",
+            Regex("""ProceduralTexture\.ensureFullscreenOnly\(\s*ProceduralTexture\.Id\.PAPER""")
+                .findAll(body).count() == 1,
+        )
+        // ⛔ 平铺槽：postFx.grain 经 OverlayFx.drawGrain 读 tile(Id.GRAIN)，读不到就静默不画
+        assertTrue(
+            "⛔ 必须调 ensureTiled()（否则 postFx.grain 的胶片颗粒层静默消失）",
+            body.contains("ProceduralTexture.ensureTiled()"),
+        )
     }
 
     // ═════════════════════ ⑥ dt 段：帧率绑定修复 ═════════════════════

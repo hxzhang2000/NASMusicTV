@@ -318,6 +318,13 @@ class StarrySkyRenderer : RendererFx() {
             w.toInt().coerceIn(1, MAX_TEX_PX),
             h.toInt().coerceIn(1, MAX_TEX_PX),
         )
+        // ⚠️ `ensureTiled()` 不可省（2026-10-07 补）：`postFx.grain = 0.026f` 经
+        // `OverlayFx.drawGrain` 读 `tile(Id.GRAIN)`，读不到就**静默 return**（不报错、
+        // 不画）；而平铺槽（GRAIN ×8 / SCANLINE）的唯一生产者是 `ensure()` 内部的
+        // `ensureTiledSlots`，`ensureFullscreenOnly` 刻意不碰它们。
+        // ⇒ 迁移到 `ensureFullscreenOnly` 时漏掉本行 ⇒ 胶片颗粒层**静默消失**（已发生过）。
+        // 成本 ≈ 13.1 万像素（GRAIN 8×128×128 + SCANLINE 1×3），约一张全屏纹理的 6%。
+        ProceduralTexture.ensureTiled()
     }
 
     /**

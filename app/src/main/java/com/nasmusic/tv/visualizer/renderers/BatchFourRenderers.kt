@@ -1632,10 +1632,16 @@ class LightBeamsRenderer : RendererFx() {
         ensureColors(accent)
 
         // ── §B10-② 体积雾：1 层 `Id.FOG`（随 `sectionEnergy` 缓慢漂移；过扫描 ⇒ 不露边）──
-        // ⚠️ `ensure` 放在 `drawContent` 内违反基类注释，与 E25 / E34 同一处理（§12.4）
         val iw = w.toInt().coerceIn(1, 4096)
         val ih = h.toInt().coerceIn(1, 4096)
-        ProceduralTexture.ensure(iw, ih)
+        // ⛔ 旧写法 `ProceduralTexture.ensure(iw, ih)` 已废除：它一次烘**全部 6 张**全屏纹理
+        //    （1920×1080 × 6 ≈ 1240 万像素 Kotlin 逐像素 + 6480 次 JNI `setPixels`），且因
+        //    `ctx.canvasSize` 在 `onEnter` 时还是 `Size.Zero` 而必然同步落在**首帧**
+        //    ⇒ 真机实测冷启动首帧黑屏 6369 ms。本效果**只画 FOG 一张** ⇒ 逐张点名，降到约 1/6。
+        // ⚠️ `ensureTiled()` 不能省：`postFx.grain = 0.030f` 经 `OverlayFx.drawGrain`
+        //    读 `tile(Id.GRAIN)`，读不到就静默不画；平铺槽只有它会烘。
+        ProceduralTexture.ensureTiled()
+        ProceduralTexture.ensureFullscreenOnly(ProceduralTexture.Id.FOG, iw, ih)
         val fogSpeed = FOG_DRIFT * (0.35f + frame.sectionEnergy)
         fogDriftX = wrap01(fogDriftX + fogSpeed * fx.dt)
         fogDriftY = wrap01(fogDriftY + fogSpeed * FOG_DRIFT_Y_K * fx.dt)

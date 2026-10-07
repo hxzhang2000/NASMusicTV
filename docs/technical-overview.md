@@ -13668,3 +13668,198 @@ APK——实测 **139 个条目 / 23.3 MB**，而运行时**一个都用不到**
 - ✅ APK 内 `assets/globe` 恰为 **9 个条目**，且对
   `node_modules` / `three.min.js` / `three-globe.min.js` / `earth.jpg` / `cities.json`
   **零命中**；整体条目数 996 → 991（正好少 5 个）
+
+### 10.217 v2.38.4 — 切换可视化效果冻结 3~5 秒：定位到首帧全屏纹理重烘，`sin` 查表 + STARFIELD 行区间分桶（2026-10-07）
+
+**结论先行**：真机 dense 埋点确诊阻塞 **100%** 在**首帧 `drawContent` 的全屏纹理重烘**，
+单张 1080p 实测 **2398~3501 ms**。两处算力优化（`sin` → 4096 项 `FloatArray` LUT、
+`starLayout` 提出 + 行区间分桶）后，端到端冻结 **E13 5817 → 1925 ms**，其余 2~5 s 的效果
+降到 **1 s 上下**。⚠️ 诊断埋点已按所有者决定**全部移除**（release 包里约 180 条/秒的日志开销
+不值得），只保留优化与门禁。
+
+#### 一、症状与真机数据
+
+按左右键切换可视化效果时，屏幕上**旧画面冻结**（**不是黑屏**）：
+
+| 设备 | 冻结时长 |
+|---|---|
+| 电视（主战场） | **3~5 秒** |
+| 手机 | 100~330 ms |
+
+⚠️ 「冻结」而非「黑屏」这一点很关键：它一开始让人怀疑是「渲染器还没画出第一帧」，
+实际上绘制循环**一直在跑**、只是主线程被一段长同步计算占住，画面停在最后一帧。
+
+#### 二、诊断方法（埋点现已移除）
+
+dense 埋点，统一 tag，一条 `adb logcat -s VProbe` 捞全。**必须打在 release 包上**
+（`AppLog.d/i/w` 带 `if (BuildConfig.DEBUG)` 守卫，release 下会被 R8 折掉 —— 只有
+`AppLog.e` 无守卫、必然保留）。三处打点：
+
+1. `RendererFx.draw` **进出**（每实例首帧一次）—— 量整段 draw 耗时；
+2. `ProceduralTexture.ensure` / `ensureFullscreenOnly` 的**每次烘焙耗时**（逐 Id）；
+3. `RendererSwapper.sync` **分段**（建对象 / `fresh.onEnter` / `previous.onExit` / `old.onExit`）。
+
+时钟一律 `SystemClock.elapsedRealtime()` / `elapsedRealtimeNanos()`（连续单调）；
+⛔ **绝不用 `System.currentTimeMillis()`** —— 它会被 NTP 校时跳变，跨条目做差不可信。
+
+⚠️ 埋点正文必须封在一个**普通对象**里，draw 块内只留 `VProbe.xxx(...)` 这种
+无字符串模板、无容器分配的普通调用：`PerfBudgetContractTest` 会扫描 `renderers/` 与
+`photo/` 下所有 `fun DrawScope.draw*(` 的函数体，禁字符串模板与每帧容器分配。
+
+结论：除首帧全屏纹理烘焙外的**每一段都在 10 ms 以内**；`RendererSwapper.sync` 本身
+（建对象 + onEnter + onExit + 释放）合计几十毫秒 ⇒ 阻塞**不在换渲染器**，而在首帧。
+
+#### 三、改前的逐纹理烘焙耗时（真机，1920×1080，单张）
+
+| 纹理 | 耗时 |
+|---|---:|
+| WATER | **3501 ms** |
+| FOG | **2861 ms** |
+| PAPER | **2398 ms** |
+| CAUSTIC | **1944 ms** |
+| STARFIELD | **295~425 ms** |
+
+#### 四、根因链
+
+**为什么每次切效果都要重烘**：`RendererFx.onExit()` → `ProceduralTexture.release()`
+把**所有**槽位清空 ⇒ 下一个效果的首帧必须重新烘自己需要的那些纹理。这是既有设计的
+直接后果（API 22–25 位图像素在 native 堆，不释放会 OOM），本轮**有意不动**
+`release()` 的调用位置。
+
+**为什么单张要 1~3.5 秒**：
+
+- `kotlin.math.sin(x: Float)` 展开成 `(float) java.lang.Math.sin(x.toDouble())`
+  —— 每次都是**双精度 libm 调用**（参数规约 + 象限归约 + 多项式求值）。
+  5 个行填充器**每像素调 2~4 次** ⇒ 1080p 单张 ≈ 210 万像素 ⇒ 400~800 万次 libm 调用。
+  真机埋点拟合：**`sin` 占烘焙时间的 66~73%**。
+- `starLayout(w, h)` 被写在**逐行 lambda 里** ⇒ 在 1080p 下被算 **1080** 次
+  （每次迭代 230 颗星 + 分配 690 个 float = 2.7 KB ⇒ 一次 ensure 多分配 2.9 MB）。
+  更糟的是行填充器每行都要遍历**全部 230** 颗星做 y 判定，而每行平均只有 **0.43** 颗星
+  落在跨度内 ⇒ 1080 × 230 = **248,400 次判定里 99.8% 是白做**。
+
+#### 五、改动
+
+**① `sin` → 4096 项 `FloatArray` LUT**（抄 `SeasideWaves.kt:197-203` / `:334` 的同构先例）。
+
+- `SIN_LUT_N = 4096` / `SIN_LUT_MASK` / `SIN_LUT_SCALE`（建表用）/ `SIN_LUT_SCALE_F`
+  （**查表必须用单精度标度** —— 用 `Double` 会把热循环里的 `a * SCALE` 重新变成
+  「f2d 转换 + 双精度乘法 + d2i 转换」，正是本优化要消灭的那一类开销）。
+- `fsin(a)` 用**四舍五入**取下标（先按符号 `±0.5f` 再 `toInt()`）而非 `SeasideWaves`
+  的截断向零：`toInt()` 是截断，下标误差可达**满 1 格** ⇒ 相位误差 `2π/N = 1.534e-3 rad`
+  ⇒ 实测 `|Δsin|` 上界 **1.534e-3**（门禁是 `1e-3`，**过不了**）；四舍五入把误差**减半**到
+  **0.5 格** ⇒ 相位误差 `π/N ≈ 7.67e-4 rad` ⇒ `|Δsin| ≤ 7.67e-4`，满足门禁。
+  代价是热循环里多一次比较 + 一次加法 —— 相对一次 libm `sin` 仍便宜两个数量级。
+- 表**多存 1 项**（`i == N` ⇒ `sin(2π) ≈ 0`）避免回绕处毛刺；`sinLutSize()` 供门禁断言。
+- 5 个行填充器共替换 **14 处** `sin` → `fsin`。
+- `paperRow` 额外两笔：把 `2π/40` 折成单精度常量 `PAPER_W`，并把**行常量**
+  `sin(y·2π/40)` 提到 x 循环外（原来每像素重算一遍步长再喂给 `sin(Double)`，
+  全表最贵的单点）。乘法顺序保持 `(sinX * sinY) * 4f` 与原式**逐位同构**。
+
+**② `starLayout` 提出 + 行区间分桶**。
+
+- `starBake(w, h)` 一次性算出 `StarBake(w, h, layout, buckets)`；
+  两处调用点（`ensure` 的六行之一、`Id.rowFiller`）都必须是「一张纹理算一次」，
+  ⛔ 不得放回逐行 lambda ⇒ **`starLayout` 每张纹理只调 1 次**（旧写法 1080 次）。
+  ⚠️ 关键是**作为 `when` 分支的实参** `starRowFiller(starBake(w, h))` 写在建 lambda 时求值；
+  若写进 lambda 体就退化成每行 1 次，门禁专门防这个静默回退。
+- `starBuckets(w, h, layout)` 把星按 y 跨度预先分桶，扁平 **CSR** 结构
+  （`bucketStart` / `items`，零逐行分配，1080p 约 13 KB）。行 `y` 的星下标区间 =
+  `[bucketStart[y], bucketStart[y+1])`。⇒ 每行只重放「可能命中本行」的星。
+- **等价性三不变量**（门禁在 1920×1080 上逐像素锁死）：
+  ① 桶是**保守超集**（真实命中 `y ∈ [sy-r, sy+r]`，取
+  `floor(sy-r)-1 … ceil(sy+r)+1` 两端各留 1 行吸收 float 舍入；误差上界
+  `h·2⁻²⁴ ≈ 6.4e-5 ≪ 1` ⇒ 落在桶外的行旧判定必然 `continue`）；
+  ② 桶内**保留原判定**（`if (dy < -r || dy > r) continue` 一字未改）；
+  ③ 行内**顺序**与旧写法一致（pass 2 按星下标升序回填 —— 重叠星是**后写覆盖**而非混合，
+  顺序一改像素就变）。
+- 每行工作量：248,400 次判定 → 实测 **1,148** 次星访问（**两个数量级**）。
+
+⛔ **`ensure()` 里六行 `ensureFullscreen(Id.X, w, h, fullKey)` 的字面量形状不可动**
+（`LightBeamsTest` / `PlasmaFlowTest` 源码扫描门禁锁死，改了门禁会**静默失效**）。
+
+#### 六、实测收益（同一台电视）
+
+| 项 | 改前 | 改后 | 倍数 |
+|---|---:|---:|---:|
+| WATER 单张 | 3501 ms | **1017 ms** | **3.4×** |
+| FOG 单张 | 2861 ms | **1027 ms** | **2.8×** |
+| PAPER 单张 | 2398 ms | **984 ms** | **2.4×** |
+| CAUSTIC 单张 | 1944 ms | **689 ms** | **2.8×** |
+| STARFIELD 单张 | 295~425 ms | **111 ms** | **3.2×** |
+
+端到端（按键 → 新效果首帧）：
+
+| 效果 | 改前 | 改后 |
+|---|---:|---:|
+| E13 液态网格 | 5817 ms | **1925 ms** |
+| E35 光轴 | 2927 ms | **1112 ms** |
+| E25 催眠 | 2456 ms | **1125 ms** |
+| E15 液态涟漪 | 3582 ms | **1134 ms** |
+| E17 星座 | 497 ms | **258 ms** |
+
+`T:SLOW`（>200 ms 的段）由 **6 条降到 0 条**。
+
+#### 七、⚠️ 遗留：瓶颈已从像素运算转移到固定成本
+
+三张最贵纹理（WATER / FOG / PAPER）改后都**停在 ~1000ms**，说明瓶颈**不再是逐像素数学**，
+而是与像素数无关的**固定成本**：`Bitmap.createBitmap` + 1080 次 JNI `setPixels` +
+16.6 MB 像素搬运。
+
+若要再降，下一步是**降采样烘焙**（按 1/2 线性尺寸烘、像素数 /4，draw 期放大）。
+⛔ **但它会引入每帧一次双线性全屏 blit**，稳态帧率风险必须真机验证 —— 本机 E43 基线
+**仅 5.9 fps**，没有余量吃这个开销。**本轮不做，留给有真机基线的人接手。**
+
+#### 八、⚠️ 已否决的方案（记录下来避免后人重走）
+
+- ❌ **warm 门控**（等首帧纹理就绪再切显示）：用户实测确认**旧画面本来就冻结在屏上**，
+  平台免费提供了该行为 ⇒ 收益 ≈ 0。
+- ❌ **crossfade**：会让 `SeasideRenderer` 的 `BlendMode.Plus` 镜面高光**闪一下加法再消失**，
+  与既有定稿裁决冲突。
+- ❌ **纹理常驻不释放**（约 41 MiB）：本机 `dumpsys meminfo` 实测
+  `Dalvik Heap Free` 仅 **4.3 MB** / `Native Heap Free` **7 MB** ⇒ 2 GB 机器上不可行。
+- ❌ **LRU 纹理缓存**：只有 **5 个可达槽位**，为 5 个对象写状态机不划算。
+- ⛔ 不要在「按需烘焙」那套之外去动 `ensure()` 六行的字面量形状（有源码扫描门禁）。
+
+#### 九、门禁
+
+| 测试 | 例数 | 锁住什么 |
+|---|---:|---|
+| `ProceduralTextureSinLutTest` | 6 | LUT 误差（≥2²⁰ 随机相位，`\|Δ\| ≤ 1e-3`）+ **负向自证** |
+| `ProceduralTextureStarfieldBucketTest` | 6 | ⭐ **1920×1080 全 1080 行逐像素零差异** + 桶是超集 + 负向自证 |
+| `ProceduralTextureStarBakeOnceTest` | 4 | `starLayout` 在一次 ensure 中**只调 1 次** |
+
+⚠️ `starLayoutCalls` / `starLayoutCallCount()` / `resetStarLayoutCallCount()` **不是埋点**，
+是 `StarBakeOnceTest` 的门禁计数器 ⇒ **⛔ 不得删除**。
+同理 `HypnoticFunctionTest` 的正向断言已**翻转为负向**（`fsin` 不可能逐像素等价，见下），
+`LightBeamsTest` 新增 **E35 门禁**。
+
+#### 十、⚠️ 教训：`sin` LUT 不可能逐像素等价
+
+各行填充器末尾都是 `.toInt()`，任何量化扰动都会让**极少数**像素跨 ±1 档。
+WATER 实测（1920×8 采样）：截断取整时 **0.78%** 像素跨档 ⇒ 改四舍五入后 **0.36%**
+（恰好减半 ⇒ 抖动源确认为量化本身，不是实现 bug）。
+而 WATER 自身 alpha 上限只有 **0.137** ⇒ 0.36% 像素上差 1/255 **肉眼不可见**。
+
+⇒ **`sin` 侧不可能给出逐像素相同的门禁**，只能锁**幅度（±1 档）+ 比例（<1%）**。
+只有 **STARFIELD 分桶**能给出真正的**逐像素等价**门禁 —— 写这类门禁时要想清楚
+「等价」在本改动下到底成不成立，别硬凑一个做不到的断言。
+
+#### 十一、埋点移除与验证
+
+诊断埋点已按所有者决定**全部移除**（`VProbe.kt` 整个删除；`RendererFx` / `RendererSwapper` /
+`ProceduralTexture` / `AdvancedRenderers` / `UltraRenderers` / `VisualizerStage`
+六处调用点连同 `PROBE_TAG`、`AppLog.e` / `SystemClock` 相关 import 一并清掉）。
+理由是 release 包里约 **180 条/秒**的日志开销不值得 —— 结论既已拿到，留着只是纯损耗。
+
+⚠️ **移除时的判据**：`ProceduralTexture.kt` 里的 `starLayoutCalls` /
+`starLayoutCallCount()` / `resetStarLayoutCallCount()` **不是埋点**，
+是 `ProceduralTextureStarBakeOnceTest` 的门禁计数器，⛔ 保留。
+
+✅ 验证（`--no-daemon "-Pkotlin.compiler.execution.strategy=in-process"`，日志落 `logs_temp/`）：
+
+- `testDebugUnitTest`：**154 类 / 1668 例 / 0 失败 / 0 错误 / 0 跳过**（BUILD SUCCESSFUL 11m19s）
+- 关键门禁逐类实跑：`ProceduralTextureStarBakeOnceTest` 4 例、
+  `ProceduralTextureStarfieldBucketTest` 6 例、`ProceduralTextureSinLutTest` 6 例、
+  `LightBeamsTest` 14 例（含 E35）、`HypnoticFunctionTest` 11 例、
+  `PerfBudgetContractTest` 9 例（draw 路径预算门禁，移除埋点后仍绿）—— **全部 0 失败**
+- `lintDebug`：**0 errors / 289 warnings**，与移除前**逐个持平**（无新增）

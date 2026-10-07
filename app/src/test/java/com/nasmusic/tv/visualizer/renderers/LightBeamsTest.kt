@@ -335,6 +335,66 @@ class LightBeamsTest {
         assertFalse("不同 y 必须不同（否则退化成竖条纹）", a1.contentEquals(a3))
     }
 
+    // ═════════════════════ ⑩-b ProceduralTexture 只烘 FOG（首帧黑屏修复） ═════════════════════
+
+    /**
+     * E35 的纹理烘焙面（2026-10-07）。
+     *
+     * ⛔ 背景：`ProceduralTexture.ensure(w, h)` 一次烘**全部 6 张**全屏纹理
+     * （1920×1080 × 6 ≈ 1240 万像素 Kotlin 逐像素 + 6480 次 JNI `setPixels`），而 E35
+     * **只画 `Id.FOG` 一张**。又因 `ctx.canvasSize` 在 `onEnter` 时还是 `Size.Zero`，
+     * 这份烘焙必然同步落在**首帧** ⇒ 真机实测冷启动首帧黑屏 6369 ms
+     * （记录在 `ProceduralTexture.kt` 的 `ensureFullscreenOnly` KDoc 里）。
+     *
+     * ⛔ **负向自证 3 条**（缺一条就空转）：
+     *  ① 剥注释必要性：KDoc 正文里就写着旧写法 ⇒ 判据必须跑在**已剥注释**的源码上；
+     *  ② 旧片段喂**同一份谓词**必须被判否、新片段被判是；
+     *  ③ 左括号边界：`ensureFullscreenOnly(` / `ensureTiled(` 都**不含** `ensure(`。
+     */
+    @Test
+    fun `⑩b 只烘 FOG - 无裸 ensure 且只点名 FOG 且保留平铺槽`() {
+        val body = classBody(codeOfBatchFour(), "LightBeamsRenderer")
+        assertTrue("类体必须能切出来（空转自证）", body.isNotEmpty())
+
+        // ⛔ 负向自证 ①：原文（含 KDoc）里确实有裸 `ProceduralTexture.ensure(` ⇒ 判据必须剥注释
+        val raw = classBody(readFile(renderersFile("BatchFourRenderers.kt")), "LightBeamsRenderer")
+        assertTrue(
+            "剥注释自证：原文里确有裸 `ProceduralTexture.ensure(`（在 KDoc 里）",
+            raw.contains("ProceduralTexture.ensure("),
+        )
+        assertFalse(
+            "剥注释生效：剥注释后不得再命中裸 ensure(",
+            body.contains("ProceduralTexture.ensure("),
+        )
+
+        // ⛔ 正向：只点名 FOG，且恰好一个调用点
+        assertEquals(
+            "ensureFullscreenOnly 必须只有一个调用点",
+            1, Regex("""ProceduralTexture\.ensureFullscreenOnly\(""").findAll(body).count(),
+        )
+        assertTrue(
+            "⛔ 必须只点名 FOG（不得一次烘多张）",
+            Regex("""ProceduralTexture\.ensureFullscreenOnly\(\s*ProceduralTexture\.Id\.FOG""")
+                .findAll(body).count() == 1,
+        )
+        // ⛔ 平铺槽：postFx.grain = 0.030f 经 OverlayFx.drawGrain 读 tile(Id.GRAIN)，
+        //    读不到就静默不画；平铺槽的唯一生产者是 ensure() 内部的 ensureTiledSlots。
+        assertTrue(
+            "⛔ 必须调 ensureTiled()（否则 postFx.grain 的胶片颗粒层静默消失）",
+            body.contains("ProceduralTexture.ensureTiled()"),
+        )
+
+        // ⛔ 负向自证 ③ + ②：喂同一份判据，旧片段判否 / 新片段判是
+        val OLD = "ProceduralTexture.ensure(iw, ih)"
+        val NEW = "ProceduralTexture.ensureTiled()\nProceduralTexture.ensureFullscreenOnly(ProceduralTexture.Id.FOG, iw, ih)"
+        assertTrue("旧片段必须被判否", OLD.contains("ProceduralTexture.ensure("))
+        assertFalse("新片段不得被判否（ensureFullscreenOnly 不含 ensure( 的左括号形态）", NEW.contains("ProceduralTexture.ensure("))
+        assertEquals(
+            "新片段的 ensureFullscreenOnly 必须恰好一个调用点",
+            1, Regex("""ProceduralTexture\.ensureFullscreenOnly\(""").findAll(NEW).count(),
+        )
+    }
+
     // ═══════════════════════════ ⑪ 覆盖门禁名单 ═══════════════════════════
 
     @Test
