@@ -22,7 +22,8 @@ const ROOT = resolve(HERE, '..', '..', '..', '..');
 const EDGE = 'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe';
 const PORT = 9333;
 // 页面与截图路径都相对仓库根 ⇒ 仓库移动/换机不失效
-const PAGE = resolve(ROOT, 'docs', 'seaside-preview.html');
+// ⚠️ 2026-10-07：原型已归档到 `docs/archive/` ⇒ 路径多一级。
+const PAGE = resolve(ROOT, 'docs', 'archive', 'seaside-preview.html');
 const URL = 'file:///' + PAGE.replace(/\\/g, '/');
 const DT = 16.6667;
 // 截图输出：agent 产出的图像按仓库规则放 output/（不是 logs_temp/）

@@ -207,7 +207,7 @@ class MainActivity : ComponentActivity() {
         // 2026-10-06 权限瘦身：原「电池优化白名单检查」（辅助类已随 C1 裁决整链路删除）
         // 与「Android 13+ POST_NOTIFICATIONS 开机申请」已移除 ——
         // 前者不再主动把用户弹到系统设置；后者是媒体通知，平台按 MediaStyle 模板豁免，
-        // 无需申请（详见 AndroidManifest 的删除说明与 docs/permission-and-signing-plan.md §四/§六）。
+        // 无需申请（详见 AndroidManifest 的删除说明与 docs/archive/permission-and-signing-plan.md §四/§六）。
 
         // SAF 树选择器（§8.8.4）：注入到 ExportCoordinator，导出时启动系统文件夹选择器
         (application as NasMusicApp).exportCoordinator.treePickLauncher = {

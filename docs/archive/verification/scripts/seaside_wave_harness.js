@@ -17,8 +17,10 @@ const vm = require('vm');
 const path = require('path');
 
 // 默认 HTML 路径：从 docs/archive/verification/scripts/ 上溯三级到 docs/
+// ⚠️ 2026-10-07：原型已归档到 `docs/archive/`，故上溯**两级**（scripts → verification →
+//   archive）而不是三级。⛔ 仍写三级会落到 `<repo>/docs/`，`readFileSync` 直接 ENOENT。
 const HTML = process.argv[2] ||
-  path.join(__dirname, '..', '..', '..', 'seaside-preview.html');
+  path.join(__dirname, '..', '..', 'seaside-preview.html');
 const SECONDS = Number(process.argv[3] || 90);
 const DT_MS = 1000 / 60;
 // 对照实验：第 4 个参数传 `solo` 则在闭包内打开单浪模式。

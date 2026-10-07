@@ -34,13 +34,14 @@ class SeasideOpBudgetTest {
     }
 
     @Test
-    fun `逐元素清单覆盖 4_9_2 表的全部 20 项外加水洼补充行`() {
+    fun `逐元素清单覆盖 4_9_2 表的全部 20 项外加水洼补充行与蟹迹`() {
         val ids = SeaOpItem.entries.map { it.name }.toSet()
         val required = listOf(
             "SAND_BLIT", "WET_WASH", "SHEEN", "SEA_FIELD", "CAUSTIC",
             "SWELL_BODY", "FOAM_LADDER", "SEA_FOAM_WASH", "OPEN_SEA_FOAM", "DISTURBANCE",
             "FOAM_LACE", "CREST_LIP", "SWASH_FINGER", "RESIDUAL_STREAK", "WET_LINE",
-            "SAND_GRAIN", "RESIDUE_POINTS", "SPLASH_POINTS", "CRAB", "POST_FX", "PUDDLE"
+            "SAND_GRAIN", "RESIDUE_POINTS", "SPLASH_POINTS", "CRAB", "CRAB_TRAIL",
+            "POST_FX", "PUDDLE"
         )
         for (r in required) assertTrue("缺元素：$r", ids.contains(r))
         assertEquals(required.size, SeaOpItem.entries.size)
@@ -199,7 +200,10 @@ class SeasideOpBudgetTest {
     // ⛔ 再因「湿沙改 8 条嵌套 ribbon、镜面高光回到 1 次」而变：
         //   WET_WASH.opsHigh 3→8、SHEEN.opsHigh 3→1 ⇒ estimate(HIGH,2) 190 → 193
         //   ⇒ 193 − 96 = 97（原 94）
-    assertEquals("HIGH 三个逐浪项全压回合批后的估算", 88, broken)
+    // ⛔ 再因新增 [SeaOpItem.CRAB_TRAIL]「蟹迹」而变：**+4**（`perWave = false` ⇒ ⛔ **不乘
+    //   STEADY_WAVES**；而 `broken` 只从合计里减掉**逐浪项**的 96 ⇒ 蟹迹那 4 次原样留在
+    //   `broken` 里）⇒ estimate(HIGH,2) 184 → 188 ⇒ 188 − 96 = 92（原 88）
+    assertEquals("HIGH 三个逐浪项全压回合批后的估算", 92, broken)
     // ⇒ 压回合批会把整体拉低（证量真实存在），但不再足以证明「会爆表」
         // ⚠️ 单项复活不足以破门（这正是 §4.9.2 判定「四处结构性必改」的原因：
         //    必须四项同时回退才越过 200）⇒ 破门断言用完整的「改造前」形态。
@@ -250,6 +254,61 @@ class SeasideOpBudgetTest {
         assertEquals("填充量同样不乘浪数", 0.004,
             SeasideOpBudget.fillOf(SeaOpItem.CRAB, SeaLevel.HIGH, waveCount = 2), 1e-12)
         assertEquals(35, SeasideOpBudget.opsOf(SeaOpItem.CRAB, SeaLevel.HIGH, legacy = true))
+    }
+
+    /**
+     * 蟹迹（[SeaOpItem.CRAB_TRAIL] / `drawCrabTrail`）—— **成对小凹点 + 极淡连续沟槽**。
+     * ⛔ **纯装饰**：不参与任何模拟量（本测试只守它的**预算数字**，不守它的几何）。
+     *
+     * ⭐ **提交数拆解：凹点恒 1 次 + 沟槽按 age 切段**
+     * ```
+     * LOW  = 1 = 凹点 1（drawPath FILL）+ 沟槽 0 段
+     * MED  = 2 = 凹点 1 + 沟槽 1 段（drawPath STROKE）
+     * HIGH = 4 = 凹点 1 + 沟槽 3 段
+     * ```
+     * ⛔ 凹点**恒 1 次**：所有在册印记的所有小凹点并进**同一条** `NativePath`；
+     *   一次提交只有一支画笔 ⇒ 时间淡出⛔ **只能靠缩小尺寸**，⛔ 不能逐点降 alpha
+     *   （那会按 age 序列翻倍成 N 次提交）。
+     */
+    @Test
+    fun `蟹迹 凹点恒一次提交 沟槽按档切段 且不逐浪`() {
+        assertTrue("蟹迹不得逐浪（同 CRAB：痕迹挂在全局单实例螃蟹身后，同参数画两次会叠亮）",
+            !SeaOpItem.CRAB_TRAIL.perWave)
+        // ⭐ 三档 = 凹点 1 + 沟槽 0/1/3 段
+        assertEquals("LOW 只画凹点（沟槽 0 段）", 1,
+            SeasideOpBudget.opsOf(SeaOpItem.CRAB_TRAIL, SeaLevel.LOW))
+        assertEquals("MEDIUM = 凹点 1 + 沟槽 1 段", 2,
+            SeasideOpBudget.opsOf(SeaOpItem.CRAB_TRAIL, SeaLevel.MEDIUM))
+        assertEquals("HIGH = 凹点 1 + 沟槽 3 段", 4,
+            SeasideOpBudget.opsOf(SeaOpItem.CRAB_TRAIL, SeaLevel.HIGH))
+        // ⛔ **不乘 waveCount**：稳态 2 浪时 HIGH 仍是 4（若标 perWave=true 会变成 8）
+        assertEquals("同参数画两次会叠亮 ⇒ 2 浪也不能翻倍", 4,
+            SeasideOpBudget.opsOf(SeaOpItem.CRAB_TRAIL, SeaLevel.HIGH, waveCount = 2))
+        assertEquals(2, SeasideOpBudget.opsOf(SeaOpItem.CRAB_TRAIL, SeaLevel.MEDIUM, waveCount = 2))
+        assertEquals(1, SeasideOpBudget.opsOf(SeaOpItem.CRAB_TRAIL, SeaLevel.LOW, waveCount = 2))
+        // ⭐ `fill*` 三档**同值** 0.001 屏：LOW 真实覆盖 < MED/HIGH（LOW 不画沟槽），
+        //   但「`fill*` 与 `ops*` 同口径 + 取保守」要求同值（高估 LOW 是保守方向）。
+        //   ⛔ 不改成 `fillLow = 0.0`：LOW 的 `opsLow = 1` 不是 0，填 0 会让 G12 **低算** LOW。
+        for (level in SeaLevel.entries) {
+            assertEquals("${level.name} 填充同值 = SEA_CRAB_TRAIL_FILL", SEA_CRAB_TRAIL_FILL,
+                SeasideOpBudget.fillOf(SeaOpItem.CRAB_TRAIL, level), 1e-12)
+        }
+        assertEquals("填充同样不乘浪数", SEA_CRAB_TRAIL_FILL,
+            SeasideOpBudget.fillOf(SeaOpItem.CRAB_TRAIL, SeaLevel.HIGH, waveCount = 2), 1e-12)
+        // ⭐ **新元素 ⇒ 没有「改造前」形态**，两列 legacy 取与裁决后**同值**。
+        //   ⛔ 这不削弱负向自证：负向自证靠 DISTURBANCE / SHEEN / SEA_FOAM_WASH /
+        //   OPEN_SEA_FOAM / CAUSTIC 等**既有行**的 legacy 值；本行在 legacy 口径下贡献
+        //   与裁决后完全相同的常数 ⇒ 两种口径的差值不受影响。
+        assertEquals(4, SeasideOpBudget.opsOf(SeaOpItem.CRAB_TRAIL, SeaLevel.HIGH, legacy = true))
+        assertEquals(SEA_CRAB_TRAIL_FILL,
+            SeasideOpBudget.fillOf(SeaOpItem.CRAB_TRAIL, SeaLevel.HIGH, legacy = true), 1e-12)
+        // ⛔ 负向自证：新元素 ⛔ **不许**伪造一个更小的 legacy 值来让断言更好过
+        assertTrue("⛔ legacy 不得小于裁决后值（那是伪造判别力）",
+            SeaOpItem.CRAB_TRAIL.opsLegacy >= SeaOpItem.CRAB_TRAIL.opsHigh)
+        assertTrue("⛔ fillLegacy 不得小于 fillHigh",
+            SeaOpItem.CRAB_TRAIL.fillLegacy >= SeaOpItem.CRAB_TRAIL.fillHigh)
+        // ⚠️ 门内断言已由 `G11 提交预算在门内` / `G12 填充预算在门内` 覆盖，此处不重复造。
+        //   本测试只钉「蟹迹这一项自己的数字」，逐档合计由 `G11 与 G12 逐档合计被钉死` 守。
     }
 
     @Test
@@ -329,12 +388,19 @@ class SeasideOpBudgetTest {
         //   ⇒ LOW  30 + 1     = **31**
         //   ⇒ MED  48 + 2     = **50**
         //   ⇒ HIGH 88 + 2+2+2+1+1 = **96**
-        assertEquals(30, SeasideOpBudget.estimate(SeaLevel.LOW, SeasideOpBudget.STEADY_WAVES))
-        assertEquals(49, SeasideOpBudget.estimate(SeaLevel.MEDIUM, SeasideOpBudget.STEADY_WAVES))
-    // ⛔ 2026-10-05「保真优先」再变：HIGH 96 → 190（逐浪项乘 waveCount = 2）：
-    //   OPEN_SEA_FOAM 1→22 (+42) / DISTURBANCE 1→18 (+34) / SEA_FOAM_WASH 1→8 (+14)
-    //   WET_WASH 1→3 (+2) / SHEEN 1→3 (+2)  ⇒ 96 + 94 = **190**
-    assertEquals(184, SeasideOpBudget.estimate(SeaLevel.HIGH, SeasideOpBudget.STEADY_WAVES))
+        // ⛔ **再因新增 [SeaOpItem.CRAB_TRAIL]「蟹迹」而变**：提交数 `1 / 2 / 4`（凹点恒 1 次
+        //   `drawPath` + 沟槽 HIGH 3 段 / MEDIUM 1 段 / LOW 0 段）。
+        //   ⭐ **`perWave = false`** ⇒ ⛔ **不乘 `STEADY_WAVES`**（与 CRAB 同一条裁决：痕迹挂在
+        //   全局单实例螃蟹身后、每帧只画一次，同参数画两次在 source-over 下会叠亮）
+        //   | 元素                     | LOW | MED | HIGH |
+        //   |--------------------------|-----|-----|------|
+        //   | CRAB_TRAIL（**不逐浪**）  | +1  | +2  | +4   |
+        //   ⇒ LOW  30 + 1 = **31**
+        //   ⇒ MED  49 + 2 = **51**
+        //   ⇒ HIGH 184 + 4 = **188**
+        assertEquals(31, SeasideOpBudget.estimate(SeaLevel.LOW, SeasideOpBudget.STEADY_WAVES))
+        assertEquals(51, SeasideOpBudget.estimate(SeaLevel.MEDIUM, SeasideOpBudget.STEADY_WAVES))
+        assertEquals(188, SeasideOpBudget.estimate(SeaLevel.HIGH, SeasideOpBudget.STEADY_WAVES))
         // 因 D9 裁决而变：LOW 1.7253 → 1.7213、MEDIUM 2.7125 → 2.7585、HIGH 2.8146 → 2.8106（屏）
         // ⚠️ **填充三档因「恢复第二次 drawPath」而完全不变** —— 高光与湿沙同区域，
         //   第二次提交⛔ 不新增像素覆盖（只是让那一带变亮）⇒ SHEEN.fill* 仍恒 0。
@@ -349,9 +415,19 @@ class SeasideOpBudgetTest {
         //     HIGH **2.8304**（不变，`fillHigh` 本来就是这个值）
         // ⚠️ MEDIUM 的余量因此是三档里**最紧**的一处：`2.7741 ≤ OVERDRAW_MAX_MEDIUM = 2.8`
         //   （余量 ≈0.026）。LOW 余量 ≈0.28、HIGH 余量 ≈0.07。
-        assertEquals(1.7213f, SeasideOpBudget.overdrawEstimate(1600f, 900f, SeaLevel.LOW), 1e-3f)
-        assertEquals(3.7741f, SeasideOpBudget.overdrawEstimate(1600f, 900f, SeaLevel.MEDIUM), 1e-3f)
-        assertEquals(3.8304f, SeasideOpBudget.overdrawEstimate(1600f, 900f, SeaLevel.HIGH), 1e-3f)
+        // ⭐ **再因新增 [SeaOpItem.CRAB_TRAIL] 而变**：**三档同值 +0.001 屏**
+        //   （`fillLow = fillMed = fillHigh = SEA_CRAB_TRAIL_FILL`）—— LOW 的**真实**覆盖其实
+        //   `< MEDIUM/HIGH`（LOW 只画凹点不画沟槽），但「`fill*` 与 `ops*` 同口径 + 取保守」
+        //   要求取同值（把 LOW 不画的沟槽也算进 LOW 是**保守**方向）。
+        //   同样 `perWave = false` ⇒ ⛔ **不乘 `STEADY_WAVES`** ⇒ 三档各 **+0.001**：
+        //   ⇒ LOW  1.7213 + 0.001 = **1.7223**
+        //   ⇒ MED  3.7741 + 0.001 = **3.7751**
+        //   ⇒ HIGH 3.8304 + 0.001 = **3.8314**
+        // ⚠️ 三档余量仍宽裕：LOW ≈0.278 / MEDIUM ≈0.115 / HIGH ≈0.129 ⇒ ⛔ **未越界**，
+        //   `OVERDRAW_MAX_*` **一个字符都不用动**（HIGH 余量 320−188 = 132，同样够用）。
+        assertEquals(1.7223f, SeasideOpBudget.overdrawEstimate(1600f, 900f, SeaLevel.LOW), 1e-3f)
+        assertEquals(3.7751f, SeasideOpBudget.overdrawEstimate(1600f, 900f, SeaLevel.MEDIUM), 1e-3f)
+        assertEquals(3.8314f, SeasideOpBudget.overdrawEstimate(1600f, 900f, SeaLevel.HIGH), 1e-3f)
     }
 
     @Test

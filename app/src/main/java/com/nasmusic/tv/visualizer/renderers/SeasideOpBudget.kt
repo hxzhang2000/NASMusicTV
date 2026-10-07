@@ -56,7 +56,7 @@ internal enum class SeaLevel {
  *    ⚠️ 这正是 §4.9.2 把它们合批的收益所在：**提交数降 1~2 个量级，填充量几乎不变**。
  *
  * ## ⭐ 系数 = §4.9.2 的**合批裁决** × §5.3 的**原型元素计数**，两者各管一件事
- * `docs/seaside-preview.html` 已由所有者**确认定稿**。本门禁守的是**提交上限**，而提交上限
+ * `docs/archive/seaside-preview.html` 已由所有者**确认定稿**。本门禁守的是**提交上限**，而提交上限
  * 只由「`style`+`color`+`strokeWidth` 的分组数」决定 ⇒ 与**元素个数**脱钩：
  * - **提交数 / `fill*`**：以 **§4.9.2 表的「裁决后」列**为准（合批后的形态）。
  * - **几何个数**（贴图块数 / pass 数 / 色数）：以 **§5.3 参数表**为准（原型定稿值），
@@ -102,6 +102,9 @@ internal const val SEA_WET_LINE_FILL = 0.0025
 
 /** 焦散笔触面积（占屏）。推导见 [SeaOpItem.CAUSTIC] 的 KDoc。 */
 internal const val SEA_CAUSTIC_FILL = 0.05
+
+/** 螃蟹爬行痕迹的填充（占屏，**三档同值**）。推导见 [SeaOpItem.CRAB_TRAIL] 的 KDoc。 */
+internal const val SEA_CRAB_TRAIL_FILL = 0.001
 
 internal enum class SeaOpItem(
     /** 中文元素名（单测报告用）。 */
@@ -351,6 +354,54 @@ internal enum class SeaOpItem(
     CRAB("螃蟹", false, 2, 4, 8, 35, 0.004, 0.004, 0.004, 0.004),
 
     /**
+     * 螃蟹爬行痕迹（`drawCrabTrail`：成对小凹点 + 极淡连续沟槽）——
+     * ⛔ **纯装饰，不参与任何模拟量**（与 [SeaOpItem.CRAB] 同一条底线：不写浪、不写湿沙、
+     * 不写 `shoreYs`，⛔ 只是「它来过」的视觉痕迹）。
+     *
+     * ## ⭐ 提交数 `1 / 2 / 4` 的拆解：**凹点恒 1 次 + 沟槽按 age 切段**
+     * - **凹点 = 恒 1 次 `drawPath`（FILL），三档都有**：所有**在册印记**的所有小凹点
+     *   （每枚两点）**并进同一条 `NativePath`** ⇒ 一次提交画完全部凹点。
+     * - **沟槽 = `ops − 1` 次 `drawPath`（STROKE）**：按 age **连续切段**，每段一支画笔、
+     *   一个 alpha 常量。HIGH **3 段** / MEDIUM **1 段** / ⛔ LOW **0 段**。
+     * ⇒ `1 = 1+0` / `2 = 1+1` / `4 = 1+3`。
+     *
+     * ⛔ **一次提交只有一支画笔 ⇒ 段内不许再分 alpha**：沟槽的浓淡**只能**靠「切成不同的段、
+     *   段间改 alpha」表达，⛔ **不能**在同一次提交里逐段调。同理，凹点的时间淡出
+     *   ⛔ **不是**逐点降 alpha，而是**缩小尺寸**（老印记的点更小）—— 这正是它
+     *   **只花 1 次提交**的原因：若改成逐点 alpha，一个 age 序列就要 N 次提交。
+     *
+     * ⛔ **`perWave = false`**（与 [SeaOpItem.CRAB] 同一裁决）：痕迹挂在**全局单实例**螃蟹的
+     *   身后，`drawCrabTrail` 每帧只随那一只蟹调一次 ⇒ 同参数画两次在 source-over 下
+     *   **会叠亮**。按 `waveCount` 乘它是**高估**，且浪数越多偏得越远。
+     *
+     * ## ⭐ `fill*` 的算式与「同口径 / 取保守」的取舍
+     * ```
+     * 痕迹总长   LEN = CRAB_TRAIL_LEN · w          （渲染层常量，痕迹跨画幅宽的一小段）
+     * 沟槽笔触   ≈ LEN · w · (0.9 · h/1080)        （约 0.9px @1080p 的描边，随 h 缩放）
+     * 凹点       印记数 = LEN·w / 印记间距；每枚 2 个椭圆，随 age 缩小
+     * 覆盖率     = (沟槽面积 + 凹点面积) / (w · h)
+     * ```
+     * ⚠️ **LOW 只画凹点、不画沟槽**，所以 LOW 的**真实**覆盖 `< MEDIUM ≈ HIGH`。
+     *   按本文件既有惯例（**`fill*` 必须与 `ops*` 同口径** + **宁可略高、取保守**，
+     *   见 [SeaOpItem.CAUSTIC] / [SeaOpItem.CREST_LIP] 两次「放开 `ops*` 就必须一并
+     *   补齐 `fill*`」），**取 `fillLow = fillMed = fillHigh = [SEA_CRAB_TRAIL_FILL]` 同值**：
+     *   把 LOW 并不画的沟槽也算进 LOW 是**偏保守**的方向（高估 LOW），
+     *   ⛔ **不违反同口径契约** —— 契约禁的是「`ops*` 放开而 `fill*` 留 0」造成的**低算**，
+     *   而同值取高是它的另一半。⛔ 不要改成 `fillLow = 0.0` 逐档精细化（LOW 的 `opsLow = 1`
+     *   不是 0，凹点确实要画 ⇒ 填 0 会让 G12 **低算** LOW，是记账漏洞）。
+     *
+     * ⭐ **`opsLegacy` / `fillLegacy` 与裁决后同值**：本行是 ⛔ **新元素，没有「改造前」形态**
+     *   ⇒ §4.9.2 的「原稿」列里没有它可对应，取同值（`opsLegacy = opsHigh`、
+     *   `fillLegacy = fillHigh`）。
+     *   ⚠️ 这**不削弱**任何负向自证：负向自证靠的是 [SeaOpItem.DISTURBANCE] /
+     *   [SeaOpItem.SHEEN] / [SeaOpItem.SEA_FOAM_WASH] / [SeaOpItem.OPEN_SEA_FOAM] /
+     *   [SeaOpItem.CAUSTIC] 等**既有行**的 legacy 值（`legacy = true` 时本行贡献与
+     *   裁决后**完全相同**的常数，两种口径的差值不受影响）。⛔ **不要**为了让某个 legacy
+     *   断言更好过而填一个更小的数 —— 那是伪造判别力。
+     */
+    CRAB_TRAIL("蟹迹", false, 1, 2, 4, 4, SEA_CRAB_TRAIL_FILL, SEA_CRAB_TRAIL_FILL, SEA_CRAB_TRAIL_FILL, SEA_CRAB_TRAIL_FILL),
+
+    /**
      * `postFx` —— §4.9.2 裁决：双通道 **2 全屏 → 只保留一个通道** `PostFx(vignette = 0.30f)`，
      * ⛔ 去掉 `grain`。提交数 **1**。
      *
@@ -363,7 +414,9 @@ internal enum class SeaOpItem(
      * ⚠️ **`fillLow` 必须是 `0.0`，且这不是「不计入」的借口**：
      * `RendererFx.applyPostFx` 只在 `fx.level != FxLevel.OFF` 时施加，而
      * `SeaLevel.LOW ⟺ FxLevel.OFF` ⇒ **LOW 档晕影根本没画** ⇒ `LOW` 的过绘制率**不含**它。
-     * ⇒ §4.9.5 G12 的 `LOW ≤ 2.0` **原样成立**（LOW 合计仍是 1.7213 屏）。
+     * ⇒ §4.9.5 G12 的 `LOW ≤ 2.0` **原样成立**（LOW 合计 ≈1.72 屏；⛔ **不写死精确值** ——
+     *   该值随各行 `fill*` 变动，逐档精确合计由 `SeasideOpBudgetTest` 的
+     *   「G11 与 G12 逐档合计被钉死」单点钉死，此处不复制第二份）。
      * ⛔ 原 KDoc 那句「若把它算进来，LOW 会 +1.00 屏 ⇒ LOW ≤ 2.0 不可能成立」**前提是错的**
      * —— 它假设晕影在 LOW 也画；实际不画。
      *

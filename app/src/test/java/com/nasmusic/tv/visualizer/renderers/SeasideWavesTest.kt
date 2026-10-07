@@ -31,7 +31,7 @@ import kotlin.math.sin
  * ⛔ 模拟核心内部零音频（见 [SeasideWaves] 类 KDoc）。
  *
  * ## 基线来源
- * `docs/seaside-preview.html`（原型定稿）+ 上述 harness，1600×900 / 60fps / 90s。
+ * `docs/archive/seaside-preview.html`（原型定稿）+ 上述 harness，1600×900 / 60fps / 90s。
  * 每个用例的 KDoc 里逐条抄了 harness 的 stdout。
  */
 class SeasideWavesTest {

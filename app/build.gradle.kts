@@ -88,7 +88,7 @@ android {
             // 而非 getByName 的配置期 NoSuchElementException。
             // ⚠️ 2026-10-06 起 CI push/tag 路径的失败点前移：workflow 的 keystore 步骤
             // 已 D5 fail-fast（secrets 缺失直接 exit 1），不会等到这里的打包阶段才失败
-            // （docs/permission-and-signing-plan.md §14.4）。本地构建仍走本行的打包期失败。
+            // （docs/archive/permission-and-signing-plan.md §14.4）。本地构建仍走本行的打包期失败。
             signingConfig = signingConfigs.findByName("release")
         }
         debug {

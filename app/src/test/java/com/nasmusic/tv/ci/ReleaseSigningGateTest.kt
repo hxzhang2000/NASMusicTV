@@ -29,7 +29,7 @@ import java.io.File
  *
  * ⚠️ 解析的是**文本**而非执行 CI —— 不需要网络与 secrets，单测可离线跑。
  * ⚠️ 断言一律 `assertTrue` / `assertFalse`：Kotlin 的 `assert` 在测试 JVM 上是空操作。
- * 详见 `docs/permission-and-signing-plan.md` §7.4 / §14.4。
+ * 详见 `docs/archive/permission-and-signing-plan.md` §7.4 / §14.4。
  */
 class ReleaseSigningGateTest {
 
@@ -52,7 +52,7 @@ class ReleaseSigningGateTest {
             "build.yml 里找不到「非 pull_request 即 fail-fast」的事件判断（D5）。\n" +
                 "后果：push/tag 上 secrets 缺失会静默回退一次性密钥，产出装不上的 APK；\n" +
                 "      CRYPTO_PASSPHRASE 缺失则产出「装得上但解不开已存凭据」的 APK。\n" +
-                "正确做法见 docs/permission-and-signing-plan.md §14.4。",
+                "正确做法见 docs/archive/permission-and-signing-plan.md §14.4。",
             hasFailFast(text),
         )
     }

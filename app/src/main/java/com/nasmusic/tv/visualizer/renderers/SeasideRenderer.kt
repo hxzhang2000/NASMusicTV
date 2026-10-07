@@ -1710,6 +1710,138 @@ const val FOAM_TILE_OFF_DISTURB = 1
         const val CRAB_SHADOW_RX = 1.18
         const val CRAB_SHADOW_RY = 0.54
 
+        // ── §12.3 T2.19b 螃蟹爬痕（[drawCrabTrail]）──────────────────────────────
+        //
+        // ⭐ **「粗细跟 h、间距跟 w」是这个模块的参数纪律**：凡是**数量**要守住的量
+        //   （印记间距）必须跟 `w` 走，否则在册印记数会随分辨率线性膨胀（4K 上每帧多画
+        //   一倍的 `addOval`）；凡是**粗细**要守住的量（点半径 / 沟槽线宽）用 `h` 的比例
+        //   再加一条**绝对 px 下界**，免得低分辨率上退化成一堆亚像素噪点。
+
+        /**
+         * 痕迹的**空间长度**（占 `w`）⇒ 1920 宽上是 `653px`，约**视口三分之一**。
+         *
+         * ⛔ **不能**写成秒：需求 3（消失速度 = 蟹速）要求寿命由**空间**反推，见
+         *   [drawCrabTrail] 的 [crabTrailLifeSec]。取 `0.34` 而不是更长：再长就横跨
+         *   大半个画面，与「一只螃蟹刚爬过去」的尺度不符。
+         */
+        const val CRAB_TRAIL_LEN = 0.34
+
+        /**
+         * 相邻两枚印记的**水平**间距（占 `w`）⇒ 1920 宽上 `7.0px`。
+         *
+         * ⛔ 名字里的 `DY` 是**历史叫法**，⛔ 实际判据是**水平距离**（所有者口径）。
+         * ⭐ 取 `w` 的比例 ⇒ 在册印记数 `= TRAIL_LEN / DY ≈ 93` **与分辨率无关**；
+         *   且它**远大于**每帧位移（`0.150·h` px/s ⇒ 60fps 下 2.3px、4K 下 6.3px）
+         *   ⇒ 落印节奏稳定在「每 2~3 帧一枚」。
+         */
+        const val CRAB_TRAIL_DY = 0.0043
+
+        /** 在册印记数上限（缓冲容量）—— `93` 枚常态用量 + 约 27% 余量。 */
+        const val CRAB_TRAIL_MAX = 128
+
+        /**
+         * 凹点基准半径（占 `h`）⇒ 1080 高上 `2.05px`（`5.3 × 4.1px` 的椭圆）。
+         *
+         * ⛔ **2026-10-07 真机修正**：原值 `0.00115`（半径 1.24px、直径 2.5px）在电视观看
+         *   距离下**读不出来** —— 参照同屏那只**看得见的**蟹：它之所以读得出靠的是
+         *   `#B4603A` 橙对沙的**高对比**，不是尺寸。痕迹是低对比的中棕叠中棕，
+         *   3px 见方在 3m 外就并进沙色背景了。现按「一帧至少 4px 见方」重定。
+         */
+        const val CRAB_TRAIL_DOT_R = 0.0019
+
+        /** 凹点半径的**绝对 px 下界**（低分辨率下不再往亚像素掉）。 */
+        const val CRAB_TRAIL_DOT_MIN_R = 1.10
+
+        /** 凹点的纵向拉伸（沿**行进方向**压长 ⇒ 读作足印而不是圆点）。 */
+        const val CRAB_TRAIL_DOT_RK = 1.30f
+
+        /**
+         * 半径小于它的凹点直接不画（⛔ 亚像素斑点只会变成噪点）。
+         * ⛔ **2026-10-07 真机修正**：`0.25` → `0.50`。半径线性于 `k01` ⇒ **面积**按 `k01²`
+         *   衰减，`0.25/1.24 = 0.20` 意味着寿命最后 20% 的印记只剩 4% 面积 —— 那一段
+         *   既是亚像素噪点又几乎不可见，⛔ 不如早一点收掉，把提交预算留给中段。
+         */
+        const val CRAB_TRAIL_MIN_R = 0.50f
+
+        /**
+         * 成对凹点相对**蟹心**的纵向偏移（占 `h`）⇒ 1080 高上 `±10.3px`（两行相距 20.5px）。
+         *
+         * ⭐ 必须跟 `h` 走：真实蟹迹的两列足印就是**蟹自己的步足落点宽度**，而
+         *   `span = 0.0335h`、步足最远伸到 `2.9R ≈ 24px` ⇒ 取 0.0095 落在腿展之内，
+         *   固定 px 会在 4K 上塌成一条单行、在低分辨率上跑到腿外面去。
+         */
+        const val CRAB_TRAIL_PAIR = 0.0095
+
+        /**
+         * 凹点的 **alpha 常量**（⛔ 逐枚不许变 —— 一次提交只有一支画笔）。
+         * ⭐ 逐枚的「淡出」全部走**缩小尺寸**，所以这档 alpha 要一次给足。
+         * ⛔ **2026-10-07 真机修正**：`0.50` → `0.62`。低对比色必须配更高 alpha 才读得出，
+         *   否则在电视上与沙色背景同化（见 [CRAB_TRAIL_DOT_R] 的同一条教训）。
+         */
+        const val CRAB_TRAIL_A = 0.62
+
+        /**
+         * 沟槽的 alpha 基数（**极低**；实际还要再乘该 age 段的档位系数与该段的平均新鲜度）。
+         * ⛔ **2026-10-07 真机修正**：`0.20` → `0.30`。HIGH 档三段实际落点约
+         *   `0.19 / 0.08 / 0.02`（α 48 / 19 / 4）；原值下末段 α≈2，**完全不可见**。
+         */
+        const val CRAB_TRAIL_GROOVE_A = 0.30
+
+        /**
+         * 沟槽的**段数上限** = HIGH 档的沟槽 pass 数（`SeaOpItem.CRAB_TRAIL` 契约：
+         * HIGH 4 次 = 凹点 1 + 沟槽 3）。⛔ 这条常量与预算表**必须**一致：段数多于它 ⇒
+         * 越界取用；少于它 ⇒ 高档会少画一段。
+         */
+        const val CRAB_TRAIL_BANDS = 3
+
+        /**
+         * 沟槽线宽（占 `h`）⇒ 1080 高上 `1.62px`。
+         *
+         * ⛔ **2026-10-07 真机修正**：`0.00083`（0.90px）→ `0.0015`。⛔ 亚像素宽的**实心描边**
+         *   会被抗锯齿摊到相邻两个像素上、每个只取一半 alpha ⇒ 等于凭空把 alpha 再砍一半。
+         *   这是「0.9px 的线看不见、1.6px 的线能看见」的主因，⛔ 不是颜色问题。
+         */
+        const val CRAB_TRAIL_GROOVE_W = 0.0015
+
+        /** 沟槽线宽的**绝对 px 下界**（低分辨率下不再掉进亚像素）。 */
+        const val CRAB_TRAIL_GROOVE_MIN_W = 1.10
+
+        /**
+         * 冲刷判据的水线余量（px）：印记圆心高过水线这么多 px 才**算**被盖住。
+         * 取 `2.0` ≈ 一个点半径 ⇒ 水线刚舔到凹点顶端就开始冲，而不是整点没顶了才算。
+         */
+        const val CRAB_TRAIL_WASH_MARGIN = 2.0f
+
+        /**
+         * 冲满所需时长（s）：被水线盖住后还要多久才彻底消失。
+         * 取 `1.2` ≈ 一次冲流在某一列上停留的时间量级 ⇒ 看得见「水把它抹掉」的
+         * 过程，又不至于拖到退水之后还留着一道半透明的鬼影。
+         */
+        const val CRAB_TRAIL_WASH_SEC = 1.2
+
+        /**
+         * 凹点色 —— 比干沙·近浪 [PAL_SAND_NEAR]（`#C9A063`）**暗约一档半**。
+         * ⛔ **2026-10-07 真机修正**：`#8A6636` → `#7A5528`。原色与沙色**同属中棕**，
+         *   按 α0.62 混过去约 `#A27C47`、亮度比沙低 22% —— 在电视上仍偏同化。
+         *   现色混过去约 `#98713E`、亮度比沙低 **28%**，且保持暖调不偏灰。
+         */
+        const val PAL_CRAB_TRAIL = 0xFF7A5528.toInt()
+
+        /**
+         * 沟槽色 —— 比 [PAL_CRAB_TRAIL] 再深半档（沟是**压**出来的，不是染上去的）。
+         * ⛔ **2026-10-07 真机修正**：`#7A5730` → `#6B4822`，理由同上。
+         */
+        const val PAL_CRAB_TRAIL_GROOVE = 0xFF6B4822.toInt()
+
+        /**
+         * ⛔ **临时 bisect 开关**：`true` ⇒ [drawCrabTrail] 开头直接 `return`（整层不画）。
+         *
+         * 用途：真机 A/B —— 只留螃蟹本体 vs 螃蟹 + 爬痕，一眼判断痕迹是不是「太抢眼 /
+         * 太脏 / 根本读不出来」。⚠️ **不是**画质档、**不**参与任何预算表 —— 纯人工开关。
+         * ⚤ 与本组其余开关一致，放在**函数体第一行**（不是调用点）。
+         */
+        const val BISECT_CRAB_TRAIL_OFF = false
+
         /**
          * §4.7① `FxLevel` → [SeaLevel] 的**唯一**映射（§4.7②：BASIC 三档全可见）。
          * ⛔ 刻意不在本文件写第二份（[SeasideOpBudget] 的 KDoc 要求渲染层只做一次性映射）。
@@ -2168,6 +2300,63 @@ const val FOAM_TILE_OFF_DISTURB = 1
 
     /** 螃蟹的纵坐标低通输出（px）；⛔ 换蟹时直接写成 `goal`。 */
     private var crabCy = 0.0
+
+    /**
+     * ⭐⭐ **爬痕是本渲染器的第二处帧状态**（第一处是 [SeasideWaves] 的 `wetAmt` 与
+     * [crabCy]）—— 因为痕迹是**历史**：「某枚印记活了多久、被水冲了多久」取决于它
+     * **是哪一帧落下的**，而帧号不进 `t` 的表达 ⇒ 不可能是 `t` 的纯函数。
+     *
+     * ⛔ **全部预分配的原始类型数组** ⇒ 逐帧零分配（⛔ 不 new `Path` / `RectF` /
+     *   `floatArrayOf` / lambda / 装箱）。
+     *
+     * - [crabTrailX] / [crabTrailY]：印记圆心的**画布绝对 px**（⛔ 不带螃蟹那四层 CTM）。
+     * - [crabTrailAge]：已存在多久（**秒**）—— ⭐ 需求 3 的载体。
+     * - [crabTrailWash]：被水线盖住的**累计**时长（**秒**）—— ⛔ **只增不减**。
+     * - ⛔ 前 [crabTrailN] 个有效，且**始终按 age 升序**（每帧原地压实）
+     *   ⇒ 沟槽「按 age 切连续段」不必再排序。
+     */
+    private val crabTrailX = FloatArray(CRAB_TRAIL_MAX)
+    private val crabTrailY = FloatArray(CRAB_TRAIL_MAX)
+    private val crabTrailAge = FloatArray(CRAB_TRAIL_MAX)
+    private val crabTrailWash = FloatArray(CRAB_TRAIL_MAX)
+
+    /** 在册印记数；⛔ 缓冲区之外的槽位是垃圾，不必清零。 */
+    private var crabTrailN = 0
+
+    /**
+     * 上一枚印记的位置（画布 px）—— 落新印的间距判据基准。
+     * ⛔ **缓冲为空时这两个值无意义**（[drawCrabTrail] 用 `crabTrailN <= 0` 直接判「必落」）
+     *   ⇒ ⛔ 不需要 `±1e9` 之类的哨兵值。
+     */
+    private var crabTrailLastX = 0f
+    private var crabTrailLastY = 0f
+
+    /** 本层已为第几只蟹（`k`）铺过印记；⛔ 换蟹 ⇒ 整条缓冲清空。 */
+    private var crabTrailK = -1
+
+    /**
+     * 当前这只蟹的痕迹寿命（**秒**）。
+     *
+     * ⭐ `life = CRAB_TRAIL_LEN·w / (spd·1000)`：痕迹的**空间长度固定**，寿命由这只蟹的
+     *   **实际步速**反推 ⇒ 尾巴沿路径退去的速度恒等于蟹速（需求 3）。逐只 `spd` 有
+     *   `0.86 + 0.30·hash` 的抖动 ⇒ 寿命随之抖动（653px 长时是 3.5~4.7s）。
+     */
+    private var crabTrailLifeSec = 0.0
+
+    /**
+     * 凹点的合批路径（**所有**在册印记的所有小凹点都在这一条里，NonZero 下自动取并集）
+     * 与沟槽的 N 段路径（**段数 = HIGH 档的沟槽 pass 数**，构造期建好）。
+     */
+    private val crabTrailPath = NativePath()
+    private val crabTrailBand = Array(CRAB_TRAIL_BANDS) { NativePath() }
+
+    /** ⛔ 爬痕**专用**画笔（`drawCrabTrail` 靠切 `style` 同时用它做 FILL 与 STROKE）。 */
+    private val crabTrailPaint = Paint().apply {
+        style = Paint.Style.FILL
+        strokeCap = Paint.Cap.ROUND
+        strokeJoin = Paint.Join.ROUND
+        isAntiAlias = true
+    }
 
     /** 焦散网的边：`(CNX−1)·CNY + CNX·(CNY−1) = 331` 条，两端是**节点下标**（端点共享）。 */
     private val causticEdgeA = IntArray((CAUSTIC_CELL_NX - 1) * CAUSTIC_CELL_NY +
@@ -4387,6 +4576,10 @@ const val FOAM_TILE_OFF_DISTURB = 1
             seaDensity = den
             releaseResources()
             rebuildGeometry(w, h)
+            // ⛔ 爬痕存的是**画布绝对像素** ⇒ 换尺寸后每一枚都是垃圾（且
+            //   [crabTrailLifeSec] 是按旧 `w` 反推出来的寿命）⇒ 连缓冲一起清掉，
+            //   否则新画面上会立刻浮出一条与新沙面对不上的旧痕迹。
+            resetCrabTrail()
         }
         val wv = waves ?: return
         if (!t0Set) {
@@ -4413,6 +4606,9 @@ const val FOAM_TILE_OFF_DISTURB = 1
         drawWetWash()
         drawSheen()
         drawPuddles()
+        // ⭐ 爬痕：⛔ 必须在 [drawCrab] **之前**（痕迹在沙上、蟹在痕迹之上），
+        //   且仍在 [drawSwellBands] 之前 ⇒ 浪真的能盖住它（与螃蟹同一条纪律）。
+        drawCrabTrail(t, dt)
         drawCrab(t, dt)
         drawSwellBands(t)
         drawSwashFingers(t)
@@ -4998,7 +5194,7 @@ const val FOAM_TILE_OFF_DISTURB = 1
      * ## ⛔ 用 [sheenBrush]、⛔ **不**复用 [wetBrush]
      * 原型那次 `lighter` 加的是 **`sheenStrip`（只有高光 ramp）**。⛔ 复用 [wetBrush]（湿沙 + 高光
      *   的预合成）会在高光带里把湿沙 ramp 也叠加一遍 ⇒ **那正是本次修正自己引入的视觉偏差**
-     *   （原型目标 = `docs/seaside-preview.html`）。⇒ [buildWetBrush] 另烘一支 [sheenBrush]，
+     *   （原型目标 = `docs/archive/seaside-preview.html`）。⇒ [buildWetBrush] 另烘一支 [sheenBrush]，
      *   色标**逐字照抄** `seaside-preview.html:2013-2017`。⛔ 它同样**只在烘焙期构造**
      *   （`Brush.` ⛔ 不许出现在本函数体内，见 [SeasideTest] ⑤）。
      * ⚠️ **已登记的已知偏差（⛔ 不是待办，⛔ 不修）**：原型的条是**逐列**锚定在 `shoreYs[i]` 上的
@@ -6727,6 +6923,319 @@ const val FOAM_TILE_OFF_DISTURB = 1
             paint.style = Paint.Style.FILL
             paint.color = PAL_CRAB_RIM
             canvas.drawPath(crabOut, paint)
+        }
+    }
+
+    /**
+     * 把爬痕的帧状态**整条清空**（[crabTrailN] 归零、在册索引作废）。
+     *
+     * ⛔ **两处调用**：`render()` 的换尺寸分支（`w/h/den` 变了 ⇒ 印记是画布绝对像素，
+     *   旧的每一枚都是垃圾）与 [drawCrabTrail] 里的「换蟹」/「档位为 0」两条早退。
+     * ⛔ **不必清数组**：缓冲区之外的槽位是垃圾，⛔ 逐槽写 0 纯属白做。
+     * ⛔ **不必 `rewind` 路径**：[crabTrailPath] 与每一条 [crabTrailBand] 都在绘制前
+     *   逐帧 `rewind`。
+     */
+    private fun resetCrabTrail() {
+        crabTrailN = 0
+        crabTrailK = -1
+        crabTrailLastX = 0f
+        crabTrailLastY = 0f
+        crabTrailLifeSec = 0.0
+    }
+
+    /**
+     * [SeaOpItem.CRAB_TRAIL] —— 螃蟹**爬痕**：成对小凹点 + 极淡连续沟槽。
+     * **4 次提交（HIGH）/ 2 次（MEDIUM）/ 1 次（LOW）**。
+     *
+     * ## ⛔ 痕迹**不能**是 `t` 的纯函数
+     * 渲染器里绝大多数层都能写成「给定 `t` 唯一确定」的一次函数 —— [drawCrab] 就是：
+     * 同样的 `t` 必然画出同样的蟹，连逐只抖动都由 `hash2(k, …)` 决定。**痕迹是历史**：
+     * 某枚印记存在了多久、被水冲了多久，取决于它**是哪一帧落下的**，而帧号进不了 `t`
+     * 的表达 ⇒ 本层**必须**有帧状态。
+     * ⚠️ 这是本渲染器的**第二处**帧状态（第一处是 [SeasideWaves] 的 `wetAmt` 与
+     * [crabCy]）。⛔ 它仍是**纯装饰层**：⛔ 不写 `wv.*`、⛔ 不读 `audio.*`、
+     * ⛔ 不调 `wv.step` —— 浪完全不知道有它，是浪把它**盖住**而不是它影响浪。
+     *
+     * ## ⭐ 需求 3「消失速度 = 蟹速」的数学就在 [crabTrailLifeSec]
+     * 痕迹的**空间长度固定**（[CRAB_TRAIL_LEN]·`w`），寿命由**这只蟹的实际步速**反推：
+     * ```
+     * life = CRAB_TRAIL_LEN · w / (spd · 1000)      [秒]
+     * ```
+     * 于是「尾巴退去的速度」`= 空间长度 / life = spd` —— **恒等于蟹速**。逐只 `spd` 有
+     * `0.86 + 0.30·hash2(k, 9219)` 的抖动 ⇒ 寿命随之在 `3.5~4.7s` 之间抖动 ⭐ 这正是
+     * 要的：慢的那只留得久、快的那只一闪而过。⛔ **不能**改成固定的秒数（那样快的蟹
+     * 尾巴会追过头、慢的蟹痕迹会拖尾）。
+     *
+     * ## ⛔ 两种消失方式，为什么 `wash` **只能增不能减**
+     * 1. **时间**：`age += dtSec`，`age ≥ life` ⇒ 回收（上面那条数学）。
+     * 2. **冲刷**：印记圆心被水线盖过（`py < shore_ys[c] − CRAB_TRAIL_WASH_MARGIN`）⇒
+     *    `wash += dtSec`；`wash ≥ CRAB_TRAIL_WASH_SEC` ⇒ 回收。
+     * ⛔ **`wash` 不许衰减**：一旦衰减，印记就会随退水**一帧一帧地回来** —— 那叫
+     * 「水退了沙自己长好了」，⛔ 不是所有者要的「**冲刷后消失**」。所以本层**没有**
+     * 「露出来就不再冲」的分支：露出来只会让它**停在半淡状态**（⛔ 这是有意的 ——
+     * 被水碰过的沙就是回不到原样）。
+     *
+     * ## ⭐ 为什么凹点用**缩小尺寸**而不是降 alpha
+     * 凹点全部并进**同一条** [crabTrailPath]、**一次** `drawPath` ⇒ ⛔ 一次提交只有
+     * 一支画笔，⛔ 同一次调用里**不许**逐枚改 alpha（那要一枚一次提交，`93` 枚就是
+     * `93` 次提交，比螃蟹那 8 批还贵 10 倍）。⇒ 逐枚的「淡出」只能走**几何**：
+     * `r = 基准半径 · k01 · (1 − wash01)`，其中 `k01 = 1 − age/life`。
+     * ⭐ 尺寸趋零在 12× 截图上读作「**沙自己愈合**」，比 alpha 趋零（读作「淡灰噪点」
+     * 再突然消失）更贴合物理；⛔ 而且它**零额外提交**。
+     * ⚠️ **冲刷也走尺寸**而不是 alpha —— 同一个理由：alpha 必须是**常量**
+     *   [CRAB_TRAIL_A]，否则就不是「一批」了。
+     *
+     * ## ⛔ 一帧滞后与 `crabIdx != k` 守卫
+     * 本函数在 [drawCrab] **之前**调用（痕迹在下、蟹在上）⇒ 横向 `x` 是纯 `t` 函数、
+     * 可以自己算（⛔ **不要**去读 `drawCrab` 的局部变量，它们只活在那一帧的栈上）；
+     * 但**纵向**只有一个来源 —— 字段 [crabCy]，而它是 [drawCrab] **上一帧**写下的。
+     * ⇒ 新蟹刚亮相那一帧，`crabIdx` 还是**上一只**、`crabCy` 也是**上一只的 y** ⇒
+     * ⛔ 必须用 `crabIdx == k` 当「不落印记」的守卫，否则第一枚印记会被印在
+     * 上一只蟹的高度上（横穿整片干沙的一道错位点）。
+     * ⚠️ 这个滞后**不可修**（调换调用点就会把痕迹画到蟹身上）；它也只有 `CRAB_SMOOTH_TAU`
+     * 量级（220ms 低通、水平位移 < 0.05px），⭐ 肉眼不可见。
+     *
+     * ## 每档的提交数拆解（`bands = opsOf(SeaOpItem.CRAB_TRAIL) − 1`）
+     * - **HIGH 4 = 1 + 3**：凹点 1 次 `drawPath`(FILL) + 沟槽 3 段 × 1 次 `drawPath`(STROKE)。
+     * - **MEDIUM 2 = 1 + 1**：凹点 + **单**段沟槽（段内 alpha 系数 `1 − 1/2 = 0.50`）。
+     * - **LOW 1 = 1 + 0**：⛔ **只画凹点**，沟槽整层不画（LOW 的 alpha 本就不足以在
+     *   1× 预算下读出「连续沟」，画了只是白花一次提交）。
+     * ⭐ 凹点那一批**所有档位都有** —— 它才是「读得出爬过」的那一半；沟槽只负责动起来的
+     *   连续感。
+     * ⛔ 沟槽分段是按 **age 连续切段**（第 `b` 段 = `age/life ∈ [b/bands, (b+1)/bands)`），
+     *   ⛔ **不是**按索引跳切 —— 跳切会把同一条折线切成碎片，沟槽读成虚线。段内 alpha
+     *   `= 1 − (b+1)/(bands+1)`（HIGH ⇒ 0.75 / 0.50 / 0.25）**乘**该段的平均新鲜度
+     *   `mean(k01 · (1 − wash01))`，⛔ 同一段里**只有一支笔、一个 alpha**。
+     *
+     * ## 其它不变量
+     * - ⛔ **暂停时冻结**：[render] 在暂停时给到的 `dtSec` 就是 `0` ⇒ `age` / `wash`
+     *   都不增长 ⇒ ⛔ 本函数**不许**自己再判 `paused`（那会让两层的时间口径打架）。
+     * - ⛔ **换尺寸时清空**：由 `render()` 的 `w/h/den` 变化分支调 [resetCrabTrail]。
+     * - ⛔ **沙面之外不画**：圆心已被水线盖住的印记**直接跳过**（⛔ **不**用
+     *   [addSandGatedOvalCap] 那种切帽子的写法 —— 印记只有 2~3px 上下，切帽子会走形）；
+     *   淡出交给 `wash` 累积，而 [drawSwellBands] 本来就画在痕迹之上。
+     * - ⛔ **逐帧零分配**：⛔ 不 new `Path` / `RectF` / `floatArrayOf` / lambda / 装箱。
+     * - ⛔ **不动螃蟹本体**：[drawCrab] / [buildCrabLegs] / [crabIdx] / [crabCy] /
+     *   既有 `CRAB_*` 一个字符都没改。
+     *
+     * @param t 相对首帧的毫秒（与 [drawCrab] 同一口径）。
+     * @param dtSec 本帧的**秒**；⛔ 暂停时为 `0`。
+     */
+    private fun DrawScope.drawCrabTrail(t: Double, dtSec: Double) {
+        if (BISECT_CRAB_TRAIL_OFF) return
+        val batches = opsOf(SeaOpItem.CRAB_TRAIL)
+        // ⛔ 档位为 0 时也**必须**清空：否则这只蟹的印记会一直挂在缓冲里，等画质档
+        //   调回来时突然整条出现在画面中间。
+        if (batches <= 0) {
+            resetCrabTrail()
+            return
+        }
+        val wv = waves ?: return
+        val w = size.width.toDouble()
+        val h = size.height.toDouble()
+        if (w <= 0.0 || h <= 0.0) return
+        val cols = wv.cols
+        val colsF = cols.toDouble()
+
+        // ── ① 槽位重算：与 [drawCrab] **同一段**纯 hash 数学 ───────────────────────
+        //    ⛔ 只读 `crabCy`（字段），⛔ **不读** [drawCrab] 的任何局部变量。
+        var k = 0
+        var tk = CRAB_T0_MS
+        var gap = crabGapMs(0)
+        while (t >= tk + gap) {
+            tk += gap
+            k++
+            gap = crabGapMs(k)
+        }
+        // ⛔ 变量名用 `cage` 而不是 `age`：下面的 `age` 是**逐枚印记**的年龄，
+        //   同名会把两个完全不同的量搅在一起（螃蟹的年龄 vs 印记的年龄）。
+        val cage = t - tk
+        val dirx = if (SeasideWaves.hash2(k, 9217) < 0.5) -1.0 else 1.0
+        val spd = CRAB_SPEED * h *
+            (CRAB_SPEED_LO + CRAB_SPEED_SPAN * SeasideWaves.hash2(k, 9219))
+        val span = CRAB_SPAN * h
+        val pad = span * 0.5 + 4.0
+        val runMs = (w + pad * 2.0) / spd * 1000.0
+        val vis = SeasideWaves.smoothstep(0.0, CRAB_FADE_MS, cage) *
+            (1.0 - SeasideWaves.smoothstep(runMs - CRAB_FADE_MS, runMs, cage))
+        val onCrab = cage <= runMs && vis >= 0.02
+        var cx = 0.0
+
+        // ── ② 换蟹 ⇒ 整条缓冲清空 + 重算寿命（需求 3 的那条数学）──────────────────
+        if (onCrab) {
+            if (crabTrailK != k) {
+                resetCrabTrail()
+                crabTrailK = k
+            }
+            // ⛔⛔ **单位**：[spd] 是 **px/s**（[CRAB_SPEED] = 0.150·h/s），长度是 px
+            //   ⇒ `长度 ÷ 速度` **得到的就是秒**，⛔ **不得再乘 1000**。
+            //   早先误写成 `/(spd·1000)` ⇒ 寿命 = 652.8 ÷ 162000 = **4 毫秒**（而非 4.0 秒）
+            //   ⇒ 印记下一帧（≈16.7ms）就被老化回收，沟槽的「同段 ≥2 枚」永远不满足
+            //   ⇒ **整层实际上一帧都没画出来过**（真机报「看不到爬行痕迹」）。
+            //   ⚠️ 对照同函数上一段的 [runMs]：那里乘 1000 是**对的**，因为它是 s → ms；
+            //   两处形似而义不同，⛔ 改这一行时别把 [runMs] 一起「修正」。
+            crabTrailLifeSec = CRAB_TRAIL_LEN * w / spd
+            cx = (if (dirx > 0) -pad else w + pad) + dirx * spd * cage / 1000.0
+        }
+        val life = crabTrailLifeSec
+
+        // ── ③ 老化 + 冲刷（⛔ 在**落印之前**跑，且 ⛔ **没有蟹时也必须跑**：蟹走完
+        //    `runMs` 之后印记还要活 3.5~4.7s，⛔ 若此时早退，那些印记会永远冻在沙上）──
+        val n0 = crabTrailN
+        if (n0 > 0 && life > 0.0) {
+            var rd = 0
+            var wr = 0
+            while (rd < n0) {
+                val px = crabTrailX[rd]
+                val py = crabTrailY[rd]
+                val na = crabTrailAge[rd] + dtSec
+                // ⛔ `wash` **只增**：露出水面的印记停在半淡状态，⛔ 绝不衰减回 0。
+                var wash = crabTrailWash[rd]
+                var c = ((px / w) * colsF).toInt()
+                if (c < 0) c = 0 else if (c > cols) c = cols
+                if (py < wv.shore_ys[c] - CRAB_TRAIL_WASH_MARGIN) wash += dtSec.toFloat()
+                // ⭐ 原地压实：写游标恒 ≤ 读游标 ⇒ 搬移安全、⛔ 零分配，而且数组
+                //   **始终按 age 升序** ⇒ 沟槽切连续段不必再排序。
+                if (na < life && wash < CRAB_TRAIL_WASH_SEC) {
+                    crabTrailX[wr] = px
+                    crabTrailY[wr] = py
+                    crabTrailAge[wr] = na.toFloat()
+                    crabTrailWash[wr] = wash.toFloat()
+                    wr++
+                }
+                rd++
+            }
+            crabTrailN = wr
+        }
+
+        // ── ④ 落新印：⛔ `crabIdx != k` 就是 KDoc 里那个「一帧滞后」守卫 ──────────
+        if (onCrab && crabIdx == k) {
+            // ⛔ 只在**画布内**落印：蟹从 `±pad` 处走进画外，那一段既看不见、
+            //   又白占缓冲（还把缓冲的寿命预算吃掉）。
+            val step = CRAB_TRAIL_DY * w
+            var gapx = abs(cx - crabTrailLastX)
+            if (crabTrailN <= 0) gapx = step
+            if (cx > 0.0 && cx < w && gapx >= step) {
+                // 满了就丢**最老**的一枚（数组按 age 升序 ⇒ 0 号就是最老的）。
+                if (crabTrailN >= CRAB_TRAIL_MAX) crabTrailN = CRAB_TRAIL_MAX - 1
+                val j = crabTrailN
+                crabTrailX[j] = cx.toFloat()
+                crabTrailY[j] = crabCy.toFloat()
+                crabTrailAge[j] = 0f
+                crabTrailWash[j] = 0f
+                crabTrailN = j + 1
+                crabTrailLastX = cx.toFloat()
+                crabTrailLastY = crabCy.toFloat()
+            }
+        }
+
+        // ── ⑤ 渲染 ────────────────────────────────────────────────────────────────
+        val n = crabTrailN
+        if (n <= 0 || life <= 0.0) return
+        val canvas = drawContext.canvas.nativeCanvas
+        val paint = crabTrailPaint
+        val invLife = 1.0 / life
+        val invWash = 1.0 / CRAB_TRAIL_WASH_SEC
+        val pair = (CRAB_TRAIL_PAIR * h).toFloat()
+        var baseR = CRAB_TRAIL_DOT_R * h
+        if (baseR < CRAB_TRAIL_DOT_MIN_R) baseR = CRAB_TRAIL_DOT_MIN_R
+
+        // ── ⑤a 凹点：**所有**在册印记的所有小凹点并进**同一条**路径，一次 FILL ─────
+        //    ⛔ **alpha 是常量**（[CRAB_TRAIL_A]）⇒ 逐枚的新鲜度只写进**半径**。
+        crabTrailPath.rewind()
+        var j = 0
+        while (j < n) {
+            val px = crabTrailX[j]
+            val py = crabTrailY[j]
+            var c = ((px / w) * colsF).toInt()
+            if (c < 0) c = 0 else if (c > cols) c = cols
+            if (py >= wv.shore_ys[c] - CRAB_TRAIL_WASH_MARGIN) {
+                var s = (1.0 - crabTrailAge[j] * invLife) * (1.0 - crabTrailWash[j] * invWash)
+                if (s > 1.0) s = 1.0 else if (s < 0.0) s = 0.0
+                val rr = (baseR * s).toFloat()
+                if (rr >= CRAB_TRAIL_MIN_R) {
+                    // ⭐ **成对**：沿行进方向的**垂直**方向（蟹横着走 ⇒ 垂直 ≈ ±y）偏移。
+                    val rx = rr * CRAB_TRAIL_DOT_RK
+                    crabTrailPath.addOval(
+                        px - rx, py - pair - rr, px + rx, py - pair + rr, NativePath.Direction.CW,
+                    )
+                    crabTrailPath.addOval(
+                        px - rx, py + pair - rr, px + rx, py + pair + rr, NativePath.Direction.CW,
+                    )
+                }
+            }
+            j++
+        }
+        paint.style = Paint.Style.FILL
+        paint.color = PAL_CRAB_TRAIL
+        paint.alpha = alpha255(CRAB_TRAIL_A)
+        canvas.drawPath(crabTrailPath, paint)
+
+        // ── ⑤b 沟槽：`batches − 1` 段，每段一条路径一次 STROKE（LOW ⇒ 0 段）────────
+        var bands = batches - 1
+        // ⛔ 段数不得越过构造期建好的 [crabTrailBand]（契约：HIGH 4 ⇒ 3 段）；
+        //   这里夹一道是为了预算表一旦被改成别的档位时**崩在这里**之外的地方。
+        if (bands > CRAB_TRAIL_BANDS) bands = CRAB_TRAIL_BANDS
+        if (bands <= 0) return
+        paint.style = Paint.Style.STROKE
+        paint.color = PAL_CRAB_TRAIL_GROOVE
+        var gw = CRAB_TRAIL_GROOVE_W * h
+        if (gw < CRAB_TRAIL_GROOVE_MIN_W) gw = CRAB_TRAIL_GROOVE_MIN_W
+        paint.strokeWidth = gw.toFloat()
+        // ⭐ 沟槽最年轻那一段的**引导点**：蟹脚接上去（凹点链在蟹脚下最多断一个
+        //   [CRAB_TRAIL_DY]·`w`，补上这一小段 ⇒ 动起来读作「一路拖过来的」）。
+        val footOk = onCrab && crabIdx == k
+        var b = 0
+        while (b < bands) {
+            val path = crabTrailBand[b]
+            path.rewind()
+            val lo = b.toDouble() / bands.toDouble()
+            val hi = (b + 1).toDouble() / bands.toDouble()
+            var sum = 0.0
+            var cnt = 0
+            var pen = false
+            j = 0
+            while (j < n) {
+                val u = crabTrailAge[j] * invLife
+                // ⭐ 按 **age 连续切段**（⛔ 不是按索引跳切，否则沟槽断成虚线）。
+                if (u >= lo && u < hi) {
+                    val px = crabTrailX[j]
+                    val py = crabTrailY[j]
+                    var c = ((px / w) * colsF).toInt()
+                    if (c < 0) c = 0 else if (c > cols) c = cols
+                    if (py >= wv.shore_ys[c] - CRAB_TRAIL_WASH_MARGIN) {
+                        var s = (1.0 - u) * (1.0 - crabTrailWash[j] * invWash)
+                        if (s > 1.0) s = 1.0 else if (s < 0.0) s = 0.0
+                        if (pen) path.lineTo(px, py) else path.moveTo(px, py)
+                        pen = true
+                        sum += s
+                        cnt++
+                    } else {
+                        pen = false
+                    }
+                }
+                j++
+            }
+            if (b == 0 && pen && footOk) {
+                val fx = cx.toFloat()
+                val fy = crabCy.toFloat()
+                if (abs(fx - crabTrailLastX) + abs(fy - crabTrailLastY) >= 0.5f) {
+                    path.lineTo(fx, fy)
+                    sum += 1.0
+                    cnt++
+                }
+            }
+            // ⛔ **单点画不出线**（`moveTo` 之后没有第二个顶点）⇒ 至少两枚才提交。
+            if (pen && cnt >= 2) {
+                val a = CRAB_TRAIL_GROOVE_A *
+                    (1.0 - (b + 1).toDouble() / (bands + 1).toDouble()) *
+                    (sum / cnt.toDouble())
+                if (a >= 0.002) {
+                    paint.alpha = alpha255(a)
+                    canvas.drawPath(path, paint)
+                }
+            }
+            b++
         }
     }
 

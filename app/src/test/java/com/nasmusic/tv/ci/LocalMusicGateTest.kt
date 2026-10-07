@@ -98,7 +98,7 @@ class LocalMusicGateTest {
                 " REQUEST_IGNORE_BATTERY_OPTIMIZATIONS（MediaStyle 通知有平台豁免、\n" +
                 "本地音乐改按需申请、电池优化跳转整删）。\n" +
                 "⚠️ 注释里提及同样算命中（U14）—— 陈旧注释会误导后人以为权限仍在。\n" +
-                "详见 docs/permission-and-signing-plan.md §四/§六。",
+                "详见 docs/archive/permission-and-signing-plan.md §四/§六。",
             hits.isEmpty(),
         )
     }
@@ -113,7 +113,7 @@ class LocalMusicGateTest {
                 "开机申请块已删（A 线），音乐权限现在只由「本地音乐」总开关驱动" +
                 "（launcher 注入，方案 §5.5）。\n" +
                 "若确实需要新的运行期权限申请，请走 ActivityResultLauncher（避免回到" +
-                "启动即弹窗的旧模式），并同步更新 docs/permission-and-signing-plan.md。",
+                "启动即弹窗的旧模式），并同步更新 docs/archive/permission-and-signing-plan.md。",
             !source.contains("ActivityCompat.requestPermissions"),
         )
     }

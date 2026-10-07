@@ -11,7 +11,7 @@ import kotlin.math.sin
  * E43「海边」—— **模拟核心**：离散浪队列 + 岸线（冲流线）+ 逐列湿润记忆。
  *
  * 权威来源：`docs/archive/seaside-visualizer-plan.md` §14.3.1 / §14.3.2 / §14.3.3，
- * 常量与公式逐项对齐 `docs/seaside-preview.html`（原型定稿）。⛔ 本文件**不含绘制层**
+ * 常量与公式逐项对齐 `docs/archive/seaside-preview.html`（原型定稿）。⛔ 本文件**不含绘制层**
  * （`bfy` / `bwj` / `slopeLaw` / `farLaw` / `kA` / `punchHoles` 等属 T2.7 / T2.18）。
  *
  * ## ⛔ 本文件的硬约束（照抄时最容易改回去的）
@@ -47,7 +47,7 @@ import kotlin.math.sin
 internal open class SeasideWaves(widthPx: Float, heightPx: Float) {
 
     // ══════════════════════════════════════════════════════════════════════════
-    //  常量 —— §5.1 / §5.2，逐项取自 docs/seaside-preview.html 的实际定义
+    //  常量 —— §5.1 / §5.2，逐项取自 docs/archive/seaside-preview.html 的实际定义
     // ══════════════════════════════════════════════════════════════════════════
 
     internal companion object {

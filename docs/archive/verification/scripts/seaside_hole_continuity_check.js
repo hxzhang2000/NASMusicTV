@@ -11,7 +11,8 @@
 const fs = require('fs');
 const path = require('path');
 
-const HTML = path.join(__dirname, '..', '..', '..', 'seaside-preview.html');
+// ⚠️ 2026-10-07：原型已归档到 `docs/archive/`，故上溯**两级**而不是三级。
+const HTML = path.join(__dirname, '..', '..', 'seaside-preview.html');
 const src = fs.readFileSync(HTML, 'utf8');
 
 // ── 从 HTML 提取 hash32/hash2/clamp，与页面完全一致 ──────────────────────

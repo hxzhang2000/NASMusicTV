@@ -215,8 +215,10 @@ class SeasideTest {
             v.isEmpty()
         )
         // 空转自证
-        assertEquals("预算表的元素数是 21（20 项 + PUDDLE 补充行）", 21, SeaOpItem.entries.size)
-        assertTrue("应识别到 ≥ 23 个 draw* 函数", drawFnDecls(strippedSrc()).size >= 23)
+        // ⛔ **因新增 [SeaOpItem.CRAB_TRAIL]「蟹迹」而变**：21 → **22**
+        assertEquals("预算表的元素数是 22（20 项 + PUDDLE 补充行 + CRAB_TRAIL 蟹迹）", 22, SeaOpItem.entries.size)
+        // ⛔ 同因：`drawCrabTrail` 会被 `DRAW_FN_RE` 认到 ⇒ 空转自证跟着收紧 23 → 24
+        assertTrue("应识别到 ≥ 24 个 draw* 函数", drawFnDecls(strippedSrc()).size >= 24)
     }
 
     // ══════════════════════════════ ⑩ 零向自证 ══════════════════════════════

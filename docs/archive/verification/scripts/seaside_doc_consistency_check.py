@@ -1,6 +1,10 @@
 import re, io, sys
 
-HTML = r"D:\hxzhang\MyGithubSoftware\NasAudio\NASMusicTV\docs\seaside-preview.html"
+# ⚠️ 2026-10-07：原型已归档到 `docs/archive/`。这里原先是**硬编码绝对路径**（且用反斜杠）
+#   ⇒ 任何 `docs/` 正斜杠扫描都扫不到它，换机/移动仓库直接失效。改为按脚本自身位置解析。
+import os
+HTML = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                    "..", "..", "seaside-preview.html")
 DOC  = r"D:\hxzhang\MyGithubSoftware\NasAudio\NASMusicTV\docs\archive\seaside-visualizer-plan.md"
 
 html = io.open(HTML, encoding="utf-8").read()
