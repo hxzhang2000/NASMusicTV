@@ -13446,3 +13446,225 @@ M1 门控位置有一处与实际代码流不符，已按实现修正（方案 v
   fail-fast 不误伤已配齐路径、APK 可覆盖安装）→ 再发本批功能。
 - **实机验收 U1–U14**：清单在方案 §十一（首启无弹窗 / 开关开申请一次 / 被拒回弹 /
   关开关下载曲仍在 / 备份导入导出往返 / 车机蓝牙不受影响等），发版后逐项过。
+
+---
+
+### 10.215 v2.38.4 — E41「世界」电视端黑屏：定位到宿主 WebView 只画首帧，回退原生改造并改为仅最高画质档提供（2026-10-06 ~ 2026-10-07）
+
+**结论先行**：曾把地球从 three-globe 整体重写为原生 three.js，并**真机验证画面正确可用**；
+随后**全部回退**——因为真正的阻断点根本不在 three-globe，而在**宿主**：这台电视的系统 WebView 被
+Compose `AndroidView` 承载时**只画出第一帧、之后永不更新**，方案 A 解决不了。
+按所有者 2026-10-07 裁决**不修**：观感最好的一版保留（手机上完美显示），E41 改为
+**仅在最高画质档提供**，旧电视黑屏接受。
+
+完整取证、四轮隔离探针、已排除项与观感对照清单见 `docs/archive/e41-tv-blackscreen-fix-plan.md`。
+本节只记根因、判定链、方法论与最终落地形态。
+
+#### 一、两个阻断点（第二个更深，且方案 A 解决不了）
+
+创维 9R54_G8S（Android 5.1.1 / SDK 22 / WebView = **Chrome 39**，`dumpsys webviewupdate` 为空、
+无 Play WebView 且不可更新；PowerVR Rogue G6110 / `MAX_TEXTURE_SIZE=8192` / 1920×1080 / DPR 1.5
+⇒ viewport 1280×720）上，E41 进可视化即全黑。
+
+1. **阻断点 1（已知，已绕开）**：three-globe 2.45.2 的 UMD 把 three 的 **TSL 子系统整段打进包里**，
+   而 TSL 在**模块初始化期**就 `new Proxy(...)`。Chrome 39 无 `Proxy`，加最小垫片后错误变成
+   `TypeError: undefined is not a function` @ `three-globe.es5.js:10976` —— 需要**拦截未知键名**
+   （`.setLayout` 这类），ES5 的 Proxy 垫片只能拦截已枚举键，**原理上做不到**。
+   ⚠️ 由此修正了一条被推翻的注释：`downlevel_libs.mjs` 原写「`new Proxy` ×3 全在 TSL、不会执行」，
+   实测证明**确实在模块初始化期执行**。
+
+2. **阻断点 2（真正的墙）**：⛔ **该 WebView 被 Compose `AndroidView` 承载时只画出第一帧，
+   之后永不更新——与 WebGL 无关。** 普通 2D canvas 的红方块**同样不上屏**。
+   这是宿主合成层的特性，任何页面内改动都救不了 ⇒ **绕开阻断点 1 也依然黑屏。**
+
+#### 二、怎么判定「画了但没上屏」（比修复本身更值钱）
+
+每一步都必要，缺一环就会得出错误结论：
+
+| 证据 | 读数 | 排除了什么 |
+|---|---|---|
+| `frames` 周期时间序列 | 3 → 3 → 12 → 161 → 2653 | rAF **没死**（单次读数分不清「rAF 停了」与「每帧极慢」，**必须拉时间序列**） |
+| `renderMs` | 首帧 10426ms，之后 3–9ms | 稳态渲染**正常**，不是性能问题 |
+| **画布回读**（`drawImage` 到 2D canvas） | `px = ["14,16,25","16,25,31","4,6,12","24,33,44","2,3,6"]` | 场景**确实画出来了**，不是空场景 |
+| `screencap` 量化 | 地球区域**精确 (0,0,0)** | 画了但**没上屏** |
+| 页面 CSS 底色改深蓝 | 屏幕显示底色 | WebView **DOM 层在合成**，进程活着 |
+| 放**普通 2D canvas** 红方块 | **也不显示** | ⛔ 与 WebGL **无关** |
+
+⚠️ 画布回读**必须紧跟 `render()` 在同一任务里**做，否则 `preserveDrawingBuffer=false` 会读到空，
+从而误判成「没画出来」。
+
+**已排除的修复路**：`preserveDrawingBuffer:true` 无效；
+`setLayerType(LAYER_TYPE_SOFTWARE)` 直接 `Error creating WebGL context`（**更糟**）；
+`onResume()` + `resumeTimers()` 无效。
+
+#### 三、诊断上的两个陷阱（都实际踩过）
+
+- ⛔ **探针假阴性**：电视**自带浏览器**跑同一批文件地球显示正常，但 `file://` 页面无法 XHR 其它
+  `file://` 子资源 ⇒ 三张贴图一张都没加载 ⇒ **探针跑的是空场景**，从未暴露宿主问题。
+  ⇒ **探针必须复现宿主条件**，否则它的「正常」不能用来否定 App 里的「异常」。
+- ⚠️ **logcat 不是唯一证据源**：这台 WebView 的 `WebChromeClient.onConsoleMessage`
+  **不转发脚本加载期错误**——四轮探针中 `SyntaxError` 从未进过 logcat。
+  ⇒ 改成 `index.html` 侧自装 `window.onerror` + `__GLOBE_ERRORS__`，并把错误**画在屏幕面板上**，
+  真机 `screencap` 一眼可读。诊断日志也不能因值不好看而吞掉（要能区分「没打出来」与「打出 null」）。
+
+#### 四、方案 A 的实施与回退（已完成并验证正确，但未采用）
+
+把地球重写为原生 three.js：地球本体 / 大气层 / 城市光点（单 `Points` + 自定义 `ShaderMaterial`）/
+大圆航线（自建 ribbon 三角带）。`globe.js` 拆出 `buildNativeBackend()` / `buildLegacyBackend()`，
+统一接口 `{group, earthYaw, material, setPoints, setArcs, onFrame, onResize}`。
+
+**真机验证通过**：`THREE r160`、`WorldGlobe` 契约建立、`mode=native`、37 城、航线、
+三张 2048×1024 贴图全部解码、`renderMs` 3ms、`ctxLost:false`、`errs:[]`。
+⇒ 证明**观感层面方案 A 是可行的**，黑屏完全来自宿主。
+
+- **yaw = 0（实测推翻初稿）**：`EARTH_YAW_OFFSET = -π/2` 是 **three-globe 内部球体朝向补偿**，
+  不是地理事实。用**经纬网格法**在电视上逐项核对（圆心经度 90°E、孟加拉湾、北京/东京/开普敦/悉尼
+  的相对方位）⇒ 原生 `SphereGeometry` 的 UV 已与 `fe()` 自洽。legacy 后端仍用 `-π/2`。
+- **`earthGroup` 父子结构取代逐帧 copy**：只由 `globeGroup.rotation.y` 承担自转。⛔ `moonPivot`
+  **绝不进组**，否则月球跟着地球转、等于失去公转。
+- ⛔ 光点不用 `PointsMaterial`（其 `gl_PointSize` 是 uniform，不支持逐点尺寸，而呼吸相位逐城不同）；
+  ⛔ 航线不用 `Line`（WebGL `lineWidth` 恒 1）也不移植 `Line2`（`LineMaterial` 是整套特定 shader）。
+
+**回退范围**：`git checkout HEAD --` 撤销 `globe.js` / `index.html` / `three.es5.js` /
+`downlevel_libs.mjs` / `WorldGlobeRenderer.kt` / `VisualizerRenderer.kt` / `VisualizerStage.kt` /
+`values/strings.xml` / `values-en/strings.xml`。`three-globe.es5.js` **逐字节未动**
+（sha256 前缀 `b40f9b467ee6dfa7`），整套 legacy 基线保留以便随时 A/B。
+
+#### 五、最终落地：画质档门控（本次唯一保留的生产改动）
+
+`AppSettings.kt`：`WORLD(...)` 由 `Tier.ADV` 提到 **`Tier.ULTRA`**。
+
+- `Tier.ULTRA` 在代码里**只**被 `supports()` 一处消费（`ULTRA -> allowFramebuffer`），
+  该字段只有 `VisualQuality.HIGH` 为 `true` ⇒ **MEDIUM / LOW 一律不提供 E41**，**无需新增枚举字段**。
+- 依据：「能显示它的设备」与「该用最高档的设备」尽量重合，而不是让用户在低档设备上切到一个黑屏效果。
+- ⛔ `needsParticleBudget = true` **照实保留**：渲染器确实读 `ctx.quality.maxParticles`，
+  而 `ParticleBudgetGateTest` 用**源码扫描**反推「谁真读 maxParticles」并与标注比对，标错即红。
+- 测试：`VisualizerThemeTest` 中 `assertTrue(MEDIUM.supports(WORLD))` 翻转为 **`assertFalse`**
+  并保留为**正向自证**（防止日后被悄悄降回 ADV），另补 `assertTrue(HIGH.supports(WORLD))`
+  与 `assertTrue(WORLD.needsParticleBudget)`。
+
+#### 六、顺带修掉的一个打包事故（保留）
+
+⛔ `downlevel_libs.mjs` 把 TypeScript + acorn 装在**脚本自身所在目录**，也就是
+`app/src/main/assets/globe/`。而该目录是 **assets**，`mergeDebugAssets` 会把底下**一切**原样打进
+APK——实测 **139 个条目 / 23.3 MB**，而运行时**一个都用不到**（`shouldInterceptRequest` 只按
+`/globe/<name>` 取）。**`.gitignore` 挡不住打包，真正的护栏是单测。**
+
+- **清理**：删掉 `node_modules`；`.gitignore` 补 `node_modules/` + assets 下三条显式条目。
+- **护栏**：新增 `GlobeAssetsHygieneTest`（3 例，含「定位失败要 fail 不能 skip」的正向自证）。
+- ⚠️ **已实测的失效模式**：该测试只读文件系统、不引用 Gradle 输入，若上次是绿的而之后只有 assets
+  内容变化，Gradle 可能判 **UP-TO-DATE 根本不重跑**（假阴性）⇒ 人工复检必须带 `--rerun-tasks`。
+  负向自证已做：造假 `node_modules` 后带 `--rerun-tasks` 重跑，`tests=3 fail=1`。
+- 离线门禁脚本改从 `logs_temp/nodecheck` 找 acorn，⛔ 不再装回 assets。
+
+#### 七、门禁（回退 + 门控 + 版本号提到 2.38.4 后，`EXIT=0`，10m12s）
+
+- `assembleDebug` ✅ 产物 `NASMusicTV-debug-v2-38-4.apk`（**2.38.4 / versionCode 173**，
+  `output-metadata.json` 双向核对一致）；`assets/globe` **14 个条目**（raw 7.2 MB / 压缩后 3.8 MB），
+  **无 `node_modules` / `package*.json`**。
+- `lintDebug` ✅ **0 errors / 289 warnings**。
+- `testDebugUnitTest` ✅ **151 类 / 1649 例 / 0 失败 / 0 错误 / 0 跳过**。
+
+#### 八、遗留
+
+- ⏳ **真机验收待用户执行**：① 电视上确认 **MEDIUM / LOW 档下 E41「世界」不再出现在可选列表**；
+  ② 手机上确认 **E41 观感与回退前完全一致**。
+- ⏳ 老旧 WebView 设备上 E41 仍会黑屏，属**已知且已接受**的取舍，不再跟进修复。
+---
+
+### 10.216 v2.38.4 — E41 assets 瘦身：5 个零加载文件移出打包目录（2026-10-07）
+
+**结论先行**：`app/src/main/assets/globe/` 从 14 个文件收敛到 **9 个运行时文件**；
+上游原件与构建输入移到 `app/src/globe-upstream/`（模块内、`main` 源集之外，Gradle 不打包），
+**进版本库、不进 APK**，该目录在 APK 内从 **3,965,758 → 1,850,885 字节（−2.02 MiB / −53%）**。
+
+⚠️ **不要拿整个 APK 的差值当收益**（本节踩过一次）：瘦身前后整个包只差 **88 KB**
+（50,138,137 → 50,049,981 字节），另约 2.03 MB 的变化来自 **debug multidex 在两次构建间
+重新分片**，与本次改动无关。⇒ **受控口径只有 `assets/globe` 这一项**；
+跨构建比较总包体必须先 `clean`，否则增量状态会污染结论。
+
+#### 一、怎么确定「哪些是真正被加载的」
+
+⛔ **不能只看 `index.html` 的 `<script src>`**：贴图是 `TextureLoader` 异步取的，
+`cities.json` 更是看着像静态数据。实际做法是**双向取证**：
+
+1. **页面侧**：先剥掉 `globe.js` 的块注释与行注释，**再**扫代码里出现的资源文件名。
+   ⛔ 顺序不能反 —— `globe.js` 注释里有一段专门解释「为什么不用上游 `earth.jpg`」，
+   按原文扫会把这段**误判成引用**，得出完全相反的结论。
+2. **宿主侧**：全仓 grep `*.kt`，确认 Kotlin 没有另一条按名读取的路径
+   （`shouldInterceptRequest` 只按 `/globe/<name>` 取 assets，页面从不请求多余文件）。
+
+结果：`globe.js` 代码里真实引用的只有 4 张贴图 —— `earth_glow.jpg` / `earth_lit.jpg` /
+`earth_night.jpg` / `moon.jpg`；库走 `index.html` 的 4 个 script；加上 `index.html` 本身 = 9。
+
+⚠️ **`cities.json` 是最容易被误判成「还在用」的一个**：城市坐标实际由 `WorldGlobeRenderer`
+经 `evalJs("WorldGlobe.initCities(...)")` 注入，页面**从不 fetch** 它。
+`WorldGlobeRenderer.kt` 顶部注释此前还把它写成运行时资产，一并改正。
+
+#### 二、移出清单与实测体积
+
+体积为 **APK 内压缩后**字节数（不是磁盘原文件大小，两者差 3–4 倍）：
+
+| 文件 | APK 内 | 为什么会在包里 |
+|---|---:|---|
+| `earth.jpg` | 1,461,877 | 上游原图 4096×2048，`earth_lit.jpg` 的派生源 |
+| `three-globe.min.js` | 443,800 | ES6 基线：ES5 产物的**再生源** + diff 基准 |
+| `three.min.js` | 203,785 | 同上 |
+| `downlevel_libs.mjs` | 4,890 | 开发期转译脚本，不是运行时代码 |
+| `cities.json` | 730 | 已被 `initCities()` 取代 |
+| **合计** | **2,115,082 ≈ 2.02 MiB** | 占 APK 的 **4.2%** |
+
+留下的 9 个运行时文件合计 **1.77 MiB**（`three-globe.es5.js` 570 KB + `three.es5.js` 261 KB
++ 4 张贴图 991 KB + `globe.js` 22 KB + 其余）。
+
+#### 三、为什么是「移出 assets」而不是「删除」
+
+⛔ 两个 ES6 原版是 **ES5 产物的唯一再生源**：`downlevel_libs.mjs` 就是从它们读源转译的。
+删掉之后 `three.es5.js` / `three-globe.es5.js` 变成**不可再生的孤儿二进制**，
+「产物出问题时逐字节 diff 回上游」这条能力永久丧失。
+
+⛔ 而且它们正是**唯一**能证伪「ES5 产物被手工改过」的手段：2026-10-07 实测
+`tsc(5.7.2)` 重新生成一遍，SHA 与已提交产物**全等**（`three.es5.js` `1c6786cb…`、
+`three-globe.es5.js` `b40f9b46…`），才确认降级后没被再动过。删了基线就没法再问这个问题。
+
+⇒ **移出 assets 兼得「不进包」与「可再生」**：文件仍在版本库里，可随时重跑转译与比对。
+
+#### 四、顺带拆掉的老雷
+
+`downlevel_libs.mjs` 原本与被处理的资产**同目录**，于是它装的 `node_modules` 也落在
+`app/src/main/assets/globe/` —— 这正是 §10.215 记录的 23 MB 打包事故的根因
+（2026-10-06 实测 APK 47.9 → 56.2 MB）。
+
+本次把「源 + 脚本 + 依赖」整体挪到 `app/src/globe-upstream/`，**装依赖与打包不再共用目录**，
+事故的**成因**被移除，而不只是被测出来。脚本本身随之改为：源从 `SCRIPT_DIR` 读、
+产物写 `OUT_DIR`（缺省 `../main/assets/globe`，可用 `argv[2]` 覆盖）。
+
+✅ **实跑验证**：搬完目录后原样执行一次 `node app/src/globe-upstream/downlevel_libs.mjs`，
+`git status` 报告 `assets/globe` **零改写**，`three-globe.es5.js` SHA 仍是 `b40f9b46…`
+—— 转译链路没断，产物逐字节一致。
+
+#### 五、护栏
+
+`GlobeAssetsHygieneTest` 从 3 例扩到 **5 例**，守住两条：
+
+- 依赖残留（`node_modules` / `package*.json`）不得回 assets —— 原有 2 例
+- **上游原件不得回 assets**（新增）：白占 2.02 MiB
+- 新增**正向自证**：那 5 个文件确实在 `app/src/globe-upstream/` —— 否则「不得存在」
+  会因路径写错而**永远通过**，比没有门禁更糟
+
+⚠️ 该测试**只读文件系统、不引用 Gradle 输入**，人工复检**必须带 `--rerun-tasks`**
+（不带会被判 UP-TO-DATE 而假绿——本次已带该参数验证）。
+
+`.gitignore` 的三条 assets 条目**保留作兜底**：`.gitignore` 只管提交、挡不住打包。
+
+#### 六、验证
+
+- ✅ 转译链路实跑，产物零改写（见 §四）
+- ✅ 门禁新增断言实跑通过（`--rerun-tasks`，5 例），**负向自证**把 `cities.json` 移回 assets
+  后恰好 **2 例变红**，报错文本指向正确，文件已还原
+- ✅ `assembleDebug` / `lintDebug` / `testDebugUnitTest` 三道门全绿
+  （BUILD SUCCESSFUL 4m30s；lint **0 errors / 289 warnings**；单测 **151 类 / 1651 例 / 0 失败**，
+  比瘦身前 +2 例即新增的两条守卫）
+- ✅ APK 内 `assets/globe` 恰为 **9 个条目**，且对
+  `node_modules` / `three.min.js` / `three-globe.min.js` / `earth.jpg` / `cities.json`
+  **零命中**；整体条目数 996 → 991（正好少 5 个）

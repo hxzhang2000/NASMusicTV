@@ -238,17 +238,23 @@
 
 | 项 | 第一轮 | 第二轮 | 第三轮 | 合计 |
 |---|---|---|---|---|
-| 移入 `docs/archive/` | 36 | 6 | 13 | **55** |
+| 移入 `docs/archive/` | 36 | 6 | 13 | **56** |
 | 移入 `docs/articles/` | 5 | 0 | 0 | **5** |
-| 同步改写引用 | 52 处 / 20 文件 | 57 处 / 41 文件 | 68 处 / 29 文件 | **177 处**（涉及 65+ 文件，各轮有重叠） |
+| 同步改写引用 | 52 处 / 20 文件 | 57 处 / 41 文件 | 68 处 / 29 文件 | **179 处**（涉及 65+ 文件，各轮有重叠） |
 | `docs/` 根目录 | 62 → 21 | 21 → 15 | 15 → **2** | **−60**（仅剩 2 篇活文档） |
 | `seaside-visualizer-plan.md` | E43 海边实现方案 v1.3。**已 shipped**（`SeasideRenderer.kt` / `SeasideWaves.kt` / `SeasideOpBudget.kt`，v2.38.2；视觉由所有者真机逐项确认后定稿）。**归档时仍带未决项**：§12.5「仍未解决 / 未验证」的 **U1**（单列尖峰 10.77 px，成因未定位）、**U8**（G13 与 §4.7① 在 4K 上冲突，**待裁定**）、**U9**（两处规格歧义，已按「不猜」记录待确认），以及 §4.7 表「逐帧水线最大位移 10.77 px ⛔ 未解决」。接替记录：`docs/seaside-preview.html` 是只读规格基准；全部已验证结论已落 `technical-overview.md` §10.209–§10.211 |
 | `photo-spectrum-effect-plan.md` | 照片墙转场与频谱方案。**已 shipped**（`PHOTO_WALL` = E39，在册于 `VisualizerTheme`）。**归档时待确认项为 0**（文档 §统计自述「待确认 0 项」）；但 §实现期记录着两条**用户上机报告的缺陷**：「竖版图片总是无法占满屏幕」「很多时候进入动画效果还未完成…」，**是否已修复未在文档中回填** —— 需要时回查源码或重上机。⛔ 已知遗留：转场打断（手动切歌/切图时从当前 blend 反向插值）明确留给阶段 10 |
+| `e41-tv-blackscreen-fix-plan.md` | E41「世界」电视端黑屏的**诊断与裁决记录**。**❌ 修复已永久放弃**（所有者 2026-10-07 裁决：方案 A / B 均否决，「改回原来很好效果的代码……就是黑屏吧」）。定位到的真根因是**宿主**而非渲染层：该机 WebView 被 Compose `AndroidView` 承载时**只画首帧、永不更新**（2D canvas 同样不上屏），故任何页面内改动都救不了。**最终落地**：`WORLD` 由 `Tier.ADV` 提到 `Tier.ULTRA`，仅最高画质档提供（v2.38.4）。**归档时仍带未决项**：§八 的**真机验收 U1/U2** 待所有者执行——① 电视上确认 MEDIUM/LOW 档不再出现 E41；② 手机上确认观感与回退前一致。全部已验证结论已落 `technical-overview.md` §10.215 |
 
 > **2026-10-05 追加归档 2 份**（所有者裁决）：`seaside-visualizer-plan.md`、`photo-spectrum-effect-plan.md` → `docs/archive/`。同步改写引用 **5 处 / 4 文件**（`SeasideWaves.kt`、`PhotoWallSettingsSection.kt`、`docs/archive/README.md`、`docs/archive/starry-sky-visualizer-plan.md`）。⚠️ 其中 **1 处是真正会跑坏的脚本**：`verification/scripts/seaside_doc_consistency_check.py` 的硬编码绝对路径用的是**反斜杠**，因此 `docs/` 正斜杠扫描扫不到——归档时必须手动扫**裸文件名**。⇒ 此论在本轮已被实证两次。
 
+> **2026-10-07 追加归档 1 份**：`e41-tv-blackscreen-fix-plan.md` → `docs/archive/`。
+> 同步改写引用 **2 处 / 2 文件**（`AppSettings.kt` 的 `WORLD` KDoc、`technical-overview.md` §10.215）。
+> ⚠️ 本篇是**同一次会话内先建后归档**，故上表「`docs/` 根目录」一列未变（净增删为 0），
+> 只更新了「移入」与「同步改写引用」的合计。
+
 > 上表只计「三轮归档」。另有 **2 份审查报告**自 `logs_temp/` 迁入 `docs/archive/`
-> （见上文「附：验证证据迁移」），故 `docs/archive/` 现共 **57 篇文档 + 本索引**。
+> （见上文「附：验证证据迁移」），故 `docs/archive/` 现共 **58 篇文档 + 本索引**。
 
 ## 回滚
 
