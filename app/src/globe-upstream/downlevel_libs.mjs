@@ -53,36 +53,45 @@
  *    校验就汇报「验证通过」，结论下早了。**必须配 vm 加载测试**（见文件末尾说明）。
  *
  * ---------------------------------------------------------------------------
- * 本目录文件清单与保留策略（改动前先读这段）
+ * 本目录（app/src/globe-upstream/）= **构建输入与上游原件，不进 APK**。
+ * 运行时装载的文件在 ../../main/assets/globe/，两者刻意分开（见 OUT_DIR 注释）。
+ * 改动前先读这段。
  * ---------------------------------------------------------------------------
- *   three.min.js            上游 ES6 原版，r160 UMD。        ⛔ 永久保留，永不删除，永不修改
- *   three-globe.min.js      上游 ES6 原版，2.45.2 UMD。      ⛔ 永久保留，永不删除，永不修改
- *   three.es5.js            本脚本产物（654KB → 987KB）。     运行时装载
- *   three-globe.es5.js      本脚本产物（1248KB → 2007KB）。   运行时装载
- *   polyfill.es5.js         手写，Chrome 39 缺失 API。        运行时装载，必须最先
- *   globe.js                本项目渲染逻辑，纯 ES5，**不参与转译**
- *   cities.json             城市坐标数据
- *   earth*.jpg / moon.jpg   贴图（earth.jpg 为 4096×2048）
- *   index.html              装配页
+ * 本目录（构建输入 / 上游原件，**零运行时加载**）：
+ *   three.min.js            上游 ES6 原版，r160 UMD。      ⛔ 永久保留，永不删除，永不修改
+ *   three-globe.min.js      上游 ES6 原版，2.45.2 UMD。    ⛔ 永久保留，永不删除，永不修改
+ *   earth.jpg               上游原图 4096x2048，earth_lit.jpg 的派生源
+ *   cities.json             城市坐标；运行时**不加载**（数据由 Kotlin 经
+ *                          WorldGlobe.initCities() 注入），保留作数据源存档
  *   downlevel_libs.mjs      本脚本
  *
- *   ⛔ **两个 ES6 原版永久保留、不得删除、不得修改。** 它们是 ES5 产物的比对基线：
- *      产物出问题时必须能逐字节 diff 回上游，确认差异只来自降级，而非库的版本漂移
- *      或误改。删掉就永久丧失该能力；改内容同样失效。代价约 1.9MB 源资源，换可回溯性。
+ * ../main/assets/globe/（运行时装载，共 9 个文件）：
+ *   three.es5.js            本脚本产物（654KB -> 987KB）
+ *   three-globe.es5.js      本脚本产物（1248KB -> 2007KB）
+ *   polyfill.es5.js         手写，Chrome 39 缺失 API。      必须最先
+ *   globe.js                本项目渲染逻辑，纯 ES5，**不参与转译**
+ *   index.html              装配页
+ *   earth_lit.jpg / earth_glow.jpg / earth_night.jpg / moon.jpg   贴图
  *
- *   ⚠️ 不做压缩。tsc 产物本身已是合法 ES5，再过 terser 只是为了省体积，不值得引入
+ *   ⛔ **两个 ES6 原版永久保留、不得删除、不得修改。** 它们是 ES5 产物的**再生源**
+ *      与比对基线：产物出问题时必须能逐字节 diff 回上游（并可用本脚本重新生成），
+ *      确认差异只来自降级，而非库的版本漂移或误改。删掉就永久丧失该能力；
+ *      改内容同样失效。⛔ 移出 assets 而非删除，正是为了「不进包」与「可再生」兼得
+ *      （2026-10-07 实测：这 5 个文件占 APK 2.02 MiB / 4.2%，其中 ES6 两份 0.62 MiB）。
+ *
+ * ⚠️ 不做压缩。tsc 产物本身已是合法 ES5，再过 terser 只是为了省体积，不值得引入
  *      额外变量（此前 Babel 的失败曾把嫌疑指向压缩链）。如需压缩，在此追加并复测。
  * ---------------------------------------------------------------------------
  *
- * 用法（node_modules 不入库，需先装一次依赖；本脚本与被处理的资产同目录）：
- *   cd app/src/main/assets/globe
+ * 用法（node_modules 不入库，需先装一次依赖；⛔ 装在本目录，**不在 assets**）：
+ *   cd app/src/globe-upstream
  *   npm install --no-save typescript@5.7.2 acorn@8.14.0
- *   node downlevel_libs.mjs [assetsDir]      # assetsDir 缺省 = 脚本所在目录
+ *   node downlevel_libs.mjs [outDir]   # outDir 缺省 = ../main/assets/globe
  *   装完记得清理：rm -rf node_modules package.json package-lock.json
  *
  * 本脚本只做「转译 + ES5 语法校验」。**运行时验证需另跑 vm 加载测试**——
  * 在 Node vm 沙箱里删掉 Chrome 39 缺失的 API，再按 index.html 的顺序加载
- * polyfill → three → three-globe → globe.js，断言 THREE / ThreeGlobe 均已定义。
+ * polyfill -> three -> three-globe -> globe.js，断言 THREE / ThreeGlobe 均已定义。
  */
 
 import ts from "typescript";
@@ -92,8 +101,13 @@ import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
-const ASSETS =
-  process.argv[2] && process.argv[2].length > 0 ? resolve(process.argv[2]) : SCRIPT_DIR;
+// 源（ES6 原版）在本脚本同目录；产物（ES5）写进 runtime assets 目录。
+// ⛔ 两者**刻意分处两地**：脚本与它装的 node_modules 都不再落在 assets 里，
+//    从根上消掉「mergeDebugAssets 把依赖打进 APK」那个雷（2026-10-06 实测 23 MB）。
+const OUT_DIR =
+  process.argv[2] && process.argv[2].length > 0
+    ? resolve(process.argv[2])
+    : resolve(SCRIPT_DIR, "../main/assets/globe");
 
 const JOBS = [
   { src: "three.min.js", out: "three.es5.js", pkg: "three.js", ver: "r160 UMD (build/three.min.js)" },
@@ -161,7 +175,7 @@ function assertEs5(code, label) {
 let failed = false;
 
 for (const job of JOBS) {
-  const original = readFileSync(resolve(ASSETS, job.src), "utf8");
+  const original = readFileSync(resolve(SCRIPT_DIR, job.src), "utf8");
   console.log(`\n=== ${job.src} -> ${job.out} ===`);
   console.log(`  输入 ES6 语法统计: ${countEs6(original)}`);
 
@@ -178,8 +192,8 @@ for (const job of JOBS) {
     failed = true;
     continue;
   }
-  writeFileSync(resolve(ASSETS, job.out), finalCode, "utf8");
-  console.log(`  ✓ 已写入 ${resolve(ASSETS, job.out)}`);
+  writeFileSync(resolve(OUT_DIR, job.out), finalCode, "utf8");
+  console.log(`  ✓ 已写入 ${resolve(OUT_DIR, job.out)}`);
 }
 
 if (failed) {

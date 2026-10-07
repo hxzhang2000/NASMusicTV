@@ -40,8 +40,10 @@ import kotlin.math.roundToInt
  * 曲面细分/光照/大圆插值成本极高；WorldWindKotlin 要求 minSdk 24（本项目锁
  * 22，含创维 5.1.1 真机回归基准）被否决。three-globe 走系统 WebView + WebGL：
  * - minSdk 22 兼容（WebGL1 兜底，three.js ≤ r162）
- * - 完全离线：three.min.js / three-globe.min.js / globe.js / cities.json 全部
- *   assets 打包，页面零网络、零远程资源
+ * - 完全离线：index.html / polyfill.es5.js / three.es5.js / three-globe.es5.js / globe.js
+ *   与 4 张贴图（earth_lit / earth_glow / earth_night / moon）全部 assets 打包，页面零网络、
+ *   零远程资源。⛔ 城市数据**不走文件**——由本类经 `evalJs("WorldGlobe.initCities(...)")`
+ *   注入，故 `cities.json` 已移出 assets（见 `app/src/globe-upstream/`）。
  * - 音频经 100ms 事件粒度桥接，连续动画留在 JS rAF 循环，Kotlin 侧零绘制开销
  *
  * ## API 契约（与 assets/globe/globe.js 一一对应，勿单边改动）

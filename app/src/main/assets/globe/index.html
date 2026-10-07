@@ -51,8 +51,12 @@
        任何改动都必须配 vm 加载测试：删掉 Chrome 39 缺失的 API 后按本顺序加载全链路。
 
     ⛔ three.min.js / three-globe.min.js（ES6 原版）：**永久保留、永不删除、永不修改**。
-       它们是 ES5 产物的**比对基线**——产物出问题时必须能逐字节 diff 回上游，
+       它们是 ES5 产物的**再生源与比对基线**——产物出问题时必须能逐字节 diff 回上游，
        确认差异只来自降级而非库的版本漂移或误改。
+       ⛔ 2026-10-07 起它们**不在本目录**（本目录只留运行时装载的 9 个文件），
+       已移至 `app/src/globe-upstream/`，与 `downlevel_libs.mjs`、`earth.jpg`、
+       `cities.json` 同处。移出而不删除，是为了既不进 APK（实测省 2.02 MiB）
+       又保住可再生性。
   -->
   <div id="globe-container"></div>
 

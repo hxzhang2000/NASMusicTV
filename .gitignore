@@ -94,6 +94,16 @@ docs/*_assets/
 # Local build/dev output dirs
 logs_temp/
 output/
+# Node 依赖（downlevel_libs.mjs 转译 ES5 产物时临时安装）
+node_modules/
+# ⛔ Node 依赖绝不能出现在 app/src/main/assets/ 下：**assets 会被 mergeDebugAssets
+#    原样打进 APK** —— 2026-10-06 实测一次就多出 23 MB。
+#    2026-10-07 起 downlevel_libs.mjs 已连同上游原件移出到 app/src/globe-upstream/，
+#    装依赖与打包不再共用目录；但下面三条仍保留作兜底 —— .gitignore 只能挡住提交、
+#    挡不住打包 ⇒ 真正的护栏是单测 `GlobeAssetsHygieneTest`。
+app/src/main/assets/globe/node_modules/
+app/src/main/assets/globe/package.json
+app/src/main/assets/globe/package-lock.json
 # box-agent 会话产物目录（`<日期>-<会话ID前8位>`，自动生成在项目根，不入仓）
 # 例：2026-09-13-384e30ce/ —— 由 agent 运行时创建，内含 output/tasks/… 截图等
 20??-??-??-????????/
