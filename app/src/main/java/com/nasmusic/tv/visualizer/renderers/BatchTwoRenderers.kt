@@ -11,8 +11,14 @@ import com.nasmusic.tv.data.model.VisualizerTheme
 import com.nasmusic.tv.visualizer.AudioFrame
 import com.nasmusic.tv.visualizer.RenderContext
 import com.nasmusic.tv.visualizer.VisualizerRenderer
+import kotlin.math.abs
+import kotlin.math.atan2
 import kotlin.math.cos
+import kotlin.math.floor
+import kotlin.math.max
+import kotlin.math.min
 import kotlin.math.sin
+import kotlin.math.sqrt
 
 /**
  * E29 `ORBITAL_RINGS` — 太阳系
@@ -59,14 +65,29 @@ import kotlin.math.sin
  *    **中心静默区** `QUIET_R = 0.15f`（内太阳系不出现前景亮星，符合真实行星际空间）。
  *    ⚠️ 视觉层级链（世界单位）：太阳 `0.0420` > Jupiter `0.0225` > Mercury `0.0060` >
  *    Phobos `0.0024` > **最大星 `0.00150`**；
+ *  - **程序化质感增强**（全部纯代码，⛔ 零贴图 / 零 assets / 零 native 堆 / 零 fx import）：
+ *    ① **晨昏线**（MEDIUM+）—— 光源在画面中心，每颗行星按 `atan2(画面中心 − 行星位置)`
+ *    把预烘的单位圆夜侧遮罩转到背日一侧，叠一层压暗的同色（分界是带蒙影鼓出的浅弧，不是硬切）；
+ *    ② **大气边缘光**（HIGH）—— 单元空间径向渐变（透明→白→透明）经 canvas 缩放摆到盘缘外一圈；
+ *    ③ **木星 / 土星带状云纹**（MEDIUM+）—— 上下两条同相扰动折线围成的等厚透镜带，
+ *    横向半宽按圆盘弦长收缩 ⇒ 恒不溢出盘面，三层正弦近似 fbm 随 `elapsed` 漂移；
+ *    ④ **太阳米粒组织**（HIGH）—— 96 段噪声圆替代纯色圆盘（提交数不变）；
+ *    ⑤ **土星环卡西尼缝**（HIGH）—— 同一条 Path 追加同心内圈，两圈之间留白即缝；
+ *    ⑥ **彗星**（全档）—— 见 [drawComet]，`elapsed` 的纯函数、禁 `Random`；
  *  - **画质档**：八行星任何档全量保留。LOW 70 星 + 跳过可选卫星（天卫/海卫）+
- *    太阳纯圆层；MEDIUM 140 星 + 全部 11 卫星 + 太阳径向渐变 + 地表/木星条纹；
- *    HIGH 220 星 + 日冕层 + 行星斜上高光。
+ *    太阳纯圆层 + 无晨昏线 / 无云带 / 无大气光 / 彗星只画核与尾；
+ *    MEDIUM 140 星 + 全部 11 卫星 + 太阳径向渐变 + 晨昏线 + 云带（木 4 / 土 3）+ 彗星轨道（32 段）；
+ *    HIGH 220 星 + 日冕层 + 行星斜上高光 + 大气边缘光 + 米粒组织 + 卡西尼缝 +
+ *    云带（木 10 / 土 8）+ 彗星轨道（64 段）与彗头光晕。
  *
  * 性能红线：draw 内零分配——轨道线/卫星环/土星环 Stroke 与太阳渐变 Brush 按
  * (w, h, scale) 缓存重建、土星环 Path 成员复用（手工旋转，不用捕获 lambda 的
  * withTransform）、行星屏幕 y 与绘制次序用成员 FloatArray/IntArray 插入排序；
- * List 一律下标遍历（不用迭代器）；坐标全为基本类型局部量。
+ * List 一律下标遍历（不用迭代器）；坐标全为基本类型局部量。晨昏线 / 大气光 / 彗尾
+ * 需要「缩放 + 旋转摆放一份单元几何」时，一律走原生
+ * `drawContext.canvas.save → translate → rotate/scale → draw… → restore`
+ * （同 [BatchFourRenderers] 的齿轮组整组缩放范式）⇒ 零分配，且不受 Compose
+ * `DrawScope` 只有块版本变换（每帧分配捕获 lambda）的限制。
  */
 class OrbitalRingsRenderer : VisualizerRenderer {
 
@@ -222,9 +243,154 @@ class OrbitalRingsRenderer : VisualizerRenderer {
         const val RING_BACK = 0x8CF5E2B8.toInt()
         const val RING_FRONT = 0xE0F5E2B8.toInt()
         const val EARTH_LAND = 0xB056C07A.toInt()
-        const val JUPITER_BAND = 0x5F6B4526.toInt()
         const val SPECULAR = 0x59FFFFFF.toInt()
         const val STAR_BLUE = 0xFFBFD4FF.toInt()
+        /** 云带基色（不透明 ⇒ alpha 完全由逐条交替的系数控制） */
+        const val JUPITER_BAND_DARK = 0xFF6B4526.toInt()
+        const val SATURN_BAND_DARK = 0xFF8A6A38.toInt()
+        const val COMET_TAIL = 0xFFCFE3FF.toInt()
+        const val COMET_NUCLEUS = 0xFFFFFFFF.toInt()
+
+        // ── 程序化增强常量（E29 纯代码渲染，零贴图/零 assets/零 native 堆/零 fx import）──────
+        /** 晨昏线：夜侧叠加 alpha */
+        const val PLANET_NIGHT_ALPHA = 0.6f
+        /** 晨昏线夜侧的颜色压暗系数（0 = 纯黑、1 = 原色；⛔ 不可用原色，同色叠加等于没画） */
+        const val PLANET_NIGHT_SHADE = 0.34f
+        /** 晨昏线过渡带宽度（单位圆半径分数，兼作蒙影带鼓出日侧的量） */
+        const val PLANET_TERMINATOR_SMOOTH = 0.08f
+        /** 晨昏线遮罩离散段数（单位圆，烘焙一次，与画布尺寸无关） */
+        const val TERMINATOR_STEPS = 20
+        /** 大气边缘光：光晕半径 = 行星盘半径 × 此系数（仅 HIGH） */
+        const val ATMOSPHERE_GLOW_R = 1.18f
+        /** 大气边缘光渐变的峰值 alpha（与 [ATMOSPHERE_GLOW_ALPHA] 相乘后 ≈ 0.12） */
+        const val ATMOSPHERE_GLOW_PEAK_A = 0.65f
+        /** 大气边缘光最大 alpha（仅 HIGH 档绘制） */
+        const val ATMOSPHERE_GLOW_ALPHA = 0.18f
+        /** 木星带状云纹条数（HIGH / MEDIUM 档） */
+        const val JUPITER_BAND_COUNT = 10
+        const val SATURN_BAND_COUNT = 8
+        const val JUPITER_BAND_COUNT_MED = 4
+        const val SATURN_BAND_COUNT_MED = 3
+        /** 云带纬度覆盖范围（起算纬度 / 总跨度，木星更宽、土星更窄） */
+        const val JUPITER_BAND_LAT_TOP = -0.45f
+        const val JUPITER_BAND_LAT_SPAN = 0.90f
+        const val SATURN_BAND_LAT_TOP = -0.40f
+        const val SATURN_BAND_LAT_SPAN = 0.80f
+        /** 云带厚度 / 间距（< 1 ⇒ 带间留缝，呈明暗相间的平行条纹） */
+        const val BAND_THICK_K = 0.72f
+        /** 云带横向半宽上限（行星盘半径分数，配合弦长收缩 ⇒ 恒不溢出盘面） */
+        const val BAND_WIDTH_K = 0.92f
+        /** 云带扰动幅度（行星半径分数）与每带离散段数 */
+        const val JUPITER_BAND_AMP = 0.055f
+        const val SATURN_BAND_AMP = 0.035f
+        const val BAND_STEPS = 64
+        /** 云带漂移速率（rad/s，木星快、土星慢） */
+        const val JUPITER_BAND_DRIFT = 0.055
+        const val SATURN_BAND_DRIFT = 0.033
+        /** 太阳米粒组织：离散段数 / 噪声振幅 / 漂移速率 / 半径调制系数 */
+        const val SUN_GRANULE_STEPS = 96
+        const val SUN_GRANULE_CONTRAST = 0.35f
+        const val SUN_GRANULE_DRIFT = 0.18
+        const val SUN_GRANULE_R_GAIN = 0.20f
+        /** 卡西尼缝：内圈（B 环）半径 / 主环（A 环）长半轴，两圈之间的空白即缝 */
+        const val SATURN_RING_INNER_K = 0.72f
+
+        // ── 彗星（功能 6：⛔ 禁 Random，全部参数来自窗口序号 hash ⇒ 可回放、零闪烁）──
+        /** 彗星窗口周期（秒）：第 k 个窗口 = `[k·W, (k+1)·W)`，`k = floor(elapsed / W)` */
+        const val COMET_WINDOW = 45.0
+        /** 窗口内的起始延迟（秒）与单次经过的时长区间 ⇒ 相邻间隔约 24~44 s 不定 */
+        const val COMET_START_SPAN = 8.0
+        const val COMET_DUR_MIN = 9.0
+        const val COMET_DUR_SPAN = 4.0
+        /** 轨道半长轴（画面半幅分数）/ 离心率区间 */
+        const val COMET_A_MIN = 0.82f
+        const val COMET_A_SPAN = 0.18f
+        const val COMET_E_MIN = 0.60f
+        const val COMET_E_SPAN = 0.24f
+        /** 彗核半径（世界单位，× scale 得像素）与近日点加成区间 */
+        const val COMET_NUCLEUS_R = 0.0032f
+        const val COMET_NUCLEUS_SPAN = 0.0022f
+        /** 彗尾长度（世界单位）：远日只留底长、近日线性加长到 `MIN + SPAN` */
+        const val COMET_TAIL_MIN = 0.055f
+        const val COMET_TAIL_SPAN = 0.150f
+        /** 彗尾弯曲量（尾长分数）与根宽 / 尾长 */
+        const val COMET_TAIL_BEND = 0.16f
+        const val COMET_TAIL_ROOT_K = 0.9f
+        const val COMET_TAIL_MID_K = 0.45f
+        /** 轨道弧离散段数 / 进出场淡入淡出占窗口进度的比例 */
+        const val COMET_ORBIT_STEPS = 64
+        const val COMET_ORBIT_STEPS_MED = 32
+        const val COMET_FADE = 0.12f
+        /** 轨道弧与彗尾的 alpha 上限（彗尾再按近日程度调制） */
+        const val COMET_ORBIT_ALPHA = 0.16f
+        const val COMET_TAIL_ALPHA = 0.30f
+        const val COMET_HEAD_GLOW_ALPHA = 0.22f
+        /** hash 盐（同一序号在不同盐位上取互不相关的参数） */
+        const val COMET_SALT_START = 901
+        const val COMET_SALT_DUR = 907
+        const val COMET_SALT_A = 911
+        const val COMET_SALT_E = 919
+        const val COMET_SALT_ROT = 929
+        const val COMET_SALT_DIR = 937
+        const val COMET_SALT_R = 941
+        const val COMET_SALT_BEND = 947
+
+        /**
+         * 确定性 hash → `[0,1)`（同 E43 海边 `SeasideWaves.hash32` 的思路，本类自带一份，
+         * ⛔ 不 import fx / 不引 `Random`）。彗星的出现时刻、轨道形状、方向、大小
+         * 全部由「窗口序号 + 盐」推出 ⇒ 同一 `elapsed` 恒得同一颗彗星（可回放、零闪烁）。
+         */
+        fun hashUnit(i: Int, salt: Int): Float {
+            var x = ((i + 1) * -1640531535) xor ((salt + 7) * 40503)
+            x = (x xor 61) xor (x ushr 16)
+            x = x + (x shl 3)
+            x = x * 0x27d4eb2d
+            x = x xor (x ushr 15)
+            return (x.toLong() and 0xFFFFFFFFL) * 2.3283064365386963E-10f
+        }
+
+        /** ⑥ 第 k 个彗星窗口的起始延迟（秒）—— 纯函数，门禁与生产共用同一份实现 */
+        internal fun cometStartAt(k: Int): Float =
+            hashUnit(k, COMET_SALT_START) * COMET_START_SPAN.toFloat()
+
+        /** ⑥ 第 k 颗彗星的经过时长（秒） */
+        internal fun cometDuration(k: Int): Float =
+            (COMET_DUR_MIN + hashUnit(k, COMET_SALT_DUR).toDouble() * COMET_DUR_SPAN).toFloat()
+
+        /**
+         * ⑥ 一阶开普勒方程：平近点角 `M` → 偏近点角 `E = M + e·sin M`
+         * （近日快、远日慢 ⇒ 不是匀速椭圆）。
+         */
+        internal fun cometAnomaly(m: Float, e: Float): Float = m + e * sin(m)
+
+        /** ⑥ 轨道半径 `r = a(1 − e·cos E)` */
+        internal fun cometRadius(a: Float, e: Float, eccentric: Float): Float =
+            a * (1f - e * cos(eccentric))
+
+        /**
+         * ① 晨昏线夜侧方位角（度）：入参是**光源方向** `(ldx, ldy) = 画面中心 − 行星位置`，
+         * 夜侧取其反向 ⇒ 返回 `atan2(−ldy, −ldx)` 的角度。canvas 旋转该角度后，
+         * 单位圆遮罩的 +x（夜方向）正好指向背日一侧（屏幕坐标 y 向下，`rotate` 顺时钟为正）。
+         */
+        internal fun nightSideDegrees(ldx: Float, ldy: Float): Float =
+            Math.toDegrees(atan2(-ldy.toDouble(), -ldx.toDouble())).toFloat()
+
+        /**
+         * ③ 云带横向半宽（**行星盘半径分数**）：弦长由上下边界里更靠极的那条决定，
+         * 再乘 [BAND_WIDTH_K] 留边 ⇒ 整条带恒在圆盘内（不需要 clip）。
+         */
+        internal fun bandChordFraction(top: Float, bot: Float): Float {
+            val lim = max(abs(top), abs(bot)).coerceAtMost(1f)
+            return sqrt(1f - lim * lim) * BAND_WIDTH_K
+        }
+
+        /** ③ 第 [idx] 条云带的中心纬度（归一化：−1 = 南极、+1 = 北极） */
+        internal fun bandLatCenter(count: Int, idx: Int, latTop: Float, latSpan: Float): Float =
+            latTop + latSpan * (idx + 0.5f) / count
+
+        /** ③ 云带厚度（归一化纬度；`< latSpan / count` ⇒ 带间留缝） */
+        internal fun bandThickness(count: Int, latSpan: Float): Float =
+            latSpan / count * BAND_THICK_K
     }
 
     // ── 数据（构造期一次性生成，draw 只读）─────────────────────────────────
@@ -264,7 +430,10 @@ class OrbitalRingsRenderer : VisualizerRenderer {
     private val ringBack = Color(RING_BACK)
     private val ringFront = Color(RING_FRONT)
     private val earthLand = Color(EARTH_LAND)
-    private val jupiterBand = Color(JUPITER_BAND)
+    private val jupiterBandDark = Color(JUPITER_BAND_DARK)
+    private val saturnBandDark = Color(SATURN_BAND_DARK)
+    private val cometTailColor = Color(COMET_TAIL)
+    private val cometNucleusColor = Color(COMET_NUCLEUS)
     private val specular = Color(SPECULAR)
     private val starWhite = Color.White
     private val starBlue = Color(STAR_BLUE)
@@ -293,6 +462,8 @@ class OrbitalRingsRenderer : VisualizerRenderer {
     private var orbitStroke: Stroke = Stroke(1f)
     private var moonStroke: Stroke = Stroke(1f)
     private var ringStroke: Stroke = Stroke(1f)
+    /** 彗星轨道弧（比行星轨道更淡更细，同按 scale 缓存） */
+    private var cometOrbitStroke: Stroke = Stroke(1f)
 
     /**
      * 中心静默区的**椭圆归一化分母的倒数**（[ensureLayout] 只在尺寸 / scale 变化时算一次）：
@@ -304,6 +475,21 @@ class OrbitalRingsRenderer : VisualizerRenderer {
 
     /** 土星环半弧复用缓冲（成员 Path，reset 后逐帧重画，零分配） */
     private val ringBuf = Path()
+
+    /**
+     * 晨昏线夜侧遮罩（**单位圆**空间，夜方向 = +x；烘焙一次，与画布尺寸无关）。
+     * 逐帧用原生 canvas 的 `save → translate → rotate → scale → drawPath → restore`
+     * 摆到行星位置 ⇒ 角度连续（不跳档）、零分配。
+     */
+    private val terminatorPath = Path()
+    private var terminatorBaked = false
+    /** 带状云纹 / 太阳米粒复用 Path（逐条 rewind，零分配） */
+    private val bandBuf = Path()
+    /** 彗星轨道弧 / 彗尾复用 Path（零分配） */
+    private val cometOrbitBuf = Path()
+    private val cometTailBuf = Path()
+    /** 大气边缘光渐变（单元空间径向渐变，仅 HIGH 档建；尺寸无关 ⇒ 只建一次） */
+    private var atmoBrush: Brush? = null
 
     // ── 深度分层缓冲（成员复用 → 每帧插入排序零分配）──────────────────────
 
@@ -332,7 +518,9 @@ class OrbitalRingsRenderer : VisualizerRenderer {
         pulseSmooth = 0f
         energySmooth = 0f
         sunBrush = null
+        atmoBrush = null
         brushW = -1f
+        brushH = -1f
         brushScale = -1f
         strokeScale = -1f
         // 0 ⇒ 尺寸未定前不构成有效归一化（drawStars 恒在 ensureLayout 之后调用）
@@ -454,14 +642,40 @@ class OrbitalRingsRenderer : VisualizerRenderer {
                 drawCircle(sunHalo, radius = sunR * 3.1f, center = center, alpha = 0.12f + bassSmooth * 0.06f)
             }
         }
-        drawCircle(sunCore, radius = sunR, center = center)
-        drawCircle(sunCoreHot, radius = sunR * 0.62f, center = center, alpha = 0.95f)
+        // ④ 太阳米粒组织（仅 HIGH）：96 段噪声圆替代纯色圆盘，亮核 drawCircle 保留
+        //    ⇒ 提交数与 LOW/MEDIUM 的两层完全一致（1 路径 + 1 圆），音频律动不受影响
+        if (tier == 2) {
+            bandBuf.rewind()
+            val drift = (elapsed * SUN_GRANULE_DRIFT).toFloat()
+            val tauF = TAU_D.toFloat()
+            var g = 0
+            while (g <= SUN_GRANULE_STEPS) {
+                val a = tauF * g / SUN_GRANULE_STEPS
+                // 四层正弦近似 fbm（权重和 = 1 ⇒ n ∈ [-1,1]）；31 频在 96 段下仍每周期 ≥3 采样
+                val n = (sin(a * 6f + drift) * 0.45f + sin(a * 11f - drift * 0.7f) * 0.28f +
+                    sin(a * 19f + drift * 1.6f) * 0.17f + sin(a * 31f - drift * 0.4f) * 0.10f)
+                val r = sunR * (1f + n * SUN_GRANULE_CONTRAST * SUN_GRANULE_R_GAIN)
+                val x = center.x + cos(a) * r
+                val y = center.y + sin(a) * r
+                if (g == 0) bandBuf.moveTo(x, y) else bandBuf.lineTo(x, y)
+                g++
+            }
+            bandBuf.close()
+            drawPath(bandBuf, color = sunCore)
+            drawCircle(sunCoreHot, radius = sunR * 0.62f, center = center, alpha = 0.95f)
+        } else {
+            drawCircle(sunCore, radius = sunR, center = center)
+            drawCircle(sunCoreHot, radius = sunR * 0.62f, center = center, alpha = 0.95f)
+        }
 
         // ── 近侧行星（屏幕 y ≥ 中线）：画在太阳之后 → 可遮住太阳（用户要求的前后遮挡）──
         while (i < planets.size) {
             drawPlanetAt(order[i], center, scale, extentYScreen)
             i++
         }
+
+        // ── ⑥ 彗星（最前景）：不定间隔掠过，画轨道弧 + 背日彗尾，出画后轨道随之消失 ──
+        drawComet(w, h, center, scale)
     }
 
     /**
@@ -561,18 +775,22 @@ class OrbitalRingsRenderer : VisualizerRenderer {
                     earthLand, radius = pr * 0.40f,
                     center = Offset(px + 0.30f * pr, py - 0.18f * pr)
                 )
-                JUPITER -> {
-                    drawOval(
-                        jupiterBand,
-                        topLeft = Offset(px - 0.85f * pr, py - 0.62f * pr),
-                        size = Size(1.70f * pr, 0.30f * pr)
+                JUPITER -> // ③ 木星云带：HIGH 10 条 / MEDIUM 4 条程序化波浪带（替代原 2 次 drawOval）
+                    drawCloudBands(
+                        px, py, pr,
+                        if (tier == 2) JUPITER_BAND_COUNT else JUPITER_BAND_COUNT_MED,
+                        JUPITER_BAND_LAT_TOP, JUPITER_BAND_LAT_SPAN, JUPITER_BAND_AMP,
+                        (elapsed * JUPITER_BAND_DRIFT).toFloat(),
+                        jupiterBandDark, 0.18f, 0.12f
                     )
-                    drawOval(
-                        jupiterBand,
-                        topLeft = Offset(px - 0.88f * pr, py + 0.27f * pr),
-                        size = Size(1.76f * pr, 0.26f * pr)
+                SATURN -> // ③ 土星云带：HIGH 8 条 / MEDIUM 3 条，更窄更淡、漂移更慢
+                    drawCloudBands(
+                        px, py, pr,
+                        if (tier == 2) SATURN_BAND_COUNT else SATURN_BAND_COUNT_MED,
+                        SATURN_BAND_LAT_TOP, SATURN_BAND_LAT_SPAN, SATURN_BAND_AMP,
+                        (elapsed * SATURN_BAND_DRIFT).toFloat(),
+                        saturnBandDark, 0.10f, 0.07f
                     )
-                }
             }
         }
         // HIGH：统一斜上高光（偏移 + 半径 ≤ 0.71r → 恒在盘内）
@@ -581,6 +799,52 @@ class OrbitalRingsRenderer : VisualizerRenderer {
                 specular, radius = pr * 0.20f,
                 center = Offset(px - 0.36f * pr, py - 0.36f * pr)
             )
+        }
+
+        // ① 晨昏线（MEDIUM + HIGH）：夜侧（背向太阳的一侧）叠一层压暗的同色
+        //    光源在画面中心 ⇒ 光线方向 = normalize(画面中心 − 行星位置)，atan2 取方位角；
+        //    夜侧 = 该方向的反向。遮罩是**单位圆**空间预烘 Path（[terminatorPath]，
+        //    含 PLANET_TERMINATOR_SMOOTH 的蒙影鼓出量），逐帧用原生 canvas 的
+        //    save → translate → rotate → scale → drawPath → restore 摆放：
+        //    无捕获 lambda、无对象分配，且角度**连续**（预烘 N 档方位角会让分界线每档突跳一次）。
+        //    ⛔ 夜侧颜色必须压暗：与行星盘同色叠加 = 像素不变，等于没画。
+        //    ⛔ 必须画在「盘 + 地表 / 云带 / 高光」**之后**，否则夜侧的细节仍是全亮 ⇒ 假立体感。
+        if (tier > 0) {
+            val ldx = center.x - px
+            val ldy = center.y - py
+            if (ldx != 0f || ldy != 0f) {
+                bakeTerminator()
+                val pc = p.color
+                val nightColor = Color(
+                    pc.red * PLANET_NIGHT_SHADE,
+                    pc.green * PLANET_NIGHT_SHADE,
+                    pc.blue * PLANET_NIGHT_SHADE,
+                    PLANET_NIGHT_ALPHA
+                )
+                val cvs = drawContext.canvas
+                cvs.save()
+                cvs.translate(px, py)
+                cvs.rotate(nightSideDegrees(ldx, ldy))
+                cvs.scale(pr, pr)
+                drawPath(terminatorPath, color = nightColor)
+                cvs.restore()
+            }
+        }
+
+        // ② 大气边缘光（仅 HIGH）：单元空间径向渐变（透明→白→透明）经 canvas 缩放摆到盘缘
+        //    Brush 构造期建好（[atmoBrush]，与画布尺寸无关）⇒ 逐帧只多一次变换进出，零分配
+        //    峰值落在 1.0 pr 处 ⇒ 盘缘外一圈微光晕（光晕半径 = pr × [ATMOSPHERE_GLOW_R]）
+        if (tier == 2) {
+            val ab = atmoBrush
+            if (ab != null) {
+                val cvs = drawContext.canvas
+                val gr = pr * ATMOSPHERE_GLOW_R
+                cvs.save()
+                cvs.translate(px, py)
+                cvs.scale(gr, gr)
+                drawCircle(brush = ab, radius = 1f, center = Offset.Zero, alpha = ATMOSPHERE_GLOW_ALPHA)
+                cvs.restore()
+            }
         }
 
         if (idx == SATURN) drawSaturnRing(px, py, pr, ringStroke, back = false)
@@ -605,6 +869,165 @@ class OrbitalRingsRenderer : VisualizerRenderer {
         }
     }
 
+    /**
+     * ③ 程序化带状云纹：每条带 = 上下两条同相扰动折线围成的等厚透镜带，写入成员
+     * [bandBuf] 后一次 `drawPath` ⇒ **每条带 1 次提交、零分配**（替代原来的 2 次 `drawOval` 横纹）。
+     *
+     *  - 横向半宽按行星圆盘的**弦长**收缩（`sqrt(1 − lat²)`）再乘 [BAND_WIDTH_K]
+     *    ⇒ 高纬度带自动变短、整条带恒不溢出盘面（不需要 clip）；
+     *  - 扰动是三层正弦叠加（近似 fbm，权重和 = 1 ⇒ 恒在 ±1），相位由 `elapsed` 驱动
+     *    ⇒ 条纹沿纬向缓慢流动；上下边**同相** ⇒ 带厚恒定（不会自交）；
+     *  - alpha 逐条交替（[alphaEven] / [alphaOdd]）⇒ 明暗相间的平行条纹。
+     *
+     * ⛔ 噪声链一律 `Float`（`kotlin.math` 的 Float 重载）：混进一个字面量 `0.5` 就整条
+     * 升成 Double，`Path.moveTo` 直接编译不过。
+     */
+    private fun DrawScope.drawCloudBands(
+        px: Float, py: Float, pr: Float, count: Int,
+        latTop: Float, latSpan: Float, amp: Float, drift: Float,
+        baseColor: Color, alphaEven: Float, alphaOdd: Float
+    ) {
+        val thick = bandThickness(count, latSpan)
+        var b = 0
+        while (b < count) {
+            val lat = bandLatCenter(count, b, latTop, latSpan)
+            val top = lat - thick * 0.5f
+            val bot = lat + thick * 0.5f
+            // 弦宽由上下边界里更靠极的那条决定 ⇒ 整带在盘内
+            val chord = bandChordFraction(top, bot) * pr
+            bandBuf.rewind()
+            var k = 0
+            while (k <= BAND_STEPS) {
+                val u = -1f + 2f * k / BAND_STEPS
+                val x = px + u * chord
+                val y = py + (top + bandWave(u, drift) * amp) * pr
+                if (k == 0) bandBuf.moveTo(x, y) else bandBuf.lineTo(x, y)
+                k++
+            }
+            var j = BAND_STEPS
+            while (j >= 0) {
+                val u = -1f + 2f * j / BAND_STEPS
+                bandBuf.lineTo(px + u * chord, py + (bot + bandWave(u, drift) * amp) * pr)
+                j--
+            }
+            bandBuf.close()
+            drawPath(bandBuf, color = baseColor, alpha = if (b and 1 == 0) alphaEven else alphaOdd)
+            b++
+        }
+    }
+
+    /** 云带扰动（近似 fbm 的三层正弦，权重和 = 1 ⇒ 值域 ±1）；[u] 为带内归一化经度 */
+    private fun bandWave(u: Float, drift: Float): Float =
+        sin(u * 6.2f + drift) * 0.5f + sin(u * 12.7f - drift * 0.7f) * 0.3f +
+            sin(u * 23.1f + drift * 1.6f) * 0.2f
+
+    /**
+     * ⑥ 彗星：偶尔经过太阳系的一颗彗星（不定间隔约 24~44 s），带轨道弧与背日彗尾。
+     *
+     * **`elapsed` 的纯函数**（⛔ 禁 `Random` ⇒ 可回放、零闪烁）：
+     * 窗口序号 `k = floor(elapsed / COMET_WINDOW)` 定出这一颗的全部参数
+     * （起始延迟、时长、半长轴、离心率、朝向、运行方向、彗核大小、尾弯向，各取一路
+     * [hashUnit] 盐位），窗口内进度 `p` 定出它在轨道上的位置。相邻两颗的间隔因此
+     * 不固定，但同一时刻永远算出同一颗。
+     *
+     * 几何：**太阳位于焦点** ⇒ 近日点 `a(1−e)` 落在内太阳系、远日点 `a(1+e)` 在画面之外；
+     * 平近点角 `M = π + 2π·p` 从远日点起扫一整圈回到远日点 ⇒ **进画与出画都在画面外**；
+     * 一阶开普勒 `E = M + e·sin M` ⇒ 近日快、远日慢（不是匀速椭圆）。
+     * 轨道平面仍走 [project]（含 [TILT]）⇒ 与行星轨道同一倾斜约定。
+     *
+     * 提交数：轨道弧 1 次（LOW 不画）+ 彗尾 1 次 + 彗核 1 次（HIGH 再 +1 次彗头光晕）。
+     * 彗星完全走出画面（窗口结束）后轨道随之消失；进出场各留 [COMET_FADE] 的淡入淡出。
+     */
+    private fun DrawScope.drawComet(w: Float, h: Float, center: Offset, scale: Float) {
+        val k = floor(elapsed / COMET_WINDOW).toInt()
+        val uWin = (elapsed - k * COMET_WINDOW).toFloat()          // 窗口内秒（小数位仍精确）
+        val startAt = cometStartAt(k)
+        val dur = cometDuration(k)
+        if (uWin < startAt || uWin > startAt + dur) return
+        val p = ((uWin - startAt) / dur).coerceIn(0f, 1f)
+        val fade = (min(p, 1f - p) / COMET_FADE).coerceIn(0f, 1f)
+
+        val a = (COMET_A_MIN + hashUnit(k, COMET_SALT_A) * COMET_A_SPAN) *
+            max(w * 0.5f / scale, h * 0.5f / (scale * TILT))       // 世界单位半长轴
+        val e = COMET_E_MIN + hashUnit(k, COMET_SALT_E) * COMET_E_SPAN
+        val rot = hashUnit(k, COMET_SALT_ROT) * TAU_D.toFloat()    // 轨道在平面内的朝向
+        val dir = if (hashUnit(k, COMET_SALT_DIR) >= 0.5f) 1f else -1f
+        val bb = sqrt(1f - e * e)                                  // 短轴 / 半长轴
+        val cosR = cos(rot)
+        val sinR = sin(rot)
+        val rPeri = a * (1f - e)
+        val rApo = a * (1f + e)
+
+        // 当前位置（M 从远日点起扫一整圈）
+        val m0 = (Math.PI + TAU_D * p).toFloat()
+        val eccentric = cometAnomaly(m0, e)
+        val coreR = (COMET_NUCLEUS_R + hashUnit(k, COMET_SALT_R) * COMET_NUCLEUS_SPAN) * scale
+        val pos = cometPoint(eccentric, a, bb, e, cosR, sinR, dir, center, scale)
+        // 彗星在画面外（远日段）时整颗不画，但轨道弧仍画（淡入淡出兜住）
+        val q = ((rApo - cometRadius(a, e, eccentric)) / (rApo - rPeri)).coerceIn(0f, 1f) // 近日程度
+
+        // ① 轨道弧（LOW 不画）
+        if (tier > 0) {
+            val steps = if (tier == 2) COMET_ORBIT_STEPS else COMET_ORBIT_STEPS_MED
+            cometOrbitBuf.rewind()
+            var s = 0
+            while (s <= steps) {
+                val m = TAU_D.toFloat() * s / steps
+                val pt = cometPoint(
+                    cometAnomaly(m, e), a, bb, e, cosR, sinR, dir, center, scale
+                )
+                if (s == 0) cometOrbitBuf.moveTo(pt.x, pt.y) else cometOrbitBuf.lineTo(pt.x, pt.y)
+                s++
+            }
+            cometOrbitBuf.close()
+            drawPath(cometOrbitBuf, color = cometTailColor, style = cometOrbitStroke, alpha = COMET_ORBIT_ALPHA * fade)
+        }
+
+        // ② 彗尾：背日方向（太阳在画面中心 ⇒ 尾向 = normalize(彗星 − 中心)），近日变长并弯曲
+        val tvx = pos.x - center.x
+        val tvy = pos.y - center.y
+        val tvLen = sqrt(tvx * tvx + tvy * tvy)
+        if (tvLen > 1f) {
+            val ux = tvx / tvLen
+            val uy = tvy / tvLen
+            val bendSign = if (hashUnit(k, COMET_SALT_BEND) >= 0.5f) 1f else -1f
+            val len = (COMET_TAIL_MIN + COMET_TAIL_SPAN * q) * scale
+            val px1 = -uy                                   // 尾向的垂向
+            val py1 = ux
+            val rootW = coreR * COMET_TAIL_ROOT_K
+            val midW = rootW * 2.1f
+            val bendMid = COMET_TAIL_BEND * len * 0.45f * bendSign
+            val bendTip = COMET_TAIL_BEND * len * bendSign
+            val mx = pos.x + ux * len * COMET_TAIL_MID_K
+            val my = pos.y + uy * len * COMET_TAIL_MID_K
+            cometTailBuf.rewind()
+            cometTailBuf.moveTo(pos.x + px1 * rootW, pos.y + py1 * rootW)
+            cometTailBuf.lineTo(mx + px1 * midW + px1 * bendMid, my + py1 * midW + py1 * bendMid)
+            cometTailBuf.lineTo(pos.x + ux * len + px1 * bendTip, pos.y + uy * len + py1 * bendTip)
+            cometTailBuf.lineTo(mx - px1 * bendMid, my - py1 * bendMid)
+            cometTailBuf.lineTo(pos.x - px1 * rootW, pos.y - py1 * rootW)
+            cometTailBuf.close()
+            drawPath(cometTailBuf, color = cometTailColor, alpha = COMET_TAIL_ALPHA * (0.35f + 0.65f * q) * fade)
+        }
+
+        // ③ 彗核（HIGH 再叠一层彗头光晕）
+        val hr = coreR * (0.75f + 0.55f * q)
+        if (tier == 2) {
+            drawCircle(cometTailColor, radius = hr * 2.6f, center = pos, alpha = COMET_HEAD_GLOW_ALPHA * fade)
+        }
+        drawCircle(cometNucleusColor, radius = hr, center = pos, alpha = fade)
+    }
+
+    /** 偏近点角 → 屏幕坐标：焦点在原点，平面内旋转 [cosR]/[sinR]，再经 [project] 压扁 */
+    private fun cometPoint(
+        eccentric: Float, a: Float, bb: Float, e: Float, cosR: Float, sinR: Float,
+        dir: Float, center: Offset, scale: Float
+    ): Offset {
+        val lx = a * (cos(eccentric) - e)
+        val ly = dir * a * bb * sin(eccentric)
+        return project(lx * cosR - ly * sinR, lx * sinR + ly * cosR, center, scale)
+    }
+
     // ── 纯函数 / 缓存维护 ────────────────────────────────────────────────────
 
     /**
@@ -625,6 +1048,8 @@ class OrbitalRingsRenderer : VisualizerRenderer {
      *
      * 手工参数方程 + 逐点旋转写入成员 [ringBuf]——不用 `withTransform`（其捕获 lambda
      * 每帧分配 2 个对象，违反零分配红线），Path 复用零分配。
+     *
+     * HIGH 档：同一条 Path 里追加同心内圈 ⇒ 卡西尼缝（两圈之间的空白），提交数不增。
      */
     private fun DrawScope.drawSaturnRing(
         px: Float, py: Float, pr: Float, stroke: Stroke, back: Boolean
@@ -646,6 +1071,24 @@ class OrbitalRingsRenderer : VisualizerRenderer {
             val y = py + ex * sinT + ey * cosT
             if (k == 0) ringBuf.moveTo(x, y) else ringBuf.lineTo(x, y)
             k++
+        }
+        // ⑤ 土星环分层：主环（A 环）之外再叠一条同心内圈（B 环），两圈之间的空白即**卡西尼缝**。
+        //    用 moveTo 起**独立子路径** ⇒ 不与主环弧相连（否则描边会多出一条把两圈连起来的
+        //    径向线），仍是同一条 Path、同一次 drawPath ⇒ 提交数不增。
+        //    缝是整圈同心分布的（真实卡西尼缝如此），不只在长轴端点。
+        if (tier == 2) {
+            val rxIn = rx * SATURN_RING_INNER_K
+            val ryIn = rxIn * RING_Y
+            k = 0
+            while (k <= RING_STEPS) {
+                val a = (a0 + stepDeg * k) * DEG2RAD
+                val ex = cos(a) * rxIn
+                val ey = sin(a) * ryIn
+                val x = px + ex * cosT - ey * sinT
+                val y = py + ex * sinT + ey * cosT
+                if (k == 0) ringBuf.moveTo(x, y) else ringBuf.lineTo(x, y)
+                k++
+            }
         }
         drawPath(ringBuf, color = if (back) ringBack else ringFront, style = stroke)
     }
@@ -688,8 +1131,10 @@ class OrbitalRingsRenderer : VisualizerRenderer {
      * ⛔ 单一统一 scale：x/y **绝不**按宽高比分别缩放，椭圆形状只由 [TILT] 决定。
      * ⛔ 本函数不触碰 `elapsed` —— 尺寸变化不会让动画倒退/重置。
      *
-     * Stroke 按 scale 缓存、太阳径向渐变按 (w, h, scale) 缓存（其分配型 →
-     * 必须重建节流），其余帧直接复用（draw 零分配）。LOW 不建渐变（sunBrush 保持 null）。
+     * Stroke（含彗星轨道弧）按 scale 缓存、太阳径向渐变按 (w, h, scale) 缓存（其分配型 →
+     * 必须重建节流）、大气边缘光的**单元空间**径向渐变只建一次（与画布尺寸无关，逐帧用
+     * canvas 缩放摆放）；晨昏线遮罩同样是单位圆空间、终身只烘一次（[bakeTerminator]）。
+     * 其余帧直接复用（draw 零分配）。LOW 不建渐变（sunBrush/atmoBrush 保持 null）。
      */
     private fun ensureLayout(w: Float, h: Float): Float {
         val s = minOf(w * 0.5f / extentX, h * 0.5f / extentY) * SCALE_MARGIN
@@ -705,16 +1150,60 @@ class OrbitalRingsRenderer : VisualizerRenderer {
                 radius = s * SUN_GLOW_R
             )
         }
+        if (tier == 2 && atmoBrush == null) {
+            // ② 大气边缘光：**单元空间**径向渐变（透明 → 白 → 透明），逐帧用 canvas 缩放摆放
+            //    ⇒ 与画布尺寸无关，只建一次；峰值落在 0.85 处 × `pr × ATMOSPHERE_GLOW_R`
+            //    ≈ 行星盘缘（1.0 pr），内外各余一段柔和过渡
+            atmoBrush = Brush.radialGradient(
+                0f to Color.Transparent,
+                0.72f to Color.Transparent,
+                0.85f to Color(1f, 1f, 1f, ATMOSPHERE_GLOW_PEAK_A),
+                1f to Color.Transparent,
+                center = Offset.Zero,
+                radius = 1f
+            )
+        }
         if (strokeScale != s) {
             strokeScale = s
             orbitStroke = Stroke((s * 0.0016f).coerceAtLeast(1.2f))
             moonStroke = Stroke((s * 0.0011f).coerceAtLeast(1f))
             ringStroke = Stroke(s * RING_W)
+            cometOrbitStroke = Stroke((s * 0.0011f).coerceAtLeast(1f))
             // 中心静默区：椭圆归一化分母的倒数（与轨道同为 TILT 压扁 ⇒ 静默区也是椭圆）
             quietInvX = 1f / (s * QUIET_R)
             quietInvY = 1f / (s * QUIET_R * TILT)
         }
         return s
+    }
+
+    /**
+     * ① 晨昏线遮罩烘焙（**单位圆**空间，夜方向 = +x；只烘一次，与画布尺寸/画质档无关）。
+     *
+     * 形状 = 夜侧半圆（外弧，沿 `−90° → +90°`，半径 1）+ 一条鼓向**日侧**的浅弧回边
+     * （在 `a = 0` 处越过圆心 [PLANET_TERMINATOR_SMOOTH]）⇒ 明暗分界不是硬切的直线直径，
+     * 而是带一段晨昏蒙影的浅弧（蒙影自然延伸到几何晨昏线以东）。
+     */
+    private fun bakeTerminator() {
+        if (terminatorBaked) return
+        terminatorBaked = true
+        val path = terminatorPath
+        path.rewind()
+        val half = (Math.PI * 0.5).toFloat()
+        var k = 0
+        while (k <= TERMINATOR_STEPS) {
+            val a = -half + Math.PI.toFloat() * k / TERMINATOR_STEPS
+            val x = cos(a)
+            val y = sin(a)
+            if (k == 0) path.moveTo(x, y) else path.lineTo(x, y)
+            k++
+        }
+        var j = TERMINATOR_STEPS
+        while (j >= 0) {
+            val a = -half + Math.PI.toFloat() * j / TERMINATOR_STEPS
+            path.lineTo(-PLANET_TERMINATOR_SMOOTH * cos(a), sin(a))
+            j--
+        }
+        path.close()
     }
 
     /**
