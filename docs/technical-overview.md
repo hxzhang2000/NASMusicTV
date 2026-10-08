@@ -14305,3 +14305,80 @@ extDirectionalSeen：仅 ACTION_DOWN 翻转、翻转后粘住。
 3. §10.221 正文中若干标识符存在**转义字符吞字**（`focusBorderWidth` → `ocusBorderWidth`、
    `androidx.core` → `ndroidx.core`、`app/src` → `pp/src`），系写入时 `\f` / `\a` / `\b` 被当作
    转义序列处理所致；不影响代码，但影响记录可读性，待后续一并校正。
+
+### 10.223 v2.38.5 — 焦点指示器需求修正：切页面后必须立即可见，不需先按一次键（2026-10-09）
+
+**需求（所有者原话）**：「当我切换到某个页面时，要立刻知道焦点在哪里？而不是先按一下才看到焦点环。」
+
+这是对 §10.221 的**需求修正**，不是新 bug。§10.221 的机制方向正确（焦点环挂链尾 +
+统一判据），但判据本身有一个**当时被接受、现在被明确否决**的行为。
+
+#### 一、为什么 §10.221 的实现做不到
+
+`shouldShowFocusVisuals()` = `looksLikeRemoteDevice || DpadInputTracker.directionalNavigationSeen`
+
+| 判据 | 性质 | 能否「进场即命中」 |
+|---|---|---|
+| `!FEATURE_TOUCHSCREEN` | 静态嗅探 | 视设备 |
+| `FEATURE_LEANBACK` / `android.hardware.type.television` | 静态嗅探 | 视设备（**非认证盒子常双双落空**） |
+| `directionalNavigationSeen` | 运行期粘滞标志 | ⛔ **必须先按一次键才翻转** |
+
+`MainActivity.kt:178` 判定 `isTVDevice` 用的是**同一套 PackageManager 嗅探**，故无处可借。
+于是「盒子隐瞒特征 ⇒ 兜底项必须先按键」正好落在被否决的行为上。
+
+#### 二、修法：加入「输入能力」型判据（而非更多设备特征）
+
+```kotlin
+InputDevice.getDeviceIds().any { InputDevice.getDevice(it).supportsSource(InputDevice.SOURCE_DPAD) }
+```
+
+遥控器本身就是注册在系统里的 input device、声明了 `SOURCE_DPAD`。这是**运行时能力探测**，
+比静态 feature 嗅探可靠：盒子再怎么不上报 leanback/television，遥控器的能力瞒不掉。
+⭐ 这条是「进场即命中」的唯一保证。
+
+**排除触摸数字化器**（`isRemoteNavigationDevice(hasDpad, isTouchDigitizer) = hasDpad && !isTouchDigitizer`）：
+部分 ROM / 模拟器给内建触摸设备顺带多报 source 位。真正的遥控器 / 键盘 / 手柄是**独立**
+input device，不会同时声明 `SOURCE_TOUCHSCREEN` ⇒ 该排除**不会**牺牲「盒子谎报 touchscreen
+也要点亮焦点环」这一核心需求。比设备名白/黑名单稳（名字各 ROM 差异极大，source 位是框架层契约）。
+
+**缓存**：放在 `object` 的 `by lazy`（**全进程一次**），不写进 `@Composable` 的 `remember` ——
+后者会让 135+ 个调用点各查一次，首屏 135 次 `InputManager` binder 调用。
+⛔ `getOrDefault(false)`：个别 ROM 输入服务未就绪会抛异常，保守当作「无 D-PAD」，
+由判据 4 兜底，**绝不让 app 崩在组合期**。
+
+**「运行中才接入设备」有意不做失效机制**：后连的蓝牙键盘/手柄，用户总得先按方向键，
+那一刻判据 4 立即生效并触发全体重组。两条互补 —— 探测负责「进场就有」，按键负责
+「后连的按一下就生效」。加主动过期反而可能在用户形成肌肉记忆后把焦点环抽走，
+那正是要修的故障本身。
+
+#### 三、手机端不得回归（v2.36.0 P2-34）
+
+裸机手机三项判据全 false（有触摸屏 / 触摸设备不报 DPAD / 未按方向键）⇒ 与改动前**完全一致**，
+「点一下永久放大 / 永久高亮容器色 / 永久聚焦文字色」三个问题不会复现。
+
+残余误判面：若某 ROM 把触摸设备报成「独立虚拟 DPAD 且不报 touchscreen」，手机会亮起焦点环 ——
+危害仅为「触摸后可见焦点环」，**远小于**永久高亮，可接受。
+
+#### 四、门禁与验证
+
+`FocusIndicatorContractTest` 15 → **26 例**，补正向（DPAD 探测不得被删）与反向（核心三条任一
+不得被误删、`directionalNavigationSeen` 兜底须在）用例。
+
+**本机** `assembleDebug + testDebugUnitTest + lintDebug`：BUILD SUCCESSFUL，
+**1736 例 / 0 失败 / 0 错误**，lint **0 Error**。
+
+⚠️ 本轮门禁自身一度**误报**：缓存检查原用「`by lazy` 的位置须早于 `getDeviceIds()`」这种
+下标比较，而源码中 `probeDpadInputDevices()` 定义在前、`by lazy` 在后，逻辑不成立。
+已改为语义检查：正则确认缓存委托给探测函数 + `functionBody()` 确认 binder 查询
+不出现在 `shouldShowFocusVisuals()` 内；`functionBody` 自身配 3 例自证
+（块体 / 表达式体 / 字符串字面量里的 `}`）。
+
+#### 五、⛔ 真机验证（未做，这是本次最可能需要返工的点）
+
+1. 盒子启动后**不按任何键**、直接切页面 —— 焦点环是否立即可见（核心需求）
+2. ⛔ **该盒子是否真的上报独立的 `SOURCE_DPAD` 遥控器设备** —— 若它报的是
+   `SOURCE_KEYBOARD`，判据 3 不命中，须靠判据 1/2/4，即本次改动在该机型上可能**无效**。
+   **这是最需要真机确认的一项。**
+3. 裸机手机切页面不出现焦点环、点一下不永久高亮
+4. 手机接蓝牙键盘后按方向键，焦点环是否正确点亮
+5. 焦点环 3 米外的观感亮度

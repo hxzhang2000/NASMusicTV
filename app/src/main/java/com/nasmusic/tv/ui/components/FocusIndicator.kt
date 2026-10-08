@@ -1,6 +1,7 @@
 package com.nasmusic.tv.ui.components
 
 import android.content.pm.PackageManager
+import android.view.InputDevice
 import android.view.KeyEvent
 import androidx.compose.foundation.border
 import androidx.compose.runtime.Composable
@@ -31,7 +32,7 @@ import com.nasmusic.tv.util.AppLog
  *
  * 本修饰符把焦点环追加到链尾，**画在最上层**。
  *
- * ## ② 判据：别再用「设备是不是电视」来决定要不要画焦点
+ * ## ② 判据：看「输入能力」，不看「设备特征」
  *
  * `PackageManager.hasSystemFeature(leanback / type.television)` 在非 Google 认证的
  * 电视盒子上经常双双返回 false（这个判据在本项目历史上已被迫补过两次：
@@ -39,12 +40,21 @@ import com.nasmusic.tv.util.AppLog
  * 而它一旦为 false，[FocusableSurface] 的 `activeFocus` 恒为 false ⇒ 缩放、焦点环、
  * 容器色、内容色**全部**关闭，用户只能靠按确认键反推焦点位置。
  *
- * 真正的判据是「**用户正在用方向键导航**」，这个可以直接观测，不依赖嗅探：
- * ① 静态：没有触摸屏（电视盒子 / 机顶盒 / 投影仪的常态，手机恒为 false）
- * ② 动态：进程内收到过任一方向/确认键（见 [DpadInputTracker]）
+ * 设备特征靠不住，**运行时输入能力**靠得住 —— 遥控器本身就是注册在系统里的
+ * input device、声明了 `SOURCE_DPAD`，盒子再怎么隐瞒 leanback/television 也瞒不掉它。
+ * 四条判据任一成立即显示焦点视觉：
+ * 1. 没有触摸屏（电视盒子 / 机顶盒 / 投影仪的常态；手机恒 false）
+ * 2. `FEATURE_LEANBACK` 或 `android.hardware.type.television`
+ * 3. **存在支持 `SOURCE_DPAD` 的输入设备**（能力探测，遥控器/外接键盘/手柄）
+ * 4. 进程内收到过任一方向/确认键（[DpadInputTracker] 兜底，覆盖运行中才接入的设备）
+ *
+ * 第 3 条是「切页面后焦点环立刻可见」这条需求的**唯一保证** ——
+ * 前两条是静态嗅探，在刻意隐瞒特征的盒子上会双双落空，而第 4 条必须先按一次键
+ * 才会翻转，那正是用户拒绝的行为（「而不是先按一下才看到焦点环」）。
  *
  * 手机上 `clickable` 节点点一下会获得焦点且焦点粘住，因此在**只靠触摸**时仍需
- * 关闭焦点视觉（`docs/conventions-adaptive-ui.md` §11），这与本判据不冲突。
+ * 关闭焦点视觉（`docs/conventions-adaptive-ui.md` §11）。裸机手机三项判据全为 false：
+ * 有触摸屏、正在触摸的那个 input device 不声明 `SOURCE_DPAD`、且没按过方向键。
  */
 
 /** 焦点环实心描边的默认宽度。TV 远距离观看，2dp 太弱（且见上方 ① 的盖住问题）。 */
@@ -107,11 +117,67 @@ internal fun nextDirectionalSeen(current: Boolean, keyCode: Int, action: Int): B
 }
 
 /**
+ * 方向按键能力的判定 —— 纯函数（可单测，不碰任何 Android 运行时）。
+ *
+ * ⛔ **排除「既声明 DPAD 又声明 TOUCHSCREEN」的设备**：
+ * 那几乎必然是内建触摸数字化器顺带多报了 source 位（部分 ROM / 模拟器如此），
+ * 而不是外接遥控器。真正的遥控器 / 键盘 / 手柄是**独立**的 input device，
+ * 不会同时声明 `SOURCE_TOUCHSCREEN`。这条排除把手机侧的误判面压到最低，
+ * 且**不牺牲**「电视盒子谎报 touchscreen 也要点亮焦点环」这条核心需求 ——
+ * 那台盒子的遥控器同样是一个独立 device，照样命中。
+ *
+ * @param hasDpad 该设备是否支持 `InputDevice.SOURCE_DPAD`
+ * @param isTouchDigitizer 该设备是否同时是触摸数字化器（`InputDevice.SOURCE_TOUCHSCREEN`）
+ */
+internal fun isRemoteNavigationDevice(hasDpad: Boolean, isTouchDigitizer: Boolean): Boolean =
+    hasDpad && !isTouchDigitizer
+
+/** 当前连接的所有 input device 里是否有支持 D-PAD 的（binder 调用，见 [dpadInputDevicePresent] 的缓存说明）。 */
+private fun probeDpadInputDevices(): Boolean = runCatching {
+    InputDevice.getDeviceIds().any { id ->
+        InputDevice.getDevice(id)?.let { device ->
+            isRemoteNavigationDevice(
+                hasDpad = device.supportsSource(InputDevice.SOURCE_DPAD),
+                isTouchDigitizer = device.supportsSource(InputDevice.SOURCE_TOUCHSCREEN),
+            )
+        } ?: false
+    }
+}.getOrDefault(false)
+
+/**
+ * D-PAD 输入设备探测结果 —— **进程内只查一次**。
+ *
+ * ## 为什么 `by lazy` 而不是 `remember`
+ *
+ * `shouldShowFocusVisuals()` 被 135+ 个组件在组合期调用。若缓存写在该 `@Composable` 里
+ * （`remember(packageManager) { … }`），每个调用点各有一份 ⇒ 首屏 135 次
+ * `InputDevice.getDeviceIds()`，而它是一次 **binder 调用**（`InputManager`），
+ * 会把首屏组合期拖出可见卡顿。放到 `object` 上则整个进程只付一次。
+ *
+ * ## 「设备是运行中才接入的」怎么办
+ *
+ * 蓝牙键盘 / 外接手柄后连时，这个值确实已经过期。**但不需要失效机制** ——
+ * 用户要用外接键盘导航，就得先按方向键；那一刻 [DpadInputTracker] 会立刻把
+ * `directionalNavigationSeen` 置 true 并触发重组（它是快照 state，读它就订阅了）。
+ * 于是两条判据形成互补：**探测负责「进场就有」（遥控器）**，按键负责
+ * **「后连的设备按一下就生效」**。加主动失效反而会引入一个风险 ——
+ * 在用户已形成肌肉记忆后把焦点环抽走，那正是本次要修的故障本身。
+ *
+ * ⛔ `getOrDefault(false)`：个别 ROM 在输入服务未就绪时会抛异常，
+ * 此时**保守地当作「无 D-PAD 设备」**，由判据 4 兜底，绝不让整个 app 崩在组合期。
+ */
+private val dpadInputDevicePresent: Boolean by lazy { probeDpadInputDevices() }
+
+/**
  * 是否应当显示焦点视觉 —— **全应用唯一判据**（焦点环 / 缩放 / 容器色 / 内容色都走它）。
  *
- * 静态判据（无触摸屏 或 电视 feature 任一）用 [remember] 缓存：PackageManager 查询
- * 在 API 22 上可能是一次 binder 调用，而本函数被 135+ 处组件在组合期调用。
- * 动态判据（[DpadInputTracker.directionalNavigationSeen]）是快照 state 读，参与重组。
+ * 四条判据任一成立即为真（详见文件头 ②）：
+ * 1. 没有触摸屏 2. 电视 feature 任一 3. **存在支持 `SOURCE_DPAD` 的输入设备**
+ * 4. 进程内收到过方向/确认键（快照 state 读，参与重组）
+ *
+ * 判据 1、2 缓存于 [remember]（PackageManager 在 API 22 上可能是 binder 调用），
+ * 判据 3 缓存于 `dpadInputDevicePresent`（全进程一次，见其 KDoc），
+ * 判据 4 是快照 state 读 —— 它一变，所有读它的组件自动重组。
  */
 @Composable
 fun shouldShowFocusVisuals(): Boolean {
@@ -124,7 +190,7 @@ fun shouldShowFocusVisuals(): Boolean {
             // 因此不会把手机误判成 TV 而重现「点一下永久高亮」。
             !packageManager.hasSystemFeature(PackageManager.FEATURE_TOUCHSCREEN)
     }
-    return looksLikeRemoteDevice || DpadInputTracker.directionalNavigationSeen
+    return looksLikeRemoteDevice || dpadInputDevicePresent || DpadInputTracker.directionalNavigationSeen
 }
 
 /**

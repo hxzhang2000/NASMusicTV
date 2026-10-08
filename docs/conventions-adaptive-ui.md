@@ -479,13 +479,64 @@ val activeFocus = isFocused && tvDevice        // ⛔ 焦点视觉一律走这�
 val tvDevice = shouldShowFocusVisuals()   // ui/components/FocusIndicator.kt
 ```
 
-它 = ① 无触摸屏（电视盒子常态，手机恒 false）**或** ② 电视 feature 任一 **或**
-③ 进程内收到过方向/确认键（`DpadInputTracker`，由 `MainActivity` 根节点
-`Modifier.onPreviewKeyEvent` 接线，只置一次就粘住）。
+设备特征靠不住，**运行时输入能力**靠得住 —— 遥控器本身就是注册在系统里的 input device、
+声明了 `SOURCE_DPAD`，盒子再怎么隐瞒 `leanback`/`television` 也瞒不掉它。四条判据任一成立即显示：
+
+| # | 判据 | 覆盖场景 |
+|---|------|----------|
+| 1 | 没有触摸屏（`!FEATURE_TOUCHSCREEN`） | 电视盒子 / 机顶盒 / 投影仪的常态 |
+| 2 | `FEATURE_LEANBACK` **或** `android.hardware.type.television` | 认证电视 |
+| 3 | **存在支持 `SOURCE_DPAD` 的输入设备** | ⭐ 非认证盒子；**进场即命中，无需按键** |
+| 4 | 进程内收到过方向/确认键（`DpadInputTracker`） | 运行中才接入的蓝牙键盘 / 手柄 |
+
+⛔ **判据 3 是「切到页面立刻看到焦点环」这条需求的唯一保证**：
+
+> 「当我切换到某个页面时，要立刻知道焦点在哪里？而不是先按一下才看到焦点环。」
+
+判据 1、2 是**静态特征嗅探**，在刻意隐瞒特征的盒子上会双双落空；判据 4 **必须先按一次键**
+才会翻转 —— 正好是用户拒绝的那个行为。判据 3 是能力探测，开屏即成立。
+
+#### 判据 3 的缓存策略
+
+`InputDevice.getDeviceIds()` 是一次 **binder 调用**（`InputManager`），而
+`shouldShowFocusVisuals()` 被 **135+ 个组件在组合期调用** ⇒ 必须缓存。
+
+- ⛔ **不能**写成 `remember { … }` 放在 `@Composable` 里：每个调用点各有一份缓存，
+  首屏仍是 135 次 binder 调用。
+- ✅ 放在 `object` 的 `by lazy` 上，**全进程只查一次**。
+
+**「设备是运行中才接入的」怎么办 —— 有意不做过期机制。**
+蓝牙键盘后连时这个值确实已过期，但用户要用键盘导航就得先按方向键；那一刻判据 4
+（`DpadInputTracker`，快照 state，读它就订阅了）立刻生效并触发全体重组。
+于是 3 与 4 互补：**3 负责「进场就有」（遥控器），4 负责「后连的按一下就生效」**。
+加主动过期反而会引入一个更糟的风险 —— 在用户已形成肌肉记忆后把焦点环抽走，
+那正是本次要修的故障本身。
+
+#### 判据 3 的误判面（手机侧）
+
+部分 ROM / 模拟器会给内建触摸数字化器**顺带多报 source 位**，那样裸机手机会被误判成
+远控设备。处理方式（`isRemoteNavigationDevice` 纯函数）：
+
+```kotlin
+internal fun isRemoteNavigationDevice(hasDpad: Boolean, isTouchDigitizer: Boolean): Boolean =
+    hasDpad && !isTouchDigitizer
+```
+
+即**排除「既支持 DPAD 又是触摸数字化器」的设备**。真正的遥控器 / 键盘 / 手柄是
+**独立**的 input device，不会同时声明 `SOURCE_TOUCHSCREEN`，所以这条排除
+**不会**牺牲「电视盒子谎报 touchscreen 也要点亮焦点环」这条核心需求 ——
+那台盒子的遥控器照样命中。
+
+裸机手机三项判据全 false：有触摸屏（判据 1 false）、触摸设备不声明 `SOURCE_DPAD`
+（判据 3 false）、没按过方向键（判据 4 false）⇒ 焦点视觉保持关闭，
+§11 的粘滞焦点态防护不受影响。
+
+#### 判据的使用纪律
 
 ⛔ 不要再写一份 `packageManager.hasSystemFeature(...)`。
 ⚠️ `isTVDevice()` 仍保留给**形态因子 / 布局**判断（`UiMode`、外接存储默认值等），
 它与焦点视觉判据**故意不同** —— 布局判错顶多版式不对，焦点判错则是「完全看不见焦点」。
+⚠️ `MainActivity` 里的 `isTVDevice` 也只是布局判据；**不要**把它当焦点视觉判据的来源。
 
 ### ⛔ 焦点环必须画在 `.background(...)` 之后
 
@@ -506,7 +557,8 @@ Compose 的绘制顺序 = 修饰符链顺序，越靠前越靠下。`FocusableSu
 （3dp，全不透明）」两层，两层都靠 `Modifier.border` 的内缩语义落在边界**之内** ⇒
 被 `.clip(shape)` 裁剪后仍完整可见，也**绝不覆盖组件内的文字**。
 
-门禁：`FocusIndicatorContractTest`（扫描源码，按修饰符链切段判定顺序，含 8 组正负用例）。
+门禁：`FocusIndicatorContractTest`（扫描源码，按修饰符链切段判定顺序；含焦点环顺序、
+四条判据完整性、D-PAD 探测与缓存、以及 `isRemoteNavigationDevice` 误判面的正负用例）。
 
 ### ⚠️ `onFocusChanged` 里别读外层派生的 `activeFocus`
 

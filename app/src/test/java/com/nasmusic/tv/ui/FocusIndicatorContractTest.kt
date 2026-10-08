@@ -1,7 +1,9 @@
 package com.nasmusic.tv.ui
 
+import android.view.InputDevice
 import android.view.KeyEvent
 import com.nasmusic.tv.ui.components.isDirectionalNavigationKey
+import com.nasmusic.tv.ui.components.isRemoteNavigationDevice
 import com.nasmusic.tv.ui.components.nextDirectionalSeen
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -20,15 +22,20 @@ import java.io.File
  *    不透明 `NasMusicColors.Surface` ⇒ 全应用看不见焦点框。这条**编译过、单测过**，
  *    只有肉眼能发现，必须门禁。
  *
- * ② **设备判据**：`PackageManager.hasSystemFeature(leanback / type.television)` 在非 Google 认证的
- *    电视盒子上经常双双 false，一旦为 false，`activeFocus` 恒为 false ⇒ 缩放、焦点环、容器色、
- *    内容色全部关闭（同一个"只靠按确认键反推焦点位置"的现象）。
+ * ② **判据能力不足**：仅靠 `PackageManager.hasSystemFeature(leanback / type.television)` 的
+ *    **静态特征嗅探**不够 —— 非 Google 认证的电视盒子上常常双双 false；唯一的兜底
+ *    「按过一次方向键」又必须先有一次按键才翻转，正好是用户拒绝的行为
+ *    （「切到页面要立刻知道焦点在哪，而不是先按一下才看到」）。
+ *    ⇒ 必须存在**基于输入能力**的判据：`InputDevice` 里有没有声明 `SOURCE_DPAD` 的设备。
+ *    遥控器本身就是注册在系统里的 input device，盒子瞒不掉它的能力。
  *
  * ## 判定规则
  *
  * 1. `FocusableSurface.kt` / `UnifiedSongRow.kt` 内，`.focusRing(` 必须出现在 `.background(` **之后**
  *    —— 否则会被容器色盖住。
  * 2. 焦点视觉的判据必须是 `shouldShowFocusVisuals()`，不得再直接用 `isTVDevice()`。
+ * 3. 四条核心判据（无触摸屏 / TV feature / **D-PAD 输入设备** / 按键兜底）一条都不能被删，
+ *    且 D-PAD 探测必须真的 or 进 `shouldShowFocusVisuals()` 的返回值、且必须被缓存。
  *
  * ⚠️ 与 [FocusableSurfaceColorContractTest] 同款：这是**启发式**护栏（只看出现次序），
  * 目的是「别删 / 别挪」。护栏本身的有效性由末尾的负向用例守住。
@@ -94,6 +101,126 @@ class FocusIndicatorContractTest {
         for (required in listOf("fun Modifier.focusRing(", "fun shouldShowFocusVisuals()", "object DpadInputTracker")) {
             assertTrue("FocusIndicator.kt 缺少 $required", text.contains(required))
         }
+    }
+
+    // ─────────────────── D-PAD 输入设备探测（核心需求：切页面即见） ───────────────────
+
+    @Test
+    fun `判据源码必须包含 SOURCE_DPAD 输入设备探测`() {
+        // 这条是「切到页面立刻看到焦点环」的唯一保证：前两条静态特征嗅探在刻意隐瞒
+        // leanback/television 的盒子上会双双落空，而按键兜底必须先按一次 —— 正是被拒绝的行为。
+        val text = uiSourceRoot().resolve("components/FocusIndicator.kt").readText()
+        for (required in listOf("InputDevice.SOURCE_DPAD", "InputDevice.getDeviceIds()", "supportsSource")) {
+            assertTrue(
+                "FocusIndicator.kt 缺少 D-PAD 能力探测的 $required" +
+                    "（删掉它焦点环就会退回「先按一下才显示」）",
+                text.contains(required),
+            )
+        }
+    }
+
+    @Test
+    fun `D-PAD 探测结果必须真的参与 shouldShowFocusVisuals 的返回`() {
+        // 光有探测函数不够：必须真的 or 进返回值，否则探测是死代码
+        val text = uiSourceRoot().resolve("components/FocusIndicator.kt").readText()
+        assertTrue(
+            "dpadInputDevicePresent 未参与 shouldShowFocusVisuals 的判定",
+            text.contains("dpadInputDevicePresent ||"),
+        )
+    }
+
+    @Test
+    fun `四条核心判据一条都不能被删`() {
+        val text = uiSourceRoot().resolve("components/FocusIndicator.kt").readText()
+        val required = mapOf(
+            "无触摸屏（FEATURE_TOUCHSCREEN）" to "FEATURE_TOUCHSCREEN",
+            "电视特征 FEATURE_LEANBACK" to "FEATURE_LEANBACK",
+            "电视特征 type.television" to "android.hardware.type.television",
+            "D-PAD 输入设备能力" to "dpadInputDevicePresent",
+            "按键兜底 directionalNavigationSeen" to "DpadInputTracker.directionalNavigationSeen",
+        )
+        val missing = required.filterValues { !text.contains(it) }.keys
+        if (missing.isNotEmpty()) {
+            fail(
+                buildString {
+                    appendLine("焦点视觉判据被删减：$missing")
+                    appendLine()
+                    appendLine("四条判据任一成立即显示焦点环，删掉任何一条都会让某类设备退回")
+                    appendLine("「看不见焦点」。尤其 D-PAD 探测是「切页面立刻可见」的唯一保证，")
+                    appendLine("按键兜底必须先按一次键才会翻转 —— 那是用户明确拒绝的行为。")
+                    appendLine()
+                    appendLine("详见 docs/conventions-adaptive-ui.md §11。")
+                }
+            )
+        }
+    }
+
+    @Test
+    fun `InputDevice 查询必须被缓存且只存在于探测函数里`() {
+        // shouldShowFocusVisuals 被 135+ 处组合期调用，而 getDeviceIds() 是 binder 调用。
+        // 缓存必须是全进程一次（`by lazy` 委托给探测函数），不是每个调用点各自的 remember。
+        val text = uiSourceRoot().resolve("components/FocusIndicator.kt").readText()
+        assertTrue("未找到 InputDevice.getDeviceIds() 调用", text.contains("InputDevice.getDeviceIds()"))
+
+        // ① 缓存必须存在，且其初始化体调用探测函数
+        assertTrue(
+            "InputDevice 探测未缓存（应有 `by lazy { probeDpadInputDevices() }`，" +
+                "否则 135+ 个组合期调用点各做一次 binder 调用）",
+            Regex("""by\s+lazy\s*\{[^}]*probeDpadInputDevices\(\)""").containsMatchIn(text),
+        )
+
+        // ② binder 查询只允许出现在 probeDpadInputDevices 函数体内，不得泄漏进组合函数
+        val composableBody = functionBody(text, "fun shouldShowFocusVisuals()")
+        assertTrue(
+            "InputDevice.getDeviceIds() 出现在 shouldShowFocusVisuals 里 ⇒ 每次重组都打 binder",
+            !composableBody.contains("InputDevice.getDeviceIds()") &&
+                !composableBody.contains("probeDpadInputDevices()"),
+        )
+    }
+
+    @Test
+    fun `缓存失效的替代方案必须在按键路径上有兜底`() {
+        // 判据 3 缓存后对「运行中才接入」的设备会过期，这是接受的取舍 ——
+        // 但必须确认兜底（判据 4 的按键跟踪）确实还在，否则动态接入就彻底没救。
+        val text = uiSourceRoot().resolve("components/FocusIndicator.kt").readText()
+        val composableBody = functionBody(text, "fun shouldShowFocusVisuals()")
+        assertTrue(
+            "shouldShowFocusVisuals 必须读 directionalNavigationSeen（覆盖运行中接入的键盘/手柄）",
+            composableBody.contains("DpadInputTracker.directionalNavigationSeen"),
+        )
+    }
+
+    // ─────────────────────────── D-PAD 探测的纯逻辑（误判面） ───────────────────────────
+
+    @Test
+    fun `遥控器这类独立 D-PAD 设备应判定为具备导航能力`() {
+        // 遥控器 / 蓝牙键盘 / 手柄：独立 device，声明 DPAD 但不是触摸数字化器
+        assertTrue("独立 DPAD 设备应命中", isRemoteNavigationDevice(hasDpad = true, isTouchDigitizer = false))
+    }
+
+    @Test
+    fun `触摸数字化器即使顺带支持 DPAD 也不得命中`() {
+        // 部分 ROM / 模拟器给内建触摸设备多报 source 位 —— 那不是遥控器，
+        // 命中它会让裸机手机误判成远控设备（v2.36.0 P2-34 的回归形态）
+        assertFalse(
+            "TOUCHSCREEN + DPAD 不得命中（防手机误判）",
+            isRemoteNavigationDevice(hasDpad = true, isTouchDigitizer = true),
+        )
+    }
+
+    @Test
+    fun `裸机手机的典型设备组合一律不命中`() {
+        // 手机上通常只挂着触摸数字化器（无 DPAD）；键盘类设备只报 KEYBOARD 不报 DPAD
+        val phoneCases = listOf(
+            Triple("触摸数字化器", false, true),
+            Triple("纯触摸", false, false),
+            Triple("无任何能力", false, false),
+            Triple("软键盘（只报 KEYBOARD）", false, false),
+        )
+        val wrong = phoneCases.filter { (label, dpad, touch) ->
+            isRemoteNavigationDevice(hasDpad = dpad, isTouchDigitizer = touch)
+        }
+        assertTrue("裸机手机不应被判为具备导航能力：${wrong.map { it.first }}", wrong.isEmpty())
     }
 
     // ─────────────────────────── 方向键判据（纯逻辑） ───────────────────────────
@@ -254,6 +381,48 @@ class FocusIndicatorContractTest {
         assertTrue("仍应检出第二条链的违规", focusRingBeforeBackground(text))
     }
 
+    // ─────────────── functionBody 的自证（它服务于上面两条「缓存」门禁） ───────────────
+
+    @Test
+    fun `负向自证 functionBody 能正确取出块体函数`() {
+        val text = """
+            fun outer() {
+                val nested = mapOf("a" to 1)
+                if (nested.isNotEmpty()) { println(nested) }
+            }
+            fun after() = 1
+        """.trimIndent()
+        val body = functionBody(text, "fun outer()")
+        assertTrue("块体函数应含其嵌套大括号", body.contains("println(nested)"))
+        assertFalse("块体函数不得吞进下一个函数", body.contains("fun after()"))
+    }
+
+    @Test
+    fun `负向自证 functionBody 能正确取出表达式体函数`() {
+        // `fun f(): Boolean = expr` 没有大括号 —— 按「找下一个 { 」切会切错
+        val text = """
+            fun expr(): Boolean = looksLike || dpadPresent
+            fun later() {
+                val x = 1
+            }
+        """.trimIndent()
+        val body = functionBody(text, "fun expr(): Boolean")
+        assertTrue("表达式体应被取出", body.contains("dpadPresent"))
+        assertFalse("表达式体不得吞进后面的块体函数", body.contains("val x = 1"))
+    }
+
+    @Test
+    fun `负向自证 functionBody 跳过字符串字面量里的括号`() {
+        val text = """
+            fun withString(): Boolean {
+                val q = "}"
+                return q.isNotEmpty()
+            }
+        """.trimIndent()
+        val body = functionBody(text, "fun withString(): Boolean")
+        assertTrue("字面量里的 } 不应提前截断函数体", body.contains("q.isNotEmpty()"))
+    }
+
     // ─────────────────────────── 工具 ───────────────────────────
 
     private fun uiSourceRoot(): File {
@@ -329,3 +498,38 @@ private fun depthDelta(raw: String): Int {
 
 private fun firstIndexOfAny(text: String, needles: List<String>): Int =
     needles.map { text.indexOf(it) }.filter { it >= 0 }.minOrNull() ?: -1
+
+/**
+ * 取出某个函数声明的函数体（含签名那一行），按括号深度配平。
+ *
+ * ⛔ 不能用「下一个空行」或「下一个 `fun `」切段 —— Kotlin 表达式体函数
+ * （`fun f() = expr`）没有大括号，而块体函数的 body 里常含嵌套 lambda。
+ * 按深度配平才既覆盖两种形态、又不把嵌套 lambda 提前截断。
+ */
+private fun functionBody(text: String, signature: String): String {
+    val start = text.indexOf(signature)
+    require(start >= 0) { "找不到函数签名：$signature" }
+    val open = text.indexOf('{', start)
+    // 表达式体：`fun f(): Boolean = …` 到行尾为止（不跨行，避免误吞下一段）
+    if (open < 0 || text.substring(start, open).contains('=')) {
+        val lineEnd = text.indexOf('\n', start).let { if (it < 0) text.length else it }
+        return text.substring(start, lineEnd)
+    }
+    var depth = 0
+    var i = open
+    while (i < text.length) {
+        val ch = text[i]
+        // 跳过字符串字面量，避免字面量里的括号把深度带偏
+        if (ch == '"') {
+            i++
+            while (i < text.length && text[i] != '"') i += if (text[i] == '\\') 2 else 1
+        } else {
+            if (ch == '{') depth++ else if (ch == '}') {
+                depth--
+                if (depth == 0) return text.substring(start, i + 1)
+            }
+        }
+        i++
+    }
+    return text.substring(start)
+}
