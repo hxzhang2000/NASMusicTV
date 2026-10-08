@@ -17,6 +17,7 @@ import kotlin.math.cos
 import kotlin.math.floor
 import kotlin.math.max
 import kotlin.math.min
+import kotlin.math.pow
 import kotlin.math.sin
 import kotlin.math.sqrt
 
@@ -69,16 +70,30 @@ import kotlin.math.sqrt
  *    ① **晨昏线**（MEDIUM+）—— 光源在画面中心，每颗行星按 `atan2(画面中心 − 行星位置)`
  *    把预烘的单位圆夜侧遮罩转到背日一侧，叠一层压暗的同色（分界是带蒙影鼓出的浅弧，不是硬切）；
  *    ② **大气边缘光**（HIGH）—— 单元空间径向渐变（透明→白→透明）经 canvas 缩放摆到盘缘外一圈；
- *    ③ **木星 / 土星带状云纹**（MEDIUM+）—— 上下两条同相扰动折线围成的等厚透镜带，
- *    横向半宽按圆盘弦长收缩 ⇒ 恒不溢出盘面，三层正弦近似 fbm 随 `elapsed` 漂移；
+ *    ③ **木星 / 土星带状云纹**（MEDIUM+）—— **米白带区（Zone）与红棕带条（Belt）按纬度交替**
+ *    （不是「同色平行条纹」），且**宽度随纬度递减**（赤道附近最宽、向两极收窄成细带）；
+ *    每条带 = 上下两条折线围成的透镜带：**公共扰动同相**（整条带一起蜿蜒、带厚恒定）+
+ *    **上下边缘各自异相/异频的褶皱**（K < 0.5 ⇒ 两边缘永不相交，带不会被自己掐断），
+ *    横向半宽按圆盘弦长收缩 ⇒ 恒不溢出盘面，四层正弦近似 fbm 随 `elapsed` 漂移；
  *    ④ **太阳米粒组织**（HIGH）—— 96 段噪声圆替代纯色圆盘（提交数不变）；
  *    ⑤ **土星环卡西尼缝**（HIGH）—— 同一条 Path 追加同心内圈，两圈之间留白即缝；
  *    ⑥ **彗星**（全档）—— 见 [drawComet]，`elapsed` 的纯函数、禁 `Random`；
+ *    **柔边锥形双尾**（离子尾蓝白笔直、严格背日 + 尘埃尾淡黄弯曲、偏向行进反侧），
+ *    每条尾由 3 层同形状递减 alpha 的锥形叠加 ⇒ 尾缘柔和、宽度连续收窄、尾尖同点收尖
+ *    （⛔ 旧版是「根/中/尖」三点折线拼的硬边多边形，观感是「贴上去的纸片」），
+ *    外加**彗发（coma）**：缓存的单元圆径向渐变经 canvas 缩放摆位 ⇒ 柔边弥散光晕，
+ *    尾从光晕里长出来，而不是从一个硬点长出来；
+ *    ⑦ **木星大红斑**（HIGH）—— 见 [drawGreatRedSpot]，南纬 ~20° 的横向涡旋，
+ *    单元空间径向渐变经 canvas 缩放摆放 ⇒ 柔边（非硬边椭圆），随木星自转做「近中央快、
+ *    近盘缘慢 + 横向压扁 + 边缘淡出」的透视漂移，**画在行星盘之后、晨昏线之前**（夜侧被正确压暗）；
  *  - **画质档**：八行星任何档全量保留。LOW 70 星 + 跳过可选卫星（天卫/海卫）+
- *    太阳纯圆层 + 无晨昏线 / 无云带 / 无大气光 / 彗星只画核与尾；
+ *    太阳纯圆层 + 无晨昏线 / 无云带 / 无大气光 / 彗星只画核、双尾与彗发（不画轨道弧）；
  *    MEDIUM 140 星 + 全部 11 卫星 + 太阳径向渐变 + 晨昏线 + 云带（木 4 / 土 3）+ 彗星轨道（32 段）；
+ *    **彗星（双尾 + 彗发）三档完全一致**（它只在约 1/4 的时间出现 ⇒ 无需分档）；
  *    HIGH 220 星 + 日冕层 + 行星斜上高光 + 大气边缘光 + 米粒组织 + 卡西尼缝 +
- *    云带（木 10 / 土 8）+ 彗星轨道（64 段）与彗头光晕。
+ *    云带（木 10 / 土 8）+ **木星大红斑** + 彗星轨道（64 段）与彗核致密晕。
+ *    HIGH 220 星 + 日冕层 + 行星斜上高光 + 大气边缘光 + 米粒组织 + 卡西尼缝 +
+ *    云带（木 10 / 土 8）+ **木星大红斑** + 彗星轨道（64 段）与彗头光晕。
  *
  * 性能红线：draw 内零分配——轨道线/卫星环/土星环 Stroke 与太阳渐变 Brush 按
  * (w, h, scale) 缓存重建、土星环 Path 成员复用（手工旋转，不用捕获 lambda 的
@@ -119,6 +134,8 @@ class OrbitalRingsRenderer : VisualizerRenderer {
     internal companion object {
         /** Double 版 2π：elapsed/period 全程 Double，取模后三角输入恒 < 2π（长会话精度） */
         const val TAU_D = Math.PI * 2.0
+        /** Float 版 π：彗尾肩部鼓出剖面用（⛔ 避免在每帧路径里混入 Double 字面量） */
+        const val PI_F = 3.14159265f
         /**
          * 视点倾角（y 分量统一乘此系数 ⇒ 轨道线短轴 = 长轴 × TILT，位置 y 同乘）。
          * **1.0 = 正上方俯视（正圆）、0.0 = 退化成一条线（⚠️ 永不取 0）**，
@@ -245,11 +262,28 @@ class OrbitalRingsRenderer : VisualizerRenderer {
         const val EARTH_LAND = 0xB056C07A.toInt()
         const val SPECULAR = 0x59FFFFFF.toInt()
         const val STAR_BLUE = 0xFFBFD4FF.toInt()
-        /** 云带基色（不透明 ⇒ alpha 完全由逐条交替的系数控制） */
-        const val JUPITER_BAND_DARK = 0xFF6B4526.toInt()
-        const val SATURN_BAND_DARK = 0xFF8A6A38.toInt()
+        /**
+         * 木星云带**亮带（Zone）基色**——不透明 ⇒ alpha 完全由逐条系数控制。
+         * 真实木星的「带区」是米白/浅奶油色（赤道带区 EZ 最亮），不是暗棕。
+         */
+        const val JUPITER_ZONE = 0xFFD8C4A0.toInt()
+        /**
+         * 木星云带**暗带（Belt）基色**——红棕（真实木星的 NEB/SEB/NTB/STB）。
+         * 旧版「所有带同色（暗棕）、只靠 alpha 交替」正是「扁平行条纹」观感的根因：
+         * 明暗必须来自**基色**（米白 vs 红棕），alpha 只做浓淡微调。
+         */
+        const val JUPITER_BELT = 0xFF8B4A2F.toInt()
+        /** 极区（最外一圈云带）：真实木星两极是灰暗的「极区罩」，比温带更暗更中性 */
+        const val JUPITER_POLAR = 0xFF7A6E62.toInt()
+        /** 土星云带亮/暗基色（土星是奶油+淡金 ⇒ 明度差比木星小，观感更柔和） */
+        const val SATURN_ZONE = 0xFFE6D3A8.toInt()
+        const val SATURN_BELT = 0xFF8A6A38.toInt()
+        const val SATURN_POLAR = 0xFF9A8C72.toInt()
         const val COMET_TAIL = 0xFFCFE3FF.toInt()
         const val COMET_NUCLEUS = 0xFFFFFFFF.toInt()
+        /** 大红斑：柔边晕圈（橙红，低 alpha）/ 涡核（砖红，更饱和）。均为不透明基色 + 逐层 alpha */
+        const val GRS_HALO = 0xFFC1502E.toInt()
+        const val GRS_CORE = 0xFFB23A1E.toInt()
 
         // ── 程序化增强常量（E29 纯代码渲染，零贴图/零 assets/零 native 堆/零 fx import）──────
         /** 晨昏线：夜侧叠加 alpha */
@@ -276,17 +310,103 @@ class OrbitalRingsRenderer : VisualizerRenderer {
         const val JUPITER_BAND_LAT_SPAN = 0.90f
         const val SATURN_BAND_LAT_TOP = -0.40f
         const val SATURN_BAND_LAT_SPAN = 0.80f
-        /** 云带厚度 / 间距（< 1 ⇒ 带间留缝，呈明暗相间的平行条纹） */
-        const val BAND_THICK_K = 0.72f
+        /**
+         * 云带厚度 / 间距（< 1 ⇒ 带间留缝）。这是**赤道亮带的**最大**厚度**，
+         * 逐带还要乘 [bandWidthFactor]（向两极收窄）⇒ 实际厚度恒 ≤ 本值。
+         *
+         * ⚠️ 调参会同时抬高门禁 ⑤ 的 `lim = max(|top|,|bot|)`，而 `bandInsideDisc`
+         * 要求 `chord² + (lim + amp)² ≤ 1`：木星 HIGH 的最坏带在纬度 ±0.405，
+         * 故 `0.405 + 厚/2 + amp` 必须留出余量 ⇒ 本值与 [JUPITER_BAND_AMP] 联合受限。
+         */
+        const val BAND_THICK_K = 0.56f
         /** 云带横向半宽上限（行星盘半径分数，配合弦长收缩 ⇒ 恒不溢出盘面） */
         const val BAND_WIDTH_K = 0.92f
-        /** 云带扰动幅度（行星半径分数）与每带离散段数 */
-        const val JUPITER_BAND_AMP = 0.055f
-        const val SATURN_BAND_AMP = 0.035f
-        const val BAND_STEPS = 64
+        /** 云带扰动幅度上限（行星半径分数）：公共扰动 + 边缘扰动之和恒 ≤ 本值（门禁 ⑤ 的判据） */
+        const val JUPITER_BAND_AMP = 0.105f
+        const val SATURN_BAND_AMP = 0.055f
+        /**
+         * 逐类云带 alpha。基色不透明 ⇒ 明暗主要来自**色相/明度**（米白 vs 红棕），
+         * alpha 只做浓淡微调；暗带略高于亮带 ⇒ 与木星「暗带压得住、亮带透得出」一致。
+         */
+        const val JUPITER_ZONE_ALPHA = 0.62f
+        const val JUPITER_BELT_ALPHA = 0.66f
+        const val JUPITER_POLAR_ALPHA = 0.42f
+        const val SATURN_ZONE_ALPHA = 0.40f
+        const val SATURN_BELT_ALPHA = 0.42f
+        const val SATURN_POLAR_ALPHA = 0.26f
+        /**
+         * 逐带厚度向两极收窄的**上限比例**（0 = 不收窄；0.5 = 极区只剩赤道的 50%）——
+         * 真实木星赤道带区（EZ）宽厚、南北温带收窄、极区细碎。
+         */
+        const val BAND_POLAR_NARROW = 0.50f
+        /** 暗带（Belt）相对亮带（Zone）的收窄（真实木星的带条比带区窄） */
+        const val BAND_BELT_NARROW = 0.84f
+        /** 扰动中「整条带一起蜿蜒（上下同相）」的占比，其余给上下边缘各自的褶皱 */
+        const val BAND_SHARE_WHOLE = 0.45f
+        /**
+         * 逐带的**公共**相位步进（rad）。⛔ 必须很小 —— 相邻两带的公共相位差直接变成
+         * 两条带的**相对**纵向位移（≈ `2 × wholeAmp × sin(步进/2)`），大了会让相邻带互相穿插。
+         * 取 0.12 ⇒ 相对位移仅 ~0.6% 半径 ⇒ 全部云带像一整层流体同步起伏（真实木星的带区
+         * 本就是同一套纬向急流），而**逐带差异**交给 [BAND_EDGE_PHASE_STEP] 那份边缘褶皱。
+         */
+        const val BAND_PHASE_STEP = 0.12f
+        /**
+         * 逐带的**边缘褶皱**相位步进（rad）——比公共部分大得多 ⇒ 相邻带的边缘涡卷明显不同相，
+         * 这正是「不像扁平行条纹」的关键观感来源。
+         */
+        const val BAND_EDGE_PHASE_STEP = 1.37f
+        /**
+         * 边缘褶皱幅度 / **本带厚度** 的上限。⛔ 必须 < 0.5 —— 上下两边缘最大相对位移
+         * `2 × 本值 × 厚度`，≥ 厚度时带会自己掐断（Path 自交 ⇒ 填充出怪形）。
+         * 取 0.40 ⇒ 留 20% 厚度余量，带永不掐断。
+         */
+        const val BAND_EDGE_MAX = 0.40f
+        /**
+         * 边缘褶皱幅度 / **带间距** 的上限——保证相邻带不互相粘连成一整片。
+         * 推导：相邻带的缝隙 = `间距 − 两带厚度均值`，两条带边缘最大相向位移
+         * `2 × 本系数 × 间距`（再加公共部分那 ~0.6%），必须 < 缝隙。
+         */
+        const val BAND_EDGE_GAP_K = 0.13f
+        /** 边缘褶皱的频率倍率（相对公共部分）——上下边缘不同频 ⇒ 湍流涡卷质感 */
+        const val BAND_EDGE_FREQ_K = 1.47f
+        const val BAND_STEPS = 96
         /** 云带漂移速率（rad/s，木星快、土星慢） */
         const val JUPITER_BAND_DRIFT = 0.055
         const val SATURN_BAND_DRIFT = 0.033
+
+        // ── ⑦ 木星大红斑（仅 HIGH；纯 Path + 单元空间渐变，零贴图 / 零 Bitmap 烘焙）──
+        /** 中心纬度（归一化，−1 = 南极）——南纬约 20°，落在南温带区的带面上 */
+        const val GRS_LAT = -0.22f
+        /** 长/短半轴（行星盘半径分数）⇒ 宽 ≈ 盘直径 30%、高 ≈ 盘直径 12%（真实 GRS ≈ 2.5:1） */
+        const val GRS_RX = 0.30f
+        const val GRS_RY = 0.12f
+        /**
+         * 自转漂移的经度行程半幅（盘半径单位）：一个周期内从 `+GRS_LON_FAR` 单调走到
+         * `−GRS_LON_FAR` ⇒ 观感是**持续向西漂移**（真实大红斑就是随木星自转向西漂）。
+         */
+        const val GRS_LON_FAR = 0.42f
+        /**
+         * 近盘缘淡出上限（|经度| ≥ 本值 ⇒ alpha = 0 ⇒ 完全隐去）。⛔ 必须 < [GRS_LON_FAR]
+         * ⇒ 行程两端都有一段**完全不可见**的区间，回绕（+FAR 跳回 +FAR）因此无跳变。
+         */
+        const val GRS_LIMB_FADE = 0.36f
+        /** 近盘缘的横向压扁量（球面透视：越靠边缘越「侧过去」） */
+        const val GRS_SQUEEZE = 0.45f
+        /**
+         * 大红斑漂移周期（秒）。⛔ 禁 `Random`——纯 `elapsed` 的线性扫掠（可回放、零闪烁）。
+         * 取木星公转周期（`buildSystem()` 里 Jupiter 的 `period = 90`）的 **1/4** = 22.5 s，
+         * ⇒ 大红斑绕木星盘一周恰好是木星公转的 1/4 周，二者节奏协调。
+         */
+        const val GRS_ROT_PERIOD = 22.5
+        /** 同一条带**上下边缘**之间的相位差（rad）——真实木星带边缘上下的褶皱并不对称 */
+        const val BAND_EDGE_SKEW = 2.37f
+        /** 柔边晕圈的半径倍率与逐层 alpha（晕圈淡、涡核浓 ⇒ 柔和涡旋而非硬边椭圆） */
+        const val GRS_HALO_K = 1.45f
+        const val GRS_HALO_ALPHA = 0.55f
+        const val GRS_CORE_ALPHA = 0.88f
+        /** 涡旋柔边渐变的中/外缘停靠点（与核心同色系、alpha 递减 ⇒ 边缘柔和到几乎透明） */
+        const val GRS_MID = 0x80C1502E.toInt()
+        const val GRS_EDGE = 0x00C1502E.toInt()
         /** 太阳米粒组织：离散段数 / 噪声振幅 / 漂移速率 / 半径调制系数 */
         const val SUN_GRANULE_STEPS = 96
         const val SUN_GRANULE_CONTRAST = 0.35f
@@ -310,21 +430,105 @@ class OrbitalRingsRenderer : VisualizerRenderer {
         /** 彗核半径（世界单位，× scale 得像素）与近日点加成区间 */
         const val COMET_NUCLEUS_R = 0.0032f
         const val COMET_NUCLEUS_SPAN = 0.0022f
-        /** 彗尾长度（世界单位）：远日只留底长、近日线性加长到 `MIN + SPAN` */
+        /** 彗尾长度（世界单位）：远日只留底长、近日线性加长到 `MIN + SPAN`（双尾共用此基准长） */
         const val COMET_TAIL_MIN = 0.055f
         const val COMET_TAIL_SPAN = 0.150f
-        /** 彗尾弯曲量（尾长分数）与根宽 / 尾长 */
+
+        // ── 双尾：离子尾（细长笔直、蓝白）+ 尘埃尾（宽而淡黄、滞后弯曲）────────────
+        /** 离子尾基色：蓝白（CO⁺ 在可见光下的冷蓝），⛔ 不透明 + 逐层 alpha */
+        const val COMET_ION = 0xFFBBD6FF.toInt()
+        /** 尘埃尾基色：偏暖的淡黄（尘埃散射日光 ⇒ 黄白），⛔ 不透明 + 逐层 alpha */
+        const val COMET_DUST = 0xFFE7D2A6.toInt()
+        /**
+         * **尾根半宽**（⛔ 半宽，不是全宽）——**以尾长为主、彗核半径为下限**：
+         * [COMET_ION_ROOT_F] / [COMET_DUST_ROOT_F] 是**尾长的分数**，[COMET_ION_ROOT_MIN] /
+         * [COMET_DUST_ROOT_MIN] 是**彗核半径的倍数下限**。
+         *
+         * ⛔ **必须以尾长为主**：彗核半径的世界单位只有 0.0032~0.0054、而尾长在近日点可达
+         * 0.2 世界单位（相差 40 倍）⇒ 若只用「几倍核半径」，近日时尾会宽成一根**短棍**
+         * （长度:全宽 ≈ 1.5:1，完全不像尾）。改成「尾长分数 + 核半径下限」后：
+         * 近日的**离子尾**长宽比约 **12:1**（细长笔直的针，真实离子尾就是一根细针），
+         * **尘埃尾**约 **3.4:1**（宽扇，真实尘埃尾确实是宽而短的扇面），
+         * 而远日（尾短）时由核半径下限托住 ⇒ 不会细到看不见。
+         */
+        const val COMET_ION_ROOT_F = 0.020f
+        const val COMET_ION_ROOT_MIN = 0.8f
+        const val COMET_DUST_ROOT_F = 0.055f
+        const val COMET_DUST_ROOT_MIN = 1.6f
+        /** 尾长倍率（相对 `COMET_TAIL_MIN + COMET_TAIL_SPAN·q` 算出的基准长）：离子尾最长、尘埃尾短一截 */
+        const val COMET_ION_LEN_K = 1.06f
+        const val COMET_DUST_LEN_K = 0.78f
+        /** 两条尾的 alpha 上限（再乘逐层倍率与近日程度；⛔ 三层叠加后仍远低于 1，不会糊成白块） */
+        const val COMET_ION_ALPHA = 0.30f
+        const val COMET_DUST_ALPHA = 0.19f
+        /**
+         * **双尾夹角**（度）：尘埃尾相对背日方向的滞后角 ∈ `[MIN, MIN + SPAN]`。
+         *
+         * 真实成因：离子尾被太阳风推 ⇒ 严格沿背日方向且**笔直**；尘埃尾带轨道惯性 ⇒
+         * 偏向**行进方向的反侧**（因此是**弯曲**的）。⛔ 本实现里「运动反侧」**不取 hash
+         * 的正负号**，而是由 `cometPoint` 的**真实屏幕速度**（相邻偏近点角的前向差分取反）
+         * 得到 ⇒ 夹角恒开在正确的一侧；近日时速度更快 ⇒ 尾更滞后（与真实彗星一致），
+         * 而离子尾的笔直由几何直接保证（弯曲量恒为 0）。
+         */
+        const val COMET_SPREAD_MIN = 5.0f
+        const val COMET_SPREAD_SPAN = 13.0f
+        /** 尘埃尾**末端弯曲量 / 尾长**（抛物线剖面 `bend·t²`：根部曲率最大、向尾尖渐直） */
         const val COMET_TAIL_BEND = 0.16f
-        const val COMET_TAIL_ROOT_K = 0.9f
-        const val COMET_TAIL_MID_K = 0.45f
+        /** 尘埃尾弯曲剖面的取样步进（偏近点角差分，屏幕速度；⛔ 不改变任何轨道/节律语义） */
+        const val COMET_VEL_DT = 0.01f
+
+        // ── 尾形：柔边锥形（尾轴多点采样 + 逐层递减 alpha 叠加）──────────────────
+        /** 锥度指数 p：尾半宽 ∝ `(1 − t)^p`（t = 尾轴归一化位置，0 = 尾根、1 = 尾尖） */
+        const val COMET_TAIL_TAPER = 1.15f
+        /**
+         * 逐层**锥度递减**步长（外层指数更小 ⇒ 收窄更晚 ⇒ 尾「甩」得更开、更像飘散出去的
+         * 尘埃流，而不是三根等宽的锥形叠在一起）。
+         */
+        const val COMET_TAIL_TAPER_STEP = 0.18f
+        /**
+         * 尾根**肩部鼓出**（宽度再乘 `1 + FLARE·sin(πt)`）：最宽处落在彗发下游一点，
+         * ⛔ 而不是从彗核硬邦邦长出一个等宽的根（旧版三段折线的「根部突兀」正源于此）。
+         */
+        const val COMET_TAIL_FLARE = 0.45f
+        /** 柔边**分层数**（每层一条同形状锥形：外层最淡最大 → 内层最浓最小 ⇒ 层间过渡即柔边） */
+        const val COMET_TAIL_LAYERS = 3
+        /** 逐层横向宽度倍率 = `1 + 层号·W_STEP` ⇒ 1.00 / 1.62 / 2.24（越外越宽） */
+        const val COMET_TAIL_LAYER_W_STEP = 0.62f
+        /** 逐层 alpha 倍率 = `1 / (1 + 层号·A_LIN + 层号²·A_QUAD)` ⇒ 1.00 / 0.44 / 0.24（越外越淡） */
+        const val COMET_TAIL_LAYER_A_LIN = 0.90f
+        const val COMET_TAIL_LAYER_A_QUAD = 0.35f
+        /** 每条尾**每侧边**沿尾轴的采样段数（14 ⇒ 单层 30 个点；⛔ 逐帧现算，不缓存任何点集） */
+        const val COMET_TAIL_STEPS = 14
+
         /** 轨道弧离散段数 / 进出场淡入淡出占窗口进度的比例 */
         const val COMET_ORBIT_STEPS = 64
         const val COMET_ORBIT_STEPS_MED = 32
         const val COMET_FADE = 0.12f
-        /** 轨道弧与彗尾的 alpha 上限（彗尾再按近日程度调制） */
+        /** 轨道弧的 alpha 上限 */
         const val COMET_ORBIT_ALPHA = 0.16f
-        const val COMET_TAIL_ALPHA = 0.30f
-        const val COMET_HEAD_GLOW_ALPHA = 0.22f
+        /**
+         * **彗发（coma）**——彗核外的弥散光晕，柔边由**缓存的单元空间径向渐变**经 canvas
+         * 缩放摆出（与大气边缘光 / 大红斑同一套手法 ⇒ 零逐帧分配）。
+         *  - [COMET_COMA_K]：晕半径 / 彗核半径（真实彗发比核大好几倍 ⇒ 尾从光晕里长出来）；
+         *  - [COMET_COMA_MIN_W]：晕半径 ≥ **最外层**离子尾根半宽 × 本值（⛔ 尾根恒落在晕内
+         *    ⇒ 无硬接缝；⛔ 本项**不乘近日系数**）；
+         *  - [COMET_COMA_ALPHA]：逐帧 alpha 上限（近日时彗发最亮）；
+         *  - [COMET_COMA_CORE_A] / [COMET_COMA_MID_A] / [COMET_COMA_EDGE_A]：渐变三段停靠
+         *    的 alpha（致密核心 → 弥散中段 → 近乎透明的外缘 ⇒ 边缘化开）。
+         */
+        const val COMET_COMA_K = 3.1f
+        const val COMET_COMA_MIN_W = 1.15f
+        const val COMET_COMA_ALPHA = 0.85f
+        const val COMET_COMA_CORE_A = 0.62f
+        const val COMET_COMA_MID_A = 0.34f
+        const val COMET_COMA_EDGE_A = 0.10f
+        /**
+         * HIGH 档的内层致密晕（小半径、低 alpha，压在柔边彗发之上）。
+         * ⛔ 半径刻意压到 [COMET_COMA_K] 之内、alpha 压到 0.13 —— 它是**致密核心**而不是
+         * 第二个光晕，否则会在柔边彗发上留下一圈可见的硬边圆盘。
+         */
+        const val COMET_HEAD_GLOW_K = 1.6f
+        const val COMET_HEAD_GLOW_ALPHA = 0.13f
         /** hash 盐（同一序号在不同盐位上取互不相关的参数） */
         const val COMET_SALT_START = 901
         const val COMET_SALT_DUR = 907
@@ -334,6 +538,8 @@ class OrbitalRingsRenderer : VisualizerRenderer {
         const val COMET_SALT_DIR = 937
         const val COMET_SALT_R = 941
         const val COMET_SALT_BEND = 947
+        /** 双尾夹角专用盐（⛔ 与 [COMET_SALT_BEND] 分开取 ⇒ 弯向与张角互不相关） */
+        const val COMET_SALT_SPLIT = 953
 
         /**
          * 确定性 hash → `[0,1)`（同 E43 海边 `SeasideWaves.hash32` 的思路，本类自带一份，
@@ -368,6 +574,30 @@ class OrbitalRingsRenderer : VisualizerRenderer {
             a * (1f - e * cos(eccentric))
 
         /**
+         * ⑥ 彗尾**锥度剖面**：尾轴归一化位置 `t`（0 = 尾根、1 = 尾尖）处的**半宽系数**。
+         *
+         * - `(1 − t)^[power]` ⇒ 宽度**从尾根到尾尖连续收窄**（⛔ 旧版是「根 / 中 / 尖」三个
+         *   点连成的折线 ⇒ 中段突然折一下、根部与中段宽度对不上，视觉上就是一块贴上去的纸片）；
+         * - `× (1 + [COMET_TAIL_FLARE]·sin(πt))` ⇒ 最宽处**落在彗发下游一点**（真实彗尾从
+         *   彗发**展开**，不是在彗核处等宽地「长」出来）。
+         *
+         * 恒有 `f(0) = 1`、`f(1) = 0`（⛔ 尾尖必收成一个点，多层叠加时三层同点收尖 ⇒
+         * 尾尖没有硬切边）。
+         */
+        internal fun cometTailProfile(t: Float, power: Float): Float =
+            (1f - t).coerceAtLeast(0f).pow(power) * (1f + COMET_TAIL_FLARE * sin(PI_F * t))
+
+        /** ⑥ 第 [layer] 层柔边锥形的**横向宽度倍率**（层号 0 = 最内最浓，越外越宽） */
+        internal fun cometLayerWidthK(layer: Int): Float = 1f + layer * COMET_TAIL_LAYER_W_STEP
+
+        /**
+         * ⑥ 第 [layer] 层柔边锥形的 **alpha 倍率**：线性项 + 平方项 ⇒ 0/1/2 层分别
+         * 1.00 / 0.44 / 0.24（越外越淡，⛔ 相邻层差值不大 ⇒ 层与层之间看起来是渐变而非色阶）。
+         */
+        internal fun cometLayerAlphaK(layer: Int): Float =
+            1f / (1f + layer * COMET_TAIL_LAYER_A_LIN + layer * layer * COMET_TAIL_LAYER_A_QUAD)
+
+        /**
          * ① 晨昏线夜侧方位角（度）：入参是**光源方向** `(ldx, ldy) = 画面中心 − 行星位置`，
          * 夜侧取其反向 ⇒ 返回 `atan2(−ldy, −ldx)` 的角度。canvas 旋转该角度后，
          * 单位圆遮罩的 +x（夜方向）正好指向背日一侧（屏幕坐标 y 向下，`rotate` 顺时钟为正）。
@@ -388,9 +618,59 @@ class OrbitalRingsRenderer : VisualizerRenderer {
         internal fun bandLatCenter(count: Int, idx: Int, latTop: Float, latSpan: Float): Float =
             latTop + latSpan * (idx + 0.5f) / count
 
-        /** ③ 云带厚度（归一化纬度；`< latSpan / count` ⇒ 带间留缝） */
+        /**
+         * ③ 云带厚度（归一化纬度；`< latSpan / count` ⇒ 带间留缝）。
+         *
+         * ⛔ **这是「最宽那条带」的厚度上限**，逐带还要乘 [bandWidthFactor] 收窄
+         * ⇒ 实际厚度恒 ≤ 本值 ⇒ 门禁 ⑤ 用本值做「含扰动上限仍在盘内」的判据依然成立。
+         */
         internal fun bandThickness(count: Int, latSpan: Float): Float =
             latSpan / count * BAND_THICK_K
+
+        /**
+         * ③ 距赤道的**带序**（0 = 最靠近赤道那条，1 = 再外一条…），左右严格对称。
+         *
+         * ⛔ 用 `floor(|idx − 中心|)` 而不是 `min(idx, count−1−idx)` —— 后者在偶数条时
+         * 会把「夹住赤道的那一对」判成带序 1（暗带），而真实木星**赤道带区 EZ 恰恰是最亮的一条**。
+         * 本式对奇/偶条数都给出「赤道 = 带序 0」，且纯整数运算、无浮点余数误差。
+         */
+        internal fun bandRing(count: Int, idx: Int): Int =
+            floor(abs(idx - (count - 1) * 0.5f)).toInt()
+
+        /** ③ 最外一圈云带的带序（[bandRing] 的取值上界）——用于判定「极区」 */
+        internal fun bandMaxRing(count: Int): Int = bandRing(count, 0)
+
+        /**
+         * ③ 云带**色调**（0 = 亮带 Zone / 1 = 暗带 Belt / 2 = 极区 muted）——
+         * 明暗**交替**（真实木星就是米白带区与红棕带条相间，不是「所有带同色」）。
+         *
+         * - 带序 0 = **赤道带区 EZ**（最宽最亮，夹住赤道的那一对）；
+         * - 奇数带序 = 带条 NEB/SEB/NTB/STB（红棕暗带）；
+         * - 偶数带序（≥2）= 温带带区 NTZ/STZ（米白亮带）；
+         * - 最外一圈（[maxRing]）= 极区（灰暗，真实木星是两极的暗色极区罩）。
+         *
+         * ⛔ `maxRing >= 2` 才启用极区档 —— MEDIUM 档（木 4 / 土 3 条）最外圈就是带序 1，
+         * 若也判成极区就会丢掉唯一的暗带、变成「暗-亮-亮-暗」以外的排布 ⇒ 只按奇偶交替。
+         *
+         * 纬度对称 ⇒ 木星观感左右一致；土星同一套规则（只是明度差更小）。
+         */
+        internal fun bandTone(ring: Int, maxRing: Int): Int =
+            if (maxRing >= 2 && ring == maxRing) 2 else if (ring and 1 == 1) 1 else 0
+
+        /**
+         * ③ 逐带**宽度收窄系数**（乘在 [bandThickness] 上）：赤道最宽（1.0），
+         * 向两极线性收窄到 `1 − [BAND_POLAR_NARROW]`；[dark] 再乘 [BAND_BELT_NARROW]。
+         *
+         * [lat] 是带中心纬度（归一化），[latTop] + [latSpan] / 2 是覆盖区半跨度。
+         * ⛔ 返回值恒 ∈ (0, 1] ⇒ 实际厚度恒 < [bandThickness] ⇒ 带间必然留缝、
+         * 且**不会**比门禁 ⑤ 判据里那条最宽的带更容易溢出盘面。
+         */
+        internal fun bandWidthFactor(lat: Float, latTop: Float, latSpan: Float, dark: Boolean): Float {
+            val halfSpan = abs(latTop) + latSpan * 0.5f          // 覆盖区到极点的距离（恒 > 0）
+            val t = if (halfSpan > 0f) (abs(lat) / halfSpan).coerceIn(0f, 1f) else 0f
+            val polar = 1f - BAND_POLAR_NARROW * t
+            return if (dark) polar * BAND_BELT_NARROW else polar
+        }
     }
 
     // ── 数据（构造期一次性生成，draw 只读）─────────────────────────────────
@@ -430,9 +710,15 @@ class OrbitalRingsRenderer : VisualizerRenderer {
     private val ringBack = Color(RING_BACK)
     private val ringFront = Color(RING_FRONT)
     private val earthLand = Color(EARTH_LAND)
-    private val jupiterBandDark = Color(JUPITER_BAND_DARK)
-    private val saturnBandDark = Color(SATURN_BAND_DARK)
+    private val jupiterZone = Color(JUPITER_ZONE)
+    private val jupiterBelt = Color(JUPITER_BELT)
+    private val jupiterPolar = Color(JUPITER_POLAR)
+    private val saturnZone = Color(SATURN_ZONE)
+    private val saturnBelt = Color(SATURN_BELT)
+    private val saturnPolar = Color(SATURN_POLAR)
     private val cometTailColor = Color(COMET_TAIL)
+    private val cometIonColor = Color(COMET_ION)
+    private val cometDustColor = Color(COMET_DUST)
     private val cometNucleusColor = Color(COMET_NUCLEUS)
     private val specular = Color(SPECULAR)
     private val starWhite = Color.White
@@ -485,11 +771,24 @@ class OrbitalRingsRenderer : VisualizerRenderer {
     private var terminatorBaked = false
     /** 带状云纹 / 太阳米粒复用 Path（逐条 rewind，零分配） */
     private val bandBuf = Path()
-    /** 彗星轨道弧 / 彗尾复用 Path（零分配） */
+    /** 彗星轨道弧 / 彗尾锥形复用 Path（零分配；每层一次 rewind，同一条缓冲轮流装三条尾的 3 层） */
     private val cometOrbitBuf = Path()
     private val cometTailBuf = Path()
+    /**
+     * 彗发（coma）柔边渐变（**单位圆空间**，与画布尺寸无关 ⇒ 只建一次）：
+     * 不透明核心 → 弥散中段 → 近乎透明的外缘。逐帧经 canvas 缩放摆到彗核位置
+     * ⇒ 柔边光晕（⛔ 硬边圆 = 「贴上去的圆盘」）。
+     */
+    private var cometComaBrush: Brush? = null
     /** 大气边缘光渐变（单元空间径向渐变，仅 HIGH 档建；尺寸无关 ⇒ 只建一次） */
     private var atmoBrush: Brush? = null
+    /**
+     * 大红斑柔边渐变（**单元椭圆空间**的径向渐变，仅 HIGH 档建一次）：
+     * 不透明砖红（0）→ 半透明橙红（中）→ 完全透明（1）。
+     * 逐帧用 canvas 缩放到目标椭圆 ⇒ **边缘柔和**（不是硬边椭圆），
+     * 且 Brush 只在 [ensureLayout] 建、逐帧只读 ⇒ 零分配。
+     */
+    private var redSpotBrush: Brush? = null
 
     // ── 深度分层缓冲（成员复用 → 每帧插入排序零分配）──────────────────────
 
@@ -519,6 +818,8 @@ class OrbitalRingsRenderer : VisualizerRenderer {
         energySmooth = 0f
         sunBrush = null
         atmoBrush = null
+        redSpotBrush = null
+        cometComaBrush = null
         brushW = -1f
         brushH = -1f
         brushScale = -1f
@@ -775,24 +1076,29 @@ class OrbitalRingsRenderer : VisualizerRenderer {
                     earthLand, radius = pr * 0.40f,
                     center = Offset(px + 0.30f * pr, py - 0.18f * pr)
                 )
-                JUPITER -> // ③ 木星云带：HIGH 10 条 / MEDIUM 4 条程序化波浪带（替代原 2 次 drawOval）
+                JUPITER -> // ③ 木星云带：HIGH 10 条 / MEDIUM 4 条；米白带区 + 红棕带条交替、宽度向两极收窄
                     drawCloudBands(
                         px, py, pr,
                         if (tier == 2) JUPITER_BAND_COUNT else JUPITER_BAND_COUNT_MED,
                         JUPITER_BAND_LAT_TOP, JUPITER_BAND_LAT_SPAN, JUPITER_BAND_AMP,
                         (elapsed * JUPITER_BAND_DRIFT).toFloat(),
-                        jupiterBandDark, 0.18f, 0.12f
+                        jupiterZone, jupiterBelt, jupiterPolar,
+                        JUPITER_ZONE_ALPHA, JUPITER_BELT_ALPHA, JUPITER_POLAR_ALPHA
                     )
-                SATURN -> // ③ 土星云带：HIGH 8 条 / MEDIUM 3 条，更窄更淡、漂移更慢
+                SATURN -> // ③ 土星云带：HIGH 8 条 / MEDIUM 3 条，色差更小、更窄更淡、漂移更慢
                     drawCloudBands(
                         px, py, pr,
                         if (tier == 2) SATURN_BAND_COUNT else SATURN_BAND_COUNT_MED,
                         SATURN_BAND_LAT_TOP, SATURN_BAND_LAT_SPAN, SATURN_BAND_AMP,
                         (elapsed * SATURN_BAND_DRIFT).toFloat(),
-                        saturnBandDark, 0.10f, 0.07f
+                        saturnZone, saturnBelt, saturnPolar,
+                        SATURN_ZONE_ALPHA, SATURN_BELT_ALPHA, SATURN_POLAR_ALPHA
                     )
             }
         }
+        // ⑦ 大红斑（仅 HIGH）：⛔ 必须画在「盘 + 云带」之后、**晨昏线之前** ⇒ 夜侧被正确压暗。
+        //    MEDIUM 只有 4 条带、已经够忙 ⇒ 大红斑只在 HIGH 画（见 [drawGreatRedSpot]）。
+        if (tier == 2 && idx == JUPITER) drawGreatRedSpot(px, py, pr)
         // HIGH：统一斜上高光（偏移 + 半径 ≤ 0.71r → 恒在盘内）
         if (tier == 2) {
             drawCircle(
@@ -870,14 +1176,25 @@ class OrbitalRingsRenderer : VisualizerRenderer {
     }
 
     /**
-     * ③ 程序化带状云纹：每条带 = 上下两条同相扰动折线围成的等厚透镜带，写入成员
-     * [bandBuf] 后一次 `drawPath` ⇒ **每条带 1 次提交、零分配**（替代原来的 2 次 `drawOval` 横纹）。
+     * ③ 程序化带状云纹：每条带 = 上下两条折线围成的透镜带，写入成员 [bandBuf]
+     * 后一次 `drawPath` ⇒ **每条带 1 次提交、零分配**（替代原来的 2 次 `drawOval` 横纹）。
      *
+     *  - **明暗两类带交替**（[bandTone]）：亮带 = 米白带区（Zone）、暗带 = 红棕带条（Belt），
+     *    最外一圈是灰暗的极区。基色各自不透明、alpha 只做浓淡微调 ⇒ 观感来自**色相/明度**，
+     *    而不是「同色带 + alpha 交替」那种扁平行条纹（旧实现的根因）。
+     *  - **宽度不等**（[bandWidthFactor]）：赤道带区最宽，向两极收窄（暗带再窄一档）
+     *    ⇒ 与真实木星「赤道带区 EZ 宽厚、温带收窄、极区细碎」一致。
      *  - 横向半宽按行星圆盘的**弦长**收缩（`sqrt(1 − lat²)`）再乘 [BAND_WIDTH_K]
-     *    ⇒ 高纬度带自动变短、整条带恒不溢出盘面（不需要 clip）；
-     *  - 扰动是三层正弦叠加（近似 fbm，权重和 = 1 ⇒ 恒在 ±1），相位由 `elapsed` 驱动
-     *    ⇒ 条纹沿纬向缓慢流动；上下边**同相** ⇒ 带厚恒定（不会自交）；
-     *  - alpha 逐条交替（[alphaEven] / [alphaOdd]）⇒ 明暗相间的平行条纹。
+     *    ⇒ 高纬度带自动变短、整条带恒不溢出盘面（不需要 clip）。
+     *  - **公共扰动 + 边缘褶皱两段**：公共段上下边缘**同相**（整条带一起蜿蜒、带厚恒定），
+     *    边缘段上下**异相异频**（[bandWave] / [bandEdgeWave]，下边缘相位再偏 [BAND_EDGE_SKEW]）
+     *    ⇒ 带边缘有木星那种卷曲的涡卷/褶皱，而不是整体平移的「慢起伏」。
+     *    逐带的**公共**相位几乎相同（[BAND_PHASE_STEP] 很小）⇒ 全部云带像同一层流体同步起伏；
+     *    逐带的**边缘**相位强烈错开（[BAND_EDGE_PHASE_STEP]）⇒ 每条带的涡卷各不相同。
+     *    两段幅度之和恒 = [amp] ⇒ 门禁 ⑤ 的「含扰动上限仍在盘内」依然成立；
+     *    边缘段幅度另受 `BAND_EDGE_MAX × 本带厚度` 与 `BAND_EDGE_GAP_K × 带间距` 双重封顶
+     *    ⇒ 既不会自交掐断，也不会与相邻带粘连。
+     *  - 相位由 `elapsed` 驱动 ⇒ 条纹沿纬向缓慢流动。
      *
      * ⛔ 噪声链一律 `Float`（`kotlin.math` 的 Float 重载）：混进一个字面量 `0.5` 就整条
      * 升成 Double，`Path.moveTo` 直接编译不过。
@@ -885,41 +1202,135 @@ class OrbitalRingsRenderer : VisualizerRenderer {
     private fun DrawScope.drawCloudBands(
         px: Float, py: Float, pr: Float, count: Int,
         latTop: Float, latSpan: Float, amp: Float, drift: Float,
-        baseColor: Color, alphaEven: Float, alphaOdd: Float
+        zoneColor: Color, beltColor: Color, polarColor: Color,
+        zoneAlpha: Float, beltAlpha: Float, polarAlpha: Float
     ) {
-        val thick = bandThickness(count, latSpan)
+        val maxThick = bandThickness(count, latSpan)
+        val spacing = latSpan / count
+        val maxRing = bandMaxRing(count)
         var b = 0
         while (b < count) {
             val lat = bandLatCenter(count, b, latTop, latSpan)
+            val tone = bandTone(bandRing(count, b), maxRing)
+            val dark = tone == 1
+            val polar = tone == 2
+            // 宽度不等：赤道最宽，向两极收窄；暗带再窄一档
+            val thick = maxThick * bandWidthFactor(lat, latTop, latSpan, dark)
             val top = lat - thick * 0.5f
             val bot = lat + thick * 0.5f
             // 弦宽由上下边界里更靠极的那条决定 ⇒ 整带在盘内
             val chord = bandChordFraction(top, bot) * pr
+            // 公共段 / 边缘段的幅度拆分（**逐条**按本带厚度与带间距封顶，见 KDoc）：
+            // 边缘段 ≤ 0.40 × 本带厚度 ⇒ 上下两边缘永不掐断；
+            // 边缘段 ≤ 0.13 × 带间距 ⇒ 相邻带永不粘连。两段之和恒 = [amp]。
+            val edgeAmp = min(amp * (1f - BAND_SHARE_WHOLE), min(thick * BAND_EDGE_MAX, spacing * BAND_EDGE_GAP_K))
+            val wholeAmp = amp - edgeAmp
+            // 逐带相位：公共部分几乎同相（整层一起起伏），边缘褶皱强烈错开（涡卷各不相同）
+            val phW = b * BAND_PHASE_STEP
+            val phE = b * BAND_EDGE_PHASE_STEP
+            val color = if (dark) beltColor else if (polar) polarColor else zoneColor
+            val alpha = if (dark) beltAlpha else if (polar) polarAlpha else zoneAlpha
             bandBuf.rewind()
             var k = 0
             while (k <= BAND_STEPS) {
                 val u = -1f + 2f * k / BAND_STEPS
                 val x = px + u * chord
-                val y = py + (top + bandWave(u, drift) * amp) * pr
+                val y = py + (top + wholeAmp * bandWave(u, drift, phW) +
+                    edgeAmp * bandEdgeWave(u, drift, phE)) * pr
                 if (k == 0) bandBuf.moveTo(x, y) else bandBuf.lineTo(x, y)
                 k++
             }
             var j = BAND_STEPS
             while (j >= 0) {
                 val u = -1f + 2f * j / BAND_STEPS
-                bandBuf.lineTo(px + u * chord, py + (bot + bandWave(u, drift) * amp) * pr)
+                // 下边缘：公共段同相（带厚恒定）+ 边缘段异相（[BAND_EDGE_SKEW] 相位差）
+                val y = py + (bot + wholeAmp * bandWave(u, drift, phW) +
+                    edgeAmp * bandEdgeWave(u, drift + BAND_EDGE_SKEW, phE)) * pr
+                bandBuf.lineTo(px + u * chord, y)
                 j--
             }
             bandBuf.close()
-            drawPath(bandBuf, color = baseColor, alpha = if (b and 1 == 0) alphaEven else alphaOdd)
+            drawPath(bandBuf, color = color, alpha = alpha)
             b++
         }
     }
 
-    /** 云带扰动（近似 fbm 的三层正弦，权重和 = 1 ⇒ 值域 ±1）；[u] 为带内归一化经度 */
-    private fun bandWave(u: Float, drift: Float): Float =
-        sin(u * 6.2f + drift) * 0.5f + sin(u * 12.7f - drift * 0.7f) * 0.3f +
-            sin(u * 23.1f + drift * 1.6f) * 0.2f
+    /**
+     * ⑦ 木星**大红斑**（Great Red Spot，仅 HIGH）：木星最标志性的特征。
+     *
+     * 形态：**横向椭圆涡旋**，长轴沿纬向、宽 ≈ 盘直径 30% / 高 ≈ 盘直径 12%（真实 GRS ≈ 2.5:1），
+     * 画在南纬 ~20°（[GRS_LAT]，落在南温带区的带面上）、随自转在盘面上**偏西**漂移
+     * （起始经度 `+[GRS_LON_FAR]` 即盘东侧，逐帧向西扫到 `−[GRS_LON_FAR]`）。
+     *
+     * **柔边而非硬边**：只用**一个**缓存好的**单元空间径向渐变** [redSpotBrush]
+     * （`ensureLayout` 里建一次），逐帧经原生 canvas `save → translate → 非等比 scale →
+     * drawCircle → restore` 摆成椭圆 ⇒ 渐变被拉成椭圆、边缘化开到近乎透明；
+     * 里面再叠一次**更小、更靠内、alpha 更高**的同一渐变当**涡核** ⇒ 共 **2 次提交**。
+     * ⛔ 不画硬边 `drawOval`：那是「贴上去的椭圆贴图」感，不是涡旋。
+     *
+     * 漂移（⛔ 禁 `Random`，纯 `elapsed` 的线性扫掠 ⇒ 可回放、零闪烁）：
+     *  - **经度**在一个周期 [GRS_ROT_PERIOD] 内从 `+GRS_LON_FAR` **单调**走到
+     *    `−GRS_LON_FAR`（周期取木星公转的 1/4 ⇒ 与行星节奏协调）⇒ 观感是持续的**西漂**，
+     *    而不是「来回摆」（大红斑真实行为就是随木星自转向西漂）；
+     *  - 越靠近盘缘越**淡出**（|经度| ≥ [GRS_LIMB_FADE] ⇒ alpha = 0）⇒ 转到盘背时不硬切，
+     *    且因为 `GRS_LIMB_FADE < GRS_LON_FAR`，行程两端各有一段完全不可见的区间 ⇒ 回绕无跳变；
+     *  - 越靠近盘缘**横向压扁**（[GRS_SQUEEZE]）⇒ 球面透视，越到边缘越「侧过去」。
+     *
+     * 层级：⛔ 必须画在木星盘/云带之后、晨昏线之前（夜侧才会被正确压暗）。
+     */
+    private fun DrawScope.drawGreatRedSpot(px: Float, py: Float, pr: Float) {
+        val sb = redSpotBrush
+        if (sb == null) return
+        // 单调西漂：`sweep` ∈ [0,1) 线性扫掠（`elapsed` 是 Double，只在此处取模并转一次 Float）
+        val sweep = ((elapsed / GRS_ROT_PERIOD) % 1.0).toFloat()
+        val lon = GRS_LON_FAR * (1f - 2f * sweep)
+        val lonAbs = abs(lon)
+        // 近盘缘淡出（线性到 0）+ 横向压扁（球面透视）
+        val edgeFade = (1f - lonAbs / GRS_LIMB_FADE).coerceIn(0f, 1f)
+        if (edgeFade <= 0f) return
+        val squeeze = 1f - GRS_SQUEEZE * lonAbs
+        val cy = py + GRS_LAT * pr
+        val cx = px + lon * pr
+        val cvs = drawContext.canvas
+        // ① 柔边晕圈（横向放大 [GRS_HALO_K] 倍、alpha 低）—— 外围弥散的橙红
+        val haloRx = pr * GRS_RX * GRS_HALO_K * squeeze
+        val haloRy = pr * GRS_RY * GRS_HALO_K
+        cvs.save()
+        cvs.translate(cx, cy)
+        cvs.scale(haloRx, haloRy)
+        drawCircle(brush = sb, radius = 1f, center = Offset.Zero, alpha = GRS_HALO_ALPHA * edgeFade)
+        cvs.restore()
+        // ② 涡核（本体、不放大、alpha 高）—— 浓的砖红核心
+        val coreRx = pr * GRS_RX * squeeze
+        val coreRy = pr * GRS_RY
+        cvs.save()
+        cvs.translate(cx, cy)
+        cvs.scale(coreRx, coreRy)
+        drawCircle(brush = sb, radius = 1f, center = Offset.Zero, alpha = GRS_CORE_ALPHA * edgeFade)
+        cvs.restore()
+    }
+
+    /**
+     * ③ 云带的**公共**扰动（近似 fbm 的四层正弦，权重和 = 1 ⇒ 值域 ±1）：上下边缘**同相** ⇒
+     * 整条带一起蜿蜒而带厚恒定（不会自交）。频率比旧版（6.2/12.7/23.1）整体提高一档。
+     * [u] = 带内归一化经度；[drift] = 随 `elapsed` 漂移的相位；[ph] = 逐带相位错开。
+     */
+    private fun bandWave(u: Float, drift: Float, ph: Float): Float =
+        sin(u * 11.3f + drift + ph) * 0.40f +
+            sin(u * 19.7f - drift * 0.8f + ph * 1.7f) * 0.28f +
+            sin(u * 31.1f + drift * 1.5f - ph * 0.6f) * 0.19f +
+            sin(u * 47.9f - drift * 0.5f + ph * 2.3f) * 0.13f
+
+    /**
+     * ③ 云带边缘的**褶皱**扰动（同样四层正弦、权重和 = 1 ⇒ 值域 ±1）：
+     * 频率是公共段的 [BAND_EDGE_FREQ_K] 倍（更细的卷曲），并与公共段**异相**
+     * ⇒ 上下边缘的褶皱不对称，得到木星带边缘那种湍流涡卷感而不是整齐的平行波。
+     */
+    private fun bandEdgeWave(u: Float, drift: Float, ph: Float): Float =
+        sin(u * 11.3f * BAND_EDGE_FREQ_K + drift * 1.3f + ph * 0.9f) * 0.38f +
+            sin(u * 19.7f * BAND_EDGE_FREQ_K - drift * 1.1f - ph * 1.4f) * 0.29f +
+            sin(u * 31.1f * BAND_EDGE_FREQ_K + drift * 1.9f + ph * 2.1f) * 0.20f +
+            sin(u * 47.9f * BAND_EDGE_FREQ_K - drift * 0.7f - ph * 1.1f) * 0.13f
 
     /**
      * ⑥ 彗星：偶尔经过太阳系的一颗彗星（不定间隔约 24~44 s），带轨道弧与背日彗尾。
@@ -935,7 +1346,15 @@ class OrbitalRingsRenderer : VisualizerRenderer {
      * 一阶开普勒 `E = M + e·sin M` ⇒ 近日快、远日慢（不是匀速椭圆）。
      * 轨道平面仍走 [project]（含 [TILT]）⇒ 与行星轨道同一倾斜约定。
      *
-     * 提交数：轨道弧 1 次（LOW 不画）+ 彗尾 1 次 + 彗核 1 次（HIGH 再 +1 次彗头光晕）。
+     * **彗发的三重身份**：柔边由**缓存渐变**摆出、尾由**逐层锥形叠加**柔化、彗核外围有
+     * **弥散光晕（coma）** ⇒ 尾从光晕里长出来，而不是从一个硬点「长」出一条硬边多边形。
+     *
+     * **双尾**：离子尾（蓝白、笔直、细长，严格背日）+ 尘埃尾（淡黄、弯曲、宽而短，
+     * 偏向行进反侧）；夹角由一路 hash 盐给出、张向由**尾向 × 运动方向**的几何关系定出。
+     *
+     * 提交数：轨道弧 1 次（LOW 不画）+ 彗发 1 次 + 彗尾 3 层 × 2 尾 = 6 次 + 彗核 1 次
+     * （HIGH 再 +1 次致密内核晕）⇒ LOW 8 / MEDIUM 9 / HIGH 10。
+     * ⛔ 每次提交都写进**同一条**成员 Path（逐层 `rewind`），零堆分配。
      * 彗星完全走出画面（窗口结束）后轨道随之消失；进出场各留 [COMET_FADE] 的淡入淡出。
      */
     private fun DrawScope.drawComet(w: Float, h: Float, center: Offset, scale: Float) {
@@ -983,39 +1402,163 @@ class OrbitalRingsRenderer : VisualizerRenderer {
             drawPath(cometOrbitBuf, color = cometTailColor, style = cometOrbitStroke, alpha = COMET_ORBIT_ALPHA * fade)
         }
 
-        // ② 彗尾：背日方向（太阳在画面中心 ⇒ 尾向 = normalize(彗星 − 中心)），近日变长并弯曲
+        // ② 彗核尺寸 + **彗发（coma）**：彗核外围的弥散光晕，三档都画。
+        //    柔边来自**缓存的单元圆空间径向渐变** [cometComaBrush] 经 canvas 缩放摆位
+        //    （与大气边缘光 / 大红斑同一套手法 ⇒ 零逐帧分配、⛔ 零硬边圆盘）。
+        //    晕半径恒 ≥ 离子尾根半宽 × [COMET_COMA_MIN_W] ⇒ 尾从光晕里「长出来」而非接缝。
+        val hr = coreR * (0.75f + 0.55f * q)
+        // 两条尾的长与根半宽（⛔ 以尾长为主、核半径为下限，见 [COMET_ION_ROOT_F] 的 KDoc）
+        val ionLen = (COMET_TAIL_MIN + COMET_TAIL_SPAN * q) * scale * COMET_ION_LEN_K
+        val dustLen = (COMET_TAIL_MIN + COMET_TAIL_SPAN * q) * scale * COMET_DUST_LEN_K
+        val ionRoot = max(ionLen * COMET_ION_ROOT_F, coreR * COMET_ION_ROOT_MIN)
+        val dustRoot = max(dustLen * COMET_DUST_ROOT_F, coreR * COMET_DUST_ROOT_MIN)
+        // 彗发半径 = max（**最外层**离子尾的根半宽 × [COMET_COMA_MIN_W]，彗核半径 ×[COMET_COMA_K] × 近日系数）
+        // ⇒ 无论哪一颗彗星、哪一档画质、近日还是远日，尾根都落在光晕里（⛔ 不留硬接缝）。
+        //    ⛔ **max 的第二项不乘近日系数** —— 远日时彗核变小，若整体缩小就会缩到容不下尾根，
+        //    尾与光晕之间重新露出硬接缝（这正是旧版「尾从硬点长出来」的观感）。
+        val comaR = max(
+            coreR * COMET_COMA_K * (0.75f + 0.35f * q),
+            ionRoot * cometLayerWidthK(COMET_TAIL_LAYERS - 1) * COMET_COMA_MIN_W
+        )
+        val cb = cometComaBrush
+        if (cb != null) {
+            val cvs = drawContext.canvas
+            cvs.save()
+            cvs.translate(pos.x, pos.y)
+            cvs.scale(comaR, comaR)
+            drawCircle(brush = cb, radius = 1f, center = Offset.Zero, alpha = COMET_COMA_ALPHA * fade)
+            cvs.restore()
+        }
+
+        // ③ **双尾**（⛔ 零分配：2 条尾 × 3 层 = 6 条锥形 Path，逐条现算、复用同一条 [cometTailBuf]）
+        //
+        //   **柔边怎么来的**：一条尾 = [COMET_TAIL_LAYERS]（3）条**同形状**锥形 Path 叠加，
+        //   外层最淡最大、内层最浓最小（[cometLayerWidthK] / [cometLayerAlphaK]）⇒ 层与层
+        //   之间形成渐变过渡，尾缘柔和。⛔ 不描边、⛔ 不用硬边多边形收尾（那正是旧版
+        //   「贴上去的纸片」观感的根因）。
+        //
+        //   **锥度怎么来的**：沿尾轴 [COMET_TAIL_STEPS]+1 点采样，半宽 = `rootW ×
+        //   [cometLayerWidthK] × (1−t)^[锥度] × (1 + 肩部鼓出)`（见 [cometTailProfile]），
+        //   宽度**从尾根到尾尖连续递减**、尾尖三层**同点收尖**（无硬切）。
+        //
+        //   **两条尾的差别**（真实成因，不是随机装饰）：
+        //    - **离子尾**（[COMET_ION] 蓝白）：被太阳风推 ⇒ **笔直**、细（根半宽 [COMET_ION_ROOT_F]
+        //      × 尾长，见常量 KDoc）、长（基准长 ×[COMET_ION_LEN_K]）⇒ 方向严格 =
+        //      `normalize(彗星 − 画面中心)`（背日），弯曲量恒 0。
+        //    - **尘埃尾**（[COMET_DUST] 淡黄）：带轨道惯性 ⇒ 偏向**行进方向的反侧**、
+        //      **弯曲**、宽（[COMET_DUST_ROOT_F]，≈ 离子的 2.8 倍）、更淡更短（×[COMET_DUST_LEN_K]）。
+        //      夹角大小由 [hashUnit] 的 [COMET_SALT_SPLIT] 决定，而**张向哪一侧是几何的**：
+        //      尾向与**屏幕速度**（[cometPoint] 的前向差分）的叉乘符号定出恒定的滞后侧
+        //      ⇒ 不管彗星往哪边飞，尘埃尾永远甩在**背后**（与真实彗星一致）。
         val tvx = pos.x - center.x
         val tvy = pos.y - center.y
         val tvLen = sqrt(tvx * tvx + tvy * tvy)
         if (tvLen > 1f) {
-            val ux = tvx / tvLen
+            val ux = tvx / tvLen                                // 背日单位向量（太阳在画面中心）
             val uy = tvy / tvLen
-            val bendSign = if (hashUnit(k, COMET_SALT_BEND) >= 0.5f) 1f else -1f
-            val len = (COMET_TAIL_MIN + COMET_TAIL_SPAN * q) * scale
-            val px1 = -uy                                   // 尾向的垂向
+            val px1 = -uy                                       // 背日方向的左法线（垂向）
             val py1 = ux
-            val rootW = coreR * COMET_TAIL_ROOT_K
-            val midW = rootW * 2.1f
-            val bendMid = COMET_TAIL_BEND * len * 0.45f * bendSign
-            val bendTip = COMET_TAIL_BEND * len * bendSign
-            val mx = pos.x + ux * len * COMET_TAIL_MID_K
-            val my = pos.y + uy * len * COMET_TAIL_MID_K
-            cometTailBuf.rewind()
-            cometTailBuf.moveTo(pos.x + px1 * rootW, pos.y + py1 * rootW)
-            cometTailBuf.lineTo(mx + px1 * midW + px1 * bendMid, my + py1 * midW + py1 * bendMid)
-            cometTailBuf.lineTo(pos.x + ux * len + px1 * bendTip, pos.y + uy * len + py1 * bendTip)
-            cometTailBuf.lineTo(mx - px1 * bendMid, my - py1 * bendMid)
-            cometTailBuf.lineTo(pos.x - px1 * rootW, pos.y - py1 * rootW)
-            cometTailBuf.close()
-            drawPath(cometTailBuf, color = cometTailColor, alpha = COMET_TAIL_ALPHA * (0.35f + 0.65f * q) * fade)
+
+            // **屏幕速度** = cometPoint 在 +dE 处的有限差分（⛔ 纯函数、零分配、`Offset`
+            // 是 value class）。滞后侧 = dot(−v, 左法线) 的符号（⛔ 退化时按 [COMET_SALT_BEND]
+            // 的 hash 定向，不会除零也不会方向不定）。
+            val pv = cometPoint(eccentric + COMET_VEL_DT, a, bb, e, cosR, sinR, dir, center, scale)
+            val vx = pv.x - pos.x
+            val vy = pv.y - pos.y
+            val lagSign = if (vx * uy - vy * ux != 0f) {
+                if (vx * uy - vy * ux > 0f) 1f else -1f
+            } else {
+                if (hashUnit(k, COMET_SALT_BEND) >= 0.5f) 1f else -1f
+            }
+            // 双尾夹角（度）：⛔ 只做小幅张角，不改变「离子尾严格背日」的硬约定
+            val splitDeg = COMET_SPREAD_MIN + hashUnit(k, COMET_SALT_SPLIT) * COMET_SPREAD_SPAN
+            val splitRad = splitDeg * DEG2RAD
+            val cs = cos(splitRad)
+            val sn = sin(splitRad)
+            // 尘埃尾方向 = 背日方向朝**滞后侧**旋 [splitDeg]
+            val dx = ux * cs + px1 * sn * lagSign
+            val dy = uy * cs + py1 * sn * lagSign
+            val qFade = (0.35f + 0.65f * q) * fade                // 近日越近越旺 + 进出场淡入淡出
+
+            var layer = COMET_TAIL_LAYERS - 1
+            while (layer >= 0) {
+                val wK = cometLayerWidthK(layer)
+                val aK = cometLayerAlphaK(layer)
+                // 锥度逐层递减（外层收窄更晚 ⇒ 尾甩得更开）
+                val taper = COMET_TAIL_TAPER - layer * COMET_TAIL_TAPER_STEP
+
+                // 离子尾：笔直（弯曲量恒 0）
+                cometTailBuf.rewind()
+                buildCometTail(cometTailBuf, pos.x, pos.y, ux, uy, ionLen, ionRoot * wK, taper, 0f)
+                drawPath(cometTailBuf, color = cometIonColor,
+                    alpha = (COMET_ION_ALPHA * aK * qFade).coerceAtMost(1f))
+
+                // 尘埃尾：末端弯曲（抛物线剖面，根部曲率最大）。⛔ 弯曲方向恒取 `+bend`：
+                //    [buildCometTail] 内部的横向偏移是沿**尾向自身的左法线**（`−uy, ux`），
+                //    而那条法线已被上面的张角旋转带到了滞后侧 ⇒ 再乘一次 [lagSign] 会把
+                //    尾巴弯到**外侧**去（与真实「尘埃甩在滞后侧」相反）。故此处恒正。
+                cometTailBuf.rewind()
+                buildCometTail(cometTailBuf, pos.x, pos.y, dx, dy, dustLen, dustRoot * wK,
+                    taper, COMET_TAIL_BEND * dustLen)
+                drawPath(cometTailBuf, color = cometDustColor,
+                    alpha = (COMET_DUST_ALPHA * aK * qFade).coerceAtMost(1f))
+                layer--
+            }
         }
 
-        // ③ 彗核（HIGH 再叠一层彗头光晕）
-        val hr = coreR * (0.75f + 0.55f * q)
+        // ④ 彗核（HIGH 再叠一层致密内核晕，压在柔边彗发之上）
         if (tier == 2) {
-            drawCircle(cometTailColor, radius = hr * 2.6f, center = pos, alpha = COMET_HEAD_GLOW_ALPHA * fade)
+            drawCircle(cometTailColor, radius = hr * COMET_HEAD_GLOW_K, center = pos,
+                alpha = COMET_HEAD_GLOW_ALPHA * fade)
         }
         drawCircle(cometNucleusColor, radius = hr, center = pos, alpha = fade)
+    }
+
+    /**
+     * 沿尾轴采样出一条**锥形彗尾**的闭合轮廓并写入 [buf]（⛔ 调用方负责 `rewind()`）。
+     *
+     * 半宽剖面 = [cometTailProfile]（`(1−t)^[taper] × (1 + 肩部鼓出)`），⛔ 从尾根到尾尖
+     * **连续收窄**、尾尖三层同点收尖。侧向偏移 = `bend · t²`（抛物线：根部曲率最大）⇒
+     * 弯曲是**连续**的（⛔ 旧版靠「中段 + 尖端」两点折线 ⇒ 尾上有明显折角）。
+     *
+     * 两侧边缘各 [COMET_TAIL_STEPS]+1 点 → 每层约 30 个顶点；单帧共 6 层
+     * （双尾 × [COMET_TAIL_LAYERS]）≈ 180 个 `lineTo`，**全部写入同一条成员 Path**、
+     * 逐层 `drawPath` ⇒ 零堆分配。
+     *
+     * ⛔ 噪声链全程 Float（[kotlin.math] 的 Float 重载）：混入一个字面量 `0.5` 就整条
+     * 升成 Double，`Path.lineTo` 直接编译不过。
+     */
+    private fun buildCometTail(
+        buf: Path,
+        rootX: Float, rootY: Float,
+        ux: Float, uy: Float,
+        len: Float, halfWidth: Float, taper: Float, bend: Float
+    ) {
+        val px = -uy
+        val py = ux
+        val steps = COMET_TAIL_STEPS
+        var i = 0
+        while (i <= steps) {
+            val t = i / steps.toFloat()
+            val hw = halfWidth * cometTailProfile(t, taper)
+            val off = bend * t * t
+            val cx = rootX + ux * len * t + px * off
+            val cy = rootY + uy * len * t + py * off
+            if (i == 0) buf.moveTo(cx + px * hw, cy + py * hw) else buf.lineTo(cx + px * hw, cy + py * hw)
+            i++
+        }
+        // 下缘：从尾尖回到尾根（t 递减）。⛔ 必须是 `+off − hw`（中线偏移同侧、半宽取反），
+        // 写成 `−(hw + off)` 会让弯曲方向与上缘相反 ⇒ 尾在弯曲处**自交掐断**（Path 自交
+        // 填充出怪形），是最容易写错的一处符号。
+        var j = steps
+        while (j >= 0) {
+            val t = j / steps.toFloat()
+            val hw = halfWidth * cometTailProfile(t, taper)
+            val off = bend * t * t
+            buf.lineTo(rootX + ux * len * t + px * (off - hw), rootY + uy * len * t + py * (off - hw))
+            j--
+        }
+        buf.close()
     }
 
     /** 偏近点角 → 屏幕坐标：焦点在原点，平面内旋转 [cosR]/[sinR]，再经 [project] 压扁 */
@@ -1158,6 +1701,32 @@ class OrbitalRingsRenderer : VisualizerRenderer {
                 0f to Color.Transparent,
                 0.72f to Color.Transparent,
                 0.85f to Color(1f, 1f, 1f, ATMOSPHERE_GLOW_PEAK_A),
+                1f to Color.Transparent,
+                center = Offset.Zero,
+                radius = 1f
+            )
+        }
+        if (tier == 2 && redSpotBrush == null) {
+            // ⑦ 大红斑柔边渐变：**单元空间**径向渐变（砖红实心 → 橙红半透 → 完全透明），
+            //    逐帧用 canvas 非等比缩放摆成横向椭圆 ⇒ 柔和涡旋（⛔ 非硬边椭圆）。
+            //    峰值在 0.55 处（略靠内）⇒ 涡核浓、外缘化开，与真实 GRS 的「浓核 + 弥散边」一致。
+            redSpotBrush = Brush.radialGradient(
+                0f to Color(GRS_CORE),
+                0.42f to Color(GRS_HALO),
+                0.68f to Color(GRS_MID),
+                1f to Color(GRS_EDGE),
+                center = Offset.Zero,
+                radius = 1f
+            )
+        }
+        if (cometComaBrush == null) {
+            // ⑥ 彗发柔边渐变：**单元圆空间**径向渐变（致密核心 → 弥散中段 → 近乎透明外缘），
+            //    逐帧经 canvas 缩放摆到彗核 ⇒ 边缘化开到近乎透明（⛔ 非硬边圆盘）。
+            //    三档都建（彗发是彗星的本体特征，LOW 档也该有），与画布尺寸无关 ⇒ 只建一次。
+            cometComaBrush = Brush.radialGradient(
+                0f to cometTailColor.copy(alpha = COMET_COMA_CORE_A),
+                0.34f to cometTailColor.copy(alpha = COMET_COMA_MID_A),
+                0.68f to cometTailColor.copy(alpha = COMET_COMA_EDGE_A),
                 1f to Color.Transparent,
                 center = Offset.Zero,
                 radius = 1f
