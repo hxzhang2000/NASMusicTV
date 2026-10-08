@@ -8,7 +8,7 @@
 >
 > ⚠️ **§14.3 是签名骨架，不是可编译全文**（v1.3 起明示）；但其中**显式给出的表达式均为定稿**，可直接照抄。
 >
-> **红线摘要**：纯 `DrawScope` / `nativeCanvas` 渲染，**禁止** shader / AGSL `RuntimeShader` / `RenderEffect` / OpenGL / `BitmapShader`（`docs/visualizer-texture-upgrade-plan.md:8-10,994,3276` 四处明文）。`draw()` 内零分配；每帧增量必须 `× fx.dt`；**不**新增 `ProceduralTexture.Id`。
+> **红线摘要**：纯 `DrawScope` / `nativeCanvas` 渲染，**禁止** shader / AGSL `RuntimeShader` / `RenderEffect` / OpenGL / `BitmapShader`（`docs/archive/visualizer-texture-upgrade-plan.md:8-10,994,3276` 四处明文）。`draw()` 内零分配；每帧增量必须 `× fx.dt`；**不**新增 `ProceduralTexture.Id`。
 >
 > ⛔ **v1.5：星轨分三层 —— 底环（圆）+ spray 喷溅弧场（密集短弧）+ 英雄亮线段（音频反应）**。底环 `RING_ALPHA` 已降到 `0.10`（几乎隐去）；数百条静态短弧由 `(bandIndex,k)` 的确定性哈希烘焙进 `SPRAY_BUCKETS` 条 `Path`，每帧只在**一个**旋转变换下画 4 次 `drawPath`（⛔ 逐帧逐弧绘制会砍掉一半帧率，见 §4.3）。真机四缺陷（过粗 / 中心死白 / 虚线 / 锯齿）全部源于「降采样双缓冲 + `DST_OUT` 逐帧衰减 + 每帧加性叠加」。现改为**底环（圆）+ 亮线段（线上逐段描出、头亮尾沉回底环）**：⛔ **不得**重新引入 ping-pong 缓冲、⛔ 弧线一律直画在原生分辨率画布上（§4.3 有完整描述，§9 R1 因此基本退役）。
 
@@ -157,7 +157,7 @@ var timeMs: Long; var seq: Long
 
 | 禁物 | 依据 | 替代 |
 |---|---|---|
-| AGSL `RuntimeShader` / `.glsl` / `.frag` / OpenGL / EGL | `visualizer-texture-upgrade-plan.md:8-10,994,3276,4681`（`RuntimeShader` 需 API 33+，本项目 minSdk 22） | `BlurMaskFilter` + 预烘焙辉光精灵 |
+| AGSL `RuntimeShader` / `.glsl` / `.frag` / OpenGL / EGL | `docs/archive/visualizer-texture-upgrade-plan.md:8-10,994,3276,4681`（`RuntimeShader` 需 API 33+，本项目 minSdk 22） | `BlurMaskFilter` + 预烘焙辉光精灵 |
 | `RenderEffect`（真高斯模糊） | 从未使用；污点近似已是惯例（`photo/transitions/ZoomP1Transitions.kt:23`、`docs/archive/photo-spectrum-effect-plan.md:3043`） | 软件层 `BlurMaskFilter` 或重复贴图淡入 |
 | `BitmapShader`（整块） | 无一处使用；纹理走 `ProceduralTexture` | `ProceduralTexture` 或 `nativeCanvas` 的 `LinearGradient` |
 | `BlendMode.Difference` | API 29+，`VisualizerStage.kt:416` 已显式绕行 | 用 `BlendMode.Plus`（底环 blit + 亮线段子弧，均加性） |
@@ -208,12 +208,12 @@ override val postFx = PostFx(vignette = 0.42f, grain = 0.026f)
 
 ### 3.4 allowFramebuffer：门控 vs 降级开关（本方案最容易搞错的一条）
 
-`VisualQuality.allowFramebuffer`（`AppSettings.kt:241,250`）=「是否允许**帧缓冲回绘**（MilkDrop 类效果需要）」。`VisualQuality.ULTRA -> allowFramebuffer`（` :263`）；而 `allowFramebuffer` **仅 HIGH=true**（` :252-254`，`MEDIUM/LOW=false`）；且 **`VisualQuality` 当前无任何 UI 入口**，`setQuality()/updateVisualizerQuality()` 全仓库零调用点（死代码，`visualizer-texture-upgrade-plan.md:67,288-289`，`PlayerSettingsSection.kt:182` 自述）⇒ **实际档位恒为 MEDIUM**。
+`VisualQuality.allowFramebuffer`（`AppSettings.kt:241,250`）=「是否允许**帧缓冲回绘**（MilkDrop 类效果需要）」。`VisualQuality.ULTRA -> allowFramebuffer`（` :263`）；而 `allowFramebuffer` **仅 HIGH=true**（` :252-254`，`MEDIUM/LOW=false`）；且 **`VisualQuality` 当前无任何 UI 入口**，`setQuality()/updateVisualizerQuality()` 全仓库零调用点（死代码，`docs/archive/visualizer-texture-upgrade-plan.md:67,288-289`，`PlayerSettingsSection.kt:182` 自述）⇒ **实际档位恒为 MEDIUM**。
 
 ⚠️ 若本效果照抄 E18 把 `allowFramebuffer` 当**门控**（要求 `==true` 才画星轨），则默认档位下**永远只有一圈底环**——亮线段完全不出现，效果退成一块星空衬底，失去本体。因此本效果**不门控 `allowFramebuffer`**，理由：
 
 1. ⭐ **v1.4/v1.5**：本效果**已无任何帧缓冲回绘**（§4.3）—— 每帧只有 1 次 1:1 `drawImage` + `SPRAY_BUCKETS`(4) 次 `drawPath` + 至多 192 次细弧 `drawArc` + 若干路径，成本量级**远低于** E18 的 3-tap 1280×720 回绘（E18 KDoc `UltraRenderers.kt:28-31` 自称「TV 填充率杀手」）。`allowFramebuffer` 这个门本来就管不到本效果。
-2. 项目 §2.4 post-mortem 的核心结论就是「**年年看不到效果**」是最大失败（`visualizer-texture-upgrade-plan.md:67` 首行）。
+2. 项目 §2.4 post-mortem 的核心结论就是「**年年看不到效果**」是最大失败（`docs/archive/visualizer-texture-upgrade-plan.md:67` 首行）。
 3. ⭐ v1.4：原先「缓冲分辨率按 `fx.level` 三档降」这条兜底**已作废**（无缓冲）；替代兜底为 **LOW 档隔柱**（`LOW_ARC_STRIDE`）与 `SEG_K` 降档（§4.7 / §九 R1）。
 
 结论定为 **`Tier.ADV` + `needsParticleBudget = false` + 不门控 `allowFramebuffer`**，并把「真机实测掉帧 → 降亮线段密度」写成预决兜底（§九 R1 / §十一裁决 1）。

@@ -883,7 +883,7 @@ if (outerR > rRing) {
 > 该错误结论直接导致 E19 / E23 长期采用**逐像素 JNI 采样**
 > （E23 ≈ 71,000 次 JNI / 35–70 ms，且发生在 `draw` 内 ⇒ 每次换行卡 2–4 帧）。
 > **正确做法：逐行 `getPixels` 批读 + 在 `IntArray` 上扫描**
-> （JNI 降 3 个数量级）。详见 `docs/visualizer-texture-upgrade-plan.md` §G11 / §15.4-A21。
+> （JNI 降 3 个数量级）。详见 `docs/archive/visualizer-texture-upgrade-plan.md` §G11 / §15.4-A21。
 
 **降级方案**：`Canvas.drawText()` 到 `Bitmap` → 逐像素 `getPixel()` 扫描采样（目标 576 点，约 5–15ms）
 - **仅在切歌或进入效果时异步算一次**，缓存 `Map<text, FloatArray>`

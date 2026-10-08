@@ -1,15 +1,15 @@
 # 可视化效果列表
 
-> **版本**：v2.38.3（versionCode 172）
-> **更新日期**：2026-10-05
+> **版本**：v2.38.4（versionCode 173）
+> **更新日期**：2026-10-08
 > **来源**：`app/src/main/java/com/nasmusic/tv/data/model/AppSettings.kt` — `VisualizerTheme` 枚举
 
-共 **21 个**效果（2026-09-27 移除 11 个：37 → 26，详见 `docs/technical-overview.md` §10.190；2026-09-28 新增 DNA：26 → 27，§10.193；2026-09-28 新增「世界」：27 → 28，§10.196；2026-10-02 新增「星空星轨」：28 → 29，§10.206；2026-10-04 新增「海边」：29 → 30，§10.209；2026-10-05 移除 9 个（见下方「已移除效果」）：30 → **21**，§10.212）。E41「世界」已于 2026-09-29 重写为 **three-globe 3D 地球版**（WebView + WebGL，完全离线；复用 E41 序号，仍 28 项，§10.197）——旧 2D 海岸线版保留在源码但不再被引用。
+共 **21 个**效果（2026-09-27 移除 11 个：37 → 26，详见 `docs/technical-overview.md` §10.190；2026-09-28 新增 DNA：26 → 27，§10.193；2026-09-28 新增「世界」：27 → 28，§10.196；2026-10-02 新增「星空星轨」：28 → 29，§10.206；2026-10-04 新增「海边」：29 → 30，§10.209；2026-10-05 移除 9 个（见下方「已移除效果」）：30 → **21**，§10.212）。E41「世界」已于 2026-09-29 重写为 **three-globe 3D 地球版**（WebView + WebGL，完全离线；复用 E41 序号，仍 21 项，§10.197），并于 **2026-10-07 升入 `Tier.ULTRA`**（§10.215，电视端 WebView 只画首帧的回退代价）。⚠️ 旧 2D 海岸线版 `WorldRenderer.kt` **已整体删除**（`546dd7c`，2026-10-06）—— 早期版本这里写的"保留在源码但不再被引用"已不成立。
 
 > ⚠️ **档位标题的措辞已部分过时**：ADV 档原写「需粒子预算，MEDIUM 及以上」，那是 2026-10-01 之前的门控口径。
 > 自 §10.205 起 ADV 档的门槛是「该效果**是否真的读取** `ctx.quality.maxParticles`」
-> （枚举第 4 参 `needsParticleBudget`），**不是**按 tier 一刀切 ⇒ 本档 11 套里有 9 套三档全可用，
-> 仅 `E14 节拍烟花` 与 `E41 世界` 真读预算、LOW 档被挡。逐项取值见 `AppSettings.kt` 的枚举 KDoc。
+> （枚举第 4 参 `needsParticleBudget`），**不是**按 tier 一刀切 ⇒ 本档 **10** 套里有 **9** 套三档全可用，
+> 仅 `E14 节拍烟花` 真读预算、LOW 档被挡（`E41 世界` 也读预算，但它已在下方 ULTRA 档）。逐项取值见 `AppSettings.kt` 的枚举 KDoc。
 > ULTRA 档「需帧缓冲，仅 HIGH」仍然成立（由 `allowFramebuffer` 决定，与粒子预算无关）。
 
 ## BASIC 档（画质全档可用）
@@ -39,14 +39,77 @@
 | E29 | ORBITAL_RINGS | 太阳系 |
 | E39 | PHOTO_WALL | 照片墙 |
 | E40 | DNA | DNA 双螺旋 |
-| E41 | WORLD | 世界 |
 | E42 | STAR_TRAILS | 星空星轨 |
 
-## ULTRA 档（需帧缓冲，仅 HIGH）
+## ULTRA 档（`supports()` 要求 `allowFramebuffer` ⇒ 仅 HIGH 画质档提供）
 
 | 序号 | 枚举键 | 显示名 |
 |---|---|---|
 | E18 | MILKDROP_FEEDBACK | 反馈残像 |
+| E41 | WORLD | 世界 |
+
+> ⚠️ **E41 的归档理由与 E18 不同**：`allowFramebuffer` 门控对两者共用，但 E41 提 ULTRA 不是因为帧缓冲，
+> 而是 2026-10-06 真机故障 —— **电视端 WebView 只画首帧**（后续帧不再回调），MEDIUM / LOW 档用户会看到一块静止的地球。
+> 所有者裁决改为**仅最高画质档提供**（§10.215）。它的 `needsParticleBudget = true` 照实保留
+> （`WorldGlobeRenderer` 确实读 `ctx.quality.maxParticles`，`ParticleBudgetGateTest` 的源码扫描要求它为 true）。
+
+## 实现与改造状态（2026-10-08 按源码逐项核对）
+
+> 数据来源：渲染器类头 = `grep -rn ": RendererFx()\|: VisualizerRenderer" app/src/main`；
+> 后处理覆盖 = `visualizer/fx/FxCoverageScanTest.kt` 的 `covered`（**14**）/ `exempt`（**7**）两份名单；
+> 单测 = `app/src/test/java/com/nasmusic/tv/visualizer/`；
+> 改造状态 = `docs/archive/visualizer-texture-upgrade-plan.md` §12.2 矩阵（**按效果**计，与上面「按类头」计的 14 不同口径）。
+> ⛔ 表内路径均相对 `app/src/main/java/com/nasmusic/tv/`；行号 = 类头所在行（2026-10-08 实测），会随编辑漂移。
+
+| 序号 | 显示名 | 渲染器（`file:line`） | LOW | 继承基类 | §六 质感改造 | 专用单测 |
+|---|---|---|:--:|:--:|---|---|
+| E05 | 圆形频谱环 | `renderers/BasicRenderers.kt:28` | ✅ | ✅ | ✅ 批次 A 全部落地 | ⛔ 无（仅 `covered` 名单） |
+| E13 | 液态网格 | `renderers/AdvancedRenderers.kt:48` | ✅ | ✅ | ✅ 批次 A 全部落地 | ⛔ 无（仅 `covered` 名单） |
+| E14 | 节拍烟花 | `renderers/ParticleRenderers.kt:30` | ⛔ | ✅ | ✅ 批次 B 全部落地 | `BeatFireworkTest` |
+| E15 | 液态涟漪 | `renderers/AdvancedRenderers.kt:275` | ✅ | ✅ | ✅ 批次 A 全部落地 | ⛔ 无（仅 `covered` 名单） |
+| E16 | 数字雨 | `renderers/AdvancedRenderers.kt:504` | ✅ | ✅ | ✅ 批次 B 全部落地 | `MatrixRainTest` |
+| E17 | 星座 | `renderers/AdvancedRenderers.kt:904` | ✅ | ✅ | ✅ 批次 A 全部落地 | ⛔ 无（仅 `LowTierElementBudgetTest`） |
+| E18 | 反馈残像 | `renderers/UltraRenderers.kt:70` | ⛔ | ✅ | ✅ 批次 B 全部落地 | `MilkdropTest` |
+| E23 | 歌词点阵 | `renderers/LyricsDotMatrixRenderer.kt:63` | ✅ | ✅ | ✅ 批次 B 全部落地 | `LyricsDotMatrixTest` + `LowTierElementBudgetTest` |
+| E24 | 心跳 | `renderers/EcgWaveRenderer.kt:78` | ✅ | ✅ | ✅ 批次 A 全部落地 | `EcgWaveformTest` |
+| E25 | 催眠 | `renderers/HypnoticFunctionRenderer.kt:70` | ✅ | ✅ | ✅ 批次 B 全部落地 | `Hypnotic{Function,Dissolve,Layout,Phase,Schedule}Test` + `FunctionLibraryTest` |
+| E29 | 太阳系 | `renderers/BatchTwoRenderers.kt:92` | ✅ | ⛔ 欠账 | ✅ §C1 六条（含 P0 星野降级）全部落地 | `OrbitalProceduralEnhanceTest` + `OrbitalStarFieldTest` |
+| E30 | 雷达 | `renderers/BatchThreeRenderers.kt:48` | ✅ | ✅ | ✅ 批次 A 全部落地 | `RadarSweepTest` |
+| E33 | 齿轮 | `renderers/BatchFourRenderers.kt:113` | ✅ | ⛔ 欠账 | ⛔ 未开工（T5.2） | ⛔ 无 |
+| E35 | 光轴 | `renderers/BatchFourRenderers.kt:1363` | ✅ | ✅ | ✅ 批次 B 全部落地 | `LightBeamsTest` |
+| E37 | 分子 | `renderers/MoleculeRenderer.kt:53` | ✅ | ⛔ 欠账 | ⛔ 未开工（T5.3） | `MoleculeLibraryTest` + `MoleculeMotionTest` |
+| E38 | 怀旧 | `renderers/VintageTvRenderer.kt:63` | ✅ | ⛔ 有意排除 | ⛔ 未开工（T5.4） | ⛔ 无（`VintageBatchMathTest` 至今未创建） |
+| E39 | 照片墙 | `visualizer/photo/PhotoRenderer.kt:49` | ✅* | ⛔ 有意排除 | ⛔ 未开工（T5.5） | `photo/` **13** 个测试类 |
+| E40 | DNA 双螺旋 | `renderers/DnaRenderer.kt:109` | ✅ | ⛔ 欠账 | ⛔ 未开工（T5.6；星野同源改造同样未动） | ⛔ 无（星野由 `OrbitalStarFieldTest` 扫） |
+| E41 | 世界 | `renderers/WorldGlobeRenderer.kt:62` | ⛔ | ⛔ 有意排除（View 型） | ⛔ 不改代码（§C7 已整节重评，只做上机验收） | `WorldLogicTest` + `WorldMapDataTest` + `GlobeAssetsHygieneTest` |
+| E42 | 星空星轨 | `renderers/StarrySkyRenderer.kt:113` | ✅ | ✅（建档即继承） | —— 本方案范围外 | `StarrySkyTest` |
+| E43 | 海边 | `renderers/SeasideRenderer.kt:155` | ✅ | ✅（建档即继承） | —— 本方案范围外 | `SeasideTest` + `SeasideWavesTest` + `SeasideAudioMapTest` + `SeasideOpBudgetTest` |
+
+> ⚠️ **三个「⛔ 欠账」与「⛔ 有意排除」不是一回事**：E38 / E39 / E41 是**按设计不继承基类**
+> （E38 后处理与内容交错 + 画面已定稿、E39 共享后处理会盖住照片、E41 是 `AndroidView` 型、`draw` 空实现）；
+> E29 / E33 / E37 / E40 是**批次 C 至今 0 套迁移**留下的欠账 ⇒ 这四套仍各自持有 `lastMs` 自算 `dt`、
+> 自己的 `rng` / 内联 LCG、自己的后处理释放。⛔ 别把这四套当成裁决排除写进豁免理由。
+>
+> 🔴 **验收状态（截至 2026-10-08）**：上表的「✅ 全部落地」= **代码已落盘**，
+> 而 `docs/archive/visualizer-texture-upgrade-plan.md` §11.1/§11.2 的 **22 条真机观感判据 0 条打勾**
+> ⇒ 改造后的效果**从未在真机逐套看过**（唯一例外是 E16 数字雨，因排查崩溃被反复上机）。
+> ⚠️ 该方案文档已于 **2026-10-08 经所有者裁决整篇归档**（「我判断是没啥可做的了」），归档时**这两类欠账原样保留**：
+> 批次 C 的 6 套质感改造（T5.2–T5.7）+ 27 条未勾验收判据（§11.1 余 5 条 + §11.2 全 22 条）——
+> 逐条清单见 `docs/archive/README.md` 第五轮。⛔ **本表的「§六 质感改造」列因此不再有新行变化**；
+> 若日后恢复，判据仍在原 §十一，不必重写。
+>
+> `*` E39 的三档可用性成立，但它还多一道**列表级**门控 —— 见下「门控的三个特殊项」第 1 条。
+
+## 门控的三个特殊项（容易漏）
+
+1. **E39 照片墙是唯一有「列表级」门控的效果**：`VisualizerTheme.selectable(photoWallAvailable)`
+   在三个照片来源开关**全关**时把 `PHOTO_WALL` 从列表里过滤掉（指示器不显示、左右键也切不到，
+   `AppSettings.kt:325` / `VisualizerRendererFactory.kt:74`）。其余 20 套恒在列表里（受画质档约束）。
+2. **E14 节拍烟花**：ADV 档里唯一 `needsParticleBudget = true` 且非 ULTRA 的效果
+   ⇒ `LOW.maxParticles = 0` 时被 `supports()` 挡下（`AppSettings.kt` 的 `VisualQuality.supports`）。
+3. **E18 / E41**：ULTRA 档由 `allowFramebuffer` 决定，该字段只有 `HIGH` 为 `true`
+   ⇒ MEDIUM / LOW **一律不提供**（与粒子预算无关）。⛔ 没有任何「按设备能力隐藏效果」的过滤逻辑
+   （`availableThemes()` 只看画质档 + 照片来源）⇒ E41 在不支持 WebView 上屏的设备上仍会出现于 HIGH 档。
 
 ## 已移除效果（v2.37.6 移除 11 个；v2.38.2 再移除 9 个）
 
@@ -73,5 +136,11 @@
 | E32 | STAIRCASE_WAVE | 阶梯 |
 | E34 | FRACTAL_TREE | 分形 |
 
-> 老用户存过的已移除主题键经 `LEGACY_MAP` 自动回落到默认 `CIRCULAR_RING`（圆形频谱环）。
+> 老用户存过的已移除主题键经 `LEGACY_MAP`（`AppSettings.kt:274-308`，**26** 个键 =
+> 5 个改名前的老名 + `AUTO_DIRECTOR` + 两批共 **20** 个已删效果）自动回落到默认 `CIRCULAR_RING`（圆形频谱环）。
+> ⚠️ 本仓 `fromKey` 末位 `?: Default` 本来就等价，`LEGACY_MAP` 的价值是**固化迁移意图**（清单靠人工维护：
+> `VisualizerThemeTest` 只断言 5 个改名前的老名（`:20-27`）+ **21 项 / `ordinalLabel` 唯一 / 显示名唯一 /
+> 档位门控 / 照片墙可见性**（`:51`、`:89-90`、`:96`、`:103`），**不核对已删名册是否全部进表** ⇒ 删效果时必须手工补这一行）。⚠️ 2026-10-05 刚删那 9 项时**没有**同步补录
+> （当时靠末位 fallback 兜住，`docs/technical-overview.md` §10 记为"有意的不一致、留待裁决"），
+> 2026-10-08 由 `49784b5` 补齐 ⇒ 两批现在口径一致。
 > 已移除序号位保留空号（E01/E06/E08/E09/E10/E21/E22/E26/E27/E28/E36 + E03/E07/E11/E12/E19/E20/E31/E32/E34），`ordinalLabel` 唯一性不受影响。

@@ -11472,7 +11472,7 @@ TypedArray、`performance.now`、`requestAnimationFrame`。
 ⛔ `STARFIELD_ALPHA` 保持 **0.55** 未动：`starLayout` 的 `w*h/9000`（密度）在共享的 `fx/ProceduralTexture.kt` 里、⛔ 不可改，而 `STARFIELD_ALPHA` 只是**亮度**旋钮、**改不了密度**；且天幕整体变暗后同时改两个变量会让真机反馈无法归因。
 ### 10.204 v2.38.0 — 数字雨上机四项：暗角染色 / 低画质原生闪退 / 列条合并 / 机内帧率读数（2026-10-01）
 
-**方案**：`docs/visualizer-texture-upgrade-plan.md`（v1.45，§11.3.6 实测记录 P-1 / P-2 / P-3）。**改动文件**：生产 `visualizer/fx/OverlayFx.kt`、`visualizer/renderers/RendererFx.kt`、`visualizer/renderers/AdvancedRenderers.kt`、`ui/components/VisualizerStage.kt`、新增 `visualizer/FpsMeter.kt`；门禁 `MatrixRainTest.kt`（13 → 15 例）、`RendererBaseContractTest.kt`（+2 例）、新增 `FpsMeterTest.kt`（7 例）。**门禁**：`testDebugUnitTest` **1517 例 / 143 类 / 0 失败**，`lintDebug` **0 Error / 281 Warning**（新增代码 0 告警）。
+**方案**：`docs/archive/visualizer-texture-upgrade-plan.md`（v1.45，§11.3.6 实测记录 P-1 / P-2 / P-3）。**改动文件**：生产 `visualizer/fx/OverlayFx.kt`、`visualizer/renderers/RendererFx.kt`、`visualizer/renderers/AdvancedRenderers.kt`、`ui/components/VisualizerStage.kt`、新增 `visualizer/FpsMeter.kt`；门禁 `MatrixRainTest.kt`（13 → 15 例）、`RendererBaseContractTest.kt`（+2 例）、新增 `FpsMeterTest.kt`（7 例）。**门禁**：`testDebugUnitTest` **1517 例 / 143 类 / 0 失败**，`lintDebug` **0 Error / 281 Warning**（新增代码 0 告警）。
 
 #### 一、P-2：暗角边色取自封面 `palette.accent` ⇒ 换歌把整幅染成封面色
 
@@ -11537,7 +11537,7 @@ TypedArray、`performance.now`、`requestAnimationFrame`。
 
 ### 10.203 v2.38.0 — 可视化质感升级：渲染器基类 + 21 套效果重做（2026-10-01）
 
-**方案**：`docs/visualizer-texture-upgrade-plan.md`（v1.38）。**提交**：`0f81d25` ~ `591571f` 共 10 个（质感升级 S0–S4）、`2931d33`（T5.1）、`4318019`（修测试树编译失败）。
+**方案**：`docs/archive/visualizer-texture-upgrade-plan.md`（v1.38）。**提交**：`0f81d25` ~ `591571f` 共 10 个（质感升级 S0–S4）、`2931d33`（T5.1）、`4318019`（修测试树编译失败）。
 
 #### 一、核心设计：`RendererFx` 基类 + 后处理工具箱
 
@@ -13150,6 +13150,12 @@ lint 内有一份硬编码的「已知安全依赖」白名单 `PageAlignmentDet
 因为它们的行为与 fallback 完全一致，加不加都落到 `CIRCULAR_RING`。⇒ 这是一处**有意的
 不一致**，留待裁决。
 
+✅ **2026-10-08 复核更正（原文保留作历史）**：上述"留待裁决"已闭环 —— 同日提交 `49784b5`
+把本轮 9 个删除项全部补进 `LEGACY_MAP`（`AppSettings.kt:295-307`，`TUNNEL_FLY` / `FREQUENCY_MOUNTAIN` /
+`GALAXY_SPIRAL` / `SPECTRO_WATERFALL` / `PARTICLE_TEXT` / `PLASMA_FLOW` / `ORIGAMI_POLY` / `STAIRCASE_WAVE` /
+`FRACTAL_TREE` → `CIRCULAR_RING`，并带注释说明"与上一批 11 个保持同一份迁移意图清单"）。
+⇒ 现状是**一致**而非"有意不一致"；本节上文的"没有加进去"仅对 `7f33c87` 那一刻成立。
+
 #### 四、被同步的计数与清单断言
 
 | 位置 | 原值 | 新值 | 依据 |
@@ -14046,3 +14052,71 @@ WIP 即使编译通过也会画出**错的东西**，逐条记录：
   ⛔ `versionName` 未提升（所有者指示），故本轮实现落在 v2.38.4 段、需随下一次发版一并带出
 - ⛔ **真机上机验收未做**（§四 的每档提交数是静态估算）：E29 的晨昏线 / 大气光 / 云带 / 米粒 / 卡西尼缝 /
   彗星 观感与 LOW 档帧率待所有者在创维 5.1.1 上确认
+
+### 10.220 v2.38.4 — E29 真机观感回访：木星改明暗带交替 + 补大红斑，彗尾改柔边双尾（2026-10-08）
+
+**背景**：§10.219 落地后所有者在创维5.1.1 实测，反馈两条观感问题——**木星条纹不像、且没有大红斑**，
+**彗尾是个硬边多边形不好看**。⇒ 本轮重做这两处的观感，⛔ 版本号未提升（仍 v2.38.4）。
+
+#### 一、木星：为什么"不像"（三个叠加的根因）
+
+1. **单一基色 + 等宽 + 仅 alpha 交替** ⇒ 读成"扁平行条纹"。真实木星是米白Zone 与红棕 Belt **交替**、
+   且**宽度不等**（赤道带最宽、极区窄而密）。原实现所有带共用一个 `JUPITER_BAND_DARK`（暗棕），
+   只靠逐条 alpha（0.18/0.12）区分深浅 ⇒ 既无色相对比、也无宽窄层次。**这是"不像"的主因。**
+2. **扰动频率过低**：原 `bandWave` 三层正弦频率仅 6.2/12.7/23.1，64 段离散下只是整条带的缓慢起伏，
+   没有木星带边缘的湍流涡旋质感。
+3. **无大红斑**：木星最标志性的特征缺失。
+
+#### 二、木星改法
+
+- **明暗双基色**（新增 `JUPITER_ZONE` 米白 `0xFFD8C4A0` / `JUPITER_BELT` 红棕 `0xFF8B4A2F` /
+  `JUPITER_POLAR` 灰暗 `0xFF7A6E62`；土星对应 `SATURN_ZONE/BELT/POLAR`，明度差刻意小于木星）。
+  旧单色常量删除。**明暗靠基色明度差，alpha 只做浓淡微调**（Zone0.62 / Belt 0.66 / Polar 0.42）。
+- **宽窄不等**：`BAND_THICK_K` 0.72→0.56（换取更大扰动的盘内余量）+ 逐带收窄
+  （`BAND_POLAR_NARROW=0.50` 极区 / `BAND_BELT_NARROW=0.84` 暗带）⇒ 赤道带宽、极区窄。
+- **湍流边缘**：`BAND_STEPS` 64→96、`JUPITER_BAND_AMP` 0.055→0.105；上下边缘**异相**扰动
+  （`BAND_EDGE_PHASE_STEP=1.37`）模拟真实带边缘上下的不对称褶皱。两项防粘连护栏：
+  `BAND_EDGE_MAX=0.40`（边缘最大相对位移 0.8×thick ⇒ 带不自交掐断）、`BAND_EDGE_GAP_K=0.13`
+  （相邻带边缘最大相向位移 0.26×spacing ⇒ 不填平缝隙）。
+- **大红斑**（仅 HIGH，+2 提交）：南纬偏西（`GRS_LAT=-0.22`）横向椭圆涡旋
+  （`GRS_RX=0.30`/`GRS_RY=0.12`，长宽比 2.5:1），橙红晕 `GRS_HALO=0xFFC1502E` + 砖红涡核
+  `GRS_CORE=0xFFB23A1E` 两层柔边（`GRS_MID/GRS_EDGE` alpha 递减到 0），随木星自转西漂
+  （`GRS_ROT_PERIOD=22.5`），盘缘淡出（`GRS_LIMB_FADE=0.36`）+ 横向压扁 `GRS_SQUEEZE=0.45`。
+  绘制在木星盘之后、晨昏线遮罩之前 ⇒ 夜侧被正确压暗。扫描校验：整个周期最大归一化半径 0.761 ≤ 1（恒在盘内）。
+
+#### 三、彗尾改法
+
+- **原缺陷**：`drawComet` 彗尾只 5 点（根部左/中段左/尖端/中段右/根部右），三条直线边 ⇒ 硬边纸片；
+  且无锥度、无柔边、无彗发、无双尾。
+- **柔边 = 3 层同形状锥形 Path 叠加**（外层最淡最大2.24/alpha0.24，中层 1.62/0.44，内层 1.00/1.00），
+  层间过渡即柔边。⛔ **不用 Brush 渐变**：尾向逐帧变化（背日方向 = 彗星位置向量），渐变要么逐帧重建
+  违反零分配、要么缓存后与尾轴对不齐、尾尖仍出硬边。
+- **锥度**：`halfWidth(t)=rootW×(1−t)^p×(1+0.45·sin(πt))`，最宽处落在尾根下游约1/4 而非彗核处；
+  三层尾尖同收尖 ⇒ 无硬切。
+- **双尾**：离子尾（蓝白 `0xFFBBD6FF`，**恒笔直**严格背日，长宽比≈12:1）+ 尘埃尾（淡黄
+  `0xFFE7D2A6`，抛物线 `0.16·len·t²`弯曲，长宽比≈3.4:1），夹角 5°~18° 取自新盐 `COMET_SALT_SPLIT`。
+  张向由彗星屏幕速度差分与背日向量的**叉乘符号**决定（永远甩在行进方向背后），速度退化时回退 hash 定向，
+  不抖动。
+- **彗发（coma）提到所有档**：新增成员 `cometComaBrush`（`radialGradient`，**单元圆空间**与画布尺寸无关），
+  `ensureLayout` 建一次，逐帧 canvas 缩放摆位；半径取"最外层离子尾根×1.15 / 核半径×3.1"⇒ 尾根恒落在光晕内无接缝。
+- **顺带修一处符号错**：下缘偏移必须是 `+off − hw`，若写成 `−(hw + off)` 会让上下缘弯曲方向相反、尾在弯曲处自交掐断。
+
+#### 四、提交数变化
+
+| 项 | 原（§10.219） | 现 | 说明 |
+|---|---|---|---|
+| 木/土云带（HIGH） | +18 | **+18** | 条数未变（10/8），仅每条路径顶点 64→96 |
+| 大红斑（HIGH） | — | **+2** | 仅 HIGH 档 |
+| 彗星（LOW/MED/HIGH） | +2/+3/+4 | **+8/+9/+10** | 彗发提至所有档 + 双尾 6 |
+
+⛔ 顶点量实涨：`BAND_STEPS` 64→96 使 HIGH 档带路径顶点 2340→3492（+49%），但**提交数不变**。
+
+#### 五、验证
+
+- `testDebugUnitTest` + `lintDebug`（两轮改动**叠加后**合并跑）：**BUILD SUCCESSFUL**，全量 1680 例 / 0 失败 /
+  0 错误，三个门禁类（`OrbitalProceduralEnhanceTest` 11 / `OrbitalStarFieldTest` 13 / `PerfBudgetContractTest` 9）全绿。
+- `assembleRelease`：**BUILD SUCCESSFUL**，`NASMusicTV-release-v2-38-4.apk` 24.35 MB。
+- **真机（创维5.1.1 / API 22）**：`install -r` 覆盖安装成功；**木星明暗带 + 大红斑、彗尾柔边双尾 + 彗发观感经所有者确认定稿**。
+- 门禁 `OrbitalProceduralEnhanceTest` 云带判据（4 组：木/土 × HIGH/MED）逐条仍成立——`BAND_THICK_K` 下调与逐带收窄
+  使最坏 `chord²+(lim+amp)²` 降至0.976（木星HIGH）以下，留2.4% 余量；门禁断言文件未改一字。
+- ⛔ **LOW 档帧率未机读数**：木星顶点 +49% 是否影响创维 5.1.1（API 22 主战场）帧率，待屏上角标/SurfaceFlinger 复核。

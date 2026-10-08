@@ -6,7 +6,7 @@
 >
 > **基线**：`HEAD = bb3a603`（v2.38.0，versionCode 169）。效果总数 **29 套**（`AppSettings.kt` 枚举 29 项，末位 `STAR_TRAILS` `:210`）；门禁断言 `VisualizerThemeTest` 7 处硬计数「29/28」、`FxCoverageScanTest` 1 处「29」——**均按 `bb3a603` 复核**。`technical-overview.md` 最新小节 **§10.207** ⇒ 本案新增 **§10.208**。`docs/archive/starry-sky-visualizer-plan.md` 是**已归档**的同类方案，其教训见 §三，本方案不复用其文档。
 >
-> **红线摘要**：纯 `DrawScope` + `nativeCanvas`，⛔ **禁止** shader / AGSL `RuntimeShader` / `RenderEffect` / OpenGL / `BitmapShader`（`docs/visualizer-texture-upgrade-plan.md:8-10,994,3276`）。海浪必须是**真实动态**（§4.3），⛔ 不得用静态纹理平移冒充。`draw()` 内零分配；每帧增量必须 `× fx.dt`；⛔ 不得覆盖 `RendererFx` 的三个 `final` 模板方法。
+> **红线摘要**：纯 `DrawScope` + `nativeCanvas`，⛔ **禁止** shader / AGSL `RuntimeShader` / `RenderEffect` / OpenGL / `BitmapShader`（`docs/archive/visualizer-texture-upgrade-plan.md:8-10,994,3276`）。海浪必须是**真实动态**（§4.3），⛔ 不得用静态纹理平移冒充。`draw()` 内零分配；每帧增量必须 `× fx.dt`；⛔ 不得覆盖 `RendererFx` 的三个 `final` 模板方法。
 
 ### 文档版本跟踪
 
@@ -144,7 +144,7 @@ protected abstract fun DrawScope.drawContent(frame: AudioFrame, ctx: RenderConte
 
 | 禁物 | 依据 | 替代 |
 |---|---|---|
-| AGSL / `.glsl` / OpenGL / EGL | `visualizer-texture-upgrade-plan.md:8-10,994,3276`（`RuntimeShader` 需 API 33+，minSdk 22） | `Brush` 渐变 + `Path` 描边 |
+| AGSL / `.glsl` / OpenGL / EGL | `docs/archive/visualizer-texture-upgrade-plan.md:8-10,994,3276`（`RuntimeShader` 需 API 33+，minSdk 22） | `Brush` 渐变 + `Path` 描边 |
 | `RenderEffect`（真高斯模糊） | 同上；API 31+ | 重复贴图低 alpha 叠加 |
 | `BitmapShader` | 全仓库零使用 | 自烘 `ImageData` 位图 + `drawImage`（沙纹理 / 泡沫贴图） |
 | 圆角 `clip` | API 22 三星 hwui 段错误真机复现 3 次（`VisualizerStage.kt:750-752`） | `drawPath` / `drawCircle` |
@@ -1375,7 +1375,7 @@ kA  = isLead ? clamp(amp · layerAlpha(adv, A.sEnergy) · fade, 0, 1)
 
 ## 十三、附：同类方案与既有资产
 
-- **同类方案文档（体例基准）**：`docs/visualizer-texture-upgrade-plan.md`（在办）、`docs/archive/photo-spectrum-effect-plan.md`（在办）。⛔ `docs/archive/starry-sky-visualizer-plan.md` 已归档，可作**教训**参考（其 §12.4 的 16 行偏差记录是本方案 §三 的直接来源），但**不可作为契约**。
+- **同类方案文档（体例基准）**：`docs/archive/visualizer-texture-upgrade-plan.md`（⛔ 2026-10-08 已归档，遗留项见 `docs/archive/README.md` 第五轮）、`docs/archive/photo-spectrum-effect-plan.md`（在办）。⛔ `docs/archive/starry-sky-visualizer-plan.md` 已归档，可作**教训**参考（其 §12.4 的 16 行偏差记录是本方案 §三 的直接来源），但**不可作为契约**。
 - **既有可复用资产**：`fx/OverlayFx.kt`（`drawVignette`/`drawGrain`，经 `postFx` 声明式启用）、`fx/AudioSmoother.kt`（本效果 attack 55ms / release 260ms、τ=700ms/500ms）、`visualizer/Easing.kt`、`VisualizerMath.kt`、`SizeCache`。
   ⚠️ `fx/ProceduralTexture.kt`（`WATER:363` / `CAUSTIC:380` / `ensureFullscreenOnly:112`）**v1.2 一张都不取用**——原型的海水/粼光/泡沫/沙面全部自绘或自烘（§2.5/§3.2/§4.8）。此处列出仅为记录「它存在、且我们刻意不用」。
 - **参考图版权**：⚠️ 参考图为第三方图库素材（昵图网水印）。**方案与代码只取其构图与色彩关系，不复制图像本身**；实现全部为程序化绘制，无任何外部素材入库。

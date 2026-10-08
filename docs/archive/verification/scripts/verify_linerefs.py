@@ -14,7 +14,7 @@ import sys
 sys.stdout.reconfigure(encoding="utf-8")
 
 ROOT = "."
-DOC = "docs/visualizer-texture-upgrade-plan.md"
+DOC = "docs/archive/visualizer-texture-upgrade-plan.md"
 
 # 建 index: basename -> [fullpath...]
 idx = {}
