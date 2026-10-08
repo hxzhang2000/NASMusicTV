@@ -12,6 +12,13 @@ data class ServerConfig(
     val apiToken: String = "",
     val username: String = "",
     val password: String = "",
+    /**
+     * 访问码 / 安全码（飞牛 fnOS 的「外网访问码」；其余后端忽略）。
+     *
+     * ⚠️ **属凭据**：与 `password` / `apiToken` 同等对待，落盘走 `CryptoUtils` AES-GCM
+     * 加密，且**不进备份 JSON**（见 `AppPreferences.exportBackupData`）。
+     */
+    val accessCode: String = "",
     val isConnected: Boolean = false,
     val displayName: String = ""
 ) {

@@ -4,7 +4,6 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -28,6 +27,7 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.LocalContentColor
 import com.nasmusic.tv.ui.theme.ButtonColors
@@ -97,6 +97,7 @@ fun isTVDevice(): Boolean {
  * @param requestFocusOnLaunch 是否在组件首次进入组合时自动请求焦点，默认 false
  * @param showFocusBorder 是否显示焦点边框，默认 true
  * @param focusBorderColor 焦点边框颜色，默认 NasMusicColors.FocusRing
+ * @param focusBorderWidth 焦点环实心描边宽度，默认 FocusRingWidth（3dp）
  * @param onFocusChanged 焦点变化回调，参数为当前是否获得焦点
  * @param content 内容 Composable
  */
@@ -120,6 +121,7 @@ fun FocusableSurface(
     requestFocusOnLaunch: Boolean = false,
     showFocusBorder: Boolean = true,
     focusBorderColor: Color = NasMusicColors.FocusRing,
+    focusBorderWidth: Dp = FocusRingWidth,
     onFocusChanged: ((Boolean) -> Unit)? = null,
     content: @Composable () -> Unit
 ) {
@@ -127,8 +129,8 @@ fun FocusableSurface(
     val animScale = remember { Animatable(1f) }
     val interactionSource = remember { MutableInteractionSource() }
     val isPressed by interactionSource.collectIsPressedAsState()
-    // 设备类型：仅 TV 显示焦点边框（手机触摸无焦点概念）
-    val tvDevice = isTVDevice()
+    // 是否应当显示焦点视觉（无触摸屏 / 电视 feature / 已用过方向键 —— 见 FocusIndicator.kt）
+    val tvDevice = shouldShowFocusVisuals()
 
     if (requestFocusOnLaunch && focusRequester != null) {
         LaunchedEffect(Unit) {
@@ -147,9 +149,13 @@ fun FocusableSurface(
     //   ① 按钮被点过一次后**永久放大 8%**（P2-34 已修）；
     //   ② 点过的那一项**永久保持高亮容器色**（如底栏/顶栏图标）；
     //   ③ 点过的那一项**永久保持聚焦文字色**。
-    // 因此把"焦点相关视觉"（缩放 / 边框 / 容器色 / 内容色）统一收敛到 [activeFocus]：
-    // 非 TV 设备恒为 false，手机只保留 `pressed*`（按下瞬时反馈）。
-    // TV 侧 `tvDevice == true` → `activeFocus == isFocused`，行为与改动前逐字一致。
+    // 因此把"焦点相关视觉"（缩放 / 焦点环 / 容器色 / 内容色）统一收敛到 [activeFocus]：
+    // 只靠触摸的设备恒为 false，手机只保留 `pressed*`（按下瞬时反馈）。
+    //
+    // ⚠️ 判据用 [shouldShowFocusVisuals] 而**不是** `isTVDevice()`：后者纯靠
+    // `hasSystemFeature(leanback / type.television)` 嗅探，在非 Google 认证的电视盒子上
+    // 经常双双 false —— 那样会把缩放/焦点环/容器色/内容色**一次性全关掉**，
+    // 用户就只能靠按确认键反推焦点在哪（真机反馈的原始现象）。
     val activeFocus = isFocused && tvDevice
 
     // 动画由 isFocused 状态驱动，避免 onFocusChanged 中 scope.launch 的竞态
@@ -182,17 +188,6 @@ fun FocusableSurface(
                 if (focusRequester != null) Modifier.focusRequester(focusRequester)
                 else Modifier
             )
-            .then(
-                if (showFocusBorder && tvDevice) {
-                    Modifier.border(
-                        width = if (activeFocus) 2.dp else 0.dp,
-                        color = if (activeFocus) focusBorderColor else Color.Transparent,
-                        shape = shape
-                    )
-                } else {
-                    Modifier
-                }
-            )
             .onFocusChanged {
                 isFocused = it.isFocused
                 onFocusChanged?.invoke(it.isFocused)
@@ -203,6 +198,18 @@ fun FocusableSurface(
                 indication = null,
                 onClick = onClick,
                 onLongClick = onLongClick
+            )
+            // ⛔⛔ 焦点环**必须放在链尾**（真机反馈「遥控器导航看不到焦点」的根因）：
+            // Compose 绘制顺序 = 修饰符链顺序，越靠前越靠下。此前的写法是
+            // `border(...)` → `background(...)`，于是**不透明容器色把焦点环整个盖住** ——
+            // 只有容器色为 Color.Transparent 的少数组件侥幸可见，所有卡片/列表行
+            // （containerColor = NasMusicColors.Surface）全部不可见。
+            // 改用 focusRing()（外侧柔光带 + 内侧实心环），两层都落在边界之内 ⇒ 不遮挡卡片内文字。
+            .focusRing(
+                shape = shape,
+                color = focusBorderColor,
+                visible = showFocusBorder && activeFocus,
+                ringWidth = focusBorderWidth,
             )
     ) {
         // ⚠️ v2.36.0（竖屏「按钮看不清」根因修复）：

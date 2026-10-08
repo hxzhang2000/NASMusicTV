@@ -67,7 +67,7 @@ import com.nasmusic.tv.ui.theme.UiMode
 import kotlinx.coroutines.launch
 
 private enum class InputField {
-    BASE_URL, USERNAME, PASSWORD, API_TOKEN
+    BASE_URL, USERNAME, PASSWORD, API_TOKEN, ACCESS_CODE
 }
 
 @OptIn(ExperimentalTvMaterial3Api::class)
@@ -136,6 +136,16 @@ fun ServerConnectScreen(
     var apiToken by remember(initialConfig) {
         mutableStateOf(
             if (initialConfig.apiToken.isNotBlank()) TextFieldValue(initialConfig.apiToken)
+            else TextFieldValue()
+        )
+    }
+    // 飞牛「访问码 / 安全码」：仅飞牛音乐需要；其余后端不显示。
+    // 属于凭据，加密落盘（AppPreferences.saveServerConfig），且从备份中剥离。
+    // NAS 未开启访问码保护时留空即可——适配器会先探测 {origin}/access_code_verify，
+    // 未开启时该端点 404/放行，留空不影响正常登录。
+    var accessCode by remember(initialConfig) {
+        mutableStateOf(
+            if (initialConfig.accessCode.isNotBlank()) TextFieldValue(initialConfig.accessCode)
             else TextFieldValue()
         )
     }
@@ -398,7 +408,8 @@ val backendRegistry = remember { (appContext.applicationContext as NasMusicApp).
                                 baseUrl = baseUrl.text.trim().removeSuffix("/"),
                                 apiToken = apiToken.text.trim(),
                                 username = username.text.trim(),
-                                password = password.text.trim()
+                                password = password.text.trim(),
+                                accessCode = accessCode.text.trim()
                             )
                             val (success, message) = backendRegistry.testConnection(config)
                             testStatus = if (success) "success:$message" else "error:$message"
@@ -463,6 +474,18 @@ val backendRegistry = remember { (appContext.applicationContext as NasMusicApp).
                     masked = true,
                     onOpen = { activeInputField = InputField.PASSWORD }
                 )
+                // 访问码仅飞牛音乐需要：其余后端没有这个概念，显示出来只会误导
+                if (backendType == ServerConfig.TYPE_FEINIU) {
+                    Spacer(modifier = Modifier.height(16.dp))
+                    FormField(
+                        label = stringResource(R.string.server_access_code),
+                        hint = stringResource(R.string.server_access_code_hint),
+                        value = accessCode,
+                        onValueChange = { accessCode = it },
+                        masked = true,
+                        onOpen = { activeInputField = InputField.ACCESS_CODE }
+                    )
+                }
             }
 
             Spacer(modifier = Modifier.height(32.dp))
@@ -488,7 +511,8 @@ val backendRegistry = remember { (appContext.applicationContext as NasMusicApp).
                             baseUrl = baseUrl.text.trim().removeSuffix("/"),
                             apiToken = apiToken.text.trim(),
                             username = username.text.trim(),
-                            password = password.text.trim()
+                            password = password.text.trim(),
+                            accessCode = accessCode.text.trim()
                         )
                         onConnect(config)
                     }
@@ -550,6 +574,12 @@ val backendRegistry = remember { (appContext.applicationContext as NasMusicApp).
                     dialogValue = apiToken.text
                     dialogMasked = true
                 }
+                InputField.ACCESS_CODE -> {
+                    dialogTitle = stringResource(R.string.server_access_code_dialog_title)
+                    dialogHint = stringResource(R.string.server_access_code_dialog_hint)
+                    dialogValue = accessCode.text
+                    dialogMasked = true
+                }
                 else -> {
                     dialogTitle = ""
                     dialogHint = ""
@@ -568,6 +598,7 @@ val backendRegistry = remember { (appContext.applicationContext as NasMusicApp).
                         InputField.USERNAME -> username = TextFieldValue(newText)
                         InputField.PASSWORD -> password = TextFieldValue(newText)
                         InputField.API_TOKEN -> apiToken = TextFieldValue(newText)
+                        InputField.ACCESS_CODE -> accessCode = TextFieldValue(newText)
                         else -> {}
                     }
                     activeInputField = null

@@ -1,8 +1,10 @@
 package com.nasmusic.tv.backend.impl
 
 import android.content.Context
+import android.util.Base64
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
+import com.nasmusic.tv.R
 import com.nasmusic.tv.backend.BackendAdapter
 import com.nasmusic.tv.data.model.Album
 import com.nasmusic.tv.data.model.Artist
@@ -46,6 +48,12 @@ import java.util.concurrent.TimeUnit
  * - ID：全部为 **GUID 字符串**；`duration` 单位**已是毫秒**
  * - 封面按 `static/cover?coverId=<id>&size=<px>` 取（**不是**按曲目 ID）
  * - 播放流 `track/stream?guid=<guid>`（guid 是**查询参数**）
+ * - **访问码 / 安全码**：飞牛 NAS 可开启「外网访问码」保护，此时**账号密码正确也登不上**。
+ *   契约要求在音乐 API 之前先探测 `{origin}/access_code_verify`，并把
+ *   `x-access-code: base64(code, UTF-8)` + `x-access-source: app` 挂到
+ *   **登录、已认证 API、封面、Media3 音频**四类请求上
+ *   （`.trellis/spec/backend/android-client-contracts.md:170-173`）。
+ *   ⚠️ 探测端点挂在**站点根**，不在 `/music/api/v1/` 下 —— 见 [FeiniuUrl.accessCodeVerifyUrl]。
  *
  * **本适配器刻意不调用 `EncodingUtils.fixEncoding()`**，元数据字符串原样使用。
  * 依据与理由见 [parseTrack] 上方的注释——简言之：该函数是为 Jellyfin 的
@@ -97,7 +105,48 @@ class FeiniuAdapter(private val appContext: Context? = null) : BackendAdapter {
         private const val PREF_DEVICE_ID = "device_id"
 
         private const val PREFS_UNSET = ""
+
+        /** 访问码请求头（契约文档 §L170-L173） */
+        private const val HEADER_ACCESS_CODE = "x-access-code"
+        private const val HEADER_ACCESS_SOURCE = "x-access-source"
+
+        /** `x-access-source` 固定值 */
+        private const val ACCESS_SOURCE_APP = "app"
+
+        /**
+         * `access_code_verify` 判定为「访问码被拒」的状态码集合。
+         * 照抄参考项目 `ConnectionResolver.ACCESS_CODE_REJECTION_CODES = {401, 403, 429}`。
+         */
+        private val ACCESS_CODE_REJECTION_CODES = setOf(401, 403, 429)
+
+        /**
+         * 网络类异常类型 → 展示用短名。
+         *
+         * ⚠️ 值取**异常类简名**（`ConnectException` 等）而非中文描述：
+         * ① 类名本身就是最有诊断价值的事实（用户截图即可定位）；
+         * ② 适配器内不允许出现面向用户的中文硬编码文案——那属于 `strings.xml`。
+         */
+        private val NETWORK_ERROR_NAMES = setOf(
+            "java.net.ConnectException",
+            "java.net.UnknownHostException",
+            "java.net.SocketTimeoutException",
+            "javax.net.ssl.SSLException"
+        )
+
+        /** 异常 cause 链最大遍历深度（防病态自引用） */
+        private const val MAX_CAUSE_DEPTH = 8
+
+        /** 信封 msg 展示长度上限 */
+        private const val MAX_MSG_LENGTH = 60
     }
+
+    /**
+     * 失败分类：[resId] 是 `R.string.*` 文案，[facts] 是原样拼在其后的协议事实。
+     *
+     * ⛔ `facts` 只允许放**非凭据**的服务端原值（HTTP 状态码 / 信封 code 与 msg /
+     * 异常类型短名），禁止放访问码、密码、token。
+     */
+    internal data class Failure(val resId: Int, val facts: List<Any> = emptyList())
 
     override val backendType: String = ServerConfig.TYPE_FEINIU
     override var serverName: String = "飞牛音乐"
@@ -115,6 +164,38 @@ class FeiniuAdapter(private val appContext: Context? = null) : BackendAdapter {
     private var loginUsername: String = ""
     @Volatile
     private var loginPasswordSha: String = ""
+
+    /**
+     * 访问码（安全码）请求头值 = `base64(code, UTF-8, NO_WRAP)`。
+     *
+     * ⚠️ **只存编码结果，不存明文**：明文仅在 `initialize()` 的栈内出现，
+     * 编码后即丢弃，明文亦不落盘（凭据由 `AppPreferences` 以 AES-GCM 加密存储）。
+     * 空串 = 用户未填访问码 ⇒ 不注入这两个头（参考项目 `ConnectionAccess.headers()` 同语义）。
+     */
+    @Volatile
+    private var encodedAccessCode: String = ""
+
+    /**
+     * 最近一次失败的分类记录（渲染 [lastErrorDetail] 的原料）；成功连接时为 null。
+     *
+     * ⚠️ 单独暴露而非只存渲染后的字符串，原因有二：
+     * 1. **可测**：本项目的单测**不打包 Android 资源**
+     *    （`app/build.gradle.kts` 未开 `unitTests.includeAndroidResources`，
+     *    Robolectric 下 `Context.getString` 恒抛 `Resources$NotFoundException`）。
+     *    只断言渲染文案的话，分类逻辑在单测里等于零覆盖——而这正是本次要修的东西。
+     * 2. **可降级**：拿不到资源表时仍能给出带协议事实的文本，而不是空串。
+     */
+    @Volatile
+    internal var lastFailure: Failure? = null
+
+    /**
+     * 最近一次失败的简短原因（见 [BackendAdapter.lastErrorDetail]）。
+     *
+     * ⛔ 渲染时只允许出现 `resId` 与**协议事实**（HTTP 状态码 / 信封 code+msg /
+     * 异常类型短名）——访问码、密码、token 一律不得进入。
+     */
+    override val lastErrorDetail: String
+        get() = lastFailure?.let { renderFailure(it) }.orEmpty()
 
     /** 令牌代数：登录成功递增；并发重登去重用（见 [withAuthRetry]） */
     @Volatile
@@ -171,7 +252,15 @@ class FeiniuAdapter(private val appContext: Context? = null) : BackendAdapter {
      * 再经 `BaiduHttpDataSourceFactory` 的拦截器注入 ExoPlayer 与 Coil 两条链路。
      */
     override val streamHeaders: Map<String, String>
-        get() = if (userToken.isNotBlank()) mapOf("Authorization" to userToken) else emptyMap()
+        get() = buildMap {
+            if (userToken.isNotBlank()) put("Authorization", userToken)
+            // 封面 `static/cover` 与播放流 `track/stream` 同样要过访问码
+            // （契约 §L170-L173 明列 artwork 与 Media3 audio）
+            if (encodedAccessCode.isNotEmpty()) {
+                put(HEADER_ACCESS_CODE, encodedAccessCode)
+                put(HEADER_ACCESS_SOURCE, ACCESS_SOURCE_APP)
+            }
+        }
 
     // ==================== 认证 ====================
 
@@ -181,13 +270,21 @@ class FeiniuAdapter(private val appContext: Context? = null) : BackendAdapter {
         username: String,
         password: String
     ): Boolean = withContext(Dispatchers.IO) {
+        lastFailure = null
         val normalized = FeiniuUrl.normalize(baseUrl)
         if (normalized.isBlank()) {
             AppLog.w(TAG, "initialize: invalid baseUrl=${UrlSanitizer.sanitize(baseUrl)}")
+            lastFailure = Failure(R.string.feiniu_err_invalid_url)
             return@withContext false
         }
         apiBase = normalized
         AppLog.d(TAG, "initialize: apiBase=${UrlSanitizer.sanitize(apiBase)}")
+
+        // 先探测访问码（飞牛开启「外网访问码」时，账号密码再对也登不上）
+        probeAccessCode(apiBase)?.let { blocked ->
+            lastFailure = blocked
+            return@withContext false
+        }
 
         // 已有令牌：直接校验
         if (apiToken.isNotBlank()) {
@@ -210,7 +307,109 @@ class FeiniuAdapter(private val appContext: Context? = null) : BackendAdapter {
                 return@withContext true
             }
         }
+        if (lastFailure == null) {
+            lastFailure = Failure(R.string.feiniu_err_no_token)
+        }
         false
+    }
+
+    /**
+     * 探测访问码（`GET {origin}/access_code_verify`）。
+     *
+     * 判定严格照抄参考项目 `ConnectionResolver.verifyAccessCode`：
+     * - HTTP 2xx → 放行
+     * - 401/403/429 且**未填**访问码 → 需要访问码（阻塞，账号密码再对也没用）
+     * - 401/403/429 且**填了**访问码 → 访问码错误
+     * - **其他一切情况（含网络异常）→ 放行**，绝不阻塞后续登录
+     *
+     * 最后一条是照抄参考项目的 `else -> access`：老版本 fnOS 可能根本没有这个端点，
+     * 此时若阻塞就会把所有未开启访问码的用户一起挡在门外。
+     *
+     * @return `0` = 放行；非 0 = 阻塞原因的字符串资源 id（**不返回文案本身**——
+     *   文案要在渲染时才解析，避免「无 Context 解析出空串」被误当成「阻塞原因 = 空」）
+     *
+     * @return `null` = 放行；非 null = 阻塞原因（尚未渲染，由调用方写入 `lastFailure`）
+     */
+    private fun probeAccessCode(api: String): Failure? {
+        val url = FeiniuUrl.accessCodeVerifyUrl(api)
+        if (url.isBlank()) return null
+        return try {
+            val request = Request.Builder().url(url).applyAccessCodeHeaders().get().build()
+            client.newCall(request).execute().use { resp ->
+                when {
+                    resp.isSuccessful -> null
+                    resp.code in ACCESS_CODE_REJECTION_CODES && encodedAccessCode.isEmpty() -> {
+                        AppLog.w(TAG, "probeAccessCode: access code required (HTTP ${resp.code})")
+                        Failure(R.string.feiniu_err_access_code_required)
+                    }
+                    resp.code in ACCESS_CODE_REJECTION_CODES -> {
+                        AppLog.w(TAG, "probeAccessCode: HTTP ${resp.code} with access code supplied")
+                        Failure(R.string.feiniu_err_access_code_invalid)
+                    }
+                    // ⚠️ 其他状态码（含 404 = 老版本无此端点）必须放行，不能阻塞登录
+                    else -> null
+                }
+            }
+        } catch (e: Exception) {
+            // ⚠️ 网络异常同样放行（照抄参考项目语义），否则断网时连地址都验不了
+            AppLog.w(TAG, "probeAccessCode: probe failed, allowing login to continue", e)
+            null
+        }
+    }
+
+    /** 给 [Request.Builder] 挂上访问码两个头（未填访问码时不挂） */
+    private fun Request.Builder.applyAccessCodeHeaders(): Request.Builder {
+        if (encodedAccessCode.isNotEmpty()) {
+            header(HEADER_ACCESS_CODE, encodedAccessCode)
+            header(HEADER_ACCESS_SOURCE, ACCESS_SOURCE_APP)
+        }
+        return this
+    }
+
+    /**
+     * 访问码入参入口：由 `BackendRegistry` 在 `initialize()` 之前调用。
+     *
+     * 只保留 base64 结果（明文即抛，不写日志、不落盘）。该值与 `loginUsername` /
+     * `loginPasswordSha` 同生命周期——[clearSessionState] 一并清空，静默重登
+     * （[withAuthRetry]）期间仍然有效。
+     */
+    override fun setAccessCode(rawCode: String) {
+        val trimmed = rawCode.trim()
+        encodedAccessCode = if (trimmed.isEmpty()) "" else
+            Base64.encodeToString(trimmed.toByteArray(Charsets.UTF_8), Base64.NO_WRAP)
+    }
+
+    /**
+     * 把 [Failure] 渲染成面向用户的短文案。
+     *
+     * 正常路径：`appContext.getString(resId, *facts)` —— 文案在 `strings.xml`，协议事实
+     * 由服务端原样提供（状态码 / code / msg），二者拼在一起即可自解释。
+     *
+     * ⚠️ 降级路径（**只在单测里会走到**）：本项目单测不打包 Android 资源，
+     * `getString` 抛 `Resources$NotFoundException`。此时退化为 `[E<resId>] <facts>`，
+     * 保证 `lastErrorDetail` 永不为空、且仍保留可断言的协议事实。生产环境
+     * `BackendRegistry` 始终传入真实 Application Context，不会命中该分支。
+     */
+    private fun renderFailure(failure: Failure): String {
+        val localized = runCatching {
+            appContext?.getString(failure.resId, *failure.facts.toTypedArray())
+        }.getOrNull()
+        if (!localized.isNullOrBlank()) return localized
+        return buildString {
+            append("[E").append(failure.resId).append(']')
+            failure.facts.forEach { append(' ').append(it) }
+        }
+    }
+
+    /** 信封错误分类（code + 服务端 msg） */
+    private fun envelopeFailure(code: Int, msg: String?): Failure =
+        Failure(R.string.feiniu_err_envelope_code, listOf(code, shortenMsg(msg)))
+
+    /** 信封 msg 截断长度：服务端文案可能很长，UI 上只需可辨识的一小段 */
+    private fun shortenMsg(msg: String?): String {
+        val value = msg?.trim().orEmpty()
+        if (value.isEmpty()) return ""
+        return if (value.length <= MAX_MSG_LENGTH) value else value.take(MAX_MSG_LENGTH) + "…"
     }
 
     /**
@@ -230,26 +429,41 @@ class FeiniuAdapter(private val appContext: Context? = null) : BackendAdapter {
             val token = str(data, "userToken")
             if (token.isNullOrBlank()) {
                 AppLog.w(TAG, "login: response has no userToken")
+                lastFailure = Failure(R.string.feiniu_err_no_token)
                 return false
             }
             userToken = token
             tokenGeneration++
             AppLog.d(TAG, "login success, token=${token.take(8)}...")
             true
+        } catch (e: AuthExpiredException) {
+            // 登录阶段收到令牌失效码：原因已在 dataOf 写入，直接失败
+            AppLog.w(TAG, "login: token rejected by server")
+            false
         } catch (e: Exception) {
             AppLog.e(TAG, "login failed", e)
+            recordNetworkError(e)
             false
         }
     }
 
-    /** `GET user/me` 校验令牌是否有效 */
+    /**
+     * `GET user/me` 校验令牌是否有效。
+     *
+     * 令牌失效属**预期内**的降级路径（随后会走密码登录），因此刻意**不写**
+     * [lastErrorDetail]——否则一次正常的「旧 token 过期」会留下误导性的诊断文案。
+     */
     private fun verifyToken(): Boolean {
         if (userToken.isBlank() || apiBase.isBlank()) return false
+        val savedFailure = lastFailure
         return try {
             val url = FeiniuUrl.endpoint(apiBase, "user/me")
-            dataOf(get(url), url) != null
+            val ok = dataOf(get(url), url) != null
+            if (!ok) lastFailure = savedFailure
+            ok
         } catch (e: Exception) {
             AppLog.d(TAG, "verifyToken failed: ${e.message}")
+            lastFailure = savedFailure
             false
         }
     }
@@ -320,6 +534,8 @@ class FeiniuAdapter(private val appContext: Context? = null) : BackendAdapter {
         userToken = ""
         loginUsername = ""
         loginPasswordSha = ""
+        // 访问码是凭据：与令牌同生命周期，登出即失效
+        encodedAccessCode = ""
         apiBase = ""
         serverVersion = ""
         mediasrvVersion = ""
@@ -733,7 +949,7 @@ class FeiniuAdapter(private val appContext: Context? = null) : BackendAdapter {
      */
     private fun execute(request: Request, url: String, authenticated: Boolean): JsonObject? {
         return try {
-            val builder = request.newBuilder()
+            val builder = request.newBuilder().applyAccessCodeHeaders()
             if (authenticated) {
                 if (userToken.isBlank()) {
                     AppLog.w(TAG, "execute: no token for ${UrlSanitizer.sanitize(url)}")
@@ -743,9 +959,13 @@ class FeiniuAdapter(private val appContext: Context? = null) : BackendAdapter {
                 builder.header("Authorization", userToken)
             }
             client.newCall(builder.build()).execute().use { response ->
-                if (response.code == 401) throw AuthExpiredException()
+                if (response.code == 401) {
+                    lastFailure = Failure(R.string.feiniu_err_token_expired)
+                    throw AuthExpiredException()
+                }
                 if (!response.isSuccessful) {
                     AppLog.w(TAG, "HTTP ${response.code} url=${UrlSanitizer.sanitize(url)}")
+                    lastFailure = Failure(R.string.feiniu_err_http_status, listOf(response.code))
                     return null
                 }
                 val text = response.body?.string()
@@ -758,8 +978,29 @@ class FeiniuAdapter(private val appContext: Context? = null) : BackendAdapter {
             throw e
         } catch (e: Exception) {
             AppLog.e(TAG, "request error url=${UrlSanitizer.sanitize(url)}", e)
+            recordNetworkError(e)
             null
         }
+    }
+
+    /**
+     * 把网络异常映射为用户可读的短原因。
+     *
+     * ⚠️ **只取异常类名，不取 `e.message`** —— 消息里可能带 URL（含凭据参数）
+     * 或内部主机名。沿 cause 链找第一个已知网络异常类型；找不到就用最外层类名兜底。
+     */
+    private fun recordNetworkError(e: Exception) {
+        var cause: Throwable? = e
+        var depth = 0
+        while (cause != null && depth < MAX_CAUSE_DEPTH) {
+            if (cause.javaClass.name in NETWORK_ERROR_NAMES) {
+                lastFailure = Failure(R.string.feiniu_err_network, listOf(cause.javaClass.simpleName))
+                return
+            }
+            cause = cause.cause
+            depth++
+        }
+        lastFailure = Failure(R.string.feiniu_err_network, listOf(e.javaClass.simpleName))
     }
 
     /**
@@ -774,10 +1015,22 @@ class FeiniuAdapter(private val appContext: Context? = null) : BackendAdapter {
         if (code != 0) {
             val msg = str(envelope, "msg").orEmpty()
             when (code) {
-                99999, 120001 -> throw AuthExpiredException()
-                120002 -> AppLog.w(TAG, "account disabled: code=$code msg=$msg")
-                100005 -> AppLog.d(TAG, "not found: code=$code url=${UrlSanitizer.sanitize(url)}")
-                else -> AppLog.w(TAG, "api error code=$code msg=$msg url=${UrlSanitizer.sanitize(url)}")
+                99999, 120001 -> {
+                    lastFailure = Failure(R.string.feiniu_err_token_expired)
+                    throw AuthExpiredException()
+                }
+                120002 -> {
+                    AppLog.w(TAG, "account disabled: code=$code msg=$msg")
+                    lastFailure = envelopeFailure(code, msg)
+                }
+                100005 -> {
+                    AppLog.d(TAG, "not found: code=$code url=${UrlSanitizer.sanitize(url)}")
+                    // 资源不存在是正常业务结果，不污染连接诊断文案
+                }
+                else -> {
+                    AppLog.w(TAG, "api error code=$code msg=$msg url=${UrlSanitizer.sanitize(url)}")
+                    lastFailure = envelopeFailure(code, msg)
+                }
             }
             return null
         }

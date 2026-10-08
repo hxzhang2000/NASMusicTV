@@ -14120,3 +14120,188 @@ WIP 即使编译通过也会画出**错的东西**，逐条记录：
 - 门禁 `OrbitalProceduralEnhanceTest` 云带判据（4 组：木/土 × HIGH/MED）逐条仍成立——`BAND_THICK_K` 下调与逐带收窄
   使最坏 `chord²+(lim+amp)²` 降至0.976（木星HIGH）以下，留2.4% 余量；门禁断言文件未改一字。
 - ⛔ **LOW 档帧率未机读数**：木星顶点 +49% 是否影响创维 5.1.1（API 22 主战场）帧率，待屏上角标/SurfaceFlinger 复核。
+
+
+### 10.221 v2.38.5 — 真机反馈「电视上遥控器导航看不到焦点在哪」（2026-10-08）
+
+**现象（所有者原话）**：「tv上打开使用遥控器控制时看不到焦点在哪啊，完全不显示，只能移动一下点下确认键看看焦点到哪里了」。
+焦点**确实在移动**（按确认键会命中当前项），但视觉上零提示 ⇒ 典型 D-Pad 可访问性硬伤。
+
+#### 一、根因（两条独立成立，必须同时修）
+
+**根因 1（更直接）：焦点环被不透明背景盖住。**
+Compose 的绘制顺序 = 修饰符链顺序，越靠前越靠下。FocusableSurface.kt 的链是
+
+`
+.border(width = if (activeFocus) 2.dp else 0.dp, color = …, shape = shape)   // 画在下面
+.background(targetContainerColor, shape)                                       // 画在上面 ⇒ 盖住它
+`
+
+Modifier.border 自带「描边内缩在边界内」的语义，Modifier.background 按同一形状铺满整个
+Box ⇒ **不透明容器色把焦点环整条覆盖**。焦点环只在 containerColor = Color.Transparent
+的少数几个组件（AppRoot.NavItem 等）上侥幸可见；而所有卡片/列表行的
+containerColor = NasMusicColors.Surface（#162032，不透明）全部不可见 ⇒ 全应用零提示。
+
+> ⚠️ **与对比度无关**：FocusRing #2DD4BF 对 Background #0C1222 的对比度足够，
+> 不存在「颜色太暗」这条路。同文件内 RowActionButton / QueueScreen 的行高亮用的是
+> clip → background → border（顺序正确），这就是「有些地方能看到、有些地方看不到」的来源。
+
+**根因 2（更隐蔽）：设备判据在非认证电视盒子上为 false。**
+isTVDevice() 纯靠 PackageManager.hasSystemFeature(leanback / type.television) 嗅探。
+非 Google 认证的电视盒子常常**两个都不上报** ⇒ ctiveFocus 恒为 false ⇒
+缩放 / 边框 / 容器色 / 内容色**一次性全关**。这个判据历史上已被迫补过两次
+（v2.20.0 从 leanback 扩到 	ype.television；再早先修过「单查 leanback」），
+说明嗅探本身不可靠。
+
+#### 二、修法
+
+**新增 ui/components/FocusIndicator.kt（全应用唯一共用机制）**
+
+| 成员 | 作用 |
+|---|---|
+| Modifier.focusRing(shape, color, visible, ringWidth, haloWidth) | 焦点环。**两层 Modifier.border 挂在链尾**：外侧柔光带 7dp/alpha 0.26 + 内侧实心环 3dp/全不透明。isible=false 时**原样返回**，不插入任何修饰符节点 |
+| shouldShowFocusVisuals(): Boolean | 焦点视觉唯一判据 = ① 无触摸屏 **或** ② 电视 feature 任一 **或** ③ 进程内收到过方向/确认键 |
+| DpadInputTracker / isDirectionalNavigationKey / 
+extDirectionalSeen | 判据 ③。纯函数分类 + 粘住标志，MainActivity 根节点 Modifier.onPreviewKeyEvent 接线 |
+| FocusRingWidth = 3.dp / FocusHaloWidth = 7.dp | 两层宽度 |
+
+⛔ **两层都在边界之内**（靠 Modifier.border 的内缩语义）⇒ 被祖先/自身 .clip(shape) 裁剪后
+仍完整可见，也**绝不覆盖组件内文字**。这是选它而不是自绘 drawWithContent 的原因：
+外扩描边要么被 clip 切掉、要么必然压在内容上。
+
+**判据改为「用户正在用按键导航」而非「设备是不是电视」** ——
+手机恒有触摸屏（判据 ① false），且从不按方向键（判据 ③ false）⇒
+docs/conventions-adaptive-ui.md §11 的「粘滞焦点态」防护**不受影响**。
+
+#### 三、覆盖范围
+
+| 文件 | 改动 |
+|---|---|
+| ui/components/FocusIndicator.kt | **新建**，上述共用机制 |
+| ui/components/FocusableSurface.kt | 焦点环移到链尾（根因 1）；isTVDevice() → shouldShowFocusVisuals()（根因 2）；新增 ocusBorderWidth 参数 |
+| ui/components/song/UnifiedSongRow.kt | SongRowModeRow 行高亮与 RowActionButton 切到 ocusRing + shouldShowFocusVisuals()；SongRowModeCard / MODE_COMPACT 的 order 一并换成 ocusRing（顺序本就正确，仅统一观感与亮度） |
+| ui/MainActivity.kt | 根节点 Modifier.onPreviewKeyEvent → DpadInputTracker.noteKeyEvent |
+
+FocusableSurface 有 **135 处调用点** ⇒ 一次修复覆盖全部界面（首页、曲库、我的、设置、
+队列、各详情页、全部对话框与 Toast 按钮）。UnifiedSongRow 另有 24 处调用点。
+
+⛔ 覆盖不到 Compose Dialog（自带独立 Window / 独立 ComposeView），但不构成问题：
+用户必须先用方向键走到该弹窗的入口，标志在打开之前就已置上。
+
+#### 四、两处被否决的写法
+
+- **Activity.dispatchKeyEvent**（本可覆盖对话框）：ComponentActivity.dispatchKeyEvent 是
+  ndroidx.core 的 RestrictedApi，lint 直接报 Error，而 CI 的 lintDebug 是**阻塞**的。
+  改用根节点 onPreviewKeyEvent（Compose 沿焦点目标的祖先链派发，在按键被消费之前先经过）。
+- **自绘 drawWithContent { drawContent(); … } 外扩描边**：drawWithContent 的 lambda 接收者是
+  ContentDrawScope（**不是** DrawScope），本项目 Compose 1.12 的 DrawScope 全部绘制方法
+  均为 abstract，包装匿名对象要实现 20 个成员；且外扩描边必然被 .clip(shape) 切掉或压到内容。
+  最终退回 Modifier.border 两层叠加。
+
+#### 五、门禁
+
+pp/src/test/java/com/nasmusic/tv/ui/FocusIndicatorContractTest.kt（**13 例**，含 9 组正负自证）：
+
+- 扫描 FocusableSurface.kt / UnifiedSongRow.kt，**按修饰符链逐段**判定
+  「焦点环是否排在 .background( 之前」。链的切分用**括号深度**而非行首字符 ——
+  .onFocusChanged { … } 的 lambda 体里有缩进但不带点的行，按行首字符切会把
+  焦点环与 .background( 切到两段去导致**漏判**（这是本轮门禁自己实测出来的漏洞，
+  已由负向用例 负向：lambda 体夹在中间也不得把焦点环与背景切散 钉住）。
+- 焦点视觉判据必须是 shouldShowFocusVisuals()；UnifiedSongRow 不得再 import isTVDevice。
+- isDirectionalNavigationKey 正负用例：方向/确认键为真；**音量/频道/媒体/BACK 键为假**
+  （媒体键由 MediaKeyHandler 处理，收进来会让「调个音量 ⇒ 焦点此后常亮」误触发）。
+- 
+extDirectionalSeen：仅 ACTION_DOWN 翻转、翻转后粘住。
+
+#### 六、验证
+
+- **本机 ssembleDebug + 	estDebugUnitTest + lintDebug 三合一：BUILD SUCCESSFUL**
+  —— 全量 **1695 例 / 0 失败 / 0 错误**（含新增 13 例），lint **0 Error / 289 Warning**
+  （与既有基线一致），产出 NASMusicTV-debug-v2-38-5.apk
+- ⛔ 验证在**独立 worktree**（HEAD dc47edf + 本次 5 个文件）完成：主工作区当时正被另一条
+  工作流并发编辑 FeiniuAdapter.kt（'val' cannot be reassigned，该文件本轮未触碰）
+- ⛔ **真机复验未做**：焦点环的观感（3 米外是否够亮）与「非认证盒子能否点亮焦点环」
+  需在创维 5.1.1 上由所有者确认
+
+#### 七、遗留（发现但未修，按边界不在本轮范围）
+
+1. VolumeControl.kt:77 与 SettingsScreen.kt:593 仍用 isTVDevice() 选**交互模型**
+   （TV 的左右键调节 vs 手机的滑杆），不是焦点视觉。电视盒子嗅探为 false 时会走手机分支。
+2. QueueScreen.kt:325 与 MineScreen.kt:705 的行高亮是 Box(focusGroup) + hasFocus
+   自绘，**从未接 isTVDevice()** ⇒ 手机上点一次会永久高亮（§11 的约定在这两处失守）。
+
+### 10.222 v2.38.5 — 飞牛音乐「连不上」：补访问码链路 + 失败原因可诊断（2026-10-08）
+
+**现象（转述终端用户）**：飞牛 NAS 已安装飞牛音乐，地址形如 `http://192.168.31.150:5666`，
+**账号密码都正确，但连接不上**。测试与连接均失败。
+
+⚠️ **本条不宣称已定位根因。** 报告链路里拿不到设备与现场日志（用户在另一网段），
+下面记录的是「对照参考项目核对出的协议缺口」与「让失败变得可诊断」，
+而非已证实的单一根因。
+
+#### 一、对照参考项目核出的协议缺口
+
+唯一权威依据是 `QiaoKes/fn-music-tv`（本地副本 `fn-music-tv-main`）。
+**登录握手本身核对无误**，逐项一致：API 基址 `/music/api/v1/`、`user/password-login`、
+密码 SHA-256 小写 hex、响应取 `data.userToken`、`Authorization: <raw token>` 无 Bearer、
+显式端口原样保留、信封 `{code,msg,data}`。**⇒ 协议正确时它本该连上。**
+
+| # | 缺口 | 性质 |
+|---|---|---|
+| 1 | **访问码（安全码）链路整体缺失**：不探测 `/access_code_verify`，不发 `x-access-code` / `x-access-source`，界面也无从填写 | 参考项目**可选**、后期加入的特性（其 CHANGELOG 原文「支持**可选的**飞牛访问码验证」）。仅当 NAS 开启外网访问码时才成立，**不是默认原因** |
+| 2 | **失败完全不可诊断**：`BackendRegistry.testConnection()` 对任何失败都返回同一句泛化文案，HTTP 状态码 / 信封 code+msg / 异常类型全部丢弃；`ServerViewModel.connectToServer()` 返回 false 时**连一句提示都不显示** | 这才是该问题长期无法定位的直接原因 |
+| 3 | 端口默认规则与参考项目不一致（参考：裸 host→5666、显式 `http://`→80、HTTPS→443） | **有意偏离，不改**，见 `FeiniuUrl.kt` 类注释与 `docs/archive/feiniu-backend-improvement-plan.md` |
+
+#### 二、修法
+
+**访问码（`FeiniuUrl` / `FeiniuAdapter`）**
+- `FeiniuUrl.accessCodeVerifyUrl(apiBase)` —— 重建 origin 拼 `{scheme}://{host}:{port}/access_code_verify`。
+  该端点挂在**站点根**而非 `/music/api/v1/` 之下。
+- `probeAccessCode()` 照抄参考项目 `ConnectionResolver.verifyAccessCode` 的四分支判定。
+  ⛔ **两条放行规则是正确性关键**：`404`（老版本 fnOS 无此端点）与**网络异常**都**必须放行**，
+  否则会把所有未开访问码的用户一起挡在门外。
+- 编码只存 base64（明文即抛），不写日志；随 `clearSessionState()` 清空，
+  静默重登（`withAuthRetry`）期间仍有效。
+- 头注入 `execute()`（登录 + 已认证 API）与 `streamHeaders`（播放流 / 封面链路）。
+- `BackendAdapter` 新增 `setAccessCode()` 默认空实现 + `lastErrorDetail` 默认空串 ⇒
+  其余 4 个适配器零改动。
+
+**可诊断错误链路**
+- `Failure(resId, facts)` + `lastFailure` → 渲染出 `lastErrorDetail`。
+  ⚠️ 存储**未渲染的分类**而非成品文案：本项目单测**不打包 Android 资源**
+  （`unitTests.includeAndroidResources` 关闭），Robolectric 下 `Context.getString` 抛
+  `Resources$NotFoundException`；只存渲染结果会让整个错误分类**无法被测试**，
+  而那正是缺口 2 存在的理由。
+- 文案一律进 `strings.xml`（含 `values-en`），Kotlin 内**零中文散文**；
+  网络异常用**异常类简名**（`ConnectException` 等）而非硬编码中文。
+- `BackendRegistry` 在 `releaseAdapter()` **之前**抓取细节（它会 `clearSessionState()`）；
+  顺手消除了异常路径上原有的重复 `releaseAdapter`。
+
+**持久化**：`ServerConfig.accessCode` → `CryptoUtils.encrypt` 落盘，
+导出/导入备份**双向剥离**，行为与 `password` / `apiToken` 一致。
+
+#### 三、门禁与验证
+
+- `FeiniuUrlTest` +8 例（origin 不落在 API 前缀下 / 自定义端口 / IPv6 方括号 / 非法输入 …）。
+- `FeiniuAdapterAccessCodeTest`（**22 例**，Robolectric + MockWebServer）覆盖头的有无、
+  `streamHeaders`、探测各状态码的放行与阻塞、错误分类。
+  含 `assertNoCredentials` 助手，**对每条失败路径**断言渲染文案与 facts 均不含
+  密码 / 明文访问码 / 其 base64。
+
+#### 四、⛔ 真实验证状态（未完成，不得当作已修复）
+
+- 单元测试与 lint 通过**只证明代码自洽**，**不证明用户的问题已解决**。
+- **仍需现场确认**：让用户在浏览器打开**免认证**端点
+  `http://192.168.31.150:5666/music/api/v1/sys/config` ——
+  返回 JSON ⇒ 服务在跑、路径对（问题在凭据/访问码）；超时 ⇒ 网络不通或**服务未启动**
+  （飞牛应用「已安装」≠「已启动」）；404 ⇒ fnOS 版本的路径不同。
+- 需补齐的信息：**电视与 NAS 是否同网段可互通**、**fnOS 版本号**、服务是否已启用。
+
+#### 五、遗留（发现但未修）
+
+1. 手机扫码填配置链路（`ServerConfigTransferServer` / `onConfigReceived`）不携带访问码 ⇒
+   扫码填的配置访问码为空。因该项可选，用户可手填，可接受。
+2. `VolumeControl.kt:77`、`SettingsScreen.kt:593` 仍用 `isTVDevice()` 选交互模型（见 §10.221 七-1）。
+3. §10.221 正文中若干标识符存在**转义字符吞字**（`focusBorderWidth` → `ocusBorderWidth`、
+   `androidx.core` → `ndroidx.core`、`app/src` → `pp/src`），系写入时 `\f` / `\a` / `\b` 被当作
+   转义序列处理所致；不影响代码，但影响记录可读性，待后续一并校正。

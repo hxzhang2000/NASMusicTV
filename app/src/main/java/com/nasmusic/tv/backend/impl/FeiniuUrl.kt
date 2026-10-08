@@ -36,6 +36,12 @@ object FeiniuUrl {
     private const val INVALID = ""
 
     /**
+     * 访问码校验端点路径（**挂在站点根，不在 `/music/api/v1/` 下**）。
+     * 依据：参考项目 `ConnectionResolver.ACCESS_CODE_PATH` + 契约文档 §L170-L173。
+     */
+    const val ACCESS_CODE_VERIFY_PATH = "/access_code_verify"
+
+    /**
      * 归一化用户输入的服务器地址为 canonical API 基址。
      *
      * 可接受的输入示例：
@@ -125,6 +131,26 @@ object FeiniuUrl {
     /** 播放流地址：`track/stream?guid=<guid>`（guid 是查询参数，不是路径段） */
     fun streamUrl(apiBase: String, guid: String): String =
         endpoint(apiBase, "track/stream", "guid" to guid)
+
+    /**
+     * 访问码校验端点：`{origin}/access_code_verify`
+     *
+     * ⚠️ **origin 不含 `/music/api/v1/`** —— 该端点挂在站点根上，不是音乐 API 的一部分
+     * （参考项目 `ConnectionResolver.verifyAccessCode` 用 `server.origin.resolve(ACCESS_CODE_PATH)`，
+     * 契约文档 §L170-L173）。本函数只做纯字符串拼装，**不引入 `android.util.Base64`**
+     * （base64 编码在 `FeiniuAdapter` 内做：minSdk 22 无法用 `java.util.Base64`，
+     * 而本文件的单测是纯 JVM 无 Robolectric，引入 Android API 会让既有用例全灭）。
+     *
+     * @param apiBase 已归一化的 API 基址（`FeiniuUrl.normalize` 的输出）
+     * @return `{scheme}://{host}:{port}/access_code_verify`；输入非法时返回空串
+     */
+    fun accessCodeVerifyUrl(apiBase: String): String {
+        if (apiBase.isBlank()) return INVALID
+        val parsed = apiBase.toHttpUrlOrNull() ?: return INVALID
+        // HttpUrl.host 对 IPv6 字面量不含方括号，需补回（与 normalize 同一约定）
+        val host = if (parsed.host.contains(':')) "[${parsed.host}]" else parsed.host
+        return "${parsed.scheme}://$host:${parsed.port}$ACCESS_CODE_VERIFY_PATH"
+    }
 
     /** 取 apiBase 的 host（用于认证头的 host 白名单匹配）；解析失败返回空串 */
     fun hostOf(apiBase: String): String =

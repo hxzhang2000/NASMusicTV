@@ -458,14 +458,55 @@ grep -n "LocalContentColor provides\|LocalFocusableContentColor provides" \
 ### 约定
 
 ```kotlin
-val tvDevice = isTVDevice()                    // FocusableSurface.kt 的公共函数
+val tvDevice = shouldShowFocusVisuals()        // ui/components/FocusIndicator.kt
 val activeFocus = isFocused && tvDevice        // ⛔ 焦点视觉一律走这个
 ```
 
-- 缩放动画、边框、`focusedContainerColor`、`focusedContentColor` **全部**改用 `activeFocus`
+- 缩放动画、焦点环、`focusedContainerColor`、`focusedContentColor` **全部**改用 `activeFocus`
 - 手机只保留**按下**（`isPressed`）的瞬时反馈
-- `isTVDevice()` 是公共 `@Composable` 函数，自实现焦点动画的组件（如 `UnifiedSongRow` 的
-  `RowActionButton`）**直接复用**，不要再写一份 `packageManager.hasSystemFeature(...)`
+
+### ⛔ 判据是 `shouldShowFocusVisuals()`，不是 `isTVDevice()`
+
+**真机反馈「遥控器导航完全看不到焦点在哪」的根因之一。**
+`isTVDevice()` 纯靠 `hasSystemFeature(leanback / type.television)` 嗅探，在**非 Google 认证的
+电视盒子**上经常双双返回 false —— 本项目历史上已被迫为这个判据补过两次（先从 leanback 扩到
+`type.television`，v2.20.0 又修了「单查 leanback」）。一旦为 false，`activeFocus` 恒为 false ⇒
+**缩放 / 焦点环 / 容器色 / 内容色全部关闭**，用户只能靠按确认键反推焦点位置。
+
+正确的判据是「**用户正在用按键导航**」，可直接观测，不依赖嗅探：
+
+```kotlin
+val tvDevice = shouldShowFocusVisuals()   // ui/components/FocusIndicator.kt
+```
+
+它 = ① 无触摸屏（电视盒子常态，手机恒 false）**或** ② 电视 feature 任一 **或**
+③ 进程内收到过方向/确认键（`DpadInputTracker`，由 `MainActivity` 根节点
+`Modifier.onPreviewKeyEvent` 接线，只置一次就粘住）。
+
+⛔ 不要再写一份 `packageManager.hasSystemFeature(...)`。
+⚠️ `isTVDevice()` 仍保留给**形态因子 / 布局**判断（`UiMode`、外接存储默认值等），
+它与焦点视觉判据**故意不同** —— 布局判错顶多版式不对，焦点判错则是「完全看不见焦点」。
+
+### ⛔ 焦点环必须画在 `.background(...)` 之后
+
+**同一条真机反馈的根因之二，也是更直接的那一个。**
+Compose 的绘制顺序 = 修饰符链顺序，越靠前越靠下。`FocusableSurface` 此前是
+
+```kotlin
+.border(width = if (activeFocus) 2.dp else 0.dp, color = ..., shape = shape)  // 画在下面
+.background(targetContainerColor, shape)                                       // 画在上面 ⇒ 盖住它
+```
+
+焦点环只在容器色为 `Color.Transparent` 的少数组件上侥幸可见，而所有卡片/列表行用的都是
+不透明 `NasMusicColors.Surface` ⇒ **全应用看不见焦点框**。这与对比度无关
+（`FocusRing #2DD4BF` 对 `Background #0C1222` 对比度足够）。
+
+自实现焦点视觉的组件一律走 `Modifier.focusRing(shape, color, visible)`，
+**挂在链尾**（`.background(...)` 之后）。它画「外侧柔光带（7dp，alpha 0.26）+ 内侧实心环
+（3dp，全不透明）」两层，两层都靠 `Modifier.border` 的内缩语义落在边界**之内** ⇒
+被 `.clip(shape)` 裁剪后仍完整可见，也**绝不覆盖组件内的文字**。
+
+门禁：`FocusIndicatorContractTest`（扫描源码，按修饰符链切段判定顺序，含 8 组正负用例）。
 
 ### ⚠️ `onFocusChanged` 里别读外层派生的 `activeFocus`
 

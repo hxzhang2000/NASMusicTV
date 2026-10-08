@@ -32,6 +32,7 @@ import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.key.onPreviewKeyEvent
 
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -43,6 +44,7 @@ import com.nasmusic.tv.R
 import com.nasmusic.tv.player.PlaybackService
 import com.nasmusic.tv.ui.components.AppRoot
 import com.nasmusic.tv.ui.components.ConnectPromptDialog
+import com.nasmusic.tv.ui.components.DpadInputTracker
 import com.nasmusic.tv.ui.screens.ExitConfirmDialog
 import com.nasmusic.tv.ui.theme.NASMusicTVTheme
 import com.nasmusic.tv.ui.theme.FontSize
@@ -309,6 +311,21 @@ class MainActivity : ComponentActivity() {
                         modifier = Modifier
                             .fillMaxSize()
                             .background(NasMusicColors.Background)
+                            // ⛔ 不用 `Activity.dispatchKeyEvent` 记方向键：那是 androidx.core 的
+                            // 受限 API，lint 报 RestrictedApi 会卡住构建（CI 的 lint 是阻塞的）。
+                            // `onPreviewKeyEvent` 挂在根节点上，Compose 会沿焦点目标的祖先链
+                            // 从根往下派发按键 ⇒ 覆盖全部页面，且在按键被消费之前先经过。
+                            //
+                            // 覆盖不到 Compose `Dialog`（自带独立 Window / 独立 ComposeView），
+                            // 但那不构成问题：用户必须先用方向键走到那个弹窗入口，
+                            // 标志在打开弹窗之前就已经置上了。
+                            .onPreviewKeyEvent { event ->
+                                // ⛔ 直接取 `nativeKeyEvent` 的 keyCode，而不是逐个 Compose `Key` 映射 ——
+                                // 后者要维护一张几十项的对照表，且新增遥控器键就漏一个。
+                                val native = event.nativeKeyEvent
+                                DpadInputTracker.noteKeyEvent(native.keyCode, native.action)
+                                false // 只观察，不消费
+                            }
                     ) {
                         AppRoot(
                             viewModel = viewModel,

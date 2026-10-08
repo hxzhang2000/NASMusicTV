@@ -56,6 +56,26 @@ interface BackendAdapter {
         get() = emptyMap()
 
     /**
+     * 最近一次失败的简短原因（面向用户，可直接展示）。
+     *
+     * 存在的理由：`initialize()` 只返回 `Boolean`，无法区分「地址非法 / 凭据错 /
+     * 服务端要求访问码 / 网络不可达」——用户只会看到一句泛化的「连接失败」，
+     * 排查无从下手。需要给出诊断的适配器（如 `FeiniuAdapter`）覆写此属性并在失败
+     * 分支写入**不含任何凭据**的短文案；其余后端沿用默认空串。
+     *
+     * ⚠️ **禁止写入访问码 / 密码 / token**——这些会经 `BackendRegistry` 直接显示到 UI。
+     */
+    val lastErrorDetail: String
+        get() = ""
+
+    /**
+     * 设置访问码 / 安全码（在 [initialize] 之前由 `BackendRegistry` 调用）。
+     *
+     * 默认空实现：只有需要访问码保护的后端（飞牛 fnOS）覆写。传入空串 = 未启用。
+     */
+    fun setAccessCode(accessCode: String) {}
+
+    /**
      * 初始化连接
      */
     suspend fun initialize(baseUrl: String, apiToken: String, username: String = "", password: String = ""): Boolean

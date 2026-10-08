@@ -260,6 +260,11 @@ class AppPreferences internal constructor(private val context: Context) {
     private val keyApiToken = stringPreferencesKey("server_api_token")
     private val keyUsername = stringPreferencesKey("server_username")
     private val keyPassword = stringPreferencesKey("server_password")
+    /**
+     * 访问码 / 安全码（飞牛 fnOS 外网访问码）。**加密存储**——它与密码同级，
+     * 明文落盘等于把访问凭证写进 prefs 文件。
+     */
+    private val keyAccessCode = stringPreferencesKey("server_access_code")
     private val keyServerConnected = booleanPreferencesKey("server_connected")
     private val keyServerDisplayName = stringPreferencesKey("server_display_name")
 
@@ -510,6 +515,7 @@ class AppPreferences internal constructor(private val context: Context) {
             apiToken = CryptoUtils.decrypt(prefs[keyApiToken] ?: ""),
             username = prefs[keyUsername] ?: "",
             password = CryptoUtils.decrypt(prefs[keyPassword] ?: ""),
+            accessCode = CryptoUtils.decrypt(prefs[keyAccessCode] ?: ""),
             isConnected = prefs[keyServerConnected] ?: false,
             displayName = prefs[keyServerDisplayName] ?: ""
         )
@@ -522,6 +528,8 @@ class AppPreferences internal constructor(private val context: Context) {
             prefs[keyApiToken] = CryptoUtils.encrypt(config.apiToken)
             prefs[keyUsername] = config.username
             prefs[keyPassword] = CryptoUtils.encrypt(config.password)
+            // 访问码是凭据：绝不明文落盘（与 password / apiToken 同等对待）
+            prefs[keyAccessCode] = CryptoUtils.encrypt(config.accessCode)
             prefs[keyServerConnected] = config.isConnected
             prefs[keyServerDisplayName] = config.displayName
         }
@@ -543,6 +551,7 @@ class AppPreferences internal constructor(private val context: Context) {
             prefs.remove(keyApiToken)
             prefs.remove(keyUsername)
             prefs.remove(keyPassword)
+            prefs.remove(keyAccessCode)
             prefs[keyServerConnected] = false
             prefs.remove(keyServerDisplayName)
         }
@@ -1901,14 +1910,15 @@ class AppPreferences internal constructor(private val context: Context) {
     )
 
     /**
-     * 导出备份数据（敏感字段已排除：密码、API Token、天气 API Key）
+     * 导出备份数据（敏感字段已排除：密码、API Token、访问码/安全码、天气 API Key）
      */
     suspend fun exportBackupData(): BackupData {
         val config = serverConfig.first()
         val ds = dataStore.data.first()
         return BackupData(
+            // accessCode 是凭据（飞牛访问码），与密码/token 一并剔除，不进备份文件
             serverConfig = if (config.baseUrl.isNotBlank()) {
-                config.copy(apiToken = "", password = "", isConnected = false)
+                config.copy(apiToken = "", password = "", accessCode = "", isConnected = false)
             } else null,
             appSettings = appSettings.first(),
             networkFavorites = getNetworkFavorites(),
@@ -1950,8 +1960,9 @@ class AppPreferences internal constructor(private val context: Context) {
      */
     suspend fun importBackupData(data: BackupData) {
         data.serverConfig?.let { config ->
+            // 访问码与密码/token 同理：备份里不带凭据（防止外部备份文件注入访问码）
             saveServerConfig(
-                config.copy(apiToken = "", password = "", isConnected = false)
+                config.copy(apiToken = "", password = "", accessCode = "", isConnected = false)
             )
         }
         data.appSettings?.let { settings ->

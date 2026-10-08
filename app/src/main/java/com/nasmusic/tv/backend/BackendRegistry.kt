@@ -72,6 +72,17 @@ class BackendRegistry(private val appContext: Context? = null) {
     private var serverDisplayName: String = ""
 
     /**
+     * 最近一次连接失败的简短原因（见 [BackendAdapter.lastErrorDetail]）。
+     *
+     * ⚠️ 必须在 `releaseAdapter(adapter)` **之前**从 adapter 取出——`releaseAdapter`
+     * 会 `logout()` + `close()`，FeiniuAdapter 的 `close()` 走 `clearSessionState()`，
+     * 之后再读就只剩空串了。为空时调用方回落到泛化文案。
+     */
+    @Volatile
+    var lastErrorDetail: String = ""
+        private set
+
+    /**
      * 获取所有支持的后端类型
      */
     val supportedTypes: List<String> get() = listOf(TYPE_JELLYFIN, TYPE_NAVIDROME, TYPE_SUBSONIC, TYPE_DAOLIYU, TYPE_FEINIU)
@@ -90,7 +101,13 @@ class BackendRegistry(private val appContext: Context? = null) {
         }
 
         // F-1：username 不落日志（debug 亦脱敏），只记布尔存在性
-        AppLog.d("BackendRegistry", "initialize: type=${config.backendType}, baseUrl=${UrlSanitizer.sanitize(config.baseUrl)}, hasUser=${config.username.isNotEmpty()}, hasPw=${config.password.isNotEmpty()}, hasToken=${config.apiToken.isNotEmpty()}")
+        AppLog.d("BackendRegistry", "initialize: type=${config.backendType}, baseUrl=${UrlSanitizer.sanitize(config.baseUrl)}, hasUser=${config.username.isNotEmpty()}, hasPw=${config.password.isNotEmpty()}, hasToken=${config.apiToken.isNotEmpty()}, hasAccessCode=${config.accessCode.isNotEmpty()}")
+
+        // 每次连接前清空，避免上一次失败的原因被误当成本次的
+        lastErrorDetail = ""
+
+        // 访问码必须在 initialize 之前注入：飞牛的 access_code_verify 探测与登录都要用它
+        adapter.setAccessCode(config.accessCode)
 
         val success = try {
             val ok = adapter.initialize(
@@ -105,6 +122,8 @@ class BackendRegistry(private val appContext: Context? = null) {
             AppLog.e("BackendRegistry", "initialize: exception during adapter.initialize()", e)
             // L1 修复（2026-10-06）：失败分支对称走 releaseAdapter（logout + close）——
             // 旧实现只 close 不 logout，与成功替换路径（releaseAdapter）不对称。
+            // ⚠️ 诊断文案必须在 releaseAdapter 之前取（close() 会清空 FeiniuAdapter 的会话态）
+            lastErrorDetail = adapter.lastErrorDetail
             releaseAdapter(adapter)
             false
         }
@@ -129,6 +148,8 @@ class BackendRegistry(private val appContext: Context? = null) {
             // 其他后端 streamHeaders 为空 Map，注入后行为不变。
             BackendAuthHeaders.update({ adapter.streamHeaders }, hostOf(config.baseUrl))
         } else {
+            // ⚠️ 同上：先取诊断文案再释放，否则 close() 之后就只剩空串
+            lastErrorDetail = adapter.lastErrorDetail
             // L1 修复：同上——对称 releaseAdapter，防服务端 session 残留
             releaseAdapter(adapter)
         }
@@ -200,12 +221,22 @@ class BackendRegistry(private val appContext: Context? = null) {
             else -> return@withContext Pair(false, appContext?.getString(R.string.backend_unsupported_type) ?: "")
         }
 
-        val success = adapter.initialize(
-            baseUrl = config.baseUrl,
-            apiToken = config.apiToken,
-            username = config.username,
-            password = config.password
-        )
+        adapter.setAccessCode(config.accessCode)
+
+        val success = try {
+            adapter.initialize(
+                baseUrl = config.baseUrl,
+                apiToken = config.apiToken,
+                username = config.username,
+                password = config.password
+            )
+        } catch (e: Exception) {
+            AppLog.e("BackendRegistry", "testConnection: exception during adapter.initialize()", e)
+            false
+        }
+
+        // ⚠️ 必须在 logout()/close() 之前取：FeiniuAdapter.close() → clearSessionState()
+        val detail = adapter.lastErrorDetail
 
         if (success) {
             val serverName = adapter.serverName
@@ -218,7 +249,9 @@ class BackendRegistry(private val appContext: Context? = null) {
             // 即使失败也尝试 logout（部分 Jellyfin 可能已创建 session）
             try { adapter.logout() } catch (e: Exception) { AppLog.w("BackendRegistry", "testConnection failed: logout", e) }
             try { adapter.close() } catch (e: Exception) { AppLog.w("BackendRegistry", "testConnection failed: close", e) }
-            Pair(false, appContext?.getString(R.string.server_connect_failed_generic) ?: "")
+            // 适配器给出具体原因就用它（飞牛：需要访问码 / 访问码错 / HTTP 码 / 网络不可达…），
+            // 拿不到才回落到泛化文案
+            Pair(false, detail.ifBlank { appContext?.getString(R.string.server_connect_failed_generic).orEmpty() })
         }
     }
 

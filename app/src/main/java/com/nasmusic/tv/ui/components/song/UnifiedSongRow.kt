@@ -52,8 +52,9 @@ import com.nasmusic.tv.data.model.sourceType
 import com.nasmusic.tv.ui.components.ConfirmDialog
 import com.nasmusic.tv.ui.components.common.CoverImage
 import com.nasmusic.tv.ui.components.common.SourceBadge
-import com.nasmusic.tv.ui.components.isTVDevice
+import com.nasmusic.tv.ui.components.focusRing
 import com.nasmusic.tv.ui.components.portraitTouchTarget
+import com.nasmusic.tv.ui.components.shouldShowFocusVisuals
 import com.nasmusic.tv.ui.theme.FontSize
 import com.nasmusic.tv.ui.theme.LocalUiMode
 import com.nasmusic.tv.ui.theme.NasMusicColors
@@ -209,10 +210,11 @@ private fun SongRowModeRow(
     // P1-16: Completed 状态点击弹出删除确认而非死按钮
     var showDeleteConfirm by remember { mutableStateOf(false) }
 
-    // v2.36.0 竖屏体验修复：焦点视觉只在 TV 上生效。
+    // v2.36.0 竖屏体验修复：焦点视觉只在**用按键导航**的设备上生效。
     // 手机触摸会让 `clickable`/`focusable` 节点获得焦点且**焦点粘住** → 行背景永久高亮 +
-    // 永久放大 2%。与 FocusableSurface 的同款处理保持一致（TV 行为逐字不变）。
-    val tvDevice = isTVDevice()
+    // 永久放大 2%。与 FocusableSurface 的同款处理保持一致。
+    // ⚠️ 判据走 `shouldShowFocusVisuals()`（无触摸屏 / 电视 feature / 已用过方向键）。
+    val tvDevice = shouldShowFocusVisuals()
     val isPortraitPhone = LocalUiMode.current == UiMode.PhonePortrait
     val activeFocus = isRowFocused && tvDevice
 
@@ -292,12 +294,6 @@ private fun SongRowModeRow(
                 color = if (activeFocus) NasMusicColors.Primary.copy(alpha = 0.2f)
                 else NasMusicColors.Surface.copy(alpha = 0.5f)
             )
-            .border(
-                width = if (activeFocus) 2.dp else 0.dp,
-                color = if (activeFocus) NasMusicColors.FocusRing.copy(alpha = 0.6f)
-                else Color.Transparent,
-                shape = RoundedCornerShape(6.dp)
-            )
             .onFocusChanged { state ->
                 isRowFocused = state.hasFocus
                 scope.launch {
@@ -310,6 +306,12 @@ private fun SongRowModeRow(
                     )
                 }
             }
+            // 焦点环挂在链尾 ⇒ 画在背景与文字之上（见 FocusIndicator.kt 的绘制顺序约定）
+            .focusRing(
+                shape = RoundedCornerShape(6.dp),
+                color = NasMusicColors.FocusRing,
+                visible = activeFocus,
+            )
     ) {
         // v2.36.0 竖屏体验修复：外层用 Column 承载「第二行（时长 + 操作按钮）」。
         // 非竖屏下 Column 只有原 Row 一个子项 → 渲染结果与改动前逐字等价（B1）。
@@ -515,41 +517,47 @@ private fun RowActionButton(
     onClick: () -> Unit,
     enabled: Boolean = true
 ) {
-    // v2.36.0：焦点视觉（高亮底 / 边框 / 1.15 缩放）只在 TV 上生效 ——
+    // v2.36.0：焦点视觉（高亮底 / 焦点环 / 1.15 缩放）只在**用按键导航**的设备上生效 ——
     // 手机触摸会让 `focusable()`/`clickable` 节点获得焦点且焦点粘住，
     // 否则点过一次的按钮会**永久放大 15% 并永久高亮**（与 FocusableSurface 同款处理）。
-    val tvDevice = isTVDevice()
+    // ⚠️ 判据走 `shouldShowFocusVisuals()`（无触摸屏 / 电视 feature / 已用过方向键），
+    // 不再单靠 `hasSystemFeature` 嗅探 —— 嗅探在非认证电视盒子上为 false，
+    // 会把焦点环整项关掉（真机反馈「遥控器导航看不到焦点」）。
+    val showFocusVisuals = shouldShowFocusVisuals()
     var isFocused by remember { mutableStateOf(false) }
     val animScale = remember { Animatable(1f) }
     val scope = rememberCoroutineScope()
 
+    val shape = RoundedCornerShape(8.dp)
     Box(
         modifier = Modifier
             // 48 / 42 dp 在竖屏分别只有 39.4 / 34.4 物理 dp ❌ → §2.7 换算抬到 56dp
             .widthIn(min = portraitTouchTarget(48.dp))
             .heightIn(min = portraitTouchTarget(42.dp))
             .scale(animScale.value)
-            .clip(RoundedCornerShape(8.dp))
+            // ⛔ 不再 `.clip(shape)`：它会把 focusRing 的外侧辉光裁掉、还只剩内侧半圈。
+            // 背景本身已由 `.background(color, shape)` 按圆角裁剪，clip 原本就是冗余的。
             .background(
                 color = if (isFocused) color.copy(alpha = 0.25f) else Color.Transparent,
-                shape = RoundedCornerShape(8.dp)
-            )
-            .border(
-                width = if (isFocused) 2.dp else 0.dp,
-                color = if (isFocused) NasMusicColors.FocusRing else Color.Transparent,
-                shape = RoundedCornerShape(8.dp)
+                shape = shape
             )
             .onFocusChanged { state ->
-                isFocused = state.hasFocus && tvDevice
+                isFocused = state.hasFocus && showFocusVisuals
                 scope.launch {
                     animScale.animateTo(
-                        if (state.hasFocus && tvDevice) 1.15f else 1f,
+                        if (state.hasFocus && showFocusVisuals) 1.15f else 1f,
                         tween(150)
                     )
                 }
             }
             .focusable(enabled = enabled)
             .clickable(enabled = enabled) { onClick() }
+            // 焦点环挂在链尾 ⇒ 画在背景与文字之上（与 FocusableSurface 同款契约）
+            .focusRing(
+                shape = shape,
+                color = NasMusicColors.FocusRing,
+                visible = isFocused,
+            )
             .padding(horizontal = 12.dp, vertical = 10.dp),
         contentAlignment = Alignment.Center
     ) {
@@ -586,12 +594,6 @@ private fun SongRowModeCard(
                 color = if (isFocused) NasMusicColors.Primary.copy(alpha = 0.15f)
                 else NasMusicColors.Surface.copy(alpha = 0.6f)
             )
-            .border(
-                width = if (isFocused) 2.dp else 0.dp,
-                color = if (isFocused) NasMusicColors.FocusRing.copy(alpha = 0.6f)
-                else Color.Transparent,
-                shape = RoundedCornerShape(12.dp)
-            )
             .onFocusChanged { state ->
                 isFocused = state.hasFocus
                 scope.launch {
@@ -601,6 +603,11 @@ private fun SongRowModeCard(
                     )
                 }
             }
+            .focusRing(
+                shape = RoundedCornerShape(12.dp),
+                color = NasMusicColors.FocusRing,
+                visible = isFocused,
+            )
             .then(
                 if (focusRequester != null) Modifier.focusRequester(focusRequester)
                 else Modifier
@@ -681,12 +688,6 @@ private fun SongRowModeCompact(
                 color = if (isFocused) NasMusicColors.Primary.copy(alpha = 0.2f)
                 else Color.Transparent
             )
-            .border(
-                width = if (isFocused) 2.dp else 0.dp,
-                color = if (isFocused) NasMusicColors.FocusRing.copy(alpha = 0.6f)
-                else Color.Transparent,
-                shape = RoundedCornerShape(6.dp)
-            )
             .onFocusChanged { state ->
                 isFocused = state.hasFocus
                 scope.launch {
@@ -696,6 +697,11 @@ private fun SongRowModeCompact(
                     )
                 }
             }
+            .focusRing(
+                shape = RoundedCornerShape(6.dp),
+                color = NasMusicColors.FocusRing,
+                visible = isFocused,
+            )
             .then(
                 if (focusRequester != null) Modifier.focusRequester(focusRequester)
                 else Modifier

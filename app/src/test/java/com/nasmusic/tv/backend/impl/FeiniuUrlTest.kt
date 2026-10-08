@@ -285,4 +285,70 @@ class FeiniuUrlTest {
         // 认证头 host 匹配用：OkHttp 的 request.url.host 不带方括号
         assertEquals("2001:db8::1", FeiniuUrl.hostOf("http://[2001:db8::1]:5666/music/api/v1/"))
     }
+
+    // ==================== accessCodeVerifyUrl：挂在站点根 ====================
+
+    @Test
+    fun `access code verify url sits at origin not under the api prefix`() {
+        // ⚠️ 核心断言：不得含 /music/api/v1/ —— 契约 L170-L173 说的是 "at the origin"
+        assertEquals(
+            "http://192.168.1.100:5666/access_code_verify",
+            FeiniuUrl.accessCodeVerifyUrl("http://192.168.1.100:5666/music/api/v1/")
+        )
+    }
+
+    @Test
+    fun `access code verify url keeps custom port`() {
+        assertEquals(
+            "http://192.168.1.100:9999/access_code_verify",
+            FeiniuUrl.accessCodeVerifyUrl("http://192.168.1.100:9999/music/api/v1/")
+        )
+    }
+
+    @Test
+    fun `access code verify url keeps https and 5667`() {
+        assertEquals(
+            "https://nas.example.com:5667/access_code_verify",
+            FeiniuUrl.accessCodeVerifyUrl("https://nas.example.com:5667/music/api/v1/")
+        )
+    }
+
+    @Test
+    fun `access code verify url keeps ipv6 brackets`() {
+        assertEquals(
+            "http://[2001:db8::1]:5666/access_code_verify",
+            FeiniuUrl.accessCodeVerifyUrl("http://[2001:db8::1]:5666/music/api/v1/")
+        )
+    }
+
+    @Test
+    fun `access code verify url accepts api base without trailing slash`() {
+        assertEquals(
+            "http://192.168.1.100:5666/access_code_verify",
+            FeiniuUrl.accessCodeVerifyUrl("http://192.168.1.100:5666/music/api/v1")
+        )
+    }
+
+    @Test
+    fun `access code verify url returns empty for invalid api base`() {
+        // 与 normalize 一致：解析失败返回空串，交调用方判空（不得拼出垃圾 URL）
+        assertEquals("", FeiniuUrl.accessCodeVerifyUrl("not a url at all"))
+        assertEquals("", FeiniuUrl.accessCodeVerifyUrl("ftp://192.168.1.100/music/api/v1/"))
+    }
+
+    @Test
+    fun `access code verify url returns empty for blank api base`() {
+        assertEquals("", FeiniuUrl.accessCodeVerifyUrl(""))
+        assertEquals("", FeiniuUrl.accessCodeVerifyUrl("   "))
+    }
+
+    @Test
+    fun `access code verify url is derived from normalize output`() {
+        // 端到端：用户输入 → normalize → 探测 URL，两步必须自洽
+        val apiBase = FeiniuUrl.normalize("192.168.1.100")
+        assertEquals(
+            "http://192.168.1.100:5666/access_code_verify",
+            FeiniuUrl.accessCodeVerifyUrl(apiBase)
+        )
+    }
 }

@@ -107,6 +107,14 @@ class ServerViewModel(
                 refreshApiVersions()
                 prefs.saveServerConfig(config.copy(isConnected = true))
                 onConnected?.invoke()
+            } else {
+                // 旧实现对 false 分支**一言不发**——用户只看到转圈结束，
+                // 无从判断是地址错、凭据错还是要填访问码。这里把 BackendRegistry
+                // 采集到的具体原因走既有的 connectMessage 通道（3 秒自动清除）。
+                val detail = backendRegistry.lastErrorDetail
+                if (detail.isNotBlank()) {
+                    postConnectMessage(detail)
+                }
             }
             success
         } catch (e: Exception) {
@@ -221,9 +229,14 @@ class ServerViewModel(
                 } else {
                     AppLog.w("ServerViewModel", "connectToSavedServer: initialize returned false")
                     if (!silent) {
-                        _connectMessage.value = getApplication<Application>().getString(R.string.connect_failed_check_settings, "")
-                        delay(3000)
-                        _connectMessage.value = null
+                        // 同 connectToServer：展示后端采集到的真实失败原因，
+                        // 避免旧文案把空占位符渲染成「连接失败: ，请检查设置」。
+                        val detail = backendRegistry.lastErrorDetail
+                        postConnectMessage(
+                            detail.ifBlank {
+                                getApplication<Application>().getString(R.string.server_connect_failed_generic)
+                            }
+                        )
                     }
                 }
             } catch (e: Exception) {
