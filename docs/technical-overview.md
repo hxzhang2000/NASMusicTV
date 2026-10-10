@@ -14485,8 +14485,9 @@ G2 的 §4.6 十五日期向量表与 G12 的「暗区/整盘 = `(R+v)/(2R)`」�
 
 **版本**：v2.38.5 → **v2.38.6**（versionCode 174 → 175；⚠️ D35 这轮**不升号** —— 175 从未发布，只重新出包）
 
-**提交**：`f697c93`（E44 全套，39 文件 / +15543 行）、`69b7ed7`（CHANGELOG v2.38.6 条目）、`1796b62`（方案文档 v1.9 状态面回写）；
-本轮 D35（渲染器 + G12 C5/C5b + 方案文档 **v2.0** + `CHANGELOG` 回改 + `visualizer-effects-list.md` + 本节）另计一次本地提交。
+**提交**：`f697c93`（E44 全套，39 文件 / +15543 行）、`69b7ed7`（CHANGELOG v2.38.6 条目）、`116e98d`（方案文档 v1.8 发布准备）、`1796b62`（方案文档 v1.9 状态面回写）；
+本轮 D35 = `8414664`（渲染器 + G12 C5/C5b）与 `45cfd43`（方案文档 **v2.0** + `CHANGELOG` 回改 + `visualizer-effects-list.md` + 本节）两次本地提交；
+重新 `assembleRelease` ⇒ `NASMusicTV-release-v2-38-6.apk` **25,520,898 字节**（`BUILD SUCCESSFUL in 4m 51s`，badging 复量 `versionCode='175' versionName='2.38.6'`、三 ABI、五个 `uses-feature-not-required`、签名证书 `CN=NASMusicTV`、`assets/globe/` 恒 9 文件含 `moon.jpg` 324,830 字节、⛔ 无 `node_modules`）。
 ⛔ 全部未推送、未打 tag。
 
 **遗留（发现但未修，不在本轮范围）**：① U1/U2/U3 三笔数字（若要用它做降档决策必须按 §十三 口径重测）；
