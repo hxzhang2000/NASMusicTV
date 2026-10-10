@@ -110,7 +110,7 @@ data class AppSettings(
 )
 
 /**
- * 可视化效果主题（21 套手动效果，无自动导演档）。
+ * 可视化效果主题（22 套手动效果，无自动导演档）。
  *
  * [tier] 决定该效果在各画质档位下的可用性，见 [VisualQuality.supports]。
  *
@@ -262,6 +262,28 @@ enum class VisualizerTheme(
      * **不**门控 [VisualQuality.allowFramebuffer]（§3.4 末条）。
      */
     SEASIDE(R.string.visualizer_theme_seaside, "海边", Tier.BASIC, "43", needsParticleBudget = false),
+
+    /**
+     * 明月（第 44 个效果，方案 `docs/moonlit-visualizer-plan.md`）
+     *
+     * 视觉：俯临一片静海的月夜 —— 分界线固定在画面 0.64 高度（⛔ 不同于 E43 那条"浪能冲上来"
+     * 的岸线），上方是**真实月相**的圆盘（月面贴图 + 三层嵌套相位阴影，相位由天文算法按系统
+     * 日期算出，⛔ 不是随机的阴晴圆缺），外围 1~3 层月晕；烟缕状云场横渡，⛔ **只有近层参与
+     * 遮挡记账**；下方海面是一条月**光柱**与逐条粼光浪脊，云遮月时水面亮度与盘体同源地压暗。
+     *
+     * ## 归 [Tier.ADV] + `needsParticleBudget = false`（§2.2）
+     * 档位上如实标注"比 BASIC 重"（7 层绘制 + 一次位图烘焙），但本效果**一个粒子都不画**、
+     * 粼光划与云的**数量**逐帧按 `fx.level` 分档而非按 `maxParticles` ⇒ 第 4 参是**可核对的事实**。
+     * [VisualQuality.supports] 的 `ADV -> !needsParticleBudget || maxParticles > 0` 因此恒为真，
+     * **三档全部可选**（含 LOW）。⚠️ 别误标 `true`：那会让 LOW 档「能渲染却不可选，切走即永久
+     * 回不来」；也别改挂 ULTRA —— 本效果**不用帧缓冲**，与 `allowFramebuffer` 无关。
+     *
+     * ⚠️ 若日后渲染器真的读取 `ctx.quality.maxParticles`，`ParticleBudgetGateTest` 的源码扫描
+     * 会与本标注对撞 ⇒ 必须同步改成 `true`。
+     *
+     * `"44"` 是空闲编号（E41 的旧 2D 版已删，编号留空位不回收）。
+     */
+    MOONLIT(R.string.visualizer_theme_moonlit, "明月", Tier.ADV, "44", needsParticleBudget = false),
     ;
 
     /** 效果分级：决定画质档位可用性 */

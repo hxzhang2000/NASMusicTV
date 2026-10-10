@@ -27,7 +27,8 @@ class AudioSmoother(
      * M10 修复（2026-10-06，代码审查报告 §4）：dt 参数化变体——固定系数版 [update]
      * 等价于隐含 60fps 基准，帧率不稳时跟随速度随帧率漂移。本变体按
      * `1-(1-k)^(dt·60)` 换算，在 60fps 下与 [update] 逐帧等价。
-     * ⚠️ 当前生产代码无调用方（零消费）；新效果接入时应优先使用本变体。
+     * ⭐ 首个生产调用方：E44「明月」`MoonlitRenderer` 的音频头（2026-10-10，§八 / G15）；
+     *    **新效果一律用本变体**，不要再走隐含帧率的 [update]。
      */
     fun updateDt(target: Float, dtSec: Float): Float {
         val base = if (target >= value) attack else release

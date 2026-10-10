@@ -10,6 +10,7 @@ import com.nasmusic.tv.visualizer.renderers.LiquidGridRenderer
 import com.nasmusic.tv.visualizer.renderers.LiquidRippleRenderer
 import com.nasmusic.tv.visualizer.renderers.MatrixRainRenderer
 import com.nasmusic.tv.visualizer.renderers.MilkdropRenderer
+import com.nasmusic.tv.visualizer.renderers.MoonlitRenderer
 import com.nasmusic.tv.visualizer.renderers.LyricsDotMatrixRenderer
 import com.nasmusic.tv.visualizer.renderers.EcgWaveRenderer
 import com.nasmusic.tv.visualizer.renderers.HypnoticFunctionRenderer
@@ -36,8 +37,8 @@ object VisualizerRendererFactory {
     /**
      * 主题枚举 → 渲染器实现。
      *
-     * [context] 供 View 型渲染器（如 three-globe 的 WebView）创建 View 用；
-     * 现有所有 Canvas 渲染器都忽略它，保持原实现。WORLD 分支已切到
+     * [context] 供需要宿主侧资源的渲染器使用：View 型（如 three-globe 的 WebView）创建 View，
+     * E44「明月」解码 `assets/globe/moon.jpg`。其余 Canvas 渲染器都忽略它，保持原实现。WORLD 分支已切到
      * 3D 版 [WorldGlobeRenderer]（WebView + three-globe）；旧 2D 版
      * WorldRenderer 已整文件删除归档（M11 修复，2026-10-06，原 2106 行零实例化死代码）。
      */
@@ -63,6 +64,9 @@ object VisualizerRendererFactory {
         VisualizerTheme.WORLD -> WorldGlobeRenderer(context)
         VisualizerTheme.STAR_TRAILS -> StarrySkyRenderer()
         VisualizerTheme.SEASIDE -> SeasideRenderer()
+        // ⚠️ 传 applicationContext 而非 Activity：E44 要把这个 Context 存成字段用于
+        // `assets/globe/moon.jpg` 的解码，存 Activity 会泄漏（`MoonlitContextLeakTest` 扫这两条）。
+        VisualizerTheme.MOONLIT -> MoonlitRenderer(context.applicationContext)
     }
 
     /**

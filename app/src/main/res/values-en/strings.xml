@@ -1125,6 +1125,7 @@
     <string name="visualizer_theme_matrix_rain">Matrix rain</string>
     <string name="visualizer_theme_milkdrop_feedback">Feedback afterimage</string>
     <string name="visualizer_theme_molecule">Molecule</string>
+    <string name="visualizer_theme_moonlit">Moonlit sea</string>
     <string name="visualizer_theme_orbital_rings">Solar system</string>
     <string name="visualizer_theme_photo_wall">Photo wall</string>
     <string name="visualizer_theme_radar_grid">Radar</string>

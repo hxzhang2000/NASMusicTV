@@ -49,6 +49,21 @@ abstract class RendererFx : VisualizerRenderer {
         fx: FxFrame,
     )
 
+    /**
+     * 本帧**暗角强度**覆盖（§八 `energy → 暗角` 这类"后处理也要跟着音频走"的需求）。
+     *
+     * 默认 [NO_VIGNETTE_OVERRIDE] ⇒ 沿用 [postFx] 的静态值，**其余 21 套效果逐像素不变**
+     * （与 [PostFx.vignetteEdge] 的 `null` 默认同一个套路：加一条默认关闭的通道，
+     * 而不是把 `postFx` 改成每帧新建 —— 后者会让 `FxCoverageScanTest` 的数字字面量判据失效）。
+     *
+     * ⚠️ 覆写它的效果必须**同时**保留 `postFx` 里的字面量数值：那个数是
+     * ① [FxCoverageScanTest] 认定"本效果走了基类后处理"的唯一依据，
+     * ② [needsDamageCoalescer] 的输入（脏区合并的账），
+     * ③ 静默帧的锚（覆盖值必须复现它，否则"接入调制"会顺手改掉静音时的观感）。
+     * ⛔ 不要因为"反正逐帧覆盖"就把 `postFx.vignette` 写成 0f 或具名常量。
+     */
+    protected open fun vignetteOverride(fx: FxFrame): Float = NO_VIGNETTE_OVERRIDE
+
     // ── 模板方法（final ⇒ 不可绕过）──────────────────────────────
 
     final override fun DrawScope.draw(frame: AudioFrame, ctx: RenderContext) {
@@ -102,14 +117,29 @@ abstract class RendererFx : VisualizerRenderer {
     /** 末尾一次性后处理（vignette / grain / scanline，按 [postFx] 配置；任一为 0 即跳过） */
     private fun DrawScope.applyPostFx(ctx: RenderContext, fx: FxFrame, postFx: PostFx) {
         with(OverlayFx) {
-            if (postFx.vignette > 0f)
-                drawVignette(ctx, postFx.vignette, edgeOverride = postFx.vignetteEdge)
+            if (postFx.vignette > 0f) {
+                // ⭐ 子类可用 vignetteOverride 逐帧改暗角强度（E44 §八 `energy → 暗角`）；
+                //    默认 NaN ⇒ 走 postFx 静态值，其余效果逐像素不变。0f 也**算有效覆盖**
+                //    （= 本帧不画暗角），所以判据是 isNaN 而不是 > 0。
+                val v = vignetteOverride(fx)
+                val strength = if (v.isNaN()) postFx.vignette else v
+                if (strength > 0f) drawVignette(ctx, strength, edgeOverride = postFx.vignetteEdge)
+            }
             if (postFx.grain > 0f) drawGrain(ctx, fx.seq, postFx.grain)
             if (postFx.scanline > 0f) drawScanlines(ctx)
         }
     }
 
     companion object {
+        /**
+         * [vignetteOverride] 的"不覆盖"哨兵。
+         *
+         * ⚠️ 刻意用 **NaN** 而不是 `-1f` / `0f`：`0f` 是**有效值**（"本帧不画暗角"），
+         * 拿它当哨兵就等于把"关掉后处理"这个动作变成不可表达 —— 而 `NaN` 与任何强度比较都
+         * 不成立，天然只能靠 [Float.isNaN] 判，误用（直接拿去比大小）会当场暴露。
+         */
+        internal val NO_VIGNETTE_OVERRIDE: Float = Float.NaN
+
         /**
          * 本帧是否需要补一次**脏区合并占位绘制**（§11.3.6 P-3，纯函数供门禁直接验证）。
          *

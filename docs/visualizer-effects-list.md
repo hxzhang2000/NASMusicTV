@@ -1,14 +1,14 @@
 # 可视化效果列表
 
-> **版本**：v2.38.4（versionCode 173）
-> **更新日期**：2026-10-08
+> **版本**：v2.38.6（versionCode 175）
+> **更新日期**：2026-10-10
 > **来源**：`app/src/main/java/com/nasmusic/tv/data/model/AppSettings.kt` — `VisualizerTheme` 枚举
 
-共 **21 个**效果（2026-09-27 移除 11 个：37 → 26，详见 `docs/technical-overview.md` §10.190；2026-09-28 新增 DNA：26 → 27，§10.193；2026-09-28 新增「世界」：27 → 28，§10.196；2026-10-02 新增「星空星轨」：28 → 29，§10.206；2026-10-04 新增「海边」：29 → 30，§10.209；2026-10-05 移除 9 个（见下方「已移除效果」）：30 → **21**，§10.212）。E41「世界」已于 2026-09-29 重写为 **three-globe 3D 地球版**（WebView + WebGL，完全离线；复用 E41 序号，仍 21 项，§10.197），并于 **2026-10-07 升入 `Tier.ULTRA`**（§10.215，电视端 WebView 只画首帧的回退代价）。⚠️ 旧 2D 海岸线版 `WorldRenderer.kt` **已整体删除**（`546dd7c`，2026-10-06）—— 早期版本这里写的"保留在源码但不再被引用"已不成立。
+共 **22 个**效果（2026-09-27 移除 11 个：37 → 26，详见 `docs/technical-overview.md` §10.190；2026-09-28 新增 DNA：26 → 27，§10.193；2026-09-28 新增「世界」：27 → 28，§10.196；2026-10-02 新增「星空星轨」：28 → 29，§10.206；2026-10-04 新增「海边」：29 → 30，§10.209；2026-10-05 移除 9 个（见下方「已移除效果」）：30 → **21**，§10.212；2026-10-09 新增「明月」E44：21 → **22**，方案见 `docs/moonlit-visualizer-plan.md`，⚠️ 该套 T0–T9 **已全部落地但从未上机**，真机验收（§十三 V 系列）尚未进行）。E41「世界」已于 2026-09-29 重写为 **three-globe 3D 地球版**（WebView + WebGL，完全离线；复用 E41 序号，仍 21 项，§10.197），并于 **2026-10-07 升入 `Tier.ULTRA`**（§10.215，电视端 WebView 只画首帧的回退代价）。⚠️ 旧 2D 海岸线版 `WorldRenderer.kt` **已整体删除**（`546dd7c`，2026-10-06）—— 早期版本这里写的"保留在源码但不再被引用"已不成立。
 
 > ⚠️ **档位标题的措辞已部分过时**：ADV 档原写「需粒子预算，MEDIUM 及以上」，那是 2026-10-01 之前的门控口径。
 > 自 §10.205 起 ADV 档的门槛是「该效果**是否真的读取** `ctx.quality.maxParticles`」
-> （枚举第 4 参 `needsParticleBudget`），**不是**按 tier 一刀切 ⇒ 本档 **10** 套里有 **9** 套三档全可用，
+> （枚举第 4 参 `needsParticleBudget`），**不是**按 tier 一刀切 ⇒ 本档 **11** 套里有 **10** 套三档全可用，
 > 仅 `E14 节拍烟花` 真读预算、LOW 档被挡（`E41 世界` 也读预算，但它已在下方 ULTRA 档）。逐项取值见 `AppSettings.kt` 的枚举 KDoc。
 > ULTRA 档「需帧缓冲，仅 HIGH」仍然成立（由 `allowFramebuffer` 决定，与粒子预算无关）。
 
@@ -40,6 +40,7 @@
 | E39 | PHOTO_WALL | 照片墙 |
 | E40 | DNA | DNA 双螺旋 |
 | E42 | STAR_TRAILS | 星空星轨 |
+| E44 | MOONLIT | 明月 |
 
 ## ULTRA 档（`supports()` 要求 `allowFramebuffer` ⇒ 仅 HIGH 画质档提供）
 
@@ -56,9 +57,9 @@
 ## 实现与改造状态（2026-10-08 按源码逐项核对）
 
 > 数据来源：渲染器类头 = `grep -rn ": RendererFx()\|: VisualizerRenderer" app/src/main`；
-> 后处理覆盖 = `visualizer/fx/FxCoverageScanTest.kt` 的 `covered`（**14**）/ `exempt`（**7**）两份名单；
+> 后处理覆盖 = `visualizer/fx/FxCoverageScanTest.kt` 的 `covered`（**15**）/ `exempt`（**7**）两份名单；
 > 单测 = `app/src/test/java/com/nasmusic/tv/visualizer/`；
-> 改造状态 = `docs/archive/visualizer-texture-upgrade-plan.md` §12.2 矩阵（**按效果**计，与上面「按类头」计的 14 不同口径）。
+> 改造状态 = `docs/archive/visualizer-texture-upgrade-plan.md` §12.2 矩阵（**按效果**计，与上面「按类头」计的 15 不同口径）。
 > ⛔ 表内路径均相对 `app/src/main/java/com/nasmusic/tv/`；行号 = 类头所在行（2026-10-08 实测），会随编辑漂移。
 
 | 序号 | 显示名 | 渲染器（`file:line`） | LOW | 继承基类 | §六 质感改造 | 专用单测 |
@@ -84,6 +85,7 @@
 | E41 | 世界 | `renderers/WorldGlobeRenderer.kt:62` | ⛔ | ⛔ 有意排除（View 型） | ⛔ 不改代码（§C7 已整节重评，只做上机验收） | `WorldLogicTest` + `WorldMapDataTest` + `GlobeAssetsHygieneTest` |
 | E42 | 星空星轨 | `renderers/StarrySkyRenderer.kt:113` | ✅ | ✅（建档即继承） | —— 本方案范围外 | `StarrySkyTest` |
 | E43 | 海边 | `renderers/SeasideRenderer.kt:155` | ✅ | ✅（建档即继承） | —— 本方案范围外 | `SeasideTest` + `SeasideWavesTest` + `SeasideAudioMapTest` + `SeasideOpBudgetTest` |
+| E44 | 明月 | `renderers/MoonlitRenderer.kt:104` | ✅ | ✅（建档即继承） | —— 本方案范围外 | ⚠️ **T0–T9 已全部落地，未上机**：真实月相（`MoonPhase` 历算 + 天平动驱动重烘）+ 月盘烘焙（`MoonDiskBake`，含 §5.4 程序化降级）+ 加法过曝芯 + 相位阴影与新月夜极淡边缘 + 夜空/海体色尺（`MoonSeascape`）+ 星野 + 层 3 月晕 + 云场与 `occl`（`MoonClouds`，含 §6.6 确定性过境）+ 光柱/粼光/地平带（`MoonWater`）+ 音频映射（`MoonAudio`）+ 每元素 ops/铺屏账（`MoonOpBudget`，上限 `3.45 / 4.00 / HIGH 不设绝对上限`）。门：`MoonPhaseTest` / `MoonDiskBakeTest` / `MoonOpBudgetTest` / `MoonSeascapeTest` / `MoonlitStarfieldTest` / `MoonlitSkySeaTest` / `MoonlitTest` / `MoonlitWaterTest` / `MoonlitAudioTest` / `MoonlitDtClockTest` / `MoonPhaseShadowTest` / `VisualizerThemeStringsGateTest`（G3 云场对账跑在 `MoonlitCloudBaseline` 再生基线上）。⛔ §十三 V/R/U 系列（含真实铺屏 ≈4.48 屏下的帧率）从未验证 ⇒ 未进 `CHANGELOG` |
 
 > ⚠️ **三个「⛔ 欠账」与「⛔ 有意排除」不是一回事**：E38 / E39 / E41 是**按设计不继承基类**
 > （E38 后处理与内容交错 + 画面已定稿、E39 共享后处理会盖住照片、E41 是 `AndroidView` 型、`draw` 空实现）；
@@ -104,7 +106,7 @@
 
 1. **E39 照片墙是唯一有「列表级」门控的效果**：`VisualizerTheme.selectable(photoWallAvailable)`
    在三个照片来源开关**全关**时把 `PHOTO_WALL` 从列表里过滤掉（指示器不显示、左右键也切不到，
-   `AppSettings.kt:325` / `VisualizerRendererFactory.kt:74`）。其余 20 套恒在列表里（受画质档约束）。
+   `AppSettings.kt:325` / `VisualizerRendererFactory.kt:74`）。其余 21 套恒在列表里（受画质档约束）。
 2. **E14 节拍烟花**：ADV 档里唯一 `needsParticleBudget = true` 且非 ULTRA 的效果
    ⇒ `LOW.maxParticles = 0` 时被 `supports()` 挡下（`AppSettings.kt` 的 `VisualQuality.supports`）。
 3. **E18 / E41**：ULTRA 档由 `allowFramebuffer` 决定，该字段只有 `HIGH` 为 `true`

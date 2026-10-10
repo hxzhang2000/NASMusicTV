@@ -1133,6 +1133,7 @@
     <string name="visualizer_theme_matrix_rain">数字雨</string>
     <string name="visualizer_theme_milkdrop_feedback">反馈残像</string>
     <string name="visualizer_theme_molecule">分子</string>
+    <string name="visualizer_theme_moonlit">明月</string>
     <string name="visualizer_theme_orbital_rings">太阳系</string>
     <string name="visualizer_theme_photo_wall">照片墙</string>
     <string name="visualizer_theme_radar_grid">雷达</string>

@@ -53,6 +53,7 @@ class FxCoverageScanTest {
         "LightBeamsRenderer",          // E35 光轴（§B10 暗角 0.50 + 颗粒 0.030）
         "StarrySkyRenderer",           // E42 星空星轨（暗角 0.42 + 颗粒 0.026）
         "SeasideRenderer",             // E43 海边（§4.9.2 裁决：只保留暗角 0.30，去掉颗粒）
+        "MoonlitRenderer",             // E44 明月（§9.2 填充账：只保留暗角 0.42，⛔ 不加颗粒 = 第二次全屏 drawRect）
     )
 
     // ── 豁免名单：阶段推进时逐条移入 covered（理由必须写明，便于复核） ──
@@ -249,7 +250,7 @@ class FxCoverageScanTest {
     fun `在册渲染器全部有归属 名单无重叠无遗漏`() {
         val decls = rendererDecls()
         assertTrue("扫描到的渲染器类应 > 0（空转自证）", decls.isNotEmpty())
-        assertTrue("渲染器类数应 ≥ 21（2026-10-05 删 9 个效果后 22；M11 修复（2026-10-06）再删死代码 WorldRenderer → 21），实测 ${decls.size}", decls.size >= 21)
+        assertTrue("渲染器类数应 ≥ 22（2026-10-05 删 9 个效果后 22；M11 修复（2026-10-06）再删死代码 WorldRenderer → 21；2026-10-08 新增 E44 明月 → 22），实测 ${decls.size}", decls.size >= 22)
         // ⛔ 解析器自证：多行构造参数的两个类必须被解析到，否则是"静默漏类"
         // ⚠️ 2026-10-05：原样本 `WaterfallRenderer` 随效果删除 ⇒ 只摘它一个，保留其余样本。
         for (n in listOf("MoleculeRenderer", "HypnoticFunctionRenderer", "PhotoRenderer")) {
