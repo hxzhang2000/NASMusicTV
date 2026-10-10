@@ -299,6 +299,65 @@ class MoonPhaseShadowTest {
             functionBody("setupDisk").contains("edgePaint.strokeWidth"))
     }
 
+    /**
+     * C5 ⚠️ **显示态满月**（所有者 2026-10-10 真机裁决「改成强制满月吧」，偏差 **D35**）。
+     * 这条门钉的是裁决的**边界**：满月只许钉在渲染器的显示态那一处，⛔ 不许钉进历算层 ——
+     * 一旦 `MoonPhase.illum` 恒为 1，G2 的六个日月食锚点、§4.6 全表与 A3 那条
+     * 「层 0 暗区恒等于 `1−f`」会**一起变成空转**（代码全绿，实际什么都没测）。
+     */
+    @Test
+    fun `C5 显示态钉满月而历算层必须保持真实`() {
+        val src = rendererSource()
+        assertTrue("显示态必须把 illum 覆盖成 DISPLAY_ILLUM（refreshPhase 那唯一一处）",
+            Regex("""MoonPhase\.of\(\w+\)\.copy\(\s*illum\s*=\s*DISPLAY_ILLUM\s*\)""").containsMatchIn(src))
+        assertEquals("⛔ 显示态之外不许再长出第二处照度钉死", 1,
+            Regex("""\.copy\(\s*illum""").findAll(src).toList().size)
+        assertTrue("DISPLAY_ILLUM 必须恒为满月", Regex("""DISPLAY_ILLUM\s*=\s*1f""").containsMatchIn(src))
+        // ⛔ 天平动不能跟着一起钉 —— 钉了 §5.1/§5.2 的重烘就退化成一张固定贴图
+        assertTrue("经度天平动仍须来自真实历算", src.contains("libWDeg = st.librationLonDeg"))
+        assertTrue("纬度天平动仍须来自真实历算", src.contains("libBDeg = st.librationLatDeg"))
+        val phase = stripComments(
+            File(mainSourceRoot(), "com/nasmusic/tv/visualizer/renderers/MoonPhase.kt").readText()
+        )
+        assertTrue("历算层不许出现显示态常量（伪造历算 = G2 整表空转）", !phase.contains("DISPLAY_ILLUM"))
+        assertTrue("MoonPhase.illum 必须仍按距角算 (1−cos e)/2：\n${illumBodyOf(phase)}",
+            Regex("""1\.0\s*-\s*cos\(e\)""").containsMatchIn(illumBodyOf(phase)))
+    }
+
+    /** 负向自证：把满月写进历算层（`illum` 直接 `return 1f`）必须被 C5 的判据抓到。 */
+    @Test
+    fun `C5b 负向自证 历算层被改成常量会被判红`() {
+        val forgery = """
+            fun illum(utcMs: Long): Float {
+                return 1f
+            }
+        """.trimIndent()
+        val body = illumBodyOf(forgery)
+        assertTrue("夹具没抽出函数体 ⇒ illumBodyOf 空转", body.contains("return 1f"))
+        assertTrue("判据对「照度改成常量」失明 ⇒ C5 那条断言是空转",
+            !Regex("""1\.0\s*-\s*cos\(e\)""").containsMatchIn(body))
+    }
+
+    /** 取 [MoonPhase] 的 `illum()` 函数体（大括号配对，⛔ 不拿全文糊 —— 全文里 `cos(e)` 到处有）。 */
+    private fun illumBodyOf(src: String): String {
+        val head = Regex("""fun\s+illum\s*\(""").find(src) ?: error("找不到 illum()")
+        var i = head.range.last
+        while (src[i] != '{') i++
+        var depth = 0
+        var j = i
+        while (j < src.length) {
+            when (src[j]) {
+                '{' -> depth++
+                '}' -> {
+                    depth--
+                    if (depth == 0) return src.substring(i + 1, j)
+                }
+            }
+            j++
+        }
+        error("illum() 大括号不配对")
+    }
+
     /** 负向自证：同一个判据函数必须抓得住"把 Paint 挪进方法体"这种写法。 */
     @Test
     fun `C4b 负向自证 方法体里 new Paint 必须被抓到`() {

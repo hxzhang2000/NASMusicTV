@@ -502,6 +502,9 @@ class MoonlitRenderer(private val context: Context) : RendererFx() {
      *
      * 60 s 才重算一次：照度日变化率最大 ≈6%/天 ⇒ 60 s 内 0.004%，肉眼零意义，
      * 但足以让跨小时播放仍与真实日期一致；⛔ 不逐帧算（一次约 30 个三角函数 + 1 个对象）。
+     *
+     * ⚠️ 返回的是**显示态**：照度按 [DISPLAY_ILLUM] 钉成满月（所有者 2026-10-10 真机裁决，
+     * 偏差 **D35**），天平动三量仍是真实历算 ⇒ 重烘判定不受影响。
      */
     private fun refreshPhase(fx: FxFrame): MoonState {
         if (monoAnchorMs < 0L) monoAnchorMs = fx.nowMs
@@ -509,7 +512,7 @@ class MoonlitRenderer(private val context: Context) : RendererFx() {
         val cached = phaseState
         if (cached != null && utcMs - phaseUtcMs < REPHASE_INTERVAL_MS) return cached
         phaseUtcMs = utcMs
-        val fresh = MoonPhase.of(utcMs)
+        val fresh = MoonPhase.of(utcMs).copy(illum = DISPLAY_ILLUM)
         phaseState = fresh
         return fresh
     }
@@ -1502,6 +1505,17 @@ class MoonlitRenderer(private val context: Context) : RendererFx() {
 
         /** §4.5 月相重算间隔（照度日变化率最大 ≈6%/天 ⇒ 60 s 内 0.004%，肉眼零意义） */
         private const val REPHASE_INTERVAL_MS = 60_000L
+
+        /**
+         * 所有者 2026-10-10 真机裁决「**改成强制满月吧**」（偏差 **D35**）⇒ 显示态照度恒为满月。
+         *
+         * 所有者只给了裁决、⛔ 未给成因，本文也不臆测现场读数。可查的背景是需求 1 的**定稿盲区**（R13）：
+         * §五/§七 那七轮观感（月海与环形山、光柱、粼光）全部是在原型 `phaseLock:'full'` 下调出来的
+         * ⇒ 非满月态上屏长什么样**从未被任何人判读过**，本轮是真机第一次读到它。
+         * ⚠️ 只钉**显示**这一把尺：历算层 [MoonPhase] 与它的 G2 / G12 一字未动，
+         * [MoonState.librationLonDeg] 起的三量仍按真实日期走 ⇒ §5.1/§5.2 的圆盘重烘照旧。
+         */
+        private const val DISPLAY_ILLUM = 1f
 
         /** §6.5 极淡边缘的照度上界 / α 的乘子（α 本身 = `0.10·(1−occl)`，逐帧由 [MoonClouds.darkEdgeA] 给）/ 线宽 */
         private const val DARK_EDGE_MAX_F = 0.06f
